@@ -1029,33 +1029,33 @@ establish_nested_datasets_filetree_structure_with_hardlinks(_Config) ->
     {ok, Link4DatasetId} = ?assertMatch({ok, _}, lfm_proxy:establish_dataset(P1Node, UserSessIdP1, ?FILE_REF(Link4Guid), ?DATA_PROTECTION)),
 
     % verify file dataset ancestors and protection flags
-    ?assertAttachedDataset(P1Node, UserSessIdP1, FileDatasetId, FileGuid, DirLvl4DatasetId, ?no_flags_mask),
+    ?assertAttachedDataset(P1Node, UserSessIdP1, FileDatasetId, FileGuid, DirLvl4DatasetId, ?no_flags_mask, ?set_flags(?METADATA_PROTECTION, ?DATA_PROTECTION)),
     ?assertDatasetMembership(P1Node, UserSessIdP1, FileGuid, ?DIRECT_DATASET_MEMBERSHIP, ?set_flags(?METADATA_PROTECTION, ?DATA_PROTECTION)),
     ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, FileGuid, FileDatasetId, [DirLvl4DatasetId, DirLvl3DatasetId, DirLvl2DatasetId], ?set_flags(?METADATA_PROTECTION, ?DATA_PROTECTION)),
 
     % verify dirs dataset ancestors and protection flags
-    ?assertAttachedDataset(P1Node, UserSessIdP1, DirLvl4DatasetId, DirLvl4Guid, DirLvl3DatasetId, ?DATA_PROTECTION),
+    ?assertAttachedDataset(P1Node, UserSessIdP1, DirLvl4DatasetId, DirLvl4Guid, DirLvl3DatasetId, ?DATA_PROTECTION, ?set_flags(?METADATA_PROTECTION, ?DATA_PROTECTION)),
     ?assertDatasetMembership(P1Node, UserSessIdP1, DirLvl4Guid, ?DIRECT_DATASET_MEMBERSHIP, ?set_flags(?METADATA_PROTECTION, ?DATA_PROTECTION)),
     ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, DirLvl4Guid, DirLvl4DatasetId, [DirLvl3DatasetId, DirLvl2DatasetId], ?set_flags(?METADATA_PROTECTION, ?DATA_PROTECTION)),
 
-    ?assertAttachedDataset(P1Node, UserSessIdP1, DirLvl3DatasetId, DirLvl3Guid, DirLvl2DatasetId, ?METADATA_PROTECTION),
+    ?assertAttachedDataset(P1Node, UserSessIdP1, DirLvl3DatasetId, DirLvl3Guid, DirLvl2DatasetId, ?METADATA_PROTECTION, ?METADATA_PROTECTION),
     ?assertDatasetMembership(P1Node, UserSessIdP1, DirLvl3Guid, ?DIRECT_DATASET_MEMBERSHIP, ?METADATA_PROTECTION),
     ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, DirLvl3Guid, DirLvl3DatasetId, [DirLvl2DatasetId], ?METADATA_PROTECTION),
 
-    ?assertAttachedDataset(P1Node, UserSessIdP1, DirLvl2DatasetId, DirLvl2Guid, undefined, ?no_flags_mask),
+    ?assertAttachedDataset(P1Node, UserSessIdP1, DirLvl2DatasetId, DirLvl2Guid, undefined, ?no_flags_mask, ?no_flags_mask),
     ?assertDatasetMembership(P1Node, UserSessIdP1, DirLvl2Guid, ?DIRECT_DATASET_MEMBERSHIP, ?no_flags_mask),
     ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, DirLvl2Guid, DirLvl2DatasetId, [], ?no_flags_mask),
 
     % verify links dataset ancestors and protection flags
-    ?assertAttachedDataset(P1Node, UserSessIdP1, Link4DatasetId, Link4Guid, DirLvl4DatasetId, ?DATA_PROTECTION),
+    ?assertAttachedDataset(P1Node, UserSessIdP1, Link4DatasetId, Link4Guid, DirLvl4DatasetId, ?DATA_PROTECTION, ?set_flags(?METADATA_PROTECTION, ?DATA_PROTECTION)),
     ?assertDatasetMembership(P1Node, UserSessIdP1, Link4Guid, ?DIRECT_DATASET_MEMBERSHIP, ?set_flags(?METADATA_PROTECTION, ?DATA_PROTECTION)),
     ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, Link4Guid, Link4DatasetId, [DirLvl4DatasetId, DirLvl3DatasetId, DirLvl2DatasetId], ?set_flags(?METADATA_PROTECTION, ?DATA_PROTECTION)),
 
-    ?assertAttachedDataset(P1Node, UserSessIdP1, Link3DatasetId, Link3Guid, DirLvl3DatasetId, ?METADATA_PROTECTION),
+    ?assertAttachedDataset(P1Node, UserSessIdP1, Link3DatasetId, Link3Guid, DirLvl3DatasetId, ?METADATA_PROTECTION, ?METADATA_PROTECTION),
     ?assertDatasetMembership(P1Node, UserSessIdP1, Link3Guid, ?DIRECT_DATASET_MEMBERSHIP, ?METADATA_PROTECTION),
     ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, Link3Guid, Link3DatasetId, [DirLvl3DatasetId, DirLvl2DatasetId], ?METADATA_PROTECTION),
 
-    ?assertAttachedDataset(P1Node, UserSessIdP1, Link1DatasetId, Link1Guid, undefined, ?no_flags_mask),
+    ?assertAttachedDataset(P1Node, UserSessIdP1, Link1DatasetId, Link1Guid, undefined, ?no_flags_mask, ?no_flags_mask),
     ?assertDatasetMembership(P1Node, UserSessIdP1, Link1Guid, ?DIRECT_DATASET_MEMBERSHIP, ?no_flags_mask),
     ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, Link1Guid, Link1DatasetId, [], ?no_flags_mask).
 
@@ -1095,7 +1095,7 @@ reattach(Node, SessionId, DatasetId) ->
     lfm_proxy:update_dataset(Node, SessionId, DatasetId, ?ATTACHED_DATASET, ?no_flags_mask, ?no_flags_mask).
 
 assert_attached_dataset(Node, SessionId, DatasetId, ExpectedRootFileGuid, ExpectedParentDatasetId,
-    ExpectedProtectionFlags,ExpectedEffProtectionFlags
+    ExpectedProtectionFlags, ExpectedEffProtectionFlags
 ) ->
     {ok, #file_attr{type = ExpectedRootFileType}} = lfm_proxy:stat(Node, SessionId, ?FILE_REF(ExpectedRootFileGuid)),
     {ok, ExpectedRootFilePath} = lfm_proxy:get_file_path(Node, SessionId, ExpectedRootFileGuid),
@@ -1132,11 +1132,23 @@ assert_dataset(Node, SessionId, DatasetId, ExpectedRootFileGuid, ExpectedParentD
             % check whether dataset is visible on parent dataset's list
             {ok, DatasetsList, true} = ?assertMatch({ok, _, true},
                 lfm_proxy:list_children_datasets(Node, SessionId, ExpectedParentDatasetId, #{offset => 0, limit => 100}), ?ATTEMPTS),
-            ?assert(lists:member({DatasetId, Name}, DatasetsList));
+            ?assert(lists:any(fun(Dataset) ->
+                {ExpDatasetId, ExpName, _} = Dataset,
+                case {ExpDatasetId, ExpName} of
+                    {DatasetId, Name} -> true;
+                    _ -> false
+                end
+            end, DatasetsList));
         false ->
             % check whether dataset is visible on space top dataset list
             SpaceId = file_id:guid_to_space_id(ExpectedRootFileGuid),
             {ok, DatasetsList, true} = ?assertMatch({ok, _, true},
                 lfm_proxy:list_top_datasets(Node, SessionId, SpaceId, ExpectedState, #{offset => 0, limit => 100}), ?ATTEMPTS),
-            ?assert(lists:member({DatasetId, Name}, DatasetsList))
+            ?assert(lists:any(fun(Dataset) ->
+                {ExpDatasetId, ExpName, _} = Dataset,
+                case {ExpDatasetId, ExpName} of
+                    {DatasetId, Name} -> true;
+                    _ -> false
+                end
+            end, DatasetsList))
     end.
