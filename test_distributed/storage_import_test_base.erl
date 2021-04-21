@@ -3167,14 +3167,15 @@ dir_and_its_child_with_protection_flag_should_not_be_updated_test_base(Config, P
     %% Append to file
     {ok, _} = sd_test_utils:write_file(W1, SDFileHandle, ?TEST_DATA_SIZE, ?TEST_DATA2),
 
-    NewMode = case StorageType of
-        ?POSIX_HELPER_NAME -> 8#777;
-        _ -> ?DEFAULT_FILE_PERMS % on s3 mode is not changed as we can only set default mode when settup up helper
+    {NewDirMode, NewFileMode} = case StorageType of
+        ?POSIX_HELPER_NAME -> {8#777, 8#777};
+        % on s3 mode is not changed as we can only set default mode when setting up helper
+        _ -> {?DEFAULT_DIR_PERMS, ?DEFAULT_FILE_PERMS}
     end,
     % Change dir mode
-    ok = sd_test_utils:chmod(W1, SDHandle, NewMode),
+    ok = sd_test_utils:chmod(W1, SDHandle, NewDirMode),
     % Change file mode
-    ok = sd_test_utils:chmod(W1, SDFileHandle, NewMode),
+    ok = sd_test_utils:chmod(W1, SDFileHandle, NewFileMode),
 
     % run consecutive scan
     enable_continuous_scans(Config, ?SPACE_ID),
@@ -3193,7 +3194,7 @@ dir_and_its_child_with_protection_flag_should_not_be_updated_test_base(Config, P
     lfm_proxy:close(W1, Handle3),
 
     % unset protection flag
-    {ok, DatasetId} = lfm_proxy:update_dataset(W1, SessId, DatasetId, undefined, ?no_flags_mask, ProtectionFlags),
+    ok = lfm_proxy:update_dataset(W1, SessId, DatasetId, undefined, ?no_flags_mask, ProtectionFlags),
 
     % run consecutive scan
     enable_continuous_scans(Config, ?SPACE_ID),
@@ -3201,12 +3202,12 @@ dir_and_its_child_with_protection_flag_should_not_be_updated_test_base(Config, P
     disable_continuous_scan(Config),
 
     % dir should have been updated
-    ?assertMatch({ok, #file_attr{mode = NewMode}}, lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH})),
+    ?assertMatch({ok, #file_attr{mode = NewDirMode}}, lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH})),
 
     % file should have been updated
     AppendedData = <<(?TEST_DATA)/binary, (?TEST_DATA2)/binary>>,
     AppendedDataSize = byte_size(AppendedData),
-    ?assertMatch({ok, #file_attr{size = AppendedDataSize, mode = NewMode}},
+    ?assertMatch({ok, #file_attr{size = AppendedDataSize, mode = NewFileMode}},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_IN_DIR_PATH})),
     {ok, Handle4} = lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_IN_DIR_PATH}, read),
     ?assertMatch({ok, AppendedData}, lfm_proxy:check_size_and_read(W1, Handle4, 0, 100)),
