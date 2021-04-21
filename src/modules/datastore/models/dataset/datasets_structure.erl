@@ -47,7 +47,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([add/4, get/3, delete/3, list_top_datasets/3, list_children_datasets/4, move/5]).
+-export([add/4, get/3, delete/3, list_top_datasets/3, list_children_datasets/4, move/5, pack_entry_index/2]).
 
 %% Test API
 -export([list_all_unsafe/2, delete_all_unsafe/2]).
@@ -60,7 +60,7 @@
 -type link_revision() :: datastore_links:link_rev().
 -type list_mode() :: top | {children, ParentDatasetPath :: link_name()}.
 
--type entry() :: {dataset:id(), dataset:name()}.
+-type entry() :: {dataset:id(), dataset:name(), index()}.
 -type entries() :: [entry()].
 
 -type fold_acc() :: term().
@@ -72,20 +72,19 @@
 % @formatter:off
 
 -type offset() :: integer().
--type start_index() :: binary().
+-type index() :: binary().
 -type limit() :: non_neg_integer().
 
 
 -type opts() :: #{
     offset => offset(),
-    % TODO VFS-7510 should it be dataset:id(), dataset:path() or dataset:name() ?
-    % start_index => start_index(),
+    start_index => index(),
     limit => limit()
 }.
 
 % @formatter:on
 
--export_type([opts/0, entries/0, entry/0]).
+-export_type([opts/0, entries/0, entry/0, index/0]).
 
 -define(CTX, (dataset:get_ctx())).
 
@@ -94,8 +93,9 @@
 -define(LOCAL_TREE_ID, oneprovider:get_id()).
 -define(LINK(LinkName, LinkValue), {LinkName, LinkValue}).
 -define(ENTRY(DatasetPath, DatasetName), {dataset_path:to_id(DatasetPath), DatasetName}).
--define(DEFAULT_BATCH_SIZE, application:get_env(?APP_NAME, ls_batch_size, 5000)).
 
+-define(DEFAULT_BATCH_SIZE, application:get_env(?APP_NAME, ls_batch_size, 5000)).
+-define(DEFAULT_OFFSET, 0).
 
 -define(FOREST_SEP, <<"###">>).
 -define(VALUE_SEP, <<"///">>).
@@ -118,7 +118,7 @@ add(SpaceId, ForestType, DatasetPath, DatasetName) ->
 get(SpaceId, ForestType, DatasetPath) ->
     case datastore_model:get_links(?CTX(SpaceId), ?FOREST(ForestType, SpaceId), all, DatasetPath) of
         {ok, [#link{target = LinkValue}]} ->
-            {ok, ?ENTRY(DatasetPath, LinkValue)};
+            {ok, build_entry(DatasetPath, LinkValue)};
         Error = {error, _} ->
             Error
     end.
@@ -161,6 +161,11 @@ move(SpaceId, ForestType, SourceDatasetPath, TargetDatasetPath, TargetName) ->
     % move links to nested datasets of the moved dataset
     move_all_descendants(SpaceId, ForestType, SourceDatasetPath, TargetDatasetPath).
 
+
+-spec pack_entry_index(dataset:name(), dataset:id()) -> index().
+pack_entry_index(DatasetName, DatasetId) ->
+    str_utils:join_binary([DatasetName, DatasetId], <<>>).
+
 %%%===================================================================
 %%% Test functions
 %%%===================================================================
@@ -192,7 +197,7 @@ delete_all_unsafe(SpaceId, ForestType) ->
 -spec list_all_unsafe(od_space:id(), forest_type()) -> {ok, [{link_name(), entry()}]}.
 list_all_unsafe(SpaceId, ForestType) ->
     fold(SpaceId, ForestType, fun(#link{name = LinkName, target = LinkValue}, Acc) ->
-        {ok, [{LinkName, ?ENTRY(LinkName, LinkValue)} | Acc]}
+        {ok, [{LinkName, build_entry(LinkName, LinkValue)} | Acc]}
     end, [], #{}).
 
 %%%===================================================================
@@ -238,7 +243,7 @@ collect_children(SpaceId, ForestType, ListedDatasetPath, LastIncludedDatasetPath
     IsSpaceListed = ListedDatasetPath =:= undefined,
     {ok, SpacePath} = dataset_path:get_space_path(SpaceId),
     {ok, {ReversedList, LastIncludedDatasetPath, LastProcessed, EndReached}} = fold(SpaceId, ForestType,
-        fun(#link{name = DatasetPath, target = LinkValue},
+        fun(#link{name = DatasetPath, target = DatasetId},
             {CollectedAcc, PrevIncludedDatasetPath, _PrevProcessedDatasetPath, _EndReached}
         ) ->
             case IsSpaceListed orelse is_prefix(ListedDatasetPath, DatasetPath) of
@@ -263,7 +268,7 @@ collect_children(SpaceId, ForestType, ListedDatasetPath, LastIncludedDatasetPath
                                         true -> stop;
                                         false -> ok
                                     end,
-                                    {OkOrStop, {[?ENTRY(DatasetPath, LinkValue) | CollectedAcc], DatasetPath, DatasetPath,
+                                    {OkOrStop, {[build_entry(DatasetPath, DatasetId) | CollectedAcc], DatasetPath, DatasetPath,
                                         SpaceDatasetListed}}
 
                             end
@@ -288,19 +293,25 @@ collect_children(SpaceId, ForestType, ListedDatasetPath, LastIncludedDatasetPath
 
 -spec sort(entries()) -> entries().
 sort(Datasets) ->
-    lists:sort(fun({_, DatasetName1}, {_, DatasetName2}) ->
-        DatasetName1 =< DatasetName2
+    lists:sort(fun({DatasetId1, DatasetName1, _}, {DatasetId2, DatasetName2, _}) ->
+        DatasetName1 < DatasetName2 orelse (DatasetName1 =:= DatasetName2 andalso DatasetId1 =< DatasetId2)
     end, Datasets).
 
 
 -spec strip(entries(), opts()) -> {entries(), EndReached :: boolean()}.
 strip(Entries, Opts) ->
-    % TODO VFS-7510 use start_index for iterating using batches
-    %%    StartId = maps:get(start_index, Opts, <<>>),
+    StartIndex = maps:get(start_index, Opts, <<>>),
     Offset = maps:get(offset, Opts, 0),
     Limit = maps:get(limit, Opts),
     Length = length(Entries),
-    FinalOffset = max(Offset, 0) + 1,
+    StartingPoint = lists_utils:foldl_while(fun
+        ({_DatasetId, _DatasetName, Index}, AccOffset) ->
+            case StartIndex =< Index of
+                true -> {halt, AccOffset};
+                false -> {cont, AccOffset + 1}
+            end
+    end, 0, Entries),
+    FinalOffset = max(StartingPoint + Offset, 0) + 1,
     case FinalOffset > Length of
         true ->
             {[], true};
@@ -314,7 +325,7 @@ move_all_descendants(SpaceId, ForestType, SourceDatasetPath, TargetDatasetPath) 
     move_all_descendants(SpaceId, ForestType, SourceDatasetPath, TargetDatasetPath, SourceDatasetPath).
 
 
--spec move_all_descendants(od_space:id(), forest_type(), link_name(), link_name(), start_index()) -> ok.
+-spec move_all_descendants(od_space:id(), forest_type(), link_name(), link_name(), index()) -> ok.
 move_all_descendants(SpaceId, ForestType, SourceDatasetPath, TargetDatasetPath, StartIndex) ->
     {ok, DescendantDatasetsReversed, AllListed} = get_descendants_batch_reversed(SpaceId, ForestType, SourceDatasetPath,
         StartIndex, ?DEFAULT_BATCH_SIZE),
@@ -347,7 +358,7 @@ move_descendants_batch(SpaceId, ForestType, SourceDatasetPath, TargetDatasetPath
 %% all datasets which paths start with prefix ParentDatasetPath.
 %% @end
 %%--------------------------------------------------------------------
--spec get_descendants_batch_reversed(od_space:id(), forest_type(), link_name(), start_index(), limit()) ->
+-spec get_descendants_batch_reversed(od_space:id(), forest_type(), link_name(), index(), limit()) ->
     {ok, [link()], AllListed :: boolean()}.
 get_descendants_batch_reversed(SpaceId, ForestType, ParentDatasetPath, StartIndex, Limit) ->
     {ok, {LinksReversed, EndReached, ListedLinksCount}} = fold(SpaceId, ForestType,
@@ -375,24 +386,10 @@ fold(SpaceId, ForestType, Fun, AccIn, Opts) ->
 
 -spec sanitize_opts(opts()) -> opts().
 sanitize_opts(Opts) ->
-    % TODO VFS-7510 try to remove code duplication in this and file_meta_forest modules
+    % TODO VFS-7560 try to remove code duplication in this and file_meta_forest modules
     InternalOpts1 = #{limit => sanitize_limit(Opts)},
-    InternalOpts2 = maps_utils:put_if_defined(InternalOpts1, offset, sanitize_offset(Opts)),
-    InternalOpts3 = maps_utils:put_if_defined(InternalOpts2, start_index, sanitize_start_index(Opts)),
-    validate_starting_opts(InternalOpts3).
-
-
--spec validate_starting_opts(opts()) -> opts().
-validate_starting_opts(InternalOpts) ->
-    % at least one of: offset, start_index must be defined so that we know
-    % were to start listing
-    case map_size(maps:with([offset, start_index], InternalOpts)) > 0 of
-        true -> InternalOpts;
-        false ->
-            %%  TODO VFS-7208 uncomment after introducing API errors to fslogic
-            %% throw(?ERROR_MISSING_AT_LEAST_ONE_VALUE([offset, start_index])),
-            throw(?EINVAL)
-    end.
+    InternalOpts2 = InternalOpts1#{offset => sanitize_offset(Opts)},
+    maps_utils:put_if_defined(InternalOpts2, start_index, sanitize_start_index(Opts)).
 
 
 -spec sanitize_limit(opts()) -> limit().
@@ -400,7 +397,7 @@ sanitize_limit(Opts) ->
     case maps:get(limit, Opts, undefined) of
         undefined ->
             ?DEFAULT_BATCH_SIZE;
-        Limit when is_integer(Limit) andalso Limit >= 0 ->
+        Limit when is_integer(Limit) andalso Limit > 0 ->
             Limit;
         %% TODO VFS-7208 uncomment after introducing API errors to fslogic
         %% Size when is_integer(Limit) ->
@@ -412,15 +409,14 @@ sanitize_limit(Opts) ->
     end.
 
 
--spec sanitize_offset(opts()) -> offset() | undefined.
+-spec sanitize_offset(opts()) -> offset().
 sanitize_offset(Opts) ->
     sanitize_offset(Opts, true).
 
 
--spec sanitize_offset(opts(), AllowNegative :: boolean()) -> offset() | undefined.
+-spec sanitize_offset(opts(), AllowNegative :: boolean()) -> offset().
 sanitize_offset(Opts, AllowNegative) ->
-    case maps:get(offset, Opts, undefined) of
-        undefined -> undefined;
+    case maps:get(offset, Opts, ?DEFAULT_OFFSET) of
         Offset when is_integer(Offset) ->
             StartIndex = maps:get(start_index, Opts, undefined),
             case {AllowNegative andalso StartIndex =/= undefined, Offset >= 0} of
@@ -440,7 +436,7 @@ sanitize_offset(Opts, AllowNegative) ->
     end.
 
 
--spec sanitize_start_index(opts()) -> start_index() | undefined.
+-spec sanitize_start_index(opts()) -> index() | undefined.
 sanitize_start_index(Opts) ->
     case maps:get(start_index, Opts, undefined) of
         undefined ->
@@ -452,3 +448,9 @@ sanitize_start_index(Opts) ->
             %% throw(?ERROR_BAD_VALUE_BINARY(start_index))
             throw(?EINVAL)
     end.
+
+
+-spec build_entry(dataset:path(), dataset:name()) -> entry().
+build_entry(DatasetPath, DatasetName) ->
+    DatasetId = dataset_path:to_id(DatasetPath),
+    {dataset_path:to_id(DatasetPath), DatasetName, pack_entry_index(DatasetName, DatasetId)}.

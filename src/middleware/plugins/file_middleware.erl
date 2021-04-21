@@ -444,7 +444,7 @@ data_spec_get(#gri{aspect = As}) when
     required => #{id => {binary, guid}},
     optional => #{
         <<"limit">> => {integer, {between, 1, 1000}},
-        <<"index">> => {any, fun
+        <<"index">> => {binary, fun
             (null) ->
                 {true, undefined};
             (undefined) ->

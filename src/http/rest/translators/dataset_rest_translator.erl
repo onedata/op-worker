@@ -17,8 +17,10 @@
 -include("middleware/middleware.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 
+%% API
 -export([create_response/4, get_response/2]).
-
+% Util functions
+-export([translate_datasets_list/2]).
 
 %%%===================================================================
 %%% API
@@ -44,7 +46,18 @@ create_response(#gri{aspect = instance}, _, resource, {#gri{id = DatasetId}, _})
 %% @end
 %%--------------------------------------------------------------------
 -spec get_response(gri:gri(), Resource :: term()) -> #rest_resp{}.
-get_response(#gri{aspect = instance}, #dataset_info{
+get_response(#gri{aspect = instance}, #dataset_info{} = DatasetInfo) ->
+    ?OK_REPLY(translate_dataset_info(DatasetInfo));
+
+get_response(#gri{aspect = children}, {Datasets, IsLast}) ->
+    ?OK_REPLY(translate_datasets_list(Datasets, IsLast)).
+
+%%%===================================================================
+%%% Util functions
+%%%===================================================================
+
+-spec translate_dataset_info(lfm_datasets:info()) -> json_utils:json_map().
+translate_dataset_info(#dataset_info{
     id = DatasetId,
     state = State,
     root_file_guid = RootFileGuid,
@@ -52,11 +65,11 @@ get_response(#gri{aspect = instance}, #dataset_info{
     root_file_type = RootFileType,
     creation_time = CreationTime,
     protection_flags = ProtectionFlags,
+    eff_protection_flags = EffProtectionFlags,
     parent = ParentId
 }) ->
     {ok, RootFileObjectId} = file_id:guid_to_objectid(RootFileGuid),
-
-    ?OK_REPLY(#{
+    #{
         <<"state">> => State,
         <<"datasetId">> => DatasetId,
         <<"parentId">> => utils:undefined_to_null(ParentId),
@@ -64,8 +77,20 @@ get_response(#gri{aspect = instance}, #dataset_info{
         <<"rootFileType">> => str_utils:to_binary(RootFileType),
         <<"rootFilePath">> => RootFilePath,
         <<"protectionFlags">> => file_meta:protection_flags_to_json(ProtectionFlags),
+        <<"effectiveProtectionFlags">> => file_meta:protection_flags_to_json(EffProtectionFlags),
         <<"creationTime">> => CreationTime
-    });
+    }.
 
-get_response(#gri{aspect = children}, Children) ->
-    ?OK_REPLY(Children).
+
+-spec translate_datasets_list([{dataset:id(), dataset:name(), datasets_structure:index()}], boolean()) -> json_utils:json_map().
+translate_datasets_list(Datasets, IsLast) ->
+    {TranslatedDatasetsReversed, NextPageToken} = lists:foldl(fun({DatasetId, DatasetName, Index}, {Acc, _}) ->
+        {[#{<<"datasetId">> => DatasetId, <<"name">> => DatasetName} | Acc], Index}
+    end, {[], undefined}, Datasets),
+    #{
+        <<"datasets">> => lists:reverse(TranslatedDatasetsReversed),
+        <<"nextPageToken">> => case IsLast of
+            true -> null;
+            false -> http_utils:base64url_encode(NextPageToken)
+        end
+    }.

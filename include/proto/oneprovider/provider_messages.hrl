@@ -17,6 +17,7 @@
 -include("modules/fslogic/acl.hrl").
 -include("proto/oneclient/common_messages.hrl").
 -include("modules/fslogic/file_attr.hrl").
+-include("modules/dataset/dataset.hrl").
 
 -record(get_parent, {
 }).
@@ -179,12 +180,14 @@
 
 -record(list_top_datasets, {
     state :: dataset:state(),
-    opts :: datasets_structure:opts()
+    opts :: dataset_api:listing_opts(),
+    mode = ?BASIC_INFO :: dataset_api:listing_mode()
 }).
 
 -record(list_children_datasets, {
     id :: dataset:id(),
-    opts :: datasets_structure:opts()
+    opts :: dataset_api:listing_opts(),
+    mode = ?BASIC_INFO :: dataset_api:listing_mode()
 }).
 
 -type provider_request_type() ::
@@ -264,7 +267,9 @@
     root_file_type :: file_meta:type(),
     creation_time :: time:seconds(),
     protection_flags = ?no_flags_mask :: data_access_control:bitmask(),
-    parent :: undefined | dataset:id()
+    eff_protection_flags = ?no_flags_mask :: data_access_control:bitmask(),
+    parent :: undefined | dataset:id(),
+    index :: dataset_api:index()
 }).
 
 -record(file_eff_dataset_summary, {
@@ -274,7 +279,7 @@
 }).
 
 -record(datasets, {
-   datasets = [] :: [{dataset:id(), dataset:name()}],
+   datasets = [] :: dataset_api:entries(),
    is_last :: boolean()
 }).
 

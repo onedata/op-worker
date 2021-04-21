@@ -142,6 +142,7 @@ all() ->
 -define(XATTR_NAME, <<"xattr_name_", (?RAND_NAME)/binary>>).
 -define(XATTR_VAL, <<"xattr_val_", (?RAND_NAME)/binary>>).
 
+-define(DIR_NAME, <<"dir", (?RAND_NAME)/binary>>).
 -define(FILE_NAME, <<"file_", (?RAND_NAME)/binary>>).
 
 -define(RAND_NAME,
@@ -488,12 +489,12 @@ create_file_and_hardlink(Config) ->
 create_dir_and_symlink(Config) ->
     [Worker, Worker2 | _] = ?config(op_worker_nodes, Config),
     SessId = ?SESS_ID(Worker),
-    FileName = ?FILE_NAME,
+    DirName = ?DIR_NAME,
     SymlinkName = <<"symlink">>,
 
-    {ok, Guid} = lfm_proxy:mkdir(Worker, SessId, ?PATH(FileName, ?SPACE_ID1)),
+    {ok, Guid} = lfm_proxy:mkdir(Worker, SessId, ?PATH(DirName, ?SPACE_ID1)),
     {ok, #file_attr{guid = SymlinkGuid}} =
-        lfm_proxy:make_symlink(Worker, SessId, ?PATH(SymlinkName, ?SPACE_ID1), Guid),
+        lfm_proxy:make_symlink(Worker, SessId, ?PATH(SymlinkName, ?SPACE_ID1), ?PATH(DirName, ?SPACE_ID1)),
     {ok, FileId} = file_id:guid_to_objectid(Guid),
     {ok, LinkFileId} = file_id:guid_to_objectid(SymlinkGuid),
 
@@ -504,7 +505,7 @@ create_dir_and_symlink(Config) ->
     ?assertReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID1,
-        <<"fileName">> => FileName,
+        <<"fileName">> => DirName,
         <<"fileType">> => str_utils:to_binary(?DIRECTORY_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{}
@@ -523,7 +524,7 @@ create_dir_and_symlink(Config) ->
     ?assertNotReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID1,
-        <<"fileName">> => FileName,
+        <<"fileName">> => DirName,
         <<"fileType">> => str_utils:to_binary(?DIRECTORY_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{}

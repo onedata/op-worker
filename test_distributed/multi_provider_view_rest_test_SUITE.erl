@@ -1217,7 +1217,7 @@ list_views_via_rest(Config, Worker, Space, ChunkSize, StartId, Acc) ->
     case list_views_via_rest(Config, Worker, Space, StartId, ChunkSize) of
         {ok, {Views, NextPageToken}} ->
             case NextPageToken of
-                <<"null">> ->
+                Null when Null =:= <<"null">> orelse Null =:= null ->
                     Acc ++ Views;
                 _ ->
                     ?assertMatch(ChunkSize, length(Views)),
