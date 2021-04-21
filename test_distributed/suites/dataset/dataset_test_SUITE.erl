@@ -996,7 +996,7 @@ establish_nested_datasets_filetree_structure_with_hardlinks(_Config) ->
     {ok, DirLvl2Guid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, DirLvl1Guid, DirLvl2Name, ?DEFAULT_DIR_PERMS),
     {ok, DirLvl3Guid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, DirLvl2Guid, DirLvl3Name, ?DEFAULT_DIR_PERMS),
     {ok, DirLvl4Guid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, DirLvl3Guid, DirLvl4Name, ?DEFAULT_DIR_PERMS),
-    {ok, DirALvl5Guid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, DirLvl4Guid, DirALvl5Name, ?DEFAULT_DIR_PERMS),
+    {ok, _DirALvl5Guid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, DirLvl4Guid, DirALvl5Name, ?DEFAULT_DIR_PERMS),
     {ok, DirBLvl5Guid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, DirLvl4Guid, DirBLvl5Name, ?DEFAULT_DIR_PERMS),
 
     % create file in the last level directory
@@ -1007,13 +1007,13 @@ establish_nested_datasets_filetree_structure_with_hardlinks(_Config) ->
     Link1Path = filename:join(["/", SpaceName, DirLvl1Name, ?FILE_NAME()]),
     {ok, #file_attr{guid = Link1Guid}} = lfm_proxy:make_link(P1Node, UserSessIdP1, Link1Path, FileGuid),
     Link2Path = filename:join(["/", SpaceName, DirLvl1Name, DirLvl2Name, ?FILE_NAME()]),
-    {ok, #file_attr{guid = Link2Guid}} = lfm_proxy:make_link(P1Node, UserSessIdP1, Link2Path, FileGuid),
+    {ok, #file_attr{guid = _Link2Guid}} = lfm_proxy:make_link(P1Node, UserSessIdP1, Link2Path, FileGuid),
     Link3Path = filename:join(["/", SpaceName, DirLvl1Name, DirLvl2Name, DirLvl3Name, ?FILE_NAME()]),
     {ok, #file_attr{guid = Link3Guid}} = lfm_proxy:make_link(P1Node, UserSessIdP1, Link3Path, FileGuid),
     Link4Path = filename:join(["/", SpaceName, DirLvl1Name, DirLvl2Name, DirLvl3Name, DirLvl4Name, ?FILE_NAME()]),
     {ok, #file_attr{guid = Link4Guid}} = lfm_proxy:make_link(P1Node, UserSessIdP1, Link4Path, FileGuid),
     Link5Path = filename:join(["/", SpaceName, DirLvl1Name, DirLvl2Name, DirLvl3Name, DirLvl4Name, DirALvl5Name, ?FILE_NAME()]),
-    {ok, #file_attr{guid = Link5Guid}} = lfm_proxy:make_link(P1Node, UserSessIdP1, Link5Path, FileGuid),
+    {ok, #file_attr{guid = _Link5Guid}} = lfm_proxy:make_link(P1Node, UserSessIdP1, Link5Path, FileGuid),
 
     % establish dataset on file
     {ok, FileDatasetId} = ?assertMatch({ok, _}, lfm_proxy:establish_dataset(P1Node, UserSessIdP1, ?FILE_REF(FileGuid), ?no_flags_mask)),
