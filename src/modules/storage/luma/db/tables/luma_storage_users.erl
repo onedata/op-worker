@@ -115,7 +115,7 @@ delete(StorageId, UserId, true) ->
     end,
     case delete(StorageId, UserId, false) of
         ok when Uid =/= undefined ->
-            luma_onedata_users:delete_uid_mapping(StorageId, Uid, false);
+            delete_reverse_mapping(StorageId, Uid);
         ok ->
             ok
     end.
