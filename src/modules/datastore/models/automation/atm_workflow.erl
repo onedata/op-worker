@@ -22,7 +22,7 @@
 -export([get_ctx/0, get_record_version/0, get_record_struct/1]).
 
 
--type id() :: file_meta:uuid().
+-type id() :: binary().
 -type diff() :: datastore_doc:diff(record()).
 -type record() :: #atm_workflow{}.
 -type doc() :: datastore_doc:doc(record()).

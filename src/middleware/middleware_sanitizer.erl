@@ -36,7 +36,7 @@
 -type param_spec() :: {type_constraint(), value_constraint()}.
 % The 'aspect' keyword allows to validate the data provided in aspect identifier.
 -type params_spec() :: #{
-    Param :: binary() | id | {aspect, binary()} => param_spec()
+    Param :: id | {aspect, binary()} | atom() | binary() => param_spec()
 }.
 
 -type data() :: #{Param :: id | aspect | binary() => term()}.

@@ -12,6 +12,7 @@
 -author("Bartosz Walkowicz").
 
 -include("modules/automation/atm_wokflow.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% API
 -export([link_key/2]).
@@ -23,18 +24,24 @@
     move_from_waiting_to_ongoing/1,
     move_from_ongoing_to_ended/1
 ]).
--export([list/5]).
+-export([list/3]).
 
 -type link_key() :: binary().
 -type virtual_list_id() :: binary(). % ?(WAITING|ONGOING|ENDED)_WORKFLOWS_KEY
 
 -type start_index() :: binary().
 -type offset() :: integer().
--type limit() :: non_neg_integer().
+-type limit() :: pos_integer().
+
+-type listing_opts() :: #{
+    offset => offset(),
+    start_index => start_index(),
+    limit => limit()
+}.
 
 -export_type([
     link_key/0, virtual_list_id/0,
-    start_index/0, offset/0, limit/0
+    start_index/0, offset/0, limit/0, listing_opts/0
 ]).
 
 -define(CTX, (atm_workflow:get_ctx())).
@@ -115,24 +122,12 @@ move_from_ongoing_to_ended(Doc) ->
     delete_ongoing(Doc).
 
 
--spec list(od_space:id(), virtual_list_id(), undefined | link_key(), offset(), limit()) ->
+-spec list(od_space:id(), virtual_list_id(), listing_opts()) ->
     [{atm_workflow:id(), link_key()}].
-list(SpaceId, ListDocId, StartId, Offset, Limit) ->
-    Opts = #{offset => Offset},
-
-    Opts2 = case StartId of
-        undefined -> Opts;
-        _ -> Opts#{prev_link_name => StartId}
-    end,
-
-    Opts3 = case Limit of
-        all -> Opts2;
-        _ -> Opts2#{size => Limit}
-    end,
-
+list(SpaceId, ListDocId, ListingOpts) ->
     {ok, Workflows} = for_each_link(ListDocId, fun(LinkName, WorkflowId, Acc) ->
         [{WorkflowId, LinkName} | Acc]
-    end, [], SpaceId, Opts3),
+    end, [], SpaceId, sanitize_listing_opts(ListingOpts)),
 
     lists:reverse(Workflows).
 
@@ -165,6 +160,29 @@ delete_link(SourceId, WorkflowId, SpaceId, Timestamp) ->
     Key = link_key(WorkflowId, Timestamp),
 
     ok = datastore_model:delete_links(?CTX, LinkRoot, ?WORKFLOWS_TREE_ID, Key).
+
+
+%% @private
+-spec sanitize_listing_opts(listing_opts()) -> datastore_model:fold_opts() | no_return().
+sanitize_listing_opts(Opts) ->
+    SanitizedOpts = try
+        middleware_sanitizer:sanitize_data(Opts, #{
+            at_least_one => #{
+                offset => {integer, any},
+                start_index => {binary, any}
+            },
+            optional => #{limit => {integer, {not_lower_than, 1}}}
+        })
+    catch _:_ ->
+        %% TODO VFS-7208 uncomment after introducing API errors to fslogic
+        throw(?EINVAL)
+    end,
+
+    kv_utils:copy_found([
+        {offset, offset},
+        {limit, size},
+        {start_index, prev_link_name}
+    ], SanitizedOpts).
 
 
 %% @private
