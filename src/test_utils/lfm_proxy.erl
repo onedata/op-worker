@@ -12,6 +12,8 @@
 -module(lfm_proxy).
 -author("Tomasz Lichon").
 
+-include("modules/fslogic/acl.hrl").
+-include("modules/dataset/dataset.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include_lib("common_test/include/ct.hrl").
@@ -73,9 +75,13 @@
     add_qos_entry/5, get_qos_entry/3, remove_qos_entry/3,
     check_qos_status/3, check_qos_status/4,
 
-    establish_dataset/3, establish_dataset/4, remove_dataset/3, update_dataset/6,
+    establish_dataset/3, establish_dataset/4, remove_dataset/3,
+    reattach_dataset/3, detach_dataset/3, update_dataset/6,
     get_dataset_info/3, get_file_eff_dataset_summary/3,
-    list_top_datasets/5, list_top_datasets/6, list_children_datasets/4
+    list_top_datasets/5, list_top_datasets/6, list_children_datasets/4,
+
+    archive_dataset/4, update_archive/4, get_archive_info/3,
+    list_archives/4, list_archives/5, remove_archive/3
 ]).
 
 -define(EXEC(Worker, Function),
@@ -867,6 +873,16 @@ remove_dataset(Worker, SessId, DatasetId) ->
     ?EXEC(Worker, lfm:remove_dataset(SessId, DatasetId)).
 
 
+-spec detach_dataset(node(), session:id(), dataset:id()) -> ok | lfm:error_reply().
+detach_dataset(Worker, SessId, DatasetId) ->
+    update_dataset(Worker, SessId, DatasetId, ?DETACHED_DATASET, ?no_flags_mask, ?no_flags_mask).
+
+
+-spec reattach_dataset(node(), session:id(), dataset:id()) -> ok | lfm:error_reply().
+reattach_dataset(Worker, SessId, DatasetId) ->
+    update_dataset(Worker, SessId, DatasetId, ?ATTACHED_DATASET, ?no_flags_mask, ?no_flags_mask).
+
+
 -spec update_dataset(node(), session:id(), dataset:id(), undefined | dataset:state(), data_access_control:bitmask(),
     data_access_control:bitmask()) -> ok | lfm:error_reply().
 update_dataset(Worker, SessId, DatasetId, NewState, FlagsToSet, FlagsToUnset) ->
@@ -900,6 +916,43 @@ list_top_datasets(Worker, SessId, SpaceId, State, Opts, ListingMode) ->
 list_children_datasets(Worker, SessId, DatasetId, Opts) ->
     ?EXEC(Worker, lfm:list_children_datasets(SessId, DatasetId, Opts)).
 
+%%%===================================================================
+%%% Archives functions
+%%%===================================================================
+
+-spec archive_dataset(node(), session:id(), dataset:id(), archive:params()) ->
+    {ok, archive:id()} | lfm:error_reply().
+archive_dataset(Worker, SessId, DatasetId, ArchivingParams) ->
+    ?EXEC(Worker, lfm:archive_dataset(SessId, DatasetId, ArchivingParams)).
+
+
+-spec update_archive(node(), session:id(), archive:id(), archive:params()) -> ok | lfm:error_reply().
+update_archive(Worker, SessId, ArchiveId, Params) ->
+    ?EXEC(Worker, lfm:update_archive(SessId, ArchiveId, Params)).
+
+
+-spec get_archive_info(node(), session:id(), archive:id()) ->
+    {ok, lfm_datasets:archive_info()} | lfm:error_reply().
+get_archive_info(Worker, SessId, ArchiveId) ->
+    ?EXEC(Worker, lfm:get_archive_info(SessId, ArchiveId)).
+
+
+-spec list_archives(node(), session:id(), dataset:id(), dataset_api:listing_opts()) ->
+    {ok, dataset_api:archive_entries(), boolean()} | lfm:error_reply().
+list_archives(Worker, SessId, DatasetId, Opts) ->
+    list_archives(Worker, SessId, DatasetId, Opts, undefined).
+
+
+-spec list_archives(node(), session:id(), dataset:id(), dataset_api:listing_opts(),
+    dataset_api:listing_mode() | undefined) ->
+    {ok, dataset_api:archive_entries(), boolean()} | lfm:error_reply().
+list_archives(Worker, SessId, DatasetId, Opts, ListingMode) ->
+    ?EXEC(Worker, lfm:list_archives(SessId, DatasetId, Opts, ListingMode)).
+
+
+-spec remove_archive(node(), session:id(), archive:id()) -> ok | lfm:error_reply().
+remove_archive(Worker, SessId, ArchiveId) ->
+    ?EXEC(Worker, lfm:remove_archive(SessId, ArchiveId)).
 
 %%%===================================================================
 %%% Internal functions

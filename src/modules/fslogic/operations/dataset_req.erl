@@ -19,7 +19,7 @@
 -include_lib("ctool/include/privileges.hrl").
 
 
-%% API
+%% Datasets API
 -export([
     establish/3,
     update/6,
@@ -29,6 +29,17 @@
     list_top_datasets/5,
     list_children_datasets/5
 ]).
+
+%% Archives API
+-export([
+    archive/4,
+    update_archive/4,
+    get_archive_info/3,
+    list_archives/5,
+    remove_archive/3
+]).
+
+% TODO przywileje i uprawnienia do archiwów
 
 %%%===================================================================
 %%% API functions
@@ -94,9 +105,9 @@ get_file_eff_summary(FileCtx0, UserCtx) ->
     ?PROVIDER_OK_RESP(Summary).
 
 
--spec list_top_datasets(od_space:id(), dataset:state(), user_ctx:ctx(), dataset_api:listing_opts(),
-    dataset_api:listing_mode()) -> fslogic_worker:provider_response().
-list_top_datasets(SpaceId, State, UserCtx, Opts, ListingMode) ->
+-spec list_top_datasets(od_space:id(), dataset:state(), dataset_api:listing_opts(),
+    dataset_api:listing_mode(), user_ctx:ctx()) -> fslogic_worker:provider_response().
+list_top_datasets(SpaceId, State, Opts, ListingMode, UserCtx) ->
     UserId = user_ctx:get_user_id(UserCtx),
     space_logic:assert_has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW),
 
@@ -104,13 +115,51 @@ list_top_datasets(SpaceId, State, UserCtx, Opts, ListingMode) ->
     ?PROVIDER_OK_RESP(#datasets{datasets = Datasets, is_last = IsLast}).
 
 
--spec list_children_datasets(file_ctx:ctx(), dataset:id(), user_ctx:ctx(), dataset_api:listing_opts(),
-    dataset_api:listing_mode()) -> fslogic_worker:provider_response().
-list_children_datasets(SpaceDirCtx, Dataset, UserCtx, Opts, ListingMode) ->
+-spec list_children_datasets(file_ctx:ctx(), dataset:id(), dataset_api:listing_opts(),
+    dataset_api:listing_mode(), user_ctx:ctx()) -> fslogic_worker:provider_response().
+list_children_datasets(SpaceDirCtx, Dataset, Opts, ListingMode, UserCtx) ->
     assert_has_eff_privilege(SpaceDirCtx, UserCtx, ?SPACE_VIEW),
 
     {ok, Datasets, IsLast} = dataset_api:list_children_datasets(Dataset, Opts, ListingMode),
     ?PROVIDER_OK_RESP(#datasets{datasets = Datasets, is_last = IsLast}).
+
+%%%===================================================================
+%%% Archives API functions
+%%%===================================================================
+
+-spec archive(file_ctx:ctx(), dataset:id(), archive:params(), user_ctx:ctx()) ->
+    fslogic_worker:provider_response().
+archive(SpaceDirCtx, DatasetId, Params, UserCtx) ->
+    {ok, ArchiveId} = dataset_api:archive(DatasetId, Params, user_ctx:get_user_id(UserCtx)),
+    ?PROVIDER_OK_RESP(#dataset_archived{id = ArchiveId}).
+
+
+-spec update_archive(file_ctx:ctx(), archive:id(), archive:params(), user_ctx:ctx()) ->
+    fslogic_worker:provider_response().
+update_archive(SpaceDirCtx, ArchiveId, Params, UserCtx) ->
+    ok = dataset_api:update_archive(ArchiveId, Params),
+    ?PROVIDER_OK_RESP.
+
+
+-spec get_archive_info(file_ctx:ctx(), archive:id(), user_ctx:ctx()) ->
+    fslogic_worker:provider_response().
+get_archive_info(SpaceDirCtx, ArchiveId, UserCtx) ->
+    {ok, ArchiveInfo} = dataset_api:get_archive_info(ArchiveId),
+    ?PROVIDER_OK_RESP(ArchiveInfo).
+
+
+-spec list_archives(file_ctx:ctx(), dataset:id(), archives_list:opts(), dataset_api:listing_mode(),
+    user_ctx:ctx()) -> fslogic_worker:provider_response().
+list_archives(SpaceDirCtx, DatasetId, Opts, ListingMode, UserCtx) ->
+    {ok, Archives, IsLast} = dataset_api:list_archives(DatasetId, Opts, ListingMode),
+    ?PROVIDER_OK_RESP(#archives{archives = Archives, is_last = IsLast}).
+
+
+-spec remove_archive(file_ctx:ctx(), archive:id(), user_ctx:ctx()) -> fslogic_worker:provider_response().
+remove_archive(SpaceDirCtx, ArchiveId, UserCtx) ->
+    ok = dataset_api:remove_archive(ArchiveId),
+    ?PROVIDER_OK_RESP.
+
 
 %%%===================================================================
 %%% Internal functions
@@ -126,5 +175,10 @@ establish_insecure(FileCtx, ProtectionFlags) ->
 -spec assert_has_eff_privilege(file_ctx:ctx(), user_ctx:ctx(), privileges:space_privilege()) -> ok.
 assert_has_eff_privilege(FileCtx, UserCtx, Privilege) ->
     UserId = user_ctx:get_user_id(UserCtx),
-    SpaceId = file_ctx:get_space_id_const(FileCtx),
-    space_logic:assert_has_eff_privilege(SpaceId, UserId, Privilege).
+    case UserId =:= ?ROOT_USER_ID of
+        true ->
+            ok;
+        false ->
+            SpaceId = file_ctx:get_space_id_const(FileCtx),
+            space_logic:assert_has_eff_privilege(SpaceId, UserId, Privilege)
+    end.

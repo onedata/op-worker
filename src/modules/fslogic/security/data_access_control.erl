@@ -294,10 +294,10 @@ assert_operations_allowed(UserCtx, FileCtx0, RequiredOps) ->
         {allowed, FileCtx1, NewUserAccessCheckProgress} ->
             permissions_cache:cache_permission(CacheKey, NewUserAccessCheckProgress),
             FileCtx1;
-        {denied, FileCtx1, NewUserAccessCheckProgress} ->
+        {denied, _FileCtx1, NewUserAccessCheckProgress} ->
             permissions_cache:cache_permission(CacheKey, NewUserAccessCheckProgress),
             throw(?EACCES);
-        {forbidden, FileCtx1, NewUserAccessCheckProgress} ->
+        {forbidden, _FileCtx1, NewUserAccessCheckProgress} ->
             permissions_cache:cache_permission(CacheKey, NewUserAccessCheckProgress),
             throw(?EPERM)
     end.

@@ -971,7 +971,6 @@ end_per_testcase(_Case, Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     PNodes = oct_background:get_all_providers_nodes(),
     SpaceId = oct_background:get_space_id(space1),
-    test_utils:mock_unload(PNodes, [file_meta]),
     onenv_dataset_test_utils:cleanup_all_datasets(krakow, space1),
     lfm_test_utils:clean_space(P1Node, PNodes, SpaceId, ?ATTEMPTS),
     lfm_proxy:teardown(Config).
