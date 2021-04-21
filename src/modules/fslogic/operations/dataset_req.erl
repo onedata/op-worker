@@ -26,8 +26,8 @@
     remove/3,
     get_info/3,
     get_file_eff_summary/2,
-    list_top_datasets/4,
-    list_children_datasets/4
+    list_top_datasets/5,
+    list_children_datasets/5
 ]).
 
 %%%===================================================================
@@ -94,22 +94,22 @@ get_file_eff_summary(FileCtx0, UserCtx) ->
     ?PROVIDER_OK_RESP(Summary).
 
 
--spec list_top_datasets(od_space:id(), dataset:state(), user_ctx:ctx(), datasets_structure:opts()) ->
-    fslogic_worker:provider_response().
-list_top_datasets(SpaceId, State, UserCtx, Opts) ->
+-spec list_top_datasets(od_space:id(), dataset:state(), user_ctx:ctx(), dataset_api:listing_opts(),
+    dataset_api:listing_mode()) -> fslogic_worker:provider_response().
+list_top_datasets(SpaceId, State, UserCtx, Opts, ListingMode) ->
     UserId = user_ctx:get_user_id(UserCtx),
     space_logic:assert_has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW),
 
-    {ok, Datasets, IsLast} = dataset_api:list_top_datasets(SpaceId, State, Opts),
+    {ok, Datasets, IsLast} = dataset_api:list_top_datasets(SpaceId, State, Opts, ListingMode),
     ?PROVIDER_OK_RESP(#datasets{datasets = Datasets, is_last = IsLast}).
 
 
--spec list_children_datasets(file_ctx:ctx(), dataset:id(), user_ctx:ctx(), datasets_structure:opts()) ->
-    fslogic_worker:provider_response().
-list_children_datasets(SpaceDirCtx, Dataset, UserCtx, Opts) ->
+-spec list_children_datasets(file_ctx:ctx(), dataset:id(), user_ctx:ctx(), dataset_api:listing_opts(),
+    dataset_api:listing_mode()) -> fslogic_worker:provider_response().
+list_children_datasets(SpaceDirCtx, Dataset, UserCtx, Opts, ListingMode) ->
     assert_has_eff_privilege(SpaceDirCtx, UserCtx, ?SPACE_VIEW),
 
-    {ok, Datasets, IsLast} = dataset_api:list_children_datasets(Dataset, Opts),
+    {ok, Datasets, IsLast} = dataset_api:list_children_datasets(Dataset, Opts, ListingMode),
     ?PROVIDER_OK_RESP(#datasets{datasets = Datasets, is_last = IsLast}).
 
 %%%===================================================================

@@ -75,7 +75,7 @@
 
     establish_dataset/3, establish_dataset/4, remove_dataset/3, update_dataset/6,
     get_dataset_info/3, get_file_eff_dataset_summary/3,
-    list_top_datasets/5, list_children_datasets/4
+    list_top_datasets/5, list_top_datasets/6, list_children_datasets/4
 ]).
 
 -define(EXEC(Worker, Function),
@@ -873,7 +873,7 @@ update_dataset(Worker, SessId, DatasetId, NewState, FlagsToSet, FlagsToUnset) ->
     ?EXEC(Worker, lfm:update_dataset(SessId, DatasetId, NewState, FlagsToSet, FlagsToUnset)).
 
 
--spec get_dataset_info(node(), session:id(), dataset:id()) -> {ok, lfm_datasets:attrs()} | lfm:error_reply().
+-spec get_dataset_info(node(), session:id(), dataset:id()) -> {ok, lfm_datasets:info()} | lfm:error_reply().
 get_dataset_info(Worker, SessId, DatasetId) ->
     ?EXEC(Worker, lfm:get_dataset_info(SessId, DatasetId)).
 
@@ -883,14 +883,20 @@ get_file_eff_dataset_summary(Worker, SessId, FileKey) ->
     ?EXEC(Worker, lfm:get_file_eff_dataset_summary(SessId, FileKey)).
 
 
--spec list_top_datasets(node(), session:id(), od_space:id(), dataset:state(), datasets_structure:opts()) ->
-    {ok, [{dataset:id(), dataset:name()}], boolean()} | lfm:error_reply().
+-spec list_top_datasets(node(), session:id(), od_space:id(), dataset:state(), dataset_api:listing_opts()) ->
+    {ok, dataset_api:entries(), boolean()} | lfm:error_reply().
 list_top_datasets(Worker, SessId, SpaceId, State, Opts) ->
-    ?EXEC(Worker, lfm:list_top_datasets(SessId, SpaceId, State, Opts)).
+    list_top_datasets(Worker, SessId, SpaceId, State, Opts, undefined).
+
+-spec list_top_datasets(node(), session:id(), od_space:id(), dataset:state(), dataset_api:listing_opts(),
+    dataset_api:listing_mode() | undefined) ->
+    {ok, dataset_api:entries(), boolean()} | lfm:error_reply().
+list_top_datasets(Worker, SessId, SpaceId, State, Opts, ListingMode) ->
+    ?EXEC(Worker, lfm:list_top_datasets(SessId, SpaceId, State, Opts, ListingMode)).
 
 
--spec list_children_datasets(node(), session:id(), dataset:id(), datasets_structure:opts()) ->
-    {ok, [{dataset:id(), dataset:name()}], boolean()} | lfm:error_reply().
+-spec list_children_datasets(node(), session:id(), dataset:id(), dataset_api:listing_opts()) ->
+    {ok, dataset_api:entries(), boolean()} | lfm:error_reply().
 list_children_datasets(Worker, SessId, DatasetId, Opts) ->
     ?EXEC(Worker, lfm:list_children_datasets(SessId, DatasetId, Opts)).
 

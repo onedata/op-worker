@@ -139,6 +139,14 @@ sanitize_param(Param, RawData, ParamsSpec) ->
     case maps:get(Param, RawData, undefined) of
         undefined ->
             false;
+        null ->
+            case maps:get(Param, ParamsSpec, undefined) of
+                {any, ValueConstraint} ->
+                    {true, sanitize_param(any, ValueConstraint, Param, null)};
+                _ ->
+                    % null values are ignored for any other TypeConstraints than "any"
+                    false
+            end;
         RawValue ->
             {TypeConstraint, ValueConstraint} = maps:get(Param, ParamsSpec),
             {true, sanitize_param(
@@ -252,10 +260,6 @@ check_type(gri, Param, EncodedGri) when is_binary(EncodedGri) ->
 check_type(gri, Param, _) ->
     throw(?ERROR_BAD_DATA(Param));
 
-check_type(page_token, _Param, null) ->
-    undefined;
-check_type(page_token, _Param, <<"null">>) ->
-    undefined;
 check_type(page_token, _Param, undefined) ->
     undefined;
 check_type(page_token, _Param, <<"undefined">>) ->

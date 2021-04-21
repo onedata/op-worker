@@ -784,7 +784,7 @@ list_all_transfers_via_rest(Config, Worker, Space, State, ChunkSize, StartId, Ac
     case list_transfers_via_rest(Config, Worker, Space, State, StartId, ChunkSize) of
         {ok, {Transfers, NextPageToken}} ->
             case NextPageToken of
-                <<"null">> ->
+                Null when Null =:= <<"null">> orelse Null =:= null ->
                     Acc ++ Transfers;
                 _ ->
                     list_all_transfers_via_rest(Config, Worker, Space, State, ChunkSize, NextPageToken, Acc ++ Transfers)

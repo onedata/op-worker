@@ -19,13 +19,13 @@
 -export([
     establish/3, remove/2, update/5,
     get_info/2, get_file_eff_summary/2,
-    list_top_datasets/4, list_children_datasets/3
+    list_top_datasets/5, list_children_datasets/4
 ]).
 
--type attrs() :: #dataset_info{}.
+-type info() :: #dataset_info{}.
 -type file_eff_summary() :: #file_eff_dataset_summary{}.
 
--export_type([attrs/0, file_eff_summary/0]).
+-export_type([info/0, file_eff_summary/0]).
 
 %%%===================================================================
 %%% API functions
@@ -65,7 +65,7 @@ remove(SessId, DatasetId) ->
 
 
 -spec get_info(session:id(), dataset:id()) ->
-    {ok, attrs()} | lfm:error_reply().
+    {ok, info()} | lfm:error_reply().
 get_info(SessId, DatasetId) ->
     SpaceGuid = get_space_guid(DatasetId),
     remote_utils:call_fslogic(SessId, provider_request, SpaceGuid,
@@ -84,23 +84,25 @@ get_file_eff_summary(SessId, FileKey) ->
     ).
 
 
--spec list_top_datasets(session:id(), od_space:id(), dataset:state(), datasets_structure:opts()) ->
-    {ok, [{dataset:id(), dataset:name()}], boolean()} | lfm:error_reply().
-list_top_datasets(SessId, SpaceId, State, Opts) ->
+-spec list_top_datasets(session:id(), od_space:id(), dataset:state(), dataset_api:listing_opts(),
+    dataset_api:listing_mode()) -> {ok, dataset_api:entries(), boolean()} | lfm:error_reply().
+list_top_datasets(SessId, SpaceId, State, Opts, ListingMode) ->
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    ListingMode2 = utils:ensure_defined(ListingMode, ?BASIC_INFO),
     remote_utils:call_fslogic(SessId, provider_request, SpaceGuid,
-        #list_top_datasets{state = State, opts = Opts},
+        #list_top_datasets{state = State, opts = Opts, mode = ListingMode2},
         fun(#datasets{datasets = Datasets, is_last = IsLast}) ->
             {ok, Datasets, IsLast}
         end).
 
 
--spec list_children_datasets(session:id(), dataset:id(), datasets_structure:opts()) ->
-    {ok, [{dataset:id(), dataset:name()}], boolean()} | lfm:error_reply().
-list_children_datasets(SessId, DatasetId, Opts) ->
+-spec list_children_datasets(session:id(), dataset:id(), dataset_api:listing_opts(), dataset_api:listing_mode()) ->
+    {ok, dataset_api:entries(), boolean()} | lfm:error_reply().
+list_children_datasets(SessId, DatasetId, Opts, ListingMode) ->
     SpaceGuid = get_space_guid(DatasetId),
+    ListingMode2 = utils:ensure_defined(ListingMode, ?BASIC_INFO),
     remote_utils:call_fslogic(SessId, provider_request, SpaceGuid,
-        #list_children_datasets{id = DatasetId, opts = Opts},
+        #list_children_datasets{id = DatasetId, opts = Opts, mode = ListingMode2},
         fun(#datasets{datasets = Datasets, is_last = IsLast}) ->
             {ok, Datasets, IsLast}
         end).

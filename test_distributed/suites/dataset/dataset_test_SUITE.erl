@@ -114,7 +114,10 @@ all() -> ?ALL([
 ).
 
 -define(assertAttachedDataset(Node, SessionId, DatasetId, Guid, ExpectedParentDatasetId, ExpectedProtectionFlags),
-    assert_attached_dataset(Node, SessionId, DatasetId, Guid, ExpectedParentDatasetId, ExpectedProtectionFlags)
+    assert_attached_dataset(Node, SessionId, DatasetId, Guid, ExpectedParentDatasetId, ExpectedProtectionFlags, ExpectedProtectionFlags)
+).
+-define(assertAttachedDataset(Node, SessionId, DatasetId, Guid, ExpectedParentDatasetId, ExpectedProtectionFlags, ExpectedEffProtectionFlags),
+    assert_attached_dataset(Node, SessionId, DatasetId, Guid, ExpectedParentDatasetId, ExpectedProtectionFlags, ExpectedEffProtectionFlags)
 ).
 
 -define(assertDetachedDataset(Node, SessionId, DatasetId, ExpectedRootFileGuid, ExpectedParentDatasetId,
@@ -721,7 +724,7 @@ establish_nested_datasets_structure(_Config) ->
 
     GuidsAndDatasets = lists:reverse(GuidsAndDatasetsReversed),
 
-    ?assertMatch({ok, [{SpaceDatasetId, SpaceName}], true},
+    ?assertMatch({ok, [{SpaceDatasetId, SpaceName, _}], true},
         lfm_proxy:list_top_datasets(P1Node, UserSessIdP1, SpaceId, attached, #{offset => 0, limit => 100})),
     ?assertNoTopDatasets(P1Node, UserSessIdP1, SpaceId, detached),
 
@@ -758,7 +761,7 @@ establish_nested_datasets_structure_end_detach_all(_Config) ->
 
     GuidsAndDatasets = lists:reverse(GuidsAndDatasetsReversed),
 
-    ?assertMatch({ok, [{SpaceDatasetId, SpaceName}], true},
+    ?assertMatch({ok, [{SpaceDatasetId, SpaceName, _}], true},
         lfm_proxy:list_top_datasets(P1Node, UserSessIdP1, SpaceId, detached, #{offset => 0, limit => 100})),
     ?assertNoTopDatasets(P1Node, UserSessIdP1, SpaceId, attached),
 
@@ -944,7 +947,8 @@ establish_datasets_with_the_same_names(_Config) ->
 
     {ok, Datasets, true} =
         lfm_proxy:list_top_datasets(P1Node, UserSessIdP1, SpaceId, attached, #{offset => 0, limit => 100}),
-    ?assertEqual(lists:sort(ExpectedDatasets), lists:sort(Datasets)),
+    DatasetsWithoutIndices = [{DN, DI} || {DN, DI, _} <- Datasets],
+    ?assertEqual(lists:sort(ExpectedDatasets), lists:sort(DatasetsWithoutIndices)),
     ?assertNoTopDatasets(P1Node, UserSessIdP1, SpaceId, detached).
 
 
@@ -982,22 +986,24 @@ detach(Node, SessionId, DatasetId) ->
 reattach(Node, SessionId, DatasetId) ->
     lfm_proxy:update_dataset(Node, SessionId, DatasetId, ?ATTACHED_DATASET, ?no_flags_mask, ?no_flags_mask).
 
-assert_attached_dataset(Node, SessionId, DatasetId, ExpectedRootFileGuid, ExpectedParentDatasetId, ExpectedProtectionFlags) ->
+assert_attached_dataset(Node, SessionId, DatasetId, ExpectedRootFileGuid, ExpectedParentDatasetId,
+    ExpectedProtectionFlags,ExpectedEffProtectionFlags
+) ->
     {ok, #file_attr{type = ExpectedRootFileType}} = lfm_proxy:stat(Node, SessionId, ?FILE_REF(ExpectedRootFileGuid)),
     {ok, ExpectedRootFilePath} = lfm_proxy:get_file_path(Node, SessionId, ExpectedRootFileGuid),
     assert_dataset(Node, SessionId, DatasetId, ExpectedRootFileGuid, ExpectedParentDatasetId, ExpectedRootFilePath,
-        ExpectedRootFileType, ?ATTACHED_DATASET, ExpectedProtectionFlags).
+        ExpectedRootFileType, ?ATTACHED_DATASET, ExpectedProtectionFlags, ExpectedEffProtectionFlags).
 
 
 assert_detached_dataset(Node, SessionId, DatasetId, ExpectedRootFileGuid, ExpectedParentDatasetId,
     ExpectedRootFilePath, ExpectedRootFileType, ExpectedProtectionFlags
 ) ->
     assert_dataset(Node, SessionId, DatasetId, ExpectedRootFileGuid, ExpectedParentDatasetId, ExpectedRootFilePath,
-        ExpectedRootFileType, ?DETACHED_DATASET, ExpectedProtectionFlags).
+        ExpectedRootFileType, ?DETACHED_DATASET, ExpectedProtectionFlags, ?no_flags_mask).
 
 
 assert_dataset(Node, SessionId, DatasetId, ExpectedRootFileGuid, ExpectedParentDatasetId, ExpectedRootFilePath,
-    ExpectedRootFileType, ExpectedState, ExpectedProtectionFlags
+    ExpectedRootFileType, ExpectedState, ExpectedProtectionFlags, ExpectedEffProtectionFlags
 ) ->
     % check dataset info
     ?assertMatch({ok, #dataset_info{
@@ -1007,7 +1013,8 @@ assert_dataset(Node, SessionId, DatasetId, ExpectedRootFileGuid, ExpectedParentD
         root_file_path = ExpectedRootFilePath,
         root_file_type = ExpectedRootFileType,
         parent = ExpectedParentDatasetId,
-        protection_flags = ExpectedProtectionFlags
+        protection_flags = ExpectedProtectionFlags,
+        eff_protection_flags = ExpectedEffProtectionFlags
     }}, lfm_proxy:get_dataset_info(Node, SessionId, DatasetId), ?ATTEMPTS),
 
     % check dataset structure entry
@@ -1015,11 +1022,11 @@ assert_dataset(Node, SessionId, DatasetId, ExpectedRootFileGuid, ExpectedParentD
     case ExpectedParentDatasetId =/= undefined of
         true ->
             % check whether dataset is visible on parent dataset's list
-            ?assertMatch({ok, [{DatasetId, Name}], true},
+            ?assertMatch({ok, [{DatasetId, Name, _}], true},
                 lfm_proxy:list_children_datasets(Node, SessionId, ExpectedParentDatasetId, #{offset => 0, limit => 100}), ?ATTEMPTS);
         false ->
             % check whether dataset is visible on space top dataset list
             SpaceId = file_id:guid_to_space_id(ExpectedRootFileGuid),
-            ?assertMatch({ok, [{DatasetId, Name}], true},
+            ?assertMatch({ok, [{DatasetId, Name, _}], true},
                 lfm_proxy:list_top_datasets(Node, SessionId, SpaceId, ExpectedState, #{offset => 0, limit => 100}), ?ATTEMPTS)
     end.

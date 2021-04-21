@@ -68,6 +68,7 @@ operation_supported(get, transfers_active_channels, private) -> true;
 operation_supported(get, {transfers_throughput_charts, _}, private) -> true;
 operation_supported(get, available_qos_parameters, private) -> true;
 operation_supported(get, datasets, private) -> true;
+operation_supported(get, datasets_details, private) -> true;
 
 operation_supported(update, {view, _}, private) -> true;
 
@@ -197,10 +198,17 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = {transfers_throughput_cha
 data_spec(#op_req{operation = get, gri = #gri{aspect = available_qos_parameters}}) ->
     undefined;
 
-data_spec(#op_req{operation = get, gri = #gri{aspect = datasets}}) -> #{
+data_spec(#op_req{operation = get, gri = #gri{aspect = Aspect}})
+    when Aspect =:= datasets
+    orelse Aspect =:= datasets_details
+-> #{
+    required => #{
+        <<"state">> => {atom, [?ATTACHED_DATASET, ?DETACHED_DATASET]}
+    },
     optional => #{
-        <<"state">> => {atom, [?ATTACHED_DATASET, ?DETACHED_DATASET]},
         <<"offset">> => {integer, any},
+        <<"index">> => {binary, any},
+        <<"token">> => {binary, non_empty},
         <<"limit">> => {integer, {between, 1, ?MAX_LIST_LIMIT}}
     }
 };
@@ -307,7 +315,8 @@ authorize(#op_req{operation = get, auth = ?USER(UserId), gri = #gri{
     As =:= eff_users;
     As =:= eff_groups;
     As =:= shares;
-    As =:= datasets
+    As =:= datasets;
+    As =:= datasets_details
 ->
     space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW);
 
@@ -402,6 +411,7 @@ validate(#op_req{operation = get, gri = #gri{id = SpaceId, aspect = As}}, _) whe
     As =:= eff_groups;
     As =:= shares;
     As =:= datasets;
+    As =:= datasets_details;
     As =:= providers
 ->
     middleware_utils:assert_space_supported_locally(SpaceId);
@@ -536,11 +546,14 @@ get(#op_req{data = Data, gri = #gri{id = SpaceId, aspect = views}}, _) ->
 
     case index:list(SpaceId, StartId, Offset, Limit) of
         {ok, Views} ->
-            NextPageToken = case length(Views) of
-                Limit -> #{<<"nextPageToken">> => lists:last(Views)};
-                _ -> #{}
+            NextPageToken = case length(Views) =:= Limit of
+                true -> lists:last(Views);
+                false -> null
             end,
-            {ok, maps:merge(#{<<"views">> => Views}, NextPageToken)};
+            {ok, #{
+                <<"views">> => Views,
+                <<"nextPageToken">> => NextPageToken
+            }};
         {error, _} = Error ->
             Error
     end;
@@ -627,7 +640,10 @@ get(#op_req{data = Data, gri = #gri{id = SpaceId, aspect = transfers}}, _) ->
                 <<"nextPageToken">> => NextPageToken
             };
         _ ->
-            #{<<"transfers">> => Transfers}
+            #{
+                <<"transfers">> => Transfers,
+                <<"nextPageToken">> => null
+            }
     end,
     {ok, value, Result};
 
@@ -695,19 +711,20 @@ get(#op_req{gri = #gri{id = SpaceId, aspect = available_qos_parameters}}, _) ->
     end, #{}, Storages),
     {ok, Res};
 
-get(#op_req{auth = Auth, gri = #gri{id = SpaceId, aspect = datasets}, data = Data}, _) ->
+get(#op_req{auth = Auth, gri = #gri{id = SpaceId, aspect = Aspect}, data = Data}, _)
+    when Aspect =:= datasets
+    orelse Aspect =:= datasets_details
+->
     State = maps:get(<<"state">>, Data, ?ATTACHED_DATASET),
-    ListingOpts = sanitize_dataset_listing_opts(Data),
-
+    ListingOpts = dataset_middleware:gather_dataset_listing_opts(Data),
+    ListingMode = case Aspect of
+        datasets -> ?BASIC_INFO;
+        datasets_details -> ?EXTENDED_INFO
+    end,
     {ok, Datasets, IsLast} = ?check(lfm:list_top_datasets(
-        Auth#auth.session_id, SpaceId, State, ListingOpts
+        Auth#auth.session_id, SpaceId, State, ListingOpts, ListingMode
     )),
-    {ok, value, #{
-        <<"datasets">> => lists:map(fun({DatasetId, DatasetName}) ->
-            #{<<"id">> => DatasetId, <<"name">> => DatasetName}
-        end, Datasets),
-        <<"isLast">> => IsLast
-    }}.
+    {ok, value, {Datasets, IsLast}}.
 
 
 %%--------------------------------------------------------------------
@@ -778,12 +795,3 @@ prepare_view_options(Data) ->
         UpdateMinChanges ->
             [{update_min_changes, UpdateMinChanges} | Options]
     end.
-
-
-%% @private
--spec sanitize_dataset_listing_opts(middleware:data()) -> datasets_structure:opts().
-sanitize_dataset_listing_opts(Data) ->
-    #{
-        offset => maps:get(<<"offset">>, Data, 0),
-        limit => maps:get(<<"limit">>, Data, ?DEFAULT_LIST_LIMIT)
-    }.
