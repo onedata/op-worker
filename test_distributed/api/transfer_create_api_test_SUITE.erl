@@ -112,7 +112,7 @@ create_file_transfer(Config, Type) ->
     % Shared file will be used to assert that shared file transfer will be forbidden
     % (it will be added to '#data_spec.bad_values')
     FileGuid = transfer_api_test_utils:create_file(P1, SessIdP1, filename:join(["/", ?SPACE_2])),
-    {ok, ShareId} = lfm_proxy:create_share(P1, SessIdP1, {guid, FileGuid}, <<"share">>),
+    {ok, ShareId} = lfm_proxy:create_share(P1, SessIdP1, ?FILE_REF(FileGuid), <<"share">>),
     file_test_utils:await_sync(P2, FileGuid),
 
     RequiredPrivs = create_file_transfer_required_privs(Type),
@@ -461,8 +461,7 @@ build_create_transfer_validate_call_result(MemRef, TransferId, #api_test_ctx{
 
 init_per_suite(Config) ->
     Posthook = fun(NewConfig) ->
-        NewConfig1 = [{space_storage_mock, false} | NewConfig],
-        NewConfig2 = initializer:setup_storage(NewConfig1),
+        NewConfig1 = initializer:setup_storage(NewConfig),
         lists:foreach(fun(Worker) ->
             % TODO VFS-6251
             test_utils:set_env(Worker, ?APP_NAME, dbsync_changes_broadcast_interval, timer:seconds(1)),
@@ -471,18 +470,18 @@ init_per_suite(Config) ->
             test_utils:set_env(Worker, ?APP_NAME, public_block_size_treshold, 0),
             test_utils:set_env(Worker, ?APP_NAME, public_block_percent_treshold, 0),
             test_utils:set_env(Worker, ?APP_NAME, rerun_transfers, false)
-        end, ?config(op_worker_nodes, NewConfig2)),
+        end, ?config(op_worker_nodes, NewConfig1)),
         ssl:start(),
         hackney:start(),
-        NewConfig3 = initializer:create_test_users_and_spaces(
-            ?TEST_FILE(NewConfig2, "env_desc.json"),
-            NewConfig2
+        NewConfig2 = initializer:create_test_users_and_spaces(
+            ?TEST_FILE(NewConfig1, "env_desc.json"),
+            NewConfig1
         ),
-        initializer:mock_auth_manager(NewConfig3, _CheckIfUserIsSupported = true),
+        initializer:mock_auth_manager(NewConfig2, _CheckIfUserIsSupported = true),
         ssl:start(),
         hackney:start(),
         start_http_server(),
-        NewConfig3
+        NewConfig2
     end,
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer]} | Config].
 

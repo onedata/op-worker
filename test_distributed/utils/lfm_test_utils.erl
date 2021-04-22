@@ -14,6 +14,7 @@
 
 -include("lfm_test_utils.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 
 %% API
 -export([clean_space/3, clean_space/4, assert_space_and_trash_are_empty/3, assert_space_dir_empty/3]).
@@ -47,7 +48,7 @@ assert_space_dir_empty(Workers, SpaceId, Attempts) ->
     lists:foreach(fun(W) ->
         ?assertMatch({ok, []},
             % TODO VFS-7064 after introducing link to trash directory this function must be adapted
-            lfm_proxy:get_children(W, ?ROOT_SESS_ID, {guid, SpaceGuid}, 0, 10), Attempts)
+            lfm_proxy:get_children(W, ?ROOT_SESS_ID, ?FILE_REF(SpaceGuid), 0, 10), Attempts)
     end, utils:ensure_list(Workers)).
 
 
@@ -57,10 +58,10 @@ assert_space_and_trash_are_empty(Workers, SpaceId, Attempts) ->
         case opw_test_rpc:supports_space(W, SpaceId) of
             true ->
                 ?assertMatch({ok, []},
-                    lfm_proxy:get_children(W, ?ROOT_SESS_ID, {guid, SpaceGuid}, 0, 100), Attempts),
+                    lfm_proxy:get_children(W, ?ROOT_SESS_ID, ?FILE_REF(SpaceGuid), 0, 100), Attempts),
                 % trash directory should be empty
                 ?assertMatch({ok, []},
-                    lfm_proxy:get_children(W, ?ROOT_SESS_ID, {guid, fslogic_uuid:spaceid_to_trash_dir_guid(SpaceId)}, 0, 100), Attempts),
+                    lfm_proxy:get_children(W, ?ROOT_SESS_ID, ?FILE_REF(fslogic_uuid:spaceid_to_trash_dir_guid(SpaceId)), 0, 100), Attempts),
                 ?assertEqual(0, opw_test_rpc:get_space_capacity_usage(W, SpaceId), Attempts);
             false ->
                 ok
@@ -75,12 +76,12 @@ rm_recursive(Worker, SessId, DirGuid, BatchSize) ->
     rm_recursive(Worker, SessId, DirGuid, <<>>, BatchSize, true).
 
 rm_recursive(Worker, SessId, DirGuid, Token, BatchSize, DeleteDir) ->
-    case lfm_proxy:get_children(Worker, SessId, {guid, DirGuid}, #{size => BatchSize, token => Token}) of
+    case lfm_proxy:get_children(Worker, SessId, ?FILE_REF(DirGuid), #{size => BatchSize, token => Token}) of
         {ok, GuidsAndNames, #{token := Token2, is_last := IsLast}} ->
             case rm_files(Worker, SessId, GuidsAndNames, BatchSize) of
                 ok ->
                     case IsLast of
-                        true when DeleteDir -> lfm_proxy:unlink(Worker, SessId, {guid, DirGuid});
+                        true when DeleteDir -> lfm_proxy:unlink(Worker, SessId, ?FILE_REF(DirGuid));
                         true -> ok;
                         false -> rm_recursive(Worker, SessId, DirGuid, Token2, BatchSize, DeleteDir)
                     end;
@@ -98,11 +99,11 @@ rm_files(Worker, SessId, GuidsAndPaths, BatchSize) ->
             true ->
                 rm_recursive(Worker, SessId, G, <<>>, BatchSize, false);
             false ->
-                case lfm_proxy:is_dir(Worker, SessId, {guid, G}) of
+                case lfm_proxy:is_dir(Worker, SessId, ?FILE_REF(G)) of
                     true ->
                         rm_recursive(Worker, SessId, G, BatchSize);
                     false ->
-                        lfm_proxy:unlink(Worker, SessId, {guid, G});
+                        lfm_proxy:unlink(Worker, SessId, ?FILE_REF(G));
                     {error, not_found} -> ok;
                     Error -> Error
                 end

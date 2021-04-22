@@ -41,7 +41,7 @@ routes() -> [
             scope = private
         }
     }},
-    %% Create file or directory
+    %% Create file
     {<<"/data/:id/children">>, rest_handler, #rest_req{
         method = 'POST',
         consumes = [<<"application/octet-stream">>],
@@ -105,6 +105,28 @@ routes() -> [
             type = op_file, 
             id = ?OBJECTID_BINDING(id), 
             aspect = content, 
+            scope = private
+        }
+    }},
+    %% Get file hard links
+    {<<"/data/:id/hardlinks">>, rest_handler, #rest_req{
+        method = 'GET',
+        produces = [<<"application/octet-stream">>],
+        b_gri = #b_gri{
+            type = op_file, 
+            id = ?OBJECTID_BINDING(id), 
+            aspect = hardlinks, 
+            scope = private
+        }
+    }},
+    %% Get symbolic link value
+    {<<"/data/:id/symlink_value">>, rest_handler, #rest_req{
+        method = 'GET',
+        produces = [<<"application/octet-stream">>],
+        b_gri = #b_gri{
+            type = op_file, 
+            id = ?OBJECTID_BINDING(id), 
+            aspect = symlink_value, 
             scope = private
         }
     }}

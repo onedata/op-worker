@@ -31,7 +31,7 @@ translate_resource(#gri{aspect = instance, scope = Scope}, #{
     <<"description">> := Description,
     <<"publicUrl">> := PublicUrl,
     <<"publicRestUrl">> := PublicRestUrl,
-    <<"fileType">> := FileType,
+    <<"rootFileType">> := FileType,
     <<"rootFileId">> := RootFileShareGuid,
     <<"handleId">> := HandleId
 }) when
@@ -78,7 +78,7 @@ translate_resource(#gri{aspect = instance, scope = Scope}, #{
             <<"description">> => Description,
             <<"publicUrl">> => PublicUrl,
             <<"publicRestUrl">> => PublicRestUrl,
-            <<"fileType">> => FileType,
+            <<"rootFileType">> => FileType,
             <<"rootFile">> => gri:serialize(#gri{
                 type = op_file,
                 id = RootFileShareGuid,

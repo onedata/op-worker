@@ -132,7 +132,7 @@ check_normal_user_permission_test_() ->
     UserId2 = <<"id2">>,
     User2 = #document{key = UserId2, value = #od_user{}},
 
-    FileGuid = <<"file_guid">>,
+    FileGuid = file_id:pack_guid(<<"file_guid">>, <<"space_id">>),
     FileCtx = file_ctx:new_by_guid(FileGuid),
 
     Ace1 = #access_control_entity{
@@ -221,7 +221,7 @@ check_normal_user_permission_test_() ->
 
 
 check_normal_group_permission_test_() ->
-    FileGuid = <<"file_guid">>,
+    FileGuid = file_id:pack_guid(<<"file_guid">>, <<"space_id">>),
     FileCtx = file_ctx:new_by_guid(FileGuid),
 
     GroupId1 = <<"gid1">>,
@@ -338,7 +338,7 @@ check_owner_principal_permission_test_() ->
     UserId = <<"UserId">>,
     User = #document{key = UserId, value = #od_user{}},
 
-    FileGuid = <<"file_guid">>,
+    FileGuid = file_id:pack_guid(<<"file_guid">>, <<"space_id">>),
     FileMeta = #file_meta{owner = UserId},
     FileDoc = #document{key = FileGuid, value = FileMeta},
     FileCtx = file_ctx:new_by_doc(FileDoc, <<"SpaceId">>),
@@ -402,7 +402,7 @@ check_owner_principal_permission_test_() ->
 
 check_group_principal_permission_test_() ->
     SpaceId = <<"space">>,
-    FileGuid = <<"file_guid">>,
+    FileGuid = file_id:pack_guid(<<"file_guid">>, <<"space_id">>),
     FileDoc = #document{key = FileGuid, value = #file_meta{}},
     FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId),
 
@@ -468,7 +468,7 @@ check_group_principal_permission_test_() ->
 
 check_everyone_principal_permission_test_() ->
     OwnerId = <<"id1">>,
-    FileGuid = <<"file_guid">>,
+    FileGuid = file_id:pack_guid(<<"file_guid">>, <<"space_id">>),
     FileMeta = #file_meta{owner = OwnerId},
     FileDoc = #document{key = FileGuid, value = FileMeta},
     FileCtx = file_ctx:new_by_doc(FileDoc, <<"space">>),
@@ -534,7 +534,7 @@ check_everyone_principal_permission_test_() ->
 
 
 check_anonymous_principal_permission_test_() ->
-    FileGuid = <<"file_guid">>,
+    FileGuid = file_id:pack_guid(<<"file_guid">>, <<"space_id">>),
     FileCtx = file_ctx:new_by_guid(FileGuid),
 
     UserId = <<"id2">>,

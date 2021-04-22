@@ -234,6 +234,7 @@ get_attrs_on_provider_not_supporting_space_test(_Config) ->
 -spec attrs_to_json(od_share:id(), #file_attr{}) -> map().
 attrs_to_json(ShareId, #file_attr{
     guid = Guid,
+    parent_guid = ParentGuid,
     name = Name,
     mode = Mode,
     uid = Uid,
@@ -245,33 +246,33 @@ attrs_to_json(ShareId, #file_attr{
     size = Size,
     shares = Shares,
     provider_id = ProviderId,
-    owner_id = OwnerId
+    owner_id = OwnerId,
+    nlink = LinksCount
 }) ->
     PublicAttrs = #{
         <<"name">> => Name,
         <<"atime">> => ATime,
         <<"mtime">> => MTime,
         <<"ctime">> => CTime,
-        <<"type">> => case Type of
-            ?REGULAR_FILE_TYPE -> <<"reg">>;
-            ?DIRECTORY_TYPE -> <<"dir">>;
-            ?SYMLINK_TYPE -> <<"lnk">>
-        end,
+        <<"type">> => str_utils:to_binary(Type),
         <<"size">> => Size
     },
 
     case ShareId of
         undefined ->
             {ok, ObjectId} = file_id:guid_to_objectid(Guid),
+            {ok, ParentObjectId} = file_id:guid_to_objectid(ParentGuid),
 
             PublicAttrs#{
                 <<"file_id">> => ObjectId,
+                <<"parent_id">> => ParentObjectId,
                 <<"mode">> => <<"0", (integer_to_binary(Mode, 8))/binary>>,
                 <<"storage_user_id">> => Uid,
                 <<"storage_group_id">> => Gid,
                 <<"shares">> => Shares,
                 <<"provider_id">> => ProviderId,
-                <<"owner_id">> => OwnerId
+                <<"owner_id">> => OwnerId,
+                <<"hardlinks_count">> => utils:undefined_to_null(LinksCount)
             };
         _ ->
             ShareGuid = file_id:guid_to_share_guid(Guid, ShareId),
@@ -279,6 +280,7 @@ attrs_to_json(ShareId, #file_attr{
 
             PublicAttrs#{
                 <<"file_id">> => ShareObjectId,
+                <<"parent_id">> => null,
                 <<"mode">> => <<"0", (integer_to_binary(2#111 band Mode, 8))/binary>>,
                 <<"storage_user_id">> => ?SHARE_UID,
                 <<"storage_group_id">> => ?SHARE_GID,
@@ -699,7 +701,7 @@ get_file_distribution_test(Config) ->
     FileType = <<"file">>,
     FilePath = filename:join(["/", ?SPACE_KRK_PAR, ?RANDOM_FILE_NAME()]),
     {ok, FileGuid} = api_test_utils:create_file(FileType, P1Node, UserSessIdP1, FilePath, 8#707),
-    {ok, ShareId} = lfm_proxy:create_share(P1Node, SpaceOwnerSessIdP1, {guid, FileGuid}, <<"share">>),
+    {ok, ShareId} = lfm_proxy:create_share(P1Node, SpaceOwnerSessIdP1, ?FILE_REF(FileGuid), <<"share">>),
 
     file_test_utils:await_sync(P2Node, FileGuid),
 
@@ -742,7 +744,7 @@ get_dir_distribution_test(Config) ->
     FileType = <<"dir">>,
     DirPath = filename:join(["/", ?SPACE_KRK_PAR, ?RANDOM_FILE_NAME()]),
     {ok, DirGuid} = api_test_utils:create_file(FileType, P1Node, UserSessIdP1, DirPath, 8#707),
-    {ok, ShareId} = lfm_proxy:create_share(P1Node, SpaceOwnerSessIdP1, {guid, DirGuid}, <<"share">>),
+    {ok, ShareId} = lfm_proxy:create_share(P1Node, SpaceOwnerSessIdP1, ?FILE_REF(DirGuid), <<"share">>),
     file_test_utils:await_sync(P2Node, DirGuid),
 
     ExpDist = [],
@@ -767,7 +769,7 @@ wait_for_file_location_sync(Node, SessId, FileGuid, ExpDistribution) ->
     SortedExpDistribution = lists:usort(ExpDistribution),
 
     GetDistFun = fun() ->
-        case lfm_proxy:get_file_distribution(Node, SessId, {guid, FileGuid}) of
+        case lfm_proxy:get_file_distribution(Node, SessId, ?FILE_REF(FileGuid)) of
             {ok, Dist} -> {ok, lists:usort(Dist)};
             {error, _} = Error -> Error
         end

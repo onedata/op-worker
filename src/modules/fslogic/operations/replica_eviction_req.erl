@@ -84,7 +84,7 @@ schedule_replica_eviction_insecure(UserCtx, FileCtx, SourceProviderId,
 ) ->
     {FilePath, _} = file_ctx:get_logical_path(FileCtx, UserCtx),
     SessionId = user_ctx:get_session_id(UserCtx),
-    FileGuid = file_ctx:get_guid_const(FileCtx),
+    FileGuid = file_ctx:get_logical_guid_const(FileCtx), % TODO VFS-7443 - effective or not? - test for hardlinks
     {ok, TransferId} = transfer:start(SessionId, FileGuid, FilePath,
         SourceProviderId, MigrationProviderId, undefined, ViewName, QueryViewParams),
     #provider_response{

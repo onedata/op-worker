@@ -15,6 +15,7 @@
 
 -include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include_lib("cluster_worker/include/elements/worker_host/worker_protocol.hrl").
 -include_lib("cluster_worker/include/modules/datastore/ha_datastore.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -259,7 +260,7 @@ many_files_creation_tree_test_base(Config, WriteToFile, CacheGUIDS, SetMetadata,
                                         false ->
                                             lfm_proxy:open(W, S, {path, F}, rdwr);
                                         _ ->
-                                            lfm_proxy:open(W, S, {guid, FileGUID}, rdwr)
+                                            lfm_proxy:open(W, S, ?FILE_REF(FileGUID), rdwr)
                                     end,
                                     WriteBuf = generator:gen_name(),
                                     WriteSize = size(WriteBuf),
@@ -278,7 +279,7 @@ many_files_creation_tree_test_base(Config, WriteToFile, CacheGUIDS, SetMetadata,
                                         false ->
                                             lfm_proxy:set_xattr(W, S, {path, F}, Xattr);
                                         _ ->
-                                            lfm_proxy:set_xattr(W, S, {guid, FileGUID}, Xattr)
+                                            lfm_proxy:set_xattr(W, S, ?FILE_REF(FileGUID), Xattr)
                                     end,
                                     file_ok;
                                 _ ->

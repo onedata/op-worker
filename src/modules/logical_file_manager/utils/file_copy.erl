@@ -15,6 +15,7 @@
 -include("global_definitions.hrl").
 -include("modules/fslogic/acl.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include("modules/fslogic/metadata.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -42,30 +43,54 @@
     TargetName :: file_meta:name()) ->
     {ok, NewFileGuid :: fslogic_worker:file_guid(),
         [child_entry()]} | {error, term()}.
+copy(_SessId, SourceGuid, SourceGuid, _TargetName) ->
+    % attempt to copy file to itself
+    {error, ?EINVAL};
 copy(SessId, SourceGuid, TargetParentGuid, TargetName) ->
-    try
-        case lfm:stat(SessId, {guid, SourceGuid}) of
-            {ok, #file_attr{type = ?DIRECTORY_TYPE} = Attr} ->
-                copy_dir(SessId, Attr, TargetParentGuid, TargetName);
-            {ok, Attr} ->
-                copy_file(SessId, Attr, TargetParentGuid, TargetName)
-        end
-    catch
-        _:{badmatch, Error}  ->
-            Error
+    {ok, SourcePath} = lfm:get_file_path(SessId, SourceGuid),
+    {ok, TargetParentPath} = lfm:get_file_path(SessId, TargetParentGuid),
+    SourcePathTokens = filepath_utils:split(SourcePath),
+    TargetParentPathTokens = filepath_utils:split(TargetParentPath),
+    case SourcePathTokens -- TargetParentPathTokens of
+        [] ->
+            % attempt to copy file to itself
+            {error, ?EINVAL};
+        _ ->
+        copy_internal(SessId, SourceGuid, TargetParentGuid, TargetName)
     end.
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
+-spec copy_internal(session:id(), SourceGuid :: fslogic_worker:file_guid(),
+    TargetParentGuid :: fslogic_worker:file_guid(),
+    TargetName :: file_meta:name()) ->
+    {ok, NewFileGuid :: fslogic_worker:file_guid(),
+        [child_entry()]} | {error, term()}.
+copy_internal(SessId, SourceGuid, TargetParentGuid, TargetName) ->
+    try
+        case lfm:stat(SessId, ?FILE_REF(SourceGuid)) of
+            {ok, #file_attr{type = ?DIRECTORY_TYPE} = Attr} ->
+                copy_dir(SessId, Attr, TargetParentGuid, TargetName);
+            {ok, Attr} ->
+                copy_file(SessId, Attr, TargetParentGuid, TargetName);
+            {error, _} = Error ->
+                Error
+        end
+    catch
+        _:{badmatch, Error2}  ->
+            Error2
+    end.
+
+
 -spec copy_dir(session:id(), #file_attr{},
     TargetParentGuid :: fslogic_worker:file_guid(),
     TargetName :: file_meta:name()) ->
     {ok, NewFileGuid :: fslogic_worker:file_guid(), [child_entry()]}.
 copy_dir(SessId, #file_attr{guid = SourceGuid, mode = Mode}, TargetParentGuid, TargetName) ->
-    {ok, TargetGuid} = lfm:mkdir(
-        SessId, TargetParentGuid, TargetName, undefined),
+    % copy dir with default perms as it should be possible to copy its children even without the write permission
+    {ok, TargetGuid} = lfm:mkdir(SessId, TargetParentGuid, TargetName, ?DEFAULT_DIR_PERMS),
     {ok, ChildEntries} = copy_children(SessId, SourceGuid, TargetGuid),
     ok = copy_metadata(SessId, SourceGuid, TargetGuid, Mode),
     {ok, TargetGuid, ChildEntries}.
@@ -79,11 +104,11 @@ copy_file(SessId, #file_attr{guid = SourceGuid, mode = Mode}, TargetParentGuid, 
     {ok, {TargetGuid, TargetHandle}} = lfm:create_and_open(
         SessId, TargetParentGuid, TargetName, Mode, write),
     try
-        {ok, SourceHandle} =
-            lfm:open(SessId, {guid, SourceGuid}, read),
+        {ok, SourceHandle} = lfm:open(SessId, ?FILE_REF(SourceGuid), read),
         try
-            {ok, _NewSourceHandle, _NewTargetHandle} =
-                copy_file_content(SourceHandle, TargetHandle, 0),
+            {ok, _NewSourceHandle, _NewTargetHandle} = copy_file_content(
+                SourceHandle, TargetHandle, 0
+            ),
             ok = copy_metadata(SessId, SourceGuid, TargetGuid, Mode),
             ok = lfm:fsync(TargetHandle)
         after
@@ -122,13 +147,13 @@ copy_children(SessId, ParentGuid, TargetParentGuid) ->
 -spec copy_children(session:id(), file_id:file_guid(), file_id:file_guid(), file_meta:list_token(), [child_entry()]) ->
     {ok, [child_entry()]} | {error, term()}.
 copy_children(SessId, ParentGuid, TargetParentGuid, Token, ChildEntriesAcc) ->
-    case lfm:get_children(SessId, {guid, ParentGuid}, #{token => Token, size => ?COPY_LS_SIZE}) of
+    case lfm:get_children(SessId, ?FILE_REF(ParentGuid), #{token => Token, size => ?COPY_LS_SIZE}) of
         {ok, Children, ListExtendedInfo} ->
             % TODO VFS-6265 fix usage of file names from lfm:get_children as they contain
             % collision suffix which normally shouldn't be there
             ChildEntries = lists:foldl(fun({ChildGuid, ChildName}, ChildrenEntries) ->
                 {ok, NewChildGuid, NewChildrenEntries} =
-                    copy(SessId, ChildGuid, TargetParentGuid, ChildName),
+                    copy_internal(SessId, ChildGuid, TargetParentGuid, ChildName),
                 [
                     {ChildGuid, NewChildGuid, TargetParentGuid, ChildName} |
                         NewChildrenEntries ++ ChildrenEntries
@@ -150,9 +175,8 @@ copy_children(SessId, ParentGuid, TargetParentGuid, Token, ChildEntriesAcc) ->
 -spec copy_metadata(session:id(), fslogic_worker:file_guid(),
     fslogic_worker:file_guid(), file_meta:posix_permissions()) -> ok.
 copy_metadata(SessId, SourceGuid, TargetGuid, Mode) ->
-    {ok, Xattrs} = lfm:list_xattr(
-        SessId, {guid, SourceGuid}, false, true
-    ),
+    {ok, Xattrs} = lfm:list_xattr(SessId, ?FILE_REF(SourceGuid), false, true),
+
     lists:foreach(fun
         (?ACL_KEY) ->
             ok;
@@ -160,10 +184,10 @@ copy_metadata(SessId, SourceGuid, TargetGuid, Mode) ->
             ok;
         (XattrName) ->
             {ok, Xattr} = lfm:get_xattr(
-                SessId, {guid, SourceGuid}, XattrName, false),
-            ok = lfm:set_xattr(SessId, {guid, TargetGuid}, Xattr)
+                SessId, ?FILE_REF(SourceGuid), XattrName, false),
+            ok = lfm:set_xattr(SessId, ?FILE_REF(TargetGuid), Xattr)
     end, Xattrs),
 
-    {ok, Acl} = lfm:get_acl(SessId, {guid, SourceGuid}),
-    lfm:set_acl(SessId, {guid, TargetGuid}, Acl),
-    lfm:set_perms(SessId, {guid, TargetGuid}, Mode).
+    {ok, Acl} = lfm:get_acl(SessId, ?FILE_REF(SourceGuid)),
+    lfm:set_acl(SessId, ?FILE_REF(TargetGuid), Acl),
+    lfm:set_perms(SessId, ?FILE_REF(TargetGuid), Mode).

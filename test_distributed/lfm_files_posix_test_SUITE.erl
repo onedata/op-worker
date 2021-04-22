@@ -11,7 +11,9 @@
 -module(lfm_files_posix_test_SUITE).
 -author("Michal Cwiertnia").
 
+-include("lfm_files_test_base.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/performance.hrl").
 -include_lib("ctool/include/errors.hrl").
@@ -39,6 +41,8 @@
     lfm_synch_stat_test/1,
     lfm_cp_file/1,
     lfm_cp_empty_dir/1,
+    lfm_cp_dir_to_itself_should_fail/1,
+    lfm_cp_dir_to_its_child_should_fail/1,
     lfm_cp_dir/1,
     lfm_truncate_test/1,
     lfm_truncate_and_write/1,
@@ -101,7 +105,8 @@
     mkdir_removed_opened_file_test/1,
     rename_removed_opened_file_races_test/1,
     rename_removed_opened_file_races_test2/1,
-    lfm_monitored_open/1
+    lfm_monitored_open/1,
+    lfm_create_and_read_symlink/1
 ]).
 
 
@@ -120,6 +125,8 @@
     lfm_synch_stat_test,
     lfm_cp_file,
     lfm_cp_empty_dir,
+    lfm_cp_dir_to_itself_should_fail,
+    lfm_cp_dir_to_its_child_should_fail,
     lfm_cp_dir,
     lfm_truncate_test,
     lfm_truncate_and_write,
@@ -182,10 +189,10 @@
     mkdir_removed_opened_file_test,
     rename_removed_opened_file_races_test,
     rename_removed_opened_file_races_test2,
-    lfm_monitored_open
+    lfm_monitored_open,
+    lfm_create_and_read_symlink
 ]).
 
--define(SPACE_ID, <<"space1">>).
 
 -define(PERFORMANCE_TEST_CASES, [
     ls_test, ls_with_stats_test, echo_loop_test
@@ -252,6 +259,12 @@ lfm_cp_file(Config) ->
 
 lfm_cp_empty_dir(Config) ->
     lfm_files_test_base:lfm_cp_empty_dir(Config).
+
+lfm_cp_dir_to_itself_should_fail(Config) ->
+    lfm_files_test_base:lfm_cp_dir_to_itself_should_fail(Config).
+
+lfm_cp_dir_to_its_child_should_fail(Config) ->
+    lfm_files_test_base:lfm_cp_dir_to_its_child_should_fail(Config).
 
 lfm_cp_dir(Config) ->
     lfm_files_test_base:lfm_cp_dir(Config).
@@ -483,7 +496,7 @@ sparse_files_should_be_created(Config) ->
     lfm_files_test_base:sparse_files_should_be_created(Config, read).
 
 rename_removed_opened_file_test(Config) ->
-    SpaceID = <<"space_id1">>,
+    SpaceId = ?SPACE_ID1,
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = fun(User) -> ?config({session_id, {User, ?GET_DOMAIN(Worker)}}, Config) end,
     FileName = generator:gen_name(),
@@ -493,7 +506,7 @@ rename_removed_opened_file_test(Config) ->
     User2 = <<"user2">>,
 
     StorageDir = ?config({storage_dir, ?GET_DOMAIN(Worker)}, Config),
-    {ok, InitialSpaceFiles} = case rpc:call(Worker, file, list_dir, [filename:join([StorageDir, SpaceID])]) of
+    {ok, InitialSpaceFiles} = case rpc:call(Worker, file, list_dir, [filename:join([StorageDir, SpaceId])]) of
         {error, ?ENOENT} -> {ok, []};
         Other -> Other
     end,
@@ -506,23 +519,23 @@ rename_removed_opened_file_test(Config) ->
     {ok, {Guid1, _}} = lfm_proxy:create_and_open(Worker, SessId(User), FilePath),
     Guid1String = binary_to_list(Guid1),
     {ok, ListAns} = ?assertMatch({ok, _},
-        rpc:call(Worker, file, list_dir, [filename:join([StorageDir, SpaceID])])),
+        rpc:call(Worker, file, list_dir, [filename:join([StorageDir, SpaceId])])),
     ?assertEqual([FileNameString], ListAns -- InitialSpaceFiles),
 
     ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId(User), {path, FilePath})),
-    ?assertEqual({error, ?ENOENT}, lfm_proxy:stat(Worker, SessId(User), {guid, Guid1})),
+    ?assertEqual({error, ?ENOENT}, lfm_proxy:stat(Worker, SessId(User), ?FILE_REF(Guid1))),
     {ok, StorageDirList} = ?assertMatch({ok, _}, rpc:call(Worker, file, list_dir, [StorageDir])),
     ?assert(lists:member(?DELETED_OPENED_FILES_DIR_STRING, StorageDirList)),
     {ok, ListAns2} = ?assertMatch({ok, _},
-        rpc:call(Worker, file, list_dir, [filename:join([StorageDir, SpaceID])])),
+        rpc:call(Worker, file, list_dir, [filename:join([StorageDir, SpaceId])])),
     ?assertEqual([], ListAns2 -- InitialSpaceFiles),
     {ok, ListAns3} = ?assertMatch({ok, _},
         rpc:call(Worker, file, list_dir, [filename:join([StorageDir, ?DELETED_OPENED_FILES_DIR])])),
     ?assertEqual([Guid1String], ListAns3 -- InitialDeletedDir),
-    RenamedStorageID = filename:join([?DELETED_OPENED_FILES_DIR, Guid1]),
-    ?assertMatch({ok, #file_location{file_id = RenamedStorageID}},
-        lfm_proxy:get_file_location(Worker, SessId(User), {guid, Guid1})),
-    ?assertMatch({error, ?ENOENT}, lfm_proxy:get_file_location(Worker, SessId(User2), {guid, Guid1})),
+    RenamedStorageId = filename:join([?DELETED_OPENED_FILES_DIR, Guid1]),
+    ?assertMatch({ok, #file_location{file_id = RenamedStorageId}},
+        lfm_proxy:get_file_location(Worker, SessId(User), ?FILE_REF(Guid1))),
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:get_file_location(Worker, SessId(User2), ?FILE_REF(Guid1))),
 
     lfm_proxy:close_all(Worker),
     {ok, ListAns4} = ?assertMatch({ok, _},
@@ -533,7 +546,7 @@ rename_removed_opened_file_test(Config) ->
 
 
 mkdir_removed_opened_file_test(Config) ->
-    SpaceID = <<"space_id1">>,
+    SpaceId = ?SPACE_ID1,
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = fun(User) -> ?config({session_id, {User, ?GET_DOMAIN(Worker)}}, Config) end,
     FileName = generator:gen_name(),
@@ -544,7 +557,7 @@ mkdir_removed_opened_file_test(Config) ->
     User = <<"user1">>,
 
     StorageDir = ?config({storage_dir, ?GET_DOMAIN(Worker)}, Config),
-    {ok, InitialSpaceFiles} = case rpc:call(Worker, file, list_dir, [filename:join([StorageDir, SpaceID])]) of
+    {ok, InitialSpaceFiles} = case rpc:call(Worker, file, list_dir, [filename:join([StorageDir, SpaceId])]) of
         {error, ?ENOENT} -> {ok, []};
         Other -> Other
     end,
@@ -557,15 +570,15 @@ mkdir_removed_opened_file_test(Config) ->
     {ok, {Guid1, _}} = lfm_proxy:create_and_open(Worker, SessId(User), FilePath),
     Guid1String = binary_to_list(Guid1),
     {ok, ListAns} = ?assertMatch({ok, _},
-        rpc:call(Worker, file, list_dir, [filename:join([StorageDir, SpaceID])])),
+        rpc:call(Worker, file, list_dir, [filename:join([StorageDir, SpaceId])])),
     ?assertEqual([FileNameString], ListAns -- InitialSpaceFiles),
 
     ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId(User), {path, FilePath})),
-    ?assertEqual({error, ?ENOENT}, lfm_proxy:stat(Worker, SessId(User), {guid, Guid1})),
+    ?assertEqual({error, ?ENOENT}, lfm_proxy:stat(Worker, SessId(User), ?FILE_REF(Guid1))),
     {ok, StorageDirList} = ?assertMatch({ok, _}, rpc:call(Worker, file, list_dir, [StorageDir])),
     ?assert(lists:member(?DELETED_OPENED_FILES_DIR_STRING, StorageDirList)),
     {ok, ListAns2} = ?assertMatch({ok, _},
-        rpc:call(Worker, file, list_dir, [filename:join([StorageDir, SpaceID])])),
+        rpc:call(Worker, file, list_dir, [filename:join([StorageDir, SpaceId])])),
     ?assertEqual([], ListAns2 -- InitialSpaceFiles),
     {ok, ListAns3} = ?assertMatch({ok, _},
         rpc:call(Worker, file, list_dir, [filename:join([StorageDir, ?DELETED_OPENED_FILES_DIR])])),
@@ -574,7 +587,7 @@ mkdir_removed_opened_file_test(Config) ->
     {ok, _} = lfm_proxy:mkdir(Worker, SessId(User), FilePath),
     {ok, _} = lfm_proxy:create_and_open(Worker, SessId(User), FilePath2),
     {ok, ListAns4} = ?assertMatch({ok, _},
-        rpc:call(Worker, file, list_dir, [filename:join([StorageDir, SpaceID])])),
+        rpc:call(Worker, file, list_dir, [filename:join([StorageDir, SpaceId])])),
     ?assertEqual([FileNameString], ListAns4 -- InitialSpaceFiles),
 
     lfm_proxy:close_all(Worker),
@@ -585,7 +598,7 @@ mkdir_removed_opened_file_test(Config) ->
     ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId(User), {path, FilePath2})),
     ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId(User), {path, FilePath})),
     {ok, ListAns6} = ?assertMatch({ok, _},
-        rpc:call(Worker, file, list_dir, [filename:join([StorageDir, SpaceID])])),
+        rpc:call(Worker, file, list_dir, [filename:join([StorageDir, SpaceId])])),
     ?assertEqual([], ListAns6 -- InitialSpaceFiles),
     ok.
 
@@ -599,7 +612,7 @@ rename_removed_opened_file_races_test2(Config) ->
 
 
 rename_removed_opened_file_races_test_base(Config, MockOpts) ->
-    SpaceID = <<"space_id1">>,
+    SpaceId = ?SPACE_ID1,
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
     SessId = fun(User) -> ?config({session_id, {User, ?GET_DOMAIN(Worker)}}, Config) end,
     FileName = generator:gen_name(),
@@ -609,7 +622,7 @@ rename_removed_opened_file_races_test_base(Config, MockOpts) ->
     Master = self(),
 
     StorageDir = ?config({storage_dir, ?GET_DOMAIN(Worker)}, Config),
-    {ok, InitialSpaceFiles} = case rpc:call(Worker, file, list_dir, [filename:join([StorageDir, SpaceID])]) of
+    {ok, InitialSpaceFiles} = case rpc:call(Worker, file, list_dir, [filename:join([StorageDir, SpaceId])]) of
         {error, ?ENOENT} -> {ok, []};
         Other -> Other
     end,
@@ -654,7 +667,7 @@ rename_removed_opened_file_races_test_base(Config, MockOpts) ->
 
     StorageDir = ?config({storage_dir, ?GET_DOMAIN(Worker)}, Config),
     {ok, ListAns} = ?assertMatch({ok, _},
-        rpc:call(Worker, file, list_dir, [filename:join([StorageDir, SpaceID])])),
+        rpc:call(Worker, file, list_dir, [filename:join([StorageDir, SpaceId])])),
     ?assertEqual([FileNameString], ListAns -- InitialSpaceFiles),
 
     spawn(fun() ->
@@ -677,11 +690,11 @@ rename_removed_opened_file_races_test_base(Config, MockOpts) ->
         5000 -> timeout
     end),
 
-    ?assertEqual({error, ?ENOENT}, lfm_proxy:stat(Worker, SessId(User), {guid, Guid1})),
+    ?assertEqual({error, ?ENOENT}, lfm_proxy:stat(Worker, SessId(User), ?FILE_REF(Guid1))),
     {ok, StorageDirList} = ?assertMatch({ok, _}, rpc:call(Worker, file, list_dir, [StorageDir])),
     ?assert(lists:member(?DELETED_OPENED_FILES_DIR_STRING, StorageDirList)),
     {ok, ListAns2} = ?assertMatch({ok, _},
-        rpc:call(Worker, file, list_dir, [filename:join([StorageDir, SpaceID])])),
+        rpc:call(Worker, file, list_dir, [filename:join([StorageDir, SpaceId])])),
     ?assertEqual([], ListAns2 -- InitialSpaceFiles),
     {ok, ListAns3} = ?assertMatch({ok, _},
         rpc:call(Worker, file, list_dir, [filename:join([StorageDir, ?DELETED_OPENED_FILES_DIR])])),
@@ -706,11 +719,11 @@ lfm_monitored_open(Config) ->
     Attempts = 10,
 
     OpenAndHungFun = fun() ->
-        Self !  lfm:open(SessId1, {guid, File1Guid}, read),
+        Self !  lfm:open(SessId1, ?FILE_REF(File1Guid), read),
         receive _ -> ok end
     end,
     MonitoredOpenAndHungFun = fun() ->
-        Self !  lfm:monitored_open(SessId1, {guid, File2Guid}, read),
+        Self !  lfm:monitored_open(SessId1, ?FILE_REF(File2Guid), read),
         receive _ -> ok end
     end,
     GetAllProcessHandles = fun(Pid) ->
@@ -769,11 +782,10 @@ lfm_monitored_open(Config) ->
         {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, FilePath)),
 
         spawn(W, fun() ->
-            Self !  lfm:monitored_open(SessId1, {guid, FileGuid}, read),
+            Self !  lfm:monitored_open(SessId1, ?FILE_REF(FileGuid), read),
             receive _ -> ok end
         end),
-
-        <<"/space_id1/file_", FileIdx/binary>>
+        filename:join([<<"/">>, ?SPACE_ID1, <<"file_", FileIdx/binary>>])
     end, lists:seq(1, FilesNum))),
 
     GetFileIdsFun = fun(ProcessHandlesDocs) ->
@@ -798,147 +810,84 @@ lfm_monitored_open(Config) ->
     ?assertEqual(ExpFileIds, lists:usort(GetAllDocsFun(undefined)), Attempts).
 
 
+lfm_create_and_read_symlink(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+
+    {SessId, _UserId} =
+        {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+
+    % Prepare test dir and link data
+    TestDir = <<"/space_name1/", (generator:gen_name())/binary>>,
+    {ok, DirGuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, TestDir)),
+    Path = <<TestDir/binary, "/", (generator:gen_name())/binary>>,
+    LinkTarget = <<"test_link">>,
+    LinkSize = byte_size(LinkTarget),
+
+    % Create symlink and check its times
+    {ok, LinkAttrs} = ?assertMatch(
+        {ok, #file_attr{type = ?SYMLINK_TYPE, size = LinkSize, fully_replicated = undefined, parent_guid = DirGuid}},
+        lfm_proxy:make_symlink(W, SessId, Path, LinkTarget)),
+    ?assert(LinkAttrs#file_attr.atime > 0),
+    ?assert(LinkAttrs#file_attr.mtime > 0),
+    ?assert(LinkAttrs#file_attr.ctime > 0),
+    ?assert(fslogic_uuid:is_symlink_uuid(file_id:guid_to_uuid(LinkAttrs#file_attr.guid))),
+
+    % Read link and check it
+    time_test_utils:simulate_seconds_passing(2), % ensure time change
+    ?assertEqual({ok, LinkTarget}, lfm_proxy:read_symlink(W, SessId, {path, Path})),
+    {ok, LinkAttrs2} = ?assertMatch(
+        {ok, #file_attr{type = ?SYMLINK_TYPE, size = LinkSize, fully_replicated = undefined, parent_guid = DirGuid}},
+        lfm_proxy:stat(W, SessId, {path, Path})),
+    ?assert(LinkAttrs2#file_attr.atime > LinkAttrs#file_attr.atime),
+    ?assertMatch({ok, [LinkAttrs2], _}, lfm_proxy:get_children_attrs(W, SessId, ?FILE_REF(DirGuid), #{offset => 0, size => 10})),
+
+    % Unlink and check if symlink is deleted
+    ?assertEqual(ok, lfm_proxy:unlink(W, SessId, {path, Path})),
+    ?assertEqual({error, enoent}, lfm_proxy:read_symlink(W, SessId, {path, Path})),
+    ?assertMatch({ok, [], _}, lfm_proxy:get_children_attrs(W, SessId, ?FILE_REF(DirGuid), #{offset => 0, size => 10})),
+
+    % Delete test dir
+    ?assertMatch(ok, lfm_proxy:unlink(W, SessId, ?FILE_REF(DirGuid))),
+    ok.
+
+
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
 
-
 init_per_suite(Config) ->
-    Posthook = fun(NewConfig) ->
-        initializer:mock_auth_manager(NewConfig),
-        initializer:setup_storage(NewConfig)
-    end,
-    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer, pool_utils]} | Config].
-
+    lfm_files_test_base:init_per_suite(Config).
 
 end_per_suite(Config) ->
-    initializer:teardown_storage(Config),
-    initializer:unmock_auth_manager(Config).
-
+    lfm_files_test_base:end_per_suite(Config).
 
 init_per_testcase(Case, Config) when
     Case =:= rename_removed_opened_file_races_test;
     Case =:= rename_removed_opened_file_races_test2
-->
+    ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, storage_driver, [passthrough]),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 
-init_per_testcase(Case, Config) when
-    Case =:= lfm_open_in_direct_mode_test;
-    Case =:= lfm_recreate_handle_test;
-    Case =:= lfm_write_after_create_no_perms_test;
-    Case =:= lfm_recreate_handle_after_delete_test
-->
-    Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Workers, user_ctx, [passthrough]),
-    test_utils:mock_expect(Workers, user_ctx, is_direct_io,
-        fun(_, _) ->
-            true
-        end),
+init_per_testcase(lfm_create_and_read_symlink = Case, Config) ->
+    time_test_utils:freeze_time(Config),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 
-
-init_per_testcase(Case, Config) when
-    Case =:= lfm_open_failure_test;
-    Case =:= lfm_create_and_open_failure_test;
-    Case =:= lfm_mv_failure_test;
-    Case =:= lfm_open_multiple_times_failure_test;
-    Case =:= lfm_open_failure_multiple_users_test;
-    Case =:= lfm_open_and_create_open_failure_test;
-    Case =:= lfm_mv_failure_multiple_users_test
-->
-    Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Workers, storage_driver, [passthrough]),
-    init_per_testcase(?DEFAULT_CASE(Case), Config);
-
-init_per_testcase(ShareTest, Config) when
-    ShareTest =:= create_share_dir_test;
-    ShareTest =:= create_share_file_test;
-    ShareTest =:= remove_share_test;
-    ShareTest =:= share_getattr_test;
-    ShareTest =:= share_get_parent_test;
-    ShareTest =:= share_list_test;
-    ShareTest =:= share_read_test;
-    ShareTest =:= share_child_getattr_test;
-    ShareTest =:= share_child_list_test;
-    ShareTest =:= share_child_read_test;
-    ShareTest =:= share_permission_denied_test
-->
-    initializer:mock_share_logic(Config),
-    init_per_testcase(?DEFAULT_CASE(ShareTest), Config);
-
-init_per_testcase(_Case, Config) ->
-    Workers = ?config(op_worker_nodes, Config),
-    initializer:communicator_mock(Workers),
-    ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
-    lfm_proxy:init(ConfigWithSessionInfo).
+init_per_testcase(Case, Config) ->
+    lfm_files_test_base:init_per_testcase(Case, Config).
 
 
 end_per_testcase(Case, Config) when
     Case =:= rename_removed_opened_file_races_test;
     Case =:= rename_removed_opened_file_races_test2
-->
+    ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Workers, [storage_driver]),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 
-end_per_testcase(Case, Config) when
-    Case =:= lfm_open_in_direct_mode_test;
-    Case =:= lfm_recreate_handle_test;
-    Case =:= lfm_write_after_create_no_perms_test;
-    Case =:= lfm_recreate_handle_after_delete_test
-->
-    Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_unload(Workers, [user_ctx]),
+end_per_testcase(lfm_create_and_read_symlink = Case, Config) ->
+    time_test_utils:unfreeze_time(Config),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 
-end_per_testcase(Case, Config) when
-    Case =:= lfm_open_failure_test;
-    Case =:= lfm_create_and_open_failure_test;
-    Case =:= lfm_mv_failure_test;
-    Case =:= lfm_open_multiple_times_failure_test;
-    Case =:= lfm_open_failure_multiple_users_test;
-    Case =:= lfm_open_and_create_open_failure_test;
-    Case =:= lfm_mv_failure_multiple_users_test
-->
-    Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_unload(Workers, [storage_driver]),
-    end_per_testcase(?DEFAULT_CASE(Case), Config);
-
-end_per_testcase(ShareTest, Config) when
-    ShareTest =:= create_share_dir_test;
-    ShareTest =:= create_share_file_test;
-    ShareTest =:= remove_share_test;
-    ShareTest =:= share_getattr_test;
-    ShareTest =:= share_get_parent_test;
-    ShareTest =:= share_list_test;
-    ShareTest =:= share_read_test;
-    ShareTest =:= share_child_getattr_test;
-    ShareTest =:= share_child_list_test;
-    ShareTest =:= share_child_read_test;
-    ShareTest =:= share_permission_denied_test
-->
-    initializer:unmock_share_logic(Config),
-
-    end_per_testcase(?DEFAULT_CASE(ShareTest), Config);
-
-end_per_testcase(Case, Config) when
-    Case =:= opening_file_should_increase_file_popularity;
-    Case =:= file_popularity_should_have_correct_file_size
-->
-    [W | _] = ?config(op_worker_nodes, Config),
-    rpc:call(W, file_popularity_api, disable, [?SPACE_ID]),
-    end_per_testcase(?DEFAULT_CASE(Case), Config);
-
-end_per_testcase(Case = lfm_cp_dir, Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
-    % set default value of ls_batch_size env
-    test_utils:set_env(W, op_worker, ls_batch_size, 5000),
-    end_per_testcase(?DEFAULT_CASE(Case), Config);
-
-end_per_testcase(_Case, Config) ->
-    Workers = ?config(op_worker_nodes, Config),
-    lfm_proxy:teardown(Config),
-    initializer:clean_test_users_and_spaces_no_validate(Config),
-    test_utils:mock_validate_and_unload(Workers, [communicator]).
+end_per_testcase(Case, Config) ->
+    lfm_files_test_base:end_per_testcase(Case, Config).

@@ -17,6 +17,7 @@
 -include("modules/datastore/transfer.hrl").
 -include("modules/fslogic/acl.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include("proto/common/credentials.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_links.hrl").
@@ -1483,7 +1484,7 @@ mkdir_and_rmdir_loop_test_base(Config0, IterationsNum, User) ->
         MkdirAns = lfm_proxy:mkdir(Worker1, SessId(Worker1), DirPath),
         ?assertMatch({ok, _}, MkdirAns),
         {ok, Handle} = MkdirAns,
-        ?assertMatch(ok, lfm_proxy:unlink(Worker1, SessId(Worker1), {guid, Handle}))
+        ?assertMatch(ok, lfm_proxy:unlink(Worker1, SessId(Worker1), ?FILE_REF(Handle)))
     end, lists:seq(1, IterationsNum)),
     ok.
 
@@ -1679,7 +1680,7 @@ transfer_files_to_source_provider(Config0) ->
     Guids = lists_utils:pmap(fun(Num) ->
         FilePath = <<"/", SpaceName/binary, "/file_",  (integer_to_binary(Num))/binary>>,
         {ok, Guid} = lfm_proxy:create(Worker, SessionId(Worker), FilePath),
-        {ok, Handle} = lfm_proxy:open(Worker, SessionId(Worker), {guid, Guid}, write),
+        {ok, Handle} = lfm_proxy:open(Worker, SessionId(Worker), ?FILE_REF(Guid), write),
         {ok, _} = lfm_proxy:write(Worker, Handle, 0, crypto:strong_rand_bytes(Size)),
         ok = lfm_proxy:close(Worker, Handle),
         Guid
@@ -1689,7 +1690,7 @@ transfer_files_to_source_provider(Config0) ->
 
     StopwatchTransfers = stopwatch:start(),
     TidsAndGuids = lists_utils:pmap(fun(Guid) ->
-        {ok, Tid} = lfm_proxy:schedule_file_replication(Worker, SessionId(Worker), {guid, Guid}, ?GET_DOMAIN_BIN(Worker)),
+        {ok, Tid} = lfm_proxy:schedule_file_replication(Worker, SessionId(Worker), ?FILE_REF(Guid), ?GET_DOMAIN_BIN(Worker)),
         {Tid, Guid}
     end, Guids),
 
@@ -1772,7 +1773,7 @@ proxy_session_token_update_test_base(Config0, {SyncNodes, ProxyNodes, ProxyNodes
 
     % But any future proxy request will update those credentials (credentials are send with every
     % proxy request)
-    ?assertMatch({ok, _}, lfm_proxy:stat(P2, SessionId, {guid, DirGuid}), Attempts),
+    ?assertMatch({ok, _}, lfm_proxy:stat(P2, SessionId, ?FILE_REF(DirGuid)), Attempts),
     ?assertEqual({ok, NewClientTokens}, get_session_client_tokens(P1, SessionId), Attempts),
     ?assertEqual({ok, NewClientTokens}, get_session_client_tokens(P2, SessionId), Attempts),
 
@@ -1894,13 +1895,13 @@ request_synchronization(Worker, User, SessId, FileCtx, Block) ->
     ]).
 
 cancel_transfers_for_session_and_file(Node, SessionId, FileCtx) ->
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
     rpc:call(Node, replica_synchronizer, cancel_transfers_of_session, [
         FileUuid, SessionId
     ]).
 
 cancel_transfers_for_session_and_file_sync(Node, SessionId, FileCtx) ->
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
     rpc:call(Node, replica_synchronizer, cancel_transfers_of_session_sync, [
         FileUuid, SessionId
     ]).
@@ -1942,7 +1943,7 @@ verify_locations(W, FileUuid, SpaceId) ->
     end, 0, IDs).
 
 get_locations(W, FileUuid, SpaceId) ->
-    FileCtx = file_ctx:new_by_guid(file_id:pack_guid(FileUuid, SpaceId)),
+    FileCtx = file_ctx:new_by_uuid(FileUuid, SpaceId),
     {LocationIds, _} = rpc:call(W, file_ctx, get_file_location_ids, [FileCtx]),
     LocationIds.
 

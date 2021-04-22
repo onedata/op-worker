@@ -25,6 +25,7 @@
 -include("modules/datastore/datastore_runner.hrl").
 -include("modules/datastore/qos.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 -behaviour(traverse_behaviour).
@@ -162,7 +163,7 @@ execute_stage(#space_unsupport_job{stage = replicate, subtask_id = undefined} = 
     #space_unsupport_job{space_id = SpaceId, storage_id = StorageId} = Job,
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
     Expression = <<?QOS_ANY_STORAGE, "\\ storageId = ", StorageId/binary>>,
-    {ok, QosEntryId} = lfm:add_qos_entry(?ROOT_SESS_ID, {guid, SpaceGuid}, Expression, 1, internal),
+    {ok, QosEntryId} = lfm:add_qos_entry(?ROOT_SESS_ID, ?FILE_REF(SpaceGuid), Expression, 1, internal),
     NewJob = Job#space_unsupport_job{subtask_id = QosEntryId},
     space_unsupport_job:save(NewJob),
     execute_stage(NewJob);

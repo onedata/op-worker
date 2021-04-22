@@ -15,6 +15,7 @@
 
 -include("api_file_test_utils.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/graph_sync/gri.hrl").
 -include_lib("ctool/include/http/codes.hrl").
 
@@ -149,12 +150,12 @@ set_file_rdf_metadata_on_provider_not_supporting_space_test(_Config) ->
 
 %% @private
 get_rdf(Node, FileGuid) ->
-    lfm_proxy:get_metadata(Node, ?ROOT_SESS_ID, {guid, FileGuid}, rdf, [], false).
+    lfm_proxy:get_metadata(Node, ?ROOT_SESS_ID, ?FILE_REF(FileGuid), rdf, [], false).
 
 
 %% @private
 remove_rdf(Node, FileGuid) ->
-    lfm_proxy:remove_metadata(Node, ?ROOT_SESS_ID, {guid, FileGuid}, rdf).
+    lfm_proxy:remove_metadata(Node, ?ROOT_SESS_ID, ?FILE_REF(FileGuid), rdf).
 
 
 %%%===================================================================
@@ -390,12 +391,12 @@ set_file_json_metadata_on_provider_not_supporting_space_test(_Config) ->
 
 %% @private
 get_json(Node, FileGuid) ->
-    lfm_proxy:get_metadata(Node, ?ROOT_SESS_ID, {guid, FileGuid}, json, [], false).
+    lfm_proxy:get_metadata(Node, ?ROOT_SESS_ID, ?FILE_REF(FileGuid), json, [], false).
 
 
 %% @private
 remove_json(Node, FileGuid) ->
-    lfm_proxy:remove_metadata(Node, ?ROOT_SESS_ID, {guid, FileGuid}, json).
+    lfm_proxy:remove_metadata(Node, ?ROOT_SESS_ID, ?FILE_REF(FileGuid), json).
 
 
 %%%===================================================================
@@ -519,7 +520,7 @@ assert_all_xattrs_set(Nodes, FileGuid, Xattrs) ->
 assert_no_xattrs_set(Node, FileGuid) ->
     ?assertMatch(
         {ok, []},
-        lfm_proxy:list_xattr(Node, ?ROOT_SESS_ID, {guid, FileGuid}, false, true)
+        lfm_proxy:list_xattr(Node, ?ROOT_SESS_ID, ?FILE_REF(FileGuid), false, true)
     ).
 
 
@@ -530,13 +531,13 @@ remove_xattrs(TestNode, Nodes, FileGuid, Xattrs) ->
     lists:foreach(fun({Key, _}) ->
         case Key of
             ?ACL_KEY ->
-                ?assertMatch(ok, lfm_proxy:remove_acl(TestNode, ?ROOT_SESS_ID, {guid, FileGuid}));
+                ?assertMatch(ok, lfm_proxy:remove_acl(TestNode, ?ROOT_SESS_ID, ?FILE_REF(FileGuid)));
             <<?CDMI_PREFIX_STR, _/binary>> ->
                 % Because cdmi attributes don't have api to remove them removal must be carried by
                 % calling custom_metadata directly
                 ?assertMatch(ok, rpc:call(TestNode, custom_metadata, remove_xattr, [FileUuid, Key]));
             _ ->
-                ?assertMatch(ok, lfm_proxy:remove_xattr(TestNode, ?ROOT_SESS_ID, {guid, FileGuid}, Key))
+                ?assertMatch(ok, lfm_proxy:remove_xattr(TestNode, ?ROOT_SESS_ID, ?FILE_REF(FileGuid), Key))
         end,
         lists:foreach(fun(Node) ->
             ?assertMatch({error, ?ENODATA}, get_xattr(Node, FileGuid, Key), ?ATTEMPTS)
@@ -546,7 +547,7 @@ remove_xattrs(TestNode, Nodes, FileGuid, Xattrs) ->
 
 %% @private
 get_xattr(Node, FileGuid, XattrKey) ->
-    lfm_proxy:get_xattr(Node, ?ROOT_SESS_ID, {guid, FileGuid}, XattrKey).
+    lfm_proxy:get_xattr(Node, ?ROOT_SESS_ID, ?FILE_REF(FileGuid), XattrKey).
 
 
 %%%===================================================================

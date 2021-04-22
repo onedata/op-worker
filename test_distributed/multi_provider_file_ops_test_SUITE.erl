@@ -13,8 +13,9 @@
 -author("Michal Wrzeszcz").
 
 -include("global_definitions.hrl").
--include("transfers_test_mechanism.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
+-include("transfers_test_mechanism.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
@@ -641,7 +642,7 @@ remove_file_during_transfers_test(Config0) ->
 
     % delete file
     timer:sleep(timer:seconds(4)),
-    lfm_proxy:unlink(Worker2, SessId(User, Worker2), {guid, GUID}),
+    lfm_proxy:unlink(Worker2, SessId(User, Worker2), ?FILE_REF(GUID)),
     lists:foreach(fun(Promise) ->
         ?assertMatch({error, file_deleted}, rpc:yield(Promise))
     end, Promises).
@@ -660,17 +661,17 @@ remove_file_on_remote_provider_ceph(Config0) ->
     ContainerId = proplists:get_value(container_id, Ceph),
     
     {ok, Guid} = lfm_proxy:create(Worker1, SessionId(Worker1), FilePath),
-    {ok, Handle} = lfm_proxy:open(Worker1, SessionId(Worker1), {guid, Guid}, write),
+    {ok, Handle} = lfm_proxy:open(Worker1, SessionId(Worker1), ?FILE_REF(Guid), write),
     {ok, _} = lfm_proxy:write(Worker1, Handle, 0, crypto:strong_rand_bytes(100)),
     ok = lfm_proxy:close(Worker1, Handle),
 
-    ?assertMatch({ok, _}, lfm_proxy:get_children(Worker2, SessionId(Worker2), {guid, Guid}, 0, 0), 60),
+    ?assertMatch({ok, _}, lfm_proxy:get_children(Worker2, SessionId(Worker2), ?FILE_REF(Guid), 0, 0), 60),
     L = utils:cmd(["docker exec", atom_to_list(ContainerId), "rados -p onedata ls -"]),
     ?assertEqual(true, length(L) > 0),
        
-    lfm_proxy:unlink(Worker2, SessionId(Worker2), {guid, Guid}),
+    lfm_proxy:unlink(Worker2, SessionId(Worker2), ?FILE_REF(Guid)),
 
-    ?assertMatch({error, ?ENOENT}, lfm_proxy:get_children(Worker1, SessionId(Worker1), {guid, Guid}, 0, 0), 60),
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:get_children(Worker1, SessionId(Worker1), ?FILE_REF(Guid), 0, 0), 60),
     ?assertMatch([], utils:cmd(["docker exec", atom_to_list(ContainerId), "rados -p onedata ls -"])).
 
 evict_on_ceph(Config0) ->
@@ -742,27 +743,27 @@ read_dir_collisions_test(Config0) ->
     SpaceName = <<"space7">>,
     RootDirPath = <<"/", SpaceName/binary, "/read_dir_collisions_test">>,
     {ok, RootDirGuid} = ?assertMatch({ok, _} , lfm_proxy:mkdir(Worker1, SessionId(Worker1), RootDirPath)),
-    ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(Worker2, SessionId(Worker2), {guid, RootDirGuid}), ?ATTEMPTS),
+    ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(Worker2, SessionId(Worker2), ?FILE_REF(RootDirGuid)), ?ATTEMPTS),
     ?assertMatch({ok, RootDirGuid}, lfm_proxy:resolve_guid(Worker2, SessionId(Worker2), RootDirPath), ?ATTEMPTS),
 
     GetNamesFromGetChildrenFun = fun(Node, Offset, Limit) ->
         {ok, Children} = ?assertMatch(
             {ok, _},
-            lfm_proxy:get_children(Node, SessionId(Node), {guid, RootDirGuid}, Offset, Limit)
+            lfm_proxy:get_children(Node, SessionId(Node), ?FILE_REF(RootDirGuid), Offset, Limit)
         ),
         lists:map(fun({_Guid, Name}) -> Name end, Children)
     end,
     GetNamesFromGetChildrenAttrsFun = fun(Node, Offset, Limit) ->
         {ok, ChildrenAttrs, _} = ?assertMatch(
             {ok, _, _},
-            lfm_proxy:get_children_attrs(Node, SessionId(Node), {guid, RootDirGuid}, #{offset => Offset, size => Limit})
+            lfm_proxy:get_children_attrs(Node, SessionId(Node), ?FILE_REF(RootDirGuid), #{offset => Offset, size => Limit})
         ),
         lists:map(fun(#file_attr{name = Name}) -> Name end, ChildrenAttrs)
     end,
     GetNamesFromGetChildrenDetailsFun = fun(Node, Offset, Limit) ->
         {ok, ChildrenDetails, _} = ?assertMatch(
             {ok, _, _},
-            lfm_proxy:get_children_details(Node, SessionId(Node), {guid, RootDirGuid}, #{offset => Offset, size => Limit})
+            lfm_proxy:get_children_details(Node, SessionId(Node), ?FILE_REF(RootDirGuid), #{offset => Offset, size => Limit})
         ),
         lists:map(fun(#file_details{file_attr = #file_attr{name = Name}}) ->
             Name
@@ -776,8 +777,8 @@ read_dir_collisions_test(Config0) ->
         {ok, Guid2} = ?assertMatch({ok, _} , lfm_proxy:create(Worker2, SessionId(Worker2), FilePath)),
 
         % Wait for providers to synchronize state
-        ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(Worker1, SessionId(Worker1), {guid, Guid2}), ?ATTEMPTS),
-        ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(Worker2, SessionId(Worker2), {guid, Guid1}), ?ATTEMPTS),
+        ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(Worker1, SessionId(Worker1), ?FILE_REF(Guid2)), ?ATTEMPTS),
+        ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(Worker2, SessionId(Worker2), ?FILE_REF(Guid1)), ?ATTEMPTS),
 
         FileName
     end, lists:seq(0, 9)),
@@ -882,14 +883,14 @@ check_fs_stats_on_different_providers(Config) ->
                         occupied = Occupied
                     }
                 ]}},
-                lfm_proxy:get_fs_stats(Node, SessId, {guid, FileGuid}),
+                lfm_proxy:get_fs_stats(Node, SessId, ?FILE_REF(FileGuid)),
                 ?ATTEMPTS
             )
         end, Files)
     end,
     WriteToFileFun = fun({Node, FileGuid, Offset, BytesNum}) ->
         Content = crypto:strong_rand_bytes(BytesNum),
-        {ok, Handle} = lfm_proxy:open(Node, GetSessId(Node), {guid, FileGuid}, write),
+        {ok, Handle} = lfm_proxy:open(Node, GetSessId(Node), ?FILE_REF(FileGuid), write),
         {ok, _} = lfm_proxy:write(Node, Handle, Offset, Content),
         ok = lfm_proxy:close(Node, Handle),
         Content
@@ -911,7 +912,7 @@ check_fs_stats_on_different_providers(Config) ->
 
     % Read file on P1 (force rtransfer) and assert that its quota was updated
     ExpReadContent = binary:part(WrittenContent, 0, 20),
-    {ok, ReadHandle} = lfm_proxy:open(P1, GetSessId(P1), {guid, F1}, read),
+    {ok, ReadHandle} = lfm_proxy:open(P1, GetSessId(P1), ?FILE_REF(F1), read),
     ?assertMatch({ok, ExpReadContent}, lfm_proxy:read(P1, ReadHandle, 100, 20), ?ATTEMPTS),
     ok = lfm_proxy:close(P1, ReadHandle),
 
@@ -933,49 +934,49 @@ list_children_recreated_remotely(Config0) ->
 
     % Upload file on worker1
     {ok, G} = lfm_proxy:create(Worker1, SessId(Worker1), SpaceGuid, <<"file_name">>, undefined),
-    {ok, _} = lfm_proxy:get_details(Worker1, SessId(Worker1), {guid, G}),
-    {ok, _, _} = lfm_proxy:get_children_details(Worker1, SessId(Worker1), {guid, SpaceGuid},
+    {ok, _} = lfm_proxy:get_details(Worker1, SessId(Worker1), ?FILE_REF(G)),
+    {ok, _, _} = lfm_proxy:get_children_details(Worker1, SessId(Worker1), ?FILE_REF(SpaceGuid),
         #{offset => 0, size => 24}),
-    {ok, _} = lfm_proxy:stat(Worker1, SessId(Worker1), {guid, G}),
-    {ok, _, _} = lfm_proxy:get_children_details(Worker1, SessId(Worker1), {guid, SpaceGuid},
+    {ok, _} = lfm_proxy:stat(Worker1, SessId(Worker1), ?FILE_REF(G)),
+    {ok, _, _} = lfm_proxy:get_children_details(Worker1, SessId(Worker1), ?FILE_REF(SpaceGuid),
         #{offset => -24, size => 24, last_name => <<"file_name">>}),
-    {ok, H} = lfm_proxy:open(Worker1, SessId(Worker1), {guid, G}, write),
+    {ok, H} = lfm_proxy:open(Worker1, SessId(Worker1), ?FILE_REF(G), write),
     {ok, _} = lfm_proxy:write(Worker1, H, 0, <<>>),
     ok = lfm_proxy:close(Worker1, H),
-    {ok, _} = lfm_proxy:get_details(Worker1, SessId(Worker1), {guid, G}),
+    {ok, _} = lfm_proxy:get_details(Worker1, SessId(Worker1), ?FILE_REF(G)),
 
     % Check on worker2
-    {ok, _, _} = lfm_proxy:get_children_details(Worker2, SessId(Worker2), {guid, SpaceGuid},
+    {ok, _, _} = lfm_proxy:get_children_details(Worker2, SessId(Worker2), ?FILE_REF(SpaceGuid),
         #{offset => -24, size => 24, last_name => <<"file_name">>}),
 
     % Delete file on worker2
-    ?assertMatch({ok, _}, lfm_proxy:stat(Worker2, SessId(Worker2), {guid, G}), 30),
-    ok = lfm_proxy:rm_recursive(Worker2, SessId(Worker2), {guid, G}),
-    ?assertMatch({error, ?EINVAL}, lfm_proxy:get_children_details(Worker2, SessId(Worker2), {guid, SpaceGuid},
+    ?assertMatch({ok, _}, lfm_proxy:stat(Worker2, SessId(Worker2), ?FILE_REF(G)), 30),
+    ok = lfm_proxy:rm_recursive(Worker2, SessId(Worker2), ?FILE_REF(G)),
+    ?assertMatch({error, ?EINVAL}, lfm_proxy:get_children_details(Worker2, SessId(Worker2), ?FILE_REF(SpaceGuid),
         #{offset => -24, size => 24})),
-    ?assertMatch({ok, _, _}, lfm_proxy:get_children_details(Worker2, SessId(Worker2), {guid, SpaceGuid},
+    ?assertMatch({ok, _, _}, lfm_proxy:get_children_details(Worker2, SessId(Worker2), ?FILE_REF(SpaceGuid),
         #{offset => -24, size => 24, last_name => <<"file_name">>})),
-    ?assertMatch({ok, _, _}, lfm_proxy:get_children_details(Worker2, SessId(Worker2), {guid, SpaceGuid},
+    ?assertMatch({ok, _, _}, lfm_proxy:get_children_details(Worker2, SessId(Worker2), ?FILE_REF(SpaceGuid),
         #{offset => 0, size => 24})),
-    ?assertMatch({ok, _, _}, lfm_proxy:get_children_details(Worker2, SessId(Worker2), {guid, SpaceGuid},
+    ?assertMatch({ok, _, _}, lfm_proxy:get_children_details(Worker2, SessId(Worker2), ?FILE_REF(SpaceGuid),
         #{offset => 0, size => 24, last_name => <<"file_name">>})),
 
     % Recreate file on worker2
     {ok, NewG} = lfm_proxy:create(Worker2, SessId(Worker2), SpaceGuid, <<"file_name">>, undefined),
-    {ok, _} = lfm_proxy:get_details(Worker2, SessId(Worker2), {guid, NewG}),
-    {ok, _, _} = lfm_proxy:get_children_details(Worker2, SessId(Worker2), {guid, SpaceGuid},
+    {ok, _} = lfm_proxy:get_details(Worker2, SessId(Worker2), ?FILE_REF(NewG)),
+    {ok, _, _} = lfm_proxy:get_children_details(Worker2, SessId(Worker2), ?FILE_REF(SpaceGuid),
         #{offset => 0, size => 24}),
-    {ok, _} = lfm_proxy:stat(Worker2, SessId(Worker2), {guid, NewG}),
+    {ok, _} = lfm_proxy:stat(Worker2, SessId(Worker2), ?FILE_REF(NewG)),
 
     % Another check on worker2
     % The bug appeared here (badmatch)
-    {ok, _, _} = lfm_proxy:get_children_details(Worker2, SessId(Worker2), {guid, SpaceGuid},
+    {ok, _, _} = lfm_proxy:get_children_details(Worker2, SessId(Worker2), ?FILE_REF(SpaceGuid),
         #{offset => -24, size => 24, last_name => <<"file_name">>}),
 
-    {ok, H2} = lfm_proxy:open(Worker2, SessId(Worker2), {guid, NewG}, write),
+    {ok, H2} = lfm_proxy:open(Worker2, SessId(Worker2), ?FILE_REF(NewG), write),
     {ok, _} = lfm_proxy:write(Worker2, H2, 0, <<>>),
     ok = lfm_proxy:close(Worker2, H2),
-    {ok, _} = lfm_proxy:get_details(Worker2, SessId(Worker2), {guid, NewG}).
+    {ok, _} = lfm_proxy:get_details(Worker2, SessId(Worker2), ?FILE_REF(NewG)).
 
 
 registered_user_opens_remotely_created_file_test(Config) ->
@@ -1003,20 +1004,20 @@ user_opens_file_test_base(Config0, IsRegisteredUser, UseShareGuid, TestCase) ->
     FilePath = filepath_utils:join([DirPath, <<"file">>]),
     {ok, _} = ?assertMatch({ok, _} , lfm_proxy:mkdir(Worker1, SessionId(Worker1), DirPath)),
     {ok, FileGuid} = ?assertMatch({ok, _} , lfm_proxy:create(Worker1, SessionId(Worker1), FilePath)),
-    {ok, ShareId} = lfm_proxy:create_share(Worker1, SessionId(Worker1), {guid, FileGuid}, <<"share">>),
+    {ok, ShareId} = lfm_proxy:create_share(Worker1, SessionId(Worker1), ?FILE_REF(FileGuid), <<"share">>),
     ShareFileGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
 
     % verify share on 2nd provider
-    ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(Worker2, ?ROOT_SESS_ID, {guid, ShareFileGuid}), ?ATTEMPTS),
+    ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(Worker2, ?ROOT_SESS_ID, ?FILE_REF(ShareFileGuid)), ?ATTEMPTS),
     case {IsRegisteredUser, UseShareGuid} of
         {true, false} ->
-             ?assertMatch({ok, _}, lfm_proxy:open(Worker2, SessionId(Worker2), {guid, FileGuid}, read), ?ATTEMPTS);
+             ?assertMatch({ok, _}, lfm_proxy:open(Worker2, SessionId(Worker2), ?FILE_REF(FileGuid), read), ?ATTEMPTS);
         {true, true} ->
-            ?assertMatch({ok, _}, lfm_proxy:open(Worker2, SessionId(Worker2), {guid, ShareFileGuid}, read), ?ATTEMPTS);
+            ?assertMatch({ok, _}, lfm_proxy:open(Worker2, SessionId(Worker2), ?FILE_REF(ShareFileGuid), read), ?ATTEMPTS);
         {false, false} ->
-            ?assertMatch({error, ?ENOENT}, lfm_proxy:open(Worker2, ?GUEST_SESS_ID, {guid, FileGuid}, read), ?ATTEMPTS);
+            ?assertMatch({error, ?ENOENT}, lfm_proxy:open(Worker2, ?GUEST_SESS_ID, ?FILE_REF(FileGuid), read), ?ATTEMPTS);
         {false, true} ->
-            ?assertMatch({ok, _}, lfm_proxy:open(Worker2, ?GUEST_SESS_ID, {guid, ShareFileGuid}, read), ?ATTEMPTS)
+            ?assertMatch({ok, _}, lfm_proxy:open(Worker2, ?GUEST_SESS_ID, ?FILE_REF(ShareFileGuid), read), ?ATTEMPTS)
     end.
 
 truncate_on_storage_does_not_block_synchronizer(Config0) ->
@@ -1033,13 +1034,13 @@ truncate_on_storage_does_not_block_synchronizer(Config0) ->
 
     % Create file on worker1
     {ok, Guid} = lfm_proxy:create(Worker1, SessId(Worker1), SpaceGuid, <<"synch_blocking_test_file">>, undefined),
-    {ok, Handle} = lfm_proxy:open(Worker1, SessId(Worker1), {guid, Guid}, write),
+    {ok, Handle} = lfm_proxy:open(Worker1, SessId(Worker1), ?FILE_REF(Guid), write),
     {ok, _} = lfm_proxy:write(Worker1, Handle, 0, FileContent),
     ok = lfm_proxy:close(Worker1, Handle),
 
     % Wait for file sync and read
-    ?assertMatch({ok, #file_attr{size = FileSize}}, lfm_proxy:stat(Worker2, SessId(Worker2), {guid, Guid}), 60),
-    {ok, Handle2} = lfm_proxy:open(Worker2, SessId(Worker2), {guid, Guid}, read),
+    ?assertMatch({ok, #file_attr{size = FileSize}}, lfm_proxy:stat(Worker2, SessId(Worker2), ?FILE_REF(Guid)), 60),
+    {ok, Handle2} = lfm_proxy:open(Worker2, SessId(Worker2), ?FILE_REF(Guid), read),
     ?assertEqual({ok, FileContent}, lfm_proxy:read(Worker2, Handle2, 0, FileSize)),
     ok = lfm_proxy:close(Worker2, Handle2),
 
@@ -1060,12 +1061,12 @@ truncate_on_storage_does_not_block_synchronizer(Config0) ->
         rpc:call(Worker1, replica_synchronizer, delete_whole_file_replica,
             [file_ctx:new_by_guid(Guid), VersionVector], timer:seconds(60))
     end),
-    ?assertMatch({ok, #file_attr{size = FileSize}}, lfm_proxy:stat(Worker1, SessId(Worker1), {guid, Guid}), 60),
+    ?assertMatch({ok, #file_attr{size = FileSize}}, lfm_proxy:stat(Worker1, SessId(Worker1), ?FILE_REF(Guid)), 60),
 
     % Test if size change (triggered by event) is not blocked by hanging storage truncate operation
     ?assertEqual(ok, rpc:call(Worker1, lfm_event_emitter, emit_file_truncated, [Guid, 0, SessId(Worker1)])),
-    ?assertMatch({ok, #file_attr{size = 0}}, lfm_proxy:stat(Worker1, SessId(Worker1), {guid, Guid}), 60),
-    ?assertMatch({ok, #file_attr{size = 0}}, lfm_proxy:stat(Worker2, SessId(Worker2), {guid, Guid}), 60),
+    ?assertMatch({ok, #file_attr{size = 0}}, lfm_proxy:stat(Worker1, SessId(Worker1), ?FILE_REF(Guid)), 60),
+    ?assertMatch({ok, #file_attr{size = 0}}, lfm_proxy:stat(Worker2, SessId(Worker2), ?FILE_REF(Guid)), 60),
 
     ok.
 
@@ -1119,7 +1120,7 @@ rtransfer_config_fetch_mock(Request, NotifyFun, CompleteFun, _, _, _) ->
     {ok, Ref}.
 
 cancel_transfers_for_session_and_file(Node, SessionId, FileCtx) ->
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
     rpc:call(Node, replica_synchronizer, cancel_transfers_of_session, [
         FileUuid, SessionId
     ]).

@@ -17,11 +17,12 @@
 -include("proto/common/credentials.hrl").
 -include("proto/oneclient/common_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/fslogic/file_attr.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include("rest_test_utils.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/privileges.hrl").
--include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("ctool/include/http/headers.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -759,9 +760,9 @@ query_spatial_view(Config) ->
     {ok, Guid1} = lfm_proxy:create(WorkerP1, SessionId, Path1),
     {ok, Guid2} = lfm_proxy:create(WorkerP1, SessionId, Path2),
     {ok, Guid3} = lfm_proxy:create(WorkerP1, SessionId, Path3),
-    ok = lfm_proxy:set_metadata(WorkerP1, SessionId, {guid, Guid1}, json, #{<<"type">> => <<"Point">>, <<"coordinates">> => [5.1, 10.22]}, [<<"loc">>]),
-    ok = lfm_proxy:set_metadata(WorkerP1, SessionId, {guid, Guid2}, json, #{<<"type">> => <<"Point">>, <<"coordinates">> => [0, 0]}, [<<"loc">>]),
-    ok = lfm_proxy:set_metadata(WorkerP1, SessionId, {guid, Guid3}, json, #{<<"type">> => <<"Point">>, <<"coordinates">> => [10, 5]}, [<<"loc">>]),
+    ok = lfm_proxy:set_metadata(WorkerP1, SessionId, ?FILE_REF(Guid1), json, #{<<"type">> => <<"Point">>, <<"coordinates">> => [5.1, 10.22]}, [<<"loc">>]),
+    ok = lfm_proxy:set_metadata(WorkerP1, SessionId, ?FILE_REF(Guid2), json, #{<<"type">> => <<"Point">>, <<"coordinates">> => [0, 0]}, [<<"loc">>]),
+    ok = lfm_proxy:set_metadata(WorkerP1, SessionId, ?FILE_REF(Guid3), json, #{<<"type">> => <<"Point">>, <<"coordinates">> => [10, 5]}, [<<"loc">>]),
 
     ?assertMatch(ok, create_view_via_rest(
         Config, WorkerP1, SpaceId, ViewName,
@@ -790,7 +791,7 @@ querying_spatial_view_with_wrong_function_should_fail(Config) ->
 
     Path1 = filename:join(["/", SpaceName, "file1"]),
     {ok, Guid1} = lfm_proxy:create(WorkerP1, SessionId, Path1),
-    ok = lfm_proxy:set_metadata(WorkerP1, SessionId, {guid, Guid1}, json, #{<<"type">> => <<"Point">>, <<"coordinates">> => [5.1, 10.22]}, [<<"loc">>]),
+    ok = lfm_proxy:set_metadata(WorkerP1, SessionId, ?FILE_REF(Guid1), json, #{<<"type">> => <<"Point">>, <<"coordinates">> => [5.1, 10.22]}, [<<"loc">>]),
 
     ?assertMatch(ok, create_view_via_rest(
         Config, WorkerP1, SpaceId, ViewName,
@@ -1025,20 +1026,19 @@ create_duplicated_views_on_remote_providers(Config) ->
 
 init_per_suite(Config) ->
     Posthook = fun(NewConfig) ->
-        NewConfig1 = [{space_storage_mock, false} | NewConfig],
-        NewConfig2 = initializer:setup_storage(NewConfig1),
+        NewConfig1 = initializer:setup_storage(NewConfig),
         lists:foreach(fun(Worker) ->
             test_utils:set_env(Worker, ?APP_NAME, dbsync_changes_broadcast_interval, timer:seconds(1)),
             test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_delay_ms, timer:seconds(1)),
             test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_force_delay_ms, timer:seconds(2)),
             test_utils:set_env(Worker, ?APP_NAME, public_block_size_treshold, 0),
             test_utils:set_env(Worker, ?APP_NAME, public_block_percent_treshold, 0)
-        end, ?config(op_worker_nodes, NewConfig2)),
+        end, ?config(op_worker_nodes, NewConfig1)),
 
         application:start(ssl),
         hackney:start(),
-        NewConfig3 = initializer:create_test_users_and_spaces(?TEST_FILE(NewConfig2, "env_desc.json"), NewConfig2),
-        NewConfig3
+        NewConfig2 = initializer:create_test_users_and_spaces(?TEST_FILE(NewConfig1, "env_desc.json"), NewConfig1),
+        NewConfig2
     end,
     [
         {?ENV_UP_POSTHOOK, Posthook},
@@ -1217,7 +1217,7 @@ list_views_via_rest(Config, Worker, Space, ChunkSize, StartId, Acc) ->
     case list_views_via_rest(Config, Worker, Space, StartId, ChunkSize) of
         {ok, {Views, NextPageToken}} ->
             case NextPageToken of
-                <<"null">> ->
+                Null when Null =:= <<"null">> orelse Null =:= null ->
                     Acc ++ Views;
                 _ ->
                     ?assertMatch(ChunkSize, length(Views)),
@@ -1331,13 +1331,13 @@ create_files_with_xattrs(Node, SessionId, SpaceName, Prefix, Num, XattrName) ->
     lists:map(fun(X) ->
         Path = filename:join(["/", SpaceName, Prefix ++ integer_to_list(X)]),
         {ok, Guid} = lfm_proxy:create(Node, SessionId, Path),
-        ok = lfm_proxy:set_xattr(Node, SessionId, {guid, Guid}, ?XATTR(XattrName, X)),
+        ok = lfm_proxy:set_xattr(Node, SessionId, ?FILE_REF(Guid), ?XATTR(XattrName, X)),
         Guid
     end, lists:seq(1, Num)).
 
 remove_files(Node, SessionId, Guids) ->
     lists:foreach(fun(G) ->
-        ok = lfm_proxy:unlink(Node, SessionId, {guid, G})
+        ok = lfm_proxy:unlink(Node, SessionId, ?FILE_REF(G))
     end, Guids).
 
 sort_workers(Config) ->

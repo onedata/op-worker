@@ -19,9 +19,10 @@
 
 -include("timeouts.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/fslogic/file_attr.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/errors.hrl").
--include_lib("ctool/include/posix/file_attr.hrl").
 
 %% API
 -export([start_link/0, spec/0]).
@@ -259,11 +260,13 @@ remove_stale_uploads(Uploads) ->
     Now = ?NOW(),
     maps:fold(fun
         (FileGuid, {UserId, CheckupTime}, Acc) when CheckupTime < Now ->
-            case lfm:stat(?ROOT_SESS_ID, {guid, FileGuid}) of
+            FileRef = ?FILE_REF(FileGuid),
+
+            case lfm:stat(?ROOT_SESS_ID, FileRef) of
                 {ok, #file_attr{mtime = MTime}} when MTime + ?INACTIVITY_PERIOD > Now ->
                     Acc#{FileGuid => {UserId, MTime + ?INACTIVITY_PERIOD}};
                 {ok, _} ->
-                    lfm:unlink(?ROOT_SESS_ID, {guid, FileGuid}, false),
+                    lfm:unlink(?ROOT_SESS_ID, FileRef, false),
                     Acc;
                 {error, _} ->
                     Acc

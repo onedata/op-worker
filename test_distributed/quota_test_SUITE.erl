@@ -15,13 +15,14 @@
 -include("fuse_test_utils.hrl").
 -include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/fslogic/file_attr.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/onedata.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
--include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("clproto/include/messages.hrl").
 -include_lib("proto/common/credentials.hrl").
@@ -462,9 +463,9 @@ replicate_file_smaller_than_quota_should_not_fail(Config) ->
     {ok, Guid} = create_file(P1, SessId(P1), f(<<"space3">>, File1)),
     ?assertMatch({ok, _}, write_to_file(P1, SessId(P1), f(<<"space3">>, File1), 0, crypto:strong_rand_bytes(20))),
     ?assertMatch({ok, [#{<<"totalBlocksSize">> := 20}]},
-        lfm_proxy:get_file_distribution(P2, SessId(P2), {guid, Guid}), ?ATTEMPTS),
+        lfm_proxy:get_file_distribution(P2, SessId(P2), ?FILE_REF(Guid)), ?ATTEMPTS),
 
-    {ok, Tid} = lfm_proxy:schedule_file_replication(P1, SessId(P1), {guid, Guid}, ?GET_DOMAIN_BIN(P2)),
+    {ok, Tid} = lfm_proxy:schedule_file_replication(P1, SessId(P1), ?FILE_REF(Guid), ?GET_DOMAIN_BIN(P2)),
 
     % wait for replication to finish
     ?assertMatch({ok, []}, rpc:call(P1, transfer, list_waiting_transfers, [<<"space_id3">>]), ?ATTEMPTS),
@@ -472,16 +473,16 @@ replicate_file_smaller_than_quota_should_not_fail(Config) ->
     ?assertEqual(true, lists:member(Tid, list_ended_transfers(P1, <<"space_id3">>)), ?ATTEMPTS),
 
     ?assertMatch({ok, [#{<<"totalBlocksSize">> := 20}, #{<<"totalBlocksSize">> := 20}]},
-        lfm_proxy:get_file_distribution(P2, SessId(P2), {guid, Guid}), ?ATTEMPTS),
+        lfm_proxy:get_file_distribution(P2, SessId(P2), ?FILE_REF(Guid)), ?ATTEMPTS),
 
     ok = fsync(P2, SessId(P2), f(<<"space3">>, File1)),
     ?assertEqual(20, current_size(P1, <<"space_id3">>), ?ATTEMPTS),
     ?assertEqual(20, current_size(P2, <<"space_id3">>), ?ATTEMPTS),
 
-    ?assertMatch({ok, _}, lfm_proxy:stat(P2, SessId(P2), {guid, Guid}), ?ATTEMPTS),
+    ?assertMatch({ok, _}, lfm_proxy:stat(P2, SessId(P2), ?FILE_REF(Guid)), ?ATTEMPTS),
     ?assertMatch(ok, unlink(P2, SessId(P2), f(<<"space3">>, File1))),
 
-    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(P1, SessId(P1), {guid, Guid}), ?ATTEMPTS),
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(P1, SessId(P1), ?FILE_REF(Guid)), ?ATTEMPTS),
     ?assertEqual(0, current_size(P2, <<"space_id3">>)),
     ?assertEqual(0, current_size(P1, <<"space_id3">>)).
 
@@ -507,10 +508,10 @@ replicate_file_bigger_than_quota_should_fail(Config) ->
     end, lists:seq(0, FileSize-1, ?GB)),
     ?assertMatch(
         {ok, [#{<<"totalBlocksSize">> := FileSize}]},
-        lfm_proxy:get_file_distribution(P2, SessId(P2), {guid, Guid}),
+        lfm_proxy:get_file_distribution(P2, SessId(P2), ?FILE_REF(Guid)),
         ?ATTEMPTS
     ),
-    {ok, Tid} = lfm_proxy:schedule_file_replication(P1, SessId(P1), {guid, Guid}, ?GET_DOMAIN_BIN(P2)),
+    {ok, Tid} = lfm_proxy:schedule_file_replication(P1, SessId(P1), ?FILE_REF(Guid), ?GET_DOMAIN_BIN(P2)),
 
     % Wait for replication to finish with failure
     ?assertMatch({ok, []}, rpc:call(P1, transfer, list_waiting_transfers, [<<"space_id5">>]), ?ATTEMPTS),
@@ -538,10 +539,10 @@ replication_of_file_bigger_than_support_should_fail(Config) ->
     {ok, Guid} = create_file(P2, SessId(P2), f(SpaceName, File1)),
     ?assertMatch({ok, _}, write_to_file(P2, SessId(P2), f(SpaceName, File1), 0, crypto:strong_rand_bytes(FileSize))),
     ?assertMatch({ok, [#{<<"totalBlocksSize">> := FileSize}]},
-        lfm_proxy:get_file_distribution(P1, SessId(P1), {guid, Guid}), ?ATTEMPTS),
+        lfm_proxy:get_file_distribution(P1, SessId(P1), ?FILE_REF(Guid)), ?ATTEMPTS),
 
-    ?assertMatch({error, ?ENOSPC}, lfm_proxy:schedule_file_replication(P1, SessId(P1), {guid, Guid}, ?GET_DOMAIN_BIN(P1))),
-    ?assertMatch({error, ?ENOSPC}, lfm_proxy:schedule_file_replication(P2, SessId(P2), {guid, Guid}, ?GET_DOMAIN_BIN(P1))).
+    ?assertMatch({error, ?ENOSPC}, lfm_proxy:schedule_file_replication(P1, SessId(P1), ?FILE_REF(Guid), ?GET_DOMAIN_BIN(P1))),
+    ?assertMatch({error, ?ENOSPC}, lfm_proxy:schedule_file_replication(P2, SessId(P2), ?FILE_REF(Guid), ?GET_DOMAIN_BIN(P1))).
 
 migration_of_file_bigger_than_support_should_fail(Config) ->
     #env{p1 = P1, p2 = P2, file1 = File1} = gen_test_env(Config),
@@ -552,12 +553,12 @@ migration_of_file_bigger_than_support_should_fail(Config) ->
     {ok, Guid} = create_file(P2, SessId(P2), f(SpaceName, File1)),
     ?assertMatch({ok, _}, write_to_file(P2, SessId(P2), f(SpaceName, File1), 0, crypto:strong_rand_bytes(FileSize))),
     ?assertMatch({ok, [#{<<"totalBlocksSize">> := FileSize}]},
-        lfm_proxy:get_file_distribution(P1, SessId(P1), {guid, Guid}), ?ATTEMPTS),
+        lfm_proxy:get_file_distribution(P1, SessId(P1), ?FILE_REF(Guid)), ?ATTEMPTS),
 
-    ?assertMatch({error, ?ENOSPC}, lfm_proxy:schedule_file_replica_eviction(P1, SessId(P1), {guid, Guid}, ?GET_DOMAIN_BIN(P2),
+    ?assertMatch({error, ?ENOSPC}, lfm_proxy:schedule_file_replica_eviction(P1, SessId(P1), ?FILE_REF(Guid), ?GET_DOMAIN_BIN(P2),
         ?GET_DOMAIN_BIN(P1)
     )),
-    ?assertMatch({error, ?ENOSPC}, lfm_proxy:schedule_file_replica_eviction(P2, SessId(P2), {guid, Guid}, ?GET_DOMAIN_BIN(P2),
+    ?assertMatch({error, ?ENOSPC}, lfm_proxy:schedule_file_replica_eviction(P2, SessId(P2), ?FILE_REF(Guid), ?GET_DOMAIN_BIN(P2),
         ?GET_DOMAIN_BIN(P1)
     )).
 
@@ -570,9 +571,9 @@ onf_replication_of_file_bigger_than_support_should_fail(Config) ->
     {ok, Guid} = create_file(P2, SessId(P2), f(SpaceName, File1)),
     ?assertMatch({ok, _}, write_to_file(P2, SessId(P2), f(SpaceName, File1), 0, crypto:strong_rand_bytes(FileSize))),
     ?assertMatch({ok, [#{<<"totalBlocksSize">> := FileSize}]},
-        lfm_proxy:get_file_distribution(P1, SessId(P1), {guid, Guid}), ?ATTEMPTS),
+        lfm_proxy:get_file_distribution(P1, SessId(P1), ?FILE_REF(Guid)), ?ATTEMPTS),
 
-    {ok, H} = ?assertMatch({ok, _}, lfm_proxy:open(P1, SessId(P1), {guid, Guid}, read), ?ATTEMPTS),
+    {ok, H} = ?assertMatch({ok, _}, lfm_proxy:open(P1, SessId(P1), ?FILE_REF(Guid), read), ?ATTEMPTS),
     ?assertMatch({error, ?ENOSPC}, lfm_proxy:read(P1, H, 0, FileSize)).
 
 
@@ -654,8 +655,8 @@ events_sent_test_base(Config, SpaceId, SupportingProvider) ->
 
     {FileGuid, _FileHandleId} = fuse_test_utils:create_file(Conn, RootGuid, Filename),
 
-    ?assertMatch({ok, _}, lfm_proxy:stat(P1, SessId, {guid, FileGuid}), ?ATTEMPTS),
-    ?assertMatch({ok, _}, write_to_file(P1, SessId, {guid, FileGuid}, 0, crypto:strong_rand_bytes(SpaceSize))),
+    ?assertMatch({ok, _}, lfm_proxy:stat(P1, SessId, ?FILE_REF(FileGuid)), ?ATTEMPTS),
+    ?assertMatch({ok, _}, write_to_file(P1, SessId, ?FILE_REF(FileGuid), 0, crypto:strong_rand_bytes(SpaceSize))),
     ?assertMatch(0, available_size(SupportingProvider, SpaceId), ?ATTEMPTS),
 
     ExpectedMessage = #'ServerMessage'{

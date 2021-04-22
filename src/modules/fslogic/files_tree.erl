@@ -81,7 +81,7 @@
 
 %% API
 -export([
-    get_parent_guid_if_not_root_dir/2, get_parent_if_not_root_dir/2,
+    get_parent_guid_if_not_root_dir/2,
     get_original_parent/2,
     get_parent/2,
 
@@ -110,30 +110,12 @@
 -spec get_parent_guid_if_not_root_dir(file_ctx:ctx(), undefined | user_ctx:ctx()) ->
     {undefined | file_id:file_guid(), file_ctx:ctx()}.
 get_parent_guid_if_not_root_dir(FileCtx, UserCtx) ->
-    FileGuid = file_ctx:get_guid_const(FileCtx),
+    FileGuid = file_ctx:get_logical_guid_const(FileCtx),
     {ParentCtx, FileCtx2} = get_parent(FileCtx, UserCtx),
 
-    case file_ctx:get_guid_const(ParentCtx) of
+    case file_ctx:get_logical_guid_const(ParentCtx) of
         FileGuid -> {undefined, FileCtx2};
         ParentGuid -> {ParentGuid, FileCtx2}
-    end.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns 'undefined' if file is root file (either userRootDir or share root)
-%% or proper ParentCtx otherwise.
-%% @end
-%%--------------------------------------------------------------------
--spec get_parent_if_not_root_dir(file_ctx:ctx(), undefined | user_ctx:ctx()) ->
-    {ParentFileCtx :: undefined | file_ctx:ctx(), NewFileCtx :: file_ctx:ctx()}.
-get_parent_if_not_root_dir(FileCtx0, UserCtx) ->
-    FileGuid = file_ctx:get_guid_const(FileCtx0),
-    {ParentCtx, FileCtx1} = get_parent(FileCtx0, UserCtx),
-
-    case file_ctx:get_guid_const(ParentCtx) of
-        FileGuid -> {undefined, FileCtx1};
-        _ -> {ParentCtx, FileCtx1}
     end.
 
 
@@ -165,8 +147,8 @@ get_original_parent(FileCtx, OriginalParentCtx) ->
 %% Returns parent's file context. In case of user root dir and share root
 %% dir/file returns the same file_ctx. Therefore, to check if given
 %% file_ctx points to root dir (either user root dir or share root) it is
-%% enough to call this function and compare returned parent ctx's guid
-%% with its own.
+%% enough to call this function and compare returned parent ctx with its own
+%% (by using e.g. 'file_ctx:equals').
 %% @end
 %%--------------------------------------------------------------------
 -spec get_parent(file_ctx:ctx(), undefined | user_ctx:ctx()) ->
@@ -183,7 +165,7 @@ get_parent(FileCtx, UserCtx) ->
 -spec get_child(file_ctx:ctx(), file_meta:name(), user_ctx:ctx()) ->
     {ChildCtx :: file_ctx:ctx(), file_ctx:ctx()} | no_return().
 get_child(FileCtx, Name, UserCtx) ->
-    case file_ctx:is_root_dir_const(FileCtx) of
+    {ChildCtx, NewFileCtx} = case file_ctx:is_root_dir_const(FileCtx) of
         true ->
             get_user_root_dir_child(UserCtx, FileCtx, Name);
         false ->
@@ -195,10 +177,11 @@ get_child(FileCtx, Name, UserCtx) ->
                         true ->
                             get_space_share_child(FileCtx, Name, UserCtx);
                         false ->
-                            get_file_child(FileCtx, Name)
+                            get_dir_child(FileCtx, Name)
                     end
             end
-    end.
+    end,
+    {file_ctx:cache_parent(NewFileCtx, ChildCtx), NewFileCtx}.
 
 
 -spec get_children(file_ctx:ctx(), user_ctx:ctx(), file_meta:list_opts()) ->
@@ -244,7 +227,7 @@ get_children(FileCtx, UserCtx, ListOpts, ChildrenWhiteList) ->
 -spec get_parent_internal(file_ctx:ctx(), undefined | user_ctx:ctx()) ->
     {ParentFileCtx :: file_ctx:ctx(), NewFileCtx :: file_ctx:ctx()}.
 get_parent_internal(FileCtx, UserCtx) ->
-    FileGuid = file_ctx:get_guid_const(FileCtx),
+    FileGuid = file_ctx:get_logical_guid_const(FileCtx),
     {FileUuid, SpaceId, ShareId} = file_id:unpack_share_guid(FileGuid),
     {Doc, FileCtx2} = file_ctx:get_file_doc_including_deleted(FileCtx),
     {ok, ParentUuid} = file_meta:get_parent_uuid(Doc),
@@ -266,7 +249,7 @@ get_parent_internal(FileCtx, UserCtx) ->
         {_, true, true} ->
             % Share root file shall point to virtual share root dir in open handle mode
             ShareRootDirUuid = fslogic_uuid:shareid_to_share_root_dir_uuid(ShareId),
-            file_ctx:new_by_guid(file_id:pack_share_guid(ShareRootDirUuid, SpaceId, ShareId));
+            file_ctx:new_by_uuid(ShareRootDirUuid, SpaceId, ShareId);
         {true, false, _} ->
             case ParentUuid =:= ?GLOBAL_ROOT_DIR_UUID
                 andalso UserCtx =/= undefined
@@ -297,12 +280,12 @@ get_parent_internal(FileCtx, UserCtx) ->
                     case IsInOpenHandleMode of
                         true ->
                             % Virtual share root dir should point to normal space dir
-                            file_ctx:new_by_guid(file_id:pack_guid(ParentUuid, SpaceId));
+                            file_ctx:new_by_uuid(ParentUuid, SpaceId);
                         false ->
                             throw(?ENOENT)
                     end;
                 false ->
-                    file_ctx:new_by_guid(file_id:pack_share_guid(ParentUuid, SpaceId, ShareId))
+                    file_ctx:new_by_uuid(ParentUuid, SpaceId, ShareId)
             end;
         {false, true, _} ->
             FileCtx2
@@ -385,8 +368,7 @@ get_space_share_child(SpaceDirCtx, Name, UserCtx) ->
     case lists:member(Name, Shares) of
         true ->
             ChildUuid = fslogic_uuid:shareid_to_share_root_dir_uuid(Name),
-            ChildShareGuid = file_id:pack_share_guid(ChildUuid, SpaceId, Name),
-            {file_ctx:new_by_guid(ChildShareGuid), SpaceDirCtx};
+            {file_ctx:new_by_uuid(ChildUuid, SpaceId, Name), SpaceDirCtx};
         false ->
             throw(?ENOENT)
     end.
@@ -482,18 +464,23 @@ get_share_root_file(UserCtx, ShareId) ->
 
 
 %% @private
--spec get_file_child(file_ctx:ctx(), file_meta:name()) ->
+-spec get_dir_child(file_ctx:ctx(), file_meta:name()) ->
     {ChildCtx :: file_ctx:ctx(), file_ctx:ctx()} | no_return().
-get_file_child(FileCtx, Name) ->
+get_dir_child(FileCtx, Name) ->
     {FileDoc, FileCtx2} = file_ctx:get_file_doc(FileCtx),
 
-    case canonical_path:resolve(FileDoc, <<"/", Name/binary>>) of
-        {ok, ChildDoc} ->
-            SpaceId = file_ctx:get_space_id_const(FileCtx),
-            ShareId = file_ctx:get_share_id_const(FileCtx),
-            {file_ctx:new_by_doc(ChildDoc, SpaceId, ShareId), FileCtx2};
-        {error, not_found} ->
-            throw(?ENOENT)
+    case file_meta:get_type(FileDoc) of
+        ?DIRECTORY_TYPE ->
+            case canonical_path:resolve(FileDoc, <<"/", Name/binary>>) of
+                {ok, ChildDoc} ->
+                    SpaceId = file_ctx:get_space_id_const(FileCtx),
+                    ShareId = file_ctx:get_share_id_const(FileCtx),
+                    {file_ctx:new_by_doc(ChildDoc, SpaceId, ShareId), FileCtx2};
+                {error, not_found} ->
+                    throw(?ENOENT)
+            end;
+        _ ->
+            throw(?ENOTDIR)
     end.
 
 
@@ -505,7 +492,7 @@ get_file_children(FileCtx, ListOpts, ChildrenWhiteList) ->
 
     case file_meta:get_type(FileDoc) of
         ?DIRECTORY_TYPE ->
-            FileGuid = file_ctx:get_guid_const(FileCtx),
+            FileGuid = file_ctx:get_logical_guid_const(FileCtx),
             {_FileUuid, SpaceId, ShareId} = file_id:unpack_share_guid(FileGuid),
 
             {ok, ChildrenLinks, ListExtendedInfo} = case ChildrenWhiteList of

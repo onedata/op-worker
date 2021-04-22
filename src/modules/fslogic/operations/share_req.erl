@@ -100,7 +100,7 @@ remove_share_internal(UserCtx, FileCtx, ShareId) ->
 -spec create_share_insecure(user_ctx:ctx(), file_ctx:ctx(), od_share:name(), od_share:description()) ->
     fslogic_worker:provider_response().
 create_share_insecure(UserCtx, FileCtx0, Name, Description) ->
-    Guid = file_ctx:get_guid_const(FileCtx0),
+    Guid = file_ctx:get_logical_guid_const(FileCtx0),
     ShareId = datastore_key:new(),
     ShareGuid = file_id:guid_to_share_guid(Guid, ShareId),
     SessionId = user_ctx:get_session_id(UserCtx),
@@ -113,7 +113,7 @@ create_share_insecure(UserCtx, FileCtx0, Name, Description) ->
         false -> file
     end,
 
-    assert_has_space_privilege(SpaceId, UserId, ?SPACE_MANAGE_SHARES),
+    space_logic:assert_has_eff_privilege(SpaceId, UserId, ?SPACE_MANAGE_SHARES),
 
     case share_logic:create(SessionId, ShareId, Name, Description, SpaceId, ShareGuid, FileType) of
         {ok, _} ->
@@ -121,7 +121,7 @@ create_share_insecure(UserCtx, FileCtx0, Name, Description) ->
                 {error, _} ->
                     ok = share_logic:delete(SessionId, ShareId),
                     ?ERROR(?EAGAIN);
-                {ok, _} ->
+                ok ->
                     #provider_response{
                         status = #status{code = ?OK},
                         provider_response = #share{share_id = ShareId}
@@ -140,25 +140,13 @@ remove_share_insecure(UserCtx, FileCtx, ShareId) ->
     UserId = user_ctx:get_user_id(UserCtx),
     SpaceId = file_ctx:get_space_id_const(FileCtx),
 
-    assert_has_space_privilege(SpaceId, UserId, ?SPACE_MANAGE_SHARES),
+    space_logic:assert_has_eff_privilege(SpaceId, UserId, ?SPACE_MANAGE_SHARES),
 
     case file_meta:remove_share(FileCtx, ShareId) of
         {error, not_found} ->
             ?ERROR(?ENOENT);
-        {ok, _} ->
+        ok ->
             ok = share_logic:delete(SessionId, ShareId),
             ok = permissions_cache:invalidate(),
             #provider_response{status = #status{code = ?OK}}
-    end.
-
-
-%% @private
--spec assert_has_space_privilege(od_space:id(), od_user:id(),
-    privileges:space_privilege()) -> ok | no_return().
-assert_has_space_privilege(SpaceId, UserId, Privilege) ->
-    case space_logic:has_eff_privilege(SpaceId, UserId, Privilege) of
-        true ->
-            ok;
-        false ->
-            ?ERROR(?EPERM)
     end.

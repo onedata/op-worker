@@ -139,6 +139,14 @@ sanitize_param(Param, RawData, ParamsSpec) ->
     case maps:get(Param, RawData, undefined) of
         undefined ->
             false;
+        null ->
+            case maps:get(Param, ParamsSpec, undefined) of
+                {any, ValueConstraint} ->
+                    {true, sanitize_param(any, ValueConstraint, Param, null)};
+                _ ->
+                    % null values are ignored for any other TypeConstraints than "any"
+                    false
+            end;
         RawValue ->
             {TypeConstraint, ValueConstraint} = maps:get(Param, ParamsSpec),
             {true, sanitize_param(
@@ -252,10 +260,6 @@ check_type(gri, Param, EncodedGri) when is_binary(EncodedGri) ->
 check_type(gri, Param, _) ->
     throw(?ERROR_BAD_DATA(Param));
 
-check_type(page_token, _Param, null) ->
-    undefined;
-check_type(page_token, _Param, <<"null">>) ->
-    undefined;
 check_type(page_token, _Param, undefined) ->
     undefined;
 check_type(page_token, _Param, <<"undefined">>) ->
@@ -300,10 +304,13 @@ check_value(json, non_empty, Param, Map) when map_size(Map) == 0 ->
 check_value(_, non_empty, _Param, _) ->
     ok;
 
-check_value(binary, guid, Param, Value) ->
+check_value(_, guid, Param, []) ->
+    throw(?ERROR_BAD_VALUE_IDENTIFIER(Param));
+check_value(_, guid, Param, Value) ->
     try
-        {_, _, _} = file_id:unpack_share_guid(Value),
-        ok
+        lists:foreach(fun(G) ->
+            {_, _, _} = file_id:unpack_share_guid(G)
+        end, utils:ensure_list(Value))
     catch _:_ ->
         throw(?ERROR_BAD_VALUE_IDENTIFIER(Param))
     end;
@@ -329,6 +336,16 @@ check_value(_, {between, Low, High}, Param, Value) ->
         false ->
             throw(?ERROR_BAD_VALUE_NOT_IN_RANGE(Param, Low, High))
     end;
+
+check_value(_, AllowedValues, Param, Values) when is_list(AllowedValues) andalso is_list(Values) ->
+    lists:foreach(fun(Val) ->
+        case lists:member(Val, AllowedValues) of
+            true ->
+                ok;
+            _ ->
+                throw(?ERROR_BAD_VALUE_LIST_NOT_ALLOWED(Param, AllowedValues))
+        end
+    end, Values);
 
 check_value(_, AllowedValues, Param, Val) when is_list(AllowedValues) ->
     case lists:member(Val, AllowedValues) of

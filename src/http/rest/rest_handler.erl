@@ -249,7 +249,7 @@ resolve_gri_bindings(SessionId, #b_gri{type = Tp, id = Id, aspect = As, scope = 
         {Atom, Asp} -> {Atom, resolve_bindings(SessionId, Asp, Req)};
         Atom -> Atom
     end,
-    ScBinding = case middleware_utils:is_shared_file_request(Tp, AsBinding, IdBinding) of
+    ScBinding = case middleware_utils:is_shared_file_request(Tp, AsBinding, Sc, IdBinding) of
         true -> public;
         false -> Sc
     end,

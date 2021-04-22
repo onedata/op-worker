@@ -16,8 +16,9 @@
 -module(permissions_test_runner).
 -author("Bartosz Walkowicz").
 
--include("permissions_test.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
+-include("permissions_test.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
@@ -363,6 +364,9 @@ run_file_protection_scenarios(ScenariosRootDirPath, #perms_test_spec{
         {?METADATA_PROTECTION, ?METADATA_PROTECTION_BLOCKED_OPERATIONS}
     ]),
 
+    SpaceOwnerUserSessId = ?config({session_id, {SpaceOwner, ?GET_DOMAIN(Node)}}, Config),
+    {ok, DatasetId} = lfm_proxy:establish_dataset(Node, SpaceOwnerUserSessId, ScenarioRootDirKey),
+
     case ProtectionFlagsToSet > 0 of
         true ->
             Executioner = case rand:uniform(3) of
@@ -373,15 +377,14 @@ run_file_protection_scenarios(ScenariosRootDirPath, #perms_test_spec{
             ExecutionerSessId = ?config({session_id, {Executioner, ?GET_DOMAIN(Node)}}, Config),
 
             % With file protection set operation should fail
-            ok = lfm_proxy:update_protection_flags(
-                Node, ?ROOT_SESS_ID, ScenarioRootDirKey, ProtectionFlagsToSet, ?no_flags_mask
-            ),
+            ok = lfm_proxy:update_dataset(
+                Node, SpaceOwnerUserSessId, DatasetId, undefined, ProtectionFlagsToSet, ?no_flags_mask),
             await_caches_clearing(Node, SpaceId, Executioner, ExtraData),
             ?assertMatch({error, ?EPERM}, Operation(ExecutionerSessId, ScenarioRootDirPath, ExtraData)),
 
             % And should succeed without it
-            ok = lfm_proxy:update_protection_flags(
-                Node, ?ROOT_SESS_ID, ScenarioRootDirKey, ?no_flags_mask, ProtectionFlagsToSet
+            ok = lfm_proxy:update_dataset(
+                Node, SpaceOwnerUserSessId, DatasetId, undefined, ?no_flags_mask, ProtectionFlagsToSet
             ),
             await_caches_clearing(Node, SpaceId, Executioner, ExtraData),
             ?assertMatch(ok, Operation(ExecutionerSessId, ScenarioRootDirPath, ExtraData)),
@@ -403,7 +406,7 @@ run_file_protection_scenarios(ScenariosRootDirPath, #perms_test_spec{
 await_caches_clearing(Node, SpaceId, UserId, ExtraData) ->
     Attempts = 30,
     Interval = 100,
-    ProtectionFlagsCache = binary_to_atom(<<"file_protection_flags_cache_", SpaceId/binary>>, utf8),
+    ProtectionFlagsCache = binary_to_atom(<<"dataset_effective_cache_", SpaceId/binary>>, utf8),
 
     AreProtectionFlagsCached = fun(FileUuid) ->
         case rpc:call(Node, bounded_cache, get, [ProtectionFlagsCache, FileUuid]) of
@@ -420,7 +423,7 @@ await_caches_clearing(Node, SpaceId, UserId, ExtraData) ->
     end,
 
     lists:foreach(fun
-        ({guid, FileGuid}) ->
+        (?FILE_REF(FileGuid)) ->
             FileUuid = file_id:guid_to_uuid(FileGuid),
             ?assertMatch(false, AreProtectionFlagsCached(FileUuid), Attempts, Interval),
             ?assertMatch(false, IsPermEntryCached({{user_perms_matrix, UserId, FileGuid}}), Attempts, Interval);
@@ -521,7 +524,7 @@ run_caveats_scenario(ScenarioCtx = #scenario_ctx{
     scenario_root_dir_path = ScenarioRootDirPath,
     extra_data = ExtraData
 }, MainToken) ->
-    {guid, ScenarioRootDirGuid} = maps:get(ScenarioRootDirPath, ExtraData),
+    ?FILE_REF(ScenarioRootDirGuid) = maps:get(ScenarioRootDirPath, ExtraData),
     {ok, ScenarioRootDirObjectId} = file_id:guid_to_objectid(ScenarioRootDirGuid),
 
     DummyGuid = <<"Z3VpZCNfaGFzaF9mNmQyOGY4OTNjOTkxMmVh">>,
@@ -608,8 +611,8 @@ run_share_test_scenarios(ScenariosRootDirPath, #perms_test_spec{
             Node, FileOwnerUserSessId, TestCaseRootDirKey, ScenarioName
         ),
         ExtraData1 = maps:map(fun
-            (_, {guid, FileGuid}) ->
-                {guid, file_id:guid_to_share_guid(FileGuid, ShareId)};
+            (_, #file_ref{guid = FileGuid} = FileRef) ->
+                FileRef#file_ref{guid = file_id:guid_to_share_guid(FileGuid, ShareId)};
             (_, Val) ->
                 Val
         end, ExtraData0),
@@ -1270,7 +1273,7 @@ create_files(Node, FileOwnerSessId, ParentDirPath, #file{
 
     ExtraData = case HookFun of
         undefined ->
-            #{FilePath => {guid, FileGuid}};
+            #{FilePath => ?FILE_REF(FileGuid)};
         _ when is_function(HookFun, 2) ->
             #{FilePath => HookFun(FileOwnerSessId, FileGuid)}
     end,
@@ -1295,7 +1298,7 @@ create_files(Node, FileOwnerSessId, ParentDirPath, #dir{
 
     ExtraData1 = case HookFun of
         undefined ->
-            ExtraData0#{DirPath => {guid, DirGuid}};
+            ExtraData0#{DirPath => ?FILE_REF(DirGuid)};
         _ when is_function(HookFun, 2) ->
             ExtraData0#{DirPath => HookFun(FileOwnerSessId, DirGuid)}
     end,
