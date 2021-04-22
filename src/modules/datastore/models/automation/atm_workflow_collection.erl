@@ -26,6 +26,8 @@
 -export([list/3, add/4, delete/4]).
 
 
+-type state_list_id() :: atm_workflow:state().
+
 -type index() :: binary().
 -type offset() :: integer().
 -type limit() :: pos_integer().
@@ -36,7 +38,7 @@
     limit => limit()
 }.
 
--export_type([index/0, offset/0, limit/0, listing_opts/0]).
+-export_type([state_list_id/0, index/0, offset/0, limit/0, listing_opts/0]).
 
 
 -define(CTX, (atm_workflow:get_ctx())).
@@ -49,22 +51,22 @@
 %%%===================================================================
 
 
--spec list(od_space:id(), atm_workflow:state(), listing_opts()) ->
+-spec list(od_space:id(), state_list_id(), listing_opts()) ->
     [{atm_workflow:id(), index()}].
-list(SpaceId, ListDocId, ListingOpts) ->
-    {ok, Workflows} = for_each_link(SpaceId, ListDocId, fun(Index, WorkflowId, Acc) ->
+list(SpaceId, StateListId, ListingOpts) ->
+    {ok, Workflows} = for_each_link(SpaceId, StateListId, fun(Index, WorkflowId, Acc) ->
         [{WorkflowId, Index} | Acc]
     end, [], sanitize_listing_opts(ListingOpts)),
 
     lists:reverse(Workflows).
 
 
--spec add(od_space:id(), atm_workflow:state(), atm_workflow:id(), time:seconds()) ->
+-spec add(od_space:id(), state_list_id(), atm_workflow:id(), time:seconds()) ->
     ok.
-add(SpaceId, WorkflowState, WorkflowId, Timestamp) ->
+add(SpaceId, StateListId, WorkflowId, Timestamp) ->
     Index = index(WorkflowId, Timestamp),
 
-    case datastore_model:add_links(?CTX, ?FOREST(SpaceId), WorkflowState, {Index, WorkflowId}) of
+    case datastore_model:add_links(?CTX, ?FOREST(SpaceId), StateListId, {Index, WorkflowId}) of
         {ok, _} ->
             ok;
         {error, already_exists} ->
@@ -72,12 +74,12 @@ add(SpaceId, WorkflowState, WorkflowId, Timestamp) ->
     end.
 
 
--spec delete(od_space:id(), atm_workflow:state(), atm_workflow:id(), time:seconds()) ->
+-spec delete(od_space:id(), state_list_id(), atm_workflow:id(), time:seconds()) ->
     ok.
-delete(SpaceId, WorkflowState, WorkflowId, Timestamp) ->
+delete(SpaceId, StateListId, WorkflowId, Timestamp) ->
     LinkName = index(WorkflowId, Timestamp),
 
-    ok = datastore_model:delete_links(?CTX, ?FOREST(SpaceId), WorkflowState, LinkName).
+    ok = datastore_model:delete_links(?CTX, ?FOREST(SpaceId), StateListId, LinkName).
 
 
 %%%===================================================================
@@ -118,13 +120,13 @@ sanitize_listing_opts(Opts) ->
 %% @private
 -spec for_each_link(
     od_space:id(),
-    atm_workflow:state(),
+    state_list_id(),
     fun((index(), atm_workflow:id(), Acc0 :: term()) -> Acc :: term()),
     term(),
     datastore_model:fold_opts()
 ) ->
     {ok, Acc :: term()} | {error, term()}.
-for_each_link(SpaceId, WorkflowState, Callback, Acc0, Options) ->
-    datastore_model:fold_links(?CTX, ?FOREST(SpaceId), WorkflowState, fun
+for_each_link(SpaceId, StateListId, Callback, Acc0, Options) ->
+    datastore_model:fold_links(?CTX, ?FOREST(SpaceId), StateListId, fun
         (#link{name = Index, target = WorkflowId}, Acc) -> {ok, Callback(Index, WorkflowId, Acc)}
     end, Acc0, Options).
