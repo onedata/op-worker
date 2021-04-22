@@ -22,7 +22,7 @@
 %% API
 -export([
     download_single_file/3, download_single_file/4,
-    download_tarball/3, download_tarball/4
+    download_tarball/4
 ]).
 
 
@@ -33,21 +33,21 @@
 -spec download_single_file(session:id(), lfm_attrs:file_attributes(), cowboy_req:req()) ->
     cowboy_req:req().
 download_single_file(SessionId, FileAttrs, Req) ->
-    download_single_file(SessionId, FileAttrs, fun() -> ok end, Req).
+    download_single_file(datastore_key:new(), SessionId, FileAttrs, Req).
 
 
 -spec download_single_file(
+    file_download_code:code(),
     session:id(),
     lfm_attrs:file_attributes(),
-    OnSuccessCallback :: fun(() -> ok),
     cowboy_req:req()
 ) ->
     cowboy_req:req().
-download_single_file(SessionId, #file_attr{
+download_single_file(Id, SessionId, #file_attr{
     guid = FileGuid,
     name = FileName,
     size = FileSize
-}, OnSuccessCallback, Req0) ->
+}, Req0) ->
     case http_parser:parse_range_header(Req0, FileSize) of
         invalid ->
             cowboy_req:reply(
@@ -62,7 +62,7 @@ download_single_file(SessionId, #file_attr{
                 {ok, FileHandle} ->
                     try
                         {Boundary, Req2} = stream_file_internal(Ranges, FileHandle, FileSize, Req1),
-                        execute_on_success_callback(FileGuid, OnSuccessCallback),
+                        execute_on_success_callback(FileGuid, fun() -> file_download_code:remove(Id) end),
                         http_streamer:close_stream(Boundary, Req2),
                         Req2
                     catch Type:Reason ->
@@ -79,25 +79,22 @@ download_single_file(SessionId, #file_attr{
     end.
 
 
--spec download_tarball( session:id(), [lfm_attrs:file_attributes()], cowboy_req:req()) -> 
-    cowboy_req:req().
-download_tarball(SessionId, FileAttrsList, Req0) ->
-    download_tarball(SessionId, FileAttrsList, fun() -> ok end, Req0).
-
-
 -spec download_tarball(
+    bulk_download_main_process:id(),
     session:id(),
     [lfm_attrs:file_attributes()],
-    OnSuccessCallback :: fun(() -> ok),
     cowboy_req:req()
 ) ->
     cowboy_req:req().
-download_tarball(SessionId, FileAttrsList, OnSuccessCallback, Req0) ->
-    Req1 = http_streamer:init_stream(?HTTP_200_OK, Req0),
-    ok = tarball_download_traverse:run(FileAttrsList, SessionId, Req1),
-    execute_on_success_callback(<<>>, OnSuccessCallback),
-    http_streamer:close_stream(undefined, Req1),
-    Req1.
+download_tarball(Id, SessionId, FileAttrsList, Req0) ->
+    case http_parser:parse_range_header(Req0, unknown) of
+        undefined ->
+            stream_whole_tarball(Id, SessionId, FileAttrsList, Req0);
+        [{0, unknown}] -> 
+            stream_whole_tarball(Id, SessionId, FileAttrsList, Req0);
+        Range ->
+            stream_partial_tarball(Id, Req0, Range)
+    end.
 
 
 %%%===================================================================
@@ -130,7 +127,8 @@ stream_whole_file(FileHandle, FileSize, Req0) ->
         #{?HDR_CONTENT_LENGTH => integer_to_binary(FileSize)},
         Req0
     ),
-    http_streamer:stream_bytes_range(FileHandle, FileSize, {0, FileSize - 1}, Req1),
+    StreamingCtx = http_streamer:new_file_stream(FileHandle, FileSize),
+    http_streamer:stream_bytes_range(StreamingCtx, {0, FileSize - 1}, Req1),
     {undefined, Req1}.
 
 
@@ -146,7 +144,8 @@ stream_one_ranged_body({RangeStart, RangeEnd} = Range, FileHandle, FileSize, Req
         },
         Req0
     ),
-    http_streamer:stream_bytes_range(FileHandle, FileSize, Range, Req1),
+    StreamingCtx = http_streamer:new_file_stream(FileHandle, FileSize),
+    http_streamer:stream_bytes_range(StreamingCtx, Range, Req1),
     {undefined, Req1}.
 
 
@@ -169,10 +168,39 @@ stream_multipart_ranged_body(Ranges, FileHandle, FileSize, Req0) ->
             {?HDR_CONTENT_RANGE, build_content_range_header_value(Range, FileSize)}
         ]),
         http_streamer:send_data_chunk(NextPartHead, Req1),
-        http_streamer:stream_bytes_range(FileHandle, FileSize, Range, Req1)
+        StreamingCtx = http_streamer:new_file_stream(FileHandle, FileSize),
+        http_streamer:stream_bytes_range(StreamingCtx, Range, Req1)
     end, Ranges),
     
     {Boundary, Req1}.
+
+
+%% @private
+-spec stream_whole_tarball(bulk_download_main_process:id(), session:id(), [lfm_attrs:file_attributes()], 
+    cowboy_req:req()) -> cowboy_req:req().
+stream_whole_tarball(Id, SessionId, FileAttrsList, Req0) ->
+    Req1 = http_streamer:init_stream(?HTTP_200_OK, Req0),
+    ok = bulk_download:start(Id, FileAttrsList, SessionId, Req1),
+    http_streamer:close_stream(undefined, Req1),
+    Req1.
+
+
+%% @private
+-spec stream_partial_tarball(bulk_download_main_process:id(), cowboy_req:req(), http_parser:bytes_range()) -> 
+    cowboy_req:req().
+stream_partial_tarball(Id, Req0, [{RangeBegin, unknown}]) ->
+    case bulk_download:catch_up_data(Id, RangeBegin) of
+        {ok, Data, SendRetryDelay} ->
+            Req1 = http_streamer:init_stream(?HTTP_206_PARTIAL_CONTENT, Req0),
+            {NewDelay, _} = http_streamer:send_data_chunk(Data, Req1, SendRetryDelay),
+            ok = bulk_download:resume(Id, Req1, NewDelay),
+            http_streamer:close_stream(undefined, Req1),
+            Req1;
+        error ->
+            cowboy_req:stream_reply(?HTTP_416_RANGE_NOT_SATISFIABLE, #{?HDR_CONTENT_RANGE => <<"bytes */*">>}, Req0)
+    end;
+stream_partial_tarball(_Id, Req0, _InvalidRange) ->
+    cowboy_req:stream_reply(?HTTP_416_RANGE_NOT_SATISFIABLE, #{?HDR_CONTENT_RANGE => <<"bytes */*">>}, Req0).
 
 
 %% @private

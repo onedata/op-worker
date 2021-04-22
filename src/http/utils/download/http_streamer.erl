@@ -21,8 +21,10 @@
 %% API
 -export([
     init_stream/2, init_stream/3, close_stream/2,
-    stream_bytes_range/4, stream_bytes_range/6, stream_bytes_range/7,
-    send_data_chunk/2,
+    new_file_stream/2, 
+    set_read_block_size/2, set_encoding_fun/2, set_send_fun/2, set_range_policy/2, 
+    stream_bytes_range/3,
+    send_data_chunk/2, send_data_chunk/3,
     get_read_block_size/1
 ]).
 
@@ -34,7 +36,16 @@
 ).
 
 -type read_block_size() :: non_neg_integer().
+-type send_state() :: term().
 -type encoding_fun() :: fun((Data :: binary()) -> EncodedData :: binary()).
+-type send_fun() :: fun(
+    (Data :: binary, SendState :: send_state(), MaxReadBlocksCount :: non_neg_integer(), RetryDelay :: non_neg_integer()) -> 
+        {NewRetryDelay :: non_neg_integer(), UpdatedSendState :: send_state()}
+).
+
+% Strict range policy means that exactly requested number of bytes will be sent despite it being smaller or
+% if file was truncated in the mean time, whereas with soft policy maximum of file size bytes will be sent.
+-type range_policy() :: strict | soft.
 
 -record(streaming_ctx, {
     file_size :: file_meta:size(),
@@ -42,10 +53,13 @@
     read_block_size :: read_block_size(),
     max_read_blocks_count :: non_neg_integer(),
     encoding_fun :: encoding_fun(),
-    tar_stream = undefined :: undefined | tar_utils:stream()
+    send_fun :: send_fun(),
+    range_policy = soft :: range_policy()
 }).
 
--type streaming_ctx() :: #streaming_ctx{}.
+-opaque streaming_ctx() :: #streaming_ctx{}.
+
+-export_type([streaming_ctx/0]).
 
 % TODO VFS-6597 - update cowboy to at least ver 2.7 to fix streaming big files
 % Due to lack of backpressure mechanism in cowboy when streaming files it must
@@ -79,43 +93,60 @@ close_stream(Boundary, Req) ->
     cowboy_req:stream_body(cow_multipart:close(Boundary), fin, Req).
 
 
--spec stream_bytes_range(lfm:handle(), file_meta:size(), http_parser:bytes_range(), cowboy_req:req()) ->
-    tar_utils:stream() | undefined | no_return().
-stream_bytes_range(FileHandle, FileSize, Range, Req) ->
-    stream_bytes_range(FileHandle, FileSize, Range, Req, 
-        fun(Data) -> Data end, get_read_block_size(FileHandle)).
-
-
--spec stream_bytes_range( lfm:handle(), file_meta:size(), http_parser:bytes_range(), cowboy_req:req(),
-    encoding_fun(), read_block_size() ) -> tar_utils:stream() | undefined | no_return().
-stream_bytes_range(FileHandle, FileSize, Range, Req, EncodingFun, ReadBlockSize) ->
-    stream_bytes_range(FileHandle, FileSize, Range, Req, EncodingFun, ReadBlockSize, undefined).
-
-
--spec stream_bytes_range(
-    lfm:handle(), 
-    file_meta:size(), 
-    http_parser:bytes_range(), 
-    cowboy_req:req(),
-    encoding_fun(), 
-    read_block_size(), 
-    tar_utils:stream() | undefined
-) ->
-    tar_utils:stream() | undefined | no_return().
-stream_bytes_range(FileHandle, FileSize, Range, Req, EncodingFun, ReadBlockSize, TarStream) ->
-    stream_bytes_range_internal(Range, #streaming_ctx{
-        file_size = FileSize,
+-spec new_file_stream(lfm:handle(), file_meta:size()) -> streaming_ctx().
+new_file_stream(FileHandle, FileSize) ->
+    #streaming_ctx{
         file_handle = FileHandle,
+        file_size = FileSize
+    }.
+
+
+-spec set_read_block_size(streaming_ctx(), read_block_size()) -> streaming_ctx().
+set_read_block_size(StreamingCtx, ReadBlockSize) ->
+    StreamingCtx#streaming_ctx{
         read_block_size = ReadBlockSize,
-        max_read_blocks_count = calculate_max_read_blocks_count(ReadBlockSize),
-        encoding_fun = EncodingFun,
-        tar_stream = TarStream
-    }, Req, ?MIN_SEND_RETRY_DELAY, 0).
+        max_read_blocks_count = calculate_max_read_blocks_count(ReadBlockSize)
+    }.
 
 
--spec send_data_chunk(Data :: iodata(), cowboy_req:req()) -> NextRetryDelay :: time:millis().
+-spec set_encoding_fun(streaming_ctx(), encoding_fun()) -> streaming_ctx().
+set_encoding_fun(StreamingCtx, EncodingFun) ->
+    StreamingCtx#streaming_ctx{
+        encoding_fun = EncodingFun
+    }.
+
+
+-spec set_send_fun(streaming_ctx(), send_fun()) -> streaming_ctx().
+set_send_fun(StreamingCtx, SendFun) ->
+    StreamingCtx#streaming_ctx{
+        send_fun = SendFun
+    }.
+
+
+-spec set_range_policy(streaming_ctx(), range_policy()) -> streaming_ctx().
+set_range_policy(StreamingCtx, NewPolicy) ->
+    StreamingCtx#streaming_ctx{
+        range_policy = NewPolicy
+    }.
+
+
+-spec stream_bytes_range(streaming_ctx(), http_parser:bytes_range(), send_state()) ->
+    tar_utils:stream() | undefined | no_return().
+stream_bytes_range(StreamingCtx, Range, SendState) ->
+    stream_bytes_range_internal(Range, 
+        set_streaming_ctx_defaults(StreamingCtx), SendState, ?MIN_SEND_RETRY_DELAY, 0).
+
+
+-spec send_data_chunk(Data :: iodata(), cowboy_req:req()) -> 
+    {NextRetryDelay :: time:millis(), cowboy_req:req()}.
 send_data_chunk(Data, Req) ->
-    send_data_chunk(Data, Req, ?MAX_DOWNLOAD_BUFFER_SIZE div ?DEFAULT_READ_BLOCK_SIZE, ?MIN_SEND_RETRY_DELAY).
+    send_data_chunk(Data, Req, ?MIN_SEND_RETRY_DELAY).
+
+
+-spec send_data_chunk(Data :: iodata(), cowboy_req:req(), time:millis()) ->
+    {NextRetryDelay :: time:millis(), cowboy_req:req()}.
+send_data_chunk(Data, Req, SendRetryDelay) ->
+    send_data_chunk(Data, Req, ?MAX_DOWNLOAD_BUFFER_SIZE div ?DEFAULT_READ_BLOCK_SIZE, SendRetryDelay).
 
 
 -spec get_read_block_size(lfm_context:ctx()) -> non_neg_integer().
@@ -138,65 +169,43 @@ get_read_block_size(FileHandle) ->
 calculate_max_read_blocks_count(ReadBlockSize) ->
     max(1, ?MAX_DOWNLOAD_BUFFER_SIZE div ReadBlockSize).
 
-
 %% @private
 -spec stream_bytes_range_internal(
     http_parser:bytes_range(),
     streaming_ctx(),
-    cowboy_req:req(),
+    State :: send_state(),
     SendRetryDelay :: time:millis(),
     ReadBytes :: non_neg_integer()
 ) ->
-    tar_utils:stream() | undefined | no_return().
-stream_bytes_range_internal({From, To}, #streaming_ctx{tar_stream = TarStreamOrUndefined}, _, _, _) when From > To ->
-    TarStreamOrUndefined;
+    term() | no_return().
+stream_bytes_range_internal({From, To}, _, SendState, _, _) when From > To ->
+    SendState;
 stream_bytes_range_internal({From, To}, #streaming_ctx{
     file_handle = FileHandle,
+    file_size = FileSize,
     read_block_size = ReadBlockSize,
     max_read_blocks_count = MaxReadBlocksCount,
     encoding_fun = EncodingFun,
-    tar_stream = undefined
-} = DownloadCtx, Req, SendRetryDelay, ReadBytes) ->
+    send_fun = SendFun,
+    range_policy = RangePolicy
+} = StreamingCtx, SendState, SendRetryDelay, ReadBytes) ->
     ToRead = min(To - From + 1, ReadBlockSize - From rem ReadBlockSize),
-    {NewFileHandle, Data} = read_file_data(FileHandle, From, ToRead, 0),
+    MinBytes = case RangePolicy of
+        soft -> 0;
+        strict -> FileSize - ReadBytes
+    end,
+    {NewFileHandle, Data} = read_file_data(FileHandle, From, ToRead, MinBytes),
 
     case byte_size(Data) of
-        0 -> 
-            undefined;
+        0 ->
+            SendState;
         DataSize ->
             EncodedData = EncodingFun(Data),
-            NextSendRetryDelay = send_data_chunk(EncodedData, Req, MaxReadBlocksCount, SendRetryDelay),
+            {NextSendRetryDelay, UpdatedState} = SendFun(EncodedData, SendState, MaxReadBlocksCount, SendRetryDelay),
             stream_bytes_range_internal(
                 {From + DataSize, To}, 
-                DownloadCtx#streaming_ctx{file_handle = NewFileHandle}, 
-                Req, NextSendRetryDelay, ReadBytes + DataSize
-            )
-    end;
-stream_bytes_range_internal({From, To}, #streaming_ctx{
-    file_size = FileSize,
-    file_handle = FileHandle,
-    read_block_size = ReadBlockSize,
-    max_read_blocks_count = MaxReadBlocksCount,
-    encoding_fun = EncodingFun,
-    tar_stream = TarStream
-} = DownloadCtx, Req, SendRetryDelay, ReadBytes) ->
-    ToRead = min(To - From + 1, ReadBlockSize - From rem ReadBlockSize),
-    % in tar header file size was provided and such number of bytes 
-    % must be streamed, otherwise incorrect tar archive will be created
-    {NewFileHandle, Data} = read_file_data(FileHandle, From, ToRead, FileSize - ReadBytes),
-    
-    case byte_size(Data) of
-        0 ->
-            TarStream;
-        DataSize ->
-            EncodedData = EncodingFun(Data),
-            TarStream2 = tar_utils:append_to_file_content(TarStream, EncodedData, DataSize),
-            {BytesToSend, FinalTarStream} = tar_utils:flush_buffer(TarStream2),
-            NextSendRetryDelay = send_data_chunk(BytesToSend, Req, MaxReadBlocksCount, SendRetryDelay),
-            stream_bytes_range_internal(
-                {From + DataSize, To},
-                DownloadCtx#streaming_ctx{file_handle = NewFileHandle, tar_stream = FinalTarStream},
-                Req, NextSendRetryDelay, ReadBytes + DataSize
+                StreamingCtx#streaming_ctx{file_handle = NewFileHandle},
+                UpdatedState, NextSendRetryDelay, ReadBytes + DataSize
             )
     end.
 
@@ -237,14 +246,14 @@ read_file_data(FileHandle, From, ToRead, MinBytes) ->
     MaxReadBlocksCount :: non_neg_integer(),
     RetryDelay :: time:millis()
 ) ->
-    NextRetryDelay :: time:millis().
+    {NextRetryDelay :: time:millis(), cowboy_req:req()}.
 send_data_chunk(Data, #{pid := ConnPid} = Req, MaxReadBlocksCount, RetryDelay) ->
     {message_queue_len, MsgQueueLen} = process_info(ConnPid, message_queue_len),
-
+    
     case MsgQueueLen < MaxReadBlocksCount of
         true ->
             cowboy_req:stream_body(Data, nofin, Req),
-            max(RetryDelay div 2, ?MIN_SEND_RETRY_DELAY);
+            {max(RetryDelay div 2, ?MIN_SEND_RETRY_DELAY), Req};
         false ->
             timer:sleep(RetryDelay),
             send_data_chunk(
@@ -252,3 +261,18 @@ send_data_chunk(Data, #{pid := ConnPid} = Req, MaxReadBlocksCount, RetryDelay) -
                 min(2 * RetryDelay, ?MAX_SEND_RETRY_DELAY)
             )
     end.
+
+
+%% @private
+-spec set_streaming_ctx_defaults(streaming_ctx()) -> streaming_ctx().
+set_streaming_ctx_defaults(#streaming_ctx{read_block_size = undefined, file_handle = FileHandle} = StreamingCtx) ->
+    set_streaming_ctx_defaults(set_read_block_size(StreamingCtx, get_read_block_size(FileHandle)));
+set_streaming_ctx_defaults(#streaming_ctx{encoding_fun = undefined} = StreamingCtx) ->
+    set_streaming_ctx_defaults(set_encoding_fun(StreamingCtx, fun(Data) -> Data end));
+set_streaming_ctx_defaults(#streaming_ctx{send_fun = undefined} = StreamingCtx) ->
+    set_streaming_ctx_defaults(set_send_fun(StreamingCtx,
+        fun(Data, Req, MaxReadBlocksCount, SendRetryDelay) ->
+            send_data_chunk(Data, Req, MaxReadBlocksCount, SendRetryDelay)
+        end));
+set_streaming_ctx_defaults(StreamingCtx) ->
+    StreamingCtx.
