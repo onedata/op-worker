@@ -47,8 +47,8 @@ handshake_attributes(_Client) ->
         XRootDDomain ->
             #{<<"xrootd">> => #{
                 <<"listSharedDirectoryChildren">> => ?XROOTD_LIST_SHARED_DIRECTORY_COMMAND_TEMPLATE(XRootDDomain),
-                <<"downloadSharedFileContent">> => ?XROOTD_DOWNLOAD_SHARED_DIRECTORY_COMMAND_TEMPLATE(XRootDDomain),
-                <<"downloadSharedDirectoryContent">> => ?XROOTD_DOWNLOAD_SHARED_FILE_COMMAND_TEMPLATE(XRootDDomain)
+                <<"downloadSharedFileContent">> => ?XROOTD_DOWNLOAD_SHARED_FILE_COMMAND_TEMPLATE(XRootDDomain),
+                <<"downloadSharedDirectoryContent">> => ?XROOTD_DOWNLOAD_SHARED_DIRECTORY_COMMAND_TEMPLATE(XRootDDomain)
             }}
     end,
 
