@@ -14,10 +14,8 @@
 
 -include("global_definitions.hrl").
 
--define(WORKFLOWS_TREE_ID, <<"WORKFLOWS_TREE">>).
-
--define(WAITING_WORKFLOWS_KEY, <<"WAITING_WORKFLOWS_KEY">>).
--define(ONGOING_WORKFLOWS_KEY, <<"ONGOING_WORKFLOWS_KEY">>).
--define(ENDED_WORKFLOWS_KEY, <<"ENDED_WORKFLOWS_KEY">>).
+-define(WAITING_WORKFLOWS_STATE, <<"waiting">>).
+-define(ONGOING_WORKFLOWS_STATE, <<"ongoing">>).
+-define(ENDED_WORKFLOWS_STATE, <<"ended">>).
 
 -endif.

@@ -6,10 +6,10 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Tests of workflows link trees.
+%%% Tests of workflow collections: waiting, ongoing and ended.
 %%% @end
 %%%-------------------------------------------------------------------
--module(atm_workflow_links_test_SUITE).
+-module(atm_workflow_collections_test_SUITE).
 -author("Bartosz Walkowicz").
 
 -include("modules/automation/atm_wokflow.hrl").
@@ -35,9 +35,6 @@
     delete_from_waiting_test/1,
     delete_from_ongoing_test/1,
     delete_from_ended_test/1,
-
-    move_from_waiting_to_ongoing_test/1,
-    move_from_ongoing_to_ended_test/1,
 
     list_with_invalid_listing_opts_test/1,
     list_with_negative_offset_test/1,
@@ -74,9 +71,6 @@ groups() -> [
         delete_from_ongoing_test,
         delete_from_ended_test,
 
-        move_from_waiting_to_ongoing_test,
-        move_from_ongoing_to_ended_test,
-
         list_with_invalid_listing_opts_test,
         list_with_negative_offset_test,
 
@@ -111,9 +105,10 @@ all() -> [
 -type listing_method() :: offset | start_index.
 
 -define(WORKFLOW_STATES, [
-    ?WAITING_WORKFLOWS_KEY, ?ONGOING_WORKFLOWS_KEY, ?ENDED_WORKFLOWS_KEY
+    ?WAITING_WORKFLOWS_STATE, ?ONGOING_WORKFLOWS_STATE, ?ENDED_WORKFLOWS_STATE
 ]).
 
+-define(DEFAULT_PROVIDER_SYNC_TIME_SEC, 15).
 -define(ATTEMPTS, 30).
 
 
@@ -123,19 +118,19 @@ all() -> [
 
 
 add_to_waiting_test(_Config) ->
-    add_links_test_base(?WAITING_WORKFLOWS_KEY).
+    add_links_test_base(?WAITING_WORKFLOWS_STATE).
 
 
 add_to_ongoing_test(_Config) ->
-    add_links_test_base(?ONGOING_WORKFLOWS_KEY).
+    add_links_test_base(?ONGOING_WORKFLOWS_STATE).
 
 
 add_to_ended_test(_Config) ->
-    add_links_test_base(?ENDED_WORKFLOWS_KEY).
+    add_links_test_base(?ENDED_WORKFLOWS_STATE).
 
 
 %% @private
--spec add_links_test_base(atm_workflow_links:virtual_list_id()) -> ok.
+-spec add_links_test_base(atm_workflow:state()) -> ok.
 add_links_test_base(State) ->
     SpaceId = oct_background:get_space_id(space_krk_par_p),
     KrkNode = oct_background:get_random_provider_node(krakow),
@@ -149,7 +144,9 @@ add_links_test_base(State) ->
     ?assertEqual(true, is_member(KrkNode, SpaceId, State, WorkflowId)),
     ?assertEqual(false, is_member(ParNode, SpaceId, State, WorkflowId)),
 
-    timer:sleep(timer:seconds(15)),
+    % Assert links are not synchronized between providers
+    % (wait some time to give time for potential synchronization)
+    timer:sleep(timer:seconds(?DEFAULT_PROVIDER_SYNC_TIME_SEC)),
 
     ?assertEqual(true, is_member(KrkNode, SpaceId, State, WorkflowId)),
     ?assertEqual(false, is_member(ParNode, SpaceId, State, WorkflowId)),
@@ -158,19 +155,19 @@ add_links_test_base(State) ->
 
 
 delete_from_waiting_test(_Config) ->
-    delete_links_test_base(?WAITING_WORKFLOWS_KEY).
+    delete_links_test_base(?WAITING_WORKFLOWS_STATE).
 
 
 delete_from_ongoing_test(_Config) ->
-    delete_links_test_base(?ONGOING_WORKFLOWS_KEY).
+    delete_links_test_base(?ONGOING_WORKFLOWS_STATE).
 
 
 delete_from_ended_test(_Config) ->
-    delete_links_test_base(?ENDED_WORKFLOWS_KEY).
+    delete_links_test_base(?ENDED_WORKFLOWS_STATE).
 
 
 %% @private
--spec delete_links_test_base(atm_workflow_links:virtual_list_id()) -> ok.
+-spec delete_links_test_base(atm_workflow:state()) -> ok.
 delete_links_test_base(State) ->
     SpaceId = oct_background:get_space_id(space_krk_par_p),
     KrkNode = oct_background:get_random_provider_node(krakow),
@@ -181,56 +178,13 @@ delete_links_test_base(State) ->
     add_link(KrkNode, State, WorkflowDoc),
     ?assertEqual(true, is_member(KrkNode, SpaceId, State, WorkflowId)),
 
-    timer:sleep(timer:seconds(5)),
+    % Assert links are not synchronized between providers
+    % (wait some time to give time for potential synchronization)
+    timer:sleep(timer:seconds(?DEFAULT_PROVIDER_SYNC_TIME_SEC)),
 
     ?assertEqual(true, is_member(KrkNode, SpaceId, State, WorkflowId)),
     delete_link(KrkNode, State, WorkflowDoc),
     ?assertEqual(false, is_member(KrkNode, SpaceId, State, WorkflowId)),
-
-    ok.
-
-
-move_from_waiting_to_ongoing_test(_Config) ->
-    move_links_test_base(?WAITING_WORKFLOWS_KEY, ?ONGOING_WORKFLOWS_KEY).
-
-
-move_from_ongoing_to_ended_test(_Config) ->
-    move_links_test_base(?ONGOING_WORKFLOWS_KEY, ?ENDED_WORKFLOWS_KEY).
-
-
-%% @private
--spec move_links_test_base(
-    atm_workflow_links:virtual_list_id(),
-    atm_workflow_links:virtual_list_id()
-) ->
-    ok.
-move_links_test_base(OriginalState, NewState) ->
-    SpaceId = oct_background:get_space_id(space_krk_par_p),
-    KrkNode = oct_background:get_random_provider_node(krakow),
-    ParNode = oct_background:get_random_provider_node(paris),
-
-    WorkflowId = str_utils:rand_hex(32),
-    WorkflowDoc = #document{key = WorkflowId, value = gen_rand_workflow(SpaceId)},
-
-    add_link(KrkNode, OriginalState, WorkflowDoc),
-    ?assertEqual(true, is_member(KrkNode, SpaceId, OriginalState, WorkflowId)),
-
-    case {OriginalState, NewState} of
-        {?WAITING_WORKFLOWS_KEY, ?ONGOING_WORKFLOWS_KEY} ->
-            move_link_from_waiting_to_ongoing(KrkNode, WorkflowDoc);
-        {?ONGOING_WORKFLOWS_KEY, ?ENDED_WORKFLOWS_KEY} ->
-            move_link_from_ongoing_to_ended(KrkNode, WorkflowDoc)
-    end,
-
-    ?assertEqual(false, is_member(KrkNode, SpaceId, OriginalState, WorkflowId)),
-    ?assertEqual(true, is_member(KrkNode, SpaceId, NewState, WorkflowId)),
-
-    timer:sleep(timer:seconds(15)),
-
-    ?assertEqual(true, is_member(KrkNode, SpaceId, NewState, WorkflowId)),
-
-    ?assertEqual(false, is_member(ParNode, SpaceId, OriginalState, WorkflowId)),
-    ?assertEqual(false, is_member(ParNode, SpaceId, NewState, WorkflowId)),
 
     ok.
 
@@ -273,83 +227,83 @@ list_with_negative_offset_test(_Config) ->
 
 
 iterate_over_100_waiting_workflows_using_offset_and_limit_1_test(_Config) ->
-    iterate_over_workflows_test_base(?WAITING_WORKFLOWS_KEY, 50, offset, 1).
+    iterate_over_workflows_test_base(?WAITING_WORKFLOWS_STATE, 50, offset, 1).
 
 
 iterate_over_100_waiting_workflows_using_offset_and_limit_10_test(_Config) ->
-    iterate_over_workflows_test_base(?WAITING_WORKFLOWS_KEY, 50, offset, 10).
+    iterate_over_workflows_test_base(?WAITING_WORKFLOWS_STATE, 50, offset, 10).
 
 
 iterate_over_100_waiting_workflows_using_offset_and_limit_100_test(_Config) ->
-    iterate_over_workflows_test_base(?WAITING_WORKFLOWS_KEY, 50, offset, 100).
+    iterate_over_workflows_test_base(?WAITING_WORKFLOWS_STATE, 50, offset, 100).
 
 
 iterate_over_100_waiting_workflows_using_start_index_and_limit_1_test(_Config) ->
-    iterate_over_workflows_test_base(?WAITING_WORKFLOWS_KEY, 50, start_index, 1).
+    iterate_over_workflows_test_base(?WAITING_WORKFLOWS_STATE, 50, start_index, 1).
 
 
 iterate_over_100_waiting_workflows_using_start_index_and_limit_10_test(_Config) ->
-    iterate_over_workflows_test_base(?WAITING_WORKFLOWS_KEY, 50, start_index, 10).
+    iterate_over_workflows_test_base(?WAITING_WORKFLOWS_STATE, 50, start_index, 10).
 
 
 iterate_over_100_waiting_workflows_using_start_index_and_limit_100_test(_Config) ->
-    iterate_over_workflows_test_base(?WAITING_WORKFLOWS_KEY, 50, start_index, 100).
+    iterate_over_workflows_test_base(?WAITING_WORKFLOWS_STATE, 50, start_index, 100).
 
 
 iterate_over_100_ongoing_workflows_using_offset_and_limit_1_test(_Config) ->
-    iterate_over_workflows_test_base(?ONGOING_WORKFLOWS_KEY, 50, offset, 1).
+    iterate_over_workflows_test_base(?ONGOING_WORKFLOWS_STATE, 50, offset, 1).
 
 
 iterate_over_100_ongoing_workflows_using_offset_and_limit_10_test(_Config) ->
-    iterate_over_workflows_test_base(?ONGOING_WORKFLOWS_KEY, 50, offset, 10).
+    iterate_over_workflows_test_base(?ONGOING_WORKFLOWS_STATE, 50, offset, 10).
 
 
 iterate_over_100_ongoing_workflows_using_offset_and_limit_100_test(_Config) ->
-    iterate_over_workflows_test_base(?ONGOING_WORKFLOWS_KEY, 50, offset, 100).
+    iterate_over_workflows_test_base(?ONGOING_WORKFLOWS_STATE, 50, offset, 100).
 
 
 iterate_over_100_ongoing_workflows_using_start_index_and_limit_1_test(_Config) ->
-    iterate_over_workflows_test_base(?ONGOING_WORKFLOWS_KEY, 50, start_index, 1).
+    iterate_over_workflows_test_base(?ONGOING_WORKFLOWS_STATE, 50, start_index, 1).
 
 
 iterate_over_100_ongoing_workflows_using_start_index_and_limit_10_test(_Config) ->
-    iterate_over_workflows_test_base(?ONGOING_WORKFLOWS_KEY, 50, start_index, 10).
+    iterate_over_workflows_test_base(?ONGOING_WORKFLOWS_STATE, 50, start_index, 10).
 
 
 iterate_over_100_ongoing_workflows_using_start_index_and_limit_100_test(_Config) ->
-    iterate_over_workflows_test_base(?ONGOING_WORKFLOWS_KEY, 50, start_index, 100).
+    iterate_over_workflows_test_base(?ONGOING_WORKFLOWS_STATE, 50, start_index, 100).
 
 
 iterate_over_100_ended_workflows_using_offset_and_limit_1_test(_Config) ->
-    iterate_over_workflows_test_base(?ENDED_WORKFLOWS_KEY, 50, offset, 1).
+    iterate_over_workflows_test_base(?ENDED_WORKFLOWS_STATE, 50, offset, 1).
 
 
 iterate_over_100_ended_workflows_using_offset_and_limit_10_test(_Config) ->
-    iterate_over_workflows_test_base(?ENDED_WORKFLOWS_KEY, 50, offset, 10).
+    iterate_over_workflows_test_base(?ENDED_WORKFLOWS_STATE, 50, offset, 10).
 
 
 iterate_over_100_ended_workflows_using_offset_and_limit_100_test(_Config) ->
-    iterate_over_workflows_test_base(?ENDED_WORKFLOWS_KEY, 50, offset, 100).
+    iterate_over_workflows_test_base(?ENDED_WORKFLOWS_STATE, 50, offset, 100).
 
 
 iterate_over_100_ended_workflows_using_start_index_and_limit_1_test(_Config) ->
-    iterate_over_workflows_test_base(?ENDED_WORKFLOWS_KEY, 50, start_index, 1).
+    iterate_over_workflows_test_base(?ENDED_WORKFLOWS_STATE, 50, start_index, 1).
 
 
 iterate_over_100_ended_workflows_using_start_index_and_limit_10_test(_Config) ->
-    iterate_over_workflows_test_base(?ENDED_WORKFLOWS_KEY, 50, start_index, 10).
+    iterate_over_workflows_test_base(?ENDED_WORKFLOWS_STATE, 50, start_index, 10).
 
 
 iterate_over_100_ended_workflows_using_start_index_and_limit_100_test(_Config) ->
-    iterate_over_workflows_test_base(?ENDED_WORKFLOWS_KEY, 50, start_index, 100).
+    iterate_over_workflows_test_base(?ENDED_WORKFLOWS_STATE, 50, start_index, 100).
 
 
 %% @private
 -spec iterate_over_workflows_test_base(
-    atm_workflow_links:virtual_list_id(),
+    atm_workflow:state(),
     pos_integer(),
     listing_method(),
-    atm_workflow_links:limit()
+    atm_workflow_collection:limit()
 ) ->
     ok.
 iterate_over_workflows_test_base(State, LinksNum, ListingMethod, Limit) ->
@@ -373,11 +327,11 @@ iterate_over_workflows_test_base(State, LinksNum, ListingMethod, Limit) ->
     node(),
     listing_method(),
     od_space:id(),
-    atm_workflow_links:virtual_list_id(),
-    atm_workflow_links:listing_opts(),
-    [{atm_workflow:id(), atm_workflow_links:link_key()}]
+    atm_workflow:state(),
+    atm_workflow_collection:listing_opts(),
+    [{atm_workflow:id(), atm_workflow_collection:index()}]
 ) ->
-    [{atm_workflow:id(), atm_workflow_links:link_key()}].
+    [{atm_workflow:id(), atm_workflow_collection:index()}].
 list_all_links_by_chunk(Node, ListingMethod, SpaceId, State, ListingOpts, LinksAcc) ->
     case list_links(Node, SpaceId, State, ListingOpts) of
         [] ->
@@ -394,10 +348,10 @@ list_all_links_by_chunk(Node, ListingMethod, SpaceId, State, ListingOpts, LinksA
 %% @private
 -spec update_listing_opts(
     listing_method(),
-    atm_workflow_links:listing_opts(),
-    [{atm_workflow:id(), atm_workflow_links:link_key()}]
+    atm_workflow_collection:listing_opts(),
+    [{atm_workflow:id(), atm_workflow_collection:index()}]
 ) ->
-    atm_workflow_links:listing_opts().
+    atm_workflow_collection:listing_opts().
 update_listing_opts(offset, ListingOpts, ListedLinks) ->
     maps:update_with(offset, fun(Offset) -> Offset + length(ListedLinks) end, ListingOpts);
 update_listing_opts(start_index, ListingOpts, ListedLinks) ->
@@ -410,8 +364,8 @@ update_listing_opts(start_index, ListingOpts, ListedLinks) ->
 
 
 %% @private
--spec gen_links(node(), od_space:id(), atm_workflow_links:virtual_list_id(), pos_integer()) ->
-    [{atm_workflow:id(), atm_workflow_links:link_key()}] .
+-spec gen_links(node(), od_space:id(), atm_workflow:state(), pos_integer()) ->
+    [{atm_workflow:id(), atm_workflow_collection:index()}] .
 gen_links(Node, SpaceId, State, LinksNum) ->
     lists:keysort(2, lists:map(fun(_) ->
         WorkflowId = str_utils:rand_hex(32),
@@ -434,64 +388,52 @@ gen_rand_workflow(SpaceId) ->
 
 
 %% @private
--spec index(atm_workflow_links:virtual_list_id(), atm_workflow:doc()) ->
-    atm_workflow_links:link_key().
-index(?WAITING_WORKFLOWS_KEY, #document{key = WorkflowId, value = #atm_workflow{
+-spec index(atm_workflow:state(), atm_workflow:doc()) ->
+    atm_workflow_collection:index().
+index(?WAITING_WORKFLOWS_STATE, #document{key = WorkflowId, value = #atm_workflow{
     schedule_time = ScheduleTime
 }}) ->
-    atm_workflow_links:link_key(WorkflowId, ScheduleTime);
-index(?ONGOING_WORKFLOWS_KEY, #document{key = WorkflowId, value = #atm_workflow{
+    <<(integer_to_binary(?EPOCH_INFINITY - ScheduleTime))/binary, WorkflowId/binary>>;
+index(?ONGOING_WORKFLOWS_STATE, #document{key = WorkflowId, value = #atm_workflow{
     start_time = StartTime
 }}) ->
-    atm_workflow_links:link_key(WorkflowId, StartTime);
-index(?ENDED_WORKFLOWS_KEY, #document{key = WorkflowId, value = #atm_workflow{
+    <<(integer_to_binary(?EPOCH_INFINITY - StartTime))/binary, WorkflowId/binary>>;
+index(?ENDED_WORKFLOWS_STATE, #document{key = WorkflowId, value = #atm_workflow{
     finish_time = FinishTime
 }}) ->
-    atm_workflow_links:link_key(WorkflowId, FinishTime).
+    <<(integer_to_binary(?EPOCH_INFINITY - FinishTime))/binary, WorkflowId/binary>>.
 
 
 %% @private
--spec add_link(node(), atm_workflow_links:virtual_list_id(), atm_workflow:doc()) -> ok.
-add_link(Node, ?WAITING_WORKFLOWS_KEY, WorkflowDoc) ->
-    ?assertEqual(ok, rpc:call(Node, atm_workflow_links, add_waiting, [WorkflowDoc]));
-add_link(Node, ?ONGOING_WORKFLOWS_KEY, WorkflowDoc) ->
-    ?assertEqual(ok, rpc:call(Node, atm_workflow_links, add_ongoing, [WorkflowDoc]));
-add_link(Node, ?ENDED_WORKFLOWS_KEY, WorkflowDoc) ->
-    ?assertEqual(ok, rpc:call(Node, atm_workflow_links, add_ended, [WorkflowDoc])).
+-spec add_link(node(), atm_workflow:state(), atm_workflow:doc()) -> ok.
+add_link(Node, ?WAITING_WORKFLOWS_STATE, WorkflowDoc) ->
+    ?assertEqual(ok, rpc:call(Node, atm_waiting_workflows, add, [WorkflowDoc]));
+add_link(Node, ?ONGOING_WORKFLOWS_STATE, WorkflowDoc) ->
+    ?assertEqual(ok, rpc:call(Node, atm_ongoing_workflows, add, [WorkflowDoc]));
+add_link(Node, ?ENDED_WORKFLOWS_STATE, WorkflowDoc) ->
+    ?assertEqual(ok, rpc:call(Node, atm_ended_workflows, add, [WorkflowDoc])).
 
 
 %% @private
--spec delete_link(node(), atm_workflow_links:virtual_list_id(), atm_workflow:doc()) -> ok.
-delete_link(Node, ?WAITING_WORKFLOWS_KEY, WorkflowDoc) ->
-    ?assertEqual(ok, rpc:call(Node, atm_workflow_links, delete_waiting, [WorkflowDoc]));
-delete_link(Node, ?ONGOING_WORKFLOWS_KEY, WorkflowDoc) ->
-    ?assertEqual(ok, rpc:call(Node, atm_workflow_links, delete_ongoing, [WorkflowDoc]));
-delete_link(Node, ?ENDED_WORKFLOWS_KEY, WorkflowDoc) ->
-    ?assertEqual(ok, rpc:call(Node, atm_workflow_links, delete_ended, [WorkflowDoc])).
+-spec delete_link(node(), atm_workflow:state(), atm_workflow:doc()) -> ok.
+delete_link(Node, ?WAITING_WORKFLOWS_STATE, WorkflowDoc) ->
+    ?assertEqual(ok, rpc:call(Node, atm_waiting_workflows, delete, [WorkflowDoc]));
+delete_link(Node, ?ONGOING_WORKFLOWS_STATE, WorkflowDoc) ->
+    ?assertEqual(ok, rpc:call(Node, atm_ongoing_workflows, delete, [WorkflowDoc]));
+delete_link(Node, ?ENDED_WORKFLOWS_STATE, WorkflowDoc) ->
+    ?assertEqual(ok, rpc:call(Node, atm_ended_workflows, delete, [WorkflowDoc])).
 
 
 %% @private
--spec move_link_from_waiting_to_ongoing(node(), atm_workflow:doc()) -> ok.
-move_link_from_waiting_to_ongoing(Node, WorkflowDoc) ->
-    ?assertEqual(ok, rpc:call(Node, atm_workflow_links, move_from_waiting_to_ongoing, [WorkflowDoc])).
-
-
-%% @private
--spec move_link_from_ongoing_to_ended(node(), atm_workflow:doc()) -> ok.
-move_link_from_ongoing_to_ended(Node, WorkflowDoc) ->
-    ?assertEqual(ok, rpc:call(Node, atm_workflow_links, move_from_ongoing_to_ended, [WorkflowDoc])).
-
-
-%% @private
--spec is_member(node(), od_space:id(), atm_workflow_links:virtual_list_id(), atm_workflow:id()) ->
+-spec is_member(node(), od_space:id(), atm_workflow:state(), atm_workflow:id()) ->
     boolean().
 is_member(Node, SpaceId, State, WorkflowId) ->
     lists:keymember(WorkflowId, 1, list_all_links(Node, SpaceId, State)).
 
 
 %% @private
--spec list_all_links(node(), od_space:id(), atm_workflow_links:virtual_list_id()) ->
-    [{atm_workflow:id(), atm_workflow_links:link_key()}].
+-spec list_all_links(node(), od_space:id(), atm_workflow:state()) ->
+    [{atm_workflow:id(), atm_workflow_collection:index()}].
 list_all_links(Node, SpaceId, State) ->
     list_links(Node, SpaceId, State, #{offset => 0}).
 
@@ -500,12 +442,16 @@ list_all_links(Node, SpaceId, State) ->
 -spec list_links(
     node(),
     od_space:id(),
-    atm_workflow_links:virtual_list_id(),
-    atm_workflow_links:listing_opts()
+    atm_workflow:state(),
+    atm_workflow_collection:listing_opts()
 ) ->
-    [{atm_workflow:id(), atm_workflow_links:link_key()}].
-list_links(Node, SpaceId, State, ListingOpts) ->
-    rpc:call(Node, atm_workflow_links, list, [SpaceId, State, ListingOpts]).
+    [{atm_workflow:id(), atm_workflow_collection:index()}].
+list_links(Node, SpaceId, ?WAITING_WORKFLOWS_STATE, ListingOpts) ->
+    rpc:call(Node, atm_waiting_workflows, list, [SpaceId, ListingOpts]);
+list_links(Node, SpaceId, ?ONGOING_WORKFLOWS_STATE, ListingOpts) ->
+    rpc:call(Node, atm_ongoing_workflows, list, [SpaceId, ListingOpts]);
+list_links(Node, SpaceId, ?ENDED_WORKFLOWS_STATE, ListingOpts) ->
+    rpc:call(Node, atm_ended_workflows, list, [SpaceId, ListingOpts]).
 
 
 %===================================================================

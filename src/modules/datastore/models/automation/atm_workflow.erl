@@ -26,9 +26,12 @@
 -type diff() :: datastore_doc:diff(record()).
 -type record() :: #atm_workflow{}.
 -type doc() :: datastore_doc:doc(record()).
--type error() :: {error, term()}.
 
--export_type([id/0, record/0, doc/0]).
+-type state() :: binary().  % ?(WAITING|ONGOING|ENDED)_WORKFLOWS_STATE
+
+-export_type([id/0, record/0, doc/0, state/0]).
+
+-type error() :: {error, term()}.
 
 
 -define(CTX, #{
