@@ -197,7 +197,7 @@ build_create_share_validate_gs_call_result_fun(MemRef, Providers, FileType, Spac
         ),
         api_test_memory:set(MemRef, shares, [ShareId | api_test_memory:get(MemRef, shares, [])]),
 
-        assert_proper_gs_share_translation(ShareId, ShareName, Description, private, FileGuid, FileType, ShareData),
+        assert_proper_gs_share_translation(SpaceId, ShareId, ShareName, Description, private, FileGuid, FileType, ShareData),
 
         verify_share_doc(
             Providers, ShareId, ShareName, Description,
@@ -271,7 +271,7 @@ get_share_test(_Config) ->
                     type = gs,
                     prepare_args_fun = build_get_share_prepare_gs_args_fun(ShareId, private),
                     validate_result_fun = fun(_, {ok, Result}) ->
-                        assert_proper_gs_share_translation(ShareId, ShareName, Description, private, FileGuid, FileType, Result)
+                        assert_proper_gs_share_translation(SpaceId, ShareId, ShareName, Description, private, FileGuid, FileType, Result)
                     end
                 }
             ],
@@ -284,7 +284,7 @@ get_share_test(_Config) ->
             client_spec = ?CLIENT_SPEC_FOR_SHARES,
             prepare_args_fun = build_get_share_prepare_gs_args_fun(ShareId, public),
             validate_result_fun = fun(_, {ok, Result}) ->
-                assert_proper_gs_share_translation(ShareId, ShareName, Description, public, FileGuid, FileType, Result)
+                assert_proper_gs_share_translation(SpaceId, ShareId, ShareName, Description, public, FileGuid, FileType, Result)
             end,
             data_spec = DataSpec
         }
@@ -632,11 +632,11 @@ get_share_doc(ProviderSelector, UserId, ShareId) ->
 
 %% @private
 -spec assert_proper_gs_share_translation(
-    od_share:id(), od_share:name(), od_share:description(), gri:scope(),
+    od_space:id(), od_share:id(), od_share:name(), od_share:description(), gri:scope(),
     file_id:file_guid(), api_test_utils:file_type(), map()
 ) ->
     ok.
-assert_proper_gs_share_translation(ShareId, ShareName, Description, Scope, FileGuid, FileType, GsShareData) ->
+assert_proper_gs_share_translation(SpaceId, ShareId, ShareName, Description, Scope, FileGuid, FileType, GsShareData) ->
     ShareFileGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
 
     ExpBasicShareData = #{
@@ -647,6 +647,7 @@ assert_proper_gs_share_translation(ShareId, ShareName, Description, Scope, FileG
             aspect = instance,
             scope = Scope
         }),
+        <<"spaceId">> => SpaceId,
         <<"name">> => ShareName,
         <<"description">> => Description,
         <<"publicUrl">> => build_share_public_url(ShareId),

@@ -161,6 +161,7 @@ translate(#gri{type = od_share, id = Id, aspect = instance, scope = public}, Res
     #document{
         key = Id,
         value = #od_share{
+            space = maps:get(<<"spaceId">>, Result),
             name = maps:get(<<"name">>, Result),
             description = maps:get(<<"description">>, Result),
             public_url = maps:get(<<"publicUrl">>, Result),
