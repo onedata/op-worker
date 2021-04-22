@@ -171,7 +171,8 @@ sync_file(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
                     case deletion_marker:check(ParentUuid, FileName) of
                         {error, not_found} ->
                             FileCtx = file_ctx:new_by_uuid(FileUuid2, SpaceId),
-                            check_protection_flags_and_maybe_sync(StorageFileCtx, FileCtx, Info);
+                            % call by module to mock in tests
+                            storage_import_engine:check_location_and_maybe_sync(StorageFileCtx, FileCtx, Info);
                         {ok, _} ->
                             {?FILE_UNMODIFIED, undefined, StorageFileCtx}
                     end
@@ -312,29 +313,6 @@ get_child_safe(FileCtx, ChildName) ->
             {error, ?ENOENT};
         throw:?ENOENT ->
             {error, ?ENOENT}
-    end.
-
-
--spec check_protection_flags_and_maybe_sync(storage_file_ctx:ctx(), file_ctx:ctx(), info()) ->
-    {result(), file_ctx:ctx() | undefined, storage_file_ctx:ctx()} | {error, term()}.
-check_protection_flags_and_maybe_sync(StorageFileCtx, FileCtx, Info = #{parent_ctx := ParentCtx}) ->
-    try
-        {FileDoc, FileCtx2} = file_ctx:get_file_doc_including_deleted(FileCtx),
-        {ok, ProtectionFlags} = dataset_eff_cache:get_eff_protection_flags(FileDoc),
-        case ProtectionFlags == ?no_flags_mask of
-            true ->
-                % call by module to mock in tests
-                storage_import_engine:check_location_and_maybe_sync(StorageFileCtx, FileCtx, Info);
-            false ->
-                SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
-                {ParentStorageFileId, _} = file_ctx:get_storage_file_id(ParentCtx),
-                ok = storage_sync_info:mark_skipped_file(ParentStorageFileId, SpaceId),
-                {?FILE_UNMODIFIED, FileCtx2, StorageFileCtx}
-        end
-    catch
-        error:{badmatch, ?ERROR_NOT_FOUND} ->
-            % call by module to mock in tests
-            storage_import_engine:check_location_and_maybe_sync(StorageFileCtx, FileCtx, Info)
     end.
 
 
@@ -948,45 +926,61 @@ maybe_update_file(StorageFileCtx, FileAttr, FileCtx, Info) ->
 %%--------------------------------------------------------------------
 -spec maybe_update_attrs(storage_file_ctx:ctx(), #file_attr{}, file_ctx:ctx(), info()) ->
     {result(), file_ctx:ctx(), storage_file_ctx:ctx()}.
-maybe_update_attrs(StorageFileCtx, FileAttr, FileCtx, Info) ->
-    UpdateAttrsFoldFun = fun(UpdateAttrFun, {StorageFileCtxAcc, FileCtxAcc, UpdatedAttrsAcc}) ->
-        {Updated, FileCtxOut, StorageFileCtxOut, AttrName} = UpdateAttrFun(StorageFileCtxAcc, FileAttr, FileCtxAcc, Info),
-        UpdatedAttrsOut = case Updated of
-            true -> [AttrName | UpdatedAttrsAcc];
-            false -> UpdatedAttrsAcc
+maybe_update_attrs(StorageFileCtx, FileAttr, FileCtx, Info = #{parent_ctx := ParentCtx}) ->
+    {FileDoc, FileCtx2} = file_ctx:get_file_doc_including_deleted(FileCtx),
+    {ok, ProtectionFlags} = dataset_eff_cache:get_eff_protection_flags(FileDoc),
+
+    % If ProtectionFlags are set, modification won't be reflected in the database
+    % Attrs will be checked anyway to determine whether protected file has changed on storage.
+    % If it has changed, it will be marks in storage_sync_info document so that
+    % attrs hash won't be updated in the database.
+    % Thanks to that, it will be possible to update the file when protection flag will be finally unset.
+    ShouldUpdate = ProtectionFlags =:= ?no_flags_mask,
+
+    ProcessAttrsFoldFun = fun(MaybeUpdateAttrFun, {StorageFileCtxAcc, FileCtxAcc, ModifiedAttrsAcc}) ->
+        {Modified, FileCtxOut, StorageFileCtxOut, AttrName} =
+            MaybeUpdateAttrFun(StorageFileCtxAcc, FileAttr, FileCtxAcc, Info, ShouldUpdate),
+        ModifiedAttrsOut = case Modified of
+            true -> [AttrName | ModifiedAttrsAcc];
+            false -> ModifiedAttrsAcc
         end,
-        {StorageFileCtxOut, FileCtxOut, UpdatedAttrsOut}
+        {StorageFileCtxOut, FileCtxOut, ModifiedAttrsOut}
     end,
 
-    {StorageFileCtx2, FileCtx2, UpdatedAttrs} = lists:foldl(UpdateAttrsFoldFun, {StorageFileCtx, FileCtx, []}, [
-       fun maybe_update_file_location/4,
-       fun maybe_update_mode/4,
-       fun maybe_update_times/4,
-       fun maybe_update_owner/4,
-       fun maybe_update_nfs4_acl/4
+    {StorageFileCtx2, FileCtx3, ModifiedAttrs} = lists:foldl(ProcessAttrsFoldFun, {StorageFileCtx, FileCtx2, []}, [
+       fun maybe_update_file_location/5,
+       fun maybe_update_mode/5,
+       fun maybe_update_times/5,
+       fun maybe_update_owner/5,
+       fun maybe_update_nfs4_acl/5
     ]),
 
-    case UpdatedAttrs of
-        [] ->
-            {?FILE_UNMODIFIED, FileCtx2, StorageFileCtx2};
-        UpdatedAttrs ->
-            SpaceId = file_ctx:get_space_id_const(FileCtx2),
+    case {ModifiedAttrs, ShouldUpdate}  of
+        {[], _} ->
+            {?FILE_UNMODIFIED, FileCtx3, StorageFileCtx2};
+        {ModifiedAttrs, true} ->
+            SpaceId = file_ctx:get_space_id_const(FileCtx3),
             StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx2),
-            {CanonicalPath, FileCtx3} = file_ctx:get_canonical_path(FileCtx2),
-            FileUuid = file_ctx:get_logical_uuid_const(FileCtx3),
-            storage_import_logger:log_modification(StorageFileId, CanonicalPath, FileUuid, SpaceId, UpdatedAttrs),
+            {CanonicalPath, FileCtx4} = file_ctx:get_canonical_path(FileCtx3),
+            FileUuid = file_ctx:get_logical_uuid_const(FileCtx4),
+            storage_import_logger:log_modification(StorageFileId, CanonicalPath, FileUuid, SpaceId, ModifiedAttrs),
             fslogic_event_emitter:emit_file_attr_changed_with_replication_status(FileCtx3, true, []),
-            {?FILE_MODIFIED, FileCtx3, StorageFileCtx2}
+            {?FILE_MODIFIED, FileCtx4, StorageFileCtx2};
+        {ModifiedAttrs, false} ->
+            SpaceId = file_ctx:get_space_id_const(FileCtx3),
+            {ParentStorageFileId, _} = file_ctx:get_storage_file_id(ParentCtx),
+            ok = storage_sync_info:mark_protected_child_has_changed(ParentStorageFileId, SpaceId),
+            {?FILE_UNMODIFIED, FileCtx3, StorageFileCtx2}
     end.
 
--spec maybe_update_file_location(storage_file_ctx:ctx(), #file_attr{}, file_ctx:ctx(), info()) ->
-    {Updated :: boolean(), file_ctx:ctx(), storage_file_ctx:ctx(), file_attr_name()}.
-maybe_update_file_location(StorageFileCtx, _FileAttr, FileCtx, _Info) ->
+-spec maybe_update_file_location(storage_file_ctx:ctx(), #file_attr{}, file_ctx:ctx(), info(), ShouldUpdate :: boolean()) ->
+    {Modified :: boolean(), file_ctx:ctx(), storage_file_ctx:ctx(), file_attr_name()}.
+maybe_update_file_location(StorageFileCtx, _FileAttr, FileCtx, _Info, ShouldUpdate) ->
     case file_ctx:is_dir(FileCtx) of
         {true, FileCtx2} ->
             {false, FileCtx2, StorageFileCtx, ?FILE_LOCATION_ATTR_NAME};
         {false, FileCtx2} ->
-            maybe_update_file_location(StorageFileCtx, FileCtx2)
+            maybe_update_file_location(StorageFileCtx, FileCtx2, ShouldUpdate)
     end.
 
 %%--------------------------------------------------------------------
@@ -995,17 +989,17 @@ maybe_update_file_location(StorageFileCtx, _FileAttr, FileCtx, _Info) ->
 %% Updates file's size if it has changed since last import.
 %% @end
 %%--------------------------------------------------------------------
--spec maybe_update_file_location(storage_file_ctx:ctx(), file_ctx:ctx()) ->
+-spec maybe_update_file_location(storage_file_ctx:ctx(), file_ctx:ctx(), ShouldUpdate :: boolean()) ->
     {Updated :: boolean(), file_ctx:ctx(), storage_file_ctx:ctx(), file_attr_name()}.
-maybe_update_file_location(StorageFileCtx, FileCtx) ->
+maybe_update_file_location(StorageFileCtx, FileCtx, ShouldUpdate) ->
     case file_ctx:get_local_file_location_doc(FileCtx) of
         {undefined, _} -> {false, FileCtx, StorageFileCtx, ?FILE_LOCATION_ATTR_NAME};
-        {FileLocationDoc, _} -> maybe_update_file_location(StorageFileCtx, FileCtx, FileLocationDoc)
+        {FileLocationDoc, _} -> maybe_update_file_location(StorageFileCtx, FileCtx, FileLocationDoc, ShouldUpdate)
     end.
 
--spec maybe_update_file_location(storage_file_ctx:ctx(), file_ctx:ctx(), file_location:doc()) ->
+-spec maybe_update_file_location(storage_file_ctx:ctx(), file_ctx:ctx(), file_location:doc(), ShouldUpdate :: boolean()) ->
     {Updated :: boolean(), file_ctx:ctx(), storage_file_ctx:ctx(), file_attr_name()}.
-maybe_update_file_location(StorageFileCtx, FileCtx, FileLocationDoc) ->
+maybe_update_file_location(StorageFileCtx, FileCtx, FileLocationDoc, ShouldUpdate) ->
     {#statbuf{st_mtime = StMtime, st_size = StSize}, StorageFileCtx2} = storage_file_ctx:stat(StorageFileCtx),
     StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx2),
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx2),
@@ -1029,7 +1023,7 @@ maybe_update_file_location(StorageFileCtx, FileCtx, FileLocationDoc) ->
 
         {true, undefined, undefined} when MTime < StMtime ->
             % file created locally and modified on storage
-            fslogic_location:update_imported_file_doc(FileCtx4, StSize),
+            ShouldUpdate andalso fslogic_location:update_imported_file_doc(FileCtx4, StSize),
             true;
 
         {true, undefined, undefined} ->
@@ -1049,7 +1043,7 @@ maybe_update_file_location(StorageFileCtx, FileCtx, FileLocationDoc) ->
         {true, undefined, #document{value = #storage_sync_info{}}} ->
             case (MTime < StMtime) or (Size =/= StSize) of
                 true ->
-                    fslogic_location:update_imported_file_doc(FileCtx4, StSize),
+                    ShouldUpdate andalso fslogic_location:update_imported_file_doc(FileCtx4, StSize),
                     true;
                 false ->
                     false
@@ -1062,7 +1056,7 @@ maybe_update_file_location(StorageFileCtx, FileCtx, FileLocationDoc) ->
                     case (MTime < StMtime) of
                         true ->
                             % file was modified on storage
-                            fslogic_location:update_imported_file_doc(FileCtx3, StSize),
+                            ShouldUpdate andalso fslogic_location:update_imported_file_doc(FileCtx3, StSize),
                             true;
                         false ->
                             % file was modified via onedata
@@ -1090,7 +1084,7 @@ maybe_update_file_location(StorageFileCtx, FileCtx, FileLocationDoc) ->
                     case (MTime < StMtime) of
                         true ->
                             %there was modified on storage
-                            fslogic_location:update_imported_file_doc(FileCtx4, StSize),
+                            ShouldUpdate andalso fslogic_location:update_imported_file_doc(FileCtx4, StSize),
                             true;
                         false ->
                             % file was modified via onedata
@@ -1105,9 +1099,9 @@ maybe_update_file_location(StorageFileCtx, FileCtx, FileLocationDoc) ->
     storage_sync_info:update_mtime(StorageFileId, SpaceId, Guid, StMtime, NewLastStat),
     {Result2, FileCtx4, StorageFileCtx2, ?FILE_LOCATION_ATTR_NAME}.
 
--spec maybe_update_mode(storage_file_ctx:ctx(), #file_attr{}, file_ctx:ctx(), info()) ->
-    {Updated :: boolean(), file_ctx:ctx(), storage_file_ctx:ctx(), file_attr_name()}.
-maybe_update_mode(StorageFileCtx, #file_attr{mode = OldMode}, FileCtx, _Info) ->
+-spec maybe_update_mode(storage_file_ctx:ctx(), #file_attr{}, file_ctx:ctx(), info(), ShouldUpdate :: boolean()) ->
+    {Modified :: boolean(), file_ctx:ctx(), storage_file_ctx:ctx(), file_attr_name()}.
+maybe_update_mode(StorageFileCtx, #file_attr{mode = OldMode}, FileCtx, _Info, ShouldUpdate) ->
     {#statbuf{st_mode = Mode}, StorageFileCtx2} = storage_file_ctx:stat(StorageFileCtx),
     Result = case file_ctx:is_space_dir_const(FileCtx) of
         false ->
@@ -1115,7 +1109,7 @@ maybe_update_mode(StorageFileCtx, #file_attr{mode = OldMode}, FileCtx, _Info) ->
                 OldMode ->
                     false;
                 NewMode ->
-                    update_mode(FileCtx, NewMode),
+                    ShouldUpdate andalso update_mode(FileCtx, NewMode),
                     true
             end;
         _ ->
@@ -1133,21 +1127,21 @@ update_mode(FileCtx, NewMode) ->
             ok
     end.
 
--spec maybe_update_times(storage_file_ctx:ctx(), #file_attr{}, file_ctx:ctx(), info()) ->
-    {Updated :: boolean(), file_ctx:ctx(), storage_file_ctx:ctx(), file_attr_name()}.
-maybe_update_times(StorageFileCtx, #file_attr{mtime = MTime, ctime = CTime}, FileCtx, _Info) ->
+-spec maybe_update_times(storage_file_ctx:ctx(), #file_attr{}, file_ctx:ctx(), info(), ShouldUpdate :: boolean()) ->
+    {Modified :: boolean(), file_ctx:ctx(), storage_file_ctx:ctx(), file_attr_name()}.
+maybe_update_times(StorageFileCtx, #file_attr{mtime = MTime, ctime = CTime}, FileCtx, _Info, ShouldUpdate) ->
     {StorageStat = #statbuf{
         st_mtime = StorageMTime,
         st_ctime = StorageCTime
     }, StorageFileCtx2} = storage_file_ctx:stat(StorageFileCtx),
-    Updated = case MTime >= StorageMTime andalso CTime >= StorageCTime of
+    Modified = case MTime >= StorageMTime andalso CTime >= StorageCTime of
         true ->
             false;
         false ->
-            update_times(FileCtx, StorageStat),
+            ShouldUpdate andalso update_times(FileCtx, StorageStat),
             true
     end,
-    {Updated, FileCtx, StorageFileCtx2, ?TIMESTAMPS_ATTR_NAME}.
+    {Modified, FileCtx, StorageFileCtx2, ?TIMESTAMPS_ATTR_NAME}.
 
 -spec update_times(file_ctx:ctx(), helpers:stat()) -> ok.
 update_times(FileCtx, #statbuf{st_atime = StorageATime, st_mtime = StorageMTime, st_ctime = StorageCTime}) ->
@@ -1161,23 +1155,23 @@ update_times(FileCtx, #statbuf{st_atime = StorageATime, st_mtime = StorageMTime,
         end
     ).
 
--spec maybe_update_owner(storage_file_ctx:ctx(), #file_attr{}, file_ctx:ctx(), info()) ->
-    {Updated :: boolean(), file_ctx:ctx(), storage_file_ctx:ctx(), file_attr_name()}.
-maybe_update_owner(StorageFileCtx, #file_attr{}, FileCtx, #{is_posix_storage := false}) ->
+-spec maybe_update_owner(storage_file_ctx:ctx(), #file_attr{}, file_ctx:ctx(), info(), ShouldUpdate :: boolean()) ->
+    {Modified :: boolean(), file_ctx:ctx(), storage_file_ctx:ctx(), file_attr_name()}.
+maybe_update_owner(StorageFileCtx, #file_attr{}, FileCtx, #{is_posix_storage := false},_) ->
     {false, FileCtx, StorageFileCtx, ?OWNER_ATTR_NAME};
-maybe_update_owner(StorageFileCtx, #file_attr{owner_id = OldOwnerId}, FileCtx, _Info) ->
-    {Updated, StorageFileCtx3} = case file_ctx:is_space_dir_const(FileCtx) of
+maybe_update_owner(StorageFileCtx, #file_attr{owner_id = OldOwnerId}, FileCtx, _Info, ShouldUpdate) ->
+    {Modified, StorageFileCtx3} = case file_ctx:is_space_dir_const(FileCtx) of
         true -> {false, StorageFileCtx};
         false ->
             case get_owner_id(StorageFileCtx) of
                 {OldOwnerId, StorageFileCtx2} ->
                     {false, StorageFileCtx2};
                 {NewOwnerId, StorageFileCtx2} ->
-                    update_owner(FileCtx, NewOwnerId),
+                    ShouldUpdate andalso update_owner(FileCtx, NewOwnerId),
                     {true, StorageFileCtx2}
             end
     end,
-    {Updated, FileCtx, StorageFileCtx3, ?OWNER_ATTR_NAME}.
+    {Modified, FileCtx, StorageFileCtx3, ?OWNER_ATTR_NAME}.
 
 -spec update_owner(file_ctx:ctx(), od_user:id()) -> ok.
 update_owner(FileCtx, NewOwnerId) ->
@@ -1192,13 +1186,13 @@ update_owner(FileCtx, NewOwnerId) ->
 %% Updates file's nfs4 ACL if it has CHANGED.
 %% @end
 %%-------------------------------------------------------------------
--spec maybe_update_nfs4_acl(storage_file_ctx:ctx(), #file_attr{}, file_ctx:ctx(), info()) ->
-    {Updated :: boolean(), file_ctx:ctx(), storage_file_ctx:ctx(), file_attr_name()}.
-maybe_update_nfs4_acl(StorageFileCtx, _FileAttr, FileCtx, #{is_posix_storage := false}) ->
+-spec maybe_update_nfs4_acl(storage_file_ctx:ctx(), #file_attr{}, file_ctx:ctx(), info(), ShouldUpdate :: boolean()) ->
+    {Modified :: boolean(), file_ctx:ctx(), storage_file_ctx:ctx(), file_attr_name()}.
+maybe_update_nfs4_acl(StorageFileCtx, _FileAttr, FileCtx, #{is_posix_storage := false}, _) ->
     {false, FileCtx, StorageFileCtx, ?NFS4_ACL_ATTR_NAME};
-maybe_update_nfs4_acl(StorageFileCtx, _FileAttr, FileCtx, #{sync_acl := false}) ->
+maybe_update_nfs4_acl(StorageFileCtx, _FileAttr, FileCtx, #{sync_acl := false}, _) ->
     {false, FileCtx, StorageFileCtx, ?NFS4_ACL_ATTR_NAME};
-maybe_update_nfs4_acl(StorageFileCtx, _FileAttr, FileCtx, #{sync_acl := true}) ->
+maybe_update_nfs4_acl(StorageFileCtx, _FileAttr, FileCtx, #{sync_acl := true}, ShouldUpdate) ->
     UserCtx = user_ctx:new(?ROOT_SESS_ID),
     StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
     Helper = storage:get_helper(StorageId),
@@ -1215,8 +1209,13 @@ maybe_update_nfs4_acl(StorageFileCtx, _FileAttr, FileCtx, #{sync_acl := true}) -
                     ACL ->
                         {false, FileCtx2, StorageFileCtx2, ?NFS4_ACL_ATTR_NAME};
                     _ ->
-                        #provider_response{status = #status{code = ?OK}} =
-                            acl_req:set_acl(UserCtx, FileCtx2, SanitizedAcl),
+                        case ShouldUpdate of
+                            true ->
+                                #provider_response{status = #status{code = ?OK}} =
+                                    acl_req:set_acl(UserCtx, FileCtx2, SanitizedAcl);
+                            false ->
+                                ok
+                        end,
                         {true, FileCtx2, StorageFileCtx2, ?NFS4_ACL_ATTR_NAME}
                 end
             catch

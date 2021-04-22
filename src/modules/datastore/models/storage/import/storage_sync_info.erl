@@ -44,7 +44,7 @@
 %% API
 -export([
     get/2,
-    get_mtime/1, get_batch_hash/3, get_guid/1, get_skipped_files/1,
+    get_mtime/1, get_batch_hash/3, get_guid/1,
     are_all_batches_processed/1,
     update_mtime/5,
     delete/2
@@ -54,7 +54,7 @@
     init_batch_counters/2,
     increase_batches_to_process/2, increase_batches_to_process/3,
     mark_processed_batch/4, mark_processed_batch/7, mark_processed_batch/8,
-    mark_skipped_file/2, reset_skipped_files/2
+    mark_protected_child_has_changed/2, set_any_protected_child_changed/3
 ]).
 
 % exported for CT tests
@@ -79,13 +79,6 @@ get_mtime(#document{value = SSI}) ->
     get_mtime(SSI);
 get_mtime(#storage_sync_info{mtime = Mtime}) ->
     Mtime.
-
-
--spec get_skipped_files(record() | doc()) -> boolean().
-get_skipped_files(#document{value = SSI}) ->
-    get_skipped_files(SSI);
-get_skipped_files(#storage_sync_info{skipped_files = SkippedFiles}) ->
-    SkippedFiles.
 
 
 -spec get_batch_hash(non_neg_integer(), non_neg_integer(), doc()) -> hash() | undefined.
@@ -158,19 +151,16 @@ update_mtime(StorageFileId, SpaceId, Guid, NewMtime, StatTimestamp) ->
     end).
 
 
--spec reset_skipped_files(helpers:file_id(), od_space:id()) -> ok | error().
-reset_skipped_files(StorageFileId, SpaceId) ->
-    set_skipped_files(StorageFileId, SpaceId, false).
+-spec mark_protected_child_has_changed(helpers:file_id(), od_space:id()) -> ok | error().
+mark_protected_child_has_changed(StorageFileId, SpaceId) ->
+    set_any_protected_child_changed(StorageFileId, SpaceId, true).
 
 
--spec mark_skipped_file(helpers:file_id(), od_space:id()) -> ok | error().
-mark_skipped_file(StorageFileId, SpaceId) ->
-    set_skipped_files(StorageFileId, SpaceId, true).
-
-
--spec set_skipped_files(helpers:file_id(), od_space:id(), boolean()) -> ok | error().
-set_skipped_files(StorageFileId, SpaceId, SkippedFiles) ->
-    create_or_update(StorageFileId, SpaceId, fun(SSI) -> {ok, SSI#storage_sync_info{skipped_files = SkippedFiles}} end).
+-spec set_any_protected_child_changed(helpers:file_id(), od_space:id(), boolean()) -> ok | error().
+set_any_protected_child_changed(StorageFileId, SpaceId, AnyProtectedChildChanged) ->
+    create_or_update(StorageFileId, SpaceId, fun(SSI) ->
+        {ok, SSI#storage_sync_info{any_protected_child_changed = AnyProtectedChildChanged}}
+    end).
 
 
 -spec increase_batches_to_process(helpers:file_id(), od_space:id()) -> ok.
@@ -221,7 +211,7 @@ mark_processed_batch(StorageFileId, SpaceId, Guid, Mtime, Offset, BatchSize, Bat
         batches_to_process = BatchesToProcess,
         children_hashes = ChildrenHashes,
         hashes_to_update = HashesToUpdate,
-        skipped_files = SkippedFiles
+        any_protected_child_changed = AnyProtectedChildChanged
     }) ->
         BatchesProcessed2 = BatchesProcessed + 1,
         HashesToUpdate2 = update_hashes_map(Offset, BatchSize, BatchHash, HashesToUpdate),
@@ -229,18 +219,18 @@ mark_processed_batch(StorageFileId, SpaceId, Guid, Mtime, Offset, BatchSize, Bat
             guid = Guid,
             batches_processed = BatchesProcessed2
         },
-        case {UpdateHashesOnFinish and (BatchesProcessed2 =:= BatchesToProcess), not SkippedFiles} of
-            {true, true} ->
+        case {UpdateHashesOnFinish and (BatchesProcessed2 =:= BatchesToProcess), AnyProtectedChildChanged} of
+            {true, false} ->
                 {ok, SSI2#storage_sync_info{
                     hashes_to_update = #{},
-                    children_hashes = maps:merge(ChildrenHashes, HashesToUpdate),
+                    children_hashes = maps:merge(ChildrenHashes, HashesToUpdate2),
                     mtime = utils:ensure_defined(Mtime, OldMtime)
                 }};
-            {false, true} ->
+            {false, false} ->
                 {ok, SSI2#storage_sync_info{
                     hashes_to_update = HashesToUpdate2
                 }};
-            {_, false} ->
+            {_, true} ->
                 {ok, SSI2}
         end
     end).
@@ -366,8 +356,8 @@ get_record_struct(6) ->
         {batches_to_process, integer},
         {batches_processed, integer},
         {hashes_to_update, #{integer => binary}},
-        % field skipped files has been added in this version
-        {skipped_files, boolean}
+        % field any_protected_child_changed has been added in this version
+        {any_protected_child_changed, boolean}
     ]}.
 
 %%--------------------------------------------------------------------
@@ -403,6 +393,6 @@ upgrade_record(5, {?MODULE, Guid, ChildrenAttrsHash, MTime, LastStat, BatchesToP
         batches_to_process = BatchesToProcess,
         batches_processed = BatchesProcessed,
         hashes_to_update = HashesToUpdate,
-        % field skipped_files has been added in this version
-        skipped_files = false
+        % field any_protected_child_changed has been added in this version
+        any_protected_child_changed = false
     }}.

@@ -311,10 +311,9 @@
     % below map contains new hashes, that will be used to update values in children_hashes
     % when counters batches_to_process == batches_processed
     hashes_to_update = #{} :: storage_sync_info:hashes(),
-    % Flag which informs whether there where any files skipped during last scan.
-    % Files could have been skipped due to protection flags.
+    % Flag which informs whether any of the protected children files has been modified on storage.
     % This flag allows to detect changes when flags are unset.
-    skipped_files = false :: boolean()
+    any_protected_child_changed = false :: boolean()
 }).
 
 % An empty model used for creating storage_sync_links

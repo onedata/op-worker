@@ -46,6 +46,7 @@
 -include("modules/storage/import/storage_import.hrl").
 -include("modules/storage/helpers/helpers.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/fslogic/acl.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/errors.hrl").
 
@@ -514,38 +515,46 @@ do_update_master_job(TraverseJob = #storage_traverse_master{
             increment_counter(SyncResult, SpaceId),
             {ok, #{}};
         {ok, {SyncResult, FileCtx, StorageFileCtx2}} ->
-            SSIDoc = get_storage_sync_info_doc(TraverseJob),
-            % stat result will be cached in StorageFileCtx
-            % we perform stat here to ensure that jobs for all batches for given directory
-            % will be scheduled with the same stat result
-            {#statbuf{}, StorageFileCtx3} = storage_file_ctx:stat(StorageFileCtx2),
-            MTimeHasChanged = storage_sync_traverse:has_mtime_changed(SSIDoc, StorageFileCtx3),
-            TraverseJob2 = TraverseJob#storage_traverse_master{
-                storage_file_ctx = StorageFileCtx3,
-                info = Info2 = Info#{
-                    file_ctx => FileCtx,
-                    storage_sync_info_doc => SSIDoc,
-                    % this job will be used to generated children jobs so set current FileCtx as parent
-                    parent_ctx => FileCtx
-                }
-            },
-            StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx3),
-            increment_counter(SyncResult, SpaceId),
+            {FileDoc, FileCtx2} = file_ctx:get_file_doc_including_deleted(FileCtx),
+            {ok, ProtectionFlags} = dataset_eff_cache:get_eff_protection_flags(FileDoc),
+            case ProtectionFlags =/= ?no_flags_mask of
+                true ->
+                    % do not schedule jobs for children as directory is protected
+                    {ok, #{}};
+                false ->
+                    SSIDoc = get_storage_sync_info_doc(TraverseJob),
+                    % stat result will be cached in StorageFileCtx
+                    % we perform stat here to ensure that jobs for all batches for given directory
+                    % will be scheduled with the same stat result
+                    {#statbuf{}, StorageFileCtx3} = storage_file_ctx:stat(StorageFileCtx2),
+                    MTimeHasChanged = storage_sync_traverse:has_mtime_changed(SSIDoc, StorageFileCtx3),
+                    TraverseJob2 = TraverseJob#storage_traverse_master{
+                        storage_file_ctx = StorageFileCtx3,
+                        info = Info2 = Info#{
+                            file_ctx => FileCtx2,
+                            storage_sync_info_doc => SSIDoc,
+                            % this job will be used to generated children jobs so set current FileCtx as parent
+                            parent_ctx => FileCtx2
+                        }
+                    },
+                    StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx3),
+                    increment_counter(SyncResult, SpaceId),
 
-            case {MTimeHasChanged, DetectDeletions, DetectModifications} of
-                {true, true, _} ->
-                    TraverseJob3 = TraverseJob2#storage_traverse_master{info = Info2#{add_deletion_detection_link => true}},
-                    StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
-                    traverse(TraverseJob3, Args, true);
-                {false, _, false} ->
-                    % DetectModifications option is disabled and MTime of directory has not changed, therefore
-                    % we are sure that hash computed out of children (only regular files) attributes
-                    % mustn't have changed
-                    traverse_only_directories(TraverseJob2#storage_traverse_master{fold_enabled = false}, Args);
-                {_, _, _} ->
-                    % Hash of children attrs might have changed, therefore it must be computed
-                    % Do not detect deletions as (MtimeHasChanged and DetectDeletions) = false
-                    traverse(TraverseJob2, Args, false)
+                    case {MTimeHasChanged, DetectDeletions, DetectModifications} of
+                        {true, true, _} ->
+                            TraverseJob3 = TraverseJob2#storage_traverse_master{info = Info2#{add_deletion_detection_link => true}},
+                            StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
+                            traverse(TraverseJob3, Args, true);
+                        {false, _, false} ->
+                            % DetectModifications option is disabled and MTime of directory has not changed, therefore
+                            % we are sure that hash computed out of children (only regular files) attributes
+                            % mustn't have changed
+                            traverse_only_directories(TraverseJob2#storage_traverse_master{fold_enabled = false}, Args);
+                        {_, _, _} ->
+                            % Hash of children attrs might have changed, therefore it must be computed
+                            % Do not detect deletions as (MtimeHasChanged and DetectDeletions) = false
+                            traverse(TraverseJob2, Args, false)
+                    end
             end;
         Error = {error, ?ENOENT} ->
             % directory might have been deleted after it was listed in parent's master job
@@ -612,16 +621,9 @@ traverse(TraverseJob = #storage_traverse_master{
     case storage_traverse:do_master_job(TraverseJob, Args) of
         {ok, MasterJobMap, HashesReversed} ->
             BatchHash = storage_import_hash:hash(lists:reverse(HashesReversed)),
-            AnyFileSkipped = case SSIDoc =:= undefined of
-                true -> false;
-                false -> storage_sync_info:get_skipped_files(SSIDoc)
-            end,
-            case
-                storage_import_hash:children_attrs_hash_has_changed(BatchHash, Offset, BatchSize, SSIDoc)
-                orelse AnyFileSkipped
-            of
+            case storage_import_hash:children_attrs_hash_has_changed(BatchHash, Offset, BatchSize, SSIDoc) of
                 true ->
-                    schedule_jobs_for_all_files(TraverseJob, MasterJobMap, BatchHash, DetectDeletions orelse AnyFileSkipped);
+                    schedule_jobs_for_all_files(TraverseJob, MasterJobMap, BatchHash, DetectDeletions);
                 false ->
                     % Hash hasn't changed, therefore we can schedule jobs only for directories
                     schedule_jobs_for_directories_only(TraverseJob, MasterJobMap, DetectDeletions)

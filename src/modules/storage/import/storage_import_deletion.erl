@@ -88,9 +88,9 @@ do_master_job(Job = #storage_traverse_master{
     StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
     StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
 
-    % reset skipped files field in case of first batch job
+    % reset any_protected_child_changed in case of first batch job
     case FMToken =:= ?INITIAL_LS_TOKEN andalso SLToken =:= #link_token{} of
-        true -> storage_sync_info:reset_skipped_files(StorageFileId, SpaceId);
+        true -> storage_sync_info:set_any_protected_child_changed(StorageFileId, SpaceId, false);
         false -> ok
     end,
 
@@ -361,7 +361,7 @@ maybe_delete_file_and_update_counters(FileCtx, SpaceId, StorageId) ->
                 delete_file_and_update_counters(FileCtx5, SpaceId, StorageId);
             false ->
                 case IsProtected of
-                    true -> storage_sync_info:mark_skipped_file(filename:dirname(StorageFileId), SpaceId);
+                    true -> storage_sync_info:mark_protected_child_has_changed(filename:dirname(StorageFileId), SpaceId);
                     false -> ok
                 end,
                 storage_import_monitoring:mark_processed_job(SpaceId)
