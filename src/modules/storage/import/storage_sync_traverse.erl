@@ -689,7 +689,7 @@ schedule_jobs_for_directories_only(TraverseJob = #storage_traverse_master{
                     true ->
                         storage_sync_info:mark_processed_batch(StorageFileId, SpaceId, Guid, undefined);
                     false ->
-                        storage_sync_info:mark_processed_batch(StorageFileId, SpaceId, Guid, STMtime)
+                        storage_sync_info:mark_processed_batch(StorageFileId, SpaceId, Guid, STMtime, undefined, undefined, undefined, false)
                 end,
                 case storage_sync_info:are_all_batches_processed(SSI) of
                     true ->
