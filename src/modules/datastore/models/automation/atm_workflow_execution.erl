@@ -6,13 +6,13 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Model storing information about workflow.
+%%% Model storing information about automation workflow execution.
 %%% @end
 %%%-------------------------------------------------------------------
--module(atm_workflow).
+-module(atm_workflow_execution).
 -author("Bartosz Walkowicz").
 
--include("modules/automation/atm_wokflow.hrl").
+-include("modules/automation/atm_wokflow_execution.hrl").
 -include("modules/datastore/datastore_runner.hrl").
 
 %% API
@@ -24,12 +24,13 @@
 
 -type id() :: binary().
 -type diff() :: datastore_doc:diff(record()).
--type record() :: #atm_workflow{}.
+-type record() :: #atm_workflow_execution{}.
 -type doc() :: datastore_doc:doc(record()).
 
--type state() :: binary().  % ?(WAITING|ONGOING|ENDED)_WORKFLOWS_STATE
+-type state() :: binary().              % ?(WAITING|ONGOING|ENDED)_STATE
+-type timestamp() :: time:seconds().
 
--export_type([id/0, record/0, doc/0, state/0]).
+-export_type([id/0, record/0, doc/0, state/0, timestamp/0]).
 
 -type error() :: {error, term()}.
 
@@ -45,10 +46,10 @@
 
 
 -spec create(file_meta:uuid(), od_space:id()) -> ok | error().
-create(WorkflowId, SpaceId) ->
+create(AtmWorkflowExecutionId, SpaceId) ->
   ?extract_ok(datastore_model:create(?CTX, #document{
-      key = WorkflowId,
-      value = #atm_workflow{
+      key = AtmWorkflowExecutionId,
+      value = #atm_workflow_execution{
           space_id = SpaceId,
           schedule_time = global_clock:timestamp_seconds()
       }
@@ -56,8 +57,8 @@ create(WorkflowId, SpaceId) ->
 
 
 -spec delete(id()) -> ok | error().
-delete(WorkflowId) ->
-    datastore_model:delete(?CTX, WorkflowId).
+delete(AtmWorkflowExecutionId) ->
+    datastore_model:delete(?CTX, AtmWorkflowExecutionId).
 
 
 %%%===================================================================
