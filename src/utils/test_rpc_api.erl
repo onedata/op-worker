@@ -12,9 +12,12 @@
 -module(test_rpc_api).
 -author("Piotr Duleba").
 
+-include("modules/logical_file_manager/lfm.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/errors.hrl").
+
+-include_lib("ctool/include/logging.hrl").
 
 -export([
     get_env/1,
@@ -52,7 +55,9 @@
     get_provider_eff_users/0,
 
     get_cert_chain_ders/0,
-    gs_protocol_supported_versions/0
+    gs_protocol_supported_versions/0,
+
+    perform_io_test/2
 ]).
 
 
@@ -121,7 +126,7 @@ lfm_open(Session, FileKey, OpenType) ->
     lfm:open(Session, FileKey, OpenType).
 
 
--spec lfm_write(lfm_context:ctx(),  integer(), binary()) ->
+-spec lfm_write(lfm_context:ctx(), integer(), binary()) ->
     {ok, lfm_context:ctx(), integer()} |{error, term()}.
 lfm_write(FileHandle, Offset, Buffer) ->
     lfm:write(FileHandle, Offset, Buffer).
@@ -217,3 +222,33 @@ get_cert_chain_ders() ->
 -spec gs_protocol_supported_versions() -> [gs_protocol:protocol_version()].
 gs_protocol_supported_versions() ->
     gs_protocol:supported_versions().
+
+
+-spec perform_io_test(session:id(), file_meta:path()) -> ok | error.
+perform_io_test(Session, Path) ->
+    BytesSize = 5000,
+    SampleFileContent = str_utils:rand_hex(BytesSize),
+
+    % Note, that SampleFileSize will be 2 times larger than
+    % ByteSize due to str_utils:rand_hex/1 function encoding.
+    SampleFileSize = byte_size(SampleFileContent),
+    FilePath = filename:join([Path, <<"test_file">>]),
+
+    IOFun = fun() ->
+        {ok, Guid} = lfm:create(Session, FilePath),
+        {ok, OpenHandle} = lfm:open(Session, ?FILE_REF(Guid), rdwr),
+        {ok, WriteHandle, Size} = lfm:write(OpenHandle, 0, SampleFileContent),
+        {ok, _ReadHandle, Data} = lfm:read(WriteHandle, 0, Size),
+        case {Size, Data} of
+            {SampleFileSize, SampleFileContent} -> ok;
+            _ -> error
+        end
+    end,
+
+    try IOFun() of
+        _ -> ok
+    catch
+        error:_ -> error
+    end.
+
+
