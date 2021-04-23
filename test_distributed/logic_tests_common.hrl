@@ -298,7 +298,7 @@ end).
     description = ?SHARE_DESCRIPTION(__Share),
     public_url = ?SHARE_PUBLIC_URL(__Share),
     file_type = ?SHARE_FILE_TYPE(__ShareId),
-    space = undefined,
+    space = ?SHARE_SPACE(__Share),
     handle = ?SHARE_HANDLE(__Share),
     root_file = ?SHARE_ROOT_FILE(__Share)
 }}).
@@ -443,6 +443,7 @@ end).
 -define(SHARE_PUBLIC_DATA_VALUE(__ShareId), #{
     <<"revision">> => 1,
     <<"gri">> => gri:serialize(#gri{type = od_share, id = __ShareId, aspect = instance, scope = public}),
+    <<"spaceId">> => ?SHARE_SPACE(__ShareId),
     <<"name">> => ?SHARE_NAME(__ShareId),
     <<"description">> => ?SHARE_DESCRIPTION(__ShareId),
     <<"publicUrl">> => ?SHARE_PUBLIC_URL(__ShareId),
@@ -454,8 +455,7 @@ end).
 -define(SHARE_PRIVATE_DATA_VALUE(__ShareId), begin
     __PublicData = ?SHARE_PUBLIC_DATA_VALUE(__ShareId),
     __PublicData#{
-        <<"gri">> => gri:serialize(#gri{type = od_share, id = __ShareId, aspect = instance, scope = private}),
-        <<"spaceId">> => ?SHARE_SPACE(__ShareId)
+        <<"gri">> => gri:serialize(#gri{type = od_share, id = __ShareId, aspect = instance, scope = private})
     }
 end).
 

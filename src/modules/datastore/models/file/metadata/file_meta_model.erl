@@ -242,10 +242,7 @@ get_record_struct(11) ->
         {provider_id, string},
         {shares, [string]},
         {deleted, boolean},
-        {parent_uuid, string},
-        % following fields have been added in this version:
-        {references, #{string => [string]}},
-        {symlink_value, string}
+        {parent_uuid, string}
     ]};
 get_record_struct(12) ->
     {record, [
@@ -266,6 +263,7 @@ get_record_struct(12) ->
         {shares, [string]},
         {deleted, boolean},
         {parent_uuid, string},
+        % fields: references and symlink_value have been added in this version
         {references, #{string => [string]}},
         {symlink_value, string},
         % field dataset_status has been added in this version
@@ -341,13 +339,27 @@ upgrade_record(10, {
     ProviderId, Shares, Deleted, ParentUuid
 }) ->
     {11, {?FILE_META_MODEL, Name, Type, Mode, 0, ACL, Owner, IsScope,
-        ProviderId, Shares, Deleted, ParentUuid, #{}, undefined
+        ProviderId, Shares, Deleted, ParentUuid
     }};
+% NOTE: there are 2 function clauses upgrading from version 11 to 12
+% because 21.02-alpha7 introduced a bug which could result in documents persisted with wrong number of fields
 upgrade_record(11, {?FILE_META_MODEL, Name, Type, Mode, ProtectionFlags, ACL, Owner, IsScope,
     ProviderId, Shares, Deleted, ParentUuid, References, SymlinkValue
 }) ->
     {12, {?FILE_META_MODEL, Name, Type, Mode, ProtectionFlags, ACL, Owner, IsScope,
-        ProviderId, Shares, Deleted, ParentUuid, References, SymlinkValue,
+        ProviderId, Shares, Deleted, ParentUuid,
+        % fields: references and symlink_value have been added in this version
+        References, SymlinkValue,
+        % field dataset_status has been added in this version
+        undefined
+    }};
+upgrade_record(11, {?FILE_META_MODEL, Name, Type, Mode, ProtectionFlags, ACL, Owner, IsScope,
+    ProviderId, Shares, Deleted, ParentUuid
+}) ->
+    {12, {?FILE_META_MODEL, Name, Type, Mode, ProtectionFlags, ACL, Owner, IsScope,
+        ProviderId, Shares, Deleted, ParentUuid,
+        % fields: references and symlink_value have been added in this version
+        #{}, undefined,
         % field dataset_status has been added in this version
         undefined
     }}.
