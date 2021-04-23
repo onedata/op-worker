@@ -378,12 +378,8 @@ apply_scope_mask(Doc = #document{value = Space = #od_space{}}, protected) ->
         }
     };
 
-apply_scope_mask(Doc = #document{value = Share = #od_share{}}, public) ->
-    Doc#document{
-        value = Share#od_share{
-            space = undefined
-        }
-    };
+apply_scope_mask(Doc = #document{value = #od_share{}}, public) ->
+    Doc;
 
 apply_scope_mask(Doc = #document{value = Provider = #od_provider{}}, protected) ->
     Doc#document{
