@@ -121,7 +121,7 @@ invalidate_on_all_nodes(SpaceId) ->
     end, Res).
 
 
--spec get_eff_ancestor_datasets(entry() | file_meta:doc()) -> {ok, [dataset_api:id()]} | error().
+-spec get_eff_ancestor_datasets(entry() | file_meta:doc()) -> {ok, [dataset:id()]} | error().
 get_eff_ancestor_datasets(#entry{eff_ancestor_datasets = EffAncestorDatasets}) ->
     {ok, EffAncestorDatasets};
 get_eff_ancestor_datasets(FileDoc) ->

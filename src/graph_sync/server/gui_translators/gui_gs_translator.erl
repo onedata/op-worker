@@ -40,18 +40,32 @@
 handshake_attributes(_Client) ->
     {ok, ProviderName} = provider_logic:get_name(),
 
+    {ok, OnezoneConfiguration} = provider_logic:get_service_configuration(onezone),
+    XRootDApiTemplates = case maps:get(<<"openDataXrootdServerDomain">>, OnezoneConfiguration, null) of
+        null ->
+            #{};
+        XRootDDomain ->
+            #{<<"xrootd">> => #{
+                <<"listSharedDirectoryChildren">> => ?XROOTD_LIST_SHARED_DIRECTORY_COMMAND_TEMPLATE(XRootDDomain),
+                <<"downloadSharedFileContent">> => ?XROOTD_DOWNLOAD_SHARED_FILE_COMMAND_TEMPLATE(XRootDDomain),
+                <<"downloadSharedDirectoryContent">> => ?XROOTD_DOWNLOAD_SHARED_DIRECTORY_COMMAND_TEMPLATE(XRootDDomain)
+            }}
+    end,
+
     #{
         <<"providerName">> => ProviderName,
         <<"serviceVersion">> => op_worker:get_release_version(),
         <<"onezoneUrl">> => oneprovider:get_oz_url(),
         <<"transfersHistoryLimitPerFile">> => transferred_file:get_history_limit(),
-        <<"restTemplates">> => #{
-            <<"listSharedDirectoryChildren">> => ?ZONE_SHARES_DATA_REDIRECTOR_PATH_TEMPLATE("/children"),
-            <<"downloadSharedFileContent">> => ?ZONE_SHARES_DATA_REDIRECTOR_PATH_TEMPLATE("/content"),
-            <<"getSharedFileAttributes">> => ?ZONE_SHARES_DATA_REDIRECTOR_PATH_TEMPLATE(""),
-            <<"getSharedFileExtendedAttributes">> => ?ZONE_SHARES_DATA_REDIRECTOR_PATH_TEMPLATE("/metadata/xattrs"),
-            <<"getSharedFileJsonMetadata">> => ?ZONE_SHARES_DATA_REDIRECTOR_PATH_TEMPLATE("/metadata/json"),
-            <<"getSharedFileRdfMetadata">> => ?ZONE_SHARES_DATA_REDIRECTOR_PATH_TEMPLATE("/metadata/rdf")
+        <<"apiTemplates">> => XRootDApiTemplates#{
+            <<"rest">> => #{
+                <<"listSharedDirectoryChildren">> => ?ZONE_SHARED_DATA_CURL_COMMAND_TEMPLATE("/children"),
+                <<"downloadSharedFileContent">> => ?ZONE_SHARED_DATA_CURL_COMMAND_TEMPLATE("/content"),
+                <<"getSharedFileAttributes">> => ?ZONE_SHARED_DATA_CURL_COMMAND_TEMPLATE(""),
+                <<"getSharedFileExtendedAttributes">> => ?ZONE_SHARED_DATA_CURL_COMMAND_TEMPLATE("/metadata/xattrs"),
+                <<"getSharedFileJsonMetadata">> => ?ZONE_SHARED_DATA_CURL_COMMAND_TEMPLATE("/metadata/json"),
+                <<"getSharedFileRdfMetadata">> => ?ZONE_SHARED_DATA_CURL_COMMAND_TEMPLATE("/metadata/rdf")
+            }
         }
     }.
 

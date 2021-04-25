@@ -27,6 +27,7 @@
 -spec translate_resource(gri:gri(), Data :: term()) ->
     gs_protocol:data() | fun((aai:auth()) -> gs_protocol:data()).
 translate_resource(#gri{aspect = instance, scope = Scope}, #{
+    <<"spaceId">> := SpaceId,
     <<"name">> := ShareName,
     <<"description">> := Description,
     <<"publicUrl">> := PublicUrl,
@@ -74,6 +75,7 @@ translate_resource(#gri{aspect = instance, scope = Scope}, #{
         end,
 
         ShareInfo#{
+            <<"spaceId">> => SpaceId,
             <<"name">> => ShareName,
             <<"description">> => Description,
             <<"publicUrl">> => PublicUrl,

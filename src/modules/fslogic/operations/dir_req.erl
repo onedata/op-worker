@@ -86,7 +86,7 @@ get_children(UserCtx, FileCtx0, ListOpts) ->
                 % (file_meta:tag_children to be precise) already did it
                 {true, #child_link{name = ChildName, guid = ChildGuid}}
         end
-    end, lists:zip(lists:seq(1, ChildrenNum), ChildrenCtxs)),
+    end, lists_utils:enumerate(ChildrenCtxs)),
 
     fslogic_times:update_atime(FileCtx1),
     #fuse_response{status = #status{code = ?OK},
@@ -307,12 +307,12 @@ list_children(UserCtx, FileCtx0, ListOpts, ChildrenWhiteList) ->
     [fuse_response_type()] when UserCtx :: user_ctx:ctx().
 map_children(UserCtx, MapFunInsecure, Children, IncludeReplicationStatus, IncludeLinkCount) ->
     ChildrenNum = length(Children),
-    NumberedChildren = lists:zip(lists:seq(1, ChildrenNum), Children),
+    EnumeratedChildren = lists_utils:enumerate(Children),
     ComputeFileAttrOpts = #{
         allow_deleted_files => false,
         include_size => true
     },
-    MapFun = fun({Num, ChildCtx}) ->
+    FilterMapFun = fun({Num, ChildCtx}) ->
         try
             #fuse_response{
                 status = #status{code = ?OK},
@@ -334,65 +334,10 @@ map_children(UserCtx, MapFunInsecure, Children, IncludeReplicationStatus, Includ
                         include_link_count => IncludeLinkCount
                     })
             end,
-            Result
+            {true, Result}
         catch _:_ ->
             % File can be not synchronized with other provider
-            error
+            false
         end
     end,
-    FilterFun = fun
-        (error) -> false;
-        (_Attrs) -> true
-    end,
-    filtermap(
-        MapFun, FilterFun, NumberedChildren,
-        ?MAX_MAP_CHILDREN_PROCESSES, ChildrenNum
-    ).
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% A parallel function similar to lists:filtermap/2. See {@link lists:filtermap/2}.
-%% However, Filter and Map functions are separeted and number of parallel
-%% processes is limited.
-%% @end
-%%--------------------------------------------------------------------
--spec filtermap(Map :: fun((X :: A) -> B), Filter :: fun((X :: A) -> boolean()),
-    L :: [A], MaxProcs :: non_neg_integer(), Length :: non_neg_integer()) -> [B].
-filtermap(Map, Filter, L, MaxProcs, Length) ->
-    case Length > MaxProcs of
-        true ->
-            {L1, L2} = lists:split(MaxProcs, L),
-            filtermap(Map, Filter, L1) ++
-                filtermap(Map, Filter, L2, MaxProcs, Length - MaxProcs);
-        _ ->
-            filtermap(Map, Filter, L)
-    end.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% A parallel function similar to lists:filtermap/2. See {@link lists:filtermap/2}.
-%% However, Filter and Map functions are separeted.
-%% @end
-%%--------------------------------------------------------------------
--spec filtermap(Map :: fun((X :: A) -> B), Filter :: fun((X :: A) -> boolean()),
-    L :: [A]) -> [B].
-filtermap(Map, Filter, L) ->
-    LWithNum = lists:zip(lists:seq(1, length(L)), L),
-    Mapped = lists_utils:pmap(fun({Num, Element}) ->
-        {Num, Map(Element)}
-    end, LWithNum),
-
-    lists:filtermap(fun
-        ({_, error}) -> false;
-        ({_, Ans}) ->
-            case Filter(Ans) of
-                true ->
-                    {true, Ans};
-                _ ->
-                    false
-            end
-    end, lists:sort(Mapped)).
+    lists_utils:pfiltermap(FilterMapFun, EnumeratedChildren, ?MAX_MAP_CHILDREN_PROCESSES).

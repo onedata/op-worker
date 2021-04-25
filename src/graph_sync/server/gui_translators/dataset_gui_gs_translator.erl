@@ -17,11 +17,9 @@
 -include("proto/oneprovider/provider_messages.hrl").
 
 %% API
--export([
-    translate_value/2, translate_resource/2,
-    translate_dataset_info/1
-]).
-
+-export([translate_value/2, translate_resource/2]).
+% Util functions
+-export([translate_dataset_info/1, translate_datasets_details_list/2]).
 
 %%%===================================================================
 %%% API
@@ -29,8 +27,8 @@
 
 
 -spec translate_value(gri:gri(), Value :: term()) -> gs_protocol:data().
-translate_value(#gri{aspect = children, scope = private}, Children) ->
-    Children.
+translate_value(#gri{aspect = children_details, scope = private}, {Datasets, IsLast}) ->
+    translate_datasets_details_list(Datasets, IsLast).
 
 
 -spec translate_resource(gri:gri(), Data :: term()) ->
@@ -38,8 +36,11 @@ translate_value(#gri{aspect = children, scope = private}, Children) ->
 translate_resource(#gri{aspect = instance, scope = private}, DatasetInfo) ->
     translate_dataset_info(DatasetInfo).
 
+%%%===================================================================
+%%% Util functions
+%%%===================================================================
 
--spec translate_dataset_info(lfm_datasets:attrs()) -> map().
+-spec translate_dataset_info(lfm_datasets:info()) -> json_utils:json_map().
 translate_dataset_info(#dataset_info{
     id = DatasetId,
     state = State,
@@ -48,7 +49,9 @@ translate_dataset_info(#dataset_info{
     root_file_type = RootFileType,
     creation_time = CreationTime,
     protection_flags = ProtectionFlags,
-    parent = ParentId
+    eff_protection_flags = EffProtectionFlags,
+    parent = ParentId,
+    index = Index
 }) ->
     #{
         <<"gri">> => gri:serialize(#gri{
@@ -72,5 +75,16 @@ translate_dataset_info(#dataset_info{
         <<"rootFilePath">> => RootFilePath,
         <<"state">> => atom_to_binary(State, utf8),
         <<"protectionFlags">> => file_meta:protection_flags_to_json(ProtectionFlags),
-        <<"creationTime">> => CreationTime
+        <<"effProtectionFlags">> => file_meta:protection_flags_to_json(EffProtectionFlags),
+        <<"creationTime">> => CreationTime,
+        <<"index">> => Index
+    }.
+
+
+-spec translate_datasets_details_list([lfm_datasets:info()], boolean()) -> json_utils:json_map().
+translate_datasets_details_list(Datasets, IsLast) ->
+    TranslatedDatasets = lists:map(fun translate_dataset_info/1, Datasets),
+    #{
+        <<"datasets">> => TranslatedDatasets,
+        <<"isLast">> => IsLast
     }.

@@ -19,6 +19,7 @@
 -include("modules/dataset/dataset.hrl").
 -include("modules/fslogic/data_access_control.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
+-include("proto/oneprovider/provider_messages.hrl").
 -include_lib("ctool/include/errors.hrl").
 
 -export([
@@ -30,6 +31,8 @@
 ]).
 -export([create/1, get/2, update/1, delete/1]).
 
+% Util functions
+-export([gather_dataset_listing_opts/1]).
 
 -define(MAX_LIST_LIMIT, 1000).
 -define(DEFAULT_LIST_LIMIT, 100).
@@ -52,6 +55,7 @@ operation_supported(create, instance, private) -> true;
 
 operation_supported(get, instance, private) -> true;
 operation_supported(get, children, private) -> true;
+operation_supported(get, children_details, private) -> true;
 
 operation_supported(update, instance, private) -> true;
 
@@ -80,9 +84,14 @@ data_spec(#op_req{operation = create, gri = #gri{aspect = instance}}) -> #{
 data_spec(#op_req{operation = get, gri = #gri{aspect = instance}}) ->
     undefined;
 
-data_spec(#op_req{operation = get, gri = #gri{aspect = children}}) -> #{
+data_spec(#op_req{operation = get, gri = #gri{aspect = Aspect}})
+    when Aspect =:= children
+    orelse Aspect =:= children_details
+-> #{
     optional => #{
         <<"offset">> => {integer, any},
+        <<"index">> => {binary, any},
+        <<"token">> => {binary, non_empty},
         <<"limit">> => {integer, {between, 1, ?MAX_LIST_LIMIT}}
     }
 };
@@ -116,6 +125,7 @@ fetch_entity(#op_req{operation = Op, auth = ?USER(_UserId), gri = #gri{
 }}) when
     (Op =:= get andalso As =:= instance);
     (Op =:= get andalso As =:= children);
+    (Op =:= get andalso As =:= children_details);
     (Op =:= update andalso As =:= instance);
     (Op =:= delete andalso As =:= instance)
 ->
@@ -144,6 +154,7 @@ authorize(#op_req{operation = create, auth = Auth, gri = #gri{aspect = instance}
 authorize(#op_req{operation = Op, auth = Auth, gri = #gri{aspect = As}}, DatasetDoc) when
     (Op =:= get andalso As =:= instance);
     (Op =:= get andalso As =:= children);
+    (Op =:= get andalso As =:= children_details);
     (Op =:= update andalso As =:= instance);
     (Op =:= delete andalso As =:= instance)
 ->
@@ -165,6 +176,7 @@ validate(#op_req{operation = create, gri = #gri{aspect = instance}, data = Data}
 validate(#op_req{operation = Op, gri = #gri{aspect = As}}, DatasetDoc) when
     (Op =:= get andalso As =:= instance);
     (Op =:= get andalso As =:= children);
+    (Op =:= get andalso As =:= children_details);
     (Op =:= update andalso As =:= instance);
     (Op =:= delete andalso As =:= instance)
 ->
@@ -198,17 +210,18 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = instance} = GRI}) -
 get(#op_req{auth = Auth, gri = #gri{id = DatasetId, aspect = instance}}, _) ->
     ?check(lfm:get_dataset_info(Auth#auth.session_id, DatasetId));
 
-get(#op_req{auth = Auth, gri = #gri{id = DatasetId, aspect = children}, data = Data}, _) ->
+get(#op_req{auth = Auth, gri = #gri{id = DatasetId, aspect = Aspect}, data = Data}, _)
+    when Aspect =:= children
+    orelse Aspect =:= children_details
+->
+    ListingMode = case Aspect of
+        children -> ?BASIC_INFO;
+        children_details -> ?EXTENDED_INFO
+    end,
     {ok, Datasets, IsLast} = ?check(lfm:list_children_datasets(
-        Auth#auth.session_id, DatasetId, sanitize_listing_opts(Data)
+        Auth#auth.session_id, DatasetId, gather_dataset_listing_opts(Data), ListingMode
     )),
-    {ok, value, #{
-        <<"datasets">> => lists:map(fun({DatasetId, DatasetName}) ->
-            #{<<"id">> => DatasetId, <<"name">> => DatasetName}
-        end, Datasets),
-        <<"isLast">> => IsLast
-    }}.
-
+    {ok, value, {Datasets, IsLast}}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -241,14 +254,21 @@ delete(#op_req{auth = Auth, gri = #gri{id = DatasetId, aspect = instance}}) ->
 
 
 %%%===================================================================
-%%% Internal functions
+%%% Util functions
 %%%===================================================================
 
-
-%% @private
--spec sanitize_listing_opts(middleware:data()) -> datasets_structure:opts().
-sanitize_listing_opts(Data) ->
-    #{
-        offset => maps:get(<<"offset">>, Data, 0),
-        limit => maps:get(<<"limit">>, Data, ?DEFAULT_LIST_LIMIT)
-    }.
+-spec gather_dataset_listing_opts(middleware:data()) -> dataset_api:listing_opts().
+gather_dataset_listing_opts(Data) ->
+    Opts = #{limit => maps:get(<<"limit">>, Data, ?DEFAULT_LIST_LIMIT)},
+    case maps:get(<<"token">>, Data, undefined) of
+        undefined ->
+            Opts2 = maps_utils:put_if_defined(Opts, offset, maps:get(<<"offset">>, Data, undefined)),
+            maps_utils:put_if_defined(Opts2, start_index, maps:get(<<"index">>, Data, undefined));
+        Token when is_binary(Token) ->
+            % if token is passed, offset has to be increased by 1
+            % to ensure that listing using token is exclusive
+            Opts#{
+                start_index => http_utils:base64url_decode(Token),
+                offset => maps:get(<<"offset">>, Data, 0) + 1
+            }
+    end.

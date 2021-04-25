@@ -36,6 +36,7 @@
     mark_parent_as_dataset_depth_10/1,
     nested_dirs_visible_on_space_dataset_list/1,
     basic_sort/1,
+    list_with_start_index_and_negative_offset/1,
     rename_depth_1/1,
     rename_depth_2/1,
     rename_depth_10/1,
@@ -65,7 +66,23 @@
     iterate_over_100_children_non_empty_datasets_using_offset_and_limit_1/1,
     iterate_over_100_children_non_empty_datasets_using_offset_and_limit_10/1,
     iterate_over_100_children_non_empty_datasets_using_offset_and_limit_100/1,
-    iterate_over_100_children_non_empty_datasets_using_offset_and_limit_1000/1
+    iterate_over_100_children_non_empty_datasets_using_offset_and_limit_1000/1,
+    iterate_over_100_top_empty_datasets_using_start_index_and_limit_1/1,
+    iterate_over_100_top_empty_datasets_using_start_index_and_limit_10/1,
+    iterate_over_100_top_empty_datasets_using_start_index_and_limit_100/1,
+    iterate_over_100_top_empty_datasets_using_start_index_and_limit_1000/1,
+    iterate_over_100_children_empty_datasets_using_start_index_and_limit_1/1,
+    iterate_over_100_children_empty_datasets_using_start_index_and_limit_10/1,
+    iterate_over_100_children_empty_datasets_using_start_index_and_limit_100/1,
+    iterate_over_100_children_empty_datasets_using_start_index_and_limit_1000/1,
+    iterate_over_100_top_non_empty_datasets_using_start_index_and_limit_1/1,
+    iterate_over_100_top_non_empty_datasets_using_start_index_and_limit_10/1,
+    iterate_over_100_top_non_empty_datasets_using_start_index_and_limit_100/1,
+    iterate_over_100_top_non_empty_datasets_using_start_index_and_limit_1000/1,
+    iterate_over_100_children_non_empty_datasets_using_start_index_and_limit_1/1,
+    iterate_over_100_children_non_empty_datasets_using_start_index_and_limit_10/1,
+    iterate_over_100_children_non_empty_datasets_using_start_index_and_limit_100/1,
+    iterate_over_100_children_non_empty_datasets_using_start_index_and_limit_1000/1
 ]).
 
 all() -> ?ALL([
@@ -80,6 +97,7 @@ all() -> ?ALL([
     mark_parent_as_dataset_depth_10,
     nested_dirs_visible_on_space_dataset_list,
     basic_sort,
+    list_with_start_index_and_negative_offset,
     rename_depth_1,
     rename_depth_2,
     rename_depth_10,
@@ -109,7 +127,23 @@ all() -> ?ALL([
     iterate_over_100_children_non_empty_datasets_using_offset_and_limit_1,
     iterate_over_100_children_non_empty_datasets_using_offset_and_limit_10,
     iterate_over_100_children_non_empty_datasets_using_offset_and_limit_100,
-    iterate_over_100_children_non_empty_datasets_using_offset_and_limit_1000
+    iterate_over_100_children_non_empty_datasets_using_offset_and_limit_1000,
+    iterate_over_100_top_empty_datasets_using_start_index_and_limit_1,
+    iterate_over_100_top_empty_datasets_using_start_index_and_limit_10,
+    iterate_over_100_top_empty_datasets_using_start_index_and_limit_100,
+    iterate_over_100_top_empty_datasets_using_start_index_and_limit_1000,
+    iterate_over_100_children_empty_datasets_using_start_index_and_limit_1,
+    iterate_over_100_children_empty_datasets_using_start_index_and_limit_10,
+    iterate_over_100_children_empty_datasets_using_start_index_and_limit_100,
+    iterate_over_100_children_empty_datasets_using_start_index_and_limit_1000,
+    iterate_over_100_top_non_empty_datasets_using_start_index_and_limit_1,
+    iterate_over_100_top_non_empty_datasets_using_start_index_and_limit_10,
+    iterate_over_100_top_non_empty_datasets_using_start_index_and_limit_100,
+    iterate_over_100_top_non_empty_datasets_using_start_index_and_limit_1000,
+    iterate_over_100_children_non_empty_datasets_using_start_index_and_limit_1,
+    iterate_over_100_children_non_empty_datasets_using_start_index_and_limit_10,
+    iterate_over_100_children_non_empty_datasets_using_start_index_and_limit_100,
+    iterate_over_100_children_non_empty_datasets_using_start_index_and_limit_1000    
 ]).
 
 
@@ -124,8 +158,6 @@ all() -> ?ALL([
 -define(RAND_NAME(Prefix), ?NAME(Prefix, rand:uniform(?RAND_RANGE))).
 -define(NAME(Prefix, Number), str_utils:join_binary([Prefix, integer_to_binary(Number)], <<"_">>)).
 -define(RAND_RANGE, 1000000000).
-
-% TODO VFS-7510 tests of iterating using start_index
 
 %%%===================================================================
 %%% API functions
@@ -191,13 +223,13 @@ nested_dirs_visible_on_space_dataset_list(_Config) ->
 
     % check whether datasets are visible on the list of space datasets
     ?assertMatch({ok, DatasetIdsAndNamesSorted, true},
-        list_top_datasets(P1Node, SpaceId, #{offset => 0, limit => 100})),
+        list_top_datasets_and_skip_indices(P1Node, SpaceId, #{offset => 0, limit => 100})),
     ?assertMatch({ok, DatasetIdsAndNamesSorted, true},
-        list_top_datasets(P2Node, SpaceId, #{offset => 0, limit => 100}), ?ATTEMPTS).
+        list_top_datasets_and_skip_indices(P2Node, SpaceId, #{offset => 0, limit => 100}), ?ATTEMPTS).
 
 basic_sort(_Config) ->
     % This test creates DatasetsCount datasets entries on the top level
-    % and checks whether they are correctly sorted
+    % and checks whether they are correctly sorted and listed using offset
     DatasetsCount = 10,
     [P1Node] = oct_background:get_provider_nodes(krakow),
     [P2Node] = oct_background:get_provider_nodes(paris),
@@ -219,29 +251,81 @@ basic_sort(_Config) ->
 
     % check whether datasets are visible on the list of space datasets
     ?assertMatch({ok, SortedDatasetIdsAndNames, true},
-        list_top_datasets(P1Node, SpaceId, #{offset => 0, limit => 100})),
+        list_top_datasets_and_skip_indices(P1Node, SpaceId, #{offset => 0, limit => 100})),
     ?assertMatch({ok, SortedDatasetIdsAndNames, true},
-        list_top_datasets(P2Node, SpaceId, #{offset => 0, limit => 100}), ?ATTEMPTS),
-
-    % check whether datasets are visible on the list of space datasets
-    ?assertMatch({ok, SortedDatasetIdsAndNames, true},
-        list_top_datasets(P1Node, SpaceId, #{offset => 0, limit => 100})),
+        list_top_datasets_and_skip_indices(P2Node, SpaceId, #{offset => 0, limit => 100}), ?ATTEMPTS),
 
     % request with offset greater than number of entries should return an empty list
     ?assertMatch({ok, [], true},
         list_top_datasets(P1Node, SpaceId, #{offset => 10, limit => 1})),
 
-    ?assertMatch({ok, [], true},
-        list_top_datasets(P1Node, SpaceId, #{offset => 1000, limit => 1})),
+    % request with limit lower than 1 should fail
+    ?assertMatch(?EINVAL,
+        list_top_datasets(P1Node, SpaceId, #{offset => 1000, limit => 0})),
 
+    ?assertMatch({ok, [], true},
+        list_top_datasets(P1Node, SpaceId, #{offset => 10, limit => 1})),
+    
     SortedDatasetIdsAndNamesSublist = lists:sublist(SortedDatasetIdsAndNames, 10, 1),
     ?assertMatch({ok, SortedDatasetIdsAndNamesSublist, true},
-        list_top_datasets(P1Node, SpaceId, #{offset => 9, limit => 1})),
+        list_top_datasets_and_skip_indices(P1Node, SpaceId, #{offset => 9, limit => 1})),
 
     SortedDatasetIdsAndNamesSublist2 = lists:sublist(SortedDatasetIdsAndNames, 9, 1),
     ?assertMatch({ok, SortedDatasetIdsAndNamesSublist2, false},
-        list_top_datasets(P1Node, SpaceId, #{offset => 8, limit => 1})).
+        list_top_datasets_and_skip_indices(P1Node, SpaceId, #{offset => 8, limit => 1})).
 
+list_with_start_index_and_negative_offset(_Config) ->
+    % This test creates DatasetsCount datasets entries on the top level
+    % and checks whether they are correctly sorted and listed using start_index and negative offset
+    DatasetsCount = 10,
+    [P1Node] = oct_background:get_provider_nodes(krakow),
+    SpaceId = oct_background:get_space_id(space1),
+    SpaceUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
+    SpaceDatasetPath = filename:join(?DIRECTORY_SEPARATOR_BIN, SpaceUuid),
+
+    % create nested directories
+    DatasetPathsAndIds = generate_dataset_paths_and_ids(SpaceDatasetPath, 1, DatasetsCount),
+
+    % create dataset entries for all directories
+    DatasetIdsAndNames = lists:map(fun({DatasetPath, DatasetId}) ->
+        DatasetName = ?DATASET_NAME,
+        ok = add(P1Node, SpaceId, DatasetPath, DatasetName),
+        {DatasetId, DatasetName}
+    end, DatasetPathsAndIds),
+
+    SortedDatasetIdsAndNames = sort(DatasetIdsAndNames),
+
+    % check whether datasets are visible on the list of space datasets
+    ?assertMatch({ok, SortedDatasetIdsAndNames, true},
+        list_top_datasets_and_skip_indices(P1Node, SpaceId, #{start_index => <<>>, offset => 0, limit => 100})),
+
+    % test requests with negative offset counted from the beginning
+    ?assertMatch({ok, SortedDatasetIdsAndNames, true},
+        list_top_datasets_and_skip_indices(P1Node, SpaceId, #{start_index => <<>>, offset => -1, limit => 100})),
+    ?assertMatch({ok, SortedDatasetIdsAndNames, true},
+        list_top_datasets_and_skip_indices(P1Node, SpaceId, #{start_index => <<>>, offset => -10, limit => 100})),
+
+    % request with negative offset, without start_index should fail
+    ?assertMatch(?EINVAL,
+        list_top_datasets(P1Node, SpaceId, #{offset => -10, limit => 1})),
+
+    {DatasetId1, _} = hd(SortedDatasetIdsAndNames),
+    {DatasetId10, _} = lists:last(SortedDatasetIdsAndNames),
+
+    {DatasetPath1, DatasetId1} = lists:keyfind(DatasetId1, 2, DatasetPathsAndIds),
+    {DatasetPath10, DatasetId10} = lists:keyfind(DatasetId10, 2, DatasetPathsAndIds),
+    {ok, {_DatasetId1, _DatasetName1, Index1}} = get(P1Node, SpaceId, DatasetPath1),
+    {ok, {_DatasetId10, _DatasetName10, Index10}} = get(P1Node, SpaceId, DatasetPath10),
+
+    % request with offset which exceeds length of the list should return an empty list
+    ?assertMatch({ok, [], true},
+        list_top_datasets(P1Node, SpaceId, #{offset => 1000, start_index => Index1, limit => 1})),
+
+    lists:foreach(fun(Offset) ->
+        ExpectedList = lists:sublist(SortedDatasetIdsAndNames, max(1, DatasetsCount + Offset), DatasetsCount),
+        ?assertMatch({ok, ExpectedList, true},
+            list_top_datasets_and_skip_indices(P1Node, SpaceId, #{offset => Offset, start_index => Index10}))
+    end, lists:seq(0, -20, -1)).
 
 rename_depth_1(_Config) ->
     rename_dataset_test_base(1).
@@ -313,30 +397,30 @@ mixed_test(_Config) ->
     % only datasets from the highest effective level should be visible on both providers
     % datasets should be sorted by names
 
-    ?assertMatch({ok, [{DatasetId1, Dir1}, {DatasetId2, Dir2}, {DatasetId34, Dir34}], true},
+    ?assertMatch({ok, [{DatasetId1, Dir1, _}, {DatasetId2, Dir2, _}, {DatasetId34, Dir34, _}], true},
         list_top_datasets(P1Node, SpaceId, #{offset => 0, limit => 100})),
-    ?assertMatch({ok, [{DatasetId1, Dir1}, {DatasetId2, Dir2}, {DatasetId34, Dir34}], true},
+    ?assertMatch({ok, [{DatasetId1, Dir1, _}, {DatasetId2, Dir2, _}, {DatasetId34, Dir34, _}], true},
         list_top_datasets(P2Node, SpaceId, #{offset => 0, limit => 100}), ?ATTEMPTS),
 
     % dataset Dir12 should be visible in dataset Dir1
-    ?assertMatch({ok, [{DatasetId12, Dir12}], true},
+    ?assertMatch({ok, [{DatasetId12, Dir12, _}], true},
         list_children_datasets(P1Node, SpaceId, Dataset1Path, #{offset => 0, limit => 100})),
-    ?assertMatch({ok, [{DatasetId12, Dir12}], true},
+    ?assertMatch({ok, [{DatasetId12, Dir12, _}], true},
         list_children_datasets(P2Node, SpaceId, Dataset1Path, #{offset => 0, limit => 100}), ?ATTEMPTS),
 
     % make Dir3 a dataset too
     add(P1Node, SpaceId, Dataset3Path, Dir3),
 
     % Dataset34 should no longer be visible on the highest level
-    ?assertMatch({ok, [{DatasetId1, Dir1}, {DatasetId2, Dir2}, {DatasetId3, Dir3}], true},
+    ?assertMatch({ok, [{DatasetId1, Dir1, _}, {DatasetId2, Dir2, _}, {DatasetId3, Dir3, _}], true},
         list_top_datasets(P1Node, SpaceId, #{offset => 0, limit => 100})),
-    ?assertMatch({ok, [{DatasetId1, Dir1}, {DatasetId2, Dir2}, {DatasetId3, Dir3}], true},
+    ?assertMatch({ok, [{DatasetId1, Dir1, _}, {DatasetId2, Dir2, _}, {DatasetId3, Dir3, _}], true},
         list_top_datasets(P2Node, SpaceId, #{offset => 0, limit => 100}), ?ATTEMPTS),
 
     % Dataset34 should be visible inside Dataset3
-    ?assertMatch({ok, [{DatasetId34, Dir34}], true},
+    ?assertMatch({ok, [{DatasetId34, Dir34, _}], true},
         list_children_datasets(P1Node, SpaceId, Dataset3Path, #{offset => 0, limit => 100})),
-    ?assertMatch({ok, [{DatasetId34, Dir34}], true},
+    ?assertMatch({ok, [{DatasetId34, Dir34, _}], true},
         list_children_datasets(P2Node, SpaceId, Dataset3Path, #{offset => 0, limit => 100}), ?ATTEMPTS).
 
 move_dataset_with_1_children(_Config) ->
@@ -399,6 +483,54 @@ iterate_over_100_children_non_empty_datasets_using_offset_and_limit_100(_Config)
 iterate_over_100_children_non_empty_datasets_using_offset_and_limit_1000(_Config) ->
     iterate_over_children_non_empty_datasets_using_offset_test_base(100, 1000).
 
+iterate_over_100_top_empty_datasets_using_start_index_and_limit_1(_Config) ->
+    iterate_over_top_empty_datasets_using_start_index_test_base(100, 1).
+
+iterate_over_100_top_empty_datasets_using_start_index_and_limit_10(_Config) ->
+    iterate_over_top_empty_datasets_using_start_index_test_base(100, 10).
+
+iterate_over_100_top_empty_datasets_using_start_index_and_limit_100(_Config) ->
+    iterate_over_top_empty_datasets_using_start_index_test_base(100, 100).
+
+iterate_over_100_top_empty_datasets_using_start_index_and_limit_1000(_Config) ->
+    iterate_over_top_empty_datasets_using_start_index_test_base(100, 1000).
+
+iterate_over_100_children_empty_datasets_using_start_index_and_limit_1(_Config) ->
+    iterate_over_children_empty_datasets_using_start_index_test_base(100, 1).
+
+iterate_over_100_children_empty_datasets_using_start_index_and_limit_10(_Config) ->
+    iterate_over_children_empty_datasets_using_start_index_test_base(100, 10).
+
+iterate_over_100_children_empty_datasets_using_start_index_and_limit_100(_Config) ->
+    iterate_over_children_empty_datasets_using_start_index_test_base(100, 100).
+
+iterate_over_100_children_empty_datasets_using_start_index_and_limit_1000(_Config) ->
+    iterate_over_children_empty_datasets_using_start_index_test_base(100, 1000).
+
+iterate_over_100_top_non_empty_datasets_using_start_index_and_limit_1(_Config) ->
+    iterate_over_top_non_empty_datasets_using_start_index_test_base(100, 1).
+
+iterate_over_100_top_non_empty_datasets_using_start_index_and_limit_10(_Config) ->
+    iterate_over_top_non_empty_datasets_using_start_index_test_base(100, 10).
+
+iterate_over_100_top_non_empty_datasets_using_start_index_and_limit_100(_Config) ->
+    iterate_over_top_non_empty_datasets_using_start_index_test_base(100, 100).
+
+iterate_over_100_top_non_empty_datasets_using_start_index_and_limit_1000(_Config) ->
+    iterate_over_top_non_empty_datasets_using_start_index_test_base(100, 1000).
+
+iterate_over_100_children_non_empty_datasets_using_start_index_and_limit_1(_Config) ->
+    iterate_over_children_non_empty_datasets_using_start_index_test_base(100, 1).
+
+iterate_over_100_children_non_empty_datasets_using_start_index_and_limit_10(_Config) ->
+    iterate_over_children_non_empty_datasets_using_start_index_test_base(100, 10).
+
+iterate_over_100_children_non_empty_datasets_using_start_index_and_limit_100(_Config) ->
+    iterate_over_children_non_empty_datasets_using_start_index_test_base(100, 100).
+
+iterate_over_100_children_non_empty_datasets_using_start_index_and_limit_1000(_Config) ->
+    iterate_over_children_non_empty_datasets_using_start_index_test_base(100, 1000).
+
 %===================================================================
 % Test bases
 %===================================================================
@@ -424,13 +556,13 @@ basic_crud_test_base(Depth) ->
     % add dataset entry
     ok = add(P1Node, SpaceId, DatasetPath, DatasetName),
 
-    ?assertMatch({ok, {DatasetId, DatasetName}}, get(P1Node, SpaceId, DatasetPath)),
-    ?assertMatch({ok, {DatasetId, DatasetName}}, get(P2Node, SpaceId, DatasetPath), ?ATTEMPTS),
+    ?assertMatch({ok, {DatasetId, DatasetName, _}}, get(P1Node, SpaceId, DatasetPath)),
+    ?assertMatch({ok, {DatasetId, DatasetName, _}}, get(P2Node, SpaceId, DatasetPath), ?ATTEMPTS),
 
     % check whether dataset is visible directly in the space (as it's effectively top dataset)
-    ?assertMatch({ok, [{DatasetId, DatasetName}], true},
+    ?assertMatch({ok, [{DatasetId, DatasetName, _}], true},
         list_top_datasets(P1Node, SpaceId, #{offset => 0, limit => 100})),
-    ?assertMatch({ok, [{DatasetId, DatasetName}], true},
+    ?assertMatch({ok, [{DatasetId, DatasetName, _}], true},
         list_top_datasets(P2Node, SpaceId, #{offset => 0, limit => 100}), ?ATTEMPTS),
 
     % check whether dataset has no nested datasets
@@ -482,9 +614,9 @@ nested_datasets_test_base(Depth) ->
         traverse_bottom_up_and_verify_children_datasets(P1Node, P2Node, SpaceId, DatasetsReversed),
 
     % check whether top dataset (space dir) is visible on the list of space datasets
-    ?assertMatch({ok, [{TopDatasetId, TopDatasetName}], true},
+    ?assertMatch({ok, [{TopDatasetId, TopDatasetName, _}], true},
         list_top_datasets(P1Node, SpaceId, #{offset => 0, limit => 100})),
-    ?assertMatch({ok, [{TopDatasetId, TopDatasetName}], true},
+    ?assertMatch({ok, [{TopDatasetId, TopDatasetName, _}], true},
         list_top_datasets(P2Node, SpaceId, #{offset => 0, limit => 100}), ?ATTEMPTS).
 
 
@@ -510,9 +642,9 @@ mark_parent_as_dataset_test_base(Depth) ->
     ok = add(P1Node, SpaceId, DeepestDatasetPath, DeepestDatasetName),
 
     % check whether it's on visible the list of space datasets
-    ?assertMatch({ok, [{DeepestDatasetId, DeepestDatasetName}], true},
+    ?assertMatch({ok, [{DeepestDatasetId, DeepestDatasetName, _}], true},
         list_top_datasets(P1Node, SpaceId, #{offset => 0, limit => 100})),
-    ?assertMatch({ok, [{DeepestDatasetId, DeepestDatasetName}], true},
+    ?assertMatch({ok, [{DeepestDatasetId, DeepestDatasetName, _}], true},
         list_top_datasets(P2Node, SpaceId, #{offset => 0, limit => 100}), ?ATTEMPTS),
 
     % check whether only direct child dataset is visible on each level
@@ -523,15 +655,15 @@ mark_parent_as_dataset_test_base(Depth) ->
             ok = add(P1Node, SpaceId, DatasetPath, DatasetName),
 
             % check whether it's the only visible dataset the list of space datasets
-            ?assertMatch({ok, [{DatasetId, DatasetName}], true},
+            ?assertMatch({ok, [{DatasetId, DatasetName, _}], true},
                 list_top_datasets(P1Node, SpaceId, #{offset => 0, limit => 100})),
-            ?assertMatch({ok, [{DatasetId, DatasetName}], true},
+            ?assertMatch({ok, [{DatasetId, DatasetName, _}], true},
                 list_top_datasets(P2Node, SpaceId, #{offset => 0, limit => 100}), ?ATTEMPTS),
 
             % check whether child dataset is visible inside it
-            ?assertMatch({ok, [{ChildDatasetId, ChildDatasetName}], true},
+            ?assertMatch({ok, [{ChildDatasetId, ChildDatasetName, _}], true},
                 list_children_datasets(P1Node, SpaceId, DatasetPath, #{offset => 0, limit => 100})),
-            ?assertMatch({ok, [{ChildDatasetId, ChildDatasetName}], true},
+            ?assertMatch({ok, [{ChildDatasetId, ChildDatasetName, _}], true},
                 list_children_datasets(P2Node, SpaceId, DatasetPath, #{offset => 0, limit => 100}), ?ATTEMPTS),
             {DatasetId, DatasetName}
         end,
@@ -539,9 +671,9 @@ mark_parent_as_dataset_test_base(Depth) ->
     ),
 
     % check whether top dataset (space dir) is visible on the list of space datasets
-    ?assertMatch({ok, [{TopDatasetId, TopDatasetName}], true},
+    ?assertMatch({ok, [{TopDatasetId, TopDatasetName, _}], true},
         list_top_datasets(P1Node, SpaceId, #{offset => 0, limit => 100})),
-    ?assertMatch({ok, [{TopDatasetId, TopDatasetName}], true},
+    ?assertMatch({ok, [{TopDatasetId, TopDatasetName, _}], true},
         list_top_datasets(P2Node, SpaceId, #{offset => 0, limit => 100}), ?ATTEMPTS).
 
 
@@ -571,9 +703,9 @@ rename_dataset_test_base(Depth) ->
     ok = move(P1Node, SpaceId, TopDatasetPath, TopDatasetPath, TopDatasetTargetName),
 
     % check whether the highest dataset is visible on the list of space datasets with a new name
-    ?assertMatch({ok, [{TopDatasetId, TopDatasetTargetName}], true},
+    ?assertMatch({ok, [{TopDatasetId, TopDatasetTargetName, _}], true},
         list_top_datasets(P1Node, SpaceId, #{offset => 0, limit => 100})),
-    ?assertMatch({ok, [{TopDatasetId, TopDatasetTargetName}], true},
+    ?assertMatch({ok, [{TopDatasetId, TopDatasetTargetName, _}], true},
         list_top_datasets(P2Node, SpaceId, #{offset => 0, limit => 100}), ?ATTEMPTS),
 
     % check whether only direct child dataset is visible on each level
@@ -624,21 +756,21 @@ move_dataset_test_base(Depth, TargetType) ->
     case TargetType of
         dataset ->
             % check whether the highest dataset on the list of space datasets is still a target_dir dataset
-            ?assertMatch({ok, [{TargetDatasetId, TargetParentName}], true},
+            ?assertMatch({ok, [{TargetDatasetId, TargetParentName, _}], true},
                 list_top_datasets(P1Node, SpaceId, #{offset => 0, limit => 100})),
-            ?assertMatch({ok, [{TargetDatasetId, TargetParentName}], true},
+            ?assertMatch({ok, [{TargetDatasetId, TargetParentName, _}], true},
                 list_top_datasets(P2Node, SpaceId, #{offset => 0, limit => 100}), ?ATTEMPTS),
 
             % check whether moved directory is visible in the target dataset
-            ?assertMatch({ok, [{TopDatasetId, TopDatasetTargetName}], true},
+            ?assertMatch({ok, [{TopDatasetId, TopDatasetTargetName, _}], true},
                 list_children_datasets(P1Node, SpaceId, TargetParentPath, #{offset => 0, limit => 100})),
-            ?assertMatch({ok, [{TopDatasetId, TopDatasetTargetName}], true},
+            ?assertMatch({ok, [{TopDatasetId, TopDatasetTargetName, _}], true},
                 list_children_datasets(P2Node, SpaceId, TargetParentPath, #{offset => 0, limit => 100}), ?ATTEMPTS);
         normal_dir ->
             % check whether the highest dataset is visible on the list of space datasets with a new name
-            ?assertMatch({ok, [{TopDatasetId, TopDatasetTargetName}], true},
+            ?assertMatch({ok, [{TopDatasetId, TopDatasetTargetName, _}], true},
                 list_top_datasets(P1Node, SpaceId, #{offset => 0, limit => 100})),
-            ?assertMatch({ok, [{TopDatasetId, TopDatasetTargetName}], true},
+            ?assertMatch({ok, [{TopDatasetId, TopDatasetTargetName, _}], true},
                 list_top_datasets(P2Node, SpaceId, #{offset => 0, limit => 100}), ?ATTEMPTS)
     end,
 
@@ -695,18 +827,18 @@ move_dataset_with_many_children_test_base(ChildrenCount) ->
     move(P1Node, SpaceId, TopDatasetPath, TargetDatasetPath, TopDatasetNewName),
 
     % check whether the highest dataset on the list of space datasets is still a target_dir dataset
-    ?assertMatch({ok, [{TargetParentDatasetId, TargetParentName}], _},
+    ?assertMatch({ok, [{TargetParentDatasetId, TargetParentName, _}], _},
         list_top_datasets(P1Node, SpaceId, #{offset => 0, limit => 100})),
 
     % check whether moved directory is visible in the target dataset
-    ?assertMatch({ok, [{TopDatasetId, TopDatasetNewName}], _},
+    ?assertMatch({ok, [{TopDatasetId, TopDatasetNewName, _}], _},
         list_children_datasets(P1Node, SpaceId, TargetParentDatasetPath, #{offset => 0, limit => 100})),
 
     % check whether nested directories are all visible in the moved dataset
     {ok, NestedDatasets, true} = list_children_datasets(P1Node, SpaceId, TargetDatasetPath, #{offset => 0, limit => ChildrenCount}),
 
     SortedExpectedDatasets = sort(ExpectedDatasets),
-    ?assertEqual(NestedDatasets, SortedExpectedDatasets).
+    ?assertEqual(skip_indices(NestedDatasets), SortedExpectedDatasets).
 
 
 iterate_over_top_empty_datasets_using_offset_test_base(ChildrenCount, Limit) ->
@@ -721,19 +853,31 @@ iterate_over_children_empty_datasets_using_offset_test_base(ChildrenCount, Limit
 iterate_over_children_non_empty_datasets_using_offset_test_base(ChildrenCount, Limit) ->
     iterate_over_datasets_test_base(ChildrenCount, 3, Limit, children_datasets, offset).
 
-iterate_over_datasets_test_base(ChildrenCount, Depth, Limit, Mode, ListingMode) ->
+iterate_over_top_empty_datasets_using_start_index_test_base(ChildrenCount, Limit) ->
+    iterate_over_datasets_test_base(ChildrenCount, 1, Limit, top_datasets, start_index).
+
+iterate_over_top_non_empty_datasets_using_start_index_test_base(ChildrenCount, Limit) ->
+    iterate_over_datasets_test_base(ChildrenCount, 3, Limit, top_datasets, start_index).
+
+iterate_over_children_empty_datasets_using_start_index_test_base(ChildrenCount, Limit) ->
+    iterate_over_datasets_test_base(ChildrenCount, 1, Limit, children_datasets, start_index).
+
+iterate_over_children_non_empty_datasets_using_start_index_test_base(ChildrenCount, Limit) ->
+    iterate_over_datasets_test_base(ChildrenCount, 3, Limit, children_datasets, start_index).
+
+iterate_over_datasets_test_base(ChildrenCount, Depth, Limit, ListingType, StartingPoint) ->
     % This test generates and creates ChildrenCount direct children datasets.
     % Each of them has Depth - 1 nested datasets
-    % Then the test checks whether dataset entries are correctly listed using ListingMode.
-    % Listing mode is an enum: [offset, start_index]
-    % Mode is an enum: [top_datasets, children_datasets] which decides whether
+    % Then the test checks whether dataset entries are correctly listed using StartingPoint.
+    % StartingPoint is an enum: [offset, start_index]
+    % ListingType is an enum: [top_datasets, children_datasets] which decides whether
     % datasets will be listed as top datasets or as children datasets of dataset attached to space directory
     [P1Node] = oct_background:get_provider_nodes(krakow),
     SpaceId = oct_background:get_space_id(space1),
     SpaceUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
     SpaceDatasetPath = filename:join(?DIRECTORY_SEPARATOR_BIN, SpaceUuid),
 
-    case Mode of
+    case ListingType of
         top_datasets ->
             ok;
         children_datasets ->
@@ -752,11 +896,11 @@ iterate_over_datasets_test_base(ChildrenCount, Depth, Limit, Mode, ListingMode) 
         {TopDatasetId, TopDatasetName}
     end, lists:seq(1, ChildrenCount)),
     SortedExpectedDatasets = sort(ExpectedDirectChildrenDatasets),
-    case Mode of
+    case ListingType of
         top_datasets ->
-            check_if_all_top_datasets_listed(P1Node, SpaceId, SortedExpectedDatasets, Limit, ListingMode);
+            check_if_all_top_datasets_listed(P1Node, SpaceId, SortedExpectedDatasets, Limit, StartingPoint);
         children_datasets ->
-            check_if_all_datasets_listed(P1Node, SpaceId, SpaceDatasetPath, SortedExpectedDatasets, Limit, ListingMode)
+            check_if_all_datasets_listed(P1Node, SpaceId, SpaceDatasetPath, SortedExpectedDatasets, Limit, StartingPoint)
     end.
 
 
@@ -828,6 +972,10 @@ delete(Node, SpaceId, DatasetPath) ->
 list_top_datasets(Node, SpaceId, Opts) ->
     rpc:call(Node, datasets_structure, list_top_datasets, [SpaceId, ?TEST_FOREST_TYPE, Opts]).
 
+list_top_datasets_and_skip_indices(Node, SpaceId, Opts) ->
+    {ok, DatasetEntries, IsLast} = list_top_datasets(Node, SpaceId, Opts),
+    {ok, skip_indices(DatasetEntries), IsLast}.
+
 list_children_datasets(Node, SpaceId, DatasetPath, Opts) ->
     rpc:call(Node, datasets_structure, list_children_datasets, [SpaceId, ?TEST_FOREST_TYPE, DatasetPath, Opts]).
 
@@ -873,8 +1021,8 @@ generate_nested_datasets(RootPath, Depth, GenerateEntryForRoot) ->
     end.
 
 
-check_if_all_top_datasets_listed(Node, SpaceId, SortedExpectedDatasets, Limit, ListingMode) ->
-    check_if_all_datasets_listed(Node, SpaceId, undefined, SortedExpectedDatasets, Limit, ListingMode).
+check_if_all_top_datasets_listed(Node, SpaceId, SortedExpectedDatasets, Limit, StartingPoint) ->
+    check_if_all_datasets_listed(Node, SpaceId, undefined, SortedExpectedDatasets, Limit, StartingPoint).
 
 
 check_if_all_datasets_listed(Node, SpaceId, DatasetPath, SortedExpectedDatasets, Limit, offset) ->
@@ -885,26 +1033,28 @@ check_if_all_datasets_listed(Node, SpaceId, DatasetPath, SortedExpectedDatasets,
     check_if_all_datasets_listed_helper(Node, SpaceId, DatasetPath, SortedExpectedDatasets, Opts, start_index).
 
 
-check_if_all_datasets_listed_helper(Node, SpaceId, DatasetPath, SortedExpectedDatasets, Opts, ListingMode) ->
+check_if_all_datasets_listed_helper(Node, SpaceId, DatasetPath, SortedExpectedDatasets, Opts, StartingPoint) ->
     {ok, ListedDatasets, AllListed} = case DatasetPath =:= undefined of
         true -> list_top_datasets(Node, SpaceId, Opts);
         false -> list_children_datasets(Node, SpaceId, DatasetPath, Opts)
     end,
     Limit = maps:get(limit, Opts),
-    ?assertMatch(ListedDatasets, lists:sublist(SortedExpectedDatasets, 1, Limit)),
-    RestSortedExpectedDatasets = SortedExpectedDatasets -- ListedDatasets,
+    ListedDatasetsWithoutIndices = skip_indices(ListedDatasets),
+    ?assertMatch(ListedDatasetsWithoutIndices, lists:sublist(SortedExpectedDatasets, 1, Limit)),
+    RestSortedExpectedDatasets = SortedExpectedDatasets -- ListedDatasetsWithoutIndices,
     case {AllListed, length(RestSortedExpectedDatasets) =:= 0} of
         {_, true} ->
             ok;
         {false, false} ->
-            NewOpts = update_opts(ListingMode, Opts, ListedDatasets),
-            check_if_all_datasets_listed_helper(Node, SpaceId, DatasetPath, RestSortedExpectedDatasets, NewOpts, ListingMode)
+            NewOpts = update_opts(StartingPoint, Opts, ListedDatasets),
+            check_if_all_datasets_listed_helper(Node, SpaceId, DatasetPath, RestSortedExpectedDatasets, NewOpts, StartingPoint)
     end.
 
 update_opts(offset, Opts, ListedDatasets) ->
     maps:update_with(offset, fun(Offset) -> Offset + length(ListedDatasets) end, Opts);
 update_opts(start_index, Opts, ListedDatasets) ->
-    maps:update_with(start_index, element(1, lists:last(ListedDatasets)), Opts).
+    Opts2 = maps:update(start_index, element(3, lists:last(ListedDatasets)), Opts),
+    maps:put(offset, 1, Opts2).
 
 sort(Datasets) ->
     lists:sort(fun({_, N1}, {_, N2}) ->  N1 =< N2 end, Datasets).
@@ -917,10 +1067,14 @@ traverse_bottom_up_and_verify_children_datasets(LocalNode, RemoteNode, SpaceId, 
     {_DeepestDatasetPath, DeepestDatasetId, DeepestDatasetName} = hd(DatasetsReversed),
     lists:foldl(
         fun({DatasetPath, DatasetId, DatasetName}, {ChildDatasetId, ChildDatasetName}) ->
-            ?assertMatch({ok, [{ChildDatasetId, ChildDatasetName}], true},
+            ?assertMatch({ok, [{ChildDatasetId, ChildDatasetName, _}], true},
                 list_children_datasets(LocalNode, SpaceId, DatasetPath, #{offset => 0, limit => 100})),
-            ?assertMatch({ok, [{ChildDatasetId, ChildDatasetName}], true},
+            ?assertMatch({ok, [{ChildDatasetId, ChildDatasetName, _}], true},
                 list_children_datasets(RemoteNode, SpaceId, DatasetPath, #{offset => 0, limit => 100}), ?ATTEMPTS),
             {DatasetId, DatasetName}
         end,
         {DeepestDatasetId, DeepestDatasetName}, tl(DatasetsReversed)).
+
+
+skip_indices(DatasetEntries) ->
+    [{DatasetName, DatasetId} || {DatasetName, DatasetId, _Index} <- DatasetEntries].

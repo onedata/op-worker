@@ -26,4 +26,8 @@
 -define(ATTACHED_DATASETS_STRUCTURE, <<"ATTACHED">>).
 -define(DETACHED_DATASETS_STRUCTURE, <<"DETACHED">>).
 
+% Macros defining listing modes
+-define(BASIC_INFO, basic).
+-define(EXTENDED_INFO, extended).
+
 -endif.

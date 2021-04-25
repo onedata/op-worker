@@ -68,6 +68,24 @@
     create_file_in_dir_exceed_batch_update_test/1,
     force_start_test/1,
     force_stop_test/1,
+    file_with_metadata_protection_should_not_be_updated_test/1,
+    file_with_data_protection_should_not_be_updated_test/1,
+    file_with_data_and_metadata_protection_should_not_be_updated_test/1,
+    file_with_metadata_protection_should_not_be_deleted_test/1,
+    file_with_data_protection_should_not_be_deleted_test/1,
+    file_with_data_and_metadata_protection_should_not_be_deleted_test/1,
+    empty_dir_with_metadata_protection_should_not_be_updated_test/1,
+    empty_dir_with_data_protection_should_not_be_updated_test/1,
+    empty_dir_with_data_and_metadata_protection_should_not_be_updated_test/1,
+    empty_dir_with_metadata_protection_should_not_be_deleted_test/1,
+    empty_dir_with_data_protection_should_not_be_deleted_test/1,
+    empty_dir_with_data_and_metadata_protection_should_not_be_deleted_test/1,
+    dir_and_its_child_with_metadata_protection_should_not_be_updated_test/1,
+    dir_and_its_child_with_data_protection_should_not_be_updated_test/1,
+    dir_and_its_child_with_data_and_metadata_protection_should_not_be_updated_test/1,
+    dir_and_its_child_with_metadata_protection_should_not_be_deleted_test/1,
+    dir_and_its_child_with_data_protection_should_not_be_deleted_test/1,
+    dir_and_its_child_with_data_and_metadata_protection_should_not_be_deleted_test/1,
 
     delete_empty_directory_update_test/1,
     delete_non_empty_directory_update_test/1,
@@ -166,7 +184,24 @@
     create_file_in_dir_exceed_batch_update_test,
     force_start_test,
     force_stop_test,
-
+    file_with_metadata_protection_should_not_be_updated_test,
+    file_with_data_protection_should_not_be_updated_test,
+    file_with_data_and_metadata_protection_should_not_be_updated_test,
+    file_with_metadata_protection_should_not_be_deleted_test,
+    file_with_data_protection_should_not_be_deleted_test,
+    file_with_data_and_metadata_protection_should_not_be_deleted_test,
+    empty_dir_with_metadata_protection_should_not_be_updated_test,
+    empty_dir_with_data_protection_should_not_be_updated_test,
+    empty_dir_with_data_and_metadata_protection_should_not_be_updated_test,
+    empty_dir_with_metadata_protection_should_not_be_deleted_test,
+    empty_dir_with_data_protection_should_not_be_deleted_test,
+    empty_dir_with_data_and_metadata_protection_should_not_be_deleted_test,
+    dir_and_its_child_with_metadata_protection_should_not_be_updated_test,
+    dir_and_its_child_with_data_protection_should_not_be_updated_test,
+    dir_and_its_child_with_data_and_metadata_protection_should_not_be_updated_test,
+    dir_and_its_child_with_metadata_protection_should_not_be_deleted_test,
+    dir_and_its_child_with_data_protection_should_not_be_deleted_test,
+    dir_and_its_child_with_data_and_metadata_protection_should_not_be_deleted_test,
     delete_empty_directory_update_test,
     delete_non_empty_directory_update_test,
     sync_works_properly_after_delete_test,
@@ -276,9 +311,6 @@ create_remote_dir_import_race_test(Config) ->
 create_remote_file_import_race_test(Config) ->
     storage_import_test_base:create_remote_file_import_race_test(Config).
 
-force_stop_test(Config) ->
-    storage_import_test_base:force_stop_test(Config).
-
 import_nfs_acl_test(Config) ->
     storage_import_test_base:import_nfs_acl_test(Config).
 
@@ -350,6 +382,63 @@ create_file_in_dir_exceed_batch_update_test(Config) ->
 
 force_start_test(Config) ->
     storage_import_test_base:force_start_test(Config).
+
+force_stop_test(Config) ->
+    storage_import_test_base:force_stop_test(Config).
+
+file_with_metadata_protection_should_not_be_updated_test(Config) ->
+    storage_import_test_base:file_with_metadata_protection_should_not_be_updated_test(Config, ?POSIX_HELPER_NAME).
+
+file_with_data_protection_should_not_be_updated_test(Config) ->
+    storage_import_test_base:file_with_data_protection_should_not_be_updated_test(Config, ?POSIX_HELPER_NAME).
+
+file_with_data_and_metadata_protection_should_not_be_updated_test(Config) ->
+    storage_import_test_base:file_with_data_and_metadata_protection_should_not_be_updated_test(Config, ?POSIX_HELPER_NAME).
+
+file_with_metadata_protection_should_not_be_deleted_test(Config) ->
+    storage_import_test_base:file_with_metadata_protection_should_not_be_deleted_test(Config, ?POSIX_HELPER_NAME).
+
+file_with_data_protection_should_not_be_deleted_test(Config) ->
+    storage_import_test_base:file_with_data_protection_should_not_be_deleted_test(Config, ?POSIX_HELPER_NAME).
+
+file_with_data_and_metadata_protection_should_not_be_deleted_test(Config) ->
+    storage_import_test_base:file_with_data_and_metadata_protection_should_not_be_deleted_test(Config, ?POSIX_HELPER_NAME).
+
+empty_dir_with_metadata_protection_should_not_be_updated_test(Config) ->
+    storage_import_test_base:empty_dir_with_metadata_protection_should_not_be_updated_test(Config).
+
+empty_dir_with_data_protection_should_not_be_updated_test(Config) ->
+    storage_import_test_base:empty_dir_with_data_protection_should_not_be_updated_test(Config).
+
+empty_dir_with_data_and_metadata_protection_should_not_be_updated_test(Config) ->
+    storage_import_test_base:empty_dir_with_data_and_metadata_protection_should_not_be_updated_test(Config).
+
+empty_dir_with_metadata_protection_should_not_be_deleted_test(Config) ->
+    storage_import_test_base:empty_dir_with_metadata_protection_should_not_be_deleted_test(Config).
+
+empty_dir_with_data_protection_should_not_be_deleted_test(Config) ->
+    storage_import_test_base:empty_dir_with_data_protection_should_not_be_deleted_test(Config).
+
+empty_dir_with_data_and_metadata_protection_should_not_be_deleted_test(Config) ->
+    storage_import_test_base:empty_dir_with_data_and_metadata_protection_should_not_be_deleted_test(Config).
+
+dir_and_its_child_with_metadata_protection_should_not_be_updated_test(Config) ->
+    storage_import_test_base:dir_and_its_child_with_metadata_protection_should_not_be_updated_test(Config, ?POSIX_HELPER_NAME).
+
+dir_and_its_child_with_data_protection_should_not_be_updated_test(Config) ->
+    storage_import_test_base:dir_and_its_child_with_data_protection_should_not_be_updated_test(Config, ?POSIX_HELPER_NAME).
+
+dir_and_its_child_with_data_and_metadata_protection_should_not_be_updated_test(Config) ->
+    storage_import_test_base:dir_and_its_child_with_data_and_metadata_protection_should_not_be_updated_test(Config, ?POSIX_HELPER_NAME).
+
+dir_and_its_child_with_metadata_protection_should_not_be_deleted_test(Config) ->
+    storage_import_test_base:dir_and_its_child_with_metadata_protection_should_not_be_deleted_test(Config).
+
+dir_and_its_child_with_data_protection_should_not_be_deleted_test(Config) ->
+    storage_import_test_base:dir_and_its_child_with_data_protection_should_not_be_deleted_test(Config).
+
+dir_and_its_child_with_data_and_metadata_protection_should_not_be_deleted_test(Config) ->
+    storage_import_test_base:dir_and_its_child_with_data_and_metadata_protection_should_not_be_deleted_test(Config).
 
 delete_empty_directory_update_test(Config) ->
     storage_import_test_base:delete_empty_directory_update_test(Config).

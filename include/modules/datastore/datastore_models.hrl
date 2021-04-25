@@ -204,7 +204,7 @@
     provider :: od_provider:id() | undefined,
     spaces = [] :: [od_space:id()],
     qos_parameters = #{} :: od_storage:qos_parameters(),
-    imported = false :: boolean() | undefined,
+    imported = false :: boolean() | binary() | undefined, % binary <<"unknown">> is allowed during upgrade procedure
     readonly = false :: boolean(),
     cache_state = #{} :: cache_state()
 }).
@@ -310,7 +310,10 @@
     batches_processed = 0:: non_neg_integer(),
     % below map contains new hashes, that will be used to update values in children_hashes
     % when counters batches_to_process == batches_processed
-    hashes_to_update = #{} :: storage_sync_info:hashes()
+    hashes_to_update = #{} :: storage_sync_info:hashes(),
+    % Flag which informs whether any of the protected children files has been modified on storage.
+    % This flag allows to detect changes when flags are unset.
+    any_protected_child_changed = false :: boolean()
 }).
 
 % An empty model used for creating storage_sync_links

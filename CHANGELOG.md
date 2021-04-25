@@ -4,6 +4,16 @@ Release notes for project op-worker
 CHANGELOG
 ---------
 
+### 21.02.0-alpha8
+
+-   **VFS-7575** Add the possibility to incorporate an XRootD server
+    within the Onedata environment for exposing Open Data collections
+    for public access using the XRootD protocol.
+-   **VFS-7510** Add API for browsing dataset structures, separately for
+    datasets in attached and detached state. The datasets can be listed
+    using batches of requested size, with desired starting point and
+    offset.
+
 ### 21.02.0-alpha7
 
 -   **VFS-7517** Several bug fixes related to edge-cases when moving or
@@ -65,6 +75,11 @@ CHANGELOG
 -   **VFS-6566** Improved UX and fixed minor issues in share views.
     Fixed inability to open share hosted by Oneprovider 19.02.x using
     Onezone 20.02.x.
+
+### 20.02.9
+
+-   **VFS-7579** Implement simple, automatically rotated file access
+    audit log, which can be optionally enabled in Oneprovider config.
 
 ### 20.02.8
 
