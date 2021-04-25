@@ -156,8 +156,8 @@ get(FileDoc = #document{key = FileUuid}) ->
             Callback = fun([Doc, ParentEntry, CalculationInfo]) ->
                 {ok, calculate(Doc, ParentEntry), CalculationInfo}
             end,
-            MergeCallback = fun(EntryAcc, NewEntry, CalculationInfoAcc, _EntryCalculationInfo) ->
-                {ok, merge_entries_protection_flags(EntryAcc, NewEntry), CalculationInfoAcc}
+            MergeCallback = fun(NewEntry, EntryAcc, _EntryCalculationInfo, CalculationInfoAcc) ->
+                {ok, merge_entries_protection_flags(NewEntry, EntryAcc), CalculationInfoAcc}
             end,
             DifferentiateCallback = fun(ReferenceEntry, MergedEntry, _CalculationInfo) ->
                 {ok, prepare_entry_to_cache(ReferenceEntry, MergedEntry)}
@@ -214,10 +214,10 @@ calculate(Doc = #document{}, #entry{
 
 -spec merge_entries_protection_flags(entry(), entry()) -> entry().
 merge_entries_protection_flags(#entry{
-    eff_protection_flags = EffProtectionFlags2
-} = _EntryAcc, #entry{
     eff_protection_flags = EffProtectionFlags1
-} = _Entry) ->
+} = _Entry, #entry{
+    eff_protection_flags = EffProtectionFlags2
+} = _EntryAcc) ->
     % Only protection flags are calculated together for all references
     #entry{
         eff_protection_flags = ?set_flags(EffProtectionFlags1, EffProtectionFlags2)

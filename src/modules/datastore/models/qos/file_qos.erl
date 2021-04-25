@@ -372,10 +372,10 @@ get_effective(#document{key = FileUuid} = FileDoc, OriginalParentDoc) ->
                 end
         end
     end,
-    MergeCallback = fun(Acc, NewEntry, CalculationInfoAcc, _EntryCalculationInfo) ->
-        {ok, merge_file_qos(Acc, NewEntry), CalculationInfoAcc}
+    MergeCallback = fun(NewEntry, Acc, _EntryCalculationInfo, CalculationInfoAcc) ->
+        {ok, merge_file_qos(NewEntry, Acc), CalculationInfoAcc}
     end,
-    Options = #{merge_callback => MergeCallback, use_referenced_key => true, force_execution_on_inode => true},
+    Options = #{merge_callback => MergeCallback, use_referenced_key => true, force_execution_on_referenced_key => true},
 
     merge_eff_qos_for_files([OriginalParentDoc, FileDoc], Callback, Options).
 

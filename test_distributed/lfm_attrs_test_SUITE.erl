@@ -49,11 +49,12 @@
     custom_metadata_doc_should_contain_file_objectid/1,
     create_and_query_view_mapping_one_file_to_many_rows/1,
     effective_value_test/1,
-    multiple_references_effective_value_test/1,
-    multiple_references_effective_value_params_test/1,
+    multiple_references_effective_value_simple_test/1,
+    multiple_references_effective_value_advanced_test/1,
     deleted_reference_effective_value_test/1,
     concurent_multiple_references_effective_value_test/1,
     concurent_multiple_references_effective_value_in_critical_section_test/1,
+    concurent_multiple_references_effective_value_parent_critical_section_test/1,
     traverse_test/1,
     file_traverse_job_test/1,
     do_not_overwrite_space_dir_attrs_on_make_space_exist_test/1,
@@ -82,11 +83,12 @@ all() ->
         resolve_guid_of_dir_should_return_dir_guid,
         custom_metadata_doc_should_contain_file_objectid,
         effective_value_test,
-        multiple_references_effective_value_test,
-        multiple_references_effective_value_params_test,
+        multiple_references_effective_value_simple_test,
+        multiple_references_effective_value_advanced_test,
         deleted_reference_effective_value_test,
         concurent_multiple_references_effective_value_test,
         concurent_multiple_references_effective_value_in_critical_section_test,
+        concurent_multiple_references_effective_value_parent_critical_section_test,
         traverse_test,
         file_traverse_job_test,
         do_not_overwrite_space_dir_attrs_on_make_space_exist_test,
@@ -96,7 +98,8 @@ all() ->
 -define(CACHE, test_cache).
 -define(CALL_CACHE(Worker, Op, Args), rpc:call(Worker, effective_value, Op, [?CACHE | Args])).
 
--define(assertNotReceivedMergeMessage, ?assertNotReceivedMatch({merge_callback, _})).
+-define(assertReceivedMergeMessage(Expected), ?assertReceivedEqual({merge_callback, Expected}, 0)).
+-define(assertNotReceivedMergeMessage(), ?assertNotReceivedMatch({merge_callback, _})).
 
 %%%====================================================================
 %%% Test function
@@ -212,12 +215,12 @@ effective_value_test(Config) ->
         ?CALL_CACHE(Worker, get_or_calculate, [Doc3, Callback, #{initial_calculation_info => []}])),
 
     invalidate_effective_value_cache(Worker),
-    % Calculation should work with in_critical_section set to true
+    % Calculation should work with critical_section_level set to direct
     ?assertEqual({ok, <<"dir3">>, [{<<"dir3">>, <<"dir2">>}, {<<"dir2">>, <<"dir1">>},
         {<<"dir1">>, <<"space_id1">>}, {<<"space_id1">>, undefined}]}, ?CALL_CACHE(Worker, get_or_calculate,
-        [Doc3, Callback, #{initial_calculation_info => [], in_critical_section => true}])),
+        [Doc3, Callback, #{initial_calculation_info => [], critical_section_level => direct}])),
     ?assertEqual({ok, <<"dir3">>, []}, ?CALL_CACHE(Worker, get_or_calculate,
-        [Doc3, Callback, #{initial_calculation_info => [], in_critical_section => true}])),
+        [Doc3, Callback, #{initial_calculation_info => [], critical_section_level => direct}])),
 
     % Invalidate cache for further tests
     invalidate_effective_value_cache(Worker),
@@ -230,7 +233,7 @@ effective_value_test(Config) ->
 
     ok.
 
-multiple_references_effective_value_test(Config) ->
+multiple_references_effective_value_simple_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     {_FileGuid, FileDoc, LinkDoc} = prepare_effective_value_test_tree(Config, "mr_ev"),
     {Callback, MergeCallback} = prepare_effective_value_callbacks(),
@@ -252,92 +255,92 @@ multiple_references_effective_value_test(Config) ->
     invalidate_effective_value_cache(Worker),
 
     % Test calculation using more than one path (path of file and hardlink should be used)
-    CalculationInfo1 = [{<<"file">>, <<"mr_ev_dir1">>}, {<<"mr_ev_dir1">>, <<"mr_ev_dir0">>},
-        {<<"mr_ev_dir0">>, <<"space_id1">>},
-        {<<"link">>, <<"mr_ev_dir3">>}, {<<"mr_ev_dir3">>, <<"space_id1">>}, {<<"space_id1">>, undefined}],
-    ?assertEqual({ok, {<<"file">>, <<"link">>}, CalculationInfo1}, ?CALL_CACHE(Worker, get_or_calculate, [LinkDoc, Callback,
+    CalculationInfo1 = [{<<"link">>, <<"mr_ev_dir3">>}, {<<"mr_ev_dir3">>, <<"space_id1">>}, {<<"space_id1">>, undefined},
+        {<<"file">>, <<"mr_ev_dir1">>}, {<<"mr_ev_dir1">>, <<"mr_ev_dir0">>}, {<<"mr_ev_dir0">>, <<"space_id1">>}],
+    ?assertEqual({ok, {<<"link">>, <<"file">>}, CalculationInfo1}, ?CALL_CACHE(Worker, get_or_calculate, [LinkDoc, Callback,
             #{initial_calculation_info => [], use_referenced_key => true, merge_callback => MergeCallback}])),
-    verify_merge_message({<<"file">>, <<"link">>, CalculationInfo1}),
-    ?assertNotReceivedMergeMessage,
+    ?assertReceivedMergeMessage({<<"link">>, <<"file">>, CalculationInfo1}),
+    ?assertNotReceivedMergeMessage(),
 
     % Value calculated using multiple paths should be provided from cache for both file and link
-    ?assertEqual({ok, {<<"file">>, <<"link">>}, []}, ?CALL_CACHE(Worker, get_or_calculate, [LinkDoc, Callback,
+    ?assertEqual({ok, {<<"link">>, <<"file">>}, []}, ?CALL_CACHE(Worker, get_or_calculate, [LinkDoc, Callback,
             #{initial_calculation_info => [], use_referenced_key => true, merge_callback => MergeCallback}])),
-    ?assertNotReceivedMergeMessage,
-    ?assertEqual({ok, {<<"file">>, <<"link">>}, []}, ?CALL_CACHE(Worker, get_or_calculate, [FileDoc, Callback,
+    ?assertNotReceivedMergeMessage(),
+    ?assertEqual({ok, {<<"link">>, <<"file">>}, []}, ?CALL_CACHE(Worker, get_or_calculate, [FileDoc, Callback,
             #{initial_calculation_info => [], use_referenced_key => true, merge_callback => MergeCallback}])),
-    ?assertNotReceivedMergeMessage,
+    ?assertNotReceivedMergeMessage(),
 
     % Cached parent values should be used without use_referenced_key parameter set to true
-    CalculationInfo2 = [{<<"file">>, <<"mr_ev_dir1">>}, {<<"link">>, <<"mr_ev_dir3">>}],
-    ?assertEqual({ok, {<<"file">>, <<"link">>}, CalculationInfo2}, ?CALL_CACHE(Worker, get_or_calculate, [LinkDoc, Callback,
+    CalculationInfo2 = [{<<"link">>, <<"mr_ev_dir3">>}, {<<"file">>, <<"mr_ev_dir1">>}],
+    ?assertEqual({ok, {<<"link">>, <<"file">>}, CalculationInfo2}, ?CALL_CACHE(Worker, get_or_calculate, [LinkDoc, Callback,
             #{initial_calculation_info => [], merge_callback => MergeCallback}])),
-    verify_merge_message({<<"file">>, <<"link">>, CalculationInfo2}),
-    ?assertNotReceivedMergeMessage,
+    ?assertReceivedMergeMessage({<<"link">>, <<"file">>, CalculationInfo2}),
+    ?assertNotReceivedMergeMessage(),
 
     % Value calculated without use_referenced_key parameter set to true should be cached
-    ?assertEqual({ok, {<<"file">>, <<"link">>}, []}, ?CALL_CACHE(Worker, get_or_calculate, [LinkDoc, Callback,
+    ?assertEqual({ok, {<<"link">>, <<"file">>}, []}, ?CALL_CACHE(Worker, get_or_calculate, [LinkDoc, Callback,
             #{initial_calculation_info => [], merge_callback => MergeCallback}])),
-    ?assertNotReceivedMergeMessage,
+    ?assertNotReceivedMergeMessage(),
 
     % Value for space dir should be calculated 2 times because timestamp is before invalidation
     Timestamp = rpc:call(Worker, bounded_cache, get_timestamp, []),
     invalidate_effective_value_cache(Worker),
-    CalculationInfo3 = [{<<"file">>, <<"mr_ev_dir1">>}, {<<"mr_ev_dir1">>, <<"mr_ev_dir0">>},
-        {<<"mr_ev_dir0">>, <<"space_id1">>}, {<<"space_id1">>, undefined},
-        {<<"link">>, <<"mr_ev_dir3">>}, {<<"mr_ev_dir3">>, <<"space_id1">>}, {<<"space_id1">>, undefined}],
-    ?assertEqual({ok, {<<"file">>, <<"link">>}, CalculationInfo3}, ?CALL_CACHE(Worker, get_or_calculate, [LinkDoc, Callback,
+    CalculationInfo3 = [{<<"link">>, <<"mr_ev_dir3">>}, {<<"mr_ev_dir3">>, <<"space_id1">>}, {<<"space_id1">>, undefined},
+        {<<"file">>, <<"mr_ev_dir1">>}, {<<"mr_ev_dir1">>, <<"mr_ev_dir0">>},
+        {<<"mr_ev_dir0">>, <<"space_id1">>}, {<<"space_id1">>, undefined}],
+    ?assertEqual({ok, {<<"link">>, <<"file">>}, CalculationInfo3}, ?CALL_CACHE(Worker, get_or_calculate, [LinkDoc, Callback,
             #{initial_calculation_info => [], timestamp => Timestamp, merge_callback => MergeCallback}])),
-    verify_merge_message({<<"file">>, <<"link">>, CalculationInfo3}),
-    ?assertNotReceivedMergeMessage,
+    ?assertReceivedMergeMessage({<<"link">>, <<"file">>, CalculationInfo3}),
+    ?assertNotReceivedMergeMessage(),
 
     % Value for space dir should be calculated only once as we are after invalidation
-    ?assertEqual({ok, {<<"file">>, <<"link">>}, CalculationInfo1}, ?CALL_CACHE(Worker, get_or_calculate, [LinkDoc, Callback,
+    ?assertEqual({ok, {<<"link">>, <<"file">>}, CalculationInfo1}, ?CALL_CACHE(Worker, get_or_calculate, [LinkDoc, Callback,
             #{initial_calculation_info => [], merge_callback => MergeCallback}])),
-    verify_merge_message({<<"file">>, <<"link">>, CalculationInfo1}),
-    ?assertNotReceivedMergeMessage,
+    ?assertReceivedMergeMessage({<<"link">>, <<"file">>, CalculationInfo1}),
+    ?assertNotReceivedMergeMessage(),
 
     ok.
 
-multiple_references_effective_value_params_test(Config) ->
+multiple_references_effective_value_advanced_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     {_FileGuid, FileDoc, LinkDoc} = prepare_effective_value_test_tree(Config, "ev_params"),
     {Callback, MergeCallback} = prepare_effective_value_callbacks(),
 
     % Test order of references used to calculate value (reference connected with argument should be used last)
-    % Test if force_execution_on_inode does not affect returned value
+    % Test if force_execution_on_referenced_key does not affect returned value
     % (inode is not deleted so no additional actions should be executed)
-    CalculationInfo1 = [{<<"link">>, <<"ev_params_dir3">>}, {<<"ev_params_dir3">>, <<"space_id1">>},
-        {<<"file">>, <<"ev_params_dir1">>}, {<<"ev_params_dir1">>, <<"ev_params_dir0">>},
-        {<<"ev_params_dir0">>, <<"space_id1">>}, {<<"space_id1">>, undefined}],
-    ?assertEqual({ok, {<<"link">>, <<"file">>}, CalculationInfo1}, ?CALL_CACHE(Worker, get_or_calculate, [FileDoc,
-        Callback, #{initial_calculation_info => [], merge_callback => MergeCallback, force_execution_on_inode => true}])),
-    verify_merge_message({<<"link">>, <<"file">>, CalculationInfo1}),
-    ?assertNotReceivedMergeMessage,
+    CalculationInfo1 = [{<<"file">>, <<"ev_params_dir1">>}, {<<"ev_params_dir1">>, <<"ev_params_dir0">>},
+        {<<"ev_params_dir0">>, <<"space_id1">>}, {<<"space_id1">>, undefined},
+        {<<"link">>, <<"ev_params_dir3">>}, {<<"ev_params_dir3">>, <<"space_id1">>}],
+    ?assertEqual({ok, {<<"file">>, <<"link">>}, CalculationInfo1}, ?CALL_CACHE(Worker, get_or_calculate, [FileDoc,
+        Callback, #{initial_calculation_info => [], merge_callback => MergeCallback, force_execution_on_referenced_key => true}])),
+    ?assertReceivedMergeMessage({<<"file">>, <<"link">>, CalculationInfo1}),
+    ?assertNotReceivedMergeMessage(),
 
     % Invalidate cache for further tests
     invalidate_effective_value_cache(Worker),
 
-    % Calculation should work with in_critical_section set to true
-    CalculationInfo2 = [{<<"file">>, <<"ev_params_dir1">>}, {<<"ev_params_dir1">>, <<"ev_params_dir0">>},
-        {<<"ev_params_dir0">>, <<"space_id1">>},
-        {<<"link">>, <<"ev_params_dir3">>}, {<<"ev_params_dir3">>, <<"space_id1">>}, {<<"space_id1">>, undefined}],
-    ?assertEqual({ok, {<<"file">>, <<"link">>}, CalculationInfo2}, ?CALL_CACHE(Worker, get_or_calculate, [LinkDoc,
-        Callback, #{initial_calculation_info => [], merge_callback => MergeCallback, in_critical_section => true}])),
-    verify_merge_message({<<"file">>, <<"link">>, CalculationInfo2}),
-    ?assertNotReceivedMergeMessage,
+    % Calculation should work with critical_section_level set to direct
+    CalculationInfo2 = [{<<"link">>, <<"ev_params_dir3">>}, {<<"ev_params_dir3">>, <<"space_id1">>},
+        {<<"space_id1">>, undefined},
+        {<<"file">>, <<"ev_params_dir1">>}, {<<"ev_params_dir1">>, <<"ev_params_dir0">>},
+        {<<"ev_params_dir0">>, <<"space_id1">>}],
+    ?assertEqual({ok, {<<"link">>, <<"file">>}, CalculationInfo2}, ?CALL_CACHE(Worker, get_or_calculate, [LinkDoc,
+        Callback, #{initial_calculation_info => [], merge_callback => MergeCallback, critical_section_level => direct}])),
+    ?assertReceivedMergeMessage({<<"link">>, <<"file">>, CalculationInfo2}),
+    ?assertNotReceivedMergeMessage(),
 
-    % Calculation should work with in_critical_section set to true and no caching because of timestamp
+    % Calculation should work with critical_section_level set to direct and no caching because of timestamp
     Timestamp2 = rpc:call(Worker, bounded_cache, get_timestamp, []),
     invalidate_effective_value_cache(Worker),
-    CalculationInfo3 = [{<<"file">>, <<"ev_params_dir1">>}, {<<"ev_params_dir1">>, <<"ev_params_dir0">>},
-        {<<"ev_params_dir0">>, <<"space_id1">>}, {<<"space_id1">>, undefined},
-        {<<"link">>, <<"ev_params_dir3">>}, {<<"ev_params_dir3">>, <<"space_id1">>}, {<<"space_id1">>, undefined}],
-    ?assertEqual({ok, {<<"file">>, <<"link">>}, CalculationInfo3}, ?CALL_CACHE(Worker, get_or_calculate, [LinkDoc,
+    CalculationInfo3 = [{<<"link">>, <<"ev_params_dir3">>}, {<<"ev_params_dir3">>, <<"space_id1">>}, {<<"space_id1">>, undefined},
+        {<<"file">>, <<"ev_params_dir1">>}, {<<"ev_params_dir1">>, <<"ev_params_dir0">>},
+        {<<"ev_params_dir0">>, <<"space_id1">>}, {<<"space_id1">>, undefined}],
+    ?assertEqual({ok, {<<"link">>, <<"file">>}, CalculationInfo3}, ?CALL_CACHE(Worker, get_or_calculate, [LinkDoc,
         Callback, #{initial_calculation_info => [], timestamp => Timestamp2, merge_callback => MergeCallback,
-            in_critical_section => true}])),
-    verify_merge_message({<<"file">>, <<"link">>, CalculationInfo3}),
-    ?assertNotReceivedMergeMessage,
+            critical_section_level => direct}])),
+    ?assertReceivedMergeMessage({<<"link">>, <<"file">>, CalculationInfo3}),
+    ?assertNotReceivedMergeMessage(),
 
     % Invalidate cache for further tests
     invalidate_effective_value_cache(Worker),
@@ -346,21 +349,21 @@ multiple_references_effective_value_params_test(Config) ->
     DifferentiateCallback = fun(Value, Acc, _CalculationInfo) ->
         {ok, {Value, Acc}}
     end,
-    ?assertEqual({ok, {<<"link">>, {<<"file">>, <<"link">>}}, CalculationInfo2}, ?CALL_CACHE(Worker, get_or_calculate,
+    ?assertEqual({ok, {<<"link">>, {<<"link">>, <<"file">>}}, CalculationInfo2}, ?CALL_CACHE(Worker, get_or_calculate,
         [LinkDoc, Callback, #{initial_calculation_info => [], merge_callback => MergeCallback,
             differentiate_callback => DifferentiateCallback}])),
-    verify_merge_message({<<"file">>, <<"link">>, CalculationInfo2}),
-    ?assertNotReceivedMergeMessage,
+    ?assertReceivedMergeMessage({<<"link">>, <<"file">>, CalculationInfo2}),
+    ?assertNotReceivedMergeMessage(),
 
     % Value calculated using postprocessing callback should be provided from cache for both file and link
-    ?assertEqual({ok, {<<"link">>, {<<"file">>, <<"link">>}}, []}, ?CALL_CACHE(Worker, get_or_calculate, [LinkDoc,
+    ?assertEqual({ok, {<<"link">>, {<<"link">>, <<"file">>}}, []}, ?CALL_CACHE(Worker, get_or_calculate, [LinkDoc,
         Callback, #{initial_calculation_info => [], merge_callback => MergeCallback,
             differentiate_callback => DifferentiateCallback}])),
-    ?assertNotReceivedMergeMessage,
-    ?assertEqual({ok, {<<"file">>, {<<"file">>, <<"link">>}}, []}, ?CALL_CACHE(Worker, get_or_calculate, [FileDoc,
+    ?assertNotReceivedMergeMessage(),
+    ?assertEqual({ok, {<<"file">>, {<<"link">>, <<"file">>}}, []}, ?CALL_CACHE(Worker, get_or_calculate, [FileDoc,
         Callback, #{initial_calculation_info => [], merge_callback => MergeCallback,
             differentiate_callback => DifferentiateCallback}])),
-    ?assertNotReceivedMergeMessage,
+    ?assertNotReceivedMergeMessage(),
 
     ok.
 
@@ -376,57 +379,60 @@ deleted_reference_effective_value_test(Config) ->
         {<<"space_id1">>, undefined}],
     ?assertEqual({ok, <<"link">>, CalculationInfo1}, ?CALL_CACHE(Worker, get_or_calculate, [LinkDoc, Callback,
         #{initial_calculation_info => [], use_referenced_key => true, merge_callback => MergeCallback}])),
-    ?assertNotReceivedMergeMessage,
+    ?assertNotReceivedMergeMessage(),
 
     % Calculated value should be provided from cache for both link and deleted file
     ?assertEqual({ok, <<"link">>, []}, ?CALL_CACHE(Worker, get_or_calculate, [LinkDoc, Callback,
         #{initial_calculation_info => [], use_referenced_key => true, merge_callback => MergeCallback}])),
-    ?assertNotReceivedMergeMessage,
+    ?assertNotReceivedMergeMessage(),
     ?assertEqual({ok, <<"link">>, []}, ?CALL_CACHE(Worker, get_or_calculate, [FileDoc, Callback,
         #{initial_calculation_info => [], use_referenced_key => true, merge_callback => MergeCallback}])),
-    ?assertNotReceivedMergeMessage,
+    ?assertNotReceivedMergeMessage(),
 
     % Invalidate cache for further tests
     invalidate_effective_value_cache(Worker),
 
-    % Test calculation using force_execution_on_inode flag
-    CalculationInfo2 = [{<<"file">>, undefined}, {<<"link">>, <<"del_ev_dir3">>}, {<<"del_ev_dir3">>, <<"space_id1">>},
-        {<<"space_id1">>, undefined}],
-    ?assertEqual({ok, {<<"file">>, <<"link">>}, CalculationInfo2}, ?CALL_CACHE(Worker, get_or_calculate, [LinkDoc, Callback,
+    % Test calculation using force_execution_on_referenced_key flag
+    CalculationInfo2 = [{<<"link">>, <<"del_ev_dir3">>}, {<<"del_ev_dir3">>, <<"space_id1">>}, {<<"space_id1">>, undefined},
+        {<<"file">>, undefined}],
+    ?assertEqual({ok, {<<"link">>, <<"file">>}, CalculationInfo2}, ?CALL_CACHE(Worker, get_or_calculate, [LinkDoc, Callback,
         #{initial_calculation_info => [], use_referenced_key => true, merge_callback => MergeCallback,
-            force_execution_on_inode => true}])),
-    verify_merge_message({<<"file">>, <<"link">>, CalculationInfo2}),
-    ?assertNotReceivedMergeMessage,
+            force_execution_on_referenced_key => true}])),
+    ?assertReceivedMergeMessage({<<"link">>, <<"file">>, CalculationInfo2}),
+    ?assertNotReceivedMergeMessage(),
 
-    % Value calculated using force_execution_on_inode flag should be provided from cache for both link and deleted file
-    ?assertEqual({ok, {<<"file">>, <<"link">>}, []}, ?CALL_CACHE(Worker, get_or_calculate, [LinkDoc, Callback,
+    % Value calculated using force_execution_on_referenced_key flag should be provided from cache for both link and deleted file
+    ?assertEqual({ok, {<<"link">>, <<"file">>}, []}, ?CALL_CACHE(Worker, get_or_calculate, [LinkDoc, Callback,
         #{initial_calculation_info => [], use_referenced_key => true, merge_callback => MergeCallback,
-            force_execution_on_inode => true}])),
-    ?assertNotReceivedMergeMessage,
-    ?assertEqual({ok, {<<"file">>, <<"link">>}, []}, ?CALL_CACHE(Worker, get_or_calculate, [FileDoc, Callback,
+            force_execution_on_referenced_key => true}])),
+    ?assertNotReceivedMergeMessage(),
+    ?assertEqual({ok, {<<"link">>, <<"file">>}, []}, ?CALL_CACHE(Worker, get_or_calculate, [FileDoc, Callback,
         #{initial_calculation_info => [], use_referenced_key => true, merge_callback => MergeCallback,
-            force_execution_on_inode => true}])),
-    ?assertNotReceivedMergeMessage,
+            force_execution_on_referenced_key => true}])),
+    ?assertNotReceivedMergeMessage(),
 
     % Invalidate cache for further tests
     invalidate_effective_value_cache(Worker),
 
     % Value should be calculated for deleted file
-    CalculationInfo3 = [{<<"link">>, <<"del_ev_dir3">>}, {<<"del_ev_dir3">>, <<"space_id1">>},
-        {<<"file">>, <<"del_ev_dir1">>}, {<<"del_ev_dir1">>, <<"del_ev_dir0">>},
-        {<<"del_ev_dir0">>, <<"space_id1">>}, {<<"space_id1">>, undefined}],
-    ?assertEqual({ok, {<<"link">>, <<"file">>}, CalculationInfo3}, ?CALL_CACHE(Worker, get_or_calculate, [FileDoc,
+    CalculationInfo3 = [{<<"file">>, <<"del_ev_dir1">>}, {<<"del_ev_dir1">>, <<"del_ev_dir0">>},
+        {<<"del_ev_dir0">>, <<"space_id1">>}, {<<"space_id1">>, undefined},
+        {<<"link">>, <<"del_ev_dir3">>}, {<<"del_ev_dir3">>, <<"space_id1">>}],
+    ?assertEqual({ok, {<<"file">>, <<"link">>}, CalculationInfo3}, ?CALL_CACHE(Worker, get_or_calculate, [FileDoc,
         Callback, #{initial_calculation_info => [], use_referenced_key => true, merge_callback => MergeCallback}])),
-    verify_merge_message({<<"link">>, <<"file">>, CalculationInfo3}),
-    ?assertNotReceivedMergeMessage,
+    ?assertReceivedMergeMessage({<<"file">>, <<"link">>, CalculationInfo3}),
+    ?assertNotReceivedMergeMessage(),
 
     ok.
 
 concurent_multiple_references_effective_value_test(Config) ->
-    concurent_multiple_references_effective_value_test_base(Config, <<"concurent_ev">>, false).
+    concurent_multiple_references_effective_value_test_base(Config, <<"concurent_ev">>, no).
 
 concurent_multiple_references_effective_value_in_critical_section_test(Config) ->
-    concurent_multiple_references_effective_value_test_base(Config, <<"concurent_ev_in_section">>, true).
+    concurent_multiple_references_effective_value_test_base(Config, <<"concurent_ev_in_section">>, direct).
+
+concurent_multiple_references_effective_value_parent_critical_section_test(Config) ->
+    concurent_multiple_references_effective_value_test_base(Config, <<"concurent_ev_in_section">>, parent).
 
 concurent_multiple_references_effective_value_test_base(Config, Prefix, CriticalSection) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -457,7 +463,7 @@ concurent_multiple_references_effective_value_test_base(Config, Prefix, Critical
             end,
 
             CallAns = ?CALL_CACHE(Worker, get_or_calculate, [Doc, Callback, #{use_referenced_key => true,
-                merge_callback => MergeCallback, in_critical_section => CriticalSection}]),
+                merge_callback => MergeCallback, critical_section_level => CriticalSection}]),
             Master ! {call_ans, CallAns}
         end)
     end, lists:seq(1, ProcsNum)),
@@ -1066,10 +1072,13 @@ init_per_testcase(Case, Config) when Case =:= traverse_test ; Case =:= file_trav
     [Worker | _] = ?config(op_worker_nodes, Config),
     ?assertEqual(ok, rpc:call(Worker, tree_traverse, init, [?MODULE, 3, 3, 10])),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
-init_per_testcase(Case, Config) when Case =:= effective_value_test ; Case =:= multiple_references_effective_value_test ;
-    Case =:= multiple_references_effective_value_params_test ; Case =:= deleted_reference_effective_value_test ;
+init_per_testcase(Case, Config) when Case =:= effective_value_test ;
+    Case =:= multiple_references_effective_value_simple_test ;
+    Case =:= multiple_references_effective_value_advanced_test ;
+    Case =:= deleted_reference_effective_value_test ;
     Case =:= concurent_multiple_references_effective_value_test ;
-    Case =:= concurent_multiple_references_effective_value_in_critical_section_test ->
+    Case =:= concurent_multiple_references_effective_value_in_critical_section_test ;
+    Case =:= concurent_multiple_references_effective_value_parent_critical_section_test ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     CachePid = spawn(Worker, fun() -> cache_proc(
         #{check_frequency => timer:minutes(5), size => 100}) end),
@@ -1090,10 +1099,13 @@ end_per_testcase(Case, Config) when Case =:= traverse_test ; Case =:= file_trave
     [Worker | _] = ?config(op_worker_nodes, Config),
     ?assertEqual(ok, rpc:call(Worker, tree_traverse, stop, [?MODULE])),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
-end_per_testcase(Case, Config) when Case =:= effective_value_test ; Case =:= multiple_references_effective_value_test ;
-    Case =:= multiple_references_effective_value_params_test ; Case =:= deleted_reference_effective_value_test ;
+end_per_testcase(Case, Config) when Case =:= effective_value_test ;
+    Case =:= multiple_references_effective_value_simple_test ;
+    Case =:= multiple_references_effective_value_advanced_test ;
+    Case =:= deleted_reference_effective_value_test ;
     Case =:= concurent_multiple_references_effective_value_test ;
-    Case =:= concurent_multiple_references_effective_value_in_critical_section_test ->
+    Case =:= concurent_multiple_references_effective_value_in_critical_section_test ;
+    Case =:= concurent_multiple_references_effective_value_parent_critical_section_test ->
     CachePid = ?config(cache_pid, Config),
     CachePid ! {finish, self()},
     ok = receive
@@ -1205,9 +1217,6 @@ prepare_effective_value_callbacks() ->
     end,
 
     {MainCallback, MergeCallback}.
-
-verify_merge_message(Expected) ->
-    ?assertReceivedEqual({merge_callback, Expected}, 0).
 
 invalidate_effective_value_cache(Worker) ->
     ?assertEqual(ok, ?CALL_CACHE(Worker, invalidate, [])),

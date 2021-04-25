@@ -134,7 +134,7 @@ test_step(Config, Options, MultipathEV) ->
             case Stop of
                 true ->
                     stress_test_traverse_pool:start_traverse(Config,
-                        #{mode => undefined, critical_section => parent, multipath_ev => MultipathEV}, <<"3">>),
+                        #{mode => undefined, critical_section_level => parent, multipath_ev => MultipathEV}, <<"3">>),
                     put(stress_phase, traverse3),
                     Ans;
                 _ ->
@@ -217,8 +217,8 @@ process_task_description(Config, Type, ID) ->
 
 set_ev_options(Job) ->
     TraverseInfo = tree_traverse:get_traverse_info(Job),
-    CriticalSection = maps:get(critical_section, TraverseInfo, false),
-    Options = #{initial_calculation_info => {0, 1}, in_critical_section => CriticalSection},
+    CriticalSection = maps:get(critical_section_level, TraverseInfo, no),
+    Options = #{initial_calculation_info => {0, 1}, critical_section_level => CriticalSection},
 
     case maps:get(multipath_ev, TraverseInfo, false) of
         true ->
