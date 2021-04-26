@@ -75,10 +75,8 @@ add(SpaceId, StateListId, AtmWorkflowExecutionId, Timestamp) ->
     Link = {index(AtmWorkflowExecutionId, Timestamp), AtmWorkflowExecutionId},
 
     case datastore_model:add_links(?CTX, ?FOREST(SpaceId), StateListId, Link) of
-        {ok, _} ->
-            ok;
-        {error, already_exists} ->
-            ok
+        {ok, _} -> ok;
+        {error, already_exists} -> ok
     end.
 
 

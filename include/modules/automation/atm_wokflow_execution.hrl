@@ -5,7 +5,8 @@
 %%% cited in 'LICENSE.txt'.
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% This file contains definitions of macros used by atm_workflow_execution module.
+%%% This file contains definitions of macros used by atm_workflow_execution
+%%% machinery.
 %%% @end
 %%%-------------------------------------------------------------------
 
