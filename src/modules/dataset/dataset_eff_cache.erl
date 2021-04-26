@@ -24,7 +24,7 @@
 
 %% API
 -export([init/1, init_group/0, invalidate_on_all_nodes/1]).
--export([get/1, get_eff_ancestor_datasets/1, get_eff_protection_flags/1]).
+-export([get/1, get_eff_ancestor_datasets/1, get_eff_dataset_protection_flags/1, get_eff_file_protection_flags/1]).
 -compile([{no_auto_import, [get/1]}]).
 
 
@@ -42,7 +42,8 @@
 -record(entry, {
     direct_attached_dataset :: undefined | dataset:id(),
     eff_ancestor_datasets = [] :: [dataset:id()],
-    eff_protection_flags :: data_access_control:bitmask()
+    eff_dataset_protection_flags = ?no_flags_mask :: data_access_control:bitmask(),
+    eff_file_protection_flags = ?no_flags_mask :: data_access_control:bitmask()
 }).
 
 -type entry() :: #entry{}.
@@ -133,13 +134,25 @@ get_eff_ancestor_datasets(FileDoc) ->
     end.
 
 
--spec get_eff_protection_flags(entry() | file_meta:doc()) -> {ok, data_access_control:bitmask()} | error().
-get_eff_protection_flags(#entry{eff_protection_flags = EffProtectionFlags}) ->
+-spec get_eff_dataset_protection_flags(entry() | file_meta:doc()) -> {ok, data_access_control:bitmask()} | error().
+get_eff_dataset_protection_flags(#entry{eff_dataset_protection_flags = EffProtectionFlags}) ->
     {ok, EffProtectionFlags};
-get_eff_protection_flags(FileDoc) ->
+get_eff_dataset_protection_flags(FileDoc) ->
     case get(FileDoc) of
         {ok, Entry} ->
-            get_eff_protection_flags(Entry);
+            get_eff_dataset_protection_flags(Entry);
+        {error, _} = Error ->
+            Error
+    end.
+
+
+-spec get_eff_file_protection_flags(entry() | file_meta:doc()) -> {ok, data_access_control:bitmask()} | error().
+get_eff_file_protection_flags(#entry{eff_file_protection_flags = EffProtectionFlags}) ->
+    {ok, EffProtectionFlags};
+get_eff_file_protection_flags(FileDoc) ->
+    case get(FileDoc) of
+        {ok, Entry} ->
+            get_eff_file_protection_flags(Entry);
         {error, _} = Error ->
             Error
     end.
@@ -149,7 +162,7 @@ get_eff_protection_flags(FileDoc) ->
 get(FileDoc = #document{key = FileUuid}) ->
     case fslogic_uuid:is_root_dir_uuid(FileUuid) orelse fslogic_uuid:is_share_root_dir_uuid(FileUuid) of
         true ->
-            {ok, #entry{eff_protection_flags = ?no_flags_mask}};
+            {ok, #entry{}};
         false ->
             {ok, SpaceId} = file_meta:get_scope_id(FileDoc),
             CacheName = ?CACHE_NAME(SpaceId),
@@ -157,7 +170,7 @@ get(FileDoc = #document{key = FileUuid}) ->
                 {ok, calculate(Doc, ParentEntry), CalculationInfo}
             end,
             MergeCallback = fun(NewEntry, EntryAcc, _EntryCalculationInfo, CalculationInfoAcc) ->
-                {ok, merge_entries_protection_flags(NewEntry, EntryAcc), CalculationInfoAcc}
+                {ok, merge_entries_file_protection_flags(NewEntry, EntryAcc), CalculationInfoAcc}
             end,
             DifferentiateCallback = fun(ReferenceEntry, MergedEntry, _CalculationInfo) ->
                 {ok, prepare_entry_to_cache(ReferenceEntry, MergedEntry)}
@@ -191,15 +204,18 @@ invalidate(SpaceId) ->
 -spec calculate(file_meta:doc(), entry() | undefined) -> entry().
 calculate(Doc = #document{}, undefined) ->
     % space dir as parent entry is undefined
+    ProtectionFlags = get_protection_flags_if_dataset_attached(Doc),
     #entry{
         direct_attached_dataset = file_meta_dataset:get_id_if_attached(Doc),
         eff_ancestor_datasets = [],
-        eff_protection_flags = get_protection_flags_if_dataset_attached(Doc)
+        eff_dataset_protection_flags = ProtectionFlags,
+        eff_file_protection_flags = ProtectionFlags
     };
 calculate(Doc = #document{}, #entry{
     direct_attached_dataset = ParentDirectAttachedDataset,
     eff_ancestor_datasets = ParentEffAncestorDatasets,
-    eff_protection_flags = ParentEffProtectionFlags
+    eff_dataset_protection_flags = ParentEffDatasetProtectionFlags,
+    eff_file_protection_flags = ParentEffFileProtectionFlags
 }) ->
     EffAncestorDatasets = case ParentDirectAttachedDataset =/= undefined of
         true -> [ParentDirectAttachedDataset | ParentEffAncestorDatasets];
@@ -209,25 +225,26 @@ calculate(Doc = #document{}, #entry{
     #entry{
         direct_attached_dataset = file_meta_dataset:get_id_if_attached(Doc),
         eff_ancestor_datasets = EffAncestorDatasets,
-        eff_protection_flags = ?set_flags(ParentEffProtectionFlags, ProtectionFlags)
+        eff_dataset_protection_flags = ?set_flags(ParentEffDatasetProtectionFlags, ProtectionFlags),
+        eff_file_protection_flags = ?set_flags(ParentEffFileProtectionFlags, ProtectionFlags)
     }.
 
--spec merge_entries_protection_flags(entry(), entry()) -> entry().
-merge_entries_protection_flags(#entry{
-    eff_protection_flags = EffProtectionFlags1
+-spec merge_entries_file_protection_flags(entry(), entry()) -> entry().
+merge_entries_file_protection_flags(#entry{
+    eff_file_protection_flags = EffProtectionFlags1
 } = _Entry, #entry{
-    eff_protection_flags = EffProtectionFlags2
+    eff_file_protection_flags = EffProtectionFlags2
 } = _EntryAcc) ->
     % Only protection flags are calculated together for all references
     #entry{
-        eff_protection_flags = ?set_flags(EffProtectionFlags1, EffProtectionFlags2)
+        eff_file_protection_flags = ?set_flags(EffProtectionFlags1, EffProtectionFlags2)
     }.
 
 -spec prepare_entry_to_cache(entry(), entry()) -> entry().
 prepare_entry_to_cache(ReferenceEntry, #entry{
-    eff_protection_flags = EffProtectionFlags
+    eff_file_protection_flags = EffProtectionFlags
 } = _MergedEntry) ->
-    ReferenceEntry#entry{eff_protection_flags = EffProtectionFlags}.
+    ReferenceEntry#entry{eff_file_protection_flags = EffProtectionFlags}.
 
 
 -spec get_protection_flags_if_dataset_attached(file_meta:doc()) -> data_access_control:bitmask().
