@@ -213,7 +213,7 @@ establish_dataset_attached_to_hardlink(_Config) ->
     ?assertAttachedDataset(P1Node, UserSessIdP1, DatasetId, LinkGuid, undefined, ProtectionFlags),
     ?assertDatasetMembership(P1Node, UserSessIdP1, LinkGuid, ?DIRECT_DATASET_MEMBERSHIP, ProtectionFlags),
     ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, LinkGuid, DatasetId, [], ProtectionFlags),
-    ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, FileGuid, undefined, [], ?no_flags_mask).
+    ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, FileGuid, undefined, [], ProtectionFlags).
 
 
 establish_dataset_attached_to_file_symlink(_Config) ->
@@ -402,7 +402,7 @@ remove_hardlink_should_detach_dataset(_Config) ->
     ?assertAttachedDataset(P1Node, UserSessIdP1, DatasetId, LinkGuid, undefined, ProtectionFlags),
     ?assertDatasetMembership(P1Node, UserSessIdP1, LinkGuid, ?DIRECT_DATASET_MEMBERSHIP, ProtectionFlags),
     ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, LinkGuid, DatasetId, [], ProtectionFlags),
-    ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, FileGuid, undefined, [], ?no_flags_mask),
+    ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, FileGuid, undefined, [], ProtectionFlags),
     % delete hardlink, dataset should be detached
     ok = lfm_proxy:unlink(P1Node, UserSessIdP1, ?FILE_REF(LinkGuid)),
     ?assertDetachedDataset(P1Node, UserSessIdP1, DatasetId, LinkGuid, undefined, LinkPath, ?REGULAR_FILE_TYPE, ProtectionFlags),
@@ -476,7 +476,7 @@ remove_file_pointed_by_hardlink(_Config) ->
     ?assertAttachedDataset(P1Node, UserSessIdP1, DatasetId, LinkGuid, undefined, ProtectionFlags),
     ?assertDatasetMembership(P1Node, UserSessIdP1, LinkGuid, ?DIRECT_DATASET_MEMBERSHIP, ProtectionFlags),
     ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, LinkGuid, DatasetId, [], ProtectionFlags),
-    ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, FileGuid, undefined, [], ?no_flags_mask),
+    ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, FileGuid, undefined, [], ProtectionFlags),
     % delete file, dataset should stay attached
     ok = lfm_proxy:unlink(P1Node, UserSessIdP1, ?FILE_REF(FileGuid)),
     ?assertMatch({error, ?ENOENT}, lfm_proxy:get_file_eff_dataset_summary(P1Node, UserSessIdP1, ?FILE_REF(FileGuid))),
@@ -575,7 +575,7 @@ reattach_if_hardlink_is_deleted_should_fail(_Config) ->
     ?assertAttachedDataset(P1Node, UserSessIdP1, DatasetId, LinkGuid, undefined, ProtectionFlags),
     ?assertDatasetMembership(P1Node, UserSessIdP1, LinkGuid, ?DIRECT_DATASET_MEMBERSHIP, ProtectionFlags),
     ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, LinkGuid, DatasetId, [], ProtectionFlags),
-    ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, FileGuid, undefined, [], ?no_flags_mask),
+    ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, FileGuid, undefined, [], ProtectionFlags),
 
     % delete hardlink
     ok = lfm_proxy:unlink(P1Node, UserSessIdP1, ?FILE_REF(LinkGuid)),

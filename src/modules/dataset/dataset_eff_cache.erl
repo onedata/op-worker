@@ -156,7 +156,18 @@ get(FileDoc = #document{key = FileUuid}) ->
             Callback = fun([Doc, ParentEntry, CalculationInfo]) ->
                 {ok, calculate(Doc, ParentEntry), CalculationInfo}
             end,
-            case effective_value:get_or_calculate(CacheName, FileDoc, Callback) of
+            MergeCallback = fun(NewEntry, EntryAcc, _EntryCalculationInfo, CalculationInfoAcc) ->
+                {ok, merge_entries_protection_flags(NewEntry, EntryAcc), CalculationInfoAcc}
+            end,
+            DifferentiateCallback = fun(ReferenceEntry, MergedEntry, _CalculationInfo) ->
+                {ok, prepare_entry_to_cache(ReferenceEntry, MergedEntry)}
+            end,
+            Options = #{
+                merge_callback => MergeCallback,
+                differentiate_callback => DifferentiateCallback
+            },
+
+            case effective_value:get_or_calculate(CacheName, FileDoc, Callback, Options) of
                 {ok, Entry, _} ->
                     {ok, Entry};
                 {error, {file_meta_missing, _}} ->
@@ -200,6 +211,23 @@ calculate(Doc = #document{}, #entry{
         eff_ancestor_datasets = EffAncestorDatasets,
         eff_protection_flags = ?set_flags(ParentEffProtectionFlags, ProtectionFlags)
     }.
+
+-spec merge_entries_protection_flags(entry(), entry()) -> entry().
+merge_entries_protection_flags(#entry{
+    eff_protection_flags = EffProtectionFlags1
+} = _Entry, #entry{
+    eff_protection_flags = EffProtectionFlags2
+} = _EntryAcc) ->
+    % Only protection flags are calculated together for all references
+    #entry{
+        eff_protection_flags = ?set_flags(EffProtectionFlags1, EffProtectionFlags2)
+    }.
+
+-spec prepare_entry_to_cache(entry(), entry()) -> entry().
+prepare_entry_to_cache(ReferenceEntry, #entry{
+    eff_protection_flags = EffProtectionFlags
+} = _MergedEntry) ->
+    ReferenceEntry#entry{eff_protection_flags = EffProtectionFlags}.
 
 
 -spec get_protection_flags_if_dataset_attached(file_meta:doc()) -> data_access_control:bitmask().
