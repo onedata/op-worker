@@ -27,7 +27,7 @@
 -type record() :: #atm_workflow_execution{}.
 -type doc() :: datastore_doc:doc(record()).
 
--type state() :: binary().              % ?(WAITING|ONGOING|ENDED)_STATE
+-type state() :: ?WAITING_STATE | ?ONGOING_STATE | ?ENDED_STATE.
 -type timestamp() :: time:seconds().
 
 -export_type([id/0, record/0, doc/0, state/0, timestamp/0]).

@@ -27,7 +27,7 @@
 -export([list/3, add/4, delete/4]).
 
 
--type state_list_id() :: atm_workflow_execution:state().
+-type tree_id() :: binary().
 
 -type index() :: binary().
 -type offset() :: integer().
@@ -39,7 +39,7 @@
     limit => limit()
 }.
 
--export_type([state_list_id/0, index/0, offset/0, limit/0, listing_opts/0]).
+-export_type([tree_id/0, index/0, offset/0, limit/0, listing_opts/0]).
 
 
 -define(CTX, (atm_workflow_execution:get_ctx())).
@@ -52,29 +52,29 @@
 %%%===================================================================
 
 
--spec list(od_space:id(), state_list_id(), listing_opts()) ->
+-spec list(od_space:id(), tree_id(), listing_opts()) ->
     [{atm_workflow_execution:id(), index()}].
-list(SpaceId, StateListId, ListingOpts) ->
+list(SpaceId, TreeId, ListingOpts) ->
     FoldFun = fun(#link{name = Index, target = AtmWorkflowExecutionId}, Acc) ->
         {ok, [{AtmWorkflowExecutionId, Index} | Acc]}
     end,
     {ok, AtmWorkflowExecutions} = datastore_model:fold_links(
-        ?CTX, ?FOREST(SpaceId), StateListId, FoldFun, [], sanitize_listing_opts(ListingOpts)
+        ?CTX, ?FOREST(SpaceId), TreeId, FoldFun, [], sanitize_listing_opts(ListingOpts)
     ),
     lists:reverse(AtmWorkflowExecutions).
 
 
 -spec add(
     od_space:id(),
-    state_list_id(),
+    tree_id(),
     atm_workflow_execution:id(),
     atm_workflow_execution:timestamp()
 ) ->
     ok.
-add(SpaceId, StateListId, AtmWorkflowExecutionId, Timestamp) ->
+add(SpaceId, TreeId, AtmWorkflowExecutionId, Timestamp) ->
     Link = {index(AtmWorkflowExecutionId, Timestamp), AtmWorkflowExecutionId},
 
-    case datastore_model:add_links(?CTX, ?FOREST(SpaceId), StateListId, Link) of
+    case datastore_model:add_links(?CTX, ?FOREST(SpaceId), TreeId, Link) of
         {ok, _} -> ok;
         {error, already_exists} -> ok
     end.
@@ -82,15 +82,15 @@ add(SpaceId, StateListId, AtmWorkflowExecutionId, Timestamp) ->
 
 -spec delete(
     od_space:id(),
-    state_list_id(),
+    tree_id(),
     atm_workflow_execution:id(),
     atm_workflow_execution:timestamp()
 ) ->
     ok.
-delete(SpaceId, StateListId, AtmWorkflowExecutionId, Timestamp) ->
+delete(SpaceId, TreeId, AtmWorkflowExecutionId, Timestamp) ->
     LinkName = index(AtmWorkflowExecutionId, Timestamp),
 
-    ok = datastore_model:delete_links(?CTX, ?FOREST(SpaceId), StateListId, LinkName).
+    ok = datastore_model:delete_links(?CTX, ?FOREST(SpaceId), TreeId, LinkName).
 
 
 %%%===================================================================

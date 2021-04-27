@@ -15,8 +15,12 @@
 
 -include("global_definitions.hrl").
 
--define(WAITING_STATE, <<"waiting">>).
--define(ONGOING_STATE, <<"ongoing">>).
--define(ENDED_STATE, <<"ended">>).
+-define(WAITING_STATE, waiting).
+-define(ONGOING_STATE, ongoing).
+-define(ENDED_STATE, ended).
+
+-define(WAITING_TREE, <<"waiting">>).
+-define(ONGOING_TREE, <<"ongoing">>).
+-define(ENDED_TREE, <<"ended">>).
 
 -endif.

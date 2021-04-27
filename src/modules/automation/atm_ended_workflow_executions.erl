@@ -25,7 +25,7 @@
 -spec list(od_space:id(), atm_workflow_executions_collection:listing_opts()) ->
     [{atm_workflow_execution:id(), atm_workflow_executions_collection:index()}].
 list(SpaceId, ListingOpts) ->
-    atm_workflow_executions_collection:list(SpaceId, ?ENDED_STATE, ListingOpts).
+    atm_workflow_executions_collection:list(SpaceId, ?ENDED_TREE, ListingOpts).
 
 
 -spec add(atm_workflow_execution:doc()) -> ok.
@@ -34,7 +34,7 @@ add(#document{key = AtmWorkflowExecutionId, value = #atm_workflow_execution{
     finish_time = FinishTime
 }}) ->
     atm_workflow_executions_collection:add(
-        SpaceId, ?ENDED_STATE, AtmWorkflowExecutionId, FinishTime
+        SpaceId, ?ENDED_TREE, AtmWorkflowExecutionId, FinishTime
     ).
 
 
@@ -44,5 +44,5 @@ delete(#document{key = AtmWorkflowExecutionId, value = #atm_workflow_execution{
     finish_time = FinishTime
 }}) ->
     atm_workflow_executions_collection:delete(
-        SpaceId, ?ENDED_STATE, AtmWorkflowExecutionId, FinishTime
+        SpaceId, ?ENDED_TREE, AtmWorkflowExecutionId, FinishTime
     ).
