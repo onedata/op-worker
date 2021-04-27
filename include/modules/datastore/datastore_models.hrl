@@ -964,4 +964,15 @@
     all_batches_listed = false :: boolean()
 }).
 
+%% Model storing information about automation store instance.
+-record(atm_store, {
+    type :: atm_store:type(),
+    name :: atm_store:name(),
+    summary :: atm_store:summary(),
+    description :: atm_store:description(),
+    frozen = false :: boolean(),
+    is_input_store :: boolean(),
+    container :: atm_data_container:container()
+}).
+
 -endif.
