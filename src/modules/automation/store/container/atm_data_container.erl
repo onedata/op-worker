@@ -57,8 +57,8 @@
 
 
 -spec init(model(), atm_data_spec:spec(), init_args()) -> container().
-init(Model, DataSpec, InitArgs) ->
-    Model:init(DataSpec, InitArgs).
+init(Model, AtmDataSpec, InitArgs) ->
+    Model:init(AtmDataSpec, InitArgs).
 
 
 -spec get_data_spec(container()) -> atm_data_spec:spec().
