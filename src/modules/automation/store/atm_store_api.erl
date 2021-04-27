@@ -18,7 +18,10 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([create/2]).
+-export([
+    create/2,
+    init_stream/2
+]).
 
 -type error() :: {error, term()}.
 
@@ -35,7 +38,7 @@ create(#atm_store_schema{
     description = Description,
     is_input_store = IsInputStore,
     store_type = StoreType,
-    data_spec = DataSpec
+    data_spec = AtmDataSpec
 }, InitialArgs) ->
     ContainerModel = store_type_to_container_model(StoreType),
 
@@ -46,8 +49,14 @@ create(#atm_store_schema{
         frozen = false,
         is_input_store = IsInputStore,
         type = StoreType,
-        container = atm_data_container:init(ContainerModel, DataSpec, InitialArgs)
+        container = atm_data_container:init(ContainerModel, AtmDataSpec, InitialArgs)
     }).
+
+
+-spec init_stream(atm_store_stream_schema(), atm_store:record()) ->
+    atm_store_stream:stream().
+init_stream(AtmStoreStreamSchema, AtmStore) ->
+    atm_store_stream:init(AtmStoreStreamSchema, AtmStore).
 
 
 %%%===================================================================
