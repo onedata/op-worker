@@ -19,7 +19,7 @@
 -include("proto/oneprovider/provider_messages.hrl").
 -include_lib("ctool/include/errors.hrl").
 %%-include_lib("ctool/include/onedata.hrl").
-%%-include_lib("ctool/include/privileges.hrl").
+-include_lib("ctool/include/privileges.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
@@ -59,7 +59,10 @@
 
     % sequential tests
     archive_dataset_many_times/1,
-    time_warp_test/1
+    time_warp_test/1, 
+    create_archive_privileges_test/1, 
+    view_archive_privileges_test/1, 
+    remove_archive_privileges_test/1
 ]).
 
 groups() -> [
@@ -87,7 +90,10 @@ groups() -> [
     ]},
     {sequential_tests, [sequential], [
         archive_dataset_many_times,
-        time_warp_test
+        time_warp_test,
+        create_archive_privileges_test,
+        view_archive_privileges_test,
+        remove_archive_privileges_test
     ]}
 ].
 
@@ -112,12 +118,11 @@ all() -> [
 }).
 -define(TEST_TIMESTAMP, 1000000000).
 
-% todo testy uprawnień
 -define(RAND_NAME, str_utils:rand_hex(20)).
 
 %===================================================================
-% Parallel tests - these tests DO NOT modify mocked global_clock and
-% therefore can be executed in parallel.
+% Parallel tests - tests which can be safely run in parallel
+% as they do not interfere with any other test.
 %===================================================================
 
 archive_dataset_attached_to_space_dir(_Config) ->
@@ -287,11 +292,10 @@ iterate_over_1000_archives_using_start_index_and_limit_1000(_Config) ->
 iterate_over_1000_archives_using_start_index_and_limit_10000(_Config) ->
     iterate_over_archives_test_base(1000, start_index, 10000).
 
-
 %===================================================================
-% Sequential tests - these tests modify mocked global_clock and thus
-% must be executed sequentially so that they do not interfere with
-% other test cases.
+% Sequential tests - tests which must be performed one after another
+% to ensure that they do not interfere with each other (e. g. by
+% modifying mocked global_clock or changing user's privileges)
 %===================================================================
 
 archive_dataset_many_times(_Config) ->
@@ -348,6 +352,106 @@ time_warp_test(_Config) ->
 
     ?assertMatch({ok, [{_, ArchiveId}, {_, ArchiveId2}], true},
         lfm_proxy:list_archives(P1Node, UserSessIdP1, DatasetId, #{offset => 0, limit => 10})).
+
+create_archive_privileges_test(_Config) ->
+    [P1Node] = oct_background:get_provider_nodes(krakow),
+    UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
+    User2SessIdP1 = oct_background:get_user_session_id(user2, krakow),
+    UserId2 = oct_background:get_user_id(user2),
+    SpaceId = oct_background:get_space_id(?SPACE),
+
+    #object{guid = Guid} = onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE, #file_spec{}),
+    {ok, DatasetId} = ?assertMatch({ok, _},
+        lfm_proxy:establish_dataset(P1Node, UserSessIdP1, ?FILE_REF(Guid), ?no_flags_mask)),
+    {ok, ArchiveId} = lfm_proxy:archive_dataset(P1Node, UserSessIdP1, DatasetId, ?TEST_ARCHIVE_PARAMS),
+
+    RequiredPrivileges = [?SPACE_MANAGE_DATASETS, ?SPACE_CREATE_ARCHIVES],
+
+    lists:foreach(fun(Privilege) ->
+        % assign user all RequiredPrivileges without Privilege
+        Privileges = RequiredPrivileges -- [Privilege] ++ privileges:space_member(),
+        ozw_test_rpc:space_set_user_privileges(SpaceId, UserId2, Privileges),
+
+        % user2 cannot create archive
+        ?assertEqual({error, ?EPERM},
+            lfm_proxy:archive_dataset(P1Node, User2SessIdP1, DatasetId, ?TEST_ARCHIVE_PARAMS), ?ATTEMPTS),
+        % user2 cannot modify an existing archive either
+        ?assertEqual({error, ?EPERM},
+            lfm_proxy:update_archive(P1Node, User2SessIdP1, ArchiveId, #{description => ?TEST_DESCRIPTION}), ?ATTEMPTS),
+
+        % assign user2 missing privilege 
+        ozw_test_rpc:space_set_user_privileges(SpaceId, UserId2, [Privilege | Privileges]),
+        % user2 can now create archive
+        ?assertMatch({ok, _},
+            lfm_proxy:archive_dataset(P1Node, User2SessIdP1, DatasetId, ?TEST_ARCHIVE_PARAMS), ?ATTEMPTS),
+        % as well as modify an existing one
+        ?assertMatch(ok,
+            lfm_proxy:update_archive(P1Node, User2SessIdP1, ArchiveId, #{description => ?TEST_DESCRIPTION}), ?ATTEMPTS)
+    end, RequiredPrivileges).
+
+
+view_archive_privileges_test(_Config) ->
+    [P1Node] = oct_background:get_provider_nodes(krakow),
+    UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
+    User2SessIdP1 = oct_background:get_user_session_id(user2, krakow),
+    UserId2 = oct_background:get_user_id(user2),
+    SpaceId = oct_background:get_space_id(?SPACE),
+
+    #object{guid = Guid} = onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE, #file_spec{}),
+    {ok, DatasetId} = lfm_proxy:establish_dataset(P1Node, UserSessIdP1, ?FILE_REF(Guid), ?no_flags_mask),
+    {ok, ArchiveId} = lfm_proxy:archive_dataset(P1Node, UserSessIdP1, DatasetId, ?TEST_ARCHIVE_PARAMS),
+
+    % assign user only space_member privileges
+    Privileges = privileges:space_member(),
+    ozw_test_rpc:space_set_user_privileges(SpaceId, UserId2, Privileges),
+
+    % user2 cannot fetch archive info
+    ?assertEqual({error, ?EPERM},
+        lfm_proxy:get_archive_info(P1Node, User2SessIdP1, ArchiveId), ?ATTEMPTS),
+    % neither can he list the archives
+    ?assertEqual({error, ?EPERM},
+        lfm_proxy:list_archives(P1Node, User2SessIdP1, DatasetId, #{offset => 0, limit => 10})),
+
+    % assign user2 privilege to view archives
+    ozw_test_rpc:space_set_user_privileges(SpaceId, UserId2, [?SPACE_VIEW_ARCHIVES | Privileges]),
+
+    % now user2 should be able to fetch archive info
+    ?assertMatch({ok, _},
+        lfm_proxy:get_archive_info(P1Node, User2SessIdP1, ArchiveId), ?ATTEMPTS),
+    % as well as list the archives
+    ?assertMatch({ok, [{_, ArchiveId}], _},
+        lfm_proxy:list_archives(P1Node, User2SessIdP1, DatasetId, #{offset => 0, limit => 10}), ?ATTEMPTS).
+
+remove_archive_privileges_test(_Config) ->
+    [P1Node] = oct_background:get_provider_nodes(krakow),
+    UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
+    User2SessIdP1 = oct_background:get_user_session_id(user2, krakow),
+    UserId2 = oct_background:get_user_id(user2),
+    SpaceId = oct_background:get_space_id(?SPACE),
+
+    #object{guid = Guid} = onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE, #file_spec{}),
+    {ok, DatasetId} = ?assertMatch({ok, _},
+        lfm_proxy:establish_dataset(P1Node, UserSessIdP1, ?FILE_REF(Guid), ?no_flags_mask)),
+    {ok, ArchiveId1} = lfm_proxy:archive_dataset(P1Node, UserSessIdP1, DatasetId, ?TEST_ARCHIVE_PARAMS),
+    {ok, ArchiveId2} = lfm_proxy:archive_dataset(P1Node, UserSessIdP1, DatasetId, ?TEST_ARCHIVE_PARAMS),
+
+    RequiredPrivileges = [?SPACE_MANAGE_DATASETS, ?SPACE_REMOVE_ARCHIVES],
+
+    lists:foreach(fun({Privilege, ArchiveId}) ->
+        % assign user all RequiredPrivileges without Privilege
+        Privileges = RequiredPrivileges -- [Privilege] ++ privileges:space_member(),
+        ozw_test_rpc:space_set_user_privileges(SpaceId, UserId2, Privileges),
+
+        % user2 cannot remove the archive
+        ?assertEqual({error, ?EPERM}, lfm_proxy:remove_archive(P1Node, User2SessIdP1, ArchiveId), ?ATTEMPTS),
+
+        % assign user2 missing privilege 
+        ozw_test_rpc:space_set_user_privileges(SpaceId, UserId2, [Privilege | Privileges]),
+        % user2 can now remove archive
+        ?assertEqual(ok, lfm_proxy:remove_archive(P1Node, User2SessIdP1, ArchiveId), ?ATTEMPTS)
+    
+    end, lists:zip(RequiredPrivileges, [ArchiveId1, ArchiveId2])).
+
 
 %===================================================================
 % Test bases
@@ -444,29 +548,6 @@ iterate_over_archives_test_base(ArchivesCount, ListingMethod, Limit) ->
     check_if_all_archives_listed(ExpArchiveIds, P1Node, UserSessIdP1, DatasetId, ListingOpts).
 
 
-check_if_all_archives_listed([], _Node, _SessId, _DatasetId, _Opts) ->
-    true;
-check_if_all_archives_listed(ExpArchiveIds, Node, SessId, DatasetId, Opts) ->
-    {ok, ListedArchives, IsLast} = lfm_proxy:list_archives(Node, SessId, DatasetId, Opts),
-    Limit = maps:get(limit, Opts),
-    ListedArchiveIds = [AId || {_, AId} <- ListedArchives],
-    ?assertEqual(lists:sublist(ExpArchiveIds, 1, Limit), ListedArchiveIds),
-    RestExpArchiveIds = ExpArchiveIds -- ListedArchiveIds,
-    case {IsLast, RestExpArchiveIds == []} of
-        {true, true} ->
-            ok;
-        {true, false} ->
-            ct:fail("Not all expected archive were listed.~nExpected: ~p", [ExpArchiveIds]);
-        {false, _} ->
-            NewOpts = update_opts(Opts, ListedArchives),
-            check_if_all_archives_listed(RestExpArchiveIds, Node, SessId, DatasetId, NewOpts)
-    end.
-
-update_opts(Opts = #{offset := Offset}, ListedArchives) ->
-    Opts#{offset => Offset + length(ListedArchives)};
-update_opts(Opts = #{start_index := _}, ListedArchives) ->
-    Opts#{start_index => element(1, lists:last(ListedArchives)), offset => 1}.
-
 %===================================================================
 % SetUp and TearDown functions
 %===================================================================
@@ -504,3 +585,26 @@ end_per_testcase(_Case, _Config) ->
 
 global_clock_timestamp(Node) ->
     rpc:call(Node, global_clock, timestamp_seconds, []).
+
+check_if_all_archives_listed([], _Node, _SessId, _DatasetId, _Opts) ->
+    true;
+check_if_all_archives_listed(ExpArchiveIds, Node, SessId, DatasetId, Opts) ->
+    {ok, ListedArchives, IsLast} = lfm_proxy:list_archives(Node, SessId, DatasetId, Opts),
+    Limit = maps:get(limit, Opts),
+    ListedArchiveIds = [AId || {_, AId} <- ListedArchives],
+    ?assertEqual(lists:sublist(ExpArchiveIds, 1, Limit), ListedArchiveIds),
+    RestExpArchiveIds = ExpArchiveIds -- ListedArchiveIds,
+    case {IsLast, RestExpArchiveIds == []} of
+        {true, true} ->
+            ok;
+        {true, false} ->
+            ct:fail("Not all expected archive were listed.~nExpected: ~p", [ExpArchiveIds]);
+        {false, _} ->
+            NewOpts = update_opts(Opts, ListedArchives),
+            check_if_all_archives_listed(RestExpArchiveIds, Node, SessId, DatasetId, NewOpts)
+    end.
+
+update_opts(Opts = #{offset := Offset}, ListedArchives) ->
+    Opts#{offset => Offset + length(ListedArchives)};
+update_opts(Opts = #{start_index := _}, ListedArchives) ->
+    Opts#{start_index => element(1, lists:last(ListedArchives)), offset => 1}.

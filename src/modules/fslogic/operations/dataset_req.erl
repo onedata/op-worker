@@ -130,6 +130,9 @@ list_children_datasets(SpaceDirCtx, Dataset, Opts, ListingMode, UserCtx) ->
 -spec archive(file_ctx:ctx(), dataset:id(), archive:params(), user_ctx:ctx()) ->
     fslogic_worker:provider_response().
 archive(SpaceDirCtx, DatasetId, Params, UserCtx) ->
+    assert_has_eff_privilege(SpaceDirCtx, UserCtx, ?SPACE_MANAGE_DATASETS),
+    assert_has_eff_privilege(SpaceDirCtx, UserCtx, ?SPACE_CREATE_ARCHIVES),
+
     {ok, ArchiveId} = dataset_api:archive(DatasetId, Params, user_ctx:get_user_id(UserCtx)),
     ?PROVIDER_OK_RESP(#dataset_archived{id = ArchiveId}).
 
@@ -137,6 +140,9 @@ archive(SpaceDirCtx, DatasetId, Params, UserCtx) ->
 -spec update_archive(file_ctx:ctx(), archive:id(), archive:params(), user_ctx:ctx()) ->
     fslogic_worker:provider_response().
 update_archive(SpaceDirCtx, ArchiveId, Params, UserCtx) ->
+    assert_has_eff_privilege(SpaceDirCtx, UserCtx, ?SPACE_MANAGE_DATASETS),
+    assert_has_eff_privilege(SpaceDirCtx, UserCtx, ?SPACE_CREATE_ARCHIVES),
+
     ok = dataset_api:update_archive(ArchiveId, Params),
     ?PROVIDER_OK_RESP.
 
@@ -144,6 +150,8 @@ update_archive(SpaceDirCtx, ArchiveId, Params, UserCtx) ->
 -spec get_archive_info(file_ctx:ctx(), archive:id(), user_ctx:ctx()) ->
     fslogic_worker:provider_response().
 get_archive_info(SpaceDirCtx, ArchiveId, UserCtx) ->
+    assert_has_eff_privilege(SpaceDirCtx, UserCtx, ?SPACE_VIEW_ARCHIVES),
+
     {ok, ArchiveInfo} = dataset_api:get_archive_info(ArchiveId),
     ?PROVIDER_OK_RESP(ArchiveInfo).
 
@@ -151,12 +159,17 @@ get_archive_info(SpaceDirCtx, ArchiveId, UserCtx) ->
 -spec list_archives(file_ctx:ctx(), dataset:id(), archives_list:opts(), dataset_api:listing_mode(),
     user_ctx:ctx()) -> fslogic_worker:provider_response().
 list_archives(SpaceDirCtx, DatasetId, Opts, ListingMode, UserCtx) ->
+    assert_has_eff_privilege(SpaceDirCtx, UserCtx, ?SPACE_VIEW_ARCHIVES),
+
     {ok, Archives, IsLast} = dataset_api:list_archives(DatasetId, Opts, ListingMode),
     ?PROVIDER_OK_RESP(#archives{archives = Archives, is_last = IsLast}).
 
 
 -spec remove_archive(file_ctx:ctx(), archive:id(), user_ctx:ctx()) -> fslogic_worker:provider_response().
 remove_archive(SpaceDirCtx, ArchiveId, UserCtx) ->
+    assert_has_eff_privilege(SpaceDirCtx, UserCtx, ?SPACE_MANAGE_DATASETS),
+    assert_has_eff_privilege(SpaceDirCtx, UserCtx, ?SPACE_REMOVE_ARCHIVES),
+
     ok = dataset_api:remove_archive(ArchiveId),
     ?PROVIDER_OK_RESP.
 
