@@ -29,20 +29,36 @@
 
 %% tests
 -export([
-    iterate_one_by_one_with_end_100/1,
-    iterate_one_by_one_with_start_25_end_100/1,
-    iterate_one_by_one_with_start_25_end_100_step_4/1,
-    iterate_one_by_one_with_start_50_end_minus_50_step_minus_2/1,
-    iterate_in_chunks_10_with_start_minus_50_end_50_step_4/1
+    create_store_with_invalid_args_test/1,
+
+    stream_one_by_one_with_end_100_test/1,
+    stream_one_by_one_with_start_25_end_100_test/1,
+    stream_one_by_one_with_start_25_end_100_step_4_test/1,
+    stream_one_by_one_with_start_50_end_minus_50_step_minus_2_test/1,
+    stream_one_by_one_with_start_10_end_10_step_1_test/1,
+
+    stream_in_chunks_5_with_start_10_end_50_step_2_test/1,
+    stream_in_chunks_10_with_start_1_end_2_step_10_test/1,
+    stream_in_chunks_10_with_start_minus_50_end_50_step_4_test/1,
+    stream_in_chunks_7_with_start_50_end_minus_50_step_minus_3_test/1,
+    stream_in_chunks_3_with_start_10_end_10_step_2_test/1
 ]).
 
 groups() -> [
     {all_tests, [parallel], [
-        iterate_one_by_one_with_end_100,
-        iterate_one_by_one_with_start_25_end_100,
-        iterate_one_by_one_with_start_25_end_100_step_4,
-        iterate_one_by_one_with_start_50_end_minus_50_step_minus_2,
-        iterate_in_chunks_10_with_start_minus_50_end_50_step_4
+        create_store_with_invalid_args_test,
+
+        stream_one_by_one_with_end_100_test,
+        stream_one_by_one_with_start_25_end_100_test,
+        stream_one_by_one_with_start_25_end_100_step_4_test,
+        stream_one_by_one_with_start_50_end_minus_50_step_minus_2_test,
+        stream_one_by_one_with_start_10_end_10_step_1_test,
+
+        stream_in_chunks_5_with_start_10_end_50_step_2_test,
+        stream_in_chunks_10_with_start_1_end_2_step_10_test,
+        stream_in_chunks_10_with_start_minus_50_end_50_step_4_test,
+        stream_in_chunks_7_with_start_50_end_minus_50_step_minus_3_test,
+        stream_in_chunks_3_with_start_10_end_10_step_2_test
     ]}
 ].
 
@@ -70,73 +86,114 @@ all() -> [
 %%%===================================================================
 
 
-iterate_one_by_one_with_end_100(_Config) ->
-    iterate_test_base(
-        #{<<"end">> => 100},
-        #atm_store_stream_schema{mode = #serial_mode{}},
-        lists:seq(0, 100)
-    ).
+create_store_with_invalid_args_test(_Config) ->
+    Node = oct_background:get_random_provider_node(krakow),
+
+    lists:foreach(fun(InvalidInitArgs) ->
+        ?assertEqual(?EINVAL, create_store(Node, ?ATM_RANGE_STORE_SCHEMA, InvalidInitArgs))
+    end, [
+        undefined,
+        #{<<"end">> => <<"NaN">>},
+        #{<<"start">> => <<"NaN">>, <<"end">> => 10},
+        #{<<"start">> => 5, <<"end">> => 10, <<"step">> => <<"NaN">>},
+        #{<<"start">> => 5, <<"end">> => 10, <<"step">> => 0},
+        #{<<"start">> => 15, <<"end">> => 10, <<"step">> => 1},
+        #{<<"start">> => -15, <<"end">> => -10, <<"step">> => -1},
+        #{<<"start">> => 10, <<"end">> => 15, <<"step">> => -1}
+    ]).
 
 
-iterate_one_by_one_with_start_25_end_100(_Config) ->
-    iterate_test_base(
-        #{<<"start">> => 25, <<"end">> => 100},
-        #atm_store_stream_schema{mode = #serial_mode{}},
-        lists:seq(25, 100)
-    ).
+stream_one_by_one_with_end_100_test(_Config) ->
+    stream_one_by_one_test_base(#{<<"end">> => 100}).
 
 
-iterate_one_by_one_with_start_25_end_100_step_4(_Config) ->
-    iterate_test_base(
-        #{<<"start">> => 25, <<"end">> => 100, <<"step">> => 4},
-        #atm_store_stream_schema{mode = #serial_mode{}},
-        lists:seq(25, 100, 4)
-    ).
+stream_one_by_one_with_start_25_end_100_test(_Config) ->
+    stream_one_by_one_test_base(#{<<"start">> => 25, <<"end">> => 100}).
 
 
-iterate_one_by_one_with_start_50_end_minus_50_step_minus_2(_Config) ->
-    iterate_test_base(
-        #{<<"start">> => 50, <<"end">> => -50, <<"step">> => -2},
-        #atm_store_stream_schema{mode = #serial_mode{}},
-        lists:seq(50, -50, -2)
-    ).
+stream_one_by_one_with_start_25_end_100_step_4_test(_Config) ->
+    stream_one_by_one_test_base(#{<<"start">> => 25, <<"end">> => 100, <<"step">> => 4}).
 
 
-iterate_in_chunks_10_with_start_minus_50_end_50_step_4(_Config) ->
-    iterate_test_base(
-        #{<<"start">> => -50, <<"end">> => 50, <<"step">> => 4},
-        #atm_store_stream_schema{mode = #bulk_mode{size = 10}},
-        split_into_chunks(10, [], lists:seq(-50, 50, 4))
+stream_one_by_one_with_start_50_end_minus_50_step_minus_2_test(_Config) ->
+    stream_one_by_one_test_base(#{<<"start">> => 50, <<"end">> => -50, <<"step">> => -2}).
+
+
+stream_one_by_one_with_start_10_end_10_step_1_test(_Config) ->
+    stream_one_by_one_test_base(#{<<"start">> => 10, <<"end">> => 10, <<"step">> => 1}).
+
+
+%% @private
+-spec stream_one_by_one_test_base(atm_store_api:init_args()) -> ok | no_return().
+stream_one_by_one_test_base(#{<<"end">> := End} = InitArgs) ->
+    Start = maps:get(<<"start">>, InitArgs, 0),
+    Step = maps:get(<<"step">>, InitArgs, 1),
+
+    AtmStoreStreamSchema = #atm_store_stream_schema{mode = #serial_mode{}},
+    stream_test_base(InitArgs, AtmStoreStreamSchema, lists:seq(Start, End, Step)).
+
+
+stream_in_chunks_5_with_start_10_end_50_step_2_test(_Config) ->
+    stream_in_chunks_test_base(5, #{<<"start">> => 10, <<"end">> => 50, <<"step">> => 2}).
+
+
+stream_in_chunks_10_with_start_1_end_2_step_10_test(_Config) ->
+    stream_in_chunks_test_base(10, #{<<"start">> => 1, <<"end">> => 2, <<"step">> => 10}).
+
+
+stream_in_chunks_10_with_start_minus_50_end_50_step_4_test(_Config) ->
+    stream_in_chunks_test_base(10, #{<<"start">> => -50, <<"end">> => 50, <<"step">> => 4}).
+
+
+stream_in_chunks_7_with_start_50_end_minus_50_step_minus_3_test(_Config) ->
+    stream_in_chunks_test_base(7, #{<<"start">> => 50, <<"end">> => -50, <<"step">> => -3}).
+
+
+stream_in_chunks_3_with_start_10_end_10_step_2_test(_Config) ->
+    stream_in_chunks_test_base(3, #{<<"start">> => 10, <<"end">> => 10, <<"step">> => 2}).
+
+
+%% @private
+-spec stream_in_chunks_test_base(pos_integer(), atm_store_api:init_args()) ->
+    ok | no_return().
+stream_in_chunks_test_base(ChunkSize, #{<<"end">> := End} = InitArgs) ->
+    Start = maps:get(<<"start">>, InitArgs, 0),
+    Step = maps:get(<<"step">>, InitArgs, 1),
+
+    stream_test_base(
+        InitArgs,
+        #atm_store_stream_schema{mode = #bulk_mode{size = ChunkSize}},
+        split_into_chunks(ChunkSize, [], lists:seq(Start, End, Step))
     ).
 
 
 %% @private
--spec iterate_test_base(
+-spec stream_test_base(
     atm_store_api:init_args(),
     atm_store_stream_schema(),
     [item()] | [[item()]]
 ) ->
     ok | no_return().
-iterate_test_base(AtmRangeStoreInitArgs, AtmStoreStreamSchema, ExpItems) ->
+stream_test_base(AtmRangeStoreInitArgs, AtmStoreStreamSchema, ExpItems) ->
     Node = oct_background:get_random_provider_node(krakow),
 
     {ok, AtmRangeStoreId} = create_store(Node, ?ATM_RANGE_STORE_SCHEMA, AtmRangeStoreInitArgs),
     AtmStoreStream = create_store_stream(Node, AtmStoreStreamSchema, AtmRangeStoreId),
 
-    assert_all_items_listed(AtmStoreStream, ExpItems).
+    assert_all_items_listed(Node, AtmStoreStream, ExpItems).
 
 
 %% @private
--spec assert_all_items_listed(atm_store_stream:stream(), [item()] | [[item()]]) ->
+-spec assert_all_items_listed(node(), atm_store_stream:stream(), [item()] | [[item()]]) ->
     ok | no_return().
-assert_all_items_listed(AtmStoreStream, []) ->
-    ?assertEqual(stop, iterator:get_next(AtmStoreStream)),
+assert_all_items_listed(Node, AtmStoreStream, []) ->
+    ?assertEqual(stop, iterator_get_next(Node, AtmStoreStream)),
     ok;
-assert_all_items_listed(AtmStoreStream0, [ExpItem | RestItems]) ->
+assert_all_items_listed(Node, AtmStoreStream0, [ExpItem | RestItems]) ->
     {ok, _, _, AtmStoreStream1} = ?assertMatch(
-        {ok, ExpItem, _, _}, iterator:get_next(AtmStoreStream0)
+        {ok, ExpItem, _, _}, iterator_get_next(Node, AtmStoreStream0)
     ),
-    assert_all_items_listed(AtmStoreStream1, RestItems).
+    assert_all_items_listed(Node, AtmStoreStream1, RestItems).
 
 
 %%%===================================================================
@@ -166,6 +223,13 @@ create_store(Node, AtmStoreSchema, InitArgs) ->
     atm_store_stream:stream().
 create_store_stream(Node, AtmStoreStreamSchema, AtmStoreId) ->
     rpc:call(Node, atm_store_api, init_stream, [AtmStoreStreamSchema, AtmStoreId]).
+
+
+%% @private
+-spec iterator_get_next(node(), iterator:iterator()) ->
+    {ok, iterator:item(), iterator:marker(), iterator:iterato()} | stop.
+iterator_get_next(Node, Iterator) ->
+    rpc:call(Node, iterator, get_next, [Iterator]).
 
 
 %===================================================================
