@@ -18,6 +18,7 @@
 -author("Jakub Kudzia").
 
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/fslogic/data_access_control.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("modules/storage/traverse/storage_traverse.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -86,6 +87,13 @@ do_master_job(Job = #storage_traverse_master{
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
     StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
     StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
+
+    % reset any_protected_child_changed in case of first batch job
+    case FMToken =:= ?INITIAL_LS_TOKEN andalso SLToken =:= #link_token{} of
+        true -> storage_sync_info:set_any_protected_child_changed(StorageFileId, SpaceId, false);
+        false -> ok
+    end,
+
     Result = try
         case refill_file_meta_children(FMChildren, FileCtx, FMToken) of
             {error, not_found} ->
@@ -336,17 +344,33 @@ maybe_delete_file_and_update_counters(FileCtx, SpaceId, StorageId) ->
     try
         {SDHandle, FileCtx2} = storage_driver:new_handle(?ROOT_SESS_ID, FileCtx),
         {IsStorageFileCreated, FileCtx3} = file_ctx:is_storage_file_created(FileCtx2),
+        {StorageFileId, FileCtx4} = file_ctx:get_storage_file_id(FileCtx3),
         Uuid = file_ctx:get_logical_uuid_const(FileCtx3),
         IsNotSymlink = not fslogic_uuid:is_symlink_uuid(Uuid),
-        case IsNotSymlink andalso IsStorageFileCreated and (not storage_driver:exists(SDHandle)) of
+        {FileDoc, FileCtx5} = file_ctx:get_file_doc_including_deleted(FileCtx4),
+        {ok, ProtectionFlags} = dataset_eff_cache:get_eff_file_protection_flags(FileDoc),
+        IsProtected = ProtectionFlags =/= ?no_flags_mask,
+        case
+            IsNotSymlink
+            andalso IsStorageFileCreated
+            andalso (not storage_driver:exists(SDHandle))
+            andalso (not IsProtected)
+        of
             true ->
                 % file is still missing on storage we can delete it from db
-               delete_file_and_update_counters(FileCtx3, SpaceId, StorageId);
+                delete_file_and_update_counters(FileCtx5, SpaceId, StorageId);
             false ->
+                case IsProtected of
+                    true -> storage_sync_info:mark_protected_child_has_changed(filename:dirname(StorageFileId), SpaceId);
+                    false -> ok
+                end,
                 storage_import_monitoring:mark_processed_job(SpaceId)
         end
     catch
         throw:?ENOENT ->
+            storage_import_monitoring:mark_processed_job(SpaceId),
+            ok;
+        error:{badmatch, ?ERROR_NOT_FOUND} ->
             storage_import_monitoring:mark_processed_job(SpaceId),
             ok;
         Error:Reason ->

@@ -168,7 +168,7 @@ get_effective_membership_and_protection_flags(FileCtx) ->
     {FileDoc, FileCtx2} = file_ctx:get_file_doc(FileCtx),
     {ok, EffCacheEntry} = dataset_eff_cache:get(FileDoc),
     {ok, EffAncestorDatasets} = dataset_eff_cache:get_eff_ancestor_datasets(EffCacheEntry),
-    {ok, EffProtectionFlags} = dataset_eff_cache:get_eff_protection_flags(EffCacheEntry),
+    {ok, EffProtectionFlags} = dataset_eff_cache:get_eff_file_protection_flags(EffCacheEntry),
     IsDirectAttached = file_meta_dataset:is_attached(FileDoc),
     EffMembership = case {IsDirectAttached, length(EffAncestorDatasets) =/= 0} of
         {true, _} -> ?DIRECT_DATASET_MEMBERSHIP;
@@ -183,7 +183,7 @@ get_effective_summary(FileCtx) ->
     {FileDoc, FileCtx2} = file_ctx:get_file_doc(FileCtx),
     {ok, EffCacheEntry} = dataset_eff_cache:get(FileDoc),
     {ok, EffAncestorDatasets} = dataset_eff_cache:get_eff_ancestor_datasets(EffCacheEntry),
-    {ok, EffProtectionFlags} = dataset_eff_cache:get_eff_protection_flags(EffCacheEntry),
+    {ok, EffProtectionFlags} = dataset_eff_cache:get_eff_file_protection_flags(EffCacheEntry),
     DatasetState = file_meta_dataset:get_state(FileDoc),
     DirectDataset = case DatasetState =:= ?ATTACHED_DATASET orelse DatasetState =:= ?DETACHED_DATASET of
         true -> file_ctx:get_logical_uuid_const(FileCtx2);
@@ -412,7 +412,7 @@ collect_attached_info(DatasetDoc, IndexOrUndefined) ->
     FileType = file_meta:get_effective_type(FileDoc),
     {ok, EffCacheEntry} = dataset_eff_cache:get(FileDoc),
     {ok, EffAncestorDatasets} = dataset_eff_cache:get_eff_ancestor_datasets(EffCacheEntry),
-    {ok, EffProtectionFlags} = dataset_eff_cache:get_eff_protection_flags(EffCacheEntry),
+    {ok, EffProtectionFlags} = dataset_eff_cache:get_eff_dataset_protection_flags(EffCacheEntry),
     FinalIndex = case IndexOrUndefined of
         undefined -> entry_index(DatasetId, FilePath);
         Index -> Index

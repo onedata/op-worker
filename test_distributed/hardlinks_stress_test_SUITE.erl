@@ -1,6 +1,6 @@
 %%%--------------------------------------------------------------------
 %%% @author Michal Wrzeszcz
-%%% @copyright (C) 2015 ACK CYFRONET AGH
+%%% @copyright (C) 2021 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -10,7 +10,7 @@
 %%% creation of large dir by single process and tree of dirs by many processes.
 %%% @end
 %%%--------------------------------------------------------------------
--module(empty_files_stress_test_SUITE).
+-module(hardlinks_stress_test_SUITE).
 -author("Michal Wrzeszcz").
 
 -include("global_definitions.hrl").
@@ -51,16 +51,16 @@ stress_test_base(Config) ->
 many_files_creation_tree_test(Config) ->
     ?PERFORMANCE(Config, [
         {parameters, [
-            [{name, spawn_beg_level}, {value, 4}, {description, "Level of tree to start spawning processes"}],
-            [{name, spawn_end_level}, {value, 5}, {description, "Level of tree to stop spawning processes"}],
-            [{name, dir_level}, {value, 6}, {description, "Level of last test directory"}],
-            [{name, dirs_per_parent}, {value, 6}, {description, "Child directories in single dir"}],
+            [{name, spawn_beg_level}, {value, 3}, {description, "Level of tree to start spawning processes"}],
+            [{name, spawn_end_level}, {value, 4}, {description, "Level of tree to stop spawning processes"}],
+            [{name, dir_level}, {value, 5}, {description, "Level of last test directory"}],
+            [{name, dirs_per_parent}, {value, 4}, {description, "Child directories in single dir"}],
             [{name, files_per_dir}, {value, 40}, {description, "Number of files in single directory"}]
         ]},
         {description, "Creates directories' and files' tree using multiple process"}
     ]).
 many_files_creation_tree_test_base(Config) ->
-    stress_test_traverse_pool:test_step(Config, #{cache_guids => true}, false).
+    stress_test_traverse_pool:test_step(Config, #{cache_guids => true, use_hardlinks => true}, true).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -73,7 +73,7 @@ end_per_suite(Config) ->
     files_stress_test_base:end_per_suite(Config).
 
 init_per_testcase(stress_test = Case, Config) ->
-    Config2 = stress_test_traverse_pool:init_pool(Config, 500),
+    Config2 = stress_test_traverse_pool:init_pool(Config, 500000),
     files_stress_test_base:init_per_testcase(Case, Config2);
 init_per_testcase(_Case, Config) ->
     Config.

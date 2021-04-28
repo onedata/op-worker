@@ -161,6 +161,7 @@ translate(#gri{type = od_share, id = Id, aspect = instance, scope = public}, Res
     #document{
         key = Id,
         value = #od_share{
+            space = maps:get(<<"spaceId">>, Result),
             name = maps:get(<<"name">>, Result),
             description = maps:get(<<"description">>, Result),
             public_url = maps:get(<<"publicUrl">>, Result),
@@ -377,12 +378,8 @@ apply_scope_mask(Doc = #document{value = Space = #od_space{}}, protected) ->
         }
     };
 
-apply_scope_mask(Doc = #document{value = Share = #od_share{}}, public) ->
-    Doc#document{
-        value = Share#od_share{
-            space = undefined
-        }
-    };
+apply_scope_mask(Doc = #document{value = #od_share{}}, public) ->
+    Doc;
 
 apply_scope_mask(Doc = #document{value = Provider = #od_provider{}}, protected) ->
     Doc#document{
