@@ -15,6 +15,7 @@
 -module(archives_list).
 -author("Jakub Kudzia").
 
+-include("global_definitions.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
 -include_lib("ctool/include/errors.hrl").
@@ -27,8 +28,6 @@
 -define(FOREST(DatasetId), <<"ARCHIVES_", DatasetId/binary>>).
 -define(LOCAL_TREE_ID, oneprovider:get_id()).
 -define(LINK(LinkName, LinkValue), {LinkName, LinkValue}).
-
--define(EPOCH_INFINITY, 9999999999). % GMT: Saturday, 20 November 2286 17:46:39
 
 % link_name() consists of 2 parts:
 %  * timestamp part - equal to ?EPOCH_INFINITY - Timestamp.
