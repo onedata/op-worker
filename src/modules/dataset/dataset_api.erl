@@ -53,10 +53,16 @@
 
 % Datasets
 % TODO VFS-7518 how should we handle race on creating dataset on the same file in 2 providers?
-% TODO VFS-7563 add tests concerning datasets
+% TODO VFS-7533 handle conflicts on remote modification of file-meta and dataset models
+% TODO VFS-7563 add tests concerning datasets to permissions test suites
 
 % Archives
+% TODO VFS-7548 API for archives
+% TODO VFS-7601 implement archivisation procedure
+% TODO VFS-7613 use datastore function for getting number of links in forest to acquire number of archives per dataset
 % TODO VFS-7616 refine archives' attributes
+% TODO VFS-7617 implement recall operation of archives
+% TODO VFS-7619 add tests concerning archives to permissions test suites
 
 -define(CRITICAL_SECTION(DatasetId, Function), critical_section:run({dataset, DatasetId}, Function)).
 
@@ -257,13 +263,11 @@ get_archive_info(ArchiveId) ->
 get_archive_info(ArchiveDoc = #document{}, ArchiveIndex) ->
     ArchiveId = archive:get_id(ArchiveDoc),
     Timestamp = archive:get_timestamp(ArchiveDoc),
-    DatasetId = archive:get_dataset_id(ArchiveDoc),
-    SpaceId = archive:get_space_id(ArchiveDoc),
     {ok, #archive_info{
         id = ArchiveId,
         dataset_id = archive:get_dataset_id(ArchiveDoc),
         % DatasetId is also Uuid of file on which the dataset is established
-        root_dir = file_id:pack_guid(DatasetId, SpaceId),
+        root_dir = archive:get_root_dir(ArchiveDoc),
         creation_timestamp = archive:get_timestamp(ArchiveDoc),
         type = archive:get_type(ArchiveDoc),
         character = archive:get_character(ArchiveDoc),

@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Tests of datasets mechanism.
+%%% Tests of archives mechanism.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(archive_test_SUITE).
@@ -18,7 +18,6 @@
 -include("modules/archive/archive.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include_lib("ctool/include/errors.hrl").
-%%-include_lib("ctool/include/onedata.hrl").
 -include_lib("ctool/include/privileges.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
@@ -151,12 +150,9 @@ archive_dataset_attached_to_hardlink(_Config) ->
 archive_dataset_attached_to_symlink(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
-    SpaceId = oct_background:get_space_id(?SPACE),
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
-    #object{guid = Guid} = onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE, #dir_spec{}),
-    {ok, DirPath} = lfm_proxy:get_file_path(P1Node, UserSessIdP1, Guid),
-    {ok, #file_attr{guid = LinkGuid}} =
-        lfm_proxy:make_symlink(P1Node, UserSessIdP1, ?FILE_REF(SpaceGuid), ?RAND_NAME, DirPath),
+    #object{guid = DirGuid} = onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE, #dir_spec{}),
+    {ok, DirPath} = lfm_proxy:get_file_path(P1Node, UserSessIdP1, DirGuid),
+    #object{guid = LinkGuid} = onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE, #symlink_spec{symlink_value = DirPath}),
     simple_archive_crud_test_base(LinkGuid).
 
 archivisation_of_detached_dataset_should_be_impossible(_Config) ->
@@ -365,28 +361,26 @@ create_archive_privileges_test(_Config) ->
         lfm_proxy:establish_dataset(P1Node, UserSessIdP1, ?FILE_REF(Guid), ?no_flags_mask)),
     {ok, ArchiveId} = lfm_proxy:archive_dataset(P1Node, UserSessIdP1, DatasetId, ?TEST_ARCHIVE_PARAMS),
 
-    RequiredPrivileges = [?SPACE_MANAGE_DATASETS, ?SPACE_CREATE_ARCHIVES],
+    RequiredPrivileges = privileges:from_list([?SPACE_MANAGE_DATASETS, ?SPACE_CREATE_ARCHIVES]),
+    AllPrivileges = privileges:from_list(RequiredPrivileges ++ privileges:space_member()),
 
     lists:foreach(fun(Privilege) ->
-        % assign user all RequiredPrivileges without Privilege
-        Privileges = RequiredPrivileges -- [Privilege] ++ privileges:space_member(),
-        ozw_test_rpc:space_set_user_privileges(SpaceId, UserId2, Privileges),
 
+        ensure_privilege_revoked(P1Node, SpaceId, UserId2, Privilege, AllPrivileges),
         % user2 cannot create archive
         ?assertEqual({error, ?EPERM},
-            lfm_proxy:archive_dataset(P1Node, User2SessIdP1, DatasetId, ?TEST_ARCHIVE_PARAMS), ?ATTEMPTS),
+            lfm_proxy:archive_dataset(P1Node, User2SessIdP1, DatasetId, ?TEST_ARCHIVE_PARAMS)),
         % user2 cannot modify an existing archive either
         ?assertEqual({error, ?EPERM},
-            lfm_proxy:update_archive(P1Node, User2SessIdP1, ArchiveId, #{description => ?TEST_DESCRIPTION}), ?ATTEMPTS),
+            lfm_proxy:update_archive(P1Node, User2SessIdP1, ArchiveId, #{description => ?TEST_DESCRIPTION})),
 
-        % assign user2 missing privilege 
-        ozw_test_rpc:space_set_user_privileges(SpaceId, UserId2, [Privilege | Privileges]),
+        ensure_privilege_assigned(P1Node, SpaceId, UserId2, Privilege, AllPrivileges),
         % user2 can now create archive
         ?assertMatch({ok, _},
-            lfm_proxy:archive_dataset(P1Node, User2SessIdP1, DatasetId, ?TEST_ARCHIVE_PARAMS), ?ATTEMPTS),
+            lfm_proxy:archive_dataset(P1Node, User2SessIdP1, DatasetId, ?TEST_ARCHIVE_PARAMS)),
         % as well as modify an existing one
         ?assertMatch(ok,
-            lfm_proxy:update_archive(P1Node, User2SessIdP1, ArchiveId, #{description => ?TEST_DESCRIPTION}), ?ATTEMPTS)
+            lfm_proxy:update_archive(P1Node, User2SessIdP1, ArchiveId, #{description => ?TEST_DESCRIPTION}))
     end, RequiredPrivileges).
 
 
@@ -401,9 +395,10 @@ view_archive_privileges_test(_Config) ->
     {ok, DatasetId} = lfm_proxy:establish_dataset(P1Node, UserSessIdP1, ?FILE_REF(Guid), ?no_flags_mask),
     {ok, ArchiveId} = lfm_proxy:archive_dataset(P1Node, UserSessIdP1, DatasetId, ?TEST_ARCHIVE_PARAMS),
 
+    AllPrivileges = privileges:from_list([?SPACE_VIEW_ARCHIVES | privileges:space_member()]),
+
     % assign user only space_member privileges
-    Privileges = privileges:space_member(),
-    ozw_test_rpc:space_set_user_privileges(SpaceId, UserId2, Privileges),
+    ensure_privilege_revoked(P1Node, SpaceId, UserId2, ?SPACE_VIEW_ARCHIVES, AllPrivileges),
 
     % user2 cannot fetch archive info
     ?assertEqual({error, ?EPERM},
@@ -413,14 +408,14 @@ view_archive_privileges_test(_Config) ->
         lfm_proxy:list_archives(P1Node, User2SessIdP1, DatasetId, #{offset => 0, limit => 10})),
 
     % assign user2 privilege to view archives
-    ozw_test_rpc:space_set_user_privileges(SpaceId, UserId2, [?SPACE_VIEW_ARCHIVES | Privileges]),
+    ensure_privilege_assigned(P1Node, SpaceId, UserId2, ?SPACE_VIEW_ARCHIVES, AllPrivileges),
 
     % now user2 should be able to fetch archive info
     ?assertMatch({ok, _},
-        lfm_proxy:get_archive_info(P1Node, User2SessIdP1, ArchiveId), ?ATTEMPTS),
+        lfm_proxy:get_archive_info(P1Node, User2SessIdP1, ArchiveId)),
     % as well as list the archives
     ?assertMatch({ok, [{_, ArchiveId}], _},
-        lfm_proxy:list_archives(P1Node, User2SessIdP1, DatasetId, #{offset => 0, limit => 10}), ?ATTEMPTS).
+        lfm_proxy:list_archives(P1Node, User2SessIdP1, DatasetId, #{offset => 0, limit => 10})).
 
 remove_archive_privileges_test(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
@@ -435,20 +430,18 @@ remove_archive_privileges_test(_Config) ->
     {ok, ArchiveId1} = lfm_proxy:archive_dataset(P1Node, UserSessIdP1, DatasetId, ?TEST_ARCHIVE_PARAMS),
     {ok, ArchiveId2} = lfm_proxy:archive_dataset(P1Node, UserSessIdP1, DatasetId, ?TEST_ARCHIVE_PARAMS),
 
-    RequiredPrivileges = [?SPACE_MANAGE_DATASETS, ?SPACE_REMOVE_ARCHIVES],
+    RequiredPrivileges = privileges:from_list([?SPACE_MANAGE_DATASETS, ?SPACE_REMOVE_ARCHIVES]),
+    AllPrivileges = privileges:from_list(RequiredPrivileges ++ privileges:space_member()),
 
     lists:foreach(fun({Privilege, ArchiveId}) ->
-        % assign user all RequiredPrivileges without Privilege
-        Privileges = RequiredPrivileges -- [Privilege] ++ privileges:space_member(),
-        ozw_test_rpc:space_set_user_privileges(SpaceId, UserId2, Privileges),
 
+        ensure_privilege_revoked(P1Node, SpaceId, UserId2, Privilege, AllPrivileges),
         % user2 cannot remove the archive
-        ?assertEqual({error, ?EPERM}, lfm_proxy:remove_archive(P1Node, User2SessIdP1, ArchiveId), ?ATTEMPTS),
+        ?assertEqual({error, ?EPERM}, lfm_proxy:remove_archive(P1Node, User2SessIdP1, ArchiveId)),
 
-        % assign user2 missing privilege 
-        ozw_test_rpc:space_set_user_privileges(SpaceId, UserId2, [Privilege | Privileges]),
+        ensure_privilege_assigned(P1Node, SpaceId, UserId2, Privilege, AllPrivileges),
         % user2 can now remove archive
-        ?assertEqual(ok, lfm_proxy:remove_archive(P1Node, User2SessIdP1, ArchiveId), ?ATTEMPTS)
+        ?assertEqual(ok, lfm_proxy:remove_archive(P1Node, User2SessIdP1, ArchiveId))
     
     end, lists:zip(RequiredPrivileges, [ArchiveId1, ArchiveId2])).
 
@@ -472,7 +465,7 @@ simple_archive_crud_test_base(Guid) ->
     ExpArchiveInfo = #archive_info{
         id = ArchiveId,
         dataset_id = DatasetId,
-        root_dir = Guid,
+        root_dir = undefined,
         creation_timestamp = ?TEST_TIMESTAMP,
         type = ?FULL_ARCHIVE,
         character = ?DIP,
@@ -608,3 +601,19 @@ update_opts(Opts = #{offset := Offset}, ListedArchives) ->
     Opts#{offset => Offset + length(ListedArchives)};
 update_opts(Opts = #{start_index := _}, ListedArchives) ->
     Opts#{start_index => element(1, lists:last(ListedArchives)), offset => 1}.
+
+has_eff_privilege(Node, SpaceId, UserId, Privilege) ->
+    rpc:call(Node, space_logic, has_eff_privilege, [SpaceId, UserId, Privilege]).
+
+ensure_privilege_revoked(Node, SpaceId, UserId, Privilege, AllPrivileges) ->
+    % assign AllPrivileges with Privilege missing
+    Privileges = privileges:from_list(AllPrivileges -- [Privilege]),
+    ozw_test_rpc:space_set_user_privileges(SpaceId, UserId, Privileges),
+    % wait till information is synced from onezone
+    ?assertMatch(false, has_eff_privilege(Node, SpaceId, UserId, Privilege), ?ATTEMPTS).
+
+ensure_privilege_assigned(Node, SpaceId, UserId, Privilege, AllPrivileges) ->
+    % assign user AllPrivileges
+    ozw_test_rpc:space_set_user_privileges(SpaceId, UserId, AllPrivileges),
+    % wait till information is synced from onezone
+    ?assertMatch(true, has_eff_privilege(Node, SpaceId, UserId, Privilege), ?ATTEMPTS).

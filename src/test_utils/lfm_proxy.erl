@@ -873,14 +873,14 @@ remove_dataset(Worker, SessId, DatasetId) ->
     ?EXEC(Worker, lfm:remove_dataset(SessId, DatasetId)).
 
 
--spec detach_dataset(node(), session:id(), dataset:id()) -> ok | lfm:error_reply().
-detach_dataset(Worker, SessId, DatasetId) ->
-    update_dataset(Worker, SessId, DatasetId, ?DETACHED_DATASET, ?no_flags_mask, ?no_flags_mask).
-
-
 -spec reattach_dataset(node(), session:id(), dataset:id()) -> ok | lfm:error_reply().
 reattach_dataset(Worker, SessId, DatasetId) ->
     update_dataset(Worker, SessId, DatasetId, ?ATTACHED_DATASET, ?no_flags_mask, ?no_flags_mask).
+
+
+-spec detach_dataset(node(), session:id(), dataset:id()) -> ok | lfm:error_reply().
+detach_dataset(Worker, SessId, DatasetId) ->
+    update_dataset(Worker, SessId, DatasetId, ?DETACHED_DATASET, ?no_flags_mask, ?no_flags_mask).
 
 
 -spec update_dataset(node(), session:id(), dataset:id(), undefined | dataset:state(), data_access_control:bitmask(),

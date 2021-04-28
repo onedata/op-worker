@@ -295,7 +295,7 @@
     protection_flags = ?no_flags_mask :: data_access_control:bitmask(),
     eff_protection_flags = ?no_flags_mask :: data_access_control:bitmask(),
     parent :: undefined | dataset:id(),
-    archives_count = 0 :: non_neg_integer(),
+    archives_count = 0 :: non_neg_integer(), % TODO VFS-7548 add to rest/gui translators and swagger
     index :: dataset_api:index()
 }).
 
@@ -317,7 +317,7 @@
 -record(archive_info, {
     id :: archive:id(),
     dataset_id :: dataset:id(),
-    root_dir :: file_id:file_guid(),
+    root_dir :: undefined | file_id:file_guid(),
     creation_timestamp :: time:millis(),
     type :: archive:type(),
     character :: archive:character(),
@@ -328,7 +328,7 @@
 }).
 
 -record(archives, {
-    archives = [] :: [archive:id()],
+    archives = [] :: dataset_api:archive_entries(),
     is_last :: boolean()
 }).
 

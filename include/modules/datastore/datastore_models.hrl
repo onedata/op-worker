@@ -393,6 +393,7 @@
 % One documents is stored for one archive.
 -record(archive, {
     dataset_id :: dataset:id(),
+    % TODO VFS-7601 set guid of directory in which archive is stored
     root_dir :: undefined | file_id:file_guid(),
     creation_timestamp :: time:seconds(),
     creator :: archive:creator(),

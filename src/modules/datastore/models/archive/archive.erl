@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% 
+%%% Model for storing information about archives.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(archive).
@@ -20,7 +20,7 @@
 -export([create/4, get/1, update/2, delete/1]).
 
 % getters
--export([get_id/1, get_timestamp/1, get_dataset_id/1, get_space_id/1,
+-export([get_id/1, get_timestamp/1, get_dataset_id/1, get_root_dir/1, get_space_id/1,
     get_type/1, get_character/1, get_data_structure/1, get_metadata_structure/1,
     get_description/1
 ]).
@@ -33,8 +33,6 @@
 -type id() :: binary().
 -type record() :: #archive{}.
 -type doc() :: datastore_doc:doc(record()).
-
--export_type([id/0]).
 
 -type creator() :: od_user:id().
 -type type() :: ?FULL_ARCHIVE | ?INCREMENTAL_ARCHIVE.
@@ -137,6 +135,12 @@ get_dataset_id(#archive{dataset_id = DatasetId}) ->
     DatasetId;
 get_dataset_id(#document{value = Archive}) ->
     get_dataset_id(Archive).
+
+-spec get_root_dir(record() | doc()) -> file_id:file_guid() | undefined.
+get_root_dir(#archive{root_dir = RootDir}) ->
+    RootDir;
+get_root_dir(#document{value = Archive}) ->
+    get_root_dir(Archive).
 
 -spec get_space_id(doc()) -> od_space:id().
 get_space_id(#document{scope = SpaceId}) ->
