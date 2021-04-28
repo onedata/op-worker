@@ -53,10 +53,11 @@ create(#atm_store_schema{
     }).
 
 
--spec init_stream(atm_store_stream_schema(), atm_store:record()) ->
+-spec init_stream(atm_store_stream_schema(), atm_store:id() | atm_store:record()) ->
     atm_store_stream:stream().
-init_stream(AtmStoreStreamSchema, AtmStore) ->
-    atm_store_stream:init(AtmStoreStreamSchema, AtmStore).
+init_stream(AtmStoreStreamSchema, AtmStoreIdOrRecord) ->
+    AtmStoreRecord = ensure_atm_store_record(AtmStoreIdOrRecord),
+    atm_store_stream:init(AtmStoreStreamSchema, AtmStoreRecord).
 
 
 %%%===================================================================
@@ -68,3 +69,13 @@ init_stream(AtmStoreStreamSchema, AtmStore) ->
 -spec store_type_to_container_model(atm_store:type()) ->
     atm_data_container:model().
 store_type_to_container_model(range) -> atm_range_data_container.
+
+
+%% @private
+-spec ensure_atm_store_record(atm_store:id() | atm_store:record()) ->
+    atm_store:record().
+ensure_atm_store_record(#atm_store{} = AtmStoreRecord) ->
+    AtmStoreRecord;
+ensure_atm_store_record(AtmStoreId) ->
+    {ok, AtmStoreRecord} = atm_store:get(AtmStoreId),
+    AtmStoreRecord.

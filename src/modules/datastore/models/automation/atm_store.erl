@@ -14,10 +14,12 @@
 
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% API
 -export([
     create/1,
+    get/1,
     delete/1
 ]).
 %% datastore_model callbacks
@@ -55,6 +57,16 @@ create(AtmStoreRecord) ->
     ?extract_key(datastore_model:create(?CTX, #document{
         value = AtmStoreRecord
     })).
+
+
+-spec get(id()) -> {ok, record()} | ?ERROR_NOT_FOUND.
+get(AtmStoreId) ->
+    case datastore_model:get(?CTX, AtmStoreId) of
+        {ok, #document{value = AtmStoreRecord}} ->
+            {ok, AtmStoreRecord};
+        ?ERROR_NOT_FOUND = Error ->
+            Error
+    end.
 
 
 -spec delete(id()) -> ok | error().

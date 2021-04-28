@@ -12,7 +12,6 @@
 -module(atm_store_stream).
 -author("Bartosz Walkowicz").
 
--behaviour(jsonable).
 -behaviour(iterator).
 
 -include("modules/automation/atm_tmp.hrl").
@@ -22,10 +21,12 @@
 -export([init/2]).
 
 %% iterator callbacks
--export([get_next/1, jump_to/2]).
-
-%% Jsonable callbacks
--export([version/0, to_json/1, from_json/1]).
+-export([
+    get_next/1,
+    jump_to/2,
+    to_json/1,
+    from_json/1
+]).
 
 
 -record(atm_store_stream, {
@@ -91,16 +92,6 @@ jump_to(Marker, #atm_store_stream{data_stream = AtmDataStream} = AtmStoreStream)
     AtmStoreStream#atm_store_stream{
         data_stream = atm_data_stream:jump_to(Marker, AtmDataStream)
     }.
-
-
-%%%===================================================================
-%%% Jsonable callbacks
-%%%===================================================================
-
-
--spec version() -> json_serializer:model_version().
-version() ->
-    1.
 
 
 -spec to_json(stream()) -> json_utils:json_map().
