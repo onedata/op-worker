@@ -23,6 +23,10 @@
     init_stream/2
 ]).
 
+-type init_args() :: atm_data_container:init_args().
+
+-export_type([init_args/0]).
+
 -type error() :: {error, term()}.
 
 
@@ -31,7 +35,7 @@
 %%%===================================================================
 
 
--spec create(atm_store_schema(), term()) -> {ok, atm_store:id()} | error().
+-spec create(atm_store_schema(), init_args()) -> {ok, atm_store:id()} | error().
 create(#atm_store_schema{
     name = Name,
     summary = Summary,

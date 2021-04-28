@@ -60,8 +60,8 @@ init(AtmDataSpec, #{<<"end">> := EndNum} = InitialArgs) when is_integer(EndNum) 
 
     case
         atm_data_spec:get_type(AtmDataSpec) =:= atm_integer_type andalso
-        is_integer(StartNum) andalso
-        is_integer(Step)
+        is_integer(StartNum) andalso is_integer(Step) andalso
+        is_proper_range(StartNum, EndNum, Step)
     of
         true ->
             #atm_range_data_container{
@@ -75,6 +75,16 @@ init(AtmDataSpec, #{<<"end">> := EndNum} = InitialArgs) when is_integer(EndNum) 
     end;
 init(_AtmDataSpec, _InitialArgs) ->
     throw(?EINVAL).
+
+
+%% @private
+-spec is_proper_range(integer(), integer(), integer()) -> boolean().
+is_proper_range(Start, End, Step) when Start =< End, Step > 0 ->
+    true;
+is_proper_range(Start, End, Step) when Start >= End, Step < 0 ->
+    true;
+is_proper_range(_Start, _End, _Step) ->
+    false.
 
 
 -spec get_data_spec(container()) -> atm_data_spec:spec().

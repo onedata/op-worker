@@ -47,8 +47,8 @@
 
 
 -spec init(integer(), integer(), integer()) -> stream().
-init(StartNum, EndNum, Step) ->
-    #atm_range_data_stream{start_num = StartNum, end_num = EndNum, step = Step}.
+init(Start, End, Step) ->
+    #atm_range_data_stream{start_num = Start, end_num = End, step = Step}.
 
 
 %%%===================================================================
@@ -59,15 +59,20 @@ init(StartNum, EndNum, Step) ->
 -spec get_next_batch(pos_integer(), stream()) ->
     {ok, [item()], marker(), stream()} | stop.
 get_next_batch(Size, #atm_range_data_stream{
-    start_num = StartNum,
-    end_num = EndNum,
+    start_num = Start,
+    end_num = End,
     step = Step
 } = AtmDataStream) ->
-    case lists:seq(StartNum, EndNum, Step) of
+    RequestedEndNum = Start + (Size - 1) * Step,
+    Threshold = case Step > 0 of
+        true -> min(RequestedEndNum, End);
+        false -> max(RequestedEndNum, End)
+    end,
+    case lists:seq(Start, Threshold, Step) of
         [] ->
             stop;
         Items ->
-            NewStartNum = StartNum + Size * Step,
+            NewStartNum = Threshold + Step,
             {ok, Items, integer_to_binary(NewStartNum), AtmDataStream#atm_range_data_stream{
                 start_num = NewStartNum
             }}
@@ -75,15 +80,15 @@ get_next_batch(Size, #atm_range_data_stream{
 
 
 -spec jump_to(marker(), stream()) -> stream().
-jump_to(StartNumBin, AtmDataStream) ->
-    AtmDataStream#atm_range_data_stream{start_num = binary_to_integer(StartNumBin)}.
+jump_to(StartBin, AtmDataStream) ->
+    AtmDataStream#atm_range_data_stream{start_num = binary_to_integer(StartBin)}.
 
 
 -spec to_json(stream()) -> json_utils:json_map().
-to_json(#atm_range_data_stream{start_num = StartNum, end_num = EndNum, step = Step}) ->
-    #{<<"start">> => StartNum, <<"end">> => EndNum, <<"step">> => Step}.
+to_json(#atm_range_data_stream{start_num = Start, end_num = End, step = Step}) ->
+    #{<<"start">> => Start, <<"end">> => End, <<"step">> => Step}.
 
 
 -spec from_json(json_utils:json_map()) -> stream().
-from_json(#{<<"start">> := StartNum, <<"end">> := EndNum, <<"step">> := Step}) ->
-    #atm_range_data_stream{start_num = StartNum, end_num = EndNum, step = Step}.
+from_json(#{<<"start">> := Start, <<"end">> := End, <<"step">> := Step}) ->
+    #atm_range_data_stream{start_num = Start, end_num = End, step = Step}.
