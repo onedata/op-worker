@@ -1211,7 +1211,6 @@ schedule_replica_eviction_by_rest(Worker, ProviderId, User, ?FILE_REF(FileGuid),
                     <<"type">> => <<"migration">>,
                     <<"replicatingProviderId">> => MigrationProviderId,
                     <<"evictingProviderId">> => ProviderId,
-                    <<"replicatingProviderId">> => MigrationProviderId,
                     <<"dataSourceType">> => <<"file">>,
                     <<"fileId">> => FileObjectId
                 }),
