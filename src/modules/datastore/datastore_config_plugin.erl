@@ -86,7 +86,7 @@ get_models() -> [
     deletion_marker,
     tree_traverse_progress,
     dataset,
-    atm_workflow_execution
+    atm_workflow_execution,
     archive,
 
 %% @TODO VFS-6767 deprecated, included for upgrade procedure. Remove in next major release after 21.02.*.
