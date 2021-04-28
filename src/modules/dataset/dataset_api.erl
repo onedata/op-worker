@@ -233,7 +233,7 @@ archive(DatasetId, Params, Attrs, UserId) ->
             case archive:create(DatasetId, SpaceId, UserId, Params, Attrs) of
                 {ok, ArchiveDoc} ->
                     ArchiveId = archive:get_id(ArchiveDoc),
-                    Timestamp = archive:get_timestamp(ArchiveDoc),
+                    Timestamp = archive:get_creation_time(ArchiveDoc),
                     {ok, SpaceId} = dataset:get_space_id(DatasetDoc),
                     archives_list:add(DatasetId, SpaceId, ArchiveId, Timestamp),
                     {ok, ArchiveId};
@@ -262,13 +262,13 @@ get_archive_info(ArchiveId) ->
 -spec get_archive_info(archive:id() | archive:doc(), archive_index() | undefined) -> {ok, archive_info()}.
 get_archive_info(ArchiveDoc = #document{}, ArchiveIndex) ->
     ArchiveId = archive:get_id(ArchiveDoc),
-    Timestamp = archive:get_timestamp(ArchiveDoc),
+    Timestamp = archive:get_creation_time(ArchiveDoc),
     {ok, #archive_info{
         id = ArchiveId,
         dataset_id = archive:get_dataset_id(ArchiveDoc),
-        % DatasetId is also Uuid of file on which the dataset is established
-        root_dir = archive:get_root_dir(ArchiveDoc),
-        creation_timestamp = archive:get_timestamp(ArchiveDoc),
+        state = archive:get_state(ArchiveDoc),
+        root_dir_guid = archive:get_root_dir(ArchiveDoc),
+        creation_time = archive:get_creation_time(ArchiveDoc),
         type = archive:get_type(ArchiveDoc),
         character = archive:get_character(ArchiveDoc),
         data_structure = archive:get_data_structure(ArchiveDoc),
@@ -304,7 +304,7 @@ remove_archive(ArchiveId) ->
             case archive:delete(ArchiveId) of
                 ok ->
                     DatasetId = archive:get_dataset_id(ArchiveDoc),
-                    Timestamp = archive:get_timestamp(ArchiveDoc),
+                    Timestamp = archive:get_creation_time(ArchiveDoc),
                     SpaceId = archive:get_space_id(ArchiveDoc),
                     archives_list:delete(DatasetId, SpaceId, ArchiveId, Timestamp);
                 ?ERROR_NOT_FOUND ->

@@ -50,7 +50,10 @@ get_response(#gri{aspect = instance}, #dataset_info{} = DatasetInfo) ->
     ?OK_REPLY(translate_dataset_info(DatasetInfo));
 
 get_response(#gri{aspect = children}, {Datasets, IsLast}) ->
-    ?OK_REPLY(translate_datasets_list(Datasets, IsLast)).
+    ?OK_REPLY(translate_datasets_list(Datasets, IsLast));
+
+get_response(#gri{aspect = archives}, {Archives, IsLast}) ->
+    ?OK_REPLY(translate_archives_list({Archives, IsLast}, IsLast)).
 
 %%%===================================================================
 %%% Util functions
@@ -66,7 +69,8 @@ translate_dataset_info(#dataset_info{
     creation_time = CreationTime,
     protection_flags = ProtectionFlags,
     eff_protection_flags = EffProtectionFlags,
-    parent = ParentId
+    parent = ParentId,
+    archives_count = ArchivesCount
 }) ->
     {ok, RootFileObjectId} = file_id:guid_to_objectid(RootFileGuid),
     #{
@@ -78,7 +82,8 @@ translate_dataset_info(#dataset_info{
         <<"rootFilePath">> => RootFilePath,
         <<"protectionFlags">> => file_meta:protection_flags_to_json(ProtectionFlags),
         <<"effectiveProtectionFlags">> => file_meta:protection_flags_to_json(EffProtectionFlags),
-        <<"creationTime">> => CreationTime
+        <<"creationTime">> => CreationTime,
+        <<"archivesCount">> => ArchivesCount
     }.
 
 
@@ -89,6 +94,20 @@ translate_datasets_list(Datasets, IsLast) ->
     end, {[], undefined}, Datasets),
     #{
         <<"datasets">> => lists:reverse(TranslatedDatasetsReversed),
+        <<"nextPageToken">> => case IsLast of
+            true -> null;
+            false -> http_utils:base64url_encode(NextPageToken)
+        end
+    }.
+
+
+-spec translate_archives_list([{dataset_api:archive_index(), archive:id()}], boolean()) -> json_utils:json_map().
+translate_archives_list(Archives, IsLast) ->
+    {TranslatedArchivesReversed, NextPageToken} = lists:foldl(fun({Index, ArchiveId}, {Acc, _}) ->
+        {[#{<<"archiveId">> => ArchiveId} | Acc], Index}
+    end, {[], undefined}, Archives),
+    #{
+        <<"archives">> => lists:reverse(TranslatedArchivesReversed),
         <<"nextPageToken">> => case IsLast of
             true -> null;
             false -> http_utils:base64url_encode(NextPageToken)

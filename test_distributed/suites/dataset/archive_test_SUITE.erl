@@ -469,8 +469,9 @@ simple_archive_crud_test_base(Guid) ->
     ExpArchiveInfo = #archive_info{
         id = ArchiveId,
         dataset_id = DatasetId,
-        root_dir = undefined,
-        creation_timestamp = ?TEST_TIMESTAMP,
+        state = ?EMPTY,
+        root_dir_guid = undefined,
+        creation_time = ?TEST_TIMESTAMP,
         type = ?FULL_ARCHIVE,
         character = ?DIP,
         data_structure = ?BAGIT,

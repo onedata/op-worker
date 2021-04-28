@@ -28,7 +28,7 @@
 % Macros defining possible characters of an archive
 -define(DIP, dip).
 -define(AIP, aip).
--define(DIP_AIP, dip_aip).
+-define(HYBRID, hybrid).
 
 % Macros defining possible archive data structure types
 -define(BAGIT, bagit).

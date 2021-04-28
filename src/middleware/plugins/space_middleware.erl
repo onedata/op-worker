@@ -716,7 +716,7 @@ get(#op_req{auth = Auth, gri = #gri{id = SpaceId, aspect = Aspect}, data = Data}
     orelse Aspect =:= datasets_details
 ->
     State = maps:get(<<"state">>, Data, ?ATTACHED_DATASET),
-    ListingOpts = dataset_middleware:gather_dataset_listing_opts(Data),
+    ListingOpts = dataset_middleware:gather_listing_opts(Data),
     ListingMode = case Aspect of
         datasets -> ?BASIC_INFO;
         datasets_details -> ?EXTENDED_INFO

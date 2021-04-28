@@ -20,8 +20,8 @@
 -export([create/5, get/1, update/2, delete/1]).
 
 % getters
--export([get_id/1, get_timestamp/1, get_dataset_id/1, get_root_dir/1, get_space_id/1,
-    get_type/1, get_character/1, get_data_structure/1, get_metadata_structure/1,
+-export([get_id/1, get_creation_time/1, get_dataset_id/1, get_root_dir/1, get_space_id/1,
+    get_state/1, get_type/1, get_character/1, get_data_structure/1, get_metadata_structure/1,
     get_description/1
 ]).
 
@@ -37,7 +37,7 @@
 -type creator() :: od_user:id().
 -type type() :: ?FULL_ARCHIVE | ?INCREMENTAL_ARCHIVE.
 -type state() :: ?EMPTY | ?INITIALIZING | ?ARCHIVED | ?RETIRING.
--type character() :: ?DIP | ?AIP | ?DIP_AIP.
+-type character() :: ?DIP | ?AIP | ?HYBRID.
 -type data_structure() :: ?BAGIT | ?SIMPLE_COPY.
 -type metadata_structure() :: ?BUILT_IN | ?JSON | ?XML.
 -type timestamp() :: time:seconds().
@@ -87,7 +87,7 @@ create(DatasetId, SpaceId, Creator, Params, Attrs) ->
     datastore_model:create(?CTX, #document{
         value = #archive{
             dataset_id = DatasetId,
-            creation_timestamp = global_clock:timestamp_seconds(),
+            creation_time = global_clock:timestamp_seconds(),
             creator = Creator,
             type = maps:get(type, SanitizedParams),
             state = ?EMPTY,
@@ -128,11 +128,11 @@ delete(ArchiveId) ->
 get_id(#document{key = ArchiveId}) ->
     ArchiveId.
 
--spec get_timestamp(record() | doc()) -> timestamp().
-get_timestamp(#archive{creation_timestamp = CreationTimestamp}) ->
-    CreationTimestamp;
-get_timestamp(#document{value = Archive}) ->
-    get_timestamp(Archive).
+-spec get_creation_time(record() | doc()) -> timestamp().
+get_creation_time(#archive{creation_time = CreationTime}) ->
+    CreationTime;
+get_creation_time(#document{value = Archive}) ->
+    get_creation_time(Archive).
 
 -spec get_dataset_id(record() | doc()) -> dataset:id().
 get_dataset_id(#archive{dataset_id = DatasetId}) ->
@@ -141,7 +141,7 @@ get_dataset_id(#document{value = Archive}) ->
     get_dataset_id(Archive).
 
 -spec get_root_dir(record() | doc()) -> file_id:file_guid() | undefined.
-get_root_dir(#archive{root_dir = RootDir}) ->
+get_root_dir(#archive{root_dir_guid = RootDir}) ->
     RootDir;
 get_root_dir(#document{value = Archive}) ->
     get_root_dir(Archive).
@@ -149,6 +149,12 @@ get_root_dir(#document{value = Archive}) ->
 -spec get_space_id(doc()) -> od_space:id().
 get_space_id(#document{scope = SpaceId}) ->
     SpaceId.
+
+-spec get_state(record() | doc()) -> state().
+get_state(#archive{state = State}) ->
+    State;
+get_state(#document{value = Archive}) ->
+    get_state(Archive).
 
 -spec get_type(record() | doc()) -> type().
 get_type(#archive{type = Type}) ->
@@ -186,10 +192,11 @@ get_description(#document{value = Archive}) ->
 
 -spec sanitize_params(params()) -> params().
 sanitize_params(Params) ->
+    % todo usunac stad?
     middleware_sanitizer:sanitize_data(Params, #{
         required => #{
             type => {atom, [?FULL_ARCHIVE, ?INCREMENTAL_ARCHIVE]},
-            character => {atom, [?DIP, ?AIP, ?DIP_AIP]},
+            character => {atom, [?DIP, ?AIP, ?HYBRID]},
             data_structure => {atom, [?BAGIT, ?SIMPLE_COPY]},
             metadata_structure => {atom, [?BUILT_IN, ?JSON, ?XML]}
         },
@@ -227,8 +234,8 @@ get_ctx() ->
 get_record_struct(1) ->
     {record, [
         {dataset_id, string},
-        {root_dir, string},
-        {creation_timestamp, integer},
+        {root_dir_guid, string},
+        {creation_time, integer},
         {creator, string},
         {type, atom},
         {state, atom},

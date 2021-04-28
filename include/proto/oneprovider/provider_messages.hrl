@@ -318,8 +318,9 @@
 -record(archive_info, {
     id :: archive:id(),
     dataset_id :: dataset:id(),
-    root_dir :: undefined | file_id:file_guid(),
-    creation_timestamp :: time:millis(),
+    state :: archive:state(),
+    root_dir_guid :: undefined | file_id:file_guid(),
+    creation_time :: time:millis(),
     type :: archive:type(),
     character :: archive:character(),
     data_structure :: archive:data_structure(),

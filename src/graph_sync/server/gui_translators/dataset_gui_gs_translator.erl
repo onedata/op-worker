@@ -28,7 +28,9 @@
 
 -spec translate_value(gri:gri(), Value :: term()) -> gs_protocol:data().
 translate_value(#gri{aspect = children_details, scope = private}, {Datasets, IsLast}) ->
-    translate_datasets_details_list(Datasets, IsLast).
+    translate_datasets_details_list(Datasets, IsLast);
+translate_value(#gri{aspect = archives_details, scope = private}, {Archives, IsLast}) ->
+    translate_archives_details_list(Archives, IsLast).
 
 
 -spec translate_resource(gri:gri(), Data :: term()) ->
@@ -51,7 +53,8 @@ translate_dataset_info(#dataset_info{
     protection_flags = ProtectionFlags,
     eff_protection_flags = EffProtectionFlags,
     parent = ParentId,
-    index = Index
+    index = Index,
+    archives_count = ArchivesCount
 }) ->
     #{
         <<"gri">> => gri:serialize(#gri{
@@ -77,7 +80,8 @@ translate_dataset_info(#dataset_info{
         <<"protectionFlags">> => file_meta:protection_flags_to_json(ProtectionFlags),
         <<"effProtectionFlags">> => file_meta:protection_flags_to_json(EffProtectionFlags),
         <<"creationTime">> => CreationTime,
-        <<"index">> => Index
+        <<"index">> => Index,
+        <<"archivesCount">> => ArchivesCount
     }.
 
 
@@ -86,5 +90,14 @@ translate_datasets_details_list(Datasets, IsLast) ->
     TranslatedDatasets = lists:map(fun translate_dataset_info/1, Datasets),
     #{
         <<"datasets">> => TranslatedDatasets,
+        <<"isLast">> => IsLast
+    }.
+
+
+-spec translate_archives_details_list([lfm_datasets:archive_info()], boolean()) -> json_utils:json_map().
+translate_archives_details_list(Archives, IsLast) ->
+    TranslatedArchives = lists:map(fun archive_gui_gs_translator:translate_archive_info/1, Archives),
+    #{
+        <<"archives">> => TranslatedArchives,
         <<"isLast">> => IsLast
     }.

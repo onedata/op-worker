@@ -177,6 +177,7 @@ is_subscribable(_) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec is_type_supported(gri:gri()) -> boolean().
+is_type_supported(#gri{type = op_archive}) -> true;
 is_type_supported(#gri{type = op_dataset}) -> true;
 is_type_supported(#gri{type = op_file}) -> true;
 is_type_supported(#gri{type = op_group}) -> true;

@@ -398,8 +398,8 @@
     dataset_id :: dataset:id(),
     % TODO VFS-7601 set guid of directory in which archive is stored
     % TODO VFS-7601 consider generating uuid basing ArchiveId
-    root_dir :: undefined | file_id:file_guid(),
-    creation_timestamp :: time:seconds(),
+    root_dir_guid :: undefined | file_id:file_guid(),
+    creation_time :: time:seconds(),
     creator :: archive:creator(),
     type :: archive:type(),
     state :: archive:state(),
