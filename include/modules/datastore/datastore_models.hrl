@@ -975,4 +975,12 @@
     container :: atm_data_container:container()
 }).
 
+%% Model that holds information about an automation workflow execution
+-record(atm_workflow_execution, {
+    space_id :: binary(),
+    schedule_time = 0 :: atm_workflow_execution:timestamp(),
+    start_time = 0 :: atm_workflow_execution:timestamp(),
+    finish_time = 0 :: atm_workflow_execution:timestamp()
+}).
+
 -endif.
