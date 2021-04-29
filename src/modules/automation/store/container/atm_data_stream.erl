@@ -26,11 +26,19 @@
 ]).
 
 
--type stream() :: atm_range_data_stream:stream().
+-type stream() ::
+    atm_single_value_data_stream:stream() |
+    atm_range_data_stream:stream().
+
 % Pointer to specific location in container so that it is possible to shift
 % stream and begin streaming from this position.
--type marker() :: atm_range_data_stream:marker().
--type item() :: atm_range_data_stream:item().
+-type marker() ::
+    atm_single_value_data_stream:marker() |
+    atm_range_data_stream:marker().
+
+-type item() ::
+    atm_single_value_data_stream:item() |
+    atm_range_data_stream:item().
 
 
 -export_type([stream/0, marker/0, item/0]).

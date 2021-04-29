@@ -72,6 +72,7 @@ init_stream(AtmStoreStreamSchema, AtmStoreIdOrRecord) ->
 %% @private
 -spec store_type_to_container_model(atm_store:type()) ->
     atm_data_container:model().
+store_type_to_container_model(single_value) -> atm_single_value_data_container;
 store_type_to_container_model(range) -> atm_range_data_container.
 
 

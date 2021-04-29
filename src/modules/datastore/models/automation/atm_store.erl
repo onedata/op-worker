@@ -99,5 +99,5 @@ get_record_struct(1) ->
         {description, string},
         {frozen, boolean},
         {is_input_store, boolean},
-        {container, {custom, json, {atm_data_container, encode, decode}}}
+        {container, {custom, string, {atm_data_container, encode, decode}}}
     ]}.

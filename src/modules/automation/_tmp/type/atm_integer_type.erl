@@ -24,6 +24,6 @@
 %%%===================================================================
 
 
--spec assert_instance(term(), atm_data_spec:spec()) -> ok | no_return().
+-spec assert_instance(term(), atm_data_spec:spec()) -> true | no_return().
 assert_instance(Value, _Type) when is_integer(Value) ->
-    ok.
+    true.

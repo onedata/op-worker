@@ -28,9 +28,19 @@
     decode/1
 ]).
 
--type model() :: atm_range_data_container.
--type init_args() :: atm_range_data_container:init_args().
--type container() :: atm_range_data_container:container().
+
+-type model() ::
+    atm_single_value_data_container |
+    atm_range_data_container.
+
+-type init_args() ::
+    atm_single_value_data_container:init_args() |
+    atm_range_data_container:init_args().
+
+-type container() ::
+    atm_single_value_data_container:container() |
+    atm_range_data_container:container().
+
 
 -export_type([model/0, init_args/0, container/0]).
 
