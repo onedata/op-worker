@@ -10,8 +10,10 @@
 %%% used to iterate over specific `atm_data_container` in batches.
 %%%
 %%%                             !!! Caution !!!
-%%% This behaviour must be implemented by proper models, that is modules with
-%%% records of the same name.
+%%% 1) This behaviour must be implemented by proper models, that is modules with
+%%%    records of the same name.
+%%% 2) The data stream behaviour in case of changes to values kept in container
+%%%    is not defined and implementation dependent (it may e.g. return old values).
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_data_stream).

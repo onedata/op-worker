@@ -15,6 +15,8 @@
 
 -behaviour(atm_data_stream).
 
+-include_lib("ctool/include/errors.hrl").
+
 %% API
 -export([init/3]).
 
@@ -26,19 +28,18 @@
     from_json/1
 ]).
 
+-type item() :: integer().
+-type marker() :: binary().
 
 -record(atm_range_data_stream, {
+    curr_num :: integer(),
     start_num :: integer(),
     end_num :: integer(),
     step :: integer()
 }).
 -type stream() :: #atm_range_data_stream{}.
 
--type marker() :: binary().
--type item() :: integer().
-
-
--export_type([stream/0, marker/0, item/0]).
+-export_type([item/0, marker/0, stream/0]).
 
 
 %%%===================================================================
@@ -48,7 +49,10 @@
 
 -spec init(integer(), integer(), integer()) -> stream().
 init(Start, End, Step) ->
-    #atm_range_data_stream{start_num = Start, end_num = End, step = Step}.
+    #atm_range_data_stream{
+        curr_num = Start,
+        start_num = Start, end_num = End, step = Step
+    }.
 
 
 %%%===================================================================
@@ -59,36 +63,63 @@ init(Start, End, Step) ->
 -spec get_next_batch(pos_integer(), stream()) ->
     {ok, [item()], marker(), stream()} | stop.
 get_next_batch(Size, #atm_range_data_stream{
-    start_num = Start,
+    curr_num = CurrNum,
     end_num = End,
     step = Step
 } = AtmDataStream) ->
-    RequestedEndNum = Start + (Size - 1) * Step,
+    RequestedEndNum = CurrNum + (Size - 1) * Step,
     Threshold = case Step > 0 of
         true -> min(RequestedEndNum, End);
         false -> max(RequestedEndNum, End)
     end,
-    case lists:seq(Start, Threshold, Step) of
+    case lists:seq(CurrNum, Threshold, Step) of
         [] ->
             stop;
         Items ->
-            NewStartNum = Threshold + Step,
-            {ok, Items, integer_to_binary(NewStartNum), AtmDataStream#atm_range_data_stream{
-                start_num = NewStartNum
+            NewCurrNum = Threshold + Step,
+            {ok, Items, integer_to_binary(NewCurrNum), AtmDataStream#atm_range_data_stream{
+                curr_num = NewCurrNum
             }}
     end.
 
 
 -spec jump_to(marker(), stream()) -> stream().
-jump_to(StartBin, AtmDataStream) ->
-    AtmDataStream#atm_range_data_stream{start_num = binary_to_integer(StartBin)}.
+jump_to(<<>>, #atm_range_data_stream{start_num = Start} = AtmDataStream) ->
+    AtmDataStream#atm_range_data_stream{curr_num = Start};
+jump_to(Marker, #atm_range_data_stream{
+    start_num = Start,
+    end_num = End,
+    step = Step
+} = AtmDataStream) ->
+    NewCurrNum = binary_to_integer(Marker),
+
+    IsValidMarker = (NewCurrNum - Start) rem Step == 0 andalso case Step > 0 of
+        true -> NewCurrNum >= Start andalso NewCurrNum =< End + Step;
+        false -> NewCurrNum =< Start andalso NewCurrNum >= End + Step
+    end,
+    case IsValidMarker of
+        true ->
+            AtmDataStream#atm_range_data_stream{curr_num = NewCurrNum};
+        false ->
+            throw(?EINVAL)
+    end.
 
 
 -spec to_json(stream()) -> json_utils:json_map().
-to_json(#atm_range_data_stream{start_num = Start, end_num = End, step = Step}) ->
-    #{<<"start">> => Start, <<"end">> => End, <<"step">> => Step}.
+to_json(#atm_range_data_stream{
+    curr_num = Current,
+    start_num = Start,
+    end_num = End,
+    step = Step
+}) ->
+    #{<<"current">> => Current, <<"start">> => Start, <<"end">> => End, <<"step">> => Step}.
 
 
 -spec from_json(json_utils:json_map()) -> stream().
-from_json(#{<<"start">> := Start, <<"end">> := End, <<"step">> := Step}) ->
-    #atm_range_data_stream{start_num = Start, end_num = End, step = Step}.
+from_json(#{
+    <<"current">> := Current,
+    <<"start">> := Start,
+    <<"end">> := End,
+    <<"step">> := Step
+}) ->
+    #atm_range_data_stream{curr_num = Current, start_num = Start, end_num = End, step = Step}.
