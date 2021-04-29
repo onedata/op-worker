@@ -17,8 +17,6 @@
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/errors.hrl").
 
--include_lib("ctool/include/logging.hrl").
-
 -export([
     get_env/1,
     get_env/2,
@@ -30,11 +28,6 @@
     get_storages/0,
     storage_describe/1,
     is_storage_imported/1,
-
-    lfm_create/2,
-    lfm_open/3,
-    lfm_write/3,
-    lfm_read/3,
 
     get_user_space_by_name/3,
 
@@ -112,30 +105,6 @@ storage_describe(StorageId) ->
 -spec is_storage_imported(storage:id()) -> boolean().
 is_storage_imported(StorageId) ->
     rpc_api:storage_is_imported_storage(StorageId).
-
-
--spec lfm_create(session:id(), file_meta:path()) ->
-    {ok, fslogic_worker:file_guid()} | {error, term()}.
-lfm_create(Session, FilePath) ->
-    lfm:create(Session, FilePath).
-
-
--spec lfm_open(session:id(), fslogic_worker:file_guid_or_path(), helpers:open_flag()) ->
-    {ok, fslogic_worker:file_guid()} | {error, term()}.
-lfm_open(Session, FileKey, OpenType) ->
-    lfm:open(Session, FileKey, OpenType).
-
-
--spec lfm_write(lfm_context:ctx(), integer(), binary()) ->
-    {ok, lfm_context:ctx(), integer()} |{error, term()}.
-lfm_write(FileHandle, Offset, Buffer) ->
-    lfm:write(FileHandle, Offset, Buffer).
-
-
--spec lfm_read(lfm_context:ctx(), integer(), integer()) ->
-    {ok, lfm_context:ctx(), binary()} | {error, term()}.
-lfm_read(FileHandle, Offset, MaxSize) ->
-    lfm:read(FileHandle, Offset, MaxSize).
 
 
 -spec get_user_space_by_name(gs_client_worker:client(), od_user:id(), od_space:name()) ->
@@ -250,5 +219,3 @@ perform_io_test(Session, Path) ->
     catch
         error:_ -> error
     end.
-
-
