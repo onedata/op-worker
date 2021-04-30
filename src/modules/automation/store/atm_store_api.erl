@@ -23,7 +23,7 @@
     init_stream/2
 ]).
 
--type init_args() :: atm_data_container:init_args().
+-type init_args() :: atm_container:init_args().
 
 -export_type([init_args/0]).
 
@@ -53,15 +53,15 @@ create(#atm_store_schema{
         frozen = false,
         is_input_store = IsInputStore,
         type = StoreType,
-        container = atm_data_container:init(ContainerModel, AtmDataSpec, InitialArgs)
+        container = atm_container:init(ContainerModel, AtmDataSpec, InitialArgs)
     }).
 
 
--spec init_stream(atm_store_stream_schema(), atm_store:id() | atm_store:record()) ->
-    atm_store_stream:stream().
-init_stream(AtmStoreStreamSchema, AtmStoreIdOrRecord) ->
-    AtmStoreRecord = ensure_atm_store_record(AtmStoreIdOrRecord),
-    atm_store_stream:init(AtmStoreStreamSchema, AtmStoreRecord).
+-spec init_stream(atm_stream_schema(), atm_store:id() | atm_store:record()) ->
+    atm_stream:stream().
+init_stream(AtmStreamSchema, AtmStoreIdOrRecord) ->
+    #atm_store{container = AtmContainer} = ensure_atm_store_record(AtmStoreIdOrRecord),
+    atm_stream:init(AtmStreamSchema, AtmContainer).
 
 
 %%%===================================================================
@@ -71,9 +71,9 @@ init_stream(AtmStoreStreamSchema, AtmStoreIdOrRecord) ->
 
 %% @private
 -spec store_type_to_container_model(atm_store:type()) ->
-    atm_data_container:model().
-store_type_to_container_model(single_value) -> atm_single_value_data_container;
-store_type_to_container_model(range) -> atm_range_data_container.
+    atm_container:model().
+store_type_to_container_model(single_value) -> atm_single_value_container;
+store_type_to_container_model(range) -> atm_range_container.
 
 
 %% @private

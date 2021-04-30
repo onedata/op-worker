@@ -14,6 +14,8 @@
 
 -behaviour(atm_data_spec).
 
+-include_lib("ctool/include/errors.hrl").
+
 
 %% atm_data_class callbacks
 -export([assert_instance/2]).
@@ -24,6 +26,8 @@
 %%%===================================================================
 
 
--spec assert_instance(term(), atm_data_spec:spec()) -> true | no_return().
+-spec assert_instance(term(), atm_data_spec:spec()) -> ok | no_return().
 assert_instance(Value, _Type) when is_integer(Value) ->
-    true.
+    ok;
+assert_instance(_Value, _Type) ->
+    throw(?EINVAL).

@@ -25,12 +25,14 @@
 ]).
 
 -opaque iterator() :: tuple().
-% Marks specific location in collection so that it would be possible to shift
+
+% Points to specific location in collection so that it would be possible to shift
 % iterator to this position.
--type marker() :: binary().
+-type cursor() :: binary().
+
 -type item() :: term().
 
--export_type([iterator/0, marker/0, item/0]).
+-export_type([iterator/0, cursor/0, item/0]).
 
 
 %%%===================================================================
@@ -38,9 +40,9 @@
 %%%===================================================================
 
 
--callback get_next(iterator()) -> {ok, item(), marker(), iterator()} | stop.
+-callback get_next(iterator()) -> {ok, item(), cursor(), iterator()} | stop.
 
--callback jump_to(marker(), iterator()) -> iterator().
+-callback jump_to(cursor(), iterator()) -> iterator().
 
 -callback to_json(iterator()) -> json_utils:json_map().
 
@@ -52,16 +54,16 @@
 %%%===================================================================
 
 
--spec get_next(iterator()) -> {ok, item(), marker(), iterator()} | stop.
+-spec get_next(iterator()) -> {ok, item(), cursor(), iterator()} | stop.
 get_next(Iterator) ->
     Module = utils:record_type(Iterator),
     Module:get_next(Iterator).
 
 
--spec jump_to(marker(), iterator()) -> iterator().
-jump_to(Marker, Iterator) ->
+-spec jump_to(cursor(), iterator()) -> iterator().
+jump_to(Cursor, Iterator) ->
     Module = utils:record_type(Iterator),
-    Module:jump_to(Marker, Iterator).
+    Module:jump_to(Cursor, Iterator).
 
 
 -spec encode(iterator()) -> binary().

@@ -37,7 +37,7 @@
 
 
 -callback assert_instance(Value :: term(), spec()) ->
-    true | no_return().
+    ok | no_return().
 
 
 %%%===================================================================
@@ -50,7 +50,7 @@ get_type(#atm_data_spec{type = Type}) ->
     Type.
 
 
--spec assert_instance(term(), spec()) -> true | no_return().
+-spec assert_instance(term(), spec()) -> ok | no_return().
 assert_instance(Value, #atm_data_spec{type = Module} = Type) ->
     Module:assert_instance(Value, Type).
 

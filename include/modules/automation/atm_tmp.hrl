@@ -33,12 +33,12 @@
 -record(serial_mode, {}).
 -record(bulk_mode, {size :: pos_integer()}).
 
--type atm_store_stream_mode() :: #serial_mode{} | #bulk_mode{}.
+-type atm_stream_mode() :: #serial_mode{} | #bulk_mode{}.
 
--record(atm_store_stream_schema, {
-    mode :: atm_store_stream_mode()
+-record(atm_stream_schema, {
+    mode :: atm_stream_mode()
 }).
 
--type atm_store_stream_schema() :: #atm_store_stream_schema{}.
+-type atm_stream_schema() :: #atm_stream_schema{}.
 
 -endif.

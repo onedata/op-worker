@@ -6,22 +6,22 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module implements `atm_data_container` functionality for
-%%% `range` atm_store type.
+%%% This module implements `atm_container` functionality for `range`
+%%% atm_store type.
 %%% @end
 %%%-------------------------------------------------------------------
--module(atm_range_data_container).
+-module(atm_range_container).
 -author("Bartosz Walkowicz").
 
--behaviour(atm_data_container).
+-behaviour(atm_container).
 
 -include_lib("ctool/include/errors.hrl").
 
-%% atm_data_container callbacks
+%% atm_container callbacks
 -export([
     init/2,
     get_data_spec/1,
-    get_data_stream/1,
+    get_container_stream/1,
     to_json/1,
     from_json/1
 ]).
@@ -37,19 +37,19 @@
 %% }
 -type init_args() :: map().
 
--record(atm_range_data_container, {
+-record(atm_range_container, {
     data_spec :: atm_data_spec:spec(),
     start_num :: integer(),
     end_num :: integer(),
     step :: integer()
 }).
--type container() :: #atm_range_data_container{}.
+-type container() :: #atm_range_container{}.
 
 -export_type([init_args/0, container/0]).
 
 
 %%%===================================================================
-%%% atm_data_container callbacks
+%%% atm_container callbacks
 %%%===================================================================
 
 
@@ -64,7 +64,7 @@ init(AtmDataSpec, #{<<"end">> := EndNum} = InitialArgs) when is_integer(EndNum) 
         is_proper_range(StartNum, EndNum, Step)
     of
         true ->
-            #atm_range_data_container{
+            #atm_range_container{
                 data_spec = AtmDataSpec,
                 start_num = StartNum,
                 end_num = EndNum,
@@ -88,21 +88,21 @@ is_proper_range(_Start, _End, _Step) ->
 
 
 -spec get_data_spec(container()) -> atm_data_spec:spec().
-get_data_spec(#atm_range_data_container{data_spec = AtmDataSpec}) ->
+get_data_spec(#atm_range_container{data_spec = AtmDataSpec}) ->
     AtmDataSpec.
 
 
--spec get_data_stream(container()) -> atm_range_data_stream:stream().
-get_data_stream(#atm_range_data_container{
+-spec get_container_stream(container()) -> atm_range_container_stream:stream().
+get_container_stream(#atm_range_container{
     start_num = StartNum,
     end_num = EndNum,
     step = Step
 }) ->
-    atm_range_data_stream:init(StartNum, EndNum, Step).
+    atm_range_container_stream:init(StartNum, EndNum, Step).
 
 
 -spec to_json(container()) -> json_utils:json_map().
-to_json(#atm_range_data_container{
+to_json(#atm_range_container{
     data_spec = AtmDataSpec,
     start_num = StartNum,
     end_num = EndNum,
@@ -123,7 +123,7 @@ from_json(#{
     <<"end">> := EndNum,
     <<"step">> := Step
 }) ->
-    #atm_range_data_container{
+    #atm_range_container{
         data_spec = atm_data_spec:from_json(AtmDataSpecJson),
         start_num = StartNum,
         end_num = EndNum,

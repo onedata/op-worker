@@ -972,7 +972,7 @@
     description :: atm_store:description(),
     frozen = false :: boolean(),
     is_input_store :: boolean(),
-    container :: atm_data_container:container()
+    container :: atm_container:container()
 }).
 
 %% Model that holds information about an automation workflow execution

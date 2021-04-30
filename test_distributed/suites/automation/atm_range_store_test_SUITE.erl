@@ -41,7 +41,9 @@
     stream_in_chunks_10_with_start_1_end_2_step_10_test/1,
     stream_in_chunks_10_with_start_minus_50_end_50_step_4_test/1,
     stream_in_chunks_7_with_start_50_end_minus_50_step_minus_3_test/1,
-    stream_in_chunks_3_with_start_10_end_10_step_2_test/1
+    stream_in_chunks_3_with_start_10_end_10_step_2_test/1,
+
+    stream_cursor_test_base/1
 ]).
 
 groups() -> [
@@ -58,7 +60,9 @@ groups() -> [
         stream_in_chunks_10_with_start_1_end_2_step_10_test,
         stream_in_chunks_10_with_start_minus_50_end_50_step_4_test,
         stream_in_chunks_7_with_start_50_end_minus_50_step_minus_3_test,
-        stream_in_chunks_3_with_start_10_end_10_step_2_test
+        stream_in_chunks_3_with_start_10_end_10_step_2_test,
+
+        stream_cursor_test_base
     ]}
 ].
 
@@ -129,8 +133,8 @@ stream_one_by_one_test_base(#{<<"end">> := End} = InitArgs) ->
     Start = maps:get(<<"start">>, InitArgs, 0),
     Step = maps:get(<<"step">>, InitArgs, 1),
 
-    AtmStoreStreamSchema = #atm_store_stream_schema{mode = #serial_mode{}},
-    stream_test_base(InitArgs, AtmStoreStreamSchema, lists:seq(Start, End, Step)).
+    AtmStreamSchema = #atm_stream_schema{mode = #serial_mode{}},
+    stream_test_base(InitArgs, AtmStreamSchema, lists:seq(Start, End, Step)).
 
 
 stream_in_chunks_5_with_start_10_end_50_step_2_test(_Config) ->
@@ -162,38 +166,70 @@ stream_in_chunks_test_base(ChunkSize, #{<<"end">> := End} = InitArgs) ->
 
     stream_test_base(
         InitArgs,
-        #atm_store_stream_schema{mode = #bulk_mode{size = ChunkSize}},
+        #atm_stream_schema{mode = #bulk_mode{size = ChunkSize}},
         split_into_chunks(ChunkSize, [], lists:seq(Start, End, Step))
     ).
 
 
 %% @private
--spec stream_test_base(
-    atm_store_api:init_args(),
-    atm_store_stream_schema(),
-    [item()] | [[item()]]
-) ->
+-spec stream_test_base(atm_store_api:init_args(), atm_stream_schema(), [item()] | [[item()]]) ->
     ok | no_return().
-stream_test_base(AtmRangeStoreInitArgs, AtmStoreStreamSchema, ExpItems) ->
+stream_test_base(AtmRangeStoreInitArgs, AtmStreamSchema, ExpItems) ->
     Node = oct_background:get_random_provider_node(krakow),
 
     {ok, AtmRangeStoreId} = create_store(Node, ?ATM_RANGE_STORE_SCHEMA, AtmRangeStoreInitArgs),
-    AtmStoreStream = create_store_stream(Node, AtmStoreStreamSchema, AtmRangeStoreId),
+    AtmStream = create_store_stream(Node, AtmStreamSchema, AtmRangeStoreId),
 
-    assert_all_items_listed(Node, AtmStoreStream, ExpItems).
+    assert_all_items_listed(Node, AtmStream, ExpItems).
 
 
 %% @private
--spec assert_all_items_listed(node(), atm_store_stream:stream(), [item()] | [[item()]]) ->
+-spec assert_all_items_listed(node(), atm_stream:stream(), [item()] | [[item()]]) ->
     ok | no_return().
-assert_all_items_listed(Node, AtmStoreStream, []) ->
-    ?assertEqual(stop, iterator_get_next(Node, AtmStoreStream)),
+assert_all_items_listed(Node, AtmStream, []) ->
+    ?assertEqual(stop, iterator_get_next(Node, AtmStream)),
     ok;
-assert_all_items_listed(Node, AtmStoreStream0, [ExpItem | RestItems]) ->
-    {ok, _, _, AtmStoreStream1} = ?assertMatch(
-        {ok, ExpItem, _, _}, iterator_get_next(Node, AtmStoreStream0)
+assert_all_items_listed(Node, AtmStream0, [ExpItem | RestItems]) ->
+    {ok, _, _, AtmStream1} = ?assertMatch(
+        {ok, ExpItem, _, _}, iterator_get_next(Node, AtmStream0)
     ),
-    assert_all_items_listed(Node, AtmStoreStream1, RestItems).
+    assert_all_items_listed(Node, AtmStream1, RestItems).
+
+
+stream_cursor_test_base(_Config) ->
+    Node = oct_background:get_random_provider_node(krakow),
+
+    InitArgs = #{<<"start">> => 2, <<"end">> => 16, <<"step">> => 3},
+    {ok, AtmRangeStoreId} = create_store(Node, ?ATM_RANGE_STORE_SCHEMA, InitArgs),
+
+    AtmSerialStreamSchema = #atm_stream_schema{mode = #serial_mode{}},
+    AtmSerialStream0 = create_store_stream(Node, AtmSerialStreamSchema, AtmRangeStoreId),
+
+    {ok, _, Cursor1, AtmSerialStream1} = ?assertMatch({ok, 2, _, _}, iterator_get_next(Node, AtmSerialStream0)),
+    {ok, _, _Cursor2, AtmSerialStream2} = ?assertMatch({ok, 5, _, _}, iterator_get_next(Node, AtmSerialStream1)),
+    {ok, _, Cursor3, AtmSerialStream3} = ?assertMatch({ok, 8, _, _}, iterator_get_next(Node, AtmSerialStream2)),
+    {ok, _, _Cursor4, AtmSerialStream4} = ?assertMatch({ok, 11, _, _}, iterator_get_next(Node, AtmSerialStream3)),
+    {ok, _, _Cursor5, AtmSerialStream5} = ?assertMatch({ok, 14, _, _}, iterator_get_next(Node, AtmSerialStream4)),
+    ?assertMatch(stop, iterator_get_next(Node, AtmSerialStream5)),
+
+    % Assert cursor shifts iterator to the beginning
+    AtmSerialStream6 = iterator_jump_to(Node, Cursor3, AtmSerialStream5),
+    {ok, _, _Cursor7, AtmSerialStream7} = ?assertMatch({ok, 11, _, _}, iterator_get_next(Node, AtmSerialStream6)),
+    ?assertMatch({ok, 14, _, _}, iterator_get_next(Node, AtmSerialStream7)),
+
+    AtmSerialStream8 = iterator_jump_to(Node, Cursor1, AtmSerialStream7),
+    {ok, _, _Cursor9, AtmSerialStream9} = ?assertMatch({ok, 5, _, _}, iterator_get_next(Node, AtmSerialStream8)),
+    ?assertMatch({ok, 8, _, _}, iterator_get_next(Node, AtmSerialStream9)),
+
+    % Assert <<>> cursor shifts iterator to the beginning
+    AtmSerialStream10 = iterator_jump_to(Node, <<>>, AtmSerialStream9),
+    ?assertMatch({ok, 2, _, _}, iterator_get_next(Node, AtmSerialStream10)),
+
+    % Invalid cursors should be rejected
+    ?assertMatch(?EINVAL, iterator_jump_to(Node, <<"dummy">>, AtmSerialStream9)),
+    ?assertMatch(?EINVAL, iterator_jump_to(Node, <<"-2">>, AtmSerialStream9)),
+    ?assertMatch(?EINVAL, iterator_jump_to(Node, <<"3">>, AtmSerialStream9)),
+    ?assertMatch(?EINVAL, iterator_jump_to(Node, <<"20">>, AtmSerialStream9)).
 
 
 %%%===================================================================
@@ -212,24 +248,31 @@ split_into_chunks(Size, Acc, [_ | _] = Items) ->
 
 
 %% @private
--spec create_store(node(), atm_store_schema(), atm_store_api:init_args()) ->
+-spec create_store(node(), atm_stream_schema(), atm_store_api:init_args()) ->
     {ok, atm_store:id()} | {error, term()}.
 create_store(Node, AtmStoreSchema, InitArgs) ->
     rpc:call(Node, atm_store_api, create, [AtmStoreSchema, InitArgs]).
 
 
 %% @private
--spec create_store_stream(node(), atm_store_stream_schema(), atm_store:id()) ->
-    atm_store_stream:stream().
-create_store_stream(Node, AtmStoreStreamSchema, AtmStoreId) ->
-    rpc:call(Node, atm_store_api, init_stream, [AtmStoreStreamSchema, AtmStoreId]).
+-spec create_store_stream(node(), atm_stream_schema(), atm_store:id()) ->
+    atm_stream:stream().
+create_store_stream(Node, AtmStreamSchema, AtmStoreId) ->
+    rpc:call(Node, atm_store_api, init_stream, [AtmStreamSchema, AtmStoreId]).
 
 
 %% @private
 -spec iterator_get_next(node(), iterator:iterator()) ->
-    {ok, iterator:item(), iterator:marker(), iterator:iterato()} | stop.
+    {ok, iterator:item(), iterator:cursor(), iterator:iterato()} | stop.
 iterator_get_next(Node, Iterator) ->
     rpc:call(Node, iterator, get_next, [Iterator]).
+
+
+%% @private
+-spec iterator_jump_to(node(), iterator:cursor(), iterator:iterator()) ->
+    iterator:iterato().
+iterator_jump_to(Node, Cursor, Iterator) ->
+    rpc:call(Node, iterator, jump_to, [Cursor, Iterator]).
 
 
 %===================================================================

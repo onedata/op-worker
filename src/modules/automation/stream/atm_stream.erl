@@ -6,10 +6,11 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module provides `iterator` functionality for `atm_store`.
+%%% This module provides `iterator` functionality for `atm_container`
+%%% extending it with additional features like batch mode or filtering.
 %%% @end
 %%%-------------------------------------------------------------------
--module(atm_store_stream).
+-module(atm_stream).
 -author("Bartosz Walkowicz").
 
 -behaviour(iterator).
@@ -29,16 +30,15 @@
 ]).
 
 
--record(atm_store_stream, {
-    mode :: atm_store_stream_mode(),
+-record(atm_stream, {
+    mode :: atm_stream_mode(),
     data_spec :: atm_data_spec:spec(),
-    data_stream :: atm_data_stream:stream()
+    container_stream :: atm_container_stream:stream()
 }).
--type stream() :: #atm_store_stream{}.
--type marker() :: atm_data_stream:marker().
--type item() :: atm_data_stream:item().
+-type stream() :: #atm_stream{}.
+-type item() :: json_utils:json_term().
 
--export_type([stream/0, marker/0, item/0]).
+-export_type([stream/0, item/0]).
 
 
 %%%===================================================================
@@ -46,12 +46,12 @@
 %%%===================================================================
 
 
--spec init(atm_store_stream_schema(), atm_store:record()) -> stream().
-init(AtmStoreStreamSchema, #atm_store{container = AtmDataContainer}) ->
-    #atm_store_stream{
-        mode = AtmStoreStreamSchema#atm_store_stream_schema.mode,
-        data_spec = atm_data_container:get_data_spec(AtmDataContainer),
-        data_stream = atm_data_container:get_data_stream(AtmDataContainer)
+-spec init(atm_stream_schema(), atm_container:container()) -> stream().
+init(AtmStreamSchema, AtmContainer) ->
+    #atm_stream{
+        mode = AtmStreamSchema#atm_stream_schema.mode,
+        data_spec = atm_container:get_data_spec(AtmContainer),
+        container_stream = atm_container:get_container_stream(AtmContainer)
     }.
 
 
@@ -60,50 +60,50 @@ init(AtmStoreStreamSchema, #atm_store{container = AtmDataContainer}) ->
 %%%===================================================================
 
 
--spec get_next(stream()) -> {ok, item(), marker(), stream()} | stop.
-get_next(#atm_store_stream{
+-spec get_next(stream()) -> {ok, item(), iterator:cursor(), stream()} | stop.
+get_next(#atm_stream{
     mode = #serial_mode{},
-    data_stream = AtmDataStream
-} = AtmStoreStream) ->
-    case atm_data_stream:get_next_batch(1, AtmDataStream) of
+    container_stream = AtmContainerStream
+} = AtmStream) ->
+    case atm_container_stream:get_next_batch(1, AtmContainerStream) of
         stop ->
             stop;
-        {ok, [Item], Marker, NewAtmDataStream} ->
-            {ok, Item, Marker, AtmStoreStream#atm_store_stream{
-                data_stream = NewAtmDataStream
+        {ok, [Item], Marker, NewAtmContainerStream} ->
+            {ok, Item, Marker, AtmStream#atm_stream{
+                container_stream = NewAtmContainerStream
             }}
     end;
-get_next(#atm_store_stream{
+get_next(#atm_stream{
     mode = #bulk_mode{size = Size},
-    data_stream = AtmDataStream
-} = AtmStoreStream) ->
-    case atm_data_stream:get_next_batch(Size, AtmDataStream) of
+    container_stream = AtmContainerStream
+} = AtmStream) ->
+    case atm_container_stream:get_next_batch(Size, AtmContainerStream) of
         stop ->
             stop;
-        {ok, Items, Marker, NewAtmDataStream} ->
-            {ok, Items, Marker, AtmStoreStream#atm_store_stream{
-                data_stream = NewAtmDataStream
+        {ok, Items, Marker, NewAtmContainerStream} ->
+            {ok, Items, Marker, AtmStream#atm_stream{
+                container_stream = NewAtmContainerStream
             }}
     end.
 
 
--spec jump_to(marker(), stream()) -> stream().
-jump_to(Marker, #atm_store_stream{data_stream = AtmDataStream} = AtmStoreStream) ->
-    AtmStoreStream#atm_store_stream{
-        data_stream = atm_data_stream:jump_to(Marker, AtmDataStream)
+-spec jump_to(iterator:cursor(), stream()) -> stream().
+jump_to(Marker, #atm_stream{container_stream = AtmContainerStream} = AtmStream) ->
+    AtmStream#atm_stream{
+        container_stream = atm_container_stream:jump_to(Marker, AtmContainerStream)
     }.
 
 
 -spec to_json(stream()) -> json_utils:json_map().
-to_json(#atm_store_stream{
+to_json(#atm_stream{
     mode = Mode,
     data_spec = AtmDataSpec,
-    data_stream = AtmDataStream
+    container_stream = AtmContainerStream
 }) ->
     #{
         <<"mode">> => mode_to_json(Mode),
         <<"dataSpec">> => atm_data_spec:to_json(AtmDataSpec),
-        <<"dataStream">> => atm_data_stream:to_json(AtmDataStream)
+        <<"containerStream">> => atm_container_stream:to_json(AtmContainerStream)
     }.
 
 
@@ -111,12 +111,12 @@ to_json(#atm_store_stream{
 from_json(#{
     <<"mode">> := ModeJson,
     <<"dataSpec">> := AtmDataSpecJson,
-    <<"dataStream">> := AtmDataStreamJson
+    <<"containerStream">> := AtmContainerStreamJson
 }) ->
-    #atm_store_stream{
+    #atm_stream{
         mode = mode_from_json(ModeJson),
         data_spec = atm_data_spec:from_json(AtmDataSpecJson),
-        data_stream = atm_data_stream:from_json(AtmDataStreamJson)
+        container_stream = atm_container_stream:from_json(AtmContainerStreamJson)
     }.
 
 
@@ -126,7 +126,7 @@ from_json(#{
 
 
 %% @private
--spec mode_to_json(atm_store_stream_mode()) -> json_utils:json_map().
+-spec mode_to_json(atm_stream_mode()) -> json_utils:json_map().
 mode_to_json(#serial_mode{}) ->
     #{<<"type">> => <<"serial">>};
 mode_to_json(#bulk_mode{size = Size}) ->
@@ -134,7 +134,7 @@ mode_to_json(#bulk_mode{size = Size}) ->
 
 
 %% @private
--spec mode_from_json(json_utils:json_map()) -> atm_store_stream_mode().
+-spec mode_from_json(json_utils:json_map()) -> atm_stream_mode().
 mode_from_json(#{<<"type">> := <<"serial">>}) ->
     #serial_mode{};
 mode_from_json(#{<<"type">> := <<"bulk">>, <<"size">> := Size}) ->
