@@ -132,6 +132,9 @@
     list_top_datasets/4, list_top_datasets/5,
     list_children_datasets/3, list_children_datasets/4
 ]).
+%% Archives related operations
+-export([archive_dataset/4, update_archive/3, get_archive_info/2, list_archives/4, remove_archive/2]).
+
 %% Utility functions
 -export([check_result/1]).
 
@@ -869,6 +872,37 @@ list_children_datasets(SessId, DatasetId, Opts) ->
     undefined | dataset_api:listing_mode()) -> {ok, dataset_api:entries(), boolean()} | error_reply().
 list_children_datasets(SessId, DatasetId, Opts, ListingMode) ->
     ?run(lfm_datasets:list_children_datasets(SessId, DatasetId, Opts, ListingMode)).
+
+%%%===================================================================
+%%% Archive related operations
+%%%===================================================================
+
+-spec archive_dataset(session:id(), dataset:id(), archive:params(), archive:attrs()) ->
+    {ok, archive:id()} | error_reply().
+archive_dataset(SessId, DatasetId, ArchiveParams, ArchiveAttrs) ->
+    ?run(lfm_datasets:archive(SessId, DatasetId, ArchiveParams, ArchiveAttrs)).
+
+
+-spec update_archive(session:id(), archive:id(), archive:attrs()) -> ok | error_reply().
+update_archive(SessId, ArchiveId, Attrs) ->
+    ?run(lfm_datasets:update_archive(SessId, ArchiveId, Attrs)).
+
+
+-spec get_archive_info(session:id(), archive:id()) ->
+    {ok, lfm_datasets:archive_info()} | error_reply().
+get_archive_info(SessId, ArchiveId) ->
+    ?run(lfm_datasets:get_archive_info(SessId, ArchiveId)).
+
+
+-spec list_archives(session:id(), dataset:id(), dataset_api:listing_opts(), dataset_api:listing_mode()) ->
+    {ok, dataset_api:archive_entries(), boolean()} | error_reply().
+list_archives(SessId, DatasetId, Opts, ListingMode) ->
+    lfm_datasets:list_archives(SessId, DatasetId, Opts, ListingMode).
+
+
+-spec remove_archive(session:id(), archive:id()) -> ok | error_reply().
+remove_archive(SessId, ArchiveId) ->
+    ?run(lfm_datasets:remove_archive(SessId, ArchiveId)).
 
 %%%===================================================================
 %%% Utility functions

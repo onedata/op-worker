@@ -392,6 +392,24 @@
     dataset_state :: undefined | dataset:state()
 }).
 
+% Model used for storing information concerning archive.
+% One documents is stored for one archive.
+-record(archive, {
+    dataset_id :: dataset:id(),
+    % TODO VFS-7601 set guid of directory in which archive is stored
+    % TODO VFS-7601 consider generating uuid basing ArchiveId
+    root_dir :: undefined | file_id:file_guid(),
+    creation_timestamp :: time:seconds(),
+    creator :: archive:creator(),
+    type :: archive:type(),
+    state :: archive:state(),
+    character :: archive:character(),
+    data_structure :: archive:data_structure(),
+    metadata_structure :: archive:metadata_structure(),
+    description :: binary()
+}).
+
+
 % Model used for storing information associated with dataset.
 % One document is stored for one dataset.
 % Key of the document is file_meta:uuid().

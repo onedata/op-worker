@@ -190,6 +190,32 @@
     mode = ?BASIC_INFO :: dataset_api:listing_mode()
 }).
 
+-record(archive_dataset, {
+    id :: dataset:id(),
+    params :: archive:params(),
+    attrs :: archive:attrs()
+}).
+
+-record(update_archive, {
+    id :: archive:id(),
+    attrs :: archive:attrs()
+}).
+
+-record(get_archive_info, {
+    id :: archive:id()
+}).
+
+-record(list_archives, {
+    dataset_id :: dataset:id(),
+    opts :: archives_list:opts(),
+    mode = ?BASIC_INFO :: dataset_api:listing_mode()
+}).
+
+-record(remove_archive, {
+    id :: archive:id()
+}).
+
+
 -type provider_request_type() ::
     #get_parent{} | #get_acl{} | #set_acl{} | #remove_acl{} |
     #get_transfer_encoding{} | #set_transfer_encoding{} |
@@ -202,7 +228,8 @@
     #create_share{} | #remove_share{} |
     #add_qos_entry{} | #get_effective_file_qos{} | #get_qos_entry{} | #remove_qos_entry{} | #check_qos_status{} |
     #establish_dataset{} | #update_dataset{} | #remove_dataset{} |
-    #get_dataset_info{} | #get_file_eff_dataset_summary{} | #list_top_datasets{} | #list_children_datasets{}.
+    #get_dataset_info{} | #get_file_eff_dataset_summary{} | #list_top_datasets{} | #list_children_datasets{} |
+    #archive_dataset{} | #update_archive{} | #get_archive_info{} | #list_archives{} | #remove_archive{}.
 
 -record(transfer_encoding, {
     value :: binary()
@@ -269,6 +296,7 @@
     protection_flags = ?no_flags_mask :: data_access_control:bitmask(),
     eff_protection_flags = ?no_flags_mask :: data_access_control:bitmask(),
     parent :: undefined | dataset:id(),
+    archives_count = 0 :: non_neg_integer(), % TODO VFS-7548 add to rest/gui translators and swagger
     index :: dataset_api:index()
 }).
 
@@ -283,12 +311,35 @@
    is_last :: boolean()
 }).
 
+-record(dataset_archived, {
+    id :: archive:id()
+}).
+
+-record(archive_info, {
+    id :: archive:id(),
+    dataset_id :: dataset:id(),
+    root_dir :: undefined | file_id:file_guid(),
+    creation_timestamp :: time:millis(),
+    type :: archive:type(),
+    character :: archive:character(),
+    data_structure :: archive:data_structure(),
+    metadata_structure :: archive:metadata_structure(),
+    index :: dataset_api:archive_index(),
+    description :: archive:description()
+}).
+
+-record(archives, {
+    archives = [] :: dataset_api:archive_entries(),
+    is_last :: boolean()
+}).
+
 -type provider_response_type() ::
     #transfer_encoding{} | #cdmi_completion_status{} | #mimetype{} | #acl{} |
-    #dir{} | #file_path{} | #file_distribution{} | #metadata{} | #share{} |
-    #scheduled_transfer{} | #qos_entry_id{} | #qos_entry{} | #eff_qos_response{} |
-    #qos_status_response{} | #dataset_established{} | #dataset_info{} | #file_eff_dataset_summary{} |
-    #datasets{} | undefined.
+    #dir{} | #file_path{} | #file_distribution{} | #metadata{} | #share{} | #scheduled_transfer{} |
+    #qos_entry_id{} | #qos_entry{} | #eff_qos_response{} | #qos_status_response{} |
+    #dataset_established{} | #dataset_info{} | #file_eff_dataset_summary{} | #datasets{}|
+    #dataset_archived{} | #archive_info{} | #archives{} |
+    undefined.
 
 -record(provider_request, {
     context_guid :: fslogic_worker:file_guid(),
