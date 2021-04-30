@@ -80,7 +80,7 @@
     get_dataset_info/3, get_file_eff_dataset_summary/3,
     list_top_datasets/5, list_top_datasets/6, list_children_datasets/4,
 
-    archive_dataset/4, update_archive/4, get_archive_info/3,
+    archive_dataset/5, update_archive/4, get_archive_info/3,
     list_archives/4, list_archives/5, remove_archive/3
 ]).
 
@@ -920,15 +920,15 @@ list_children_datasets(Worker, SessId, DatasetId, Opts) ->
 %%% Archives functions
 %%%===================================================================
 
--spec archive_dataset(node(), session:id(), dataset:id(), archive:params()) ->
+-spec archive_dataset(node(), session:id(), dataset:id(), archive:params(), archive:attrs()) ->
     {ok, archive:id()} | lfm:error_reply().
-archive_dataset(Worker, SessId, DatasetId, ArchivingParams) ->
-    ?EXEC(Worker, lfm:archive_dataset(SessId, DatasetId, ArchivingParams)).
+archive_dataset(Worker, SessId, DatasetId, ArchiveParams, ArchiveAttrs) ->
+    ?EXEC(Worker, lfm:archive_dataset(SessId, DatasetId, ArchiveParams, ArchiveAttrs)).
 
 
--spec update_archive(node(), session:id(), archive:id(), archive:params()) -> ok | lfm:error_reply().
-update_archive(Worker, SessId, ArchiveId, Params) ->
-    ?EXEC(Worker, lfm:update_archive(SessId, ArchiveId, Params)).
+-spec update_archive(node(), session:id(), archive:id(), archive:attrs()) -> ok | lfm:error_reply().
+update_archive(Worker, SessId, ArchiveId, Attrs) ->
+    ?EXEC(Worker, lfm:update_archive(SessId, ArchiveId, Attrs)).
 
 
 -spec get_archive_info(node(), session:id(), archive:id()) ->

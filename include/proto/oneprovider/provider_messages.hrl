@@ -192,12 +192,13 @@
 
 -record(archive_dataset, {
     id :: dataset:id(),
-    params :: archive:params()
+    params :: archive:params(),
+    attrs :: archive:attrs()
 }).
 
 -record(update_archive, {
     id :: archive:id(),
-    params :: archive:params()
+    attrs :: archive:attrs()
 }).
 
 -record(get_archive_info, {

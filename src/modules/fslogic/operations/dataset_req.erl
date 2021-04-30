@@ -32,7 +32,7 @@
 
 %% Archives API
 -export([
-    archive/4,
+    archive/5,
     update_archive/4,
     get_archive_info/3,
     list_archives/5,
@@ -125,23 +125,23 @@ list_children_datasets(SpaceDirCtx, Dataset, Opts, ListingMode, UserCtx) ->
 %%% Archives API functions
 %%%===================================================================
 
--spec archive(file_ctx:ctx(), dataset:id(), archive:params(), user_ctx:ctx()) ->
+-spec archive(file_ctx:ctx(), dataset:id(), archive:params(), archive:attrs(), user_ctx:ctx()) ->
     fslogic_worker:provider_response().
-archive(SpaceDirCtx, DatasetId, Params, UserCtx) ->
+archive(SpaceDirCtx, DatasetId, Params, Attrs, UserCtx) ->
     assert_has_eff_privilege(SpaceDirCtx, UserCtx, ?SPACE_MANAGE_DATASETS),
     assert_has_eff_privilege(SpaceDirCtx, UserCtx, ?SPACE_CREATE_ARCHIVES),
 
-    {ok, ArchiveId} = dataset_api:archive(DatasetId, Params, user_ctx:get_user_id(UserCtx)),
+    {ok, ArchiveId} = dataset_api:archive(DatasetId, Params, Attrs, user_ctx:get_user_id(UserCtx)),
     ?PROVIDER_OK_RESP(#dataset_archived{id = ArchiveId}).
 
 
--spec update_archive(file_ctx:ctx(), archive:id(), archive:params(), user_ctx:ctx()) ->
+-spec update_archive(file_ctx:ctx(), archive:id(), archive:attrs(), user_ctx:ctx()) ->
     fslogic_worker:provider_response().
-update_archive(SpaceDirCtx, ArchiveId, Params, UserCtx) ->
+update_archive(SpaceDirCtx, ArchiveId, Attrs, UserCtx) ->
     assert_has_eff_privilege(SpaceDirCtx, UserCtx, ?SPACE_MANAGE_DATASETS),
     assert_has_eff_privilege(SpaceDirCtx, UserCtx, ?SPACE_CREATE_ARCHIVES),
 
-    ok = dataset_api:update_archive(ArchiveId, Params),
+    ok = dataset_api:update_archive(ArchiveId, Attrs),
     ?PROVIDER_OK_RESP.
 
 

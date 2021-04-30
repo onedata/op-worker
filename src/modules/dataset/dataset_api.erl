@@ -26,7 +26,7 @@
 -export([list_top_datasets/4, list_children_datasets/3]).
 
 %% Archives API
--export([archive/3, update_archive/2, get_archive_info/1, list_archives/3, remove_archive/1]).
+-export([archive/4, update_archive/2, get_archive_info/1, list_archives/3, remove_archive/1]).
 
 %% Utils
 -export([get_associated_file_ctx/1]).
@@ -223,14 +223,14 @@ list_children_datasets(DatasetId, Opts, ListingMode) ->
 %%% Archives API
 %%%===================================================================
 
--spec archive(dataset:id(), archive:params(), od_user:id()) -> {ok, archive:id()} | error().
-archive(DatasetId, Params, UserId) ->
+-spec archive(dataset:id(), archive:params(), archive:attrs(), od_user:id()) -> {ok, archive:id()} | error().
+archive(DatasetId, Params, Attrs, UserId) ->
     {ok, DatasetDoc} = dataset:get(DatasetId),
     {ok, State} = dataset:get_state(DatasetDoc),
     case State of
         ?ATTACHED_DATASET ->
             {ok, SpaceId} = dataset:get_space_id(DatasetDoc),
-            case archive:create(DatasetId, SpaceId, UserId, Params) of
+            case archive:create(DatasetId, SpaceId, UserId, Params, Attrs) of
                 {ok, ArchiveDoc} ->
                     ArchiveId = archive:get_id(ArchiveDoc),
                     Timestamp = archive:get_timestamp(ArchiveDoc),
@@ -248,9 +248,9 @@ archive(DatasetId, Params, UserId) ->
     end.
 
 
--spec update_archive(archive:id(), archive:params()) -> ok | error().
-update_archive(ArchiveId, Params) ->
-    archive:update(ArchiveId, Params).
+-spec update_archive(archive:id(), archive:attrs()) -> ok | error().
+update_archive(ArchiveId, Attrs) ->
+    archive:update(ArchiveId, Attrs).
 
 
 -spec get_archive_info(archive:id()) -> {ok, archive_info()}.

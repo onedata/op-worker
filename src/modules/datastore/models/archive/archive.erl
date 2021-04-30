@@ -17,7 +17,7 @@
 -include("modules/datastore/datastore_runner.hrl").
 
 %% API
--export([create/4, get/1, update/2, delete/1]).
+-export([create/5, get/1, update/2, delete/1]).
 
 % getters
 -export([get_id/1, get_timestamp/1, get_dataset_id/1, get_root_dir/1, get_space_id/1,
@@ -45,10 +45,13 @@
 
 % @formatter:on
 -type params() :: #{
-    type => type(),
-    character => character(),
-    data_structure => data_structure(),
-    metadata_structure => metadata_structure(),
+    type := type(),
+    character := character(),
+    data_structure := data_structure(),
+    metadata_structure := metadata_structure()
+}.
+
+-type attrs() :: #{
     description => description()
 }.
 % @formatter:off
@@ -59,7 +62,7 @@
     id/0, doc/0,
     creator/0, type/0, state/0, character/0,
     data_structure/0, metadata_structure/0,
-    timestamp/0, description/0, params/0
+    timestamp/0, description/0, params/0, attrs/0
 ]).
 
 % @formatter:on
@@ -77,9 +80,10 @@
 %%% API functions
 %%%===================================================================
 
--spec create(dataset:id(), od_space:id(), creator(), params()) -> {ok, doc()} | error().
-create(DatasetId, SpaceId, Creator, Params) ->
+-spec create(dataset:id(), od_space:id(), creator(), params(), attrs()) -> {ok, doc()} | error().
+create(DatasetId, SpaceId, Creator, Params, Attrs) ->
     SanitizedParams = sanitize_params(Params),
+    SanitizedAttrs = sanitize_attrs(Attrs),
     datastore_model:create(?CTX, #document{
         value = #archive{
             dataset_id = DatasetId,
@@ -90,19 +94,19 @@ create(DatasetId, SpaceId, Creator, Params) ->
             character = maps:get(character, SanitizedParams),
             data_structure = maps:get(data_structure, SanitizedParams),
             metadata_structure = maps:get(metadata_structure, SanitizedParams),
-            description = maps:get(description, SanitizedParams, <<>>)
+            description = maps:get(description, SanitizedAttrs, <<>>)
         },
         scope = SpaceId
     }).
 
 
--spec update(id(), params()) -> ok | error().
-update(ArchiveId, Params) ->
-    % TODO VFS-7616 sanitize params?
+-spec update(id(), attrs()) -> ok | error().
+update(ArchiveId, Attrs) ->
+    SanitizedAttrs = sanitize_attrs(Attrs),
     ?extract_ok(datastore_model:update(?CTX, ArchiveId, fun(Archive = #archive{description = CurrentDescription}) ->
         {ok, Archive#archive{
-            % TODO VFS-7616 which params can be updated?
-            description = maps:get(description, Params, CurrentDescription)
+            % TODO VFS-7616 which attrs can be updated?
+            description = maps:get(description, SanitizedAttrs, CurrentDescription)
         }}
     end)).
 
@@ -192,6 +196,13 @@ sanitize_params(Params) ->
         optional => #{
             description => {binary, any}
         }
+    }).
+
+
+-spec sanitize_attrs(attrs()) -> attrs().
+sanitize_attrs(Attrs) ->
+    middleware_sanitizer:sanitize_data(Attrs, #{
+        optional => #{description => {binary, any}}
     }).
 
 %%%===================================================================

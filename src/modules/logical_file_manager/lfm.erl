@@ -133,7 +133,7 @@
     list_children_datasets/3, list_children_datasets/4
 ]).
 %% Archives related operations
--export([archive_dataset/3, update_archive/3, get_archive_info/2, list_archives/4, remove_archive/2]).
+-export([archive_dataset/4, update_archive/3, get_archive_info/2, list_archives/4, remove_archive/2]).
 
 %% Utility functions
 -export([check_result/1]).
@@ -877,15 +877,15 @@ list_children_datasets(SessId, DatasetId, Opts, ListingMode) ->
 %%% Archive related operations
 %%%===================================================================
 
--spec archive_dataset(session:id(), dataset:id(), archive:params()) ->
+-spec archive_dataset(session:id(), dataset:id(), archive:params(), archive:attrs()) ->
     {ok, archive:id()} | error_reply().
-archive_dataset(SessId, DatasetId, ArchivingParams) ->
-    ?run(lfm_datasets:archive(SessId, DatasetId, ArchivingParams)).
+archive_dataset(SessId, DatasetId, ArchiveParams, ArchiveAttrs) ->
+    ?run(lfm_datasets:archive(SessId, DatasetId, ArchiveParams, ArchiveAttrs)).
 
 
--spec update_archive(session:id(), archive:id(), archive:params()) -> ok | error_reply().
-update_archive(SessId, ArchiveId, Params) ->
-    ?run(lfm_datasets:update_archive(SessId, ArchiveId, Params)).
+-spec update_archive(session:id(), archive:id(), archive:attrs()) -> ok | error_reply().
+update_archive(SessId, ArchiveId, Attrs) ->
+    ?run(lfm_datasets:update_archive(SessId, ArchiveId, Attrs)).
 
 
 -spec get_archive_info(session:id(), archive:id()) ->

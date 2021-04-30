@@ -780,9 +780,9 @@ handle_provider_request(UserCtx, #list_top_datasets{state = State, opts = Opts, 
     dataset_req:list_top_datasets(file_ctx:get_space_id_const(SpaceDirCtx), State, Opts, ListingMode, UserCtx);
 handle_provider_request(UserCtx, #list_children_datasets{id = DatasetId, opts = Opts, mode = ListingMode}, SpaceDirCtx) ->
     dataset_req:list_children_datasets(SpaceDirCtx, DatasetId, Opts, ListingMode, UserCtx);
-handle_provider_request(UserCtx, #archive_dataset{id = DatasetId, params = Params}, SpaceDirCtx) ->
-    dataset_req:archive(SpaceDirCtx, DatasetId, Params, UserCtx);
-handle_provider_request(UserCtx, #update_archive{id = ArchiveId, params = Params}, SpaceDirCtx) ->
+handle_provider_request(UserCtx, #archive_dataset{id = DatasetId, params = Params, attrs = Attrs}, SpaceDirCtx) ->
+    dataset_req:archive(SpaceDirCtx, DatasetId, Params, Attrs, UserCtx);
+handle_provider_request(UserCtx, #update_archive{id = ArchiveId, attrs = Params}, SpaceDirCtx) ->
     dataset_req:update_archive(SpaceDirCtx, ArchiveId, Params, UserCtx);
 handle_provider_request(UserCtx, #get_archive_info{id = ArchiveId}, SpaceDirCtx) ->
     dataset_req:get_archive_info(SpaceDirCtx, ArchiveId, UserCtx);

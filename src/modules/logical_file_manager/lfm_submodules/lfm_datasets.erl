@@ -23,7 +23,7 @@
 ]).
 
 %% Archives API
--export([archive/3, update_archive/3, get_archive_info/2, list_archives/4, remove_archive/2]).
+-export([archive/4, update_archive/3, get_archive_info/2, list_archives/4, remove_archive/2]).
 
 -type info() :: #dataset_info{}.
 -type archive_info() :: #archive_info{}.
@@ -122,24 +122,24 @@ list_children_datasets(SessId, DatasetId, Opts, ListingMode) ->
 %%% Archives API functions
 %%%===================================================================
 
--spec archive(session:id(), dataset:id(), archive:params()) ->
+-spec archive(session:id(), dataset:id(), archive:params(), archive:attrs()) ->
     {ok, archive:id()} | lfm:error_reply().
-archive(SessId, DatasetId, ArchivingParams) ->
+archive(SessId, DatasetId, ArchiveParams, ArchiveAttrs) ->
     SpaceGuid = dataset_id_to_space_guid(DatasetId),
     remote_utils:call_fslogic(SessId, provider_request, SpaceGuid,
-        #archive_dataset{id = DatasetId, params = ArchivingParams},
+        #archive_dataset{id = DatasetId, params = ArchiveParams, attrs = ArchiveAttrs},
         fun(#dataset_archived{id = ArchiveId}) ->
             {ok, ArchiveId}
         end
     ).
 
 
--spec update_archive(session:id(), archive:id(), archive:params()) ->
+-spec update_archive(session:id(), archive:id(), archive:attrs()) ->
     ok | lfm:error_reply().
-update_archive(SessId, ArchiveId, Params) ->
+update_archive(SessId, ArchiveId, Attrs) ->
     SpaceGuid = archive_id_to_space_guid(ArchiveId),
     remote_utils:call_fslogic(SessId, provider_request, SpaceGuid,
-        #update_archive{id = ArchiveId, params = Params},
+        #update_archive{id = ArchiveId, attrs = Attrs},
         fun(_) -> ok end
 
     ).
