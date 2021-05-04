@@ -38,7 +38,7 @@
 -type init_args() :: map().
 
 -record(atm_range_container, {
-    data_spec :: atm_data_spec:spec(),
+    data_spec :: atm_data_spec:record(),
     start_num :: integer(),
     end_num :: integer(),
     step :: integer()
@@ -53,7 +53,7 @@
 %%%===================================================================
 
 
--spec init(atm_data_spec:spec(), init_args()) -> container() | no_return().
+-spec init(atm_data_spec:record(), init_args()) -> container() | no_return().
 init(AtmDataSpec, #{<<"end">> := EndNum} = InitialArgs) when is_integer(EndNum) ->
     StartNum = maps:get(<<"start">>, InitialArgs, 0),
     Step = maps:get(<<"step">>, InitialArgs, 1),
@@ -87,7 +87,7 @@ is_proper_range(_Start, _End, _Step) ->
     false.
 
 
--spec get_data_spec(container()) -> atm_data_spec:spec().
+-spec get_data_spec(container()) -> atm_data_spec:record().
 get_data_spec(#atm_range_container{data_spec = AtmDataSpec}) ->
     AtmDataSpec.
 

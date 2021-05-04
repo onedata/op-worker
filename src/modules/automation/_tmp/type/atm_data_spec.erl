@@ -12,32 +12,17 @@
 -module(atm_data_spec).
 -author("Bartosz Walkowicz").
 
--behaviour(jsonable).
-
 -include("modules/automation/atm_tmp.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([get_type/1, assert_instance/2]).
-
-%% Jsonable callbacks
--export([version/0, to_json/1, from_json/1]).
+-export([get_type/1, get_value_constraints/1]).
+-export([to_json/1, from_json/1]).
 
 
--type spec() :: #atm_data_spec{}.
--type type() :: atm_integer_type.
+-type record() :: #atm_data_spec{}.
 
-
--export_type([spec/0, type/0]).
-
-
-%%%===================================================================
-%%% Callbacks
-%%%===================================================================
-
-
--callback assert_instance(Value :: term(), spec()) ->
-    ok | no_return().
+-export_type([record/0]).
 
 
 %%%===================================================================
@@ -45,27 +30,17 @@
 %%%===================================================================
 
 
--spec get_type(spec()) -> type().
+-spec get_type(record()) -> atm_data_type:type().
 get_type(#atm_data_spec{type = Type}) ->
     Type.
 
 
--spec assert_instance(term(), spec()) -> ok | no_return().
-assert_instance(Value, #atm_data_spec{type = Module} = Type) ->
-    Module:assert_instance(Value, Type).
+-spec get_value_constraints(record()) -> map().
+get_value_constraints(#atm_data_spec{value_constraints = ValueConstraints}) ->
+    ValueConstraints.
 
 
-%%%===================================================================
-%%% Jsonable callbacks
-%%%===================================================================
-
-
--spec version() -> json_serializer:model_version().
-version() ->
-    1.
-
-
--spec to_json(spec()) -> json_utils:json_map().
+-spec to_json(record()) -> json_utils:json_map().
 to_json(#atm_data_spec{type = Type, value_constraints = ValueConstraints}) ->
     #{
         <<"type">> => atom_to_binary(Type, utf8),
@@ -73,7 +48,7 @@ to_json(#atm_data_spec{type = Type, value_constraints = ValueConstraints}) ->
     }.
 
 
--spec from_json(json_utils:json_map()) -> spec().
+-spec from_json(json_utils:json_map()) -> record().
 from_json(#{
     <<"type">> := TypeBin,
     <<"valueConstraints">> := ValueConstraints

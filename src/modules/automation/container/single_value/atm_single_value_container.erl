@@ -29,7 +29,7 @@
 -type init_args() :: undefined | json_utils:json_term().
 
 -record(atm_single_value_container, {
-    data_spec :: atm_data_spec:spec(),
+    data_spec :: atm_data_spec:record(),
     value :: undefined | json_utils:json_term()
 }).
 -type container() :: #atm_single_value_container{}.
@@ -42,9 +42,9 @@
 %%%===================================================================
 
 
--spec init(atm_data_spec:spec(), init_args()) -> container() | no_return().
+-spec init(atm_data_spec:record(), init_args()) -> container() | no_return().
 init(AtmDataSpec, InitArgs) ->
-    InitArgs == undefined orelse atm_data_spec:assert_instance(InitArgs, AtmDataSpec),
+    InitArgs == undefined orelse atm_data_validator:assert_instance(InitArgs, AtmDataSpec),
 
     #atm_single_value_container{
         data_spec = AtmDataSpec,
@@ -52,7 +52,7 @@ init(AtmDataSpec, InitArgs) ->
     }.
 
 
--spec get_data_spec(container()) -> atm_data_spec:spec().
+-spec get_data_spec(container()) -> atm_data_spec:record().
 get_data_spec(#atm_single_value_container{data_spec = AtmDataSpec}) ->
     AtmDataSpec.
 

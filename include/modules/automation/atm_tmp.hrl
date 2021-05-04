@@ -15,8 +15,8 @@
 -define(ATM_TMP_HRL, 1).
 
 -record(atm_data_spec, {
-    type :: atm_data_spec:type(),
-    value_constraints = #{} :: json_utils:json_map()
+    type :: atm_data_type:type(),
+    value_constraints = #{} :: atm_data_type:value_constraints()
 }).
 
 -record(atm_store_schema, {
@@ -25,7 +25,7 @@
     description :: atm_store:description(),
     is_input_store :: boolean(),
     store_type :: atm_store:type(),
-    data_spec :: atm_data_spec:spec()
+    data_spec :: atm_data_spec:record()
 }).
 
 -type atm_store_schema() :: #atm_store_schema{}.

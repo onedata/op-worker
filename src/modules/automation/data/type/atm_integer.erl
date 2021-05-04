@@ -6,28 +6,26 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Module implementing atm integer type class.
+%%% This module implements `atm_data_validator` functionality for
+%%% `atm_integer_type`.
 %%% @end
 %%%-------------------------------------------------------------------
--module(atm_integer_type).
+-module(atm_integer).
 -author("Bartosz Walkowicz").
 
--behaviour(atm_data_spec).
+-behaviour(atm_data_validator).
 
--include_lib("ctool/include/errors.hrl").
-
-
-%% atm_data_class callbacks
--export([assert_instance/2]).
+%% atm_data_validator callbacks
+-export([is_instance/2]).
 
 
 %%%===================================================================
-%%% API functions
+%%% atm_data_validator callbacks
 %%%===================================================================
 
 
--spec assert_instance(term(), atm_data_spec:spec()) -> ok | no_return().
-assert_instance(Value, _Type) when is_integer(Value) ->
-    ok;
-assert_instance(_Value, _Type) ->
-    throw(?EINVAL).
+-spec is_instance(term(), atm_data_type:value_constraints()) -> boolean().
+is_instance(Value, _ValueConstraints) when is_integer(Value) ->
+    true;
+is_instance(_Value, _ValueConstraints) ->
+    false.

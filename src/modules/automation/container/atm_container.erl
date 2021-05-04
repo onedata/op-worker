@@ -48,9 +48,9 @@
 %%%===================================================================
 
 
--callback init(atm_data_spec:spec(), init_args()) -> container().
+-callback init(atm_data_spec:record(), init_args()) -> container().
 
--callback get_data_spec(container()) -> atm_data_spec:spec().
+-callback get_data_spec(container()) -> atm_data_spec:record().
 
 -callback get_container_stream(container()) -> atm_container_stream:stream().
 
@@ -64,12 +64,12 @@
 %%%===================================================================
 
 
--spec init(model(), atm_data_spec:spec(), init_args()) -> container().
+-spec init(model(), atm_data_spec:record(), init_args()) -> container().
 init(Model, AtmDataSpec, InitArgs) ->
     Model:init(AtmDataSpec, InitArgs).
 
 
--spec get_data_spec(container()) -> atm_data_spec:spec().
+-spec get_data_spec(container()) -> atm_data_spec:record().
 get_data_spec(AtmContainer) ->
     Model = utils:record_type(AtmContainer),
     Model:get_data_spec(AtmContainer).

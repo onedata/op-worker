@@ -32,7 +32,7 @@
 
 -record(atm_stream, {
     mode :: atm_stream_mode(),
-    data_spec :: atm_data_spec:spec(),
+    data_spec :: atm_data_spec:record(),
     container_stream :: atm_container_stream:stream()
 }).
 -type stream() :: #atm_stream{}.

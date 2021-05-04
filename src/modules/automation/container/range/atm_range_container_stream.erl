@@ -92,7 +92,7 @@ jump_to(Cursor, AtmContainerStream) ->
 
 
 %% @private
--spec sanitize_cursor(iterator:cursor(), stream()) -> boolean().
+-spec sanitize_cursor(iterator:cursor(), stream()) -> integer().
 sanitize_cursor(Cursor, AtmContainerStream) ->
     try
         CursorInt = binary_to_integer(Cursor),
