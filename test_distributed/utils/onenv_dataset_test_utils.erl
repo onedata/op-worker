@@ -49,18 +49,18 @@
     oct_background:entity_selector(),
     onenv_file_test_utils:object_selector()
 ) ->
-    dataset:id().
+    dataset_object().
 set_up_and_sync_dataset(UserSelector, RootFileSelector) ->
-    set_up_and_sync_dataset(UserSelector, RootFileSelector, []).
+    set_up_and_sync_dataset(UserSelector, RootFileSelector, #dataset_spec{}).
 
 
 -spec set_up_and_sync_dataset(
     oct_background:entity_selector(),
     onenv_file_test_utils:object_selector(),
-    [binary()]
+    dataset_spec()
 ) ->
-    dataset:id().
-set_up_and_sync_dataset(UserSelector, RootFileSelector, ProtectionFlags) ->
+    dataset_object().
+set_up_and_sync_dataset(UserSelector, RootFileSelector, DatasetSpec) ->
     UserId = oct_background:get_user_id(UserSelector),
     {RootFileGuid, SpaceId} = onenv_file_test_utils:resolve_file(RootFileSelector),
 
@@ -68,12 +68,10 @@ set_up_and_sync_dataset(UserSelector, RootFileSelector, ProtectionFlags) ->
         SpaceId
     )),
 
-    DatasetObj = set_up_dataset(CreationProvider, UserId, RootFileGuid, #dataset_spec{
-        protection_flags = ProtectionFlags
-    }),
+    DatasetObj = set_up_dataset(CreationProvider, UserId, RootFileGuid, DatasetSpec),
     await_dataset_sync(CreationProvider, SyncProviders, UserId, DatasetObj),
 
-    DatasetObj#dataset_object.id.
+    DatasetObj.
 
 
 -spec set_up_dataset(
@@ -87,7 +85,8 @@ set_up_dataset(_CreationProvider, _UserId, _FileGuid, undefined) ->
     undefined;
 set_up_dataset(CreationProvider, UserId, FileGuid, #dataset_spec{
     state = State,
-    protection_flags = ProtectionFlagsJson
+    protection_flags = ProtectionFlagsJson,
+    archive = ArchiveSpec
 }) ->
     CreationNode = ?OCT_RAND_OP_NODE(CreationProvider),
     UserSessId = oct_background:get_user_session_id(UserId, CreationProvider),
@@ -108,14 +107,17 @@ set_up_dataset(CreationProvider, UserId, FileGuid, #dataset_spec{
             ))
     end,
 
+    ArchiveObj = onenv_archive_test_utils:set_up_archive(CreationProvider, UserId, DatasetId, ArchiveSpec),
+
     #dataset_object{
         id = DatasetId,
         state = State,
-        protection_flags = ProtectionFlagsJson
+        protection_flags = ProtectionFlagsJson,
+        space_id = file_id:guid_to_space_id(FileGuid),
+        archive = ArchiveObj
     }.
 
 
-%% @private
 -spec await_dataset_sync(
     oct_background:entity_selector(),
     [oct_background:entity_selector()],
@@ -129,7 +131,8 @@ await_dataset_sync(_CreationProvider, _SyncProviders, _UserId, undefined) ->
 await_dataset_sync(CreationProvider, SyncProviders, UserId, #dataset_object{
     id = DatasetId,
     state = State,
-    protection_flags = ProtectionFlagsJson
+    protection_flags = ProtectionFlagsJson,
+    archive = ArchiveObj
 }) ->
     CreationNode = ?OCT_RAND_OP_NODE(CreationProvider),
     CreationNodeSessId = oct_background:get_user_session_id(UserId, CreationProvider),
@@ -149,7 +152,10 @@ await_dataset_sync(CreationProvider, SyncProviders, UserId, #dataset_object{
             lfm_proxy:get_dataset_info(SyncNode, SessId, DatasetId),
             ?ATTEMPTS
         )
-    end, SyncProviders).
+    end, SyncProviders),
+
+    onenv_archive_test_utils:await_archive_sync(CreationProvider, SyncProviders, UserId, ArchiveObj).
+
 
 
 -spec get_exp_child_datasets(
@@ -281,7 +287,7 @@ cleanup_dataset_archives(Node, DatasetId, Offset) ->
     {ok, Archives, IsLast} =
         lfm_proxy:list_archives(Node, ?ROOT_SESS_ID, DatasetId, #{offset => Offset, limit => Limit}),
     lists:foreach(fun({_Index, ArchiveId}) ->
-        lfm_proxy:remove_archive(Node, ?ROOT_SESS_ID, ArchiveId)
+        rpc:call(Node, dataset_api, remove_archive, [ArchiveId])
     end, Archives),
     case IsLast of
         true -> ok;

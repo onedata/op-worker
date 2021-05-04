@@ -66,6 +66,18 @@ routes() -> [
             scope = private
         }
     }},
+    %% Purge archive
+    {<<"/archives/:aid/init_purge">>, rest_handler, #rest_req{
+        method = 'POST',
+        parse_body = as_json_params,
+        consumes = [<<"application/json">>],
+        b_gri = #b_gri{
+            type = op_archive,
+            id = ?BINDING(aid),
+            aspect = purge,
+            scope = private
+        }
+    }},
     %% List archives of the dataset
     {<<"/datasets/:did/archives">>, rest_handler, #rest_req{
         method = 'GET',

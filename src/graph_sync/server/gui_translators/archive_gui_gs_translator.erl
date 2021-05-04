@@ -41,14 +41,12 @@ translate_archive_info(#archive_info{
     state = State,
     root_dir_guid = RootDirGuid,
     creation_time = CreationTime,
-    type = Type,
-    character = Character,
-    data_structure = DataStructure,
-    metadata_structure = MetadataStructure,
-    description = Description,
+    params = Params,
+    attrs = Attrs,
     index = Index
 }) ->
-    #{
+    ParamsAndAttrs = maps:merge(archive_params:to_json(Params), archive_attrs:to_json(Attrs)),
+    ParamsAndAttrs#{
         <<"gri">> => gri:serialize(#gri{
             type = op_archive, id = ArchiveId,
             aspect = instance, scope = private
@@ -57,16 +55,15 @@ translate_archive_info(#archive_info{
             type = op_dataset, id = DatasetId,
             aspect = instance, scope = private
         }),
-        <<"rootDir">> => gri:serialize(#gri{
-            type = op_file, id = RootDirGuid,
-            aspect = instance, scope = private
-        }),
+        <<"rootDir">> => case RootDirGuid =/= undefined of
+            true -> gri:serialize(#gri{
+                type = op_file, id = RootDirGuid,
+                aspect = instance, scope = private
+            });
+            false ->
+                null
+        end,
         <<"state">> => atom_to_binary(State, utf8),
         <<"creationTime">> => CreationTime,
-        <<"type">> => atom_to_binary(Type, utf8),
-        <<"character">> => atom_to_binary(Character, utf8),
-        <<"dataStructure">> => atom_to_binary(DataStructure, utf8),
-        <<"metadataStructure">> => atom_to_binary(MetadataStructure, utf8),
-        <<"description">> => Description,
         <<"index">> => Index
     }.

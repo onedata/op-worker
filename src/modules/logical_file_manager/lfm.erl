@@ -133,7 +133,7 @@
     list_children_datasets/3, list_children_datasets/4
 ]).
 %% Archives related operations
--export([archive_dataset/4, update_archive/3, get_archive_info/2, list_archives/4, remove_archive/2]).
+-export([archive_dataset/4, modify_archive_attrs/3, get_archive_info/2, list_archives/4, init_archive_purge/3]).
 
 %% Utility functions
 -export([check_result/1]).
@@ -883,9 +883,9 @@ archive_dataset(SessId, DatasetId, ArchiveParams, ArchiveAttrs) ->
     ?run(lfm_datasets:archive(SessId, DatasetId, ArchiveParams, ArchiveAttrs)).
 
 
--spec update_archive(session:id(), archive:id(), archive:attrs()) -> ok | error_reply().
-update_archive(SessId, ArchiveId, Attrs) ->
-    ?run(lfm_datasets:update_archive(SessId, ArchiveId, Attrs)).
+-spec modify_archive_attrs(session:id(), archive:id(), archive:attrs()) -> ok | error_reply().
+modify_archive_attrs(SessId, ArchiveId, Attrs) ->
+    ?run(lfm_datasets:modify_archive_attrs(SessId, ArchiveId, Attrs)).
 
 
 -spec get_archive_info(session:id(), archive:id()) ->
@@ -900,9 +900,9 @@ list_archives(SessId, DatasetId, Opts, ListingMode) ->
     lfm_datasets:list_archives(SessId, DatasetId, Opts, ListingMode).
 
 
--spec remove_archive(session:id(), archive:id()) -> ok | error_reply().
-remove_archive(SessId, ArchiveId) ->
-    ?run(lfm_datasets:remove_archive(SessId, ArchiveId)).
+-spec init_archive_purge(session:id(), archive:id(), dataset_api:url_callback()) -> ok | error_reply().
+init_archive_purge(SessId, ArchiveId, CallbackUrl) ->
+    ?run(lfm_datasets:init_archive_purge(SessId, ArchiveId, CallbackUrl)).
 
 %%%===================================================================
 %%% Utility functions

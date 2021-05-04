@@ -107,16 +107,17 @@ all() -> [
 -define(SPACE, space1).
 
 
--define(TEST_ARCHIVE_PARAMS, #{
-    type => ?FULL_ARCHIVE,
-    character => ?DIP,
-    data_structure => ?BAGIT,
-    metadata_structure => ?BUILT_IN
+-define(TEST_ARCHIVE_PARAMS, #archive_params{
+    type = ?FULL_ARCHIVE,
+    character = ?DIP,
+    data_structure = ?BAGIT,
+    metadata_structure = ?BUILT_IN
 }).
 
 -define(TEST_DESCRIPTION, <<"TEST DESCRIPTION">>).
--define(TEST_ARCHIVE_ATTRS, #{
-    description => ?TEST_DESCRIPTION
+-define(TEST_DESCRIPTION2, <<"TEST DESCRIPTION2">>).
+-define(TEST_ARCHIVE_ATTRS, #archive_attrs{
+    description = ?TEST_DESCRIPTION
 }).
 
 -define(TEST_TIMESTAMP, 1000000000).
@@ -259,7 +260,10 @@ removal_of_not_empty_dataset_should_fail(_Config) ->
     ?assertEqual({error, ?ENOTEMPTY},
         lfm_proxy:remove_dataset(P1Node, UserSessIdP1, DatasetId)),
 
-    ?assertEqual(ok, lfm_proxy:remove_archive(P1Node, UserSessIdP1, ArchiveId)),
+    ?assertEqual(ok, lfm_proxy:init_archive_purge(P1Node, UserSessIdP1, ArchiveId)),
+    % wait till archive is purged
+    ?assertMatch({ok, [], true},
+        lfm_proxy:list_archives(P1Node, UserSessIdP1, DatasetId, #{offset => 0, limit => 10}), ?ATTEMPTS),
     ?assertEqual(ok, lfm_proxy:remove_dataset(P1Node, UserSessIdP1, DatasetId)).
 
 iterate_over_1000_archives_using_offset_and_limit_1(_Config) ->
@@ -376,7 +380,7 @@ create_archive_privileges_test(_Config) ->
             lfm_proxy:archive_dataset(P1Node, User2SessIdP1, DatasetId, ?TEST_ARCHIVE_PARAMS, ?TEST_ARCHIVE_ATTRS)),
         % user2 cannot modify an existing archive either
         ?assertEqual({error, ?EPERM},
-            lfm_proxy:update_archive(P1Node, User2SessIdP1, ArchiveId, #{description => ?TEST_DESCRIPTION})),
+            lfm_proxy:modify_archive_attrs(P1Node, User2SessIdP1, ArchiveId, #archive_attrs{description = ?TEST_DESCRIPTION2})),
 
         ensure_privilege_assigned(P1Node, SpaceId, UserId2, Privilege, AllPrivileges),
         % user2 can now create archive
@@ -384,7 +388,7 @@ create_archive_privileges_test(_Config) ->
             lfm_proxy:archive_dataset(P1Node, User2SessIdP1, DatasetId, ?TEST_ARCHIVE_PARAMS, ?TEST_ARCHIVE_ATTRS)),
         % as well as modify an existing one
         ?assertMatch(ok,
-            lfm_proxy:update_archive(P1Node, User2SessIdP1, ArchiveId, #{description => ?TEST_DESCRIPTION}))
+            lfm_proxy:modify_archive_attrs(P1Node, User2SessIdP1, ArchiveId, #archive_attrs{description = ?TEST_DESCRIPTION2}))
     end, RequiredPrivileges).
 
 
@@ -441,11 +445,11 @@ remove_archive_privileges_test(_Config) ->
 
         ensure_privilege_revoked(P1Node, SpaceId, UserId2, Privilege, AllPrivileges),
         % user2 cannot remove the archive
-        ?assertEqual({error, ?EPERM}, lfm_proxy:remove_archive(P1Node, User2SessIdP1, ArchiveId)),
+        ?assertEqual({error, ?EPERM}, lfm_proxy:init_archive_purge(P1Node, User2SessIdP1, ArchiveId)),
 
         ensure_privilege_assigned(P1Node, SpaceId, UserId2, Privilege, AllPrivileges),
         % user2 can now remove archive
-        ?assertEqual(ok, lfm_proxy:remove_archive(P1Node, User2SessIdP1, ArchiveId))
+        ?assertEqual(ok, lfm_proxy:init_archive_purge(P1Node, User2SessIdP1, ArchiveId))
     
     end, lists:zip(RequiredPrivileges, [ArchiveId1, ArchiveId2])).
 
@@ -472,12 +476,16 @@ simple_archive_crud_test_base(Guid) ->
         state = ?EMPTY,
         root_dir_guid = undefined,
         creation_time = ?TEST_TIMESTAMP,
-        type = ?FULL_ARCHIVE,
-        character = ?DIP,
-        data_structure = ?BAGIT,
-        metadata_structure = ?BUILT_IN,
         index = Index,
-        description = ?TEST_DESCRIPTION
+        params = #archive_params{
+            type = ?FULL_ARCHIVE,
+            character = ?DIP,
+            data_structure = ?BAGIT,
+            metadata_structure = ?BUILT_IN
+        },
+        attrs = #archive_attrs{
+            description = ?TEST_DESCRIPTION
+        }
     },
 
     % verify whether Archive is visible in the local provider
@@ -497,23 +505,23 @@ simple_archive_crud_test_base(Guid) ->
         lfm_proxy:list_archives(P2Node, UserSessIdP2, DatasetId, #{offset => 0, limit => 10}, ?EXTENDED_INFO), ?ATTEMPTS),
 
     % update archive
-    UpdateDescription = <<"NEW DESCRIPTION">>,
-    ExpArchiveInfo2 = ExpArchiveInfo#archive_info{description = UpdateDescription},
+    UpdatedAttrs = #archive_attrs{description = <<"NEW DESCRIPTION">>},
+    ExpArchiveInfo2 = ExpArchiveInfo#archive_info{attrs = UpdatedAttrs},
     ?assertEqual(ok,
-        lfm_proxy:update_archive(P2Node, UserSessIdP2, ArchiveId, #{description => UpdateDescription})),
+        lfm_proxy:modify_archive_attrs(P2Node, UserSessIdP2, ArchiveId, UpdatedAttrs)),
     ?assertEqual({ok, ExpArchiveInfo2},
         lfm_proxy:get_archive_info(P2Node, UserSessIdP2, ArchiveId)),
     ?assertEqual({ok, ExpArchiveInfo2},
         lfm_proxy:get_archive_info(P1Node, UserSessIdP1, ArchiveId), ?ATTEMPTS),
 
     % remove archive
-    ok = lfm_proxy:remove_archive(P1Node, UserSessIdP1, ArchiveId),
+    ok = lfm_proxy:init_archive_purge(P1Node, UserSessIdP1, ArchiveId),
 
     % verify whether Archive has been removed in the local provider
     ?assertEqual({error, ?ENOENT},
-        lfm_proxy:get_archive_info(P1Node, UserSessIdP1, ArchiveId)),
+        lfm_proxy:get_archive_info(P1Node, UserSessIdP1, ArchiveId), ?ATTEMPTS),
     ?assertEqual({ok, [], true},
-        lfm_proxy:list_archives(P1Node, UserSessIdP1, DatasetId, #{offset => 0, limit => 10})),
+        lfm_proxy:list_archives(P1Node, UserSessIdP1, DatasetId, #{offset => 0, limit => 10}), ?ATTEMPTS),
 
     % verify whether Archive has been removed in the remote provider
     ?assertEqual({error, ?ENOENT},

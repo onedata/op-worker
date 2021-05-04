@@ -17,12 +17,11 @@
 -include("modules/datastore/datastore_runner.hrl").
 
 %% API
--export([create/5, get/1, update/2, delete/1]).
+-export([create/5, get/1, mark_purging/1, modify_attrs/2, delete/1]).
 
 % getters
 -export([get_id/1, get_creation_time/1, get_dataset_id/1, get_root_dir/1, get_space_id/1,
-    get_state/1, get_type/1, get_character/1, get_data_structure/1, get_metadata_structure/1,
-    get_description/1
+    get_state/1, get_params/1, get_attrs/1
 ]).
 
 %% datastore_model callbacks
@@ -33,28 +32,21 @@
 -type id() :: binary().
 -type record() :: #archive{}.
 -type doc() :: datastore_doc:doc(record()).
+-type diff() :: datastore_doc:diff(record()).
 
 -type creator() :: od_user:id().
--type type() :: ?FULL_ARCHIVE | ?INCREMENTAL_ARCHIVE.
--type state() :: ?EMPTY | ?INITIALIZING | ?ARCHIVED | ?RETIRING.
--type character() :: ?DIP | ?AIP | ?HYBRID.
--type data_structure() :: ?BAGIT | ?SIMPLE_COPY.
--type metadata_structure() :: ?BUILT_IN | ?JSON | ?XML.
+
+-type type() :: archive_params:type().
+-type character() :: archive_params:character().
+-type data_structure() :: archive_params:data_structure().
+-type metadata_structure() :: archive_params:metadata_structure().
+
+-type state() :: ?EMPTY | ?INITIALIZING | ?ARCHIVED | ?PURGING.
 -type timestamp() :: time:seconds().
--type description() :: binary().
+-type description() :: archive_attrs:description() | undefined.
 
-% @formatter:on
--type params() :: #{
-    type := type(),
-    character := character(),
-    data_structure := data_structure(),
-    metadata_structure := metadata_structure()
-}.
-
--type attrs() :: #{
-    description => description()
-}.
-% @formatter:off
+-type params() :: archive_params:params().
+-type attrs() :: archive_attrs:attrs().
 
 -type error() :: {error, term()}.
 
@@ -80,33 +72,32 @@
 %%% API functions
 %%%===================================================================
 
--spec create(dataset:id(), od_space:id(), creator(), params(), attrs()) -> {ok, doc()} | error().
+-spec create(dataset:id(), od_space:id(), creator(), params(), attrs()) ->
+    {ok, doc()} | error().
 create(DatasetId, SpaceId, Creator, Params, Attrs) ->
-    SanitizedParams = sanitize_params(Params),
-    SanitizedAttrs = sanitize_attrs(Attrs),
     datastore_model:create(?CTX, #document{
         value = #archive{
             dataset_id = DatasetId,
             creation_time = global_clock:timestamp_seconds(),
             creator = Creator,
-            type = maps:get(type, SanitizedParams),
             state = ?EMPTY,
-            character = maps:get(character, SanitizedParams),
-            data_structure = maps:get(data_structure, SanitizedParams),
-            metadata_structure = maps:get(metadata_structure, SanitizedParams),
-            description = maps:get(description, SanitizedAttrs, <<>>)
+            params = Params,
+            attrs = Attrs
         },
         scope = SpaceId
     }).
 
 
--spec update(id(), attrs()) -> ok | error().
-update(ArchiveId, Attrs) ->
-    SanitizedAttrs = sanitize_attrs(Attrs),
-    ?extract_ok(datastore_model:update(?CTX, ArchiveId, fun(Archive = #archive{description = CurrentDescription}) ->
+-spec mark_purging(id()) -> ok | error().
+mark_purging(ArchiveId) ->
+    ?extract_ok(update(ArchiveId, fun(Archive) -> {ok, Archive#archive{state = ?PURGING}} end)).
+
+
+-spec modify_attrs(id(), attrs()) -> ok | error().
+modify_attrs(ArchiveId, Attrs) ->
+    ?extract_ok(update(ArchiveId, fun(Archive = #archive{attrs = CurrentAttrs}) ->
         {ok, Archive#archive{
-            % TODO VFS-7616 which attrs can be updated?
-            description = maps:get(description, SanitizedAttrs, CurrentDescription)
+            attrs = archive_attrs:update(CurrentAttrs, Attrs)
         }}
     end)).
 
@@ -156,61 +147,26 @@ get_state(#archive{state = State}) ->
 get_state(#document{value = Archive}) ->
     get_state(Archive).
 
--spec get_type(record() | doc()) -> type().
-get_type(#archive{type = Type}) ->
-    Type;
-get_type(#document{value = Archive}) ->
-    get_type(Archive).
+-spec get_params(record() | doc()) -> params().
+get_params(#archive{params = Params}) ->
+    Params;
+get_params(#document{value = Archive}) ->
+    get_params(Archive).
 
--spec get_character(record() | doc()) -> character().
-get_character(#archive{character = Character}) ->
-    Character;
-get_character(#document{value = Archive}) ->
-    get_character(Archive).
+-spec get_attrs(record() | doc()) -> attrs().
+get_attrs(#archive{attrs = Attrs}) ->
+    Attrs;
+get_attrs(#document{value = Archive}) ->
+    get_attrs(Archive).
 
--spec get_data_structure(record() | doc()) -> data_structure().
-get_data_structure(#archive{data_structure = DataStructure}) ->
-    DataStructure;
-get_data_structure(#document{value = Archive}) ->
-    get_data_structure(Archive).
-
--spec get_metadata_structure(record() | doc()) -> metadata_structure().
-get_metadata_structure(#archive{metadata_structure = MetadataStructure}) ->
-    MetadataStructure;
-get_metadata_structure(#document{value = Archive}) ->
-    get_metadata_structure(Archive).
-
--spec get_description(record() | doc()) -> description().
-get_description(#archive{description = Description}) ->
-    Description;
-get_description(#document{value = Archive}) ->
-    get_description(Archive).
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
--spec sanitize_params(params()) -> params().
-sanitize_params(Params) ->
-    % todo usunac stad?
-    middleware_sanitizer:sanitize_data(Params, #{
-        required => #{
-            type => {atom, [?FULL_ARCHIVE, ?INCREMENTAL_ARCHIVE]},
-            character => {atom, [?DIP, ?AIP, ?HYBRID]},
-            data_structure => {atom, [?BAGIT, ?SIMPLE_COPY]},
-            metadata_structure => {atom, [?BUILT_IN, ?JSON, ?XML]}
-        },
-        optional => #{
-            description => {binary, any}
-        }
-    }).
-
-
--spec sanitize_attrs(attrs()) -> attrs().
-sanitize_attrs(Attrs) ->
-    middleware_sanitizer:sanitize_data(Attrs, #{
-        optional => #{description => {binary, any}}
-    }).
+-spec update(id(), diff()) -> {ok, doc()} | error().
+update(ArchiveId, Diff) ->
+    datastore_model:update(?CTX, ArchiveId, Diff).
 
 %%%===================================================================
 %%% Datastore callbacks
@@ -237,10 +193,14 @@ get_record_struct(1) ->
         {root_dir_guid, string},
         {creation_time, integer},
         {creator, string},
-        {type, atom},
         {state, atom},
-        {character, atom},
-        {data_structure, atom},
-        {metadata_structure, atom},
-        {description, binary}
+        {params, {record, [
+            {type, atom},
+            {character, atom},
+            {data_structure, atom},
+            {metadata_structure, atom}
+        ]}},
+        {attrs, {record, [
+            {description, binary}
+        ]}}
     ]}.

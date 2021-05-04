@@ -19,7 +19,7 @@
 %% API
 -export([translate_value/2, translate_resource/2]).
 % Util functions
--export([translate_dataset_info/1, translate_datasets_details_list/2]).
+-export([translate_dataset_info/1, translate_datasets_details_list/2, translate_archives_details_list/2]).
 
 %%%===================================================================
 %%% API

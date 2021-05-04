@@ -23,7 +23,7 @@
 ]).
 
 %% Archives API
--export([archive/4, update_archive/3, get_archive_info/2, list_archives/4, remove_archive/2]).
+-export([archive/4, modify_archive_attrs/3, get_archive_info/2, list_archives/4, init_archive_purge/3]).
 
 -type info() :: #dataset_info{}.
 -type archive_info() :: #archive_info{}.
@@ -134,12 +134,12 @@ archive(SessId, DatasetId, ArchiveParams, ArchiveAttrs) ->
     ).
 
 
--spec update_archive(session:id(), archive:id(), archive:attrs()) ->
+-spec modify_archive_attrs(session:id(), archive:id(), archive:attrs()) ->
     ok | lfm:error_reply().
-update_archive(SessId, ArchiveId, Attrs) ->
+modify_archive_attrs(SessId, ArchiveId, Attrs) ->
     SpaceGuid = archive_id_to_space_guid(ArchiveId),
     remote_utils:call_fslogic(SessId, provider_request, SpaceGuid,
-        #update_archive{id = ArchiveId, attrs = Attrs},
+        #modify_archive_attrs{id = ArchiveId, attrs = Attrs},
         fun(_) -> ok end
 
     ).
@@ -168,12 +168,12 @@ list_archives(SessId, DatasetId, Opts, ListingMode) ->
     ).
 
 
--spec remove_archive(session:id(), archive:id()) ->
+-spec init_archive_purge(session:id(), archive:id(), dataset_api:url_callback()) ->
     ok | lfm:error_reply().
-remove_archive(SessId, ArchiveId) ->
+init_archive_purge(SessId, ArchiveId, CallbackUrl) ->
     SpaceGuid = archive_id_to_space_guid(ArchiveId),
     remote_utils:call_fslogic(SessId, provider_request, SpaceGuid,
-        #remove_archive{id = ArchiveId},
+        #init_archive_purge{id = ArchiveId, callback = CallbackUrl},
         fun(_) -> ok end
     ).
 

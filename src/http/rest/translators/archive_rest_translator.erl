@@ -58,22 +58,20 @@ translate_archive_info(#archive_info{
     state = State,
     root_dir_guid = RootDirGuid,
     creation_time = CreationTime,
-    type = Type,
-    character = Character,
-    data_structure = DataStructure,
-    metadata_structure = MetadataStructure,
-    description = Description
+    params = Params,
+    attrs = Attrs
 }) ->
-    {ok, RootDirObjectId} = file_id:guid_to_objectid(RootDirGuid),
-    #{
+    ParamsAndAttrs = maps:merge(archive_params:to_json(Params), archive_attrs:to_json(Attrs)),
+    ParamsAndAttrs#{
         <<"archiveId">> => ArchiveId,
         <<"datasetId">> => DatasetId,
         <<"state">> => State,
-        <<"rootDirectoryId">> => RootDirObjectId,
-        <<"creationTime">> => CreationTime,
-        <<"type">> => Type,
-        <<"character">> => Character,
-        <<"dataStructure">> => DataStructure,
-        <<"metadataStructure">> => MetadataStructure,
-        <<"description">> => Description
+        <<"rootDirectoryId">> => case RootDirGuid =/= undefined of
+            true ->
+                {ok, RootDirObjectId} = file_id:guid_to_objectid(RootDirGuid),
+                RootDirObjectId;
+            false ->
+                null
+        end,
+        <<"creationTime">> => CreationTime
     }.

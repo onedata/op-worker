@@ -401,12 +401,9 @@
     root_dir_guid :: undefined | file_id:file_guid(),
     creation_time :: time:seconds(),
     creator :: archive:creator(),
-    type :: archive:type(),
     state :: archive:state(),
-    character :: archive:character(),
-    data_structure :: archive:data_structure(),
-    metadata_structure :: archive:metadata_structure(),
-    description :: binary()
+    params :: archive:params(),
+    attrs :: archive:attrs()
 }).
 
 

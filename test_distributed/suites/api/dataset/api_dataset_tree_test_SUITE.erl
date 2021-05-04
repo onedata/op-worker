@@ -399,19 +399,12 @@ build_get_child_datasets_prepare_rest_args_fun(ValidId) ->
 -spec build_get_child_datasets_prepare_gs_args_fun(dataset:id()) ->
     onenv_api_test_runner:prepare_args_fun().
 build_get_child_datasets_prepare_gs_args_fun(DatasetId) ->
-    build_prepare_get_child_datasets_gs_args_fun(DatasetId, children_details).
-
-
-%% @private
--spec build_prepare_get_child_datasets_gs_args_fun(dataset:id(), gri:aspect()) ->
-    onenv_api_test_runner:prepare_args_fun().
-build_prepare_get_child_datasets_gs_args_fun(DatasetId, Aspect) ->
     fun(#api_test_ctx{data = Data0}) ->
         {GriId, Data1} = api_test_utils:maybe_substitute_bad_id(DatasetId, Data0),
 
         #gs_args{
             operation = get,
-            gri = #gri{type = op_dataset, id = GriId, aspect = Aspect, scope = private},
+            gri = #gri{type = op_dataset, id = GriId, aspect = children_details, scope = private},
             data = Data1
         }
     end.
@@ -430,7 +423,7 @@ build_prepare_get_child_datasets_gs_args_fun(DatasetId, Aspect) ->
 ) ->
     ok | no_return().
 validate_listed_datasets(ListingResult, Params, AllDatasetsSorted, Format) ->
-    Limit = maps:get(<<"limit">>, Params, 1000),
+    Limit = maps:get(<<"limit">>, Params, 100),
     Offset = maps:get(<<"offset">>, Params, 0),
     Index = case maps:get(<<"index">>, Params, undefined) of
         undefined -> <<>>;
@@ -686,7 +679,7 @@ init_per_group(_Group, Config) ->
         2 ->
             ct:pal("Establishing dataset for space root dir"),
 
-            DatasetId = onenv_dataset_test_utils:set_up_and_sync_dataset(user3, SpaceId),
+            #dataset_object{id = DatasetId} = onenv_dataset_test_utils:set_up_and_sync_dataset(user3, SpaceId),
 
             DatasetInfo = #dataset_info{
                 id = DatasetId,

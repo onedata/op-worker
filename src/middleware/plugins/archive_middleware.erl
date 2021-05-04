@@ -21,6 +21,7 @@
 -include("modules/logical_file_manager/lfm.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include_lib("ctool/include/errors.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 -export([
     operation_supported/3,
@@ -30,14 +31,6 @@
     validate/2
 ]).
 -export([create/1, get/2, update/1, delete/1]).
-
-% Util functions
--export([]).
-
--define(MAX_LIST_LIMIT, 1000).
--define(DEFAULT_LIST_LIMIT, 100).
--define(ALL_PROTECTION_FLAGS, [?DATA_PROTECTION_BIN, ?METADATA_PROTECTION_BIN]).
-
 
 %%%===================================================================
 %%% API
@@ -52,12 +45,11 @@
 -spec operation_supported(middleware:operation(), gri:aspect(),
     middleware:scope()) -> boolean().
 operation_supported(create, instance, private) -> true;
+operation_supported(create, purge, private) -> true;
 
 operation_supported(get, instance, private) -> true;
 
 operation_supported(update, instance, private) -> true;
-
-operation_supported(delete, instance, private) -> true;
 
 operation_supported(_, _, _) -> false.
 
@@ -71,13 +63,18 @@ operation_supported(_, _, _) -> false.
 data_spec(#op_req{operation = create, gri = #gri{aspect = instance}}) -> #{
     required => #{
         <<"datasetId">> => {binary, non_empty},
-        <<"type">> => {atom, [?FULL_ARCHIVE, ?INCREMENTAL_ARCHIVE]},
-        <<"character">> => {atom, [?DIP, ?AIP, ?HYBRID]},
-        <<"dataStructure">> => {atom, [?BAGIT, ?SIMPLE_COPY]},
-        <<"metadataStructure">> => {atom, [?BUILT_IN, ?JSON, ?XML]}
+        <<"type">> => {atom, ?ARCHIVE_TYPES},
+        <<"character">> => {atom, ?ARCHIVE_CHARACTERS},
+        <<"dataStructure">> => {atom, ?ARCHIVE_DATA_STRUCTURES},
+        <<"metadataStructure">> => {atom, ?ARCHIVE_METADATA_STRUCTURES}
     },
     optional => #{
         <<"description">> => {binary, any}
+    }
+};
+data_spec(#op_req{operation = create, gri = #gri{aspect = purge}}) -> #{
+    optional => #{
+        <<"callback">> => fun(Callback) -> url_utils:is_valid(Callback) end
     }
 };
 
@@ -86,12 +83,9 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = instance}}) ->
 
 data_spec(#op_req{operation = update, gri = #gri{aspect = instance}}) -> #{
     optional => #{
-        description => {binary, any}
+        <<"description">> => {binary, any}
     }
-};
-
-data_spec(#op_req{operation = delete, gri = #gri{aspect = instance}}) ->
-    undefined.
+}.
 
 
 %%--------------------------------------------------------------------
@@ -109,9 +103,9 @@ fetch_entity(#op_req{operation = Op, auth = ?USER(_UserId), gri = #gri{
     aspect = As,
     scope = private
 }}) when
+    (Op =:= create andalso As =:= purge);
     (Op =:= get andalso As =:= instance);
-    (Op =:= update andalso As =:= instance);
-    (Op =:= delete andalso As =:= instance)
+    (Op =:= update andalso As =:= instance)
 ->
     case archive:get(ArchiveId) of
         {ok, ArchiveDoc} ->
@@ -136,9 +130,9 @@ authorize(#op_req{operation = create, auth = Auth, gri = #gri{aspect = instance}
     middleware_utils:is_eff_space_member(Auth, SpaceId);
 
 authorize(#op_req{operation = Op, auth = Auth, gri = #gri{aspect = As}}, ArchiveDoc) when
+    (Op =:= create andalso As =:= purge);
     (Op =:= get andalso As =:= instance);
-    (Op =:= update andalso As =:= instance);
-    (Op =:= delete andalso As =:= instance)
+    (Op =:= update andalso As =:= instance)
 ->
     SpaceId = archive:get_space_id(ArchiveDoc),
     middleware_utils:is_eff_space_member(Auth, SpaceId).
@@ -156,9 +150,9 @@ validate(#op_req{operation = create, gri = #gri{aspect = instance}, data = Data}
     middleware_utils:assert_space_supported_locally(SpaceId);
 
 validate(#op_req{operation = Op, gri = #gri{aspect = As}}, ArchiveDoc) when
+    (Op =:= create andalso As =:= purge);
     (Op =:= get andalso As =:= instance);
-    (Op =:= update andalso As =:= instance);
-    (Op =:= delete andalso As =:= instance)
+    (Op =:= update andalso As =:= instance)
 ->
     SpaceId = archive:get_space_id(ArchiveDoc),
     middleware_utils:assert_space_supported_locally(SpaceId).
@@ -173,16 +167,22 @@ validate(#op_req{operation = Op, gri = #gri{aspect = As}}, ArchiveDoc) when
 create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = instance} = GRI}) ->
     SessionId = Auth#auth.session_id,
     DatasetId = maps:get(<<"datasetId">>, Data),
-    Params = #{
-        type => maps:get(<<"type">>, Data),
-        character => maps:get(<<"character">>, Data),
-        data_structure => maps:get(<<"dataStructure">>, Data),
-        metadata_structure => maps:get(<<"metadataStructure">>, Data),
-        description => maps:get(<<"description">>, Data, <<>>)
-    },
-    {ok, ArchiveId} = ?check(lfm:archive_dataset(SessionId, DatasetId, Params)),
-    {ok, ArchiveInfo} = ?check(lfm:get_archive_info(SessionId, ArchiveId)),
-    {ok, resource, {GRI#gri{id = ArchiveId}, ArchiveInfo}}.
+    Params = archive_params:from_json(Data),
+    Attrs = archive_attrs:from_json(Data),
+    case lfm:archive_dataset(SessionId, DatasetId, Params, Attrs) of
+        {ok, ArchiveId} ->
+            {ok, ArchiveInfo} = ?check(lfm:get_archive_info(SessionId, ArchiveId)),
+            {ok, resource, {GRI#gri{id = ArchiveId}, ArchiveInfo}};
+        {error, ?EINVAL} ->
+            throw(?ERROR_BAD_DATA(<<"datasetId">>, <<"Detached dataset cannot be modified.">>));
+        Other ->
+            ?check(Other)
+    end;
+
+create(#op_req{auth = Auth, data = Data, gri = #gri{id = ArchiveId, aspect = purge}}) ->
+    SessionId = Auth#auth.session_id,
+    Callback = maps:get(<<"callback">>, Data, undefined),
+    ?check(lfm:init_archive_purge(SessionId, ArchiveId, Callback)).
 
 
 %%--------------------------------------------------------------------
@@ -201,11 +201,8 @@ get(#op_req{auth = Auth, gri = #gri{id = ArchiveId, aspect = instance}}, _) ->
 %%--------------------------------------------------------------------
 -spec update(middleware:req()) -> middleware:update_result().
 update(#op_req{auth = Auth, gri = #gri{id = ArchiveId, aspect = instance}, data = Data}) ->
-    Params = kv_utils:copy_found([{<<"description">>, description}], Data, #{}),
-    case map_size(Params) =:= 0 of
-        true -> ok;
-        false -> ?check(lfm:update_archive(Auth#auth.session_id, ArchiveId, Params))
-    end.
+    AttrsToModify = archive_attrs:from_json(Data),
+    ?check(lfm:modify_archive_attrs(Auth#auth.session_id, ArchiveId, AttrsToModify)).
 
 
 %%--------------------------------------------------------------------
@@ -214,5 +211,5 @@ update(#op_req{auth = Auth, gri = #gri{id = ArchiveId, aspect = instance}, data 
 %% @end
 %%--------------------------------------------------------------------
 -spec delete(middleware:req()) -> middleware:delete_result().
-delete(#op_req{auth = Auth, gri = #gri{id = ArchiveId, aspect = instance}}) ->
-    ?check(lfm:remove_archive(Auth#auth.session_id, ArchiveId)).
+delete(#op_req{}) ->
+    ?ERROR_NOT_SUPPORTED.

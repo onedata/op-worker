@@ -295,7 +295,7 @@ gather_listing_opts(Data) ->
     Opts = #{limit => maps:get(<<"limit">>, Data, ?DEFAULT_LIST_LIMIT)},
     case maps:get(<<"token">>, Data, undefined) of
         undefined ->
-            Opts2 = maps_utils:put_if_defined(Opts, offset, maps:get(<<"offset">>, Data, undefined)),
+            Opts2 = Opts#{offset => maps:get(<<"offset">>, Data, 0)},
             maps_utils:put_if_defined(Opts2, start_index, maps:get(<<"index">>, Data, undefined));
         Token when is_binary(Token) ->
             % if token is passed, offset has to be increased by 1

@@ -196,7 +196,7 @@
     attrs :: archive:attrs()
 }).
 
--record(update_archive, {
+-record(modify_archive_attrs, {
     id :: archive:id(),
     attrs :: archive:attrs()
 }).
@@ -211,8 +211,9 @@
     mode = ?BASIC_INFO :: dataset_api:listing_mode()
 }).
 
--record(remove_archive, {
-    id :: archive:id()
+-record(init_archive_purge, {
+    id :: archive:id(),
+    callback :: dataset_api:url_callback()
 }).
 
 
@@ -229,7 +230,7 @@
     #add_qos_entry{} | #get_effective_file_qos{} | #get_qos_entry{} | #remove_qos_entry{} | #check_qos_status{} |
     #establish_dataset{} | #update_dataset{} | #remove_dataset{} |
     #get_dataset_info{} | #get_file_eff_dataset_summary{} | #list_top_datasets{} | #list_children_datasets{} |
-    #archive_dataset{} | #update_archive{} | #get_archive_info{} | #list_archives{} | #remove_archive{}.
+    #archive_dataset{} | #modify_archive_attrs{} | #get_archive_info{} | #list_archives{} | #init_archive_purge{}.
 
 -record(transfer_encoding, {
     value :: binary()
@@ -296,7 +297,7 @@
     protection_flags = ?no_flags_mask :: data_access_control:bitmask(),
     eff_protection_flags = ?no_flags_mask :: data_access_control:bitmask(),
     parent :: undefined | dataset:id(),
-    archives_count = 0 :: non_neg_integer(), % TODO VFS-7548 add to rest/gui translators and swagger
+    archives_count = 0 :: non_neg_integer(),
     index :: dataset_api:index()
 }).
 
@@ -321,12 +322,9 @@
     state :: archive:state(),
     root_dir_guid :: undefined | file_id:file_guid(),
     creation_time :: time:millis(),
-    type :: archive:type(),
-    character :: archive:character(),
-    data_structure :: archive:data_structure(),
-    metadata_structure :: archive:metadata_structure(),
-    index :: dataset_api:archive_index(),
-    description :: archive:description()
+    params :: archive:params(),
+    attrs :: archive:attrs(),
+    index :: dataset_api:archive_index()
 }).
 
 -record(archives, {

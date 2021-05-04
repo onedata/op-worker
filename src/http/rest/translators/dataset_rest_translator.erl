@@ -20,7 +20,7 @@
 %% API
 -export([create_response/4, get_response/2]).
 % Util functions
--export([translate_datasets_list/2]).
+-export([translate_datasets_list/2, translate_archives_list/2]).
 
 %%%===================================================================
 %%% API
@@ -53,7 +53,7 @@ get_response(#gri{aspect = children}, {Datasets, IsLast}) ->
     ?OK_REPLY(translate_datasets_list(Datasets, IsLast));
 
 get_response(#gri{aspect = archives}, {Archives, IsLast}) ->
-    ?OK_REPLY(translate_archives_list({Archives, IsLast}, IsLast)).
+    ?OK_REPLY(translate_archives_list(Archives, IsLast)).
 
 %%%===================================================================
 %%% Util functions
@@ -101,7 +101,7 @@ translate_datasets_list(Datasets, IsLast) ->
     }.
 
 
--spec translate_archives_list([{dataset_api:archive_index(), archive:id()}], boolean()) -> json_utils:json_map().
+-spec translate_archives_list(dataset_api:basic_archive_entries(), boolean()) -> json_utils:json_map().
 translate_archives_list(Archives, IsLast) ->
     {TranslatedArchivesReversed, NextPageToken} = lists:foldl(fun({Index, ArchiveId}, {Acc, _}) ->
         {[#{<<"archiveId">> => ArchiveId} | Acc], Index}
