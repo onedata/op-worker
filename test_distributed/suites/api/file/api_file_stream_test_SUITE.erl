@@ -62,7 +62,7 @@ all() -> [
 ].
 
 -define(DEFAULT_READ_BLOCK_SIZE, 1024).
--define(GUI_DOWNLOAD_CODE_EXPIRATION_SECONDS, 30).
+-define(GUI_DOWNLOAD_CODE_EXPIRATION_SECONDS, 20).
 
 -define(ATTEMPTS, 30).
 
@@ -941,12 +941,12 @@ download_file_using_download_code(Node, FileDownloadUrl) ->
 -spec download_file_using_download_code_with_resumes(node(), FileDownloadUrl :: binary()) ->
     {ok, Content :: binary()} | {error, term()}.
 download_file_using_download_code_with_resumes(Node, FileDownloadUrl) ->
-    DownloadFun = fun(Begin) ->
+    InitDownloadFun = fun(Begin) ->
         {ok, _Ref} = http_client:request_return_stream(get, FileDownloadUrl, build_range_header(Begin), <<>>, get_download_opts(Node))
     end,
     Self = self(),
-    spawn(fun() -> DownloadFun(0), failing_download_client(Self) end),
-    check_download_result(async_download(#{}, DownloadFun)).
+    spawn(fun() -> InitDownloadFun(0), failing_download_client(Self) end),
+    check_download_result(async_download(#{}, InitDownloadFun)).
 
 %% @private
 -spec get_download_opts(node()) -> http_client:opts().
@@ -1122,18 +1122,30 @@ init_per_suite(Config) ->
             lists:foreach(fun(OpNode) -> 
                 test_node_starter:load_modules([OpNode], [?MODULE]),
                 ok = test_utils:mock_new(OpNode, file_download_utils),
-                ErrorFun = fun(Id, SessionId, FileAttrs, Req) ->
+                ErrorFun = fun(FileAttrs, Req) ->
                     ShouldBlock = lists:any(fun(#file_attr{guid = Guid}) ->
                         {Uuid, _, _} = file_id:unpack_share_guid(Guid),
                         node_cache:get({block_file, Uuid}, false)
                     end, utils:ensure_list(FileAttrs)),
                     case ShouldBlock of
                         true -> http_req:send_error(?ERROR_POSIX(?EAGAIN), Req);
-                        false -> meck:passthrough([Id, SessionId, FileAttrs, Req])
+                        false -> passthrough
                     end
                 end,
-                ok = test_utils:mock_expect(OpNode, file_download_utils, download_single_file, ErrorFun),
-                ok = test_utils:mock_expect(OpNode, file_download_utils, download_tarball, ErrorFun)
+                ok = test_utils:mock_expect(OpNode, file_download_utils, download_single_file, 
+                    fun(SessionId, FileAttrs, Callback, Req) -> 
+                        case ErrorFun(FileAttrs, Req) of
+                            passthrough -> meck:passthrough([SessionId, FileAttrs, Callback, Req]);
+                            Res -> Res
+                        end
+                    end),
+                ok = test_utils:mock_expect(OpNode, file_download_utils, download_tarball,
+                    fun(Id, SessionId, FileAttrs, Req) ->
+                        case ErrorFun(FileAttrs, Req) of
+                            passthrough -> meck:passthrough([Id, SessionId, FileAttrs, Req]);
+                            Res -> Res
+                        end
+                    end)
             end, ProviderNodes),
             NewConfig
         end

@@ -20,6 +20,8 @@
 -define(MSG_CONTINUE(__RetryDelay), {continue, __RetryDelay}).
 -define(MSG_DONE, done).
 -define(MSG_ERROR, error).
--define(MSG_STOP, stop).
+-define(MSG_FINISH, finish).
+
+-define(LOOP_TIMEOUT, timer:seconds(5)).
 
 -endif.

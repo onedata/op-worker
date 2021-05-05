@@ -30,13 +30,11 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([run/4, get_pid/1]).
-
-%% datastore_model callbacks
--export([get_ctx/0]).
+-export([start/4, resume/2, finish/1]).
+-export([report_next_file/2, report_data_sent/2, report_traverse_done/1]).
 
 -record(state, {
-    id :: id(),
+    id :: bulk_download:id(),
     sent_bytes = 0 :: integer(),
     buffer = <<>> :: binary(),
     connection_pid :: pid(),
@@ -45,54 +43,70 @@
 }).
 
 -type state() :: #state{}.
--type id() :: bulk_download_traverse:id().
 -type traverse_status() :: in_progress | finished.
--export_type([id/0]).
-
--record(bulk_download_main_process, {
-    pid :: pid()
-}).
-
--define(CTX, #{
-    model => ?MODULE,
-    fold_enabled => true,
-    memory_copies => all,
-    disc_driver => undefined
-}).
 
 
 -define(TARBALL_DOWNLOAD_TRAVERSE_POOL_NAME, bulk_download_traverse:get_pool_name()).
 -define(BULK_DOWNLOAD_RESUME_TIMEOUT, timer:seconds(op_worker:get_env(download_code_expiration_interval_seconds, 1800))).
--define(MAX_BUFFER_SIZE, max(
-    32768, % buffer cannot be smaller than tar stream internal buffer
-    op_worker:get_env(max_download_buffer_size, 20971520) + 32768
-)).
+-define(MAX_BUFFER_SIZE, op_worker:get_env(max_download_buffer_size, 20971520) + 32768). % buffer cannot be smaller than tar stream internal buffer (32768 bytes)
+
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
--spec run(id(), [lfm_attrs:file_attributes()], session:id(), pid()) -> {ok, pid()} | {error, term()}.
-run(TaskId, FileAttrsList, SessionId, InitialConn) ->
+-spec start(bulk_download:id(), [lfm_attrs:file_attributes()], session:id(), pid()) -> 
+    {ok, pid()} | {error, term()}.
+start(TaskId, FileAttrsList, SessionId, InitialConn) ->
     case tree_traverse_session:setup_for_task(user_ctx:new(SessionId), TaskId) of
         ok -> {ok, spawn(fun() -> main(TaskId, FileAttrsList, SessionId, InitialConn) end)};
         {error, _} = Error -> Error
     end.
+
+
+-spec resume(pid(), non_neg_integer()) -> ok.
+resume(MainPid, ResumeOffset) ->
+    MainPid ! ?MSG_RESUMED(self(), ResumeOffset),
+    ok.
+
+
+-spec finish(pid()) -> ok.
+finish(MainPid) ->
+    MainPid ! ?MSG_FINISH,
+    ok.
+
+
+-spec report_data_sent(pid(), time:millis()) -> ok.
+report_data_sent(MainPid, NewDelay) -> 
+    MainPid ! ?MSG_CONTINUE(NewDelay),
+    ok.
+
+
+-spec report_next_file(pid(), lfm_attrs:file_attributes()) -> ok.
+report_next_file(MainPid, FileAttrs) -> 
+    MainPid ! ?MSG_NEXT_FILE(FileAttrs, self()),
+    ok.
+
+
+-spec report_traverse_done(pid()) -> ok.
+report_traverse_done(MainPid) -> 
+    MainPid ! ?MSG_DONE,
+    ok.
 
 %%%===================================================================
 %%% Internal functions responsible for streaming file data
 %%%===================================================================
 
 %% @private
--spec main(id(), [lfm_attrs:file_attributes()], session:id(), pid()) -> state().
+-spec main(bulk_download:id(), [lfm_attrs:file_attributes()], session:id(), pid()) -> state().
 main(TaskId, FileAttrsList, SessionId, InitialConn) ->
-    save_pid(TaskId, self()),
-    State = #state{id = TaskId, connection_pid = InitialConn},
-    {ok, UserId} = session:get_user_id(SessionId),
+    bulk_download_persistence:save_main_pid(TaskId, self()),
     TarStream = tar_utils:open_archive_stream(),
+    State = #state{id = TaskId, connection_pid = InitialConn, tar_stream = TarStream},
+    {ok, UserId} = session:get_user_id(SessionId),
     {ok, UserCtx} = tree_traverse_session:acquire_for_task(UserId, ?TARBALL_DOWNLOAD_TRAVERSE_POOL_NAME, TaskId),
-    #state{tar_stream = FinalTarStream} = UpdatedState =
-        handle_multiple_files(FileAttrsList, TaskId, UserCtx, State#state{tar_stream = TarStream}),
+    #state{tar_stream = FinalTarStream} = UpdatedState = 
+        handle_multiple_files(FileAttrsList, TaskId, UserCtx, State),
     #state{connection_pid = Conn} = FinalState =
         send_data(tar_utils:close_archive_stream(FinalTarStream), UpdatedState),
     tree_traverse_session:close_for_task(TaskId),
@@ -101,7 +115,7 @@ main(TaskId, FileAttrsList, SessionId, InitialConn) ->
 
 
 %% @private
--spec handle_multiple_files([lfm_attrs:file_attributes()], bulk_download_traverse:id(), 
+-spec handle_multiple_files([lfm_attrs:file_attributes()], bulk_download:id(), 
     user_ctx:ctx(), state()) -> state().
 handle_multiple_files([], _TaskId, _UserCtx, State) -> 
     State;
@@ -137,7 +151,7 @@ handle_multiple_files(
 
 %% @private
 -spec stream_file(state(), session:id(), lfm_attrs:file_attributes(),
-    file_meta:path()) -> tar_utils:stream().
+    file_meta:path()) -> state().
 stream_file(State, SessionId, FileAttrs, StartingDirPath) ->
     #file_attr{size = FileSize, guid = Guid} = FileAttrs,
     case check_read_result(lfm:monitored_open(SessionId, ?FILE_REF(Guid), read)) of
@@ -145,7 +159,7 @@ stream_file(State, SessionId, FileAttrs, StartingDirPath) ->
             {Bytes, UpdatedState} = new_tar_file_entry(State, FileAttrs, StartingDirPath),
             UpdatedState1 = send_data(Bytes, UpdatedState),
             Range = {0, FileSize - 1},
-            StreamingCtx = http_streamer:new_file_stream(FileHandle, FileSize),
+            StreamingCtx = http_streamer:build_ctx(FileHandle, FileSize),
             StreamingCtx1 = http_streamer:set_range_policy(StreamingCtx, strict),
             StreamingCtx2 = http_streamer:set_send_fun(StreamingCtx1, fun(Data, InFunState, _MaxReadBlocksCount, SendRetryDelay) -> 
                 DataSize = byte_size(Data),
@@ -168,7 +182,7 @@ stream_file(State, SessionId, FileAttrs, StartingDirPath) ->
 
 
 %% @private
--spec stream_symlink(state(), session:id(), lfm_attrs:file_attributes(), file_meta:path()) -> tar_utils:stream().
+-spec stream_symlink(state(), session:id(), lfm_attrs:file_attributes(), file_meta:path()) -> state().
 stream_symlink(State, SessionId, FileAttrs, StartingDirPath) ->
     #file_attr{guid = Guid} = FileAttrs,
     case check_read_result(lfm:read_symlink(SessionId, ?FILE_REF(Guid))) of
@@ -229,8 +243,8 @@ update_stats(SentChunk, State) ->
 
 
 %% @private
--spec new_tar_file_entry(tar_utils:stream(), lfm_attrs:file_attributes(), file_meta:path()) ->
-    {binary(), tar_utils:stream()}.
+-spec new_tar_file_entry(state(), lfm_attrs:file_attributes(), file_meta:path()) ->
+    {binary(), state()}.
 new_tar_file_entry(TarStream, FileAttrs, StartingDirPath) ->
     new_tar_file_entry(TarStream, FileAttrs, StartingDirPath, undefined).
 
@@ -271,7 +285,7 @@ loop_with_conn(State) ->
 -spec loop_with_conn(state(), traverse_status()) -> state().
 loop_with_conn(#state{id = Id} = State, TraverseStatus) ->
     receive
-        ?MSG_STOP ->
+        ?MSG_FINISH ->
             finalize(State);
         ?MSG_CONTINUE(NewDelay) -> 
             case TraverseStatus of
@@ -283,7 +297,7 @@ loop_with_conn(#state{id = Id} = State, TraverseStatus) ->
             loop_with_conn(UpdatedState, TraverseStatus)
     after ?BULK_DOWNLOAD_RESUME_TIMEOUT ->
         file_download_code:remove(Id),
-        datastore_model:delete(?CTX, Id),
+        bulk_download_persistence:delete(Id),
         finalize(State)
     end.
 
@@ -330,41 +344,17 @@ catch_up_data(#state{buffer = Buffer, sent_bytes = SentBytes}, ResumeOffset) ->
         false -> error
     end.
 
-%%%===================================================================
-%%% Datastore API
-%%%===================================================================
-
-%% @private
--spec save_pid(id(), pid()) -> ok.
-save_pid(Id, Pid) ->
-    ?extract_ok(datastore_model:save(?CTX, #document{key = Id, value = #bulk_download_main_process{pid = Pid}})).
-
-
--spec get_pid(id()) -> {ok, pid()} | undefined | {error, term()}.
-get_pid(Id) ->
-    case datastore_model:get(?CTX, Id) of
-        {ok, #document{value = #bulk_download_main_process{pid = Pid}}} -> check_pid(Pid);
-        {error, _} = Error -> Error
-    end.
-
-
-%% @private
--spec get_ctx() -> datastore:ctx().
-get_ctx() ->
-    ?CTX.
-
 
 %%%===================================================================
 %%% Helper functions
 %%%===================================================================
 
 %% @private
--spec check_pid(pid() | undefined) -> {ok, pid()} | undefined.
-check_pid(undefined) -> undefined;
+-spec check_pid(pid()) -> {ok, pid()} | {error, term()}.
 check_pid(Pid) when is_pid(Pid) ->
     case is_process_alive(Pid) of
         true -> {ok, Pid};
-        false -> undefined
+        false -> {error, noproc}
     end.
 
 

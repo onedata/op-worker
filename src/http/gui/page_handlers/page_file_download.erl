@@ -66,12 +66,16 @@ handle(<<"GET">>, Req) ->
     FileDownloadCode = cowboy_req:binding(code, Req),
     case file_download_code:verify(FileDownloadCode) of
         {true, SessionId, FileGuids} ->
-            OzUrl = oneprovider:get_oz_url(),
-            Req2 = gui_cors:allow_origin(OzUrl, Req),
-            Req3 = gui_cors:allow_frame_origin(OzUrl, Req2),
-            handle_http_download(FileDownloadCode, SessionId, FileGuids, Req3);
+            handle_http_download(FileDownloadCode, SessionId, FileGuids, Req);
         false ->
-            http_req:send_error(?ERROR_BAD_VALUE_ID_NOT_FOUND(<<"code">>), Req)
+            case bulk_download_persistence:get_main_pid(FileDownloadCode) of
+                {ok, _} ->
+                    % bulk download has its state saved, so SessionId 
+                    % and list of files are not needed for resume
+                    handle_http_download(FileDownloadCode, <<>>, [], Req);
+                _ ->
+                    http_req:send_error(?ERROR_BAD_VALUE_ID_NOT_FOUND(<<"code">>), Req)
+            end
     end.
 
 
@@ -119,7 +123,10 @@ maybe_sync_first_file_block(_SessionId, _FileGuids) ->
     cowboy_req:req()
 ) ->
     cowboy_req:req().
-handle_http_download(FileDownloadCode, SessionId, FileGuids, Req0) ->
+handle_http_download(FileDownloadCode, SessionId, FileGuids, Req) ->
+    OzUrl = oneprovider:get_oz_url(),
+    Req2 = gui_cors:allow_origin(OzUrl, Req),
+    Req3 = gui_cors:allow_frame_origin(OzUrl, Req2),
     FileAttrsList = lists_utils:foldl_while(fun (FileGuid, Acc) ->
         case lfm:stat(SessionId, ?FILE_REF(FileGuid)) of
             {ok, #file_attr{} = FileAttr} -> {cont, [FileAttr | Acc]};
@@ -131,22 +138,22 @@ handle_http_download(FileDownloadCode, SessionId, FileGuids, Req0) ->
 
     case FileAttrsList of
         {error, Errno} ->
-            http_req:send_error(?ERROR_POSIX(Errno), Req0);
+            http_req:send_error(?ERROR_POSIX(Errno), Req3);
         [#file_attr{name = FileName, type = ?DIRECTORY_TYPE}] ->
-            Req1 = set_content_disposition_header(<<(normalize_filename(FileName))/binary, ".tar.gz">>, Req0),
+            Req4 = set_content_disposition_header(<<(normalize_filename(FileName))/binary, ".tar.gz">>, Req3),
             file_download_utils:download_tarball(
-                FileDownloadCode, SessionId, FileAttrsList, Req1
+                FileDownloadCode, SessionId, FileAttrsList, Req4
             );
         [#file_attr{name = FileName, type = ?REGULAR_FILE_TYPE} = Attr] ->
-            Req1 = set_content_disposition_header(normalize_filename(FileName), Req0),
+            Req4 = set_content_disposition_header(normalize_filename(FileName), Req3),
             file_download_utils:download_single_file(
-                FileDownloadCode, SessionId, Attr, Req1
+                SessionId, Attr, fun() -> file_download_code:remove(FileDownloadCode) end, Req4
             );
         _ ->
             Timestamp = integer_to_binary(global_clock:timestamp_seconds()),
-            Req1 = set_content_disposition_header(<<"onedata-download-", Timestamp/binary, ".tar.gz">>, Req0),
+            Req4 = set_content_disposition_header(<<"onedata-download-", Timestamp/binary, ".tar.gz">>, Req3),
             file_download_utils:download_tarball(
-                FileDownloadCode, SessionId, FileAttrsList, Req1
+                FileDownloadCode, SessionId, FileAttrsList, Req4
             )
     end.
 

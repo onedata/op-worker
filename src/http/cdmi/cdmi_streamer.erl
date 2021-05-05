@@ -69,7 +69,7 @@ stream_cdmi(Req, #cdmi_req{
             ?HDR_CONTENT_LENGTH => integer_to_binary(StreamSize)
         }, Req),
         cowboy_req:stream_body(JsonBodyPrefix, nofin, Req2),
-        StreamingCtx = http_streamer:new_file_stream(FileHandle, FileSize),
+        StreamingCtx = http_streamer:build_ctx(FileHandle, FileSize),
         StreamingCtx1 = http_streamer:set_encoding_fun(StreamingCtx, fun(Data) -> cdmi_encoder:encode(Data, Encoding) end),
         StreamingCtx2 = http_streamer:set_read_block_size(StreamingCtx1, ReadBlockSize),
         http_streamer:stream_bytes_range(StreamingCtx2, Range1, Req2),
