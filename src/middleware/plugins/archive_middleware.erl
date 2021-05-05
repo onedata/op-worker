@@ -169,14 +169,14 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = instance} = GRI}) -
     DatasetId = maps:get(<<"datasetId">>, Data),
     Params = archive_params:from_json(Data),
     Attrs = archive_attrs:from_json(Data),
-    case lfm:archive_dataset(SessionId, DatasetId, Params, Attrs) of
-        {ok, ArchiveId} ->
-            {ok, ArchiveInfo} = ?check(lfm:get_archive_info(SessionId, ArchiveId)),
-            {ok, resource, {GRI#gri{id = ArchiveId}, ArchiveInfo}};
+    Result =  lfm:archive_dataset(SessionId, DatasetId, Params, Attrs),
+    case Result of
         {error, ?EINVAL} ->
             throw(?ERROR_BAD_DATA(<<"datasetId">>, <<"Detached dataset cannot be modified.">>));
-        Other ->
-            ?check(Other)
+        _ ->
+            {ok, ArchiveId} = ?check(Result),
+            {ok, ArchiveInfo} = ?check(lfm:get_archive_info(SessionId, ArchiveId)),
+            {ok, resource, {GRI#gri{id = ArchiveId}, ArchiveInfo}}
     end;
 
 create(#op_req{auth = Auth, data = Data, gri = #gri{id = ArchiveId, aspect = purge}}) ->

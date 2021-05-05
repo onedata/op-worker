@@ -277,6 +277,7 @@ cleanup_datasets(Node, SpaceId, ForestType) ->
 -spec cleanup_dataset(node(), dataset:id()) -> ok.
 cleanup_dataset(Node, DatasetId) ->
     cleanup_dataset_archives(Node, DatasetId, 0),
+    ?assertMatch({ok, #dataset_info{archives_count = 0}}, lfm_proxy:get_dataset_info(Node, ?ROOT_SESS_ID, DatasetId), ?ATTEMPTS),
     lfm_proxy:remove_dataset(Node, ?ROOT_SESS_ID, DatasetId).
 
 
