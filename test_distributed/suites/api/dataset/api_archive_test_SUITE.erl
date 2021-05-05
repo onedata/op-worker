@@ -20,6 +20,8 @@
 -include_lib("ctool/include/graph_sync/gri.hrl").
 -include_lib("ctool/include/http/codes.hrl").
 -include_lib("ctool/include/privileges.hrl").
+-include_lib("inets/include/httpd.hrl").
+
 
 -export([
     all/0, groups/0,
@@ -35,6 +37,10 @@
     get_dataset_archives/1,
     init_archive_purge_test/1
 ]).
+
+%% httpd callback
+-export([do/1]).
+
 
 groups() -> [
     {all_tests, [parallel], [
@@ -53,6 +59,18 @@ all() -> [
 -define(ATTEMPTS, 30).
 -define(TEST_TIMESTAMP, 1111111111).
 -define(NON_EXISTENT_ARCHIVE_ID, <<"NonExistentArchive">>).
+-define(NON_EXISTENT_DATASET_ID, <<"NonExistentDataset">>).
+
+
+-define(HTTP_SERVER_PORT, 8080).
+-define(PURGED_ARCHIVE_PATH, "/archive_purged").
+-define(CALLBACK_URL(), begin
+    {ok, IpAddressBin} = ip_utils:to_binary(initializer:local_ip_v4()),
+    str_utils:format_bin(<<"http://~s:~p~s">>, [IpAddressBin, ?HTTP_SERVER_PORT, ?PURGED_ARCHIVE_PATH])
+end).
+
+-define(TEST_PROCESS, test_process).
+-define(ARCHIVE_PURGED(ArchiveId), {archive_purged, ArchiveId}).
 
 %%%===================================================================
 %%% Archive dataset test functions
@@ -103,6 +121,7 @@ archive_dataset(_Config) ->
                     <<"description">> => [<<"Test description">>]
                 },
                 bad_values = [
+                    {<<"datasetId">>, ?NON_EXISTENT_DATASET_ID, ?ERROR_FORBIDDEN},
                     {<<"datasetId">>, DetachedDatasetId,
                         ?ERROR_BAD_DATA(<<"datasetId">>, <<"Detached dataset cannot be modified.">>)},
                     {<<"type">>, <<"not allowed type">>,
@@ -155,7 +174,6 @@ build_archive_dataset_validate_rest_call_result_fun(MemRef) ->
         ),
         ArchiveId = maps:get(<<"archiveId">>, Body),
         api_test_memory:set(MemRef, archive_id, ArchiveId),
-        api_test_memory:set(MemRef, archives, [ArchiveId | api_test_memory:get(MemRef, archives, [])]),
 
         ExpLocation = api_test_utils:build_rest_url(TestNode, [<<"archives">>, ArchiveId]),
         ?assertEqual(ExpLocation, maps:get(<<"Location">>, Headers))
@@ -177,7 +195,6 @@ build_archive_dataset_validate_gs_call_result_fun(MemRef) ->
             gri:deserialize(ArchiveGri)
         ),
         api_test_memory:set(MemRef, archive_id, ArchiveId),
-        api_test_memory:set(MemRef, archives, [ArchiveId | api_test_memory:get(MemRef, archives, [])]),
 
         Params = archive_params:from_json(Data),
         Attrs = archive_attrs:from_json(Data),
@@ -225,13 +242,13 @@ build_verify_archive_dataset_fun(MemRef, Providers) ->
 get_archive_info(_Config) ->
     #object{dataset = #dataset_object{
         id = DatasetId,
-        archive = #archive_object{
+        archives = [#archive_object{
             id = ArchiveId,
             params = ArchiveParams,
             attrs = ArchiveAttrs
-        }
+        }]
     }} = onenv_file_test_utils:create_and_sync_file_tree(user3, space_krk_par,
-        #file_spec{dataset = #dataset_spec{archive = #archive_spec{}}}
+        #file_spec{dataset = #dataset_spec{archives = 1}}
     ),
 
     ParamsJson = archive_params:to_json(ArchiveParams),
@@ -252,14 +269,14 @@ get_archive_info(_Config) ->
                     prepare_args_fun = build_get_archive_prepare_rest_args_fun(ArchiveId),
                     validate_result_fun = fun(#api_test_ctx{node = TestNode}, {ok, RespCode, _, RespBody}) ->
                         CreationTime = time_test_utils:global_seconds(TestNode),
-                        ExpDatasetData = ParamsAndAttrsJson#{
+                        ExpArchiveData = ParamsAndAttrsJson#{
                             <<"archiveId">> => ArchiveId,
                             <<"datasetId">> => DatasetId,
                             <<"state">> => atom_to_binary(?EMPTY, utf8),
                             <<"rootDirectoryId">> => null,
                             <<"creationTime">> => CreationTime
                         },
-                        ?assertEqual({?HTTP_200_OK, ExpDatasetData}, {RespCode, RespBody})
+                        ?assertEqual({?HTTP_200_OK, ExpArchiveData}, {RespCode, RespBody})
                     end
                 },
                 #scenario_template{
@@ -268,8 +285,8 @@ get_archive_info(_Config) ->
                     prepare_args_fun = build_get_archive_prepare_gs_args_fun(ArchiveId),
                     validate_result_fun = fun(#api_test_ctx{node = TestNode}, {ok, Result}) ->
                         CreationTime = time_test_utils:global_seconds(TestNode),
-                        ExpDatasetData = build_archive_gs_instance(ArchiveId, DatasetId, CreationTime, ArchiveParams, ArchiveAttrs),
-                        ?assertEqual(ExpDatasetData, Result)
+                        ExpArchiveData = build_archive_gs_instance(ArchiveId, DatasetId, CreationTime, ArchiveParams, ArchiveAttrs),
+                        ?assertEqual(ExpArchiveData, Result)
                     end
                 }
             ],
@@ -316,23 +333,27 @@ build_get_archive_prepare_gs_args_fun(ArchiveId) ->
 modify_archive_attrs(_Config) ->
     #object{dataset = #dataset_object{
         id = DatasetId,
-        archive = #archive_object{id = ArchiveId
-    }}} = onenv_file_test_utils:create_and_sync_file_tree(user3, space_krk_par,
-        #file_spec{dataset = #dataset_spec{archive = #archive_spec{}}}
+        archives = ArchiveObjects
+    }} = onenv_file_test_utils:create_and_sync_file_tree(user3, space_krk_par,
+        #file_spec{dataset = #dataset_spec{archives = 30}}
     ),
+
+    MemRef = api_test_memory:init(),
+    api_test_memory:set(MemRef, archive_objects, ArchiveObjects),
 
     Providers = [krakow, paris],
     maybe_detach_dataset(Providers, DatasetId),
 
     ?assert(onenv_api_test_runner:run_tests([
         #suite_spec{
-            target_nodes = [krakow, paris],
+            target_nodes = Providers,
             client_spec = ?CLIENT_SPEC_FOR_SPACE_KRK_PAR(?EPERM),
+            verify_fun = build_verify_modified_archive_attrs_fun(MemRef, Providers),
             scenario_templates = [
                 #scenario_template{
                     name = <<"Modify archive attrs using REST API">>,
                     type = rest,
-                    prepare_args_fun = build_update_archive_prepare_rest_args_fun(ArchiveId),
+                    prepare_args_fun = build_update_archive_prepare_rest_args_fun(MemRef),
                     validate_result_fun = fun(#api_test_ctx{}, {ok, RespCode, _, RespBody}) ->
                         ?assertEqual({?HTTP_204_NO_CONTENT, #{}}, {RespCode, RespBody})
                     end
@@ -340,7 +361,7 @@ modify_archive_attrs(_Config) ->
                 #scenario_template{
                     name = <<"Modify archive attrs using GS API">>,
                     type = gs,
-                    prepare_args_fun = build_update_archive_prepare_gs_args_fun(ArchiveId),
+                    prepare_args_fun = build_update_archive_prepare_gs_args_fun(MemRef),
                     validate_result_fun = fun(#api_test_ctx{}, Result) ->
                         ?assertEqual(ok, Result)
                     end
@@ -360,11 +381,13 @@ modify_archive_attrs(_Config) ->
     ])).
 
 %% @private
--spec build_update_archive_prepare_rest_args_fun(archive:id()) ->
+-spec build_update_archive_prepare_rest_args_fun(api_test_memory:mem_ref()) ->
     onenv_api_test_runner:prepare_args_fun().
-build_update_archive_prepare_rest_args_fun(ArchiveId) ->
+build_update_archive_prepare_rest_args_fun(MemRef) ->
     fun(#api_test_ctx{data = Data0}) ->
+        ArchiveObject = #archive_object{id = ArchiveId} = take_random_archive(MemRef),
         {Id, Data1} = api_test_utils:maybe_substitute_bad_id(ArchiveId, Data0),
+        api_test_memory:set(MemRef, archive_to_modify, ArchiveObject#archive_object{id = Id}),
 
         #rest_args{
             method = patch,
@@ -376,17 +399,54 @@ build_update_archive_prepare_rest_args_fun(ArchiveId) ->
 
 
 %% @private
--spec build_update_archive_prepare_gs_args_fun(archive:id()) ->
+-spec build_update_archive_prepare_gs_args_fun(api_test_memory:mem_ref()) ->
     onenv_api_test_runner:prepare_args_fun().
-build_update_archive_prepare_gs_args_fun(ArchiveId) ->
+build_update_archive_prepare_gs_args_fun(MemRef) ->
     fun(#api_test_ctx{data = Data0}) ->
+        ArchiveObject = #archive_object{id = ArchiveId} = take_random_archive(MemRef),
         {Id, Data1} = api_test_utils:maybe_substitute_bad_id(ArchiveId, Data0),
+        api_test_memory:set(MemRef, archive_to_modify, ArchiveObject#archive_object{id = Id}),
 
         #gs_args{
             operation = update,
             gri = #gri{type = op_archive, id = Id, aspect = instance, scope = private},
             data = Data1
         }
+    end.
+
+
+%% @private
+-spec build_verify_modified_archive_attrs_fun(
+    api_test_memory:mem_ref(),
+    [oct_background:entity_selector()]
+) ->
+    onenv_api_test_runner:verify_fun().
+build_verify_modified_archive_attrs_fun(MemRef, Providers) ->
+    fun(ExpResult, #api_test_ctx{data = Data}) ->
+        case api_test_memory:get(MemRef, archive_to_modify) of
+            #archive_object{id = ?NON_EXISTENT_ARCHIVE_ID} ->
+                ok;
+            #archive_object{id = ArchiveId, attrs = PrevAttrs} ->
+
+                ExpCurrentAttrs = case ExpResult of
+                    expected_failure ->
+                        PrevAttrs;
+                    expected_success ->
+                        PassedDescription = maps:get(<<"description">>, Data, undefined),
+                        PrevAttrs#archive_attrs{
+                            description = utils:ensure_defined(PassedDescription, PrevAttrs#archive_attrs.description)
+                        }
+                end,
+
+                lists:foreach(fun(Provider) ->
+                    Node = ?OCT_RAND_OP_NODE(Provider),
+                    UserSessId = oct_background:get_user_session_id(user3, Provider),
+                    ?assertMatch({ok, #archive_info{attrs = ExpCurrentAttrs}},
+                        lfm_proxy:get_archive_info(Node, UserSessId, ArchiveId), ?ATTEMPTS)
+                end, Providers),
+                api_test_memory:set(MemRef, archive_attrs, ExpCurrentAttrs)
+
+        end
     end.
 
 
@@ -397,28 +457,22 @@ build_update_archive_prepare_gs_args_fun(ArchiveId) ->
 get_dataset_archives(_Config) ->
 
     #object{dataset = #dataset_object{
-        id = DatasetId
-    }} = onenv_file_test_utils:create_and_sync_file_tree(user3, space_krk_par, #file_spec{dataset = #dataset_spec{}}),
+        id = DatasetId,
+        archives = ArchiveObjects
+    }} = onenv_file_test_utils:create_and_sync_file_tree(user3, space_krk_par, #file_spec{dataset = #dataset_spec{
+        % pick random count of archives
+        archives = rand:uniform(1000)
+    }}),
 
     Providers = [krakow, paris],
-    CreationProvider = lists_utils:random_element(Providers),
-    CreationNode = ?OCT_RAND_OP_NODE(CreationProvider),
-    UserSessId = oct_background:get_user_session_id(user3, CreationProvider),
+    RandomProvider = lists_utils:random_element(Providers),
+    RandomProviderNode = ?OCT_RAND_OP_NODE(RandomProvider),
+    UserSessId = oct_background:get_user_session_id(user3, RandomProvider),
 
-    % pick random count of archives
-    ArchivesCount = rand:uniform(1000),
-
-    ArchiveObjectsAndInfos = lists:map(fun(_) ->
-        ArchiveObj = #archive_object{id = ArchiveId} =
-            onenv_archive_test_utils:set_up_archive(CreationProvider, user3, DatasetId),
-        {ok, ArchiveInfo} = lfm_proxy:get_archive_info(CreationNode, UserSessId, ArchiveId),
-        {ArchiveObj, ArchiveInfo}
-    end, lists:seq(1, ArchivesCount)),
-
-    ArchiveInfos = lists:map(fun({ArchiveObj, ArchiveInfo}) ->
-        onenv_archive_test_utils:await_archive_sync(CreationProvider, Providers, user3, ArchiveObj),
+    ArchiveInfos = lists:map(fun(#archive_object{id = ArchiveId}) ->
+        {ok, ArchiveInfo} = lfm_proxy:get_archive_info(RandomProviderNode, UserSessId, ArchiveId),
         ArchiveInfo
-    end, ArchiveObjectsAndInfos),
+    end, ArchiveObjects),
 
     % pick first and last index as token test values
     % list of archives is sorted descending by creation time
@@ -433,6 +487,7 @@ get_dataset_archives(_Config) ->
         #suite_spec{
             target_nodes = Providers,
             client_spec = ?CLIENT_SPEC_FOR_SPACE_KRK_PAR(?EPERM),
+            randomly_select_scenarios = true,
             scenario_templates = [
                 #scenario_template{
                     name = <<"Get dataset archives using REST API">>,
@@ -537,10 +592,10 @@ validate_listed_archives(ListingResult, Params, AllArchives, Format) ->
         EncodedToken -> http_utils:base64url_decode(EncodedToken)
     end,
 
-    StrippedArchives = lists:filter(fun(#archive_info{index = ArchiveIndex}) ->
+    StrippedArchives = lists:dropwhile(fun(#archive_info{index = ArchiveIndex}) ->
         case Token =:= undefined of
-            true -> ArchiveIndex >= Index;
-            false -> ArchiveIndex > Token
+            true -> ArchiveIndex < Index;
+            false -> ArchiveIndex =< Token
         end
     end, AllArchivesSorted),
 
@@ -567,30 +622,24 @@ validate_listed_archives(ListingResult, Params, AllArchives, Format) ->
 
 
 %%%===================================================================
-%% Init purge of archive test
+%%% Init purge of archive test
 %%%===================================================================
 
 init_archive_purge_test(_Config) ->
     Providers = [krakow, paris],
-    CreationProvider = lists_utils:random_element(Providers),
 
     #object{dataset = #dataset_object{
-        id = DatasetId
-    }} = onenv_file_test_utils:create_and_sync_file_tree(user3, space_krk_par, #file_spec{dataset = #dataset_spec{}}),
-
-    ArchiveObjects = lists:map(fun(_) ->
-        onenv_archive_test_utils:set_up_archive(CreationProvider, user3, DatasetId)
-    end, lists:seq(1, 20)),
-
-    ArchiveIds = lists:map(fun(ArchiveObj) ->
-        onenv_archive_test_utils:await_archive_sync(CreationProvider, Providers, user3, ArchiveObj),
-        ArchiveObj#archive_object.id
-    end, ArchiveObjects),
+        id = DatasetId,
+        archives = ArchiveObjects
+    }} = onenv_file_test_utils:create_and_sync_file_tree(user3, space_krk_par, #file_spec{dataset = #dataset_spec{
+        archives = 20
+    }}),
 
     MemRef = api_test_memory:init(),
-    api_test_memory:set(MemRef, archive_ids, ArchiveIds),
+    api_test_memory:set(MemRef, archive_objects, ArchiveObjects),
 
     maybe_detach_dataset(Providers, DatasetId),
+    true = register(?TEST_PROCESS, self()),
 
     ?assert(onenv_api_test_runner:run_tests([
         #suite_spec{
@@ -615,7 +664,8 @@ init_archive_purge_test(_Config) ->
             ],
             data_spec = #data_spec{
                 bad_values = [
-                    {bad_id, ?NON_EXISTENT_ARCHIVE_ID, ?ERROR_NOT_FOUND}
+                    {bad_id, ?NON_EXISTENT_ARCHIVE_ID, ?ERROR_NOT_FOUND},
+                    {<<"callback">>, <<"htp:/wrong-url.org">>, ?ERROR_BAD_DATA(<<"callback">>)}
                 ]
             }
         }
@@ -626,15 +676,18 @@ init_archive_purge_test(_Config) ->
 -spec build_init_purge_archive_prepare_rest_args_fun(api_test_memory:mem_ref()) ->
     onenv_api_test_runner:prepare_args_fun().
 build_init_purge_archive_prepare_rest_args_fun(MemRef) ->
-    fun(#api_test_ctx{data = Data}) ->
-        [ArchiveId | RestArchiveIds] = lists_utils:shuffle(api_test_memory:get(MemRef, archive_ids)),
-        {Id, _} = api_test_utils:maybe_substitute_bad_id(ArchiveId, Data),
-        api_test_memory:set(MemRef, archive_to_purge, Id),
-        api_test_memory:set(MemRef, archive_ids, RestArchiveIds),
+    fun(#api_test_ctx{data = Data0}) ->
+        ArchiveObject = #archive_object{id = ArchiveId} = take_random_archive(MemRef),
+        {Id, _} = api_test_utils:maybe_substitute_bad_id(ArchiveId, Data0),
+        api_test_memory:set(MemRef, archive_to_purge, ArchiveObject#archive_object{id = Id}),
+
+        Body = #{<<"callback">> => maps:get(<<"callback">>, Data0, ?CALLBACK_URL())},
 
         #rest_args{
             method = post,
-            path = <<"archives/", Id/binary, "/init_purge">>
+            headers = #{<<"content-type">> => <<"application/json">>},
+            path = <<"archives/", Id/binary, "/init_purge">>,
+            body = json_utils:encode(Body)
         }
     end.
 
@@ -644,15 +697,16 @@ build_init_purge_archive_prepare_rest_args_fun(MemRef) ->
     onenv_api_test_runner:prepare_args_fun().
 build_init_purge_archive_prepare_gs_args_fun(MemRef) ->
     fun(#api_test_ctx{data = Data0}) ->
-        [ArchiveId | RestArchiveIds] = lists_utils:shuffle(api_test_memory:get(MemRef, archive_ids)),
+        ArchiveObject = #archive_object{id = ArchiveId} = take_random_archive(MemRef),
         {Id, _} = api_test_utils:maybe_substitute_bad_id(ArchiveId, Data0),
-        api_test_memory:set(MemRef, archive_to_purge, Id),
-        api_test_memory:set(MemRef, archive_ids, RestArchiveIds),
+        api_test_memory:set(MemRef, archive_to_purge, ArchiveObject#archive_object{id = Id}),
+
+        Data1 = maps:merge(#{<<"callback">> => ?CALLBACK_URL()}, Data0),
 
         #gs_args{
             operation = create,
             gri = #gri{type = op_archive, id = Id, aspect = purge, scope = private},
-            data = Data0
+            data = Data1
         }
     end.
 
@@ -667,11 +721,25 @@ build_verify_archive_purged_fun(MemRef, Providers, DatasetId) ->
 
     fun(ExpResult, _) ->
         case api_test_memory:get(MemRef, archive_to_purge) of
-            ?NON_EXISTENT_ARCHIVE_ID ->
+            #archive_object{id = ?NON_EXISTENT_ARCHIVE_ID} ->
                 ok;
             undefined ->
                 ct:fail("undefined archive to remove");
-            ArchiveId ->
+            #archive_object{id = ArchiveId} ->
+
+                case ExpResult of
+                    expected_success ->
+                        Timeout = timer:seconds(?ATTEMPTS),
+                        receive
+                            ?ARCHIVE_PURGED(ArchiveId) -> ok
+                        after
+                            Timeout ->
+                                ct:fail("Archive ~p not purged", [ArchiveId])
+                        end;
+                    expected_failure ->
+                        ok
+                end,
+
                 lists:foreach(fun(Provider) ->
                     Node = ?OCT_RAND_OP_NODE(Provider),
                     UserSessId = oct_background:get_user_session_id(user2, Provider),
@@ -715,7 +783,7 @@ verify_archive(
         GetDatasetsFun =  fun() -> list_archive_ids(Node, UserSessId, DatasetId, ListOpts) end,
         ?assertEqual(true, lists:member(ArchiveId, GetDatasetsFun()), ?ATTEMPTS),
 
-        ExpDatasetInfo = #archive_info{
+        ExpArchiveInfo = #archive_info{
             id = ArchiveId,
             dataset_id = DatasetId,
             state = ?EMPTY,
@@ -730,7 +798,7 @@ verify_archive(
             attrs = #archive_attrs{description = Description},
             index = archives_list:index(ArchiveId, CreationTime)
         },
-        ?assertEqual({ok, ExpDatasetInfo}, lfm_proxy:get_archive_info(Node, UserSessId, ArchiveId), ?ATTEMPTS)
+        ?assertEqual({ok, ExpArchiveInfo}, lfm_proxy:get_archive_info(Node, UserSessId, ArchiveId), ?ATTEMPTS)
     end, Providers).
 
 
@@ -759,6 +827,16 @@ build_archive_gs_instance(ArchiveId, DatasetId, CreationTime, Params, Attrs) ->
     BasicInfo#{<<"revision">> => 1}.
 
 
+-spec take_random_archive(api_test_memory:mem_ref()) -> onenv_archive_test_utils:archive_object().
+take_random_archive(MemRef) ->
+    case lists_utils:shuffle(api_test_memory:get(MemRef, archive_objects)) of
+        [ArchiveObject | RestArchiveIds] ->
+            api_test_memory:set(MemRef, archive_objects, RestArchiveIds),
+            ArchiveObject;
+        [] ->
+            ct:fail("List of created archives is empty")
+    end.
+
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
@@ -777,12 +855,14 @@ init_per_suite(Config) ->
             ozw_test_rpc:space_set_user_privileges(
                 SpaceId, ?OCT_USER_ID(user4), privileges:space_member() -- [?SPACE_VIEW]
             ),
+            start_http_server(),
             NewConfig
         end
     }).
 
 
 end_per_suite(_Config) ->
+    stop_http_server(),
     oct_background:end_per_suite().
 
 init_per_group(_Group, Config) ->
@@ -796,12 +876,36 @@ end_per_group(_Group, Config) ->
     time_test_utils:unfreeze_time(Config).
 
 init_per_testcase(_Case, Config) ->
-    ct:timetrap({minutes, 30}),
+    ct:timetrap({minutes, 10}),
     Config.
 
 
 end_per_testcase(_Case, _Config) ->
     ok.
+
+%%%===================================================================
+%%% HTTP server used for checking HTTP callbacks
+%%%===================================================================
+
+start_http_server() ->
+    inets:start(),
+    {ok, _} = inets:start(httpd, [
+        {port, ?HTTP_SERVER_PORT},
+        {server_name, "httpd_test"},
+        {server_root, "/tmp"},
+        {document_root, "/tmp"},
+        {modules, [?MODULE]}
+    ]).
+
+
+stop_http_server() ->
+    inets:stop().
+
+
+do(#mod{method = "POST", request_uri = ?PURGED_ARCHIVE_PATH, entity_body = Body}) ->
+    #{<<"archiveId">> := ArchiveId} = json_utils:decode(Body),
+    ?TEST_PROCESS ! ?ARCHIVE_PURGED(ArchiveId),
+    done.
 
 
 %%%===================================================================

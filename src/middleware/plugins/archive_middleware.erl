@@ -7,7 +7,7 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module handles middleware operations (create, get, update, delete)
-%%% corresponding archives.
+%%% corresponding to archives.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(archive_middleware).
@@ -74,7 +74,7 @@ data_spec(#op_req{operation = create, gri = #gri{aspect = instance}}) -> #{
 };
 data_spec(#op_req{operation = create, gri = #gri{aspect = purge}}) -> #{
     optional => #{
-        <<"callback">> => fun(Callback) -> url_utils:is_valid(Callback) end
+        <<"callback">> => {binary, fun(Callback) -> url_utils:is_valid(Callback) end}
     }
 };
 
