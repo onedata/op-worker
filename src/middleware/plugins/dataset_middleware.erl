@@ -35,7 +35,7 @@
 -export([gather_listing_opts/1]).
 
 -define(MAX_LIST_LIMIT, 1000).
--define(DEFAULT_LIST_LIMIT, 100).
+-define(DEFAULT_LIST_LIMIT, 1000).
 -define(ALL_PROTECTION_FLAGS, [?DATA_PROTECTION_BIN, ?METADATA_PROTECTION_BIN]).
 
 

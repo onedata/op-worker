@@ -24,6 +24,7 @@
 -define(EMPTY, empty).
 -define(INITIALIZING, initializing).
 -define(ARCHIVED, archived).
+-define(FAILED, failed).
 -define(PURGING, purging).
 
 % Macros defining possible characters of an archive
