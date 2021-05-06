@@ -81,7 +81,8 @@ translate_dataset_info(#dataset_info{
         <<"effProtectionFlags">> => file_meta:protection_flags_to_json(EffProtectionFlags),
         <<"creationTime">> => CreationTime,
         <<"index">> => Index,
-        <<"archivesCount">> => ArchivesCount
+        <<"archivesCount">> => ArchivesCount,
+        <<"spaceId">> => file_id:guid_to_space_id(RootFileGuid)
     }.
 
 
