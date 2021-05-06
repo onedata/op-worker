@@ -37,11 +37,11 @@
 -type creator() :: od_user:id().
 
 -type type() :: archive_params:type().
--type character() :: archive_params:character().
+-type dip() :: archive_params:dip().
 -type data_structure() :: archive_params:data_structure().
 -type metadata_structure() :: archive_params:metadata_structure().
 
--type state() :: ?EMPTY | ?INITIALIZING | ?ARCHIVED | ?PURGING.
+-type state() :: ?EMPTY | ?INITIALIZING | ?PERSISTED | ?PURGING.
 -type timestamp() :: time:seconds().
 -type description() :: archive_attrs:description() | undefined.
 
@@ -52,7 +52,7 @@
 
 -export_type([
     id/0, doc/0,
-    creator/0, type/0, state/0, character/0,
+    creator/0, type/0, state/0, dip/0,
     data_structure/0, metadata_structure/0,
     timestamp/0, description/0, params/0, attrs/0
 ]).
@@ -196,9 +196,10 @@ get_record_struct(1) ->
         {state, atom},
         {params, {record, [
             {type, atom},
-            {character, atom},
+            {dip, boolean},
             {data_structure, atom},
-            {metadata_structure, atom}
+            {metadata_structure, atom},
+            {callback, string}
         ]}},
         {attrs, {record, [
             {description, binary}

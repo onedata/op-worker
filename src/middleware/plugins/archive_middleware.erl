@@ -64,12 +64,13 @@ data_spec(#op_req{operation = create, gri = #gri{aspect = instance}}) -> #{
     required => #{
         <<"datasetId">> => {binary, non_empty},
         <<"type">> => {atom, ?ARCHIVE_TYPES},
-        <<"character">> => {atom, ?ARCHIVE_CHARACTERS},
         <<"dataStructure">> => {atom, ?ARCHIVE_DATA_STRUCTURES},
         <<"metadataStructure">> => {atom, ?ARCHIVE_METADATA_STRUCTURES}
     },
     optional => #{
-        <<"description">> => {binary, any}
+        <<"dip">> => {boolean, any},
+        <<"description">> => {binary, any},
+        <<"callback">> => {binary, fun(Callback) -> url_utils:is_valid(Callback) end}
     }
 };
 data_spec(#op_req{operation = create, gri = #gri{aspect = purge}}) -> #{

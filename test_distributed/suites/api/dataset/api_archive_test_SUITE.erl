@@ -63,13 +63,19 @@ all() -> [
 
 
 -define(HTTP_SERVER_PORT, 8080).
--define(PURGED_ARCHIVE_PATH, "/archive_purged").
--define(CALLBACK_URL(), begin
+-define(ARCHIVE_PERSISTED_PATH, "/archive_persisted").
+-define(ARCHIVE_PURGED_PATH, "/archive_purged").
+
+-define(ARCHIVE_PERSISTED_CALLBACK_URL(), ?CALLBACK_URL(?ARCHIVE_PERSISTED_PATH)).
+-define(ARCHIVE_PURGED_CALLBACK_URL(), ?CALLBACK_URL(?ARCHIVE_PURGED_PATH)).
+-define(CALLBACK_URL(Path), begin
     {ok, IpAddressBin} = ip_utils:to_binary(initializer:local_ip_v4()),
-    str_utils:format_bin(<<"http://~s:~p~s">>, [IpAddressBin, ?HTTP_SERVER_PORT, ?PURGED_ARCHIVE_PATH])
+    str_utils:format_bin(<<"http://~s:~p~s">>, [IpAddressBin, ?HTTP_SERVER_PORT, Path])
 end).
 
--define(TEST_PROCESS, test_process).
+-define(CREATE_TEST_PROCESS, create_test_process).
+-define(PURGE_TEST_PROCESS, purge_test_process).
+-define(ARCHIVE_PERSISTED(ArchiveId, DatasetId), {archive_persisted, ArchiveId, DatasetId}).
 -define(ARCHIVE_PURGED(ArchiveId), {archive_purged, ArchiveId}).
 
 %%%===================================================================
@@ -88,6 +94,8 @@ archive_dataset(_Config) ->
     } = onenv_file_test_utils:create_and_sync_file_tree(user3, space_krk_par, #file_spec{dataset = #dataset_spec{state = ?DETACHED_DATASET}}),
 
     MemRef = api_test_memory:init(),
+
+    true = register(?CREATE_TEST_PROCESS, self()),
 
     ?assert(onenv_api_test_runner:run_tests([
         #suite_spec{
@@ -110,15 +118,16 @@ archive_dataset(_Config) ->
                 }
             ],
             data_spec = #data_spec{
-                required = [<<"datasetId">>, <<"type">>, <<"character">>, <<"dataStructure">>, <<"metadataStructure">>],
-                optional = [<<"description">>],
+                required = [<<"datasetId">>, <<"type">>, <<"dataStructure">>, <<"metadataStructure">>],
+                optional = [<<"description">>, <<"dip">>, <<"callback">>],
                 correct_values = #{
                     <<"datasetId">> => [DatasetId],
                     <<"type">> => ?ARCHIVE_TYPES,
-                    <<"character">> => ?ARCHIVE_CHARACTERS,
+                    <<"dip">> => [true, false],
                     <<"dataStructure">> => ?ARCHIVE_DATA_STRUCTURES,
                     <<"metadataStructure">> => ?ARCHIVE_METADATA_STRUCTURES,
-                    <<"description">> => [<<"Test description">>]
+                    <<"description">> => [<<"Test description">>],
+                    <<"callback">> => [?ARCHIVE_PERSISTED_CALLBACK_URL()]
                 },
                 bad_values = [
                     {<<"datasetId">>, ?NON_EXISTENT_DATASET_ID, ?ERROR_FORBIDDEN},
@@ -126,13 +135,13 @@ archive_dataset(_Config) ->
                         ?ERROR_BAD_DATA(<<"datasetId">>, <<"Detached dataset cannot be modified.">>)},
                     {<<"type">>, <<"not allowed type">>,
                         ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"type">>, ensure_binaries(?ARCHIVE_TYPES))},
-                    {<<"character">>, <<"not allowed character">>,
-                        ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"character">>, ensure_binaries(?ARCHIVE_CHARACTERS))},
+                    {<<"dip">>, <<"not boolean">>, ?ERROR_BAD_VALUE_BOOLEAN(<<"dip">>)},
                     {<<"dataStructure">>, <<"not allowed dataStructure">>,
                         ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"dataStructure">>, ensure_binaries(?ARCHIVE_DATA_STRUCTURES))},
                     {<<"metadataStructure">>, <<"not allowed metadataStructure">>,
                         ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"metadataStructure">>, ensure_binaries(?ARCHIVE_METADATA_STRUCTURES))},
-                    {<<"description">>, [123, 456], ?ERROR_BAD_VALUE_BINARY(<<"description">>)}
+                    {<<"description">>, [123, 456], ?ERROR_BAD_VALUE_BINARY(<<"description">>)},
+                    {<<"callback">>, <<"htp:/wrong-url.org">>, ?ERROR_BAD_DATA(<<"callback">>)}
                 ]
             }
         }
@@ -222,17 +231,32 @@ build_verify_archive_dataset_fun(MemRef, Providers) ->
             CreationTime = time_test_utils:global_seconds(TestNode),
             DatasetId = maps:get(<<"datasetId">>, Data),
             Type = maps:get(<<"type">>, Data),
-            Character = maps:get(<<"character">>, Data),
             DataStructure = maps:get(<<"dataStructure">>, Data),
             MetadataStructure = maps:get(<<"metadataStructure">>, Data),
+            Dip = maps:get(<<"dip">>, Data, ?DEFAULT_DIP),
             Description = maps:get(<<"description">>, Data, undefined),
-
+            Callback = maps:get(<<"callback">>, Data, undefined),
+            case Callback =/= undefined of
+                true -> await_archive_persisted_callback_called(ArchiveId, DatasetId);
+                false -> ok
+            end,
             verify_archive(
                 UserId, Providers, ArchiveId, DatasetId, CreationTime,
-                Type, Character, DataStructure, MetadataStructure, Description
+                Type, Dip, DataStructure, MetadataStructure, Callback, Description
             );
         (expected_failure, _) ->
             ok
+    end.
+
+%% @private
+-spec await_archive_persisted_callback_called(archive:id(), dataset:id()) -> ok.
+await_archive_persisted_callback_called(ArchiveId, DatasetId) ->
+    Timeout = timer:seconds(?ATTEMPTS),
+    receive
+        ?ARCHIVE_PERSISTED(ArchiveId, DatasetId) -> ok
+    after
+        Timeout ->
+            ct:fail("Archive ~p not created", [ArchiveId])
     end.
 
 %%%===================================================================
@@ -571,7 +595,7 @@ build_get_dataset_archives_prepare_gs_args_fun(DatasetId) ->
 ) ->
     ok | no_return().
 validate_listed_archives(ListingResult, Params, AllArchives, Format) ->
-    Limit = maps:get(<<"limit">>, Params, 100),
+    Limit = maps:get(<<"limit">>, Params, 1000),
     Offset = maps:get(<<"offset">>, Params, 0),
     Index = case maps:get(<<"index">>, Params, undefined) of
         undefined -> <<>>;
@@ -638,7 +662,7 @@ init_archive_purge_test(_Config) ->
     api_test_memory:set(MemRef, archive_objects, ArchiveObjects),
 
     maybe_detach_dataset(Providers, DatasetId),
-    true = register(?TEST_PROCESS, self()),
+    true = register(?PURGE_TEST_PROCESS, self()),
 
     ?assert(onenv_api_test_runner:run_tests([
         #suite_spec{
@@ -664,7 +688,7 @@ init_archive_purge_test(_Config) ->
             data_spec = #data_spec{
                 optional = [<<"callback">>],
                 correct_values = #{
-                    <<"callback">> => [?CALLBACK_URL()]
+                    <<"callback">> => [?ARCHIVE_PURGED_CALLBACK_URL()]
                 },
                 bad_values = [
                     {bad_id, ?NON_EXISTENT_ARCHIVE_ID, ?ERROR_NOT_FOUND},
@@ -775,13 +799,13 @@ await_archive_purged_callback_called(ArchiveId) ->
 %% @private
 -spec verify_archive(
     od_user:id(), [oct_background:entity_selector()], archive:id(), dataset:id(),
-    archive:timestamp(), archive:type(), archive:character(), archive:data_structure(), archive:metadata_structure(),
-    archive:description()
+    archive:timestamp(), archive:type(), archive:dip(), archive:data_structure(), archive:metadata_structure(),
+    dataset_api:url_callback(), archive:description()
 ) ->
     ok.
 verify_archive(
     UserId, Providers, ArchiveId, DatasetId, CreationTime,
-    Type, Character, DataStructure, MetadataStructure, Description
+    Type, Dip, DataStructure, MetadataStructure, Callback, Description
 ) ->
     lists:foreach(fun(Provider) ->
         Node = ?OCT_RAND_OP_NODE(Provider),
@@ -798,9 +822,10 @@ verify_archive(
             creation_time = CreationTime,
             params = #archive_params{
                 type = Type,
-                character = Character,
+                dip = Dip,
                 data_structure = DataStructure,
-                metadata_structure = MetadataStructure
+                metadata_structure = MetadataStructure,
+                callback = Callback
             },
             attrs = #archive_attrs{description = Description},
             index = archives_list:index(ArchiveId, CreationTime)
@@ -908,10 +933,13 @@ start_http_server() ->
 stop_http_server() ->
     inets:stop().
 
-
-do(#mod{method = "POST", request_uri = ?PURGED_ARCHIVE_PATH, entity_body = Body}) ->
+do(#mod{method = "POST", request_uri = ?ARCHIVE_PERSISTED_PATH, entity_body = Body}) ->
+    #{<<"archiveId">> := ArchiveId, <<"datasetId">> := DatasetId} = json_utils:decode(Body),
+    ?CREATE_TEST_PROCESS ! ?ARCHIVE_PERSISTED(ArchiveId, DatasetId),
+    done;
+do(#mod{method = "POST", request_uri = ?ARCHIVE_PURGED_PATH, entity_body = Body}) ->
     #{<<"archiveId">> := ArchiveId} = json_utils:decode(Body),
-    ?TEST_PROCESS ! ?ARCHIVE_PURGED(ArchiveId),
+    ?PURGE_TEST_PROCESS ! ?ARCHIVE_PURGED(ArchiveId),
     done.
 
 

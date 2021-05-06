@@ -135,7 +135,7 @@ await_archive_sync(CreationProvider, SyncProviders, UserId, #archive_object{id =
 random_archive_params() ->
     #archive_params{
         type = lists_utils:random_element(?ARCHIVE_TYPES),
-        character = lists_utils:random_element(?ARCHIVE_CHARACTERS),
+        dip = lists_utils:random_element([true, false]),
         data_structure = lists_utils:random_element(?ARCHIVE_DATA_STRUCTURES),
         metadata_structure = lists_utils:random_element(?ARCHIVE_METADATA_STRUCTURES)
     }.

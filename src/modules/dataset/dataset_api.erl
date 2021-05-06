@@ -243,8 +243,10 @@ archive(DatasetId, Params, Attrs, UserId) ->
                     Timestamp = archive:get_creation_time(ArchiveDoc),
                     {ok, SpaceId} = dataset:get_space_id(DatasetDoc),
                     archives_list:add(DatasetId, SpaceId, ArchiveId, Timestamp),
-                    {ok, ArchiveId};
                     % TODO VFS-7601 schedule archivisation job here
+                    CallbackUrl = archive_params:get_callback(Params),
+                    notify_archive_created(ArchiveId, DatasetId, CallbackUrl),
+                    {ok, ArchiveId};
                 {error, Error} ->
                     Error
             end;
@@ -530,8 +532,18 @@ entry_index(DatasetId, RootFilePath) ->
     datasets_structure:pack_entry_index(DatasetName, DatasetId).
 
 
+
+-spec notify_archive_created(archive:id(), dataset:id(), url_callback()) -> ok.
+notify_archive_created(_ArchiveId, _DatasetId, undefined) ->
+    ok;
+notify_archive_created(ArchiveId, DatasetId, CallbackUrl) ->
+    Headers = #{?HDR_CONTENT_TYPE => <<"application/json">>},
+    Body = json_utils:encode(#{<<"archiveId">> => ArchiveId, <<"datasetId">> => DatasetId}),
+    http_client:post(CallbackUrl, Headers, Body),
+    ok.
+
 -spec notify_archive_purged(archive:id(), url_callback()) -> ok.
-notify_archive_purged(ArchiveId, undefined) ->
+notify_archive_purged(_ArchiveId, undefined) ->
     ok;
 notify_archive_purged(ArchiveId, CallbackUrl) ->
     Headers = #{?HDR_CONTENT_TYPE => <<"application/json">>},

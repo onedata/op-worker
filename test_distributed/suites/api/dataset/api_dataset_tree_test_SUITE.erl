@@ -423,7 +423,7 @@ build_get_child_datasets_prepare_gs_args_fun(DatasetId) ->
 ) ->
     ok | no_return().
 validate_listed_datasets(ListingResult, Params, AllDatasetsSorted, Format) ->
-    Limit = maps:get(<<"limit">>, Params, 100),
+    Limit = maps:get(<<"limit">>, Params, 1000),
     Offset = maps:get(<<"offset">>, Params, 0),
     Index = case maps:get(<<"index">>, Params, undefined) of
         undefined -> <<>>;

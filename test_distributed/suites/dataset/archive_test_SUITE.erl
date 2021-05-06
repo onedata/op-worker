@@ -109,7 +109,7 @@ all() -> [
 
 -define(TEST_ARCHIVE_PARAMS, #archive_params{
     type = ?FULL_ARCHIVE,
-    character = ?DIP,
+    dip = true,
     data_structure = ?BAGIT,
     metadata_structure = ?BUILT_IN
 }).
@@ -479,7 +479,7 @@ simple_archive_crud_test_base(Guid) ->
         index = Index,
         params = #archive_params{
             type = ?FULL_ARCHIVE,
-            character = ?DIP,
+            dip = true,
             data_structure = ?BAGIT,
             metadata_structure = ?BUILT_IN
         },
