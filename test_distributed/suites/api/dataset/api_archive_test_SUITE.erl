@@ -443,8 +443,7 @@ build_verify_modified_archive_attrs_fun(MemRef, Providers) ->
                     UserSessId = oct_background:get_user_session_id(user3, Provider),
                     ?assertMatch({ok, #archive_info{attrs = ExpCurrentAttrs}},
                         lfm_proxy:get_archive_info(Node, UserSessId, ArchiveId), ?ATTEMPTS)
-                end, Providers),
-                api_test_memory:set(MemRef, archive_attrs, ExpCurrentAttrs)
+                end, Providers)
 
         end
     end.
@@ -632,7 +631,7 @@ init_archive_purge_test(_Config) ->
         id = DatasetId,
         archives = ArchiveObjects
     }} = onenv_file_test_utils:create_and_sync_file_tree(user3, space_krk_par, #file_spec{dataset = #dataset_spec{
-        archives = 20
+        archives = 30
     }}),
 
     MemRef = api_test_memory:init(),
@@ -663,6 +662,10 @@ init_archive_purge_test(_Config) ->
                 }
             ],
             data_spec = #data_spec{
+                optional = [<<"callback">>],
+                correct_values = #{
+                    <<"callback">> => [?CALLBACK_URL()]
+                },
                 bad_values = [
                     {bad_id, ?NON_EXISTENT_ARCHIVE_ID, ?ERROR_NOT_FOUND},
                     {<<"callback">>, <<"htp:/wrong-url.org">>, ?ERROR_BAD_DATA(<<"callback">>)}
@@ -681,13 +684,11 @@ build_init_purge_archive_prepare_rest_args_fun(MemRef) ->
         {Id, _} = api_test_utils:maybe_substitute_bad_id(ArchiveId, Data0),
         api_test_memory:set(MemRef, archive_to_purge, ArchiveObject#archive_object{id = Id}),
 
-        Body = #{<<"callback">> => maps:get(<<"callback">>, Data0, ?CALLBACK_URL())},
-
         #rest_args{
             method = post,
             headers = #{<<"content-type">> => <<"application/json">>},
             path = <<"archives/", Id/binary, "/init_purge">>,
-            body = json_utils:encode(Body)
+            body = json_utils:encode(Data0)
         }
     end.
 
@@ -701,12 +702,10 @@ build_init_purge_archive_prepare_gs_args_fun(MemRef) ->
         {Id, _} = api_test_utils:maybe_substitute_bad_id(ArchiveId, Data0),
         api_test_memory:set(MemRef, archive_to_purge, ArchiveObject#archive_object{id = Id}),
 
-        Data1 = maps:merge(#{<<"callback">> => ?CALLBACK_URL()}, Data0),
-
         #gs_args{
             operation = create,
             gri = #gri{type = op_archive, id = Id, aspect = purge, scope = private},
-            data = Data1
+            data = Data0
         }
     end.
 
@@ -719,7 +718,7 @@ build_init_purge_archive_prepare_gs_args_fun(MemRef) ->
     onenv_api_test_runner:verify_fun().
 build_verify_archive_purged_fun(MemRef, Providers, DatasetId) ->
 
-    fun(ExpResult, _) ->
+    fun(ExpResult, #api_test_ctx{data = Data}) ->
         case api_test_memory:get(MemRef, archive_to_purge) of
             #archive_object{id = ?NON_EXISTENT_ARCHIVE_ID} ->
                 ok;
@@ -729,12 +728,9 @@ build_verify_archive_purged_fun(MemRef, Providers, DatasetId) ->
 
                 case ExpResult of
                     expected_success ->
-                        Timeout = timer:seconds(?ATTEMPTS),
-                        receive
-                            ?ARCHIVE_PURGED(ArchiveId) -> ok
-                        after
-                            Timeout ->
-                                ct:fail("Archive ~p not purged", [ArchiveId])
+                        case maps:is_key(<<"callback">>, Data) of
+                            true -> await_archive_purged_callback_called(ArchiveId);
+                            false -> ok
                         end;
                     expected_failure ->
                         ok
@@ -759,6 +755,17 @@ build_verify_archive_purged_fun(MemRef, Providers, DatasetId) ->
                     end
                 end, Providers)
         end
+    end.
+
+%% @private
+-spec await_archive_purged_callback_called(archive:id()) -> ok.
+await_archive_purged_callback_called(ArchiveId) ->
+    Timeout = timer:seconds(?ATTEMPTS),
+    receive
+        ?ARCHIVE_PURGED(ArchiveId) -> ok
+    after
+        Timeout ->
+            ct:fail("Archive ~p not purged", [ArchiveId])
     end.
 
 %%%===================================================================
