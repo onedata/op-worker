@@ -41,4 +41,21 @@
 
 -type atm_stream_schema() :: #atm_stream_schema{}.
 
+-record(atm_lambda_argument_spec, {
+    name :: binary(),
+    data_spec :: atm_data_spec:record(),
+    is_array :: boolean(),
+    is_optional :: boolean(),
+    default_value = undefined :: term()
+}).
+
+-type atm_lambda_argument_spec() :: #atm_lambda_argument_spec{}.
+
+-record(atm_task_schema_argument_mapper, {
+    name :: binary(),
+    input_spec :: map()
+}).
+
+-type atm_task_schema_argument_mapper() :: #atm_task_schema_argument_mapper{}.
+
 -endif.
