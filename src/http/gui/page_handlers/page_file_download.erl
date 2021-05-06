@@ -21,7 +21,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 
--export([get_file_download_url/2, handle/2]).
+-export([gen_file_download_url/2, handle/2]).
 
 
 %%%===================================================================
@@ -37,9 +37,9 @@
 %% download no such test is performed - inaccessible files are ignored during streaming.
 %% @end
 %%--------------------------------------------------------------------
--spec get_file_download_url(session:id(), [fslogic_worker:file_guid()]) ->
+-spec gen_file_download_url(session:id(), [fslogic_worker:file_guid()]) ->
     {ok, binary()} | errors:error().
-get_file_download_url(SessionId, FileGuids) ->
+gen_file_download_url(SessionId, FileGuids) ->
     try
         maybe_sync_first_file_block(SessionId, FileGuids),
         Hostname = oneprovider:get_domain(),
@@ -68,12 +68,10 @@ handle(<<"GET">>, Req) ->
         {true, SessionId, FileGuids} ->
             handle_http_download(FileDownloadCode, SessionId, FileGuids, Req);
         false ->
-            case bulk_download_persistence:get_main_pid(FileDownloadCode) of
-                {ok, _} ->
-                    % bulk download has its state saved, so SessionId 
-                    % and list of files are not needed for resume
+            case bulk_download:can_continue(FileDownloadCode) of
+                true -> 
                     handle_http_download(FileDownloadCode, <<>>, [], Req);
-                _ ->
+                false -> 
                     http_req:send_error(?ERROR_BAD_VALUE_ID_NOT_FOUND(<<"code">>), Req)
             end
     end.

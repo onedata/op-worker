@@ -17,7 +17,8 @@
 -define(MSG_NEXT_FILE(__FileAttrs, __Pid), {next_file, __FileAttrs, __Pid}).
 -define(MSG_DATA_CHUNK(__Chunk, __RetryDelay), {data_chunk, __Chunk, __RetryDelay}).
 -define(MSG_RESUMED(__NewConn, __Offset), {resumed, __NewConn, __Offset}).
--define(MSG_CONTINUE(__RetryDelay), {continue, __RetryDelay}).
+-define(MSG_DATA_SENT(__RetryDelay), {data_sent, __RetryDelay}).
+-define(MSG_CHECK_OFFSET(__NewConn, __Offset), {check_offset, __NewConn, __Offset}).
 -define(MSG_DONE, done).
 -define(MSG_ERROR, error).
 -define(MSG_FINISH, finish).

@@ -11,11 +11,11 @@
 %%% to the connection process (abbreviated as Conn). All given files are 
 %%% processed sequentially and if directory is encountered new `bulk_download_traverse` 
 %%% is started for it. This traverse is responsible for informing main process about 
-%%% files that are to be added to archive. 
+%%% files that are to be added to the tarball. 
 %%% If connection process dies during download main process is being suspended up to 
-%%% ?BULK_DOWNLOAD_RESUME_TIMEOUT milliseconds, to allow for resuming of such download.
+%%% ?BULK_DOWNLOAD_RESUME_TIMEOUT milliseconds, to allow resuming of such download.
 %%% Because some of data sent just before failure might have been lost main process buffers 
-%%% ?MAX_BUFFER_SIZE of last sent bytes. Thanks to this it is possible to catch up lost data.
+%%% ?MAX_BUFFER_SIZE of last sent bytes. Thanks to this it is possible to resend unreceived data.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(bulk_download_main_process).
@@ -32,6 +32,7 @@
 %% API
 -export([start/4, resume/2, finish/1]).
 -export([report_next_file/2, report_data_sent/2, report_traverse_done/1]).
+-export([is_offset_allowed/2]).
 
 -record(state, {
     id :: bulk_download:id(),
@@ -48,7 +49,7 @@
 
 -define(TARBALL_DOWNLOAD_TRAVERSE_POOL_NAME, bulk_download_traverse:get_pool_name()).
 -define(BULK_DOWNLOAD_RESUME_TIMEOUT, timer:seconds(op_worker:get_env(download_code_expiration_interval_seconds, 1800))).
--define(MAX_BUFFER_SIZE, op_worker:get_env(max_download_buffer_size, 20971520) + 32768). % buffer cannot be smaller than tar stream internal buffer (32768 bytes)
+-define(MAX_BUFFER_SIZE, (op_worker:get_env(max_download_buffer_size, 20971520) + 32768)). % buffer cannot be smaller than tar stream internal buffer (32768 bytes)
 
 
 %%%===================================================================
@@ -57,9 +58,9 @@
 
 -spec start(bulk_download:id(), [lfm_attrs:file_attributes()], session:id(), pid()) -> 
     {ok, pid()} | {error, term()}.
-start(TaskId, FileAttrsList, SessionId, InitialConn) ->
-    case tree_traverse_session:setup_for_task(user_ctx:new(SessionId), TaskId) of
-        ok -> {ok, spawn(fun() -> main(TaskId, FileAttrsList, SessionId, InitialConn) end)};
+start(BulkDownloadId, FileAttrsList, SessionId, InitialConn) ->
+    case tree_traverse_session:setup_for_task(user_ctx:new(SessionId), BulkDownloadId) of
+        ok -> {ok, spawn(fun() -> main(BulkDownloadId, FileAttrsList, SessionId, InitialConn) end)};
         {error, _} = Error -> Error
     end.
 
@@ -78,7 +79,7 @@ finish(MainPid) ->
 
 -spec report_data_sent(pid(), time:millis()) -> ok.
 report_data_sent(MainPid, NewDelay) -> 
-    MainPid ! ?MSG_CONTINUE(NewDelay),
+    MainPid ! ?MSG_DATA_SENT(NewDelay),
     ok.
 
 
@@ -93,60 +94,70 @@ report_traverse_done(MainPid) ->
     MainPid ! ?MSG_DONE,
     ok.
 
+
+-spec is_offset_allowed(pid(), non_neg_integer()) -> boolean().
+is_offset_allowed(MainPid, Offset) ->
+    MainPid ! ?MSG_CHECK_OFFSET(self(), Offset),
+    receive
+        Res -> Res
+    after ?LOOP_TIMEOUT ->
+        false
+    end.
+
 %%%===================================================================
 %%% Internal functions responsible for streaming file data
 %%%===================================================================
 
 %% @private
 -spec main(bulk_download:id(), [lfm_attrs:file_attributes()], session:id(), pid()) -> state().
-main(TaskId, FileAttrsList, SessionId, InitialConn) ->
-    bulk_download_persistence:save_main_pid(TaskId, self()),
+main(BulkDownloadId, FileAttrsList, SessionId, InitialConn) ->
+    bulk_download_task:save_main_pid(BulkDownloadId, self()),
     TarStream = tar_utils:open_archive_stream(),
-    State = #state{id = TaskId, connection_pid = InitialConn, tar_stream = TarStream},
+    State = #state{id = BulkDownloadId, connection_pid = InitialConn, tar_stream = TarStream},
     {ok, UserId} = session:get_user_id(SessionId),
-    {ok, UserCtx} = tree_traverse_session:acquire_for_task(UserId, ?TARBALL_DOWNLOAD_TRAVERSE_POOL_NAME, TaskId),
+    {ok, UserCtx} = tree_traverse_session:acquire_for_task(UserId, ?TARBALL_DOWNLOAD_TRAVERSE_POOL_NAME, BulkDownloadId),
     #state{tar_stream = FinalTarStream} = UpdatedState = 
-        handle_multiple_files(FileAttrsList, TaskId, UserCtx, State),
+        handle_multiple_files(FileAttrsList, BulkDownloadId, UserCtx, State),
     #state{connection_pid = Conn} = FinalState =
         send_data(tar_utils:close_archive_stream(FinalTarStream), UpdatedState),
-    tree_traverse_session:close_for_task(TaskId),
+    tree_traverse_session:close_for_task(BulkDownloadId),
     Conn ! ?MSG_DONE,
-    loop_with_conn(FinalState, finished). % do not die yet, last chunk might have failed
+    wait_for_conn(FinalState, finished). % do not die yet, last chunk might have failed
 
 
 %% @private
 -spec handle_multiple_files([lfm_attrs:file_attributes()], bulk_download:id(), 
     user_ctx:ctx(), state()) -> state().
-handle_multiple_files([], _TaskId, _UserCtx, State) -> 
+handle_multiple_files([], _BulkDownloadId, _UserCtx, State) -> 
     State;
 handle_multiple_files(
     [#file_attr{guid = Guid, type = ?DIRECTORY_TYPE} = FileAttrs | Tail],
-    TaskId, UserCtx, State
+    BulkDownloadId, UserCtx, State
 ) ->
     {ok, Path} = get_file_path(Guid),
     PathPrefix = str_utils:ensure_suffix(filename:dirname(Path), <<"/">>),
-    % add starting dir to archive here as traverse do not execute slave job on it
+    % add starting dir to the tarball here as traverse does not execute slave job on it
     {Bytes, UpdatedState} = new_tar_file_entry(State, FileAttrs, PathPrefix),
     UpdatedState1 = send_data(Bytes, UpdatedState),
-    bulk_download_traverse:start(TaskId, UserCtx, Guid),
-    FinalState = loop_with_traverse(UpdatedState1, user_ctx:get_session_id(UserCtx), PathPrefix),
-    handle_multiple_files(Tail, TaskId, UserCtx, FinalState);
+    bulk_download_traverse:start(BulkDownloadId, UserCtx, Guid),
+    FinalState = wait_for_traverse(UpdatedState1, user_ctx:get_session_id(UserCtx), PathPrefix),
+    handle_multiple_files(Tail, BulkDownloadId, UserCtx, FinalState);
 handle_multiple_files(
     [#file_attr{guid = Guid, type = ?REGULAR_FILE_TYPE} = FileAttrs | Tail], 
-    TaskId, UserCtx, State
+    BulkDownloadId, UserCtx, State
 ) ->
     {ok, Path} = get_file_path(Guid),
     PathPrefix = str_utils:ensure_suffix(filename:dirname(Path), <<"/">>),
     UpdatedState = stream_file(State, user_ctx:get_session_id(UserCtx), FileAttrs, PathPrefix),
-    handle_multiple_files(Tail, TaskId, UserCtx, UpdatedState);
+    handle_multiple_files(Tail, BulkDownloadId, UserCtx, UpdatedState);
 handle_multiple_files(
     [#file_attr{guid = Guid, type = ?SYMLINK_TYPE} = FileAttrs | Tail],
-    TaskId, UserCtx, State
+    BulkDownloadId, UserCtx, State
 ) ->
     {ok, Path} = get_file_path(Guid),
     PathPrefix = str_utils:ensure_suffix(filename:dirname(Path), <<"/">>),
     UpdatedState = stream_symlink(State, user_ctx:get_session_id(UserCtx), FileAttrs, PathPrefix),
-    handle_multiple_files(Tail, TaskId, UserCtx, UpdatedState).
+    handle_multiple_files(Tail, BulkDownloadId, UserCtx, UpdatedState).
 
 
 %% @private
@@ -160,8 +171,8 @@ stream_file(State, SessionId, FileAttrs, StartingDirPath) ->
             UpdatedState1 = send_data(Bytes, UpdatedState),
             Range = {0, FileSize - 1},
             StreamingCtx = http_streamer:build_ctx(FileHandle, FileSize),
-            StreamingCtx1 = http_streamer:set_range_policy(StreamingCtx, strict),
-            StreamingCtx2 = http_streamer:set_send_fun(StreamingCtx1, fun(Data, InFunState, _MaxReadBlocksCount, SendRetryDelay) -> 
+            StreamingCtx2 = http_streamer:set_range_policy(StreamingCtx, strict),
+            StreamingCtx3 = http_streamer:set_send_fun(StreamingCtx2, fun(Data, InFunState, _MaxReadBlocksCount, SendRetryDelay) -> 
                 DataSize = byte_size(Data),
                 #state{tar_stream = TarStream} = InFunState,
                 TarStream2 = tar_utils:append_to_file_content(TarStream, Data, DataSize),
@@ -170,13 +181,13 @@ stream_file(State, SessionId, FileAttrs, StartingDirPath) ->
                     send_data(BytesToSend, InFunState#state{tar_stream = FinalTarStream, send_retry_delay = SendRetryDelay}),
                 {NewDelay, UpdatedInFunState}
             end),
-            FinalState = http_streamer:stream_bytes_range(StreamingCtx2, Range, UpdatedState1),
+            FinalState = http_streamer:stream_bytes_range(StreamingCtx3, Range, UpdatedState1),
             lfm:monitored_release(FileHandle),
             FinalState;
         ignored ->
             State;
         {error, _} = Error ->
-            ?warning("Unexpected error during tarball download: ~p. File ~p will be ignored", [Error, Guid]),
+            ?warning("Unexpected error during bulk download: ~p. File ~p will be ignored", [Error, Guid]),
             State
     end.
 
@@ -192,28 +203,28 @@ stream_symlink(State, SessionId, FileAttrs, StartingDirPath) ->
         ignored ->
             State;
         {error, _} = Error ->
-            ?warning("Unexpected error during tarball download: ~p. File ~p will be ignored", [Error, Guid]),
+            ?warning("Unexpected error during bulk download: ~p. File ~p will be ignored", [Error, Guid]),
             State
     end.
 
 
 %% @private
--spec loop_with_traverse(state(), session:id(), file_meta:path()) -> state().
-loop_with_traverse(State, SessionId, RootDirPath) ->
+-spec wait_for_traverse(state(), session:id(), file_meta:path()) -> state().
+wait_for_traverse(State, SessionId, RootDirPath) ->
     receive
         ?MSG_NEXT_FILE(#file_attr{type = ?REGULAR_FILE_TYPE} = FileAttrs, TraversePid) ->
             State2 = stream_file(State, SessionId, FileAttrs, RootDirPath),
             TraversePid ! ?MSG_DONE,
-            loop_with_traverse(State2, SessionId, RootDirPath);
+            wait_for_traverse(State2, SessionId, RootDirPath);
         ?MSG_NEXT_FILE(#file_attr{type = ?SYMLINK_TYPE} = FileAttrs, TraversePid) ->
             State2 = stream_symlink(State, SessionId, FileAttrs, RootDirPath),
             TraversePid ! ?MSG_DONE,
-            loop_with_traverse(State2, SessionId, RootDirPath);
+            wait_for_traverse(State2, SessionId, RootDirPath);
         ?MSG_NEXT_FILE(#file_attr{type = ?DIRECTORY_TYPE} = FileAttrs, TraversePid) ->
             {Bytes, State2} = new_tar_file_entry(State, FileAttrs, RootDirPath),
             State3 = send_data(Bytes, State2),
             TraversePid ! ?MSG_DONE,
-            loop_with_traverse(State3, SessionId, RootDirPath);
+            wait_for_traverse(State3, SessionId, RootDirPath);
         ?MSG_DONE -> 
             State
     end.
@@ -223,14 +234,14 @@ loop_with_traverse(State, SessionId, RootDirPath) ->
 -spec send_data(binary(), state()) -> state().
 send_data(<<>>, State) -> State;
 send_data(Data, #state{send_retry_delay = SendRetryDelay, connection_pid = Conn} = State) ->
-    UpdatedState = update_stats(Data, State),
+    UpdatedState = update_sent_bytes_buffer(Data, State),
     Conn ! ?MSG_DATA_CHUNK(Data, SendRetryDelay),
-    loop_with_conn(UpdatedState).
+    wait_for_conn(UpdatedState).
 
 
 %% @private
--spec update_stats(binary(), state()) -> state().
-update_stats(SentChunk, State) ->
+-spec update_sent_bytes_buffer(binary(), state()) -> state().
+update_sent_bytes_buffer(SentChunk, State) ->
     #state{sent_bytes = SentBytes, buffer = Buffer} = State,
     ChunkSize = byte_size(SentChunk),
     BufferSize = byte_size(Buffer),
@@ -276,72 +287,69 @@ new_tar_file_entry(#state{tar_stream = TarStream} = State, FileAttrs, StartingDi
 %%%===================================================================
 
 %% @private
--spec loop_with_conn(state()) -> state().
-loop_with_conn(State) ->
-    loop_with_conn(State, in_progress).
+-spec wait_for_conn(state()) -> state().
+wait_for_conn(State) ->
+    wait_for_conn(State, in_progress).
 
 
 %% @private
--spec loop_with_conn(state(), traverse_status()) -> state().
-loop_with_conn(#state{id = Id} = State, TraverseStatus) ->
+-spec wait_for_conn(state(), traverse_status()) -> state().
+wait_for_conn(#state{id = Id} = State, TraverseStatus) ->
     receive
         ?MSG_FINISH ->
             finalize(State);
-        ?MSG_CONTINUE(NewDelay) -> 
+        ?MSG_DATA_SENT(NewDelay) -> 
             case TraverseStatus of
-                finished -> loop_with_conn(State#state{send_retry_delay = NewDelay}, TraverseStatus);
+                finished -> wait_for_conn(State#state{send_retry_delay = NewDelay}, TraverseStatus);
                 in_progress -> State#state{send_retry_delay = NewDelay}
             end;
+        ?MSG_CHECK_OFFSET(NewConn, Offset) ->
+            NewConn ! check_offset(State, Offset),
+            wait_for_conn(State, TraverseStatus);
         ?MSG_RESUMED(NewConn, ResumeOffset) ->
             UpdatedState = handle_resume(State, NewConn, ResumeOffset, TraverseStatus),
-            loop_with_conn(UpdatedState, TraverseStatus)
+            wait_for_conn(UpdatedState, TraverseStatus)
     after ?BULK_DOWNLOAD_RESUME_TIMEOUT ->
         file_download_code:remove(Id),
-        bulk_download_persistence:delete(Id),
+        bulk_download_task:delete(Id),
         finalize(State)
     end.
 
 
 %% @private
--spec finalize(state()) -> no_return().
-finalize(#state{id = Id, tar_stream = TarStream}) ->
-    traverse:cancel(bulk_download_traverse:get_pool_name(), Id),
-    try
-        tar_utils:close_archive_stream(TarStream)
-    catch _:_ ->
-        ok % tar stream could have already been closed, so crash here is expected
-    end,
-    exit(kill).
-
-
-%% @private
 -spec handle_resume(state(), pid(), non_neg_integer(), traverse_status()) -> state().
-handle_resume(State, NewConn, ResumeOffset, TraverseStatus) ->
-    #state{connection_pid = PrevConn, send_retry_delay = SendRetryDelay} = State,
-    case check_pid(PrevConn) of
-        {ok, _} -> 
+handle_resume(#state{connection_pid = PrevConn} = State, NewConn, ResumeOffset, TraverseStatus) ->
+    case is_process_alive(PrevConn) of
+        true -> 
             NewConn ! ?MSG_ERROR,
             State;
-        _ ->
+        false ->
             UpdatedState = State#state{connection_pid = NewConn},
-            case catch_up_data(UpdatedState, ResumeOffset) of
-                {ok, DataToCatchUp} ->
-                    NewConn ! ?MSG_DATA_CHUNK(DataToCatchUp, SendRetryDelay),
-                    TraverseStatus == finished andalso (NewConn ! ?MSG_DONE);
-                error ->
-                    NewConn ! ?MSG_ERROR
+            case resend_unreceived_data(UpdatedState, ResumeOffset) of
+                true -> TraverseStatus == finished andalso (NewConn ! ?MSG_DONE);
+                false -> NewConn ! ?MSG_ERROR
             end,
             UpdatedState
     end.
 
 
 %% @private
--spec catch_up_data(state(), non_neg_integer()) -> {ok, binary()} | error.
-catch_up_data(#state{buffer = Buffer, sent_bytes = SentBytes}, ResumeOffset) ->
+-spec resend_unreceived_data(state(), non_neg_integer()) -> {ok, binary()} | error.
+resend_unreceived_data(State, ResumeOffset) ->
+    #state{
+        connection_pid = Conn, 
+        buffer = Buffer, 
+        sent_bytes = SentBytes, 
+        send_retry_delay = SendRetryDelay
+    } = State,
     BufferSize = byte_size(Buffer),
-    case ResumeOffset =< SentBytes andalso ResumeOffset > (SentBytes - BufferSize) of
-        true -> {ok, binary:part(Buffer, BufferSize, ResumeOffset - SentBytes)};
-        false -> error
+    case check_offset(State, ResumeOffset) of
+        true -> 
+            BytesToResend = binary:part(Buffer, BufferSize, ResumeOffset - SentBytes),
+            Conn ! ?MSG_DATA_CHUNK(BytesToResend, SendRetryDelay),
+            true;
+        false -> 
+            false
     end.
 
 
@@ -350,12 +358,19 @@ catch_up_data(#state{buffer = Buffer, sent_bytes = SentBytes}, ResumeOffset) ->
 %%%===================================================================
 
 %% @private
--spec check_pid(pid()) -> {ok, pid()} | {error, term()}.
-check_pid(Pid) when is_pid(Pid) ->
-    case is_process_alive(Pid) of
-        true -> {ok, Pid};
-        false -> {error, noproc}
-    end.
+-spec check_offset(state(), non_neg_integer()) -> boolean().
+check_offset(#state{buffer = Buffer, sent_bytes = SentBytes}, ResumeOffset) ->
+    BufferSize = byte_size(Buffer),
+    ResumeOffset =< SentBytes andalso ResumeOffset > (SentBytes - BufferSize).
+
+
+%% @private
+-spec finalize(state()) -> no_return().
+finalize(#state{id = Id, tar_stream = TarStream}) ->
+    traverse:cancel(bulk_download_traverse:get_pool_name(), Id),
+    % tar stream could have already been closed, so crash here is expected
+    catch tar_utils:close_archive_stream(TarStream),
+    exit(kill).
 
 
 %% TODO VFS-6057 resolve share path up to share not user root dir

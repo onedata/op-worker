@@ -36,15 +36,15 @@
 ).
 
 -type read_block_size() :: non_neg_integer().
--type send_state() :: term().
+-type stream_state() :: term(). % opaque term passed to send_fun for the use of the calling module
 -type encoding_fun() :: fun((Data :: binary()) -> EncodedData :: binary()).
 -type send_fun() :: fun(
-    (Data :: binary(), send_state(), MaxReadBlocksCount :: non_neg_integer(), RetryDelay :: non_neg_integer()) -> 
-        {NewRetryDelay :: non_neg_integer(), UpdatedSendState :: send_state()}
+    (Data :: binary(), stream_state(), MaxReadBlocksCount :: non_neg_integer(), RetryDelay :: non_neg_integer()) -> 
+        {NewRetryDelay :: non_neg_integer(), UpdatedSendState :: stream_state()}
 ).
 
 % Strict range policy means that exactly requested number of bytes will be sent despite it being smaller or
-% if file was truncated in the mean time (file data will be padded with '0' to fill required number of bytes).
+% if file was truncated in the meantime (file data will be padded with '0' to fill required number of bytes).
 % With soft policy maximum of file size bytes will be sent.
 -type range_policy() :: strict | soft.
 
@@ -131,7 +131,7 @@ set_range_policy(StreamingCtx, NewPolicy) ->
     }.
 
 
--spec stream_bytes_range(ctx(), http_parser:bytes_range(), send_state()) ->
+-spec stream_bytes_range(ctx(), http_parser:bytes_range(), stream_state()) ->
     tar_utils:stream() | undefined | no_return().
 stream_bytes_range(StreamingCtx, Range, SendState) ->
     stream_bytes_range_internal(Range, 
@@ -174,7 +174,7 @@ calculate_max_read_blocks_count(ReadBlockSize) ->
 -spec stream_bytes_range_internal(
     http_parser:bytes_range(),
     ctx(),
-    State :: send_state(),
+    State :: stream_state(),
     SendRetryDelay :: time:millis(),
     ReadBytes :: non_neg_integer()
 ) ->

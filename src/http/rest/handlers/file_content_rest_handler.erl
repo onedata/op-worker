@@ -146,7 +146,7 @@ process_request(#op_req{
         {ok, #file_attr{type = ?REGULAR_FILE_TYPE} = FileAttrs} ->
             file_download_utils:download_single_file(SessionId, FileAttrs, Req);
         {ok, #file_attr{} = FileAttrs} ->
-            case page_file_download:get_file_download_url(SessionId, [FileGuid]) of
+            case page_file_download:gen_file_download_url(SessionId, [FileGuid]) of
                 {ok, Url} -> 
                     cowboy_req:reply(?HTTP_302_FOUND, #{?HDR_LOCATION => Url}, Req);
                 {error, _} = Error ->

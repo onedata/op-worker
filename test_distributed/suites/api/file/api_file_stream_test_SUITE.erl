@@ -103,7 +103,7 @@ gui_download_file_test(Config) ->
         forbidden_in_space = [user4]
     },
     FileSpec = #file_spec{mode = 8#604, content = ?RAND_CONTENT(), shares = [#share_spec{}]},
-    gui_download_test_base(Config, FileSpec, ClientSpec, <<"File">>, standard_download).
+    gui_download_test_base(Config, FileSpec, ClientSpec, <<"File">>, uninterrupted_download).
 
 gui_download_dir_test(Config) ->
     ClientSpec = ?TARBALL_DOWNLOAD_CLIENT_SPEC,
@@ -278,7 +278,7 @@ gui_download_test_base(Config, FileTreeSpec, ClientSpec, ScenarioPrefix) ->
     onenv_file_test_utils:object_spec() | [onenv_file_test_utils:file_spec()], 
     onenv_api_test_runner:client_spec(), 
     binary(),
-    simulate_failures | standard_download
+    simulate_failures | uninterrupted_download
 ) -> 
     ok.
 gui_download_test_base(Config, FileTreeSpec, ClientSpec, ScenarioPrefix, DownloadType) ->
@@ -409,7 +409,7 @@ build_get_download_url_validate_gs_call_fun(MemRef) ->
     
         DownloadFunction = case api_test_memory:get(MemRef, download_type, simulate_failures) of
             simulate_failures -> fun download_file_using_download_code_with_resumes/2;
-            standard_download -> fun download_file_using_download_code/2
+            uninterrupted_download -> fun download_file_using_download_code/2
         end,
         case rand:uniform(2) of
             1 ->
