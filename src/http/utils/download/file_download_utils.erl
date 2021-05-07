@@ -176,7 +176,7 @@ stream_multipart_ranged_body(Ranges, FileHandle, FileSize, Req0) ->
 
 
 %% @private
--spec stream_whole_tarball(bulk_download_main_process:id(), session:id(), [lfm_attrs:file_attributes()], 
+-spec stream_whole_tarball(bulk_download:id(), session:id(), [lfm_attrs:file_attributes()], 
     cowboy_req:req()) -> cowboy_req:req().
 stream_whole_tarball(_BulkDownloadId, _SessionId, [], Req0) ->
     % can happen when requested download from the beginning and download 
@@ -190,7 +190,7 @@ stream_whole_tarball(BulkDownloadId, SessionId, FileAttrsList, Req0) ->
 
 
 %% @private
--spec stream_partial_tarball(bulk_download_main_process:id(), cowboy_req:req(), [http_parser:bytes_range()] | invalid) -> 
+-spec stream_partial_tarball(bulk_download:id(), cowboy_req:req(), [http_parser:bytes_range()] | invalid) -> 
     cowboy_req:req().
 stream_partial_tarball(BulkDownloadId, Req0, [{RangeBegin, unknown}]) ->
     case bulk_download:is_offset_allowed(BulkDownloadId, RangeBegin) of
@@ -199,7 +199,7 @@ stream_partial_tarball(BulkDownloadId, Req0, [{RangeBegin, unknown}]) ->
             ok = bulk_download:continue(BulkDownloadId, RangeBegin, Req1),
             http_streamer:close_stream(undefined, Req1),
             Req1;
-        error ->
+        false ->
             cowboy_req:stream_reply(?HTTP_416_RANGE_NOT_SATISFIABLE, #{?HDR_CONTENT_RANGE => <<"bytes */*">>}, Req0)
     end;
 stream_partial_tarball(_BulkDownloadId, Req0, _InvalidRange) ->

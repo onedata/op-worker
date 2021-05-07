@@ -49,7 +49,7 @@ start(BulkDownloadId, UserCtx, Guid) ->
         batch_size => 1,
         children_master_jobs_mode => sync,
         child_dirs_job_generation_policy => generate_slave_and_master_jobs,
-        additional_data => #{<<"main_pid">> => transfer_utils:encode_pid(self())},
+        additional_data => #{<<"main_pid">> => utils:encode_pid(self())},
         master_job_mode => single
     },
     {ok, _} = tree_traverse:run(
@@ -148,4 +148,4 @@ slave_job_loop(Pid) ->
 get_main_pid(BulkDownloadId) ->
     {ok, #{ <<"main_pid">> := EncodedPid }} =
         traverse_task:get_additional_data(?POOL_NAME, BulkDownloadId),
-    transfer_utils:decode_pid(EncodedPid).
+    utils:decode_pid(EncodedPid).

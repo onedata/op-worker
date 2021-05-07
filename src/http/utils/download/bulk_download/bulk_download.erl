@@ -16,9 +16,37 @@
 %%% is impossible to perform necessary finalization main process is introduced. 
 %%% There is only one main process for whole bulk download (one exception being 
 %%% starting the same bulk download from the beginning in which case old main 
-%%% process is killed and new one is started).
-%%% This module assumes that its functions are called by connection process. It is 
-%%% responsible for communication with main process and streaming data.
+%%% process is killed and new one is started). 
+%%% 
+%%% Bulk download implementation is split between several modules: 
+%%%     * `bulk_download` - module assumes that its functions are called by 
+%%%             connection process. It is responsible for communication with 
+%%%             main process and streaming data.
+%%%     * `bulk_download_main_process` - module responsible for handling 
+%%%             bulk download main process. It is operated by main process.
+%%%     * `bulk_download_traverse` - module responsible for tree traverse during 
+%%%             bulk download. It is operated by processes from traverse pool.
+%%%     * `bulk_download_task` - implements datastore API for storing bulk download 
+%%%             related data. 
+%%% 
+%%% Whole bulk download procedure has following steps:
+%%%     1) connection process starts main process 
+%%%     2) main process takes first file from requested list of files 
+%%%     3) if file is a directory main process starts bulk download traverse, otherwise 5) 
+%%%     4) process from traverse pool sequentially reports next files to main process 
+%%%        (i.e steps 5-8 are repeated until traverse finishes)
+%%%     5) main process reads part of file and sends this chunk to connection process 
+%%%     6) connection process forwards received chunk to client and sends confirmation 
+%%%        to main process
+%%%     7) upon send confirmation main process reads next file chunk 
+%%%     8) steps 5-7 are repeated until the end of file 
+%%%     9) repeat steps 2-8 until all files from given list are processed 
+%%% 
+%%% In case of connection failure connection process will die and main process will be 
+%%% waiting for confirmation on step 7) in above list. 
+%%% To resume bulk download new connection process sends resume request to main process 
+%%% with offset and main process responds with missing data and then continues as if 
+%%% there was no break.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(bulk_download).
@@ -35,6 +63,8 @@
 
 -export_type([id/0]).
 
+-define(MAX_CHUNK_SIZE, 10485760). % 10 MB
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -44,7 +74,7 @@
 run(BulkDownloadId, FileAttrsList, SessionId, CowboyReq) ->
     Conn = self(),
     case bulk_download_task:get_main_pid(BulkDownloadId) of
-        {ok, Pid} -> bulk_download_main_process:finish(Pid);
+        {ok, Pid} -> bulk_download_main_process:abort(Pid);
         _ -> ok
     end,
     {ok, MainPid} = bulk_download_main_process:start(BulkDownloadId, FileAttrsList, SessionId, Conn),
@@ -90,7 +120,8 @@ data_streaming_loop(BulkDownloadId, MainPid, CowboyReq) ->
     receive
         ?MSG_DATA_CHUNK(Data, SendRetryDelay) ->
             % TODO VFS-6597 - after cowboy update to at least ver 2.7 send bytes directly from main process
-            {NewDelay, _} = http_streamer:send_data_chunk(Data, CowboyReq, SendRetryDelay),
+            % when resending unreceived data chunk can be very large, so ensure it is sent in smaller chunks
+            NewDelay = send_in_chunks(Data, CowboyReq, SendRetryDelay),
             bulk_download_main_process:report_data_sent(MainPid, NewDelay),
             data_streaming_loop(BulkDownloadId, MainPid, CowboyReq);
         ?MSG_ERROR ->
@@ -105,3 +136,13 @@ data_streaming_loop(BulkDownloadId, MainPid, CowboyReq) ->
                 error(?ERROR_INTERNAL_SERVER_ERROR)
         end
     end.
+
+
+%% @private
+-spec send_in_chunks(binary(), cowboy_req:req(), time:millis()) -> time:millis().
+send_in_chunks(Data, CowboyReq, SendRetryDelay) when byte_size(Data) > ?MAX_CHUNK_SIZE ->
+    {NewDelay, _} = http_streamer:send_data_chunk(binary:part(Data, 0, ?MAX_CHUNK_SIZE), CowboyReq, SendRetryDelay),
+    send_in_chunks(binary:part(Data, ?MAX_CHUNK_SIZE, byte_size(Data) - ?MAX_CHUNK_SIZE), CowboyReq, NewDelay);
+send_in_chunks(Data, CowboyReq, SendRetryDelay) ->
+    {NewDelay, _} = http_streamer:send_data_chunk(Data, CowboyReq, SendRetryDelay),
+    NewDelay.

@@ -87,8 +87,8 @@ handle(<<"GET">>, Req) ->
 %% Checks file permissions and syncs first file block when downloading single 
 %% regular file. In case of multi file/directory download access test is not 
 %% performed, as inaccessible files will be ignored. Also first block sync is 
-%% not needed, because first bytes (gzip header) are sent instantly after 
-%% streaming started.
+%% not needed, because first bytes (first file TAR header) are sent instantly 
+%% after streaming started.
 %% @end
 %%--------------------------------------------------------------------
 -spec maybe_sync_first_file_block(session:id(), [file_id:file_guid()]) -> ok.
@@ -138,7 +138,7 @@ handle_http_download(FileDownloadCode, SessionId, FileGuids, Req) ->
         {error, Errno} ->
             http_req:send_error(?ERROR_POSIX(Errno), Req3);
         [#file_attr{name = FileName, type = ?DIRECTORY_TYPE}] ->
-            Req4 = set_content_disposition_header(<<(normalize_filename(FileName))/binary, ".tar.gz">>, Req3),
+            Req4 = set_content_disposition_header(<<(normalize_filename(FileName))/binary, ".tar">>, Req3),
             file_download_utils:download_tarball(
                 FileDownloadCode, SessionId, FileAttrsList, Req4
             );
@@ -149,7 +149,7 @@ handle_http_download(FileDownloadCode, SessionId, FileGuids, Req) ->
             );
         _ ->
             Timestamp = integer_to_binary(global_clock:timestamp_seconds()),
-            Req4 = set_content_disposition_header(<<"onedata-download-", Timestamp/binary, ".tar.gz">>, Req3),
+            Req4 = set_content_disposition_header(<<"onedata-download-", Timestamp/binary, ".tar">>, Req3),
             file_download_utils:download_tarball(
                 FileDownloadCode, SessionId, FileAttrsList, Req4
             )

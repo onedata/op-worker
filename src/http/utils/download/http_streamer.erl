@@ -178,7 +178,7 @@ calculate_max_read_blocks_count(ReadBlockSize) ->
     SendRetryDelay :: time:millis(),
     ReadBytes :: non_neg_integer()
 ) ->
-    term() | no_return().
+    stream_state() | no_return().
 stream_bytes_range_internal({From, To}, _, SendState, _, _) when From > To ->
     SendState;
 stream_bytes_range_internal({From, To}, #streaming_ctx{

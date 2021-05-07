@@ -30,7 +30,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([start/4, resume/2, finish/1]).
+-export([start/4, resume/2, abort/1]).
 -export([report_next_file/2, report_data_sent/2, report_traverse_done/1]).
 -export([is_offset_allowed/2]).
 
@@ -48,8 +48,10 @@
 
 
 -define(TARBALL_DOWNLOAD_TRAVERSE_POOL_NAME, bulk_download_traverse:get_pool_name()).
--define(BULK_DOWNLOAD_RESUME_TIMEOUT, timer:seconds(op_worker:get_env(download_code_expiration_interval_seconds, 1800))).
--define(MAX_BUFFER_SIZE, (op_worker:get_env(max_download_buffer_size, 20971520) + 32768)). % buffer cannot be smaller than tar stream internal buffer (32768 bytes)
+-define(BULK_DOWNLOAD_RESUME_TIMEOUT, timer:seconds(op_worker:get_env(
+    download_code_expiration_interval_seconds, 1800))).
+% buffer cannot be smaller than tar stream internal buffer (32768 bytes)
+-define(MAX_BUFFER_SIZE, (op_worker:get_env(max_download_buffer_size, 104857600) + 32768)).
 
 
 %%%===================================================================
@@ -71,9 +73,9 @@ resume(MainPid, ResumeOffset) ->
     ok.
 
 
--spec finish(pid()) -> ok.
-finish(MainPid) ->
-    MainPid ! ?MSG_FINISH,
+-spec abort(pid()) -> ok.
+abort(MainPid) ->
+    MainPid ! ?MSG_ABORT,
     ok.
 
 
@@ -100,7 +102,7 @@ is_offset_allowed(MainPid, Offset) ->
     MainPid ! ?MSG_CHECK_OFFSET(self(), Offset),
     receive
         Res -> Res
-    after ?LOOP_TIMEOUT ->
+    after ?LOOP_TIMEOUT -> 
         false
     end.
 
@@ -109,10 +111,10 @@ is_offset_allowed(MainPid, Offset) ->
 %%%===================================================================
 
 %% @private
--spec main(bulk_download:id(), [lfm_attrs:file_attributes()], session:id(), pid()) -> state().
+-spec main(bulk_download:id(), [lfm_attrs:file_attributes()], session:id(), pid()) -> no_return().
 main(BulkDownloadId, FileAttrsList, SessionId, InitialConn) ->
     bulk_download_task:save_main_pid(BulkDownloadId, self()),
-    TarStream = tar_utils:open_archive_stream(),
+    TarStream = tar_utils:open_archive_stream(#{gzip => false}),
     State = #state{id = BulkDownloadId, connection_pid = InitialConn, tar_stream = TarStream},
     {ok, UserId} = session:get_user_id(SessionId),
     {ok, UserCtx} = tree_traverse_session:acquire_for_task(UserId, ?TARBALL_DOWNLOAD_TRAVERSE_POOL_NAME, BulkDownloadId),
@@ -296,7 +298,7 @@ wait_for_conn(State) ->
 -spec wait_for_conn(state(), traverse_status()) -> state().
 wait_for_conn(#state{id = Id} = State, TraverseStatus) ->
     receive
-        ?MSG_FINISH ->
+        ?MSG_ABORT ->
             finalize(State);
         ?MSG_DATA_SENT(NewDelay) -> 
             case TraverseStatus of
@@ -304,7 +306,7 @@ wait_for_conn(#state{id = Id} = State, TraverseStatus) ->
                 in_progress -> State#state{send_retry_delay = NewDelay}
             end;
         ?MSG_CHECK_OFFSET(NewConn, Offset) ->
-            NewConn ! check_offset(State, Offset),
+            NewConn ! is_offset_within_buffer_bounds(State, Offset),
             wait_for_conn(State, TraverseStatus);
         ?MSG_RESUMED(NewConn, ResumeOffset) ->
             UpdatedState = handle_resume(State, NewConn, ResumeOffset, TraverseStatus),
@@ -318,23 +320,17 @@ wait_for_conn(#state{id = Id} = State, TraverseStatus) ->
 
 %% @private
 -spec handle_resume(state(), pid(), non_neg_integer(), traverse_status()) -> state().
-handle_resume(#state{connection_pid = PrevConn} = State, NewConn, ResumeOffset, TraverseStatus) ->
-    case is_process_alive(PrevConn) of
-        true -> 
-            NewConn ! ?MSG_ERROR,
-            State;
-        false ->
-            UpdatedState = State#state{connection_pid = NewConn},
-            case resend_unreceived_data(UpdatedState, ResumeOffset) of
-                true -> TraverseStatus == finished andalso (NewConn ! ?MSG_DONE);
-                false -> NewConn ! ?MSG_ERROR
-            end,
-            UpdatedState
-    end.
+handle_resume(State, NewConn, ResumeOffset, TraverseStatus) ->
+    UpdatedState = State#state{connection_pid = NewConn},
+    case resend_unreceived_data(UpdatedState, ResumeOffset) of
+        true -> TraverseStatus == finished andalso (NewConn ! ?MSG_DONE);
+        false -> NewConn ! ?MSG_ERROR
+    end,
+    UpdatedState.
 
 
 %% @private
--spec resend_unreceived_data(state(), non_neg_integer()) -> {ok, binary()} | error.
+-spec resend_unreceived_data(state(), non_neg_integer()) -> binary().
 resend_unreceived_data(State, ResumeOffset) ->
     #state{
         connection_pid = Conn, 
@@ -343,7 +339,7 @@ resend_unreceived_data(State, ResumeOffset) ->
         send_retry_delay = SendRetryDelay
     } = State,
     BufferSize = byte_size(Buffer),
-    case check_offset(State, ResumeOffset) of
+    case is_offset_within_buffer_bounds(State, ResumeOffset) of
         true -> 
             BytesToResend = binary:part(Buffer, BufferSize, ResumeOffset - SentBytes),
             Conn ! ?MSG_DATA_CHUNK(BytesToResend, SendRetryDelay),
@@ -358,10 +354,10 @@ resend_unreceived_data(State, ResumeOffset) ->
 %%%===================================================================
 
 %% @private
--spec check_offset(state(), non_neg_integer()) -> boolean().
-check_offset(#state{buffer = Buffer, sent_bytes = SentBytes}, ResumeOffset) ->
+-spec is_offset_within_buffer_bounds(state(), non_neg_integer()) -> boolean().
+is_offset_within_buffer_bounds(#state{buffer = Buffer, sent_bytes = SentBytes}, Offset) ->
     BufferSize = byte_size(Buffer),
-    ResumeOffset =< SentBytes andalso ResumeOffset > (SentBytes - BufferSize).
+    Offset =< SentBytes andalso Offset > (SentBytes - BufferSize).
 
 
 %% @private

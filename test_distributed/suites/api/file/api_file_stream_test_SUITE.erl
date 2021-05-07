@@ -1064,7 +1064,7 @@ check_extracted_tarball_structure(#object{name = Filename}, no_files, CurrentPat
 -spec unpack_tarball(binary()) -> binary().
 unpack_tarball(Bytes) ->
     TmpDir = mochitemp:mkdtemp(),
-    ok = erl_tar:extract({binary, Bytes}, [compressed, {cwd, TmpDir}]),
+    ok = erl_tar:extract({binary, Bytes}, [{cwd, TmpDir}]),
     TmpDir.
 
 
