@@ -47,7 +47,7 @@ from_json(ParamsJson = #{
         metadata_structure = utils:ensure_atom(MetadataStructure),
         % optional values
         dip = utils:ensure_boolean(maps:get(<<"dip">>, ParamsJson, ?DEFAULT_DIP)),
-        callback = maps:get(<<"callback">>, ParamsJson, undefined)
+        callback = utils:null_to_undefined(maps:get(<<"callback">>, ParamsJson, undefined))
     }.
 
 
@@ -59,13 +59,13 @@ to_json(#archive_params{
     dip = Dip,
     callback = CallbackOrUndefined
 }) ->
-    ParamsJson = #{
+    #{
         <<"type">> => str_utils:to_binary(Type),
         <<"dataStructure">> => str_utils:to_binary(DataStructure),
         <<"metadataStructure">> => str_utils:to_binary(MetadataStructure),
-        <<"dip">> => Dip
-    },
-    maps_utils:put_if_defined(ParamsJson, <<"callback">>, CallbackOrUndefined).
+        <<"dip">> => Dip,
+        <<"callback">> => utils:undefined_to_null(CallbackOrUndefined)
+    }.
 
 
 -spec get_callback(params()) -> url_callback() | undefined.
