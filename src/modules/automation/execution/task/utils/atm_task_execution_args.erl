@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% TODO WRITEME.
+%%% Utility functions for handling atm task execution arguments.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_task_execution_args).
@@ -20,39 +20,13 @@
 -export([build_specs/2, build_args/2]).
 
 
-%% Full 'input_spec' format can't be expressed directly in type spec due to
-%% dialyzer limitations in specifying concrete binaries. Instead it is
-%% shown below:
-%%
-%% #{
-%%      <<"inputRefType">> := <<"const">> | <<"store">> | <<"item">>,
-%%      <<"inputRef">> => case <<"inputRefType">> of
-%%          <<"const">> -> ConstValue :: json_utils:json_term();
-%%          <<"store">> -> StoreSchemaId :: binary();
-%%          <<"item">> -> json_utils:query() % optional, if not specified entire
-%%                                           % item is substituted
-%%      end
-%% }
--type input_spec() :: map().
-
--record(atm_task_execution_argument_spec, {
-    name :: binary(),
-    input_spec :: input_spec(),
-    data_spec :: atm_data_spec:record(),
-    is_array :: boolean()
-}).
--type spec() :: #atm_task_execution_argument_spec{}.
-
--export_type([input_spec/0, spec/0]).
-
-
 %%%===================================================================
 %%% API
 %%%===================================================================
 
 
 -spec build_specs([atm_lambda_argument_spec()], [atm_task_schema_argument_mapper()]) ->
-    [spec()].
+    [atm_task_execution:arg_spec()].
 build_specs(AtmLambdaArgSpecs, AtmTaskSchemaArgMappers) ->
     build_specs(
         lists:usort(fun order_atm_lambda_arg_specs_by_name/2, AtmLambdaArgSpecs),
@@ -61,15 +35,20 @@ build_specs(AtmLambdaArgSpecs, AtmTaskSchemaArgMappers) ->
     ).
 
 
--spec build_args([spec()], atm_task_execution:ctx()) -> json_utils:json_map().
-build_args(AtmTaskExecutionArgSpecs, AtmTaskExecutionCtx) ->
+-spec build_args(atm_task_execution:ctx(), [atm_task_execution:arg_spec()]) ->
+    json_utils:json_map() | no_return().
+build_args(AtmTaskExecutionCtx, AtmTaskExecutionArgSpecs) ->
     lists:foldl(fun(#atm_task_execution_argument_spec{
         name = Name,
-        input_spec = InputSpec
+        input_spec = ArgInputSpec
     } = AtmTaskExecutionArgSpec, Args) ->
-        ArgValue = build_arg(AtmTaskExecutionCtx, InputSpec),
-        validate_arg(ArgValue, AtmTaskExecutionArgSpec),
-        Args#{Name => ArgValue}
+        try
+            ArgValue = build_arg(AtmTaskExecutionCtx, ArgInputSpec),
+            validate_arg(ArgValue, AtmTaskExecutionArgSpec),
+            Args#{Name => ArgValue}
+        catch _:Reason ->
+            throw(?ERROR_ATM_TASK_ARG_MAPPING_FAILED(Name, Reason))
+        end
     end, #{}, AtmTaskExecutionArgSpecs).
 
 
@@ -108,9 +87,9 @@ order_atm_task_schema_arg_mappers_by_name(
 -spec build_specs(
     OrderedUniqueAtmLambdaArgSpecs :: [atm_lambda_argument_spec()],
     OrderedUniqueAtmTaskSchemaArgMappers :: [atm_task_schema_argument_mapper()],
-    AtmTaskExecutionArgSpecs :: [spec()]
+    AtmTaskExecutionArgSpecs :: [atm_task_execution:arg_spec()]
 ) ->
-    [spec()] | no_return().
+    [atm_task_execution:arg_spec()] | no_return().
 build_specs([], [], AtmTaskExecutionArgSpecs) ->
     AtmTaskExecutionArgSpecs;
 
@@ -139,8 +118,19 @@ build_specs(
 ) ->
     build_specs(RestAtmLambdaArgSpecs, AtmTaskSchemaArgMappers, AtmTaskExecutionArgSpecs);
 
-build_specs(_AtmLambdaArgSpecs, _AtmTaskSchemaArgMappers, _AtmTaskExecutionArgSpecs) ->
-    throw(?EINVAL).
+build_specs(
+    [#atm_lambda_argument_spec{name = Name} | _],
+    _AtmTaskSchemaArgMappers,
+    _AtmTaskExecutionArgSpecs
+) ->
+    throw(?ERROR_ATM_NO_TASK_MAPPER_FOR_REQUIRED_LAMBDA_ARG(Name));
+
+build_specs(
+    [],
+    [#atm_task_schema_argument_mapper{name = Name} | _],
+    _AtmTaskExecutionArgSpecs
+) ->
+    throw(?ERROR_ATM_TASK_MAPPER_FOR_NONEXISTENT_LAMBDA_ARG(Name)).
 
 
 %% @private
@@ -148,11 +138,11 @@ build_specs(_AtmLambdaArgSpecs, _AtmTaskSchemaArgMappers, _AtmTaskExecutionArgSp
     atm_lambda_argument_spec(),
     undefined | atm_task_schema_argument_mapper()
 ) ->
-    spec().
+    atm_task_execution:arg_spec().
 build_spec(#atm_lambda_argument_spec{
     name = Name,
     data_spec = AtmDataSpec,
-    is_array = IsArray,
+    is_batch = IsBatch,
     default_value = DefaultValue
 }, undefined) ->
     #atm_task_execution_argument_spec{
@@ -162,24 +152,24 @@ build_spec(#atm_lambda_argument_spec{
             <<"inputRef">> => DefaultValue
         },
         data_spec = AtmDataSpec,
-        is_array = IsArray
+        is_batch = IsBatch
     };
 
 build_spec(#atm_lambda_argument_spec{
     name = Name,
     data_spec = AtmDataSpec,
-    is_array = IsArray
+    is_batch = IsBatch
 }, #atm_task_schema_argument_mapper{input_spec = InputSpec}) ->
     #atm_task_execution_argument_spec{
         name = Name,
         input_spec = InputSpec,
         data_spec = AtmDataSpec,
-        is_array = IsArray
+        is_batch = IsBatch
     }.
 
 
 %% @private
--spec build_arg(atm_task_execution:ctx(), input_spec()) ->
+-spec build_arg(atm_task_execution:ctx(), atm_task_execution:arg_input_spec()) ->
     json_utils:json_term() | no_return().
 build_arg(_AtmTaskExecutionArgSpec, #{
     <<"inputRefType">> := <<"const">>,
@@ -192,7 +182,7 @@ build_arg(#atm_task_execution_ctx{stores = Stores}, #{
     <<"inputRef">> := StoreSchemaId
 }) ->
     case maps:get(StoreSchemaId, Stores, undefined) of
-        undefined -> throw(?EINVAL);
+        undefined -> throw(?ERROR_TASK_ARG_MAPPER_INVALID_INPUT_SPEC);
         StoreCredentials -> StoreCredentials
     end;
 
@@ -206,20 +196,23 @@ build_arg(#atm_task_execution_ctx{item = Item}, #{
             % TODO fix query in case of array indices
             case json_utils:query(Item, Path) of
                 {ok, Value} -> Value;
-                error -> throw(?EINVAL)
+                error -> throw(?ERROR_TASK_ARG_MAPPER_INVALID_INPUT_SPEC)
             end
     end;
 
 build_arg(_AtmTaskExecutionArgSpec, _InputSpec) ->
-    throw(?EINVAL).
+    throw(?ERROR_TASK_ARG_MAPPER_INVALID_INPUT_SPEC).
 
 
 %% @private
--spec validate_arg(json_utils:json_term() | [json_utils:json_term()], spec()) ->
+-spec validate_arg(
+    json_utils:json_term() | [json_utils:json_term()],
+    atm_task_execution:arg_spec()
+) ->
     ok | no_return().
 validate_arg(ArgsBatch, #atm_task_execution_argument_spec{
     data_spec = AtmDataSpec,
-    is_array = true
+    is_batch = true
 }) ->
     lists:foreach(fun(ArgValue) ->
         atm_data_validator:assert_instance(ArgValue, AtmDataSpec)
@@ -227,6 +220,6 @@ validate_arg(ArgsBatch, #atm_task_execution_argument_spec{
 
 validate_arg(ArgValue, #atm_task_execution_argument_spec{
     data_spec = AtmDataSpec,
-    is_array = false
+    is_batch = false
 }) ->
     atm_data_validator:assert_instance(ArgValue, AtmDataSpec).

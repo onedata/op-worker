@@ -88,6 +88,7 @@ get_models() -> [
     dataset,
     atm_store,
     atm_workflow_execution,
+    atm_task_execution,
 
     %% @TODO VFS-6767 deprecated, included for upgrade procedure. Remove in next major release after 21.02.*.
     space_strategies,

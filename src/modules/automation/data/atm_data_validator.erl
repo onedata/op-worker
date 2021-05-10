@@ -20,7 +20,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([assert_instance/2, is_instance/2]).
+-export([assert_instance/2]).
 
 
 %%%===================================================================
@@ -28,8 +28,8 @@
 %%%===================================================================
 
 
--callback is_instance(Value :: term(), atm_data_type:value_constraints()) ->
-    boolean().
+-callback assert_instance(json_utils:json_term(), atm_data_type:value_constraints()) ->
+    ok | no_return().
 
 
 %%%===================================================================
@@ -37,16 +37,9 @@
 %%%===================================================================
 
 
--spec assert_instance(term(), atm_data_spec:record()) -> ok | no_return().
+-spec assert_instance(json_utils:json_term(), atm_data_spec:record()) ->
+    ok | no_return().
 assert_instance(Value, AtmDataSpec) ->
-    case is_instance(Value, AtmDataSpec) of
-        true -> ok;
-        false -> throw(?EINVAL)
-    end.
-
-
--spec is_instance(term(), atm_data_spec:record()) -> boolean().
-is_instance(Value, AtmDataSpec) ->
     Module = get_callback_module(atm_data_spec:get_type(AtmDataSpec)),
     Module:assert_instance(Value, atm_data_spec:get_value_constraints(AtmDataSpec)).
 

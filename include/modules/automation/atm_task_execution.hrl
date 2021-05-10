@@ -5,8 +5,8 @@
 %%% cited in 'LICENSE.txt'.
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% This file contains definitions of macros used by atm_workflow_task
-%%% machinery.
+%%% This file contains definitions of macros and records used by
+%%% automation task execution machinery.
 %%% @end
 %%%-------------------------------------------------------------------
 
@@ -18,5 +18,13 @@
     item :: json_utils:json_term(),
     stores :: map()
 }).
+
+-record(atm_task_execution_argument_spec, {
+    name :: binary(),
+    input_spec :: atm_task_execution:arg_input_spec(),
+    data_spec :: atm_data_spec:record(),
+    is_batch :: boolean()
+}).
+
 
 -endif.

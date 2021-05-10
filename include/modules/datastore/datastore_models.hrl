@@ -983,4 +983,13 @@
     finish_time = 0 :: atm_workflow_execution:timestamp()
 }).
 
+%% Model storing information about automation task execution.
+-record(atm_task_execution, {
+    name :: binary(),
+    schema_id :: binary(),
+    lambda_id :: binary(),
+    executor :: atm_task_executor:executor(),
+    argument_specs :: [atm_task_execution:arg_spec()]
+}).
+
 -endif.

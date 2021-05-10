@@ -15,8 +15,10 @@
 
 -behaviour(atm_data_validator).
 
+-include("modules/automation/atm_tmp.hrl").
+
 %% atm_data_validator callbacks
--export([is_instance/2]).
+-export([assert_instance/2]).
 
 
 %%%===================================================================
@@ -24,8 +26,9 @@
 %%%===================================================================
 
 
--spec is_instance(term(), atm_data_type:value_constraints()) -> boolean().
-is_instance(Value, _ValueConstraints) when is_integer(Value) ->
-    true;
-is_instance(_Value, _ValueConstraints) ->
-    false.
+-spec assert_instance(json_utils:json_term(), atm_data_type:value_constraints()) ->
+    ok | no_return().
+assert_instance(Value, _ValueConstraints) when is_integer(Value) ->
+    ok;
+assert_instance(Value, _ValueConstraints) ->
+    throw(?ERROR_ATM_DATA_TYPE_UNVERIFIED(Value, <<"integer">>)).
