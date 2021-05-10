@@ -17,11 +17,8 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([
-    create/1,
-    get/1,
-    delete/1
-]).
+-export([create/1, get/1, delete/1]).
+
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1, get_record_version/0]).
 
@@ -41,8 +38,6 @@
     type/0, name/0, summary/0, description/0
 ]).
 
--type error() :: {error, term()}.
-
 
 -define(CTX, #{model => ?MODULE}).
 
@@ -52,24 +47,24 @@
 %%%===================================================================
 
 
--spec create(record()) -> {ok, id()} | error().
+-spec create(record()) -> {ok, id()} | {error, term()}.
 create(AtmStoreRecord) ->
     ?extract_key(datastore_model:create(?CTX, #document{
         value = AtmStoreRecord
     })).
 
 
--spec get(id()) -> {ok, record()} | ?ERROR_NOT_FOUND.
+-spec get(id()) -> {ok, record()} | {error, term()}.
 get(AtmStoreId) ->
     case datastore_model:get(?CTX, AtmStoreId) of
         {ok, #document{value = AtmStoreRecord}} ->
             {ok, AtmStoreRecord};
-        ?ERROR_NOT_FOUND = Error ->
+        {error, _} = Error ->
             Error
     end.
 
 
--spec delete(id()) -> ok | error().
+-spec delete(id()) -> ok | {error, term()}.
 delete(AtmStoreId) ->
     datastore_model:delete(?CTX, AtmStoreId).
 
