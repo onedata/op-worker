@@ -164,20 +164,10 @@ update(DatasetId, Diff) ->
 %%% Datastore callbacks
 %%%===================================================================
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns model's context.
-%% @end
-%%--------------------------------------------------------------------
 -spec get_ctx() -> datastore:ctx().
 get_ctx() ->
     ?CTX.
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns model's record structure in provided version.
-%% @end
-%%--------------------------------------------------------------------
 -spec get_record_struct(datastore_model:record_version()) -> datastore_model:record_struct().
 get_record_struct(1) ->
     {record, [

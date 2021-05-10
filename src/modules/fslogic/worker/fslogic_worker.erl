@@ -777,9 +777,19 @@ handle_provider_request(UserCtx, #get_dataset_info{id = DatasetId}, SpaceDirCtx)
 handle_provider_request(UserCtx, #get_file_eff_dataset_summary{}, FileCtx) ->
     dataset_req:get_file_eff_summary(FileCtx, UserCtx);
 handle_provider_request(UserCtx, #list_top_datasets{state = State, opts = Opts, mode = ListingMode}, SpaceDirCtx) ->
-    dataset_req:list_top_datasets(file_ctx:get_space_id_const(SpaceDirCtx), State, UserCtx, Opts, ListingMode);
+    dataset_req:list_top_datasets(file_ctx:get_space_id_const(SpaceDirCtx), State, Opts, ListingMode, UserCtx);
 handle_provider_request(UserCtx, #list_children_datasets{id = DatasetId, opts = Opts, mode = ListingMode}, SpaceDirCtx) ->
-    dataset_req:list_children_datasets(SpaceDirCtx, DatasetId, UserCtx, Opts, ListingMode).
+    dataset_req:list_children_datasets(SpaceDirCtx, DatasetId, Opts, ListingMode, UserCtx);
+handle_provider_request(UserCtx, #archive_dataset{id = DatasetId, params = Params, attrs = Attrs}, SpaceDirCtx) ->
+    dataset_req:archive(SpaceDirCtx, DatasetId, Params, Attrs, UserCtx);
+handle_provider_request(UserCtx, #update_archive{id = ArchiveId, attrs = Params}, SpaceDirCtx) ->
+    dataset_req:update_archive(SpaceDirCtx, ArchiveId, Params, UserCtx);
+handle_provider_request(UserCtx, #get_archive_info{id = ArchiveId}, SpaceDirCtx) ->
+    dataset_req:get_archive_info(SpaceDirCtx, ArchiveId, UserCtx);
+handle_provider_request(UserCtx, #list_archives{dataset_id = DatasetId, opts = Opts, mode = ListingMode}, SpaceDirCtx) ->
+    dataset_req:list_archives(SpaceDirCtx, DatasetId, Opts, ListingMode, UserCtx);
+handle_provider_request(UserCtx, #remove_archive{id = DatasetId}, SpaceDirCtx) ->
+    dataset_req:remove_archive(SpaceDirCtx, DatasetId, UserCtx).
 
 
 %%--------------------------------------------------------------------

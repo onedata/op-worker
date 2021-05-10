@@ -392,6 +392,24 @@
     dataset_state :: undefined | dataset:state()
 }).
 
+% Model used for storing information concerning archive.
+% One documents is stored for one archive.
+-record(archive, {
+    dataset_id :: dataset:id(),
+    % TODO VFS-7601 set guid of directory in which archive is stored
+    % TODO VFS-7601 consider generating uuid basing ArchiveId
+    root_dir :: undefined | file_id:file_guid(),
+    creation_timestamp :: time:seconds(),
+    creator :: archive:creator(),
+    type :: archive:type(),
+    state :: archive:state(),
+    character :: archive:character(),
+    data_structure :: archive:data_structure(),
+    metadata_structure :: archive:metadata_structure(),
+    description :: binary()
+}).
+
+
 % Model used for storing information associated with dataset.
 % One document is stored for one dataset.
 % Key of the document is file_meta:uuid().
@@ -962,6 +980,17 @@
     processed = 0 :: non_neg_integer(),
     % flag that informs whether all batches of children have been listed
     all_batches_listed = false :: boolean()
+}).
+
+%% Model storing information about automation store instance.
+-record(atm_store, {
+    type :: atm_store:type(),
+    name :: atm_store:name(),
+    summary :: atm_store:summary(),
+    description :: atm_store:description(),
+    frozen = false :: boolean(),
+    is_input_store :: boolean(),
+    container :: atm_container:container()
 }).
 
 %% Model that holds information about an automation workflow execution
