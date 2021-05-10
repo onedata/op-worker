@@ -108,6 +108,9 @@
 }).
 -type atm_task_schema() :: #atm_task_schema{}.
 
+-type operation_spec_engine() :: openfaas.
+
+%% TODO VFS-7637 better error handling and logging
 -define(ERROR_ATM_NO_TASK_MAPPER_FOR_REQUIRED_LAMBDA_ARG(__ARG_NAME),
     {error, {no_task_mapper_for, __ARG_NAME}}
 ).
@@ -131,7 +134,5 @@
 -define(ERROR_TASK_ARG_MAPPER_INVALID_INPUT_SPEC,
     {error, atm_task_mapper_invalid_input_spec}
 ).
-
--type operation_spec_engine() :: openfaas.
 
 -endif.

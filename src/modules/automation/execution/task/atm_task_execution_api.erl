@@ -86,7 +86,7 @@ run(Item, AtmTaskExecutionId) ->
 
     AtmTaskExecutionCtx = #atm_task_execution_ctx{
         item = Item,
-        stores = #{}  %% TODO get workflow execution stores
+        stores = #{}  %% TODO VFS-7638 get stores from workflow execution ctx
     },
     Args = atm_task_execution_args:build_args(AtmTaskExecutionCtx, AtmTaskArgSpecs),
     atm_task_executor:run(Args, AtmTaskExecutor).

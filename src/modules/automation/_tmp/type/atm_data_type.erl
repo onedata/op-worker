@@ -12,7 +12,7 @@
 -module(atm_data_type).
 -author("Bartosz Walkowicz").
 
--type type() :: atm_integer_type.
+-type type() :: atm_integer_type | atm_string_type | atm_object_type.
 -type value_constraints() :: map().
 
 -export_type([type/0, value_constraints/0]).
