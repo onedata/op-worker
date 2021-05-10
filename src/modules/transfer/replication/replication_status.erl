@@ -91,7 +91,7 @@
 
 -spec handle_enqueued(transfer:id()) -> {ok, transfer:doc()} | error().
 handle_enqueued(TransferId) ->
-    EncodedPid = transfer_utils:encode_pid(self()),
+    EncodedPid = utils:encode_pid(self()),
     transfer:update(TransferId, fun(Transfer) ->
         case Transfer#transfer.replication_status of
             ?SCHEDULED_STATUS ->
