@@ -44,7 +44,6 @@
 }).
 
 -type state() :: #state{}.
--type download_status() :: in_progress | finished.
 
 
 -define(TARBALL_DOWNLOAD_TRAVERSE_POOL_NAME, bulk_download_traverse:get_pool_name()).

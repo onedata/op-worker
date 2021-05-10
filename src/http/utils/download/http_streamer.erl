@@ -24,7 +24,7 @@
     build_ctx/2, 
     set_read_block_size/2, set_encoding_fun/2, set_send_fun/2, set_range_policy/2, 
     stream_bytes_range/3,
-    send_data_chunk/2, send_data_chunk/3,
+    send_data_chunk/2, send_data_chunk/4,
     get_read_block_size/1
 ]).
 
@@ -141,13 +141,42 @@ stream_bytes_range(StreamingCtx, Range, SendState) ->
 -spec send_data_chunk(Data :: iodata(), cowboy_req:req()) -> 
     {NextRetryDelay :: time:millis(), cowboy_req:req()}.
 send_data_chunk(Data, Req) ->
-    send_data_chunk(Data, Req, ?MIN_SEND_RETRY_DELAY).
+    send_data_chunk(Data, Req, ?MAX_DOWNLOAD_BUFFER_SIZE div ?DEFAULT_READ_BLOCK_SIZE ,?MIN_SEND_RETRY_DELAY).
 
 
--spec send_data_chunk(Data :: iodata(), cowboy_req:req(), time:millis()) ->
+%%--------------------------------------------------------------------
+%% @doc
+%% TODO VFS-6597 - update cowboy to at least ver 2.7 to fix streaming big files
+%% Cowboy uses separate process to manage socket and all messages, including
+%% data, to stream are sent to that process. However because it doesn't enforce
+%% any backpressure mechanism it is easy, on slow networks and fast storages,
+%% to read to memory entire file while sending process doesn't keep up with
+%% sending those data. To avoid this it is necessary to check message_queue_len
+%% of sending process and ensure it is not larger than max allowed blocks to
+%% read into memory.
+%% @end
+%%--------------------------------------------------------------------
+-spec send_data_chunk(
+    Data :: iodata(),
+    cowboy_req:req(),
+    MaxReadBlocksCount :: non_neg_integer(),
+    RetryDelay :: time:millis()
+) ->
     {NextRetryDelay :: time:millis(), cowboy_req:req()}.
-send_data_chunk(Data, Req, SendRetryDelay) ->
-    send_data_chunk(Data, Req, ?MAX_DOWNLOAD_BUFFER_SIZE div ?DEFAULT_READ_BLOCK_SIZE, SendRetryDelay).
+send_data_chunk(Data, #{pid := ConnPid} = Req, MaxReadBlocksCount, RetryDelay) ->
+    {message_queue_len, MsgQueueLen} = process_info(ConnPid, message_queue_len),
+    
+    case MsgQueueLen < MaxReadBlocksCount of
+        true ->
+            cowboy_req:stream_body(Data, nofin, Req),
+            {max(RetryDelay div 2, ?MIN_SEND_RETRY_DELAY), Req};
+        false ->
+            timer:sleep(RetryDelay),
+            send_data_chunk(
+                Data, Req, MaxReadBlocksCount,
+                min(2 * RetryDelay, ?MAX_SEND_RETRY_DELAY)
+            )
+    end.
 
 
 -spec get_read_block_size(lfm_context:ctx()) -> non_neg_integer().
@@ -225,42 +254,6 @@ read_file_data(FileHandle, From, ToRead, MinBytes) ->
                 false -> Data
             end,
             {NewFileHandle, FinalData}
-    end.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% TODO VFS-6597 - update cowboy to at least ver 2.7 to fix streaming big files
-%% Cowboy uses separate process to manage socket and all messages, including
-%% data, to stream are sent to that process. However because it doesn't enforce
-%% any backpressure mechanism it is easy, on slow networks and fast storages,
-%% to read to memory entire file while sending process doesn't keep up with
-%% sending those data. To avoid this it is necessary to check message_queue_len
-%% of sending process and ensure it is not larger than max allowed blocks to
-%% read into memory.
-%% @end
-%%--------------------------------------------------------------------
--spec send_data_chunk(
-    Data :: iodata(),
-    cowboy_req:req(),
-    MaxReadBlocksCount :: non_neg_integer(),
-    RetryDelay :: time:millis()
-) ->
-    {NextRetryDelay :: time:millis(), cowboy_req:req()}.
-send_data_chunk(Data, #{pid := ConnPid} = Req, MaxReadBlocksCount, RetryDelay) ->
-    {message_queue_len, MsgQueueLen} = process_info(ConnPid, message_queue_len),
-    
-    case MsgQueueLen < MaxReadBlocksCount of
-        true ->
-            cowboy_req:stream_body(Data, nofin, Req),
-            {max(RetryDelay div 2, ?MIN_SEND_RETRY_DELAY), Req};
-        false ->
-            timer:sleep(RetryDelay),
-            send_data_chunk(
-                Data, Req, MaxReadBlocksCount,
-                min(2 * RetryDelay, ?MAX_SEND_RETRY_DELAY)
-            )
     end.
 
 
