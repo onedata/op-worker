@@ -44,7 +44,7 @@
 }).
 
 -type state() :: #state{}.
--type traverse_status() :: in_progress | finished.
+-type download_status() :: in_progress | finished.
 
 
 -define(TARBALL_DOWNLOAD_TRAVERSE_POOL_NAME, bulk_download_traverse:get_pool_name()).
@@ -124,7 +124,7 @@ main(BulkDownloadId, FileAttrsList, SessionId, InitialConn) ->
         send_data(tar_utils:close_archive_stream(FinalTarStream), UpdatedState),
     tree_traverse_session:close_for_task(BulkDownloadId),
     Conn ! ?MSG_DONE,
-    wait_for_conn(FinalState, finished). % do not die yet, last chunk might have failed
+    wait_for_conn_upon_finish(FinalState). % do not die yet, last chunk might have failed
 
 
 %% @private
@@ -290,27 +290,18 @@ new_tar_file_entry(#state{tar_stream = TarStream} = State, FileAttrs, StartingDi
 
 %% @private
 -spec wait_for_conn(state()) -> state().
-wait_for_conn(State) ->
-    wait_for_conn(State, in_progress).
-
-
-%% @private
--spec wait_for_conn(state(), traverse_status()) -> state().
-wait_for_conn(#state{id = Id} = State, TraverseStatus) ->
+wait_for_conn(#state{id = Id} = State) ->
     receive
         ?MSG_ABORT ->
             finalize(State);
-        ?MSG_DATA_SENT(NewDelay) -> 
-            case TraverseStatus of
-                finished -> wait_for_conn(State#state{send_retry_delay = NewDelay}, TraverseStatus);
-                in_progress -> State#state{send_retry_delay = NewDelay}
-            end;
+        ?MSG_DATA_SENT(NewDelay) ->
+            State#state{send_retry_delay = NewDelay};
         ?MSG_CHECK_OFFSET(NewConn, Offset) ->
             NewConn ! is_offset_within_buffer_bounds(State, Offset),
-            wait_for_conn(State, TraverseStatus);
+            wait_for_conn(State);
         ?MSG_RESUMED(NewConn, ResumeOffset) ->
-            UpdatedState = handle_resume(State, NewConn, ResumeOffset, TraverseStatus),
-            wait_for_conn(UpdatedState, TraverseStatus)
+            UpdatedState = handle_resume(State, NewConn, ResumeOffset),
+            wait_for_conn(UpdatedState)
     after ?BULK_DOWNLOAD_RESUME_TIMEOUT ->
         file_download_code:remove(Id),
         bulk_download_task:delete(Id),
@@ -319,18 +310,26 @@ wait_for_conn(#state{id = Id} = State, TraverseStatus) ->
 
 
 %% @private
--spec handle_resume(state(), pid(), non_neg_integer(), traverse_status()) -> state().
-handle_resume(State, NewConn, ResumeOffset, TraverseStatus) ->
+-spec wait_for_conn_upon_finish(state()) -> no_return().
+wait_for_conn_upon_finish(State) ->
+    #state{connection_pid = NewConn} = UpdatedState = wait_for_conn(State),
+    NewConn ! ?MSG_DONE,
+    wait_for_conn_upon_finish(UpdatedState).
+
+
+%% @private
+-spec handle_resume(state(), pid(), non_neg_integer()) -> state().
+handle_resume(State, NewConn, ResumeOffset) ->
     UpdatedState = State#state{connection_pid = NewConn},
     case resend_unreceived_data(UpdatedState, ResumeOffset) of
-        true -> TraverseStatus == finished andalso (NewConn ! ?MSG_DONE);
+        true -> ok;
         false -> NewConn ! ?MSG_ERROR
     end,
     UpdatedState.
 
 
 %% @private
--spec resend_unreceived_data(state(), non_neg_integer()) -> binary().
+-spec resend_unreceived_data(state(), non_neg_integer()) -> boolean().
 resend_unreceived_data(State, ResumeOffset) ->
     #state{
         connection_pid = Conn, 
