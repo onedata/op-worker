@@ -27,15 +27,13 @@
 
 -export_type([init_args/0]).
 
--type error() :: {error, term()}.
-
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
 
--spec create(atm_store_schema(), init_args()) -> {ok, atm_store:id()} | error().
+-spec create(atm_store_schema(), init_args()) -> {ok, atm_store:id()} | {error, term()}.
 create(#atm_store_schema{
     name = Name,
     summary = Summary,
@@ -46,14 +44,14 @@ create(#atm_store_schema{
 }, InitialArgs) ->
     ContainerModel = store_type_to_container_model(StoreType),
 
-    atm_store:create(#atm_store{
+    {ok, _} = atm_store:create(#atm_store{
         name = Name,
         summary = Summary,
         description = Description,
         frozen = false,
         is_input_store = IsInputStore,
         type = StoreType,
-        container = atm_container:init(ContainerModel, AtmDataSpec, InitialArgs)
+        container = atm_container:create(ContainerModel, AtmDataSpec, InitialArgs)
     }).
 
 
@@ -70,7 +68,7 @@ init_stream(AtmStreamSchema, AtmStoreIdOrRecord) ->
 
 
 %% @private
--spec store_type_to_container_model(atm_store:type()) ->
+-spec store_type_to_container_model(automation:store_type()) ->
     atm_container:model().
 store_type_to_container_model(single_value) -> atm_single_value_container;
 store_type_to_container_model(range) -> atm_range_container.

@@ -19,19 +19,19 @@
 -author("Bartosz Walkowicz").
 
 -behaviour(atm_container_stream).
+-behaviour(persistent_record).
 
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([init/1]).
+-export([create/1]).
 
 % atm_container_stream callbacks
--export([
-    get_next_batch/2,
-    jump_to/2,
-    to_json/1,
-    from_json/1
-]).
+-export([get_next_batch/2, jump_to/2]).
+
+%% persistent_record callbacks
+-export([version/0, db_encode/2, db_decode/2]).
+
 
 -type item() :: json_utils:json_term().
 
@@ -49,8 +49,8 @@
 %%%===================================================================
 
 
--spec init(undefined | item()) -> stream().
-init(Value) ->
+-spec create(undefined | item()) -> stream().
+create(Value) ->
     #atm_single_value_container_stream{value = Value, exhausted = false}.
 
 
@@ -71,7 +71,7 @@ get_next_batch(_BatchSize, #atm_single_value_container_stream{value = Value} = A
     }}.
 
 
--spec jump_to(iterator:cursor(), stream()) -> stream().
+-spec jump_to(iterator:cursor(), stream()) -> stream() | no_return().
 jump_to(<<>>, AtmContainerStream) ->
     AtmContainerStream#atm_single_value_container_stream{exhausted = false};
 jump_to(<<"fin">>, AtmContainerStream) ->
@@ -80,15 +80,34 @@ jump_to(_InvalidCursor, _AtmContainerStream) ->
     throw(?EINVAL).
 
 
--spec to_json(stream()) -> json_utils:json_map().
-to_json(#atm_single_value_container_stream{value = undefined, exhausted = Exhausted}) ->
+%%%===================================================================
+%%% persistent_record callbacks
+%%%===================================================================
+
+
+-spec version() -> persistent_record:record_version().
+version() ->
+    1.
+
+
+-spec db_encode(stream(), persistent_record:nested_record_encoder()) ->
+    json_utils:json_term().
+db_encode(#atm_single_value_container_stream{
+    value = undefined,
+    exhausted = Exhausted
+}, _NestedRecordEncoder) ->
     #{<<"exhausted">> => Exhausted};
-to_json(#atm_single_value_container_stream{value = Value, exhausted = Exhausted}) ->
+
+db_encode(#atm_single_value_container_stream{
+    value = Value,
+    exhausted = Exhausted
+}, _NestedRecordEncoder) ->
     #{<<"value">> => Value, <<"exhausted">> => Exhausted}.
 
 
--spec from_json(json_utils:json_map()) -> stream().
-from_json(#{<<"exhausted">> := Exhausted} = AtmContainerStreamJson) ->
+-spec db_decode(json_utils:json_term(), persistent_record:nested_record_decoder()) ->
+    stream().
+db_decode(#{<<"exhausted">> := Exhausted} = AtmContainerStreamJson, _NestedRecordDecoder) ->
     #atm_single_value_container_stream{
         value = maps:get(<<"value">>, AtmContainerStreamJson, undefined),
         exhausted = Exhausted

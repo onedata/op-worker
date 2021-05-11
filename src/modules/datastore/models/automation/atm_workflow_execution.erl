@@ -45,7 +45,7 @@
 %%%===================================================================
 
 
--spec create(file_meta:uuid(), od_space:id()) -> ok | error().
+-spec create(id(), od_space:id()) -> ok | error().
 create(AtmWorkflowExecutionId, SpaceId) ->
   ?extract_ok(datastore_model:create(?CTX, #document{
       key = AtmWorkflowExecutionId,

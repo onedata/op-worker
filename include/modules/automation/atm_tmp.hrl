@@ -15,11 +15,11 @@
 -define(ATM_TMP_HRL, 1).
 
 -record(atm_store_schema, {
-    name :: atm_store:name(),
-    summary :: atm_store:summary(),
-    description :: atm_store:description(),
+    name :: automation:name(),
+    summary :: automation:summary(),
+    description :: automation:description(),
     is_input_store :: boolean(),
-    store_type :: atm_store:type(),
+    store_type :: automation:store_type(),
     data_spec :: atm_data_spec:record()
 }).
 -type atm_store_schema() :: #atm_store_schema{}.

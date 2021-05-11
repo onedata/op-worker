@@ -9,8 +9,10 @@
 %%% This module defines iterator interface.
 %%%
 %%%                             !!! Caution !!!
-%%% This behaviour must be implemented by proper models, that is modules with
-%%% records of the same name.
+%%% 1) This behaviour must be implemented by proper models, that is modules with
+%%%    records of the same name.
+%%% 2) Models implementing this behaviour must also implement `persistent_record`
+%%%    behaviour.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(iterator).
@@ -44,10 +46,6 @@
 
 -callback jump_to(cursor(), iterator()) -> iterator().
 
--callback to_json(iterator()) -> json_utils:json_map().
-
--callback from_json(json_utils:json_map()) -> iterator().
-
 
 %%%===================================================================
 %%% API functions
@@ -68,14 +66,20 @@ jump_to(Cursor, Iterator) ->
 
 -spec encode(iterator()) -> binary().
 encode(Iterator) ->
-    Module = utils:record_type(Iterator),
-    IteratorJson = Module:to_json(Iterator),
-    json_utils:encode(IteratorJson#{<<"_type">> => atom_to_binary(Module, utf8)}).
+    Model = utils:record_type(Iterator),
+
+    json_utils:encode(#{
+        <<"_type">> => atom_to_binary(Model, utf8),
+        <<"_data">> => persistent_record:encode(Iterator, Model)
+    }).
 
 
 -spec decode(binary()) -> iterator().
 decode(IteratorBin) ->
-    IteratorJson = json_utils:decode(IteratorBin),
-    {ModuleBin, IteratorJson2} = maps:take(<<"_type">>, IteratorJson),
-    Module = binary_to_atom(ModuleBin, utf8),
-    Module:from_json(IteratorJson2).
+    #{
+        <<"_type">> := TypeBin,
+        <<"_data">> := Data
+    } = json_utils:decode(IteratorBin),
+
+    Model = binary_to_atom(TypeBin, utf8),
+    persistent_record:decode(Data, Model).

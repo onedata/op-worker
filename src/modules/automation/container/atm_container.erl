@@ -10,21 +10,22 @@
 %%% used to store and retrieve data of specific type.
 %%%
 %%%                             !!! Caution !!!
-%%% This behaviour must be implemented by proper models, that is modules with
-%%% records of the same name.
+%%% 1) This behaviour must be implemented by proper models, that is modules with
+%%%    records of the same name.
+%%% 2) Models implementing this behaviour must also implement `persistent_record`
+%%%    behaviour.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_container).
 -author("Bartosz Walkowicz").
 
+-behaviour(persistent_record).
+
 %% API
--export([
-    init/3,
-    get_data_spec/1,
-    get_container_stream/1,
-    encode/1,
-    decode/1
-]).
+-export([create/3, get_data_spec/1, get_container_stream/1]).
+
+%% persistent_record callbacks
+-export([version/0, db_encode/2, db_decode/2]).
 
 
 -type model() ::
@@ -48,15 +49,11 @@
 %%%===================================================================
 
 
--callback init(atm_data_spec:record(), init_args()) -> container().
+-callback create(atm_data_spec:record(), init_args()) -> container().
 
 -callback get_data_spec(container()) -> atm_data_spec:record().
 
 -callback get_container_stream(container()) -> atm_container_stream:stream().
-
--callback to_json(container()) -> json_utils:json_map().
-
--callback from_json(json_utils:json_map()) -> container().
 
 
 %%%===================================================================
@@ -64,9 +61,9 @@
 %%%===================================================================
 
 
--spec init(model(), atm_data_spec:record(), init_args()) -> container().
-init(Model, AtmDataSpec, InitArgs) ->
-    Model:init(AtmDataSpec, InitArgs).
+-spec create(model(), atm_data_spec:record(), init_args()) -> container().
+create(Model, AtmDataSpec, InitArgs) ->
+    Model:create(AtmDataSpec, InitArgs).
 
 
 -spec get_data_spec(container()) -> atm_data_spec:record().
@@ -81,16 +78,30 @@ get_container_stream(AtmContainer) ->
     Model:get_container_stream(AtmContainer).
 
 
--spec encode(container()) -> binary().
-encode(AtmContainer) ->
+%%%===================================================================
+%%% persistent_record callbacks
+%%%===================================================================
+
+
+-spec version() -> persistent_record:record_version().
+version() ->
+    1.
+
+
+-spec db_encode(container(), persistent_record:nested_record_encoder()) ->
+    json_utils:json_term().
+db_encode(AtmContainer, NestedRecordEncoder) ->
     Model = utils:record_type(AtmContainer),
-    AtmContainerJson = Model:to_json(AtmContainer),
-    json_utils:encode(AtmContainerJson#{<<"_type">> => atom_to_binary(Model, utf8)}).
+
+    maps:merge(
+        #{<<"_type">> => atom_to_binary(Model, utf8)},
+        NestedRecordEncoder(AtmContainer, Model)
+    ).
 
 
--spec decode(binary()) -> container().
-decode(AtmContainerBin) ->
-    AtmContainerJson = json_utils:decode(AtmContainerBin),
-    {ModelBin, AtmContainerJson2} = maps:take(<<"_type">>, AtmContainerJson),
-    Model = binary_to_atom(ModelBin, utf8),
-    Model:from_json(AtmContainerJson2).
+-spec db_decode(json_utils:json_term(), persistent_record:nested_record_decoder()) ->
+    container().
+db_decode(#{<<"_type">> := TypeJson} = AtmContainerJson, NestedRecordDecoder) ->
+    Model = binary_to_atom(TypeJson, utf8),
+
+    NestedRecordDecoder(AtmContainerJson, Model).

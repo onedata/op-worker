@@ -14,19 +14,19 @@
 -author("Bartosz Walkowicz").
 
 -behaviour(atm_container_stream).
+-behaviour(persistent_record).
 
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([init/3]).
+-export([create/3]).
 
 % atm_container_stream callbacks
--export([
-    get_next_batch/2,
-    jump_to/2,
-    to_json/1,
-    from_json/1
-]).
+-export([get_next_batch/2, jump_to/2]).
+
+%% persistent_record callbacks
+-export([version/0, db_encode/2, db_decode/2]).
+
 
 -type item() :: integer().
 
@@ -46,8 +46,8 @@
 %%%===================================================================
 
 
--spec init(integer(), integer(), integer()) -> stream().
-init(Start, End, Step) ->
+-spec create(integer(), integer(), integer()) -> stream().
+create(Start, End, Step) ->
     #atm_range_container_stream{
         curr_num = Start,
         start_num = Start, end_num = End, step = Step
@@ -92,7 +92,7 @@ jump_to(Cursor, AtmContainerStream) ->
 
 
 %% @private
--spec sanitize_cursor(iterator:cursor(), stream()) -> integer().
+-spec sanitize_cursor(iterator:cursor(), stream()) -> integer() | no_return().
 sanitize_cursor(Cursor, AtmContainerStream) ->
     try
         CursorInt = binary_to_integer(Cursor),
@@ -116,21 +116,33 @@ is_in_proper_range(Num, #atm_range_container_stream{
     end.
 
 
--spec to_json(stream()) -> json_utils:json_map().
-to_json(#atm_range_container_stream{
+%%%===================================================================
+%%% persistent_record callbacks
+%%%===================================================================
+
+
+-spec version() -> persistent_record:record_version().
+version() ->
+    1.
+
+
+-spec db_encode(stream(), persistent_record:nested_record_encoder()) ->
+    json_utils:json_term().
+db_encode(#atm_range_container_stream{
     curr_num = Current,
     start_num = Start,
     end_num = End,
     step = Step
-}) ->
+}, _NestedRecordEncoder) ->
     #{<<"current">> => Current, <<"start">> => Start, <<"end">> => End, <<"step">> => Step}.
 
 
--spec from_json(json_utils:json_map()) -> stream().
-from_json(#{
+-spec db_decode(json_utils:json_term(), persistent_record:nested_record_decoder()) ->
+    stream().
+db_decode(#{
     <<"current">> := Current,
     <<"start">> := Start,
     <<"end">> := End,
     <<"step">> := Step
-}) ->
+}, _NestedRecordDecoder) ->
     #atm_range_container_stream{curr_num = Current, start_num = Start, end_num = End, step = Step}.

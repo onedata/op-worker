@@ -14,18 +14,20 @@
 %%%    records of the same name.
 %%% 2) The container stream behaviour in case of changes to values kept in container
 %%%    is not defined and implementation dependent (it may e.g. return old values).
+%%% 3) Models implementing this behaviour must also implement `persistent_record`
+%%%    behaviour.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_container_stream).
 -author("Bartosz Walkowicz").
 
+-behaviour(persistent_record).
+
 %% API
--export([
-    get_next_batch/2,
-    jump_to/2,
-    to_json/1,
-    from_json/1
-]).
+-export([get_next_batch/2, jump_to/2]).
+
+%% persistent_record callbacks
+-export([version/0, db_encode/2, db_decode/2]).
 
 
 -type stream() ::
@@ -52,10 +54,6 @@
 
 -callback jump_to(iterator:cursor(), stream()) -> stream().
 
--callback to_json(stream()) -> json_utils:json_map().
-
--callback from_json(json_utils:json_map()) -> stream().
-
 
 %%%===================================================================
 %%% API
@@ -75,15 +73,30 @@ jump_to(Cursor, AtmContainerStream) ->
     Module:jump_to(Cursor, AtmContainerStream).
 
 
--spec to_json(stream()) -> json_utils:json_map().
-to_json(AtmContainerStream) ->
-    Module = utils:record_type(AtmContainerStream),
-    AtmContainerStreamJson = Module:to_json(AtmContainerStream),
-    AtmContainerStreamJson#{<<"_type">> => atom_to_binary(Module, utf8)}.
+%%%===================================================================
+%%% persistent_record callbacks
+%%%===================================================================
 
 
--spec from_json(json_utils:json_map()) -> stream().
-from_json(AtmContainerStreamJson) ->
-    {ModuleBin, AtmContainerStreamJson2} = maps:take(<<"_type">>, AtmContainerStreamJson),
-    Module = binary_to_atom(ModuleBin, utf8),
-    Module:from_json(AtmContainerStreamJson2).
+-spec version() -> persistent_record:record_version().
+version() ->
+    1.
+
+
+-spec db_encode(stream(), persistent_record:nested_record_encoder()) ->
+    json_utils:json_term().
+db_encode(AtmContainerStream, NestedRecordEncoder) ->
+    Model = utils:record_type(AtmContainerStream),
+
+    maps:merge(
+        #{<<"_type">> => atom_to_binary(Model, utf8)},
+        NestedRecordEncoder(AtmContainerStream, Model)
+    ).
+
+
+-spec db_decode(json_utils:json_term(), persistent_record:nested_record_decoder()) ->
+    stream().
+db_decode(#{<<"_type">> := TypeJson} = AtmContainerStreamJson, NestedRecordDecoder) ->
+    Model = binary_to_atom(TypeJson, utf8),
+
+    NestedRecordDecoder(AtmContainerStreamJson, Model).

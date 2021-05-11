@@ -984,10 +984,10 @@
 
 %% Model storing information about automation store instance.
 -record(atm_store, {
-    type :: atm_store:type(),
-    name :: atm_store:name(),
-    summary :: atm_store:summary(),
-    description :: atm_store:description(),
+    type :: automation:store_type(),
+    name :: automation:name(),
+    summary :: automation:summary(),
+    description :: automation:description(),
     frozen = false :: boolean(),
     is_input_store :: boolean(),
     container :: atm_container:container()

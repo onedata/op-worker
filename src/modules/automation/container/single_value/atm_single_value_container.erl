@@ -14,17 +14,16 @@
 -author("Bartosz Walkowicz").
 
 -behaviour(atm_container).
+-behaviour(persistent_record).
 
 -include_lib("ctool/include/errors.hrl").
 
 %% atm_container callbacks
--export([
-    init/2,
-    get_data_spec/1,
-    get_container_stream/1,
-    to_json/1,
-    from_json/1
-]).
+-export([create/2, get_data_spec/1, get_container_stream/1]).
+
+%% persistent_record callbacks
+-export([version/0, db_encode/2, db_decode/2]).
+
 
 -type init_args() :: undefined | json_utils:json_term().
 
@@ -42,8 +41,8 @@
 %%%===================================================================
 
 
--spec init(atm_data_spec:record(), init_args()) -> container() | no_return().
-init(AtmDataSpec, InitArgs) ->
+-spec create(atm_data_spec:record(), init_args()) -> container() | no_return().
+create(AtmDataSpec, InitArgs) ->
     InitArgs == undefined orelse atm_data_validator:assert_instance(InitArgs, AtmDataSpec),
 
     #atm_single_value_container{
@@ -59,22 +58,41 @@ get_data_spec(#atm_single_value_container{data_spec = AtmDataSpec}) ->
 
 -spec get_container_stream(container()) -> atm_single_value_container_stream:stream().
 get_container_stream(#atm_single_value_container{value = Value}) ->
-    atm_single_value_container_stream:init(Value).
+    atm_single_value_container_stream:create(Value).
 
 
--spec to_json(container()) -> json_utils:json_map().
-to_json(#atm_single_value_container{data_spec = AtmDataSpec, value = undefined}) ->
-    #{<<"dataSpec">> => atm_data_spec:to_json(AtmDataSpec)};
-to_json(#atm_single_value_container{data_spec = AtmDataSpec, value = Value}) ->
+%%%===================================================================
+%%% persistent_record callbacks
+%%%===================================================================
+
+
+-spec version() -> persistent_record:record_version().
+version() ->
+    1.
+
+
+-spec db_encode(container(), persistent_record:nested_record_encoder()) ->
+    json_utils:json_term().
+db_encode(#atm_single_value_container{
+    data_spec = AtmDataSpec,
+    value = undefined
+}, NestedRecordEncoder) ->
+    #{<<"dataSpec">> => NestedRecordEncoder(AtmDataSpec, atm_data_spec)};
+
+db_encode(#atm_single_value_container{
+    data_spec = AtmDataSpec,
+    value = Value
+}, NestedRecordEncoder) ->
     #{
-        <<"dataSpec">> => atm_data_spec:to_json(AtmDataSpec),
+        <<"dataSpec">> => NestedRecordEncoder(AtmDataSpec, atm_data_spec),
         <<"value">> => Value
     }.
 
 
--spec from_json(json_utils:json_map()) -> container().
-from_json(#{<<"dataSpec">> := AtmDataSpecJson} = AtmSingleValueContainerJson) ->
+-spec db_decode(json_utils:json_term(), persistent_record:nested_record_decoder()) ->
+    container().
+db_decode(#{<<"dataSpec">> := AtmDataSpecJson} = AtmContainerJson, NestedRecordDecoder) ->
     #atm_single_value_container{
-        data_spec = atm_data_spec:from_json(AtmDataSpecJson),
-        value = maps:get(<<"value">>, AtmSingleValueContainerJson, undefined)
+        data_spec = NestedRecordDecoder(AtmDataSpecJson, atm_data_spec),
+        value = maps:get(<<"value">>, AtmContainerJson, undefined)
     }.

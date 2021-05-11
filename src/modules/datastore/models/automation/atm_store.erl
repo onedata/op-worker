@@ -28,15 +28,7 @@
 -type doc() :: datastore_doc:doc(record()).
 -type diff() :: datastore_doc:diff(record()).
 
--type type() :: atom().
--type name() :: binary().
--type summary() :: binary().
--type description() :: binary().
-
--export_type([
-    id/0, record/0, doc/0, diff/0,
-    type/0, name/0, summary/0, description/0
-]).
+-export_type([id/0, record/0, doc/0, diff/0]).
 
 
 -define(CTX, #{model => ?MODULE}).
@@ -94,5 +86,5 @@ get_record_struct(1) ->
         {description, string},
         {frozen, boolean},
         {is_input_store, boolean},
-        {container, {custom, string, {atm_container, encode, decode}}}
+        {container, {custom, string, {persistent_record, encode, decode, atm_container}}}
     ]}.

@@ -14,17 +14,16 @@
 -author("Bartosz Walkowicz").
 
 -behaviour(atm_container).
+-behaviour(persistent_record).
 
 -include_lib("ctool/include/errors.hrl").
 
 %% atm_container callbacks
--export([
-    init/2,
-    get_data_spec/1,
-    get_container_stream/1,
-    to_json/1,
-    from_json/1
-]).
+-export([create/2, get_data_spec/1, get_container_stream/1]).
+
+%% persistent_record callbacks
+-export([version/0, db_encode/2, db_decode/2]).
+
 
 %% Full 'init_args' format can't be expressed directly in type spec due to
 %% dialyzer limitations in specifying concrete binaries. Instead it is
@@ -53,38 +52,21 @@
 %%%===================================================================
 
 
--spec init(atm_data_spec:record(), init_args()) -> container() | no_return().
-init(AtmDataSpec, #{<<"end">> := EndNum} = InitialArgs) when is_integer(EndNum) ->
+-spec create(atm_data_spec:record(), init_args()) -> container() | no_return().
+create(AtmDataSpec, #{<<"end">> := EndNum} = InitialArgs) ->
     StartNum = maps:get(<<"start">>, InitialArgs, 0),
     Step = maps:get(<<"step">>, InitialArgs, 1),
 
-    case
-        atm_data_spec:get_type(AtmDataSpec) =:= atm_integer_type andalso
-        is_integer(StartNum) andalso is_integer(Step) andalso
-        is_proper_range(StartNum, EndNum, Step)
-    of
-        true ->
-            #atm_range_container{
-                data_spec = AtmDataSpec,
-                start_num = StartNum,
-                end_num = EndNum,
-                step = Step
-            };
-        false ->
-            throw(?EINVAL)
-    end;
-init(_AtmDataSpec, _InitialArgs) ->
-    throw(?EINVAL).
+    validate_init_args(StartNum, EndNum, Step, AtmDataSpec),
 
-
-%% @private
--spec is_proper_range(integer(), integer(), integer()) -> boolean().
-is_proper_range(Start, End, Step) when Start =< End, Step > 0 ->
-    true;
-is_proper_range(Start, End, Step) when Start >= End, Step < 0 ->
-    true;
-is_proper_range(_Start, _End, _Step) ->
-    false.
+    #atm_range_container{
+        data_spec = AtmDataSpec,
+        start_num = StartNum,
+        end_num = EndNum,
+        step = Step
+    };
+create(_AtmDataSpec, _InitialArgs) ->
+    throw(?ERROR_MISSING_REQUIRED_VALUE(<<"end">>)).
 
 
 -spec get_data_spec(container()) -> atm_data_spec:record().
@@ -98,34 +80,78 @@ get_container_stream(#atm_range_container{
     end_num = EndNum,
     step = Step
 }) ->
-    atm_range_container_stream:init(StartNum, EndNum, Step).
+    atm_range_container_stream:create(StartNum, EndNum, Step).
 
 
--spec to_json(container()) -> json_utils:json_map().
-to_json(#atm_range_container{
+%%%===================================================================
+%%% persistent_record callbacks
+%%%===================================================================
+
+
+-spec version() -> persistent_record:record_version().
+version() ->
+    1.
+
+
+-spec db_encode(container(), persistent_record:nested_record_encoder()) ->
+    json_utils:json_term().
+db_encode(#atm_range_container{
     data_spec = AtmDataSpec,
     start_num = StartNum,
     end_num = EndNum,
     step = Step
-}) ->
+}, NestedRecordEncoder) ->
     #{
-        <<"dataSpec">> => atm_data_spec:to_json(AtmDataSpec),
+        <<"dataSpec">> => NestedRecordEncoder(AtmDataSpec, atm_data_spec),
         <<"start">> => StartNum,
         <<"end">> => EndNum,
         <<"step">> => Step
     }.
 
 
--spec from_json(json_utils:json_map()) -> container().
-from_json(#{
+-spec db_decode(json_utils:json_term(), persistent_record:nested_record_decoder()) ->
+    container().
+db_decode(#{
     <<"dataSpec">> := AtmDataSpecJson,
     <<"start">> := StartNum,
     <<"end">> := EndNum,
     <<"step">> := Step
-}) ->
+}, NestedRecordDecoder) ->
     #atm_range_container{
-        data_spec = atm_data_spec:from_json(AtmDataSpecJson),
+        data_spec = NestedRecordDecoder(AtmDataSpecJson, atm_data_spec),
         start_num = StartNum,
         end_num = EndNum,
         step = Step
     }.
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+
+%% @private
+-spec validate_init_args(integer(), integer(), integer(), atm_data_spec:record()) ->
+    ok | no_return().
+validate_init_args(StartNum, EndNum, Step, AtmDataSpec) ->
+    %% TODO more descriptive logs
+    case
+        atm_data_spec:get_type(AtmDataSpec) =:= atm_integer_type andalso
+        is_integer(StartNum) andalso is_integer(EndNum) andalso is_integer(Step) andalso
+        is_proper_range(StartNum, EndNum, Step)
+    of
+        true ->
+            ok;
+        false ->
+            throw(?EINVAL)
+    end.
+
+
+%% @private
+-spec is_proper_range(integer(), integer(), integer()) -> boolean().
+is_proper_range(Start, End, Step) when Start =< End, Step > 0 ->
+    true;
+is_proper_range(Start, End, Step) when Start >= End, Step < 0 ->
+    true;
+is_proper_range(_Start, _End, _Step) ->
+    false.

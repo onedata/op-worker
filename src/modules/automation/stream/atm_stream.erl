@@ -7,13 +7,14 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module provides `iterator` functionality for `atm_container`
-%%% extending it with additional features like batch mode or filtering.
+%%% extending it with additional features like bulk mode or filtering.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_stream).
 -author("Bartosz Walkowicz").
 
 -behaviour(iterator).
+-behaviour(persistent_record).
 
 -include("modules/automation/atm_tmp.hrl").
 -include("modules/datastore/datastore_models.hrl").
@@ -22,12 +23,10 @@
 -export([init/2]).
 
 %% iterator callbacks
--export([
-    get_next/1,
-    jump_to/2,
-    to_json/1,
-    from_json/1
-]).
+-export([get_next/1, jump_to/2]).
+
+%% persistent_record callbacks
+-export([version/0, db_encode/2, db_decode/2]).
 
 
 -record(atm_stream, {
@@ -94,29 +93,41 @@ jump_to(Marker, #atm_stream{container_stream = AtmContainerStream} = AtmStream) 
     }.
 
 
--spec to_json(stream()) -> json_utils:json_map().
-to_json(#atm_stream{
+%%%===================================================================
+%%% persistent_record callbacks
+%%%===================================================================
+
+
+-spec version() -> persistent_record:record_version().
+version() ->
+    1.
+
+
+-spec db_encode(stream(), persistent_record:nested_record_encoder()) ->
+    json_utils:json_term().
+db_encode(#atm_stream{
     mode = Mode,
     data_spec = AtmDataSpec,
     container_stream = AtmContainerStream
-}) ->
+}, NestedRecordEncoder) ->
     #{
         <<"mode">> => mode_to_json(Mode),
-        <<"dataSpec">> => atm_data_spec:to_json(AtmDataSpec),
-        <<"containerStream">> => atm_container_stream:to_json(AtmContainerStream)
+        <<"dataSpec">> => NestedRecordEncoder(AtmDataSpec, atm_data_spec),
+        <<"containerStream">> => NestedRecordEncoder(AtmContainerStream, atm_container_stream)
     }.
 
 
--spec from_json(json_utils:json_map()) -> stream().
-from_json(#{
+-spec db_decode(json_utils:json_term(), persistent_record:nested_record_decoder()) ->
+    stream().
+db_decode(#{
     <<"mode">> := ModeJson,
     <<"dataSpec">> := AtmDataSpecJson,
     <<"containerStream">> := AtmContainerStreamJson
-}) ->
+}, NestedRecordDecoder) ->
     #atm_stream{
         mode = mode_from_json(ModeJson),
-        data_spec = atm_data_spec:from_json(AtmDataSpecJson),
-        container_stream = atm_container_stream:from_json(AtmContainerStreamJson)
+        data_spec = NestedRecordDecoder(AtmDataSpecJson, atm_data_spec),
+        container_stream = NestedRecordDecoder(AtmContainerStreamJson, atm_container_stream)
     }.
 
 
