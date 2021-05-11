@@ -20,7 +20,7 @@
 }).
 
 -record(atm_task_execution_argument_spec, {
-    name :: binary(),
+    name :: automation:name(),
     input_spec :: atm_task_execution:arg_input_spec(),
     data_spec :: atm_data_spec:record(),
     is_batch :: boolean()

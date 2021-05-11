@@ -47,20 +47,16 @@ create(AtmWorkflowExecutionId, #atm_task_schema{
 }, AtmLambda) ->
     %% TODO rm lambda arg after integration with lo
     #od_atm_lambda{
-        operation_spec = AtmLambdaOperationSpec = #atm_lambda_operation_spec{
-            spec = Spec
-        },
+        operation_spec = AtmLambdaOperationSpec,
         argument_specs = AtmLambdaArgSpecs
     } = AtmLambda,
-
-    ExecutorModel = get_executor_model(Spec),
 
     {ok, _} = atm_task_execution:create(#atm_task_execution{
         name = AtmTaskName,
         schema_id = AtmTaskSchemaId,
         lambda_id = AtmLambdaId,
         executor = atm_task_executor:create(
-            ExecutorModel, AtmWorkflowExecutionId, AtmLambdaOperationSpec
+            AtmWorkflowExecutionId, AtmLambdaOperationSpec
         ),
         argument_specs = atm_task_execution_args:build_specs(
             AtmLambdaArgSpecs, AtmTaskArgMappers
@@ -77,7 +73,7 @@ init(AtmTaskExecutionId) ->
 
 
 -spec run(json_utils:json_term(), atm_task_execution:id()) ->
-    {ok, atm_task_execution_api:task_id()} | no_return().
+    {ok, task_id()} | no_return().
 run(Item, AtmTaskExecutionId) ->
     #atm_task_execution{
         executor = AtmTaskExecutor,
@@ -100,12 +96,6 @@ delete(AtmTaskExecutionId) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-
-%% @private
--spec get_executor_model(atm_openfaas_operation_spec()) ->
-    atom().
-get_executor_model(#atm_openfaas_operation_spec{}) -> openfaas.
 
 
 %% @private

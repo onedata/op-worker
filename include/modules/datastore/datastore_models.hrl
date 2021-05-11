@@ -985,7 +985,7 @@
 
 %% Model storing information about automation task execution.
 -record(atm_task_execution, {
-    name :: binary(),
+    name :: automation:name(),
     schema_id :: binary(),
     lambda_id :: binary(),
     executor :: atm_task_executor:executor(),

@@ -7,21 +7,27 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module defines `atm_task_executor` interface - an object which can be
-%%% used to run an automation task.
+%%% used to execute an automation task with given arguments.
 %%%
 %%%                             !!! Caution !!!
-%%% This behaviour must be implemented by proper models, that is modules with
-%%% records of the same name.
+%%% 1) This behaviour must be implemented by proper models, that is modules with
+%%%    records of the same name.
+%%% 2) Models implementing this behaviour must also implement `persistent_record`
+%%%    behaviour.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_task_executor).
 -author("Bartosz Walkowicz").
 
+-behaviour(persistent_record).
+
 -include("modules/automation/atm_tmp.hrl").
 
 %% API
--export([create/3, init/1, run/2]).
--export([encode/1, decode/1]).
+-export([create/2, init/1, run/2]).
+
+%% persistent_record callbacks
+-export([version/0, db_encode/2, db_decode/2]).
 
 
 -type model() :: atm_openfaas_task_executor.
@@ -41,7 +47,7 @@
 %% mustn't perform any long lasting initialization tasks.
 %% @end
 %%--------------------------------------------------------------------
--callback create(atm_workflow_execution:id(), atm_lambda_operation_spec()) ->
+-callback create(atm_workflow_execution:id(), atm_lambda_operation_spec:record()) ->
     executor() | no_return().
 
 
@@ -56,27 +62,11 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Schedules task execution.
+%% Schedules task execution for specified arguments.
 %% @end
 %%--------------------------------------------------------------------
 -callback run(json_utils:json_map(), executor()) ->
     {ok, atm_task_execution_api:task_id()} | no_return().
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Encodes a record into a database-compliant JSON object.
-%% @end
-%%--------------------------------------------------------------------
--callback db_encode(executor()) -> json_utils:json_map().
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Decodes a record from a database-compliant JSON object.
-%% @end
-%%--------------------------------------------------------------------
--callback db_decode(json_utils:json_map()) -> executor().
 
 
 %%%===================================================================
@@ -84,13 +74,10 @@
 %%%===================================================================
 
 
--spec create(
-    operation_spec_engine(),
-    atm_workflow_execution:id(),
-    atm_lambda_operation_spec()
-) ->
+-spec create(atm_workflow_execution:id(), atm_lambda_operation_spec:record()) ->
     executor() | no_return().
-create(Engine, AtmWorkflowExecutionId, AtmLambadaOperationSpec) ->
+create(AtmWorkflowExecutionId, AtmLambadaOperationSpec) ->
+    Engine = atm_lambda_operation_spec:get_engine(AtmLambadaOperationSpec),
     Model = engine_to_executor_model(Engine),
     Model:create(AtmWorkflowExecutionId, AtmLambadaOperationSpec).
 
@@ -108,19 +95,35 @@ run(Arguments, AtmTaskExecutor) ->
     Model:run(Arguments, AtmTaskExecutor).
 
 
--spec encode(executor()) -> binary().
-encode(AtmTaskExecutor) ->
+%%%===================================================================
+%%% persistent_record callbacks
+%%%===================================================================
+
+
+-spec version() -> persistent_record:record_version().
+version() ->
+    1.
+
+
+-spec db_encode(executor(), persistent_record:nested_record_encoder()) ->
+    json_utils:json_term().
+db_encode(AtmTaskExecutor, NestedRecordEncoder) ->
     Model = utils:record_type(AtmTaskExecutor),
-    AtmContainerJson = Model:db_encode(AtmTaskExecutor),
-    json_utils:encode(AtmContainerJson#{<<"_type">> => atom_to_binary(Model, utf8)}).
+    Engine = executor_model_to_engine(Model),
+
+    maps:merge(
+        #{<<"engine">> => atm_lambda_operation_spec:engine_to_json(Engine)},
+        NestedRecordEncoder(AtmTaskExecutor, Model)
+    ).
 
 
--spec decode(binary()) -> executor().
-decode(AtmTaskExecutorBin) ->
-    AtmTaskExecutorJson = json_utils:decode(AtmTaskExecutorBin),
-    {ModelBin, AtmTaskExecutorJson2} = maps:take(<<"_type">>, AtmTaskExecutorJson),
-    Model = binary_to_atom(ModelBin, utf8),
-    Model:db_decode(AtmTaskExecutorJson2).
+-spec db_decode(json_utils:json_term(), persistent_record:nested_record_decoder()) ->
+    executor().
+db_decode(#{<<"engine">> := EngineJson} = AtmTaskExecutorJson, NestedRecordDecoder) ->
+    Engine = atm_lambda_operation_spec:engine_from_json(EngineJson),
+    Model = engine_to_executor_model(Engine),
+
+    NestedRecordDecoder(AtmTaskExecutorJson, Model).
 
 
 %%%===================================================================
@@ -129,5 +132,10 @@ decode(AtmTaskExecutorBin) ->
 
 
 %% @private
--spec engine_to_executor_model(operation_spec_engine()) -> model().
+-spec engine_to_executor_model(atm_lambda_operation_spec:engine()) -> model().
 engine_to_executor_model(openfaas) -> atm_openfaas_task_executor.
+
+
+%% @private
+-spec executor_model_to_engine(model()) -> atm_lambda_operation_spec:engine().
+executor_model_to_engine(atm_openfaas_task_executor) -> openfaas.

@@ -31,4 +31,4 @@
 assert_instance(Value, _ValueConstraints) when is_binary(Value) ->
     ok;
 assert_instance(Value, _ValueConstraints) ->
-    throw(?ERROR_ATM_DATA_TYPE_UNVERIFIED(Value, <<"string">>)).
+    throw(?ERROR_ATM_DATA_TYPE_UNVERIFIED(Value, atm_string_type)).

@@ -14,6 +14,7 @@
 
 -include("modules/automation/atm_tmp.hrl").
 
+-include_lib("ctool/include/automation/automation.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").

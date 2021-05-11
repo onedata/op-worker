@@ -31,4 +31,4 @@
 assert_instance(Value, _ValueConstraints) when is_integer(Value) ->
     ok;
 assert_instance(Value, _ValueConstraints) ->
-    throw(?ERROR_ATM_DATA_TYPE_UNVERIFIED(Value, <<"integer">>)).
+    throw(?ERROR_ATM_DATA_TYPE_UNVERIFIED(Value, atm_integer_type)).

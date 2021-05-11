@@ -7,31 +7,32 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module implements `atm_task_executor` functionality for `openfaas`
-%%% lambda engine.
+%%% lambda operation engine.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_openfaas_task_executor).
 -author("Bartosz Walkowicz").
 
 -behaviour(atm_task_executor).
+-behaviour(persistent_record).
 
 -include("http/gui_paths.hrl").
 -include("modules/automation/atm_tmp.hrl").
+-include_lib("ctool/include/automation/automation.hrl").
 -include_lib("ctool/include/http/codes.hrl").
 -include_lib("ctool/include/http/headers.hrl").
 
 
-%% API
--export([
-    create/2, init/1, run/2,
-    db_encode/1, db_decode/1
-]).
+%% atm_task_executor callbacks
+-export([create/2, init/1, run/2]).
+
+%% persistent_record callbacks
+-export([version/0, db_encode/2, db_decode/2]).
 
 
 -record(atm_openfaas_task_executor, {
     function_name :: binary(),
-    docker_image :: binary(),
-    docker_execution_options :: #atm_docker_execution_options{}
+    operation_spec :: atm_openfaas_operation_spec:record()
 }).
 -type executor() :: #atm_openfaas_task_executor{}.
 
@@ -56,24 +57,18 @@
 
 
 %%%===================================================================
-%%% API
+%%% atm_task_executor callbacks
 %%%===================================================================
 
 
--spec create(atm_workflow_execution:id(), atm_lambda_operation_spec()) ->
+-spec create(atm_workflow_execution:id(), atm_openfaas_operation_spec:record()) ->
     executor() | no_return().
-create(AtmWorkflowExecutionId, #atm_lambda_operation_spec{
-    spec = Spec = #atm_openfaas_operation_spec{
-        docker_image = DockerImage,
-        docker_execution_options = DockerExecutionOptions
-    }
-}) ->
-    get_openfaas_config(),
+create(AtmWorkflowExecutionId, #atm_openfaas_operation_spec{} = OperationSpec) ->
+    assert_openfaas_configured(),
 
     #atm_openfaas_task_executor{
-        function_name = get_function_name(AtmWorkflowExecutionId, Spec),
-        docker_image = DockerImage,
-        docker_execution_options = DockerExecutionOptions
+        function_name = get_function_name(AtmWorkflowExecutionId, OperationSpec),
+        operation_spec = OperationSpec
     }.
 
 
@@ -96,31 +91,37 @@ run(Data, AtmTaskExecutor) ->
     schedule_function_execution(Data, AtmTaskExecutor).
 
 
--spec db_encode(executor()) -> json_utils:json_map().
+%%%===================================================================
+%%% persistent_record callbacks
+%%%===================================================================
+
+
+-spec version() -> persistent_record:record_version().
+version() ->
+    1.
+
+
+-spec db_encode(executor(), persistent_record:nested_record_encoder()) ->
+    json_utils:json_term().
 db_encode(#atm_openfaas_task_executor{
     function_name = FunctionName,
-    docker_image = DockerImage,
-    docker_execution_options = DockerExecutionOptions
-}) ->
+    operation_spec = OperationSpec
+}, NestedRecordEncoder) ->
     #{
         <<"functionName">> => FunctionName,
-        <<"dockerImage">> => DockerImage,
-        % TODO replace with encoder from ctool
-        <<"dockerExecutionOptions">> => term_to_binary(DockerExecutionOptions)
+        <<"operationSpec">> => NestedRecordEncoder(OperationSpec, atm_openfaas_operation_spec)
     }.
 
 
--spec db_decode(json_utils:json_map()) -> executor().
+-spec db_decode(json_utils:json_term(), persistent_record:nested_record_decoder()) ->
+    executor().
 db_decode(#{
     <<"functionName">> := FunctionName,
-    <<"dockerImage">> := DockerImage,
-    <<"dockerExecutionOptions">> := DockerExecutionOptions
-}) ->
+    <<"operationSpec">> := OperationSpecJson
+}, NestedRecordDecoder) ->
     #atm_openfaas_task_executor{
         function_name = FunctionName,
-        docker_image = DockerImage,
-        % TODO replace with decoder from ctool
-        docker_execution_options = binary_to_term(DockerExecutionOptions)
+        operation_spec = NestedRecordDecoder(OperationSpecJson, atm_openfaas_operation_spec)
     }.
 
 
@@ -141,7 +142,7 @@ db_decode(#{
 %% must be unique.
 %% @end
 %%-------------------------------------------------------------------
--spec get_function_name(atm_workflow_execution:id(), atm_openfaas_operation_spec()) ->
+-spec get_function_name(atm_workflow_execution:id(), atm_openfaas_operation_spec:record()) ->
     binary().
 get_function_name(_AtmWorkflowExecutionId, #atm_openfaas_operation_spec{
     docker_image = DockerImage,
@@ -195,7 +196,7 @@ register_function(#init_ctx{
     openfaas_config = OpenfaasConfig,
     executor = #atm_openfaas_task_executor{
         function_name = FunctionName,
-        docker_image = DockerImage
+        operation_spec = #atm_openfaas_operation_spec{docker_image = DockerImage}
     }
 } = InitCtx) ->
     Endpoint = get_openfaas_endpoint(OpenfaasConfig, <<"/system/functions">>),
@@ -224,14 +225,18 @@ register_function(#init_ctx{
 %% @private
 -spec prepare_function_annotations(init_ctx()) -> json_utils:json_map().
 prepare_function_annotations(#init_ctx{executor = #atm_openfaas_task_executor{
-    docker_execution_options = #atm_docker_execution_options{mount_oneclient = false}}
+    operation_spec = #atm_openfaas_operation_spec{
+        docker_execution_options = #atm_docker_execution_options{mount_oneclient = false}
+    }}
 }) ->
     #{};
 prepare_function_annotations(#init_ctx{executor = #atm_openfaas_task_executor{
-    docker_execution_options = #atm_docker_execution_options{
-        mount_oneclient = true,
-        oneclient_mount_point = MountPoint,
-        oneclient_options = OneclientOptions
+    operation_spec = #atm_openfaas_operation_spec{
+        docker_execution_options = #atm_docker_execution_options{
+            mount_oneclient = true,
+            oneclient_mount_point = MountPoint,
+            oneclient_options = OneclientOptions
+        }
     }}
 }) ->
     #{<<"annotations">> => #{
@@ -250,7 +255,7 @@ await_function_readiness(InitCtx) ->
 %% @private
 -spec await_function_readiness(init_ctx(), non_neg_integer()) -> ok | no_return().
 await_function_readiness(_InitCtx, 0) ->
-    throw(?ERROR_ATM_OPENFAAS_FUNCTION_REGISTRATION_FAILURE);
+    throw(?ERROR_ATM_OPENFAAS_FUNCTION_REGISTRATION_FAILED);
 
 await_function_readiness(#init_ctx{
     openfaas_config = OpenfaasConfig,
@@ -303,6 +308,13 @@ schedule_function_execution(Data, #atm_openfaas_task_executor{
         _ ->
             throw(?ERROR_ATM_OPENFAAS_QUERY_FAILED)
     end.
+
+
+%% @private
+-spec assert_openfaas_configured() -> ok | no_return().
+assert_openfaas_configured() ->
+    get_openfaas_config(),
+    ok.
 
 
 %% @private

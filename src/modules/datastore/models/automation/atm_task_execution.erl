@@ -102,11 +102,11 @@ get_record_struct(1) ->
         {name, string},
         {schema_id, string},
         {lambda_id, string},
-        {executor, {custom, string, {atm_task_executor, encode, decode}}},
+        {executor, {custom, string, {persistent_record, encode, decode, atm_task_executor}}},
         {argument_specs, [{record, [
             {name, string},
             {input_spec, {custom, string, {json_utils, encode, decode}}},
-            {data_spec, {custom, string, {atm_data_spec, encode, decode}}},
+            {data_spec, {custom, string, {persistent_record, encode, decode, atm_data_spec}}},
             {is_batch, boolean}
         ]}]}
     ]}.

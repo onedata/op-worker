@@ -14,7 +14,7 @@
 
 -include("modules/automation/atm_task_execution.hrl").
 -include("modules/automation/atm_tmp.hrl").
--include_lib("ctool/include/errors.hrl").
+-include_lib("ctool/include/automation/automation.hrl").
 
 %% API
 -export([build_specs/2, build_args/2]).
@@ -25,7 +25,10 @@
 %%%===================================================================
 
 
--spec build_specs([atm_lambda_argument_spec()], [atm_task_schema_argument_mapper()]) ->
+-spec build_specs(
+    [atm_lambda_argument_spec:record()],
+    [atm_task_schema_argument_mapper()]
+) ->
     [atm_task_execution:arg_spec()].
 build_specs(AtmLambdaArgSpecs, AtmTaskSchemaArgMappers) ->
     build_specs(
@@ -59,8 +62,8 @@ build_args(AtmTaskExecutionCtx, AtmTaskExecutionArgSpecs) ->
 
 %% @private
 -spec order_atm_lambda_arg_specs_by_name(
-    atm_lambda_argument_spec(),
-    atm_lambda_argument_spec()
+    atm_lambda_argument_spec:record(),
+    atm_lambda_argument_spec:record()
 ) ->
     boolean().
 order_atm_lambda_arg_specs_by_name(
@@ -85,7 +88,7 @@ order_atm_task_schema_arg_mappers_by_name(
 
 %% @private
 -spec build_specs(
-    OrderedUniqueAtmLambdaArgSpecs :: [atm_lambda_argument_spec()],
+    OrderedUniqueAtmLambdaArgSpecs :: [atm_lambda_argument_spec:record()],
     OrderedUniqueAtmTaskSchemaArgMappers :: [atm_task_schema_argument_mapper()],
     AtmTaskExecutionArgSpecs :: [atm_task_execution:arg_spec()]
 ) ->
@@ -123,19 +126,19 @@ build_specs(
     _AtmTaskSchemaArgMappers,
     _AtmTaskExecutionArgSpecs
 ) ->
-    throw(?ERROR_ATM_NO_TASK_MAPPER_FOR_REQUIRED_LAMBDA_ARG(Name));
+    throw(?ERROR_ATM_NO_TASK_ARG_MAPPER_FOR_REQUIRED_LAMBDA_ARG(Name));
 
 build_specs(
     [],
     [#atm_task_schema_argument_mapper{name = Name} | _],
     _AtmTaskExecutionArgSpecs
 ) ->
-    throw(?ERROR_ATM_TASK_MAPPER_FOR_NONEXISTENT_LAMBDA_ARG(Name)).
+    throw(?ERROR_ATM_TASK_ARG_MAPPER_FOR_NONEXISTENT_LAMBDA_ARG(Name)).
 
 
 %% @private
 -spec build_spec(
-    atm_lambda_argument_spec(),
+    atm_lambda_argument_spec:record(),
     undefined | atm_task_schema_argument_mapper()
 ) ->
     atm_task_execution:arg_spec().
@@ -182,7 +185,7 @@ build_arg(#atm_task_execution_ctx{stores = Stores}, #{
     <<"inputRef">> := StoreSchemaId
 }) ->
     case maps:get(StoreSchemaId, Stores, undefined) of
-        undefined -> throw(?ERROR_TASK_ARG_MAPPER_INVALID_INPUT_SPEC);
+        undefined -> throw(?ERROR_TASK_ARG_MAPPER_NONEXISTENT_STORE(StoreSchemaId));
         StoreCredentials -> StoreCredentials
     end;
 
@@ -192,11 +195,11 @@ build_arg(#atm_task_execution_ctx{item = Item}, #{
     case maps:get(<<"inputRef">>, InputSpec, undefined) of
         undefined ->
             Item;
-        Path ->
+        Query ->
             % TODO fix query in case of array indices
-            case json_utils:query(Item, Path) of
+            case json_utils:query(Item, Query) of
                 {ok, Value} -> Value;
-                error -> throw(?ERROR_TASK_ARG_MAPPER_INVALID_INPUT_SPEC)
+                error -> throw(?ERROR_TASK_ARG_MAPPER_ITEM_QUERY_FAILED(Item, Query))
             end
     end;
 

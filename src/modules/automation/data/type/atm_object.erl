@@ -31,4 +31,4 @@
 assert_instance(Value, _ValueConstraints) when is_map(Value) ->
     ok;
 assert_instance(Value, _ValueConstraints) ->
-    throw(?ERROR_ATM_DATA_TYPE_UNVERIFIED(Value, <<"object">>)).
+    throw(?ERROR_ATM_DATA_TYPE_UNVERIFIED(Value, atm_object_type)).
