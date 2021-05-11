@@ -86,6 +86,7 @@ get_models() -> [
     deletion_marker,
     tree_traverse_progress,
     dataset,
+    archive,
     atm_store,
     atm_workflow_execution,
     atm_task_execution,

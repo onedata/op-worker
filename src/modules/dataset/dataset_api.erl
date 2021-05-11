@@ -21,28 +21,48 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([establish/2, update/4, detach/1, remove/1, move_if_applicable/2, extend_with_info/1]).
+-export([establish/2, update/4, detach/1, remove/1, move_if_applicable/2]).
 -export([get_info/1, get_effective_membership_and_protection_flags/1, get_effective_summary/1]).
 -export([list_top_datasets/4, list_children_datasets/3]).
+
+%% Archives API
+-export([archive/4, update_archive/2, get_archive_info/1, list_archives/3, remove_archive/1]).
+
+%% Utils
 -export([get_associated_file_ctx/1]).
 
 -type error() :: {error, term()}.
 
 -type info() :: #dataset_info{}.
-
 -type basic_entry() :: datasets_structure:entry().
 -type basic_entries() :: [basic_entry()].
 -type extended_entries() :: [info()].
 -type entries() :: basic_entries() | extended_entries().
 
+-type archive_info() :: #archive_info{}.
+-type basic_archive_entries() :: [archives_list:entry()].
+-type extended_archive_entries() :: [archive_info()].
+-type archive_entries() :: basic_archive_entries() | extended_archive_entries().
+-type archive_index() :: archives_list:index().
+
 -type listing_opts() :: datasets_structure:opts().
 -type listing_mode() :: ?BASIC_INFO | ?EXTENDED_INFO.
 -type index() :: datasets_structure:index().
 
--export_type([entries/0, listing_opts/0, index/0, listing_mode/0]).
+-export_type([entries/0, listing_opts/0, index/0, listing_mode/0, archive_entries/0, archive_index/0]).
 
+% Datasets
 % TODO VFS-7518 how should we handle race on creating dataset on the same file in 2 providers?
-% TODO VFS-7563 add tests concerning datasets
+% TODO VFS-7533 handle conflicts on remote modification of file-meta and dataset models
+% TODO VFS-7563 add tests concerning datasets to permissions test suites
+
+% Archives
+% TODO VFS-7548 API for archives
+% TODO VFS-7601 implement archivisation procedure
+% TODO VFS-7613 use datastore function for getting number of links in forest to acquire number of archives per dataset
+% TODO VFS-7616 refine archives' attributes
+% TODO VFS-7617 implement recall operation of archives
+% TODO VFS-7619 add tests concerning archives to permissions test suites
 
 -define(CRITICAL_SECTION(DatasetId, Function), critical_section:run({dataset, DatasetId}, Function)).
 
@@ -101,14 +121,19 @@ detach(DatasetId) ->
     ?CRITICAL_SECTION(DatasetId, fun() -> detach_internal(DatasetId) end).
 
 
--spec remove(dataset:id() | dataset:doc()) -> ok.
+-spec remove(dataset:id() | dataset:doc()) -> ok | error().
 remove(Doc = #document{key = DatasetId})->
     ?CRITICAL_SECTION(DatasetId, fun() ->
-        ok = remove_from_datasets_structure(Doc),
-        {ok, SpaceId} = dataset:get_space_id(Doc),
-        ok = dataset:delete(DatasetId),
-        ok = file_meta_dataset:remove(DatasetId),
-        dataset_eff_cache:invalidate_on_all_nodes(SpaceId)
+        case archives_list:is_empty(DatasetId) of
+            true ->
+                ok = remove_from_datasets_structure(Doc),
+                {ok, SpaceId} = dataset:get_space_id(Doc),
+                ok = dataset:delete(DatasetId),
+                ok = file_meta_dataset:remove(DatasetId),
+                dataset_eff_cache:invalidate_on_all_nodes(SpaceId);
+            false ->
+                {error, ?ENOTEMPTY}
+        end
     end);
 remove(DatasetId) when is_binary(DatasetId) ->
     {ok, Doc} = dataset:get(DatasetId),
@@ -194,13 +219,114 @@ list_children_datasets(DatasetId, Opts, ListingMode) ->
             {ok, extend_with_info(DatasetEntries), IsLast}
     end.
 
+%%%===================================================================
+%%% Archives API
+%%%===================================================================
+
+-spec archive(dataset:id(), archive:params(), archive:attrs(), od_user:id()) -> {ok, archive:id()} | error().
+archive(DatasetId, Params, Attrs, UserId) ->
+    {ok, DatasetDoc} = dataset:get(DatasetId),
+    {ok, State} = dataset:get_state(DatasetDoc),
+    case State of
+        ?ATTACHED_DATASET ->
+            {ok, SpaceId} = dataset:get_space_id(DatasetDoc),
+            case archive:create(DatasetId, SpaceId, UserId, Params, Attrs) of
+                {ok, ArchiveDoc} ->
+                    ArchiveId = archive:get_id(ArchiveDoc),
+                    Timestamp = archive:get_timestamp(ArchiveDoc),
+                    {ok, SpaceId} = dataset:get_space_id(DatasetDoc),
+                    archives_list:add(DatasetId, SpaceId, ArchiveId, Timestamp),
+                    {ok, ArchiveId};
+                    % TODO VFS-7601 schedule archivisation job here
+                {error, Error} ->
+                    Error
+            end;
+        ?DETACHED_DATASET ->
+            {error, ?EINVAL}
+        %% TODO VFS-7208 uncomment after introducing API errors to fslogic
+        % throw(?ERROR_BAD_DATA(state, <<"Detached dataset cannot be modified.">>));
+    end.
+
+
+-spec update_archive(archive:id(), archive:attrs()) -> ok | error().
+update_archive(ArchiveId, Attrs) ->
+    archive:update(ArchiveId, Attrs).
+
+
+-spec get_archive_info(archive:id()) -> {ok, archive_info()}.
+get_archive_info(ArchiveId) ->
+    get_archive_info(ArchiveId, undefined).
+
+
+%% @private
+-spec get_archive_info(archive:id() | archive:doc(), archive_index() | undefined) -> {ok, archive_info()}.
+get_archive_info(ArchiveDoc = #document{}, ArchiveIndex) ->
+    ArchiveId = archive:get_id(ArchiveDoc),
+    Timestamp = archive:get_timestamp(ArchiveDoc),
+    {ok, #archive_info{
+        id = ArchiveId,
+        dataset_id = archive:get_dataset_id(ArchiveDoc),
+        % DatasetId is also Uuid of file on which the dataset is established
+        root_dir = archive:get_root_dir(ArchiveDoc),
+        creation_timestamp = archive:get_timestamp(ArchiveDoc),
+        type = archive:get_type(ArchiveDoc),
+        character = archive:get_character(ArchiveDoc),
+        data_structure = archive:get_data_structure(ArchiveDoc),
+        metadata_structure = archive:get_metadata_structure(ArchiveDoc),
+        description = archive:get_description(ArchiveDoc),
+        index = case ArchiveIndex =:= undefined of
+            true -> archives_list:index(ArchiveId, Timestamp);
+            false -> ArchiveIndex
+        end
+    }};
+get_archive_info(ArchiveId, ArchiveIndex) ->
+    {ok, ArchiveDoc} = archive:get(ArchiveId),
+    get_archive_info(ArchiveDoc, ArchiveIndex).
+
+
+-spec list_archives(dataset:id(), archives_list:opts(), listing_mode()) ->
+        {ok, archive_entries(), IsLast :: boolean()}.
+list_archives(DatasetId, ListingOpts, ListingMode) ->
+    ArchiveEntries = archives_list:list(DatasetId, ListingOpts),
+    IsLast = maps:get(limit, ListingOpts) > length(ArchiveEntries),
+    case ListingMode of
+        ?BASIC_INFO ->
+            {ok, ArchiveEntries, IsLast};
+        ?EXTENDED_INFO ->
+            {ok, extend_with_archive_info(ArchiveEntries), IsLast}
+    end.
+
+
+-spec remove_archive(archive:id()) -> ok | error().
+remove_archive(ArchiveId) ->
+    case archive:get(ArchiveId) of
+        {ok, ArchiveDoc} ->
+            case archive:delete(ArchiveId) of
+                ok ->
+                    DatasetId = archive:get_dataset_id(ArchiveDoc),
+                    Timestamp = archive:get_timestamp(ArchiveDoc),
+                    SpaceId = archive:get_space_id(ArchiveDoc),
+                    archives_list:delete(DatasetId, SpaceId, ArchiveId, Timestamp);
+                ?ERROR_NOT_FOUND ->
+                    % there was race with other process removing the archive
+                    ok
+            end;
+        ?ERROR_NOT_FOUND ->
+            ok;
+        {error, _} = Error ->
+            Error
+    end.
+
+
+%%%===================================================================
+%%% Util functions
+%%%===================================================================
 
 -spec get_associated_file_ctx(dataset:doc()) -> file_ctx:ctx().
 get_associated_file_ctx(DatasetDoc) ->
     {ok, Uuid} = dataset:get_id(DatasetDoc),
     {ok, SpaceId} = dataset:get_space_id(DatasetDoc),
     file_ctx:new_by_uuid(Uuid, SpaceId).
-
 
 %%%===================================================================
 %%% Internal functions
@@ -277,7 +403,7 @@ collect_state_dependant_info(DatasetId, IndexOrUndefined) ->
 
 -spec collect_attached_info(dataset:doc(), index() | undefined) -> info().
 collect_attached_info(DatasetDoc, IndexOrUndefined) ->
-    {ok, Uuid} = dataset:get_id(DatasetDoc),
+    {ok, DatasetId = Uuid} = dataset:get_id(DatasetDoc),
     {ok, CreationTime} = dataset:get_creation_time(DatasetDoc),
     {ok, SpaceId} = dataset:get_space_id(DatasetDoc),
     {ok, FileDoc} = file_meta:get(Uuid),
@@ -288,11 +414,11 @@ collect_attached_info(DatasetDoc, IndexOrUndefined) ->
     {ok, EffAncestorDatasets} = dataset_eff_cache:get_eff_ancestor_datasets(EffCacheEntry),
     {ok, EffProtectionFlags} = dataset_eff_cache:get_eff_dataset_protection_flags(EffCacheEntry),
     FinalIndex = case IndexOrUndefined of
-        undefined -> entry_index(Uuid, FilePath);
+        undefined -> entry_index(DatasetId, FilePath);
         Index -> Index
     end,
     #dataset_info{
-        id = Uuid,
+        id = DatasetId,
         root_file_guid = file_ctx:get_logical_guid_const(FileCtx),
         creation_time = CreationTime,
         state = ?ATTACHED_DATASET,
@@ -304,13 +430,14 @@ collect_attached_info(DatasetDoc, IndexOrUndefined) ->
             true -> undefined;
             false -> hd(EffAncestorDatasets)
         end,
+        archives_count = archives_list:length(DatasetId),
         index = FinalIndex
     }.
 
 
 -spec collect_detached_info(dataset:doc(), index() | undefined) -> info().
 collect_detached_info(DatasetDoc, IndexOrUndefined) ->
-    {ok, Uuid} = dataset:get_id(DatasetDoc),
+    {ok, DatasetId = Uuid} = dataset:get_id(DatasetDoc),
     {ok, CreationTime} = dataset:get_creation_time(DatasetDoc),
     {ok, SpaceId} = dataset:get_space_id(DatasetDoc),
     {ok, DetachedInfo} = dataset:get_detached_info(DatasetDoc),
@@ -319,11 +446,11 @@ collect_detached_info(DatasetDoc, IndexOrUndefined) ->
     DetachedDatasetPath = detached_dataset_info:get_path(DetachedInfo),
     ProtectionFlags = detached_dataset_info:get_protection_flags(DetachedInfo),
     FinalIndex = case IndexOrUndefined of
-        undefined -> entry_index(Uuid, RootFilePath);
+        undefined -> entry_index(DatasetId, RootFilePath);
         Index -> Index
     end,
     #dataset_info{
-        id = Uuid,
+        id = DatasetId,
         root_file_guid = file_id:pack_guid(Uuid, SpaceId),
         creation_time = CreationTime,
         state = ?DETACHED_DATASET,
@@ -332,6 +459,7 @@ collect_detached_info(DatasetDoc, IndexOrUndefined) ->
         protection_flags = ProtectionFlags,
         eff_protection_flags = ?no_flags_mask,
         parent = detached_datasets:get_parent(SpaceId, DetachedDatasetPath),
+        archives_count = archives_list:length(DatasetId),
         index = FinalIndex
     }.
 
@@ -361,11 +489,25 @@ extend_with_info(DatasetEntries) ->
         try
             {true, collect_state_dependant_info(DatasetId, Index)}
         catch _:_ ->
-            % File can be not synchronized with other provider
+            % Dataset can be not synchronized with other provider
             false
         end
     end,
     lists_utils:pfiltermap(FilterMapFun, DatasetEntries, ?MAX_LIST_EXTENDED_DATASET_INFO_PROCS).
+
+
+-spec extend_with_archive_info(basic_archive_entries()) -> extended_archive_entries().
+extend_with_archive_info(ArchiveEntries) ->
+    FilterMapFun = fun({ArchiveIndex, ArchiveId}) ->
+        try
+            {ok, ArchiveInfo} = get_archive_info(ArchiveId, ArchiveIndex),
+            {true, ArchiveInfo}
+        catch _:_ ->
+            % Archive can be not synchronized with other provider
+            false
+        end
+    end,
+    lists_utils:pfiltermap(FilterMapFun, ArchiveEntries, ?MAX_LIST_EXTENDED_DATASET_INFO_PROCS).
 
 
 -spec entry_index(dataset:id(), file_meta:path()) -> index().

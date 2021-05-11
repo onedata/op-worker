@@ -877,7 +877,6 @@ get_global_time(Node) ->
 %%% SetUp and TearDown functions
 %%%===================================================================
 
-
 init_per_suite(Config) ->
     oct_background:init_per_suite(Config, #onenv_test_config{
         onenv_scenario = "api_tests",
@@ -895,6 +894,9 @@ init_per_suite(Config) ->
     }).
 
 
+end_per_suite(_Config) ->
+    oct_background:end_per_suite().
+
 init_per_group(_Group, Config) ->
     time_test_utils:freeze_time(Config),
     time_test_utils:set_current_time_seconds(1600000000),
@@ -911,21 +913,14 @@ init_per_group(_Group, Config) ->
     end,
     [{space_dir_dataset, SpaceDirDatasetId} | NewConfig].
 
-
 end_per_group(_Group, Config) ->
     onenv_dataset_test_utils:cleanup_all_datasets(space_krk_par),
     lfm_proxy:teardown(Config),
     time_test_utils:unfreeze_time(Config).
 
-
-end_per_suite(_Config) ->
-    oct_background:end_per_suite().
-
-
 init_per_testcase(_Case, Config) ->
     ct:timetrap({minutes, 10}),
     Config.
-
 
 end_per_testcase(_Case, _Config) ->
     ok.

@@ -263,8 +263,30 @@ cleanup_and_verify_datasets(Nodes, SpaceId, ForestType) ->
 cleanup_datasets(Node, SpaceId, ForestType) ->
     {ok, Datasets} = rpc:call(Node, datasets_structure, list_all_unsafe, [SpaceId, ForestType]),
     lists:foreach(fun({_DatasetPath, {DatasetId, _DatasetName, _Index}}) ->
-        ok = rpc:call(Node, dataset_api, remove, [DatasetId])
+        cleanup_dataset(Node, DatasetId)
     end, Datasets).
+
+
+%% @private
+-spec cleanup_dataset(node(), dataset:id()) -> ok.
+cleanup_dataset(Node, DatasetId) ->
+    cleanup_dataset_archives(Node, DatasetId, 0),
+    lfm_proxy:remove_dataset(Node, ?ROOT_SESS_ID, DatasetId).
+
+
+%% @private
+-spec cleanup_dataset_archives(node(), dataset:id(), non_neg_integer()) -> ok.
+cleanup_dataset_archives(Node, DatasetId, Offset) ->
+    Limit = 1000,
+    {ok, Archives, IsLast} =
+        lfm_proxy:list_archives(Node, ?ROOT_SESS_ID, DatasetId, #{offset => Offset, limit => Limit}),
+    lists:foreach(fun({_Index, ArchiveId}) ->
+        lfm_proxy:remove_archive(Node, ?ROOT_SESS_ID, ArchiveId)
+    end, Archives),
+    case IsLast of
+        true -> ok;
+        false -> cleanup_dataset_archives(Node, DatasetId, Offset + length(Archives))
+    end.
 
 
 %% @private
