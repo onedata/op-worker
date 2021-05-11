@@ -194,7 +194,7 @@ gs_protocol_supported_versions() ->
 
 
 -spec perform_io_test(session:id(), file_meta:path()) -> ok | error.
-perform_io_test(Session, Path) ->
+perform_io_test(SessionId, Path) ->
     BytesSize = 5000,
     SampleFileContent = str_utils:rand_hex(BytesSize),
 
@@ -204,8 +204,8 @@ perform_io_test(Session, Path) ->
     FilePath = filename:join([Path, <<"test_file">>]),
 
     IOFun = fun() ->
-        {ok, Guid} = lfm:create(Session, FilePath),
-        {ok, OpenHandle} = lfm:open(Session, ?FILE_REF(Guid), rdwr),
+        {ok, Guid} = lfm:create(SessionId, FilePath),
+        {ok, OpenHandle} = lfm:open(SessionId, ?FILE_REF(Guid), rdwr),
         {ok, WriteHandle, Size} = lfm:write(OpenHandle, 0, SampleFileContent),
         {ok, _ReadHandle, Data} = lfm:read(WriteHandle, 0, Size),
         case {Size, Data} of
@@ -214,8 +214,7 @@ perform_io_test(Session, Path) ->
         end
     end,
 
-    try IOFun() of
-        _ -> ok
+    try IOFun()
     catch
         error:_ -> error
     end.
