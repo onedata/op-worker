@@ -261,12 +261,13 @@ synchronize_file_for_entries(TaskId, UserCtx, FileCtx, QosEntries) ->
         true -> 
             ok;
         false ->
+            Res = replica_synchronizer:synchronize(UserCtx, FileCtx2, FileBlock, 
+                false, TransferId, ?QOS_SYNCHRONIZATION_PRIORITY),
             case file_popularity:increment_open(FileCtx) of
                 ok -> ok;
                 {error, not_found} -> ok
             end,
-            replica_synchronizer:synchronize(UserCtx, FileCtx2, FileBlock, 
-                false, TransferId, ?QOS_SYNCHRONIZATION_PRIORITY)
+            Res
     end,
     lists:foreach(fun(QosEntry) ->
         qos_entry:remove_transfer_from_list(QosEntry, TransferId)
