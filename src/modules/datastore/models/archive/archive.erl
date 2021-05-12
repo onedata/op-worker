@@ -60,7 +60,7 @@
     id/0, doc/0,
     creator/0, type/0, state/0, include_dip/0,
     layout/0, timestamp/0, description/0,
-    config/0, description/0, callback/0, diff/0
+    config/0, callback/0, diff/0
 ]).
 
 % @formatter:on

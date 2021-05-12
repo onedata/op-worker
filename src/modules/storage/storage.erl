@@ -553,9 +553,9 @@ sanitize_readonly_option(IdOrName, #{
     importedStorage := Imported
 }) ->
     case {
-        utils:ensure_boolean(Readonly),
-        utils:ensure_boolean(SkipStorageDetection),
-        utils:ensure_boolean(Imported)
+        utils:to_boolean(Readonly),
+        utils:to_boolean(SkipStorageDetection),
+        utils:to_boolean(Imported)
     } of
         {false, _, _} -> ok;
         {true, false, _} -> throw(?ERROR_BAD_VALUE_NOT_ALLOWED(skipStorageDetection, [true]));

@@ -46,10 +46,10 @@ from_json(ConfigJson = #{
 }) ->
     #archive_config{
 
-        layout = utils:ensure_atom(Layout),
+        layout = utils:to_atom(Layout),
         % optional values
-        incremental = utils:ensure_boolean(maps:get(<<"incremental">>, ConfigJson, ?DEFAULT_INCREMENTAL)),
-        include_dip = utils:ensure_boolean(maps:get(<<"includeDip">>, ConfigJson, ?DEFAULT_INCLUDE_DIP))
+        incremental = utils:to_boolean(maps:get(<<"incremental">>, ConfigJson, ?DEFAULT_INCREMENTAL)),
+        include_dip = utils:to_boolean(maps:get(<<"includeDip">>, ConfigJson, ?DEFAULT_INCLUDE_DIP))
     }.
 
 
