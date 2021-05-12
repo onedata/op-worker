@@ -261,6 +261,10 @@ synchronize_file_for_entries(TaskId, UserCtx, FileCtx, QosEntries) ->
         true -> 
             ok;
         false ->
+            case file_popularity:increment_open(FileCtx) of
+                ok -> ok;
+                {error, not_found} -> ok
+            end,
             replica_synchronizer:synchronize(UserCtx, FileCtx2, FileBlock, 
                 false, TransferId, ?QOS_SYNCHRONIZATION_PRIORITY)
     end,
