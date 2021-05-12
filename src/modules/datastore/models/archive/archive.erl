@@ -227,7 +227,7 @@ get_record_struct(1) ->
         {state, atom},
         {config, {record, [
             {incremental, boolean},
-            {dip, boolean},
+            {include_dip, boolean},
             {layout, atom}
         ]}},
         {preserved_callback, string},

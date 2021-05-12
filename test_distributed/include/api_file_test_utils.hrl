@@ -28,12 +28,12 @@
 
 -define(CLIENT_SPEC_FOR_SPACE_KRK_PAR(__ERRNO), #client_spec{
     correct = [
-%%        user2, % space owner - doesn't need any perms
+        user2, % space owner - doesn't need any perms
         user3  % files owner (see fun create_shared_file/1)
-    ]
-%%    unauthorized = [nobody],
-%%    forbidden_not_in_space = [user1],
-%%    forbidden_in_space = [{user4, ?ERROR_POSIX(__ERRNO)}]
+    ],
+    unauthorized = [nobody],
+    forbidden_not_in_space = [user1],
+    forbidden_in_space = [{user4, ?ERROR_POSIX(__ERRNO)}]
 }).
 -define(CLIENT_SPEC_FOR_SPACE_KRK_PAR, ?CLIENT_SPEC_FOR_SPACE_KRK_PAR(?EACCES)).
 
