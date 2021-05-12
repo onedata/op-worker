@@ -33,6 +33,7 @@
     periodical_autocleaning_should_evict_file_replica_when_it_is_replicated/1,
     forcefully_started_autocleaning_should_evict_file_replica_when_it_is_replicated/1,
     autocleaning_should_evict_file_replica_replicated_by_job/1,
+    autocleaning_should_evict_file_replica_replicated_by_qos/1,
     autocleaning_should_evict_file_replicas_until_it_reaches_configured_target/1,
     autocleaning_should_evict_file_replica_when_it_satisfies_all_enabled_rules/1,
     autocleaning_should_not_evict_file_replica_when_it_does_not_satisfy_max_open_count_rule/1,
@@ -59,6 +60,7 @@ all() -> [
     periodical_autocleaning_should_evict_file_replica_when_it_is_replicated,
     forcefully_started_autocleaning_should_evict_file_replica_when_it_is_replicated,
     autocleaning_should_evict_file_replica_replicated_by_job,
+    autocleaning_should_evict_file_replica_replicated_by_qos,
     autocleaning_should_evict_file_replicas_until_it_reaches_configured_target,
     autocleaning_should_evict_file_replica_when_it_satisfies_all_enabled_rules,
     autocleaning_should_not_evict_file_replica_when_it_does_not_satisfy_max_open_count_rule,
@@ -313,6 +315,37 @@ autocleaning_should_evict_file_replica_replicated_by_job(Config) ->
     schedule_file_replication(W1, SessId, Guid, ProviderId1),
     ?assertDistribution(W1, SessId, ?DISTS([DomainP1, DomainP2], [Size, Size]), Guid),
     ?assertEqual(Size, current_size(W1, ?SPACE_ID), ?ATTEMPTS),
+    ?assertDistribution(W1, SessId, ?DISTS([DomainP1, DomainP2], [0, Size]), Guid),
+    ?assertOneOfReports({ok, #{
+        released_bytes := Size,
+        bytes_to_release := Size,
+        files_number := 1,
+        status := ?COMPLETED
+    }}, W1, ?SPACE_ID).
+
+autocleaning_should_evict_file_replica_replicated_by_qos(Config) ->
+    [W1, W2 | _] = ?config(op_worker_nodes, Config),
+    SessId = ?SESSION(W1, Config),
+    SessId2 = ?SESSION(W2, Config),
+    FileName = ?FILE_NAME,
+    Size = 10,
+    DomainP1 = ?GET_DOMAIN_BIN(W1),
+    DomainP2 = ?GET_DOMAIN_BIN(W2),
+    ProviderId1 = provider_id(W1),
+    enable_file_popularity(W1, ?SPACE_ID),
+    
+    Guid = write_file(W2, SessId2, ?FILE_PATH(FileName), Size),
+    configure_autocleaning(W1, ?SPACE_ID, #{
+        enabled => true,
+        target => 0,
+        threshold => Size - 1
+    }),
+    ?assertDistribution(W1, SessId, ?DISTS([DomainP2], [Size]), Guid),
+    {ok, QosEntryId} = lfm_proxy:add_qos_entry(W1, SessId, ?FILE_REF(Guid), <<"providerId=", ProviderId1/binary>>, 1),
+    ?assertMatch({ok, {#{QosEntryId := _}, _}}, lfm_proxy:get_effective_file_qos(W1, SessId, ?FILE_REF(Guid))),
+    ?assertDistribution(W1, SessId, ?DISTS([DomainP1, DomainP2], [Size, Size]), Guid),
+    ?assertEqual(Size, current_size(W1, ?SPACE_ID), ?ATTEMPTS),
+    ok = lfm_proxy:remove_qos_entry(W1, SessId, QosEntryId),
     ?assertDistribution(W1, SessId, ?DISTS([DomainP1, DomainP2], [0, Size]), Guid),
     ?assertOneOfReports({ok, #{
         released_bytes := Size,
