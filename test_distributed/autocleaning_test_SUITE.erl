@@ -16,7 +16,6 @@
 -include("lfm_test_utils.hrl").
 -include("modules/fslogic/acl.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
--include("modules/autocleaning/autocleaning.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -140,9 +139,9 @@ all() -> [
     __Guid
 end).
 
--define(FAILED_BIN, str_utils:to_binary(?FAILED)).
--define(COMPLETED_BIN, str_utils:to_binary(<<"completed">>)).
--define(ACTIVE_BIN, str_utils:to_binary(<<"active">>)).
+-define(FAILED, <<"failed">>).
+-define(COMPLETED, <<"completed">>).
+-define(ACTIVE, <<"active">>).
 -define(CANCELLING, <<"cancelling">>).
 -define(CANCELLED, <<"cancelled">>).
 
@@ -200,7 +199,7 @@ autocleaning_should_not_evict_file_replica_when_it_is_not_replicated(Config) ->
         released_bytes := 0,
         bytes_to_release := Size,
         files_number := 0,
-        status := ?FAILED_BIN
+        status := ?FAILED
     }}, W1, ?SPACE_ID).
 
 autocleaning_should_evict_file_replica_when_it_is_replicated(Config) ->
@@ -227,7 +226,7 @@ autocleaning_should_evict_file_replica_when_it_is_replicated(Config) ->
         released_bytes := Size,
         bytes_to_release := Size,
         files_number := 1,
-        status := ?COMPLETED_BIN
+        status := ?COMPLETED
     }}, W1, ?SPACE_ID).
 
 periodical_autocleaning_should_evict_file_replica_when_it_is_replicated(Config) ->
@@ -257,7 +256,7 @@ periodical_autocleaning_should_evict_file_replica_when_it_is_replicated(Config) 
         released_bytes := Size,
         bytes_to_release := Size,
         files_number := 1,
-        status := ?COMPLETED_BIN
+        status := ?COMPLETED
     }}, W1, ?SPACE_ID).
 
 forcefully_started_autocleaning_should_evict_file_replica_when_it_is_replicated(Config) ->
@@ -290,7 +289,7 @@ forcefully_started_autocleaning_should_evict_file_replica_when_it_is_replicated(
         released_bytes := Size,
         bytes_to_release := Size,
         files_number := 1,
-        status := ?COMPLETED_BIN
+        status := ?COMPLETED
     }}, W1, ARId).
 
 autocleaning_should_evict_file_replica_replicated_by_job(Config) ->
@@ -319,7 +318,7 @@ autocleaning_should_evict_file_replica_replicated_by_job(Config) ->
         released_bytes := Size,
         bytes_to_release := Size,
         files_number := 1,
-        status := ?COMPLETED_BIN
+        status := ?COMPLETED
     }}, W1, ?SPACE_ID).
 
 autocleaning_should_evict_file_replicas_until_it_reaches_configured_target(Config) ->
@@ -408,7 +407,7 @@ autocleaning_should_evict_file_replica_when_it_satisfies_all_enabled_rules(Confi
         released_bytes := Size,
         bytes_to_release := Size,
         files_number := 1,
-        status := ?COMPLETED_BIN
+        status := ?COMPLETED
     }}, W1, ?SPACE_ID).
 
 autocleaning_should_not_evict_file_replica_when_it_does_not_satisfy_max_open_count_rule(Config) ->
@@ -555,7 +554,7 @@ restart_autocleaning_run_test(Config) ->
     Ctx = rpc:call(W1, autocleaning_run, get_ctx, []),
     Doc = #document{
         value = #autocleaning_run{
-            status = ?ACTIVE,
+            status = binary_to_atom(?ACTIVE, utf8),
             space_id = ?SPACE_ID,
             started_at = StartTime = rpc:call(W1, global_clock, timestamp_seconds, []),
             bytes_to_release = Size - Target
@@ -579,7 +578,7 @@ restart_autocleaning_run_test(Config) ->
         released_bytes := Size,
         bytes_to_release := Size,
         files_number := 1,
-        status := ?COMPLETED_BIN
+        status := ?COMPLETED
     }}, get_run_report(W1, ARId)).
 
 autocleaning_should_evict_file_when_it_is_old_enough(Config) ->
@@ -624,7 +623,7 @@ autocleaning_should_evict_file_when_it_is_old_enough(Config) ->
         released_bytes := Size,
         bytes_to_release := Size,
         files_number := 1,
-        status := ?COMPLETED_BIN
+        status := ?COMPLETED
     }},  W1, ?SPACE_ID).
 
 autocleaning_should_not_evict_opened_file_replica(Config) ->
@@ -661,7 +660,7 @@ autocleaning_should_not_evict_opened_file_replica(Config) ->
         released_bytes := 0,
         bytes_to_release := Size,
         files_number := 0,
-        status := ?FAILED_BIN
+        status := ?FAILED
     }},  W1, ?SPACE_ID).
 
 cancel_autocleaning_run(Config) ->
@@ -720,7 +719,7 @@ cancel_autocleaning_run(Config) ->
             released_bytes := ReleasedBytes,
             bytes_to_release := TotalSize,
             files_number := FilesNumber,
-            status := ?ACTIVE_BIN
+            status := ?ACTIVE
         }} = get_run_report(W1, ARId),
         ReleasedBytes > 0 andalso FilesNumber > 0
     end, ?ATTEMPTS),
@@ -809,7 +808,7 @@ time_warp_test(Config) ->
         {ok, #{
             released_bytes := ReleasedBytes,
             bytes_to_release := BytesToRelease,
-            status := ?COMPLETED_BIN,
+            status := ?COMPLETED,
             started_at := StartTimeIso8601,
             stopped_at := StartTimeIso8601
         }} = get_run_report(W1, ARId),
@@ -918,7 +917,7 @@ autocleaning_should_not_evict_file_replica_when_it_does_not_satisfy_one_rule_tes
         released_bytes := 0,
         bytes_to_release := Size,
         files_number := 0,
-        status := ?FAILED_BIN
+        status := ?FAILED
     }},  W1, ?SPACE_ID).
 
 %%%===================================================================
