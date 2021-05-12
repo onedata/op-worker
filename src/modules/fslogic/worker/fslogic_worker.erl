@@ -783,10 +783,11 @@ handle_provider_request(UserCtx, #list_children_datasets{id = DatasetId, opts = 
 handle_provider_request(UserCtx, #archive_dataset{
     id = DatasetId,
     config = Config,
-    callback = Callback,
+    preserved_callback = PreservedCallback,
+    purged_callback = PurgedCallback,
     description = Description
 }, SpaceDirCtx) ->
-    dataset_req:archive(SpaceDirCtx, DatasetId, Config, Callback, Description, UserCtx);
+    dataset_req:archive(SpaceDirCtx, DatasetId, Config, PreservedCallback, PurgedCallback, Description, UserCtx);
 handle_provider_request(UserCtx, #update_archive{id = ArchiveId, diff = Diff}, SpaceDirCtx) ->
     dataset_req:update_archive(SpaceDirCtx, ArchiveId, Diff, UserCtx);
 handle_provider_request(UserCtx, #get_archive_info{id = ArchiveId}, SpaceDirCtx) ->

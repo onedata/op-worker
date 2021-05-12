@@ -32,7 +32,7 @@
 
 %% Archives API
 -export([
-    archive/6,
+    archive/7,
     update_archive/4,
     get_archive_info/3,
     list_archives/5,
@@ -126,13 +126,14 @@ list_children_datasets(SpaceDirCtx, Dataset, Opts, ListingMode, UserCtx) ->
 %%%===================================================================
 
 -spec archive(file_ctx:ctx(), dataset:id(), archive:config(), archive:callback(),
-    archive:description(), user_ctx:ctx()) ->
+    archive:callback(), archive:description(), user_ctx:ctx()) ->
     fslogic_worker:provider_response().
-archive(SpaceDirCtx, DatasetId, Config, PreservedCallback, Description, UserCtx) ->
+archive(SpaceDirCtx, DatasetId, Config, PreservedCallback, PurgedCallback, Description, UserCtx) ->
     assert_has_eff_privilege(SpaceDirCtx, UserCtx, ?SPACE_MANAGE_DATASETS),
     assert_has_eff_privilege(SpaceDirCtx, UserCtx, ?SPACE_CREATE_ARCHIVES),
 
-    {ok, ArchiveId} = dataset_api:archive(DatasetId, Config, PreservedCallback, Description, user_ctx:get_user_id(UserCtx)),
+    {ok, ArchiveId} = dataset_api:archive(DatasetId, Config, PreservedCallback, PurgedCallback,
+        Description, user_ctx:get_user_id(UserCtx)),
     ?PROVIDER_OK_RESP(#dataset_archived{id = ArchiveId}).
 
 

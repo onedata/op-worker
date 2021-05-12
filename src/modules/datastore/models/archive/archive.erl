@@ -17,7 +17,7 @@
 -include("modules/datastore/datastore_runner.hrl").
 
 %% API
--export([create/6, get/1, modify_attrs/2, delete/1, mark_purging/2]).
+-export([create/7, get/1, modify_attrs/2, delete/1, mark_purging/2]).
 
 % getters
 -export([get_id/1, get_creation_time/1, get_dataset_id/1, get_root_dir/1, get_space_id/1,
@@ -78,9 +78,9 @@
 %%% API functions
 %%%===================================================================
 
--spec create(dataset:id(), od_space:id(), creator(), config(), callback(), description()) ->
+-spec create(dataset:id(), od_space:id(), creator(), config(), callback(), callback(), description()) ->
     {ok, doc()} | error().
-create(DatasetId, SpaceId, Creator, Config, PreservedCallback, Description) ->
+create(DatasetId, SpaceId, Creator, Config, PreservedCallback, PurgedCallback, Description) ->
     datastore_model:create(?CTX, #document{
         value = #archive{
             dataset_id = DatasetId,
@@ -89,6 +89,7 @@ create(DatasetId, SpaceId, Creator, Config, PreservedCallback, Description) ->
             state = ?ARCHIVE_PENDING,
             config = Config,
             preserved_callback = PreservedCallback,
+            purged_callback = PurgedCallback,
             description = Description
         },
         scope = SpaceId

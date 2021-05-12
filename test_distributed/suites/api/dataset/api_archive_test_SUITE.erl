@@ -118,12 +118,13 @@ create_archive(_Config) ->
             ],
             data_spec = #data_spec{
                 required = [<<"datasetId">>, <<"config">>],
-                optional = [<<"description">>, <<"preservedCallback">>],
+                optional = [<<"description">>, <<"preservedCallback">>, <<"purgedCallback">>],
                 correct_values = #{
                     <<"datasetId">> => [DatasetId],
                     <<"config">> => generate_all_valid_configs(),
                     <<"description">> => [<<"Test description">>],
-                    <<"preservedCallback">> => [?ARCHIVE_PRESERVED_CALLBACK_URL()]
+                    <<"preservedCallback">> => [?ARCHIVE_PRESERVED_CALLBACK_URL()],
+                    <<"purgedCallback">> => [?ARCHIVE_PURGED_CALLBACK_URL()]
                 },
                 bad_values = [
                     {<<"datasetId">>, ?NON_EXISTENT_DATASET_ID, ?ERROR_FORBIDDEN},
@@ -136,7 +137,8 @@ create_archive(_Config) ->
                     {<<"config">>, #{<<"layout">> => <<"not allowed layout">>},
                         ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"layout">>, ensure_binaries(?ARCHIVE_LAYOUTS))},
                     {<<"description">>, [123, 456], ?ERROR_BAD_VALUE_BINARY(<<"description">>)},
-                    {<<"preservedCallback">>, <<"htp:/wrong-url.org">>, ?ERROR_BAD_DATA(<<"preservedCallback">>)}
+                    {<<"preservedCallback">>, <<"htp:/wrong-url.org">>, ?ERROR_BAD_DATA(<<"preservedCallback">>)},
+                    {<<"purgedCallback">>, <<"htp:/wrong-url.org">>, ?ERROR_BAD_DATA(<<"purgedCallback">>)}
                 ]
             }
         }
@@ -218,8 +220,10 @@ build_create_archive_validate_gs_call_result_fun(MemRef) ->
         Config = archive_config:from_json(maps:get(<<"config">>, Data)),
         Description = maps:get(<<"description">>, Data, ?DEFAULT_ARCHIVE_DESCRIPTION),
         PreservedCallback = maps:get(<<"preservedCallback">>, Data, undefined),
+        PurgedCallback = maps:get(<<"purgedCallback">>, Data, undefined),
 
-        ExpArchiveData = build_archive_gs_instance(ArchiveId, DatasetId, CreationTime, Config, Description, PreservedCallback),
+        ExpArchiveData = build_archive_gs_instance(ArchiveId, DatasetId, CreationTime, Config, Description,
+            PreservedCallback, PurgedCallback),
         ?assertEqual(ExpArchiveData, ArchiveData)
     end.
 
@@ -322,7 +326,7 @@ get_archive_info(_Config) ->
                     validate_result_fun = fun(#api_test_ctx{node = TestNode}, {ok, Result}) ->
                         CreationTime = time_test_utils:global_seconds(TestNode),
                         ExpArchiveData = build_archive_gs_instance(ArchiveId, DatasetId, CreationTime, Config,
-                            Description, undefined),
+                            Description, undefined, undefined),
                         ?assertEqual(ExpArchiveData, Result)
                     end
                 }
@@ -851,8 +855,8 @@ list_archive_ids(Node, UserSessId, DatasetId, ListOpts) ->
 
 %% @private
 -spec build_archive_gs_instance(archive:id(), dataset:id(), archive:timestamp(), archive:config(),
-    archive:description(), archive:callback()) -> json_utils:json_term().
-build_archive_gs_instance(ArchiveId, DatasetId, CreationTime, Config, Description, PreservedCallback) ->
+    archive:description(), archive:callback(), archive:callback()) -> json_utils:json_term().
+build_archive_gs_instance(ArchiveId, DatasetId, CreationTime, Config, Description, PreservedCallback, PurgedCallback) ->
     BasicInfo = archive_gui_gs_translator:translate_archive_info(#archive_info{
         id = ArchiveId,
         dataset_id = DatasetId,
@@ -862,6 +866,7 @@ build_archive_gs_instance(ArchiveId, DatasetId, CreationTime, Config, Descriptio
         config = Config,
         description = Description,
         preserved_callback = PreservedCallback,
+        purged_callback = PurgedCallback,
         index = archives_list:index(ArchiveId, CreationTime)
     }),
     BasicInfo#{<<"revision">> => 1}.

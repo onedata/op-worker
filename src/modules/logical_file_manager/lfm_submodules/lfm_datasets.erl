@@ -23,7 +23,7 @@
 ]).
 
 %% Archives API
--export([archive/5, update_archive/3, get_archive_info/2, list_archives/4, init_archive_purge/3]).
+-export([archive/6, update_archive/3, get_archive_info/2, list_archives/4, init_archive_purge/3]).
 
 -type info() :: #dataset_info{}.
 -type archive_info() :: #archive_info{}.
@@ -122,12 +122,18 @@ list_children_datasets(SessId, DatasetId, Opts, ListingMode) ->
 %%% Archives API functions
 %%%===================================================================
 
--spec archive(session:id(), dataset:id(), archive:config(), archive:callback(), archive:description()) ->
+-spec archive(session:id(), dataset:id(), archive:config(), archive:callback(), archive:callback(), archive:description()) ->
     {ok, archive:id()} | lfm:error_reply().
-archive(SessId, DatasetId, Config, Callback, Description) ->
+archive(SessId, DatasetId, Config, PreservedCallback, PurgedCallback, Description) ->
     SpaceGuid = dataset_id_to_space_guid(DatasetId),
     remote_utils:call_fslogic(SessId, provider_request, SpaceGuid,
-        #archive_dataset{id = DatasetId, config = Config, description = Description, callback = Callback},
+        #archive_dataset{
+            id = DatasetId,
+            config = Config,
+            description = Description,
+            preserved_callback = PreservedCallback,
+            purged_callback = PurgedCallback
+        },
         fun(#dataset_archived{id = ArchiveId}) ->
             {ok, ArchiveId}
         end

@@ -27,7 +27,7 @@
 -export([list_top_datasets/4, list_children_datasets/3]).
 
 %% Archives API
--export([archive/5, update_archive/2, get_archive_info/1, list_archives/3, init_archive_purge/2]).
+-export([archive/6, update_archive/2, get_archive_info/1, list_archives/3, init_archive_purge/2]).
 
 %% Exported for use in tests
 -export([remove_archive/1]).
@@ -229,15 +229,17 @@ list_children_datasets(DatasetId, Opts, ListingMode) ->
 %%% Archives API
 %%%===================================================================
 
--spec archive(dataset:id(), archive:config(), archive:description(), archive:callback(),
+-spec archive(dataset:id(), archive:config(), archive:description(), archive:callback(), archive:callback(),
     od_user:id()) -> {ok, archive:id()} | error().
-archive(DatasetId, Config, PreservedCallback, Description, UserId) ->
+archive(DatasetId, Config, PreservedCallback, PurgedCallback, Description, UserId) ->
     {ok, DatasetDoc} = dataset:get(DatasetId),
     {ok, State} = dataset:get_state(DatasetDoc),
     case State of
         ?ATTACHED_DATASET ->
             {ok, SpaceId} = dataset:get_space_id(DatasetDoc),
-            case archive:create(DatasetId, SpaceId, UserId, Config, PreservedCallback, Description) of
+            case archive:create(DatasetId, SpaceId, UserId, Config,
+                PreservedCallback, PurgedCallback, Description)
+            of
                 {ok, ArchiveDoc} ->
                     ArchiveId = archive:get_id(ArchiveDoc),
                     Timestamp = archive:get_creation_time(ArchiveDoc),

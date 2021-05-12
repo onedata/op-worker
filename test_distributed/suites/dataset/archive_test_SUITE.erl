@@ -119,6 +119,7 @@ all() -> [
 -define(TEST_ARCHIVE_PRESERVED_CALLBACK2, <<"https://preserved1.org">>).
 -define(TEST_ARCHIVE_PURGED_CALLBACK1, <<"https://purged1.org">>).
 -define(TEST_ARCHIVE_PURGED_CALLBACK2, <<"https://purged2.org">>).
+-define(TEST_ARCHIVE_PURGED_CALLBACK3, <<"https://purged3.org">>).
 
 -define(TEST_TIMESTAMP, 1000000000).
 
@@ -468,7 +469,7 @@ simple_archive_crud_test_base(Guid) ->
 
     % create archive
     {ok, ArchiveId} = lfm_proxy:archive_dataset(P1Node, UserSessIdP1, DatasetId, ?TEST_ARCHIVE_CONFIG,
-        ?TEST_ARCHIVE_PRESERVED_CALLBACK1, ?TEST_DESCRIPTION1
+        ?TEST_ARCHIVE_PRESERVED_CALLBACK1, ?TEST_ARCHIVE_PURGED_CALLBACK1, ?TEST_DESCRIPTION1
     ),
 
     Index = archives_list:index(ArchiveId, ?TEST_TIMESTAMP),
@@ -485,7 +486,7 @@ simple_archive_crud_test_base(Guid) ->
             layout = ?ARCHIVE_BAGIT_LAYOUT
         },
         preserved_callback = ?TEST_ARCHIVE_PRESERVED_CALLBACK1,
-        purged_callback = undefined,
+        purged_callback = ?TEST_ARCHIVE_PURGED_CALLBACK1,
         description = ?TEST_DESCRIPTION1
     },
 
@@ -523,7 +524,7 @@ simple_archive_crud_test_base(Guid) ->
         lfm_proxy:get_archive_info(P1Node, UserSessIdP1, ArchiveId), ?ATTEMPTS),
 
     % remove archive
-    ok = lfm_proxy:init_archive_purge(P1Node, UserSessIdP1, ArchiveId, ?TEST_ARCHIVE_PURGED_CALLBACK1),
+    ok = lfm_proxy:init_archive_purge(P1Node, UserSessIdP1, ArchiveId, ?TEST_ARCHIVE_PURGED_CALLBACK3),
 
     % verify whether Archive has been removed in the local provider
     ?assertEqual({error, ?ENOENT},

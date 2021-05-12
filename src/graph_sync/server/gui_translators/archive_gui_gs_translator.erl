@@ -47,8 +47,7 @@ translate_archive_info(#archive_info{
     description = Description,
     index = Index
 }) ->
-    ConfigJson = archive_config:to_json(Config),
-    ConfigJson#{
+    #{
         <<"gri">> => gri:serialize(#gri{
             type = op_archive, id = ArchiveId,
             aspect = instance, scope = private

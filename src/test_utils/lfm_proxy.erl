@@ -80,7 +80,7 @@
     get_dataset_info/3, get_file_eff_dataset_summary/3,
     list_top_datasets/5, list_top_datasets/6, list_children_datasets/4,
 
-    archive_dataset/5, archive_dataset/6,
+    archive_dataset/5, archive_dataset/7,
     update_archive/4, get_archive_info/3,
     list_archives/4, list_archives/5,
     init_archive_purge/3, init_archive_purge/4
@@ -925,12 +925,12 @@ list_children_datasets(Worker, SessId, DatasetId, Opts) ->
 -spec archive_dataset(node(), session:id(), dataset:id(), archive:config(),
     archive:description()) -> {ok, archive:id()} | lfm:error_reply().
 archive_dataset(Worker, SessId, DatasetId, Config, Description) ->
-    archive_dataset(Worker, SessId, DatasetId, Config, undefined, Description).
+    archive_dataset(Worker, SessId, DatasetId, Config, undefined, undefined, Description).
 
 -spec archive_dataset(node(), session:id(), dataset:id(), archive:config(), archive:callback(),
-    archive:description()) -> {ok, archive:id()} | lfm:error_reply().
-archive_dataset(Worker, SessId, DatasetId, Config, Callback, Description) ->
-    ?EXEC(Worker, lfm:archive_dataset(SessId, DatasetId, Config, Callback, Description)).
+    archive:callback(), archive:description()) -> {ok, archive:id()} | lfm:error_reply().
+archive_dataset(Worker, SessId, DatasetId, Config, PreservedCallback, PurgedCallback, Description) ->
+    ?EXEC(Worker, lfm:archive_dataset(SessId, DatasetId, Config, PreservedCallback, PurgedCallback, Description)).
 
 
 -spec update_archive(node(), session:id(), archive:id(), archive:diff()) -> ok | lfm:error_reply().

@@ -67,7 +67,8 @@ data_spec(#op_req{operation = create, gri = #gri{aspect = instance}}) -> #{
     },
     optional => #{
         <<"description">> => {binary, any},
-        <<"preservedCallback">> => {binary, fun(Callback) -> url_utils:is_valid(Callback) end}
+        <<"preservedCallback">> => {binary, fun(Callback) -> url_utils:is_valid(Callback) end},
+        <<"purgedCallback">> => {binary, fun(Callback) -> url_utils:is_valid(Callback) end}
     }
 };
 data_spec(#op_req{operation = create, gri = #gri{aspect = purge}}) -> #{
@@ -170,8 +171,9 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = instance} = GRI}) -
     ConfigJson = maps:get(<<"config">>, Data),
     Config = archive_config:from_json(ConfigJson),
     Description = maps:get(<<"description">>, Data, ?DEFAULT_ARCHIVE_DESCRIPTION),
-    Callback = maps:get(<<"preservedCallback">>, Data, undefined),
-    Result =  lfm:archive_dataset(SessionId, DatasetId, Config, Callback, Description),
+    PreservedCallback = maps:get(<<"preservedCallback">>, Data, undefined),
+    PurgedCallback = maps:get(<<"purgedCallback">>, Data, undefined),
+    Result =  lfm:archive_dataset(SessionId, DatasetId, Config, PreservedCallback, PurgedCallback, Description),
     case Result of
         {error, ?EINVAL} ->
             throw(?ERROR_BAD_DATA(<<"datasetId">>, <<"Detached dataset cannot be modified.">>));

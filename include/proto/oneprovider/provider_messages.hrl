@@ -193,7 +193,8 @@
 -record(archive_dataset, {
     id :: dataset:id(),
     config :: archive:config(),
-    callback :: archive:callback(),
+    preserved_callback :: archive:callback(),
+    purged_callback :: archive:callback(),
     description :: archive:description()
 }).
 

@@ -133,7 +133,7 @@
     list_children_datasets/3, list_children_datasets/4
 ]).
 %% Archives related operations
--export([archive_dataset/5, update_archive/3, get_archive_info/2, list_archives/4, init_archive_purge/3]).
+-export([archive_dataset/6, update_archive/3, get_archive_info/2, list_archives/4, init_archive_purge/3]).
 
 %% Utility functions
 -export([check_result/1]).
@@ -877,10 +877,11 @@ list_children_datasets(SessId, DatasetId, Opts, ListingMode) ->
 %%% Archive related operations
 %%%===================================================================
 
--spec archive_dataset(session:id(), dataset:id(), archive:config(), archive:callback(), archive:description()) ->
+-spec archive_dataset(session:id(), dataset:id(), archive:config(), archive:callback(),
+    archive:callback(), archive:description()) ->
     {ok, archive:id()} | error_reply().
-archive_dataset(SessId, DatasetId, Config, Callback, Description) ->
-    ?run(lfm_datasets:archive(SessId, DatasetId, Config, Callback, Description)).
+archive_dataset(SessId, DatasetId, Config, PreservedCallback, PurgedCallback, Description) ->
+    ?run(lfm_datasets:archive(SessId, DatasetId, Config, PreservedCallback, PurgedCallback, Description)).
 
 
 -spec update_archive(session:id(), archive:id(), archive:diff()) -> ok | error_reply().
