@@ -63,19 +63,16 @@ operation_supported(_, _, _) -> false.
 data_spec(#op_req{operation = create, gri = #gri{aspect = instance}}) -> #{
     required => #{
         <<"datasetId">> => {binary, non_empty},
-        <<"type">> => {atom, ?ARCHIVE_TYPES},
-        <<"dataStructure">> => {atom, ?ARCHIVE_DATA_STRUCTURES},
-        <<"metadataStructure">> => {atom, ?ARCHIVE_METADATA_STRUCTURES}
+        <<"config">> => {json, fun(RawConfig) -> {true, archive_config:sanitize(RawConfig)} end}
     },
     optional => #{
-        <<"dip">> => {boolean, any},
         <<"description">> => {binary, any},
-        <<"callback">> => {binary, fun(Callback) -> url_utils:is_valid(Callback) end}
+        <<"preservedCallback">> => {binary, fun(Callback) -> url_utils:is_valid(Callback) end}
     }
 };
 data_spec(#op_req{operation = create, gri = #gri{aspect = purge}}) -> #{
     optional => #{
-        <<"callback">> => {binary, fun(Callback) -> url_utils:is_valid(Callback) end}
+        <<"purgedCallback">> => {binary, fun(Callback) -> url_utils:is_valid(Callback) end}
     }
 };
 
@@ -84,7 +81,9 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = instance}}) ->
 
 data_spec(#op_req{operation = update, gri = #gri{aspect = instance}}) -> #{
     optional => #{
-        <<"description">> => {binary, any}
+        <<"description">> => {binary, any},
+        <<"preservedCallback">> => {binary, fun(Callback) -> url_utils:is_valid(Callback) end},
+        <<"purgedCallback">> => {binary, fun(Callback) -> url_utils:is_valid(Callback) end}
     }
 }.
 
@@ -168,9 +167,11 @@ validate(#op_req{operation = Op, gri = #gri{aspect = As}}, ArchiveDoc) when
 create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = instance} = GRI}) ->
     SessionId = Auth#auth.session_id,
     DatasetId = maps:get(<<"datasetId">>, Data),
-    Params = archive_params:from_json(Data),
-    Attrs = archive_attrs:from_json(Data),
-    Result =  lfm:archive_dataset(SessionId, DatasetId, Params, Attrs),
+    ConfigJson = maps:get(<<"config">>, Data),
+    Config = archive_config:from_json(ConfigJson),
+    Description = maps:get(<<"description">>, Data, ?DEFAULT_ARCHIVE_DESCRIPTION),
+    Callback = maps:get(<<"preservedCallback">>, Data, undefined),
+    Result =  lfm:archive_dataset(SessionId, DatasetId, Config, Callback, Description),
     case Result of
         {error, ?EINVAL} ->
             throw(?ERROR_BAD_DATA(<<"datasetId">>, <<"Detached dataset cannot be modified.">>));
@@ -182,7 +183,7 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = instance} = GRI}) -
 
 create(#op_req{auth = Auth, data = Data, gri = #gri{id = ArchiveId, aspect = purge}}) ->
     SessionId = Auth#auth.session_id,
-    Callback = maps:get(<<"callback">>, Data, undefined),
+    Callback = maps:get(<<"purgedCallback">>, Data, undefined),
     ?check(lfm:init_archive_purge(SessionId, ArchiveId, Callback)).
 
 
@@ -202,8 +203,7 @@ get(#op_req{auth = Auth, gri = #gri{id = ArchiveId, aspect = instance}}, _) ->
 %%--------------------------------------------------------------------
 -spec update(middleware:req()) -> middleware:update_result().
 update(#op_req{auth = Auth, gri = #gri{id = ArchiveId, aspect = instance}, data = Data}) ->
-    AttrsToModify = archive_attrs:from_json(Data),
-    ?check(lfm:modify_archive_attrs(Auth#auth.session_id, ArchiveId, AttrsToModify)).
+    ?check(lfm:update_archive(Auth#auth.session_id, ArchiveId, Data)).
 
 
 %%--------------------------------------------------------------------

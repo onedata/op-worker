@@ -362,7 +362,7 @@ get_dataset_test_base(
                             <<"protectionFlags">> => ProtectionFlags,
                             <<"effectiveProtectionFlags">> => EffProtectionFlags,
                             <<"creationTime">> => CreationTime,
-                            <<"archivesCount">> => 0
+                            <<"archiveCount">> => 0
                         },
                         ?assertEqual({?HTTP_200_OK, ExpDatasetData}, {RespCode, RespBody})
                     end
@@ -803,7 +803,7 @@ build_dataset_gs_instance(
         eff_protection_flags = file_meta:protection_flags_from_json(EffProtectionFlagsJson),
         parent = ParentId,
         index = datasets_structure:pack_entry_index(filename:basename(RootFilePath), DatasetId),
-        archives_count = 0
+        archive_count = 0
     }),
     BasicInfo#{<<"revision">> => 1}.
 

@@ -402,8 +402,10 @@
     creation_time :: time:seconds(),
     creator :: archive:creator(),
     state :: archive:state(),
-    params :: archive:params(),
-    attrs :: archive:attrs()
+    config :: archive:config(),
+    preserved_callback :: archive:callback(),
+    purged_callback :: archive:callback(),
+    description :: archive:description()
 }).
 
 

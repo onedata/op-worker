@@ -133,7 +133,7 @@
     list_children_datasets/3, list_children_datasets/4
 ]).
 %% Archives related operations
--export([archive_dataset/4, modify_archive_attrs/3, get_archive_info/2, list_archives/4, init_archive_purge/3]).
+-export([archive_dataset/5, update_archive/3, get_archive_info/2, list_archives/4, init_archive_purge/3]).
 
 %% Utility functions
 -export([check_result/1]).
@@ -877,15 +877,15 @@ list_children_datasets(SessId, DatasetId, Opts, ListingMode) ->
 %%% Archive related operations
 %%%===================================================================
 
--spec archive_dataset(session:id(), dataset:id(), archive:params(), archive:attrs()) ->
+-spec archive_dataset(session:id(), dataset:id(), archive:config(), archive:callback(), archive:description()) ->
     {ok, archive:id()} | error_reply().
-archive_dataset(SessId, DatasetId, ArchiveParams, ArchiveAttrs) ->
-    ?run(lfm_datasets:archive(SessId, DatasetId, ArchiveParams, ArchiveAttrs)).
+archive_dataset(SessId, DatasetId, Config, Callback, Description) ->
+    ?run(lfm_datasets:archive(SessId, DatasetId, Config, Callback, Description)).
 
 
--spec modify_archive_attrs(session:id(), archive:id(), archive:attrs()) -> ok | error_reply().
-modify_archive_attrs(SessId, ArchiveId, Attrs) ->
-    ?run(lfm_datasets:modify_archive_attrs(SessId, ArchiveId, Attrs)).
+-spec update_archive(session:id(), archive:id(), archive:diff()) -> ok | error_reply().
+update_archive(SessId, ArchiveId, Diff) ->
+    ?run(lfm_datasets:update_archive(SessId, ArchiveId, Diff)).
 
 
 -spec get_archive_info(session:id(), archive:id()) ->
@@ -900,7 +900,7 @@ list_archives(SessId, DatasetId, Opts, ListingMode) ->
     lfm_datasets:list_archives(SessId, DatasetId, Opts, ListingMode).
 
 
--spec init_archive_purge(session:id(), archive:id(), dataset_api:url_callback()) -> ok | error_reply().
+-spec init_archive_purge(session:id(), archive:id(), archive:callback()) -> ok | error_reply().
 init_archive_purge(SessId, ArchiveId, CallbackUrl) ->
     ?run(lfm_datasets:init_archive_purge(SessId, ArchiveId, CallbackUrl)).
 

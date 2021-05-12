@@ -58,14 +58,15 @@ translate_archive_info(#archive_info{
     state = State,
     root_dir_guid = RootDirGuid,
     creation_time = CreationTime,
-    params = Params,
-    attrs = Attrs
+    config = Config,
+    preserved_callback = PreservedCallback,
+    purged_callback = PurgedCallback,
+    description = Description
 }) ->
-    ParamsAndAttrs = maps:merge(archive_params:to_json(Params), archive_attrs:to_json(Attrs)),
-    ParamsAndAttrs#{
+    #{
         <<"archiveId">> => ArchiveId,
         <<"datasetId">> => DatasetId,
-        <<"state">> => State,
+        <<"state">> => str_utils:to_binary(State),
         <<"rootDirectoryId">> => case RootDirGuid =/= undefined of
             true ->
                 {ok, RootDirObjectId} = file_id:guid_to_objectid(RootDirGuid),
@@ -73,5 +74,9 @@ translate_archive_info(#archive_info{
             false ->
                 null
         end,
-        <<"creationTime">> => CreationTime
+        <<"creationTime">> => CreationTime,
+        <<"config">> => archive_config:to_json(Config),
+        <<"preservedCallback">> => utils:undefined_to_null(PreservedCallback),
+        <<"purgedCallback">> => utils:undefined_to_null(PurgedCallback),
+        <<"description">> => Description
     }.

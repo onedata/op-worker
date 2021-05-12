@@ -30,7 +30,18 @@
 %%--------------------------------------------------------------------
 -spec routes() -> [{binary(), module(), #rest_req{}}].
 routes() -> [
-    %% Archive dataset
+    %% List archives of a dataset
+    {<<"/datasets/:did/archives">>, rest_handler, #rest_req{
+        method = 'GET',
+        produces = [<<"application/json">>],
+        b_gri = #b_gri{
+            type = op_dataset,
+            id = ?BINDING(did),
+            aspect = archives,
+            scope = private
+        }
+    }},
+    %% Create archive from a dataset
     {<<"/archives">>, rest_handler, #rest_req{
         method = 'POST',
         parse_body = as_json_params,
@@ -75,17 +86,6 @@ routes() -> [
             type = op_archive,
             id = ?BINDING(aid),
             aspect = purge,
-            scope = private
-        }
-    }},
-    %% List archives of the dataset
-    {<<"/datasets/:did/archives">>, rest_handler, #rest_req{
-        method = 'GET',
-        produces = [<<"application/json">>],
-        b_gri = #b_gri{
-            type = op_dataset,
-            id = ?BINDING(did),
-            aspect = archives,
             scope = private
         }
     }}

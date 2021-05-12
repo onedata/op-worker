@@ -20,8 +20,8 @@
 
 
 -record(archive_spec, {
-    params :: undefined | archive:params(),
-    attrs :: undefined | archive:attrs()
+    config :: undefined | archive:config(),
+    description :: undefined | archive:description()
 }).
 
 -record(dataset_spec, {
@@ -60,8 +60,8 @@
 
 -record(archive_object, {
     id :: archive:id(),
-    params :: archive:params(),
-    attrs :: archive:attrs(),
+    config :: archive:config(),
+    description :: archive:description(),
     index :: dataset_api:archive_index()
 }).
 

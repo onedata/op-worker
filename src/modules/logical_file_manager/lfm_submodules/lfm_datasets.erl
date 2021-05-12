@@ -23,7 +23,7 @@
 ]).
 
 %% Archives API
--export([archive/4, modify_archive_attrs/3, get_archive_info/2, list_archives/4, init_archive_purge/3]).
+-export([archive/5, update_archive/3, get_archive_info/2, list_archives/4, init_archive_purge/3]).
 
 -type info() :: #dataset_info{}.
 -type archive_info() :: #archive_info{}.
@@ -122,24 +122,24 @@ list_children_datasets(SessId, DatasetId, Opts, ListingMode) ->
 %%% Archives API functions
 %%%===================================================================
 
--spec archive(session:id(), dataset:id(), archive:params(), archive:attrs()) ->
+-spec archive(session:id(), dataset:id(), archive:config(), archive:callback(), archive:description()) ->
     {ok, archive:id()} | lfm:error_reply().
-archive(SessId, DatasetId, ArchiveParams, ArchiveAttrs) ->
+archive(SessId, DatasetId, Config, Callback, Description) ->
     SpaceGuid = dataset_id_to_space_guid(DatasetId),
     remote_utils:call_fslogic(SessId, provider_request, SpaceGuid,
-        #archive_dataset{id = DatasetId, params = ArchiveParams, attrs = ArchiveAttrs},
+        #archive_dataset{id = DatasetId, config = Config, description = Description, callback = Callback},
         fun(#dataset_archived{id = ArchiveId}) ->
             {ok, ArchiveId}
         end
     ).
 
 
--spec modify_archive_attrs(session:id(), archive:id(), archive:attrs()) ->
+-spec update_archive(session:id(), archive:id(), archive:diff()) ->
     ok | lfm:error_reply().
-modify_archive_attrs(SessId, ArchiveId, Attrs) ->
+update_archive(SessId, ArchiveId, Diff) ->
     SpaceGuid = archive_id_to_space_guid(ArchiveId),
     remote_utils:call_fslogic(SessId, provider_request, SpaceGuid,
-        #modify_archive_attrs{id = ArchiveId, attrs = Attrs},
+        #update_archive{id = ArchiveId, diff = Diff},
         fun(_) -> ok end
 
     ).
@@ -168,7 +168,7 @@ list_archives(SessId, DatasetId, Opts, ListingMode) ->
     ).
 
 
--spec init_archive_purge(session:id(), archive:id(), dataset_api:url_callback()) ->
+-spec init_archive_purge(session:id(), archive:id(), archive:callback()) ->
     ok | lfm:error_reply().
 init_archive_purge(SessId, ArchiveId, CallbackUrl) ->
     SpaceGuid = archive_id_to_space_guid(ArchiveId),

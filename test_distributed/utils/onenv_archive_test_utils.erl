@@ -72,17 +72,17 @@ set_up_archive(CreationProvider, UserId, DatasetId) ->
 set_up_archive(_CreationProvider, _UserId, _DatasetId, undefined) ->
     undefined;
 set_up_archive(CreationProvider, UserId, DatasetId, #archive_spec{
-    params = ParamsOrUndefined,
-    attrs = AttrsOrUndefined
+    config = ConfigOrUndefined,
+    description = AttrsOrUndefined
 }) ->
     CreationNode = ?OCT_RAND_OP_NODE(CreationProvider),
     UserSessId = oct_background:get_user_session_id(UserId, CreationProvider),
-    Params = utils:ensure_defined(ParamsOrUndefined, random_archive_params()),
-    Attrs = utils:ensure_defined(AttrsOrUndefined, random_archive_attrs()),
+    Config = utils:ensure_defined(ConfigOrUndefined, random_archive_config()),
+    Description = utils:ensure_defined(AttrsOrUndefined, random_archive_description()),
 
     {ok, ArchiveId} = ?assertMatch(
         {ok, _},
-        lfm_proxy:archive_dataset(CreationNode, UserSessId, DatasetId, Params, Attrs),
+        lfm_proxy:archive_dataset(CreationNode, UserSessId, DatasetId, Config, Description),
         ?ATTEMPTS
     ),
 
@@ -90,8 +90,8 @@ set_up_archive(CreationProvider, UserId, DatasetId, #archive_spec{
     
     #archive_object{
         id = ArchiveId,
-        params = Params,
-        attrs = Attrs,
+        config = Config,
+        description = Description,
         index = Index
     }.
 
@@ -131,20 +131,19 @@ await_archive_sync(CreationProvider, SyncProviders, UserId, #archive_object{id =
 %%%===================================================================
 
 %% @private
--spec random_archive_params() -> archive:params().
-random_archive_params() ->
-    #archive_params{
-        type = lists_utils:random_element(?ARCHIVE_TYPES),
-        dip = lists_utils:random_element([true, false]),
-        data_structure = lists_utils:random_element(?ARCHIVE_DATA_STRUCTURES),
-        metadata_structure = lists_utils:random_element(?ARCHIVE_METADATA_STRUCTURES)
+-spec random_archive_config() -> archive:config().
+random_archive_config() ->
+    #archive_config{
+        incremental = lists_utils:random_element([true, false]),
+        include_dip = lists_utils:random_element([true, false]),
+        layout = lists_utils:random_element(?ARCHIVE_LAYOUTS)
     }.
 
 
 %% @private
--spec random_archive_attrs() -> archive:attrs().
-random_archive_attrs() ->
+-spec random_archive_description() -> archive:description().
+random_archive_description() ->
     case rand:uniform(2) of
-        1 -> #archive_attrs{};
-        2 -> #archive_attrs{description = str_utils:rand_hex(20)}
+        1 -> ?DEFAULT_ARCHIVE_DESCRIPTION;
+        2 -> str_utils:rand_hex(20)
     end.

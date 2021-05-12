@@ -27,7 +27,7 @@
 -export([list_top_datasets/4, list_children_datasets/3]).
 
 %% Archives API
--export([archive/4, modify_archive_attrs/2, get_archive_info/1, list_archives/3, init_archive_purge/2]).
+-export([archive/5, update_archive/2, get_archive_info/1, list_archives/3, init_archive_purge/2]).
 
 %% Exported for use in tests
 -export([remove_archive/1]).
@@ -52,11 +52,10 @@
 -type listing_opts() :: datasets_structure:opts().
 -type listing_mode() :: ?BASIC_INFO | ?EXTENDED_INFO.
 -type index() :: datasets_structure:index().
--type url_callback() :: http_client:url() | undefined.
 
 
 -export_type([entries/0, listing_opts/0, index/0, listing_mode/0, basic_archive_entries/0,
-    archive_entries/0, archive_index/0, url_callback/0]).
+    archive_entries/0, archive_index/0]).
 
 % Datasets
 % TODO VFS-7518 how should we handle race on creating dataset on the same file in 2 providers?
@@ -230,22 +229,22 @@ list_children_datasets(DatasetId, Opts, ListingMode) ->
 %%% Archives API
 %%%===================================================================
 
--spec archive(dataset:id(), archive:params(), archive:attrs(), od_user:id()) -> {ok, archive:id()} | error().
-archive(DatasetId, Params, Attrs, UserId) ->
+-spec archive(dataset:id(), archive:config(), archive:description(), archive:callback(),
+    od_user:id()) -> {ok, archive:id()} | error().
+archive(DatasetId, Config, PreservedCallback, Description, UserId) ->
     {ok, DatasetDoc} = dataset:get(DatasetId),
     {ok, State} = dataset:get_state(DatasetDoc),
     case State of
         ?ATTACHED_DATASET ->
             {ok, SpaceId} = dataset:get_space_id(DatasetDoc),
-            case archive:create(DatasetId, SpaceId, UserId, Params, Attrs) of
+            case archive:create(DatasetId, SpaceId, UserId, Config, PreservedCallback, Description) of
                 {ok, ArchiveDoc} ->
                     ArchiveId = archive:get_id(ArchiveDoc),
                     Timestamp = archive:get_creation_time(ArchiveDoc),
                     {ok, SpaceId} = dataset:get_space_id(DatasetDoc),
                     archives_list:add(DatasetId, SpaceId, ArchiveId, Timestamp),
                     % TODO VFS-7601 schedule archivisation job here
-                    CallbackUrl = archive_params:get_callback(Params),
-                    notify_archive_created(ArchiveId, DatasetId, CallbackUrl),
+                    notify_archive_preserved(ArchiveId, DatasetId, PreservedCallback),
                     {ok, ArchiveId};
                 {error, Error} ->
                     Error
@@ -257,9 +256,9 @@ archive(DatasetId, Params, Attrs, UserId) ->
     end.
 
 
--spec modify_archive_attrs(archive:id(), archive:attrs()) -> ok | error().
-modify_archive_attrs(ArchiveId, Attrs) ->
-    archive:modify_attrs(ArchiveId, Attrs).
+-spec update_archive(archive:id(), archive:diff()) -> ok | error().
+update_archive(ArchiveId, Diff) ->
+    archive:modify_attrs(ArchiveId, Diff).
 
 
 -spec get_archive_info(archive:id()) -> {ok, archive_info()}.
@@ -278,8 +277,10 @@ get_archive_info(ArchiveDoc = #document{}, ArchiveIndex) ->
         state = archive:get_state(ArchiveDoc),
         root_dir_guid = archive:get_root_dir(ArchiveDoc),
         creation_time = archive:get_creation_time(ArchiveDoc),
-        params = archive:get_params(ArchiveDoc),
-        attrs = archive:get_attrs(ArchiveDoc),
+        config = archive:get_config(ArchiveDoc),
+        preserved_callback = archive:get_preserved_callback(ArchiveDoc),
+        purged_callback = archive:get_purged_callback(ArchiveDoc),
+        description = archive:get_description(ArchiveDoc),
         index = case ArchiveIndex =:= undefined of
             true -> archives_list:index(ArchiveId, Timestamp);
             false -> ArchiveIndex
@@ -303,14 +304,15 @@ list_archives(DatasetId, ListingOpts, ListingMode) ->
     end.
 
 
--spec init_archive_purge(archive:id(), url_callback()) -> ok | error().
+-spec init_archive_purge(archive:id(), archive:callback()) -> ok | error().
 init_archive_purge(ArchiveId, CallbackUrl) ->
-    ok = archive:mark_purging(ArchiveId),
+    {ok, ArchiveDoc} = archive:mark_purging(ArchiveId, CallbackUrl),
+    DatasetId = archive:get_dataset_id(ArchiveDoc),
     % TODO VFS-7624 init purging job
     % it should remove archive doc when finished
     % Should it be possible to register many callbacks in case of parallel purge requests?
     ok = remove_archive(ArchiveId),
-    notify_archive_purged(ArchiveId, CallbackUrl).
+    notify_archive_purged(ArchiveId, DatasetId, CallbackUrl).
 
 
 -spec remove_archive(archive:id()) -> ok | error().
@@ -446,7 +448,7 @@ collect_attached_info(DatasetDoc, IndexOrUndefined) ->
             true -> undefined;
             false -> hd(EffAncestorDatasets)
         end,
-        archives_count = archives_list:length(DatasetId),
+        archive_count = archives_list:length(DatasetId),
         index = FinalIndex
     }.
 
@@ -475,7 +477,7 @@ collect_detached_info(DatasetDoc, IndexOrUndefined) ->
         protection_flags = ProtectionFlags,
         eff_protection_flags = ?no_flags_mask,
         parent = detached_datasets:get_parent(SpaceId, DetachedDatasetPath),
-        archives_count = archives_list:length(DatasetId),
+        archive_count = archives_list:length(DatasetId),
         index = FinalIndex
     }.
 
@@ -533,20 +535,33 @@ entry_index(DatasetId, RootFilePath) ->
 
 
 
--spec notify_archive_created(archive:id(), dataset:id(), url_callback()) -> ok.
-notify_archive_created(_ArchiveId, _DatasetId, undefined) ->
-    ok;
-notify_archive_created(ArchiveId, DatasetId, CallbackUrl) ->
-    Headers = #{?HDR_CONTENT_TYPE => <<"application/json">>},
-    Body = json_utils:encode(#{<<"archiveId">> => ArchiveId, <<"datasetId">> => DatasetId}),
-    http_client:post(CallbackUrl, Headers, Body),
-    ok.
+-spec notify_archive_preserved(archive:id(), dataset:id(), archive:callback()) -> ok.
+notify_archive_preserved(ArchiveId, DatasetId, CallbackUrl) ->
+    notify_archive_callback(ArchiveId, DatasetId, CallbackUrl, <<"preservation">>).
 
--spec notify_archive_purged(archive:id(), url_callback()) -> ok.
-notify_archive_purged(_ArchiveId, undefined) ->
+
+-spec notify_archive_purged(archive:id(), dataset:id(), archive:callback()) -> ok.
+notify_archive_purged(ArchiveId, DatasetId, CallbackUrl) ->
+    notify_archive_callback(ArchiveId, DatasetId, CallbackUrl, <<"purging">>).
+
+
+-spec notify_archive_callback(archive:id(), dataset:id(), archive:callback(), binary()) -> ok.
+notify_archive_callback(_ArchiveId, _DatasetId, undefined, _Operation) ->
     ok;
-notify_archive_purged(ArchiveId, CallbackUrl) ->
+notify_archive_callback(ArchiveId, DatasetId, CallbackUrl, Operation) ->
     Headers = #{?HDR_CONTENT_TYPE => <<"application/json">>},
-    Body = json_utils:encode(#{<<"archiveId">> => ArchiveId}),
-    http_client:post(CallbackUrl, Headers, Body),
-    ok.
+    Body = json_utils:encode(#{
+        <<"archiveId">> => ArchiveId,
+        <<"datasetId">> => DatasetId,
+        <<"error">> => null
+    }),
+    try
+        http_client:post(CallbackUrl, Headers, Body),
+        ok
+    catch
+        Type:Reason ->
+            ?error_stacktrace(
+                "Calling URL callback ~s, after successful ~s of "
+                "archive ~s created from dataset ~s, failed due to ~p:~p.",
+                [CallbackUrl, Operation, ArchiveId, DatasetId, Type, Reason])
+    end.

@@ -780,10 +780,15 @@ handle_provider_request(UserCtx, #list_top_datasets{state = State, opts = Opts, 
     dataset_req:list_top_datasets(file_ctx:get_space_id_const(SpaceDirCtx), State, Opts, ListingMode, UserCtx);
 handle_provider_request(UserCtx, #list_children_datasets{id = DatasetId, opts = Opts, mode = ListingMode}, SpaceDirCtx) ->
     dataset_req:list_children_datasets(SpaceDirCtx, DatasetId, Opts, ListingMode, UserCtx);
-handle_provider_request(UserCtx, #archive_dataset{id = DatasetId, params = Params, attrs = Attrs}, SpaceDirCtx) ->
-    dataset_req:archive(SpaceDirCtx, DatasetId, Params, Attrs, UserCtx);
-handle_provider_request(UserCtx, #modify_archive_attrs{id = ArchiveId, attrs = Params}, SpaceDirCtx) ->
-    dataset_req:modify_archive_attrs(SpaceDirCtx, ArchiveId, Params, UserCtx);
+handle_provider_request(UserCtx, #archive_dataset{
+    id = DatasetId,
+    config = Config,
+    callback = Callback,
+    description = Description
+}, SpaceDirCtx) ->
+    dataset_req:archive(SpaceDirCtx, DatasetId, Config, Callback, Description, UserCtx);
+handle_provider_request(UserCtx, #update_archive{id = ArchiveId, diff = Diff}, SpaceDirCtx) ->
+    dataset_req:update_archive(SpaceDirCtx, ArchiveId, Diff, UserCtx);
 handle_provider_request(UserCtx, #get_archive_info{id = ArchiveId}, SpaceDirCtx) ->
     dataset_req:get_archive_info(SpaceDirCtx, ArchiveId, UserCtx);
 handle_provider_request(UserCtx, #list_archives{dataset_id = DatasetId, opts = Opts, mode = ListingMode}, SpaceDirCtx) ->

@@ -284,7 +284,7 @@ cleanup_datasets(Node, SpaceId, ForestType) ->
 -spec cleanup_dataset(node(), dataset:id()) -> ok.
 cleanup_dataset(Node, DatasetId) ->
     cleanup_dataset_archives(Node, DatasetId, 0),
-    ?assertMatch(0, get_archives_count(Node, DatasetId), ?ATTEMPTS),
+    ?assertMatch(0, get_archive_count(Node, DatasetId), ?ATTEMPTS),
     lfm_proxy:remove_dataset(Node, ?ROOT_SESS_ID, DatasetId).
 
 
@@ -312,9 +312,9 @@ assert_all_dataset_entries_are_deleted_on_all_nodes(SpaceId, ForestType) ->
 
 
 %% @private
--spec get_archives_count(node(), dataset:id()) -> non_neg_integer().
-get_archives_count(Node, DatasetId) ->
+-spec get_archive_count(node(), dataset:id()) -> non_neg_integer().
+get_archive_count(Node, DatasetId) ->
     case lfm_proxy:get_dataset_info(Node, ?ROOT_SESS_ID, DatasetId) of
-        {ok, #dataset_info{archives_count = ArchivesCount}} -> ArchivesCount;
+        {ok, #dataset_info{archive_count = ArchiveCount}} -> ArchiveCount;
         {error, ?ENOENT} -> 0
     end.

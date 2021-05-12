@@ -54,7 +54,7 @@ translate_dataset_info(#dataset_info{
     eff_protection_flags = EffProtectionFlags,
     parent = ParentId,
     index = Index,
-    archives_count = ArchivesCount
+    archive_count = ArchiveCount
 }) ->
     #{
         <<"gri">> => gri:serialize(#gri{
@@ -81,7 +81,7 @@ translate_dataset_info(#dataset_info{
         <<"effProtectionFlags">> => file_meta:protection_flags_to_json(EffProtectionFlags),
         <<"creationTime">> => CreationTime,
         <<"index">> => Index,
-        <<"archivesCount">> => ArchivesCount,
+        <<"archiveCount">> => ArchiveCount,
         <<"spaceId">> => file_id:guid_to_space_id(RootFileGuid)
     }.
 

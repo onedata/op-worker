@@ -31,9 +31,9 @@
 ]).
 
 -export([
-    archive_dataset/1,
+    create_archive/1,
     get_archive_info/1,
-    modify_archive_attrs/1,
+    modify_archive_description/1,
     get_dataset_archives/1,
     init_archive_purge_test/1
 ]).
@@ -44,9 +44,9 @@
 
 groups() -> [
     {all_tests, [parallel], [
-        archive_dataset,
+        create_archive,
         get_archive_info,
-        modify_archive_attrs,
+        modify_archive_description,
         get_dataset_archives,
         init_archive_purge_test
     ]}
@@ -63,10 +63,10 @@ all() -> [
 
 
 -define(HTTP_SERVER_PORT, 8080).
--define(ARCHIVE_PERSISTED_PATH, "/archive_persisted").
+-define(ARCHIVE_PRESERVED_PATH, "/archive_preserved").
 -define(ARCHIVE_PURGED_PATH, "/archive_purged").
 
--define(ARCHIVE_PERSISTED_CALLBACK_URL(), ?CALLBACK_URL(?ARCHIVE_PERSISTED_PATH)).
+-define(ARCHIVE_PRESERVED_CALLBACK_URL(), ?CALLBACK_URL(?ARCHIVE_PRESERVED_PATH)).
 -define(ARCHIVE_PURGED_CALLBACK_URL(), ?CALLBACK_URL(?ARCHIVE_PURGED_PATH)).
 -define(CALLBACK_URL(Path), begin
     {ok, IpAddressBin} = ip_utils:to_binary(initializer:local_ip_v4()),
@@ -81,8 +81,7 @@ end).
 %%%===================================================================
 %%% Archive dataset test functions
 %%%===================================================================
-
-archive_dataset(_Config) ->
+create_archive(_Config) ->
     Providers = [krakow, paris],
 
     #object{
@@ -102,56 +101,67 @@ archive_dataset(_Config) ->
             target_nodes = Providers,
             client_spec = ?CLIENT_SPEC_FOR_SPACE_KRK_PAR(?EPERM),
             randomly_select_scenarios = true,
-            verify_fun = build_verify_archive_dataset_fun(MemRef, Providers),
+            verify_fun = build_verify_archive_created_fun(MemRef, Providers),
             scenario_templates = [
                 #scenario_template{
                     name = <<"Archive dataset using REST API">>,
                     type = rest,
-                    prepare_args_fun = fun archive_dataset_prepare_rest_args_fun/1,
-                    validate_result_fun = build_archive_dataset_validate_rest_call_result_fun(MemRef)
+                    prepare_args_fun = fun create_archive_prepare_rest_args_fun/1,
+                    validate_result_fun = build_create_archive_validate_rest_call_result_fun(MemRef)
                 },
                 #scenario_template{
                     name = <<"Archive dataset using GS API">>,
                     type = gs,
-                    prepare_args_fun = fun archive_datasets_prepare_gs_args_fun/1,
-                    validate_result_fun = build_archive_dataset_validate_gs_call_result_fun(MemRef)
+                    prepare_args_fun = fun create_archive_prepare_gs_args_fun/1,
+                    validate_result_fun = build_create_archive_validate_gs_call_result_fun(MemRef)
                 }
             ],
             data_spec = #data_spec{
-                required = [<<"datasetId">>, <<"type">>, <<"dataStructure">>, <<"metadataStructure">>],
-                optional = [<<"description">>, <<"dip">>, <<"callback">>],
+                required = [<<"datasetId">>, <<"config">>],
+                optional = [<<"description">>, <<"preservedCallback">>],
                 correct_values = #{
                     <<"datasetId">> => [DatasetId],
-                    <<"type">> => ?ARCHIVE_TYPES,
-                    <<"dip">> => [true, false],
-                    <<"dataStructure">> => ?ARCHIVE_DATA_STRUCTURES,
-                    <<"metadataStructure">> => ?ARCHIVE_METADATA_STRUCTURES,
+                    <<"config">> => generate_all_valid_configs(),
                     <<"description">> => [<<"Test description">>],
-                    <<"callback">> => [?ARCHIVE_PERSISTED_CALLBACK_URL()]
+                    <<"preservedCallback">> => [?ARCHIVE_PRESERVED_CALLBACK_URL()]
                 },
                 bad_values = [
                     {<<"datasetId">>, ?NON_EXISTENT_DATASET_ID, ?ERROR_FORBIDDEN},
                     {<<"datasetId">>, DetachedDatasetId,
                         ?ERROR_BAD_DATA(<<"datasetId">>, <<"Detached dataset cannot be modified.">>)},
-                    {<<"type">>, <<"not allowed type">>,
-                        ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"type">>, ensure_binaries(?ARCHIVE_TYPES))},
-                    {<<"dip">>, <<"not boolean">>, ?ERROR_BAD_VALUE_BOOLEAN(<<"dip">>)},
-                    {<<"dataStructure">>, <<"not allowed dataStructure">>,
-                        ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"dataStructure">>, ensure_binaries(?ARCHIVE_DATA_STRUCTURES))},
-                    {<<"metadataStructure">>, <<"not allowed metadataStructure">>,
-                        ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"metadataStructure">>, ensure_binaries(?ARCHIVE_METADATA_STRUCTURES))},
+                    {<<"config">>, #{<<"incremental">> => <<"not boolean">>, <<"layout">> => ?ARCHIVE_BAGIT_LAYOUT},
+                        ?ERROR_BAD_VALUE_BOOLEAN(<<"incremental">>)},
+                    {<<"config">>, #{<<"includeDip">> => <<"not boolean">>, <<"layout">> => ?ARCHIVE_BAGIT_LAYOUT},
+                        ?ERROR_BAD_VALUE_BOOLEAN(<<"includeDip">>)},
+                    {<<"config">>, #{<<"layout">> => <<"not allowed layout">>},
+                        ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"layout">>, ensure_binaries(?ARCHIVE_LAYOUTS))},
                     {<<"description">>, [123, 456], ?ERROR_BAD_VALUE_BINARY(<<"description">>)},
-                    {<<"callback">>, <<"htp:/wrong-url.org">>, ?ERROR_BAD_DATA(<<"callback">>)}
+                    {<<"preservedCallback">>, <<"htp:/wrong-url.org">>, ?ERROR_BAD_DATA(<<"preservedCallback">>)}
                 ]
             }
         }
     ])).
 
+%% @private
+-spec generate_all_valid_configs() -> [archive_config:config_json()].
+generate_all_valid_configs() ->
+    BooleansAndUndefined = [true, false, undefined],
+    AllConfigsCombinations = [
+        {Layout, Incremental, IncludeDip}
+        || Layout <- ?ARCHIVE_LAYOUTS, Incremental <- BooleansAndUndefined, IncludeDip <- BooleansAndUndefined
+    ],
+    lists:foldl(fun({L, I, ID}, Acc) ->
+        Config = #{<<"layout">> => L},
+        Config2 = maps_utils:put_if_defined(Config, <<"incremental">>, I),
+        Config3 = maps_utils:put_if_defined(Config2, <<"includeDip">>, ID),
+        [Config3 | Acc]
+    end, [], AllConfigsCombinations).
+
 
 %% @private
--spec archive_dataset_prepare_rest_args_fun(onenv_api_test_runner:api_test_ctx()) ->
+-spec create_archive_prepare_rest_args_fun(onenv_api_test_runner:api_test_ctx()) ->
     onenv_api_test_runner:rest_args().
-archive_dataset_prepare_rest_args_fun(#api_test_ctx{data = Data}) ->
+create_archive_prepare_rest_args_fun(#api_test_ctx{data = Data}) ->
     #rest_args{
         method = post,
         path = <<"archives">>,
@@ -161,9 +171,9 @@ archive_dataset_prepare_rest_args_fun(#api_test_ctx{data = Data}) ->
 
 
 %% @private
--spec archive_datasets_prepare_gs_args_fun(onenv_api_test_runner:api_test_ctx()) ->
+-spec create_archive_prepare_gs_args_fun(onenv_api_test_runner:api_test_ctx()) ->
     onenv_api_test_runner:rest_args().
-archive_datasets_prepare_gs_args_fun(#api_test_ctx{data = Data}) ->
+create_archive_prepare_gs_args_fun(#api_test_ctx{data = Data}) ->
     #gs_args{
         operation = create,
         gri = #gri{type = op_archive, aspect = instance, scope = private},
@@ -172,9 +182,9 @@ archive_datasets_prepare_gs_args_fun(#api_test_ctx{data = Data}) ->
 
 
 %% @private
--spec build_archive_dataset_validate_rest_call_result_fun(api_test_memory:mem_ref()) ->
+-spec build_create_archive_validate_rest_call_result_fun(api_test_memory:mem_ref()) ->
     onenv_api_test_runner:validate_call_result_fun().
-build_archive_dataset_validate_rest_call_result_fun(MemRef) ->
+build_create_archive_validate_rest_call_result_fun(MemRef) ->
     fun(#api_test_ctx{node = TestNode}, Result) ->
 
         {ok, _, Headers, Body} = ?assertMatch(
@@ -190,9 +200,9 @@ build_archive_dataset_validate_rest_call_result_fun(MemRef) ->
 
 
 %% @private
--spec build_archive_dataset_validate_gs_call_result_fun(api_test_memory:mem_ref()) ->
+-spec build_create_archive_validate_gs_call_result_fun(api_test_memory:mem_ref()) ->
     onenv_api_test_runner:validate_call_result_fun().
-build_archive_dataset_validate_gs_call_result_fun(MemRef) ->
+build_create_archive_validate_gs_call_result_fun(MemRef) ->
     fun(#api_test_ctx{node = TestNode, data = Data}, Result) ->
         CreationTime = time_test_utils:global_seconds(TestNode),
         DatasetId = maps:get(<<"datasetId">>, Data),
@@ -205,21 +215,22 @@ build_archive_dataset_validate_gs_call_result_fun(MemRef) ->
         ),
         api_test_memory:set(MemRef, archive_id, ArchiveId),
 
-        Params = archive_params:from_json(Data),
-        Attrs = archive_attrs:from_json(Data),
-        
-        ExpArchiveData = build_archive_gs_instance(ArchiveId, DatasetId, CreationTime, Params, Attrs),
+        Config = archive_config:from_json(maps:get(<<"config">>, Data)),
+        Description = maps:get(<<"description">>, Data, ?DEFAULT_ARCHIVE_DESCRIPTION),
+        PreservedCallback = maps:get(<<"preservedCallback">>, Data, undefined),
+
+        ExpArchiveData = build_archive_gs_instance(ArchiveId, DatasetId, CreationTime, Config, Description, PreservedCallback),
         ?assertEqual(ExpArchiveData, ArchiveData)
     end.
 
 
 %% @private
--spec build_verify_archive_dataset_fun(
+-spec build_verify_archive_created_fun(
     api_test_memory:mem_ref(),
     [oct_background:entity_selector()]
 ) ->
     onenv_api_test_runner:verify_fun().
-build_verify_archive_dataset_fun(MemRef, Providers) ->
+build_verify_archive_created_fun(MemRef, Providers) ->
     fun
         (expected_success, #api_test_ctx{
             node = TestNode,
@@ -230,27 +241,25 @@ build_verify_archive_dataset_fun(MemRef, Providers) ->
 
             CreationTime = time_test_utils:global_seconds(TestNode),
             DatasetId = maps:get(<<"datasetId">>, Data),
-            Type = maps:get(<<"type">>, Data),
-            DataStructure = maps:get(<<"dataStructure">>, Data),
-            MetadataStructure = maps:get(<<"metadataStructure">>, Data),
-            Dip = maps:get(<<"dip">>, Data, ?DEFAULT_DIP),
-            Description = maps:get(<<"description">>, Data, undefined),
-            Callback = maps:get(<<"callback">>, Data, undefined),
-            case Callback =/= undefined of
-                true -> await_archive_persisted_callback_called(ArchiveId, DatasetId);
+            Config = maps:get(<<"config">>, Data),
+            Description = maps:get(<<"description">>, Data, ?DEFAULT_ARCHIVE_DESCRIPTION),
+            PreservedCallback = maps:get(<<"preservedCallback">>, Data, undefined),
+            PurgedCallback = maps:get(<<"purgedCallback">>, Data, undefined),
+            case PreservedCallback =/= undefined of
+                true -> await_archive_preserved_callback_called(ArchiveId, DatasetId);
                 false -> ok
             end,
             verify_archive(
-                UserId, Providers, ArchiveId, DatasetId, CreationTime,
-                Type, Dip, DataStructure, MetadataStructure, Callback, Description
+                UserId, Providers, ArchiveId, DatasetId, CreationTime, Config,
+                PreservedCallback, PurgedCallback, Description
             );
         (expected_failure, _) ->
             ok
     end.
 
 %% @private
--spec await_archive_persisted_callback_called(archive:id(), dataset:id()) -> ok.
-await_archive_persisted_callback_called(ArchiveId, DatasetId) ->
+-spec await_archive_preserved_callback_called(archive:id(), dataset:id()) -> ok.
+await_archive_preserved_callback_called(ArchiveId, DatasetId) ->
     Timeout = timer:seconds(?ATTEMPTS),
     receive
         ?ARCHIVE_PERSISTED(ArchiveId, DatasetId) -> ok
@@ -268,16 +277,14 @@ get_archive_info(_Config) ->
         id = DatasetId,
         archives = [#archive_object{
             id = ArchiveId,
-            params = ArchiveParams,
-            attrs = ArchiveAttrs
+            config = Config,
+            description = Description
         }]
     }} = onenv_file_test_utils:create_and_sync_file_tree(user3, space_krk_par,
         #file_spec{dataset = #dataset_spec{archives = 1}}
     ),
 
-    ParamsJson = archive_params:to_json(ArchiveParams),
-    AttrsJson = archive_attrs:to_json(ArchiveAttrs),
-    ParamsAndAttrsJson = maps:merge(ParamsJson, AttrsJson),
+    ConfigJson = archive_config:to_json(Config),
 
     Providers = [krakow, paris],
     maybe_detach_dataset(Providers, DatasetId),
@@ -293,14 +300,19 @@ get_archive_info(_Config) ->
                     prepare_args_fun = build_get_archive_prepare_rest_args_fun(ArchiveId),
                     validate_result_fun = fun(#api_test_ctx{node = TestNode}, {ok, RespCode, _, RespBody}) ->
                         CreationTime = time_test_utils:global_seconds(TestNode),
-                        ExpArchiveData = ParamsAndAttrsJson#{
+                        ExpArchiveData = #{
                             <<"archiveId">> => ArchiveId,
                             <<"datasetId">> => DatasetId,
-                            <<"state">> => atom_to_binary(?EMPTY, utf8),
+                            <<"state">> => atom_to_binary(?ARCHIVE_PENDING, utf8),
                             <<"rootDirectoryId">> => null,
-                            <<"creationTime">> => CreationTime
+                            <<"creationTime">> => CreationTime,
+                            <<"description">> => Description,
+                            <<"config">> => ConfigJson,
+                            <<"preservedCallback">> => null,
+                            <<"purgedCallback">> => null
                         },
-                        ?assertEqual({?HTTP_200_OK, ExpArchiveData}, {RespCode, RespBody})
+                        ?assertEqual(?HTTP_200_OK, RespCode),
+                        ?assertEqual(ExpArchiveData, RespBody)
                     end
                 },
                 #scenario_template{
@@ -309,7 +321,8 @@ get_archive_info(_Config) ->
                     prepare_args_fun = build_get_archive_prepare_gs_args_fun(ArchiveId),
                     validate_result_fun = fun(#api_test_ctx{node = TestNode}, {ok, Result}) ->
                         CreationTime = time_test_utils:global_seconds(TestNode),
-                        ExpArchiveData = build_archive_gs_instance(ArchiveId, DatasetId, CreationTime, ArchiveParams, ArchiveAttrs),
+                        ExpArchiveData = build_archive_gs_instance(ArchiveId, DatasetId, CreationTime, Config,
+                            Description, undefined),
                         ?assertEqual(ExpArchiveData, Result)
                     end
                 }
@@ -354,7 +367,7 @@ build_get_archive_prepare_gs_args_fun(ArchiveId) ->
 %%% Update dataset test functions
 %%%===================================================================
 
-modify_archive_attrs(_Config) ->
+modify_archive_description(_Config) ->
     #object{dataset = #dataset_object{
         id = DatasetId,
         archives = ArchiveObjects
@@ -372,20 +385,20 @@ modify_archive_attrs(_Config) ->
         #suite_spec{
             target_nodes = Providers,
             client_spec = ?CLIENT_SPEC_FOR_SPACE_KRK_PAR(?EPERM),
-            verify_fun = build_verify_modified_archive_attrs_fun(MemRef, Providers),
+            verify_fun = build_verify_modified_archive_description_fun(MemRef, Providers),
             scenario_templates = [
                 #scenario_template{
-                    name = <<"Modify archive attrs using REST API">>,
+                    name = <<"Modify archive description using REST API">>,
                     type = rest,
-                    prepare_args_fun = build_update_archive_prepare_rest_args_fun(MemRef),
+                    prepare_args_fun = build_update_archive_description_prepare_rest_args_fun(MemRef),
                     validate_result_fun = fun(#api_test_ctx{}, {ok, RespCode, _, RespBody}) ->
                         ?assertEqual({?HTTP_204_NO_CONTENT, #{}}, {RespCode, RespBody})
                     end
                 },
                 #scenario_template{
-                    name = <<"Modify archive attrs using GS API">>,
+                    name = <<"Modify archive description using GS API">>,
                     type = gs,
-                    prepare_args_fun = build_update_archive_prepare_gs_args_fun(MemRef),
+                    prepare_args_fun = build_update_archive_description_prepare_gs_args_fun(MemRef),
                     validate_result_fun = fun(#api_test_ctx{}, Result) ->
                         ?assertEqual(ok, Result)
                     end
@@ -405,9 +418,9 @@ modify_archive_attrs(_Config) ->
     ])).
 
 %% @private
--spec build_update_archive_prepare_rest_args_fun(api_test_memory:mem_ref()) ->
+-spec build_update_archive_description_prepare_rest_args_fun(api_test_memory:mem_ref()) ->
     onenv_api_test_runner:prepare_args_fun().
-build_update_archive_prepare_rest_args_fun(MemRef) ->
+build_update_archive_description_prepare_rest_args_fun(MemRef) ->
     fun(#api_test_ctx{data = Data0}) ->
         ArchiveObject = #archive_object{id = ArchiveId} = take_random_archive(MemRef),
         {Id, Data1} = api_test_utils:maybe_substitute_bad_id(ArchiveId, Data0),
@@ -423,9 +436,9 @@ build_update_archive_prepare_rest_args_fun(MemRef) ->
 
 
 %% @private
--spec build_update_archive_prepare_gs_args_fun(api_test_memory:mem_ref()) ->
+-spec build_update_archive_description_prepare_gs_args_fun(api_test_memory:mem_ref()) ->
     onenv_api_test_runner:prepare_args_fun().
-build_update_archive_prepare_gs_args_fun(MemRef) ->
+build_update_archive_description_prepare_gs_args_fun(MemRef) ->
     fun(#api_test_ctx{data = Data0}) ->
         ArchiveObject = #archive_object{id = ArchiveId} = take_random_archive(MemRef),
         {Id, Data1} = api_test_utils:maybe_substitute_bad_id(ArchiveId, Data0),
@@ -440,32 +453,31 @@ build_update_archive_prepare_gs_args_fun(MemRef) ->
 
 
 %% @private
--spec build_verify_modified_archive_attrs_fun(
+-spec build_verify_modified_archive_description_fun(
     api_test_memory:mem_ref(),
     [oct_background:entity_selector()]
 ) ->
     onenv_api_test_runner:verify_fun().
-build_verify_modified_archive_attrs_fun(MemRef, Providers) ->
+build_verify_modified_archive_description_fun(MemRef, Providers) ->
     fun(ExpResult, #api_test_ctx{data = Data}) ->
         case api_test_memory:get(MemRef, archive_to_modify) of
             #archive_object{id = ?NON_EXISTENT_ARCHIVE_ID} ->
                 ok;
-            #archive_object{id = ArchiveId, attrs = PrevAttrs} ->
+            #archive_object{id = ArchiveId, description = PrevDescription} ->
 
-                ExpCurrentAttrs = case ExpResult of
+                ExpCurrentDescription = case ExpResult of
                     expected_failure ->
-                        PrevAttrs;
+                        PrevDescription;
                     expected_success ->
                         PassedDescription = maps:get(<<"description">>, Data, undefined),
-                        PrevAttrs#archive_attrs{
-                            description = utils:ensure_defined(PassedDescription, PrevAttrs#archive_attrs.description)
-                        }
+                        utils:ensure_defined(PassedDescription, PrevDescription)
+
                 end,
 
                 lists:foreach(fun(Provider) ->
                     Node = ?OCT_RAND_OP_NODE(Provider),
                     UserSessId = oct_background:get_user_session_id(user3, Provider),
-                    ?assertMatch({ok, #archive_info{attrs = ExpCurrentAttrs}},
+                    ?assertMatch({ok, #archive_info{description = ExpCurrentDescription}},
                         lfm_proxy:get_archive_info(Node, UserSessId, ArchiveId), ?ATTEMPTS)
                 end, Providers)
 
@@ -686,13 +698,13 @@ init_archive_purge_test(_Config) ->
                 }
             ],
             data_spec = #data_spec{
-                optional = [<<"callback">>],
+                optional = [<<"purgedCallback">>],
                 correct_values = #{
-                    <<"callback">> => [?ARCHIVE_PURGED_CALLBACK_URL()]
+                    <<"purgedCallback">> => [?ARCHIVE_PURGED_CALLBACK_URL()]
                 },
                 bad_values = [
                     {bad_id, ?NON_EXISTENT_ARCHIVE_ID, ?ERROR_NOT_FOUND},
-                    {<<"callback">>, <<"htp:/wrong-url.org">>, ?ERROR_BAD_DATA(<<"callback">>)}
+                    {<<"purgedCallback">>, <<"htp:/wrong-url.org">>, ?ERROR_BAD_DATA(<<"purgedCallback">>)}
                 ]
             }
         }
@@ -752,7 +764,7 @@ build_verify_archive_purged_fun(MemRef, Providers, DatasetId) ->
 
                 case ExpResult of
                     expected_success ->
-                        case maps:is_key(<<"callback">>, Data) of
+                        case maps:is_key(<<"purgedCallback">>, Data) of
                             true -> await_archive_purged_callback_called(ArchiveId);
                             false -> ok
                         end;
@@ -798,14 +810,13 @@ await_archive_purged_callback_called(ArchiveId) ->
 
 %% @private
 -spec verify_archive(
-    od_user:id(), [oct_background:entity_selector()], archive:id(), dataset:id(),
-    archive:timestamp(), archive:type(), archive:dip(), archive:data_structure(), archive:metadata_structure(),
-    dataset_api:url_callback(), archive:description()
+    od_user:id(), [oct_background:entity_selector()], archive:id(), dataset:id(), archive:timestamp(),
+    archive:config(), archive:callback(), archive:callback(), archive:description()
 ) ->
     ok.
 verify_archive(
-    UserId, Providers, ArchiveId, DatasetId, CreationTime,
-    Type, Dip, DataStructure, MetadataStructure, Callback, Description
+    UserId, Providers, ArchiveId, DatasetId, CreationTime, Config,
+    PreservedCallback, PurgedCallback, Description
 ) ->
     lists:foreach(fun(Provider) ->
         Node = ?OCT_RAND_OP_NODE(Provider),
@@ -817,17 +828,13 @@ verify_archive(
         ExpArchiveInfo = #archive_info{
             id = ArchiveId,
             dataset_id = DatasetId,
-            state = ?EMPTY,
+            state = ?ARCHIVE_PENDING,
             root_dir_guid = undefined,
             creation_time = CreationTime,
-            params = #archive_params{
-                type = Type,
-                dip = Dip,
-                data_structure = DataStructure,
-                metadata_structure = MetadataStructure,
-                callback = Callback
-            },
-            attrs = #archive_attrs{description = Description},
+            config = archive_config:from_json(Config),
+            preserved_callback = PreservedCallback,
+            purged_callback = PurgedCallback,
+            description = Description,
             index = archives_list:index(ArchiveId, CreationTime)
         },
         ?assertEqual({ok, ExpArchiveInfo}, lfm_proxy:get_archive_info(Node, UserSessId, ArchiveId), ?ATTEMPTS)
@@ -843,17 +850,18 @@ list_archive_ids(Node, UserSessId, DatasetId, ListOpts) ->
 
 
 %% @private
--spec build_archive_gs_instance(archive:id(), dataset:id(), archive:timestamp(), archive:params(), 
-    archive:attrs()) -> json_utils:json_term().
-build_archive_gs_instance(ArchiveId, DatasetId, CreationTime, Params, Attrs) ->
+-spec build_archive_gs_instance(archive:id(), dataset:id(), archive:timestamp(), archive:config(),
+    archive:description(), archive:callback()) -> json_utils:json_term().
+build_archive_gs_instance(ArchiveId, DatasetId, CreationTime, Config, Description, PreservedCallback) ->
     BasicInfo = archive_gui_gs_translator:translate_archive_info(#archive_info{
         id = ArchiveId,
         dataset_id = DatasetId,
-        state = ?EMPTY,
+        state = str_utils:to_binary(?ARCHIVE_PENDING),
         root_dir_guid = undefined,
         creation_time = CreationTime,
-        params = Params,
-        attrs = Attrs,
+        config = Config,
+        description = Description,
+        preserved_callback = PreservedCallback,
         index = archives_list:index(ArchiveId, CreationTime)
     }),
     BasicInfo#{<<"revision">> => 1}.
@@ -933,7 +941,7 @@ start_http_server() ->
 stop_http_server() ->
     inets:stop().
 
-do(#mod{method = "POST", request_uri = ?ARCHIVE_PERSISTED_PATH, entity_body = Body}) ->
+do(#mod{method = "POST", request_uri = ?ARCHIVE_PRESERVED_PATH, entity_body = Body}) ->
     #{<<"archiveId">> := ArchiveId, <<"datasetId">> := DatasetId} = json_utils:decode(Body),
     ?CREATE_TEST_PROCESS ! ?ARCHIVE_PERSISTED(ArchiveId, DatasetId),
     done;

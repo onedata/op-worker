@@ -70,7 +70,7 @@ translate_dataset_info(#dataset_info{
     protection_flags = ProtectionFlags,
     eff_protection_flags = EffProtectionFlags,
     parent = ParentId,
-    archives_count = ArchivesCount
+    archive_count = ArchiveCount
 }) ->
     {ok, RootFileObjectId} = file_id:guid_to_objectid(RootFileGuid),
     #{
@@ -83,7 +83,7 @@ translate_dataset_info(#dataset_info{
         <<"protectionFlags">> => file_meta:protection_flags_to_json(ProtectionFlags),
         <<"effectiveProtectionFlags">> => file_meta:protection_flags_to_json(EffProtectionFlags),
         <<"creationTime">> => CreationTime,
-        <<"archivesCount">> => ArchivesCount
+        <<"archiveCount">> => ArchiveCount
     }.
 
 
@@ -104,7 +104,7 @@ translate_datasets_list(Datasets, IsLast) ->
 -spec translate_archives_list(dataset_api:basic_archive_entries(), boolean()) -> json_utils:json_map().
 translate_archives_list(Archives, IsLast) ->
     {TranslatedArchivesReversed, NextPageToken} = lists:foldl(fun({Index, ArchiveId}, {Acc, _}) ->
-        {[#{<<"archiveId">> => ArchiveId} | Acc], Index}
+        {[ArchiveId | Acc], Index}
     end, {[], undefined}, Archives),
     #{
         <<"archives">> => lists:reverse(TranslatedArchivesReversed),

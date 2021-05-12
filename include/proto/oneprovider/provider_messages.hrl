@@ -192,13 +192,15 @@
 
 -record(archive_dataset, {
     id :: dataset:id(),
-    params :: archive:params(),
-    attrs :: archive:attrs()
+    config :: archive:config(),
+    callback :: archive:callback(),
+    description :: archive:description()
 }).
 
--record(modify_archive_attrs, {
+-record(update_archive, {
     id :: archive:id(),
-    attrs :: archive:attrs()
+    description :: archive:description() | undefined,
+    diff :: archive:diff()
 }).
 
 -record(get_archive_info, {
@@ -213,7 +215,7 @@
 
 -record(init_archive_purge, {
     id :: archive:id(),
-    callback :: dataset_api:url_callback()
+    callback :: archive:callback()
 }).
 
 
@@ -230,7 +232,7 @@
     #add_qos_entry{} | #get_effective_file_qos{} | #get_qos_entry{} | #remove_qos_entry{} | #check_qos_status{} |
     #establish_dataset{} | #update_dataset{} | #remove_dataset{} |
     #get_dataset_info{} | #get_file_eff_dataset_summary{} | #list_top_datasets{} | #list_children_datasets{} |
-    #archive_dataset{} | #modify_archive_attrs{} | #get_archive_info{} | #list_archives{} | #init_archive_purge{}.
+    #archive_dataset{} | #update_archive{} | #get_archive_info{} | #list_archives{} | #init_archive_purge{}.
 
 -record(transfer_encoding, {
     value :: binary()
@@ -297,7 +299,7 @@
     protection_flags = ?no_flags_mask :: data_access_control:bitmask(),
     eff_protection_flags = ?no_flags_mask :: data_access_control:bitmask(),
     parent :: undefined | dataset:id(),
-    archives_count = 0 :: non_neg_integer(),
+    archive_count = 0 :: non_neg_integer(),
     index :: dataset_api:index()
 }).
 
@@ -322,8 +324,10 @@
     state :: archive:state(),
     root_dir_guid :: undefined | file_id:file_guid(),
     creation_time :: time:millis(),
-    params :: archive:params(),
-    attrs :: archive:attrs(),
+    config :: archive:config(),
+    preserved_callback :: archive:callback(),
+    purged_callback :: archive:callback(),
+    description :: archive:description(),
     index :: dataset_api:archive_index()
 }).
 

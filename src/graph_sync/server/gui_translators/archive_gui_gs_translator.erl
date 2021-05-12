@@ -41,12 +41,14 @@ translate_archive_info(#archive_info{
     state = State,
     root_dir_guid = RootDirGuid,
     creation_time = CreationTime,
-    params = Params,
-    attrs = Attrs,
+    config = Config,
+    preserved_callback = PreservedCallback,
+    purged_callback = PurgedCallback,
+    description = Description,
     index = Index
 }) ->
-    ParamsAndAttrs = maps:merge(archive_params:to_json(Params), archive_attrs:to_json(Attrs)),
-    ParamsAndAttrs#{
+    ConfigJson = archive_config:to_json(Config),
+    ConfigJson#{
         <<"gri">> => gri:serialize(#gri{
             type = op_archive, id = ArchiveId,
             aspect = instance, scope = private
@@ -55,6 +57,7 @@ translate_archive_info(#archive_info{
             type = op_dataset, id = DatasetId,
             aspect = instance, scope = private
         }),
+        <<"state">> => str_utils:to_binary(State),
         <<"rootDir">> => case RootDirGuid =/= undefined of
             true -> gri:serialize(#gri{
                 type = op_file, id = RootDirGuid,
@@ -63,7 +66,10 @@ translate_archive_info(#archive_info{
             false ->
                 null
         end,
-        <<"state">> => atom_to_binary(State, utf8),
         <<"creationTime">> => CreationTime,
+        <<"config">> => archive_config:to_json(Config),
+        <<"preservedCallback">> => utils:undefined_to_null(PreservedCallback),
+        <<"purgedCallback">> => utils:undefined_to_null(PurgedCallback),
+        <<"description">> => Description,
         <<"index">> => Index
     }.
