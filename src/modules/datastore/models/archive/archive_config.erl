@@ -15,6 +15,7 @@
 -author("Jakub Kudzia").
 
 -include("modules/archive/archive.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% API
 -export([from_json/1, to_json/1, sanitize/1]).
@@ -67,12 +68,25 @@ to_json(#archive_config{
 
 -spec sanitize(json_utils:json_map()) -> config_json().
 sanitize(RawConfig) ->
-    middleware_sanitizer:sanitize_data(RawConfig, #{
-        required => #{
-            <<"layout">> => {atom, ?ARCHIVE_LAYOUTS}
-        },
-        optional => #{
-            <<"includeDip">> => {boolean, any},
-            <<"incremental">> => {boolean, any}
-        }
-    }).
+    try
+        middleware_sanitizer:sanitize_data(RawConfig, #{
+            required => #{
+                <<"layout">> => {atom, ?ARCHIVE_LAYOUTS}
+            },
+            optional => #{
+                <<"includeDip">> => {boolean, any},
+                <<"incremental">> => {boolean, any}
+            }
+        })
+    catch
+        % config is a nested object of the archive object,
+        % therefore catch errors and add "config." to name of the key associated with the error
+        throw:?ERROR_MISSING_REQUIRED_VALUE(Key) ->
+            throw(?ERROR_MISSING_REQUIRED_VALUE(str_utils:format_bin("config.~s", [Key])));
+        throw:?ERROR_BAD_VALUE_NOT_ALLOWED(Key, AllowedVals) ->
+            throw(?ERROR_BAD_VALUE_NOT_ALLOWED(str_utils:format_bin("config.~s", [Key]), AllowedVals));
+        throw:?ERROR_BAD_VALUE_BOOLEAN(Key) ->
+            throw(?ERROR_BAD_VALUE_BOOLEAN(str_utils:format_bin("config.~s", [Key])));
+        throw:?ERROR_BAD_VALUE_ATOM(Key) ->
+            throw(?ERROR_BAD_VALUE_ATOM(str_utils:format_bin("config.~s", [Key])))
+    end.
