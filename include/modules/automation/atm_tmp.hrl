@@ -15,28 +15,37 @@
 -define(ATM_TMP_HRL, 1).
 
 -record(atm_store_schema, {
+    id :: binary(),
     name :: automation:name(),
-    summary :: automation:summary(),
     description :: automation:description(),
-    is_input_store :: boolean(),
-    store_type :: automation:store_type(),
-    data_spec :: atm_data_spec:record()
+    type :: automation:store_type(),
+    data_spec :: atm_data_spec:record(),
+    requires_initial_value :: boolean()
 }).
 -type atm_store_schema() :: #atm_store_schema{}.
 
--record(serial_mode, {}).
--record(bulk_mode, {size :: pos_integer()}).
+-record(atm_store_iterator_serial_strategy, {}).
+-record(atm_store_iterator_batch_strategy, {size :: pos_integer()}).
 
--type atm_stream_mode() :: #serial_mode{} | #bulk_mode{}.
+-type atm_store_iterator_strategy() ::
+    #atm_store_iterator_serial_strategy{} |
+    #atm_store_iterator_batch_strategy{}.
 
--record(atm_stream_schema, {
-    mode :: atm_stream_mode()
+-record(atm_store_iterator_spec, {
+    strategy :: atm_store_iterator_strategy(),
+    store_schema_id :: binary()
 }).
--type atm_stream_schema() :: #atm_stream_schema{}.
+-type atm_store_iterator_spec() :: #atm_store_iterator_spec{}.
+
+-record(atm_store_iterator_config, {
+    store_id :: binary(),
+    strategy :: atm_store_iterator_strategy()
+}).
+-type atm_store_iterator_config() :: #atm_store_iterator_config{}.
 
 -record(atm_task_schema_argument_mapper, {
-    name :: binary(),
-    input_spec :: map()
+    argument_name :: binary(),
+    value_builder :: map()
 }).
 -type atm_task_schema_argument_mapper() :: #atm_task_schema_argument_mapper{}.
 
@@ -56,8 +65,33 @@
     name :: binary(),
     lambda_id :: binary(),
     argument_mappings :: [atm_task_schema_argument_mapper()]
+%%    result_mappings :: [atm_task_schema_result_mapper()]
 }).
 -type atm_task_schema() :: #atm_task_schema{}.
+
+-record(atm_parallel_box_schema, {
+    id :: binary(),
+    name :: automation:name(),
+    tasks :: [atm_task_schema()]
+}).
+-type atm_parallel_box_schema() :: #atm_parallel_box_schema{}.
+
+-record(atm_lane_schema, {
+    id :: binary(),
+    name :: automation:name(),
+    parallel_boxes :: [atm_parallel_box_schema()],
+    store_iterator_spec :: atm_store_iterator_spec()
+}).
+-type atm_lane_schema() :: #atm_lane_schema{}.
+
+-record(atm_workflow_schema, {
+    id :: binary(),
+    name :: automation:name(),
+    description :: automation:description(),
+    stores :: [atm_store_schema()],
+    lanes :: [atm_lane_schema()],
+    state :: incomplete | ready | deprecated
+}).
 
 %% TODO VFS-7637 better error handling and logging
 -define(ERROR_ATM_OPENFAAS_NOT_CONFIGURED, {error, openfaas_not_configured}).
@@ -88,5 +122,13 @@
 -define(ERROR_TASK_ARG_MAPPER_ITEM_QUERY_FAILED(__ITEM, __QUERY),
     {error, {atm_task_arg_item_query_failed, __ITEM, __QUERY}}
 ).
+-define(ERROR_ATM_BAD_DATA, {error, atm_bad_data}).
+-define(ERROR_ATM_BAD_DATA(__KEY, __REASON),
+    {error, {atm_bad_data, __KEY, __REASON}}
+).
+-define(ERROR_ATM_UNSUPPORTED_DATA_TYPE(__UNSUPPORTED_TYPE, __SUPPORTED_TYPES),
+    {error, {atm_unsupported_data_type, __UNSUPPORTED_TYPE, __SUPPORTED_TYPES}}
+).
+
 
 -endif.

@@ -18,14 +18,11 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([
-    create/2,
-    init_stream/2
-]).
+-export([create/2, get_iterator/1]).
 
--type init_args() :: atm_container:init_args().
+-type initial_value() :: atm_container:initial_value().
 
--export_type([init_args/0]).
+-export_type([initial_value/0]).
 
 
 %%%===================================================================
@@ -33,33 +30,34 @@
 %%%===================================================================
 
 
--spec create(atm_store_schema(), init_args()) -> {ok, atm_store:id()} | {error, term()}.
+-spec create(atm_store_schema(), initial_value()) ->
+    {ok, atm_store:id()} | {error, term()}.
 create(#atm_store_schema{
-    name = Name,
-    summary = Summary,
-    description = Description,
-    is_input_store = IsInputStore,
-    store_type = StoreType,
+    id = AtmStoreSchemaId,
+    name = AtmStoreName,
+    description = AtmStoreDescription,
+    requires_initial_value = RequiresInitialValues,
+    type = StoreType,
     data_spec = AtmDataSpec
 }, InitialArgs) ->
-    ContainerModel = store_type_to_container_model(StoreType),
+    ContainerModel = store_type_to_container_type(StoreType),
 
     {ok, _} = atm_store:create(#atm_store{
-        name = Name,
-        summary = Summary,
-        description = Description,
+        schema_id = AtmStoreSchemaId,
+        name = AtmStoreName,
+        description = AtmStoreDescription,
+        requires_initial_value = RequiresInitialValues,
         frozen = false,
-        is_input_store = IsInputStore,
         type = StoreType,
         container = atm_container:create(ContainerModel, AtmDataSpec, InitialArgs)
     }).
 
 
--spec init_stream(atm_stream_schema(), atm_store:id() | atm_store:record()) ->
-    atm_stream:stream().
-init_stream(AtmStreamSchema, AtmStoreIdOrRecord) ->
-    #atm_store{container = AtmContainer} = ensure_atm_store_record(AtmStoreIdOrRecord),
-    atm_stream:init(AtmStreamSchema, AtmContainer).
+-spec get_iterator(atm_store_iterator_config:record()) ->
+    atm_store_iterator:record().
+get_iterator(#atm_store_iterator_config{store_id = AtmStoreId} = AtmStoreIteratorConfig) ->
+    {ok, #atm_store{container = AtmContainer}} = atm_store:get(AtmStoreId),
+    atm_store_iterator:create(AtmStoreIteratorConfig, AtmContainer).
 
 
 %%%===================================================================
@@ -68,17 +66,7 @@ init_stream(AtmStreamSchema, AtmStoreIdOrRecord) ->
 
 
 %% @private
--spec store_type_to_container_model(automation:store_type()) ->
-    atm_container:model().
-store_type_to_container_model(single_value) -> atm_single_value_container;
-store_type_to_container_model(range) -> atm_range_container.
-
-
-%% @private
--spec ensure_atm_store_record(atm_store:id() | atm_store:record()) ->
-    atm_store:record().
-ensure_atm_store_record(#atm_store{} = AtmStoreRecord) ->
-    AtmStoreRecord;
-ensure_atm_store_record(AtmStoreId) ->
-    {ok, AtmStoreRecord} = atm_store:get(AtmStoreId),
-    AtmStoreRecord.
+-spec store_type_to_container_type(automation:store_type()) ->
+    atm_container:type().
+store_type_to_container_type(single_value) -> atm_single_value_container;
+store_type_to_container_type(range) -> atm_range_container.

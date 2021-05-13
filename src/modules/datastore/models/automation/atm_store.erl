@@ -80,11 +80,11 @@ get_record_version() ->
     datastore_model:record_struct().
 get_record_struct(1) ->
     {record, [
-        {type, atom},
+        {schema_id, string},
         {name, string},
-        {summary, string},
         {description, string},
+        {requires_initial_value, boolean},
         {frozen, boolean},
-        {is_input_store, boolean},
+        {type, atom},
         {container, {custom, string, {persistent_record, encode, decode, atm_container}}}
     ]}.

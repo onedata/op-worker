@@ -984,13 +984,13 @@
 
 %% Model storing information about automation store instance.
 -record(atm_store, {
-    type :: automation:store_type(),
+    schema_id :: binary(),
     name :: automation:name(),
-    summary :: automation:summary(),
     description :: automation:description(),
+    requires_initial_value :: boolean(),
     frozen = false :: boolean(),
-    is_input_store :: boolean(),
-    container :: atm_container:container()
+    type :: automation:store_type(),
+    container :: atm_container:record()
 }).
 
 %% Model that holds information about an automation workflow execution
@@ -1003,8 +1003,8 @@
 
 %% Model storing information about automation task execution.
 -record(atm_task_execution, {
-    name :: automation:name(),
     schema_id :: binary(),
+    name :: automation:name(),
     lambda_id :: binary(),
     executor :: atm_task_executor:executor(),
     argument_specs :: [atm_task_execution:arg_spec()]

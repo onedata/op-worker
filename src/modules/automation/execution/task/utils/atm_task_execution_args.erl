@@ -80,8 +80,8 @@ order_atm_lambda_arg_specs_by_name(
 ) ->
     boolean().
 order_atm_task_schema_arg_mappers_by_name(
-    #atm_task_schema_argument_mapper{name = Name1},
-    #atm_task_schema_argument_mapper{name = Name2}
+    #atm_task_schema_argument_mapper{argument_name = Name1},
+    #atm_task_schema_argument_mapper{argument_name = Name2}
 ) ->
     Name1 =< Name2.
 
@@ -98,7 +98,7 @@ build_specs([], [], AtmTaskExecutionArgSpecs) ->
 
 build_specs(
     [#atm_lambda_argument_spec{name = Name} = AtmLambdaArgSpec | RestAtmLambdaArgSpecs],
-    [#atm_task_schema_argument_mapper{name = Name} = AtmTaskSchemaArgMapper | RestAtmTaskSchemaArgMappers],
+    [#atm_task_schema_argument_mapper{argument_name = Name} = AtmTaskSchemaArgMapper | RestAtmTaskSchemaArgMappers],
     AtmTaskExecutionArgSpecs
 ) ->
     build_specs(RestAtmLambdaArgSpecs, RestAtmTaskSchemaArgMappers, [
@@ -130,7 +130,7 @@ build_specs(
 
 build_specs(
     [],
-    [#atm_task_schema_argument_mapper{name = Name} | _],
+    [#atm_task_schema_argument_mapper{argument_name = Name} | _],
     _AtmTaskExecutionArgSpecs
 ) ->
     throw(?ERROR_ATM_TASK_ARG_MAPPER_FOR_NONEXISTENT_LAMBDA_ARG(Name)).
@@ -162,7 +162,7 @@ build_spec(#atm_lambda_argument_spec{
     name = Name,
     data_spec = AtmDataSpec,
     is_batch = IsBatch
-}, #atm_task_schema_argument_mapper{input_spec = InputSpec}) ->
+}, #atm_task_schema_argument_mapper{value_builder = InputSpec}) ->
     #atm_task_execution_argument_spec{
         name = Name,
         input_spec = InputSpec,
