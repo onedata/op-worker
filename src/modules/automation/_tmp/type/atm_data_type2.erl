@@ -9,7 +9,7 @@
 %%% Tmp module - remove after integration with ctool and lambdas.
 %%% @end
 %%%-------------------------------------------------------------------
--module(atm_data_type).
+-module(atm_data_type2).
 -author("Bartosz Walkowicz").
 
 -type type() :: atm_integer_type.
