@@ -38,7 +38,7 @@
 -type init_args() :: map().
 
 -record(atm_range_container, {
-    data_spec :: atm_data_spec:record(),
+    data_spec :: atm_data_spec2:record(),
     start_num :: integer(),
     end_num :: integer(),
     step :: integer()
@@ -53,13 +53,13 @@
 %%%===================================================================
 
 
--spec init(atm_data_spec:record(), init_args()) -> container() | no_return().
+-spec init(atm_data_spec2:record(), init_args()) -> container() | no_return().
 init(AtmDataSpec, #{<<"end">> := EndNum} = InitialArgs) when is_integer(EndNum) ->
     StartNum = maps:get(<<"start">>, InitialArgs, 0),
     Step = maps:get(<<"step">>, InitialArgs, 1),
 
     case
-        atm_data_spec:get_type(AtmDataSpec) =:= atm_integer_type andalso
+        atm_data_spec2:get_type(AtmDataSpec) =:= atm_integer_type andalso
         is_integer(StartNum) andalso is_integer(Step) andalso
         is_proper_range(StartNum, EndNum, Step)
     of
@@ -87,7 +87,7 @@ is_proper_range(_Start, _End, _Step) ->
     false.
 
 
--spec get_data_spec(container()) -> atm_data_spec:record().
+-spec get_data_spec(container()) -> atm_data_spec2:record().
 get_data_spec(#atm_range_container{data_spec = AtmDataSpec}) ->
     AtmDataSpec.
 
@@ -109,7 +109,7 @@ to_json(#atm_range_container{
     step = Step
 }) ->
     #{
-        <<"dataSpec">> => atm_data_spec:to_json(AtmDataSpec),
+        <<"dataSpec">> => atm_data_spec2:to_json(AtmDataSpec),
         <<"start">> => StartNum,
         <<"end">> => EndNum,
         <<"step">> => Step
@@ -124,7 +124,7 @@ from_json(#{
     <<"step">> := Step
 }) ->
     #atm_range_container{
-        data_spec = atm_data_spec:from_json(AtmDataSpecJson),
+        data_spec = atm_data_spec2:from_json(AtmDataSpecJson),
         start_num = StartNum,
         end_num = EndNum,
         step = Step
