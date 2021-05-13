@@ -86,7 +86,7 @@ routes() -> [
             scope = private
         }
     }},
-    %% Download file content
+    %% Download file or directory content
     {<<"/data/:id/content">>, rest_handler, #rest_req{
         method = 'GET',
         produces = [<<"application/octet-stream">>],

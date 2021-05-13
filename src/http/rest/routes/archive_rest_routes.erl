@@ -7,11 +7,11 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%--------------------------------------------------------------------
-%%% @doc 
-%%% This module contains definitions of dataset REST methods.
+%%% @doc
+%%% This module contains definitions of archive REST methods.
 %%% @end
 %%%--------------------------------------------------------------------
--module(dataset_rest_routes).
+-module(archive_rest_routes).
 
 -include("http/rest.hrl").
 
@@ -25,87 +25,67 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Definitions of dataset REST paths.
+%% Definitions of archive REST paths.
 %% @end
 %%--------------------------------------------------------------------
 -spec routes() -> [{binary(), module(), #rest_req{}}].
 routes() -> [
-    %% List space top datasets
-    {<<"/spaces/:sid/datasets">>, rest_handler, #rest_req{
-        method = 'GET',
-        produces = [<<"application/json">>],
-        b_gri = #b_gri{
-            type = op_space,
-            id = ?BINDING(sid),
-            aspect = datasets,
-            scope = private
-        }
-    }},
-    %% List child datasets of a dataset
-    {<<"/datasets/:did/children">>, rest_handler, #rest_req{
+    %% List archives of a dataset
+    {<<"/datasets/:did/archives">>, rest_handler, #rest_req{
         method = 'GET',
         produces = [<<"application/json">>],
         b_gri = #b_gri{
             type = op_dataset,
             id = ?BINDING(did),
-            aspect = children,
+            aspect = archives,
             scope = private
         }
     }},
-    %% Establish dataset
-    {<<"/datasets">>, rest_handler, #rest_req{
+    %% Create archive from a dataset
+    {<<"/archives">>, rest_handler, #rest_req{
         method = 'POST',
         parse_body = as_json_params,
         consumes = [<<"application/json">>],
         produces = [<<"application/json">>],
         b_gri = #b_gri{
-            type = op_dataset,
+            type = op_archive,
             id = undefined,
             aspect = instance,
             scope = private
         }
     }},
-    %% Remove dataset
-    {<<"/datasets/:did">>, rest_handler, #rest_req{
-        method = 'DELETE',
-        b_gri = #b_gri{
-            type = op_dataset,
-            id = ?BINDING(did),
-            aspect = instance,
-            scope = private
-        }
-    }},
-    %% Get dataset information
-    {<<"/datasets/:did">>, rest_handler, #rest_req{
+    %% Get archive information
+    {<<"/archives/:aid">>, rest_handler, #rest_req{
         method = 'GET',
         produces = [<<"application/json">>],
         b_gri = #b_gri{
-            type = op_dataset,
-            id = ?BINDING(did),
+            type = op_archive,
+            id = ?BINDING(aid),
             aspect = instance,
             scope = private
         }
     }},
-    %% Update dataset
-    {<<"/datasets/:did">>, rest_handler, #rest_req{
+    %% Update archive
+    {<<"/archives/:aid">>, rest_handler, #rest_req{
         method = 'PATCH',
         parse_body = as_json_params,
         consumes = [<<"application/json">>],
         b_gri = #b_gri{
-            type = op_dataset,
-            id = ?BINDING(did),
+            type = op_archive,
+            id = ?BINDING(aid),
             aspect = instance,
             scope = private
         }
     }},
-    %% Get dataset summary for file or directory
-    {<<"/data/:id/dataset/summary">>, rest_handler, #rest_req{
-        method = 'GET',
-        produces = [<<"application/json">>],
+    %% Purge archive
+    {<<"/archives/:aid/init_purge">>, rest_handler, #rest_req{
+        method = 'POST',
+        parse_body = as_json_params,
+        consumes = [<<"application/json">>],
         b_gri = #b_gri{
-            type = op_file,
-            id = ?OBJECTID_BINDING(id),
-            aspect = dataset_summary,
+            type = op_archive,
+            id = ?BINDING(aid),
+            aspect = purge,
             scope = private
         }
     }}

@@ -780,16 +780,22 @@ handle_provider_request(UserCtx, #list_top_datasets{state = State, opts = Opts, 
     dataset_req:list_top_datasets(file_ctx:get_space_id_const(SpaceDirCtx), State, Opts, ListingMode, UserCtx);
 handle_provider_request(UserCtx, #list_children_datasets{id = DatasetId, opts = Opts, mode = ListingMode}, SpaceDirCtx) ->
     dataset_req:list_children_datasets(SpaceDirCtx, DatasetId, Opts, ListingMode, UserCtx);
-handle_provider_request(UserCtx, #archive_dataset{id = DatasetId, params = Params, attrs = Attrs}, SpaceDirCtx) ->
-    dataset_req:archive(SpaceDirCtx, DatasetId, Params, Attrs, UserCtx);
-handle_provider_request(UserCtx, #update_archive{id = ArchiveId, attrs = Params}, SpaceDirCtx) ->
-    dataset_req:update_archive(SpaceDirCtx, ArchiveId, Params, UserCtx);
+handle_provider_request(UserCtx, #archive_dataset{
+    id = DatasetId,
+    config = Config,
+    preserved_callback = PreservedCallback,
+    purged_callback = PurgedCallback,
+    description = Description
+}, SpaceDirCtx) ->
+    dataset_req:archive(SpaceDirCtx, DatasetId, Config, PreservedCallback, PurgedCallback, Description, UserCtx);
+handle_provider_request(UserCtx, #update_archive{id = ArchiveId, diff = Diff}, SpaceDirCtx) ->
+    dataset_req:update_archive(SpaceDirCtx, ArchiveId, Diff, UserCtx);
 handle_provider_request(UserCtx, #get_archive_info{id = ArchiveId}, SpaceDirCtx) ->
     dataset_req:get_archive_info(SpaceDirCtx, ArchiveId, UserCtx);
 handle_provider_request(UserCtx, #list_archives{dataset_id = DatasetId, opts = Opts, mode = ListingMode}, SpaceDirCtx) ->
     dataset_req:list_archives(SpaceDirCtx, DatasetId, Opts, ListingMode, UserCtx);
-handle_provider_request(UserCtx, #remove_archive{id = DatasetId}, SpaceDirCtx) ->
-    dataset_req:remove_archive(SpaceDirCtx, DatasetId, UserCtx).
+handle_provider_request(UserCtx, #init_archive_purge{id = ArchiveId, callback = CallbackUrl}, SpaceDirCtx) ->
+    dataset_req:init_archive_purge(SpaceDirCtx, ArchiveId, CallbackUrl, UserCtx).
 
 
 %%--------------------------------------------------------------------

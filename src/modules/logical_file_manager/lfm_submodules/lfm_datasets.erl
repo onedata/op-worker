@@ -23,7 +23,7 @@
 ]).
 
 %% Archives API
--export([archive/4, update_archive/3, get_archive_info/2, list_archives/4, remove_archive/2]).
+-export([archive/6, update_archive/3, get_archive_info/2, list_archives/4, init_archive_purge/3]).
 
 -type info() :: #dataset_info{}.
 -type archive_info() :: #archive_info{}.
@@ -122,24 +122,30 @@ list_children_datasets(SessId, DatasetId, Opts, ListingMode) ->
 %%% Archives API functions
 %%%===================================================================
 
--spec archive(session:id(), dataset:id(), archive:params(), archive:attrs()) ->
+-spec archive(session:id(), dataset:id(), archive:config(), archive:callback(), archive:callback(), archive:description()) ->
     {ok, archive:id()} | lfm:error_reply().
-archive(SessId, DatasetId, ArchiveParams, ArchiveAttrs) ->
+archive(SessId, DatasetId, Config, PreservedCallback, PurgedCallback, Description) ->
     SpaceGuid = dataset_id_to_space_guid(DatasetId),
     remote_utils:call_fslogic(SessId, provider_request, SpaceGuid,
-        #archive_dataset{id = DatasetId, params = ArchiveParams, attrs = ArchiveAttrs},
+        #archive_dataset{
+            id = DatasetId,
+            config = Config,
+            description = Description,
+            preserved_callback = PreservedCallback,
+            purged_callback = PurgedCallback
+        },
         fun(#dataset_archived{id = ArchiveId}) ->
             {ok, ArchiveId}
         end
     ).
 
 
--spec update_archive(session:id(), archive:id(), archive:attrs()) ->
+-spec update_archive(session:id(), archive:id(), archive:diff()) ->
     ok | lfm:error_reply().
-update_archive(SessId, ArchiveId, Attrs) ->
+update_archive(SessId, ArchiveId, Diff) ->
     SpaceGuid = archive_id_to_space_guid(ArchiveId),
     remote_utils:call_fslogic(SessId, provider_request, SpaceGuid,
-        #update_archive{id = ArchiveId, attrs = Attrs},
+        #update_archive{id = ArchiveId, diff = Diff},
         fun(_) -> ok end
 
     ).
@@ -168,12 +174,12 @@ list_archives(SessId, DatasetId, Opts, ListingMode) ->
     ).
 
 
--spec remove_archive(session:id(), archive:id()) ->
+-spec init_archive_purge(session:id(), archive:id(), archive:callback()) ->
     ok | lfm:error_reply().
-remove_archive(SessId, ArchiveId) ->
+init_archive_purge(SessId, ArchiveId, CallbackUrl) ->
     SpaceGuid = archive_id_to_space_guid(ArchiveId),
     remote_utils:call_fslogic(SessId, provider_request, SpaceGuid,
-        #remove_archive{id = ArchiveId},
+        #init_archive_purge{id = ArchiveId, callback = CallbackUrl},
         fun(_) -> ok end
     ).
 
