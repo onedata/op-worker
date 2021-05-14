@@ -32,6 +32,7 @@
 -spec routes() -> [{Path :: binary(), Handler :: module(), RoutesForPath :: map()}].
 routes() ->
     AllRoutes = lists:flatten([
+        archive_rest_routes:routes(),
         basic_file_operations_rest_routes:routes(),
         custom_file_metadata_rest_routes:routes(),
         dataset_rest_routes:routes(),

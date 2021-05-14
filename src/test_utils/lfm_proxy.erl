@@ -80,8 +80,10 @@
     get_dataset_info/3, get_file_eff_dataset_summary/3,
     list_top_datasets/5, list_top_datasets/6, list_children_datasets/4,
 
-    archive_dataset/5, update_archive/4, get_archive_info/3,
-    list_archives/4, list_archives/5, remove_archive/3
+    archive_dataset/5, archive_dataset/7,
+    update_archive/4, get_archive_info/3,
+    list_archives/4, list_archives/5,
+    init_archive_purge/3, init_archive_purge/4
 ]).
 
 -define(EXEC(Worker, Function),
@@ -920,15 +922,20 @@ list_children_datasets(Worker, SessId, DatasetId, Opts) ->
 %%% Archives functions
 %%%===================================================================
 
--spec archive_dataset(node(), session:id(), dataset:id(), archive:params(), archive:attrs()) ->
-    {ok, archive:id()} | lfm:error_reply().
-archive_dataset(Worker, SessId, DatasetId, ArchiveParams, ArchiveAttrs) ->
-    ?EXEC(Worker, lfm:archive_dataset(SessId, DatasetId, ArchiveParams, ArchiveAttrs)).
+-spec archive_dataset(node(), session:id(), dataset:id(), archive:config(),
+    archive:description()) -> {ok, archive:id()} | lfm:error_reply().
+archive_dataset(Worker, SessId, DatasetId, Config, Description) ->
+    archive_dataset(Worker, SessId, DatasetId, Config, undefined, undefined, Description).
+
+-spec archive_dataset(node(), session:id(), dataset:id(), archive:config(), archive:callback(),
+    archive:callback(), archive:description()) -> {ok, archive:id()} | lfm:error_reply().
+archive_dataset(Worker, SessId, DatasetId, Config, PreservedCallback, PurgedCallback, Description) ->
+    ?EXEC(Worker, lfm:archive_dataset(SessId, DatasetId, Config, PreservedCallback, PurgedCallback, Description)).
 
 
--spec update_archive(node(), session:id(), archive:id(), archive:attrs()) -> ok | lfm:error_reply().
-update_archive(Worker, SessId, ArchiveId, Attrs) ->
-    ?EXEC(Worker, lfm:update_archive(SessId, ArchiveId, Attrs)).
+-spec update_archive(node(), session:id(), archive:id(), archive:diff()) -> ok | lfm:error_reply().
+update_archive(Worker, SessId, ArchiveId, Diff) ->
+    ?EXEC(Worker, lfm:update_archive(SessId, ArchiveId, Diff)).
 
 
 -spec get_archive_info(node(), session:id(), archive:id()) ->
@@ -950,9 +957,14 @@ list_archives(Worker, SessId, DatasetId, Opts, ListingMode) ->
     ?EXEC(Worker, lfm:list_archives(SessId, DatasetId, Opts, ListingMode)).
 
 
--spec remove_archive(node(), session:id(), archive:id()) -> ok | lfm:error_reply().
-remove_archive(Worker, SessId, ArchiveId) ->
-    ?EXEC(Worker, lfm:remove_archive(SessId, ArchiveId)).
+-spec init_archive_purge(node(), session:id(), archive:id()) -> ok | lfm:error_reply().
+init_archive_purge(Worker, SessId, ArchiveId) ->
+    init_archive_purge(Worker, SessId, ArchiveId, undefined).
+
+-spec init_archive_purge(node(), session:id(), archive:id(), archive:callback()) ->
+    ok | lfm:error_reply().
+init_archive_purge(Worker, SessId, ArchiveId, Callback) ->
+    ?EXEC(Worker, lfm:init_archive_purge(SessId, ArchiveId, Callback)).
 
 %%%===================================================================
 %%% Internal functions

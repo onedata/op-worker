@@ -15,28 +15,29 @@
 
 % TODO VFS-7616 refine archives' attributes, describe and explain following macros
 
-% Macros defining possible types of archives
--define(FULL_ARCHIVE, full).
--define(INCREMENTAL_ARCHIVE, incremental).
+% Macros defining possible states of an archive
+-define(ARCHIVE_PENDING, pending).
+-define(ARCHIVE_BUILDING, building).
+-define(ARCHIVE_PRESERVED, preserved).
+-define(ARCHIVE_FAILED, failed).
+-define(ARCHIVE_PURGING, purging).
 
-% Macros defining possible states of archive
--define(EMPTY, empty).
--define(INITIALIZING, initializing).
--define(ARCHIVED, archived).
--define(RETIRING, retiring).
 
-% Macros defining possible characters of an archive
--define(DIP, dip).
--define(AIP, aip).
--define(DIP_AIP, dip_aip).
+% Macros defining possible layouts of files and directories in an archive
+-define(ARCHIVE_PLAIN_LAYOUT, plain).
+-define(ARCHIVE_BAGIT_LAYOUT, bagit).
+-define(ARCHIVE_LAYOUTS, [?ARCHIVE_BAGIT_LAYOUT, ?ARCHIVE_PLAIN_LAYOUT]).
 
-% Macros defining possible archive data structure types
--define(BAGIT, bagit).
--define(SIMPLE_COPY, simple_copy).
+-define(DEFAULT_INCLUDE_DIP, false).
+-define(DEFAULT_INCREMENTAL, false).
+-define(DEFAULT_ARCHIVE_DESCRIPTION, <<>>).
 
-% Macros defining possible archive metadata structure types
--define(BUILT_IN, built_in).
--define(JSON, json).
--define(XML, xml).
+-record(archive_config, {
+    incremental = ?DEFAULT_INCREMENTAL :: archive_config:incremental(),
+    % This flag determines whether dissemination information package (DIP) is created alongside with
+    % archival information package (AIP), on the storage.
+    include_dip = ?DEFAULT_INCLUDE_DIP :: archive_config:include_dip(),
+    layout :: archive_config:layout()
+}).
 
 -endif.
