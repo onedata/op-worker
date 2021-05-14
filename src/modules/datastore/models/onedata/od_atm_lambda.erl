@@ -15,7 +15,7 @@
 
 -include("modules/datastore/datastore_models.hrl").
 
--type id() :: automation:id().
+-type id() :: binary().
 -type record() :: #od_atm_lambda{}.
 -type doc() :: datastore_doc:doc(record()).
 -type diff() :: datastore_doc:diff(record()).
