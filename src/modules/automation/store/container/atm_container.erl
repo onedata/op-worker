@@ -74,7 +74,7 @@ get_data_spec(AtmContainer) ->
 -spec get_iterator(record()) -> atm_container_iterator:record().
 get_iterator(AtmContainer) ->
     RecordType = utils:record_type(AtmContainer),
-    RecordType:get_container_stream(AtmContainer).
+    RecordType:get_iterator(AtmContainer).
 
 
 %%%===================================================================

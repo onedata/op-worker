@@ -94,17 +94,23 @@ all() -> [
 create_store_with_invalid_args_test(_Config) ->
     Node = oct_background:get_random_provider_node(krakow),
 
-    lists:foreach(fun(InvalidInitArgs) ->
-        ?assertEqual(?EINVAL, create_store(Node, ?ATM_RANGE_STORE_SCHEMA, InvalidInitArgs))
+    lists:foreach(fun({InvalidInitialValue, ExpError}) ->
+        ?assertEqual(ExpError, create_store(Node, ?ATM_RANGE_STORE_SCHEMA, InvalidInitialValue))
     end, [
-        undefined,
-        #{<<"end">> => <<"NaN">>},
-        #{<<"start">> => <<"NaN">>, <<"end">> => 10},
-        #{<<"start">> => 5, <<"end">> => 10, <<"step">> => <<"NaN">>},
-        #{<<"start">> => 5, <<"end">> => 10, <<"step">> => 0},
-        #{<<"start">> => 15, <<"end">> => 10, <<"step">> => 1},
-        #{<<"start">> => -15, <<"end">> => -10, <<"step">> => -1},
-        #{<<"start">> => 10, <<"end">> => 15, <<"step">> => -1}
+        {undefined, ?ERROR_MISSING_REQUIRED_VALUE(<<"end">>)},
+        {#{<<"end">> => <<"NaN">>},
+            ?ERROR_ATM_BAD_DATA(<<"end">>, ?ERROR_ATM_DATA_TYPE_UNVERIFIED(<<"NaN">>, atm_integer_type))
+        },
+        {#{<<"start">> => <<"NaN">>, <<"end">> => 10},
+            ?ERROR_ATM_BAD_DATA(<<"start">>, ?ERROR_ATM_DATA_TYPE_UNVERIFIED(<<"NaN">>, atm_integer_type))
+        },
+        {#{<<"start">> => 5, <<"end">> => 10, <<"step">> => <<"NaN">>},
+            ?ERROR_ATM_BAD_DATA(<<"step">>, ?ERROR_ATM_DATA_TYPE_UNVERIFIED(<<"NaN">>, atm_integer_type))
+        },
+        {#{<<"start">> => 5, <<"end">> => 10, <<"step">> => 0}, ?ERROR_ATM_BAD_DATA},
+        {#{<<"start">> => 15, <<"end">> => 10, <<"step">> => 1}, ?ERROR_ATM_BAD_DATA},
+        {#{<<"start">> => -15, <<"end">> => -10, <<"step">> => -1}, ?ERROR_ATM_BAD_DATA},
+        {#{<<"start">> => 10, <<"end">> => 15, <<"step">> => -1}, ?ERROR_ATM_BAD_DATA}
     ]).
 
 

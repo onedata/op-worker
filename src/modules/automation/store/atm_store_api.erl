@@ -36,10 +36,10 @@ create(#atm_store_schema{
     id = AtmStoreSchemaId,
     name = AtmStoreName,
     description = AtmStoreDescription,
-    requires_initial_value = RequiresInitialValues,
+    requires_initial_value = RequiresInitialValues,  % TODO check
     type = StoreType,
     data_spec = AtmDataSpec
-}, InitialArgs) ->
+}, InitialValue) ->
     ContainerModel = store_type_to_container_type(StoreType),
 
     {ok, _} = atm_store:create(#atm_store{
@@ -49,7 +49,7 @@ create(#atm_store_schema{
         requires_initial_value = RequiresInitialValues,
         frozen = false,
         type = StoreType,
-        container = atm_container:create(ContainerModel, AtmDataSpec, InitialArgs)
+        container = atm_container:create(ContainerModel, AtmDataSpec, InitialValue)
     }).
 
 
