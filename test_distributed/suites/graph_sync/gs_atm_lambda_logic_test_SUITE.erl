@@ -9,7 +9,7 @@
 %%% This module tests automation lambda logic API using mocked gs_client module.
 %%% @end
 %%%--------------------------------------------------------------------
--module(atm_lambda_logic_test_SUITE).
+-module(gs_atm_lambda_logic_test_SUITE).
 -author("Michal Stanisz").
 
 -include("logic_tests_common.hrl").
