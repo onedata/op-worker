@@ -87,7 +87,7 @@
     eff_spaces = [] :: [od_space:id()],
     eff_handle_services = [] :: [od_handle_service:id()],
     eff_handles = [] :: [od_handle:id()],
-    eff_atm_inventories = [] :: [automation:id()],
+    eff_atm_inventories = [] :: [od_atm_inventory:id()],
 
     cache_state = #{} :: cache_state()
 }).
@@ -237,7 +237,7 @@
     argument_specs = [] :: [atm_lambda_argument_spec:record()],
     result_specs = [] :: [atm_lambda_result_spec:record()],
     
-    atm_inventories = [] :: [automation:id()],
+    atm_inventories = [] :: [od_atm_inventory:id()],
     
     cache_state = #{} :: cache_state()
 }).

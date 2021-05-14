@@ -208,6 +208,41 @@ end).
 
 % Mocked atm_lambda data
 -define(ATM_LAMBDA_NAME(__AtmLambda), __AtmLambda).
+-define(ATM_LAMBDA_SUMMARY(__AtmLambda), <<"example_summary">>).
+-define(ATM_LAMBDA_DESCRIPTION(__AtmLambda), <<"example_description">>).
+-define(ATM_LAMBDA_OPERATION_SPEC(__AtmLambda), 
+    #atm_openfaas_operation_spec{
+        docker_image = <<"examle_docker_image">>,
+        docker_execution_options = #atm_docker_execution_options{
+            readonly = false,
+            mount_oneclient = true,
+            oneclient_mount_point = <<"/a/b/c/d">>,
+            oneclient_options = <<"--a --b">>
+        }
+    }
+).
+-define(ATM_LAMBDA_DATA_SPEC, 
+    #atm_data_spec{
+        type = atm_archive_type,
+        value_constraints = #{}
+    }
+).
+-define(ATM_LAMBDA_ARGUMENT_SPEC(__AtmLambda),
+    #atm_lambda_argument_spec{
+        name = ?ATM_LAMBDA_NAME(__AtmLambda),
+        data_spec = ?ATM_LAMBDA_DATA_SPEC,
+        is_batch = false,
+        is_optional = true,
+        default_value = 8
+    }
+).
+-define(ATM_LAMBDA_RESULT_SPEC(__AtmLambda),
+        #atm_lambda_result_spec{
+        name = <<"example_name">>,
+        data_spec = ?ATM_LAMBDA_DATA_SPEC,
+        is_batch = true
+    }
+).
 -define(ATM_LAMBDA_INVENTORIES(__AtmLambda), [?ATM_INVENTORY_1]).
 
 
@@ -389,8 +424,15 @@ end).
     name = ?ATM_INVENTORY_NAME(__AtmInventory)
 }}).
 
--define(ATM_LAMBDA_PRIVATE_DATA_MATCHER(__AtmLambda), #document{key = __AtmLambda, value = #od_atm_lambda{
-    name = ?ATM_LAMBDA_NAME(__AtmLambda)
+-define(ATM_LAMBDA_PRIVATE_DATA_MATCHER(__AtmLambda), 
+    #document{key = __AtmLambda, value = #od_atm_lambda{
+        name = ?ATM_LAMBDA_NAME(__AtmLambda),
+        summary = ?ATM_LAMBDA_SUMMARY(__AtmLambdaId),
+        description = ?ATM_LAMBDA_DESCRIPTION(__AtmLambdaId),
+        operation_spec = ?ATM_LAMBDA_OPERATION_SPEC(__AtmLambda),
+        argument_specs = [?ATM_LAMBDA_ARGUMENT_SPEC(__AtmLambda)],
+        result_specs = [?ATM_LAMBDA_RESULT_SPEC(__AtmLambda)],
+        atm_inventories = [?ATM_INVENTORY_1]
 }}).
 
 
@@ -599,39 +641,10 @@ end).
     <<"revision">> => 1,
     <<"gri">> => gri:serialize(#gri{type = od_atm_lambda, id = __AtmLambdaId, aspect = instance, scope = private}),
     <<"name">> => ?ATM_LAMBDA_NAME(__AtmLambdaId),
-    <<"summary">> => <<"example_summary">>,
-    <<"description">> => <<"example_description">>,
-    <<"operationSpec">> => jsonable_record:to_json(
-        #atm_openfaas_operation_spec{
-            docker_image = <<"examle_docker_image">>,
-            docker_execution_options = #atm_docker_execution_options{
-                readonly = false,
-                mount_oneclient = true,
-                oneclient_mount_point = <<"/a/b/c/d">>,
-                oneclient_options = lists_utils:random_element([<<"">>, <<"--a --b">>])
-            }
-        }, atm_lambda_operation_spec),
-    <<"argumentSpecs">> => lists:map(fun(_) ->
-        jsonable_record:to_json(#atm_lambda_argument_spec{
-            name = <<"example_name">>,
-            data_spec = #atm_data_spec{
-                type = atm_archive_type,
-                value_constraints = #{}
-            },
-            is_batch = false,
-            is_optional = true,
-            default_value = 8
-        }, atm_lambda_argument_spec)
-    end, lists:seq(1, rand:uniform(5) - 1)),
-    <<"resultSpecs">> => lists:map(fun(_) ->
-        jsonable_record:to_json(#atm_lambda_result_spec{
-            name = <<"example_name">>,
-            data_spec = #atm_data_spec{
-                type = atm_archive_type,
-                value_constraints = #{}
-            },
-            is_batch = true
-        }, atm_lambda_result_spec)
-    end, lists:seq(1, rand:uniform(5) - 1)),
+    <<"summary">> => ?ATM_LAMBDA_SUMMARY(__AtmLambdaId),
+    <<"description">> => ?ATM_LAMBDA_DESCRIPTION(__AtmLambdaId),
+    <<"operationSpec">> => jsonable_record:to_json(?ATM_LAMBDA_OPERATION_SPEC(__AtmLambdaId), atm_lambda_operation_spec),
+    <<"argumentSpecs">> => [jsonable_record:to_json(?ATM_LAMBDA_ARGUMENT_SPEC(__AtmLambdaId), atm_lambda_argument_spec)],
+    <<"resultSpecs">> => [jsonable_record:to_json(?ATM_LAMBDA_RESULT_SPEC(__AtmLambdaId), atm_lambda_result_spec)],
     <<"atmInventories">> => [?ATM_INVENTORY_1]
 }).
