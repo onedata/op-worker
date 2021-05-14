@@ -9,7 +9,7 @@
 %%% This module tests handle service logic API using mocked gs_client module.
 %%% @end
 %%%--------------------------------------------------------------------
--module(handle_service_logic_test_SUITE).
+-module(gs_handle_service_logic_test_SUITE).
 -author("Lukasz Opiola").
 
 -include("logic_tests_common.hrl").

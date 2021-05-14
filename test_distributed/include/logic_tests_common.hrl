@@ -18,6 +18,7 @@
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("cluster_worker/include/graph_sync/graph_sync.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
+-include_lib("ctool/include/automation/automation.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/privileges.hrl").
@@ -59,6 +60,8 @@
 -define(STORAGE_2, <<"storage2Id">>).
 -define(TOKEN_1, <<"token1Id">>).
 -define(TOKEN_2, <<"token2Id">>).
+-define(ATM_INVENTORY_1, <<"atm_inventory1Id">>).
+-define(ATM_LAMBDA_1, <<"atm_lambda1Id">>).
 
 % User authorizations
 % Token auth is translated to {token, Token} before graph sync request.
@@ -96,6 +99,7 @@
 -define(USER_EFF_SPACES(__User), [?SPACE_1, ?SPACE_2]).
 -define(USER_EFF_HANDLE_SERVICES(__User), [?HANDLE_SERVICE_1, ?HANDLE_SERVICE_2]).
 -define(USER_EFF_HANDLES(__User), [?HANDLE_1, ?HANDLE_2]).
+-define(USER_EFF_ATM_INVENTORIES(__User), [?ATM_INVENTORY_1]).
 
 % Mocked group data
 -define(GROUP_NAME(__Group), __Group).
@@ -199,6 +203,48 @@ end).
     ?STORAGE_2 -> [?PROVIDER_2]
 end).
 
+% Mocked atm_inventory data
+-define(ATM_INVENTORY_NAME(__AtmInventory), __AtmInventory).
+
+% Mocked atm_lambda data
+-define(ATM_LAMBDA_NAME(__AtmLambda), __AtmLambda).
+-define(ATM_LAMBDA_SUMMARY(__AtmLambda), <<"example_summary">>).
+-define(ATM_LAMBDA_DESCRIPTION(__AtmLambda), <<"example_description">>).
+-define(ATM_LAMBDA_OPERATION_SPEC(__AtmLambda), 
+    #atm_openfaas_operation_spec{
+        docker_image = <<"examle_docker_image">>,
+        docker_execution_options = #atm_docker_execution_options{
+            readonly = false,
+            mount_oneclient = true,
+            oneclient_mount_point = <<"/a/b/c/d">>,
+            oneclient_options = <<"--a --b">>
+        }
+    }
+).
+-define(ATM_LAMBDA_DATA_SPEC, 
+    #atm_data_spec{
+        type = atm_archive_type,
+        value_constraints = #{}
+    }
+).
+-define(ATM_LAMBDA_ARGUMENT_SPEC(__AtmLambda),
+    #atm_lambda_argument_spec{
+        name = ?ATM_LAMBDA_NAME(__AtmLambda),
+        data_spec = ?ATM_LAMBDA_DATA_SPEC,
+        is_batch = false,
+        is_optional = true,
+        default_value = 8
+    }
+).
+-define(ATM_LAMBDA_RESULT_SPEC(__AtmLambda),
+        #atm_lambda_result_spec{
+        name = <<"example_name">>,
+        data_spec = ?ATM_LAMBDA_DATA_SPEC,
+        is_batch = true
+    }
+).
+-define(ATM_LAMBDA_INVENTORIES(__AtmLambda), [?ATM_INVENTORY_1]).
+
 
 -define(MOCK_JOIN_GROUP_TOKEN, <<"mockJoinGroupToken">>).
 -define(MOCK_JOINED_GROUP_ID, <<"mockJoinedGroupId">>).
@@ -225,7 +271,8 @@ end).
     eff_groups = ?USER_EFF_GROUPS(__User),
     eff_spaces = ?USER_EFF_SPACES(__User),
     eff_handle_services = ?USER_EFF_HANDLE_SERVICES(__User),
-    eff_handles = ?USER_EFF_HANDLES(__User)
+    eff_handles = ?USER_EFF_HANDLES(__User),
+    eff_atm_inventories = ?USER_EFF_ATM_INVENTORIES(__User)
 }}).
 -define(USER_PROTECTED_DATA_MATCHER(__User), #document{key = __User, value = #od_user{
     full_name = ?USER_FULL_NAME(__User),
@@ -373,6 +420,21 @@ end).
     readonly = false
 }}).
 
+-define(ATM_INVENTORY_PRIVATE_DATA_MATCHER(__AtmInventory), #document{key = __AtmInventory, value = #od_atm_inventory{
+    name = ?ATM_INVENTORY_NAME(__AtmInventory)
+}}).
+
+-define(ATM_LAMBDA_PRIVATE_DATA_MATCHER(__AtmLambda), 
+    #document{key = __AtmLambda, value = #od_atm_lambda{
+        name = ?ATM_LAMBDA_NAME(__AtmLambda),
+        summary = ?ATM_LAMBDA_SUMMARY(__AtmLambdaId),
+        description = ?ATM_LAMBDA_DESCRIPTION(__AtmLambdaId),
+        operation_spec = ?ATM_LAMBDA_OPERATION_SPEC(__AtmLambda),
+        argument_specs = [?ATM_LAMBDA_ARGUMENT_SPEC(__AtmLambda)],
+        result_specs = [?ATM_LAMBDA_RESULT_SPEC(__AtmLambda)],
+        atm_inventories = [?ATM_INVENTORY_1]
+}}).
+
 
 -define(USER_SHARED_DATA_VALUE(__UserId), #{
     <<"revision">> => 1,
@@ -402,7 +464,8 @@ end).
         <<"effectiveGroups">> => ?USER_EFF_GROUPS(__UserId),
         <<"effectiveSpaces">> => ?USER_EFF_SPACES(__UserId),
         <<"effectiveHandleServices">> => ?USER_EFF_HANDLE_SERVICES(__UserId),
-        <<"effectiveHandles">> => ?USER_EFF_HANDLES(__UserId)
+        <<"effectiveHandles">> => ?USER_EFF_HANDLES(__UserId),
+        <<"effectiveAtmInventories">> => ?USER_EFF_ATM_INVENTORIES(__UserId)
     }
 end).
 
@@ -565,3 +628,23 @@ end).
 }).
 
 -define(TEMPORARY_TOKENS_SECRET_GENERATION(__UserId), 1).
+
+
+-define(ATM_INVENTORY_PRIVATE_DATA_VALUE(__AtmInventoryId), #{
+    <<"revision">> => 1,
+    <<"gri">> => gri:serialize(#gri{type = od_atm_inventory, id = __AtmInventoryId, aspect = instance, scope = private}),
+    <<"name">> => ?ATM_INVENTORY_NAME(__AtmInventoryId)
+}).
+
+
+-define(ATM_LAMBDA_PRIVATE_DATA_VALUE(__AtmLambdaId), #{
+    <<"revision">> => 1,
+    <<"gri">> => gri:serialize(#gri{type = od_atm_lambda, id = __AtmLambdaId, aspect = instance, scope = private}),
+    <<"name">> => ?ATM_LAMBDA_NAME(__AtmLambdaId),
+    <<"summary">> => ?ATM_LAMBDA_SUMMARY(__AtmLambdaId),
+    <<"description">> => ?ATM_LAMBDA_DESCRIPTION(__AtmLambdaId),
+    <<"operationSpec">> => jsonable_record:to_json(?ATM_LAMBDA_OPERATION_SPEC(__AtmLambdaId), atm_lambda_operation_spec),
+    <<"argumentSpecs">> => [jsonable_record:to_json(?ATM_LAMBDA_ARGUMENT_SPEC(__AtmLambdaId), atm_lambda_argument_spec)],
+    <<"resultSpecs">> => [jsonable_record:to_json(?ATM_LAMBDA_RESULT_SPEC(__AtmLambdaId), atm_lambda_result_spec)],
+    <<"atmInventories">> => [?ATM_INVENTORY_1]
+}).

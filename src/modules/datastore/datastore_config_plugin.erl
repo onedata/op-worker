@@ -32,6 +32,8 @@ get_models() -> [
     od_harvester,
     od_storage,
     od_token,
+    od_atm_inventory,
+    od_atm_lambda,
     temporary_token_secret,
     provider_auth,
     offline_access_credentials,
