@@ -19,8 +19,11 @@
 
 %% API
 -export([get_routing_key/2, get_attr_routing_keys/2, get_replica_status_routing_keys/2,
+    get_attr_routing_keys_without_replica_status_changes/2,
     get_stream_key/1, get_aggregation_key/1]).
 -export([get_context/1, update_context/2]).
+-export([get_reference_based_prefix/1,
+    get_attr_changed_reference_based_prefix/0, get_replica_status_reference_based_prefix/0]).
 
 -type aggregation_key() :: term().
 -type ctx() :: undefined | {file, file_ctx:ctx()}.
@@ -104,6 +107,19 @@ get_attr_routing_keys(Guid, RoutingCtx) ->
     subscription_manager:event_routing_keys().
 get_replica_status_routing_keys(Guid, RoutingCtx) ->
     check_links_and_get_parent_connected_routing_key(<<"replica_status_changed.">>, Guid, RoutingCtx).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns a routing keys (see get_routing_key fun) for events connected with file_attrs excluding events
+%% connected only with change of replication status.
+%% Warning: It is only temporary solution as currently events framework does not allow parametrize subscriptions.
+%% Usually, get_routing_key function should be used.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_attr_routing_keys_without_replica_status_changes(Guid :: fslogic_worker:file_guid(),
+    RoutingCtx :: routing_ctx()) -> subscription_manager:event_routing_keys().
+get_attr_routing_keys_without_replica_status_changes(Guid, RoutingCtx) ->
+    check_links_and_get_parent_connected_routing_key(<<"file_attr_changed.">>, Guid, RoutingCtx).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -225,6 +241,35 @@ update_context(#file_renamed_event{top_entry = E} = Evt, {file, FileCtx}) ->
     Evt#file_renamed_event{top_entry = E#file_renamed_entry{old_guid = FileGuid}};
 update_context(Evt, _Ctx) ->
     Evt.
+
+-spec get_reference_based_prefix(event:base() | event:type() | binary()) ->
+    {ok, binary()} | {error, not_reference_based}.
+get_reference_based_prefix(#event{type = Type}) ->
+    get_reference_based_prefix(Type);
+get_reference_based_prefix(#file_attr_changed_event{}) ->
+    {ok, <<"file_attr_changed.">>};
+get_reference_based_prefix(#file_location_changed_event{}) ->
+    {ok, <<"file_location_changed.">>};
+get_reference_based_prefix(#file_perm_changed_event{}) ->
+    {ok, <<"file_perm_changed.">>};
+get_reference_based_prefix(<<"file_attr_changed.", _/binary>>) ->
+    {ok, <<"file_attr_changed.">>};
+get_reference_based_prefix(<<"replica_status_changed.", _/binary>>) ->
+    {ok, <<"replica_status_changed.">>};
+get_reference_based_prefix(<<"file_location_changed.", _/binary>>) ->
+    {ok, <<"file_location_changed.">>};
+get_reference_based_prefix(<<"file_perm_changed.", _/binary>>) ->
+    {ok, <<"file_perm_changed.">>};
+get_reference_based_prefix(_) ->
+    {error, not_reference_based}.
+
+-spec get_attr_changed_reference_based_prefix() -> binary().
+get_attr_changed_reference_based_prefix() ->
+    <<"file_attr_changed.">>.
+
+-spec get_replica_status_reference_based_prefix() -> binary().
+get_replica_status_reference_based_prefix() ->
+    <<"replica_status_changed.">>.
 
 %%%===================================================================
 %%% Internal functions
