@@ -46,6 +46,7 @@ get_documents_diff(Worker, After, Before, SessionClosed) ->
                             ({ok, #document{value = #permissions_cache{}}}) -> false;
                             ({ok, #document{value = #permissions_cache_helper{}}}) -> false;
                             ({ok, #document{value = #permissions_cache_helper2{}}}) -> false;
+                            ({ok, #document{value = #file_subscription_counter{}}}) -> false;
                             (_) -> true
     end, Ans),
 
