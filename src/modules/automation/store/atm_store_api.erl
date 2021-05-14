@@ -13,16 +13,23 @@
 -author("Bartosz Walkowicz").
 
 -include("modules/automation/atm_tmp.hrl").
+-include("modules/automation/atm_wokflow_execution.hrl").
 -include("modules/datastore/datastore_models.hrl").
--include("modules/datastore/datastore_runner.hrl").
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([create/2, get_iterator/1]).
+-export([
+    create_all/2, create/2,
+    build_iterator_config/2, get_iterator/1,
+    delete_all/1, delete/1
+]).
 
 -type initial_value() :: atm_container:initial_value().
+-type initial_values() :: #{AtmStoreSchemaId :: automation:id() => initial_value()}.
 
--export_type([initial_value/0]).
+-type registry() :: #{AtmStoreSchemaId :: automation:id() => atm_store:id()}.
+
+-export_type([initial_value/0, initial_values/0, registry/0]).
 
 
 %%%===================================================================
@@ -30,13 +37,32 @@
 %%%===================================================================
 
 
+-spec create_all([atm_store_schema()], initial_values()) -> registry() | no_return().
+create_all(AtmStoreSchemas, InitialValues) ->
+    lists:foldl(fun(#atm_store_schema{
+        id = AtmStoreSchemaId
+    } = AtmStoreSchema, Acc) ->
+        InitialValue = maps:get(AtmStoreSchemaId, InitialValues, undefined),
+        try
+            {ok, AtmStoreId} = create(AtmStoreSchema, InitialValue),
+            Acc#{AtmStoreSchemaId => AtmStoreId}
+        catch _:Reason ->
+            delete_all(maps:values(Acc)),
+            throw(?ERROR_ATM_STORE_CREATION_FAILED(AtmStoreSchemaId, Reason))
+        end
+    end, #{}, AtmStoreSchemas).
+
+
 -spec create(atm_store_schema(), initial_value()) ->
-    {ok, atm_store:id()} | {error, term()}.
+    {ok, atm_store:id()} | no_return().
+create(#atm_store_schema{requires_initial_value = true}, undefined) ->
+    throw(?ERROR_ATM_STORE_MISSING_REQUIRED_INITIAL_VALUE);
+
 create(#atm_store_schema{
     id = AtmStoreSchemaId,
     name = AtmStoreName,
     description = AtmStoreDescription,
-    requires_initial_value = RequiresInitialValues,  % TODO check
+    requires_initial_value = RequiresInitialValues,
     type = StoreType,
     data_spec = AtmDataSpec
 }, InitialValue) ->
@@ -53,11 +79,27 @@ create(#atm_store_schema{
     }).
 
 
+-spec build_iterator_config(registry(), atm_store_iterator_spec()) ->
+    atm_store_iterator_config:record() | no_return().
+build_iterator_config(AtmStoreRegistry, AtmStoreIteratorConfig) ->
+    atm_store_iterator_config:build(AtmStoreRegistry, AtmStoreIteratorConfig).
+
+
 -spec get_iterator(atm_store_iterator_config:record()) ->
     atm_store_iterator:record().
 get_iterator(#atm_store_iterator_config{store_id = AtmStoreId} = AtmStoreIteratorConfig) ->
     {ok, #atm_store{container = AtmContainer}} = atm_store:get(AtmStoreId),
     atm_store_iterator:create(AtmStoreIteratorConfig, AtmContainer).
+
+
+-spec delete_all([atm_store:id()]) -> ok.
+delete_all(AtmStoreIds) ->
+    lists:foreach(fun(AtmStoreId) -> delete(AtmStoreId) end, AtmStoreIds).
+
+
+-spec delete(atm_store:id()) -> ok | {error, term()}.
+delete(AtmStoreId) ->
+    atm_store:delete(AtmStoreId).
 
 
 %%%===================================================================

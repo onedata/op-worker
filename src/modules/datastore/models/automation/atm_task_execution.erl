@@ -13,6 +13,7 @@
 -author("Bartosz Walkowicz").
 
 -include("modules/automation/atm_task_execution.hrl").
+-include("modules/automation/atm_wokflow_execution.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
 
@@ -44,11 +45,12 @@
 %%      end
 %% }
 -type arg_input_spec() :: json_utils:json_map().
-
 -type arg_spec() :: #atm_task_execution_argument_spec{}.
 
+-type status() :: ?PENDING_STATUS | ?ACTIVE_STATUS | ?FINISHED_STATUS | ?FAILED_STATUS.
+
 -export_type([id/0, record/0, doc/0, diff/0]).
--export_type([ctx/0, arg_input_spec/0, arg_spec/0]).
+-export_type([ctx/0, arg_input_spec/0, arg_spec/0, status/0]).
 
 
 -define(CTX, #{model => ?MODULE}).

@@ -13,6 +13,7 @@
 -author("Bartosz Walkowicz").
 
 -include("modules/automation/atm_task_execution.hrl").
+-include("modules/automation/atm_wokflow_execution.hrl").
 -include("modules/automation/atm_tmp.hrl").
 -include("modules/datastore/datastore_models.hrl").
 
@@ -52,6 +53,7 @@ create(AtmWorkflowExecutionId, #atm_task_schema{
     } = AtmLambda,
 
     {ok, _} = atm_task_execution:create(#atm_task_execution{
+        status = ?PENDING_STATUS,
         name = AtmTaskName,
         schema_id = AtmTaskSchemaId,
         lambda_id = AtmLambdaId,

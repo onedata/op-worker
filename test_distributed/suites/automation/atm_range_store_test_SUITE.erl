@@ -13,6 +13,7 @@
 -author("Bartosz Walkowicz").
 
 -include("modules/automation/atm_tmp.hrl").
+-include("modules/automation/atm_wokflow_execution.hrl").
 
 -include_lib("ctool/include/automation/automation.hrl").
 -include_lib("ctool/include/errors.hrl").

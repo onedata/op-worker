@@ -28,9 +28,15 @@
 -type doc() :: datastore_doc:doc(record()).
 
 -type state() :: ?WAITING_STATE | ?ONGOING_STATE | ?ENDED_STATE.
+
+-type status() ::
+    ?SCHEDULED_STATUS | ?INITIALIZING_STATUS | ?ENQUEUED_STATUS |
+    ?ACTIVE_STATUS |
+    ?FINISHED_STATUS | ?FAILED_STATUS.
+
 -type timestamp() :: time:seconds().
 
--export_type([id/0, record/0, doc/0, state/0, timestamp/0]).
+-export_type([id/0, record/0, doc/0, state/0, status/0, timestamp/0]).
 
 -type error() :: {error, term()}.
 
@@ -50,6 +56,7 @@ create(AtmWorkflowExecutionId, SpaceId) ->
   ?extract_ok(datastore_model:create(?CTX, #document{
       key = AtmWorkflowExecutionId,
       value = #atm_workflow_execution{
+          status = ?SCHEDULED_STATUS,
           space_id = SpaceId,
           schedule_time = global_clock:timestamp_seconds()
       }

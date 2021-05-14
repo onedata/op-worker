@@ -37,12 +37,6 @@
 }).
 -type atm_store_iterator_spec() :: #atm_store_iterator_spec{}.
 
--record(atm_store_iterator_config, {
-    store_id :: binary(),
-    strategy :: atm_store_iterator_strategy()
-}).
--type atm_store_iterator_config() :: #atm_store_iterator_config{}.
-
 -record(atm_task_schema_argument_mapper, {
     argument_name :: binary(),
     value_builder :: map()
@@ -61,23 +55,23 @@
 -type od_atm_lambda() :: #od_atm_lambda{}.
 
 -record(atm_task_schema, {
-    id :: binary(),
-    name :: binary(),
-    lambda_id :: binary(),
+    id :: automation:id(),
+    name :: automation:name(),
+    lambda_id :: automation:id(),
     argument_mappings :: [atm_task_schema_argument_mapper()]
 %%    result_mappings :: [atm_task_schema_result_mapper()]
 }).
 -type atm_task_schema() :: #atm_task_schema{}.
 
 -record(atm_parallel_box_schema, {
-    id :: binary(),
+    id :: automation:id(),
     name :: automation:name(),
     tasks :: [atm_task_schema()]
 }).
 -type atm_parallel_box_schema() :: #atm_parallel_box_schema{}.
 
 -record(atm_lane_schema, {
-    id :: binary(),
+    id :: automation:id(),
     name :: automation:name(),
     parallel_boxes :: [atm_parallel_box_schema()],
     store_iterator_spec :: atm_store_iterator_spec()
@@ -85,7 +79,7 @@
 -type atm_lane_schema() :: #atm_lane_schema{}.
 
 -record(atm_workflow_schema, {
-    id :: binary(),
+    id :: automation:id(),
     name :: automation:name(),
     description :: automation:description(),
     stores :: [atm_store_schema()],
@@ -104,6 +98,9 @@
     {error, {atm_data_type_unverified, __VALUE, __EXP_TYPE}}
 ).
 
+-define(ERROR_ATM_REFERENCED_NONEXISTENT_STORE(__STORE_SCHEMA_ID),
+    {error, {atm_task_arg_mapper_nonexistent_store, __STORE_SCHEMA_ID}}
+).
 -define(ERROR_ATM_NO_TASK_ARG_MAPPER_FOR_REQUIRED_LAMBDA_ARG(__ARG_NAME),
     {error, {no_task_arg_mapper_for, __ARG_NAME}}
 ).
@@ -113,13 +110,10 @@
 -define(ERROR_ATM_TASK_ARG_MAPPING_FAILED(__ARG_NAME, __REASON),
     {error, {atm_task_arg_mapping_failed, __ARG_NAME, __REASON}}
 ).
--define(ERROR_TASK_ARG_MAPPER_INVALID_INPUT_SPEC,
+-define(ERROR_ATM_TASK_ARG_MAPPER_INVALID_INPUT_SPEC,
     {error, atm_task_arg_mapper_invalid_input_spec}
 ).
--define(ERROR_TASK_ARG_MAPPER_NONEXISTENT_STORE(__STORE_SCHEMA_ID),
-    {error, {atm_task_arg_mapper_nonexistent_store, __STORE_SCHEMA_ID}}
-).
--define(ERROR_TASK_ARG_MAPPER_ITEM_QUERY_FAILED(__ITEM, __QUERY),
+-define(ERROR_ATM_TASK_ARG_MAPPER_ITEM_QUERY_FAILED(__ITEM, __QUERY),
     {error, {atm_task_arg_item_query_failed, __ITEM, __QUERY}}
 ).
 -define(ERROR_ATM_BAD_DATA, {error, atm_bad_data}).
@@ -128,6 +122,12 @@
 ).
 -define(ERROR_ATM_UNSUPPORTED_DATA_TYPE(__UNSUPPORTED_TYPE, __SUPPORTED_TYPES),
     {error, {atm_unsupported_data_type, __UNSUPPORTED_TYPE, __SUPPORTED_TYPES}}
+).
+-define(ERROR_ATM_STORE_MISSING_REQUIRED_INITIAL_VALUE,
+    {error, atm_store_missing_required_initial_value}
+).
+-define(ERROR_ATM_STORE_CREATION_FAILED(__STORE_SCHEMA_ID, __REASON),
+    {error, {atm_store_creation_failed, __STORE_SCHEMA_ID, __REASON}}
 ).
 
 

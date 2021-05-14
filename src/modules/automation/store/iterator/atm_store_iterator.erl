@@ -16,6 +16,7 @@
 -behaviour(persistent_record).
 
 -include("modules/automation/atm_tmp.hrl").
+-include("modules/automation/atm_wokflow_execution.hrl").
 -include("modules/datastore/datastore_models.hrl").
 
 %% API
@@ -31,7 +32,7 @@
 -type item() :: json_utils:json_term().
 
 -record(atm_store_iterator, {
-    config :: atm_store_iterator_config(),
+    config :: atm_store_iterator_config:record(),
     data_spec :: atm_data_spec:record(),
     container_iterator :: atm_container_iterator:record()
 }).

@@ -185,7 +185,7 @@ build_arg(#atm_task_execution_ctx{stores = Stores}, #{
     <<"inputRef">> := StoreSchemaId
 }) ->
     case maps:get(StoreSchemaId, Stores, undefined) of
-        undefined -> throw(?ERROR_TASK_ARG_MAPPER_NONEXISTENT_STORE(StoreSchemaId));
+        undefined -> throw(?ERROR_ATM_REFERENCED_NONEXISTENT_STORE(StoreSchemaId));
         StoreCredentials -> StoreCredentials
     end;
 
@@ -199,12 +199,12 @@ build_arg(#atm_task_execution_ctx{item = Item}, #{
             % TODO fix query in case of array indices
             case json_utils:query(Item, Query) of
                 {ok, Value} -> Value;
-                error -> throw(?ERROR_TASK_ARG_MAPPER_ITEM_QUERY_FAILED(Item, Query))
+                error -> throw(?ERROR_ATM_TASK_ARG_MAPPER_ITEM_QUERY_FAILED(Item, Query))
             end
     end;
 
 build_arg(_AtmTaskExecutionArgSpec, _InputSpec) ->
-    throw(?ERROR_TASK_ARG_MAPPER_INVALID_INPUT_SPEC).
+    throw(?ERROR_ATM_TASK_ARG_MAPPER_INVALID_INPUT_SPEC).
 
 
 %% @private

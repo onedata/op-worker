@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module provides `iterator` functionality for `atm_store`.
+%%% TODO WRITEME.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_store_iterator_config).
@@ -15,6 +15,10 @@
 -behaviour(persistent_record).
 
 -include("modules/automation/atm_tmp.hrl").
+-include("modules/automation/atm_wokflow_execution.hrl").
+
+%% API
+-export([build/2]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
@@ -23,6 +27,28 @@
 -type record() :: #atm_store_iterator_config{}.
 
 -export_type([record/0]).
+
+
+%%%===================================================================
+%%% API
+%%%===================================================================
+
+
+-spec build(atm_store_api:registry(), atm_store_iterator_spec()) ->
+    record() | no_return().
+build(AtmStoreRegistry, #atm_store_iterator_spec{
+    store_schema_id = AtmStoreSchemaId,
+    strategy = AtmStoreIteratorStrategy
+}) ->
+    case maps:get(AtmStoreSchemaId, AtmStoreRegistry, undefined) of
+        undefined ->
+            throw(?ERROR_ATM_REFERENCED_NONEXISTENT_STORE(AtmStoreSchemaId));
+        AtmStoreId ->
+            #atm_store_iterator_config{
+                store_id = AtmStoreId,
+                strategy = AtmStoreIteratorStrategy
+            }
+    end.
 
 
 %%%===================================================================
@@ -40,7 +66,7 @@ version() ->
 db_encode(#atm_store_iterator_config{
     store_id = AtmStoreId,
     strategy = AtmStoreIteratorStrategy
-}, NestedRecordEncoder) ->
+}, _NestedRecordEncoder) ->
     #{
         <<"storeId">> => AtmStoreId,
         % TODO replace with below after integration with ctool/oz
@@ -54,7 +80,7 @@ db_encode(#atm_store_iterator_config{
 db_decode(#{
     <<"storeId">> := AtmStoreId,
     <<"strategy">> := AtmStoreIteratorStrategyJson
-}, NestedRecordDecoder) ->
+}, _NestedRecordDecoder) ->
     #atm_store_iterator_config{
         store_id = AtmStoreId,
         strategy = binary_to_term(json_utils:decode(AtmStoreIteratorStrategyJson))
