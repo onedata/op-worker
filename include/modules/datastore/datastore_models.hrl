@@ -382,7 +382,9 @@
     shares = [] :: [od_share:id()], % VFS-7437 Handle conflict resolution similarly to hardlinks
     deleted = false :: boolean(),
     parent_uuid :: file_meta:uuid(),
-    references = file_meta_hardlinks:empty_references() :: file_meta_hardlinks:references(),
+    % references are not always present in document to prevent copying large amounts of data
+    % in such a case references are undefined
+    references = file_meta_hardlinks:empty_references() :: file_meta_hardlinks:references() | undefined,
     symlink_value :: undefined | file_meta_symlinks:symlink(),
     % this field is used to cache value from #dataset.state field
     % TODO VFS-7533 handle conflict on file_meta with remote provider
