@@ -506,6 +506,22 @@ listxattr(SDHandle = #sd_handle{file = FileId}) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Flush buffer of BufferedStorageHelper for specific file.
+%% @end
+%%--------------------------------------------------------------------
+-spec flushbuffer(handle(), CurrentSize :: integer()) -> ok | error_reply().
+flushbuffer(SDHandle = #sd_handle{file = FileId}, CurrentSize) ->
+    run_with_helper_handle(retry_as_root, SDHandle, fun(HelperHandle) ->
+        case helpers:flushbuffer(HelperHandle, FileId, CurrentSize) of
+            ok -> ok;
+            {error, ?ENOENT} -> ok;
+            {error, __} = Error -> Error
+        end
+    end, ?READWRITE).
+
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Removes a file. CurrentSize specifies the current size of the file
 %% known by the op-worker.
 %% @end
