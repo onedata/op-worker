@@ -94,7 +94,7 @@ get_iterator(#atm_store_iterator_config{store_id = AtmStoreId} = AtmStoreIterato
 
 -spec delete_all([atm_store:id()]) -> ok.
 delete_all(AtmStoreIds) ->
-    lists:foreach(fun(AtmStoreId) -> delete(AtmStoreId) end, AtmStoreIds).
+    lists:foreach(fun delete/1, AtmStoreIds).
 
 
 -spec delete(atm_store:id()) -> ok | {error, term()}.

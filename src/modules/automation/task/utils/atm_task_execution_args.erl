@@ -42,15 +42,15 @@ build_specs(AtmLambdaArgSpecs, AtmTaskSchemaArgMappers) ->
     json_utils:json_map() | no_return().
 build_args(AtmTaskExecutionCtx, AtmTaskExecutionArgSpecs) ->
     lists:foldl(fun(#atm_task_execution_argument_spec{
-        name = Name,
+        name = ArgName,
         input_spec = ArgInputSpec
     } = AtmTaskExecutionArgSpec, Args) ->
         try
             ArgValue = build_arg(AtmTaskExecutionCtx, ArgInputSpec),
             validate_arg(ArgValue, AtmTaskExecutionArgSpec),
-            Args#{Name => ArgValue}
+            Args#{ArgName => ArgValue}
         catch _:Reason ->
-            throw(?ERROR_ATM_TASK_ARG_MAPPING_FAILED(Name, Reason))
+            throw(?ERROR_ATM_TASK_ARG_MAPPING_FAILED(ArgName, Reason))
         end
     end, #{}, AtmTaskExecutionArgSpecs).
 

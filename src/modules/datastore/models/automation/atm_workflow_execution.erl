@@ -16,7 +16,7 @@
 -include("modules/datastore/datastore_runner.hrl").
 
 %% API
--export([create/2, delete/1]).
+-export([create/1, get/1, delete/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_version/0, get_record_struct/1]).
@@ -38,12 +38,8 @@
 
 -export_type([id/0, record/0, doc/0, state/0, status/0, timestamp/0]).
 
--type error() :: {error, term()}.
 
-
--define(CTX, #{
-    model => ?MODULE
-}).
+-define(CTX, #{model => ?MODULE}).
 
 
 %%%===================================================================
@@ -51,19 +47,22 @@
 %%%===================================================================
 
 
--spec create(id(), od_space:id()) -> ok | error().
-create(AtmWorkflowExecutionId, SpaceId) ->
-  ?extract_ok(datastore_model:create(?CTX, #document{
-      key = AtmWorkflowExecutionId,
-      value = #atm_workflow_execution{
-          status = ?SCHEDULED_STATUS,
-          space_id = SpaceId,
-          schedule_time = global_clock:timestamp_seconds()
-      }
-  })).
+-spec create(doc()) -> ok | {error, term()}.
+create(AtmWorkflowExecutionDoc) ->
+  ?extract_ok(datastore_model:create(?CTX, AtmWorkflowExecutionDoc)).
 
 
--spec delete(id()) -> ok | error().
+-spec get(id()) -> {ok, record()} | {error, term()}.
+get(AtmWorkflowExecutionId) ->
+    case datastore_model:get(?CTX, AtmWorkflowExecutionId) of
+        {ok, #document{value = AtmWorkflowExecutionRecord}} ->
+            {ok, AtmWorkflowExecutionRecord};
+        {error, _} = Error ->
+            Error
+    end.
+
+
+-spec delete(id()) -> ok | {error, term()}.
 delete(AtmWorkflowExecutionId) ->
     datastore_model:delete(?CTX, AtmWorkflowExecutionId).
 
@@ -101,7 +100,31 @@ get_record_version() ->
 -spec get_record_struct(datastore_model:record_version()) -> datastore_model:record_struct().
 get_record_struct(1) ->
     {record, [
+        {schema_id, string},
+        {schema_state, atom},
+        {name, string},
+        {description, string},
+
         {space_id, string},
+        {stores, [string]},
+        {lanes, [{record, [
+            {schema_id, string},
+            {name, string},
+
+            {status, atom},
+            {parallel_boxes, [{record, [
+                {schema_id, string},
+                {name, string},
+                {status, atom},
+                {tasks, {custom, string, {json_utils, encode, decode}}}
+            ]}]},
+
+            {store_iterator_config,
+                {custom, string, {persistent_record, encode, decode, atm_store_iterator_config}}
+            }
+        ]}]},
+
+        {status, atom},
         {schedule_time, integer},
         {start_time, integer},
         {finish_time, integer}

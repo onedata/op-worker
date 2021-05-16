@@ -34,7 +34,7 @@
     function_name :: binary(),
     operation_spec :: atm_openfaas_operation_spec:record()
 }).
--type executor() :: #atm_openfaas_task_executor{}.
+-type record() :: #atm_openfaas_task_executor{}.
 
 -record(openfaas_config, {
     url :: binary(),
@@ -45,11 +45,11 @@
 
 -record(init_ctx, {
     openfaas_config :: openfaas_config(),
-    executor :: executor()
+    executor :: record()
 }).
 -type init_ctx() :: #init_ctx{}.
 
--export_type([executor/0]).
+-export_type([record/0]).
 
 
 -define(AWAIT_READINESS_RETRIES, 150).
@@ -62,7 +62,7 @@
 
 
 -spec create(atm_workflow_execution:id(), atm_openfaas_operation_spec:record()) ->
-    executor() | no_return().
+    record() | no_return().
 create(AtmWorkflowExecutionId, #atm_openfaas_operation_spec{} = OperationSpec) ->
     assert_openfaas_configured(),
 
@@ -72,7 +72,7 @@ create(AtmWorkflowExecutionId, #atm_openfaas_operation_spec{} = OperationSpec) -
     }.
 
 
--spec init(executor()) -> ok | no_return().
+-spec init(record()) -> ok | no_return().
 init(AtmTaskExecutor) ->
     InitCtx = #init_ctx{
         openfaas_config = get_openfaas_config(),
@@ -85,7 +85,7 @@ init(AtmTaskExecutor) ->
     await_function_readiness(InitCtx).
 
 
--spec run(json_utils:json_map(), executor()) ->
+-spec run(json_utils:json_map(), record()) ->
     {ok, atm_task_execution_api:task_id()} | no_return().
 run(Data, AtmTaskExecutor) ->
     schedule_function_execution(Data, AtmTaskExecutor).
@@ -101,7 +101,7 @@ version() ->
     1.
 
 
--spec db_encode(executor(), persistent_record:nested_record_encoder()) ->
+-spec db_encode(record(), persistent_record:nested_record_encoder()) ->
     json_utils:json_term().
 db_encode(#atm_openfaas_task_executor{
     function_name = FunctionName,
@@ -114,7 +114,7 @@ db_encode(#atm_openfaas_task_executor{
 
 
 -spec db_decode(json_utils:json_term(), persistent_record:nested_record_decoder()) ->
-    executor().
+    record().
 db_decode(#{
     <<"functionName">> := FunctionName,
     <<"operationSpec">> := OperationSpecJson
@@ -288,7 +288,7 @@ await_function_readiness(#init_ctx{
 
 
 %% @private
--spec schedule_function_execution(json_utils:json_map(), executor()) ->
+-spec schedule_function_execution(json_utils:json_map(), record()) ->
     {ok, atm_task_execution_api:task_id()} | no_return().
 schedule_function_execution(Data, #atm_openfaas_task_executor{
     function_name = FunctionName

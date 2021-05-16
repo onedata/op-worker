@@ -23,19 +23,20 @@
 }).
 
 -record(atm_parallel_box_execution, {
-    status :: atm_task_execution:status(), %% TODO status
     schema_id :: automation:id(),
     name :: automation:name(),
-    tasks :: [atm_task_execution:id()]
+    status :: atm_parallel_box_execution:status(),
+    tasks :: #{atm_task_execution:id() => atm_task_execution:status()}
 }).
 
 -record(atm_lane_execution, {
-    status :: atm_task_execution:status(), %% TODO status
     schema_id :: automation:id(),
     name :: automation:name(),
-    store_iterator_config :: atm_store_iterator_config:record(),
-    parallel_boxes :: [#atm_parallel_box_execution{}]
+    status :: atm_lane_execution:status(),
+    parallel_boxes :: [atm_parallel_box_execution:record()],
+    store_iterator_config :: atm_store_iterator_config:record()
 }).
+
 
 -define(WAITING_STATE, waiting).
 -define(ONGOING_STATE, ongoing).

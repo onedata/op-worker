@@ -31,9 +31,9 @@
 
 
 -type model() :: atm_openfaas_task_executor.
--type executor() :: atm_openfaas_task_executor:executor().
+-type record() :: atm_openfaas_task_executor:record().
 
--export_type([model/0, executor/0]).
+-export_type([model/0, record/0]).
 
 
 %%%===================================================================
@@ -41,31 +41,12 @@
 %%%===================================================================
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Creates executor model. It is expected to return fast and as such
-%% mustn't perform any long lasting initialization tasks.
-%% @end
-%%--------------------------------------------------------------------
 -callback create(atm_workflow_execution:id(), atm_lambda_operation_spec:record()) ->
-    executor() | no_return().
+    record() | no_return().
 
+-callback init(record()) -> ok | no_return().
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Initializes executor (e.g. by registering functions in external services
-%% like Openfaas).
-%% @end
-%%--------------------------------------------------------------------
--callback init(executor()) -> ok | no_return().
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Schedules task execution for specified arguments.
-%% @end
-%%--------------------------------------------------------------------
--callback run(json_utils:json_map(), executor()) ->
+-callback run(json_utils:json_map(), record()) ->
     {ok, atm_task_execution_api:task_id()} | no_return().
 
 
@@ -75,20 +56,20 @@
 
 
 -spec create(atm_workflow_execution:id(), atm_lambda_operation_spec:record()) ->
-    executor() | no_return().
+    record() | no_return().
 create(AtmWorkflowExecutionId, AtmLambadaOperationSpec) ->
     Engine = atm_lambda_operation_spec:get_engine(AtmLambadaOperationSpec),
     Model = engine_to_executor_model(Engine),
     Model:create(AtmWorkflowExecutionId, AtmLambadaOperationSpec).
 
 
--spec init(executor()) -> ok | no_return().
+-spec init(record()) -> ok | no_return().
 init(AtmTaskExecutor) ->
     Model = utils:record_type(AtmTaskExecutor),
     Model:init(AtmTaskExecutor).
 
 
--spec run(json_utils:json_map(), executor()) ->
+-spec run(json_utils:json_map(), record()) ->
     {ok, atm_task_execution_api:task_id()} | no_return().
 run(Arguments, AtmTaskExecutor) ->
     Model = utils:record_type(AtmTaskExecutor),
@@ -105,7 +86,7 @@ version() ->
     1.
 
 
--spec db_encode(executor(), persistent_record:nested_record_encoder()) ->
+-spec db_encode(record(), persistent_record:nested_record_encoder()) ->
     json_utils:json_term().
 db_encode(AtmTaskExecutor, NestedRecordEncoder) ->
     Model = utils:record_type(AtmTaskExecutor),
@@ -118,7 +99,7 @@ db_encode(AtmTaskExecutor, NestedRecordEncoder) ->
 
 
 -spec db_decode(json_utils:json_term(), persistent_record:nested_record_decoder()) ->
-    executor().
+    record().
 db_decode(#{<<"engine">> := EngineJson} = AtmTaskExecutorJson, NestedRecordDecoder) ->
     Engine = atm_lambda_operation_spec:engine_from_json(EngineJson),
     Model = engine_to_executor_model(Engine),

@@ -70,8 +70,8 @@ create(AtmTaskExecutionRecord) ->
 -spec get(id()) -> {ok, record()} | {error, term()}.
 get(AtmTaskExecutionId) ->
     case datastore_model:get(?CTX, AtmTaskExecutionId) of
-        {ok, #document{value = AtmStoreRecord}} ->
-            {ok, AtmStoreRecord};
+        {ok, #document{value = AtmTaskExecutionRecord}} ->
+            {ok, AtmTaskExecutionRecord};
         {error, _} = Error ->
             Error
     end.
@@ -101,14 +101,24 @@ get_record_version() ->
     datastore_model:record_struct().
 get_record_struct(1) ->
     {record, [
-        {name, string},
         {schema_id, string},
+        {name, string},
         {lambda_id, string},
+
+        {workflow_execution_id, string},
+        {lane_no, integer},
+        {parallel_box_no, integer},
+
         {executor, {custom, string, {persistent_record, encode, decode, atm_task_executor}}},
         {argument_specs, [{record, [
             {name, string},
             {input_spec, {custom, string, {json_utils, encode, decode}}},
             {data_spec, {custom, string, {persistent_record, encode, decode, atm_data_spec}}},
             {is_batch, boolean}
-        ]}]}
+        ]}]},
+
+        {status, atom},
+        {handled_items, integer},
+        {processed_items, integer},
+        {failed_items, integer}
     ]}.

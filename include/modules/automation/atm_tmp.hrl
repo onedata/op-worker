@@ -78,14 +78,17 @@
 }).
 -type atm_lane_schema() :: #atm_lane_schema{}.
 
+-type atm_workflow_schema_state() :: incomplete | ready | deprecated.
+
 -record(atm_workflow_schema, {
     id :: automation:id(),
     name :: automation:name(),
     description :: automation:description(),
     stores :: [atm_store_schema()],
     lanes :: [atm_lane_schema()],
-    state :: incomplete | ready | deprecated
+    state :: atm_workflow_schema_state()
 }).
+-type atm_workflow_schema() :: #atm_workflow_schema{}.
 
 %% TODO VFS-7637 better error handling and logging
 -define(ERROR_ATM_OPENFAAS_NOT_CONFIGURED, {error, openfaas_not_configured}).
@@ -128,6 +131,25 @@
 ).
 -define(ERROR_ATM_STORE_CREATION_FAILED(__STORE_SCHEMA_ID, __REASON),
     {error, {atm_store_creation_failed, __STORE_SCHEMA_ID, __REASON}}
+).
+-define(ERROR_ATM_TASK_EXECUTION_CREATION_FAILED(__TASK_SCHEMA_ID, __REASON),
+    {error, {atm_task_execution_creation_failed, __TASK_SCHEMA_ID, __REASON}}
+).
+-define(ERROR_ATM_PARALLEL_BOX_EXECUTION_CREATION_FAILED(__PARALLEL_BOX_SCHEMA_ID, __REASON),
+    {error, {atm_parallel_box_execution_creation_failed, __PARALLEL_BOX_SCHEMA_ID, __REASON}}
+).
+-define(ERROR_ATM_LANE_EXECUTION_CREATION_FAILED(__LANE_SCHEMA_ID, __REASON),
+    {error, {atm_lane_execution_creation_failed, __LANE_SCHEMA_ID, __REASON}}
+).
+
+-define(ERROR_ATM_TASK_EXECUTION_INIT_FAILED(__TASK_SCHEMA_ID, __REASON),
+    {error, {atm_task_execution_init_failed, __TASK_SCHEMA_ID, __REASON}}
+).
+-define(ERROR_ATM_PARALLEL_BOX_EXECUTION_INIT_FAILED(__PARALLEL_BOX_SCHEMA_ID, __REASON),
+    {error, {atm_parallel_box_init_creation_failed, __PARALLEL_BOX_SCHEMA_ID, __REASON}}
+).
+-define(ERROR_ATM_LANE_EXECUTION_INIT_FAILED(__LANE_SCHEMA_ID, __REASON),
+    {error, {atm_lane_execution_init_failed, __LANE_SCHEMA_ID, __REASON}}
 ).
 
 

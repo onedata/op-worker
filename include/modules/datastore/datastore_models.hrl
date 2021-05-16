@@ -994,23 +994,35 @@
 
 %% Model storing information about automation task execution.
 -record(atm_task_execution, {
-    status :: atm_task_execution:status(),
-
     schema_id :: automation:id(),
     name :: automation:name(),
     lambda_id :: automation:id(),
-    executor :: atm_task_executor:executor(),
+
+    workflow_execution_id :: atm_workflow_execution:id(),
+    lane_no :: non_neg_integer(),
+    parallel_box_no :: non_neg_integer(),
+
+    executor :: atm_task_executor:record(),
     argument_specs :: [atm_task_execution:arg_spec()],
 
+    status :: atm_task_execution:status(),
+    handled_items = 0 :: non_neg_integer(),
     processed_items = 0 :: non_neg_integer(),
     failed_items = 0 :: non_neg_integer()
 }).
 
 %% Model that holds information about an automation workflow execution
 -record(atm_workflow_execution, {
-    space_id :: binary(),
-    status :: atm_workflow_execution:status(),
+    schema_id :: automation:id(),
+    schema_state :: incomplete | ready | deprecated,
+    name :: automation:name(),
+    description :: automation:description(),
 
+    space_id :: od_space:id(),
+    stores :: [atm_store:id()],
+    lanes :: [atm_lane_execution:record()],
+
+    status :: atm_workflow_execution:status(),
     schedule_time = 0 :: atm_workflow_execution:timestamp(),
     start_time = 0 :: atm_workflow_execution:timestamp(),
     finish_time = 0 :: atm_workflow_execution:timestamp()
