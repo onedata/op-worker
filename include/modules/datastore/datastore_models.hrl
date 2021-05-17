@@ -1027,6 +1027,11 @@
     argument_specs :: [atm_task_execution:arg_spec()],
 
     status :: atm_task_execution:status(),
+    % Flag used to tell if status was changed during doc update. It is necessary
+    % due to limitation of datastore as otherwise getting document before update
+    % would be needed (to compare 2 docs)
+    status_changed = false :: boolean(),
+
     handled_items = 0 :: non_neg_integer(),
     processed_items = 0 :: non_neg_integer(),
     failed_items = 0 :: non_neg_integer()
@@ -1044,6 +1049,11 @@
     lanes :: [atm_lane_execution:record()],
 
     status :: atm_workflow_execution:status(),
+    % Flag used to tell if status was changed during doc update. It is necessary
+    % due to limitation of datastore as otherwise getting document before update
+    % would be needed (to compare 2 docs)
+    status_changed = false :: boolean(),
+
     schedule_time = 0 :: atm_workflow_execution:timestamp(),
     start_time = 0 :: atm_workflow_execution:timestamp(),
     finish_time = 0 :: atm_workflow_execution:timestamp()

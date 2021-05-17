@@ -18,7 +18,7 @@
 -include("modules/datastore/datastore_runner.hrl").
 
 %% API
--export([create/1, get/1, delete/1]).
+-export([create/1, get/1, update/2, delete/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1, get_record_version/0]).
@@ -67,14 +67,14 @@ create(AtmTaskExecutionRecord) ->
     ?extract_key(datastore_model:create(?CTX, Doc)).
 
 
--spec get(id()) -> {ok, record()} | {error, term()}.
+-spec get(id()) -> {ok, doc()} | {error, term()}.
 get(AtmTaskExecutionId) ->
-    case datastore_model:get(?CTX, AtmTaskExecutionId) of
-        {ok, #document{value = AtmTaskExecutionRecord}} ->
-            {ok, AtmTaskExecutionRecord};
-        {error, _} = Error ->
-            Error
-    end.
+    datastore_model:get(?CTX, AtmTaskExecutionId).
+
+
+-spec update(id(), diff()) -> {ok, doc()} | {error, term()}.
+update(AtmTaskExecutionId, Diff) ->
+    datastore_model:update(?CTX, AtmTaskExecutionId, Diff).
 
 
 -spec delete(id()) -> ok | {error, term()}.

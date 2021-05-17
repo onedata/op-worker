@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% TODO WRITEME.
+%%% Helper module for performing operations on automation store iterator config.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_store_iterator_config).

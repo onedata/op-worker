@@ -76,7 +76,7 @@ create(AtmWorkflowExecutionId, AtmLaneNo, AtmParallelBoxNo, #atm_task_schema{
     {ok, #document{value = #od_atm_lambda{
         operation_spec = AtmLambdaOperationSpec,
         argument_specs = AtmLambdaArgSpecs
-    }}} = atm_lambda_logic:get(?ROOT_SESS_ID, AtmLambdaId),  %% TODO use user session
+    }}} = atm_lambda_logic:get(?ROOT_SESS_ID, AtmLambdaId),  %% TODO VFS-7671 use user session
 
     {ok, _} = atm_task_execution:create(#atm_task_execution{
         schema_id = AtmTaskSchemaId,
@@ -100,9 +100,9 @@ create(AtmWorkflowExecutionId, AtmLaneNo, AtmParallelBoxNo, #atm_task_schema{
 -spec init_all([atm_task_execution:id()]) -> ok | no_return().
 init_all(AtmTaskExecutionIds) ->
     lists:foreach(fun(AtmTaskExecutionId) ->
-        {ok, AtmTaskExecutionRecord = #atm_task_execution{
+        {ok, #document{value = AtmTaskExecutionRecord = #atm_task_execution{
             schema_id = AtmTaskSchemaId
-        }} = atm_task_execution:get(AtmTaskExecutionId),
+        }}} = atm_task_execution:get(AtmTaskExecutionId),
 
         try
             init(AtmTaskExecutionRecord)
@@ -130,19 +130,17 @@ delete(AtmTaskExecutionId) ->
     atm_task_execution:delete(AtmTaskExecutionId).
 
 
--spec run(json_utils:json_term(), atm_task_execution:id()) ->
+-spec run(atm_task_execution:id(), json_utils:json_term()) ->
     {ok, task_id()} | no_return().
-run(Item, AtmTaskExecutionId) ->
+run(AtmTaskExecutionId, Item) ->
     #atm_task_execution{
         executor = AtmTaskExecutor,
         argument_specs = AtmTaskArgSpecs
-    } = ensure_atm_task_execution_record(AtmTaskExecutionId),
+    } = update_handled_items(AtmTaskExecutionId),
 
-    AtmTaskExecutionCtx = #atm_task_execution_ctx{
-        item = Item,
-        stores = #{}  %% TODO VFS-7638 get stores from workflow execution ctx
-    },
+    AtmTaskExecutionCtx = #atm_task_execution_ctx{item = Item},
     Args = atm_task_execution_args:build_args(AtmTaskExecutionCtx, AtmTaskArgSpecs),
+
     atm_task_executor:run(Args, AtmTaskExecutor).
 
 
@@ -152,10 +150,56 @@ run(Item, AtmTaskExecutionId) ->
 
 
 %% @private
+-spec update_handled_items(atm_task_execution:id()) ->
+    atm_task_execution:record().
+update_handled_items(AtmTaskExecutionId) ->
+    {ok, #document{value = AtmTaskExecutionRecord}} = atm_task_execution:update(
+        AtmTaskExecutionId, fun
+            (#atm_task_execution{
+                status = ?PENDING_STATUS,
+                status_changed = false,
+                handled_items = 0
+            } = AtmTaskExecution) ->
+                {ok, AtmTaskExecution#atm_task_execution{
+                    status = ?ACTIVE_STATUS,
+                    status_changed = true,
+                    handled_items = 1
+                }};
+            (#atm_task_execution{handled_items = HandledItems} = AtmTaskExecution) ->
+                {ok, AtmTaskExecution#atm_task_execution{
+                    status_changed = false,
+                    handled_items = HandledItems + 1
+                }}
+        end
+    ),
+    case AtmTaskExecutionRecord of
+        #atm_task_execution{status_changed = true} ->
+            report_status_change(AtmTaskExecutionId, AtmTaskExecutionRecord);
+        _ ->
+            ok
+    end,
+    AtmTaskExecutionRecord.
+
+
+%% @private
+-spec report_status_change(atm_task_execution:id(), atm_task_execution:record()) -> ok.
+report_status_change(AtmTaskExecutionId, #atm_task_execution{
+    workflow_execution_id = AtmWorkflowExecutionId,
+    lane_no = AtmLaneNo,
+    parallel_box_no = AtmParallelBoxNo,
+    status = NewStatus
+}) ->
+    atm_workflow_execution_api:report_task_status_change(
+        AtmWorkflowExecutionId, AtmLaneNo, AtmParallelBoxNo,
+        AtmTaskExecutionId, NewStatus
+    ).
+
+
+%% @private
 -spec ensure_atm_task_execution_record(atm_task_execution:id() | atm_task_execution:record()) ->
     atm_task_execution:record().
 ensure_atm_task_execution_record(#atm_task_execution{} = AtmTaskExecution) ->
     AtmTaskExecution;
 ensure_atm_task_execution_record(AtmTaskExecutionId) ->
-    {ok, AtmTaskExecutionRecord} = atm_task_execution:get(AtmTaskExecutionId),
+    {ok, #document{value = AtmTaskExecutionRecord}} = atm_task_execution:get(AtmTaskExecutionId),
     AtmTaskExecutionRecord.

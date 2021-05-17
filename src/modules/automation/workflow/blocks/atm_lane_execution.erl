@@ -18,7 +18,10 @@
 -export([
     create_all/3, create/4,
     init_all/1, init/1,
-    delete_all/1, delete/1
+    delete_all/1, delete/1,
+
+    gather_statuses/1,
+    update_task_status/4
 ]).
 
 
@@ -108,3 +111,38 @@ delete_all(AtmLaneExecutions) ->
 -spec delete(record()) -> ok.
 delete(#atm_lane_execution{parallel_boxes = ParallelBoxExecutions}) ->
     atm_parallel_box_execution:delete_all(ParallelBoxExecutions).
+
+
+-spec gather_statuses([record()]) -> [status()].
+gather_statuses(AtmLaneExecutions) ->
+    lists:map(fun(#atm_lane_execution{status = Status}) -> Status end, AtmLaneExecutions).
+
+
+-spec update_task_status(
+    non_neg_integer(),
+    atm_task_execution:id(),
+    atm_task_execution:status(),
+    record()
+) ->
+    {ok, record()} | {error, term()}.
+update_task_status(AtmParallelBoxExecutionNo, AtmTaskExecutionId, NewStatus, #atm_lane_execution{
+    parallel_boxes = AtmParallelBoxExecutions
+} = AtmLaneExecution) ->
+    AtmParallelBoxExecution = lists:nth(AtmParallelBoxExecutionNo, AtmParallelBoxExecutions),
+
+    case atm_parallel_box_execution:update_task_status(
+        AtmTaskExecutionId, NewStatus, AtmParallelBoxExecution
+    ) of
+        {ok, NewParallelBoxExecution} ->
+            NewAtmParallelBoxExecutions = atm_status_utils:replace_at(
+                NewParallelBoxExecution, AtmParallelBoxExecutionNo, AtmParallelBoxExecutions
+            ),
+            {ok, AtmLaneExecution#atm_lane_execution{
+                status = atm_status_utils:converge(lists:usort(
+                    atm_parallel_box_execution:gather_statuses(NewAtmParallelBoxExecutions)
+                )),
+                parallel_boxes = NewAtmParallelBoxExecutions
+            }};
+        {error, _} = Error ->
+            Error
+    end.

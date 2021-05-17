@@ -171,6 +171,7 @@ build_spec(#atm_lambda_argument_spec{
     }.
 
 
+% TODO VFS-7660 handle store builder
 %% @private
 -spec build_arg(atm_task_execution:ctx(), atm_task_execution:arg_input_spec()) ->
     json_utils:json_term() | no_return().
@@ -180,15 +181,6 @@ build_arg(_AtmTaskExecutionArgSpec, #{
 }) ->
     ConstValue;
 
-build_arg(#atm_task_execution_ctx{stores = Stores}, #{
-    <<"inputRefType">> := <<"store">>,
-    <<"inputRef">> := StoreSchemaId
-}) ->
-    case maps:get(StoreSchemaId, Stores, undefined) of
-        undefined -> throw(?ERROR_ATM_REFERENCED_NONEXISTENT_STORE(StoreSchemaId));
-        StoreCredentials -> StoreCredentials
-    end;
-
 build_arg(#atm_task_execution_ctx{item = Item}, #{
     <<"inputRefType">> := <<"item">>
 } = InputSpec) ->
@@ -196,7 +188,7 @@ build_arg(#atm_task_execution_ctx{item = Item}, #{
         undefined ->
             Item;
         Query ->
-            % TODO fix query in case of array indices
+            % TODO VFS-7660 fix query in case of array indices
             case json_utils:query(Item, Query) of
                 {ok, Value} -> Value;
                 error -> throw(?ERROR_ATM_TASK_ARG_MAPPER_ITEM_QUERY_FAILED(Item, Query))

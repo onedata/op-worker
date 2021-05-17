@@ -15,8 +15,7 @@
 
 
 -record(atm_task_execution_ctx, {
-    item :: json_utils:json_term(),
-    stores :: map()
+    item :: json_utils:json_term()
 }).
 
 -record(atm_task_execution_argument_spec, {

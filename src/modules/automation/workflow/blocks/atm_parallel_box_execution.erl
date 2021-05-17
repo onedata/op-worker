@@ -17,7 +17,10 @@
 -export([
     create_all/3, create/4,
     init_all/1, init/1,
-    delete_all/1, delete/1
+    delete_all/1, delete/1,
+
+    gather_statuses/1,
+    update_task_status/3
 ]).
 
 
@@ -104,3 +107,33 @@ delete_all(AtmParallelBoxExecutions) ->
 -spec delete(record()) -> ok.
 delete(#atm_parallel_box_execution{tasks = AtmTaskExecutions}) ->
     atm_task_execution_api:delete_all(maps:keys(AtmTaskExecutions)).
+
+
+-spec gather_statuses([record()]) -> [status()].
+gather_statuses(AtmParallelBoxExecutions) ->
+    lists:map(fun(#atm_parallel_box_execution{status = Status}) ->
+        Status
+    end, AtmParallelBoxExecutions).
+
+
+-spec update_task_status(atm_task_execution:id(), atm_task_execution:status(), record()) ->
+    {ok, record()} | {error, term()}.
+update_task_status(AtmTaskExecutionId, NewStatus, #atm_parallel_box_execution{
+    tasks = AtmTaskExecutionRegistry
+} = AtmParallelBoxExecution) ->
+    AtmTaskExecutionStatus = maps:get(AtmTaskExecutionId, AtmTaskExecutionRegistry),
+
+    case atm_status_utils:is_transition_allowed(AtmTaskExecutionStatus, NewStatus) of
+        true ->
+            NewAtmTaskExecutionRegistry = AtmTaskExecutionRegistry#{
+                AtmTaskExecutionId => NewStatus
+            },
+            {ok, AtmParallelBoxExecution#atm_parallel_box_execution{
+                status = atm_status_utils:converge(lists:usort(maps:values(
+                    NewAtmTaskExecutionRegistry
+                ))),
+                tasks = NewAtmTaskExecutionRegistry
+            }};
+        false ->
+            {error, AtmTaskExecutionStatus}
+    end.

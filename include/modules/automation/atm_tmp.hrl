@@ -140,6 +140,10 @@
 -define(ERROR_ATM_LANE_EXECUTION_INIT_FAILED(__LANE_SCHEMA_ID, __REASON),
     {error, {atm_lane_execution_init_failed, __LANE_SCHEMA_ID, __REASON}}
 ).
+-define(ERROR_ATM_INVALID_STATUS_TRANSITION(__PREV_STATUS, __NEW_STATUS),
+    {error, {atm_invalid_status_transition, __PREV_STATUS, __NEW_STATUS}}
+).
+
 
 
 -endif.
