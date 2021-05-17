@@ -200,7 +200,7 @@ expected_custom_helper_args(?S3_HELPER_NAME) -> [
     {optional, <<"signatureVersion">>},
     {optional, <<"maximumCanonicalObjectSize">>},
     {optional, <<"fileMode">>}, {optional, <<"dirMode">>},
-    {optional, <<"blockSize">>}, {optional, <<"archiveStorage">>}];
+    {optional, <<"blockSize">>}];
 expected_custom_helper_args(?SWIFT_HELPER_NAME) -> [
     <<"authUrl">>, <<"containerName">>, <<"tenantName">>,
     {optional, <<"blockSize">>}];
