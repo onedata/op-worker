@@ -49,18 +49,18 @@
     oct_background:entity_selector(),
     onenv_file_test_utils:object_selector()
 ) ->
-    dataset:id().
+    dataset_object().
 set_up_and_sync_dataset(UserSelector, RootFileSelector) ->
-    set_up_and_sync_dataset(UserSelector, RootFileSelector, []).
+    set_up_and_sync_dataset(UserSelector, RootFileSelector, #dataset_spec{}).
 
 
 -spec set_up_and_sync_dataset(
     oct_background:entity_selector(),
     onenv_file_test_utils:object_selector(),
-    [binary()]
+    dataset_spec()
 ) ->
-    dataset:id().
-set_up_and_sync_dataset(UserSelector, RootFileSelector, ProtectionFlags) ->
+    dataset_object().
+set_up_and_sync_dataset(UserSelector, RootFileSelector, DatasetSpec) ->
     UserId = oct_background:get_user_id(UserSelector),
     {RootFileGuid, SpaceId} = onenv_file_test_utils:resolve_file(RootFileSelector),
 
@@ -68,12 +68,10 @@ set_up_and_sync_dataset(UserSelector, RootFileSelector, ProtectionFlags) ->
         SpaceId
     )),
 
-    DatasetObj = set_up_dataset(CreationProvider, UserId, RootFileGuid, #dataset_spec{
-        protection_flags = ProtectionFlags
-    }),
+    DatasetObj = set_up_dataset(CreationProvider, UserId, RootFileGuid, DatasetSpec),
     await_dataset_sync(CreationProvider, SyncProviders, UserId, DatasetObj),
 
-    DatasetObj#dataset_object.id.
+    DatasetObj.
 
 
 -spec set_up_dataset(
@@ -87,7 +85,8 @@ set_up_dataset(_CreationProvider, _UserId, _FileGuid, undefined) ->
     undefined;
 set_up_dataset(CreationProvider, UserId, FileGuid, #dataset_spec{
     state = State,
-    protection_flags = ProtectionFlagsJson
+    protection_flags = ProtectionFlagsJson,
+    archives = Archives
 }) ->
     CreationNode = ?OCT_RAND_OP_NODE(CreationProvider),
     UserSessId = oct_background:get_user_session_id(UserId, CreationProvider),
@@ -108,14 +107,24 @@ set_up_dataset(CreationProvider, UserId, FileGuid, #dataset_spec{
             ))
     end,
 
+    ArchiveSpecs = case is_integer(Archives) of
+        true -> [#archive_spec{} || _ <- lists:seq(1, Archives)];
+        false -> Archives
+    end,
+
+    ArchiveObjs = lists:map(fun(ArchiveSpec) ->
+        onenv_archive_test_utils:set_up_archive(CreationProvider, UserId, DatasetId, ArchiveSpec)
+    end, ArchiveSpecs),
+
     #dataset_object{
         id = DatasetId,
         state = State,
-        protection_flags = ProtectionFlagsJson
+        protection_flags = ProtectionFlagsJson,
+        space_id = file_id:guid_to_space_id(FileGuid),
+        archives = ArchiveObjs
     }.
 
 
-%% @private
 -spec await_dataset_sync(
     oct_background:entity_selector(),
     [oct_background:entity_selector()],
@@ -129,7 +138,8 @@ await_dataset_sync(_CreationProvider, _SyncProviders, _UserId, undefined) ->
 await_dataset_sync(CreationProvider, SyncProviders, UserId, #dataset_object{
     id = DatasetId,
     state = State,
-    protection_flags = ProtectionFlagsJson
+    protection_flags = ProtectionFlagsJson,
+    archives = ArchiveObjs
 }) ->
     CreationNode = ?OCT_RAND_OP_NODE(CreationProvider),
     CreationNodeSessId = oct_background:get_user_session_id(UserId, CreationProvider),
@@ -140,7 +150,7 @@ await_dataset_sync(CreationProvider, SyncProviders, UserId, #dataset_object{
         lfm_proxy:get_dataset_info(CreationNode, CreationNodeSessId, DatasetId)
     ),
 
-    lists:foreach(fun(SyncProvider) ->
+    lists_utils:pforeach(fun(SyncProvider) ->
         SyncNode = ?OCT_RAND_OP_NODE(SyncProvider),
         SessId = oct_background:get_user_session_id(UserId, SyncProvider),
 
@@ -149,7 +159,12 @@ await_dataset_sync(CreationProvider, SyncProviders, UserId, #dataset_object{
             lfm_proxy:get_dataset_info(SyncNode, SessId, DatasetId),
             ?ATTEMPTS
         )
-    end, SyncProviders).
+    end, SyncProviders),
+
+    lists_utils:pforeach(fun(ArchiveObj) ->
+        onenv_archive_test_utils:await_archive_sync(CreationProvider, SyncProviders, UserId, ArchiveObj)
+    end, ArchiveObjs).
+
 
 
 -spec get_exp_child_datasets(
@@ -252,9 +267,7 @@ get_exp_child_datasets_internal(State, ParentDirPath, ParentDatasetId, ParentEff
 %% @private
 -spec cleanup_and_verify_datasets([node()], od_space:id(), datasets_structure:forest_type()) -> ok.
 cleanup_and_verify_datasets(Nodes, SpaceId, ForestType) ->
-    lists:foreach(fun(Node)->
-        cleanup_datasets(Node, SpaceId, ForestType)
-    end, Nodes),
+    cleanup_datasets(lists_utils:random_element(Nodes), SpaceId, ForestType),
     assert_all_dataset_entries_are_deleted_on_all_nodes(SpaceId, ForestType).
 
 
@@ -263,8 +276,31 @@ cleanup_and_verify_datasets(Nodes, SpaceId, ForestType) ->
 cleanup_datasets(Node, SpaceId, ForestType) ->
     {ok, Datasets} = rpc:call(Node, datasets_structure, list_all_unsafe, [SpaceId, ForestType]),
     lists:foreach(fun({_DatasetPath, {DatasetId, _DatasetName, _Index}}) ->
-        ok = rpc:call(Node, dataset_api, remove, [DatasetId])
+        cleanup_dataset(Node, DatasetId)
     end, Datasets).
+
+
+%% @private
+-spec cleanup_dataset(node(), dataset:id()) -> ok.
+cleanup_dataset(Node, DatasetId) ->
+    cleanup_dataset_archives(Node, DatasetId, 0),
+    ?assertMatch(0, get_archive_count(Node, DatasetId), ?ATTEMPTS),
+    lfm_proxy:remove_dataset(Node, ?ROOT_SESS_ID, DatasetId).
+
+
+%% @private
+-spec cleanup_dataset_archives(node(), dataset:id(), non_neg_integer()) -> ok.
+cleanup_dataset_archives(Node, DatasetId, Offset) ->
+    Limit = 1000,
+    {ok, Archives, IsLast} =
+        lfm_proxy:list_archives(Node, ?ROOT_SESS_ID, DatasetId, #{offset => Offset, limit => Limit}),
+    lists:foreach(fun({_Index, ArchiveId}) ->
+        rpc:call(Node, dataset_api, remove_archive, [ArchiveId])
+    end, Archives),
+    case IsLast of
+        true -> ok;
+        false -> cleanup_dataset_archives(Node, DatasetId, Offset + length(Archives))
+    end.
 
 
 %% @private
@@ -273,3 +309,12 @@ assert_all_dataset_entries_are_deleted_on_all_nodes(SpaceId, ForestType) ->
     lists:foreach(fun(N) ->
         ?assertMatch({ok, []}, rpc:call(N, datasets_structure, list_all_unsafe, [SpaceId, ForestType]), ?ATTEMPTS)
     end, oct_background:get_all_providers_nodes()).
+
+
+%% @private
+-spec get_archive_count(node(), dataset:id()) -> non_neg_integer().
+get_archive_count(Node, DatasetId) ->
+    case lfm_proxy:get_dataset_info(Node, ?ROOT_SESS_ID, DatasetId) of
+        {ok, #dataset_info{archive_count = ArchiveCount}} -> ArchiveCount;
+        {error, ?ENOENT} -> 0
+    end.

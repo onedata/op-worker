@@ -195,13 +195,13 @@ create_file_tree(UserId, ParentGuid, CreationProvider, #file_spec{
 create_file_tree(UserId, ParentGuid, CreationProvider, #symlink_spec{
     name = NameOrUndefined,
     shares = ShareSpecs,
-    symlink_value = LinkPath
+    symlink_value = SymlinkValue
 }) ->
     FileName = utils:ensure_defined(NameOrUndefined, str_utils:rand_hex(20)),
     UserSessId = oct_background:get_user_session_id(UserId, CreationProvider),
     CreationNode = lists_utils:random_element(oct_background:get_provider_nodes(CreationProvider)),
 
-    {ok, #file_attr{guid = SymlinkGuid}} = create_symlink(CreationNode, UserSessId, ParentGuid, FileName, LinkPath),
+    {ok, #file_attr{guid = SymlinkGuid}} = create_symlink(CreationNode, UserSessId, ParentGuid, FileName, SymlinkValue),
 
     #object{
         guid = SymlinkGuid,
@@ -211,7 +211,7 @@ create_file_tree(UserId, ParentGuid, CreationProvider, #symlink_spec{
         children = undefined,
         content = undefined,
         mode = ?DEFAULT_SYMLINK_PERMS,
-        symlink_value = LinkPath
+        symlink_value = SymlinkValue
     };
 
 create_file_tree(UserId, ParentGuid, CreationProvider, #dir_spec{
@@ -411,9 +411,9 @@ create_dir(Node, SessId, ParentGuid, FileName, FileMode) ->
 
 %% @private
 -spec create_symlink(node(), session:id(), file_id:file_guid(), file_meta:name(), file_meta_symlinks:symlink()) ->
-    {ok, file_id:file_guid()} | no_return().
-create_symlink(Node, SessId, ParentGuid, FileName, LinkPath) ->
-    ?assertMatch({ok, _}, lfm_proxy:make_symlink(Node, SessId, ?FILE_REF(ParentGuid), FileName, LinkPath)).
+    {ok, #file_attr{}} | no_return().
+create_symlink(Node, SessId, ParentGuid, FileName, SymlinkValue) ->
+    ?assertMatch({ok, _}, lfm_proxy:make_symlink(Node, SessId, ?FILE_REF(ParentGuid), FileName, SymlinkValue)).
 
 
 %% @private

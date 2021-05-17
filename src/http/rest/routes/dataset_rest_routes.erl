@@ -2,7 +2,7 @@
 %%% This file has been automatically generated from Swagger
 %%% specification - DO NOT EDIT!
 %%%
-%%% @copyright (C) 2019-2020 ACK CYFRONET AGH
+%%% @copyright (C) 2019-2021 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -35,9 +35,9 @@ routes() -> [
         method = 'GET',
         produces = [<<"application/json">>],
         b_gri = #b_gri{
-            type = op_space, 
-            id = ?BINDING(sid), 
-            aspect = datasets, 
+            type = op_space,
+            id = ?BINDING(sid),
+            aspect = datasets,
             scope = private
         }
     }},
@@ -46,9 +46,9 @@ routes() -> [
         method = 'GET',
         produces = [<<"application/json">>],
         b_gri = #b_gri{
-            type = op_dataset, 
-            id = ?BINDING(did), 
-            aspect = children, 
+            type = op_dataset,
+            id = ?BINDING(did),
+            aspect = children,
             scope = private
         }
     }},
@@ -59,9 +59,9 @@ routes() -> [
         consumes = [<<"application/json">>],
         produces = [<<"application/json">>],
         b_gri = #b_gri{
-            type = op_dataset, 
-            id = undefined, 
-            aspect = instance, 
+            type = op_dataset,
+            id = undefined,
+            aspect = instance,
             scope = private
         }
     }},
@@ -69,9 +69,9 @@ routes() -> [
     {<<"/datasets/:did">>, rest_handler, #rest_req{
         method = 'DELETE',
         b_gri = #b_gri{
-            type = op_dataset, 
-            id = ?BINDING(did), 
-            aspect = instance, 
+            type = op_dataset,
+            id = ?BINDING(did),
+            aspect = instance,
             scope = private
         }
     }},
@@ -80,9 +80,9 @@ routes() -> [
         method = 'GET',
         produces = [<<"application/json">>],
         b_gri = #b_gri{
-            type = op_dataset, 
-            id = ?BINDING(did), 
-            aspect = instance, 
+            type = op_dataset,
+            id = ?BINDING(did),
+            aspect = instance,
             scope = private
         }
     }},
@@ -92,9 +92,9 @@ routes() -> [
         parse_body = as_json_params,
         consumes = [<<"application/json">>],
         b_gri = #b_gri{
-            type = op_dataset, 
-            id = ?BINDING(did), 
-            aspect = instance, 
+            type = op_dataset,
+            id = ?BINDING(did),
+            aspect = instance,
             scope = private
         }
     }},
@@ -103,9 +103,9 @@ routes() -> [
         method = 'GET',
         produces = [<<"application/json">>],
         b_gri = #b_gri{
-            type = op_file, 
-            id = ?OBJECTID_BINDING(id), 
-            aspect = dataset_summary, 
+            type = op_file,
+            id = ?OBJECTID_BINDING(id),
+            aspect = dataset_summary,
             scope = private
         }
     }}

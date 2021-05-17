@@ -879,7 +879,8 @@ simulate_user_update_with_blocked_value(Nodes, UserId, Blocked, Revision) ->
             <<"effectiveGroups">> => [],
             <<"effectiveSpaces">> => [],
             <<"effectiveHandleServices">> => [],
-            <<"effectiveHandles">> => []
+            <<"effectiveHandles">> => [],
+            <<"effectiveAtmInventories">> => []
         }}
     ]),
     % the push message processing is async - wait for the process to finish

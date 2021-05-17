@@ -32,10 +32,10 @@
 -export([create/1, get/2, update/1, delete/1]).
 
 % Util functions
--export([gather_dataset_listing_opts/1]).
+-export([gather_listing_opts/1]).
 
 -define(MAX_LIST_LIMIT, 1000).
--define(DEFAULT_LIST_LIMIT, 100).
+-define(DEFAULT_LIST_LIMIT, 1000).
 -define(ALL_PROTECTION_FLAGS, [?DATA_PROTECTION_BIN, ?METADATA_PROTECTION_BIN]).
 
 
@@ -56,6 +56,8 @@ operation_supported(create, instance, private) -> true;
 operation_supported(get, instance, private) -> true;
 operation_supported(get, children, private) -> true;
 operation_supported(get, children_details, private) -> true;
+operation_supported(get, archives, private) -> true;
+operation_supported(get, archives_details, private) -> true;
 
 operation_supported(update, instance, private) -> true;
 
@@ -96,6 +98,18 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = Aspect}})
     }
 };
 
+data_spec(#op_req{operation = get, gri = #gri{aspect = Aspect}})
+    when Aspect =:= archives
+    orelse Aspect =:= archives_details
+-> #{
+    optional => #{
+        <<"offset">> => {integer, any},
+        <<"index">> => {binary, any},
+        <<"token">> => {binary, non_empty},
+        <<"limit">> => {integer, {between, 1, ?MAX_LIST_LIMIT}}
+    }
+};
+
 data_spec(#op_req{operation = update, gri = #gri{aspect = instance}}) -> #{
     at_least_one => #{
         <<"state">> => {atom, [?ATTACHED_DATASET, ?DETACHED_DATASET]},
@@ -126,6 +140,8 @@ fetch_entity(#op_req{operation = Op, auth = ?USER(_UserId), gri = #gri{
     (Op =:= get andalso As =:= instance);
     (Op =:= get andalso As =:= children);
     (Op =:= get andalso As =:= children_details);
+    (Op =:= get andalso As =:= archives);
+    (Op =:= get andalso As =:= archives_details);
     (Op =:= update andalso As =:= instance);
     (Op =:= delete andalso As =:= instance)
 ->
@@ -155,6 +171,8 @@ authorize(#op_req{operation = Op, auth = Auth, gri = #gri{aspect = As}}, Dataset
     (Op =:= get andalso As =:= instance);
     (Op =:= get andalso As =:= children);
     (Op =:= get andalso As =:= children_details);
+    (Op =:= get andalso As =:= archives);
+    (Op =:= get andalso As =:= archives_details);
     (Op =:= update andalso As =:= instance);
     (Op =:= delete andalso As =:= instance)
 ->
@@ -177,6 +195,8 @@ validate(#op_req{operation = Op, gri = #gri{aspect = As}}, DatasetDoc) when
     (Op =:= get andalso As =:= instance);
     (Op =:= get andalso As =:= children);
     (Op =:= get andalso As =:= children_details);
+    (Op =:= get andalso As =:= archives);
+    (Op =:= get andalso As =:= archives_details);
     (Op =:= update andalso As =:= instance);
     (Op =:= delete andalso As =:= instance)
 ->
@@ -219,9 +239,22 @@ get(#op_req{auth = Auth, gri = #gri{id = DatasetId, aspect = Aspect}, data = Dat
         children_details -> ?EXTENDED_INFO
     end,
     {ok, Datasets, IsLast} = ?check(lfm:list_children_datasets(
-        Auth#auth.session_id, DatasetId, gather_dataset_listing_opts(Data), ListingMode
+        Auth#auth.session_id, DatasetId, gather_listing_opts(Data), ListingMode
     )),
-    {ok, value, {Datasets, IsLast}}.
+    {ok, value, {Datasets, IsLast}};
+
+get(#op_req{auth = Auth, gri = #gri{id = DatasetId, aspect = Aspect}, data = Data}, _)
+    when Aspect =:= archives
+    orelse Aspect =:= archives_details
+->
+    ListingMode = case Aspect of
+        archives -> ?BASIC_INFO;
+        archives_details -> ?EXTENDED_INFO
+    end,
+    {ok, Archives, IsLast} = ?check(lfm:list_archives(
+        Auth#auth.session_id, DatasetId, gather_listing_opts(Data), ListingMode
+    )),
+    {ok, value, {Archives, IsLast}}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -257,12 +290,12 @@ delete(#op_req{auth = Auth, gri = #gri{id = DatasetId, aspect = instance}}) ->
 %%% Util functions
 %%%===================================================================
 
--spec gather_dataset_listing_opts(middleware:data()) -> dataset_api:listing_opts().
-gather_dataset_listing_opts(Data) ->
+-spec gather_listing_opts(middleware:data()) -> dataset_api:listing_opts().
+gather_listing_opts(Data) ->
     Opts = #{limit => maps:get(<<"limit">>, Data, ?DEFAULT_LIST_LIMIT)},
     case maps:get(<<"token">>, Data, undefined) of
         undefined ->
-            Opts2 = maps_utils:put_if_defined(Opts, offset, maps:get(<<"offset">>, Data, undefined)),
+            Opts2 = Opts#{offset => maps:get(<<"offset">>, Data, 0)},
             maps_utils:put_if_defined(Opts2, start_index, maps:get(<<"index">>, Data, undefined));
         Token when is_binary(Token) ->
             % if token is passed, offset has to be increased by 1

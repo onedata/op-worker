@@ -294,10 +294,10 @@ assert_operations_allowed(UserCtx, FileCtx0, RequiredOps) ->
         {allowed, FileCtx1, NewUserAccessCheckProgress} ->
             permissions_cache:cache_permission(CacheKey, NewUserAccessCheckProgress),
             FileCtx1;
-        {denied, FileCtx1, NewUserAccessCheckProgress} ->
+        {denied, _FileCtx1, NewUserAccessCheckProgress} ->
             permissions_cache:cache_permission(CacheKey, NewUserAccessCheckProgress),
             throw(?EACCES);
-        {forbidden, FileCtx1, NewUserAccessCheckProgress} ->
+        {forbidden, _FileCtx1, NewUserAccessCheckProgress} ->
             permissions_cache:cache_permission(CacheKey, NewUserAccessCheckProgress),
             throw(?EPERM)
     end.
@@ -359,7 +359,7 @@ get_operations_blocked_by_lack_of_space_privs(_UserCtx, _FileCtx, _ShareId) ->
     {bitmask(), file_ctx:ctx()}.
 get_operations_blocked_by_file_protection_flags(FileCtx0) ->
     {FileDoc, FileCtx1} = file_ctx:get_file_doc_including_deleted(FileCtx0),
-    {ok, Flags} = dataset_eff_cache:get_eff_protection_flags(FileDoc),
+    {ok, Flags} = dataset_eff_cache:get_eff_file_protection_flags(FileDoc),
 
     DeniedOps = lists:foldl(fun({ProtectionFlag, RestrictedOps}, DeniedOpsAcc) ->
         case ?has_all_flags(Flags, ProtectionFlag) of

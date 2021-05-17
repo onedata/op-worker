@@ -106,6 +106,8 @@ translate_value(ProtocolVersion, GRI, Data) ->
 -spec translate_resource(gs_protocol:protocol_version(), gri:gri(),
     ResourceData :: term()) -> Result | fun((aai:auth()) -> Result) when
     Result :: gs_protocol:data() | errors:error() | no_return().
+translate_resource(_, #gri{type = op_archive} = GRI, Data) ->
+    archive_gui_gs_translator:translate_resource(GRI, Data);
 translate_resource(_, #gri{type = op_dataset} = GRI, Data) ->
     dataset_gui_gs_translator:translate_resource(GRI, Data);
 translate_resource(_, #gri{type = op_file} = GRI, Data) ->

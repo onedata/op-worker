@@ -14,7 +14,17 @@
             "storages": [
                 {
                     "type": "nulldevice",
-                    "name": "nulldevice",
+                    "name": "nulldevice1",
+                    "latencyMin": "0",
+                    "latencyMax": "0",
+                    "timeoutProbability": "0.0",
+                    "filter": "*",
+                    "simulatedFilesystemParameters": "",
+                    "simulatedFilesystemGrowSpeed": "0.0"
+                },
+                {
+                    "type": "nulldevice",
+                    "name": "nulldevice2",
                     "latencyMin": "0",
                     "latencyMax": "0",
                     "timeoutProbability": "0.0",
@@ -108,15 +118,19 @@
                 ],
                 "providers": {
                     "p1": {
-                        "storage": "nulldevice",
+                        "storage": "nulldevice1",
                         "supported_size": 1000000000
                     },
                     "p2": {
-                        "storage": "nulldevice",
+                        "storage": "nulldevice2",
                         "supported_size": 1000000000
                     }
                 }
             }
+        },
+        "storages": {
+            "p1": {"nulldevice1": {}},
+            "p2": {"nulldevice2": {}}
         }
     }
 }

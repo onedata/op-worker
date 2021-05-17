@@ -87,6 +87,7 @@
     eff_spaces = [] :: [od_space:id()],
     eff_handle_services = [] :: [od_handle_service:id()],
     eff_handles = [] :: [od_handle:id()],
+    eff_atm_inventories = [] :: [od_atm_inventory:id()],
 
     cache_state = #{} :: cache_state()
 }).
@@ -221,6 +222,26 @@
     cache_state = #{} :: cache_state()
 }).
 
+-record(od_atm_inventory, {
+    name :: automation:name(),
+    
+    cache_state = #{} :: cache_state()
+}).
+
+-record(od_atm_lambda, {
+    name :: automation:name(),
+    summary :: automation:summary(),
+    description :: automation:description(),
+    
+    operation_spec :: atm_lambda_operation_spec:record(),
+    argument_specs = [] :: [atm_lambda_argument_spec:record()],
+    result_specs = [] :: [atm_lambda_result_spec:record()],
+    
+    atm_inventories = [] :: [od_atm_inventory:id()],
+    
+    cache_state = #{} :: cache_state()
+}).
+
 %%%===================================================================
 %%% Records specific for oneprovider
 %%%===================================================================
@@ -310,7 +331,10 @@
     batches_processed = 0:: non_neg_integer(),
     % below map contains new hashes, that will be used to update values in children_hashes
     % when counters batches_to_process == batches_processed
-    hashes_to_update = #{} :: storage_sync_info:hashes()
+    hashes_to_update = #{} :: storage_sync_info:hashes(),
+    % Flag which informs whether any of the protected children files has been modified on storage.
+    % This flag allows to detect changes when flags are unset.
+    any_protected_child_changed = false :: boolean()
 }).
 
 % An empty model used for creating storage_sync_links
@@ -388,6 +412,23 @@
     % TODO VFS-7533 handle conflict on file_meta with remote provider
     dataset_state :: undefined | dataset:state()
 }).
+
+% Model used for storing information concerning archive.
+% One documents is stored for one archive.
+-record(archive, {
+    dataset_id :: dataset:id(),
+    % TODO VFS-7601 set guid of directory in which archive is stored
+    % TODO VFS-7601 consider generating uuid basing ArchiveId
+    root_dir_guid :: undefined | file_id:file_guid(),
+    creation_time :: time:seconds(),
+    creator :: archive:creator(),
+    state :: archive:state(),
+    config :: archive:config(),
+    preserved_callback :: archive:callback(),
+    purged_callback :: archive:callback(),
+    description :: archive:description()
+}).
+
 
 % Model used for storing information associated with dataset.
 % One document is stored for one dataset.
@@ -959,6 +1000,25 @@
     processed = 0 :: non_neg_integer(),
     % flag that informs whether all batches of children have been listed
     all_batches_listed = false :: boolean()
+}).
+
+%% Model storing information about automation store instance.
+-record(atm_store, {
+    type :: atm_store:type(),
+    name :: atm_store:name(),
+    summary :: atm_store:summary(),
+    description :: atm_store:description(),
+    frozen = false :: boolean(),
+    is_input_store :: boolean(),
+    container :: atm_container:container()
+}).
+
+%% Model that holds information about an automation workflow execution
+-record(atm_workflow_execution, {
+    space_id :: binary(),
+    schedule_time = 0 :: atm_workflow_execution:timestamp(),
+    start_time = 0 :: atm_workflow_execution:timestamp(),
+    finish_time = 0 :: atm_workflow_execution:timestamp()
 }).
 
 -endif.
