@@ -43,17 +43,6 @@
 }).
 -type atm_task_schema_argument_mapper() :: #atm_task_schema_argument_mapper{}.
 
--record(od_atm_lambda, {
-    name :: automation:name(),
-    summary :: automation:summary(),
-    description :: automation:description(),
-
-    operation_spec :: atm_lambda_operation_spec:record(),
-    argument_specs = [] :: [atm_lambda_argument_spec:record()]
-%%    result_specs = [] :: [atm_lambda_result_spec:record()]
-}).
--type od_atm_lambda() :: #od_atm_lambda{}.
-
 -record(atm_task_schema, {
     id :: automation:id(),
     name :: automation:name(),

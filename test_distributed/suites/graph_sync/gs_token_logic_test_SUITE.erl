@@ -9,7 +9,7 @@
 %%% This module tests token logic API using mocked gs_client module.
 %%% @end
 %%%--------------------------------------------------------------------
--module(token_logic_test_SUITE).
+-module(gs_token_logic_test_SUITE).
 -author("Bartosz Walkowicz").
 
 -include("logic_tests_common.hrl").

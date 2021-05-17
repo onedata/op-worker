@@ -674,6 +674,40 @@ mock_graph_get(#gri{type = temporary_token_secret, id = UserId, aspect = user, s
             };
         false ->
             ?ERROR_FORBIDDEN
+    end;
+
+mock_graph_get(#gri{type = od_atm_inventory, id = AtmInventoryId, aspect = instance}, AuthOverride, _AuthHint) ->
+    Authorized = case AuthOverride of
+        undefined ->
+            false;
+        #auth_override{client_auth = ?USER_GS_TOKEN_AUTH(SerializedToken)} ->
+            UserId = token_to_user_id(SerializedToken),
+            lists:member(AtmInventoryId, ?USER_EFF_ATM_INVENTORIES(UserId))
+    end,
+    case Authorized of
+        true ->
+            Data = ?ATM_INVENTORY_PRIVATE_DATA_VALUE(AtmInventoryId),
+            {ok, #gs_resp_graph{data_format = resource, data = Data}};
+        false ->
+            ?ERROR_FORBIDDEN
+    end;
+
+mock_graph_get(#gri{type = od_atm_lambda, id = AtmLambdaId, aspect = instance}, AuthOverride, _AuthHint) ->
+    Authorized = case AuthOverride of
+        undefined ->
+            false;
+        #auth_override{client_auth = ?USER_GS_TOKEN_AUTH(SerializedToken)} ->
+            UserId = token_to_user_id(SerializedToken),
+            lists:any(fun(AtmInventoryId) ->
+                lists:member(AtmInventoryId, ?USER_EFF_ATM_INVENTORIES(UserId))
+            end, ?ATM_LAMBDA_INVENTORIES(AtmLambdaId))
+    end,
+    case Authorized of
+        true ->
+            Data = ?ATM_LAMBDA_PRIVATE_DATA_VALUE(AtmLambdaId),
+            {ok, #gs_resp_graph{data_format = resource, data = Data}};
+        false ->
+            ?ERROR_FORBIDDEN
     end.
 
 

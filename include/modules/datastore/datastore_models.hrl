@@ -87,6 +87,7 @@
     eff_spaces = [] :: [od_space:id()],
     eff_handle_services = [] :: [od_handle_service:id()],
     eff_handles = [] :: [od_handle:id()],
+    eff_atm_inventories = [] :: [od_atm_inventory:id()],
 
     cache_state = #{} :: cache_state()
 }).
@@ -218,6 +219,26 @@
 -record(temporary_token_secret, {
     generation :: temporary_token_secret:generation(),
 
+    cache_state = #{} :: cache_state()
+}).
+
+-record(od_atm_inventory, {
+    name :: automation:name(),
+    
+    cache_state = #{} :: cache_state()
+}).
+
+-record(od_atm_lambda, {
+    name :: automation:name(),
+    summary :: automation:summary(),
+    description :: automation:description(),
+    
+    operation_spec :: atm_lambda_operation_spec:record(),
+    argument_specs = [] :: [atm_lambda_argument_spec:record()],
+    result_specs = [] :: [atm_lambda_result_spec:record()],
+    
+    atm_inventories = [] :: [od_atm_inventory:id()],
+    
     cache_state = #{} :: cache_state()
 }).
 

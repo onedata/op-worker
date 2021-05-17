@@ -12,6 +12,7 @@
 -module(atm_task_execution_api).
 -author("Bartosz Walkowicz").
 
+-include("modules/fslogic/fslogic_common.hrl").
 -include("modules/automation/atm_task_execution.hrl").
 -include("modules/automation/atm_wokflow_execution.hrl").
 -include("modules/datastore/datastore_models.hrl").
@@ -72,10 +73,10 @@ create(AtmWorkflowExecutionId, AtmLaneNo, AtmParallelBoxNo, #atm_task_schema{
     lambda_id = AtmLambdaId,
     argument_mappings = AtmTaskArgMappers
 }) ->
-    #od_atm_lambda{
+    {ok, #document{value = #od_atm_lambda{
         operation_spec = AtmLambdaOperationSpec,
         argument_specs = AtmLambdaArgSpecs
-    } = od_atm_lambda:get(AtmLambdaId),
+    }}} = atm_lambda_logic:get(?ROOT_SESS_ID, AtmLambdaId),  %% TODO use user session
 
     {ok, _} = atm_task_execution:create(#atm_task_execution{
         schema_id = AtmTaskSchemaId,
