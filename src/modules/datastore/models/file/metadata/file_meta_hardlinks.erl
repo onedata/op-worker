@@ -70,17 +70,11 @@ new_doc(FileUuid, FileName, ParentUuid, SpaceId) ->
 
 -spec merge_link_and_file_doc(file_meta:doc(), file_meta:doc()) -> {ok, file_meta:doc()}.
 merge_link_and_file_doc(LinkDoc = #document{value = LinkRecord}, #document{value = FileRecord}) ->
-    ReferencesMap = FileRecord#file_meta.references,
-    References = case maps:size(ReferencesMap) < ?INCLUDE_REFERENCES_MAP_SIZE_TRESHOLD of
-        true -> ReferencesMap;
-        false -> undefined
-    end,
     {ok, LinkDoc#document{
         value = LinkRecord#file_meta{
             mode = FileRecord#file_meta.mode,
             acl = FileRecord#file_meta.acl,
-            owner = FileRecord#file_meta.owner,
-            references = References
+            owner = FileRecord#file_meta.owner
         }
     }}.
 
