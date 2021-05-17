@@ -25,7 +25,7 @@
 ]).
 
 
--type status() :: ?PENDING_STATUS | ?ACTIVE_STATUS | ?FINISHED_STATUS | ?FAILED_STATUS.
+-type status() :: atm_task_execution:status().
 -type record() :: #atm_lane_execution{}.
 
 -export_type([status/0, record/0]).
@@ -138,8 +138,8 @@ update_task_status(AtmParallelBoxExecutionNo, AtmTaskExecutionId, NewStatus, #at
                 NewParallelBoxExecution, AtmParallelBoxExecutionNo, AtmParallelBoxExecutions
             ),
             {ok, AtmLaneExecution#atm_lane_execution{
-                status = atm_status_utils:converge(lists:usort(
-                    atm_parallel_box_execution:gather_statuses(NewAtmParallelBoxExecutions)
+                status = atm_status_utils:converge(atm_parallel_box_execution:gather_statuses(
+                    NewAtmParallelBoxExecutions
                 )),
                 parallel_boxes = NewAtmParallelBoxExecutions
             }};

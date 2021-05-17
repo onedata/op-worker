@@ -22,6 +22,14 @@
     converge/1
 ]).
 
+-type status() ::
+    atm_workflow_execution:status() |
+    atm_lane_execution:status() |
+    atm_parallel_box_execution:status() |
+    atm_task_execution:status().
+
+-export_type([status/0]).
+
 
 %%%===================================================================
 %%% API functions
@@ -36,18 +44,31 @@ replace_at(NewValue, Index, [Element | Rest]) ->
     [Element | replace_at(Rest, Index - 1, NewValue)].
 
 
--spec is_transition_allowed(
-    atm_workflow_execution:status(),
-    atm_workflow_execution:status()
-) ->
+%% TODO VFS-7674 add missing transitions
+-spec is_transition_allowed(status(), status()) ->
     boolean().
-is_transition_allowed(?PENDING_STATUS, _) -> true;
+is_transition_allowed(?SCHEDULED_STATUS, ?INITIALIZING_STATUS) -> true;
+is_transition_allowed(?INITIALIZING_STATUS, ?ENQUEUED_STATUS) -> true;
+is_transition_allowed(?INITIALIZING_STATUS, ?FAILED_STATUS) -> true;
+is_transition_allowed(?ENQUEUED_STATUS, ?ACTIVE_STATUS) -> true;
+is_transition_allowed(?ENQUEUED_STATUS, ?ACTIVE_STATUS) -> true;
+is_transition_allowed(?PENDING_STATUS, ?ACTIVE_STATUS) -> true;
 is_transition_allowed(_, _) -> false.
 
 
--spec converge([atm_workflow_execution:status()]) ->
-    atm_workflow_execution:status().
-converge([Status]) -> Status;
-converge([?ACTIVE_STATUS | _]) -> ?ACTIVE_STATUS;
-converge([?PENDING_STATUS | _]) -> ?ACTIVE_STATUS;
-converge([?FAILED_STATUS, ?FINISHED_STATUS]) -> ?FAILED_STATUS.
+-spec converge([status()]) -> status().
+converge(Statuses) ->
+    converge_unique(lists:usort(Statuses)).
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+
+%% @private
+-spec converge_unique([status()]) -> status().
+converge_unique([Status]) -> Status;
+converge_unique([?ACTIVE_STATUS | _]) -> ?ACTIVE_STATUS;
+converge_unique([?PENDING_STATUS | _]) -> ?ACTIVE_STATUS;
+converge_unique([?FAILED_STATUS, ?FINISHED_STATUS]) -> ?FAILED_STATUS.

@@ -194,9 +194,9 @@ update_task_status(
             NewAtmLaneExecutions = atm_status_utils:replace_at(
                 NewLaneExecution, AtmLaneExecutionNo, AtmLaneExecutions
             ),
-            NewAtmWorkflowStatus = atm_status_utils:converge(lists:usort(
+            NewAtmWorkflowStatus = atm_status_utils:converge(
                 atm_lane_execution:gather_statuses(NewAtmLaneExecutions)
-            )),
+            ),
             {ok, AtmWorkflowExecution#atm_workflow_execution{
                 status = NewAtmWorkflowStatus,
                 status_changed = NewAtmWorkflowStatus /= CurrentStatus,
