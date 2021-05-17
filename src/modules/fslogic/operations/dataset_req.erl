@@ -133,7 +133,7 @@ archive(SpaceDirCtx, DatasetId, Config, PreservedCallback, PurgedCallback, Descr
     assert_has_eff_privilege(SpaceDirCtx, UserCtx, ?SPACE_CREATE_ARCHIVES),
 
     {ok, ArchiveId} = dataset_api:archive(DatasetId, Config, PreservedCallback, PurgedCallback,
-        Description, user_ctx:get_user_id(UserCtx)),
+        Description, UserCtx),
     ?PROVIDER_OK_RESP(#dataset_archived{id = ArchiveId}).
 
 

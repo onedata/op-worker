@@ -93,4 +93,10 @@
 -define(CANONICAL_PATH, canonical_path).
 -define(UUID_BASED_PATH, uuid_based_path).
 
+-define(SYMLINK_SPACE_ID_PREFIX, "<__onedata_space_id:").
+-define(SYMLINK_SPACE_ID_SUFFIX, ">").
+-define(SYMLINK_SPACE_ID_PATH_PREFIX(SpaceId),
+    <<?SYMLINK_SPACE_ID_PREFIX, (SpaceId)/binary, ?SYMLINK_SPACE_ID_SUFFIX>>
+).
+
 -endif.

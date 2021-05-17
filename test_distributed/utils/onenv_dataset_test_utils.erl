@@ -37,7 +37,7 @@
 -export_type([dataset_spec/0, dataset_object/0]).
 
 
--define(ATTEMPTS, 30).
+-define(ATTEMPTS, 60).
 
 
 %%%===================================================================
@@ -162,7 +162,7 @@ await_dataset_sync(CreationProvider, SyncProviders, UserId, #dataset_object{
     end, SyncProviders),
 
     lists_utils:pforeach(fun(ArchiveObj) ->
-        onenv_archive_test_utils:await_archive_sync(CreationProvider, SyncProviders, UserId, ArchiveObj)
+        onenv_archive_test_utils:await_archive_sync(CreationProvider, SyncProviders, UserId, ArchiveObj, DatasetId)
     end, ArchiveObjs).
 
 

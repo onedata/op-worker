@@ -202,6 +202,7 @@ init(_Args) ->
     tree_deletion_traverse:init_pool(),
     tarball_download_traverse:init_pool(),
     clproto_serializer:load_msg_defs(),
+    archivisation_traverse:init_pool(),
 
     schedule_invalidate_permissions_cache(),
     schedule_rerun_transfers(),
@@ -303,6 +304,7 @@ cleanup() ->
     tree_deletion_traverse:stop_pool(),
     tarball_download_traverse:stop_pool(),
     replica_synchronizer:terminate_all(),
+    archivisation_traverse:stop_pool(),
     ok.
 
 %%%===================================================================

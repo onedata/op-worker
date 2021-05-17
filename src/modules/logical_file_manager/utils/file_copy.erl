@@ -21,7 +21,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([copy/4]).
+-export([copy/4, copy/5]).
 
 -define(COPY_BUFFER_SIZE,
     application:get_env(?APP_NAME, rename_file_chunk_size, 8388608)). % 8*1024*1024
@@ -43,21 +43,25 @@
     TargetName :: file_meta:name()) ->
     {ok, NewFileGuid :: fslogic_worker:file_guid(),
         [child_entry()]} | {error, term()}.
-copy(_SessId, SourceGuid, SourceGuid, _TargetName) ->
+copy(SessId, SourceGuid, TargetParentGuid, TargetName) ->
+    copy(SessId, SourceGuid, TargetParentGuid, TargetName, true).
+
+copy(_SessId, SourceGuid, SourceGuid, _TargetName, _Recursive) ->
     % attempt to copy file to itself
     {error, ?EINVAL};
-copy(SessId, SourceGuid, TargetParentGuid, TargetName) ->
+copy(SessId, SourceGuid, TargetParentGuid, TargetName, Recursive) ->
     {ok, SourcePath} = lfm:get_file_path(SessId, SourceGuid),
     {ok, TargetParentPath} = lfm:get_file_path(SessId, TargetParentGuid),
     SourcePathTokens = filepath_utils:split(SourcePath),
     TargetParentPathTokens = filepath_utils:split(TargetParentPath),
     case SourcePathTokens -- TargetParentPathTokens of
-        [] ->
+        [] when Recursive ->
             % attempt to copy file to itself
             {error, ?EINVAL};
         _ ->
-        copy_internal(SessId, SourceGuid, TargetParentGuid, TargetName)
+            copy_internal(SessId, SourceGuid, TargetParentGuid, TargetName, Recursive)
     end.
+
 
 %%%===================================================================
 %%% Internal functions
@@ -65,16 +69,20 @@ copy(SessId, SourceGuid, TargetParentGuid, TargetName) ->
 
 -spec copy_internal(session:id(), SourceGuid :: fslogic_worker:file_guid(),
     TargetParentGuid :: fslogic_worker:file_guid(),
-    TargetName :: file_meta:name()) ->
+    TargetName :: file_meta:name(),
+    Recursive :: boolean()
+) ->
     {ok, NewFileGuid :: fslogic_worker:file_guid(),
         [child_entry()]} | {error, term()}.
-copy_internal(SessId, SourceGuid, TargetParentGuid, TargetName) ->
+copy_internal(SessId, SourceGuid, TargetParentGuid, TargetName, Recursive) ->
     try
         case lfm:stat(SessId, ?FILE_REF(SourceGuid)) of
             {ok, #file_attr{type = ?DIRECTORY_TYPE} = Attr} ->
-                copy_dir(SessId, Attr, TargetParentGuid, TargetName);
-            {ok, Attr} ->
+                copy_dir(SessId, Attr, TargetParentGuid, TargetName, Recursive);
+            {ok, #file_attr{type = ?REGULAR_FILE_TYPE} = Attr} ->
                 copy_file(SessId, Attr, TargetParentGuid, TargetName);
+            {ok, #file_attr{type = ?SYMLINK_TYPE} = Attr} ->
+                copy_symlink(SessId, Attr, TargetParentGuid, TargetName);
             {error, _} = Error ->
                 Error
         end
@@ -86,14 +94,22 @@ copy_internal(SessId, SourceGuid, TargetParentGuid, TargetName) ->
 
 -spec copy_dir(session:id(), #file_attr{},
     TargetParentGuid :: fslogic_worker:file_guid(),
-    TargetName :: file_meta:name()) ->
+    TargetName :: file_meta:name(),
+    Recursive :: boolean()
+) ->
     {ok, NewFileGuid :: fslogic_worker:file_guid(), [child_entry()]}.
-copy_dir(SessId, #file_attr{guid = SourceGuid, mode = Mode}, TargetParentGuid, TargetName) ->
+copy_dir(SessId, #file_attr{guid = SourceGuid, mode = Mode}, TargetParentGuid, TargetName, Recursive) ->
     % copy dir with default perms as it should be possible to copy its children even without the write permission
-    {ok, TargetGuid} = lfm:mkdir(SessId, TargetParentGuid, TargetName, ?DEFAULT_DIR_PERMS),
-    {ok, ChildEntries} = copy_children(SessId, SourceGuid, TargetGuid),
+    {ok, TargetGuid} = lfm:mkdir(SessId, TargetParentGuid, TargetName, ?DEFAULT_DIR_MODE),
+    ChildEntries2 = case Recursive of
+        true ->
+            {ok, ChildEntries} = copy_children(SessId, SourceGuid, TargetGuid),
+            ChildEntries;
+        false ->
+            []
+    end,
     ok = copy_metadata(SessId, SourceGuid, TargetGuid, Mode),
-    {ok, TargetGuid, ChildEntries}.
+    {ok, TargetGuid, ChildEntries2}.
 
 
 -spec copy_file(session:id(), #file_attr{},
@@ -118,6 +134,18 @@ copy_file(SessId, #file_attr{guid = SourceGuid, mode = Mode}, TargetParentGuid, 
         lfm:release(TargetHandle)
     end,
     {ok, TargetGuid, []}.
+
+
+-spec copy_symlink(session:id(), #file_attr{},
+    TargetParentGuid :: fslogic_worker:file_guid(),
+    TargetName :: file_meta:name()) ->
+    {ok, NewFileGuid :: fslogic_worker:file_guid(), [child_entry()]}.
+copy_symlink(SessId, #file_attr{guid = SourceGuid}, TargetParentGuid, TargetName) ->
+    {ok, SymlinkValue} = lfm:read_symlink(SessId, ?FILE_REF(SourceGuid)),
+    {ok, #file_attr{guid = CopyGuid}} =
+        lfm:make_symlink(SessId, ?FILE_REF(TargetParentGuid), TargetName, SymlinkValue),
+    {ok, CopyGuid, []}.
+
 
 
 -spec copy_file_content(lfm:handle(), lfm:handle(), non_neg_integer()) ->
@@ -153,7 +181,7 @@ copy_children(SessId, ParentGuid, TargetParentGuid, Token, ChildEntriesAcc) ->
             % collision suffix which normally shouldn't be there
             ChildEntries = lists:foldl(fun({ChildGuid, ChildName}, ChildrenEntries) ->
                 {ok, NewChildGuid, NewChildrenEntries} =
-                    copy_internal(SessId, ChildGuid, TargetParentGuid, ChildName),
+                    copy_internal(SessId, ChildGuid, TargetParentGuid, ChildName, true),
                 [
                     {ChildGuid, NewChildGuid, TargetParentGuid, ChildName} |
                         NewChildrenEntries ++ ChildrenEntries

@@ -195,6 +195,5 @@ dataset_id_to_space_guid(DatasetId) ->
 
 -spec archive_id_to_space_guid(archive:id()) -> fslogic_worker:file_guid().
 archive_id_to_space_guid(ArchiveId) ->
-    {ok, ArchiveDoc} = archive:get(ArchiveId),
-    SpaceId = archive:get_space_id(ArchiveDoc),
+    {ok, SpaceId} = archive:get_space_id(ArchiveId),
     fslogic_uuid:spaceid_to_space_dir_guid(SpaceId).

@@ -12,18 +12,21 @@
 -module(archive).
 -author("Jakub Kudzia").
 
--include("modules/archive/archive.hrl").
+-include("modules/dataset/archive.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
 
 %% API
--export([create/7, get/1, modify_attrs/2, delete/1, mark_purging/2]).
+-export([create/7, get/1, modify_attrs/2, delete/1,
+    mark_building/1, mark_preserved/1, mark_failed/1, mark_purging/2]).
 
 % getters
--export([get_id/1, get_creation_time/1, get_dataset_id/1, get_root_dir/1, get_space_id/1,
+-export([get_id/1, get_creation_time/1, get_dataset_id/1, get_space_id/1,
     get_state/1, get_config/1, get_preserved_callback/1, get_purged_callback/1,
     get_description/1
 ]).
+% setters
+-export([]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1]).
@@ -47,7 +50,7 @@
 -type include_dip() :: archive_config:include_dip().
 -type layout() :: archive_config:layout().
 
--type state() :: ?ARCHIVE_PENDING | ?ARCHIVE_BUILDING | ?ARCHIVE_PRESERVED | ?ARCHIVE_PURGING.
+-type state() :: ?ARCHIVE_PENDING | ?ARCHIVE_BUILDING | ?ARCHIVE_PRESERVED | ?ARCHIVE_PURGING | ?ARCHIVE_FAILED.
 -type timestamp() :: time:seconds().
 -type description() :: binary().
 -type callback() :: http_client:url() | undefined.
@@ -120,6 +123,65 @@ modify_attrs(ArchiveId, Diff) when is_map(Diff) ->
 delete(ArchiveId) ->
     datastore_model:delete(?CTX, ArchiveId).
 
+%%%===================================================================
+%%% Getters for #archive record
+%%%===================================================================
+
+-spec get_id(doc()) -> {ok, id()}.
+get_id(#document{key = ArchiveId}) ->
+    {ok, ArchiveId}.
+
+-spec get_creation_time(record() | doc()) -> {ok, timestamp()}.
+get_creation_time(#archive{creation_time = CreationTime}) ->
+    {ok, CreationTime};
+get_creation_time(#document{value = Archive}) ->
+    get_creation_time(Archive).
+
+-spec get_dataset_id(record() | doc()) -> {ok, dataset:id()}.
+get_dataset_id(#archive{dataset_id = DatasetId}) ->
+    {ok, DatasetId};
+get_dataset_id(#document{value = Archive}) ->
+    get_dataset_id(Archive).
+
+-spec get_space_id(id() | doc()) -> {ok, od_space:id()}.
+get_space_id(#document{scope = SpaceId}) ->
+    {ok, SpaceId};
+get_space_id(ArchiveId) ->
+    ?get_field(ArchiveId, fun get_space_id/1).
+
+-spec get_state(record() | doc()) -> {ok, state()}.
+get_state(#archive{state = State}) ->
+    {ok, State};
+get_state(#document{value = Archive}) ->
+    get_state(Archive).
+
+-spec get_config(record() | doc()) -> {ok, config()}.
+get_config(#archive{config = Config}) ->
+    {ok, Config};
+get_config(#document{value = Archive}) ->
+    get_config(Archive).
+
+-spec get_preserved_callback(record() | doc()) -> {ok, callback()}.
+get_preserved_callback(#archive{preserved_callback = PreservedCallback}) ->
+    {ok, PreservedCallback};
+get_preserved_callback(#document{value = Archive}) ->
+    get_preserved_callback(Archive).
+
+-spec get_purged_callback(record() | doc()) -> {ok, callback()}.
+get_purged_callback(#archive{purged_callback = PurgedCallback}) ->
+    {ok, PurgedCallback};
+get_purged_callback(#document{value = Archive}) ->
+    get_purged_callback(Archive).
+
+-spec get_description(record() | doc()) -> {ok, description()}.
+get_description(#archive{description = Description}) ->
+    {ok, Description};
+get_description(#document{value = Archive}) ->
+    get_description(Archive).
+
+%%%===================================================================
+%%% Setters for #archive record
+%%%===================================================================
 
 -spec mark_purging(id(), callback()) -> {ok, doc()} | error().
 mark_purging(ArchiveId, Callback) ->
@@ -127,74 +189,33 @@ mark_purging(ArchiveId, Callback) ->
         {ok, Archive#archive{
             state = ?ARCHIVE_PURGING,
             purged_callback = utils:ensure_defined(Callback, PrevPurgedCallback)
-        }} 
+        }}
     end).
 
+-spec mark_building(id()) -> ok | error().
+mark_building(ArchiveId) ->
+    set_state(ArchiveId, ?ARCHIVE_BUILDING).
 
-%%%===================================================================
-%%% Getters for #archive record
-%%%===================================================================
+-spec mark_preserved(id()) -> ok | error().
+mark_preserved(ArchiveId) ->
+    set_state(ArchiveId, ?ARCHIVE_PRESERVED).
 
--spec get_id(doc()) -> id().
-get_id(#document{key = ArchiveId}) ->
-    ArchiveId.
+-spec mark_failed(id()) -> ok | error().
+mark_failed(ArchiveId) ->
+    set_state(ArchiveId, ?ARCHIVE_FAILED).
 
--spec get_creation_time(record() | doc()) -> timestamp().
-get_creation_time(#archive{creation_time = CreationTime}) ->
-    CreationTime;
-get_creation_time(#document{value = Archive}) ->
-    get_creation_time(Archive).
-
--spec get_dataset_id(record() | doc()) -> dataset:id().
-get_dataset_id(#archive{dataset_id = DatasetId}) ->
-    DatasetId;
-get_dataset_id(#document{value = Archive}) ->
-    get_dataset_id(Archive).
-
--spec get_root_dir(record() | doc()) -> file_id:file_guid() | undefined.
-get_root_dir(#archive{root_dir_guid = RootDir}) ->
-    RootDir;
-get_root_dir(#document{value = Archive}) ->
-    get_root_dir(Archive).
-
--spec get_space_id(doc()) -> od_space:id().
-get_space_id(#document{scope = SpaceId}) ->
-    SpaceId.
-
--spec get_state(record() | doc()) -> state().
-get_state(#archive{state = State}) ->
-    State;
-get_state(#document{value = Archive}) ->
-    get_state(Archive).
-
--spec get_config(record() | doc()) -> config().
-get_config(#archive{config = Config}) ->
-    Config;
-get_config(#document{value = Archive}) ->
-    get_config(Archive).
-
--spec get_preserved_callback(record() | doc()) -> callback().
-get_preserved_callback(#archive{preserved_callback = PreservedCallback}) ->
-    PreservedCallback;
-get_preserved_callback(#document{value = Archive}) ->
-    get_preserved_callback(Archive).
-
--spec get_purged_callback(record() | doc()) -> callback().
-get_purged_callback(#archive{purged_callback = PurgedCallback}) ->
-    PurgedCallback;
-get_purged_callback(#document{value = Archive}) ->
-    get_purged_callback(Archive).
-
--spec get_description(record() | doc()) -> description().
-get_description(#archive{description = Description}) ->
-    Description;
-get_description(#document{value = Archive}) ->
-    get_description(Archive).
+%% @private
+-spec set_state(id(), state()) -> ok.
+set_state(ArchiveId, NewState) ->
+    ?extract_ok(update(ArchiveId, fun(Archive) ->
+        {ok, Archive#archive{state = NewState}}
+    end)).
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
+%% @private
 -spec update(id(), datastore_doc:diff(record())) -> {ok, doc()} | error().
 update(ArchiveId, Diff) when is_function(Diff)->
     datastore_model:update(?CTX, ArchiveId, Diff).
@@ -221,7 +242,6 @@ get_ctx() ->
 get_record_struct(1) ->
     {record, [
         {dataset_id, string},
-        {root_dir_guid, string},
         {creation_time, integer},
         {creator, string},
         {state, atom},

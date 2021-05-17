@@ -98,7 +98,7 @@ start(RootDirCtx, UserCtx, EmitEvents, RootOriginalParentUuid) ->
 task_started(TaskId, _Pool) ->
     ?debug("dir deletion job ~p started", [TaskId]).
 
--spec task_canceled(traverse:id(), traverse:pool()) -> ok.
+-spec task_canceled(id(), tree_traverse:pool()) -> ok.
 task_canceled(TaskId, _PoolName) ->
     tree_traverse_session:close_for_task(TaskId),
     ?debug("dir deletion job ~p cancelled", [TaskId]).
@@ -109,12 +109,12 @@ task_finished(TaskId, _Pool) ->
     ?debug("dir deletion job ~p finished", [TaskId]).
 
 -spec get_job(traverse:job_id() | tree_traverse_job:doc()) ->
-    {ok, tree_traverse:master_job(), traverse:pool(), id()}  | {error, term()}.
-get_job(DocOrID) ->
-    tree_traverse:get_job(DocOrID).
+    {ok, tree_traverse:master_job(), tree_traverse:pool(), id()}  | {error, term()}.
+get_job(DocOrId) ->
+    tree_traverse:get_job(DocOrId).
 
 -spec update_job_progress(undefined | main_job | traverse:job_id(),
-    tree_traverse:master_job(), traverse:pool(), id(),
+    tree_traverse:master_job(), tree_traverse:pool(), id(),
     traverse:job_status()) -> {ok, traverse:job_id()}  | {error, term()}.
 update_job_progress(Id, Job, Pool, TaskId, Status) ->
     tree_traverse:update_job_progress(Id, Job, Pool, TaskId, Status, ?MODULE).

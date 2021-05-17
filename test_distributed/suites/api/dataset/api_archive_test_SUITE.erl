@@ -15,7 +15,8 @@
 -include("api_test_runner.hrl").
 -include("onenv_test_utils.hrl").
 -include("api_file_test_utils.hrl").
--include("modules/archive/archive.hrl").
+-include("modules/dataset/archive.hrl").
+-include("modules/dataset/archivisation_tree.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include_lib("ctool/include/graph_sync/gri.hrl").
 -include_lib("ctool/include/http/codes.hrl").
@@ -44,7 +45,7 @@
 
 groups() -> [
     {all_tests, [parallel], [
-        create_archive,
+%%        create_archive,
         get_archive_info,
         modify_archive_description,
         get_dataset_archives,
@@ -77,6 +78,7 @@ end).
 -define(PURGE_TEST_PROCESS, purge_test_process).
 -define(ARCHIVE_PERSISTED(ArchiveId, DatasetId), {archive_persisted, ArchiveId, DatasetId}).
 -define(ARCHIVE_PURGED(ArchiveId), {archive_purged, ArchiveId}).
+-define(SPACE, space_krk_par).
 
 %%%===================================================================
 %%% Archive dataset test functions
@@ -86,11 +88,11 @@ create_archive(_Config) ->
 
     #object{
         dataset = #dataset_object{id = DatasetId}
-    } = onenv_file_test_utils:create_and_sync_file_tree(user3, space_krk_par, #file_spec{dataset = #dataset_spec{}}),
+    } = onenv_file_test_utils:create_and_sync_file_tree(user3, ?SPACE, #file_spec{dataset = #dataset_spec{}}),
 
     #object{
         dataset = #dataset_object{id = DetachedDatasetId}
-    } = onenv_file_test_utils:create_and_sync_file_tree(user3, space_krk_par, #file_spec{dataset = #dataset_spec{state = ?DETACHED_DATASET}}),
+    } = onenv_file_test_utils:create_and_sync_file_tree(user3, ?SPACE, #file_spec{dataset = #dataset_spec{state = ?DETACHED_DATASET}}),
 
     MemRef = api_test_memory:init(),
 
@@ -100,7 +102,7 @@ create_archive(_Config) ->
         #suite_spec{
             target_nodes = Providers,
             client_spec = ?CLIENT_SPEC_FOR_SPACE_KRK_PAR(?EPERM),
-            randomly_select_scenarios = true,
+%%            randomly_select_scenarios = true, todo
             verify_fun = build_verify_archive_created_fun(MemRef, Providers),
             scenario_templates = [
                 #scenario_template{
@@ -117,8 +119,8 @@ create_archive(_Config) ->
                 }
             ],
             data_spec = #data_spec{
-                required = [<<"datasetId">>, <<"config">>],
-                optional = [<<"description">>, <<"preservedCallback">>, <<"purgedCallback">>],
+                required = [<<"datasetId">>],
+                optional = [<<"config">>, <<"description">>, <<"preservedCallback">>, <<"purgedCallback">>],
                 correct_values = #{
                     <<"datasetId">> => [DatasetId],
                     <<"config">> => generate_all_valid_configs(),
@@ -130,13 +132,14 @@ create_archive(_Config) ->
                     {<<"datasetId">>, ?NON_EXISTENT_DATASET_ID, ?ERROR_FORBIDDEN},
                     {<<"datasetId">>, DetachedDatasetId,
                         ?ERROR_BAD_DATA(<<"datasetId">>, <<"Detached dataset cannot be modified.">>)},
-                    {<<"config">>, #{<<"incremental">> => <<"not boolean">>, <<"layout">> => ?ARCHIVE_BAGIT_LAYOUT},
-                        ?ERROR_BAD_VALUE_BOOLEAN(<<"config.incremental">>)},
-                    {<<"config">>, #{<<"includeDip">> => <<"not boolean">>, <<"layout">> => ?ARCHIVE_BAGIT_LAYOUT},
-                        ?ERROR_BAD_VALUE_BOOLEAN(<<"config.includeDip">>)},
+                    {<<"config">>, #{<<"incremental">> => <<"not boolean">>},
+                        % TODO VFS-7652 ?ERROR_BAD_VALUE_BOOLEAN(<<"config.incremental">>)},
+                        ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"config.incremental">>, ensure_binaries(?SUPPORTED_INCREMENTAL_VALUES))},
+                    {<<"config">>, #{<<"includeDip">> => <<"not boolean">>},
+                        % TODO VFS-7653 ?ERROR_BAD_VALUE_BOOLEAN(<<"config.includeDip">>)},
+                        ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"config.includeDip">>, ensure_binaries(?SUPPORTED_INCLUDE_DIP_VALUES))},
                     {<<"config">>, #{<<"layout">> => <<"not allowed layout">>},
                         ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"config.layout">>, ensure_binaries(?ARCHIVE_LAYOUTS))},
-                    {<<"config">>, #{}, ?ERROR_MISSING_REQUIRED_VALUE(<<"config.layout">>)},
                     {<<"description">>, [123, 456], ?ERROR_BAD_VALUE_BINARY(<<"description">>)},
                     {<<"preservedCallback">>, <<"htp:/wrong-url.org">>, ?ERROR_BAD_DATA(<<"preservedCallback">>)},
                     {<<"purgedCallback">>, <<"htp:/wrong-url.org">>, ?ERROR_BAD_DATA(<<"purgedCallback">>)}
@@ -148,13 +151,15 @@ create_archive(_Config) ->
 %% @private
 -spec generate_all_valid_configs() -> [archive_config:config_json()].
 generate_all_valid_configs() ->
-    BooleansAndUndefined = [true, false, undefined],
+    LayoutValues = [undefined | ?ARCHIVE_LAYOUTS],
+    IncrementalValues = [undefined | ?SUPPORTED_INCREMENTAL_VALUES],
+    IncludeDipValues = [undefined | ?SUPPORTED_INCLUDE_DIP_VALUES],
     AllConfigsCombinations = [
         {Layout, Incremental, IncludeDip}
-        || Layout <- ?ARCHIVE_LAYOUTS, Incremental <- BooleansAndUndefined, IncludeDip <- BooleansAndUndefined
+        || Layout <- LayoutValues, Incremental <- IncrementalValues, IncludeDip <- IncludeDipValues
     ],
     lists:foldl(fun({L, I, ID}, Acc) ->
-        Config = #{<<"layout">> => L},
+        Config = maps_utils:put_if_defined(#{}, <<"layout">>, L),
         Config2 = maps_utils:put_if_defined(Config, <<"incremental">>, I),
         Config3 = maps_utils:put_if_defined(Config2, <<"includeDip">>, ID),
         [Config3 | Acc]
@@ -285,7 +290,7 @@ get_archive_info(_Config) ->
             config = Config,
             description = Description
         }]
-    }} = onenv_file_test_utils:create_and_sync_file_tree(user3, space_krk_par,
+    }} = onenv_file_test_utils:create_and_sync_file_tree(user3, ?SPACE,
         #file_spec{dataset = #dataset_spec{archives = 1}}
     ),
 
@@ -305,11 +310,14 @@ get_archive_info(_Config) ->
                     prepare_args_fun = build_get_archive_prepare_rest_args_fun(ArchiveId),
                     validate_result_fun = fun(#api_test_ctx{node = TestNode}, {ok, RespCode, _, RespBody}) ->
                         CreationTime = time_test_utils:global_seconds(TestNode),
+                        SpaceId = oct_background:get_space_id(?SPACE),
+                        RootDirectoryGuid = file_id:pack_guid(?ARCHIVE_DIR_UUID(ArchiveId), SpaceId),
+                        {ok, RootDirectoryId} = file_id:guid_to_objectid(RootDirectoryGuid),
                         ExpArchiveData = #{
                             <<"archiveId">> => ArchiveId,
                             <<"datasetId">> => DatasetId,
                             <<"state">> => atom_to_binary(?ARCHIVE_PENDING, utf8),
-                            <<"rootDirectoryId">> => null,
+                            <<"rootDirectoryId">> => RootDirectoryId,
                             <<"creationTime">> => CreationTime,
                             <<"description">> => Description,
                             <<"config">> => ConfigJson,
@@ -376,7 +384,7 @@ modify_archive_description(_Config) ->
     #object{dataset = #dataset_object{
         id = DatasetId,
         archives = ArchiveObjects
-    }} = onenv_file_test_utils:create_and_sync_file_tree(user3, space_krk_par,
+    }} = onenv_file_test_utils:create_and_sync_file_tree(user3, ?SPACE,
         #file_spec{dataset = #dataset_spec{archives = 30}}
     ),
 
@@ -499,7 +507,7 @@ get_dataset_archives(_Config) ->
     #object{dataset = #dataset_object{
         id = DatasetId,
         archives = ArchiveObjects
-    }} = onenv_file_test_utils:create_and_sync_file_tree(user3, space_krk_par, #file_spec{dataset = #dataset_spec{
+    }} = onenv_file_test_utils:create_and_sync_file_tree(user3, ?SPACE, #file_spec{dataset = #dataset_spec{
         % pick random count of archives
         archives = rand:uniform(1000)
     }}),
@@ -527,7 +535,7 @@ get_dataset_archives(_Config) ->
         #suite_spec{
             target_nodes = Providers,
             client_spec = ?CLIENT_SPEC_FOR_SPACE_KRK_PAR(?EPERM),
-            randomly_select_scenarios = true,
+%%            randomly_select_scenarios = true, todo
             scenario_templates = [
                 #scenario_template{
                     name = <<"Get dataset archives using REST API">>,
@@ -671,7 +679,7 @@ init_archive_purge_test(_Config) ->
     #object{dataset = #dataset_object{
         id = DatasetId,
         archives = ArchiveObjects
-    }} = onenv_file_test_utils:create_and_sync_file_tree(user3, space_krk_par, #file_spec{dataset = #dataset_spec{
+    }} = onenv_file_test_utils:create_and_sync_file_tree(user3, ?SPACE, #file_spec{dataset = #dataset_spec{
         archives = 30
     }}),
 
@@ -834,7 +842,7 @@ verify_archive(
             id = ArchiveId,
             dataset_id = DatasetId,
             state = ?ARCHIVE_PENDING,
-            root_dir_guid = undefined,
+            root_dir_guid = file_id:pack_guid(?ARCHIVE_DIR_UUID(ArchiveId), oct_background:get_space_id(?SPACE)),
             creation_time = CreationTime,
             config = archive_config:from_json(Config),
             preserved_callback = PreservedCallback,
@@ -862,7 +870,7 @@ build_archive_gs_instance(ArchiveId, DatasetId, CreationTime, Config, Descriptio
         id = ArchiveId,
         dataset_id = DatasetId,
         state = str_utils:to_binary(?ARCHIVE_PENDING),
-        root_dir_guid = undefined,
+        root_dir_guid = file_id:pack_guid(?ARCHIVE_DIR_UUID(ArchiveId), oct_background:get_space_id(?SPACE)),
         creation_time = CreationTime,
         config = Config,
         description = Description,
@@ -893,7 +901,7 @@ init_per_suite(Config) ->
         onenv_scenario = "api_tests",
         envs = [{op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}],
         posthook = fun(NewConfig) ->
-            SpaceId = oct_background:get_space_id(space_krk_par),
+            SpaceId = oct_background:get_space_id(?SPACE),
             ozw_test_rpc:space_set_user_privileges(SpaceId, ?OCT_USER_ID(user3), [
                 ?SPACE_MANAGE_DATASETS, ?SPACE_VIEW_ARCHIVES, ?SPACE_CREATE_ARCHIVES,
                 ?SPACE_REMOVE_ARCHIVES, ?SPACE_RECALL_ARCHIVES | privileges:space_member()
@@ -917,12 +925,12 @@ init_per_group(_Group, Config) ->
     lfm_proxy:init(Config, false).
 
 end_per_group(_Group, Config) ->
-    onenv_dataset_test_utils:cleanup_all_datasets(space_krk_par),
+    onenv_dataset_test_utils:cleanup_all_datasets(?SPACE),
     lfm_proxy:teardown(Config),
     time_test_utils:unfreeze_time(Config).
 
 init_per_testcase(_Case, Config) ->
-    ct:timetrap({minutes, 10}),
+    ct:timetrap({minutes, 30}), % todo
     Config.
 
 
