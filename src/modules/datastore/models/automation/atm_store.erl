@@ -15,7 +15,7 @@
 -include("modules/datastore/datastore_models.hrl").
 
 %% API
--export([create/1, get/1, delete/1]).
+-export([create/1, get/1, update/2, delete/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1, get_record_version/0]).
@@ -51,6 +51,11 @@ get(AtmStoreId) ->
         {error, _} = Error ->
             Error
     end.
+
+
+-spec update(id(), diff()) -> ok | {error, term()}.
+update(AtmStoreId, UpdateFun) ->
+    ?extract_ok(datastore_model:update(?CTX, AtmStoreId, UpdateFun)).
 
 
 -spec delete(id()) -> ok | {error, term()}.

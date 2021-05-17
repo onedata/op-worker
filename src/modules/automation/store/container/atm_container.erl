@@ -23,7 +23,7 @@
 -behaviour(persistent_record).
 
 %% API
--export([create/3, get_data_spec/1, acquire_iterator/1]).
+-export([create/3, get_data_spec/1, acquire_iterator/1, update/4]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
@@ -31,16 +31,25 @@
 
 -type type() ::
     atm_single_value_container |
-    atm_range_container.
+    atm_range_container |
+    atm_list_container.
 
 -type initial_value() ::
-    atm_single_value_container:initial_value() |
-    atm_range_container:initial_value().
+    atm_single_value_container:initial_value() | 
+    atm_range_container:initial_value() |
+    atm_list_container:initial_value().
 
 -type record() ::
-    atm_single_value_container:record() |
-    atm_range_container:record().
+    atm_single_value_container:record() | 
+    atm_range_container:record() |
+    atm_list_container:record().
 
+-type update_operation() :: append | set.
+
+-type update_options() ::
+    atm_single_value_container:update_options() |
+    atm_range_container:update_options() |
+    atm_list_container:update_options().
 
 -export_type([type/0, initial_value/0, record/0]).
 
@@ -55,6 +64,9 @@
 -callback get_data_spec(record()) -> atm_data_spec:record().
 
 -callback acquire_iterator(record()) -> atm_container_iterator:record().
+
+-callback update(record(), update_operation(), update_options(), json_utils:json_term()) -> 
+    ok | no_return().
 
 
 %%%===================================================================
@@ -77,6 +89,13 @@ get_data_spec(AtmContainer) ->
 acquire_iterator(AtmContainer) ->
     RecordType = utils:record_type(AtmContainer),
     RecordType:acquire_iterator(AtmContainer).
+
+
+-spec update(record(), update_operation(), update_options(), json_utils:json_term()) ->
+    record() | no_return().
+update(AtmContainer, Operation, Options, Item) ->
+    RecordType = utils:record_type(AtmContainer),
+    RecordType:update(AtmContainer, Operation, Options, Item).
 
 
 %%%===================================================================

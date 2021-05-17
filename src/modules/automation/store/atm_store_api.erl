@@ -17,6 +17,7 @@
 %% API
 -export([
     create_all/1, create/3,
+    update/4,
     delete_all/1, delete/1,
     acquire_iterator/2
 ]).
@@ -84,6 +85,18 @@ create(AtmWorkflowExecutionId, InitialValue, #atm_store_schema{
     }).
 
 
+-spec update(atm_store:id(), atm_container:update_operation(),
+    atm_container:update_options(), json_utils:json_term()) -> ok | {error, term()}.
+update(AtmStoreId, Operation, Options, Item) ->
+    critical_section:run({atm_store_update, AtmStoreId}, fun() ->
+        {ok, #atm_store{container = AtmContainer}} = atm_store:get(AtmStoreId),
+        UpdatedContainer = atm_container:update(AtmContainer, Operation, Options, Item),
+        atm_store:update(AtmStoreId, fun(#atm_store{} = PrevStore) ->
+            {ok, PrevStore#atm_store{container = UpdatedContainer}}
+        end)
+    end).
+
+
 -spec delete_all([atm_store:id()]) -> ok.
 delete_all(AtmStoreIds) ->
     lists:foreach(fun delete/1, AtmStoreIds).
@@ -113,4 +126,5 @@ acquire_iterator(AtmExecutionState, #atm_store_iterator_spec{
 -spec store_type_to_container_type(automation:store_type()) ->
     atm_container:type().
 store_type_to_container_type(single_value) -> atm_single_value_container;
-store_type_to_container_type(range) -> atm_range_container.
+store_type_to_container_type(range) -> atm_range_container;
+store_type_to_container_type(list) -> atm_list_container.
