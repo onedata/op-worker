@@ -182,7 +182,7 @@ iterate_in_chunks_test_base(ChunkSize, #{<<"end">> := End} = InitialValue) ->
 %% @private
 -spec iterate_test_base(
     atm_store_api:initial_value(),
-    atm_store_iterator_strategy(),
+    atm_store_iterator_spec:strategy(),
     [item()] | [[item()]]
 ) ->
     ok | no_return().
@@ -267,7 +267,7 @@ split_into_chunks(Size, Acc, [_ | _] = Items) ->
 
 
 %% @private
--spec create_store(node(), atm_store_schema(), atm_store_api:initial_value()) ->
+-spec create_store(node(), atm_store_schema:record(), atm_store_api:initial_value()) ->
     {ok, atm_store:id()} | {error, term()}.
 create_store(Node, AtmStoreSchema, InitialValue) ->
     rpc:call(Node, atm_store_api, create, [AtmStoreSchema, InitialValue]).

@@ -14,68 +14,14 @@
 -ifndef(ATM_TMP_HRL).
 -define(ATM_TMP_HRL, 1).
 
--record(atm_store_schema, {
-    id :: binary(),
-    name :: automation:name(),
-    description :: automation:description(),
-    type :: automation:store_type(),
-    data_spec :: atm_data_spec:record(),
-    requires_initial_value :: boolean()
-}).
--type atm_store_schema() :: #atm_store_schema{}.
-
--record(atm_store_iterator_serial_strategy, {}).
--record(atm_store_iterator_batch_strategy, {size :: pos_integer()}).
-
--type atm_store_iterator_strategy() ::
-    #atm_store_iterator_serial_strategy{} |
-    #atm_store_iterator_batch_strategy{}.
-
--record(atm_store_iterator_spec, {
-    strategy :: atm_store_iterator_strategy(),
-    store_schema_id :: binary()
-}).
--type atm_store_iterator_spec() :: #atm_store_iterator_spec{}.
-
--record(atm_task_schema_argument_mapper, {
-    argument_name :: binary(),
-    value_builder :: map()
-}).
--type atm_task_schema_argument_mapper() :: #atm_task_schema_argument_mapper{}.
-
--record(atm_task_schema, {
-    id :: automation:id(),
-    name :: automation:name(),
-    lambda_id :: automation:id(),
-    argument_mappings :: [atm_task_schema_argument_mapper()]
-%%    result_mappings :: [atm_task_schema_result_mapper()]
-}).
--type atm_task_schema() :: #atm_task_schema{}.
-
--record(atm_parallel_box_schema, {
-    id :: automation:id(),
-    name :: automation:name(),
-    tasks :: [atm_task_schema()]
-}).
--type atm_parallel_box_schema() :: #atm_parallel_box_schema{}.
-
--record(atm_lane_schema, {
-    id :: automation:id(),
-    name :: automation:name(),
-    parallel_boxes :: [atm_parallel_box_schema()],
-    store_iterator_spec :: atm_store_iterator_spec()
-}).
--type atm_lane_schema() :: #atm_lane_schema{}.
-
--type atm_workflow_schema_state() :: incomplete | ready | deprecated.
 
 -record(atm_workflow_schema, {
     id :: automation:id(),
     name :: automation:name(),
     description :: automation:description(),
-    stores :: [atm_store_schema()],
-    lanes :: [atm_lane_schema()],
-    state :: atm_workflow_schema_state()
+    stores :: [atm_store_schema:record()],
+    lanes :: [atm_lane_schema:record()],
+    state :: incomplete | ready | deprecated
 }).
 -type atm_workflow_schema() :: #atm_workflow_schema{}.
 
@@ -143,7 +89,6 @@
 -define(ERROR_ATM_INVALID_STATUS_TRANSITION(__PREV_STATUS, __NEW_STATUS),
     {error, {atm_invalid_status_transition, __PREV_STATUS, __NEW_STATUS}}
 ).
-
 
 
 -endif.

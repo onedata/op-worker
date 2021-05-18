@@ -16,10 +16,12 @@
 
 -include("modules/automation/atm_tmp.hrl").
 -include("global_definitions.hrl").
+-include_lib("ctool/include/automation/automation.hrl").
+
 
 -record(atm_store_iterator_config, {
     store_id :: atm_store:id(),
-    strategy :: atm_store_iterator_strategy()
+    strategy :: atm_store_iterator_spec:strategy()
 }).
 
 -record(atm_parallel_box_execution, {

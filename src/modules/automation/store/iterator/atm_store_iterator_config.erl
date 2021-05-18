@@ -14,7 +14,6 @@
 
 -behaviour(persistent_record).
 
--include("modules/automation/atm_tmp.hrl").
 -include("modules/automation/atm_wokflow_execution.hrl").
 
 %% API
@@ -34,7 +33,7 @@
 %%%===================================================================
 
 
--spec build(atm_store_api:registry(), atm_store_iterator_spec()) ->
+-spec build(atm_store_api:registry(), atm_store_iterator_spec:record()) ->
     record() | no_return().
 build(AtmStoreRegistry, #atm_store_iterator_spec{
     store_schema_id = AtmStoreSchemaId,
@@ -66,24 +65,31 @@ version() ->
 db_encode(#atm_store_iterator_config{
     store_id = AtmStoreId,
     strategy = AtmStoreIteratorStrategy
-}, _NestedRecordEncoder) ->
+}, NestedRecordEncoder) ->
+    AtmStoreIteratorStrategyRecordType = utils:record_type(AtmStoreIteratorStrategy),
+
     #{
+        <<"_type">> => atom_to_binary(AtmStoreIteratorStrategyRecordType, utf8),
         <<"storeId">> => AtmStoreId,
-        % TODO replace with below after integration with ctool/oz
-        <<"strategy">> => json_utils:encode(term_to_binary(AtmStoreIteratorStrategy))
-%%        <<"strategy">> => NestedRecordEncoder(AtmStoreIteratorStrategy, atm_store_iterator_strategy)
+        <<"strategy">> => NestedRecordEncoder(
+            AtmStoreIteratorStrategy, AtmStoreIteratorStrategyRecordType
+        )
     }.
 
 
 -spec db_decode(json_utils:json_term(), persistent_record:nested_record_decoder()) ->
     record().
 db_decode(#{
+    <<"_type">> := AtmStoreIteratorStrategyRecordTypeBin,
     <<"storeId">> := AtmStoreId,
     <<"strategy">> := AtmStoreIteratorStrategyJson
-}, _NestedRecordDecoder) ->
+}, NestedRecordDecoder) ->
+    AtmStoreIteratorStrategyRecordType = binary_to_atom(
+        AtmStoreIteratorStrategyRecordTypeBin, utf8
+    ),
     #atm_store_iterator_config{
         store_id = AtmStoreId,
-        strategy = binary_to_term(json_utils:decode(AtmStoreIteratorStrategyJson))
-        % TODO replace with below after integration with ctool/oz
-%%        strategy = NestedRecordDecoder(AtmStoreIteratorStrategyJson, atm_store_iterator_strategy)
+        strategy = NestedRecordDecoder(
+            AtmStoreIteratorStrategyJson, AtmStoreIteratorStrategyRecordType
+        )
     }.

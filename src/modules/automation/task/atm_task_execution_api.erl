@@ -41,7 +41,7 @@
     atm_workflow_execution:id(),
     non_neg_integer(),
     non_neg_integer(),
-    [atm_task_schema()]
+    [atm_task_schema:record()]
 ) ->
     registry() | no_return().
 create_all(AtmWorkflowExecutionId, AtmLaneNo, AtmParallelBoxNo, AtmTaskSchemas) ->
@@ -64,7 +64,7 @@ create_all(AtmWorkflowExecutionId, AtmLaneNo, AtmParallelBoxNo, AtmTaskSchemas) 
     atm_workflow_execution:id(),
     non_neg_integer(),
     non_neg_integer(),
-    atm_task_schema()
+    atm_task_schema:record()
 ) ->
     {ok, atm_task_execution:id()} | no_return().
 create(AtmWorkflowExecutionId, AtmLaneNo, AtmParallelBoxNo, #atm_task_schema{

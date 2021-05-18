@@ -30,27 +30,11 @@
 -type diff() :: datastore_doc:diff(record()).
 
 -type ctx() :: #atm_task_execution_ctx{}.
-
-%% Full 'arg_input_spec' format can't be expressed directly in type spec due to
-%% dialyzer limitations in specifying concrete binaries. Instead it is
-%% shown below:
-%%
-%% #{
-%%      <<"inputRefType">> := <<"const">> | <<"store">> | <<"item">>,
-%%      <<"inputRef">> => case <<"inputRefType">> of
-%%          <<"const">> -> ConstValue :: json_utils:json_term();
-%%          <<"store">> -> StoreSchemaId :: binary();
-%%          <<"item">> -> json_utils:query() % optional, if not specified entire
-%%                                           % item is substituted
-%%      end
-%% }
--type arg_input_spec() :: json_utils:json_map().
 -type arg_spec() :: #atm_task_execution_argument_spec{}.
-
 -type status() :: ?PENDING_STATUS | ?ACTIVE_STATUS | ?FINISHED_STATUS | ?FAILED_STATUS.
 
 -export_type([id/0, record/0, doc/0, diff/0]).
--export_type([ctx/0, arg_input_spec/0, arg_spec/0, status/0]).
+-export_type([ctx/0, arg_spec/0, status/0]).
 
 
 -define(CTX, #{model => ?MODULE}).
@@ -112,7 +96,7 @@ get_record_struct(1) ->
         {executor, {custom, string, {persistent_record, encode, decode, atm_task_executor}}},
         {argument_specs, [{record, [
             {name, string},
-            {input_spec, {custom, string, {json_utils, encode, decode}}},
+            {value_builder, {custom, string, {persistent_record, encode, decode, atm_argument_value_builder}}},
             {data_spec, {custom, string, {persistent_record, encode, decode, atm_data_spec}}},
             {is_batch, boolean}
         ]}]},

@@ -39,7 +39,7 @@
 -spec create_all(
     atm_workflow_execution:id(),
     atm_store_api:registry(),
-    [atm_lane_schema()]
+    [atm_lane_schema:record()]
 ) ->
     [record()] | no_return().
 create_all(AtmWorkflowExecutionId, AtmStoreRegistry, AtmLaneSchemas) ->
@@ -62,7 +62,7 @@ create_all(AtmWorkflowExecutionId, AtmStoreRegistry, AtmLaneSchemas) ->
     atm_workflow_execution:id(),
     atm_store_api:registry(),
     non_neg_integer(),
-    atm_lane_schema()
+    atm_lane_schema:record()
 ) ->
     record() | no_return().
 create(AtmWorkflowExecutionId, AtmStoreRegistry, AtmLaneNo, #atm_lane_schema{

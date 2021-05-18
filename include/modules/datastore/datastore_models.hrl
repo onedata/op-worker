@@ -1008,6 +1008,7 @@
     name :: automation:name(),
     description :: automation:description(),
     requires_initial_value :: boolean(),
+    initial_value :: undefined | json_utils:json_term(),
     frozen = false :: boolean(),
     type :: automation:store_type(),
     container :: atm_container:record()

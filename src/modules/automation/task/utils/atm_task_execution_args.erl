@@ -27,7 +27,7 @@
 
 -spec build_specs(
     [atm_lambda_argument_spec:record()],
-    [atm_task_schema_argument_mapper()]
+    [atm_task_schema_argument_mapper:record()]
 ) ->
     [atm_task_execution:arg_spec()].
 build_specs(AtmLambdaArgSpecs, AtmTaskSchemaArgMappers) ->
@@ -43,10 +43,10 @@ build_specs(AtmLambdaArgSpecs, AtmTaskSchemaArgMappers) ->
 build_args(AtmTaskExecutionCtx, AtmTaskExecutionArgSpecs) ->
     lists:foldl(fun(#atm_task_execution_argument_spec{
         name = ArgName,
-        input_spec = ArgInputSpec
+        value_builder = ArgValueBuilder
     } = AtmTaskExecutionArgSpec, Args) ->
         try
-            ArgValue = build_arg(AtmTaskExecutionCtx, ArgInputSpec),
+            ArgValue = build_arg(AtmTaskExecutionCtx, ArgValueBuilder),
             validate_arg(ArgValue, AtmTaskExecutionArgSpec),
             Args#{ArgName => ArgValue}
         catch _:Reason ->
@@ -75,8 +75,8 @@ order_atm_lambda_arg_specs_by_name(
 
 %% @private
 -spec order_atm_task_schema_arg_mappers_by_name(
-    atm_task_schema_argument_mapper(),
-    atm_task_schema_argument_mapper()
+    atm_task_schema_argument_mapper:record(),
+    atm_task_schema_argument_mapper:record()
 ) ->
     boolean().
 order_atm_task_schema_arg_mappers_by_name(
@@ -89,7 +89,7 @@ order_atm_task_schema_arg_mappers_by_name(
 %% @private
 -spec build_specs(
     OrderedUniqueAtmLambdaArgSpecs :: [atm_lambda_argument_spec:record()],
-    OrderedUniqueAtmTaskSchemaArgMappers :: [atm_task_schema_argument_mapper()],
+    OrderedUniqueAtmTaskSchemaArgMappers :: [atm_task_schema_argument_mapper:record()],
     AtmTaskExecutionArgSpecs :: [atm_task_execution:arg_spec()]
 ) ->
     [atm_task_execution:arg_spec()] | no_return().
@@ -139,7 +139,7 @@ build_specs(
 %% @private
 -spec build_spec(
     atm_lambda_argument_spec:record(),
-    undefined | atm_task_schema_argument_mapper()
+    undefined | atm_task_schema_argument_mapper:record()
 ) ->
     atm_task_execution:arg_spec().
 build_spec(#atm_lambda_argument_spec{
@@ -150,10 +150,7 @@ build_spec(#atm_lambda_argument_spec{
 }, undefined) ->
     #atm_task_execution_argument_spec{
         name = Name,
-        input_spec = #{
-            <<"inputRefType">> => <<"const">>,
-            <<"inputRef">> => DefaultValue
-        },
+        value_builder = #atm_argument_value_builder{type = const, recipe = DefaultValue},
         data_spec = AtmDataSpec,
         is_batch = IsBatch
     };
@@ -162,37 +159,39 @@ build_spec(#atm_lambda_argument_spec{
     name = Name,
     data_spec = AtmDataSpec,
     is_batch = IsBatch
-}, #atm_task_schema_argument_mapper{value_builder = InputSpec}) ->
+}, #atm_task_schema_argument_mapper{value_builder = ValueBuilder}) ->
     #atm_task_execution_argument_spec{
         name = Name,
-        input_spec = InputSpec,
+        value_builder = ValueBuilder,
         data_spec = AtmDataSpec,
         is_batch = IsBatch
     }.
 
 
-% TODO VFS-7660 handle store builder
+% TODO VFS-7660 handle rest of atm_argument_value_builder:type()
 %% @private
--spec build_arg(atm_task_execution:ctx(), atm_task_execution:arg_input_spec()) ->
+-spec build_arg(atm_task_execution:ctx(), atm_argument_value_builder:record()) ->
     json_utils:json_term() | no_return().
-build_arg(_AtmTaskExecutionArgSpec, #{
-    <<"inputRefType">> := <<"const">>,
-    <<"inputRef">> := ConstValue
+build_arg(_AtmTaskExecutionArgSpec, #atm_argument_value_builder{
+    type = const,
+    recipe = ConstValue
 }) ->
     ConstValue;
 
-build_arg(#atm_task_execution_ctx{item = Item}, #{
-    <<"inputRefType">> := <<"item">>
-} = InputSpec) ->
-    case maps:get(<<"inputRef">>, InputSpec, undefined) of
-        undefined ->
-            Item;
-        Query ->
-            % TODO VFS-7660 fix query in case of array indices
-            case json_utils:query(Item, Query) of
-                {ok, Value} -> Value;
-                error -> throw(?ERROR_ATM_TASK_ARG_MAPPER_ITEM_QUERY_FAILED(Item, Query))
-            end
+build_arg(#atm_task_execution_ctx{item = Item}, #atm_argument_value_builder{
+    type = iterated_item,
+    recipe = undefined
+}) ->
+    Item;
+
+build_arg(#atm_task_execution_ctx{item = Item}, #atm_argument_value_builder{
+    type = iterated_item,
+    recipe = Query
+}) ->
+    % TODO VFS-7660 fix query in case of array indices
+    case json_utils:query(Item, Query) of
+        {ok, Value} -> Value;
+        error -> throw(?ERROR_ATM_TASK_ARG_MAPPER_ITEM_QUERY_FAILED(Item, Query))
     end;
 
 build_arg(_AtmTaskExecutionArgSpec, _InputSpec) ->

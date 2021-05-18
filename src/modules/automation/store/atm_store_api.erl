@@ -37,7 +37,8 @@
 %%%===================================================================
 
 
--spec create_all([atm_store_schema()], initial_values()) -> registry() | no_return().
+-spec create_all([atm_store_schema:record()], initial_values()) ->
+    registry() | no_return().
 create_all(AtmStoreSchemas, InitialValues) ->
     lists:foldl(fun(#atm_store_schema{
         id = AtmStoreSchemaId
@@ -53,7 +54,7 @@ create_all(AtmStoreSchemas, InitialValues) ->
     end, #{}, AtmStoreSchemas).
 
 
--spec create(atm_store_schema(), initial_value()) ->
+-spec create(atm_store_schema:record(), undefined | initial_value()) ->
     {ok, atm_store:id()} | no_return().
 create(#atm_store_schema{requires_initial_value = true}, undefined) ->
     throw(?ERROR_ATM_STORE_MISSING_REQUIRED_INITIAL_VALUE);
@@ -63,23 +64,26 @@ create(#atm_store_schema{
     name = AtmStoreName,
     description = AtmStoreDescription,
     requires_initial_value = RequiresInitialValues,
+    default_initial_value = DefaultInitialValue,
     type = StoreType,
     data_spec = AtmDataSpec
 }, InitialValue) ->
     ContainerModel = store_type_to_container_type(StoreType),
+    ActualInitialValue = utils:ensure_defined(InitialValue, DefaultInitialValue),
 
     {ok, _} = atm_store:create(#atm_store{
         schema_id = AtmStoreSchemaId,
         name = AtmStoreName,
         description = AtmStoreDescription,
         requires_initial_value = RequiresInitialValues,
+        initial_value = ActualInitialValue,
         frozen = false,
         type = StoreType,
-        container = atm_container:create(ContainerModel, AtmDataSpec, InitialValue)
+        container = atm_container:create(ContainerModel, AtmDataSpec, ActualInitialValue)
     }).
 
 
--spec build_iterator_config(registry(), atm_store_iterator_spec()) ->
+-spec build_iterator_config(registry(), atm_store_iterator_spec:record()) ->
     atm_store_iterator_config:record() | no_return().
 build_iterator_config(AtmStoreRegistry, AtmStoreIteratorConfig) ->
     atm_store_iterator_config:build(AtmStoreRegistry, AtmStoreIteratorConfig).

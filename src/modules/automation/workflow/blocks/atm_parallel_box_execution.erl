@@ -38,7 +38,7 @@
 -spec create_all(
     atm_workflow_execution:id(),
     non_neg_integer(),
-    [atm_parallel_box_schema()]
+    [atm_parallel_box_schema:record()]
 ) ->
     [record()] | no_return().
 create_all(AtmWorkflowExecutionId, AtmLaneNo, AtmParallelBoxSchemas) ->
@@ -61,7 +61,7 @@ create_all(AtmWorkflowExecutionId, AtmLaneNo, AtmParallelBoxSchemas) ->
     atm_workflow_execution:id(),
     non_neg_integer(),
     non_neg_integer(),
-    atm_parallel_box_schema()
+    atm_parallel_box_schema:record()
 ) ->
     record() | no_return().
 create(AtmWorkflowExecutionId, AtmLaneNo, AtmParallelBoxNo, #atm_parallel_box_schema{
