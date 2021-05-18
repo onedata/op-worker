@@ -74,6 +74,8 @@
 }.
 
 
+-define(DEFAULT_REFERENCES_LIMIT, 100).
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -162,7 +164,7 @@ get_file_details_insecure(UserCtx, FileCtx, Opts) ->
     {FileAttr, FileDoc, _, FileCtx2} = resolve_file_attr(UserCtx, FileCtx, Opts),
     {ok, ActivePermissionsType} = file_meta:get_active_perms_type(FileDoc),
 
-    ReferencesLimit = maps:get(effective_values_references_limit, Opts, 100),
+    ReferencesLimit = maps:get(effective_values_references_limit, Opts, ?DEFAULT_REFERENCES_LIMIT),
     ShouldCalculateEffectiveValues = case ReferencesLimit of
         infinity -> true;
         _ ->
