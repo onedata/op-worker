@@ -20,13 +20,13 @@
 -export([all/0]).
 
 %% tests
--export([truncate_new_test/1, truncate_increase_size_test/1,
+-export([mknod_test/1, truncate_new_test/1, truncate_increase_size_test/1,
          truncate_decrease_size_test/1, sequential_write_test/1,
-        read_write_test/1, unlink_test/1]).
+         read_write_test/1, unlink_test/1]).
 
 -define(TEST_CASES, [
-    truncate_new_test, truncate_increase_size_test, truncate_decrease_size_test,
-    sequential_write_test, read_write_test, unlink_test
+    mknod_test, truncate_new_test, truncate_increase_size_test,
+    truncate_decrease_size_test, sequential_write_test, read_write_test, unlink_test
 ]).
 
 all() -> ?ALL(?TEST_CASES, ?TEST_CASES).
@@ -36,11 +36,23 @@ all() -> ?ALL(?TEST_CASES, ?TEST_CASES).
 -define(FILE_ID_SIZE, 30).
 -define(KB, 1024).
 -define(MB, 1024 * 1024).
--define(TIMEOUT, timer:seconds(60)).
+-define(TIMEOUT, timer:minutes(5)).
 
 %%%===================================================================
 %%% Test functions
 %%%===================================================================
+mknod_test(Config) ->
+    Helper = new_helper(Config),
+    FileName = random_file_id(),
+    FileId = erlang:iolist_to_binary([<<"/space1/.__onedata__">>, FileName]),
+    ArchiveFileId = erlang:iolist_to_binary([<<"/space1/.__onedata_archive/">>, FileName]),
+    mknod(Helper, FileId, 438),
+    mknod(Helper, ArchiveFileId, 438),
+
+    ?assertMatch({ok, #statbuf{st_size = 0}}, getattr(Helper, ArchiveFileId)),
+
+    delete_helper(Helper).
+
 
 truncate_new_test(Config) ->
     Helper = new_helper(Config),
@@ -260,6 +272,9 @@ getattr(Helper, FileId) ->
 
 truncate(Helper, FileId, Size, CurrentSize) ->
     ?assertEqual(ok, call(Helper, truncate, [FileId, Size, CurrentSize])).
+
+mknod(Helper, FileId, Mode) ->
+    ?assertEqual(ok, call(Helper, mknod, [FileId, Mode, reg])).
 
 flushbuffer(Helper, FileId, CurrentSize) ->
     ?assertEqual(ok, call(Helper, flushbuffer, [FileId, CurrentSize])).
