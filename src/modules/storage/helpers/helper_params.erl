@@ -19,6 +19,7 @@
 -include("modules/datastore/datastore_models.hrl").
 -include("proto/common/credentials.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -317,7 +318,15 @@ remove_field(ToRemove, Fields) ->
     {ok, Scheme :: http | https, HostAndPort :: binary()}.
 parse_url(URL) ->
     #{scheme := Scheme, host := Host, port := Port, path := Path} = url_utils:parse(URL),
-    {ok, Scheme, str_utils:format_bin("~ts:~B~ts", [Host, Port, Path])}.
+
+    ValidatedScheme = case Port of
+        443 -> https;
+        8443 -> https;
+        80 -> http;
+        6743 -> http;
+        _ -> throw(?ERROR_MALFORMED_DATA)
+    end,
+    {ok, ValidatedScheme, str_utils:format_bin("~ts:~B~ts", [Host, Port, Path])}.
 
 %%--------------------------------------------------------------------
 %% @private
