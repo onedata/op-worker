@@ -74,9 +74,19 @@ do_notify_or_retry(_ArchiveId, _DatasetId, _CallbackUrl, _Operation, _ErrorDescr
     ok;
 do_notify_or_retry(ArchiveId, DatasetId, CallbackUrl, Operation, ErrorDescription, Sleep, RetriesLeft) ->
     try
-        {ok, ?HTTP_200_OK, _, _} = 
+        {ok, ResponseCode, _, _} =
             http_client:post(CallbackUrl, ?HEADERS, prepare_body(ArchiveId, DatasetId, ErrorDescription)),
-        ok
+        case http_utils:is_success_code(ResponseCode) of
+            true ->
+                ok;
+            false ->
+                ?error(
+                    "Calling URL callback ~s, after ~s of "
+                    "archive ~s created from dataset ~s failed with ~p response code.~n"
+                    "Next retry in ~p seconds. Number of retries left: ~p",
+                    [CallbackUrl, Operation, ArchiveId, DatasetId, ResponseCode]),
+                wait_and_retry(ArchiveId, DatasetId, CallbackUrl, Operation, ErrorDescription, Sleep, RetriesLeft - 1)
+        end
     catch
         Type:Reason ->
             ?error_stacktrace(
@@ -84,9 +94,16 @@ do_notify_or_retry(ArchiveId, DatasetId, CallbackUrl, Operation, ErrorDescriptio
                 "archive ~s created from dataset ~s, failed due to ~p:~p.~n"
                 "Next retry in ~p seconds. Number of retries left: ~p",
                 [CallbackUrl, Operation, ArchiveId, DatasetId, Type, Reason]),
-            timer:sleep(Sleep),
-            do_notify_or_retry(ArchiveId, DatasetId, CallbackUrl, Operation, ErrorDescription, Sleep * 2, RetriesLeft - 1)
+            wait_and_retry(ArchiveId, DatasetId, CallbackUrl, Operation, ErrorDescription, Sleep, RetriesLeft - 1)
     end.
+
+
+-spec wait_and_retry(archive:id(), dataset:id(), archive:callback(), operation(), error_description(),
+    non_neg_integer(), non_neg_integer()) -> ok.
+wait_and_retry(ArchiveId, DatasetId, CallbackUrl, Operation, ErrorDescription, Sleep, RetriesLeft) ->
+    timer:sleep(Sleep),
+    NextSleep = min(2 * Sleep, ?MAX_INTERVAL),
+    do_notify_or_retry(ArchiveId, DatasetId, CallbackUrl, Operation, ErrorDescription, NextSleep, RetriesLeft - 1).
 
 
 -spec prepare_body(archive:id(), dataset:id(), error_description()) -> binary().

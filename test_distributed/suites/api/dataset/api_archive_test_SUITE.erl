@@ -45,7 +45,7 @@
 
 groups() -> [
     {all_tests, [parallel], [
-%%        create_archive,
+        create_archive,
         get_archive_info,
         modify_archive_description,
         get_dataset_archives,
@@ -102,7 +102,7 @@ create_archive(_Config) ->
         #suite_spec{
             target_nodes = Providers,
             client_spec = ?CLIENT_SPEC_FOR_SPACE_KRK_PAR(?EPERM),
-%%            randomly_select_scenarios = true, todo
+            randomly_select_scenarios = true,
             verify_fun = build_verify_archive_created_fun(MemRef, Providers),
             scenario_templates = [
                 #scenario_template{
@@ -535,7 +535,7 @@ get_dataset_archives(_Config) ->
         #suite_spec{
             target_nodes = Providers,
             client_spec = ?CLIENT_SPEC_FOR_SPACE_KRK_PAR(?EPERM),
-%%            randomly_select_scenarios = true, todo
+            randomly_select_scenarios = true,
             scenario_templates = [
                 #scenario_template{
                     name = <<"Get dataset archives using REST API">>,
@@ -930,7 +930,7 @@ end_per_group(_Group, Config) ->
     time_test_utils:unfreeze_time(Config).
 
 init_per_testcase(_Case, Config) ->
-    ct:timetrap({minutes, 30}), % todo
+    ct:timetrap({minutes, 10}),
     Config.
 
 
