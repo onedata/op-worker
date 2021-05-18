@@ -932,7 +932,7 @@ static ErlNifFunc nif_funcs[] = {{"get_handle", 2, get_handle},
     {"removexattr", 3, sh_removexattr}, {"listxattr", 2, sh_listxattr},
     {"open", 3, sh_open}, {"read", 3, sh_read}, {"write", 3, sh_write},
     {"release", 1, sh_release}, {"flush", 1, sh_flush}, {"fsync", 2, sh_fsync},
-    "flushbuffer", 3, sh_flushbuffer};
+    {"flushbuffer", 3, sh_flushbuffer}};
 
 ERL_NIF_INIT(helpers_nif, nif_funcs, load, NULL, NULL, NULL);
 
