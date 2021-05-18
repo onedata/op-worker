@@ -79,7 +79,7 @@
 -define(CRITICAL_SECTION(DatasetId, Function), critical_section:run({dataset, DatasetId}, Function)).
 
 -define(MAX_LIST_EXTENDED_DATASET_INFO_PROCS,
-    application:get_env(?APP_NAME, max_list_extended_dataset_info_procs, 20)).
+    op_worker:get_env(max_list_extended_dataset_info_procs, 20)).
 
 %%%===================================================================
 %%% API functions

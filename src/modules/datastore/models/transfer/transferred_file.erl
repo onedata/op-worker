@@ -44,7 +44,7 @@
 
 % Inactivity time (in seconds) after which the history of past transfers will
 % be erased.
--define(HISTORY_LIMIT, application:get_env(?APP_NAME, transfers_history_limit_per_file, 100)).
+-define(HISTORY_LIMIT, op_worker:get_env(transfers_history_limit_per_file, 100)).
 
 -define(CTX, #{
     model => ?MODULE,

@@ -25,7 +25,7 @@
 
 -spec get_env(Key :: atom()) -> term() | no_return().
 get_env(Key) ->
-    case application:get_env(?APP_NAME, Key) of
+    case op_worker:get_env(Key) of
         {ok, Value} ->
             Value;
         undefined ->
@@ -36,7 +36,7 @@ get_env(Key) ->
 
 -spec get_env(Key :: atom(), Default) -> term() | Default.
 get_env(Key, Default) ->
-    application:get_env(?APP_NAME, Key, Default).
+    op_worker:get_env(Key, Default).
 
 
 -spec set_env(Key :: atom(), Value :: term()) -> ok.

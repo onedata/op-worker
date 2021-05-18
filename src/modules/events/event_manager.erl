@@ -80,7 +80,7 @@ handle(Manager, Message) ->
 %% @private
 -spec handle(pid(), term(), integer()) -> ok.
 handle(_Manager, Request, -1) ->
-    case application:get_env(?APP_NAME, log_event_manager_errors, false) of
+    case op_worker:get_env(log_event_manager_errors, false) of
         true -> ?error("Max retries for request: ~p", [Request]);
         false -> ?debug("Max retries for request: ~p", [Request])
     end,
@@ -171,7 +171,7 @@ init([MgrSup, SessId]) ->
     {stop, Reason :: term(), Reply :: term(), NewState :: #state{}} |
     {stop, Reason :: term(), NewState :: #state{}}.
 handle_call(Request, _From, State) ->
-    Retries = application:get_env(?APP_NAME, event_manager_retries, 1),
+    Retries = op_worker:get_env(event_manager_retries, 1),
     handle_in_process(Request, State, Retries),
     {reply, ok, State}.
 
@@ -611,7 +611,7 @@ start_event_streams(#state{streams_sup = StmsSup, session_id = SessId} = State) 
 %%--------------------------------------------------------------------
 -spec retry_handle(#state{}, Request :: term(), RetryCounter :: non_neg_integer()) -> ok.
 retry_handle(_State, Request, 0) ->
-    case application:get_env(?APP_NAME, log_event_manager_errors, false) of
+    case op_worker:get_env(log_event_manager_errors, false) of
         true -> ?error("Max retries for request: ~p", [Request]);
         false -> ?debug("Max retries for request: ~p", [Request])
     end,

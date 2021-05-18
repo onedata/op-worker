@@ -99,7 +99,7 @@ required_permissions() ->
 %%--------------------------------------------------------------------
 -spec max_transfer_retries() -> non_neg_integer().
 max_transfer_retries() ->
-    application:get_env(?APP_NAME, max_eviction_retries_per_file_replica, 5).
+    op_worker:get_env(max_eviction_retries_per_file_replica, 5).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -108,7 +108,7 @@ max_transfer_retries() ->
 %%--------------------------------------------------------------------
 -spec view_querying_chunk_size() -> non_neg_integer().
 view_querying_chunk_size() ->
-    application:get_env(?APP_NAME, replica_eviction_by_view_batch, 1000).
+    op_worker:get_env(replica_eviction_by_view_batch, 1000).
 
 %%--------------------------------------------------------------------
 %% @doc

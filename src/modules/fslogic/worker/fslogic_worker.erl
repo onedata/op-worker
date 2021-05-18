@@ -69,17 +69,17 @@
 -define(INIT_DATASETS_CACHE(Space), {init_datasets_cache, Space}).
 
 -define(SHOULD_PERFORM_PERIODICAL_SPACES_AUTOCLEANING_CHECK,
-    application:get_env(?APP_NAME, autocleaning_periodical_spaces_check_enabled, true)).
+    op_worker:get_env(autocleaning_periodical_spaces_check_enabled, true)).
 
 % delays and intervals
 -define(INVALIDATE_PERMISSIONS_CACHE_INTERVAL,
-    application:get_env(?APP_NAME, invalidate_permissions_cache_interval, timer:seconds(30))).
+    op_worker:get_env(invalidate_permissions_cache_interval, timer:seconds(30))).
 -define(AUTOCLEANING_PERIODICAL_SPACES_CHECK_INTERVAL,
-    application:get_env(?APP_NAME, autocleaning_periodical_spaces_check_interval, timer:minutes(1))).
+    op_worker:get_env(autocleaning_periodical_spaces_check_interval, timer:minutes(1))).
 -define(RERUN_TRANSFERS_DELAY,
-    application:get_env(?APP_NAME, rerun_transfers_delay, 10000)).
+    op_worker:get_env(rerun_transfers_delay, 10000)).
 -define(RESTART_AUTOCLEANING_RUNS_DELAY,
-    application:get_env(?APP_NAME, restart_autocleaning_runs_delay, 10000)).
+    op_worker:get_env(restart_autocleaning_runs_delay, 10000)).
 
 % exometer macros
 -define(EXOMETER_NAME(Param), ?exometer_name(?MODULE, count, Param)).
@@ -94,10 +94,10 @@
 -define(EXOMETER_DEFAULT_DATA_POINTS_NUMBER, 10000).
 
 % This macro is used to disable automatic rerun of transfers in tests
--define(SHOULD_RERUN_TRANSFERS, application:get_env(?APP_NAME, rerun_transfers, true)).
+-define(SHOULD_RERUN_TRANSFERS, op_worker:get_env(rerun_transfers, true)).
 
 % This macro is used to disable automatic restart of autocleaning runs in tests
--define(SHOULD_RESTART_AUTOCLEANING_RUNS, application:get_env(?APP_NAME, autocleaning_restart_runs, true)).
+-define(SHOULD_RESTART_AUTOCLEANING_RUNS, op_worker:get_env(autocleaning_restart_runs, true)).
 
 -define(OPERATIONS_AVAILABLE_IN_SHARE_MODE, [
     % Checking perms for operations other than 'read' should result in immediate ?EACCES

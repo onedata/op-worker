@@ -137,7 +137,7 @@ put_binary(Req, #cdmi_req{
     {MimeType, Encoding} = cdmi_parser:parse_content_type_header(Req),
     {FileGuid, Truncate, Offset} = case Attrs of
         undefined ->
-            {ok, DefaultMode} = application:get_env(?APP_NAME, default_file_mode),
+            {ok, DefaultMode} = op_worker:get_env(default_file_mode),
             {ok, Guid} = cdmi_lfm:create_file(SessionId, Path, DefaultMode),
             {Guid, false, 0};
         #file_attr{guid = Guid, size = Size} ->
@@ -197,7 +197,7 @@ put_cdmi(Req, #cdmi_req{
     % create object using create/cp/mv
     {ok, OperationPerformed, Guid} = case {Attrs, CopyURI, MoveURI} of
         {undefined, undefined, undefined} ->
-            {ok, DefaultMode} = application:get_env(?APP_NAME, default_file_mode),
+            {ok, DefaultMode} = op_worker:get_env(default_file_mode),
             {ok, NewGuid} = cdmi_lfm:create_file(SessionId, Path, DefaultMode),
             write_binary_to_file(
                 SessionId, ?FILE_REF(NewGuid),

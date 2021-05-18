@@ -26,9 +26,9 @@
 
 -behaviour(gen_server).
 
--define(MINIMAL_SYNC_REQUEST, application:get_env(?APP_NAME, minimal_sync_request, 32768)).
--define(TRIGGER_BYTE, application:get_env(?APP_NAME, trigger_byte, 52428800)).
--define(PREFETCH_SIZE, application:get_env(?APP_NAME, prefetch_size, 104857600)).
+-define(MINIMAL_SYNC_REQUEST, op_worker:get_env(minimal_sync_request, 32768)).
+-define(TRIGGER_BYTE, op_worker:get_env(trigger_byte, 52428800)).
+-define(PREFETCH_SIZE, op_worker:get_env(prefetch_size, 104857600)).
 
 %% The process is supposed to die after ?DIE_AFTER time of idling (no requests in flight)
 -define(DIE_AFTER, 60000).
@@ -50,11 +50,11 @@
 -define(REF_TO_TIDS_CLEARING_MSG(__Ref), {clear_ref_to_tids_association, __Ref}).
 
 -define(PREFETCH_PRIORITY,
-    application:get_env(?APP_NAME, default_prefetch_priority, 96)).
--define(MAX_RETRIES, application:get_env(?APP_NAME, synchronizer_max_retries, 0)).
--define(MIN_BACKOFF, application:get_env(?APP_NAME, synchronizer_min_backoff, timer:seconds(1))).
--define(BACKOFF_RATE, application:get_env(?APP_NAME, synchronizer_backoff_rate, 1.5)).
--define(MAX_BACKOFF, application:get_env(?APP_NAME, synchronizer_max_backoff, timer:minutes(5))).
+    op_worker:get_env(default_prefetch_priority, 96)).
+-define(MAX_RETRIES, op_worker:get_env(synchronizer_max_retries, 0)).
+-define(MIN_BACKOFF, op_worker:get_env(synchronizer_min_backoff, timer:seconds(1))).
+-define(BACKOFF_RATE, op_worker:get_env(synchronizer_backoff_rate, 1.5)).
+-define(MAX_BACKOFF, op_worker:get_env(synchronizer_max_backoff, timer:minutes(5))).
 
 -define(FLUSH_STATS, flush_stats).
 -define(FLUSH_BLOCKS, flush_blocks).
@@ -807,7 +807,7 @@ handle_info({Ref, complete, ErrorStatus}, State) ->
 handle_info(fslogic_cache_check_flush, State) ->
     fslogic_cache:check_flush(),
 
-    case application:get_env(?APP_NAME, synchronizer_gc, on_flush_location) of
+    case op_worker:get_env(synchronizer_gc, on_flush_location) of
         on_flush_location ->
             erlang:garbage_collect();
         _ ->
@@ -1296,7 +1296,7 @@ prefetch([], _TransferId, State) -> State;
 prefetch(_NewTransfers, _TransferId, #state{in_sequence_hits = 0} = State) ->
     State;
 prefetch(_, TransferId, #state{in_sequence_hits = Hits, last_transfer = Block} = State) ->
-    case application:get_env(?APP_NAME, synchronizer_prefetch, true) of
+    case op_worker:get_env(synchronizer_prefetch, true) of
         true ->
             #file_block{offset = O, size = S} = Block,
             Offset = O + S,
@@ -1392,7 +1392,7 @@ cache_stats_and_blocks(TransferIds, ProviderId, Block, State) ->
         StatsPerTransfer#{TransferId => NewTransferStats}
     end, State#state.cached_stats, TransferIds),
 
-    CachedBlocks = case application:get_env(?APP_NAME, synchronizer_in_progress_events, transfers_only) of
+    CachedBlocks = case op_worker:get_env(synchronizer_in_progress_events, transfers_only) of
         transfers_only ->
             case TransferIds of
                 [undefined] ->
@@ -1435,9 +1435,9 @@ flush_blocks(#state{cached_blocks = Blocks, file_ctx = FileCtx} = State, Exclude
 
     FlushFinalBlocks = case IsTransfer of
         true ->
-            application:get_env(?APP_NAME, synchronizer_transfer_finished_events, all);
+            op_worker:get_env(synchronizer_transfer_finished_events, all);
         _ ->
-            application:get_env(?APP_NAME, synchronizer_on_fly_finished_events, all)
+            op_worker:get_env(synchronizer_on_fly_finished_events, all)
     end,
 
     Ans = lists:foldl(fun({From, FinalBlock, Type}, Acc) ->
@@ -1451,7 +1451,7 @@ flush_blocks(#state{cached_blocks = Blocks, file_ctx = FileCtx} = State, Exclude
         end
     end, [], FinalBlocks),
 
-    case application:get_env(?APP_NAME, synchronizer_in_progress_events, transfers_only) of
+    case op_worker:get_env(synchronizer_in_progress_events, transfers_only) of
         off ->
             false;
         _ ->
@@ -1462,7 +1462,7 @@ flush_blocks(#state{cached_blocks = Blocks, file_ctx = FileCtx} = State, Exclude
             end, Blocks2)
     end,
 
-    case application:get_env(?APP_NAME, synchronizer_gc, on_flush_location) of
+    case op_worker:get_env(synchronizer_gc, on_flush_location) of
         on_flush_blocks ->
             erlang:garbage_collect();
         _ ->
@@ -1555,7 +1555,7 @@ flush_stats(#state{space_id = SpaceId} = State, CancelTimer) ->
             State#state{cached_stats = #{}}
     end,
 
-    case application:get_env(?APP_NAME, synchronizer_gc, on_flush_location) of
+    case op_worker:get_env(synchronizer_gc, on_flush_location) of
         on_flush_stats ->
             erlang:garbage_collect();
         _ ->

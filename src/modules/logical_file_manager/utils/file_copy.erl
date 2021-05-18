@@ -24,8 +24,8 @@
 -export([copy/4, copy/5]).
 
 -define(COPY_BUFFER_SIZE,
-    application:get_env(?APP_NAME, rename_file_chunk_size, 8388608)). % 8*1024*1024
--define(COPY_LS_SIZE, application:get_env(?APP_NAME, ls_batch_size, 5000)).
+    op_worker:get_env(rename_file_chunk_size, 8388608)). % 8*1024*1024
+-define(COPY_LS_SIZE, op_worker:get_env(ls_batch_size, 5000)).
 
 -type child_entry() :: {
     OldGuid :: fslogic_worker:file_guid(),

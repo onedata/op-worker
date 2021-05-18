@@ -30,7 +30,7 @@
 -define(decode_pid(__PID), utils:decode_pid(__PID)).
 
 -define(MAX_FILE_TRANSFER_FAILURES_PER_TRANSFER,
-    application:get_env(?APP_NAME, max_file_transfer_failures_per_transfer, 10)).
+    op_worker:get_env(max_file_transfer_failures_per_transfer, 10)).
 
 %%%===================================================================
 %%% API

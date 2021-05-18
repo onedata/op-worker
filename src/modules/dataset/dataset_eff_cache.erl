@@ -35,8 +35,8 @@
 -define(CACHE_NAME(SpaceId),
     binary_to_atom(<<"dataset_effective_cache_", SpaceId/binary>>, utf8)).
 
--define(CACHE_SIZE, application:get_env(?APP_NAME, dataset_eff_cache_size, 65536)).
--define(CHECK_FREQUENCY, application:get_env(?APP_NAME, dataset_check_frequency, 30000)).
+-define(CACHE_SIZE, op_worker:get_env(dataset_eff_cache_size, 65536)).
+-define(CHECK_FREQUENCY, op_worker:get_env(dataset_check_frequency, 30000)).
 -define(CACHE_OPTS, #{group => ?CACHE_GROUP}).
 
 -record(entry, {

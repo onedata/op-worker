@@ -53,7 +53,7 @@ new(SessId) ->
     case session:get(SessId) of
         {ok, #document{value = #session{type = rest, accessed = LastAccess}} = Session} ->
             Now = global_clock:timestamp_seconds(),
-            {ok, TTL} = application:get_env(?APP_NAME, rest_session_grace_period_seconds),
+            {ok, TTL} = op_worker:get_env(rest_session_grace_period_seconds),
             % TODO VFS-6586 - refactor rest session expiration
             {ok, UpdatedSession} = case Now > LastAccess + 0.6 * TTL of
                 true ->
@@ -64,7 +64,7 @@ new(SessId) ->
             #user_ctx{session = UpdatedSession};
         {ok, #document{value = #session{type = gui, accessed = LastAccess}} = Session} ->
             Now = global_clock:timestamp_seconds(),
-            {ok, TTL} = application:get_env(?APP_NAME, gui_session_grace_period_seconds),
+            {ok, TTL} = op_worker:get_env(gui_session_grace_period_seconds),
             % TODO VFS-6586 - refactor gui session expiration
             {ok, UpdatedSession} = case Now > LastAccess + 0.6 * TTL of
                 true ->

@@ -45,7 +45,7 @@ get_oz_url() ->
 %%--------------------------------------------------------------------
 -spec get_oz_rest_port() -> integer().
 get_oz_rest_port() ->
-    {ok, Port} = application:get_env(?APP_NAME, oz_rest_port),
+    {ok, Port} = op_worker:get_env(oz_rest_port),
     Port.
 
 %%--------------------------------------------------------------------
@@ -55,7 +55,7 @@ get_oz_rest_port() ->
 %%--------------------------------------------------------------------
 -spec get_oz_rest_api_prefix() -> string().
 get_oz_rest_api_prefix() ->
-    {ok, Prefix} = application:get_env(?APP_NAME, oz_rest_api_prefix),
+    {ok, Prefix} = op_worker:get_env(oz_rest_api_prefix),
     Prefix.
 
 %%--------------------------------------------------------------------
@@ -79,7 +79,7 @@ get_oz_rest_endpoint(Path) ->
 %%--------------------------------------------------------------------
 -spec get_cacerts_dir() -> file:name_all().
 get_cacerts_dir() ->
-    {ok, CACertsDir} = application:get_env(?APP_NAME, cacerts_dir),
+    {ok, CACertsDir} = op_worker:get_env(cacerts_dir),
     CACertsDir.
 
 %%--------------------------------------------------------------------

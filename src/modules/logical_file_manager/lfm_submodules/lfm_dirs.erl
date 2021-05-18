@@ -50,7 +50,7 @@ mkdir(SessId, Path, Mode) ->
 ) ->
     {ok, file_id:file_guid()} | lfm:error_reply().
 mkdir(SessId, ParentGuid, Name, undefined) ->
-    {ok, Mode} = application:get_env(?APP_NAME, default_dir_mode),
+    {ok, Mode} = op_worker:get_env(default_dir_mode),
     mkdir(SessId, ParentGuid, Name, Mode);
 mkdir(SessId, ParentGuid0, Name, Mode) ->
     ParentGuid1 = lfm_file_key:resolve_file_key(
@@ -178,7 +178,7 @@ get_children_count(SessId, FileKey) ->
 -spec count_children(session:id(), fslogic_worker:file_guid()) ->
     {ok, non_neg_integer()} | lfm:error_reply().
 count_children(SessId, FileGuid) ->
-    {ok, BatchSize} = application:get_env(?APP_NAME, ls_batch_size),
+    {ok, BatchSize} = op_worker:get_env(ls_batch_size),
     count_children(SessId, FileGuid, #{token => ?INITIAL_LS_TOKEN, size => BatchSize}, 0).
 
 
