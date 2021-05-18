@@ -45,15 +45,21 @@ add_subscriber(<<_/binary>> = Key, SessId) ->
         {ok, Sub#file_subscription{sessions = gb_sets:add_element(SessId, SessIds)}}
     end,
     case file_subscription:update(Key, Diff) of
-        {ok, #document{key = Key}} -> {ok, Key};
+        {ok, #document{key = Key}} ->
+            file_subscription_counter:subscription_added(Key),
+            {ok, Key};
         {error, not_found} ->
             Doc = #document{key = Key, value = #file_subscription{
                 sessions = gb_sets:from_list([SessId])
             }},
             case file_subscription:create(Doc) of
-                {ok, _} -> {ok, Key};
-                {error, already_exists} -> add_subscriber(Key, SessId);
-                {error, Reason} -> {error, Reason}
+                {ok, _} ->
+                    file_subscription_counter:subscription_added(Key),
+                    {ok, Key};
+                {error, already_exists} ->
+                    add_subscriber(Key, SessId);
+                {error, Reason} ->
+                    {error, Reason}
             end;
         {error, Reason} -> {error, Reason}
     end;
@@ -96,25 +102,47 @@ get_subscribers(Evt, [RoutingCtx | RoutingInfo]) ->
             Other
     end;
 get_subscribers(Evt, RoutingCtx) ->
-    case event_type:get_routing_key(Evt, RoutingCtx) of
-        {ok, Keys} -> process_event_routing_keys(Keys);
-        {error, session_only} -> #event_subscribers{}
+    case file_subscription_counter:has_subscriptions(Evt) of
+        false ->
+            % This is hack for rest-based tests with large amount of links to single file
+            % It cannot be handled with good performance until event's subsystem architecture is changed
+            #event_subscribers{};
+        _ ->
+            case event_type:get_routing_key(Evt, RoutingCtx) of
+                {ok, Keys} -> process_event_routing_keys(Keys);
+                {error, session_only} -> #event_subscribers{}
+            end
     end.
 
 -spec get_attr_event_subscribers(fslogic_worker:file_guid(), event_type:routing_ctx(), boolean()) ->
     {event_subscribers() | {error, Reason :: term()}, event_subscribers() | {error, Reason :: term()}}.
 get_attr_event_subscribers(Guid, RoutingCtx, SizeChanged) ->
-    case SizeChanged of
-        true ->
+    HasAttrSubscriptions = file_subscription_counter:has_subscriptions(
+        event_type:get_attr_changed_reference_based_prefix()),
+    HasReplicaSubscriptions = file_subscription_counter:has_subscriptions(
+        event_type:get_replica_status_reference_based_prefix()),
+
+    case {(HasAttrSubscriptions =/= false) andalso SizeChanged, HasReplicaSubscriptions} of
+        {true, true} ->
             {AttrChangedKeys, StatusChangedKeys} = event_type:get_attr_routing_keys(Guid, RoutingCtx),
             {
                 process_event_routing_keys(AttrChangedKeys),
                 process_event_routing_keys(StatusChangedKeys)
             };
-        false ->
+        {true, false} ->
+            {
+                process_event_routing_keys(event_type:get_attr_routing_keys_without_replica_status_changes(Guid, RoutingCtx)),
+                #event_subscribers{}
+            };
+        {false, true} ->
             {
                 #event_subscribers{},
                 process_event_routing_keys(event_type:get_replica_status_routing_keys(Guid, RoutingCtx))
+            };
+        {false, false} ->
+            {
+                #event_subscribers{},
+                #event_subscribers{}
             }
     end.
 
@@ -168,6 +196,7 @@ remove_subscriber(Key, SessId) ->
     end,
     case file_subscription:update(Key, Diff) of
         {ok, #document{value = #file_subscription{sessions = SIds}}} ->
+            file_subscription_counter:subscription_deleted(Key),
             case gb_sets:is_empty(SIds) of
                 true ->
                     Pred = fun(#file_subscription{sessions = SIds2}) ->
@@ -177,6 +206,8 @@ remove_subscriber(Key, SessId) ->
                 false ->
                     ok
             end;
-        {error, not_found} -> ok;
-        {error, Reason} -> {error, Reason}
+        {error, not_found} ->
+            ok;
+        {error, Reason} ->
+            {error, Reason}
     end.

@@ -266,10 +266,17 @@ translate_file_details(#file_details{
         _ ->
             BasicPublicFields
     end,
-    case Scope of
-        public ->
+    case {Scope, EffQosMembership} of
+        {public, _} ->
             PublicFields;
-        private ->
+        {private, undefined} -> % all or none effective fields are undefined
+            PublicFields#{
+                <<"hardlinksCount">> => utils:undefined_to_null(NLink),
+                <<"effProtectionFlags">> => [],
+                <<"providerId">> => ProviderId,
+                <<"ownerId">> => OwnerId
+            };
+        {private, _} ->
             PublicFields#{
                 <<"hardlinksCount">> => utils:undefined_to_null(NLink),
                 <<"effProtectionFlags">> => file_meta:protection_flags_to_json(

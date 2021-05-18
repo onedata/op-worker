@@ -24,9 +24,9 @@
     index_startid :: binary(),
     active_permissions_type :: file_meta:permissions_type(),
     has_metadata :: boolean(),
-    eff_qos_membership :: file_qos:membership(),
-    eff_dataset_membership :: dataset:membership(),
-    eff_protection_flags :: data_access_control:bitmask()
+    eff_qos_membership :: file_qos:membership() | undefined,
+    eff_dataset_membership :: dataset:membership() | undefined,
+    eff_protection_flags :: data_access_control:bitmask() | undefined
 }).
 
 -endif.
