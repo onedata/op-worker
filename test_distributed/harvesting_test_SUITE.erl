@@ -493,7 +493,7 @@ create_dir_and_symlink(Config) ->
     SymlinkName = <<"symlink">>,
 
     {ok, Guid} = lfm_proxy:mkdir(Worker, SessId, ?PATH(DirName, ?SPACE_ID1)),
-    SpaceIdPrefix = ?SYMLINK_SPACE_ID_PATH_PREFIX(?SPACE_ID1),
+    SpaceIdPrefix = ?SYMLINK_SPACE_ID_ABS_PATH_PREFIX(?SPACE_ID1),
     LinkTarget = filename:join([SpaceIdPrefix, DirName]),
     {ok, #file_attr{guid = SymlinkGuid}} =
         lfm_proxy:make_symlink(Worker, SessId, ?PATH(SymlinkName, ?SPACE_ID1), LinkTarget),

@@ -64,8 +64,10 @@ notify_archive_callback(_ArchiveId, _DatasetId, undefined, _Operation, _ErrorDes
     ok;
 notify_archive_callback(ArchiveId, DatasetId, CallbackUrl, Operation, ErrorDescription) ->
     spawn(fun() ->
-        do_notify_or_retry(ArchiveId, DatasetId, CallbackUrl, Operation, ErrorDescription, ?INITIAL_INTERVAL(), ?MAX_RETRIES)
-    end).
+        do_notify_or_retry(ArchiveId, DatasetId, CallbackUrl, Operation, ErrorDescription, ?INITIAL_INTERVAL(),
+            ?MAX_RETRIES + 1)
+    end),
+    ok.
 
 
 -spec do_notify_or_retry(archive:id(), dataset:id(), archive:callback(), operation(), error_description(), 
@@ -74,26 +76,34 @@ do_notify_or_retry(_ArchiveId, _DatasetId, _CallbackUrl, _Operation, _ErrorDescr
     ok;
 do_notify_or_retry(ArchiveId, DatasetId, CallbackUrl, Operation, ErrorDescription, Sleep, RetriesLeft) ->
     try
-        {ok, ResponseCode, _, _} =
-            http_client:post(CallbackUrl, ?HEADERS, prepare_body(ArchiveId, DatasetId, ErrorDescription)),
-        case http_utils:is_success_code(ResponseCode) of
-            true ->
-                ok;
-            false ->
-                ?error(
+        case http_client:post(CallbackUrl, ?HEADERS, prepare_body(ArchiveId, DatasetId, ErrorDescription)) of
+            {ok, ResponseCode, _, _} ->
+                case http_utils:is_success_code(ResponseCode) of
+                    true ->
+                        ok;
+                    false ->
+                        ?warning(
+                            "Calling URL callback ~s, after ~s of "
+                            "archive ~s created from dataset ~s failed with ~p response code.~n"
+                            "Next retry in ~p seconds. Number of retries left: ~p",
+                            [CallbackUrl, Operation, ArchiveId, DatasetId, ResponseCode, Sleep / 1000, RetriesLeft - 1]),
+                        wait_and_retry(ArchiveId, DatasetId, CallbackUrl, Operation, ErrorDescription, Sleep, RetriesLeft - 1)
+                end;
+            {error, _} = Error ->
+                ?warning(
                     "Calling URL callback ~s, after ~s of "
-                    "archive ~s created from dataset ~s failed with ~p response code.~n"
+                    "archive ~s created from dataset ~s failed due to ~w.~n"
                     "Next retry in ~p seconds. Number of retries left: ~p",
-                    [CallbackUrl, Operation, ArchiveId, DatasetId, ResponseCode]),
+                    [CallbackUrl, Operation, ArchiveId, DatasetId, Error, Sleep / 1000, RetriesLeft - 1]),
                 wait_and_retry(ArchiveId, DatasetId, CallbackUrl, Operation, ErrorDescription, Sleep, RetriesLeft - 1)
         end
     catch
         Type:Reason ->
-            ?error_stacktrace(
+            ?warning_stacktrace(
                 "Calling URL callback ~s, after ~s of "
-                "archive ~s created from dataset ~s, failed due to ~p:~p.~n"
+                "archive ~s created from dataset ~s, failed due to ~w:~w.~n"
                 "Next retry in ~p seconds. Number of retries left: ~p",
-                [CallbackUrl, Operation, ArchiveId, DatasetId, Type, Reason]),
+                [CallbackUrl, Operation, ArchiveId, DatasetId, Type, Reason, Sleep / 1000, RetriesLeft - 1]),
             wait_and_retry(ArchiveId, DatasetId, CallbackUrl, Operation, ErrorDescription, Sleep, RetriesLeft - 1)
     end.
 
@@ -103,7 +113,7 @@ do_notify_or_retry(ArchiveId, DatasetId, CallbackUrl, Operation, ErrorDescriptio
 wait_and_retry(ArchiveId, DatasetId, CallbackUrl, Operation, ErrorDescription, Sleep, RetriesLeft) ->
     timer:sleep(Sleep),
     NextSleep = min(2 * Sleep, ?MAX_INTERVAL),
-    do_notify_or_retry(ArchiveId, DatasetId, CallbackUrl, Operation, ErrorDescription, NextSleep, RetriesLeft - 1).
+    do_notify_or_retry(ArchiveId, DatasetId, CallbackUrl, Operation, ErrorDescription, NextSleep, RetriesLeft).
 
 
 -spec prepare_body(archive:id(), dataset:id(), error_description()) -> binary().

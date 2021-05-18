@@ -31,22 +31,22 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([create_archive_dir/4, is_special_uuid/1]).
+-export([create_archive_dir/3, is_special_uuid/1]).
 
 %%%===================================================================
 %%% API functions
 %%%===================================================================
 
--spec create_archive_dir(archive:id(), dataset:id(), od_space:id(), archive:creator()) ->
+-spec create_archive_dir(archive:id(), dataset:id(), od_space:id()) ->
     {ok, file_meta:uuid()}.
-create_archive_dir(ArchiveId, DatasetId, SpaceId, ArchiveCreator) ->
+create_archive_dir(ArchiveId, DatasetId, SpaceId) ->
     ensure_archives_root_dir_created(SpaceId),
     ensure_dataset_archives_dir_created(DatasetId, SpaceId),
     DatasetArchivesDirUuid = ?DATASET_ARCHIVES_DIR_UUID(DatasetId),
     ArchiveDirUuid = ?ARCHIVE_DIR_UUID(ArchiveId),
     ArchiveDirDoc = file_meta:new_doc(
         ArchiveDirUuid, ArchiveDirUuid,
-        ?DIRECTORY_TYPE, ?DEFAULT_DIR_PERMS, ArchiveCreator,
+        ?DIRECTORY_TYPE, ?DEFAULT_DIR_PERMS, ?SPACE_OWNER_ID(SpaceId),
         DatasetArchivesDirUuid, SpaceId
     ),
     create_file_meta(DatasetArchivesDirUuid, ArchiveDirDoc),

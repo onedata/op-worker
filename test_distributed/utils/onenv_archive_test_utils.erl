@@ -32,7 +32,7 @@
 -export_type([archive_spec/0, archive_object/0]).
 
 
--define(ATTEMPTS, 600).
+-define(ATTEMPTS, 30).
 
 
 %%%===================================================================
@@ -82,8 +82,7 @@ set_up_archive(CreationProvider, UserId, DatasetId, #archive_spec{
 
     {ok, ArchiveId} = ?assertMatch(
         {ok, _},
-        lfm_proxy:archive_dataset(CreationNode, UserSessId, DatasetId, Config, Description),
-        ?ATTEMPTS
+        lfm_proxy:archive_dataset(CreationNode, UserSessId, DatasetId, Config, Description)
     ),
 
     {ok, #archive_info{index = Index}} = lfm_proxy:get_archive_info(CreationNode, UserSessId, ArchiveId),

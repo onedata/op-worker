@@ -45,9 +45,9 @@
 
 -spec init_pool() -> ok.
 init_pool() ->
-    MasterJobsLimit = application:get_env(?APP_NAME, archivisation_traverse_master_jobs_limit, 10),
-    SlaveJobsLimit = application:get_env(?APP_NAME, archivisation_traverse_slave_jobs_limit, 10),
-    ParallelismLimit = application:get_env(?APP_NAME, archivisation_traverse_parallelism_limit, 10),
+    MasterJobsLimit = op_worker:get_env(archivisation_traverse_master_jobs_limit, 10),
+    SlaveJobsLimit = op_worker:get_env(archivisation_traverse_slave_jobs_limit, 10),
+    ParallelismLimit = op_worker:get_env(archivisation_traverse_parallelism_limit, 10),
     tree_traverse:init(?POOL_NAME, MasterJobsLimit, SlaveJobsLimit, ParallelismLimit).
 
 
@@ -65,7 +65,7 @@ start(ArchiveDoc, DatasetDoc, UserCtx) ->
             {ok, DatasetId} = archive:get_dataset_id(ArchiveDoc),
             {ok, SpaceId} = archive:get_space_id(ArchiveDoc),
             UserId = user_ctx:get_user_id(UserCtx),
-            {ok, ArchiveDirUuid} = archivisation_tree:create_archive_dir(ArchiveId, DatasetId, SpaceId, UserId),
+            {ok, ArchiveDirUuid} = archivisation_tree:create_archive_dir(ArchiveId, DatasetId, SpaceId),
             ArchiveDirGuid = file_id:pack_guid(ArchiveDirUuid, SpaceId),
             DatasetRootCtx = dataset_api:get_associated_file_ctx(DatasetDoc),
 
@@ -120,7 +120,7 @@ task_finished(TaskId, _Pool) ->
             archivisation_callback:notify_preserved(ArchiveId, DatasetId, CallbackUrlOrUndefined);
         false ->
             ok = archive:mark_failed(ArchiveId),
-            % TODO VFS-7662 send more descriptive error description to archvisation callback
+            % TODO VFS-7662 send more descriptive error description to archivisation callback
             ErrorDescription = <<"Errors occurered during archivisation job.">>,
             archivisation_callback:notify_preservation_failed(ArchiveId, DatasetId, CallbackUrlOrUndefined, ErrorDescription)
     end.

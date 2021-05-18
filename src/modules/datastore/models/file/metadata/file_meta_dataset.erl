@@ -116,7 +116,7 @@ get_id_if_attached(FileDoc) ->
 
 -spec has_dataset_established(file_meta:doc() | file_meta:file_meta()) -> boolean().
 has_dataset_established(#file_meta{dataset_state = State}) ->
-    State =:= ?ATTACHED_DATASET orelse State =:= ?DETACHED_DATASET;
+    State =/= undefined;
 has_dataset_established(#document{value = FileMeta}) ->
     has_dataset_established(FileMeta).
 

@@ -128,7 +128,7 @@ space_absolute_path_test(_Config) ->
     Node = oct_background:get_random_provider_node(krakow),
     SessId = oct_background:get_user_session_id(user1, krakow),
 
-    SpaceIdPrefix = ?SYMLINK_SPACE_ID_PATH_PREFIX(oct_background:get_space_id(space_krk)),
+    SpaceIdPrefix = ?SYMLINK_SPACE_ID_ABS_PATH_PREFIX(oct_background:get_space_id(space_krk)),
     DirName = str_utils:rand_hex(10),
     FileName = str_utils:rand_hex(10),
 
@@ -286,7 +286,7 @@ symlink_chain_test(_Config) ->
 symlink_in_share_test(_Config) ->
     Node = oct_background:get_random_provider_node(krakow),
 
-    SpaceIdPrefix = ?SYMLINK_SPACE_ID_PATH_PREFIX(oct_background:get_space_id(space_krk)),
+    SpaceIdPrefix = ?SYMLINK_SPACE_ID_ABS_PATH_PREFIX(oct_background:get_space_id(space_krk)),
     File1Name = str_utils:rand_hex(10),
     DirName = str_utils:rand_hex(10),
     File2Name = str_utils:rand_hex(10),

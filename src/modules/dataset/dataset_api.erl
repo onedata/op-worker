@@ -321,13 +321,17 @@ list_archives(DatasetId, ListingOpts, ListingMode) ->
 
 -spec init_archive_purge(archive:id(), archive:callback()) -> ok | error().
 init_archive_purge(ArchiveId, CallbackUrl) ->
-    {ok, ArchiveDoc} = archive:mark_purging(ArchiveId, CallbackUrl),
-    {ok, DatasetId} = archive:get_dataset_id(ArchiveDoc),
-    % TODO VFS-7624 init purging job
-    % it should remove archive doc when finished
-    % Should it be possible to register many callbacks in case of parallel purge requests?
-    ok = remove_archive(ArchiveId),
-    archivisation_callback:notify_purged(ArchiveId, DatasetId, CallbackUrl).
+    case archive:mark_purging(ArchiveId, CallbackUrl) of
+        {ok, ArchiveDoc} ->
+            {ok, DatasetId} = archive:get_dataset_id(ArchiveDoc),
+            % TODO VFS-7624 init purging job
+            % it should remove archive doc when finished
+            % Should it be possible to register many callbacks in case of parallel purge requests?
+            ok = remove_archive(ArchiveId),
+            archivisation_callback:notify_purged(ArchiveId, DatasetId, CallbackUrl);
+        {error, _} = Error ->
+            Error
+    end.
 
 
 -spec remove_archive(archive:id()) -> ok | error().

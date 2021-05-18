@@ -15,6 +15,7 @@
 -include("modules/dataset/archive.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% API
 -export([create/7, get/1, modify_attrs/2, delete/1,
@@ -25,8 +26,6 @@
     get_state/1, get_config/1, get_preserved_callback/1, get_purged_callback/1,
     get_description/1
 ]).
-% setters
--export([]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1]).
@@ -185,11 +184,19 @@ get_description(#document{value = Archive}) ->
 
 -spec mark_purging(id(), callback()) -> {ok, doc()} | error().
 mark_purging(ArchiveId, Callback) ->
-    update(ArchiveId, fun(Archive = #archive{purged_callback = PrevPurgedCallback}) ->
-        {ok, Archive#archive{
-            state = ?ARCHIVE_PURGING,
-            purged_callback = utils:ensure_defined(Callback, PrevPurgedCallback)
-        }}
+    update(ArchiveId, fun(Archive = #archive{
+        state = PrevState,
+        purged_callback = PrevPurgedCallback
+    }) ->
+        case PrevState =:= ?ARCHIVE_PENDING orelse PrevState =:= ?ARCHIVE_BUILDING of
+            true ->
+                {error, ?EBUSY};
+            false ->
+                {ok, Archive#archive{
+                    state = ?ARCHIVE_PURGING,
+                    purged_callback = utils:ensure_defined(Callback, PrevPurgedCallback)
+                }}
+        end
     end).
 
 -spec mark_building(id()) -> ok | error().
