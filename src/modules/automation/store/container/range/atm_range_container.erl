@@ -36,6 +36,7 @@
 %%      <<"step">> => integer()    % default `1`
 %% }
 -type initial_value() :: #{binary() => integer()}.
+-type update_options() :: #{binary() => boolean()}. 
 
 -record(atm_range_container, {
     data_spec :: atm_data_spec:record(),
@@ -45,7 +46,7 @@
 }).
 -type record() :: #atm_range_container{}.
 
--export_type([initial_value/0, record/0]).
+-export_type([initial_value/0, update_options/0, record/0]).
 
 
 %%%===================================================================
@@ -85,7 +86,7 @@ acquire_iterator(#atm_range_container{
     atm_range_container_iterator:build(StartNum, EndNum, Step).
 
 
--spec update(record(), atm_container:update_operation(), atm_container:update_options(), json_utils:json_term()) ->
+-spec update(record(), atm_container:update_operation(), update_options(), atm_api:item()) ->
     no_return().
 update(_Record, _Operation, _Options, _Item) ->
     throw(?ERROR_NOT_SUPPORTED).

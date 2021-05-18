@@ -9,7 +9,7 @@
 %%% Module with utility functions for automation tests
 %%% @end
 %%%-------------------------------------------------------------------
--module(automation_test_utils).
+-module(automation_store_test_utils).
 -author("Michal Stanisz").
 
 -include("modules/automation/atm_tmp.hrl").
@@ -26,6 +26,7 @@
 -export([
     split_into_chunks/3
 ]).
+-export([example_data/1, example_bad_data/1, all_data_types/0]).
 
 -type item() :: json_utils:json_term().
 
@@ -78,3 +79,29 @@ split_into_chunks(_Size, Acc, []) ->
 split_into_chunks(Size, Acc, [_ | _] = Items) ->
     Chunk = lists:sublist(Items, 1, Size),
     split_into_chunks(Size, [Chunk | Acc], Items -- Chunk).
+
+
+-spec example_data(atm_data_type:type()) -> json_utils:json_term().
+example_data(atm_integer_type) -> 
+    rand:uniform(1000000);
+example_data(atm_string_type) -> 
+    str_utils:rand_hex(32);
+example_data(atm_object_type) -> 
+    lists:foldl(fun(_, Acc) ->
+        Key = example_data(atm_string_type),
+        Value = example_data(lists_utils:random_element(all_data_types())),
+        Acc#{Key => Value}
+    end, #{}, lists:seq(1, rand:uniform(3) - 1)).
+
+
+-spec example_bad_data(atm_data_type:type()) -> json_utils:json_term().
+example_bad_data(Type) -> 
+    example_data(lists_utils:random_element(all_data_types() -- [Type])).
+
+
+-spec all_data_types() -> [atm_data_type:type()].
+all_data_types() -> [
+    atm_integer_type,
+    atm_string_type,
+    atm_object_type
+].

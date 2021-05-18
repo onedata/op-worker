@@ -29,6 +29,14 @@
 
 
 -type initial_value() :: [atm_api:item()].
+%% Full 'initial_value' format can't be expressed directly in type spec due to
+%% dialyzer limitations in specifying individual binaries. Instead it is
+%% shown below:
+%%
+%% #{
+%%      <<"isBatch">> := boolean()
+%% }
+-type update_options() :: #{binary() => boolean()}. 
 
 -record(atm_list_container, {
     data_spec :: atm_data_spec:record(),
@@ -36,7 +44,7 @@
 }).
 -type record() :: #atm_list_container{}.
 
--export_type([initial_value/0, record/0]).
+-export_type([initial_value/0, update_options/0, record/0]).
 
 
 -define(CTX, atm_store:get_ctx()).
@@ -67,7 +75,7 @@ acquire_iterator(#atm_list_container{backend_id = BackendId}) ->
     atm_list_container_iterator:create(BackendId).
 
 
--spec update(record(), atm_container:update_operation(), atm_container:update_options(), atm_api:item()) ->
+-spec update(record(), atm_container:update_operation(), update_options(), atm_api:item()) ->
     record() | no_return().
 update(#atm_list_container{} = Record, append, #{<<"isBatch">> := true}, Batch) ->
     #atm_list_container{data_spec = AtmDataSpec, backend_id = BackendId} = Record,

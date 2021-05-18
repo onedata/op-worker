@@ -26,6 +26,7 @@
 
 
 -type initial_value() :: undefined | atm_api:item().
+-type update_options() :: #{binary() => boolean()}. 
 
 -record(atm_single_value_container, {
     data_spec :: atm_data_spec:record(),
@@ -33,7 +34,7 @@
 }).
 -type record() :: #atm_single_value_container{}.
 
--export_type([initial_value/0, record/0]).
+-export_type([initial_value/0, update_options/0, record/0]).
 
 
 %%%===================================================================
@@ -61,10 +62,10 @@ acquire_iterator(#atm_single_value_container{value = Value}) ->
     atm_single_value_container_iterator:build(Value).
 
 
--spec update(record(), atm_container:update_operation(), atm_container:update_options(), json_utils:json_term()) ->
+-spec update(record(), atm_container:update_operation(), update_options(), json_utils:json_term()) ->
     record() | no_return().
 update(#atm_single_value_container{data_spec = AtmDataSpec} = Record, set, _Options, Item) ->
-    atm_data_validator:assert_instance(Item, AtmDataSpec),
+    atm_data_validator:validate(Item, AtmDataSpec),
     Record#atm_single_value_container{value = Item};
 update(_Record, _Operation, _Options, _Item) ->
     throw(?ERROR_NOT_SUPPORTED).

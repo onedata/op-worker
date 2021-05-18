@@ -79,6 +79,9 @@
 -define(ERROR_ATM_INVALID_STATUS_TRANSITION(__PREV_STATUS, __NEW_STATUS),
     {error, {atm_invalid_status_transition, __PREV_STATUS, __NEW_STATUS}}
 ).
+-define(ERROR_ATM_STORE_FROZEN(__ATM_STORE_ID),
+    {error, {atm_store_frozen, __ATM_STORE_ID}}
+).
 
 
 -endif.

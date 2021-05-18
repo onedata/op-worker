@@ -65,8 +65,8 @@
 
 -callback acquire_iterator(record()) -> atm_container_iterator:record().
 
--callback update(record(), update_operation(), update_options(), json_utils:json_term()) -> 
-    ok | no_return().
+-callback update(record(), update_operation(), update_options(), atm_api:item()) -> 
+    record() | no_return().
 
 
 %%%===================================================================

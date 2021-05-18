@@ -13,6 +13,7 @@
 -author("Bartosz Walkowicz").
 
 -include("modules/datastore/datastore_models.hrl").
+-include("modules/datastore/datastore_runner.hrl").
 
 %% API
 -export([create/1, get/1, update/2, delete/1]).

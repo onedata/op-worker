@@ -86,15 +86,19 @@ create(AtmWorkflowExecutionId, InitialValue, #atm_store_schema{
 
 
 -spec update(atm_store:id(), atm_container:update_operation(),
-    atm_container:update_options(), json_utils:json_term()) -> ok | {error, term()}.
+    atm_container:update_options(), json_utils:json_term()) -> ok | no_return().
 update(AtmStoreId, Operation, Options, Item) ->
-    critical_section:run({atm_store_update, AtmStoreId}, fun() ->
-        {ok, #atm_store{container = AtmContainer}} = atm_store:get(AtmStoreId),
-        UpdatedContainer = atm_container:update(AtmContainer, Operation, Options, Item),
-        atm_store:update(AtmStoreId, fun(#atm_store{} = PrevStore) ->
-            {ok, PrevStore#atm_store{container = UpdatedContainer}}
-        end)
-    end).
+    case atm_store:get(AtmStoreId) of
+        {ok, #atm_store{container = AtmContainer, frozen = false}} -> 
+            UpdatedContainer = atm_container:update(AtmContainer, Operation, Options, Item),
+            atm_store:update(AtmStoreId, fun(#atm_store{} = PrevStore) ->
+                {ok, PrevStore#atm_store{container = UpdatedContainer}}
+            end);
+        {ok, #atm_store{container = AtmContainer, frozen = true}} -> 
+            throw(?ERROR_ATM_STORE_FROZEN(AtmContainer));
+        {error, _} = Error ->
+            throw(Error)
+    end.
 
 
 -spec delete_all([atm_store:id()]) -> ok.

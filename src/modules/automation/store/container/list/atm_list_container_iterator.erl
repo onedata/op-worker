@@ -8,11 +8,6 @@
 %%% @doc
 %%% This module provides `atm_container_iterator` functionality for
 %%% `atm_list_container`.
-%%%
-%%%                             !!! Caution !!!
-%%% This iterator snapshots container's value at creation time so that even if
-%%% value kept in container changes the iterator will still return the same
-%%% old value.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_list_container_iterator).
