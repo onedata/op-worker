@@ -308,10 +308,28 @@ translate(#gri{type = od_atm_lambda, id = Id, aspect = instance, scope = private
             name = maps:get(<<"name">>, Result),
             summary = maps:get(<<"summary">>, Result),
             description = maps:get(<<"description">>, Result),
+
             operation_spec = jsonable_record:from_json(maps:get(<<"operationSpec">>, Result), atm_lambda_operation_spec),
-            argument_specs = [jsonable_record:from_json(S, atm_lambda_argument_spec) || S <- maps:get(<<"argumentSpecs">>, Result)],
-            result_specs = [jsonable_record:from_json(S, atm_lambda_result_spec) || S <- maps:get(<<"resultSpecs">>, Result)],
+            argument_specs = jsonable_record:list_from_json(maps:get(<<"argumentSpecs">>, Result), atm_lambda_argument_spec),
+            result_specs = jsonable_record:list_from_json(maps:get(<<"resultSpecs">>, Result), atm_lambda_result_spec),
+
             atm_inventories = maps:get(<<"atmInventories">>, Result)
+        }
+    };
+
+translate(#gri{type = od_atm_workflow_schema, id = Id, aspect = instance, scope = private}, Result) ->
+    #document{
+        key = Id,
+        value = #od_atm_workflow_schema{
+            name = maps:get(<<"name">>, Result),
+            description = maps:get(<<"description">>, Result),
+
+            stores = jsonable_record:list_from_json(maps:get(<<"stores">>, Result), atm_store_schema),
+            lanes = jsonable_record:list_from_json(maps:get(<<"lanes">>, Result), atm_lane_schema),
+
+            state = automation:workflow_schema_state_from_json(maps:get(<<"state">>, Result)),
+
+            atm_inventory = maps:get(<<"atmInventoryId">>, Result)
         }
     };
 

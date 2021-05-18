@@ -708,6 +708,22 @@ mock_graph_get(#gri{type = od_atm_lambda, id = AtmLambdaId, aspect = instance}, 
             {ok, #gs_resp_graph{data_format = resource, data = Data}};
         false ->
             ?ERROR_FORBIDDEN
+    end;
+
+mock_graph_get(#gri{type = od_atm_workflow_schema, id = AtmWfSchemaId, aspect = instance}, AuthOverride, _AuthHint) ->
+    Authorized = case AuthOverride of
+        undefined ->
+            false;
+        #auth_override{client_auth = ?USER_GS_TOKEN_AUTH(SerializedToken)} ->
+            UserId = token_to_user_id(SerializedToken),
+            lists:member(?ATM_WORKFLOW_SCHEMA_INVENTORY(AtmWfSchemaId), ?USER_EFF_ATM_INVENTORIES(UserId))
+    end,
+    case Authorized of
+        true ->
+            Data = ?ATM_WORKFLOW_SCHEMA_PRIVATE_DATA_VALUE(AtmWfSchemaId),
+            {ok, #gs_resp_graph{data_format = resource, data = Data}};
+        false ->
+            ?ERROR_FORBIDDEN
     end.
 
 

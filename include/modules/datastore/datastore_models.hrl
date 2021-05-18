@@ -45,28 +45,29 @@
 %
 % The below ASCII visual shows possible relations in entities graph.
 %
-%           provider
-%              ^
-%              |
-%           storage                              share
-%              ^                                   ^
-%              |                                   |
-%            space            handle_service<----handle
-%           ^ ^ ^ ^             ^         ^       ^  ^
-%          /  | |  \           /          |      /   |
-%         /   | |   \         /           |     /    |
-%        /   /   \   \       /            |    /     |
-%       /   /     \   \     /             |   /      |
-% share user harvester group             user      group
-%              ^    ^     ^                          ^
-%             /      \    |                          |
-%            /        \   |                          |
-%          user        group                        user
-%                      ^   ^
-%                     /     \
-%                    /       \
-%                  user      user
-%
+%           provider----------------------------->cluster
+%              ^                                    ^  ^
+%              |                                    |  |
+%           storage                       share     |  |
+%              ^                            ^       |  |
+%              |                            |       |  |
+%            space     handle_service<----handle    |  |
+%           ^ ^ ^ ^          ^     ^       ^  ^     |  |
+%          /  | |  \         |     |      /   |     |  |
+%         /   | |   \        |     |     /    |    /   |
+%        /   /   \   \       /      \   /     |   /    |    atm_inventory
+%       /   /     \   \     /       user      |  /     /     ^  ^  ^  ^
+% share user harvester group                group     /     /   |  |  |
+%              ^    ^     ^                   ^      /  group   |  |  |
+%             /      \    |                   |     /     ^     |  |  |
+%            /        \   |                   |    /     /     /   |  |
+%          user        group                 user-'-----------'   /    \
+%                      ^   ^                                     /      \
+%                     /     \                      atm_workflow_schema   \
+%                    /       \                                ^           \
+%                  user      user                              \           \
+%                                                               '-- atm_lambda
+
 
 -record(od_user, {
     full_name :: undefined | binary(),
@@ -239,6 +240,20 @@
     
     atm_inventories = [] :: [od_atm_inventory:id()],
     
+    cache_state = #{} :: cache_state()
+}).
+
+-record(od_atm_workflow_schema, {
+    name :: automation:name(),
+    description :: automation:description(),
+
+    stores = [] :: [atm_store_schema:record()],
+    lanes = [] :: [atm_lane_schema:record()],
+
+    state :: automation:workflow_schema_state(),
+
+    atm_inventory :: undefined | od_atm_inventory:id(),
+
     cache_state = #{} :: cache_state()
 }).
 

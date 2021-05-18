@@ -60,8 +60,9 @@
 -define(STORAGE_2, <<"storage2Id">>).
 -define(TOKEN_1, <<"token1Id">>).
 -define(TOKEN_2, <<"token2Id">>).
--define(ATM_INVENTORY_1, <<"atm_inventory1Id">>).
--define(ATM_LAMBDA_1, <<"atm_lambda1Id">>).
+-define(ATM_INVENTORY_1, <<"atmInventory1Id">>).
+-define(ATM_LAMBDA_1, <<"atmLambda1Id">>).
+-define(ATM_WORKFLOW_SCHEMA_1, <<"atmWorkflowSchema1Id">>).
 
 % User authorizations
 % Token auth is translated to {token, Token} before graph sync request.
@@ -210,9 +211,9 @@ end).
 -define(ATM_LAMBDA_NAME(__AtmLambda), __AtmLambda).
 -define(ATM_LAMBDA_SUMMARY(__AtmLambda), <<"example_summary">>).
 -define(ATM_LAMBDA_DESCRIPTION(__AtmLambda), <<"example_description">>).
--define(ATM_LAMBDA_OPERATION_SPEC(__AtmLambda), 
+-define(ATM_LAMBDA_OPERATION_SPEC(__AtmLambda),
     #atm_openfaas_operation_spec{
-        docker_image = <<"examle_docker_image">>,
+        docker_image = <<"example_docker_image">>,
         docker_execution_options = #atm_docker_execution_options{
             readonly = false,
             mount_oneclient = true,
@@ -221,7 +222,7 @@ end).
         }
     }
 ).
--define(ATM_LAMBDA_DATA_SPEC, 
+-define(ATM_LAMBDA_DATA_SPEC,
     #atm_data_spec{
         type = atm_archive_type,
         value_constraints = #{}
@@ -237,13 +238,163 @@ end).
     }
 ).
 -define(ATM_LAMBDA_RESULT_SPEC(__AtmLambda),
-        #atm_lambda_result_spec{
+    #atm_lambda_result_spec{
         name = <<"example_name">>,
         data_spec = ?ATM_LAMBDA_DATA_SPEC,
         is_batch = true
     }
 ).
 -define(ATM_LAMBDA_INVENTORIES(__AtmLambda), [?ATM_INVENTORY_1]).
+
+% Mocked atm_workflow_schema data
+-define(ATM_WORKFLOW_SCHEMA_NAME(__AtmWfSchema), __AtmWfSchema).
+-define(ATM_WORKFLOW_SCHEMA_DESCRIPTION(__AtmWfSchema), <<"example description">>).
+-define(ATM_WORKFLOW_SCHEMA_STORES(__AtmWfSchema), [
+    #atm_store_schema{
+        id = <<"store1Id">>,
+        name = <<"store1Name">>,
+        description = <<"store1Desc">>,
+        type = list,
+        data_spec = #atm_data_spec{
+            type = atm_file_type,
+            value_constraints = #{}
+        },
+        requires_initial_value = true
+    },
+    #atm_store_schema{
+        id = <<"store2Id">>,
+        name = <<"store2Name">>,
+        description = <<"store2Desc">>,
+        type = single_value,
+        data_spec = #atm_data_spec{
+            type = atm_integer_type,
+            value_constraints = #{}
+        },
+        requires_initial_value = false
+    }
+]).
+-define(ATM_WORKFLOW_SCHEMA_LANES(__AtmWfSchema), [
+    #atm_lane_schema{
+        id = <<"lane1Id">>,
+        name = <<"lane1Name">>,
+        store_iterator_spec = #atm_store_iterator_spec{
+            store_schema_id = <<"store1Id">>,
+            strategy = #atm_store_iterator_serial_strategy{}
+        },
+        parallel_boxes = [
+            #atm_parallel_box_schema{
+                id = <<"pbox1Id">>,
+                name = <<"pbox1Name">>,
+                tasks = [
+                    #atm_task_schema{
+                        id = <<"task1Id">>,
+                        name = <<"task1Name">>,
+                        lambda_id = <<"task1Lambda">>,
+                        argument_mappings = [
+                            #atm_task_schema_argument_mapper{
+                                argument_name = <<"lambda1ArgName">>,
+                                value_builder = #atm_argument_value_builder{
+                                    type = iterated_item, recipe = undefined
+                                }
+                            }
+                        ],
+                        result_mappings = [
+                            #atm_task_schema_result_mapper{
+                                result_name = <<"lambda1ResName">>,
+                                store_schema_id = <<"store1Id">>,
+                                dispatch_function = add
+                            }
+                        ]
+                    }
+                ]
+            },
+            #atm_parallel_box_schema{
+                id = <<"pbox2Id">>,
+                name = <<"pbox2Name">>,
+                tasks = [
+                    #atm_task_schema{
+                        id = <<"task2Id">>,
+                        name = <<"task2Name">>,
+                        lambda_id = <<"task2Lambda">>,
+                        argument_mappings = [
+                            #atm_task_schema_argument_mapper{
+                                argument_name = <<"lambda2ArgName">>,
+                                value_builder = #atm_argument_value_builder{
+                                    type = const, recipe = 27.8
+                                }
+                            }
+                        ],
+                        result_mappings = [
+                            #atm_task_schema_result_mapper{
+                                result_name = <<"lambda2ResName">>,
+                                store_schema_id = <<"store2Id">>,
+                                dispatch_function = remove
+                            }
+                        ]
+                    }
+                ]
+            }
+        ]
+    },
+    #atm_lane_schema{
+        id = <<"lane2Id">>,
+        name = <<"lane2Name">>,
+        store_iterator_spec = #atm_store_iterator_spec{
+            store_schema_id = <<"store2Id">>,
+            strategy = #atm_store_iterator_batch_strategy{size = 1000}
+        },
+        parallel_boxes = [
+            #atm_parallel_box_schema{
+                id = <<"pbox3Id">>,
+                name = <<"pbox3Name">>,
+                tasks = [
+                    #atm_task_schema{
+                        id = <<"task3Id">>,
+                        name = <<"task3Name">>,
+                        lambda_id = <<"task3Lambda">>,
+                        argument_mappings = [
+                            #atm_task_schema_argument_mapper{
+                                argument_name = <<"lambda3ArgName">>,
+                                value_builder = #atm_argument_value_builder{
+                                    type = object, recipe = #{}
+                                }
+                            }
+                        ],
+                        result_mappings = [
+                            #atm_task_schema_result_mapper{
+                                result_name = <<"lambda3ResName">>,
+                                store_schema_id = <<"store3Id">>,
+                                dispatch_function = set
+                            }
+                        ]
+                    },
+                    #atm_task_schema{
+                        id = <<"task4Id">>,
+                        name = <<"task4Name">>,
+                        lambda_id = <<"task4Lambda">>,
+                        argument_mappings = [
+                            #atm_task_schema_argument_mapper{
+                                argument_name = <<"lambda4ArgName">>,
+                                value_builder = #atm_argument_value_builder{
+                                    type = onedatafs_credentials, recipe = undefined
+                                }
+                            }
+                        ],
+                        result_mappings = [
+                            #atm_task_schema_result_mapper{
+                                result_name = <<"lambda4ResName">>,
+                                store_schema_id = <<"store4Id">>,
+                                dispatch_function = append
+                            }
+                        ]
+                    }
+                ]
+            }
+        ]
+    }
+]).
+-define(ATM_WORKFLOW_SCHEMA_STATE(__AtmWfSchema), incomplete).
+-define(ATM_WORKFLOW_SCHEMA_INVENTORY(__AtmWfSchema), ?ATM_INVENTORY_1).
 
 
 -define(MOCK_JOIN_GROUP_TOKEN, <<"mockJoinGroupToken">>).
@@ -424,16 +575,26 @@ end).
     name = ?ATM_INVENTORY_NAME(__AtmInventory)
 }}).
 
--define(ATM_LAMBDA_PRIVATE_DATA_MATCHER(__AtmLambda), 
+-define(ATM_LAMBDA_PRIVATE_DATA_MATCHER(__AtmLambda),
     #document{key = __AtmLambda, value = #od_atm_lambda{
         name = ?ATM_LAMBDA_NAME(__AtmLambda),
         summary = ?ATM_LAMBDA_SUMMARY(__AtmLambdaId),
-        description = ?ATM_LAMBDA_DESCRIPTION(__AtmLambdaId),
+        description = ?ATM_LAMBDA_DESCRIPTION(__AtmLambda),
         operation_spec = ?ATM_LAMBDA_OPERATION_SPEC(__AtmLambda),
         argument_specs = [?ATM_LAMBDA_ARGUMENT_SPEC(__AtmLambda)],
         result_specs = [?ATM_LAMBDA_RESULT_SPEC(__AtmLambda)],
-        atm_inventories = [?ATM_INVENTORY_1]
-}}).
+        atm_inventories = ?ATM_LAMBDA_INVENTORIES(__AtmLambda)
+    }}).
+
+-define(ATM_WORKFLOW_SCHEMA_PRIVATE_DATA_MATCHER(__AtmWfSchema),
+    #document{key = __AtmWfSchema, value = #od_atm_workflow_schema{
+        name = ?ATM_WORKFLOW_SCHEMA_NAME(__AtmWfSchema),
+        description = ?ATM_WORKFLOW_SCHEMA_DESCRIPTION(__AtmWfSchema),
+        stores = ?ATM_WORKFLOW_SCHEMA_STORES(__AtmWfSchema),
+        lanes = ?ATM_WORKFLOW_SCHEMA_LANES(__AtmWfSchema),
+        state = ?ATM_WORKFLOW_SCHEMA_STATE(__AtmWfSchema),
+        atm_inventory = ?ATM_WORKFLOW_SCHEMA_INVENTORY(__AtmWfSchema)
+    }}).
 
 
 -define(USER_SHARED_DATA_VALUE(__UserId), #{
@@ -644,7 +805,19 @@ end).
     <<"summary">> => ?ATM_LAMBDA_SUMMARY(__AtmLambdaId),
     <<"description">> => ?ATM_LAMBDA_DESCRIPTION(__AtmLambdaId),
     <<"operationSpec">> => jsonable_record:to_json(?ATM_LAMBDA_OPERATION_SPEC(__AtmLambdaId), atm_lambda_operation_spec),
-    <<"argumentSpecs">> => [jsonable_record:to_json(?ATM_LAMBDA_ARGUMENT_SPEC(__AtmLambdaId), atm_lambda_argument_spec)],
-    <<"resultSpecs">> => [jsonable_record:to_json(?ATM_LAMBDA_RESULT_SPEC(__AtmLambdaId), atm_lambda_result_spec)],
-    <<"atmInventories">> => [?ATM_INVENTORY_1]
+    <<"argumentSpecs">> => jsonable_record:list_to_json([?ATM_LAMBDA_ARGUMENT_SPEC(__AtmLambdaId)], atm_lambda_argument_spec),
+    <<"resultSpecs">> => jsonable_record:list_to_json([?ATM_LAMBDA_RESULT_SPEC(__AtmLambdaId)], atm_lambda_result_spec),
+    <<"atmInventories">> => ?ATM_LAMBDA_INVENTORIES(__AtmLambdaId)
+}).
+
+
+-define(ATM_WORKFLOW_SCHEMA_PRIVATE_DATA_VALUE(__AtmWfSchemaId), #{
+    <<"revision">> => 1,
+    <<"gri">> => gri:serialize(#gri{type = od_atm_workflow_schema, id = __AtmWfSchemaId, aspect = instance, scope = private}),
+    <<"name">> => ?ATM_WORKFLOW_SCHEMA_NAME(__AtmWfSchemaId),
+    <<"description">> => ?ATM_WORKFLOW_SCHEMA_DESCRIPTION(__AtmWfSchemaId),
+    <<"stores">> => jsonable_record:list_to_json(?ATM_WORKFLOW_SCHEMA_STORES(__AtmWfSchemaId), atm_store_schema),
+    <<"lanes">> => jsonable_record:list_to_json(?ATM_WORKFLOW_SCHEMA_LANES(__AtmWfSchemaId), atm_lane_schema),
+    <<"state">> => automation:workflow_schema_state_to_json(?ATM_WORKFLOW_SCHEMA_STATE(__AtmWfSchemaId)),
+    <<"atmInventoryId">> => ?ATM_WORKFLOW_SCHEMA_INVENTORY(__AtmWfSchemaId)
 }).

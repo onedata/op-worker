@@ -34,6 +34,7 @@ get_models() -> [
     od_token,
     od_atm_inventory,
     od_atm_lambda,
+    od_atm_workflow_schema,
     temporary_token_secret,
     provider_auth,
     offline_access_credentials,
