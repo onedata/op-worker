@@ -24,7 +24,7 @@
     set_size/1, calculate_size/1, increase_size/2,
     get_storage_file_id/1, get_storage_id/1]).
 -export([mkdir/2, mkdir/3, mv/2, chmod/2, chown/3, link/2, readdir/3,
-    get_child_handle/2, listobjects/4]).
+    get_child_handle/2, listobjects/4, flushbuffer/2]).
 -export([stat/1, read/3, write/3, create/2, open/2, release/1,
     truncate/3, unlink/2, fsync/2, rmdir/1, exists/1]).
 -export([setxattr/5, getxattr/2, removexattr/2, listxattr/1]).
