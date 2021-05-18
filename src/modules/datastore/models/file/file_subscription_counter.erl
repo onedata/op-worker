@@ -5,8 +5,10 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc Tmp model counting subscriptions used to optimize events
+%%% @doc Helper model counting subscriptions used to optimize events
 %%% management when no oneclients are subscribed (e.g., only REST usage).
+%%% NOTE: It is temporary solution to be deleted after refactoring of
+%%% events subsystem.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(file_subscription_counter).
@@ -61,8 +63,8 @@ has_subscriptions(Evt) ->
     case event_type:get_reference_based_prefix(Evt) of
         {ok, Prefix} ->
             case datastore_model:get(?CTX, Prefix) of
-                {ok, #document{value = #file_subscription_counter{subscriptions_count = Count}}} when Count > 0 ->
-                    true;
+                {ok, #document{value = #file_subscription_counter{subscriptions_count = Count}}} ->
+                    Count > 0;
                 _ ->
                     false
             end;

@@ -74,7 +74,8 @@ merge_link_and_file_doc(LinkDoc = #document{value = LinkRecord}, #document{value
         value = LinkRecord#file_meta{
             mode = FileRecord#file_meta.mode,
             acl = FileRecord#file_meta.acl,
-            owner = FileRecord#file_meta.owner
+            owner = FileRecord#file_meta.owner,
+            references = undefined
         }
     }}.
 
@@ -117,7 +118,7 @@ count_references(Doc = #document{value = #file_meta{references = References}}) -
         false -> {ok, ReferencesCount + 1}
     end;
 count_references(Key) ->
-    case file_meta:get_including_deleted(Key) of
+    case file_meta:get_including_deleted(fslogic_uuid:ensure_referenced_uuid(Key)) of
         {ok, Doc} -> count_references(Doc);
         Other -> Other
     end.
@@ -140,7 +141,7 @@ list_references(Doc = #document{key = TargetKey, value = #file_meta{references =
         false -> {ok, [TargetKey | ReferencesList]}  
     end;
 list_references(Key) ->
-    case file_meta:get_including_deleted(Key) of
+    case file_meta:get_including_deleted(fslogic_uuid:ensure_referenced_uuid(Key)) of
         {ok, Doc} -> list_references(Doc);
         Other -> Other
     end.

@@ -86,7 +86,7 @@ get_routing_key(_, _) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns a routing keys (see get_routing_key fun) for events connected with file_attrs.
-%% Warning: It is only temporary solution as currently events framework does not allow parametrize subscriptions.
+%% Warning: It is only temporary solution as currently events framework does not allow to parametrize subscriptions.
 %% Multiple routing keys for event should not be used.
 %% @end
 %%--------------------------------------------------------------------
@@ -99,7 +99,7 @@ get_attr_routing_keys(Guid, RoutingCtx) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns a routing keys (see get_routing_key fun) for events connected with change of replication status.
-%% Warning: It is only temporary solution as currently events framework does not allow parametrize subscriptions.
+%% Warning: It is only temporary solution as currently events framework does not allow to parametrize subscriptions.
 %% Usually, get_routing_key function should be used.
 %% @end
 %%--------------------------------------------------------------------
@@ -112,7 +112,7 @@ get_replica_status_routing_keys(Guid, RoutingCtx) ->
 %% @doc
 %% Returns a routing keys (see get_routing_key fun) for events connected with file_attrs excluding events
 %% connected only with change of replication status.
-%% Warning: It is only temporary solution as currently events framework does not allow parametrize subscriptions.
+%% Warning: It is only temporary solution as currently events framework does not allow to parametrize subscriptions.
 %% Usually, get_routing_key function should be used.
 %% @end
 %%--------------------------------------------------------------------
