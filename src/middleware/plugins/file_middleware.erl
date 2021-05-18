@@ -750,7 +750,7 @@ get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = dataset_summary}}, _
 get(#op_req{auth = Auth, gri = #gri{aspect = download_url}, data = Data}, _) ->
     SessionId = Auth#auth.session_id,
     FileGuids = maps:get(<<"file_ids">>, Data),
-    case page_file_download:get_file_download_url(SessionId, FileGuids) of
+    case page_file_download:gen_file_download_url(SessionId, FileGuids) of
         {ok, URL} ->
             {ok, value, URL};
         {error, _} = Error ->
