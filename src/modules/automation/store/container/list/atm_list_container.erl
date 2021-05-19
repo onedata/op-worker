@@ -16,20 +16,18 @@
 -behaviour(atm_container).
 -behaviour(persistent_record).
 
+-include("modules/automation/atm_tmp.hrl").
 -include_lib("ctool/include/errors.hrl").
 
 %% atm_container callbacks
--export([create/2, get_data_spec/1, acquire_iterator/1, update/4]).
+-export([create/2, get_data_spec/1, acquire_iterator/1, update/4, delete/1]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
 
-%% datastore API
--export([get_ctx/0]).
 
-
--type initial_value() :: [atm_api:item()].
-%% Full 'initial_value' format can't be expressed directly in type spec due to
+-type initial_value() :: [atm_api:item()] | undefined.
+%% Full ' update_options' format can't be expressed directly in type spec due to
 %% dialyzer limitations in specifying individual binaries. Instead it is
 %% shown below:
 %%
@@ -47,22 +45,18 @@
 -export_type([initial_value/0, update_options/0, record/0]).
 
 
--define(CTX, atm_store:get_ctx()).
-
 %%%===================================================================
 %%% atm_container callbacks
 %%%===================================================================
 
-
 -spec create(atm_data_spec:record(), initial_value()) -> record() | no_return().
-create(AtmDataSpec, InitOpts) ->
-    Key = datastore_key:new(),
-    ok = datastore_infinite_log:create(?CTX, Key, InitOpts),
-
-    #atm_list_container{
-        data_spec = AtmDataSpec,
-        backend_id = Key
-    }.
+create(AtmDataSpec, undefined) ->
+    create_container(AtmDataSpec);
+create(AtmDataSpec, InitialValue) when is_list(InitialValue) ->
+    assert_data_batch(AtmDataSpec, InitialValue),
+    update(create_container(AtmDataSpec), append, #{<<"isBatch">> => true}, InitialValue);
+create(_AtmDataSpec, _InitialValue) ->
+    throw(?ERROR_ATM_BAD_DATA(<<"initialValue">>, <<"not a list">>)).
 
 
 -spec get_data_spec(record()) -> atm_data_spec:record().
@@ -77,13 +71,11 @@ acquire_iterator(#atm_list_container{backend_id = BackendId}) ->
 
 -spec update(record(), atm_container:update_operation(), update_options(), atm_api:item()) ->
     record() | no_return().
-update(#atm_list_container{} = Record, append, #{<<"isBatch">> := true}, Batch) ->
+update(#atm_list_container{} = Record, append, #{<<"isBatch">> := true}, Batch) when is_list(Batch) ->
     #atm_list_container{data_spec = AtmDataSpec, backend_id = BackendId} = Record,
+    assert_data_batch(AtmDataSpec, Batch),
     lists:foreach(fun(Item) ->
-        atm_data_validator:validate(Item, AtmDataSpec)
-    end, Batch),
-    lists:foreach(fun(Item) ->
-        ok = datastore_infinite_log:append(?CTX, BackendId, json_utils:encode(Item))
+        ok = atm_store_infinite_log:append(BackendId, json_utils:encode(Item))
     end, Batch),
     Record;
 update(#atm_list_container{} = Record, append, Options, Item) ->
@@ -92,10 +84,14 @@ update(_Record, _Operation, _Options, _Item) ->
     throw(?ERROR_NOT_SUPPORTED).
 
 
+-spec delete(record()) -> ok.
+delete(#atm_list_container{backend_id = BackendId}) ->
+    atm_store_infinite_log:destroy(BackendId).
+
+
 %%%===================================================================
 %%% persistent_record callbacks
 %%%===================================================================
-
 
 -spec version() -> persistent_record:record_version().
 version() ->
@@ -124,9 +120,20 @@ db_decode(#{<<"dataSpec">> := AtmDataSpecJson, <<"backendId">> := BackendId}, Ne
 
 
 %%%===================================================================
-%%% datastore API 
+%%% Internal functions
 %%%===================================================================
 
--spec get_ctx() -> datastore:ctx().
-get_ctx() ->
-    ?CTX.
+-spec create_container(atm_data_spec:record()) -> record().
+create_container(AtmDataSpec) ->
+    {ok, Id} = atm_store_infinite_log:create(#{}),
+    #atm_list_container{
+        data_spec = AtmDataSpec,
+        backend_id = Id
+    }.
+
+
+-spec assert_data_batch(atm_data_spec:record(), [json_utils:json_term()]) -> ok | no_return().
+assert_data_batch(AtmDataSpec, Batch) ->
+    lists:foreach(fun(Item) ->
+        atm_data_validator:validate(Item, AtmDataSpec)
+    end, Batch).

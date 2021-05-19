@@ -108,6 +108,8 @@ delete_all(AtmStoreIds) ->
 
 -spec delete(atm_store:id()) -> ok | {error, term()}.
 delete(AtmStoreId) ->
+    {ok, #atm_store{container = AtmContainer}} = atm_store:get(AtmStoreId),
+    ok = atm_container:delete(AtmContainer),
     atm_store:delete(AtmStoreId).
 
 

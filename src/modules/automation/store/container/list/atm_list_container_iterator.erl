@@ -58,9 +58,8 @@ create(BackendId) ->
     {ok, [item()], iterator:cursor(), record()} | stop.
 get_next_batch(BatchSize, #atm_list_container_iterator{} = Record) ->
     #atm_list_container_iterator{backend_id = BackendId, index = StartIndex} = Record,
-    Ctx = atm_list_container:get_ctx(),
-    {ok, {Marker, EntrySeries}} = datastore_infinite_log:list(
-        Ctx, BackendId, #{start_from => {index, StartIndex}, limit => BatchSize}),
+    {ok, {Marker, EntrySeries}} = atm_store_infinite_log:list(
+        BackendId, #{start_from => {index, StartIndex}, limit => BatchSize}),
     Res = lists:map(fun({_Index, {_Timestamp, V}}) -> json_utils:decode(V) end, EntrySeries),
     case {Res, Marker} of
         {[], done} -> 

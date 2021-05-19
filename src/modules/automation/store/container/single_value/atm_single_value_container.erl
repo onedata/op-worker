@@ -19,7 +19,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% atm_container callbacks
--export([create/2, get_data_spec/1, acquire_iterator/1, update/4]).
+-export([create/2, get_data_spec/1, acquire_iterator/1, update/4, delete/1]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
@@ -69,6 +69,11 @@ update(#atm_single_value_container{data_spec = AtmDataSpec} = Record, set, _Opti
     Record#atm_single_value_container{value = Item};
 update(_Record, _Operation, _Options, _Item) ->
     throw(?ERROR_NOT_SUPPORTED).
+
+
+-spec delete(record()) -> ok.
+delete(_Record) ->
+    ok.
 
 
 %%%===================================================================

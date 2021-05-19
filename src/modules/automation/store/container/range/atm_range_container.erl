@@ -20,7 +20,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% atm_container callbacks
--export([create/2, get_data_spec/1, acquire_iterator/1, update/4]).
+-export([create/2, get_data_spec/1, acquire_iterator/1, update/4, delete/1]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
@@ -90,6 +90,11 @@ acquire_iterator(#atm_range_container{
     no_return().
 update(_Record, _Operation, _Options, _Item) ->
     throw(?ERROR_NOT_SUPPORTED).
+
+
+-spec delete(record()) -> ok.
+delete(_Record) ->
+    ok.
 
 
 %%%===================================================================

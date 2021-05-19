@@ -75,26 +75,26 @@ create_store_with_invalid_args_test(_Config) ->
     Node = oct_background:get_random_provider_node(krakow),
     
     lists:foreach(fun(DataType) ->
-        BadValue = automation_store_test_utils:example_bad_data(DataType),
+        BadValue = atm_store_test_utils:example_bad_data(DataType),
         ?assertEqual(?ERROR_ATM_DATA_TYPE_UNVERIFIED(BadValue, DataType), 
-            automation_store_test_utils:create_store(Node, ?ATM_SINGLE_VALUE_STORE_SCHEMA(DataType), BadValue))
-    end, automation_store_test_utils:all_data_types()).
+            atm_store_test_utils:create_store(Node, ?ATM_SINGLE_VALUE_STORE_SCHEMA(DataType), BadValue))
+    end, atm_store_test_utils:all_data_types()).
 
 
 update_store_test(_Config) ->
     Node = oct_background:get_random_provider_node(krakow),
-    {ok, AtmStoreId0} = automation_store_test_utils:create_store(Node, ?ATM_SINGLE_VALUE_STORE_SCHEMA, undefined),
+    {ok, AtmStoreId0} = atm_store_test_utils:create_store(Node, ?ATM_SINGLE_VALUE_STORE_SCHEMA, undefined),
     ?assertEqual(?ERROR_NOT_SUPPORTED,
-        automation_store_test_utils:update_store(Node, AtmStoreId0, append, #{}, <<"NaN">>)),
+        atm_store_test_utils:update_store(Node, AtmStoreId0, append, #{}, <<"NaN">>)),
     
     lists:foreach(fun(DataType) ->
-        {ok, AtmStoreId} = automation_store_test_utils:create_store(Node, ?ATM_SINGLE_VALUE_STORE_SCHEMA(DataType), undefined),
-        BadValue = automation_store_test_utils:example_bad_data(DataType),
+        {ok, AtmStoreId} = atm_store_test_utils:create_store(Node, ?ATM_SINGLE_VALUE_STORE_SCHEMA(DataType), undefined),
+        BadValue = atm_store_test_utils:example_bad_data(DataType),
         ?assertEqual(?ERROR_ATM_DATA_TYPE_UNVERIFIED(BadValue, DataType),
-            automation_store_test_utils:update_store(Node, AtmStoreId, set, #{}, BadValue)),
-        ValidValue = automation_store_test_utils:example_data(DataType),
-        ?assertEqual(ok, automation_store_test_utils:update_store(Node, AtmStoreId, set, #{}, ValidValue))
-    end, automation_store_test_utils:all_data_types()).
+            atm_store_test_utils:update_store(Node, AtmStoreId, set, #{}, BadValue)),
+        ValidValue = atm_store_test_utils:example_data(DataType),
+        ?assertEqual(ok, atm_store_test_utils:update_store(Node, AtmStoreId, set, #{}, ValidValue))
+    end, atm_store_test_utils:all_data_types()).
 
 
 iterate_one_by_one_test(_Config) ->
@@ -109,7 +109,7 @@ iterate_in_chunks_test(_Config) ->
 iterate_test_base(AtmStoreIteratorStrategy, ValueToSet, ExpectedValue) ->
     Node = oct_background:get_random_provider_node(krakow),
 
-    {ok, AtmStoreId} = automation_store_test_utils:create_store(Node, ?ATM_SINGLE_VALUE_STORE_SCHEMA, undefined),
+    {ok, AtmStoreId} = atm_store_test_utils:create_store(Node, ?ATM_SINGLE_VALUE_STORE_SCHEMA, undefined),
     
     AtmListStoreDummySchemaId = <<"dummyId">>,
     
@@ -120,20 +120,20 @@ iterate_test_base(AtmStoreIteratorStrategy, ValueToSet, ExpectedValue) ->
         store_schema_id = AtmListStoreDummySchemaId,
         strategy = AtmStoreIteratorStrategy
     },
-    AtmStoreIterator = automation_store_test_utils:acquire_store_iterator(
+    AtmStoreIterator = atm_store_test_utils:acquire_store_iterator(
         Node, AtmWorkflowExecutionEnv, AtmStoreIteratorSpec),
     
-    ?assertEqual(stop, automation_store_test_utils:iterator_get_next(Node, AtmStoreIterator)),
-    ?assertEqual(ok, automation_store_test_utils:update_store(Node, AtmStoreId, set, #{}, ValueToSet)),
-    AtmStoreIterator1 = automation_store_test_utils:acquire_store_iterator(Node, AtmWorkflowExecutionEnv, AtmStoreIteratorSpec),
-    {ok, _, _, AtmIterator2} = ?assertMatch({ok, ExpectedValue, _, _}, automation_store_test_utils:iterator_get_next(Node, AtmStoreIterator1)),
-    ?assertEqual(stop, automation_store_test_utils:iterator_get_next(Node, AtmIterator2)).
+    ?assertEqual(stop, atm_store_test_utils:iterator_get_next(Node, AtmStoreIterator)),
+    ?assertEqual(ok, atm_store_test_utils:update_store(Node, AtmStoreId, set, #{}, ValueToSet)),
+    AtmStoreIterator1 = atm_store_test_utils:acquire_store_iterator(Node, AtmWorkflowExecutionEnv, AtmStoreIteratorSpec),
+    {ok, _, _, AtmIterator2} = ?assertMatch({ok, ExpectedValue, _, _}, atm_store_test_utils:iterator_get_next(Node, AtmStoreIterator1)),
+    ?assertEqual(stop, atm_store_test_utils:iterator_get_next(Node, AtmIterator2)).
 
 
 iterator_cursor_test(_Config) ->
     Node = oct_background:get_random_provider_node(krakow),
 
-    {ok, AtmStoreId} = automation_store_test_utils:create_store(Node, ?ATM_SINGLE_VALUE_STORE_SCHEMA, 8),
+    {ok, AtmStoreId} = atm_store_test_utils:create_store(Node, ?ATM_SINGLE_VALUE_STORE_SCHEMA, 8),
     
     AtmListStoreDummySchemaId = <<"dummyId">>,
     
@@ -144,25 +144,25 @@ iterator_cursor_test(_Config) ->
         store_schema_id = AtmListStoreDummySchemaId,
         strategy = #atm_store_iterator_serial_strategy{}
     },
-    AtmSerialIterator0 = automation_store_test_utils:acquire_store_iterator(
+    AtmSerialIterator0 = atm_store_test_utils:acquire_store_iterator(
         Node, AtmWorkflowExecutionEnv, AtmStoreIteratorSpec),
 
-    {ok, _, Cursor1, AtmSerialIterator1} = ?assertMatch({ok, 8, _, _}, automation_store_test_utils:iterator_get_next(Node, AtmSerialIterator0)),
-    ?assertMatch(stop, automation_store_test_utils:iterator_get_next(Node, AtmSerialIterator1)),
+    {ok, _, Cursor1, AtmSerialIterator1} = ?assertMatch({ok, 8, _, _}, atm_store_test_utils:iterator_get_next(Node, AtmSerialIterator0)),
+    ?assertMatch(stop, atm_store_test_utils:iterator_get_next(Node, AtmSerialIterator1)),
     
-    AtmSerialIterator2 = automation_store_test_utils:iterator_jump_to(Node, Cursor1, AtmSerialIterator1),
-    ?assertMatch(stop, automation_store_test_utils:iterator_get_next(Node, AtmSerialIterator2)),
+    AtmSerialIterator2 = atm_store_test_utils:iterator_jump_to(Node, Cursor1, AtmSerialIterator1),
+    ?assertMatch(stop, atm_store_test_utils:iterator_get_next(Node, AtmSerialIterator2)),
 
 
     % Assert <<>> cursor shifts iterator to the beginning
-    AtmSerialIterator3 = automation_store_test_utils:iterator_jump_to(Node, <<>>, AtmSerialIterator2),
-    ?assertMatch({ok, 8, _, _}, automation_store_test_utils:iterator_get_next(Node, AtmSerialIterator3)),
+    AtmSerialIterator3 = atm_store_test_utils:iterator_jump_to(Node, <<>>, AtmSerialIterator2),
+    ?assertMatch({ok, 8, _, _}, atm_store_test_utils:iterator_get_next(Node, AtmSerialIterator3)),
 
     % Invalid cursors should be rejected
-    ?assertMatch(?EINVAL, automation_store_test_utils:iterator_jump_to(Node, <<"dummy">>, AtmSerialIterator2)),
-    ?assertMatch(?EINVAL, automation_store_test_utils:iterator_jump_to(Node, <<"-2">>, AtmSerialIterator2)),
-    ?assertMatch(?EINVAL, automation_store_test_utils:iterator_jump_to(Node, <<"3">>, AtmSerialIterator2)),
-    ?assertMatch(?EINVAL, automation_store_test_utils:iterator_jump_to(Node, <<"20">>, AtmSerialIterator2)).
+    ?assertMatch(?EINVAL, atm_store_test_utils:iterator_jump_to(Node, <<"dummy">>, AtmSerialIterator2)),
+    ?assertMatch(?EINVAL, atm_store_test_utils:iterator_jump_to(Node, <<"-2">>, AtmSerialIterator2)),
+    ?assertMatch(?EINVAL, atm_store_test_utils:iterator_jump_to(Node, <<"3">>, AtmSerialIterator2)),
+    ?assertMatch(?EINVAL, atm_store_test_utils:iterator_jump_to(Node, <<"20">>, AtmSerialIterator2)).
 
 
 %===================================================================

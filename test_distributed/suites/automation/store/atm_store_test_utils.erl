@@ -6,10 +6,10 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Module with utility functions for automation tests
+%%% Module with utility functions for automation store tests
 %%% @end
 %%%-------------------------------------------------------------------
--module(automation_store_test_utils).
+-module(atm_store_test_utils).
 -author("Michal Stanisz").
 
 -include("modules/automation/atm_tmp.hrl").

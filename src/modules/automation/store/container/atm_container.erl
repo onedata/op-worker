@@ -23,7 +23,7 @@
 -behaviour(persistent_record).
 
 %% API
--export([create/3, get_data_spec/1, acquire_iterator/1, update/4]).
+-export([create/3, get_data_spec/1, acquire_iterator/1, update/4, delete/1]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
@@ -68,6 +68,8 @@
 -callback update(record(), update_operation(), update_options(), atm_api:item()) -> 
     record() | no_return().
 
+-callback delete(record()) -> ok | no_return().
+
 
 %%%===================================================================
 %%% API
@@ -96,6 +98,12 @@ acquire_iterator(AtmContainer) ->
 update(AtmContainer, Operation, Options, Item) ->
     RecordType = utils:record_type(AtmContainer),
     RecordType:update(AtmContainer, Operation, Options, Item).
+
+
+-spec delete(record()) -> ok | no_return().
+delete(AtmContainer) ->
+    RecordType = utils:record_type(AtmContainer),
+    RecordType:update(AtmContainer).
 
 
 %%%===================================================================
