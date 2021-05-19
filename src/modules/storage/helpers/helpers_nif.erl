@@ -256,7 +256,7 @@ stop_monitoring() ->
 -spec prepare_args() -> #{binary() => binary()}.
 prepare_args() ->
     OpWorkerArgs = lists:foldl(fun(EnvKey, Map) ->
-        {ok, EnvValue} = op_worker:get_env(EnvKey),
+        EnvValue = op_worker:get_env(EnvKey),
         maps:put(str_utils:to_binary(EnvKey), str_utils:to_binary(EnvValue), Map)
     end, #{}, [
         ceph_helper_threads_number,

@@ -86,12 +86,12 @@ acquire_default_display_credentials(Storage, SpaceId) ->
 
 -spec generate_uid(od_user:id()) -> luma:uid().
 generate_uid(UserId) ->
-    {ok, UidRange} = op_worker:get_env(uid_range),
+    UidRange = op_worker:get_env(uid_range),
     generate_posix_identifier(UserId, UidRange).
 
 -spec generate_gid(od_space:id()) -> luma:gid().
 generate_gid(SpaceId) ->
-    {ok, GidRange} = op_worker:get_env(gid_range),
+    GidRange = op_worker:get_env(gid_range),
     generate_posix_identifier(SpaceId, GidRange).
 
 -spec generate_posix_credentials(od_user:id(), od_space:id()) -> {luma:uid(), luma:gid()}.

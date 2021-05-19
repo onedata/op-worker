@@ -90,7 +90,7 @@ app_name() ->
 %%--------------------------------------------------------------------
 -spec cm_nodes() -> {ok, Nodes :: [atom()]} | undefined.
 cm_nodes() ->
-    op_worker:get_env(cm_nodes).
+    application:get_env(?APP_NAME, cm_nodes).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -99,7 +99,7 @@ cm_nodes() ->
 %%--------------------------------------------------------------------
 -spec db_nodes() -> {ok, Nodes :: [atom()]} | undefined.
 db_nodes() ->
-    op_worker:get_env(db_nodes).
+    application:get_env(?APP_NAME, db_nodes).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -236,7 +236,7 @@ exometer_reporters() -> [].
     [{atom(), [any()]} |{singleton, atom(), [any()]}] | {atom(), [any()], list()}) ->
     [{atom(), [any()]} |{singleton, atom(), [any()]}] | {atom(), [any()], list()}.
 filter_disabled_workers(WorkersSpecs) ->
-    DisabledWorkers = op_worker:get_env(disabled_workers, []),
+    DisabledWorkers = application:get_env(?APP_NAME, disabled_workers, []),
     DisabledWorkersSet = sets:from_list(DisabledWorkers),
     lists:filter(fun
         ({Worker, _WorkerArgs}) ->

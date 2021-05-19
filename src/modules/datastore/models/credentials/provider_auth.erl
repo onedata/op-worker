@@ -169,7 +169,7 @@ acquire_identity_token_for_consumer(Consumer) ->
 %%--------------------------------------------------------------------
 -spec get_root_token_file_path() -> string().
 get_root_token_file_path() ->
-    {ok, ProviderRootTokenFile} = op_worker:get_env(root_token_path),
+    ProviderRootTokenFile = op_worker:get_env(root_token_path),
     filename:absname(ProviderRootTokenFile).
 
 

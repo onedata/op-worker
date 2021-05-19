@@ -293,7 +293,7 @@ prepare_ssl_opts() ->
     OriginalSSLOpts = application:get_env(rtransfer_link, ssl, []),
     case proplists:get_value(use_ssl, OriginalSSLOpts, true) of
         true ->
-            {ok, KeyFile} = op_worker:get_env(web_key_file),
+            KeyFile = op_worker:get_env(web_key_file),
             CABundle = make_ca_bundle(),
             CertBundle = make_cert_bundle(),
             Opts = [{use_ssl, true}, {cert_path, CertBundle}, {key_path, KeyFile} |
@@ -323,8 +323,8 @@ make_ca_bundle() ->
 %%--------------------------------------------------------------------
 -spec make_cert_bundle() -> file:filename().
 make_cert_bundle() ->
-    {ok, CertFile} = op_worker:get_env(web_cert_file),
-    {ok, ChainFile} = op_worker:get_env(web_cert_chain_file),
+    CertFile = op_worker:get_env(web_cert_file),
+    ChainFile = op_worker:get_env(web_cert_chain_file),
     {ok, Cert} = file:read_file(CertFile),
     Contents =
         case file:read_file(ChainFile) of
@@ -367,13 +367,13 @@ prepare_graphite_opts() ->
     case op_worker:get_env(integrate_with_graphite, false) of
         false -> ok;
         true ->
-            case op_worker:get_env(graphite_api_key) of
-                {ok, Bin} when byte_size(Bin) > 0 ->
+            case op_worker:get_env(graphite_api_key, undefined) of
+                {ok, Bin} when is_binary(Bin) andalso byte_size(Bin) > 0 ->
                     ?error("rtransfer_link doesn't support graphite access with API key", []);
                 _ ->
-                    {ok, Host} = op_worker:get_env(graphite_host),
-                    {ok, Port} = op_worker:get_env(graphite_port),
-                    {ok, Prefix} = op_worker:get_env(graphite_prefix),
+                    Host = op_worker:get_env(graphite_host),
+                    Port = op_worker:get_env(graphite_port),
+                    Prefix = op_worker:get_env(graphite_prefix),
                     NewPrefix = unicode:characters_to_list(Prefix) ++ "-rtransfer.link",
                     Url = "http://" ++ unicode:characters_to_list(Host) ++ ":" ++
                         integer_to_list(Port),

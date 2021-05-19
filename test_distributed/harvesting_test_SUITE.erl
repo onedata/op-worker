@@ -1687,7 +1687,7 @@ mock_space_logic_harvest_metadata(Node) ->
     Self = self(),
     ok = test_utils:mock_expect(Node, space_logic, harvest_metadata,
         fun(SpaceId, Destination, Batch, _MaxStreamSeq, _MaxSeq) ->
-            case application:get_env(op_worker, ?MOCK_HARVEST_METADATA_FAILURE, false) of
+            case op_worker:get_env(?MOCK_HARVEST_METADATA_FAILURE, false) of
                 true ->
                     {error, test_error};
                 false ->

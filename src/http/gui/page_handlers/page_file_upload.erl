@@ -148,9 +148,9 @@ assert_file_upload_registered(UserId, FileGuid) ->
 read_body_opts(SpaceId) ->
     WriteBlockSize = file_upload_utils:get_preferable_write_block_size(SpaceId),
 
-    {ok, UploadWriteSize} = op_worker:get_env(upload_write_size),
-    {ok, UploadReadTimeout} = op_worker:get_env(upload_read_timeout),
-    {ok, UploadPeriod} = op_worker:get_env(upload_read_period),
+    UploadWriteSize = op_worker:get_env(upload_write_size),
+    UploadReadTimeout = op_worker:get_env(upload_read_timeout),
+    UploadPeriod = op_worker:get_env(upload_read_period),
 
     #{
         % length is chunk size - how much the cowboy read

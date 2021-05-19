@@ -112,8 +112,8 @@ get_cert_chain_ders() ->
 -spec gui_config() -> gui:gui_config().
 gui_config() ->
     % Get certs
-    {ok, KeyFile} = op_worker:get_env(web_key_file),
-    {ok, CertFile} = op_worker:get_env(web_cert_file),
+    KeyFile = op_worker:get_env(web_key_file),
+    CertFile = op_worker:get_env(web_cert_file),
     ChainFile = op_worker:get_env(web_cert_chain_file, undefined),
 
     CustomCowboyRoutes = lists:flatten([

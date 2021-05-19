@@ -426,7 +426,7 @@ delete_regular_file_and_update_counters(FileCtx, SpaceId) ->
 -spec delete_dir_recursive(file_ctx:ctx(), od_space:id(), storage:id()) -> ok.
 delete_dir_recursive(FileCtx, SpaceId, StorageId) ->
     RootUserCtx = user_ctx:new(?ROOT_SESS_ID),
-    {ok, BatchSize} = op_worker:get_env(ls_batch_size),
+    BatchSize = op_worker:get_env(ls_batch_size),
     ListOpts = #{token => ?INITIAL_LS_TOKEN, size => BatchSize},
     {ok, FileCtx2} = delete_children(FileCtx, RootUserCtx, ListOpts, SpaceId, StorageId),
     delete_file(FileCtx2).

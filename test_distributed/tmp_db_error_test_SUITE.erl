@@ -113,11 +113,11 @@ test_read_operations_on_db_error(Worker, SessId, DirsAndFiles) ->
     file_ops_test_utils:test_read_operations_on_error(Worker, SessId, DirsAndFiles, ?EAGAIN).
 
 enable_db_error_emulation() ->
-    application:set_env(?APP_NAME, emulate_db_error, true).
+    op_worker:set_env(emulate_db_error, true).
 
 
 disable_db_error_emulation() ->
-    application:set_env(?APP_NAME, emulate_db_error, false).
+    op_worker:set_env(emulate_db_error, false).
 
 mock_cberl(Config) ->
     Workers = test_config:get_all_op_worker_nodes(Config),

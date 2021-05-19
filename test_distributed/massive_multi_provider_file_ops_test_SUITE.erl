@@ -728,8 +728,8 @@ check_ended(Worker, Tasks) ->
 
 save_callback(Callback, TaskId) ->
     critical_section:run(save_callback, fun() ->
-        List = application:get_env(?APP_NAME, Callback, []),
-        application:set_env(?APP_NAME, Callback, [{TaskId, stopwatch:start()} | List])
+        List = op_worker:get_env(Callback, []),
+        op_worker:set_env(Callback, [{TaskId, stopwatch:start()} | List])
     end),
     ok.
 
