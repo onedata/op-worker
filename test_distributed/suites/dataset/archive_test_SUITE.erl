@@ -178,12 +178,18 @@ archive_dataset_attached_to_symlink(_Config) ->
     #object{name = DirName} = onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, #dir_spec{}),
     SpaceIdPrefix = ?SYMLINK_SPACE_ID_ABS_PATH_PREFIX(oct_background:get_space_id(?SPACE)),
     LinkTarget = filename:join([SpaceIdPrefix, DirName]),
-    #object{guid = LinkGuid} = onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE,
-        #symlink_spec{symlink_value = LinkTarget}),
-    #dataset_object{
-        id = DatasetId,
-        archives = [#archive_object{id = ArchiveId}]
-    } = onenv_dataset_test_utils:set_up_and_sync_dataset(?USER1, LinkGuid, #dataset_spec{archives = 1}),
+    #object{
+        guid = LinkGuid,
+        dataset = #dataset_object{
+            id = DatasetId,
+            archives = [#archive_object{id = ArchiveId}]
+        }
+    } = onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE,
+        #symlink_spec{
+            symlink_value = LinkTarget,
+            dataset = #dataset_spec{archives = 1}
+        }
+    ),
     archive_simple_dataset_test_base(LinkGuid, DatasetId, ArchiveId).
 
 

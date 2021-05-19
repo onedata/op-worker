@@ -49,6 +49,7 @@
 -record(symlink_spec, {
     name = undefined :: undefined | binary(),
     shares = [] :: [onenv_file_test_utils:share_spec()],
+    dataset = undefined :: undefined | onenv_dataset_test_utils:dataset_spec(),
     symlink_value :: binary()
 }).
 

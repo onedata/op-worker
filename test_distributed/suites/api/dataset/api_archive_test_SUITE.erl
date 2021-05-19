@@ -58,7 +58,6 @@ all() -> [
 ].
 
 -define(ATTEMPTS, 30).
--define(TEST_TIMESTAMP, 1111111111).
 -define(NON_EXISTENT_ARCHIVE_ID, <<"NonExistentArchive">>).
 -define(NON_EXISTENT_DATASET_ID, <<"NonExistentDataset">>).
 
@@ -230,9 +229,12 @@ build_create_archive_validate_gs_call_result_fun(MemRef) ->
         PreservedCallback = maps:get(<<"preservedCallback">>, Data, undefined),
         PurgedCallback = maps:get(<<"purgedCallback">>, Data, undefined),
 
-        ExpArchiveData = build_archive_gs_instance(ArchiveId, DatasetId, CreationTime, Config, Description,
-            PreservedCallback, PurgedCallback),
-        ?assertEqual(ExpArchiveData, ArchiveData)
+        ExpArchiveData = build_archive_gs_instance(ArchiveId, DatasetId, CreationTime, ?ARCHIVE_BUILDING, Config,
+            Description, PreservedCallback, PurgedCallback),
+        % state is removed from the map as it may be in pending, building or even preserved state when request is handled
+        ExpArchiveData2 = maps:without([<<"state">>], ExpArchiveData),
+        ArchiveData2 = maps:without([<<"state">>], ArchiveData),
+        ?assertMatch(ExpArchiveData2, ArchiveData2)
     end.
 
 
@@ -272,7 +274,7 @@ build_verify_archive_created_fun(MemRef, Providers) ->
 %% @private
 -spec await_archive_preserved_callback_called(archive:id(), dataset:id()) -> ok.
 await_archive_preserved_callback_called(ArchiveId, DatasetId) ->
-    Timeout = timer:seconds(?ATTEMPTS),
+    Timeout = timer:seconds(60),
     receive
         ?ARCHIVE_PERSISTED(ArchiveId, DatasetId) -> ok
     after
@@ -336,8 +338,8 @@ get_archive_info(_Config) ->
                     prepare_args_fun = build_get_archive_prepare_gs_args_fun(ArchiveId),
                     validate_result_fun = fun(#api_test_ctx{node = TestNode}, {ok, Result}) ->
                         CreationTime = time_test_utils:global_seconds(TestNode),
-                        ExpArchiveData = build_archive_gs_instance(ArchiveId, DatasetId, CreationTime, Config,
-                            Description, undefined, undefined),
+                        ExpArchiveData = build_archive_gs_instance(ArchiveId, DatasetId, CreationTime, ?ARCHIVE_PRESERVED,
+                            Config, Description, undefined, undefined),
                         ?assertEqual(ExpArchiveData, Result)
                     end
                 }
@@ -865,13 +867,13 @@ list_archive_ids(Node, UserSessId, DatasetId, ListOpts) ->
 
 
 %% @private
--spec build_archive_gs_instance(archive:id(), dataset:id(), archive:timestamp(), archive:config(),
+-spec build_archive_gs_instance(archive:id(), dataset:id(), archive:timestamp(), archive:state(), archive:config(),
     archive:description(), archive:callback(), archive:callback()) -> json_utils:json_term().
-build_archive_gs_instance(ArchiveId, DatasetId, CreationTime, Config, Description, PreservedCallback, PurgedCallback) ->
+build_archive_gs_instance(ArchiveId, DatasetId, CreationTime, State, Config, Description, PreservedCallback, PurgedCallback) ->
     BasicInfo = archive_gui_gs_translator:translate_archive_info(#archive_info{
         id = ArchiveId,
         dataset_id = DatasetId,
-        state = str_utils:to_binary(?ARCHIVE_PRESERVED),
+        state = str_utils:to_binary(State),
         root_dir_guid = file_id:pack_guid(?ARCHIVE_DIR_UUID(ArchiveId), oct_background:get_space_id(?SPACE)),
         creation_time = CreationTime,
         config = Config,
@@ -923,7 +925,6 @@ end_per_suite(_Config) ->
 
 init_per_group(_Group, Config) ->
     time_test_utils:freeze_time(Config),
-    time_test_utils:set_current_time_seconds(?TEST_TIMESTAMP),
     lfm_proxy:init(Config, false).
 
 end_per_group(_Group, Config) ->
@@ -932,7 +933,7 @@ end_per_group(_Group, Config) ->
     time_test_utils:unfreeze_time(Config).
 
 init_per_testcase(_Case, Config) ->
-    ct:timetrap({minutes, 10}),
+    ct:timetrap({minutes, 20}),
     Config.
 
 
@@ -958,14 +959,27 @@ stop_http_server() ->
     inets:stop().
 
 do(#mod{method = "POST", request_uri = ?ARCHIVE_PRESERVED_PATH, entity_body = Body}) ->
-    #{<<"archiveId">> := ArchiveId, <<"datasetId">> := DatasetId} = json_utils:decode(Body),
-    ?CREATE_TEST_PROCESS ! ?ARCHIVE_PERSISTED(ArchiveId, DatasetId),
-    {proceed, [{response,{?HTTP_204_NO_CONTENT, []}}]};
+    maybe_respond(fun() ->
+        #{<<"archiveId">> := ArchiveId, <<"datasetId">> := DatasetId} = json_utils:decode(Body),
+        ?CREATE_TEST_PROCESS ! ?ARCHIVE_PERSISTED(ArchiveId, DatasetId)
+    end);
 do(#mod{method = "POST", request_uri = ?ARCHIVE_PURGED_PATH, entity_body = Body}) ->
-    #{<<"archiveId">> := ArchiveId,  <<"datasetId">> := DatasetId} = json_utils:decode(Body),
-    ?PURGE_TEST_PROCESS ! ?ARCHIVE_PURGED(ArchiveId, DatasetId),
-    {proceed, [{response,{?HTTP_204_NO_CONTENT, []}}]}.
+    maybe_respond(fun() ->
+        #{<<"archiveId">> := ArchiveId,  <<"datasetId">> := DatasetId} = json_utils:decode(Body),
+        ?PURGE_TEST_PROCESS ! ?ARCHIVE_PURGED(ArchiveId, DatasetId)
+    end).
 
+
+-spec maybe_respond(function()) -> tuple().
+maybe_respond(Fun) ->
+    ResponseCode = case rand:uniform(2) of
+        1 ->
+            Fun(),
+            ?HTTP_204_NO_CONTENT;
+        2 ->
+            ?HTTP_500_INTERNAL_SERVER_ERROR
+    end,
+    {proceed, [{response,{ResponseCode, []}}]}.
 
 %%%===================================================================
 %%% Internal functions
