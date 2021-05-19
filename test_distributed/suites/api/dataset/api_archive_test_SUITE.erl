@@ -959,22 +959,22 @@ stop_http_server() ->
     inets:stop().
 
 do(#mod{method = "POST", request_uri = ?ARCHIVE_PRESERVED_PATH, entity_body = Body}) ->
-    maybe_respond(fun() ->
+    handle_callback_message(fun() ->
         #{<<"archiveId">> := ArchiveId, <<"datasetId">> := DatasetId} = json_utils:decode(Body),
         ?CREATE_TEST_PROCESS ! ?ARCHIVE_PERSISTED(ArchiveId, DatasetId)
     end);
 do(#mod{method = "POST", request_uri = ?ARCHIVE_PURGED_PATH, entity_body = Body}) ->
-    maybe_respond(fun() ->
+    handle_callback_message(fun() ->
         #{<<"archiveId">> := ArchiveId,  <<"datasetId">> := DatasetId} = json_utils:decode(Body),
         ?PURGE_TEST_PROCESS ! ?ARCHIVE_PURGED(ArchiveId, DatasetId)
     end).
 
 
--spec maybe_respond(function()) -> tuple().
-maybe_respond(Fun) ->
+-spec handle_callback_message(function()) -> tuple().
+handle_callback_message(HandleFun) ->
     ResponseCode = case rand:uniform(2) of
         1 ->
-            Fun(),
+            HandleFun(),
             ?HTTP_204_NO_CONTENT;
         2 ->
             ?HTTP_500_INTERNAL_SERVER_ERROR
