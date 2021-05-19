@@ -668,6 +668,13 @@ ERL_NIF_TERM listxattr(NifCTX ctx, helper_ptr helper, folly::fbstring file)
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
 
+ERL_NIF_TERM flushbuffer(
+    NifCTX ctx, helper_ptr helper, folly::fbstring file, size_t size)
+{
+    handle_result(ctx, helper->flushBuffer(file, size));
+    return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
+}
+
 ERL_NIF_TERM open(NifCTX ctx, helper_ptr helper, folly::fbstring file,
     folly::fbvector<nifpp::str_atom> flags)
 {
@@ -864,6 +871,12 @@ static ERL_NIF_TERM sh_listxattr(
     return wrap(listxattr, env, argv);
 }
 
+static ERL_NIF_TERM sh_flushbuffer(
+    ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+{
+    return wrap(flushbuffer, env, argv);
+}
+
 static ERL_NIF_TERM sh_open(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
     return wrap(open, env, argv);
@@ -911,15 +924,15 @@ static ErlNifFunc nif_funcs[] = {{"get_handle", 2, get_handle},
     {"refresh_helper_params", 2, sh_refresh_helper_params},
     {"getattr", 2, sh_getattr}, {"access", 3, sh_access},
     {"readdir", 4, sh_readdir}, {"listobjects", 5, sh_listobjects},
-    {"mknod", 5, sh_mknod}, {"mkdir", 3, sh_mkdir},
-    {"unlink", 3, sh_unlink}, {"rmdir", 2, sh_rmdir},
-    {"symlink", 3, sh_symlink}, {"rename", 3, sh_rename}, {"link", 3, sh_link},
-    {"chmod", 3, sh_chmod}, {"chown", 4, sh_chown},
-    {"truncate", 4, sh_truncate}, {"setxattr", 6, sh_setxattr},
-    {"getxattr", 3, sh_getxattr}, {"removexattr", 3, sh_removexattr},
-    {"listxattr", 2, sh_listxattr}, {"open", 3, sh_open}, {"read", 3, sh_read},
-    {"write", 3, sh_write}, {"release", 1, sh_release}, {"flush", 1, sh_flush},
-    {"fsync", 2, sh_fsync}};
+    {"mknod", 5, sh_mknod}, {"mkdir", 3, sh_mkdir}, {"unlink", 3, sh_unlink},
+    {"rmdir", 2, sh_rmdir}, {"symlink", 3, sh_symlink},
+    {"rename", 3, sh_rename}, {"link", 3, sh_link}, {"chmod", 3, sh_chmod},
+    {"chown", 4, sh_chown}, {"truncate", 4, sh_truncate},
+    {"setxattr", 6, sh_setxattr}, {"getxattr", 3, sh_getxattr},
+    {"removexattr", 3, sh_removexattr}, {"listxattr", 2, sh_listxattr},
+    {"open", 3, sh_open}, {"read", 3, sh_read}, {"write", 3, sh_write},
+    {"release", 1, sh_release}, {"flush", 1, sh_flush}, {"fsync", 2, sh_fsync},
+    {"flushbuffer", 3, sh_flushbuffer}};
 
 ERL_NIF_INIT(helpers_nif, nif_funcs, load, NULL, NULL, NULL);
 
