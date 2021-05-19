@@ -36,23 +36,23 @@ get_test(Config) ->
     [Node | _] = ?config(op_worker_nodes, Config),
     User1Sess = logic_tests_common:get_user_session(Config, ?USER_1),
     
-    AtmWfSchemaGriMatcher = #gri{type = od_atm_workflow_schema, id = ?ATM_WORKFLOW_SCHEMA_1, aspect = instance, _ = '_'},
+    AtmWorkflowSchemaGriMatcher = #gri{type = od_atm_workflow_schema, id = ?ATM_WORKFLOW_SCHEMA_1, aspect = instance, _ = '_'},
     
-    GraphCalls = logic_tests_common:count_reqs(Config, graph, AtmWfSchemaGriMatcher),
+    GraphCalls = logic_tests_common:count_reqs(Config, graph, AtmWorkflowSchemaGriMatcher),
 
     ?assertMatch(
         {ok, ?ATM_WORKFLOW_SCHEMA_PRIVATE_DATA_MATCHER(?ATM_WORKFLOW_SCHEMA_1)},
         rpc:call(Node, atm_workflow_schema_logic, get, [User1Sess, ?ATM_WORKFLOW_SCHEMA_1])
     ),
 
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, AtmWfSchemaGriMatcher)),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, AtmWorkflowSchemaGriMatcher)),
 
-    % AtmWfSchema private data should now be cached
+    % AtmWorkflowSchema private data should now be cached
     ?assertMatch(
         {ok, ?ATM_WORKFLOW_SCHEMA_PRIVATE_DATA_MATCHER(?ATM_WORKFLOW_SCHEMA_1)},
         rpc:call(Node, atm_workflow_schema_logic, get, [User1Sess, ?ATM_WORKFLOW_SCHEMA_1])
     ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, AtmWfSchemaGriMatcher)),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, AtmWorkflowSchemaGriMatcher)),
 
     % Make sure that provider can access non-cached data
     logic_tests_common:invalidate_cache(Config, od_atm_workflow_schema, ?ATM_WORKFLOW_SCHEMA_1),
@@ -60,7 +60,7 @@ get_test(Config) ->
         {ok, ?ATM_WORKFLOW_SCHEMA_PRIVATE_DATA_MATCHER(?ATM_WORKFLOW_SCHEMA_1)},
         rpc:call(Node, atm_workflow_schema_logic, get, [User1Sess, ?ATM_WORKFLOW_SCHEMA_1])
     ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, AtmWfSchemaGriMatcher)),
+    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, AtmWorkflowSchemaGriMatcher)),
     ok.
 
 
@@ -70,26 +70,26 @@ subscribe_test(Config) ->
 
     logic_tests_common:invalidate_cache(Config, od_atm_workflow_schema, ?ATM_WORKFLOW_SCHEMA_1),
     % Simulate received updates
-    AtmWfSchema1PrivateGRI = #gri{type = od_atm_workflow_schema, id = ?ATM_WORKFLOW_SCHEMA_1, aspect = instance, scope = private},
-    AtmWfSchema1PrivateData = ?ATM_WORKFLOW_SCHEMA_PRIVATE_DATA_VALUE(?ATM_WORKFLOW_SCHEMA_1),
+    AtmWorkflowSchema1PrivateGRI = #gri{type = od_atm_workflow_schema, id = ?ATM_WORKFLOW_SCHEMA_1, aspect = instance, scope = private},
+    AtmWorkflowSchema1PrivateData = ?ATM_WORKFLOW_SCHEMA_PRIVATE_DATA_VALUE(?ATM_WORKFLOW_SCHEMA_1),
     
-    AtmWfSchemaGriMatcher = #gri{type = od_atm_workflow_schema, id = ?ATM_WORKFLOW_SCHEMA_1, aspect = instance, _ = '_'},
-    GraphCalls = logic_tests_common:count_reqs(Config, graph, AtmWfSchemaGriMatcher),
+    AtmWorkflowSchemaGriMatcher = #gri{type = od_atm_workflow_schema, id = ?ATM_WORKFLOW_SCHEMA_1, aspect = instance, _ = '_'},
+    GraphCalls = logic_tests_common:count_reqs(Config, graph, AtmWorkflowSchemaGriMatcher),
 
     % private scope
     ?assertMatch(
         {ok, ?ATM_WORKFLOW_SCHEMA_PRIVATE_DATA_MATCHER(?ATM_WORKFLOW_SCHEMA_1)},
         rpc:call(Node, atm_workflow_schema_logic, get, [User1Sess, ?ATM_WORKFLOW_SCHEMA_1])
     ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, AtmWfSchemaGriMatcher)),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, AtmWorkflowSchemaGriMatcher)),
 
     NewName = <<"new_name">>,
     
-    ChangedData1 = AtmWfSchema1PrivateData#{
+    ChangedData1 = AtmWorkflowSchema1PrivateData#{
         <<"name">> => NewName,
         <<"revision">> => 6
     },
-    PushMessage1 = #gs_push_graph{gri = AtmWfSchema1PrivateGRI, data = ChangedData1, change_type = updated},
+    PushMessage1 = #gs_push_graph{gri = AtmWorkflowSchema1PrivateGRI, data = ChangedData1, change_type = updated},
     logic_tests_common:simulate_push(Config, PushMessage1),
 
     ?assertMatch(
@@ -99,11 +99,11 @@ subscribe_test(Config) ->
         }}},
         rpc:call(Node, atm_workflow_schema_logic, get, [User1Sess, ?ATM_WORKFLOW_SCHEMA_1])
     ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, AtmWfSchemaGriMatcher)),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, AtmWorkflowSchemaGriMatcher)),
 
 
     % Simulate a 'deleted' push and see if cache was invalidated
-    PushMessage4 = #gs_push_graph{gri = AtmWfSchema1PrivateGRI, change_type = deleted},
+    PushMessage4 = #gs_push_graph{gri = AtmWorkflowSchema1PrivateGRI, change_type = deleted},
     logic_tests_common:simulate_push(Config, PushMessage4),
     ?assertMatch(
         {error, not_found},
@@ -118,7 +118,7 @@ subscribe_test(Config) ->
         rpc:call(Node, atm_workflow_schema_logic, get, [User1Sess, ?ATM_WORKFLOW_SCHEMA_1])
     ),
 
-    PushMessage5 = #gs_push_nosub{gri = AtmWfSchema1PrivateGRI, reason = forbidden},
+    PushMessage5 = #gs_push_nosub{gri = AtmWorkflowSchema1PrivateGRI, reason = forbidden},
     logic_tests_common:simulate_push(Config, PushMessage5),
     ?assertMatch(
         {error, not_found},

@@ -247,9 +247,9 @@ end).
 -define(ATM_LAMBDA_INVENTORIES(__AtmLambda), [?ATM_INVENTORY_1]).
 
 % Mocked atm_workflow_schema data
--define(ATM_WORKFLOW_SCHEMA_NAME(__AtmWfSchema), __AtmWfSchema).
--define(ATM_WORKFLOW_SCHEMA_DESCRIPTION(__AtmWfSchema), <<"example description">>).
--define(ATM_WORKFLOW_SCHEMA_STORES(__AtmWfSchema), [
+-define(ATM_WORKFLOW_SCHEMA_NAME(__AtmWorkflowSchema), __AtmWorkflowSchema).
+-define(ATM_WORKFLOW_SCHEMA_DESCRIPTION(__AtmWorkflowSchema), <<"example description">>).
+-define(ATM_WORKFLOW_SCHEMA_STORES(__AtmWorkflowSchema), [
     #atm_store_schema{
         id = <<"store1Id">>,
         name = <<"store1Name">>,
@@ -273,7 +273,7 @@ end).
         requires_initial_value = false
     }
 ]).
--define(ATM_WORKFLOW_SCHEMA_LANES(__AtmWfSchema), [
+-define(ATM_WORKFLOW_SCHEMA_LANES(__AtmWorkflowSchema), [
     #atm_lane_schema{
         id = <<"lane1Id">>,
         name = <<"lane1Name">>,
@@ -293,7 +293,7 @@ end).
                         argument_mappings = [
                             #atm_task_schema_argument_mapper{
                                 argument_name = <<"lambda1ArgName">>,
-                                value_builder = #atm_argument_value_builder{
+                                value_builder = #atm_task_argument_value_builder{
                                     type = iterated_item, recipe = undefined
                                 }
                             }
@@ -319,7 +319,7 @@ end).
                         argument_mappings = [
                             #atm_task_schema_argument_mapper{
                                 argument_name = <<"lambda2ArgName">>,
-                                value_builder = #atm_argument_value_builder{
+                                value_builder = #atm_task_argument_value_builder{
                                     type = const, recipe = 27.8
                                 }
                             }
@@ -355,7 +355,7 @@ end).
                         argument_mappings = [
                             #atm_task_schema_argument_mapper{
                                 argument_name = <<"lambda3ArgName">>,
-                                value_builder = #atm_argument_value_builder{
+                                value_builder = #atm_task_argument_value_builder{
                                     type = object, recipe = #{}
                                 }
                             }
@@ -375,7 +375,7 @@ end).
                         argument_mappings = [
                             #atm_task_schema_argument_mapper{
                                 argument_name = <<"lambda4ArgName">>,
-                                value_builder = #atm_argument_value_builder{
+                                value_builder = #atm_task_argument_value_builder{
                                     type = onedatafs_credentials, recipe = undefined
                                 }
                             }
@@ -393,8 +393,8 @@ end).
         ]
     }
 ]).
--define(ATM_WORKFLOW_SCHEMA_STATE(__AtmWfSchema), incomplete).
--define(ATM_WORKFLOW_SCHEMA_INVENTORY(__AtmWfSchema), ?ATM_INVENTORY_1).
+-define(ATM_WORKFLOW_SCHEMA_STATE(__AtmWorkflowSchema), incomplete).
+-define(ATM_WORKFLOW_SCHEMA_INVENTORY(__AtmWorkflowSchema), ?ATM_INVENTORY_1).
 
 
 -define(MOCK_JOIN_GROUP_TOKEN, <<"mockJoinGroupToken">>).
@@ -586,14 +586,14 @@ end).
         atm_inventories = ?ATM_LAMBDA_INVENTORIES(__AtmLambda)
     }}).
 
--define(ATM_WORKFLOW_SCHEMA_PRIVATE_DATA_MATCHER(__AtmWfSchema),
-    #document{key = __AtmWfSchema, value = #od_atm_workflow_schema{
-        name = ?ATM_WORKFLOW_SCHEMA_NAME(__AtmWfSchema),
-        description = ?ATM_WORKFLOW_SCHEMA_DESCRIPTION(__AtmWfSchema),
-        stores = ?ATM_WORKFLOW_SCHEMA_STORES(__AtmWfSchema),
-        lanes = ?ATM_WORKFLOW_SCHEMA_LANES(__AtmWfSchema),
-        state = ?ATM_WORKFLOW_SCHEMA_STATE(__AtmWfSchema),
-        atm_inventory = ?ATM_WORKFLOW_SCHEMA_INVENTORY(__AtmWfSchema)
+-define(ATM_WORKFLOW_SCHEMA_PRIVATE_DATA_MATCHER(__AtmWorkflowSchema),
+    #document{key = __AtmWorkflowSchema, value = #od_atm_workflow_schema{
+        name = ?ATM_WORKFLOW_SCHEMA_NAME(__AtmWorkflowSchema),
+        description = ?ATM_WORKFLOW_SCHEMA_DESCRIPTION(__AtmWorkflowSchema),
+        stores = ?ATM_WORKFLOW_SCHEMA_STORES(__AtmWorkflowSchema),
+        lanes = ?ATM_WORKFLOW_SCHEMA_LANES(__AtmWorkflowSchema),
+        state = ?ATM_WORKFLOW_SCHEMA_STATE(__AtmWorkflowSchema),
+        atm_inventory = ?ATM_WORKFLOW_SCHEMA_INVENTORY(__AtmWorkflowSchema)
     }}).
 
 
@@ -811,13 +811,13 @@ end).
 }).
 
 
--define(ATM_WORKFLOW_SCHEMA_PRIVATE_DATA_VALUE(__AtmWfSchemaId), #{
+-define(ATM_WORKFLOW_SCHEMA_PRIVATE_DATA_VALUE(__AtmWorkflowSchemaId), #{
     <<"revision">> => 1,
-    <<"gri">> => gri:serialize(#gri{type = od_atm_workflow_schema, id = __AtmWfSchemaId, aspect = instance, scope = private}),
-    <<"name">> => ?ATM_WORKFLOW_SCHEMA_NAME(__AtmWfSchemaId),
-    <<"description">> => ?ATM_WORKFLOW_SCHEMA_DESCRIPTION(__AtmWfSchemaId),
-    <<"stores">> => jsonable_record:list_to_json(?ATM_WORKFLOW_SCHEMA_STORES(__AtmWfSchemaId), atm_store_schema),
-    <<"lanes">> => jsonable_record:list_to_json(?ATM_WORKFLOW_SCHEMA_LANES(__AtmWfSchemaId), atm_lane_schema),
-    <<"state">> => automation:workflow_schema_state_to_json(?ATM_WORKFLOW_SCHEMA_STATE(__AtmWfSchemaId)),
-    <<"atmInventoryId">> => ?ATM_WORKFLOW_SCHEMA_INVENTORY(__AtmWfSchemaId)
+    <<"gri">> => gri:serialize(#gri{type = od_atm_workflow_schema, id = __AtmWorkflowSchemaId, aspect = instance, scope = private}),
+    <<"name">> => ?ATM_WORKFLOW_SCHEMA_NAME(__AtmWorkflowSchemaId),
+    <<"description">> => ?ATM_WORKFLOW_SCHEMA_DESCRIPTION(__AtmWorkflowSchemaId),
+    <<"stores">> => jsonable_record:list_to_json(?ATM_WORKFLOW_SCHEMA_STORES(__AtmWorkflowSchemaId), atm_store_schema),
+    <<"lanes">> => jsonable_record:list_to_json(?ATM_WORKFLOW_SCHEMA_LANES(__AtmWorkflowSchemaId), atm_lane_schema),
+    <<"state">> => automation:workflow_schema_state_to_json(?ATM_WORKFLOW_SCHEMA_STATE(__AtmWorkflowSchemaId)),
+    <<"atmInventoryId">> => ?ATM_WORKFLOW_SCHEMA_INVENTORY(__AtmWorkflowSchemaId)
 }).
