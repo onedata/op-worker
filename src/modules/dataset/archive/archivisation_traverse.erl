@@ -23,12 +23,16 @@
 
 
 %% API
--export([init_pool/0, stop_pool/0, start/3]).
+-export([init_pool/0, stop_pool/0, start/3, get_description/1,
+    get_files_to_archive_count/1, get_files_archived_count/1,
+    get_files_failed_count/1, get_byte_size/1
+]).
 
 %% Traverse behaviour callbacks
 -export([
     task_started/2,
     task_finished/2,
+    get_sync_info/1,
     get_job/1,
     update_job_progress/5,
     do_master_job/2,
@@ -38,6 +42,7 @@
 -define(POOL_NAME, atom_to_binary(?MODULE, utf8)).
 
 -type id() :: tree_traverse:id().
+-type description() :: traverse:description().
 
 %%%===================================================================
 %%% API functions
@@ -75,23 +80,48 @@ start(ArchiveDoc, DatasetDoc, UserCtx) ->
             },
             {ok, CallbackOrUndefined} = archive:get_preserved_callback(ArchiveDoc),
             AdditionalData2 = maps_utils:put_if_defined(AdditionalData, <<"callback">>, CallbackOrUndefined),
-
+            {ok, ArchiveDoc2} = archive:set_job_id(ArchiveId, TaskId),
             Options = #{
                 task_id => TaskId,
                 children_master_jobs_mode => async,
                 traverse_info => #{
-                    archive_doc => ArchiveDoc,
+                    archive_doc => ArchiveDoc2,
                     target_parent_guid => ArchiveDirGuid,
                     dataset_root_guid => file_ctx:get_logical_guid_const(DatasetRootCtx)
                 },
                 additional_data => AdditionalData2
             },
-
-            {ok, _} = tree_traverse:run(?POOL_NAME, DatasetRootCtx, UserId, Options),
+            {ok, TaskId} = tree_traverse:run(?POOL_NAME, DatasetRootCtx, UserId, Options),
             ok;
         {error, _} = Error ->
             Error
     end.
+
+
+-spec get_description(id()) -> {ok, description()} | {error, term()}.
+get_description(TaskId) ->
+    {ok, TaskDoc} = traverse_task:get(?POOL_NAME, TaskId),
+    traverse_task:get_description(TaskDoc).
+
+
+-spec get_files_archived_count(description()) -> non_neg_integer().
+get_files_archived_count(JobDescription) ->
+    maps:get(slave_jobs_done, JobDescription, 0).
+
+
+-spec get_files_to_archive_count(description()) -> non_neg_integer().
+get_files_to_archive_count(JobDescription) ->
+    maps:get(slave_jobs_delegated, JobDescription, 0).
+
+
+-spec get_files_failed_count(description()) -> non_neg_integer().
+get_files_failed_count(JobDescription) ->
+    maps:get(slave_jobs_failed, JobDescription, 0).
+
+
+-spec get_byte_size(description()) -> non_neg_integer().
+get_byte_size(JobsDescription) ->
+    maps:get(byte_size, JobsDescription, 0).
 
 %%%===================================================================
 %%% Traverse behaviour callbacks
@@ -109,21 +139,33 @@ task_finished(TaskId, _Pool) ->
     {ok, TaskDoc} = traverse_task:get(?POOL_NAME, TaskId),
     {ok, AdditionalData} = traverse_task:get_additional_data(TaskDoc),
     {ok, Description} = traverse_task:get_description(TaskDoc),
-    SlaveJobsFailed = maps:get(slave_jobs_failed, Description, 0),
-    MasterJobsFailed = maps:get(master_jobs_failed, Description, 0),
+
+    FilesToArchive = get_files_to_archive_count(Description),
+    FilesArchived = get_files_archived_count(Description),
+    FilesFailed = get_files_failed_count(Description),
+    ByteSize = get_byte_size(Description),
+
     ArchiveId = maps:get(<<"archiveId">>, AdditionalData),
     DatasetId = maps:get(<<"datasetId">>, AdditionalData),
     CallbackUrlOrUndefined = maps:get(<<"callback">>, AdditionalData, undefined),
+
+    SlaveJobsFailed = maps:get(slave_jobs_failed, Description, 0),
+    MasterJobsFailed = maps:get(master_jobs_failed, Description, 0),
     case SlaveJobsFailed + MasterJobsFailed =:= 0 of
         true ->
-            ok = archive:mark_preserved(ArchiveId),
+            ok = archive:mark_preserved(ArchiveId, FilesToArchive, FilesArchived, FilesFailed, ByteSize),
             archivisation_callback:notify_preserved(ArchiveId, DatasetId, CallbackUrlOrUndefined);
         false ->
-            ok = archive:mark_failed(ArchiveId),
+            ok = archive:mark_failed(ArchiveId, FilesToArchive, FilesArchived, FilesFailed, ByteSize),
             % TODO VFS-7662 send more descriptive error description to archivisation callback
             ErrorDescription = <<"Errors occurered during archivisation job.">>,
             archivisation_callback:notify_preservation_failed(ArchiveId, DatasetId, CallbackUrlOrUndefined, ErrorDescription)
     end.
+
+
+-spec get_sync_info(tree_traverse:master_job()) -> {ok, traverse:sync_info()}.
+get_sync_info(Job) ->
+    tree_traverse:get_sync_info(Job).
 
 
 -spec get_job(traverse:job_id() | tree_traverse_job:doc()) ->
@@ -176,7 +218,7 @@ do_master_job(Job = #tree_traverse{
     tree_traverse:do_master_job(Job2, MasterJobArgs).
 
 
--spec do_slave_job(tree_traverse:slave_job(), id()) -> ok.
+-spec do_slave_job(tree_traverse:slave_job(), id()) -> {ok, description()}.
 do_slave_job(#tree_traverse_slave{
     user_id = UserId,
     file_ctx = FileCtx,
@@ -185,5 +227,7 @@ do_slave_job(#tree_traverse_slave{
     {ok, UserCtx} = tree_traverse_session:acquire_for_task(UserId, ?POOL_NAME, TaskId),
     {FileName, FileCtx2} = file_ctx:get_aliased_name(FileCtx, UserCtx),
     FileGuid = file_ctx:get_logical_guid_const(FileCtx2),
-    {ok, _, _} = file_copy:copy(user_ctx:get_session_id(UserCtx), FileGuid, TargetParentGuid, FileName, false),
-    ok.
+    {ok, CopyGuid, _} = file_copy:copy(user_ctx:get_session_id(UserCtx), FileGuid, TargetParentGuid, FileName, false),
+    CopyCtx = file_ctx:new_by_guid(CopyGuid),
+    {FileSize, _} = file_ctx:get_file_size(CopyCtx),
+    {ok, #{byte_size => FileSize}}.

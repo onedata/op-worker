@@ -286,7 +286,8 @@ get_archive_info(ArchiveDoc = #document{}, ArchiveIndex) ->
     {ok, PreservedCallback} = archive:get_preserved_callback(ArchiveDoc),
     {ok, PurgedCallback} = archive:get_purged_callback(ArchiveDoc),
     {ok, Description} = archive:get_description(ArchiveDoc),
-    {ok, #archive_info{
+     ArchiveInfoWithStats = get_archive_stats(ArchiveDoc),
+    {ok, ArchiveInfoWithStats#archive_info{
         id = ArchiveId,
         dataset_id = DatasetId,
         state = State,
@@ -306,8 +307,34 @@ get_archive_info(ArchiveId, ArchiveIndex) ->
     get_archive_info(ArchiveDoc, ArchiveIndex).
 
 
+-spec get_archive_stats(archive:doc()) -> archive_info().
+get_archive_stats(ArchiveDoc) ->
+    case archive:is_finished(ArchiveDoc) of
+        true ->
+            {ok, FilesToArchive} = archive:get_files_to_archive(ArchiveDoc),
+            {ok, FilesArchived} = archive:get_files_archived(ArchiveDoc),
+            {ok, FilesFailed} = archive:get_files_failed(ArchiveDoc),
+            {ok, ByteSize} = archive:get_byte_size(ArchiveDoc),
+            #archive_info{
+                files_to_archive = FilesToArchive,
+                files_archived = FilesArchived,
+                files_failed = FilesFailed,
+                byte_size = ByteSize
+            };
+        false ->
+            {ok, JobId} = archive:get_job_id(ArchiveDoc),
+            {ok, ArchivisationJobDescription} = archivisation_traverse:get_description(JobId),
+            #archive_info{
+                files_to_archive = archivisation_traverse:get_files_to_archive_count(ArchivisationJobDescription),
+                files_archived = archivisation_traverse:get_files_archived_count(ArchivisationJobDescription),
+                files_failed = archivisation_traverse:get_files_failed_count(ArchivisationJobDescription),
+                byte_size = archivisation_traverse:get_byte_size(ArchivisationJobDescription)
+            }
+    end.
+
+
 -spec list_archives(dataset:id(), archives_list:opts(), listing_mode()) ->
-        {ok, archive_entries(), IsLast :: boolean()}.
+    {ok, archive_entries(), IsLast :: boolean()}.
 list_archives(DatasetId, ListingOpts, ListingMode) ->
     ArchiveEntries = archives_list:list(DatasetId, ListingOpts),
     IsLast = maps:get(limit, ListingOpts) > length(ArchiveEntries),

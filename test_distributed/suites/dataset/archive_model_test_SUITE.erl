@@ -123,6 +123,7 @@ all() -> [
 -define(TEST_ARCHIVE_PURGED_CALLBACK3, <<"https://purged3.org">>).
 
 -define(RAND_NAME, str_utils:rand_hex(20)).
+-define(RAND_CONTENT(Size), crypto:strong_rand_bytes(Size)).
 
 %===================================================================
 % Parallel tests - tests which can be safely run in parallel
@@ -133,28 +134,35 @@ archive_dataset_attached_to_space_dir(_Config) ->
     SpaceId = oct_background:get_space_id(?SPACE),
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
     #dataset_object{id = DatasetId} = onenv_dataset_test_utils:set_up_and_sync_dataset(user1, SpaceGuid),
-    simple_archive_crud_test_base(DatasetId).
+    simple_archive_crud_test_base(DatasetId, ?DIRECTORY_TYPE).
 
 archive_dataset_attached_to_dir(_Config) ->
     #object{dataset = #dataset_object{id = DatasetId}} =
         onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE, #dir_spec{dataset = #dataset_spec{}}),
-    simple_archive_crud_test_base(DatasetId).
+    simple_archive_crud_test_base(DatasetId, ?DIRECTORY_TYPE).
 
 archive_dataset_attached_to_file(_Config) ->
+    Size = 20,
     #object{dataset = #dataset_object{id = DatasetId}} =
-        onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE, #file_spec{dataset = #dataset_spec{}}),
-    simple_archive_crud_test_base(DatasetId).
+        onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE, #file_spec{
+            dataset = #dataset_spec{},
+            content = ?RAND_CONTENT(Size)
+        }),
+    simple_archive_crud_test_base(DatasetId, ?REGULAR_FILE_TYPE, Size).
 
 archive_dataset_attached_to_hardlink(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
     SpaceId = oct_background:get_space_id(?SPACE),
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
-    #object{guid = FileGuid} = onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE, #file_spec{}),
+    Size = 20,
+    #object{guid = FileGuid} = onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE, #file_spec{
+        content = ?RAND_CONTENT(Size)
+    }),
     {ok, #file_attr{guid = LinkGuid}} =
         lfm_proxy:make_link(P1Node, UserSessIdP1, ?FILE_REF(FileGuid), ?FILE_REF(SpaceGuid), ?RAND_NAME),
     #dataset_object{id = DatasetId} = onenv_dataset_test_utils:set_up_and_sync_dataset(user1, LinkGuid),
-    simple_archive_crud_test_base(DatasetId).
+    simple_archive_crud_test_base(DatasetId, ?LINK_TYPE, Size).
 
 archive_dataset_attached_to_symlink(_Config) ->
     #object{name = DirName} = onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE, #dir_spec{}),
@@ -163,7 +171,7 @@ archive_dataset_attached_to_symlink(_Config) ->
     #object{dataset = #dataset_object{id = DatasetId}} = onenv_file_test_utils:create_and_sync_file_tree(
         user1, ?SPACE, #symlink_spec{symlink_value = LinkTarget, dataset = #dataset_spec{}}
     ),
-    simple_archive_crud_test_base(DatasetId).
+    simple_archive_crud_test_base(DatasetId, ?SYMLINK_TYPE).
 
 archivisation_of_detached_dataset_should_be_impossible(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
@@ -481,7 +489,10 @@ remove_archive_privileges_test(_Config) ->
 % Test bases
 %===================================================================
 
-simple_archive_crud_test_base(DatasetId) ->
+simple_archive_crud_test_base(DatasetId, RootFileType) ->
+    simple_archive_crud_test_base(DatasetId, RootFileType, 0).
+
+simple_archive_crud_test_base(DatasetId, RootFileType, ExpSize) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     [P2Node] = oct_background:get_provider_nodes(paris),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
@@ -494,6 +505,11 @@ simple_archive_crud_test_base(DatasetId) ->
 
     ArchiveRootDirUuid = ?ARCHIVE_DIR_UUID(ArchiveId),
     ArchiveRootDirGuid = file_id:pack_guid(ArchiveRootDirUuid, SpaceId),
+
+    ExpectedFilesToArchive = case RootFileType of
+        ?DIRECTORY_TYPE -> 0;
+        _ -> 1
+    end,
 
     Timestamp = global_clock_timestamp(P1Node),
     Index = archives_list:index(ArchiveId, Timestamp),
@@ -511,7 +527,11 @@ simple_archive_crud_test_base(DatasetId) ->
         },
         preserved_callback = ?TEST_ARCHIVE_PRESERVED_CALLBACK1,
         purged_callback = ?TEST_ARCHIVE_PURGED_CALLBACK1,
-        description = ?TEST_DESCRIPTION1
+        description = ?TEST_DESCRIPTION1,
+        files_to_archive = ExpectedFilesToArchive,
+        files_archived = ExpectedFilesToArchive,
+        files_failed = 0,
+        byte_size = ExpSize
     },
 
     % verify whether Archive is visible in the local provider

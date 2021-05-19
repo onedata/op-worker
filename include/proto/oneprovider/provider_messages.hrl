@@ -329,7 +329,11 @@
     preserved_callback :: archive:callback(),
     purged_callback :: archive:callback(),
     description :: archive:description(),
-    index :: dataset_api:archive_index()
+    index :: dataset_api:archive_index(),
+    files_to_archive = 0 :: non_neg_integer(),
+    files_archived = 0 :: non_neg_integer(),
+    files_failed = 0 :: non_neg_integer(),
+    byte_size = 0 :: non_neg_integer()
 }).
 
 -record(archives, {

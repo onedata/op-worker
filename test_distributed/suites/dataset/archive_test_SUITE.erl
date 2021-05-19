@@ -91,7 +91,8 @@ all() -> [
 
 -define(TEST_TIMESTAMP, 1000000000).
 
--define(RAND_NAME, str_utils:rand_hex(20)).
+-define(RAND_NAME(), str_utils:rand_hex(20)).
+-define(RAND_CONTENT(Size), crypto:strong_rand_bytes(Size)).
 
 -define(RAND_NAME(Prefix), ?NAME(Prefix, rand:uniform(?RAND_RANGE))).
 -define(NAME(Prefix, Number), str_utils:join_binary([Prefix, integer_to_binary(Number)], <<"_">>)).
@@ -152,12 +153,16 @@ archive_dataset_attached_to_dir(_Config) ->
     archive_simple_dataset_test_base(DirGuid, DatasetId, ArchiveId).
 
 archive_dataset_attached_to_file(_Config) ->
+    Size = 20,
     #object{
         guid = FileGuid,
         dataset = #dataset_object{
             id = DatasetId,
             archives = [#archive_object{id = ArchiveId}]
-    }} = onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, #file_spec{dataset = #dataset_spec{archives = 1}}),
+    }} = onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, #file_spec{
+        dataset = #dataset_spec{archives = 1},
+        content = ?RAND_CONTENT(Size)
+    }),
     archive_simple_dataset_test_base(FileGuid, DatasetId, ArchiveId).
 
 archive_dataset_attached_to_hardlink(_Config) ->
@@ -165,9 +170,12 @@ archive_dataset_attached_to_hardlink(_Config) ->
     UserSessIdP1 = oct_background:get_user_session_id(?USER1, krakow),
     SpaceId = oct_background:get_space_id(?SPACE),
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
-    #object{guid = FileGuid} = onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, #file_spec{}),
+    Size = 20,
+    #object{guid = FileGuid} = onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, #file_spec{
+        content = ?RAND_CONTENT(Size)
+    }),
     {ok, #file_attr{guid = LinkGuid}} =
-        lfm_proxy:make_link(P1Node, UserSessIdP1, ?FILE_REF(FileGuid), ?FILE_REF(SpaceGuid), ?RAND_NAME),
+        lfm_proxy:make_link(P1Node, UserSessIdP1, ?FILE_REF(FileGuid), ?FILE_REF(SpaceGuid), ?RAND_NAME()),
     #dataset_object{
         id = DatasetId,
         archives = [#archive_object{id = ArchiveId}]
@@ -211,7 +219,13 @@ archive_simple_dataset_test_base(Guid, DatasetId, ArchiveId) ->
         Node = oct_background:get_random_provider_node(Provider),
         SessionId = oct_background:get_user_session_id(?USER1, Provider),
         assert_archive_dir_structure_is_correct(Node, SessionId, SpaceId, DatasetId, ArchiveId),
-        assert_archive_is_preserved(Node, SessionId, ArchiveId, Guid)
+        {ok, #file_attr{type = Type, size = Size}} = lfm_proxy:stat(Node, SessionId, ?FILE_REF(Guid)),
+        {FileCount, ExpSize} = case Type of
+            ?DIRECTORY_TYPE -> {0, 0};
+            ?SYMLINK_TYPE -> {1, 0};
+            _ -> {1, Size}
+        end,
+        assert_archive_is_preserved(Node, SessionId, ArchiveId, Guid, FileCount, ExpSize)
     end, oct_background:get_space_supporting_providers(?SPACE)).
 
 archive_dataset_tree_test_base(FileStructure) ->
@@ -223,11 +237,15 @@ archive_dataset_tree_test_base(FileStructure) ->
         dataset = #dataset_object{id = DatasetId}
     } = onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, #dir_spec{dataset = #dataset_spec{}}),
 
-    lfm_test_utils:create_files_tree(Node, SessId, FileStructure, RootGuid),
+    {_, FileGuids} = lfm_test_utils:create_files_tree(Node, SessId, FileStructure, RootGuid),
 
     {ok, ArchiveId} =
         lfm_proxy:archive_dataset(Node, SessId, DatasetId, #archive_config{layout = ?ARCHIVE_PLAIN_LAYOUT}, <<>>),
-    assert_archive_is_preserved(Node, SessId, ArchiveId, RootGuid).
+    {FileCount, _} = lists:foldl(fun({Dirs, Files}, {Acc, PrevDirs}) ->
+        {Acc + PrevDirs * Files, Dirs}
+    end, {0, 1}, FileStructure),
+    % created files are empty therefore expected size is 0
+    assert_archive_is_preserved(Node, SessId, ArchiveId, RootGuid, length(FileGuids), 0).
 
 %===================================================================
 % SetUp and TearDown functions
@@ -315,9 +333,14 @@ assert_archive_dir_exists(Node, SessionId, SpaceId, DatasetId, ArchiveId) ->
     }}, lfm_proxy:stat(Node, SessionId, ?FILE_REF(ArchiveDirGuid)), ?ATTEMPTS).
 
 
-assert_archive_is_preserved(Node, SessionId, ArchiveId, RootGuid) ->
-    ?assertMatch({ok, #archive_info{state = ?ARCHIVE_PRESERVED}},
-        lfm_proxy:get_archive_info(Node, SessionId, ArchiveId), ?ATTEMPTS),
+assert_archive_is_preserved(Node, SessionId, ArchiveId, RootGuid, FileCount, ExpSize) ->
+    ?assertMatch({ok, #archive_info{
+        state = ?ARCHIVE_PRESERVED,
+        files_to_archive = FileCount,
+        files_archived = FileCount,
+        files_failed = 0,
+        byte_size = ExpSize
+    }}, lfm_proxy:get_archive_info(Node, SessionId, ArchiveId), ?ATTEMPTS),
     ArchiveDirUuid = ?ARCHIVE_DIR_UUID(ArchiveId),
     SpaceId = file_id:guid_to_space_id(RootGuid),
     ArchiveDirGuid = file_id:pack_guid(ArchiveDirUuid, SpaceId),
