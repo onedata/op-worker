@@ -103,7 +103,7 @@ update(AtmContainer, Operation, Options, Item) ->
 -spec delete(record()) -> ok | no_return().
 delete(AtmContainer) ->
     RecordType = utils:record_type(AtmContainer),
-    RecordType:update(AtmContainer).
+    RecordType:delete(AtmContainer).
 
 
 %%%===================================================================

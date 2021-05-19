@@ -9,7 +9,7 @@
 %%% Module with infinite log API for the use in automation store.
 %%% @end
 %%%-------------------------------------------------------------------
--module(atm_store_infinite_log).
+-module(atm_infinite_log_store_backend).
 -author("Michal Stanisz").
 
 %% API

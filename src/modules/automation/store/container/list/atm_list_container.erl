@@ -53,7 +53,7 @@
 create(AtmDataSpec, undefined) ->
     create_container(AtmDataSpec);
 create(AtmDataSpec, InitialValue) when is_list(InitialValue) ->
-    assert_data_batch(AtmDataSpec, InitialValue),
+    validate_data_batch(AtmDataSpec, InitialValue),
     update(create_container(AtmDataSpec), append, #{<<"isBatch">> => true}, InitialValue);
 create(_AtmDataSpec, _InitialValue) ->
     throw(?ERROR_ATM_BAD_DATA(<<"initialValue">>, <<"not a list">>)).
@@ -73,9 +73,9 @@ acquire_iterator(#atm_list_container{backend_id = BackendId}) ->
     record() | no_return().
 update(#atm_list_container{} = Record, append, #{<<"isBatch">> := true}, Batch) when is_list(Batch) ->
     #atm_list_container{data_spec = AtmDataSpec, backend_id = BackendId} = Record,
-    assert_data_batch(AtmDataSpec, Batch),
+    validate_data_batch(AtmDataSpec, Batch),
     lists:foreach(fun(Item) ->
-        ok = atm_store_infinite_log:append(BackendId, json_utils:encode(Item))
+        ok = atm_infinite_log_store_backend:append(BackendId, json_utils:encode(Item))
     end, Batch),
     Record;
 update(#atm_list_container{} = Record, append, Options, Item) ->
@@ -86,7 +86,7 @@ update(_Record, _Operation, _Options, _Item) ->
 
 -spec delete(record()) -> ok.
 delete(#atm_list_container{backend_id = BackendId}) ->
-    atm_store_infinite_log:destroy(BackendId).
+    atm_infinite_log_store_backend:destroy(BackendId).
 
 
 %%%===================================================================
@@ -125,15 +125,15 @@ db_decode(#{<<"dataSpec">> := AtmDataSpecJson, <<"backendId">> := BackendId}, Ne
 
 -spec create_container(atm_data_spec:record()) -> record().
 create_container(AtmDataSpec) ->
-    {ok, Id} = atm_store_infinite_log:create(#{}),
+    {ok, Id} = atm_infinite_log_store_backend:create(#{}),
     #atm_list_container{
         data_spec = AtmDataSpec,
         backend_id = Id
     }.
 
 
--spec assert_data_batch(atm_data_spec:record(), [json_utils:json_term()]) -> ok | no_return().
-assert_data_batch(AtmDataSpec, Batch) ->
+-spec validate_data_batch(atm_data_spec:record(), [json_utils:json_term()]) -> ok | no_return().
+validate_data_batch(AtmDataSpec, Batch) ->
     lists:foreach(fun(Item) ->
         atm_data_validator:validate(Item, AtmDataSpec)
     end, Batch).
