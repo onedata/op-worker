@@ -13,7 +13,7 @@
 -author("Bartosz Walkowicz").
 
 -include("modules/automation/atm_tmp.hrl").
--include("modules/automation/atm_wokflow_execution.hrl").
+-include("modules/automation/atm_execution.hrl").
 
 -include_lib("ctool/include/automation/automation.hrl").
 -include_lib("ctool/include/errors.hrl").
@@ -277,7 +277,7 @@ create_store(Node, AtmStoreSchema, InitialValue) ->
 -spec create_store_iterate(node(), atm_store_iterator_config:record()) ->
     atm_store_iterator:record().
 create_store_iterate(Node, AtmStoreIteratorConfig) ->
-    rpc:call(Node, atm_store_api, get_iterator, [AtmStoreIteratorConfig]).
+    rpc:call(Node, atm_store_api, acquire_iterator, [AtmStoreIteratorConfig]).
 
 
 %% @private

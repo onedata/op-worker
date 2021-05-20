@@ -53,7 +53,7 @@ create_all(AtmWorkflowExecutionId, AtmLaneNo, AtmParallelBoxNo, AtmTaskSchemas) 
             ),
             #{AtmTaskExecutionId => ?PENDING_STATUS}
         catch _:Reason ->
-            delete_all(maps:keys(Acc)),
+            catch delete_all(maps:keys(Acc)),
             throw(?ERROR_ATM_TASK_EXECUTION_CREATION_FAILED(AtmTaskSchemaId, Reason))
         end
     end, #{}, AtmTaskSchemas).
@@ -90,9 +90,9 @@ create(AtmWorkflowExecutionId, AtmLaneNo, AtmParallelBoxNo, #atm_task_schema{
         argument_specs = atm_task_execution_args:build_specs(AtmLambdaArgSpecs, AtmTaskArgMappers),
 
         status = ?PENDING_STATUS,
-        handled_items = 0,
-        processed_items = 0,
-        failed_items = 0
+        items_in_processing = 0,
+        items_processed = 0,
+        items_failed = 0
     }).
 
 
@@ -157,17 +157,17 @@ update_handled_items(AtmTaskExecutionId) ->
             (#atm_task_execution{
                 status = ?PENDING_STATUS,
                 status_changed = false,
-                handled_items = 0
+                items_in_processing = 0
             } = AtmTaskExecution) ->
                 {ok, AtmTaskExecution#atm_task_execution{
                     status = ?ACTIVE_STATUS,
                     status_changed = true,
-                    handled_items = 1
+                    items_in_processing = 1
                 }};
-            (#atm_task_execution{handled_items = HandledItems} = AtmTaskExecution) ->
+            (#atm_task_execution{items_in_processing = ItemsInProcessing} = AtmTaskExecution) ->
                 {ok, AtmTaskExecution#atm_task_execution{
                     status_changed = false,
-                    handled_items = HandledItems + 1
+                    items_in_processing = ItemsInProcessing + 1
                 }}
         end
     ),

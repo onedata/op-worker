@@ -24,7 +24,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([create/1]).
+-export([build/1]).
 
 % atm_container_iterator callbacks
 -export([get_next_batch/2, jump_to/2]).
@@ -33,15 +33,13 @@
 -export([version/0, db_encode/2, db_decode/2]).
 
 
--type item() :: json_utils:json_term().
-
 -record(atm_single_value_container_iterator, {
-    value :: undefined | item(),
+    value :: undefined | atm_execution:item(),
     exhausted = false :: boolean()
 }).
 -type record() :: #atm_single_value_container_iterator{}.
 
--export_type([item/0, record/0]).
+-export_type([record/0]).
 
 
 %%%===================================================================
@@ -49,8 +47,8 @@
 %%%===================================================================
 
 
--spec create(undefined | item()) -> record().
-create(Value) ->
+-spec build(undefined | atm_execution:item()) -> record().
+build(Value) ->
     #atm_single_value_container_iterator{value = Value, exhausted = false}.
 
 
@@ -60,7 +58,7 @@ create(Value) ->
 
 
 -spec get_next_batch(atm_container_iterator:batch_size(), record()) ->
-    {ok, [item()], iterator:cursor(), record()} | stop.
+    {ok, [atm_execution:item()], iterator:cursor(), record()} | stop.
 get_next_batch(_BatchSize, #atm_single_value_container_iterator{value = undefined}) ->
     stop;
 get_next_batch(_BatchSize, #atm_single_value_container_iterator{exhausted = true}) ->

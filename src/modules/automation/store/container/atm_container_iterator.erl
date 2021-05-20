@@ -31,15 +31,11 @@
 
 -type batch_size() :: pos_integer().
 
--type item() ::
-    atm_single_value_container_iterator:item() |
-    atm_range_container_iterator:item().
-
 -type record() ::
     atm_single_value_container_iterator:record() |
     atm_range_container_iterator:record().
 
--export_type([batch_size/0, item/0, record/0]).
+-export_type([batch_size/0, record/0]).
 
 
 %%%===================================================================
@@ -48,7 +44,7 @@
 
 
 -callback get_next_batch(batch_size(), record()) ->
-    {ok, [item()], iterator:cursor(), record()} | stop.
+    {ok, [atm_execution:item()], iterator:cursor(), record()} | stop.
 
 -callback jump_to(iterator:cursor(), record()) -> record().
 
@@ -59,7 +55,7 @@
 
 
 -spec get_next_batch(batch_size(), record()) ->
-    {ok, [item()], iterator:cursor(), record()} | stop.
+    {ok, [atm_execution:item()], iterator:cursor(), record()} | stop.
 get_next_batch(BatchSize, AtmContainerIterator) ->
     Module = utils:record_type(AtmContainerIterator),
     Module:get_next_batch(BatchSize, AtmContainerIterator).

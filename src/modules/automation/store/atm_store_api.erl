@@ -20,7 +20,7 @@
 %% API
 -export([
     create_all/2, create/2,
-    build_iterator_config/2, get_iterator/1,
+    build_iterator_config/2, acquire_iterator/1,
     delete_all/1, delete/1
 ]).
 
@@ -40,15 +40,13 @@
 -spec create_all([atm_store_schema:record()], initial_values()) ->
     registry() | no_return().
 create_all(AtmStoreSchemas, InitialValues) ->
-    lists:foldl(fun(#atm_store_schema{
-        id = AtmStoreSchemaId
-    } = AtmStoreSchema, Acc) ->
+    lists:foldl(fun(#atm_store_schema{id = AtmStoreSchemaId} = AtmStoreSchema, Acc) ->
         InitialValue = maps:get(AtmStoreSchemaId, InitialValues, undefined),
         try
             {ok, AtmStoreId} = create(AtmStoreSchema, InitialValue),
             Acc#{AtmStoreSchemaId => AtmStoreId}
         catch _:Reason ->
-            delete_all(maps:values(Acc)),
+            catch delete_all(maps:values(Acc)),
             throw(?ERROR_ATM_STORE_CREATION_FAILED(AtmStoreSchemaId, Reason))
         end
     end, #{}, AtmStoreSchemas).
@@ -89,11 +87,11 @@ build_iterator_config(AtmStoreRegistry, AtmStoreIteratorConfig) ->
     atm_store_iterator_config:build(AtmStoreRegistry, AtmStoreIteratorConfig).
 
 
--spec get_iterator(atm_store_iterator_config:record()) ->
+-spec acquire_iterator(atm_store_iterator_config:record()) ->
     atm_store_iterator:record().
-get_iterator(#atm_store_iterator_config{store_id = AtmStoreId} = AtmStoreIteratorConfig) ->
+acquire_iterator(#atm_store_iterator_config{store_id = AtmStoreId} = AtmStoreIteratorConfig) ->
     {ok, #atm_store{container = AtmContainer}} = atm_store:get(AtmStoreId),
-    atm_store_iterator:create(AtmStoreIteratorConfig, AtmContainer).
+    atm_store_iterator:build(AtmStoreIteratorConfig, AtmContainer).
 
 
 -spec delete_all([atm_store:id()]) -> ok.

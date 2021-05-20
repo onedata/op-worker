@@ -30,10 +30,10 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Asserts that give value is of expected type and all value constraints holds.
+%% Asserts that give value is of expected type and all value constraints hold.
 %% @end
 %%--------------------------------------------------------------------
--callback assert_instance(json_utils:json_term(), atm_data_type:value_constraints()) ->
+-callback assert_instance(atm_execution:item(), atm_data_type:value_constraints()) ->
     ok | no_return().
 
 
@@ -42,7 +42,7 @@
 %%%===================================================================
 
 
--spec assert_instance(json_utils:json_term(), atm_data_spec:record()) ->
+-spec assert_instance(atm_execution:item(), atm_data_spec:record()) ->
     ok | no_return().
 assert_instance(Value, AtmDataSpec) ->
     Module = get_callback_module(atm_data_spec:get_type(AtmDataSpec)),
@@ -56,6 +56,6 @@ assert_instance(Value, AtmDataSpec) ->
 
 %% @private
 -spec get_callback_module(atm_data_type:type()) -> module().
-get_callback_module(atm_integer_type) -> atm_integer;
-get_callback_module(atm_string_type) -> atm_string;
-get_callback_module(atm_object_type) -> atm_object.
+get_callback_module(atm_integer_type) -> atm_integer_value;
+get_callback_module(atm_string_type) -> atm_string_value;
+get_callback_module(atm_object_type) -> atm_object_value.

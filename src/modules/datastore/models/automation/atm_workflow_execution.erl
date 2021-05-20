@@ -116,7 +116,7 @@ get_record_struct(1) ->
                 {schema_id, string},
                 {name, string},
                 {status, atom},
-                {tasks, {custom, string, {json_utils, encode, decode}}}
+                {tasks, #{string => string}}
             ]}]},
 
             {store_iterator_config,

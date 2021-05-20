@@ -20,7 +20,7 @@
 -include("modules/datastore/datastore_models.hrl").
 
 %% API
--export([create/2]).
+-export([build/2]).
 
 %% iterator callbacks
 -export([get_next/1, jump_to/2]).
@@ -29,8 +29,6 @@
 -export([version/0, db_encode/2, db_decode/2]).
 
 
--type item() :: json_utils:json_term().
-
 -record(atm_store_iterator, {
     config :: atm_store_iterator_config:record(),
     data_spec :: atm_data_spec:record(),
@@ -38,7 +36,7 @@
 }).
 -type record() :: #atm_store_iterator{}.
 
--export_type([record/0, item/0]).
+-export_type([record/0]).
 
 
 %%%===================================================================
@@ -46,12 +44,12 @@
 %%%===================================================================
 
 
--spec create(atm_store_iterator_config:record(), atm_container:record()) -> record().
-create(AtmStoreIteratorConfig, AtmContainer) ->
+-spec build(atm_store_iterator_config:record(), atm_container:record()) -> record().
+build(AtmStoreIteratorConfig, AtmContainer) ->
     #atm_store_iterator{
         config = AtmStoreIteratorConfig,
         data_spec = atm_container:get_data_spec(AtmContainer),
-        container_iterator = atm_container:get_iterator(AtmContainer)
+        container_iterator = atm_container:acquire_iterator(AtmContainer)
     }.
 
 
@@ -60,7 +58,7 @@ create(AtmStoreIteratorConfig, AtmContainer) ->
 %%%===================================================================
 
 
--spec get_next(record()) -> {ok, item(), iterator:cursor(), record()} | stop.
+-spec get_next(record()) -> {ok, atm_execution:item(), iterator:cursor(), record()} | stop.
 get_next(#atm_store_iterator{
     config = #atm_store_iterator_config{strategy = #atm_store_iterator_serial_strategy{}},
     container_iterator = AtmContainerIterator

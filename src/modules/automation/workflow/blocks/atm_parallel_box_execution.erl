@@ -51,7 +51,7 @@ create_all(AtmWorkflowExecutionId, AtmLaneNo, AtmParallelBoxSchemas) ->
             ),
             [AtmParallelBoxExecution | Acc]
         catch _:Reason ->
-            delete_all(Acc),
+            catch delete_all(Acc),
             throw(?ERROR_ATM_PARALLEL_BOX_EXECUTION_CREATION_FAILED(AtmParallelBoxSchemaId, Reason))
         end
     end, [], lists_utils:enumerate(AtmParallelBoxSchemas))).

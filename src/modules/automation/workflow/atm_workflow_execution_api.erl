@@ -46,7 +46,7 @@ create(SpaceId, #atm_workflow_schema{
     AtmLaneExecutions = try
         atm_lane_execution:create_all(AtmWorkflowExecutionId, AtmStoreRegistry, AtmLaneSchemas)
     catch Type:Reason ->
-        atm_store_api:delete_all(maps:values(AtmStoreRegistry)),
+        catch atm_store_api:delete_all(maps:values(AtmStoreRegistry)),
         erlang:Type(Reason)
     end,
 
@@ -74,17 +74,17 @@ create(SpaceId, #atm_workflow_schema{
 
 -spec init(atm_workflow_execution:id()) -> ok | no_return().
 init(AtmWorkflowExecutionId) ->
-    {ok, #atm_workflow_execution{lanes = AtmLaneExecutions}} = transit_to_status(
+    {ok, #atm_workflow_execution{lanes = AtmLaneExecutions}} = transition_to_status(
         AtmWorkflowExecutionId, ?INITIALIZING_STATUS
     ),
 
     try
         atm_lane_execution:init_all(AtmLaneExecutions)
     catch Type:Reason ->
-        transit_to_failed_status(AtmWorkflowExecutionId),
+        transition_to_status(AtmWorkflowExecutionId, ?FAILED_STATUS),
         erlang:Type(Reason)
     end,
-    transit_to_status(AtmWorkflowExecutionId, ?ENQUEUED_STATUS),
+    transition_to_status(AtmWorkflowExecutionId, ?ENQUEUED_STATUS),
 
     ok.
 
@@ -135,9 +135,19 @@ report_task_status_change(
 
 
 %% @private
--spec transit_to_status(atm_workflow_execution:id(), atm_workflow_execution:status()) ->
+-spec transition_to_status(atm_workflow_execution:id(), atm_workflow_execution:status()) ->
     {ok, atm_workflow_execution:record()} | no_return().
-transit_to_status(AtmWorkflowExecutionId, NewStatus) ->
+transition_to_status(AtmWorkflowExecutionId, ?FAILED_STATUS) ->
+    % TODO should fail here change status of all lanes, pboxes and tasks ??
+    TransitFun = fun(#atm_workflow_execution{} = AtmWorkflowExecution) ->
+        {ok, AtmWorkflowExecution#atm_workflow_execution{status = ?FAILED_STATUS}}
+    end,
+    {ok, #document{value = AtmWorkflowExecutionRecord}} = atm_workflow_execution:update(
+        AtmWorkflowExecutionId, TransitFun
+    ),
+    {ok, AtmWorkflowExecutionRecord};
+
+transition_to_status(AtmWorkflowExecutionId, NewStatus) ->
     Diff = fun(#atm_workflow_execution{status = Status} = AtmWorkflowExecution) ->
         case atm_status_utils:is_transition_allowed(Status, NewStatus) of
             true ->
@@ -153,17 +163,6 @@ transit_to_status(AtmWorkflowExecutionId, NewStatus) ->
         {error, CurrStatus} ->
             throw(?ERROR_ATM_INVALID_STATUS_TRANSITION(CurrStatus, NewStatus))
     end.
-
-
-%% @private
--spec transit_to_failed_status(atm_workflow_execution:id()) -> ok.
-transit_to_failed_status(AtmWorkflowExecutionId) ->
-    % TODO should fail here change status of all lanes, pboxes and tasks ??
-    TransitFun = fun(#atm_workflow_execution{} = AtmWorkflowExecution) ->
-        {ok, AtmWorkflowExecution#atm_workflow_execution{status = ?FAILED_STATUS}}
-    end,
-    atm_workflow_execution:update(AtmWorkflowExecutionId, TransitFun),
-    ok.
 
 
 %% @private

@@ -20,7 +20,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% atm_container callbacks
--export([create/2, get_data_spec/1, get_iterator/1]).
+-export([create/2, get_data_spec/1, acquire_iterator/1]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
@@ -35,7 +35,7 @@
 %%      <<"start">> => integer(),  % default `0`
 %%      <<"step">> => integer()    % default `1`
 %% }
--type initial_value() :: map().
+-type initial_value() :: #{binary() => integer()}.
 
 -record(atm_range_container, {
     data_spec :: atm_data_spec:record(),
@@ -76,13 +76,13 @@ get_data_spec(#atm_range_container{data_spec = AtmDataSpec}) ->
     AtmDataSpec.
 
 
--spec get_iterator(record()) -> atm_range_container_iterator:record().
-get_iterator(#atm_range_container{
+-spec acquire_iterator(record()) -> atm_range_container_iterator:record().
+acquire_iterator(#atm_range_container{
     start_num = StartNum,
     end_num = EndNum,
     step = Step
 }) ->
-    atm_range_container_iterator:create(StartNum, EndNum, Step).
+    atm_range_container_iterator:build(StartNum, EndNum, Step).
 
 
 %%%===================================================================

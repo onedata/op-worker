@@ -19,17 +19,17 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% atm_container callbacks
--export([create/2, get_data_spec/1, get_iterator/1]).
+-export([create/2, get_data_spec/1, acquire_iterator/1]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
 
 
--type initial_value() :: undefined | json_utils:json_term().
+-type initial_value() :: undefined | atm_execution:item().
 
 -record(atm_single_value_container, {
     data_spec :: atm_data_spec:record(),
-    value :: undefined | json_utils:json_term()
+    value :: undefined | atm_execution:item()
 }).
 -type record() :: #atm_single_value_container{}.
 
@@ -42,12 +42,12 @@
 
 
 -spec create(atm_data_spec:record(), initial_value()) -> record() | no_return().
-create(AtmDataSpec, InitArgs) ->
-    InitArgs == undefined orelse atm_data_validator:assert_instance(InitArgs, AtmDataSpec),
+create(AtmDataSpec, InitialValue) ->
+    InitialValue == undefined orelse atm_data_validator:assert_instance(InitialValue, AtmDataSpec),
 
     #atm_single_value_container{
         data_spec = AtmDataSpec,
-        value = InitArgs
+        value = InitialValue
     }.
 
 
@@ -56,9 +56,9 @@ get_data_spec(#atm_single_value_container{data_spec = AtmDataSpec}) ->
     AtmDataSpec.
 
 
--spec get_iterator(record()) -> atm_single_value_container_iterator:record().
-get_iterator(#atm_single_value_container{value = Value}) ->
-    atm_single_value_container_iterator:create(Value).
+-spec acquire_iterator(record()) -> atm_single_value_container_iterator:record().
+acquire_iterator(#atm_single_value_container{value = Value}) ->
+    atm_single_value_container_iterator:build(Value).
 
 
 %%%===================================================================

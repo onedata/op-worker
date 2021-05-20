@@ -67,7 +67,7 @@ create(AtmWorkflowExecutionId, #atm_openfaas_operation_spec{} = OperationSpec) -
     assert_openfaas_configured(),
 
     #atm_openfaas_task_executor{
-        function_name = get_function_name(AtmWorkflowExecutionId, OperationSpec),
+        function_name = build_function_name(AtmWorkflowExecutionId, OperationSpec),
         operation_spec = OperationSpec
     }.
 
@@ -142,15 +142,15 @@ db_decode(#{
 %% must be unique.
 %% @end
 %%-------------------------------------------------------------------
--spec get_function_name(atm_workflow_execution:id(), atm_openfaas_operation_spec:record()) ->
+-spec build_function_name(atm_workflow_execution:id(), atm_openfaas_operation_spec:record()) ->
     binary().
-get_function_name(_AtmWorkflowExecutionId, #atm_openfaas_operation_spec{
+build_function_name(_AtmWorkflowExecutionId, #atm_openfaas_operation_spec{
     docker_image = DockerImage,
     docker_execution_options = #atm_docker_execution_options{mount_oneclient = false}
 }) ->
-    digest([DockerImage]);
+    datastore_key:new_from_digest([DockerImage]);
 
-get_function_name(AtmWorkflowExecutionId, #atm_openfaas_operation_spec{
+build_function_name(AtmWorkflowExecutionId, #atm_openfaas_operation_spec{
     docker_image = DockerImage,
     docker_execution_options = #atm_docker_execution_options{
         mount_oneclient = true,
@@ -158,15 +158,9 @@ get_function_name(AtmWorkflowExecutionId, #atm_openfaas_operation_spec{
         oneclient_options = OneclientOptions
     }
 }) ->
-    digest([AtmWorkflowExecutionId, DockerImage, MountPoint, OneclientOptions]).
-
-
-%% @private
--spec digest([binary()]) -> binary().
-digest(DigestComponents) ->
-    hex_utils:hex(crypto:hash_final(lists:foldl(fun(Bin, Ctx) ->
-        crypto:hash_update(Ctx, Bin)
-    end, crypto:hash_init(md5), DigestComponents))).
+    datastore_key:new_from_digest([
+        AtmWorkflowExecutionId, DockerImage, MountPoint, OneclientOptions
+    ]).
 
 
 %% @private
@@ -241,7 +235,7 @@ prepare_function_annotations(#init_ctx{executor = #atm_openfaas_task_executor{
 }) ->
     #{<<"annotations">> => #{
         % TODO VFS-7627 set proper annotation for oneclient mounts
-        <<"com.mountpoin">> => MountPoint,
+        <<"com.mountpoint">> => MountPoint,
         <<"com.options">> => OneclientOptions
     }}.
 

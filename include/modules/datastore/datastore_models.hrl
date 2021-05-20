@@ -1009,6 +1009,8 @@
     description :: automation:description(),
     requires_initial_value :: boolean(),
     initial_value :: undefined | json_utils:json_term(),
+    % Flag used to tell if content (items) update operation should be blocked
+    % (e.g when store is used as the iteration source for currently executed lane).
     frozen = false :: boolean(),
     type :: automation:store_type(),
     container :: atm_container:record()
@@ -1033,9 +1035,9 @@
     % would be needed (to compare 2 docs)
     status_changed = false :: boolean(),
 
-    handled_items = 0 :: non_neg_integer(),
-    processed_items = 0 :: non_neg_integer(),
-    failed_items = 0 :: non_neg_integer()
+    items_in_processing = 0 :: non_neg_integer(),
+    items_processed = 0 :: non_neg_integer(),
+    items_failed = 0 :: non_neg_integer()
 }).
 
 %% Model that holds information about an automation workflow execution

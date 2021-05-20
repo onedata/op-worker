@@ -52,7 +52,7 @@ create_all(AtmWorkflowExecutionId, AtmStoreRegistry, AtmLaneSchemas) ->
             ),
             [AtmLaneExecution | Acc]
         catch _:Reason ->
-            delete_all(Acc),
+            catch delete_all(Acc),
             throw(?ERROR_ATM_LANE_EXECUTION_CREATION_FAILED(AtmLaneSchemaId, Reason))
         end
     end, [], lists_utils:enumerate(AtmLaneSchemas))).

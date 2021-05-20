@@ -19,7 +19,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([create/3]).
+-export([build/3]).
 
 % atm_container_iterator callbacks
 -export([get_next_batch/2, jump_to/2]).
@@ -27,8 +27,6 @@
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
 
-
--type item() :: integer().
 
 -record(atm_range_container_iterator, {
     curr_num :: integer(),
@@ -38,7 +36,7 @@
 }).
 -type record() :: #atm_range_container_iterator{}.
 
--export_type([item/0, record/0]).
+-export_type([record/0]).
 
 
 %%%===================================================================
@@ -46,8 +44,8 @@
 %%%===================================================================
 
 
--spec create(integer(), integer(), integer()) -> record().
-create(Start, End, Step) ->
+-spec build(integer(), integer(), integer()) -> record().
+build(Start, End, Step) ->
     #atm_range_container_iterator{
         curr_num = Start,
         start_num = Start, end_num = End, step = Step
@@ -60,7 +58,7 @@ create(Start, End, Step) ->
 
 
 -spec get_next_batch(atm_container_iterator:batch_size(), record()) ->
-    {ok, [item()], iterator:cursor(), record()} | stop.
+    {ok, [atm_execution:item()], iterator:cursor(), record()} | stop.
 get_next_batch(BatchSize, #atm_range_container_iterator{
     curr_num = CurrNum,
     end_num = End,

@@ -101,7 +101,7 @@ get_record_struct(1) ->
         ]}]},
 
         {status, atom},
-        {handled_items, integer},
-        {processed_items, integer},
-        {failed_items, integer}
+        {items_in_processing, integer},
+        {items_processed, integer},
+        {items_failed, integer}
     ]}.

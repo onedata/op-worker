@@ -10,7 +10,7 @@
 %%% `atm_string_type`.
 %%% @end
 %%%-------------------------------------------------------------------
--module(atm_string).
+-module(atm_string_value).
 -author("Bartosz Walkowicz").
 
 -behaviour(atm_data_validator).
@@ -26,7 +26,7 @@
 %%%===================================================================
 
 
--spec assert_instance(json_utils:json_term(), atm_data_type:value_constraints()) ->
+-spec assert_instance(atm_execution:item(), atm_data_type:value_constraints()) ->
     ok | no_return().
 assert_instance(Value, _ValueConstraints) when is_binary(Value) ->
     ok;
