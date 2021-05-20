@@ -12,7 +12,7 @@
 -module(atm_workflow_execution).
 -author("Bartosz Walkowicz").
 
--include("modules/automation/atm_wokflow_execution.hrl").
+-include("modules/automation/atm_execution.hrl").
 -include("modules/datastore/datastore_runner.hrl").
 
 %% API

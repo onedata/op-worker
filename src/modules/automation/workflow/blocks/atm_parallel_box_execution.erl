@@ -12,7 +12,7 @@
 -module(atm_parallel_box_execution).
 -author("Bartosz Walkowicz").
 
--include("modules/automation/atm_wokflow_execution.hrl").
+-include("modules/automation/atm_execution.hrl").
 
 -export([
     create_all/3, create/4,

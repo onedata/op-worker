@@ -12,8 +12,8 @@
 -module(atm_task_execution_args).
 -author("Bartosz Walkowicz").
 
--include("modules/automation/atm_task_execution.hrl").
 -include("modules/automation/atm_tmp.hrl").
+-include("modules/automation/atm_execution.hrl").
 -include_lib("ctool/include/automation/automation.hrl").
 
 %% API

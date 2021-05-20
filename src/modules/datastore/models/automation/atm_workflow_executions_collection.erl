@@ -20,7 +20,7 @@
 -module(atm_workflow_executions_collection).
 -author("Bartosz Walkowicz").
 
--include("modules/automation/atm_wokflow_execution.hrl").
+-include("modules/automation/atm_execution.hrl").
 -include_lib("ctool/include/errors.hrl").
 
 %% API

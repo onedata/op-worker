@@ -5,7 +5,7 @@
 %%% cited in 'LICENSE.txt'.
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% This file contains definitions of macros used by atm_workflow_execution
+%%% This file contains definitions of macros used by automation execution
 %%% machinery.
 %%% @end
 %%%-------------------------------------------------------------------
@@ -19,9 +19,15 @@
 -include_lib("ctool/include/automation/automation.hrl").
 
 
--record(atm_store_iterator_config, {
-    store_id :: atm_store:id(),
-    strategy :: atm_store_iterator_spec:strategy()
+-record(atm_task_execution_ctx, {
+    item :: json_utils:json_term()
+}).
+
+-record(atm_task_execution_argument_spec, {
+    name :: automation:name(),
+    value_builder :: atm_argument_value_builder:record(),
+    data_spec :: atm_data_spec:record(),
+    is_batch :: boolean()
 }).
 
 -record(atm_parallel_box_execution, {
@@ -29,6 +35,11 @@
     name :: automation:name(),
     status :: atm_parallel_box_execution:status(),
     tasks :: #{atm_task_execution:id() => atm_task_execution:status()}
+}).
+
+-record(atm_store_iterator_config, {
+    store_id :: atm_store:id(),
+    strategy :: atm_store_iterator_spec:strategy()
 }).
 
 -record(atm_lane_execution, {

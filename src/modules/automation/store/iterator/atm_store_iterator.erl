@@ -15,8 +15,8 @@
 -behaviour(iterator).
 -behaviour(persistent_record).
 
+-include("modules/automation/atm_execution.hrl").
 -include("modules/automation/atm_tmp.hrl").
--include("modules/automation/atm_wokflow_execution.hrl").
 -include("modules/datastore/datastore_models.hrl").
 
 %% API

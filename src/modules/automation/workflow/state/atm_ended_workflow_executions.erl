@@ -11,7 +11,7 @@
 -module(atm_ended_workflow_executions).
 -author("Bartosz Walkowicz").
 
--include("modules/automation/atm_wokflow_execution.hrl").
+-include("modules/automation/atm_execution.hrl").
 
 %% API
 -export([list/2, add/1, delete/1]).

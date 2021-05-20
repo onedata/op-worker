@@ -12,10 +12,9 @@
 -module(atm_task_execution_api).
 -author("Bartosz Walkowicz").
 
--include("modules/fslogic/fslogic_common.hrl").
--include("modules/automation/atm_task_execution.hrl").
--include("modules/automation/atm_wokflow_execution.hrl").
+-include("modules/automation/atm_execution.hrl").
 -include("modules/datastore/datastore_models.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 
 %% API
 -export([

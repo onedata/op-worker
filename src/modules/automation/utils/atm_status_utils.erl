@@ -13,7 +13,7 @@
 -module(atm_status_utils).
 -author("Bartosz Walkowicz").
 
--include("modules/automation/atm_wokflow_execution.hrl").
+-include("modules/automation/atm_execution.hrl").
 
 %% API
 -export([
