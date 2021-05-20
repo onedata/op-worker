@@ -63,4 +63,5 @@ validate(AtmWorkflowExecutionCtx, Value, AtmDataSpec) ->
 -spec get_callback_module(atm_data_type:type()) -> module().
 get_callback_module(atm_integer_type) -> atm_integer_value;
 get_callback_module(atm_string_type) -> atm_string_value;
-get_callback_module(atm_object_type) -> atm_object_value.
+get_callback_module(atm_object_type) -> atm_object_value;
+get_callback_module(atm_file_type) -> atm_file_value.

@@ -153,4 +153,5 @@ acquire_iterator(AtmExecutionEnv, #atm_store_iterator_spec{
     atm_container:type().
 store_type_to_container_type(single_value) -> atm_single_value_container;
 store_type_to_container_type(range) -> atm_range_container;
-store_type_to_container_type(list) -> atm_list_container.
+store_type_to_container_type(list) -> atm_list_container;
+store_type_to_container_type(tree_forest) -> atm_tree_forest_container.

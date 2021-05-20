@@ -21,7 +21,8 @@
     create_store/4,
     apply_operation/6,
     acquire_store_iterator/3, 
-    iterator_get_next/2
+    iterator_get_next/2,
+    iterator_mark_exhausted/2
 ]).
 -export([
     split_into_chunks/3
@@ -102,6 +103,11 @@ acquire_store_iterator(ProviderSelector, AtmWorkflowExecutionEnv, AtmStoreIterat
 iterator_get_next(ProviderSelector, Iterator) ->
     Node = oct_background:get_random_provider_node(ProviderSelector),
     rpc:call(Node, iterator, get_next, [Iterator]).
+
+
+-spec iterator_mark_exhausted(node(), iterator:iterator()) -> ok.
+iterator_mark_exhausted(Node, Iterator) ->
+    rpc:call(Node, iterator, mark_exhausted, [Iterator]).
 
 
 -spec split_into_chunks(pos_integer(), [[item()]], [item()]) ->
