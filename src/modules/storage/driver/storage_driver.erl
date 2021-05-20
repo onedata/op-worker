@@ -215,7 +215,6 @@ mkdir(Handle, Mode) ->
     ok | error_reply().
 mkdir(#sd_handle{file = FileId} = SDHandle, Mode, Recursive) ->
     run_with_helper_handle(retry_as_root_and_chown, SDHandle, fun(HelperHandle) ->
-        fun(_) -> ok end,
         case helpers:mkdir(HelperHandle, FileId, Mode) of
             ok ->
                 ok;
