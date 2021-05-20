@@ -29,6 +29,9 @@
 %% Onepanel RPC API
 -export([prepare_helper_args/2, prepare_user_ctx_params/2]).
 
+%% Export for eunit tests.
+-export([parse_url/1]).
+
 -type name() :: helper:name().
 -type args() :: helper:args().
 -type user_ctx() :: helper:user_ctx().
@@ -37,6 +40,8 @@
 -type optional_field() :: {optional, field()}.
 -type field_spec() :: field() | optional_field().
 
+-define(DEFAULT_HTTP_PORT, 80).
+-define(DEFAULT_HTTPS_PORT, 443).
 
 %%%===================================================================
 %%% API
@@ -317,16 +322,38 @@ remove_field(ToRemove, Fields) ->
 -spec parse_url(URL :: binary()) ->
     {ok, Scheme :: http | https, HostAndPort :: binary()}.
 parse_url(URL) ->
-    #{scheme := Scheme, host := Host, port := Port, path := Path} = url_utils:parse(URL),
+    #{scheme := ParsedScheme, host := ParsedHost, port := ParsedPort, path := ParsedPath} = url_utils:parse(URL),
 
-    ValidatedScheme = case Port of
-        443 -> https;
-        8443 -> https;
-        80 -> http;
-        6743 -> http;
-        _ -> throw(?ERROR_MALFORMED_DATA)
+    URLScheme = get_scheme_from_url(URL),
+    URLPort = get_port_from_url(URL, ParsedHost),
+
+    {FinalScheme, FinalPort} = case URLPort of
+        undefined ->
+            case URLScheme of
+                http -> {http, ?DEFAULT_HTTP_PORT};
+                https -> {https, ?DEFAULT_HTTPS_PORT};
+                undefined -> throw(?ERROR_MALFORMED_DATA)
+            end;
+        ?DEFAULT_HTTP_PORT ->
+            case URLScheme of
+                undefined -> {http, ?DEFAULT_HTTP_PORT};
+                http -> {http, ?DEFAULT_HTTP_PORT};
+                https -> {https, ?DEFAULT_HTTP_PORT}
+            end;
+        ?DEFAULT_HTTPS_PORT ->
+            case URLScheme of
+                undefined -> {https, ?DEFAULT_HTTPS_PORT};
+                http -> {http, ?DEFAULT_HTTPS_PORT};
+                https -> {https, ?DEFAULT_HTTPS_PORT}
+            end;
+        CustomPort ->
+            case URLScheme of
+                undefined -> throw(?ERROR_MALFORMED_DATA);
+                http -> {http, CustomPort};
+                https -> {https, CustomPort}
+            end
     end,
-    {ok, ValidatedScheme, str_utils:format_bin("~ts:~B~ts", [Host, Port, Path])}.
+    {ok, FinalScheme, str_utils:format_bin("~ts:~B~ts", [ParsedHost, FinalPort, ParsedPath])}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -368,3 +395,29 @@ validate_field(Field, Params) ->
         #{} ->
             {error, {missing_field, Field}}
     end.
+
+
+%% @private
+-spec get_scheme_from_url(binary()) -> http | https | undefined.
+get_scheme_from_url(URL) ->
+    case hd(binary:split(URL, [<<"://">>])) of
+        <<"https">> -> https;
+        <<"http">> -> http;
+        _ -> undefined
+    end.
+
+
+%% @private
+-spec get_port_from_url(binary(), binary()) -> integer() | undefined.
+get_port_from_url(URL, Hostname) ->
+    UrlSplit = binary:split(URL, Hostname),
+    PortAndPathString = binary_to_list(lists:nth(2, UrlSplit)),
+    case lists:sublist(PortAndPathString, 1, 1) == ":" of
+        true ->
+            PortAndPathStringStripped = string:strip(PortAndPathString, left, $:),
+            list_to_integer(hd(string:split(PortAndPathStringStripped, "/")));
+        false ->
+            undefined
+    end.
+
+
