@@ -29,22 +29,50 @@
     {<<"https://hostname">>, {ok, https, <<"hostname:443/">>}},
     {<<"https://hostname/path">>, {ok, https, <<"hostname:443/path">>}},
 
-    {<<"http://hostname:80/">>, {ok, http, <<"hostname:80/">>}},
+    {<<"http://hostname:80">>, {ok, http, <<"hostname:80/">>}},
     {<<"http://hostname:80/path">>, {ok, http, <<"hostname:80/path">>}},
     {<<"https://hostname:443/">>, {ok, https, <<"hostname:443/">>}},
     {<<"https://hostname:443/path">>, {ok, https, <<"hostname:443/path">>}},
 
-    {<<"http://hostname:1234/">>, {ok, http, <<"hostname:1234/">>}},
+    {<<"http://hostname:443">>, {ok, http, <<"hostname:443/">>}},
+    {<<"http://hostname:443/path">>, {ok, http, <<"hostname:443/path">>}},
+    {<<"https://hostname:80">>, {ok, https, <<"hostname:80/">>}},
+    {<<"https://hostname:80/path">>, {ok, https, <<"hostname:80/path">>}},
+
+    {<<"http://hostname:1234">>, {ok, http, <<"hostname:1234/">>}},
     {<<"http://hostname:1234/path">>, {ok, http, <<"hostname:1234/path">>}},
-    {<<"https://hostname:1234/">>, {ok, https, <<"hostname:1234/">>}},
-    {<<"https://hostname:1234/path">>, {ok, https, <<"hostname:1234/path">>}}
+    {<<"https://hostname:1234">>, {ok, https, <<"hostname:1234/">>}},
+    {<<"https://hostname:1234/path">>, {ok, https, <<"hostname:1234/path">>}},
+
+    {<<" http://hostname:1234">>, {ok, http, <<"hostname:1234/">>}},
+    {<<" http://hostname:1234/path">>, {ok, http, <<"hostname:1234/path">>}},
+    {<<" https://hostname:1234">>, {ok, https, <<"hostname:1234/">>}},
+    {<<" https://hostname:1234/path">>, {ok, https, <<"hostname:1234/path">>}},
+    {<<"http://hostname:1234  ">>, {ok, http, <<"hostname:1234/">>}},
+    {<<"http://hostname:1234/path  ">>, {ok, http, <<"hostname:1234/path">>}},
+    {<<"https://hostname:1234  ">>, {ok, https, <<"hostname:1234/">>}},
+    {<<"https://hostname:1234/path  ">>, {ok, https, <<"hostname:1234/path">>}},
+    {<<" http://hostname:1234  ">>, {ok, http, <<"hostname:1234/">>}},
+    {<<" http://hostname:1234/path  ">>, {ok, http, <<"hostname:1234/path">>}},
+    {<<" https://hostname:1234  ">>, {ok, https, <<"hostname:1234/">>}},
+    {<<" https://hostname:1234/path  ">>, {ok, https, <<"hostname:1234/path">>}}
 ]).
 
 -define(INCORRECT_URL_BATCH, [
     <<"hostname">>,
     <<"hostname/path">>,
     <<"hostname:1234">>,
-    <<"hostname:1234/path">>
+    <<"hostname:1234/path">>,
+    <<"hostname:string">>,
+    <<"hostname:string/path">>,
+    <<"http://hostname:string">>,
+    <<"http://hostname:string/path">>,
+    <<"https://hostname:string">>,
+    <<"https://hostname:string/path">>,
+    <<"unknown://hostname">>,
+    <<"unknown://hostname/path">>,
+    <<"unknown://hostname:1234">>,
+    <<"unknown://hostname:1234/path">>
 ]).
 
 

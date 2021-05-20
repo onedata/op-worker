@@ -330,38 +330,43 @@ remove_field(ToRemove, Fields) ->
 -spec parse_url(URL :: binary()) ->
     {ok, Scheme :: http | https, HostAndPort :: binary()}.
 parse_url(URL) ->
-    #{scheme := ParsedScheme, host := ParsedHost, port := ParsedPort, path := ParsedPath} = url_utils:parse(URL),
+    try
+        parse_url_insecure(URL)
+    catch
+        _:_ -> throw(?ERROR_MALFORMED_DATA)
+    end.
 
-    URLScheme = get_scheme_from_url(URL),
-    URLPort = get_port_from_url(URL, ParsedHost),
 
-    {FinalScheme, FinalPort} = case URLPort of
-        undefined ->
-            case URLScheme of
-                http -> {http, ?DEFAULT_HTTP_PORT};
-                https -> {https, ?DEFAULT_HTTPS_PORT};
-                undefined -> throw(?ERROR_MALFORMED_DATA)
-            end;
-        ?DEFAULT_HTTP_PORT ->
-            case URLScheme of
-                undefined -> {http, ?DEFAULT_HTTP_PORT};
-                http -> {http, ?DEFAULT_HTTP_PORT};
-                https -> {https, ?DEFAULT_HTTP_PORT}
-            end;
-        ?DEFAULT_HTTPS_PORT ->
-            case URLScheme of
-                undefined -> {https, ?DEFAULT_HTTPS_PORT};
-                http -> {http, ?DEFAULT_HTTPS_PORT};
-                https -> {https, ?DEFAULT_HTTPS_PORT}
-            end;
-        CustomPort ->
-            case URLScheme of
-                undefined -> throw(?ERROR_MALFORMED_DATA);
-                http -> {http, CustomPort};
-                https -> {https, CustomPort}
-            end
+%% @private
+-spec parse_url_insecure(URL :: binary()) ->
+    {ok, Scheme :: http | https, HostAndPort :: binary()} | no_return().
+parse_url_insecure(URL) ->
+    URLTrimmed = list_to_binary(string:trim(binary_to_list(URL))),
+    #{host := ParsedHost, path := ParsedPath} = url_utils:parse(URLTrimmed),
+    URLScheme = get_scheme_from_url(URLTrimmed),
+    URLPort = get_port_from_url(URLTrimmed, ParsedHost),
+
+    {FinalScheme, FinalPort} = case {URLScheme, URLPort} of
+        {undefined, undefined} ->
+            throw(?ERROR_MALFORMED_DATA);
+        {undefined, ?DEFAULT_HTTP_PORT} ->
+            {http, ?DEFAULT_HTTP_PORT};
+        {undefined, ?DEFAULT_HTTPS_PORT} ->
+            {https, ?DEFAULT_HTTPS_PORT};
+        {undefined, _Port} ->
+            throw(?ERROR_MALFORMED_DATA);
+        {http, undefined} ->
+            {http, ?DEFAULT_HTTP_PORT};
+        {https, undefined} ->
+            {https, ?DEFAULT_HTTPS_PORT};
+        {http, CustomPort} ->
+            {http, CustomPort};
+        {https, CustomPort} ->
+            {https, CustomPort}
     end,
+
     {ok, FinalScheme, str_utils:format_bin("~ts:~B~ts", [ParsedHost, FinalPort, ParsedPath])}.
+
 
 %%--------------------------------------------------------------------
 %% @private
@@ -418,14 +423,12 @@ get_scheme_from_url(URL) ->
 %% @private
 -spec get_port_from_url(binary(), binary()) -> integer() | undefined.
 get_port_from_url(URL, Hostname) ->
-    UrlSplit = binary:split(URL, Hostname),
-    PortAndPathString = binary_to_list(lists:nth(2, UrlSplit)),
-    case lists:sublist(PortAndPathString, 1, 1) == ":" of
-        true ->
-            PortAndPathStringStripped = string:strip(PortAndPathString, left, $:),
-            list_to_integer(hd(string:split(PortAndPathStringStripped, "/")));
-        false ->
+    case binary:split(URL, Hostname) of
+        [_, <<":", PortAndPathPart/binary>>] ->
+            binary_to_integer(hd(string:split(PortAndPathPart, "/")));
+        _ ->
             undefined
     end.
+
 
 
