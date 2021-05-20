@@ -16,7 +16,7 @@
 % Macros associated with archivisation
 -define(ARCHIVES_ROOT_DIR_UUID_PREFIX, "archives_root_").
 -define(ARCHIVES_ROOT_DIR_UUID(SpaceId), <<?ARCHIVES_ROOT_DIR_UUID_PREFIX, SpaceId/binary>>).
--define(ARCHIVES_ROOT_DIR_NAME, file_meta:hidden_file_name(<<"archives">>)).
+-define(ARCHIVES_ROOT_DIR_NAME, file_meta:hidden_file_name(<<"archive">>)).
 
 -define(DATASET_ARCHIVES_DIR_UUID_PREFIX, "dataset_archives_").
 -define(DATASET_ARCHIVES_DIR_UUID(DatasetId), <<?DATASET_ARCHIVES_DIR_UUID_PREFIX, DatasetId/binary>>).

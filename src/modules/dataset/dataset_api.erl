@@ -66,7 +66,6 @@
 % TODO VFS-7617 implement recall operation of archives
 % TODO VFS-7624 implement purging job for archives
 % TODO VFS-7668 integrate S3 archives helper
-% TODO VFS-7669 counter of archived files and sum of their sizes
 % TODO VFS-7651 implement archivisation with bagit layout archives
 % TODO VFS-7652 implement incremental archives
 % TODO VFS-7653 implement creating DIP for an archive

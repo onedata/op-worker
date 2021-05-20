@@ -69,7 +69,7 @@ all() -> [
     {group, sequential_tests}
 ].
 
--define(ATTEMPTS, 60).
+-define(ATTEMPTS, 120).
 
 -define(SPACE, space_krk_par_p).
 -define(USER1, user1).
