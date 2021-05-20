@@ -735,7 +735,9 @@ put_cache_state(TTS = #temporary_token_secret{}, CacheState) ->
 put_cache_state(AtmInventory = #od_atm_inventory{}, CacheState) ->
     AtmInventory#od_atm_inventory{cache_state = CacheState};
 put_cache_state(AtmLambda = #od_atm_lambda{}, CacheState) ->
-    AtmLambda#od_atm_lambda{cache_state = CacheState}.
+    AtmLambda#od_atm_lambda{cache_state = CacheState};
+put_cache_state(AtmWorkflowSchema = #od_atm_workflow_schema{}, CacheState) ->
+    AtmWorkflowSchema#od_atm_workflow_schema{cache_state = CacheState}.
 
 
 %% @private
@@ -767,6 +769,8 @@ get_cache_state(#temporary_token_secret{cache_state = CacheState}) ->
 get_cache_state(#od_atm_inventory{cache_state = CacheState}) ->
     CacheState;
 get_cache_state(#od_atm_lambda{cache_state = CacheState}) ->
+    CacheState;
+get_cache_state(#od_atm_workflow_schema{cache_state = CacheState}) ->
     CacheState.
 
 
@@ -946,9 +950,11 @@ is_user_authorized_to_get(UserId, SessionId, _, #gri{type = od_atm_inventory, sc
 
 is_user_authorized_to_get(UserId, SessionId, _, #gri{type = od_atm_lambda, scope = private}, CachedDoc) ->
     #document{value = #od_atm_lambda{atm_inventories = AtmInventories}} = CachedDoc,
-    lists:any(fun(AtmInventory) ->
-        user_logic:has_eff_atm_inventory(SessionId, UserId, AtmInventory)
-    end, AtmInventories);
+    user_logic:has_any_eff_atm_inventory(SessionId, UserId, AtmInventories);
+
+is_user_authorized_to_get(UserId, SessionId, _, #gri{type = od_atm_workflow_schema, scope = private}, CachedDoc) ->
+    #document{value = #od_atm_workflow_schema{atm_inventory = AtmInventory}} = CachedDoc,
+    user_logic:has_eff_atm_inventory(SessionId, UserId, AtmInventory);
 
 is_user_authorized_to_get(_, _, _, _, _) ->
     false.
