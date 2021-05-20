@@ -349,12 +349,13 @@ parse_url_insecure(URL) ->
     {FinalScheme, FinalPort} = case {URLScheme, URLPort} of
         {undefined, undefined} ->
             throw(?ERROR_MALFORMED_DATA);
-        {undefined, ?DEFAULT_HTTP_PORT} ->
-            {http, ?DEFAULT_HTTP_PORT};
         {undefined, ?DEFAULT_HTTPS_PORT} ->
             {https, ?DEFAULT_HTTPS_PORT};
-        {undefined, _Port} ->
-            throw(?ERROR_MALFORMED_DATA);
+        {undefined, ?DEFAULT_HTTP_PORT} ->
+            {http, ?DEFAULT_HTTP_PORT};
+        %% TODO: VFS-7682 - following match should throw an error
+        {undefined, CustomPort} ->
+            {http, CustomPort};
         {http, CustomPort} ->
             {http, utils:ensure_defined(CustomPort, ?DEFAULT_HTTP_PORT)};
         {https, CustomPort} ->

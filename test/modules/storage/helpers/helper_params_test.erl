@@ -55,14 +55,16 @@
     {<<" http://hostname:1234  ">>, {ok, http, <<"hostname:1234/">>}},
     {<<" http://hostname:1234/path  ">>, {ok, http, <<"hostname:1234/path">>}},
     {<<" https://hostname:1234  ">>, {ok, https, <<"hostname:1234/">>}},
-    {<<" https://hostname:1234/path  ">>, {ok, https, <<"hostname:1234/path">>}}
+    {<<" https://hostname:1234/path  ">>, {ok, https, <<"hostname:1234/path">>}},
+
+    %% TODO: VFS-7682 - move following cases to INCORRECT_URL_BATCH, as they should cause an error
+    {<<"hostname:1234">>, {ok, http, <<"hostname:1234/">>}},
+    {<<"hostname:1234/path">>, {ok, http, <<"hostname:1234/path">>}}
 ]).
 
 -define(INCORRECT_URL_BATCH, [
     <<"hostname">>,
     <<"hostname/path">>,
-    <<"hostname:1234">>,
-    <<"hostname:1234/path">>,
     <<"hostname:string">>,
     <<"hostname:string/path">>,
     <<"http://hostname:string">>,
