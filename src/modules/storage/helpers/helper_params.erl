@@ -67,8 +67,16 @@ prepare_helper_args(HelperName, Params) ->
 
 %% @private
 -spec derive_scheme_from_url(args()) -> args().
-derive_scheme_from_url(#{<<"hostname">> := URL} = Params) ->
-    {ok, UrlScheme, Host} = parse_url(URL),
+derive_scheme_from_url(#{<<"hostname">> := Hostname, <<"scheme">> := Scheme} = Params) ->
+    HostnameWithScheme = str_utils:join_binary([Scheme, <<"://">>, Hostname]),
+    {ok, UrlScheme, Host} = parse_url(HostnameWithScheme),
+    Scheme = case UrlScheme of
+        https -> <<"https">>;
+        _ -> <<"http">>
+    end,
+    Params#{<<"scheme">> => Scheme, <<"hostname">> => Host};
+derive_scheme_from_url(#{<<"hostname">> := HostnameWithScheme} = Params) ->
+    {ok, UrlScheme, Host} = parse_url(HostnameWithScheme),
     Scheme = case UrlScheme of
         https -> <<"https">>;
         _ -> <<"http">>
