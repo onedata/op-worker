@@ -355,14 +355,10 @@ parse_url_insecure(URL) ->
             {https, ?DEFAULT_HTTPS_PORT};
         {undefined, _Port} ->
             throw(?ERROR_MALFORMED_DATA);
-        {http, undefined} ->
-            {http, ?DEFAULT_HTTP_PORT};
-        {https, undefined} ->
-            {https, ?DEFAULT_HTTPS_PORT};
         {http, CustomPort} ->
-            {http, CustomPort};
+            {http, utils:ensure_defined(CustomPort, ?DEFAULT_HTTP_PORT)};
         {https, CustomPort} ->
-            {https, CustomPort}
+            {https, utils:ensure_defined(CustomPort, ?DEFAULT_HTTPS_PORT)}
     end,
 
     {ok, FinalScheme, str_utils:format_bin("~ts:~B~ts", [ParsedHost, FinalPort, ParsedPath])}.
@@ -429,6 +425,3 @@ get_port_from_url(URL, Hostname) ->
         _ ->
             undefined
     end.
-
-
-
