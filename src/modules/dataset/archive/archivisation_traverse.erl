@@ -7,7 +7,7 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module implements traverse_behaviour.
-%%% It is used to traverse tree rooted in root file of passed Dataset
+%%% It is used to traverse tree rooted in root of passed Dataset
 %%% and build archive of the dataset.
 %%% @end
 %%%-------------------------------------------------------------------
@@ -43,6 +43,8 @@
 
 -type id() :: tree_traverse:id().
 -type description() :: traverse:description().
+
+-export_type([id/0]).
 
 %%%===================================================================
 %%% API functions

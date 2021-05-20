@@ -241,9 +241,7 @@ archive_dataset_tree_test_base(FileStructure) ->
 
     {ok, ArchiveId} =
         lfm_proxy:archive_dataset(Node, SessId, DatasetId, #archive_config{layout = ?ARCHIVE_PLAIN_LAYOUT}, <<>>),
-    {FileCount, _} = lists:foldl(fun({Dirs, Files}, {Acc, PrevDirs}) ->
-        {Acc + PrevDirs * Files, Dirs}
-    end, {0, 1}, FileStructure),
+
     % created files are empty therefore expected size is 0
     assert_archive_is_preserved(Node, SessId, ArchiveId, RootGuid, length(FileGuids), 0).
 

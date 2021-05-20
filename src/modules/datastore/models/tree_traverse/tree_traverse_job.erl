@@ -62,13 +62,13 @@ save_master_job(Key, Job = #tree_traverse{
     track_subtree_status = TrackSubtreeStatus,
     batch_size = BatchSize,
     traverse_info = TraverseInfo
-}, Pool, TaskID, CallbackModule) ->
+}, Pool, TaskId, CallbackModule) ->
     Uuid = file_ctx:get_logical_uuid_const(FileCtx),
     Scope = file_ctx:get_space_id_const(FileCtx),
     Record = #tree_traverse_job{
         pool = Pool,
         callback_module = CallbackModule,
-        task_id = TaskID,
+        task_id = TaskId,
         doc_id = Uuid,
         user_id = UserId,
         use_listing_token = Token =/= undefined,
@@ -98,8 +98,9 @@ delete_master_job(Key, _Job, _, _CallbackModule) ->
 -spec get_master_job(key() | doc()) ->
     {ok, tree_traverse:master_job(), traverse:pool(), traverse:id()}  | {error, term()}.
 get_master_job(#document{value = #tree_traverse_job{
-    pool = Pool, task_id = TaskID,
-    doc_id = DocID,
+    pool = Pool,
+    task_id = TaskId,
+    doc_id = DocId,
     user_id = UserId,
     use_listing_token = UseListingToken,
     last_name = LastName,
@@ -110,24 +111,28 @@ get_master_job(#document{value = #tree_traverse_job{
     batch_size = BatchSize,
     traverse_info = TraverseInfo
 }}) ->
-    {ok, Doc = #document{scope = SpaceId}} = file_meta:get_including_deleted(DocID),
-    FileCtx = file_ctx:new_by_doc(Doc, SpaceId),
-    Job = #tree_traverse{
-        file_ctx = FileCtx,
-        user_id = UserId,
-        token = case UseListingToken of
-            true -> ?INITIAL_LS_TOKEN;
-            false -> undefined
-        end,
-        last_name = LastName,
-        last_tree = LastTree,
-        child_dirs_job_generation_policy = ChildDirsJobGenerationPolicy,
-        children_master_jobs_mode = ChildrenMasterJobsMode,
-        track_subtree_status = TrackSubtreeStatus,
-        batch_size = BatchSize,
-        traverse_info = binary_to_term(TraverseInfo)
-    },
-    {ok, Job, Pool, TaskID};
+    case file_meta:get_including_deleted(DocId) of
+        {ok, Doc = #document{scope = SpaceId}} ->
+            FileCtx = file_ctx:new_by_doc(Doc, SpaceId),
+            Job = #tree_traverse{
+                file_ctx = FileCtx,
+                user_id = UserId,
+                token = case UseListingToken of
+                    true -> ?INITIAL_LS_TOKEN;
+                    false -> undefined
+                end,
+                last_name = LastName,
+                last_tree = LastTree,
+                child_dirs_job_generation_policy = ChildDirsJobGenerationPolicy,
+                children_master_jobs_mode = ChildrenMasterJobsMode,
+                track_subtree_status = TrackSubtreeStatus,
+                batch_size = BatchSize,
+                traverse_info = binary_to_term(TraverseInfo)
+            },
+            {ok, Job, Pool, TaskId};
+        {error, _} = Error ->
+            Error
+    end;
 get_master_job(Key) ->
     case datastore_model:get(?CTX#{include_deleted => true}, Key) of
         {ok, Doc} ->

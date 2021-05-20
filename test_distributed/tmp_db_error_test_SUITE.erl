@@ -126,7 +126,7 @@ mock_cberl(Config) ->
 
     Node = node(),
     GenericMock = fun(ArgsList) ->
-        case rpc:call(Node, application, get_env, [?APP_NAME, emulate_db_error, false]) of
+        case rpc:call(Node, op_worker, get_env, [emulate_db_error, false]) of
             true -> {error, etmpfail};
             false -> meck:passthrough(ArgsList)
         end

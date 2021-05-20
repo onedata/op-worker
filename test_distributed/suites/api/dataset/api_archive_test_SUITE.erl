@@ -232,8 +232,9 @@ build_create_archive_validate_gs_call_result_fun(MemRef) ->
         ExpArchiveData = build_archive_gs_instance(ArchiveId, DatasetId, CreationTime, ?ARCHIVE_BUILDING, Config,
             Description, PreservedCallback, PurgedCallback),
         % state is removed from the map as it may be in pending, building or even preserved state when request is handled
-        ExpArchiveData2 = maps:without([<<"state">>], ExpArchiveData),
-        ArchiveData2 = maps:without([<<"state">>], ArchiveData),
+        IgnoredKeys = [<<"state">>, <<"filesToArchive">>, <<"filesArchived">>, <<"filesFailed">>, <<"byteSize">>],
+        ExpArchiveData2 = maps:without(IgnoredKeys, ExpArchiveData),
+        ArchiveData2 = maps:without(IgnoredKeys, ArchiveData),
         ?assertMatch(ExpArchiveData2, ArchiveData2)
     end.
 
@@ -326,7 +327,11 @@ get_archive_info(_Config) ->
                             <<"description">> => Description,
                             <<"config">> => ConfigJson,
                             <<"preservedCallback">> => null,
-                            <<"purgedCallback">> => null
+                            <<"purgedCallback">> => null,
+                            <<"filesToArchive">> => 1,
+                            <<"filesArchived">> => 1,
+                            <<"filesFailed">> => 0,
+                            <<"byteSize">> => 0
                         },
                         ?assertEqual(?HTTP_200_OK, RespCode),
                         ?assertEqual(ExpArchiveData, RespBody)
@@ -852,7 +857,11 @@ verify_archive(
             preserved_callback = PreservedCallback,
             purged_callback = PurgedCallback,
             description = Description,
-            index = archives_list:index(ArchiveId, CreationTime)
+            index = archives_list:index(ArchiveId, CreationTime),
+            files_to_archive = 1,
+            files_archived = 1,
+            files_failed = 0,
+            byte_size = 0
         },
         ?assertEqual({ok, ExpArchiveInfo}, lfm_proxy:get_archive_info(Node, UserSessId, ArchiveId), ?ATTEMPTS)
     end, Providers).
@@ -880,7 +889,11 @@ build_archive_gs_instance(ArchiveId, DatasetId, CreationTime, State, Config, Des
         description = Description,
         preserved_callback = PreservedCallback,
         purged_callback = PurgedCallback,
-        index = archives_list:index(ArchiveId, CreationTime)
+        index = archives_list:index(ArchiveId, CreationTime),
+        files_to_archive = 1,
+        files_archived = 1,
+        files_failed = 0,
+        byte_size = 0
     }),
     BasicInfo#{<<"revision">> => 1}.
 

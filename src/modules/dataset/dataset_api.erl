@@ -286,8 +286,8 @@ get_archive_info(ArchiveDoc = #document{}, ArchiveIndex) ->
     {ok, PreservedCallback} = archive:get_preserved_callback(ArchiveDoc),
     {ok, PurgedCallback} = archive:get_purged_callback(ArchiveDoc),
     {ok, Description} = archive:get_description(ArchiveDoc),
-     ArchiveInfoWithStats = get_archive_stats(ArchiveDoc),
-    {ok, ArchiveInfoWithStats#archive_info{
+    {FilesToArchive, FilesArchived, FilesFailed, ByteSize} = get_archive_stats(ArchiveDoc),
+    {ok, #archive_info{
         id = ArchiveId,
         dataset_id = DatasetId,
         state = State,
@@ -300,14 +300,19 @@ get_archive_info(ArchiveDoc = #document{}, ArchiveIndex) ->
         index = case ArchiveIndex =:= undefined of
             true -> archives_list:index(ArchiveId, Timestamp);
             false -> ArchiveIndex
-        end
+        end,
+        files_to_archive = FilesToArchive,
+        files_archived = FilesArchived,
+        files_failed = FilesFailed,
+        byte_size = ByteSize
     }};
 get_archive_info(ArchiveId, ArchiveIndex) ->
     {ok, ArchiveDoc} = archive:get(ArchiveId),
     get_archive_info(ArchiveDoc, ArchiveIndex).
 
 
--spec get_archive_stats(archive:doc()) -> archive_info().
+-spec get_archive_stats(archive:doc()) ->
+    {non_neg_integer(), non_neg_integer(), non_neg_integer(), non_neg_integer()}.
 get_archive_stats(ArchiveDoc) ->
     case archive:is_finished(ArchiveDoc) of
         true ->
@@ -315,20 +320,15 @@ get_archive_stats(ArchiveDoc) ->
             {ok, FilesArchived} = archive:get_files_archived(ArchiveDoc),
             {ok, FilesFailed} = archive:get_files_failed(ArchiveDoc),
             {ok, ByteSize} = archive:get_byte_size(ArchiveDoc),
-            #archive_info{
-                files_to_archive = FilesToArchive,
-                files_archived = FilesArchived,
-                files_failed = FilesFailed,
-                byte_size = ByteSize
-            };
+            {FilesToArchive, FilesArchived, FilesFailed, ByteSize};
         false ->
             {ok, JobId} = archive:get_job_id(ArchiveDoc),
             {ok, ArchivisationJobDescription} = archivisation_traverse:get_description(JobId),
-            #archive_info{
-                files_to_archive = archivisation_traverse:get_files_to_archive_count(ArchivisationJobDescription),
-                files_archived = archivisation_traverse:get_files_archived_count(ArchivisationJobDescription),
-                files_failed = archivisation_traverse:get_files_failed_count(ArchivisationJobDescription),
-                byte_size = archivisation_traverse:get_byte_size(ArchivisationJobDescription)
+            {
+                archivisation_traverse:get_files_to_archive_count(ArchivisationJobDescription),
+                archivisation_traverse:get_files_archived_count(ArchivisationJobDescription),
+                archivisation_traverse:get_files_failed_count(ArchivisationJobDescription),
+                archivisation_traverse:get_byte_size(ArchivisationJobDescription)
             }
     end.
 
