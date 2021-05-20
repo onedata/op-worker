@@ -89,11 +89,11 @@ groups() -> [
     ]},
     {sequential_tests, [sequential], [
         archive_dataset_attached_to_space_dir,
-        archive_dataset_many_times,
         time_warp_test,
         create_archive_privileges_test,
         view_archive_privileges_test,
-        remove_archive_privileges_test
+        remove_archive_privileges_test,
+        archive_dataset_many_times
     ]}
 ].
 
@@ -103,7 +103,7 @@ all() -> [
     {group, sequential_tests}
 ].
 
--define(ATTEMPTS, 60).
+-define(ATTEMPTS, 120).
 
 -define(SPACE, space_krk_par_p).
 
