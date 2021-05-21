@@ -16,7 +16,7 @@
 -behaviour(middleware_plugin).
 
 -include("middleware/middleware.hrl").
--include("modules/archive/archive.hrl").
+-include("modules/dataset/archive.hrl").
 -include("modules/fslogic/data_access_control.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
@@ -62,10 +62,10 @@ operation_supported(_, _, _) -> false.
 -spec data_spec(middleware:req()) -> undefined | middleware_sanitizer:data_spec().
 data_spec(#op_req{operation = create, gri = #gri{aspect = instance}}) -> #{
     required => #{
-        <<"datasetId">> => {binary, non_empty},
-        <<"config">> => {json, fun(RawConfig) -> {true, archive_config:sanitize(RawConfig)} end}
+        <<"datasetId">> => {binary, non_empty}
     },
     optional => #{
+        <<"config">> => {json, fun(RawConfig) -> {true, archive_config:sanitize(RawConfig)} end},
         <<"description">> => {binary, any},
         <<"preservedCallback">> => {binary, fun(Callback) -> url_utils:is_valid(Callback) end},
         <<"purgedCallback">> => {binary, fun(Callback) -> url_utils:is_valid(Callback) end}
@@ -135,7 +135,7 @@ authorize(#op_req{operation = Op, auth = Auth, gri = #gri{aspect = As}}, Archive
     (Op =:= get andalso As =:= instance);
     (Op =:= update andalso As =:= instance)
 ->
-    SpaceId = archive:get_space_id(ArchiveDoc),
+    {ok, SpaceId} = archive:get_space_id(ArchiveDoc),
     middleware_utils:is_eff_space_member(Auth, SpaceId).
 
 
@@ -155,7 +155,7 @@ validate(#op_req{operation = Op, gri = #gri{aspect = As}}, ArchiveDoc) when
     (Op =:= get andalso As =:= instance);
     (Op =:= update andalso As =:= instance)
 ->
-    SpaceId = archive:get_space_id(ArchiveDoc),
+    {ok, SpaceId} = archive:get_space_id(ArchiveDoc),
     middleware_utils:assert_space_supported_locally(SpaceId).
 
 
@@ -168,7 +168,7 @@ validate(#op_req{operation = Op, gri = #gri{aspect = As}}, ArchiveDoc) when
 create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = instance} = GRI}) ->
     SessionId = Auth#auth.session_id,
     DatasetId = maps:get(<<"datasetId">>, Data),
-    ConfigJson = maps:get(<<"config">>, Data),
+    ConfigJson = maps:get(<<"config">>, Data, #{}),
     Config = archive_config:from_json(ConfigJson),
     Description = maps:get(<<"description">>, Data, ?DEFAULT_ARCHIVE_DESCRIPTION),
     PreservedCallback = maps:get(<<"preservedCallback">>, Data, undefined),

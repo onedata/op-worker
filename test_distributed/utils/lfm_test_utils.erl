@@ -15,6 +15,7 @@
 -include("lfm_test_utils.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
+-include("modules/dataset/archivisation_tree.hrl").
 
 %% API
 -export([clean_space/3, clean_space/4, assert_space_and_trash_are_empty/3, assert_space_dir_empty/3]).
@@ -41,6 +42,8 @@ clean_space(CleaningWorker, AllWorkers, SpaceId, Attempts) ->
     rm_recursive(CleaningWorker, ?ROOT_SESS_ID, SpaceGuid, <<>>, BatchSize, false),
     % TODO VFS-7064 remove below line after introducing link to trash directory
     rm_recursive(CleaningWorker, ?ROOT_SESS_ID, fslogic_uuid:spaceid_to_trash_dir_guid(SpaceId), <<>>, BatchSize, false),
+    ArchivesDirGuid = file_id:pack_guid(?ARCHIVES_ROOT_DIR_UUID(SpaceId), SpaceId),
+    rm_recursive(CleaningWorker, ?ROOT_SESS_ID, ArchivesDirGuid, <<>>, BatchSize, true),
     assert_space_and_trash_are_empty(AllWorkers, SpaceId, Attempts).
 
 assert_space_dir_empty(Workers, SpaceId, Attempts) ->

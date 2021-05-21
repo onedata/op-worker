@@ -43,7 +43,7 @@
 
 % Macros used when process is waiting for other process to init session
 -define(SESSION_INITIALIZATION_CHECK_PERIOD_BASE, 100).
--define(SESSION_INITIALIZATION_RETRIES, application:get_env(?APP_NAME, session_initialization_retries, 8)).
+-define(SESSION_INITIALIZATION_RETRIES, op_worker:get_env(session_initialization_retries, 8)).
 
 %%%===================================================================
 %%% API

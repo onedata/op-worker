@@ -15,7 +15,8 @@
 
 -include("onenv_test_utils.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
--include("modules/archive/archive.hrl").
+-include("modules/dataset/archive.hrl").
+-include("modules/dataset/archivisation_tree.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/privileges.hrl").
@@ -35,7 +36,6 @@
 %% tests
 -export([
     % parallel tests
-    archive_dataset_attached_to_space_dir/1,
     archive_dataset_attached_to_dir/1,
     archive_dataset_attached_to_file/1,
     archive_dataset_attached_to_hardlink/1,
@@ -45,18 +45,19 @@
     archive_of_dataset_associated_with_deleted_file_should_be_accessible/1,
     archive_reattached_dataset/1,
     removal_of_not_empty_dataset_should_fail/1,
-    iterate_over_1000_archives_using_offset_and_limit_1/1,
-    iterate_over_1000_archives_using_offset_and_limit_10/1,
-    iterate_over_1000_archives_using_offset_and_limit_100/1,
-    iterate_over_1000_archives_using_offset_and_limit_1000/1,
-    iterate_over_1000_archives_using_offset_and_limit_10000/1,
-    iterate_over_1000_archives_using_start_index_and_limit_1/1,
-    iterate_over_1000_archives_using_start_index_and_limit_10/1,
-    iterate_over_1000_archives_using_start_index_and_limit_100/1,
-    iterate_over_1000_archives_using_start_index_and_limit_1000/1,
-    iterate_over_1000_archives_using_start_index_and_limit_10000/1,
+    iterate_over_100_archives_using_offset_and_limit_1/1,
+    iterate_over_100_archives_using_offset_and_limit_10/1,
+    iterate_over_100_archives_using_offset_and_limit_100/1,
+    iterate_over_100_archives_using_offset_and_limit_1000/1,
+    iterate_over_100_archives_using_offset_and_limit_10000/1,
+    iterate_over_100_archives_using_start_index_and_limit_1/1,
+    iterate_over_100_archives_using_start_index_and_limit_10/1,
+    iterate_over_100_archives_using_start_index_and_limit_100/1,
+    iterate_over_100_archives_using_start_index_and_limit_1000/1,
+    iterate_over_100_archives_using_start_index_and_limit_10000/1,
 
     % sequential tests
+    archive_dataset_attached_to_space_dir/1,
     archive_dataset_many_times/1,
     time_warp_test/1, 
     create_archive_privileges_test/1, 
@@ -66,7 +67,6 @@
 
 groups() -> [
     {parallel_tests, [parallel], [
-        archive_dataset_attached_to_space_dir,
         archive_dataset_attached_to_dir,
         archive_dataset_attached_to_file,
         archive_dataset_attached_to_hardlink,
@@ -76,23 +76,24 @@ groups() -> [
         archive_of_dataset_associated_with_deleted_file_should_be_accessible,
         archive_reattached_dataset,
         removal_of_not_empty_dataset_should_fail,
-        iterate_over_1000_archives_using_offset_and_limit_1,
-        iterate_over_1000_archives_using_offset_and_limit_10,
-        iterate_over_1000_archives_using_offset_and_limit_100,
-        iterate_over_1000_archives_using_offset_and_limit_1000,
-        iterate_over_1000_archives_using_offset_and_limit_10000,
-        iterate_over_1000_archives_using_start_index_and_limit_1,
-        iterate_over_1000_archives_using_start_index_and_limit_10,
-        iterate_over_1000_archives_using_start_index_and_limit_100,
-        iterate_over_1000_archives_using_start_index_and_limit_1000,
-        iterate_over_1000_archives_using_start_index_and_limit_10000
+        iterate_over_100_archives_using_offset_and_limit_1,
+        iterate_over_100_archives_using_offset_and_limit_10,
+        iterate_over_100_archives_using_offset_and_limit_100,
+        iterate_over_100_archives_using_offset_and_limit_1000,
+        iterate_over_100_archives_using_offset_and_limit_10000,
+        iterate_over_100_archives_using_start_index_and_limit_1,
+        iterate_over_100_archives_using_start_index_and_limit_10,
+        iterate_over_100_archives_using_start_index_and_limit_100,
+        iterate_over_100_archives_using_start_index_and_limit_1000,
+        iterate_over_100_archives_using_start_index_and_limit_10000
     ]},
     {sequential_tests, [sequential], [
-        archive_dataset_many_times,
+        archive_dataset_attached_to_space_dir,
         time_warp_test,
         create_archive_privileges_test,
         view_archive_privileges_test,
-        remove_archive_privileges_test
+        remove_archive_privileges_test,
+        archive_dataset_many_times
     ]}
 ].
 
@@ -102,15 +103,15 @@ all() -> [
     {group, sequential_tests}
 ].
 
--define(ATTEMPTS, 30).
+-define(ATTEMPTS, 120).
 
--define(SPACE, space1).
+-define(SPACE, space_krk_par_p).
 
 
 -define(TEST_ARCHIVE_CONFIG, #archive_config{
     incremental = false,
-    include_dip = true,
-    layout = ?ARCHIVE_BAGIT_LAYOUT
+    include_dip = false,
+    layout = ?ARCHIVE_PLAIN_LAYOUT
 }).
 
 -define(TEST_DESCRIPTION1, <<"TEST DESCRIPTION">>).
@@ -121,9 +122,8 @@ all() -> [
 -define(TEST_ARCHIVE_PURGED_CALLBACK2, <<"https://purged2.org">>).
 -define(TEST_ARCHIVE_PURGED_CALLBACK3, <<"https://purged3.org">>).
 
--define(TEST_TIMESTAMP, 1000000000).
-
 -define(RAND_NAME, str_utils:rand_hex(20)).
+-define(RAND_CONTENT(Size), crypto:strong_rand_bytes(Size)).
 
 %===================================================================
 % Parallel tests - tests which can be safely run in parallel
@@ -133,42 +133,51 @@ all() -> [
 archive_dataset_attached_to_space_dir(_Config) ->
     SpaceId = oct_background:get_space_id(?SPACE),
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
-    simple_archive_crud_test_base(SpaceGuid).
+    #dataset_object{id = DatasetId} = onenv_dataset_test_utils:set_up_and_sync_dataset(user1, SpaceGuid),
+    simple_archive_crud_test_base(DatasetId, ?DIRECTORY_TYPE).
 
 archive_dataset_attached_to_dir(_Config) ->
-    #object{guid = DirGuid} = onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE, #dir_spec{}),
-    simple_archive_crud_test_base(DirGuid).
+    #object{dataset = #dataset_object{id = DatasetId}} =
+        onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE, #dir_spec{dataset = #dataset_spec{}}),
+    simple_archive_crud_test_base(DatasetId, ?DIRECTORY_TYPE).
 
 archive_dataset_attached_to_file(_Config) ->
-    #object{guid = FileGuid} = onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE, #file_spec{}),
-    simple_archive_crud_test_base(FileGuid).
+    Size = 20,
+    #object{dataset = #dataset_object{id = DatasetId}} =
+        onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE, #file_spec{
+            dataset = #dataset_spec{},
+            content = ?RAND_CONTENT(Size)
+        }),
+    simple_archive_crud_test_base(DatasetId, ?REGULAR_FILE_TYPE, Size).
 
 archive_dataset_attached_to_hardlink(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
     SpaceId = oct_background:get_space_id(?SPACE),
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
-    #object{guid = FileGuid} = onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE, #file_spec{}),
+    Size = 20,
+    #object{guid = FileGuid} = onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE, #file_spec{
+        content = ?RAND_CONTENT(Size)
+    }),
     {ok, #file_attr{guid = LinkGuid}} =
         lfm_proxy:make_link(P1Node, UserSessIdP1, ?FILE_REF(FileGuid), ?FILE_REF(SpaceGuid), ?RAND_NAME),
-    simple_archive_crud_test_base(LinkGuid).
+    #dataset_object{id = DatasetId} = onenv_dataset_test_utils:set_up_and_sync_dataset(user1, LinkGuid),
+    simple_archive_crud_test_base(DatasetId, ?LINK_TYPE, Size).
 
 archive_dataset_attached_to_symlink(_Config) ->
-    [P1Node] = oct_background:get_provider_nodes(krakow),
-    UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
-    #object{guid = DirGuid} = onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE, #dir_spec{}),
-    {ok, DirPath} = lfm_proxy:get_file_path(P1Node, UserSessIdP1, DirGuid),
-    #object{guid = LinkGuid} = onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE, #symlink_spec{symlink_value = DirPath}),
-    simple_archive_crud_test_base(LinkGuid).
+    #object{name = DirName} = onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE, #dir_spec{}),
+    SpaceIdPrefix = ?SYMLINK_SPACE_ID_ABS_PATH_PREFIX(oct_background:get_space_id(?SPACE)),
+    LinkTarget = filename:join([SpaceIdPrefix, DirName]),
+    #object{dataset = #dataset_object{id = DatasetId}} = onenv_file_test_utils:create_and_sync_file_tree(
+        user1, ?SPACE, #symlink_spec{symlink_value = LinkTarget, dataset = #dataset_spec{}}
+    ),
+    simple_archive_crud_test_base(DatasetId, ?SYMLINK_TYPE).
 
 archivisation_of_detached_dataset_should_be_impossible(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
-    #object{guid = Guid} = onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE, #file_spec{}),
-
-    {ok, DatasetId} = ?assertMatch({ok, _},
-        lfm_proxy:establish_dataset(P1Node, UserSessIdP1, ?FILE_REF(Guid), ?no_flags_mask)),
-    ok = lfm_proxy:detach_dataset(P1Node, UserSessIdP1, DatasetId),
+    #object{dataset = #dataset_object{id = DatasetId}} =
+        onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE, #file_spec{dataset = #dataset_spec{state = ?DETACHED_DATASET}}),
 
     ?assertMatch({error, ?EINVAL},
         lfm_proxy:archive_dataset(P1Node, UserSessIdP1, DatasetId, ?TEST_ARCHIVE_CONFIG, ?TEST_DESCRIPTION1)).
@@ -176,15 +185,14 @@ archivisation_of_detached_dataset_should_be_impossible(_Config) ->
 archive_of_detached_dataset_should_be_accessible(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
-    #object{guid = Guid} = onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE, #file_spec{}),
+    #object{dataset = #dataset_object{id = DatasetId}} =
+        onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE, #file_spec{dataset = #dataset_spec{}}),
 
-    {ok, DatasetId} = ?assertMatch({ok, _},
-        lfm_proxy:establish_dataset(P1Node, UserSessIdP1, ?FILE_REF(Guid), ?no_flags_mask)),
     {ok, ArchiveId} = ?assertMatch({ok, _},
         lfm_proxy:archive_dataset(P1Node, UserSessIdP1, DatasetId, ?TEST_ARCHIVE_CONFIG, ?TEST_DESCRIPTION1)),
-    ?assertMatch({ok, #archive_info{}},
-        lfm_proxy:get_archive_info(P1Node, UserSessIdP1, ArchiveId)),
-    Index = archives_list:index(ArchiveId, ?TEST_TIMESTAMP),
+    ?assertMatch({ok, #archive_info{state = ?ARCHIVE_PRESERVED}},
+        lfm_proxy:get_archive_info(P1Node, UserSessIdP1, ArchiveId), ?ATTEMPTS),
+    Index = archives_list:index(ArchiveId, global_clock_timestamp(P1Node)),
     ?assertEqual({ok, [{Index, ArchiveId}], true},
         lfm_proxy:list_archives(P1Node, UserSessIdP1, DatasetId, #{offset => 0, limit => 10})),
 
@@ -198,15 +206,14 @@ archive_of_detached_dataset_should_be_accessible(_Config) ->
 archive_of_dataset_associated_with_deleted_file_should_be_accessible(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
-    #object{guid = Guid} = onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE, #file_spec{}),
+    #object{guid = Guid, dataset = #dataset_object{id = DatasetId}} =
+        onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE, #file_spec{dataset = #dataset_spec{}}),
 
-    {ok, DatasetId} = ?assertMatch({ok, _},
-        lfm_proxy:establish_dataset(P1Node, UserSessIdP1, ?FILE_REF(Guid), ?no_flags_mask)),
     {ok, ArchiveId} = ?assertMatch({ok, _},
         lfm_proxy:archive_dataset(P1Node, UserSessIdP1, DatasetId, ?TEST_ARCHIVE_CONFIG, ?TEST_DESCRIPTION1)),
-    ?assertMatch({ok, #archive_info{}},
-        lfm_proxy:get_archive_info(P1Node, UserSessIdP1, ArchiveId)),
-    Index = archives_list:index(ArchiveId, ?TEST_TIMESTAMP),
+    ?assertMatch({ok, #archive_info{state = ?ARCHIVE_PRESERVED}},
+        lfm_proxy:get_archive_info(P1Node, UserSessIdP1, ArchiveId), ?ATTEMPTS),
+    Index = archives_list:index(ArchiveId, global_clock_timestamp(P1Node)),
     ?assertEqual({ok, [{Index, ArchiveId}], true},
         lfm_proxy:list_archives(P1Node, UserSessIdP1, DatasetId, #{offset => 0, limit => 10})),
 
@@ -220,15 +227,14 @@ archive_of_dataset_associated_with_deleted_file_should_be_accessible(_Config) ->
 archive_reattached_dataset(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
-    #object{guid = Guid} = onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE, #file_spec{}),
+    #object{dataset = #dataset_object{id = DatasetId}} =
+        onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE, #file_spec{dataset = #dataset_spec{}}),
 
-    {ok, DatasetId} = ?assertMatch({ok, _},
-        lfm_proxy:establish_dataset(P1Node, UserSessIdP1, ?FILE_REF(Guid), ?no_flags_mask)),
     {ok, ArchiveId} = ?assertMatch({ok, _},
         lfm_proxy:archive_dataset(P1Node, UserSessIdP1, DatasetId, ?TEST_ARCHIVE_CONFIG, ?TEST_DESCRIPTION1)),
-    ?assertMatch({ok, #archive_info{}},
-        lfm_proxy:get_archive_info(P1Node, UserSessIdP1, ArchiveId)),
-    Index = archives_list:index(ArchiveId, ?TEST_TIMESTAMP),
+    ?assertMatch({ok, #archive_info{state = ?ARCHIVE_PRESERVED}},
+        lfm_proxy:get_archive_info(P1Node, UserSessIdP1, ArchiveId), ?ATTEMPTS),
+    Index = archives_list:index(ArchiveId, global_clock_timestamp(P1Node)),
     ?assertEqual({ok, [{Index, ArchiveId}], true},
         lfm_proxy:list_archives(P1Node, UserSessIdP1, DatasetId, #{offset => 0, limit => 10})),
 
@@ -238,23 +244,23 @@ archive_reattached_dataset(_Config) ->
     {ok, ArchiveId2} = ?assertMatch({ok, _},
         lfm_proxy:archive_dataset(P1Node, UserSessIdP1, DatasetId, ?TEST_ARCHIVE_CONFIG, ?TEST_DESCRIPTION1)),
 
-    ?assertMatch({ok, #archive_info{}}, lfm_proxy:get_archive_info(P1Node, UserSessIdP1, ArchiveId2)),
+    ?assertMatch({ok, #archive_info{state = ?ARCHIVE_PRESERVED}},
+        lfm_proxy:get_archive_info(P1Node, UserSessIdP1, ArchiveId2), ?ATTEMPTS),
     ?assertMatch({ok, [_, _], true},
         lfm_proxy:list_archives(P1Node, UserSessIdP1, DatasetId, #{offset => 0, limit => 10})).
 
 removal_of_not_empty_dataset_should_fail(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
-    #object{guid = Guid} = onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE, #file_spec{}),
+    #object{dataset = #dataset_object{id = DatasetId}} =
+        onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE, #file_spec{dataset = #dataset_spec{}}),
 
-    {ok, DatasetId} = ?assertMatch({ok, _},
-        lfm_proxy:establish_dataset(P1Node, UserSessIdP1, ?FILE_REF(Guid), ?no_flags_mask)),
     {ok, ArchiveId} = ?assertMatch({ok, _},
         lfm_proxy:archive_dataset(P1Node, UserSessIdP1, DatasetId, ?TEST_ARCHIVE_CONFIG, ?TEST_DESCRIPTION1)),
 
-    ?assertMatch({ok, #archive_info{}},
-        lfm_proxy:get_archive_info(P1Node, UserSessIdP1, ArchiveId)),
-    Index = archives_list:index(ArchiveId, ?TEST_TIMESTAMP),
+    ?assertMatch({ok, #archive_info{state = ?ARCHIVE_PRESERVED}},
+        lfm_proxy:get_archive_info(P1Node, UserSessIdP1, ArchiveId), ?ATTEMPTS),
+    Index = archives_list:index(ArchiveId, global_clock_timestamp(P1Node)),
     ?assertEqual({ok, [{Index, ArchiveId}], true},
         lfm_proxy:list_archives(P1Node, UserSessIdP1, DatasetId, #{offset => 0, limit => 10})),
 
@@ -267,35 +273,35 @@ removal_of_not_empty_dataset_should_fail(_Config) ->
         lfm_proxy:list_archives(P1Node, UserSessIdP1, DatasetId, #{offset => 0, limit => 10}), ?ATTEMPTS),
     ?assertEqual(ok, lfm_proxy:remove_dataset(P1Node, UserSessIdP1, DatasetId)).
 
-iterate_over_1000_archives_using_offset_and_limit_1(_Config) ->
-    iterate_over_archives_test_base(1000, offset, 1).
+iterate_over_100_archives_using_offset_and_limit_1(_Config) ->
+    iterate_over_archives_test_base(100, offset, 1).
 
-iterate_over_1000_archives_using_offset_and_limit_10(_Config) ->
-    iterate_over_archives_test_base(1000, offset, 10).
+iterate_over_100_archives_using_offset_and_limit_10(_Config) ->
+    iterate_over_archives_test_base(100, offset, 10).
 
-iterate_over_1000_archives_using_offset_and_limit_100(_Config) ->
-    iterate_over_archives_test_base(1000, offset, 100).
+iterate_over_100_archives_using_offset_and_limit_100(_Config) ->
+    iterate_over_archives_test_base(100, offset, 100).
 
-iterate_over_1000_archives_using_offset_and_limit_1000(_Config) ->
-    iterate_over_archives_test_base(1000, offset, 1000).
+iterate_over_100_archives_using_offset_and_limit_1000(_Config) ->
+    iterate_over_archives_test_base(100, offset, 1000).
 
-iterate_over_1000_archives_using_offset_and_limit_10000(_Config) ->
-    iterate_over_archives_test_base(1000, offset, 10000).
+iterate_over_100_archives_using_offset_and_limit_10000(_Config) ->
+    iterate_over_archives_test_base(100, offset, 10000).
 
-iterate_over_1000_archives_using_start_index_and_limit_1(_Config) ->
-    iterate_over_archives_test_base(1000, start_index, 1).
+iterate_over_100_archives_using_start_index_and_limit_1(_Config) ->
+    iterate_over_archives_test_base(100, start_index, 1).
 
-iterate_over_1000_archives_using_start_index_and_limit_10(_Config) ->
-    iterate_over_archives_test_base(1000, start_index, 10).
+iterate_over_100_archives_using_start_index_and_limit_10(_Config) ->
+    iterate_over_archives_test_base(100, start_index, 10).
 
-iterate_over_1000_archives_using_start_index_and_limit_100(_Config) ->
-    iterate_over_archives_test_base(1000, start_index, 100).
+iterate_over_100_archives_using_start_index_and_limit_100(_Config) ->
+    iterate_over_archives_test_base(100, start_index, 100).
 
-iterate_over_1000_archives_using_start_index_and_limit_1000(_Config) ->
-    iterate_over_archives_test_base(1000, start_index, 1000).
+iterate_over_100_archives_using_start_index_and_limit_1000(_Config) ->
+    iterate_over_archives_test_base(100, start_index, 1000).
 
-iterate_over_1000_archives_using_start_index_and_limit_10000(_Config) ->
-    iterate_over_archives_test_base(1000, start_index, 10000).
+iterate_over_100_archives_using_start_index_and_limit_10000(_Config) ->
+    iterate_over_archives_test_base(100, start_index, 10000).
 
 %===================================================================
 % Sequential tests - tests which must be performed one after another
@@ -309,10 +315,9 @@ archive_dataset_many_times(_Config) ->
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
     UserSessIdP2 = oct_background:get_user_session_id(user1, paris),
 
-    #object{guid = Guid} = onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE, #file_spec{}),
     Count = 1000,
-    {ok, DatasetId} = ?assertMatch({ok, _},
-        lfm_proxy:establish_dataset(P1Node, UserSessIdP1, ?FILE_REF(Guid), ?no_flags_mask)),
+    #object{dataset = #dataset_object{id = DatasetId}} =
+        onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE, #file_spec{dataset = #dataset_spec{}}),
 
     Timestamp = global_clock_timestamp(P1Node),
 
@@ -326,8 +331,8 @@ archive_dataset_many_times(_Config) ->
     end, lists:seq(1, Count)),
 
     lists:foreach(fun({_Index, ArchiveId}) ->
-        ?assertMatch({ok, #archive_info{}},
-            lfm_proxy:get_archive_info(P1Node, UserSessIdP1, ArchiveId))
+        ?assertMatch({ok, #archive_info{state = ?ARCHIVE_PRESERVED}},
+            lfm_proxy:get_archive_info(P1Node, UserSessIdP1, ArchiveId), ?ATTEMPTS)
     end, ExpArchiveIdsReversed),
 
     ?assertMatch({ok, #dataset_info{archive_count = Count}},
@@ -343,12 +348,13 @@ archive_dataset_many_times(_Config) ->
 time_warp_test(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
-    #object{guid = Guid} = onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE, #file_spec{}),
-    {ok, DatasetId} = ?assertMatch({ok, _},
-        lfm_proxy:establish_dataset(P1Node, UserSessIdP1, ?FILE_REF(Guid), ?no_flags_mask)),
 
-    {ok, ArchiveId} = ?assertMatch({ok, _},
-        lfm_proxy:archive_dataset(P1Node, UserSessIdP1, DatasetId, ?TEST_ARCHIVE_CONFIG, ?TEST_DESCRIPTION1)),
+    #object{
+        dataset = #dataset_object{
+            id = DatasetId,
+            archives = [#archive_object{id = ArchiveId}]
+        }
+    } = onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE, #file_spec{dataset = #dataset_spec{archives = 1}}),
 
     time_test_utils:simulate_seconds_passing(-1),
 
@@ -365,13 +371,18 @@ create_archive_privileges_test(_Config) ->
     UserId2 = oct_background:get_user_id(user2),
     SpaceId = oct_background:get_space_id(?SPACE),
 
-    #object{guid = Guid} = onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE, #file_spec{}),
-    {ok, DatasetId} = ?assertMatch({ok, _},
-        lfm_proxy:establish_dataset(P1Node, UserSessIdP1, ?FILE_REF(Guid), ?no_flags_mask)),
-    {ok, ArchiveId} = lfm_proxy:archive_dataset(P1Node, UserSessIdP1, DatasetId, ?TEST_ARCHIVE_CONFIG, ?TEST_DESCRIPTION1),
+    #object{
+        dataset = #dataset_object{
+            id = DatasetId,
+            archives = [#archive_object{id = ArchiveId}]
+        }
+    } = onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE, #file_spec{dataset = #dataset_spec{archives = 1}}),
 
     RequiredPrivileges = privileges:from_list([?SPACE_MANAGE_DATASETS, ?SPACE_CREATE_ARCHIVES]),
     AllPrivileges = privileges:from_list(RequiredPrivileges ++ privileges:space_member()),
+
+    ?assertMatch({ok, #archive_info{state = ?ARCHIVE_PRESERVED}},
+        lfm_proxy:get_archive_info(P1Node, UserSessIdP1, ArchiveId), ?ATTEMPTS),
 
     lists:foreach(fun(Privilege) ->
 
@@ -385,8 +396,13 @@ create_archive_privileges_test(_Config) ->
 
         ensure_privilege_assigned(P1Node, SpaceId, UserId2, Privilege, AllPrivileges),
         % user2 can now create archive
-        ?assertMatch({ok, _},
+
+        {ok, ArchiveId2} = ?assertMatch({ok, _},
             lfm_proxy:archive_dataset(P1Node, User2SessIdP1, DatasetId, ?TEST_ARCHIVE_CONFIG, ?TEST_DESCRIPTION1)),
+
+        ?assertMatch({ok, #archive_info{state = ?ARCHIVE_PRESERVED}},
+            lfm_proxy:get_archive_info(P1Node, UserSessIdP1, ArchiveId2), ?ATTEMPTS),
+
         % as well as modify an existing one
         ?assertMatch(ok,
             lfm_proxy:update_archive(P1Node, User2SessIdP1, ArchiveId, #{<<"description">> => ?TEST_DESCRIPTION2}))
@@ -400,9 +416,15 @@ view_archive_privileges_test(_Config) ->
     UserId2 = oct_background:get_user_id(user2),
     SpaceId = oct_background:get_space_id(?SPACE),
 
-    #object{guid = Guid} = onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE, #file_spec{}),
-    {ok, DatasetId} = lfm_proxy:establish_dataset(P1Node, UserSessIdP1, ?FILE_REF(Guid), ?no_flags_mask),
-    {ok, ArchiveId} = lfm_proxy:archive_dataset(P1Node, UserSessIdP1, DatasetId, ?TEST_ARCHIVE_CONFIG, ?TEST_DESCRIPTION1),
+    #object{
+        dataset = #dataset_object{
+            id = DatasetId,
+            archives = [#archive_object{id = ArchiveId}]
+        }
+    } = onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE, #file_spec{dataset = #dataset_spec{archives = 1}}),
+
+    ?assertMatch({ok, #archive_info{state = ?ARCHIVE_PRESERVED}},
+        lfm_proxy:get_archive_info(P1Node, UserSessIdP1, ArchiveId), ?ATTEMPTS),
 
     AllPrivileges = privileges:from_list([?SPACE_VIEW_ARCHIVES | privileges:space_member()]),
 
@@ -433,11 +455,19 @@ remove_archive_privileges_test(_Config) ->
     UserId2 = oct_background:get_user_id(user2),
     SpaceId = oct_background:get_space_id(?SPACE),
 
-    #object{guid = Guid} = onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE, #file_spec{}),
-    {ok, DatasetId} = ?assertMatch({ok, _},
-        lfm_proxy:establish_dataset(P1Node, UserSessIdP1, ?FILE_REF(Guid), ?no_flags_mask)),
-    {ok, ArchiveId1} = lfm_proxy:archive_dataset(P1Node, UserSessIdP1, DatasetId, ?TEST_ARCHIVE_CONFIG, ?TEST_DESCRIPTION1),
-    {ok, ArchiveId2} = lfm_proxy:archive_dataset(P1Node, UserSessIdP1, DatasetId, ?TEST_ARCHIVE_CONFIG, ?TEST_DESCRIPTION1),
+    #object{
+        dataset = #dataset_object{
+            archives = [
+                #archive_object{id = ArchiveId1},
+                #archive_object{id = ArchiveId2}
+            ]
+        }
+    } = onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE, #file_spec{dataset = #dataset_spec{archives = 2}}),
+
+    ?assertMatch({ok, #archive_info{state = ?ARCHIVE_PRESERVED}},
+        lfm_proxy:get_archive_info(P1Node, UserSessIdP1, ArchiveId1), ?ATTEMPTS),
+    ?assertMatch({ok, #archive_info{state = ?ARCHIVE_PRESERVED}},
+        lfm_proxy:get_archive_info(P1Node, UserSessIdP1, ArchiveId1), ?ATTEMPTS),
 
     RequiredPrivileges = privileges:from_list([?SPACE_MANAGE_DATASETS, ?SPACE_REMOVE_ARCHIVES]),
     AllPrivileges = privileges:from_list(RequiredPrivileges ++ privileges:space_member()),
@@ -451,7 +481,7 @@ remove_archive_privileges_test(_Config) ->
         ensure_privilege_assigned(P1Node, SpaceId, UserId2, Privilege, AllPrivileges),
         % user2 can now remove archive
         ?assertEqual(ok, lfm_proxy:init_archive_purge(P1Node, User2SessIdP1, ArchiveId))
-    
+
     end, lists:zip(RequiredPrivileges, [ArchiveId1, ArchiveId2])).
 
 
@@ -459,44 +489,58 @@ remove_archive_privileges_test(_Config) ->
 % Test bases
 %===================================================================
 
-simple_archive_crud_test_base(Guid) ->
+simple_archive_crud_test_base(DatasetId, RootFileType) ->
+    simple_archive_crud_test_base(DatasetId, RootFileType, 0).
+
+simple_archive_crud_test_base(DatasetId, RootFileType, ExpSize) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     [P2Node] = oct_background:get_provider_nodes(paris),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
     UserSessIdP2 = oct_background:get_user_session_id(user1, paris),
-    {ok, DatasetId} = ?assertMatch({ok, _},
-        lfm_proxy:establish_dataset(P1Node, UserSessIdP1, ?FILE_REF(Guid), ?no_flags_mask)),
+    SpaceId = oct_background:get_space_id(?SPACE),
 
     % create archive
     {ok, ArchiveId} = lfm_proxy:archive_dataset(P1Node, UserSessIdP1, DatasetId, ?TEST_ARCHIVE_CONFIG,
-        ?TEST_ARCHIVE_PRESERVED_CALLBACK1, ?TEST_ARCHIVE_PURGED_CALLBACK1, ?TEST_DESCRIPTION1
-    ),
+        ?TEST_ARCHIVE_PRESERVED_CALLBACK1, ?TEST_ARCHIVE_PURGED_CALLBACK1, ?TEST_DESCRIPTION1),
 
-    Index = archives_list:index(ArchiveId, ?TEST_TIMESTAMP),
+    ArchiveRootDirUuid = ?ARCHIVE_DIR_UUID(ArchiveId),
+    ArchiveRootDirGuid = file_id:pack_guid(ArchiveRootDirUuid, SpaceId),
+
+    ExpectedFilesToArchive = case RootFileType of
+        ?DIRECTORY_TYPE -> 0;
+        _ -> 1
+    end,
+
+    Timestamp = global_clock_timestamp(P1Node),
+    Index = archives_list:index(ArchiveId, Timestamp),
     ExpArchiveInfo = #archive_info{
         id = ArchiveId,
         dataset_id = DatasetId,
-        state = ?ARCHIVE_PENDING,
-        root_dir_guid = undefined,
-        creation_time = ?TEST_TIMESTAMP,
+        state = ?ARCHIVE_PRESERVED,
+        root_dir_guid = ArchiveRootDirGuid,
+        creation_time = Timestamp,
         index = Index,
         config = #archive_config{
             incremental = false,
-            include_dip = true,
-            layout = ?ARCHIVE_BAGIT_LAYOUT
+            include_dip = false,
+            layout = ?ARCHIVE_PLAIN_LAYOUT
         },
         preserved_callback = ?TEST_ARCHIVE_PRESERVED_CALLBACK1,
         purged_callback = ?TEST_ARCHIVE_PURGED_CALLBACK1,
-        description = ?TEST_DESCRIPTION1
+        description = ?TEST_DESCRIPTION1,
+        files_to_archive = ExpectedFilesToArchive,
+        files_archived = ExpectedFilesToArchive,
+        files_failed = 0,
+        byte_size = ExpSize
     },
 
     % verify whether Archive is visible in the local provider
     ?assertEqual({ok, ExpArchiveInfo},
-        lfm_proxy:get_archive_info(P1Node, UserSessIdP1, ArchiveId)),
+        lfm_proxy:get_archive_info(P1Node, UserSessIdP1, ArchiveId), ?ATTEMPTS),
     ?assertEqual({ok, [{Index, ArchiveId}], true},
-        lfm_proxy:list_archives(P1Node, UserSessIdP1, DatasetId, #{offset => 0, limit => 10}, ?BASIC_INFO)),
+        lfm_proxy:list_archives(P1Node, UserSessIdP1, DatasetId, #{offset => 0, limit => 10}, ?BASIC_INFO), ?ATTEMPTS),
     ?assertEqual({ok, [ExpArchiveInfo], true},
-        lfm_proxy:list_archives(P1Node, UserSessIdP1, DatasetId, #{offset => 0, limit => 10}, ?EXTENDED_INFO)),
+        lfm_proxy:list_archives(P1Node, UserSessIdP1, DatasetId, #{offset => 0, limit => 10}, ?EXTENDED_INFO), ?ATTEMPTS),
 
     % verify whether Archive is visible in the remote provider
     ?assertEqual({ok, ExpArchiveInfo},
@@ -543,17 +587,24 @@ iterate_over_archives_test_base(ArchiveCount, ListingMethod, Limit) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
 
-    #object{guid = Guid} = onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE, #file_spec{}),
-    {ok, DatasetId} = ?assertMatch({ok, _},
-        lfm_proxy:establish_dataset(P1Node, UserSessIdP1, ?FILE_REF(Guid), ?no_flags_mask)),
+    #object{dataset = #dataset_object{
+        id = DatasetId,
+        archives = ArchiveObjects
+    }} = onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE,
+        #file_spec{dataset = #dataset_spec{archives = ArchiveCount}}),
 
-    UnsortedArchiveIds = lists:map(fun(_) ->
-        {ok, ArchiveId} = lfm_proxy:archive_dataset(P1Node, UserSessIdP1, DatasetId, ?TEST_ARCHIVE_CONFIG, ?TEST_DESCRIPTION1),
-        ArchiveId
-    end, lists:seq(1, ArchiveCount)),
+    UnsortedArchiveIdsAndIndices = [{Id, Index} || #archive_object{id = Id, index = Index} <- ArchiveObjects],
 
-    % all archives will have the same timestamp so they will be sorted in ascending order by they ids
-    ExpArchiveIds = lists:sort(UnsortedArchiveIds),
+    lists_utils:pforeach(fun({ArchiveId, _}) ->
+        ?assertMatch({ok, #archive_info{state = ?ARCHIVE_PRESERVED}},
+            lfm_proxy:get_archive_info(P1Node, UserSessIdP1, ArchiveId), ?ATTEMPTS)
+    end, UnsortedArchiveIdsAndIndices),
+
+    % sort archives by their indices
+    ExpArchiveIdsAndIndices = lists:sort(fun({_Id1, Ind1}, {_Id2, Ind2}) ->
+        Ind1 =< Ind2
+    end, UnsortedArchiveIdsAndIndices),
+    ExpArchiveIds = [Id || {Id, _} <- ExpArchiveIdsAndIndices],
 
     ListingOpts = case ListingMethod of
         offset -> #{offset => 0, limit => Limit};
@@ -578,13 +629,14 @@ end_per_suite(_Config) ->
 
 init_per_group(_Group, Config) ->
     time_test_utils:freeze_time(Config),
-    time_test_utils:set_current_time_seconds(?TEST_TIMESTAMP),
     lfm_proxy:init(Config, false).
 
-end_per_group(parallel_tests, Config) ->
-    time_test_utils:unfreeze_time(Config),
-    end_per_group(default, Config);
 end_per_group(_Group, Config) ->
+    time_test_utils:unfreeze_time(Config),
+    SpaceId = oct_background:get_space_id(?SPACE),
+    Workers = oct_background:get_all_providers_nodes(),
+    CleaningWorker = oct_background:get_random_provider_node(krakow),
+    lfm_test_utils:clean_space(CleaningWorker, Workers, SpaceId, ?ATTEMPTS),
     onenv_dataset_test_utils:cleanup_all_datasets(krakow, ?SPACE),
     lfm_proxy:teardown(Config).
 
@@ -609,6 +661,7 @@ check_if_all_archives_listed(ExpArchiveIds, Node, SessId, DatasetId, Opts) ->
     ListedArchiveIds = [AId || {_, AId} <- ListedArchives],
     ?assertEqual(lists:sublist(ExpArchiveIds, 1, Limit), ListedArchiveIds),
     RestExpArchiveIds = ExpArchiveIds -- ListedArchiveIds,
+
     case {IsLast, RestExpArchiveIds == []} of
         {true, true} ->
             ok;

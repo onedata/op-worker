@@ -241,7 +241,7 @@ create(SessId, Path, Mode) ->
 ) ->
     {ok, file_id:file_guid()} | lfm:error_reply().
 create(SessId, ParentGuid, Name, undefined) ->
-    {ok, DefaultMode} = application:get_env(?APP_NAME, default_file_mode),
+    DefaultMode = op_worker:get_env(default_file_mode),
     create(SessId, ParentGuid, Name, DefaultMode);
 create(SessId, ParentGuid0, Name, Mode) ->
     ParentGuid1 = lfm_file_key:resolve_file_key(
@@ -308,7 +308,7 @@ create_and_open(SessId, Path, Mode, OpenFlag) ->
 ) ->
     {ok, {file_id:file_guid(), lfm:handle()}} | lfm:error_reply().
 create_and_open(SessId, ParentGuid, Name, undefined, OpenFlag) ->
-    {ok, DefaultMode} = application:get_env(?APP_NAME, default_file_mode),
+    DefaultMode = op_worker:get_env(default_file_mode),
     create_and_open(SessId, ParentGuid, Name, DefaultMode, OpenFlag);
 create_and_open(SessId, ParentGuid0, Name, Mode, OpenFlag) ->
     ParentGuid1 = lfm_file_key:resolve_file_key(

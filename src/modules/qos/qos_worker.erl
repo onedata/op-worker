@@ -29,7 +29,7 @@
 -define(RETRY_FAILED_FILES, retry_failed_files).
 
 -define(RETRY_FAILED_FILES_INTERVAL_SECONDS,
-    application:get_env(?APP_NAME, qos_retry_failed_files_interval_seconds, 300)). % 5 minutes
+    op_worker:get_env(qos_retry_failed_files_interval_seconds, 300)). % 5 minutes
 
 %%%===================================================================
 %%% worker_plugin_behaviour callbacks

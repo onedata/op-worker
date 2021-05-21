@@ -56,7 +56,7 @@
 
 -define(SERVICE_CONFIGURATION_CACHE_TTL_SEC, 15).
 -define(PROVIDER_NODES_CACHE_TTL_SEC,
-    application:get_env(?APP_NAME, provider_nodes_cache_ttl_seconds, 600) % 10 minutes
+    op_worker:get_env(provider_nodes_cache_ttl_seconds, 600) % 10 minutes
 ).
 
 -compile([{no_auto_import, [get/0]}]).
@@ -761,7 +761,7 @@ get_peer_version(Service) ->
 -spec provider_connection_ssl_opts(od_provider:domain()) -> [http_client:ssl_opt()].
 provider_connection_ssl_opts(Domain) ->
     CaCerts = oneprovider:trusted_ca_certs(),
-    SecureFlag = application:get_env(?APP_NAME, interprovider_connections_security, true),
+    SecureFlag = op_worker:get_env(interprovider_connections_security, true),
     [{cacerts, CaCerts}, {secure, SecureFlag}, {hostname, Domain}].
 
 

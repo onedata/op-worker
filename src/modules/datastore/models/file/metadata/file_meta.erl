@@ -700,7 +700,7 @@ make_space_exist(SpaceId) ->
         value = #file_meta{
             name = SpaceId,
             type = ?DIRECTORY_TYPE,
-            mode = ?DEFAULT_DIR_PERMS,
+            mode = ?DEFAULT_DIR_MODE,
             owner = ?SPACE_OWNER_ID(SpaceId),
             is_scope = true,
             parent_uuid = ?GLOBAL_ROOT_DIR_UUID

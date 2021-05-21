@@ -13,7 +13,7 @@
 -author("Jakub Kudzia").
 
 -include("onenv_test_utils.hrl").
--include("modules/archive/archive.hrl").
+-include("modules/dataset/archive.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
@@ -23,7 +23,7 @@
     set_up_and_sync_archive/3,
     set_up_archive/3,
     set_up_archive/4,
-    await_archive_sync/4
+    await_archive_sync/5
 ]).
 
 -type archive_spec() :: #archive_spec{}.
@@ -32,7 +32,7 @@
 -export_type([archive_spec/0, archive_object/0]).
 
 
--define(ATTEMPTS, 30).
+-define(ATTEMPTS, 120).
 
 
 %%%===================================================================
@@ -48,7 +48,7 @@
 set_up_and_sync_archive(Providers, UserSelector, DatasetId) ->
     [CreationProvider | SyncProviders] = lists_utils:shuffle(Providers),
     ArchiveObj = set_up_archive(CreationProvider, UserSelector, DatasetId),
-    await_archive_sync(CreationProvider, SyncProviders, UserSelector, ArchiveObj),
+    await_archive_sync(CreationProvider, SyncProviders, UserSelector, ArchiveObj, DatasetId),
     ArchiveObj.
 
 
@@ -82,17 +82,16 @@ set_up_archive(CreationProvider, UserId, DatasetId, #archive_spec{
 
     {ok, ArchiveId} = ?assertMatch(
         {ok, _},
-        lfm_proxy:archive_dataset(CreationNode, UserSessId, DatasetId, Config, Description),
-        ?ATTEMPTS
+        lfm_proxy:archive_dataset(CreationNode, UserSessId, DatasetId, Config, Description)
     ),
 
-    {ok, #archive_info{index = Index}} = lfm_proxy:get_archive_info(CreationNode, UserSessId, ArchiveId),
+    {ok, ArchiveInfo} = lfm_proxy:get_archive_info(CreationNode, UserSessId, ArchiveId),
     
     #archive_object{
         id = ArchiveId,
         config = Config,
         description = Description,
-        index = Index
+        index = ArchiveInfo#archive_info.index
     }.
 
 
@@ -100,17 +99,18 @@ set_up_archive(CreationProvider, UserId, DatasetId, #archive_spec{
     oct_background:entity_selector(),
     [oct_background:entity_selector()],
     oct_background:entity_selector(),
-    undefined | archive_object()
+    undefined | archive_object(),
+    datset:id()
 ) ->
     ok | no_return().
-await_archive_sync(_CreationProvider, _SyncProviders, _UserId, undefined) ->
+await_archive_sync(_CreationProvider, _SyncProviders, _UserId, undefined, _) ->
     ok;
 
-await_archive_sync(CreationProvider, SyncProviders, UserId, #archive_object{id = ArchiveId}) ->
+await_archive_sync(CreationProvider, SyncProviders, UserId, #archive_object{id = ArchiveId}, DatasetId) ->
     CreationNode = ?OCT_RAND_OP_NODE(CreationProvider),
     CreationNodeSessId = oct_background:get_user_session_id(UserId, CreationProvider),
 
-    {ok, ArchiveInfo} = ?assertMatch(
+    ?assertMatch(
         {ok, #archive_info{id = ArchiveId}},
         lfm_proxy:get_archive_info(CreationNode, CreationNodeSessId, ArchiveId)
     ),
@@ -119,11 +119,17 @@ await_archive_sync(CreationProvider, SyncProviders, UserId, #archive_object{id =
         SyncNode = ?OCT_RAND_OP_NODE(SyncProvider),
         SessId = oct_background:get_user_session_id(UserId, SyncProvider),
 
-        ?assertEqual(
-            {ok, ArchiveInfo},
+        ?assertMatch(
+            {ok, #archive_info{id = ArchiveId}},
             lfm_proxy:get_archive_info(SyncNode, SessId, ArchiveId),
             ?ATTEMPTS
-        )
+        ),
+        ListArchivesFun = fun() ->
+            {ok, Archives, _} = lfm_proxy:list_archives(SyncNode, SessId, DatasetId, #{offset => 0, limit => 10000}),
+            [AId || {_, AId} <- Archives]
+        end,
+        ?assertEqual(true, lists:member(ArchiveId, ListArchivesFun()), ?ATTEMPTS)
+
     end, SyncProviders).
 
 %%%===================================================================
@@ -134,8 +140,8 @@ await_archive_sync(CreationProvider, SyncProviders, UserId, #archive_object{id =
 -spec random_archive_config() -> archive:config().
 random_archive_config() ->
     #archive_config{
-        incremental = lists_utils:random_element([true, false]),
-        include_dip = lists_utils:random_element([true, false]),
+        incremental = lists_utils:random_element(?SUPPORTED_INCREMENTAL_VALUES),
+        include_dip = lists_utils:random_element(?SUPPORTED_INCLUDE_DIP_VALUES),
         layout = lists_utils:random_element(?ARCHIVE_LAYOUTS)
     }.
 

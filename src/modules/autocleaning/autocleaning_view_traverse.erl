@@ -41,11 +41,11 @@
 %% @formatter:on
 
 -define(AUTOCLEANING_MASTER_JOBS_NUM,
-    application:get_env(?APP_NAME, autocleaning_master_jobs_num, 10)).
+    op_worker:get_env(autocleaning_master_jobs_num, 10)).
 -define(AUTOCLEANING_SLAVE_JOBS_NUM,
-    application:get_env(?APP_NAME, autocleaning_slave_jobs_num, 50)).
+    op_worker:get_env(autocleaning_slave_jobs_num, 50)).
 -define(AUTOCLEANING_PARALLEL_ORDERS_LIMIT,
-    application:get_env(?APP_NAME, autocleaning_parallel_orders_limit, 10)).
+    op_worker:get_env(autocleaning_parallel_orders_limit, 10)).
 
 -define(TASK_ID_SEPARATOR, <<"$$">>).
 

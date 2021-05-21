@@ -302,12 +302,12 @@ finder_should_return_duplicated_blocks_only_from_providers_with_equal_or_greater
 start() ->
     meck:new([oneprovider]),
     meck:expect(oneprovider, get_id, fun() -> ?LOCAL_PID end),
-    application:set_env(?APP_NAME, synchronizer_block_suiting, false),
+    op_worker:set_env(synchronizer_block_suiting, false),
     ok.
 
 
 stop(_) ->
-    application:unset_env(?APP_NAME, synchronizer_block_suiting),
+    op_worker:unset_env(synchronizer_block_suiting),
     ?assert(meck:validate([oneprovider])),
     meck:unload(),
     erase().

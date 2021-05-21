@@ -49,7 +49,7 @@
 create(SpaceId) ->
     SpaceUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
     TrashDoc = file_meta:new_doc(fslogic_uuid:spaceid_to_trash_dir_uuid(SpaceId),
-        ?TRASH_DIR_NAME, ?DIRECTORY_TYPE, ?DEFAULT_DIR_PERMS, ?SPACE_OWNER_ID(SpaceId),
+        ?TRASH_DIR_NAME, ?DIRECTORY_TYPE, ?DEFAULT_DIR_MODE, ?SPACE_OWNER_ID(SpaceId),
         SpaceUuid, SpaceId
     ),
     % TODO VFS-7064 use file_meta:create so that link to the trash directory will be added

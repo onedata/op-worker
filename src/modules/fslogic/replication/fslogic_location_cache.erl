@@ -55,7 +55,7 @@
 -export([get_location_size/2, get_blocks_range/1, get_blocks_range/2]).
 
 %% Max hole in sequence - see get_overlapping_blocks_sequence/2 function doc
--define(MAX_HOLE, application:get_env(?APP_NAME, overlapping_seqiences_max_hole, 5)).
+-define(MAX_HOLE, op_worker:get_env(overlapping_seqiences_max_hole, 5)).
 
 %%%===================================================================
 %%% Location getters/setters

@@ -57,8 +57,8 @@
 -export_type([spec/0]).
 
 -define(FILE_REGISTRATION_POOL, file_registration_pool).
--define(FILE_REGISTRATION_POOL_SIZE, application:get_env(?APP_NAME, file_registration_pool_size, 20)).
--define(FILE_REGISTRATION_TIMEOUT, application:get_env(?APP_NAME, file_registration_timeout, 30000)).
+-define(FILE_REGISTRATION_POOL_SIZE, op_worker:get_env(file_registration_pool_size, 20)).
+-define(FILE_REGISTRATION_TIMEOUT, op_worker:get_env(file_registration_timeout, 30000)).
 
 %%%===================================================================
 %%% API functions

@@ -136,10 +136,10 @@ fslogic_get_file_attr_test_base(Config, CheckReplicationStatus) ->
     end, [
         {SessId1, UserId1, 8#1755, 0, <<"/">>, undefined, ?DIRECTORY_TYPE},
         {SessId2, UserId2, 8#1755, 0, <<"/">>, undefined, ?DIRECTORY_TYPE},
-        {SessId1, <<"space_name1">>, ?DEFAULT_DIR_PERMS, 0, <<"/space_name1">>, UserRootGuid1, ?DIRECTORY_TYPE},
-        {SessId2, <<"space_name2">>, ?DEFAULT_DIR_PERMS, 0, <<"/space_name2">>, UserRootGuid2, ?DIRECTORY_TYPE},
-        {SessId1, <<"space_name3">>, ?DEFAULT_DIR_PERMS, 0, <<"/space_name3">>, UserRootGuid1, ?DIRECTORY_TYPE},
-        {SessId2, <<"space_name4">>, ?DEFAULT_DIR_PERMS, 0, <<"/space_name4">>, UserRootGuid2, ?DIRECTORY_TYPE},
+        {SessId1, <<"space_name1">>, ?DEFAULT_DIR_MODE, 0, <<"/space_name1">>, UserRootGuid1, ?DIRECTORY_TYPE},
+        {SessId2, <<"space_name2">>, ?DEFAULT_DIR_MODE, 0, <<"/space_name2">>, UserRootGuid2, ?DIRECTORY_TYPE},
+        {SessId1, <<"space_name3">>, ?DEFAULT_DIR_MODE, 0, <<"/space_name3">>, UserRootGuid1, ?DIRECTORY_TYPE},
+        {SessId2, <<"space_name4">>, ?DEFAULT_DIR_MODE, 0, <<"/space_name4">>, UserRootGuid2, ?DIRECTORY_TYPE},
         {SessId1, FileName, ?DEFAULT_FILE_PERMS, FileUid, FilePath, Space1Guid, ?REGULAR_FILE_TYPE}
     ]),
     ?assertMatch(
@@ -245,7 +245,7 @@ fslogic_get_file_children_attrs_test(Config) ->
 
     TestFun = fun({SessionId, Path, NameList, OwnersList, UserRootGuid}) ->
         Files = lists:map(fun({Name, Owner}) ->
-            {SessionId, Name, ?DEFAULT_DIR_PERMS, ?ROOT_UID, <<"/", Name/binary>>, Owner, UserRootGuid}
+            {SessionId, Name, ?DEFAULT_DIR_MODE, ?ROOT_UID, <<"/", Name/binary>>, Owner, UserRootGuid}
         end, lists:zip(NameList, OwnersList)),
 
         FilesAttrs = lists:map(fun({SessId, Name, Mode, UID, P, Owner, ParentGuid}) ->
@@ -307,10 +307,10 @@ fslogic_get_child_attr_test(Config) ->
             }
         }, ?file_req(Worker, SessId, ParentGuid, #get_child_attr{name = ChildName}))
     end, [
-        {SessId1, <<"space_name1">>, ?DEFAULT_DIR_PERMS, 0, UserRootGuid1, <<"space_name1">>},
-        {SessId2, <<"space_name2">>, ?DEFAULT_DIR_PERMS, 0, UserRootGuid2, <<"space_name2">>},
-        {SessId1, <<"space_name3">>, ?DEFAULT_DIR_PERMS, 0, UserRootGuid1, <<"space_name3">>},
-        {SessId2, <<"space_name4">>, ?DEFAULT_DIR_PERMS, 0, UserRootGuid2, <<"space_name4">>}
+        {SessId1, <<"space_name1">>, ?DEFAULT_DIR_MODE, 0, UserRootGuid1, <<"space_name1">>},
+        {SessId2, <<"space_name2">>, ?DEFAULT_DIR_MODE, 0, UserRootGuid2, <<"space_name2">>},
+        {SessId1, <<"space_name3">>, ?DEFAULT_DIR_MODE, 0, UserRootGuid1, <<"space_name3">>},
+        {SessId2, <<"space_name4">>, ?DEFAULT_DIR_MODE, 0, UserRootGuid2, <<"space_name4">>}
     ]),
     ?assertMatch(#fuse_response{status = #status{code = ?ENOENT}},
         ?file_req(Worker, SessId1, UserRootGuid1, #get_child_attr{name = <<"no such child">>})).

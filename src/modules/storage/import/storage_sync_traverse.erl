@@ -88,7 +88,7 @@
 -define(TASK_ID_SEP, <<"###">>).
 -define(TASK_ID_PREFIX, <<"storage_sync">>).
 
--define(BATCH_SIZE, application:get_env(?APP_NAME, storage_import_dir_batch_size, 1000)).
+-define(BATCH_SIZE, op_worker:get_env(storage_import_dir_batch_size, 1000)).
 
 %%%===================================================================
 %%% API functions
@@ -97,9 +97,9 @@
 -spec init_pool() -> ok.
 init_pool() ->
     % Get pool limits from app.config
-    MasterJobsLimit = application:get_env(?APP_NAME, storage_import_master_jobs_limit, 10),
-    SlaveJobsLimit = application:get_env(?APP_NAME, storage_import_slave_workers_limit, 10),
-    ParallelSyncedSpacesLimit = application:get_env(?APP_NAME, storage_import_parallel_synced_spaces_limit, 10),
+    MasterJobsLimit = op_worker:get_env(storage_import_master_jobs_limit, 10),
+    SlaveJobsLimit = op_worker:get_env(storage_import_slave_workers_limit, 10),
+    ParallelSyncedSpacesLimit = op_worker:get_env(storage_import_parallel_synced_spaces_limit, 10),
     storage_traverse:init(?POOL, MasterJobsLimit, SlaveJobsLimit, ParallelSyncedSpacesLimit).
 
 -spec stop_pool() -> ok.

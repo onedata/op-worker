@@ -45,7 +45,7 @@
 -export_type([task_id/0]).
 
 -define(POOL_NAME, atom_to_binary(?MODULE, utf8)).
--define(TRAVERSE_BATCH_SIZE, application:get_env(?APP_NAME, unsupport_cleanup_traverse_batch_size, 40)).
+-define(TRAVERSE_BATCH_SIZE, op_worker:get_env(unsupport_cleanup_traverse_batch_size, 40)).
 
 
 %%%===================================================================
@@ -75,9 +75,9 @@ start(SpaceId, StorageId) ->
 
 -spec init_pool() -> ok  | no_return().
 init_pool() ->
-    MasterJobsLimit = application:get_env(?APP_NAME, unsupport_cleanup_traverse_master_jobs_limit, 10),
-    SlaveJobsLimit = application:get_env(?APP_NAME, unsupport_cleanup_traverse_slave_jobs_limit, 20),
-    ParallelismLimit = application:get_env(?APP_NAME, unsupport_cleanup_traverse_parallelism_limit, 20),
+    MasterJobsLimit = op_worker:get_env(unsupport_cleanup_traverse_master_jobs_limit, 10),
+    SlaveJobsLimit = op_worker:get_env(unsupport_cleanup_traverse_slave_jobs_limit, 20),
+    ParallelismLimit = op_worker:get_env(unsupport_cleanup_traverse_parallelism_limit, 20),
     
     tree_traverse:init(?MODULE, MasterJobsLimit, SlaveJobsLimit, ParallelismLimit).
 
