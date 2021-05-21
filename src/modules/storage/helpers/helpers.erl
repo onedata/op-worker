@@ -27,7 +27,7 @@
     mknod/4, mkdir/3, unlink/3, rmdir/2, symlink/3, rename/3, link/3,
     chmod/3, chown/4, truncate/4, setxattr/6, getxattr/3, removexattr/3,
     listxattr/2, open/3, read/3, write/3, release/1, flush/1, fsync/2,
-    flushbuffer/3, readdir/4, listobjects/5]).
+    flushbuffer/3, readdir/4, listobjects/5, blocksize_for_path/2]).
 -export([init_counters/0, init_report/0]).
 %% For tests
 -export([apply_helper_nif/3, receive_loop/2]).
@@ -178,6 +178,15 @@ unlink(Handle, FileId, CurrentSize) ->
 flushbuffer(Handle, FileId, CurrentSize) ->
     ?MODULE:apply_helper_nif(Handle, flushbuffer, [FileId, CurrentSize]).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Calls {@link helpers_nif:blocksize_for_path/2} function.
+%% @end
+%%--------------------------------------------------------------------
+-spec blocksize_for_path(helper_handle(), file_id())
+    -> ok | {error, Reason :: term()}.
+blocksize_for_path(Handle, FileId) ->
+    ?MODULE:apply_helper_nif(Handle, blocksize_for_path, [FileId]).
 
 %%--------------------------------------------------------------------
 %% @doc

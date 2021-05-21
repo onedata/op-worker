@@ -51,6 +51,11 @@ mknod_test(Config) ->
 
     ?assertMatch({ok, #statbuf{st_size = 0}}, getattr(Helper, ArchiveFileId)),
 
+    {ok, RootBlockSize} = blocksize_for_path(Helper, FileId),
+    {ok, ArchiveBufferBlockSize} = blocksize_for_path(Helper, ArchiveFileId),
+
+    ?assertEqual(ArchiveBufferBlockSize, 5*RootBlockSize),
+
     delete_helper(Helper).
 
 
@@ -281,3 +286,6 @@ flushbuffer(Helper, FileId, CurrentSize) ->
 
 unlink(Helper, FileId, CurrentSize) ->
     ?assertEqual(ok, call(Helper, unlink, [FileId, CurrentSize])).
+
+blocksize_for_path(Helper, FileId) ->
+    call(Helper, blocksize_for_path, [FileId]).
