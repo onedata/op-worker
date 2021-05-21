@@ -57,7 +57,7 @@ all() -> [
     {group, all_tests}
 ].
 
--define(ATTEMPTS, 30).
+-define(ATTEMPTS, 120).
 -define(NON_EXISTENT_ARCHIVE_ID, <<"NonExistentArchive">>).
 -define(NON_EXISTENT_DATASET_ID, <<"NonExistentDataset">>).
 

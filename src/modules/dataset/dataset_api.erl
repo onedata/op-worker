@@ -27,10 +27,10 @@
 -export([list_top_datasets/4, list_children_datasets/3]).
 
 %% Archives API
--export([archive/6, update_archive/2, get_archive_info/1, list_archives/3, init_archive_purge/2]).
+-export([archive/6, update_archive/2, get_archive_info/1, list_archives/3, init_archive_purge/3]).
 
 %% Exported for use in tests
--export([remove_archive/1]).
+-export([remove_archive/1, remove_archive/2]).
 
 %% Utils
 -export([get_associated_file_ctx/1]).
@@ -65,7 +65,6 @@
 % Archives
 % TODO VFS-7617 implement recall operation of archives
 % TODO VFS-7624 implement purging job for archives
-% TODO VFS-7668 integrate S3 archives helper
 % TODO VFS-7651 implement archivisation with bagit layout archives
 % TODO VFS-7652 implement incremental archives
 % TODO VFS-7653 implement creating DIP for an archive
@@ -345,39 +344,43 @@ list_archives(DatasetId, ListingOpts, ListingMode) ->
     end.
 
 
--spec init_archive_purge(archive:id(), archive:callback()) -> ok | error().
-init_archive_purge(ArchiveId, CallbackUrl) ->
+-spec init_archive_purge(archive:id(), archive:callback(), user_ctx:ctx()) -> ok | error().
+init_archive_purge(ArchiveId, CallbackUrl, UserCtx) ->
     case archive:mark_purging(ArchiveId, CallbackUrl) of
         {ok, ArchiveDoc} ->
             {ok, DatasetId} = archive:get_dataset_id(ArchiveDoc),
             % TODO VFS-7624 init purging job
             % it should remove archive doc when finished
             % Should it be possible to register many callbacks in case of parallel purge requests?
-            ok = remove_archive(ArchiveId),
+            ok = remove_archive(ArchiveId, UserCtx),
             archivisation_callback:notify_purged(ArchiveId, DatasetId, CallbackUrl);
         {error, _} = Error ->
             Error
     end.
 
+-spec remove_archive(archive:doc() | archive:id()) -> ok | error().
+remove_archive(Archive) ->
+    remove_archive(Archive, user_ctx:new(?ROOT_SESS_ID)).
 
--spec remove_archive(archive:id()) -> ok | error().
-remove_archive(ArchiveId) ->
-    case archive:get(ArchiveId) of
-        {ok, ArchiveDoc} ->
-            case archive:delete(ArchiveId) of
-                ok ->
-                    {ok, DatasetId} = archive:get_dataset_id(ArchiveDoc),
-                    {ok, Timestamp} = archive:get_creation_time(ArchiveDoc),
-                    {ok, SpaceId} = archive:get_space_id(ArchiveDoc),
-                    archives_list:delete(DatasetId, SpaceId, ArchiveId, Timestamp);
-                ?ERROR_NOT_FOUND ->
-                    % there was race with other process removing the archive
-                    ok
-            end;
+
+-spec remove_archive(archive:id() | archive:doc(), user_ctx:ctx()) -> ok | error().
+remove_archive(ArchiveDoc = #document{}, UserCtx) ->
+    {ok, ArchiveId} = archive:get_id(ArchiveDoc),
+    case archive:delete(ArchiveId) of
+        ok ->
+            {ok, SpaceId} = archive:get_space_id(ArchiveDoc),
+            {ok, DatasetId} = archive:get_dataset_id(ArchiveDoc),
+            {ok, Timestamp} = archive:get_creation_time(ArchiveDoc),
+            archives_list:delete(DatasetId, SpaceId, ArchiveId, Timestamp);
         ?ERROR_NOT_FOUND ->
-            ok;
-        {error, _} = Error ->
-            Error
+            % there was race with other process removing the archive
+            ok
+    end;
+remove_archive(ArchiveId, UserCtx) ->
+    case archive:get(ArchiveId) of
+        {ok, ArchiveDoc} -> remove_archive(ArchiveDoc, UserCtx);
+        ?ERROR_NOT_FOUND -> ok;
+        {error, _} = Error -> Error
     end.
 
 

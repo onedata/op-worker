@@ -24,7 +24,7 @@
 -export([copy/4, copy/5]).
 
 -define(COPY_BUFFER_SIZE,
-    op_worker:get_env(rename_file_chunk_size, 52428800)). % 8*1024*1024 % todo
+    op_worker:get_env(rename_file_chunk_size, 52428800)). % 50*1024*1024
 -define(COPY_LS_SIZE, op_worker:get_env(ls_batch_size, 5000)).
 
 -type child_entry() :: {
@@ -122,8 +122,9 @@ copy_file(SessId, #file_attr{guid = SourceGuid, mode = Mode}, TargetParentGuid, 
     try
         {ok, SourceHandle} = lfm:open(SessId, ?FILE_REF(SourceGuid), read),
         try
+            BufferSize = get_buffer_size(TargetGuid),
             {ok, _NewSourceHandle, _NewTargetHandle} = copy_file_content(
-                SourceHandle, TargetHandle, 0
+                SourceHandle, TargetHandle, 0, BufferSize
             ),
             ok = copy_metadata(SessId, SourceGuid, TargetGuid, Mode),
             ok = lfm:fsync(TargetHandle)
@@ -148,16 +149,16 @@ copy_symlink(SessId, #file_attr{guid = SourceGuid}, TargetParentGuid, TargetName
 
 
 
--spec copy_file_content(lfm:handle(), lfm:handle(), non_neg_integer()) ->
+-spec copy_file_content(lfm:handle(), lfm:handle(), non_neg_integer(), non_neg_integer()) ->
     {ok, lfm:handle(), lfm:handle()} | {error, term()}.
-copy_file_content(SourceHandle, TargetHandle, Offset) ->
+copy_file_content(SourceHandle, TargetHandle, Offset, BufferSize) ->
     case lfm:check_size_and_read(SourceHandle, Offset, ?COPY_BUFFER_SIZE) of
         {ok, NewSourceHandle, <<>>} ->
             {ok, NewSourceHandle, TargetHandle};
         {ok, NewSourceHandle, Data} ->
             case lfm:write(TargetHandle, Offset, Data) of
                 {ok, NewTargetHandle, N} ->
-                    copy_file_content(NewSourceHandle, NewTargetHandle, Offset + N);
+                    copy_file_content(NewSourceHandle, NewTargetHandle, Offset + N, BufferSize);
                 Error ->
                     Error
             end;
@@ -219,3 +220,13 @@ copy_metadata(SessId, SourceGuid, TargetGuid, Mode) ->
     {ok, Acl} = lfm:get_acl(SessId, ?FILE_REF(SourceGuid)),
     lfm:set_acl(SessId, ?FILE_REF(TargetGuid), Acl),
     lfm:set_perms(SessId, ?FILE_REF(TargetGuid), Mode).
+
+
+-spec get_buffer_size(file_id:file_guid()) -> non_neg_integer().
+get_buffer_size(FileGuid) ->
+    {SDHandle, _FileCtx2} = storage_driver:new_handle(?ROOT_SESS_ID, file_ctx:new_by_guid(FileGuid)),
+    case storage_driver:blocksize_for_path(SDHandle) of
+        {ok, 0} -> ?COPY_BUFFER_SIZE;
+        {ok, Size} when is_integer(Size) andalso Size > 0 -> Size;
+        _ -> ?COPY_BUFFER_SIZE
+    end.

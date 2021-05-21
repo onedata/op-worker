@@ -72,7 +72,7 @@ start(ArchiveDoc, DatasetDoc, UserCtx) ->
             {ok, DatasetId} = archive:get_dataset_id(ArchiveDoc),
             {ok, SpaceId} = archive:get_space_id(ArchiveDoc),
             UserId = user_ctx:get_user_id(UserCtx),
-            {ok, ArchiveDirUuid} = archivisation_tree:create_archive_dir(ArchiveId, DatasetId, SpaceId),
+            {ok, ArchiveDirUuid} = archivisation_tree:create_archive_dir(ArchiveId, DatasetId, SpaceId, UserId),
             ArchiveDirGuid = file_id:pack_guid(ArchiveDirUuid, SpaceId),
             DatasetRootCtx = dataset_api:get_associated_file_ctx(DatasetDoc),
 

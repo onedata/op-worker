@@ -534,12 +534,11 @@ get_new_storage_file_id(FileCtx) ->
     case helper:get_storage_path_type(Helper) of
         ?FLAT_STORAGE_PATH ->
             FileUuid = file_ctx:get_logical_uuid_const(ReferencedUuidBasedFileCtx3),
-            StorageFileId = storage_file_id:flat(FileUuid, SpaceId, Storage, CanonicalPath),
+            StorageFileId = storage_file_id:flat(CanonicalPath, FileUuid, SpaceId, Storage),
             FinalCtx = return_newer_if_equals(ReferencedUuidBasedFileCtx3, FileCtx),
             {StorageFileId, FinalCtx#file_ctx{storage_file_id = StorageFileId}};
         ?CANONICAL_STORAGE_PATH ->
-            StorageId = storage:get_id(Storage),
-            StorageFileId = storage_file_id:canonical(CanonicalPath, SpaceId, StorageId),
+            StorageFileId = storage_file_id:canonical(CanonicalPath, SpaceId, Storage),
             FinalCtx = return_newer_if_equals(ReferencedUuidBasedFileCtx3, FileCtx),
             {StorageFileId, FinalCtx#file_ctx{storage_file_id = StorageFileId}}
     end.

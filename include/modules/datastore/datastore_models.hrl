@@ -450,7 +450,7 @@
     % internal fields
     % this field is used to fetch traverse_task document to get counters' values
     % when archivisation job is still in progress
-    job_id ::archivisation_traverse:id()
+    job_id :: archivisation_traverse:id()
 }).
 
 

@@ -171,7 +171,7 @@ init_archive_purge(SpaceDirCtx, ArchiveId, CallbackUrl, UserCtx) ->
     assert_has_eff_privilege(SpaceDirCtx, UserCtx, ?SPACE_MANAGE_DATASETS),
     assert_has_eff_privilege(SpaceDirCtx, UserCtx, ?SPACE_REMOVE_ARCHIVES),
 
-    ok = dataset_api:init_archive_purge(ArchiveId, CallbackUrl),
+    ok = dataset_api:init_archive_purge(ArchiveId, CallbackUrl, UserCtx),
     ?PROVIDER_OK_RESP.
 
 
