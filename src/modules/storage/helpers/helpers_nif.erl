@@ -30,8 +30,8 @@
 -export([refresh_params/2, refresh_helper_params/2, getattr/2, access/3,
     mknod/5, mkdir/3, unlink/3, rmdir/2, symlink/3, rename/3, link/3,
     chmod/3, chown/4, truncate/4, setxattr/6, getxattr/3, removexattr/3,
-    listxattr/2, open/3, read/3, write/3, release/1, flush/1, fsync/2,
-    readdir/4, listobjects/5]).
+    listxattr/2, flushbuffer/3, open/3, read/3, write/3, release/1, flush/1,
+    fsync/2, readdir/4, listobjects/5]).
 -export([start_monitoring/0, stop_monitoring/0]).
 
 %%%===================================================================
@@ -165,6 +165,12 @@ removexattr(_Handle, _FileId, _Name) ->
 -spec listxattr(helper_handle(), helpers:file_id()) ->
     {ok, response_ref()} | {error, Reason :: term()}.
 listxattr(_Handle, _FileId) ->
+    erlang:nif_error(helpers_nif_not_loaded).
+
+
+-spec flushbuffer(helper_handle(), helpers:file_id(), Size :: non_neg_integer()) ->
+    {ok, response_ref()} | {error, Reason :: term()}.
+flushbuffer(_Handle, _FileId, _Size) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
 

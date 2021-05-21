@@ -103,7 +103,7 @@ gui_download_file_test(Config) ->
         forbidden_in_space = [user4]
     },
     FileSpec = #file_spec{mode = 8#604, content = ?RAND_CONTENT(), shares = [#share_spec{}]},
-    gui_download_test_base(Config, FileSpec, ClientSpec, <<"File">>).
+    gui_download_test_base(Config, FileSpec, ClientSpec, <<"File">>, uninterrupted_download).
 
 gui_download_dir_test(Config) ->
     ClientSpec = ?TARBALL_DOWNLOAD_CLIENT_SPEC,
@@ -194,7 +194,7 @@ gui_download_incorrect_uuid_test(Config) ->
     SpaceId = oct_background:get_space_id(space_krk_par),
     ValidateCallResultFun = fun(#api_test_ctx{node = DownloadNode}, Result) ->
         {ok, #{<<"fileUrl">> := FileDownloadUrl}} = ?assertMatch({ok, #{}}, Result),
-        ?assertMatch(?ERROR_POSIX(?ENOENT), download_file_with_gui_endpoint(DownloadNode, FileDownloadUrl))
+        ?assertMatch(?ERROR_POSIX(?ENOENT), download_file_using_download_code_with_resumes(DownloadNode, FileDownloadUrl))
     end,
     
     DataSpec = #data_spec{
@@ -263,13 +263,25 @@ gui_download_tarball_with_hardlinks_test(Config) ->
 
 %% @private
 -spec gui_download_test_base(
+    test_config:config(),
+    onenv_file_test_utils:object_spec() | [onenv_file_test_utils:file_spec()],
+    onenv_api_test_runner:client_spec(),
+    binary()
+) ->
+    ok.
+gui_download_test_base(Config, FileTreeSpec, ClientSpec, ScenarioPrefix) ->
+    gui_download_test_base(Config, FileTreeSpec, ClientSpec, ScenarioPrefix, simulate_failures).
+
+%% @private
+-spec gui_download_test_base(
     test_config:config(), 
     onenv_file_test_utils:object_spec() | [onenv_file_test_utils:file_spec()], 
     onenv_api_test_runner:client_spec(), 
-    binary()
+    binary(),
+    simulate_failures | uninterrupted_download
 ) -> 
     ok.
-gui_download_test_base(Config, FileTreeSpec, ClientSpec, ScenarioPrefix) ->
+gui_download_test_base(Config, FileTreeSpec, ClientSpec, ScenarioPrefix, DownloadType) ->
     Providers = ?config(op_worker_nodes, Config),
 
     SpaceId = oct_background:get_space_id(space_krk_par),
@@ -278,6 +290,7 @@ gui_download_test_base(Config, FileTreeSpec, ClientSpec, ScenarioPrefix) ->
             user3, SpaceId, #dir_spec{shares = [#share_spec{}]}, krakow),
 
     MemRef = api_test_memory:init(),
+    api_test_memory:set(MemRef, download_type, DownloadType),
 
     SetupFun = build_download_file_setup_fun(MemRef, FileTreeSpec), 
     ValidateCallResultFun = build_get_download_url_validate_gs_call_fun(MemRef), 
@@ -393,7 +406,11 @@ build_get_download_url_validate_gs_call_fun(MemRef) ->
 
         {ok, #{<<"fileUrl">> := FileDownloadUrl}} = ?assertMatch({ok, #{}}, Result),
         [_, DownloadCode] = binary:split(FileDownloadUrl, [<<"/download/">>]),
-
+    
+        DownloadFunction = case api_test_memory:get(MemRef, download_type, simulate_failures) of
+            simulate_failures -> fun download_file_using_download_code_with_resumes/2;
+            uninterrupted_download -> fun download_file_using_download_code/2
+        end,
         case rand:uniform(2) of
             1 ->
                 User4Id = oct_background:get_user_id(user4),
@@ -404,7 +421,7 @@ build_get_download_url_validate_gs_call_fun(MemRef) ->
                     ?USER(User4Id) -> ok;
                     _ ->
                         block_file_streaming(DownloadNode, Guid),
-                        ?assertEqual(?ERROR_POSIX(?EAGAIN), download_file_with_gui_endpoint(DownloadNode, FileDownloadUrl)),
+                        ?assertEqual(?ERROR_POSIX(?EAGAIN), DownloadFunction(DownloadNode, FileDownloadUrl)),
                         unblock_file_streaming(DownloadNode, Guid),
                         ?assertMatch({ok, _}, get_file_download_code_doc(DownloadNode, DownloadCode, memory))
                 end,
@@ -412,9 +429,9 @@ build_get_download_url_validate_gs_call_fun(MemRef) ->
                 % But first successful download should make it unusable
                 case FileTreeObject of
                     [#object{type = ?REGULAR_FILE_TYPE, content = ExpContent1}] ->
-                        ?assertEqual({ok, ExpContent1}, download_file_with_gui_endpoint(DownloadNode, FileDownloadUrl));
+                        ?assertEqual({ok, ExpContent1}, DownloadFunction(DownloadNode, FileDownloadUrl));
                     _ ->
-                        {ok, Bytes} = ?assertMatch({ok, _}, download_file_with_gui_endpoint(DownloadNode, FileDownloadUrl)),
+                        {ok, Bytes} = ?assertMatch({ok, _}, DownloadFunction(DownloadNode, FileDownloadUrl)),
                         % user4 does not have access to files, so downloaded tarball contains only dir entry
                         lists:foreach(fun(Object) ->
                             case {Client, api_test_memory:get(MemRef, scope)} of
@@ -425,8 +442,10 @@ build_get_download_url_validate_gs_call_fun(MemRef) ->
                             end
                         end, utils:ensure_list(FileTreeObject))
                 end,
+                % file download code is still usable for some time to allow for resuming after download of last chunk failed
+                timer:sleep(timer:seconds(?GUI_DOWNLOAD_CODE_EXPIRATION_SECONDS)), 
                 ?assertMatch(?ERROR_NOT_FOUND, get_file_download_code_doc(DownloadNode, DownloadCode, memory), ?ATTEMPTS),
-                ?assertEqual(?ERROR_BAD_VALUE_ID_NOT_FOUND(<<"code">>), download_file_with_gui_endpoint(DownloadNode, FileDownloadUrl)),
+                ?assertEqual(?ERROR_BAD_VALUE_ID_NOT_FOUND(<<"code">>), DownloadFunction(DownloadNode, FileDownloadUrl)),
 
                 api_test_memory:set(MemRef, download_succeeded, true);
             2 ->
@@ -443,7 +462,7 @@ build_get_download_url_validate_gs_call_fun(MemRef) ->
                 ?assertMatch({ok, _}, get_file_download_code_doc(DownloadNode, DownloadCode, memory)),
 
                 % Still after request, which will fail, it should be deleted also from memory
-                ?assertEqual(?ERROR_BAD_VALUE_ID_NOT_FOUND(<<"code">>), download_file_with_gui_endpoint(DownloadNode, FileDownloadUrl)),
+                ?assertEqual(?ERROR_BAD_VALUE_ID_NOT_FOUND(<<"code">>), DownloadFunction(DownloadNode, FileDownloadUrl)),
                 ?assertMatch(?ERROR_NOT_FOUND, get_file_download_code_doc(DownloadNode, DownloadCode, memory)),
     
                 api_test_memory:set(MemRef, download_succeeded, false)
@@ -479,24 +498,6 @@ get_file_download_code_doc(Node, DownloadCode, Location) ->
         disc -> Ctx0#{memory_driver => undefined}
     end,
     rpc:call(Node, datastore_model, get, [Ctx1, DownloadCode]).
-
-
-%% @private
--spec download_file_with_gui_endpoint(node(), FileDownloadUrl :: binary()) ->
-    {ok, Content :: binary()} | {error, term()}.
-download_file_with_gui_endpoint(Node, FileDownloadUrl) ->
-    CaCerts = opw_test_rpc:get_cert_chain_ders(Node),
-    Opts = [{ssl_options, [{cacerts, CaCerts}]}, {recv_timeout, infinity}],
-
-    case http_client:request(get, FileDownloadUrl, #{}, <<>>, Opts) of
-        {ok, ?HTTP_200_OK, _RespHeaders, RespBody} ->
-            {ok, RespBody};
-        {ok, _RespCode, _RespHeaders, RespBody} ->
-            errors:from_json(maps:get(<<"error">>, json_utils:decode(RespBody)));
-        {error, _} = Error ->
-            Error
-    end.
-
 
 %% @private
 -spec build_download_file_verify_fun(api_test_memory:mem_ref()) ->
@@ -929,6 +930,90 @@ build_download_file_setup_fun(MemRef, Spec) ->
     end.
 
 
+%% @private
+-spec download_file_using_download_code(node(), FileDownloadUrl :: binary()) ->
+    {ok, Content :: binary()} | {error, term()}.
+download_file_using_download_code(Node, FileDownloadUrl) ->
+    check_download_result(http_client:request(get, FileDownloadUrl, #{}, <<>>, get_download_opts(Node))).
+
+
+%% @private
+-spec download_file_using_download_code_with_resumes(node(), FileDownloadUrl :: binary()) ->
+    {ok, Content :: binary()} | {error, term()}.
+download_file_using_download_code_with_resumes(Node, FileDownloadUrl) ->
+    InitDownloadFun = fun(Begin) ->
+        {ok, _Ref} = http_client:request_return_stream(get, FileDownloadUrl, build_range_header(Begin), <<>>, get_download_opts(Node))
+    end,
+    Self = self(),
+    spawn(fun() -> InitDownloadFun(0), failing_download_client(Self) end),
+    check_download_result(async_download(#{}, InitDownloadFun)).
+
+%% @private
+-spec get_download_opts(node()) -> http_client:opts().
+get_download_opts(Node) ->
+    CaCerts = opw_test_rpc:get_cert_chain_ders(Node),
+    [{ssl_options, [{cacerts, CaCerts}]}, {recv_timeout, infinity}].
+
+
+%% @private
+-spec check_download_result(http_client:response()) -> {ok, http_client:body()} | {error, term()}.
+check_download_result({ok, ?HTTP_200_OK, _RespHeaders, RespBody}) ->
+    {ok, RespBody};
+check_download_result({ok, ?HTTP_206_PARTIAL_CONTENT, _RespHeaders, RespBody}) ->
+    {ok, RespBody};
+check_download_result({ok, _RespCode, _RespHeaders, RespBody}) ->
+    errors:from_json(maps:get(<<"error">>, json_utils:decode(RespBody)));
+check_download_result({error, _} = Error) ->
+    Error.
+
+
+%% @private
+-spec build_range_header(non_neg_integer()) -> http_client:headers().
+build_range_header(Begin) ->
+    #{?HDR_RANGE => <<"bytes=", (integer_to_binary(Begin))/binary, "-">>}.
+
+
+%% @private
+-spec async_download(map(), fun((non_neg_integer()) -> {ok, term()})) -> http_client:response().
+async_download(ResultMap, DownloadFun) ->
+    receive
+        {hackney_response, _Ref, {status, StatusInt, _Reason}} ->
+            async_download(ResultMap#{status => StatusInt}, DownloadFun);
+        {hackney_response, _Ref, {headers, Headers}} ->
+            async_download(ResultMap#{headers => Headers}, DownloadFun);
+        {hackney_response, _Ref, done} ->
+            {ok, maps:get(status, ResultMap), maps:get(headers, ResultMap), maps:get(body, ResultMap)};
+        {hackney_response, _Ref, Bin} ->
+            PrevBin = maps:get(body, ResultMap, <<>>),
+            async_download(ResultMap#{body => <<PrevBin/binary, Bin/binary>>}, DownloadFun);
+        killed ->
+            Self = self(),
+            spawn(fun() -> DownloadFun(byte_size(maps:get(body, ResultMap, <<>>))), failing_download_client(Self) end),
+            async_download(ResultMap, DownloadFun)
+    end.
+
+
+%% @private
+-spec failing_download_client(pid()) -> boolean().
+failing_download_client(Pid) ->
+    failing_download_client(Pid, 8).
+
+
+%% @private
+-spec failing_download_client(pid(), non_neg_integer()) -> boolean().
+failing_download_client(Pid, 0) ->
+    Pid ! killed,
+    exit(kill);
+failing_download_client(Pid, ChunksUntilFail) ->
+    receive
+        {hackney_response, _Ref, done} = Msg ->
+            Pid ! Msg;
+        Msg ->
+            Pid ! Msg,
+            failing_download_client(Pid, ChunksUntilFail - 1)
+    end.
+
+
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -979,7 +1064,7 @@ check_extracted_tarball_structure(#object{name = Filename}, no_files, CurrentPat
 -spec unpack_tarball(binary()) -> binary().
 unpack_tarball(Bytes) ->
     TmpDir = mochitemp:mkdtemp(),
-    ?assertEqual(ok, erl_tar:extract({binary, Bytes}, [compressed, {cwd, TmpDir}])),
+    ok = erl_tar:extract({binary, Bytes}, [{cwd, TmpDir}]),
     TmpDir.
 
 
@@ -1011,6 +1096,7 @@ init_per_suite(Config) ->
             {op_worker, op_worker, [
                 {fuse_session_grace_period_seconds, 24 * 60 * 60},
                 {default_download_read_block_size, ?DEFAULT_READ_BLOCK_SIZE},
+                {max_download_buffer_size, 2 * ?DEFAULT_READ_BLOCK_SIZE},
 
                 % Ensure replica_synchronizer will not fetch more data than requested
                 {minimal_sync_request, ?DEFAULT_READ_BLOCK_SIZE},
@@ -1036,18 +1122,30 @@ init_per_suite(Config) ->
             lists:foreach(fun(OpNode) -> 
                 test_node_starter:load_modules([OpNode], [?MODULE]),
                 ok = test_utils:mock_new(OpNode, file_download_utils),
-                ErrorFun = fun(SessionId, FileAttrs, Callback, Req) ->
+                ErrorFun = fun(FileAttrs, Req) ->
                     ShouldBlock = lists:any(fun(#file_attr{guid = Guid}) ->
                         {Uuid, _, _} = file_id:unpack_share_guid(Guid),
                         node_cache:get({block_file, Uuid}, false)
                     end, utils:ensure_list(FileAttrs)),
                     case ShouldBlock of
                         true -> http_req:send_error(?ERROR_POSIX(?EAGAIN), Req);
-                        false -> meck:passthrough([SessionId, FileAttrs, Callback, Req])
+                        false -> passthrough
                     end
                 end,
-                ok = test_utils:mock_expect(OpNode, file_download_utils, download_single_file, ErrorFun),
-                ok = test_utils:mock_expect(OpNode, file_download_utils, download_tarball, ErrorFun)
+                ok = test_utils:mock_expect(OpNode, file_download_utils, download_single_file, 
+                    fun(SessionId, FileAttrs, Callback, Req) -> 
+                        case ErrorFun(FileAttrs, Req) of
+                            passthrough -> meck:passthrough([SessionId, FileAttrs, Callback, Req]);
+                            Res -> Res
+                        end
+                    end),
+                ok = test_utils:mock_expect(OpNode, file_download_utils, download_tarball,
+                    fun(Id, SessionId, FileAttrs, Req) ->
+                        case ErrorFun(FileAttrs, Req) of
+                            passthrough -> meck:passthrough([Id, SessionId, FileAttrs, Req]);
+                            Res -> Res
+                        end
+                    end)
             end, ProviderNodes),
             NewConfig
         end

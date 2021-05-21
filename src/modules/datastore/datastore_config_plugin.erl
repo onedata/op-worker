@@ -34,6 +34,7 @@ get_models() -> [
     od_token,
     od_atm_inventory,
     od_atm_lambda,
+    od_atm_workflow_schema,
     temporary_token_secret,
     provider_auth,
     offline_access_credentials,
@@ -88,10 +89,11 @@ get_models() -> [
     deletion_marker,
     tree_traverse_progress,
     dataset,
-    archive,
+    bulk_download_task,
     atm_store,
     atm_task_execution,
     atm_workflow_execution,
+    archive,
 
     %% @TODO VFS-6767 deprecated, included for upgrade procedure. Remove in next major release after 21.02.*.
     space_strategies,

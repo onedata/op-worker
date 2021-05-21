@@ -25,7 +25,7 @@
 
 -record(atm_task_execution_argument_spec, {
     name :: automation:name(),
-    value_builder :: atm_argument_value_builder:record(),
+    value_builder :: atm_task_argument_value_builder:record(),
     data_spec :: atm_data_spec:record(),
     is_batch :: boolean()
 }).

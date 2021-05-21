@@ -16,6 +16,7 @@
 -include("middleware/middleware.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/errors.hrl").
+-include_lib("ctool/include/http/headers.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 
@@ -145,7 +146,12 @@ process_request(#op_req{
         {ok, #file_attr{type = ?REGULAR_FILE_TYPE} = FileAttrs} ->
             file_download_utils:download_single_file(SessionId, FileAttrs, Req);
         {ok, #file_attr{} = FileAttrs} ->
-            file_download_utils:download_tarball(SessionId, [FileAttrs], Req)
+            case page_file_download:gen_file_download_url(SessionId, [FileGuid]) of
+                {ok, Url} -> 
+                    cowboy_req:reply(?HTTP_302_FOUND, #{?HDR_LOCATION => Url}, Req);
+                {error, _} = Error ->
+                    http_req:send_error(Error, Req)
+            end
     end;
 
 process_request(#op_req{

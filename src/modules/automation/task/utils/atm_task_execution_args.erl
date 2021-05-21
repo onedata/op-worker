@@ -150,7 +150,7 @@ build_spec(#atm_lambda_argument_spec{
 }, undefined) ->
     #atm_task_execution_argument_spec{
         name = Name,
-        value_builder = #atm_argument_value_builder{type = const, recipe = DefaultValue},
+        value_builder = #atm_task_argument_value_builder{type = const, recipe = DefaultValue},
         data_spec = AtmDataSpec,
         is_batch = IsBatch
     };
@@ -168,23 +168,23 @@ build_spec(#atm_lambda_argument_spec{
     }.
 
 
-% TODO VFS-7660 handle rest of atm_argument_value_builder:type()
+% TODO VFS-7660 handle rest of atm_task_argument_value_builder:type()
 %% @private
--spec build_arg(atm_task_execution:ctx(), atm_argument_value_builder:record()) ->
+-spec build_arg(atm_task_execution:ctx(), atm_task_argument_value_builder:record()) ->
     json_utils:json_term() | no_return().
-build_arg(_AtmTaskExecutionArgSpec, #atm_argument_value_builder{
+build_arg(_AtmTaskExecutionArgSpec, #atm_task_argument_value_builder{
     type = const,
     recipe = ConstValue
 }) ->
     ConstValue;
 
-build_arg(#atm_task_execution_ctx{item = Item}, #atm_argument_value_builder{
+build_arg(#atm_task_execution_ctx{item = Item}, #atm_task_argument_value_builder{
     type = iterated_item,
     recipe = undefined
 }) ->
     Item;
 
-build_arg(#atm_task_execution_ctx{item = Item}, #atm_argument_value_builder{
+build_arg(#atm_task_execution_ctx{item = Item}, #atm_task_argument_value_builder{
     type = iterated_item,
     recipe = Query
 }) ->
