@@ -17,7 +17,7 @@
 %% API
 -export([
     create_all/3, create/4,
-    init_all/1, init/1,
+    prepare_all/1, prepare/1,
     delete_all/1, delete/1,
 
     gather_statuses/1,
@@ -87,20 +87,20 @@ create(AtmWorkflowExecutionId, AtmStoreRegistry, AtmLaneNo, #atm_lane_schema{
     }.
 
 
--spec init_all([record()]) -> ok | no_return().
-init_all(AtmLaneExecutions) ->
+-spec prepare_all([record()]) -> ok | no_return().
+prepare_all(AtmLaneExecutions) ->
     lists:foreach(fun(#atm_lane_execution{schema_id = AtmLaneSchemaId} = AtmLaneExecution) ->
         try
-            init(AtmLaneExecution)
+            prepare(AtmLaneExecution)
         catch _:Reason ->
-            throw(?ERROR_ATM_LANE_EXECUTION_INIT_FAILED(AtmLaneSchemaId, Reason))
+            throw(?ERROR_ATM_LANE_EXECUTION_PREPARATION_FAILED(AtmLaneSchemaId, Reason))
         end
     end, AtmLaneExecutions).
 
 
--spec init(record()) -> ok | no_return().
-init(#atm_lane_execution{parallel_boxes = AtmParallelBoxExecutions}) ->
-    atm_parallel_box_execution:init_all(AtmParallelBoxExecutions).
+-spec prepare(record()) -> ok | no_return().
+prepare(#atm_lane_execution{parallel_boxes = AtmParallelBoxExecutions}) ->
+    atm_parallel_box_execution:prepare_all(AtmParallelBoxExecutions).
 
 
 -spec delete_all([record()]) -> ok.

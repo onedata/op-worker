@@ -77,14 +77,14 @@
     {error, {atm_lane_execution_creation_failed, __LANE_SCHEMA_ID, __REASON}}
 ).
 
--define(ERROR_ATM_TASK_EXECUTION_INIT_FAILED(__TASK_SCHEMA_ID, __REASON),
-    {error, {atm_task_execution_init_failed, __TASK_SCHEMA_ID, __REASON}}
+-define(ERROR_ATM_TASK_EXECUTION_PREPARATION_FAILED(__TASK_SCHEMA_ID, __REASON),
+    {error, {atm_task_execution_preparation_failed, __TASK_SCHEMA_ID, __REASON}}
 ).
--define(ERROR_ATM_PARALLEL_BOX_EXECUTION_INIT_FAILED(__PARALLEL_BOX_SCHEMA_ID, __REASON),
-    {error, {atm_parallel_box_init_creation_failed, __PARALLEL_BOX_SCHEMA_ID, __REASON}}
+-define(ERROR_ATM_PARALLEL_BOX_EXECUTION_PREPARATION_FAILED(__PARALLEL_BOX_SCHEMA_ID, __REASON),
+    {error, {atm_parallel_box_preparation_creation_failed, __PARALLEL_BOX_SCHEMA_ID, __REASON}}
 ).
--define(ERROR_ATM_LANE_EXECUTION_INIT_FAILED(__LANE_SCHEMA_ID, __REASON),
-    {error, {atm_lane_execution_init_failed, __LANE_SCHEMA_ID, __REASON}}
+-define(ERROR_ATM_LANE_EXECUTION_PREPARATION_FAILED(__LANE_SCHEMA_ID, __REASON),
+    {error, {atm_lane_execution_preparation_failed, __LANE_SCHEMA_ID, __REASON}}
 ).
 -define(ERROR_ATM_INVALID_STATUS_TRANSITION(__PREV_STATUS, __NEW_STATUS),
     {error, {atm_invalid_status_transition, __PREV_STATUS, __NEW_STATUS}}

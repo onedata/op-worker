@@ -19,16 +19,15 @@
 %% API
 -export([
     create_all/4, create/4,
-    init_all/1, init/1,
+    prepare_all/1, prepare/1,
     delete_all/1, delete/1,
     run/2
 ]).
 
 
--type registry() :: #{atm_task_execution:id() => atm_task_execution:status()}.
 -type task_id() :: binary().
 
--export_type([registry/0, task_id/0]).
+-export_type([task_id/0]).
 
 
 %%%===================================================================
@@ -42,7 +41,7 @@
     non_neg_integer(),
     [atm_task_schema:record()]
 ) ->
-    registry() | no_return().
+    [atm_task_execution:id()] | no_return().
 create_all(AtmWorkflowExecutionId, AtmLaneNo, AtmParallelBoxNo, AtmTaskSchemas) ->
     lists:foldl(fun(#atm_task_schema{
         id = AtmTaskSchemaId
@@ -51,12 +50,12 @@ create_all(AtmWorkflowExecutionId, AtmLaneNo, AtmParallelBoxNo, AtmTaskSchemas) 
             {ok, AtmTaskExecutionId} = create(
                 AtmWorkflowExecutionId, AtmLaneNo, AtmParallelBoxNo, AtmTaskSchema
             ),
-            #{AtmTaskExecutionId => ?PENDING_STATUS}
+            [AtmTaskExecutionId | Acc]
         catch _:Reason ->
-            catch delete_all(maps:keys(Acc)),
+            catch delete_all(Acc),
             throw(?ERROR_ATM_TASK_EXECUTION_CREATION_FAILED(AtmTaskSchemaId, Reason))
         end
-    end, #{}, AtmTaskSchemas).
+    end, [], AtmTaskSchemas).
 
 
 -spec create(
@@ -96,27 +95,27 @@ create(AtmWorkflowExecutionId, AtmLaneNo, AtmParallelBoxNo, #atm_task_schema{
     }).
 
 
--spec init_all([atm_task_execution:id()]) -> ok | no_return().
-init_all(AtmTaskExecutionIds) ->
+-spec prepare_all([atm_task_execution:id()]) -> ok | no_return().
+prepare_all(AtmTaskExecutionIds) ->
     lists:foreach(fun(AtmTaskExecutionId) ->
         {ok, #document{value = AtmTaskExecutionRecord = #atm_task_execution{
             schema_id = AtmTaskSchemaId
         }}} = atm_task_execution:get(AtmTaskExecutionId),
 
         try
-            init(AtmTaskExecutionRecord)
+            prepare(AtmTaskExecutionRecord)
         catch _:Reason ->
-            throw(?ERROR_ATM_TASK_EXECUTION_INIT_FAILED(AtmTaskSchemaId, Reason))
+            throw(?ERROR_ATM_TASK_EXECUTION_PREPARATION_FAILED(AtmTaskSchemaId, Reason))
         end
     end, AtmTaskExecutionIds).
 
 
--spec init(atm_task_execution:id() | atm_task_execution:record()) -> ok | no_return().
-init(AtmTaskExecutionIdOrRecord) ->
+-spec prepare(atm_task_execution:id() | atm_task_execution:record()) -> ok | no_return().
+prepare(AtmTaskExecutionIdOrRecord) ->
     #atm_task_execution{executor = AtmTaskExecutor} = ensure_atm_task_execution_record(
         AtmTaskExecutionIdOrRecord
     ),
-    atm_task_executor:init(AtmTaskExecutor).
+    atm_task_executor:prepare(AtmTaskExecutor).
 
 
 -spec delete_all([atm_task_execution:id()]) -> ok.

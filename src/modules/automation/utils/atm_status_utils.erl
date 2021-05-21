@@ -47,9 +47,9 @@ replace_at(NewValue, Index, [Element | Rest]) ->
 %% TODO VFS-7674 add missing transitions
 -spec is_transition_allowed(status(), status()) ->
     boolean().
-is_transition_allowed(?SCHEDULED_STATUS, ?INITIALIZING_STATUS) -> true;
-is_transition_allowed(?INITIALIZING_STATUS, ?ENQUEUED_STATUS) -> true;
-is_transition_allowed(?INITIALIZING_STATUS, ?FAILED_STATUS) -> true;
+is_transition_allowed(?SCHEDULED_STATUS, ?PREPARING_STATUS) -> true;
+is_transition_allowed(?PREPARING_STATUS, ?ENQUEUED_STATUS) -> true;
+is_transition_allowed(?PREPARING_STATUS, ?FAILED_STATUS) -> true;
 is_transition_allowed(?ENQUEUED_STATUS, ?ACTIVE_STATUS) -> true;
 is_transition_allowed(?ENQUEUED_STATUS, ?ACTIVE_STATUS) -> true;
 is_transition_allowed(?PENDING_STATUS, ?ACTIVE_STATUS) -> true;

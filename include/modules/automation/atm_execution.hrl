@@ -60,7 +60,7 @@
 -define(ENDED_TREE, <<"ended">>).
 
 -define(SCHEDULED_STATUS, scheduled).
--define(INITIALIZING_STATUS, initializing).
+-define(PREPARING_STATUS, preparing).
 -define(ENQUEUED_STATUS, enqueued).
 -define(PENDING_STATUS, pending).
 -define(ACTIVE_STATUS, active).

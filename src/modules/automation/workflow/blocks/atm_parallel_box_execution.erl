@@ -16,7 +16,7 @@
 
 -export([
     create_all/3, create/4,
-    init_all/1, init/1,
+    prepare_all/1, prepare/1,
     delete_all/1, delete/1,
 
     gather_statuses/1,
@@ -69,7 +69,7 @@ create(AtmWorkflowExecutionId, AtmLaneNo, AtmParallelBoxNo, #atm_parallel_box_sc
     name = AtmParallelBoxName,
     tasks = AtmTaskSchemas
 }) ->
-    AtmTaskExecutionRegistry = atm_task_execution_api:create_all(
+    AtmTaskExecutions = atm_task_execution_api:create_all(
         AtmWorkflowExecutionId, AtmLaneNo, AtmParallelBoxNo, AtmTaskSchemas
     ),
 
@@ -77,26 +77,28 @@ create(AtmWorkflowExecutionId, AtmLaneNo, AtmParallelBoxNo, #atm_parallel_box_sc
         status = ?PENDING_STATUS,
         schema_id = AtmParallelBoxSchemaId,
         name = AtmParallelBoxName,
-        tasks = AtmTaskExecutionRegistry
+        tasks = lists:foldl(fun(AtmTaskExecution, Acc) ->
+            Acc#{AtmTaskExecution => ?PENDING_STATUS}
+        end, #{}, AtmTaskExecutions)
     }.
 
 
--spec init_all([record()]) -> ok | no_return().
-init_all(AtmParallelBoxExecutions) ->
+-spec prepare_all([record()]) -> ok | no_return().
+prepare_all(AtmParallelBoxExecutions) ->
     lists:foreach(fun(#atm_parallel_box_execution{
         schema_id = AtmParallelBoxSchemaId
     } = AtmParallelBoxExecution) ->
         try
-            init(AtmParallelBoxExecution)
+            prepare(AtmParallelBoxExecution)
         catch _:Reason ->
-            throw(?ERROR_ATM_PARALLEL_BOX_EXECUTION_INIT_FAILED(AtmParallelBoxSchemaId, Reason))
+            throw(?ERROR_ATM_PARALLEL_BOX_EXECUTION_PREPARATION_FAILED(AtmParallelBoxSchemaId, Reason))
         end
     end, AtmParallelBoxExecutions).
 
 
--spec init(record()) -> ok | no_return().
-init(#atm_parallel_box_execution{tasks = AtmTaskExecutionRegistry}) ->
-    atm_task_execution_api:init_all(maps:keys(AtmTaskExecutionRegistry)).
+-spec prepare(record()) -> ok | no_return().
+prepare(#atm_parallel_box_execution{tasks = AtmTaskExecutionRegistry}) ->
+    atm_task_execution_api:prepare_all(maps:keys(AtmTaskExecutionRegistry)).
 
 
 -spec delete_all([record()]) -> ok.

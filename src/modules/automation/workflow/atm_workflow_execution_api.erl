@@ -19,7 +19,7 @@
 
 %% API
 -export([
-    create/3, init/1, delete/1,
+    create/3, prepare/1, delete/1,
     report_task_status_change/5
 ]).
 
@@ -72,14 +72,14 @@ create(SpaceId, #atm_workflow_schema{
     {ok, AtmWorkflowExecutionId}.
 
 
--spec init(atm_workflow_execution:id()) -> ok | no_return().
-init(AtmWorkflowExecutionId) ->
+-spec prepare(atm_workflow_execution:id()) -> ok | no_return().
+prepare(AtmWorkflowExecutionId) ->
     {ok, #atm_workflow_execution{lanes = AtmLaneExecutions}} = transition_to_status(
-        AtmWorkflowExecutionId, ?INITIALIZING_STATUS
+        AtmWorkflowExecutionId, ?PREPARING_STATUS
     ),
 
     try
-        atm_lane_execution:init_all(AtmLaneExecutions)
+        atm_lane_execution:prepare_all(AtmLaneExecutions)
     catch Type:Reason ->
         transition_to_status(AtmWorkflowExecutionId, ?FAILED_STATUS),
         erlang:Type(Reason)
