@@ -698,11 +698,17 @@ handle_info(?FLUSH_BLOCKS, State) ->
 handle_info(?FLUSH_EVENTS, State) ->
     {noreply, flush_events(State), ?DIE_AFTER};
 
-handle_info({Ref, complete, {ok, _} = _Status}, #state{retries_number = Retries} = State) ->
+handle_info({Ref, complete, {ok, _} = _Status}, #state{retries_number = Retries, file_ctx = FileCtx} = State) ->
     {Block, _Priority, _AffectedFroms, FinishedFroms, State1} =
         disassociate_ref(Ref, State),
     {FinishedBlocks, ExcludeSessions, EndedTransfers, State2} =
         disassociate_froms(FinishedFroms, State1),
+
+    % flushbuffer will be performed only on archive storages
+    % in other cases it's a NOOP
+    {SDHandle, FileCtx2} = storage_driver:new_handle(?ROOT_SESS_ID, FileCtx),
+    {FileSize, _} = file_ctx:get_local_storage_file_size(FileCtx2),
+    ok = storage_driver:flushbuffer(SDHandle, FileSize),
 
     {Ans, State3} = flush_blocks(State2, ExcludeSessions, FinishedBlocks,
         EndedTransfers =/= []),

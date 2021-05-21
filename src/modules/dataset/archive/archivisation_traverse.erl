@@ -227,9 +227,14 @@ do_slave_job(#tree_traverse_slave{
     traverse_info = #{target_parent_guid := TargetParentGuid}
 }, TaskId) ->
     {ok, UserCtx} = tree_traverse_session:acquire_for_task(UserId, ?POOL_NAME, TaskId),
+    SessionId = user_ctx:get_session_id(UserCtx),
     {FileName, FileCtx2} = file_ctx:get_aliased_name(FileCtx, UserCtx),
     FileGuid = file_ctx:get_logical_guid_const(FileCtx2),
-    {ok, CopyGuid, _} = file_copy:copy(user_ctx:get_session_id(UserCtx), FileGuid, TargetParentGuid, FileName, false),
+    {ok, CopyGuid, _} = file_copy:copy(SessionId, FileGuid, TargetParentGuid, FileName, false),
+
     CopyCtx = file_ctx:new_by_guid(CopyGuid),
-    {FileSize, _} = file_ctx:get_file_size(CopyCtx),
+    {FileSize, CopyCtx2} = file_ctx:get_local_storage_file_size(CopyCtx),
+    {SDHandle, _} = storage_driver:new_handle(SessionId, CopyCtx2),
+    ok = storage_driver:flushbuffer(SDHandle, FileSize),
+
     {ok, #{byte_size => FileSize}}.

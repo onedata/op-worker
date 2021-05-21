@@ -45,7 +45,7 @@ mknod_test(Config) ->
     Helper = new_helper(Config),
     FileName = random_file_id(),
     FileId = erlang:iolist_to_binary([<<"/space1/.__onedata__">>, FileName]),
-    ArchiveFileId = erlang:iolist_to_binary([<<"/space1/.__onedata_archive/">>, FileName]),
+    ArchiveFileId = erlang:iolist_to_binary([<<"/space1/.__onedata__archive/">>, FileName]),
     mknod(Helper, FileId, 438),
     mknod(Helper, ArchiveFileId, 438),
 
@@ -58,7 +58,7 @@ truncate_new_test(Config) ->
     Helper = new_helper(Config),
     FileName = random_file_id(),
     FileId = erlang:iolist_to_binary([<<"/space1/">>, FileName]),
-    ArchiveFileId = erlang:iolist_to_binary([<<"/space1/.__onedata_archive/">>, FileName]),
+    ArchiveFileId = erlang:iolist_to_binary([<<"/space1/.__onedata__archive/">>, FileName]),
     FileSize = 21 * ?MB,
     truncate(Helper, FileId, FileSize, 0),
     truncate(Helper, ArchiveFileId, FileSize, 0),
@@ -72,7 +72,7 @@ truncate_increase_size_test(Config) ->
     Helper = new_helper(Config),
     FileName = random_file_id(),
     FileId = erlang:iolist_to_binary([<<"/space1/">>, FileName]),
-    ArchiveFileId = erlang:iolist_to_binary([<<"/space1/.__onedata_archive/">>, FileName]),
+    ArchiveFileId = erlang:iolist_to_binary([<<"/space1/.__onedata__archive/">>, FileName]),
     FileSize = 12 * ?MB,
     truncate(Helper, FileId, FileSize, 0),
     truncate(Helper, ArchiveFileId, FileSize, 0),
@@ -90,7 +90,7 @@ truncate_decrease_size_test(Config) ->
     Helper = new_helper(Config),
     FileName = random_file_id(),
     FileId = erlang:iolist_to_binary([<<"/space1/">>, FileName]),
-    ArchiveFileId = erlang:iolist_to_binary([<<"/space1/.__onedata_archive/">>, FileName]),
+    ArchiveFileId = erlang:iolist_to_binary([<<"/space1/.__onedata__archive/">>, FileName]),
     FileSize = 24 * ?MB,
     truncate(Helper, FileId, FileSize, 0),
     truncate(Helper, ArchiveFileId, FileSize, 0),
@@ -109,7 +109,7 @@ sequential_write_test(Config) ->
     Helper = new_helper(Config),
     FileName = random_file_id(),
     FileId = erlang:iolist_to_binary([<<"/space1/">>, FileName]),
-    ArchiveFileId = erlang:iolist_to_binary([<<"/space1/.__onedata_archive/">>, FileName]),
+    ArchiveFileId = erlang:iolist_to_binary([<<"/space1/.__onedata__archive/">>, FileName]),
     ChunkSize = 1 * ?MB,
 
     lists:map(fun(N) ->
@@ -135,7 +135,7 @@ sequential_write_test(Config) ->
 read_write_test(Config) ->
     Helper = new_helper(Config),
     FileName = random_file_id(),
-    ArchiveFileId = erlang:iolist_to_binary([<<"/space1/.__onedata_archive/">>, FileName]),
+    ArchiveFileId = erlang:iolist_to_binary([<<"/space1/.__onedata__archive/">>, FileName]),
     ChunkSize = 1 * ?MB,
 
     lists:map(fun(N) ->
@@ -159,7 +159,7 @@ read_write_test(Config) ->
 unlink_test(Config) ->
     Helper = new_helper(Config),
     FileName = random_file_id(),
-    ArchiveFileId = erlang:iolist_to_binary([<<"/space1/.__onedata_archive/">>, FileName]),
+    ArchiveFileId = erlang:iolist_to_binary([<<"/space1/.__onedata__archive/">>, FileName]),
     FileSize = 21 * ?MB,
     truncate(Helper, ArchiveFileId, FileSize, 0),
 

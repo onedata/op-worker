@@ -230,8 +230,8 @@ list_children_datasets(DatasetId, Opts, ListingMode) ->
 %%% Archives API
 %%%===================================================================
 
--spec archive(dataset:id(), archive:config(), archive:description(), archive:callback(), archive:callback(),
-    user_ctx:ctx()) -> {ok, archive:id()} | error().
+-spec archive(dataset:id(), archive:config(), archive:callback(), archive:callback(),
+    archive:description(), user_ctx:ctx()) -> {ok, archive:id()} | error().
 archive(DatasetId, Config, PreservedCallback, PurgedCallback, Description, UserCtx) ->
     {ok, DatasetDoc} = dataset:get(DatasetId),
     {ok, State} = dataset:get_state(DatasetDoc),

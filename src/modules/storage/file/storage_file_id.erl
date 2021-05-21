@@ -14,13 +14,14 @@
 -author("Jakub Kudzia").
 
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/dataset/archivisation_tree.hrl").
 
 %%%===================================================================
 %%% Exports
 %%%===================================================================
 
 %% API
--export([space_dir_id/2, flat/2, canonical/3]).
+-export([space_dir_id/2, flat/4, canonical/3]).
 
 %%%===================================================================
 %%% API functions
@@ -53,8 +54,26 @@ space_dir_id(SpaceId, StorageId) ->
 %% e.g. "/SpaceId/A/B/C/ABCyasd7321r5ssasdd7asdsafdfvsd"
 %% @end
 %%--------------------------------------------------------------------
--spec flat(file_meta:uuid(), od_space:id()) -> helpers:file_id().
-flat(FileUuid, SpaceId) ->
+%%-spec flat(file_meta:uuid(), od_space:id()) -> helpers:file_id().
+% todo uporzadkowac kolejnosc argumentów
+flat(FileUuid, SpaceId, Storage, FslogicCanonicalPath) ->
+    % if storage has `archiveStorage` param equal to true
+    % and the canonical path points inside the hidden .__onedata__archive directory
+    % the path is canonical, despite the fact that storage is flat
+    case storage:is_archive(Storage) of
+        true ->
+            case is_in_archive(FslogicCanonicalPath) of
+                true ->
+                    canonical(FslogicCanonicalPath, SpaceId, storage:get_id(Storage));
+                false ->
+                    plain_flat(FileUuid, SpaceId)
+            end;
+        false ->
+            plain_flat(FileUuid, SpaceId)
+    end.
+
+% todo rename
+plain_flat(FileUuid, SpaceId) ->
     case fslogic_uuid:is_root_dir_uuid(FileUuid) of
         true ->
             <<?DIRECTORY_SEPARATOR>>;
@@ -118,4 +137,13 @@ ensure_starts_with_space_id(FilePath, SpaceId) ->
             FilePath;
         [Sep | Path] ->
             filepath_utils:join([Sep, SpaceId | Path])
+    end.
+
+
+-spec is_in_archive(file_meta:path()) -> boolean().
+is_in_archive(CanonicalPath) ->
+    ArchivesRootDirName = ?ARCHIVES_ROOT_DIR_NAME,
+    case filepath_utils:split(CanonicalPath) of
+        [_Sep, _SpaceId, ArchivesRootDirName | _Rest] -> true;
+         _ -> false
     end.
