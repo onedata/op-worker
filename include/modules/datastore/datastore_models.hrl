@@ -252,7 +252,7 @@
 
     state :: automation:workflow_schema_state(),
 
-    atm_inventory :: undefined | od_atm_inventory:id(),
+    atm_inventory :: od_atm_inventory:id(),
 
     cache_state = #{} :: cache_state()
 }).
@@ -1019,27 +1019,26 @@
 
 %% Model storing information about automation store instance.
 -record(atm_store, {
+    workflow_execution_id :: atm_workflow_execution:id(),
+
     schema_id :: automation:id(),
-    name :: automation:name(),
-    description :: automation:description(),
-    requires_initial_value :: boolean(),
     initial_value :: undefined | json_utils:json_term(),
+
     % Flag used to tell if content (items) update operation should be blocked
     % (e.g when store is used as the iteration source for currently executed lane).
     frozen = false :: boolean(),
+
     type :: automation:store_type(),
     container :: atm_container:record()
 }).
 
 %% Model storing information about automation task execution.
 -record(atm_task_execution, {
-    schema_id :: automation:id(),
-    name :: automation:name(),
-    lambda_id :: automation:id(),
-
     workflow_execution_id :: atm_workflow_execution:id(),
     lane_no :: non_neg_integer(),
     parallel_box_no :: non_neg_integer(),
+
+    schema_id :: automation:id(),
 
     executor :: atm_task_executor:record(),
     argument_specs :: [atm_task_execution:arg_spec()],
@@ -1055,15 +1054,26 @@
     items_failed = 0 :: non_neg_integer()
 }).
 
-%% Model that holds information about an automation workflow execution
--record(atm_workflow_execution, {
+%% Model that holds information about an automation workflow schema snapshot
+-record(atm_workflow_schema_snapshot, {
     schema_id :: automation:id(),
-    schema_state :: incomplete | ready | deprecated,
     name :: automation:name(),
     description :: automation:description(),
 
+    stores = [] :: [atm_store_schema:record()],
+    lanes = [] :: [atm_lane_schema:record()],
+
+    state :: automation:workflow_schema_state(),
+
+    atm_inventory :: od_atm_inventory:id()
+}).
+
+%% Model that holds information about an automation workflow execution
+-record(atm_workflow_execution, {
     space_id :: od_space:id(),
-    stores :: [atm_store:id()],
+    schema_snapshot_id :: atm_workflow_schema_snapshot:id(),
+
+    stores :: atm_workflow_execution:store_registry(),
     lanes :: [atm_lane_execution:record()],
 
     status :: atm_workflow_execution:status(),

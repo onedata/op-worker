@@ -6,40 +6,27 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Model storing information about automation workflow execution.
+%%% Model storing automation workflow schema snapshot.
 %%% @end
 %%%-------------------------------------------------------------------
--module(atm_workflow_execution).
+-module(atm_workflow_schema_snapshot).
 -author("Bartosz Walkowicz").
 
 -include("modules/automation/atm_execution.hrl").
+-include("modules/datastore/datastore_runner.hrl").
 
 %% API
--export([create/1, get/1, update/2, delete/1]).
+-export([create/2, get/1, delete/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_version/0, get_record_struct/1]).
 
 
 -type id() :: binary().
--type diff() :: datastore_doc:diff(record()).
--type record() :: #atm_workflow_execution{}.
+-type record() :: #atm_workflow_schema_snapshot{}.
 -type doc() :: datastore_doc:doc(record()).
 
--type state() :: ?WAITING_STATE | ?ONGOING_STATE | ?ENDED_STATE.
-
--type store_registry() :: #{AtmStoreSchemaId :: automation:id() => atm_store:id()}.
-
--type status() ::
-    ?SCHEDULED_STATUS | ?PREPARING_STATUS | ?ENQUEUED_STATUS |
-    ?ACTIVE_STATUS |
-    ?FINISHED_STATUS | ?FAILED_STATUS.
-
--type timestamp() :: time:seconds().
-
--export_type([
-    id/0, record/0, doc/0, state/0, store_registry/0, status/0, timestamp/0
-]).
+-export_type([id/0, record/0, doc/0]).
 
 
 -define(CTX, #{model => ?MODULE}).
@@ -50,24 +37,39 @@
 %%%===================================================================
 
 
--spec create(doc()) -> {ok, doc()} | {error, term()}.
-create(AtmWorkflowExecutionDoc) ->
-    datastore_model:create(?CTX, AtmWorkflowExecutionDoc).
+-spec create(atm_workflow_execution:id(), od_atm_workflow_schema:doc()) ->
+    {ok, id()} | {error, term()}.
+create(AtmWorkflowExecutionId, #document{key = AtmWorkflowSchemaId, value = #od_atm_workflow_schema{
+    name = AtmWorkflowSchemaName,
+    description = AtmWorkflowSchemaDescription,
+    stores = AtmStoreSchemas,
+    lanes = AtmLaneSchemas,
+    state = AtmWorkflowSchemaState,
+    atm_inventory = AtmInventoryId
+}}) ->
+    %% TODO VFS-7685 add ref count and gen snapshot id based on doc revision
+    ?extract_key(datastore_model:create(?CTX, #document{
+        key = AtmWorkflowExecutionId,
+        value = #atm_workflow_schema_snapshot{
+            schema_id = AtmWorkflowSchemaId,
+            name = AtmWorkflowSchemaName,
+            description = AtmWorkflowSchemaDescription,
+            stores = AtmStoreSchemas,
+            lanes = AtmLaneSchemas,
+            state = AtmWorkflowSchemaState,
+            atm_inventory = AtmInventoryId
+        }
+    })).
 
 
 -spec get(id()) -> {ok, doc()} | {error, term()}.
-get(AtmWorkflowExecutionId) ->
-    datastore_model:get(?CTX, AtmWorkflowExecutionId).
-
-
--spec update(id(), diff()) -> {ok, doc()} | {error, term()}.
-update(AtmWorkflowExecutionId, Diff) ->
-    datastore_model:update(?CTX, AtmWorkflowExecutionId, Diff).
+get(AtmWorkflowSchemaSnapshotId) ->
+    datastore_model:get(?CTX, AtmWorkflowSchemaSnapshotId).
 
 
 -spec delete(id()) -> ok | {error, term()}.
-delete(AtmWorkflowExecutionId) ->
-    datastore_model:delete(?CTX, AtmWorkflowExecutionId).
+delete(AtmWorkflowSchemaSnapshotId) ->
+    datastore_model:delete(?CTX, AtmWorkflowSchemaSnapshotId).
 
 
 %%%===================================================================
@@ -103,25 +105,14 @@ get_record_version() ->
 -spec get_record_struct(datastore_model:record_version()) -> datastore_model:record_struct().
 get_record_struct(1) ->
     {record, [
-        {space_id, string},
-        {schema_snapshot_id, string},
+        {schema_id, string},
+        {name, string},
+        {description, string},
 
-        {stores, #{string => string}},
+        {stores, [{custom, string, {persistent_record, encode, decode, atm_store_schema}}]},
+        {lanes, [{custom, string, {persistent_record, encode, decode, atm_lane_schema}}]},
 
-        {lanes, [{record, [
-            {schema_id, string},
-            {status, atom},
-            {parallel_boxes, [{record, [
-                {schema_id, string},
-                {status, atom},
-                {tasks, #{string => string}}
-            ]}]}
-        ]}]},
+        {state, {custom, string, {automation, workflow_schema_state_to_json, workflow_schema_state_from_json}}},
 
-        {status, atom},
-        {status_changed, boolean},
-
-        {schedule_time, integer},
-        {start_time, integer},
-        {finish_time, integer}
+        {atm_inventory, string}
     ]}.

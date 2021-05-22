@@ -13,8 +13,6 @@
 -author("Bartosz Walkowicz").
 
 -include("modules/automation/atm_execution.hrl").
--include("modules/datastore/datastore_models.hrl").
--include("modules/datastore/datastore_runner.hrl").
 
 %% API
 -export([create/1, get/1, update/2, delete/1]).
@@ -46,8 +44,7 @@
 
 -spec create(record()) -> {ok, id()} | {error, term()}.
 create(AtmTaskExecutionRecord) ->
-    Doc = #document{value = AtmTaskExecutionRecord},
-    ?extract_key(datastore_model:create(?CTX, Doc)).
+    datastore_model:create(?CTX, #document{value = AtmTaskExecutionRecord}).
 
 
 -spec get(id()) -> {ok, doc()} | {error, term()}.
@@ -84,23 +81,23 @@ get_record_version() ->
     datastore_model:record_struct().
 get_record_struct(1) ->
     {record, [
-        {schema_id, string},
-        {name, string},
-        {lambda_id, string},
-
         {workflow_execution_id, string},
         {lane_no, integer},
         {parallel_box_no, integer},
 
+        {schema_id, string},
+
         {executor, {custom, string, {persistent_record, encode, decode, atm_task_executor}}},
         {argument_specs, [{record, [
             {name, string},
-            {value_builder, {custom, string, {persistent_record, encode, decode, atm_argument_value_builder}}},
+            {value_builder, {custom, string, {persistent_record, encode, decode, atm_task_argument_value_builder}}},
             {data_spec, {custom, string, {persistent_record, encode, decode, atm_data_spec}}},
             {is_batch, boolean}
         ]}]},
 
         {status, atom},
+        {status_changed, boolean},
+
         {items_in_processing, integer},
         {items_processed, integer},
         {items_failed, integer}

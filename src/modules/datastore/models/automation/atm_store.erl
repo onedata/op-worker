@@ -13,14 +13,13 @@
 -author("Bartosz Walkowicz").
 
 -include("modules/datastore/datastore_models.hrl").
--include("modules/datastore/datastore_runner.hrl").
--include_lib("ctool/include/errors.hrl").
 
 %% API
 -export([create/1, get/1, delete/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1, get_record_version/0]).
+-export([encode_initial_value/1, decode_initial_value/1]).
 
 
 -type id() :: binary().
@@ -39,11 +38,9 @@
 %%%===================================================================
 
 
--spec create(record()) -> {ok, id()} | {error, term()}.
+-spec create(record()) -> {ok, doc()} | {error, term()}.
 create(AtmStoreRecord) ->
-    ?extract_key(datastore_model:create(?CTX, #document{
-        value = AtmStoreRecord
-    })).
+    datastore_model:create(?CTX, #document{value = AtmStoreRecord}).
 
 
 -spec get(id()) -> {ok, record()} | {error, term()}.
@@ -80,11 +77,20 @@ get_record_version() ->
     datastore_model:record_struct().
 get_record_struct(1) ->
     {record, [
+        {workflow_execution_id, string},
         {schema_id, string},
-        {name, string},
-        {description, string},
-        {requires_initial_value, boolean},
+        {initial_value, {custom, string, {?MODULE, encode_initial_value, decode_initial_value}}},
         {frozen, boolean},
         {type, atom},
         {container, {custom, string, {persistent_record, encode, decode, atm_container}}}
     ]}.
+
+
+-spec encode_initial_value(undefined | json_utils:json_term()) -> binary().
+encode_initial_value(Value) ->
+    json_utils:encode(utils:undefined_to_null(Value)).
+
+
+-spec decode_initial_value(binary()) -> undefined | json_utils:json_term().
+decode_initial_value(Value) ->
+    utils:null_to_undefined(json_utils:decode(Value)).

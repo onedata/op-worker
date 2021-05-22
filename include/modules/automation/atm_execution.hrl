@@ -10,8 +10,8 @@
 %%% @end
 %%%-------------------------------------------------------------------
 
--ifndef(ATM_WORKFLOW_EXECUTION_HRL).
--define(ATM_WORKFLOW_EXECUTION_HRL, 1).
+-ifndef(ATM_EXECUTION_HRL).
+-define(ATM_EXECUTION_HRL, 1).
 
 
 -include("modules/automation/atm_tmp.hrl").
@@ -47,7 +47,7 @@
     name :: automation:name(),
     status :: atm_lane_execution:status(),
     parallel_boxes :: [atm_parallel_box_execution:record()],
-    store_iterator_config :: atm_store_iterator_config:record()
+    store_iterator_spec :: atm_store_iterator_spec:record()
 }).
 
 

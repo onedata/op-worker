@@ -92,6 +92,7 @@ get_models() -> [
     bulk_download_task,
     atm_store,
     atm_task_execution,
+    atm_workflow_schema_snapshot,
     atm_workflow_execution,
     archive,
 
