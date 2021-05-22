@@ -30,7 +30,7 @@
 
 
 -record(atm_store_iterator, {
-    config :: atm_store_iterator_config:record(),
+    spec :: atm_store_iterator_spec:record(),
     data_spec :: atm_data_spec:record(),
     container_iterator :: atm_container_iterator:record()
 }).
@@ -44,10 +44,10 @@
 %%%===================================================================
 
 
--spec build(atm_store_iterator_config:record(), atm_container:record()) -> record().
-build(AtmStoreIteratorConfig, AtmContainer) ->
+-spec build(atm_store_iterator_spec:record(), atm_container:record()) -> record().
+build(AtmStoreIteratorSpec, AtmContainer) ->
     #atm_store_iterator{
-        config = AtmStoreIteratorConfig,
+        spec = AtmStoreIteratorSpec,
         data_spec = atm_container:get_data_spec(AtmContainer),
         container_iterator = atm_container:acquire_iterator(AtmContainer)
     }.
@@ -60,7 +60,7 @@ build(AtmStoreIteratorConfig, AtmContainer) ->
 
 -spec get_next(record()) -> {ok, atm_execution:item(), iterator:cursor(), record()} | stop.
 get_next(#atm_store_iterator{
-    config = #atm_store_iterator_config{strategy = #atm_store_iterator_serial_strategy{}},
+    spec = #atm_store_iterator_spec{strategy = #atm_store_iterator_serial_strategy{}},
     container_iterator = AtmContainerIterator
 } = AtmStoreIterator) ->
     case atm_container_iterator:get_next_batch(1, AtmContainerIterator) of
@@ -72,7 +72,7 @@ get_next(#atm_store_iterator{
             }}
     end;
 get_next(#atm_store_iterator{
-    config = #atm_store_iterator_config{strategy = #atm_store_iterator_batch_strategy{
+    spec = #atm_store_iterator_spec{strategy = #atm_store_iterator_batch_strategy{
         size = Size
     }},
     container_iterator = AtmContainerIterator
@@ -109,12 +109,12 @@ version() ->
 -spec db_encode(record(), persistent_record:nested_record_encoder()) ->
     json_utils:json_term().
 db_encode(#atm_store_iterator{
-    config = AtmStoreIteratorConfig,
+    spec = AtmStoreIteratorSpec,
     data_spec = AtmDataSpec,
     container_iterator = AtmContainerIterator
 }, NestedRecordEncoder) ->
     #{
-        <<"config">> => NestedRecordEncoder(AtmStoreIteratorConfig, atm_store_iterator_config),
+        <<"spec">> => NestedRecordEncoder(AtmStoreIteratorSpec, atm_store_iterator_spec),
         <<"dataSpec">> => NestedRecordEncoder(AtmDataSpec, atm_data_spec),
         <<"containerIterator">> => NestedRecordEncoder(AtmContainerIterator, atm_container_iterator)
     }.
@@ -123,12 +123,12 @@ db_encode(#atm_store_iterator{
 -spec db_decode(json_utils:json_term(), persistent_record:nested_record_decoder()) ->
     record().
 db_decode(#{
-    <<"config">> := AtmStoreIteratorConfigJson,
+    <<"spec">> := AtmStoreIteratorSpecJson,
     <<"dataSpec">> := AtmDataSpecJson,
     <<"containerIterator">> := AtmContainerIteratorJson
 }, NestedRecordDecoder) ->
     #atm_store_iterator{
-        config = NestedRecordDecoder(AtmStoreIteratorConfigJson, atm_store_iterator_config),
+        spec = NestedRecordDecoder(AtmStoreIteratorSpecJson, atm_store_iterator_spec),
         data_spec = NestedRecordDecoder(AtmDataSpecJson, atm_data_spec),
         container_iterator = NestedRecordDecoder(AtmContainerIteratorJson, atm_container_iterator)
     }.
