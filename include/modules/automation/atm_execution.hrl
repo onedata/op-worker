@@ -19,6 +19,22 @@
 -include_lib("ctool/include/automation/automation.hrl").
 
 
+-record(atm_workflow_execution_ctx, {
+    store_registry :: amt_workflow_execution:store_registry()
+}).
+
+-record(atm_lane_execution, {
+    schema_id :: automation:id(),
+    status :: atm_lane_execution:status(),
+    parallel_boxes :: [atm_parallel_box_execution:record()]
+}).
+
+-record(atm_parallel_box_execution, {
+    schema_id :: automation:id(),
+    status :: atm_parallel_box_execution:status(),
+    tasks :: #{atm_task_execution:id() => atm_task_execution:status()}
+}).
+
 -record(atm_task_execution_ctx, {
     item :: json_utils:json_term()
 }).
@@ -30,24 +46,10 @@
     is_batch :: boolean()
 }).
 
--record(atm_parallel_box_execution, {
-    schema_id :: automation:id(),
-    name :: automation:name(),
-    status :: atm_parallel_box_execution:status(),
-    tasks :: #{atm_task_execution:id() => atm_task_execution:status()}
-}).
-
+%% TODO rm
 -record(atm_store_iterator_config, {
     store_id :: atm_store:id(),
     strategy :: atm_store_iterator_spec:strategy()
-}).
-
--record(atm_lane_execution, {
-    schema_id :: automation:id(),
-    name :: automation:name(),
-    status :: atm_lane_execution:status(),
-    parallel_boxes :: [atm_parallel_box_execution:record()],
-    store_iterator_spec :: atm_store_iterator_spec:record()
 }).
 
 
