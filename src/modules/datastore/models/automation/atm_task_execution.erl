@@ -42,7 +42,7 @@
 %%%===================================================================
 
 
--spec create(record()) -> {ok, id()} | {error, term()}.
+-spec create(record()) -> {ok, doc()} | {error, term()}.
 create(AtmTaskExecutionRecord) ->
     datastore_model:create(?CTX, #document{value = AtmTaskExecutionRecord}).
 

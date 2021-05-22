@@ -15,6 +15,7 @@
 -include("modules/automation/atm_execution.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/errors.hrl").
 
 %% API
@@ -23,52 +24,46 @@
     report_task_status_change/5
 ]).
 
+-record(components, {
+    schema_snapshot_id = undefined :: undefined | atm_workflow_schema_snapshot:id(),
+    stores = undefined :: undefined | atm_workflow_execution:store_registry(),
+    lanes = undefined :: undefined | [atm_lane_execution:record()]
+}).
+-type components() :: #components{}.
+
+-record(create_ctx, {
+    space_id :: od_space:id(),
+    workflow_execution_id :: atm_workflow_execution:id(),
+    workflow_schema_doc :: od_atm_workflow_schema:doc(),
+    initial_values :: atm_store_api:initial_values()
+}).
+-type create_ctx() :: #create_ctx{}.
+
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
 
--spec create(od_space:id(), atm_workflow_schema(), atm_store_api:initial_values()) ->
+-spec create(od_space:id(), od_atm_workflow_schema:id(), atm_store_api:initial_values()) ->
     {ok, atm_workflow_execution:id()} | no_return().
-create(SpaceId, #atm_workflow_schema{
-    id = AtmWorkflowSchemaId,
-    state = AtmWorkflowSchemaState,
-    name = AtmWorkflowSchemaName,
-    description = AtmWorkflowSchemaDescription,
-    stores = AtmStoreSchemas,
-    lanes = AtmLaneSchemas
-}, InitialValues) ->
+create(SpaceId, AtmWorkflowSchemaId, InitialValues) ->
+    %% TODO VFS-7671 use user session
+    {ok, AtmWorkflowSchemaDoc} = atm_workflow_schema_logic:get(?ROOT_SESS_ID, AtmWorkflowSchemaId),
+
     AtmWorkflowExecutionId = datastore_key:new(),
 
-    AtmStoreRegistry = atm_store_api:create_all(AtmStoreSchemas, InitialValues),
+    CreateCtx = #create_ctx{
+        space_id = SpaceId,
+        workflow_execution_id = AtmWorkflowExecutionId,
+        workflow_schema_doc = AtmWorkflowSchemaDoc,
+        initial_values = InitialValues
+    },
+    Components = create_components(CreateCtx),
+    AtmWorkflowExecutionDoc = create_doc(CreateCtx, Components),
 
-    AtmLaneExecutions = try
-        atm_lane_execution:create_all(AtmWorkflowExecutionId, AtmStoreRegistry, AtmLaneSchemas)
-    catch Type:Reason ->
-        catch atm_store_api:delete_all(maps:values(AtmStoreRegistry)),
-        erlang:Type(Reason)
-    end,
+    atm_waiting_workflow_executions:add(AtmWorkflowExecutionDoc),
 
-    atm_workflow_execution:create(#document{
-        key = AtmWorkflowExecutionId,
-        value = #atm_workflow_execution{
-            schema_id = AtmWorkflowSchemaId,
-            schema_state = AtmWorkflowSchemaState,
-            name = AtmWorkflowSchemaName,
-            description = AtmWorkflowSchemaDescription,
-
-            space_id = SpaceId,
-            stores = maps:values(AtmStoreRegistry),
-            lanes = AtmLaneExecutions,
-
-            status = ?SCHEDULED_STATUS,
-            schedule_time = global_clock:timestamp_seconds(),
-            start_time = 0,
-            finish_time = 0
-        }
-    }),
-    % TODO VFS-7672 add to scheduled link tree
     {ok, AtmWorkflowExecutionId}.
 
 
@@ -92,10 +87,16 @@ prepare(AtmWorkflowExecutionId) ->
 -spec delete(atm_workflow_execution:id()) -> ok | no_return().
 delete(AtmWorkflowExecutionId) ->
     {ok, #document{value = #atm_workflow_execution{
+        schema_snapshot_id = AtmWorkflowSchemaSnapshotId,
+        stores = AtmStoreRegistry,
         lanes = AtmLaneExecutions
     }}} = atm_workflow_execution:get(AtmWorkflowExecutionId),
 
-    atm_lane_execution:delete_all(AtmLaneExecutions),
+    delete_components(#components{
+        schema_snapshot_id = AtmWorkflowSchemaSnapshotId,
+        stores = AtmStoreRegistry,
+        lanes = AtmLaneExecutions
+    }),
     atm_workflow_execution:delete(AtmWorkflowExecutionId).
 
 
@@ -132,6 +133,127 @@ report_task_status_change(
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+%% @private
+-spec create_components(create_ctx()) -> components() | no_return().
+create_components(CreateCtx) ->
+    lists:foldl(fun(CreateComponentFun, Components) ->
+        try
+            CreateComponentFun(Components, CreateCtx)
+        catch Type:Reason ->
+            delete_components(Components),
+            erlang:Type(Reason)
+        end
+    end, #components{}, [
+        fun create_schema_snapshot/2,
+        fun create_stores/2,
+        fun create_lane_executions/2
+    ]).
+
+
+%% @private
+-spec create_schema_snapshot(create_ctx(), components()) -> components().
+create_schema_snapshot(#create_ctx{
+    workflow_execution_id = AtmWorkflowExecutionId,
+    workflow_schema_doc = AtmWorkflowSchemaDoc
+}, Components) ->
+    {ok, AtmWorkflowSchemaSnapshotId} = atm_workflow_schema_snapshot:create(
+        AtmWorkflowExecutionId, AtmWorkflowSchemaDoc
+    ),
+    Components#components{schema_snapshot_id = AtmWorkflowSchemaSnapshotId}.
+
+
+%% @private
+-spec create_stores(create_ctx(), components()) -> components().
+create_stores(#create_ctx{
+    workflow_execution_id = AtmWorkflowExecutionId,
+    workflow_schema_doc = #document{value = #od_atm_workflow_schema{
+        stores = AtmStoreSchemas
+    }},
+    initial_values = InitialValues
+}, Components) ->
+    AtmStoreDocs = atm_store_api:create_all(
+        AtmWorkflowExecutionId, InitialValues, AtmStoreSchemas
+    ),
+    AtmStoreRegistry = lists:foldl(fun(#document{key = AtmStoreId, value = #atm_store{
+        schema_id = AtmStoreSchemaId
+    }}, Acc) ->
+        Acc#{AtmStoreSchemaId => AtmStoreId}
+    end, #{}, AtmStoreDocs),
+
+    Components#components{stores = AtmStoreRegistry}.
+
+
+%% @private
+-spec create_lane_executions(create_ctx(), components()) -> components().
+create_lane_executions(#create_ctx{
+    workflow_execution_id = AtmWorkflowExecutionId,
+    workflow_schema_doc = #document{value = #od_atm_workflow_schema{lanes = AtmLaneSchemas}}
+}, Components) ->
+    Components#components{lanes = atm_lane_execution:create_all(
+        AtmWorkflowExecutionId, AtmLaneSchemas
+    )}.
+
+
+%% @private
+-spec create_doc(create_ctx(), components()) ->
+    atm_workflow_execution:doc() | no_return().
+create_doc(
+    #create_ctx{
+        space_id = SpaceId,
+        workflow_execution_id = AtmWorkflowExecutionId
+    },
+    Components = #components{
+        schema_snapshot_id = AtmWorkflowSchemaSnapshotId,
+        stores = AtmStoreRegistry,
+        lanes = AtmLaneExecutions
+    }
+) ->
+    try
+        {ok, AtmWorkflowExecutionDoc} = atm_workflow_execution:create(#document{
+            key = AtmWorkflowExecutionId,
+            value = #atm_workflow_execution{
+                space_id = SpaceId,
+                schema_snapshot_id = AtmWorkflowSchemaSnapshotId,
+
+                stores = AtmStoreRegistry,
+                lanes = AtmLaneExecutions,
+
+                status = ?SCHEDULED_STATUS,
+
+                schedule_time = global_clock:timestamp_seconds(),
+                start_time = 0,
+                finish_time = 0
+            }
+        }),
+        AtmWorkflowExecutionDoc
+    catch Type:Reason ->
+        delete_components(Components),
+        erlang:Type(Reason)
+    end.
+
+
+%% @private
+-spec delete_components(components()) -> ok.
+delete_components(#components{
+    schema_snapshot_id = undefined,
+    stores = undefined,
+    lanes = undefined
+}) ->
+    ok;
+
+delete_components(#components{schema_snapshot_id = AtmWorkflowSchemaSnapshotId} = Components) ->
+    catch atm_workflow_schema_snapshot:delete(AtmWorkflowSchemaSnapshotId),
+    delete_components(Components#components{schema_snapshot_id = undefined});
+
+delete_components(#components{stores = StoreRegistry} = Components) ->
+    catch atm_store_api:delete_all(maps:values(StoreRegistry)),
+    delete_components(Components#components{stores = undefined});
+
+delete_components(#components{lanes = AtmLaneExecutions} = Components) ->
+    catch atm_lane_execution:delete_all(AtmLaneExecutions),
+    delete_components(Components#components{lanes = undefined}).
 
 
 %% @private

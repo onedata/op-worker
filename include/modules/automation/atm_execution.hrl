@@ -20,7 +20,7 @@
 
 
 -record(atm_workflow_execution_ctx, {
-    store_registry :: amt_workflow_execution:store_registry()
+    store_registry :: atm_workflow_execution:store_registry()
 }).
 
 -record(atm_lane_execution, {

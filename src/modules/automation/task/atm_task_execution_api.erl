@@ -13,7 +13,6 @@
 -author("Bartosz Walkowicz").
 
 -include("modules/automation/atm_execution.hrl").
--include("modules/datastore/datastore_models.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 
 %% API
@@ -41,21 +40,21 @@
     non_neg_integer(),
     [atm_task_schema:record()]
 ) ->
-    [atm_task_execution:id()] | no_return().
+    [atm_task_execution:doc()] | no_return().
 create_all(AtmWorkflowExecutionId, AtmLaneNo, AtmParallelBoxNo, AtmTaskSchemas) ->
-    lists:foldl(fun(#atm_task_schema{
+    lists:reverse(lists:foldl(fun(#atm_task_schema{
         id = AtmTaskSchemaId
     } = AtmTaskSchema, Acc) ->
         try
-            {ok, AtmTaskExecutionId} = create(
+            {ok, AtmTaskExecutionDoc} = create(
                 AtmWorkflowExecutionId, AtmLaneNo, AtmParallelBoxNo, AtmTaskSchema
             ),
-            [AtmTaskExecutionId | Acc]
+            [AtmTaskExecutionDoc | Acc]
         catch _:Reason ->
-            catch delete_all(Acc),
+            catch delete_all([Doc#document.key || Doc <- Acc]),
             throw(?ERROR_ATM_TASK_EXECUTION_CREATION_FAILED(AtmTaskSchemaId, Reason))
         end
-    end, [], AtmTaskSchemas).
+    end, [], AtmTaskSchemas)).
 
 
 -spec create(
@@ -64,10 +63,9 @@ create_all(AtmWorkflowExecutionId, AtmLaneNo, AtmParallelBoxNo, AtmTaskSchemas) 
     non_neg_integer(),
     atm_task_schema:record()
 ) ->
-    {ok, atm_task_execution:id()} | no_return().
+    {ok, atm_task_execution:doc()} | no_return().
 create(AtmWorkflowExecutionId, AtmLaneNo, AtmParallelBoxNo, #atm_task_schema{
     id = AtmTaskSchemaId,
-    name = AtmTaskName,
     lambda_id = AtmLambdaId,
     argument_mappings = AtmTaskArgMappers
 }) ->
@@ -77,18 +75,17 @@ create(AtmWorkflowExecutionId, AtmLaneNo, AtmParallelBoxNo, #atm_task_schema{
     }}} = atm_lambda_logic:get(?ROOT_SESS_ID, AtmLambdaId),  %% TODO VFS-7671 use user session
 
     {ok, _} = atm_task_execution:create(#atm_task_execution{
-        schema_id = AtmTaskSchemaId,
-        name = AtmTaskName,
-        lambda_id = AtmLambdaId,
-
         workflow_execution_id = AtmWorkflowExecutionId,
         lane_no = AtmLaneNo,
         parallel_box_no = AtmParallelBoxNo,
+
+        schema_id = AtmTaskSchemaId,
 
         executor = atm_task_executor:create(AtmWorkflowExecutionId, AtmLambdaOperationSpec),
         argument_specs = atm_task_execution_args:build_specs(AtmLambdaArgSpecs, AtmTaskArgMappers),
 
         status = ?PENDING_STATUS,
+
         items_in_processing = 0,
         items_processed = 0,
         items_failed = 0
@@ -134,7 +131,7 @@ run(AtmTaskExecutionId, Item) ->
     #atm_task_execution{
         executor = AtmTaskExecutor,
         argument_specs = AtmTaskArgSpecs
-    } = update_handled_items(AtmTaskExecutionId),
+    } = update_items_in_processing(AtmTaskExecutionId),
 
     AtmTaskExecutionCtx = #atm_task_execution_ctx{item = Item},
     Args = atm_task_execution_args:build_args(AtmTaskExecutionCtx, AtmTaskArgSpecs),
@@ -148,9 +145,9 @@ run(AtmTaskExecutionId, Item) ->
 
 
 %% @private
--spec update_handled_items(atm_task_execution:id()) ->
+-spec update_items_in_processing(atm_task_execution:id()) ->
     atm_task_execution:record().
-update_handled_items(AtmTaskExecutionId) ->
+update_items_in_processing(AtmTaskExecutionId) ->
     {ok, #document{value = AtmTaskExecutionRecord}} = atm_task_execution:update(
         AtmTaskExecutionId, fun
             (#atm_task_execution{

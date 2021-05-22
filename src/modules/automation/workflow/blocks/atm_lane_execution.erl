@@ -16,7 +16,7 @@
 
 %% API
 -export([
-    create_all/3, create/4,
+    create_all/2, create/3,
     prepare_all/1, prepare/1,
     delete_all/1, delete/1,
 
@@ -36,20 +36,14 @@
 %%%===================================================================
 
 
--spec create_all(
-    atm_workflow_execution:id(),
-    atm_store_api:registry(),
-    [atm_lane_schema:record()]
-) ->
+-spec create_all(atm_workflow_execution:id(), [atm_lane_schema:record()]) ->
     [record()] | no_return().
-create_all(AtmWorkflowExecutionId, AtmStoreRegistry, AtmLaneSchemas) ->
+create_all(AtmWorkflowExecutionId, AtmLaneSchemas) ->
     lists:reverse(lists:foldl(fun({AtmLaneNo, #atm_lane_schema{
         id = AtmLaneSchemaId
     } = AtmLaneSchema}, Acc) ->
         try
-            AtmLaneExecution = create(
-                AtmWorkflowExecutionId, AtmStoreRegistry, AtmLaneNo, AtmLaneSchema
-            ),
+            AtmLaneExecution = create(AtmWorkflowExecutionId, AtmLaneNo, AtmLaneSchema),
             [AtmLaneExecution | Acc]
         catch _:Reason ->
             catch delete_all(Acc),
@@ -60,29 +54,23 @@ create_all(AtmWorkflowExecutionId, AtmStoreRegistry, AtmLaneSchemas) ->
 
 -spec create(
     atm_workflow_execution:id(),
-    atm_store_api:registry(),
     non_neg_integer(),
     atm_lane_schema:record()
 ) ->
     record() | no_return().
-create(AtmWorkflowExecutionId, AtmStoreRegistry, AtmLaneNo, #atm_lane_schema{
+create(AtmWorkflowExecutionId, AtmLaneNo, #atm_lane_schema{
     id = AtmLaneSchemaId,
-    name = AtmLaneName,
-    parallel_boxes = AtmParallelBoxSchemas,
-    store_iterator_spec = AtmStoreIteratorSpec
+    parallel_boxes = AtmParallelBoxSchemas
 }) ->
-    AtmStoreIteratorConfig = atm_store_api:build_iterator_config(
-        AtmStoreRegistry, AtmStoreIteratorSpec
-    ),
     AtmParallelBoxExecutions = atm_parallel_box_execution:create_all(
         AtmWorkflowExecutionId, AtmLaneNo, AtmParallelBoxSchemas
     ),
 
     #atm_lane_execution{
-        status = ?PENDING_STATUS,
         schema_id = AtmLaneSchemaId,
-        name = AtmLaneName,
-        store_iterator_config = AtmStoreIteratorConfig,
+        status = atm_status_utils:converge(atm_parallel_box_execution:gather_statuses(
+            AtmParallelBoxExecutions
+        )),
         parallel_boxes = AtmParallelBoxExecutions
     }.
 

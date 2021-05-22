@@ -44,9 +44,7 @@ create_all(AtmWorkflowExecutionId, InitialValues, AtmStoreSchemas) ->
             AtmStoreSchemaId, InitialValues, undefined
         )),
         try
-            {ok, AtmStoreDoc} = create(
-                AtmWorkflowExecutionId, AtmStoreSchema, InitialValue
-            ),
+            {ok, AtmStoreDoc} = create(AtmWorkflowExecutionId, InitialValue, AtmStoreSchema),
             [AtmStoreDoc | Acc]
         catch _:Reason ->
             catch delete_all([Doc#document.key || Doc <- Acc]),
@@ -96,7 +94,7 @@ delete(AtmStoreId) ->
     atm_store:delete(AtmStoreId).
 
 
--spec acquire_iterator(atm_workflow_execution_ctx:ctx(), atm_store_iterator_config:record()) ->
+-spec acquire_iterator(atm_workflow_execution_ctx:ctx(), atm_store_iterator_spec:record()) ->
     atm_store_iterator:record().
 acquire_iterator(AtmWorkflowExecutionCtx, #atm_store_iterator_spec{
     store_schema_id = AtmStoreSchemaId

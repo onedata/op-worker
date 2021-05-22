@@ -66,20 +66,22 @@ create_all(AtmWorkflowExecutionId, AtmLaneNo, AtmParallelBoxSchemas) ->
     record() | no_return().
 create(AtmWorkflowExecutionId, AtmLaneNo, AtmParallelBoxNo, #atm_parallel_box_schema{
     id = AtmParallelBoxSchemaId,
-    name = AtmParallelBoxName,
     tasks = AtmTaskSchemas
 }) ->
-    AtmTaskExecutions = atm_task_execution_api:create_all(
+    AtmTaskExecutionDocs = atm_task_execution_api:create_all(
         AtmWorkflowExecutionId, AtmLaneNo, AtmParallelBoxNo, AtmTaskSchemas
     ),
+    AtmTaskExecutionsStatus = lists:foldl(fun(#document{
+        key = AtmTaskExecutionId,
+        value = #atm_task_execution{status = AtmTaskExecutionStatus}
+    }, Acc) ->
+        Acc#{AtmTaskExecutionId => AtmTaskExecutionStatus}
+    end, #{}, AtmTaskExecutionDocs),
 
     #atm_parallel_box_execution{
-        status = ?PENDING_STATUS,
         schema_id = AtmParallelBoxSchemaId,
-        name = AtmParallelBoxName,
-        tasks = lists:foldl(fun(AtmTaskExecution, Acc) ->
-            Acc#{AtmTaskExecution => ?PENDING_STATUS}
-        end, #{}, AtmTaskExecutions)
+        status = atm_status_utils:converge(maps:values(AtmTaskExecutionsStatus)),
+        tasks = AtmTaskExecutionsStatus
     }.
 
 
