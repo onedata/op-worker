@@ -275,7 +275,7 @@ build_verify_archive_created_fun(MemRef, Providers) ->
 %% @private
 -spec await_archive_preserved_callback_called(archive:id(), dataset:id()) -> ok.
 await_archive_preserved_callback_called(ArchiveId, DatasetId) ->
-    Timeout = timer:seconds(60),
+    Timeout = timer:minutes(3),
     receive
         ?ARCHIVE_PERSISTED(ArchiveId, DatasetId) -> ok
     after

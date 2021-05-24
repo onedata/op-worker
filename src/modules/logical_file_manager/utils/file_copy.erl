@@ -224,9 +224,15 @@ copy_metadata(SessId, SourceGuid, TargetGuid, Mode) ->
 
 -spec get_buffer_size(file_id:file_guid()) -> non_neg_integer().
 get_buffer_size(FileGuid) ->
-    {SDHandle, _FileCtx2} = storage_driver:new_handle(?ROOT_SESS_ID, file_ctx:new_by_guid(FileGuid)),
-    case storage_driver:blocksize_for_path(SDHandle) of
-        {ok, 0} -> ?COPY_BUFFER_SIZE;
-        {ok, Size} when is_integer(Size) andalso Size > 0 -> Size;
-        _ -> ?COPY_BUFFER_SIZE
+    SpaceId = file_id:guid_to_space_id(FileGuid),
+    case space_logic:is_supported(?ROOT_SESS_ID, SpaceId, oneprovider:get_id()) of
+        true ->
+            {SDHandle, _FileCtx2} = storage_driver:new_handle(?ROOT_SESS_ID, file_ctx:new_by_guid(FileGuid)),
+            case storage_driver:blocksize_for_path(SDHandle) of
+                {ok, 0} -> ?COPY_BUFFER_SIZE;
+                {ok, Size} when is_integer(Size) andalso Size > 0 -> Size;
+                _ -> ?COPY_BUFFER_SIZE
+            end;
+        false ->
+            ?COPY_BUFFER_SIZE
     end.
