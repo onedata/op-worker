@@ -985,11 +985,11 @@ do(#mod{method = "POST", request_uri = ?ARCHIVE_PURGED_PATH, entity_body = Body}
 
 -spec handle_callback_message(function()) -> tuple().
 handle_callback_message(HandleFun) ->
-    ResponseCode = case rand:uniform(2) of
-        1 ->
+    ResponseCode = case rand:uniform(4) of
+        N when N =< 3 ->
             HandleFun(),
             ?HTTP_204_NO_CONTENT;
-        2 ->
+        4 ->
             ?HTTP_500_INTERNAL_SERVER_ERROR
     end,
     {proceed, [{response,{ResponseCode, []}}]}.

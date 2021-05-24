@@ -55,11 +55,11 @@ groups() -> [
         archive_dataset_attached_to_file,
         archive_dataset_attached_to_hardlink,
         archive_dataset_attached_to_symlink,
-        archive_big_tree,
         archive_directory_with_number_of_files_exceeding_batch_size
     ]},
     {sequential_tests, [sequential], [
-        archive_dataset_attached_to_space_dir
+        archive_dataset_attached_to_space_dir,
+        archive_big_tree
     ]}
 ].
 
