@@ -16,15 +16,14 @@
 
 %% API
 -export([
-    create_all/3, create/3,
+    create_all/1, create/3,
     delete_all/1, delete/1,
     acquire_iterator/2
 ]).
 
 -type initial_value() :: atm_container:initial_value().
--type initial_values() :: #{AtmStoreSchemaId :: automation:id() => initial_value()}.
 
--export_type([initial_value/0, initial_values/0]).
+-export_type([initial_value/0]).
 
 
 %%%===================================================================
@@ -32,13 +31,14 @@
 %%%===================================================================
 
 
--spec create_all(
-    atm_workflow_execution:id(),
-    initial_values(),
-    [atm_store_schema:record()]
-) ->
-    [atm_store:doc()] | no_return().
-create_all(AtmWorkflowExecutionId, InitialValues, AtmStoreSchemas) ->
+-spec create_all(atm_execution:creation_ctx()) -> [atm_store:doc()] | no_return().
+create_all(#atm_execution_creation_ctx{
+    workflow_execution_id = AtmWorkflowExecutionId,
+    workflow_schema_doc = #document{value = #od_atm_workflow_schema{
+        stores = AtmStoreSchemas
+    }},
+    initial_values = InitialValues
+}) ->
     lists:reverse(lists:foldl(fun(#atm_store_schema{id = AtmStoreSchemaId} = AtmStoreSchema, Acc) ->
         InitialValue = utils:null_to_undefined(maps:get(
             AtmStoreSchemaId, InitialValues, undefined

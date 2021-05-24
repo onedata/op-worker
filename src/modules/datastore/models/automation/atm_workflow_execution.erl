@@ -28,8 +28,6 @@
 
 -type state() :: ?WAITING_STATE | ?ONGOING_STATE | ?ENDED_STATE.
 
--type store_registry() :: #{AtmStoreSchemaId :: automation:id() => atm_store:id()}.
-
 -type status() ::
     ?SCHEDULED_STATUS | ?PREPARING_STATUS | ?ENQUEUED_STATUS |
     ?ACTIVE_STATUS |
@@ -37,9 +35,7 @@
 
 -type timestamp() :: time:seconds().
 
--export_type([
-    id/0, record/0, doc/0, state/0, store_registry/0, status/0, timestamp/0
-]).
+-export_type([id/0, record/0, doc/0, state/0, status/0, timestamp/0]).
 
 
 -define(CTX, #{model => ?MODULE}).
@@ -106,7 +102,7 @@ get_record_struct(1) ->
         {space_id, string},
         {schema_snapshot_id, string},
 
-        {stores, #{string => string}},
+        {store_registry, #{string => string}},
 
         {lanes, [{record, [
             {schema_id, string},
@@ -114,7 +110,7 @@ get_record_struct(1) ->
             {parallel_boxes, [{record, [
                 {schema_id, string},
                 {status, atom},
-                {tasks, #{string => string}}
+                {tasks, #{string => atom}}
             ]}]}
         ]}]},
 

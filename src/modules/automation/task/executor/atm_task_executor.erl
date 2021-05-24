@@ -14,6 +14,8 @@
 %%%    records of the same name.
 %%% 2) Models implementing this behaviour must also implement `persistent_record`
 %%%    behaviour.
+%%% 3) Modules implementing this behaviour must be registered in
+%%%    `engine_to_executor_model/executor_model_to_engine` functions.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_task_executor).

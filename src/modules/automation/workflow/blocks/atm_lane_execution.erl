@@ -16,7 +16,7 @@
 
 %% API
 -export([
-    create_all/2, create/3,
+    create_all/1, create/3,
     prepare_all/1, prepare/1,
     delete_all/1, delete/1,
 
@@ -36,14 +36,17 @@
 %%%===================================================================
 
 
--spec create_all(atm_workflow_execution:id(), [atm_lane_schema:record()]) ->
-    [record()] | no_return().
-create_all(AtmWorkflowExecutionId, AtmLaneSchemas) ->
-    lists:reverse(lists:foldl(fun({AtmLaneNo, #atm_lane_schema{
+-spec create_all(atm_execution:creation_ctx()) -> [record()] | no_return().
+create_all(#atm_execution_creation_ctx{
+    workflow_schema_doc = #document{value = #od_atm_workflow_schema{
+        lanes = AtmLaneSchemas
+    }}
+} = AtmExecutionCreationCtx) ->
+    lists:reverse(lists:foldl(fun({AtmLaneIndex, #atm_lane_schema{
         id = AtmLaneSchemaId
     } = AtmLaneSchema}, Acc) ->
         try
-            AtmLaneExecution = create(AtmWorkflowExecutionId, AtmLaneNo, AtmLaneSchema),
+            AtmLaneExecution = create(AtmExecutionCreationCtx, AtmLaneIndex, AtmLaneSchema),
             [AtmLaneExecution | Acc]
         catch _:Reason ->
             catch delete_all(Acc),
@@ -53,17 +56,17 @@ create_all(AtmWorkflowExecutionId, AtmLaneSchemas) ->
 
 
 -spec create(
-    atm_workflow_execution:id(),
+    atm_execution:creation_ctx(),
     non_neg_integer(),
     atm_lane_schema:record()
 ) ->
     record() | no_return().
-create(AtmWorkflowExecutionId, AtmLaneNo, #atm_lane_schema{
+create(AtmExecutionCreationCtx, AtmLaneIndex, #atm_lane_schema{
     id = AtmLaneSchemaId,
     parallel_boxes = AtmParallelBoxSchemas
 }) ->
     AtmParallelBoxExecutions = atm_parallel_box_execution:create_all(
-        AtmWorkflowExecutionId, AtmLaneNo, AtmParallelBoxSchemas
+        AtmExecutionCreationCtx, AtmLaneIndex, AtmParallelBoxSchemas
     ),
 
     #atm_lane_execution{
@@ -113,17 +116,17 @@ gather_statuses(AtmLaneExecutions) ->
     record()
 ) ->
     {ok, record()} | {error, term()}.
-update_task_status(AtmParallelBoxExecutionNo, AtmTaskExecutionId, NewStatus, #atm_lane_execution{
+update_task_status(AtmParallelBoxIndex, AtmTaskExecutionId, NewStatus, #atm_lane_execution{
     parallel_boxes = AtmParallelBoxExecutions
 } = AtmLaneExecution) ->
-    AtmParallelBoxExecution = lists:nth(AtmParallelBoxExecutionNo, AtmParallelBoxExecutions),
+    AtmParallelBoxExecution = lists:nth(AtmParallelBoxIndex, AtmParallelBoxExecutions),
 
     case atm_parallel_box_execution:update_task_status(
         AtmTaskExecutionId, NewStatus, AtmParallelBoxExecution
     ) of
         {ok, NewParallelBoxExecution} ->
             NewAtmParallelBoxExecutions = atm_status_utils:replace_at(
-                NewParallelBoxExecution, AtmParallelBoxExecutionNo, AtmParallelBoxExecutions
+                NewParallelBoxExecution, AtmParallelBoxIndex, AtmParallelBoxExecutions
             ),
             {ok, AtmLaneExecution#atm_lane_execution{
                 status = atm_status_utils:converge(atm_parallel_box_execution:gather_statuses(

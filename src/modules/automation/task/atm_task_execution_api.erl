@@ -35,19 +35,17 @@
 
 
 -spec create_all(
-    atm_workflow_execution:id(),
+    atm_execution:creation_ctx(),
     non_neg_integer(),
     non_neg_integer(),
     [atm_task_schema:record()]
 ) ->
     [atm_task_execution:doc()] | no_return().
-create_all(AtmWorkflowExecutionId, AtmLaneNo, AtmParallelBoxNo, AtmTaskSchemas) ->
-    lists:reverse(lists:foldl(fun(#atm_task_schema{
-        id = AtmTaskSchemaId
-    } = AtmTaskSchema, Acc) ->
+create_all(AtmExecutionCreationCtx, AtmLaneIndex, AtmParallelBoxIndex, AtmTaskSchemas) ->
+    lists:reverse(lists:foldl(fun(#atm_task_schema{id = AtmTaskSchemaId} = AtmTaskSchema, Acc) ->
         try
             {ok, AtmTaskExecutionDoc} = create(
-                AtmWorkflowExecutionId, AtmLaneNo, AtmParallelBoxNo, AtmTaskSchema
+                AtmExecutionCreationCtx, AtmLaneIndex, AtmParallelBoxIndex, AtmTaskSchema
             ),
             [AtmTaskExecutionDoc | Acc]
         catch _:Reason ->
@@ -58,26 +56,31 @@ create_all(AtmWorkflowExecutionId, AtmLaneNo, AtmParallelBoxNo, AtmTaskSchemas) 
 
 
 -spec create(
-    atm_workflow_execution:id(),
+    atm_execution:creation_ctx(),
     non_neg_integer(),
     non_neg_integer(),
     atm_task_schema:record()
 ) ->
     {ok, atm_task_execution:doc()} | no_return().
-create(AtmWorkflowExecutionId, AtmLaneNo, AtmParallelBoxNo, #atm_task_schema{
+create(AtmExecutionCreationCtx, AtmLaneIndex, AtmParallelBoxIndex, #atm_task_schema{
     id = AtmTaskSchemaId,
     lambda_id = AtmLambdaId,
     argument_mappings = AtmTaskArgMappers
 }) ->
+    #atm_execution_creation_ctx{
+        workflow_execution_id = AtmWorkflowExecutionId
+    } = AtmExecutionCreationCtx,
+
+    %% TODO VFS-7671 use lambda snapshots stored in atm_execution:creation_ctx()
     {ok, #document{value = #od_atm_lambda{
         operation_spec = AtmLambdaOperationSpec,
         argument_specs = AtmLambdaArgSpecs
-    }}} = atm_lambda_logic:get(?ROOT_SESS_ID, AtmLambdaId),  %% TODO VFS-7671 use user session
+    }}} = atm_lambda_logic:get(?ROOT_SESS_ID, AtmLambdaId),
 
     {ok, _} = atm_task_execution:create(#atm_task_execution{
         workflow_execution_id = AtmWorkflowExecutionId,
-        lane_no = AtmLaneNo,
-        parallel_box_no = AtmParallelBoxNo,
+        lane_index = AtmLaneIndex,
+        parallel_box_index = AtmParallelBoxIndex,
 
         schema_id = AtmTaskSchemaId,
 
@@ -180,12 +183,12 @@ update_items_in_processing(AtmTaskExecutionId) ->
 -spec report_status_change(atm_task_execution:id(), atm_task_execution:record()) -> ok.
 report_status_change(AtmTaskExecutionId, #atm_task_execution{
     workflow_execution_id = AtmWorkflowExecutionId,
-    lane_no = AtmLaneNo,
-    parallel_box_no = AtmParallelBoxNo,
+    lane_index = AtmLaneIndex,
+    parallel_box_index = AtmParallelBoxIndex,
     status = NewStatus
 }) ->
     atm_workflow_execution_api:report_task_status_change(
-        AtmWorkflowExecutionId, AtmLaneNo, AtmParallelBoxNo,
+        AtmWorkflowExecutionId, AtmLaneIndex, AtmParallelBoxIndex,
         AtmTaskExecutionId, NewStatus
     ).
 

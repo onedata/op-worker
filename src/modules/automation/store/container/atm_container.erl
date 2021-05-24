@@ -13,6 +13,8 @@
 %%% 1) This behaviour must be implemented by modules with records of the same name.
 %%% 2) Modules implementing this behaviour must also implement `persistent_record`
 %%%    behaviour.
+%%% 3) Modules implementing this behaviour must be registered in
+%%%    `atm_store_api:store_type_to_container_type` function.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_container).

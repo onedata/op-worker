@@ -82,8 +82,8 @@ get_record_version() ->
 get_record_struct(1) ->
     {record, [
         {workflow_execution_id, string},
-        {lane_no, integer},
-        {parallel_box_no, integer},
+        {lane_index, integer},
+        {parallel_box_index, integer},
 
         {schema_id, string},
 

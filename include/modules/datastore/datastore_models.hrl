@@ -1035,8 +1035,8 @@
 %% Model storing information about automation task execution.
 -record(atm_task_execution, {
     workflow_execution_id :: atm_workflow_execution:id(),
-    lane_no :: non_neg_integer(),
-    parallel_box_no :: non_neg_integer(),
+    lane_index :: non_neg_integer(),
+    parallel_box_index :: non_neg_integer(),
 
     schema_id :: automation:id(),
 
@@ -1073,7 +1073,7 @@
     space_id :: od_space:id(),
     schema_snapshot_id :: atm_workflow_schema_snapshot:id(),
 
-    stores :: atm_workflow_execution:store_registry(),
+    store_registry :: atm_execution:store_registry(),
     lanes :: [atm_lane_execution:record()],
 
     status :: atm_workflow_execution:status(),

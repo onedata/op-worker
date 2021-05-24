@@ -58,7 +58,7 @@ is_transition_allowed(_, _) -> false.
 
 -spec converge([status()]) -> status().
 converge(Statuses) ->
-    converge_unique(lists:usort(Statuses)).
+    converge_uniquely_sorted(lists:usort(Statuses)).
 
 
 %%%===================================================================
@@ -67,8 +67,8 @@ converge(Statuses) ->
 
 
 %% @private
--spec converge_unique([status()]) -> status().
-converge_unique([Status]) -> Status;
-converge_unique([?ACTIVE_STATUS | _]) -> ?ACTIVE_STATUS;
-converge_unique([?PENDING_STATUS | _]) -> ?ACTIVE_STATUS;
-converge_unique([?FAILED_STATUS, ?FINISHED_STATUS]) -> ?FAILED_STATUS.
+-spec converge_uniquely_sorted([status()]) -> status().
+converge_uniquely_sorted([Status]) -> Status;
+converge_uniquely_sorted([?ACTIVE_STATUS | _]) -> ?ACTIVE_STATUS;
+converge_uniquely_sorted([?PENDING_STATUS | _]) -> ?ACTIVE_STATUS;
+converge_uniquely_sorted([?FAILED_STATUS, ?FINISHED_STATUS]) -> ?FAILED_STATUS.

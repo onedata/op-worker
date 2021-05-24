@@ -36,18 +36,18 @@
 
 
 -spec create_all(
-    atm_workflow_execution:id(),
+    atm_execution:creation_ctx(),
     non_neg_integer(),
     [atm_parallel_box_schema:record()]
 ) ->
     [record()] | no_return().
-create_all(AtmWorkflowExecutionId, AtmLaneNo, AtmParallelBoxSchemas) ->
-    lists:reverse(lists:foldl(fun({AtmParallelBoxNo, #atm_parallel_box_schema{
+create_all(AtmExecutionCreationCtx, AtmLaneIndex, AtmParallelBoxSchemas) ->
+    lists:reverse(lists:foldl(fun({AtmParallelBoxIndex, #atm_parallel_box_schema{
         id = AtmParallelBoxSchemaId
     } = AtmParallelBoxSchema}, Acc) ->
         try
             AtmParallelBoxExecution = create(
-                AtmWorkflowExecutionId, AtmLaneNo, AtmParallelBoxNo, AtmParallelBoxSchema
+                AtmExecutionCreationCtx, AtmLaneIndex, AtmParallelBoxIndex, AtmParallelBoxSchema
             ),
             [AtmParallelBoxExecution | Acc]
         catch _:Reason ->
@@ -58,20 +58,20 @@ create_all(AtmWorkflowExecutionId, AtmLaneNo, AtmParallelBoxSchemas) ->
 
 
 -spec create(
-    atm_workflow_execution:id(),
+    atm_execution:creation_ctx(),
     non_neg_integer(),
     non_neg_integer(),
     atm_parallel_box_schema:record()
 ) ->
     record() | no_return().
-create(AtmWorkflowExecutionId, AtmLaneNo, AtmParallelBoxNo, #atm_parallel_box_schema{
+create(AtmExecutionCreationCtx, AtmLaneIndex, AtmParallelBoxIndex, #atm_parallel_box_schema{
     id = AtmParallelBoxSchemaId,
     tasks = AtmTaskSchemas
 }) ->
     AtmTaskExecutionDocs = atm_task_execution_api:create_all(
-        AtmWorkflowExecutionId, AtmLaneNo, AtmParallelBoxNo, AtmTaskSchemas
+        AtmExecutionCreationCtx, AtmLaneIndex, AtmParallelBoxIndex, AtmTaskSchemas
     ),
-    AtmTaskExecutionsStatus = lists:foldl(fun(#document{
+    AtmTaskExecutionStatuses = lists:foldl(fun(#document{
         key = AtmTaskExecutionId,
         value = #atm_task_execution{status = AtmTaskExecutionStatus}
     }, Acc) ->
@@ -80,8 +80,8 @@ create(AtmWorkflowExecutionId, AtmLaneNo, AtmParallelBoxNo, #atm_parallel_box_sc
 
     #atm_parallel_box_execution{
         schema_id = AtmParallelBoxSchemaId,
-        status = atm_status_utils:converge(maps:values(AtmTaskExecutionsStatus)),
-        tasks = AtmTaskExecutionsStatus
+        status = atm_status_utils:converge(maps:values(AtmTaskExecutionStatuses)),
+        tasks = AtmTaskExecutionStatuses
     }.
 
 
