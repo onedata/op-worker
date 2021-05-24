@@ -53,12 +53,6 @@
     is_batch :: boolean()
 }).
 
-%% TODO rm
--record(atm_store_iterator_config, {
-    store_id :: atm_store:id(),
-    strategy :: atm_store_iterator_spec:strategy()
-}).
-
 
 -define(WAITING_STATE, waiting).
 -define(ONGOING_STATE, ongoing).

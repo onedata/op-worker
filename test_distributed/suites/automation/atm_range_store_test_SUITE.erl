@@ -14,6 +14,7 @@
 
 -include("modules/automation/atm_tmp.hrl").
 -include("modules/automation/atm_execution.hrl").
+-include("modules/datastore/datastore_runner.hrl").
 
 -include_lib("ctool/include/automation/automation.hrl").
 -include_lib("ctool/include/errors.hrl").
@@ -96,9 +97,9 @@ create_store_with_invalid_args_test(_Config) ->
     Node = oct_background:get_random_provider_node(krakow),
 
     lists:foreach(fun({InvalidInitialValue, ExpError}) ->
-        ?assertEqual(ExpError, create_store(Node, ?ATM_RANGE_STORE_SCHEMA, InvalidInitialValue))
+        ?assertEqual(ExpError, create_store(Node, InvalidInitialValue, ?ATM_RANGE_STORE_SCHEMA))
     end, [
-        {undefined, ?ERROR_MISSING_REQUIRED_VALUE(<<"end">>)},
+        {undefined, ?ERROR_ATM_STORE_MISSING_REQUIRED_INITIAL_VALUE},
         {#{<<"end">> => <<"NaN">>},
             ?ERROR_ATM_BAD_DATA(<<"end">>, ?ERROR_ATM_DATA_TYPE_UNVERIFIED(<<"NaN">>, atm_integer_type))
         },
@@ -189,12 +190,17 @@ iterate_in_chunks_test_base(ChunkSize, #{<<"end">> := End} = InitialValue) ->
 iterate_test_base(AtmRangeStoreInitialValue, AtmStoreIteratorStrategy, ExpItems) ->
     Node = oct_background:get_random_provider_node(krakow),
 
-    {ok, AtmRangeStoreId} = create_store(Node, ?ATM_RANGE_STORE_SCHEMA, AtmRangeStoreInitialValue),
-    AtmStoreIteratorConfig = #atm_store_iterator_config{
-        store_id = AtmRangeStoreId,
+    AtmRangeStoreDummySchemaId = <<"dummyId">>,
+
+    {ok, AtmRangeStoreId} = create_store(Node, AtmRangeStoreInitialValue, ?ATM_RANGE_STORE_SCHEMA),
+    AtmStoreIteratorSpec = #atm_store_iterator_spec{
+        store_schema_id = AtmRangeStoreDummySchemaId,
         strategy = AtmStoreIteratorStrategy
     },
-    AtmStoreIterator = create_store_iterate(Node, AtmStoreIteratorConfig),
+    AtmExecutionState = #atm_execution_state{
+        store_registry = #{AtmRangeStoreDummySchemaId => AtmRangeStoreId}
+    },
+    AtmStoreIterator = acquire_store_iterate(Node, AtmExecutionState, AtmStoreIteratorSpec),
 
     assert_all_items_listed(Node, AtmStoreIterator, ExpItems).
 
@@ -215,14 +221,18 @@ assert_all_items_listed(Node, AtmStoreIterator0, [ExpItem | RestItems]) ->
 iterator_cursor_test(_Config) ->
     Node = oct_background:get_random_provider_node(krakow),
 
+    AtmRangeStoreDummySchemaId = <<"dummyId">>,
     InitialValue = #{<<"start">> => 2, <<"end">> => 16, <<"step">> => 3},
-    {ok, AtmRangeStoreId} = create_store(Node, ?ATM_RANGE_STORE_SCHEMA, InitialValue),
+    {ok, AtmRangeStoreId} = create_store(Node, InitialValue, ?ATM_RANGE_STORE_SCHEMA),
 
-    AtmStoreIteratorConfig = #atm_store_iterator_config{
-        store_id = AtmRangeStoreId,
+    AtmStoreIteratorSpec = #atm_store_iterator_spec{
+        store_schema_id = AtmRangeStoreDummySchemaId,
         strategy = #atm_store_iterator_serial_strategy{}
     },
-    AtmSerialIterator0 = create_store_iterate(Node, AtmStoreIteratorConfig),
+    AtmExecutionState = #atm_execution_state{
+        store_registry = #{AtmRangeStoreDummySchemaId => AtmRangeStoreId}
+    },
+    AtmSerialIterator0 = acquire_store_iterate(Node, AtmExecutionState, AtmStoreIteratorSpec),
 
     {ok, _, Cursor1, AtmSerialIterator1} = ?assertMatch({ok, 2, _, _}, iterator_get_next(Node, AtmSerialIterator0)),
     {ok, _, _Cursor2, AtmSerialIterator2} = ?assertMatch({ok, 5, _, _}, iterator_get_next(Node, AtmSerialIterator1)),
@@ -267,17 +277,23 @@ split_into_chunks(Size, Acc, [_ | _] = Items) ->
 
 
 %% @private
--spec create_store(node(), atm_store_schema:record(), atm_store_api:initial_value()) ->
+-spec create_store(node(), atm_store_api:initial_value(), atm_store_schema:record()) ->
     {ok, atm_store:id()} | {error, term()}.
-create_store(Node, AtmStoreSchema, InitialValue) ->
-    rpc:call(Node, atm_store_api, create, [AtmStoreSchema, InitialValue]).
+create_store(Node, InitialValue, AtmStoreSchema) ->
+    ?extract_key(rpc:call(Node, atm_store_api, create, [
+        <<"dummyId">>, InitialValue, AtmStoreSchema
+    ])).
 
 
 %% @private
--spec create_store_iterate(node(), atm_store_iterator_config:record()) ->
+-spec acquire_store_iterate(
+    node(),
+    atm_execution_state:record(),
+    atm_store_iterator_spec:record()
+) ->
     atm_store_iterator:record().
-create_store_iterate(Node, AtmStoreIteratorConfig) ->
-    rpc:call(Node, atm_store_api, acquire_iterator, [AtmStoreIteratorConfig]).
+acquire_store_iterate(Node, AtmExecutionState, AtmStoreIteratorSpec) ->
+    rpc:call(Node, atm_store_api, acquire_iterator, [AtmExecutionState, AtmStoreIteratorSpec]).
 
 
 %% @private
