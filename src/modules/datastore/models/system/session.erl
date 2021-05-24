@@ -32,6 +32,7 @@
 -export([get_session_supervisor_and_node/1]).
 -export([get_event_manager/1, get_sequencer_manager/1]).
 -export([get_credentials/1, get_data_constraints/1, get_user_id/1]).
+-export([get_mode/1]).
 -export([set_direct_io/3]).
 
 % exometer callbacks
@@ -47,6 +48,14 @@
 -type ttl() :: non_neg_integer().
 -type grace_period() :: non_neg_integer().
 -type type() :: fuse | rest | gui | offline | provider_outgoing | provider_incoming | root | guest.
+% Supported session modes:
+% - normal
+% - open_handle - special session mode in which user traverses open handle shares tree
+%                 (listing space dir return virtual share root dirs corresponding to
+%                 shares having open handle instead of space dirs and files) and is
+%                 treated as guest when checking privileges.
+%                 Currently supported only in 'fuse' and 'guest' session type.
+-type mode() :: normal | open_handle.
 % All sessions, beside root and guest (they start with active status),
 % start with initializing status. When the last component of supervision tree
 % gets up (either incoming_session_watcher or outgoing_connection_manager),
@@ -57,7 +66,7 @@
 -export_type([
     id/0, record/0, doc/0,
     ttl/0, grace_period/0,
-    type/0, status/0
+    type/0, mode/0, status/0
 ]).
 
 -define(CTX, #{
@@ -282,6 +291,20 @@ get_data_constraints(#session{data_constraints = DataConstraints}) ->
     DataConstraints;
 get_data_constraints(#document{value = Session}) ->
     get_data_constraints(Session).
+
+
+-spec get_mode(id() | record() | doc()) -> {ok, mode()} | {error, term()}.
+get_mode(<<_/binary>> = SessId) ->
+    case session:get(SessId) of
+        {ok, #document{value = #session{mode = SessMode}}} ->
+            {ok, SessMode};
+        {error, _} = Error ->
+            Error
+    end;
+get_mode(#session{mode = SessMode}) ->
+    {ok, SessMode};
+get_mode(#document{value = #session{mode = SessMode}}) ->
+    {ok, SessMode}.
 
 
 %%--------------------------------------------------------------------

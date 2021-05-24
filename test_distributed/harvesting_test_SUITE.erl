@@ -19,11 +19,14 @@
 -module(harvesting_test_SUITE).
 -author("Jakub Kudzia").
 
--include("proto/oneclient/fuse_messages.hrl").
+-include("modules/dataset/dataset.hrl").
+-include("modules/fslogic/data_access_control.hrl").
 -include("modules/harvesting/harvesting.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/fslogic/file_attr.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
+-include("proto/oneclient/fuse_messages.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
--include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -39,6 +42,9 @@
 -export([
     harvest_space_doc_and_do_not_harvest_trash_doc/1,
     create_file/1,
+    create_file_and_hardlink/1,
+    create_dir_and_symlink/1,
+    create_file_with_dataset/1,
     rename_file/1,
     delete_file/1,
     set_json_metadata/1,
@@ -70,6 +76,9 @@ all() ->
     ?ALL([
         harvest_space_doc_and_do_not_harvest_trash_doc,
         create_file,
+        create_file_and_hardlink,
+        create_dir_and_symlink,
+        create_file_with_dataset,
         rename_file,
         delete_file,
         set_json_metadata,
@@ -133,6 +142,7 @@ all() ->
 -define(XATTR_NAME, <<"xattr_name_", (?RAND_NAME)/binary>>).
 -define(XATTR_VAL, <<"xattr_val_", (?RAND_NAME)/binary>>).
 
+-define(DIR_NAME, <<"dir", (?RAND_NAME)/binary>>).
 -define(FILE_NAME, <<"file_", (?RAND_NAME)/binary>>).
 
 -define(RAND_NAME,
@@ -274,6 +284,7 @@ harvest_space_doc_and_do_not_harvest_trash_doc(Config) ->
         <<"fileId">> => SpaceFileId,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => ?SPACE_NAME1,
+        <<"fileType">> => str_utils:to_binary(?DIRECTORY_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{}
     }], ProviderId),
@@ -283,6 +294,7 @@ harvest_space_doc_and_do_not_harvest_trash_doc(Config) ->
         <<"fileId">> => TrashFileId,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => ?TRASH_DIR_NAME,
+        <<"fileType">> => str_utils:to_binary(?DIRECTORY_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{}
     }], ProviderId),
@@ -292,6 +304,7 @@ harvest_space_doc_and_do_not_harvest_trash_doc(Config) ->
         <<"fileId">> => SpaceFileId,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => ?SPACE_NAME1,
+        <<"fileType">> => str_utils:to_binary(?DIRECTORY_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{}
     }], ProviderId2).
@@ -312,6 +325,7 @@ create_file(Config) ->
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{}
     }], ProviderId),
@@ -321,6 +335,208 @@ create_file(Config) ->
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
+        <<"operation">> => <<"submit">>,
+        <<"payload">> => #{}
+    }], ProviderId2).
+
+
+create_file_with_dataset(Config) ->
+    [Worker, Worker2 | _] = ?config(op_worker_nodes, Config),
+    SessId = ?SESS_ID(Worker),
+    FileName = ?FILE_NAME,
+
+    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1)),
+    {ok, DatasetId} = lfm_proxy:establish_dataset(Worker, SessId, ?FILE_REF(Guid)),
+    {ok, FileId} = file_id:guid_to_objectid(Guid),
+
+    Destination = #{?HARVESTER1 => [?INDEX11]},
+    ProviderId = ?PROVIDER_ID(Worker),
+    ProviderId2 = ?PROVIDER_ID(Worker2),
+
+    ?assertReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
+        <<"fileId">> => FileId,
+        <<"spaceId">> => ?SPACE_ID1,
+        <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
+        <<"operation">> => <<"submit">>,
+        <<"payload">> => #{},
+        <<"datasetId">> => DatasetId
+    }], ProviderId),
+
+    % Worker2 does not support SPACE1 so it shouldn't submit metadata entry
+    ?assertNotReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
+        <<"fileId">> => FileId,
+        <<"spaceId">> => ?SPACE_ID1,
+        <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
+        <<"operation">> => <<"submit">>,
+        <<"payload">> => #{},
+        <<"datasetId">> => DatasetId
+    }], ProviderId2),
+
+    ok = lfm_proxy:update_dataset(Worker, SessId, DatasetId, ?DETACHED_DATASET, ?no_flags_mask, ?no_flags_mask),
+
+    ?assertNotReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
+        <<"fileId">> => FileId,
+        <<"spaceId">> => ?SPACE_ID1,
+        <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
+        <<"operation">> => <<"submit">>,
+        <<"payload">> => #{},
+        <<"datasetId">> => DatasetId
+    }], ProviderId),
+
+    % detaching dataset should result in entry without datasetId
+    ?assertReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
+        <<"fileId">> => FileId,
+        <<"spaceId">> => ?SPACE_ID1,
+        <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
+        <<"operation">> => <<"submit">>,
+        <<"payload">> => #{}
+    }], ProviderId),
+
+    % reattach dataset
+    ok = lfm_proxy:update_dataset(Worker, SessId, DatasetId, ?ATTACHED_DATASET, ?no_flags_mask, ?no_flags_mask),
+
+    ?assertReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
+        <<"fileId">> => FileId,
+        <<"spaceId">> => ?SPACE_ID1,
+        <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
+        <<"operation">> => <<"submit">>,
+        <<"payload">> => #{},
+        <<"datasetId">> => DatasetId
+    }], ProviderId),
+
+    % remove dataset
+    ok = lfm_proxy:remove_dataset(Worker, SessId, DatasetId),
+
+    ?assertNotReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
+        <<"fileId">> => FileId,
+        <<"spaceId">> => ?SPACE_ID1,
+        <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
+        <<"operation">> => <<"submit">>,
+        <<"payload">> => #{},
+        <<"datasetId">> => DatasetId
+    }], ProviderId),
+
+    ?assertReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
+        <<"fileId">> => FileId,
+        <<"spaceId">> => ?SPACE_ID1,
+        <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
+        <<"operation">> => <<"submit">>,
+        <<"payload">> => #{}
+    }], ProviderId).
+
+
+create_file_and_hardlink(Config) ->
+    [Worker, Worker2 | _] = ?config(op_worker_nodes, Config),
+    SessId = ?SESS_ID(Worker),
+    FileName = ?FILE_NAME,
+    HardlinkName = <<"hardlink">>,
+
+    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1)),
+    {ok, #file_attr{guid = HardlinkGuid}} =
+        lfm_proxy:make_link(Worker, SessId, ?PATH(HardlinkName, ?SPACE_ID1), Guid),
+    {ok, FileId} = file_id:guid_to_objectid(Guid),
+    {ok, LinkFileId} = file_id:guid_to_objectid(HardlinkGuid),
+
+    Destination = #{?HARVESTER1 => [?INDEX11]},
+    ProviderId = ?PROVIDER_ID(Worker),
+    ProviderId2 = ?PROVIDER_ID(Worker2),
+
+    ?assertReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
+        <<"fileId">> => FileId,
+        <<"spaceId">> => ?SPACE_ID1,
+        <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
+        <<"operation">> => <<"submit">>,
+        <<"payload">> => #{}
+    }], ProviderId),
+
+    ?assertReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
+        <<"fileId">> => LinkFileId,
+        <<"spaceId">> => ?SPACE_ID1,
+        <<"fileName">> => HardlinkName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
+        <<"operation">> => <<"submit">>,
+        <<"payload">> => #{}
+    }], ProviderId),
+
+    % Worker2 does not support SPACE1 so it shouldn't submit metadata entry
+    ?assertNotReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
+        <<"fileId">> => FileId,
+        <<"spaceId">> => ?SPACE_ID1,
+        <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
+        <<"operation">> => <<"submit">>,
+        <<"payload">> => #{}
+    }], ProviderId2),
+
+    ?assertNotReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
+        <<"fileId">> => LinkFileId,
+        <<"spaceId">> => ?SPACE_ID1,
+        <<"fileName">> => HardlinkName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
+        <<"operation">> => <<"submit">>,
+        <<"payload">> => #{}
+    }], ProviderId2).
+
+create_dir_and_symlink(Config) ->
+    [Worker, Worker2 | _] = ?config(op_worker_nodes, Config),
+    SessId = ?SESS_ID(Worker),
+    DirName = ?DIR_NAME,
+    SymlinkName = <<"symlink">>,
+
+    {ok, Guid} = lfm_proxy:mkdir(Worker, SessId, ?PATH(DirName, ?SPACE_ID1)),
+    SpaceIdPrefix = ?SYMLINK_SPACE_ID_ABS_PATH_PREFIX(?SPACE_ID1),
+    LinkTarget = filename:join([SpaceIdPrefix, DirName]),
+    {ok, #file_attr{guid = SymlinkGuid}} =
+        lfm_proxy:make_symlink(Worker, SessId, ?PATH(SymlinkName, ?SPACE_ID1), LinkTarget),
+    {ok, FileId} = file_id:guid_to_objectid(Guid),
+    {ok, LinkFileId} = file_id:guid_to_objectid(SymlinkGuid),
+
+    Destination = #{?HARVESTER1 => [?INDEX11]},
+    ProviderId = ?PROVIDER_ID(Worker),
+    ProviderId2 = ?PROVIDER_ID(Worker2),
+
+    ?assertReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
+        <<"fileId">> => FileId,
+        <<"spaceId">> => ?SPACE_ID1,
+        <<"fileName">> => DirName,
+        <<"fileType">> => str_utils:to_binary(?DIRECTORY_TYPE),
+        <<"operation">> => <<"submit">>,
+        <<"payload">> => #{}
+    }], ProviderId),
+
+    ?assertReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
+        <<"fileId">> => LinkFileId,
+        <<"spaceId">> => ?SPACE_ID1,
+        <<"fileName">> => SymlinkName,
+        <<"fileType">> => str_utils:to_binary(?SYMLINK_TYPE),
+        <<"operation">> => <<"submit">>,
+        <<"payload">> => #{}
+    }], ProviderId),
+
+    % Worker2 does not support SPACE1 so it shouldn't submit metadata entry
+    ?assertNotReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
+        <<"fileId">> => FileId,
+        <<"spaceId">> => ?SPACE_ID1,
+        <<"fileName">> => DirName,
+        <<"fileType">> => str_utils:to_binary(?DIRECTORY_TYPE),
+        <<"operation">> => <<"submit">>,
+        <<"payload">> => #{}
+    }], ProviderId2),
+
+    ?assertNotReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
+        <<"fileId">> => LinkFileId,
+        <<"spaceId">> => ?SPACE_ID1,
+        <<"fileName">> => SymlinkName,
+        <<"fileType">> => str_utils:to_binary(?SYMLINK_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{}
     }], ProviderId2).
@@ -341,17 +557,19 @@ rename_file(Config) ->
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{}
     }], ProviderId),
 
-    {ok, Guid} = lfm_proxy:mv(Worker, SessId, {guid, Guid}, ?PATH(FileName2, ?SPACE_ID1)),
+    {ok, Guid} = lfm_proxy:mv(Worker, SessId, ?FILE_REF(Guid), ?PATH(FileName2, ?SPACE_ID1)),
 
     % check whether operation of rename was harvested
     ?assertReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => FileName2,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{}
     }], ProviderId).
@@ -372,11 +590,12 @@ delete_file(Config) ->
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{}
     }], ProviderId),
 
-    ok = lfm_proxy:unlink(Worker, SessId, {guid, Guid}),
+    ok = lfm_proxy:unlink(Worker, SessId, ?FILE_REF(Guid)),
 
     ?assertReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
         <<"fileId">> => FileId,
@@ -395,7 +614,7 @@ set_json_metadata(Config) ->
     JSON = #{<<"color">> => <<"blue">>},
 
     {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1)),
-    ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, json, JSON, []),
+    ok = lfm_proxy:set_metadata(Worker, SessId, ?FILE_REF(Guid), json, JSON, []),
     {ok, FileId} = file_id:guid_to_objectid(Guid),
 
     Destination = #{?HARVESTER1 => [?INDEX11]},
@@ -406,6 +625,7 @@ set_json_metadata(Config) ->
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{
             <<"json">> => JSON
@@ -417,6 +637,7 @@ set_json_metadata(Config) ->
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{
             <<"json">> => JSON
@@ -431,7 +652,7 @@ modify_json_metadata(Config) ->
     JSON = #{<<"color">> => <<"blue">>},
 
     {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1)),
-    ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, json, JSON, []),
+    ok = lfm_proxy:set_metadata(Worker, SessId, ?FILE_REF(Guid), json, JSON, []),
     {ok, FileId} = file_id:guid_to_objectid(Guid),
 
     Destination = #{?HARVESTER1 => [?INDEX11]},
@@ -441,6 +662,7 @@ modify_json_metadata(Config) ->
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{
             <<"json">> => JSON
@@ -448,12 +670,13 @@ modify_json_metadata(Config) ->
     }], ProviderId),
 
     JSON2 = #{<<"color">> => <<"blue">>, <<"size">> => <<"big">>},
-    ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, json, JSON2, []),
+    ok = lfm_proxy:set_metadata(Worker, SessId, ?FILE_REF(Guid), json, JSON2, []),
 
     ?assertReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{
             <<"json">> => JSON2
@@ -468,7 +691,7 @@ delete_json_metadata(Config) ->
     JSON = #{<<"color">> => <<"blue">>},
 
     {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1)),
-    ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, json, JSON, []),
+    ok = lfm_proxy:set_metadata(Worker, SessId, ?FILE_REF(Guid), json, JSON, []),
     {ok, FileId} = file_id:guid_to_objectid(Guid),
 
     Destination = #{?HARVESTER1 => [?INDEX11]},
@@ -478,18 +701,20 @@ delete_json_metadata(Config) ->
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{
             <<"json">> => JSON
         }
     }], ProviderId),
 
-    ok = lfm_proxy:remove_metadata(Worker, SessId, {guid, Guid}, json),
+    ok = lfm_proxy:remove_metadata(Worker, SessId, ?FILE_REF(Guid), json),
 
     ?assertReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{}
     }], ProviderId).
@@ -502,7 +727,7 @@ delete_file_with_json_metadata(Config) ->
     JSON = #{<<"color">> => <<"blue">>},
 
     {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1)),
-    ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, json, JSON, []),
+    ok = lfm_proxy:set_metadata(Worker, SessId, ?FILE_REF(Guid), json, JSON, []),
     {ok, FileId} = file_id:guid_to_objectid(Guid),
 
     Destination = #{?HARVESTER1 => [?INDEX11]},
@@ -512,13 +737,14 @@ delete_file_with_json_metadata(Config) ->
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{
             <<"json">> => JSON
         }
     }], ProviderId),
 
-    ok = lfm_proxy:unlink(Worker, SessId, {guid, Guid}),
+    ok = lfm_proxy:unlink(Worker, SessId, ?FILE_REF(Guid)),
     ?assertReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
         <<"fileId">> => FileId,
         <<"operation">> => <<"delete">>
@@ -536,7 +762,7 @@ modify_json_many_times(Config) ->
         Key = <<"key_", (integer_to_binary(I))/binary>>,
         Value = <<"value_", (integer_to_binary(I))/binary>>,
         JSON = #{Key => Value},
-        ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, json, JSON, []),
+        ok = lfm_proxy:set_metadata(Worker, SessId, ?FILE_REF(Guid), json, JSON, []),
         JSON
     end, undefined, lists:seq(1, Modifications)),
 
@@ -547,6 +773,7 @@ modify_json_many_times(Config) ->
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{
             <<"json">> => ExpectedFinalJSON
@@ -560,7 +787,7 @@ set_rdf_metadata(Config) ->
     RDF = ?DUMMY_RDF,
 
     {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1)),
-    ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, rdf, RDF, []),
+    ok = lfm_proxy:set_metadata(Worker, SessId, ?FILE_REF(Guid), rdf, RDF, []),
     {ok, FileId} = file_id:guid_to_objectid(Guid),
 
     Destination = #{?HARVESTER1 => [?INDEX11]},
@@ -571,6 +798,7 @@ set_rdf_metadata(Config) ->
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{
             <<"rdf">> => RDF
@@ -582,6 +810,7 @@ set_rdf_metadata(Config) ->
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{
             <<"json">> => RDF
@@ -595,7 +824,7 @@ modify_rdf_metadata(Config) ->
     RDF = ?DUMMY_RDF,
 
     {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1)),
-    ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, rdf, RDF, []),
+    ok = lfm_proxy:set_metadata(Worker, SessId, ?FILE_REF(Guid), rdf, RDF, []),
     {ok, FileId} = file_id:guid_to_objectid(Guid),
 
     Destination = #{?HARVESTER1 => [?INDEX11]},
@@ -605,6 +834,7 @@ modify_rdf_metadata(Config) ->
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{
             <<"rdf">> => RDF
@@ -612,12 +842,13 @@ modify_rdf_metadata(Config) ->
     }], ProviderId),
 
     RDF2 = ?DUMMY_RDF(2),
-    ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, rdf, RDF2, []),
+    ok = lfm_proxy:set_metadata(Worker, SessId, ?FILE_REF(Guid), rdf, RDF2, []),
 
     ?assertReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{
             <<"rdf">> => RDF2
@@ -632,7 +863,7 @@ delete_rdf_metadata(Config) ->
     RDF = ?DUMMY_RDF,
 
     {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1)),
-    ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, rdf, RDF, []),
+    ok = lfm_proxy:set_metadata(Worker, SessId, ?FILE_REF(Guid), rdf, RDF, []),
     {ok, FileId} = file_id:guid_to_objectid(Guid),
 
     Destination = #{?HARVESTER1 => [?INDEX11]},
@@ -642,18 +873,20 @@ delete_rdf_metadata(Config) ->
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{
             <<"rdf">> => RDF
         }
     }], ProviderId),
 
-    ok = lfm_proxy:remove_metadata(Worker, SessId, {guid, Guid}, rdf),
+    ok = lfm_proxy:remove_metadata(Worker, SessId, ?FILE_REF(Guid), rdf),
 
     ?assertReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{}
     }], ProviderId).
@@ -666,7 +899,7 @@ delete_file_with_rdf_metadata(Config) ->
     RDF = ?DUMMY_RDF,
 
     {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1)),
-    ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, rdf, RDF, []),
+    ok = lfm_proxy:set_metadata(Worker, SessId, ?FILE_REF(Guid), rdf, RDF, []),
     {ok, FileId} = file_id:guid_to_objectid(Guid),
 
     Destination = #{?HARVESTER1 => [?INDEX11]},
@@ -676,13 +909,14 @@ delete_file_with_rdf_metadata(Config) ->
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{
             <<"rdf">> => RDF
         }
     }], ProviderId),
 
-    ok = lfm_proxy:unlink(Worker, SessId, {guid, Guid}),
+    ok = lfm_proxy:unlink(Worker, SessId, ?FILE_REF(Guid)),
     ?assertReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
         <<"fileId">> => FileId,
         <<"operation">> => <<"delete">>
@@ -698,7 +932,7 @@ modify_rdf_many_times(Config) ->
 
     ExpectedFinalRDF = lists:foldl(fun(I, _) ->
         RDF = ?DUMMY_RDF(I),
-        ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, rdf, RDF, []),
+        ok = lfm_proxy:set_metadata(Worker, SessId, ?FILE_REF(Guid), rdf, RDF, []),
         RDF
     end, undefined, lists:seq(1, Modifications)),
 
@@ -709,6 +943,7 @@ modify_rdf_many_times(Config) ->
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{
             <<"rdf">> => ExpectedFinalRDF
@@ -724,7 +959,7 @@ set_xattr_metadata(Config) ->
     Xattr = #xattr{name = XattrName, value = XattrValue},
 
     {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1)),
-    ok = lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr),
+    ok = lfm_proxy:set_xattr(Worker, SessId, ?FILE_REF(Guid), Xattr),
     {ok, FileId} = file_id:guid_to_objectid(Guid),
 
     Destination = #{?HARVESTER1 => [?INDEX11]},
@@ -735,6 +970,7 @@ set_xattr_metadata(Config) ->
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{
             <<"xattrs">> => #{
@@ -748,6 +984,7 @@ set_xattr_metadata(Config) ->
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{
             <<"xattrs">> => #{
@@ -781,6 +1018,7 @@ cdmi_xattr_should_not_be_harvested(Config) ->
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{}
     }], ProviderId),
@@ -790,6 +1028,7 @@ cdmi_xattr_should_not_be_harvested(Config) ->
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{}
     }], ProviderId2).
@@ -804,7 +1043,7 @@ modify_xattr_metadata(Config) ->
     Xattr = #xattr{name = XattrName, value = XattrValue},
 
     {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1)),
-    ok = lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr),
+    ok = lfm_proxy:set_xattr(Worker, SessId, ?FILE_REF(Guid), Xattr),
     {ok, FileId} = file_id:guid_to_objectid(Guid),
 
     Destination = #{?HARVESTER1 => [?INDEX11]},
@@ -814,6 +1053,7 @@ modify_xattr_metadata(Config) ->
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{
             <<"xattrs">> => #{
@@ -826,12 +1066,13 @@ modify_xattr_metadata(Config) ->
     XattrValue2 = <<"value2">>,
     Xattr2 = #xattr{name = XattrName2, value = XattrValue2},
 
-    ok = lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr2),
+    ok = lfm_proxy:set_xattr(Worker, SessId, ?FILE_REF(Guid), Xattr2),
 
     ?assertReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{
             <<"xattrs">> => #{
@@ -850,7 +1091,7 @@ delete_xattr_metadata(Config) ->
     Xattr = #xattr{name = XattrName, value = XattrValue},
 
     {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1)),
-    ok = lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr),
+    ok = lfm_proxy:set_xattr(Worker, SessId, ?FILE_REF(Guid), Xattr),
     {ok, FileId} = file_id:guid_to_objectid(Guid),
 
     Destination = #{?HARVESTER1 => [?INDEX11]},
@@ -860,6 +1101,7 @@ delete_xattr_metadata(Config) ->
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{
             <<"xattrs">> => #{
@@ -868,12 +1110,13 @@ delete_xattr_metadata(Config) ->
         }
     }], ProviderId),
 
-    ok = lfm_proxy:remove_xattr(Worker, SessId, {guid, Guid}, XattrName),
+    ok = lfm_proxy:remove_xattr(Worker, SessId, ?FILE_REF(Guid), XattrName),
 
     ?assertReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{}
     }], ProviderId).
@@ -887,7 +1130,7 @@ delete_file_with_xattr_metadata(Config) ->
     Xattr = #xattr{name = XattrName, value = XattrValue},
 
     {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1)),
-    ok = lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr),
+    ok = lfm_proxy:set_xattr(Worker, SessId, ?FILE_REF(Guid), Xattr),
     {ok, FileId} = file_id:guid_to_objectid(Guid),
 
     Destination = #{?HARVESTER1 => [?INDEX11]},
@@ -898,6 +1141,7 @@ delete_file_with_xattr_metadata(Config) ->
         <<"operation">> => <<"submit">>,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"payload">> => #{
             <<"xattrs">> => #{
                 XattrName => XattrValue
@@ -905,7 +1149,7 @@ delete_file_with_xattr_metadata(Config) ->
         }
     }], ProviderId),
 
-    ok = lfm_proxy:unlink(Worker, SessId, {guid, Guid}),
+    ok = lfm_proxy:unlink(Worker, SessId, ?FILE_REF(Guid)),
     ?assertReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
         <<"fileId">> => FileId,
         <<"operation">> => <<"delete">>
@@ -923,7 +1167,7 @@ modify_xattr_many_times(Config) ->
         XattrName = <<"name", (integer_to_binary(I))/binary>>,
         XattrValue = <<"value", (integer_to_binary(I))/binary>>,
         Xattr = #xattr{name = XattrName, value = XattrValue},
-        ok = lfm_proxy:set_xattr(Worker, SessId, {guid, Guid}, Xattr),
+        ok = lfm_proxy:set_xattr(Worker, SessId, ?FILE_REF(Guid), Xattr),
         XattrsIn#{XattrName => XattrValue}
     end, #{}, lists:seq(1, Modifications)),
 
@@ -934,6 +1178,7 @@ modify_xattr_many_times(Config) ->
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{
             <<"xattrs">> => ExpectedFinalXattrs
@@ -949,7 +1194,7 @@ modify_metadata_and_rename_file(Config) ->
     JSON = #{<<"color">> => <<"blue">>},
 
     {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1)),
-    ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, json, JSON, []),
+    ok = lfm_proxy:set_metadata(Worker, SessId, ?FILE_REF(Guid), json, JSON, []),
     {ok, FileId} = file_id:guid_to_objectid(Guid),
 
     Destination = #{?HARVESTER1 => [?INDEX11]},
@@ -959,6 +1204,7 @@ modify_metadata_and_rename_file(Config) ->
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{
             <<"json">> => JSON
@@ -966,14 +1212,15 @@ modify_metadata_and_rename_file(Config) ->
     }], ProviderId),
 
     JSON2 = #{<<"color">> => <<"blue">>, <<"size">> => <<"big">>},
-    {ok, Guid} = lfm_proxy:mv(Worker, SessId, {guid, Guid}, ?PATH(FileName2, ?SPACE_ID1)),
-    ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, json, JSON2, []),
+    {ok, Guid} = lfm_proxy:mv(Worker, SessId, ?FILE_REF(Guid), ?PATH(FileName2, ?SPACE_ID1)),
+    ok = lfm_proxy:set_metadata(Worker, SessId, ?FILE_REF(Guid), json, JSON2, []),
 
     % both updates should be aggregated and sent in one batch
     ?assertReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => FileName2,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{
             <<"json">> => JSON2
@@ -990,7 +1237,7 @@ changes_should_be_submitted_to_all_harvesters_and_indices_subscribed_for_the_spa
     JSON1 = #{<<"color">> => <<"blue">>},
 
     {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID2)),
-    ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, json, JSON1, []),
+    ok = lfm_proxy:set_metadata(Worker, SessId, ?FILE_REF(Guid), json, JSON1, []),
     {ok, FileId} = file_id:guid_to_objectid(Guid),
 
     Destination = #{
@@ -1003,6 +1250,7 @@ changes_should_be_submitted_to_all_harvesters_and_indices_subscribed_for_the_spa
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID2,
         <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{
             <<"json">> => JSON1
@@ -1022,11 +1270,11 @@ changes_from_all_subscribed_spaces_should_be_submitted_to_the_harvester(Config) 
 
     {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID3)),
     {ok, FileId} = file_id:guid_to_objectid(Guid),
-    ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, json, JSON1, []),
+    ok = lfm_proxy:set_metadata(Worker, SessId, ?FILE_REF(Guid), json, JSON1, []),
 
     {ok, Guid2} = lfm_proxy:create(Worker, SessId, ?PATH(FileName2, ?SPACE_ID4)),
     {ok, FileId2} = file_id:guid_to_objectid(Guid2),
-    ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid2}, json, JSON2, []),
+    ok = lfm_proxy:set_metadata(Worker, SessId, ?FILE_REF(Guid2), json, JSON2, []),
 
     Destination = #{?HARVESTER1 => [?INDEX11]},
     ProviderId = ?PROVIDER_ID(Worker),
@@ -1035,6 +1283,7 @@ changes_from_all_subscribed_spaces_should_be_submitted_to_the_harvester(Config) 
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID3,
         <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{
             <<"json">> => JSON1
@@ -1045,6 +1294,7 @@ changes_from_all_subscribed_spaces_should_be_submitted_to_the_harvester(Config) 
         <<"fileId">> => FileId2,
         <<"spaceId">> => ?SPACE_ID4,
         <<"fileName">> => FileName2,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{
             <<"json">> => JSON2
@@ -1067,21 +1317,22 @@ each_provider_should_submit_only_local_changes_to_the_harvester(Config) ->
 
     {ok, Guid} = lfm_proxy:create(WorkerP1, SessId, ?PATH(FileName, ?SPACE_ID5)),
     {ok, FileId} = file_id:guid_to_objectid(Guid),
-    ok = lfm_proxy:set_metadata(WorkerP1, SessId, {guid, Guid}, json, JSON1, []),
+    ok = lfm_proxy:set_metadata(WorkerP1, SessId, ?FILE_REF(Guid), json, JSON1, []),
 
     {ok, Guid2} = lfm_proxy:create(WorkerP2, SessId2, ?PATH(FileName2, ?SPACE_ID5)),
     {ok, FileId2} = file_id:guid_to_objectid(Guid2),
-    ok = lfm_proxy:set_metadata(WorkerP2, SessId2, {guid, Guid2}, json, JSON2, []),
+    ok = lfm_proxy:set_metadata(WorkerP2, SessId2, ?FILE_REF(Guid2), json, JSON2, []),
 
     Destination = #{?HARVESTER3 => [?INDEX31]},
 
-    ?assertMatch({ok, _}, lfm_proxy:stat(WorkerP1, SessId, {guid, Guid2}), ?ATTEMPTS),
-    ?assertMatch({ok, _}, lfm_proxy:stat(WorkerP2, SessId2, {guid, Guid}), ?ATTEMPTS),
+    ?assertMatch({ok, _}, lfm_proxy:stat(WorkerP1, SessId, ?FILE_REF(Guid2)), ?ATTEMPTS),
+    ?assertMatch({ok, _}, lfm_proxy:stat(WorkerP2, SessId2, ?FILE_REF(Guid)), ?ATTEMPTS),
 
     ?assertReceivedHarvestMetadata(?SPACE_ID5, Destination, [#{
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID5,
         <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{
             <<"json">> => JSON1
@@ -1092,6 +1343,7 @@ each_provider_should_submit_only_local_changes_to_the_harvester(Config) ->
         <<"fileId">> => FileId2,
         <<"spaceId">> => ?SPACE_ID5,
         <<"fileName">> => FileName2,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{
             <<"json">> => JSON2
@@ -1102,6 +1354,7 @@ each_provider_should_submit_only_local_changes_to_the_harvester(Config) ->
         <<"fileId">> => FileId2,
         <<"spaceId">> => ?SPACE_ID5,
         <<"fileName">> => FileName2,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{
             <<"json">> => JSON2
@@ -1112,6 +1365,7 @@ each_provider_should_submit_only_local_changes_to_the_harvester(Config) ->
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID5,
         <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{
             <<"json">> => JSON1
@@ -1134,21 +1388,22 @@ each_provider_should_submit_only_local_changes_to_the_harvester2(Config) ->
 
     {ok, Guid} = lfm_proxy:create(WorkerP1, SessId, ?PATH(FileName, ?SPACE_ID5)),
     {ok, FileId} = file_id:guid_to_objectid(Guid),
-    ok = lfm_proxy:set_metadata(WorkerP1, SessId, {guid, Guid}, json, JSON1, []),
+    ok = lfm_proxy:set_metadata(WorkerP1, SessId, ?FILE_REF(Guid), json, JSON1, []),
 
     {ok, Guid2} = lfm_proxy:create(WorkerP2, SessId2, ?PATH(FileName2, ?SPACE_ID5)),
     {ok, FileId2} = file_id:guid_to_objectid(Guid2),
-    ok = lfm_proxy:set_metadata(WorkerP2, SessId2, {guid, Guid2}, json, JSON2, []),
+    ok = lfm_proxy:set_metadata(WorkerP2, SessId2, ?FILE_REF(Guid2), json, JSON2, []),
 
     Destination = #{?HARVESTER3 => [?INDEX31]},
 
-    ?assertMatch({ok, _}, lfm_proxy:stat(WorkerP1, SessId, {guid, Guid2}), ?ATTEMPTS),
-    ?assertMatch({ok, _}, lfm_proxy:stat(WorkerP2, SessId2, {guid, Guid}), ?ATTEMPTS),
+    ?assertMatch({ok, _}, lfm_proxy:stat(WorkerP1, SessId, ?FILE_REF(Guid2)), ?ATTEMPTS),
+    ?assertMatch({ok, _}, lfm_proxy:stat(WorkerP2, SessId2, ?FILE_REF(Guid)), ?ATTEMPTS),
 
     ?assertReceivedHarvestMetadata(?SPACE_ID5, Destination, [#{
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID5,
         <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{
             <<"json">> => JSON1
@@ -1159,6 +1414,7 @@ each_provider_should_submit_only_local_changes_to_the_harvester2(Config) ->
         <<"fileId">> => FileId2,
         <<"spaceId">> => ?SPACE_ID5,
         <<"fileName">> => FileName2,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{
             <<"json">> => JSON2
@@ -1169,6 +1425,7 @@ each_provider_should_submit_only_local_changes_to_the_harvester2(Config) ->
         <<"fileId">> => FileId2,
         <<"spaceId">> => ?SPACE_ID5,
         <<"fileName">> => FileName2,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{
             <<"json">> => JSON2
@@ -1179,14 +1436,15 @@ each_provider_should_submit_only_local_changes_to_the_harvester2(Config) ->
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID5,
         <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{
             <<"json">> => JSON1
         }
     }], ProviderId2),
 
-    ok = lfm_proxy:unlink(WorkerP1, SessId, {guid, Guid2}),
-    ok = lfm_proxy:unlink(WorkerP2, SessId2, {guid, Guid}),
+    ok = lfm_proxy:unlink(WorkerP1, SessId, ?FILE_REF(Guid2)),
+    ok = lfm_proxy:unlink(WorkerP2, SessId2, ?FILE_REF(Guid)),
 
     ?assertReceivedHarvestMetadata(?SPACE_ID5, Destination, [#{
         <<"fileId">> => FileId2,
@@ -1220,7 +1478,7 @@ submit_entry_failure(Config) ->
 
     {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1)),
     {ok, FileId} = file_id:guid_to_objectid(Guid),
-    ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, json, JSON1, []),
+    ok = lfm_proxy:set_metadata(Worker, SessId, ?FILE_REF(Guid), json, JSON1, []),
 
     Destination = #{?HARVESTER1 => [?INDEX11]},
     ProviderId = ?PROVIDER_ID(Worker),
@@ -1229,6 +1487,7 @@ submit_entry_failure(Config) ->
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{
             <<"json">> => JSON1
@@ -1243,14 +1502,15 @@ submit_entry_failure(Config) ->
     {ok, Guid2} = lfm_proxy:create(Worker, SessId, ?PATH(FileName2, ?SPACE_ID1)),
     {ok, FileId2} = file_id:guid_to_objectid(Guid2),
 
-    ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, json, JSON2, []),
-    ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid2}, json, JSON3, []),
+    ok = lfm_proxy:set_metadata(Worker, SessId, ?FILE_REF(Guid), json, JSON2, []),
+    ok = lfm_proxy:set_metadata(Worker, SessId, ?FILE_REF(Guid2), json, JSON3, []),
 
     % changes should not be submitted as connection to onezone failed
     ?assertNotReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{
             <<"json">> => JSON2
@@ -1259,6 +1519,7 @@ submit_entry_failure(Config) ->
         <<"fileId">> => FileId2,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => FileName2,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{
             <<"json">> => JSON3
@@ -1275,6 +1536,7 @@ submit_entry_failure(Config) ->
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{
             <<"json">> => JSON2
@@ -1283,6 +1545,7 @@ submit_entry_failure(Config) ->
         <<"fileId">> => FileId2,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => FileName2,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{
             <<"json">> => JSON3
@@ -1294,6 +1557,7 @@ submit_entry_failure(Config) ->
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{
             <<"json">> => JSON1
@@ -1311,7 +1575,7 @@ delete_entry_failure(Config) ->
 
     {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1)),
     {ok, FileId} = file_id:guid_to_objectid(Guid),
-    ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, json, JSON1, []),
+    ok = lfm_proxy:set_metadata(Worker, SessId, ?FILE_REF(Guid), json, JSON1, []),
 
     Destination = #{?HARVESTER1 => [?INDEX11]},
     ProviderId = ?PROVIDER_ID(Worker),
@@ -1320,6 +1584,7 @@ delete_entry_failure(Config) ->
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{
             <<"json">> => JSON1
@@ -1328,7 +1593,7 @@ delete_entry_failure(Config) ->
 
     set_mock_harvest_metadata_failure(Worker, true),
 
-    ok = lfm_proxy:unlink(Worker, SessId, {guid, Guid}),
+    ok = lfm_proxy:unlink(Worker, SessId, ?FILE_REF(Guid)),
 
     % change should not be submitted as connection to onezone failed
     ?assertNotReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
@@ -1352,6 +1617,7 @@ delete_entry_failure(Config) ->
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => FileName,
+        <<"fileType">> => str_utils:to_binary(?REGULAR_FILE_TYPE),
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{
             <<"json">> => JSON1
@@ -1421,7 +1687,7 @@ mock_space_logic_harvest_metadata(Node) ->
     Self = self(),
     ok = test_utils:mock_expect(Node, space_logic, harvest_metadata,
         fun(SpaceId, Destination, Batch, _MaxStreamSeq, _MaxSeq) ->
-            case application:get_env(op_worker, ?MOCK_HARVEST_METADATA_FAILURE, false) of
+            case op_worker:get_env(?MOCK_HARVEST_METADATA_FAILURE, false) of
                 true ->
                     {error, test_error};
                 false ->
@@ -1471,20 +1737,17 @@ subtract_sorted_batches(B1, [], UnexpectedReversed) ->
     {B1, lists:reverse(UnexpectedReversed)};
 subtract_sorted_batches([], B2, RestReversed) ->
     {[], lists:reverse(RestReversed) ++ B2};
-subtract_sorted_batches([#{
-    <<"fileId">> := FileId,
-    <<"operation">> := <<"submit">>,
-    <<"payload">> := Payload,
-    <<"spaceId">> := SpaceId,
-    <<"fileName">> := FileName
-    } | T], [#{
-    <<"fileId">> := FileId,
-    <<"operation">> := <<"submit">>,
-    <<"payload">> := Payload,
-    <<"spaceId">> := SpaceId,
-    <<"fileName">> := FileName
-} | T2], UnexpectedReversed) ->
-    subtract_sorted_batches(T, T2, UnexpectedReversed);
+subtract_sorted_batches(
+    B1 = [ExpectedEntry = #{<<"operation">> := <<"submit">>} | T],
+    [ReceivedEntry = #{<<"operation">> := <<"submit">>} | T2],
+    UnexpectedReversed
+) ->
+    case are_submit_entries_equal(ExpectedEntry, ReceivedEntry) of
+        true ->
+            subtract_sorted_batches(T, T2, UnexpectedReversed);
+        false ->
+            subtract_sorted_batches(B1, T2, [ReceivedEntry | UnexpectedReversed])
+    end;
 subtract_sorted_batches([#{
     <<"fileId">> := FileId,
     <<"operation">> := <<"delete">>
@@ -1495,3 +1758,21 @@ subtract_sorted_batches([#{
     subtract_sorted_batches(T, T2, UnexpectedReversed);
 subtract_sorted_batches(B1, [H | T2], UnexpectedReversed) ->
     subtract_sorted_batches(B1, T2, [H | UnexpectedReversed]).
+
+
+are_submit_entries_equal(ExpectedEntry = #{
+    <<"fileId">> := FileId,
+    <<"operation">> := <<"submit">>,
+    <<"payload">> := Payload,
+    <<"spaceId">> := SpaceId,
+    <<"fileName">> := FileName,
+    <<"fileType">> := FileType
+}, ReceivedEntry) ->
+    % mandatory fields
+    (FileId == maps:get(<<"fileId">>, ReceivedEntry)) andalso
+    (Payload == maps:get(<<"payload">>, ReceivedEntry)) andalso
+    (SpaceId == maps:get(<<"spaceId">>, ReceivedEntry)) andalso
+    (FileName == maps:get(<<"fileName">>, ReceivedEntry)) andalso
+    (FileType == maps:get(<<"fileType">>, ReceivedEntry)) andalso
+    % optional fields
+    (maps:get(<<"datasetId">>, ExpectedEntry, undefined) == maps:get(<<"datasetId">>, ReceivedEntry, undefined)).

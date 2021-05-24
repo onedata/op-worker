@@ -14,9 +14,10 @@
 -author("Tomasz Lichon").
 
 -include("global_definitions.hrl").
--include("modules/auth/acl.hrl").
 -include("modules/datastore/transfer.hrl").
+-include("modules/fslogic/data_access_control.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -61,7 +62,8 @@ synchronize_block(UserCtx, FileCtx, undefined, Prefetch, TransferId, Priority) -
         file_ctx:get_or_create_local_file_location_doc(FileCtx, skip_local_blocks),
     case fslogic_location_cache:get_blocks(FLDoc, #{count => 2}) of
         [#file_block{offset = 0, size = Size}] ->
-            FLC = #file_location_changed{file_location = FL,
+            LogicalUuid = file_ctx:get_logical_uuid_const(FileCtx2),
+            FLC = #file_location_changed{file_location = FL#file_location{uuid = LogicalUuid},
                 change_beg_offset = 0, change_end_offset = Size},
             #fuse_response{status = #status{code = ?OK}, fuse_response = FLC};
         _ ->
@@ -71,8 +73,10 @@ synchronize_block(UserCtx, FileCtx, undefined, Prefetch, TransferId, Priority) -
 synchronize_block(UserCtx, FileCtx, Block, Prefetch, TransferId, Priority) ->
     case replica_synchronizer:synchronize(UserCtx, FileCtx, Block,
         Prefetch, TransferId, Priority) of
-        {ok, Ans} ->
-            #fuse_response{status = #status{code = ?OK}, fuse_response = Ans};
+        {ok, #file_location_changed{file_location = FL} = Ans} ->
+            LogicalUuid = file_ctx:get_logical_uuid_const(FileCtx),
+            #fuse_response{status = #status{code = ?OK},
+                fuse_response = Ans#file_location_changed{file_location = FL#file_location{uuid = LogicalUuid}}};
         {error, Reason} ->
             throw(Reason)
     end.
@@ -119,23 +123,24 @@ synchronize_block_and_compute_checksum(UserCtx, FileCtx,
     Range = #file_block{offset = Offset, size = Size}, Prefetch, Priority
 ) ->
     SessId = user_ctx:get_session_id(UserCtx),
-    FileGuid = file_ctx:get_guid_const(FileCtx),
+    FileGuid = file_ctx:get_logical_guid_const(FileCtx),
 
-    {ok, Ans} = replica_synchronizer:synchronize(UserCtx, FileCtx, Range,
-        Prefetch, undefined, Priority),
+    {ok, #file_location_changed{file_location = FL} = Ans} =
+        replica_synchronizer:synchronize(UserCtx, FileCtx, Range, Prefetch, undefined, Priority),
 
-    %todo do not use lfm, operate on fslogic directly
-    {ok, Handle} = lfm:open(SessId, {guid, FileGuid}, read),
+    %TODO VFS-7393 do not use lfm, operate on fslogic directly
+    {ok, Handle} = lfm:open(SessId, ?FILE_REF(FileGuid), read),
     % does sync internally
     {ok, _, Data} = lfm_files:read_without_events(Handle, Offset, Size, off),
     lfm:release(Handle),
 
     Checksum = crypto:hash(md4, Data),
+    LogicalUuid = file_ctx:get_logical_uuid_const(FileCtx),
     #fuse_response{
         status = #status{code = ?OK},
         fuse_response = #sync_response{
             checksum = Checksum,
-            file_location_changed = Ans
+            file_location_changed = Ans#file_location_changed{file_location = FL#file_location{uuid = LogicalUuid}}
         }
     }.
 
@@ -150,7 +155,7 @@ get_file_distribution(UserCtx, FileCtx0) ->
     FileCtx1 = file_ctx:assert_file_exists(FileCtx0),
     FileCtx2 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx1,
-        [traverse_ancestors, ?read_metadata]
+        [?TRAVERSE_ANCESTORS, ?OPERATIONS(?read_metadata_mask)]
     ),
     get_file_distribution_insecure(UserCtx, FileCtx2).
 
@@ -177,7 +182,7 @@ schedule_file_replication(
 
     FileCtx2 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx1,
-        [traverse_ancestors]
+        [?TRAVERSE_ANCESTORS]
     ),
 
     {FilePath, FileCtx3} = file_ctx:get_logical_path(FileCtx2, UserCtx),
@@ -233,7 +238,7 @@ schedule_file_replication_insecure(
     Callback, ViewName, QueryViewParams
 ) ->
     SessionId = user_ctx:get_session_id(UserCtx),
-    FileGuid = file_ctx:get_guid_const(FileCtx),
+    FileGuid = file_ctx:get_logical_guid_const(FileCtx), % TODO VFS-7443 - effective or not? - test for hardlinks
     {ok, TransferId} = transfer:start(SessionId, FileGuid, FilePath, undefined,
         TargetProviderId, Callback, ViewName, QueryViewParams),
     #provider_response{

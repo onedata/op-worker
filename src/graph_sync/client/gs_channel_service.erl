@@ -275,7 +275,7 @@ is_clock_sync_satisfied() ->
 %% @private
 -spec check_compatibility_with_onezone() -> boolean().
 check_compatibility_with_onezone() ->
-    case provider_logic:fetch_service_configuration(onezone) of
+    case provider_logic:get_service_configuration(onezone) of
         {ok, OzConfiguration} ->
             Resolver = compatibility:build_resolver(consistent_hashing:get_all_nodes(), oneprovider:trusted_ca_certs()),
             check_for_compatibility_registry_updates(Resolver, OzConfiguration),

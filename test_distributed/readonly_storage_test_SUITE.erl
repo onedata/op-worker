@@ -30,9 +30,9 @@
 
 -include("modules/storage/helpers/helpers.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/fslogic/file_attr.hrl").
 -include("distribution_assert.hrl").
 -include("lfm_test_utils.hrl").
--include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/errors.hrl").
 
@@ -149,7 +149,7 @@ read_should_succeed(Config) ->
     {Guid, _} = create_file_on_storage_and_register(W1, SessId, ?SPACE_ID, FileName, ?TEST_DATA),
 
     % check whether file can be read
-    {ok, H} = ?assertMatch({ok, _}, lfm_proxy:open(W1, SessId, {guid, Guid}, read)),
+    {ok, H} = ?assertMatch({ok, _}, lfm_proxy:open(W1, SessId, ?FILE_REF(Guid), read)),
     ?assertEqual({ok, ?TEST_DATA}, lfm_proxy:read(W1, H, 0, 100)),
     ok = lfm_proxy:close(W1, H).
 
@@ -161,8 +161,8 @@ write_should_fail(Config) ->
     {Guid, _} = create_file_on_storage_and_register(W1, SessId, ?SPACE_ID, FileName, ?TEST_DATA),
 
     % it should be impossible to open the file for writing
-    ?assertEqual({error, ?EROFS}, lfm_proxy:open(W1, SessId, {guid, Guid}, rdwr)),
-    ?assertEqual({error, ?EROFS}, lfm_proxy:open(W1, SessId, {guid, Guid}, write)).
+    ?assertEqual({error, ?EROFS}, lfm_proxy:open(W1, SessId, ?FILE_REF(Guid), rdwr)),
+    ?assertEqual({error, ?EROFS}, lfm_proxy:open(W1, SessId, ?FILE_REF(Guid), write)).
 
 chmod_should_succeed_but_not_change_mode_on_storage(Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
@@ -173,8 +173,8 @@ chmod_should_succeed_but_not_change_mode_on_storage(Config) ->
 
     % chmod file
     NewMode = 8#440,
-    ?assertEqual(ok, lfm_proxy:set_perms(W1, ?ROOT_SESS_ID, {guid, Guid}, NewMode)),
-    ?assertMatch({ok, #file_attr{mode = NewMode}}, lfm_proxy:stat(W1, SessId, {guid, Guid})),
+    ?assertEqual(ok, lfm_proxy:set_perms(W1, ?ROOT_SESS_ID, ?FILE_REF(Guid), NewMode)),
+    ?assertMatch({ok, #file_attr{mode = NewMode}}, lfm_proxy:stat(W1, SessId, ?FILE_REF(Guid))),
 
     % file should still have old mode on storage
     ?assertMatch({ok, #statbuf{st_mode = ?DEFAULT_FILE_MODE}}, sd_test_utils:stat(W1, SDHandle)).
@@ -187,7 +187,7 @@ rename_should_fail(Config) ->
     {Guid, SDHandle} = create_file_on_storage_and_register(W1, SessId, ?SPACE_ID, FileName, ?TEST_DATA),
 
     % rename should fail
-    ?assertMatch({error, ?EROFS}, lfm_proxy:mv(W1, SessId, {guid, Guid}, ?PATH(TargetName))),
+    ?assertMatch({error, ?EROFS}, lfm_proxy:mv(W1, SessId, ?FILE_REF(Guid), ?PATH(TargetName))),
 
     ?assertMatch({ok, [{Guid, FileName}]}, lfm_proxy:get_children(W1, SessId, {path, ?SPACE_PATH}, 0, 10)),
     ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(W1, SessId, {path, ?PATH(FileName)})),
@@ -227,7 +227,7 @@ mv_should_fail(Config) ->
         lfm_proxy:get_children(W2, SessId2, {path, ?SPACE_PATH}, 0, 10), ?ATTEMPTS),
 
     % mv should fail
-    ?assertMatch({error, ?EROFS}, lfm_proxy:mv(W1, SessId, {guid, Guid}, ?PATH(TargetPath))),
+    ?assertMatch({error, ?EROFS}, lfm_proxy:mv(W1, SessId, ?FILE_REF(Guid), ?PATH(TargetPath))),
 
     % file should still be visible on storage under old path
     ?assertMatch({ok, #statbuf{st_mode = ?DEFAULT_FILE_MODE}}, sd_test_utils:stat(W1, SDHandle)),
@@ -250,7 +250,7 @@ unlink_should_succeed_but_should_leave_files_on_storage(Config) ->
     {Guid, SDFileHandle} = create_file_on_storage_and_register(W1, SessId, ?SPACE_ID, FileRelativePath, ?TEST_DATA),
 
     % it should be possible to remove the file (only its metadata)
-    ?assertEqual(ok, lfm_proxy:unlink(W1, SessId, {guid, Guid})),
+    ?assertEqual(ok, lfm_proxy:unlink(W1, SessId, ?FILE_REF(Guid))),
     % file should still exist on storage
     ?assertMatch({ok, #statbuf{}}, sd_test_utils:stat(W1, SDFileHandle)),
 
@@ -273,7 +273,7 @@ recursive_rm_should_succeed_but_should_leave_files_on_storage(Config) ->
 
     % it should be possible to remove the file (only its metadata)
     ?assertEqual(ok, lfm_proxy:rm_recursive(W1, SessId, {path, ?PATH(DirName)})),
-    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(W1, SessId, {guid, DirGuid}), ?ATTEMPTS),
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(W1, SessId, ?FILE_REF(DirGuid)), ?ATTEMPTS),
 
     % file should still exist on storage
     ?assertMatch({ok, #statbuf{}}, sd_test_utils:stat(W1, SDFileHandle)),
@@ -291,7 +291,7 @@ truncate_should_fail(Config) ->
     {Guid, SDFileHandle} = create_file_on_storage_and_register(W1, SessId, ?SPACE_ID, FileName, ?TEST_DATA),
 
     % it should not be possible to truncate the file (only its metadata)
-    ?assertEqual({error, ?EROFS}, lfm_proxy:truncate(W1, SessId, {guid, Guid}, 0)),
+    ?assertEqual({error, ?EROFS}, lfm_proxy:truncate(W1, SessId, ?FILE_REF(Guid), 0)),
 
     % file should still have old size
     TestDataSize = byte_size(?TEST_DATA),
@@ -306,12 +306,12 @@ remote_chmod_should_not_change_mode_on_storage(Config) ->
     {Guid, SDHandle} = create_file_on_storage_and_register(W1, SessId, ?SPACE_ID, FileName, ?TEST_DATA),
 
     % wait for file to be synchronized to W2
-    ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(W2, SessId2, {guid, Guid}), ?ATTEMPTS),
+    ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(W2, SessId2, ?FILE_REF(Guid)), ?ATTEMPTS),
 
     % chmod file
     NewMode = 8#440,
-    ?assertEqual(ok, lfm_proxy:set_perms(W2, ?ROOT_SESS_ID, {guid, Guid}, NewMode)),
-    ?assertMatch({ok, #file_attr{mode = NewMode}}, lfm_proxy:stat(W1, SessId, {guid, Guid}), ?ATTEMPTS),
+    ?assertEqual(ok, lfm_proxy:set_perms(W2, ?ROOT_SESS_ID, ?FILE_REF(Guid), NewMode)),
+    ?assertMatch({ok, #file_attr{mode = NewMode}}, lfm_proxy:stat(W1, SessId, ?FILE_REF(Guid)), ?ATTEMPTS),
 
     % file should still have old mode on storage
     ?assertMatch({ok, #statbuf{st_mode = ?DEFAULT_FILE_MODE}}, sd_test_utils:stat(W1, SDHandle)).
@@ -326,15 +326,15 @@ remote_rename_should_not_rename_file_on_storage(Config) ->
     {Guid, SDHandle} = create_file_on_storage_and_register(W1, SessId, ?SPACE_ID, FileName, ?TEST_DATA),
 
     % wait for file to be synchronized to W2
-    ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(W2, SessId2, {guid, Guid}), ?ATTEMPTS),
+    ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(W2, SessId2, ?FILE_REF(Guid)), ?ATTEMPTS),
     ?assertMatch({ok, [{Guid, FileName}]}, lfm_proxy:get_children(W1, SessId, {path, ?SPACE_PATH}, 0, 10), ?ATTEMPTS),
 
-    {ok, H} = ?assertMatch({ok, _}, lfm_proxy:open(W2, SessId2, {guid, Guid}, read), ?ATTEMPTS),
+    {ok, H} = ?assertMatch({ok, _}, lfm_proxy:open(W2, SessId2, ?FILE_REF(Guid), read), ?ATTEMPTS),
     ?assertEqual({ok, ?TEST_DATA}, lfm_proxy:read(W2, H, 0, 100), ?ATTEMPTS),
     ok = lfm_proxy:close(W2, H),
 
     % rename file
-    ?assertEqual({ok, Guid}, lfm_proxy:mv(W2, SessId2, {guid, Guid}, ?PATH(TargetFileName))),
+    ?assertEqual({ok, Guid}, lfm_proxy:mv(W2, SessId2, ?FILE_REF(Guid), ?PATH(TargetFileName))),
 
     % file should be renamed in W1
     ?assertMatch({ok, [{Guid, TargetFileName}]}, lfm_proxy:get_children(W1, SessId, {path, ?SPACE_PATH}, 0, 10), ?ATTEMPTS),
@@ -345,7 +345,7 @@ remote_rename_should_not_rename_file_on_storage(Config) ->
     timer:sleep(timer:seconds(20)),
 
     % W1 should still have up to date version of the file
-    {ok, H2} = ?assertMatch({ok, _}, lfm_proxy:open(W1, SessId, {guid, Guid}, read), ?ATTEMPTS),
+    {ok, H2} = ?assertMatch({ok, _}, lfm_proxy:open(W1, SessId, ?FILE_REF(Guid), read), ?ATTEMPTS),
     ?assertEqual({ok, ?TEST_DATA}, lfm_proxy:read(W1, H2, 0, 100), ?ATTEMPTS),
     ok = lfm_proxy:close(W1, H2),
 
@@ -378,12 +378,12 @@ remote_move_should_not_rename_file_on_storage(Config) ->
         lfm_proxy:get_children(W1, SessId, {path, ?SPACE_PATH}, 0, 10), ?ATTEMPTS),
 
     % wait for file to be synchronized to W2
-    ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(W2, SessId2, {guid, Guid}), ?ATTEMPTS),
+    ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(W2, SessId2, ?FILE_REF(Guid)), ?ATTEMPTS),
     ?assertMatch({ok, [{DirGuid, TargetDir}, {Guid, FileName}]},
         lfm_proxy:get_children(W2, SessId2, {path, ?SPACE_PATH}, 0, 10), ?ATTEMPTS),
 
     % move file
-    ?assertEqual({ok, Guid}, lfm_proxy:mv(W2, SessId2, {guid, Guid}, ?PATH(TargetPath))),
+    ?assertEqual({ok, Guid}, lfm_proxy:mv(W2, SessId2, ?FILE_REF(Guid), ?PATH(TargetPath))),
 
     % file should be renamed in W1
     ?assertMatch({ok, [{Guid, TargetFileName}]}, lfm_proxy:get_children(W1, SessId, {path, ?PATH(TargetDir)}, 0, 10), ?ATTEMPTS),
@@ -394,7 +394,7 @@ remote_move_should_not_rename_file_on_storage(Config) ->
     timer:sleep(timer:seconds(20)),
 
     % W1 should still have up to date version of the file
-    {ok, H2} = ?assertMatch({ok, _}, lfm_proxy:open(W1, SessId, {guid, Guid}, read), ?ATTEMPTS),
+    {ok, H2} = ?assertMatch({ok, _}, lfm_proxy:open(W1, SessId, ?FILE_REF(Guid), read), ?ATTEMPTS),
     ?assertEqual({ok, ?TEST_DATA}, lfm_proxy:read(W1, H2, 0, 100), ?ATTEMPTS),
     ok = lfm_proxy:close(W1, H2),
 
@@ -421,14 +421,14 @@ remote_unlink_should_not_trigger_unlinking_files_on_local_storage(Config) ->
     {Guid, SDFileHandle} = create_file_on_storage_and_register(W1, SessId, ?SPACE_ID, FileRelativePath, ?TEST_DATA),
 
     % wait for file to be synchronized to W2
-    ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(W2, SessId2, {guid, Guid}), ?ATTEMPTS),
+    ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(W2, SessId2, ?FILE_REF(Guid)), ?ATTEMPTS),
     ?assertMatch({ok, [{_, DirName}]}, lfm_proxy:get_children(W2, SessId2, {path, ?SPACE_PATH}, 0, 10), ?ATTEMPTS),
     ?assertMatch({ok, [{Guid, FileName}]}, lfm_proxy:get_children(W2, SessId2, {path, ?PATH(DirName)}, 0, 10), ?ATTEMPTS),
 
-    ?assertEqual(ok, lfm_proxy:unlink(W2, SessId2, {guid, Guid})),
+    ?assertEqual(ok, lfm_proxy:unlink(W2, SessId2, ?FILE_REF(Guid))),
 
     % wait for file to be unlinked
-    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(W1, SessId, {guid, Guid}), ?ATTEMPTS),
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(W1, SessId, ?FILE_REF(Guid)), ?ATTEMPTS),
 
     % file should still exist on storage
     ?assertMatch({ok, #statbuf{}}, sd_test_utils:stat(W1, SDFileHandle)),
@@ -441,10 +441,10 @@ remote_unlink_should_not_trigger_unlinking_files_on_local_storage(Config) ->
     ?assertEqual(ok, lfm_proxy:unlink(W2, SessId2, {path, ?PATH(DirName)})),
 
     % wait for dir to be unlinked
-    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(W1, SessId, {guid, DirGuid}), ?ATTEMPTS),
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(W1, SessId, ?FILE_REF(DirGuid)), ?ATTEMPTS),
     ?assertMatch({ok, []}, lfm_proxy:get_children(W1, SessId, {path, ?SPACE_PATH}, 0, 10), ?ATTEMPTS),
-    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(W1, SessId, {guid, Guid}), ?ATTEMPTS),
-    ?assertMatch({error, ?ENOENT}, lfm_proxy:get_children(W1, SessId, {guid, DirGuid}, 0, 10), ?ATTEMPTS),
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(W1, SessId, ?FILE_REF(Guid)), ?ATTEMPTS),
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:get_children(W1, SessId, ?FILE_REF(DirGuid), 0, 10), ?ATTEMPTS),
 
     StorageDirId = filepath_utils:join([<<"/">>, DirName]),
     SDDirHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageDirId),
@@ -463,13 +463,13 @@ remote_recursive_rm_should_not_trigger_removal_of_files_on_local_storage(Config)
 
     % wait for file to be synchronized to W2
     {ok, #file_attr{parent_guid = DirGuid}} =
-        ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(W2, SessId2, {guid, Guid}), ?ATTEMPTS),
+        ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(W2, SessId2, ?FILE_REF(Guid)), ?ATTEMPTS),
 
     ?assertEqual(ok, lfm_proxy:rm_recursive(W2, SessId2, {path, ?PATH(DirName)})),
 
     % wait for files to be removed
-    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(W1, SessId, {guid, DirGuid}), ?ATTEMPTS),
-    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(W1, SessId, {guid, Guid}), ?ATTEMPTS),
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(W1, SessId, ?FILE_REF(DirGuid)), ?ATTEMPTS),
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(W1, SessId, ?FILE_REF(Guid)), ?ATTEMPTS),
 
     % file should still exist on storage
     ?assertMatch({ok, #statbuf{}}, sd_test_utils:stat(W1, SDFileHandle)),
@@ -490,22 +490,22 @@ remote_truncate_should_not_trigger_truncate_on_storage(Config) ->
     {Guid2, SDFileHandle2} = create_file_on_storage_and_register(W1, SessId, ?SPACE_ID, FileName2, ?TEST_DATA),
 
     % replicate both files to W2
-    {ok, H} = ?assertMatch({ok, _}, lfm_proxy:open(W2, SessId2, {guid, Guid}, read), ?ATTEMPTS),
+    {ok, H} = ?assertMatch({ok, _}, lfm_proxy:open(W2, SessId2, ?FILE_REF(Guid), read), ?ATTEMPTS),
     ?assertEqual({ok, ?TEST_DATA}, lfm_proxy:read(W2, H, 0, 100), ?ATTEMPTS),
     ok = lfm_proxy:close(W2, H),
 
-    {ok, H2} = ?assertMatch({ok, _}, lfm_proxy:open(W2, SessId2, {guid, Guid2}, read), ?ATTEMPTS),
+    {ok, H2} = ?assertMatch({ok, _}, lfm_proxy:open(W2, SessId2, ?FILE_REF(Guid2), read), ?ATTEMPTS),
     ?assertEqual({ok, ?TEST_DATA}, lfm_proxy:read(W2, H2, 0, 100), ?ATTEMPTS),
     ok = lfm_proxy:close(W2, H2),
 
     NewSize1 = 0,
     NewSize2 = 1000,
-    ?assertEqual(ok, lfm_proxy:truncate(W2, SessId2, {guid, Guid}, NewSize1)),
-    ?assertEqual(ok, lfm_proxy:truncate(W2, SessId2, {guid, Guid2}, NewSize2)),
+    ?assertEqual(ok, lfm_proxy:truncate(W2, SessId2, ?FILE_REF(Guid), NewSize1)),
+    ?assertEqual(ok, lfm_proxy:truncate(W2, SessId2, ?FILE_REF(Guid2), NewSize2)),
 
     % logical files' sizes should change
-    ?assertMatch({ok, #file_attr{size = NewSize1}}, lfm_proxy:stat(W1, SessId, {guid, Guid}), ?ATTEMPTS),
-    ?assertMatch({ok, #file_attr{size = NewSize2}}, lfm_proxy:stat(W1, SessId, {guid, Guid2}), ?ATTEMPTS),
+    ?assertMatch({ok, #file_attr{size = NewSize1}}, lfm_proxy:stat(W1, SessId, ?FILE_REF(Guid)), ?ATTEMPTS),
+    ?assertMatch({ok, #file_attr{size = NewSize2}}, lfm_proxy:stat(W1, SessId, ?FILE_REF(Guid2)), ?ATTEMPTS),
 
     % files should still have old sizes on storage
     TestDataSize = byte_size(?TEST_DATA),
@@ -523,8 +523,8 @@ replication_on_the_fly_should_fail(Config) ->
     {ok, _} = lfm_proxy:write(W2, Handle, 0, ?TEST_DATA),
     lfm_proxy:close(W2, Handle),
 
-    ?assertMatch({ok, #file_attr{size = TestDataSize}}, lfm_proxy:stat(W1, SessId, {guid, Guid}), ?ATTEMPTS),
-    ?assertEqual({error, ?EROFS}, lfm_proxy:open(W1, SessId, {guid, Guid}, read)).
+    ?assertMatch({ok, #file_attr{size = TestDataSize}}, lfm_proxy:stat(W1, SessId, ?FILE_REF(Guid)), ?ATTEMPTS),
+    ?assertEqual({error, ?EROFS}, lfm_proxy:open(W1, SessId, ?FILE_REF(Guid), read)).
 
 remote_change_should_invalidate_local_file_but_leave_storage_file_unchanged(Config) ->
     [W1, W2 | _] = ?config(op_worker_nodes, Config),
@@ -537,7 +537,7 @@ remote_change_should_invalidate_local_file_but_leave_storage_file_unchanged(Conf
     ProviderId2 = provider_id(W2),
     {Guid, SDFileHandle} = create_file_on_storage_and_register(W1, SessId, ?SPACE_ID, FileName, ?TEST_DATA),
 
-    {ok, H} = ?assertMatch({ok, _}, lfm_proxy:open(W2, SessId2, {guid, Guid}, rdwr), ?ATTEMPTS),
+    {ok, H} = ?assertMatch({ok, _}, lfm_proxy:open(W2, SessId2, ?FILE_REF(Guid), rdwr), ?ATTEMPTS),
     ?assertMatch({ok, ?TEST_DATA}, lfm_proxy:read(W2, H, 0, TestDataSize), ?ATTEMPTS),
     ?assertMatch({ok, _}, lfm_proxy:write(W2, H, 0, ?TEST_DATA2)),
     lfm_proxy:close(W2, H),
@@ -545,8 +545,8 @@ remote_change_should_invalidate_local_file_but_leave_storage_file_unchanged(Conf
     % whole file on W1 should be invalidated
     ?assertDistribution(W1, SessId, ?DISTS([ProviderId1, ProviderId2], [0, TestDataSize2]), Guid, ?ATTEMPTS),
 
-    ?assertEqual({error, ?EROFS}, lfm_proxy:open(W1, SessId, {guid, Guid}, rdwr), ?ATTEMPTS),
-    ?assertMatch({ok, #file_attr{size = TestDataSize2}}, lfm_proxy:stat(W1, SessId, {guid, Guid}), ?ATTEMPTS),
+    ?assertEqual({error, ?EROFS}, lfm_proxy:open(W1, SessId, ?FILE_REF(Guid), rdwr), ?ATTEMPTS),
+    ?assertMatch({ok, #file_attr{size = TestDataSize2}}, lfm_proxy:stat(W1, SessId, ?FILE_REF(Guid)), ?ATTEMPTS),
     ?assertEqual({ok, ?TEST_DATA}, sd_test_utils:read_file(W1, SDFileHandle, 0, TestDataSize)).
 
 remote_change_should_invalidate_local_file_but_leave_storage_file_unchanged2(Config) ->
@@ -560,7 +560,7 @@ remote_change_should_invalidate_local_file_but_leave_storage_file_unchanged2(Con
     ProviderId2 = provider_id(W2),
     {Guid, SDFileHandle} = create_file_on_storage_and_register(W1, SessId, ?SPACE_ID, FileName, ?TEST_DATA),
 
-    {ok, H} = ?assertMatch({ok, _}, lfm_proxy:open(W2, SessId2, {guid, Guid}, rdwr), ?ATTEMPTS),
+    {ok, H} = ?assertMatch({ok, _}, lfm_proxy:open(W2, SessId2, ?FILE_REF(Guid), rdwr), ?ATTEMPTS),
     ?assertMatch({ok, ?TEST_DATA}, lfm_proxy:read(W2, H, 0, TestDataSize), ?ATTEMPTS),
     ?assertMatch({ok, _}, lfm_proxy:write(W2, H, ChangedByteOffset, <<"#">>)),
     lfm_proxy:close(W2, H),
@@ -569,8 +569,8 @@ remote_change_should_invalidate_local_file_but_leave_storage_file_unchanged2(Con
     ExpectedP1Blocks = [[0, ChangedByteOffset], [ChangedByteOffset + 1, TestDataSize - (ChangedByteOffset + 1)]],
     ?assertDistribution(W1, SessId, ?DISTS([ProviderId1, ProviderId2], [ExpectedP1Blocks, TestDataSize]), Guid, ?ATTEMPTS),
 
-    ?assertEqual({error, ?EROFS}, lfm_proxy:open(W1, SessId, {guid, Guid}, rdwr), ?ATTEMPTS),
-    ?assertMatch({ok, #file_attr{size = TestDataSize}}, lfm_proxy:stat(W1, SessId, {guid, Guid}), ?ATTEMPTS),
+    ?assertEqual({error, ?EROFS}, lfm_proxy:open(W1, SessId, ?FILE_REF(Guid), rdwr), ?ATTEMPTS),
+    ?assertMatch({ok, #file_attr{size = TestDataSize}}, lfm_proxy:stat(W1, SessId, ?FILE_REF(Guid)), ?ATTEMPTS),
     ?assertEqual({ok, ?TEST_DATA}, sd_test_utils:read_file(W1, SDFileHandle, 0, TestDataSize)).
 
 replication_job_should_fail(Config) ->
@@ -586,13 +586,13 @@ replication_job_should_fail(Config) ->
     {ok, _} = lfm_proxy:write(W2, Handle, 0, ?TEST_DATA),
     lfm_proxy:close(W2, Handle),
 
-    ?assertMatch({ok, #file_attr{size = TestDataSize}}, lfm_proxy:stat(W1, SessId, {guid, Guid}), ?ATTEMPTS),
+    ?assertMatch({ok, #file_attr{size = TestDataSize}}, lfm_proxy:stat(W1, SessId, ?FILE_REF(Guid)), ?ATTEMPTS),
     ?assertMatch({ok, [#{
         <<"blocks">> := [[0, TestDataSize]],
         <<"providerId">> := ProviderId2,
         <<"totalBlocksSize">> := TestDataSize
-    }]}, lfm_proxy:get_file_distribution(W1, SessId, {guid, Guid}), ?ATTEMPTS),
-    ?assertEqual({error, ?EROFS}, lfm_proxy:schedule_file_replication(W1, SessId, {guid, Guid}, ProviderId1)).
+    }]}, lfm_proxy:get_file_distribution(W1, SessId, ?FILE_REF(Guid)), ?ATTEMPTS),
+    ?assertEqual({error, ?EROFS}, lfm_proxy:schedule_file_replication(W1, SessId, ?FILE_REF(Guid), ProviderId1)).
 
 
 eviction_job_should_succeed(Config) ->
@@ -605,12 +605,12 @@ eviction_job_should_succeed(Config) ->
     ProviderId2 = provider_id(W2),
     {Guid, SDFileHandle} = create_file_on_storage_and_register(W1, SessId, ?SPACE_ID, FileName, ?TEST_DATA),
 
-    {ok, H} = ?assertMatch({ok, _}, lfm_proxy:open(W2, SessId2, {guid, Guid}, read), ?ATTEMPTS),
+    {ok, H} = ?assertMatch({ok, _}, lfm_proxy:open(W2, SessId2, ?FILE_REF(Guid), read), ?ATTEMPTS),
     ?assertMatch({ok, ?TEST_DATA}, lfm_proxy:read(W2, H, 0, TestDataSize), ?ATTEMPTS),
     lfm_proxy:close(W2, H),
 
     ?assertDistribution(W1, SessId, ?DISTS([ProviderId1, ProviderId2], [TestDataSize, TestDataSize]), Guid, ?ATTEMPTS),
-    ?assertMatch({ok, _}, lfm_proxy:schedule_file_replica_eviction(W1, SessId, {guid, Guid}, ProviderId1, undefined)),
+    ?assertMatch({ok, _}, lfm_proxy:schedule_file_replica_eviction(W1, SessId, ?FILE_REF(Guid), ProviderId1, undefined)),
 
     % whole file on W1 should be invalidated
     ?assertDistribution(W1, SessId, ?DISTS([ProviderId1, ProviderId2], [0, TestDataSize]), Guid, ?ATTEMPTS),
@@ -631,13 +631,13 @@ migration_job_should_fail(Config) ->
     {ok, _} = lfm_proxy:write(W2, Handle, 0, ?TEST_DATA),
     lfm_proxy:close(W2, Handle),
 
-    ?assertMatch({ok, #file_attr{size = TestDataSize}}, lfm_proxy:stat(W1, SessId, {guid, Guid}), ?ATTEMPTS),
+    ?assertMatch({ok, #file_attr{size = TestDataSize}}, lfm_proxy:stat(W1, SessId, ?FILE_REF(Guid)), ?ATTEMPTS),
     ?assertMatch({ok, [#{
         <<"blocks">> := [[0, TestDataSize]],
         <<"providerId">> := ProviderId2,
         <<"totalBlocksSize">> := TestDataSize
-    }]}, lfm_proxy:get_file_distribution(W1, SessId, {guid, Guid}), ?ATTEMPTS),
-    ?assertEqual({error, ?EROFS}, lfm_proxy:schedule_file_replica_eviction(W1, SessId, {guid, Guid}, ProviderId2, ProviderId1)).
+    }]}, lfm_proxy:get_file_distribution(W1, SessId, ?FILE_REF(Guid)), ?ATTEMPTS),
+    ?assertEqual({error, ?EROFS}, lfm_proxy:schedule_file_replica_eviction(W1, SessId, ?FILE_REF(Guid), ProviderId2, ProviderId1)).
 
 %%%===================================================================
 %%% SetUp and TearDown functions

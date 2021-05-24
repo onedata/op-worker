@@ -100,7 +100,15 @@ data_spec(#op_req{operation = create, data = Data, gri = #gri{aspect = instance}
             },
             ViewOptional = AlwaysOptional#{
                 <<"queryViewParams">> => {json, fun(QueryViewParams) ->
-                    {true, view_utils:sanitize_query_options(QueryViewParams)}
+                    {true, view_utils:sanitize_query_options(
+                        % TODO VFS-7388 - query view params sanitization was written for query
+                        % string and not body so it expects all values to be binaries
+                        maps:map(fun
+                            (_Key, true) -> true;
+                            (_Key, false) -> false;
+                            (_Key, Value) -> json_utils:encode(Value)
+                        end, QueryViewParams)
+                    )}
                 end}
             },
             {ViewRequired, ViewOptional};
@@ -280,7 +288,7 @@ validate(#op_req{operation = delete, gri = #gri{aspect = cancel}}, _) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec create(middleware:req()) -> middleware:create_result().
-create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = instance}}) ->
+create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = instance} = GRI}) ->
     SessionId = Auth#auth.session_id,
 
     ReplicatingProviderId = maps:get(<<"replicatingProviderId">>, Data, undefined),
@@ -290,7 +298,7 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = instance}}) ->
     {ok, TransferId} = case maps:get(<<"dataSourceType">>, Data) of
         file ->
             ?check(lfm:schedule_file_transfer(
-                SessionId, maps:get(<<"fileId">>, Data),
+                SessionId, ?FILE_REF(maps:get(<<"fileId">>, Data)),
                 ReplicatingProviderId, EvictingProviderId,
                 Callback
             ));
@@ -304,7 +312,8 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = instance}}) ->
                 Callback
             ))
     end,
-    {ok, value, TransferId};
+    {ok, #document{value = Transfer}} = transfer:get(TransferId),
+    {ok, resource, {GRI#gri{id = TransferId}, Transfer}};
 
 create(#op_req{auth = ?USER(UserId), gri = #gri{id = TransferId, aspect = rerun}}) ->
     case transfer:rerun_ended(UserId, TransferId) of

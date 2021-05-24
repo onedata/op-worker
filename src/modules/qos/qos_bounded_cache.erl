@@ -207,7 +207,7 @@ get_space_list() ->
 %% @private
 -spec get_param(atom(), non_neg_integer()) -> non_neg_integer().
 get_param(ParamName, DefaultVal) ->
-    Value = application:get_env(?APP_NAME, ParamName, DefaultVal),
+    Value = op_worker:get_env(ParamName, DefaultVal),
     ensure_non_neg_integer(Value, ParamName, DefaultVal).
 
 

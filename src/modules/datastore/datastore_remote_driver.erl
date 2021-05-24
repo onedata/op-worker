@@ -117,8 +117,7 @@ get_async(#{
 %%--------------------------------------------------------------------
 -spec wait(future()) -> {ok, doc()} | {error, term()}.
 wait({{ok, MsgId}, _} = Future) ->
-    Timeout = application:get_env(op_worker, datastore_remote_driver_timeout,
-        timer:minutes(1)),
+    Timeout = op_worker:get_env(datastore_remote_driver_timeout, timer:minutes(1)),
     receive
         #server_message{
             message_id = MsgId,

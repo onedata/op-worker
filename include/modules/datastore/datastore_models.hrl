@@ -16,7 +16,7 @@
 -include("modules/events/subscriptions.hrl").
 -include("modules/fslogic/fslogic_delete.hrl").
 -include("modules/storage/luma/luma.hrl").
--include_lib("ctool/include/posix/file_attr.hrl").
+-include("modules/fslogic/file_attr.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_models.hrl").
 
 -type file_descriptors() :: #{session:id() => non_neg_integer()}.
@@ -45,28 +45,29 @@
 %
 % The below ASCII visual shows possible relations in entities graph.
 %
-%           provider
-%              ^
-%              |
-%           storage                              share
-%              ^                                   ^
-%              |                                   |
-%            space            handle_service<----handle
-%           ^ ^ ^ ^             ^         ^       ^  ^
-%          /  | |  \           /          |      /   |
-%         /   | |   \         /           |     /    |
-%        /   /   \   \       /            |    /     |
-%       /   /     \   \     /             |   /      |
-% share user harvester group             user      group
-%              ^    ^     ^                          ^
-%             /      \    |                          |
-%            /        \   |                          |
-%          user        group                        user
-%                      ^   ^
-%                     /     \
-%                    /       \
-%                  user      user
-%
+%           provider----------------------------->cluster
+%              ^                                    ^  ^
+%              |                                    |  |
+%           storage                       share     |  |
+%              ^                            ^       |  |
+%              |                            |       |  |
+%            space     handle_service<----handle    |  |
+%           ^ ^ ^ ^          ^     ^       ^  ^     |  |
+%          /  | |  \         |     |      /   |     |  |
+%         /   | |   \        |     |     /    |    /   |
+%        /   /   \   \       /      \   /     |   /    |    atm_inventory
+%       /   /     \   \     /       user      |  /     /     ^  ^  ^  ^
+% share user harvester group                group     /     /   |  |  |
+%              ^    ^     ^                   ^      /  group   |  |  |
+%             /      \    |                   |     /     ^     |  |  |
+%            /        \   |                   |    /     /     /   |  |
+%          user        group                 user-'-----------'   /    \
+%                      ^   ^                                     /      \
+%                     /     \                      atm_workflow_schema   \
+%                    /       \                                ^           \
+%                  user      user                              \           \
+%                                                               '-- atm_lambda
+
 
 -record(od_user, {
     full_name :: undefined | binary(),
@@ -87,6 +88,7 @@
     eff_spaces = [] :: [od_space:id()],
     eff_handle_services = [] :: [od_handle_service:id()],
     eff_handles = [] :: [od_handle:id()],
+    eff_atm_inventories = [] :: [od_atm_inventory:id()],
 
     cache_state = #{} :: cache_state()
 }).
@@ -221,6 +223,40 @@
     cache_state = #{} :: cache_state()
 }).
 
+-record(od_atm_inventory, {
+    name :: automation:name(),
+    
+    cache_state = #{} :: cache_state()
+}).
+
+-record(od_atm_lambda, {
+    name :: automation:name(),
+    summary :: automation:summary(),
+    description :: automation:description(),
+    
+    operation_spec :: atm_lambda_operation_spec:record(),
+    argument_specs = [] :: [atm_lambda_argument_spec:record()],
+    result_specs = [] :: [atm_lambda_result_spec:record()],
+    
+    atm_inventories = [] :: [od_atm_inventory:id()],
+    
+    cache_state = #{} :: cache_state()
+}).
+
+-record(od_atm_workflow_schema, {
+    name :: automation:name(),
+    description :: automation:description(),
+
+    stores = [] :: [atm_store_schema:record()],
+    lanes = [] :: [atm_lane_schema:record()],
+
+    state :: automation:workflow_schema_state(),
+
+    atm_inventory :: undefined | od_atm_inventory:id(),
+
+    cache_state = #{} :: cache_state()
+}).
+
 %%%===================================================================
 %%% Records specific for oneprovider
 %%%===================================================================
@@ -237,7 +273,7 @@
 -record(file_download_code, {
     expires :: time:seconds(),
     session_id :: session:id(),
-    file_guid :: fslogic_worker:file_guid()
+    file_guids :: [fslogic_worker:file_guid()]
 }).
 
 -record(offline_access_credentials, {
@@ -250,15 +286,12 @@
     next_renewal_backoff :: time:seconds()
 }).
 
--record(file_force_proxy, {
-    provider_id :: undefined | oneprovider:id()
-}).
-
 %% User session
 -record(session, {
     status :: undefined | session:status(),
     accessed :: undefined | time:seconds(),
     type :: undefined | session:type(),
+    mode = normal :: session:mode(),
     identity :: aai:subject(),
     credentials :: undefined | auth_manager:credentials(),
     data_constraints :: data_constraints:constraints(),
@@ -313,7 +346,10 @@
     batches_processed = 0:: non_neg_integer(),
     % below map contains new hashes, that will be used to update values in children_hashes
     % when counters batches_to_process == batches_processed
-    hashes_to_update = #{} :: storage_sync_info:hashes()
+    hashes_to_update = #{} :: storage_sync_info:hashes(),
+    % Flag which informs whether any of the protected children files has been modified on storage.
+    % This flag allows to detect changes when flags are unset.
+    any_protected_child_changed = false :: boolean()
 }).
 
 % An empty model used for creating storage_sync_links
@@ -377,13 +413,54 @@
     name :: undefined | file_meta:name(),
     type :: undefined | file_meta:type(),
     mode = 0 :: file_meta:posix_permissions(),
-    acl = [] :: acl:acl(),
-    owner :: od_user:id(),
+    protection_flags = 0 :: data_access_control:bitmask(),
+    acl = [] :: acl:acl(), % VFS-7437 Handle conflict resolution similarly to hardlinks
+    owner :: undefined | od_user:id(), % undefined for hardlink doc
     is_scope = false :: boolean(),
-    provider_id :: undefined | oneprovider:id(), %% ID of provider that created this file
-    shares = [] :: [od_share:id()],
+    provider_id :: undefined | oneprovider:id(), %% Id of provider that created this file
+    shares = [] :: [od_share:id()], % VFS-7437 Handle conflict resolution similarly to hardlinks
     deleted = false :: boolean(),
-    parent_uuid :: undefined | file_meta:uuid()
+    parent_uuid :: file_meta:uuid(),
+    references = file_meta_hardlinks:empty_references() :: file_meta_hardlinks:references(),
+    symlink_value :: undefined | file_meta_symlinks:symlink(),
+    % this field is used to cache value from #dataset.state field
+    % TODO VFS-7533 handle conflict on file_meta with remote provider
+    dataset_state :: undefined | dataset:state()
+}).
+
+% Model used for storing information concerning archive.
+% One documents is stored for one archive.
+-record(archive, {
+    dataset_id :: dataset:id(),
+    creation_time :: time:seconds(),
+    creator :: archive:creator(),
+    state :: archive:state(),
+    config :: archive:config(),
+    preserved_callback :: archive:callback(),
+    purged_callback :: archive:callback(),
+    description :: archive:description(),
+    % following counters are set after archivisation job is finished,
+    % so that there is no need to fetch traverse_task document (identified by job_id)
+    % to get their values
+    files_to_archive = 0 :: non_neg_integer(),
+    files_archived = 0 :: non_neg_integer(),
+    files_failed = 0 :: non_neg_integer(),
+    byte_size = 0 :: non_neg_integer(),
+
+    % internal fields
+    % this field is used to fetch traverse_task document to get counters' values
+    % when archivisation job is still in progress
+    job_id ::archivisation_traverse:id()
+}).
+
+
+% Model used for storing information associated with dataset.
+% One document is stored for one dataset.
+% Key of the document is file_meta:uuid().
+-record(dataset, {
+    creation_time :: time:seconds(),
+    state :: dataset:state(),
+    detached_info :: undefined | dataset:detached_info()
 }).
 
 
@@ -394,17 +471,7 @@
 
 -record(storage_config, {
     helper :: helpers:helper(),
-    luma_config :: storage:luma_config(),
-    imported_storage = false :: boolean()
-}).
-
-
-%%% @TODO VFS-5856 deprecated, included for upgrade procedure. Remove in next major release after 20.02.*.
--record(storage, {
-    name = <<>> :: storage_config:name(),
-    helpers = [] :: [helpers:helper()],
-    readonly = false :: boolean(),
-    luma_config = undefined :: undefined | luma_config:config()
+    luma_config :: storage:luma_config()
 }).
 
 
@@ -415,12 +482,6 @@
     feed :: luma:feed()
 }).
 
-%% Model that maps space to storage
-%%% @TODO VFS-5856 deprecated, included for upgrade procedure. Remove in next major release after 20.02.*.
--record(space_storage, {
-    storage_ids = [] :: [storage:id()],
-    mounted_in_root = [] :: [storage:id()]
-}).
 
 -record(space_unsupport_job, {
     stage = init :: space_unsupport:stage(),
@@ -579,7 +640,7 @@
     auto_storage_import_config :: undefined | auto_storage_import_config:config()
 }).
 
-%% @TODO VFS-6767 deprecated, included for upgrade procedure. Remove in next major release after 20.02.*.
+%% @TODO VFS-6767 deprecated, included for upgrade procedure. Remove in next major release after 21.02.*.
 %% Model that stores configuration of storage import mechanism
 -record(storage_sync_config, {
     import_enabled = false :: boolean(),
@@ -588,13 +649,13 @@
     update_config = #{} :: space_strategies:update_config()
 }).
 
-%% @TODO VFS-6767 deprecated, included for upgrade procedure. Remove in next major release after 20.02.*.
+%% @TODO VFS-6767 deprecated, included for upgrade procedure. Remove in next major release after 21.02.*.
 %% Model that maps space to storage strategies
 -record(space_strategies, {
     sync_configs = #{} :: space_strategies:sync_configs()
 }).
 
-%% @TODO VFS-6767 deprecated, included for upgrade procedure. Remove in next major release after 20.02.*.
+%% @TODO VFS-6767 deprecated, included for upgrade procedure. Remove in next major release after 21.02.*.
 -record(storage_sync_monitoring, {
     scans = 0 :: non_neg_integer(), % overall number of finished scans,
     import_start_time :: undefined | time:seconds(),
@@ -947,7 +1008,7 @@
     last_name :: file_meta:name(),
     last_tree :: od_provider:id(),
     % Traverse task specific info
-    execute_slave_on_dir :: tree_traverse:execute_slave_on_dir(),
+    child_dirs_job_generation_policy :: tree_traverse:child_dirs_job_generation_policy(),
     children_master_jobs_mode :: tree_traverse:children_master_jobs_mode(),
     track_subtree_status :: boolean(),
     batch_size :: tree_traverse:batch_size(),
@@ -963,6 +1024,25 @@
     processed = 0 :: non_neg_integer(),
     % flag that informs whether all batches of children have been listed
     all_batches_listed = false :: boolean()
+}).
+
+%% Model storing information about automation store instance.
+-record(atm_store, {
+    type :: atm_store:type(),
+    name :: atm_store:name(),
+    summary :: atm_store:summary(),
+    description :: atm_store:description(),
+    frozen = false :: boolean(),
+    is_input_store :: boolean(),
+    container :: atm_container:container()
+}).
+
+%% Model that holds information about an automation workflow execution
+-record(atm_workflow_execution, {
+    space_id :: binary(),
+    schedule_time = 0 :: atm_workflow_execution:timestamp(),
+    start_time = 0 :: atm_workflow_execution:timestamp(),
+    finish_time = 0 :: atm_workflow_execution:timestamp()
 }).
 
 -endif.

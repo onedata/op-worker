@@ -67,11 +67,11 @@
 -define(LOCAL_CHANGES, fslogic_cache_local_changes).
 
 -define(LOCAL_BLOCKS_STORE,
-    application:get_env(?APP_NAME, local_blocks_store, doc)).
+    op_worker:get_env(local_blocks_store, doc)).
 -define(LOCAL_BLOCKS_FLUSH,
-    application:get_env(?APP_NAME, local_blocks_flush, on_terminate)).
+    op_worker:get_env(local_blocks_flush, on_terminate)).
 -define(BLOCKS_FLUSH_DELAY_MILLIS,
-    application:get_env(?APP_NAME, blocks_flush_delay, timer:seconds(3))).
+    op_worker:get_env(blocks_flush_delay, timer:seconds(3))).
 
 -type flush_type() :: sync | async | terminate.
 

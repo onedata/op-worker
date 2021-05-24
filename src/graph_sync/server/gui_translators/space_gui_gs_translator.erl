@@ -40,7 +40,9 @@ translate_value(#gri{aspect = transfers_active_channels}, ActiveChannels) ->
 translate_value(#gri{aspect = {transfers_throughput_charts, _}}, Charts) ->
     Charts;
 translate_value(#gri{aspect = evaluate_qos_expression}, Result) ->
-    Result.
+    Result;
+translate_value(#gri{aspect = datasets_details, scope = private}, {Datasets, IsLast}) ->
+    dataset_gui_gs_translator:translate_datasets_details_list(Datasets, IsLast).
 
 
 -spec translate_resource(gri:gri(), Data :: term()) ->

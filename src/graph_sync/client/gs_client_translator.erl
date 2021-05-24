@@ -55,7 +55,8 @@ translate(#gri{type = od_user, id = Id, aspect = instance, scope = private}, Res
             eff_groups = maps:get(<<"effectiveGroups">>, Result),
             eff_spaces = maps:get(<<"effectiveSpaces">>, Result),
             eff_handle_services = maps:get(<<"effectiveHandleServices">>, Result),
-            eff_handles = maps:get(<<"effectiveHandles">>, Result)
+            eff_handles = maps:get(<<"effectiveHandles">>, Result),
+            eff_atm_inventories = maps:get(<<"effectiveAtmInventories">>, Result)
         }
     };
 
@@ -161,6 +162,7 @@ translate(#gri{type = od_share, id = Id, aspect = instance, scope = public}, Res
     #document{
         key = Id,
         value = #od_share{
+            space = maps:get(<<"spaceId">>, Result),
             name = maps:get(<<"name">>, Result),
             description = maps:get(<<"description">>, Result),
             public_url = maps:get(<<"publicUrl">>, Result),
@@ -293,6 +295,44 @@ translate(#gri{type = temporary_token_secret, id = Id, aspect = user, scope = sh
         value = #temporary_token_secret{generation = maps:get(<<"generation">>, Result)}
     };
 
+translate(#gri{type = od_atm_inventory, id = Id, aspect = instance, scope = private}, Result) ->
+    #document{
+        key = Id,
+        value = #od_atm_inventory{name = maps:get(<<"name">>, Result)}
+    };
+
+translate(#gri{type = od_atm_lambda, id = Id, aspect = instance, scope = private}, Result) ->
+    #document{
+        key = Id,
+        value = #od_atm_lambda{
+            name = maps:get(<<"name">>, Result),
+            summary = maps:get(<<"summary">>, Result),
+            description = maps:get(<<"description">>, Result),
+
+            operation_spec = jsonable_record:from_json(maps:get(<<"operationSpec">>, Result), atm_lambda_operation_spec),
+            argument_specs = jsonable_record:list_from_json(maps:get(<<"argumentSpecs">>, Result), atm_lambda_argument_spec),
+            result_specs = jsonable_record:list_from_json(maps:get(<<"resultSpecs">>, Result), atm_lambda_result_spec),
+
+            atm_inventories = maps:get(<<"atmInventories">>, Result)
+        }
+    };
+
+translate(#gri{type = od_atm_workflow_schema, id = Id, aspect = instance, scope = private}, Result) ->
+    #document{
+        key = Id,
+        value = #od_atm_workflow_schema{
+            name = maps:get(<<"name">>, Result),
+            description = maps:get(<<"description">>, Result),
+
+            stores = jsonable_record:list_from_json(maps:get(<<"stores">>, Result), atm_store_schema),
+            lanes = jsonable_record:list_from_json(maps:get(<<"lanes">>, Result), atm_lane_schema),
+
+            state = automation:workflow_schema_state_from_json(maps:get(<<"state">>, Result)),
+
+            atm_inventory = maps:get(<<"atmInventoryId">>, Result)
+        }
+    };
+
 translate(GRI, Result) ->
     ?error("Cannot translate graph sync response body for:~nGRI: ~p~nResult: ~p", [
         GRI, Result
@@ -377,12 +417,8 @@ apply_scope_mask(Doc = #document{value = Space = #od_space{}}, protected) ->
         }
     };
 
-apply_scope_mask(Doc = #document{value = Share = #od_share{}}, public) ->
-    Doc#document{
-        value = Share#od_share{
-            space = undefined
-        }
-    };
+apply_scope_mask(Doc = #document{value = #od_share{}}, public) ->
+    Doc;
 
 apply_scope_mask(Doc = #document{value = Provider = #od_provider{}}, protected) ->
     Doc#document{

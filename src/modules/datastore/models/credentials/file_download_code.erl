@@ -24,7 +24,7 @@
 -export([create/2, verify/1, remove/1]).
 
 %% datastore_model callbacks
--export([get_ctx/0, get_record_version/0, get_record_struct/1]).
+-export([get_ctx/0, get_record_version/0, get_record_struct/1, upgrade_record/2]).
 
 -type code() :: binary().
 -type record() :: #file_download_code{}.
@@ -48,8 +48,8 @@
 %%%===================================================================
 
 
--spec create(session:id(), fslogic_worker:file_guid()) -> {ok, code()} | {error, term()}.
-create(SessionId, FileGuid) ->
+-spec create(session:id(), [fslogic_worker:file_guid()]) -> {ok, code()} | {error, term()}.
+create(SessionId, FileGuids) ->
     Ctx = ?CTX,
 
     ExpirationInterval = ?EXPIRATION_INTERVAL,
@@ -61,7 +61,7 @@ create(SessionId, FileGuid) ->
             % remove document from db and not from memory
             expires = ?NOW() + ExpirationInterval,
             session_id = SessionId,
-            file_guid = FileGuid
+            file_guids = FileGuids
         }
     },
     case datastore_model:save(CtxWithExpiration, Doc) of
@@ -70,7 +70,7 @@ create(SessionId, FileGuid) ->
     end.
 
 
--spec verify(code()) -> false | {true, session:id(), fslogic_worker:file_guid()}.
+-spec verify(code()) -> false | {true, session:id(), [fslogic_worker:file_guid()]}.
 verify(Code) ->
     Now = ?NOW(),
 
@@ -78,9 +78,9 @@ verify(Code) ->
         {ok, #document{value = #file_download_code{
             expires = Expires,
             session_id = SessionId,
-            file_guid = FileGuid
+            file_guids = FileGuids
         }}} when Now < Expires ->
-            {true, SessionId, FileGuid};
+            {true, SessionId, FileGuids};
         {ok, _} ->
             ok = datastore_model:delete(?CTX, Code),
             false;
@@ -116,7 +116,7 @@ get_ctx() ->
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    1.
+    2.
 
 
 %%--------------------------------------------------------------------
@@ -131,4 +131,32 @@ get_record_struct(1) ->
         {expires, integer},
         {session_id, string},
         {file_guid, string}
+    ]};
+get_record_struct(2) ->
+    {record, [
+        {expires, integer},
+        {session_id, string},
+        {file_guids, [string]} % modified field
     ]}.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Upgrades model's record from provided version to the next one.
+%% @end
+%%--------------------------------------------------------------------
+-spec upgrade_record(datastore_model:record_version(), datastore_model:record()) ->
+    {datastore_model:record_version(), datastore_model:record()}.
+upgrade_record(1, Record) ->
+    {
+        file_download_code, 
+        Expires,
+        SessionId,
+        FileGuid
+    } = Record,
+    
+    {2, {file_download_code,
+        Expires,
+        SessionId,
+        [FileGuid]
+    }}.

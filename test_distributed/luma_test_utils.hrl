@@ -512,7 +512,6 @@ end).
     key = Id,
     value = #storage_config{
         helper = Helper,
-        imported_storage = false,
         luma_config = ?LUMA_CONFIG(LumaMode)
     }
 }).

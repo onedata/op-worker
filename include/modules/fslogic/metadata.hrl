@@ -13,7 +13,7 @@
 -ifndef(METADATA_HRL).
 -define(METADATA_HRL, 1).
 
--include("modules/auth/acl.hrl").
+-include("modules/fslogic/acl.hrl").
 
 -define(ONEDATA_PREFIX, <<"onedata_">>).
 -define(ONEDATA_PREFIX_STR, "onedata_").

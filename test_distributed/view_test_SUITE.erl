@@ -12,6 +12,7 @@
 -author("Jakub Kudzia").
 
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
@@ -152,7 +153,7 @@ query_view_using_file_meta(Config) ->
             <<"value">> := #{
                 <<"name">> := ?TRASH_DIR_NAME,
                 <<"type">> := <<"DIR">>,
-                <<"mode">> := ?DEFAULT_DIR_PERMS,
+                <<"mode">> := ?DEFAULT_DIR_MODE,
                 <<"owner">> := SpaceOwnerId,
                 <<"provider_id">> := ProviderId,
                 <<"shares">> := [],
@@ -166,7 +167,7 @@ query_view_using_file_meta(Config) ->
             <<"value">> := #{
                 <<"name">> := ?SPACE_ID,
                 <<"type">> := <<"DIR">>,
-                <<"mode">> := ?DEFAULT_DIR_PERMS,
+                <<"mode">> := ?DEFAULT_DIR_MODE,
                 <<"owner">> := SpaceOwnerId,
                 <<"provider_id">> := ProviderId,
                 <<"shares">> := [],
@@ -226,12 +227,12 @@ query_view_using_custom_metadata(Config) ->
     XattrName = <<"xattr_name">>,
     XattrValue = <<"xattr_value">>,
     Xattr = #xattr{name = XattrName, value = XattrValue},
-    lfm_proxy:set_xattr(Worker, ?SESS_ID(Worker), {guid, SpaceGuid}, Xattr),
+    lfm_proxy:set_xattr(Worker, ?SESS_ID(Worker), ?FILE_REF(SpaceGuid), Xattr),
 
     XattrName2 = <<"xattr_name2">>,
     XattrValue2 = <<"xattr_value2">>,
     Xattr2 = #xattr{name = XattrName2, value = XattrValue2},
-    lfm_proxy:set_xattr(Worker, ?SESS_ID(Worker), {guid, SpaceGuid}, Xattr2),
+    lfm_proxy:set_xattr(Worker, ?SESS_ID(Worker), ?FILE_REF(SpaceGuid), Xattr2),
 
     SimpleMapFunction = <<"
         function(id, type, meta, ctx) {
@@ -262,7 +263,7 @@ query_view_using_file_popularity(Config) ->
     FilePath = ?TEST_FILE(?SPACE_NAME),
     {ok, Guid} = lfm_proxy:create(Worker, SessionId, FilePath),
     Uuid = file_id:guid_to_uuid(Guid),
-    {ok, H} = lfm_proxy:open(Worker, SessionId, {guid, Guid}, write),
+    {ok, H} = lfm_proxy:open(Worker, SessionId, ?FILE_REF(Guid), write),
     lfm_proxy:write(Worker, H, 0, TestData),
     lfm_proxy:close(Worker, H),
 

@@ -57,24 +57,24 @@ save_master_job(Key, Job = #tree_traverse{
     token = Token,
     last_name = LastName,
     last_tree = LastTree,
-    execute_slave_on_dir = OnDir,
+    child_dirs_job_generation_policy = ChildDirsJobGenerationPolicy,
     children_master_jobs_mode = ChildrenMasterJobsMode,
     track_subtree_status = TrackSubtreeStatus,
     batch_size = BatchSize,
     traverse_info = TraverseInfo
-}, Pool, TaskID, CallbackModule) ->
-    Uuid = file_ctx:get_uuid_const(FileCtx),
+}, Pool, TaskId, CallbackModule) ->
+    Uuid = file_ctx:get_logical_uuid_const(FileCtx),
     Scope = file_ctx:get_space_id_const(FileCtx),
     Record = #tree_traverse_job{
         pool = Pool,
         callback_module = CallbackModule,
-        task_id = TaskID,
+        task_id = TaskId,
         doc_id = Uuid,
         user_id = UserId,
         use_listing_token = Token =/= undefined,
         last_name = LastName,
         last_tree = LastTree,
-        execute_slave_on_dir = OnDir,
+        child_dirs_job_generation_policy = ChildDirsJobGenerationPolicy,
         children_master_jobs_mode = ChildrenMasterJobsMode,
         track_subtree_status = TrackSubtreeStatus,
         batch_size = BatchSize,
@@ -98,36 +98,41 @@ delete_master_job(Key, _Job, _, _CallbackModule) ->
 -spec get_master_job(key() | doc()) ->
     {ok, tree_traverse:master_job(), traverse:pool(), traverse:id()}  | {error, term()}.
 get_master_job(#document{value = #tree_traverse_job{
-    pool = Pool, task_id = TaskID,
-    doc_id = DocID,
+    pool = Pool,
+    task_id = TaskId,
+    doc_id = DocId,
     user_id = UserId,
     use_listing_token = UseListingToken,
     last_name = LastName,
     last_tree = LastTree,
-    execute_slave_on_dir = OnDir,
+    child_dirs_job_generation_policy = ChildDirsJobGenerationPolicy,
     children_master_jobs_mode = ChildrenMasterJobsMode,
     track_subtree_status = TrackSubtreeStatus,
     batch_size = BatchSize,
     traverse_info = TraverseInfo
 }}) ->
-    {ok, Doc = #document{scope = SpaceId}} = file_meta:get_including_deleted(DocID),
-    FileCtx = file_ctx:new_by_doc(Doc, SpaceId),
-    Job = #tree_traverse{
-        file_ctx = FileCtx,
-        user_id = UserId,
-        token = case UseListingToken of
-            true -> ?INITIAL_LS_TOKEN;
-            false -> undefined
-        end,
-        last_name = LastName,
-        last_tree = LastTree,
-        execute_slave_on_dir = OnDir,
-        children_master_jobs_mode = ChildrenMasterJobsMode,
-        track_subtree_status = TrackSubtreeStatus,
-        batch_size = BatchSize,
-        traverse_info = binary_to_term(TraverseInfo)
-    },
-    {ok, Job, Pool, TaskID};
+    case file_meta:get_including_deleted(DocId) of
+        {ok, Doc = #document{scope = SpaceId}} ->
+            FileCtx = file_ctx:new_by_doc(Doc, SpaceId),
+            Job = #tree_traverse{
+                file_ctx = FileCtx,
+                user_id = UserId,
+                token = case UseListingToken of
+                    true -> ?INITIAL_LS_TOKEN;
+                    false -> undefined
+                end,
+                last_name = LastName,
+                last_tree = LastTree,
+                child_dirs_job_generation_policy = ChildDirsJobGenerationPolicy,
+                children_master_jobs_mode = ChildrenMasterJobsMode,
+                track_subtree_status = TrackSubtreeStatus,
+                batch_size = BatchSize,
+                traverse_info = binary_to_term(TraverseInfo)
+            },
+            {ok, Job, Pool, TaskId};
+        {error, _} = Error ->
+            Error
+    end;
 get_master_job(Key) ->
     case datastore_model:get(?CTX#{include_deleted => true}, Key) of
         {ok, Doc} ->
@@ -157,7 +162,7 @@ get_ctx() ->
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    2.
+    3.
 
 
 -spec get_record_struct(datastore_model:record_version()) ->
@@ -193,6 +198,23 @@ get_record_struct(2) ->
         {track_subtree_status, boolean},
         {batch_size, integer},
         {traverse_info, binary}
+    ]};
+get_record_struct(3) ->
+    {record, [
+        {pool, string},
+        {callback_module, atom},
+        {task_id, string},
+        {doc_id, string},
+        {user_id, string},
+        {use_listing_token, boolean},
+        {last_name, string},
+        {last_tree, string},
+        % execute_slave_on_dir has been changed to child_dirs_job_generation_policy in this version
+        {child_dirs_job_generation_policy, atom},
+        {children_master_jobs_mode, atom},
+        {track_subtree_status, boolean},
+        {batch_size, integer},
+        {traverse_info, binary}
     ]}.
 
 
@@ -222,6 +244,44 @@ upgrade_record(1, {?MODULE, Pool, CallbackModule, TaskId, DocId, LastName, LastT
         sync,
         % track_subtree_status has been added in this version
         false,
+        BatchSize,
+        TraverseInfo
+    }};
+upgrade_record(2, Record) ->
+    {
+        ?MODULE,
+        Pool,
+        CallbackModule,
+        TaskId,
+        DocId,
+        UserId,
+        UseListingToken,
+        LastName,
+        LastTree,
+        ExecuteSlaveOnDir,
+        ChildrenMasterJobsMode,
+        TrackSubtreeStatus,
+        BatchSize,
+        TraverseInfo
+    } = Record,
+    
+    ChildDirsJobGenerationPolicy = case ExecuteSlaveOnDir of
+        false -> generate_master_jobs;
+        true -> generate_slave_and_master_jobs
+    end,
+    
+    {3, {?MODULE,
+        Pool,
+        CallbackModule,
+        TaskId,
+        DocId,
+        UserId,
+        UseListingToken,
+        LastName,
+        LastTree,
+        ChildDirsJobGenerationPolicy,
+        ChildrenMasterJobsMode,
+        TrackSubtreeStatus,
         BatchSize,
         TraverseInfo
     }}.

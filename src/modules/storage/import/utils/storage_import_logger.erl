@@ -109,8 +109,8 @@ log(Format, Args, SpaceId) ->
 %%-------------------------------------------------------------------
 -spec audit_log_file_name(od_space:id()) -> string().
 audit_log_file_name(SpaceId) ->
-    LogFilePrefix = application:get_env(?APP_NAME, storage_import_audit_log_file_prefix,
+    LogFilePrefix = op_worker:get_env(storage_import_audit_log_file_prefix,
         "/tmp/storage_import_"),
-    LogFileExtension = application:get_env(?APP_NAME, storage_import_audit_log_file_extension,
+    LogFileExtension = op_worker:get_env(storage_import_audit_log_file_extension,
         ".log"),
     LogFilePrefix ++ str_utils:to_list(SpaceId) ++ LogFileExtension.

@@ -209,9 +209,8 @@ sanitize_pos_integer(Key, Value, Threshold) when is_integer(Value) ->
             throw(?ERROR_BAD_VALUE_TOO_LOW(Key, Threshold))
     end;
 sanitize_pos_integer(Key, Value, Threshold) ->
-    try
-        IntValue = binary_to_integer(Value),
-        sanitize_pos_integer(Key, IntValue, Threshold)
+    try binary_to_integer(Value) of
+        IntValue -> sanitize_pos_integer(Key, IntValue, Threshold)
     catch _:_ ->
         throw(?ERROR_BAD_VALUE_INTEGER(Key))
     end.

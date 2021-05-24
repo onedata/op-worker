@@ -11,6 +11,7 @@
 -module(transfer_req).
 -author("Bartosz Walkowicz").
 
+-include("modules/fslogic/data_access_control.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 
 %% API
@@ -37,15 +38,14 @@ schedule_file_transfer(
     ReplicatingProviderId, EvictingProviderId,
     Callback
 ) ->
-    assert_not_a_trash_dir_replication(ReplicatingProviderId, FileCtx0),
     data_constraints:assert_not_readonly_mode(UserCtx),
+    FileCtx1 = assert_replication_possible(ReplicatingProviderId, FileCtx0),
 
-    FileCtx1 = fslogic_authz:ensure_authorized(
-        UserCtx, FileCtx0,
-        [traverse_ancestors]
+    FileCtx2 = fslogic_authz:ensure_authorized(
+        UserCtx, FileCtx1, [?TRAVERSE_ANCESTORS]
     ),
     schedule_transfer_insecure(
-        UserCtx, FileCtx1,
+        UserCtx, FileCtx2,
         ReplicatingProviderId, EvictingProviderId,
         undefined, [],
         Callback
@@ -67,13 +67,13 @@ schedule_view_transfer(
     Callback
 ) ->
     data_constraints:assert_not_readonly_mode(UserCtx),
+    SpaceDirCtx1 = assert_replication_possible(ReplicatingProviderId, SpaceDirCtx0),
 
-    SpaceDirCtx1 = fslogic_authz:ensure_authorized(
-        UserCtx, SpaceDirCtx0,
-        [traverse_ancestors]
+    SpaceDirCtx2 = fslogic_authz:ensure_authorized(
+        UserCtx, SpaceDirCtx1, [?TRAVERSE_ANCESTORS]
     ),
     schedule_transfer_insecure(
-        UserCtx, SpaceDirCtx1,
+        UserCtx, SpaceDirCtx2,
         ReplicatingProviderId, EvictingProviderId,
         ViewName, QueryViewParams,
         Callback
@@ -101,7 +101,7 @@ schedule_transfer_insecure(
     Callback
 ) ->
     SessionId = user_ctx:get_session_id(UserCtx),
-    FileGuid = file_ctx:get_guid_const(SpaceDirCtx),
+    FileGuid = file_ctx:get_logical_guid_const(SpaceDirCtx), % TODO VFS-7443 - effective or not? - test for hardlinks
     {FilePath, _} = file_ctx:get_logical_path(SpaceDirCtx, UserCtx),
 
     {ok, TransferId} = transfer:start(
@@ -112,10 +112,13 @@ schedule_transfer_insecure(
     ?PROVIDER_OK_RESP(#scheduled_transfer{transfer_id = TransferId}).
 
 
--spec assert_not_a_trash_dir_replication(undefined | od_provider:id(), file_ctx:ctx()) -> ok.
-assert_not_a_trash_dir_replication(undefined, _) ->
+%% @private
+-spec assert_replication_possible(undefined | od_provider:id(), file_ctx:ctx()) ->
+    file_ctx:ctx().
+assert_replication_possible(undefined, FileCtx0) ->
     % if ReplicatingProvider is undefined the transfer is a eviction
-    % eviction is allowed on trash directory
-    ok;
-assert_not_a_trash_dir_replication(_ReplicatingProviderId, FileCtx0) ->
-    file_ctx:assert_not_trash_dir_const(FileCtx0).
+    FileCtx0;
+assert_replication_possible(ReplicatingProviderId, FileCtx0) ->
+    file_ctx:assert_not_trash_dir_const(FileCtx0),
+    file_ctx:assert_not_readonly_target_storage_const(FileCtx0, ReplicatingProviderId),
+    file_ctx:assert_smaller_than_provider_support_size(FileCtx0, ReplicatingProviderId).

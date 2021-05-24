@@ -271,13 +271,13 @@ mock_handshake_to_succeed_after_n_retries(Nodes, MaxFailedAttempts) ->
 
     test_utils:mock_new(Nodes, connection_auth, [passthrough]),
     test_utils:mock_expect(Nodes, connection_auth, handle_handshake, fun(Request, IpAddress) ->
-        case application:get_env(?APP_NAME, test_handshake_failed_attempts, 0) of
+        case op_worker:get_env(test_handshake_failed_attempts, 0) of
             infinity ->
                 throw(invalid_token);
             0 ->
                 meck:passthrough([Request, IpAddress]);
             Num ->
-                application:set_env(?APP_NAME, test_handshake_failed_attempts, Num - 1),
+                op_worker:set_env(test_handshake_failed_attempts, Num - 1),
                 throw(invalid_token)
         end
     end).

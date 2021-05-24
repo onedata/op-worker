@@ -12,14 +12,17 @@
 -module(lfm_proxy).
 -author("Tomasz Lichon").
 
--include_lib("common_test/include/ct.hrl").
+-include("modules/fslogic/acl.hrl").
+-include("modules/dataset/dataset.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
+-include_lib("common_test/include/ct.hrl").
 
 
 %% API
 -export([init/1, init/2, init/3, teardown/1]).
 -export([
-    stat/3, get_fs_stats/3, get_details/3,
+    stat/3, stat/4, resolve_symlink/3, get_fs_stats/3, get_details/3,
     resolve_guid/3, get_file_path/3,
     get_parent/3,
     check_perms/4,
@@ -32,6 +35,8 @@
 
     get_file_location/3,
     create/3, create/4, create/5,
+    make_link/4, make_link/5,
+    make_symlink/4, make_symlink/5, read_symlink/3,
     create_and_open/3, create_and_open/4, create_and_open/5,
     open/4,
     close/2, close_all/1,
@@ -68,7 +73,17 @@
 
     get_effective_file_qos/3,
     add_qos_entry/5, get_qos_entry/3, remove_qos_entry/3,
-    check_qos_status/3, check_qos_status/4
+    check_qos_status/3, check_qos_status/4,
+
+    establish_dataset/3, establish_dataset/4, remove_dataset/3,
+    reattach_dataset/3, detach_dataset/3, update_dataset/6,
+    get_dataset_info/3, get_file_eff_dataset_summary/3,
+    list_top_datasets/5, list_top_datasets/6, list_children_datasets/4,
+
+    archive_dataset/5, archive_dataset/7,
+    update_archive/4, get_archive_info/3,
+    list_archives/4, list_archives/5,
+    init_archive_purge/3, init_archive_purge/4
 ]).
 
 -define(EXEC(Worker, Function),
@@ -94,12 +109,15 @@
 init(Config) ->
     init(Config, true).
 
+
 -spec init(Config :: list(), boolean()) -> list().
 init(Config, Link) ->
     init(Config, Link, ?config(op_worker_nodes, Config)).
 
+
 -spec init(Config :: list(), boolean(), [node()]) -> list().
 init(Config, Link, Workers) ->
+    teardown(Config),
     Host = self(),
     ServerFun = fun() ->
         register(lfm_proxy_server, self()),
@@ -130,11 +148,12 @@ init(Config, Link, Workers) ->
 
 -spec teardown(Config :: list()) -> ok.
 teardown(Config) ->
-    lists:foreach(
-        fun(Worker) ->
-            Pid = rpc:call(Worker, erlang, whereis, [lfm_proxy_server]),
-            Pid ! exit
-        end, ?config(op_worker_nodes, Config)).
+    lists:foreach(fun(Worker) ->
+        case rpc:call(Worker, erlang, whereis, [lfm_proxy_server]) of
+            undefined -> ok;
+            Pid -> Pid ! exit
+        end
+    end, ?config(op_worker_nodes, Config)).
 
 
 %%%===================================================================
@@ -145,19 +164,31 @@ teardown(Config) ->
 -spec stat(node(), session:id(), lfm:file_key() | file_meta:uuid()) ->
     {ok, lfm_attrs:file_attributes()} | lfm:error_reply().
 stat(Worker, SessId, FileKey) ->
-    ?EXEC(Worker, lfm:stat(SessId, uuid_to_guid(Worker, FileKey))).
+    ?EXEC(Worker, lfm:stat(SessId, uuid_to_file_ref(Worker, FileKey))).
+
+
+-spec stat(node(), session:id(), lfm:file_key() | file_meta:uuid(), boolean()) ->
+    {ok, lfm_attrs:file_attributes()} | lfm:error_reply().
+stat(Worker, SessId, FileKey, IncludeLinksCount) ->
+    ?EXEC(Worker, lfm:stat(SessId, uuid_to_file_ref(Worker, FileKey), IncludeLinksCount)).
+
+
+-spec resolve_symlink(node(), session:id(), lfm:file_key() | file_meta:uuid()) ->
+    {ok, file_id:file_guid()} | lfm:error_reply().
+resolve_symlink(Worker, SessId, FileKey) ->
+    ?EXEC(Worker, lfm:resolve_symlink(SessId, uuid_to_file_ref(Worker, FileKey))).
 
 
 -spec get_fs_stats(node(), session:id(), lfm:file_key() | file_meta:uuid()) ->
     {ok, lfm_attrs:fs_stats()} | lfm:error_reply().
 get_fs_stats(Worker, SessId, FileKey) ->
-    ?EXEC(Worker, lfm:get_fs_stats(SessId, uuid_to_guid(Worker, FileKey))).
+    ?EXEC(Worker, lfm:get_fs_stats(SessId, uuid_to_file_ref(Worker, FileKey))).
 
 
 -spec get_details(node(), session:id(), lfm:file_key() | file_meta:uuid()) ->
     {ok, lfm_attrs:file_details()} | lfm:error_reply().
 get_details(Worker, SessId, FileKey) ->
-    ?EXEC(Worker, lfm:get_details(SessId, uuid_to_guid(Worker, FileKey))).
+    ?EXEC(Worker, lfm:get_details(SessId, uuid_to_file_ref(Worker, FileKey))).
 
 
 -spec resolve_guid(node(), session:id(), file_meta:path()) ->
@@ -175,7 +206,7 @@ get_file_path(Worker, SessId, Guid) ->
     ?EXEC(Worker, lfm:get_file_path(SessId, Guid)).
 
 
--spec get_parent(node(), session:id(), fslogic_worker:file_guid_or_path()) ->
+-spec get_parent(node(), session:id(), lfm:file_key()) ->
     {ok, fslogic_worker:file_guid()} | lfm:error_reply().
 get_parent(Worker, SessId, FileKey) ->
     ?EXEC(Worker, lfm:get_parent(SessId, FileKey)).
@@ -190,7 +221,8 @@ check_perms(Worker, SessId, FileKey, OpenFlag) ->
 -spec set_perms(node(), session:id(), lfm:file_key() | file_meta:uuid(), file_meta:posix_permissions()) ->
     ok | lfm:error_reply().
 set_perms(Worker, SessId, FileKey, NewPerms) ->
-    ?EXEC(Worker, lfm:set_perms(SessId, uuid_to_guid(Worker, FileKey), NewPerms)).
+    ?EXEC(Worker, lfm:set_perms(SessId, uuid_to_file_ref(Worker, FileKey), NewPerms)).
+
 
 -spec update_times(node(), session:id(), lfm:file_key(),
     file_meta:time(), file_meta:time(), file_meta:time()) ->
@@ -199,47 +231,48 @@ update_times(Worker, SessId, FileKey, ATime, MTime, CTime) ->
     ?EXEC(Worker, lfm:update_times(SessId, FileKey, ATime, MTime, CTime)).
 
 
--spec unlink(node(), session:id(), fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path()) ->
+-spec unlink(node(), session:id(), lfm:file_key() | file_meta:uuid_or_path()) ->
     ok | lfm:error_reply().
 unlink(Worker, SessId, FileKey) ->
-    ?EXEC(Worker, lfm:unlink(SessId, uuid_to_guid(Worker, FileKey), false)).
+    ?EXEC(Worker, lfm:unlink(SessId, uuid_to_file_ref(Worker, FileKey), false)).
 
 
--spec rm_recursive(node(), session:id(), fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path()) ->
+-spec rm_recursive(node(), session:id(), lfm:file_key() | file_meta:uuid_or_path()) ->
     ok | lfm:error_reply().
 rm_recursive(Worker, SessId, FileKey) ->
-    ?EXEC(Worker, lfm:rm_recursive(SessId, uuid_to_guid(Worker, FileKey))).
+    ?EXEC(Worker, lfm:rm_recursive(SessId, uuid_to_file_ref(Worker, FileKey))).
 
 
--spec mv(node(), session:id(), fslogic_worker:file_guid_or_path(), file_meta:path()) ->
+-spec mv(node(), session:id(), lfm:file_key(), file_meta:path()) ->
     {ok, fslogic_worker:file_guid()} | lfm:error_reply().
-mv(Worker, SessId, FileKeyFrom, PathTo) ->
-    ?EXEC(Worker, lfm:mv(SessId, FileKeyFrom, PathTo)).
+mv(Worker, SessId, FileKey, TargetPath) ->
+    {TargetName, TargetDirPath} = filepath_utils:basename_and_parent_dir(TargetPath),
+    mv(Worker, SessId, FileKey, {path, TargetDirPath}, TargetName).
 
 
--spec mv(node(), session:id(), fslogic_worker:file_guid_or_path(), fslogic_worker:file_guid_or_path(),
+-spec mv(node(), session:id(), lfm:file_key(), lfm:file_key(),
     file_meta:name()) -> {ok, fslogic_worker:file_guid()} | lfm:error_reply().
 mv(Worker, SessId, FileKey, TargetParentKey, TargetName) ->
     ?EXEC(Worker, lfm:mv(SessId, FileKey, TargetParentKey, TargetName)).
 
 
--spec cp(node(), session:id(), fslogic_worker:file_guid_or_path(), file_meta:path()) ->
+-spec cp(node(), session:id(), lfm:file_key(), file_meta:path()) ->
     {ok, fslogic_worker:file_guid()} | lfm:error_reply().
-cp(Worker, SessId, FileKeyFrom, PathTo) ->
-    ?EXEC(Worker, lfm:cp(SessId, FileKeyFrom, PathTo)).
+cp(Worker, SessId, FileKey, TargetPath) ->
+    {TargetName, TargetDirPath} = filepath_utils:basename_and_parent_dir(TargetPath),
+    cp(Worker, SessId, FileKey, {path, TargetDirPath}, TargetName).
 
 
--spec cp(node(), session:id(), fslogic_worker:file_guid_or_path(), fslogic_worker:file_guid_or_path(),
+-spec cp(node(), session:id(), lfm:file_key(), lfm:file_key(),
     file_meta:name()) -> {ok, fslogic_worker:file_guid()} | lfm:error_reply().
 cp(Worker, SessId, FileKey, TargetParentKey, TargetName) ->
     ?EXEC(Worker, lfm:cp(SessId, FileKey, TargetParentKey, TargetName)).
 
 
--spec is_dir(node(), session:id(), fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path()) ->
+-spec is_dir(node(), session:id(), lfm:file_key() | file_meta:uuid_or_path()) ->
     ok | lfm:error_reply().
 is_dir(Worker, SessId, FileKey) ->
-    ?EXEC(Worker, lfm:is_dir(SessId, uuid_to_guid(Worker, FileKey))).
-
+    ?EXEC(Worker, lfm:is_dir(SessId, uuid_to_file_ref(Worker, FileKey))).
 
 
 %%%===================================================================
@@ -247,10 +280,16 @@ is_dir(Worker, SessId, FileKey) ->
 %%%===================================================================
 
 
--spec get_file_location(node(), session:id(), FileKey :: fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path()) ->
+-spec get_file_location(node(), session:id(), FileKey :: lfm:file_key() | file_meta:uuid_or_path()) ->
     {ok, file_location:record()} | lfm:error_reply().
 get_file_location(Worker, SessId, FileKey) ->
-    ?EXEC(Worker, lfm:get_file_location(SessId, uuid_to_guid(Worker, FileKey))).
+    ?EXEC(Worker, lfm:get_file_location(SessId, uuid_to_file_ref(Worker, FileKey))).
+
+
+-spec read_symlink(node(), session:id(), FileKey :: lfm:file_key()) ->
+    {ok, file_meta_symlinks:symlink()} | lfm:error_reply().
+read_symlink(Worker, SessId, FileKey) ->
+    ?EXEC(Worker, lfm:read_symlink(SessId, uuid_to_file_ref(Worker, FileKey))).
 
 
 -spec create(node(), session:id(), file_meta:path()) ->
@@ -272,21 +311,41 @@ create(Worker, SessId, ParentGuid, Name, Mode) ->
     ?EXEC(Worker, lfm:create(SessId, ParentGuid, Name, Mode)).
 
 
+-spec make_link(node(), session:id(), file_meta:path(), fslogic_worker:file_guid()) ->
+    {ok, #file_attr{}} | lfm:error_reply().
+make_link(Worker, SessId, LinkPath, FileGuid) ->
+    {LinkName, TargetParentPath} = filepath_utils:basename_and_parent_dir(LinkPath),
+    make_link(Worker, SessId, ?FILE_REF(FileGuid), {path, TargetParentPath}, LinkName).
+
+
+-spec make_link(node(), session:id(), lfm:file_key(), lfm:file_key(), file_meta:name()) ->
+    {ok, #file_attr{}} | lfm:error_reply().
+make_link(Worker, SessId, FileKey, TargetParentKey, Name) ->
+    ?EXEC(Worker, lfm:make_link(SessId, FileKey, TargetParentKey, Name)).
+
+
+-spec make_symlink(node(), session:id(), file_meta:path(), file_meta_symlinks:symlink()) ->
+    {ok, #file_attr{}} | lfm:error_reply().
+make_symlink(Worker, SessId, SymlinkPath, SymlinkValue) ->
+    {Name, TargetParentPath} = filepath_utils:basename_and_parent_dir(SymlinkPath),
+    make_symlink(Worker, SessId, {path, TargetParentPath}, Name, SymlinkValue).
+
+
+-spec make_symlink(node(), session:id(), ParentKey :: lfm:file_key(),
+    Name :: file_meta:name(), LinkTarget :: file_meta_symlinks:symlink()) ->
+    {ok, #file_attr{}} | lfm:error_reply().
+make_symlink(Worker, SessId, ParentKey, Name, Link) ->
+    ?EXEC(Worker, lfm:make_symlink(SessId, ParentKey, Name, Link)).
+
+
 -spec create_and_open(node(), session:id(), file_meta:path()) ->
     {ok, {fslogic_worker:file_guid(), lfm:handle()}} |
     lfm:error_reply().
 create_and_open(Worker, SessId, Path) ->
-    ?EXEC(Worker,
-        case lfm:create_and_open(SessId, Path, rdwr) of
-            {ok, {Guid, Handle}} ->
-                TestHandle = crypto:strong_rand_bytes(10),
-                ets:insert(lfm_handles, {TestHandle, Handle}),
-                {ok, {Guid, TestHandle}};
-            Other -> Other
-        end).
+    create_and_open(Worker, SessId, Path, undefined).
 
 
--spec create_and_open(node(), session:id(), file_meta:path(), file_meta:posix_permissions()) ->
+-spec create_and_open(node(), session:id(), file_meta:path(), undefined | file_meta:posix_permissions()) ->
     {ok, {fslogic_worker:file_guid(), lfm:handle()}} |
     lfm:error_reply().
 create_and_open(Worker, SessId, Path, Mode) ->
@@ -315,12 +374,12 @@ create_and_open(Worker, SessId, ParentGuid, Name, Mode) ->
         end).
 
 
--spec open(node(), session:id(), FileKey :: fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path(),
+-spec open(node(), session:id(), FileKey :: lfm:file_key() | file_meta:uuid_or_path(),
     OpenType :: helpers:open_flag()) ->
     {ok, lfm:handle()} | lfm:error_reply().
 open(Worker, SessId, FileKey, OpenFlag) ->
     ?EXEC(Worker,
-        case lfm:open(SessId, uuid_to_guid(Worker, FileKey), OpenFlag) of
+        case lfm:open(SessId, uuid_to_file_ref(Worker, FileKey), OpenFlag) of
             {ok, Handle} ->
                 TestHandle = crypto:strong_rand_bytes(10),
                 ets:insert(lfm_handles, {TestHandle, Handle}),
@@ -429,7 +488,7 @@ write_and_check(Worker, TestHandle, Offset, Bytes) ->
                     ets:insert(lfm_handles, {TestHandle, NewHandle}),
                     case lfm:fsync(NewHandle) of
                         ok ->
-                            {ok, Res, lfm:stat(SessId, {guid, Guid})};
+                            {ok, Res, lfm:stat(SessId, ?FILE_REF(Guid))};
                         Other2 ->
                             Other2
                     end;
@@ -457,7 +516,7 @@ fsync(Worker, SessId, FileKey, OneproviderId) ->
 -spec truncate(node(), session:id(), lfm:file_key() | file_meta:uuid(), non_neg_integer()) ->
     term().
 truncate(Worker, SessId, FileKey, Size) ->
-    ?EXEC(Worker, lfm:truncate(SessId, uuid_to_guid(Worker, FileKey), Size)).
+    ?EXEC(Worker, lfm:truncate(SessId, uuid_to_file_ref(Worker, FileKey), Size)).
 
 
 %%%===================================================================
@@ -468,10 +527,10 @@ truncate(Worker, SessId, FileKey, Size) ->
 -spec mkdir(node(), session:id(), binary()) ->
     {ok, fslogic_worker:file_guid()} | lfm:error_reply().
 mkdir(Worker, SessId, Path) ->
-    ?EXEC(Worker, lfm:mkdir(SessId, Path)).
+    mkdir(Worker, SessId, Path, undefined).
 
 
--spec mkdir(node(), session:id(), binary(), file_meta:posix_permissions()) ->
+-spec mkdir(node(), session:id(), binary(), undefined | file_meta:posix_permissions()) ->
     {ok, DirUuid :: file_meta:uuid()} | lfm:error_reply().
 mkdir(Worker, SessId, Path, Mode) ->
     ?EXEC(Worker, lfm:mkdir(SessId, Path, Mode)).
@@ -484,14 +543,14 @@ mkdir(Worker, SessId, ParentGuid, Name, Mode) ->
     ?EXEC(Worker, lfm:mkdir(SessId, ParentGuid, Name, Mode)).
 
 
--spec get_children(node(), session:id(), fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path(),
+-spec get_children(node(), session:id(), lfm:file_key() | file_meta:uuid_or_path(),
     file_meta:list_opts()) ->
     {ok, [{fslogic_worker:file_guid(), file_meta:name()}], file_meta:list_extended_info()} | lfm:error_reply().
 get_children(Worker, SessId, FileKey, ListOpts) ->
-    ?EXEC(Worker, lfm:get_children(SessId, uuid_to_guid(Worker, FileKey), ListOpts)).
+    ?EXEC(Worker, lfm:get_children(SessId, uuid_to_file_ref(Worker, FileKey), ListOpts)).
 
 
--spec get_children(node(), session:id(), fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path(),
+-spec get_children(node(), session:id(), lfm:file_key() | file_meta:uuid_or_path(),
     integer(), integer()) ->
     {ok, [{fslogic_worker:file_guid(), file_meta:name()}]} | lfm:error_reply().
 get_children(Worker, SessId, FileKey, Offset, Limit) ->
@@ -502,10 +561,10 @@ get_children(Worker, SessId, FileKey, Offset, Limit) ->
     end.
 
 
--spec get_children_attrs(node(), session:id(), fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path(),
+-spec get_children_attrs(node(), session:id(), lfm:file_key() | file_meta:uuid_or_path(),
     file_meta:list_opts()) -> {ok, [#file_attr{}]} | lfm:error_reply().
 get_children_attrs(Worker, SessId, FileKey, ListOpts) ->
-    ?EXEC(Worker, lfm:get_children_attrs(SessId, uuid_to_guid(Worker, FileKey), ListOpts)).
+    ?EXEC(Worker, lfm:get_children_attrs(SessId, uuid_to_file_ref(Worker, FileKey), ListOpts)).
 
 
 -spec get_child_attr(node(), session:id(), fslogic_worker:file_guid(), file_meta:name()) ->
@@ -514,10 +573,10 @@ get_child_attr(Worker, SessId, ParentGuid, ChildName) ->
     ?EXEC(Worker, lfm:get_child_attr(SessId, ParentGuid, ChildName)).
 
 
--spec get_children_details(node(), session:id(), fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path(),
+-spec get_children_details(node(), session:id(), lfm:file_key() | file_meta:uuid_or_path(),
     file_meta:list_opts()) -> {ok, [lfm_attrs:file_details()], file_meta:list_extended_info()} | lfm:error_reply().
 get_children_details(Worker, SessId, FileKey, ListOpts) ->
-    ?EXEC(Worker, lfm:get_children_details(SessId, uuid_to_guid(Worker, FileKey), ListOpts)).
+    ?EXEC(Worker, lfm:get_children_details(SessId, uuid_to_file_ref(Worker, FileKey), ListOpts)).
 
 
 %%%===================================================================
@@ -525,41 +584,41 @@ get_children_details(Worker, SessId, FileKey, ListOpts) ->
 %%%===================================================================
 
 
--spec get_xattr(node(), session:id(), fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path(), custom_metadata:name()) ->
+-spec get_xattr(node(), session:id(), lfm:file_key() | file_meta:uuid_or_path(), custom_metadata:name()) ->
     {ok, #xattr{}} | lfm:error_reply().
 get_xattr(Worker, SessId, FileKey, XattrKey) ->
     get_xattr(Worker, SessId, FileKey, XattrKey, false).
 
 
--spec get_xattr(node(), session:id(), fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path(), custom_metadata:name(), boolean()) ->
+-spec get_xattr(node(), session:id(), lfm:file_key() | file_meta:uuid_or_path(), custom_metadata:name(), boolean()) ->
     {ok, #xattr{}} | lfm:error_reply().
 get_xattr(Worker, SessId, FileKey, XattrKey, Inherited) ->
-    ?EXEC(Worker, lfm:get_xattr(SessId, uuid_to_guid(Worker, FileKey), XattrKey, Inherited)).
+    ?EXEC(Worker, lfm:get_xattr(SessId, uuid_to_file_ref(Worker, FileKey), XattrKey, Inherited)).
 
 
--spec set_xattr(node(), session:id(), fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path(), #xattr{}) ->
+-spec set_xattr(node(), session:id(), lfm:file_key() | file_meta:uuid_or_path(), #xattr{}) ->
     ok | lfm:error_reply().
 set_xattr(Worker, SessId, FileKey, Xattr) ->
     set_xattr(Worker, SessId, FileKey, Xattr, false, false).
 
 
--spec set_xattr(node(), session:id(), fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path(), #xattr{},
+-spec set_xattr(node(), session:id(), lfm:file_key() | file_meta:uuid_or_path(), #xattr{},
     Create :: boolean(), Replace :: boolean()) ->
     ok | lfm:error_reply().
 set_xattr(Worker, SessId, FileKey, Xattr, Create, Replace) ->
-    ?EXEC(Worker, lfm:set_xattr(SessId, uuid_to_guid(Worker, FileKey), Xattr, Create, Replace)).
+    ?EXEC(Worker, lfm:set_xattr(SessId, uuid_to_file_ref(Worker, FileKey), Xattr, Create, Replace)).
 
 
--spec remove_xattr(node(), session:id(), fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path(), custom_metadata:name()) ->
+-spec remove_xattr(node(), session:id(), lfm:file_key() | file_meta:uuid_or_path(), custom_metadata:name()) ->
     ok | lfm:error_reply().
 remove_xattr(Worker, SessId, FileKey, XattrKey) ->
-    ?EXEC(Worker, lfm:remove_xattr(SessId, uuid_to_guid(Worker, FileKey), XattrKey)).
+    ?EXEC(Worker, lfm:remove_xattr(SessId, uuid_to_file_ref(Worker, FileKey), XattrKey)).
 
 
--spec list_xattr(node(), session:id(), fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path(), boolean(), boolean()) ->
+-spec list_xattr(node(), session:id(), lfm:file_key() | file_meta:uuid_or_path(), boolean(), boolean()) ->
     {ok, [custom_metadata:name()]} | lfm:error_reply().
 list_xattr(Worker, SessId, FileKey, Inherited, ShowInternal) ->
-    ?EXEC(Worker, lfm:list_xattr(SessId, uuid_to_guid(Worker, FileKey), Inherited, ShowInternal)).
+    ?EXEC(Worker, lfm:list_xattr(SessId, uuid_to_file_ref(Worker, FileKey), Inherited, ShowInternal)).
 
 
 %%%===================================================================
@@ -567,22 +626,22 @@ list_xattr(Worker, SessId, FileKey, Inherited, ShowInternal) ->
 %%%===================================================================
 
 
--spec get_acl(node(), session:id(), fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path()) ->
+-spec get_acl(node(), session:id(), lfm:file_key() | file_meta:uuid_or_path()) ->
     {ok, acl:acl()} | lfm:error_reply().
 get_acl(Worker, SessId, FileKey) ->
-    ?EXEC(Worker, lfm:get_acl(SessId, uuid_to_guid(Worker, FileKey))).
+    ?EXEC(Worker, lfm:get_acl(SessId, uuid_to_file_ref(Worker, FileKey))).
 
 
--spec set_acl(node(), session:id(), fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path(), acl:acl()) ->
+-spec set_acl(node(), session:id(), lfm:file_key() | file_meta:uuid_or_path(), acl:acl()) ->
     ok | lfm:error_reply().
 set_acl(Worker, SessId, FileKey, EntityList) ->
-    ?EXEC(Worker, lfm:set_acl(SessId, uuid_to_guid(Worker, FileKey), EntityList)).
+    ?EXEC(Worker, lfm:set_acl(SessId, uuid_to_file_ref(Worker, FileKey), EntityList)).
 
 
--spec remove_acl(node(), session:id(), fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path()) ->
+-spec remove_acl(node(), session:id(), lfm:file_key() | file_meta:uuid_or_path()) ->
     ok | lfm:error_reply().
 remove_acl(Worker, SessId, FileKey) ->
-    ?EXEC(Worker, lfm:remove_acl(SessId, uuid_to_guid(Worker, FileKey))).
+    ?EXEC(Worker, lfm:remove_acl(SessId, uuid_to_file_ref(Worker, FileKey))).
 
 
 %%%===================================================================
@@ -593,38 +652,38 @@ remove_acl(Worker, SessId, FileKey) ->
 -spec get_transfer_encoding(node(), session:id(), lfm:file_key() | file_meta:uuid()) ->
     {ok, custom_metadata:transfer_encoding()} | lfm:error_reply().
 get_transfer_encoding(Worker, SessId, FileKey) ->
-    ?EXEC(Worker, lfm:get_transfer_encoding(SessId, uuid_to_guid(Worker, FileKey))).
+    ?EXEC(Worker, lfm:get_transfer_encoding(SessId, uuid_to_file_ref(Worker, FileKey))).
 
 
 -spec set_transfer_encoding(node(), session:id(), lfm:file_key() | file_meta:uuid(), custom_metadata:transfer_encoding()) ->
     ok | lfm:error_reply().
 set_transfer_encoding(Worker, SessId, FileKey, Encoding) ->
-    ?EXEC(Worker, lfm:set_transfer_encoding(SessId, uuid_to_guid(Worker, FileKey), Encoding)).
+    ?EXEC(Worker, lfm:set_transfer_encoding(SessId, uuid_to_file_ref(Worker, FileKey), Encoding)).
 
 
 -spec get_cdmi_completion_status(node(), session:id(), lfm:file_key() | file_meta:uuid()) ->
     {ok, custom_metadata:cdmi_completion_status()} | lfm:error_reply().
 get_cdmi_completion_status(Worker, SessId, FileKey) ->
-    ?EXEC(Worker, lfm:get_cdmi_completion_status(SessId, uuid_to_guid(Worker, FileKey))).
+    ?EXEC(Worker, lfm:get_cdmi_completion_status(SessId, uuid_to_file_ref(Worker, FileKey))).
 
 
 -spec set_cdmi_completion_status(node(), session:id(),
     lfm:file_key() | file_meta:uuid(), custom_metadata:cdmi_completion_status()) ->
     ok | lfm:error_reply().
 set_cdmi_completion_status(Worker, SessId, FileKey, CompletionStatus) ->
-    ?EXEC(Worker, lfm:set_cdmi_completion_status(SessId, uuid_to_guid(Worker, FileKey), CompletionStatus)).
+    ?EXEC(Worker, lfm:set_cdmi_completion_status(SessId, uuid_to_file_ref(Worker, FileKey), CompletionStatus)).
 
 
 -spec get_mimetype(node(), session:id(), lfm:file_key() | file_meta:uuid()) ->
     {ok, custom_metadata:mimetype()} | lfm:error_reply().
 get_mimetype(Worker, SessId, FileKey) ->
-    ?EXEC(Worker, lfm:get_mimetype(SessId, uuid_to_guid(Worker, FileKey))).
+    ?EXEC(Worker, lfm:get_mimetype(SessId, uuid_to_file_ref(Worker, FileKey))).
 
 
 -spec set_mimetype(node(), session:id(), lfm:file_key() | file_meta:uuid(), custom_metadata:mimetype()) ->
     ok | lfm:error_reply().
 set_mimetype(Worker, SessId, FileKey, Mimetype) ->
-    ?EXEC(Worker, lfm:set_mimetype(SessId, uuid_to_guid(Worker, FileKey), Mimetype)).
+    ?EXEC(Worker, lfm:set_mimetype(SessId, uuid_to_file_ref(Worker, FileKey), Mimetype)).
 
 
 %%%===================================================================
@@ -692,7 +751,9 @@ remove_share(Worker, SessId, FileKey) ->
 -spec schedule_file_replication(node(), session:id(), lfm:file_key(),
     ProviderId :: oneprovider:id()) -> {ok, transfer:id()} | {error, term()}.
 schedule_file_replication(Worker, SessId, FileKey, ProviderId) ->
-    ?EXEC(Worker, lfm:schedule_file_replication(SessId, FileKey, ProviderId, undefined)).
+    ?EXEC(Worker, lfm:schedule_file_transfer(
+        SessId, FileKey, ProviderId, undefined, undefined
+    )).
 
 
 -spec schedule_replication_by_view(
@@ -705,8 +766,9 @@ schedule_file_replication(Worker, SessId, FileKey, ProviderId) ->
 ) ->
     {ok, transfer:id()} | {error, term()}.
 schedule_replication_by_view(Worker, SessId, ProviderId, SpaceId, ViewName, QueryViewParams) ->
-    ?EXEC(Worker, lfm:schedule_replication_by_view(
-        SessId, ProviderId, undefined, SpaceId, ViewName, QueryViewParams
+    ?EXEC(Worker, lfm:schedule_view_transfer(
+        SessId, SpaceId, ViewName, QueryViewParams,
+        ProviderId, undefined, undefined
     )).
 
 
@@ -719,7 +781,9 @@ schedule_replication_by_view(Worker, SessId, ProviderId, SpaceId, ViewName, Quer
 ) ->
     {ok, transfer:id()} | {error, term()}.
 schedule_file_replica_eviction(Worker, SessId, FileKey, ProviderId, MigrationProviderId) ->
-    ?EXEC(Worker, lfm:schedule_replica_eviction(SessId, FileKey, ProviderId, MigrationProviderId)).
+    ?EXEC(Worker, lfm:schedule_file_transfer(
+        SessId, FileKey, MigrationProviderId, ProviderId, undefined
+    )).
 
 
 -spec schedule_replica_eviction_by_view(
@@ -736,9 +800,9 @@ schedule_replica_eviction_by_view(
     Worker, SessId, ProviderId, MigrationProviderId,
     SpaceId, ViewName, QueryViewParams
 ) ->
-    ?EXEC(Worker, lfm:schedule_replica_eviction_by_view(
-        SessId, ProviderId, MigrationProviderId, SpaceId,
-        ViewName, QueryViewParams
+    ?EXEC(Worker, lfm:schedule_view_transfer(
+        SessId, SpaceId, ViewName, QueryViewParams,
+        MigrationProviderId, ProviderId, undefined
     )).
 
 
@@ -790,6 +854,119 @@ check_qos_status(Worker, SessId, QosEntryId, FileKey) ->
 
 
 %%%===================================================================
+%%% Datasets functions
+%%%===================================================================
+
+
+-spec establish_dataset(node(), session:id(), lfm:file_key()) ->
+    {ok, dataset:id()} | lfm:error_reply().
+establish_dataset(Worker, SessId, FileKey) ->
+    establish_dataset(Worker, SessId, FileKey, 0).
+
+
+-spec establish_dataset(node(), session:id(), lfm:file_key(), data_access_control:bitmask()) ->
+    {ok, dataset:id()} | lfm:error_reply().
+establish_dataset(Worker, SessId, FileKey, ProtectionFlags) ->
+    ?EXEC(Worker, lfm:establish_dataset(SessId, FileKey, ProtectionFlags)).
+
+
+-spec remove_dataset(node(), session:id(), dataset:id()) -> ok | lfm:error_reply().
+remove_dataset(Worker, SessId, DatasetId) ->
+    ?EXEC(Worker, lfm:remove_dataset(SessId, DatasetId)).
+
+
+-spec reattach_dataset(node(), session:id(), dataset:id()) -> ok | lfm:error_reply().
+reattach_dataset(Worker, SessId, DatasetId) ->
+    update_dataset(Worker, SessId, DatasetId, ?ATTACHED_DATASET, ?no_flags_mask, ?no_flags_mask).
+
+
+-spec detach_dataset(node(), session:id(), dataset:id()) -> ok | lfm:error_reply().
+detach_dataset(Worker, SessId, DatasetId) ->
+    update_dataset(Worker, SessId, DatasetId, ?DETACHED_DATASET, ?no_flags_mask, ?no_flags_mask).
+
+
+-spec update_dataset(node(), session:id(), dataset:id(), undefined | dataset:state(), data_access_control:bitmask(),
+    data_access_control:bitmask()) -> ok | lfm:error_reply().
+update_dataset(Worker, SessId, DatasetId, NewState, FlagsToSet, FlagsToUnset) ->
+    ?EXEC(Worker, lfm:update_dataset(SessId, DatasetId, NewState, FlagsToSet, FlagsToUnset)).
+
+
+-spec get_dataset_info(node(), session:id(), dataset:id()) -> {ok, lfm_datasets:info()} | lfm:error_reply().
+get_dataset_info(Worker, SessId, DatasetId) ->
+    ?EXEC(Worker, lfm:get_dataset_info(SessId, DatasetId)).
+
+
+-spec get_file_eff_dataset_summary(node(), session:id(), lfm:file_key()) -> {ok, lfm_datasets:file_eff_summary()} | lfm:error_reply().
+get_file_eff_dataset_summary(Worker, SessId, FileKey) ->
+    ?EXEC(Worker, lfm:get_file_eff_dataset_summary(SessId, FileKey)).
+
+
+-spec list_top_datasets(node(), session:id(), od_space:id(), dataset:state(), dataset_api:listing_opts()) ->
+    {ok, dataset_api:entries(), boolean()} | lfm:error_reply().
+list_top_datasets(Worker, SessId, SpaceId, State, Opts) ->
+    list_top_datasets(Worker, SessId, SpaceId, State, Opts, undefined).
+
+-spec list_top_datasets(node(), session:id(), od_space:id(), dataset:state(), dataset_api:listing_opts(),
+    dataset_api:listing_mode() | undefined) ->
+    {ok, dataset_api:entries(), boolean()} | lfm:error_reply().
+list_top_datasets(Worker, SessId, SpaceId, State, Opts, ListingMode) ->
+    ?EXEC(Worker, lfm:list_top_datasets(SessId, SpaceId, State, Opts, ListingMode)).
+
+
+-spec list_children_datasets(node(), session:id(), dataset:id(), dataset_api:listing_opts()) ->
+    {ok, dataset_api:entries(), boolean()} | lfm:error_reply().
+list_children_datasets(Worker, SessId, DatasetId, Opts) ->
+    ?EXEC(Worker, lfm:list_children_datasets(SessId, DatasetId, Opts)).
+
+%%%===================================================================
+%%% Archives functions
+%%%===================================================================
+
+-spec archive_dataset(node(), session:id(), dataset:id(), archive:config(),
+    archive:description()) -> {ok, archive:id()} | lfm:error_reply().
+archive_dataset(Worker, SessId, DatasetId, Config, Description) ->
+    archive_dataset(Worker, SessId, DatasetId, Config, undefined, undefined, Description).
+
+-spec archive_dataset(node(), session:id(), dataset:id(), archive:config(), archive:callback(),
+    archive:callback(), archive:description()) -> {ok, archive:id()} | lfm:error_reply().
+archive_dataset(Worker, SessId, DatasetId, Config, PreservedCallback, PurgedCallback, Description) ->
+    ?EXEC(Worker, lfm:archive_dataset(SessId, DatasetId, Config, PreservedCallback, PurgedCallback, Description)).
+
+
+-spec update_archive(node(), session:id(), archive:id(), archive:diff()) -> ok | lfm:error_reply().
+update_archive(Worker, SessId, ArchiveId, Diff) ->
+    ?EXEC(Worker, lfm:update_archive(SessId, ArchiveId, Diff)).
+
+
+-spec get_archive_info(node(), session:id(), archive:id()) ->
+    {ok, lfm_datasets:archive_info()} | lfm:error_reply().
+get_archive_info(Worker, SessId, ArchiveId) ->
+    ?EXEC(Worker, lfm:get_archive_info(SessId, ArchiveId)).
+
+
+-spec list_archives(node(), session:id(), dataset:id(), dataset_api:listing_opts()) ->
+    {ok, dataset_api:archive_entries(), boolean()} | lfm:error_reply().
+list_archives(Worker, SessId, DatasetId, Opts) ->
+    list_archives(Worker, SessId, DatasetId, Opts, undefined).
+
+
+-spec list_archives(node(), session:id(), dataset:id(), dataset_api:listing_opts(),
+    dataset_api:listing_mode() | undefined) ->
+    {ok, dataset_api:archive_entries(), boolean()} | lfm:error_reply().
+list_archives(Worker, SessId, DatasetId, Opts, ListingMode) ->
+    ?EXEC(Worker, lfm:list_archives(SessId, DatasetId, Opts, ListingMode)).
+
+
+-spec init_archive_purge(node(), session:id(), archive:id()) -> ok | lfm:error_reply().
+init_archive_purge(Worker, SessId, ArchiveId) ->
+    init_archive_purge(Worker, SessId, ArchiveId, undefined).
+
+-spec init_archive_purge(node(), session:id(), archive:id(), archive:callback()) ->
+    ok | lfm:error_reply().
+init_archive_purge(Worker, SessId, ArchiveId, Callback) ->
+    ?EXEC(Worker, lfm:init_archive_purge(SessId, ArchiveId, Callback)).
+
+%%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
@@ -816,9 +993,9 @@ exec(Worker, Fun, Timeout) ->
     end.
 
 
-uuid_to_guid(W, {uuid, Uuid}) ->
-    {guid, uuid_to_guid(W, Uuid)};
-uuid_to_guid(W, Uuid) when is_binary(Uuid) ->
+uuid_to_file_ref(W, {uuid, Uuid}) ->
+    ?FILE_REF(uuid_to_file_ref(W, Uuid));
+uuid_to_file_ref(W, Uuid) when is_binary(Uuid) ->
     rpc:call(W, fslogic_uuid, uuid_to_guid, [Uuid]);
-uuid_to_guid(_, Other) ->
+uuid_to_file_ref(_, Other) ->
     Other.

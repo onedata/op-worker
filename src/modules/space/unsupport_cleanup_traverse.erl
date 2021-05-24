@@ -45,7 +45,7 @@
 -export_type([task_id/0]).
 
 -define(POOL_NAME, atom_to_binary(?MODULE, utf8)).
--define(TRAVERSE_BATCH_SIZE, application:get_env(?APP_NAME, unsupport_cleanup_traverse_batch_size, 40)).
+-define(TRAVERSE_BATCH_SIZE, op_worker:get_env(unsupport_cleanup_traverse_batch_size, 40)).
 
 
 %%%===================================================================
@@ -75,9 +75,9 @@ start(SpaceId, StorageId) ->
 
 -spec init_pool() -> ok  | no_return().
 init_pool() ->
-    MasterJobsLimit = application:get_env(?APP_NAME, unsupport_cleanup_traverse_master_jobs_limit, 10),
-    SlaveJobsLimit = application:get_env(?APP_NAME, unsupport_cleanup_traverse_slave_jobs_limit, 20),
-    ParallelismLimit = application:get_env(?APP_NAME, unsupport_cleanup_traverse_parallelism_limit, 20),
+    MasterJobsLimit = op_worker:get_env(unsupport_cleanup_traverse_master_jobs_limit, 10),
+    SlaveJobsLimit = op_worker:get_env(unsupport_cleanup_traverse_slave_jobs_limit, 20),
+    ParallelismLimit = op_worker:get_env(unsupport_cleanup_traverse_parallelism_limit, 20),
     
     tree_traverse:init(?MODULE, MasterJobsLimit, SlaveJobsLimit, ParallelismLimit).
 
@@ -157,7 +157,7 @@ gen_id(SpaceId, StorageId) ->
 -spec cleanup_dir(task_id(), file_ctx:ctx(), boolean()) -> ok.
 cleanup_dir(TaskId, FileCtx, RemoveStorageFiles) ->
     fslogic_delete:cleanup_file(FileCtx, RemoveStorageFiles),
-    tree_traverse:delete_subtree_status_doc(TaskId, file_ctx:get_uuid_const(FileCtx)),
+    tree_traverse:delete_subtree_status_doc(TaskId, file_ctx:get_logical_uuid_const(FileCtx)),
     case file_ctx:is_space_dir_const(FileCtx) of
         true -> ok;
         false -> file_processed(TaskId, FileCtx, RemoveStorageFiles)
@@ -168,8 +168,8 @@ cleanup_dir(TaskId, FileCtx, RemoveStorageFiles) ->
 -spec file_processed(task_id(), file_ctx:ctx(), boolean()) -> ok.
 file_processed(TaskId, FileCtx, RemoveStorageFiles) ->
     UserCtx = user_ctx:new(?ROOT_SESS_ID),
-    {ParentFileCtx, _FileCtx} = file_ctx:get_parent(FileCtx, UserCtx),
-    ParentUuid = file_ctx:get_uuid_const(ParentFileCtx),
+    {ParentFileCtx, _FileCtx} = files_tree:get_parent(FileCtx, UserCtx),
+    ParentUuid = file_ctx:get_logical_uuid_const(ParentFileCtx),
     ParentStatus = tree_traverse:report_child_processed(TaskId, ParentUuid),
     maybe_cleanup_dir(ParentStatus, TaskId, ParentFileCtx, RemoveStorageFiles).
 

@@ -27,13 +27,13 @@
 % requested blocks will be enlarged to overlap with full storage system blocks to
 % optimize data writing to storage system. Blocks are enlarged only if source provider
 % posses data needed to enlarge block.
--define(BLOCK_SUITING_OPT, application:get_env(?APP_NAME, synchronizer_block_suiting, true)).
+-define(BLOCK_SUITING_OPT, op_worker:get_env(synchronizer_block_suiting, true)).
 % Define minimal size of block that can be enlarged.
 % This option can be used to prevent system from enlarging small blocks because such
 % behaviour can result in significantly increased consumption of network bandwidth.
 % By default the system tries to suite all requested blocks to storage block size
 % (all blocks of size greater than 0).
--define(BLOCK_SUITING_MIN_SIZE, application:get_env(?APP_NAME, synchronizer_block_suiting_min_size, 0)).
+-define(BLOCK_SUITING_MIN_SIZE, op_worker:get_env(synchronizer_block_suiting_min_size, 0)).
 
 %%%===================================================================
 %%% API
@@ -259,7 +259,7 @@ get_duplicated_blocks_per_provider(LocalBlocksList, LocalVV, RemoteLocations) ->
     storage_details()}], requests_list()) -> requests_list().
 consolidate_requested_blocks(PresentBlocks, RemoteList) ->
     Zipped = lists:zip(PresentBlocks, RemoteList),
-    MinSize = application:get_env(?APP_NAME, rtransfer_min_hole_size, 0),
+    MinSize = op_worker:get_env(rtransfer_min_hole_size, 0),
     case MinSize =< 1 of
         true ->
             PresentBlocks;
