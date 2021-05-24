@@ -45,28 +45,29 @@
 %
 % The below ASCII visual shows possible relations in entities graph.
 %
-%           provider
-%              ^
-%              |
-%           storage                              share
-%              ^                                   ^
-%              |                                   |
-%            space            handle_service<----handle
-%           ^ ^ ^ ^             ^         ^       ^  ^
-%          /  | |  \           /          |      /   |
-%         /   | |   \         /           |     /    |
-%        /   /   \   \       /            |    /     |
-%       /   /     \   \     /             |   /      |
-% share user harvester group             user      group
-%              ^    ^     ^                          ^
-%             /      \    |                          |
-%            /        \   |                          |
-%          user        group                        user
-%                      ^   ^
-%                     /     \
-%                    /       \
-%                  user      user
-%
+%           provider----------------------------->cluster
+%              ^                                    ^  ^
+%              |                                    |  |
+%           storage                       share     |  |
+%              ^                            ^       |  |
+%              |                            |       |  |
+%            space     handle_service<----handle    |  |
+%           ^ ^ ^ ^          ^     ^       ^  ^     |  |
+%          /  | |  \         |     |      /   |     |  |
+%         /   | |   \        |     |     /    |    /   |
+%        /   /   \   \       /      \   /     |   /    |    atm_inventory
+%       /   /     \   \     /       user      |  /     /     ^  ^  ^  ^
+% share user harvester group                group     /     /   |  |  |
+%              ^    ^     ^                   ^      /  group   |  |  |
+%             /      \    |                   |     /     ^     |  |  |
+%            /        \   |                   |    /     /     /   |  |
+%          user        group                 user-'-----------'   /    \
+%                      ^   ^                                     /      \
+%                     /     \                      atm_workflow_schema   \
+%                    /       \                                ^           \
+%                  user      user                              \           \
+%                                                               '-- atm_lambda
+
 
 -record(od_user, {
     full_name :: undefined | binary(),
@@ -87,6 +88,7 @@
     eff_spaces = [] :: [od_space:id()],
     eff_handle_services = [] :: [od_handle_service:id()],
     eff_handles = [] :: [od_handle:id()],
+    eff_atm_inventories = [] :: [od_atm_inventory:id()],
 
     cache_state = #{} :: cache_state()
 }).
@@ -217,6 +219,40 @@
 
 -record(temporary_token_secret, {
     generation :: temporary_token_secret:generation(),
+
+    cache_state = #{} :: cache_state()
+}).
+
+-record(od_atm_inventory, {
+    name :: automation:name(),
+    
+    cache_state = #{} :: cache_state()
+}).
+
+-record(od_atm_lambda, {
+    name :: automation:name(),
+    summary :: automation:summary(),
+    description :: automation:description(),
+    
+    operation_spec :: atm_lambda_operation_spec:record(),
+    argument_specs = [] :: [atm_lambda_argument_spec:record()],
+    result_specs = [] :: [atm_lambda_result_spec:record()],
+    
+    atm_inventories = [] :: [od_atm_inventory:id()],
+    
+    cache_state = #{} :: cache_state()
+}).
+
+-record(od_atm_workflow_schema, {
+    name :: automation:name(),
+    description :: automation:description(),
+
+    stores = [] :: [atm_store_schema:record()],
+    lanes = [] :: [atm_lane_schema:record()],
+
+    state :: automation:workflow_schema_state(),
+
+    atm_inventory :: undefined | od_atm_inventory:id(),
 
     cache_state = #{} :: cache_state()
 }).
@@ -396,17 +432,25 @@
 % One documents is stored for one archive.
 -record(archive, {
     dataset_id :: dataset:id(),
-    % TODO VFS-7601 set guid of directory in which archive is stored
-    % TODO VFS-7601 consider generating uuid basing ArchiveId
-    root_dir :: undefined | file_id:file_guid(),
-    creation_timestamp :: time:seconds(),
+    creation_time :: time:seconds(),
     creator :: archive:creator(),
-    type :: archive:type(),
     state :: archive:state(),
-    character :: archive:character(),
-    data_structure :: archive:data_structure(),
-    metadata_structure :: archive:metadata_structure(),
-    description :: binary()
+    config :: archive:config(),
+    preserved_callback :: archive:callback(),
+    purged_callback :: archive:callback(),
+    description :: archive:description(),
+    % following counters are set after archivisation job is finished,
+    % so that there is no need to fetch traverse_task document (identified by job_id)
+    % to get their values
+    files_to_archive = 0 :: non_neg_integer(),
+    files_archived = 0 :: non_neg_integer(),
+    files_failed = 0 :: non_neg_integer(),
+    byte_size = 0 :: non_neg_integer(),
+
+    % internal fields
+    % this field is used to fetch traverse_task document to get counters' values
+    % when archivisation job is still in progress
+    job_id ::archivisation_traverse:id()
 }).
 
 

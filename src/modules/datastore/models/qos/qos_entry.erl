@@ -109,7 +109,7 @@
 -define(TRANSFERS_KEY(QosEntryId), <<"transfer_qos_key_", QosEntryId/binary>>).
 -define(FAILED_FILES_KEY(SpaceId), <<"failed_files_qos_key_", SpaceId/binary>>).
 
--define(FOLD_LINKS_BATCH_SIZE, application:get_env(?APP_NAME, qos_fold_links_batch_size, 100)).
+-define(FOLD_LINKS_BATCH_SIZE, op_worker:get_env(qos_fold_links_batch_size, 100)).
 
 %%%===================================================================
 %%% Functions operating on document using datastore_model API

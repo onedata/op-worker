@@ -17,6 +17,7 @@
 %% API
 -export([run_and_normalize_error/2]).
 -export([extract_ok/1, extract_key/1, ok_if_not_found/1, ok_if_exists/1]).
+-export([get_field/3]).
 
 %%%===================================================================
 %%% API
@@ -80,6 +81,17 @@ ok_if_not_found(Result) -> Result.
 -spec ok_if_exists(T) -> ok | T.
 ok_if_exists(?ERROR_ALREADY_EXISTS) -> ok;
 ok_if_exists(Result) -> Result.
+
+
+-spec get_field(datastore:key(), datastore_model:model(),
+    fun((datastore:doc()) -> {ok, FieldValue :: term()})) ->
+    {ok, FieldValue :: term()} | {error, term()}.
+get_field(Key, Model, GetterFun) ->
+    case Model:get(Key) of
+        {ok, Doc} -> GetterFun(Doc);
+        {error, _} = Error -> Error
+    end.
+
 
 %%%===================================================================
 %%% Internal functions

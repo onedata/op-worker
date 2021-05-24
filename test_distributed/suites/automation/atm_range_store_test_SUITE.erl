@@ -77,7 +77,7 @@ all() -> [
     description = <<"description">>,
     is_input_store = true,
     store_type = range,
-    data_spec = #atm_data_spec{type = atm_integer_type}
+    data_spec = #atm_data_spec2{type = atm_integer_type}
 }).
 
 -type item() :: integer().

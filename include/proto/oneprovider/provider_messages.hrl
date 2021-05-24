@@ -192,13 +192,16 @@
 
 -record(archive_dataset, {
     id :: dataset:id(),
-    params :: archive:params(),
-    attrs :: archive:attrs()
+    config :: archive:config(),
+    preserved_callback :: archive:callback(),
+    purged_callback :: archive:callback(),
+    description :: archive:description()
 }).
 
 -record(update_archive, {
     id :: archive:id(),
-    attrs :: archive:attrs()
+    description :: archive:description() | undefined,
+    diff :: archive:diff()
 }).
 
 -record(get_archive_info, {
@@ -211,8 +214,9 @@
     mode = ?BASIC_INFO :: dataset_api:listing_mode()
 }).
 
--record(remove_archive, {
-    id :: archive:id()
+-record(init_archive_purge, {
+    id :: archive:id(),
+    callback :: archive:callback()
 }).
 
 
@@ -229,7 +233,7 @@
     #add_qos_entry{} | #get_effective_file_qos{} | #get_qos_entry{} | #remove_qos_entry{} | #check_qos_status{} |
     #establish_dataset{} | #update_dataset{} | #remove_dataset{} |
     #get_dataset_info{} | #get_file_eff_dataset_summary{} | #list_top_datasets{} | #list_children_datasets{} |
-    #archive_dataset{} | #update_archive{} | #get_archive_info{} | #list_archives{} | #remove_archive{}.
+    #archive_dataset{} | #update_archive{} | #get_archive_info{} | #list_archives{} | #init_archive_purge{}.
 
 -record(transfer_encoding, {
     value :: binary()
@@ -296,7 +300,7 @@
     protection_flags = ?no_flags_mask :: data_access_control:bitmask(),
     eff_protection_flags = ?no_flags_mask :: data_access_control:bitmask(),
     parent :: undefined | dataset:id(),
-    archives_count = 0 :: non_neg_integer(), % TODO VFS-7548 add to rest/gui translators and swagger
+    archive_count = 0 :: non_neg_integer(),
     index :: dataset_api:index()
 }).
 
@@ -318,14 +322,18 @@
 -record(archive_info, {
     id :: archive:id(),
     dataset_id :: dataset:id(),
-    root_dir :: undefined | file_id:file_guid(),
-    creation_timestamp :: time:millis(),
-    type :: archive:type(),
-    character :: archive:character(),
-    data_structure :: archive:data_structure(),
-    metadata_structure :: archive:metadata_structure(),
+    state :: archive:state(),
+    root_dir_guid :: undefined | file_id:file_guid(),
+    creation_time :: time:millis(),
+    config :: archive:config(),
+    preserved_callback :: archive:callback(),
+    purged_callback :: archive:callback(),
+    description :: archive:description(),
     index :: dataset_api:archive_index(),
-    description :: archive:description()
+    files_to_archive = 0 :: non_neg_integer(),
+    files_archived = 0 :: non_neg_integer(),
+    files_failed = 0 :: non_neg_integer(),
+    byte_size = 0 :: non_neg_integer()
 }).
 
 -record(archives, {

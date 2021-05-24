@@ -37,8 +37,8 @@
 
 -spec init_group() -> ok.
 init_group() ->
-    CheckFrequency = application:get_env(?APP_NAME, canonical_paths_cache_frequency, 30000),
-    Size = application:get_env(?APP_NAME, canonical_paths_cache_size, 20000),
+    CheckFrequency = op_worker:get_env(canonical_paths_cache_frequency, 30000),
+    Size = op_worker:get_env(canonical_paths_cache_size, 20000),
     ok = effective_value:init_group(?PATH_CACHE_GROUP, #{
         check_frequency => CheckFrequency,
         size => Size,

@@ -82,6 +82,8 @@ spaces:
         size: '1000000000'
   - name: space_krk_par_p
     user: *user1
+    users:
+      - user: *user2
     supports:
       - provider: "oneprovider-1"
         storage_name: "posix"

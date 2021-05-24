@@ -193,8 +193,8 @@
 -define(MAX_BACKOFF_INTERVAL, application:get_env(
     ?APP_NAME, harvesting_stream_max_backoff_interval, timer:minutes(5))).
 
--define(BATCH_SIZE, application:get_env(?APP_NAME, harvesting_batch_size, 1000)).
--define(FLUSH_TIMEOUT_SECONDS, application:get_env(?APP_NAME, harvesting_flush_timeout_seconds, 10)).
+-define(BATCH_SIZE, op_worker:get_env(harvesting_batch_size, 1000)).
+-define(FLUSH_TIMEOUT_SECONDS, op_worker:get_env(harvesting_flush_timeout_seconds, 10)).
 -define(FLUSH_TIMEOUT, timer:seconds(?FLUSH_TIMEOUT_SECONDS)).
 
 -define(EXEC_AND_HANDLE_HARVESTING_DOC_NOT_FOUND(Fun),

@@ -32,7 +32,7 @@
 
 -record(atm_stream, {
     mode :: atm_stream_mode(),
-    data_spec :: atm_data_spec:record(),
+    data_spec :: atm_data_spec2:record(),
     container_stream :: atm_container_stream:stream()
 }).
 -type stream() :: #atm_stream{}.
@@ -102,7 +102,7 @@ to_json(#atm_stream{
 }) ->
     #{
         <<"mode">> => mode_to_json(Mode),
-        <<"dataSpec">> => atm_data_spec:to_json(AtmDataSpec),
+        <<"dataSpec">> => atm_data_spec2:to_json(AtmDataSpec),
         <<"containerStream">> => atm_container_stream:to_json(AtmContainerStream)
     }.
 
@@ -115,7 +115,7 @@ from_json(#{
 }) ->
     #atm_stream{
         mode = mode_from_json(ModeJson),
-        data_spec = atm_data_spec:from_json(AtmDataSpecJson),
+        data_spec = atm_data_spec2:from_json(AtmDataSpecJson),
         container_stream = atm_container_stream:from_json(AtmContainerStreamJson)
     }.
 

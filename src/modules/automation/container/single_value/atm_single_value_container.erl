@@ -29,7 +29,7 @@
 -type init_args() :: undefined | json_utils:json_term().
 
 -record(atm_single_value_container, {
-    data_spec :: atm_data_spec:record(),
+    data_spec :: atm_data_spec2:record(),
     value :: undefined | json_utils:json_term()
 }).
 -type container() :: #atm_single_value_container{}.
@@ -42,7 +42,7 @@
 %%%===================================================================
 
 
--spec init(atm_data_spec:record(), init_args()) -> container() | no_return().
+-spec init(atm_data_spec2:record(), init_args()) -> container() | no_return().
 init(AtmDataSpec, InitArgs) ->
     InitArgs == undefined orelse atm_data_validator:assert_instance(InitArgs, AtmDataSpec),
 
@@ -52,7 +52,7 @@ init(AtmDataSpec, InitArgs) ->
     }.
 
 
--spec get_data_spec(container()) -> atm_data_spec:record().
+-spec get_data_spec(container()) -> atm_data_spec2:record().
 get_data_spec(#atm_single_value_container{data_spec = AtmDataSpec}) ->
     AtmDataSpec.
 
@@ -64,10 +64,10 @@ get_container_stream(#atm_single_value_container{value = Value}) ->
 
 -spec to_json(container()) -> json_utils:json_map().
 to_json(#atm_single_value_container{data_spec = AtmDataSpec, value = undefined}) ->
-    #{<<"dataSpec">> => atm_data_spec:to_json(AtmDataSpec)};
+    #{<<"dataSpec">> => atm_data_spec2:to_json(AtmDataSpec)};
 to_json(#atm_single_value_container{data_spec = AtmDataSpec, value = Value}) ->
     #{
-        <<"dataSpec">> => atm_data_spec:to_json(AtmDataSpec),
+        <<"dataSpec">> => atm_data_spec2:to_json(AtmDataSpec),
         <<"value">> => Value
     }.
 
@@ -75,6 +75,6 @@ to_json(#atm_single_value_container{data_spec = AtmDataSpec, value = Value}) ->
 -spec from_json(json_utils:json_map()) -> container().
 from_json(#{<<"dataSpec">> := AtmDataSpecJson} = AtmSingleValueContainerJson) ->
     #atm_single_value_container{
-        data_spec = atm_data_spec:from_json(AtmDataSpecJson),
+        data_spec = atm_data_spec2:from_json(AtmDataSpecJson),
         value = maps:get(<<"value">>, AtmSingleValueContainerJson, undefined)
     }.

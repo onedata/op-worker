@@ -60,9 +60,9 @@
 
 -spec init_pools() -> ok.
 init_pools() ->
-    MasterJobsLimit = application:get_env(?APP_NAME, space_unsupport_master_jobs_limit, 1),
-    SlaveJobsLimit = application:get_env(?APP_NAME, space_unsupport_slave_jobs_limit, 5),
-    ParallelismLimit = application:get_env(?APP_NAME, space_unsupport_parallelism_limit, 5),
+    MasterJobsLimit = op_worker:get_env(space_unsupport_master_jobs_limit, 1),
+    SlaveJobsLimit = op_worker:get_env(space_unsupport_slave_jobs_limit, 5),
+    ParallelismLimit = op_worker:get_env(space_unsupport_parallelism_limit, 5),
     traverse:init_pool(?POOL_NAME, MasterJobsLimit, SlaveJobsLimit, ParallelismLimit),
     unsupport_cleanup_traverse:init_pool().
 

@@ -14,6 +14,7 @@
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% API
 -export([change_replicated/2]).
@@ -100,10 +101,14 @@ change_replicated_internal(_SpaceId, Index = #document{
     view_changes:handle(Index);
 change_replicated_internal(_SpaceId, #document{value = #traverse_task{}} = Task) ->
     traverse:on_task_change(Task, oneprovider:get_id_or_undefined());
-change_replicated_internal(_SpaceId, #document{key = JobID, value = #tree_traverse_job{}} = Doc) ->
-    % TODO VFS-6391 fix race with file_meta
-    {ok, Job, PoolName, TaskID} = tree_traverse:get_job(Doc),
-    traverse:on_job_change(Job, JobID, PoolName, TaskID, oneprovider:get_id_or_undefined());
+change_replicated_internal(_SpaceId, #document{key = JobId, value = #tree_traverse_job{}} = Doc) ->
+    case tree_traverse:get_job(Doc) of
+        {ok, Job, PoolName, TaskId} ->
+            traverse:on_job_change(Job, JobId, PoolName, TaskId, oneprovider:get_id_or_undefined());
+        ?ERROR_NOT_FOUND ->
+            % TODO VFS-6391 fix race with file_meta 
+            ok
+    end;
 change_replicated_internal(SpaceId, QosEntry = #document{
     key = QosEntryId,
     value = #qos_entry{}

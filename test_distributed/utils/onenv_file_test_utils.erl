@@ -195,13 +195,18 @@ create_file_tree(UserId, ParentGuid, CreationProvider, #file_spec{
 create_file_tree(UserId, ParentGuid, CreationProvider, #symlink_spec{
     name = NameOrUndefined,
     shares = ShareSpecs,
-    symlink_value = SymlinkValue
+    symlink_value = SymlinkValue,
+    dataset = DatasetSpec
 }) ->
     FileName = utils:ensure_defined(NameOrUndefined, str_utils:rand_hex(20)),
     UserSessId = oct_background:get_user_session_id(UserId, CreationProvider),
     CreationNode = lists_utils:random_element(oct_background:get_provider_nodes(CreationProvider)),
 
     {ok, #file_attr{guid = SymlinkGuid}} = create_symlink(CreationNode, UserSessId, ParentGuid, FileName, SymlinkValue),
+
+    DatasetObj = onenv_dataset_test_utils:set_up_dataset(
+        CreationProvider, UserId, SymlinkGuid, DatasetSpec
+    ),
 
     #object{
         guid = SymlinkGuid,
@@ -210,6 +215,7 @@ create_file_tree(UserId, ParentGuid, CreationProvider, #symlink_spec{
         shares = create_shares(CreationProvider, UserSessId, SymlinkGuid, ShareSpecs),
         children = undefined,
         content = undefined,
+        dataset = DatasetObj,
         mode = ?DEFAULT_SYMLINK_PERMS,
         symlink_value = SymlinkValue
     };
@@ -272,9 +278,13 @@ await_sync(CreationProvider, SyncProviders, UserId, #object{
     onenv_dataset_test_utils:await_dataset_sync(CreationProvider, SyncProviders, UserId, DatasetObj),
     await_file_distribution_sync(CreationProvider, SyncProviders, UserId, Object);
 
-await_sync(_CreationProvider, SyncProviders, UserId, #object{type = ?SYMLINK_TYPE} = Object) ->
+await_sync(CreationProvider, SyncProviders, UserId, #object{
+    type = ?SYMLINK_TYPE,
+    dataset = DatasetObj
+} = Object) ->
     % file_attr construction uses file_meta document, so this checks symlink value synchronization
-    await_file_attr_sync(SyncProviders, UserId, Object);
+    await_file_attr_sync(SyncProviders, UserId, Object),
+    onenv_dataset_test_utils:await_dataset_sync(CreationProvider, SyncProviders, UserId, DatasetObj);
 
 await_sync(CreationProvider, SyncProviders, UserId, #object{
     guid = DirGuid,

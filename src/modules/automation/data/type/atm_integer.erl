@@ -24,7 +24,7 @@
 %%%===================================================================
 
 
--spec is_instance(term(), atm_data_type:value_constraints()) -> boolean().
+-spec is_instance(term(), atm_data_type2:value_constraints()) -> boolean().
 is_instance(Value, _ValueConstraints) when is_integer(Value) ->
     true;
 is_instance(_Value, _ValueConstraints) ->

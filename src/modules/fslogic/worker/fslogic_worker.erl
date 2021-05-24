@@ -69,17 +69,17 @@
 -define(INIT_DATASETS_CACHE(Space), {init_datasets_cache, Space}).
 
 -define(SHOULD_PERFORM_PERIODICAL_SPACES_AUTOCLEANING_CHECK,
-    application:get_env(?APP_NAME, autocleaning_periodical_spaces_check_enabled, true)).
+    op_worker:get_env(autocleaning_periodical_spaces_check_enabled, true)).
 
 % delays and intervals
 -define(INVALIDATE_PERMISSIONS_CACHE_INTERVAL,
-    application:get_env(?APP_NAME, invalidate_permissions_cache_interval, timer:seconds(30))).
+    op_worker:get_env(invalidate_permissions_cache_interval, timer:seconds(30))).
 -define(AUTOCLEANING_PERIODICAL_SPACES_CHECK_INTERVAL,
-    application:get_env(?APP_NAME, autocleaning_periodical_spaces_check_interval, timer:minutes(1))).
+    op_worker:get_env(autocleaning_periodical_spaces_check_interval, timer:minutes(1))).
 -define(RERUN_TRANSFERS_DELAY,
-    application:get_env(?APP_NAME, rerun_transfers_delay, 10000)).
+    op_worker:get_env(rerun_transfers_delay, 10000)).
 -define(RESTART_AUTOCLEANING_RUNS_DELAY,
-    application:get_env(?APP_NAME, restart_autocleaning_runs_delay, 10000)).
+    op_worker:get_env(restart_autocleaning_runs_delay, 10000)).
 
 % exometer macros
 -define(EXOMETER_NAME(Param), ?exometer_name(?MODULE, count, Param)).
@@ -94,10 +94,10 @@
 -define(EXOMETER_DEFAULT_DATA_POINTS_NUMBER, 10000).
 
 % This macro is used to disable automatic rerun of transfers in tests
--define(SHOULD_RERUN_TRANSFERS, application:get_env(?APP_NAME, rerun_transfers, true)).
+-define(SHOULD_RERUN_TRANSFERS, op_worker:get_env(rerun_transfers, true)).
 
 % This macro is used to disable automatic restart of autocleaning runs in tests
--define(SHOULD_RESTART_AUTOCLEANING_RUNS, application:get_env(?APP_NAME, autocleaning_restart_runs, true)).
+-define(SHOULD_RESTART_AUTOCLEANING_RUNS, op_worker:get_env(autocleaning_restart_runs, true)).
 
 -define(OPERATIONS_AVAILABLE_IN_SHARE_MODE, [
     % Checking perms for operations other than 'read' should result in immediate ?EACCES
@@ -200,8 +200,9 @@ init(_Args) ->
     file_registration:init_pool(),
     autocleaning_view_traverse:init_pool(),
     tree_deletion_traverse:init_pool(),
-    tarball_download_traverse:init_pool(),
+    bulk_download_traverse:init_pool(),
     clproto_serializer:load_msg_defs(),
+    archivisation_traverse:init_pool(),
 
     schedule_invalidate_permissions_cache(),
     schedule_rerun_transfers(),
@@ -301,8 +302,9 @@ cleanup() ->
     file_registration:stop_pool(),
     replica_deletion_master:stop_workers_pool(),
     tree_deletion_traverse:stop_pool(),
-    tarball_download_traverse:stop_pool(),
+    bulk_download_traverse:stop_pool(),
     replica_synchronizer:terminate_all(),
+    archivisation_traverse:stop_pool(),
     ok.
 
 %%%===================================================================
@@ -780,16 +782,22 @@ handle_provider_request(UserCtx, #list_top_datasets{state = State, opts = Opts, 
     dataset_req:list_top_datasets(file_ctx:get_space_id_const(SpaceDirCtx), State, Opts, ListingMode, UserCtx);
 handle_provider_request(UserCtx, #list_children_datasets{id = DatasetId, opts = Opts, mode = ListingMode}, SpaceDirCtx) ->
     dataset_req:list_children_datasets(SpaceDirCtx, DatasetId, Opts, ListingMode, UserCtx);
-handle_provider_request(UserCtx, #archive_dataset{id = DatasetId, params = Params, attrs = Attrs}, SpaceDirCtx) ->
-    dataset_req:archive(SpaceDirCtx, DatasetId, Params, Attrs, UserCtx);
-handle_provider_request(UserCtx, #update_archive{id = ArchiveId, attrs = Params}, SpaceDirCtx) ->
-    dataset_req:update_archive(SpaceDirCtx, ArchiveId, Params, UserCtx);
+handle_provider_request(UserCtx, #archive_dataset{
+    id = DatasetId,
+    config = Config,
+    preserved_callback = PreservedCallback,
+    purged_callback = PurgedCallback,
+    description = Description
+}, SpaceDirCtx) ->
+    dataset_req:archive(SpaceDirCtx, DatasetId, Config, PreservedCallback, PurgedCallback, Description, UserCtx);
+handle_provider_request(UserCtx, #update_archive{id = ArchiveId, diff = Diff}, SpaceDirCtx) ->
+    dataset_req:update_archive(SpaceDirCtx, ArchiveId, Diff, UserCtx);
 handle_provider_request(UserCtx, #get_archive_info{id = ArchiveId}, SpaceDirCtx) ->
     dataset_req:get_archive_info(SpaceDirCtx, ArchiveId, UserCtx);
 handle_provider_request(UserCtx, #list_archives{dataset_id = DatasetId, opts = Opts, mode = ListingMode}, SpaceDirCtx) ->
     dataset_req:list_archives(SpaceDirCtx, DatasetId, Opts, ListingMode, UserCtx);
-handle_provider_request(UserCtx, #remove_archive{id = DatasetId}, SpaceDirCtx) ->
-    dataset_req:remove_archive(SpaceDirCtx, DatasetId, UserCtx).
+handle_provider_request(UserCtx, #init_archive_purge{id = ArchiveId, callback = CallbackUrl}, SpaceDirCtx) ->
+    dataset_req:init_archive_purge(SpaceDirCtx, ArchiveId, CallbackUrl, UserCtx).
 
 
 %%--------------------------------------------------------------------

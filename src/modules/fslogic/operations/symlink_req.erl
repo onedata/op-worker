@@ -12,6 +12,7 @@
 -module(symlink_req).
 -author("Bartosz Walkowicz").
 
+-include("modules/fslogic/fslogic_common.hrl").
 -include("modules/fslogic/data_access_control.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 
@@ -26,9 +27,6 @@
 }).
 -type ctx() :: #resolution_ctx{}.
 
-
--define(SPACE_ID_PREFIX, "<__onedata_space_id:").
--define(SPACE_ID_SUFFIX, ">").
 
 -define(SYMLINK_HOPS_LIMIT, 40).
 
@@ -103,7 +101,7 @@ resolve_symlink(SymlinkFileCtx, #resolution_ctx{
         [<<?DIRECTORY_SEPARATOR>> | _] ->
             % absolute path with no space id prefix - not supported
             throw(?ENOENT);
-        [<<?SPACE_ID_PREFIX, SpaceId:SpaceIdSize/binary, ?SPACE_ID_SUFFIX>> | RestTokens] ->
+        [<<?SYMLINK_SPACE_ID_PREFIX, SpaceId:SpaceIdSize/binary, ?SYMLINK_SPACE_ID_SUFFIX>> | RestTokens] ->
             % absolute path with space id prefix (start at space dir).
             % Share Id is added to starting space guid so that it will be passed on
             % during file tree navigation. Checks if the file pointed to by the symlink

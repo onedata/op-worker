@@ -39,7 +39,7 @@
 -export_type([id/0]).
 
 -define(POOL_NAME, atom_to_binary(?MODULE, utf8)).
--define(TRAVERSE_BATCH_SIZE, application:get_env(?APP_NAME, qos_traverse_batch_size, 40)).
+-define(TRAVERSE_BATCH_SIZE, op_worker:get_env(qos_traverse_batch_size, 40)).
 
 %%%===================================================================
 %%% API
@@ -112,9 +112,9 @@ report_entry_deleted(#document{key = QosEntryId} = QosEntryDoc) ->
 -spec init_pool() -> ok  | no_return().
 init_pool() ->
     % Get pool limits from app.config
-    MasterJobsLimit = application:get_env(?APP_NAME, qos_traverse_master_jobs_limit, 10),
-    SlaveJobsLimit = application:get_env(?APP_NAME, qos_traverse_slave_jobs_limit, 20),
-    ParallelismLimit = application:get_env(?APP_NAME, qos_traverse_parallelism_limit, 20),
+    MasterJobsLimit = op_worker:get_env(qos_traverse_master_jobs_limit, 10),
+    SlaveJobsLimit = op_worker:get_env(qos_traverse_slave_jobs_limit, 20),
+    ParallelismLimit = op_worker:get_env(qos_traverse_parallelism_limit, 20),
 
     tree_traverse:init(?MODULE, MasterJobsLimit, SlaveJobsLimit, ParallelismLimit).
 
@@ -261,8 +261,13 @@ synchronize_file_for_entries(TaskId, UserCtx, FileCtx, QosEntries) ->
         true -> 
             ok;
         false ->
-            replica_synchronizer:synchronize(UserCtx, FileCtx2, FileBlock, 
-                false, TransferId, ?QOS_SYNCHRONIZATION_PRIORITY)
+            Res = replica_synchronizer:synchronize(UserCtx, FileCtx2, FileBlock, 
+                false, TransferId, ?QOS_SYNCHRONIZATION_PRIORITY),
+            case file_popularity:increment_open(FileCtx) of
+                ok -> ok;
+                {error, not_found} -> ok
+            end,
+            Res
     end,
     lists:foreach(fun(QosEntry) ->
         qos_entry:remove_transfer_from_list(QosEntry, TransferId)

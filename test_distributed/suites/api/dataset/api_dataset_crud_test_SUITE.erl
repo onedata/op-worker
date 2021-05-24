@@ -211,7 +211,7 @@ build_establish_dataset_validate_gs_call_result_fun(MemRef, Config) ->
         RootFileGuid = api_test_memory:get(MemRef, file_guid),
         RootFileType = api_test_memory:get(MemRef, file_type),
         RootFilePath = api_test_memory:get(MemRef, file_path),
-        CreationTime = get_global_time(TestNode),
+        CreationTime = time_test_utils:global_seconds(TestNode),
         ProtectionFlags = maps:get(<<"protectionFlags">>, Data, []),
 
         {ok, #{<<"gri">> := DatasetGri} = DatasetData} = ?assertMatch({ok, _}, Result),
@@ -251,7 +251,7 @@ build_verify_establish_dataset_fun(MemRef, Providers, SpaceId, Config) ->
             RootFileGuid = api_test_memory:get(MemRef, file_guid),
             RootFileType = api_test_memory:get(MemRef, file_type),
             RootFilePath = api_test_memory:get(MemRef, file_path),
-            CreationTime = get_global_time(TestNode),
+            CreationTime = time_test_utils:global_seconds(TestNode),
             ProtectionFlags = maps:get(<<"protectionFlags">>, Data, []),
 
             verify_dataset(
@@ -347,7 +347,7 @@ get_dataset_test_base(
                     type = rest,
                     prepare_args_fun = build_get_dataset_prepare_rest_args_fun(DatasetId),
                     validate_result_fun = fun(#api_test_ctx{node = TestNode}, {ok, RespCode, _, RespBody}) ->
-                        CreationTime = get_global_time(TestNode),
+                        CreationTime = time_test_utils:global_seconds(TestNode),
                         EffProtectionFlags = case State of
                             ?ATTACHED_DATASET -> ProtectionFlags;
                             ?DETACHED_DATASET -> []
@@ -361,7 +361,8 @@ get_dataset_test_base(
                             <<"state">> => StateBin,
                             <<"protectionFlags">> => ProtectionFlags,
                             <<"effectiveProtectionFlags">> => EffProtectionFlags,
-                            <<"creationTime">> => CreationTime
+                            <<"creationTime">> => CreationTime,
+                            <<"archiveCount">> => 0
                         },
                         ?assertEqual({?HTTP_200_OK, ExpDatasetData}, {RespCode, RespBody})
                     end
@@ -371,7 +372,7 @@ get_dataset_test_base(
                     type = gs,
                     prepare_args_fun = build_get_dataset_prepare_gs_args_fun(DatasetId),
                     validate_result_fun = fun(#api_test_ctx{node = TestNode}, {ok, Result}) ->
-                        CreationTime = get_global_time(TestNode),
+                        CreationTime = time_test_utils:global_seconds(TestNode),
 
                         ExpDatasetData = build_dataset_gs_instance(
                             State, DatasetId, ParentId, ProtectionFlags, CreationTime,
@@ -510,9 +511,9 @@ update_dataset_test(Config) ->
 %% @private
 -spec build_update_dataset_prepare_rest_args_fun(dataset:id()) ->
     onenv_api_test_runner:prepare_args_fun().
-build_update_dataset_prepare_rest_args_fun(ShareId) ->
+build_update_dataset_prepare_rest_args_fun(DatasetId) ->
     fun(#api_test_ctx{data = Data0}) ->
-        {Id, Data1} = api_test_utils:maybe_substitute_bad_id(ShareId, Data0),
+        {Id, Data1} = api_test_utils:maybe_substitute_bad_id(DatasetId, Data0),
 
         #rest_args{
             method = patch,
@@ -526,9 +527,9 @@ build_update_dataset_prepare_rest_args_fun(ShareId) ->
 %% @private
 -spec build_update_dataset_prepare_gs_args_fun(dataset:id()) ->
     onenv_api_test_runner:prepare_args_fun().
-build_update_dataset_prepare_gs_args_fun(ShareId) ->
+build_update_dataset_prepare_gs_args_fun(DatasetId) ->
     fun(#api_test_ctx{data = Data0}) ->
-        {Id, Data1} = api_test_utils:maybe_substitute_bad_id(ShareId, Data0),
+        {Id, Data1} = api_test_utils:maybe_substitute_bad_id(DatasetId, Data0),
 
         #gs_args{
             operation = update,
@@ -549,7 +550,7 @@ build_verify_update_dataset_fun(MemRef, Providers, SpaceId, DatasetId, FileGuid,
     SpaceDirDatasetId = ?config(space_dir_dataset, Config),
 
     fun(ExpTestResult, #api_test_ctx{node = TestNode, data = Data}) ->
-        CreationTime = get_global_time(TestNode),
+        CreationTime = time_test_utils:global_seconds(TestNode),
 
         PrevState = api_test_memory:get(MemRef, previous_state),
         PrevProtectionFlags = api_test_memory:get(MemRef, previous_protection_flags),
@@ -801,7 +802,8 @@ build_dataset_gs_instance(
         protection_flags = file_meta:protection_flags_from_json(ProtectionFlagsJson),
         eff_protection_flags = file_meta:protection_flags_from_json(EffProtectionFlagsJson),
         parent = ParentId,
-        index = datasets_structure:pack_entry_index(filename:basename(RootFilePath), DatasetId)
+        index = datasets_structure:pack_entry_index(filename:basename(RootFilePath), DatasetId),
+        archive_count = 0
     }),
     BasicInfo#{<<"revision">> => 1}.
 
@@ -866,13 +868,6 @@ list_child_dataset_ids(Node, UserSessId, ParentId, ListOpts) ->
     {ok, Datasets, _} = lfm_proxy:list_children_datasets(Node, UserSessId, ParentId, ListOpts),
     lists:map(fun({DatasetId, _, _}) -> DatasetId end, Datasets).
 
-
-%% @private
--spec get_global_time(node()) -> time:seconds().
-get_global_time(Node) ->
-    rpc:call(Node, global_clock, timestamp_seconds, []).
-
-
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
@@ -909,7 +904,8 @@ init_per_group(_Group, Config) ->
             undefined;
         2 ->
             ct:pal("Establishing dataset for space root dir"),
-            onenv_dataset_test_utils:set_up_and_sync_dataset(user3, space_krk_par)
+            DatasetObj = onenv_dataset_test_utils:set_up_and_sync_dataset(user3, space_krk_par),
+            DatasetObj#dataset_object.id
     end,
     [{space_dir_dataset, SpaceDirDatasetId} | NewConfig].
 

@@ -32,6 +32,8 @@
 -export([has_eff_space/2, has_eff_space/3]).
 -export([get_space_by_name/3]).
 -export([get_eff_handle_services/1]).
+-export([has_eff_atm_inventory/2, has_eff_atm_inventory/3]).
+-export([has_any_eff_atm_inventory/2, has_any_eff_atm_inventory/3]).
 
 %%%===================================================================
 %%% API
@@ -227,3 +229,35 @@ get_eff_handle_services(#od_user{eff_handle_services = HServices}) ->
     {ok, HServices};
 get_eff_handle_services(#document{value = User}) ->
     get_eff_handle_services(User).
+
+
+-spec has_eff_atm_inventory(od_user:doc(), od_atm_inventory:id()) -> boolean().
+has_eff_atm_inventory(#document{value = #od_user{eff_atm_inventories = EffAtmInventories}}, AtmInventoryId) ->
+    lists:member(AtmInventoryId, EffAtmInventories).
+
+
+-spec has_eff_atm_inventory(gs_client_worker:client(), od_user:id(), od_atm_inventory:id()) ->
+    boolean().
+has_eff_atm_inventory(Client, UserId, AtmInventoryId) when is_binary(UserId) ->
+    case get(Client, UserId) of
+        {ok, UserDoc = #document{}} ->
+            has_eff_atm_inventory(UserDoc, AtmInventoryId);
+        {error, _} ->
+            false
+    end.
+
+
+-spec has_any_eff_atm_inventory(od_user:doc(), [od_atm_inventory:id()]) -> boolean().
+has_any_eff_atm_inventory(#document{value = #od_user{eff_atm_inventories = UserAtmInventories}}, TargetAtmInventories) ->
+    lists_utils:intersect(UserAtmInventories, TargetAtmInventories) /= [].
+
+
+-spec has_any_eff_atm_inventory(gs_client_worker:client(), od_user:id(), [od_atm_inventory:id()]) ->
+    boolean().
+has_any_eff_atm_inventory(Client, UserId, TargetAtmInventories) when is_binary(UserId) ->
+    case get(Client, UserId) of
+        {ok, UserDoc = #document{}} ->
+            has_any_eff_atm_inventory(UserDoc, TargetAtmInventories);
+        {error, _} ->
+            false
+    end.

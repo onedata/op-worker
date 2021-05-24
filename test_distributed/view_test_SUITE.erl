@@ -153,7 +153,7 @@ query_view_using_file_meta(Config) ->
             <<"value">> := #{
                 <<"name">> := ?TRASH_DIR_NAME,
                 <<"type">> := <<"DIR">>,
-                <<"mode">> := ?DEFAULT_DIR_PERMS,
+                <<"mode">> := ?DEFAULT_DIR_MODE,
                 <<"owner">> := SpaceOwnerId,
                 <<"provider_id">> := ProviderId,
                 <<"shares">> := [],
@@ -167,7 +167,7 @@ query_view_using_file_meta(Config) ->
             <<"value">> := #{
                 <<"name">> := ?SPACE_ID,
                 <<"type">> := <<"DIR">>,
-                <<"mode">> := ?DEFAULT_DIR_PERMS,
+                <<"mode">> := ?DEFAULT_DIR_MODE,
                 <<"owner">> := SpaceOwnerId,
                 <<"provider_id">> := ProviderId,
                 <<"shares">> := [],
