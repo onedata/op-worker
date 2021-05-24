@@ -238,7 +238,7 @@ transition_to_status(AtmWorkflowExecutionId, ?FAILED_STATUS) ->
 
 transition_to_status(AtmWorkflowExecutionId, NewStatus) ->
     Diff = fun(#atm_workflow_execution{status = Status} = AtmWorkflowExecution) ->
-        case atm_status_utils:is_transition_allowed(Status, NewStatus) of
+        case atm_execution_status:is_transition_allowed(Status, NewStatus) of
             true ->
                 {ok, AtmWorkflowExecution#atm_workflow_execution{status = NewStatus}};
             false ->
@@ -279,10 +279,10 @@ update_task_status(
         AtmParallelBoxIndex, AtmTaskExecutionId, NewStatus, AtmLanExecution
     ) of
         {ok, NewLaneExecution} ->
-            NewAtmLaneExecutions = atm_status_utils:replace_at(
+            NewAtmLaneExecutions = atm_execution_status:replace_at(
                 NewLaneExecution, AtmLaneIndex, AtmLaneExecutions
             ),
-            NewAtmWorkflowStatus = atm_status_utils:converge(
+            NewAtmWorkflowStatus = atm_execution_status:converge(
                 atm_lane_execution:gather_statuses(NewAtmLaneExecutions)
             ),
             {ok, AtmWorkflowExecution#atm_workflow_execution{

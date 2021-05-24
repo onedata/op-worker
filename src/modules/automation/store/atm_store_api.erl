@@ -94,14 +94,12 @@ delete(AtmStoreId) ->
     atm_store:delete(AtmStoreId).
 
 
--spec acquire_iterator(atm_workflow_execution_ctx:ctx(), atm_store_iterator_spec:record()) ->
+-spec acquire_iterator(atm_execution_state:record(), atm_store_iterator_spec:record()) ->
     atm_store_iterator:record().
-acquire_iterator(AtmWorkflowExecutionCtx, #atm_store_iterator_spec{
+acquire_iterator(AtmExecutionState, #atm_store_iterator_spec{
     store_schema_id = AtmStoreSchemaId
 } = AtmStoreIteratorConfig) ->
-    AtmStoreId = atm_workflow_execution_ctx:get_store_id(
-        AtmStoreSchemaId, AtmWorkflowExecutionCtx
-    ),
+    AtmStoreId = atm_execution_state:get_store_id(AtmStoreSchemaId, AtmExecutionState),
     {ok, #atm_store{container = AtmContainer}} = atm_store:get(AtmStoreId),
     atm_store_iterator:build(AtmStoreIteratorConfig, AtmContainer).
 

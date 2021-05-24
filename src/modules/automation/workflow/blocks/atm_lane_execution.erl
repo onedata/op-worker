@@ -71,7 +71,7 @@ create(AtmExecutionCreationCtx, AtmLaneIndex, #atm_lane_schema{
 
     #atm_lane_execution{
         schema_id = AtmLaneSchemaId,
-        status = atm_status_utils:converge(atm_parallel_box_execution:gather_statuses(
+        status = atm_execution_status:converge(atm_parallel_box_execution:gather_statuses(
             AtmParallelBoxExecutions
         )),
         parallel_boxes = AtmParallelBoxExecutions
@@ -125,11 +125,11 @@ update_task_status(AtmParallelBoxIndex, AtmTaskExecutionId, NewStatus, #atm_lane
         AtmTaskExecutionId, NewStatus, AtmParallelBoxExecution
     ) of
         {ok, NewParallelBoxExecution} ->
-            NewAtmParallelBoxExecutions = atm_status_utils:replace_at(
+            NewAtmParallelBoxExecutions = atm_execution_status:replace_at(
                 NewParallelBoxExecution, AtmParallelBoxIndex, AtmParallelBoxExecutions
             ),
             {ok, AtmLaneExecution#atm_lane_execution{
-                status = atm_status_utils:converge(atm_parallel_box_execution:gather_statuses(
+                status = atm_execution_status:converge(atm_parallel_box_execution:gather_statuses(
                     NewAtmParallelBoxExecutions
                 )),
                 parallel_boxes = NewAtmParallelBoxExecutions

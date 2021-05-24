@@ -10,7 +10,7 @@
 %%% lanes, parallel boxes and task statuses.
 %%% @end
 %%%-------------------------------------------------------------------
--module(atm_status_utils).
+-module(atm_execution_status).
 -author("Bartosz Walkowicz").
 
 -include("modules/automation/atm_execution.hrl").
@@ -66,6 +66,7 @@ converge(Statuses) ->
 %%%===================================================================
 
 
+%% TODO VFS-7674 handle all combination of statuses
 %% @private
 -spec converge_uniquely_sorted([status()]) -> status().
 converge_uniquely_sorted([Status]) -> Status;

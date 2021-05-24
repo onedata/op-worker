@@ -26,7 +26,7 @@
     initial_values :: atm_execution:initial_values()
 }).
 
--record(atm_workflow_execution_ctx, {
+-record(atm_execution_state, {
     store_registry :: atm_execution:store_registry()
 }).
 
