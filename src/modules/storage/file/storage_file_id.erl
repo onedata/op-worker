@@ -14,7 +14,6 @@
 -author("Jakub Kudzia").
 
 -include("modules/fslogic/fslogic_common.hrl").
--include("modules/dataset/archivisation_tree.hrl").
 
 %%%===================================================================
 %%% Exports
@@ -60,7 +59,7 @@ flat(FslogicCanonicalPath, FileUuid, SpaceId, StorageDataOrId) ->
     % the path is canonical, despite the fact that storage is flat
     case storage:is_archive(StorageDataOrId) of
         true ->
-            case is_in_archive(FslogicCanonicalPath) of
+            case archivisation_tree:is_in_archive(FslogicCanonicalPath) of
                 true ->
                     canonical(FslogicCanonicalPath, SpaceId, storage:get_id(StorageDataOrId));
                 false ->
@@ -147,13 +146,4 @@ ensure_starts_with_space_id(FilePath, SpaceId) ->
             FilePath;
         [Sep | Path] ->
             filepath_utils:join([Sep, SpaceId | Path])
-    end.
-
-
--spec is_in_archive(file_meta:path()) -> boolean().
-is_in_archive(CanonicalPath) ->
-    ArchivesRootDirName = ?ARCHIVES_ROOT_DIR_NAME,
-    case filepath_utils:split(CanonicalPath) of
-        [_Sep, _SpaceId, ArchivesRootDirName | _Rest] -> true;
-         _ -> false
     end.

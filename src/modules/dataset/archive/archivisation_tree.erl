@@ -30,7 +30,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([create_archive_dir/4, is_special_uuid/1]).
+-export([create_archive_dir/4, is_special_uuid/1, is_in_archive/1]).
 
 %%%===================================================================
 %%% API functions
@@ -65,6 +65,15 @@ is_special_uuid(<<?ARCHIVE_DIR_UUID_PREFIX, _/binary>>) ->
     true;
 is_special_uuid(_) ->
     false.
+
+
+-spec is_in_archive(file_meta:path()) -> boolean().
+is_in_archive(CanonicalPath) ->
+    ArchivesRootDirName = ?ARCHIVES_ROOT_DIR_NAME,
+    case filepath_utils:split(CanonicalPath) of
+        [_Sep, _SpaceId, ArchivesRootDirName | _Rest] -> true;
+        _ -> false
+    end.
 
 %%%===================================================================
 %%% Internal functions

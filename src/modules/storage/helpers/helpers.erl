@@ -184,7 +184,7 @@ flushbuffer(Handle, FileId, CurrentSize) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec blocksize_for_path(helper_handle(), file_id())
-    -> ok | {error, Reason :: term()}.
+    -> {ok, non_neg_integer()} | {error, Reason :: term()}.
 blocksize_for_path(Handle, FileId) ->
     ?MODULE:apply_helper_nif(Handle, blocksize_for_path, [FileId]).
 

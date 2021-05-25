@@ -704,11 +704,7 @@ handle_info({Ref, complete, {ok, _} = _Status}, #state{retries_number = Retries,
     {FinishedBlocks, ExcludeSessions, EndedTransfers, State2} =
         disassociate_froms(FinishedFroms, State1),
 
-    % flushbuffer will be performed only on archive storages
-    % in other cases it's a NOOP
-    {SDHandle, FileCtx2} = storage_driver:new_handle(?ROOT_SESS_ID, FileCtx),
-    {FileSize, _} = file_ctx:get_local_storage_file_size(FileCtx2),
-    ok = storage_driver:flushbuffer(SDHandle, FileSize),
+    flush_archive_helper_buffer_if_applicable(FileCtx),
 
     {Ans, State3} = flush_blocks(State2, ExcludeSessions, FinishedBlocks,
         EndedTransfers =/= []),
@@ -1765,4 +1761,23 @@ assert_smaller_than_local_support_size(TotalSize, SpaceId) ->
     case TotalSize > LocalSupportSize of
         true -> throw(?ENOSPC);
         false -> ok
+    end.
+
+
+-spec flush_archive_helper_buffer_if_applicable(file_ctx:ctx()) -> ok.
+flush_archive_helper_buffer_if_applicable(FileCtx) ->
+    {Storage, FileCtx2} = file_ctx:get_storage(FileCtx),
+    case storage:is_archive(Storage) of
+        true ->
+            {CanonicalPath, FileCtx3} = file_ctx:get_canonical_path(FileCtx2),
+            case archivisation_tree:is_in_archive(CanonicalPath) of
+                true ->
+                    {SDHandle, FileCtx4} = storage_driver:new_handle(?ROOT_SESS_ID, FileCtx3),
+                    {FileSize, _} = file_ctx:get_local_storage_file_size(FileCtx4),
+                    ok = storage_driver:flushbuffer(SDHandle, FileSize);
+                false ->
+                    ok
+            end;
+        false ->
+            ok
     end.
