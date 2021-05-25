@@ -54,7 +54,10 @@
     include_replication_status => boolean(),
 
     % Tells whether hardlink count should be included in answer
-    include_link_count => boolean()
+    include_link_count => boolean(),
+
+    % Tells whether fields calculated using effective value should be included in answer
+    effective_values_references_limit => non_neg_integer() | infinity
 }.
 
 -export_type([name_conflicts_resolution_policy/0, compute_file_attr_opts/0]).
@@ -70,6 +73,8 @@
     FileCtx :: file_ctx:ctx()
 }.
 
+
+-define(DEFAULT_REFERENCES_LIMIT, 100).
 
 %%%===================================================================
 %%% API
@@ -158,8 +163,25 @@ get_file_details(UserCtx, FileCtx0) ->
 get_file_details_insecure(UserCtx, FileCtx, Opts) ->
     {FileAttr, FileDoc, _, FileCtx2} = resolve_file_attr(UserCtx, FileCtx, Opts),
     {ok, ActivePermissionsType} = file_meta:get_active_perms_type(FileDoc),
-    {ok, EffectiveMembership, EffProtectionFlags, FileCtx3} =
-        dataset_api:get_effective_membership_and_protection_flags(FileCtx2),
+
+    ReferencesLimit = maps:get(effective_values_references_limit, Opts, ?DEFAULT_REFERENCES_LIMIT),
+    ShouldCalculateEffectiveValues = case ReferencesLimit of
+        infinity -> true;
+        _ ->
+            case file_meta_hardlinks:count_references(FileDoc) of
+                {ok, LinksCount} -> LinksCount =< ReferencesLimit;
+                _ -> false
+            end
+    end,
+    {EffQoSMembership, EffDatasetMembership, EffProtectionFlags, FileCtx4} = case ShouldCalculateEffectiveValues of
+        true ->
+            EffectiveQoSMembership = file_qos:qos_membership(FileDoc),
+            {ok, EffectiveDatasetMembership, EffectiveProtectionFlags, FileCtx3} =
+                dataset_api:get_effective_membership_and_protection_flags(FileCtx2),
+            {EffectiveQoSMembership, EffectiveDatasetMembership, EffectiveProtectionFlags, FileCtx3};
+        false ->
+            {undefined, undefined, undefined, FileCtx2}
+    end,
 
     #fuse_response{
         status = #status{code = ?OK},
@@ -174,9 +196,9 @@ get_file_details_insecure(UserCtx, FileCtx, Opts) ->
             end,
             index_startid = file_meta:get_name(FileDoc),
             active_permissions_type = ActivePermissionsType,
-            has_metadata = has_metadata(FileCtx3),
-            eff_qos_membership = file_qos:qos_membership(FileDoc),
-            eff_dataset_membership = EffectiveMembership,
+            has_metadata = has_metadata(FileCtx4),
+            eff_qos_membership = EffQoSMembership,
+            eff_dataset_membership = EffDatasetMembership,
             eff_protection_flags = EffProtectionFlags
         }
     }.

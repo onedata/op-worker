@@ -33,6 +33,7 @@
 
 % TODO VFS-7441 - Test number of links that can be stored in file_meta doc
 -define(MAX_LINKS_NUM, 65536). % 64 * 1024
+-define(INCLUDE_REFERENCES_MAP_SIZE_TRESHOLD, 64).
 
 %%%===================================================================
 %%% API
@@ -74,7 +75,7 @@ merge_link_and_file_doc(LinkDoc = #document{value = LinkRecord}, #document{value
             mode = FileRecord#file_meta.mode,
             acl = FileRecord#file_meta.acl,
             owner = FileRecord#file_meta.owner,
-            references = FileRecord#file_meta.references
+            references = undefined
         }
     }}.
 
@@ -108,6 +109,8 @@ deregister(FileUuid, LinkUuid) ->
     end.
 
 -spec count_references(file_meta:uuid() | file_meta:doc()) -> {ok, non_neg_integer()} | {error, term()}.
+count_references(#document{key = Key, value = #file_meta{references = undefined}}) ->
+    count_references(Key);
 count_references(Doc = #document{value = #file_meta{references = References}}) ->
     ReferencesCount = count_references_in_map(References),
     case file_meta:is_deleted(Doc) of
@@ -115,7 +118,7 @@ count_references(Doc = #document{value = #file_meta{references = References}}) -
         false -> {ok, ReferencesCount + 1}
     end;
 count_references(Key) ->
-    case file_meta:get_including_deleted(Key) of
+    case file_meta:get_including_deleted(fslogic_uuid:ensure_referenced_uuid(Key)) of
         {ok, Doc} -> count_references(Doc);
         Other -> Other
     end.
@@ -128,6 +131,8 @@ inspect_references(KeyOrDoc) ->
     end.
 
 -spec list_references(file_meta:uuid() | file_meta:doc()) -> {ok, [link()]} | {error, term()}.
+list_references(#document{key = Key, value = #file_meta{references = undefined}}) ->
+    list_references(Key);
 list_references(Doc = #document{key = TargetKey, value = #file_meta{references = References}}) ->
     ReferencesList = references_to_list(References),
     case file_meta:is_deleted(Doc) of
@@ -136,7 +141,7 @@ list_references(Doc = #document{key = TargetKey, value = #file_meta{references =
         false -> {ok, [TargetKey | ReferencesList]}  
     end;
 list_references(Key) ->
-    case file_meta:get_including_deleted(Key) of
+    case file_meta:get_including_deleted(fslogic_uuid:ensure_referenced_uuid(Key)) of
         {ok, Doc} -> list_references(Doc);
         Other -> Other
     end.
