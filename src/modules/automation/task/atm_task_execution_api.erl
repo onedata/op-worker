@@ -155,17 +155,14 @@ update_items_in_processing(AtmTaskExecutionId) ->
         AtmTaskExecutionId, fun
             (#atm_task_execution{
                 status = ?PENDING_STATUS,
-                status_changed = false,
                 items_in_processing = 0
             } = AtmTaskExecution) ->
                 {ok, AtmTaskExecution#atm_task_execution{
                     status = ?ACTIVE_STATUS,
-                    status_changed = true,
                     items_in_processing = 1
                 }};
             (#atm_task_execution{items_in_processing = ItemsInProcessing} = AtmTaskExecution) ->
                 {ok, AtmTaskExecution#atm_task_execution{
-                    status_changed = false,
                     items_in_processing = ItemsInProcessing + 1
                 }}
         end

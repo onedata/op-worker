@@ -53,8 +53,18 @@ get(AtmTaskExecutionId) ->
 
 
 -spec update(id(), diff()) -> {ok, doc()} | {error, term()}.
-update(AtmTaskExecutionId, Diff) ->
-    datastore_model:update(?CTX, AtmTaskExecutionId, Diff).
+update(AtmTaskExecutionId, Diff1) ->
+    Diff2 = fun(#atm_task_execution{status = PrevStatus} = AtmTaskExecution) ->
+        case Diff1(AtmTaskExecution#atm_task_execution{status_changed = false}) of
+            {ok, #atm_task_execution{status = NewStatus} = NewAtmTaskExecution} ->
+                {ok, NewAtmTaskExecution#atm_task_execution{
+                    status_changed = NewStatus /= PrevStatus
+                }};
+            {error, _} = Error ->
+                Error
+        end
+    end,
+    datastore_model:update(?CTX, AtmTaskExecutionId, Diff2).
 
 
 -spec delete(id()) -> ok | {error, term()}.

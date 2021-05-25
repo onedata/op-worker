@@ -61,8 +61,15 @@ get(AtmWorkflowExecutionId) ->
 
 -spec update(id(), diff()) -> {ok, doc()} | {error, term()}.
 update(AtmWorkflowExecutionId, Diff1) ->
-    Diff2 = fun(#atm_workflow_execution{status = {Status, _}} = AtmWorkflowExecution) ->
-        Diff1(AtmWorkflowExecution#atm_workflow_execution{status = {Status, unchanged}})
+    Diff2 = fun(#atm_workflow_execution{status = PrevStatus} = AtmWorkflowExecution) ->
+        case Diff1(AtmWorkflowExecution#atm_workflow_execution{status_changed = false}) of
+            {ok, #atm_workflow_execution{status = NewStatus} = NewAtmWorkflowExecution} ->
+                {ok, NewAtmWorkflowExecution#atm_workflow_execution{
+                    status_changed = NewStatus /= PrevStatus
+                }};
+            {error, _} = Error ->
+                Error
+        end
     end,
     datastore_model:update(?CTX, AtmWorkflowExecutionId, Diff2).
 
@@ -111,7 +118,8 @@ get_record_struct(1) ->
         {store_registry, #{string => string}},
         {lanes, [{custom, string, {persistent_record, encode, decode, atm_lane_execution}}]},
 
-        {status, {atom, atom}},
+        {status, atom},
+        {status_changed, boolean},
 
         {schedule_time, integer},
         {start_time, integer},
