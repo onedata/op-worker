@@ -24,7 +24,7 @@
 -export([get_id/1, get_creation_time/1, get_dataset_id/1, get_space_id/1,
     get_state/1, get_config/1, get_preserved_callback/1, get_purged_callback/1,
     get_description/1, get_job_id/1, get_files_to_archive/1, get_files_archived/1,
-    get_files_failed/1, get_byte_size/1, is_finished/1
+    get_files_failed/1, get_bytes_archived/1, is_finished/1
 ]).
 
 % setters
@@ -205,11 +205,11 @@ get_files_failed(#archive{files_failed = FilesFailed}) ->
 get_files_failed(#document{value = Archive}) ->
     get_files_failed(Archive).
 
--spec get_byte_size(record() | doc()) -> {ok, non_neg_integer()}.
-get_byte_size(#archive{byte_size = ByteSize}) ->
-    {ok, ByteSize};
-get_byte_size(#document{value = Archive}) ->
-    get_byte_size(Archive).
+-spec get_bytes_archived(record() | doc()) -> {ok, non_neg_integer()}.
+get_bytes_archived(#archive{bytes_archived = BytesArchived}) ->
+    {ok, BytesArchived};
+get_bytes_archived(#document{value = Archive}) ->
+    get_bytes_archived(Archive).
 
 -spec is_finished(record() | doc()) -> boolean().
 is_finished(#archive{state = State}) ->
@@ -248,14 +248,14 @@ mark_building(ArchiveId) ->
 
 -spec mark_preserved(id(), non_neg_integer(), non_neg_integer(), non_neg_integer(), non_neg_integer()) ->
     ok | error().
-mark_preserved(ArchiveId, FilesToArchive, FilesArchived, FilesFailed, ByteSize) ->
-    mark_finished(ArchiveId, ?ARCHIVE_PRESERVED, FilesToArchive, FilesArchived, FilesFailed, ByteSize).
+mark_preserved(ArchiveId, FilesToArchive, FilesArchived, FilesFailed, BytesArchived) ->
+    mark_finished(ArchiveId, ?ARCHIVE_PRESERVED, FilesToArchive, FilesArchived, FilesFailed, BytesArchived).
 
 
 -spec mark_failed(id(), non_neg_integer(), non_neg_integer(), non_neg_integer(), non_neg_integer()) ->
     ok | error().
-mark_failed(ArchiveId, FilesToArchive, FilesArchived, FilesFailed, ByteSize) ->
-    mark_finished(ArchiveId, ?ARCHIVE_FAILED, FilesToArchive, FilesArchived, FilesFailed, ByteSize).
+mark_failed(ArchiveId, FilesToArchive, FilesArchived, FilesFailed, BytesArchived) ->
+    mark_finished(ArchiveId, ?ARCHIVE_FAILED, FilesToArchive, FilesArchived, FilesFailed, BytesArchived).
 
 
 -spec set_job_id(id(), archivisation_traverse:id()) -> {ok, doc()}.
@@ -268,14 +268,14 @@ set_job_id(ArchiveId, JobId) ->
 %% @private
 -spec mark_finished(id(), ?ARCHIVE_PRESERVED | ?ARCHIVE_FAILED,
     non_neg_integer(), non_neg_integer(), non_neg_integer(), non_neg_integer()) -> ok.
-mark_finished(ArchiveId, NewState, FilesToArchive, FilesArchived, FilesFailed, ByteSize) ->
+mark_finished(ArchiveId, NewState, FilesToArchive, FilesArchived, FilesFailed, BytesArchived) ->
     ?extract_ok(update(ArchiveId, fun(Archive) ->
         {ok, Archive#archive{
             state = NewState,
             files_to_archive = FilesToArchive,
             files_archived = FilesArchived,
             files_failed = FilesFailed,
-            byte_size = ByteSize
+            bytes_archived = BytesArchived
         }}
     end)).
 
@@ -324,6 +324,6 @@ get_record_struct(1) ->
         {files_to_archive, integer},
         {files_archived, integer},
         {files_failed, integer},
-        {byte_size, integer},
+        {bytes_archived, integer},
         {job_id, string}
     ]}.

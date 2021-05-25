@@ -284,7 +284,7 @@ get_archive_info(ArchiveDoc = #document{}, ArchiveIndex) ->
     {ok, PreservedCallback} = archive:get_preserved_callback(ArchiveDoc),
     {ok, PurgedCallback} = archive:get_purged_callback(ArchiveDoc),
     {ok, Description} = archive:get_description(ArchiveDoc),
-    {FilesToArchive, FilesArchived, FilesFailed, ByteSize} = get_archive_stats(ArchiveDoc),
+    {FilesToArchive, FilesArchived, FilesFailed, BytesArchived} = get_archive_stats(ArchiveDoc),
     {ok, #archive_info{
         id = ArchiveId,
         dataset_id = DatasetId,
@@ -302,7 +302,7 @@ get_archive_info(ArchiveDoc = #document{}, ArchiveIndex) ->
         files_to_archive = FilesToArchive,
         files_archived = FilesArchived,
         files_failed = FilesFailed,
-        byte_size = ByteSize
+        bytes_archived = BytesArchived
     }};
 get_archive_info(ArchiveId, ArchiveIndex) ->
     {ok, ArchiveDoc} = archive:get(ArchiveId),
@@ -317,8 +317,8 @@ get_archive_stats(ArchiveDoc) ->
             {ok, FilesToArchive} = archive:get_files_to_archive(ArchiveDoc),
             {ok, FilesArchived} = archive:get_files_archived(ArchiveDoc),
             {ok, FilesFailed} = archive:get_files_failed(ArchiveDoc),
-            {ok, ByteSize} = archive:get_byte_size(ArchiveDoc),
-            {FilesToArchive, FilesArchived, FilesFailed, ByteSize};
+            {ok, BytesArchived} = archive:get_bytes_archived(ArchiveDoc),
+            {FilesToArchive, FilesArchived, FilesFailed, BytesArchived};
         false ->
             {ok, JobId} = archive:get_job_id(ArchiveDoc),
             {ok, ArchivisationJobDescription} = archivisation_traverse:get_description(JobId),
@@ -326,7 +326,7 @@ get_archive_stats(ArchiveDoc) ->
                 archivisation_traverse:get_files_to_archive_count(ArchivisationJobDescription),
                 archivisation_traverse:get_files_archived_count(ArchivisationJobDescription),
                 archivisation_traverse:get_files_failed_count(ArchivisationJobDescription),
-                archivisation_traverse:get_byte_size(ArchivisationJobDescription)
+                archivisation_traverse:get_bytes_archived(ArchivisationJobDescription)
             }
     end.
 

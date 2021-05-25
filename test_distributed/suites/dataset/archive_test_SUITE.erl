@@ -338,7 +338,7 @@ assert_archive_is_preserved(Node, SessionId, ArchiveId, RootGuid, FileCount, Exp
         files_to_archive = FileCount,
         files_archived = FileCount,
         files_failed = 0,
-        byte_size = ExpSize
+        bytes_archived = ExpSize
     }}, lfm_proxy:get_archive_info(Node, SessionId, ArchiveId), ?ATTEMPTS),
     ArchiveDirUuid = ?ARCHIVE_DIR_UUID(ArchiveId),
     SpaceId = file_id:guid_to_space_id(RootGuid),

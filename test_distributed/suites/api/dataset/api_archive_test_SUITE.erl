@@ -232,7 +232,7 @@ build_create_archive_validate_gs_call_result_fun(MemRef) ->
         ExpArchiveData = build_archive_gs_instance(ArchiveId, DatasetId, CreationTime, ?ARCHIVE_BUILDING, Config,
             Description, PreservedCallback, PurgedCallback),
         % state is removed from the map as it may be in pending, building or even preserved state when request is handled
-        IgnoredKeys = [<<"state">>, <<"filesToArchive">>, <<"filesArchived">>, <<"filesFailed">>, <<"byteSize">>],
+        IgnoredKeys = [<<"state">>, <<"filesToArchive">>, <<"filesArchived">>, <<"filesFailed">>, <<"bytesArchived">>],
         ExpArchiveData2 = maps:without(IgnoredKeys, ExpArchiveData),
         ArchiveData2 = maps:without(IgnoredKeys, ArchiveData),
         ?assertMatch(ExpArchiveData2, ArchiveData2)
@@ -331,7 +331,7 @@ get_archive_info(_Config) ->
                             <<"filesToArchive">> => 1,
                             <<"filesArchived">> => 1,
                             <<"filesFailed">> => 0,
-                            <<"byteSize">> => 0
+                            <<"bytesArchived">> => 0
                         },
                         ?assertEqual(?HTTP_200_OK, RespCode),
                         ?assertEqual(ExpArchiveData, RespBody)
@@ -861,7 +861,7 @@ verify_archive(
             files_to_archive = 1,
             files_archived = 1,
             files_failed = 0,
-            byte_size = 0
+            bytes_archived = 0
         },
         ?assertEqual({ok, ExpArchiveInfo}, lfm_proxy:get_archive_info(Node, UserSessId, ArchiveId), ?ATTEMPTS)
     end, Providers).
@@ -893,7 +893,7 @@ build_archive_gs_instance(ArchiveId, DatasetId, CreationTime, State, Config, Des
         files_to_archive = 1,
         files_archived = 1,
         files_failed = 0,
-        byte_size = 0
+        bytes_archived = 0
     }),
     BasicInfo#{<<"revision">> => 1}.
 

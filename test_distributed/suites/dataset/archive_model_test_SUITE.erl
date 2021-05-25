@@ -531,7 +531,7 @@ simple_archive_crud_test_base(DatasetId, RootFileType, ExpSize) ->
         files_to_archive = ExpectedFilesToArchive,
         files_archived = ExpectedFilesToArchive,
         files_failed = 0,
-        byte_size = ExpSize
+        bytes_archived = ExpSize
     },
 
     % verify whether Archive is visible in the local provider

@@ -25,7 +25,7 @@
 %% API
 -export([init_pool/0, stop_pool/0, start/3, get_description/1,
     get_files_to_archive_count/1, get_files_archived_count/1,
-    get_files_failed_count/1, get_byte_size/1
+    get_files_failed_count/1, get_bytes_archived/1
 ]).
 
 %% Traverse behaviour callbacks
@@ -121,9 +121,9 @@ get_files_failed_count(JobDescription) ->
     maps:get(slave_jobs_failed, JobDescription, 0).
 
 
--spec get_byte_size(description()) -> non_neg_integer().
-get_byte_size(JobsDescription) ->
-    maps:get(byte_size, JobsDescription, 0).
+-spec get_bytes_archived(description()) -> non_neg_integer().
+get_bytes_archived(JobsDescription) ->
+    maps:get(bytes_archived, JobsDescription, 0).
 
 %%%===================================================================
 %%% Traverse behaviour callbacks
@@ -145,7 +145,7 @@ task_finished(TaskId, _Pool) ->
     FilesToArchive = get_files_to_archive_count(Description),
     FilesArchived = get_files_archived_count(Description),
     FilesFailed = get_files_failed_count(Description),
-    ByteSize = get_byte_size(Description),
+    BytesArchived = get_bytes_archived(Description),
 
     ArchiveId = maps:get(<<"archiveId">>, AdditionalData),
     DatasetId = maps:get(<<"datasetId">>, AdditionalData),
@@ -155,10 +155,10 @@ task_finished(TaskId, _Pool) ->
     MasterJobsFailed = maps:get(master_jobs_failed, Description, 0),
     case SlaveJobsFailed + MasterJobsFailed =:= 0 of
         true ->
-            ok = archive:mark_preserved(ArchiveId, FilesToArchive, FilesArchived, FilesFailed, ByteSize),
+            ok = archive:mark_preserved(ArchiveId, FilesToArchive, FilesArchived, FilesFailed, BytesArchived),
             archivisation_callback:notify_preserved(ArchiveId, DatasetId, CallbackUrlOrUndefined);
         false ->
-            ok = archive:mark_failed(ArchiveId, FilesToArchive, FilesArchived, FilesFailed, ByteSize),
+            ok = archive:mark_failed(ArchiveId, FilesToArchive, FilesArchived, FilesFailed, BytesArchived),
             % TODO VFS-7662 send more descriptive error description to archivisation callback
             ErrorDescription = <<"Errors occurered during archivisation job.">>,
             archivisation_callback:notify_preservation_failed(ArchiveId, DatasetId, CallbackUrlOrUndefined, ErrorDescription)
@@ -237,4 +237,4 @@ do_slave_job(#tree_traverse_slave{
     {SDHandle, _} = storage_driver:new_handle(SessionId, CopyCtx2),
     ok = storage_driver:flushbuffer(SDHandle, FileSize),
 
-    {ok, #{byte_size => FileSize}}.
+    {ok, #{bytes_archived => FileSize}}.

@@ -49,7 +49,7 @@ translate_archive_info(#archive_info{
     files_to_archive = FilesToArchive,
     files_archived = FilesArchived,
     files_failed = FilesFailed,
-    byte_size = ByteSize
+    bytes_archived = BytesArchived
 }) ->
     #{
         <<"gri">> => gri:serialize(#gri{
@@ -78,5 +78,5 @@ translate_archive_info(#archive_info{
         <<"filesToArchive">> => FilesToArchive,
         <<"filesArchived">> => FilesArchived,
         <<"filesFailed">> => FilesFailed,
-        <<"byteSize">> => ByteSize
+        <<"bytesArchived">> => BytesArchived
     }.
