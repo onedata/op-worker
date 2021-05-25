@@ -333,7 +333,7 @@
     files_to_archive = 0 :: non_neg_integer(),
     files_archived = 0 :: non_neg_integer(),
     files_failed = 0 :: non_neg_integer(),
-    byte_size = 0 :: non_neg_integer()
+    bytes_archived = 0 :: non_neg_integer()
 }).
 
 -record(archives, {

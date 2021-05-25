@@ -33,7 +33,7 @@
     is_posix_compatible/1, is_getting_size_supported/1, is_rename_supported/1,
     is_import_supported/1, is_auto_import_supported/1, is_file_registration_supported/1,
     is_nfs4_acl_supported/1, should_skip_storage_detection/1, supports_storage_access_type/2,
-    is_object/1
+    is_object/1, is_archive_storage/1
 ]).
 -export([get_args_with_user_ctx/2]).
 -export([translate_name/1, translate_arg_name/1]).
@@ -299,6 +299,12 @@ is_object(#helper{name = Name}) ->
     is_object(Name);
 is_object(HelperName) ->
     lists:member(HelperName, ?OBJECT_HELPERS).
+
+
+-spec is_archive_storage(helpers:helper()) -> boolean().
+is_archive_storage(#helper{args = Args}) ->
+    utils:to_boolean(maps:get(<<"archiveStorage">>, Args, false)).
+
 
 -spec is_getting_size_supported(helpers:helper()) -> boolean().
 is_getting_size_supported(Helper) ->

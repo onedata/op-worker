@@ -55,11 +55,11 @@ groups() -> [
         archive_dataset_attached_to_file,
         archive_dataset_attached_to_hardlink,
         archive_dataset_attached_to_symlink,
-        archive_big_tree,
         archive_directory_with_number_of_files_exceeding_batch_size
     ]},
     {sequential_tests, [sequential], [
-        archive_dataset_attached_to_space_dir
+        archive_dataset_attached_to_space_dir,
+        archive_big_tree
     ]}
 ].
 
@@ -69,7 +69,7 @@ all() -> [
     {group, sequential_tests}
 ].
 
--define(ATTEMPTS, 120).
+-define(ATTEMPTS, 300).
 
 -define(SPACE, space_krk_par_p).
 -define(USER1, user1).
@@ -112,7 +112,7 @@ create_archivisation_tree(_Config) ->
     SpaceId = oct_background:get_space_id(?SPACE),
     Count = 100,
     % Generate mock datasets, archives and users
-    MockedData = [{?DATASET_ID(), ?ARCHIVE_ID()} || _ <- lists:seq(1, Count)],
+    MockedData = [{?DATASET_ID(), ?ARCHIVE_ID(), ?USER_ID()} || _ <- lists:seq(1, Count)],
 
     P1Data = lists_utils:random_sublist(MockedData),
     P2Data = MockedData -- P1Data,
@@ -120,8 +120,8 @@ create_archivisation_tree(_Config) ->
     % create archive directories for mock data
     lists_utils:pforeach(fun({Provider, Data}) ->
         Node = oct_background:get_random_provider_node(Provider),
-        lists_utils:pforeach(fun({DatasetId, ArchiveId}) ->
-            create_archive_dir(Node, ArchiveId, DatasetId, SpaceId)
+        lists_utils:pforeach(fun({DatasetId, ArchiveId, UserId}) ->
+            create_archive_dir(Node, ArchiveId, DatasetId, SpaceId, UserId)
         end, Data)
     end, [{P1, P1Data}, {P2, P2Data}]),
 
@@ -129,8 +129,8 @@ create_archivisation_tree(_Config) ->
     lists_utils:pforeach(fun(Provider) ->
         Node = oct_background:get_random_provider_node(Provider),
         SessionId = oct_background:get_user_session_id(?USER1, Provider),
-        lists_utils:pforeach(fun({DatasetId, ArchiveId}) ->
-            assert_archive_dir_structure_is_correct(Node, SessionId, SpaceId, DatasetId, ArchiveId)
+        lists_utils:pforeach(fun({DatasetId, ArchiveId, UserId}) ->
+            assert_archive_dir_structure_is_correct(Node, SessionId, SpaceId, DatasetId, ArchiveId, UserId)
         end, MockedData)
     end, Providers).
 
@@ -218,7 +218,8 @@ archive_simple_dataset_test_base(Guid, DatasetId, ArchiveId) ->
     lists:foreach(fun(Provider) ->
         Node = oct_background:get_random_provider_node(Provider),
         SessionId = oct_background:get_user_session_id(?USER1, Provider),
-        assert_archive_dir_structure_is_correct(Node, SessionId, SpaceId, DatasetId, ArchiveId),
+        UserId = oct_background:get_user_id(?USER1),
+        assert_archive_dir_structure_is_correct(Node, SessionId, SpaceId, DatasetId, ArchiveId, UserId),
         {ok, #file_attr{type = Type, size = Size}} = lfm_proxy:stat(Node, SessionId, ?FILE_REF(Guid)),
         {FileCount, ExpSize} = case Type of
             ?DIRECTORY_TYPE -> {0, 0};
@@ -251,7 +252,7 @@ archive_dataset_tree_test_base(FileStructure) ->
 
 init_per_suite(Config) ->
     oct_background:init_per_suite(Config, #onenv_test_config{
-        onenv_scenario = "2op",
+        onenv_scenario = "2op-archive",
         envs = [{op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}]
     }).
 
@@ -278,13 +279,13 @@ end_per_testcase(_Case, _Config) ->
 % Internal functions
 %===================================================================
 
-create_archive_dir(Node, ArchiveId, DatasetId, SpaceId) ->
-    rpc:call(Node, archivisation_tree, create_archive_dir, [ArchiveId, DatasetId, SpaceId]).
+create_archive_dir(Node, ArchiveId, DatasetId, SpaceId, UserId) ->
+    rpc:call(Node, archivisation_tree, create_archive_dir, [ArchiveId, DatasetId, SpaceId, UserId]).
 
-assert_archive_dir_structure_is_correct(Node, SessionId, SpaceId, DatasetId, ArchiveId) ->
+assert_archive_dir_structure_is_correct(Node, SessionId, SpaceId, DatasetId, ArchiveId, UserId) ->
     assert_archives_root_dir_exists(Node, SessionId, SpaceId),
     assert_dataset_archives_dir_exists(Node, SessionId, SpaceId, DatasetId),
-    assert_archive_dir_exists(Node, SessionId, SpaceId, DatasetId, ArchiveId).
+    assert_archive_dir_exists(Node, SessionId, SpaceId, DatasetId, ArchiveId, UserId).
 
 assert_archives_root_dir_exists(Node, SessionId, SpaceId) ->
     ArchivesRootUuid = ?ARCHIVES_ROOT_DIR_UUID(SpaceId),
@@ -310,13 +311,13 @@ assert_dataset_archives_dir_exists(Node, SessionId, SpaceId, DatasetId) ->
     ?assertMatch({ok, #file_attr{
         guid = DatasetArchivesDirGuid,
         name = DatasetArchivesDirUuid,
-        mode = ?DATASET_ARCHIVES_DIR_PERMS,
+        mode = ?DEFAULT_DIR_PERMS,
         owner_id = ?SPACE_OWNER_ID(SpaceId),
         parent_guid = ArchivesRootGuid
     }}, lfm_proxy:stat(Node, SessionId, ?FILE_REF(DatasetArchivesDirGuid)), ?ATTEMPTS).
 
 
-assert_archive_dir_exists(Node, SessionId, SpaceId, DatasetId, ArchiveId) ->
+assert_archive_dir_exists(Node, SessionId, SpaceId, DatasetId, ArchiveId, UserId) ->
     ArchiveDirUuid = ?ARCHIVE_DIR_UUID(ArchiveId),
     ArchiveDirGuid = file_id:pack_guid(ArchiveDirUuid, SpaceId),
     DatasetArchivesDirUuid = ?DATASET_ARCHIVES_DIR_UUID(DatasetId),
@@ -326,7 +327,7 @@ assert_archive_dir_exists(Node, SessionId, SpaceId, DatasetId, ArchiveId) ->
         guid = ArchiveDirGuid,
         name = ArchiveDirUuid,
         mode = ?DEFAULT_DIR_PERMS,
-        owner_id = ?SPACE_OWNER_ID(SpaceId),
+        owner_id = UserId,
         parent_guid = DatasetArchivesDirGuid
     }}, lfm_proxy:stat(Node, SessionId, ?FILE_REF(ArchiveDirGuid)), ?ATTEMPTS).
 
@@ -337,7 +338,7 @@ assert_archive_is_preserved(Node, SessionId, ArchiveId, RootGuid, FileCount, Exp
         files_to_archive = FileCount,
         files_archived = FileCount,
         files_failed = 0,
-        byte_size = ExpSize
+        bytes_archived = ExpSize
     }}, lfm_proxy:get_archive_info(Node, SessionId, ArchiveId), ?ATTEMPTS),
     ArchiveDirUuid = ?ARCHIVE_DIR_UUID(ArchiveId),
     SpaceId = file_id:guid_to_space_id(RootGuid),
@@ -348,7 +349,7 @@ assert_archive_is_preserved(Node, SessionId, ArchiveId, RootGuid, FileCount, Exp
     assert_copied(Node, SessionId, RootGuid, CopyRootGuid).
 
 
-assert_copied(Node, SessionId, SourceGuid, TargetGuid) ->
+    assert_copied(Node, SessionId, SourceGuid, TargetGuid) ->
     assert_attrs_copied(Node, SessionId, SourceGuid, TargetGuid),
     assert_metadata_copied(Node, SessionId, SourceGuid, TargetGuid),
     {ok, SourceAttr} = lfm_proxy:stat(Node, SessionId, ?FILE_REF(SourceGuid)),
@@ -412,11 +413,29 @@ assert_content_copied(Node, SessionId, SourceGuid, TargetGuid) ->
     ?assertEqual({ok, SourceContent},
         lfm_proxy:read(Node, SourceHandle, 0, 10000), ?ATTEMPTS),
     lfm_proxy:close(Node, SourceHandle),
-    lfm_proxy:close(Node, TargetHandle).
+    lfm_proxy:close(Node, TargetHandle),
+    assert_file_is_flushed_from_buffer(Node, SessionId, SourceGuid, TargetGuid).
 
+
+assert_file_is_flushed_from_buffer(Node, SessionId, SourceGuid, TargetGuid) ->
+    SpaceId = oct_background:get_space_id(?SPACE),
+    {ok, #file_attr{size = SourceSize}} = lfm_proxy:stat(Node, SessionId, ?FILE_REF(SourceGuid)),
+    TargetSDHandle = sd_test_utils:new_handle(Node, SpaceId, get_storage_file_id(Node, TargetGuid)),
+    GetStorageSize = fun(SDHandle) ->
+        case sd_test_utils:stat(Node, SDHandle) of
+            {ok, #statbuf{st_size = SourceSize}} -> SourceSize;
+            _ -> error
+        end
+    end,
+    ?assertEqual(SourceSize, GetStorageSize(TargetSDHandle), ?ATTEMPTS).
 
 assert_symlink_values_copied(Node, SessionId, SourceGuid, TargetGuid) ->
     ReadSymlink = fun(Guid) ->
         lfm_proxy:read_symlink(Node, SessionId, ?FILE_REF(Guid))
     end,
     ?assertEqual(ReadSymlink(SourceGuid), ReadSymlink(TargetGuid), ?ATTEMPTS).
+
+get_storage_file_id(Node, Guid) ->
+    FileCtx = rpc:call(Node, file_ctx, new_by_guid, [Guid]),
+    {StorageFileId, _} = rpc:call(Node, file_ctx, get_storage_file_id, [FileCtx]),
+    StorageFileId.

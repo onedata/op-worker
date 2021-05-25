@@ -25,7 +25,7 @@
 %% API
 -export([init_pool/0, stop_pool/0, start/3, get_description/1,
     get_files_to_archive_count/1, get_files_archived_count/1,
-    get_files_failed_count/1, get_byte_size/1
+    get_files_failed_count/1, get_bytes_archived/1
 ]).
 
 %% Traverse behaviour callbacks
@@ -53,7 +53,7 @@
 -spec init_pool() -> ok.
 init_pool() ->
     MasterJobsLimit = op_worker:get_env(archivisation_traverse_master_jobs_limit, 10),
-    SlaveJobsLimit = op_worker:get_env(archivisation_traverse_slave_jobs_limit, 10),
+    SlaveJobsLimit = op_worker:get_env(archivisation_traverse_slave_jobs_limit, 100),
     ParallelismLimit = op_worker:get_env(archivisation_traverse_parallelism_limit, 10),
     tree_traverse:init(?POOL_NAME, MasterJobsLimit, SlaveJobsLimit, ParallelismLimit).
 
@@ -72,7 +72,7 @@ start(ArchiveDoc, DatasetDoc, UserCtx) ->
             {ok, DatasetId} = archive:get_dataset_id(ArchiveDoc),
             {ok, SpaceId} = archive:get_space_id(ArchiveDoc),
             UserId = user_ctx:get_user_id(UserCtx),
-            {ok, ArchiveDirUuid} = archivisation_tree:create_archive_dir(ArchiveId, DatasetId, SpaceId),
+            {ok, ArchiveDirUuid} = archivisation_tree:create_archive_dir(ArchiveId, DatasetId, SpaceId, UserId),
             ArchiveDirGuid = file_id:pack_guid(ArchiveDirUuid, SpaceId),
             DatasetRootCtx = dataset_api:get_associated_file_ctx(DatasetDoc),
 
@@ -121,9 +121,9 @@ get_files_failed_count(JobDescription) ->
     maps:get(slave_jobs_failed, JobDescription, 0).
 
 
--spec get_byte_size(description()) -> non_neg_integer().
-get_byte_size(JobsDescription) ->
-    maps:get(byte_size, JobsDescription, 0).
+-spec get_bytes_archived(description()) -> non_neg_integer().
+get_bytes_archived(JobsDescription) ->
+    maps:get(bytes_archived, JobsDescription, 0).
 
 %%%===================================================================
 %%% Traverse behaviour callbacks
@@ -145,7 +145,7 @@ task_finished(TaskId, _Pool) ->
     FilesToArchive = get_files_to_archive_count(Description),
     FilesArchived = get_files_archived_count(Description),
     FilesFailed = get_files_failed_count(Description),
-    ByteSize = get_byte_size(Description),
+    BytesArchived = get_bytes_archived(Description),
 
     ArchiveId = maps:get(<<"archiveId">>, AdditionalData),
     DatasetId = maps:get(<<"datasetId">>, AdditionalData),
@@ -155,10 +155,10 @@ task_finished(TaskId, _Pool) ->
     MasterJobsFailed = maps:get(master_jobs_failed, Description, 0),
     case SlaveJobsFailed + MasterJobsFailed =:= 0 of
         true ->
-            ok = archive:mark_preserved(ArchiveId, FilesToArchive, FilesArchived, FilesFailed, ByteSize),
+            ok = archive:mark_preserved(ArchiveId, FilesToArchive, FilesArchived, FilesFailed, BytesArchived),
             archivisation_callback:notify_preserved(ArchiveId, DatasetId, CallbackUrlOrUndefined);
         false ->
-            ok = archive:mark_failed(ArchiveId, FilesToArchive, FilesArchived, FilesFailed, ByteSize),
+            ok = archive:mark_failed(ArchiveId, FilesToArchive, FilesArchived, FilesFailed, BytesArchived),
             % TODO VFS-7662 send more descriptive error description to archivisation callback
             ErrorDescription = <<"Errors occurered during archivisation job.">>,
             archivisation_callback:notify_preservation_failed(ArchiveId, DatasetId, CallbackUrlOrUndefined, ErrorDescription)
@@ -227,9 +227,14 @@ do_slave_job(#tree_traverse_slave{
     traverse_info = #{target_parent_guid := TargetParentGuid}
 }, TaskId) ->
     {ok, UserCtx} = tree_traverse_session:acquire_for_task(UserId, ?POOL_NAME, TaskId),
+    SessionId = user_ctx:get_session_id(UserCtx),
     {FileName, FileCtx2} = file_ctx:get_aliased_name(FileCtx, UserCtx),
     FileGuid = file_ctx:get_logical_guid_const(FileCtx2),
-    {ok, CopyGuid, _} = file_copy:copy(user_ctx:get_session_id(UserCtx), FileGuid, TargetParentGuid, FileName, false),
+    {ok, CopyGuid, _} = file_copy:copy(SessionId, FileGuid, TargetParentGuid, FileName, false),
+
     CopyCtx = file_ctx:new_by_guid(CopyGuid),
-    {FileSize, _} = file_ctx:get_file_size(CopyCtx),
-    {ok, #{byte_size => FileSize}}.
+    {FileSize, CopyCtx2} = file_ctx:get_local_storage_file_size(CopyCtx),
+    {SDHandle, _} = storage_driver:new_handle(SessionId, CopyCtx2),
+    ok = storage_driver:flushbuffer(SDHandle, FileSize),
+
+    {ok, #{bytes_archived => FileSize}}.

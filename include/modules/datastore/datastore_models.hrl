@@ -445,12 +445,12 @@
     files_to_archive = 0 :: non_neg_integer(),
     files_archived = 0 :: non_neg_integer(),
     files_failed = 0 :: non_neg_integer(),
-    byte_size = 0 :: non_neg_integer(),
+    bytes_archived = 0 :: non_neg_integer(),
 
     % internal fields
     % this field is used to fetch traverse_task document to get counters' values
     % when archivisation job is still in progress
-    job_id ::archivisation_traverse:id()
+    job_id :: archivisation_traverse:id()
 }).
 
 

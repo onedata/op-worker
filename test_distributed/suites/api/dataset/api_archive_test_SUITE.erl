@@ -57,7 +57,7 @@ all() -> [
     {group, all_tests}
 ].
 
--define(ATTEMPTS, 30).
+-define(ATTEMPTS, 120).
 -define(NON_EXISTENT_ARCHIVE_ID, <<"NonExistentArchive">>).
 -define(NON_EXISTENT_DATASET_ID, <<"NonExistentDataset">>).
 
@@ -232,7 +232,7 @@ build_create_archive_validate_gs_call_result_fun(MemRef) ->
         ExpArchiveData = build_archive_gs_instance(ArchiveId, DatasetId, CreationTime, ?ARCHIVE_BUILDING, Config,
             Description, PreservedCallback, PurgedCallback),
         % state is removed from the map as it may be in pending, building or even preserved state when request is handled
-        IgnoredKeys = [<<"state">>, <<"filesToArchive">>, <<"filesArchived">>, <<"filesFailed">>, <<"byteSize">>],
+        IgnoredKeys = [<<"state">>, <<"filesToArchive">>, <<"filesArchived">>, <<"filesFailed">>, <<"bytesArchived">>],
         ExpArchiveData2 = maps:without(IgnoredKeys, ExpArchiveData),
         ArchiveData2 = maps:without(IgnoredKeys, ArchiveData),
         ?assertMatch(ExpArchiveData2, ArchiveData2)
@@ -275,7 +275,7 @@ build_verify_archive_created_fun(MemRef, Providers) ->
 %% @private
 -spec await_archive_preserved_callback_called(archive:id(), dataset:id()) -> ok.
 await_archive_preserved_callback_called(ArchiveId, DatasetId) ->
-    Timeout = timer:seconds(60),
+    Timeout = timer:minutes(3),
     receive
         ?ARCHIVE_PERSISTED(ArchiveId, DatasetId) -> ok
     after
@@ -331,7 +331,7 @@ get_archive_info(_Config) ->
                             <<"filesToArchive">> => 1,
                             <<"filesArchived">> => 1,
                             <<"filesFailed">> => 0,
-                            <<"byteSize">> => 0
+                            <<"bytesArchived">> => 0
                         },
                         ?assertEqual(?HTTP_200_OK, RespCode),
                         ?assertEqual(ExpArchiveData, RespBody)
@@ -861,7 +861,7 @@ verify_archive(
             files_to_archive = 1,
             files_archived = 1,
             files_failed = 0,
-            byte_size = 0
+            bytes_archived = 0
         },
         ?assertEqual({ok, ExpArchiveInfo}, lfm_proxy:get_archive_info(Node, UserSessId, ArchiveId), ?ATTEMPTS)
     end, Providers).
@@ -893,7 +893,7 @@ build_archive_gs_instance(ArchiveId, DatasetId, CreationTime, State, Config, Des
         files_to_archive = 1,
         files_archived = 1,
         files_failed = 0,
-        byte_size = 0
+        bytes_archived = 0
     }),
     BasicInfo#{<<"revision">> => 1}.
 
@@ -985,11 +985,11 @@ do(#mod{method = "POST", request_uri = ?ARCHIVE_PURGED_PATH, entity_body = Body}
 
 -spec handle_callback_message(function()) -> tuple().
 handle_callback_message(HandleFun) ->
-    ResponseCode = case rand:uniform(2) of
-        1 ->
+    ResponseCode = case rand:uniform(4) of
+        N when N =< 3 ->
             HandleFun(),
             ?HTTP_204_NO_CONTENT;
-        2 ->
+        4 ->
             ?HTTP_500_INTERNAL_SERVER_ERROR
     end,
     {proceed, [{response,{ResponseCode, []}}]}.
