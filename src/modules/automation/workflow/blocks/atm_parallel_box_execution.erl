@@ -12,6 +12,8 @@
 -module(atm_parallel_box_execution).
 -author("Bartosz Walkowicz").
 
+-behaviour(persistent_record).
+
 -include("modules/automation/atm_execution.hrl").
 
 -export([
@@ -22,6 +24,9 @@
     gather_statuses/1,
     update_task_status/3
 ]).
+
+%% persistent_record callbacks
+-export([version/0, db_encode/2, db_decode/2]).
 
 
 -type status() :: atm_task_execution:status().
@@ -139,3 +144,45 @@ update_task_status(AtmTaskExecutionId, NewStatus, #atm_parallel_box_execution{
         false ->
             {error, AtmTaskExecutionStatus}
     end.
+
+
+%%%===================================================================
+%%% persistent_record callbacks
+%%%===================================================================
+
+
+-spec version() -> persistent_record:record_version().
+version() ->
+    1.
+
+
+-spec db_encode(record(), persistent_record:nested_record_encoder()) ->
+    json_utils:json_term().
+db_encode(#atm_parallel_box_execution{
+    schema_id = AtmParallelBoxSchemaId,
+    status = AtmParallelBoxExecutionStatus,
+    tasks = Tasks
+}, _NestedRecordEncoder) ->
+    #{
+        <<"schemaId">> => AtmParallelBoxSchemaId,
+        <<"status">> => atom_to_binary(AtmParallelBoxExecutionStatus, utf8),
+        <<"parallelBoxes">> => maps:map(fun(_AtmTaskExecutionId, AtmTaskExecutionStatus) ->
+            atom_to_binary(AtmTaskExecutionStatus, utf8)
+        end, Tasks)
+    }.
+
+
+-spec db_decode(json_utils:json_term(), persistent_record:nested_record_decoder()) ->
+    record().
+db_decode(#{
+    <<"schemaId">> := AtmParallelBoxSchemaId,
+    <<"status">> := AtmParallelBoxExecutionStatusBin,
+    <<"parallelBoxes">> := AtmParallelBoxExecutionsJson
+}, _NestedRecordDecoder) ->
+    #atm_parallel_box_execution{
+        schema_id = AtmParallelBoxSchemaId,
+        status = binary_to_atom(AtmParallelBoxExecutionStatusBin, utf8),
+        tasks = maps:map(fun(_AtmTaskExecutionId, AtmTaskExecutionStatusBin) ->
+            binary_to_atom(AtmTaskExecutionStatusBin, utf8)
+        end, AtmParallelBoxExecutionsJson)
+    }.

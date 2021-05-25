@@ -106,16 +106,7 @@ get_record_struct(1) ->
         {schema_snapshot_id, string},
 
         {store_registry, #{string => string}},
-
-        {lanes, [{record, [
-            {schema_id, string},
-            {status, atom},
-            {parallel_boxes, [{record, [
-                {schema_id, string},
-                {status, atom},
-                {tasks, #{string => atom}}
-            ]}]}
-        ]}]},
+        {lanes, [{custom, string, {persistent_record, encode, decode, atm_lane_execution}}]},
 
         {status, atom},
         {status_changed, boolean},

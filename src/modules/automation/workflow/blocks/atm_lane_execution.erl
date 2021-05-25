@@ -12,6 +12,8 @@
 -module(atm_lane_execution).
 -author("Bartosz Walkowicz").
 
+-behaviour(persistent_record).
+
 -include("modules/automation/atm_execution.hrl").
 
 %% API
@@ -23,6 +25,9 @@
     gather_statuses/1,
     update_task_status/4
 ]).
+
+%% persistent_record callbacks
+-export([version/0, db_encode/2, db_decode/2]).
 
 
 -type status() :: atm_task_execution:status().
@@ -137,3 +142,45 @@ update_task_status(AtmParallelBoxIndex, AtmTaskExecutionId, NewStatus, #atm_lane
         {error, _} = Error ->
             Error
     end.
+
+
+%%%===================================================================
+%%% persistent_record callbacks
+%%%===================================================================
+
+
+-spec version() -> persistent_record:record_version().
+version() ->
+    1.
+
+
+-spec db_encode(record(), persistent_record:nested_record_encoder()) ->
+    json_utils:json_term().
+db_encode(#atm_lane_execution{
+    schema_id = AtmLaneSchemaId,
+    status = AtmLaneExecutionStatus,
+    parallel_boxes = AtmParallelBoxExecutions
+}, NestedRecordEncoder) ->
+    #{
+        <<"schemaId">> => AtmLaneSchemaId,
+        <<"status">> => atom_to_binary(AtmLaneExecutionStatus, utf8),
+        <<"parallelBoxes">> => lists:map(fun(AtmParallelBoxExecution) ->
+            NestedRecordEncoder(AtmParallelBoxExecution, atm_parallel_box_execution)
+        end, AtmParallelBoxExecutions)
+    }.
+
+
+-spec db_decode(json_utils:json_term(), persistent_record:nested_record_decoder()) ->
+    record().
+db_decode(#{
+    <<"schemaId">> := AtmLaneSchemaId,
+    <<"status">> := AtmLaneExecutionStatusBin,
+    <<"parallelBoxes">> := AtmParallelBoxExecutionsJson
+}, NestedRecordDecoder) ->
+    #atm_lane_execution{
+        schema_id = AtmLaneSchemaId,
+        status = binary_to_atom(AtmLaneExecutionStatusBin, utf8),
+        parallel_boxes = lists:map(fun(AtmParallelBoxExecutionJson) ->
+            NestedRecordDecoder(AtmParallelBoxExecutionJson, atm_parallel_box_execution)
+        end, AtmParallelBoxExecutionsJson)
+    }.
