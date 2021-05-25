@@ -1041,7 +1041,7 @@
     schema_id :: automation:id(),
 
     executor :: atm_task_executor:record(),
-    argument_specs :: [atm_task_execution:arg_spec()],
+    argument_specs :: [atm_task_execution_argument_spec:record()],
 
     status :: atm_task_execution:status(),
     % Flag used to tell if status was changed during doc update (set automatically

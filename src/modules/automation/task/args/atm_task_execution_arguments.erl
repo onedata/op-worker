@@ -6,18 +6,16 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Utility functions for handling atm task execution arguments.
+%%% Utility functions for constructing task execution argument specs and values.
 %%% @end
 %%%-------------------------------------------------------------------
--module(atm_task_execution_args).
+-module(atm_task_execution_arguments).
 -author("Bartosz Walkowicz").
 
--include("modules/automation/atm_tmp.hrl").
 -include("modules/automation/atm_execution.hrl").
--include_lib("ctool/include/automation/automation.hrl").
 
 %% API
--export([build_specs/2, build_args/2]).
+-export([build_specs/2, construct_args/2]).
 
 
 %%%===================================================================
@@ -29,7 +27,7 @@
     [atm_lambda_argument_spec:record()],
     [atm_task_schema_argument_mapper:record()]
 ) ->
-    [atm_task_execution:arg_spec()].
+    [atm_task_execution_argument_spec:record()].
 build_specs(AtmLambdaArgSpecs, AtmTaskSchemaArgMappers) ->
     build_specs(
         lists:usort(fun order_atm_lambda_arg_specs_by_name/2, AtmLambdaArgSpecs),
@@ -38,17 +36,17 @@ build_specs(AtmLambdaArgSpecs, AtmTaskSchemaArgMappers) ->
     ).
 
 
--spec build_args(atm_task_execution:ctx(), [atm_task_execution:arg_spec()]) ->
+-spec construct_args(
+    atm_task_execution:ctx(),
+    [atm_task_execution_argument_spec:record()]
+) ->
     json_utils:json_map() | no_return().
-build_args(AtmTaskExecutionCtx, AtmTaskExecutionArgSpecs) ->
-    lists:foldl(fun(#atm_task_execution_argument_spec{
-        name = ArgName,
-        value_builder = ArgValueBuilder
-    } = AtmTaskExecutionArgSpec, Args) ->
+construct_args(AtmTaskExecutionCtx, AtmTaskExecutionArgSpecs) ->
+    lists:foldl(fun(#atm_task_execution_argument_spec{name = ArgName} = AtmTaskExecutionArgSpec, Args) ->
         try
-            ArgValue = build_arg(AtmTaskExecutionCtx, ArgValueBuilder),
-            validate_arg(ArgValue, AtmTaskExecutionArgSpec),
-            Args#{ArgName => ArgValue}
+            Args#{ArgName => atm_task_execution_argument_spec:construct_arg(
+                AtmTaskExecutionCtx, AtmTaskExecutionArgSpec
+            )}
         catch _:Reason ->
             throw(?ERROR_ATM_TASK_ARG_MAPPING_FAILED(ArgName, Reason))
         end
@@ -90,9 +88,9 @@ order_atm_task_schema_arg_mappers_by_name(
 -spec build_specs(
     OrderedUniqueAtmLambdaArgSpecs :: [atm_lambda_argument_spec:record()],
     OrderedUniqueAtmTaskSchemaArgMappers :: [atm_task_schema_argument_mapper:record()],
-    AtmTaskExecutionArgSpecs :: [atm_task_execution:arg_spec()]
+    AtmTaskExecutionArgSpecs :: [atm_task_execution_argument_spec:record()]
 ) ->
-    [atm_task_execution:arg_spec()] | no_return().
+    [atm_task_execution_argument_spec:record()] | no_return().
 build_specs([], [], AtmTaskExecutionArgSpecs) ->
     AtmTaskExecutionArgSpecs;
 
@@ -102,7 +100,8 @@ build_specs(
     AtmTaskExecutionArgSpecs
 ) ->
     build_specs(RestAtmLambdaArgSpecs, RestAtmTaskSchemaArgMappers, [
-        build_spec(AtmLambdaArgSpec, AtmTaskSchemaArgMapper) | AtmTaskExecutionArgSpecs
+        atm_task_execution_argument_spec:build(AtmLambdaArgSpec, AtmTaskSchemaArgMapper)
+        | AtmTaskExecutionArgSpecs
     ]);
 
 build_specs(
@@ -111,7 +110,8 @@ build_specs(
     AtmTaskExecutionArgSpecs
 ) when Default /= undefined ->
     build_specs(RestAtmLambdaArgSpecs, AtmTaskSchemaArgMappers, [
-        build_spec(AtmLambdaArgSpec, undefined), AtmTaskExecutionArgSpecs
+        atm_task_execution_argument_spec:build(AtmLambdaArgSpec, undefined)
+        | AtmTaskExecutionArgSpecs
     ]);
 
 build_specs(
@@ -135,85 +135,3 @@ build_specs(
 ) ->
     throw(?ERROR_ATM_TASK_ARG_MAPPER_FOR_NONEXISTENT_LAMBDA_ARG(Name)).
 
-
-%% @private
--spec build_spec(
-    atm_lambda_argument_spec:record(),
-    undefined | atm_task_schema_argument_mapper:record()
-) ->
-    atm_task_execution:arg_spec().
-build_spec(#atm_lambda_argument_spec{
-    name = Name,
-    data_spec = AtmDataSpec,
-    is_batch = IsBatch,
-    default_value = DefaultValue
-}, undefined) ->
-    #atm_task_execution_argument_spec{
-        name = Name,
-        value_builder = #atm_task_argument_value_builder{type = const, recipe = DefaultValue},
-        data_spec = AtmDataSpec,
-        is_batch = IsBatch
-    };
-
-build_spec(#atm_lambda_argument_spec{
-    name = Name,
-    data_spec = AtmDataSpec,
-    is_batch = IsBatch
-}, #atm_task_schema_argument_mapper{value_builder = ValueBuilder}) ->
-    #atm_task_execution_argument_spec{
-        name = Name,
-        value_builder = ValueBuilder,
-        data_spec = AtmDataSpec,
-        is_batch = IsBatch
-    }.
-
-
-% TODO VFS-7660 handle rest of atm_task_argument_value_builder:type()
-%% @private
--spec build_arg(atm_task_execution:ctx(), atm_task_argument_value_builder:record()) ->
-    json_utils:json_term() | no_return().
-build_arg(_AtmTaskExecutionArgSpec, #atm_task_argument_value_builder{
-    type = const,
-    recipe = ConstValue
-}) ->
-    ConstValue;
-
-build_arg(#atm_task_execution_ctx{item = Item}, #atm_task_argument_value_builder{
-    type = iterated_item,
-    recipe = undefined
-}) ->
-    Item;
-
-build_arg(#atm_task_execution_ctx{item = Item}, #atm_task_argument_value_builder{
-    type = iterated_item,
-    recipe = Query
-}) ->
-    % TODO VFS-7660 fix query in case of array indices
-    case json_utils:query(Item, Query) of
-        {ok, Value} -> Value;
-        error -> throw(?ERROR_ATM_TASK_ARG_MAPPER_ITEM_QUERY_FAILED(Item, Query))
-    end;
-
-build_arg(_AtmTaskExecutionArgSpec, _InputSpec) ->
-    throw(?ERROR_ATM_TASK_ARG_MAPPER_INVALID_INPUT_SPEC).
-
-
-%% @private
--spec validate_arg(
-    json_utils:json_term() | [json_utils:json_term()],
-    atm_task_execution:arg_spec()
-) ->
-    ok | no_return().
-validate_arg(ArgsBatch, #atm_task_execution_argument_spec{
-    data_spec = AtmDataSpec,
-    is_batch = true
-}) ->
-    lists:foreach(fun(ArgValue) ->
-        atm_data_validator:validate(ArgValue, AtmDataSpec)
-    end, ArgsBatch);
-
-validate_arg(ArgValue, #atm_task_execution_argument_spec{
-    data_spec = AtmDataSpec,
-    is_batch = false
-}) ->
-    atm_data_validator:validate(ArgValue, AtmDataSpec).

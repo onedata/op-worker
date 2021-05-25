@@ -85,7 +85,9 @@ create(AtmExecutionCreationCtx, AtmLaneIndex, AtmParallelBoxIndex, #atm_task_sch
         schema_id = AtmTaskSchemaId,
 
         executor = atm_task_executor:create(AtmWorkflowExecutionId, AtmLambdaOperationSpec),
-        argument_specs = atm_task_execution_args:build_specs(AtmLambdaArgSpecs, AtmTaskArgMappers),
+        argument_specs = atm_task_execution_arguments:build_specs(
+            AtmLambdaArgSpecs, AtmTaskArgMappers
+        ),
 
         status = ?PENDING_STATUS,
 
@@ -137,8 +139,9 @@ run(AtmTaskExecutionId, Item) ->
     } = update_items_in_processing(AtmTaskExecutionId),
 
     AtmTaskExecutionCtx = #atm_task_execution_ctx{item = Item},
-    Args = atm_task_execution_args:build_args(AtmTaskExecutionCtx, AtmTaskArgSpecs),
-
+    Args = atm_task_execution_arguments:construct_args(
+        AtmTaskExecutionCtx, AtmTaskArgSpecs
+    ),
     atm_task_executor:run(Args, AtmTaskExecutor).
 
 

@@ -27,11 +27,10 @@
 -type diff() :: datastore_doc:diff(record()).
 
 -type ctx() :: #atm_task_execution_ctx{}.
--type arg_spec() :: #atm_task_execution_argument_spec{}.
 -type status() :: ?PENDING_STATUS | ?ACTIVE_STATUS | ?FINISHED_STATUS | ?FAILED_STATUS.
 
 -export_type([id/0, record/0, doc/0, diff/0]).
--export_type([ctx/0, arg_spec/0, status/0]).
+-export_type([ctx/0, status/0]).
 
 
 -define(CTX, #{model => ?MODULE}).
@@ -98,12 +97,9 @@ get_record_struct(1) ->
         {schema_id, string},
 
         {executor, {custom, string, {persistent_record, encode, decode, atm_task_executor}}},
-        {argument_specs, [{record, [
-            {name, string},
-            {value_builder, {custom, string, {persistent_record, encode, decode, atm_task_argument_value_builder}}},
-            {data_spec, {custom, string, {persistent_record, encode, decode, atm_data_spec}}},
-            {is_batch, boolean}
-        ]}]},
+        {argument_specs, [{custom, string, {
+            persistent_record, encode, decode, atm_task_execution_argument_spec
+        }}]},
 
         {status, atom},
         {status_changed, boolean},
