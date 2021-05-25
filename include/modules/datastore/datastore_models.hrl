@@ -1076,11 +1076,9 @@
     store_registry :: atm_workflow_execution:store_registry(),
     lanes :: [atm_lane_execution:record()],
 
-    status :: atm_workflow_execution:status(),
-    % Flag used to tell if status was changed during doc update. It is necessary
-    % due to limitation of datastore as otherwise getting document before update
-    % would be needed (to compare 2 docs)
-    status_changed = false :: boolean(),
+    % Along with the value of 'status' parameter, stores information whether
+    % the value has changed during the last update.
+    status :: {atm_workflow_execution:status(), changed | unchanged},
 
     schedule_time = 0 :: atm_workflow_execution:timestamp(),
     start_time = 0 :: atm_workflow_execution:timestamp(),

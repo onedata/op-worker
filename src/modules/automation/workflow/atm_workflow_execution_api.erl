@@ -100,7 +100,7 @@ report_task_status_change(
         )
     end,
     case atm_workflow_execution:update(AtmWorkflowExecutionId, Diff) of
-        {ok, #document{value = #atm_workflow_execution{status_changed = true}}} ->
+        {ok, #document{value = #atm_workflow_execution{status = {_Status, changed}}}} ->
             % TODO VFS-7672 change link tree
             ok;
         _ ->
@@ -190,7 +190,7 @@ create_doc(
                 store_registry = AtmStoreRegistry,
                 lanes = AtmLaneExecutions,
 
-                status = ?SCHEDULED_STATUS,
+                status = {?SCHEDULED_STATUS, changed},
 
                 schedule_time = global_clock:timestamp_seconds(),
                 start_time = 0,
@@ -240,7 +240,7 @@ delete_execution_elements(_) ->
 transition_to_status(AtmWorkflowExecutionId, ?FAILED_STATUS) ->
     % TODO VFS-7674 should fail here change status of all lanes, pboxes and tasks ??
     TransitFun = fun(#atm_workflow_execution{} = AtmWorkflowExecution) ->
-        {ok, AtmWorkflowExecution#atm_workflow_execution{status = ?FAILED_STATUS}}
+        {ok, AtmWorkflowExecution#atm_workflow_execution{status = {?FAILED_STATUS, changed}}}
     end,
     {ok, #document{value = AtmWorkflowExecutionRecord}} = atm_workflow_execution:update(
         AtmWorkflowExecutionId, TransitFun
@@ -248,10 +248,10 @@ transition_to_status(AtmWorkflowExecutionId, ?FAILED_STATUS) ->
     {ok, AtmWorkflowExecutionRecord};
 
 transition_to_status(AtmWorkflowExecutionId, NewStatus) ->
-    Diff = fun(#atm_workflow_execution{status = Status} = AtmWorkflowExecution) ->
+    Diff = fun(#atm_workflow_execution{status = {Status, _}} = AtmWorkflowExecution) ->
         case atm_status_utils:is_transition_allowed(Status, NewStatus) of
             true ->
-                {ok, AtmWorkflowExecution#atm_workflow_execution{status = NewStatus}};
+                {ok, AtmWorkflowExecution#atm_workflow_execution{status = {NewStatus, changed}}};
             false ->
                 {error, Status}
         end
@@ -280,7 +280,7 @@ update_task_status(
     AtmTaskExecutionId,
     NewStatus,
     AtmWorkflowExecution = #atm_workflow_execution{
-        status = CurrentStatus,
+        status = {CurrentStatus, _},
         lanes = AtmLaneExecutions
     }
 ) ->
@@ -297,8 +297,10 @@ update_task_status(
                 atm_lane_execution:gather_statuses(NewAtmLaneExecutions)
             ),
             {ok, AtmWorkflowExecution#atm_workflow_execution{
-                status = NewAtmWorkflowStatus,
-                status_changed = NewAtmWorkflowStatus /= CurrentStatus,
+                status = case NewAtmWorkflowStatus == CurrentStatus of
+                    true -> {NewAtmWorkflowStatus, unchanged};
+                    false -> {NewAtmWorkflowStatus, changed}
+                end,
                 lanes = NewAtmLaneExecutions
             }};
         {error, _} = Error ->
