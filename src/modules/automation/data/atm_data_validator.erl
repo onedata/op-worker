@@ -33,7 +33,7 @@
 %% Asserts that give value is of expected type and all value constraints hold.
 %% @end
 %%--------------------------------------------------------------------
--callback assert_instance(atm_execution:item(), atm_data_type:value_constraints()) ->
+-callback assert_instance(atm_api:item(), atm_data_type:value_constraints()) ->
     ok | no_return().
 
 
@@ -42,7 +42,7 @@
 %%%===================================================================
 
 
--spec assert_instance(atm_execution:item(), atm_data_spec:record()) ->
+-spec assert_instance(atm_api:item(), atm_data_spec:record()) ->
     ok | no_return().
 assert_instance(Value, AtmDataSpec) ->
     Module = get_callback_module(atm_data_spec:get_type(AtmDataSpec)),

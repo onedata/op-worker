@@ -26,7 +26,7 @@
 %%%===================================================================
 
 
--spec assert_instance(atm_execution:item(), atm_data_type:value_constraints()) ->
+-spec assert_instance(atm_api:item(), atm_data_type:value_constraints()) ->
     ok | no_return().
 assert_instance(Value, _ValueConstraints) when is_integer(Value) ->
     ok;

@@ -34,7 +34,7 @@
 
 
 -record(atm_single_value_container_iterator, {
-    value :: undefined | atm_execution:item(),
+    value :: undefined | atm_api:item(),
     exhausted = false :: boolean()
 }).
 -type record() :: #atm_single_value_container_iterator{}.
@@ -47,7 +47,7 @@
 %%%===================================================================
 
 
--spec build(undefined | atm_execution:item()) -> record().
+-spec build(undefined | atm_api:item()) -> record().
 build(Value) ->
     #atm_single_value_container_iterator{value = Value, exhausted = false}.
 
@@ -58,7 +58,7 @@ build(Value) ->
 
 
 -spec get_next_batch(atm_container_iterator:batch_size(), record()) ->
-    {ok, [atm_execution:item()], iterator:cursor(), record()} | stop.
+    {ok, [atm_api:item()], iterator:cursor(), record()} | stop.
 get_next_batch(_BatchSize, #atm_single_value_container_iterator{value = undefined}) ->
     stop;
 get_next_batch(_BatchSize, #atm_single_value_container_iterator{exhausted = true}) ->

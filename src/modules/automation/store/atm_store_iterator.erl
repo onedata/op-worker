@@ -58,7 +58,7 @@ build(AtmStoreIteratorSpec, AtmContainer) ->
 %%%===================================================================
 
 
--spec get_next(record()) -> {ok, atm_execution:item(), iterator:cursor(), record()} | stop.
+-spec get_next(record()) -> {ok, atm_api:item(), iterator:cursor(), record()} | stop.
 get_next(#atm_store_iterator{
     spec = #atm_store_iterator_spec{strategy = #atm_store_iterator_serial_strategy{}},
     container_iterator = AtmContainerIterator

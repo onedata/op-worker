@@ -31,7 +31,7 @@
 %%%===================================================================
 
 
--spec create_all(atm_execution:creation_ctx()) -> [atm_store:doc()] | no_return().
+-spec create_all(atm_api:creation_ctx()) -> [atm_store:doc()] | no_return().
 create_all(#atm_execution_creation_ctx{
     workflow_execution_id = AtmWorkflowExecutionId,
     workflow_schema_doc = #document{value = #od_atm_workflow_schema{
@@ -94,12 +94,12 @@ delete(AtmStoreId) ->
     atm_store:delete(AtmStoreId).
 
 
--spec acquire_iterator(atm_execution_state:record(), atm_store_iterator_spec:record()) ->
+-spec acquire_iterator(atm_workflow_execution_env:record(), atm_store_iterator_spec:record()) ->
     atm_store_iterator:record().
 acquire_iterator(AtmExecutionState, #atm_store_iterator_spec{
     store_schema_id = AtmStoreSchemaId
 } = AtmStoreIteratorConfig) ->
-    AtmStoreId = atm_execution_state:get_store_id(AtmStoreSchemaId, AtmExecutionState),
+    AtmStoreId = atm_workflow_execution_env:get_store_id(AtmStoreSchemaId, AtmExecutionState),
     {ok, #atm_store{container = AtmContainer}} = atm_store:get(AtmStoreId),
     atm_store_iterator:build(AtmStoreIteratorConfig, AtmContainer).
 

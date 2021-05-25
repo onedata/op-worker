@@ -35,7 +35,7 @@
 
 
 -spec create_all(
-    atm_execution:creation_ctx(),
+    atm_api:creation_ctx(),
     non_neg_integer(),
     non_neg_integer(),
     [atm_task_schema:record()]
@@ -56,7 +56,7 @@ create_all(AtmExecutionCreationCtx, AtmLaneIndex, AtmParallelBoxIndex, AtmTaskSc
 
 
 -spec create(
-    atm_execution:creation_ctx(),
+    atm_api:creation_ctx(),
     non_neg_integer(),
     non_neg_integer(),
     atm_task_schema:record()

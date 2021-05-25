@@ -9,7 +9,7 @@
 %%% TODO VFS-7674 Describe automation workflow execution machinery
 %%% @end
 %%%--------------------------------------------------------------------
--module(atm_execution).
+-module(atm_api).
 -author("Bartosz Walkowicz").
 
 -include("modules/automation/atm_execution.hrl").
@@ -18,14 +18,14 @@
 -export([start/3]).
 
 
+% TODO VFS-7660 mv to automation erl
 -type item() :: json_utils:json_term().
 
 -type initial_values() :: #{AtmStoreSchemaId :: automation:id() => atm_store_api:initial_value()}.
--type store_registry() :: #{AtmStoreSchemaId :: automation:id() => atm_store:id()}.
 
 -type creation_ctx() :: #atm_execution_creation_ctx{}.
 
--export_type([item/0, initial_values/0, store_registry/0, creation_ctx/0]).
+-export_type([item/0, initial_values/0, creation_ctx/0]).
 
 
 %%%===================================================================

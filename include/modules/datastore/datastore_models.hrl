@@ -1073,7 +1073,7 @@
     space_id :: od_space:id(),
     schema_snapshot_id :: atm_workflow_schema_snapshot:id(),
 
-    store_registry :: atm_execution:store_registry(),
+    store_registry :: atm_workflow_execution:store_registry(),
     lanes :: [atm_lane_execution:record()],
 
     status :: atm_workflow_execution:status(),

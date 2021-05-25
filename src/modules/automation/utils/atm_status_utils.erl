@@ -10,7 +10,7 @@
 %%% lanes, parallel boxes and task statuses.
 %%% @end
 %%%-------------------------------------------------------------------
--module(atm_execution_status).
+-module(atm_status_utils).
 -author("Bartosz Walkowicz").
 
 -include("modules/automation/atm_execution.hrl").

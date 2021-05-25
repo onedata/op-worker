@@ -23,11 +23,11 @@
     space_id :: od_space:id(),
     workflow_execution_id :: atm_workflow_execution:id(),
     workflow_schema_doc :: od_atm_workflow_schema:doc(),
-    initial_values :: atm_execution:initial_values()
+    initial_values :: atm_api:initial_values()
 }).
 
--record(atm_execution_state, {
-    store_registry :: atm_execution:store_registry()
+-record(atm_workflow_execution_env, {
+    store_registry :: atm_workflow_execution:store_registry()
 }).
 
 -record(atm_lane_execution, {
@@ -54,9 +54,9 @@
 }).
 
 
--define(WAITING_STATE, waiting).
--define(ONGOING_STATE, ongoing).
--define(ENDED_STATE, ended).
+-define(WAITING_PHASE, waiting).
+-define(ONGOING_PHASE, ongoing).
+-define(ENDED_PHASE, ended).
 
 -define(WAITING_TREE, <<"waiting">>).
 -define(ONGOING_TREE, <<"ongoing">>).

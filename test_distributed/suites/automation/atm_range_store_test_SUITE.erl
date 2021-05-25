@@ -197,10 +197,10 @@ iterate_test_base(AtmRangeStoreInitialValue, AtmStoreIteratorStrategy, ExpItems)
         store_schema_id = AtmRangeStoreDummySchemaId,
         strategy = AtmStoreIteratorStrategy
     },
-    AtmExecutionState = #atm_execution_state{
+    AtmWorkflowExecutionEnv = #atm_workflow_execution_env{
         store_registry = #{AtmRangeStoreDummySchemaId => AtmRangeStoreId}
     },
-    AtmStoreIterator = acquire_store_iterate(Node, AtmExecutionState, AtmStoreIteratorSpec),
+    AtmStoreIterator = acquire_store_iterate(Node, AtmWorkflowExecutionEnv, AtmStoreIteratorSpec),
 
     assert_all_items_listed(Node, AtmStoreIterator, ExpItems).
 
@@ -229,10 +229,10 @@ iterator_cursor_test(_Config) ->
         store_schema_id = AtmRangeStoreDummySchemaId,
         strategy = #atm_store_iterator_serial_strategy{}
     },
-    AtmExecutionState = #atm_execution_state{
+    AtmWorkflowExecutionEnv = #atm_workflow_execution_env{
         store_registry = #{AtmRangeStoreDummySchemaId => AtmRangeStoreId}
     },
-    AtmSerialIterator0 = acquire_store_iterate(Node, AtmExecutionState, AtmStoreIteratorSpec),
+    AtmSerialIterator0 = acquire_store_iterate(Node, AtmWorkflowExecutionEnv, AtmStoreIteratorSpec),
 
     {ok, _, Cursor1, AtmSerialIterator1} = ?assertMatch({ok, 2, _, _}, iterator_get_next(Node, AtmSerialIterator0)),
     {ok, _, _Cursor2, AtmSerialIterator2} = ?assertMatch({ok, 5, _, _}, iterator_get_next(Node, AtmSerialIterator1)),
@@ -288,12 +288,14 @@ create_store(Node, InitialValue, AtmStoreSchema) ->
 %% @private
 -spec acquire_store_iterate(
     node(),
-    atm_execution_state:record(),
+    atm_workflow_execution_env:record(),
     atm_store_iterator_spec:record()
 ) ->
     atm_store_iterator:record().
-acquire_store_iterate(Node, AtmExecutionState, AtmStoreIteratorSpec) ->
-    rpc:call(Node, atm_store_api, acquire_iterator, [AtmExecutionState, AtmStoreIteratorSpec]).
+acquire_store_iterate(Node, AtmWorkflowExecutionEnv, AtmStoreIteratorSpec) ->
+    rpc:call(Node, atm_store_api, acquire_iterator, [
+        AtmWorkflowExecutionEnv, AtmStoreIteratorSpec
+    ]).
 
 
 %% @private

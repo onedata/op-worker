@@ -19,12 +19,12 @@
 -export([report_task_status_change/5]).
 
 
--record(components, {
+-record(execution_elements, {
     schema_snapshot_id = undefined :: undefined | atm_workflow_schema_snapshot:id(),
-    store_registry = undefined :: undefined | atm_execution:store_registry(),
+    store_registry = undefined :: undefined | atm_workflow_execution:store_registry(),
     lanes = undefined :: undefined | [atm_lane_execution:record()]
 }).
--type components() :: #components{}.
+-type execution_elements() :: #execution_elements{}.
 
 
 %%%===================================================================
@@ -32,12 +32,12 @@
 %%%===================================================================
 
 
--spec create(atm_execution:creation_ctx()) ->
+-spec create(atm_api:creation_ctx()) ->
     {ok, atm_workflow_execution:doc()} | no_return().
 create(AtmExecutionCreationCtx) ->
-    AtmWorkflowExecutionComponents = create_components(AtmExecutionCreationCtx),
+    AtmWorkflowExecutionElements = create_execution_elements(AtmExecutionCreationCtx),
     AtmWorkflowExecutionDoc = create_doc(
-        AtmExecutionCreationCtx, AtmWorkflowExecutionComponents
+        AtmExecutionCreationCtx, AtmWorkflowExecutionElements
     ),
     atm_waiting_workflow_executions:add(AtmWorkflowExecutionDoc),
 
@@ -69,7 +69,7 @@ delete(AtmWorkflowExecutionId) ->
         lanes = AtmLaneExecutions
     }}} = atm_workflow_execution:get(AtmWorkflowExecutionId),
 
-    delete_components(#components{
+    delete_execution_elements(#execution_elements{
         schema_snapshot_id = AtmWorkflowSchemaSnapshotId,
         store_registry = AtmStoreRegistry,
         lanes = AtmLaneExecutions
@@ -114,16 +114,17 @@ report_task_status_change(
 
 
 %% @private
--spec create_components(atm_execution:creation_ctx()) -> components() | no_return().
-create_components(AtmExecutionCreationCtx) ->
-    lists:foldl(fun(CreateComponentFun, Components) ->
+-spec create_execution_elements(atm_api:creation_ctx()) ->
+    execution_elements() | no_return().
+create_execution_elements(AtmExecutionCreationCtx) ->
+    lists:foldl(fun(CreateExecutionElementFun, ExecutionElements) ->
         try
-            CreateComponentFun(AtmExecutionCreationCtx, Components)
+            CreateExecutionElementFun(AtmExecutionCreationCtx, ExecutionElements)
         catch Type:Reason ->
-            delete_components(Components),
+            delete_execution_elements(ExecutionElements),
             erlang:Type(Reason)
         end
-    end, #components{}, [
+    end, #execution_elements{}, [
         fun create_schema_snapshot/2,
         fun create_stores/2,
         fun create_lane_executions/2
@@ -131,20 +132,21 @@ create_components(AtmExecutionCreationCtx) ->
 
 
 %% @private
--spec create_schema_snapshot(atm_execution:creation_ctx(), components()) -> components().
+-spec create_schema_snapshot(atm_api:creation_ctx(), execution_elements()) ->
+    execution_elements().
 create_schema_snapshot(#atm_execution_creation_ctx{
     workflow_execution_id = AtmWorkflowExecutionId,
     workflow_schema_doc = AtmWorkflowSchemaDoc
-}, Components) ->
+}, ExecutionElements) ->
     {ok, AtmWorkflowSchemaSnapshotId} = atm_workflow_schema_snapshot:create(
         AtmWorkflowExecutionId, AtmWorkflowSchemaDoc
     ),
-    Components#components{schema_snapshot_id = AtmWorkflowSchemaSnapshotId}.
+    ExecutionElements#execution_elements{schema_snapshot_id = AtmWorkflowSchemaSnapshotId}.
 
 
 %% @private
--spec create_stores(atm_execution:creation_ctx(), components()) -> components().
-create_stores(AtmExecutionCreationCtx, Components) ->
+-spec create_stores(atm_api:creation_ctx(), execution_elements()) -> execution_elements().
+create_stores(AtmExecutionCreationCtx, ExecutionElements) ->
     AtmStoreDocs = atm_store_api:create_all(AtmExecutionCreationCtx),
     AtmStoreRegistry = lists:foldl(fun(#document{key = AtmStoreId, value = #atm_store{
         schema_id = AtmStoreSchemaId
@@ -152,24 +154,27 @@ create_stores(AtmExecutionCreationCtx, Components) ->
         Acc#{AtmStoreSchemaId => AtmStoreId}
     end, #{}, AtmStoreDocs),
 
-    Components#components{store_registry = AtmStoreRegistry}.
+    ExecutionElements#execution_elements{store_registry = AtmStoreRegistry}.
 
 
 %% @private
--spec create_lane_executions(atm_execution:creation_ctx(), components()) -> components().
-create_lane_executions(AtmExecutionCreationCtx, Components) ->
-    Components#components{lanes = atm_lane_execution:create_all(AtmExecutionCreationCtx)}.
+-spec create_lane_executions(atm_api:creation_ctx(), execution_elements()) ->
+    execution_elements().
+create_lane_executions(AtmExecutionCreationCtx, ExecutionElements) ->
+    ExecutionElements#execution_elements{
+        lanes = atm_lane_execution:create_all(AtmExecutionCreationCtx)
+    }.
 
 
 %% @private
--spec create_doc(atm_execution:creation_ctx(), components()) ->
+-spec create_doc(atm_api:creation_ctx(), execution_elements()) ->
     atm_workflow_execution:doc() | no_return().
 create_doc(
     #atm_execution_creation_ctx{
         space_id = SpaceId,
         workflow_execution_id = AtmWorkflowExecutionId
     },
-    Components = #components{
+    ExecutionElements = #execution_elements{
         schema_snapshot_id = AtmWorkflowSchemaSnapshotId,
         store_registry = AtmStoreRegistry,
         lanes = AtmLaneExecutions
@@ -194,32 +199,38 @@ create_doc(
         }),
         AtmWorkflowExecutionDoc
     catch Type:Reason ->
-        delete_components(Components),
+        delete_execution_elements(ExecutionElements),
         erlang:Type(Reason)
     end.
 
 
 %% @private
--spec delete_components(components()) -> ok.
-delete_components(#components{schema_snapshot_id = AtmWorkflowSchemaSnapshotId} = Components) when
-    AtmWorkflowSchemaSnapshotId /= undefined
-->
+-spec delete_execution_elements(execution_elements()) -> ok.
+delete_execution_elements(#execution_elements{
+    schema_snapshot_id = AtmWorkflowSchemaSnapshotId
+} = ExecutionElements) when AtmWorkflowSchemaSnapshotId /= undefined ->
     catch atm_workflow_schema_snapshot:delete(AtmWorkflowSchemaSnapshotId),
-    delete_components(Components#components{schema_snapshot_id = undefined});
 
-delete_components(#components{store_registry = AtmStoreRegistry} = Components) when
-    AtmStoreRegistry /= undefined
-->
+    delete_execution_elements(ExecutionElements#execution_elements{
+        schema_snapshot_id = undefined
+    });
+
+delete_execution_elements(#execution_elements{
+    store_registry = AtmStoreRegistry
+} = ExecutionElements) when AtmStoreRegistry /= undefined ->
     catch atm_store_api:delete_all(maps:values(AtmStoreRegistry)),
-    delete_components(Components#components{store_registry = undefined});
 
-delete_components(#components{lanes = AtmLaneExecutions} = Components) when
-    AtmLaneExecutions /= undefined
-->
+    delete_execution_elements(ExecutionElements#execution_elements{
+        store_registry = undefined
+    });
+
+delete_execution_elements(#execution_elements{
+    lanes = AtmLaneExecutions
+} = ExecutionElements) when AtmLaneExecutions /= undefined ->
     catch atm_lane_execution:delete_all(AtmLaneExecutions),
-    delete_components(Components#components{lanes = undefined});
+    delete_execution_elements(ExecutionElements#execution_elements{lanes = undefined});
 
-delete_components(_) ->
+delete_execution_elements(_) ->
     ok.
 
 
@@ -227,7 +238,7 @@ delete_components(_) ->
 -spec transition_to_status(atm_workflow_execution:id(), atm_workflow_execution:status()) ->
     {ok, atm_workflow_execution:record()} | no_return().
 transition_to_status(AtmWorkflowExecutionId, ?FAILED_STATUS) ->
-    % TODO should fail here change status of all lanes, pboxes and tasks ??
+    % TODO VFS-7674 should fail here change status of all lanes, pboxes and tasks ??
     TransitFun = fun(#atm_workflow_execution{} = AtmWorkflowExecution) ->
         {ok, AtmWorkflowExecution#atm_workflow_execution{status = ?FAILED_STATUS}}
     end,
@@ -238,7 +249,7 @@ transition_to_status(AtmWorkflowExecutionId, ?FAILED_STATUS) ->
 
 transition_to_status(AtmWorkflowExecutionId, NewStatus) ->
     Diff = fun(#atm_workflow_execution{status = Status} = AtmWorkflowExecution) ->
-        case atm_execution_status:is_transition_allowed(Status, NewStatus) of
+        case atm_status_utils:is_transition_allowed(Status, NewStatus) of
             true ->
                 {ok, AtmWorkflowExecution#atm_workflow_execution{status = NewStatus}};
             false ->
@@ -279,10 +290,10 @@ update_task_status(
         AtmParallelBoxIndex, AtmTaskExecutionId, NewStatus, AtmLanExecution
     ) of
         {ok, NewLaneExecution} ->
-            NewAtmLaneExecutions = atm_execution_status:replace_at(
+            NewAtmLaneExecutions = atm_status_utils:replace_at(
                 NewLaneExecution, AtmLaneIndex, AtmLaneExecutions
             ),
-            NewAtmWorkflowStatus = atm_execution_status:converge(
+            NewAtmWorkflowStatus = atm_status_utils:converge(
                 atm_lane_execution:gather_statuses(NewAtmLaneExecutions)
             ),
             {ok, AtmWorkflowExecution#atm_workflow_execution{

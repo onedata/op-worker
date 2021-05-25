@@ -44,7 +44,7 @@
 
 
 -callback get_next_batch(batch_size(), record()) ->
-    {ok, [atm_execution:item()], iterator:cursor(), record()} | stop.
+    {ok, [atm_api:item()], iterator:cursor(), record()} | stop.
 
 -callback jump_to(iterator:cursor(), record()) -> record().
 
@@ -55,7 +55,7 @@
 
 
 -spec get_next_batch(batch_size(), record()) ->
-    {ok, [atm_execution:item()], iterator:cursor(), record()} | stop.
+    {ok, [atm_api:item()], iterator:cursor(), record()} | stop.
 get_next_batch(BatchSize, AtmContainerIterator) ->
     Module = utils:record_type(AtmContainerIterator),
     Module:get_next_batch(BatchSize, AtmContainerIterator).
