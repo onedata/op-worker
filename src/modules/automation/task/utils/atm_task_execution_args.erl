@@ -209,11 +209,11 @@ validate_arg(ArgsBatch, #atm_task_execution_argument_spec{
     is_batch = true
 }) ->
     lists:foreach(fun(ArgValue) ->
-        atm_data_validator:assert_instance(ArgValue, AtmDataSpec)
+        atm_data_validator:validate(ArgValue, AtmDataSpec)
     end, ArgsBatch);
 
 validate_arg(ArgValue, #atm_task_execution_argument_spec{
     data_spec = AtmDataSpec,
     is_batch = false
 }) ->
-    atm_data_validator:assert_instance(ArgValue, AtmDataSpec).
+    atm_data_validator:validate(ArgValue, AtmDataSpec).

@@ -20,7 +20,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([assert_instance/2]).
+-export([validate/2]).
 
 
 %%%===================================================================
@@ -30,10 +30,10 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Asserts that give value is of expected type and all value constraints hold.
+%% Asserts that all value constraints hold for specified item.
 %% @end
 %%--------------------------------------------------------------------
--callback assert_instance(atm_api:item(), atm_data_type:value_constraints()) ->
+-callback assert_meet_constraints(atm_api:item(), atm_data_type:value_constraints()) ->
     ok | no_return().
 
 
@@ -42,11 +42,11 @@
 %%%===================================================================
 
 
--spec assert_instance(atm_api:item(), atm_data_spec:record()) ->
+-spec validate(atm_api:item(), atm_data_spec:record()) ->
     ok | no_return().
-assert_instance(Value, AtmDataSpec) ->
+validate(Value, AtmDataSpec) ->
     Module = get_callback_module(atm_data_spec:get_type(AtmDataSpec)),
-    Module:assert_instance(Value, atm_data_spec:get_value_constraints(AtmDataSpec)).
+    Module:assert_meet_constraints(Value, atm_data_spec:get_value_constraints(AtmDataSpec)).
 
 
 %%%===================================================================

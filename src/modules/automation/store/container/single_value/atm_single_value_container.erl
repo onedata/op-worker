@@ -43,7 +43,7 @@
 
 -spec create(atm_data_spec:record(), initial_value()) -> record() | no_return().
 create(AtmDataSpec, InitialValue) ->
-    InitialValue == undefined orelse atm_data_validator:assert_instance(InitialValue, AtmDataSpec),
+    InitialValue == undefined orelse atm_data_validator:validate(InitialValue, AtmDataSpec),
 
     #atm_single_value_container{
         data_spec = AtmDataSpec,
