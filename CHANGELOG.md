@@ -1,6 +1,15 @@
-# Release notes for project op-worker
+Release notes for project op-worker
+===================================
 
-## CHANGELOG
+CHANGELOG
+---------
+
+### 21.02.0-alpha11
+
+-   **VFS-7589** Added StorageRouter and BufferedStorage helpers to
+    handling of aggregate storages such as archive storage.
+-   **VFS-7304** Add preliminary REST API and GUI for dataset
+    archivisation - to be extended in near future.
 
 ### 21.02.0-alpha10
 
