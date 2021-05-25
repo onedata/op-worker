@@ -230,7 +230,7 @@ get_buffer_size(FileGuid) ->
             {SDHandle, _FileCtx2} = storage_driver:new_handle(?ROOT_SESS_ID, file_ctx:new_by_guid(FileGuid)),
             case storage_driver:blocksize_for_path(SDHandle) of
                 {ok, 0} -> ?COPY_BUFFER_SIZE; % on imported storage blockSize can be equal to 0
-                {ok, Size} when Size > 0 -> Size;
+                {ok, Size} -> Size;
                 _ -> ?COPY_BUFFER_SIZE
             end;
         false ->
