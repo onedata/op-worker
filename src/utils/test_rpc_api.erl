@@ -50,7 +50,7 @@
     get_cert_chain_ders/0,
     gs_protocol_supported_versions/0,
 
-    perform_io_test/2
+    perform_io_test/3
 ]).
 
 
@@ -107,10 +107,11 @@ is_storage_imported(StorageId) ->
     rpc_api:storage_is_imported_storage(StorageId).
 
 
--spec get_user_space_by_name(gs_client_worker:client(), od_user:id(), od_space:name()) ->
+-spec get_user_space_by_name(od_user:id(), od_space:name(), tokens:serialized()) ->
     {true, od_space:id()} | false.
-get_user_space_by_name(Session, UserId, SpaceName) ->
-    user_logic:get_space_by_name(Session, UserId, SpaceName).
+get_user_space_by_name(UserId, SpaceName, AccessToken) ->
+    SessionId = create_session(UserId, AccessToken),
+    user_logic:get_space_by_name(SessionId, UserId, SpaceName).
 
 
 -spec get_spaces() -> {ok, [od_space:id()]} | errors:error().
@@ -193,8 +194,9 @@ gs_protocol_supported_versions() ->
     gs_protocol:supported_versions().
 
 
--spec perform_io_test(session:id(), file_meta:path()) -> ok | error.
-perform_io_test(SessionId, Path) ->
+-spec perform_io_test(file_meta:path(), od_user:id(), tokens:serialized()) -> ok | error.
+perform_io_test(Path, UserId, AccessToken) ->
+    SessionId = create_session(UserId, AccessToken),
     BytesSize = 5000,
     SampleFileContent = str_utils:rand_hex(BytesSize),
 
@@ -218,3 +220,28 @@ perform_io_test(SessionId, Path) ->
     catch
         error:_ -> error
     end.
+
+
+%%%===================================================================
+%%% Helpers
+%%%===================================================================
+
+
+%% @private
+-spec create_session(od_user:id(), tokens:serialized()) -> binary().
+create_session(UserId, AccessToken) ->
+    Nonce = crypto:strong_rand_bytes(10),
+    Identity = ?SUB(user, UserId),
+    TokenCredentials = build_token_credentials(AccessToken, undefined, local_ip_v4(), oneclient, allow_data_access_caveats),
+    {ok, SessionId} = create_fuse_session(Nonce, Identity, TokenCredentials),
+    SessionId.
+
+
+%% @private
+-spec local_ip_v4() -> inet:ip_address().
+local_ip_v4() ->
+    {ok, Addrs} = inet:getifaddrs(),
+    hd([
+        Addr || {_, Opts} <- Addrs, {addr, Addr} <- Opts,
+        size(Addr) == 4, Addr =/= {127, 0, 0, 1}
+    ]).
