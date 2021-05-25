@@ -27,8 +27,8 @@
 
 
 %% Full 'initial_value' format can't be expressed directly in type spec due to
-%% dialyzer limitations in specifying concrete binaries. Instead it is
-%% shown below:
+%% dialyzer limitations in specifying concrete binaries ('initial_value' must be
+%% proper json object which implies binaries as keys). Instead it is shown below:
 %%
 %% #{
 %%      <<"end">> := integer(),
