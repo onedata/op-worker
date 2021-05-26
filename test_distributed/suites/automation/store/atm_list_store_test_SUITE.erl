@@ -35,7 +35,7 @@
     apply_operation_test/1,
     iterate_one_by_one_test/1,
     iterate_in_chunks_test/1,
-    iterator_cursor_test/1
+    reuse_iterator_test/1
 ]).
 
 groups() -> [
@@ -44,7 +44,7 @@ groups() -> [
         apply_operation_test,
         iterate_one_by_one_test,
         iterate_in_chunks_test,
-        iterator_cursor_test
+        reuse_iterator_test
     ]}
 ].
 
@@ -139,14 +139,13 @@ iterate_test_base(AtmStoreIteratorStrategy, Length, ExpectedResultsList) ->
         Node, AtmWorkflowExecutionEnv, AtmStoreIteratorSpec),
     
     lists:foldl(fun(Expected, Iterator) ->
-        {ok, _, _, NewIterator} = ?assertMatch({ok, Expected, _,_}, atm_store_test_utils:iterator_get_next(Node, Iterator)),
+        {ok, _, NewIterator} = ?assertMatch({ok, Expected, _}, atm_store_test_utils:iterator_get_next(Node, Iterator)),
         NewIterator
     end, AtmStoreIterator0, ExpectedResultsList),
     ok.
 
 
-iterator_cursor_test(_Config) ->
-    
+reuse_iterator_test(_Config) ->
     Node = oct_background:get_random_provider_node(krakow),
     
     Items = lists:seq(1, 5),
@@ -164,27 +163,18 @@ iterator_cursor_test(_Config) ->
     },
     AtmSerialIterator0 = atm_store_test_utils:acquire_store_iterator(Node, AtmWorkflowExecutionEnv, AtmStoreIteratorSpec),
 
-    {ok, _, Cursor1, AtmSerialIterator1} = ?assertMatch({ok, 1, _, _}, atm_store_test_utils:iterator_get_next(Node, AtmSerialIterator0)),
-    {ok, _, _Cursor2, AtmSerialIterator2} = ?assertMatch({ok, 2, _, _}, atm_store_test_utils:iterator_get_next(Node, AtmSerialIterator1)),
-    {ok, _, Cursor3, AtmSerialIterator3} = ?assertMatch({ok, 3, _, _}, atm_store_test_utils:iterator_get_next(Node, AtmSerialIterator2)),
-    {ok, _, _Cursor4, AtmSerialIterator4} = ?assertMatch({ok, 4, _, _}, atm_store_test_utils:iterator_get_next(Node, AtmSerialIterator3)),
-    {ok, _, _Cursor5, AtmSerialIterator5} = ?assertMatch({ok, 5, _, _}, atm_store_test_utils:iterator_get_next(Node, AtmSerialIterator4)),
+    {ok, _, AtmSerialIterator1} = ?assertMatch({ok, 1, _}, atm_store_test_utils:iterator_get_next(Node, AtmSerialIterator0)),
+    {ok, _, AtmSerialIterator2} = ?assertMatch({ok, 2, _}, atm_store_test_utils:iterator_get_next(Node, AtmSerialIterator1)),
+    {ok, _, AtmSerialIterator3} = ?assertMatch({ok, 3, _}, atm_store_test_utils:iterator_get_next(Node, AtmSerialIterator2)),
+    {ok, _, AtmSerialIterator4} = ?assertMatch({ok, 4, _}, atm_store_test_utils:iterator_get_next(Node, AtmSerialIterator3)),
+    {ok, _, AtmSerialIterator5} = ?assertMatch({ok, 5, _}, atm_store_test_utils:iterator_get_next(Node, AtmSerialIterator4)),
     ?assertMatch(stop, atm_store_test_utils:iterator_get_next(Node, AtmSerialIterator5)),
 
-    AtmSerialIterator6 = atm_store_test_utils:iterator_jump_to(Node, Cursor3, AtmSerialIterator5),
-    {ok, _, _Cursor7, AtmSerialIterator7} = ?assertMatch({ok, 4, _, _}, atm_store_test_utils:iterator_get_next(Node, AtmSerialIterator6)),
-    ?assertMatch({ok, 5, _, _}, atm_store_test_utils:iterator_get_next(Node, AtmSerialIterator7)),
+    {ok, _, AtmSerialIterator7} = ?assertMatch({ok, 4, _}, atm_store_test_utils:iterator_get_next(Node, AtmSerialIterator3)),
+    ?assertMatch({ok, 5, _}, atm_store_test_utils:iterator_get_next(Node, AtmSerialIterator7)),
 
-    AtmSerialIterator8 = atm_store_test_utils:iterator_jump_to(Node, Cursor1, AtmSerialIterator7),
-    {ok, _, _Cursor9, AtmSerialIterator9} = ?assertMatch({ok, 2, _, _}, atm_store_test_utils:iterator_get_next(Node, AtmSerialIterator8)),
-    ?assertMatch({ok, 3, _, _}, atm_store_test_utils:iterator_get_next(Node, AtmSerialIterator9)),
-
-    % Assert <<>> cursor shifts iterator to the beginning
-    AtmSerialIterator10 = atm_store_test_utils:iterator_jump_to(Node, <<>>, AtmSerialIterator9),
-    ?assertMatch({ok, 1, _, _}, atm_store_test_utils:iterator_get_next(Node, AtmSerialIterator10)),
-
-    % Invalid cursors should be rejected
-    ?assertMatch(?EINVAL, atm_store_test_utils:iterator_jump_to(Node, <<"dummy">>, AtmSerialIterator9)).
+    {ok, _, AtmSerialIterator9} = ?assertMatch({ok, 2, _}, atm_store_test_utils:iterator_get_next(Node, AtmSerialIterator1)),
+    ?assertMatch({ok, 3, _}, atm_store_test_utils:iterator_get_next(Node, AtmSerialIterator9)).
 
 
 %===================================================================

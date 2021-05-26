@@ -20,8 +20,7 @@
     create_store/3, 
     apply_operation/5,
     acquire_store_iterator/3, 
-    iterator_get_next/2, 
-    iterator_jump_to/3
+    iterator_get_next/2
 ]).
 -export([
     split_into_chunks/3
@@ -61,15 +60,9 @@ acquire_store_iterator(Node, AtmWorkflowExecutionEnv, AtmStoreIteratorSpec) ->
 
 
 -spec iterator_get_next(node(), iterator:iterator()) ->
-    {ok, iterator:item(), iterator:cursor(), iterator:iterato()} | stop.
+    {ok, iterator:item(), iterator:iterato()} | stop.
 iterator_get_next(Node, Iterator) ->
     rpc:call(Node, iterator, get_next, [Iterator]).
-
-
--spec iterator_jump_to(node(), iterator:cursor(), iterator:iterator()) ->
-    iterator:iterato().
-iterator_jump_to(Node, Cursor, Iterator) ->
-    rpc:call(Node, iterator, jump_to, [Cursor, Iterator]).
 
 
 -spec split_into_chunks(pos_integer(), [[item()]], [item()]) ->

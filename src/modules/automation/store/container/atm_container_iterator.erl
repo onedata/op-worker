@@ -23,7 +23,7 @@
 -behaviour(persistent_record).
 
 %% API
--export([get_next_batch/2, jump_to/2]).
+-export([get_next_batch/2]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
@@ -45,9 +45,7 @@
 
 
 -callback get_next_batch(batch_size(), record()) ->
-    {ok, [atm_api:item()], iterator:cursor(), record()} | stop.
-
--callback jump_to(iterator:cursor(), record()) -> record().
+    {ok, [atm_api:item()], record()} | stop.
 
 
 %%%===================================================================
@@ -56,16 +54,10 @@
 
 
 -spec get_next_batch(batch_size(), record()) ->
-    {ok, [atm_api:item()], iterator:cursor(), record()} | stop.
+    {ok, [atm_api:item()], record()} | stop.
 get_next_batch(BatchSize, AtmContainerIterator) ->
     Module = utils:record_type(AtmContainerIterator),
     Module:get_next_batch(BatchSize, AtmContainerIterator).
-
-
--spec jump_to(iterator:cursor(), record()) -> record().
-jump_to(Cursor, AtmContainerIterator) ->
-    Module = utils:record_type(AtmContainerIterator),
-    Module:jump_to(Cursor, AtmContainerIterator).
 
 
 %%%===================================================================

@@ -19,10 +19,10 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([create/1]).
+-export([build/1]).
 
 % atm_container_iterator callbacks
--export([get_next_batch/2, jump_to/2]).
+-export([get_next_batch/2]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
@@ -44,8 +44,8 @@
 %%%===================================================================
 
 
--spec create(atm_list_container:backend_id()) -> record().
-create(BackendId) ->
+-spec build(atm_list_container:backend_id()) -> record().
+build(BackendId) ->
     #atm_list_container_iterator{backend_id = BackendId}.
 
 
@@ -55,7 +55,7 @@ create(BackendId) ->
 
 
 -spec get_next_batch(atm_container_iterator:batch_size(), record()) ->
-    {ok, [item()], iterator:cursor(), record()} | stop.
+    {ok, [item()], record()} | stop.
 get_next_batch(BatchSize, #atm_list_container_iterator{} = Record) ->
     #atm_list_container_iterator{backend_id = BackendId, index = StartIndex} = Record,
     {ok, {Marker, EntrySeries}} = atm_list_store_backend:list(
@@ -66,16 +66,8 @@ get_next_batch(BatchSize, #atm_list_container_iterator{} = Record) ->
             stop;
         _ ->
             {LastIndex, _} = lists:last(EntrySeries),
-            Cursor = integer_to_binary(LastIndex + 1),
-            {ok, Res, Cursor, Record#atm_list_container_iterator{index = LastIndex + 1}}
+            {ok, Res, Record#atm_list_container_iterator{index = LastIndex + 1}}
     end.
-
-
--spec jump_to(iterator:cursor(), record()) -> record() | no_return().
-jump_to(<<>>, AtmContainerIterator) ->
-    AtmContainerIterator#atm_list_container_iterator{index = 0};
-jump_to(Cursor, AtmContainerIterator) ->
-    AtmContainerIterator#atm_list_container_iterator{index = sanitize_cursor(Cursor)}.
 
 
 %%%===================================================================
@@ -104,25 +96,3 @@ db_decode(#{<<"backendId">> := BackendId, <<"index">> := Index}, _NestedRecordDe
         backend_id = BackendId,
         index = Index
     }.
-
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-%% @private
--spec sanitize_cursor(iterator:cursor()) -> non_neg_integer() | no_return().
-sanitize_cursor(Cursor) ->
-    try
-        CursorInt = binary_to_integer(Cursor),
-        true = is_in_proper_range(CursorInt),
-        CursorInt
-    catch _:_ ->
-        throw(?EINVAL)
-    end.
-
-
-%% @private
--spec is_in_proper_range(integer()) -> boolean().
-is_in_proper_range(Num) when Num >= 0 -> true;
-is_in_proper_range(_Num) -> false.

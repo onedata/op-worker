@@ -22,7 +22,7 @@
 -export([build/3]).
 
 % atm_container_iterator callbacks
--export([get_next_batch/2, jump_to/2]).
+-export([get_next_batch/2]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
@@ -58,7 +58,7 @@ build(Start, End, Step) ->
 
 
 -spec get_next_batch(atm_container_iterator:batch_size(), record()) ->
-    {ok, [atm_api:item()], iterator:cursor(), record()} | stop.
+    {ok, [atm_api:item()], record()} | stop.
 get_next_batch(BatchSize, #atm_range_container_iterator{
     curr_num = CurrNum,
     end_num = End,
@@ -77,41 +77,7 @@ get_next_batch(BatchSize, #atm_range_container_iterator{
             NewAtmContainerIterator = AtmContainerIterator#atm_range_container_iterator{
                 curr_num = NewCurrNum
             },
-            {ok, Items, integer_to_binary(NewCurrNum), NewAtmContainerIterator}
-    end.
-
-
--spec jump_to(iterator:cursor(), record()) -> record().
-jump_to(<<>>, #atm_range_container_iterator{start_num = Start} = AtmContainerIterator) ->
-    AtmContainerIterator#atm_range_container_iterator{curr_num = Start};
-jump_to(Cursor, AtmContainerIterator) ->
-    AtmContainerIterator#atm_range_container_iterator{
-        curr_num = sanitize_cursor(Cursor, AtmContainerIterator)
-    }.
-
-
-%% @private
--spec sanitize_cursor(iterator:cursor(), record()) -> integer() | no_return().
-sanitize_cursor(Cursor, AtmContainerIterator) ->
-    try
-        CursorInt = binary_to_integer(Cursor),
-        true = is_in_proper_range(CursorInt, AtmContainerIterator),
-        CursorInt
-    catch _:_ ->
-        throw(?EINVAL)
-    end.
-
-
-%% @private
--spec is_in_proper_range(integer(), record()) -> boolean().
-is_in_proper_range(Num, #atm_range_container_iterator{
-    start_num = Start,
-    end_num = End,
-    step = Step
-}) ->
-    (Num - Start) rem Step == 0 andalso case Step > 0 of
-        true -> Num >= Start andalso Num =< End + Step;
-        false -> Num =< Start andalso Num >= End + Step
+            {ok, Items, NewAtmContainerIterator}
     end.
 
 

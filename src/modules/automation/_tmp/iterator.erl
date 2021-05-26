@@ -21,20 +21,15 @@
 %% API
 -export([
     get_next/1,
-    jump_to/2,
     encode/1,
     decode/1
 ]).
 
 -opaque iterator() :: tuple().
 
-% Points to specific location in collection so that it would be possible to shift
-% iterator to this position.
--type cursor() :: binary().
-
 -type item() :: term().
 
--export_type([iterator/0, cursor/0, item/0]).
+-export_type([iterator/0, item/0]).
 
 
 %%%===================================================================
@@ -42,9 +37,7 @@
 %%%===================================================================
 
 
--callback get_next(iterator()) -> {ok, item(), cursor(), iterator()} | stop.
-
--callback jump_to(cursor(), iterator()) -> iterator().
+-callback get_next(iterator()) -> {ok, item(), iterator()} | stop.
 
 
 %%%===================================================================
@@ -52,16 +45,10 @@
 %%%===================================================================
 
 
--spec get_next(iterator()) -> {ok, item(), cursor(), iterator()} | stop.
+-spec get_next(iterator()) -> {ok, item(), iterator()} | stop.
 get_next(Iterator) ->
     Module = utils:record_type(Iterator),
     Module:get_next(Iterator).
-
-
--spec jump_to(cursor(), iterator()) -> iterator().
-jump_to(Cursor, Iterator) ->
-    Module = utils:record_type(Iterator),
-    Module:jump_to(Cursor, Iterator).
 
 
 -spec encode(iterator()) -> binary().

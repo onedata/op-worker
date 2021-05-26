@@ -67,7 +67,7 @@ get_data_spec(#atm_list_container{data_spec = AtmDataSpec}) ->
 
 -spec acquire_iterator(record()) -> atm_list_container_iterator:record().
 acquire_iterator(#atm_list_container{backend_id = BackendId}) ->
-    atm_list_container_iterator:create(BackendId).
+    atm_list_container_iterator:build(BackendId).
 
 
 -spec apply_operation(record(), atm_container:operation(), apply_operation_options(), atm_api:item()) ->
