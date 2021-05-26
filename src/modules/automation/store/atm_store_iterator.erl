@@ -23,7 +23,7 @@
 -export([build/2]).
 
 %% iterator callbacks
--export([get_next/1]).
+-export([get_next/1, mark_exhausted/1]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
@@ -86,6 +86,10 @@ get_next(#atm_store_iterator{
             }}
     end.
 
+
+-spec mark_exhausted(record()) -> ok.
+mark_exhausted(#atm_store_iterator{container_iterator = ContainerIterator}) ->
+    atm_container_iterator:mark_exhausted(ContainerIterator).
 
 %%%===================================================================
 %%% persistent_record callbacks

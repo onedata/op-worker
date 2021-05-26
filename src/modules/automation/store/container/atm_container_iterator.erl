@@ -23,7 +23,7 @@
 -behaviour(persistent_record).
 
 %% API
--export([get_next_batch/2]).
+-export([get_next_batch/2, mark_exhausted/1]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
@@ -47,6 +47,8 @@
 -callback get_next_batch(batch_size(), record()) ->
     {ok, [atm_api:item()], record()} | stop.
 
+-callback mark_exhausted(record()) -> ok.
+
 
 %%%===================================================================
 %%% API
@@ -58,6 +60,12 @@
 get_next_batch(BatchSize, AtmContainerIterator) ->
     Module = utils:record_type(AtmContainerIterator),
     Module:get_next_batch(BatchSize, AtmContainerIterator).
+
+
+-spec mark_exhausted(record()) -> ok.
+mark_exhausted(AtmContainerIterator) ->
+    Module = utils:record_type(AtmContainerIterator),
+    Module:mark_exhausted(AtmContainerIterator).
 
 
 %%%===================================================================

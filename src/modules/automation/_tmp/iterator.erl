@@ -21,6 +21,7 @@
 %% API
 -export([
     get_next/1,
+    mark_exhausted/1,
     encode/1,
     decode/1
 ]).
@@ -39,6 +40,8 @@
 
 -callback get_next(iterator()) -> {ok, item(), iterator()} | stop.
 
+-callback mark_exhausted(iterator()) -> ok.
+
 
 %%%===================================================================
 %%% API functions
@@ -49,6 +52,12 @@
 get_next(Iterator) ->
     Module = utils:record_type(Iterator),
     Module:get_next(Iterator).
+
+
+-spec mark_exhausted(iterator()) -> ok.
+mark_exhausted(Iterator) ->
+    Module = utils:record_type(Iterator),
+    Module:mark_exhausted(Iterator).
 
 
 -spec encode(iterator()) -> binary().

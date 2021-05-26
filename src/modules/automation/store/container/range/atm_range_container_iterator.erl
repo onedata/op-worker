@@ -22,7 +22,7 @@
 -export([build/3]).
 
 % atm_container_iterator callbacks
--export([get_next_batch/2]).
+-export([get_next_batch/2, mark_exhausted/1]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
@@ -79,6 +79,11 @@ get_next_batch(BatchSize, #atm_range_container_iterator{
             },
             {ok, Items, NewAtmContainerIterator}
     end.
+
+
+-spec mark_exhausted(record()) -> ok.
+mark_exhausted(_AtmContainerIterator) ->
+    ok.
 
 
 %%%===================================================================
