@@ -506,7 +506,7 @@ simple_archive_crud_test_base(DatasetId, RootFileType, ExpSize) ->
     ArchiveRootDirUuid = ?ARCHIVE_DIR_UUID(ArchiveId),
     ArchiveRootDirGuid = file_id:pack_guid(ArchiveRootDirUuid, SpaceId),
 
-    ExpectedFilesToArchive = case RootFileType of
+    ExpectedFilesArchived = case RootFileType of
         ?DIRECTORY_TYPE -> 0;
         _ -> 1
     end,
@@ -517,7 +517,7 @@ simple_archive_crud_test_base(DatasetId, RootFileType, ExpSize) ->
         id = ArchiveId,
         dataset_id = DatasetId,
         state = ?ARCHIVE_PRESERVED,
-        root_dir_guid = ArchiveRootDirGuid,
+        parent_dir_guid = ArchiveRootDirGuid,
         creation_time = Timestamp,
         index = Index,
         config = #archive_config{
@@ -528,10 +528,7 @@ simple_archive_crud_test_base(DatasetId, RootFileType, ExpSize) ->
         preserved_callback = ?TEST_ARCHIVE_PRESERVED_CALLBACK1,
         purged_callback = ?TEST_ARCHIVE_PURGED_CALLBACK1,
         description = ?TEST_DESCRIPTION1,
-        files_to_archive = ExpectedFilesToArchive,
-        files_archived = ExpectedFilesToArchive,
-        files_failed = 0,
-        bytes_archived = ExpSize
+        stats = archive_stats:new(ExpectedFilesArchived, 0, ExpSize)
     },
 
     % verify whether Archive is visible in the local provider

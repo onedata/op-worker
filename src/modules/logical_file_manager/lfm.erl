@@ -896,7 +896,7 @@ get_archive_info(SessId, ArchiveId) ->
 
 
 -spec list_archives(session:id(), dataset:id(), dataset_api:listing_opts(), dataset_api:listing_mode()) ->
-    {ok, dataset_api:archive_entries(), boolean()} | error_reply().
+    {ok, archive_api:entries(), boolean()} | error_reply().
 list_archives(SessId, DatasetId, Opts, ListingMode) ->
     lfm_datasets:list_archives(SessId, DatasetId, Opts, ListingMode).
 

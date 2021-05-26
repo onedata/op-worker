@@ -232,7 +232,7 @@ build_create_archive_validate_gs_call_result_fun(MemRef) ->
         ExpArchiveData = build_archive_gs_instance(ArchiveId, DatasetId, CreationTime, ?ARCHIVE_BUILDING, Config,
             Description, PreservedCallback, PurgedCallback),
         % state is removed from the map as it may be in pending, building or even preserved state when request is handled
-        IgnoredKeys = [<<"state">>, <<"filesToArchive">>, <<"filesArchived">>, <<"filesFailed">>, <<"bytesArchived">>],
+        IgnoredKeys = [<<"state">>, <<"stats">>, <<"parentDir">>],
         ExpArchiveData2 = maps:without(IgnoredKeys, ExpArchiveData),
         ArchiveData2 = maps:without(IgnoredKeys, ArchiveData),
         ?assertMatch(ExpArchiveData2, ArchiveData2)
@@ -322,16 +322,17 @@ get_archive_info(_Config) ->
                             <<"archiveId">> => ArchiveId,
                             <<"datasetId">> => DatasetId,
                             <<"state">> => atom_to_binary(?ARCHIVE_PRESERVED, utf8),
-                            <<"rootDirectoryId">> => RootDirectoryId,
+                            <<"parentDirectoryId">> => RootDirectoryId,
                             <<"creationTime">> => CreationTime,
                             <<"description">> => Description,
                             <<"config">> => ConfigJson,
                             <<"preservedCallback">> => null,
                             <<"purgedCallback">> => null,
-                            <<"filesToArchive">> => 1,
-                            <<"filesArchived">> => 1,
-                            <<"filesFailed">> => 0,
-                            <<"bytesArchived">> => 0
+                            <<"stats">> => #{
+                                <<"filesArchived">> => 1,
+                                <<"filesFailed">> => 0,
+                                <<"bytesArchived">> => 0
+                            }
                         },
                         ?assertEqual(?HTTP_200_OK, RespCode),
                         ?assertEqual(ExpArchiveData, RespBody)
@@ -851,17 +852,14 @@ verify_archive(
             id = ArchiveId,
             dataset_id = DatasetId,
             state = ?ARCHIVE_PRESERVED,
-            root_dir_guid = file_id:pack_guid(?ARCHIVE_DIR_UUID(ArchiveId), oct_background:get_space_id(?SPACE)),
+            parent_dir_guid = file_id:pack_guid(?ARCHIVE_DIR_UUID(ArchiveId), oct_background:get_space_id(?SPACE)),
             creation_time = CreationTime,
             config = archive_config:from_json(Config),
             preserved_callback = PreservedCallback,
             purged_callback = PurgedCallback,
             description = Description,
             index = archives_list:index(ArchiveId, CreationTime),
-            files_to_archive = 1,
-            files_archived = 1,
-            files_failed = 0,
-            bytes_archived = 0
+            stats = archive_stats:new(1, 0, 0)
         },
         ?assertEqual({ok, ExpArchiveInfo}, lfm_proxy:get_archive_info(Node, UserSessId, ArchiveId), ?ATTEMPTS)
     end, Providers).
@@ -883,17 +881,14 @@ build_archive_gs_instance(ArchiveId, DatasetId, CreationTime, State, Config, Des
         id = ArchiveId,
         dataset_id = DatasetId,
         state = str_utils:to_binary(State),
-        root_dir_guid = file_id:pack_guid(?ARCHIVE_DIR_UUID(ArchiveId), oct_background:get_space_id(?SPACE)),
+        parent_dir_guid = file_id:pack_guid(?ARCHIVE_DIR_UUID(ArchiveId), oct_background:get_space_id(?SPACE)),
         creation_time = CreationTime,
         config = Config,
         description = Description,
         preserved_callback = PreservedCallback,
         purged_callback = PurgedCallback,
         index = archives_list:index(ArchiveId, CreationTime),
-        files_to_archive = 1,
-        files_archived = 1,
-        files_failed = 0,
-        bytes_archived = 0
+        stats = archive_stats:new(1, 0, 0)
     }),
     BasicInfo#{<<"revision">> => 1}.
 

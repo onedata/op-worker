@@ -18,17 +18,16 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([create/7, get/1, modify_attrs/2, delete/1]).
+-export([create/7, create_child/3, get/1, modify_attrs/2, delete/1]).
 
 % getters
--export([get_id/1, get_creation_time/1, get_dataset_id/1, get_space_id/1,
+-export([get_id/1, get_creation_time/1, get_dataset_id/1, get_dataset_root_file_guid/1, get_space_id/1,
     get_state/1, get_config/1, get_preserved_callback/1, get_purged_callback/1,
-    get_description/1, get_job_id/1, get_files_to_archive/1, get_files_archived/1,
-    get_files_failed/1, get_bytes_archived/1, is_finished/1
+    get_description/1, get_stats/1, get_parent_dir_guid/1, get_parent/1, get_parent_doc/1, is_finished/1
 ]).
 
 % setters
--export([mark_building/1, mark_preserved/5, mark_failed/5, mark_purging/2, set_job_id/2]).
+-export([mark_building/2, mark_purging/2, mark_file_archived/2, mark_file_failed/1, mark_finished/2]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1]).
@@ -95,7 +94,33 @@ create(DatasetId, SpaceId, Creator, Config, PreservedCallback, PurgedCallback, D
             config = Config,
             preserved_callback = PreservedCallback,
             purged_callback = PurgedCallback,
-            description = Description
+            description = Description,
+            stats = archive_stats:empty()
+        },
+        scope = SpaceId
+    }).
+
+
+-spec create_child(dataset:id(), doc(), file_id:file_guid()) -> {ok, doc()} | error().
+create_child(DatasetId, #document{
+    key = ParentArchiveId,
+    value = #archive{
+        config = Config,
+        creator = Creator
+    },
+    scope = SpaceId
+}, RootDirGuid) ->
+    datastore_model:create(?CTX, #document{
+        value = #archive{
+            dataset_id = DatasetId,
+            creation_time = global_clock:timestamp_seconds(),
+            config = Config,
+            state = ?ARCHIVE_BUILDING,
+            parent_dir_guid = RootDirGuid,
+            parent = ParentArchiveId,
+            creator = Creator,
+            description = <<"">>,
+            stats = archive_stats:empty()
         },
         scope = SpaceId
     }).
@@ -145,6 +170,16 @@ get_dataset_id(#archive{dataset_id = DatasetId}) ->
 get_dataset_id(#document{value = Archive}) ->
     get_dataset_id(Archive).
 
+-spec get_dataset_root_file_guid(id() | doc()) -> {ok, file_id:file_guid()}.
+get_dataset_root_file_guid(Doc = #document{}) ->
+    {ok, DatasetId} = get_dataset_id(Doc),
+    {ok, RootFileUuid} = dataset:get_root_file_uuid(DatasetId),
+    {ok, SpaceId} = get_space_id(Doc),
+    {ok, file_id:pack_guid(RootFileUuid, SpaceId)};
+get_dataset_root_file_guid(ArchiveId) when is_binary(ArchiveId) ->
+    {ok, ArchiveDoc} = get(ArchiveId),
+    get_dataset_root_file_guid(ArchiveDoc).
+
 -spec get_space_id(id() | doc()) -> {ok, od_space:id()}.
 get_space_id(#document{scope = SpaceId}) ->
     {ok, SpaceId};
@@ -181,35 +216,31 @@ get_description(#archive{description = Description}) ->
 get_description(#document{value = Archive}) ->
     get_description(Archive).
 
--spec get_job_id(record() | doc()) -> {ok, archivisation_traverse:id()}.
-get_job_id(#archive{job_id = JobId}) ->
-    {ok, JobId};
-get_job_id(#document{value = Archive}) ->
-    get_job_id(Archive).
+-spec get_stats(record() | doc()) -> {ok, archive_stats:stats()}.
+get_stats(#archive{stats = Stats}) ->
+    {ok, Stats};
+get_stats(#document{value = Archive}) ->
+    get_stats(Archive).
 
--spec get_files_to_archive(record() | doc()) -> {ok, non_neg_integer()}.
-get_files_to_archive(#archive{files_to_archive = FilesToArchive}) ->
-    {ok, FilesToArchive};
-get_files_to_archive(#document{value = Archive}) ->
-    get_files_to_archive(Archive).
+-spec get_parent_dir_guid(record() | doc()) -> {ok, file_id:file_guid()}.
+get_parent_dir_guid(#archive{parent_dir_guid = ParentDirGuid}) ->
+    {ok, ParentDirGuid};
+get_parent_dir_guid(#document{value = Archive}) ->
+    get_parent_dir_guid(Archive).
 
--spec get_files_archived(record() | doc()) -> {ok, non_neg_integer()}.
-get_files_archived(#archive{files_archived = FilesArchived}) ->
-    {ok, FilesArchived};
-get_files_archived(#document{value = Archive}) ->
-    get_files_archived(Archive).
+-spec get_parent(record() | doc()) -> {ok, archive:id() | undefined}.
+get_parent(#archive{parent = Parent}) ->
+    {ok, Parent};
+get_parent(#document{value = Archive}) ->
+    get_parent(Archive).
 
--spec get_files_failed(record() | doc()) -> {ok, non_neg_integer()}.
-get_files_failed(#archive{files_failed = FilesFailed}) ->
-    {ok, FilesFailed};
-get_files_failed(#document{value = Archive}) ->
-    get_files_failed(Archive).
+-spec get_parent_doc(record() | doc()) -> {ok, doc() | undefined} | {error, term()}.
+get_parent_doc(Archive) ->
+    case get_parent(Archive) of
+        {ok, undefined} -> {ok, undefined};
+        {ok, ParentArchiveId} -> get(ParentArchiveId)
+    end.
 
--spec get_bytes_archived(record() | doc()) -> {ok, non_neg_integer()}.
-get_bytes_archived(#archive{bytes_archived = BytesArchived}) ->
-    {ok, BytesArchived};
-get_bytes_archived(#document{value = Archive}) ->
-    get_bytes_archived(Archive).
 
 -spec is_finished(record() | doc()) -> boolean().
 is_finished(#archive{state = State}) ->
@@ -239,44 +270,40 @@ mark_purging(ArchiveId, Callback) ->
     end).
 
 
--spec mark_building(id()) -> ok | error().
-mark_building(ArchiveId) ->
-    ?extract_ok(update(ArchiveId, fun(Archive) ->
-        {ok, Archive#archive{state = ?ARCHIVE_BUILDING}}
+-spec mark_building(id() | doc(), file_id:file_guid()) -> ok | error().
+mark_building(ArchiveDocOrId, ParentDirGuid) ->
+    ?extract_ok(update(ArchiveDocOrId, fun(Archive) ->
+        {ok, Archive#archive{
+            state = ?ARCHIVE_BUILDING,
+            parent_dir_guid = ParentDirGuid
+        }}
     end)).
 
 
--spec mark_preserved(id(), non_neg_integer(), non_neg_integer(), non_neg_integer(), non_neg_integer()) ->
-    ok | error().
-mark_preserved(ArchiveId, FilesToArchive, FilesArchived, FilesFailed, BytesArchived) ->
-    mark_finished(ArchiveId, ?ARCHIVE_PRESERVED, FilesToArchive, FilesArchived, FilesFailed, BytesArchived).
-
-
--spec mark_failed(id(), non_neg_integer(), non_neg_integer(), non_neg_integer(), non_neg_integer()) ->
-    ok | error().
-mark_failed(ArchiveId, FilesToArchive, FilesArchived, FilesFailed, BytesArchived) ->
-    mark_finished(ArchiveId, ?ARCHIVE_FAILED, FilesToArchive, FilesArchived, FilesFailed, BytesArchived).
-
-
--spec set_job_id(id(), archivisation_traverse:id()) -> {ok, doc()}.
-set_job_id(ArchiveId, JobId) ->
-    update(ArchiveId, fun(Archive) ->
-        {ok, Archive#archive{job_id = JobId}}
-    end).
-
-
-%% @private
--spec mark_finished(id(), ?ARCHIVE_PRESERVED | ?ARCHIVE_FAILED,
-    non_neg_integer(), non_neg_integer(), non_neg_integer(), non_neg_integer()) -> ok.
-mark_finished(ArchiveId, NewState, FilesToArchive, FilesArchived, FilesFailed, BytesArchived) ->
-    ?extract_ok(update(ArchiveId, fun(Archive) ->
+-spec mark_finished(id() | doc(), archive_stats:stats()) -> ok.
+mark_finished(ArchiveDocOrId, NestedArchivesStats) ->
+    ?extract_ok(update(ArchiveDocOrId, fun(Archive = #archive{stats = CurrentStats}) ->
+        AggregatedStats = archive_stats:sum(CurrentStats, NestedArchivesStats),
         {ok, Archive#archive{
-            state = NewState,
-            files_to_archive = FilesToArchive,
-            files_archived = FilesArchived,
-            files_failed = FilesFailed,
-            bytes_archived = BytesArchived
+            state = case AggregatedStats#archive_stats.files_failed =:= 0 of
+                true -> ?ARCHIVE_PRESERVED;
+                false -> ?ARCHIVE_FAILED
+            end,
+            stats = AggregatedStats
         }}
+    end)).
+
+
+-spec mark_file_archived(id() | doc(), non_neg_integer()) -> ok | error().
+mark_file_archived(ArchiveDocOrId, FileSize) ->
+    ?extract_ok(update(ArchiveDocOrId, fun(Archive = #archive{stats = Stats}) ->
+        {ok, Archive#archive{stats = archive_stats:mark_file_archived(Stats, FileSize)}}
+    end)).
+
+-spec mark_file_failed(id() | doc()) -> ok | error().
+mark_file_failed(ArchiveDocOrId) ->
+    ?extract_ok(update(ArchiveDocOrId, fun(Archive = #archive{stats = Stats}) ->
+        {ok, Archive#archive{stats = archive_stats:mark_file_failed(Stats)}}
     end)).
 
 %%%===================================================================
@@ -284,8 +311,10 @@ mark_finished(ArchiveId, NewState, FilesToArchive, FilesArchived, FilesFailed, B
 %%%===================================================================
 
 %% @private
--spec update(id(), datastore_doc:diff(record())) -> {ok, doc()} | error().
-update(ArchiveId, Diff) when is_function(Diff)->
+-spec update(id() | doc(), datastore_doc:diff(record())) -> {ok, doc()} | error().
+update(#document{key = ArchiveId}, Diff) ->
+    update(ArchiveId, Diff);
+update(ArchiveId, Diff) ->
     datastore_model:update(?CTX, ArchiveId, Diff).
 
 %%%===================================================================
@@ -320,10 +349,12 @@ get_record_struct(1) ->
         ]}},
         {preserved_callback, string},
         {purged_callback, string},
-        {description, binary},
-        {files_to_archive, integer},
-        {files_archived, integer},
-        {files_failed, integer},
-        {bytes_archived, integer},
-        {job_id, string}
+        {description, string},
+        {parent_dir_guid, string},
+        {stats, {record, [
+            {files_archived, integer},
+            {files_failed, integer},
+            {bytes_archived, integer}
+        ]}},
+        {parent, string}
     ]}.

@@ -9,7 +9,98 @@
 %%% This module implements list structure which is used to store
 %%% ids of archives created from the given dataset.
 %%% Each dataset is associated with a forest in which each provider
-%%% has its own tree.
+%%% has its own tree.%%%--------------------------------------------------------------------
+%%%%% This file has been automatically generated from Swagger
+%%%%% specification - DO NOT EDIT!
+%%%%%
+%%%%% @copyright (C) 2019-2021 ACK CYFRONET AGH
+%%%%% This software is released under the MIT license
+%%%%% cited in 'LICENSE.txt'.
+%%%%% @end
+%%%%%--------------------------------------------------------------------
+%%%%% @doc
+%%%%% This module contains definitions of archive REST methods.
+%%%%% @end
+%%%%%--------------------------------------------------------------------
+%%-module(archive_rest_routes).
+%%
+%%-include("http/rest.hrl").
+%%
+%%-export([routes/0]).
+%%
+%%
+%%%%%===================================================================
+%%%%% API
+%%%%%===================================================================
+%%
+%%
+%%%%--------------------------------------------------------------------
+%%%% @doc
+%%%% Definitions of archive REST paths.
+%%%% @end
+%%%%--------------------------------------------------------------------
+%%-spec routes() -> [{binary(), module(), #rest_req{}}].
+%%routes() -> [
+%%    %% List archives of a dataset
+%%    {<<"/datasets/:did/archives">>, rest_handler, #rest_req{
+%%        method = 'GET',
+%%        produces = [<<"application/json">>],
+%%        b_gri = #b_gri{
+%%            type = op_dataset,
+%%            id = ?BINDING(did),
+%%            aspect = archives,
+%%            scope = private
+%%        }
+%%    }},
+%%    %% Create archive from a dataset
+%%    {<<"/archives">>, rest_handler, #rest_req{
+%%        method = 'POST',
+%%        parse_body = as_json_params,
+%%        consumes = [<<"application/json">>],
+%%        produces = [<<"application/json">>],
+%%        b_gri = #b_gri{
+%%            type = op_archive,
+%%            id = undefined,
+%%            aspect = instance,
+%%            scope = private
+%%        }
+%%    }},
+%%    %% Get archive information
+%%    {<<"/archives/:aid">>, rest_handler, #rest_req{
+%%        method = 'GET',
+%%        produces = [<<"application/json">>],
+%%        b_gri = #b_gri{
+%%            type = op_archive,
+%%            id = ?BINDING(aid),
+%%            aspect = instance,
+%%            scope = private
+%%        }
+%%    }},
+%%    %% Update archive
+%%    {<<"/archives/:aid">>, rest_handler, #rest_req{
+%%        method = 'PATCH',
+%%        parse_body = as_json_params,
+%%        consumes = [<<"application/json">>],
+%%        b_gri = #b_gri{
+%%            type = op_archive,
+%%            id = ?BINDING(aid),
+%%            aspect = instance,
+%%            scope = private
+%%        }
+%%    }},
+%%    %% Purge archive
+%%    {<<"/archives/:aid/init_purge">>, rest_handler, #rest_req{
+%%        method = 'POST',
+%%        parse_body = as_json_params,
+%%        consumes = [<<"application/json">>],
+%%        b_gri = #b_gri{
+%%            type = op_archive,
+%%            id = ?BINDING(aid),
+%%            aspect = purge,
+%%            scope = private
+%%        }
+%%    }}
+%%].
 %%% @end
 %%%-------------------------------------------------------------------
 -module(archives_list).
@@ -23,9 +114,9 @@
 %% API
 -export([add/4, list/2, delete/4, index/2, length/1, is_empty/1]).
 
--define(CTX, (dataset:get_ctx())).
+-define(CTX, (archive:get_ctx())).
 -define(CTX(Scope), ?CTX#{scope => Scope}).
--define(FOREST(DatasetId), <<"ARCHIVES_", DatasetId/binary>>).
+-define(FOREST(DatasetId), <<"ARCHIVES_LIST_", DatasetId/binary>>).
 -define(LOCAL_TREE_ID, oneprovider:get_id()).
 -define(LINK(LinkName, LinkValue), {LinkName, LinkValue}).
 

@@ -106,11 +106,8 @@ is_attached(#file_meta{dataset_state = DatasetState}) ->
 -spec get_id_if_attached(file_meta:doc()) -> dataset:id() | undefined.
 get_id_if_attached(FileDoc) ->
     case is_attached(FileDoc) of
-        true ->
-            {ok, Uuid} = file_meta:get_uuid(FileDoc),
-            Uuid;
-        false ->
-            undefined
+        true -> get_id(FileDoc);
+        false -> undefined
     end.
 
 

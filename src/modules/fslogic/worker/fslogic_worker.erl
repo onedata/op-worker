@@ -789,7 +789,7 @@ handle_provider_request(UserCtx, #archive_dataset{
     purged_callback = PurgedCallback,
     description = Description
 }, SpaceDirCtx) ->
-    dataset_req:archive(SpaceDirCtx, DatasetId, Config, PreservedCallback, PurgedCallback, Description, UserCtx);
+    dataset_req:create_archive(SpaceDirCtx, DatasetId, Config, PreservedCallback, PurgedCallback, Description, UserCtx);
 handle_provider_request(UserCtx, #update_archive{id = ArchiveId, diff = Diff}, SpaceDirCtx) ->
     dataset_req:update_archive(SpaceDirCtx, ArchiveId, Diff, UserCtx);
 handle_provider_request(UserCtx, #get_archive_info{id = ArchiveId}, SpaceDirCtx) ->
