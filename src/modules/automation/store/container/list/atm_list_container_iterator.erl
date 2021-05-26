@@ -31,7 +31,7 @@
 -type item() :: json_utils:json_term().
 
 -record(atm_list_container_iterator, {
-    backend_id :: atm_list_container:id(),
+    backend_id :: atm_list_container:backend_id(),
     index = 0 :: non_neg_integer()
 }).
 -type record() :: #atm_list_container_iterator{}.

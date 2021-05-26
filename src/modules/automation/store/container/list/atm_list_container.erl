@@ -34,16 +34,18 @@
 %% #{
 %%      <<"isBatch">> := boolean()
 %% }
--type apply_operation_options() :: #{binary() => boolean()}. 
+-type apply_operation_options() :: #{binary() => boolean()}.
+
+% id of underlying persistent record implemented by `atm_list_store_backend`
+-type backend_id() :: binary().
 
 -record(atm_list_container, {
     data_spec :: atm_data_spec:record(),
-    % id of underlying persistent record implemented by `atm_list_store_backend`
-    backend_id :: binary()
+    backend_id :: backend_id()
 }).
 -type record() :: #atm_list_container{}.
 
--export_type([initial_value/0, apply_operation_options/0, record/0]).
+-export_type([initial_value/0, apply_operation_options/0, backend_id/0, record/0]).
 
 
 %%%===================================================================

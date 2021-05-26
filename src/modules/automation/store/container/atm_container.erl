@@ -51,7 +51,7 @@
     atm_range_container:apply_operation_options() |
     atm_list_container:apply_operation_options().
 
--export_type([type/0, initial_value/0, record/0]).
+-export_type([type/0, initial_value/0, operation/0, apply_operation_options/0, record/0]).
 
 
 %%%===================================================================
