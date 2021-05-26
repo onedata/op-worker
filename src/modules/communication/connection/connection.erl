@@ -131,10 +131,10 @@
 -define(PACKET_VALUE, 4).
 
 -define(DEFAULT_SOCKET_MODE,
-    application:get_env(?APP_NAME, default_socket_mode, active_once)
+    op_worker:get_env(default_socket_mode, active_once)
 ).
 -define(DEFAULT_VERIFY_MSG_FLAG,
-    application:get_env(?APP_NAME, verify_msg_before_encoding, true)
+    op_worker:get_env(verify_msg_before_encoding, true)
 ).
 
 %% API

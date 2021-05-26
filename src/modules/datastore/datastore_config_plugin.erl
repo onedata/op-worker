@@ -41,6 +41,7 @@ get_models() -> [
     file_download_code,
     subscription,
     file_subscription,
+    file_subscription_counter,
     session,
     session_local_links,
     file_meta,

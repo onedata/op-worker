@@ -421,7 +421,9 @@
     shares = [] :: [od_share:id()], % VFS-7437 Handle conflict resolution similarly to hardlinks
     deleted = false :: boolean(),
     parent_uuid :: file_meta:uuid(),
-    references = file_meta_hardlinks:empty_references() :: file_meta_hardlinks:references(),
+    % references are not always present in document to prevent copying large amounts of data
+    % in such a case references are undefined
+    references = file_meta_hardlinks:empty_references() :: file_meta_hardlinks:references() | undefined,
     symlink_value :: undefined | file_meta_symlinks:symlink(),
     % this field is used to cache value from #dataset.state field
     % TODO VFS-7533 handle conflict on file_meta with remote provider
@@ -432,16 +434,25 @@
 % One documents is stored for one archive.
 -record(archive, {
     dataset_id :: dataset:id(),
-    % TODO VFS-7601 set guid of directory in which archive is stored
-    % TODO VFS-7601 consider generating uuid basing ArchiveId
-    root_dir_guid :: undefined | file_id:file_guid(),
     creation_time :: time:seconds(),
     creator :: archive:creator(),
     state :: archive:state(),
     config :: archive:config(),
     preserved_callback :: archive:callback(),
     purged_callback :: archive:callback(),
-    description :: archive:description()
+    description :: archive:description(),
+    % following counters are set after archivisation job is finished,
+    % so that there is no need to fetch traverse_task document (identified by job_id)
+    % to get their values
+    files_to_archive = 0 :: non_neg_integer(),
+    files_archived = 0 :: non_neg_integer(),
+    files_failed = 0 :: non_neg_integer(),
+    bytes_archived = 0 :: non_neg_integer(),
+
+    % internal fields
+    % this field is used to fetch traverse_task document to get counters' values
+    % when archivisation job is still in progress
+    job_id :: archivisation_traverse:id()
 }).
 
 

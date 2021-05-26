@@ -226,9 +226,9 @@ mock_harvest_request_processing_time(Config, MinTime, MaxTime) ->
 random_request_processing_time(Req) ->
     {MinTime, MaxTime} = case Req of
         #gs_req{request = #gs_req_graph{gri = #gri{type = od_space, aspect = harvest_metadata}}} ->
-            application:get_env(op_worker, mock_harvest_req_proc_time, {1, 20});
+            op_worker:get_env(mock_harvest_req_proc_time, {1, 20});
         _ ->
-            application:get_env(op_worker, mock_req_proc_time, {1, 20})
+            op_worker:get_env(mock_req_proc_time, {1, 20})
     end,
     MinTime + rand:uniform(MaxTime - MinTime + 1) - 1.
 
@@ -461,8 +461,8 @@ mock_graph_get(GRI = #gri{type = od_user, id = Id, aspect = instance}, AuthOverr
                 ?USER_INCREASING_REV ->
                     % This user's revision rises with every fetch
                     critical_section:run(?USER_INCREASING_REV, fun() ->
-                        Rev = application:get_env(op_worker, mock_inc_rev, 1),
-                        application:set_env(op_worker, mock_inc_rev, Rev + 1),
+                        Rev = op_worker:get_env(mock_inc_rev, 1),
+                        op_worker:set_env(mock_inc_rev, Rev + 1),
                         {ok, #gs_resp_graph{data_format = resource, data = Data#{
                             <<"revision">> => Rev
                         }}}

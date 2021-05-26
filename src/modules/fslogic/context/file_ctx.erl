@@ -530,16 +530,15 @@ get_new_storage_file_id(FileCtx) ->
     {Storage, ReferencedUuidBasedFileCtx2} = get_storage(ReferencedUuidBasedFileCtx),
     Helper = storage:get_helper(Storage),
     SpaceId = file_ctx:get_space_id_const(ReferencedUuidBasedFileCtx2),
+    {CanonicalPath, ReferencedUuidBasedFileCtx3} = file_ctx:get_canonical_path(ReferencedUuidBasedFileCtx2),
     case helper:get_storage_path_type(Helper) of
         ?FLAT_STORAGE_PATH ->
-            FileUuid = file_ctx:get_logical_uuid_const(ReferencedUuidBasedFileCtx2),
-            StorageFileId = storage_file_id:flat(FileUuid, SpaceId),
-            FinalCtx = return_newer_if_equals(ReferencedUuidBasedFileCtx2, FileCtx),
+            FileUuid = file_ctx:get_logical_uuid_const(ReferencedUuidBasedFileCtx3),
+            StorageFileId = storage_file_id:flat(CanonicalPath, FileUuid, SpaceId, Storage),
+            FinalCtx = return_newer_if_equals(ReferencedUuidBasedFileCtx3, FileCtx),
             {StorageFileId, FinalCtx#file_ctx{storage_file_id = StorageFileId}};
         ?CANONICAL_STORAGE_PATH ->
-            {CanonicalPath, ReferencedUuidBasedFileCtx3} = file_ctx:get_canonical_path(ReferencedUuidBasedFileCtx2),
-            StorageId = storage:get_id(Storage),
-            StorageFileId = storage_file_id:canonical(CanonicalPath, SpaceId, StorageId),
+            StorageFileId = storage_file_id:canonical(CanonicalPath, SpaceId, Storage),
             FinalCtx = return_newer_if_equals(ReferencedUuidBasedFileCtx3, FileCtx),
             {StorageFileId, FinalCtx#file_ctx{storage_file_id = StorageFileId}}
     end.

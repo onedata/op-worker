@@ -675,6 +675,13 @@ ERL_NIF_TERM flushbuffer(
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
 
+ERL_NIF_TERM blocksize_for_path(
+    NifCTX ctx, helper_ptr helper, folly::fbstring file)
+{
+    handle_result(ctx, helper->blockSizeForPath(file));
+    return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
+}
+
 ERL_NIF_TERM open(NifCTX ctx, helper_ptr helper, folly::fbstring file,
     folly::fbvector<nifpp::str_atom> flags)
 {
@@ -877,6 +884,12 @@ static ERL_NIF_TERM sh_flushbuffer(
     return wrap(flushbuffer, env, argv);
 }
 
+static ERL_NIF_TERM sh_blocksize_for_path(
+    ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+{
+    return wrap(blocksize_for_path, env, argv);
+}
+
 static ERL_NIF_TERM sh_open(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
     return wrap(open, env, argv);
@@ -932,7 +945,8 @@ static ErlNifFunc nif_funcs[] = {{"get_handle", 2, get_handle},
     {"removexattr", 3, sh_removexattr}, {"listxattr", 2, sh_listxattr},
     {"open", 3, sh_open}, {"read", 3, sh_read}, {"write", 3, sh_write},
     {"release", 1, sh_release}, {"flush", 1, sh_flush}, {"fsync", 2, sh_fsync},
-    {"flushbuffer", 3, sh_flushbuffer}};
+    {"flushbuffer", 3, sh_flushbuffer},
+    {"blocksize_for_path", 2, sh_blocksize_for_path}};
 
 ERL_NIF_INIT(helpers_nif, nif_funcs, load, NULL, NULL, NULL);
 

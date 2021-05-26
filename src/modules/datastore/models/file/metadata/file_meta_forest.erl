@@ -91,7 +91,7 @@
 -define(LINK(FileName, FileUuid), {FileName, FileUuid}).
 
 -define(MINIMAL_TREE_ID_SUFFIX_LEN, 4).
--define(DEFAULT_LS_BATCH_SIZE, application:get_env(?APP_NAME, ls_batch_size, 5000)).
+-define(DEFAULT_LS_BATCH_SIZE, op_worker:get_env(ls_batch_size, 5000)).
 
 %%%===================================================================
 %%% API

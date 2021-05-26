@@ -45,7 +45,11 @@ translate_archive_info(#archive_info{
     preserved_callback = PreservedCallback,
     purged_callback = PurgedCallback,
     description = Description,
-    index = Index
+    index = Index,
+    files_to_archive = FilesToArchive,
+    files_archived = FilesArchived,
+    files_failed = FilesFailed,
+    bytes_archived = BytesArchived
 }) ->
     #{
         <<"gri">> => gri:serialize(#gri{
@@ -70,5 +74,9 @@ translate_archive_info(#archive_info{
         <<"preservedCallback">> => utils:undefined_to_null(PreservedCallback),
         <<"purgedCallback">> => utils:undefined_to_null(PurgedCallback),
         <<"description">> => Description,
-        <<"index">> => Index
+        <<"index">> => Index,
+        <<"filesToArchive">> => FilesToArchive,
+        <<"filesArchived">> => FilesArchived,
+        <<"filesFailed">> => FilesFailed,
+        <<"bytesArchived">> => BytesArchived
     }.

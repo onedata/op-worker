@@ -14,10 +14,10 @@
 
 -include("global_definitions.hrl").
 -include("modules/dataset/dataset.hrl").
+-include("modules/dataset/archivisation_tree.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/fslogic/data_access_control.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
--include_lib("ctool/include/http/headers.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/errors.hrl").
 
@@ -27,10 +27,10 @@
 -export([list_top_datasets/4, list_children_datasets/3]).
 
 %% Archives API
--export([archive/6, update_archive/2, get_archive_info/1, list_archives/3, init_archive_purge/2]).
+-export([archive/6, update_archive/2, get_archive_info/1, list_archives/3, init_archive_purge/3]).
 
 %% Exported for use in tests
--export([remove_archive/1]).
+-export([remove_archive/1, remove_archive/2]).
 
 %% Utils
 -export([get_associated_file_ctx/1]).
@@ -63,17 +63,21 @@
 % TODO VFS-7563 add tests concerning datasets to permissions test suites
 
 % Archives
-% TODO VFS-7601 implement archivisation procedure
-% TODO VFS-7613 use datastore function for getting number of links in forest to acquire number of archives per dataset
-% TODO VFS-7616 refine archives' attributes
 % TODO VFS-7617 implement recall operation of archives
-% TODO VFS-7619 add tests concerning archives to permissions test suites
 % TODO VFS-7624 implement purging job for archives
+% TODO VFS-7651 implement archivisation with bagit layout archives
+% TODO VFS-7652 implement incremental archives
+% TODO VFS-7653 implement creating DIP for an archive
+% TODO VFS-7613 use datastore function for getting number of links in forest to acquire number of archives per dataset
+% TODO VFS-7664 add followLink option to archivisation job
+% TODO VFS-7616 refine archives' attributes
+% TODO VFS-7619 add tests concerning archives to permissions test suites
+% TODO VFS-7662 send precise error descriptions to archivisation webhook
 
 -define(CRITICAL_SECTION(DatasetId, Function), critical_section:run({dataset, DatasetId}, Function)).
 
 -define(MAX_LIST_EXTENDED_DATASET_INFO_PROCS,
-    application:get_env(?APP_NAME, max_list_extended_dataset_info_procs, 20)).
+    op_worker:get_env(max_list_extended_dataset_info_procs, 20)).
 
 %%%===================================================================
 %%% API functions
@@ -84,12 +88,12 @@ establish(FileCtx, ProtectionFlags) ->
     ?CRITICAL_SECTION(file_ctx:get_logical_uuid_const(FileCtx), fun() ->
         SpaceId = file_ctx:get_space_id_const(FileCtx),
         Uuid = file_ctx:get_logical_uuid_const(FileCtx),
-        ok = dataset:create(Uuid, SpaceId),
+        {ok, DatasetId} = dataset:create(Uuid, SpaceId),
         {DatasetName, _FileCtx2} = file_ctx:get_aliased_name(FileCtx, user_ctx:new(?ROOT_SESS_ID)),
         ok = file_meta_dataset:establish(Uuid, ProtectionFlags),
         ok = attached_datasets:add(SpaceId, Uuid, DatasetName),
         dataset_eff_cache:invalidate_on_all_nodes(SpaceId),
-        {ok, Uuid}
+        {ok, DatasetId}
     end).
 
 
@@ -135,7 +139,8 @@ remove(Doc = #document{key = DatasetId})->
                 ok = remove_from_datasets_structure(Doc),
                 {ok, SpaceId} = dataset:get_space_id(Doc),
                 ok = dataset:delete(DatasetId),
-                ok = file_meta_dataset:remove(DatasetId),
+                {ok, Uuid} = dataset:get_root_file_uuid(Doc),
+                ok = file_meta_dataset:remove(Uuid),
                 dataset_eff_cache:invalidate_on_all_nodes(SpaceId);
             false ->
                 {error, ?ENOTEMPTY}
@@ -186,17 +191,12 @@ get_effective_membership_and_protection_flags(FileCtx) ->
 
 -spec get_effective_summary(file_ctx:ctx()) -> {ok, #file_eff_dataset_summary{}}.
 get_effective_summary(FileCtx) ->
-    {FileDoc, FileCtx2} = file_ctx:get_file_doc(FileCtx),
+    {FileDoc, _FileCtx2} = file_ctx:get_file_doc(FileCtx),
     {ok, EffCacheEntry} = dataset_eff_cache:get(FileDoc),
     {ok, EffAncestorDatasets} = dataset_eff_cache:get_eff_ancestor_datasets(EffCacheEntry),
     {ok, EffProtectionFlags} = dataset_eff_cache:get_eff_file_protection_flags(EffCacheEntry),
-    DatasetState = file_meta_dataset:get_state(FileDoc),
-    DirectDataset = case DatasetState =:= ?ATTACHED_DATASET orelse DatasetState =:= ?DETACHED_DATASET of
-        true -> file_ctx:get_logical_uuid_const(FileCtx2);
-        false -> undefined
-    end,
     {ok, #file_eff_dataset_summary{
-        direct_dataset = DirectDataset,
+        direct_dataset = file_meta_dataset:get_id(FileDoc),
         eff_ancestor_datasets = EffAncestorDatasets,
         eff_protection_flags = EffProtectionFlags
     }}.
@@ -229,26 +229,30 @@ list_children_datasets(DatasetId, Opts, ListingMode) ->
 %%% Archives API
 %%%===================================================================
 
--spec archive(dataset:id(), archive:config(), archive:description(), archive:callback(), archive:callback(),
-    od_user:id()) -> {ok, archive:id()} | error().
-archive(DatasetId, Config, PreservedCallback, PurgedCallback, Description, UserId) ->
+-spec archive(dataset:id(), archive:config(), archive:callback(), archive:callback(),
+    archive:description(), user_ctx:ctx()) -> {ok, archive:id()} | error().
+archive(DatasetId, Config, PreservedCallback, PurgedCallback, Description, UserCtx) ->
     {ok, DatasetDoc} = dataset:get(DatasetId),
     {ok, State} = dataset:get_state(DatasetDoc),
     case State of
         ?ATTACHED_DATASET ->
             {ok, SpaceId} = dataset:get_space_id(DatasetDoc),
+            UserId = user_ctx:get_user_id(UserCtx),
             case archive:create(DatasetId, SpaceId, UserId, Config,
                 PreservedCallback, PurgedCallback, Description)
             of
                 {ok, ArchiveDoc} ->
-                    ArchiveId = archive:get_id(ArchiveDoc),
-                    Timestamp = archive:get_creation_time(ArchiveDoc),
+                    {ok, ArchiveId} = archive:get_id(ArchiveDoc),
+                    {ok, Timestamp} = archive:get_creation_time(ArchiveDoc),
                     {ok, SpaceId} = dataset:get_space_id(DatasetDoc),
                     archives_list:add(DatasetId, SpaceId, ArchiveId, Timestamp),
-                    % TODO VFS-7601 schedule archivisation job here
-                    notify_archive_preserved(ArchiveId, DatasetId, PreservedCallback),
-                    {ok, ArchiveId};
-                {error, Error} ->
+                    case archivisation_traverse:start(ArchiveDoc, DatasetDoc, UserCtx) of
+                        ok ->
+                            {ok, ArchiveId};
+                        {error, _} = Error ->
+                            Error
+                    end;
+                {error, _} = Error ->
                     Error
             end;
         ?DETACHED_DATASET ->
@@ -271,30 +275,64 @@ get_archive_info(ArchiveId) ->
 %% @private
 -spec get_archive_info(archive:id() | archive:doc(), archive_index() | undefined) -> {ok, archive_info()}.
 get_archive_info(ArchiveDoc = #document{}, ArchiveIndex) ->
-    ArchiveId = archive:get_id(ArchiveDoc),
-    Timestamp = archive:get_creation_time(ArchiveDoc),
+    {ok, ArchiveId} = archive:get_id(ArchiveDoc),
+    {ok, DatasetId} = archive:get_dataset_id(ArchiveDoc),
+    {ok, Timestamp} = archive:get_creation_time(ArchiveDoc),
+    {ok, SpaceId} = archive:get_space_id(ArchiveDoc),
+    {ok, State} = archive:get_state(ArchiveDoc),
+    {ok, Config} = archive:get_config(ArchiveDoc),
+    {ok, PreservedCallback} = archive:get_preserved_callback(ArchiveDoc),
+    {ok, PurgedCallback} = archive:get_purged_callback(ArchiveDoc),
+    {ok, Description} = archive:get_description(ArchiveDoc),
+    {FilesToArchive, FilesArchived, FilesFailed, BytesArchived} = get_archive_stats(ArchiveDoc),
     {ok, #archive_info{
         id = ArchiveId,
-        dataset_id = archive:get_dataset_id(ArchiveDoc),
-        state = archive:get_state(ArchiveDoc),
-        root_dir_guid = archive:get_root_dir(ArchiveDoc),
-        creation_time = archive:get_creation_time(ArchiveDoc),
-        config = archive:get_config(ArchiveDoc),
-        preserved_callback = archive:get_preserved_callback(ArchiveDoc),
-        purged_callback = archive:get_purged_callback(ArchiveDoc),
-        description = archive:get_description(ArchiveDoc),
+        dataset_id = DatasetId,
+        state = State,
+        root_dir_guid = file_id:pack_guid(?ARCHIVE_DIR_UUID(ArchiveId), SpaceId),
+        creation_time = Timestamp,
+        config = Config,
+        preserved_callback = PreservedCallback,
+        purged_callback = PurgedCallback,
+        description = Description,
         index = case ArchiveIndex =:= undefined of
             true -> archives_list:index(ArchiveId, Timestamp);
             false -> ArchiveIndex
-        end
+        end,
+        files_to_archive = FilesToArchive,
+        files_archived = FilesArchived,
+        files_failed = FilesFailed,
+        bytes_archived = BytesArchived
     }};
 get_archive_info(ArchiveId, ArchiveIndex) ->
     {ok, ArchiveDoc} = archive:get(ArchiveId),
     get_archive_info(ArchiveDoc, ArchiveIndex).
 
 
+-spec get_archive_stats(archive:doc()) ->
+    {non_neg_integer(), non_neg_integer(), non_neg_integer(), non_neg_integer()}.
+get_archive_stats(ArchiveDoc) ->
+    case archive:is_finished(ArchiveDoc) of
+        true ->
+            {ok, FilesToArchive} = archive:get_files_to_archive(ArchiveDoc),
+            {ok, FilesArchived} = archive:get_files_archived(ArchiveDoc),
+            {ok, FilesFailed} = archive:get_files_failed(ArchiveDoc),
+            {ok, BytesArchived} = archive:get_bytes_archived(ArchiveDoc),
+            {FilesToArchive, FilesArchived, FilesFailed, BytesArchived};
+        false ->
+            {ok, JobId} = archive:get_job_id(ArchiveDoc),
+            {ok, ArchivisationJobDescription} = archivisation_traverse:get_description(JobId),
+            {
+                archivisation_traverse:get_files_to_archive_count(ArchivisationJobDescription),
+                archivisation_traverse:get_files_archived_count(ArchivisationJobDescription),
+                archivisation_traverse:get_files_failed_count(ArchivisationJobDescription),
+                archivisation_traverse:get_bytes_archived(ArchivisationJobDescription)
+            }
+    end.
+
+
 -spec list_archives(dataset:id(), archives_list:opts(), listing_mode()) ->
-        {ok, archive_entries(), IsLast :: boolean()}.
+    {ok, archive_entries(), IsLast :: boolean()}.
 list_archives(DatasetId, ListingOpts, ListingMode) ->
     ArchiveEntries = archives_list:list(DatasetId, ListingOpts),
     IsLast = maps:get(limit, ListingOpts) > length(ArchiveEntries),
@@ -306,35 +344,43 @@ list_archives(DatasetId, ListingOpts, ListingMode) ->
     end.
 
 
--spec init_archive_purge(archive:id(), archive:callback()) -> ok | error().
-init_archive_purge(ArchiveId, CallbackUrl) ->
-    {ok, ArchiveDoc} = archive:mark_purging(ArchiveId, CallbackUrl),
-    DatasetId = archive:get_dataset_id(ArchiveDoc),
-    % TODO VFS-7624 init purging job
-    % it should remove archive doc when finished
-    % Should it be possible to register many callbacks in case of parallel purge requests?
-    ok = remove_archive(ArchiveId),
-    notify_archive_purged(ArchiveId, DatasetId, CallbackUrl).
-
-
--spec remove_archive(archive:id()) -> ok | error().
-remove_archive(ArchiveId) ->
-    case archive:get(ArchiveId) of
+-spec init_archive_purge(archive:id(), archive:callback(), user_ctx:ctx()) -> ok | error().
+init_archive_purge(ArchiveId, CallbackUrl, UserCtx) ->
+    case archive:mark_purging(ArchiveId, CallbackUrl) of
         {ok, ArchiveDoc} ->
-            case archive:delete(ArchiveId) of
-                ok ->
-                    DatasetId = archive:get_dataset_id(ArchiveDoc),
-                    Timestamp = archive:get_creation_time(ArchiveDoc),
-                    SpaceId = archive:get_space_id(ArchiveDoc),
-                    archives_list:delete(DatasetId, SpaceId, ArchiveId, Timestamp);
-                ?ERROR_NOT_FOUND ->
-                    % there was race with other process removing the archive
-                    ok
-            end;
-        ?ERROR_NOT_FOUND ->
-            ok;
+            {ok, DatasetId} = archive:get_dataset_id(ArchiveDoc),
+            % TODO VFS-7624 init purging job
+            % it should remove archive doc when finished
+            % Should it be possible to register many callbacks in case of parallel purge requests?
+            ok = remove_archive(ArchiveId, UserCtx),
+            archivisation_callback:notify_purged(ArchiveId, DatasetId, CallbackUrl);
         {error, _} = Error ->
             Error
+    end.
+
+-spec remove_archive(archive:doc() | archive:id()) -> ok | error().
+remove_archive(Archive) ->
+    remove_archive(Archive, user_ctx:new(?ROOT_SESS_ID)).
+
+
+-spec remove_archive(archive:id() | archive:doc(), user_ctx:ctx()) -> ok | error().
+remove_archive(ArchiveDoc = #document{}, UserCtx) ->
+    {ok, ArchiveId} = archive:get_id(ArchiveDoc),
+    case archive:delete(ArchiveId) of
+        ok ->
+            {ok, SpaceId} = archive:get_space_id(ArchiveDoc),
+            {ok, DatasetId} = archive:get_dataset_id(ArchiveDoc),
+            {ok, Timestamp} = archive:get_creation_time(ArchiveDoc),
+            archives_list:delete(DatasetId, SpaceId, ArchiveId, Timestamp);
+        ?ERROR_NOT_FOUND ->
+            % there was race with other process removing the archive
+            ok
+    end;
+remove_archive(ArchiveId, UserCtx) ->
+    case archive:get(ArchiveId) of
+        {ok, ArchiveDoc} -> remove_archive(ArchiveDoc, UserCtx);
+        ?ERROR_NOT_FOUND -> ok;
+        {error, _} = Error -> Error
     end.
 
 
@@ -344,7 +390,7 @@ remove_archive(ArchiveId) ->
 
 -spec get_associated_file_ctx(dataset:doc()) -> file_ctx:ctx().
 get_associated_file_ctx(DatasetDoc) ->
-    {ok, Uuid} = dataset:get_id(DatasetDoc),
+    {ok, Uuid} = dataset:get_root_file_uuid(DatasetDoc),
     {ok, SpaceId} = dataset:get_space_id(DatasetDoc),
     file_ctx:new_by_uuid(Uuid, SpaceId).
 
@@ -393,8 +439,9 @@ detach_internal(DatasetId) ->
 -spec update_protection_flags(dataset:id(), data_access_control:bitmask(), data_access_control:bitmask()) -> ok.
 update_protection_flags(DatasetId, FlagsToSet, FlagsToUnset) ->
     {ok, Doc} = dataset:get(DatasetId),
+    {ok, Uuid} = dataset:get_root_file_uuid(Doc),
     {ok, SpaceId} = dataset:get_space_id(Doc),
-    ok = file_meta:update_protection_flags(DatasetId, FlagsToSet, FlagsToUnset),
+    ok = file_meta:update_protection_flags(Uuid, FlagsToSet, FlagsToUnset),
     dataset_eff_cache:invalidate_on_all_nodes(SpaceId).
 
 -spec remove_from_datasets_structure(dataset:doc()) -> ok.
@@ -423,9 +470,10 @@ collect_state_dependant_info(DatasetId, IndexOrUndefined) ->
 
 -spec collect_attached_info(dataset:doc(), index() | undefined) -> info().
 collect_attached_info(DatasetDoc, IndexOrUndefined) ->
-    {ok, DatasetId = Uuid} = dataset:get_id(DatasetDoc),
+    {ok, DatasetId} = dataset:get_id(DatasetDoc),
     {ok, CreationTime} = dataset:get_creation_time(DatasetDoc),
     {ok, SpaceId} = dataset:get_space_id(DatasetDoc),
+    {ok, Uuid} = dataset:get_root_file_uuid(DatasetDoc),
     {ok, FileDoc} = file_meta:get(Uuid),
     FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId),
     {FilePath, _FileCtx2} = file_ctx:get_logical_path(FileCtx, user_ctx:new(?ROOT_SESS_ID)),
@@ -457,7 +505,8 @@ collect_attached_info(DatasetDoc, IndexOrUndefined) ->
 
 -spec collect_detached_info(dataset:doc(), index() | undefined) -> info().
 collect_detached_info(DatasetDoc, IndexOrUndefined) ->
-    {ok, DatasetId = Uuid} = dataset:get_id(DatasetDoc),
+    {ok, DatasetId} = dataset:get_id(DatasetDoc),
+    {ok, Uuid} = dataset:get_root_file_uuid(DatasetDoc),
     {ok, CreationTime} = dataset:get_creation_time(DatasetDoc),
     {ok, SpaceId} = dataset:get_space_id(DatasetDoc),
     {ok, DetachedInfo} = dataset:get_detached_info(DatasetDoc),
@@ -534,36 +583,3 @@ extend_with_archive_info(ArchiveEntries) ->
 entry_index(DatasetId, RootFilePath) ->
     DatasetName = filename:basename(RootFilePath),
     datasets_structure:pack_entry_index(DatasetName, DatasetId).
-
-
-
--spec notify_archive_preserved(archive:id(), dataset:id(), archive:callback()) -> ok.
-notify_archive_preserved(ArchiveId, DatasetId, CallbackUrl) ->
-    notify_archive_callback(ArchiveId, DatasetId, CallbackUrl, <<"preservation">>).
-
-
--spec notify_archive_purged(archive:id(), dataset:id(), archive:callback()) -> ok.
-notify_archive_purged(ArchiveId, DatasetId, CallbackUrl) ->
-    notify_archive_callback(ArchiveId, DatasetId, CallbackUrl, <<"purging">>).
-
-
--spec notify_archive_callback(archive:id(), dataset:id(), archive:callback(), binary()) -> ok.
-notify_archive_callback(_ArchiveId, _DatasetId, undefined, _Operation) ->
-    ok;
-notify_archive_callback(ArchiveId, DatasetId, CallbackUrl, Operation) ->
-    Headers = #{?HDR_CONTENT_TYPE => <<"application/json">>},
-    Body = json_utils:encode(#{
-        <<"archiveId">> => ArchiveId,
-        <<"datasetId">> => DatasetId,
-        <<"error">> => null
-    }),
-    try
-        http_client:post(CallbackUrl, Headers, Body),
-        ok
-    catch
-        Type:Reason ->
-            ?error_stacktrace(
-                "Calling URL callback ~s, after successful ~s of "
-                "archive ~s created from dataset ~s, failed due to ~p:~p.",
-                [CallbackUrl, Operation, ArchiveId, DatasetId, Type, Reason])
-    end.

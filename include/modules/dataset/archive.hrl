@@ -26,8 +26,15 @@
 % Macros defining possible layouts of files and directories in an archive
 -define(ARCHIVE_PLAIN_LAYOUT, plain).
 -define(ARCHIVE_BAGIT_LAYOUT, bagit).
--define(ARCHIVE_LAYOUTS, [?ARCHIVE_BAGIT_LAYOUT, ?ARCHIVE_PLAIN_LAYOUT]).
+% TODO VFS-7651 add ?ARCHIVE_BAGIT_LAYOUT to the following list
+-define(ARCHIVE_LAYOUTS, [?ARCHIVE_PLAIN_LAYOUT]).
 
+% TODO VFS-7652 add true to the below list
+-define(SUPPORTED_INCREMENTAL_VALUES, [false]).
+% TODO VFS-7653 add true to the below list
+-define(SUPPORTED_INCLUDE_DIP_VALUES, [false]).
+
+-define(DEFAULT_LAYOUT, ?ARCHIVE_PLAIN_LAYOUT).
 -define(DEFAULT_INCLUDE_DIP, false).
 -define(DEFAULT_INCREMENTAL, false).
 -define(DEFAULT_ARCHIVE_DESCRIPTION, <<>>).

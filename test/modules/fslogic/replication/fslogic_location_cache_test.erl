@@ -233,7 +233,7 @@ get_multiple_overlapping_sequences_template(InputBlocksProducer, ExpectedBlocksP
     BlockToStart, BlockToStop, BlocksNumber) ->
     TestBlocks = gen_test_blocks(BlocksNumber),
     lists:foreach(fun(MaxHole) ->
-        application:set_env(?APP_NAME, overlapping_seqiences_max_hole, MaxHole),
+        op_worker:set_env(overlapping_seqiences_max_hole, MaxHole),
         lists:foreach(fun(M) ->
             lists:foreach(fun(N) ->
                 BasicBlocksList = lists:sublist(TestBlocks, M, N - M + 1),
@@ -252,7 +252,7 @@ get_overlapping_sequences_using_three_blocks_test() ->
     InputBlocks = [Block1, Block2, Block3],
 
     lists:foreach(fun(MaxHole) ->
-        application:set_env(?APP_NAME, overlapping_seqiences_max_hole, MaxHole),
+        op_worker:set_env(overlapping_seqiences_max_hole, MaxHole),
         ExpectedBlocks = case {MaxHole < 3, MaxHole < 4} of
             {true, true} ->
                 [{[Block1], [Block1]}, {[Block2], [Block2]}, {[Block3], [Block3]}];
@@ -267,7 +267,7 @@ get_overlapping_sequences_using_three_blocks_test() ->
 get_overlapping_sequences_using_multiple_blocks_test() ->
     TestBlocks = gen_test_blocks(30),
     MaxHole = 3,
-    application:set_env(?APP_NAME, overlapping_seqiences_max_hole, MaxHole),
+    op_worker:set_env(overlapping_seqiences_max_hole, MaxHole),
 
     Block1 = lists:nth(3, TestBlocks),
     Block2 = lists:nth(8, TestBlocks),
@@ -360,7 +360,7 @@ get_overlapping_and_triple_update_test() ->
 get_overlapping_sequences_and_update_test() ->
     TestBlocks = gen_test_blocks(25),
     MaxHole = 3,
-    application:set_env(?APP_NAME, overlapping_seqiences_max_hole, MaxHole),
+    op_worker:set_env(overlapping_seqiences_max_hole, MaxHole),
 
     Block1 = lists:nth(3, TestBlocks),
     Block2 = lists:nth(8, TestBlocks),

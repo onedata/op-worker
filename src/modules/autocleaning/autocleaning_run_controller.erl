@@ -166,7 +166,7 @@
 
 
 % batch size used to query the file_popularity_view
--define(BATCH_SIZE, application:get_env(?APP_NAME, autocleaning_view_batch_size, 1000)).
+-define(BATCH_SIZE, op_worker:get_env(autocleaning_view_batch_size, 1000)).
 -define(ID_SEPARATOR, <<"##">>).
 
 -define(UPDATE_DOC_COUNTERS_MAX_INTERVAL, timer:seconds(1)).

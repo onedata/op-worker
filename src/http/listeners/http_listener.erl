@@ -22,13 +22,13 @@
 -define(HTTP_LISTENER, http_listener).
 
 % Listener config
--define(PORT, application:get_env(?APP_NAME, http_server_port, 80)).
--define(ACCEPTORS_NUM, application:get_env(?APP_NAME, http_acceptors, 10)).
--define(REQUEST_TIMEOUT, application:get_env(?APP_NAME, http_request_timeout, timer:seconds(30))).
+-define(PORT, op_worker:get_env(http_server_port, 80)).
+-define(ACCEPTORS_NUM, op_worker:get_env(http_acceptors, 10)).
+-define(REQUEST_TIMEOUT, op_worker:get_env(http_request_timeout, timer:seconds(30))).
 
--define(LE_CHALLENGE_PATH, application:get_env(?APP_NAME, letsencrypt_challenge_api_prefix,
+-define(LE_CHALLENGE_PATH, op_worker:get_env(letsencrypt_challenge_api_prefix,
     "/.well-known/acme-challenge")).
--define(LE_CHALLENGE_ROOT, application:get_env(?APP_NAME, letsencrypt_challenge_static_root,
+-define(LE_CHALLENGE_ROOT, op_worker:get_env(letsencrypt_challenge_static_root,
     "/tmp/op_worker/http/.well-known/acme-challenge/")).
 
 %% listener_behaviour callbacks

@@ -86,8 +86,11 @@ spaces:
       - user: *user2
     supports:
       - provider: "oneprovider-1"
-        storage_name: "posix"
-        size: '1000000000'
+        storage_name: "s3-archive-krakow"
+        size: '10000000000'
       - provider: "oneprovider-2"
-        storage_name: "posix"
-        size: '1000000000'
+        storage_name: "s3-archive-paris"
+        size: '10000000000'
+
+storages:
+  - s3

@@ -493,8 +493,10 @@ create_dir_and_symlink(Config) ->
     SymlinkName = <<"symlink">>,
 
     {ok, Guid} = lfm_proxy:mkdir(Worker, SessId, ?PATH(DirName, ?SPACE_ID1)),
+    SpaceIdPrefix = ?SYMLINK_SPACE_ID_ABS_PATH_PREFIX(?SPACE_ID1),
+    LinkTarget = filename:join([SpaceIdPrefix, DirName]),
     {ok, #file_attr{guid = SymlinkGuid}} =
-        lfm_proxy:make_symlink(Worker, SessId, ?PATH(SymlinkName, ?SPACE_ID1), ?PATH(DirName, ?SPACE_ID1)),
+        lfm_proxy:make_symlink(Worker, SessId, ?PATH(SymlinkName, ?SPACE_ID1), LinkTarget),
     {ok, FileId} = file_id:guid_to_objectid(Guid),
     {ok, LinkFileId} = file_id:guid_to_objectid(SymlinkGuid),
 
@@ -1685,7 +1687,7 @@ mock_space_logic_harvest_metadata(Node) ->
     Self = self(),
     ok = test_utils:mock_expect(Node, space_logic, harvest_metadata,
         fun(SpaceId, Destination, Batch, _MaxStreamSeq, _MaxSeq) ->
-            case application:get_env(op_worker, ?MOCK_HARVEST_METADATA_FAILURE, false) of
+            case op_worker:get_env(?MOCK_HARVEST_METADATA_FAILURE, false) of
                 true ->
                     {error, test_error};
                 false ->
