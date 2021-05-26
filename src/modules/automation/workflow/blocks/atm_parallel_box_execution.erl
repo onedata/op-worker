@@ -166,7 +166,7 @@ db_encode(#atm_parallel_box_execution{
     #{
         <<"schemaId">> => AtmParallelBoxSchemaId,
         <<"status">> => atom_to_binary(AtmParallelBoxExecutionStatus, utf8),
-        <<"parallelBoxes">> => maps:map(fun(_AtmTaskExecutionId, AtmTaskExecutionStatus) ->
+        <<"tasks">> => maps:map(fun(_AtmTaskExecutionId, AtmTaskExecutionStatus) ->
             atom_to_binary(AtmTaskExecutionStatus, utf8)
         end, Tasks)
     }.
@@ -177,12 +177,12 @@ db_encode(#atm_parallel_box_execution{
 db_decode(#{
     <<"schemaId">> := AtmParallelBoxSchemaId,
     <<"status">> := AtmParallelBoxExecutionStatusBin,
-    <<"parallelBoxes">> := AtmParallelBoxExecutionsJson
+    <<"tasks">> := AtmTasksJson
 }, _NestedRecordDecoder) ->
     #atm_parallel_box_execution{
         schema_id = AtmParallelBoxSchemaId,
         status = binary_to_atom(AtmParallelBoxExecutionStatusBin, utf8),
         tasks = maps:map(fun(_AtmTaskExecutionId, AtmTaskExecutionStatusBin) ->
             binary_to_atom(AtmTaskExecutionStatusBin, utf8)
-        end, AtmParallelBoxExecutionsJson)
+        end, AtmTasksJson)
     }.

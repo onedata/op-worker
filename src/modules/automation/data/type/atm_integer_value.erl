@@ -18,7 +18,7 @@
 -include("modules/automation/atm_tmp.hrl").
 
 %% atm_data_validator callbacks
--export([assert_meet_constraints/2]).
+-export([assert_meets_constraints/2]).
 
 
 %%%===================================================================
@@ -26,9 +26,9 @@
 %%%===================================================================
 
 
--spec assert_meet_constraints(atm_api:item(), atm_data_type:value_constraints()) ->
+-spec assert_meets_constraints(atm_api:item(), atm_data_type:value_constraints()) ->
     ok | no_return().
-assert_meet_constraints(Value, _ValueConstraints) when is_integer(Value) ->
+assert_meets_constraints(Value, _ValueConstraints) when is_integer(Value) ->
     ok;
-assert_meet_constraints(Value, _ValueConstraints) ->
+assert_meets_constraints(Value, _ValueConstraints) ->
     throw(?ERROR_ATM_DATA_TYPE_UNVERIFIED(Value, atm_integer_type)).

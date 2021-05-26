@@ -33,7 +33,7 @@
 %% Asserts that all value constraints hold for specified item.
 %% @end
 %%--------------------------------------------------------------------
--callback assert_meet_constraints(atm_api:item(), atm_data_type:value_constraints()) ->
+-callback assert_meets_constraints(atm_api:item(), atm_data_type:value_constraints()) ->
     ok | no_return().
 
 
@@ -46,7 +46,7 @@
     ok | no_return().
 validate(Value, AtmDataSpec) ->
     Module = get_callback_module(atm_data_spec:get_type(AtmDataSpec)),
-    Module:assert_meet_constraints(Value, atm_data_spec:get_value_constraints(AtmDataSpec)).
+    Module:assert_meets_constraints(Value, atm_data_spec:get_value_constraints(AtmDataSpec)).
 
 
 %%%===================================================================
