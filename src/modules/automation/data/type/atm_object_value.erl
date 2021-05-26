@@ -7,16 +7,18 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module implements `atm_data_validator` functionality for
-%%% `atm_integer_type`.
+%%% `atm_object_type`.
 %%% @end
 %%%-------------------------------------------------------------------
--module(atm_integer).
+-module(atm_object_value).
 -author("Bartosz Walkowicz").
 
 -behaviour(atm_data_validator).
 
+-include("modules/automation/atm_tmp.hrl").
+
 %% atm_data_validator callbacks
--export([is_instance/2]).
+-export([assert_meets_constraints/2]).
 
 
 %%%===================================================================
@@ -24,8 +26,9 @@
 %%%===================================================================
 
 
--spec is_instance(term(), atm_data_type2:value_constraints()) -> boolean().
-is_instance(Value, _ValueConstraints) when is_integer(Value) ->
-    true;
-is_instance(_Value, _ValueConstraints) ->
-    false.
+-spec assert_meets_constraints(atm_api:item(), atm_data_type:value_constraints()) ->
+    ok | no_return().
+assert_meets_constraints(Value, _ValueConstraints) when is_map(Value) ->
+    ok;
+assert_meets_constraints(Value, _ValueConstraints) ->
+    throw(?ERROR_ATM_DATA_TYPE_UNVERIFIED(Value, atm_object_type)).

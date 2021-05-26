@@ -12,11 +12,10 @@
 -module(atm_workflow_execution).
 -author("Bartosz Walkowicz").
 
--include("modules/automation/atm_wokflow_execution.hrl").
--include("modules/datastore/datastore_runner.hrl").
+-include("modules/automation/atm_execution.hrl").
 
 %% API
--export([create/2, delete/1]).
+-export([create/1, get/1, update/2, delete/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_version/0, get_record_struct/1]).
@@ -27,17 +26,22 @@
 -type record() :: #atm_workflow_execution{}.
 -type doc() :: datastore_doc:doc(record()).
 
--type state() :: ?WAITING_STATE | ?ONGOING_STATE | ?ENDED_STATE.
+-type store_registry() :: #{AtmStoreSchemaId :: automation:id() => atm_store:id()}.
+
+-type phase() :: ?WAITING_PHASE | ?ONGOING_PHASE | ?ENDED_PHASE.
+
+-type status() ::
+    ?SCHEDULED_STATUS | ?PREPARING_STATUS | ?ENQUEUED_STATUS |
+    ?ACTIVE_STATUS |
+    ?FINISHED_STATUS | ?FAILED_STATUS.
+
 -type timestamp() :: time:seconds().
 
--export_type([id/0, record/0, doc/0, state/0, timestamp/0]).
+-export_type([id/0, diff/0, record/0, doc/0]).
+-export_type([store_registry/0, phase/0, status/0, timestamp/0]).
 
--type error() :: {error, term()}.
 
-
--define(CTX, #{
-    model => ?MODULE
-}).
+-define(CTX, #{model => ?MODULE}).
 
 
 %%%===================================================================
@@ -45,18 +49,32 @@
 %%%===================================================================
 
 
--spec create(file_meta:uuid(), od_space:id()) -> ok | error().
-create(AtmWorkflowExecutionId, SpaceId) ->
-  ?extract_ok(datastore_model:create(?CTX, #document{
-      key = AtmWorkflowExecutionId,
-      value = #atm_workflow_execution{
-          space_id = SpaceId,
-          schedule_time = global_clock:timestamp_seconds()
-      }
-  })).
+-spec create(doc()) -> {ok, doc()} | {error, term()}.
+create(AtmWorkflowExecutionDoc) ->
+    datastore_model:create(?CTX, AtmWorkflowExecutionDoc).
 
 
--spec delete(id()) -> ok | error().
+-spec get(id()) -> {ok, doc()} | {error, term()}.
+get(AtmWorkflowExecutionId) ->
+    datastore_model:get(?CTX, AtmWorkflowExecutionId).
+
+
+-spec update(id(), diff()) -> {ok, doc()} | {error, term()}.
+update(AtmWorkflowExecutionId, Diff1) ->
+    Diff2 = fun(#atm_workflow_execution{status = PrevStatus} = AtmWorkflowExecution) ->
+        case Diff1(AtmWorkflowExecution#atm_workflow_execution{status_changed = false}) of
+            {ok, #atm_workflow_execution{status = NewStatus} = NewAtmWorkflowExecution} ->
+                {ok, NewAtmWorkflowExecution#atm_workflow_execution{
+                    status_changed = NewStatus /= PrevStatus
+                }};
+            {error, _} = Error ->
+                Error
+        end
+    end,
+    datastore_model:update(?CTX, AtmWorkflowExecutionId, Diff2).
+
+
+-spec delete(id()) -> ok | {error, term()}.
 delete(AtmWorkflowExecutionId) ->
     datastore_model:delete(?CTX, AtmWorkflowExecutionId).
 
@@ -95,6 +113,14 @@ get_record_version() ->
 get_record_struct(1) ->
     {record, [
         {space_id, string},
+        {schema_snapshot_id, string},
+
+        {store_registry, #{string => string}},
+        {lanes, [{custom, string, {persistent_record, encode, decode, atm_lane_execution}}]},
+
+        {status, atom},
+        {status_changed, boolean},
+
         {schedule_time, integer},
         {start_time, integer},
         {finish_time, integer}
