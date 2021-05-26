@@ -5,13 +5,13 @@
 %%% cited in 'LICENSE.txt'.
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% Module operating on collection of waiting automation workflow executions.
+%%% Module operating on collection of ongoing automation workflow executions.
 %%% @end
 %%%-------------------------------------------------------------------
--module(atm_waiting_workflow_executions).
+-module(atm_ongoing_workflow_executions).
 -author("Bartosz Walkowicz").
 
--include("modules/automation/atm_wokflow_execution.hrl").
+-include("modules/automation/atm_execution.hrl").
 
 %% API
 -export([list/2, add/1, delete/1]).
@@ -25,24 +25,24 @@
 -spec list(od_space:id(), atm_workflow_executions_collection:listing_opts()) ->
     [{atm_workflow_execution:id(), atm_workflow_executions_collection:index()}].
 list(SpaceId, ListingOpts) ->
-    atm_workflow_executions_collection:list(SpaceId, ?WAITING_TREE, ListingOpts).
+    atm_workflow_executions_collection:list(SpaceId, ?ONGOING_TREE, ListingOpts).
 
 
 -spec add(atm_workflow_execution:doc()) -> ok.
 add(#document{key = AtmWorkflowExecutionId, value = #atm_workflow_execution{
     space_id = SpaceId,
-    schedule_time = ScheduleTime
+    start_time = StartTime
 }}) ->
     atm_workflow_executions_collection:add(
-        SpaceId, ?WAITING_TREE, AtmWorkflowExecutionId, ScheduleTime
+        SpaceId, ?ONGOING_TREE, AtmWorkflowExecutionId, StartTime
     ).
 
 
 -spec delete(atm_workflow_execution:doc()) -> ok.
 delete(#document{key = AtmWorkflowExecutionId, value = #atm_workflow_execution{
     space_id = SpaceId,
-    schedule_time = ScheduleTime
+    start_time = StartTime
 }}) ->
     atm_workflow_executions_collection:delete(
-        SpaceId, ?WAITING_TREE, AtmWorkflowExecutionId, ScheduleTime
+        SpaceId, ?ONGOING_TREE, AtmWorkflowExecutionId, StartTime
     ).

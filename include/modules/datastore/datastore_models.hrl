@@ -252,7 +252,7 @@
 
     state :: automation:workflow_schema_state(),
 
-    atm_inventory :: undefined | od_atm_inventory:id(),
+    atm_inventory :: od_atm_inventory:id(),
 
     cache_state = #{} :: cache_state()
 }).
@@ -1030,18 +1030,69 @@
 
 %% Model storing information about automation store instance.
 -record(atm_store, {
-    type :: atm_store:type(),
-    name :: atm_store:name(),
-    summary :: atm_store:summary(),
-    description :: atm_store:description(),
+    workflow_execution_id :: atm_workflow_execution:id(),
+
+    schema_id :: automation:id(),
+    initial_value :: undefined | json_utils:json_term(),
+
+    % Flag used to tell if content (items) update operation should be blocked
+    % (e.g when store is used as the iteration source for currently executed lane).
     frozen = false :: boolean(),
-    is_input_store :: boolean(),
-    container :: atm_container:container()
+
+    type :: automation:store_type(),
+    container :: atm_container:record()
+}).
+
+%% Model storing information about automation task execution.
+-record(atm_task_execution, {
+    workflow_execution_id :: atm_workflow_execution:id(),
+    lane_index :: non_neg_integer(),
+    parallel_box_index :: non_neg_integer(),
+
+    schema_id :: automation:id(),
+
+    executor :: atm_task_executor:record(),
+    argument_specs :: [atm_task_execution_argument_spec:record()],
+
+    status :: atm_task_execution:status(),
+    % Flag used to tell if status was changed during doc update (set automatically
+    % when updating doc). It is necessary due to limitation of datastore as
+    % otherwise getting document before update would be needed (to compare 2 docs).
+    status_changed = false :: boolean(),
+
+    items_in_processing = 0 :: non_neg_integer(),
+    items_processed = 0 :: non_neg_integer(),
+    items_failed = 0 :: non_neg_integer()
+}).
+
+%% Model that holds information about an automation workflow schema snapshot
+-record(atm_workflow_schema_snapshot, {
+    schema_id :: automation:id(),
+    name :: automation:name(),
+    description :: automation:description(),
+
+    stores = [] :: [atm_store_schema:record()],
+    lanes = [] :: [atm_lane_schema:record()],
+
+    state :: automation:workflow_schema_state(),
+
+    atm_inventory :: od_atm_inventory:id()
 }).
 
 %% Model that holds information about an automation workflow execution
 -record(atm_workflow_execution, {
-    space_id :: binary(),
+    space_id :: od_space:id(),
+    schema_snapshot_id :: atm_workflow_schema_snapshot:id(),
+
+    store_registry :: atm_workflow_execution:store_registry(),
+    lanes :: [atm_lane_execution:record()],
+
+    status :: atm_workflow_execution:status(),
+    % Flag used to tell if status was changed during doc update (set automatically
+    % when updating doc). It is necessary due to limitation of datastore as
+    % otherwise getting document before update would be needed (to compare 2 docs).
+    status_changed = false :: boolean(),
+
     schedule_time = 0 :: atm_workflow_execution:timestamp(),
     start_time = 0 :: atm_workflow_execution:timestamp(),
     finish_time = 0 :: atm_workflow_execution:timestamp()
