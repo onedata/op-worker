@@ -227,8 +227,10 @@ try_to_start_connection() ->
 start_gs_client_worker() ->
     case gs_client_worker:start() of
         ok ->
-            % the hooks on connection require operational db and workers, but
-            % the connection may be established before in order to perform an upgrade
+            % The on connection procedures require operational db and workers, but
+            % the connection may be established before in order to perform an upgrade.
+            % In such case, the procedures are deferred and will be called
+            % when the 'on_db_and_workers_ready' callback fires.
             case node_manager:are_db_and_workers_ready() of
                 false ->
                     ?info("Deferring on-connect-to-oz procedures as DB and workers are not ready yet");
