@@ -96,7 +96,7 @@ get_models() -> [
     atm_workflow_schema_snapshot,
     atm_workflow_execution,
     archive,
-    atm_store_infinite_log,
+    atm_list_store_backend,
     workflow_engine_state,
     workflow_execution_state,
     workflow_cached_item,

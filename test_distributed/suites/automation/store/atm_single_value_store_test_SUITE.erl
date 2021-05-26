@@ -26,14 +26,13 @@
 -export([
     groups/0, all/0,
     init_per_suite/1, end_per_suite/1,
-    init_per_group/2, end_per_group/2,
     init_per_testcase/2, end_per_testcase/2
 ]).
 
 %% tests
 -export([
     create_store_with_invalid_args_test/1,
-    update_store_test/1,
+    apply_operation_test/1,
     iterate_one_by_one_test/1,
     iterate_in_chunks_test/1,
     iterator_cursor_test/1
@@ -42,7 +41,7 @@
 groups() -> [
     {all_tests, [parallel], [
         create_store_with_invalid_args_test,
-        update_store_test,
+        apply_operation_test,
         iterate_one_by_one_test,
         iterate_in_chunks_test,
         iterator_cursor_test
@@ -77,23 +76,23 @@ create_store_with_invalid_args_test(_Config) ->
     lists:foreach(fun(DataType) ->
         BadValue = atm_store_test_utils:example_bad_data(DataType),
         ?assertEqual(?ERROR_ATM_DATA_TYPE_UNVERIFIED(BadValue, DataType), 
-            atm_store_test_utils:create_store(Node, ?ATM_SINGLE_VALUE_STORE_SCHEMA(DataType), BadValue))
+            atm_store_test_utils:create_store(Node, BadValue, ?ATM_SINGLE_VALUE_STORE_SCHEMA(DataType)))
     end, atm_store_test_utils:all_data_types()).
 
 
-update_store_test(_Config) ->
+apply_operation_test(_Config) ->
     Node = oct_background:get_random_provider_node(krakow),
-    {ok, AtmStoreId0} = atm_store_test_utils:create_store(Node, ?ATM_SINGLE_VALUE_STORE_SCHEMA, undefined),
+    {ok, AtmStoreId0} = atm_store_test_utils:create_store(Node, undefined, ?ATM_SINGLE_VALUE_STORE_SCHEMA),
     ?assertEqual(?ERROR_NOT_SUPPORTED,
-        atm_store_test_utils:update_store(Node, AtmStoreId0, append, #{}, <<"NaN">>)),
+        atm_store_test_utils:apply_operation(Node, AtmStoreId0, append, #{}, <<"NaN">>)),
     
     lists:foreach(fun(DataType) ->
-        {ok, AtmStoreId} = atm_store_test_utils:create_store(Node, ?ATM_SINGLE_VALUE_STORE_SCHEMA(DataType), undefined),
+        {ok, AtmStoreId} = atm_store_test_utils:create_store(Node, undefined, ?ATM_SINGLE_VALUE_STORE_SCHEMA(DataType)),
         BadValue = atm_store_test_utils:example_bad_data(DataType),
         ?assertEqual(?ERROR_ATM_DATA_TYPE_UNVERIFIED(BadValue, DataType),
-            atm_store_test_utils:update_store(Node, AtmStoreId, set, #{}, BadValue)),
+            atm_store_test_utils:apply_operation(Node, AtmStoreId, set, #{}, BadValue)),
         ValidValue = atm_store_test_utils:example_data(DataType),
-        ?assertEqual(ok, atm_store_test_utils:update_store(Node, AtmStoreId, set, #{}, ValidValue))
+        ?assertEqual(ok, atm_store_test_utils:apply_operation(Node, AtmStoreId, set, #{}, ValidValue))
     end, atm_store_test_utils:all_data_types()).
 
 
@@ -109,7 +108,7 @@ iterate_in_chunks_test(_Config) ->
 iterate_test_base(AtmStoreIteratorStrategy, ValueToSet, ExpectedValue) ->
     Node = oct_background:get_random_provider_node(krakow),
 
-    {ok, AtmStoreId} = atm_store_test_utils:create_store(Node, ?ATM_SINGLE_VALUE_STORE_SCHEMA, undefined),
+    {ok, AtmStoreId} = atm_store_test_utils:create_store(Node, undefined, ?ATM_SINGLE_VALUE_STORE_SCHEMA),
     
     AtmListStoreDummySchemaId = <<"dummyId">>,
     
@@ -124,7 +123,7 @@ iterate_test_base(AtmStoreIteratorStrategy, ValueToSet, ExpectedValue) ->
         Node, AtmWorkflowExecutionEnv, AtmStoreIteratorSpec),
     
     ?assertEqual(stop, atm_store_test_utils:iterator_get_next(Node, AtmStoreIterator)),
-    ?assertEqual(ok, atm_store_test_utils:update_store(Node, AtmStoreId, set, #{}, ValueToSet)),
+    ?assertEqual(ok, atm_store_test_utils:apply_operation(Node, AtmStoreId, set, #{}, ValueToSet)),
     AtmStoreIterator1 = atm_store_test_utils:acquire_store_iterator(Node, AtmWorkflowExecutionEnv, AtmStoreIteratorSpec),
     {ok, _, _, AtmIterator2} = ?assertMatch({ok, ExpectedValue, _, _}, atm_store_test_utils:iterator_get_next(Node, AtmStoreIterator1)),
     ?assertEqual(stop, atm_store_test_utils:iterator_get_next(Node, AtmIterator2)).
@@ -133,7 +132,7 @@ iterate_test_base(AtmStoreIteratorStrategy, ValueToSet, ExpectedValue) ->
 iterator_cursor_test(_Config) ->
     Node = oct_background:get_random_provider_node(krakow),
 
-    {ok, AtmStoreId} = atm_store_test_utils:create_store(Node, ?ATM_SINGLE_VALUE_STORE_SCHEMA, 8),
+    {ok, AtmStoreId} = atm_store_test_utils:create_store(Node, 8, ?ATM_SINGLE_VALUE_STORE_SCHEMA),
     
     AtmListStoreDummySchemaId = <<"dummyId">>,
     
@@ -179,14 +178,6 @@ init_per_suite(Config) ->
 
 end_per_suite(_Config) ->
     oct_background:end_per_suite().
-
-
-init_per_group(_Group, Config) ->
-    lfm_proxy:init(Config, false).
-
-
-end_per_group(_Group, Config) ->
-    lfm_proxy:teardown(Config).
 
 
 init_per_testcase(_Case, Config) ->

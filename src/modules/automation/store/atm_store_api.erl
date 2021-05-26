@@ -17,7 +17,7 @@
 %% API
 -export([
     create_all/1, create/3,
-    update/4,
+    apply_operation/4,
     delete_all/1, delete/1,
     acquire_iterator/2
 ]).
@@ -85,12 +85,12 @@ create(AtmWorkflowExecutionId, InitialValue, #atm_store_schema{
     }).
 
 
--spec update(atm_store:id(), atm_container:update_operation(),
-    atm_container:update_options(), json_utils:json_term()) -> ok | no_return().
-update(AtmStoreId, Operation, Options, Item) ->
+-spec apply_operation(atm_store:id(), atm_container:operation(),
+    atm_container:apply_operation_options(), atm_api:item()) -> ok | no_return().
+apply_operation(AtmStoreId, Operation, Options, Item) ->
     case atm_store:get(AtmStoreId) of
         {ok, #atm_store{container = AtmContainer, frozen = false}} -> 
-            UpdatedContainer = atm_container:update(AtmContainer, Operation, Options, Item),
+            UpdatedContainer = atm_container:apply_operation(AtmContainer, Operation, Options, Item),
             atm_store:update(AtmStoreId, fun(#atm_store{} = PrevStore) ->
                 {ok, PrevStore#atm_store{container = UpdatedContainer}}
             end);

@@ -19,14 +19,14 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% atm_container callbacks
--export([create/2, get_data_spec/1, acquire_iterator/1, update/4, delete/1]).
+-export([create/2, get_data_spec/1, acquire_iterator/1, apply_operation/4, delete/1]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
 
 
 -type initial_value() :: undefined | atm_api:item().
--type update_options() :: #{binary() => boolean()}. 
+-type apply_operation_options() :: #{binary() => boolean()}. 
 
 -record(atm_single_value_container, {
     data_spec :: atm_data_spec:record(),
@@ -34,7 +34,7 @@
 }).
 -type record() :: #atm_single_value_container{}.
 
--export_type([initial_value/0, update_options/0, record/0]).
+-export_type([initial_value/0, apply_operation_options/0, record/0]).
 
 
 %%%===================================================================
@@ -62,12 +62,12 @@ acquire_iterator(#atm_single_value_container{value = Value}) ->
     atm_single_value_container_iterator:build(Value).
 
 
--spec update(record(), atm_container:update_operation(), update_options(), json_utils:json_term()) ->
+-spec apply_operation(record(), atm_container:operation(), apply_operation_options(), atm_api:item()) ->
     record() | no_return().
-update(#atm_single_value_container{data_spec = AtmDataSpec} = Record, set, _Options, Item) ->
+apply_operation(#atm_single_value_container{data_spec = AtmDataSpec} = Record, set, _Options, Item) ->
     atm_data_validator:validate(Item, AtmDataSpec),
     Record#atm_single_value_container{value = Item};
-update(_Record, _Operation, _Options, _Item) ->
+apply_operation(_Record, _Operation, _Options, _Item) ->
     throw(?ERROR_NOT_SUPPORTED).
 
 

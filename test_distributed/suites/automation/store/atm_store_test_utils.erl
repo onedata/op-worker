@@ -18,7 +18,7 @@
 %% API
 -export([
     create_store/3, 
-    update_store/5,
+    apply_operation/5,
     acquire_store_iterator/3, 
     iterator_get_next/2, 
     iterator_jump_to/3
@@ -42,10 +42,10 @@ create_store(Node, InitialValue, AtmStoreSchema) ->
     ])).
 
 
--spec update_store(node(), atm_store:id(), atm_container:update_operation(), 
-    atm_container:update_options(), json_utils:json_term()) -> ok | {error, term()}.
-update_store(Node, AtmStoreId, Operation, Options, Item) ->
-    rpc:call(Node, atm_store_api, update, [AtmStoreId, Operation, Options, Item]).
+-spec apply_operation(node(), atm_store:id(), atm_container:operation(), 
+    atm_container:apply_operation_options(), json_utils:json_term()) -> ok | {error, term()}.
+apply_operation(Node, AtmStoreId, Operation, Options, Item) ->
+    rpc:call(Node, atm_store_api, apply_operation, [AtmStoreId, Operation, Options, Item]).
 
 
 -spec acquire_store_iterator(
@@ -81,7 +81,7 @@ split_into_chunks(Size, Acc, [_ | _] = Items) ->
     split_into_chunks(Size, [Chunk | Acc], Items -- Chunk).
 
 
--spec example_data(atm_data_type:type()) -> json_utils:json_term().
+-spec example_data(atm_data_type:type()) -> atm_api:item().
 example_data(atm_integer_type) -> 
     rand:uniform(1000000);
 example_data(atm_string_type) -> 
@@ -94,7 +94,7 @@ example_data(atm_object_type) ->
     end, #{}, lists:seq(1, rand:uniform(3) - 1)).
 
 
--spec example_bad_data(atm_data_type:type()) -> json_utils:json_term().
+-spec example_bad_data(atm_data_type:type()) -> atm_api:item().
 example_bad_data(Type) -> 
     example_data(lists_utils:random_element(all_data_types() -- [Type])).
 

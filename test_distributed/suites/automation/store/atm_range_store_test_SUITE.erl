@@ -26,14 +26,13 @@
 -export([
     groups/0, all/0,
     init_per_suite/1, end_per_suite/1,
-    init_per_group/2, end_per_group/2,
     init_per_testcase/2, end_per_testcase/2
 ]).
 
 %% tests
 -export([
     create_store_with_invalid_args_test/1,
-    update_store_test/1,
+    apply_operation_test/1,
 
     iterate_one_by_one_with_end_100_test/1,
     iterate_one_by_one_with_start_25_end_100_test/1,
@@ -53,7 +52,7 @@
 groups() -> [
     {all_tests, [parallel], [
         create_store_with_invalid_args_test,
-        update_store_test,
+        apply_operation_test,
 
         iterate_one_by_one_with_end_100_test,
         iterate_one_by_one_with_start_25_end_100_test,
@@ -117,14 +116,14 @@ create_store_with_invalid_args_test(_Config) ->
     ]).
 
 
-update_store_test(_Config) ->
+apply_operation_test(_Config) ->
     Node = oct_background:get_random_provider_node(krakow),
-    {ok, AtmRangeStoreId} = atm_store_test_utils:create_store(Node, ?ATM_RANGE_STORE_SCHEMA, #{<<"end">> => 8}),
+    {ok, AtmRangeStoreId} = atm_store_test_utils:create_store(Node, #{<<"end">> => 8}, ?ATM_RANGE_STORE_SCHEMA),
     
     ?assertEqual(?ERROR_NOT_SUPPORTED,
-        atm_store_test_utils:update_store(Node, AtmRangeStoreId, append, #{}, <<"NaN">>)),
+        atm_store_test_utils:apply_operation(Node, AtmRangeStoreId, append, #{}, <<"NaN">>)),
     ?assertEqual(?ERROR_NOT_SUPPORTED,
-        atm_store_test_utils:update_store(Node, AtmRangeStoreId, set, #{}, <<"NaN">>)).
+        atm_store_test_utils:apply_operation(Node, AtmRangeStoreId, set, #{}, <<"NaN">>)).
 
 
 iterate_one_by_one_with_end_100_test(_Config) ->
@@ -286,14 +285,6 @@ init_per_suite(Config) ->
 
 end_per_suite(_Config) ->
     oct_background:end_per_suite().
-
-
-init_per_group(_Group, Config) ->
-    lfm_proxy:init(Config, false).
-
-
-end_per_group(_Group, Config) ->
-    lfm_proxy:teardown(Config).
 
 
 init_per_testcase(_Case, Config) ->

@@ -26,14 +26,13 @@
 -export([
     groups/0, all/0,
     init_per_suite/1, end_per_suite/1,
-    init_per_group/2, end_per_group/2,
     init_per_testcase/2, end_per_testcase/2
 ]).
 
 %% tests
 -export([
     create_store_with_invalid_args_test/1,
-    update_store_test/1,
+    apply_operation_test/1,
     iterate_one_by_one_test/1,
     iterate_in_chunks_test/1,
     iterator_cursor_test/1
@@ -42,7 +41,7 @@
 groups() -> [
     {all_tests, [parallel], [
         create_store_with_invalid_args_test,
-        update_store_test,
+        apply_operation_test,
         iterate_one_by_one_test,
         iterate_in_chunks_test,
         iterator_cursor_test
@@ -74,36 +73,36 @@ all() -> [
 create_store_with_invalid_args_test(_Config) ->
     Node = oct_background:get_random_provider_node(krakow),
     ?assertEqual(?ERROR_ATM_STORE_MISSING_REQUIRED_INITIAL_VALUE,
-        atm_store_test_utils:create_store(Node, (?ATM_LIST_STORE_SCHEMA)#atm_store_schema{requires_initial_value = true}, undefined)),
+        atm_store_test_utils:create_store(Node, undefined, (?ATM_LIST_STORE_SCHEMA)#atm_store_schema{requires_initial_value = true})),
     ?assertEqual(?ERROR_ATM_BAD_DATA(<<"initialValue">>, <<"not a list">>),
-        atm_store_test_utils:create_store(Node, ?ATM_LIST_STORE_SCHEMA, 8)),
+        atm_store_test_utils:create_store(Node, 8, ?ATM_LIST_STORE_SCHEMA)),
     
     lists:foreach(fun(DataType) ->
         BadValue = atm_store_test_utils:example_bad_data(DataType),
         ValidValue = atm_store_test_utils:example_data(DataType),
         ?assertEqual(?ERROR_ATM_DATA_TYPE_UNVERIFIED(BadValue, DataType),
-            atm_store_test_utils:create_store(Node, ?ATM_LIST_STORE_SCHEMA(DataType), [ValidValue, BadValue, ValidValue]))
+            atm_store_test_utils:create_store(Node, [ValidValue, BadValue, ValidValue], ?ATM_LIST_STORE_SCHEMA(DataType)))
     end, atm_store_test_utils:all_data_types()).
 
 
-update_store_test(_Config) ->
+apply_operation_test(_Config) ->
     Node = oct_background:get_random_provider_node(krakow),
-    {ok, AtmListStoreId0} = atm_store_test_utils:create_store(Node, ?ATM_LIST_STORE_SCHEMA, undefined),
+    {ok, AtmListStoreId0} = atm_store_test_utils:create_store(Node, undefined, ?ATM_LIST_STORE_SCHEMA),
     
     ?assertEqual(?ERROR_NOT_SUPPORTED,
-        atm_store_test_utils:update_store(Node, AtmListStoreId0, set, #{}, <<"NaN">>)),
+        atm_store_test_utils:apply_operation(Node, AtmListStoreId0, set, #{}, <<"NaN">>)),
     
     lists:foreach(fun(DataType) ->
-        {ok, AtmListStoreId} = atm_store_test_utils:create_store(Node, ?ATM_LIST_STORE_SCHEMA(DataType), undefined),
+        {ok, AtmListStoreId} = atm_store_test_utils:create_store(Node, undefined, ?ATM_LIST_STORE_SCHEMA(DataType)),
         BadValue = atm_store_test_utils:example_bad_data(DataType),
         ValidValue = atm_store_test_utils:example_data(DataType),
         
         ?assertEqual(?ERROR_ATM_DATA_TYPE_UNVERIFIED(BadValue, DataType),
-            atm_store_test_utils:update_store(Node, AtmListStoreId, append, #{}, BadValue)),
-        ?assertEqual(ok, atm_store_test_utils:update_store(Node, AtmListStoreId, append, #{}, ValidValue)),
+            atm_store_test_utils:apply_operation(Node, AtmListStoreId, append, #{}, BadValue)),
+        ?assertEqual(ok, atm_store_test_utils:apply_operation(Node, AtmListStoreId, append, #{}, ValidValue)),
         ?assertEqual(?ERROR_ATM_DATA_TYPE_UNVERIFIED(BadValue, DataType),
-            atm_store_test_utils:update_store(Node, AtmListStoreId, append, #{<<"isBatch">> => true}, [ValidValue, BadValue, ValidValue])),
-        ?assertEqual(ok, atm_store_test_utils:update_store(Node, AtmListStoreId, append, #{<<"isBatch">> => true}, lists:duplicate(8, ValidValue)))
+            atm_store_test_utils:apply_operation(Node, AtmListStoreId, append, #{<<"isBatch">> => true}, [ValidValue, BadValue, ValidValue])),
+        ?assertEqual(ok, atm_store_test_utils:apply_operation(Node, AtmListStoreId, append, #{<<"isBatch">> => true}, lists:duplicate(8, ValidValue)))
     end, atm_store_test_utils:all_data_types()).
 
 
@@ -125,7 +124,7 @@ iterate_in_chunks_test(_Config) ->
 iterate_test_base(AtmStoreIteratorStrategy, Length, ExpectedResultsList) ->
     Node = oct_background:get_random_provider_node(krakow),
     Items = lists:seq(1, Length),
-    {ok, AtmListStoreId} = atm_store_test_utils:create_store(Node, ?ATM_LIST_STORE_SCHEMA, Items),
+    {ok, AtmListStoreId} = atm_store_test_utils:create_store(Node, Items, ?ATM_LIST_STORE_SCHEMA),
     
     AtmListStoreDummySchemaId = <<"dummyId">>,
     
@@ -151,7 +150,7 @@ iterator_cursor_test(_Config) ->
     Node = oct_background:get_random_provider_node(krakow),
     
     Items = lists:seq(1, 5),
-    {ok, AtmListStoreId} = atm_store_test_utils:create_store(Node, ?ATM_LIST_STORE_SCHEMA, Items),
+    {ok, AtmListStoreId} = atm_store_test_utils:create_store(Node, Items, ?ATM_LIST_STORE_SCHEMA),
     
     AtmListStoreDummySchemaId = <<"dummyId">>,
     
@@ -172,7 +171,6 @@ iterator_cursor_test(_Config) ->
     {ok, _, _Cursor5, AtmSerialIterator5} = ?assertMatch({ok, 5, _, _}, atm_store_test_utils:iterator_get_next(Node, AtmSerialIterator4)),
     ?assertMatch(stop, atm_store_test_utils:iterator_get_next(Node, AtmSerialIterator5)),
 
-    % Assert cursor shifts iterator to the beginning
     AtmSerialIterator6 = atm_store_test_utils:iterator_jump_to(Node, Cursor3, AtmSerialIterator5),
     {ok, _, _Cursor7, AtmSerialIterator7} = ?assertMatch({ok, 4, _, _}, atm_store_test_utils:iterator_get_next(Node, AtmSerialIterator6)),
     ?assertMatch({ok, 5, _, _}, atm_store_test_utils:iterator_get_next(Node, AtmSerialIterator7)),
@@ -203,14 +201,6 @@ init_per_suite(Config) ->
 
 end_per_suite(_Config) ->
     oct_background:end_per_suite().
-
-
-init_per_group(_Group, Config) ->
-    lfm_proxy:init(Config, false).
-
-
-end_per_group(_Group, Config) ->
-    lfm_proxy:teardown(Config).
 
 
 init_per_testcase(_Case, Config) ->

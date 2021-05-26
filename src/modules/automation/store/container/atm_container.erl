@@ -23,7 +23,7 @@
 -behaviour(persistent_record).
 
 %% API
--export([create/3, get_data_spec/1, acquire_iterator/1, update/4, delete/1]).
+-export([create/3, get_data_spec/1, acquire_iterator/1, apply_operation/4, delete/1]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
@@ -44,12 +44,12 @@
     atm_range_container:record() |
     atm_list_container:record().
 
--type update_operation() :: append | set.
+-type operation() :: append | set.
 
--type update_options() ::
-    atm_single_value_container:update_options() |
-    atm_range_container:update_options() |
-    atm_list_container:update_options().
+-type apply_operation_options() ::
+    atm_single_value_container:apply_operation_options() |
+    atm_range_container:apply_operation_options() |
+    atm_list_container:apply_operation_options().
 
 -export_type([type/0, initial_value/0, record/0]).
 
@@ -65,7 +65,7 @@
 
 -callback acquire_iterator(record()) -> atm_container_iterator:record().
 
--callback update(record(), update_operation(), update_options(), atm_api:item()) -> 
+-callback apply_operation(record(), operation(), apply_operation_options(), atm_api:item()) -> 
     record() | no_return().
 
 -callback delete(record()) -> ok | no_return().
@@ -93,11 +93,11 @@ acquire_iterator(AtmContainer) ->
     RecordType:acquire_iterator(AtmContainer).
 
 
--spec update(record(), update_operation(), update_options(), json_utils:json_term()) ->
+-spec apply_operation(record(), operation(), apply_operation_options(), atm_api:item()) ->
     record() | no_return().
-update(AtmContainer, Operation, Options, Item) ->
+apply_operation(AtmContainer, Operation, Options, Item) ->
     RecordType = utils:record_type(AtmContainer),
-    RecordType:update(AtmContainer, Operation, Options, Item).
+    RecordType:apply_operation(AtmContainer, Operation, Options, Item).
 
 
 -spec delete(record()) -> ok | no_return().

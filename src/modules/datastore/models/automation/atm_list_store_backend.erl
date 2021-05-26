@@ -6,10 +6,10 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Module with infinite log API for the use in automation store.
+%%% Module with the persistent list store backend implemented using infinite log.
 %%% @end
 %%%-------------------------------------------------------------------
--module(atm_infinite_log_store_backend).
+-module(atm_list_store_backend).
 -author("Michal Stanisz").
 
 %% API
