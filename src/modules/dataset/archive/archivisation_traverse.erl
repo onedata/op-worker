@@ -171,16 +171,20 @@ do_master_job(Job = #tree_traverse{
             {ok, UserCtx} = tree_traverse_session:acquire_for_task(UserId, ?POOL_NAME, TaskId),
             {FinalArchiveDoc, FinalTargetParentGuid} = case IsFirstBatch of
                 true ->
-
                     % check if there is dataset attach to current directory
                     % if true, create a nested archive associated with the dataset
-                    {ok, CurrentArchiveDoc2} =
-                        create_nested_archive_if_direct_dataset_is_attached(FileCtx2, CurrentArchiveDoc, TargetParentGuid),
+                    {ok, CurrentArchiveDoc2, HasCreatedNestedDoc} =
+                        create_nested_archive_if_direct_dataset_is_attached(FileCtx2, CurrentArchiveDoc),
 
                     {ok, ArchivedDirCtx} = archive_dir_only(FileCtx2, TargetParentGuid, UserCtx),
 
+                    {ok, CurrentArchiveDoc3} = case HasCreatedNestedDoc orelse is_dataset_root(Job) of
+                        true -> set_root_file_guid(CurrentArchiveDoc2, ArchivedDirCtx);
+                        false -> {ok, CurrentArchiveDoc2}
+                    end,
+
                     % return archive doc and guid of archived dir for children jobs
-                    {CurrentArchiveDoc2, file_ctx:get_logical_guid_const(ArchivedDirCtx)};
+                    {CurrentArchiveDoc3, file_ctx:get_logical_guid_const(ArchivedDirCtx)};
                 false ->
                     {CurrentArchiveDoc, TargetParentGuid}
             end,
@@ -208,7 +212,7 @@ do_master_job(Job = #tree_traverse{
 
 
 -spec do_slave_job(tree_traverse:slave_job(), id()) -> ok.
-do_slave_job(#tree_traverse_slave{
+do_slave_job(Job = #tree_traverse_slave{
     user_id = UserId,
     file_ctx = FileCtx,
     traverse_info = #{
@@ -217,12 +221,16 @@ do_slave_job(#tree_traverse_slave{
         current_archive_doc := CurrentArchiveDoc
     }
 }, TaskId) ->
-    {ok, CurrentArchiveDoc2} = create_nested_archive_if_direct_dataset_is_attached(FileCtx, CurrentArchiveDoc, TargetParentGuid),
+    {ok, CurrentArchiveDoc2, HasCreatedNestedDoc} = create_nested_archive_if_direct_dataset_is_attached(FileCtx, CurrentArchiveDoc),
     {ok, UserCtx} = tree_traverse_session:acquire_for_task(UserId, ?POOL_NAME, TaskId),
     case archive_file(FileCtx, TargetParentGuid, UserCtx) of
         {ok, CopyCtx} ->
             {FileSize, _} = file_ctx:get_local_storage_file_size(CopyCtx),
-            archive:mark_file_archived(CurrentArchiveDoc2, FileSize);
+            RootFileGuidOrUndefined = case HasCreatedNestedDoc orelse is_dataset_root(Job) of
+                true -> file_ctx:get_logical_guid_const(CopyCtx);
+                false -> undefined
+            end,
+            archive:mark_file_archived(CurrentArchiveDoc2, FileSize, RootFileGuidOrUndefined);
         error ->
             archive:mark_file_failed(CurrentArchiveDoc2)
     end,
@@ -235,18 +243,24 @@ do_slave_job(#tree_traverse_slave{
 %%% Internal functions
 %%%===================================================================
 
--spec create_nested_archive_if_direct_dataset_is_attached(file_ctx:ctx(), archive:doc(), file_id:file_guid()) ->
-    {ok, archive:doc()} | {error, term()}.
-create_nested_archive_if_direct_dataset_is_attached(FileCtx, ParentArchiveDoc, TargetParentGuid) ->
+-spec set_root_file_guid(archive:doc(), file_ctx:ctx()) -> {ok, archive:doc()} | {error, term()}.
+set_root_file_guid(ArchiveDoc, FileCtx) ->
+    archive:set_root_file_guid(ArchiveDoc, file_ctx:get_logical_guid_const(FileCtx)).
+
+
+-spec create_nested_archive_if_direct_dataset_is_attached(file_ctx:ctx(), archive:doc()) ->
+    {ok, archive:doc(), boolean()} | {error, term()}.
+create_nested_archive_if_direct_dataset_is_attached(FileCtx, ParentArchiveDoc) ->
     {FileDoc, _FileCtx2} = file_ctx:get_file_doc(FileCtx),
     {ok, ParentDatasetId} = archive:get_dataset_id(ParentArchiveDoc),
     case file_meta_dataset:get_id_if_attached(FileDoc) of
         undefined ->
-            {ok, ParentArchiveDoc};
+            {ok, ParentArchiveDoc, false};
         ParentDatasetId ->
-            {ok, ParentArchiveDoc};
+            {ok, ParentArchiveDoc, false};
         DatasetId ->
-            archive_api:create_child_archive(DatasetId, ParentArchiveDoc, TargetParentGuid)
+            {ok, NestedArchiveDoc} = archive_api:create_child_archive(DatasetId, ParentArchiveDoc),
+            {ok, NestedArchiveDoc, true}
     end.
 
 
@@ -283,27 +297,35 @@ propagate_up(FileCtx, UserCtx, ScheduledDatasetRootGuid, NextArchiveDoc, NextArc
 
 
 -spec mark_building_if_first_job(tree_traverse:master_job()) -> ok.
-mark_building_if_first_job(Job = #tree_traverse{
-    traverse_info = #{
-        target_parent_guid := TargetParentGuid,
-        current_archive_doc := CurrentArchiveDoc
-    }
-}) ->
+mark_building_if_first_job(Job = #tree_traverse{traverse_info = #{current_archive_doc := CurrentArchiveDoc}}) ->
     case is_first_job(Job) of
-        true -> ok = archive:mark_building(CurrentArchiveDoc, TargetParentGuid);
+        true -> ok = archive:mark_building(CurrentArchiveDoc);
         false -> ok
     end.
 
 
--spec is_first_job(tree_traverse:master_job()) -> boolean().
-is_first_job(#tree_traverse{
+-spec is_dataset_root(tree_traverse:job()) -> boolean().
+is_dataset_root(#tree_traverse{
     file_ctx = FileCtx,
-    traverse_info = #{scheduled_dataset_root_guid := ScheduledDatasetRootGuid},
-    token = ListingToken
+    traverse_info = #{scheduled_dataset_root_guid := ScheduledDatasetRootGuid}
 }) ->
     FileGuid = file_ctx:get_logical_guid_const(FileCtx),
+    FileGuid =:= ScheduledDatasetRootGuid;
+is_dataset_root(#tree_traverse_slave{
+    file_ctx = FileCtx,
+    traverse_info = #{scheduled_dataset_root_guid := ScheduledDatasetRootGuid}
+}) ->
+    FileGuid = file_ctx:get_logical_guid_const(FileCtx),
+    FileGuid =:= ScheduledDatasetRootGuid.
+
+
+-spec is_first_job(tree_traverse:master_job()) -> boolean().
+is_first_job(Job = #tree_traverse{
+    file_ctx = FileCtx,
+    token = ListingToken
+}) ->
     {IsDir, _} = file_ctx:is_dir(FileCtx),
-    FileGuid =:= ScheduledDatasetRootGuid andalso (
+    is_dataset_root(Job) andalso (
         (IsDir andalso (ListingToken =:= ?INITIAL_LS_TOKEN))
         orelse not IsDir
     ).

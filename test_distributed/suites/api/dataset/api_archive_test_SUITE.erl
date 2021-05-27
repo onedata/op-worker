@@ -18,6 +18,7 @@
 -include("modules/dataset/archive.hrl").
 -include("modules/dataset/archivisation_tree.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/graph_sync/gri.hrl").
 -include_lib("ctool/include/http/codes.hrl").
 -include_lib("ctool/include/privileges.hrl").
@@ -230,9 +231,9 @@ build_create_archive_validate_gs_call_result_fun(MemRef) ->
         PurgedCallback = maps:get(<<"purgedCallback">>, Data, undefined),
 
         ExpArchiveData = build_archive_gs_instance(ArchiveId, DatasetId, CreationTime, ?ARCHIVE_BUILDING, Config,
-            Description, PreservedCallback, PurgedCallback),
+            Description, PreservedCallback, PurgedCallback, undefined),
         % state is removed from the map as it may be in pending, building or even preserved state when request is handled
-        IgnoredKeys = [<<"state">>, <<"stats">>, <<"parentDir">>],
+        IgnoredKeys = [<<"state">>, <<"stats">>, <<"rootFile">>],
         ExpArchiveData2 = maps:without(IgnoredKeys, ExpArchiveData),
         ArchiveData2 = maps:without(IgnoredKeys, ArchiveData),
         ?assertMatch(ExpArchiveData2, ArchiveData2)
@@ -315,14 +316,13 @@ get_archive_info(_Config) ->
                     prepare_args_fun = build_get_archive_prepare_rest_args_fun(ArchiveId),
                     validate_result_fun = fun(#api_test_ctx{node = TestNode}, {ok, RespCode, _, RespBody}) ->
                         CreationTime = time_test_utils:global_seconds(TestNode),
-                        SpaceId = oct_background:get_space_id(?SPACE),
-                        RootDirectoryGuid = file_id:pack_guid(?ARCHIVE_DIR_UUID(ArchiveId), SpaceId),
-                        {ok, RootDirectoryId} = file_id:guid_to_objectid(RootDirectoryGuid),
+                        RootFileGuid = get_root_file_guid(TestNode, ArchiveId),
+                        {ok, RootFileId} = file_id:guid_to_objectid(RootFileGuid),
                         ExpArchiveData = #{
                             <<"archiveId">> => ArchiveId,
                             <<"datasetId">> => DatasetId,
                             <<"state">> => atom_to_binary(?ARCHIVE_PRESERVED, utf8),
-                            <<"parentDirectoryId">> => RootDirectoryId,
+                            <<"rootFileId">> => RootFileId,
                             <<"creationTime">> => CreationTime,
                             <<"description">> => Description,
                             <<"config">> => ConfigJson,
@@ -344,8 +344,9 @@ get_archive_info(_Config) ->
                     prepare_args_fun = build_get_archive_prepare_gs_args_fun(ArchiveId),
                     validate_result_fun = fun(#api_test_ctx{node = TestNode}, {ok, Result}) ->
                         CreationTime = time_test_utils:global_seconds(TestNode),
+                        RootFileGuid = get_root_file_guid(TestNode, ArchiveId),
                         ExpArchiveData = build_archive_gs_instance(ArchiveId, DatasetId, CreationTime, ?ARCHIVE_PRESERVED,
-                            Config, Description, undefined, undefined),
+                            Config, Description, undefined, undefined, RootFileGuid),
                         ?assertEqual(ExpArchiveData, Result)
                     end
                 }
@@ -848,11 +849,13 @@ verify_archive(
         GetDatasetsFun =  fun() -> list_archive_ids(Node, UserSessId, DatasetId, ListOpts) end,
         ?assertEqual(true, lists:member(ArchiveId, GetDatasetsFun()), ?ATTEMPTS),
 
+        RootFileGuid = get_root_file_guid(Node, ArchiveId),
+
         ExpArchiveInfo = #archive_info{
             id = ArchiveId,
             dataset_id = DatasetId,
             state = ?ARCHIVE_PRESERVED,
-            parent_dir_guid = file_id:pack_guid(?ARCHIVE_DIR_UUID(ArchiveId), oct_background:get_space_id(?SPACE)),
+            root_file_guid = RootFileGuid,
             creation_time = CreationTime,
             config = archive_config:from_json(Config),
             preserved_callback = PreservedCallback,
@@ -875,13 +878,15 @@ list_archive_ids(Node, UserSessId, DatasetId, ListOpts) ->
 
 %% @private
 -spec build_archive_gs_instance(archive:id(), dataset:id(), archive:timestamp(), archive:state(), archive:config(),
-    archive:description(), archive:callback(), archive:callback()) -> json_utils:json_term().
-build_archive_gs_instance(ArchiveId, DatasetId, CreationTime, State, Config, Description, PreservedCallback, PurgedCallback) ->
+    archive:description(), archive:callback(), archive:callback(), file_id:file_guid()) -> json_utils:json_term().
+build_archive_gs_instance(ArchiveId, DatasetId, CreationTime, State, Config, Description, PreservedCallback, PurgedCallback,
+    RootFileGuid
+) ->
     BasicInfo = archive_gui_gs_translator:translate_archive_info(#archive_info{
         id = ArchiveId,
         dataset_id = DatasetId,
         state = str_utils:to_binary(State),
-        parent_dir_guid = file_id:pack_guid(?ARCHIVE_DIR_UUID(ArchiveId), oct_background:get_space_id(?SPACE)),
+        root_file_guid = RootFileGuid,
         creation_time = CreationTime,
         config = Config,
         description = Description,
@@ -902,6 +907,15 @@ take_random_archive(MemRef) ->
         [] ->
             ct:fail("List of created archives is empty")
     end.
+
+
+-spec get_root_file_guid(node(), archive:id()) -> file_id:file_guid().
+get_root_file_guid(Node, ArchiveId) ->
+    ArchiveDirGuid = file_id:pack_guid(?ARCHIVE_DIR_UUID(ArchiveId), oct_background:get_space_id(?SPACE)),
+    {ok, [{RootFileGuid, _}]} = ?assertMatch({ok, [_]},
+        lfm_proxy:get_children(Node, ?ROOT_SESS_ID, ?FILE_REF(ArchiveDirGuid), 0, 10), ?ATTEMPTS),
+    RootFileGuid.
+
 
 %%%===================================================================
 %%% SetUp and TearDown functions

@@ -18,16 +18,16 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([create/7, create_child/3, get/1, modify_attrs/2, delete/1]).
+-export([create/7, create_child/2, get/1, modify_attrs/2, delete/1]).
 
 % getters
 -export([get_id/1, get_creation_time/1, get_dataset_id/1, get_dataset_root_file_guid/1, get_space_id/1,
     get_state/1, get_config/1, get_preserved_callback/1, get_purged_callback/1,
-    get_description/1, get_stats/1, get_parent_dir_guid/1, get_parent/1, get_parent_doc/1, is_finished/1
+    get_description/1, get_stats/1, get_root_file_guid/1, get_parent/1, get_parent_doc/1, is_finished/1
 ]).
 
 % setters
--export([mark_building/2, mark_purging/2, mark_file_archived/2, mark_file_failed/1, mark_finished/2]).
+-export([mark_building/1, mark_purging/2, mark_file_archived/3, mark_file_failed/1, mark_finished/2, set_root_file_guid/2]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1]).
@@ -101,7 +101,7 @@ create(DatasetId, SpaceId, Creator, Config, PreservedCallback, PurgedCallback, D
     }).
 
 
--spec create_child(dataset:id(), doc(), file_id:file_guid()) -> {ok, doc()} | error().
+-spec create_child(dataset:id(), doc()) -> {ok, doc()} | error().
 create_child(DatasetId, #document{
     key = ParentArchiveId,
     value = #archive{
@@ -109,14 +109,13 @@ create_child(DatasetId, #document{
         creator = Creator
     },
     scope = SpaceId
-}, RootDirGuid) ->
+}) ->
     datastore_model:create(?CTX, #document{
         value = #archive{
             dataset_id = DatasetId,
             creation_time = global_clock:timestamp_seconds(),
             config = Config,
             state = ?ARCHIVE_BUILDING,
-            parent_dir_guid = RootDirGuid,
             parent = ParentArchiveId,
             creator = Creator,
             description = <<"">>,
@@ -222,11 +221,11 @@ get_stats(#archive{stats = Stats}) ->
 get_stats(#document{value = Archive}) ->
     get_stats(Archive).
 
--spec get_parent_dir_guid(record() | doc()) -> {ok, file_id:file_guid()}.
-get_parent_dir_guid(#archive{parent_dir_guid = ParentDirGuid}) ->
-    {ok, ParentDirGuid};
-get_parent_dir_guid(#document{value = Archive}) ->
-    get_parent_dir_guid(Archive).
+-spec get_root_file_guid(record() | doc()) -> {ok, file_id:file_guid()}.
+get_root_file_guid(#archive{root_file_guid = RootFileGuid}) ->
+    {ok, RootFileGuid};
+get_root_file_guid(#document{value = Archive}) ->
+    get_root_file_guid(Archive).
 
 -spec get_parent(record() | doc()) -> {ok, archive:id() | undefined}.
 get_parent(#archive{parent = Parent}) ->
@@ -270,12 +269,11 @@ mark_purging(ArchiveId, Callback) ->
     end).
 
 
--spec mark_building(id() | doc(), file_id:file_guid()) -> ok | error().
-mark_building(ArchiveDocOrId, ParentDirGuid) ->
+-spec mark_building(id() | doc()) -> ok | error().
+mark_building(ArchiveDocOrId) ->
     ?extract_ok(update(ArchiveDocOrId, fun(Archive) ->
         {ok, Archive#archive{
-            state = ?ARCHIVE_BUILDING,
-            parent_dir_guid = ParentDirGuid
+            state = ?ARCHIVE_BUILDING
         }}
     end)).
 
@@ -294,10 +292,13 @@ mark_finished(ArchiveDocOrId, NestedArchivesStats) ->
     end)).
 
 
--spec mark_file_archived(id() | doc(), non_neg_integer()) -> ok | error().
-mark_file_archived(ArchiveDocOrId, FileSize) ->
-    ?extract_ok(update(ArchiveDocOrId, fun(Archive = #archive{stats = Stats}) ->
-        {ok, Archive#archive{stats = archive_stats:mark_file_archived(Stats, FileSize)}}
+-spec mark_file_archived(id() | doc(), non_neg_integer(), file_id:file_guid() | undefined) -> ok | error().
+mark_file_archived(ArchiveDocOrId, FileSize, NewRootFileGuid) ->
+    ?extract_ok(update(ArchiveDocOrId, fun(Archive = #archive{stats = Stats, root_file_guid = RootFileGUid}) ->
+        {ok, Archive#archive{
+            stats = archive_stats:mark_file_archived(Stats, FileSize),
+            root_file_guid = utils:ensure_defined(NewRootFileGuid, RootFileGUid)
+        }}
     end)).
 
 -spec mark_file_failed(id() | doc()) -> ok | error().
@@ -305,6 +306,13 @@ mark_file_failed(ArchiveDocOrId) ->
     ?extract_ok(update(ArchiveDocOrId, fun(Archive = #archive{stats = Stats}) ->
         {ok, Archive#archive{stats = archive_stats:mark_file_failed(Stats)}}
     end)).
+
+
+-spec set_root_file_guid(id() | doc(), file_id:file_guid()) -> {ok, doc()} | error().
+set_root_file_guid(ArchiveDocOrId, RootFileGuid) ->
+    update(ArchiveDocOrId, fun(Archive) ->
+        {ok, Archive#archive{root_file_guid = RootFileGuid}}
+    end).
 
 %%%===================================================================
 %%% Internal functions
@@ -350,7 +358,7 @@ get_record_struct(1) ->
         {preserved_callback, string},
         {purged_callback, string},
         {description, string},
-        {parent_dir_guid, string},
+        {root_file_guid, string},
         {stats, {record, [
             {files_archived, integer},
             {files_failed, integer},

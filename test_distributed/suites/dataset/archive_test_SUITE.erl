@@ -285,13 +285,13 @@ archive_nested_datasets(_Config) ->
     Node = oct_background:get_random_provider_node(krakow),
     SessionId = oct_background:get_user_session_id(?USER1, krakow),
     ListOpts = #{offset => 0, limit => 10},
-    {ok, [{_, ArchiveFile21Id}], _} = ?assertMatch({ok, _, true}, 
+    {ok, [{_, ArchiveFile21Id}], _} = ?assertMatch({ok, [_], true},
         lfm_proxy:list_archives(Node, SessionId, DatasetFile21Id, ListOpts), ?ATTEMPTS),
-    {ok, [{_, ArchiveDir22Id}], _} = ?assertMatch({ok, _, true},
+    {ok, [{_, ArchiveDir22Id}], _} = ?assertMatch({ok, [_], true},
         lfm_proxy:list_archives(Node, SessionId, DatasetDir22Id, ListOpts), ?ATTEMPTS),
-    {ok, [{_, ArchiveDir31Id}], _} = ?assertMatch({ok, _, true},
+    {ok, [{_, ArchiveDir31Id}], _} = ?assertMatch({ok, [_], true},
         lfm_proxy:list_archives(Node, SessionId, DatasetDir31Id, ListOpts), ?ATTEMPTS),
-    {ok, [{_, ArchiveFile41Id}], _} = ?assertMatch({ok, _, true},
+    {ok, [{_, ArchiveFile41Id}], _} = ?assertMatch({ok, [_], true},
         lfm_proxy:list_archives(Node, SessionId, DatasetFile41Id, ListOpts), ?ATTEMPTS),
     % DatasetFile4 is detached, therefore archive for this dataset shouldn't have been created
     ?assertMatch({ok, [], true},
@@ -434,15 +434,14 @@ assert_archive_dir_exists(Node, SessionId, SpaceId, DatasetId, ArchiveId, UserId
 
 
 assert_archive_is_preserved(Node, SessionId, ArchiveId, DatasetId, RootGuid, FileCount, ExpSize) ->
-    {ok, #archive_info{parent_dir_guid = ArchiveParentDirGuid}} =
-        ?assertMatch({ok, #archive_info{
-            state = ?ARCHIVE_PRESERVED,
-            stats = #archive_stats{
-                files_archived = FileCount,
-                files_failed = 0,
-                bytes_archived = ExpSize
-            }}}, lfm_proxy:get_archive_info(Node, SessionId, ArchiveId), ?ATTEMPTS
-        ),
+    {ok, #archive_info{root_file_guid = CopyRootGuid}} = ?assertMatch({ok, #archive_info{
+        state = ?ARCHIVE_PRESERVED,
+        stats = #archive_stats{
+            files_archived = FileCount,
+            files_failed = 0,
+            bytes_archived = ExpSize
+        }
+    }}, lfm_proxy:get_archive_info(Node, SessionId, ArchiveId), ?ATTEMPTS),
 
     GetDatasetArchives = fun() ->
         case lfm_proxy:list_archives(Node, SessionId, DatasetId, #{offset => 0, limit => 10000}) of
@@ -453,9 +452,7 @@ assert_archive_is_preserved(Node, SessionId, ArchiveId, DatasetId, RootGuid, Fil
         end
     end,
     ?assertEqual(true, lists:member(ArchiveId, GetDatasetArchives()), ?ATTEMPTS),
-    {ok, #file_attr{name = SourceRootName}} = lfm_proxy:stat(Node, SessionId, ?FILE_REF(RootGuid)),
-    {ok, #file_attr{guid = CopyRootGuid}} = ?assertMatch({ok, _},
-        lfm_proxy:get_child_attr(Node, SessionId, ArchiveParentDirGuid, SourceRootName), ?ATTEMPTS),
+
     assert_copied(Node, SessionId, RootGuid, CopyRootGuid).
 
 
@@ -478,12 +475,17 @@ assert_attrs_copied(Node, SessionId, SourceGuid, TargetGuid) ->
         lfm_proxy:stat(Node, SessionId, ?FILE_REF(Guid))
     end,
     {ok, SourceAttr} = Stat(SourceGuid),
-    {ok, TargetAttr} = ?assertMatch({ok, #file_attr{}}, Stat(TargetGuid), ?ATTEMPTS),
-    ?assertEqual(SourceAttr#file_attr.name, TargetAttr#file_attr.name),
-    ?assertEqual(SourceAttr#file_attr.mode, TargetAttr#file_attr.mode),
-    ?assertEqual(SourceAttr#file_attr.type, TargetAttr#file_attr.type),
-    ?assertEqual(SourceAttr#file_attr.size, TargetAttr#file_attr.size).
-
+    ?assertEqual(true, try
+        {ok, TargetAttr} = ?assertMatch({ok, #file_attr{}}, Stat(TargetGuid), ?ATTEMPTS),
+        ?assertEqual(SourceAttr#file_attr.name, TargetAttr#file_attr.name),
+        ?assertEqual(SourceAttr#file_attr.mode, TargetAttr#file_attr.mode),
+        ?assertEqual(SourceAttr#file_attr.type, TargetAttr#file_attr.type),
+        ?assertEqual(SourceAttr#file_attr.size, TargetAttr#file_attr.size),
+        true
+    catch
+        _:_ ->
+            false
+    end, ?ATTEMPTS).
 
 assert_metadata_copied(Node, SessionId, SourceGuid, TargetGuid) ->
     GetXattrs = fun(Guid) ->

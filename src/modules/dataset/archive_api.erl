@@ -22,7 +22,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([create_archive/6, create_child_archive/3, update_archive/2, get_archive_info/1,
+-export([create_archive/6, create_child_archive/2, update_archive/2, get_archive_info/1,
     list_archives/3, init_archive_purge/3, get_nested_archives_stats/1]).
 
 %% Exported for use in tests
@@ -95,11 +95,11 @@ create_archive(DatasetId, Config, PreservedCallback, PurgedCallback, Description
     end.
 
 
--spec create_child_archive(dataset:id(), archive:doc(), file_id:file_guid()) -> {ok, archive:doc()} | error().
-create_child_archive(DatasetId, ParentArchiveDoc, TargetParentGuid) ->
+-spec create_child_archive(dataset:id(), archive:doc()) -> {ok, archive:doc()} | error().
+create_child_archive(DatasetId, ParentArchiveDoc) ->
     {ok, SpaceId} = archive:get_space_id(ParentArchiveDoc),
     {ok, ParentArchiveId} = archive:get_id(ParentArchiveDoc),
-    case archive:create_child(DatasetId, ParentArchiveDoc, TargetParentGuid) of
+    case archive:create_child(DatasetId, ParentArchiveDoc) of
         {ok, ArchiveDoc} ->
             {ok, ArchiveId} = archive:get_id(ArchiveDoc),
             {ok, Timestamp} = archive:get_creation_time(ArchiveDoc),
@@ -129,7 +129,7 @@ get_archive_info(ArchiveDoc = #document{}, ArchiveIndex) ->
     {ok, Timestamp} = archive:get_creation_time(ArchiveDoc),
     {ok, State} = archive:get_state(ArchiveDoc),
     {ok, Config} = archive:get_config(ArchiveDoc),
-    {ok, ParentDirGuid} = archive:get_parent_dir_guid(ArchiveDoc),
+    {ok, RootFileGuid} = archive:get_root_file_guid(ArchiveDoc),
     {ok, PreservedCallback} = archive:get_preserved_callback(ArchiveDoc),
     {ok, PurgedCallback} = archive:get_purged_callback(ArchiveDoc),
     {ok, Description} = archive:get_description(ArchiveDoc),
@@ -137,7 +137,7 @@ get_archive_info(ArchiveDoc = #document{}, ArchiveIndex) ->
         id = ArchiveId,
         dataset_id = DatasetId,
         state = State,
-        parent_dir_guid = ParentDirGuid,
+        root_file_guid = RootFileGuid,
         creation_time = Timestamp,
         config = Config,
         preserved_callback = PreservedCallback,
