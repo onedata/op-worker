@@ -90,7 +90,7 @@ apply_operation_test(_Config) ->
     {ok, AtmListStoreId0} = atm_store_test_utils:create_store(Node, undefined, ?ATM_LIST_STORE_SCHEMA),
     
     ?assertEqual(?ERROR_NOT_SUPPORTED,
-        atm_store_test_utils:apply_operation(Node, AtmListStoreId0, set, #{}, <<"NaN">>)),
+        atm_store_test_utils:apply_operation(Node, set, <<"NaN">>, #{}, AtmListStoreId0)),
     
     lists:foreach(fun(DataType) ->
         {ok, AtmListStoreId} = atm_store_test_utils:create_store(Node, undefined, ?ATM_LIST_STORE_SCHEMA(DataType)),
@@ -98,11 +98,11 @@ apply_operation_test(_Config) ->
         ValidValue = atm_store_test_utils:example_data(DataType),
         
         ?assertEqual(?ERROR_ATM_DATA_TYPE_UNVERIFIED(BadValue, DataType),
-            atm_store_test_utils:apply_operation(Node, AtmListStoreId, append, #{}, BadValue)),
-        ?assertEqual(ok, atm_store_test_utils:apply_operation(Node, AtmListStoreId, append, #{}, ValidValue)),
+            atm_store_test_utils:apply_operation(Node, append, BadValue, #{}, AtmListStoreId)),
+        ?assertEqual(ok, atm_store_test_utils:apply_operation(Node, append, ValidValue, #{}, AtmListStoreId)),
         ?assertEqual(?ERROR_ATM_DATA_TYPE_UNVERIFIED(BadValue, DataType),
-            atm_store_test_utils:apply_operation(Node, AtmListStoreId, append, #{<<"isBatch">> => true}, [ValidValue, BadValue, ValidValue])),
-        ?assertEqual(ok, atm_store_test_utils:apply_operation(Node, AtmListStoreId, append, #{<<"isBatch">> => true}, lists:duplicate(8, ValidValue)))
+            atm_store_test_utils:apply_operation(Node, append, [ValidValue, BadValue, ValidValue], #{<<"isBatch">> => true}, AtmListStoreId)),
+        ?assertEqual(ok, atm_store_test_utils:apply_operation(Node, append, lists:duplicate(8, ValidValue), #{<<"isBatch">> => true}, AtmListStoreId))
     end, atm_store_test_utils:all_data_types()).
 
 
@@ -169,7 +169,9 @@ reuse_iterator_test(_Config) ->
     {ok, _, AtmSerialIterator4} = ?assertMatch({ok, 4, _}, atm_store_test_utils:iterator_get_next(Node, AtmSerialIterator3)),
     {ok, _, AtmSerialIterator5} = ?assertMatch({ok, 5, _}, atm_store_test_utils:iterator_get_next(Node, AtmSerialIterator4)),
     ?assertMatch(stop, atm_store_test_utils:iterator_get_next(Node, AtmSerialIterator5)),
-
+    
+    ?assertMatch({ok, 1, _}, atm_store_test_utils:iterator_get_next(Node, AtmSerialIterator0)),
+    
     {ok, _, AtmSerialIterator7} = ?assertMatch({ok, 4, _}, atm_store_test_utils:iterator_get_next(Node, AtmSerialIterator3)),
     ?assertMatch({ok, 5, _}, atm_store_test_utils:iterator_get_next(Node, AtmSerialIterator7)),
 

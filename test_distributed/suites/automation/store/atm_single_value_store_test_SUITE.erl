@@ -84,15 +84,15 @@ apply_operation_test(_Config) ->
     Node = oct_background:get_random_provider_node(krakow),
     {ok, AtmStoreId0} = atm_store_test_utils:create_store(Node, undefined, ?ATM_SINGLE_VALUE_STORE_SCHEMA),
     ?assertEqual(?ERROR_NOT_SUPPORTED,
-        atm_store_test_utils:apply_operation(Node, AtmStoreId0, append, #{}, <<"NaN">>)),
+        atm_store_test_utils:apply_operation(Node, append, <<"NaN">>, #{}, AtmStoreId0)),
     
     lists:foreach(fun(DataType) ->
         {ok, AtmStoreId} = atm_store_test_utils:create_store(Node, undefined, ?ATM_SINGLE_VALUE_STORE_SCHEMA(DataType)),
         BadValue = atm_store_test_utils:example_bad_data(DataType),
         ?assertEqual(?ERROR_ATM_DATA_TYPE_UNVERIFIED(BadValue, DataType),
-            atm_store_test_utils:apply_operation(Node, AtmStoreId, set, #{}, BadValue)),
+            atm_store_test_utils:apply_operation(Node, set, BadValue, #{}, AtmStoreId)),
         ValidValue = atm_store_test_utils:example_data(DataType),
-        ?assertEqual(ok, atm_store_test_utils:apply_operation(Node, AtmStoreId, set, #{}, ValidValue))
+        ?assertEqual(ok, atm_store_test_utils:apply_operation(Node, set, ValidValue, #{}, AtmStoreId))
     end, atm_store_test_utils:all_data_types()).
 
 
@@ -123,7 +123,7 @@ iterate_test_base(AtmStoreIteratorStrategy, ValueToSet, ExpectedValue) ->
         Node, AtmWorkflowExecutionEnv, AtmStoreIteratorSpec),
     
     ?assertEqual(stop, atm_store_test_utils:iterator_get_next(Node, AtmStoreIterator)),
-    ?assertEqual(ok, atm_store_test_utils:apply_operation(Node, AtmStoreId, set, #{}, ValueToSet)),
+    ?assertEqual(ok, atm_store_test_utils:apply_operation(Node, set, ValueToSet, #{}, AtmStoreId)),
     AtmStoreIterator1 = atm_store_test_utils:acquire_store_iterator(Node, AtmWorkflowExecutionEnv, AtmStoreIteratorSpec),
     {ok, _, AtmIterator2} = ?assertMatch({ok, ExpectedValue, _}, atm_store_test_utils:iterator_get_next(Node, AtmStoreIterator1)),
     ?assertEqual(stop, atm_store_test_utils:iterator_get_next(Node, AtmIterator2)).
@@ -148,6 +148,7 @@ reuse_iterator_test(_Config) ->
 
     {ok, _, AtmSerialIterator1} = ?assertMatch({ok, 8, _}, atm_store_test_utils:iterator_get_next(Node, AtmSerialIterator0)),
     ?assertMatch(stop, atm_store_test_utils:iterator_get_next(Node, AtmSerialIterator1)),
+    ?assertMatch({ok, 8, _}, atm_store_test_utils:iterator_get_next(Node, AtmSerialIterator0)),
     
     ?assertMatch(stop, atm_store_test_utils:iterator_get_next(Node, AtmSerialIterator1)).
 

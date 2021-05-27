@@ -27,7 +27,7 @@
 
 
 -type initial_value() :: [atm_api:item()] | undefined.
-%% Full ' apply_operation_options' format can't be expressed directly in type spec due to
+%% Full 'apply_operation_options' format can't be expressed directly in type spec due to
 %% dialyzer limitations in specifying individual binaries. Instead it is
 %% shown below:
 %%
@@ -57,7 +57,7 @@ create(AtmDataSpec, undefined) ->
     create_container(AtmDataSpec);
 create(AtmDataSpec, InitialValue) when is_list(InitialValue) ->
     validate_data_batch(AtmDataSpec, InitialValue),
-    apply_operation(create_container(AtmDataSpec), append, #{<<"isBatch">> => true}, InitialValue);
+    apply_operation(append, InitialValue, #{<<"isBatch">> => true}, create_container(AtmDataSpec));
 create(_AtmDataSpec, _InitialValue) ->
     throw(?ERROR_ATM_BAD_DATA(<<"initialValue">>, <<"not a list">>)).
 
@@ -72,18 +72,18 @@ acquire_iterator(#atm_list_container{backend_id = BackendId}) ->
     atm_list_container_iterator:build(BackendId).
 
 
--spec apply_operation(record(), atm_container:operation(), apply_operation_options(), atm_api:item()) ->
+-spec apply_operation(atm_container:operation(), atm_api:item(), apply_operation_options(), record()) ->
     record() | no_return().
-apply_operation(#atm_list_container{} = Record, append, #{<<"isBatch">> := true}, Batch) when is_list(Batch) ->
+apply_operation(append, Batch, #{<<"isBatch">> := true}, #atm_list_container{} = Record) when is_list(Batch) ->
     #atm_list_container{data_spec = AtmDataSpec, backend_id = BackendId} = Record,
     validate_data_batch(AtmDataSpec, Batch),
     lists:foreach(fun(Item) ->
         ok = atm_list_store_backend:append(BackendId, json_utils:encode(Item))
     end, Batch),
     Record;
-apply_operation(#atm_list_container{} = Record, append, Options, Item) ->
-    apply_operation(Record, append, Options#{<<"isBatch">> => true}, [Item]);
-apply_operation(_Record, _Operation, _Options, _Item) ->
+apply_operation(append, Item, Options, #atm_list_container{} = Record) ->
+    apply_operation(append, [Item], Options#{<<"isBatch">> => true}, Record);
+apply_operation(_Operation, _Item, _Options, _Record) ->
     throw(?ERROR_NOT_SUPPORTED).
 
 

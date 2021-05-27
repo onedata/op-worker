@@ -41,10 +41,10 @@ create_store(Node, InitialValue, AtmStoreSchema) ->
     ])).
 
 
--spec apply_operation(node(), atm_store:id(), atm_container:operation(), 
-    atm_container:apply_operation_options(), json_utils:json_term()) -> ok | {error, term()}.
-apply_operation(Node, AtmStoreId, Operation, Options, Item) ->
-    rpc:call(Node, atm_store_api, apply_operation, [AtmStoreId, Operation, Options, Item]).
+-spec apply_operation(node(), atm_container:operation(), atm_api:item(), 
+    atm_container:apply_operation_options(), atm_store:id()) -> ok | {error, term()}.
+apply_operation(Node, Operation, Item, Options, AtmStoreId) ->
+    rpc:call(Node, atm_store_api, apply_operation, [Operation, Item, Options, AtmStoreId]).
 
 
 -spec acquire_store_iterator(

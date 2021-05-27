@@ -121,9 +121,9 @@ apply_operation_test(_Config) ->
     {ok, AtmRangeStoreId} = atm_store_test_utils:create_store(Node, #{<<"end">> => 8}, ?ATM_RANGE_STORE_SCHEMA),
     
     ?assertEqual(?ERROR_NOT_SUPPORTED,
-        atm_store_test_utils:apply_operation(Node, AtmRangeStoreId, append, #{}, <<"NaN">>)),
+        atm_store_test_utils:apply_operation(Node, append, <<"NaN">>, #{}, AtmRangeStoreId)),
     ?assertEqual(?ERROR_NOT_SUPPORTED,
-        atm_store_test_utils:apply_operation(Node, AtmRangeStoreId, set, #{}, <<"NaN">>)).
+        atm_store_test_utils:apply_operation(Node, set, <<"NaN">>, #{}, AtmRangeStoreId)).
 
 
 iterate_one_by_one_with_end_100_test(_Config) ->
@@ -202,7 +202,7 @@ iterate_test_base(AtmRangeStoreInitialValue, AtmStoreIteratorStrategy, ExpItems)
 
     AtmRangeStoreDummySchemaId = <<"dummyId">>,
 
-    {ok, AtmRangeStoreId} =  atm_store_test_utils:create_store(Node, AtmRangeStoreInitialValue, ?ATM_RANGE_STORE_SCHEMA),
+    {ok, AtmRangeStoreId} = atm_store_test_utils:create_store(Node, AtmRangeStoreInitialValue, ?ATM_RANGE_STORE_SCHEMA),
     AtmStoreIteratorSpec = #atm_store_iterator_spec{
         store_schema_id = AtmRangeStoreDummySchemaId,
         strategy = AtmStoreIteratorStrategy
@@ -210,7 +210,7 @@ iterate_test_base(AtmRangeStoreInitialValue, AtmStoreIteratorStrategy, ExpItems)
     AtmWorkflowExecutionEnv = #atm_workflow_execution_env{
         store_registry = #{AtmRangeStoreDummySchemaId => AtmRangeStoreId}
     },
-    AtmStoreIterator =  atm_store_test_utils:acquire_store_iterator(Node, AtmWorkflowExecutionEnv, AtmStoreIteratorSpec),
+    AtmStoreIterator = atm_store_test_utils:acquire_store_iterator(Node, AtmWorkflowExecutionEnv, AtmStoreIteratorSpec),
 
     assert_all_items_listed(Node, AtmStoreIterator, ExpItems).
 
@@ -250,7 +250,9 @@ reuse_iterator_test(_Config) ->
     {ok, _, AtmSerialIterator4} = ?assertMatch({ok, 11, _}, atm_store_test_utils:iterator_get_next(Node, AtmSerialIterator3)),
     {ok, _, AtmSerialIterator5} = ?assertMatch({ok, 14, _}, atm_store_test_utils:iterator_get_next(Node, AtmSerialIterator4)),
     ?assertMatch(stop, atm_store_test_utils:iterator_get_next(Node, AtmSerialIterator5)),
-
+    
+    ?assertMatch({ok, 2, _}, atm_store_test_utils:iterator_get_next(Node, AtmSerialIterator0)),
+    
     {ok, _, AtmSerialIterator7} = ?assertMatch({ok, 11, _}, atm_store_test_utils:iterator_get_next(Node, AtmSerialIterator3)),
     ?assertMatch({ok, 14, _}, atm_store_test_utils:iterator_get_next(Node, AtmSerialIterator7)),
 

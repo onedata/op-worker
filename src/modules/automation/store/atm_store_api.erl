@@ -85,12 +85,16 @@ create(AtmWorkflowExecutionId, InitialValue, #atm_store_schema{
     }).
 
 
--spec apply_operation(atm_store:id(), atm_container:operation(),
-    atm_container:apply_operation_options(), atm_api:item()) -> ok | no_return().
-apply_operation(AtmStoreId, Operation, Options, Item) ->
+-spec apply_operation(atm_container:operation(), atm_api:item(), 
+    atm_container:apply_operation_options(), atm_store:id()) -> ok | no_return().
+apply_operation(Operation, Item, Options, AtmStoreId) ->
+    % NOTE: no need to use critical section here as containers either:
+    %   * are based on structure that support transaction operation on their own 
+    %   * store only one value and it will be overwritten 
+    %   * do not support any operation
     case atm_store:get(AtmStoreId) of
         {ok, #atm_store{container = AtmContainer, frozen = false}} -> 
-            UpdatedContainer = atm_container:apply_operation(AtmContainer, Operation, Options, Item),
+            UpdatedContainer = atm_container:apply_operation(Operation, Item, Options, AtmContainer),
             atm_store:update(AtmStoreId, fun(#atm_store{} = PrevStore) ->
                 {ok, PrevStore#atm_store{container = UpdatedContainer}}
             end);

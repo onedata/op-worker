@@ -86,9 +86,9 @@ acquire_iterator(#atm_range_container{
     atm_range_container_iterator:build(StartNum, EndNum, Step).
 
 
--spec apply_operation(record(), atm_container:operation(), apply_operation_options(), atm_api:item()) ->
+-spec apply_operation(atm_container:operation(), atm_api:item(), apply_operation_options(), record()) ->
     no_return().
-apply_operation(_Record, _Operation, _Options, _Item) ->
+apply_operation(_Operation, _Item, _Options, _Record) ->
     throw(?ERROR_NOT_SUPPORTED).
 
 

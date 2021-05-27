@@ -65,7 +65,7 @@
 
 -callback acquire_iterator(record()) -> atm_container_iterator:record().
 
--callback apply_operation(record(), operation(), apply_operation_options(), atm_api:item()) -> 
+-callback apply_operation(operation(), atm_api:item(), apply_operation_options(), record()) ->
     record() | no_return().
 
 -callback delete(record()) -> ok | no_return().
@@ -93,11 +93,11 @@ acquire_iterator(AtmContainer) ->
     RecordType:acquire_iterator(AtmContainer).
 
 
--spec apply_operation(record(), operation(), apply_operation_options(), atm_api:item()) ->
+-spec apply_operation(operation(), atm_api:item(), apply_operation_options(), record()) ->
     record() | no_return().
-apply_operation(AtmContainer, Operation, Options, Item) ->
+apply_operation(Operation, Item, Options, AtmContainer) ->
     RecordType = utils:record_type(AtmContainer),
-    RecordType:apply_operation(AtmContainer, Operation, Options, Item).
+    RecordType:apply_operation(Operation, Item, Options, AtmContainer).
 
 
 -spec delete(record()) -> ok | no_return().

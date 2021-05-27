@@ -62,12 +62,12 @@ acquire_iterator(#atm_single_value_container{value = Value}) ->
     atm_single_value_container_iterator:build(Value).
 
 
--spec apply_operation(record(), atm_container:operation(), apply_operation_options(), atm_api:item()) ->
+-spec apply_operation(atm_container:operation(), atm_api:item(), apply_operation_options(), record()) ->
     record() | no_return().
-apply_operation(#atm_single_value_container{data_spec = AtmDataSpec} = Record, set, _Options, Item) ->
+apply_operation(set, Item, _Options, #atm_single_value_container{data_spec = AtmDataSpec} = Record) ->
     atm_data_validator:validate(Item, AtmDataSpec),
     Record#atm_single_value_container{value = Item};
-apply_operation(_Record, _Operation, _Options, _Item) ->
+apply_operation(_Operation, _Item, _Options, _Record) ->
     throw(?ERROR_NOT_SUPPORTED).
 
 
