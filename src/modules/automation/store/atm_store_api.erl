@@ -17,6 +17,7 @@
 %% API
 -export([
     create_all/1, create/3,
+    apply_operation/4,
     delete_all/1, delete/1,
     acquire_iterator/2
 ]).
@@ -84,6 +85,26 @@ create(AtmWorkflowExecutionId, InitialValue, #atm_store_schema{
     }).
 
 
+-spec apply_operation(atm_container:operation(), atm_api:item(), 
+    atm_container:apply_operation_options(), atm_store:id()) -> ok | no_return().
+apply_operation(Operation, Item, Options, AtmStoreId) ->
+    % NOTE: no need to use critical section here as containers either:
+    %   * are based on structure that support transaction operation on their own 
+    %   * store only one value and it will be overwritten 
+    %   * do not support any operation
+    case atm_store:get(AtmStoreId) of
+        {ok, #atm_store{container = AtmContainer, frozen = false}} -> 
+            UpdatedContainer = atm_container:apply_operation(Operation, Item, Options, AtmContainer),
+            atm_store:update(AtmStoreId, fun(#atm_store{} = PrevStore) ->
+                {ok, PrevStore#atm_store{container = UpdatedContainer}}
+            end);
+        {ok, #atm_store{container = AtmContainer, frozen = true}} -> 
+            throw(?ERROR_ATM_STORE_FROZEN(AtmContainer));
+        {error, _} = Error ->
+            throw(Error)
+    end.
+
+
 -spec delete_all([atm_store:id()]) -> ok.
 delete_all(AtmStoreIds) ->
     lists:foreach(fun delete/1, AtmStoreIds).
@@ -91,6 +112,8 @@ delete_all(AtmStoreIds) ->
 
 -spec delete(atm_store:id()) -> ok | {error, term()}.
 delete(AtmStoreId) ->
+    {ok, #atm_store{container = AtmContainer}} = atm_store:get(AtmStoreId),
+    ok = atm_container:delete(AtmContainer),
     atm_store:delete(AtmStoreId).
 
 
@@ -113,4 +136,5 @@ acquire_iterator(AtmExecutionState, #atm_store_iterator_spec{
 -spec store_type_to_container_type(automation:store_type()) ->
     atm_container:type().
 store_type_to_container_type(single_value) -> atm_single_value_container;
-store_type_to_container_type(range) -> atm_range_container.
+store_type_to_container_type(range) -> atm_range_container;
+store_type_to_container_type(list) -> atm_list_container.

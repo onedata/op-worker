@@ -23,7 +23,7 @@
 -behaviour(persistent_record).
 
 %% API
--export([get_next_batch/2, jump_to/2]).
+-export([get_next_batch/2, mark_exhausted/1]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
@@ -33,6 +33,7 @@
 
 -type record() ::
     atm_single_value_container_iterator:record() |
+    atm_list_container_iterator:record() |
     atm_range_container_iterator:record().
 
 -export_type([batch_size/0, record/0]).
@@ -44,9 +45,9 @@
 
 
 -callback get_next_batch(batch_size(), record()) ->
-    {ok, [atm_api:item()], iterator:cursor(), record()} | stop.
+    {ok, [atm_api:item()], record()} | stop.
 
--callback jump_to(iterator:cursor(), record()) -> record().
+-callback mark_exhausted(record()) -> ok.
 
 
 %%%===================================================================
@@ -55,16 +56,16 @@
 
 
 -spec get_next_batch(batch_size(), record()) ->
-    {ok, [atm_api:item()], iterator:cursor(), record()} | stop.
+    {ok, [atm_api:item()], record()} | stop.
 get_next_batch(BatchSize, AtmContainerIterator) ->
     Module = utils:record_type(AtmContainerIterator),
     Module:get_next_batch(BatchSize, AtmContainerIterator).
 
 
--spec jump_to(iterator:cursor(), record()) -> record().
-jump_to(Cursor, AtmContainerIterator) ->
+-spec mark_exhausted(record()) -> ok.
+mark_exhausted(AtmContainerIterator) ->
     Module = utils:record_type(AtmContainerIterator),
-    Module:jump_to(Cursor, AtmContainerIterator).
+    Module:mark_exhausted(AtmContainerIterator).
 
 
 %%%===================================================================

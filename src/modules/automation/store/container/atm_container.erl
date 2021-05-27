@@ -23,7 +23,7 @@
 -behaviour(persistent_record).
 
 %% API
--export([create/3, get_data_spec/1, acquire_iterator/1]).
+-export([create/3, get_data_spec/1, acquire_iterator/1, apply_operation/4, delete/1]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
@@ -31,18 +31,27 @@
 
 -type type() ::
     atm_single_value_container |
-    atm_range_container.
+    atm_range_container |
+    atm_list_container.
 
 -type initial_value() ::
-    atm_single_value_container:initial_value() |
-    atm_range_container:initial_value().
+    atm_single_value_container:initial_value() | 
+    atm_range_container:initial_value() |
+    atm_list_container:initial_value().
 
 -type record() ::
-    atm_single_value_container:record() |
-    atm_range_container:record().
+    atm_single_value_container:record() | 
+    atm_range_container:record() |
+    atm_list_container:record().
 
+-type operation() :: append | set.
 
--export_type([type/0, initial_value/0, record/0]).
+-type apply_operation_options() ::
+    atm_single_value_container:apply_operation_options() |
+    atm_range_container:apply_operation_options() |
+    atm_list_container:apply_operation_options().
+
+-export_type([type/0, initial_value/0, operation/0, apply_operation_options/0, record/0]).
 
 
 %%%===================================================================
@@ -55,6 +64,11 @@
 -callback get_data_spec(record()) -> atm_data_spec:record().
 
 -callback acquire_iterator(record()) -> atm_container_iterator:record().
+
+-callback apply_operation(operation(), atm_api:item(), apply_operation_options(), record()) ->
+    record() | no_return().
+
+-callback delete(record()) -> ok | no_return().
 
 
 %%%===================================================================
@@ -77,6 +91,19 @@ get_data_spec(AtmContainer) ->
 acquire_iterator(AtmContainer) ->
     RecordType = utils:record_type(AtmContainer),
     RecordType:acquire_iterator(AtmContainer).
+
+
+-spec apply_operation(operation(), atm_api:item(), apply_operation_options(), record()) ->
+    record() | no_return().
+apply_operation(Operation, Item, Options, AtmContainer) ->
+    RecordType = utils:record_type(AtmContainer),
+    RecordType:apply_operation(Operation, Item, Options, AtmContainer).
+
+
+-spec delete(record()) -> ok | no_return().
+delete(AtmContainer) ->
+    RecordType = utils:record_type(AtmContainer),
+    RecordType:delete(AtmContainer).
 
 
 %%%===================================================================
