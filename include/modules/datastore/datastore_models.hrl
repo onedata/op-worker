@@ -1021,4 +1021,42 @@
     finish_time = 0 :: atm_workflow_execution:timestamp()
 }).
 
+%%%===================================================================
+%%% Workflow engine connected models
+%%%===================================================================
+
+-record(workflow_cached_item, {
+    item :: workflow_store:item()
+}).
+
+-record(workflow_iterator_snapshot, {
+    iterator :: workflow_store:iterator(),
+    lane_index = 0 :: workflow_execution_state:index(),
+    item_index = 0 :: workflow_execution_state:index()
+}).
+
+-record(workflow_engine_state, {
+    executions = [] :: [workflow_engine:execution_id()],
+    slots_used = 0 :: non_neg_integer(),
+    slots_limit :: non_neg_integer()
+}).
+
+-record(workflow_execution_state, {
+    lane_count = 0 :: non_neg_integer(), % TODO VFS-7551 - delete during integration with BW
+    current_lane :: workflow_execution_state:current_lane() | undefined,
+
+    iteration_state :: workflow_iteration_state:state() | undefined,
+    jobs :: workflow_jobs:jobs() | undefined,
+
+    % Field used to return additional information about document update procedure
+    % (datastore:update returns {ok, #document{}} or {error, term()}
+    % so such information has to be returned via record's field).
+    update_report :: workflow_execution_state:update_report() | undefined
+}).
+
+-record(workflow_async_call_pool, {
+    slots_used = 0 :: non_neg_integer(),
+    slots_limit :: non_neg_integer()
+}).
+
 -endif.
