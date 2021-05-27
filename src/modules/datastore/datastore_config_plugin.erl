@@ -96,6 +96,11 @@ get_models() -> [
     atm_workflow_schema_snapshot,
     atm_workflow_execution,
     archive,
+    workflow_engine_state,
+    workflow_execution_state,
+    workflow_cached_item,
+    workflow_iterator_snapshot,
+    workflow_async_call_pool,
 
     %% @TODO VFS-6767 deprecated, included for upgrade procedure. Remove in next major release after 21.02.*.
     space_strategies,
