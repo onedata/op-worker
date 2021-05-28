@@ -92,12 +92,12 @@ create(AtmWorkflowExecutionCtx, InitialValue, #atm_store_schema{
 -spec apply_operation(
     atm_workflow_execution_ctx:record(),
     atm_container:operation_type(),
-    atm_container:operation_options(),
     atm_api:item(),
+    atm_container:operation_options(),
     atm_store:id()
 ) ->
     ok | no_return().
-apply_operation(AtmWorkflowExecutionCtx, Operation, Options, Item, AtmStoreId) ->
+apply_operation(AtmWorkflowExecutionCtx, Operation, Item, Options, AtmStoreId) ->
     % NOTE: no need to use critical section here as containers either:
     %   * are based on structure that support transaction operation on their own 
     %   * store only one value and it will be overwritten 

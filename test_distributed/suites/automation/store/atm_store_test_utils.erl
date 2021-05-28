@@ -17,8 +17,8 @@
 
 %% API
 -export([
-    create_store/3, 
-    apply_operation/5,
+    create_store/4,
+    apply_operation/6,
     acquire_store_iterator/3, 
     iterator_get_next/2
 ]).
@@ -33,18 +33,32 @@
 %%% API
 %%%===================================================================
 
--spec create_store(node(), atm_store_api:initial_value(), atm_store_schema:record()) ->
+-spec create_store(
+    node(),
+    atm_workflow_execution_ctx:record(),
+    atm_store_api:initial_value(),
+    atm_store_schema:record()
+) ->
     {ok, atm_store:id()} | {error, term()}.
-create_store(Node, InitialValue, AtmStoreSchema) ->
+create_store(Node, AtmWorkflowExecutionCtx, InitialValue, AtmStoreSchema) ->
     ?extract_key(rpc:call(Node, atm_store_api, create, [
-        <<"dummyId">>, InitialValue, AtmStoreSchema
+        AtmWorkflowExecutionCtx, InitialValue, AtmStoreSchema
     ])).
 
 
--spec apply_operation(node(), atm_container:operation(), atm_api:item(), 
-    atm_container:apply_operation_options(), atm_store:id()) -> ok | {error, term()}.
-apply_operation(Node, Operation, Item, Options, AtmStoreId) ->
-    rpc:call(Node, atm_store_api, apply_operation, [Operation, Item, Options, AtmStoreId]).
+-spec apply_operation(
+    node(),
+    atm_workflow_execution_ctx:record(),
+    atm_container:operation(),
+    atm_api:item(),
+    atm_container:operation_options(),
+    atm_store:id()
+) ->
+    ok | {error, term()}.
+apply_operation(Node, AtmWorkflowExecutionCtx, Operation, Item, Options, AtmStoreId) ->
+    rpc:call(Node, atm_store_api, apply_operation, [
+        AtmWorkflowExecutionCtx, Operation, Item, Options, AtmStoreId
+    ]).
 
 
 -spec acquire_store_iterator(

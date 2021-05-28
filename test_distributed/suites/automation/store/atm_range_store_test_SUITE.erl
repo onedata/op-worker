@@ -83,6 +83,11 @@ all() -> [
     type = range,
     data_spec = #atm_data_spec{type = atm_integer_type}
 }).
+-define(RAND_ATM_WORKFLOW_EXECUTION_CTX(), #atm_workflow_execution_ctx{
+    space_id = oct_background:get_space_id(space_krk),
+    workflow_execution_id = str_utils:rand_hex(32),
+    session_id = oct_background:get_user_session_id(user1, krakow)
+}).
 
 -define(ATTEMPTS, 30).
 
@@ -94,9 +99,12 @@ all() -> [
 
 create_store_with_invalid_args_test(_Config) ->
     Node = oct_background:get_random_provider_node(krakow),
+    AtmWorkflowExecutionCxt = ?RAND_ATM_WORKFLOW_EXECUTION_CTX(),
 
     lists:foreach(fun({InvalidInitialValue, ExpError}) ->
-        ?assertEqual(ExpError, atm_store_test_utils:create_store(Node, InvalidInitialValue, ?ATM_RANGE_STORE_SCHEMA))
+        ?assertEqual(ExpError, atm_store_test_utils:create_store(
+            Node, AtmWorkflowExecutionCxt, InvalidInitialValue, ?ATM_RANGE_STORE_SCHEMA
+        ))
     end, [
         {undefined, ?ERROR_ATM_STORE_MISSING_REQUIRED_INITIAL_VALUE},
         {#{}, ?ERROR_MISSING_REQUIRED_VALUE(<<"end">>)},
@@ -118,12 +126,17 @@ create_store_with_invalid_args_test(_Config) ->
 
 apply_operation_test(_Config) ->
     Node = oct_background:get_random_provider_node(krakow),
-    {ok, AtmRangeStoreId} = atm_store_test_utils:create_store(Node, #{<<"end">> => 8}, ?ATM_RANGE_STORE_SCHEMA),
-    
-    ?assertEqual(?ERROR_NOT_SUPPORTED,
-        atm_store_test_utils:apply_operation(Node, append, <<"NaN">>, #{}, AtmRangeStoreId)),
-    ?assertEqual(?ERROR_NOT_SUPPORTED,
-        atm_store_test_utils:apply_operation(Node, set, <<"NaN">>, #{}, AtmRangeStoreId)).
+    AtmWorkflowExecutionCxt = ?RAND_ATM_WORKFLOW_EXECUTION_CTX(),
+    {ok, AtmRangeStoreId} = atm_store_test_utils:create_store(
+        Node, AtmWorkflowExecutionCxt, #{<<"end">> => 8}, ?ATM_RANGE_STORE_SCHEMA
+    ),
+
+    ?assertEqual(?ERROR_NOT_SUPPORTED, atm_store_test_utils:apply_operation(
+        Node, AtmWorkflowExecutionCxt, append, <<"NaN">>, #{}, AtmRangeStoreId
+    )),
+    ?assertEqual(?ERROR_NOT_SUPPORTED, atm_store_test_utils:apply_operation(
+        Node, AtmWorkflowExecutionCxt, set, <<"NaN">>, #{}, AtmRangeStoreId
+    )).
 
 
 iterate_one_by_one_with_end_100_test(_Config) ->
@@ -200,14 +213,24 @@ iterate_in_chunks_test_base(ChunkSize, #{<<"end">> := End} = InitialValue) ->
 iterate_test_base(AtmRangeStoreInitialValue, AtmStoreIteratorStrategy, ExpItems) ->
     Node = oct_background:get_random_provider_node(krakow),
 
+    #atm_workflow_execution_ctx{
+        space_id = SpaceId,
+        workflow_execution_id = AtmWorkflowExecutionId
+    } = AtmWorkflowExecutionCxt = ?RAND_ATM_WORKFLOW_EXECUTION_CTX(),
+
+    {ok, AtmRangeStoreId} = atm_store_test_utils:create_store(
+        Node, AtmWorkflowExecutionCxt, AtmRangeStoreInitialValue, ?ATM_RANGE_STORE_SCHEMA
+    ),
+
     AtmRangeStoreDummySchemaId = <<"dummyId">>,
 
-    {ok, AtmRangeStoreId} = atm_store_test_utils:create_store(Node, AtmRangeStoreInitialValue, ?ATM_RANGE_STORE_SCHEMA),
     AtmStoreIteratorSpec = #atm_store_iterator_spec{
         store_schema_id = AtmRangeStoreDummySchemaId,
         strategy = AtmStoreIteratorStrategy
     },
     AtmWorkflowExecutionEnv = #atm_workflow_execution_env{
+        space_id = SpaceId,
+        workflow_execution_id = AtmWorkflowExecutionId,
         store_registry = #{AtmRangeStoreDummySchemaId => AtmRangeStoreId}
     },
     AtmStoreIterator = atm_store_test_utils:acquire_store_iterator(Node, AtmWorkflowExecutionEnv, AtmStoreIteratorSpec),
@@ -231,15 +254,24 @@ assert_all_items_listed(Node, AtmStoreIterator0, [ExpItem | RestItems]) ->
 reuse_iterator_test(_Config) ->
     Node = oct_background:get_random_provider_node(krakow),
 
-    AtmRangeStoreDummySchemaId = <<"dummyId">>,
-    InitialValue = #{<<"start">> => 2, <<"end">> => 16, <<"step">> => 3},
-    {ok, AtmRangeStoreId} = atm_store_test_utils:create_store(Node, InitialValue, ?ATM_RANGE_STORE_SCHEMA),
+    #atm_workflow_execution_ctx{
+        space_id = SpaceId,
+        workflow_execution_id = AtmWorkflowExecutionId
+    } = AtmWorkflowExecutionCxt = ?RAND_ATM_WORKFLOW_EXECUTION_CTX(),
 
+    InitialValue = #{<<"start">> => 2, <<"end">> => 16, <<"step">> => 3},
+    {ok, AtmRangeStoreId} = atm_store_test_utils:create_store(
+        Node, AtmWorkflowExecutionCxt, InitialValue, ?ATM_RANGE_STORE_SCHEMA
+    ),
+
+    AtmRangeStoreDummySchemaId = <<"dummyId">>,
     AtmStoreIteratorSpec = #atm_store_iterator_spec{
         store_schema_id = AtmRangeStoreDummySchemaId,
         strategy = #atm_store_iterator_serial_strategy{}
     },
     AtmWorkflowExecutionEnv = #atm_workflow_execution_env{
+        space_id = SpaceId,
+        workflow_execution_id = AtmWorkflowExecutionId,
         store_registry = #{AtmRangeStoreDummySchemaId => AtmRangeStoreId}
     },
     AtmSerialIterator0 =  atm_store_test_utils:acquire_store_iterator(Node, AtmWorkflowExecutionEnv, AtmStoreIteratorSpec),
