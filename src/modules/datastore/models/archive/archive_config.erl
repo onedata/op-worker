@@ -14,6 +14,8 @@
 -module(archive_config).
 -author("Jakub Kudzia").
 
+-behaviour(persistent_record).
+
 -include("modules/dataset/archive.hrl").
 -include_lib("ctool/include/errors.hrl").
 
