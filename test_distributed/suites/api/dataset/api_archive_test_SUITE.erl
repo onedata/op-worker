@@ -151,7 +151,7 @@ create_archive(_Config) ->
     ])).
 
 %% @private
--spec generate_all_valid_configs() -> [archive_config:config_json()].
+-spec generate_all_valid_configs() -> [archive_config:json()].
 generate_all_valid_configs() ->
     LayoutValues = [undefined | ?ARCHIVE_LAYOUTS],
     IncrementalValues = [undefined | ?SUPPORTED_INCREMENTAL_VALUES],

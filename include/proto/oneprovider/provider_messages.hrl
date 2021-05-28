@@ -330,7 +330,7 @@
     purged_callback :: archive:callback(),
     description :: archive:description(),
     index :: archive_api:index(),
-    stats :: archive_stats:stats()
+    stats :: archive_stats:record()
 }).
 
 -record(archives, {

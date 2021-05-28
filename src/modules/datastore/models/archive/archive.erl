@@ -56,7 +56,7 @@
 -type description() :: binary().
 -type callback() :: http_client:url() | undefined.
 
--type config() :: archive_config:config().
+-type config() :: archive_config:record().
 
 -type error() :: {error, term()}.
 
@@ -215,7 +215,7 @@ get_description(#archive{description = Description}) ->
 get_description(#document{value = Archive}) ->
     get_description(Archive).
 
--spec get_stats(record() | doc()) -> {ok, archive_stats:stats()}.
+-spec get_stats(record() | doc()) -> {ok, archive_stats:record()}.
 get_stats(#archive{stats = Stats}) ->
     {ok, Stats};
 get_stats(#document{value = Archive}) ->
@@ -278,7 +278,7 @@ mark_building(ArchiveDocOrId) ->
     end)).
 
 
--spec mark_finished(id() | doc(), archive_stats:stats()) -> ok.
+-spec mark_finished(id() | doc(), archive_stats:record()) -> ok.
 mark_finished(ArchiveDocOrId, NestedArchivesStats) ->
     ?extract_ok(update(ArchiveDocOrId, fun(Archive = #archive{stats = CurrentStats}) ->
         AggregatedStats = archive_stats:sum(CurrentStats, NestedArchivesStats),
@@ -353,19 +353,11 @@ get_record_struct(1) ->
         {creation_time, integer},
         {creator, string},
         {state, atom},
-        {config, {record, [
-            {incremental, boolean},
-            {include_dip, boolean},
-            {layout, atom}
-        ]}},
+        {config, {custom, string, {persistent_record, encode, decode, archive_config}}},
         {preserved_callback, string},
         {purged_callback, string},
         {description, string},
         {root_file_guid, string},
-        {stats, {record, [
-            {files_archived, integer},
-            {files_failed, integer},
-            {bytes_archived, integer}
-        ]}},
+        {stats, {custom, string, {persistent_record, encode, decode, archive_stats}}},
         {parent, string}
     ]}.

@@ -14,6 +14,8 @@
 -module(archive_stats).
 -author("Jakub Kudzia").
 
+-behaviour(persistent_record).
+
 -include("modules/dataset/archive.hrl").
 
 
@@ -22,19 +24,22 @@
     mark_file_archived/2, mark_file_failed/1
 ]).
 
--type stats() :: #archive_stats{}.
--export_type([stats/0]).
+%% persistent_record callbacks
+-export([version/0, db_encode/2, db_decode/2]).
+
+-type record() :: #archive_stats{}.
+-export_type([record/0]).
 
 %%%===================================================================
 %%% API functions
 %%%===================================================================
 
--spec empty() -> stats().
+-spec empty() -> record().
 empty() ->
     #archive_stats{}.
 
 
--spec new(non_neg_integer(), non_neg_integer(), non_neg_integer()) -> stats().
+-spec new(non_neg_integer(), non_neg_integer(), non_neg_integer()) -> record().
 new(FilesArchived, FilesFailed, BytesArchived) ->
     #archive_stats{
         files_archived = FilesArchived,
@@ -43,7 +48,7 @@ new(FilesArchived, FilesFailed, BytesArchived) ->
     }.
 
 
--spec to_json(archive_stats:stats()) -> json_utils:json_map().
+-spec to_json(archive_stats:record()) -> json_utils:json_map().
 to_json(#archive_stats{
     files_archived = FilesArchived,
     files_failed = FilesFailed,
@@ -55,8 +60,21 @@ to_json(#archive_stats{
         <<"bytesArchived">> => BytesArchived
     }.
 
+%% @private
+-spec from_json(json_utils:json_map()) -> archive_stats:record().
+from_json(#{
+    <<"filesArchived">> := FilesArchived,
+    <<"filesFailed">> := FilesFailed,
+    <<"bytesArchived">> := BytesArchived
+}) ->
+    #archive_stats{
+        files_archived = FilesArchived,
+        files_failed = FilesFailed,
+        bytes_archived = BytesArchived
+    }.
 
--spec sum(stats(), stats()) -> stats().
+
+-spec sum(record(), record()) -> record().
 sum(Stats1, Stats2) ->
     #archive_stats{
         files_archived = Stats1#archive_stats.files_archived + Stats2#archive_stats.files_archived,
@@ -65,7 +83,7 @@ sum(Stats1, Stats2) ->
     }.
 
 
--spec mark_file_archived(stats(), non_neg_integer()) -> stats().
+-spec mark_file_archived(record(), non_neg_integer()) -> record().
 mark_file_archived(Stats, FileSize) ->
     Stats#archive_stats{
         files_archived = Stats#archive_stats.files_archived + 1,
@@ -73,8 +91,28 @@ mark_file_archived(Stats, FileSize) ->
     }.
 
 
--spec mark_file_failed(stats()) -> stats().
+-spec mark_file_failed(record()) -> record().
 mark_file_failed(Stats) ->
     Stats#archive_stats{
         files_failed = Stats#archive_stats.files_failed + 1
     }.
+
+%%%===================================================================
+%%% persistent_record callbacks
+%%%===================================================================
+
+-spec version() -> persistent_record:record_version().
+version() ->
+    1.
+
+
+-spec db_encode(record(), persistent_record:nested_record_encoder()) ->
+    json_utils:json_term().
+db_encode(ArchiveStats, _NestedRecordEncoder) ->
+    to_json(ArchiveStats).
+
+
+-spec db_decode(json_utils:json_term(), persistent_record:nested_record_decoder()) ->
+    record().
+db_decode(ArchiveStatsJson, _NestedRecordDecoder) ->
+    from_json(ArchiveStatsJson).

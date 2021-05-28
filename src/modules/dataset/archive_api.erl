@@ -226,7 +226,7 @@ extend_with_archive_info(ArchiveEntries) ->
 
 
 
--spec get_aggregated_stats(archive:doc() | archive:id()) -> archive_stats:stats().
+-spec get_aggregated_stats(archive:doc() | archive:id()) -> archive_stats:record().
 get_aggregated_stats(ArchiveDoc = #document{}) ->
     {ok, ArchiveStats} = archive:get_stats(ArchiveDoc),
     case archive:is_finished(ArchiveDoc) of
@@ -242,12 +242,12 @@ get_aggregated_stats(ArchiveId) ->
     get_aggregated_stats(ArchiveDoc).
 
 
--spec get_nested_archives_stats(archive:id() | archive:doc()) -> archive_stats:stats().
+-spec get_nested_archives_stats(archive:id() | archive:doc()) -> archive_stats:record().
 get_nested_archives_stats(ArchiveIdOrDoc) ->
     get_nested_archives_stats(ArchiveIdOrDoc, #link_token{}, archive_stats:empty()).
 
--spec get_nested_archives_stats(archive:id() | archive:doc(), archives_forest:token(), archive_stats:stats()) ->
-    archive_stats:stats().
+-spec get_nested_archives_stats(archive:id() | archive:doc(), archives_forest:token(), archive_stats:record()) ->
+    archive_stats:record().
 get_nested_archives_stats(#document{key = ArchiveId}, Token, NestedArchiveStatsAccIn) ->
     get_nested_archives_stats(ArchiveId, Token, NestedArchiveStatsAccIn);
 get_nested_archives_stats(ArchiveId, Token, NestedArchiveStatsAccIn) when is_binary(ArchiveId) ->

@@ -442,7 +442,7 @@
     purged_callback :: archive:callback(),
     description :: archive:description(),
     root_file_guid :: undefined | file_id:file_guid(),
-    stats = archive_stats:empty() :: archive_stats:stats(),
+    stats = archive_stats:empty() :: archive_stats:record(),
 
     % if archive has been created directly it has no parent archive
     % if archive has been created indirectly, this fields points to it's parent archive
