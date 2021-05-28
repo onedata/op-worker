@@ -32,12 +32,12 @@
 %%%===================================================================
 
 
--spec create(atm_api:creation_ctx()) ->
+-spec create(atm_workflow_execution:creation_ctx()) ->
     {ok, atm_workflow_execution:doc()} | no_return().
-create(AtmExecutionCreationCtx) ->
-    AtmWorkflowExecutionElements = create_execution_elements(AtmExecutionCreationCtx),
+create(AtmWorkflowExecutionCreationCtx) ->
     AtmWorkflowExecutionDoc = create_doc(
-        AtmExecutionCreationCtx, AtmWorkflowExecutionElements
+        AtmWorkflowExecutionCreationCtx,
+        create_execution_elements(AtmWorkflowExecutionCreationCtx)
     ),
     atm_waiting_workflow_executions:add(AtmWorkflowExecutionDoc),
 
@@ -114,12 +114,12 @@ report_task_status_change(
 
 
 %% @private
--spec create_execution_elements(atm_api:creation_ctx()) ->
+-spec create_execution_elements(atm_workflow_execution:creation_ctx()) ->
     execution_elements() | no_return().
-create_execution_elements(AtmExecutionCreationCtx) ->
+create_execution_elements(AtmWorkflowExecutionCreationCtx) ->
     lists:foldl(fun(CreateExecutionElementFun, ExecutionElements) ->
         try
-            CreateExecutionElementFun(AtmExecutionCreationCtx, ExecutionElements)
+            CreateExecutionElementFun(AtmWorkflowExecutionCreationCtx, ExecutionElements)
         catch Type:Reason ->
             delete_execution_elements(ExecutionElements),
             erlang:Type(Reason)
@@ -132,22 +132,24 @@ create_execution_elements(AtmExecutionCreationCtx) ->
 
 
 %% @private
--spec create_schema_snapshot(atm_api:creation_ctx(), execution_elements()) ->
+-spec create_schema_snapshot(atm_workflow_execution:creation_ctx(), execution_elements()) ->
     execution_elements().
-create_schema_snapshot(#atm_execution_creation_ctx{
-    workflow_execution_id = AtmWorkflowExecutionId,
+create_schema_snapshot(#atm_workflow_execution_creation_ctx{
+    workflow_execution_ctx = AtmWorkflowExecutionCtx,
     workflow_schema_doc = AtmWorkflowSchemaDoc
 }, ExecutionElements) ->
     {ok, AtmWorkflowSchemaSnapshotId} = atm_workflow_schema_snapshot:create(
-        AtmWorkflowExecutionId, AtmWorkflowSchemaDoc
+        atm_workflow_execution_ctx:get_workflow_execution_id(AtmWorkflowExecutionCtx),
+        AtmWorkflowSchemaDoc
     ),
     ExecutionElements#execution_elements{schema_snapshot_id = AtmWorkflowSchemaSnapshotId}.
 
 
 %% @private
--spec create_stores(atm_api:creation_ctx(), execution_elements()) -> execution_elements().
-create_stores(AtmExecutionCreationCtx, ExecutionElements) ->
-    AtmStoreDocs = atm_store_api:create_all(AtmExecutionCreationCtx),
+-spec create_stores(atm_workflow_execution:creation_ctx(), execution_elements()) ->
+    execution_elements().
+create_stores(AtmWorkflowExecutionCreationCtx, ExecutionElements) ->
+    AtmStoreDocs = atm_store_api:create_all(AtmWorkflowExecutionCreationCtx),
     AtmStoreRegistry = lists:foldl(fun(#document{key = AtmStoreId, value = #atm_store{
         schema_id = AtmStoreSchemaId
     }}, Acc) ->
@@ -158,21 +160,20 @@ create_stores(AtmExecutionCreationCtx, ExecutionElements) ->
 
 
 %% @private
--spec create_lane_executions(atm_api:creation_ctx(), execution_elements()) ->
+-spec create_lane_executions(atm_workflow_execution:creation_ctx(), execution_elements()) ->
     execution_elements().
-create_lane_executions(AtmExecutionCreationCtx, ExecutionElements) ->
+create_lane_executions(AtmWorkflowExecutionCreationCtx, ExecutionElements) ->
     ExecutionElements#execution_elements{
-        lanes = atm_lane_execution:create_all(AtmExecutionCreationCtx)
+        lanes = atm_lane_execution:create_all(AtmWorkflowExecutionCreationCtx)
     }.
 
 
 %% @private
--spec create_doc(atm_api:creation_ctx(), execution_elements()) ->
+-spec create_doc(atm_workflow_execution:creation_ctx(), execution_elements()) ->
     atm_workflow_execution:doc() | no_return().
 create_doc(
-    #atm_execution_creation_ctx{
-        space_id = SpaceId,
-        workflow_execution_id = AtmWorkflowExecutionId
+    #atm_workflow_execution_creation_ctx{
+        workflow_execution_ctx = AtmWorkflowExecutionCtx
     },
     ExecutionElements = #execution_elements{
         schema_snapshot_id = AtmWorkflowSchemaSnapshotId,
@@ -182,9 +183,11 @@ create_doc(
 ) ->
     try
         {ok, AtmWorkflowExecutionDoc} = atm_workflow_execution:create(#document{
-            key = AtmWorkflowExecutionId,
+            key = atm_workflow_execution_ctx:get_workflow_execution_id(
+                AtmWorkflowExecutionCtx
+            ),
             value = #atm_workflow_execution{
-                space_id = SpaceId,
+                space_id = atm_workflow_execution_ctx:get_space_id(AtmWorkflowExecutionCtx),
                 schema_snapshot_id = AtmWorkflowSchemaSnapshotId,
 
                 store_registry = AtmStoreRegistry,

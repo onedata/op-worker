@@ -19,15 +19,29 @@
 -include_lib("ctool/include/automation/automation.hrl").
 
 
--record(atm_execution_creation_ctx, {
+-record(atm_workflow_execution_ctx, {
     space_id :: od_space:id(),
     workflow_execution_id :: atm_workflow_execution:id(),
+    session_id :: session:id()
+}).
+
+-record(atm_workflow_execution_creation_ctx, {
+    workflow_execution_ctx :: atm_workflow_execution_ctx:record(),
     workflow_schema_doc :: od_atm_workflow_schema:doc(),
     initial_values :: atm_api:initial_values()
 }).
 
 -record(atm_workflow_execution_env, {
+    space_id :: od_space:id(),
+    workflow_execution_id :: atm_workflow_execution:id(),
     store_registry :: atm_workflow_execution:store_registry()
+}).
+
+-record(atm_container_operation, {
+    type :: atm_container:operation_type(),
+    options :: atm_container:operation_options(),
+    value :: atm_api:item(),
+    workflow_execution_ctx :: atm_workflow_execution_ctx:record()
 }).
 
 -record(atm_lane_execution, {
@@ -43,6 +57,8 @@
 }).
 
 -record(atm_task_execution_ctx, {
+    workflow_execution_env :: atm_workflow_execution_env:record(),
+    workflow_execution_ctx :: atm_workflow_execution_ctx:record(),
     item :: json_utils:json_term()
 }).
 

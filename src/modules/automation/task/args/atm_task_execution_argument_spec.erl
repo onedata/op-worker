@@ -66,11 +66,16 @@ build(#atm_lambda_argument_spec{
 
 -spec construct_arg(atm_task_execution:ctx(), record()) ->
     json_utils:json_term() | no_return().
-construct_arg(AtmTaskExecutionCtx, #atm_task_execution_argument_spec{
-    value_builder = ArgValueBuilder
-} = AtmTaskExecutionArgSpec) ->
+construct_arg(
+    AtmTaskExecutionCtx = #atm_task_execution_ctx{
+        workflow_execution_ctx = AtmWorkflowExecutionCtx
+    },
+    AtmTaskExecutionArgSpec = #atm_task_execution_argument_spec{
+        value_builder = ArgValueBuilder
+    }
+) ->
     ArgValue = build_value(AtmTaskExecutionCtx, ArgValueBuilder),
-    validate_value(ArgValue, AtmTaskExecutionArgSpec),
+    validate_value(AtmWorkflowExecutionCtx, ArgValue, AtmTaskExecutionArgSpec),
     ArgValue.
 
 
@@ -110,21 +115,25 @@ build_value(_AtmTaskExecutionArgSpec, _InputSpec) ->
 
 
 %% @private
--spec validate_value(json_utils:json_term() | [json_utils:json_term()], record()) ->
+-spec validate_value(
+    atm_workflow_execution_ctx:record(),
+    json_utils:json_term() | [json_utils:json_term()],
+    record()
+) ->
     ok | no_return().
-validate_value(ArgsBatch, #atm_task_execution_argument_spec{
+validate_value(AtmWorkflowExecutionCtx, ArgsBatch, #atm_task_execution_argument_spec{
     data_spec = AtmDataSpec,
     is_batch = true
 }) ->
     lists:foreach(fun(ArgValue) ->
-        atm_data_validator:validate(ArgValue, AtmDataSpec)
+        atm_data_validator:validate(AtmWorkflowExecutionCtx, ArgValue, AtmDataSpec)
     end, ArgsBatch);
 
-validate_value(ArgValue, #atm_task_execution_argument_spec{
+validate_value(AtmWorkflowExecutionCtx, ArgValue, #atm_task_execution_argument_spec{
     data_spec = AtmDataSpec,
     is_batch = false
 }) ->
-    atm_data_validator:validate(ArgValue, AtmDataSpec).
+    atm_data_validator:validate(AtmWorkflowExecutionCtx, ArgValue, AtmDataSpec).
 
 
 %%%===================================================================

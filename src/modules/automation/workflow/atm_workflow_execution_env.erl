@@ -6,7 +6,8 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Utility functions operating on automation workflow execution environment.
+%%% Helper module providing utility functions for handling various schema id
+%%% to entity id mappings in context of specific automation workflow execution.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_workflow_execution_env).
@@ -15,7 +16,10 @@
 -include("modules/automation/atm_execution.hrl").
 
 %% API
--export([get_store_id/2]).
+-export([
+    get_store_id/2,
+    get_workflow_execution_ctx/1
+]).
 
 -type record() :: #atm_workflow_execution_env{}.
 
@@ -37,3 +41,11 @@ get_store_id(AtmStoreSchemaId, #atm_workflow_execution_env{
         AtmStoreId ->
             AtmStoreId
     end.
+
+
+-spec get_workflow_execution_ctx(record()) -> atm_workflow_execution_ctx:record().
+get_workflow_execution_ctx(#atm_workflow_execution_env{
+    space_id = SpaceId,
+    workflow_execution_id = AtmWorkflowExecutionId
+}) ->
+    atm_workflow_execution_ctx:build(SpaceId, AtmWorkflowExecutionId).

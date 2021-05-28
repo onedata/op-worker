@@ -26,6 +26,8 @@
 -type record() :: #atm_workflow_execution{}.
 -type doc() :: datastore_doc:doc(record()).
 
+-type creation_ctx() :: #atm_workflow_execution_creation_ctx{}.
+
 -type store_registry() :: #{AtmStoreSchemaId :: automation:id() => atm_store:id()}.
 
 -type phase() :: ?WAITING_PHASE | ?ONGOING_PHASE | ?ENDED_PHASE.
@@ -38,7 +40,7 @@
 -type timestamp() :: time:seconds().
 
 -export_type([id/0, diff/0, record/0, doc/0]).
--export_type([store_registry/0, phase/0, status/0, timestamp/0]).
+-export_type([creation_ctx/0, store_registry/0, phase/0, status/0, timestamp/0]).
 
 
 -define(CTX, #{model => ?MODULE}).
