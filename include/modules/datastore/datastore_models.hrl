@@ -441,18 +441,12 @@
     preserved_callback :: archive:callback(),
     purged_callback :: archive:callback(),
     description :: archive:description(),
-    % following counters are set after archivisation job is finished,
-    % so that there is no need to fetch traverse_task document (identified by job_id)
-    % to get their values
-    files_to_archive = 0 :: non_neg_integer(),
-    files_archived = 0 :: non_neg_integer(),
-    files_failed = 0 :: non_neg_integer(),
-    bytes_archived = 0 :: non_neg_integer(),
+    root_file_guid :: undefined | file_id:file_guid(),
+    stats = archive_stats:empty() :: archive_stats:record(),
 
-    % internal fields
-    % this field is used to fetch traverse_task document to get counters' values
-    % when archivisation job is still in progress
-    job_id :: archivisation_traverse:id()
+    % if archive has been created directly it has no parent archive
+    % if archive has been created indirectly, this fields points to it's parent archive
+    parent :: undefined | archive:id()
 }).
 
 
