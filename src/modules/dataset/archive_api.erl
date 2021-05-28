@@ -26,7 +26,7 @@
     list_archives/3, init_archive_purge/3, get_nested_archives_stats/1]).
 
 %% Exported for use in tests
--export([remove_archive/1, remove_archive/2]).
+-export([remove_archive_recursive/1]).
 
 
 -type info() :: #archive_info{}.
@@ -43,7 +43,7 @@
 
 
 % TODO VFS-7617 implement recall operation of archives
-% TODO VFS-7624 implement purging job for archives
+% TODO VFS-7718 improve purging so that archive record is deleted when files are removed from storage
 % TODO VFS-7651 implement archivisation with bagit layout archives
 % TODO VFS-7652 implement incremental archives
 % TODO VFS-7653 implement creating DIP for an archive
@@ -172,13 +172,47 @@ init_archive_purge(ArchiveId, CallbackUrl, UserCtx) ->
     case archive:mark_purging(ArchiveId, CallbackUrl) of
         {ok, ArchiveDoc} ->
             {ok, DatasetId} = archive:get_dataset_id(ArchiveDoc),
-            % TODO VFS-7624 init purging job
-            % it should remove archive doc when finished
-            % Should it be possible to register many callbacks in case of parallel purge requests?
-            ok = remove_archive(ArchiveId, UserCtx),
+            % TODO VFS-7718 Should it be possible to register many callbacks in case of parallel purge requests?
+            {ok, SpaceId} = archive:get_space_id(ArchiveDoc),
+            ArchiveDocCtx = file_ctx:new_by_uuid(?ARCHIVE_DIR_UUID(ArchiveId), SpaceId),
+            delete_req:delete_using_trash(UserCtx, ArchiveDocCtx, true),
+
+            % TODO VFS-7718 removal of archive doc and callback should be executed when deleting from trash is finished
+            % (now it's done before archive files are deleted from storage)
+            ok = remove_archive_recursive(ArchiveDoc, UserCtx),
             archivisation_callback:notify_purged(ArchiveId, DatasetId, CallbackUrl);
         {error, _} = Error ->
             Error
+    end.
+
+
+-spec remove_archive_recursive(archive:doc() | archive:id()) -> ok.
+remove_archive_recursive(ArchiveDocOrId) ->
+    remove_archive_recursive(ArchiveDocOrId, #link_token{}).
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+-spec remove_archive_recursive(archive:doc() | archive:id(), archives_forest:token()) -> ok.
+remove_archive_recursive(ArchiveDocOrId, Token) ->
+    {ok, ArchiveId} = case ArchiveDocOrId of
+        #document{} = ArchiveDoc -> archive:get_id(ArchiveDoc);
+        ArchiveId0 when is_binary(ArchiveId0) -> {ok, ArchiveId0}
+    end,
+    case archives_forest:list(ArchiveId, Token, 1000) of
+        {ok, ChildrenArchives, Token2} ->
+            lists:foreach(fun(ChildArchiveId) ->
+                remove_archive_recursive(ChildArchiveId)
+            end, ChildrenArchives),
+            case Token2#link_token.is_last of
+                true ->
+                    remove_archive(ArchiveDocOrId);
+                false ->
+                    remove_archive_recursive(ArchiveDocOrId, Token2)
+            end;
+        {error, not_found} ->
+            ok
     end.
 
 
@@ -195,6 +229,8 @@ remove_archive(ArchiveDoc = #document{}, _UserCtx) ->
             {ok, SpaceId} = archive:get_space_id(ArchiveDoc),
             {ok, DatasetId} = archive:get_dataset_id(ArchiveDoc),
             {ok, Timestamp} = archive:get_creation_time(ArchiveDoc),
+            {ok, ParentArchiveId} = archive:get_parent(ArchiveDoc),
+            ParentArchiveId =/= undefined andalso archives_forest:delete(ParentArchiveId, SpaceId, ArchiveId),
             archives_list:delete(DatasetId, SpaceId, ArchiveId, Timestamp);
         ?ERROR_NOT_FOUND ->
             % there was race with other process removing the archive
@@ -207,9 +243,6 @@ remove_archive(ArchiveId, UserCtx) ->
         {error, _} = Error -> Error
     end.
 
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
 
 -spec extend_with_archive_info(basic_entries()) -> extended_entries().
 extend_with_archive_info(ArchiveEntries) ->

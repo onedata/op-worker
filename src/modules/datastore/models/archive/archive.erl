@@ -255,10 +255,15 @@ is_finished(#document{value = Archive}) ->
 mark_purging(ArchiveId, Callback) ->
     update(ArchiveId, fun(Archive = #archive{
         state = PrevState,
-        purged_callback = PrevPurgedCallback
+        purged_callback = PrevPurgedCallback,
+        parent = Parent
     }) ->
-        case PrevState =:= ?ARCHIVE_PENDING orelse PrevState =:= ?ARCHIVE_BUILDING of
+        case PrevState =:= ?ARCHIVE_PENDING
+            orelse PrevState =:= ?ARCHIVE_BUILDING
+            orelse Parent =/= undefined % nested dataset cannot be removed as it would destroy parent dataset
+        of
             true ->
+                % TODO VFS-7718 return better error for nested dataset?
                 {error, ?EBUSY};
             false ->
                 {ok, Archive#archive{

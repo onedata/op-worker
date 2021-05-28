@@ -61,12 +61,17 @@ delete(ParentArchiveId, SpaceId, ArchiveId) ->
     end.
 
 
--spec list(archive:id(), token(), limit()) -> {ok, [link_name()], token()}.
-list(ArchiveId, Token, Limit) ->
-    {{ok, Archives}, Token2} = fold_links(ArchiveId, fun(ArchiveId, Acc) ->
+-spec list(archive:id(), token(), limit()) -> {ok, [link_name()], token()} | {error, term()}.
+list(ParentArchiveId, Token, Limit) ->
+    Result = fold_links(ParentArchiveId, fun(ArchiveId, Acc) ->
         [ArchiveId | Acc]
     end, [], #{token => Token, size => Limit}),
-    {ok, Archives, Token2}.
+    case Result of
+        {{ok, Archives}, Token2} ->
+            {ok, Archives, Token2};
+        {error, _} = Error ->
+            Error
+    end.
 
 
 %%%===================================================================
