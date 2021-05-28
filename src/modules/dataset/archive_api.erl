@@ -179,7 +179,7 @@ init_archive_purge(ArchiveId, CallbackUrl, UserCtx) ->
 
             % TODO VFS-7718 removal of archive doc and callback should be executed when deleting from trash is finished
             % (now it's done before archive files are deleted from storage)
-            ok = remove_archive_recursive(ArchiveDoc, UserCtx),
+            ok = remove_archive_recursive(ArchiveDoc),
             archivisation_callback:notify_purged(ArchiveId, DatasetId, CallbackUrl);
         {error, _} = Error ->
             Error
