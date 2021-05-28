@@ -61,8 +61,6 @@ is_special_uuid(<<?ARCHIVES_ROOT_DIR_UUID_PREFIX, _/binary>>) ->
     true;
 is_special_uuid(<<?DATASET_ARCHIVES_DIR_UUID_PREFIX, _/binary>>) ->
     true;
-is_special_uuid(<<?ARCHIVE_DIR_UUID_PREFIX, _/binary>>) ->
-    true;
 is_special_uuid(_) ->
     false.
 

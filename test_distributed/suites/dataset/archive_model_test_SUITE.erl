@@ -103,7 +103,7 @@ all() -> [
     {group, sequential_tests}
 ].
 
--define(ATTEMPTS, 120).
+-define(ATTEMPTS, 300).
 
 -define(SPACE, space_krk_par_p).
 
