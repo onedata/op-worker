@@ -260,7 +260,7 @@ mark_purging(ArchiveId, Callback) ->
     }) ->
         case PrevState =:= ?ARCHIVE_PENDING
             orelse PrevState =:= ?ARCHIVE_BUILDING
-            orelse Parent =/= undefined % nested dataset cannot be removed as it would destroy parent dataset
+            orelse Parent =/= undefined % nested archive cannot be removed as it would destroy parent archive
         of
             true ->
                 % TODO VFS-7718 return better error for nested dataset?
