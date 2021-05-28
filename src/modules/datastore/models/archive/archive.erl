@@ -294,12 +294,15 @@ mark_finished(ArchiveDocOrId, NestedArchivesStats) ->
 
 -spec mark_file_archived(id() | doc(), non_neg_integer(), file_id:file_guid() | undefined) -> ok | error().
 mark_file_archived(ArchiveDocOrId, FileSize, NewRootFileGuid) ->
-    ?extract_ok(update(ArchiveDocOrId, fun(Archive = #archive{stats = Stats, root_file_guid = RootFileGUid}) ->
-        {ok, Archive#archive{
-            stats = archive_stats:mark_file_archived(Stats, FileSize),
-            root_file_guid = utils:ensure_defined(NewRootFileGuid, RootFileGUid)
-        }}
+    ?extract_ok(update(ArchiveDocOrId, fun(Archive0 = #archive{stats = Stats}) ->
+        Archive1 = Archive0#archive{stats = archive_stats:mark_file_archived(Stats, FileSize)},
+        Archive2 = case NewRootFileGuid =/= undefined of
+            true -> Archive1#archive{root_file_guid = NewRootFileGuid};
+            false -> Archive1
+        end,
+        {ok, Archive2}
     end)).
+
 
 -spec mark_file_failed(id() | doc()) -> ok | error().
 mark_file_failed(ArchiveDocOrId) ->
