@@ -200,7 +200,7 @@ remove_archive_recursive(ArchiveDocOrId, Token) ->
         #document{} = ArchiveDoc -> archive:get_id(ArchiveDoc);
         ArchiveId0 when is_binary(ArchiveId0) -> {ok, ArchiveId0}
     end,
-    case archives_forest:list(ArchiveId, Token, 1000) of
+    case archives_forest:list(ArchiveId, Token, ?BATCH_SIZE) of
         {ok, ChildrenArchives, Token2} ->
             lists:foreach(fun(ChildArchiveId) ->
                 remove_archive_recursive(ChildArchiveId)
