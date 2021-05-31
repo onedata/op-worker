@@ -34,7 +34,8 @@
 -type record() ::
     atm_single_value_container_iterator:record() |
     atm_list_container_iterator:record() |
-    atm_range_container_iterator:record().
+    atm_range_container_iterator:record() |
+    atm_tree_forest_container_iterator:record().
 
 -export_type([batch_size/0, record/0]).
 

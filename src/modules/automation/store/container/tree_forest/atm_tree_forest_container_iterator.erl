@@ -33,7 +33,7 @@
 
 -type item() :: json_utils:json_term().
 -type object_id() :: binary().
--type list_opts() :: file_meta:list_opts().
+-type list_opts() :: map().
 
 -record(queue_info, {
     id :: atm_tree_forest_iterator_queue:id(),
@@ -67,7 +67,7 @@
 %%% API
 %%%===================================================================
 
--spec build(atm_list_container:backend_id(), atm_data_type:type()) -> record().
+-spec build(atm_list_container_iterator:record(), atm_data_spec:record()) -> record().
 build(RootsIterator, DataSpec) ->
     Module = type_specific_module(atm_data_spec:get_type(DataSpec)),
     #atm_tree_forest_container_iterator{
@@ -83,7 +83,7 @@ build(RootsIterator, DataSpec) ->
 %%%===================================================================
 
 -spec get_next_batch(atm_container_iterator:batch_size(), record()) ->
-    {ok, [item()], iterator:cursor(), record()} | stop.
+    {ok, [item()], record()} | stop.
 get_next_batch(BatchSize, #atm_tree_forest_container_iterator{} = Record) ->
     get_next_batch(BatchSize, Record, []).
 
@@ -103,7 +103,7 @@ mark_exhausted(#atm_tree_forest_container_iterator{queue_info = Q} = Iterator) -
 
 %% @private
 -spec get_next_batch(atm_container_iterator:batch_size(), record(), [item()]) ->
-    {ok, [item()], iterator:cursor(), record()} | stop.
+    {ok, [item()], record()} | stop.
 get_next_batch(BatchSize, #atm_tree_forest_container_iterator{} = Record, ForestAcc) when BatchSize =< 0 ->
     {ok, ForestAcc, Record};
 get_next_batch(BatchSize, #atm_tree_forest_container_iterator{current_object = undefined} = Record, ForestAcc) ->
@@ -194,7 +194,7 @@ add_to_queue(#queue_info{id = Id, current_queue_index = Index} = Q, Batch) ->
 
 
 %% @private
--spec get_from_queue(queue_info()) -> queue_info() | no_return().
+-spec get_from_queue(queue_info()) -> {object_id() | undefined, queue_info()} | no_return().
 get_from_queue(#queue_info{id = Id, current_queue_index = Index} = Q) ->
     case atm_tree_forest_iterator_queue:get(Id, Index + 1) of
         {ok, undefined} ->
@@ -254,11 +254,11 @@ db_encode(#atm_tree_forest_container_iterator{
         <<"typeSpecificModule">> => atom_to_binary(Module, utf8),
         <<"currentObject">> => utils:undefined_to_null(CurrentObject),
         <<"treeListOpts">> => 
-            json_utils:encode(maps:map(fun(Key, Value, Acc) -> 
+            json_utils:encode(maps:fold(fun(Key, Value, Acc) -> 
                 Acc#{atom_to_binary(Key, utf8) => Value} 
-            end, TreeListOpts)),
+            end, #{}, TreeListOpts)),
         <<"rootsIterator">> => atm_list_container_iterator:db_encode(RootsIterator, NestedRecordEncoder),
-        <<"queueInfo">> => json_utils:encode(encode_queue_info(QueueInfo))
+        <<"queueInfo">> => encode_queue_info(QueueInfo)
     }.
 
 
@@ -275,11 +275,11 @@ db_decode(#{
         type_specific_module = binary_to_atom(Module, utf8),
         current_object = utils:null_to_undefined(CurrentObject),
         tree_list_opts = 
-            maps:map(fun(Key, Value, Acc) -> 
+            maps:fold(fun(Key, Value, Acc) -> 
                 Acc#{binary_to_atom(Key, utf8) => Value} 
-            end, json_utils:decode(TreeListOpts)),
+            end, #{}, json_utils:decode(TreeListOpts)),
         roots_iterator = atm_list_container_iterator:db_decode(RootsIterator, NestedRecordDecoder),
-        queue_info = decode_queue_info(json_utils:decode(QueueInfo))
+        queue_info = decode_queue_info(QueueInfo)
     }.
 
 

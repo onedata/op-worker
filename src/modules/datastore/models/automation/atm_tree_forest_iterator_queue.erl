@@ -181,7 +181,7 @@ filter_by_discriminator(_, _OriginIndex, Entries) ->
 -spec append_entries(id(), record(), index(), [entry()]) -> ok.
 append_entries(_Id, _FirstRecord, _OriginIndex, []) -> ok;
 append_entries(Id, FirstRecord, OriginIndex, Entries) ->
-    #atm_tree_forest_iterator_queue{ values = ValuesBefore, entry_count = EntryCount } = FirstRecord,
+    #atm_tree_forest_iterator_queue{values = ValuesBefore, entry_count = EntryCount } = FirstRecord,
     {NewEntryCount, [{LowestDocNum, LowestDocValues} | EntriesPerDocTail]} =
         prepare_values(EntryCount, Entries),
     {_, Name} = lists:last(Entries),
@@ -216,7 +216,7 @@ append_entries(Id, FirstRecord, OriginIndex, Entries) ->
 
 %% @private
 -spec prepare_values(entry_count(), [entry()]) -> 
-    {non_neg_integer(), [{entry_count(), [entry()]}]}.
+    {entry_count(), [{entry_count(), values()}]}.
 prepare_values(EntryCount, Entries) ->
     {FinalEntryCount, ReversedEntriesPerDoc} = lists:foldl(
         fun({Value, _}, {CurrentIndex, [{DocNum, Map} | Tail] = Acc}) ->

@@ -25,14 +25,14 @@
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
 
--type update_options() :: map().
+-type apply_operation_options() :: #{binary() => boolean()}.
 -type initial_value() :: [json_utils:json_term()] | undefined.
 -record(atm_tree_forest_container, {
     roots_list :: atm_list_container:record()
 }).
 -type record() :: #atm_tree_forest_container{}.
 
--export_type([initial_value/0, update_options/0, record/0]).
+-export_type([initial_value/0, apply_operation_options/0, record/0]).
 
 
 %%%===================================================================
@@ -52,14 +52,14 @@ get_data_spec(#atm_tree_forest_container{roots_list = RootsList}) ->
     atm_list_container:get_data_spec(RootsList).
 
 
--spec acquire_iterator(record()) -> atm_list_container_iterator:record().
+-spec acquire_iterator(record()) -> atm_tree_forest_container_iterator:record().
 acquire_iterator(#atm_tree_forest_container{roots_list = RootsList}) ->
     DataSpec = atm_list_container:get_data_spec(RootsList),
     RootsIterator = atm_list_container:acquire_iterator(RootsList),
     atm_tree_forest_container_iterator:build(RootsIterator, DataSpec).
 
 
--spec apply_operation(atm_container:update_operation(), atm_api:item(), update_options(), record()) ->
+-spec apply_operation(atm_container:operation(), atm_api:item(), apply_operation_options(), record()) ->
     record() | no_return().
 apply_operation(Operation, Item, Options, #atm_tree_forest_container{roots_list = RootsList} = Record) ->
     Record#atm_tree_forest_container{
