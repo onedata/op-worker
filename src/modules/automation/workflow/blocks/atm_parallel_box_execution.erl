@@ -21,6 +21,8 @@
     prepare_all/1, prepare/1,
     delete_all/1, delete/1,
 
+    get_spec/1,
+
     gather_statuses/1,
     update_task_status/3
 ]).
@@ -116,6 +118,13 @@ delete_all(AtmParallelBoxExecutions) ->
 -spec delete(record()) -> ok.
 delete(#atm_parallel_box_execution{tasks = AtmTaskExecutions}) ->
     atm_task_execution_api:delete_all(maps:keys(AtmTaskExecutions)).
+
+
+-spec get_spec(record()) -> workflow_engine:parallel_box_spec().
+get_spec(#atm_parallel_box_execution{tasks = AtmTaskExecutions}) ->
+    maps:map(fun(AtmTaskExecutionId, _AtmTaskExecutionStatus) ->
+        atm_task_execution_api:get_spec(AtmTaskExecutionId)
+    end, AtmTaskExecutions).
 
 
 -spec gather_statuses([record()]) -> [status()].

@@ -44,10 +44,24 @@ start(UserCtx, SpaceId, AtmWorkflowSchemaId, InitialValues) ->
         SpaceId, AtmWorkflowExecutionId
     ),
 
-    {ok, _} = atm_workflow_execution_api:create(#atm_workflow_execution_creation_ctx{
+    {ok, #document{
+        value = #atm_workflow_execution{
+            store_registry = AtmStoreRegistry
+        }
+    }} = atm_workflow_execution_api:create(#atm_workflow_execution_creation_ctx{
         workflow_execution_ctx = AtmWorkflowExecutionCtx,
         workflow_schema_doc = AtmWorkflowSchemaDoc,
         initial_values = InitialValues
     }),
+
+    % TODO uncomment after MW implements it
+%%    AtmWorkflowExecutionEnv = #atm_workflow_execution_env{
+%%        space_id = SpaceId,
+%%        workflow_execution_id = AtmWorkflowExecutionId,
+%%        store_registry = AtmStoreRegistry
+%%    },
+%%    workflow_engine:start(
+%%        atm_workflow_execution_handler, AtmWorkflowExecutionId, AtmWorkflowExecutionEnv
+%%    ),
 
     {ok, AtmWorkflowExecutionId}.

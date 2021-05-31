@@ -59,7 +59,9 @@
 -record(atm_task_execution_ctx, {
     workflow_execution_env :: atm_workflow_execution_env:record(),
     workflow_execution_ctx :: atm_workflow_execution_ctx:record(),
-    item :: json_utils:json_term()
+    item :: json_utils:json_term(),
+    finished_callback :: binary(),
+    heartbeat_callback :: binary()
 }).
 
 -record(atm_task_execution_argument_spec, {

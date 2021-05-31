@@ -26,7 +26,7 @@
 -include("modules/automation/atm_tmp.hrl").
 
 %% API
--export([create/2, prepare/1, run/2]).
+-export([create/2, prepare/1, run/3]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
@@ -48,8 +48,8 @@
 
 -callback prepare(record()) -> ok | no_return().
 
--callback run(json_utils:json_map(), record()) ->
-    {ok, atm_task_execution_api:task_id()} | no_return().
+-callback run(atm_task_execution:ctx(), json_utils:json_map(), record()) ->
+    ok | no_return().
 
 
 %%%===================================================================
@@ -71,11 +71,11 @@ prepare(AtmTaskExecutor) ->
     Model:prepare(AtmTaskExecutor).
 
 
--spec run(json_utils:json_map(), record()) ->
-    {ok, atm_task_execution_api:task_id()} | no_return().
-run(Arguments, AtmTaskExecutor) ->
+-spec run(atm_task_execution:ctx(), json_utils:json_map(), record()) ->
+    ok | no_return().
+run(AtmTaskExecutionCtx, Arguments, AtmTaskExecutor) ->
     Model = utils:record_type(AtmTaskExecutor),
-    Model:run(Arguments, AtmTaskExecutor).
+    Model:run(AtmTaskExecutionCtx, Arguments, AtmTaskExecutor).
 
 
 %%%===================================================================

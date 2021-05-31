@@ -16,6 +16,7 @@
 
 %% API
 -export([create/1, prepare/1, delete/1]).
+-export([get_lane_execution_spec/3]).
 -export([report_task_status_change/5]).
 
 
@@ -76,6 +77,32 @@ delete(AtmWorkflowExecutionId) ->
     }),
 
     atm_workflow_execution:delete(AtmWorkflowExecutionId).
+
+
+-spec get_lane_execution_spec(
+    atm_workflow_execution:id(),
+    atm_workflow_execution_env:record(),
+    non_neg_integer()
+) ->
+    workflow_engine:lane_spec().
+get_lane_execution_spec(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmLaneIndex) ->
+    {ok, AtmWorkflowExecutionDoc = #document{
+        value = #atm_workflow_execution{
+            lanes = AtmLaneExecutions
+        }
+    }} = atm_workflow_execution:get(AtmWorkflowExecutionId),
+
+    AtmLanExecution = lists:nth(AtmLaneIndex, AtmLaneExecutions),
+
+    #{
+        parallel_boxes => atm_lane_execution:get_parallel_box_execution_specs(
+            AtmLanExecution
+        ),
+        iterator => get_iterator_for_lane_execution(
+            AtmWorkflowExecutionEnv, AtmLaneIndex, AtmWorkflowExecutionDoc
+        ),
+        is_last => is_last_lane_execution(AtmLaneIndex, AtmWorkflowExecutionDoc)
+    }.
 
 
 -spec report_task_status_change(
@@ -266,6 +293,38 @@ transition_to_status(AtmWorkflowExecutionId, NewStatus) ->
         {error, CurrStatus} ->
             throw(?ERROR_ATM_INVALID_STATUS_TRANSITION(CurrStatus, NewStatus))
     end.
+
+
+%% @private
+-spec get_iterator_for_lane_execution(
+    atm_workflow_execution_env:record(),
+    non_neg_integer(),
+    atm_workflow_execution:doc()
+) ->
+    atm_store_iterator:record().
+get_iterator_for_lane_execution(AtmWorkflowExecutionEnv, AtmLaneIndex, #document{
+    value = #atm_workflow_execution{
+        schema_snapshot_id = AtmWorkflowSchemaSnapshotId
+    }
+}) ->
+    {ok, #document{value = #atm_workflow_schema_snapshot{
+        lanes = AtmLaneSchemas
+    }}} = atm_workflow_schema_snapshot:get(AtmWorkflowSchemaSnapshotId),
+
+    #atm_lane_schema{store_iterator_spec = AtmStoreIteratorSpec} = lists:nth(
+        AtmLaneIndex, AtmLaneSchemas
+    ),
+
+    atm_store_api:acquire_iterator(AtmWorkflowExecutionEnv, AtmStoreIteratorSpec).
+
+
+%% @private
+-spec is_last_lane_execution(non_neg_integer(), atm_workflow_execution:doc()) ->
+    boolean().
+is_last_lane_execution(AtmLaneIndex, #document{value = #atm_workflow_execution{
+    lanes = AtmLaneExecutions
+}}) ->
+    AtmLaneIndex == length(AtmLaneExecutions).
 
 
 %% @private
