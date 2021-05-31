@@ -7,15 +7,21 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module implements persistent state of a single tree forest iteration. 
-%%% It is designed to be used as a fifo queue - entries should be retrieved by increasing 
-%%% indices. Retrieving an entry does not remove it from the queue to allow for later 
-%%% retrieving in case of provider restart. 
+%%% It is designed to be used as a fifo queue - entries should be peeked by increasing 
+%%% indices. Peeking an entry does not remove it from the queue to allow for later 
+%%% peek in case of provider restart. 
 %%% It is assumed that new entries are derived from previous one, hence OriginIndex must 
 %%% be provided to push function. If OriginIndex is lower than currently processed 
-%%% index (highest one that have been retrieved), such push is ignored (entries resulting 
+%%% index (highest one that have been peeked), such push is ignored (entries resulting 
 %%% from this index were already pushed). In order to avoid duplication between pushes 
-%%% from the same origin index discriminator keeps entry name of last provided entry. 
-%%% Therefore it is assumed, that entries are sorted ascending by these names.
+%%% from the same OriginIndex discriminator keeps entry name of last provided entry. 
+%%% Entries with name lower than the one kept by discriminator are ignored.
+%%% Therefore it is assumed, that entries are sorted ascending by these names. 
+%%% 
+%%% For each new tree in forest empty entry is "added" - this is simply done by increasing 
+%%% entries counter. This simulates pushing tree root to the queue and immediately peeking it. 
+%%% It must be done in order to distinguish between pushing entries from new tree 
+%%% and restarting iteration in the previous one.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_tree_forest_iterator_queue).
@@ -26,7 +32,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([push/3, get/2, report_new_tree/2, prune/2, destroy/1]).
+-export([push/3, peek/2, report_new_tree/2, prune/2, destroy/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_version/0, get_record_struct/1]).
@@ -61,8 +67,8 @@ push(Id, Entries, OriginIndex) ->
     critical_section:run({?MODULE, Id}, fun() -> push_unsafe(Id, Entries, OriginIndex) end).
 
 
--spec get(id(), index()) -> {ok, value() | undefined} | {error, term()}.
-get(Id, Index) ->
+-spec peek(id(), index()) -> {ok, value() | undefined} | {error, term()}.
+peek(Id, Index) ->
     DocNum = Index div ?MAX_VALUES_PER_DOC,
     case get_record(Id, DocNum) of
         {ok, #atm_tree_forest_iterator_queue{values = Values}} ->
@@ -71,10 +77,10 @@ get(Id, Index) ->
                     {ok, undefined};
                 Value ->
                     UpdateFirstDocFun = fun(#atm_tree_forest_iterator_queue{
-                        processed_index = ProcessedIndex
+                        currently_processed_index = ProcessedIndex
                     } = Record) ->
                         {ok, Record#atm_tree_forest_iterator_queue{
-                            processed_index = max(Index, ProcessedIndex)}
+                            currently_processed_index = max(Index, ProcessedIndex)}
                         }
                     end,
                     {ok, _} = update_record(Id, 0, UpdateFirstDocFun),
@@ -107,7 +113,7 @@ prune(Id, Index) ->
         {ok, #atm_tree_forest_iterator_queue{last_pruned_doc_num = StartDocNum}} ->
             lists:foreach(fun(Num) ->
                 delete_record(Id, Num)
-            end, lists:seq(StartDocNum, LastToPruneDocNum - 1) -- [0]), % never delete 0th doc
+            end, lists:seq(StartDocNum, max(StartDocNum - 1, LastToPruneDocNum - 1)) -- [0]), % never delete 0th doc
             UpdateFinalDocFun = fun(#atm_tree_forest_iterator_queue{values = Values} = Record) ->
                 {ok, Record#atm_tree_forest_iterator_queue{
                     values = prune_values(LastToPruneDocNum * ?MAX_VALUES_PER_DOC, Index, Values)
@@ -150,13 +156,13 @@ destroy(Id) ->
 push_unsafe(Id, Entries, OriginIndex) ->
     case get_record(Id, 0) of
         {ok, #atm_tree_forest_iterator_queue{
-            processed_index = ProcessedIndex
+            currently_processed_index = ProcessedIndex
         } = FirstRecord} when ProcessedIndex =< OriginIndex ->
             #atm_tree_forest_iterator_queue{
                 discriminator = Discriminator
             } = FirstRecord,
             FilteredEntries = filter_by_discriminator(Discriminator, OriginIndex, Entries),
-            append_entries(Id, FirstRecord, OriginIndex, FilteredEntries);
+            push_unsafe(Id, FirstRecord, OriginIndex, FilteredEntries);
         {ok, _} ->
             ok;
         {error, _} = Error ->
@@ -165,22 +171,9 @@ push_unsafe(Id, Entries, OriginIndex) ->
 
 
 %% @private
--spec filter_by_discriminator(discriminator(), index(), [entry()]) -> [entry()].
-filter_by_discriminator({OriginIndex, DiscriminatorName}, OriginIndex, Entries) ->
-    lists:filtermap(fun({_, EntryName} = Value) ->
-        case EntryName > DiscriminatorName of
-            true -> {true, Value};
-            false -> false
-        end
-    end, Entries);
-filter_by_discriminator(_, _OriginIndex, Entries) ->
-    Entries.
-
-
-%% @private
--spec append_entries(id(), record(), index(), [entry()]) -> ok.
-append_entries(_Id, _FirstRecord, _OriginIndex, []) -> ok;
-append_entries(Id, FirstRecord, OriginIndex, Entries) ->
+-spec push_unsafe(id(), record(), index(), [entry()]) -> ok.
+push_unsafe(_Id, _FirstRecord, _OriginIndex, []) -> ok;
+push_unsafe(Id, FirstRecord, OriginIndex, Entries) ->
     #atm_tree_forest_iterator_queue{values = ValuesBefore, entry_count = EntryCount } = FirstRecord,
     {NewEntryCount, [{LowestDocNum, LowestDocValues} | EntriesPerDocTail]} =
         prepare_values(EntryCount, Entries),
@@ -212,6 +205,16 @@ append_entries(Id, FirstRecord, OriginIndex, Entries) ->
                 value = #atm_tree_forest_iterator_queue{values = DocValues}
             })
     end, EntriesPerDocTail).
+
+
+%% @private
+-spec filter_by_discriminator(discriminator(), index(), [entry()]) -> [entry()].
+filter_by_discriminator({OriginIndex, DiscriminatorName}, OriginIndex, Entries) ->
+    lists:filter(fun({_, EntryName}) ->
+        EntryName > DiscriminatorName
+    end, Entries);
+filter_by_discriminator(_, _OriginIndex, Entries) ->
+    Entries.
 
 
 %% @private

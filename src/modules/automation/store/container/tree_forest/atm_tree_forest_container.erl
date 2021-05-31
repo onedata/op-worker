@@ -20,30 +20,29 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% atm_container callbacks
--export([create/2, get_data_spec/1, acquire_iterator/1, apply_operation/4, delete/1]).
+-export([create/3, get_data_spec/1, acquire_iterator/1, apply_operation/2, delete/1]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
 
--type apply_operation_options() :: #{binary() => boolean()}.
--type initial_value() :: [json_utils:json_term()] | undefined.
+-type operation_options() :: #{binary() => boolean()}.
+-type initial_value() :: [atm_api:item()] | undefined.
 -record(atm_tree_forest_container, {
     roots_list :: atm_list_container:record()
 }).
 -type record() :: #atm_tree_forest_container{}.
 
--export_type([initial_value/0, apply_operation_options/0, record/0]).
+-export_type([initial_value/0, operation_options/0, record/0]).
 
 
 %%%===================================================================
 %%% atm_container callbacks
 %%%===================================================================
 
--spec create(atm_data_spec:record(), initial_value()) -> record() | no_return().
-create(AtmDataSpec, InitialValue) ->
-    validate_data_type(atm_data_spec:get_type(AtmDataSpec)),
+-spec create(atm_data_spec:record(), initial_value(), atm_workflow_execution_ctx:record()) -> record() | no_return().
+create(AtmDataSpec, InitialValue, AtmWorkflowExecutionCtx) ->
     #atm_tree_forest_container{
-        roots_list = atm_list_container:create(AtmDataSpec, InitialValue)
+        roots_list = atm_list_container:create(AtmDataSpec, InitialValue, AtmWorkflowExecutionCtx)
     }.
 
 
@@ -59,11 +58,11 @@ acquire_iterator(#atm_tree_forest_container{roots_list = RootsList}) ->
     atm_tree_forest_container_iterator:build(RootsIterator, DataSpec).
 
 
--spec apply_operation(atm_container:operation(), atm_api:item(), apply_operation_options(), record()) ->
+-spec apply_operation(record(), atm_container:operation()) ->
     record() | no_return().
-apply_operation(Operation, Item, Options, #atm_tree_forest_container{roots_list = RootsList} = Record) ->
+apply_operation(#atm_tree_forest_container{roots_list = RootsList} = Record, Operation) ->
     Record#atm_tree_forest_container{
-        roots_list = atm_list_container:apply_operation(Operation, Item, Options, RootsList)
+        roots_list = atm_list_container:apply_operation(RootsList, Operation)
     }.
 
 
@@ -85,7 +84,7 @@ version() ->
     json_utils:json_term().
 db_encode(#atm_tree_forest_container{roots_list = ListContainer}, NestedRecordEncoder) ->
     #{
-        <<"rootsList">> => atm_list_container:db_encode(ListContainer, NestedRecordEncoder)
+        <<"rootsList">> => NestedRecordEncoder(ListContainer, atm_list_container)
     }.
 
 
@@ -93,17 +92,5 @@ db_encode(#atm_tree_forest_container{roots_list = ListContainer}, NestedRecordEn
     record().
 db_decode(#{<<"rootsList">> := EncodedListContainer}, NestedRecordDecoder) ->
     #atm_tree_forest_container{
-        roots_list = atm_list_container:db_decode(EncodedListContainer, NestedRecordDecoder)
+        roots_list = NestedRecordDecoder(EncodedListContainer, atm_list_container)
     }.
-
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-%% @private
--spec validate_data_type(atm_data_type:type()) -> ok | no_return().
-validate_data_type(atm_file_type) -> 
-    ok;
-validate_data_type(_) -> 
-    throw(?ERROR_NOT_SUPPORTED).

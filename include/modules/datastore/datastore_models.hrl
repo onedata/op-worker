@@ -1096,7 +1096,7 @@
 -record(atm_tree_forest_iterator_queue, {
     values = #{} :: atm_tree_forest_iterator_queue:values(),
     entry_count = 0 :: atm_tree_forest_iterator_queue:entry_count(),
-    processed_index = 0 :: atm_tree_forest_iterator_queue:index(),
+    currently_processed_index = 0 :: atm_tree_forest_iterator_queue:index(),
     discriminator = {0, <<>>} :: atm_tree_forest_iterator_queue:discriminator(), 
     last_pruned_doc_num = 0 :: atm_tree_forest_iterator_queue:doc_num()
 }).

@@ -22,7 +22,7 @@
 -export([build/1]).
 
 % atm_container_iterator callbacks
--export([get_next_batch/2, mark_exhausted/1]).
+-export([get_next_batch/3, mark_exhausted/2]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
@@ -54,9 +54,9 @@ build(BackendId) ->
 %%%===================================================================
 
 
--spec get_next_batch(atm_container_iterator:batch_size(), record()) ->
+-spec get_next_batch(atm_container_iterator:batch_size(), atm_workflow_execution_ctx:record(), record()) ->
     {ok, [item()], record()} | stop.
-get_next_batch(BatchSize, #atm_list_container_iterator{} = Record) ->
+get_next_batch(_AtmWorkflowExecutionCtx, BatchSize, #atm_list_container_iterator{} = Record) ->
     #atm_list_container_iterator{backend_id = BackendId, index = StartIndex} = Record,
     {ok, {Marker, EntrySeries}} = atm_list_store_backend:list(
         BackendId, #{start_from => {index, StartIndex}, limit => BatchSize}),
@@ -70,8 +70,8 @@ get_next_batch(BatchSize, #atm_list_container_iterator{} = Record) ->
     end.
 
 
--spec mark_exhausted(record()) -> ok.
-mark_exhausted(_AtmContainerIterator) ->
+-spec mark_exhausted(atm_workflow_execution_ctx:record(), record()) -> ok.
+mark_exhausted(_AtmWorkflowExecutionCtx, _AtmContainerIterator) ->
     ok.
 
 %%%===================================================================

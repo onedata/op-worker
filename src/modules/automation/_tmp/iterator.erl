@@ -20,14 +20,15 @@
 
 %% API
 -export([
-    get_next/1,
-    mark_exhausted/1,
+    get_next/2,
+    mark_exhausted/2,
     encode/1,
     decode/1
 ]).
 
 -opaque iterator() :: tuple().
 
+-type env() :: term().
 -type item() :: term().
 
 -export_type([iterator/0, item/0]).
@@ -38,9 +39,9 @@
 %%%===================================================================
 
 
--callback get_next(iterator()) -> {ok, item(), iterator()} | stop.
+-callback get_next(env(), iterator()) -> {ok, item(), iterator()} | stop.
 
--callback mark_exhausted(iterator()) -> ok.
+-callback mark_exhausted(env(), iterator()) -> ok.
 
 
 %%%===================================================================
@@ -48,16 +49,16 @@
 %%%===================================================================
 
 
--spec get_next(iterator()) -> {ok, item(), iterator()} | stop.
-get_next(Iterator) ->
+-spec get_next(env(), iterator()) -> {ok, item(), iterator()} | stop.
+get_next(Env, Iterator) ->
     Module = utils:record_type(Iterator),
-    Module:get_next(Iterator).
+    Module:get_next(Env, Iterator).
 
 
--spec mark_exhausted(iterator()) -> ok.
-mark_exhausted(Iterator) ->
+-spec mark_exhausted(env(), iterator()) -> ok.
+mark_exhausted(Env, Iterator) ->
     Module = utils:record_type(Iterator),
-    Module:mark_exhausted(Iterator).
+    Module:mark_exhausted(Env, Iterator).
 
 
 -spec encode(iterator()) -> binary().

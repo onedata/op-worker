@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Tests of automation list store.
+%%% Tests of automation tree forest store.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_tree_forest_store_test_SUITE).
@@ -37,11 +37,14 @@
     create_store_with_invalid_args_test/1,
     apply_operation_test/1,
     iterator_queue_test/1,
-    iterate_one_by_one_test/1,
-    iterate_in_chunks_test/1,
+    iterate_one_by_one_files_test/1,
+    iterate_in_chunks_files_test/1,
+    iterate_one_by_one_datasets_test/1,
+    iterate_in_chunks_datasets_test/1,
     restart_iteration_test/1,
     restart_partial_iteration_test/1,
-    iteration_with_deleted_root/1
+    iteration_with_deleted_root/1,
+    iteration_without_permission/1
 ]).
 
 groups() -> [
@@ -49,11 +52,14 @@ groups() -> [
         create_store_with_invalid_args_test,
         apply_operation_test,
         iterator_queue_test,
-        iterate_one_by_one_test,
-        iterate_in_chunks_test,
+        iterate_one_by_one_files_test,
+        iterate_in_chunks_files_test,
+        iterate_one_by_one_datasets_test,
+        iterate_in_chunks_datasets_test,
         restart_iteration_test,
         restart_partial_iteration_test,
-        iteration_with_deleted_root
+        iteration_with_deleted_root,
+        iteration_without_permission
     ]}
 ].
 
@@ -79,24 +85,36 @@ all() -> [
 %%%===================================================================
 
 create_store_with_invalid_args_test(_Config) ->
-    Node = oct_background:get_random_provider_node(krakow),
+    AtmWorkflowExecutionCtx = atm_store_test_utils:create_workflow_execution_ctx(krakow, user1, space_krk),
     ?assertEqual(?ERROR_ATM_STORE_MISSING_REQUIRED_INITIAL_VALUE,
-        atm_store_test_utils:create_store(Node, undefined, (?ATM_TREE_FOREST_STORE_SCHEMA)#atm_store_schema{requires_initial_value = true})),
+        atm_store_test_utils:create_store(
+            krakow, AtmWorkflowExecutionCtx, undefined, 
+            (?ATM_TREE_FOREST_STORE_SCHEMA)#atm_store_schema{requires_initial_value = true})
+    ),
     ?assertEqual(?ERROR_ATM_BAD_DATA(<<"initialValue">>, <<"not a list">>),
-        atm_store_test_utils:create_store(Node, 8, ?ATM_TREE_FOREST_STORE_SCHEMA)),
-    lists:foreach(fun(DataType) ->
-        ?assertEqual(?ERROR_NOT_SUPPORTED,
-            atm_store_test_utils:create_store(Node, undefined, ?ATM_TREE_FOREST_STORE_SCHEMA(DataType)))
-    end, atm_store_test_utils:all_data_types() -- [atm_file_type]).
+        atm_store_test_utils:create_store(
+            krakow, AtmWorkflowExecutionCtx, 8, ?ATM_TREE_FOREST_STORE_SCHEMA)
+    ).
 
 
 apply_operation_test(_Config) ->
-    Node = oct_background:get_random_provider_node(krakow),
-    {ok, AtmListStoreId0} = atm_store_test_utils:create_store(Node, undefined, ?ATM_TREE_FOREST_STORE_SCHEMA),
+    AtmWorkflowExecutionCtx = atm_store_test_utils:create_workflow_execution_ctx(krakow, user1, space_krk),
+    {ok, AtmListStoreId0} = atm_store_test_utils:create_store(krakow, AtmWorkflowExecutionCtx, undefined, ?ATM_TREE_FOREST_STORE_SCHEMA),
     
-    %% @TODO VFS-7676 test adding actual files
+    
+    SpaceId = oct_background:get_space_id(space_krk),
+    ?assertEqual(?ERROR_ATM_DATA_TYPE_UNVERIFIED(<<"not a file">>, atm_file_type),
+        atm_store_test_utils:apply_operation(
+            krakow, AtmWorkflowExecutionCtx, append, <<"not a file">>, #{}, AtmListStoreId0)),
+    ?assertEqual(?ERROR_NOT_FOUND,
+        atm_store_test_utils:apply_operation(
+            krakow, AtmWorkflowExecutionCtx, append, file_id:pack_guid(<<"dummy_uuid">>, <<"dummy_space_id">>), #{}, AtmListStoreId0)),
+    ?assertEqual(?ERROR_NOT_FOUND,
+        atm_store_test_utils:apply_operation(
+            krakow, AtmWorkflowExecutionCtx, append, file_id:pack_guid(<<"dummy_uuid">>, SpaceId), #{}, AtmListStoreId0)),
     ?assertEqual(?ERROR_NOT_SUPPORTED,
-        atm_store_test_utils:apply_operation(Node, set, <<"NaN">>, #{}, AtmListStoreId0)).
+        atm_store_test_utils:apply_operation(
+            krakow, AtmWorkflowExecutionCtx, set, <<"NaN">>, #{}, AtmListStoreId0)).
 
 
 iterator_queue_test(_Config) ->
@@ -109,7 +127,7 @@ iterator_queue_test(_Config) ->
     #atm_tree_forest_iterator_queue{values = FirstNodeValues} = 
         ?assertMatch(#atm_tree_forest_iterator_queue{
             entry_count = 19, 
-            processed_index = 0, 
+            currently_processed_index = 0, 
             last_pruned_doc_num = 0, 
             discriminator = {0, Name1}
         }, get_queue_node(TestQueueId, 0)),
@@ -125,7 +143,7 @@ iterator_queue_test(_Config) ->
     ?assertMatch(#atm_tree_forest_iterator_queue{
         values = FirstNodeValues,
         entry_count = 19,
-        processed_index = 0,
+        currently_processed_index = 0,
         last_pruned_doc_num = 0,
         discriminator = {0, Name1}
     }, get_queue_node(TestQueueId, 0)),
@@ -137,7 +155,7 @@ iterator_queue_test(_Config) ->
     ?assertMatch(#atm_tree_forest_iterator_queue{
         values = FirstNodeValues,
         entry_count = 20,
-        processed_index = 0,
+        currently_processed_index = 0,
         last_pruned_doc_num = 0,
         discriminator = {0, Name2}
     }, get_queue_node(TestQueueId, 0)),
@@ -146,13 +164,13 @@ iterator_queue_test(_Config) ->
     
     % also pushing values originating from old index should not add new values
     ?assertEqual({ok, <<"entry1">>}, queue_pop(TestQueueId, 1)),
-    ?assertMatch(#atm_tree_forest_iterator_queue{processed_index = 1}, get_queue_node(TestQueueId, 0)),
+    ?assertMatch(#atm_tree_forest_iterator_queue{currently_processed_index = 1}, get_queue_node(TestQueueId, 0)),
     
     ?assertEqual(ok, queue_push(TestQueueId, lists:map(fun(Num) -> {<<"entry", (integer_to_binary(Num))/binary>>, Name1} end, lists:seq(1, 20)), 0)),
     ?assertMatch(#atm_tree_forest_iterator_queue{
         values = FirstNodeValues,
         entry_count = 20,
-        processed_index = 1,
+        currently_processed_index = 1,
         last_pruned_doc_num = 0,
         discriminator = {0, Name2}
     }, get_queue_node(TestQueueId, 0)),
@@ -164,7 +182,7 @@ iterator_queue_test(_Config) ->
     ?assertMatch(#atm_tree_forest_iterator_queue{
         values = FirstNodeValues,
         entry_count = 21,
-        processed_index = 1,
+        currently_processed_index = 1,
         last_pruned_doc_num = 0,
         discriminator = {2, Name0}
     }, get_queue_node(TestQueueId, 0)),
@@ -203,87 +221,112 @@ iterator_queue_test(_Config) ->
     ?assertMatch({error, not_found}, get_queue_node(TestQueueId, 2)).
     
 
-iterate_one_by_one_test(_Config) ->
+iterate_one_by_one_files_test(_Config) ->
     Depth = 6,
     AtmStoreIteratorStrategy = #atm_store_iterator_serial_strategy{},
-    iterate_test_base(AtmStoreIteratorStrategy, Depth).
+    iterate_test_base(AtmStoreIteratorStrategy, Depth, atm_file_type).
 
 
-iterate_in_chunks_test(_Config) ->
+iterate_in_chunks_files_test(_Config) ->
     Depth = 6,
     ChunkSize = rand:uniform(Depth) + 8,
     AtmStoreIteratorStrategy = #atm_store_iterator_batch_strategy{size = ChunkSize},
-    iterate_test_base(AtmStoreIteratorStrategy, Depth).
+    iterate_test_base(AtmStoreIteratorStrategy, Depth, atm_file_type).
+
+
+iterate_one_by_one_datasets_test(_Config) ->
+    Depth = 4,
+    AtmStoreIteratorStrategy = #atm_store_iterator_serial_strategy{},
+    iterate_test_base(AtmStoreIteratorStrategy, Depth, atm_dataset_type).
+
+
+iterate_in_chunks_datasets_test(_Config) ->
+    Depth = 4,
+    ChunkSize = rand:uniform(Depth) + 8,
+    AtmStoreIteratorStrategy = #atm_store_iterator_batch_strategy{size = ChunkSize},
+    iterate_test_base(AtmStoreIteratorStrategy, Depth, atm_dataset_type).
 
 
 restart_iteration_test(_Config) ->
-    Node = oct_background:get_random_provider_node(krakow),
     AtmStoreIteratorStrategy = #atm_store_iterator_batch_strategy{size = 3},
-    {AtmSerialIterator0, FilesMap} = create_iteration_test_env(Node, AtmStoreIteratorStrategy, 1),
+    {AtmWorkflowExecutionEnv, AtmSerialIterator0, _FilesMap, Expected} = create_iteration_test_env(krakow, AtmStoreIteratorStrategy, 1, atm_file_type),
     
-    IteratorsAndResults = check_iterator_listing(Node, AtmSerialIterator0, lists:flatten(maps:values(FilesMap)), return_iterators ),
+    IteratorsAndResults = check_iterator_listing(
+        krakow, AtmWorkflowExecutionEnv, AtmSerialIterator0, Expected, return_iterators
+    ),
     
     lists:foreach(fun({Iterator, ExpectedResults}) ->
-        check_iterator_listing(Node, Iterator, ExpectedResults, return_none)
+        check_iterator_listing(krakow, AtmWorkflowExecutionEnv, Iterator, ExpectedResults, return_none)
     end, IteratorsAndResults).
 
 
 restart_partial_iteration_test(_Config) ->
-    Node = oct_background:get_random_provider_node(krakow),
     AtmStoreIteratorStrategy = #atm_store_iterator_batch_strategy{size = 50},
-    {AtmStoreIterator0, FileMap} = create_iteration_test_env(Node, AtmStoreIteratorStrategy, 3),
-    FileList = lists:flatten(maps:values(FileMap)),
-    {ok, Res0, AtmStoreIterator1} = ?assertMatch({ok, _, _}, atm_store_test_utils:iterator_get_next(Node, AtmStoreIterator0)),
-    {ok, _, _} = ?assertMatch({ok, _, _}, atm_store_test_utils:iterator_get_next(Node, AtmStoreIterator1)),
-    {ok, Res1, AtmStoreIterator2} = ?assertMatch({ok, _, _}, atm_store_test_utils:iterator_get_next(Node, AtmStoreIterator1)),
+    {AtmWorkflowExecutionEnv, AtmStoreIterator0, _FilesMap, FileList} = create_iteration_test_env(krakow, AtmStoreIteratorStrategy, 3, atm_file_type),
+    {ok, Res0, AtmStoreIterator1} = ?assertMatch({ok, _, _}, atm_store_test_utils:iterator_get_next(krakow, AtmWorkflowExecutionEnv, AtmStoreIterator0)),
+    {ok, _, _} = ?assertMatch({ok, _, _}, atm_store_test_utils:iterator_get_next(krakow, AtmWorkflowExecutionEnv, AtmStoreIterator1)),
+    {ok, Res1, AtmStoreIterator2} = ?assertMatch({ok, _, _}, atm_store_test_utils:iterator_get_next(krakow, AtmWorkflowExecutionEnv, AtmStoreIterator1)),
     check_listed_values(Res1, FileList -- Res0),
-    {ok, Res2, AtmStoreIterator3} = ?assertMatch({ok, _, _}, atm_store_test_utils:iterator_get_next(Node, AtmStoreIterator2)),
+    {ok, Res2, AtmStoreIterator3} = ?assertMatch({ok, _, _}, atm_store_test_utils:iterator_get_next(krakow, AtmWorkflowExecutionEnv, AtmStoreIterator2)),
     check_listed_values(Res2, FileList -- Res1),
-    ?assertMatch(stop, atm_store_test_utils:iterator_get_next(Node, AtmStoreIterator3)).
+    ?assertMatch(stop, atm_store_test_utils:iterator_get_next(krakow, AtmWorkflowExecutionEnv, AtmStoreIterator3)).
 
 
 iteration_with_deleted_root(_Config) ->
     Node = oct_background:get_random_provider_node(krakow),
     User1Session = oct_background:get_user_session_id(user1, krakow),
     AtmStoreIteratorStrategy = #atm_store_iterator_batch_strategy{size = 50},
-    {AtmStoreIterator0, FilesMap} = create_iteration_test_env(Node, AtmStoreIteratorStrategy, 3),
+    {AtmWorkflowExecutionEnv, AtmStoreIterator0, FilesMap, _Expected} = create_iteration_test_env(krakow, AtmStoreIteratorStrategy, 3, atm_file_type),
     
     [RootToDelete0 | _RootsTail] = maps:keys(FilesMap),
     ?assertEqual(ok, lfm_proxy:rm_recursive(Node, User1Session, ?FILE_REF(RootToDelete0))),
     ?assertEqual({error, ?ENOENT}, lfm_proxy:stat(Node, User1Session, ?FILE_REF(RootToDelete0)), ?ATTEMPTS),
     ExpectedFiles0 = lists:flatten(maps:values(maps:without([RootToDelete0], FilesMap))),
     
-    check_iterator_listing(Node, AtmStoreIterator0, ExpectedFiles0, return_none).
+    check_iterator_listing(krakow, AtmWorkflowExecutionEnv, AtmStoreIterator0, ExpectedFiles0, return_none).
+
+
+iteration_without_permission(_Config) ->
+    AtmStoreIteratorStrategy = #atm_store_iterator_batch_strategy{size = 50},
+    {AtmWorkflowExecutionEnv, AtmStoreIterator0, FilesMap, _Expected} = create_iteration_test_env(krakow, AtmStoreIteratorStrategy, 1, atm_file_type, user2),
+    Roots = maps:keys(FilesMap),
+    
+    check_iterator_listing(krakow, AtmWorkflowExecutionEnv, AtmStoreIterator0, Roots, return_none).
 
 
 %%%===================================================================
 %%% Helper functions
 %%%===================================================================
 
--spec iterate_test_base(atm_store_iterator_config:record(), non_neg_integer()) -> ok.
-iterate_test_base(AtmStoreIteratorStrategy, Depth) ->
-    Node = oct_background:get_random_provider_node(krakow),
-    {AtmStoreIterator0, FilesMap} = create_iteration_test_env(Node, AtmStoreIteratorStrategy, Depth),
-    check_iterator_listing(Node, AtmStoreIterator0, lists:flatten(maps:values(FilesMap)), return_none).
+-spec iterate_test_base(atm_store_iterator_config:record(), non_neg_integer(), atm_data_type:type()) -> ok.
+iterate_test_base(AtmStoreIteratorStrategy, Depth, Type) ->
+    {AtmWorkflowExecutionEnv, AtmStoreIterator0, _FilesMap, Expected} = create_iteration_test_env(krakow, AtmStoreIteratorStrategy, Depth, Type),
+    check_iterator_listing(krakow, AtmWorkflowExecutionEnv, AtmStoreIterator0, Expected, return_none).
 
 
--spec check_iterator_listing(node(), atm_store_iterator:record(), [file_id:file_guid()], return_iterators | return_none) -> 
+-spec check_iterator_listing(
+    oct_background:entity_selector(),
+    atm_workflow_execution_env:record(), 
+    atm_store_iterator:record(), 
+    [file_id:file_guid()], 
+    return_iterators | return_none
+) -> 
     [{atm_store_iterator:record(), [file_id:file_guid()]}].
-check_iterator_listing(Node, Iterator, [], _) ->
-    ?assertEqual(stop, atm_store_test_utils:iterator_get_next(Node, Iterator)),
+check_iterator_listing(ProviderSelector, AtmWorkflowExecutionEnv, Iterator, [], _) ->
+    ?assertEqual(stop, atm_store_test_utils:iterator_get_next(ProviderSelector, AtmWorkflowExecutionEnv, Iterator)),
     [];
-check_iterator_listing(Node, Iterator, ExpectedList, ReturnStrategy) ->
+check_iterator_listing(ProviderSelector, AtmWorkflowExecutionEnv, Iterator, ExpectedList, ReturnStrategy) ->
     % duplication here is deliberate
-    {ok, Res, NewIterator} = ?assertMatch({ok, _, _}, atm_store_test_utils:iterator_get_next(Node, Iterator)),
-    ?assertMatch({ok, Res, NewIterator}, atm_store_test_utils:iterator_get_next(Node, Iterator)),
+    {ok, Res, NewIterator} = ?assertMatch({ok, _, _}, atm_store_test_utils:iterator_get_next(ProviderSelector, AtmWorkflowExecutionEnv, Iterator)),
+    ?assertMatch({ok, Res, NewIterator}, atm_store_test_utils:iterator_get_next(ProviderSelector, AtmWorkflowExecutionEnv, Iterator)),
     ResList = utils:ensure_list(Res),
     check_listed_values(ResList, ExpectedList),
     case ReturnStrategy of
         return_iterators ->
-            [{Iterator, ExpectedList}] ++ check_iterator_listing(Node, NewIterator, ExpectedList -- ResList, ReturnStrategy);
+            [{Iterator, ExpectedList}] ++ check_iterator_listing(ProviderSelector, AtmWorkflowExecutionEnv, NewIterator, ExpectedList -- ResList, ReturnStrategy);
         _ ->
-            ok = atm_store_test_utils:iterator_mark_exhausted(Node, Iterator),
-            check_iterator_listing(Node, NewIterator, ExpectedList -- ResList, ReturnStrategy)
+            ok = atm_store_test_utils:iterator_mark_exhausted(ProviderSelector, AtmWorkflowExecutionEnv, Iterator),
+            check_iterator_listing(ProviderSelector, AtmWorkflowExecutionEnv, NewIterator, ExpectedList -- ResList, ReturnStrategy)
     end.
 
 
@@ -292,10 +335,20 @@ check_listed_values(Values, Expected) ->
     lists:foreach(fun(G) -> ?assertEqual(true, lists:member(G, Expected)) end, Values).
 
 
--spec create_iteration_test_env(node(), atm_store_iterator_spec:strategy(), non_neg_integer()) ->
-    {atm_store_iterator:record(), #{file_id:file_guid() => [file_id:file_guid()]}}.
-create_iteration_test_env(Node, AtmStoreIteratorStrategy, Depth) ->
+-spec create_iteration_test_env(oct_background:entity_selector(), atm_store_iterator_spec:strategy(), non_neg_integer(), atm_data_type:type()) ->
+    {atm_store_iterator:record(), #{file_id:file_guid() => [file_id:file_guid()]}, [term()]}.
+create_iteration_test_env(ProviderSelector, AtmStoreIteratorStrategy, Depth, Type) ->
+    create_iteration_test_env(ProviderSelector, AtmStoreIteratorStrategy, Depth, Type, user1).
+
+-spec create_iteration_test_env(oct_background:entity_selector(), atm_store_iterator_spec:strategy(), non_neg_integer(), atm_data_type:type(), atom()) ->
+    {atm_store_iterator:record(), #{file_id:file_guid() => [file_id:file_guid()]}, [term()]}.
+create_iteration_test_env(ProviderSelector, AtmStoreIteratorStrategy, Depth, Type, WorkflowUserPlaceholder) ->
+    Node = oct_background:get_random_provider_node(ProviderSelector),
     SpaceId = oct_background:get_space_id(space_krk),
+    WorkflowId = datastore_key:new(),
+    SessId = oct_background:get_user_session_id(WorkflowUserPlaceholder, krakow),
+    ok = rpc:call(Node, atm_workflow_execution_session, init, [WorkflowId, rpc:call(Node, user_ctx, new, [SessId])]),
+    AtmWorkflowExecutionCtx = rpc:call(Node, atm_workflow_execution_ctx, build, [SpaceId, WorkflowId]),
     ChildrenSpecGen = fun
         F(0) -> [];
         F(Depth) ->
@@ -303,30 +356,44 @@ create_iteration_test_env(Node, AtmStoreIteratorStrategy, Depth) ->
             [#dir_spec{children = Children}, #dir_spec{children = Children}, #dir_spec{children = Children}, #file_spec{}]
     end,
     ChildrenSpec = ChildrenSpecGen(Depth),
-    DirSpec = [#dir_spec{children = ChildrenSpec}, #dir_spec{children = ChildrenSpec}, #file_spec{}],
+    Spec = [#dir_spec{children = ChildrenSpec, mode = 8#705}, #dir_spec{children = ChildrenSpec, mode = 8#705}, #file_spec{}],
     Objects = onenv_file_test_utils:create_and_sync_file_tree(
-        user1, SpaceId, DirSpec, krakow
+        user1, SpaceId, Spec, krakow
     ),
     ObjectToListFun = fun
         F(#object{guid = G, children = undefined}) -> [G];
         F(#object{guid = G, children = Children}) -> [G] ++ lists:flatmap(F, Children)
     end,
-    FileMap = lists:foldl(fun(#object{guid = Guid} = Object, Acc) ->
+    FilesMap = lists:foldl(fun(#object{guid = Guid} = Object, Acc) ->
         Acc#{Guid => ObjectToListFun(Object)}
     end, #{}, Objects),
     
+    {Roots, Expected} = case Type of
+        atm_file_type -> {maps:keys(FilesMap), lists:flatten(maps:values(FilesMap))};
+        atm_dataset_type ->
+            lists:foldl(fun(Guid, {AccRoots, AccExpected} = Acc) ->
+                case {lists:member(Guid, maps:keys(FilesMap)), rand:uniform(2)} of
+                    {false, 1} -> Acc;
+                    {false, _} ->
+                        {ok, DatasetId} = lfm_proxy:establish_dataset(Node, ?ROOT_SESS_ID, #file_ref{guid = Guid}),
+                        {AccRoots, [DatasetId | AccExpected]};
+                    {true, _} ->
+                        {ok, DatasetId} = lfm_proxy:establish_dataset(Node, ?ROOT_SESS_ID, #file_ref{guid = Guid}),
+                        {[DatasetId | AccRoots], [DatasetId | AccExpected]}
+                end
+            end, {[], []}, lists:flatten(maps:values(FilesMap)))
+    end,
+    
     AtmRangeStoreDummySchemaId = <<"dummyId">>,
     
-    {ok, AtmListStoreId} = atm_store_test_utils:create_store(Node, maps:keys(FileMap), ?ATM_TREE_FOREST_STORE_SCHEMA),
+    {ok, AtmListStoreId} = atm_store_test_utils:create_store(ProviderSelector, AtmWorkflowExecutionCtx, Roots, ?ATM_TREE_FOREST_STORE_SCHEMA(Type)),
     AtmStoreIteratorSpec = #atm_store_iterator_spec{
         store_schema_id = AtmRangeStoreDummySchemaId,
         strategy = AtmStoreIteratorStrategy
     },
-    AtmWorkflowExecutionEnv = #atm_workflow_execution_env{
-        store_registry = #{AtmRangeStoreDummySchemaId => AtmListStoreId}
-    },
-    AtmStoreIterator0 = atm_store_test_utils:acquire_store_iterator(Node, AtmWorkflowExecutionEnv, AtmStoreIteratorSpec),
-    {AtmStoreIterator0, FileMap}.
+    AtmWorkflowExecutionEnv = atm_workflow_execution_env:build(SpaceId, WorkflowId, #{AtmRangeStoreDummySchemaId => AtmListStoreId}),
+    AtmStoreIterator0 = atm_store_test_utils:acquire_store_iterator(ProviderSelector, AtmWorkflowExecutionEnv, AtmStoreIteratorSpec),
+    {AtmWorkflowExecutionEnv, AtmStoreIterator0, FilesMap, Expected}.
 
 
 queue_init(Id) ->
@@ -341,7 +408,7 @@ queue_push(Id, Entries, OriginIndex) ->
 
 queue_pop(Id, Index) ->
     Node = oct_background:get_random_provider_node(krakow),
-    rpc:call(Node, atm_tree_forest_iterator_queue, get, [Id, Index]).
+    rpc:call(Node, atm_tree_forest_iterator_queue, peek, [Id, Index]).
 
 
 queue_clean(Id, Index) ->

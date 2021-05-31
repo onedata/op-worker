@@ -16,77 +16,125 @@
 -behaviour(atm_data_validator).
 -behaviour(atm_tree_forest_container_iterator).
 
+-include("modules/automation/atm_execution.hrl").
 -include("modules/automation/atm_tmp.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/errors.hrl").
 
 %% atm_data_validator callbacks
--export([assert_meets_constraints/2]).
+-export([assert_meets_constraints/3]).
 
 %% atm_tree_forest_container_iterator callbacks
--export([list_children/2, check_object_existence/1]).
+-export([
+    list_children/4, check_object_existence/2, 
+    initial_listing_options/0,
+    encode_listing_options/1, decode_listing_options/1
+]).
 
 -type object_id() :: file_id:file_guid().
--type list_opts() :: atm_tree_forest_container_iterator:list_opts().
+-type list_opts() :: file_meta:list_opts().
 
 %%%===================================================================
 %%% atm_data_validator callbacks
 %%%===================================================================
 
--spec assert_meets_constraints(atm_api:item(), atm_data_type:value_constraints()) ->
+-spec assert_meets_constraints(
+    atm_workflow_execution_ctx:record(),
+    atm_api:item(),
+    atm_data_type:value_constraints()
+) ->
     ok | no_return().
-assert_meets_constraints(Value, _ValueConstraints) when is_binary(Value) ->
-    case check_object_existence(Value) of
-        true -> ok;
-        false -> throw(?ERROR_NOT_FOUND)
+assert_meets_constraints(AtmWorkflowExecutionCtx, Value, _ValueConstraints) when is_binary(Value) ->
+    SpaceId = atm_workflow_execution_ctx:get_space_id(AtmWorkflowExecutionCtx),
+    try
+        case file_id:guid_to_space_id(Value) of
+            SpaceId -> ok;
+            _ -> ?ERROR_NOT_FOUND
+        end,
+        case check_object_existence(AtmWorkflowExecutionCtx, Value) of
+            true -> ok;
+            false -> ?ERROR_NOT_FOUND
+        end
+    of
+        ok -> ok;
+        {error, _} = Error -> throw(Error)
+    catch _:_ ->
+        throw(?ERROR_ATM_DATA_TYPE_UNVERIFIED(Value, atm_file_type))
     end;
-assert_meets_constraints(Value, _ValueConstraints) ->
+assert_meets_constraints(_AtmWorkflowExecutionCtx, Value, _ValueConstraints) ->
     throw(?ERROR_ATM_DATA_TYPE_UNVERIFIED(Value, atm_file_type)).
 
 
--spec list_children(object_id(), list_opts()) -> 
-    {[{object_id(), binary()}], [object_id()], list_opts()} | no_return().
-list_children(Guid, ListOpts) ->
+-spec list_children(atm_workflow_execution_ctx:record(), object_id(), list_opts(), non_neg_integer()) ->
+    {[{object_id(), file_meta:name()}], [object_id()], list_opts(), IsLast :: boolean()} | no_return().
+list_children(AtmWorkflowExecutionCtx, Guid, ListOpts, BatchSize) ->
+    SessionId = atm_workflow_execution_ctx:get_session_id(AtmWorkflowExecutionCtx),
     try
-        list_children_unsafe(Guid, ListOpts)
+        list_children_unsafe(SessionId, Guid, ListOpts#{size => BatchSize})
     catch _:Error ->
         case datastore_runner:normalize_error(Error) of
-            ?EACCES -> 
-                {[], [], #{is_last => true}};
+            ?EACCES ->
+                {[], [], #{}, true};
             ?EPERM ->
-                {[], [], #{is_last => true}};
+                {[], [], #{}, true};
             ?ENOENT ->
-                {[], [], #{is_last => true}};
+                {[], [], #{}, true};
             _ -> 
                 throw(Error)
         end
     end.
 
 
--spec check_object_existence(object_id()) -> boolean().
-check_object_existence(FileGuid) ->
-    %% @TODO VFS-7676 use user credentials
-    case lfm:stat(?ROOT_SESS_ID, ?FILE_REF(FileGuid)) of
+-spec check_object_existence(atm_workflow_execution_ctx:record(), object_id()) -> boolean().
+check_object_existence(AtmWorkflowExecutionCtx, FileGuid) ->
+    SessionId = atm_workflow_execution_ctx:get_session_id(AtmWorkflowExecutionCtx),
+    case lfm:stat(SessionId, ?FILE_REF(FileGuid)) of
         {ok, _} -> true;
-        {error, ?ENOENT} -> false
+        {error, ?EACCES} -> false;
+        {error, ?EPERM} -> false;
+        {error, ?ENOENT} -> false;
+        {error, _} = Error -> throw(Error)
     end.
+
+
+-spec initial_listing_options() -> list_opts().
+initial_listing_options() ->
+    #{
+        last_name => <<>>,
+        last_tree => <<>>
+    }.
+
+
+-spec encode_listing_options(list_opts()) -> json_utils:json_term().
+encode_listing_options(#{last_name := LastName, last_tree := LastTree}) ->
+    #{
+        <<"last_name">> => LastName,
+        <<"last_tree">> => LastTree
+    }.
+
+
+-spec decode_listing_options(json_utils:json_term()) -> list_opts().
+decode_listing_options(#{<<"last_name">> := LastName, <<"last_tree">> := LastTree}) ->
+    #{
+        last_name => LastName,
+        last_tree => LastTree
+    }.
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
 %% @private
--spec list_children_unsafe(object_id(), list_opts()) ->
-    {[{object_id(), binary()}], [object_id()], list_opts()}.
-list_children_unsafe(Guid, ListOpts) ->
+-spec list_children_unsafe(session:id(), object_id(), list_opts()) ->
+    {[{object_id(), file_meta:name()}], [object_id()], list_opts(), boolean()}.
+list_children_unsafe(SessionId, Guid, ListOpts) ->
     case file_ctx:is_dir(file_ctx:new_by_guid(Guid)) of
         {false, _Ctx} ->
-            {[], [], #{is_last => true}};
+            {[], [], #{}, true};
         {true, Ctx} ->
             {Children, ExtendedListInfo, _Ctx1} = dir_req:get_children_ctxs(
-                %% @TODO VFS-7676 use user credentials
-                user_ctx:new(session_utils:root_session_id()),
+                user_ctx:new(SessionId),
                 Ctx,
                 ListOpts),
             {ReversedDirsAndNames, ReversedFiles} = lists:foldl(fun(ChildCtx, {DirsSoFar, FilesSoFar}) ->
@@ -98,5 +146,10 @@ list_children_unsafe(Guid, ListOpts) ->
                         {DirsSoFar, [file_ctx:get_logical_guid_const(ChildCtx) | FilesSoFar]}
                 end
             end, {[], []}, Children),
-            {lists:reverse(ReversedDirsAndNames), lists:reverse(ReversedFiles), ExtendedListInfo}
+            {
+                lists:reverse(ReversedDirsAndNames), 
+                lists:reverse(ReversedFiles), 
+                maps:without([is_last], ExtendedListInfo), 
+                maps:get(is_last, ExtendedListInfo)
+            }
     end.

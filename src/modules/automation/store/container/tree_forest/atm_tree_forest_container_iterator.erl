@@ -25,15 +25,15 @@
 -export([build/2]).
 
 % atm_container_iterator callbacks
--export([get_next_batch/2, mark_exhausted/1]).
+-export([get_next_batch/3, mark_exhausted/2]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
 
 
--type item() :: json_utils:json_term().
+-type item() :: atm_api:item().
 -type object_id() :: binary().
--type list_opts() :: map().
+-type list_opts() :: term().
 
 -record(queue_info, {
     id :: atm_tree_forest_iterator_queue:id(),
@@ -43,6 +43,7 @@
 -type queue_info() :: #queue_info{}.
 
 -record(atm_tree_forest_container_iterator, {
+    session_id :: session:id(),
     type_specific_module :: module(),
     current_object = undefined :: undefined | object_id(),
     tree_list_opts :: list_opts(),
@@ -58,10 +59,21 @@
 %%% Callbacks
 %%%===================================================================
 
--callback list_children(object_id(), list_opts()) -> 
-    {[{object_id(), binary()}], [object_id()], list_opts()} | no_return().
+-callback list_children(
+    atm_workflow_execution_ctx:record(), 
+    object_id(), 
+    list_opts(),
+    atm_container_iterator:batch_size()
+) -> 
+    {[{object_id(), binary()}], [object_id()], list_opts(), IsLast :: boolean()} | no_return().
 
--callback check_object_existence(object_id()) -> boolean().
+-callback check_object_existence(atm_workflow_execution_ctx:record(), object_id()) -> boolean().
+
+-callback initial_listing_options() -> list_opts().
+
+-callback encode_listing_options(list_opts()) -> json_utils:json_term().
+
+-callback decode_listing_options(json_utils:json_term()) -> list_opts().
 
 %%%===================================================================
 %%% API
@@ -73,7 +85,7 @@ build(RootsIterator, DataSpec) ->
     #atm_tree_forest_container_iterator{
         type_specific_module = Module,
         roots_iterator = RootsIterator,
-        tree_list_opts = default_tree_list_options(),
+        tree_list_opts = Module:initial_listing_options(),
         queue_info = #queue_info{id = datastore_key:new()}
     }.
 
@@ -82,15 +94,15 @@ build(RootsIterator, DataSpec) ->
 %%% atm_container_iterator callbacks
 %%%===================================================================
 
--spec get_next_batch(atm_container_iterator:batch_size(), record()) ->
+-spec get_next_batch(atm_workflow_execution_ctx:record(), atm_container_iterator:batch_size(), record()) ->
     {ok, [item()], record()} | stop.
-get_next_batch(BatchSize, #atm_tree_forest_container_iterator{} = Record) ->
-    get_next_batch(BatchSize, Record, []).
+get_next_batch(AtmWorkflowExecutionCtx, BatchSize, #atm_tree_forest_container_iterator{} = Record) ->
+    get_next_batch(AtmWorkflowExecutionCtx, BatchSize, Record, []).
 
 
--spec mark_exhausted(record()) -> ok.
-mark_exhausted(#atm_tree_forest_container_iterator{queue_info = Q} = Iterator) -> 
-    case get_next_batch(1, Iterator) of
+-spec mark_exhausted(atm_workflow_execution_ctx:record(), record()) -> ok.
+mark_exhausted(AtmWorkflowExecutionCtx, #atm_tree_forest_container_iterator{queue_info = Q} = Iterator) -> 
+    case get_next_batch(AtmWorkflowExecutionCtx, 1, Iterator, []) of
         stop -> 
             destroy_queue(Q);
         _ ->
@@ -102,27 +114,43 @@ mark_exhausted(#atm_tree_forest_container_iterator{queue_info = Q} = Iterator) -
 %%%===================================================================
 
 %% @private
--spec get_next_batch(atm_container_iterator:batch_size(), record(), [item()]) ->
+-spec get_next_batch(
+    atm_workflow_execution_ctx:record(), 
+    atm_container_iterator:batch_size(), 
+    record(), 
+    [item()]
+) ->
     {ok, [item()], record()} | stop.
-get_next_batch(BatchSize, #atm_tree_forest_container_iterator{} = Record, ForestAcc) when BatchSize =< 0 ->
+get_next_batch(_AtmWorkflowExecutionCtx, BatchSize, Record, ForestAcc) when BatchSize =< 0 ->
     {ok, ForestAcc, Record};
-get_next_batch(BatchSize, #atm_tree_forest_container_iterator{current_object = undefined} = Record, ForestAcc) ->
-    #atm_tree_forest_container_iterator{type_specific_module = Module, roots_iterator = ListIterator, queue_info = Q} = Record,
-    case atm_list_container_iterator:get_next_batch(1, ListIterator) of
+get_next_batch(
+    AtmWorkflowExecutionCtx, 
+    BatchSize, 
+    #atm_tree_forest_container_iterator{current_object = undefined} = Record, 
+    ForestAcc
+) ->
+    #atm_tree_forest_container_iterator{
+        type_specific_module = Module, 
+        roots_iterator = ListIterator, 
+        queue_info = Q
+    } = Record,
+    case atm_list_container_iterator:get_next_batch(AtmWorkflowExecutionCtx, 1, ListIterator) of
         {ok, [ObjectId], NextRootsIterator} ->
             UpdatedRecord = Record#atm_tree_forest_container_iterator{
                 current_object = ObjectId,
                 roots_iterator = NextRootsIterator,
-                tree_list_opts = default_tree_list_options(),
+                tree_list_opts = Module:initial_listing_options(),
                 queue_info = queue_report_new_tree(Q)
             },
-            case Module:check_object_existence(ObjectId) of
+            case Module:check_object_existence(AtmWorkflowExecutionCtx, ObjectId) of
                 true ->
-                    get_next_batch(BatchSize - 1, UpdatedRecord, [ObjectId | ForestAcc]);
+                    get_next_batch(
+                        AtmWorkflowExecutionCtx, BatchSize - 1, UpdatedRecord, [ObjectId | ForestAcc]);
                 false ->
-                    get_next_batch(BatchSize, UpdatedRecord#atm_tree_forest_container_iterator{
-                        current_object = undefined
-                    }, ForestAcc)
+                    get_next_batch(AtmWorkflowExecutionCtx, BatchSize, 
+                        UpdatedRecord#atm_tree_forest_container_iterator{current_object = undefined}, 
+                        ForestAcc
+                    )
             end;
         stop ->
             case length(ForestAcc) of
@@ -130,58 +158,59 @@ get_next_batch(BatchSize, #atm_tree_forest_container_iterator{current_object = u
                 _ -> {ok, ForestAcc, Record}
             end
     end;
-get_next_batch(BatchSize, #atm_tree_forest_container_iterator{} = Record, ForestAcc) ->
-    {TreeAcc, NewRecord} = get_next_batch_from_single_tree(BatchSize, Record, ForestAcc),
-    get_next_batch(BatchSize - length(TreeAcc), NewRecord, TreeAcc).
+get_next_batch(AtmWorkflowExecutionCtx, BatchSize, Record, ForestAcc) ->
+    {TreeAcc, NewRecord} = get_next_batch_from_single_tree(
+        AtmWorkflowExecutionCtx, BatchSize, Record, ForestAcc),
+    get_next_batch(AtmWorkflowExecutionCtx, BatchSize - length(TreeAcc), NewRecord, TreeAcc).
 
 
 %% @private
--spec get_next_batch_from_single_tree(atm_container_iterator:batch_size(), record(), [item()]) ->
+-spec get_next_batch_from_single_tree(
+    atm_workflow_execution_ctx:record(), 
+    atm_container_iterator:batch_size(), 
+    record(), 
+    [item()]
+) ->
     {[item()], record()}.
-get_next_batch_from_single_tree(_BatchSize, #atm_tree_forest_container_iterator{current_object = undefined} = Record, Acc) ->
+get_next_batch_from_single_tree(
+    _AtmWorkflowExecutionCtx, 
+    _BatchSize, 
+    #atm_tree_forest_container_iterator{current_object = undefined} = Record, 
+    Acc
+) ->
     {Acc, Record};
-get_next_batch_from_single_tree(BatchSize, #atm_tree_forest_container_iterator{} = Record, Acc) when BatchSize =< 0 ->
+get_next_batch_from_single_tree(_AtmWorkflowExecutionCtx, BatchSize, Record, Acc) when BatchSize =< 0 ->
     {Acc, Record};
-get_next_batch_from_single_tree(BatchSize, #atm_tree_forest_container_iterator{} = Record, Acc) ->
+get_next_batch_from_single_tree(AtmWorkflowExecutionCtx, BatchSize, Record, Acc) ->
     #atm_tree_forest_container_iterator{
         type_specific_module = Module,
         queue_info = QueueInfo,
         current_object = CurrentObject,
         tree_list_opts = ListOpts
     } = Record,
-    {ChildDirs, ChildFiles, ListExtendedInfo} =
-        Module:list_children(CurrentObject, ListOpts#{size => BatchSize}),
-    UpdatedQueueInfo = add_to_queue(QueueInfo, ChildDirs),
-    ChildDirsGuids = lists:map(fun({Guid, _}) -> Guid end, ChildDirs),
+    {TraversableObjects, NonTraversableObjects, NewListOptions, IsLast} =
+        Module:list_children(AtmWorkflowExecutionCtx, CurrentObject, ListOpts, BatchSize),
+    UpdatedQueueInfo = add_to_queue(QueueInfo, TraversableObjects),
+    ChildDirsGuids = lists:map(fun({Guid, _}) -> Guid end, TraversableObjects),
     
-    UpdatedRecord = case maps:get(is_last, ListExtendedInfo) of
+    UpdatedRecord = case IsLast of
         true ->
             {NextObject, QueueInfo2} = get_from_queue(UpdatedQueueInfo),
             Record#atm_tree_forest_container_iterator{
-                queue_info = QueueInfo2,
                 current_object = NextObject,
-                tree_list_opts = default_tree_list_options()
+                tree_list_opts = Module:initial_listing_options(),
+                queue_info = QueueInfo2
             };
         false ->
             Record#atm_tree_forest_container_iterator{
-                queue_info = UpdatedQueueInfo,
-                tree_list_opts = #{
-                    last_name => maps:get(last_name, ListExtendedInfo, <<>>),
-                    last_tree => maps:get(last_tree, ListExtendedInfo, <<>>)
-                }
+                tree_list_opts = maps:without([is_last], NewListOptions),
+                queue_info = UpdatedQueueInfo
             }
     end,
-    Result = ChildDirsGuids ++ ChildFiles,
-    get_next_batch_from_single_tree(BatchSize - length(Result), UpdatedRecord, Result ++ Acc).
+    Result = ChildDirsGuids ++ NonTraversableObjects,
+    get_next_batch_from_single_tree(
+        AtmWorkflowExecutionCtx, BatchSize - length(Result), UpdatedRecord, Result ++ Acc).
 
-
-%% @private
--spec default_tree_list_options() -> list_opts().
-default_tree_list_options() ->
-    #{
-        last_name => <<>>,
-        last_tree => <<>>
-    }.
 
 
 %% @private
@@ -196,7 +225,7 @@ add_to_queue(#queue_info{id = Id, current_queue_index = Index} = Q, Batch) ->
 %% @private
 -spec get_from_queue(queue_info()) -> {object_id() | undefined, queue_info()} | no_return().
 get_from_queue(#queue_info{id = Id, current_queue_index = Index} = Q) ->
-    case atm_tree_forest_iterator_queue:get(Id, Index + 1) of
+    case atm_tree_forest_iterator_queue:peek(Id, Index + 1) of
         {ok, undefined} ->
             {undefined, Q#queue_info{current_queue_index = Index}};
         {ok, Value} ->
@@ -253,10 +282,7 @@ db_encode(#atm_tree_forest_container_iterator{
     #{
         <<"typeSpecificModule">> => atom_to_binary(Module, utf8),
         <<"currentObject">> => utils:undefined_to_null(CurrentObject),
-        <<"treeListOpts">> => 
-            json_utils:encode(maps:fold(fun(Key, Value, Acc) -> 
-                Acc#{atom_to_binary(Key, utf8) => Value} 
-            end, #{}, TreeListOpts)),
+        <<"treeListOpts">> => Module:encode_listing_options(TreeListOpts),
         <<"rootsIterator">> => atm_list_container_iterator:db_encode(RootsIterator, NestedRecordEncoder),
         <<"queueInfo">> => encode_queue_info(QueueInfo)
     }.
@@ -265,19 +291,17 @@ db_encode(#atm_tree_forest_container_iterator{
 -spec db_decode(json_utils:json_term(), persistent_record:nested_record_decoder()) ->
     record().
 db_decode(#{
-    <<"typeSpecificModule">> := Module,
+    <<"typeSpecificModule">> := EncodedModule,
     <<"currentObject">> := CurrentObject,
     <<"treeListOpts">> := TreeListOpts,
     <<"rootsIterator">> := RootsIterator,
     <<"queueInfo">> := QueueInfo
 }, NestedRecordDecoder) ->
+    Module = binary_to_atom(EncodedModule, utf8),
     #atm_tree_forest_container_iterator{
-        type_specific_module = binary_to_atom(Module, utf8),
+        type_specific_module = Module,
         current_object = utils:null_to_undefined(CurrentObject),
-        tree_list_opts = 
-            maps:fold(fun(Key, Value, Acc) -> 
-                Acc#{binary_to_atom(Key, utf8) => Value} 
-            end, #{}, json_utils:decode(TreeListOpts)),
+        tree_list_opts = Module:decode_listing_options(TreeListOpts),
         roots_iterator = atm_list_container_iterator:db_decode(RootsIterator, NestedRecordDecoder),
         queue_info = decode_queue_info(QueueInfo)
     }.
@@ -307,4 +331,6 @@ decode_queue_info(#{<<"queueId">> := QueueId, <<"currentIndex">> := CurrentIndex
 %% @private
 -spec type_specific_module(atm_data_type:type()) -> module().
 type_specific_module(atm_file_type) ->
-    atm_file_value.
+    atm_file_value;
+type_specific_module(atm_dataset_type) ->
+    atm_dataset_value.
