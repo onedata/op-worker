@@ -62,11 +62,6 @@ all() -> [
     type = list,
     data_spec = #atm_data_spec{type = DataType}
 }).
--define(RAND_ATM_WORKFLOW_EXECUTION_CTX(), #atm_workflow_execution_ctx{
-    space_id = oct_background:get_space_id(space_krk),
-    workflow_execution_id = str_utils:rand_hex(32),
-    session_id = oct_background:get_user_session_id(user1, krakow)
-}).
 
 -define(ATTEMPTS, 30).
 
@@ -75,56 +70,59 @@ all() -> [
 %%% API functions
 %%%===================================================================
 
+
 create_store_with_invalid_args_test(_Config) ->
-    Node = oct_background:get_random_provider_node(krakow),
-    AtmWorkflowExecutionCxt = ?RAND_ATM_WORKFLOW_EXECUTION_CTX(),
+    AtmWorkflowExecutionCtx = atm_store_test_utils:create_workflow_execution_ctx(
+        krakow, user1, space_krk
+    ),
 
     ?assertEqual(?ERROR_ATM_STORE_MISSING_REQUIRED_INITIAL_VALUE, atm_store_test_utils:create_store(
-        Node, AtmWorkflowExecutionCxt, undefined, (?ATM_LIST_STORE_SCHEMA)#atm_store_schema{requires_initial_value = true}
+        krakow, AtmWorkflowExecutionCtx, undefined, (?ATM_LIST_STORE_SCHEMA)#atm_store_schema{requires_initial_value = true}
     )),
     ?assertEqual(?ERROR_ATM_BAD_DATA(<<"initialValue">>, <<"not a list">>), atm_store_test_utils:create_store(
-        Node, AtmWorkflowExecutionCxt, 8, ?ATM_LIST_STORE_SCHEMA
+        krakow, AtmWorkflowExecutionCtx, 8, ?ATM_LIST_STORE_SCHEMA
     )),
-    
+
     lists:foreach(fun(DataType) ->
         BadValue = atm_store_test_utils:example_bad_data(DataType),
         ValidValue = atm_store_test_utils:example_data(DataType),
         ?assertEqual(?ERROR_ATM_DATA_TYPE_UNVERIFIED(BadValue, DataType), atm_store_test_utils:create_store(
-            Node, AtmWorkflowExecutionCxt, [ValidValue, BadValue, ValidValue], ?ATM_LIST_STORE_SCHEMA(DataType)
+            krakow, AtmWorkflowExecutionCtx, [ValidValue, BadValue, ValidValue], ?ATM_LIST_STORE_SCHEMA(DataType)
         ))
     end, atm_store_test_utils:all_data_types()).
 
 
 apply_operation_test(_Config) ->
-    Node = oct_background:get_random_provider_node(krakow),
-    AtmWorkflowExecutionCxt = ?RAND_ATM_WORKFLOW_EXECUTION_CTX(),
+    AtmWorkflowExecutionCtx = atm_store_test_utils:create_workflow_execution_ctx(
+        krakow, user1, space_krk
+    ),
 
     {ok, AtmListStoreId0} = atm_store_test_utils:create_store(
-        Node, AtmWorkflowExecutionCxt, undefined, ?ATM_LIST_STORE_SCHEMA
+        krakow, AtmWorkflowExecutionCtx, undefined, ?ATM_LIST_STORE_SCHEMA
     ),
     
     ?assertEqual(?ERROR_NOT_SUPPORTED, atm_store_test_utils:apply_operation(
-        Node, AtmWorkflowExecutionCxt, set, <<"NaN">>, #{}, AtmListStoreId0
+        krakow, AtmWorkflowExecutionCtx, set, <<"NaN">>, #{}, AtmListStoreId0
     )),
     
     lists:foreach(fun(DataType) ->
         {ok, AtmListStoreId} = atm_store_test_utils:create_store(
-            Node, AtmWorkflowExecutionCxt, undefined, ?ATM_LIST_STORE_SCHEMA(DataType)
+            krakow, AtmWorkflowExecutionCtx, undefined, ?ATM_LIST_STORE_SCHEMA(DataType)
         ),
         BadValue = atm_store_test_utils:example_bad_data(DataType),
         ValidValue = atm_store_test_utils:example_data(DataType),
         
         ?assertEqual(?ERROR_ATM_DATA_TYPE_UNVERIFIED(BadValue, DataType), atm_store_test_utils:apply_operation(
-            Node, AtmWorkflowExecutionCxt, append, BadValue, #{}, AtmListStoreId
+            krakow, AtmWorkflowExecutionCtx, append, BadValue, #{}, AtmListStoreId
         )),
         ?assertEqual(ok, atm_store_test_utils:apply_operation(
-            Node, AtmWorkflowExecutionCxt, append, ValidValue, #{}, AtmListStoreId
+            krakow, AtmWorkflowExecutionCtx, append, ValidValue, #{}, AtmListStoreId
         )),
         ?assertEqual(?ERROR_ATM_DATA_TYPE_UNVERIFIED(BadValue, DataType), atm_store_test_utils:apply_operation(
-            Node, AtmWorkflowExecutionCxt, append, [ValidValue, BadValue, ValidValue], #{<<"isBatch">> => true}, AtmListStoreId
+            krakow, AtmWorkflowExecutionCtx, append, [ValidValue, BadValue, ValidValue], #{<<"isBatch">> => true}, AtmListStoreId
         )),
         ?assertEqual(ok, atm_store_test_utils:apply_operation(
-            Node, AtmWorkflowExecutionCxt, append, lists:duplicate(8, ValidValue), #{<<"isBatch">> => true}, AtmListStoreId
+            krakow, AtmWorkflowExecutionCtx, append, lists:duplicate(8, ValidValue), #{<<"isBatch">> => true}, AtmListStoreId
         ))
     end, atm_store_test_utils:all_data_types()).
 
@@ -145,80 +143,75 @@ iterate_in_chunks_test(_Config) ->
 
 -spec iterate_test_base(atm_store_iterator_config:record(), non_neg_integer(), [term()]) -> ok.
 iterate_test_base(AtmStoreIteratorStrategy, Length, ExpectedResultsList) ->
-    Node = oct_background:get_random_provider_node(krakow),
     Items = lists:seq(1, Length),
 
-    #atm_workflow_execution_ctx{
-        space_id = SpaceId,
-        workflow_execution_id = AtmWorkflowExecutionId
-    } = AtmWorkflowExecutionCxt = ?RAND_ATM_WORKFLOW_EXECUTION_CTX(),
+    AtmWorkflowExecutionCtx = atm_store_test_utils:create_workflow_execution_ctx(
+        krakow, user1, space_krk
+    ),
 
     {ok, AtmListStoreId} = atm_store_test_utils:create_store(
-        Node, AtmWorkflowExecutionCxt, Items, ?ATM_LIST_STORE_SCHEMA
+        krakow, AtmWorkflowExecutionCtx, Items, ?ATM_LIST_STORE_SCHEMA
     ),
-    
+
     AtmListStoreDummySchemaId = <<"dummyId">>,
     
-    AtmWorkflowExecutionEnv = #atm_workflow_execution_env{
-        space_id = SpaceId,
-        workflow_execution_id = AtmWorkflowExecutionId,
-        store_registry = #{AtmListStoreDummySchemaId => AtmListStoreId}
-    },
+    AtmWorkflowExecutionEnv = atm_workflow_execution_env:build(
+        atm_workflow_execution_ctx:get_space_id(AtmWorkflowExecutionCtx),
+        atm_workflow_execution_ctx:get_workflow_execution_id(AtmWorkflowExecutionCtx),
+        #{AtmListStoreDummySchemaId => AtmListStoreId}
+    ),
     AtmStoreIteratorSpec = #atm_store_iterator_spec{
         store_schema_id = AtmListStoreDummySchemaId,
         strategy = AtmStoreIteratorStrategy
     },
     AtmStoreIterator0 = atm_store_test_utils:acquire_store_iterator(
-        Node, AtmWorkflowExecutionEnv, AtmStoreIteratorSpec),
-    
+        krakow, AtmWorkflowExecutionEnv, AtmStoreIteratorSpec
+    ),
+
     lists:foldl(fun(Expected, Iterator) ->
-        {ok, _, NewIterator} = ?assertMatch({ok, Expected, _}, atm_store_test_utils:iterator_get_next(Node, Iterator)),
+        {ok, _, NewIterator} = ?assertMatch({ok, Expected, _}, atm_store_test_utils:iterator_get_next(krakow, Iterator)),
         NewIterator
     end, AtmStoreIterator0, ExpectedResultsList),
     ok.
 
 
 reuse_iterator_test(_Config) ->
-    Node = oct_background:get_random_provider_node(krakow),
-
-    #atm_workflow_execution_ctx{
-        space_id = SpaceId,
-        workflow_execution_id = AtmWorkflowExecutionId
-    } = AtmWorkflowExecutionCxt = ?RAND_ATM_WORKFLOW_EXECUTION_CTX(),
+    AtmWorkflowExecutionCtx = atm_store_test_utils:create_workflow_execution_ctx(
+        krakow, user1, space_krk
+    ),
 
     Items = lists:seq(1, 5),
     {ok, AtmListStoreId} = atm_store_test_utils:create_store(
-        Node, AtmWorkflowExecutionCxt, Items, ?ATM_LIST_STORE_SCHEMA
+        krakow, AtmWorkflowExecutionCtx, Items, ?ATM_LIST_STORE_SCHEMA
     ),
     
     AtmListStoreDummySchemaId = <<"dummyId">>,
-    
-    AtmWorkflowExecutionEnv = #atm_workflow_execution_env{
-        space_id = SpaceId,
-        workflow_execution_id = AtmWorkflowExecutionId,
-        store_registry = #{AtmListStoreDummySchemaId => AtmListStoreId}
-    },
-    
+
+    AtmWorkflowExecutionEnv = atm_workflow_execution_env:build(
+        atm_workflow_execution_ctx:get_space_id(AtmWorkflowExecutionCtx),
+        atm_workflow_execution_ctx:get_workflow_execution_id(AtmWorkflowExecutionCtx),
+        #{AtmListStoreDummySchemaId => AtmListStoreId}
+    ),
     AtmStoreIteratorSpec = #atm_store_iterator_spec{
         store_schema_id = AtmListStoreDummySchemaId,
         strategy = #atm_store_iterator_serial_strategy{}
     },
-    AtmSerialIterator0 = atm_store_test_utils:acquire_store_iterator(Node, AtmWorkflowExecutionEnv, AtmStoreIteratorSpec),
+    AtmSerialIterator0 = atm_store_test_utils:acquire_store_iterator(krakow, AtmWorkflowExecutionEnv, AtmStoreIteratorSpec),
 
-    {ok, _, AtmSerialIterator1} = ?assertMatch({ok, 1, _}, atm_store_test_utils:iterator_get_next(Node, AtmSerialIterator0)),
-    {ok, _, AtmSerialIterator2} = ?assertMatch({ok, 2, _}, atm_store_test_utils:iterator_get_next(Node, AtmSerialIterator1)),
-    {ok, _, AtmSerialIterator3} = ?assertMatch({ok, 3, _}, atm_store_test_utils:iterator_get_next(Node, AtmSerialIterator2)),
-    {ok, _, AtmSerialIterator4} = ?assertMatch({ok, 4, _}, atm_store_test_utils:iterator_get_next(Node, AtmSerialIterator3)),
-    {ok, _, AtmSerialIterator5} = ?assertMatch({ok, 5, _}, atm_store_test_utils:iterator_get_next(Node, AtmSerialIterator4)),
-    ?assertMatch(stop, atm_store_test_utils:iterator_get_next(Node, AtmSerialIterator5)),
+    {ok, _, AtmSerialIterator1} = ?assertMatch({ok, 1, _}, atm_store_test_utils:iterator_get_next(krakow, AtmSerialIterator0)),
+    {ok, _, AtmSerialIterator2} = ?assertMatch({ok, 2, _}, atm_store_test_utils:iterator_get_next(krakow, AtmSerialIterator1)),
+    {ok, _, AtmSerialIterator3} = ?assertMatch({ok, 3, _}, atm_store_test_utils:iterator_get_next(krakow, AtmSerialIterator2)),
+    {ok, _, AtmSerialIterator4} = ?assertMatch({ok, 4, _}, atm_store_test_utils:iterator_get_next(krakow, AtmSerialIterator3)),
+    {ok, _, AtmSerialIterator5} = ?assertMatch({ok, 5, _}, atm_store_test_utils:iterator_get_next(krakow, AtmSerialIterator4)),
+    ?assertMatch(stop, atm_store_test_utils:iterator_get_next(krakow, AtmSerialIterator5)),
     
-    ?assertMatch({ok, 1, _}, atm_store_test_utils:iterator_get_next(Node, AtmSerialIterator0)),
+    ?assertMatch({ok, 1, _}, atm_store_test_utils:iterator_get_next(krakow, AtmSerialIterator0)),
     
-    {ok, _, AtmSerialIterator7} = ?assertMatch({ok, 4, _}, atm_store_test_utils:iterator_get_next(Node, AtmSerialIterator3)),
-    ?assertMatch({ok, 5, _}, atm_store_test_utils:iterator_get_next(Node, AtmSerialIterator7)),
+    {ok, _, AtmSerialIterator7} = ?assertMatch({ok, 4, _}, atm_store_test_utils:iterator_get_next(krakow, AtmSerialIterator3)),
+    ?assertMatch({ok, 5, _}, atm_store_test_utils:iterator_get_next(krakow, AtmSerialIterator7)),
 
-    {ok, _, AtmSerialIterator9} = ?assertMatch({ok, 2, _}, atm_store_test_utils:iterator_get_next(Node, AtmSerialIterator1)),
-    ?assertMatch({ok, 3, _}, atm_store_test_utils:iterator_get_next(Node, AtmSerialIterator9)).
+    {ok, _, AtmSerialIterator9} = ?assertMatch({ok, 2, _}, atm_store_test_utils:iterator_get_next(krakow, AtmSerialIterator1)),
+    ?assertMatch({ok, 3, _}, atm_store_test_utils:iterator_get_next(krakow, AtmSerialIterator9)).
 
 
 %===================================================================

@@ -8,9 +8,10 @@
 %%% @doc
 %%% This module provides utility functions for management of automation
 %%% workflow execution ctx. The ctx contains information about space and
-%%% user in context of who the workflow execution is performed.
-%%% It mustn't be cached or saved to db but rather recreated on demand to
-%%% periodically refresh user offline session used by execution machinery.
+%%% user in context of which the workflow execution is performed.
+%%% The context may change during an execution, as it includes the user session
+%%% that is refreshed periodically. For this reason, it must be rebuilt every
+%%% time it is needed.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_workflow_execution_ctx).
@@ -22,6 +23,12 @@
 -export([build/2]).
 -export([get_space_id/1, get_workflow_execution_id/1, get_session_id/1]).
 
+
+-record(atm_workflow_execution_ctx, {
+    space_id :: od_space:id(),
+    workflow_execution_id :: atm_workflow_execution:id(),
+    session_id :: session:id()
+}).
 -type record() :: #atm_workflow_execution_ctx{}.
 
 -export_type([record/0]).

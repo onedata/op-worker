@@ -17,10 +17,17 @@
 
 %% API
 -export([
+    build/3,
     get_store_id/2,
-    get_workflow_execution_ctx/1
+    acquire_workflow_execution_ctx/1
 ]).
 
+
+-record(atm_workflow_execution_env, {
+    space_id :: od_space:id(),
+    workflow_execution_id :: atm_workflow_execution:id(),
+    store_registry :: atm_workflow_execution:store_registry()
+}).
 -type record() :: #atm_workflow_execution_env{}.
 
 -export_type([record/0]).
@@ -29,6 +36,20 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+
+-spec build(
+    od_space:id(),
+    atm_workflow_execution:id(),
+    atm_workflow_execution:store_registry()
+) ->
+    record().
+build(SpaceId, AtmWorkflowExecutionId, AtmStoreRegistry) ->
+    #atm_workflow_execution_env{
+        space_id = SpaceId,
+        workflow_execution_id = AtmWorkflowExecutionId,
+        store_registry = AtmStoreRegistry
+    }.
 
 
 -spec get_store_id(automation:id(), record()) -> atm_store:id() | no_return().
@@ -43,8 +64,8 @@ get_store_id(AtmStoreSchemaId, #atm_workflow_execution_env{
     end.
 
 
--spec get_workflow_execution_ctx(record()) -> atm_workflow_execution_ctx:record().
-get_workflow_execution_ctx(#atm_workflow_execution_env{
+-spec acquire_workflow_execution_ctx(record()) -> atm_workflow_execution_ctx:record().
+acquire_workflow_execution_ctx(#atm_workflow_execution_env{
     space_id = SpaceId,
     workflow_execution_id = AtmWorkflowExecutionId
 }) ->

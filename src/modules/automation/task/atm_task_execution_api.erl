@@ -148,7 +148,7 @@ run(AtmTaskExecutionId, AtmWorkflowExecutionEnv, Item) ->
 
     AtmTaskExecutionCtx = #atm_task_execution_ctx{
         workflow_execution_env = AtmWorkflowExecutionEnv,
-        workflow_execution_ctx = atm_workflow_execution_env:get_workflow_execution_ctx(
+        workflow_execution_ctx = atm_workflow_execution_env:acquire_workflow_execution_ctx(
             AtmWorkflowExecutionEnv
         ),
         item = Item
