@@ -12,6 +12,11 @@
 %%% The context may change during an execution, as it includes the user session
 %%% that is refreshed periodically. For this reason, it must be rebuilt every
 %%% time it is needed.
+%%% Main uses of automation workflow context are:
+%%% 1) iteration (e.g. when iterating file or dataset tree forest store
+%%%    it is necessary to check user access privileges).
+%%% 2) data validation (e.g. when adding file to some store it is necessary
+%%%    to assert files exist within this space and user has access to them).
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_workflow_execution_ctx).

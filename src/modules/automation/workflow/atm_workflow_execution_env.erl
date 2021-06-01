@@ -6,8 +6,13 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Helper module providing utility functions for handling various schema id
-%%% to entity id mappings in context of specific automation workflow execution.
+%%% This module provides utility functions for management of automation
+%%% workflow execution environment which consists of conditions in which
+%%% specific workflow is being executed (e.g. mapping of store schema id to
+%%% actual store id).
+%%% Main uses of automation workflow environment are:
+%%% 1) mapping of store schema id to actual store id.
+%%% 2) acquisition of automation workflow context.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_workflow_execution_env).
