@@ -16,7 +16,7 @@
 %%% 1) iteration (e.g. when iterating file or dataset tree forest store
 %%%    it is necessary to check user access privileges).
 %%% 2) data validation (e.g. when adding file to some store it is necessary
-%%%    to assert files exist within this space and user has access to them).
+%%%    to assert files existence within this space and user's access to them).
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_workflow_execution_ctx).

@@ -75,7 +75,7 @@ create(AtmWorkflowExecutionCreationCtx, AtmLaneIndex, AtmParallelBoxIndex, #atm_
         AtmWorkflowExecutionCtx
     ),
 
-    %% TODO VFS-7671 use lambda snapshots stored in atm_workflow_execution:creation_ctx()
+    %% TODO VFS-7690 use lambda snapshots stored in atm_workflow_execution:creation_ctx()
     {ok, #document{value = #od_atm_lambda{
         operation_spec = AtmLambdaOperationSpec,
         argument_specs = AtmLambdaArgSpecs
