@@ -53,21 +53,46 @@ struct HelpersNIF {
         bufferingEnabled = (args["buffer_helpers"] == "true");
 
         for (const auto &entry :
-            std::unordered_map<folly::fbstring, folly::fbstring>(
-                {{CEPH_HELPER_NAME, "ceph_helper_threads_number"},
-                    {CEPHRADOS_HELPER_NAME, "cephrados_helper_threads_number"},
-                    {POSIX_HELPER_NAME, "posix_helper_threads_number"},
-                    {S3_HELPER_NAME, "s3_helper_threads_number"},
-                    {SWIFT_HELPER_NAME, "swift_helper_threads_number"},
-                    {GLUSTERFS_HELPER_NAME, "glusterfs_helper_threads_number"},
+            std::unordered_map<folly::fbstring,
+                std::pair<folly::fbstring, folly::fbstring>>(
+                {{CEPH_HELPER_NAME,
+                     {"ceph_helper_threads_number", "ceph_worker"}},
+                    {CEPHRADOS_HELPER_NAME,
+                        {"cephrados_helper_threads_number",
+                            "cephrados_worker"}},
+                    {POSIX_HELPER_NAME,
+                        {"posix_helper_threads_number", "posix_worker"}},
+                    {S3_HELPER_NAME, {"s3_helper_threads_number", "s3_worker"}},
+                    {SWIFT_HELPER_NAME,
+                        {"swift_helper_threads_number", "swift_worker"}},
+                    {GLUSTERFS_HELPER_NAME,
+                        {"glusterfs_helper_threads_number",
+                            "glusterfs_worker"}},
                     {NULL_DEVICE_HELPER_NAME,
-                        "nulldevice_helper_threads_number"}})) {
-            auto threads = std::stoul(args[entry.second].toStdString());
+                        {"nulldevice_helper_threads_number",
+                            "nulldevice_worker"}}})) {
+            auto threads = std::stoul(args[entry.second.first].toStdString());
             services.emplace(entry.first, std::make_unique<HelperIOService>());
             auto &service = services[entry.first]->service;
             auto &workers = services[entry.first]->workers;
             for (std::size_t i = 0; i < threads; ++i) {
-                workers.push_back(std::thread([&]() { service.run(); }));
+                auto t = std::thread([&, i]() {
+                    folly::setThreadName(
+                        fmt::format("{}-{}", entry.second.second, i));
+                    service.run();
+                });
+
+                cpu_set_t cpuset;
+                CPU_ZERO(&cpuset);
+                for (unsigned int cpuid = 0;
+                     cpuid < std::thread::hardware_concurrency(); cpuid++) {
+                    CPU_SET(cpuid, &cpuset);
+                }
+
+                pthread_setaffinity_np(
+                    t.native_handle(), sizeof(cpu_set_t), &cpuset);
+
+                workers.push_back(std::move(t));
             }
         }
 
