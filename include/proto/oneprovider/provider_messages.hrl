@@ -211,7 +211,7 @@
 -record(list_archives, {
     dataset_id :: dataset:id(),
     opts :: archives_list:opts(),
-    mode = ?BASIC_INFO :: dataset_api:listing_mode()
+    mode = ?BASIC_INFO :: archive_api:listing_mode()
 }).
 
 -record(init_archive_purge, {
@@ -323,21 +323,18 @@
     id :: archive:id(),
     dataset_id :: dataset:id(),
     state :: archive:state(),
-    root_dir_guid :: undefined | file_id:file_guid(),
+    root_file_guid :: undefined | file_id:file_guid(),
     creation_time :: time:millis(),
     config :: archive:config(),
     preserved_callback :: archive:callback(),
     purged_callback :: archive:callback(),
     description :: archive:description(),
-    index :: dataset_api:archive_index(),
-    files_to_archive = 0 :: non_neg_integer(),
-    files_archived = 0 :: non_neg_integer(),
-    files_failed = 0 :: non_neg_integer(),
-    bytes_archived = 0 :: non_neg_integer()
+    index :: archive_api:index(),
+    stats :: archive_stats:record()
 }).
 
 -record(archives, {
-    archives = [] :: dataset_api:archive_entries(),
+    archives = [] :: archive_api:entries(),
     is_last :: boolean()
 }).
 

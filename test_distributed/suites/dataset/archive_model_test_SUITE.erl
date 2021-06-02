@@ -103,7 +103,7 @@ all() -> [
     {group, sequential_tests}
 ].
 
--define(ATTEMPTS, 120).
+-define(ATTEMPTS, 300).
 
 -define(SPACE, space_krk_par_p).
 
@@ -506,18 +506,22 @@ simple_archive_crud_test_base(DatasetId, RootFileType, ExpSize) ->
     ArchiveRootDirUuid = ?ARCHIVE_DIR_UUID(ArchiveId),
     ArchiveRootDirGuid = file_id:pack_guid(ArchiveRootDirUuid, SpaceId),
 
-    ExpectedFilesToArchive = case RootFileType of
+    ExpectedFilesArchived = case RootFileType of
         ?DIRECTORY_TYPE -> 0;
         _ -> 1
     end,
 
     Timestamp = global_clock_timestamp(P1Node),
     Index = archives_list:index(ArchiveId, Timestamp),
+
+    {ok, [{CopyRootGuid, _}]} = ?assertMatch({ok, [_]},
+        lfm_proxy:get_children(P1Node, UserSessIdP1, ?FILE_REF(ArchiveRootDirGuid), 0, 10), ?ATTEMPTS),
+
     ExpArchiveInfo = #archive_info{
         id = ArchiveId,
         dataset_id = DatasetId,
         state = ?ARCHIVE_PRESERVED,
-        root_dir_guid = ArchiveRootDirGuid,
+        root_file_guid = CopyRootGuid,
         creation_time = Timestamp,
         index = Index,
         config = #archive_config{
@@ -528,26 +532,23 @@ simple_archive_crud_test_base(DatasetId, RootFileType, ExpSize) ->
         preserved_callback = ?TEST_ARCHIVE_PRESERVED_CALLBACK1,
         purged_callback = ?TEST_ARCHIVE_PURGED_CALLBACK1,
         description = ?TEST_DESCRIPTION1,
-        files_to_archive = ExpectedFilesToArchive,
-        files_archived = ExpectedFilesToArchive,
-        files_failed = 0,
-        bytes_archived = ExpSize
+        stats = archive_stats:new(ExpectedFilesArchived, 0, ExpSize)
     },
 
     % verify whether Archive is visible in the local provider
-    ?assertEqual({ok, ExpArchiveInfo},
+    ?assertMatch({ok, ExpArchiveInfo},
         lfm_proxy:get_archive_info(P1Node, UserSessIdP1, ArchiveId), ?ATTEMPTS),
     ?assertEqual({ok, [{Index, ArchiveId}], true},
         lfm_proxy:list_archives(P1Node, UserSessIdP1, DatasetId, #{offset => 0, limit => 10}, ?BASIC_INFO), ?ATTEMPTS),
-    ?assertEqual({ok, [ExpArchiveInfo], true},
+    ?assertMatch({ok, [ExpArchiveInfo], true},
         lfm_proxy:list_archives(P1Node, UserSessIdP1, DatasetId, #{offset => 0, limit => 10}, ?EXTENDED_INFO), ?ATTEMPTS),
 
     % verify whether Archive is visible in the remote provider
-    ?assertEqual({ok, ExpArchiveInfo},
+    ?assertMatch({ok, ExpArchiveInfo},
         lfm_proxy:get_archive_info(P2Node, UserSessIdP2, ArchiveId), ?ATTEMPTS),
     ?assertEqual({ok, [{Index, ArchiveId}], true},
         lfm_proxy:list_archives(P2Node, UserSessIdP2, DatasetId, #{offset => 0, limit => 10}, ?BASIC_INFO), ?ATTEMPTS),
-    ?assertEqual({ok, [ExpArchiveInfo], true},
+    ?assertMatch({ok, [ExpArchiveInfo], true},
         lfm_proxy:list_archives(P2Node, UserSessIdP2, DatasetId, #{offset => 0, limit => 10}, ?EXTENDED_INFO), ?ATTEMPTS),
 
     % update archive
@@ -562,9 +563,9 @@ simple_archive_crud_test_base(DatasetId, RootFileType, ExpSize) ->
             <<"preservedCallback">> => ?TEST_ARCHIVE_PRESERVED_CALLBACK2,
             <<"purgedCallback">> => ?TEST_ARCHIVE_PURGED_CALLBACK2
         })),
-    ?assertEqual({ok, ExpArchiveInfo2},
+    ?assertMatch({ok, ExpArchiveInfo2},
         lfm_proxy:get_archive_info(P2Node, UserSessIdP2, ArchiveId)),
-    ?assertEqual({ok, ExpArchiveInfo2},
+    ?assertMatch({ok, ExpArchiveInfo2},
         lfm_proxy:get_archive_info(P1Node, UserSessIdP1, ArchiveId), ?ATTEMPTS),
 
     % remove archive

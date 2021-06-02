@@ -11,7 +11,7 @@
 %%% For each automation workflow execution a new session should be initialized
 %%% at the beginning of processing and terminated at the end of it. Session
 %%% acquisition, on the other hand, should be performed each time session is
-%%% used (this checks if session is still valid and refresh credentials needed).
+%%% used (this checks if session is still valid and refreshes credentials needed).
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_workflow_execution_session).

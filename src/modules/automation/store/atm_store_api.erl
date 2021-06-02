@@ -103,7 +103,8 @@ apply_operation(AtmWorkflowExecutionCtx, Operation, Item, Options, AtmStoreId) -
     %   * store only one value and it will be overwritten 
     %   * do not support any operation
     case atm_store:get(AtmStoreId) of
-        {ok, #atm_store{container = AtmContainer, frozen = false}} -> 
+        {ok, #atm_store{container = AtmContainer, frozen = false}} ->
+            % TODO VFS-7691 maybe perform data validation here instead of specific container ??
             UpdatedContainer = atm_container:apply_operation(AtmContainer, #atm_container_operation{
                 type = Operation,
                 options = Options,
