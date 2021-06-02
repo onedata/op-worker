@@ -96,9 +96,9 @@ stream_cdmi(Req, #cdmi_req{
 -spec cdmi_stream_size(http_parser:bytes_range(), FileSize :: non_neg_integer(),
     Encoding :: binary(), DataPrefix :: binary(), DataSuffix :: binary()) ->
     non_neg_integer().
-cdmi_stream_size({0, -1}, _FileSize, _Encoding, _DataPrefix, _DataSuffix) ->
-    % Empty file
-    0;
+cdmi_stream_size({0, -1}, _FileSize, _Encoding, DataPrefix, DataSuffix) ->
+    % Empty file - only data prefix and suffix is sent
+    byte_size(DataPrefix) + byte_size(DataSuffix);
 cdmi_stream_size({From, To}, FileSize, Encoding, DataPrefix, DataSuffix) when To >= From ->
     DataSize = min(FileSize - 1, To) - From + 1,
     EncodedDataSize = case Encoding of
