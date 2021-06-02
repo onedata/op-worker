@@ -22,8 +22,10 @@
 
 -behaviour(persistent_record).
 
+-include("modules/automation/atm_execution.hrl").
+
 %% API
--export([create/3, get_data_spec/1, acquire_iterator/1, apply_operation/4, delete/1]).
+-export([create/4, get_data_spec/1, acquire_iterator/1, apply_operation/2, delete/1]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
@@ -44,14 +46,17 @@
     atm_range_container:record() |
     atm_list_container:record().
 
--type operation() :: append | set.
+-type operation_type() :: append | set.
 
--type apply_operation_options() ::
-    atm_single_value_container:apply_operation_options() |
-    atm_range_container:apply_operation_options() |
-    atm_list_container:apply_operation_options().
+-type operation_options() ::
+    atm_single_value_container:operation_options() |
+    atm_range_container:operation_options() |
+    atm_list_container:operation_options().
 
--export_type([type/0, initial_value/0, operation/0, apply_operation_options/0, record/0]).
+-type operation() :: #atm_container_operation{}.
+
+-export_type([type/0, initial_value/0, record/0]).
+-export_type([operation_type/0, operation_options/0, operation/0]).
 
 
 %%%===================================================================
@@ -59,14 +64,18 @@
 %%%===================================================================
 
 
--callback create(atm_data_spec:record(), initial_value()) -> record().
+-callback create(
+    atm_data_spec:record(),
+    initial_value(),
+    atm_workflow_execution_ctx:record()
+) ->
+    record().
 
 -callback get_data_spec(record()) -> atm_data_spec:record().
 
 -callback acquire_iterator(record()) -> atm_container_iterator:record().
 
--callback apply_operation(operation(), atm_api:item(), apply_operation_options(), record()) ->
-    record() | no_return().
+-callback apply_operation(record(), operation()) -> record() | no_return().
 
 -callback delete(record()) -> ok | no_return().
 
@@ -76,9 +85,15 @@
 %%%===================================================================
 
 
--spec create(type(), atm_data_spec:record(), initial_value()) -> record().
-create(RecordType, AtmDataSpec, InitArgs) ->
-    RecordType:create(AtmDataSpec, InitArgs).
+-spec create(
+    type(),
+    atm_data_spec:record(),
+    initial_value(),
+    atm_workflow_execution_ctx:record()
+) ->
+    record().
+create(RecordType, AtmDataSpec, InitArgs, AtmWorkflowExecutionCtx) ->
+    RecordType:create(AtmDataSpec, InitArgs, AtmWorkflowExecutionCtx).
 
 
 -spec get_data_spec(record()) -> atm_data_spec:record().
@@ -93,11 +108,10 @@ acquire_iterator(AtmContainer) ->
     RecordType:acquire_iterator(AtmContainer).
 
 
--spec apply_operation(operation(), atm_api:item(), apply_operation_options(), record()) ->
-    record() | no_return().
-apply_operation(Operation, Item, Options, AtmContainer) ->
+-spec apply_operation(record(), operation()) -> record() | no_return().
+apply_operation(AtmContainer, AtmContainerOperation) ->
     RecordType = utils:record_type(AtmContainer),
-    RecordType:apply_operation(Operation, Item, Options, AtmContainer).
+    RecordType:apply_operation(AtmContainer, AtmContainerOperation).
 
 
 -spec delete(record()) -> ok | no_return().

@@ -20,7 +20,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([validate/2]).
+-export([validate/3]).
 
 
 %%%===================================================================
@@ -33,7 +33,11 @@
 %% Asserts that all value constraints hold for specified item.
 %% @end
 %%--------------------------------------------------------------------
--callback assert_meets_constraints(atm_api:item(), atm_data_type:value_constraints()) ->
+-callback assert_meets_constraints(
+    atm_workflow_execution_ctx:record(),
+    atm_api:item(),
+    atm_data_type:value_constraints()
+) ->
     ok | no_return().
 
 
@@ -42,11 +46,12 @@
 %%%===================================================================
 
 
--spec validate(atm_api:item(), atm_data_spec:record()) ->
+-spec validate(atm_workflow_execution_ctx:record(), atm_api:item(), atm_data_spec:record()) ->
     ok | no_return().
-validate(Value, AtmDataSpec) ->
+validate(AtmWorkflowExecutionCtx, Value, AtmDataSpec) ->
     Module = get_callback_module(atm_data_spec:get_type(AtmDataSpec)),
-    Module:assert_meets_constraints(Value, atm_data_spec:get_value_constraints(AtmDataSpec)).
+    ValueConstraints = atm_data_spec:get_value_constraints(AtmDataSpec),
+    Module:assert_meets_constraints(AtmWorkflowExecutionCtx, Value, ValueConstraints).
 
 
 %%%===================================================================

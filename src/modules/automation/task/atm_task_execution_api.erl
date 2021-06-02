@@ -20,7 +20,7 @@
     create_all/4, create/4,
     prepare_all/1, prepare/1,
     delete_all/1, delete/1,
-    run/2
+    run/3
 ]).
 
 
@@ -35,17 +35,17 @@
 
 
 -spec create_all(
-    atm_api:creation_ctx(),
+    atm_workflow_execution:creation_ctx(),
     non_neg_integer(),
     non_neg_integer(),
     [atm_task_schema:record()]
 ) ->
     [atm_task_execution:doc()] | no_return().
-create_all(AtmExecutionCreationCtx, AtmLaneIndex, AtmParallelBoxIndex, AtmTaskSchemas) ->
+create_all(AtmWorkflowExecutionCreationCtx, AtmLaneIndex, AtmParallelBoxIndex, AtmTaskSchemas) ->
     lists:reverse(lists:foldl(fun(#atm_task_schema{id = AtmTaskSchemaId} = AtmTaskSchema, Acc) ->
         try
             {ok, AtmTaskExecutionDoc} = create(
-                AtmExecutionCreationCtx, AtmLaneIndex, AtmParallelBoxIndex, AtmTaskSchema
+                AtmWorkflowExecutionCreationCtx, AtmLaneIndex, AtmParallelBoxIndex, AtmTaskSchema
             ),
             [AtmTaskExecutionDoc | Acc]
         catch _:Reason ->
@@ -56,22 +56,26 @@ create_all(AtmExecutionCreationCtx, AtmLaneIndex, AtmParallelBoxIndex, AtmTaskSc
 
 
 -spec create(
-    atm_api:creation_ctx(),
+    atm_workflow_execution:creation_ctx(),
     non_neg_integer(),
     non_neg_integer(),
     atm_task_schema:record()
 ) ->
     {ok, atm_task_execution:doc()} | no_return().
-create(AtmExecutionCreationCtx, AtmLaneIndex, AtmParallelBoxIndex, #atm_task_schema{
+create(AtmWorkflowExecutionCreationCtx, AtmLaneIndex, AtmParallelBoxIndex, #atm_task_schema{
     id = AtmTaskSchemaId,
     lambda_id = AtmLambdaId,
     argument_mappings = AtmTaskArgMappers
 }) ->
-    #atm_execution_creation_ctx{
-        workflow_execution_id = AtmWorkflowExecutionId
-    } = AtmExecutionCreationCtx,
+    #atm_workflow_execution_creation_ctx{
+        workflow_execution_ctx = AtmWorkflowExecutionCtx
+    } = AtmWorkflowExecutionCreationCtx,
 
-    %% TODO VFS-7671 use lambda snapshots stored in atm_execution:creation_ctx()
+    AtmWorkflowExecutionId = atm_workflow_execution_ctx:get_workflow_execution_id(
+        AtmWorkflowExecutionCtx
+    ),
+
+    %% TODO VFS-7690 use lambda snapshots stored in atm_workflow_execution:creation_ctx()
     {ok, #document{value = #od_atm_lambda{
         operation_spec = AtmLambdaOperationSpec,
         argument_specs = AtmLambdaArgSpecs
@@ -130,15 +134,25 @@ delete(AtmTaskExecutionId) ->
     atm_task_execution:delete(AtmTaskExecutionId).
 
 
--spec run(atm_task_execution:id(), json_utils:json_term()) ->
+-spec run(
+    atm_task_execution:id(),
+    atm_workflow_execution_env:record(),
+    json_utils:json_term()
+) ->
     {ok, task_id()} | no_return().
-run(AtmTaskExecutionId, Item) ->
+run(AtmTaskExecutionId, AtmWorkflowExecutionEnv, Item) ->
     #atm_task_execution{
         executor = AtmTaskExecutor,
         argument_specs = AtmTaskArgSpecs
     } = update_items_in_processing(AtmTaskExecutionId),
 
-    AtmTaskExecutionCtx = #atm_task_execution_ctx{item = Item},
+    AtmTaskExecutionCtx = #atm_task_execution_ctx{
+        workflow_execution_env = AtmWorkflowExecutionEnv,
+        workflow_execution_ctx = atm_workflow_execution_env:acquire_workflow_execution_ctx(
+            AtmWorkflowExecutionEnv
+        ),
+        item = Item
+    },
     Args = atm_task_execution_arguments:construct_args(
         AtmTaskExecutionCtx, AtmTaskArgSpecs
     ),
