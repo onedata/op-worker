@@ -21,7 +21,8 @@
 %% API
 -export([
     get_next/2,
-    mark_exhausted/2,
+    forget_before/1,
+    mark_exhausted/1,
     encode/1,
     decode/1
 ]).
@@ -41,8 +42,9 @@
 
 -callback get_next(env(), iterator()) -> {ok, item(), iterator()} | stop.
 
--callback mark_exhausted(env(), iterator()) -> ok.
+-callback forget_before(iterator()) -> ok.
 
+-callback mark_exhausted(iterator()) -> ok.
 
 %%%===================================================================
 %%% API functions
@@ -55,10 +57,16 @@ get_next(Env, Iterator) ->
     Module:get_next(Env, Iterator).
 
 
--spec mark_exhausted(env(), iterator()) -> ok.
-mark_exhausted(Env, Iterator) ->
+-spec forget_before(iterator()) -> ok.
+forget_before(Iterator) ->
     Module = utils:record_type(Iterator),
-    Module:mark_exhausted(Env, Iterator).
+    Module:forget_before(Iterator).
+
+
+-spec mark_exhausted(iterator()) -> ok.
+mark_exhausted(Iterator) ->
+    Module = utils:record_type(Iterator),
+    Module:mark_exhausted(Iterator).
 
 
 -spec encode(iterator()) -> binary().

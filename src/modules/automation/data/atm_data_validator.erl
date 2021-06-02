@@ -20,7 +20,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([validate/3]).
+-export([sanitize/3, map_value/3]).
 
 
 %%%===================================================================
@@ -30,15 +30,19 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Asserts that all value constraints hold for specified item.
+%% Asserts that all value constraints hold for specified item. Returns sanitized item.
 %% @end
 %%--------------------------------------------------------------------
--callback assert_meets_constraints(
+-callback sanitize(
     atm_workflow_execution_ctx:record(),
     atm_api:item(),
     atm_data_type:value_constraints()
 ) ->
-    ok | no_return().
+    atm_api:item() | no_return().
+
+
+-callback map_value(atm_workflow_execution_ctx:record(), atm_api:item()) -> 
+    {true, atm_api:item()} | false.
 
 
 %%%===================================================================
@@ -46,12 +50,19 @@
 %%%===================================================================
 
 
--spec validate(atm_workflow_execution_ctx:record(), atm_api:item(), atm_data_spec:record()) ->
-    ok | no_return().
-validate(AtmWorkflowExecutionCtx, Value, AtmDataSpec) ->
+-spec sanitize(atm_workflow_execution_ctx:record(), atm_api:item(), atm_data_spec:record()) ->
+    atm_api:item() | no_return().
+sanitize(AtmWorkflowExecutionCtx, Value, AtmDataSpec) ->
     Module = get_callback_module(atm_data_spec:get_type(AtmDataSpec)),
     ValueConstraints = atm_data_spec:get_value_constraints(AtmDataSpec),
-    Module:assert_meets_constraints(AtmWorkflowExecutionCtx, Value, ValueConstraints).
+    Module:sanitize(AtmWorkflowExecutionCtx, Value, ValueConstraints).
+
+
+-spec map_value(atm_workflow_execution_ctx:record(), atm_api:item(), atm_data_spec:record()) -> 
+    {true, atm_api:item()} | false.
+map_value(AtmWorkflowExecutionCtx, Value, AtmDataSpec) ->
+    Module = get_callback_module(atm_data_spec:get_type(AtmDataSpec)),
+    Module:map_value(AtmWorkflowExecutionCtx, Value).
 
 
 %%%===================================================================

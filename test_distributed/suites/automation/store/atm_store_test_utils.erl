@@ -22,7 +22,8 @@
     apply_operation/6,
     acquire_store_iterator/3, 
     iterator_get_next/3,
-    iterator_mark_exhausted/3
+    iterator_forget_before/2,
+    iterator_mark_exhausted/2
 ]).
 -export([
     split_into_chunks/3
@@ -105,10 +106,16 @@ iterator_get_next(ProviderSelector, AtmWorkflowExecutionEnv, Iterator) ->
     rpc:call(Node, iterator, get_next, [AtmWorkflowExecutionEnv, Iterator]).
 
 
--spec iterator_mark_exhausted(oct_background:entity_selector(), atm_workflow_execution_env:record(), iterator:iterator()) -> ok.
-iterator_mark_exhausted(ProviderSelector, AtmWorkflowExecutionEnv, Iterator) ->
+-spec iterator_forget_before(oct_background:entity_selector(), iterator:iterator()) -> ok.
+iterator_forget_before(ProviderSelector, Iterator) ->
     Node = oct_background:get_random_provider_node(ProviderSelector),
-    rpc:call(Node, iterator, mark_exhausted, [AtmWorkflowExecutionEnv, Iterator]).
+    rpc:call(Node, iterator, forget_before, [Iterator]).
+
+
+-spec iterator_mark_exhausted(oct_background:entity_selector(), iterator:iterator()) -> ok.
+iterator_mark_exhausted(ProviderSelector, Iterator) ->
+    Node = oct_background:get_random_provider_node(ProviderSelector),
+    rpc:call(Node, iterator, mark_exhausted, [Iterator]).
 
 
 -spec split_into_chunks(pos_integer(), [[item()]], [item()]) ->

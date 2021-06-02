@@ -23,7 +23,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% atm_data_validator callbacks
--export([assert_meets_constraints/3]).
+-export([sanitize/3, map_value/2]).
 
 %% atm_tree_forest_container_iterator callbacks
 -export([
@@ -32,42 +32,43 @@
     encode_listing_options/1, decode_listing_options/1
 ]).
 
--type object_id() :: file_id:file_guid().
 -type list_opts() :: file_meta:list_opts().
 
 %%%===================================================================
 %%% atm_data_validator callbacks
 %%%===================================================================
 
--spec assert_meets_constraints(
+-spec sanitize(
     atm_workflow_execution_ctx:record(),
     atm_api:item(),
     atm_data_type:value_constraints()
 ) ->
-    ok | no_return().
-assert_meets_constraints(AtmWorkflowExecutionCtx, Value, _ValueConstraints) when is_binary(Value) ->
+    atm_api:item() | no_return().
+sanitize(AtmWorkflowExecutionCtx, #{<<"file_id">> := CdmiId} = Value, _ValueConstraints) ->
     SpaceId = atm_workflow_execution_ctx:get_space_id(AtmWorkflowExecutionCtx),
     try
-        case file_id:guid_to_space_id(Value) of
-            SpaceId -> ok;
-            _ -> ?ERROR_NOT_FOUND
-        end,
-        case check_object_existence(AtmWorkflowExecutionCtx, Value) of
-            true -> ok;
-            false -> ?ERROR_NOT_FOUND
+        {ok, Guid} = file_id:objectid_to_guid(CdmiId),
+        case file_id:guid_to_space_id(Guid) of
+            SpaceId ->
+                case check_object_existence(AtmWorkflowExecutionCtx, Guid) of
+                    true -> {ok, Guid};
+                    false -> ?ERROR_NOT_FOUND
+                end;
+            _ -> 
+                ?ERROR_NOT_FOUND
         end
     of
-        ok -> ok;
+        {ok, G} -> G;
         {error, _} = Error -> throw(Error)
     catch _:_ ->
         throw(?ERROR_ATM_DATA_TYPE_UNVERIFIED(Value, atm_file_type))
     end;
-assert_meets_constraints(_AtmWorkflowExecutionCtx, Value, _ValueConstraints) ->
+sanitize(_AtmWorkflowExecutionCtx, Value, _ValueConstraints) ->
     throw(?ERROR_ATM_DATA_TYPE_UNVERIFIED(Value, atm_file_type)).
 
 
--spec list_children(atm_workflow_execution_ctx:record(), object_id(), list_opts(), non_neg_integer()) ->
-    {[{object_id(), file_meta:name()}], [object_id()], list_opts(), IsLast :: boolean()} | no_return().
+-spec list_children(atm_workflow_execution_ctx:record(), file_id:file_guid(), list_opts(), non_neg_integer()) ->
+    {[{file_id:file_guid(), file_meta:name()}], [file_id:file_guid()], list_opts(), IsLast :: boolean()} | no_return().
 list_children(AtmWorkflowExecutionCtx, Guid, ListOpts, BatchSize) ->
     SessionId = atm_workflow_execution_ctx:get_session_id(AtmWorkflowExecutionCtx),
     try
@@ -86,7 +87,7 @@ list_children(AtmWorkflowExecutionCtx, Guid, ListOpts, BatchSize) ->
     end.
 
 
--spec check_object_existence(atm_workflow_execution_ctx:record(), object_id()) -> boolean().
+-spec check_object_existence(atm_workflow_execution_ctx:record(), file_id:file_guid()) -> boolean().
 check_object_existence(AtmWorkflowExecutionCtx, FileGuid) ->
     SessionId = atm_workflow_execution_ctx:get_session_id(AtmWorkflowExecutionCtx),
     case lfm:stat(SessionId, ?FILE_REF(FileGuid)) of
@@ -121,13 +122,22 @@ decode_listing_options(#{<<"last_name">> := LastName, <<"last_tree">> := LastTre
         last_tree => LastTree
     }.
 
+
+-spec map_value(atm_workflow_execution_ctx:record(), file_id:file_guid()) -> {true, atm_api:item()} | false.
+map_value(AtmWorkflowExecutionCtx, Guid) ->
+    SessionId = atm_workflow_execution_ctx:get_session_id(AtmWorkflowExecutionCtx),
+    case lfm:stat(SessionId, #file_ref{guid = Guid}) of
+        {ok, FileAttrs} -> {true, map_file_attrs(FileAttrs)};
+        {error, _} -> false
+    end.
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
 %% @private
--spec list_children_unsafe(session:id(), object_id(), list_opts()) ->
-    {[{object_id(), file_meta:name()}], [object_id()], list_opts(), boolean()}.
+-spec list_children_unsafe(session:id(), file_id:file_guid(), list_opts()) ->
+    {[{file_id:file_guid(), file_meta:name()}], [file_id:file_guid()], list_opts(), boolean()}.
 list_children_unsafe(SessionId, Guid, ListOpts) ->
     case file_ctx:is_dir(file_ctx:new_by_guid(Guid)) of
         {false, _Ctx} ->
@@ -153,3 +163,44 @@ list_children_unsafe(SessionId, Guid, ListOpts) ->
                 maps:get(is_last, ExtendedListInfo)
             }
     end.
+
+
+-spec map_file_attrs(lfm_attrs:file_attributes()) -> atm_api:item().
+map_file_attrs(#file_attr{
+    guid = Guid, 
+    name = Name, 
+    mode = Mode, 
+    parent_guid = ParentGuid, 
+    uid = Uid, 
+    gid = Gid, 
+    atime = Atime, 
+    mtime = Mtime, 
+    ctime = Ctime, 
+    type = Type, 
+    size = Size, 
+    shares = Shares, 
+    provider_id = ProviderId, 
+    owner_id = Owner_id, 
+    fully_replicated = FullyReplicated, 
+    nlink = Nlink
+}) ->
+    {ok, CdmiId} = file_id:guid_to_objectid(Guid),
+    #{
+        <<"file_id">> => CdmiId,
+        <<"guid">> => Guid,
+        <<"name">> => Name,
+        <<"mode">> => Mode,
+        <<"parent_guid">> => ParentGuid,
+        <<"uid">> => Uid,
+        <<"gid">> => Gid,
+        <<"atime">> => Atime,
+        <<"mtime">> => Mtime,
+        <<"ctime">> => Ctime,
+        <<"type">> => Type,
+        <<"size">> => Size,
+        <<"shares">> => Shares,
+        <<"provider_id">> => ProviderId,
+        <<"owner_id">> => Owner_id,
+        <<"fully_replicated">> => FullyReplicated,
+        <<"nlink">> => Nlink
+    }.

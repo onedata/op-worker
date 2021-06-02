@@ -116,7 +116,7 @@ prune(Id, Index) ->
             end, lists:seq(StartDocNum, max(StartDocNum - 1, LastToPruneDocNum - 1)) -- [0]), % never delete 0th doc
             UpdateFinalDocFun = fun(#atm_tree_forest_iterator_queue{values = Values} = Record) ->
                 {ok, Record#atm_tree_forest_iterator_queue{
-                    values = prune_values(LastToPruneDocNum * ?MAX_VALUES_PER_DOC, Index, Values)
+                    values = prune_values(LastToPruneDocNum * ?MAX_VALUES_PER_DOC, max(Index, 0), Values)
                 }}
             end,
             ok = ?extract_ok(update_record(Id, LastToPruneDocNum, UpdateFinalDocFun)),

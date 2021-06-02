@@ -25,7 +25,7 @@
 -export([build/2]).
 
 % atm_container_iterator callbacks
--export([get_next_batch/3, mark_exhausted/2]).
+-export([get_next_batch/3, forget_before/1, mark_exhausted/1]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
@@ -100,14 +100,14 @@ get_next_batch(AtmWorkflowExecutionCtx, BatchSize, #atm_tree_forest_container_it
     get_next_batch(AtmWorkflowExecutionCtx, BatchSize, Record, []).
 
 
--spec mark_exhausted(atm_workflow_execution_ctx:record(), record()) -> ok.
-mark_exhausted(AtmWorkflowExecutionCtx, #atm_tree_forest_container_iterator{queue_info = Q} = Iterator) -> 
-    case get_next_batch(AtmWorkflowExecutionCtx, 1, Iterator, []) of
-        stop -> 
-            destroy_queue(Q);
-        _ ->
-            prune_queue(Q)
-    end.
+-spec forget_before(record()) -> ok.
+forget_before(#atm_tree_forest_container_iterator{queue_info = Q}) ->
+    prune_queue(Q).
+
+
+-spec mark_exhausted(record()) -> ok.
+mark_exhausted(#atm_tree_forest_container_iterator{queue_info = Q}) -> 
+    destroy_queue(Q).
 
 %%%===================================================================
 %%% Internal functions
@@ -247,7 +247,7 @@ queue_report_new_tree(#queue_info{id = Id, current_queue_index = Index} = Q) ->
 %% @private
 -spec prune_queue(queue_info()) -> ok | no_return().
 prune_queue(#queue_info{id = Id, current_queue_index = Index}) ->
-    case atm_tree_forest_iterator_queue:prune(Id, Index) of
+    case atm_tree_forest_iterator_queue:prune(Id, Index - 1) of
         ok -> ok;
         {error, _} = Error -> throw(Error)
     end.

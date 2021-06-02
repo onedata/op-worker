@@ -25,7 +25,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% atm_data_validator callbacks
--export([assert_meets_constraints/3]).
+-export([sanitize/3, map_value/2]).
 
 %% atm_tree_forest_container_iterator callbacks
 -export([
@@ -34,37 +34,36 @@
     encode_listing_options/1, decode_listing_options/1
 ]).
 
--type object_id() :: dataset:id().
 -type list_opts() :: atm_tree_forest_container_iterator:list_opts().
 
 %%%===================================================================
 %%% atm_data_validator callbacks
 %%%===================================================================
 
--spec assert_meets_constraints(
+-spec sanitize(
     atm_workflow_execution_ctx:record(),
     atm_api:item(),
     atm_data_type:value_constraints()
 ) ->
-    ok | no_return().
-assert_meets_constraints(AtmWorkflowExecutionCtx, Value, _ValueConstraints) when is_binary(Value) ->
+    atm_api:item() | no_return().
+sanitize(AtmWorkflowExecutionCtx, #{<<"dataset_id">> := DatasetId} = Value, _ValueConstraints) ->
     try
-        case check_object_existence(AtmWorkflowExecutionCtx, Value) of
-            true -> ok;
+        case check_object_existence(AtmWorkflowExecutionCtx, DatasetId) of
+            true -> {ok, DatasetId};
             false -> ?ERROR_NOT_FOUND
         end
     of
-        ok -> ok;
+        {ok, D} -> D;
         {error, _} = Error -> throw(Error)
     catch _:_ ->
         throw(?ERROR_ATM_DATA_TYPE_UNVERIFIED(Value, atm_dataset_type))
     end;
-assert_meets_constraints(_AtmWorkflowExecutionCtx, Value, _ValueConstraints) ->
+sanitize(_AtmWorkflowExecutionCtx, Value, _ValueConstraints) ->
     throw(?ERROR_ATM_DATA_TYPE_UNVERIFIED(Value, atm_dataset_type)).
 
 
--spec list_children(atm_workflow_execution_ctx:record(), object_id(), list_opts(), non_neg_integer()) ->
-    {[{object_id(), binary()}], [object_id()], list_opts(), IsLast :: boolean()} | no_return().
+-spec list_children(atm_workflow_execution_ctx:record(), dataset:id(), list_opts(), non_neg_integer()) ->
+    {[{dataset:id(), binary()}], [dataset:id()], list_opts(), IsLast :: boolean()} | no_return().
 list_children(AtmWorkflowExecutionCtx, DatasetId, ListOpts, BatchSize) ->
     SessionId = atm_workflow_execution_ctx:get_session_id(AtmWorkflowExecutionCtx),
     case lfm:list_children_datasets(SessionId, DatasetId, ListOpts#{limit => BatchSize}) of
@@ -85,7 +84,7 @@ list_children(AtmWorkflowExecutionCtx, DatasetId, ListOpts, BatchSize) ->
     end.
 
 
--spec check_object_existence(atm_workflow_execution_ctx:record(), object_id()) -> boolean().
+-spec check_object_existence(atm_workflow_execution_ctx:record(), dataset:id()) -> boolean().
 check_object_existence(AtmWorkflowExecutionCtx, DatasetId) ->
     SpaceId = atm_workflow_execution_ctx:get_space_id(AtmWorkflowExecutionCtx),
     SessionId = atm_workflow_execution_ctx:get_session_id(AtmWorkflowExecutionCtx),
@@ -114,4 +113,46 @@ encode_listing_options(#{offset := Offset}) ->
 -spec decode_listing_options(json_utils:json_term()) -> list_opts().
 decode_listing_options(#{<<"offset">> := Offset}) ->
     #{offset => Offset}.
+
+
+-spec map_value(atm_workflow_execution_ctx:record(), dataset:id()) -> {true, atm_api:item()} | false.
+map_value(AtmWorkflowExecutionCtx, DatasetId) ->
+    SessionId = atm_workflow_execution_ctx:get_session_id(AtmWorkflowExecutionCtx),
+    case lfm:get_dataset_info(SessionId, DatasetId) of
+        {ok, DatasetInfo} -> {true, map_dataset_info(DatasetInfo)};
+        {error, _} -> false
+    end.
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+-spec map_dataset_info(lfm_datasets:info()) -> atm_api:item().
+map_dataset_info(#dataset_info{
+    id = DatasetId,
+    state = DatasetState,
+    root_file_guid = RootFileGuid,
+    root_file_path = RootFilePath,
+    root_file_type = RootFileType,
+    creation_time = CreationTime,
+    protection_flags = ProtectionFlags,
+    eff_protection_flags = EffProtectionFlags,
+    parent = Parent,
+    archive_count = ArchiveCount,
+    index = Index
+}) ->
+    #{
+        <<"dataset_id">> => DatasetId,
+        <<"state">> => DatasetState,
+        <<"root_file_guid">> => RootFileGuid,
+        <<"root_file_path">> => RootFilePath,
+        <<"root_file_type">> => RootFileType,
+        <<"creation_time">> => CreationTime,
+        <<"protection_flags">> => ProtectionFlags,
+        <<"eff_protection_flags">> => EffProtectionFlags,
+        <<"parent">> => utils:undefined_to_null(Parent),
+        <<"archive_count">> => ArchiveCount,
+        <<"index">> => Index
+    }.
     

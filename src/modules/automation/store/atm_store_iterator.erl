@@ -23,7 +23,7 @@
 -export([build/2]).
 
 %% iterator callbacks
--export([get_next/2, mark_exhausted/2]).
+-export([get_next/2, forget_before/1, mark_exhausted/1]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
@@ -62,6 +62,7 @@ build(AtmStoreIteratorSpec, AtmContainer) ->
     {ok, atm_api:item(), record()} | stop.
 get_next(AtmWorkflowExecutionEnv, #atm_store_iterator{
     spec = #atm_store_iterator_spec{strategy = #atm_store_iterator_serial_strategy{}},
+    data_spec = DataSpec,
     container_iterator = AtmContainerIterator
 } = AtmStoreIterator) ->
     AtmWorkflowExecutionCtx = 
@@ -69,12 +70,19 @@ get_next(AtmWorkflowExecutionEnv, #atm_store_iterator{
     case atm_container_iterator:get_next_batch(AtmWorkflowExecutionCtx, 1, AtmContainerIterator) of
         stop ->
             stop;
-        {ok, [Item], NewAtmContainerIterator} ->
-            {ok, Item, AtmStoreIterator#atm_store_iterator{
+        {ok, [Result], NewAtmContainerIterator} ->
+            NewStoreIterator = AtmStoreIterator#atm_store_iterator{
                 container_iterator = NewAtmContainerIterator
-            }}
+            },
+            case atm_data_validator:map_value(AtmWorkflowExecutionCtx, Result, DataSpec) of
+                {true, Item} ->
+                    {ok, Item, NewStoreIterator};
+                false ->
+                    get_next(AtmWorkflowExecutionEnv, NewStoreIterator)
+            end
     end;
 get_next(AtmWorkflowExecutionEnv, #atm_store_iterator{
+    data_spec = DataSpec,
     spec = #atm_store_iterator_spec{strategy = #atm_store_iterator_batch_strategy{
         size = Size
     }},
@@ -86,17 +94,23 @@ get_next(AtmWorkflowExecutionEnv, #atm_store_iterator{
         stop ->
             stop;
         {ok, Items, NewAtmContainerIterator} ->
-            {ok, Items, AtmStoreIterator#atm_store_iterator{
+            MappedItems = lists:filtermap(fun(Item) ->
+                atm_data_validator:map_value(AtmWorkflowExecutionCtx, Item, DataSpec)
+            end, Items),
+            {ok, MappedItems, AtmStoreIterator#atm_store_iterator{
                 container_iterator = NewAtmContainerIterator
             }}
     end.
 
 
--spec mark_exhausted(atm_workflow_execution_env:record(), record()) -> ok.
-mark_exhausted(AtmWorkflowExecutionEnv, #atm_store_iterator{container_iterator = ContainerIterator}) ->
-    AtmWorkflowExecutionCtx =
-        atm_workflow_execution_env:acquire_workflow_execution_ctx(AtmWorkflowExecutionEnv),
-    atm_container_iterator:mark_exhausted(AtmWorkflowExecutionCtx, ContainerIterator).
+-spec forget_before(record()) -> ok.
+forget_before(#atm_store_iterator{container_iterator = ContainerIterator}) ->
+    atm_container_iterator:forget_before(ContainerIterator).
+
+
+-spec mark_exhausted(record()) -> ok.
+mark_exhausted(#atm_store_iterator{container_iterator = ContainerIterator}) ->
+    atm_container_iterator:mark_exhausted(ContainerIterator).
 
 %%%===================================================================
 %%% persistent_record callbacks

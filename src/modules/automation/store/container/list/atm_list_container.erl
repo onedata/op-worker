@@ -87,10 +87,10 @@ apply_operation(#atm_list_container{} = Record, #atm_container_operation{
     workflow_execution_ctx = AtmWorkflowExecutionCtx
 }) when is_list(Batch) ->
     #atm_list_container{data_spec = AtmDataSpec, backend_id = BackendId} = Record,
-    validate_data_batch(AtmWorkflowExecutionCtx, AtmDataSpec, Batch),
+    SanitizedBatch = validate_data_batch(AtmWorkflowExecutionCtx, AtmDataSpec, Batch),
     lists:foreach(fun(Item) ->
         ok = atm_list_store_backend:append(BackendId, json_utils:encode(Item))
-    end, Batch),
+    end, SanitizedBatch),
     Record;
 
 apply_operation(#atm_list_container{} = Record, #atm_container_operation{
@@ -165,6 +165,6 @@ create_container(AtmDataSpec) ->
 ) ->
     ok | no_return().
 validate_data_batch(AtmWorkflowExecutionCtx, AtmDataSpec, Batch) ->
-    lists:foreach(fun(Item) ->
-        atm_data_validator:validate(AtmWorkflowExecutionCtx, Item, AtmDataSpec)
+    lists:map(fun(Item) ->
+        atm_data_validator:sanitize(AtmWorkflowExecutionCtx, Item, AtmDataSpec)
     end, Batch).

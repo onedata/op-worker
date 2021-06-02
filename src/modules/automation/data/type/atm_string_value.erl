@@ -18,7 +18,7 @@
 -include("modules/automation/atm_tmp.hrl").
 
 %% atm_data_validator callbacks
--export([assert_meets_constraints/3]).
+-export([sanitize/3, map_value/2]).
 
 
 %%%===================================================================
@@ -26,13 +26,19 @@
 %%%===================================================================
 
 
--spec assert_meets_constraints(
+-spec sanitize(
     atm_workflow_execution_ctx:record(),
     atm_api:item(),
     atm_data_type:value_constraints()
 ) ->
-    ok | no_return().
-assert_meets_constraints(_, Value, _ValueConstraints) when is_binary(Value) ->
-    ok;
-assert_meets_constraints(_, Value, _ValueConstraints) ->
+    atm_api:item() | no_return().
+sanitize(_, Value, _ValueConstraints) when is_binary(Value) ->
+    Value;
+sanitize(_, Value, _ValueConstraints) ->
     throw(?ERROR_ATM_DATA_TYPE_UNVERIFIED(Value, atm_string_type)).
+
+
+-spec map_value(atm_workflow_execution_ctx:record(), atm_api:item()) ->
+    {true, atm_api:item()} | false.
+map_value(_, Value) ->
+    {true, Value}.
