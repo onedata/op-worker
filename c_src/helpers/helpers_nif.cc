@@ -101,21 +101,21 @@ struct HelpersNIF {
             std::unordered_map<folly::fbstring,
                 std::pair<folly::fbstring, folly::fbstring>>(
                 {{CEPH_HELPER_NAME,
-                     {"ceph_helper_threads_number", "ceph_worker"}},
+                     {"ceph_helper_threads_number", "ceph_t"}},
                     {CEPHRADOS_HELPER_NAME,
                         {"cephrados_helper_threads_number",
-                            "cephrados_worker"}},
+                            "crados_t"}},
                     {POSIX_HELPER_NAME,
-                        {"posix_helper_threads_number", "posix_worker"}},
-                    {S3_HELPER_NAME, {"s3_helper_threads_number", "s3_worker"}},
+                        {"posix_helper_threads_number", "posix_t"}},
+                    {S3_HELPER_NAME, {"s3_helper_threads_number", "s3_t"}},
                     {SWIFT_HELPER_NAME,
-                        {"swift_helper_threads_number", "swift_worker"}},
+                        {"swift_helper_threads_number", "swift_t"}},
                     {GLUSTERFS_HELPER_NAME,
                         {"glusterfs_helper_threads_number",
-                            "glusterfs_worker"}},
+                            "gluster_t"}},
                     {NULL_DEVICE_HELPER_NAME,
                         {"nulldevice_helper_threads_number",
-                            "nulldevice_worker"}}})) {
+                            "nulldev_t"}}})) {
             auto threads = std::stoul(args[entry.second.first].toStdString());
             services.emplace(entry.first, std::make_unique<HelperIOService>());
             auto &service = services[entry.first]->service;
@@ -135,11 +135,11 @@ struct HelpersNIF {
 
         webDAVExecutor = std::make_shared<folly::IOThreadPoolExecutor>(
             std::stoul(args["webdav_helper_threads_number"].toStdString()),
-            std::make_shared<StorageWorkerFactory>("webdav_worker"));
+            std::make_shared<StorageWorkerFactory>("webdav_t"));
 
         xrootdExecutor = std::make_shared<folly::IOThreadPoolExecutor>(
             std::stoul(args["xrootd_helper_threads_number"].toStdString()),
-            std::make_shared<StorageWorkerFactory>("xrootd_worker"));
+            std::make_shared<StorageWorkerFactory>("xrootd_t"));
 
         SHCreator = std::make_unique<one::helpers::StorageHelperCreator>(
             services[CEPH_HELPER_NAME]->service,
