@@ -26,14 +26,59 @@ namespace {
  * @defgroup StaticAtoms Statically created atoms for ease of usage.
  * @{
  */
-nifpp::str_atom ok{"ok"};
-nifpp::str_atom error{"error"};
+nifpp::str_atom ok {"ok"};
+nifpp::str_atom error {"error"};
 /** @} */
 
 using helper_ptr = one::helpers::StorageHelperPtr;
 using file_handle_ptr = one::helpers::FileHandlePtr;
 using reqid_t = std::tuple<int, int, int>;
 using helper_args_t = std::unordered_map<folly::fbstring, folly::fbstring>;
+
+/**
+ * Set CPU affinity for a given thread to all available CPU cores.
+ */
+void setCPUAffinity(std::thread &t)
+{
+    cpu_set_t cpuset;
+    CPU_ZERO(&cpuset);
+    for (unsigned int cpuid = 0; cpuid < std::thread::hardware_concurrency();
+         cpuid++) {
+        CPU_SET(cpuid, &cpuset);
+    }
+
+    pthread_setaffinity_np(t.native_handle(), sizeof(cpu_set_t), &cpuset);
+};
+
+/**
+ * Initializer for storage helper workers based on folly ThreadPool.
+ */
+class StorageWorkerFactory : public folly::ThreadFactory {
+public:
+    explicit StorageWorkerFactory(folly::fbstring name)
+        : m_name {std::move(name)}
+        , m_id {0}
+    {
+    }
+
+    std::thread newThread(folly::Func &&func) override
+    {
+        auto t = std::thread(
+            [f = std::move(func),
+                n = fmt::format("{}-{}", m_name, m_id++)]() mutable {
+                folly::setThreadName(n);
+                f();
+            });
+
+        setCPUAffinity(t);
+
+        return t;
+    }
+
+private:
+    folly::fbstring m_name;
+    std::atomic<uint64_t> m_id;
+};
 
 /**
  * Static resource holder.
@@ -82,25 +127,19 @@ struct HelpersNIF {
                     service.run();
                 });
 
-                cpu_set_t cpuset;
-                CPU_ZERO(&cpuset);
-                for (unsigned int cpuid = 0;
-                     cpuid < std::thread::hardware_concurrency(); cpuid++) {
-                    CPU_SET(cpuid, &cpuset);
-                }
-
-                pthread_setaffinity_np(
-                    t.native_handle(), sizeof(cpu_set_t), &cpuset);
+                setCPUAffinity(t);
 
                 workers.push_back(std::move(t));
             }
         }
 
         webDAVExecutor = std::make_shared<folly::IOThreadPoolExecutor>(
-            std::stoul(args["webdav_helper_threads_number"].toStdString()));
+            std::stoul(args["webdav_helper_threads_number"].toStdString()),
+            std::make_shared<StorageWorkerFactory>("webdav_worker"));
 
         xrootdExecutor = std::make_shared<folly::IOThreadPoolExecutor>(
-            std::stoul(args["xrootd_helper_threads_number"].toStdString()));
+            std::stoul(args["xrootd_helper_threads_number"].toStdString()),
+            std::make_shared<StorageWorkerFactory>("xrootd_worker"));
 
         SHCreator = std::make_unique<one::helpers::StorageHelperCreator>(
             services[CEPH_HELPER_NAME]->service,
@@ -111,14 +150,14 @@ struct HelpersNIF {
             services[GLUSTERFS_HELPER_NAME]->service, webDAVExecutor,
             xrootdExecutor, services[NULL_DEVICE_HELPER_NAME]->service,
             std::stoul(args["buffer_scheduler_threads_number"].toStdString()),
-            buffering::BufferLimits{
+            buffering::BufferLimits {
                 std::stoul(args["read_buffer_min_size"].toStdString()),
                 std::stoul(args["read_buffer_max_size"].toStdString()),
-                std::chrono::seconds{std::stoul(
+                std::chrono::seconds {std::stoul(
                     args["read_buffer_prefetch_duration"].toStdString())},
                 std::stoul(args["write_buffer_min_size"].toStdString()),
                 std::stoul(args["write_buffer_max_size"].toStdString()),
-                std::chrono::seconds{std::stoul(
+                std::chrono::seconds {std::stoul(
                     args["write_buffer_flush_delay"].toStdString())}});
 
         umask(0);
@@ -153,7 +192,7 @@ namespace {
  *           POSIX open mode / flag.
  * @{
  */
-const std::unordered_map<nifpp::str_atom, one::helpers::Flag> atom_to_flag{
+const std::unordered_map<nifpp::str_atom, one::helpers::Flag> atom_to_flag {
     {"O_NONBLOCK", one::helpers::Flag::NONBLOCK},
     {"O_APPEND", one::helpers::Flag::APPEND},
     {"O_ASYNC", one::helpers::Flag::ASYNC},
@@ -181,7 +220,7 @@ one::helpers::FlagsSet translateFlags(folly::fbvector<nifpp::str_atom> atoms)
             flags.insert(result->second);
         }
         else {
-            throw std::system_error{
+            throw std::system_error {
                 std::make_error_code(std::errc::invalid_argument)};
         }
     }
@@ -298,7 +337,7 @@ public:
      * deleter.
      */
     Env()
-        : env{enif_alloc_env(), enif_free_env}
+        : env {enif_alloc_env(), enif_free_env}
     {
     }
 
@@ -341,9 +380,9 @@ private:
     static thread_local std::default_random_engine gen;
     static thread_local std::uniform_int_distribution<int> dist;
 };
-thread_local std::random_device NifCTX::rd{};
-thread_local std::default_random_engine NifCTX::gen{NifCTX::rd()};
-thread_local std::uniform_int_distribution<int> NifCTX::dist{};
+thread_local std::random_device NifCTX::rd {};
+thread_local std::default_random_engine NifCTX::gen {NifCTX::rd()};
+thread_local std::uniform_int_distribution<int> NifCTX::dist {};
 
 /**
  * Runs given function and returns result or error term.
@@ -358,11 +397,11 @@ template <class T> ERL_NIF_TERM handle_errors(ErlNifEnv *env, T &&fun)
     }
     catch (const std::system_error &e) {
         return nifpp::make(
-            env, std::make_tuple(error, nifpp::str_atom{e.code().message()}));
+            env, std::make_tuple(error, nifpp::str_atom {e.code().message()}));
     }
     catch (const std::exception &e) {
         return nifpp::make(
-            env, std::make_tuple(error, folly::fbstring{e.what()}));
+            env, std::make_tuple(error, folly::fbstring {e.what()}));
     }
 }
 
@@ -371,14 +410,14 @@ ERL_NIF_TERM wrap_helper(ERL_NIF_TERM (*fun)(NifCTX ctx, Args...),
     ErlNifEnv *env, const ERL_NIF_TERM args[], std::index_sequence<I...>)
 {
     return handle_errors(env,
-        [&]() { return fun(NifCTX{env}, nifpp::get<Args>(env, args[I])...); });
+        [&]() { return fun(NifCTX {env}, nifpp::get<Args>(env, args[I])...); });
 }
 
 template <typename... Args>
 ERL_NIF_TERM wrap(ERL_NIF_TERM (*fun)(NifCTX, Args...), ErlNifEnv *env,
     const ERL_NIF_TERM args[])
 {
-    return wrap_helper(fun, env, args, std::index_sequence_for<Args...>{});
+    return wrap_helper(fun, env, args, std::index_sequence_for<Args...> {});
 }
 
 template <typename... Args, std::size_t... I>
@@ -394,7 +433,7 @@ ERL_NIF_TERM noctx_wrap(ERL_NIF_TERM (*fun)(ErlNifEnv *env, Args...),
     ErlNifEnv *env, const ERL_NIF_TERM args[])
 {
     return noctx_wrap_helper(
-        fun, env, args, std::index_sequence_for<Args...>{});
+        fun, env, args, std::index_sequence_for<Args...> {});
 }
 
 /**
@@ -443,14 +482,14 @@ template <class T> void handle_result(NifCTX ctx, folly::Future<T> future)
     future.then([ctx](T &&value) { handle_value(ctx, std::move(value)); })
         .onError([ctx](const std::system_error &e) {
             auto it = error_to_atom.find(e.code());
-            nifpp::str_atom reason{e.code().message()};
+            nifpp::str_atom reason {e.code().message()};
             if (it != error_to_atom.end())
                 reason = it->second;
 
             ctx.send(std::make_tuple(error, reason));
         })
         .onError([ctx](const std::exception &e) {
-            nifpp::str_atom reason{e.what()};
+            nifpp::str_atom reason {e.what()};
             ctx.send(std::make_tuple(error, reason));
         });
 }
