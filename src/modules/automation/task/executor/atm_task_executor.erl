@@ -26,7 +26,7 @@
 -include("modules/automation/atm_tmp.hrl").
 
 %% API
--export([create/2, prepare/1, run/3]).
+-export([create/2, prepare/1, get_spec/1, run/3]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
@@ -47,6 +47,8 @@
     record() | no_return().
 
 -callback prepare(record()) -> ok | no_return().
+
+-callback get_spec(record()) -> workflow_engine:task_spec().
 
 -callback run(atm_job_execution_ctx:record(), json_utils:json_map(), record()) ->
     ok | no_return().
@@ -69,6 +71,12 @@ create(AtmWorkflowExecutionId, AtmLambadaOperationSpec) ->
 prepare(AtmTaskExecutor) ->
     Model = utils:record_type(AtmTaskExecutor),
     Model:prepare(AtmTaskExecutor).
+
+
+-spec get_spec(record()) -> workflow_engine:task_spec().
+get_spec(AtmTaskExecutor) ->
+    Model = utils:record_type(AtmTaskExecutor),
+    Model:get_spec(AtmTaskExecutor).
 
 
 -spec run(atm_job_execution_ctx:record(), json_utils:json_map(), record()) ->

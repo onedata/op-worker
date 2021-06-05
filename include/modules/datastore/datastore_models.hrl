@@ -1047,6 +1047,7 @@
 
     executor :: atm_task_executor:record(),
     argument_specs :: [atm_task_execution_argument_spec:record()],
+    result_specs :: [atm_task_execution_result_spec:record()],
 
     status :: atm_task_execution:status(),
     % Flag used to tell if status was changed during doc update (set automatically

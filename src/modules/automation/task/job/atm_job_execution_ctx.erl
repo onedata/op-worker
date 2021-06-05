@@ -8,7 +8,7 @@
 %%% @doc
 %%% This module provides utility functions for management of automation
 %%% job execution context which consists of information necessary to run
-%%% or schedule task execution for specific iterated item (automation job is
+%%% or schedule task execution for specific item (automation job is
 %%% automation task execution for specific item).
 %%% @end
 %%%-------------------------------------------------------------------

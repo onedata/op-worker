@@ -93,6 +93,48 @@ construct_arg(AtmJobExecutionCtx, AtmTaskExecutionArgSpec = #atm_task_execution_
 
 
 %%%===================================================================
+%%% persistent_record callbacks
+%%%===================================================================
+
+
+-spec version() -> persistent_record:record_version().
+version() ->
+    1.
+
+
+-spec db_encode(record(), persistent_record:nested_record_encoder()) ->
+    json_utils:json_term().
+db_encode(#atm_task_execution_argument_spec{
+    name = Name,
+    value_builder = ValueBuilder,
+    data_spec = AtmDataSpec,
+    is_batch = IsBatch
+}, NestedRecordEncoder) ->
+    #{
+        <<"name">> => Name,
+        <<"valueBuilder">> => NestedRecordEncoder(ValueBuilder, atm_task_argument_value_builder),
+        <<"dataSpec">> => NestedRecordEncoder(AtmDataSpec, atm_data_spec),
+        <<"isBatch">> => IsBatch
+    }.
+
+
+-spec db_decode(json_utils:json_term(), persistent_record:nested_record_decoder()) ->
+    record().
+db_decode(#{
+    <<"name">> := Name,
+    <<"valueBuilder">> := ValueBuilderJson,
+    <<"dataSpec">> := AtmDataSpecJson,
+    <<"isBatch">> := IsBatch
+}, NestedRecordDecoder) ->
+    #atm_task_execution_argument_spec{
+        name = Name,
+        value_builder = NestedRecordDecoder(ValueBuilderJson, atm_task_argument_value_builder),
+        data_spec = NestedRecordDecoder(AtmDataSpecJson, atm_data_spec),
+        is_batch = IsBatch
+    }.
+
+
+%%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
@@ -149,45 +191,3 @@ validate_value(AtmWorkflowExecutionCtx, ArgValue, #atm_task_execution_argument_s
     is_batch = false
 }) ->
     atm_data_validator:validate(AtmWorkflowExecutionCtx, ArgValue, AtmDataSpec).
-
-
-%%%===================================================================
-%%% persistent_record callbacks
-%%%===================================================================
-
-
--spec version() -> persistent_record:record_version().
-version() ->
-    1.
-
-
--spec db_encode(record(), persistent_record:nested_record_encoder()) ->
-    json_utils:json_term().
-db_encode(#atm_task_execution_argument_spec{
-    name = Name,
-    value_builder = ValueBuilder,
-    data_spec = AtmDataSpec,
-    is_batch = IsBatch
-}, NestedRecordEncoder) ->
-    #{
-        <<"name">> => Name,
-        <<"valueBuilder">> => NestedRecordEncoder(ValueBuilder, atm_task_argument_value_builder),
-        <<"dataSpec">> => NestedRecordEncoder(AtmDataSpec, atm_data_spec),
-        <<"isBatch">> => IsBatch
-    }.
-
-
--spec db_decode(json_utils:json_term(), persistent_record:nested_record_decoder()) ->
-    record().
-db_decode(#{
-    <<"name">> := Name,
-    <<"valueBuilder">> := ValueBuilderJson,
-    <<"dataSpec">> := AtmDataSpecJson,
-    <<"isBatch">> := IsBatch
-}, NestedRecordDecoder) ->
-    #atm_task_execution_argument_spec{
-        name = Name,
-        value_builder = NestedRecordDecoder(ValueBuilderJson, atm_task_argument_value_builder),
-        data_spec = NestedRecordDecoder(AtmDataSpecJson, atm_data_spec),
-        is_batch = IsBatch
-    }.

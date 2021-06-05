@@ -68,7 +68,8 @@ create_all(AtmWorkflowExecutionCreationCtx, AtmLaneIndex, AtmParallelBoxIndex, A
 create(AtmWorkflowExecutionCreationCtx, AtmLaneIndex, AtmParallelBoxIndex, #atm_task_schema{
     id = AtmTaskSchemaId,
     lambda_id = AtmLambdaId,
-    argument_mappings = AtmTaskArgMappers
+    argument_mappings = AtmTaskSchemaArgMappers,
+    result_mappings = AtmTaskSchemaResultMappers
 }) ->
     #atm_workflow_execution_creation_ctx{
         workflow_execution_ctx = AtmWorkflowExecutionCtx
@@ -82,7 +83,8 @@ create(AtmWorkflowExecutionCreationCtx, AtmLaneIndex, AtmParallelBoxIndex, #atm_
     %% TODO VFS-7690 use lambda snapshots stored in atm_workflow_execution:creation_ctx()
     {ok, #document{value = #od_atm_lambda{
         operation_spec = AtmLambdaOperationSpec,
-        argument_specs = AtmLambdaArgSpecs
+        argument_specs = AtmLambdaArgSpecs,
+        result_specs = AtmLambdaResultSpecs
     }}} = atm_lambda_logic:get(SessionId, AtmLambdaId),
 
     {ok, _} = atm_task_execution:create(#atm_task_execution{
@@ -94,7 +96,10 @@ create(AtmWorkflowExecutionCreationCtx, AtmLaneIndex, AtmParallelBoxIndex, #atm_
 
         executor = atm_task_executor:create(AtmWorkflowExecutionId, AtmLambdaOperationSpec),
         argument_specs = atm_task_execution_arguments:build_specs(
-            AtmLambdaArgSpecs, AtmTaskArgMappers
+            AtmLambdaArgSpecs, AtmTaskSchemaArgMappers
+        ),
+        result_specs = atm_task_execution_results:build_specs(
+            AtmLambdaResultSpecs, AtmTaskSchemaResultMappers
         ),
 
         status = ?PENDING_STATUS,
@@ -139,9 +144,11 @@ delete(AtmTaskExecutionId) ->
 
 
 -spec get_spec(atm_task_execution:id()) -> workflow_engine:task_spec().
-get_spec(_AtmTaskExecutionId) ->
-    % TODO VFS-7707 implement callback for different task executors
-    #{type => async}.
+get_spec(AtmTaskExecutionId) ->
+    #document{value = #atm_task_execution{executor = AtmTaskExecutor}} = ensure_atm_task_execution_doc(
+        AtmTaskExecutionId
+    ),
+    atm_task_executor:get_spec(AtmTaskExecutor).
 
 
 -spec run(

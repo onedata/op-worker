@@ -22,7 +22,7 @@
 
 
 %% atm_task_executor callbacks
--export([create/2, prepare/1, run/3]).
+-export([create/2, prepare/1, get_spec/1, run/3]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
@@ -81,6 +81,11 @@ prepare(AtmTaskExecutor) ->
         false -> register_function(PrepareCtx)
     end,
     await_function_readiness(PrepareCtx).
+
+
+-spec get_spec(record()) -> workflow_engine:task_spec().
+get_spec(_AtmTaskExecutor) ->
+    #{type => async}.
 
 
 -spec run(atm_job_execution_ctx:record(), json_utils:json_map(), record()) ->
