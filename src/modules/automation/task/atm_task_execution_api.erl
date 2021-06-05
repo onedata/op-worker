@@ -77,12 +77,13 @@ create(AtmWorkflowExecutionCreationCtx, AtmLaneIndex, AtmParallelBoxIndex, #atm_
     AtmWorkflowExecutionId = atm_workflow_execution_ctx:get_workflow_execution_id(
         AtmWorkflowExecutionCtx
     ),
+    SessionId = atm_workflow_execution_ctx:get_session_id(AtmWorkflowExecutionCtx),
 
     %% TODO VFS-7690 use lambda snapshots stored in atm_workflow_execution:creation_ctx()
     {ok, #document{value = #od_atm_lambda{
         operation_spec = AtmLambdaOperationSpec,
         argument_specs = AtmLambdaArgSpecs
-    }}} = atm_lambda_logic:get(?ROOT_SESS_ID, AtmLambdaId),
+    }}} = atm_lambda_logic:get(SessionId, AtmLambdaId),
 
     {ok, _} = atm_task_execution:create(#atm_task_execution{
         workflow_execution_id = AtmWorkflowExecutionId,
@@ -107,22 +108,22 @@ create(AtmWorkflowExecutionCreationCtx, AtmLaneIndex, AtmParallelBoxIndex, #atm_
 -spec prepare_all([atm_task_execution:id()]) -> ok | no_return().
 prepare_all(AtmTaskExecutionIds) ->
     lists:foreach(fun(AtmTaskExecutionId) ->
-        {ok, #document{value = AtmTaskExecutionRecord = #atm_task_execution{
+        {ok, AtmTaskExecutionDoc = #document{value = #atm_task_execution{
             schema_id = AtmTaskSchemaId
         }}} = atm_task_execution:get(AtmTaskExecutionId),
 
         try
-            prepare(AtmTaskExecutionRecord)
+            prepare(AtmTaskExecutionDoc)
         catch _:Reason ->
             throw(?ERROR_ATM_TASK_EXECUTION_PREPARATION_FAILED(AtmTaskSchemaId, Reason))
         end
     end, AtmTaskExecutionIds).
 
 
--spec prepare(atm_task_execution:id() | atm_task_execution:record()) -> ok | no_return().
-prepare(AtmTaskExecutionIdOrRecord) ->
-    #atm_task_execution{executor = AtmTaskExecutor} = ensure_atm_task_execution_record(
-        AtmTaskExecutionIdOrRecord
+-spec prepare(atm_task_execution:id() | atm_task_execution:doc()) -> ok | no_return().
+prepare(AtmTaskExecutionIdOrDoc) ->
+    #document{value = #atm_task_execution{executor = AtmTaskExecutor}} = ensure_atm_task_execution_doc(
+        AtmTaskExecutionIdOrDoc
     ),
     atm_task_executor:prepare(AtmTaskExecutor).
 
@@ -151,25 +152,18 @@ get_spec(_AtmTaskExecutionId) ->
     binary()
 ) ->
     ok | no_return().
-run(AtmWorkflowExecutionEnv, AtmTaskExecutionId, Item, FinishedCallback, HeartbeatCallback) ->
+run(AtmWorkflowExecutionEnv, AtmTaskExecutionId, Item, ReportResultUrl, HeartbeatUrl) ->
     #document{value = #atm_task_execution{
         executor = AtmTaskExecutor,
         argument_specs = AtmTaskArgSpecs
     }} = update_items_in_processing(AtmTaskExecutionId),
 
-    AtmTaskExecutionCtx = #atm_task_execution_ctx{
-        workflow_execution_env = AtmWorkflowExecutionEnv,
-        workflow_execution_ctx = atm_workflow_execution_env:acquire_workflow_execution_ctx(
-            AtmWorkflowExecutionEnv
-        ),
-        item = Item,
-        finished_callback = FinishedCallback,
-        heartbeat_callback = HeartbeatCallback
-    },
-    Args = atm_task_execution_arguments:construct_args(
-        AtmTaskExecutionCtx, AtmTaskArgSpecs
+    AtmJobExecutionCtx = atm_job_execution_ctx:build(
+        AtmWorkflowExecutionEnv, Item, ReportResultUrl, HeartbeatUrl
     ),
-    atm_task_executor:run(AtmTaskExecutionCtx, Args, AtmTaskExecutor).
+    Args = atm_task_execution_arguments:construct_args(AtmJobExecutionCtx, AtmTaskArgSpecs),
+
+    atm_task_executor:run(AtmJobExecutionCtx, Args, AtmTaskExecutor).
 
 
 -spec mark_ended(atm_task_execution:id()) -> ok.
@@ -199,9 +193,7 @@ update_items_in_processing(AtmTaskExecutionId) ->
                 items_in_processing = 1
             }};
         (#atm_task_execution{items_in_processing = ItemsInProcessing} = AtmTaskExecution) ->
-            {ok, AtmTaskExecution#atm_task_execution{
-                items_in_processing = ItemsInProcessing + 1
-            }}
+            {ok, AtmTaskExecution#atm_task_execution{items_in_processing = ItemsInProcessing + 1}}
     end),
     handle_status_change(AtmTaskExecutionDoc),
     AtmTaskExecutionDoc.
@@ -228,10 +220,10 @@ handle_status_change(#document{
 
 
 %% @private
--spec ensure_atm_task_execution_record(atm_task_execution:id() | atm_task_execution:record()) ->
-    atm_task_execution:record().
-ensure_atm_task_execution_record(#atm_task_execution{} = AtmTaskExecution) ->
-    AtmTaskExecution;
-ensure_atm_task_execution_record(AtmTaskExecutionId) ->
-    {ok, #document{value = AtmTaskExecutionRecord}} = atm_task_execution:get(AtmTaskExecutionId),
-    AtmTaskExecutionRecord.
+-spec ensure_atm_task_execution_doc(atm_task_execution:id() | atm_task_execution:doc()) ->
+    atm_task_execution:doc().
+ensure_atm_task_execution_doc(#document{value = #atm_task_execution{}} = AtmTaskExecutionDoc) ->
+    AtmTaskExecutionDoc;
+ensure_atm_task_execution_doc(AtmTaskExecutionId) ->
+    {ok, AtmTaskExecutionDoc = #document{}} = atm_task_execution:get(AtmTaskExecutionId),
+    AtmTaskExecutionDoc.

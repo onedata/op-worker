@@ -50,7 +50,7 @@
 -export_type([record/0]).
 
 
--define(AWAIT_READINESS_RETRIES, 150).
+-define(AWAIT_READINESS_RETRIES, 180).
 -define(AWAIT_READINESS_INTERVAL_SEC, 1).
 
 
@@ -83,10 +83,10 @@ prepare(AtmTaskExecutor) ->
     await_function_readiness(PrepareCtx).
 
 
--spec run(atm_task_execution:ctx(), json_utils:json_map(), record()) ->
+-spec run(atm_job_execution_ctx:record(), json_utils:json_map(), record()) ->
     ok | no_return().
-run(AtmTaskExecutionCtx, Data, AtmTaskExecutor) ->
-    schedule_function_execution(AtmTaskExecutionCtx, Data, AtmTaskExecutor).
+run(AtmJobExecutionCtx, Data, AtmTaskExecutor) ->
+    schedule_function_execution(AtmJobExecutionCtx, Data, AtmTaskExecutor).
 
 
 %%%===================================================================
@@ -280,9 +280,9 @@ await_function_readiness(#prepare_ctx{
 
 
 %% @private
--spec schedule_function_execution(atm_task_execution:ctx(), json_utils:json_map(), record()) ->
+-spec schedule_function_execution(atm_job_execution_ctx:record(), json_utils:json_map(), record()) ->
     ok | no_return().
-schedule_function_execution(AtmTaskExecutionCtx, Data, #atm_openfaas_task_executor{
+schedule_function_execution(AtmJobExecutionCtx, Data, #atm_openfaas_task_executor{
     function_name = FunctionName
 }) ->
     OpenfaasConfig = get_openfaas_config(),
@@ -291,7 +291,7 @@ schedule_function_execution(AtmTaskExecutionCtx, Data, #atm_openfaas_task_execut
     ),
     AuthHeaders = get_basic_auth_header(OpenfaasConfig),
     AllHeaders = AuthHeaders#{
-        <<"X-Callback-Url">> => AtmTaskExecutionCtx#atm_task_execution_ctx.finished_callback
+        <<"X-Callback-Url">> => atm_job_execution_ctx:get_report_result_url(AtmJobExecutionCtx)
     },
 
     case http_client:post(Endpoint, AllHeaders, json_utils:encode(Data)) of

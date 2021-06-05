@@ -44,21 +44,6 @@
     tasks :: #{atm_task_execution:id() => atm_task_execution:status()}
 }).
 
--record(atm_task_execution_ctx, {
-    workflow_execution_env :: atm_workflow_execution_env:record(),
-    workflow_execution_ctx :: atm_workflow_execution_ctx:record(),
-    item :: json_utils:json_term(),
-    finished_callback :: binary(),
-    heartbeat_callback :: binary()
-}).
-
--record(atm_task_execution_argument_spec, {
-    name :: automation:name(),
-    value_builder :: atm_task_argument_value_builder:record(),
-    data_spec :: atm_data_spec:record(),
-    is_batch :: boolean()
-}).
-
 
 -define(WAITING_PHASE, waiting).
 -define(ONGOING_PHASE, ongoing).

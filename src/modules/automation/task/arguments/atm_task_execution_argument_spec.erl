@@ -6,7 +6,11 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Helper module operating on automation task execution argument spec.
+%%% Module responsible for operating on task execution argument spec which is
+%%% 'atm_lambda_argument_spec' and 'atm_task_schema_argument_mapper' merged into
+%%% one record. It is done for performance reasons so as to not reference
+%%% several more documents (workflow schema and lambda doc) when executing
+%%% task for each item.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_task_execution_argument_spec).
@@ -17,12 +21,18 @@
 -include("modules/automation/atm_execution.hrl").
 
 %% API
--export([build/2, construct_arg/2]).
+-export([build/2, get_name/1, construct_arg/2]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
 
 
+-record(atm_task_execution_argument_spec, {
+    name :: automation:name(),
+    value_builder :: atm_task_argument_value_builder:record(),
+    data_spec :: atm_data_spec:record(),
+    is_batch :: boolean()
+}).
 -type record() :: #atm_task_execution_argument_spec{}.
 
 -export_type([record/0]).
@@ -64,18 +74,21 @@ build(#atm_lambda_argument_spec{
     }.
 
 
--spec construct_arg(atm_task_execution:ctx(), record()) ->
+-spec get_name(record()) -> automation:name().
+get_name(#atm_task_execution_argument_spec{name = ArgName}) ->
+    ArgName.
+
+
+-spec construct_arg(atm_job_execution_ctx:record(), record()) ->
     json_utils:json_term() | no_return().
-construct_arg(
-    AtmTaskExecutionCtx = #atm_task_execution_ctx{
-        workflow_execution_ctx = AtmWorkflowExecutionCtx
-    },
-    AtmTaskExecutionArgSpec = #atm_task_execution_argument_spec{
-        value_builder = ArgValueBuilder
-    }
-) ->
-    ArgValue = build_value(AtmTaskExecutionCtx, ArgValueBuilder),
+construct_arg(AtmJobExecutionCtx, AtmTaskExecutionArgSpec = #atm_task_execution_argument_spec{
+    value_builder = ArgValueBuilder
+}) ->
+    ArgValue = build_value(AtmJobExecutionCtx, ArgValueBuilder),
+
+    AtmWorkflowExecutionCtx = atm_job_execution_ctx:get_workflow_execution_ctx(AtmJobExecutionCtx),
     validate_value(AtmWorkflowExecutionCtx, ArgValue, AtmTaskExecutionArgSpec),
+
     ArgValue.
 
 
@@ -84,26 +97,27 @@ construct_arg(
 %%%===================================================================
 
 
-% TODO VFS-7660 handle rest of atm_task_argument_value_builder:type()
 %% @private
--spec build_value(atm_task_execution:ctx(), atm_task_argument_value_builder:record()) ->
+-spec build_value(atm_job_execution_ctx:record(), atm_task_argument_value_builder:record()) ->
     json_utils:json_term() | no_return().
-build_value(_AtmTaskExecutionCtx, #atm_task_argument_value_builder{
+build_value(_AtmJobExecutionCtx, #atm_task_argument_value_builder{
     type = const,
     recipe = ConstValue
 }) ->
     ConstValue;
 
-build_value(#atm_task_execution_ctx{item = Item}, #atm_task_argument_value_builder{
+build_value(AtmJobExecutionCtx, #atm_task_argument_value_builder{
     type = iterated_item,
     recipe = undefined
 }) ->
-    Item;
+    atm_job_execution_ctx:get_item(AtmJobExecutionCtx);
 
-build_value(#atm_task_execution_ctx{item = Item}, #atm_task_argument_value_builder{
+build_value(AtmJobExecutionCtx, #atm_task_argument_value_builder{
     type = iterated_item,
     recipe = Query
 }) ->
+    Item = atm_job_execution_ctx:get_item(AtmJobExecutionCtx),
+
     % TODO VFS-7660 fix query in case of array indices
     case json_utils:query(Item, Query) of
         {ok, Value} -> Value;
@@ -111,6 +125,7 @@ build_value(#atm_task_execution_ctx{item = Item}, #atm_task_argument_value_build
     end;
 
 build_value(_AtmTaskExecutionArgSpec, _InputSpec) ->
+    % TODO VFS-7660 handle rest of atm_task_argument_value_builder:type()
     throw(?ERROR_ATM_TASK_ARG_MAPPER_INVALID_INPUT_SPEC).
 
 

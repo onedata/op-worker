@@ -6,8 +6,8 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module defines `atm_task_executor` interface - an object which can be
-%%% used to execute an automation task with given arguments.
+%%% This module defines `atm_task_executor` interface - an object used to
+%%% execute a job (an automation task with specific arguments).
 %%%
 %%%                             !!! Caution !!!
 %%% 1) This behaviour must be implemented by proper models, that is modules with
@@ -48,7 +48,7 @@
 
 -callback prepare(record()) -> ok | no_return().
 
--callback run(atm_task_execution:ctx(), json_utils:json_map(), record()) ->
+-callback run(atm_job_execution_ctx:record(), json_utils:json_map(), record()) ->
     ok | no_return().
 
 
@@ -71,7 +71,7 @@ prepare(AtmTaskExecutor) ->
     Model:prepare(AtmTaskExecutor).
 
 
--spec run(atm_task_execution:ctx(), json_utils:json_map(), record()) ->
+-spec run(atm_job_execution_ctx:record(), json_utils:json_map(), record()) ->
     ok | no_return().
 run(AtmTaskExecutionCtx, Arguments, AtmTaskExecutor) ->
     Model = utils:record_type(AtmTaskExecutor),
