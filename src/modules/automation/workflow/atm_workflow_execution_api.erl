@@ -98,7 +98,7 @@ get_lane_execution_spec(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmLane
         parallel_boxes => atm_lane_execution:get_parallel_box_execution_specs(
             AtmLanExecution
         ),
-        iterator => get_iterator_for_lane_execution(
+        iterator => acquire_iterator_for_lane_execution(
             AtmWorkflowExecutionEnv, AtmLaneIndex, AtmWorkflowExecutionDoc
         ),
         is_last => is_last_lane_execution(AtmLaneIndex, AtmWorkflowExecutionDoc)
@@ -296,26 +296,30 @@ transition_to_status(AtmWorkflowExecutionId, NewStatus) ->
 
 
 %% @private
--spec get_iterator_for_lane_execution(
+-spec acquire_iterator_for_lane_execution(
     atm_workflow_execution_env:record(),
     non_neg_integer(),
     atm_workflow_execution:doc()
 ) ->
     atm_store_iterator:record().
-get_iterator_for_lane_execution(AtmWorkflowExecutionEnv, AtmLaneIndex, #document{
-    value = #atm_workflow_execution{
-        schema_snapshot_id = AtmWorkflowSchemaSnapshotId
-    }
-}) ->
+acquire_iterator_for_lane_execution(AtmWorkflowExecutionEnv, AtmLaneIndex, AtmWorkflowExecutionDoc) ->
+    #atm_lane_schema{store_iterator_spec = AtmStoreIteratorSpec} = get_lane_schema(
+        AtmLaneIndex, AtmWorkflowExecutionDoc
+    ),
+    atm_store_api:acquire_iterator(AtmWorkflowExecutionEnv, AtmStoreIteratorSpec).
+
+
+%% @private
+-spec get_lane_schema(non_neg_integer(), atm_workflow_execution:doc()) ->
+    atm_lane_schema:record().
+get_lane_schema(AtmLaneIndex, #document{value = #atm_workflow_execution{
+    schema_snapshot_id = AtmWorkflowSchemaSnapshotId
+}}) ->
     {ok, #document{value = #atm_workflow_schema_snapshot{
         lanes = AtmLaneSchemas
     }}} = atm_workflow_schema_snapshot:get(AtmWorkflowSchemaSnapshotId),
 
-    #atm_lane_schema{store_iterator_spec = AtmStoreIteratorSpec} = lists:nth(
-        AtmLaneIndex, AtmLaneSchemas
-    ),
-
-    atm_store_api:acquire_iterator(AtmWorkflowExecutionEnv, AtmStoreIteratorSpec).
+    lists:nth(AtmLaneIndex, AtmLaneSchemas).
 
 
 %% @private

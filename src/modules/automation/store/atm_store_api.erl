@@ -17,6 +17,7 @@
 %% API
 -export([
     create_all/1, create/3,
+    freeze/1, unfreeze/1,
     apply_operation/5,
     delete_all/1, delete/1,
     acquire_iterator/2
@@ -87,6 +88,20 @@ create(AtmWorkflowExecutionCtx, InitialValue, #atm_store_schema{
             ContainerModel, AtmDataSpec, ActualInitialValue, AtmWorkflowExecutionCtx
         )
     }).
+
+
+-spec freeze(atm_store:id()) -> ok.
+freeze(AtmStoreId) ->
+    ok = atm_store:update(AtmStoreId, fun(#atm_store{} = AtmStore) ->
+        {ok, AtmStore#atm_store{frozen = true}}
+    end).
+
+
+-spec unfreeze(atm_store:id()) -> ok.
+unfreeze(AtmStoreId) ->
+    ok = atm_store:update(AtmStoreId, fun(#atm_store{} = AtmStore) ->
+        {ok, AtmStore#atm_store{frozen = false}}
+    end).
 
 
 -spec apply_operation(
