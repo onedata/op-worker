@@ -6,7 +6,8 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% TODO WRITEME
+%%% This module implements callbacks for handling automation workflow
+%%% execution process.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(atm_workflow_execution_handler).
@@ -23,7 +24,8 @@
     get_lane_spec/3,
     process_item/6,
     process_result/4,
-    handle_task_ended/3
+    handle_task_execution_ended/3,
+    handle_lane_execution_ended/3
 ]).
 
 
@@ -124,18 +126,37 @@ process_result(_AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmTaskExecutio
     ok.
 
 
--spec handle_task_ended(
+-spec handle_task_execution_ended(
     atm_workflow_execution:id(),
     atm_workflow_execution_env:record(),
     atm_task_execution:id()
 ) ->
     ok.
-handle_task_ended(_AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv, AtmTaskExecutionId) ->
+handle_task_execution_ended(_AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv, AtmTaskExecutionId) ->
     try
         ok = atm_task_execution_api:mark_ended(AtmTaskExecutionId)
     catch _:Reason ->
         % TODO VFS-7637 use audit log
         ?error("FAILED TO MARK TASK EXECUTION ~p AS ENDED DUE TO: ~p", [
             AtmTaskExecutionId, Reason
+        ])
+    end.
+
+
+-spec handle_lane_execution_ended(
+    atm_workflow_execution:id(),
+    atm_workflow_execution_env:record(),
+    non_neg_integer()
+) ->
+    ok.
+handle_lane_execution_ended(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmLaneExecutionIndex) ->
+    try
+        ok = atm_workflow_execution_api:report_lane_execution_ended(
+            AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmLaneExecutionIndex
+        )
+    catch _:Reason ->
+        % TODO VFS-7637 use audit log
+        ?error("FAILED TO MARK LANE EXECUTION ~p AS ENDED DUE TO: ~p", [
+            AtmLaneExecutionIndex, Reason
         ])
     end.
