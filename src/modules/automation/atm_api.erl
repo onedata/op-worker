@@ -54,12 +54,10 @@ start(UserCtx, SpaceId, AtmWorkflowSchemaId, InitialValues) ->
         initial_values = InitialValues
     }),
 
-    % TODO uncomment after MW implements it
-%%    AtmWorkflowExecutionEnv = #atm_workflow_execution_env{
-%%        space_id = SpaceId,
-%%        workflow_execution_id = AtmWorkflowExecutionId,
-%%        store_registry = AtmStoreRegistry
-%%    },
+%%    % TODO VFS-7551 uncomment after MW implements it
+%%    AtmWorkflowExecutionEnv = atm_workflow_execution_env:build(
+%%        SpaceId, AtmWorkflowExecutionId, AtmStoreRegistry
+%%    ),
 %%    workflow_engine:start(
 %%        atm_workflow_execution_handler, AtmWorkflowExecutionId, AtmWorkflowExecutionEnv
 %%    ),

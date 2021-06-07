@@ -22,7 +22,7 @@
     delete_all/1, delete/1,
 
     get_spec/1,
-    run/5,
+    run/5, handle_results/3,
     mark_ended/1
 ]).
 
@@ -162,15 +162,33 @@ get_spec(AtmTaskExecutionId) ->
 run(AtmWorkflowExecutionEnv, AtmTaskExecutionId, Item, ReportResultUrl, HeartbeatUrl) ->
     #document{value = #atm_task_execution{
         executor = AtmTaskExecutor,
-        argument_specs = AtmTaskArgSpecs
+        argument_specs = AtmTaskExecutionArgSpecs
     }} = update_items_in_processing(AtmTaskExecutionId),
 
     AtmJobExecutionCtx = atm_job_execution_ctx:build(
         AtmWorkflowExecutionEnv, Item, ReportResultUrl, HeartbeatUrl
     ),
-    Args = atm_task_execution_arguments:construct_args(AtmJobExecutionCtx, AtmTaskArgSpecs),
+    Args = atm_task_execution_arguments:construct_args(AtmJobExecutionCtx, AtmTaskExecutionArgSpecs),
 
     atm_task_executor:run(AtmJobExecutionCtx, Args, AtmTaskExecutor).
+
+
+-spec handle_results(
+    atm_workflow_execution_env:record(),
+    atm_task_execution:id(),
+    error | json_utils:json_map()
+) ->
+    ok | no_return().
+handle_results(_AtmWorkflowExecutionEnv, AtmTaskExecutionId, error) ->
+    update_items_failed_and_processed(AtmTaskExecutionId);
+
+handle_results(AtmWorkflowExecutionEnv, AtmTaskExecutionId, Results) ->
+    #document{value = #atm_task_execution{
+        result_specs = AtmTaskExecutionResultSpecs
+    }} = ensure_atm_task_execution_doc(AtmTaskExecutionId),
+
+    atm_task_execution_results:apply(AtmWorkflowExecutionEnv, AtmTaskExecutionResultSpecs, Results),
+    update_items_processed(AtmTaskExecutionId).
 
 
 -spec mark_ended(atm_task_execution:id()) -> ok.
@@ -204,6 +222,32 @@ update_items_in_processing(AtmTaskExecutionId) ->
     end),
     handle_status_change(AtmTaskExecutionDoc),
     AtmTaskExecutionDoc.
+
+
+%% @private
+-spec update_items_processed(atm_task_execution:id()) -> ok.
+update_items_processed(AtmTaskExecutionId) ->
+    {ok, _} = atm_task_execution:update(AtmTaskExecutionId, fun
+        (#atm_task_execution{items_processed = ItemsProcessed} = AtmTaskExecution) ->
+            {ok, AtmTaskExecution#atm_task_execution{items_processed = ItemsProcessed + 1}}
+    end),
+    ok.
+
+
+%% @private
+-spec update_items_failed_and_processed(atm_task_execution:id()) -> ok.
+update_items_failed_and_processed(AtmTaskExecutionId) ->
+    {ok, _} = atm_task_execution:update(AtmTaskExecutionId, fun
+        (#atm_task_execution{
+            items_processed = ItemsProcessed,
+            items_failed = ItemsFailed
+        } = AtmTaskExecution) ->
+            {ok, AtmTaskExecution#atm_task_execution{
+                items_processed = ItemsProcessed + 1,
+                items_failed = ItemsFailed + 1
+            }}
+    end),
+    ok.
 
 
 %% @private

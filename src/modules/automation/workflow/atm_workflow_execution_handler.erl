@@ -12,7 +12,7 @@
 -module(atm_workflow_execution_handler).
 -author("Bartosz Walkowicz").
 
-% TODO substitute bahaviour module
+% TODO VFS-7551 substitute bahaviour module
 %%-behaviour(workflow_handler).
 
 -include_lib("ctool/include/logging.hrl").
@@ -80,25 +80,47 @@ process_item(
     AtmWorkflowExecutionEnv,
     AtmTaskExecutionId,
     Item,
-    FinishedCallback,
-    HeartbeatCallback
+    ReportResultUrl,
+    HeartbeatUrl
 ) ->
     try
         ok = atm_task_execution_api:run(
             AtmWorkflowExecutionEnv, AtmTaskExecutionId, Item,
-            FinishedCallback, HeartbeatCallback
+            ReportResultUrl, HeartbeatUrl
         )
     catch _:Reason ->
         % TODO VFS-7637 use audit log
         ?error("[~p] FAILED TO RUN TASK ~p DUE TO: ~p", [
             AtmWorkflowExecutionId, AtmTaskExecutionId, Reason
         ]),
+        catch atm_task_execution_api:handle_results(
+            AtmWorkflowExecutionEnv, AtmTaskExecutionId, error
+        ),
         error
     end.
 
 
-process_result(_AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv, _AtmTaskExecutionId, _Result) ->
-    % TODO VFS-7691 implement result mappers
+-spec process_result(
+    atm_workflow_execution:id(),
+    atm_workflow_execution_env:record(),
+    atm_task_execution:id(),
+    {error, term()} | json_utils:json_map()
+) ->
+    ok | error.
+process_result(_AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmTaskExecutionId, {error, _}) ->
+    catch atm_task_execution_api:handle_results(AtmWorkflowExecutionEnv, AtmTaskExecutionId, error),
+    error;
+
+process_result(_AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmTaskExecutionId, Results) ->
+    try
+        atm_task_execution_api:handle_results(AtmWorkflowExecutionEnv, AtmTaskExecutionId, Results)
+    catch _:Reason ->
+        % TODO VFS-7637 use audit log
+        ?error("FAILED TO PROCESS RESULT FOR TASK EXECUTION ~p DUE TO: ~p", [
+            AtmTaskExecutionId, Reason
+        ]),
+        catch atm_task_execution_api:handle_results(AtmWorkflowExecutionEnv, AtmTaskExecutionId, error)
+    end,
     ok.
 
 

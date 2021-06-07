@@ -15,7 +15,7 @@
 -include("modules/automation/atm_execution.hrl").
 
 %% API
--export([build_specs/2]).
+-export([build_specs/2, apply/3]).
 
 
 %%%===================================================================
@@ -42,6 +42,35 @@ build_specs(AtmLambdaResultSpecs, AtmTaskSchemaResultMappers) ->
         ),
         [AtmTaskExecutionResultSpec | Acc]
     end, [], lists:usort(fun order_atm_lambda_result_specs_by_name/2, AtmLambdaResultSpecs)).
+
+
+-spec apply(
+    atm_workflow_execution_env:record(),
+    [atm_task_execution_result_spec:record()],
+    json_utils:json_map()
+) ->
+    ok | no_return().
+apply(AtmWorkflowExecutionEnv, AtmTaskExecutionResultSpecs, Results) ->
+    AtmWorkflowExecutionCtx = atm_workflow_execution_env:acquire_workflow_execution_ctx(
+        AtmWorkflowExecutionEnv
+    ),
+    lists:foreach(fun(AtmTaskExecutionResultSpec) ->
+        ResultName = atm_task_execution_result_spec:get_name(AtmTaskExecutionResultSpec),
+
+        case maps:get(ResultName, Results, undefined) of
+            undefined ->
+                throw(?ERROR_ATM_TASK_MISSING_RESULT(ResultName));
+            Result ->
+                try
+                    atm_task_execution_result_spec:apply_result(
+                        AtmWorkflowExecutionEnv, AtmWorkflowExecutionCtx,
+                        AtmTaskExecutionResultSpec, Result
+                    )
+                catch _:Reason ->
+                    throw(?ERROR_ATM_TASK_RESULT_MAPPING_FAILED(ResultName, Reason))
+                end
+        end
+    end, AtmTaskExecutionResultSpecs).
 
 
 %%%===================================================================

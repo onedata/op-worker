@@ -44,6 +44,15 @@
 -define(ERROR_ATM_TASK_ARG_MAPPER_ITEM_QUERY_FAILED(__ITEM, __QUERY),
     {error, {atm_task_arg_item_query_failed, __ITEM, __QUERY}}
 ).
+-define(ERROR_ATM_TASK_MISSING_RESULT(__RESULT_NAME),
+    {error, {atm_task_missing_result, __RESULT_NAME}}
+).
+-define(ERROR_ATM_TASK_RESULT_DISPATCH_FAILED(__STORE_SCHEMA_ID, __REASON),
+    {error, {atm_task_result_dispatch_failed, __STORE_SCHEMA_ID, __REASON}}
+).
+-define(ERROR_ATM_TASK_RESULT_MAPPING_FAILED(__RESULT_NAME, __REASON),
+    {error, {atm_task_result_mapping_failed, __RESULT_NAME, __REASON}}
+).
 -define(ERROR_ATM_BAD_DATA, {error, atm_bad_data}).
 -define(ERROR_ATM_BAD_DATA(__KEY, __REASON),
     {error, {atm_bad_data, __KEY, __REASON}}

@@ -21,7 +21,7 @@
 -include("modules/automation/atm_execution.hrl").
 
 %% API
--export([build/2]).
+-export([build/2, get_name/1, apply_result/4]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
@@ -65,6 +65,25 @@ build(#atm_lambda_result_spec{
         is_batch = IsBatch,
         dispatch_specs = lists:map(fun build_dispatch_spec/1, AtmTaskSchemaResultMappers)
     }.
+
+
+-spec get_name(record()) -> automation:name().
+get_name(#atm_task_execution_result_spec{name = Name}) ->
+    Name.
+
+
+-spec apply_result(
+    atm_workflow_execution_env:record(),
+    atm_workflow_execution_ctx:record(),
+    record(),
+    json_utils:json_term()
+) ->
+    ok | no_return().
+apply_result(AtmWorkflowExecutionEnv, AtmWorkflowExecutionCtx, AtmTaskExecutionResultSpec, Result) ->
+    validate_result(AtmWorkflowExecutionCtx, AtmTaskExecutionResultSpec, Result),
+    dispatch_result(
+        AtmWorkflowExecutionEnv, AtmWorkflowExecutionCtx, AtmTaskExecutionResultSpec, Result
+    ).
 
 
 %%%===================================================================
@@ -148,3 +167,49 @@ dispatch_spec_from_json(#{
         store_schema_id = AtmStoreSchemaId,
         function = binary_to_atom(DispatchFunctionBin, utf8)
     }.
+
+
+%% @private
+-spec validate_result(atm_workflow_execution_ctx:record(), record(), json_utils:json_term()) ->
+    ok | no_return().
+validate_result(AtmWorkflowExecutionCtx, #atm_task_execution_result_spec{
+    data_spec = AtmDataSpec,
+    is_batch = true
+}, Result) ->
+    lists:foreach(fun(Value) ->
+        atm_data_validator:validate(AtmWorkflowExecutionCtx, Value, AtmDataSpec)
+    end, Result);
+
+validate_result(AtmWorkflowExecutionCtx, #atm_task_execution_result_spec{
+    data_spec = AtmDataSpec,
+    is_batch = false
+}, Result) ->
+    atm_data_validator:validate(AtmWorkflowExecutionCtx, Result, AtmDataSpec).
+
+
+%% @private
+-spec dispatch_result(
+    atm_workflow_execution_env:record(),
+    atm_workflow_execution_ctx:record(),
+    record(),
+    json_utils:json_term()
+) ->
+    ok | no_return().
+dispatch_result(AtmWorkflowExecutionEnv, AtmWorkflowExecutionCtx, #atm_task_execution_result_spec{
+    dispatch_specs = DispatchSpecs,
+    is_batch = IsBatch
+}, Result) ->
+    Options = #{<<"isBatch">> => IsBatch},
+
+    lists:foreach(fun(#dispatch_spec{store_schema_id = AtmStoreSchemaId, function = DispatchFun}) ->
+        try
+            AtmStoreId = atm_workflow_execution_env:get_store_id(
+                AtmStoreSchemaId, AtmWorkflowExecutionEnv
+            ),
+            atm_store_api:apply_operation(
+                AtmWorkflowExecutionCtx, DispatchFun, Result, Options, AtmStoreId
+            )
+        catch _:Reason ->
+            throw(?ERROR_ATM_TASK_RESULT_DISPATCH_FAILED(AtmStoreSchemaId, Reason))
+        end
+    end, DispatchSpecs).
