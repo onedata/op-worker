@@ -29,7 +29,7 @@
     storage_describe/1,
     is_storage_imported/1,
 
-    get_user_space_by_name/3,
+    get_user_space_by_name/2,
 
     get_spaces/0,
     get_space_details/1,
@@ -50,7 +50,7 @@
     get_cert_chain_ders/0,
     gs_protocol_supported_versions/0,
 
-    perform_io_test/3
+    perform_io_test/2
 ]).
 
 
@@ -107,9 +107,10 @@ is_storage_imported(StorageId) ->
     rpc_api:storage_is_imported_storage(StorageId).
 
 
--spec get_user_space_by_name(od_user:id(), od_space:name(), tokens:serialized()) ->
+-spec get_user_space_by_name(od_space:name(), tokens:serialized()) ->
     {true, od_space:id()} | false.
-get_user_space_by_name(UserId, SpaceName, AccessToken) ->
+get_user_space_by_name(SpaceName, AccessToken) ->
+    UserId = get_user_id_from_token(AccessToken),
     SessionId = create_session(UserId, AccessToken),
     user_logic:get_space_by_name(SessionId, UserId, SpaceName).
 
@@ -194,8 +195,9 @@ gs_protocol_supported_versions() ->
     gs_protocol:supported_versions().
 
 
--spec perform_io_test(file_meta:path(), od_user:id(), tokens:serialized()) -> ok | error.
-perform_io_test(Path, UserId, AccessToken) ->
+-spec perform_io_test(file_meta:path(), tokens:serialized()) -> ok | error.
+perform_io_test(Path, AccessToken) ->
+    UserId = get_user_id_from_token(AccessToken),
     SessionId = create_session(UserId, AccessToken),
     BytesSize = 5000,
     SampleFileContent = str_utils:rand_hex(BytesSize),
@@ -228,7 +230,7 @@ perform_io_test(Path, UserId, AccessToken) ->
 
 
 %% @private
--spec create_session(od_user:id(), tokens:serialized()) -> binary().
+-spec create_session(od_user:id(), tokens:serialized()) -> session:id().
 create_session(UserId, AccessToken) ->
     Nonce = crypto:strong_rand_bytes(10),
     Identity = ?SUB(user, UserId),
@@ -245,3 +247,11 @@ local_ip_v4() ->
         Addr || {_, Opts} <- Addrs, {addr, Addr} <- Opts,
         size(Addr) == 4, Addr =/= {127, 0, 0, 1}
     ]).
+
+
+%% @private
+-spec get_user_id_from_token(tokens:token()) -> od_user:id().
+get_user_id_from_token(Token) ->
+    {ok, #token{subject = Subject}} = tokens:deserialize(Token),
+    #subject{id = Id} = Subject,
+    Id.
