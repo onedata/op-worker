@@ -250,8 +250,7 @@ local_ip_v4() ->
 
 
 %% @private
--spec get_user_id_from_token(tokens:token()) -> od_user:id().
+-spec get_user_id_from_token(binary()) -> od_user:id().
 get_user_id_from_token(Token) ->
-    {ok, #token{subject = Subject}} = tokens:deserialize(Token),
-    #subject{id = Id} = Subject,
+    {ok, #token{subject = #subject{id = Id}}} = tokens:deserialize(Token),
     Id.
