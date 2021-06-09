@@ -20,21 +20,17 @@
 
 %% API
 -export([
-    get_next/1,
-    jump_to/2,
+    get_next/2,
+    forget_before/1,
+    mark_exhausted/1,
     encode/1,
     decode/1
 ]).
 
 -opaque iterator() :: tuple().
-
-% Points to specific location in collection so that it would be possible to shift
-% iterator to this position.
--type cursor() :: binary().
-
 -type item() :: term().
 
--export_type([iterator/0, cursor/0, item/0]).
+-export_type([iterator/0, item/0]).
 
 
 %%%===================================================================
@@ -42,9 +38,11 @@
 %%%===================================================================
 
 
--callback get_next(iterator()) -> {ok, item(), cursor(), iterator()} | stop.
+-callback get_next(workflow_engine:execution_context(), iterator()) -> {ok, item(), iterator()} | stop.
 
--callback jump_to(cursor(), iterator()) -> iterator().
+-callback forget_before(iterator()) -> ok.
+
+-callback mark_exhausted(iterator()) -> ok.
 
 
 %%%===================================================================
@@ -52,16 +50,22 @@
 %%%===================================================================
 
 
--spec get_next(iterator()) -> {ok, item(), cursor(), iterator()} | stop.
-get_next(Iterator) ->
+-spec get_next(workflow_engine:execution_context(), iterator()) -> {ok, item(), iterator()} | stop.
+get_next(Context, Iterator) ->
     Module = utils:record_type(Iterator),
-    Module:get_next(Iterator).
+    Module:get_next(Context, Iterator).
 
 
--spec jump_to(cursor(), iterator()) -> iterator().
-jump_to(Cursor, Iterator) ->
+-spec forget_before(iterator()) -> ok.
+forget_before(Iterator) ->
     Module = utils:record_type(Iterator),
-    Module:jump_to(Cursor, Iterator).
+    Module:forget_before(Iterator).
+
+
+-spec mark_exhausted(iterator()) -> ok.
+mark_exhausted(Iterator) ->
+    Module = utils:record_type(Iterator),
+    Module:mark_exhausted(Iterator).
 
 
 -spec encode(iterator()) -> binary().

@@ -23,6 +23,8 @@
 %% API
 -export([init/2, add_execution_id/2, remove_execution_id/2, poll_next_execution_id/1, get_execution_ids/1,
     increment_slot_usage/1, decrement_slot_usage/1]).
+%% Test API
+-export([get_slots_used/1]).
 
 -define(CTX, #{
     model => ?MODULE,
@@ -49,14 +51,19 @@ add_execution_id(EngineId, ExecutionId) ->
     {ok, _} = datastore_model:update(?CTX, EngineId, Diff),
     ok.
 
--spec remove_execution_id(workflow_engine:id(), workflow_engine:execution_id()) -> ok.
+-spec remove_execution_id(workflow_engine:id(), workflow_engine:execution_id()) -> ok | ?WF_ERROR_ALREADY_REMOVED.
 remove_execution_id(EngineId, ExecutionId) ->
     Diff = fun
         (#workflow_engine_state{executions = ExecutionIds} = Record) ->
-            {ok, Record#workflow_engine_state{executions = ExecutionIds -- [ExecutionId]}}
+            case lists:member(ExecutionId, ExecutionIds) of
+                true -> {ok, Record#workflow_engine_state{executions = ExecutionIds -- [ExecutionId]}};
+                false -> ?WF_ERROR_ALREADY_REMOVED
+            end
     end,
-    {ok, _} = datastore_model:update(?CTX, EngineId, Diff),
-    ok.
+    case datastore_model:update(?CTX, EngineId, Diff) of
+        {ok, _} -> ok;
+        ?WF_ERROR_ALREADY_REMOVED -> ?WF_ERROR_ALREADY_REMOVED
+    end.
 
 -spec poll_next_execution_id(workflow_engine:id()) -> {ok, workflow_engine:execution_id()} | ?ERROR_NOT_FOUND.
 poll_next_execution_id(EngineId) ->
@@ -108,3 +115,12 @@ decrement_slot_usage(EngineId) ->
     end,
     {ok, _} = datastore_model:update(?CTX, EngineId, Diff),
     ok.
+
+%%%===================================================================
+%%% Test API
+%%%===================================================================
+
+-spec get_slots_used(workflow_engine:id()) -> non_neg_integer().
+get_slots_used(EngineId) ->
+    {ok, #document{value = #workflow_engine_state{slots_used = SlotsUsed}}} = datastore_model:get(?CTX, EngineId),
+    SlotsUsed.

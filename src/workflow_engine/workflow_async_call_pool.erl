@@ -21,6 +21,8 @@
 
 %% API
 -export([init/2, increment_slot_usage/1, decrement_slot_usage/1]).
+%% Test API
+-export([get_slot_usage/1]).
 
 -type id() :: binary().
 -type record() :: #workflow_async_call_pool{}.
@@ -53,6 +55,15 @@ increment_slot_usage(Id) ->
 decrement_slot_usage(Id) ->
     {ok, _} = datastore_model:update(?CTX, Id, fun decrement_slot_usage_internal/1),
     ok.
+
+%%%===================================================================
+%%% Test API
+%%%===================================================================
+
+-spec get_slot_usage(id()) -> non_neg_integer().
+get_slot_usage(Id) ->
+    {ok, #document{value = #workflow_async_call_pool{slots_used = SlotsUsed}}} = datastore_model:get(?CTX, Id),
+    SlotsUsed.
 
 %%%===================================================================
 %%% Functions operating on record

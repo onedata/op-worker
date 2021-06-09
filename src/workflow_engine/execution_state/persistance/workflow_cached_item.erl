@@ -34,13 +34,13 @@
 %%% API
 %%%===================================================================
 
--spec put(workflow_store:item()) -> id().
+-spec put(iterator:item()) -> id().
 put(Item) ->
     Doc = #document{value = #workflow_cached_item{item = Item}},
     {ok, #document{key = ItemId}} = datastore_model:save(?CTX, Doc),
     ItemId.
 
--spec get(id()) -> workflow_store:item().
+-spec get(id()) -> iterator:item().
 get(ItemId) ->
     {ok, #document{value = #workflow_cached_item{item = Item}}} = datastore_model:get(?CTX, ItemId),
     Item.

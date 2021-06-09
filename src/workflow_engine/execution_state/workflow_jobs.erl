@@ -20,9 +20,9 @@
 %% API
 -export([init/0, prepare_next_waiting_job/1, populate_with_jobs_for_item/4,
     pause_job/2, mark_ongoing_job_finished/2, register_failure/2,
-    ensure_job_identifier_or_cache_ans/3, prepare_next_parallel_box/4]).
--export([register_async_call/5, check_timeouts/1, reset_keepalive_timer/2]).
--export([is_async_job/1, get_item_id/2, get_task_id/2]).
+    remove_pending_async_job/3, prepare_next_parallel_box/4]).
+-export([register_async_call/3, check_timeouts/1, reset_keepalive_timer/2]).
+-export([job_identifier_to_binary/1, binary_to_job_identifier/1, get_item_id/2, get_task_details/2]).
 
 % Internal record used for scheduled jobs management
 -record(job_identifier, {
@@ -31,10 +31,8 @@
     task_index :: workflow_execution_state:index()
 }).
 
-% Internal record used for management of jobs that are processed asynchronously
--record(async_job, {
-    job_identifier :: job_identifier(),
-    task_id :: task_executor:task_id(), % TODO VFS-7551 - delete field
+% Internal record used to control timeouts of jobs that are processed asynchronously
+-record(async_job_timer, {
     keepalive_timer :: countdown_timer:instance(),
     % max allowed time between heartbeats to assume the async process is still alive
     keepalive_timeout :: time:seconds()
@@ -52,18 +50,19 @@
     failed_items = sets:new() :: items_set(),
 
     pending_async_jobs = #{} :: pending_async_jobs(),
-    unidentified_async_refs = #{} :: unidentified_async_refs() % TODO VFS-7551 - clean when they are not needed anymore (after integration with BW)
+    raced_results = #{} :: raced_results() % TODO VFS-7551 - clean when they are not needed anymore (after integration with BW)
 }).
 
 -type job_identifier() :: #job_identifier{}.
 -type jobs_set() :: gb_sets:set(job_identifier()).
 -type items_set() :: sets:set(workflow_execution_state:index()).
--type async_job() :: #async_job{}.
--type pending_async_jobs() :: #{task_executor:async_ref() => async_job()}.
--type unidentified_async_refs() :: #{task_executor:async_ref() => task_executor:result()}.
+-type pending_async_jobs() :: #{job_identifier() => #async_job_timer{}}.
+-type raced_results() :: #{job_identifier() => workflow_handler:callback_execution_result()}.
 -type jobs() :: #workflow_jobs{}.
 
 -export_type([job_identifier/0, jobs/0]).
+
+-define(SEPARATOR, "_").
 
 %%%===================================================================
 %%% API
@@ -74,7 +73,7 @@ init() ->
     #workflow_jobs{}.
 
 -spec prepare_next_waiting_job(jobs()) ->
-    {ok, job_identifier(), jobs()} | ?WF_ERROR_ONGOING_ITEMS_ONLY | ?ERROR_NOT_FOUND.
+    {ok, job_identifier(), jobs()} | ?WF_ERROR_NO_WAITING_ITEMS | ?ERROR_NOT_FOUND.
 prepare_next_waiting_job(Jobs = #workflow_jobs{
     waiting = Waiting,
     ongoing = Ongoing
@@ -87,7 +86,7 @@ prepare_next_waiting_job(Jobs = #workflow_jobs{
         true ->
             case gb_sets:is_empty(Ongoing) of
                 true -> ?ERROR_NOT_FOUND;
-                false -> ?WF_ERROR_ONGOING_ITEMS_ONLY
+                false -> ?WF_ERROR_NO_WAITING_ITEMS
             end
     end.
 
@@ -95,7 +94,7 @@ prepare_next_waiting_job(Jobs = #workflow_jobs{
     jobs(),
     workflow_execution_state:index(),
     workflow_execution_state:index(),
-    workflow_definition:boxes_map()
+    workflow_execution_state:boxes_map()
 ) -> {jobs(), job_identifier()}.
 populate_with_jobs_for_item(
     Jobs = #workflow_jobs{
@@ -155,22 +154,20 @@ register_failure(Jobs = #workflow_jobs{
     % TODO VFS-7551 - count errors and stop workflow when errors limit is reached
     Jobs2#workflow_jobs{failed_items = NewFailed}.
 
--spec ensure_job_identifier_or_cache_ans(jobs(), job_identifier() | task_executor:async_ref(), task_executor:result()) ->
-    {{ok, job_identifier()} | ?WF_ERROR_UNKNOWN_REFERENCE, jobs()}.
-ensure_job_identifier_or_cache_ans(Jobs, #job_identifier{} = JobIdentifier, _Ans) ->
-    {{ok, JobIdentifier}, Jobs};
-ensure_job_identifier_or_cache_ans(Jobs = #workflow_jobs{
+-spec remove_pending_async_job(jobs(), job_identifier(), workflow_handler:callback_execution_result()) ->
+    {ok | ?WF_ERROR_UNKNOWN_JOB, jobs()}.
+remove_pending_async_job(Jobs = #workflow_jobs{
     pending_async_jobs = AsyncCalls,
-    unidentified_async_refs = Unidentified
-}, Ref, Ans) ->
-    case maps:get(Ref, AsyncCalls, undefined) of
+    raced_results = Unidentified
+}, JobIdentifier, Ans) ->
+    case maps:get(JobIdentifier, AsyncCalls, undefined) of
         undefined ->
-            {?WF_ERROR_UNKNOWN_REFERENCE, Jobs#workflow_jobs{unidentified_async_refs = Unidentified#{Ref => Ans}}};
-        #async_job{job_identifier = JobIdentifier} ->
-            {{ok, JobIdentifier}, Jobs#workflow_jobs{pending_async_jobs = maps:remove(Ref, AsyncCalls)}}
+            {?WF_ERROR_UNKNOWN_JOB, Jobs#workflow_jobs{raced_results = Unidentified#{JobIdentifier => Ans}}};
+        _ ->
+            {ok, Jobs#workflow_jobs{pending_async_jobs = maps:remove(JobIdentifier, AsyncCalls)}}
     end.
 
--spec prepare_next_parallel_box(jobs(), job_identifier(), workflow_definition:boxes_map(), non_neg_integer()) ->
+-spec prepare_next_parallel_box(jobs(), job_identifier(), workflow_execution_state:boxes_map(), non_neg_integer()) ->
     {ok, jobs()} | ?WF_ERROR_ITEM_PROCESSING_FINISHED(workflow_execution_state:index()).
 prepare_next_parallel_box(_Jobs,
     #job_identifier{
@@ -205,24 +202,22 @@ prepare_next_parallel_box(
 %%% Functions returning/updating pending_async_jobs field
 %%%===================================================================
 
--spec register_async_call(jobs(), job_identifier(), task_executor:task_id(), task_executor:async_ref(), time:seconds()) ->
-    {ok | ?WF_ERROR_ALREADY_FINISHED(task_executor:result()), jobs()}.
+-spec register_async_call(jobs(), job_identifier(), time:seconds()) -> 
+    {ok | ?WF_ERROR_ALREADY_FINISHED(workflow_handler:callback_execution_result()), jobs()}.
 register_async_call(Jobs = #workflow_jobs{
     pending_async_jobs = AsyncCalls,
-    unidentified_async_refs = Unidentified
-}, JobIdentifier, TaskId, Ref, KeepaliveTimeout) ->
-    case maps:get(Ref, Unidentified, undefined) of
+    raced_results = Unidentified
+}, JobIdentifier, KeepaliveTimeout) ->
+    case maps:get(JobIdentifier, Unidentified, undefined) of
         undefined ->
-            NewAsyncCalls = AsyncCalls#{Ref => #async_job{
-                job_identifier = JobIdentifier,
-                task_id = TaskId,
+            NewAsyncCalls = AsyncCalls#{JobIdentifier => #async_job_timer{
                 keepalive_timer = countdown_timer:start_seconds(KeepaliveTimeout),
                 keepalive_timeout = KeepaliveTimeout
             }},
             {ok, Jobs#workflow_jobs{pending_async_jobs = NewAsyncCalls}};
         FinalAns ->
             {?WF_ERROR_ALREADY_FINISHED(FinalAns),
-                Jobs#workflow_jobs{unidentified_async_refs = maps:remove(Ref, Unidentified)}}
+                Jobs#workflow_jobs{raced_results = maps:remove(JobIdentifier, Unidentified)}}
     end.
 
 -spec check_timeouts(jobs()) -> {ok, jobs()} | ?ERROR_NOT_FOUND.
@@ -231,14 +226,16 @@ check_timeouts(Jobs = #workflow_jobs{
     ongoing = Ongoing
 }) ->
     CheckAns = maps:fold(
-        fun(Ref, AsyncJob, {ExtendedTimeoutsAcc, ErrorsAcc} = Acc) ->
-            #async_job{task_id = TaskId, keepalive_timer = Timer} = AsyncJob,
+        fun(JobIdentifier, AsyncJobTimer, {ExtendedTimeoutsAcc, ErrorsAcc} = Acc) ->
+            #async_job_timer{keepalive_timer = Timer} = AsyncJobTimer,
             case countdown_timer:is_expired(Timer) of
                 true ->
-                    case task_executor:check_ongoing_item_processing(TaskId, Ref) of
-                        ok -> {[Ref | ExtendedTimeoutsAcc], ErrorsAcc};
-                        error -> {ExtendedTimeoutsAcc, [Ref | ErrorsAcc]}
-                    end;
+                    % TODO VFS-7551 - check if task is expired
+%%                    case task_executor:check_ongoing_item_processing(TaskId, Ref) of
+%%                        ok -> {[Ref | ExtendedTimeoutsAcc], ErrorsAcc};
+%%                        error -> {ExtendedTimeoutsAcc, [JobIdentifier | ErrorsAcc]}
+%%                    end;
+                    {ExtendedTimeoutsAcc, [JobIdentifier | ErrorsAcc]};
                 false ->
                     Acc
             end
@@ -247,23 +244,24 @@ check_timeouts(Jobs = #workflow_jobs{
     case CheckAns of
         {[], []} ->
             ?ERROR_NOT_FOUND;
-        {UpdatedTimeouts, ErrorRefs} ->
+        {UpdatedTimeouts, Errors} ->
             % TODO VFS-7551 - delete iteration_state step when necessary
-            {AsyncCallsWithErrorsDeleted, NewOngoing} = lists:foldl(fun(ErrorRef, {AsyncCallsAcc, OngoingAcc} = AccTuple) ->
-                case maps:get(ErrorRef, AsyncCallsAcc, undefined) of
+            {AsyncCallsWithErrorsDeleted, NewOngoing} = lists:foldl(fun(JobIdentifier, {AsyncCallsAcc, OngoingAcc} = AccTuple) ->
+                case maps:get(JobIdentifier, AsyncCallsAcc, undefined) of
                     undefined ->
                         AccTuple; % Async call ended after timer check
-                    #async_job{job_identifier = JobIdentifier} ->
-                        {maps:remove(ErrorRef, AsyncCallsAcc), gb_sets:delete(JobIdentifier, OngoingAcc)}
+                    #async_job_timer{} ->
+                        {maps:remove(JobIdentifier, AsyncCallsAcc), gb_sets:delete(JobIdentifier, OngoingAcc)}
                 end
-            end, {AsyncCalls, Ongoing}, ErrorRefs),
+            end, {AsyncCalls, Ongoing}, Errors),
 
-            FinalAsyncCalls = lists:foldl(fun(Ref, Acc) ->
-                case maps:get(Ref, Acc, undefined) of
+            FinalAsyncCalls = lists:foldl(fun(JobIdentifier, Acc) ->
+                case maps:get(JobIdentifier, Acc, undefined) of
                     undefined ->
                         Acc; % Async call ended after timer check
-                    AsyncJob = #async_job{keepalive_timeout = KeepaliveTimeout} ->
-                        Acc#{Ref => AsyncJob#async_job{keepalive_timer = countdown_timer:start_seconds(KeepaliveTimeout)}}
+                    AsyncJobTimer = #async_job_timer{keepalive_timeout = KeepaliveTimeout} ->
+                        Acc#{JobIdentifier => AsyncJobTimer#async_job_timer{
+                            keepalive_timer = countdown_timer:start_seconds(KeepaliveTimeout)}}
                 end
             end, AsyncCallsWithErrorsDeleted, UpdatedTimeouts),
 
@@ -273,13 +271,14 @@ check_timeouts(Jobs = #workflow_jobs{
             }}
     end.
 
--spec reset_keepalive_timer(jobs(), task_executor:async_ref()) -> jobs().
-reset_keepalive_timer(Jobs = #workflow_jobs{pending_async_jobs = AsyncCalls}, Ref) ->
-    NewAsyncCalls = case maps:get(Ref, AsyncCalls, undefined) of
+-spec reset_keepalive_timer(jobs(), job_identifier()) -> jobs().
+reset_keepalive_timer(Jobs = #workflow_jobs{pending_async_jobs = AsyncCalls}, JobIdentifier) ->
+    NewAsyncCalls = case maps:get(JobIdentifier, AsyncCalls, undefined) of
         undefined ->
             AsyncCalls; % Async call ended after timer check
-        AsyncJob = #async_job{keepalive_timeout = KeepaliveTimeout} ->
-            AsyncCalls#{Ref => AsyncJob#async_job{keepalive_timer = countdown_timer:start_seconds(KeepaliveTimeout)}}
+        AsyncJobTimer = #async_job_timer{keepalive_timeout = KeepaliveTimeout} ->
+            AsyncCalls#{JobIdentifier => AsyncJobTimer#async_job_timer{
+                keepalive_timer = countdown_timer:start_seconds(KeepaliveTimeout)}}
     end,
     Jobs#workflow_jobs{pending_async_jobs = NewAsyncCalls}.
 
@@ -287,18 +286,32 @@ reset_keepalive_timer(Jobs = #workflow_jobs{pending_async_jobs = AsyncCalls}, Re
 %%% Functions operating on job_identifier record
 %%%===================================================================
 
--spec is_async_job(job_identifier() | task_executor:async_ref()) -> boolean().
-is_async_job(#job_identifier{}) ->
-    false;
-is_async_job(_) ->
-    true.
+-spec job_identifier_to_binary(job_identifier()) -> binary().
+job_identifier_to_binary(#job_identifier{
+    item_index = ItemIndex,
+    parallel_box_index = BoxIndex,
+    task_index = TaskIndex
+}) ->
+    <<(integer_to_binary(ItemIndex))/binary, ?SEPARATOR,
+        (integer_to_binary(BoxIndex))/binary, ?SEPARATOR,
+        (integer_to_binary(TaskIndex))/binary>>.
+
+-spec binary_to_job_identifier(binary()) -> job_identifier().
+binary_to_job_identifier(Binary) ->
+    [ItemIndexBin, BoxIndexBin, TaskIndexBin] = binary:split(Binary, <<?SEPARATOR>>, [global, trim_all]),
+    #job_identifier{
+        item_index = binary_to_integer(ItemIndexBin),
+        parallel_box_index = binary_to_integer(BoxIndexBin),
+        task_index = binary_to_integer(TaskIndexBin)
+    }.
 
 -spec get_item_id(job_identifier(), workflow_iteration_state:state()) -> workflow_cached_item:id().
 get_item_id(#job_identifier{item_index = ItemIndex}, IterationProgress) ->
     workflow_iteration_state:get_item_id(IterationProgress, ItemIndex).
 
--spec get_task_id(job_identifier(), workflow_definition:boxes_map()) -> task_executor:task_id().
-get_task_id(#job_identifier{parallel_box_index = BoxIndex, task_index = TaskIndex}, BoxesSpec) ->
+-spec get_task_details(job_identifier(), workflow_execution_state:boxes_map()) ->
+    {workflow_engine:task_id(), workflow_engine:task_spec()}.
+get_task_details(#job_identifier{parallel_box_index = BoxIndex, task_index = TaskIndex}, BoxesSpec) ->
     Tasks = maps:get(BoxIndex, BoxesSpec),
     maps:get(TaskIndex, Tasks).
 

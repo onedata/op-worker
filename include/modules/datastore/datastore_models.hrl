@@ -1103,11 +1103,11 @@
 %%%===================================================================
 
 -record(workflow_cached_item, {
-    item :: workflow_store:item()
+    item :: iterator:item()
 }).
 
 -record(workflow_iterator_snapshot, {
-    iterator :: workflow_store:iterator(),
+    iterator :: iterator:iterator(),
     lane_index = 0 :: workflow_execution_state:index(),
     item_index = 0 :: workflow_execution_state:index()
 }).
@@ -1119,8 +1119,11 @@
 }).
 
 -record(workflow_execution_state, {
-    lane_count = 0 :: non_neg_integer(), % TODO VFS-7551 - delete during integration with BW
-    current_lane :: workflow_execution_state:current_lane() | undefined,
+    handler :: workflow_handler:handler(),
+    context :: workflow_engine:execution_context(),
+
+    current_lane = not_prepared :: workflow_execution_state:current_lane() |
+        workflow_execution_state:lane_preparation_status(),
 
     iteration_state :: workflow_iteration_state:state() | undefined,
     jobs :: workflow_jobs:jobs() | undefined,

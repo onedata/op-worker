@@ -26,7 +26,7 @@
 % Internal record to store information about single iterator and item connected with it
 -record(iteration_step, {
     cached_item_id :: workflow_cached_item:id() | undefined, % undefined for initial iterator
-    iterator :: workflow_store:iterator()
+    iterator :: iterator:iterator()
 }).
 
 % Internal record to store information about all items and iterators currently being used.
@@ -56,7 +56,7 @@
 %%% API
 %%%===================================================================
 
--spec init(workflow_store:iterator()) -> state().
+-spec init(iterator:iterator()) -> state().
 init(InitialIterator) ->
     FirstStep = #iteration_step{iterator = InitialIterator},
     #iteration_state{
@@ -72,7 +72,7 @@ handle_iteration_finished(Progress) ->
 get_last_registered_step(#iteration_state{last_registered_step = Step}) ->
     Step.
 
--spec register_new_step(state(), iteration_step(), workflow_cached_item:id(), workflow_store:iterator()) ->
+-spec register_new_step(state(), iteration_step(), workflow_cached_item:id(), iterator:iterator()) ->
     state() | ?WF_ERROR_RACE_CONDITION.
 register_new_step(
     Progress = #iteration_state{
@@ -97,7 +97,7 @@ register_new_step(_, _, _, _) ->
     ?WF_ERROR_RACE_CONDITION.
 
 -spec handle_step_finish(state(), workflow_execution_state:index()) ->
-    {state(), LastConsecutiveFinishedIterator :: workflow_store:iterator() | undefined}.
+    {state(), LastConsecutiveFinishedIterator :: iterator:iterator() | undefined}.
 handle_step_finish(
     Progress = #iteration_state{
         pending_steps = Steps,
@@ -152,7 +152,7 @@ handle_step_finish(
 %%% Helper API operating on #iteration_step record
 %%%===================================================================
 
--spec get_iterator(iteration_step()) -> workflow_store:iterator().
+-spec get_iterator(iteration_step()) -> iterator:iterator().
 get_iterator(#iteration_step{iterator = Iterator}) ->
     Iterator.
 

@@ -16,13 +16,28 @@
 %%% DEFAULTS
 %%%===================================================================
 
--define(DEFAULT_ASYNC_CALL_POOL_ID, <<"DEFAULT_ASYNC_CALL_POOL_ID">>).
+-define(DEFAULT_ASYNC_CALL_POOL_ID, <<"DEF_CALL_POOL">>).
 
 %%%===================================================================
-%%% Macros used to return task processing results
+%%% Record describing job to be executed
 %%%===================================================================
 
--define(PROCESSING_FINISHED, finished).
+-record(job_execution_spec, {
+    handler :: workflow_handler:handler(),
+    context :: workflow_engine:execution_context(),
+    task_id :: workflow_engine:task_id(),
+    task_spec :: workflow_engine:task_spec(),
+    item_it :: workflow_cached_item:id(),
+    job_identifier :: workflow_jobs:job_identifier()
+}).
+
+%%%===================================================================
+%%% Macros describing possible execution status updates
+%%%===================================================================
+
+-define(SYNC_CALL, sync_call).
+-define(ASYNC_CALL_STARTED, async_call_started).
+-define(ASYNC_CALL_FINISHED, async_call_finished).
 
 %%%===================================================================
 %%% Macros used to describe processing of parallel box's jobs
@@ -36,16 +51,21 @@
 %%%===================================================================
 
 % Macros used to control workflow_engine actions
+-define(END_EXECUTION_AND_NOTIFY(Handler, Context, LaneIndex),
+    {end_execution_and_notify, Handler, Context, LaneIndex}).
 -define(END_EXECUTION, end_execution).
 -define(DEFER_EXECUTION, defer_execution).
+-define(PREPARE_EXECUTION(Handler, ExecutionContext),
+    {prepare_execution, Handler, ExecutionContext}).
 
 % errors returned by workflow_engine_state to control workflow_engine
 -define(WF_ERROR_ALL_SLOTS_USED, {error, all_slots_used}).
+-define(WF_ERROR_ALREADY_REMOVED, {error, already_removed}).
 
 % errors used by workflow_execution_state to control workflow_engine
--define(WF_ERROR_ONGOING_ITEMS_ONLY, {error, ongoing_items_only}).
+-define(WF_ERROR_NO_WAITING_ITEMS, {error, no_waiting_items}).
 -define(WF_ERROR_RACE_CONDITION, {error, race_condition}).
--define(WF_ERROR_UNKNOWN_REFERENCE, {error, unknown_reference}).
+-define(WF_ERROR_UNKNOWN_JOB, {error, unknown_job}).
 -define(WF_ERROR_ALREADY_FINISHED(Ans), {error, {already_finished, Ans}}).
 -define(WF_ERROR_ITEM_PROCESSING_FINISHED(Item), {error, {item_processing_finished, Item}}).
 
