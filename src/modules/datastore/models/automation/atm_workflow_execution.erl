@@ -115,6 +115,8 @@ get_record_version() ->
 get_record_struct(1) ->
     {record, [
         {space_id, string},
+        {atm_inventory_id, string},
+
         {schema_snapshot_id, string},
 
         {store_registry, #{string => string}},

@@ -14,7 +14,9 @@
 -include("modules/automation/atm_execution.hrl").
 
 %% API
--export([list/2, add/1, delete/1]).
+-export([list/2, list/3, add/1, delete/1]).
+
+-define(FOREST(__SPACE_ID), <<"ATM_ONGOING_WORKFLOW_EXECUTIONS_FOREST_", __SPACE_ID/binary>>).
 
 
 %%%===================================================================
@@ -22,27 +24,39 @@
 %%%===================================================================
 
 
--spec list(od_space:id(), atm_workflow_executions_collection:listing_opts()) ->
-    [{atm_workflow_execution:id(), atm_workflow_executions_collection:index()}].
+-spec list(od_space:id(), atm_workflow_executions_forest:listing_opts()) ->
+    atm_workflow_executions_forest:listing().
 list(SpaceId, ListingOpts) ->
-    atm_workflow_executions_collection:list(SpaceId, ?ONGOING_TREE, ListingOpts).
+    list(SpaceId, all, ListingOpts).
+
+
+-spec list(
+    od_space:id(),
+    atm_workflow_executions_forest:tree_ids(),
+    atm_workflow_executions_forest:listing_opts()
+) ->
+    atm_workflow_executions_forest:listing().
+list(SpaceId, AtmInventoryIds, ListingOpts) ->
+    atm_workflow_executions_forest:list(?FOREST(SpaceId), AtmInventoryIds, ListingOpts).
 
 
 -spec add(atm_workflow_execution:doc()) -> ok.
 add(#document{key = AtmWorkflowExecutionId, value = #atm_workflow_execution{
     space_id = SpaceId,
+    atm_inventory_id = AtmInventoryId,
     start_time = StartTime
 }}) ->
-    atm_workflow_executions_collection:add(
-        SpaceId, ?ONGOING_TREE, AtmWorkflowExecutionId, StartTime
+    atm_workflow_executions_forest:add(
+        ?FOREST(SpaceId), AtmInventoryId, AtmWorkflowExecutionId, StartTime
     ).
 
 
 -spec delete(atm_workflow_execution:doc()) -> ok.
 delete(#document{key = AtmWorkflowExecutionId, value = #atm_workflow_execution{
     space_id = SpaceId,
+    atm_inventory_id = AtmInventoryId,
     start_time = StartTime
 }}) ->
-    atm_workflow_executions_collection:delete(
-        SpaceId, ?ONGOING_TREE, AtmWorkflowExecutionId, StartTime
+    atm_workflow_executions_forest:delete(
+        ?FOREST(SpaceId), AtmInventoryId, AtmWorkflowExecutionId, StartTime
     ).

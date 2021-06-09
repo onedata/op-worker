@@ -62,10 +62,6 @@
 -define(ONGOING_PHASE, ongoing).
 -define(ENDED_PHASE, ended).
 
--define(WAITING_TREE, <<"waiting">>).
--define(ONGOING_TREE, <<"ongoing">>).
--define(ENDED_TREE, <<"ended">>).
-
 -define(SCHEDULED_STATUS, scheduled).
 -define(PREPARING_STATUS, preparing).
 -define(ENQUEUED_STATUS, enqueued).

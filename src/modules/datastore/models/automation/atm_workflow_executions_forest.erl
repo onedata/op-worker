@@ -17,7 +17,7 @@
 %%%                                     reaching given state at the same time.
 %%% @end
 %%%-------------------------------------------------------------------
--module(atm_workflow_executions_collection).
+-module(atm_workflow_executions_forest).
 -author("Bartosz Walkowicz").
 
 -include("modules/automation/atm_execution.hrl").
@@ -27,7 +27,9 @@
 -export([list/3, add/4, delete/4]).
 
 
--type tree_id() :: binary().
+-type forest() :: binary().
+-type tree_id() :: od_atm_inventory:id().
+-type tree_ids() :: tree_id() | [tree_id()] | all.
 
 -type index() :: binary().
 -type offset() :: integer().
@@ -38,13 +40,13 @@
     offset => offset(),
     limit => limit()
 }.
+-type listing() :: [{{atm_workflow_execution:id(), index()}}].
 
--export_type([tree_id/0, index/0, offset/0, limit/0, listing_opts/0]).
+-export_type([forest/0, tree_id/0, tree_ids/0]).
+-export_type([index/0, offset/0, limit/0, listing_opts/0, listing/0]).
 
 
 -define(CTX, (atm_workflow_execution:get_ctx())).
-
--define(FOREST(__SPACE_ID), <<"ATM_WORKFLOW_EXECUTIONS_FOREST_", __SPACE_ID/binary>>).
 
 
 %%%===================================================================
@@ -52,45 +54,34 @@
 %%%===================================================================
 
 
--spec list(od_space:id(), tree_id(), listing_opts()) ->
-    [{atm_workflow_execution:id(), index()}].
-list(SpaceId, TreeId, ListingOpts) ->
+-spec list(forest(), tree_ids(), listing_opts()) -> listing().
+list(Forest, TreeIds, ListingOpts) ->
     FoldFun = fun(#link{name = Index, target = AtmWorkflowExecutionId}, Acc) ->
         {ok, [{AtmWorkflowExecutionId, Index} | Acc]}
     end,
     {ok, AtmWorkflowExecutions} = datastore_model:fold_links(
-        ?CTX, ?FOREST(SpaceId), TreeId, FoldFun, [], sanitize_listing_opts(ListingOpts)
+        ?CTX, Forest, TreeIds, FoldFun, [], sanitize_listing_opts(ListingOpts)
     ),
     lists:reverse(AtmWorkflowExecutions).
 
 
--spec add(
-    od_space:id(),
-    tree_id(),
-    atm_workflow_execution:id(),
-    atm_workflow_execution:timestamp()
-) ->
+-spec add(forest(), tree_id(), atm_workflow_execution:id(), atm_workflow_execution:timestamp()) ->
     ok.
-add(SpaceId, TreeId, AtmWorkflowExecutionId, Timestamp) ->
+add(Forest, TreeId, AtmWorkflowExecutionId, Timestamp) ->
     Link = {index(AtmWorkflowExecutionId, Timestamp), AtmWorkflowExecutionId},
 
-    case datastore_model:add_links(?CTX, ?FOREST(SpaceId), TreeId, Link) of
+    case datastore_model:add_links(?CTX, Forest, TreeId, Link) of
         {ok, _} -> ok;
         {error, already_exists} -> ok
     end.
 
 
--spec delete(
-    od_space:id(),
-    tree_id(),
-    atm_workflow_execution:id(),
-    atm_workflow_execution:timestamp()
-) ->
+-spec delete(forest(), tree_id(), atm_workflow_execution:id(), atm_workflow_execution:timestamp()) ->
     ok.
-delete(SpaceId, TreeId, AtmWorkflowExecutionId, Timestamp) ->
+delete(Forest, TreeId, AtmWorkflowExecutionId, Timestamp) ->
     LinkName = index(AtmWorkflowExecutionId, Timestamp),
 
-    ok = datastore_model:delete_links(?CTX, ?FOREST(SpaceId), TreeId, LinkName).
+    ok = datastore_model:delete_links(?CTX, Forest, TreeId, LinkName).
 
 
 %%%===================================================================

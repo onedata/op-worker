@@ -1076,6 +1076,8 @@
 %% Model that holds information about an automation workflow execution
 -record(atm_workflow_execution, {
     space_id :: od_space:id(),
+    atm_inventory_id :: od_atm_inventory:id(),
+
     schema_snapshot_id :: atm_workflow_schema_snapshot:id(),
 
     store_registry :: atm_workflow_execution:store_registry(),
