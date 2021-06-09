@@ -126,14 +126,14 @@ validate_value(AtmWorkflowExecutionCtx, ArgsBatch, #atm_task_execution_argument_
     is_batch = true
 }) ->
     lists:foreach(fun(ArgValue) ->
-        atm_data_validator:sanitize(AtmWorkflowExecutionCtx, ArgValue, AtmDataSpec)
+        atm_data_validator:validate(AtmWorkflowExecutionCtx, ArgValue, AtmDataSpec)
     end, ArgsBatch);
 
 validate_value(AtmWorkflowExecutionCtx, ArgValue, #atm_task_execution_argument_spec{
     data_spec = AtmDataSpec,
     is_batch = false
 }) ->
-    atm_data_validator:sanitize(AtmWorkflowExecutionCtx, ArgValue, AtmDataSpec).
+    atm_data_validator:validate(AtmWorkflowExecutionCtx, ArgValue, AtmDataSpec).
 
 
 %%%===================================================================

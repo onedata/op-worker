@@ -67,19 +67,13 @@ get_next(AtmWorkflowExecutionEnv, #atm_store_iterator{
 } = AtmStoreIterator) ->
     AtmWorkflowExecutionCtx = 
         atm_workflow_execution_env:acquire_workflow_execution_ctx(AtmWorkflowExecutionEnv),
-    case atm_container_iterator:get_next_batch(AtmWorkflowExecutionCtx, 1, AtmContainerIterator) of
+    case get_next_internal(AtmWorkflowExecutionCtx, AtmContainerIterator, 1, DataSpec) of
         stop ->
             stop;
-        {ok, [Result], NewAtmContainerIterator} ->
-            NewStoreIterator = AtmStoreIterator#atm_store_iterator{
+        {ok, [Item], NewAtmContainerIterator} ->
+            {ok, Item, AtmStoreIterator#atm_store_iterator{
                 container_iterator = NewAtmContainerIterator
-            },
-            case atm_data_validator:map_value(AtmWorkflowExecutionCtx, Result, DataSpec) of
-                {true, Item} ->
-                    {ok, Item, NewStoreIterator};
-                false ->
-                    get_next(AtmWorkflowExecutionEnv, NewStoreIterator)
-            end
+            }}
     end;
 get_next(AtmWorkflowExecutionEnv, #atm_store_iterator{
     data_spec = DataSpec,
@@ -90,14 +84,11 @@ get_next(AtmWorkflowExecutionEnv, #atm_store_iterator{
 } = AtmStoreIterator) ->
     AtmWorkflowExecutionCtx =
         atm_workflow_execution_env:acquire_workflow_execution_ctx(AtmWorkflowExecutionEnv),
-    case atm_container_iterator:get_next_batch(AtmWorkflowExecutionCtx, Size, AtmContainerIterator) of
+    case get_next_internal(AtmWorkflowExecutionCtx, AtmContainerIterator, Size, DataSpec) of
         stop ->
             stop;
         {ok, Items, NewAtmContainerIterator} ->
-            MappedItems = lists:filtermap(fun(Item) ->
-                atm_data_validator:map_value(AtmWorkflowExecutionCtx, Item, DataSpec)
-            end, Items),
-            {ok, MappedItems, AtmStoreIterator#atm_store_iterator{
+            {ok, Items, AtmStoreIterator#atm_store_iterator{
                 container_iterator = NewAtmContainerIterator
             }}
     end.
@@ -148,3 +139,36 @@ db_decode(#{
         data_spec = NestedRecordDecoder(AtmDataSpecJson, atm_data_spec),
         container_iterator = NestedRecordDecoder(AtmContainerIteratorJson, atm_container_iterator)
     }.
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+
+%% @private
+-spec get_next_internal(
+    atm_workflow_execution_ctx:record(), 
+    atm_container_iterator:record(), 
+    pos_integer(), 
+    atm_data_spec:record()
+) ->
+    {ok, [atm_api:item()], atm_container_iterator:record()} | stop.
+get_next_internal(AtmWorkflowExecutionCtx, AtmContainerIterator, Size, DataSpec) ->
+    case atm_container_iterator:get_next_batch(AtmWorkflowExecutionCtx, Size, AtmContainerIterator) of
+        stop ->
+            stop;
+        {ok, Items, NewAtmContainerIterator} ->
+            ExpandedItems = lists:filtermap(fun(Item) ->
+                case atm_data_compressor:expand(AtmWorkflowExecutionCtx, Item, DataSpec) of
+                    {ok, Value} -> {true, Value};
+                    {error, _} -> false
+                end
+            end, Items),
+            case ExpandedItems of
+                [] ->
+                    get_next_internal(AtmWorkflowExecutionCtx, NewAtmContainerIterator, Size, DataSpec);
+                _ ->
+                    {ok, ExpandedItems, NewAtmContainerIterator}
+            end
+    end.

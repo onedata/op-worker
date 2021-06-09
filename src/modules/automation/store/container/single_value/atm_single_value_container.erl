@@ -52,7 +52,7 @@ create(AtmDataSpec, undefined, _AtmWorkflowExecutionCtx) ->
 create(AtmDataSpec, InitialValue, AtmWorkflowExecutionCtx) ->
     #atm_single_value_container{
         data_spec = AtmDataSpec,
-        value = atm_data_validator:sanitize(AtmWorkflowExecutionCtx, InitialValue, AtmDataSpec)
+        value = atm_data_validator:validate(AtmWorkflowExecutionCtx, InitialValue, AtmDataSpec)
     }.
 
 
@@ -75,7 +75,7 @@ apply_operation(#atm_single_value_container{} = Record, #atm_container_operation
 }) ->
     #atm_single_value_container{data_spec = AtmDataSpec} = Record,
     Record#atm_single_value_container{
-        value = atm_data_validator:sanitize(AtmWorkflowExecutionCtx, Item, AtmDataSpec)
+        value = atm_data_validator:validate(AtmWorkflowExecutionCtx, Item, AtmDataSpec)
     };
 
 apply_operation(_Record, _Operation) ->

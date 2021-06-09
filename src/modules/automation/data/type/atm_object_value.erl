@@ -6,8 +6,8 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module implements `atm_data_validator` functionality for
-%%% `atm_object_type`.
+%%% This module implements `atm_data_validator` and `atm_data_compressor` 
+%%% functionality for `atm_object_type`.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_object_value).
@@ -18,7 +18,10 @@
 -include("modules/automation/atm_tmp.hrl").
 
 %% atm_data_validator callbacks
--export([sanitize/3, map_value/2]).
+-export([validate/3]).
+
+%% atm_data_compressor callbacks
+-export([compress/1, expand/2]).
 
 
 %%%===================================================================
@@ -26,19 +29,27 @@
 %%%===================================================================
 
 
--spec sanitize(
+-spec validate(
     atm_workflow_execution_ctx:record(),
     atm_api:item(),
     atm_data_type:value_constraints()
 ) ->
     atm_api:item() | no_return().
-sanitize(_, Value, _ValueConstraints) when is_map(Value) ->
+validate(_, Value, _ValueConstraints) when is_map(Value) ->
     Value;
-sanitize(_, Value, _ValueConstraints) ->
+validate(_, Value, _ValueConstraints) ->
     throw(?ERROR_ATM_DATA_TYPE_UNVERIFIED(Value, atm_object_type)).
 
 
--spec map_value(atm_workflow_execution_ctx:record(), atm_api:item()) ->
-    {true, atm_api:item()} | false.
-map_value(_, Value) ->
-    {true, Value}.
+%%%===================================================================
+%%% atm_data_validator callbacks
+%%%===================================================================
+
+
+-spec compress(atm_api:item()) -> atm_api:item().
+compress(Value) -> Value.
+
+-spec expand(atm_workflow_execution_ctx:record(), atm_api:item()) ->
+    {ok, atm_api:item()}.
+expand(_, Value) ->
+    {ok, Value}.

@@ -27,6 +27,7 @@
 
 -type operation_options() :: #{binary() => boolean()}.
 -type initial_value() :: [atm_api:item()] | undefined.
+
 -record(atm_tree_forest_container, {
     roots_list :: atm_list_container:record()
 }).

@@ -6,8 +6,8 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module implements `atm_data_validator` functionality for
-%%% `atm_file_type`.
+%%% This module implements `atm_data_validator`, `atm_tree_forest_container_iterator` 
+%%% and `atm_data_compressor` functionality for `atm_file_type`.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_file_value).
@@ -16,21 +16,23 @@
 -behaviour(atm_data_validator).
 -behaviour(atm_tree_forest_container_iterator).
 
--include("modules/automation/atm_execution.hrl").
 -include("modules/automation/atm_tmp.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/errors.hrl").
 
 %% atm_data_validator callbacks
--export([sanitize/3, map_value/2]).
+-export([validate/3]).
 
 %% atm_tree_forest_container_iterator callbacks
 -export([
-    list_children/4, check_object_existence/2, 
+    list_children/4, check_exists/2,
     initial_listing_options/0,
     encode_listing_options/1, decode_listing_options/1
 ]).
+
+%% atm_data_compressor callbacks
+-export([compress/1, expand/2]).
 
 -type list_opts() :: file_meta:list_opts().
 
@@ -38,34 +40,38 @@
 %%% atm_data_validator callbacks
 %%%===================================================================
 
--spec sanitize(
+-spec validate(
     atm_workflow_execution_ctx:record(),
     atm_api:item(),
     atm_data_type:value_constraints()
 ) ->
-    atm_api:item() | no_return().
-sanitize(AtmWorkflowExecutionCtx, #{<<"file_id">> := CdmiId} = Value, _ValueConstraints) ->
+    ok | no_return().
+validate(AtmWorkflowExecutionCtx, #{<<"file_id">> := ObjectId} = Value, _ValueConstraints) ->
     SpaceId = atm_workflow_execution_ctx:get_space_id(AtmWorkflowExecutionCtx),
     try
-        {ok, Guid} = file_id:objectid_to_guid(CdmiId),
+        {ok, Guid} = file_id:objectid_to_guid(ObjectId),
         case file_id:guid_to_space_id(Guid) of
             SpaceId ->
-                case check_object_existence(AtmWorkflowExecutionCtx, Guid) of
-                    true -> {ok, Guid};
+                case check_exists(AtmWorkflowExecutionCtx, Guid) of
+                    true -> ok;
                     false -> ?ERROR_NOT_FOUND
                 end;
             _ -> 
                 ?ERROR_NOT_FOUND
         end
     of
-        {ok, G} -> G;
+        ok -> ok;
         {error, _} = Error -> throw(Error)
     catch _:_ ->
         throw(?ERROR_ATM_DATA_TYPE_UNVERIFIED(Value, atm_file_type))
     end;
-sanitize(_AtmWorkflowExecutionCtx, Value, _ValueConstraints) ->
+validate(_AtmWorkflowExecutionCtx, Value, _ValueConstraints) ->
     throw(?ERROR_ATM_DATA_TYPE_UNVERIFIED(Value, atm_file_type)).
 
+
+%%%===================================================================
+%%% atm_tree_forest_container_iterator callbacks
+%%%===================================================================
 
 -spec list_children(atm_workflow_execution_ctx:record(), file_id:file_guid(), list_opts(), non_neg_integer()) ->
     {[{file_id:file_guid(), file_meta:name()}], [file_id:file_guid()], list_opts(), IsLast :: boolean()} | no_return().
@@ -74,12 +80,8 @@ list_children(AtmWorkflowExecutionCtx, Guid, ListOpts, BatchSize) ->
     try
         list_children_unsafe(SessionId, Guid, ListOpts#{size => BatchSize})
     catch _:Error ->
-        case datastore_runner:normalize_error(Error) of
-            ?EACCES ->
-                {[], [], #{}, true};
-            ?EPERM ->
-                {[], [], #{}, true};
-            ?ENOENT ->
+        case atm_data_utils:is_error_ignored(datastore_runner:normalize_error(Error)) of
+            true ->
                 {[], [], #{}, true};
             _ -> 
                 throw(Error)
@@ -87,15 +89,16 @@ list_children(AtmWorkflowExecutionCtx, Guid, ListOpts, BatchSize) ->
     end.
 
 
--spec check_object_existence(atm_workflow_execution_ctx:record(), file_id:file_guid()) -> boolean().
-check_object_existence(AtmWorkflowExecutionCtx, FileGuid) ->
+-spec check_exists(atm_workflow_execution_ctx:record(), file_id:file_guid()) -> boolean().
+check_exists(AtmWorkflowExecutionCtx, FileGuid) ->
     SessionId = atm_workflow_execution_ctx:get_session_id(AtmWorkflowExecutionCtx),
     case lfm:stat(SessionId, ?FILE_REF(FileGuid)) of
         {ok, _} -> true;
-        {error, ?EACCES} -> false;
-        {error, ?EPERM} -> false;
-        {error, ?ENOENT} -> false;
-        {error, _} = Error -> throw(Error)
+        {error, Type} = Error -> 
+            case atm_data_utils:is_error_ignored(Type) of
+                true -> false;
+                false -> throw(Error)
+            end
     end.
 
 
@@ -123,12 +126,23 @@ decode_listing_options(#{<<"last_name">> := LastName, <<"last_tree">> := LastTre
     }.
 
 
--spec map_value(atm_workflow_execution_ctx:record(), file_id:file_guid()) -> {true, atm_api:item()} | false.
-map_value(AtmWorkflowExecutionCtx, Guid) ->
+%%%===================================================================
+%%% atm_data_compressor callbacks
+%%%===================================================================
+
+-spec compress(atm_api:item()) -> file_id:file_guid().
+compress(#{<<"file_id">> := ObjectId}) ->
+    {ok, Guid} = file_id:objectid_to_guid(ObjectId),
+    Guid.
+
+
+-spec expand(atm_workflow_execution_ctx:record(), file_id:file_guid()) -> 
+    {ok, atm_api:item()} | {error, term()}.
+expand(AtmWorkflowExecutionCtx, Guid) ->
     SessionId = atm_workflow_execution_ctx:get_session_id(AtmWorkflowExecutionCtx),
     case lfm:stat(SessionId, #file_ref{guid = Guid}) of
-        {ok, FileAttrs} -> {true, map_file_attrs(FileAttrs)};
-        {error, _} -> false
+        {ok, FileAttrs} -> {ok, translate_file_attrs(FileAttrs)};
+        {error, _} = Error -> Error 
     end.
 
 %%%===================================================================
@@ -165,8 +179,9 @@ list_children_unsafe(SessionId, Guid, ListOpts) ->
     end.
 
 
--spec map_file_attrs(lfm_attrs:file_attributes()) -> atm_api:item().
-map_file_attrs(#file_attr{
+%% @private
+-spec translate_file_attrs(lfm_attrs:file_attributes()) -> atm_api:item().
+translate_file_attrs(#file_attr{
     guid = Guid, 
     name = Name, 
     mode = Mode, 
@@ -181,18 +196,17 @@ map_file_attrs(#file_attr{
     shares = Shares, 
     provider_id = ProviderId, 
     owner_id = Owner_id, 
-    fully_replicated = FullyReplicated, 
     nlink = Nlink
 }) ->
-    {ok, CdmiId} = file_id:guid_to_objectid(Guid),
+    {ok, ObjectId} = file_id:guid_to_objectid(Guid),
+    {ok, ParentObjectId} = file_id:guid_to_objectid(ParentGuid),
     #{
-        <<"file_id">> => CdmiId,
-        <<"guid">> => Guid,
+        <<"file_id">> => ObjectId,
         <<"name">> => Name,
         <<"mode">> => Mode,
-        <<"parent_guid">> => ParentGuid,
-        <<"uid">> => Uid,
-        <<"gid">> => Gid,
+        <<"parent_id">> => ParentObjectId,
+        <<"storage_user_id">> => Uid,
+        <<"storage_group_id">> => Gid,
         <<"atime">> => Atime,
         <<"mtime">> => Mtime,
         <<"ctime">> => Ctime,
@@ -201,6 +215,5 @@ map_file_attrs(#file_attr{
         <<"shares">> => Shares,
         <<"provider_id">> => ProviderId,
         <<"owner_id">> => Owner_id,
-        <<"fully_replicated">> => FullyReplicated,
-        <<"nlink">> => Nlink
+        <<"hardlinks_count">> => Nlink
     }.
