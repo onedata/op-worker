@@ -39,6 +39,7 @@ create(AtmWorkflowExecutionCreationCtx) ->
         AtmWorkflowExecutionCreationCtx,
         create_execution_elements(AtmWorkflowExecutionCreationCtx)
     ),
+    % TODO VFS-7672 move to atm_workflow_execution_status
     atm_waiting_workflow_executions:add(AtmWorkflowExecutionDoc),
 
     {ok, AtmWorkflowExecutionDoc}.
@@ -46,18 +47,26 @@ create(AtmWorkflowExecutionCreationCtx) ->
 
 -spec prepare(atm_workflow_execution:id()) -> ok | no_return().
 prepare(AtmWorkflowExecutionId) ->
-    {ok, #atm_workflow_execution{lanes = AtmLaneExecutions}} = transition_to_status(
+    {ok, #document{
+        value = #atm_workflow_execution{
+            lanes = AtmLaneExecutions
+        }
+    }} = atm_workflow_execution_status:handle_transition_in_waiting_phase(
         AtmWorkflowExecutionId, ?PREPARING_STATUS
     ),
 
     try
         atm_lane_execution:prepare_all(AtmLaneExecutions)
     catch Type:Reason ->
-        transition_to_status(AtmWorkflowExecutionId, ?FAILED_STATUS),
+        atm_workflow_execution_status:handle_transition_in_waiting_phase(
+            AtmWorkflowExecutionId, ?FAILED_STATUS
+        ),
         erlang:Type(Reason)
     end,
-    transition_to_status(AtmWorkflowExecutionId, ?ENQUEUED_STATUS),
 
+    {ok, _} = atm_workflow_execution_status:handle_transition_in_waiting_phase(
+        AtmWorkflowExecutionId, ?ENQUEUED_STATUS
+    ),
     ok.
 
 
@@ -75,6 +84,7 @@ delete(AtmWorkflowExecutionId) ->
         lanes = AtmLaneExecutions
     }),
 
+    % TODO VFS-7672 remove from links tree
     atm_workflow_execution:delete(AtmWorkflowExecutionId).
 
 
@@ -93,19 +103,10 @@ report_task_status_change(
     AtmTaskExecutionId,
     NewStatus
 ) ->
-    Diff = fun(#atm_workflow_execution{} = AtmWorkflowExecution) ->
-        update_task_status(
-            AtmLaneExecutionIndex, AtmParallelBoxExecutionIndex,
-            AtmTaskExecutionId, NewStatus, AtmWorkflowExecution
-        )
-    end,
-    case atm_workflow_execution:update(AtmWorkflowExecutionId, Diff) of
-        {ok, #document{value = #atm_workflow_execution{status_changed = true}}} ->
-            % TODO VFS-7672 change link tree
-            ok;
-        _ ->
-            ok
-    end.
+    atm_workflow_execution_status:report_task_status_change(
+        AtmWorkflowExecutionId, AtmLaneExecutionIndex, AtmParallelBoxExecutionIndex,
+        AtmTaskExecutionId, NewStatus
+    ).
 
 
 %%%===================================================================
@@ -173,7 +174,10 @@ create_lane_executions(AtmWorkflowExecutionCreationCtx, ExecutionElements) ->
     atm_workflow_execution:doc() | no_return().
 create_doc(
     #atm_workflow_execution_creation_ctx{
-        workflow_execution_ctx = AtmWorkflowExecutionCtx
+        workflow_execution_ctx = AtmWorkflowExecutionCtx,
+        workflow_schema_doc = #document{value = #od_atm_workflow_schema{
+            atm_inventory = AtmInventoryId
+        }}
     },
     ExecutionElements = #execution_elements{
         schema_snapshot_id = AtmWorkflowSchemaSnapshotId,
@@ -188,6 +192,8 @@ create_doc(
             ),
             value = #atm_workflow_execution{
                 space_id = atm_workflow_execution_ctx:get_space_id(AtmWorkflowExecutionCtx),
+                atm_inventory_id = AtmInventoryId,
+
                 schema_snapshot_id = AtmWorkflowSchemaSnapshotId,
 
                 store_registry = AtmStoreRegistry,
@@ -235,71 +241,3 @@ delete_execution_elements(#execution_elements{
 
 delete_execution_elements(_) ->
     ok.
-
-
-%% @private
--spec transition_to_status(atm_workflow_execution:id(), atm_workflow_execution:status()) ->
-    {ok, atm_workflow_execution:record()} | no_return().
-transition_to_status(AtmWorkflowExecutionId, ?FAILED_STATUS) ->
-    % TODO VFS-7674 should fail here change status of all lanes, pboxes and tasks ??
-    TransitFun = fun(#atm_workflow_execution{} = AtmWorkflowExecution) ->
-        {ok, AtmWorkflowExecution#atm_workflow_execution{status = ?FAILED_STATUS}}
-    end,
-    {ok, #document{value = AtmWorkflowExecutionRecord}} = atm_workflow_execution:update(
-        AtmWorkflowExecutionId, TransitFun
-    ),
-    {ok, AtmWorkflowExecutionRecord};
-
-transition_to_status(AtmWorkflowExecutionId, NewStatus) ->
-    Diff = fun(#atm_workflow_execution{status = Status} = AtmWorkflowExecution) ->
-        case atm_status_utils:is_transition_allowed(Status, NewStatus) of
-            true ->
-                {ok, AtmWorkflowExecution#atm_workflow_execution{status = NewStatus}};
-            false ->
-                {error, Status}
-        end
-    end,
-
-    case atm_workflow_execution:update(AtmWorkflowExecutionId, Diff) of
-        {ok, #document{value = AtmWorkflowExecution}} ->
-            {ok, AtmWorkflowExecution};
-        {error, CurrStatus} ->
-            throw(?ERROR_ATM_INVALID_STATUS_TRANSITION(CurrStatus, NewStatus))
-    end.
-
-
-%% @private
--spec update_task_status(
-    non_neg_integer(),
-    non_neg_integer(),
-    atm_task_execution:id(),
-    atm_task_execution:status(),
-    atm_workflow_execution:record()
-) ->
-    {ok, atm_workflow_execution:record()} | {error, term()}.
-update_task_status(
-    AtmLaneIndex,
-    AtmParallelBoxIndex,
-    AtmTaskExecutionId,
-    NewStatus,
-    #atm_workflow_execution{lanes = AtmLaneExecutions} = AtmWorkflowExecution
-) ->
-    AtmLanExecution = lists:nth(AtmLaneIndex, AtmLaneExecutions),
-
-    case atm_lane_execution:update_task_status(
-        AtmParallelBoxIndex, AtmTaskExecutionId, NewStatus, AtmLanExecution
-    ) of
-        {ok, NewLaneExecution} ->
-            NewAtmLaneExecutions = atm_status_utils:replace_at(
-                NewLaneExecution, AtmLaneIndex, AtmLaneExecutions
-            ),
-            NewAtmWorkflowStatus = atm_status_utils:converge(
-                atm_lane_execution:gather_statuses(NewAtmLaneExecutions)
-            ),
-            {ok, AtmWorkflowExecution#atm_workflow_execution{
-                status = NewAtmWorkflowStatus,
-                lanes = NewAtmLaneExecutions
-            }};
-        {error, _} = Error ->
-            Error
-    end.
