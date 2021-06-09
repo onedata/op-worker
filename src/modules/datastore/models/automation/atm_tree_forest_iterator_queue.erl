@@ -43,13 +43,13 @@
 -type entry_name() :: binary().
 -type entry() :: {value(), entry_name()}.
 -type discriminator() :: {index(), entry_name()}.
--type values() :: #{index() => value()}.
+-type entries() :: #{index() => value()}.
 -type node_num() :: non_neg_integer().
 -type record() :: #atm_tree_forest_iterator_queue{}.
 -type doc() :: datastore_doc:doc(record()).
 -type diff() :: datastore_doc:diff(record()).
 
--export_type([id/0, index/0, values/0, entry_name/0, discriminator/0, node_num/0]).
+-export_type([id/0, index/0, entries/0, entry_name/0, discriminator/0, node_num/0]).
 
 -define(CTX, #{model => ?MODULE}).
 
@@ -79,8 +79,8 @@ push(Id, Entries, OriginIndex) ->
 peek(Id, Index) ->
     NodeNum = Index div ?MAX_VALUES_PER_NODE,
     case get_record(Id, NodeNum) of
-        {ok, #atm_tree_forest_iterator_queue{values = Values}} ->
-            {ok, maps:get(Index, Values, undefined)};
+        {ok, #atm_tree_forest_iterator_queue{entries = Entries}} ->
+            {ok, maps:get(Index, Entries, undefined)};
         {error, not_found} ->
             {ok, undefined};
         {error, _} = Error ->
@@ -91,10 +91,10 @@ peek(Id, Index) ->
 -spec report_processing_index(id(), index()) -> ok.
 report_processing_index(Id, Index) ->
     UpdateFirstNodeFun = fun(#atm_tree_forest_iterator_queue{
-        currently_processed_index = ProcessedIndex
+        currently_processed_entry_index = ProcessedIndex
     } = Record) ->
         {ok, Record#atm_tree_forest_iterator_queue{
-            currently_processed_index = max(Index, ProcessedIndex)}
+            currently_processed_entry_index = max(Index, ProcessedIndex)}
         }
     end,
     ?extract_ok(update_record(Id, 0, UpdateFirstNodeFun)).
@@ -121,9 +121,9 @@ prune(Id, Index) ->
             lists:foreach(fun(Num) ->
                 delete_record(Id, Num)
             end, lists:seq(StartNodeNum, max(StartNodeNum - 1, LastToPruneNodeNum - 1)) -- [0]), % do not delete 0th node
-            UpdateFinalNodeFun = fun(#atm_tree_forest_iterator_queue{values = Values} = Record) ->
+            UpdateFinalNodeFun = fun(#atm_tree_forest_iterator_queue{entries = Entries} = Record) ->
                 {ok, Record#atm_tree_forest_iterator_queue{
-                    values = prune_values(LastToPruneNodeNum * ?MAX_VALUES_PER_NODE, max(Index, 0), Values)
+                    entries = prune_values(LastToPruneNodeNum * ?MAX_VALUES_PER_NODE, max(Index, 0), Entries)
                 }}
             end,
             ok = ?extract_ok(update_record(Id, LastToPruneNodeNum, UpdateFinalNodeFun)),
@@ -133,7 +133,7 @@ prune(Id, Index) ->
                 _ ->
                     UpdateFirstNodeFun = fun(#atm_tree_forest_iterator_queue{} = Record) ->
                         {ok, Record#atm_tree_forest_iterator_queue{
-                            last_pruned_node_num = LastToPruneNodeNum, values = #{}
+                            last_pruned_node_num = LastToPruneNodeNum, entries = #{}
                         }}
                     end,
                     ?extract_ok(update_record(Id, 0, UpdateFirstNodeFun))
@@ -163,7 +163,7 @@ destroy(Id) ->
 push_unsafe(Id, Entries, OriginIndex) ->
     case get_record(Id, 0) of
         {ok, #atm_tree_forest_iterator_queue{
-            currently_processed_index = ProcessedIndex
+            currently_processed_entry_index = ProcessedIndex
         } = FirstRecord} when ProcessedIndex =< OriginIndex ->
             #atm_tree_forest_iterator_queue{
                 discriminator = Discriminator
@@ -181,8 +181,8 @@ push_unsafe(Id, Entries, OriginIndex) ->
 -spec push_unsafe(id(), record(), index(), [entry()]) -> ok.
 push_unsafe(_Id, _FirstRecord, _OriginIndex, []) -> ok;
 push_unsafe(Id, FirstRecord, OriginIndex, Entries) ->
-    #atm_tree_forest_iterator_queue{values = ValuesBefore, last_pushed_entry_index = LastEntryIndex} = FirstRecord,
-    {UpdatedLastEntryIndex, [{LowestNodeNum, LowestNodeValues} | EntriesPerNodeTail]} =
+    #atm_tree_forest_iterator_queue{entries = EntriesBefore, last_pushed_entry_index = LastEntryIndex} = FirstRecord,
+    {UpdatedLastEntryIndex, [{LowestNodeNum, LowestNodeEntries} | EntriesPerNodeTail]} =
         prepare_values(LastEntryIndex, Entries),
     {_, Name} = lists:last(Entries),
     UpdatedFirstRecord = case LowestNodeNum of
@@ -190,26 +190,26 @@ push_unsafe(Id, FirstRecord, OriginIndex, Entries) ->
             FirstRecord#atm_tree_forest_iterator_queue{
                 last_pushed_entry_index = UpdatedLastEntryIndex,
                 discriminator = {OriginIndex, Name},
-                values = maps:merge(ValuesBefore, LowestNodeValues)
+                entries = maps:merge(EntriesBefore, LowestNodeEntries)
             };
         _ ->
             {ok, _} = datastore_model:update(?CTX, get_node_id(Id, LowestNodeNum),
-                fun(#atm_tree_forest_iterator_queue{values = Values} = Q) ->
+                fun(#atm_tree_forest_iterator_queue{entries = Entries} = Q) ->
                     {ok, Q#atm_tree_forest_iterator_queue{
-                        values = maps:merge(Values, LowestNodeValues)
+                        entries = maps:merge(Entries, LowestNodeEntries)
                     }}
-                end, #atm_tree_forest_iterator_queue{values = LowestNodeValues}),
+                end, #atm_tree_forest_iterator_queue{entries = LowestNodeEntries}),
             FirstRecord#atm_tree_forest_iterator_queue{
                 last_pushed_entry_index = UpdatedLastEntryIndex,
                 discriminator = {OriginIndex, Name}
             }
     end,
     {ok, _} = datastore_model:update(?CTX, get_node_id(Id, 0), fun(_) -> {ok, UpdatedFirstRecord} end),
-    lists:foreach(fun({NodeNum, NodeValues}) ->
+    lists:foreach(fun({NodeNum, NodeEntries}) ->
         {ok, _} = datastore_model:save(?CTX, 
             #document{
                 key = get_node_id(Id, NodeNum), 
-                value = #atm_tree_forest_iterator_queue{values = NodeValues}
+                value = #atm_tree_forest_iterator_queue{entries = NodeEntries}
             })
     end, EntriesPerNodeTail).
 
@@ -226,7 +226,7 @@ filter_by_discriminator(_, _OriginIndex, Entries) ->
 
 %% @private
 -spec prepare_values(index(), [entry()]) -> 
-    {index(), [{node_num(), values()}]}.
+    {index(), [{node_num(), entries()}]}.
 prepare_values(LastEntryIndex, Entries) ->
     {FinalLastEntryIndex, ReversedEntriesPerNode} = lists:foldl(
         fun({Value, _}, {CurrentIndex, [{NodeNum, Map} | Tail] = Acc}) ->
@@ -243,9 +243,9 @@ prepare_values(LastEntryIndex, Entries) ->
 
 
 %% @private
--spec prune_values(index(), index(), values()) -> values().
-prune_values(StartIndex, EndIndex, Values) ->
-    maps:without(lists:seq(StartIndex, EndIndex), Values).
+-spec prune_values(index(), index(), entries()) -> entries().
+prune_values(StartIndex, EndIndex, Entries) ->
+    maps:without(lists:seq(StartIndex, EndIndex), Entries).
 
 
 %%%===================================================================

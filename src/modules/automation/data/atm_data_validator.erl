@@ -21,7 +21,6 @@
 
 %% API
 -export([validate/3]).
--export([get_callback_module/1]).
 
 
 %%%===================================================================
@@ -50,14 +49,6 @@
 -spec validate(atm_workflow_execution_ctx:record(), atm_api:item(), atm_data_spec:record()) ->
     ok | no_return().
 validate(AtmWorkflowExecutionCtx, Value, AtmDataSpec) ->
-    Module = get_callback_module(atm_data_spec:get_type(AtmDataSpec)),
+    Module = atm_data_utils:get_callback_module(atm_data_spec:get_type(AtmDataSpec)),
     ValueConstraints = atm_data_spec:get_value_constraints(AtmDataSpec),
     Module:validate(AtmWorkflowExecutionCtx, Value, ValueConstraints).
-
-
--spec get_callback_module(atm_data_type:type()) -> module().
-get_callback_module(atm_dataset_type) -> atm_dataset_value;
-get_callback_module(atm_file_type) -> atm_file_value;
-get_callback_module(atm_integer_type) -> atm_integer_value;
-get_callback_module(atm_string_type) -> atm_string_value;
-get_callback_module(atm_object_type) -> atm_object_value.

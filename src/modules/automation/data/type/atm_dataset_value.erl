@@ -26,7 +26,7 @@
 
 %% atm_tree_forest_container_iterator callbacks
 -export([
-    list_children/4, check_exists/2,
+    list_children/4, exists/2,
     initial_listing_options/0,
     encode_listing_options/1, decode_listing_options/1
 ]).
@@ -48,7 +48,7 @@
 ) ->
     ok | no_return().
 validate(AtmWorkflowExecutionCtx, #{<<"datasetId">> := DatasetId} = Value, _ValueConstraints) ->
-    try check_exists(AtmWorkflowExecutionCtx, DatasetId) of
+    try exists(AtmWorkflowExecutionCtx, DatasetId) of
         true -> ok;
         false -> throw(?ERROR_NOT_FOUND)
     catch _:_ ->
@@ -83,8 +83,8 @@ list_children(AtmWorkflowExecutionCtx, DatasetId, ListOpts, BatchSize) ->
     end.
 
 
--spec check_exists(atm_workflow_execution_ctx:record(), dataset:id()) -> boolean().
-check_exists(AtmWorkflowExecutionCtx, DatasetId) ->
+-spec exists(atm_workflow_execution_ctx:record(), dataset:id()) -> boolean().
+exists(AtmWorkflowExecutionCtx, DatasetId) ->
     SessionId = atm_workflow_execution_ctx:get_session_id(AtmWorkflowExecutionCtx),
     case lfm:get_dataset_info(SessionId, DatasetId) of
         {ok, _} -> true;

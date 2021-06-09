@@ -132,16 +132,16 @@ iterator_queue_test(_Config) ->
     Name2 = <<"name2">>,
     {ok, TestQueueId} = ?assertMatch({ok, _}, queue_init()),
     ?assertEqual(ok, queue_push(TestQueueId, lists:map(fun(Num) -> {<<"entry", (integer_to_binary(Num))/binary>>, Name1} end, lists:seq(1, 19)), 0)),
-    #atm_tree_forest_iterator_queue{values = FirstNodeValues} = 
+    #atm_tree_forest_iterator_queue{entries = FirstNodeValues} = 
         ?assertMatch(#atm_tree_forest_iterator_queue{
             last_pushed_entry_index = 19, 
-            currently_processed_index = 0, 
+            currently_processed_entry_index = 0, 
             last_pruned_node_num = 0, 
             discriminator = {0, Name1}
         }, get_queue_node(TestQueueId, 0)),
     ?assertEqual(9, maps:size(FirstNodeValues)), % there is no entry with index 0
     check_queue_values(FirstNodeValues, lists:seq(1, 9), true),
-    #atm_tree_forest_iterator_queue{values = SecondNodeValues} =
+    #atm_tree_forest_iterator_queue{entries = SecondNodeValues} =
         ?assertMatch(#atm_tree_forest_iterator_queue{}, get_queue_node(TestQueueId, 1)),
     ?assertEqual(10, maps:size(SecondNodeValues)),
     check_queue_values(SecondNodeValues, lists:seq(10, 19), true),
@@ -149,57 +149,57 @@ iterator_queue_test(_Config) ->
     % pushing with a name lower than last already given should not be accepted
     ?assertEqual(ok, queue_push(TestQueueId, lists:map(fun(Num) -> {<<"entry", (integer_to_binary(Num))/binary>>, Name0} end, lists:seq(1, 20)), 0)),
     ?assertMatch(#atm_tree_forest_iterator_queue{
-        values = FirstNodeValues,
+        entries = FirstNodeValues,
         last_pushed_entry_index = 19,
-        currently_processed_index = 0,
+        currently_processed_entry_index = 0,
         last_pruned_node_num = 0,
         discriminator = {0, Name1}
     }, get_queue_node(TestQueueId, 0)),
-    ?assertMatch(#atm_tree_forest_iterator_queue{values = SecondNodeValues}, get_queue_node(TestQueueId, 1)),
+    ?assertMatch(#atm_tree_forest_iterator_queue{entries = SecondNodeValues}, get_queue_node(TestQueueId, 1)),
     ?assertMatch({error, not_found}, get_queue_node(TestQueueId, 2)),
     
     % however push with higher name should be accepted
     ?assertEqual(ok, queue_push(TestQueueId, [{<<"entry">>, Name2}], 0)),
     ?assertMatch(#atm_tree_forest_iterator_queue{
-        values = FirstNodeValues,
+        entries = FirstNodeValues,
         last_pushed_entry_index = 20,
-        currently_processed_index = 0,
+        currently_processed_entry_index = 0,
         last_pruned_node_num = 0,
         discriminator = {0, Name2}
     }, get_queue_node(TestQueueId, 0)),
-    ?assertMatch(#atm_tree_forest_iterator_queue{values = SecondNodeValues}, get_queue_node(TestQueueId, 1)),
-    ?assertMatch(#atm_tree_forest_iterator_queue{values = #{20 := <<"entry">>}}, get_queue_node(TestQueueId, 2)),
+    ?assertMatch(#atm_tree_forest_iterator_queue{entries = SecondNodeValues}, get_queue_node(TestQueueId, 1)),
+    ?assertMatch(#atm_tree_forest_iterator_queue{entries = #{20 := <<"entry">>}}, get_queue_node(TestQueueId, 2)),
     
     % also pushing values originating from lower (older) origin index should not add new values
     ?assertEqual({ok, <<"entry1">>}, queue_peek(TestQueueId, 1)),
     ?assertEqual(ok, queue_report_processing_index(TestQueueId, 1)),
-    ?assertMatch(#atm_tree_forest_iterator_queue{currently_processed_index = 1}, get_queue_node(TestQueueId, 0)),
+    ?assertMatch(#atm_tree_forest_iterator_queue{currently_processed_entry_index = 1}, get_queue_node(TestQueueId, 0)),
     
     ?assertEqual(ok, queue_push(TestQueueId, lists:map(fun(Num) -> {<<"entry", (integer_to_binary(Num))/binary>>, Name1} end, lists:seq(1, 20)), 0)),
     ?assertMatch(#atm_tree_forest_iterator_queue{
-        values = FirstNodeValues,
+        entries = FirstNodeValues,
         last_pushed_entry_index = 20,
-        currently_processed_index = 1,
+        currently_processed_entry_index = 1,
         last_pruned_node_num = 0,
         discriminator = {0, Name2}
     }, get_queue_node(TestQueueId, 0)),
-    ?assertMatch(#atm_tree_forest_iterator_queue{values = SecondNodeValues}, get_queue_node(TestQueueId, 1)),
-    ?assertNotMatch(#atm_tree_forest_iterator_queue{values = #{21 := _}}, get_queue_node(TestQueueId, 2)),
+    ?assertMatch(#atm_tree_forest_iterator_queue{entries = SecondNodeValues}, get_queue_node(TestQueueId, 1)),
+    ?assertNotMatch(#atm_tree_forest_iterator_queue{entries = #{21 := _}}, get_queue_node(TestQueueId, 2)),
     
     % but push with higher origin index should always be accepted
     ?assertEqual(ok, queue_push(TestQueueId, [{<<"entry">>, Name0}], 2)),
     ?assertMatch(#atm_tree_forest_iterator_queue{
-        values = FirstNodeValues,
+        entries = FirstNodeValues,
         last_pushed_entry_index = 21,
-        currently_processed_index = 1,
+        currently_processed_entry_index = 1,
         last_pruned_node_num = 0,
         discriminator = {2, Name0}
     }, get_queue_node(TestQueueId, 0)),
-    ?assertMatch(#atm_tree_forest_iterator_queue{values = SecondNodeValues}, get_queue_node(TestQueueId, 1)),
-    ?assertMatch(#atm_tree_forest_iterator_queue{values = #{21 := <<"entry">>}}, get_queue_node(TestQueueId, 2)),
+    ?assertMatch(#atm_tree_forest_iterator_queue{entries = SecondNodeValues}, get_queue_node(TestQueueId, 1)),
+    ?assertMatch(#atm_tree_forest_iterator_queue{entries = #{21 := <<"entry">>}}, get_queue_node(TestQueueId, 2)),
     
     ?assertEqual(ok, queue_clean(TestQueueId, 8)),
-    #atm_tree_forest_iterator_queue{values = Values0} =
+    #atm_tree_forest_iterator_queue{entries = Values0} =
         ?assertMatch(#atm_tree_forest_iterator_queue{
             last_pushed_entry_index = 21,
             last_pruned_node_num = 0
@@ -207,18 +207,18 @@ iterator_queue_test(_Config) ->
     ?assertEqual(1, maps:size(Values0)),
     check_queue_values(Values0, lists:seq(1, 8), false),
     check_queue_values(Values0, [9], true),
-    ?assertMatch(#atm_tree_forest_iterator_queue{values = SecondNodeValues}, get_queue_node(TestQueueId, 1)),
+    ?assertMatch(#atm_tree_forest_iterator_queue{entries = SecondNodeValues}, get_queue_node(TestQueueId, 1)),
     
     % clean never deletes first doc
     ?assertEqual(ok, queue_clean(TestQueueId, 20)),
-    #atm_tree_forest_iterator_queue{values = Values1} =
+    #atm_tree_forest_iterator_queue{entries = Values1} =
         ?assertMatch(#atm_tree_forest_iterator_queue{
             last_pushed_entry_index = 21,
             last_pruned_node_num = 2
         }, get_queue_node(TestQueueId, 0)),
     ?assertEqual(0, maps:size(Values1)),
     ?assertMatch({error, not_found}, get_queue_node(TestQueueId, 1)),
-    #atm_tree_forest_iterator_queue{values = Values2} =
+    #atm_tree_forest_iterator_queue{entries = Values2} =
         ?assertMatch(#atm_tree_forest_iterator_queue{}, get_queue_node(TestQueueId, 2)),
     ?assertEqual(1, maps:size(Values2)),
     check_queue_values(Values2, [20], false),

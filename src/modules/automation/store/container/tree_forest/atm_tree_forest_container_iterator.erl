@@ -65,7 +65,7 @@
 ) -> 
     {[{item_id(), binary()}], [item_id()], list_opts(), IsLast :: boolean()} | no_return().
 
--callback check_exists(atm_workflow_execution_ctx:record(), item_id()) -> boolean().
+-callback exists(atm_workflow_execution_ctx:record(), item_id()) -> boolean().
 
 -callback initial_listing_options() -> list_opts().
 
@@ -140,7 +140,7 @@ get_next_batch(
                 tree_list_opts = Module:initial_listing_options(),
                 queue_ref = queue_report_new_tree(QueueRef)
             },
-            case Module:check_exists(AtmWorkflowExecutionCtx, ItemId) of
+            case Module:exists(AtmWorkflowExecutionCtx, ItemId) of
                 true ->
                     get_next_batch(
                         AtmWorkflowExecutionCtx, BatchSize - 1, UpdatedRecord, [ItemId | ForestAcc]);

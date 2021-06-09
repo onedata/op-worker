@@ -50,9 +50,10 @@ create(AtmDataSpec, undefined, _AtmWorkflowExecutionCtx) ->
         data_spec = AtmDataSpec
     };
 create(AtmDataSpec, InitialValue, AtmWorkflowExecutionCtx) ->
+    atm_data_validator:validate(AtmWorkflowExecutionCtx, InitialValue, AtmDataSpec),
     #atm_single_value_container{
         data_spec = AtmDataSpec,
-        value = atm_data_validator:validate(AtmWorkflowExecutionCtx, InitialValue, AtmDataSpec)
+        value = atm_data_compressor:compress(InitialValue, AtmDataSpec)
     }.
 
 

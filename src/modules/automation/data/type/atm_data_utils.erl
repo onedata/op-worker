@@ -15,6 +15,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 -export([is_error_ignored/1]).
+-export([get_callback_module/1]).
 
 %%%===================================================================
 %%% API
@@ -25,3 +26,11 @@ is_error_ignored(?EACCES) -> true;
 is_error_ignored(?EPERM) -> true;
 is_error_ignored(?ENOENT) -> true;
 is_error_ignored(_) -> false.
+
+
+-spec get_callback_module(atm_data_type:type()) -> module().
+get_callback_module(atm_dataset_type) -> atm_dataset_value;
+get_callback_module(atm_file_type) -> atm_file_value;
+get_callback_module(atm_integer_type) -> atm_integer_value;
+get_callback_module(atm_string_type) -> atm_string_value;
+get_callback_module(atm_object_type) -> atm_object_value.

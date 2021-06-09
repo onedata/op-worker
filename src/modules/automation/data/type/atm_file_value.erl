@@ -26,7 +26,7 @@
 
 %% atm_tree_forest_container_iterator callbacks
 -export([
-    list_children/4, check_exists/2,
+    list_children/4, exists/2,
     initial_listing_options/0,
     encode_listing_options/1, decode_listing_options/1
 ]).
@@ -52,7 +52,7 @@ validate(AtmWorkflowExecutionCtx, #{<<"file_id">> := ObjectId} = Value, _ValueCo
         {ok, Guid} = file_id:objectid_to_guid(ObjectId),
         case file_id:guid_to_space_id(Guid) of
             SpaceId ->
-                case check_exists(AtmWorkflowExecutionCtx, Guid) of
+                case exists(AtmWorkflowExecutionCtx, Guid) of
                     true -> ok;
                     false -> ?ERROR_NOT_FOUND
                 end;
@@ -89,8 +89,8 @@ list_children(AtmWorkflowExecutionCtx, Guid, ListOpts, BatchSize) ->
     end.
 
 
--spec check_exists(atm_workflow_execution_ctx:record(), file_id:file_guid()) -> boolean().
-check_exists(AtmWorkflowExecutionCtx, FileGuid) ->
+-spec exists(atm_workflow_execution_ctx:record(), file_id:file_guid()) -> boolean().
+exists(AtmWorkflowExecutionCtx, FileGuid) ->
     SessionId = atm_workflow_execution_ctx:get_session_id(AtmWorkflowExecutionCtx),
     case lfm:stat(SessionId, ?FILE_REF(FileGuid)) of
         {ok, _} -> true;

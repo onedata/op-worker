@@ -42,7 +42,7 @@ validate(_, Value, _ValueConstraints) ->
 
 
 %%%===================================================================
-%%% atm_data_validator callbacks
+%%% atm_data_compressor callbacks
 %%%===================================================================
 
 
