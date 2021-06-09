@@ -41,7 +41,7 @@
 ]).
 -export([fetch_name/1, fetch_name_of_remote_storage/2, fetch_provider_id_of_remote_storage/2, 
     fetch_qos_parameters_of_local_storage/1, fetch_qos_parameters_of_remote_storage/2]).
--export([should_skip_storage_detection/1, is_imported/1, is_posix_compatible/1, is_local_storage_readonly/1, is_storage_readonly/2]).
+-export([should_skip_storage_detection/1, is_imported/1, is_posix_compatible/1, is_local_storage_readonly/1, is_storage_readonly/2, is_archive/1]).
 -export([has_non_auto_luma_feed/1]).
 -export([is_local/1]).
 -export([verify_configuration/3]).
@@ -114,7 +114,7 @@ create(Name, Helper, LumaConfig, ImportedStorage, Readonly, QosParameters) ->
 -spec get(id() | data()) -> {ok, data()} | {error, term()}.
 get(StorageId) when is_binary(StorageId) ->
     storage_config:get(StorageId);
-get(StorageData) ->
+get(StorageData = #document{}) ->
     {ok, StorageData}.
 
 
@@ -334,6 +334,12 @@ is_local(StorageId) ->
 is_posix_compatible(StorageDataOrId) ->
     Helper = get_helper(StorageDataOrId),
     helper:is_posix_compatible(Helper).
+
+
+-spec is_archive(id() | data()) -> boolean().
+is_archive(StorageDataOrId) ->
+    Helper = get_helper(StorageDataOrId),
+    helper:is_archive_storage(Helper).
 
 %%%===================================================================
 %%% Functions to modify storage details

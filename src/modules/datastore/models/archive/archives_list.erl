@@ -23,9 +23,9 @@
 %% API
 -export([add/4, list/2, delete/4, index/2, length/1, is_empty/1]).
 
--define(CTX, (dataset:get_ctx())).
+-define(CTX, (archive:get_ctx())).
 -define(CTX(Scope), ?CTX#{scope => Scope}).
--define(FOREST(DatasetId), <<"ARCHIVES_", DatasetId/binary>>).
+-define(FOREST(DatasetId), <<"ARCHIVES_LIST_", DatasetId/binary>>).
 -define(LOCAL_TREE_ID, oneprovider:get_id()).
 -define(LINK(LinkName, LinkValue), {LinkName, LinkValue}).
 

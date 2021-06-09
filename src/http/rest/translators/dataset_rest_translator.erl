@@ -101,7 +101,7 @@ translate_datasets_list(Datasets, IsLast) ->
     }.
 
 
--spec translate_archives_list(dataset_api:basic_archive_entries(), boolean()) -> json_utils:json_map().
+-spec translate_archives_list(archive_api:basic_entries(), boolean()) -> json_utils:json_map().
 translate_archives_list(Archives, IsLast) ->
     {TranslatedArchivesReversed, NextPageToken} = lists:foldl(fun({Index, ArchiveId}, {Acc, _}) ->
         {[ArchiveId | Acc], Index}

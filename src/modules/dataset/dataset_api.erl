@@ -14,7 +14,6 @@
 
 -include("global_definitions.hrl").
 -include("modules/dataset/dataset.hrl").
--include("modules/dataset/archivisation_tree.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/fslogic/data_access_control.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
@@ -26,12 +25,6 @@
 -export([get_info/1, get_effective_membership_and_protection_flags/1, get_effective_summary/1]).
 -export([list_top_datasets/4, list_children_datasets/3]).
 
-%% Archives API
--export([archive/6, update_archive/2, get_archive_info/1, list_archives/3, init_archive_purge/2]).
-
-%% Exported for use in tests
--export([remove_archive/1]).
-
 %% Utils
 -export([get_associated_file_ctx/1]).
 
@@ -42,38 +35,16 @@
 -type basic_entries() :: [basic_entry()].
 -type extended_entries() :: [info()].
 -type entries() :: basic_entries() | extended_entries().
-
--type archive_info() :: #archive_info{}.
--type basic_archive_entries() :: [archives_list:entry()].
--type extended_archive_entries() :: [archive_info()].
--type archive_entries() :: basic_archive_entries() | extended_archive_entries().
--type archive_index() :: archives_list:index().
-
 -type listing_opts() :: datasets_structure:opts().
 -type listing_mode() :: ?BASIC_INFO | ?EXTENDED_INFO.
 -type index() :: datasets_structure:index().
 
+-export_type([entries/0, listing_opts/0, index/0, listing_mode/0]).
 
--export_type([entries/0, listing_opts/0, index/0, listing_mode/0, basic_archive_entries/0,
-    archive_entries/0, archive_index/0]).
-
-% Datasets
 % TODO VFS-7518 how should we handle race on creating dataset on the same file in 2 providers?
 % TODO VFS-7533 handle conflicts on remote modification of file-meta and dataset models
 % TODO VFS-7563 add tests concerning datasets to permissions test suites
 
-% Archives
-% TODO VFS-7617 implement recall operation of archives
-% TODO VFS-7624 implement purging job for archives
-% TODO VFS-7668 integrate S3 archives helper
-% TODO VFS-7651 implement archivisation with bagit layout archives
-% TODO VFS-7652 implement incremental archives
-% TODO VFS-7653 implement creating DIP for an archive
-% TODO VFS-7613 use datastore function for getting number of links in forest to acquire number of archives per dataset
-% TODO VFS-7664 add followLink option to archivisation job
-% TODO VFS-7616 refine archives' attributes
-% TODO VFS-7619 add tests concerning archives to permissions test suites
-% TODO VFS-7662 send precise error descriptions to archivisation webhook
 
 -define(CRITICAL_SECTION(DatasetId, Function), critical_section:run({dataset, DatasetId}, Function)).
 
@@ -114,8 +85,8 @@ update(DatasetDoc, NewState, FlagsToSet, FlagsToUnset) ->
                 reattach(DatasetId, FlagsToSet, FlagsToUnset);
             {?DETACHED_DATASET, undefined, _, _} ->
                 {error, ?EINVAL};
-                %% TODO VFS-7208 uncomment after introducing API errors to fslogic
-                % throw(?ERROR_BAD_DATA(state, <<"Detached dataset cannot be modified.">>));
+            %% TODO VFS-7208 uncomment after introducing API errors to fslogic
+            % throw(?ERROR_BAD_DATA(state, <<"Detached dataset cannot be modified.">>));
             {?ATTACHED_DATASET, ?DETACHED_DATASET, ?no_flags_mask, ?no_flags_mask} ->
                 % it's forbidden to change flags while detaching dataset
                 detach(DatasetId);
@@ -133,7 +104,7 @@ detach(DatasetId) ->
 
 
 -spec remove(dataset:id() | dataset:doc()) -> ok | error().
-remove(Doc = #document{key = DatasetId})->
+remove(Doc = #document{key = DatasetId}) ->
     ?CRITICAL_SECTION(DatasetId, fun() ->
         case archives_list:is_empty(DatasetId) of
             true ->
@@ -156,7 +127,7 @@ remove(DatasetId) when is_binary(DatasetId) ->
 move_if_applicable(SourceDoc, TargetDoc) ->
     {ok, Uuid} = file_meta:get_uuid(SourceDoc),
     ?CRITICAL_SECTION(Uuid, fun() ->
-            case file_meta_dataset:is_attached(TargetDoc) of
+        case file_meta_dataset:is_attached(TargetDoc) of
             false ->
                 ok;
             true ->
@@ -225,161 +196,6 @@ list_children_datasets(DatasetId, Opts, ListingMode) ->
         ?EXTENDED_INFO ->
             {ok, extend_with_info(DatasetEntries), IsLast}
     end.
-
-%%%===================================================================
-%%% Archives API
-%%%===================================================================
-
--spec archive(dataset:id(), archive:config(), archive:description(), archive:callback(), archive:callback(),
-    user_ctx:ctx()) -> {ok, archive:id()} | error().
-archive(DatasetId, Config, PreservedCallback, PurgedCallback, Description, UserCtx) ->
-    {ok, DatasetDoc} = dataset:get(DatasetId),
-    {ok, State} = dataset:get_state(DatasetDoc),
-    case State of
-        ?ATTACHED_DATASET ->
-            {ok, SpaceId} = dataset:get_space_id(DatasetDoc),
-            UserId = user_ctx:get_user_id(UserCtx),
-            case archive:create(DatasetId, SpaceId, UserId, Config,
-                PreservedCallback, PurgedCallback, Description)
-            of
-                {ok, ArchiveDoc} ->
-                    {ok, ArchiveId} = archive:get_id(ArchiveDoc),
-                    {ok, Timestamp} = archive:get_creation_time(ArchiveDoc),
-                    {ok, SpaceId} = dataset:get_space_id(DatasetDoc),
-                    archives_list:add(DatasetId, SpaceId, ArchiveId, Timestamp),
-                    case archivisation_traverse:start(ArchiveDoc, DatasetDoc, UserCtx) of
-                        ok ->
-                            {ok, ArchiveId};
-                        {error, _} = Error ->
-                            Error
-                    end;
-                {error, _} = Error ->
-                    Error
-            end;
-        ?DETACHED_DATASET ->
-            {error, ?EINVAL}
-        %% TODO VFS-7208 uncomment after introducing API errors to fslogic
-        % throw(?ERROR_BAD_DATA(<<"datasetId">>, <<"Detached dataset cannot be modified.">>));
-    end.
-
-
--spec update_archive(archive:id(), archive:diff()) -> ok | error().
-update_archive(ArchiveId, Diff) ->
-    archive:modify_attrs(ArchiveId, Diff).
-
-
--spec get_archive_info(archive:id()) -> {ok, archive_info()}.
-get_archive_info(ArchiveId) ->
-    get_archive_info(ArchiveId, undefined).
-
-
-%% @private
--spec get_archive_info(archive:id() | archive:doc(), archive_index() | undefined) -> {ok, archive_info()}.
-get_archive_info(ArchiveDoc = #document{}, ArchiveIndex) ->
-    {ok, ArchiveId} = archive:get_id(ArchiveDoc),
-    {ok, DatasetId} = archive:get_dataset_id(ArchiveDoc),
-    {ok, Timestamp} = archive:get_creation_time(ArchiveDoc),
-    {ok, SpaceId} = archive:get_space_id(ArchiveDoc),
-    {ok, State} = archive:get_state(ArchiveDoc),
-    {ok, Config} = archive:get_config(ArchiveDoc),
-    {ok, PreservedCallback} = archive:get_preserved_callback(ArchiveDoc),
-    {ok, PurgedCallback} = archive:get_purged_callback(ArchiveDoc),
-    {ok, Description} = archive:get_description(ArchiveDoc),
-    {FilesToArchive, FilesArchived, FilesFailed, ByteSize} = get_archive_stats(ArchiveDoc),
-    {ok, #archive_info{
-        id = ArchiveId,
-        dataset_id = DatasetId,
-        state = State,
-        root_dir_guid = file_id:pack_guid(?ARCHIVE_DIR_UUID(ArchiveId), SpaceId),
-        creation_time = Timestamp,
-        config = Config,
-        preserved_callback = PreservedCallback,
-        purged_callback = PurgedCallback,
-        description = Description,
-        index = case ArchiveIndex =:= undefined of
-            true -> archives_list:index(ArchiveId, Timestamp);
-            false -> ArchiveIndex
-        end,
-        files_to_archive = FilesToArchive,
-        files_archived = FilesArchived,
-        files_failed = FilesFailed,
-        byte_size = ByteSize
-    }};
-get_archive_info(ArchiveId, ArchiveIndex) ->
-    {ok, ArchiveDoc} = archive:get(ArchiveId),
-    get_archive_info(ArchiveDoc, ArchiveIndex).
-
-
--spec get_archive_stats(archive:doc()) ->
-    {non_neg_integer(), non_neg_integer(), non_neg_integer(), non_neg_integer()}.
-get_archive_stats(ArchiveDoc) ->
-    case archive:is_finished(ArchiveDoc) of
-        true ->
-            {ok, FilesToArchive} = archive:get_files_to_archive(ArchiveDoc),
-            {ok, FilesArchived} = archive:get_files_archived(ArchiveDoc),
-            {ok, FilesFailed} = archive:get_files_failed(ArchiveDoc),
-            {ok, ByteSize} = archive:get_byte_size(ArchiveDoc),
-            {FilesToArchive, FilesArchived, FilesFailed, ByteSize};
-        false ->
-            {ok, JobId} = archive:get_job_id(ArchiveDoc),
-            {ok, ArchivisationJobDescription} = archivisation_traverse:get_description(JobId),
-            {
-                archivisation_traverse:get_files_to_archive_count(ArchivisationJobDescription),
-                archivisation_traverse:get_files_archived_count(ArchivisationJobDescription),
-                archivisation_traverse:get_files_failed_count(ArchivisationJobDescription),
-                archivisation_traverse:get_byte_size(ArchivisationJobDescription)
-            }
-    end.
-
-
--spec list_archives(dataset:id(), archives_list:opts(), listing_mode()) ->
-    {ok, archive_entries(), IsLast :: boolean()}.
-list_archives(DatasetId, ListingOpts, ListingMode) ->
-    ArchiveEntries = archives_list:list(DatasetId, ListingOpts),
-    IsLast = maps:get(limit, ListingOpts) > length(ArchiveEntries),
-    case ListingMode of
-        ?BASIC_INFO ->
-            {ok, ArchiveEntries, IsLast};
-        ?EXTENDED_INFO ->
-            {ok, extend_with_archive_info(ArchiveEntries), IsLast}
-    end.
-
-
--spec init_archive_purge(archive:id(), archive:callback()) -> ok | error().
-init_archive_purge(ArchiveId, CallbackUrl) ->
-    case archive:mark_purging(ArchiveId, CallbackUrl) of
-        {ok, ArchiveDoc} ->
-            {ok, DatasetId} = archive:get_dataset_id(ArchiveDoc),
-            % TODO VFS-7624 init purging job
-            % it should remove archive doc when finished
-            % Should it be possible to register many callbacks in case of parallel purge requests?
-            ok = remove_archive(ArchiveId),
-            archivisation_callback:notify_purged(ArchiveId, DatasetId, CallbackUrl);
-        {error, _} = Error ->
-            Error
-    end.
-
-
--spec remove_archive(archive:id()) -> ok | error().
-remove_archive(ArchiveId) ->
-    case archive:get(ArchiveId) of
-        {ok, ArchiveDoc} ->
-            case archive:delete(ArchiveId) of
-                ok ->
-                    {ok, DatasetId} = archive:get_dataset_id(ArchiveDoc),
-                    {ok, Timestamp} = archive:get_creation_time(ArchiveDoc),
-                    {ok, SpaceId} = archive:get_space_id(ArchiveDoc),
-                    archives_list:delete(DatasetId, SpaceId, ArchiveId, Timestamp);
-                ?ERROR_NOT_FOUND ->
-                    % there was race with other process removing the archive
-                    ok
-            end;
-        ?ERROR_NOT_FOUND ->
-            ok;
-        {error, _} = Error ->
-            Error
-    end.
-
 
 %%%===================================================================
 %%% Util functions
@@ -560,20 +376,6 @@ extend_with_info(DatasetEntries) ->
         end
     end,
     lists_utils:pfiltermap(FilterMapFun, DatasetEntries, ?MAX_LIST_EXTENDED_DATASET_INFO_PROCS).
-
-
--spec extend_with_archive_info(basic_archive_entries()) -> extended_archive_entries().
-extend_with_archive_info(ArchiveEntries) ->
-    FilterMapFun = fun({ArchiveIndex, ArchiveId}) ->
-        try
-            {ok, ArchiveInfo} = get_archive_info(ArchiveId, ArchiveIndex),
-            {true, ArchiveInfo}
-        catch _:_ ->
-            % Archive can be not synchronized with other provider
-            false
-        end
-    end,
-    lists_utils:pfiltermap(FilterMapFun, ArchiveEntries, ?MAX_LIST_EXTENDED_DATASET_INFO_PROCS).
 
 
 -spec entry_index(dataset:id(), file_meta:path()) -> index().

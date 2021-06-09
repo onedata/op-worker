@@ -252,7 +252,7 @@
 
     state :: automation:workflow_schema_state(),
 
-    atm_inventory :: undefined | od_atm_inventory:id(),
+    atm_inventory :: od_atm_inventory:id(),
 
     cache_state = #{} :: cache_state()
 }).
@@ -421,7 +421,9 @@
     shares = [] :: [od_share:id()], % VFS-7437 Handle conflict resolution similarly to hardlinks
     deleted = false :: boolean(),
     parent_uuid :: file_meta:uuid(),
-    references = file_meta_hardlinks:empty_references() :: file_meta_hardlinks:references(),
+    % references are not always present in document to prevent copying large amounts of data
+    % in such a case references are undefined
+    references = file_meta_hardlinks:empty_references() :: file_meta_hardlinks:references() | undefined,
     symlink_value :: undefined | file_meta_symlinks:symlink(),
     % this field is used to cache value from #dataset.state field
     % TODO VFS-7533 handle conflict on file_meta with remote provider
@@ -439,18 +441,12 @@
     preserved_callback :: archive:callback(),
     purged_callback :: archive:callback(),
     description :: archive:description(),
-    % following counters are set after archivisation job is finished,
-    % so that there is no need to fetch traverse_task document (identified by job_id)
-    % to get their values
-    files_to_archive = 0 :: non_neg_integer(),
-    files_archived = 0 :: non_neg_integer(),
-    files_failed = 0 :: non_neg_integer(),
-    byte_size = 0 :: non_neg_integer(),
+    root_file_guid :: undefined | file_id:file_guid(),
+    stats = archive_stats:empty() :: archive_stats:record(),
 
-    % internal fields
-    % this field is used to fetch traverse_task document to get counters' values
-    % when archivisation job is still in progress
-    job_id ::archivisation_traverse:id()
+    % if archive has been created directly it has no parent archive
+    % if archive has been created indirectly, this fields points to it's parent archive
+    parent :: undefined | archive:id()
 }).
 
 
@@ -1028,21 +1024,110 @@
 
 %% Model storing information about automation store instance.
 -record(atm_store, {
-    type :: atm_store:type(),
-    name :: atm_store:name(),
-    summary :: atm_store:summary(),
-    description :: atm_store:description(),
+    workflow_execution_id :: atm_workflow_execution:id(),
+
+    schema_id :: automation:id(),
+    initial_value :: undefined | json_utils:json_term(),
+
+    % Flag used to tell if content (items) update operation should be blocked
+    % (e.g when store is used as the iteration source for currently executed lane).
     frozen = false :: boolean(),
-    is_input_store :: boolean(),
-    container :: atm_container:container()
+
+    type :: automation:store_type(),
+    container :: atm_container:record()
+}).
+
+%% Model storing information about automation task execution.
+-record(atm_task_execution, {
+    workflow_execution_id :: atm_workflow_execution:id(),
+    lane_index :: non_neg_integer(),
+    parallel_box_index :: non_neg_integer(),
+
+    schema_id :: automation:id(),
+
+    executor :: atm_task_executor:record(),
+    argument_specs :: [atm_task_execution_argument_spec:record()],
+
+    status :: atm_task_execution:status(),
+    % Flag used to tell if status was changed during doc update (set automatically
+    % when updating doc). It is necessary due to limitation of datastore as
+    % otherwise getting document before update would be needed (to compare 2 docs).
+    status_changed = false :: boolean(),
+
+    items_in_processing = 0 :: non_neg_integer(),
+    items_processed = 0 :: non_neg_integer(),
+    items_failed = 0 :: non_neg_integer()
+}).
+
+%% Model that holds information about an automation workflow schema snapshot
+-record(atm_workflow_schema_snapshot, {
+    schema_id :: automation:id(),
+    name :: automation:name(),
+    description :: automation:description(),
+
+    stores = [] :: [atm_store_schema:record()],
+    lanes = [] :: [atm_lane_schema:record()],
+
+    state :: automation:workflow_schema_state(),
+
+    atm_inventory :: od_atm_inventory:id()
 }).
 
 %% Model that holds information about an automation workflow execution
 -record(atm_workflow_execution, {
-    space_id :: binary(),
+    space_id :: od_space:id(),
+    schema_snapshot_id :: atm_workflow_schema_snapshot:id(),
+
+    store_registry :: atm_workflow_execution:store_registry(),
+    lanes :: [atm_lane_execution:record()],
+
+    status :: atm_workflow_execution:status(),
+    % Flag used to tell if status was changed during doc update (set automatically
+    % when updating doc). It is necessary due to limitation of datastore as
+    % otherwise getting document before update would be needed (to compare 2 docs).
+    status_changed = false :: boolean(),
+
     schedule_time = 0 :: atm_workflow_execution:timestamp(),
     start_time = 0 :: atm_workflow_execution:timestamp(),
     finish_time = 0 :: atm_workflow_execution:timestamp()
+}).
+
+%%%===================================================================
+%%% Workflow engine connected models
+%%%===================================================================
+
+-record(workflow_cached_item, {
+    item :: workflow_store:item()
+}).
+
+-record(workflow_iterator_snapshot, {
+    iterator :: workflow_store:iterator(),
+    lane_index = 0 :: workflow_execution_state:index(),
+    item_index = 0 :: workflow_execution_state:index()
+}).
+
+-record(workflow_engine_state, {
+    executions = [] :: [workflow_engine:execution_id()],
+    slots_used = 0 :: non_neg_integer(),
+    slots_limit :: non_neg_integer()
+}).
+
+-record(workflow_execution_state, {
+    lane_count = 0 :: non_neg_integer(), % TODO VFS-7551 - delete during integration with BW
+    current_lane :: workflow_execution_state:current_lane() | undefined,
+
+    iteration_state :: workflow_iteration_state:state() | undefined,
+    jobs :: workflow_jobs:jobs() | undefined,
+
+    % Field used to return additional information about document update procedure
+    % (datastore:update returns {ok, #document{}} or {error, term()}
+    % so such information has to be returned via record's field).
+    update_report :: workflow_execution_state:update_report() | undefined
+}).
+
+-record(workflow_async_call_pool, {
+    slots_used = 0 :: non_neg_integer(),
+    slots_limit :: non_neg_integer()
 }).
 
 -endif.

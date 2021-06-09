@@ -14,16 +14,13 @@
 
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
--include_lib("ctool/include/errors.hrl").
 
 %% API
--export([
-    create/1,
-    get/1,
-    delete/1
-]).
+-export([create/1, get/1, update/2, delete/1]).
+
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1, get_record_version/0]).
+-export([encode_initial_value/1, decode_initial_value/1]).
 
 
 -type id() :: binary().
@@ -31,17 +28,7 @@
 -type doc() :: datastore_doc:doc(record()).
 -type diff() :: datastore_doc:diff(record()).
 
--type type() :: atom().
--type name() :: binary().
--type summary() :: binary().
--type description() :: binary().
-
--export_type([
-    id/0, record/0, doc/0, diff/0,
-    type/0, name/0, summary/0, description/0
-]).
-
--type error() :: {error, term()}.
+-export_type([id/0, record/0, doc/0, diff/0]).
 
 
 -define(CTX, #{model => ?MODULE}).
@@ -52,24 +39,27 @@
 %%%===================================================================
 
 
--spec create(record()) -> {ok, id()} | error().
+-spec create(record()) -> {ok, doc()} | {error, term()}.
 create(AtmStoreRecord) ->
-    ?extract_key(datastore_model:create(?CTX, #document{
-        value = AtmStoreRecord
-    })).
+    datastore_model:create(?CTX, #document{value = AtmStoreRecord}).
 
 
--spec get(id()) -> {ok, record()} | ?ERROR_NOT_FOUND.
+-spec get(id()) -> {ok, record()} | {error, term()}.
 get(AtmStoreId) ->
     case datastore_model:get(?CTX, AtmStoreId) of
         {ok, #document{value = AtmStoreRecord}} ->
             {ok, AtmStoreRecord};
-        ?ERROR_NOT_FOUND = Error ->
+        {error, _} = Error ->
             Error
     end.
 
 
--spec delete(id()) -> ok | error().
+-spec update(id(), diff()) -> ok | {error, term()}.
+update(AtmStoreId, UpdateFun) ->
+    ?extract_ok(datastore_model:update(?CTX, AtmStoreId, UpdateFun)).
+
+
+-spec delete(id()) -> ok | {error, term()}.
 delete(AtmStoreId) ->
     datastore_model:delete(?CTX, AtmStoreId).
 
@@ -93,11 +83,20 @@ get_record_version() ->
     datastore_model:record_struct().
 get_record_struct(1) ->
     {record, [
-        {type, atom},
-        {name, string},
-        {summary, string},
-        {description, string},
+        {workflow_execution_id, string},
+        {schema_id, string},
+        {initial_value, {custom, string, {?MODULE, encode_initial_value, decode_initial_value}}},
         {frozen, boolean},
-        {is_input_store, boolean},
-        {container, {custom, string, {atm_container, encode, decode}}}
+        {type, atom},
+        {container, {custom, string, {persistent_record, encode, decode, atm_container}}}
     ]}.
+
+
+-spec encode_initial_value(undefined | json_utils:json_term()) -> binary().
+encode_initial_value(Value) ->
+    json_utils:encode(utils:undefined_to_null(Value)).
+
+
+-spec decode_initial_value(binary()) -> undefined | json_utils:json_term().
+decode_initial_value(Value) ->
+    utils:null_to_undefined(json_utils:decode(Value)).

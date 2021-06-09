@@ -30,20 +30,20 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([create_archive_dir/3, is_special_uuid/1]).
+-export([create_archive_dir/4, is_special_uuid/1, is_in_archive/1]).
 
 %%%===================================================================
 %%% API functions
 %%%===================================================================
 
--spec create_archive_dir(archive:id(), dataset:id(), od_space:id()) ->
+-spec create_archive_dir(archive:id(), dataset:id(), od_space:id(), od_user:id()) ->
     {ok, file_meta:uuid()}.
-create_archive_dir(ArchiveId, DatasetId, SpaceId) ->
+create_archive_dir(ArchiveId, DatasetId, SpaceId, ArchiveCreatorId) ->
     DatasetArchivesDirUuid = ?DATASET_ARCHIVES_DIR_UUID(DatasetId),
     ArchiveDirUuid = ?ARCHIVE_DIR_UUID(ArchiveId),
     ArchiveDirDoc = file_meta:new_doc(
         ArchiveDirUuid, ArchiveDirUuid,
-        ?DIRECTORY_TYPE, ?DEFAULT_DIR_PERMS, ?SPACE_OWNER_ID(SpaceId),
+        ?DIRECTORY_TYPE, ?DEFAULT_DIR_PERMS, ArchiveCreatorId,
         DatasetArchivesDirUuid, SpaceId
     ),
     case create_file_meta(DatasetArchivesDirUuid, ArchiveDirDoc) of
@@ -61,10 +61,17 @@ is_special_uuid(<<?ARCHIVES_ROOT_DIR_UUID_PREFIX, _/binary>>) ->
     true;
 is_special_uuid(<<?DATASET_ARCHIVES_DIR_UUID_PREFIX, _/binary>>) ->
     true;
-is_special_uuid(<<?ARCHIVE_DIR_UUID_PREFIX, _/binary>>) ->
-    true;
 is_special_uuid(_) ->
     false.
+
+
+-spec is_in_archive(file_meta:path()) -> boolean().
+is_in_archive(CanonicalPath) ->
+    ArchivesRootDirName = ?ARCHIVES_ROOT_DIR_NAME,
+    case filepath_utils:split(CanonicalPath) of
+        [_Sep, _SpaceId, ArchivesRootDirName | _Rest] -> true;
+        _ -> false
+    end.
 
 %%%===================================================================
 %%% Internal functions
@@ -76,7 +83,7 @@ create_dataset_archives_dir(DatasetId, SpaceId) ->
     DatasetArchivesDirUuid = ?DATASET_ARCHIVES_DIR_UUID(DatasetId),
     DatasetArchivedDirDoc = file_meta:new_doc(
         DatasetArchivesDirUuid, DatasetArchivesDirUuid,
-        ?DIRECTORY_TYPE, ?DATASET_ARCHIVES_DIR_PERMS, ?SPACE_OWNER_ID(SpaceId),
+        ?DIRECTORY_TYPE, ?DEFAULT_DIR_PERMS, ?SPACE_OWNER_ID(SpaceId),
         ArchivesRootDirUuid, SpaceId
     ),
     case create_file_meta(ArchivesRootDirUuid, DatasetArchivedDirDoc) of

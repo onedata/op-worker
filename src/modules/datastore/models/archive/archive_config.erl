@@ -14,6 +14,8 @@
 -module(archive_config).
 -author("Jakub Kudzia").
 
+-behaviour(persistent_record).
+
 -include("modules/dataset/archive.hrl").
 -include_lib("ctool/include/errors.hrl").
 
@@ -23,8 +25,8 @@
 %% Getters
 -export([]).
 
--type config() :: #archive_config{}.
--type config_json() :: map().
+-type record() :: #archive_config{}.
+-type json() :: json_utils:json_map().
 %% #{
 %%      <<"layout">> := layout(),
 %%      <<"incremental">> => incremental(),
@@ -34,13 +36,16 @@
 -type include_dip() :: boolean().
 -type layout() :: ?ARCHIVE_BAGIT_LAYOUT | ?ARCHIVE_PLAIN_LAYOUT.
 
--export_type([config/0, config_json/0, incremental/0, include_dip/0, layout/0]).
+-export_type([record/0, json/0, incremental/0, include_dip/0, layout/0]).
+
+%% persistent_record callbacks
+-export([version/0, db_encode/2, db_decode/2]).
 
 %%%===================================================================
 %%% API functions
 %%%===================================================================
 
--spec from_json(config_json()) -> config().
+-spec from_json(json()) -> record().
 from_json(ConfigJson) ->
     #archive_config{
         layout = utils:to_atom(maps:get(<<"layout">>, ConfigJson, ?DEFAULT_LAYOUT)),
@@ -49,7 +54,7 @@ from_json(ConfigJson) ->
     }.
 
 
--spec to_json(config()) -> config_json().
+-spec to_json(record()) -> json().
 to_json(#archive_config{
     incremental = Incremental,
     layout = Layout,
@@ -62,7 +67,7 @@ to_json(#archive_config{
     }.
 
 
--spec sanitize(json_utils:json_map()) -> config_json().
+-spec sanitize(json_utils:json_map()) -> json().
 sanitize(RawConfig) ->
     try
         middleware_sanitizer:sanitize_data(RawConfig, #{
@@ -84,3 +89,23 @@ sanitize(RawConfig) ->
         throw:?ERROR_BAD_VALUE_ATOM(Key) ->
             throw(?ERROR_BAD_VALUE_ATOM(str_utils:format_bin("config.~s", [Key])))
     end.
+
+%%%===================================================================
+%%% persistent_record callbacks
+%%%===================================================================
+
+-spec version() -> persistent_record:record_version().
+version() ->
+    1.
+
+
+-spec db_encode(record(), persistent_record:nested_record_encoder()) ->
+    json_utils:json_term().
+db_encode(ArchiveConfig, _NestedRecordEncoder) ->
+    to_json(ArchiveConfig).
+
+
+-spec db_decode(json_utils:json_term(), persistent_record:nested_record_decoder()) ->
+    record().
+db_decode(ArchiveConfigJson, _NestedRecordDecoder) ->
+    from_json(ArchiveConfigJson).

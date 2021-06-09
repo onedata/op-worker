@@ -41,6 +41,7 @@ get_models() -> [
     file_download_code,
     subscription,
     file_subscription,
+    file_subscription_counter,
     session,
     session_local_links,
     file_meta,
@@ -90,9 +91,19 @@ get_models() -> [
     tree_traverse_progress,
     dataset,
     bulk_download_task,
-    atm_store,
-    atm_workflow_execution,
     archive,
+    workflow_engine_state,
+    workflow_execution_state,
+    workflow_cached_item,
+    workflow_iterator_snapshot,
+    workflow_async_call_pool,
+    
+    % automation related models
+    atm_store,
+    atm_task_execution,
+    atm_workflow_schema_snapshot,
+    atm_workflow_execution,
+    atm_list_store_backend,
 
     %% @TODO VFS-6767 deprecated, included for upgrade procedure. Remove in next major release after 21.02.*.
     space_strategies,

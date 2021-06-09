@@ -20,7 +20,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([assert_instance/2, is_instance/2]).
+-export([validate/3]).
 
 
 %%%===================================================================
@@ -28,8 +28,17 @@
 %%%===================================================================
 
 
--callback is_instance(Value :: term(), atm_data_type2:value_constraints()) ->
-    boolean().
+%%--------------------------------------------------------------------
+%% @doc
+%% Asserts that all value constraints hold for specified item.
+%% @end
+%%--------------------------------------------------------------------
+-callback assert_meets_constraints(
+    atm_workflow_execution_ctx:record(),
+    atm_api:item(),
+    atm_data_type:value_constraints()
+) ->
+    ok | no_return().
 
 
 %%%===================================================================
@@ -37,18 +46,12 @@
 %%%===================================================================
 
 
--spec assert_instance(term(), atm_data_spec2:record()) -> ok | no_return().
-assert_instance(Value, AtmDataSpec) ->
-    case is_instance(Value, AtmDataSpec) of
-        true -> ok;
-        false -> throw(?EINVAL)
-    end.
-
-
--spec is_instance(term(), atm_data_spec2:record()) -> boolean().
-is_instance(Value, AtmDataSpec) ->
-    Module = get_callback_module(atm_data_spec2:get_type(AtmDataSpec)),
-    Module:assert_instance(Value, atm_data_spec2:get_value_constraints(AtmDataSpec)).
+-spec validate(atm_workflow_execution_ctx:record(), atm_api:item(), atm_data_spec:record()) ->
+    ok | no_return().
+validate(AtmWorkflowExecutionCtx, Value, AtmDataSpec) ->
+    Module = get_callback_module(atm_data_spec:get_type(AtmDataSpec)),
+    ValueConstraints = atm_data_spec:get_value_constraints(AtmDataSpec),
+    Module:assert_meets_constraints(AtmWorkflowExecutionCtx, Value, ValueConstraints).
 
 
 %%%===================================================================
@@ -57,5 +60,7 @@ is_instance(Value, AtmDataSpec) ->
 
 
 %% @private
--spec get_callback_module(atm_data_type2:type()) -> module().
-get_callback_module(atm_integer_type) -> atm_integer.
+-spec get_callback_module(atm_data_type:type()) -> module().
+get_callback_module(atm_integer_type) -> atm_integer_value;
+get_callback_module(atm_string_type) -> atm_string_value;
+get_callback_module(atm_object_type) -> atm_object_value.

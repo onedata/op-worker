@@ -32,7 +32,7 @@
 
 %% Archives API
 -export([
-    archive/7,
+    create_archive/7,
     update_archive/4,
     get_archive_info/3,
     list_archives/5,
@@ -125,14 +125,14 @@ list_children_datasets(SpaceDirCtx, Dataset, Opts, ListingMode, UserCtx) ->
 %%% Archives API functions
 %%%===================================================================
 
--spec archive(file_ctx:ctx(), dataset:id(), archive:config(), archive:callback(),
+-spec create_archive(file_ctx:ctx(), dataset:id(), archive:config(), archive:callback(),
     archive:callback(), archive:description(), user_ctx:ctx()) ->
     fslogic_worker:provider_response().
-archive(SpaceDirCtx, DatasetId, Config, PreservedCallback, PurgedCallback, Description, UserCtx) ->
+create_archive(SpaceDirCtx, DatasetId, Config, PreservedCallback, PurgedCallback, Description, UserCtx) ->
     assert_has_eff_privilege(SpaceDirCtx, UserCtx, ?SPACE_MANAGE_DATASETS),
     assert_has_eff_privilege(SpaceDirCtx, UserCtx, ?SPACE_CREATE_ARCHIVES),
 
-    {ok, ArchiveId} = dataset_api:archive(DatasetId, Config, PreservedCallback, PurgedCallback,
+    {ok, ArchiveId} = archive_api:create_archive(DatasetId, Config, PreservedCallback, PurgedCallback,
         Description, UserCtx),
     ?PROVIDER_OK_RESP(#dataset_archived{id = ArchiveId}).
 
@@ -143,7 +143,7 @@ update_archive(SpaceDirCtx, ArchiveId, Diff, UserCtx) ->
     assert_has_eff_privilege(SpaceDirCtx, UserCtx, ?SPACE_MANAGE_DATASETS),
     assert_has_eff_privilege(SpaceDirCtx, UserCtx, ?SPACE_CREATE_ARCHIVES),
 
-    ok = dataset_api:update_archive(ArchiveId, Diff),
+    ok = archive_api:update_archive(ArchiveId, Diff),
     ?PROVIDER_OK_RESP.
 
 
@@ -152,7 +152,7 @@ update_archive(SpaceDirCtx, ArchiveId, Diff, UserCtx) ->
 get_archive_info(SpaceDirCtx, ArchiveId, UserCtx) ->
     assert_has_eff_privilege(SpaceDirCtx, UserCtx, ?SPACE_VIEW_ARCHIVES),
 
-    {ok, ArchiveInfo} = dataset_api:get_archive_info(ArchiveId),
+    {ok, ArchiveInfo} = archive_api:get_archive_info(ArchiveId),
     ?PROVIDER_OK_RESP(ArchiveInfo).
 
 
@@ -161,7 +161,7 @@ get_archive_info(SpaceDirCtx, ArchiveId, UserCtx) ->
 list_archives(SpaceDirCtx, DatasetId, Opts, ListingMode, UserCtx) ->
     assert_has_eff_privilege(SpaceDirCtx, UserCtx, ?SPACE_VIEW_ARCHIVES),
 
-    {ok, Archives, IsLast} = dataset_api:list_archives(DatasetId, Opts, ListingMode),
+    {ok, Archives, IsLast} = archive_api:list_archives(DatasetId, Opts, ListingMode),
     ?PROVIDER_OK_RESP(#archives{archives = Archives, is_last = IsLast}).
 
 
@@ -171,7 +171,7 @@ init_archive_purge(SpaceDirCtx, ArchiveId, CallbackUrl, UserCtx) ->
     assert_has_eff_privilege(SpaceDirCtx, UserCtx, ?SPACE_MANAGE_DATASETS),
     assert_has_eff_privilege(SpaceDirCtx, UserCtx, ?SPACE_REMOVE_ARCHIVES),
 
-    ok = dataset_api:init_archive_purge(ArchiveId, CallbackUrl),
+    ok = archive_api:init_archive_purge(ArchiveId, CallbackUrl, UserCtx),
     ?PROVIDER_OK_RESP.
 
 

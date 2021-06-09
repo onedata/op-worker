@@ -37,6 +37,10 @@
 %% Endpoint used to connect as a client to protocol endpoint
 -define(CLIENT_PROTOCOL_PATH, "/clproto").
 
+% TODO VFS-7628 make openfaas respond to https
+%% Endpoint used as callback for Openfaas
+-define(ATM_TASK_FINISHED_CALLBACK_PATH, "/tasks/").
+
 %% Protocol name for HTTP upgrade headers on client protocol endpoint
 -define(CLIENT_PROTOCOL_UPGRADE_NAME, "clproto").
 

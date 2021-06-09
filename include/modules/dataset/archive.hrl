@@ -47,4 +47,10 @@
     layout :: archive_config:layout()
 }).
 
+-record(archive_stats, {
+    files_archived = 0 :: non_neg_integer(),
+    files_failed = 0 :: non_neg_integer(),
+    bytes_archived = 0 :: non_neg_integer()
+}).
+
 -endif.

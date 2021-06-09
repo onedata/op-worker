@@ -15,6 +15,7 @@
 -behaviour(listener_behaviour).
 
 -include("global_definitions.hrl").
+-include("http/gui_paths.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 % Cowboy listener reference
@@ -60,6 +61,8 @@ start() ->
     Dispatch = cowboy_router:compile([
         {'_', [
             {?LE_CHALLENGE_PATH ++ "/[...]", cowboy_static, {dir, ?LE_CHALLENGE_ROOT}},
+            % TODO VFS-7628 make openfaas respond to https
+            {?ATM_TASK_FINISHED_CALLBACK_PATH ++ "[...]", atm_callback_handler, []},
             {'_', redirector_handler, https_listener:port()}
         ]}
     ]),

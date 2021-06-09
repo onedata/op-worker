@@ -945,14 +945,14 @@ get_archive_info(Worker, SessId, ArchiveId) ->
 
 
 -spec list_archives(node(), session:id(), dataset:id(), dataset_api:listing_opts()) ->
-    {ok, dataset_api:archive_entries(), boolean()} | lfm:error_reply().
+    {ok, archive_api:entries(), boolean()} | lfm:error_reply().
 list_archives(Worker, SessId, DatasetId, Opts) ->
     list_archives(Worker, SessId, DatasetId, Opts, undefined).
 
 
 -spec list_archives(node(), session:id(), dataset:id(), dataset_api:listing_opts(),
     dataset_api:listing_mode() | undefined) ->
-    {ok, dataset_api:archive_entries(), boolean()} | lfm:error_reply().
+    {ok, archive_api:entries(), boolean()} | lfm:error_reply().
 list_archives(Worker, SessId, DatasetId, Opts, ListingMode) ->
     ?EXEC(Worker, lfm:list_archives(SessId, DatasetId, Opts, ListingMode)).
 
