@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @author Bartosz Walkowicz
+%%% @author Michal Stanisz
 %%% @copyright (C) 2021 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
@@ -7,11 +7,11 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module provides `atm_container_iterator` functionality for
-%%% `atm_range_container`.
+%%% `atm_list_container`.
 %%% @end
 %%%-------------------------------------------------------------------
--module(atm_range_container_iterator).
--author("Bartosz Walkowicz").
+-module(atm_list_container_iterator).
+-author("Michal Stanisz").
 
 -behaviour(atm_container_iterator).
 -behaviour(persistent_record).
@@ -19,7 +19,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([build/3]).
+-export([build/1]).
 
 % atm_container_iterator callbacks
 -export([get_next_batch/2, mark_exhausted/1]).
@@ -28,15 +28,15 @@
 -export([version/0, db_encode/2, db_decode/2]).
 
 
--record(atm_range_container_iterator, {
-    curr_num :: integer(),
-    start_num :: integer(),
-    end_num :: integer(),
-    step :: integer()
-}).
--type record() :: #atm_range_container_iterator{}.
+-type item() :: json_utils:json_term().
 
--export_type([record/0]).
+-record(atm_list_container_iterator, {
+    backend_id :: atm_list_container:backend_id(),
+    index = 0 :: non_neg_integer()
+}).
+-type record() :: #atm_list_container_iterator{}.
+
+-export_type([item/0, record/0]).
 
 
 %%%===================================================================
@@ -44,12 +44,9 @@
 %%%===================================================================
 
 
--spec build(integer(), integer(), integer()) -> record().
-build(Start, End, Step) ->
-    #atm_range_container_iterator{
-        curr_num = Start,
-        start_num = Start, end_num = End, step = Step
-    }.
+-spec build(atm_list_container:backend_id()) -> record().
+build(BackendId) ->
+    #atm_list_container_iterator{backend_id = BackendId}.
 
 
 %%%===================================================================
@@ -58,33 +55,24 @@ build(Start, End, Step) ->
 
 
 -spec get_next_batch(atm_container_iterator:batch_size(), record()) ->
-    {ok, [atm_api:item()], record()} | stop.
-get_next_batch(BatchSize, #atm_range_container_iterator{
-    curr_num = CurrNum,
-    end_num = End,
-    step = Step
-} = AtmContainerIterator) ->
-    RequestedEndNum = CurrNum + (BatchSize - 1) * Step,
-    Threshold = case Step > 0 of
-        true -> min(RequestedEndNum, End);
-        false -> max(RequestedEndNum, End)
-    end,
-    case lists:seq(CurrNum, Threshold, Step) of
-        [] ->
+    {ok, [item()], record()} | stop.
+get_next_batch(BatchSize, #atm_list_container_iterator{} = Record) ->
+    #atm_list_container_iterator{backend_id = BackendId, index = StartIndex} = Record,
+    {ok, {Marker, EntrySeries}} = atm_list_store_backend:list(
+        BackendId, #{start_from => {index, StartIndex}, limit => BatchSize}),
+    Res = lists:map(fun({_Index, {_Timestamp, V}}) -> json_utils:decode(V) end, EntrySeries),
+    case {Res, Marker} of
+        {[], done} -> 
             stop;
-        Items ->
-            NewCurrNum = Threshold + Step,
-            NewAtmContainerIterator = AtmContainerIterator#atm_range_container_iterator{
-                curr_num = NewCurrNum
-            },
-            {ok, Items, NewAtmContainerIterator}
+        _ ->
+            {LastIndex, _} = lists:last(EntrySeries),
+            {ok, Res, Record#atm_list_container_iterator{index = LastIndex + 1}}
     end.
 
 
 -spec mark_exhausted(record()) -> ok.
 mark_exhausted(_AtmContainerIterator) ->
     ok.
-
 
 %%%===================================================================
 %%% persistent_record callbacks
@@ -98,21 +86,17 @@ version() ->
 
 -spec db_encode(record(), persistent_record:nested_record_encoder()) ->
     json_utils:json_term().
-db_encode(#atm_range_container_iterator{
-    curr_num = Current,
-    start_num = Start,
-    end_num = End,
-    step = Step
+db_encode(#atm_list_container_iterator{
+    backend_id = BackendId,
+    index = Index
 }, _NestedRecordEncoder) ->
-    #{<<"current">> => Current, <<"start">> => Start, <<"end">> => End, <<"step">> => Step}.
+    #{<<"backendId">> => BackendId, <<"index">> => Index}.
 
 
 -spec db_decode(json_utils:json_term(), persistent_record:nested_record_decoder()) ->
     record().
-db_decode(#{
-    <<"current">> := Current,
-    <<"start">> := Start,
-    <<"end">> := End,
-    <<"step">> := Step
-}, _NestedRecordDecoder) ->
-    #atm_range_container_iterator{curr_num = Current, start_num = Start, end_num = End, step = Step}.
+db_decode(#{<<"backendId">> := BackendId, <<"index">> := Index}, _NestedRecordDecoder) ->
+    #atm_list_container_iterator{
+        backend_id = BackendId,
+        index = Index
+    }.

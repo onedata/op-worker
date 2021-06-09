@@ -63,7 +63,7 @@
     id :: archive:id(),
     config :: archive:config(),
     description :: archive:description(),
-    index :: dataset_api:archive_index()
+    index :: archive_api:index()
 }).
 
 

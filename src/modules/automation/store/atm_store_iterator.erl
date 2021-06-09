@@ -23,7 +23,7 @@
 -export([build/2]).
 
 %% iterator callbacks
--export([get_next/1, jump_to/2]).
+-export([get_next/1, mark_exhausted/1]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
@@ -58,7 +58,7 @@ build(AtmStoreIteratorSpec, AtmContainer) ->
 %%%===================================================================
 
 
--spec get_next(record()) -> {ok, atm_api:item(), iterator:cursor(), record()} | stop.
+-spec get_next(record()) -> {ok, atm_api:item(), record()} | stop.
 get_next(#atm_store_iterator{
     spec = #atm_store_iterator_spec{strategy = #atm_store_iterator_serial_strategy{}},
     container_iterator = AtmContainerIterator
@@ -66,8 +66,8 @@ get_next(#atm_store_iterator{
     case atm_container_iterator:get_next_batch(1, AtmContainerIterator) of
         stop ->
             stop;
-        {ok, [Item], Marker, NewAtmContainerIterator} ->
-            {ok, Item, Marker, AtmStoreIterator#atm_store_iterator{
+        {ok, [Item], NewAtmContainerIterator} ->
+            {ok, Item, AtmStoreIterator#atm_store_iterator{
                 container_iterator = NewAtmContainerIterator
             }}
     end;
@@ -80,21 +80,16 @@ get_next(#atm_store_iterator{
     case atm_container_iterator:get_next_batch(Size, AtmContainerIterator) of
         stop ->
             stop;
-        {ok, Items, Marker, NewAtmContainerIterator} ->
-            {ok, Items, Marker, AtmStoreIterator#atm_store_iterator{
+        {ok, Items, NewAtmContainerIterator} ->
+            {ok, Items, AtmStoreIterator#atm_store_iterator{
                 container_iterator = NewAtmContainerIterator
             }}
     end.
 
 
--spec jump_to(iterator:cursor(), record()) -> record().
-jump_to(Cursor, #atm_store_iterator{
-    container_iterator = AtmContainerIterator
-} = AtmStoreIterator) ->
-    AtmStoreIterator#atm_store_iterator{
-        container_iterator = atm_container_iterator:jump_to(Cursor, AtmContainerIterator)
-    }.
-
+-spec mark_exhausted(record()) -> ok.
+mark_exhausted(#atm_store_iterator{container_iterator = ContainerIterator}) ->
+    atm_container_iterator:mark_exhausted(ContainerIterator).
 
 %%%===================================================================
 %%% persistent_record callbacks

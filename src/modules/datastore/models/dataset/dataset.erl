@@ -93,9 +93,11 @@ get_id(#document{key = DatasetId}) ->
 %% DatasetId is uuid of a root file.
 %% @end
 %%--------------------------------------------------------------------
--spec get_root_file_uuid(doc() | id()) -> {ok, file_meta:uuid()}.
+-spec get_root_file_uuid(id() | doc()) -> {ok, file_meta:uuid()}.
 get_root_file_uuid(#document{} = DatasetDoc) ->
-    get_id(DatasetDoc).
+    get_id(DatasetDoc);
+get_root_file_uuid(DatasetId) ->
+    {ok, DatasetId}.
 
 
 -spec get_space_id(doc() | dataset:id()) -> {ok, od_space:id()}.

@@ -15,7 +15,7 @@
 -include("modules/automation/atm_execution.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 
--export([start/3]).
+-export([start/4]).
 
 
 % TODO VFS-7660 mv to automation erl
@@ -23,9 +23,7 @@
 
 -type initial_values() :: #{AtmStoreSchemaId :: automation:id() => atm_store_api:initial_value()}.
 
--type creation_ctx() :: #atm_execution_creation_ctx{}.
-
--export_type([item/0, initial_values/0, creation_ctx/0]).
+-export_type([item/0, initial_values/0]).
 
 
 %%%===================================================================
@@ -33,17 +31,21 @@
 %%%===================================================================
 
 
--spec start(od_space:id(), od_atm_workflow_schema:id(), initial_values()) ->
+-spec start(user_ctx:ctx(), od_space:id(), od_atm_workflow_schema:id(), initial_values()) ->
     {ok, atm_workflow_execution:id()} | no_return().
-start(SpaceId, AtmWorkflowSchemaId, InitialValues) ->
-    %% TODO VFS-7671 use user session
-    {ok, AtmWorkflowSchemaDoc} = atm_workflow_schema_logic:get(?ROOT_SESS_ID, AtmWorkflowSchemaId),
+start(UserCtx, SpaceId, AtmWorkflowSchemaId, InitialValues) ->
+    SessionId = user_ctx:get_session_id(UserCtx),
+    {ok, AtmWorkflowSchemaDoc} = atm_workflow_schema_logic:get(SessionId, AtmWorkflowSchemaId),
 
     AtmWorkflowExecutionId = datastore_key:new(),
+    ok = atm_workflow_execution_session:init(AtmWorkflowExecutionId, UserCtx),
 
-    {ok, _} = atm_workflow_execution_api:create(#atm_execution_creation_ctx{
-        space_id = SpaceId,
-        workflow_execution_id = AtmWorkflowExecutionId,
+    AtmWorkflowExecutionCtx = atm_workflow_execution_ctx:build(
+        SpaceId, AtmWorkflowExecutionId
+    ),
+
+    {ok, _} = atm_workflow_execution_api:create(#atm_workflow_execution_creation_ctx{
+        workflow_execution_ctx = AtmWorkflowExecutionCtx,
         workflow_schema_doc = AtmWorkflowSchemaDoc,
         initial_values = InitialValues
     }),

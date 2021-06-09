@@ -20,7 +20,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% atm_container callbacks
--export([create/2, get_data_spec/1, acquire_iterator/1]).
+-export([create/3, get_data_spec/1, acquire_iterator/1, apply_operation/2, delete/1]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
@@ -36,6 +36,7 @@
 %%      <<"step">> => integer()    % default `1`
 %% }
 -type initial_value() :: #{binary() => integer()}.
+-type operation_options() :: #{binary() => boolean()}.
 
 -record(atm_range_container, {
     data_spec :: atm_data_spec:record(),
@@ -45,7 +46,7 @@
 }).
 -type record() :: #atm_range_container{}.
 
--export_type([initial_value/0, record/0]).
+-export_type([initial_value/0, operation_options/0, record/0]).
 
 
 %%%===================================================================
@@ -53,13 +54,14 @@
 %%%===================================================================
 
 
--spec create(atm_data_spec:record(), initial_value()) -> record() | no_return().
-create(AtmDataSpec, #{<<"end">> := EndNum} = InitialArgs) ->
+-spec create(atm_data_spec:record(), initial_value(), atm_workflow_execution_ctx:record()) ->
+    record() | no_return().
+create(AtmDataSpec, #{<<"end">> := EndNum} = InitialArgs, AtmWorkflowExecutionCtx) ->
     StartNum = maps:get(<<"start">>, InitialArgs, 0),
     Step = maps:get(<<"step">>, InitialArgs, 1),
 
     assert_supported_data_spec(AtmDataSpec),
-    validate_init_args(StartNum, EndNum, Step, AtmDataSpec),
+    validate_init_args(StartNum, EndNum, Step, AtmDataSpec, AtmWorkflowExecutionCtx),
 
     #atm_range_container{
         data_spec = AtmDataSpec,
@@ -67,7 +69,7 @@ create(AtmDataSpec, #{<<"end">> := EndNum} = InitialArgs) ->
         end_num = EndNum,
         step = Step
     };
-create(_AtmDataSpec, _InitialArgs) ->
+create(_AtmDataSpec, _InitialArgs, _AtmWorkflowExecutionCtx) ->
     throw(?ERROR_MISSING_REQUIRED_VALUE(<<"end">>)).
 
 
@@ -83,6 +85,17 @@ acquire_iterator(#atm_range_container{
     step = Step
 }) ->
     atm_range_container_iterator:build(StartNum, EndNum, Step).
+
+
+-spec apply_operation(record(), atm_container:operation()) ->
+    no_return().
+apply_operation(_Record, _AtmContainerOperation) ->
+    throw(?ERROR_NOT_SUPPORTED).
+
+
+-spec delete(record()) -> ok.
+delete(_Record) ->
+    ok.
 
 
 %%%===================================================================
@@ -144,12 +157,16 @@ assert_supported_data_spec(AtmDataSpec) ->
 
 
 %% @private
--spec validate_init_args(integer(), integer(), integer(), atm_data_spec:record()) ->
+-spec validate_init_args(
+    integer(), integer(), integer(),
+    atm_data_spec:record(),
+    atm_workflow_execution_ctx:record()
+) ->
     ok | no_return().
-validate_init_args(StartNum, EndNum, Step, AtmDataSpec) ->
+validate_init_args(StartNum, EndNum, Step, AtmDataSpec, AtmWorkflowExecutionCtx) ->
     lists:foreach(fun({ArgName, ArgValue}) ->
         try
-            atm_data_validator:validate(ArgValue, AtmDataSpec)
+            atm_data_validator:validate(AtmWorkflowExecutionCtx, ArgValue, AtmDataSpec)
         catch throw:Reason  ->
             throw(?ERROR_ATM_BAD_DATA(ArgName, Reason))
         end

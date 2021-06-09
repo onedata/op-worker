@@ -41,11 +41,12 @@
     archive_dataset_attached_to_file/1,
     archive_dataset_attached_to_hardlink/1,
     archive_dataset_attached_to_symlink/1,
-    archive_big_tree/1,
     archive_directory_with_number_of_files_exceeding_batch_size/1,
+    archive_nested_datasets/1,
 
     % sequential tests
-    archive_dataset_attached_to_space_dir/1
+    archive_dataset_attached_to_space_dir/1,
+    archive_big_tree/1
 ]).
 
 groups() -> [
@@ -55,7 +56,8 @@ groups() -> [
         archive_dataset_attached_to_file,
         archive_dataset_attached_to_hardlink,
         archive_dataset_attached_to_symlink,
-        archive_directory_with_number_of_files_exceeding_batch_size
+        archive_directory_with_number_of_files_exceeding_batch_size,
+        archive_nested_datasets
     ]},
     {sequential_tests, [sequential], [
         archive_dataset_attached_to_space_dir,
@@ -92,6 +94,8 @@ all() -> [
 -define(TEST_TIMESTAMP, 1000000000).
 
 -define(RAND_NAME(), str_utils:rand_hex(20)).
+-define(RAND_SIZE(), rand:uniform(50)).
+-define(RAND_CONTENT(), crypto:strong_rand_bytes(?RAND_SIZE())).
 -define(RAND_CONTENT(Size), crypto:strong_rand_bytes(Size)).
 
 -define(RAND_NAME(Prefix), ?NAME(Prefix, rand:uniform(?RAND_RANGE))).
@@ -209,6 +213,103 @@ archive_directory_with_number_of_files_exceeding_batch_size(_Config) ->
     % default batch size is 1000
     archive_dataset_tree_test_base([{0, 2048}]).
 
+
+archive_nested_datasets(_Config) ->
+    #object{
+        guid = Dir11Guid,
+        dataset = #dataset_object{
+            id = DatasetDir11Id,
+            archives = [#archive_object{id = ArchiveDir11Id}]
+        },
+        children = [
+            #object{
+                guid = File21Guid,
+                dataset = #dataset_object{id = DatasetFile21Id},
+                content = File21Content
+            },
+            #object{
+                children = [
+                    #object{
+                        guid = Dir31Guid,
+                        dataset = #dataset_object{id = DatasetDir31Id},
+                        children = [
+                            #object{
+                                guid = File41Guid,
+                                dataset = #dataset_object{id = DatasetFile41Id},
+                                content = File41Content
+                            },
+                            #object{
+                                dataset = #dataset_object{id = DatasetFile42Id},
+                                content = File42Content
+                            }
+                        ]
+                    }
+                ]
+            },
+            #object{
+                guid = Dir22Guid,
+                dataset = #dataset_object{id = DatasetDir22Id}
+            }
+        ]
+    } = onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE,
+        #dir_spec{ % dataset
+            dataset = #dataset_spec{archives = 1},
+            children = [
+                #file_spec{ % dataset
+                    dataset = #dataset_spec{},
+                    content = ?RAND_CONTENT()
+                },
+                #dir_spec{
+                    children = [
+                        #dir_spec{
+                            dataset = #dataset_spec{}, % dataset
+                            children = [
+                                #file_spec{  % dataset
+                                    dataset = #dataset_spec{},
+                                    content = ?RAND_CONTENT()
+                                },
+                                #file_spec{ % archive shouldn't be created for this file
+                                    dataset = #dataset_spec{state = ?DETACHED_DATASET},
+                                    content = ?RAND_CONTENT()
+                                }
+                            ]
+                        }
+                    ]
+                },
+                #dir_spec{dataset = #dataset_spec{}} % dataset
+            ]
+        }
+    ),
+    % archiving top dataset should result in creation of archives also for
+    % nested datasets
+    Node = oct_background:get_random_provider_node(krakow),
+    SessionId = oct_background:get_user_session_id(?USER1, krakow),
+    ListOpts = #{offset => 0, limit => 10},
+    {ok, [{_, ArchiveFile21Id}], _} = ?assertMatch({ok, [_], true},
+        lfm_proxy:list_archives(Node, SessionId, DatasetFile21Id, ListOpts), ?ATTEMPTS),
+    {ok, [{_, ArchiveDir22Id}], _} = ?assertMatch({ok, [_], true},
+        lfm_proxy:list_archives(Node, SessionId, DatasetDir22Id, ListOpts), ?ATTEMPTS),
+    {ok, [{_, ArchiveDir31Id}], _} = ?assertMatch({ok, [_], true},
+        lfm_proxy:list_archives(Node, SessionId, DatasetDir31Id, ListOpts), ?ATTEMPTS),
+    {ok, [{_, ArchiveFile41Id}], _} = ?assertMatch({ok, [_], true},
+        lfm_proxy:list_archives(Node, SessionId, DatasetFile41Id, ListOpts), ?ATTEMPTS),
+    % DatasetFile4 is detached, therefore archive for this dataset shouldn't have been created
+    ?assertMatch({ok, [], true},
+        lfm_proxy:list_archives(Node, SessionId, DatasetFile42Id, ListOpts), ?ATTEMPTS),
+
+    File21Size = byte_size(File21Content),
+    File41Size = byte_size(File41Content),
+    File42Size = byte_size(File42Content),
+    ArchiveDir11Bytes = File21Size + File41Size + File42Size,
+    ArchiveDir31Bytes = File41Size + File42Size,
+
+    assert_archive_is_preserved(Node, SessionId, ArchiveDir11Id, DatasetDir11Id, Dir11Guid, 3, ArchiveDir11Bytes),
+    assert_archive_is_preserved(Node, SessionId, ArchiveFile21Id, DatasetFile21Id, File21Guid, 1, File21Size),
+    assert_archive_is_preserved(Node, SessionId, ArchiveDir22Id,  DatasetDir22Id, Dir22Guid, 0, 0),
+    assert_archive_is_preserved(Node, SessionId, ArchiveDir31Id, DatasetDir31Id, Dir31Guid, 2, ArchiveDir31Bytes),
+    assert_archive_is_preserved(Node, SessionId, ArchiveFile41Id, DatasetFile41Id, File41Guid, 1, File41Size).
+
+
 %===================================================================
 % Test bases
 %===================================================================
@@ -226,7 +327,7 @@ archive_simple_dataset_test_base(Guid, DatasetId, ArchiveId) ->
             ?SYMLINK_TYPE -> {1, 0};
             _ -> {1, Size}
         end,
-        assert_archive_is_preserved(Node, SessionId, ArchiveId, Guid, FileCount, ExpSize)
+        assert_archive_is_preserved(Node, SessionId, ArchiveId, DatasetId, Guid, FileCount, ExpSize)
     end, oct_background:get_space_supporting_providers(?SPACE)).
 
 archive_dataset_tree_test_base(FileStructure) ->
@@ -244,7 +345,7 @@ archive_dataset_tree_test_base(FileStructure) ->
         lfm_proxy:archive_dataset(Node, SessId, DatasetId, #archive_config{layout = ?ARCHIVE_PLAIN_LAYOUT}, <<>>),
 
     % created files are empty therefore expected size is 0
-    assert_archive_is_preserved(Node, SessId, ArchiveId, RootGuid, length(FileGuids), 0).
+    assert_archive_is_preserved(Node, SessId, ArchiveId, DatasetId, RootGuid, length(FileGuids), 0).
 
 %===================================================================
 % SetUp and TearDown functions
@@ -332,20 +433,26 @@ assert_archive_dir_exists(Node, SessionId, SpaceId, DatasetId, ArchiveId, UserId
     }}, lfm_proxy:stat(Node, SessionId, ?FILE_REF(ArchiveDirGuid)), ?ATTEMPTS).
 
 
-assert_archive_is_preserved(Node, SessionId, ArchiveId, RootGuid, FileCount, ExpSize) ->
-    ?assertMatch({ok, #archive_info{
+assert_archive_is_preserved(Node, SessionId, ArchiveId, DatasetId, RootGuid, FileCount, ExpSize) ->
+    {ok, #archive_info{root_file_guid = CopyRootGuid}} = ?assertMatch({ok, #archive_info{
         state = ?ARCHIVE_PRESERVED,
-        files_to_archive = FileCount,
-        files_archived = FileCount,
-        files_failed = 0,
-        bytes_archived = ExpSize
+        stats = #archive_stats{
+            files_archived = FileCount,
+            files_failed = 0,
+            bytes_archived = ExpSize
+        }
     }}, lfm_proxy:get_archive_info(Node, SessionId, ArchiveId), ?ATTEMPTS),
-    ArchiveDirUuid = ?ARCHIVE_DIR_UUID(ArchiveId),
-    SpaceId = file_id:guid_to_space_id(RootGuid),
-    ArchiveDirGuid = file_id:pack_guid(ArchiveDirUuid, SpaceId),
-    {ok, #file_attr{name = SourceRootName}} = lfm_proxy:stat(Node, SessionId, ?FILE_REF(RootGuid)),
-    {ok, #file_attr{guid = CopyRootGuid}} = ?assertMatch({ok, _},
-        lfm_proxy:get_child_attr(Node, SessionId, ArchiveDirGuid, SourceRootName), ?ATTEMPTS),
+
+    GetDatasetArchives = fun() ->
+        case lfm_proxy:list_archives(Node, SessionId, DatasetId, #{offset => 0, limit => 10000}) of
+            {ok, ArchiveIdsAndIndices, _} ->
+                [AID || {_, AID} <- ArchiveIdsAndIndices];
+            _ ->
+                error
+        end
+    end,
+    ?assertEqual(true, lists:member(ArchiveId, GetDatasetArchives()), ?ATTEMPTS),
+
     assert_copied(Node, SessionId, RootGuid, CopyRootGuid).
 
 
@@ -368,12 +475,17 @@ assert_attrs_copied(Node, SessionId, SourceGuid, TargetGuid) ->
         lfm_proxy:stat(Node, SessionId, ?FILE_REF(Guid))
     end,
     {ok, SourceAttr} = Stat(SourceGuid),
-    {ok, TargetAttr} = ?assertMatch({ok, #file_attr{}}, Stat(TargetGuid), ?ATTEMPTS),
-    ?assertEqual(SourceAttr#file_attr.name, TargetAttr#file_attr.name),
-    ?assertEqual(SourceAttr#file_attr.mode, TargetAttr#file_attr.mode),
-    ?assertEqual(SourceAttr#file_attr.type, TargetAttr#file_attr.type),
-    ?assertEqual(SourceAttr#file_attr.size, TargetAttr#file_attr.size).
-
+    ?assertEqual(true, try
+        {ok, TargetAttr} = ?assertMatch({ok, #file_attr{}}, Stat(TargetGuid), ?ATTEMPTS),
+        ?assertEqual(SourceAttr#file_attr.name, TargetAttr#file_attr.name),
+        ?assertEqual(SourceAttr#file_attr.mode, TargetAttr#file_attr.mode),
+        ?assertEqual(SourceAttr#file_attr.type, TargetAttr#file_attr.type),
+        ?assertEqual(SourceAttr#file_attr.size, TargetAttr#file_attr.size),
+        true
+    catch
+        _:_ ->
+            false
+    end, ?ATTEMPTS).
 
 assert_metadata_copied(Node, SessionId, SourceGuid, TargetGuid) ->
     GetXattrs = fun(Guid) ->

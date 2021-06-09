@@ -56,24 +56,21 @@ translate_archive_info(#archive_info{
     id = ArchiveId,
     dataset_id = DatasetId,
     state = State,
-    root_dir_guid = RootDirGuid,
+    root_file_guid = RootFileGuid,
     creation_time = CreationTime,
     config = Config,
     preserved_callback = PreservedCallback,
     purged_callback = PurgedCallback,
     description = Description,
-    files_to_archive = FilesToArchive,
-    files_archived = FilesArchived,
-    files_failed = FilesFailed,
-    bytes_archived = BytesArchived
+    stats = Stats
 }) ->
     #{
         <<"archiveId">> => ArchiveId,
         <<"datasetId">> => DatasetId,
         <<"state">> => str_utils:to_binary(State),
-        <<"rootDirectoryId">> => case RootDirGuid =/= undefined of
+        <<"rootFileId">> => case RootFileGuid =/= undefined of
             true ->
-                {ok, RootDirObjectId} = file_id:guid_to_objectid(RootDirGuid),
+                {ok, RootDirObjectId} = file_id:guid_to_objectid(RootFileGuid),
                 RootDirObjectId;
             false ->
                 null
@@ -83,8 +80,5 @@ translate_archive_info(#archive_info{
         <<"preservedCallback">> => utils:undefined_to_null(PreservedCallback),
         <<"purgedCallback">> => utils:undefined_to_null(PurgedCallback),
         <<"description">> => Description,
-        <<"filesToArchive">> => FilesToArchive,
-        <<"filesArchived">> => FilesArchived,
-        <<"filesFailed">> => FilesFailed,
-        <<"bytesArchived">> => BytesArchived
+        <<"stats">> => archive_stats:to_json(Stats)
     }.

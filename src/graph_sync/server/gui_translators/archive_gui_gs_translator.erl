@@ -39,17 +39,14 @@ translate_archive_info(#archive_info{
     id = ArchiveId,
     dataset_id = DatasetId,
     state = State,
-    root_dir_guid = RootDirGuid,
+    root_file_guid = RootFileGuid,
     creation_time = CreationTime,
     config = Config,
     preserved_callback = PreservedCallback,
     purged_callback = PurgedCallback,
     description = Description,
     index = Index,
-    files_to_archive = FilesToArchive,
-    files_archived = FilesArchived,
-    files_failed = FilesFailed,
-    bytes_archived = BytesArchived
+    stats = Stats
 }) ->
     #{
         <<"gri">> => gri:serialize(#gri{
@@ -61,9 +58,9 @@ translate_archive_info(#archive_info{
             aspect = instance, scope = private
         }),
         <<"state">> => str_utils:to_binary(State),
-        <<"rootDir">> => case RootDirGuid =/= undefined of
+        <<"rootFile">> => case RootFileGuid =/= undefined of
             true -> gri:serialize(#gri{
-                type = op_file, id = RootDirGuid,
+                type = op_file, id = RootFileGuid,
                 aspect = instance, scope = private
             });
             false ->
@@ -75,8 +72,5 @@ translate_archive_info(#archive_info{
         <<"purgedCallback">> => utils:undefined_to_null(PurgedCallback),
         <<"description">> => Description,
         <<"index">> => Index,
-        <<"filesToArchive">> => FilesToArchive,
-        <<"filesArchived">> => FilesArchived,
-        <<"filesFailed">> => FilesFailed,
-        <<"bytesArchived">> => BytesArchived
+        <<"stats">> => archive_stats:to_json(Stats)
     }.

@@ -41,17 +41,17 @@
 %%%===================================================================
 
 
--spec create_all(atm_api:creation_ctx()) -> [record()] | no_return().
-create_all(#atm_execution_creation_ctx{
+-spec create_all(atm_workflow_execution:creation_ctx()) -> [record()] | no_return().
+create_all(#atm_workflow_execution_creation_ctx{
     workflow_schema_doc = #document{value = #od_atm_workflow_schema{
         lanes = AtmLaneSchemas
     }}
-} = AtmExecutionCreationCtx) ->
+} = AtmWorkflowExecutionCreationCtx) ->
     lists:reverse(lists:foldl(fun({AtmLaneIndex, #atm_lane_schema{
         id = AtmLaneSchemaId
     } = AtmLaneSchema}, Acc) ->
         try
-            AtmLaneExecution = create(AtmExecutionCreationCtx, AtmLaneIndex, AtmLaneSchema),
+            AtmLaneExecution = create(AtmWorkflowExecutionCreationCtx, AtmLaneIndex, AtmLaneSchema),
             [AtmLaneExecution | Acc]
         catch _:Reason ->
             catch delete_all(Acc),
@@ -61,17 +61,17 @@ create_all(#atm_execution_creation_ctx{
 
 
 -spec create(
-    atm_api:creation_ctx(),
+    atm_workflow_execution:creation_ctx(),
     non_neg_integer(),
     atm_lane_schema:record()
 ) ->
     record() | no_return().
-create(AtmExecutionCreationCtx, AtmLaneIndex, #atm_lane_schema{
+create(AtmWorkflowExecutionCreationCtx, AtmLaneIndex, #atm_lane_schema{
     id = AtmLaneSchemaId,
     parallel_boxes = AtmParallelBoxSchemas
 }) ->
     AtmParallelBoxExecutions = atm_parallel_box_execution:create_all(
-        AtmExecutionCreationCtx, AtmLaneIndex, AtmParallelBoxSchemas
+        AtmWorkflowExecutionCreationCtx, AtmLaneIndex, AtmParallelBoxSchemas
     ),
 
     #atm_lane_execution{
