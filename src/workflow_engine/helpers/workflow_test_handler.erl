@@ -18,7 +18,7 @@
 -include_lib("ctool/include/test/test_utils.hrl").
 
 -export([prepare/2, get_lane_spec/3, process_item/6, process_result/4,
-    handle_task_ended/3, handle_lane_execution_ended/3]).
+    handle_task_execution_ended/3, handle_lane_execution_ended/3]).
 
 %%%===================================================================
 %%% API
@@ -91,13 +91,13 @@ process_item(_ExecutionId, _Context, _TaskId, _Item, _FinishCallback, _) ->
 process_result(_, _, _, Result) ->
     binary_to_atom(Result, utf8).
 
--spec handle_task_ended(
+-spec handle_task_execution_ended(
     workflow_engine:execution_id(),
     workflow_engine:execution_context(),
     workflow_engine:task_id()
 ) ->
     ok.
-handle_task_ended(_, _, _) ->
+handle_task_execution_ended(_, _, _) ->
     ok.
 
 handle_lane_execution_ended(_, _, _) ->

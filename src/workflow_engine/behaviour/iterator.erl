@@ -40,8 +40,25 @@
 
 -callback get_next(workflow_engine:execution_context(), iterator()) -> {ok, item(), iterator()} | stop.
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Marks all iterators older than given one as invalid - auxiliary
+%% data stored for purpose of serving next items with the use of
+%% these iterators can be cleaned up.
+%% Given iterator, as well as all subsequent ones, are still valid.
+%% Later calls to get_next/2 with invalidated iterators can
+%% result in undefined behaviour.
+%% @end
+%%--------------------------------------------------------------------
 -callback forget_before(iterator()) -> ok.
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Marks all iterators in given iteration line as invalid - all auxiliary
+%% data stored for purpose of serving next items can be cleaned up.
+%% Later calls to get_next/2 can result in undefined behaviour.
+%% @end
+%%--------------------------------------------------------------------
 -callback mark_exhausted(iterator()) -> ok.
 
 

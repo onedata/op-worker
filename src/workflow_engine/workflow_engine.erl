@@ -55,15 +55,15 @@
 
 -type task_type() :: sync | async.
 -type task_spec() :: #{
-    type => task_type(),
-    async_call_pools := [workflow_async_call_pool:id()] | undefined,
-    keepalive_timeout := time:seconds()
+    type := task_type(),
+    async_call_pools => [workflow_async_call_pool:id()] | undefined,
+    keepalive_timeout => time:seconds()
 }.
 -type parallel_box_spec() :: #{task_id() => task_spec()}.
 -type lane_spec() :: #{
-    parallel_boxes => [parallel_box_spec()],
-    iterator => iterator:iterator(),
-    is_last := boolean()
+    parallel_boxes := [parallel_box_spec()],
+    iterator := iterator:iterator(),
+    is_last => boolean()
 }.
 %% @formatter:on
 

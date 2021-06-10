@@ -69,7 +69,7 @@
     callback_execution_result().
 
 
--callback handle_task_ended(
+-callback handle_task_execution_ended(
     workflow_engine:execution_id(),
     workflow_engine:execution_context(),
     workflow_engine:task_id()
