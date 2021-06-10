@@ -175,10 +175,10 @@ dispatch_spec_from_json(#{
 validate_result(AtmWorkflowExecutionCtx, #atm_task_execution_result_spec{
     data_spec = AtmDataSpec,
     is_batch = true
-}, Result) ->
-    lists:foreach(fun(Value) ->
-        atm_data_validator:validate(AtmWorkflowExecutionCtx, Value, AtmDataSpec)
-    end, Result);
+}, ResultsBatch) ->
+    lists:foreach(fun(Result) ->
+        atm_data_validator:validate(AtmWorkflowExecutionCtx, Result, AtmDataSpec)
+    end, ResultsBatch);
 
 validate_result(AtmWorkflowExecutionCtx, #atm_task_execution_result_spec{
     data_spec = AtmDataSpec,

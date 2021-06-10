@@ -6,8 +6,8 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module defines `atm_task_executor` interface - an object used to
-%%% execute a job (an automation task with specific arguments).
+%%% This module defines `atm_task_executor` interface - an object used for
+%%% executing a job (an automation task with specific arguments).
 %%%
 %%%                             !!! Caution !!!
 %%% 1) This behaviour must be implemented by proper models, that is modules with
