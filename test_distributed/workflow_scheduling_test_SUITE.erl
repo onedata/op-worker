@@ -145,7 +145,7 @@ job_failure_test(Config) ->
     Workflow = #{
         id => Id,
         workflow_handler => workflow_test_handler,
-        execution_context => #{type => WorkflowType}
+        execution_context => #{type => WorkflowType, async_call_pools => [?ASYNC_CALL_POOL_ID]}
     },
 
     TaskToFail = <<"job_failure_test_workflow_task3_3_2">>,
