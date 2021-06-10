@@ -36,7 +36,9 @@
 
 -spec init_engine() -> ok.
 init_engine() ->
-    workflow_engine:init(?ATM_WORKFLOW_ENGINE).
+%%    % TODO VFS-7551 uncomment after MW implements it
+%%    workflow_engine:init(?ATM_WORKFLOW_ENGINE).
+    ok.
 
 
 -spec schedule_workflow_execution(
