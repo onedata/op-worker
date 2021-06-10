@@ -17,6 +17,7 @@
 %% API
 -export([
     create_all/1, create/3,
+    freeze/1, unfreeze/1,
     apply_operation/5,
     delete_all/1, delete/1,
     acquire_iterator/2
@@ -89,6 +90,20 @@ create(AtmWorkflowExecutionCtx, InitialValue, #atm_store_schema{
     }).
 
 
+-spec freeze(atm_store:id()) -> ok.
+freeze(AtmStoreId) ->
+    ok = atm_store:update(AtmStoreId, fun(#atm_store{} = AtmStore) ->
+        {ok, AtmStore#atm_store{frozen = true}}
+    end).
+
+
+-spec unfreeze(atm_store:id()) -> ok.
+unfreeze(AtmStoreId) ->
+    ok = atm_store:update(AtmStoreId, fun(#atm_store{} = AtmStore) ->
+        {ok, AtmStore#atm_store{frozen = false}}
+    end).
+
+
 -spec apply_operation(
     atm_workflow_execution_ctx:record(),
     atm_container:operation_type(),
@@ -135,10 +150,10 @@ delete(AtmStoreId) ->
 
 -spec acquire_iterator(atm_workflow_execution_env:record(), atm_store_iterator_spec:record()) ->
     atm_store_iterator:record().
-acquire_iterator(AtmExecutionEnv, #atm_store_iterator_spec{
+acquire_iterator(AtmWorkflowExecutionEnv, #atm_store_iterator_spec{
     store_schema_id = AtmStoreSchemaId
 } = AtmStoreIteratorConfig) ->
-    AtmStoreId = atm_workflow_execution_env:get_store_id(AtmStoreSchemaId, AtmExecutionEnv),
+    AtmStoreId = atm_workflow_execution_env:get_store_id(AtmStoreSchemaId, AtmWorkflowExecutionEnv),
     {ok, #atm_store{container = AtmContainer}} = atm_store:get(AtmStoreId),
     atm_store_iterator:build(AtmStoreIteratorConfig, AtmContainer).
 

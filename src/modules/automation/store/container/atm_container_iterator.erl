@@ -7,7 +7,7 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module defines `atm_container_iterator` interface - an object which can be
-%%% used to iterate over specific `atm_container` in batches.
+%%% used for iteration over specific `atm_container` in batches.
 %%%
 %%%                             !!! Caution !!!
 %%% 1) This behaviour must be implemented by modules with records of the same name.

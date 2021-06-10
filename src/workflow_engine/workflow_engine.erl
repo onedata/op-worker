@@ -68,7 +68,8 @@
 %% @formatter:on
 
 -export_type([id/0, execution_id/0, execution_context/0, task_id/0,
-    job_execution_spec/0, processing_stage/0, processing_result/0, task_spec/0, lane_spec/0]).
+    job_execution_spec/0, processing_stage/0, processing_result/0,
+    task_spec/0, parallel_box_spec/0, lane_spec/0]).
 
 -define(POOL_ID(EngineId), binary_to_atom(EngineId, utf8)).
 -define(DEFAULT_SLOT_COUNT, 20).

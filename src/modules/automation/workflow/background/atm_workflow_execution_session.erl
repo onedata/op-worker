@@ -53,7 +53,7 @@ acquire(AtmWorkflowExecutionId) ->
                     "Execution will be cancelled.", [AtmWorkflowExecutionId, Error]
                 )
             end),
-            % TODO VFS-7690 cancel workflow
+            % TODO VFS-7693 cancel workflow
             throw(?EACCES)
     end.
 
