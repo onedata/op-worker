@@ -7,10 +7,9 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% Module responsible for operating on task execution result spec which is
-%%% 'atm_lambda_result_spec' and 'atm_task_schema_result_mapper' merged into
-%%% one record. It is done for performance reasons so as to not reference
-%%% several more documents (workflow schema and lambda doc) when executing
-%%% task for each item.
+%%% created based on 'atm_lambda_result_spec' and 'atm_task_schema_result_mapper'.
+%%% It is done for performance reasons so as to not reference several more
+%%% documents (workflow schema and lambda doc) when executing task for each item.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_task_execution_result_spec).

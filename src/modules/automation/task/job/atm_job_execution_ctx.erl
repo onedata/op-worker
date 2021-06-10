@@ -27,7 +27,6 @@
 
 
 -record(atm_job_execution_ctx, {
-    workflow_execution_env :: atm_workflow_execution_env:record(),
     workflow_execution_ctx :: atm_workflow_execution_ctx:record(),
     item :: json_utils:json_term(),
     report_result_url :: undefined | binary(),
@@ -52,7 +51,6 @@
     record().
 build(AtmWorkflowExecutionEnv, Item, ReportResultUrl, HeartbeatUrl) ->
     #atm_job_execution_ctx{
-        workflow_execution_env = AtmWorkflowExecutionEnv,
         workflow_execution_ctx = atm_workflow_execution_env:acquire_workflow_execution_ctx(
             AtmWorkflowExecutionEnv
         ),

@@ -15,7 +15,8 @@
 -include("modules/automation/atm_execution.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 
--export([start/4]).
+-export([init_engine/0]).
+-export([schedule_workflow_execution/4]).
 
 
 % TODO VFS-7660 mv to automation erl
@@ -25,15 +26,27 @@
 
 -export_type([item/0, initial_values/0]).
 
+-define(ATM_WORKFLOW_ENGINE, <<"atm_workflow_engine">>).
+
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
 
--spec start(user_ctx:ctx(), od_space:id(), od_atm_workflow_schema:id(), initial_values()) ->
+-spec init_engine() -> ok.
+init_engine() ->
+    workflow_engine:init(?ATM_WORKFLOW_ENGINE).
+
+
+-spec schedule_workflow_execution(
+    user_ctx:ctx(),
+    od_space:id(),
+    od_atm_workflow_schema:id(),
+    initial_values()
+) ->
     {ok, atm_workflow_execution:id()} | no_return().
-start(UserCtx, SpaceId, AtmWorkflowSchemaId, InitialValues) ->
+schedule_workflow_execution(UserCtx, SpaceId, AtmWorkflowSchemaId, InitialValues) ->
     SessionId = user_ctx:get_session_id(UserCtx),
 
     {ok, AtmWorkflowSchemaDoc = #document{value = #od_atm_workflow_schema{
