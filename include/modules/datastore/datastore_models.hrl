@@ -1075,7 +1075,8 @@
 
     state :: automation:workflow_schema_state(),
 
-    atm_inventory :: od_atm_inventory:id()
+    atm_inventory :: od_atm_inventory:id(),
+    atm_lambdas :: [od_atm_lambda:id()]
 }).
 
 %% Model that holds information about an automation workflow execution

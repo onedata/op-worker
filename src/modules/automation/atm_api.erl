@@ -35,7 +35,15 @@
     {ok, atm_workflow_execution:id()} | no_return().
 start(UserCtx, SpaceId, AtmWorkflowSchemaId, InitialValues) ->
     SessionId = user_ctx:get_session_id(UserCtx),
-    {ok, AtmWorkflowSchemaDoc} = atm_workflow_schema_logic:get(SessionId, AtmWorkflowSchemaId),
+
+    {ok, AtmWorkflowSchemaDoc = #document{value = #od_atm_workflow_schema{
+        atm_lambdas = AtmLambdaIds
+    }}} = atm_workflow_schema_logic:get(SessionId, AtmWorkflowSchemaId),
+
+    AtmLambdaDocs = lists:foldl(fun(AtmLambdaId, Acc) ->
+        {ok, AtmLambdaDoc} = atm_lambda_logic:get(SessionId, AtmLambdaId),
+        Acc#{AtmLambdaId => AtmLambdaDoc}
+    end, #{}, AtmLambdaIds),
 
     AtmWorkflowExecutionId = datastore_key:new(),
     ok = atm_workflow_execution_session:init(AtmWorkflowExecutionId, UserCtx),
@@ -51,6 +59,7 @@ start(UserCtx, SpaceId, AtmWorkflowSchemaId, InitialValues) ->
     }} = atm_workflow_execution_api:create(#atm_workflow_execution_creation_ctx{
         workflow_execution_ctx = AtmWorkflowExecutionCtx,
         workflow_schema_doc = AtmWorkflowSchemaDoc,
+        lambda_docs = AtmLambdaDocs,
         initial_values = InitialValues
     }),
 

@@ -22,6 +22,7 @@
 -record(atm_workflow_execution_creation_ctx, {
     workflow_execution_ctx :: atm_workflow_execution_ctx:record(),
     workflow_schema_doc :: od_atm_workflow_schema:doc(),
+    lambda_docs :: #{od_atm_lambda:id() => od_atm_lambda:doc()},
     initial_values :: atm_api:initial_values()
 }).
 

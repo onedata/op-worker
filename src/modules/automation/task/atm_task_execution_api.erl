@@ -72,20 +72,19 @@ create(AtmWorkflowExecutionCreationCtx, AtmLaneIndex, AtmParallelBoxIndex, #atm_
     result_mappings = AtmTaskSchemaResultMappers
 }) ->
     #atm_workflow_execution_creation_ctx{
-        workflow_execution_ctx = AtmWorkflowExecutionCtx
+        workflow_execution_ctx = AtmWorkflowExecutionCtx,
+        lambda_docs = AtmLambdaDocs
     } = AtmWorkflowExecutionCreationCtx,
 
     AtmWorkflowExecutionId = atm_workflow_execution_ctx:get_workflow_execution_id(
         AtmWorkflowExecutionCtx
     ),
-    SessionId = atm_workflow_execution_ctx:get_session_id(AtmWorkflowExecutionCtx),
 
-    %% TODO VFS-7690 use lambda snapshots stored in atm_workflow_execution:creation_ctx()
-    {ok, #document{value = #od_atm_lambda{
+    #document{value = #od_atm_lambda{
         operation_spec = AtmLambdaOperationSpec,
         argument_specs = AtmLambdaArgSpecs,
         result_specs = AtmLambdaResultSpecs
-    }}} = atm_lambda_logic:get(SessionId, AtmLambdaId),
+    }} = maps:get(AtmLambdaId, AtmLambdaDocs),
 
     {ok, _} = atm_task_execution:create(#atm_task_execution{
         workflow_execution_id = AtmWorkflowExecutionId,
