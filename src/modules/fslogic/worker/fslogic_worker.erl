@@ -196,6 +196,7 @@ init_dataset_eff_caches(Space) ->
 init(_Args) ->
     init_effective_caches(),
     transfer:init(),
+    atm_api:init_engine(),
     replica_deletion_master:init_workers_pool(),
     file_registration:init_pool(),
     autocleaning_view_traverse:init_pool(),

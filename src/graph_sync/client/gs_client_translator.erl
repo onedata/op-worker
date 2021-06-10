@@ -298,7 +298,11 @@ translate(#gri{type = temporary_token_secret, id = Id, aspect = user, scope = sh
 translate(#gri{type = od_atm_inventory, id = Id, aspect = instance, scope = private}, Result) ->
     #document{
         key = Id,
-        value = #od_atm_inventory{name = maps:get(<<"name">>, Result)}
+        value = #od_atm_inventory{
+            name = maps:get(<<"name">>, Result),
+            atm_lambdas = maps:get(<<"atmLambdas">>, Result),
+            atm_workflow_schemas = maps:get(<<"atmWorkflowSchemas">>, Result)
+        }
     };
 
 translate(#gri{type = od_atm_lambda, id = Id, aspect = instance, scope = private}, Result) ->
@@ -329,7 +333,8 @@ translate(#gri{type = od_atm_workflow_schema, id = Id, aspect = instance, scope 
 
             state = automation:workflow_schema_state_from_json(maps:get(<<"state">>, Result)),
 
-            atm_inventory = maps:get(<<"atmInventoryId">>, Result)
+            atm_inventory = maps:get(<<"atmInventoryId">>, Result),
+            atm_lambdas = maps:get(<<"atmLambdas">>, Result)
         }
     };
 

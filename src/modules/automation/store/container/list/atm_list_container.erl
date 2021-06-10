@@ -85,7 +85,7 @@ apply_operation(#atm_list_container{} = Record, #atm_container_operation{
     options = #{<<"isBatch">> := true},
     value = Batch,
     workflow_execution_ctx = AtmWorkflowExecutionCtx
-}) when is_list(Batch) ->
+}) ->
     #atm_list_container{data_spec = AtmDataSpec, backend_id = BackendId} = Record,
     validate_data_batch(AtmWorkflowExecutionCtx, AtmDataSpec, Batch),
     lists:foreach(fun(Item) ->
