@@ -36,7 +36,7 @@
 -type execution_context() :: term().
 -type task_id() :: binary().
 -type job_execution_spec() :: #job_execution_spec{}.
--type execution_status_update_type() :: ?SYNC_CALL | ?ASYNC_CALL_STARTED | ?ASYNC_CALL_FINISHED.
+-type processing_stage() :: ?SYNC_CALL | ?ASYNC_CALL_STARTED | ?ASYNC_CALL_FINISHED.
 -type processing_result() :: workflow_handler:callback_execution_result() | {ok, KeepaliveTimeout :: time:seconds()}.
 
 %% @formatter:off
@@ -68,7 +68,7 @@
 %% @formatter:on
 
 -export_type([id/0, execution_id/0, execution_context/0, task_id/0,
-    job_execution_spec/0, execution_status_update_type/0, processing_result/0, task_spec/0, lane_spec/0]).
+    job_execution_spec/0, processing_stage/0, processing_result/0, task_spec/0, lane_spec/0]).
 
 -define(POOL_ID(EngineId), binary_to_atom(EngineId, utf8)).
 -define(DEFAULT_SLOT_COUNT, 20).
@@ -121,7 +121,7 @@ execute_workflow(EngineId, ExecutionSpec) ->
     trigger_job_scheduling(EngineId, ?TAKE_UP_FREE_SLOTS),
     ok.
 
--spec report_execution_status_update(execution_id(), id(), execution_status_update_type(),
+-spec report_execution_status_update(execution_id(), id(), processing_stage(),
     workflow_jobs:job_identifier(), workflow_async_call_pool:id() | undefined, processing_result()) -> ok.
 report_execution_status_update(ExecutionId, EngineId, ReportType, JobIdentifier, CallPoolId, Ans) ->
     case CallPoolId of
@@ -152,17 +152,20 @@ report_execution_status_update(ExecutionId, EngineId, ReportType, JobIdentifier,
 init_service(Id, Options) ->
     SlotsLimit = maps:get(slots_limit, Options, ?DEFAULT_SLOT_COUNT),
     init_pool(Id, SlotsLimit),
-    workflow_engine_state:init(Id, SlotsLimit),
+    case workflow_engine_state:init(Id, SlotsLimit) of
+        ok ->
+            AsyncCallPools = maps:get(workflow_async_call_pools_to_use, Options,
+                [{?DEFAULT_ASYNC_CALL_POOL_ID, ?DEFAULT_CALLS_LIMIT}]),
+            lists:foreach(fun({AsyncCallPoolId, AsyncCallPoolSlotsLimit}) ->
+                workflow_async_call_pool:init(AsyncCallPoolId, AsyncCallPoolSlotsLimit)
+            end, AsyncCallPools),
 
-    AsyncCallPools = maps:get(workflow_async_call_pools_to_use, Options,
-        [{?DEFAULT_ASYNC_CALL_POOL_ID, ?DEFAULT_CALLS_LIMIT}]),
-    lists:foreach(fun({AsyncCallPoolId, AsyncCallPoolSlotsLimit}) ->
-        workflow_async_call_pool:init(AsyncCallPoolId, AsyncCallPoolSlotsLimit)
-    end, AsyncCallPools),
-
-    case maps:get(init_workflow_timeout_server, Options, ?USE_TIMEOUT_SERVER_DEFAULT) of
-        true -> workflow_timeout_monitor:init(Id);
-        false -> ok
+            case maps:get(init_workflow_timeout_server, Options, ?USE_TIMEOUT_SERVER_DEFAULT) of
+                true -> workflow_timeout_monitor:init(Id);
+                false -> ok
+            end;
+        ?ERROR_ALREADY_EXISTS ->
+            ok
     end.
 
 -spec takeover_service(id(), options(), node()) -> ok.
@@ -297,7 +300,7 @@ schedule_prepare_on_pool(EngineId, ExecutionId, Handler, ExecutionContext) ->
 process_item(EngineId, ExecutionId, JobExecutionSpec = #job_execution_spec{
     task_id = TaskId,
     task_spec = TaskSpec,
-    item_it = ItemId,
+    item_id = ItemId,
     job_identifier = JobIdentifier
 }) ->
     try
@@ -306,9 +309,9 @@ process_item(EngineId, ExecutionId, JobExecutionSpec = #job_execution_spec{
             sync ->
                 {?SYNC_CALL, process_item(ExecutionId, JobExecutionSpec, <<>>, <<>>)};
             async ->
-                FinishCallback = workflow_engine_callbacks:prepare_finish_callback_id(
+                FinishCallback = workflow_engine_callback_handler:prepare_finish_callback_id(
                     ExecutionId, EngineId, JobIdentifier, TaskSpec),
-                HeartbeatCallback = workflow_engine_callbacks:prepare_heartbeat_callback_id(
+                HeartbeatCallback = workflow_engine_callback_handler:prepare_heartbeat_callback_id(
                     ExecutionId, EngineId, JobIdentifier),
 
                 case process_item(ExecutionId, JobExecutionSpec, FinishCallback, HeartbeatCallback) of
@@ -337,7 +340,7 @@ process_item(ExecutionId, #job_execution_spec{
     handler = Handler,
     context = ExecutionContext,
     task_id = TaskId,
-    item_it = ItemId
+    item_id = ItemId
 }, FinishCallback, HeartbeatCallback) ->
     Item = workflow_cached_item:get(ItemId),
     try
@@ -345,6 +348,7 @@ process_item(ExecutionId, #job_execution_spec{
             FinishCallback, HeartbeatCallback)
     catch
         Error:Reason  ->
+            % TODO VFS-7551 - use callbacks to get human readable information about item and task
             ?error_stacktrace("Unexpected error handling task ~p for item ~p (id ~p): ~p:~p",
                 [TaskId, Item, ItemId, Error, Reason]),
             error

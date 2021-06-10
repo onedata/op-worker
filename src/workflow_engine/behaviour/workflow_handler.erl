@@ -35,6 +35,12 @@
     callback_execution_result().
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Callback to get lane spec.
+%% Warning: this callback can be called multiple times for single lane.
+%% @end
+%%--------------------------------------------------------------------
 -callback get_lane_spec(
     workflow_engine:execution_id(),
     workflow_engine:execution_context(),
@@ -71,6 +77,14 @@
     ok.
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Callback reporting that all tasks have been executed for all items.
+%% Warning: this callback can be called multiple times for single lane
+%% even after next line processing start. However, it is guaranteed that
+%% it will be called at least once before next line processing start.
+%% @end
+%%--------------------------------------------------------------------
 -callback handle_lane_execution_ended(
     workflow_engine:execution_id(),
     workflow_engine:execution_context(),

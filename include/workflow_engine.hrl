@@ -16,7 +16,7 @@
 %%% DEFAULTS
 %%%===================================================================
 
--define(DEFAULT_ASYNC_CALL_POOL_ID, <<"DEF_CALL_POOL">>).
+-define(DEFAULT_ASYNC_CALL_POOL_ID, <<"def_call_pol">>).
 
 %%%===================================================================
 %%% Record describing job to be executed
@@ -27,7 +27,7 @@
     context :: workflow_engine:execution_context(),
     task_id :: workflow_engine:task_id(),
     task_spec :: workflow_engine:task_spec(),
-    item_it :: workflow_cached_item:id(),
+    item_id :: workflow_cached_item:id(),
     job_identifier :: workflow_jobs:job_identifier()
 }).
 

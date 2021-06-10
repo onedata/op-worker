@@ -26,8 +26,7 @@
     single_async_workflow_execution_test/1,
     multiple_sync_workflow_execution_test/1,
     multiple_async_workflow_execution_test/1,
-    restart_test/1,
-    timeouts_test/1
+    job_failure_test/1
 ]).
 
 all() ->
@@ -36,11 +35,11 @@ all() ->
         single_async_workflow_execution_test,
         multiple_sync_workflow_execution_test,
         multiple_async_workflow_execution_test,
-        restart_test,
-        timeouts_test
+        job_failure_test
     ]).
 
 -define(ENGINE_ID, <<"test_engine">>).
+-define(ASYNC_CALL_POOL_ID, <<"test_call_pool">>).
 
 %%%===================================================================
 %%% Test functions
@@ -61,7 +60,7 @@ single_workflow_execution_test_base(Config, WorkflowType) ->
     Workflow = #{
         id => Id,
         workflow_handler => workflow_test_handler,
-        execution_context => #{type => WorkflowType}
+        execution_context => #{type => WorkflowType, async_call_pools => [?ASYNC_CALL_POOL_ID]}
     },
 
     ?assertEqual(ok, rpc:call(Worker, workflow_engine, execute_workflow, [?ENGINE_ID, Workflow])),
@@ -92,7 +91,7 @@ multiple_workflow_execution_test_base(Config, WorkflowType) ->
         #{
             id => ExecutionId,
             workflow_handler => workflow_test_handler,
-            execution_context => #{type => WorkflowType}
+            execution_context => #{type => WorkflowType, async_call_pools => [?ASYNC_CALL_POOL_ID]}
         }
     end, Ids),
 
@@ -139,17 +138,17 @@ multiple_workflow_execution_test_base(Config, WorkflowType) ->
     end, lists:zip(Ids, Workflows)),
     ok.
 
-restart_test(Config) ->
+job_failure_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     WorkflowType = sync,
-    Id = <<"restart_test_workflow">>,
+    Id = <<"job_failure_test_workflow">>,
     Workflow = #{
         id => Id,
         workflow_handler => workflow_test_handler,
         execution_context => #{type => WorkflowType}
     },
 
-    TaskToFail = <<"restart_test_workflow_task3_3_2">>,
+    TaskToFail = <<"job_failure_test_workflow_task3_3_2">>,
     ItemToFail = <<"100">>,
     set_task_execution_gatherer_option(Config, fail_job, {TaskToFail, ItemToFail}),
     ?assertEqual(ok, rpc:call(Worker, workflow_engine, execute_workflow, [?ENGINE_ID, Workflow])),
@@ -165,34 +164,6 @@ restart_test(Config) ->
     unset_task_execution_gatherer_option(Config, fail_job),
     ok.
 
-timeouts_test(Config) ->
-    ok.
-%%    [Worker | _] = ?config(op_worker_nodes, Config),
-%%    WorkflowType = async,
-%%    Id = <<"async_timeouts_workflow">>,
-%%    Workflow = #{
-%%        id => Id,
-%%        workflow_handler => workflow_test_handler,
-%%        execution_context => #{type => WorkflowType}
-%%    },
-%%
-%%    % TODO VFS-7551 force timeout
-%%    TaskToFail = <<"async_timeouts_workflow_task3_3_2">>,
-%%    ItemToFail = <<"100">>,
-%%    set_task_execution_gatherer_option(Config, fail_job, {TaskToFail, ItemToFail}),
-%%    ?assertEqual(ok, rpc:call(Worker, workflow_engine, execute_workflow, [?ENGINE_ID, Workflow])),
-%%
-%%    Expected = get_expected_task_execution_order(Workflow, 3, 3, ItemToFail, TaskToFail),
-%%    #{execution_history := ExecutionHistory} = ExtendedHistoryStats = get_task_execution_history(Config),
-%%    verify_execution_history_stats(ExtendedHistoryStats, WorkflowType),
-%%    ?assertNotEqual(timeout, ExecutionHistory),
-%%
-%%    ExecutionHistoryWithoutPrepare = verify_preparation_phase(Id, ExecutionHistory),
-%%    verify_execution_history(Expected, ExecutionHistoryWithoutPrepare, WorkflowType),
-%%
-%%    unset_task_execution_gatherer_option(Config, fail_job),
-%%    ok.
-
 %%%===================================================================
 %%% Init/teardown functions
 %%%===================================================================
@@ -201,11 +172,12 @@ init_per_suite(Config) ->
     Posthook = fun(NewConfig) ->
         [Worker | _] = ?config(op_worker_nodes, NewConfig),
         ok = rpc:call(Worker, workflow_engine, init, [?ENGINE_ID,
-            #{workflow_async_call_pools_to_use => [{?DEFAULT_ASYNC_CALL_POOL_ID, 60}]}]),
+            #{workflow_async_call_pools_to_use => [{?ASYNC_CALL_POOL_ID, 60}]}]),
         NewConfig
     end,
     [
-%%        {?LOAD_MODULES, [workflow_test_handler]},
+        % TODO VFS-7551 - uncomment when workflow_test_handler is moved to test directory
+        % {?LOAD_MODULES, [workflow_test_handler]},
         {?ENV_UP_POSTHOOK, Posthook} | Config].
 
 end_per_suite(_Config) ->
@@ -214,7 +186,7 @@ end_per_suite(_Config) ->
 init_per_testcase(_, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     Master = spawn(fun start_task_execution_gatherer/0),
-    test_utils:mock_new(Workers, [workflow_test_handler, workflow_engine_callbacks]),
+    test_utils:mock_new(Workers, [workflow_test_handler, workflow_engine_callback_handler]),
 
     test_utils:mock_expect(Workers, workflow_test_handler, prepare, fun(ExecutionId, Context) ->
         Master ! {task_processing, self(), <<ExecutionId/binary, "_prepare">>, undefined},
@@ -232,23 +204,23 @@ init_per_testcase(_, Config) ->
         end
     ),
     
-    test_utils:mock_expect(Workers, workflow_engine_callbacks, handle_callback, fun(CallbackId, Result) ->
+    test_utils:mock_expect(Workers, workflow_engine_callback_handler, handle_callback, fun(CallbackId, Result) ->
         {_CallbackType, ExecutionId, _EngineId, JobIdentifier, _CallPools} =
-            workflow_engine_callbacks:decode_callback_id(CallbackId),
+            workflow_engine_callback_handler:decode_callback_id(CallbackId),
         {TaskId, ItemId} = get_task_and_item_ids(ExecutionId, JobIdentifier),
         Master ! {task_processing, self(), <<"result_", TaskId/binary>>, ItemId},
         receive
             history_saved -> ok
         end,
         % Warning: do not use meck:passthrough as it does not work when 2 mocks work within one process
-        apply(meck_util:original_name(workflow_engine_callbacks), handle_callback, [CallbackId, Result])
+        apply(meck_util:original_name(workflow_engine_callback_handler), handle_callback, [CallbackId, Result])
     end),
 
     [{task_execution_gatherer, Master} | Config].
 
 end_per_testcase(_, Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_unload(Workers, [workflow_test_handler, workflow_engine_callbacks]).
+    test_utils:mock_unload(Workers, [workflow_test_handler, workflow_engine_callback_handler]).
 
 %%%===================================================================
 %%% Internal functions
@@ -261,7 +233,7 @@ task_execution_gatherer_loop(#{execution_history := History} = Acc, ProcWaitingF
     receive
         {task_processing, Sender, Task, Item} ->
             Acc2 = update_slots_usage_statistics(Acc, async_slots_used_stats, rpc:call(node(Sender),
-                workflow_async_call_pool, get_slot_usage, [?DEFAULT_ASYNC_CALL_POOL_ID])),
+                workflow_async_call_pool, get_slot_usage, [?ASYNC_CALL_POOL_ID])),
             Acc3 = update_slots_usage_statistics(Acc2, pool_slots_used_stats, rpc:call(node(Sender),
                 workflow_engine_state, get_slots_used, [?ENGINE_ID])),
             Acc4 = case Options of
@@ -292,7 +264,6 @@ task_execution_gatherer_loop(#{execution_history := History} = Acc, ProcWaitingF
     end.
 
 update_slots_usage_statistics(Acc, Key, NewValue) ->
-%%    ct:print("hhhhhh ~p", [{Key, NewValue}]),
     case maps:get(Key, Acc, undefined) of
         undefined -> Acc#{Key => {NewValue, NewValue}};
         {Min, Max} -> Acc#{Key => {min(Min, NewValue), max(Max, NewValue)}}
@@ -305,13 +276,14 @@ get_task_execution_history(Config) ->
             get_task_execution_history(Config);
         {task_execution_history, HistoryAcc} ->
             [Worker | _] = ?config(op_worker_nodes, Config),
-            AsyncSlotsUsed = rpc:call(Worker, workflow_async_call_pool, get_slot_usage, [?DEFAULT_ASYNC_CALL_POOL_ID]),
+            AsyncSlotsUsed = rpc:call(Worker, workflow_async_call_pool, get_slot_usage, [?ASYNC_CALL_POOL_ID]),
             EngineSlotsUsed = rpc:call(Worker, workflow_engine_state, get_slots_used, [?ENGINE_ID]),
             HistoryAcc#{final_async_slots_used => AsyncSlotsUsed, final_pool_slots_used => EngineSlotsUsed}
     after
         30000 -> timeout
     end.
 
+% TODO VFS-7551 - uncomment checks in this function and fix tests
 verify_execution_history_stats(Acc, WorkflowType) ->
     ?assertEqual(0, maps:get(final_async_slots_used, Acc)),
 %%    ?assertEqual(0, maps:get(final_pool_slots_used, Acc)),
@@ -324,7 +296,6 @@ verify_execution_history_stats(Acc, WorkflowType) ->
             ?assertEqual(0, MaxAsyncSlots),
             % Task processing is initialized after pool slots count is incremented
             % and it is finished before pool slots count is decremented so '0' should not appear in history
-            % TODO VFS-7551 - uncomment checks
 %%            ?assertEqual(1, MinPoolSlots);
             ok;
         async ->

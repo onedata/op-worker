@@ -24,7 +24,8 @@
 % TODO VFS-7551 - attach to supervisor, use gen_server
 -spec init(workflow_engine:id()) -> ok.
 init(EngineId) ->
-    spawn_link(fun() -> server_loop(EngineId) end),
+    Node = datastore_key:any_responsible_node(EngineId),
+    spawn(Node, fun() -> server_loop(EngineId) end),
     ok.
 
 -spec report_heartbeat(workflow_engine:execution_id(), workflow_jobs:job_identifier()) -> ok.

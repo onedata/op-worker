@@ -35,11 +35,13 @@
 %%% API
 %%%===================================================================
 
--spec init(workflow_engine:id(), non_neg_integer()) -> ok.
+-spec init(workflow_engine:id(), non_neg_integer()) -> ok | ?ERROR_ALREADY_EXISTS.
 init(EngineId, SlotsLimit) ->
     Doc = #document{key = EngineId, value = #workflow_engine_state{slots_limit = SlotsLimit}},
-    {ok, _} = datastore_model:create(?CTX, Doc),
-    ok.
+    case datastore_model:create(?CTX, Doc) of
+        {ok, _} -> ok;
+        ?ERROR_ALREADY_EXISTS -> ?ERROR_ALREADY_EXISTS
+    end.
 
 % TODO VFS-7551 - acquire slot if it is free (optimization - one call instead of two)
 -spec add_execution_id(workflow_engine:id(), workflow_engine:execution_id()) -> ok.

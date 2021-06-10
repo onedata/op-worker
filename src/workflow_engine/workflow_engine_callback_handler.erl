@@ -7,16 +7,17 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% Helper module for workflow_engine to handle callback from
-%%% task execution engines.
+%%% task execution platforms.
 %%% @end
 %%%-------------------------------------------------------------------
--module(workflow_engine_callbacks).
+-module(workflow_engine_callback_handler).
 -author("Michal Wrzeszcz").
 
 -behaviour(cowboy_handler).
 
 -include("workflow_engine.hrl").
 -include_lib("ctool/include/http/codes.hrl").
+-include_lib("ctool/include/http/headers.hrl").
 
 %% Cowboy callback
 -export([init/2]).
@@ -31,6 +32,7 @@
 -type callback() :: workflow_handler:finished_callback_id() | workflow_handler:heartbeat_callback_id().
 
 -define(SEPARATOR, "___").
+-define(WF_ERROR_MALFORMED_REQUEST, {error, malformed_request}).
 
 %%%===================================================================
 %%% Cowboy callback
@@ -44,11 +46,23 @@
 -spec init(cowboy_req:req(), any()) -> {ok, cowboy_req:req(), any()}.
 init(Req, State) ->
     Path = cowboy_req:path(Req),
-    {ok, Body, _} = cowboy_req:read_body(Req),
     <<"/tasks/", CallbackId/binary>> = Path,
-    ?MODULE:handle_callback(CallbackId, Body), % Call via ?MODULE for tests
 
-    {ok, cowboy_req:reply(?HTTP_200_OK, Req), State}.
+    {ContentType, _, _} = cowboy_req:parse_header(?HDR_CONTENT_TYPE, Req),
+    {ok, Body, _} = cowboy_req:read_body(Req),
+    ParsedBody = case ContentType of
+        <<"application/json">> ->
+            try
+                json_utils:decode(Body)
+            catch _:_ ->
+                ?WF_ERROR_MALFORMED_REQUEST
+            end;
+        _ ->
+            Body
+    end,
+    ?MODULE:handle_callback(CallbackId, ParsedBody), % Call via ?MODULE for tests
+
+    {ok, cowboy_req:reply(?HTTP_204_NO_CONTENT, Req), State}.
 
 %%%===================================================================
 %%% API
@@ -74,15 +88,15 @@ prepare_heartbeat_callback_id(ExecutionId, EngineId, JobIdentifier) ->
 
 -spec handle_callback(
     workflow_handler:finished_callback_id() | workflow_handler:heartbeat_callback_id(),
-    workflow_handler:task_processing_result()
+    workflow_handler:task_processing_result() | ?WF_ERROR_MALFORMED_REQUEST | undefined
 ) -> ok.
-handle_callback(CallbackId, Result) ->
+handle_callback(CallbackId, Message) ->
     {CallbackType, ExecutionId, EngineId, JobIdentifier, CallPools} = decode_callback_id(CallbackId),
     case CallbackType of
         ?FINISH_CALLBACK_TYPE ->
             % TODO VFS-7551 - process result and get CallPools from state
             {Handler, Context, TaskId} = workflow_execution_state:get_result_processing_data(ExecutionId, JobIdentifier),
-            ProcessedResult = Handler:process_result(ExecutionId, Context, TaskId, Result),
+            ProcessedResult = Handler:process_result(ExecutionId, Context, TaskId, Message),
             workflow_engine:report_execution_status_update(
                 ExecutionId, EngineId, ?ASYNC_CALL_FINISHED, JobIdentifier, CallPools, ProcessedResult);
         ?HEARTBEAT_CALLBACK_TYPE ->
@@ -122,7 +136,7 @@ decode_callback_id(CallbackId) ->
         ExecutionId,
         EngineId,
         workflow_jobs:binary_to_job_identifier(JobIdentifierBin),
-        binary_to_calls_pool(CallPoolsBin)
+        binary_to_call_pool(CallPoolsBin)
     }.
 
 -spec call_pools_to_binary([workflow_async_call_pool:id()] | undefined) -> binary().
@@ -131,8 +145,8 @@ call_pools_to_binary([CallPools]) ->
 call_pools_to_binary(undefined) ->
     <<"undefined">>.
 
--spec binary_to_calls_pool(binary()) -> [workflow_async_call_pool:id()] | undefined.
-binary_to_calls_pool(<<"undefined">>) ->
+-spec binary_to_call_pool(binary()) -> workflow_async_call_pool:id() | undefined.
+binary_to_call_pool(<<"undefined">>) ->
     undefined;
-binary_to_calls_pool(CallPools) ->
+binary_to_call_pool(CallPools) ->
     CallPools.

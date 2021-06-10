@@ -7,7 +7,7 @@
 %%%--------------------------------------------------------------------
 %%% @doc
 %%% Implementation of workflow_handler behaviour to be used in tests.
-%%% TODO - move to test directory when problem with mocks is solved
+%%% TODO VFS-7551 - move to test directory when problem with mocks is solved
 %%% @end
 %%%--------------------------------------------------------------------
 -module(workflow_test_handler).
@@ -39,11 +39,12 @@ prepare(_, _) ->
     workflow_execution_state:index()
 ) ->
     {ok, workflow_engine:lane_spec()}.
-get_lane_spec(ExecutionId, #{type := Type} =_ExecutionContext, LaneIndex) ->
+get_lane_spec(ExecutionId, #{type := Type, async_call_pools := Pools} =_ExecutionContext, LaneIndex) ->
     Boxes = lists:map(fun(BoxIndex) ->
         lists:foldl(fun(TaskIndex, TaskAcc) ->
             TaskAcc#{<<ExecutionId/binary, "_task", (integer_to_binary(LaneIndex))/binary, "_",
-                (integer_to_binary(BoxIndex))/binary, "_", (integer_to_binary(TaskIndex))/binary>> => #{type => Type}}
+                (integer_to_binary(BoxIndex))/binary, "_", (integer_to_binary(TaskIndex))/binary>> =>
+                    #{type => Type, async_call_pools => Pools}}
         end, #{}, lists:seq(1, BoxIndex))
     end, lists:seq(1, LaneIndex)),
 
@@ -72,7 +73,7 @@ process_item(_ExecutionId, _Context, <<"async", _/binary>> = _TaskId, Item, Fini
                 Domain = atom_to_binary(?GET_DOMAIN(node()), utf8),
                 http_client:put(<<"http://", Domain/binary, "/tasks/", FinishCallback/binary>>, #{}, <<"ok">>);
             false ->
-                workflow_engine_callbacks:handle_callback(FinishCallback, <<"ok">>)
+                workflow_engine_callback_handler:handle_callback(FinishCallback, <<"ok">>)
         end
     end),
     ok;

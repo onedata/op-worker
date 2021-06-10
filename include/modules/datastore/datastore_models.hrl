@@ -1116,8 +1116,8 @@
     handler :: workflow_handler:handler(),
     context :: workflow_engine:execution_context(),
 
-    current_lane = not_prepared :: workflow_execution_state:current_lane() |
-        workflow_execution_state:lane_preparation_status(),
+    preparation_status = not_prepared :: workflow_execution_state:preparation_status(),
+    current_lane :: workflow_execution_state:current_lane() | undefined,
 
     iteration_state :: workflow_iteration_state:state() | undefined,
     jobs :: workflow_jobs:jobs() | undefined,

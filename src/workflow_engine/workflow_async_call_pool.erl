@@ -18,6 +18,7 @@
 
 -include("workflow_engine.hrl").
 -include("modules/datastore/datastore_models.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% API
 -export([init/2, increment_slot_usage/1, decrement_slot_usage/1]).
@@ -41,8 +42,10 @@
 -spec init(id(), non_neg_integer()) -> ok.
 init(Id, SlotsLimit) ->
     Doc = #document{key = Id, value = #workflow_async_call_pool{slots_limit = SlotsLimit}},
-    {ok, _} = datastore_model:create(?CTX, Doc),
-    ok.
+    case datastore_model:create(?CTX, Doc) of
+        {ok, _} -> ok;
+        ?ERROR_ALREADY_EXISTS -> ok
+    end.
 
 -spec increment_slot_usage(id()) -> ok | ?WF_ERROR_LIMIT_REACHED.
 increment_slot_usage(Id) ->

@@ -50,11 +50,13 @@ save(ExecutionId, LaneIndex, ItemIndex, Iterator) ->
             {ok, ExistingRecord#workflow_iterator_snapshot{
                 lane_index = LaneIndex, item_index = ItemIndex, iterator = Iterator}};
         (_) ->
-            % Multiple processed have been saving iterators in parallel
+            % Multiple processes have been saving iterators in parallel
             {error, already_saved}
     end,
     case datastore_model:update(?CTX, ExecutionId, Diff, Record) of
         {ok, _} ->
+            % Mark iterator exhausted after change of line
+            % (each line has new iterator and iterator for previous line can be destroyed)
             case PrevLaneIndex =/= undefined andalso PrevLaneIndex < LaneIndex of
                 true -> iterator:mark_exhausted(PrevIterator); % TODO VFS-7551 - handle without additional get
                 false -> ok
