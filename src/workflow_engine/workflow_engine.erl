@@ -43,7 +43,7 @@
 }.
 %% @formatter:on
 
-% TODO describe and properly define types
+% TODO VFS-7551 describe and properly define types
 -type task_spec() :: map().
 -type parallel_box_spec() :: #{TaskId :: binary() => task_spec()}.
 -type lane_spec() :: map().

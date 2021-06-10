@@ -572,7 +572,9 @@ end).
 }}).
 
 -define(ATM_INVENTORY_PRIVATE_DATA_MATCHER(__AtmInventory), #document{key = __AtmInventory, value = #od_atm_inventory{
-    name = ?ATM_INVENTORY_NAME(__AtmInventory)
+    name = ?ATM_INVENTORY_NAME(__AtmInventory),
+    atm_lambdas = [?ATM_LAMBDA_1],
+    atm_workflow_schemas = [?ATM_WORKFLOW_SCHEMA_1]
 }}).
 
 -define(ATM_LAMBDA_PRIVATE_DATA_MATCHER(__AtmLambda),
@@ -593,7 +595,8 @@ end).
         stores = ?ATM_WORKFLOW_SCHEMA_STORES(__AtmWorkflowSchema),
         lanes = ?ATM_WORKFLOW_SCHEMA_LANES(__AtmWorkflowSchema),
         state = ?ATM_WORKFLOW_SCHEMA_STATE(__AtmWorkflowSchema),
-        atm_inventory = ?ATM_WORKFLOW_SCHEMA_INVENTORY(__AtmWorkflowSchema)
+        atm_inventory = ?ATM_WORKFLOW_SCHEMA_INVENTORY(__AtmWorkflowSchema),
+        atm_lambdas = [?ATM_LAMBDA_1]
     }}).
 
 
@@ -794,7 +797,9 @@ end).
 -define(ATM_INVENTORY_PRIVATE_DATA_VALUE(__AtmInventoryId), #{
     <<"revision">> => 1,
     <<"gri">> => gri:serialize(#gri{type = od_atm_inventory, id = __AtmInventoryId, aspect = instance, scope = private}),
-    <<"name">> => ?ATM_INVENTORY_NAME(__AtmInventoryId)
+    <<"name">> => ?ATM_INVENTORY_NAME(__AtmInventoryId),
+    <<"atmLambdas">> => [?ATM_LAMBDA_1],
+    <<"atmWorkflowSchemas">> => [?ATM_WORKFLOW_SCHEMA_1]
 }).
 
 
@@ -819,5 +824,6 @@ end).
     <<"stores">> => jsonable_record:list_to_json(?ATM_WORKFLOW_SCHEMA_STORES(__AtmWorkflowSchemaId), atm_store_schema),
     <<"lanes">> => jsonable_record:list_to_json(?ATM_WORKFLOW_SCHEMA_LANES(__AtmWorkflowSchemaId), atm_lane_schema),
     <<"state">> => automation:workflow_schema_state_to_json(?ATM_WORKFLOW_SCHEMA_STATE(__AtmWorkflowSchemaId)),
-    <<"atmInventoryId">> => ?ATM_WORKFLOW_SCHEMA_INVENTORY(__AtmWorkflowSchemaId)
+    <<"atmInventoryId">> => ?ATM_WORKFLOW_SCHEMA_INVENTORY(__AtmWorkflowSchemaId),
+    <<"atmLambdas">> => [?ATM_LAMBDA_1]
 }).

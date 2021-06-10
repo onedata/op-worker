@@ -225,7 +225,10 @@
 
 -record(od_atm_inventory, {
     name :: automation:name(),
-    
+
+    atm_lambdas :: [od_atm_lambda:id()],
+    atm_workflow_schemas :: [od_atm_workflow_schema:id()],
+
     cache_state = #{} :: cache_state()
 }).
 
@@ -253,6 +256,7 @@
     state :: automation:workflow_schema_state(),
 
     atm_inventory :: od_atm_inventory:id(),
+    atm_lambdas :: [od_atm_lambda:id()],
 
     cache_state = #{} :: cache_state()
 }).
