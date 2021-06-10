@@ -4,6 +4,10 @@ Release notes for project op-worker
 CHANGELOG
 ---------
 
+### 21.02.0-alpha13
+
+-   **VFS-7649** Added support for purging archives in GUI.
+
 ### 21.02.0-alpha12
 
 -   **VFS-7705** Added more file actions to archive file browser GUI:
