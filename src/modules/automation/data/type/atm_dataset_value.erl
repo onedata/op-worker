@@ -36,7 +36,10 @@
 
 
 -type id() :: atm_value:compressed(). % More precisely dataset:id() but without undefined. Specified this way for dialyzer.
--type list_opts() :: dataset_api:listing_opts().
+-type list_opts() :: #{
+    start_index => dataset_api:index(),
+    offset => non_neg_integer()
+}.
 
 %%%===================================================================
 %%% atm_data_validator callbacks

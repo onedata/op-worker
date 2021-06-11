@@ -34,7 +34,10 @@
 %% atm_data_compressor callbacks
 -export([compress/1, expand/2]).
 
--type list_opts() :: file_meta:list_opts().
+-type list_opts() :: #{
+    last_name => file_meta:name(),
+    last_tree => file_meta:name()
+}.
 
 %%%===================================================================
 %%% atm_data_validator callbacks

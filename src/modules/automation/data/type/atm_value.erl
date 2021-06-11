@@ -36,7 +36,7 @@ get_callback_module(atm_string_type) -> atm_string_value;
 get_callback_module(atm_object_type) -> atm_object_value.
 
 
--spec is_error_ignored(errors:errno()) -> boolean().
+-spec is_error_ignored(errors:reason()) -> boolean().
 is_error_ignored(?EACCES) -> true;
 is_error_ignored(?EPERM) -> true;
 is_error_ignored(?ENOENT) -> true;
