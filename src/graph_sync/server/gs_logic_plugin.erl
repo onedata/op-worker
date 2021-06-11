@@ -181,6 +181,7 @@ is_type_supported(#gri{type = op_archive}) -> true;
 is_type_supported(#gri{type = op_atm_inventory}) -> true;
 is_type_supported(#gri{type = op_atm_workflow_execution}) -> true;
 is_type_supported(#gri{type = op_atm_workflow_schema}) -> true;
+is_type_supported(#gri{type = op_atm_workflow_schema_snapshot}) -> true;
 is_type_supported(#gri{type = op_dataset}) -> true;
 is_type_supported(#gri{type = op_file}) -> true;
 is_type_supported(#gri{type = op_group}) -> true;

@@ -175,6 +175,7 @@ get_plugin(op_archive) -> archive_middleware;
 get_plugin(op_atm_inventory) -> atm_inventory_middleware;
 get_plugin(op_atm_workflow_execution) -> atm_workflow_execution_middleware;
 get_plugin(op_atm_workflow_schema) -> atm_workflow_schema_middleware;
+get_plugin(op_atm_workflow_schema_snapshot) -> atm_workflow_schema_snapshot_middleware;
 get_plugin(op_dataset) -> dataset_middleware;
 get_plugin(op_file) -> file_middleware;
 get_plugin(op_group) -> group_middleware;
