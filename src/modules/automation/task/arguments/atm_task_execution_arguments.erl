@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Utility functions for constructing task execution argument specs and values.
+%%% Helper module for constructing task execution argument specs and values.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_task_execution_arguments).
@@ -37,15 +37,16 @@ build_specs(AtmLambdaArgSpecs, AtmTaskSchemaArgMappers) ->
 
 
 -spec construct_args(
-    atm_task_execution:ctx(),
+    atm_job_execution_ctx:record(),
     [atm_task_execution_argument_spec:record()]
 ) ->
     json_utils:json_map() | no_return().
-construct_args(AtmTaskExecutionCtx, AtmTaskExecutionArgSpecs) ->
-    lists:foldl(fun(#atm_task_execution_argument_spec{name = ArgName} = AtmTaskExecutionArgSpec, Args) ->
+construct_args(AtmJobExecutionCtx, AtmTaskExecutionArgSpecs) ->
+    lists:foldl(fun(AtmTaskExecutionArgSpec, Args) ->
+        ArgName = atm_task_execution_argument_spec:get_name(AtmTaskExecutionArgSpec),
         try
             Args#{ArgName => atm_task_execution_argument_spec:construct_arg(
-                AtmTaskExecutionCtx, AtmTaskExecutionArgSpec
+                AtmJobExecutionCtx, AtmTaskExecutionArgSpec
             )}
         catch _:Reason ->
             throw(?ERROR_ATM_TASK_ARG_MAPPING_FAILED(ArgName, Reason))
@@ -134,4 +135,3 @@ build_specs(
     _AtmTaskExecutionArgSpecs
 ) ->
     throw(?ERROR_ATM_TASK_ARG_MAPPER_FOR_NONEXISTENT_LAMBDA_ARG(Name)).
-

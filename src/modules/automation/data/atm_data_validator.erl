@@ -7,7 +7,7 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module defines `atm_data_validator` interface - an object which can be
-%%% used to validate values against specific type and value constraints.
+%%% used for validation of values against specific type and value constraints.
 %%%
 %%%                             !!! Caution !!!
 %%% When adding validator for new type, the module must be registered in

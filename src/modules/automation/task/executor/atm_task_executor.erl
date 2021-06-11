@@ -6,8 +6,8 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module defines `atm_task_executor` interface - an object which can be
-%%% used to execute an automation task with given arguments.
+%%% This module defines `atm_task_executor` interface - an object used for
+%%% executing a job (an automation task with specific arguments).
 %%%
 %%%                             !!! Caution !!!
 %%% 1) This behaviour must be implemented by proper models, that is modules with
@@ -26,7 +26,7 @@
 -include("modules/automation/atm_tmp.hrl").
 
 %% API
--export([create/2, prepare/1, run/2]).
+-export([create/2, prepare/1, get_spec/1, run/3]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
@@ -48,8 +48,10 @@
 
 -callback prepare(record()) -> ok | no_return().
 
--callback run(json_utils:json_map(), record()) ->
-    {ok, atm_task_execution_api:task_id()} | no_return().
+-callback get_spec(record()) -> workflow_engine:task_spec().
+
+-callback run(atm_job_execution_ctx:record(), json_utils:json_map(), record()) ->
+    ok | no_return().
 
 
 %%%===================================================================
@@ -71,11 +73,17 @@ prepare(AtmTaskExecutor) ->
     Model:prepare(AtmTaskExecutor).
 
 
--spec run(json_utils:json_map(), record()) ->
-    {ok, atm_task_execution_api:task_id()} | no_return().
-run(Arguments, AtmTaskExecutor) ->
+-spec get_spec(record()) -> workflow_engine:task_spec().
+get_spec(AtmTaskExecutor) ->
     Model = utils:record_type(AtmTaskExecutor),
-    Model:run(Arguments, AtmTaskExecutor).
+    Model:get_spec(AtmTaskExecutor).
+
+
+-spec run(atm_job_execution_ctx:record(), json_utils:json_map(), record()) ->
+    ok | no_return().
+run(AtmTaskExecutionCtx, Arguments, AtmTaskExecutor) ->
+    Model = utils:record_type(AtmTaskExecutor),
+    Model:run(AtmTaskExecutionCtx, Arguments, AtmTaskExecutor).
 
 
 %%%===================================================================

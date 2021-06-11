@@ -43,7 +43,13 @@
 }.
 %% @formatter:on
 
+% TODO VFS-7551 describe and properly define types
+-type task_spec() :: map().
+-type parallel_box_spec() :: #{TaskId :: binary() => task_spec()}.
+-type lane_spec() :: map().
+
 -export_type([id/0, execution_id/0]).
+-export_type([task_spec/0, parallel_box_spec/0, lane_spec/0]).
 
 -define(POOL_ID(EngineId), binary_to_atom(EngineId, utf8)).
 -define(DEFAULT_SLOT_COUNT, 20).

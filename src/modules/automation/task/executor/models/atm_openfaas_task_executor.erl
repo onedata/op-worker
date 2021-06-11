@@ -16,15 +16,13 @@
 -behaviour(atm_task_executor).
 -behaviour(persistent_record).
 
--include("http/gui_paths.hrl").
--include("modules/automation/atm_tmp.hrl").
--include_lib("ctool/include/automation/automation.hrl").
+-include("modules/automation/atm_execution.hrl").
 -include_lib("ctool/include/http/codes.hrl").
 -include_lib("ctool/include/http/headers.hrl").
 
 
 %% atm_task_executor callbacks
--export([create/2, prepare/1, run/2]).
+-export([create/2, prepare/1, get_spec/1, run/3]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
@@ -52,7 +50,7 @@
 -export_type([record/0]).
 
 
--define(AWAIT_READINESS_RETRIES, 150).
+-define(AWAIT_READINESS_RETRIES, 180).
 -define(AWAIT_READINESS_INTERVAL_SEC, 1).
 
 
@@ -85,10 +83,15 @@ prepare(AtmTaskExecutor) ->
     await_function_readiness(PrepareCtx).
 
 
--spec run(json_utils:json_map(), record()) ->
-    {ok, atm_task_execution_api:task_id()} | no_return().
-run(Data, AtmTaskExecutor) ->
-    schedule_function_execution(Data, AtmTaskExecutor).
+-spec get_spec(record()) -> workflow_engine:task_spec().
+get_spec(_AtmTaskExecutor) ->
+    #{type => async}.
+
+
+-spec run(atm_job_execution_ctx:record(), json_utils:json_map(), record()) ->
+    ok | no_return().
+run(AtmJobExecutionCtx, Data, AtmTaskExecutor) ->
+    schedule_function_execution(AtmJobExecutionCtx, Data, AtmTaskExecutor).
 
 
 %%%===================================================================
@@ -282,23 +285,23 @@ await_function_readiness(#prepare_ctx{
 
 
 %% @private
--spec schedule_function_execution(json_utils:json_map(), record()) ->
-    {ok, atm_task_execution_api:task_id()} | no_return().
-schedule_function_execution(Data, #atm_openfaas_task_executor{
+-spec schedule_function_execution(atm_job_execution_ctx:record(), json_utils:json_map(), record()) ->
+    ok | no_return().
+schedule_function_execution(AtmJobExecutionCtx, Data, #atm_openfaas_task_executor{
     function_name = FunctionName
 }) ->
-    TaskId = str_utils:rand_hex(32),
-
     OpenfaasConfig = get_openfaas_config(),
     Endpoint = get_openfaas_endpoint(
         OpenfaasConfig, <<"/async-function/", FunctionName/binary>>
     ),
     AuthHeaders = get_basic_auth_header(OpenfaasConfig),
-    AllHeaders = AuthHeaders#{<<"X-Callback-Url">> => build_op_callback_url(TaskId)},
+    AllHeaders = AuthHeaders#{
+        <<"X-Callback-Url">> => atm_job_execution_ctx:get_report_result_url(AtmJobExecutionCtx)
+    },
 
     case http_client:post(Endpoint, AllHeaders, json_utils:encode(Data)) of
         {ok, ?HTTP_202_ACCEPTED, _, _} ->
-            {ok, TaskId};
+            ok;
         _ ->
             throw(?ERROR_ATM_OPENFAAS_QUERY_FAILED)
     end.
@@ -342,15 +345,3 @@ get_openfaas_endpoint(#openfaas_config{url = OpenfaasUrl}, Path) ->
 -spec get_basic_auth_header(openfaas_config()) -> map().
 get_basic_auth_header(#openfaas_config{basic_auth = BasicAuth}) ->
     #{?HDR_AUTHORIZATION => BasicAuth}.
-
-
-%% @private
--spec build_op_callback_url(atm_task_execution_api:task_id()) -> binary().
-build_op_callback_url(TaskId) ->
-    Port = http_listener:port(),
-    Host = oneprovider:get_domain(),
-
-    % TODO VFS-7628 make openfaas respond to https
-    str_utils:format_bin("http://~s:~B~s~s", [
-        Host, Port, ?ATM_TASK_FINISHED_CALLBACK_PATH, TaskId
-    ]).

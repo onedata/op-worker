@@ -225,7 +225,10 @@
 
 -record(od_atm_inventory, {
     name :: automation:name(),
-    
+
+    atm_lambdas :: [od_atm_lambda:id()],
+    atm_workflow_schemas :: [od_atm_workflow_schema:id()],
+
     cache_state = #{} :: cache_state()
 }).
 
@@ -253,6 +256,7 @@
     state :: automation:workflow_schema_state(),
 
     atm_inventory :: od_atm_inventory:id(),
+    atm_lambdas :: [od_atm_lambda:id()],
 
     cache_state = #{} :: cache_state()
 }).
@@ -1047,6 +1051,7 @@
 
     executor :: atm_task_executor:record(),
     argument_specs :: [atm_task_execution_argument_spec:record()],
+    result_specs :: [atm_task_execution_result_spec:record()],
 
     status :: atm_task_execution:status(),
     % Flag used to tell if status was changed during doc update (set automatically
@@ -1070,7 +1075,8 @@
 
     state :: automation:workflow_schema_state(),
 
-    atm_inventory :: od_atm_inventory:id()
+    atm_inventory :: od_atm_inventory:id(),
+    atm_lambdas :: [od_atm_lambda:id()]
 }).
 
 %% Model that holds information about an automation workflow execution

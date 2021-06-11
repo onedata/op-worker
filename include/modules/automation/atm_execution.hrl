@@ -22,6 +22,7 @@
 -record(atm_workflow_execution_creation_ctx, {
     workflow_execution_ctx :: atm_workflow_execution_ctx:record(),
     workflow_schema_doc :: od_atm_workflow_schema:doc(),
+    lambda_docs :: #{od_atm_lambda:id() => od_atm_lambda:doc()},
     initial_values :: atm_api:initial_values()
 }).
 
@@ -42,19 +43,6 @@
     schema_id :: automation:id(),
     status :: atm_parallel_box_execution:status(),
     tasks :: #{atm_task_execution:id() => atm_task_execution:status()}
-}).
-
--record(atm_task_execution_ctx, {
-    workflow_execution_env :: atm_workflow_execution_env:record(),
-    workflow_execution_ctx :: atm_workflow_execution_ctx:record(),
-    item :: json_utils:json_term()
-}).
-
--record(atm_task_execution_argument_spec, {
-    name :: automation:name(),
-    value_builder :: atm_task_argument_value_builder:record(),
-    data_spec :: atm_data_spec:record(),
-    is_batch :: boolean()
 }).
 
 
