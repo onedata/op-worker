@@ -59,4 +59,6 @@
 -define(FAILED_STATUS, failed).
 
 
+-define(check_atm(__FunctionCall), atm_middleware_utils:check_result(__FunctionCall)).
+
 -endif.

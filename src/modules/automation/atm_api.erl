@@ -47,7 +47,7 @@ init_engine() ->
     od_atm_workflow_schema:id(),
     initial_values()
 ) ->
-    {ok, atm_workflow_execution:id()} | no_return().
+    {ok, atm_workflow_execution:id(), atm_workflow_execution:record()} | no_return().
 schedule_workflow_execution(UserCtx, SpaceId, AtmWorkflowSchemaId, InitialValues) ->
     SessionId = user_ctx:get_session_id(UserCtx),
 
@@ -68,7 +68,7 @@ schedule_workflow_execution(UserCtx, SpaceId, AtmWorkflowSchemaId, InitialValues
     ),
 
     {ok, #document{
-        value = #atm_workflow_execution{
+        value = AtmWorkflowExecution = #atm_workflow_execution{
             store_registry = AtmStoreRegistry
         }
     }} = atm_workflow_execution_api:create(#atm_workflow_execution_creation_ctx{
@@ -86,4 +86,4 @@ schedule_workflow_execution(UserCtx, SpaceId, AtmWorkflowSchemaId, InitialValues
 %%        atm_workflow_execution_handler, AtmWorkflowExecutionId, AtmWorkflowExecutionEnv
 %%    ),
 
-    {ok, AtmWorkflowExecutionId}.
+    {ok, AtmWorkflowExecutionId, AtmWorkflowExecution}.
