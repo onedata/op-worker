@@ -16,7 +16,7 @@
 %%% DEFAULTS
 %%%===================================================================
 
--define(DEFAULT_ASYNC_CALL_POOL_ID, <<"def_call_pol">>).
+-define(DEFAULT_ASYNC_CALL_POOL_ID, <<"def_call_pool">>).
 
 %%%===================================================================
 %%% Record describing job to be executed
