@@ -114,11 +114,11 @@ apply_operation_test(_Config) ->
         atm_store_test_utils:apply_operation(
             krakow, AtmWorkflowExecutionCtx, append, <<"not a file">>, #{}, AtmListStoreId0)),
     {ok, BadId1} = file_id:guid_to_objectid(file_id:pack_guid(<<"dummy_uuid">>, <<"dummy_space_id">>)),
-    ?assertEqual(?ERROR_NOT_FOUND,
+    ?assertEqual(?ERROR_POSIX(?ENOENT),
         atm_store_test_utils:apply_operation(
             krakow, AtmWorkflowExecutionCtx, append, #{<<"file_id">> => BadId1}, #{}, AtmListStoreId0)),
     {ok, BadId2} = file_id:guid_to_objectid(file_id:pack_guid(<<"dummy_uuid">>, SpaceId)),
-    ?assertEqual(?ERROR_NOT_FOUND,
+    ?assertEqual(?ERROR_POSIX(?ENOENT),
         atm_store_test_utils:apply_operation(
             krakow, AtmWorkflowExecutionCtx, append, #{<<"file_id">> => BadId2}, #{}, AtmListStoreId0)),
     ?assertEqual(?ERROR_NOT_SUPPORTED,
@@ -132,16 +132,16 @@ iterator_queue_test(_Config) ->
     Name2 = <<"name2">>,
     {ok, TestQueueId} = ?assertMatch({ok, _}, queue_init()),
     ?assertEqual(ok, queue_push(TestQueueId, lists:map(fun(Num) -> {<<"entry", (integer_to_binary(Num))/binary>>, Name1} end, lists:seq(1, 19)), 0)),
-    #atm_tree_forest_iterator_queue{entries = FirstNodeValues} = 
+    #atm_tree_forest_iterator_queue{values = FirstNodeValues} = 
         ?assertMatch(#atm_tree_forest_iterator_queue{
-            last_pushed_entry_index = 19, 
-            currently_processed_entry_index = 0, 
+            last_pushed_value_index = 19, 
+            highest_peeked_value_index = 0, 
             last_pruned_node_num = 0, 
             discriminator = {0, Name1}
         }, get_queue_node(TestQueueId, 0)),
     ?assertEqual(9, maps:size(FirstNodeValues)), % there is no entry with index 0
     check_queue_values(FirstNodeValues, lists:seq(1, 9), true),
-    #atm_tree_forest_iterator_queue{entries = SecondNodeValues} =
+    #atm_tree_forest_iterator_queue{values = SecondNodeValues} =
         ?assertMatch(#atm_tree_forest_iterator_queue{}, get_queue_node(TestQueueId, 1)),
     ?assertEqual(10, maps:size(SecondNodeValues)),
     check_queue_values(SecondNodeValues, lists:seq(10, 19), true),
@@ -149,76 +149,75 @@ iterator_queue_test(_Config) ->
     % pushing with a name lower than last already given should not be accepted
     ?assertEqual(ok, queue_push(TestQueueId, lists:map(fun(Num) -> {<<"entry", (integer_to_binary(Num))/binary>>, Name0} end, lists:seq(1, 20)), 0)),
     ?assertMatch(#atm_tree_forest_iterator_queue{
-        entries = FirstNodeValues,
-        last_pushed_entry_index = 19,
-        currently_processed_entry_index = 0,
+        values = FirstNodeValues,
+        last_pushed_value_index = 19,
+        highest_peeked_value_index = 0,
         last_pruned_node_num = 0,
         discriminator = {0, Name1}
     }, get_queue_node(TestQueueId, 0)),
-    ?assertMatch(#atm_tree_forest_iterator_queue{entries = SecondNodeValues}, get_queue_node(TestQueueId, 1)),
+    ?assertMatch(#atm_tree_forest_iterator_queue{values = SecondNodeValues}, get_queue_node(TestQueueId, 1)),
     ?assertMatch({error, not_found}, get_queue_node(TestQueueId, 2)),
     
     % however push with higher name should be accepted
     ?assertEqual(ok, queue_push(TestQueueId, [{<<"entry">>, Name2}], 0)),
     ?assertMatch(#atm_tree_forest_iterator_queue{
-        entries = FirstNodeValues,
-        last_pushed_entry_index = 20,
-        currently_processed_entry_index = 0,
+        values = FirstNodeValues,
+        last_pushed_value_index = 20,
+        highest_peeked_value_index = 0,
         last_pruned_node_num = 0,
         discriminator = {0, Name2}
     }, get_queue_node(TestQueueId, 0)),
-    ?assertMatch(#atm_tree_forest_iterator_queue{entries = SecondNodeValues}, get_queue_node(TestQueueId, 1)),
-    ?assertMatch(#atm_tree_forest_iterator_queue{entries = #{20 := <<"entry">>}}, get_queue_node(TestQueueId, 2)),
+    ?assertMatch(#atm_tree_forest_iterator_queue{values = SecondNodeValues}, get_queue_node(TestQueueId, 1)),
+    ?assertMatch(#atm_tree_forest_iterator_queue{values = #{20 := <<"entry">>}}, get_queue_node(TestQueueId, 2)),
     
     % also pushing values originating from lower (older) origin index should not add new values
     ?assertEqual({ok, <<"entry1">>}, queue_peek(TestQueueId, 1)),
-    ?assertEqual(ok, queue_report_processing_index(TestQueueId, 1)),
-    ?assertMatch(#atm_tree_forest_iterator_queue{currently_processed_entry_index = 1}, get_queue_node(TestQueueId, 0)),
+    ?assertMatch(#atm_tree_forest_iterator_queue{highest_peeked_value_index = 1}, get_queue_node(TestQueueId, 0)),
     
     ?assertEqual(ok, queue_push(TestQueueId, lists:map(fun(Num) -> {<<"entry", (integer_to_binary(Num))/binary>>, Name1} end, lists:seq(1, 20)), 0)),
     ?assertMatch(#atm_tree_forest_iterator_queue{
-        entries = FirstNodeValues,
-        last_pushed_entry_index = 20,
-        currently_processed_entry_index = 1,
+        values = FirstNodeValues,
+        last_pushed_value_index = 20,
+        highest_peeked_value_index = 1,
         last_pruned_node_num = 0,
         discriminator = {0, Name2}
     }, get_queue_node(TestQueueId, 0)),
-    ?assertMatch(#atm_tree_forest_iterator_queue{entries = SecondNodeValues}, get_queue_node(TestQueueId, 1)),
-    ?assertNotMatch(#atm_tree_forest_iterator_queue{entries = #{21 := _}}, get_queue_node(TestQueueId, 2)),
+    ?assertMatch(#atm_tree_forest_iterator_queue{values = SecondNodeValues}, get_queue_node(TestQueueId, 1)),
+    ?assertNotMatch(#atm_tree_forest_iterator_queue{values = #{21 := _}}, get_queue_node(TestQueueId, 2)),
     
     % but push with higher origin index should always be accepted
     ?assertEqual(ok, queue_push(TestQueueId, [{<<"entry">>, Name0}], 2)),
     ?assertMatch(#atm_tree_forest_iterator_queue{
-        entries = FirstNodeValues,
-        last_pushed_entry_index = 21,
-        currently_processed_entry_index = 1,
+        values = FirstNodeValues,
+        last_pushed_value_index = 21,
+        highest_peeked_value_index = 1,
         last_pruned_node_num = 0,
         discriminator = {2, Name0}
     }, get_queue_node(TestQueueId, 0)),
-    ?assertMatch(#atm_tree_forest_iterator_queue{entries = SecondNodeValues}, get_queue_node(TestQueueId, 1)),
-    ?assertMatch(#atm_tree_forest_iterator_queue{entries = #{21 := <<"entry">>}}, get_queue_node(TestQueueId, 2)),
+    ?assertMatch(#atm_tree_forest_iterator_queue{values = SecondNodeValues}, get_queue_node(TestQueueId, 1)),
+    ?assertMatch(#atm_tree_forest_iterator_queue{values = #{21 := <<"entry">>}}, get_queue_node(TestQueueId, 2)),
     
     ?assertEqual(ok, queue_clean(TestQueueId, 8)),
-    #atm_tree_forest_iterator_queue{entries = Values0} =
+    #atm_tree_forest_iterator_queue{values = Values0} =
         ?assertMatch(#atm_tree_forest_iterator_queue{
-            last_pushed_entry_index = 21,
+            last_pushed_value_index = 21,
             last_pruned_node_num = 0
         }, get_queue_node(TestQueueId, 0)),
     ?assertEqual(1, maps:size(Values0)),
     check_queue_values(Values0, lists:seq(1, 8), false),
     check_queue_values(Values0, [9], true),
-    ?assertMatch(#atm_tree_forest_iterator_queue{entries = SecondNodeValues}, get_queue_node(TestQueueId, 1)),
+    ?assertMatch(#atm_tree_forest_iterator_queue{values = SecondNodeValues}, get_queue_node(TestQueueId, 1)),
     
     % clean never deletes first doc
     ?assertEqual(ok, queue_clean(TestQueueId, 20)),
-    #atm_tree_forest_iterator_queue{entries = Values1} =
+    #atm_tree_forest_iterator_queue{values = Values1} =
         ?assertMatch(#atm_tree_forest_iterator_queue{
-            last_pushed_entry_index = 21,
+            last_pushed_value_index = 21,
             last_pruned_node_num = 2
         }, get_queue_node(TestQueueId, 0)),
     ?assertEqual(0, maps:size(Values1)),
     ?assertMatch({error, not_found}, get_queue_node(TestQueueId, 1)),
-    #atm_tree_forest_iterator_queue{entries = Values2} =
+    #atm_tree_forest_iterator_queue{values = Values2} =
         ?assertMatch(#atm_tree_forest_iterator_queue{}, get_queue_node(TestQueueId, 2)),
     ?assertEqual(1, maps:size(Values2)),
     check_queue_values(Values2, [20], false),
@@ -258,14 +257,14 @@ iterate_in_chunks_datasets_test(_Config) ->
 
 restart_iteration_test(_Config) ->
     AtmStoreIteratorStrategy = #atm_store_iterator_batch_strategy{size = 3},
-    {AtmWorkflowExecutionEnv, AtmSerialIterator0, _FilesMap, Expected} = create_iteration_test_env(krakow, AtmStoreIteratorStrategy, 1, atm_file_type),
+    {AtmWorkflowExecutionEnv, AtmSerialIterator0, _FilesMap, Expected} = create_iteration_test_env(krakow, AtmStoreIteratorStrategy, 2, atm_file_type),
     
     IteratorsAndResults = check_iterator_listing(
         krakow, AtmWorkflowExecutionEnv, AtmSerialIterator0, Expected, return_iterators, atm_file_type
     ),
     
     lists:foreach(fun({Iterator, ExpectedResults}) ->
-        check_iterator_listing(krakow, AtmWorkflowExecutionEnv, Iterator, ExpectedResults, return_none, atm_file_type)
+        check_iterator_listing(krakow, AtmWorkflowExecutionEnv, Iterator, ExpectedResults, return_iterators, atm_file_type)
     end, IteratorsAndResults).
 
 
@@ -326,7 +325,7 @@ check_iterator_listing(ProviderSelector, AtmWorkflowExecutionEnv, Iterator, [], 
     ?assertEqual(stop, atm_store_test_utils:iterator_get_next(ProviderSelector, AtmWorkflowExecutionEnv, Iterator)),
     [];
 check_iterator_listing(ProviderSelector, AtmWorkflowExecutionEnv, Iterator, ExpectedList, ReturnStrategy, Type) ->
-    % duplication here is deliberate
+    % duplication here is deliberate to check reuse of iterator
     {ok, Res, NewIterator} = ?assertMatch({ok, _, _}, atm_store_test_utils:iterator_get_next(ProviderSelector, AtmWorkflowExecutionEnv, Iterator)),
     ?assertMatch({ok, Res, NewIterator}, atm_store_test_utils:iterator_get_next(ProviderSelector, AtmWorkflowExecutionEnv, Iterator)),
     ResList = utils:ensure_list(Res),
@@ -442,11 +441,6 @@ queue_push(Id, Entries, OriginIndex) ->
 queue_peek(Id, Index) ->
     Node = oct_background:get_random_provider_node(krakow),
     rpc:call(Node, atm_tree_forest_iterator_queue, peek, [Id, Index]).
-
-
-queue_report_processing_index(Id, Index) ->
-    Node = oct_background:get_random_provider_node(krakow),
-    rpc:call(Node, atm_tree_forest_iterator_queue, report_processing_index, [Id, Index]).
 
 
 queue_clean(Id, Index) ->

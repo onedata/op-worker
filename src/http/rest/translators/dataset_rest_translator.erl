@@ -47,7 +47,7 @@ create_response(#gri{aspect = instance}, _, resource, {#gri{id = DatasetId}, _})
 %%--------------------------------------------------------------------
 -spec get_response(gri:gri(), Resource :: term()) -> #rest_resp{}.
 get_response(#gri{aspect = instance}, #dataset_info{} = DatasetInfo) ->
-    ?OK_REPLY(dataset_utils:translate_dataset_info(DatasetInfo));
+    ?OK_REPLY(dataset_utils:dataset_info_to_json(DatasetInfo));
 
 get_response(#gri{aspect = children}, {Datasets, IsLast}) ->
     ?OK_REPLY(translate_datasets_list(Datasets, IsLast));

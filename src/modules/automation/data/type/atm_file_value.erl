@@ -26,7 +26,7 @@
 
 %% atm_tree_forest_container_iterator callbacks
 -export([
-    list_children/4, exists/2,
+    list_children/4,
     initial_listing_options/0,
     encode_listing_options/1, decode_listing_options/1
 ]).
@@ -42,22 +42,23 @@
 
 -spec validate(
     atm_workflow_execution_ctx:record(),
-    atm_api:item(),
+    atm_value:expanded(),
     atm_data_type:value_constraints()
 ) ->
     ok | no_return().
-validate(AtmWorkflowExecutionCtx, #{<<"file_id">> := ObjectId} = Value, _ValueConstraints) ->
+validate(AtmWorkflowExecutionCtx, #{<<"file_id">> := ObjectId} = Value, ValueConstraints) ->
     SpaceId = atm_workflow_execution_ctx:get_space_id(AtmWorkflowExecutionCtx),
     try
         {ok, Guid} = file_id:objectid_to_guid(ObjectId),
         case file_id:guid_to_space_id(Guid) of
             SpaceId ->
-                case exists(AtmWorkflowExecutionCtx, Guid) of
-                    true -> ok;
-                    false -> ?ERROR_NOT_FOUND
+                SessionId = atm_workflow_execution_ctx:get_session_id(AtmWorkflowExecutionCtx),
+                case lfm:stat(SessionId, ?FILE_REF(Guid)) of
+                    {ok, FileAttrs} -> check_constraints(FileAttrs, ValueConstraints);
+                    {error, Errno} -> ?ERROR_POSIX(Errno)
                 end;
             _ -> 
-                ?ERROR_NOT_FOUND
+                ?ERROR_POSIX(?ENOENT)
         end
     of
         ok -> ok;
@@ -80,25 +81,12 @@ list_children(AtmWorkflowExecutionCtx, Guid, ListOpts, BatchSize) ->
     try
         list_children_unsafe(SessionId, Guid, ListOpts#{size => BatchSize})
     catch _:Error ->
-        case atm_data_utils:is_error_ignored(datastore_runner:normalize_error(Error)) of
+        case atm_value:is_error_ignored(datastore_runner:normalize_error(Error)) of
             true ->
                 {[], [], #{}, true};
             _ -> 
                 throw(Error)
         end
-    end.
-
-
--spec exists(atm_workflow_execution_ctx:record(), file_id:file_guid()) -> boolean().
-exists(AtmWorkflowExecutionCtx, FileGuid) ->
-    SessionId = atm_workflow_execution_ctx:get_session_id(AtmWorkflowExecutionCtx),
-    case lfm:stat(SessionId, ?FILE_REF(FileGuid)) of
-        {ok, _} -> true;
-        {error, Type} = Error -> 
-            case atm_data_utils:is_error_ignored(Type) of
-                true -> false;
-                false -> throw(Error)
-            end
     end.
 
 
@@ -130,14 +118,14 @@ decode_listing_options(#{<<"last_name">> := LastName, <<"last_tree">> := LastTre
 %%% atm_data_compressor callbacks
 %%%===================================================================
 
--spec compress(atm_api:item()) -> file_id:file_guid().
+-spec compress(atm_value:expanded()) -> file_id:file_guid().
 compress(#{<<"file_id">> := ObjectId}) ->
     {ok, Guid} = file_id:objectid_to_guid(ObjectId),
     Guid.
 
 
 -spec expand(atm_workflow_execution_ctx:record(), file_id:file_guid()) -> 
-    {ok, atm_api:item()} | {error, term()}.
+    {ok, atm_value:expanded()} | {error, term()}.
 expand(AtmWorkflowExecutionCtx, Guid) ->
     SessionId = atm_workflow_execution_ctx:get_session_id(AtmWorkflowExecutionCtx),
     case lfm:stat(SessionId, #file_ref{guid = Guid}) of
@@ -148,6 +136,17 @@ expand(AtmWorkflowExecutionCtx, Guid) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%% @private
+-spec check_constraints(lfm_attrs:file_attributes(), atm_data_type:value_constraints()) -> 
+    ok | no_return().
+check_constraints(#file_attr{type = FileType}, Constraints) ->
+    case maps:get(file_type, Constraints, 'ANY') of
+        'ANY' -> ok;
+        FileType -> ok;
+        Other -> throw(?ERROR_ATM_DATA_TYPE_CONSTRAINT_UNVERIFIED(Other, FileType))
+    end.
+
 
 %% @private
 -spec list_children_unsafe(session:id(), file_id:file_guid(), list_opts()) ->

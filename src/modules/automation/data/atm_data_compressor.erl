@@ -11,7 +11,7 @@
 %%%
 %%%                             !!! Caution !!!
 %%% When adding compressor for new type, the module must be registered in
-%%% `atm_data_validator:get_callback_module` function.
+%%% `atm_value:get_callback_module` function.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_data_compressor).
@@ -43,12 +43,12 @@
 -spec compress(atm_api:item(), atm_data_spec:record()) ->
     atm_api:item() | no_return().
 compress(Value, AtmDataSpec) ->
-    Module = atm_data_utils:get_callback_module(atm_data_spec:get_type(AtmDataSpec)),
+    Module = atm_value:get_callback_module(atm_data_spec:get_type(AtmDataSpec)),
     Module:compress(Value).
 
 
 -spec expand(atm_workflow_execution_ctx:record(), atm_api:item(), atm_data_spec:record()) -> 
     {ok, atm_api:item()} | {error, term()}.
 expand(AtmWorkflowExecutionCtx, Value, AtmDataSpec) ->
-    Module = atm_data_utils:get_callback_module(atm_data_spec:get_type(AtmDataSpec)),
+    Module = atm_value:get_callback_module(atm_data_spec:get_type(AtmDataSpec)),
     Module:expand(AtmWorkflowExecutionCtx, Value).

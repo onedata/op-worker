@@ -7,7 +7,8 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module provides `atm_container_iterator` functionality for
-%%% `atm_tree_forest_container`.
+%%% `atm_tree_forest_container`. Each atm_data_type, that is to be 
+%%% allowed for iteration must implement behaviour provided by this module.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_tree_forest_container_iterator).
@@ -31,8 +32,11 @@
 -export([version/0, db_encode/2, db_decode/2]).
 
 
--type item_id() :: binary().
+-type item_id() :: atm_value:compressed().
 -type list_opts() :: term().
+-type traversable_item_id() :: item_id().
+-type nontraversable_item_id() :: item_id().
+-type item_name() :: binary().
 
 -record(queue_ref, {
     id :: atm_tree_forest_iterator_queue:id(),
@@ -43,7 +47,8 @@
 
 -record(atm_tree_forest_container_iterator, {
     callback_module :: module(),
-    current_item = undefined :: undefined | item_id(),
+    current_traversable_item = undefined :: undefined | item_id(),
+    tree_listing_finished = false :: boolean(),
     tree_list_opts :: list_opts(),
     roots_iterator :: atm_list_container_iterator:record(),
     queue_ref :: queue_ref()
@@ -63,9 +68,11 @@
     list_opts(),
     atm_container_iterator:batch_size()
 ) -> 
-    {[{item_id(), binary()}], [item_id()], list_opts(), IsLast :: boolean()} | no_return().
-
--callback exists(atm_workflow_execution_ctx:record(), item_id()) -> boolean().
+    {
+        [{traversable_item_id(), item_name()}], 
+        [nontraversable_item_id()], 
+        list_opts(), IsLast :: boolean()
+    } | no_return().
 
 -callback initial_listing_options() -> list_opts().
 
@@ -124,7 +131,7 @@ get_next_batch(_AtmWorkflowExecutionCtx, BatchSize, Record, ForestAcc) when Batc
 get_next_batch(
     AtmWorkflowExecutionCtx, 
     BatchSize, 
-    #atm_tree_forest_container_iterator{current_item = undefined} = Record, 
+    #atm_tree_forest_container_iterator{tree_listing_finished = true} = Record, 
     ForestAcc
 ) ->
     #atm_tree_forest_container_iterator{
@@ -133,23 +140,16 @@ get_next_batch(
         queue_ref = QueueRef
     } = Record,
     case atm_list_container_iterator:get_next_batch(AtmWorkflowExecutionCtx, 1, ListIterator) of
-        {ok, [ItemId], NextRootsIterator} ->
+        {ok, [CurrentTreeRoot], NextRootsIterator} ->
             UpdatedRecord = Record#atm_tree_forest_container_iterator{
-                current_item = ItemId,
+                current_traversable_item = CurrentTreeRoot,
+                tree_listing_finished = false,
                 roots_iterator = NextRootsIterator,
                 tree_list_opts = Module:initial_listing_options(),
                 queue_ref = queue_report_new_tree(QueueRef)
             },
-            case Module:exists(AtmWorkflowExecutionCtx, ItemId) of
-                true ->
-                    get_next_batch(
-                        AtmWorkflowExecutionCtx, BatchSize - 1, UpdatedRecord, [ItemId | ForestAcc]);
-                false ->
-                    get_next_batch(AtmWorkflowExecutionCtx, BatchSize, 
-                        UpdatedRecord#atm_tree_forest_container_iterator{current_item = undefined}, 
-                        ForestAcc
-                    )
-            end;
+            get_next_batch(
+                AtmWorkflowExecutionCtx, BatchSize - 1, UpdatedRecord, [CurrentTreeRoot | ForestAcc]);
         stop ->
             case length(ForestAcc) of
                 0 -> stop;
@@ -170,34 +170,49 @@ get_next_batch(AtmWorkflowExecutionCtx, BatchSize, Record, ForestAcc) ->
     [atm_api:item()]
 ) ->
     {[atm_api:item()], record()}.
-get_next_batch_from_single_tree(
-    _AtmWorkflowExecutionCtx, 
-    _BatchSize, 
-    #atm_tree_forest_container_iterator{current_item = undefined} = Record, 
-    Acc
-) ->
-    {Acc, Record};
 get_next_batch_from_single_tree(_AtmWorkflowExecutionCtx, BatchSize, Record, Acc) when BatchSize =< 0 ->
     {Acc, Record};
+get_next_batch_from_single_tree(
+    AtmWorkflowExecutionCtx, 
+    BatchSize, 
+    #atm_tree_forest_container_iterator{current_traversable_item = undefined} = Record, 
+    Acc
+) ->
+    #atm_tree_forest_container_iterator{queue_ref = QueueRef, callback_module = Module} = Record, 
+    case get_from_queue(QueueRef) of
+        {undefined, QueueRef2} ->
+            {Acc, Record#atm_tree_forest_container_iterator{
+                queue_ref = QueueRef2, 
+                tree_listing_finished = true
+            }};
+        {NextTraversableItem, QueueRef2} ->
+            get_next_batch_from_single_tree(
+                AtmWorkflowExecutionCtx,
+                BatchSize - 1,
+                Record#atm_tree_forest_container_iterator{
+                    current_traversable_item = NextTraversableItem,
+                    tree_list_opts = Module:initial_listing_options(),
+                    queue_ref = QueueRef2
+                },
+                [NextTraversableItem | Acc]
+            )
+    end;
 get_next_batch_from_single_tree(AtmWorkflowExecutionCtx, BatchSize, Record, Acc) ->
     #atm_tree_forest_container_iterator{
         callback_module = Module,
         queue_ref = QueueRef,
-        current_item = CurrentItem,
+        current_traversable_item = CurrentTraversableItem,
         tree_list_opts = ListOpts
     } = Record,
     {TraversableItemsWithNames, NonTraversableItemsIds, NewListOptions, IsLast} =
-        Module:list_children(AtmWorkflowExecutionCtx, CurrentItem, ListOpts, BatchSize),
+        Module:list_children(AtmWorkflowExecutionCtx, CurrentTraversableItem, ListOpts, BatchSize),
     UpdatedQueueRef = add_to_queue(QueueRef, TraversableItemsWithNames),
-    TraversableItemsIds = lists:map(fun({Id, _}) -> Id end, TraversableItemsWithNames),
     
     UpdatedRecord = case IsLast of
         true ->
-            {NextItem, QueueRef2} = get_from_queue(UpdatedQueueRef),
             Record#atm_tree_forest_container_iterator{
-                current_item = NextItem,
-                tree_list_opts = Module:initial_listing_options(),
-                queue_ref = QueueRef2
+                current_traversable_item = undefined,
+                queue_ref = UpdatedQueueRef
             };
         false ->
             Record#atm_tree_forest_container_iterator{
@@ -205,13 +220,16 @@ get_next_batch_from_single_tree(AtmWorkflowExecutionCtx, BatchSize, Record, Acc)
                 queue_ref = UpdatedQueueRef
             }
     end,
-    Result = TraversableItemsIds ++ NonTraversableItemsIds,
     get_next_batch_from_single_tree(
-        AtmWorkflowExecutionCtx, BatchSize - length(Result), UpdatedRecord, Result ++ Acc).
+        AtmWorkflowExecutionCtx, 
+        BatchSize - length(NonTraversableItemsIds), 
+        UpdatedRecord, 
+        NonTraversableItemsIds ++ Acc
+    ).
 
 
 %% @private
--spec queue_init() -> {ok, queue_ref()} | no_return().
+-spec queue_init() -> queue_ref() | no_return().
 queue_init() ->
     case atm_tree_forest_iterator_queue:init() of
         {ok, Id} -> #queue_ref{id = Id};
@@ -235,7 +253,6 @@ get_from_queue(#queue_ref{id = Id, current_queue_index = Index} = QueueRef) ->
         {ok, undefined} ->
             {undefined, QueueRef#queue_ref{current_queue_index = Index}};
         {ok, Value} ->
-            ok = atm_tree_forest_iterator_queue:report_processing_index(Id, Index + 1),
             {Value, QueueRef#queue_ref{current_queue_index = Index + 1}};
         {error, _} = Error ->
             throw(Error)
@@ -281,16 +298,18 @@ version() ->
     json_utils:json_term().
 db_encode(#atm_tree_forest_container_iterator{
     callback_module = Module,
-    current_item = CurrentItem,
+    current_traversable_item = CurrentTraversableItem,
+    tree_listing_finished = TreeListingFinished,
     tree_list_opts = TreeListOpts,
     roots_iterator = RootsIterator,
     queue_ref = QueueRef
 }, NestedRecordEncoder) ->
     #{
         <<"typeSpecificModule">> => atom_to_binary(Module, utf8),
-        <<"currentItem">> => utils:undefined_to_null(CurrentItem),
+        <<"currentTraversableItem">> => utils:undefined_to_null(CurrentTraversableItem),
+        <<"treeListingFinished">> => TreeListingFinished,
         <<"treeListOpts">> => Module:encode_listing_options(TreeListOpts),
-        <<"rootsIterator">> => NestedRecordEncoder(RootsIterator, atm_container_iterator),
+        <<"rootsIterator">> => NestedRecordEncoder(RootsIterator, atm_list_container_iterator),
         <<"queueRef">> => encode_queue_ref(QueueRef)
     }.
 
@@ -299,7 +318,8 @@ db_encode(#atm_tree_forest_container_iterator{
     record().
 db_decode(#{
     <<"typeSpecificModule">> := EncodedModule,
-    <<"currentItem">> := CurrentItem,
+    <<"currentTraversableItem">> := CurrentTraversableItem,
+    <<"treeListingFinished">> := TreeListingFinished,
     <<"treeListOpts">> := TreeListOpts,
     <<"rootsIterator">> := RootsIterator,
     <<"queueRef">> := QueueRef
@@ -307,9 +327,10 @@ db_decode(#{
     Module = binary_to_atom(EncodedModule, utf8),
     #atm_tree_forest_container_iterator{
         callback_module = Module,
-        current_item = utils:null_to_undefined(CurrentItem),
+        current_traversable_item = utils:null_to_undefined(CurrentTraversableItem),
+        tree_listing_finished = TreeListingFinished,
         tree_list_opts = Module:decode_listing_options(TreeListOpts),
-        roots_iterator = NestedRecordDecoder(RootsIterator, atm_container_iterator),
+        roots_iterator = NestedRecordDecoder(RootsIterator, atm_list_container_iterator),
         queue_ref = decode_queue_ref(QueueRef)
     }.
 

@@ -57,7 +57,7 @@ build(Value) ->
 %%%===================================================================
 
 
--spec get_next_batch(atm_container_iterator:batch_size(), atm_workflow_execution_ctx:record(), record()) ->
+-spec get_next_batch(atm_workflow_execution_ctx:record(), atm_container_iterator:batch_size(), record()) ->
     {ok, [atm_api:item()], record()} | stop.
 get_next_batch(_AtmWorkflowExecutionCtx, _BatchSize, #atm_single_value_container_iterator{value = undefined}) ->
     stop;

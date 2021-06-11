@@ -31,7 +31,7 @@
 
 -spec validate(
     atm_workflow_execution_ctx:record(),
-    atm_api:item(),
+    atm_value:expanded(),
     atm_data_type:value_constraints()
 ) ->
     ok | no_return().
@@ -46,10 +46,10 @@ validate(_, Value, _ValueConstraints) ->
 %%%===================================================================
 
 
--spec compress(atm_api:item()) -> atm_api:item().
+-spec compress(atm_value:expanded()) -> integer().
 compress(Value) -> Value.
 
--spec expand(atm_workflow_execution_ctx:record(), atm_api:item()) ->
-    {ok, atm_api:item()}.
+-spec expand(atm_workflow_execution_ctx:record(), integer()) ->
+    {ok, atm_value:expanded()}.
 expand(_, Value) ->
     {ok, Value}.

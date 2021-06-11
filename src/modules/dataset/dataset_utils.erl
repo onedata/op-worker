@@ -14,15 +14,15 @@
 
 -include("proto/oneprovider/provider_messages.hrl").
 
--export([translate_dataset_info/1]).
+-export([dataset_info_to_json/1]).
 
 %%%===================================================================
 %%% API functions
 %%%===================================================================
 
 
--spec translate_dataset_info(lfm_datasets:info()) -> json_utils:json_map().
-translate_dataset_info(#dataset_info{
+-spec dataset_info_to_json(lfm_datasets:info()) -> json_utils:json_map().
+dataset_info_to_json(#dataset_info{
     id = DatasetId,
     state = State,
     root_file_guid = RootFileGuid,

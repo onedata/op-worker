@@ -75,8 +75,9 @@ apply_operation(#atm_single_value_container{} = Record, #atm_container_operation
     workflow_execution_ctx = AtmWorkflowExecutionCtx
 }) ->
     #atm_single_value_container{data_spec = AtmDataSpec} = Record,
+    atm_data_validator:validate(AtmWorkflowExecutionCtx, Item, AtmDataSpec),
     Record#atm_single_value_container{
-        value = atm_data_validator:validate(AtmWorkflowExecutionCtx, Item, AtmDataSpec)
+        value = atm_data_compressor:compress(Item, AtmDataSpec)
     };
 
 apply_operation(_Record, _Operation) ->

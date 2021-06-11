@@ -11,7 +11,7 @@
 %%%
 %%%                             !!! Caution !!!
 %%% When adding validator for new type, the module must be registered in
-%%% `get_callback_module` function.
+%%% `atm_value:get_callback_module` function.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_data_validator).
@@ -49,6 +49,6 @@
 -spec validate(atm_workflow_execution_ctx:record(), atm_api:item(), atm_data_spec:record()) ->
     ok | no_return().
 validate(AtmWorkflowExecutionCtx, Value, AtmDataSpec) ->
-    Module = atm_data_utils:get_callback_module(atm_data_spec:get_type(AtmDataSpec)),
+    Module = atm_value:get_callback_module(atm_data_spec:get_type(AtmDataSpec)),
     ValueConstraints = atm_data_spec:get_value_constraints(AtmDataSpec),
     Module:validate(AtmWorkflowExecutionCtx, Value, ValueConstraints).
