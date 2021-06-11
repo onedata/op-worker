@@ -26,6 +26,42 @@
 
 -spec translate_resource(gri:gri(), Data :: term()) ->
     gs_protocol:data() | fun((aai:auth()) -> gs_protocol:data()).
-translate_resource(#gri{aspect = instance, scope = private}, #atm_workflow_execution{}) ->
-    % TODO translate?
-    #{}.
+translate_resource(#gri{aspect = instance, scope = private}, #atm_workflow_execution{
+    space_id = SpaceId,
+    atm_inventory_id = AtmInventoryId,
+
+    schema_snapshot_id = AtmWorkflowSchemaSnapshotId,
+    lambda_snapshot_registry = AtmLambdaSnapshotRegistry,
+
+    store_registry = AtmStoreRegistry,
+    lanes = AtmLaneExecutions,  %% TODO translate lane executions
+
+    status = Status,
+
+    schedule_time = ScheduleTime,
+    start_time = StartTime,
+    finish_time = FinishTime
+}) ->
+    #{
+        <<"space">> => gri:serialize(#gri{
+            type = op_space, id = SpaceId,
+            aspect = instance, scope = private
+        }),
+        <<"atmInventory">> => gri:serialize(#gri{
+            type = op_atm_inventory, id = AtmInventoryId,
+            aspect = instance, scope = private
+        }),
+        <<"atmWorkflowSchemaSnapshot">> => gri:serialize(#gri{
+            type = op_atm_workflow_schema_snapshot, id = AtmWorkflowSchemaSnapshotId,
+            aspect = instance, scope = private
+        }),
+        <<"lambdaSnapshotRegistry">> => AtmLambdaSnapshotRegistry,
+
+        <<"storeRegistry">> => AtmStoreRegistry,
+
+        <<"status">> => atom_to_binary(Status, utf8),
+
+        <<"scheduleTime">> => ScheduleTime,
+        <<"startTime">> => StartTime,
+        <<"finishTime">> => FinishTime
+    }.
