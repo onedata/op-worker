@@ -7,10 +7,10 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module handles translation of middleware results concerning
-%%% automation inventories entities into GUI GRAPH SYNC responses.
+%%% automation workflow schema entities into GUI GRAPH SYNC responses.
 %%% @end
 %%%-------------------------------------------------------------------
--module(atm_inventory_gui_gs_translator).
+-module(atm_workflow_schema_gui_gs_translator).
 -author("Bartosz Walkowicz").
 
 -include("middleware/middleware.hrl").
@@ -26,24 +26,13 @@
 
 -spec translate_resource(gri:gri(), Data :: term()) ->
     gs_protocol:data() | fun((aai:auth()) -> gs_protocol:data()).
-translate_resource(GRI = #gri{aspect = instance, scope = private}, #od_atm_inventory{
-    name = AtmInventoryName
+translate_resource(#gri{aspect = instance, scope = private}, #od_atm_workflow_schema{
+    name = AtmWorkflowSchemaName,
+    description = AtmWorkflowSchemaDescription,
+    stores = AtmStoreSchemas
 }) ->
     #{
-        <<"name">> => AtmInventoryName,
-        <<"atmWorkflowSchemaList">> => gri:serialize(GRI#gri{
-            aspect = atm_workflow_schemas,
-            scope = private
-        })
-    };
-translate_resource(#gri{aspect = atm_workflow_schemas, scope = private}, AtmWorkflowSchemas) ->
-    #{
-        <<"list">> => lists:map(fun(AtmWorkflowSchemaId) ->
-            gri:serialize(#gri{
-                type = op_atm_workflow_schema,
-                id = AtmWorkflowSchemaId,
-                aspect = instance,
-                scope = private
-            })
-        end, AtmWorkflowSchemas)
+        <<"name">> => AtmWorkflowSchemaName,
+        <<"description">> => AtmWorkflowSchemaDescription,
+        <<"stores">> => jsonable_record:list_to_json(AtmStoreSchemas, atm_store_schema)
     }.

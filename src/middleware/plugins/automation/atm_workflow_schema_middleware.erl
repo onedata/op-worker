@@ -7,10 +7,10 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module handles middleware operations (create, get, update, delete)
-%%% corresponding to automation inventories.
+%%% corresponding to automation workflow schema.
 %%% @end
 %%%-------------------------------------------------------------------
--module(atm_inventory_middleware).
+-module(atm_workflow_schema_middleware).
 -author("Bartosz Walkowicz").
 
 -behaviour(middleware_plugin).
@@ -43,7 +43,6 @@
 -spec operation_supported(middleware:operation(), gri:aspect(),
     middleware:scope()) -> boolean().
 operation_supported(get, instance, private) -> true;
-operation_supported(get, atm_workflow_schemas, private) -> true;
 
 operation_supported(_, _, _) -> false.
 
@@ -54,10 +53,7 @@ operation_supported(_, _, _) -> false.
 %% @end
 %%--------------------------------------------------------------------
 -spec data_spec(middleware:req()) -> undefined | middleware_sanitizer:data_spec().
-data_spec(#op_req{operation = get, gri = #gri{aspect = As}}) when
-    As =:= instance;
-    As =:= atm_workflow_schemas
-->
+data_spec(#op_req{operation = get, gri = #gri{aspect = instance}}) ->
     undefined.
 
 
@@ -70,10 +66,10 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = As}}) when
 %%--------------------------------------------------------------------
 -spec fetch_entity(middleware:req()) ->
     {ok, middleware:versioned_entity()} | errors:error().
-fetch_entity(#op_req{auth = Auth, gri = #gri{id = AtmInventoryId, scope = private}}) ->
-    case atm_inventory_logic:get(Auth#auth.session_id, AtmInventoryId) of
-        {ok, #document{value = AtmInventory}} ->
-            {ok, {AtmInventory, 1}};
+fetch_entity(#op_req{auth = Auth, gri = #gri{id = AtmWorkflowSchemaId, scope = private}}) ->
+    case atm_workflow_schema_logic:get(Auth#auth.session_id, AtmWorkflowSchemaId) of
+        {ok, #document{value = AtmWorkflowSchema}} ->
+            {ok, {AtmWorkflowSchema, 1}};
         {error, _} = Error ->
             Error
     end;
@@ -90,10 +86,7 @@ fetch_entity(_) ->
 authorize(#op_req{auth = ?GUEST}, _) ->
     false;
 
-authorize(#op_req{operation = get, gri = #gri{aspect = As}}, _) when
-    As =:= instance;
-    As =:= atm_workflow_schemas
-->
+authorize(#op_req{operation = get, gri = #gri{aspect = instance}}, _) ->
     % authorization was checked by oz in `fetch_entity`
     true.
 
@@ -104,10 +97,7 @@ authorize(#op_req{operation = get, gri = #gri{aspect = As}}, _) when
 %% @end
 %%--------------------------------------------------------------------
 -spec validate(middleware:req(), middleware:entity()) -> ok | no_return().
-validate(#op_req{operation = get, gri = #gri{aspect = As}}, _) when
-    As =:= instance;
-    As =:= atm_workflow_schemas
-->
+validate(#op_req{operation = get, gri = #gri{aspect = instance}}, _) ->
     % validation was checked by oz in `fetch_entity`
     ok.
 
@@ -128,13 +118,8 @@ create(_) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get(middleware:req(), middleware:entity()) -> middleware:get_result().
-get(#op_req{gri = #gri{aspect = instance, scope = private}}, AtmInventory) ->
-    {ok, AtmInventory};
-
-get(#op_req{gri = #gri{aspect = atm_workflow_schemas, scope = private}}, #od_atm_inventory{
-    atm_workflow_schemas = AtmWorkflowSchemas
-}) ->
-    {ok, AtmWorkflowSchemas}.
+get(#op_req{gri = #gri{aspect = instance, scope = private}}, AtmWorkflowSchema) ->
+    {ok, AtmWorkflowSchema}.
 
 
 %%--------------------------------------------------------------------

@@ -173,6 +173,7 @@ client_to_string(?USER(UId)) -> str_utils:format("user:~s", [UId]).
 -spec get_plugin(gri:entity_type()) -> module() | no_return().
 get_plugin(op_archive) -> archive_middleware;
 get_plugin(op_atm_inventory) -> atm_inventory_middleware;
+get_plugin(op_atm_workflow_schema) -> atm_workflow_schema_middleware;
 get_plugin(op_dataset) -> dataset_middleware;
 get_plugin(op_file) -> file_middleware;
 get_plugin(op_group) -> group_middleware;
