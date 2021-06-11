@@ -45,7 +45,8 @@ create(AtmWorkflowExecutionId, #document{key = AtmWorkflowSchemaId, value = #od_
     stores = AtmStoreSchemas,
     lanes = AtmLaneSchemas,
     state = AtmWorkflowSchemaState,
-    atm_inventory = AtmInventoryId
+    atm_inventory = AtmInventoryId,
+    atm_lambdas = AtmLambdaIds
 }}) ->
     %% TODO VFS-7685 add ref count and gen snapshot id based on doc revision
     ?extract_key(datastore_model:create(?CTX, #document{
@@ -57,7 +58,8 @@ create(AtmWorkflowExecutionId, #document{key = AtmWorkflowSchemaId, value = #od_
             stores = AtmStoreSchemas,
             lanes = AtmLaneSchemas,
             state = AtmWorkflowSchemaState,
-            atm_inventory = AtmInventoryId
+            atm_inventory = AtmInventoryId,
+            atm_lambdas = AtmLambdaIds
         }
     })).
 
@@ -114,5 +116,6 @@ get_record_struct(1) ->
 
         {state, {custom, string, {automation, workflow_schema_state_to_json, workflow_schema_state_from_json}}},
 
-        {atm_inventory, string}
+        {atm_inventory, string},
+        {atm_lambdas, [string]}
     ]}.

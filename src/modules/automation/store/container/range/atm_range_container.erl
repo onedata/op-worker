@@ -185,4 +185,4 @@ assert_proper_range(Start, End, Step) when Start =< End, Step > 0 ->
 assert_proper_range(Start, End, Step) when Start >= End, Step < 0 ->
     ok;
 assert_proper_range(_Start, _End, _Step) ->
-    throw(?ERROR_ATM_BAD_DATA).
+    throw(?ERROR_ATM_BAD_DATA(<<"range">>, <<"invalid range specification">>)).

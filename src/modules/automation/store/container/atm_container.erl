@@ -7,7 +7,7 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module defines `atm_container` interface - an object which can be
-%%% used to store and retrieve data of specific type.
+%%% used for storing and retrieving data of specific type.
 %%%
 %%%                             !!! Caution !!!
 %%% 1) This behaviour must be implemented by modules with records of the same name.

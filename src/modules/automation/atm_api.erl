@@ -15,7 +15,8 @@
 -include("modules/automation/atm_execution.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 
--export([start/4]).
+-export([init_engine/0]).
+-export([schedule_workflow_execution/4]).
 
 
 % TODO VFS-7660 mv to automation erl
@@ -25,17 +26,39 @@
 
 -export_type([item/0, initial_values/0]).
 
+-define(ATM_WORKFLOW_ENGINE, <<"atm_workflow_engine">>).
+
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
 
--spec start(user_ctx:ctx(), od_space:id(), od_atm_workflow_schema:id(), initial_values()) ->
+-spec init_engine() -> ok.
+init_engine() ->
+%%    % TODO VFS-7551 uncomment after MW implements it
+%%    workflow_engine:init(?ATM_WORKFLOW_ENGINE).
+    ok.
+
+
+-spec schedule_workflow_execution(
+    user_ctx:ctx(),
+    od_space:id(),
+    od_atm_workflow_schema:id(),
+    initial_values()
+) ->
     {ok, atm_workflow_execution:id()} | no_return().
-start(UserCtx, SpaceId, AtmWorkflowSchemaId, InitialValues) ->
+schedule_workflow_execution(UserCtx, SpaceId, AtmWorkflowSchemaId, InitialValues) ->
     SessionId = user_ctx:get_session_id(UserCtx),
-    {ok, AtmWorkflowSchemaDoc} = atm_workflow_schema_logic:get(SessionId, AtmWorkflowSchemaId),
+
+    {ok, AtmWorkflowSchemaDoc = #document{value = #od_atm_workflow_schema{
+        atm_lambdas = AtmLambdaIds
+    }}} = atm_workflow_schema_logic:get(SessionId, AtmWorkflowSchemaId),
+
+    AtmLambdaDocs = lists:foldl(fun(AtmLambdaId, Acc) ->
+        {ok, AtmLambdaDoc} = atm_lambda_logic:get(SessionId, AtmLambdaId),
+        Acc#{AtmLambdaId => AtmLambdaDoc}
+    end, #{}, AtmLambdaIds),
 
     AtmWorkflowExecutionId = datastore_key:new(),
     ok = atm_workflow_execution_session:init(AtmWorkflowExecutionId, UserCtx),
@@ -44,10 +67,23 @@ start(UserCtx, SpaceId, AtmWorkflowSchemaId, InitialValues) ->
         SpaceId, AtmWorkflowExecutionId
     ),
 
-    {ok, _} = atm_workflow_execution_api:create(#atm_workflow_execution_creation_ctx{
+    {ok, #document{
+        value = #atm_workflow_execution{
+            store_registry = AtmStoreRegistry
+        }
+    }} = atm_workflow_execution_api:create(#atm_workflow_execution_creation_ctx{
         workflow_execution_ctx = AtmWorkflowExecutionCtx,
         workflow_schema_doc = AtmWorkflowSchemaDoc,
+        lambda_docs = AtmLambdaDocs,
         initial_values = InitialValues
     }),
+
+%%    % TODO VFS-7551 uncomment after MW implements it
+%%    AtmWorkflowExecutionEnv = atm_workflow_execution_env:build(
+%%        SpaceId, AtmWorkflowExecutionId, AtmStoreRegistry
+%%    ),
+%%    workflow_engine:start(
+%%        atm_workflow_execution_handler, AtmWorkflowExecutionId, AtmWorkflowExecutionEnv
+%%    ),
 
     {ok, AtmWorkflowExecutionId}.

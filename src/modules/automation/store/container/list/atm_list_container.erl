@@ -81,7 +81,7 @@ apply_operation(#atm_list_container{data_spec = AtmDataSpec} = Record, #atm_cont
     options = #{<<"isBatch">> := true},
     value = Batch,
     workflow_execution_ctx = AtmWorkflowExecutionCtx
-}) when is_list(Batch) ->
+}) ->
     validate_data_batch(AtmWorkflowExecutionCtx, AtmDataSpec, Batch),
     append_insecure(Batch, Record);
 
