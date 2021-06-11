@@ -80,11 +80,10 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = instance}}) ->
 %%--------------------------------------------------------------------
 -spec fetch_entity(middleware:req()) ->
     {ok, middleware:versioned_entity()} | errors:error().
-fetch_entity(#op_req{auth = Auth, gri = #gri{id = AtmWorkflowExecutionId, scope = private}}) ->
-    % TODO lfm:get_atm_workflow_execution
-    case atm_workflow_schema_logic:get(Auth#auth.session_id, AtmWorkflowExecutionId) of
-        {ok, #document{value = AtmWorkflowSchema}} ->
-            {ok, {AtmWorkflowSchema, 1}};
+fetch_entity(#op_req{gri = #gri{id = AtmWorkflowExecutionId, scope = private}}) ->
+    case atm_workflow_execution:get(AtmWorkflowExecutionId) of
+        {ok, #document{value = AtmWorkflowExecution}} ->
+            {ok, {AtmWorkflowExecution, 1}};
         {error, _} = Error ->
             Error
     end;
@@ -125,10 +124,9 @@ validate(#op_req{operation = create, data = Data, gri = #gri{aspect = instance}}
     SpaceId = maps:get(<<"spaceId">>, Data),
     middleware_utils:assert_space_supported_locally(SpaceId);
 
-validate(#op_req{operation = get, gri = #gri{aspect = instance}}, #atm_workflow_execution{
-    space_id = SpaceId
-}) ->
-    middleware_utils:assert_space_supported_locally(SpaceId).
+validate(#op_req{operation = get, gri = #gri{aspect = instance}}, _) ->
+    % Doc was already fetched in 'fetch_entity' so space must be supported locally
+    ok.
 
 
 %%--------------------------------------------------------------------

@@ -23,6 +23,9 @@
 
 -record(execution_elements, {
     schema_snapshot_id = undefined :: undefined | atm_workflow_schema_snapshot:id(),
+    lambda_snapshot_registry = undefined :: undefined | #{
+        od_atm_lambda:id() => atm_lambda_snapshot:id()
+    },
     store_registry = undefined :: undefined | atm_workflow_execution:store_registry(),
     lanes = undefined :: undefined | [atm_lane_execution:record()]
 }).
@@ -76,12 +79,14 @@ prepare(AtmWorkflowExecutionId) ->
 delete(AtmWorkflowExecutionId) ->
     {ok, #document{value = #atm_workflow_execution{
         schema_snapshot_id = AtmWorkflowSchemaSnapshotId,
+        lambda_snapshot_registry = AtmLambdaSnapshotRegistry,
         store_registry = AtmStoreRegistry,
         lanes = AtmLaneExecutions
     }}} = atm_workflow_execution:get(AtmWorkflowExecutionId),
 
     delete_execution_elements(#execution_elements{
         schema_snapshot_id = AtmWorkflowSchemaSnapshotId,
+        lambda_snapshot_registry = AtmLambdaSnapshotRegistry,
         store_registry = AtmStoreRegistry,
         lanes = AtmLaneExecutions
     }),
@@ -172,6 +177,7 @@ create_execution_elements(AtmWorkflowExecutionCreationCtx) ->
         end
     end, #execution_elements{}, [
         fun create_schema_snapshot/2,
+        fun create_lambda_snapshots/2,
         fun create_stores/2,
         fun create_lane_executions/2
     ]).
@@ -189,6 +195,24 @@ create_schema_snapshot(#atm_workflow_execution_creation_ctx{
         AtmWorkflowSchemaDoc
     ),
     ExecutionElements#execution_elements{schema_snapshot_id = AtmWorkflowSchemaSnapshotId}.
+
+
+%% @private
+-spec create_lambda_snapshots(atm_workflow_execution:creation_ctx(), execution_elements()) ->
+    execution_elements().
+create_lambda_snapshots(#atm_workflow_execution_creation_ctx{
+    workflow_execution_ctx = AtmWorkflowExecutionCtx,
+    lambda_docs = AtmLambdaDocs
+}, ExecutionElements) ->
+    AtmWorkflowExecutionId = atm_workflow_execution_ctx:get_workflow_execution_id(
+        AtmWorkflowExecutionCtx
+    ),
+    AtmLambdaSnapshotRegistry = lists:foldl(fun(#document{key = AtmLambdaId} = AtmLambdaDoc, Acc) ->
+        {ok, AtmLambdaSnapshotId} = atm_lambda_snapshot:create(AtmWorkflowExecutionId, AtmLambdaDoc),
+        Acc#{AtmLambdaId => AtmLambdaSnapshotId}
+    end, #{}, maps:values(AtmLambdaDocs)),
+
+    ExecutionElements#execution_elements{lambda_snapshot_registry = AtmLambdaSnapshotRegistry}.
 
 
 %% @private
@@ -226,6 +250,7 @@ create_doc(
     },
     ExecutionElements = #execution_elements{
         schema_snapshot_id = AtmWorkflowSchemaSnapshotId,
+        lambda_snapshot_registry = AtmLambdaSnapshotRegistry,
         store_registry = AtmStoreRegistry,
         lanes = AtmLaneExecutions
     }
@@ -240,6 +265,7 @@ create_doc(
                 atm_inventory_id = AtmInventoryId,
 
                 schema_snapshot_id = AtmWorkflowSchemaSnapshotId,
+                lambda_snapshot_registry = AtmLambdaSnapshotRegistry,
 
                 store_registry = AtmStoreRegistry,
                 lanes = AtmLaneExecutions,
@@ -267,6 +293,15 @@ delete_execution_elements(#execution_elements{
 
     delete_execution_elements(ExecutionElements#execution_elements{
         schema_snapshot_id = undefined
+    });
+
+delete_execution_elements(#execution_elements{
+    lambda_snapshot_registry = AtmLambdaSnapshotRegistry
+} = ExecutionElements) when AtmLambdaSnapshotRegistry /= undefined ->
+    lists:foreach(fun atm_lambda_snapshot:delete/1, maps:values(AtmLambdaSnapshotRegistry)),
+
+    delete_execution_elements(ExecutionElements#execution_elements{
+        lambda_snapshot_registry = undefined
     });
 
 delete_execution_elements(#execution_elements{

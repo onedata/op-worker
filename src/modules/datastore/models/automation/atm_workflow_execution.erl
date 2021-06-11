@@ -118,6 +118,7 @@ get_record_struct(1) ->
         {atm_inventory_id, string},
 
         {schema_snapshot_id, string},
+        {lambda_snapshot_registry, #{string => string}},
 
         {store_registry, #{string => string}},
         {lanes, [{custom, string, {persistent_record, encode, decode, atm_lane_execution}}]},

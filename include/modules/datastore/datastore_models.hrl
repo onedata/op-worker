@@ -1079,12 +1079,28 @@
     atm_lambdas :: [od_atm_lambda:id()]
 }).
 
+%% Model that holds information about an automation lambda snapshot
+-record(atm_lambda_snapshot, {
+    lambda_id :: automation:id(),
+
+    name :: automation:name(),
+    summary :: automation:summary(),
+    description :: automation:description(),
+
+    operation_spec :: atm_lambda_operation_spec:record(),
+    argument_specs = [] :: [atm_lambda_argument_spec:record()],
+    result_specs = [] :: [atm_lambda_result_spec:record()],
+
+    atm_inventories = [] :: [od_atm_inventory:id()]
+}).
+
 %% Model that holds information about an automation workflow execution
 -record(atm_workflow_execution, {
     space_id :: od_space:id(),
     atm_inventory_id :: od_atm_inventory:id(),
 
     schema_snapshot_id :: atm_workflow_schema_snapshot:id(),
+    lambda_snapshot_registry :: #{od_atm_lambda:id() => atm_lambda_snapshot:id()},
 
     store_registry :: atm_workflow_execution:store_registry(),
     lanes :: [atm_lane_execution:record()],
