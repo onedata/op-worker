@@ -22,11 +22,7 @@
     converge/1
 ]).
 
--type status() ::
-    atm_workflow_execution:status() |
-    atm_lane_execution:status() |
-    atm_parallel_box_execution:status() |
-    atm_task_execution:status().
+-type status() :: atm_workflow_execution:status() | atm_task_execution:status().
 
 -export_type([status/0]).
 

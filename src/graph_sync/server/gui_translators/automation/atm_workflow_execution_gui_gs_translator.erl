@@ -34,7 +34,7 @@ translate_resource(#gri{aspect = instance, scope = private}, #atm_workflow_execu
     lambda_snapshot_registry = AtmLambdaSnapshotRegistry,
 
     store_registry = AtmStoreRegistry,
-    lanes = AtmLaneExecutions,  %% TODO translate lane executions
+    lanes = AtmLaneExecutions,
 
     status = Status,
 
@@ -58,6 +58,7 @@ translate_resource(#gri{aspect = instance, scope = private}, #atm_workflow_execu
         <<"lambdaSnapshotRegistry">> => AtmLambdaSnapshotRegistry,
 
         <<"storeRegistry">> => AtmStoreRegistry,
+        <<"lanes">> => lists:map(fun atm_lane_execution:to_json/1, AtmLaneExecutions),
 
         <<"status">> => atom_to_binary(Status, utf8),
 

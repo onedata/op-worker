@@ -33,18 +33,6 @@
     workflow_execution_ctx :: atm_workflow_execution_ctx:record()
 }).
 
--record(atm_lane_execution, {
-    schema_id :: automation:id(),
-    status :: atm_lane_execution:status(),
-    parallel_boxes :: [atm_parallel_box_execution:record()]
-}).
-
--record(atm_parallel_box_execution, {
-    schema_id :: automation:id(),
-    status :: atm_parallel_box_execution:status(),
-    tasks :: #{atm_task_execution:id() => atm_task_execution:status()}
-}).
-
 
 -define(WAITING_PHASE, waiting).
 -define(ONGOING_PHASE, ongoing).
