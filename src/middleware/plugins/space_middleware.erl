@@ -69,6 +69,7 @@ operation_supported(get, {transfers_throughput_charts, _}, private) -> true;
 operation_supported(get, available_qos_parameters, private) -> true;
 operation_supported(get, datasets, private) -> true;
 operation_supported(get, datasets_details, private) -> true;
+operation_supported(get, atm_workflow_execution_details, private) -> true;
 
 operation_supported(update, {view, _}, private) -> true;
 
@@ -213,6 +214,16 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = Aspect}})
     }
 };
 
+data_spec(#op_req{operation = get, gri = #gri{aspect = atm_workflow_execution_details}}) -> #{
+    optional => #{
+        <<"phase">> => {atom, [waiting, ongoing, ended]},  %% TODO replace with macros
+        <<"index">> => {binary, any},
+        <<"token">> => {binary, non_empty},
+        <<"offset">> => {integer, any},
+        <<"limit">> => {integer, {between, 1, ?MAX_LIST_LIMIT}}
+    }
+};
+
 data_spec(#op_req{operation = update, gri = #gri{aspect = {view, _}}}) -> #{
     optional => #{
         <<"mapFunction">> => {binary, any},
@@ -342,6 +353,12 @@ authorize(#op_req{operation = get, auth = ?USER(UserId) = Auth, gri = #gri{
     SessionId = Auth#auth.session_id,
     space_logic:has_eff_user(SessionId, SpaceId, UserId);
 
+authorize(#op_req{operation = get, auth = ?USER(UserId), gri = #gri{
+    id = SpaceId,
+    aspect = atm_workflow_execution_details
+}}, _) ->
+    space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW_ATM_WORKFLOW_EXECUTIONS);
+
 authorize(#op_req{operation = update, auth = ?USER(UserId), gri = #gri{
     id = SpaceId,
     aspect = {view, _}
@@ -432,6 +449,12 @@ validate(#op_req{operation = get, gri = #gri{
     id = SpaceId,
     aspect = available_qos_parameters
 }}, _QosEntry) ->
+    middleware_utils:assert_space_supported_locally(SpaceId);
+
+validate(#op_req{operation = get, gri = #gri{
+    id = SpaceId,
+    aspect = atm_workflow_execution_details
+}}, _) ->
     middleware_utils:assert_space_supported_locally(SpaceId);
 
 validate(#op_req{operation = update, gri = #gri{
@@ -724,7 +747,36 @@ get(#op_req{auth = Auth, gri = #gri{id = SpaceId, aspect = Aspect}, data = Data}
     {ok, Datasets, IsLast} = ?check(lfm:list_top_datasets(
         Auth#auth.session_id, SpaceId, State, ListingOpts, ListingMode
     )),
-    {ok, value, {Datasets, IsLast}}.
+    {ok, value, {Datasets, IsLast}};
+
+get(#op_req{data = Data, gri = #gri{id = SpaceId, aspect = atm_workflow_execution_details}}, _) ->
+    Phase = maps:get(<<"phase">>, Data, ongoing), %% TODO replace with macro
+
+    Offset = maps:get(<<"offset">>, Data, 0),
+    Limit = maps:get(<<"limit">>, Data, ?DEFAULT_LIST_LIMIT),
+
+    ListingOpts = case maps:get(<<"token">>, Data, undefined) of
+        undefined ->
+            Index = maps:get(<<"index">>, Data, undefined),
+            maps_utils:put_if_defined(#{offset => Offset, limit => Limit}, start_index, Index);
+        Token when is_binary(Token) ->
+            % if token is passed, offset has to be increased by 1
+            % to ensure that listing using token is exclusive
+            #{
+                start_index => http_utils:base64url_decode(Token),
+                offset => Offset + 1,
+                limit => Limit
+            }
+    end,
+
+    AtmWorkflowExecutions = lists_utils:pmap(fun({AtmWorkflowExecutionId, _}) ->
+        {ok, #document{value = AtmWorkflowExecution}} = atm_workflow_execution:get(
+            AtmWorkflowExecutionId
+        ),
+        AtmWorkflowExecution
+    end, atm_api:list_workflow_executions(SpaceId, Phase, ListingOpts)),
+
+    {ok, value, AtmWorkflowExecutions}.
 
 
 %%--------------------------------------------------------------------

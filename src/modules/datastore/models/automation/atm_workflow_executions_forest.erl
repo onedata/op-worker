@@ -40,7 +40,7 @@
     offset => offset(),
     limit => limit()
 }.
--type listing() :: [{{atm_workflow_execution:id(), index()}}].
+-type listing() :: [{atm_workflow_execution:id(), index()}].
 
 -export_type([forest/0, tree_id/0, tree_ids/0]).
 -export_type([index/0, offset/0, limit/0, listing_opts/0, listing/0]).

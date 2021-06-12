@@ -17,6 +17,7 @@
 
 %% API
 -export([translate_resource/2]).
+-export([translate_atm_workflow_execution/1]).
 
 
 %%%===================================================================
@@ -26,7 +27,18 @@
 
 -spec translate_resource(gri:gri(), Data :: term()) ->
     gs_protocol:data() | fun((aai:auth()) -> gs_protocol:data()).
-translate_resource(#gri{aspect = instance, scope = private}, #atm_workflow_execution{
+translate_resource(#gri{aspect = instance, scope = private}, AtmWorkflowExecution) ->
+    translate_atm_workflow_execution(AtmWorkflowExecution).
+
+
+%%%===================================================================
+%%% Util functions
+%%%===================================================================
+
+
+-spec translate_atm_workflow_execution(atm_workflow_execution:record()) ->
+    json_utils:json_map().
+translate_atm_workflow_execution(#atm_workflow_execution{
     space_id = SpaceId,
     atm_inventory_id = AtmInventoryId,
 

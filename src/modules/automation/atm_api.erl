@@ -17,6 +17,7 @@
 
 -export([init_engine/0]).
 -export([schedule_workflow_execution/4]).
+-export([list_workflow_executions/3]).
 
 
 % TODO VFS-7660 mv to automation erl
@@ -87,3 +88,17 @@ schedule_workflow_execution(UserCtx, SpaceId, AtmWorkflowSchemaId, InitialValues
 %%    ),
 
     {ok, AtmWorkflowExecutionId, AtmWorkflowExecution}.
+
+
+-spec list_workflow_executions(
+    od_space:id(),
+    atm_workflow_execution:phase(),
+    atm_workflow_executions_forest:listing_opts()
+) ->
+    atm_workflow_executions_forest:listing().
+list_workflow_executions(SpaceId, ?WAITING_PHASE, ListingOpts) ->
+    atm_waiting_workflow_executions:list(SpaceId, ListingOpts);
+list_workflow_executions(SpaceId, ?ONGOING_PHASE, ListingOpts) ->
+    atm_waiting_workflow_executions:list(SpaceId, ListingOpts);
+list_workflow_executions(SpaceId, ?ENDED_PHASE, ListingOpts) ->
+    atm_waiting_workflow_executions:list(SpaceId, ListingOpts).
