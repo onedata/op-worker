@@ -127,14 +127,11 @@ get(#op_req{data = Data, gri = #gri{id = SpaceId, aspect = atm_workflow_executio
             }
     end,
 
-    AtmWorkflowExecutions = lists_utils:pmap(fun({AtmWorkflowExecutionId, _}) ->
-        {ok, #document{value = AtmWorkflowExecution}} = atm_workflow_execution:get(
-            AtmWorkflowExecutionId
-        ),
-        AtmWorkflowExecution
+    AtmWorkflowExecutionSummaries = lists_utils:pmap(fun({AtmWorkflowExecutionId, _}) ->
+        atm_workflow_execution_api:get_summary(AtmWorkflowExecutionId)
     end, atm_api:list_workflow_executions(SpaceId, Phase, ListingOpts)),
 
-    {ok, value, AtmWorkflowExecutions}.
+    {ok, value, AtmWorkflowExecutionSummaries}.
 
 
 %%--------------------------------------------------------------------

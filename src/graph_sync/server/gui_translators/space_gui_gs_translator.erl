@@ -35,19 +35,27 @@ translate_value(#gri{aspect = transfers}, #{<<"transfers">> := TransfersIds}) ->
         aspect = instance,
         scope = private
     }) end, TransfersIds)};
+
 translate_value(#gri{aspect = transfers_active_channels}, ActiveChannels) ->
     ActiveChannels;
+
 translate_value(#gri{aspect = {transfers_throughput_charts, _}}, Charts) ->
     Charts;
+
 translate_value(#gri{aspect = evaluate_qos_expression}, Result) ->
     Result;
+
 translate_value(#gri{aspect = datasets_details, scope = private}, {Datasets, IsLast}) ->
     dataset_gui_gs_translator:translate_datasets_details_list(Datasets, IsLast);
-translate_value(#gri{aspect = atm_workflow_execution_details, scope = private}, AtmWorkflowExecutions) ->
+
+translate_value(#gri{
+    aspect = atm_workflow_execution_summaries,
+    scope = private
+}, AtmWorkflowExecutionSummaries) ->
     #{
-        <<"atmWorlfowExecutions">> => lists:map(
-            fun atm_workflow_execution_gui_gs_translator:translate_atm_workflow_execution/1,
-            AtmWorkflowExecutions
+        <<"list">> => lists:map(
+            fun atm_workflow_execution_gui_gs_translator:translate_atm_workflow_execution_summary/1,
+            AtmWorkflowExecutionSummaries
         )
     }.
 

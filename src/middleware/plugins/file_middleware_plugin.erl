@@ -882,10 +882,10 @@ update(#op_req{auth = Auth, data = Data, gri = #gri{id = Guid, aspect = acl}}) -
 %% @private
 -spec resolve_delete_operation_handler(gri:aspect(), middleware:scope()) ->
     module() | no_return().
-resolve_delete_operation_handler(instance, private) -> true;              % gs only
-resolve_delete_operation_handler(xattrs, private) -> true;                % REST/gs
-resolve_delete_operation_handler(json_metadata, private) -> true;         % REST/gs
-resolve_delete_operation_handler(rdf_metadata, private) -> true;          % REST/gs
+resolve_delete_operation_handler(instance, private) -> ?MODULE;              % gs only
+resolve_delete_operation_handler(xattrs, private) -> ?MODULE;                % REST/gs
+resolve_delete_operation_handler(json_metadata, private) -> ?MODULE;         % REST/gs
+resolve_delete_operation_handler(rdf_metadata, private) -> ?MODULE;          % REST/gs
 resolve_delete_operation_handler(_, _) -> throw(?ERROR_NOT_SUPPORTED).
 
 

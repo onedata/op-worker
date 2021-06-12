@@ -18,7 +18,12 @@
 
 %% API
 -export([translate_resource/2]).
--export([translate_atm_workflow_execution/1]).
+
+%% Util functions
+-export([
+    translate_atm_workflow_execution/1,
+    translate_atm_workflow_execution_summary/1
+]).
 
 
 %%%===================================================================
@@ -32,7 +37,7 @@ translate_resource(#gri{aspect = instance, scope = private}, AtmWorkflowExecutio
     translate_atm_workflow_execution(AtmWorkflowExecution);
 
 translate_resource(#gri{aspect = summary, scope = private}, AtmWorkflowExecution) ->
-    translate_atm_workflow_summary(AtmWorkflowExecution).
+    translate_atm_workflow_execution_summary(AtmWorkflowExecution).
 
 
 %%%===================================================================
@@ -87,9 +92,9 @@ translate_atm_workflow_execution(#atm_workflow_execution{
     }.
 
 
--spec translate_atm_workflow_summary(atm_workflow_execution:summary()) ->
+-spec translate_atm_workflow_execution_summary(atm_workflow_execution:summary()) ->
     json_utils:json_map().
-translate_atm_workflow_summary(#atm_workflow_execution_summary{
+translate_atm_workflow_execution_summary(#atm_workflow_execution_summary{
     atm_workflow_execution_id = AtmWorkflowExecutionId,
 
     name = Name,
@@ -105,6 +110,11 @@ translate_atm_workflow_summary(#atm_workflow_execution_summary{
         <<"gri">> => gri:serialize(#gri{
             type = op_atm_workflow_execution, id = AtmWorkflowExecutionId,
             aspect = summary, scope = private
+        }),
+
+        <<"atmWorkflowExecution">> => gri:serialize(#gri{
+            type = op_atm_workflow_execution, id = AtmWorkflowExecutionId,
+            aspect = instance, scope = private
         }),
 
         <<"name">> => Name,
