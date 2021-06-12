@@ -117,6 +117,7 @@ get_record_struct(1) ->
         {space_id, string},
         {atm_inventory_id, string},
 
+        {name, string},
         {schema_snapshot_id, string},
         {lambda_snapshot_registry, #{string => string}},
 

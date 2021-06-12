@@ -1099,6 +1099,7 @@
     space_id :: od_space:id(),
     atm_inventory_id :: od_atm_inventory:id(),
 
+    name :: automation:name(),
     schema_snapshot_id :: atm_workflow_schema_snapshot:id(),
     lambda_snapshot_registry :: #{od_atm_lambda:id() => atm_lambda_snapshot:id()},
 

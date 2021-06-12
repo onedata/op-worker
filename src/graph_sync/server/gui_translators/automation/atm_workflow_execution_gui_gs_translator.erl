@@ -42,6 +42,7 @@ translate_atm_workflow_execution(#atm_workflow_execution{
     space_id = SpaceId,
     atm_inventory_id = AtmInventoryId,
 
+    name = AtmWorkflowSchemaName,
     schema_snapshot_id = AtmWorkflowSchemaSnapshotId,
     lambda_snapshot_registry = AtmLambdaSnapshotRegistry,
 
@@ -63,6 +64,8 @@ translate_atm_workflow_execution(#atm_workflow_execution{
             type = op_atm_inventory, id = AtmInventoryId,
             aspect = instance, scope = private
         }),
+
+        <<"name">> => AtmWorkflowSchemaName,
         <<"atmWorkflowSchemaSnapshot">> => gri:serialize(#gri{
             type = op_atm_workflow_schema_snapshot, id = AtmWorkflowSchemaSnapshotId,
             aspect = instance, scope = private

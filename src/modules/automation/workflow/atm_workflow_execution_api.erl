@@ -245,6 +245,7 @@ create_doc(
     #atm_workflow_execution_creation_ctx{
         workflow_execution_ctx = AtmWorkflowExecutionCtx,
         workflow_schema_doc = #document{value = #od_atm_workflow_schema{
+            name = AtmWorkflowSchemaName,
             atm_inventory = AtmInventoryId
         }}
     },
@@ -264,6 +265,7 @@ create_doc(
                 space_id = atm_workflow_execution_ctx:get_space_id(AtmWorkflowExecutionCtx),
                 atm_inventory_id = AtmInventoryId,
 
+                name = AtmWorkflowSchemaName,
                 schema_snapshot_id = AtmWorkflowSchemaSnapshotId,
                 lambda_snapshot_registry = AtmLambdaSnapshotRegistry,
 
