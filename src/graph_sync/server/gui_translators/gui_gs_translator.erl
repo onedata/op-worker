@@ -110,6 +110,8 @@ translate_resource(_, #gri{type = op_archive} = GRI, Data) ->
     archive_gui_gs_translator:translate_resource(GRI, Data);
 translate_resource(_, #gri{type = op_atm_inventory} = GRI, Data) ->
     atm_inventory_gui_gs_translator:translate_resource(GRI, Data);
+translate_resource(_, #gri{type = op_atm_lambda_snapshot} = GRI, Data) ->
+    atm_lambda_snapshot_gui_gs_translator:translate_resource(GRI, Data);
 translate_resource(_, #gri{type = op_atm_workflow_execution} = GRI, Data) ->
     atm_workflow_execution_gui_gs_translator:translate_resource(GRI, Data);
 translate_resource(_, #gri{type = op_atm_workflow_schema} = GRI, Data) ->
