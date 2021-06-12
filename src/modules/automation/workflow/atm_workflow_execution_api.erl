@@ -16,6 +16,7 @@
 
 %% API
 -export([create/1, prepare/1, delete/1]).
+-export([get_summary/1, get_summary/2]).
 -export([get_lane_execution_spec/3]).
 -export([report_task_status_change/5]).
 -export([report_lane_execution_ended/3]).
@@ -93,6 +94,36 @@ delete(AtmWorkflowExecutionId) ->
 
     % TODO VFS-7672 remove from links tree
     atm_workflow_execution:delete(AtmWorkflowExecutionId).
+
+
+-spec get_summary(atm_workflow_execution:id() | atm_workflow_execution:doc()) ->
+    atm_workflow_execution:summary().
+get_summary(#document{key = AtmWorkflowExecutionId, value = AtmWorkflowExecution}) ->
+    get_summary(AtmWorkflowExecutionId, AtmWorkflowExecution);
+get_summary(AtmWorkflowExecutionId) ->
+    {ok, AtmWorkflowExecutionDoc} = atm_workflow_execution:get(AtmWorkflowExecutionId),
+    get_summary(AtmWorkflowExecutionDoc).
+
+
+-spec get_summary(atm_workflow_execution:id(), atm_workflow_execution:record()) ->
+    atm_workflow_execution:summary().
+get_summary(AtmWorkflowExecutionId, #atm_workflow_execution{
+    name = Name,
+    atm_inventory_id = AtmInventoryId,
+    status = AtmWorkflowExecutionStatus,
+    schedule_time = ScheduleTime,
+    start_time = StartTime,
+    finish_time = FinishTime
+}) ->
+    #atm_workflow_execution_summary{
+        atm_workflow_execution_id = AtmWorkflowExecutionId,
+        name = Name,
+        atm_inventory_id = AtmInventoryId,
+        status = AtmWorkflowExecutionStatus,
+        schedule_time = ScheduleTime,
+        start_time = StartTime,
+        finish_time = FinishTime
+    }.
 
 
 -spec get_lane_execution_spec(

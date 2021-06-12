@@ -39,8 +39,11 @@
 
 -type timestamp() :: time:seconds().
 
+-type summary() :: #atm_workflow_execution_summary{}.
+
 -export_type([id/0, diff/0, record/0, doc/0]).
 -export_type([creation_ctx/0, store_registry/0, phase/0, status/0, timestamp/0]).
+-export_type([summary/0]).
 
 
 -define(CTX, #{model => ?MODULE}).

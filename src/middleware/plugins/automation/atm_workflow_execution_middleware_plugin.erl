@@ -45,6 +45,7 @@
 resolve_handler(create, instance, private) -> ?MODULE;
 
 resolve_handler(get, instance, private) -> ?MODULE;
+resolve_handler(get, summary, private) -> ?MODULE;
 
 resolve_handler(_, _, _) -> throw(?ERROR_NOT_SUPPORTED).
 
@@ -71,7 +72,10 @@ data_spec(#op_req{operation = create, gri = #gri{aspect = instance}}) ->
         }
     };
 
-data_spec(#op_req{operation = get, gri = #gri{aspect = instance}}) ->
+data_spec(#op_req{operation = get, gri = #gri{aspect = As}}) when
+    As =:= instance;
+    As =:= summary
+->
     undefined.
 
 
@@ -112,9 +116,20 @@ authorize(#op_req{operation = create, auth = ?USER(UserId), data = Data, gri = #
     SpaceId = maps:get(<<"spaceId">>, Data),
     space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_SCHEDULE_ATM_WORKFLOW_EXECUTIONS);
 
-authorize(#op_req{operation = get, auth = ?USER(UserId), gri = #gri{
-    aspect = instance
-}}, #atm_workflow_execution{space_id = SpaceId}) ->
+authorize(#op_req{
+    operation = get,
+    auth = ?USER(UserId, SessId),
+    gri = #gri{aspect = instance}
+}, #atm_workflow_execution{space_id = SpaceId, atm_inventory_id = AtmInventoryId}) ->
+    user_logic:has_eff_atm_inventory(UserId, SessId, AtmInventoryId) andalso space_logic:has_eff_privilege(
+        SpaceId, UserId, ?SPACE_VIEW_ATM_WORKFLOW_EXECUTIONS
+    );
+
+authorize(#op_req{
+    operation = get,
+    auth = ?USER(UserId),
+    gri = #gri{aspect = summary}
+}, #atm_workflow_execution{space_id = SpaceId}) ->
     space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW_ATM_WORKFLOW_EXECUTIONS).
 
 
@@ -128,7 +143,10 @@ validate(#op_req{operation = create, data = Data, gri = #gri{aspect = instance}}
     SpaceId = maps:get(<<"spaceId">>, Data),
     middleware_utils:assert_space_supported_locally(SpaceId);
 
-validate(#op_req{operation = get, gri = #gri{aspect = instance}}, _) ->
+validate(#op_req{operation = get, gri = #gri{aspect = As}}, _) when
+    As =:= instance;
+    As =:= summary
+->
     % Doc was already fetched in 'fetch_entity' so space must be supported locally
     ok.
 
@@ -157,7 +175,14 @@ create(#op_req{auth = ?USER(_UserId, SessionId), data = Data, gri = #gri{aspect 
 %%--------------------------------------------------------------------
 -spec get(middleware:req(), middleware:entity()) -> middleware:get_result().
 get(#op_req{gri = #gri{aspect = instance, scope = private}}, AtmWorkflowExecution) ->
-    {ok, AtmWorkflowExecution}.
+    {ok, AtmWorkflowExecution};
+
+get(#op_req{gri = #gri{
+    id = AtmWorkflowExecutionId,
+    aspect = summary,
+    scope = private
+}}, AtmWorkflowExecution) ->
+    {ok, atm_workflow_execution_api:get_summary(AtmWorkflowExecutionId, AtmWorkflowExecution)}.
 
 
 %%--------------------------------------------------------------------

@@ -19,6 +19,19 @@
 -include_lib("ctool/include/automation/automation.hrl").
 
 
+-record(atm_workflow_execution_summary, {
+    atm_workflow_execution_id :: atm_workflow_execution:id(),
+
+    name :: automation:name(),
+    atm_inventory_id :: od_atm_inventory:id(),
+
+    status :: atm_workflow_execution:status(),
+
+    schedule_time :: atm_workflow_execution:timestamp(),
+    start_time :: atm_workflow_execution:timestamp(),
+    finish_time :: atm_workflow_execution:timestamp()
+}).
+
 -record(atm_workflow_execution_creation_ctx, {
     workflow_execution_ctx :: atm_workflow_execution_ctx:record(),
     workflow_schema_doc :: od_atm_workflow_schema:doc(),

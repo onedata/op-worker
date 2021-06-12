@@ -14,6 +14,7 @@
 -author("Bartosz Walkowicz").
 
 -include("middleware/middleware.hrl").
+-include("modules/automation/atm_execution.hrl").
 
 %% API
 -export([translate_resource/2]).
@@ -28,7 +29,10 @@
 -spec translate_resource(gri:gri(), Data :: term()) ->
     gs_protocol:data() | fun((aai:auth()) -> gs_protocol:data()).
 translate_resource(#gri{aspect = instance, scope = private}, AtmWorkflowExecution) ->
-    translate_atm_workflow_execution(AtmWorkflowExecution).
+    translate_atm_workflow_execution(AtmWorkflowExecution);
+
+translate_resource(#gri{aspect = summary, scope = private}, AtmWorkflowExecution) ->
+    translate_atm_workflow_summary(AtmWorkflowExecution).
 
 
 %%%===================================================================
@@ -42,7 +46,7 @@ translate_atm_workflow_execution(#atm_workflow_execution{
     space_id = SpaceId,
     atm_inventory_id = AtmInventoryId,
 
-    name = AtmWorkflowSchemaName,
+    name = Name,
     schema_snapshot_id = AtmWorkflowSchemaSnapshotId,
     lambda_snapshot_registry = AtmLambdaSnapshotRegistry,
 
@@ -65,7 +69,7 @@ translate_atm_workflow_execution(#atm_workflow_execution{
             aspect = instance, scope = private
         }),
 
-        <<"name">> => AtmWorkflowSchemaName,
+        <<"name">> => Name,
         <<"atmWorkflowSchemaSnapshot">> => gri:serialize(#gri{
             type = op_atm_workflow_schema_snapshot, id = AtmWorkflowSchemaSnapshotId,
             aspect = instance, scope = private
@@ -76,6 +80,40 @@ translate_atm_workflow_execution(#atm_workflow_execution{
         <<"lanes">> => lists:map(fun atm_lane_execution:to_json/1, AtmLaneExecutions),
 
         <<"status">> => atom_to_binary(Status, utf8),
+
+        <<"scheduleTime">> => ScheduleTime,
+        <<"startTime">> => StartTime,
+        <<"finishTime">> => FinishTime
+    }.
+
+
+-spec translate_atm_workflow_summary(atm_workflow_execution:summary()) ->
+    json_utils:json_map().
+translate_atm_workflow_summary(#atm_workflow_execution_summary{
+    atm_workflow_execution_id = AtmWorkflowExecutionId,
+
+    name = Name,
+    atm_inventory_id = AtmInventoryId,
+
+    status = AtmWorkflowExecutionStatus,
+
+    schedule_time = ScheduleTime,
+    start_time = StartTime,
+    finish_time = FinishTime
+}) ->
+    #{
+        <<"gri">> => gri:serialize(#gri{
+            type = op_atm_workflow_execution, id = AtmWorkflowExecutionId,
+            aspect = summary, scope = private
+        }),
+
+        <<"name">> => Name,
+        <<"atmInventory">> => gri:serialize(#gri{
+            type = op_atm_inventory, id = AtmInventoryId,
+            aspect = instance, scope = private
+        }),
+
+        <<"status">> => atom_to_binary(AtmWorkflowExecutionStatus, utf8),
 
         <<"scheduleTime">> => ScheduleTime,
         <<"startTime">> => StartTime,
