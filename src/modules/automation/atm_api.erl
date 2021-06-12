@@ -99,6 +99,6 @@ schedule_workflow_execution(UserCtx, SpaceId, AtmWorkflowSchemaId, InitialValues
 list_workflow_executions(SpaceId, ?WAITING_PHASE, ListingOpts) ->
     atm_waiting_workflow_executions:list(SpaceId, ListingOpts);
 list_workflow_executions(SpaceId, ?ONGOING_PHASE, ListingOpts) ->
-    atm_waiting_workflow_executions:list(SpaceId, ListingOpts);
+    atm_ongoing_workflow_executions:list(SpaceId, ListingOpts);
 list_workflow_executions(SpaceId, ?ENDED_PHASE, ListingOpts) ->
-    atm_waiting_workflow_executions:list(SpaceId, ListingOpts).
+    atm_ended_workflow_executions:list(SpaceId, ListingOpts).

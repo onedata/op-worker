@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Bartosz Walkowicz
-%%% @copyright (C) 2019 ACK CYFRONET AGH
+%%% @copyright (C) 2019-2021 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -10,25 +10,25 @@
 %%% corresponding to provider aspects such as e.g. instance or configuration.
 %%% @end
 %%%-------------------------------------------------------------------
--module(provider_middleware).
+-module(provider_middleware_plugin).
 -author("Bartosz Walkowicz").
 
--behaviour(middleware_plugin).
+-behaviour(middleware_router).
+-behaviour(middleware_handler).
 
 -include("middleware/middleware.hrl").
 -include("modules/rtransfer/rtransfer.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
+%% API
 -export([gather_configuration/0]).
 
--export([
-    operation_supported/3,
-    data_spec/1,
-    fetch_entity/1,
-    authorize/2,
-    validate/2
-]).
+%% middleware_router callbacks
+-export([resolve_handler/3]).
+
+%% middleware_handler callbacks
+-export([data_spec/1, fetch_entity/1, authorize/2, validate/2]).
 -export([create/1, get/2, update/1, delete/1]).
 
 
@@ -79,23 +79,33 @@ gather_configuration() ->
     }.
 
 
+%%%===================================================================
+%%% middleware_router callbacks
+%%%===================================================================
+
+
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link middleware_plugin} callback operation_supported/3.
+%% {@link middleware_router} callback resolve_handler/3.
 %% @end
 %%--------------------------------------------------------------------
--spec operation_supported(middleware:operation(), gri:aspect(),
-    middleware:scope()) -> boolean().
-operation_supported(get, instance, protected) -> true;
-operation_supported(get, configuration, public) -> true;
-operation_supported(get, test_image, public) -> true;
+-spec resolve_handler(middleware:operation(), gri:aspect(), middleware:scope()) ->
+    module() | no_return().
+resolve_handler(get, instance, protected) -> ?MODULE;
+resolve_handler(get, configuration, public) -> ?MODULE;
+resolve_handler(get, test_image, public) -> ?MODULE;
 
-operation_supported(_, _, _) -> false.
+resolve_handler(_, _, _) -> throw(?ERROR_NOT_SUPPORTED).
+
+
+%%%===================================================================
+%%% middleware_handler callbacks
+%%%===================================================================
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link middleware_plugin} callback data_spec/1.
+%% {@link middleware_handler} callback data_spec/1.
 %% @end
 %%--------------------------------------------------------------------
 -spec data_spec(middleware:req()) -> undefined | middleware_sanitizer:data_spec().
@@ -109,7 +119,7 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = test_image}}) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link middleware_plugin} callback fetch_entity/1.
+%% {@link middleware_handler} callback fetch_entity/1.
 %% @end
 %%--------------------------------------------------------------------
 -spec fetch_entity(middleware:req()) ->
@@ -131,7 +141,7 @@ fetch_entity(_) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link middleware_plugin} callback authorize/2.
+%% {@link middleware_handler} callback authorize/2.
 %% @end
 %%--------------------------------------------------------------------
 -spec authorize(middleware:req(), middleware:entity()) -> boolean().
@@ -146,7 +156,7 @@ authorize(#op_req{operation = get, gri = #gri{aspect = test_image}}, _) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link middleware_plugin} callback validate/1.
+%% {@link middleware_handler} callback validate/1.
 %% @end
 %%--------------------------------------------------------------------
 -spec validate(middleware:req(), middleware:entity()) -> ok | no_return().
@@ -161,7 +171,7 @@ validate(#op_req{operation = get, gri = #gri{aspect = test_image}}, _) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link middleware_plugin} callback create/2.
+%% {@link middleware_handler} callback create/2.
 %% @end
 %%--------------------------------------------------------------------
 -spec create(middleware:req()) -> middleware:create_result().
@@ -171,7 +181,7 @@ create(_) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link middleware_plugin} callback get/2.
+%% {@link middleware_handler} callback get/2.
 %% @end
 %%--------------------------------------------------------------------
 -spec get(middleware:req(), middleware:entity()) -> middleware:get_result().
@@ -193,7 +203,7 @@ get(#op_req{gri = #gri{aspect = test_image}}, _) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link middleware_plugin} callback update/1.
+%% {@link middleware_handler} callback update/1.
 %% @end
 %%--------------------------------------------------------------------
 -spec update(middleware:req()) -> middleware:update_result().
@@ -203,7 +213,7 @@ update(_) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link middleware_plugin} callback delete/1.
+%% {@link middleware_handler} callback delete/1.
 %% @end
 %%--------------------------------------------------------------------
 -spec delete(middleware:req()) -> middleware:delete_result().

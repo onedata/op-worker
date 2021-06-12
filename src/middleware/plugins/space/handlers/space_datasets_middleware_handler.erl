@@ -7,106 +7,102 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module handles middleware operations (create, get, update, delete)
-%%% corresponding to automation lambda snapshots.
+%%% corresponding to space datasets aspects.
 %%% @end
 %%%-------------------------------------------------------------------
--module(atm_lambda_snapshot_middleware).
+-module(space_datasets_middleware_handler).
 -author("Bartosz Walkowicz").
 
--behaviour(middleware_plugin).
+-behaviour(middleware_handler).
 
 -include("middleware/middleware.hrl").
+-include("modules/dataset/dataset.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/errors.hrl").
--include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/privileges.hrl").
 
--export([
-    operation_supported/3,
-    data_spec/1,
-    fetch_entity/1,
-    authorize/2,
-    validate/2
-]).
+%% middleware_handler callbacks
+-export([data_spec/1, fetch_entity/1, authorize/2, validate/2]).
 -export([create/1, get/2, update/1, delete/1]).
 
 
+-define(MAX_LIST_LIMIT, 1000).
+-define(DEFAULT_LIST_LIMIT, 1000).
+
+
 %%%===================================================================
-%%% API
+%%% middleware_handler callbacks
 %%%===================================================================
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link middleware_plugin} callback operation_supported/3.
-%% @end
-%%--------------------------------------------------------------------
--spec operation_supported(middleware:operation(), gri:aspect(),
-    middleware:scope()) -> boolean().
-operation_supported(get, instance, private) -> true;
-
-operation_supported(_, _, _) -> false.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link middleware_plugin} callback data_spec/1.
+%% {@link middleware_handler} callback data_spec/1.
 %% @end
 %%--------------------------------------------------------------------
 -spec data_spec(middleware:req()) -> undefined | middleware_sanitizer:data_spec().
-data_spec(#op_req{operation = get, gri = #gri{aspect = instance}}) ->
-    undefined.
+data_spec(#op_req{operation = get, gri = #gri{aspect = As}}) when
+    As =:= datasets;
+    As =:= datasets_details
+-> #{
+    required => #{
+        <<"state">> => {atom, [?ATTACHED_DATASET, ?DETACHED_DATASET]}
+    },
+    optional => #{
+        <<"offset">> => {integer, any},
+        <<"index">> => {binary, any},
+        <<"token">> => {binary, non_empty},
+        <<"limit">> => {integer, {between, 1, ?MAX_LIST_LIMIT}}
+    }
+}.
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link middleware_plugin} callback fetch_entity/1.
-%%
-%% For now fetches only records for authorized users.
+%% {@link middleware_handler} callback fetch_entity/1.
 %% @end
 %%--------------------------------------------------------------------
 -spec fetch_entity(middleware:req()) ->
     {ok, middleware:versioned_entity()} | errors:error().
-fetch_entity(#op_req{gri = #gri{id = AtmLambdaSnapshotId, scope = private}}) ->
-    case atm_lambda_snapshot:get(AtmLambdaSnapshotId) of
-        {ok, #document{value = AtmLambdaSnapshot}} ->
-            {ok, {AtmLambdaSnapshot, 1}};
-        {error, _} = Error ->
-            Error
-    end;
 fetch_entity(_) ->
-    ?ERROR_FORBIDDEN.
+    {ok, {undefined, 1}}.
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link middleware_plugin} callback authorize/2.
+%% {@link middleware_handler} callback authorize/2.
 %% @end
 %%--------------------------------------------------------------------
 -spec authorize(middleware:req(), middleware:entity()) -> boolean().
 authorize(#op_req{auth = ?GUEST}, _) ->
     false;
 
-authorize(#op_req{operation = get, auth = ?USER(UserId, SessionId), gri = #gri{
-    aspect = instance
-}}, #atm_lambda_snapshot{atm_inventories = AtmInventories}) ->
-    % Caution!! Below checks should be always synchronized with one done by oz
-    % when getting lambda
-    user_logic:has_any_eff_atm_inventory(SessionId, UserId, AtmInventories).
+authorize(#op_req{operation = get, auth = ?USER(UserId), gri = #gri{
+    id = SpaceId,
+    aspect = As
+}}, _) when
+    As =:= datasets;
+    As =:= datasets_details
+->
+    space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW).
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link middleware_plugin} callback validate/2.
+%% {@link middleware_handler} callback validate/2.
 %% @end
 %%--------------------------------------------------------------------
 -spec validate(middleware:req(), middleware:entity()) -> ok | no_return().
-validate(#op_req{operation = get, gri = #gri{aspect = instance}}, _) ->
-    ok.
+validate(#op_req{operation = get, gri = #gri{id = SpaceId, aspect = As}}, _) when
+    As =:= datasets;
+    As =:= datasets_details
+->
+    middleware_utils:assert_space_supported_locally(SpaceId).
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link middleware_plugin} callback create/1.
+%% {@link middleware_handler} callback create/1.
 %% @end
 %%--------------------------------------------------------------------
 -spec create(middleware:req()) -> middleware:create_result().
@@ -116,17 +112,29 @@ create(_) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link middleware_plugin} callback get/2.
+%% {@link middleware_handler} callback get/2.
 %% @end
 %%--------------------------------------------------------------------
 -spec get(middleware:req(), middleware:entity()) -> middleware:get_result().
-get(#op_req{gri = #gri{aspect = instance, scope = private}}, AtmLambdaSnapshot) ->
-    {ok, AtmLambdaSnapshot}.
+get(#op_req{auth = Auth, gri = #gri{id = SpaceId, aspect = Aspect}, data = Data}, _)
+    when Aspect =:= datasets
+    orelse Aspect =:= datasets_details
+->
+    State = maps:get(<<"state">>, Data, ?ATTACHED_DATASET),
+    ListingOpts = dataset_middleware_plugin:gather_listing_opts(Data),
+    ListingMode = case Aspect of
+        datasets -> ?BASIC_INFO;
+        datasets_details -> ?EXTENDED_INFO
+    end,
+    {ok, Datasets, IsLast} = ?check(lfm:list_top_datasets(
+        Auth#auth.session_id, SpaceId, State, ListingOpts, ListingMode
+    )),
+    {ok, value, {Datasets, IsLast}}.
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link middleware_plugin} callback update/1.
+%% {@link middleware_handler} callback update/1.
 %% @end
 %%--------------------------------------------------------------------
 -spec update(middleware:req()) -> middleware:update_result().
@@ -136,7 +144,7 @@ update(_) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link middleware_plugin} callback delete/1.
+%% {@link middleware_handler} callback delete/1.
 %% @end
 %%--------------------------------------------------------------------
 -spec delete(middleware:req()) -> middleware:delete_result().

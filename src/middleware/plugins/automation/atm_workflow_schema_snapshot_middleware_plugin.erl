@@ -7,73 +7,73 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module handles middleware operations (create, get, update, delete)
-%%% corresponding to automation inventories.
+%%% corresponding to automation workflow schema snapshots.
 %%% @end
 %%%-------------------------------------------------------------------
--module(atm_inventory_middleware).
+-module(atm_workflow_schema_snapshot_middleware_plugin).
 -author("Bartosz Walkowicz").
 
--behaviour(middleware_plugin).
+-behaviour(middleware_router).
+-behaviour(middleware_handler).
 
 -include("middleware/middleware.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/privileges.hrl").
 
--export([
-    operation_supported/3,
-    data_spec/1,
-    fetch_entity/1,
-    authorize/2,
-    validate/2
-]).
+%% middleware_router callbacks
+-export([resolve_handler/3]).
+
+%% middleware_handler callbacks
+-export([data_spec/1, fetch_entity/1, authorize/2, validate/2]).
 -export([create/1, get/2, update/1, delete/1]).
 
 
 %%%===================================================================
-%%% API
+%%% middleware_router callbacks
 %%%===================================================================
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link middleware_plugin} callback operation_supported/3.
+%% {@link middleware_router} callback resolve_handler/3.
 %% @end
 %%--------------------------------------------------------------------
--spec operation_supported(middleware:operation(), gri:aspect(),
-    middleware:scope()) -> boolean().
-operation_supported(get, instance, private) -> true;
-operation_supported(get, atm_workflow_schemas, private) -> true;
+-spec resolve_handler(middleware:operation(), gri:aspect(), middleware:scope()) ->
+    module() | no_return().
+resolve_handler(get, instance, private) -> ?MODULE;
 
-operation_supported(_, _, _) -> false.
+resolve_handler(_, _, _) -> throw(?ERROR_NOT_SUPPORTED).
+
+
+%%%===================================================================
+%%% middleware_handler callbacks
+%%%===================================================================
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link middleware_plugin} callback data_spec/1.
+%% {@link middleware_handler} callback data_spec/1.
 %% @end
 %%--------------------------------------------------------------------
 -spec data_spec(middleware:req()) -> undefined | middleware_sanitizer:data_spec().
-data_spec(#op_req{operation = get, gri = #gri{aspect = As}}) when
-    As =:= instance;
-    As =:= atm_workflow_schemas
-->
+data_spec(#op_req{operation = get, gri = #gri{aspect = instance}}) ->
     undefined.
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link middleware_plugin} callback fetch_entity/1.
+%% {@link middleware_handler} callback fetch_entity/1.
 %%
 %% For now fetches only records for authorized users.
 %% @end
 %%--------------------------------------------------------------------
 -spec fetch_entity(middleware:req()) ->
     {ok, middleware:versioned_entity()} | errors:error().
-fetch_entity(#op_req{auth = Auth, gri = #gri{id = AtmInventoryId, scope = private}}) ->
-    case atm_inventory_logic:get(Auth#auth.session_id, AtmInventoryId) of
-        {ok, #document{value = AtmInventory}} ->
-            {ok, {AtmInventory, 1}};
+fetch_entity(#op_req{gri = #gri{id = AtmWorkflowSchemaSnapshotId, scope = private}}) ->
+    case atm_workflow_schema_snapshot:get(AtmWorkflowSchemaSnapshotId) of
+        {ok, #document{value = AtmWorkflowSchemaSnapshot}} ->
+            {ok, {AtmWorkflowSchemaSnapshot, 1}};
         {error, _} = Error ->
             Error
     end;
@@ -83,38 +83,34 @@ fetch_entity(_) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link middleware_plugin} callback authorize/2.
+%% {@link middleware_handler} callback authorize/2.
 %% @end
 %%--------------------------------------------------------------------
 -spec authorize(middleware:req(), middleware:entity()) -> boolean().
 authorize(#op_req{auth = ?GUEST}, _) ->
     false;
 
-authorize(#op_req{operation = get, gri = #gri{aspect = As}}, _) when
-    As =:= instance;
-    As =:= atm_workflow_schemas
-->
-    % authorization was checked by oz in `fetch_entity`
-    true.
+authorize(#op_req{operation = get, auth = ?USER(UserId, SessionId), gri = #gri{
+    aspect = instance
+}}, #atm_workflow_schema_snapshot{atm_inventory = AtmInventoryId}) ->
+    % Caution!! Below checks should be always synchronized with one done by oz
+    % when getting workflow schema
+    user_logic:has_eff_atm_inventory(SessionId, UserId, AtmInventoryId).
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link middleware_plugin} callback validate/2.
+%% {@link middleware_handler} callback validate/2.
 %% @end
 %%--------------------------------------------------------------------
 -spec validate(middleware:req(), middleware:entity()) -> ok | no_return().
-validate(#op_req{operation = get, gri = #gri{aspect = As}}, _) when
-    As =:= instance;
-    As =:= atm_workflow_schemas
-->
-    % validation was checked by oz in `fetch_entity`
+validate(#op_req{operation = get, gri = #gri{aspect = instance}}, _) ->
     ok.
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link middleware_plugin} callback create/1.
+%% {@link middleware_handler} callback create/1.
 %% @end
 %%--------------------------------------------------------------------
 -spec create(middleware:req()) -> middleware:create_result().
@@ -124,22 +120,17 @@ create(_) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link middleware_plugin} callback get/2.
+%% {@link middleware_handler} callback get/2.
 %% @end
 %%--------------------------------------------------------------------
 -spec get(middleware:req(), middleware:entity()) -> middleware:get_result().
-get(#op_req{gri = #gri{aspect = instance, scope = private}}, AtmInventory) ->
-    {ok, AtmInventory};
-
-get(#op_req{gri = #gri{aspect = atm_workflow_schemas, scope = private}}, #od_atm_inventory{
-    atm_workflow_schemas = AtmWorkflowSchemas
-}) ->
-    {ok, AtmWorkflowSchemas}.
+get(#op_req{gri = #gri{aspect = instance, scope = private}}, AtmWorkflowSchemaSnapshot) ->
+    {ok, AtmWorkflowSchemaSnapshot}.
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link middleware_plugin} callback update/1.
+%% {@link middleware_handler} callback update/1.
 %% @end
 %%--------------------------------------------------------------------
 -spec update(middleware:req()) -> middleware:update_result().
@@ -149,7 +140,7 @@ update(_) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link middleware_plugin} callback delete/1.
+%% {@link middleware_handler} callback delete/1.
 %% @end
 %%--------------------------------------------------------------------
 -spec delete(middleware:req()) -> middleware:delete_result().
