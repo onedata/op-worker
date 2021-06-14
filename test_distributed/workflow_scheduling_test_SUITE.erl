@@ -13,6 +13,7 @@
 -author("Michal Wrzeszcz").
 
 -include("workflow_engine.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
@@ -26,7 +27,8 @@
     single_async_workflow_execution_test/1,
     multiple_sync_workflow_execution_test/1,
     multiple_async_workflow_execution_test/1,
-    job_failure_test/1
+    restart_test/1,
+    timeouts_test/1
 ]).
 
 all() ->
@@ -35,7 +37,8 @@ all() ->
         single_async_workflow_execution_test,
         multiple_sync_workflow_execution_test,
         multiple_async_workflow_execution_test,
-        job_failure_test
+        restart_test,
+        timeouts_test
     ]).
 
 -define(ENGINE_ID, <<"test_engine">>).
@@ -72,6 +75,7 @@ single_workflow_execution_test_base(Config, WorkflowType) ->
 
     ExecutionHistoryWithoutPrepare = verify_preparation_phase(Id, ExecutionHistory),
     verify_execution_history(Expected, ExecutionHistoryWithoutPrepare, WorkflowType),
+    verify_memory(Config),
     ok.
 
 multiple_sync_workflow_execution_test(Config) ->
@@ -136,19 +140,21 @@ multiple_workflow_execution_test_base(Config, WorkflowType) ->
         ExecutionHistoryWithoutPrepare = verify_preparation_phase(ExecutionId, lists:reverse(WorkflowExecutionHistory)),
         verify_execution_history(LanesDefinitions, ExecutionHistoryWithoutPrepare, WorkflowType)
     end, lists:zip(Ids, Workflows)),
+
+    verify_memory(Config),
     ok.
 
-job_failure_test(Config) ->
+restart_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     WorkflowType = sync,
-    Id = <<"job_failure_test_workflow">>,
+    Id = <<"restart_test_workflow">>,
     Workflow = #{
         id => Id,
         workflow_handler => workflow_test_handler,
         execution_context => #{type => WorkflowType, async_call_pools => [?ASYNC_CALL_POOL_ID]}
     },
 
-    TaskToFail = <<"job_failure_test_workflow_task3_3_2">>,
+    TaskToFail = <<"restart_test_workflow_task3_3_2">>,
     ItemToFail = <<"100">>,
     set_task_execution_gatherer_option(Config, fail_job, {TaskToFail, ItemToFail}),
     ?assertEqual(ok, rpc:call(Worker, workflow_engine, execute_workflow, [?ENGINE_ID, Workflow])),
@@ -162,7 +168,39 @@ job_failure_test(Config) ->
     verify_execution_history(Expected, ExecutionHistoryWithoutPrepare, WorkflowType),
 
     unset_task_execution_gatherer_option(Config, fail_job),
+
+    verify_memory(Config),
     ok.
+
+timeouts_test(Config) ->
+    ok.
+%%    [Worker | _] = ?config(op_worker_nodes, Config),
+%%    WorkflowType = async,
+%%    Id = <<"async_timeouts_workflow">>,
+%%    Workflow = #{
+%%        id => Id,
+%%        workflow_handler => workflow_test_handler,
+%%        execution_context => #{type => WorkflowType, async_call_pools => [?ASYNC_CALL_POOL_ID]}
+%%    },
+%%
+%%    % TODO VFS-7551 force timeout
+%%    TaskToFail = <<"async_timeouts_workflow_task3_3_2">>,
+%%    ItemToFail = <<"100">>,
+%%    set_task_execution_gatherer_option(Config, fail_job, {TaskToFail, ItemToFail}),
+%%    ?assertEqual(ok, rpc:call(Worker, workflow_engine, execute_workflow, [?ENGINE_ID, Workflow])),
+%%
+%%    Expected = get_expected_task_execution_order(Workflow, 3, 3, ItemToFail, TaskToFail),
+%%    #{execution_history := ExecutionHistory} = ExtendedHistoryStats = get_task_execution_history(Config),
+%%    verify_execution_history_stats(ExtendedHistoryStats, WorkflowType),
+%%    ?assertNotEqual(timeout, ExecutionHistory),
+%%
+%%    ExecutionHistoryWithoutPrepare = verify_preparation_phase(Id, ExecutionHistory),
+%%    verify_execution_history(Expected, ExecutionHistoryWithoutPrepare, WorkflowType),
+%%
+%%    unset_task_execution_gatherer_option(Config, fail_job),
+%%
+%%    verify_memory(Config),
+%%    ok.
 
 %%%===================================================================
 %%% Init/teardown functions
@@ -440,3 +478,29 @@ get_task_and_item_ids(ExecutionId, {_, ItemIndex, BoxIndex, TaskIndex}) ->
     ItemId = integer_to_binary(ItemIndex),
     {TaskId, ItemId}.
 
+verify_memory(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    Models = [workflow_cached_item, workflow_iterator_snapshot, workflow_execution_state],
+    lists:foreach(fun(Model) ->
+        Ctx = datastore_model_default:set_defaults(datastore_model_default:get_ctx(Model)),
+        #{memory_driver := MemoryDriver, memory_driver_ctx := MemoryDriverCtx} = Ctx,
+        ?assertEqual([], get_keys(Worker, MemoryDriver, MemoryDriverCtx))
+    end, Models).
+
+
+get_keys(Worker, ets_driver, MemoryDriverCtx) ->
+    lists:foldl(fun(#{table := Table}, AccOut) ->
+        AccOut ++ lists:filtermap(fun
+            ({_Key, #document{deleted = true}}) -> false;
+            ({Key, #document{deleted = false}}) -> {true, Key}
+        end, rpc:call(Worker, ets, tab2list, [Table]))
+    end, [], datastore_multiplier:get_names(MemoryDriverCtx));
+get_keys(Worker, mnesia_driver, MemoryDriverCtx) ->
+    lists:foldl(fun(#{table := Table}, AccOut) ->
+        AccOut ++ mnesia:async_dirty(fun() ->
+            rpc:call(Worker, mnesia, foldl, [fun
+                ({entry, _Key, #document{deleted = true}}, Acc) -> Acc;
+                ({entry, Key, #document{deleted = false}}, Acc) -> [Key | Acc]
+            end, [], Table])
+        end)
+    end, [], datastore_multiplier:get_names(MemoryDriverCtx)).

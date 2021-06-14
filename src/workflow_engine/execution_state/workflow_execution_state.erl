@@ -20,7 +20,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([init/3, init_using_snapshot/3, prepare_next_job/1,
+-export([init/3, init_using_snapshot/3, cleanup/1, prepare_next_job/1,
     report_execution_status_update/4, report_execution_prepared/4, report_limit_reached_error/2,
     check_timeouts/1, reset_keepalive_timer/2, get_result_processing_data/2]).
 %% Test API
@@ -46,7 +46,8 @@
 -record(items_processed_report, {
     lane_index :: index(),
     last_finished_item_index :: index(),
-    finished_iterator :: iterator:iterator()
+    finished_item_id :: workflow_cached_item:id(),
+    finished_iterator :: iterator:iterator() | undefined
 }).
 
 -type index() :: non_neg_integer(). % scheduling is based on positions of elements (items, parallel_boxes, tasks)
@@ -101,7 +102,6 @@
 
 -spec init(workflow_engine:execution_id(), workflow_handler:handler(), workflow_engine:execution_context()) -> ok.
 init(ExecutionId, Handler, Context) ->
-    % TODO VFS-7786 - destroy when execution is ended
     Doc = #document{key = ExecutionId, value = #workflow_execution_state{handler = Handler, context = Context}},
     {ok, _} = datastore_model:save(?CTX, Doc),
     ok.
@@ -121,6 +121,10 @@ init_using_snapshot(ExecutionId, Handler, Context) ->
         ?ERROR_NOT_FOUND ->
             init(ExecutionId, Handler, Context)
     end.
+
+-spec cleanup(workflow_engine:execution_id()) -> ok.
+cleanup(ExecutionId) ->
+    ok = datastore_model:delete(?CTX, ExecutionId).
 
 -spec prepare_next_job(workflow_engine:execution_id()) ->
     {ok, workflow_engine:job_execution_spec()} |
@@ -155,8 +159,12 @@ report_execution_status_update(ExecutionId, JobIdentifier, UpdateType, Ans) ->
     case update(ExecutionId, fun(State) ->
         report_execution_status_update_internal(State, JobIdentifier, UpdateType, Ans)
     end) of
+        {ok, #document{value = #workflow_execution_state{update_report = #items_processed_report{
+            finished_iterator = undefined, finished_item_id = ItemId}}}} ->
+            workflow_cached_item:delete(ItemId);
         {ok, #document{value = #workflow_execution_state{update_report = #items_processed_report{lane_index = LaneIndex,
-            last_finished_item_index = ItemIndex, finished_iterator = IteratorToSave}}}} ->
+            last_finished_item_index = ItemIndex, finished_iterator = IteratorToSave, finished_item_id = ItemId}}}} ->
+            workflow_cached_item:delete(ItemId),
             workflow_iterator_snapshot:save(ExecutionId, LaneIndex, ItemIndex, IteratorToSave);
         {ok, _} ->
             ok
@@ -317,6 +325,7 @@ prepare_next_job_using_iterator(ExecutionId, CurrentIterationStep, LaneIndex, Co
                         job_identifier = JobIdentifier
                     }};
                 ?WF_ERROR_RACE_CONDITION ->
+                    workflow_cached_item:delete(NextItemId),
                     prepare_next_job_for_current_lane(ExecutionId)
             end;
         stop ->
@@ -506,16 +515,12 @@ prepare_next_parallel_box(State = #workflow_execution_state{
         {ok, NewJobs} ->
             {ok, State#workflow_execution_state{jobs = NewJobs}};
         ?WF_ERROR_ITEM_PROCESSING_FINISHED(ItemIndex) ->
-            case workflow_iteration_state:handle_step_finish(IterationState, ItemIndex) of
-                {NewIterationState, undefined} ->
-                    {ok, State#workflow_execution_state{iteration_state = NewIterationState}};
-                {NewIterationState, IteratorToSave} ->
-                    {ok, State#workflow_execution_state{
-                        iteration_state = NewIterationState,
-                        update_report = #items_processed_report{lane_index = LaneIndex,
-                            last_finished_item_index = ItemIndex, finished_iterator = IteratorToSave}
-                    }}
-            end
+            {NewIterationState, ItemId, IteratorToSave} = workflow_iteration_state:handle_step_finish(IterationState, ItemIndex),
+            {ok, State#workflow_execution_state{
+                iteration_state = NewIterationState,
+                update_report = #items_processed_report{lane_index = LaneIndex, last_finished_item_index = ItemIndex,
+                    finished_item_id = ItemId, finished_iterator = IteratorToSave}
+            }}
     end.
 
 -spec reset_keepalive_timer_internal(state(), workflow_jobs:job_identifier()) -> {ok, state()}.

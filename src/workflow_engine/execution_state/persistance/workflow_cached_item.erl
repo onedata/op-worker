@@ -10,7 +10,6 @@
 %%% by multiple tasks so each item is cached when it is returned by
 %%% iterator (before usage by first task) and is deleted from cache
 %%% after usage by last task.
-%%% TODO VFS-7786 - delete not used items from cache
 %%% @end
 %%%-------------------------------------------------------------------
 -module(workflow_cached_item).
@@ -19,7 +18,7 @@
 -include("modules/datastore/datastore_models.hrl").
 
 %% API
--export([put/1, get/1]).
+-export([put/1, get/1, delete/1]).
 
 -type id() :: binary().
 
@@ -44,3 +43,7 @@ put(Item) ->
 get(ItemId) ->
     {ok, #document{value = #workflow_cached_item{item = Item}}} = datastore_model:get(?CTX, ItemId),
     Item.
+
+-spec delete(id()) -> ok.
+delete(ItemId) ->
+    ok = datastore_model:delete(?CTX, ItemId).

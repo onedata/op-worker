@@ -468,7 +468,7 @@ assert_documents_cleaned_up(Worker, Scope, Models) ->
     ProviderId = ?GET_DOMAIN_BIN(Worker),
     ?assert(lists:foldl(fun(Model, AccOut) ->
         Keys = rpc:call(Worker, ?MODULE, get_keys, [Model]),
-        ct:print("aaaaa ~p", [Model]),
+
         Ctx = datastore_model_default:set_defaults(datastore_model_default:get_ctx(Model)),
         #{disc_driver := DiscDriver} = Ctx,
         Result = case DiscDriver of

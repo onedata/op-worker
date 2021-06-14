@@ -1112,7 +1112,7 @@
 %%%===================================================================
 
 -record(workflow_cached_item, {
-    item :: iterator:item()
+    item :: iterator:item() % TODO - czy iterator nie powinien byc zapisany z itemem?
 }).
 
 -record(workflow_iterator_snapshot, {

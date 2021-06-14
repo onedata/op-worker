@@ -19,7 +19,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([save/4, get/1, mark_exhausted/1]).
+-export([save/4, get/1, cleanup/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1]).
@@ -76,10 +76,11 @@ get(ExecutionId) ->
             ?ERROR_NOT_FOUND
     end.
 
--spec mark_exhausted(workflow_engine:execution_id()) -> ok.
-mark_exhausted(ExecutionId) ->
+-spec cleanup(workflow_engine:execution_id()) -> ok.
+cleanup(ExecutionId) ->
     {ok, _LaneIndex, Iterator} = ?MODULE:get(ExecutionId),
-    iterator:mark_exhausted(Iterator).
+    iterator:mark_exhausted(Iterator),
+    ok = datastore_model:delete(?CTX, ExecutionId).
 
 %%%===================================================================
 %%% datastore_model callbacks

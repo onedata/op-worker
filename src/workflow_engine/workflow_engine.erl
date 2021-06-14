@@ -233,13 +233,20 @@ schedule_next_job(EngineId, DeferredExecutions) ->
                             case workflow_engine_state:remove_execution_id(EngineId, ExecutionId) of
                                 ok ->
                                     Handler:handle_lane_execution_ended(ExecutionId, Context, LaneIndex),
-                                    workflow_iterator_snapshot:mark_exhausted(ExecutionId);
+                                    workflow_iterator_snapshot:cleanup(ExecutionId),
+                                    workflow_execution_state:cleanup(ExecutionId);
                                 ?WF_ERROR_ALREADY_REMOVED ->
                                     ok
                             end,
                             schedule_next_job(EngineId, DeferredExecutions);
                         ?END_EXECUTION ->
-                            workflow_engine_state:remove_execution_id(EngineId, ExecutionId),
+                            case workflow_engine_state:remove_execution_id(EngineId, ExecutionId) of
+                                ok ->
+                                    workflow_iterator_snapshot:cleanup(ExecutionId),
+                                    workflow_execution_state:cleanup(ExecutionId);
+                                ?WF_ERROR_ALREADY_REMOVED ->
+                                    ok
+                            end,
                             schedule_next_job(EngineId, DeferredExecutions);
                         ?DEFER_EXECUTION ->
                             % no jobs can be currently scheduled for this execution but new jobs will appear in future

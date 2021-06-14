@@ -96,8 +96,8 @@ register_new_step(
 register_new_step(_, _, _, _) ->
     ?WF_ERROR_RACE_CONDITION.
 
--spec handle_step_finish(state(), workflow_execution_state:index()) ->
-    {state(), LastConsecutiveFinishedIterator :: iterator:iterator() | undefined}.
+-spec handle_step_finish(state(), workflow_execution_state:index()) -> {state(),
+    FinishedItemId :: workflow_cached_item:id(), LastConsecutiveFinishedIterator :: iterator:iterator() | undefined}.
 handle_step_finish(
     Progress = #iteration_state{
         pending_steps = Steps,
@@ -117,12 +117,13 @@ handle_step_finish(
                     {FinishedIterator, ItemIndex + 1, FinishedAhead}
             end
     end,
-    
+
+    #iteration_step{cached_item_id = ItemId} = maps:get(ItemIndex, Steps),
     {Progress#iteration_state{
         pending_steps = maps:remove(ItemIndex, Steps),
         last_finished_step_index = LastConsecutiveFinishedIndex,
         steps_finished_ahead = FinalFinishedAhead
-    }, FinalIterator};
+    }, ItemId, FinalIterator};
 handle_step_finish(
     Progress = #iteration_state{
         pending_steps = Steps,
@@ -142,11 +143,12 @@ handle_step_finish(
         _ ->
             gb_trees:insert({ItemIndex, ItemIndex}, FinishedIterator, FinishedAhead)
     end,
+    #iteration_step{cached_item_id = ItemId} = maps:get(ItemIndex, Steps),
     {Progress#iteration_state{
         pending_steps = maps:remove(ItemIndex, Steps),
         steps_finished_ahead = FinalFinishedAhead,
         last_finished_step_index = min(LastFinishedStepIndex, ItemIndex)
-    }, undefined}.
+    }, ItemId, undefined}.
 
 %%%===================================================================
 %%% Helper API operating on #iteration_step record
