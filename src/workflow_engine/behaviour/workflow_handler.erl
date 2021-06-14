@@ -16,7 +16,7 @@
 -type handler() :: module().
 -type task_processing_result() :: term().
 -type callback_execution_result() :: ok | error.
-% TODO VFS-7551 move following types to callback server:
+% TODO VFS-7787 move following types to callback server:
 -type finished_callback_id() :: binary().
 -type heartbeat_callback_id() :: binary().
 

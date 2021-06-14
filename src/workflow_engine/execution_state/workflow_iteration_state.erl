@@ -9,7 +9,7 @@
 %%% Helper module for workflow_execution_state processing information
 %%% about iteration progress. Keeps information about items currently
 %%% being processed and iterators connected with them.
-%%% TODO VFS-7551 Add eunit tests
+%%% TODO VFS-7784 Add eunit tests
 %%% @end
 %%%-------------------------------------------------------------------
 -module(workflow_iteration_state).
@@ -37,7 +37,7 @@
     last_registered_step :: iteration_step() | undefined, % undefined when iteration is finished (nothing has been
                                                           % returned trying to obtain next item and iterator)
     last_registered_step_index = 0 :: workflow_execution_state:index(),
-    last_finished_step_index = 1 :: workflow_execution_state:index(), % TODO VFS-7551 - maybe init as undefined?
+    last_finished_step_index = 1 :: workflow_execution_state:index(), % TODO VFS-7787 - maybe init as undefined?
     steps_finished_ahead = gb_trees:empty() :: steps_finished_ahead()
 }).
 

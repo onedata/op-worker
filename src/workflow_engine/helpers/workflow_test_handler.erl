@@ -7,7 +7,7 @@
 %%%--------------------------------------------------------------------
 %%% @doc
 %%% Implementation of workflow_handler behaviour to be used in tests.
-%%% TODO VFS-7551 - move to test directory when problem with mocks is solved
+%%% TODO VFS-7784 - move to test directory when problem with mocks is solved
 %%% @end
 %%%--------------------------------------------------------------------
 -module(workflow_test_handler).
@@ -66,7 +66,7 @@ get_lane_spec(ExecutionId, #{type := Type, async_call_pools := Pools} =_Executio
     workflow_handler:callback_execution_result().
 process_item(_ExecutionId, _Context, <<"async", _/binary>> = _TaskId, Item, FinishCallback, _) ->
     spawn(fun() ->
-        timer:sleep(100), % TODO VFS-7551 - test with different sleep times
+        timer:sleep(100), % TODO VFS-7784 - test with different sleep times
         case binary_to_integer(Item) =< 10 of
             true ->
                 % Use http_client only for part of items as it is much slower than direct `handle_callback` call

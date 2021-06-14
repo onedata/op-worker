@@ -10,7 +10,7 @@
 %%% by single task processing engine (not to be confused with
 %%% workflow_engine). It allows limiting number of tasks being
 %%% processed in parallel.
-%%% TODO VFS-7551 - count calls for each task separately
+%%% TODO VFS-7788 - count calls for each task separately
 %%% @end
 %%%-------------------------------------------------------------------
 -module(workflow_async_call_pool).

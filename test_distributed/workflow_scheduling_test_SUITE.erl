@@ -108,7 +108,7 @@ multiple_workflow_execution_test_base(Config, WorkflowType) ->
     verify_execution_history_stats(ExtendedHistoryStats, WorkflowType),
     ?assertNotEqual(timeout, ExecutionHistory),
 
-    % Different id sizes - TODO VFS-7551 - add workflow id to history element
+    % Different id sizes - TODO VFS-7784 - add workflow id to history element
     ExecutionHistoryMap = case WorkflowType of
         sync ->
             lists:foldl(fun
@@ -176,7 +176,7 @@ init_per_suite(Config) ->
         NewConfig
     end,
     [
-        % TODO VFS-7551 - uncomment when workflow_test_handler is moved to test directory
+        % TODO VFS-7784 - uncomment when workflow_test_handler is moved to test directory
         % {?LOAD_MODULES, [workflow_test_handler]},
         {?ENV_UP_POSTHOOK, Posthook} | Config].
 
@@ -283,7 +283,7 @@ get_task_execution_history(Config) ->
         30000 -> timeout
     end.
 
-% TODO VFS-7551 - uncomment checks in this function and fix tests
+% TODO VFS-7784 - uncomment checks in this function and fix tests
 verify_execution_history_stats(Acc, WorkflowType) ->
     ?assertEqual(0, maps:get(final_async_slots_used, Acc)),
 %%    ?assertEqual(0, maps:get(final_pool_slots_used, Acc)),

@@ -50,7 +50,7 @@
     failed_items = sets:new() :: items_set(),
 
     pending_async_jobs = #{} :: pending_async_jobs(),
-    raced_results = #{} :: raced_results() % TODO VFS-7551 - clean when they are not needed anymore (after integration with BW)
+    raced_results = #{} :: raced_results() % TODO VFS-7787 - clean when they are not needed anymore (after integration with BW)
 }).
 
 -type job_identifier() :: #job_identifier{}.
@@ -151,7 +151,7 @@ register_failure(Jobs = #workflow_jobs{
         ?NO_JOBS_LEFT_FOR_PARALLEL_BOX -> Failed
     end,
 
-    % TODO VFS-7551 - count errors and stop workflow when errors limit is reached
+    % TODO VFS-7788 - count errors and stop workflow when errors limit is reached
     Jobs2#workflow_jobs{failed_items = NewFailed}.
 
 -spec remove_pending_async_job(jobs(), job_identifier(), workflow_handler:callback_execution_result()) ->
@@ -230,7 +230,7 @@ check_timeouts(Jobs = #workflow_jobs{
             #async_job_timer{keepalive_timer = Timer} = AsyncJobTimer,
             case countdown_timer:is_expired(Timer) of
                 true ->
-                    % TODO VFS-7551 - check if task is expired
+                    % TODO VFS-7788 - check if task is expired
 %%                    case task_executor:check_ongoing_item_processing(TaskId, Ref) of
 %%                        ok -> {[Ref | ExtendedTimeoutsAcc], ErrorsAcc};
 %%                        error -> {ExtendedTimeoutsAcc, [JobIdentifier | ErrorsAcc]}
@@ -245,7 +245,7 @@ check_timeouts(Jobs = #workflow_jobs{
         {[], []} ->
             ?ERROR_NOT_FOUND;
         {UpdatedTimeouts, Errors} ->
-            % TODO VFS-7551 - delete iteration_state step when necessary
+            % TODO VFS-7786 - delete iteration_state step when necessary
             {AsyncCallsWithErrorsDeleted, NewOngoing} = lists:foldl(fun(JobIdentifier, {AsyncCallsAcc, OngoingAcc} = AccTuple) ->
                 case maps:get(JobIdentifier, AsyncCallsAcc, undefined) of
                     undefined ->

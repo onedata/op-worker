@@ -43,7 +43,7 @@ init(EngineId, SlotsLimit) ->
         ?ERROR_ALREADY_EXISTS -> ?ERROR_ALREADY_EXISTS
     end.
 
-% TODO VFS-7551 - acquire slot if it is free (optimization - one call instead of two)
+% TODO VFS-7787 - acquire slot if it is free (optimization - one call instead of two)
 -spec add_execution_id(workflow_engine:id(), workflow_engine:execution_id()) -> ok.
 add_execution_id(EngineId, ExecutionId) ->
     Diff = fun
@@ -69,7 +69,7 @@ remove_execution_id(EngineId, ExecutionId) ->
 
 -spec poll_next_execution_id(workflow_engine:id()) -> {ok, workflow_engine:execution_id()} | ?ERROR_NOT_FOUND.
 poll_next_execution_id(EngineId) ->
-    % TODO VFS-7551 add groups/list/spaces management - we use priorities here
+    % TODO VFS-7788 add groups/list/spaces management - we use priorities here
     % Provide execution ids using round robin algorithm due to update of executions list on each poll
     % (do not update document if list has only one element)
     Diff = fun

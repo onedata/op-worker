@@ -7,7 +7,7 @@
 %%%--------------------------------------------------------------------
 %%% @doc
 %%% Implementation of iterator behaviour to be used in tests.
-%%% TODO VFS-7551 - move to test directory when problem with mocks is solved
+%%% TODO VFS-7784 - move to test directory when problem with mocks is solved
 %%% @end
 %%%--------------------------------------------------------------------
 -module(workflow_test_iterator).

@@ -8,8 +8,8 @@
 %%% @doc
 %%% Stores iterators used to restart workflow executions (one iterator per execution).
 %%% Each iterator is stored together with lane and item index to prevent races.
-%%% TODO VFS-7551 - delete not used iterators from cache (when execution is finished)
-%%% TODO VFS-7551 - save first iterator of lane
+%%% TODO VFS-7786 - delete not used iterators from cache (when execution is finished)
+%%% TODO VFS-7787 - save first iterator of lane
 %%% @end
 %%%-------------------------------------------------------------------
 -module(workflow_iterator_snapshot).
@@ -58,7 +58,7 @@ save(ExecutionId, LaneIndex, ItemIndex, Iterator) ->
             % Mark iterator exhausted after change of line
             % (each line has new iterator and iterator for previous line can be destroyed)
             case PrevLaneIndex =/= undefined andalso PrevLaneIndex < LaneIndex of
-                true -> iterator:mark_exhausted(PrevIterator); % TODO VFS-7551 - handle without additional get
+                true -> iterator:mark_exhausted(PrevIterator); % TODO VFS-7787 - handle without additional get
                 false -> ok
             end,
             iterator:forget_before(Iterator);

@@ -94,7 +94,7 @@ init(Id) ->
 
 -spec init(id(), options()) -> ok.
 init(Id, Options) ->
-    % TODO VFS-7551 Implement internal_service HA callbacks
+    % TODO VFS-7788 Implement internal_service HA callbacks
     ServiceOptions = #{
         start_function => init_service,
         start_function_args => [Id, Options],
@@ -171,12 +171,12 @@ init_service(Id, Options) ->
 
 -spec takeover_service(id(), options(), node()) -> ok.
 takeover_service(_EngineId, _Options, _Node) ->
-    % TODO VFS-7551 Restart tasks
+    % TODO VFS-7788 Restart tasks
     ok.
 
 -spec init_pool(id(), non_neg_integer()) -> ok.
 init_pool(EngineId, SlotsLimit) ->
-    % TODO VFS-7551 handle params such as ParallelLanesLimit, ParallelSyncItems, ParallelAsyncItems, ParallelReports
+    % TODO VFS-7788 handle params such as ParallelLanesLimit, ParallelSyncItems, ParallelAsyncItems, ParallelReports
     try
         {ok, _} = worker_pool:start_sup_pool(?POOL_ID(EngineId), [{workers, SlotsLimit}]),
         ok
@@ -202,7 +202,7 @@ trigger_job_scheduling(EngineId, ?FOR_CURRENT_SLOT) ->
             ok;
         ?WF_ERROR_ALL_DEFERRED ->
             workflow_engine_state:decrement_slot_usage(EngineId),
-            % TODO VFS-7551 - check without acquire to break spawning loop
+            % TODO VFS-7787 - check without acquire to break spawning loop
             spawn(fun() ->
                 timer:sleep(timer:seconds(5)),
                 trigger_job_scheduling(EngineId, ?TAKE_UP_FREE_SLOTS)
@@ -271,12 +271,12 @@ schedule_on_pool(EngineId, ExecutionId, #job_execution_spec{
             ok = worker_pool:cast(?POOL_ID(EngineId), CallArgs);
         {async, undefined} ->
             ok = worker_pool:cast(?POOL_ID(EngineId), CallArgs);
-        {async, [CallPoolId]} -> % TODO VFS-7551 - support multiple pools
+        {async, [CallPoolId]} -> % TODO VFS-7788 - support multiple pools
             case workflow_async_call_pool:increment_slot_usage(CallPoolId) of
                 ok ->
                     ok = worker_pool:cast(?POOL_ID(EngineId), CallArgs);
                 ?WF_ERROR_LIMIT_REACHED ->
-                    % TODO VFS-7551 - handle case when other tasks can be started (limit of task, not task execution engine is reached)
+                    % TODO VFS-7787 - handle case when other tasks can be started (limit of task, not task execution engine is reached)
                     workflow_execution_state:report_limit_reached_error(ExecutionId, JobIdentifier),
                     ?WF_ERROR_LIMIT_REACHED
             end
@@ -349,7 +349,7 @@ process_item(ExecutionId, #job_execution_spec{
             FinishCallback, HeartbeatCallback)
     catch
         Error:Reason  ->
-            % TODO VFS-7551 - use callbacks to get human readable information about item and task
+            % TODO VFS-7788 - use callbacks to get human readable information about item and task
             ?error_stacktrace("Unexpected error handling task ~p for item ~p (id ~p): ~p:~p",
                 [TaskId, Item, ItemId, Error, Reason]),
             error

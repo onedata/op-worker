@@ -10,9 +10,6 @@
 %%% It is used by processes of workflow_engine
 %%% that synchronize on model's documents update dividing between
 %%% themselves jobs to execute.
-%%% TODO VFS-7551 - check if module responsible for workflows' lists checks lists' consistency on cluster restart
-%%% (item can be in more than one list after node crash)
-%%% TODO VFS-7551 - lists of workflow should be per space
 %%% @end
 %%%-------------------------------------------------------------------
 -module(workflow_execution_state).
@@ -104,7 +101,7 @@
 
 -spec init(workflow_engine:execution_id(), workflow_handler:handler(), workflow_engine:execution_context()) -> ok.
 init(ExecutionId, Handler, Context) ->
-    % TODO VFS-7551 - destroy when execution is ended
+    % TODO VFS-7786 - destroy when execution is ended
     Doc = #document{key = ExecutionId, value = #workflow_execution_state{handler = Handler, context = Context}},
     {ok, _} = datastore_model:save(?CTX, Doc),
     ok.
@@ -131,7 +128,7 @@ init_using_snapshot(ExecutionId, Handler, Context) ->
     ?PREPARE_EXECUTION(workflow_handler:handler(), workflow_engine:execution_context()) | ?DEFER_EXECUTION |
     ?END_EXECUTION.
 prepare_next_job(ExecutionId) ->
-    % TODO VFS-7551 - check quota for async jobs and do nothing if it is exceeded
+    % TODO VFS-7787 - check quota for async jobs and do nothing if it is exceeded
     case prepare_next_job_for_current_lane(ExecutionId) of
         {ok, _} = OkAns ->
             OkAns;
@@ -302,8 +299,8 @@ prepare_next_job_for_current_lane(ExecutionId) ->
 prepare_next_job_using_iterator(ExecutionId, CurrentIterationStep, LaneIndex, Context) ->
     case iterator:get_next(Context, workflow_iteration_state:get_iterator(CurrentIterationStep)) of
         {ok, NextItem, NextIterator} ->
-            ParallelBoxToStart = 1, % TODO VFS-7551 - get ParallelBoxToStart from iterator
-            NextItemId = workflow_cached_item:put(NextItem), % TODO VFS-7551 return (to engine) item instead of item_id in this case (engine must read from cache when we have item here)
+            ParallelBoxToStart = 1, % TODO VFS-7788 - get ParallelBoxToStart from iterator
+            NextItemId = workflow_cached_item:put(NextItem), % TODO VFS-7787 return (to engine) item instead of item_id in this case (engine must read from cache when we have item here)
             case update(ExecutionId, fun(State) ->
                 register_and_prepare_new_item(
                     State, NextItemId, ParallelBoxToStart, CurrentIterationStep, NextIterator)
@@ -345,7 +342,7 @@ prepare_next_job_using_iterator(ExecutionId, CurrentIterationStep, LaneIndex, Co
 
 -spec update(workflow_engine:execution_id(), update_fun()) -> {ok, state()} | {error, term()}.
 update(ExecutionId, UpdateFun) ->
-    % TODO VFS-7551 - should we add try/catch or allow functions fail?
+    % TODO VFS-7787 - should we add try/catch or allow functions fail?
     datastore_model:update(?CTX, ExecutionId, fun(State) ->
         UpdateFun(State#workflow_execution_state{update_report = undefined})
     end).
@@ -385,7 +382,7 @@ register_and_prepare_new_item(State = #workflow_execution_state{
     iteration_state = IterationState,
     current_lane = #current_lane{parallel_boxes_spec = BoxesSpec}
 }, NewItemId, ParallelBoxToStart, PrevIterationStep, NewIterator) ->
-    % TODO VFS-7551 - it may be needed to allow registration of waiting items as a result of async call processing finish
+    % TODO VFS-7789 - it may be needed to allow registration of waiting items as a result of async call processing finish
     case workflow_iteration_state:register_new_step(IterationState, PrevIterationStep, NewItemId, NewIterator) of
         ?WF_ERROR_RACE_CONDITION = Error ->
             Error;
@@ -533,9 +530,9 @@ reset_keepalive_timer_internal(State = #workflow_execution_state{
 report_job_finish(State = #workflow_execution_state{
     jobs = Jobs
 }, JobIdentifier, ok) ->
-    % TODO VFS-7551 - should we protect against unknown keys? can they appear
+    % TODO VFS-7787 - should we protect against unknown keys? can they appear
     {NewJobs2, RemainingForBox} = workflow_jobs:mark_ongoing_job_finished(Jobs, JobIdentifier),
-    % TODO VFS-7551 - Delete unused iterators and save information used for restarts
+    % TODO VFS-7786 - Delete unused iterators and save information used for restarts
     case RemainingForBox of
         ?AT_LEAST_ONE_JOB_LEFT_FOR_PARALLEL_BOX ->
             {ok, State#workflow_execution_state{jobs = NewJobs2}};

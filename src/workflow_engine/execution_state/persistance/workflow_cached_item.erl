@@ -10,7 +10,7 @@
 %%% by multiple tasks so each item is cached when it is returned by
 %%% iterator (before usage by first task) and is deleted from cache
 %%% after usage by last task.
-%%% TODO VFS-7551 - delete not used items from cache
+%%% TODO VFS-7786 - delete not used items from cache
 %%% @end
 %%%-------------------------------------------------------------------
 -module(workflow_cached_item).

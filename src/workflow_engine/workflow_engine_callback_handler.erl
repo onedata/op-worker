@@ -94,7 +94,7 @@ handle_callback(CallbackId, Message) ->
     {CallbackType, ExecutionId, EngineId, JobIdentifier, CallPools} = decode_callback_id(CallbackId),
     case CallbackType of
         ?FINISH_CALLBACK_TYPE ->
-            % TODO VFS-7551 - process result and get CallPools from state
+            % TODO VFS-7789 - process result on pool and get CallPools from state
             {Handler, Context, TaskId} = workflow_execution_state:get_result_processing_data(ExecutionId, JobIdentifier),
             ProcessedResult = Handler:process_result(ExecutionId, Context, TaskId, Message),
             workflow_engine:report_execution_status_update(
@@ -141,7 +141,7 @@ decode_callback_id(CallbackId) ->
 
 -spec call_pools_to_binary([workflow_async_call_pool:id()] | undefined) -> binary().
 call_pools_to_binary([CallPools]) ->
-    CallPools; % TODO VFS-7551 - support multiple pools
+    CallPools; % TODO VFS-7788 - support multiple pools
 call_pools_to_binary(undefined) ->
     <<"undefined">>.
 
