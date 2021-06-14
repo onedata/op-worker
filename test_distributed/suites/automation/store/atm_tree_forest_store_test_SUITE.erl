@@ -292,7 +292,7 @@ iteration_with_deleted_root(_Config) ->
     [RootToDelete0 | _RootsTail] = maps:keys(FilesMap),
     ?assertEqual(ok, lfm_proxy:rm_recursive(Node, User1Session, ?FILE_REF(RootToDelete0))),
     ?assertEqual({error, ?ENOENT}, lfm_proxy:stat(Node, User1Session, ?FILE_REF(RootToDelete0)), ?ATTEMPTS),
-    ExpectedFiles0 = lists:flatten(maps:values(maps:without([RootToDelete0], FilesMap))),
+    ExpectedFiles0 = lists:flatten(lists:map(fun({_, V}) -> V end, maps:values(maps:without([RootToDelete0], FilesMap)))),
     
     check_iterator_listing(krakow, AtmWorkflowExecutionEnv, AtmStoreIterator0, ExpectedFiles0, return_none, atm_file_type).
 
@@ -307,7 +307,7 @@ iteration_after_restart_with_deleted_root(_Config) ->
     [RootToDelete0 | _RootsTail] = maps:keys(FilesMap),
     ?assertEqual(ok, lfm_proxy:rm_recursive(Node, User1Session, ?FILE_REF(RootToDelete0))),
     ?assertEqual({error, ?ENOENT}, lfm_proxy:stat(Node, User1Session, ?FILE_REF(RootToDelete0)), ?ATTEMPTS),
-    ExpectedAfter = lists:flatten(maps:values(maps:without([RootToDelete0], FilesMap))),
+    ExpectedAfter = lists:flatten(lists:map(fun({_, V}) -> V end, maps:values(maps:without([RootToDelete0], FilesMap)))),
     check_iterator_listing(krakow, AtmWorkflowExecutionEnv, AtmStoreIterator0, ExpectedAfter, return_none, atm_file_type).
 
 
@@ -316,7 +316,11 @@ iteration_after_restart_with_new_dirs_root(_Config) ->
     {AtmWorkflowExecutionEnv, AtmStoreIterator0, FilesMap, ExpectedBefore} = create_iteration_test_env(krakow, AtmStoreIteratorStrategy, 3, atm_file_type),
     
     check_iterator_listing(krakow, AtmWorkflowExecutionEnv, AtmStoreIterator0, ExpectedBefore, return_iterators, atm_file_type),
-    [Root1 | _RootsTail] = maps:keys(FilesMap),
+    [Root1 | _] = maps:fold(
+        fun (K, {?DIRECTORY_TYPE, _}, Acc) -> [K | Acc];
+            (_K, _, Acc) -> Acc
+        end, [], FilesMap),
+            
     
     Spec = [#dir_spec{children = [], mode = 8#705}, #dir_spec{children = [#file_spec{}], mode = 8#705}, #file_spec{}],
     Objects = onenv_file_test_utils:create_and_sync_file_tree(user1, Root1, Spec, krakow),
@@ -423,12 +427,12 @@ create_iteration_test_env(ProviderSelector, AtmStoreIteratorStrategy, Depth, Typ
         F(#object{guid = G, children = undefined}) -> [G];
         F(#object{guid = G, children = Children}) -> [G] ++ lists:flatmap(F, Children)
     end,
-    FilesMap = lists:foldl(fun(#object{guid = Guid} = Object, Acc) ->
-        Acc#{Guid => ObjectToListFun(Object)}
+    FilesMap = lists:foldl(fun(#object{guid = Guid, type = Type} = Object, Acc) ->
+        Acc#{Guid => {Type, ObjectToListFun(Object)}}
     end, #{}, Objects),
     
     {Roots, Expected} = case Type of
-        atm_file_type -> {maps:keys(FilesMap), lists:flatten(maps:values(FilesMap))};
+        atm_file_type -> {maps:keys(FilesMap), lists:flatten(lists:map(fun({_, V}) -> V end, maps:values(FilesMap)))};
         atm_dataset_type ->
             lists:foldl(fun(Guid, {AccRoots, AccExpected} = Acc) ->
                 case {lists:member(Guid, maps:keys(FilesMap)), rand:uniform(2)} of
@@ -440,7 +444,7 @@ create_iteration_test_env(ProviderSelector, AtmStoreIteratorStrategy, Depth, Typ
                         {ok, DatasetId} = lfm_proxy:establish_dataset(Node, ?ROOT_SESS_ID, #file_ref{guid = Guid}),
                         {[DatasetId | AccRoots], [DatasetId | AccExpected]}
                 end
-            end, {[], []}, lists:flatten(maps:values(FilesMap)))
+            end, {[], []}, lists:flatten(lists:map(fun({_, V}) -> V end, maps:values(FilesMap))))
     end,
     
     AtmStoreDummySchemaId = <<"dummyId">>,

@@ -13,7 +13,7 @@
 %%% `get_callback_module` function.
 %%%
 %%% NOTE: As function `get_next_batch` with newer iterator can be called only 
-%%% after previous call finished it is concurrently secure. 
+%%% after previous call to this function finished it is concurrently secure. 
 %%% Only cases that must be secured are when reusing iterators. This is provided by 
 %%% underlying `atm_tree_forest_iterator_queue` module, as reusing iterators does 
 %%% not change any persisted counters or values.
