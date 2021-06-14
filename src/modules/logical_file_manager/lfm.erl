@@ -513,8 +513,7 @@ get_child_attr(SessId, ParentGuid, ChildName)  ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Gets file basic attributes (see file_attr.hrl) for each directory children
-%% starting with Offset-th entry and up to Limit of entries.
+%% Gets file basic attributes (see file_attr.hrl) for each directory children.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_children_attrs(session:id(), file_key(), file_meta:list_opts()) ->
@@ -525,9 +524,7 @@ get_children_attrs(SessId, FileKey, ListOpts) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Gets file details (see file_details.hrl) for each directory children
-%% starting with Offset-th from specified StartId entry and up to Limit
-%% of entries.
+%% Gets file details (see file_details.hrl) for each directory children.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_children_details(session:id(), file_key(), file_meta:list_opts()) ->

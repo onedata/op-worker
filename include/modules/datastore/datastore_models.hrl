@@ -1098,6 +1098,15 @@
     finish_time = 0 :: atm_workflow_execution:timestamp()
 }).
 
+%% Model for storing persistent state of a single tree forest iteration.
+-record(atm_tree_forest_iterator_queue, {
+    values = #{} :: atm_tree_forest_iterator_queue:values(),
+    last_pushed_value_index = 0 :: atm_tree_forest_iterator_queue:index(),
+    highest_peeked_value_index = 0 :: atm_tree_forest_iterator_queue:index(),
+    discriminator = {0, <<>>} :: atm_tree_forest_iterator_queue:discriminator(), 
+    last_pruned_node_num = 0 :: atm_tree_forest_iterator_queue:node_num()
+}).
+
 %%%===================================================================
 %%% Workflow engine connected models
 %%%===================================================================

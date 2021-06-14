@@ -169,7 +169,7 @@ iterate_test_base(AtmStoreIteratorStrategy, Length, ExpectedResultsList) ->
     ),
 
     lists:foldl(fun(Expected, Iterator) ->
-        {ok, _, NewIterator} = ?assertMatch({ok, Expected, _}, atm_store_test_utils:iterator_get_next(krakow, Iterator)),
+        {ok, _, NewIterator} = ?assertMatch({ok, Expected, _}, atm_store_test_utils:iterator_get_next(krakow, AtmWorkflowExecutionEnv, Iterator)),
         NewIterator
     end, AtmStoreIterator0, ExpectedResultsList),
     ok.
@@ -198,20 +198,20 @@ reuse_iterator_test(_Config) ->
     },
     AtmSerialIterator0 = atm_store_test_utils:acquire_store_iterator(krakow, AtmWorkflowExecutionEnv, AtmStoreIteratorSpec),
 
-    {ok, _, AtmSerialIterator1} = ?assertMatch({ok, 1, _}, atm_store_test_utils:iterator_get_next(krakow, AtmSerialIterator0)),
-    {ok, _, AtmSerialIterator2} = ?assertMatch({ok, 2, _}, atm_store_test_utils:iterator_get_next(krakow, AtmSerialIterator1)),
-    {ok, _, AtmSerialIterator3} = ?assertMatch({ok, 3, _}, atm_store_test_utils:iterator_get_next(krakow, AtmSerialIterator2)),
-    {ok, _, AtmSerialIterator4} = ?assertMatch({ok, 4, _}, atm_store_test_utils:iterator_get_next(krakow, AtmSerialIterator3)),
-    {ok, _, AtmSerialIterator5} = ?assertMatch({ok, 5, _}, atm_store_test_utils:iterator_get_next(krakow, AtmSerialIterator4)),
-    ?assertMatch(stop, atm_store_test_utils:iterator_get_next(krakow, AtmSerialIterator5)),
+    {ok, _, AtmSerialIterator1} = ?assertMatch({ok, 1, _}, atm_store_test_utils:iterator_get_next(krakow, AtmWorkflowExecutionEnv, AtmSerialIterator0)),
+    {ok, _, AtmSerialIterator2} = ?assertMatch({ok, 2, _}, atm_store_test_utils:iterator_get_next(krakow, AtmWorkflowExecutionEnv, AtmSerialIterator1)),
+    {ok, _, AtmSerialIterator3} = ?assertMatch({ok, 3, _}, atm_store_test_utils:iterator_get_next(krakow, AtmWorkflowExecutionEnv, AtmSerialIterator2)),
+    {ok, _, AtmSerialIterator4} = ?assertMatch({ok, 4, _}, atm_store_test_utils:iterator_get_next(krakow, AtmWorkflowExecutionEnv, AtmSerialIterator3)),
+    {ok, _, AtmSerialIterator5} = ?assertMatch({ok, 5, _}, atm_store_test_utils:iterator_get_next(krakow, AtmWorkflowExecutionEnv, AtmSerialIterator4)),
+    ?assertMatch(stop, atm_store_test_utils:iterator_get_next(krakow, AtmWorkflowExecutionEnv, AtmSerialIterator5)),
     
-    ?assertMatch({ok, 1, _}, atm_store_test_utils:iterator_get_next(krakow, AtmSerialIterator0)),
+    ?assertMatch({ok, 1, _}, atm_store_test_utils:iterator_get_next(krakow, AtmWorkflowExecutionEnv, AtmSerialIterator0)),
     
-    {ok, _, AtmSerialIterator7} = ?assertMatch({ok, 4, _}, atm_store_test_utils:iterator_get_next(krakow, AtmSerialIterator3)),
-    ?assertMatch({ok, 5, _}, atm_store_test_utils:iterator_get_next(krakow, AtmSerialIterator7)),
+    {ok, _, AtmSerialIterator7} = ?assertMatch({ok, 4, _}, atm_store_test_utils:iterator_get_next(krakow, AtmWorkflowExecutionEnv, AtmSerialIterator3)),
+    ?assertMatch({ok, 5, _}, atm_store_test_utils:iterator_get_next(krakow, AtmWorkflowExecutionEnv, AtmSerialIterator7)),
 
-    {ok, _, AtmSerialIterator9} = ?assertMatch({ok, 2, _}, atm_store_test_utils:iterator_get_next(krakow, AtmSerialIterator1)),
-    ?assertMatch({ok, 3, _}, atm_store_test_utils:iterator_get_next(krakow, AtmSerialIterator9)).
+    {ok, _, AtmSerialIterator9} = ?assertMatch({ok, 2, _}, atm_store_test_utils:iterator_get_next(krakow, AtmWorkflowExecutionEnv, AtmSerialIterator1)),
+    ?assertMatch({ok, 3, _}, atm_store_test_utils:iterator_get_next(krakow, AtmWorkflowExecutionEnv, AtmSerialIterator9)).
 
 
 %===================================================================

@@ -39,19 +39,22 @@
 -type initial_value() ::
     atm_single_value_container:initial_value() | 
     atm_range_container:initial_value() |
-    atm_list_container:initial_value().
+    atm_list_container:initial_value() |
+    atm_tree_forest_container:initial_value().
 
 -type record() ::
     atm_single_value_container:record() | 
     atm_range_container:record() |
-    atm_list_container:record().
+    atm_list_container:record() |
+    atm_tree_forest_container:record().
 
 -type operation_type() :: append | set.
 
 -type operation_options() ::
     atm_single_value_container:operation_options() |
     atm_range_container:operation_options() |
-    atm_list_container:operation_options().
+    atm_list_container:operation_options() |
+    atm_tree_forest_container:operation_options().
 
 -type operation() :: #atm_container_operation{}.
 

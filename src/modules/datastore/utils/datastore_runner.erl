@@ -18,6 +18,7 @@
 -export([run_and_normalize_error/2]).
 -export([extract_ok/1, extract_key/1, ok_if_not_found/1, ok_if_exists/1]).
 -export([get_field/3]).
+-export([normalize_error/1]).
 
 %%%===================================================================
 %%% API
@@ -92,13 +93,7 @@ get_field(Key, Model, GetterFun) ->
         {error, _} = Error -> Error
     end.
 
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
 %%--------------------------------------------------------------------
-%% @private
 %% @doc
 %% Returns just error reason for given error tuple
 %% @end

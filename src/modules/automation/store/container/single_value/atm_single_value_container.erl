@@ -45,14 +45,15 @@
 
 -spec create(atm_data_spec:record(), initial_value(), atm_workflow_execution_ctx:record()) ->
     record() | no_return().
+create(AtmDataSpec, undefined, _AtmWorkflowExecutionCtx) ->
+    #atm_single_value_container{
+        data_spec = AtmDataSpec
+    };
 create(AtmDataSpec, InitialValue, AtmWorkflowExecutionCtx) ->
-    InitialValue == undefined orelse atm_data_validator:validate(
-        AtmWorkflowExecutionCtx, InitialValue, AtmDataSpec
-    ),
-
+    atm_data_validator:validate(AtmWorkflowExecutionCtx, InitialValue, AtmDataSpec),
     #atm_single_value_container{
         data_spec = AtmDataSpec,
-        value = InitialValue
+        value = atm_data_compressor:compress(InitialValue, AtmDataSpec)
     }.
 
 
@@ -75,7 +76,9 @@ apply_operation(#atm_single_value_container{} = Record, #atm_container_operation
 }) ->
     #atm_single_value_container{data_spec = AtmDataSpec} = Record,
     atm_data_validator:validate(AtmWorkflowExecutionCtx, Item, AtmDataSpec),
-    Record#atm_single_value_container{value = Item};
+    Record#atm_single_value_container{
+        value = atm_data_compressor:compress(Item, AtmDataSpec)
+    };
 
 apply_operation(_Record, _Operation) ->
     throw(?ERROR_NOT_SUPPORTED).
