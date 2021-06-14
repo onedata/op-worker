@@ -25,7 +25,7 @@
 
 
 -spec list(od_space:id(), atm_workflow_executions_forest:listing_opts()) ->
-    atm_workflow_executions_forest:listing().
+    atm_workflow_executions_forest:entries().
 list(SpaceId, ListingOpts) ->
     list(SpaceId, all, ListingOpts).
 
@@ -35,7 +35,7 @@ list(SpaceId, ListingOpts) ->
     atm_workflow_executions_forest:tree_ids(),
     atm_workflow_executions_forest:listing_opts()
 ) ->
-    atm_workflow_executions_forest:listing().
+    atm_workflow_executions_forest:entries().
 list(SpaceId, AtmInventoryIds, ListingOpts) ->
     atm_workflow_executions_forest:list(?FOREST(SpaceId), AtmInventoryIds, ListingOpts).
 

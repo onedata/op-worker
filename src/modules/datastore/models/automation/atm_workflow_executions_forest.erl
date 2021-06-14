@@ -8,13 +8,6 @@
 %%% Module which implements generic automation workflow executions collection
 %%% using datastore links (each link is associated with exactly one execution
 %%% in given state).
-%%%
-%%% Collections are sorted by indices consisting of two parts:
-%%% 1) timestamp part - actually it is '?EPOCH_INFINITY - specified Timestamp'.
-%%%                     This causes the newer entries (with higher timestamps)
-%%%                     to be added at the beginning of collection.
-%%% 2) atm workflow execution id part - to disambiguate between executions
-%%%                                     reaching given state at the same time.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_workflow_executions_forest).
@@ -31,6 +24,12 @@
 -type tree_id() :: od_atm_inventory:id().
 -type tree_ids() :: tree_id() | [tree_id()] | all.
 
+% index() consists of 2 parts:
+%  1) timestamp part - equal to ?EPOCH_INFINITY - specified Timestamp.
+%     Thanks to that links are sorted in descending order by their timestamps
+%     (the newest is first).
+%  2) atm workflow execution id part - this part allows to distinguish links
+%     associated with executions reaching given phase at the same time.
 -type index() :: binary().
 -type offset() :: integer().
 -type limit() :: pos_integer().
@@ -38,12 +37,12 @@
 -type listing_opts() :: #{
     start_index => index(),
     offset => offset(),
-    limit => limit()
+    limit := limit()
 }.
--type listing() :: [{atm_workflow_execution:id(), index()}].
+-type entries() :: [{index(), atm_workflow_execution:id()}].
 
 -export_type([forest/0, tree_id/0, tree_ids/0]).
--export_type([index/0, offset/0, limit/0, listing_opts/0, listing/0]).
+-export_type([index/0, offset/0, limit/0, listing_opts/0, entries/0]).
 
 
 -define(CTX, (atm_workflow_execution:get_ctx())).
@@ -54,10 +53,10 @@
 %%%===================================================================
 
 
--spec list(forest(), tree_ids(), listing_opts()) -> listing().
+-spec list(forest(), tree_ids(), listing_opts()) -> entries().
 list(Forest, TreeIds, ListingOpts) ->
     FoldFun = fun(#link{name = Index, target = AtmWorkflowExecutionId}, Acc) ->
-        {ok, [{AtmWorkflowExecutionId, Index} | Acc]}
+        {ok, [{Index, AtmWorkflowExecutionId} | Acc]}
     end,
     {ok, AtmWorkflowExecutions} = datastore_model:fold_links(
         ?CTX, Forest, TreeIds, FoldFun, [], sanitize_listing_opts(ListingOpts)
@@ -102,11 +101,13 @@ index(AtmWorkflowExecutionId, Timestamp) ->
 sanitize_listing_opts(Opts) ->
     SanitizedOpts = try
         middleware_sanitizer:sanitize_data(Opts, #{
+            required => #{
+                limit => {integer, {not_lower_than, 1}}
+            },
             at_least_one => #{
                 offset => {integer, any},
                 start_index => {binary, any}
-            },
-            optional => #{limit => {integer, {not_lower_than, 1}}}
+            }
         })
     catch _:_ ->
         %% TODO VFS-7208 do not catch errors after introducing API errors to fslogic

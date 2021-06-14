@@ -51,12 +51,13 @@ translate_value(#gri{aspect = datasets_details, scope = private}, {Datasets, IsL
 translate_value(#gri{
     aspect = atm_workflow_execution_summaries,
     scope = private
-}, AtmWorkflowExecutionSummaries) ->
+}, {AtmWorkflowExecutionSummaries, IsLast}) ->
     #{
         <<"list">> => lists:map(
             fun atm_workflow_execution_gui_gs_translator:translate_atm_workflow_execution_summary/1,
             AtmWorkflowExecutionSummaries
-        )
+        ),
+        <<"isLast">> => IsLast
     }.
 
 

@@ -15,11 +15,21 @@
 -include("modules/automation/atm_execution.hrl").
 
 %% API
+-export([list/4]).
 -export([create/1, prepare/1, delete/1]).
 -export([get_summary/1, get_summary/2]).
 -export([get_lane_execution_spec/3]).
 -export([report_task_status_change/5]).
 -export([report_lane_execution_ended/3]).
+
+
+-type listing_mode() :: basic | summary.
+
+-type basic_entries() :: atm_workflow_executions_forest:entries().
+-type summary_entries() :: [{atm_workflow_executions_forest:index(), atm_workflow_execution:summary()}].
+-type entries() :: basic_entries() | summary_entries().
+
+-export_type([listing_mode/0, basic_entries/0, summary_entries/0, entries/0]).
 
 
 -record(execution_elements, {
@@ -36,6 +46,29 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+
+-spec list(
+    od_space:id(),
+    atm_workflow_execution:phase(),
+    listing_mode(),
+    atm_workflow_executions_forest:listing_opts()
+) ->
+    {ok, entries(), IsLast :: boolean()}.
+list(SpaceId, Phase, ListingMode, ListingOpts) ->
+    AtmWorkflowExecutionEntries = list(SpaceId, Phase, ListingOpts),
+    IsLast = maps:get(limit, ListingOpts) > length(AtmWorkflowExecutionEntries),
+
+    case ListingMode of
+        basic ->
+            {ok, AtmWorkflowExecutionEntries, IsLast};
+        summary ->
+            AtmWorkflowExecutionSummaries = lists_utils:pmap(fun({Index, AtmWorkflowExecutionId}) ->
+                {Index, get_summary(AtmWorkflowExecutionId)}
+            end, AtmWorkflowExecutionEntries),
+
+            {ok, AtmWorkflowExecutionSummaries, IsLast}
+    end.
 
 
 -spec create(atm_workflow_execution:creation_ctx()) ->
@@ -193,6 +226,21 @@ report_lane_execution_ended(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, Atm
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+%% @private
+-spec list(
+    od_space:id(),
+    atm_workflow_execution:phase(),
+    atm_workflow_executions_forest:listing_opts()
+) ->
+    atm_workflow_executions_forest:entries().
+list(SpaceId, ?WAITING_PHASE, ListingOpts) ->
+    atm_waiting_workflow_executions:list(SpaceId, ListingOpts);
+list(SpaceId, ?ONGOING_PHASE, ListingOpts) ->
+    atm_ongoing_workflow_executions:list(SpaceId, ListingOpts);
+list(SpaceId, ?ENDED_PHASE, ListingOpts) ->
+    atm_ended_workflow_executions:list(SpaceId, ListingOpts).
 
 
 %% @private
