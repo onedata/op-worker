@@ -192,6 +192,7 @@ get_handler(#op_req{operation = Operation, gri = #gri{
 get_router(op_archive) -> archive_middleware_plugin;
 get_router(op_atm_inventory) -> atm_inventory_middleware_plugin;
 get_router(op_atm_lambda_snapshot) -> atm_lambda_snapshot_middleware_plugin;
+get_router(op_atm_store) -> atm_store_middleware_plugin;
 get_router(op_atm_task_execution) -> atm_task_execution_middleware_plugin;
 get_router(op_atm_workflow_execution) -> atm_workflow_execution_middleware_plugin;
 get_router(op_atm_workflow_schema) -> atm_workflow_schema_middleware_plugin;
