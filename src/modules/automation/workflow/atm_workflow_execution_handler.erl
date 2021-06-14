@@ -13,8 +13,7 @@
 -module(atm_workflow_execution_handler).
 -author("Bartosz Walkowicz").
 
-% TODO VFS-7551 substitute behaviour module
-%%-behaviour(workflow_handler).
+-behaviour(workflow_handler).
 
 -include_lib("ctool/include/logging.hrl").
 

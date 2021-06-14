@@ -28,8 +28,6 @@
 ]).
 
 -opaque iterator() :: tuple().
-
--type env() :: term().
 -type item() :: term().
 
 -export_type([iterator/0, item/0]).
@@ -40,15 +38,15 @@
 %%%===================================================================
 
 
--callback get_next(env(), iterator()) -> {ok, item(), iterator()} | stop.
+-callback get_next(workflow_engine:execution_context(), iterator()) -> {ok, item(), iterator()} | stop.
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Marks all iterators older than given one as invalid - auxiliary 
-%% data stored for purpose of serving next items with the use of 
-%% these iterators can be cleaned up. 
+%% Marks all iterators older than given one as invalid - auxiliary
+%% data stored for purpose of serving next items with the use of
+%% these iterators can be cleaned up.
 %% Given iterator, as well as all subsequent ones, are still valid.
-%% Later calls to get_next/2 with invalidated iterators can 
+%% Later calls to get_next/2 with invalidated iterators can
 %% result in undefined behaviour.
 %% @end
 %%--------------------------------------------------------------------
@@ -56,22 +54,23 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Marks all iterators in given iteration line as invalid - all auxiliary 
+%% Marks all iterators in given iteration line as invalid - all auxiliary
 %% data stored for purpose of serving next items can be cleaned up.
 %% Later calls to get_next/2 can result in undefined behaviour.
 %% @end
 %%--------------------------------------------------------------------
 -callback mark_exhausted(iterator()) -> ok.
 
+
 %%%===================================================================
 %%% API functions
 %%%===================================================================
 
 
--spec get_next(env(), iterator()) -> {ok, item(), iterator()} | stop.
-get_next(Env, Iterator) ->
+-spec get_next(workflow_engine:execution_context(), iterator()) -> {ok, item(), iterator()} | stop.
+get_next(Context, Iterator) ->
     Module = utils:record_type(Iterator),
-    Module:get_next(Env, Iterator).
+    Module:get_next(Context, Iterator).
 
 
 -spec forget_before(iterator()) -> ok.
