@@ -1101,7 +1101,7 @@
 
     name :: automation:name(),
     schema_snapshot_id :: atm_workflow_schema_snapshot:id(),
-    lambda_snapshot_registry :: #{od_atm_lambda:id() => atm_lambda_snapshot:id()},
+    lambda_snapshot_registry :: atm_workflow_execution:lambda_snapshot_registry(),
 
     store_registry :: atm_workflow_execution:store_registry(),
     lanes :: [atm_lane_execution:record()],
