@@ -29,6 +29,9 @@
 -export([data_spec/1, fetch_entity/1, authorize/2, validate/2]).
 -export([create/1, get/2, update/1, delete/1]).
 
+%% Utility functions
+-export([has_access_to_workflow_execution_details/2]).
+
 
 %%%===================================================================
 %%% middleware_router callbacks
@@ -116,14 +119,8 @@ authorize(#op_req{operation = create, auth = ?USER(UserId), data = Data, gri = #
     SpaceId = maps:get(<<"spaceId">>, Data),
     space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_SCHEDULE_ATM_WORKFLOW_EXECUTIONS);
 
-authorize(#op_req{
-    operation = get,
-    auth = ?USER(UserId, SessId),
-    gri = #gri{aspect = instance}
-}, #atm_workflow_execution{space_id = SpaceId, atm_inventory_id = AtmInventoryId}) ->
-    user_logic:has_eff_atm_inventory(UserId, SessId, AtmInventoryId) andalso space_logic:has_eff_privilege(
-        SpaceId, UserId, ?SPACE_VIEW_ATM_WORKFLOW_EXECUTIONS
-    );
+authorize(#op_req{operation = get, auth = Auth, gri = #gri{aspect = instance}}, AtmWorkflowExecution) ->
+    has_access_to_workflow_execution_details(Auth, AtmWorkflowExecution);
 
 authorize(#op_req{
     operation = get,
@@ -162,10 +159,23 @@ create(#op_req{auth = ?USER(_UserId, SessionId), data = Data, gri = #gri{aspect 
     AtmWorkflowSchemaId = maps:get(<<"atmWorkflowSchemaId">>, Data),
     AtmStoreInitialValues = maps:get(<<"storeInitialValues">>, Data, #{}),
 
-    {ok, AtmWorkflowExecutionId, AtmWorkflowExecution} = ?check_atm(lfm:schedule_atm_workflow_execution(
+    Result = lfm:schedule_atm_workflow_execution(
         SessionId, SpaceId, AtmWorkflowSchemaId, AtmStoreInitialValues
-    )),
-    {ok, resource, {GRI#gri{id = AtmWorkflowExecutionId}, AtmWorkflowExecution}}.
+    ),
+    case Result of
+        {ok, AtmWorkflowExecutionId, AtmWorkflowExecution} ->
+            {ok, resource, {GRI#gri{id = AtmWorkflowExecutionId}, AtmWorkflowExecution}};
+        ?ERROR_NOT_FOUND ->
+            ?ERROR_NOT_FOUND;
+        {error, ?ENOENT} ->
+            ?ERROR_NOT_FOUND;
+        {error, ?EACCES} ->
+            ?ERROR_FORBIDDEN;
+        {error, ?EPERM} ->
+            ?ERROR_FORBIDDEN;
+        {error, _} ->
+            ?ERROR_MALFORMED_DATA
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -203,3 +213,35 @@ update(_) ->
 -spec delete(middleware:req()) -> middleware:delete_result().
 delete(_) ->
     ?ERROR_NOT_SUPPORTED.
+
+
+%%%===================================================================
+%%% Utility functions
+%%%===================================================================
+
+
+-spec has_access_to_workflow_execution_details(
+    aai:auth(),
+    atm_workflow_execution:record() | atm_workflow_execution:id()
+) ->
+    boolean().
+has_access_to_workflow_execution_details(?GUEST, _) ->
+    false;
+
+has_access_to_workflow_execution_details(?USER(UserId, SessionId), #atm_workflow_execution{
+    space_id = SpaceId,
+    atm_inventory_id = AtmInventoryId
+}) ->
+    HasEffAtmInventory = user_logic:has_eff_atm_inventory(UserId, SessionId, AtmInventoryId),
+
+    HasEffAtmInventory andalso space_logic:has_eff_privilege(
+        SpaceId, UserId, ?SPACE_VIEW_ATM_WORKFLOW_EXECUTIONS
+    );
+
+has_access_to_workflow_execution_details(Auth, AtmWorkflowExecutionId) ->
+    case atm_workflow_execution:get(AtmWorkflowExecutionId) of
+        {ok, #document{value = AtmWorkflowExecution}} ->
+            has_access_to_workflow_execution_details(Auth, AtmWorkflowExecution);
+        {error, _} ->
+            false
+    end.

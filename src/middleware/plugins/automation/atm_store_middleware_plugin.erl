@@ -91,13 +91,12 @@ fetch_entity(_) ->
 authorize(#op_req{auth = ?GUEST}, _) ->
     false;
 
-authorize(#op_req{
-    operation = get,
-    auth = ?USER(UserId, SessId),
-    gri = #gri{aspect = instance}
-}, #atm_task_execution{}) ->
-    %% TODO check space privs and maybe inventory id membership ?
-    true.
+authorize(#op_req{operation = get, auth = Auth, gri = #gri{aspect = instance}}, #atm_store{
+    workflow_execution_id = AtmWorkflowExecutionId
+}) ->
+    atm_workflow_execution_middleware_plugin:has_access_to_workflow_execution_details(
+        Auth, AtmWorkflowExecutionId
+    ).
 
 
 %%--------------------------------------------------------------------
