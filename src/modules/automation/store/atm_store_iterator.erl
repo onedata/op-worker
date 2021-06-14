@@ -159,9 +159,9 @@ get_next_internal(AtmWorkflowExecutionCtx, AtmContainerIterator, Size, DataSpec)
         stop ->
             stop;
         {ok, Items, NewAtmContainerIterator} ->
-            ExpandedItems = lists:filtermap(fun(Item) ->
-                case atm_data_compressor:expand(AtmWorkflowExecutionCtx, Item, DataSpec) of
-                    {ok, Value} -> {true, Value};
+            ExpandedItems = lists:filtermap(fun(CompressedItem) ->
+                case atm_data_compressor:expand(AtmWorkflowExecutionCtx, CompressedItem, DataSpec) of
+                    {ok, ExpandedItem} -> {true, ExpandedItem};
                     {error, _} -> false
                 end
             end, Items),

@@ -37,8 +37,8 @@
 
 -type id() :: atm_value:compressed(). % More precisely dataset:id() but without undefined. Specified this way for dialyzer.
 -type list_opts() :: #{
-    start_index => dataset_api:index(),
-    offset => non_neg_integer()
+    start_index := dataset_api:index(),
+    offset := non_neg_integer()
 }.
 
 %%%===================================================================
@@ -105,7 +105,7 @@ has_access(AtmWorkflowExecutionCtx, DatasetId) ->
 -spec initial_listing_options() -> list_opts().
 initial_listing_options() ->
     #{
-        start_id => <<>>,
+        start_index => <<>>,
         offset => 0
     }.
 

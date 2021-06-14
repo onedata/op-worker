@@ -44,6 +44,8 @@
     restart_iteration_test/1,
     restart_partial_iteration_test/1,
     iteration_with_deleted_root/1,
+    iteration_after_restart_with_deleted_root/1,
+    iteration_after_restart_with_new_dirs_root/1,
     iteration_without_permission/1
 ]).
 
@@ -59,6 +61,8 @@ groups() -> [
         restart_iteration_test,
         restart_partial_iteration_test,
         iteration_with_deleted_root,
+        iteration_after_restart_with_deleted_root,
+        iteration_after_restart_with_new_dirs_root,
         iteration_without_permission
     ]}
 ].
@@ -106,24 +110,23 @@ create_store_with_invalid_args_test(_Config) ->
 
 apply_operation_test(_Config) ->
     AtmWorkflowExecutionCtx = atm_store_test_utils:create_workflow_execution_ctx(krakow, user1, space_krk),
-    {ok, AtmListStoreId0} = atm_store_test_utils:create_store(krakow, AtmWorkflowExecutionCtx, undefined, ?ATM_TREE_FOREST_STORE_SCHEMA),
-    
+    {ok, AtmStoreId} = atm_store_test_utils:create_store(krakow, AtmWorkflowExecutionCtx, undefined, ?ATM_TREE_FOREST_STORE_SCHEMA),
     
     SpaceId = oct_background:get_space_id(space_krk),
     ?assertEqual(?ERROR_ATM_DATA_TYPE_UNVERIFIED(<<"not a file">>, atm_file_type),
         atm_store_test_utils:apply_operation(
-            krakow, AtmWorkflowExecutionCtx, append, <<"not a file">>, #{}, AtmListStoreId0)),
+            krakow, AtmWorkflowExecutionCtx, append, <<"not a file">>, #{}, AtmStoreId)),
     {ok, BadId1} = file_id:guid_to_objectid(file_id:pack_guid(<<"dummy_uuid">>, <<"dummy_space_id">>)),
     ?assertEqual(?ERROR_POSIX(?ENOENT),
         atm_store_test_utils:apply_operation(
-            krakow, AtmWorkflowExecutionCtx, append, #{<<"file_id">> => BadId1}, #{}, AtmListStoreId0)),
+            krakow, AtmWorkflowExecutionCtx, append, #{<<"file_id">> => BadId1}, #{}, AtmStoreId)),
     {ok, BadId2} = file_id:guid_to_objectid(file_id:pack_guid(<<"dummy_uuid">>, SpaceId)),
     ?assertEqual(?ERROR_POSIX(?ENOENT),
         atm_store_test_utils:apply_operation(
-            krakow, AtmWorkflowExecutionCtx, append, #{<<"file_id">> => BadId2}, #{}, AtmListStoreId0)),
+            krakow, AtmWorkflowExecutionCtx, append, #{<<"file_id">> => BadId2}, #{}, AtmStoreId)),
     ?assertEqual(?ERROR_NOT_SUPPORTED,
         atm_store_test_utils:apply_operation(
-            krakow, AtmWorkflowExecutionCtx, set, <<"NaN">>, #{}, AtmListStoreId0)).
+            krakow, AtmWorkflowExecutionCtx, set, <<"NaN">>, #{}, AtmStoreId)).
 
 
 iterator_queue_test(_Config) ->
@@ -294,6 +297,38 @@ iteration_with_deleted_root(_Config) ->
     check_iterator_listing(krakow, AtmWorkflowExecutionEnv, AtmStoreIterator0, ExpectedFiles0, return_none, atm_file_type).
 
 
+iteration_after_restart_with_deleted_root(_Config) ->
+    Node = oct_background:get_random_provider_node(krakow),
+    User1Session = oct_background:get_user_session_id(user1, krakow),
+    AtmStoreIteratorStrategy = #atm_store_iterator_batch_strategy{size = 50},
+    {AtmWorkflowExecutionEnv, AtmStoreIterator0, FilesMap, ExpectedBefore} = create_iteration_test_env(krakow, AtmStoreIteratorStrategy, 3, atm_file_type),
+    
+    check_iterator_listing(krakow, AtmWorkflowExecutionEnv, AtmStoreIterator0, ExpectedBefore, return_iterators, atm_file_type),
+    [RootToDelete0 | _RootsTail] = maps:keys(FilesMap),
+    ?assertEqual(ok, lfm_proxy:rm_recursive(Node, User1Session, ?FILE_REF(RootToDelete0))),
+    ?assertEqual({error, ?ENOENT}, lfm_proxy:stat(Node, User1Session, ?FILE_REF(RootToDelete0)), ?ATTEMPTS),
+    ExpectedAfter = lists:flatten(maps:values(maps:without([RootToDelete0], FilesMap))),
+    check_iterator_listing(krakow, AtmWorkflowExecutionEnv, AtmStoreIterator0, ExpectedAfter, return_none, atm_file_type).
+
+
+iteration_after_restart_with_new_dirs_root(_Config) ->
+    AtmStoreIteratorStrategy = #atm_store_iterator_batch_strategy{size = 50},
+    {AtmWorkflowExecutionEnv, AtmStoreIterator0, FilesMap, ExpectedBefore} = create_iteration_test_env(krakow, AtmStoreIteratorStrategy, 3, atm_file_type),
+    
+    check_iterator_listing(krakow, AtmWorkflowExecutionEnv, AtmStoreIterator0, ExpectedBefore, return_iterators, atm_file_type),
+    [Root1 | _RootsTail] = maps:keys(FilesMap),
+    
+    Spec = [#dir_spec{children = [], mode = 8#705}, #dir_spec{children = [#file_spec{}], mode = 8#705}, #file_spec{}],
+    Objects = onenv_file_test_utils:create_and_sync_file_tree(user1, Root1, Spec, krakow),
+    RegFiles = lists:filtermap(
+        fun (#object{type = ?REGULAR_FILE_TYPE, guid = Guid}) -> 
+                {true, Guid}; 
+            (_) -> 
+                false 
+        end, Objects),
+    check_iterator_listing(krakow, AtmWorkflowExecutionEnv, AtmStoreIterator0, ExpectedBefore ++ RegFiles, return_none, atm_file_type).
+    
+
 iteration_without_permission(_Config) ->
     AtmStoreIteratorStrategy = #atm_store_iterator_batch_strategy{size = 50},
     {AtmWorkflowExecutionEnv, AtmStoreIterator0, FilesMap, _Expected} = create_iteration_test_env(krakow, AtmStoreIteratorStrategy, 1, atm_file_type, user2),
@@ -408,7 +443,7 @@ create_iteration_test_env(ProviderSelector, AtmStoreIteratorStrategy, Depth, Typ
             end, {[], []}, lists:flatten(maps:values(FilesMap)))
     end,
     
-    AtmRangeStoreDummySchemaId = <<"dummyId">>,
+    AtmStoreDummySchemaId = <<"dummyId">>,
     
     RootsToAdd = lists:map(fun(Root) ->
         case Type of
@@ -418,12 +453,12 @@ create_iteration_test_env(ProviderSelector, AtmStoreIteratorStrategy, Depth, Typ
             atm_dataset_type -> #{<<"datasetId">> => Root}
         end
     end, Roots),
-    {ok, AtmListStoreId} = atm_store_test_utils:create_store(ProviderSelector, AtmWorkflowExecutionCtx, RootsToAdd, ?ATM_TREE_FOREST_STORE_SCHEMA(Type)),
+    {ok, AtmStoreId} = atm_store_test_utils:create_store(ProviderSelector, AtmWorkflowExecutionCtx, RootsToAdd, ?ATM_TREE_FOREST_STORE_SCHEMA(Type)),
     AtmStoreIteratorSpec = #atm_store_iterator_spec{
-        store_schema_id = AtmRangeStoreDummySchemaId,
+        store_schema_id = AtmStoreDummySchemaId,
         strategy = AtmStoreIteratorStrategy
     },
-    AtmWorkflowExecutionEnv = atm_workflow_execution_env:build(SpaceId, WorkflowId, #{AtmRangeStoreDummySchemaId => AtmListStoreId}),
+    AtmWorkflowExecutionEnv = atm_workflow_execution_env:build(SpaceId, WorkflowId, #{AtmStoreDummySchemaId => AtmStoreId}),
     AtmStoreIterator0 = atm_store_test_utils:acquire_store_iterator(ProviderSelector, AtmWorkflowExecutionEnv, AtmStoreIteratorSpec),
     {AtmWorkflowExecutionEnv, AtmStoreIterator0, FilesMap, Expected}.
 

@@ -28,11 +28,11 @@
 %%%===================================================================
 
 
--callback compress(atm_api:item()) -> atm_api:item() | no_return().
+-callback compress(atm_value:expanded()) -> atm_value:compressed() | no_return().
 
 
--callback expand(atm_workflow_execution_ctx:record(), atm_api:item()) -> 
-    {ok, atm_api:item()} | {error, term()}.
+-callback expand(atm_workflow_execution_ctx:record(), atm_value:compressed()) -> 
+    {ok, atm_value:expanded()} | {error, term()}.
 
 
 %%%===================================================================
@@ -40,15 +40,15 @@
 %%%===================================================================
 
 
--spec compress(atm_api:item(), atm_data_spec:record()) ->
-    atm_api:item() | no_return().
+-spec compress(atm_value:expanded(), atm_data_spec:record()) ->
+    atm_value:compressed() | no_return().
 compress(Value, AtmDataSpec) ->
     Module = atm_value:get_callback_module(atm_data_spec:get_type(AtmDataSpec)),
     Module:compress(Value).
 
 
--spec expand(atm_workflow_execution_ctx:record(), atm_api:item(), atm_data_spec:record()) -> 
-    {ok, atm_api:item()} | {error, term()}.
+-spec expand(atm_workflow_execution_ctx:record(), atm_value:compressed(), atm_data_spec:record()) -> 
+    {ok, atm_value:expanded()} | {error, term()}.
 expand(AtmWorkflowExecutionCtx, Value, AtmDataSpec) ->
     Module = atm_value:get_callback_module(atm_data_spec:get_type(AtmDataSpec)),
     Module:expand(AtmWorkflowExecutionCtx, Value).

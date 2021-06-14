@@ -19,15 +19,18 @@
 %%% ascending by these names. 
 %%% 
 %%% For each new tree in forest empty entry is "added" - this is simply done by increasing 
-%%% entries counter. This simulates pushing tree root to the queue and immediately peeking it. 
-%%% It must be done in order to distinguish between pushing entries from new tree 
-%%% and restarting iteration in the previous one. 
+%%% `last_pushed_value_index`. This simulates pushing tree root to the queue and immediately 
+%%% peeking and pruning it. It must be done in order to distinguish between pushing entries 
+%%% from new tree and restarting iteration in the previous one. 
 %%% 
 %%% In order to avoid storing to many values in one datastore document whole structure is 
 %%% stored between multiple nodes saved in individual datastore documents. Division of 
 %%% values between nodes is as follows -> value with index I is stored in node number 
 %%% I div ?MAX_VALUES_PER_NODE. 
 %%% All structure statistics are kept in node number 0 which is never pruned.
+%%%
+%%% NOTE: this module does NOT provide any security for concurrent usage. 
+%%% It must be provided by higher level modules.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_tree_forest_iterator_queue).
@@ -78,8 +81,21 @@ init() ->
 
 -spec push(id(), [entry()], index()) -> ok | {error, term()}.
 push(_Id, [], _OriginIndex) -> ok;
-push(Id, Entries, OriginIndex) -> 
-    critical_section:run({?MODULE, Id}, fun() -> push_unsafe(Id, Entries, OriginIndex) end).
+push(Id, Entries, OriginIndex) ->
+    case get_record(Id, 0) of
+        {ok, #atm_tree_forest_iterator_queue{
+            highest_peeked_value_index = HighestPeekedIndex
+        } = FirstRecord} when HighestPeekedIndex =< OriginIndex ->
+            #atm_tree_forest_iterator_queue{
+                discriminator = Discriminator
+            } = FirstRecord,
+            FilteredEntries = filter_by_discriminator(Discriminator, OriginIndex, Entries),
+            push(Id, FirstRecord, OriginIndex, FilteredEntries);
+        {ok, _} ->
+            ok;
+        {error, _} = Error ->
+            Error
+    end.
 
 
 -spec peek(id(), index()) -> {ok, value() | undefined} | {error, term()}.
@@ -108,10 +124,14 @@ report_new_tree(Id, Index) ->
             LastEntryIndex ->
                 {ok, Q#atm_tree_forest_iterator_queue{last_pushed_value_index = LastEntryIndex + 1}};
             _ ->
-                {ok, Q}
+                {error, no_change}
         end
     end, 
-    ?extract_ok(update_record(Id, 0, UpdateFun)).
+    case update_record(Id, 0, UpdateFun) of
+        {ok, _} -> ok;
+        {error, no_change} -> ok;
+        {error, _} = Error -> Error
+    end.
 
 
 -spec prune(id(), index()) -> ok | {error, term()}.
@@ -127,14 +147,17 @@ prune(Id, Index) ->
                     values = prune_values(LastToPruneNodeNum * ?MAX_VALUES_PER_NODE, max(Index, 0), Values)
                 }}
             end,
-            ok = ?extract_ok(update_record(Id, LastToPruneNodeNum, UpdateFinalNodeFun)),
+            ok = ?ok_if_not_found(?extract_ok(update_record(Id, LastToPruneNodeNum, UpdateFinalNodeFun))),
             case LastToPruneNodeNum of
                 0 -> 
                     ok;
                 _ ->
-                    UpdateFirstNodeFun = fun(#atm_tree_forest_iterator_queue{} = Record) ->
+                    UpdateFirstNodeFun = fun(#atm_tree_forest_iterator_queue{
+                        last_pruned_node_num = PrevLastPrunedNodeNum
+                    } = Record) ->
                         {ok, Record#atm_tree_forest_iterator_queue{
-                            last_pruned_node_num = LastToPruneNodeNum, values = #{}
+                            last_pruned_node_num = max(LastToPruneNodeNum, PrevLastPrunedNodeNum),
+                            values = #{}
                         }}
                     end,
                     ?extract_ok(update_record(Id, 0, UpdateFirstNodeFun))
@@ -160,28 +183,9 @@ destroy(Id) ->
 %%%===================================================================
 
 %% @private
--spec push_unsafe(id(), [entry()], index()) -> ok | {error, term()}.
-push_unsafe(Id, Entries, OriginIndex) ->
-    case get_record(Id, 0) of
-        {ok, #atm_tree_forest_iterator_queue{
-            highest_peeked_value_index = HighestPeekedIndex
-        } = FirstRecord} when HighestPeekedIndex =< OriginIndex ->
-            #atm_tree_forest_iterator_queue{
-                discriminator = Discriminator
-            } = FirstRecord,
-            FilteredEntries = filter_by_discriminator(Discriminator, OriginIndex, Entries),
-            push_unsafe(Id, FirstRecord, OriginIndex, FilteredEntries);
-        {ok, _} ->
-            ok;
-        {error, _} = Error ->
-            Error
-    end.
-
-
-%% @private
--spec push_unsafe(id(), record(), index(), [entry()]) -> ok.
-push_unsafe(_Id, _FirstRecord, _OriginIndex, []) -> ok;
-push_unsafe(Id, FirstRecord, OriginIndex, Entries) ->
+-spec push(id(), record(), index(), [entry()]) -> ok.
+push(_Id, _FirstRecord, _OriginIndex, []) -> ok;
+push(Id, FirstRecord, OriginIndex, Entries) ->
     #atm_tree_forest_iterator_queue{values = ValuesBefore, last_pushed_value_index = LastEntryIndex} = FirstRecord,
     {UpdatedLastValueIndex, [{LowestNodeNum, LowestNodeValues} | ValuesPerNodeTail]} =
         prepare_values(LastEntryIndex, Entries),

@@ -35,8 +35,9 @@
 -export([compress/1, expand/2]).
 
 -type list_opts() :: #{
-    last_name => file_meta:name(),
-    last_tree => file_meta:name()
+    last_name := file_meta:name(),
+    last_tree := file_meta:name(),
+    size => non_neg_integer()
 }.
 
 %%%===================================================================
@@ -142,12 +143,12 @@ expand(AtmWorkflowExecutionCtx, Guid) ->
 
 %% @private
 -spec check_constraints(lfm_attrs:file_attributes(), atm_data_type:value_constraints()) -> 
-    ok | no_return().
+    ok | {error, term()}.
 check_constraints(#file_attr{type = FileType}, Constraints) ->
     case maps:get(file_type, Constraints, 'ANY') of
         'ANY' -> ok;
         FileType -> ok;
-        Other -> throw(?ERROR_ATM_DATA_TYPE_CONSTRAINT_UNVERIFIED(Other, FileType))
+        Other -> ?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(Other, FileType)
     end.
 
 

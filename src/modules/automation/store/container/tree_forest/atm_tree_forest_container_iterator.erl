@@ -8,7 +8,15 @@
 %%% @doc
 %%% This module provides `atm_container_iterator` functionality for
 %%% `atm_tree_forest_container`. Each atm_data_type, that is to be 
-%%% allowed for iteration must implement behaviour provided by this module.
+%%% allowed for iteration must implement behaviour provided by this module. 
+%%% All modules implementing this behaviour must be registered in 
+%%% `get_callback_module` function.
+%%%
+%%% NOTE: As function `get_next_batch` with newer iterator can be called only 
+%%% after previous call finished it is concurrently secure. 
+%%% Only cases that must be secured are when reusing iterators. This is provided by 
+%%% underlying `atm_tree_forest_iterator_queue` module, as reusing iterators does 
+%%% not change any persisted counters or values.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_tree_forest_container_iterator).
@@ -64,7 +72,7 @@
 
 -callback list_children(
     atm_workflow_execution_ctx:record(), 
-    item_id(), 
+    traversable_item_id() | nontraversable_item_id(), 
     list_opts(),
     atm_container_iterator:batch_size()
 ) -> 

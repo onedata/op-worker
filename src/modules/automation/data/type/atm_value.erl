@@ -19,7 +19,7 @@
 -export([get_callback_module/1]).
 -export([is_error_ignored/1]).
 
--type compressed() :: binary().
+-type compressed() :: term().
 -type expanded() :: atm_api:item().
 
 -export_type([compressed/0, expanded/0]).

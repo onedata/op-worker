@@ -30,12 +30,12 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Asserts that all value constraints hold for specified item. Returns sanitized item.
+%% Asserts that all value constraints hold for specified item.
 %% @end
 %%--------------------------------------------------------------------
 -callback validate(
     atm_workflow_execution_ctx:record(),
-    atm_api:item(),
+    atm_value:expanded(),
     atm_data_type:value_constraints()
 ) ->
     ok | no_return().
@@ -46,7 +46,7 @@
 %%%===================================================================
 
 
--spec validate(atm_workflow_execution_ctx:record(), atm_api:item(), atm_data_spec:record()) ->
+-spec validate(atm_workflow_execution_ctx:record(), atm_value:expanded(), atm_data_spec:record()) ->
     ok | no_return().
 validate(AtmWorkflowExecutionCtx, Value, AtmDataSpec) ->
     Module = atm_value:get_callback_module(atm_data_spec:get_type(AtmDataSpec)),
