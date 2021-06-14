@@ -12,11 +12,12 @@
 -ifndef(PROVIDER_MESSAGES_HRL).
 -define(PROVIDER_MESSAGES_HRL, 1).
 
--include("modules/auth/acl.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/qos.hrl").
+-include("modules/fslogic/acl.hrl").
 -include("proto/oneclient/common_messages.hrl").
--include_lib("ctool/include/posix/file_attr.hrl").
+-include("modules/fslogic/file_attr.hrl").
+-include("modules/dataset/dataset.hrl").
 
 -record(get_parent, {
 }).
@@ -155,6 +156,69 @@
     qos_id :: qos_entry:id()
 }).
 
+-record(establish_dataset, {
+    protection_flags = ?no_flags_mask :: data_access_control:bitmask()
+}).
+
+-record(update_dataset, {
+    id :: dataset:id(),
+    state :: undefined | dataset:state(),
+    flags_to_set = ?no_flags_mask :: data_access_control:bitmask(),
+    flags_to_unset = ?no_flags_mask :: data_access_control:bitmask()
+}).
+
+-record(remove_dataset, {
+    id :: dataset:id()
+}).
+
+-record(get_dataset_info, {
+    id :: dataset:id()
+}).
+
+-record(get_file_eff_dataset_summary, {
+}).
+
+-record(list_top_datasets, {
+    state :: dataset:state(),
+    opts :: dataset_api:listing_opts(),
+    mode = ?BASIC_INFO :: dataset_api:listing_mode()
+}).
+
+-record(list_children_datasets, {
+    id :: dataset:id(),
+    opts :: dataset_api:listing_opts(),
+    mode = ?BASIC_INFO :: dataset_api:listing_mode()
+}).
+
+-record(archive_dataset, {
+    id :: dataset:id(),
+    config :: archive:config(),
+    preserved_callback :: archive:callback(),
+    purged_callback :: archive:callback(),
+    description :: archive:description()
+}).
+
+-record(update_archive, {
+    id :: archive:id(),
+    description :: archive:description() | undefined,
+    diff :: archive:diff()
+}).
+
+-record(get_archive_info, {
+    id :: archive:id()
+}).
+
+-record(list_archives, {
+    dataset_id :: dataset:id(),
+    opts :: archives_list:opts(),
+    mode = ?BASIC_INFO :: archive_api:listing_mode()
+}).
+
+-record(init_archive_purge, {
+    id :: archive:id(),
+    callback :: archive:callback()
+}).
+
 
 -type provider_request_type() ::
     #get_parent{} | #get_acl{} | #set_acl{} | #remove_acl{} |
@@ -166,7 +230,10 @@
     #schedule_file_replication{} | #schedule_replica_invalidation{} |
     #get_metadata{} | #remove_metadata{} | #set_metadata{} | #check_perms{} |
     #create_share{} | #remove_share{} |
-    #add_qos_entry{} | #get_effective_file_qos{} | #get_qos_entry{} | #remove_qos_entry{} | #check_qos_status{}.
+    #add_qos_entry{} | #get_effective_file_qos{} | #get_qos_entry{} | #remove_qos_entry{} | #check_qos_status{} |
+    #establish_dataset{} | #update_dataset{} | #remove_dataset{} |
+    #get_dataset_info{} | #get_file_eff_dataset_summary{} | #list_top_datasets{} | #list_children_datasets{} |
+    #archive_dataset{} | #update_archive{} | #get_archive_info{} | #list_archives{} | #init_archive_purge{}.
 
 -record(transfer_encoding, {
     value :: binary()
@@ -219,11 +286,65 @@
     assigned_entries = #{} :: file_qos:assigned_entries()
 }).
 
+-record(dataset_established, {
+    id :: dataset:id()
+}).
+
+-record(dataset_info, {
+    id :: dataset:id(),
+    state :: dataset:state(),
+    root_file_guid :: fslogic_worker:file_guid(),
+    root_file_path :: file_meta:path(),
+    root_file_type :: file_meta:type(),
+    creation_time :: time:seconds(),
+    protection_flags = ?no_flags_mask :: data_access_control:bitmask(),
+    eff_protection_flags = ?no_flags_mask :: data_access_control:bitmask(),
+    parent :: undefined | dataset:id(),
+    archive_count = 0 :: non_neg_integer(),
+    index :: dataset_api:index()
+}).
+
+-record(file_eff_dataset_summary, {
+    direct_dataset :: dataset:id(),
+    eff_ancestor_datasets :: [dataset:id()],
+    eff_protection_flags = ?no_flags_mask :: data_access_control:bitmask()
+}).
+
+-record(datasets, {
+   datasets = [] :: dataset_api:entries(),
+   is_last :: boolean()
+}).
+
+-record(dataset_archived, {
+    id :: archive:id()
+}).
+
+-record(archive_info, {
+    id :: archive:id(),
+    dataset_id :: dataset:id(),
+    state :: archive:state(),
+    root_file_guid :: undefined | file_id:file_guid(),
+    creation_time :: time:millis(),
+    config :: archive:config(),
+    preserved_callback :: archive:callback(),
+    purged_callback :: archive:callback(),
+    description :: archive:description(),
+    index :: archive_api:index(),
+    stats :: archive_stats:record()
+}).
+
+-record(archives, {
+    archives = [] :: archive_api:entries(),
+    is_last :: boolean()
+}).
+
 -type provider_response_type() ::
-    #transfer_encoding{} | #cdmi_completion_status{} |#mimetype{} | #acl{} |
-    #dir{} | #file_path{} | #file_distribution{} | #metadata{} | #share{} |
-    #scheduled_transfer{} | #qos_entry_id{} | #qos_entry{} | #eff_qos_response{} |
-    #qos_status_response{} | undefined.
+    #transfer_encoding{} | #cdmi_completion_status{} | #mimetype{} | #acl{} |
+    #dir{} | #file_path{} | #file_distribution{} | #metadata{} | #share{} | #scheduled_transfer{} |
+    #qos_entry_id{} | #qos_entry{} | #eff_qos_response{} | #qos_status_response{} |
+    #dataset_established{} | #dataset_info{} | #file_eff_dataset_summary{} | #datasets{}|
+    #dataset_archived{} | #archive_info{} | #archives{} |
+    undefined.
 
 -record(provider_request, {
     context_guid :: fslogic_worker:file_guid(),
@@ -235,6 +356,7 @@
     provider_response :: provider_response_type()
 }).
 
+-define(PROVIDER_OK_RESP, ?PROVIDER_OK_RESP(undefined)).
 -define(PROVIDER_OK_RESP(__RESPONSE), #provider_response{
     status = #status{code = ?OK},
     provider_response = __RESPONSE

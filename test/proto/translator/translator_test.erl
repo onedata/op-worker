@@ -327,8 +327,8 @@ get_token_auth(Val) ->
 get_client_handshake_request(Token, Nonce, CompOpVersions) ->
     {Internal, Protobuf} = get_token_auth(Token),
     {
-        #client_handshake_request{client_tokens = Internal, nonce = Nonce, compatible_oneprovider_versions = CompOpVersions},
-        #'ClientHandshakeRequest'{macaroon = Protobuf, session_id = Nonce, compatible_oneprovider_versions = CompOpVersions}
+        #client_handshake_request{client_tokens = Internal, nonce = Nonce, compatible_oneprovider_versions = CompOpVersions, session_mode = normal},
+        #'ClientHandshakeRequest'{macaroon = Protobuf, session_id = Nonce, compatible_oneprovider_versions = CompOpVersions, session_mode = 'NORMAL'}
     }.
 
 get_provider_handshake_request(ProviderId, Token) ->

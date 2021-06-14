@@ -49,7 +49,7 @@
 -define(PROVIDER_ID_CACHE_KEY, provider_id_cache).
 
 -define(PROVIDER_AUTH_KEY, <<"provider_auth">>).
--define(TOKEN_TTL, application:get_env(?APP_NAME, provider_token_ttl_sec, 900)).
+-define(TOKEN_TTL, op_worker:get_env(provider_token_ttl_sec, 900)).
 % Tokens from cache with lower TTL will not be used
 % (they might expire before they are consumed), a new one will be generated.
 -define(MIN_TTL_FROM_CACHE, 15).
@@ -169,7 +169,7 @@ acquire_identity_token_for_consumer(Consumer) ->
 %%--------------------------------------------------------------------
 -spec get_root_token_file_path() -> string().
 get_root_token_file_path() ->
-    {ok, ProviderRootTokenFile} = application:get_env(?APP_NAME, root_token_path),
+    ProviderRootTokenFile = op_worker:get_env(root_token_path),
     filename:absname(ProviderRootTokenFile).
 
 

@@ -28,6 +28,6 @@
 
 -define(REPLICA_DELETION_WORKER, replica_deletion_worker).
 -define(REPLICA_DELETION_WORKERS_POOL, replica_deletion_workers_pool).
--define(REPLICA_DELETION_WORKERS_NUM, application:get_env(?APP_NAME, replica_deletion_workers_num, 10)).
+-define(REPLICA_DELETION_WORKERS_NUM, op_worker:get_env(replica_deletion_workers_num, 10)).
 
 -endif.

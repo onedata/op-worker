@@ -13,6 +13,7 @@
 
 -include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include("modules/monitoring/rrd_definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/errors.hrl").
@@ -66,7 +67,7 @@ create_rrd(SpaceId, MonitoringId, StateBuffer, CreationTime) ->
                 end,
             {ok, Guid} = lfm:create(?ROOT_SESS_ID, RRDDirGuid, RRDFileName, undefined),
 
-            {ok, Handle} = lfm:open(?ROOT_SESS_ID, {guid, Guid}, write),
+            {ok, Handle} = lfm:open(?ROOT_SESS_ID, ?FILE_REF(Guid), write),
             {ok, Handle2, RRDSize} = lfm:write(Handle, 0, RRDFile),
             ok = lfm:fsync(Handle2),
             ok = lfm:release(Handle2),
@@ -98,7 +99,7 @@ update_rrd(MonitoringId, MonitoringState, UpdateTime, UpdateValues) ->
         UpdateValues
     ),
 
-    {ok, Handle} = lfm:open(?ROOT_SESS_ID, {guid, RRDGuid}, rdwr),
+    {ok, Handle} = lfm:open(?ROOT_SESS_ID, ?FILE_REF(RRDGuid), rdwr),
     {ok, Handle2, RRDFile} = lfm:silent_read(Handle, 0, ?RRD_READ_SIZE),
 
     {ok, TmpPath} = write_rrd_to_file(RRDFile),
@@ -132,7 +133,7 @@ export_rrd(MonitoringId, Step, Format) ->
     {ok, #document{value = #monitoring_state{rrd_guid = RRDGuid, monitoring_id = #monitoring_id{provider_id = ProviderId}}}} =
         monitoring_state:get(MonitoringId),
 
-    {ok, Handle} = lfm:open(?ROOT_SESS_ID, {guid, RRDGuid}, read),
+    {ok, Handle} = lfm:open(?ROOT_SESS_ID, ?FILE_REF(RRDGuid), read),
     {ok, Handle2, RRDFile} = lfm_files:read_without_events(Handle, 0, ?RRD_READ_SIZE),
     ok = lfm:release(Handle2),
     {ok, TmpPath} = write_rrd_to_file(RRDFile),

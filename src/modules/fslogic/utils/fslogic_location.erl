@@ -7,6 +7,8 @@
 %%%--------------------------------------------------------------------
 %%% @doc
 %%% This module provides functions operating on file_location.
+%%% Note: file_location should operate always on referenced uuids. Thus,
+%%% creating file_location record, referenced uuid and guid must be used.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(fslogic_location).
@@ -29,8 +31,8 @@
     GeneratedKey :: boolean()) -> {{ok, file_location:record()} | {error, already_exists}, file_ctx:ctx()}.
 create_doc(FileCtx, StorageFileCreated, GeneratedKey) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
-    FileGuid = file_ctx:get_guid_const(FileCtx),
+    FileUuid = file_ctx:get_referenced_uuid_const(FileCtx),
+    FileGuid = file_ctx:get_referenced_guid_const(FileCtx),
     {StorageFileId, FileCtx2} = file_ctx:get_new_storage_file_id(FileCtx),
     {StorageId, FileCtx3} = file_ctx:get_storage_id(FileCtx2),
     {Size, FileCtx4} = file_ctx:get_file_size_from_remote_locations(FileCtx3),

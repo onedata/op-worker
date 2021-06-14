@@ -85,7 +85,7 @@ reconcile_qos(FileCtx) ->
 %%--------------------------------------------------------------------
 -spec reconcile_qos(file_meta:uuid(), od_space:id()) -> ok.
 reconcile_qos(FileUuid, SpaceId) ->
-    FileCtx = file_ctx:new_by_guid(file_id:pack_guid(FileUuid, SpaceId)),
+    FileCtx = file_ctx:new_by_uuid(FileUuid, SpaceId),
     reconcile_qos(FileCtx).
 
 
@@ -102,16 +102,16 @@ reconcile_qos(FileUuid, SpaceId) ->
     when Option :: ignore_missing_files.
 reconcile_qos_internal(FileCtx, Options) when is_list(Options) ->
     {StorageId, FileCtx1} = file_ctx:get_storage_id(FileCtx),
-    FileUuid = file_ctx:get_uuid_const(FileCtx1),
+    InodeUuid = file_ctx:get_referenced_uuid_const(FileCtx1),
     SpaceId = file_ctx:get_space_id_const(FileCtx1),
-    case file_qos:get_effective(FileUuid) of
+    case file_qos:get_effective(InodeUuid) of
         {error, {file_meta_missing, MissingUuid}} ->
             % new file_ctx will be generated when file_meta_posthook
             % will be executed (see function reconcile_qos/2).
             lists:member(ignore_missing_files, Options) orelse 
                 file_meta_posthooks:add_hook(
-                    MissingUuid, <<"check_qos_", FileUuid/binary>>,
-                    ?MODULE, reconcile_qos, [FileUuid, SpaceId]),
+                    MissingUuid, <<"check_qos_", InodeUuid/binary>>,
+                    ?MODULE, reconcile_qos, [InodeUuid, SpaceId]),
             ok;
         {ok, EffFileQos} ->
             case file_qos:is_in_trash(EffFileQos) of
@@ -157,7 +157,7 @@ reevaluate_qos(#document{key = QosEntryId} = QosEntryDoc) ->
     case qos_expression:try_assigning_storages(SpaceId, QosExpression, ReplicasNum) of
         {true, AssignedStorages} ->
             AllTraverseReqs = qos_traverse_req:build_traverse_reqs(
-                file_ctx:get_uuid_const(FileCtx), AssignedStorages
+                file_ctx:get_logical_uuid_const(FileCtx), AssignedStorages
             ),
             qos_entry:mark_possible(QosEntryId, SpaceId, AllTraverseReqs),
             qos_traverse_req:start_applicable_traverses(
@@ -173,7 +173,7 @@ reevaluate_qos(QosEntryId) when is_binary(QosEntryId) ->
 -spec retry_failed_files(od_space:id()) -> ok.
 retry_failed_files(SpaceId) ->
     qos_entry:apply_to_all_in_failed_files_list(SpaceId, fun(FileUuid) ->
-        FileCtx = file_ctx:new_by_guid(file_id:pack_guid(FileUuid, SpaceId)),
+        FileCtx = file_ctx:new_by_uuid(FileUuid, SpaceId),
         ok = qos_entry:remove_from_failed_files_list(SpaceId, FileUuid),
         ok = reconcile_qos_internal(FileCtx, [ignore_missing_files])
     end).

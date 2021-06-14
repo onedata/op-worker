@@ -19,6 +19,8 @@
 -behaviour(middleware_plugin).
 
 -include("middleware/middleware.hrl").
+-include("modules/dataset/dataset.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include("modules/datastore/transfer.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/privileges.hrl").
@@ -33,8 +35,7 @@
 -export([create/1, get/2, update/1, delete/1]).
 
 -define(MAX_LIST_LIMIT, 1000).
--define(DEFAULT_VIEW_LIST_LIMIT, 100).
--define(DEFAULT_TRANSFER_LIST_LIMIT, 100).
+-define(DEFAULT_LIST_LIMIT, 1000).
 
 
 %%%===================================================================
@@ -66,6 +67,8 @@ operation_supported(get, transfers, private) -> true;
 operation_supported(get, transfers_active_channels, private) -> true;
 operation_supported(get, {transfers_throughput_charts, _}, private) -> true;
 operation_supported(get, available_qos_parameters, private) -> true;
+operation_supported(get, datasets, private) -> true;
+operation_supported(get, datasets_details, private) -> true;
 
 operation_supported(update, {view, _}, private) -> true;
 
@@ -195,6 +198,21 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = {transfers_throughput_cha
 data_spec(#op_req{operation = get, gri = #gri{aspect = available_qos_parameters}}) ->
     undefined;
 
+data_spec(#op_req{operation = get, gri = #gri{aspect = Aspect}})
+    when Aspect =:= datasets
+    orelse Aspect =:= datasets_details
+-> #{
+    required => #{
+        <<"state">> => {atom, [?ATTACHED_DATASET, ?DETACHED_DATASET]}
+    },
+    optional => #{
+        <<"offset">> => {integer, any},
+        <<"index">> => {binary, any},
+        <<"token">> => {binary, non_empty},
+        <<"limit">> => {integer, {between, 1, ?MAX_LIST_LIMIT}}
+    }
+};
+
 data_spec(#op_req{operation = update, gri = #gri{aspect = {view, _}}}) -> #{
     optional => #{
         <<"mapFunction">> => {binary, any},
@@ -296,7 +314,9 @@ authorize(#op_req{operation = get, auth = ?USER(UserId), gri = #gri{
 }}, _) when
     As =:= eff_users;
     As =:= eff_groups;
-    As =:= shares
+    As =:= shares;
+    As =:= datasets;
+    As =:= datasets_details
 ->
     space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW);
 
@@ -390,6 +410,8 @@ validate(#op_req{operation = get, gri = #gri{id = SpaceId, aspect = As}}, _) whe
     As =:= eff_users;
     As =:= eff_groups;
     As =:= shares;
+    As =:= datasets;
+    As =:= datasets_details;
     As =:= providers
 ->
     middleware_utils:assert_space_supported_locally(SpaceId);
@@ -512,7 +534,7 @@ get(#op_req{auth = Auth, gri = #gri{id = SpaceId, aspect = instance}}, _) ->
 
 get(#op_req{data = Data, gri = #gri{id = SpaceId, aspect = views}}, _) ->
     PageToken = maps:get(<<"page_token">>, Data, <<"null">>),
-    Limit = maps:get(<<"limit">>, Data, ?DEFAULT_VIEW_LIST_LIMIT),
+    Limit = maps:get(<<"limit">>, Data, ?DEFAULT_LIST_LIMIT),
 
     {StartId, Offset} = case PageToken of
         <<"null">> ->
@@ -524,11 +546,14 @@ get(#op_req{data = Data, gri = #gri{id = SpaceId, aspect = views}}, _) ->
 
     case index:list(SpaceId, StartId, Offset, Limit) of
         {ok, Views} ->
-            NextPageToken = case length(Views) of
-                Limit -> #{<<"nextPageToken">> => lists:last(Views)};
-                _ -> #{}
+            NextPageToken = case length(Views) =:= Limit of
+                true -> lists:last(Views);
+                false -> null
             end,
-            {ok, maps:merge(#{<<"views">> => Views}, NextPageToken)};
+            {ok, #{
+                <<"views">> => Views,
+                <<"nextPageToken">> => NextPageToken
+            }};
         {error, _} = Error ->
             Error
     end;
@@ -567,7 +592,7 @@ get(#op_req{auth = Auth, gri = #gri{id = SpaceId, aspect = providers}}, _) ->
 get(#op_req{data = Data, gri = #gri{id = SpaceId, aspect = transfers}}, _) ->
     StartId = maps:get(<<"page_token">>, Data, undefined),
     TransferState = maps:get(<<"state">>, Data, <<"ongoing">>),
-    Limit = maps:get(<<"limit">>, Data, ?DEFAULT_TRANSFER_LIST_LIMIT),
+    Limit = maps:get(<<"limit">>, Data, ?DEFAULT_LIST_LIMIT),
     Offset = case {StartId, maps:get(<<"offset">>, Data, undefined)} of
         {undefined, undefined} ->
             % Start from the beginning if no page_token and offset given
@@ -615,7 +640,10 @@ get(#op_req{data = Data, gri = #gri{id = SpaceId, aspect = transfers}}, _) ->
                 <<"nextPageToken">> => NextPageToken
             };
         _ ->
-            #{<<"transfers">> => Transfers}
+            #{
+                <<"transfers">> => Transfers,
+                <<"nextPageToken">> => null
+            }
     end,
     {ok, value, Result};
 
@@ -681,7 +709,22 @@ get(#op_req{gri = #gri{id = SpaceId, aspect = available_qos_parameters}}, _) ->
             )}
         end, OuterAcc, QosParameters)
     end, #{}, Storages),
-    {ok, Res}.
+    {ok, Res};
+
+get(#op_req{auth = Auth, gri = #gri{id = SpaceId, aspect = Aspect}, data = Data}, _)
+    when Aspect =:= datasets
+    orelse Aspect =:= datasets_details
+->
+    State = maps:get(<<"state">>, Data, ?ATTACHED_DATASET),
+    ListingOpts = dataset_middleware:gather_listing_opts(Data),
+    ListingMode = case Aspect of
+        datasets -> ?BASIC_INFO;
+        datasets_details -> ?EXTENDED_INFO
+    end,
+    {ok, Datasets, IsLast} = ?check(lfm:list_top_datasets(
+        Auth#auth.session_id, SpaceId, State, ListingOpts, ListingMode
+    )),
+    {ok, value, {Datasets, IsLast}}.
 
 
 %%--------------------------------------------------------------------

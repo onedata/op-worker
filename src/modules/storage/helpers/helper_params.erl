@@ -244,7 +244,8 @@ expected_custom_helper_args(?NULL_DEVICE_HELPER_NAME) -> [
 expected_generic_helper_args() -> [
     <<"storagePathType">>,
     {optional, <<"skipStorageDetection">>},
-    {optional, <<"timeout">>}
+    {optional, <<"timeout">>},
+    {optional, <<"archiveStorage">>}
 ].
 
 %%--------------------------------------------------------------------

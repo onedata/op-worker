@@ -86,6 +86,9 @@ valid_qos_expression_test() ->
     check_valid_expression(<<"a = 8.8">>, [<<"a">>, 8.8, <<"=">>]),
     check_valid_expression(<<"a < 8.8">>, [<<"a">>, 8.8, <<"<">>]),
     check_valid_expression(<<"a >= 8.8">>, [<<"a">>, 8.8, <<">=">>]),
+    check_valid_expression(<<"a = aaaa.aaaa.aaa">>, [<<"a">>, <<"aaaa.aaaa.aaa">>, <<"=">>]),
+    check_valid_expression(<<"a = aaaa.888.888">>, [<<"a">>, <<"aaaa.888.888">>, <<"=">>]),
+    check_valid_expression(<<"a = 888.888.888">>, [<<"a">>, <<"888.888.888">>, <<"=">>]),
     ok.
     
 

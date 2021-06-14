@@ -60,7 +60,6 @@
     % Tests the Onezone's public shared data redirector, that should
     % redirect to the corresponding endpoint in a suitable Oneprovider.
     {rest_with_shared_guid, od_space:id()} |
-    {deprecated_rest_with_shared_guid, od_space:id()} |
     % Rest scenario that results in ?ERROR_NOT_SUPPORTED regardless
     % of request auth and parameters.
     rest_not_supported |
@@ -81,7 +80,7 @@
 % setting some value on one node and updating it on another node.
 % Checks whether value set on one node was synced with other nodes can be
 % performed using `verify_fun` callback.
--type target_nodes() :: [node()].
+-type target_nodes() :: [node() | oct_background:entity_selector()].
 
 -type client_placeholder() :: atom().
 
@@ -340,14 +339,13 @@ run_malformed_data_test_cases(#suite_spec{
     scenario_type()
 ) ->
     boolean().
-is_data_error_applicable_to_scenario({error, _}, _)                                            -> true;
-is_data_error_applicable_to_scenario({Scenario, _}, Scenario)                                  -> true;
-is_data_error_applicable_to_scenario({rest_handler, _}, rest)                                  -> true;
-is_data_error_applicable_to_scenario({rest_handler, _}, rest_with_file_path)                   -> true;
-is_data_error_applicable_to_scenario({rest_handler, _}, {rest_with_shared_guid, _})            -> true;
-is_data_error_applicable_to_scenario({rest_handler, _}, {deprecated_rest_with_shared_guid, _}) -> true;
-is_data_error_applicable_to_scenario({rest_handler, _}, rest_not_supported)                    -> true;
-is_data_error_applicable_to_scenario(_, _)                                                     -> false.
+is_data_error_applicable_to_scenario({error, _}, _)                                 -> true;
+is_data_error_applicable_to_scenario({Scenario, _}, Scenario)                       -> true;
+is_data_error_applicable_to_scenario({rest_handler, _}, rest)                       -> true;
+is_data_error_applicable_to_scenario({rest_handler, _}, rest_with_file_path)        -> true;
+is_data_error_applicable_to_scenario({rest_handler, _}, {rest_with_shared_guid, _}) -> true;
+is_data_error_applicable_to_scenario({rest_handler, _}, rest_not_supported)         -> true;
+is_data_error_applicable_to_scenario(_, _)                                          -> false.
 
 
 %% @private
@@ -635,8 +633,7 @@ validate_error_result(Type, ExpError, {ok, RespCode, _RespHeaders, RespBody}) wh
     Type == rest;
     Type == rest_with_file_path;
     Type == rest_not_supported;
-    element(1, Type) == rest_with_shared_guid;
-    element(1, Type) == deprecated_rest_with_shared_guid
+    element(1, Type) == rest_with_shared_guid
 ->
     ?assertEqual(
         {errors:to_http_code(ExpError), ?REST_ERROR(ExpError)},
@@ -819,12 +816,29 @@ get_correct_values(Key, #data_spec{correct_values = CorrectValues}) ->
 
 %% @private
 -spec prepare_suite_spec(scenario_spec() | suite_spec()) -> suite_spec().
-prepare_suite_spec(#suite_spec{client_spec = ClientSpecTemplate} = SuiteSpec) ->
+prepare_suite_spec(#suite_spec{
+    target_nodes = TargetNodes,
+    client_spec = ClientSpecTemplate
+} = SuiteSpec) ->
     SuiteSpec#suite_spec{
+        target_nodes = prepare_target_nodes(TargetNodes),
         client_spec = prepare_client_spec(ClientSpecTemplate)
     };
 prepare_suite_spec(#scenario_spec{} = ScenarioSpec) ->
     prepare_suite_spec(scenario_spec_to_suite_spec(ScenarioSpec)).
+
+
+%% @private
+-spec prepare_target_nodes(target_nodes()) -> target_nodes().
+prepare_target_nodes(TargetNodes) ->
+    lists:map(fun(NodeSelector) ->
+        case lists:member(NodeSelector, nodes(known)) of
+            true ->
+                NodeSelector;
+            false ->
+                lists_utils:random_element(oct_background:get_provider_nodes(NodeSelector))
+        end
+    end, TargetNodes).
 
 
 %% @private
@@ -948,10 +962,7 @@ should_expect_lack_of_support_error({rest_with_shared_guid, _}, _Auth, ?ONEZONE_
     % Onezone always redirects to a supporting provider which serves any client
     % when a share guid is requested
     false;
-should_expect_lack_of_support_error({Type, SpaceId}, _Auth, Node) when
-    Type == rest_with_shared_guid;
-    Type == deprecated_rest_with_shared_guid
-->
+should_expect_lack_of_support_error({rest_with_shared_guid, SpaceId}, _Auth, Node) ->
     case opw_test_rpc:supports_space(Node, SpaceId) of
         true -> false;
         false -> {true, ?ERROR_SPACE_NOT_SUPPORTED_BY(opw_test_rpc:get_provider_id(Node))}

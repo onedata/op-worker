@@ -8,12 +8,15 @@
 %%% @doc
 %%% This module is responsible for handing requests operating on file access
 %%% control lists.
+%%% Note: this module operates on referenced uuids - all operations on hardlinks
+%%% are treated as operations on original file. Thus, acls are shared
+%%% between hardlinks and original file.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(acl_req).
 -author("Tomasz Lichon").
 
--include("modules/auth/acl.hrl").
+-include("modules/fslogic/data_access_control.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/fslogic/metadata.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
@@ -36,7 +39,7 @@
 get_acl(UserCtx, FileCtx0) ->
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
-        [traverse_ancestors, ?read_acl]
+        [?TRAVERSE_ANCESTORS, ?OPERATIONS(?read_acl_mask)]
     ),
     get_acl_insecure(UserCtx, FileCtx1).
 
@@ -51,7 +54,7 @@ set_acl(UserCtx, FileCtx0, Acl) ->
     file_ctx:assert_not_trash_dir_const(FileCtx0),
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
-        [traverse_ancestors, ?write_acl]
+        [?TRAVERSE_ANCESTORS, ?OPERATIONS(?write_acl_mask)]
     ),
     set_acl_insecure(UserCtx, FileCtx1, Acl).
 
@@ -66,7 +69,7 @@ remove_acl(UserCtx, FileCtx0) ->
     file_ctx:assert_not_trash_dir_const(FileCtx0),
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
-        [traverse_ancestors, ?write_acl]
+        [?TRAVERSE_ANCESTORS, ?OPERATIONS(?write_acl_mask)]
     ),
     remove_acl_insecure(UserCtx, FileCtx1).
 
@@ -85,7 +88,7 @@ remove_acl(UserCtx, FileCtx0) ->
 -spec get_acl_insecure(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:provider_response().
 get_acl_insecure(_UserCtx, FileCtx) ->
-    {Acl, _} = file_ctx:get_acl(FileCtx),
+    {Acl, _} = file_ctx:get_acl(file_ctx:ensure_based_on_referenced_guid(FileCtx)),
     % ACLs are kept in database without names, as they might change.
     % Resolve the names here.
     #provider_response{
@@ -115,7 +118,7 @@ set_acl_insecure(_UserCtx, FileCtx, Acl) ->
     % ACLs are kept in database without names, as they might change.
     % Strip the names here.
     AclWithoutNames = acl:strip_names(Acl),
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    FileUuid = file_ctx:get_referenced_uuid_const(FileCtx),
     case file_meta:update_acl(FileUuid, AclWithoutNames) of
         ok ->
             ok = permissions_cache:invalidate(),
@@ -135,7 +138,7 @@ set_acl_insecure(_UserCtx, FileCtx, Acl) ->
 -spec remove_acl_insecure(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:provider_response().
 remove_acl_insecure(_UserCtx, FileCtx) ->
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    FileUuid = file_ctx:get_referenced_uuid_const(FileCtx),
     case file_meta:update_acl(FileUuid, []) of
         ok ->
             ok = permissions_cache:invalidate(),

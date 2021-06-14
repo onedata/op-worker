@@ -397,7 +397,6 @@ setup_storage([], Config) ->
     Config;
 setup_storage([Worker | Rest], Config) ->
     TmpDir = generator:gen_storage_dir(),
-    %% @todo: use shared storage
     "" = rpc:call(Worker, os, cmd, ["mkdir -p " ++ TmpDir ++ " -m 777"]),
     UserCtx = #{<<"uid">> => <<"0">>, <<"gid">> => <<"0">>},
     Args = #{
@@ -482,7 +481,7 @@ mock_test_file_context(Config, UuidPrefix) ->
     test_utils:mock_new(Workers, file_ctx),
     test_utils:mock_expect(Workers, file_ctx, is_root_dir_const,
         fun(FileCtx) ->
-            Uuid = file_ctx:get_uuid_const(FileCtx),
+            Uuid = file_ctx:get_logical_uuid_const(FileCtx),
             case str_utils:binary_starts_with(Uuid, UuidPrefix) of
                 true -> false;
                 false -> meck:passthrough([FileCtx])
@@ -490,7 +489,7 @@ mock_test_file_context(Config, UuidPrefix) ->
         end),
     test_utils:mock_expect(Workers, file_ctx, file_exists_const,
         fun(FileCtx) ->
-            Uuid = file_ctx:get_uuid_const(FileCtx),
+            Uuid = file_ctx:get_logical_uuid_const(FileCtx),
             case str_utils:binary_starts_with(Uuid, UuidPrefix) of
                 true -> true;
                 false -> meck:passthrough([FileCtx])
@@ -900,7 +899,8 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config, NoHistory) -
     provider_logic_mock_setup(Config, AllWorkers, DomainMappings, SpacesSetup, SpacesSupports, CustomStorages, StoragesSetupMap),
 
     lists:foreach(fun(DomainWorker) ->
-        rpc:call(DomainWorker, fslogic_worker, init_paths_caches, [all])
+        rpc:call(DomainWorker, fslogic_worker, init_paths_caches, [all]),
+        rpc:call(DomainWorker, fslogic_worker, init_dataset_eff_caches, [all])
     end, get_different_domain_workers(Config)),
 
     cluster_logic_mock_setup(AllWorkers),
@@ -1258,6 +1258,11 @@ space_logic_mock_setup(Workers, Spaces, Users, SpacesToStorages, SpacesHarvester
         lists_utils:is_subset(Privileges, UserPrivileges)
     end),
 
+    test_utils:mock_expect(Workers, space_logic, get_eff_privileges, fun(SpaceId, UserId) ->
+        {ok, #document{value = #od_space{eff_users = EffUsers}}} = GetSpaceFun(none, SpaceId),
+        {ok, maps:get(UserId, EffUsers, [])}
+    end),
+
     test_utils:mock_expect(Workers, space_logic, is_supported, fun(?ROOT_SESS_ID, SpaceId, ProviderId) ->
         {ok, #document{value = #od_space{providers = Providers}}} = GetSpaceFun(?ROOT_SESS_ID, SpaceId),
         maps:is_key(ProviderId, Providers)
@@ -1518,6 +1523,8 @@ provider_logic_mock_setup(_Config, AllWorkers, DomainMappings, SpacesSetup,
     end,
 
     test_utils:mock_expect(AllWorkers, provider_logic, verify_provider_identity, fun(_) -> ok end),
+
+    test_utils:mock_expect(AllWorkers, provider_logic, get_service_configuration, fun(_) -> {ok, #{}} end),
 
     test_utils:mock_expect(AllWorkers, token_logic, verify_provider_identity_token, VerifyProviderIdentityFun).
 

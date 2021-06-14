@@ -48,14 +48,16 @@
 -export([get_rtransfer_port/1]).
 -export([set_txt_record/3, remove_txt_record/1]).
 -export([zone_get_offline_access_idps/0]).
--export([fetch_service_configuration/1, fetch_peer_version/1]).
+-export([get_service_configuration/1, get_peer_version/1]).
 -export([provider_connection_ssl_opts/1]).
 -export([assert_provider_compatibility/1]).
 -export([verify_provider_identity/1]).
 
 
--define(PROVIDER_NODES_CACHE_TTL,
-    application:get_env(?APP_NAME, provider_nodes_cache_ttl_seconds, 600)). % 10 minutes
+-define(SERVICE_CONFIGURATION_CACHE_TTL_SEC, 15).
+-define(PROVIDER_NODES_CACHE_TTL_SEC,
+    op_worker:get_env(provider_nodes_cache_ttl_seconds, 600) % 10 minutes
+).
 
 -compile([{no_auto_import, [get/0]}]).
 
@@ -382,16 +384,15 @@ get_domain(SessionId, ProviderId) ->
 %%--------------------------------------------------------------------
 -spec get_nodes(od_provider:id()) -> {ok, [binary()]} | {error, term()}.
 get_nodes(ProviderId) ->
-    ResolveNodes = fun() ->
+    node_cache:acquire({provider_nodes, ProviderId}, fun() ->
         % Call by ?MODULE to allow for CT testing
         case ?MODULE:get_domain(?ROOT_SESS_ID, ProviderId) of
             {ok, Domain} ->
-                {ok, get_nodes(ProviderId, Domain), ?PROVIDER_NODES_CACHE_TTL};
+                {ok, get_nodes(ProviderId, Domain), ?PROVIDER_NODES_CACHE_TTL_SEC};
             {error, _} = Error ->
                 Error
         end
-    end,
-    node_cache:acquire({provider_nodes, ProviderId}, ResolveNodes).
+    end).
 
 -spec get_nodes(od_provider:id(), od_provider:domain()) -> [binary()].
 get_nodes(ProviderId, Domain) ->
@@ -404,9 +405,9 @@ get_nodes(ProviderId, Domain) ->
             {ok, IPsAtoms} = inet:getaddrs(binary_to_list(Domain), inet),
             IPs = [list_to_binary(inet:ntoa(IP)) || IP <- IPsAtoms],
             IpsString = str_utils:join_binary(IPs, <<", ">>),
-            ProviderConfig = fetch_service_configuration({oneprovider, Domain, Domain}),
+            ProviderConfig = get_service_configuration({oneprovider, Domain, Domain}),
             ConfigMatches = fun(IP) ->
-                ProviderConfig =:= (catch fetch_service_configuration({oneprovider, Domain, IP}))
+                ProviderConfig =:= (catch get_service_configuration({oneprovider, Domain, IP}))
             end,
             case lists:all(ConfigMatches, IPs) of
                 true ->
@@ -434,7 +435,7 @@ get_nodes(ProviderId, Domain) ->
 get_rtransfer_port(ProviderId) ->
     ResolvePort = fun() ->
         {ok, Domain} = provider_logic:get_domain(ProviderId),
-        Port = case fetch_service_configuration({oneprovider, Domain, Domain}) of
+        Port = case get_service_configuration({oneprovider, Domain, Domain}) of
             {ok, #{<<"rtransferPort">> := RtransferPort}} ->
                 RtransferPort;
             _ ->
@@ -442,7 +443,7 @@ get_rtransfer_port(ProviderId) ->
                     [to_printable(ProviderId), ?RTRANSFER_PORT]),
                 ?RTRANSFER_PORT
         end,
-        {ok, Port, ?PROVIDER_NODES_CACHE_TTL}
+        {ok, Port, ?PROVIDER_NODES_CACHE_TTL_SEC}
     end,
     node_cache:acquire({rtransfer_port, ProviderId}, ResolvePort).
 
@@ -674,7 +675,7 @@ map_idp_group_to_onedata(Idp, IdpGroupId) ->
 %%--------------------------------------------------------------------
 -spec zone_get_offline_access_idps() -> {ok, [IdP :: binary()]} | {error, term()}.
 zone_get_offline_access_idps() ->
-    case fetch_service_configuration(onezone) of
+    case get_service_configuration(onezone) of
         {ok, Map} ->
             SupportedIdPs = maps:get(<<"supportedIdPs">>, Map, []),
             {ok, lists:filtermap(fun(IdPConfig) ->
@@ -724,32 +725,26 @@ verify_provider_identity(TheirProviderId) ->
     end.
 
 
--spec fetch_service_configuration(onezone | {oneprovider, Domain :: binary(), Hostname :: binary()}) ->
+-spec get_service_configuration(onezone | {oneprovider, Domain :: binary(), Hostname :: binary()}) ->
     {ok, json_utils:json_term()} |
     {error, {bad_response, Code :: integer(), Body :: binary()}} |
     {error, term()}.
-fetch_service_configuration(onezone) ->
-    URL = oneprovider:get_oz_url(?ZONE_CONFIGURATION_PATH),
-    DeprecatedURL = oneprovider:get_oz_url(?DEPRECATED_ZONE_CONFIGURATION_PATH),
-    SslOpts = [{cacerts, oneprovider:trusted_ca_certs()}],
-    fetch_configuration(URL, DeprecatedURL, SslOpts);
-
-fetch_service_configuration({oneprovider, Domain, Hostname}) ->
-    URL = str_utils:format_bin("https://~s~s", [
-        Hostname, ?PROVIDER_CONFIGURATION_PATH
-    ]),
-    DeprecatedURL = str_utils:format_bin("https://~s~s", [
-        Hostname, ?DEPRECATED_PROVIDER_CONFIGURATION_PATH
-    ]),
-    SslOpts = provider_connection_ssl_opts(Domain),
-    fetch_configuration(URL, DeprecatedURL, SslOpts).
+get_service_configuration(ServiceSpec) ->
+    node_cache:acquire({service_configuration, ServiceSpec}, fun() ->
+        case fetch_service_configuration(ServiceSpec) of
+            {ok, Configuration} ->
+                {ok, Configuration, ?SERVICE_CONFIGURATION_CACHE_TTL_SEC};
+            {error, _} = Error ->
+                Error
+        end
+    end).
 
 
--spec fetch_peer_version(onezone | {oneprovider, Domain :: binary(), Hostname :: binary()}) ->
+-spec get_peer_version(onezone | {oneprovider, Domain :: binary(), Hostname :: binary()}) ->
     {ok, PeerVersion :: binary()} |
     {error, {bad_response, Code :: integer(), Body :: binary()}} | {error, term()}.
-fetch_peer_version(Service) ->
-    case fetch_service_configuration(Service) of
+get_peer_version(Service) ->
+    case get_service_configuration(Service) of
         {ok, JsonMap} ->
             PeerVersion = maps:get(<<"version">>, JsonMap, <<"unknown">>),
             {ok, PeerVersion};
@@ -766,7 +761,7 @@ fetch_peer_version(Service) ->
 -spec provider_connection_ssl_opts(od_provider:domain()) -> [http_client:ssl_opt()].
 provider_connection_ssl_opts(Domain) ->
     CaCerts = oneprovider:trusted_ca_certs(),
-    SecureFlag = application:get_env(?APP_NAME, interprovider_connections_security, true),
+    SecureFlag = op_worker:get_env(interprovider_connections_security, true),
     [{cacerts, CaCerts}, {secure, SecureFlag}, {hostname, Domain}].
 
 
@@ -777,7 +772,7 @@ provider_connection_ssl_opts(Domain) ->
 %%--------------------------------------------------------------------
 -spec assert_provider_compatibility(Domain :: binary()) -> ok | no_return().
 assert_provider_compatibility(Domain) ->
-    case fetch_peer_version({oneprovider, Domain, Domain}) of
+    case get_peer_version({oneprovider, Domain, Domain}) of
         {ok, RemoteOpVersion} ->
             Resolver = compatibility:build_resolver(consistent_hashing:get_all_nodes(), oneprovider:trusted_ca_certs()),
             OpVersion = op_worker:get_release_version(),
@@ -805,6 +800,28 @@ assert_provider_compatibility(Domain) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%% @private
+-spec fetch_service_configuration(onezone | {oneprovider, Domain :: binary(), Hostname :: binary()}) ->
+    {ok, json_utils:json_term()} |
+    {error, {bad_response, Code :: integer(), Body :: binary()}} |
+    {error, term()}.
+fetch_service_configuration(onezone) ->
+    URL = oneprovider:get_oz_url(?ZONE_CONFIGURATION_PATH),
+    DeprecatedURL = oneprovider:get_oz_url(?DEPRECATED_ZONE_CONFIGURATION_PATH),
+    SslOpts = [{cacerts, oneprovider:trusted_ca_certs()}],
+    fetch_configuration(URL, DeprecatedURL, SslOpts);
+
+fetch_service_configuration({oneprovider, Domain, Hostname}) ->
+    URL = str_utils:format_bin("https://~s~s", [
+        Hostname, ?PROVIDER_CONFIGURATION_PATH
+    ]),
+    DeprecatedURL = str_utils:format_bin("https://~s~s", [
+        Hostname, ?DEPRECATED_PROVIDER_CONFIGURATION_PATH
+    ]),
+    SslOpts = provider_connection_ssl_opts(Domain),
+    fetch_configuration(URL, DeprecatedURL, SslOpts).
+
 
 %%--------------------------------------------------------------------
 %% @private

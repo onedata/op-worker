@@ -362,7 +362,7 @@ mark_dequeued(TransferId) ->
 
 -spec set_controller_process(id()) -> {ok, doc()} | {error, term()}.
 set_controller_process(TransferId) ->
-    EncodedPid = transfer_utils:encode_pid(self()),
+    EncodedPid = utils:encode_pid(self()),
     update(TransferId, fun(Transfer) ->
         {ok, Transfer#transfer{pid = EncodedPid}}
     end).

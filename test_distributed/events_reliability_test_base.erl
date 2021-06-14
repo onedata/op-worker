@@ -83,13 +83,12 @@ events_aggregation_stream_error_test2(Config) ->
 
     test_utils:mock_expect(Workers, event_stream, handle_call, fun
         (#event{type = #file_read_event{}} = Request, From, State) ->
-            case application:get_env(?APP_NAME, ?FUNCTION_NAME) of
-                {ok, _} ->
-                    meck:passthrough([Request, From, State]);
+            case op_worker:get_env(?FUNCTION_NAME, undefined) of
+                undefined ->
+                    op_worker:set_env(?FUNCTION_NAME, true),
+                    throw(test_error);
                 _ ->
-                    application:set_env(?APP_NAME, ?FUNCTION_NAME, true),
-                    throw(test_error)
-
+                    meck:passthrough([Request, From, State])
             end;
          (Request, From, State) ->
              meck:passthrough([Request, From, State])
@@ -129,12 +128,12 @@ events_aggregation_manager_error_test2(_Config) ->
 %%
 %%    test_utils:mock_expect(Workers, event_manager, handle_call, fun
 %%        (#event{type = #file_read_event{}} = Request, From, State) ->
-%%            case application:get_env(?APP_NAME, ?FUNCTION_NAME) of
-%%                {ok, _} ->
-%%                    meck:passthrough([Request, From, State]);
+%%            case op_worker:get_env(?FUNCTION_NAME, undefined) of
+%%                undefined ->
+%%                    op_worker:set_env(?FUNCTION_NAME, true),
+%%                    throw(test_error);
 %%                _ ->
-%%                    application:set_env(?APP_NAME, ?FUNCTION_NAME, true),
-%%                    throw(test_error)
+%%                    meck:passthrough([Request, From, State])
 %%            end;
 %%        (Request, From, State) ->
 %%            meck:passthrough([Request, From, State])
@@ -303,11 +302,10 @@ events_flush_test_base(Config, ConnectionWorker, AssertionWorker, MockError, Flu
 
 init_per_suite(Config) ->
     Posthook = fun(NewConfig) ->
-        NewConfig1 = [{space_storage_mock, false} | NewConfig],
-        NewConfig2 = initializer:setup_storage(NewConfig1),
+        NewConfig1 = initializer:setup_storage(NewConfig),
         application:start(ssl),
         hackney:start(),
-        FinalConfig = initializer:create_test_users_and_spaces(?TEST_FILE(NewConfig2, "env_desc.json"), NewConfig2),
+        FinalConfig = initializer:create_test_users_and_spaces(?TEST_FILE(NewConfig1, "env_desc.json"), NewConfig1),
         timer:sleep(2000), % Time to process events connected with initialization and connect providers
         FinalConfig
     end,
@@ -382,13 +380,12 @@ mock_handle_file_written_events(Workers, _MockError) ->
     test_utils:mock_expect(Workers, fslogic_event_handler, handle_file_written_events,
         fun
             (Evts, #{notify := _NotifyFun} = UserCtxMap) ->
-                case application:get_env(?APP_NAME, ?FUNCTION_NAME) of
-                    {ok, _} ->
-                        meck:passthrough([Evts, UserCtxMap]);
+                case op_worker:get_env(?FUNCTION_NAME, undefined) of
+                    undefined ->
+                        op_worker:set_env(?FUNCTION_NAME, true),
+                        throw(test_error);
                     _ ->
-                        application:set_env(?APP_NAME, ?FUNCTION_NAME, true),
-                        throw(test_error)
-
+                        meck:passthrough([Evts, UserCtxMap])
                 end;
             (Evts, UserCtxMap) ->
                 meck:passthrough([Evts, UserCtxMap])

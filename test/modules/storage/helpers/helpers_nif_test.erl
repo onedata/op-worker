@@ -112,21 +112,21 @@ stop(_) ->
 %%--------------------------------------------------------------------
 -spec prepare_environment() -> ok.
 prepare_environment() ->
-    application:set_env(?APP_NAME, ceph_helper_threads_number, 1),
-    application:set_env(?APP_NAME, cephrados_helper_threads_number, 1),
-    application:set_env(?APP_NAME, posix_helper_threads_number, 8),
-    application:set_env(?APP_NAME, s3_helper_threads_number, 1),
-    application:set_env(?APP_NAME, swift_helper_threads_number, 1),
-    application:set_env(?APP_NAME, glusterfs_helper_threads_number, 1),
-    application:set_env(?APP_NAME, webdav_helper_threads_number, 25),
-    application:set_env(?APP_NAME, xrootd_helper_threads_number, 25),
-    application:set_env(?APP_NAME, buffer_helpers, false),
-    application:set_env(?APP_NAME, buffer_scheduler_threads_number, 1),
-    application:set_env(?APP_NAME, read_buffer_min_size, 1024),
-    application:set_env(?APP_NAME, read_buffer_max_size, 1024),
-    application:set_env(?APP_NAME, read_buffer_prefetch_duration, 1),
-    application:set_env(?APP_NAME, write_buffer_min_size, 1024),
-    application:set_env(?APP_NAME, write_buffer_max_size, 1024),
-    application:set_env(?APP_NAME, write_buffer_flush_delay, 1).
+    op_worker:set_env(ceph_helper_threads_number, 1),
+    op_worker:set_env(cephrados_helper_threads_number, 1),
+    op_worker:set_env(posix_helper_threads_number, 8),
+    op_worker:set_env(s3_helper_threads_number, 1),
+    op_worker:set_env(swift_helper_threads_number, 1),
+    op_worker:set_env(glusterfs_helper_threads_number, 1),
+    op_worker:set_env(webdav_helper_threads_number, 25),
+    op_worker:set_env(xrootd_helper_threads_number, 25),
+    op_worker:set_env(buffer_helpers, false),
+    op_worker:set_env(buffer_scheduler_threads_number, 1),
+    op_worker:set_env(read_buffer_min_size, 1024),
+    op_worker:set_env(read_buffer_max_size, 1024),
+    op_worker:set_env(read_buffer_prefetch_duration, 1),
+    op_worker:set_env(write_buffer_min_size, 1024),
+    op_worker:set_env(write_buffer_max_size, 1024),
+    op_worker:set_env(write_buffer_flush_delay, 1).
 
 -endif.

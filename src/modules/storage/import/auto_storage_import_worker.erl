@@ -27,8 +27,8 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% Interval between successive checks of spaces' storage import configuration.
--define(STORAGE_IMPORT_CHECK_INTERVAL, application:get_env(?APP_NAME, storage_import_check_interval, 1)).
--define(STORAGE_IMPORT_REVISION_INTERVAL, application:get_env(?APP_NAME, storage_import_revision_interval, 60)).
+-define(STORAGE_IMPORT_CHECK_INTERVAL, op_worker:get_env(storage_import_check_interval, 1)).
+-define(STORAGE_IMPORT_REVISION_INTERVAL, op_worker:get_env(storage_import_revision_interval, 60)).
 
 -define(SPACES_CHECK, spaces_check).
 -define(REVISE_REGISTRY, revise_registry).

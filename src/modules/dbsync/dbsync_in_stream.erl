@@ -205,7 +205,7 @@ forward_changes_batch(ProviderId, Since, Until, Timestamp, Docs, State = #state{
             }
     end,
 
-    case application:get_env(?APP_NAME, dbsync_in_stream_gc, on) of
+    case op_worker:get_env(dbsync_in_stream_gc, on) of
         on ->
             erlang:garbage_collect();
         _ ->
@@ -223,7 +223,7 @@ forward_changes_batch(ProviderId, Since, Until, Timestamp, Docs, State = #state{
 -spec save_msg_id(dbsync_communicator:msg_id(), msg_id_history()) ->
     msg_id_history().
 save_msg_id(MsgId, History) ->
-    MaxSize = application:get_env(?APP_NAME, dbsync_msg_id_history_len, 10000),
+    MaxSize = op_worker:get_env(dbsync_msg_id_history_len, 10000),
     History2 = queue:in(MsgId, History),
     case queue:len(History2) > MaxSize of
         true ->

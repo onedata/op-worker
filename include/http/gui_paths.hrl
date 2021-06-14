@@ -37,6 +37,10 @@
 %% Endpoint used to connect as a client to protocol endpoint
 -define(CLIENT_PROTOCOL_PATH, "/clproto").
 
+% TODO VFS-7628 make openfaas respond to https
+%% Endpoint used as callback for Openfaas
+-define(ATM_TASK_FINISHED_CALLBACK_PATH, "/tasks/").
+
 %% Protocol name for HTTP upgrade headers on client protocol endpoint
 -define(CLIENT_PROTOCOL_UPGRADE_NAME, "clproto").
 
@@ -47,9 +51,20 @@
 % Expands to a centralized endpoint in Onezone used to fetch info and contents
 % of any file/directory being a part of any share (by file id) - redirects
 % to a REST endpoint in one of the supporting providers.
--define(ZONE_SHARES_DATA_REDIRECTOR_PATH_TEMPLATE(SubPath),
-    oneprovider:get_oz_url(<<"/api/v3/onezone/shares/data/{{id}}", SubPath>>)
-).
+-define(ZONE_SHARED_DATA_CURL_COMMAND_TEMPLATE(SubPath), [
+    <<"curl">>, <<"-L">>, oneprovider:get_oz_url(<<"/api/v3/onezone/shares/data/{id}", SubPath>>)
+]).
+
+-define(XROOTD_URI(Domain, Path), str_utils:format_bin("root://~s~s", [Domain, Path])).
+-define(XROOTD_DOWNLOAD_SHARED_FILE_COMMAND_TEMPLATE(Domain), [
+    <<"xrdcp">>, ?XROOTD_URI(Domain, <<"//data/{spaceId}/{spaceId}/{shareId}{path}">>), <<".">>
+]).
+-define(XROOTD_DOWNLOAD_SHARED_DIRECTORY_COMMAND_TEMPLATE(Domain), [
+    <<"xrdcp">>, <<"-r">>, ?XROOTD_URI(Domain, <<"//data/{spaceId}/{spaceId}/{shareId}{path}">>), <<".">>
+]).
+-define(XROOTD_LIST_SHARED_DIRECTORY_COMMAND_TEMPLATE(Domain), [
+    <<"xrdfs">>, ?XROOTD_URI(Domain, <<"">>), <<"ls">>, <<"/data/{spaceId}/{spaceId}/{shareId}{path}">>
+]).
 
 %% All requests to this endpoint will be proxied to onepanel.
 -define(PANEL_REST_PROXY_PATH, "/api/v3/onepanel/").

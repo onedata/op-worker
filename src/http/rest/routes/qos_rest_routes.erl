@@ -46,7 +46,6 @@ routes() -> [
     %% Remove QoS requirement
     {<<"/qos_requirements/:qid">>, rest_handler, #rest_req{
         method = 'DELETE',
-        consumes = [<<"application/json">>],
         b_gri = #b_gri{
             type = op_qos, 
             id = ?BINDING(qid), 
@@ -66,17 +65,17 @@ routes() -> [
         }
     }},
     %% Get QoS summary for file or directory
-    {<<"/data/:id/qos_summary">>, rest_handler, #rest_req{
+    {<<"/data/:id/qos/summary">>, rest_handler, #rest_req{
         method = 'GET',
         produces = [<<"application/json">>],
         b_gri = #b_gri{
             type = op_file, 
             id = ?OBJECTID_BINDING(id), 
-            aspect = file_qos_summary, 
+            aspect = qos_summary, 
             scope = private
         }
     }},
-    %% Evaluate qos expression
+    %% Evaluate QoS expression
     {<<"/spaces/:sid/evaluate_qos_expression">>, rest_handler, #rest_req{
         method = 'POST',
         parse_body = as_json_params,

@@ -30,14 +30,11 @@
 -export([create/2, create/3, get/1, exists/1, delete/1]).
 -export([get_id/1, get_helper/1,
     get_luma_feed/1, get_luma_config/1,
-    should_skip_storage_detection/1, is_imported_storage/1]).
+    should_skip_storage_detection/1]).
 
 -export([update_helper/2, update_luma_config/2, set_luma_config/2]).
 
 -export([delete_all/0]).
-
-%% function for migrating old #storage{} record
--export([migrate_to_storage_config_v1/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0]).
@@ -138,16 +135,6 @@ should_skip_storage_detection(Storage) ->
     Helper = get_helper(Storage),
     helper:should_skip_storage_detection(Helper).
 
-%% @TODO VFS-5856 deprecated, included for upgrade procedure
--spec is_imported_storage(doc() | record() | storage:id()) -> boolean().
-is_imported_storage(#document{value = #storage_config{} = Value}) ->
-    is_imported_storage(Value);
-is_imported_storage(#storage_config{imported_storage = ImportedStorage}) ->
-    ImportedStorage;
-is_imported_storage(StorageId) ->
-    {ok, #document{value = Value}} = get(StorageId),
-    is_imported_storage(Value).
-
 
 -spec update_helper(storage:id(), fun((helpers:helper()) -> helpers:helper())) ->
     ok | {error, term()}.
@@ -201,23 +188,6 @@ delete_all() ->
         delete(StorageId)
     end, StorageList).
 
-%%%===================================================================
-%%% Migration functions
-%%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc
-%% This function upgrades old `storage` record to `storage_config`
-%% in version 1.
-%% @end
-%%--------------------------------------------------------------------
--spec migrate_to_storage_config_v1(#storage{}) -> tuple().
-migrate_to_storage_config_v1(#storage{
-    helpers = [Helper],
-    readonly = Readonly,
-    luma_config = LumaConfig
-}) ->
-    {?MODULE, Helper, Readonly, LumaConfig, false}.
 
 %%%===================================================================
 %%% datastore_model callbacks
@@ -240,7 +210,7 @@ get_ctx() ->
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    2.
+    3.
 
 
 %%--------------------------------------------------------------------
@@ -265,7 +235,7 @@ get_record_struct(1) ->
             {url, string},
             {api_key, string}
         ]}},
-        {imported_storage, boolean} % @TODO 5856 deprecated remove in next major version
+        {imported_storage, boolean}
     ]};
 get_record_struct(2) ->
     {record, [
@@ -284,7 +254,21 @@ get_record_struct(2) ->
             {url, string},
             {api_key, string}
         ]}},
-        {imported_storage, boolean} % @TODO 5856 deprecated remove in next major version
+        {imported_storage, boolean}
+    ]};
+get_record_struct(3) ->
+    {record, [
+        {helper, {record, [
+            {name, string},
+            {args, #{string => string}},
+            {admin_ctx, #{string => string}}
+        ]}},
+        {luma_config, {record, [
+            {feed, atom},
+            {url, string},
+            {api_key, string}
+        ]}}
+        % deprecated imported_storage field has been removed in this version
     ]}.
 
 %%--------------------------------------------------------------------
@@ -318,4 +302,6 @@ upgrade_record(1, {?MODULE, Helper, Readonly, LumaConfig, ImportedStorage}) ->
         {helper, HelperName, NewArgs, AdminCtx},
         LumaConfig2,
         ImportedStorage
-    }}.
+    }};
+upgrade_record(2, {?MODULE, Helper, LumaConfig, _ImportedStorage}) ->
+    {3, {?MODULE, Helper, LumaConfig}}.

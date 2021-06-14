@@ -13,6 +13,7 @@
 -author("Jakub Kudzia").
 
 -include("global_definitions.hrl").
+-include("modules/fslogic/data_access_control.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -54,7 +55,7 @@ schedule_replica_eviction(
 
     FileCtx2 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx1,
-        [traverse_ancestors] %todo VFS-4844
+        [?TRAVERSE_ANCESTORS] %todo VFS-4844
     ),
     schedule_replica_eviction_insecure(
         UserCtx, FileCtx2,
@@ -83,7 +84,7 @@ schedule_replica_eviction_insecure(UserCtx, FileCtx, SourceProviderId,
 ) ->
     {FilePath, _} = file_ctx:get_logical_path(FileCtx, UserCtx),
     SessionId = user_ctx:get_session_id(UserCtx),
-    FileGuid = file_ctx:get_guid_const(FileCtx),
+    FileGuid = file_ctx:get_logical_guid_const(FileCtx), % TODO VFS-7443 - effective or not? - test for hardlinks
     {ok, TransferId} = transfer:start(SessionId, FileGuid, FilePath,
         SourceProviderId, MigrationProviderId, undefined, ViewName, QueryViewParams),
     #provider_response{

@@ -13,6 +13,7 @@
 -author("Bartosz Walkowicz").
 
 -include("global_definitions.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include("proto/common/handshake_messages.hrl").
 -include("rest_test_utils.hrl").
 -include_lib("cluster_worker/include/graph_sync/graph_sync.hrl").
@@ -206,7 +207,7 @@ changes_stream_file_meta_change_test(Config) ->
     % when
     spawn(fun() ->
         timer:sleep(500),
-        lfm_proxy:set_perms(WorkerP1, SessionId, {guid, FileGuid}, Mode2)
+        lfm_proxy:set_perms(WorkerP1, SessionId, ?FILE_REF(FileGuid), Mode2)
     end),
 
     ChangesSpec = #{<<"fileMeta">> => #{
@@ -244,7 +245,7 @@ changes_stream_xattr_test(Config) ->
     % when
     spawn(fun() ->
         timer:sleep(500),
-        lfm_proxy:set_xattr(WorkerP1, SessionId, {guid, FileGuid},
+        lfm_proxy:set_xattr(WorkerP1, SessionId, ?FILE_REF(FileGuid),
             #xattr{name = <<"name">>, value = <<"value">>}
         )
     end),
@@ -293,7 +294,7 @@ changes_stream_json_metadata_test(Config) ->
     % when
     spawn(fun() ->
         timer:sleep(500),
-        lfm_proxy:set_metadata(WorkerP1, SessionId, {guid, FileGuid}, json, OnedataJson, [])
+        lfm_proxy:set_metadata(WorkerP1, SessionId, ?FILE_REF(FileGuid), json, OnedataJson, [])
     end),
 
     ChangesSpec = #{<<"customMetadata">> => #{
@@ -331,7 +332,7 @@ changes_stream_times_test(Config) ->
     % when
     spawn(fun() ->
         timer:sleep(1000),
-        lfm_proxy:update_times(WorkerP1, SessionId, {guid, FileGuid}, Time, Time, Time)
+        lfm_proxy:update_times(WorkerP1, SessionId, ?FILE_REF(FileGuid), Time, Time, Time)
     end),
 
     ChangesSpec = #{<<"times">> => #{
@@ -374,7 +375,7 @@ changes_stream_file_location_test(Config) ->
     % when
     spawn(fun() ->
         timer:sleep(500),
-        {ok, Handle} = lfm_proxy:open(WorkerP1, SessionId, {guid, FileGuid}, write),
+        {ok, Handle} = lfm_proxy:open(WorkerP1, SessionId, ?FILE_REF(FileGuid), write),
         {ok, 5} = lfm_proxy:write(WorkerP1, Handle, 0, <<"01234">>)
     end),
 
@@ -418,11 +419,11 @@ changes_triggers_test(Config) ->
     % when
     spawn(fun() ->
         timer:sleep(500),
-        {ok, Handle} = lfm_proxy:open(WorkerP1, SessionId, {guid, FileGuid}, write),
+        {ok, Handle} = lfm_proxy:open(WorkerP1, SessionId, ?FILE_REF(FileGuid), write),
         {ok, 5} = lfm_proxy:write(WorkerP1, Handle, 0, <<"01234">>),
 
         timer:sleep(500),
-        lfm_proxy:update_times(WorkerP1, SessionId, {guid, FileGuid}, Time, Time, Time)
+        lfm_proxy:update_times(WorkerP1, SessionId, ?FILE_REF(FileGuid), Time, Time, Time)
     end),
 
     ChangesSpec = #{
@@ -470,11 +471,11 @@ changes_stream_request_several_records_test(Config) ->
     % when
     spawn(fun() ->
         timer:sleep(500),
-        lfm_proxy:set_xattr(WorkerP1, SessionId, {guid, FileGuid},
+        lfm_proxy:set_xattr(WorkerP1, SessionId, ?FILE_REF(FileGuid),
             #xattr{name = <<"name">>, value = <<"value">>}
         ),
         timer:sleep(500),
-        lfm_proxy:update_times(WorkerP1, SessionId, {guid, FileGuid}, Time, Time, Time)
+        lfm_proxy:update_times(WorkerP1, SessionId, ?FILE_REF(FileGuid), Time, Time, Time)
     end),
 
     ChangesSpec = #{
@@ -544,7 +545,7 @@ changes_stream_on_multi_provider_test(Config) ->
     % when
     spawn(fun() ->
         timer:sleep(500),
-        {ok, Handle} = lfm_proxy:open(WorkerP2, SessionIdP2, {guid, FileGuid}, write),
+        {ok, Handle} = lfm_proxy:open(WorkerP2, SessionIdP2, ?FILE_REF(FileGuid), write),
         lfm_proxy:write(WorkerP2, Handle, 0, <<"data">>)
     end),
 
@@ -619,19 +620,18 @@ changes_stream_closed_on_disconnection(Config) ->
 
 init_per_suite(Config) ->
     Posthook = fun(NewConfig) ->
-        NewConfig1 = [{space_storage_mock, false} | NewConfig],
-        NewConfig2 = initializer:setup_storage(NewConfig1),
+        NewConfig1 = initializer:setup_storage(NewConfig),
         lists:foreach(fun(Worker) ->
             test_utils:set_env(Worker, ?APP_NAME, dbsync_changes_broadcast_interval, timer:seconds(1)),
             test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_delay_ms, timer:seconds(1)),
-            test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_force_delay_ms, timer:seconds(1)), % TODO - change to 2 seconds
+            test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_force_delay_ms, timer:seconds(2)),
             test_utils:set_env(Worker, ?APP_NAME, public_block_size_treshold, 0),
             test_utils:set_env(Worker, ?APP_NAME, public_block_percent_treshold, 0)
-        end, ?config(op_worker_nodes, NewConfig2)),
+        end, ?config(op_worker_nodes, NewConfig1)),
 
         application:start(ssl),
         hackney:start(),
-        initializer:create_test_users_and_spaces(?TEST_FILE(NewConfig2, "env_desc.json"), NewConfig2)
+        initializer:create_test_users_and_spaces(?TEST_FILE(NewConfig1, "env_desc.json"), NewConfig1)
     end,
     {ok, _} = application:ensure_all_started(worker_pool),
     [

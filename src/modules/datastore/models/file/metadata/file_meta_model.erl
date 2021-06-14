@@ -14,16 +14,24 @@
 
 -include("modules/datastore/datastore_models.hrl").
 
+%% datastore_model callbacks
+-export([
+    get_record_version/0, get_record_struct/1,
+    upgrade_record/2, resolve_conflict/3
+]).
 
 -define(FILE_META_MODEL, file_meta).
-
-%% datastore_model callbacks
--export([get_record_struct/1, upgrade_record/2, resolve_conflict/3]).
 
 
 %%%===================================================================
 %%% API functions
 %%%===================================================================
+
+
+-spec get_record_version() -> datastore_model:record_version().
+get_record_version() ->
+    12.
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -214,7 +222,54 @@ get_record_struct(10) ->
         {shares, [string]},
         {deleted, boolean},
         {parent_uuid, string}
+    ]};
+get_record_struct(11) ->
+    {record, [
+        {name, string},
+        {type, atom},
+        {mode, integer},
+        % field 'protection_flags' has been added in this version
+        {protection_flags, integer},
+        {acl, [{record, [
+            {acetype, integer},
+            {aceflags, integer},
+            {identifier, string},
+            {name, string},
+            {acemask, integer}
+        ]}]},
+        {owner, string},
+        {is_scope, boolean},
+        {provider_id, string},
+        {shares, [string]},
+        {deleted, boolean},
+        {parent_uuid, string}
+    ]};
+get_record_struct(12) ->
+    {record, [
+        {name, string},
+        {type, atom},
+        {mode, integer},
+        {protection_flags, integer},
+        {acl, [{record, [
+            {acetype, integer},
+            {aceflags, integer},
+            {identifier, string},
+            {name, string},
+            {acemask, integer}
+        ]}]},
+        {owner, string},
+        {is_scope, boolean},
+        {provider_id, string},
+        {shares, [string]},
+        {deleted, boolean},
+        {parent_uuid, string},
+        % fields: references and symlink_value have been added in this version
+        {references, #{string => [string]}},
+        {symlink_value, string},
+        % field dataset_status has been added in this version
+        {dataset_status, atom}
     ]}.
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -278,7 +333,37 @@ upgrade_record(9, {
 }) ->
     {10, {?FILE_META_MODEL, Name, Type, Mode, ACL, Owner, IsScope,
         ProviderId, Shares, Deleted, ParentUuid
+    }};
+upgrade_record(10, {
+    ?FILE_META_MODEL, Name, Type, Mode, ACL, Owner, IsScope,
+    ProviderId, Shares, Deleted, ParentUuid
+}) ->
+    {11, {?FILE_META_MODEL, Name, Type, Mode, 0, ACL, Owner, IsScope,
+        ProviderId, Shares, Deleted, ParentUuid
+    }};
+% NOTE: there are 2 function clauses upgrading from version 11 to 12
+% because 21.02-alpha7 introduced a bug which could result in documents persisted with wrong number of fields
+upgrade_record(11, {?FILE_META_MODEL, Name, Type, Mode, ProtectionFlags, ACL, Owner, IsScope,
+    ProviderId, Shares, Deleted, ParentUuid, References, SymlinkValue
+}) ->
+    {12, {?FILE_META_MODEL, Name, Type, Mode, ProtectionFlags, ACL, Owner, IsScope,
+        ProviderId, Shares, Deleted, ParentUuid,
+        % fields: references and symlink_value have been added in this version
+        References, SymlinkValue,
+        % field dataset_status has been added in this version
+        undefined
+    }};
+upgrade_record(11, {?FILE_META_MODEL, Name, Type, Mode, ProtectionFlags, ACL, Owner, IsScope,
+    ProviderId, Shares, Deleted, ParentUuid
+}) ->
+    {12, {?FILE_META_MODEL, Name, Type, Mode, ProtectionFlags, ACL, Owner, IsScope,
+        ProviderId, Shares, Deleted, ParentUuid,
+        % fields: references and symlink_value have been added in this version
+        #{}, undefined,
+        % field dataset_status has been added in this version
+        undefined
     }}.
+
 
 
 %%--------------------------------------------------------------------
@@ -294,13 +379,15 @@ resolve_conflict(_Ctx,
     NewDoc = #document{key = Uuid, value = #file_meta{name = NewName, parent_uuid = NewParentUuid}, scope = SpaceId},
     PrevDoc = #document{value = #file_meta{name = PrevName, parent_uuid = PrevParentUuid}}
 ) ->
+    invalidate_paths_cache_if_needed(NewDoc, PrevDoc),
+    invalidate_dataset_eff_cache_if_needed(NewDoc, PrevDoc),
     spawn(fun() ->
         invalidate_qos_bounded_cache_if_moved_to_trash(NewDoc, PrevDoc)
     end),
     case (NewName =/= PrevName) orelse (NewParentUuid =/= PrevParentUuid) of
         true ->
             spawn(fun() ->
-                FileCtx = file_ctx:new_by_guid(file_id:pack_guid(Uuid, SpaceId)),
+                FileCtx = file_ctx:new_by_uuid(Uuid, SpaceId),
                 OldParentGuid = file_id:pack_guid(PrevParentUuid, SpaceId),
                 NewParentGuid = file_id:pack_guid(NewParentUuid, SpaceId),
                 fslogic_event_emitter:emit_file_renamed_no_exclude(
@@ -310,14 +397,55 @@ resolve_conflict(_Ctx,
             ok
     end,
 
-    default.
-
+    case file_meta_hardlinks:merge_references(NewDoc, PrevDoc) of
+        not_mutated ->
+            default;
+        {mutated, MergedReferences} ->
+            #document{revs = [NewRev | _]} = NewDoc,
+            #document{revs = [PrevlRev | _]} = PrevDoc,
+            DocBase = #document{value = RecordBase} = case datastore_rev:is_greater(NewRev, PrevlRev) of
+                true -> NewDoc;
+                false -> PrevDoc
+            end,
+            {true, DocBase#document{value = RecordBase#file_meta{references = MergedReferences}}}
+    end.
 
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
+
+%% @private
+-spec invalidate_dataset_eff_cache_if_needed(file_meta:doc(), file_meta:doc()) -> ok.
+invalidate_dataset_eff_cache_if_needed(
+    #document{value = #file_meta{
+        protection_flags = NewFlags,
+        parent_uuid = NewParentUuid,
+        dataset_state = NewDatasetState
+    }, scope = SpaceId},
+    #document{value = #file_meta{
+        protection_flags = OldFlags,
+        parent_uuid = PrevParentUuid,
+        dataset_state = OldDatasetState
+    }}
+) ->
+    % TODO VFS-7518 resolve conflicts on creating datasets
+    case OldFlags =/= NewFlags
+        orelse PrevParentUuid =/= NewParentUuid
+        orelse NewDatasetState =/= OldDatasetState
+    of
+        true ->
+            spawn(fun() ->
+                dataset_eff_cache:invalidate_on_all_nodes(SpaceId)
+            end),
+            ok;
+        false ->
+            ok
+    end.
+
+
+%% @private
 -spec invalidate_qos_bounded_cache_if_moved_to_trash(file_meta:doc(), file_meta:doc()) -> ok.
 invalidate_qos_bounded_cache_if_moved_to_trash(
     #document{key = Uuid, value = #file_meta{parent_uuid = NewParentUuid}, scope = SpaceId}, #document{value = #file_meta{parent_uuid = PrevParentUuid}
@@ -325,10 +453,25 @@ invalidate_qos_bounded_cache_if_moved_to_trash(
     case PrevParentUuid =/= NewParentUuid andalso fslogic_uuid:is_trash_dir_uuid(NewParentUuid) of
         true ->
             % the file has been moved to trash
-            FileCtx = file_ctx:new_by_guid(file_id:pack_guid(Uuid, SpaceId)),
-            PrevParentCtx = file_ctx:new_by_guid(file_id:pack_guid(PrevParentUuid, SpaceId)),
-            file_qos:clean_up(FileCtx, PrevParentCtx),
+            FileCtx = file_ctx:new_by_uuid(Uuid, SpaceId),
+            PrevParentCtx = file_ctx:new_by_uuid(PrevParentUuid, SpaceId),
+            file_qos:clean_up_on_no_reference(FileCtx, PrevParentCtx),
             qos_bounded_cache:invalidate_on_all_nodes(SpaceId);
+        false ->
+            ok
+    end.
+
+
+%% @private
+-spec invalidate_paths_cache_if_needed(file_meta:doc(), file_meta:doc()) -> ok.
+invalidate_paths_cache_if_needed(
+    #document{value = #file_meta{name = NewName, parent_uuid = NewParentUuid}, scope = SpaceId},
+    #document{value = #file_meta{name = OldName, parent_uuid = PrevParentUuid}}
+) ->
+    case NewName =/= OldName orelse PrevParentUuid =/= NewParentUuid of
+        true ->
+            spawn(fun() -> paths_cache:invalidate_on_all_nodes(SpaceId) end),
+            ok;
         false ->
             ok
     end.
