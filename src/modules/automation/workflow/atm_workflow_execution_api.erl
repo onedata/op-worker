@@ -16,7 +16,7 @@
 
 %% API
 -export([list/4]).
--export([create/1, prepare/1, delete/1]).
+-export([create/1, delete/1]).
 -export([get_summary/1, get_summary/2]).
 -export([report_task_status_change/5]).
 
@@ -80,31 +80,6 @@ create(AtmWorkflowExecutionCreationCtx) ->
     atm_waiting_workflow_executions:add(AtmWorkflowExecutionDoc),
 
     {ok, AtmWorkflowExecutionDoc}.
-
-
--spec prepare(atm_workflow_execution:id()) -> ok | no_return().
-prepare(AtmWorkflowExecutionId) ->
-    {ok, #document{
-        value = #atm_workflow_execution{
-            lanes = AtmLaneExecutions
-        }
-    }} = atm_workflow_execution_status:handle_transition_in_waiting_phase(
-        AtmWorkflowExecutionId, ?PREPARING_STATUS
-    ),
-
-    try
-        atm_lane_execution:prepare_all(AtmLaneExecutions)
-    catch Type:Reason ->
-        atm_workflow_execution_status:handle_transition_in_waiting_phase(
-            AtmWorkflowExecutionId, ?FAILED_STATUS
-        ),
-        erlang:Type(Reason)
-    end,
-
-    {ok, _} = atm_workflow_execution_status:handle_transition_in_waiting_phase(
-        AtmWorkflowExecutionId, ?ENQUEUED_STATUS
-    ),
-    ok.
 
 
 -spec delete(atm_workflow_execution:id()) -> ok | no_return().

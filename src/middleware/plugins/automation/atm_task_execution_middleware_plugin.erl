@@ -72,7 +72,7 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = instance}}) ->
 -spec fetch_entity(middleware:req()) ->
     {ok, middleware:versioned_entity()} | errors:error().
 fetch_entity(#op_req{gri = #gri{id = AtmTaskExecutionId, scope = private}}) ->
-    case atm_workflow_execution:get(AtmTaskExecutionId) of
+    case atm_task_execution:get(AtmTaskExecutionId) of
         {ok, #document{value = AtmTaskExecution}} ->
             {ok, {AtmTaskExecution, 1}};
         {error, _} = Error ->

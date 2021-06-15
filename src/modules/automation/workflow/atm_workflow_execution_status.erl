@@ -19,6 +19,7 @@
 -export([
     infer_phase/1,
     handle_transition_in_waiting_phase/2,
+    handle_transition_to_failed_status_from_waiting_phase/1,
     report_task_status_change/5
 ]).
 
@@ -39,7 +40,7 @@ infer_phase(#atm_workflow_execution{status = ?FAILED_STATUS}) -> ?ENDED_PHASE.
 
 -spec handle_transition_in_waiting_phase(
     atm_workflow_execution:id(),
-    ?PREPARING_STATUS | ?ENQUEUED_STATUS | ?FAILED_STATUS
+    ?PREPARING_STATUS | ?ENQUEUED_STATUS
 ) ->
     {ok, atm_workflow_execution:doc()} | no_return().
 handle_transition_in_waiting_phase(AtmWorkflowExecutionId, WaitingStatus) when
@@ -60,9 +61,12 @@ handle_transition_in_waiting_phase(AtmWorkflowExecutionId, WaitingStatus) when
             Result;
         {error, CurrStatus} ->
             throw(?ERROR_ATM_INVALID_STATUS_TRANSITION(CurrStatus, WaitingStatus))
-    end;
+    end.
 
-handle_transition_in_waiting_phase(AtmWorkflowExecutionId, ?FAILED_STATUS) ->
+
+-spec handle_transition_to_failed_status_from_waiting_phase(atm_workflow_execution:id()) ->
+    ok | no_return().
+handle_transition_to_failed_status_from_waiting_phase(AtmWorkflowExecutionId) ->
     % TODO VFS-7674 should fail here change status of all lanes, pboxes and tasks ??
     Diff = fun
         (AtmWorkflowExecution = #atm_workflow_execution{
@@ -78,9 +82,9 @@ handle_transition_in_waiting_phase(AtmWorkflowExecutionId, ?FAILED_STATUS) ->
     end,
 
     case atm_workflow_execution:update(AtmWorkflowExecutionId, Diff) of
-        {ok, AtmWorkflowExecutionDoc} = Result ->
+        {ok, AtmWorkflowExecutionDoc} ->
             move_from_waiting_to_ended_phase(AtmWorkflowExecutionDoc),
-            Result;
+            ok;
         {error, CurrStatus} ->
             throw(?ERROR_ATM_INVALID_STATUS_TRANSITION(CurrStatus, ?FAILED_STATUS))
     end.

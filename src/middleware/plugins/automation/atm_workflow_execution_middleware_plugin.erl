@@ -232,7 +232,7 @@ has_access_to_workflow_execution_details(?USER(UserId, SessionId), #atm_workflow
     space_id = SpaceId,
     atm_inventory_id = AtmInventoryId
 }) ->
-    HasEffAtmInventory = user_logic:has_eff_atm_inventory(UserId, SessionId, AtmInventoryId),
+    HasEffAtmInventory = user_logic:has_eff_atm_inventory(SessionId, UserId, AtmInventoryId),
 
     HasEffAtmInventory andalso space_logic:has_eff_privilege(
         SpaceId, UserId, ?SPACE_VIEW_ATM_WORKFLOW_EXECUTIONS

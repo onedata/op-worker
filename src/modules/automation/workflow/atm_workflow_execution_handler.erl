@@ -39,7 +39,7 @@
     ok | error.
 prepare(AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv) ->
     try
-        ok = atm_workflow_execution_api:prepare(AtmWorkflowExecutionId)
+        prepare_internal(AtmWorkflowExecutionId)
     catch _:Reason ->
         % TODO VFS-7637 use audit log
         ?error("FAILED TO PREPARE WORKFLOW ~p DUE TO: ~p", [
@@ -177,6 +177,43 @@ handle_lane_execution_ended(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, Atm
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+%% @private
+-spec prepare_internal(atm_workflow_execution:id()) -> ok | no_return().
+prepare_internal(AtmWorkflowExecutionId) ->
+    {ok, #document{value = #atm_workflow_execution{
+        lanes = AtmLaneExecutions
+    }}} = transition_to_preparing_status(AtmWorkflowExecutionId),
+
+    try
+        atm_lane_execution:prepare_all(AtmLaneExecutions)
+    catch Type:Reason ->
+        atm_workflow_execution_status:handle_transition_to_failed_status_from_waiting_phase(
+            AtmWorkflowExecutionId
+        ),
+        erlang:Type(Reason)
+    end,
+
+    transition_to_enqueued_status(AtmWorkflowExecutionId).
+
+
+%% @private
+-spec transition_to_preparing_status(atm_workflow_execution:id()) ->
+    {ok, atm_workflow_execution:doc()} | no_return().
+transition_to_preparing_status(AtmWorkflowExecutionId) ->
+    {ok, _} = atm_workflow_execution_status:handle_transition_in_waiting_phase(
+        AtmWorkflowExecutionId, ?PREPARING_STATUS
+    ).
+
+
+%% @private
+-spec transition_to_enqueued_status(atm_workflow_execution:id()) -> ok | no_return().
+transition_to_enqueued_status(AtmWorkflowExecutionId) ->
+    {ok, _} = atm_workflow_execution_status:handle_transition_in_waiting_phase(
+        AtmWorkflowExecutionId, ?ENQUEUED_STATUS
+    ),
+    ok.
 
 
 %% @private
