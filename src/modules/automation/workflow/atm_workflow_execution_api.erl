@@ -42,20 +42,29 @@
     atm_workflow_executions_forest:listing_opts()
 ) ->
     {ok, entries(), IsLast :: boolean()}.
-list(SpaceId, Phase, ListingMode, ListingOpts) ->
-    AtmWorkflowExecutionEntries = list(SpaceId, Phase, ListingOpts),
-    IsLast = maps:get(limit, ListingOpts) > length(AtmWorkflowExecutionEntries),
+list(SpaceId, Phase, basic, ListingOpts) ->
+    AtmWorkflowExecutionBasicEntries = list_basic_entries(SpaceId, Phase, ListingOpts),
+    IsLast = maps:get(limit, ListingOpts) > length(AtmWorkflowExecutionBasicEntries),
 
-    case ListingMode of
-        basic ->
-            {ok, AtmWorkflowExecutionEntries, IsLast};
-        summary ->
-            AtmWorkflowExecutionSummaries = lists_utils:pmap(fun({Index, AtmWorkflowExecutionId}) ->
-                {Index, get_summary(AtmWorkflowExecutionId)}
-            end, AtmWorkflowExecutionEntries),
+    {ok, AtmWorkflowExecutionBasicEntries, IsLast};
 
-            {ok, AtmWorkflowExecutionSummaries, IsLast}
-    end.
+list(SpaceId, Phase, summary, ListingOpts) ->
+    AtmWorkflowExecutionBasicEntries = list_basic_entries(SpaceId, Phase, ListingOpts),
+    IsLast = maps:get(limit, ListingOpts) > length(AtmWorkflowExecutionBasicEntries),
+
+    AtmWorkflowExecutionSummaryEntries = lists_utils:pfiltermap(fun({Index, AtmWorkflowExecutionId}) ->
+        {ok, #document{value = AtmWorkflowExecution}} = atm_workflow_execution:get(
+            AtmWorkflowExecutionId
+        ),
+        case atm_workflow_execution_status:infer_phase(AtmWorkflowExecution) of
+            Phase ->
+                {true, {Index, get_summary(AtmWorkflowExecutionId, AtmWorkflowExecution)}};
+            _ ->
+                false
+        end
+    end, AtmWorkflowExecutionBasicEntries),
+
+    {ok, AtmWorkflowExecutionSummaryEntries, IsLast}.
 
 
 -spec create(atm_workflow_execution:creation_ctx()) ->
@@ -121,15 +130,15 @@ report_task_status_change(
 
 
 %% @private
--spec list(
+-spec list_basic_entries(
     od_space:id(),
     atm_workflow_execution:phase(),
     atm_workflow_executions_forest:listing_opts()
 ) ->
-    atm_workflow_executions_forest:entries().
-list(SpaceId, ?WAITING_PHASE, ListingOpts) ->
+    basic_entries().
+list_basic_entries(SpaceId, ?WAITING_PHASE, ListingOpts) ->
     atm_waiting_workflow_executions:list(SpaceId, ListingOpts);
-list(SpaceId, ?ONGOING_PHASE, ListingOpts) ->
+list_basic_entries(SpaceId, ?ONGOING_PHASE, ListingOpts) ->
     atm_ongoing_workflow_executions:list(SpaceId, ListingOpts);
-list(SpaceId, ?ENDED_PHASE, ListingOpts) ->
+list_basic_entries(SpaceId, ?ENDED_PHASE, ListingOpts) ->
     atm_ended_workflow_executions:list(SpaceId, ListingOpts).
