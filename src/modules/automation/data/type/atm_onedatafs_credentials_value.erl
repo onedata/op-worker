@@ -21,7 +21,7 @@
 -include("modules/automation/atm_tmp.hrl").
 
 %% atm_data_validator callbacks
--export([validate/3]).
+-export([assert_meets_constraints/3]).
 
 
 %%%===================================================================
@@ -29,11 +29,11 @@
 %%%===================================================================
 
 
--spec validate(
+-spec assert_meets_constraints(
     atm_workflow_execution_ctx:record(),
     atm_value:expanded(),
     atm_data_type:value_constraints()
 ) ->
     ok | no_return().
-validate(_, Value, _ValueConstraints) when is_map(Value) ->
+assert_meets_constraints(_AtmWorkflowExecutionCtx, _Value, _ValueConstraints) ->
     ok.
