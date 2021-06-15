@@ -146,13 +146,13 @@ iterate_test_base(AtmStoreIteratorStrategy, ValueToSet, ExpectedValue) ->
         krakow, AtmWorkflowExecutionEnv, AtmStoreIteratorSpec
     ),
     
-    ?assertEqual(stop, atm_store_test_utils:iterator_get_next(krakow, AtmStoreIterator)),
+    ?assertEqual(stop, atm_store_test_utils:iterator_get_next(krakow, AtmWorkflowExecutionEnv, AtmStoreIterator)),
     ?assertEqual(ok, atm_store_test_utils:apply_operation(
         krakow, AtmWorkflowExecutionCtx, set, ValueToSet, #{}, AtmStoreId)
     ),
     AtmStoreIterator1 = atm_store_test_utils:acquire_store_iterator(krakow, AtmWorkflowExecutionEnv, AtmStoreIteratorSpec),
-    {ok, _, AtmIterator2} = ?assertMatch({ok, ExpectedValue, _}, atm_store_test_utils:iterator_get_next(krakow, AtmStoreIterator1)),
-    ?assertEqual(stop, atm_store_test_utils:iterator_get_next(krakow, AtmIterator2)).
+    {ok, _, AtmIterator2} = ?assertMatch({ok, ExpectedValue, _}, atm_store_test_utils:iterator_get_next(krakow, AtmWorkflowExecutionEnv, AtmStoreIterator1)),
+    ?assertEqual(stop, atm_store_test_utils:iterator_get_next(krakow, AtmWorkflowExecutionEnv, AtmIterator2)).
 
 
 reuse_iterator_test(_Config) ->
@@ -179,11 +179,11 @@ reuse_iterator_test(_Config) ->
         krakow, AtmWorkflowExecutionEnv, AtmStoreIteratorSpec
     ),
 
-    {ok, _, AtmSerialIterator1} = ?assertMatch({ok, 8, _}, atm_store_test_utils:iterator_get_next(krakow, AtmSerialIterator0)),
-    ?assertMatch(stop, atm_store_test_utils:iterator_get_next(krakow, AtmSerialIterator1)),
-    ?assertMatch({ok, 8, _}, atm_store_test_utils:iterator_get_next(krakow, AtmSerialIterator0)),
+    {ok, _, AtmSerialIterator1} = ?assertMatch({ok, 8, _}, atm_store_test_utils:iterator_get_next(krakow, AtmWorkflowExecutionEnv, AtmSerialIterator0)),
+    ?assertMatch(stop, atm_store_test_utils:iterator_get_next(krakow, AtmWorkflowExecutionEnv, AtmSerialIterator1)),
+    ?assertMatch({ok, 8, _}, atm_store_test_utils:iterator_get_next(krakow, AtmWorkflowExecutionEnv, AtmSerialIterator0)),
     
-    ?assertMatch(stop, atm_store_test_utils:iterator_get_next(krakow, AtmSerialIterator1)).
+    ?assertMatch(stop, atm_store_test_utils:iterator_get_next(krakow, AtmWorkflowExecutionEnv, AtmSerialIterator1)).
 
 
 %===================================================================

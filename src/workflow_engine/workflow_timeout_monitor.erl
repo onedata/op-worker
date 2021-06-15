@@ -21,15 +21,16 @@
 %%% API
 %%%===================================================================
 
-% TODO VFS-7551 - attach to supervisor, use gen_server
+% TODO VFS-7787 - attach to supervisor, use gen_server
 -spec init(workflow_engine:id()) -> ok.
 init(EngineId) ->
-    spawn_link(fun() -> server_loop(EngineId) end),
+    Node = datastore_key:any_responsible_node(EngineId),
+    spawn(Node, fun() -> server_loop(EngineId) end),
     ok.
 
--spec report_heartbeat(workflow_engine:execution_id(), task_executor:async_ref()) -> ok.
-report_heartbeat(ExecutionId, Ref) ->
-    workflow_execution_state:reset_keepalive_timer(ExecutionId, Ref).
+-spec report_heartbeat(workflow_engine:execution_id(), workflow_jobs:job_identifier()) -> ok.
+report_heartbeat(ExecutionId, JobIdentifier) ->
+    workflow_execution_state:reset_keepalive_timer(ExecutionId, JobIdentifier).
 
 %%%===================================================================
 %%% Server loop

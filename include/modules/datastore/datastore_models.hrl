@@ -1117,16 +1117,25 @@
     finish_time = 0 :: atm_workflow_execution:timestamp()
 }).
 
+%% Model for storing persistent state of a single tree forest iteration.
+-record(atm_tree_forest_iterator_queue, {
+    values = #{} :: atm_tree_forest_iterator_queue:values(),
+    last_pushed_value_index = 0 :: atm_tree_forest_iterator_queue:index(),
+    highest_peeked_value_index = 0 :: atm_tree_forest_iterator_queue:index(),
+    discriminator = {0, <<>>} :: atm_tree_forest_iterator_queue:discriminator(), 
+    last_pruned_node_num = 0 :: atm_tree_forest_iterator_queue:node_num()
+}).
+
 %%%===================================================================
 %%% Workflow engine connected models
 %%%===================================================================
 
 -record(workflow_cached_item, {
-    item :: workflow_store:item()
+    item :: iterator:item()
 }).
 
 -record(workflow_iterator_snapshot, {
-    iterator :: workflow_store:iterator(),
+    iterator :: iterator:iterator(),
     lane_index = 0 :: workflow_execution_state:index(),
     item_index = 0 :: workflow_execution_state:index()
 }).
@@ -1138,7 +1147,10 @@
 }).
 
 -record(workflow_execution_state, {
-    lane_count = 0 :: non_neg_integer(), % TODO VFS-7551 - delete during integration with BW
+    handler :: workflow_handler:handler(),
+    context :: workflow_engine:execution_context(),
+
+    preparation_status = not_prepared :: workflow_execution_state:preparation_status(),
     current_lane :: workflow_execution_state:current_lane() | undefined,
 
     iteration_state :: workflow_iteration_state:state() | undefined,

@@ -103,6 +103,11 @@ CHANGELOG
 -   **VFS-6566** Improved UX and fixed minor issues in share views.
     Fixed inability to open share hosted by Oneprovider 19.02.x using
     Onezone 20.02.x.
+-
+### 20.02.10
+
+-   **VFS-7739** Improved CPU affinity of storage driver threads in
+    Oneprovider.
 
 ### 20.02.9
 

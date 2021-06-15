@@ -6,8 +6,8 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module implements `atm_data_validator` functionality for
-%%% `atm_integer_type`.
+%%% This module implements `atm_data_validator` and `atm_data_compressor` 
+%%% functionality for `atm_integer_type`.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_integer_value).
@@ -18,7 +18,10 @@
 -include("modules/automation/atm_tmp.hrl").
 
 %% atm_data_validator callbacks
--export([assert_meets_constraints/3]).
+-export([validate/3]).
+
+%% atm_data_compressor callbacks
+-export([compress/1, expand/2]).
 
 
 %%%===================================================================
@@ -26,13 +29,27 @@
 %%%===================================================================
 
 
--spec assert_meets_constraints(
+-spec validate(
     atm_workflow_execution_ctx:record(),
-    atm_api:item(),
+    atm_value:expanded(),
     atm_data_type:value_constraints()
 ) ->
     ok | no_return().
-assert_meets_constraints(_, Value, _ValueConstraints) when is_integer(Value) ->
+validate(_, Value, _ValueConstraints) when is_integer(Value) ->
     ok;
-assert_meets_constraints(_, Value, _ValueConstraints) ->
+validate(_, Value, _ValueConstraints) ->
     throw(?ERROR_ATM_DATA_TYPE_UNVERIFIED(Value, atm_integer_type)).
+
+
+%%%===================================================================
+%%% atm_data_compressor callbacks
+%%%===================================================================
+
+
+-spec compress(atm_value:expanded()) -> integer().
+compress(Value) -> Value.
+
+-spec expand(atm_workflow_execution_ctx:record(), integer()) ->
+    {ok, atm_value:expanded()}.
+expand(_, Value) ->
+    {ok, Value}.

@@ -36,9 +36,7 @@
 
 -spec init_engine() -> ok.
 init_engine() ->
-%%    % TODO VFS-7551 uncomment after MW implements it
-%%    workflow_engine:init(?ATM_WORKFLOW_ENGINE).
-    ok.
+    workflow_engine:init(?ATM_WORKFLOW_ENGINE).
 
 
 -spec schedule_workflow_execution(
@@ -78,12 +76,14 @@ schedule_workflow_execution(UserCtx, SpaceId, AtmWorkflowSchemaId, InitialValues
         initial_values = InitialValues
     }),
 
-%%    % TODO VFS-7551 uncomment after MW implements it
-%%    AtmWorkflowExecutionEnv = atm_workflow_execution_env:build(
-%%        SpaceId, AtmWorkflowExecutionId, AtmStoreRegistry
-%%    ),
-%%    workflow_engine:start(
-%%        atm_workflow_execution_handler, AtmWorkflowExecutionId, AtmWorkflowExecutionEnv
-%%    ),
+    AtmWorkflowExecutionEnv = atm_workflow_execution_env:build(
+        SpaceId, AtmWorkflowExecutionId, AtmStoreRegistry
+    ),
+    Options = #{
+        id => AtmWorkflowExecutionId,
+        workflow_handler => atm_workflow_execution_handler,
+        execution_context => AtmWorkflowExecutionEnv
+    },
+    workflow_engine:execute_workflow(?ATM_WORKFLOW_ENGINE, Options),
 
     {ok, AtmWorkflowExecutionId, AtmWorkflowExecution}.

@@ -10,7 +10,7 @@
 %%% by single task processing engine (not to be confused with
 %%% workflow_engine). It allows limiting number of tasks being
 %%% processed in parallel.
-%%% TODO VFS-7551 - count calls for each task separately
+%%% TODO VFS-7788 - count calls for each task separately
 %%% @end
 %%%-------------------------------------------------------------------
 -module(workflow_async_call_pool).
@@ -18,9 +18,12 @@
 
 -include("workflow_engine.hrl").
 -include("modules/datastore/datastore_models.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% API
 -export([init/2, increment_slot_usage/1, decrement_slot_usage/1]).
+%% Test API
+-export([get_slot_usage/1]).
 
 -type id() :: binary().
 -type record() :: #workflow_async_call_pool{}.
@@ -39,8 +42,10 @@
 -spec init(id(), non_neg_integer()) -> ok.
 init(Id, SlotsLimit) ->
     Doc = #document{key = Id, value = #workflow_async_call_pool{slots_limit = SlotsLimit}},
-    {ok, _} = datastore_model:create(?CTX, Doc),
-    ok.
+    case datastore_model:create(?CTX, Doc) of
+        {ok, _} -> ok;
+        ?ERROR_ALREADY_EXISTS -> ok
+    end.
 
 -spec increment_slot_usage(id()) -> ok | ?WF_ERROR_LIMIT_REACHED.
 increment_slot_usage(Id) ->
@@ -53,6 +58,15 @@ increment_slot_usage(Id) ->
 decrement_slot_usage(Id) ->
     {ok, _} = datastore_model:update(?CTX, Id, fun decrement_slot_usage_internal/1),
     ok.
+
+%%%===================================================================
+%%% Test API
+%%%===================================================================
+
+-spec get_slot_usage(id()) -> non_neg_integer().
+get_slot_usage(Id) ->
+    {ok, #document{value = #workflow_async_call_pool{slots_used = SlotsUsed}}} = datastore_model:get(?CTX, Id),
+    SlotsUsed.
 
 %%%===================================================================
 %%% Functions operating on record
