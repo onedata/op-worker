@@ -16,9 +16,10 @@
 -author("Bartosz Walkowicz").
 
 -include("modules/automation/atm_execution.hrl").
+-include_lib("ctool/include/aai/aai.hrl").
 
 %% API
--export([build/4]).
+-export([build/5]).
 -export([
     get_workflow_execution_ctx/1,
     get_access_token/1,
@@ -29,6 +30,7 @@
 
 -record(atm_job_execution_ctx, {
     workflow_execution_ctx :: atm_workflow_execution_ctx:record(),
+    in_readonly_mode :: boolean(),
     item :: json_utils:json_term(),
     report_result_url :: undefined | binary(),
     heartbeat_url :: undefined | binary()
@@ -45,16 +47,18 @@
 
 -spec build(
     atm_workflow_execution_env:record(),
+    boolean(),
     json_utils:json_term(),
     undefined | binary(),
     undefined | binary()
 ) ->
     record().
-build(AtmWorkflowExecutionEnv, Item, ReportResultUrl, HeartbeatUrl) ->
+build(AtmWorkflowExecutionEnv, InReadonlyMode, Item, ReportResultUrl, HeartbeatUrl) ->
     #atm_job_execution_ctx{
         workflow_execution_ctx = atm_workflow_execution_env:acquire_workflow_execution_ctx(
             AtmWorkflowExecutionEnv
         ),
+        in_readonly_mode = InReadonlyMode,
         item = Item,
         report_result_url = ReportResultUrl,
         heartbeat_url = HeartbeatUrl
@@ -69,8 +73,16 @@ get_workflow_execution_ctx(#atm_job_execution_ctx{
 
 
 -spec get_access_token(record()) -> auth_manager:access_token().
-get_access_token(#atm_job_execution_ctx{workflow_execution_ctx = AtmWorkflowExecutionCtx}) ->
-    atm_workflow_execution_ctx:get_access_token(AtmWorkflowExecutionCtx).
+get_access_token(#atm_job_execution_ctx{
+    workflow_execution_ctx = AtmWorkflowExecutionCtx,
+    in_readonly_mode = InReadonlyMode
+}) ->
+    AccessToken = atm_workflow_execution_ctx:get_access_token(AtmWorkflowExecutionCtx),
+
+    case InReadonlyMode of
+        true -> tokens:confine(AccessToken, #cv_data_readonly{});
+        false -> AccessToken
+    end.
 
 
 -spec get_item(record()) -> json_utils:json_term().

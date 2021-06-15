@@ -165,7 +165,8 @@ run(AtmWorkflowExecutionEnv, AtmTaskExecutionId, Item, ReportResultUrl, Heartbea
     }} = update_items_in_processing(AtmTaskExecutionId),
 
     AtmJobExecutionCtx = atm_job_execution_ctx:build(
-        AtmWorkflowExecutionEnv, Item, ReportResultUrl, HeartbeatUrl
+        AtmWorkflowExecutionEnv, atm_task_executor:in_readonly_mode(AtmTaskExecutor),
+        Item, ReportResultUrl, HeartbeatUrl
     ),
     Args = atm_task_execution_arguments:construct_args(AtmJobExecutionCtx, AtmTaskExecutionArgSpecs),
 

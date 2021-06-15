@@ -22,7 +22,7 @@
 
 
 %% atm_task_executor callbacks
--export([create/2, prepare/1, get_spec/1, run/3]).
+-export([create/2, prepare/1, get_spec/1, in_readonly_mode/1, run/3]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
@@ -86,6 +86,13 @@ prepare(AtmTaskExecutor) ->
 -spec get_spec(record()) -> workflow_engine:task_spec().
 get_spec(_AtmTaskExecutor) ->
     #{type => async}.
+
+
+-spec in_readonly_mode(record()) -> boolean().
+in_readonly_mode(#atm_openfaas_task_executor{operation_spec = #atm_openfaas_operation_spec{
+    docker_execution_options = #atm_docker_execution_options{readonly = Readonly}
+}}) ->
+    Readonly.
 
 
 -spec run(atm_job_execution_ctx:record(), json_utils:json_map(), record()) ->
