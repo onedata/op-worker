@@ -78,11 +78,10 @@
 -define(DEFAULT_KEEPALIVE_TIMEOUT_SEC, 300).
 
 -define(WF_ERROR_NOTHING_TO_START, {error, nothing_to_start}).
--define(WF_ERROR_ALL_DEFERRED, {error, all_deferred}).
 
 % Job triggering modes (see function trigger_job_scheduling/2)
 -define(TAKE_UP_FREE_SLOTS, take_up_free_slots).
--define(FOR_CURRENT_SLOT, for_current_slot).
+-define(FOR_CURRENT_SLOT_FIRST, for_current_slot_first).
 
 %%%===================================================================
 %%% API
@@ -139,10 +138,7 @@ report_execution_status_update(ExecutionId, EngineId, ReportType, JobIdentifier,
             % Asynchronous job finish - it has no slot acquired
             trigger_job_scheduling(EngineId, ?TAKE_UP_FREE_SLOTS);
         _ ->
-            case trigger_job_scheduling(EngineId, ?FOR_CURRENT_SLOT) of
-                ok -> ok;
-                ?WF_ERROR_NOTHING_TO_START -> ok
-            end
+            trigger_job_scheduling(EngineId, ?FOR_CURRENT_SLOT_FIRST)
     end.
 
 %%%===================================================================
@@ -185,35 +181,36 @@ init_pool(EngineId, SlotsLimit) ->
             throw({error, already_exists})
     end.
 
--spec trigger_job_scheduling(id(), ?TAKE_UP_FREE_SLOTS | ?FOR_CURRENT_SLOT) -> ok | ?WF_ERROR_NOTHING_TO_START.
+-spec trigger_job_scheduling(id(), ?TAKE_UP_FREE_SLOTS | ?FOR_CURRENT_SLOT_FIRST) -> ok.
 trigger_job_scheduling(EngineId, ?TAKE_UP_FREE_SLOTS) ->
     case workflow_engine_state:increment_slot_usage(EngineId) of
         ok ->
-            case trigger_job_scheduling(EngineId, ?FOR_CURRENT_SLOT) of
+            case trigger_job_scheduling_for_acquired_slot(EngineId) of
                 ok -> trigger_job_scheduling(EngineId, ?TAKE_UP_FREE_SLOTS);
                 ?WF_ERROR_NOTHING_TO_START -> ok
             end;
         ?WF_ERROR_ALL_SLOTS_USED ->
             ok
     end;
-trigger_job_scheduling(EngineId, ?FOR_CURRENT_SLOT) ->
+trigger_job_scheduling(EngineId, ?FOR_CURRENT_SLOT_FIRST) ->
+    case trigger_job_scheduling_for_acquired_slot(EngineId) of
+        ok ->
+            trigger_job_scheduling(EngineId, ?TAKE_UP_FREE_SLOTS);
+        ?WF_ERROR_NOTHING_TO_START ->
+            ok
+    end.
+
+-spec trigger_job_scheduling_for_acquired_slot(id()) -> ok | ?WF_ERROR_NOTHING_TO_START.
+trigger_job_scheduling_for_acquired_slot(EngineId) ->
     case schedule_next_job(EngineId, []) of
         ok ->
             ok;
-        ?WF_ERROR_ALL_DEFERRED ->
-            workflow_engine_state:decrement_slot_usage(EngineId),
-            % TODO VFS-7787 - check without acquire to break spawning loop
-            spawn(fun() ->
-                timer:sleep(timer:seconds(5)),
-                trigger_job_scheduling(EngineId, ?TAKE_UP_FREE_SLOTS)
-            end),
-            ?WF_ERROR_NOTHING_TO_START;
         ?WF_ERROR_NOTHING_TO_START ->
             workflow_engine_state:decrement_slot_usage(EngineId),
             ?WF_ERROR_NOTHING_TO_START
-    end.
+    end.    
 
--spec schedule_next_job(id(), [execution_id()]) -> ok | ?WF_ERROR_ALL_DEFERRED | ?WF_ERROR_NOTHING_TO_START.
+-spec schedule_next_job(id(), [execution_id()]) -> ok | ?WF_ERROR_NOTHING_TO_START.
 schedule_next_job(EngineId, DeferredExecutions) ->
     case workflow_engine_state:poll_next_execution_id(EngineId) of
         {ok, ExecutionId} ->
@@ -255,7 +252,7 @@ schedule_next_job(EngineId, DeferredExecutions) ->
                 true ->
                     % no jobs can be currently scheduled for any execution (all executions has been checked and
                     % added to DeferredExecutions) but new jobs will appear in future
-                    ?WF_ERROR_ALL_DEFERRED
+                    ?WF_ERROR_NOTHING_TO_START
             end;
         ?ERROR_NOT_FOUND ->
             ?WF_ERROR_NOTHING_TO_START
@@ -372,10 +369,7 @@ prepare_execution(EngineId, ExecutionId, Handler, ExecutionContext) ->
     try
         Ans = Handler:prepare(ExecutionId, ExecutionContext),
         workflow_execution_state:report_execution_prepared(ExecutionId, Handler, ExecutionContext, Ans),
-        case trigger_job_scheduling(EngineId, ?FOR_CURRENT_SLOT) of
-            ok -> ok;
-            ?WF_ERROR_NOTHING_TO_START -> ok
-        end
+        trigger_job_scheduling(EngineId, ?FOR_CURRENT_SLOT_FIRST)
     catch
         Error:Reason  ->
             ?error_stacktrace("Unexpected error perparing execution ~p: ~p:~p", [ExecutionId, Error, Reason])
