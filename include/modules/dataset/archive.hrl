@@ -29,7 +29,7 @@
 % TODO VFS-7651 add ?ARCHIVE_BAGIT_LAYOUT to the following list
 -define(ARCHIVE_LAYOUTS, [?ARCHIVE_PLAIN_LAYOUT]).
 
-% TODO VFS-7652 add true to the below list
+% TODO VFS-7780 add true to the below list
 -define(SUPPORTED_INCREMENTAL_VALUES, [false]).
 % TODO VFS-7653 add true to the below list
 -define(SUPPORTED_INCLUDE_DIP_VALUES, [false]).

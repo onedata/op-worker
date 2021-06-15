@@ -45,7 +45,7 @@
 % TODO VFS-7617 implement recall operation of archives
 % TODO VFS-7718 improve purging so that archive record is deleted when files are removed from storage
 % TODO VFS-7651 implement archivisation with bagit layout archives
-% TODO VFS-7652 implement incremental archives
+% TODO VFS-7780 implement incremental archives
 % TODO VFS-7653 implement creating DIP for an archive
 % TODO VFS-7613 use datastore function for getting number of links in forest to acquire number of archives per dataset
 % TODO VFS-7664 add followLink option to archivisation job

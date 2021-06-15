@@ -74,7 +74,7 @@ sanitize(RawConfig) ->
             optional => #{
                 <<"layout">> => {atom, ?ARCHIVE_LAYOUTS},
                 <<"includeDip">> => {boolean, ?SUPPORTED_INCLUDE_DIP_VALUES}, % TODO VFS-7653 change to {boolean, any}
-                <<"incremental">> => {boolean, ?SUPPORTED_INCREMENTAL_VALUES} % TODO VFS-7652 change to {boolean, any}
+                <<"incremental">> => {boolean, ?SUPPORTED_INCREMENTAL_VALUES} % TODO VFS-7780 change to {boolean, any}
             }
         })
     catch

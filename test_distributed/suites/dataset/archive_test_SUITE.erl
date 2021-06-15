@@ -433,8 +433,12 @@ assert_archive_dir_exists(Node, SessionId, SpaceId, DatasetId, ArchiveId, UserId
     }}, lfm_proxy:stat(Node, SessionId, ?FILE_REF(ArchiveDirGuid)), ?ATTEMPTS).
 
 
-assert_archive_is_preserved(Node, SessionId, ArchiveId, DatasetId, RootGuid, FileCount, ExpSize) ->
-    {ok, #archive_info{root_file_guid = CopyRootGuid}} = ?assertMatch({ok, #archive_info{
+assert_archive_is_preserved(Node, SessionId, ArchiveId, DatasetId, DatasetRootFileGuid, FileCount, ExpSize) ->
+    {ok, #archive_info{
+        config = #archive_config{
+            layout = ArchiveLayout
+        }
+    }} = ?assertMatch({ok, #archive_info{
         state = ?ARCHIVE_PRESERVED,
         stats = #archive_stats{
             files_archived = FileCount,
@@ -453,10 +457,14 @@ assert_archive_is_preserved(Node, SessionId, ArchiveId, DatasetId, RootGuid, Fil
     end,
     ?assertEqual(true, lists:member(ArchiveId, GetDatasetArchives()), ?ATTEMPTS),
 
-    assert_copied(Node, SessionId, RootGuid, CopyRootGuid).
+    assert_layout(Node, SessionId, ArchiveId, DatasetRootFileGuid, ArchiveLayout).
 
 
-    assert_copied(Node, SessionId, SourceGuid, TargetGuid) ->
+assert_layout(Node, SessionId, ArchiveId, DatasetRootFileGuid, ?ARCHIVE_PLAIN_LAYOUT) ->
+    {ok, #archive_info{root_file_guid = CopyRootGuid}} = lfm_proxy:get_archive_info(Node, SessionId, ArchiveId),
+    assert_copied(Node, SessionId, DatasetRootFileGuid, CopyRootGuid).
+
+assert_copied(Node, SessionId, SourceGuid, TargetGuid) ->
     assert_attrs_copied(Node, SessionId, SourceGuid, TargetGuid),
     assert_metadata_copied(Node, SessionId, SourceGuid, TargetGuid),
     {ok, SourceAttr} = lfm_proxy:stat(Node, SessionId, ?FILE_REF(SourceGuid)),
