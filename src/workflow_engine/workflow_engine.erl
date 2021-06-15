@@ -226,11 +226,14 @@ schedule_next_job(EngineId, DeferredExecutions) ->
                             end;
                         ?PREPARE_EXECUTION(Handler, ExecutionContext) ->
                             schedule_prepare_on_pool(EngineId, ExecutionId, Handler, ExecutionContext);
-                        ?END_EXECUTION_AND_NOTIFY(Handler, Context, LaneIndex) ->
+                        ?END_EXECUTION_AND_NOTIFY(Handler, Context, LaneIndex, ErrorEncountered) ->
                             case workflow_engine_state:remove_execution_id(EngineId, ExecutionId) of
                                 ok ->
                                     Handler:handle_lane_execution_ended(ExecutionId, Context, LaneIndex),
-                                    workflow_iterator_snapshot:cleanup(ExecutionId),
+                                    case ErrorEncountered of
+                                        true -> ok;
+                                        false -> workflow_iterator_snapshot:cleanup(ExecutionId)
+                                    end,
                                     workflow_execution_state:cleanup(ExecutionId);
                                 ?WF_ERROR_ALREADY_REMOVED ->
                                     ok

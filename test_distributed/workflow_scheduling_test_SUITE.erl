@@ -72,7 +72,6 @@ single_workflow_execution_test_base(Config, WorkflowType) ->
     #{execution_history := ExecutionHistory} = ExtendedHistoryStats = get_task_execution_history(Config),
     verify_execution_history_stats(ExtendedHistoryStats, WorkflowType),
     ?assertNotEqual(timeout, ExecutionHistory),
-
     ExecutionHistoryWithoutPrepare = verify_preparation_phase(Id, ExecutionHistory),
     verify_execution_history(Expected, ExecutionHistoryWithoutPrepare, WorkflowType),
     verify_memory(Config),
@@ -159,16 +158,23 @@ restart_test(Config) ->
     set_task_execution_gatherer_option(Config, fail_job, {TaskToFail, ItemToFail}),
     ?assertEqual(ok, rpc:call(Worker, workflow_engine, execute_workflow, [?ENGINE_ID, Workflow])),
 
-    Expected = get_expected_task_execution_order(Workflow, 3, 3, ItemToFail, TaskToFail),
+    Expected = get_expected_task_execution_order_with_error(Workflow, 3, 3, ItemToFail, TaskToFail),
     #{execution_history := ExecutionHistory} = ExtendedHistoryStats = get_task_execution_history(Config),
     verify_execution_history_stats(ExtendedHistoryStats, WorkflowType),
     ?assertNotEqual(timeout, ExecutionHistory),
-
     ExecutionHistoryWithoutPrepare = verify_preparation_phase(Id, ExecutionHistory),
     verify_execution_history(Expected, ExecutionHistoryWithoutPrepare, WorkflowType),
+    verify_memory(Config, true),
+    ct:print("Execution with error verified"),
 
     unset_task_execution_gatherer_option(Config, fail_job),
-
+    ExpectedAfterRestart = get_expected_task_execution_order_after_restart(Workflow, 3, ItemToFail),
+    ?assertEqual(ok, rpc:call(Worker, workflow_engine, execute_workflow, [?ENGINE_ID, Workflow])),
+    #{execution_history := ExecutionHistoryAfterRestart} = ExtendedHistoryStatsAfterRestart =
+        get_task_execution_history(Config),
+    verify_execution_history_stats(ExtendedHistoryStatsAfterRestart, WorkflowType),
+    ?assertNotEqual(timeout, ExecutionHistoryAfterRestart),
+    verify_execution_history(ExpectedAfterRestart, ExecutionHistoryAfterRestart, WorkflowType),
     verify_memory(Config),
     ok.
 
@@ -257,6 +263,7 @@ init_per_testcase(_, Config) ->
     [{task_execution_gatherer, Master} | Config].
 
 end_per_testcase(_, Config) ->
+    ?config(task_execution_gatherer, Config) ! stop,
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Workers, [workflow_test_handler, workflow_engine_callback_handler]).
 
@@ -292,12 +299,17 @@ task_execution_gatherer_loop(#{execution_history := History} = Acc, ProcWaitingF
         {set_option, Key, Value} ->
             task_execution_gatherer_loop(Acc, ProcWaitingForAns, Options#{Key => Value});
         {unset_option, Key} ->
-            task_execution_gatherer_loop(Acc, ProcWaitingForAns, maps:remove(Key, Options))
+            task_execution_gatherer_loop(Acc, ProcWaitingForAns, maps:remove(Key, Options));
+        stop ->
+            ok
     after
         15000 ->
             case ProcWaitingForAns of
-                undefined -> task_execution_gatherer_loop(Acc, ProcWaitingForAns, Options);
-                _ -> ProcWaitingForAns ! {task_execution_history, Acc#{execution_history => lists:reverse(History)}}
+                undefined ->
+                    task_execution_gatherer_loop(Acc, ProcWaitingForAns, Options);
+                _ ->
+                    ProcWaitingForAns ! {task_execution_history, Acc#{execution_history => lists:reverse(History)}},
+                    task_execution_gatherer_loop(#{execution_history => []}, undefined, #{})
             end
     end.
 
@@ -354,18 +366,21 @@ set_task_execution_gatherer_option(Config, Key, Value) ->
 unset_task_execution_gatherer_option(Config, Key) ->
     ?config(task_execution_gatherer, Config) ! {unset_option, Key}.
 
-get_expected_task_execution_order(Workflow) ->
-    get_expected_task_execution_order(Workflow, undefined, undefined, undefined, undefined).
+get_expected_task_execution_order(#{id := ExecutionId, execution_context := Context}) ->
+    get_expected_task_execution_order(1, ExecutionId, Context, full_execution).
 
-get_expected_task_execution_order(#{id := ExecutionId, execution_context := Context},
+get_expected_task_execution_order_with_error(#{id := ExecutionId, execution_context := Context},
     LaneWithErrorIndex, BoxWithErrorIndex, ItemToFail, TaskToFail) ->
     get_expected_task_execution_order(
         1, ExecutionId, Context,
-        LaneWithErrorIndex, BoxWithErrorIndex, ItemToFail, TaskToFail
+        {expected_failure, LaneWithErrorIndex, BoxWithErrorIndex, ItemToFail, TaskToFail}
     ).
 
-get_expected_task_execution_order(LaneIndex, ExecutionId, Context,
-    LaneWithErrorIndex, BoxWithErrorIndex, ItemToFail, TaskToFail) ->
+get_expected_task_execution_order_after_restart(#{id := ExecutionId, execution_context := Context},
+    RestartedLaneIndex, RestartedItem) ->
+    get_expected_task_execution_order(1, ExecutionId, Context, {restarted_from, RestartedLaneIndex, RestartedItem}).
+
+get_expected_task_execution_order(LaneIndex, ExecutionId, Context, Description) ->
     {ok, #{
         parallel_boxes := Boxes,
         iterator := Iterator,
@@ -373,21 +388,29 @@ get_expected_task_execution_order(LaneIndex, ExecutionId, Context,
     }} = workflow_test_handler:get_lane_spec(ExecutionId, Context, LaneIndex),
     Items = get_items(Context, Iterator),
 
-    LaneSpec = case LaneIndex of
-        LaneWithErrorIndex ->
+    {LaneSpec, ShouldFinish} = case Description of
+        {expected_failure, LaneIndex, BoxWithErrorIndex, ItemToFail, TaskToFail} ->
             TasksForFailedItem = lists:sublist(Boxes, BoxWithErrorIndex - 1) ++
                 [maps:remove(TaskToFail, lists:nth(BoxWithErrorIndex, Boxes))],
-            {Boxes, Items, ItemToFail, TasksForFailedItem};
+            {{Boxes, Items, ItemToFail, TasksForFailedItem}, true};
+        {restarted_from, RestartedLaneIndex, _RestartedItem} when LaneIndex < RestartedLaneIndex ->
+            {undefined, IsLast};
+        {restarted_from, LaneIndex, RestartedItem} ->
+            FilteredItems = lists:filter(fun(Item) ->
+                binary_to_integer(Item) >= binary_to_integer(RestartedItem)
+            end, Items),
+            {{Boxes, FilteredItems, undefined, []}, IsLast};
         _ ->
-            {Boxes, Items, undefined, []}
+            {{Boxes, Items, undefined, []}, IsLast}
     end,
 
-    case IsLast of
-        true ->
+    case {ShouldFinish, LaneSpec} of
+        {true, _} ->
             [LaneSpec];
-        false ->
-            [LaneSpec | get_expected_task_execution_order(LaneIndex + 1, ExecutionId, Context,
-                LaneWithErrorIndex, BoxWithErrorIndex, ItemToFail, TaskToFail)]
+        {false, undefined} ->
+            get_expected_task_execution_order(LaneIndex + 1, ExecutionId, Context, Description);
+        {false, _} ->
+            [LaneSpec | get_expected_task_execution_order(LaneIndex + 1, ExecutionId, Context, Description)]
     end.
 
 get_items(Context, Iterator) ->
@@ -479,12 +502,18 @@ get_task_and_item_ids(ExecutionId, {_, ItemIndex, BoxIndex, TaskIndex}) ->
     {TaskId, ItemId}.
 
 verify_memory(Config) ->
+    verify_memory(Config, false).
+
+verify_memory(Config, RestartDocPresent) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Models = [workflow_cached_item, workflow_iterator_snapshot, workflow_execution_state],
     lists:foreach(fun(Model) ->
         Ctx = datastore_model_default:set_defaults(datastore_model_default:get_ctx(Model)),
         #{memory_driver := MemoryDriver, memory_driver_ctx := MemoryDriverCtx} = Ctx,
-        ?assertEqual([], get_keys(Worker, MemoryDriver, MemoryDriverCtx))
+        case RestartDocPresent andalso Model =:= workflow_iterator_snapshot of
+            true -> ?assertMatch([_], get_keys(Worker, MemoryDriver, MemoryDriverCtx));
+            false -> ?assertEqual([], get_keys(Worker, MemoryDriver, MemoryDriverCtx))
+        end
     end, Models).
 
 

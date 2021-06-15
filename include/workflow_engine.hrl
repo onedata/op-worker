@@ -51,8 +51,8 @@
 %%%===================================================================
 
 % Macros used to control workflow_engine actions
--define(END_EXECUTION_AND_NOTIFY(Handler, Context, LaneIndex),
-    {end_execution_and_notify, Handler, Context, LaneIndex}).
+-define(END_EXECUTION_AND_NOTIFY(Handler, Context, LaneIndex, ErrorEncountered),
+    {end_execution_and_notify, Handler, Context, LaneIndex, ErrorEncountered}).
 -define(END_EXECUTION, end_execution).
 -define(DEFER_EXECUTION, defer_execution).
 -define(PREPARE_EXECUTION(Handler, ExecutionContext),

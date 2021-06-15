@@ -74,8 +74,8 @@
 % Definitions of possible errors
 -define(WF_ERROR_LANE_ALREADY_PREPARED, {error, lane_already_prepared}).
 -define(WF_ERROR_LANE_CHANGED, {error, lane_changed}).
--define(WF_ERROR_EXECUTION_FINISHED(Handler, Context, LaneIndex),
-    {error, {execution_finished, Handler, Context, LaneIndex}}).
+-define(WF_ERROR_EXECUTION_FINISHED(Handler, Context, LaneIndex, ErrorEncountered),
+    {error, {execution_finished, Handler, Context, LaneIndex, ErrorEncountered}}).
 -define(WF_ERROR_LANE_FINISHED(LaneIndex, Handler, Context), {error, {lane_finished, LaneIndex, Handler, Context}}).
 -define(WF_ERROR_NO_CACHED_ITEMS(LaneIndex, ItemIndex, Iterator, Context),
     {error, {no_cached_items, LaneIndex, ItemIndex, Iterator, Context}}).
@@ -83,7 +83,7 @@
 
 -type update_fun() :: datastore_doc:diff(state()).
 -type no_items_error() :: ?WF_ERROR_NO_WAITING_ITEMS |
-    ?WF_ERROR_EXECUTION_FINISHED(workflow_handler:handler(), workflow_engine:execution_context(), index()) |
+    ?WF_ERROR_EXECUTION_FINISHED(workflow_handler:handler(), workflow_engine:execution_context(), index(), boolean()) |
     ?WF_ERROR_LANE_FINISHED(index(), workflow_handler:handler(), workflow_engine:execution_context()).
 % Type used to return additional information about document update procedure
 % (see #workflow_execution_state.update_report)
@@ -129,7 +129,7 @@ cleanup(ExecutionId) ->
 
 -spec prepare_next_job(workflow_engine:execution_id()) ->
     {ok, workflow_engine:job_execution_spec()} |
-    ?END_EXECUTION_AND_NOTIFY(workflow_handler:handler(), workflow_engine:execution_context(), index()) |
+    ?END_EXECUTION_AND_NOTIFY(workflow_handler:handler(), workflow_engine:execution_context(), index(), boolean()) |
     ?PREPARE_EXECUTION(workflow_handler:handler(), workflow_engine:execution_context()) | ?DEFER_EXECUTION |
     ?END_EXECUTION.
 prepare_next_job(ExecutionId) ->
@@ -144,8 +144,8 @@ prepare_next_job(ExecutionId) ->
             ?DEFER_EXECUTION;
         ?PREPARE_EXECUTION(Handler, ExecutionContext) ->
             ?PREPARE_EXECUTION(Handler, ExecutionContext);
-        ?WF_ERROR_EXECUTION_FINISHED(Handler, Context, LaneIndex) ->
-            ?END_EXECUTION_AND_NOTIFY(Handler, Context, LaneIndex);
+        ?WF_ERROR_EXECUTION_FINISHED(Handler, Context, LaneIndex, ErrorEncountered) ->
+            ?END_EXECUTION_AND_NOTIFY(Handler, Context, LaneIndex, ErrorEncountered);
         ?WF_ERROR_EXECUTION_PREPARATION_FAILED ->
             ?END_EXECUTION
     end.
@@ -515,6 +515,7 @@ prepare_next_parallel_box(State = #workflow_execution_state{
         parallel_boxes_spec = BoxesSpec,
         lane_index = LaneIndex
     },
+    error_encountered = ErrorEncountered,
     jobs = Jobs,
     iteration_state = IterationState
 }, JobIdentifier) ->
@@ -524,10 +525,14 @@ prepare_next_parallel_box(State = #workflow_execution_state{
         ?WF_ERROR_ITEM_PROCESSING_FINISHED(ItemIndex) ->
             {NewIterationState, ItemIdToSnapshot, ItemIdsToDelete} =
                 workflow_iteration_state:handle_item_processed(IterationState, ItemIndex),
+            FinalItemIdToSnapshot = case ErrorEncountered of
+                true -> undefined;
+                false -> ItemIdToSnapshot
+            end,
             {ok, State#workflow_execution_state{
                 iteration_state = NewIterationState,
                 update_report = #items_processed_report{lane_index = LaneIndex, last_finished_item_index = ItemIndex,
-                    item_id_to_snapshot = ItemIdToSnapshot, item_ids_to_delete = ItemIdsToDelete}
+                    item_id_to_snapshot = FinalItemIdToSnapshot, item_ids_to_delete = ItemIdsToDelete}
             }}
     end.
 
@@ -566,7 +571,7 @@ handle_no_waiting_items_error(#workflow_execution_state{
 }, Error) ->
     case {Error, IsLast orelse ErrorEncountered} of
         {?WF_ERROR_NO_WAITING_ITEMS, _} -> ?WF_ERROR_NO_WAITING_ITEMS;
-        {?ERROR_NOT_FOUND, true} -> ?WF_ERROR_EXECUTION_FINISHED(Handler, Context, LaneIndex);
+        {?ERROR_NOT_FOUND, true} -> ?WF_ERROR_EXECUTION_FINISHED(Handler, Context, LaneIndex, ErrorEncountered);
         {?ERROR_NOT_FOUND, false} -> ?WF_ERROR_LANE_FINISHED(LaneIndex, Handler, Context)
     end.
 
