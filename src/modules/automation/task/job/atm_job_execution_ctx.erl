@@ -21,6 +21,7 @@
 -export([build/4]).
 -export([
     get_workflow_execution_ctx/1,
+    get_access_token/1,
     get_item/1,
     get_report_result_url/1
 ]).
@@ -65,6 +66,11 @@ get_workflow_execution_ctx(#atm_job_execution_ctx{
     workflow_execution_ctx = AtmWorkflowExecutionCtx
 }) ->
     AtmWorkflowExecutionCtx.
+
+
+-spec get_access_token(record()) -> auth_manager:access_token().
+get_access_token(#atm_job_execution_ctx{workflow_execution_ctx = AtmWorkflowExecutionCtx}) ->
+    atm_workflow_execution_ctx:get_access_token(AtmWorkflowExecutionCtx).
 
 
 -spec get_item(record()) -> json_utils:json_term().

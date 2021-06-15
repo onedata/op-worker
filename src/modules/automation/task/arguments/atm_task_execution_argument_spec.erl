@@ -166,7 +166,15 @@ build_value(AtmJobExecutionCtx, #atm_task_argument_value_builder{
         error -> throw(?ERROR_ATM_TASK_ARG_MAPPER_ITEM_QUERY_FAILED(Item, Query))
     end;
 
-build_value(_AtmTaskExecutionArgSpec, _InputSpec) ->
+build_value(AtmJobExecutionCtx, #atm_task_argument_value_builder{
+    type = onedatafs_credentials
+}) ->
+    #{
+        <<"host">> => oneprovider:get_domain(),
+        <<"accessToken">> => atm_job_execution_ctx:get_access_token(AtmJobExecutionCtx)
+    };
+
+build_value(_AtmJobExecutionCtx, _InputSpec) ->
     % TODO VFS-7660 handle rest of atm_task_argument_value_builder:type()
     throw(?ERROR_ATM_TASK_ARG_MAPPER_INVALID_INPUT_SPEC).
 

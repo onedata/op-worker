@@ -26,13 +26,17 @@
 
 %% API
 -export([build/2]).
--export([get_space_id/1, get_workflow_execution_id/1, get_session_id/1]).
+-export([
+    get_space_id/1,
+    get_workflow_execution_id/1,
+    get_session_id/1, get_access_token/1
+]).
 
 
 -record(atm_workflow_execution_ctx, {
     space_id :: od_space:id(),
     workflow_execution_id :: atm_workflow_execution:id(),
-    session_id :: session:id()
+    user_ctx :: user_ctx:ctx()
 }).
 -type record() :: #atm_workflow_execution_ctx{}.
 
@@ -49,7 +53,7 @@ build(SpaceId, AtmWorkflowExecutionId) ->
     #atm_workflow_execution_ctx{
         space_id = SpaceId,
         workflow_execution_id = AtmWorkflowExecutionId,
-        session_id = atm_workflow_execution_session:acquire(AtmWorkflowExecutionId)
+        user_ctx = atm_workflow_execution_session:acquire(AtmWorkflowExecutionId)
     }.
 
 
@@ -66,5 +70,11 @@ get_workflow_execution_id(#atm_workflow_execution_ctx{
 
 
 -spec get_session_id(record()) -> session:id().
-get_session_id(#atm_workflow_execution_ctx{session_id = SessionId}) ->
-    SessionId.
+get_session_id(#atm_workflow_execution_ctx{user_ctx = UserCtx}) ->
+    user_ctx:get_session_id(UserCtx).
+
+
+-spec get_access_token(record()) -> auth_manager:access_token().
+get_access_token(#atm_workflow_execution_ctx{user_ctx = UserCtx}) ->
+    TokenCredentials = user_ctx:get_credentials(UserCtx),
+    auth_manager:get_access_token(TokenCredentials).
