@@ -46,8 +46,8 @@
 -record(items_processed_report, {
     lane_index :: index(),
     last_finished_item_index :: index(),
-    finished_item_id :: workflow_cached_item:id(),
-    finished_iterator :: iterator:iterator() | undefined
+    item_id_to_snapshot :: workflow_cached_item:id() | undefined,
+    item_ids_to_delete :: [workflow_cached_item:id()]
 }).
 
 -type index() :: non_neg_integer(). % scheduling is based on positions of elements (items, parallel_boxes, tasks)
@@ -58,7 +58,8 @@
 -define(NOT_PREPARED, not_prepared).
 -define(PREPARING, preparing).
 -define(PREPARATION_FAILED, preparation_failed).
--type preparation_status() :: ?NOT_PREPARED | ?PREPARING | ?PREPARATION_FAILED.
+-define(PREPARATION_FINISHED, preparation_finished).
+-type preparation_status() :: ?NOT_PREPARED | ?PREPARING | ?PREPARATION_FAILED | ?PREPARATION_FINISHED.
 
 -type current_lane() :: #current_lane{}.
 
@@ -76,8 +77,8 @@
 -define(WF_ERROR_EXECUTION_FINISHED(Handler, Context, LaneIndex),
     {error, {execution_finished, Handler, Context, LaneIndex}}).
 -define(WF_ERROR_LANE_FINISHED(LaneIndex, Handler, Context), {error, {lane_finished, LaneIndex, Handler, Context}}).
--define(WF_ERROR_NO_CACHED_ITEMS(LaneIndex, IterationStep, Context),
-    {error, {no_cached_items, LaneIndex, IterationStep, Context}}).
+-define(WF_ERROR_NO_CACHED_ITEMS(LaneIndex, ItemIndex, Iterator, Context),
+    {error, {no_cached_items, LaneIndex, ItemIndex, Iterator, Context}}).
 -define(WF_ERROR_EXECUTION_PREPARATION_FAILED, {error, execution_preparation_failed}).
 
 -type update_fun() :: datastore_doc:diff(state()).
@@ -160,12 +161,17 @@ report_execution_status_update(ExecutionId, JobIdentifier, UpdateType, Ans) ->
         report_execution_status_update_internal(State, JobIdentifier, UpdateType, Ans)
     end) of
         {ok, #document{value = #workflow_execution_state{update_report = #items_processed_report{
-            finished_iterator = undefined, finished_item_id = ItemId}}}} ->
-            workflow_cached_item:delete(ItemId);
-        {ok, #document{value = #workflow_execution_state{update_report = #items_processed_report{lane_index = LaneIndex,
-            last_finished_item_index = ItemIndex, finished_iterator = IteratorToSave, finished_item_id = ItemId}}}} ->
-            workflow_cached_item:delete(ItemId),
-            workflow_iterator_snapshot:save(ExecutionId, LaneIndex, ItemIndex, IteratorToSave);
+            item_id_to_snapshot = undefined, item_ids_to_delete = ItemIdsToDelete}}}} ->
+            lists:foreach(fun(ItemId) -> workflow_cached_item:delete(ItemId) end, ItemIdsToDelete);
+        {ok, #document{value = #workflow_execution_state{update_report = #items_processed_report{
+            lane_index = LaneIndex,
+            last_finished_item_index = ItemIndex,
+            item_id_to_snapshot = ItemIdToSnapshot,
+            item_ids_to_delete = ItemIdsToDelete
+        }}}} ->
+            IteratorToSave = workflow_cached_item:get_iterator(ItemIdToSnapshot),
+            workflow_iterator_snapshot:save(ExecutionId, LaneIndex, ItemIndex, IteratorToSave),
+            lists:foreach(fun(ItemId) -> workflow_cached_item:delete(ItemId) end, ItemIdsToDelete);
         {ok, _} ->
             ok
     end.
@@ -296,22 +302,22 @@ prepare_next_job_for_current_lane(ExecutionId) ->
                 item_id = ItemId,
                 job_identifier = JobIdentifier
             }};
-        ?WF_ERROR_NO_CACHED_ITEMS(LaneIndex, IterationStep, Context) ->
-            prepare_next_job_using_iterator(ExecutionId, IterationStep, LaneIndex, Context);
+        ?WF_ERROR_NO_CACHED_ITEMS(LaneIndex, ItemIndex, Iterator, Context) ->
+            prepare_next_job_using_iterator(ExecutionId, ItemIndex, Iterator, LaneIndex, Context);
         {error, _} = Error ->
             Error
     end.
 
--spec prepare_next_job_using_iterator(workflow_engine:execution_id(), workflow_iteration_state:iteration_step(),
+-spec prepare_next_job_using_iterator(workflow_engine:execution_id(), index(), iterator:iterator(),
     index(), workflow_engine:execution_context()) -> {ok, workflow_engine:job_execution_spec()} | no_items_error().
-prepare_next_job_using_iterator(ExecutionId, CurrentIterationStep, LaneIndex, Context) ->
-    case iterator:get_next(Context, workflow_iteration_state:get_iterator(CurrentIterationStep)) of
+prepare_next_job_using_iterator(ExecutionId, ItemIndex, CurrentIterator, LaneIndex, Context) ->
+    case iterator:get_next(Context, CurrentIterator) of
         {ok, NextItem, NextIterator} ->
             ParallelBoxToStart = 1, % TODO VFS-7788 - get ParallelBoxToStart from iterator
-            NextItemId = workflow_cached_item:put(NextItem), % TODO VFS-7787 return (to engine) item instead of item_id in this case (engine must read from cache when we have item here)
+            NextItemId = workflow_cached_item:put(NextItem, NextIterator), % TODO VFS-7787 return (to engine) item instead of item_id in this case (engine must read from cache when we have item here)
             case update(ExecutionId, fun(State) ->
                 register_and_prepare_new_item(
-                    State, NextItemId, ParallelBoxToStart, CurrentIterationStep, NextIterator)
+                    State, ItemIndex, NextItemId, ParallelBoxToStart, NextIterator)
             end) of
                 {ok, #document{value = #workflow_execution_state{update_report = #job_prepared_report{
                     job_identifier = JobIdentifier, task_id = TaskId, task_spec = TaskSpec},
@@ -373,6 +379,7 @@ prepare_lane(#workflow_execution_state{current_lane = #current_lane{lane_index =
     ?WF_ERROR_LANE_ALREADY_PREPARED;
 prepare_lane(State, NextLaneSpec, Iterator) ->
     {ok, State#workflow_execution_state{
+        preparation_status = ?PREPARATION_FINISHED,
         current_lane = NextLaneSpec,
         iteration_state = workflow_iteration_state:init(Iterator),
         jobs = workflow_jobs:init()
@@ -380,9 +387,9 @@ prepare_lane(State, NextLaneSpec, Iterator) ->
 
 -spec register_and_prepare_new_item(
     state(),
+    index(),
     workflow_cached_item:id(),
     index(),
-    workflow_iteration_state:iteration_step(),
     iterator:iterator()
 ) ->
     {ok, state()} | ?WF_ERROR_RACE_CONDITION.
@@ -390,9 +397,9 @@ register_and_prepare_new_item(State = #workflow_execution_state{
     jobs = Jobs,
     iteration_state = IterationState,
     current_lane = #current_lane{parallel_boxes_spec = BoxesSpec}
-}, NewItemId, ParallelBoxToStart, PrevIterationStep, NewIterator) ->
+}, PrevItemIndex, NewItemId, ParallelBoxToStart, NewIterator) ->
     % TODO VFS-7789 - it may be needed to allow registration of waiting items as a result of async call processing finish
-    case workflow_iteration_state:register_new_step(IterationState, PrevIterationStep, NewItemId, NewIterator) of
+    case workflow_iteration_state:register_new_item(IterationState, PrevItemIndex, NewItemId, NewIterator) of
         ?WF_ERROR_RACE_CONDITION = Error ->
             Error;
         {NewItemIndex, NewIterationState} ->
@@ -463,7 +470,7 @@ report_execution_status_update_internal(State, JobIdentifier, _UpdateType, Ans) 
 
 -spec prepare_next_waiting_job(state()) ->
     {ok, state()} | no_items_error() |
-    ?WF_ERROR_NO_CACHED_ITEMS(index(), workflow_iteration_state:iteration_step(), workflow_engine:execution_context()) |
+    ?WF_ERROR_NO_CACHED_ITEMS(index(), index(), iterator:iterator(), workflow_engine:execution_context()) |
     ?WF_ERROR_EXECUTION_PREPARATION_FAILED.
 prepare_next_waiting_job(State = #workflow_execution_state{
     context = Context,
@@ -481,11 +488,11 @@ prepare_next_waiting_job(State = #workflow_execution_state{
                 jobs = NewJobs
             }};
         Error ->
-            case workflow_iteration_state:get_last_registered_step(IterationState) of
+            case workflow_iteration_state:get_last_registered(IterationState) of
                 undefined -> % iteration has finished
                     handle_no_waiting_items_error(State, Error);
-                IterationStep ->
-                    ?WF_ERROR_NO_CACHED_ITEMS(LaneIndex, IterationStep, Context)
+                {ItemIndex, Iterator} ->
+                    ?WF_ERROR_NO_CACHED_ITEMS(LaneIndex, ItemIndex, Iterator, Context)
             end
     end;
 prepare_next_waiting_job(State = #workflow_execution_state{
@@ -515,11 +522,12 @@ prepare_next_parallel_box(State = #workflow_execution_state{
         {ok, NewJobs} ->
             {ok, State#workflow_execution_state{jobs = NewJobs}};
         ?WF_ERROR_ITEM_PROCESSING_FINISHED(ItemIndex) ->
-            {NewIterationState, ItemId, IteratorToSave} = workflow_iteration_state:handle_step_finish(IterationState, ItemIndex),
+            {NewIterationState, ItemIdToSnapshot, ItemIdsToDelete} =
+                workflow_iteration_state:handle_item_processed(IterationState, ItemIndex),
             {ok, State#workflow_execution_state{
                 iteration_state = NewIterationState,
                 update_report = #items_processed_report{lane_index = LaneIndex, last_finished_item_index = ItemIndex,
-                    finished_item_id = ItemId, finished_iterator = IteratorToSave}
+                    item_id_to_snapshot = ItemIdToSnapshot, item_ids_to_delete = ItemIdsToDelete}
             }}
     end.
 
@@ -548,15 +556,16 @@ report_job_finish(State = #workflow_execution_state{
     jobs = Jobs
 }, JobIdentifier, error) ->
     FinalJobs = workflow_jobs:register_failure(Jobs, JobIdentifier),
-    {ok, State#workflow_execution_state{jobs = FinalJobs}}.
+    {ok, State#workflow_execution_state{jobs = FinalJobs, error_encountered = true}}.
 
 -spec handle_no_waiting_items_error(state(), ?WF_ERROR_NO_WAITING_ITEMS | ?ERROR_NOT_FOUND) -> no_items_error().
 handle_no_waiting_items_error(#workflow_execution_state{
     current_lane = #current_lane{lane_index = LaneIndex, is_last = IsLast},
+    error_encountered = ErrorEncountered,
     handler = Handler,
     context = Context
 }, Error) ->
-    case {Error, IsLast} of
+    case {Error, IsLast orelse ErrorEncountered} of
         {?WF_ERROR_NO_WAITING_ITEMS, _} -> ?WF_ERROR_NO_WAITING_ITEMS;
         {?ERROR_NOT_FOUND, true} -> ?WF_ERROR_EXECUTION_FINISHED(Handler, Context, LaneIndex);
         {?ERROR_NOT_FOUND, false} -> ?WF_ERROR_LANE_FINISHED(LaneIndex, Handler, Context)

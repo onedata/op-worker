@@ -18,7 +18,7 @@
 -include("modules/datastore/datastore_models.hrl").
 
 %% API
--export([put/1, get/1, delete/1]).
+-export([put/2, get_item/1, get_iterator/1, delete/1]).
 
 -type id() :: binary().
 
@@ -33,16 +33,21 @@
 %%% API
 %%%===================================================================
 
--spec put(iterator:item()) -> id().
-put(Item) ->
-    Doc = #document{value = #workflow_cached_item{item = Item}},
+-spec put(iterator:item(), iterator:iterator()) -> id().
+put(Item, Iterator) ->
+    Doc = #document{value = #workflow_cached_item{item = Item, iterator = Iterator}},
     {ok, #document{key = ItemId}} = datastore_model:save(?CTX, Doc),
     ItemId.
 
--spec get(id()) -> iterator:item().
-get(ItemId) ->
+-spec get_item(id()) -> iterator:item().
+get_item(ItemId) ->
     {ok, #document{value = #workflow_cached_item{item = Item}}} = datastore_model:get(?CTX, ItemId),
     Item.
+
+-spec get_iterator(id()) -> iterator:iterator().
+get_iterator(ItemId) ->
+    {ok, #document{value = #workflow_cached_item{iterator = Iterator}}} = datastore_model:get(?CTX, ItemId),
+    Iterator.
 
 -spec delete(id()) -> ok.
 delete(ItemId) ->

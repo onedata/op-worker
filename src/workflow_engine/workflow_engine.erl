@@ -350,7 +350,7 @@ process_item(ExecutionId, #job_execution_spec{
     task_id = TaskId,
     item_id = ItemId
 }, FinishCallback, HeartbeatCallback) ->
-    Item = workflow_cached_item:get(ItemId),
+    Item = workflow_cached_item:get_item(ItemId),
     try
         Handler:process_item(ExecutionId, ExecutionContext, TaskId, Item,
             FinishCallback, HeartbeatCallback)

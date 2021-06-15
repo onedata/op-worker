@@ -1112,7 +1112,8 @@
 %%%===================================================================
 
 -record(workflow_cached_item, {
-    item :: iterator:item() % TODO - czy iterator nie powinien byc zapisany z itemem?
+    item :: iterator:item(),
+    iterator :: iterator:iterator()
 }).
 
 -record(workflow_iterator_snapshot, {
@@ -1133,6 +1134,7 @@
 
     preparation_status = not_prepared :: workflow_execution_state:preparation_status(),
     current_lane :: workflow_execution_state:current_lane() | undefined,
+    error_encountered = false :: boolean(),
 
     iteration_state :: workflow_iteration_state:state() | undefined,
     jobs :: workflow_jobs:jobs() | undefined,
