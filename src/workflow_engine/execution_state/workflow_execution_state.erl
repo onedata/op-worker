@@ -522,7 +522,7 @@ prepare_next_parallel_box(State = #workflow_execution_state{
     case workflow_jobs:prepare_next_parallel_box(Jobs, JobIdentifier, BoxesSpec, BoxCount) of
         {ok, NewJobs} ->
             {ok, State#workflow_execution_state{jobs = NewJobs}};
-        ?WF_ERROR_ITEM_PROCESSING_FINISHED(ItemIndex) ->
+        {?WF_ERROR_ITEM_PROCESSING_FINISHED(ItemIndex), NewJobs} ->
             {NewIterationState, ItemIdToSnapshot, ItemIdsToDelete} =
                 workflow_iteration_state:handle_item_processed(IterationState, ItemIndex),
             FinalItemIdToSnapshot = case ErrorEncountered of
@@ -530,6 +530,7 @@ prepare_next_parallel_box(State = #workflow_execution_state{
                 false -> ItemIdToSnapshot
             end,
             {ok, State#workflow_execution_state{
+                jobs = NewJobs,
                 iteration_state = NewIterationState,
                 update_report = #items_processed_report{lane_index = LaneIndex, last_finished_item_index = ItemIndex,
                     item_id_to_snapshot = FinalItemIdToSnapshot, item_ids_to_delete = ItemIdsToDelete}
@@ -559,8 +560,15 @@ report_job_finish(State = #workflow_execution_state{
 report_job_finish(State = #workflow_execution_state{
     jobs = Jobs
 }, JobIdentifier, error) ->
-    FinalJobs = workflow_jobs:register_failure(Jobs, JobIdentifier),
-    {ok, State#workflow_execution_state{jobs = FinalJobs, error_encountered = true}}.
+    {FinalJobs, RemainingForBox} = workflow_jobs:register_failure(Jobs, JobIdentifier),
+    State2 = State#workflow_execution_state{jobs = FinalJobs, error_encountered = true},
+    case RemainingForBox of
+        ?AT_LEAST_ONE_JOB_LEFT_FOR_PARALLEL_BOX ->
+            {ok, State2};
+        ?NO_JOBS_LEFT_FOR_PARALLEL_BOX ->
+            % Call prepare_next_parallel_box/2 to delete metadata for failed item
+            prepare_next_parallel_box(State2, JobIdentifier)
+    end.
 
 -spec handle_no_waiting_items_error(state(), ?WF_ERROR_NO_WAITING_ITEMS | ?ERROR_NOT_FOUND) -> no_items_error().
 handle_no_waiting_items_error(#workflow_execution_state{

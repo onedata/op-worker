@@ -59,6 +59,7 @@
 -type pending_async_jobs() :: #{job_identifier() => #async_job_timer{}}.
 -type raced_results() :: #{job_identifier() => workflow_handler:callback_execution_result()}.
 -type jobs() :: #workflow_jobs{}.
+-type jobs_for_parallel_box() :: ?NO_JOBS_LEFT_FOR_PARALLEL_BOX | ?AT_LEAST_ONE_JOB_LEFT_FOR_PARALLEL_BOX.
 
 -export_type([job_identifier/0, jobs/0]).
 
@@ -126,8 +127,7 @@ pause_job(Jobs = #workflow_jobs{
         ongoing = gb_sets:delete(JobIdentifier, Ongoing)
     }.
 
--spec mark_ongoing_job_finished(jobs(), job_identifier()) ->
-    {jobs(), ?NO_JOBS_LEFT_FOR_PARALLEL_BOX | ?AT_LEAST_ONE_JOB_LEFT_FOR_PARALLEL_BOX}.
+-spec mark_ongoing_job_finished(jobs(), job_identifier()) -> {jobs(), jobs_for_parallel_box()}.
 mark_ongoing_job_finished(Jobs = #workflow_jobs{
     ongoing = Ongoing,
     waiting = Waiting
@@ -139,7 +139,7 @@ mark_ongoing_job_finished(Jobs = #workflow_jobs{
     end,
     {Jobs#workflow_jobs{ongoing = NewOngoing}, RemainingForBox}.
 
--spec register_failure(jobs(), job_identifier()) -> jobs().
+-spec register_failure(jobs(), job_identifier()) -> {jobs(), jobs_for_parallel_box()}.
 register_failure(Jobs = #workflow_jobs{
     failed_items = Failed
 }, #job_identifier{item_index = ItemIndex} = JobIdentifier) ->
@@ -152,7 +152,7 @@ register_failure(Jobs = #workflow_jobs{
     end,
 
     % TODO VFS-7788 - count errors and stop workflow when errors limit is reached
-    Jobs2#workflow_jobs{failed_items = NewFailed}.
+    {Jobs2#workflow_jobs{failed_items = NewFailed}, RemainingForBox}.
 
 -spec remove_pending_async_job(jobs(), job_identifier(), workflow_handler:callback_execution_result()) ->
     {ok | ?WF_ERROR_UNKNOWN_JOB, jobs()}.
@@ -168,13 +168,13 @@ remove_pending_async_job(Jobs = #workflow_jobs{
     end.
 
 -spec prepare_next_parallel_box(jobs(), job_identifier(), workflow_execution_state:boxes_map(), non_neg_integer()) ->
-    {ok, jobs()} | ?WF_ERROR_ITEM_PROCESSING_FINISHED(workflow_execution_state:index()).
-prepare_next_parallel_box(_Jobs,
+    {ok | ?WF_ERROR_ITEM_PROCESSING_FINISHED(workflow_execution_state:index()), jobs()}.
+prepare_next_parallel_box(Jobs,
     #job_identifier{
         parallel_box_index = BoxCount,
         item_index = ItemIndex
     }, _BoxesSpec, BoxCount) ->
-    ?WF_ERROR_ITEM_PROCESSING_FINISHED(ItemIndex);
+    {?WF_ERROR_ITEM_PROCESSING_FINISHED(ItemIndex), Jobs};
 prepare_next_parallel_box(
     Jobs = #workflow_jobs{
         failed_items = Failed,
@@ -187,7 +187,8 @@ prepare_next_parallel_box(
     BoxesSpec, _BoxCount) ->
     case has_item(ItemIndex, Failed) of
         true ->
-            {ok, Jobs#workflow_jobs{failed_items = sets:del_element(ItemIndex, Failed)}};
+            {?WF_ERROR_ITEM_PROCESSING_FINISHED(ItemIndex),
+                Jobs#workflow_jobs{failed_items = sets:del_element(ItemIndex, Failed)}};
         false ->
             NewBoxIndex = BoxIndex + 1,
             Tasks = maps:get(NewBoxIndex, BoxesSpec),
