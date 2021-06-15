@@ -202,14 +202,14 @@ list_with_invalid_listing_opts_test(_Config) ->
     lists:foreach(fun(InvalidListingOpts) ->
         ?assertEqual(?EINVAL, list_links(KrkNode, SpaceId, Phase, all, InvalidListingOpts))
     end, [
-        % Either offset or start_index must be specified
-        #{}, #{limit => 10},
+        % Limit and either offset or start_index must be specified
+        #{}, #{offset => 0}, #{start_index => 0}, #{limit => 10},
         % Limit lower than 1 is not allowed
         #{offset => 0, limit => -10}, #{offset => 0, limit => 0}, #{offset => 0, limit => all},
         % Offset must be proper integer
-        #{offset => <<>>}, #{offset => -2.5},
+        #{offset => <<>>, limit => 10}, #{offset => -2.5, limit => 10},
         % Start index must be proper binary
-        #{start_index => 10}
+        #{start_index => 10, limit => 10}
     ]).
 
 
@@ -222,10 +222,9 @@ list_with_negative_offset_test(_Config) ->
     AtmInventoryIds = [str_utils:rand_hex(32), str_utils:rand_hex(32)],
     AllLinks = populate_links(Node, SpaceId, Phase, AtmInventoryIds, AtmInventoryIds, 30),
 
-    ?assertEqual(AllLinks, list_links(Node, SpaceId, Phase, all, #{offset => -10})),
     ?assertEqual(AllLinks, list_links(Node, SpaceId, Phase, all, #{offset => -10, limit => 30})),
 
-    StartIndex = element(2, lists:nth(20, AllLinks)),
+    StartIndex = element(1, lists:nth(20, AllLinks)),
     ExpLinks = lists:sublist(AllLinks, 15, 10),
     ?assertEqual(
         ExpLinks,
@@ -336,43 +335,6 @@ iterate_over_atm_workflow_executions_test_base(Phase, LinksNum, ListingMethod, L
     ?assertEqual(ExpLinks, ListedLinks).
 
 
-%% @private
--spec list_all_links_by_chunk(
-    node(),
-    listing_method(),
-    od_space:id(),
-    atm_workflow_execution:phase(),
-    atm_workflow_executions_forest:tree_ids(),
-    atm_workflow_executions_forest:listing_opts(),
-    [{atm_workflow_execution:id(), atm_workflow_executions_forest:index()}]
-) ->
-    [{atm_workflow_execution:id(), atm_workflow_executions_forest:index()}].
-list_all_links_by_chunk(Node, ListingMethod, SpaceId, Phase, ListedAtmInventoryIds, ListingOpts, LinksAcc) ->
-    case list_links(Node, SpaceId, Phase, ListedAtmInventoryIds, ListingOpts) of
-        [] ->
-            LinksAcc;
-        ListedLinks ->
-            list_all_links_by_chunk(
-                Node, ListingMethod, SpaceId, Phase, ListedAtmInventoryIds,
-                update_listing_opts(ListingMethod, ListingOpts, ListedLinks),
-                LinksAcc ++ ListedLinks
-            )
-    end.
-
-
-%% @private
--spec update_listing_opts(
-    listing_method(),
-    atm_workflow_executions_forest:listing_opts(),
-    [{atm_workflow_execution:id(), atm_workflow_executions_forest:index()}]
-) ->
-    atm_workflow_executions_forest:listing_opts().
-update_listing_opts(offset, ListingOpts, ListedLinks) ->
-    maps:update_with(offset, fun(Offset) -> Offset + length(ListedLinks) end, ListingOpts);
-update_listing_opts(start_index, ListingOpts, ListedLinks) ->
-    maps:update(start_index, element(2, lists:last(ListedLinks)), ListingOpts#{offset => 1}).
-
-
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -397,7 +359,7 @@ populate_links(Node, SpaceId, Phase, AllAtmInventoryIds, ListedAtmInventoryId, L
     populate_links(Node, SpaceId, Phase, AllAtmInventoryIds, [ListedAtmInventoryId], LinksNum);
 
 populate_links(Node, SpaceId, Phase, AllAtmInventoryIds, ListedAtmInventoryIds, LinksNum) ->
-    lists:keysort(2, lists:filtermap(fun(_) ->
+    lists:keysort(1, lists:filtermap(fun(_) ->
         AtmInventoryId = lists_utils:random_element(AllAtmInventoryIds),
         AtmWorkflowExecutionDoc = gen_rand_workflow(SpaceId, AtmInventoryId),
         AtmWorkflowExecutionId = AtmWorkflowExecutionDoc#document.key,
@@ -405,7 +367,7 @@ populate_links(Node, SpaceId, Phase, AllAtmInventoryIds, ListedAtmInventoryIds, 
 
         case lists:member(AtmInventoryId, ListedAtmInventoryIds) of
             true ->
-                {true, {AtmWorkflowExecutionId, index(Phase, AtmWorkflowExecutionDoc)}};
+                {true, {index(Phase, AtmWorkflowExecutionDoc), AtmWorkflowExecutionId}};
             false ->
                 false
         end
@@ -479,7 +441,7 @@ is_member(Node, SpaceId, Phase, AtmWorkflowExecutionId) ->
 ) ->
     boolean().
 is_member(Node, SpaceId, Phase, TreeIds, AtmWorkflowExecutionId) ->
-    lists:keymember(AtmWorkflowExecutionId, 1, list_all_links(Node, SpaceId, Phase, TreeIds)).
+    lists:keymember(AtmWorkflowExecutionId, 2, list_all_links(Node, SpaceId, Phase, TreeIds)).
 
 
 %% @private
@@ -489,9 +451,33 @@ is_member(Node, SpaceId, Phase, TreeIds, AtmWorkflowExecutionId) ->
     atm_workflow_execution:phase(),
     atm_workflow_executions_forest:tree_ids()
 ) ->
-    atm_workflow_execution:listing().
+    atm_workflow_executions_forest:entries().
 list_all_links(Node, SpaceId, Phase, TreeIds) ->
-    list_links(Node, SpaceId, Phase, TreeIds, #{offset => 0}).
+    list_all_links_by_chunk(Node, offset, SpaceId, Phase, TreeIds, #{offset => 0, limit => 100}, []).
+
+
+%% @private
+-spec list_all_links_by_chunk(
+    node(),
+    listing_method(),
+    od_space:id(),
+    atm_workflow_execution:phase(),
+    atm_workflow_executions_forest:tree_ids(),
+    atm_workflow_executions_forest:listing_opts(),
+    atm_workflow_executions_forest:entries()
+) ->
+    atm_workflow_executions_forest:entries().
+list_all_links_by_chunk(Node, ListingMethod, SpaceId, Phase, ListedAtmInventoryIds, ListingOpts, LinksAcc) ->
+    case list_links(Node, SpaceId, Phase, ListedAtmInventoryIds, ListingOpts) of
+        [] ->
+            LinksAcc;
+        ListedLinks ->
+            list_all_links_by_chunk(
+                Node, ListingMethod, SpaceId, Phase, ListedAtmInventoryIds,
+                update_listing_opts(ListingMethod, ListingOpts, ListedLinks),
+                LinksAcc ++ ListedLinks
+            )
+    end.
 
 
 %% @private
@@ -502,13 +488,26 @@ list_all_links(Node, SpaceId, Phase, TreeIds) ->
     atm_workflow_executions_forest:tree_ids(),
     atm_workflow_executions_forest:listing_opts()
 ) ->
-    atm_workflow_execution:listing().
+    atm_workflow_executions_forest:entries().
 list_links(Node, SpaceId, ?WAITING_PHASE, TreeIds, ListingOpts) ->
     rpc:call(Node, atm_waiting_workflow_executions, list, [SpaceId, TreeIds, ListingOpts]);
 list_links(Node, SpaceId, ?ONGOING_PHASE, TreeIds, ListingOpts) ->
     rpc:call(Node, atm_ongoing_workflow_executions, list, [SpaceId, TreeIds, ListingOpts]);
 list_links(Node, SpaceId, ?ENDED_PHASE, TreeIds, ListingOpts) ->
     rpc:call(Node, atm_ended_workflow_executions, list, [SpaceId, TreeIds, ListingOpts]).
+
+
+%% @private
+-spec update_listing_opts(
+    listing_method(),
+    atm_workflow_executions_forest:listing_opts(),
+    [{atm_workflow_execution:id(), atm_workflow_executions_forest:index()}]
+) ->
+    atm_workflow_executions_forest:listing_opts().
+update_listing_opts(offset, ListingOpts, ListedLinks) ->
+    maps:update_with(offset, fun(Offset) -> Offset + length(ListedLinks) end, ListingOpts);
+update_listing_opts(start_index, ListingOpts, ListedLinks) ->
+    maps:update(start_index, element(1, lists:last(ListedLinks)), ListingOpts#{offset => 1}).
 
 
 %===================================================================
@@ -528,7 +527,7 @@ end_per_suite(_Config) ->
 
 
 init_per_testcase(_Case, Config) ->
-    ct:timetrap({minutes, 5}),
+    ct:timetrap({minutes, 3}),
     Config.
 
 
