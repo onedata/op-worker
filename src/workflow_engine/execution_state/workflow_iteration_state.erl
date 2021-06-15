@@ -36,9 +36,10 @@
 -type state() :: #iteration_state{}.
 % Tree storing ranges of items which processing already finished.
 % Range is deleted from tree when no items with smaller index is being processed.
+% Range is encoded as tupe {To, From} to allow easier finding of ranges to be merged (see handle_item_processed/2).
 -type items_finished_ahead() :: gb_trees:tree({
-    From :: workflow_execution_state:index(),
-    To :: workflow_execution_state:index()
+    To :: workflow_execution_state:index(),
+    From :: workflow_execution_state:index()
 }, workflow_cached_item:id()).
 
 -export_type([state/0]).
@@ -101,7 +102,7 @@ handle_item_processed(
                 {FinishedItemId, [FinishedItemId], ItemIndex + 1, FinishedAhead};
             false ->
                 case gb_trees:smallest(FinishedAhead) of
-                    {{From, To} = Key, ItemIdToReturn} when From =:= ItemIndex + 1 ->
+                    {{To, From} = Key, ItemIdToReturn} when From =:= ItemIndex + 1 ->
                         UpdatedFinishedAhead = gb_trees:delete(Key, FinishedAhead),
                         {ItemIdToReturn, [FinishedItemId, ItemIdToReturn], To + 1, UpdatedFinishedAhead};
                     _ ->
@@ -122,13 +123,19 @@ handle_item_processed(
     ItemIndex
 ) ->
     FinishedItemId = maps:get(ItemIndex, Pending),
-    {IdsToDelete, FinalFinishedAhead} = case gb_trees:next(gb_trees:iterator_from(ItemIndex, FinishedAhead)) of
-        {{From, To} = Key, ItemId, _} when From =:= ItemIndex + 1 ->
+    {IdsToDelete, FinalFinishedAhead} = case gb_trees:next(gb_trees:iterator_from({ItemIndex - 1, 0}, FinishedAhead)) of
+        {{To, From} = Key, ItemId, _} when From =:= ItemIndex + 1 ->
             UpdatedFinishedAhead = gb_trees:delete(Key, FinishedAhead),
-            {[FinishedItemId], gb_trees:insert({ItemIndex, To}, ItemId, UpdatedFinishedAhead)};
-        {{From, To} = Key, ItemId, _} when To =:= ItemIndex - 1 ->
+            {[FinishedItemId], gb_trees:insert({To, ItemIndex}, ItemId, UpdatedFinishedAhead)};
+        {{To, From} = Key, ItemId, TreeIterator} when To =:= ItemIndex - 1 ->
             UpdatedFinishedAhead = gb_trees:delete(Key, FinishedAhead),
-            {[ItemId], gb_trees:insert({From, ItemIndex}, FinishedItemId, UpdatedFinishedAhead)};
+            case gb_trees:next(TreeIterator) of
+                {{To2, From2} = Key2, ItemId2, _} when From2 =:= ItemIndex + 1 ->
+                    UpdatedFinishedAhead2 = gb_trees:delete(Key2, UpdatedFinishedAhead),
+                    {[ItemId, FinishedItemId], gb_trees:insert({To2, From}, ItemId2, UpdatedFinishedAhead2)};
+                _ ->
+                    {[ItemId], gb_trees:insert({ItemIndex, From}, FinishedItemId, UpdatedFinishedAhead)}
+            end;
         _ ->
             {[], gb_trees:insert({ItemIndex, ItemIndex}, FinishedItemId, FinishedAhead)}
     end,

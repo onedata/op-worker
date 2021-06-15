@@ -8,7 +8,6 @@
 %%% @doc
 %%% Stores iterators used to restart workflow executions (one iterator per execution).
 %%% Each iterator is stored together with lane and item index to prevent races.
-%%% TODO VFS-7786 - delete not used iterators from cache (when execution is finished)
 %%% TODO VFS-7787 - save first iterator of lane
 %%% @end
 %%%-------------------------------------------------------------------

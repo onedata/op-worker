@@ -545,7 +545,6 @@ report_job_finish(State = #workflow_execution_state{
 }, JobIdentifier, ok) ->
     % TODO VFS-7787 - should we protect against unknown keys? can they appear
     {NewJobs2, RemainingForBox} = workflow_jobs:mark_ongoing_job_finished(Jobs, JobIdentifier),
-    % TODO VFS-7786 - Delete unused iterators and save information used for restarts
     case RemainingForBox of
         ?AT_LEAST_ONE_JOB_LEFT_FOR_PARALLEL_BOX ->
             {ok, State#workflow_execution_state{jobs = NewJobs2}};
