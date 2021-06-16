@@ -70,6 +70,7 @@
 -define(WF_ERROR_ALREADY_REMOVED, {error, already_removed}).
 
 % errors used by workflow_execution_state to control workflow_engine
+-define(WF_ERROR_PREPARATION_FAILED, {error, preparation_failed}).
 -define(WF_ERROR_NO_WAITING_ITEMS, {error, no_waiting_items}).
 -define(WF_ERROR_RACE_CONDITION, {error, race_condition}).
 -define(WF_ERROR_UNKNOWN_JOB, {error, unknown_job}).

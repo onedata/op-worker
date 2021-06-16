@@ -112,14 +112,18 @@ execute_workflow(EngineId, ExecutionSpec) ->
     Handler = maps:get(workflow_handler, ExecutionSpec),
     Context = maps:get(execution_context, ExecutionSpec, undefined),
 
-    case ExecutionSpec of
+    InitAns = case ExecutionSpec of
         #{force_clean_execution := true} -> workflow_execution_state:init(ExecutionId, Handler, Context);
         _ -> workflow_execution_state:init_using_snapshot(ExecutionId, Handler, Context)
     end,
 
-    workflow_engine_state:add_execution_id(EngineId, ExecutionId),
-    trigger_job_scheduling(EngineId, ?TAKE_UP_FREE_SLOTS),
-    ok.
+    case InitAns of
+        ok ->
+            workflow_engine_state:add_execution_id(EngineId, ExecutionId),
+            trigger_job_scheduling(EngineId, ?TAKE_UP_FREE_SLOTS);
+        ?WF_ERROR_PREPARATION_FAILED ->
+            ok
+    end.
 
 -spec report_execution_status_update(execution_id(), id(), processing_stage(),
     workflow_jobs:job_identifier(), workflow_async_call_pool:id() | undefined, processing_result()) -> ok.

@@ -58,8 +58,8 @@
 -define(NOT_PREPARED, not_prepared).
 -define(PREPARING, preparing).
 -define(PREPARATION_FAILED, preparation_failed).
--define(PREPARATION_FINISHED, preparation_finished).
--type preparation_status() :: ?NOT_PREPARED | ?PREPARING | ?PREPARATION_FAILED | ?PREPARATION_FINISHED.
+-define(PREPARATION_SUCCESSFUL, preparation_successful).
+-type preparation_status() :: ?NOT_PREPARED | ?PREPARING | ?PREPARATION_FAILED | ?PREPARATION_SUCCESSFUL.
 
 -type current_lane() :: #current_lane{}.
 
@@ -108,17 +108,21 @@ init(ExecutionId, Handler, Context) ->
     ok.
 
 -spec init_using_snapshot(
-    workflow_engine:execution_id(), workflow_handler:handler(), workflow_engine:execution_context()) -> ok.
+    workflow_engine:execution_id(), workflow_handler:handler(), workflow_engine:execution_context()) ->
+    ok | ?WF_ERROR_PREPARATION_FAILED.
 init_using_snapshot(ExecutionId, Handler, Context) ->
     case workflow_iterator_snapshot:get(ExecutionId) of
         {ok, LaneIndex, Iterator} ->
-            {_InitialIterator, CurrentLaneSpec} =
-                get_initial_iterator_and_lane_spec(ExecutionId, Handler, Context, LaneIndex),
-            {ok, Record} = prepare_lane(
-                #workflow_execution_state{handler = Handler, context = Context}, CurrentLaneSpec, Iterator),
-            Doc = #document{key = ExecutionId, value = Record},
-            {ok, _} = datastore_model:save(?CTX, Doc),
-            ok;
+            case get_initial_iterator_and_lane_spec(ExecutionId, Handler, Context, LaneIndex) of
+                {ok, _InitialIterator, CurrentLaneSpec} ->
+                    {ok, Record} = prepare_lane(
+                        #workflow_execution_state{handler = Handler, context = Context}, CurrentLaneSpec, Iterator),
+                    Doc = #document{key = ExecutionId, value = Record},
+                    {ok, _} = datastore_model:save(?CTX, Doc),
+                    ok;
+                ?WF_ERROR_PREPARATION_FAILED ->
+                    ?WF_ERROR_PREPARATION_FAILED
+            end;
         ?ERROR_NOT_FOUND ->
             init(ExecutionId, Handler, Context)
     end.
@@ -183,8 +187,10 @@ report_execution_status_update(ExecutionId, JobIdentifier, UpdateType, Ans) ->
     workflow_handler:callback_execution_result()
 ) -> ok.
 report_execution_prepared(ExecutionId, Handler, ExecutionContext, ok) ->
-    {ok, IteratorToSave} = prepare_lane(ExecutionId, Handler, ExecutionContext, 1),
-    workflow_iterator_snapshot:save(ExecutionId, 0, 0, IteratorToSave);
+    case prepare_lane(ExecutionId, Handler, ExecutionContext, 1) of
+        {ok, IteratorToSave} -> workflow_iterator_snapshot:save(ExecutionId, 0, 0, IteratorToSave);
+        ?WF_ERROR_PREPARATION_FAILED -> ok
+    end;
 report_execution_prepared(ExecutionId, _Handler, _ExecutionContext, error) ->
     {ok, _} = update(ExecutionId, fun(State) ->
         handle_preparation_failure(State)
@@ -237,51 +243,61 @@ get_result_processing_data(ExecutionId, JobIdentifier) ->
     workflow_handler:handler(),
     workflow_engine:execution_context(),
     index()
-) -> {iterator:iterator(), current_lane()}.
+) -> {ok, iterator:iterator(), current_lane()} | ?WF_ERROR_PREPARATION_FAILED.
 get_initial_iterator_and_lane_spec(ExecutionId, Handler, Context, LaneIndex) ->
-    {ok, #{
-        parallel_boxes := Boxes,
-        iterator := Iterator,
-        is_last := IsLast
-    }} = Handler:get_lane_spec(ExecutionId, Context, LaneIndex),
+    case Handler:get_lane_spec(ExecutionId, Context, LaneIndex) of
+        {ok, #{
+            parallel_boxes := Boxes,
+            iterator := Iterator,
+            is_last := IsLast
+        }} ->
+            BoxesMap = lists:foldl(fun({BoxIndex, BoxSpec}, BoxesAcc) ->
+                Tasks = lists:foldl(fun({TaskIndex, {TaskId, TaskSpec}}, TaskAcc) ->
+                    TaskAcc#{TaskIndex => {TaskId, TaskSpec}}
+                end, #{}, lists_utils:enumerate(maps:to_list(BoxSpec))),
+                BoxesAcc#{BoxIndex => Tasks}
+            end, #{}, lists_utils:enumerate(Boxes)),
 
-    BoxesMap = lists:foldl(fun({BoxIndex, BoxSpec}, BoxesAcc) ->
-        Tasks = lists:foldl(fun({TaskIndex, {TaskId, TaskSpec}}, TaskAcc) ->
-            TaskAcc#{TaskIndex => {TaskId, TaskSpec}}
-        end, #{}, lists_utils:enumerate(maps:to_list(BoxSpec))),
-        BoxesAcc#{BoxIndex => Tasks}
-    end, #{}, lists_utils:enumerate(Boxes)),
-
-    {
-        Iterator,
-        #current_lane{
-            lane_index = LaneIndex,
-            is_last = IsLast,
-            parallel_boxes_count = length(Boxes),
-            parallel_boxes_spec = BoxesMap
-        }
-    }.
+            {
+                ok,
+                Iterator,
+                #current_lane{
+                    lane_index = LaneIndex,
+                    is_last = IsLast,
+                    parallel_boxes_count = length(Boxes),
+                    parallel_boxes_spec = BoxesMap
+                }
+            };
+        error ->
+            ?WF_ERROR_PREPARATION_FAILED
+    end.
 
 -spec prepare_lane(
     workflow_engine:execution_id(),
     workflow_handler:handler(),
     workflow_engine:execution_context(),
     index()
-) -> {ok, iterator:iterator()}.
+) -> {ok, iterator:iterator()} | ?WF_ERROR_PREPARATION_FAILED.
 prepare_lane(ExecutionId, Handler, Context, LaneIndex) ->
     case LaneIndex > 1 of
         true -> Handler:handle_lane_execution_ended(ExecutionId, Context, LaneIndex - 1);
         false -> ok
     end,
-    {Iterator, CurrentLaneSpec} =
-        get_initial_iterator_and_lane_spec(ExecutionId, Handler, Context, LaneIndex),
-    case update(ExecutionId, fun(State) ->
-        prepare_lane(State, CurrentLaneSpec, Iterator)
-    end) of
-        {ok, _} ->
-            {ok, Iterator};
-        ?WF_ERROR_LANE_ALREADY_PREPARED ->
-            {ok, Iterator}
+    case get_initial_iterator_and_lane_spec(ExecutionId, Handler, Context, LaneIndex) of
+        {ok, Iterator, CurrentLaneSpec} ->
+            case update(ExecutionId, fun(State) ->
+                prepare_lane(State, CurrentLaneSpec, Iterator)
+            end) of
+                {ok, _} ->
+                    {ok, Iterator};
+                ?WF_ERROR_LANE_ALREADY_PREPARED ->
+                    {ok, Iterator}
+            end;
+        ?WF_ERROR_PREPARATION_FAILED ->
+            {ok, _} = update(ExecutionId, fun(State) ->
+                handle_preparation_failure(State)
+            end),
+            ?WF_ERROR_PREPARATION_FAILED
     end.
 
 -spec prepare_next_job_for_current_lane(workflow_engine:execution_id()) ->
@@ -381,7 +397,7 @@ prepare_lane(#workflow_execution_state{current_lane = #current_lane{lane_index =
     ?WF_ERROR_LANE_ALREADY_PREPARED;
 prepare_lane(State, NextLaneSpec, Iterator) ->
     {ok, State#workflow_execution_state{
-        preparation_status = ?PREPARATION_FINISHED,
+        preparation_status = ?PREPARATION_SUCCESSFUL,
         current_lane = NextLaneSpec,
         iteration_state = workflow_iteration_state:init(Iterator),
         jobs = workflow_jobs:init()
@@ -475,6 +491,7 @@ report_execution_status_update_internal(State, JobIdentifier, _UpdateType, Ans) 
     ?WF_ERROR_NO_CACHED_ITEMS(index(), index(), iterator:iterator(), workflow_engine:execution_context()) |
     ?WF_ERROR_EXECUTION_PREPARATION_FAILED.
 prepare_next_waiting_job(State = #workflow_execution_state{
+    preparation_status = ?PREPARATION_SUCCESSFUL,
     context = Context,
     jobs = Jobs,
     iteration_state = IterationState,
