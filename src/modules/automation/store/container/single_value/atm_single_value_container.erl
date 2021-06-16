@@ -26,12 +26,12 @@
 -export([version/0, db_encode/2, db_decode/2]).
 
 
--type initial_value() :: undefined | atm_api:item().
+-type initial_value() :: undefined | automation:item().
 -type operation_options() :: #{binary() => boolean()}.
 
 -record(atm_single_value_container, {
     data_spec :: atm_data_spec:record(),
-    value :: undefined | atm_api:item()
+    value :: undefined | automation:item()
 }).
 -type record() :: #atm_single_value_container{}.
 

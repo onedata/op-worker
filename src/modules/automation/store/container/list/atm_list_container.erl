@@ -26,7 +26,7 @@
 -export([version/0, db_encode/2, db_decode/2]).
 
 
--type initial_value() :: [atm_api:item()] | undefined.
+-type initial_value() :: [automation:item()] | undefined.
 %% Full 'operation_options' format can't be expressed directly in type spec due to
 %% dialyzer limitations in specifying individual binaries. Instead it is
 %% shown below:
@@ -163,7 +163,7 @@ validate_data_batch(AtmWorkflowExecutionCtx, AtmDataSpec, Batch) ->
 
 
 %% @private
--spec append_insecure([atm_api:item()], record()) -> record().
+-spec append_insecure([automation:item()], record()) -> record().
 append_insecure(Batch, #atm_list_container{data_spec = AtmDataSpec, backend_id = BackendId} = Record) ->
     lists:foreach(fun(Item) ->
         CompressedItem = atm_data_compressor:compress(Item, AtmDataSpec),

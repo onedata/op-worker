@@ -42,7 +42,7 @@
 -record(atm_container_operation, {
     type :: atm_container:operation_type(),
     options :: atm_container:operation_options(),
-    value :: atm_api:item(),
+    value :: automation:item(),
     workflow_execution_ctx :: atm_workflow_execution_ctx:record()
 }).
 

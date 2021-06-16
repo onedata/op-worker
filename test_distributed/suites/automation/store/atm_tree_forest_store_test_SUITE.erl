@@ -388,7 +388,7 @@ check_listed_values(Values, Expected, Type) ->
     Expected -- IdsList.
 
 
--spec retrieve_id(atm_data_type:type(), atm_api:item()) -> atm_api:item().
+-spec retrieve_id(atm_data_type:type(), automation:item()) -> automation:item().
 retrieve_id(atm_file_type, #{<<"file_id">> := CdmiId}) ->
     {ok, Guid} = file_id:objectid_to_guid(CdmiId),
     Guid;

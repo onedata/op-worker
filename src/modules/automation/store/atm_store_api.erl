@@ -107,7 +107,7 @@ unfreeze(AtmStoreId) ->
 -spec apply_operation(
     atm_workflow_execution_ctx:record(),
     atm_container:operation_type(),
-    atm_api:item(),
+    automation:item(),
     atm_container:operation_options(),
     atm_store:id()
 ) ->

@@ -20,7 +20,7 @@
 -export([is_error_ignored/1]).
 
 -type compressed() :: term().
--type expanded() :: atm_api:item().
+-type expanded() :: automation:item().
 
 -export_type([compressed/0, expanded/0]).
 

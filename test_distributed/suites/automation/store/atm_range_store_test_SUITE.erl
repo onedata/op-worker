@@ -212,7 +212,7 @@ iterate_in_chunks_test_base(ChunkSize, #{<<"end">> := End} = InitialValue) ->
 -spec iterate_test_base(
     atm_store_api:initial_value(),
     atm_store_iterator_spec:strategy(),
-    [atm_api:item()] | [[atm_api:item()]]
+    [automation:item()] | [[automation:item()]]
 ) ->
     ok | no_return().
 iterate_test_base(AtmRangeStoreInitialValue, AtmStoreIteratorStrategy, ExpItems) ->
@@ -241,7 +241,12 @@ iterate_test_base(AtmRangeStoreInitialValue, AtmStoreIteratorStrategy, ExpItems)
 
 
 %% @private
--spec assert_all_items_listed(node(), atm_workflow_execution_env:record(), atm_store_iterator:record(), [atm_api:item()] | [[atm_api:item()]]) ->
+-spec assert_all_items_listed(
+    node(),
+    atm_workflow_execution_env:record(),
+    atm_store_iterator:record(),
+    [automation:item()] | [[automation:item()]]
+) ->
     ok | no_return().
 assert_all_items_listed(Node, AtmWorkflowExecutionEnv, AtmStoreIterator, []) ->
     ?assertEqual(stop, atm_store_test_utils:iterator_get_next(Node, AtmWorkflowExecutionEnv, AtmStoreIterator)),

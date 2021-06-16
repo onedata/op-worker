@@ -71,7 +71,7 @@ get_lane_spec(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmLaneIndex) ->
         }}
     catch _:Reason ->
         % TODO VFS-7637 use audit log
-        ?error("[~p] FAILED TO GET LANE ~p SPEC ~p DUE TO: ~p", [
+        ?error("[~p] FAILED TO GET LANE ~p SPEC DUE TO: ~p", [
             AtmWorkflowExecutionId, AtmLaneIndex, Reason
         ]),
         error
@@ -82,7 +82,7 @@ get_lane_spec(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmLaneIndex) ->
     atm_workflow_execution:id(),
     atm_workflow_execution_env:record(),
     atm_task_execution:id(),
-    atm_api:item(),
+    automation:item(),
     binary(),
     binary()
 ) ->

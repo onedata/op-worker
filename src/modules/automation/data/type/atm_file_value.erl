@@ -186,7 +186,7 @@ list_children_unsafe(SessionId, Guid, ListOpts) ->
 
 
 %% @private
--spec translate_file_attrs(lfm_attrs:file_attributes()) -> atm_api:item().
+-spec translate_file_attrs(lfm_attrs:file_attributes()) -> automation:item().
 translate_file_attrs(#file_attr{
     guid = Guid, 
     name = Name, 

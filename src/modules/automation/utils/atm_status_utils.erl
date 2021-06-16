@@ -17,7 +17,6 @@
 
 %% API
 -export([
-    replace_at/3,
     is_transition_allowed/2,
     converge/1
 ]).
@@ -30,14 +29,6 @@
 %%%===================================================================
 %%% API functions
 %%%===================================================================
-
-
-% TODO VFS-7660 mv to ctool lists_utils
--spec replace_at(term(), pos_integer(), [term()]) -> [term()].
-replace_at(NewValue, 1, [_ | Rest]) ->
-    [NewValue | Rest];
-replace_at(NewValue, Index, [Element | Rest]) ->
-    [Element | replace_at(Rest, Index - 1, NewValue)].
 
 
 %% TODO VFS-7674 add missing transitions

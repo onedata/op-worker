@@ -141,7 +141,7 @@ update_task_status(AtmParallelBoxIndex, AtmTaskExecutionId, NewStatus, #atm_lane
         AtmTaskExecutionId, NewStatus, AtmParallelBoxExecution
     ) of
         {ok, NewParallelBoxExecution} ->
-            NewAtmParallelBoxExecutions = atm_status_utils:replace_at(
+            NewAtmParallelBoxExecutions = lists_utils:replace_at(
                 NewParallelBoxExecution, AtmParallelBoxIndex, AtmParallelBoxExecutions
             ),
             {ok, AtmLaneExecution#atm_lane_execution{
