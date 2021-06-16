@@ -920,7 +920,7 @@ init_archive_purge(SessId, ArchiveId, CallbackUrl) ->
     session:id(),
     od_space:id(),
     od_atm_workflow_schema:id(),
-    atm_api:initial_values()
+    atm_workflow_execution_api:store_initial_values()
 ) ->
     {ok, atm_workflow_execution:id(), atm_workflow_execution:record()} | error_reply().
 schedule_atm_workflow_execution(SessId, SpaceId, AtmWorkflowSchemaId, AtmStoreInitialValues) ->

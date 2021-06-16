@@ -29,12 +29,12 @@
     user_ctx:ctx(),
     file_ctx:ctx(),
     od_atm_workflow_schema:id(),
-    atm_api:initial_values()
+    atm_workflow_execution_api:store_initial_values()
 ) ->
     fslogic_worker:provider_response().
 schedule_workflow_execution(UserCtx, SpaceDirCtx, AtmWorkflowSchemaId, AtmStoreInitialValues) ->
     SpaceId = file_ctx:get_space_id_const(SpaceDirCtx),
-    {ok, AtmWorkflowExecutionId, AtmWorkflowExecution} = atm_api:schedule_workflow_execution(
+    {ok, AtmWorkflowExecutionId, AtmWorkflowExecution} = atm_workflow_execution_api:create(
         UserCtx, SpaceId, AtmWorkflowSchemaId, AtmStoreInitialValues
     ),
     ?PROVIDER_OK_RESP(#atm_workflow_execution_scheduled{

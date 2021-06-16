@@ -92,8 +92,8 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = As}}) when
 -spec fetch_entity(middleware:req()) ->
     {ok, middleware:versioned_entity()} | errors:error().
 fetch_entity(#op_req{gri = #gri{id = AtmWorkflowExecutionId, scope = private}}) ->
-    case atm_workflow_execution:get(AtmWorkflowExecutionId) of
-        {ok, #document{value = AtmWorkflowExecution}} ->
+    case atm_workflow_execution_api:get(AtmWorkflowExecutionId) of
+        {ok, AtmWorkflowExecution} ->
             {ok, {AtmWorkflowExecution, 1}};
         {error, _} = Error ->
             Error
@@ -239,8 +239,8 @@ has_access_to_workflow_execution_details(?USER(UserId, SessionId), #atm_workflow
     );
 
 has_access_to_workflow_execution_details(Auth, AtmWorkflowExecutionId) ->
-    case atm_workflow_execution:get(AtmWorkflowExecutionId) of
-        {ok, #document{value = AtmWorkflowExecution}} ->
+    case atm_workflow_execution_api:get(AtmWorkflowExecutionId) of
+        {ok, AtmWorkflowExecution} ->
             has_access_to_workflow_execution_details(Auth, AtmWorkflowExecution);
         {error, _} ->
             false
