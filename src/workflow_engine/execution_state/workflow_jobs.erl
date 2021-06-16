@@ -21,8 +21,11 @@
 -export([init/0, prepare_next_waiting_job/1, populate_with_jobs_for_item/4,
     pause_job/2, mark_ongoing_job_finished/2, register_failure/2,
     remove_pending_async_job/3, prepare_next_parallel_box/4]).
+%% Functions returning/updating pending_async_jobs field
 -export([register_async_call/3, check_timeouts/1, reset_keepalive_timer/2]).
--export([job_identifier_to_binary/1, binary_to_job_identifier/1, get_item_id/2, get_task_details/2]).
+%% Functions operating on job_identifier record
+-export([job_identifier_to_binary/1, binary_to_job_identifier/1, get_item_id/2,
+    get_task_details/2, is_previous/2]).
 
 % Internal record used for scheduled jobs management
 -record(job_identifier, {
@@ -60,8 +63,9 @@
 -type raced_results() :: #{job_identifier() => workflow_handler:callback_execution_result()}.
 -type jobs() :: #workflow_jobs{}.
 -type jobs_for_parallel_box() :: ?NO_JOBS_LEFT_FOR_PARALLEL_BOX | ?AT_LEAST_ONE_JOB_LEFT_FOR_PARALLEL_BOX.
+-type item_processing_result() :: ?SUCCESS | ?FAILURE.
 
--export_type([job_identifier/0, jobs/0]).
+-export_type([job_identifier/0, jobs/0, item_processing_result/0]).
 
 -define(SEPARATOR, "_").
 
@@ -144,15 +148,8 @@ register_failure(Jobs = #workflow_jobs{
     failed_items = Failed
 }, #job_identifier{item_index = ItemIndex} = JobIdentifier) ->
     {Jobs2, RemainingForBox} = mark_ongoing_job_finished(Jobs, JobIdentifier),
-
-    NewFailed = case RemainingForBox of
-        % Keep only one key for failed parallel box
-        ?AT_LEAST_ONE_JOB_LEFT_FOR_PARALLEL_BOX -> sets:add_element(ItemIndex, Failed);
-        ?NO_JOBS_LEFT_FOR_PARALLEL_BOX -> Failed
-    end,
-
     % TODO VFS-7788 - count errors and stop workflow when errors limit is reached
-    {Jobs2#workflow_jobs{failed_items = NewFailed}, RemainingForBox}.
+    {Jobs2#workflow_jobs{failed_items = sets:add_element(ItemIndex, Failed)}, RemainingForBox}.
 
 -spec remove_pending_async_job(jobs(), job_identifier(), workflow_handler:callback_execution_result()) ->
     {ok | ?WF_ERROR_UNKNOWN_JOB, jobs()}.
@@ -168,13 +165,13 @@ remove_pending_async_job(Jobs = #workflow_jobs{
     end.
 
 -spec prepare_next_parallel_box(jobs(), job_identifier(), workflow_execution_state:boxes_map(), non_neg_integer()) ->
-    {ok | ?WF_ERROR_ITEM_PROCESSING_FINISHED(workflow_execution_state:index()), jobs()}.
+    {ok | ?WF_ERROR_ITEM_PROCESSING_FINISHED(workflow_execution_state:index(), item_processing_result()), jobs()}.
 prepare_next_parallel_box(Jobs,
     #job_identifier{
         parallel_box_index = BoxCount,
         item_index = ItemIndex
     }, _BoxesSpec, BoxCount) ->
-    {?WF_ERROR_ITEM_PROCESSING_FINISHED(ItemIndex), Jobs};
+    {?WF_ERROR_ITEM_PROCESSING_FINISHED(ItemIndex, ?SUCCESS), Jobs};
 prepare_next_parallel_box(
     Jobs = #workflow_jobs{
         failed_items = Failed,
@@ -187,7 +184,7 @@ prepare_next_parallel_box(
     BoxesSpec, _BoxCount) ->
     case has_item(ItemIndex, Failed) of
         true ->
-            {?WF_ERROR_ITEM_PROCESSING_FINISHED(ItemIndex),
+            {?WF_ERROR_ITEM_PROCESSING_FINISHED(ItemIndex, ?FAILURE),
                 Jobs#workflow_jobs{failed_items = sets:del_element(ItemIndex, Failed)}};
         false ->
             NewBoxIndex = BoxIndex + 1,
@@ -315,6 +312,10 @@ get_item_id(#job_identifier{item_index = ItemIndex}, IterationProgress) ->
 get_task_details(#job_identifier{parallel_box_index = BoxIndex, task_index = TaskIndex}, BoxesSpec) ->
     Tasks = maps:get(BoxIndex, BoxesSpec),
     maps:get(TaskIndex, Tasks).
+
+-spec is_previous(job_identifier(), job_identifier()) -> boolean().
+is_previous(#job_identifier{item_index = ItemIndex1}, #job_identifier{item_index = ItemIndex2}) ->
+    ItemIndex1 < ItemIndex2.
 
 %%%===================================================================
 %%% Internal functions

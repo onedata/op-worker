@@ -199,6 +199,8 @@ report_limit_reached_error(ExecutionId, JobIdentifier) ->
 -spec check_timeouts(workflow_engine:execution_id()) -> ok.
 check_timeouts(ExecutionId) ->
     case datastore_model:get(?CTX, ExecutionId) of
+        {ok, #document{value = #workflow_execution_state{jobs = undefined}}} ->
+            ok;
         {ok, #document{value = #workflow_execution_state{jobs = Jobs}}} ->
             case workflow_jobs:check_timeouts(Jobs) of
                 {ok, NewJobs} -> update(ExecutionId, fun(State) -> update_jobs(State, NewJobs) end);
@@ -522,11 +524,15 @@ prepare_next_parallel_box(State = #workflow_execution_state{
     case workflow_jobs:prepare_next_parallel_box(Jobs, JobIdentifier, BoxesSpec, BoxCount) of
         {ok, NewJobs} ->
             {ok, State#workflow_execution_state{jobs = NewJobs}};
-        {?WF_ERROR_ITEM_PROCESSING_FINISHED(ItemIndex), NewJobs} ->
+        {?WF_ERROR_ITEM_PROCESSING_FINISHED(ItemIndex, SuccessOrFailure), NewJobs} ->
             {NewIterationState, ItemIdToSnapshot, ItemIdsToDelete} =
-                workflow_iteration_state:handle_item_processed(IterationState, ItemIndex),
+                workflow_iteration_state:handle_item_processed(IterationState, ItemIndex, SuccessOrFailure),
             FinalItemIdToSnapshot = case ErrorEncountered of
-                true -> undefined;
+                {true, FailedJobIdentifier} ->
+                    case workflow_jobs:is_previous(JobIdentifier, FailedJobIdentifier) of
+                        true -> ItemIdToSnapshot;
+                        false -> undefined
+                    end;
                 false -> ItemIdToSnapshot
             end,
             {ok, State#workflow_execution_state{
@@ -558,10 +564,19 @@ report_job_finish(State = #workflow_execution_state{
             prepare_next_parallel_box(State#workflow_execution_state{jobs = NewJobs2}, JobIdentifier)
     end;
 report_job_finish(State = #workflow_execution_state{
-    jobs = Jobs
+    jobs = Jobs,
+    error_encountered = ErrorEncountered
 }, JobIdentifier, error) ->
     {FinalJobs, RemainingForBox} = workflow_jobs:register_failure(Jobs, JobIdentifier),
-    State2 = State#workflow_execution_state{jobs = FinalJobs, error_encountered = true},
+    State2 = case ErrorEncountered of
+        false ->
+            State#workflow_execution_state{jobs = FinalJobs, error_encountered = {true, JobIdentifier}};
+        {true, PrevErrorJobIdentifier} ->
+            case workflow_jobs:is_previous(PrevErrorJobIdentifier, JobIdentifier) of
+                true -> State#workflow_execution_state{jobs = FinalJobs};
+                false -> State#workflow_execution_state{jobs = FinalJobs, error_encountered = {true, JobIdentifier}}
+            end
+    end,
     case RemainingForBox of
         ?AT_LEAST_ONE_JOB_LEFT_FOR_PARALLEL_BOX ->
             {ok, State2};
@@ -577,9 +592,13 @@ handle_no_waiting_items_error(#workflow_execution_state{
     handler = Handler,
     context = Context
 }, Error) ->
-    case {Error, IsLast orelse ErrorEncountered} of
+    HasErrorEncountered = case ErrorEncountered of
+        {true, _} -> true;
+        false -> false
+    end,
+    case {Error, IsLast orelse HasErrorEncountered} of
         {?WF_ERROR_NO_WAITING_ITEMS, _} -> ?WF_ERROR_NO_WAITING_ITEMS;
-        {?ERROR_NOT_FOUND, true} -> ?WF_ERROR_EXECUTION_FINISHED(Handler, Context, LaneIndex, ErrorEncountered);
+        {?ERROR_NOT_FOUND, true} -> ?WF_ERROR_EXECUTION_FINISHED(Handler, Context, LaneIndex, HasErrorEncountered);
         {?ERROR_NOT_FOUND, false} -> ?WF_ERROR_LANE_FINISHED(LaneIndex, Handler, Context)
     end.
 

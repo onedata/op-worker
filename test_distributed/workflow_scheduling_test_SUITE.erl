@@ -27,7 +27,8 @@
     single_async_workflow_execution_test/1,
     multiple_sync_workflow_execution_test/1,
     multiple_async_workflow_execution_test/1,
-    restart_test/1,
+    fail_one_of_many_task_in_box_test/1,
+    fail_only_task_in_box_test/1,
     timeouts_test/1
 ]).
 
@@ -37,7 +38,8 @@ all() ->
         single_async_workflow_execution_test,
         multiple_sync_workflow_execution_test,
         multiple_async_workflow_execution_test,
-        restart_test,
+        fail_one_of_many_task_in_box_test,
+        fail_only_task_in_box_test,
         timeouts_test
     ]).
 
@@ -143,7 +145,13 @@ multiple_workflow_execution_test_base(Config, WorkflowType) ->
     verify_memory(Config),
     ok.
 
-restart_test(Config) ->
+fail_one_of_many_task_in_box_test(Config) ->
+    failure_test_base(Config, <<"restart_test_workflow_task3_3_2">>, 3, 3).
+
+fail_only_task_in_box_test(Config) ->
+    failure_test_base(Config, <<"restart_test_workflow_task3_1_1">>, 3, 1).
+
+failure_test_base(Config, TaskToFail, LaneWithErrorIndex, BoxWithErrorIndex) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     WorkflowType = sync,
     Id = <<"restart_test_workflow">>,
@@ -153,12 +161,12 @@ restart_test(Config) ->
         execution_context => #{type => WorkflowType, async_call_pools => [?ASYNC_CALL_POOL_ID]}
     },
 
-    TaskToFail = <<"restart_test_workflow_task3_3_2">>, % TODO VFS-7784 - test for task3_1_1
     ItemToFail = <<"100">>,
     set_task_execution_gatherer_option(Config, fail_job, {TaskToFail, ItemToFail}),
     ?assertEqual(ok, rpc:call(Worker, workflow_engine, execute_workflow, [?ENGINE_ID, Workflow])),
 
-    Expected = get_expected_task_execution_order_with_error(Workflow, 3, 3, ItemToFail, TaskToFail),
+    Expected = get_expected_task_execution_order_with_error(
+        Workflow, LaneWithErrorIndex, BoxWithErrorIndex, ItemToFail, TaskToFail),
     #{execution_history := ExecutionHistory} = ExtendedHistoryStats = get_task_execution_history(Config),
     verify_execution_history_stats(ExtendedHistoryStats, WorkflowType),
     ?assertNotEqual(timeout, ExecutionHistory),
@@ -168,7 +176,7 @@ restart_test(Config) ->
     ct:print("Execution with error verified"),
 
     unset_task_execution_gatherer_option(Config, fail_job),
-    ExpectedAfterRestart = get_expected_task_execution_order_after_restart(Workflow, 3, ItemToFail),
+    ExpectedAfterRestart = get_expected_task_execution_order_after_restart(Workflow, LaneWithErrorIndex, ItemToFail),
     ?assertEqual(ok, rpc:call(Worker, workflow_engine, execute_workflow, [?ENGINE_ID, Workflow])),
     #{execution_history := ExecutionHistoryAfterRestart} = ExtendedHistoryStatsAfterRestart =
         get_task_execution_history(Config),
@@ -390,8 +398,11 @@ get_expected_task_execution_order(LaneIndex, ExecutionId, Context, Description) 
 
     {LaneSpec, ShouldFinish} = case Description of
         {expected_failure, LaneIndex, BoxWithErrorIndex, ItemToFail, TaskToFail} ->
-            TasksForFailedItem = lists:sublist(Boxes, BoxWithErrorIndex - 1) ++
-                [maps:remove(TaskToFail, lists:nth(BoxWithErrorIndex, Boxes))],
+            TasksForFailedBox = maps:remove(TaskToFail, lists:nth(BoxWithErrorIndex, Boxes)),
+            TasksForFailedItem = case maps:size(TasksForFailedBox) of
+                0 -> lists:sublist(Boxes, BoxWithErrorIndex - 1);
+                _ -> lists:sublist(Boxes, BoxWithErrorIndex - 1) ++ [TasksForFailedBox]
+            end,
             {{Boxes, Items, ItemToFail, TasksForFailedItem}, true};
         {restarted_from, RestartedLaneIndex, _RestartedItem} when LaneIndex < RestartedLaneIndex ->
             {undefined, IsLast};

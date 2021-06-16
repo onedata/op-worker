@@ -40,6 +40,13 @@
 -define(ASYNC_CALL_FINISHED, async_call_finished).
 
 %%%===================================================================
+%%% Macros describing possible results of item processing
+%%%===================================================================
+
+-define(SUCCESS, success).
+-define(FAILURE, failure).
+
+%%%===================================================================
 %%% Macros used to describe processing of parallel box's jobs
 %%%===================================================================
 
@@ -67,7 +74,8 @@
 -define(WF_ERROR_RACE_CONDITION, {error, race_condition}).
 -define(WF_ERROR_UNKNOWN_JOB, {error, unknown_job}).
 -define(WF_ERROR_ALREADY_FINISHED(Ans), {error, {already_finished, Ans}}).
--define(WF_ERROR_ITEM_PROCESSING_FINISHED(Item), {error, {item_processing_finished, Item}}).
+-define(WF_ERROR_ITEM_PROCESSING_FINISHED(Item, SuccessOrFailure),
+    {error, {item_processing_finished, Item, SuccessOrFailure}}).
 
 % errors returned by workflow_async_call_pool to control workflow_engine
 -define(WF_ERROR_LIMIT_REACHED, {error, limit_reached}).
