@@ -108,7 +108,10 @@ report_task_status_change(
     AtmTaskExecutionId,
     NewAtmTaskExecutionStatus
 ) ->
-    Diff = fun(AtmWorkflowExecution = #atm_workflow_execution{lanes = AtmLaneExecutions}) ->
+    Diff = fun(AtmWorkflowExecution = #atm_workflow_execution{
+        status = AtmWorkflowExecutionStatus,
+        lanes = AtmLaneExecutions
+    }) ->
         AtmLanExecution = lists:nth(AtmLaneExecutionIndex, AtmLaneExecutions),
 
         case atm_lane_execution:update_task_status(
@@ -124,6 +127,10 @@ report_task_status_change(
                 ),
                 NewAtmWorkflowExecution = AtmWorkflowExecution#atm_workflow_execution{
                     status = NewAtmWorkflowExecutionStatus,
+                    % 'status_changed' field must be changed manually here as it's value
+                    % is checked right below when still in update fun (automatic update
+                    % happens after returning from Diff fun)
+                    status_changed = NewAtmWorkflowExecutionStatus /= AtmWorkflowExecutionStatus,
                     lanes = NewAtmLaneExecutions
                 },
                 {ok, set_times_on_phase_transition(NewAtmWorkflowExecution)};

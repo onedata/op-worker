@@ -18,6 +18,9 @@
 %% TODO VFS-7637 better error handling and logging
 -define(ERROR_ATM_OPENFAAS_NOT_CONFIGURED, {error, openfaas_not_configured}).
 -define(ERROR_ATM_OPENFAAS_QUERY_FAILED, {error, openfaas_query_failed}).
+-define(ERROR_ATM_OPENFAAS_QUERY_FAILED(__REASON),
+    {error, {openfaas_query_failed, __REASON}}
+).
 -define(ERROR_ATM_OPENFAAS_FUNCTION_REGISTRATION_FAILED,
     {error, openfaas_function_registration_failed}
 ).

@@ -158,7 +158,7 @@ build_function_name(_AtmWorkflowExecutionId, #atm_openfaas_operation_spec{
     docker_image = DockerImage,
     docker_execution_options = #atm_docker_execution_options{mount_oneclient = false}
 }) ->
-    datastore_key:new_from_digest([DockerImage]);
+    <<"fun-", (datastore_key:new_from_digest([DockerImage]))/binary>>;
 
 build_function_name(AtmWorkflowExecutionId, #atm_openfaas_operation_spec{
     docker_image = DockerImage,
@@ -168,9 +168,9 @@ build_function_name(AtmWorkflowExecutionId, #atm_openfaas_operation_spec{
         oneclient_options = OneclientOptions
     }
 }) ->
-    datastore_key:new_from_digest([
+    <<"fun-", (datastore_key:new_from_digest([
         AtmWorkflowExecutionId, DockerImage, MountPoint, OneclientOptions
-    ]).
+    ]))/binary>>.
 
 
 %% @private
@@ -221,6 +221,8 @@ register_function(#prepare_ctx{
             % Possible race with other task registering function
             % (Openfaas returns 500 if function already exists)
             ok;
+        {ok, ?HTTP_400_BAD_REQUEST, _RespHeaders, ErrorReason} ->
+            throw(?ERROR_ATM_OPENFAAS_QUERY_FAILED(ErrorReason));
         _ ->
             throw(?ERROR_ATM_OPENFAAS_QUERY_FAILED)
     end.
