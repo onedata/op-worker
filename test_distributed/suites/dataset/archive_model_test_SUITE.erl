@@ -518,7 +518,7 @@ simple_archive_crud_test_base(DatasetId, RootFileType, ExpSize) ->
         id = ArchiveId,
         dataset_id = DatasetId,
         state = ?ARCHIVE_PRESERVED,
-        dir_guid = ArchiveRootDirGuid,
+        root_dir_guid = ArchiveRootDirGuid,
         creation_time = Timestamp,
         index = Index,
         config = #archive_config{

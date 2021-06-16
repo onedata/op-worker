@@ -22,7 +22,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([create_archive/6, create_child_archive/2, update_archive/2, get_archive_info/1,
+-export([create_archive_and_schedule_archivisation_job/6, update_archive/2, get_archive_info/1,
     list_archives/3, init_archive_purge/3, get_nested_archives_stats/1]).
 
 %% Exported for use in tests
@@ -62,9 +62,13 @@
 %%% API functions
 %%%===================================================================
 
--spec create_archive(dataset:id(), archive:config(), archive:callback(), archive:callback(),
-    archive:description(), user_ctx:ctx()) -> {ok, archive:id()} | error().
-create_archive(DatasetId, Config, PreservedCallback, PurgedCallback, Description, UserCtx) ->
+-spec create_archive_and_schedule_archivisation_job(
+    dataset:id(), archive:config(), archive:callback(), archive:callback(),
+    archive:description(), user_ctx:ctx()
+) -> {ok, archive:id()} | error().
+create_archive_and_schedule_archivisation_job(
+    DatasetId, Config, PreservedCallback, PurgedCallback, Description, UserCtx
+) ->
     {ok, DatasetDoc} = dataset:get(DatasetId),
     {ok, State} = dataset:get_state(DatasetDoc),
     case State of
@@ -95,22 +99,6 @@ create_archive(DatasetId, Config, PreservedCallback, PurgedCallback, Description
     end.
 
 
--spec create_child_archive(dataset:id(), archive:doc()) -> {ok, archive:doc()} | error().
-create_child_archive(DatasetId, ParentArchiveDoc) ->
-    {ok, SpaceId} = archive:get_space_id(ParentArchiveDoc),
-    {ok, ParentArchiveId} = archive:get_id(ParentArchiveDoc),
-    case archive:create_child(DatasetId, ParentArchiveDoc) of
-        {ok, ArchiveDoc} ->
-            {ok, ArchiveId} = archive:get_id(ArchiveDoc),
-            {ok, Timestamp} = archive:get_creation_time(ArchiveDoc),
-            archives_list:add(DatasetId, SpaceId, ArchiveId, Timestamp),
-            archives_forest:add(ParentArchiveId, SpaceId, ArchiveId),
-            {ok, ArchiveDoc};
-        {error, _} = Error ->
-            Error
-    end.
-
-
 -spec update_archive(archive:id(), archive:diff()) -> ok | error().
 update_archive(ArchiveId, Diff) ->
     archive:modify_attrs(ArchiveId, Diff).
@@ -129,7 +117,7 @@ get_archive_info(ArchiveDoc = #document{}, ArchiveIndex) ->
     {ok, Timestamp} = archive:get_creation_time(ArchiveDoc),
     {ok, State} = archive:get_state(ArchiveDoc),
     {ok, Config} = archive:get_config(ArchiveDoc),
-    {ok, ArchiveDirGuid} = archive:get_dir_guid(ArchiveDoc),
+    {ok, ArchiveRootDirGuid} = archive:get_root_dir_guid(ArchiveDoc),
     {ok, PreservedCallback} = archive:get_preserved_callback(ArchiveDoc),
     {ok, PurgedCallback} = archive:get_purged_callback(ArchiveDoc),
     {ok, Description} = archive:get_description(ArchiveDoc),
@@ -137,7 +125,7 @@ get_archive_info(ArchiveDoc = #document{}, ArchiveIndex) ->
         id = ArchiveId,
         dataset_id = DatasetId,
         state = State,
-        dir_guid = ArchiveDirGuid,
+        root_dir_guid = ArchiveRootDirGuid,
         creation_time = Timestamp,
         config = Config,
         preserved_callback = PreservedCallback,

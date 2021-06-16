@@ -20,7 +20,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([from_json/1, to_json/1, sanitize/1]).
+-export([from_json/1, to_json/1, sanitize/1, get_layout/1]).
 
 %% Getters
 -export([]).
@@ -89,6 +89,11 @@ sanitize(RawConfig) ->
         throw:?ERROR_BAD_VALUE_ATOM(Key) ->
             throw(?ERROR_BAD_VALUE_ATOM(str_utils:format_bin("config.~s", [Key])))
     end.
+
+
+-spec get_layout(record()) -> layout().
+get_layout(#archive_config{layout = Layout}) ->
+    Layout.
 
 %%%===================================================================
 %%% persistent_record callbacks

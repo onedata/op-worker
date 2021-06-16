@@ -18,16 +18,19 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([create/7, create_child/2, get/1, modify_attrs/2, delete/1]).
+-export([create/7, create_nested/2, get/1, modify_attrs/2, delete/1]).
 
 % getters
 -export([get_id/1, get_creation_time/1, get_dataset_id/1, get_dataset_root_file_guid/1, get_space_id/1,
     get_state/1, get_config/1, get_preserved_callback/1, get_purged_callback/1,
-    get_description/1, get_stats/1, get_dir_guid/1, get_parent/1, get_parent_doc/1, is_finished/1
+    get_description/1, get_stats/1, get_root_dir_guid/1, get_data_dir_guid/1, get_parent/1, get_parent_doc/1, is_finished/1
 ]).
 
 % setters
--export([mark_building/1, mark_purging/2, mark_file_archived/2, mark_file_failed/1, mark_finished/2, set_dir_guid/2]).
+-export([mark_building/1, mark_purging/2,
+    mark_file_archived/2, mark_file_failed/1, mark_finished/2,
+    set_root_dir_guid/2, set_data_dir_guid/2
+]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1]).
@@ -101,8 +104,8 @@ create(DatasetId, SpaceId, Creator, Config, PreservedCallback, PurgedCallback, D
     }).
 
 
--spec create_child(dataset:id(), doc()) -> {ok, doc()} | error().
-create_child(DatasetId, #document{
+-spec create_nested(dataset:id(), doc()) -> {ok, doc()} | error().
+create_nested(DatasetId, #document{
     key = ParentArchiveId,
     value = #archive{
         config = Config,
@@ -114,10 +117,11 @@ create_child(DatasetId, #document{
         value = #archive{
             dataset_id = DatasetId,
             creation_time = global_clock:timestamp_seconds(),
-            config = Config,
-            state = ?ARCHIVE_BUILDING,
-            parent = ParentArchiveId,
             creator = Creator,
+            % nested archive is created when parent archive is already in building state
+            state = ?ARCHIVE_BUILDING,
+            config = Config,
+            parent = ParentArchiveId,
             description = <<"">>,
             stats = archive_stats:empty()
         },
@@ -221,11 +225,17 @@ get_stats(#archive{stats = Stats}) ->
 get_stats(#document{value = Archive}) ->
     get_stats(Archive).
 
--spec get_dir_guid(record() | doc()) -> {ok, file_id:file_guid()}.
-get_dir_guid(#archive{dir_guid = DirGuid}) ->
-    {ok, DirGuid};
-get_dir_guid(#document{value = Archive}) ->
-    get_dir_guid(Archive).
+-spec get_root_dir_guid(record() | doc()) -> {ok, file_id:file_guid()}.
+get_root_dir_guid(#archive{root_dir_guid = RootDirGuid}) ->
+    {ok, RootDirGuid};
+get_root_dir_guid(#document{value = Archive}) ->
+    get_root_dir_guid(Archive).
+
+-spec get_data_dir_guid(record() | doc()) -> {ok, file_id:file_guid()}.
+get_data_dir_guid(#archive{data_dir_guid = DataDirGuid}) -> 
+    {ok, DataDirGuid};
+get_data_dir_guid(#document{value = Archive}) -> 
+    get_data_dir_guid(Archive).
 
 -spec get_parent(record() | doc()) -> {ok, archive:id() | undefined}.
 get_parent(#archive{parent = Parent}) ->
@@ -310,10 +320,16 @@ mark_file_failed(ArchiveDocOrId) ->
     end)).
 
 
--spec set_dir_guid(id() | doc(), file_id:file_guid()) -> {ok, doc()} | error().
-set_dir_guid(ArchiveDocOrId, DirGuid) ->
+-spec set_root_dir_guid(id() | doc(), file_id:file_guid()) -> {ok, doc()} | error().
+set_root_dir_guid(ArchiveDocOrId, RootDirGuid) ->
     update(ArchiveDocOrId, fun(Archive) ->
-        {ok, Archive#archive{dir_guid = DirGuid}}
+        {ok, Archive#archive{root_dir_guid = RootDirGuid}}
+    end).
+
+-spec set_data_dir_guid(id() | doc(), file_id:file_guid()) -> {ok, doc()} | error().
+set_data_dir_guid(ArchiveDocOrId, DataDirGuid) ->
+    update(ArchiveDocOrId, fun(Archive) ->
+        {ok, Archive#archive{data_dir_guid = DataDirGuid}}
     end).
 
 %%%===================================================================
@@ -356,7 +372,8 @@ get_record_struct(1) ->
         {preserved_callback, string},
         {purged_callback, string},
         {description, string},
-        {dir_guid, string},
+        {root_dir_guid, string},
+        {data_dir_guid, string},
         {stats, {custom, string, {persistent_record, encode, decode, archive_stats}}},
         {parent, string}
     ]}.

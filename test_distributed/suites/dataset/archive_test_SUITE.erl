@@ -37,31 +37,43 @@
 -export([
     % parallel tests
     create_archivisation_tree/1,
-    archive_dataset_attached_to_dir/1,
-    archive_dataset_attached_to_file/1,
-    archive_dataset_attached_to_hardlink/1,
-    archive_dataset_attached_to_symlink/1,
-    archive_directory_with_number_of_files_exceeding_batch_size/1,
+    archive_dataset_attached_to_dir_plain_layout/1,
+    archive_dataset_attached_to_file_plain_layout/1,
+    archive_dataset_attached_to_hardlink_plain_layout/1,
+    archive_dataset_attached_to_symlink_plain_layout/1,
+    archive_directory_with_number_of_files_exceeding_batch_size_plain_layout/1,
+    archive_dataset_attached_to_dir_bagit_layout/1,
+    archive_dataset_attached_to_file_bagit_layout/1,
+    archive_dataset_attached_to_hardlink_bagit_layout/1,
+    archive_dataset_attached_to_symlink_bagit_layout/1,
+    archive_directory_with_number_of_files_exceeding_batch_size_bagit_layout/1,
     archive_nested_datasets/1,
 
     % sequential tests
     archive_dataset_attached_to_space_dir/1,
-    archive_big_tree/1
+    archive_big_tree_plain_layout/1,
+    archive_big_tree_bagit_layout/1
 ]).
 
 groups() -> [
     {parallel_tests, [parallel], [
         create_archivisation_tree,
-        archive_dataset_attached_to_dir,
-        archive_dataset_attached_to_file,
-        archive_dataset_attached_to_hardlink,
-        archive_dataset_attached_to_symlink,
-        archive_directory_with_number_of_files_exceeding_batch_size,
+        archive_dataset_attached_to_dir_plain_layout,
+        archive_dataset_attached_to_file_plain_layout,
+        archive_dataset_attached_to_hardlink_plain_layout,
+        archive_dataset_attached_to_symlink_plain_layout,
+        archive_directory_with_number_of_files_exceeding_batch_size_plain_layout,
+        archive_dataset_attached_to_dir_bagit_layout,
+        archive_dataset_attached_to_file_bagit_layout,
+        archive_dataset_attached_to_hardlink_bagit_layout,
+        archive_dataset_attached_to_symlink_bagit_layout,
+        archive_directory_with_number_of_files_exceeding_batch_size_bagit_layout,
         archive_nested_datasets
     ]},
     {sequential_tests, [sequential], [
         archive_dataset_attached_to_space_dir,
-        archive_big_tree
+        archive_big_tree_plain_layout,
+        archive_big_tree_bagit_layout
     ]}
 ].
 
@@ -75,13 +87,6 @@ all() -> [
 
 -define(SPACE, space_krk_par_p).
 -define(USER1, user1).
-
-
--define(TEST_ARCHIVE_CONFIG, #archive_config{
-    incremental = false,
-    include_dip = false,
-    layout = ?ARCHIVE_PLAIN_LAYOUT
-}).
 
 -define(TEST_DESCRIPTION1, <<"TEST DESCRIPTION">>).
 -define(TEST_DESCRIPTION2, <<"TEST DESCRIPTION2">>).
@@ -138,81 +143,36 @@ create_archivisation_tree(_Config) ->
         end, MockedData)
     end, Providers).
 
-archive_dataset_attached_to_space_dir(_Config) ->
-    SpaceId = oct_background:get_space_id(?SPACE),
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
-    #dataset_object{
-        id = DatasetId,
-        archives = [#archive_object{id = ArchiveId}]
-    } = onenv_dataset_test_utils:set_up_and_sync_dataset(?USER1, SpaceGuid, #dataset_spec{archives = 1}),
-    archive_simple_dataset_test_base(SpaceGuid, DatasetId, ArchiveId).
 
-archive_dataset_attached_to_dir(_Config) ->
-    #object{
-        guid = DirGuid,
-        dataset = #dataset_object{
-            id = DatasetId,
-            archives = [#archive_object{id = ArchiveId}]
-    }} = onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, #dir_spec{dataset = #dataset_spec{archives = 1}}),
-    archive_simple_dataset_test_base(DirGuid, DatasetId, ArchiveId).
+archive_dataset_attached_to_dir_plain_layout(_Config) ->
+    archive_dataset_attached_to_dir_test_base(?ARCHIVE_PLAIN_LAYOUT).
 
-archive_dataset_attached_to_file(_Config) ->
-    Size = 20,
-    #object{
-        guid = FileGuid,
-        dataset = #dataset_object{
-            id = DatasetId,
-            archives = [#archive_object{id = ArchiveId}]
-    }} = onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, #file_spec{
-        dataset = #dataset_spec{archives = 1},
-        content = ?RAND_CONTENT(Size)
-    }),
-    archive_simple_dataset_test_base(FileGuid, DatasetId, ArchiveId).
+archive_dataset_attached_to_file_plain_layout(_Config) ->
+    archive_dataset_attached_to_file_test_base(?ARCHIVE_PLAIN_LAYOUT).
 
-archive_dataset_attached_to_hardlink(_Config) ->
-    [P1Node] = oct_background:get_provider_nodes(krakow),
-    UserSessIdP1 = oct_background:get_user_session_id(?USER1, krakow),
-    SpaceId = oct_background:get_space_id(?SPACE),
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
-    Size = 20,
-    #object{guid = FileGuid} = onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, #file_spec{
-        content = ?RAND_CONTENT(Size)
-    }),
-    {ok, #file_attr{guid = LinkGuid}} =
-        lfm_proxy:make_link(P1Node, UserSessIdP1, ?FILE_REF(FileGuid), ?FILE_REF(SpaceGuid), ?RAND_NAME()),
-    #dataset_object{
-        id = DatasetId,
-        archives = [#archive_object{id = ArchiveId}]
-    } = onenv_dataset_test_utils:set_up_and_sync_dataset(?USER1, LinkGuid, #dataset_spec{archives = 1}),
-    archive_simple_dataset_test_base(LinkGuid, DatasetId, ArchiveId).
+archive_dataset_attached_to_hardlink_plain_layout(_Config) ->
+    archive_dataset_attached_to_hardlink_test_base(?ARCHIVE_PLAIN_LAYOUT).
 
-archive_dataset_attached_to_symlink(_Config) ->
-    #object{name = DirName} = onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, #dir_spec{}),
-    SpaceIdPrefix = ?SYMLINK_SPACE_ID_ABS_PATH_PREFIX(oct_background:get_space_id(?SPACE)),
-    LinkTarget = filename:join([SpaceIdPrefix, DirName]),
-    #object{
-        guid = LinkGuid,
-        dataset = #dataset_object{
-            id = DatasetId,
-            archives = [#archive_object{id = ArchiveId}]
-        }
-    } = onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE,
-        #symlink_spec{
-            symlink_value = LinkTarget,
-            dataset = #dataset_spec{archives = 1}
-        }
-    ),
-    archive_simple_dataset_test_base(LinkGuid, DatasetId, ArchiveId).
+archive_dataset_attached_to_symlink_plain_layout(_Config) ->
+    archive_dataset_attached_to_symlink_test_base(?ARCHIVE_PLAIN_LAYOUT).
 
+archive_directory_with_number_of_files_exceeding_batch_size_plain_layout(_Config) ->
+    archive_directory_with_number_of_files_exceeding_batch_size_test_base(?ARCHIVE_PLAIN_LAYOUT).
 
-archive_big_tree(_Config) ->
-    archive_dataset_tree_test_base([{10, 10}, {10, 10}, {10, 10}]).
+archive_dataset_attached_to_dir_bagit_layout(_Config) ->
+    archive_dataset_attached_to_dir_test_base(?ARCHIVE_BAGIT_LAYOUT).
 
+archive_dataset_attached_to_file_bagit_layout(_Config) ->
+    archive_dataset_attached_to_file_test_base(?ARCHIVE_BAGIT_LAYOUT).
 
-archive_directory_with_number_of_files_exceeding_batch_size(_Config) ->
-    % default batch size is 1000
-    archive_dataset_tree_test_base([{0, 2048}]).
+archive_dataset_attached_to_hardlink_bagit_layout(_Config) ->
+    archive_dataset_attached_to_hardlink_test_base(?ARCHIVE_BAGIT_LAYOUT).
 
+archive_dataset_attached_to_symlink_bagit_layout(_Config) ->
+    archive_dataset_attached_to_symlink_test_base(?ARCHIVE_BAGIT_LAYOUT).
+
+archive_directory_with_number_of_files_exceeding_batch_size_bagit_layout(_Config) ->
+    archive_directory_with_number_of_files_exceeding_batch_size_test_base(?ARCHIVE_BAGIT_LAYOUT).
 
 archive_nested_datasets(_Config) ->
     #object{
@@ -309,10 +269,103 @@ archive_nested_datasets(_Config) ->
     assert_archive_is_preserved(Node, SessionId, ArchiveDir31Id, DatasetDir31Id, Dir31Guid, 2, ArchiveDir31Bytes),
     assert_archive_is_preserved(Node, SessionId, ArchiveFile41Id, DatasetFile41Id, File41Guid, 1, File41Size).
 
+%===================================================================
+% Sequential tests - tests which must be performed one after another
+% to ensure that they do not interfere with each other
+%===================================================================
+
+archive_dataset_attached_to_space_dir(_Config) ->
+    SpaceId = oct_background:get_space_id(?SPACE),
+    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    #dataset_object{
+        id = DatasetId,
+        archives = [#archive_object{id = ArchiveId}]
+    } = onenv_dataset_test_utils:set_up_and_sync_dataset(?USER1, SpaceGuid, #dataset_spec{archives = 1}),
+    archive_simple_dataset_test_base(SpaceGuid, DatasetId, ArchiveId).
+
+archive_big_tree_plain_layout(_Config) ->
+    archive_big_tree_test_base(?ARCHIVE_PLAIN_LAYOUT).
+
+archive_big_tree_bagit_layout(_Config) ->
+    archive_big_tree_test_base(?ARCHIVE_BAGIT_LAYOUT).
 
 %===================================================================
 % Test bases
 %===================================================================
+
+archive_dataset_attached_to_dir_test_base(Layout) ->
+    #object{
+        guid = DirGuid,
+        dataset = #dataset_object{
+            id = DatasetId,
+            archives = [#archive_object{id = ArchiveId}]
+        }} = onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, #dir_spec{dataset = #dataset_spec{archives = [#archive_spec{
+        config = #archive_config{layout = Layout}
+    }]}}),
+    archive_simple_dataset_test_base(DirGuid, DatasetId, ArchiveId).
+
+archive_dataset_attached_to_file_test_base(Layout) ->
+    Size = 20,
+    #object{
+        guid = FileGuid,
+        dataset = #dataset_object{
+            id = DatasetId,
+            archives = [#archive_object{id = ArchiveId}]
+        }} = onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, #file_spec{
+        dataset = #dataset_spec{archives = [#archive_spec{
+            config = #archive_config{layout = Layout}
+        }]},
+        content = ?RAND_CONTENT(Size)
+    }),
+    archive_simple_dataset_test_base(FileGuid, DatasetId, ArchiveId).
+
+archive_dataset_attached_to_hardlink_test_base(Layout) ->
+    [P1Node] = oct_background:get_provider_nodes(krakow),
+    UserSessIdP1 = oct_background:get_user_session_id(?USER1, krakow),
+    SpaceId = oct_background:get_space_id(?SPACE),
+    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    Size = 20,
+    #object{guid = FileGuid} = onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, #file_spec{
+        content = ?RAND_CONTENT(Size)
+    }),
+    {ok, #file_attr{guid = LinkGuid}} =
+        lfm_proxy:make_link(P1Node, UserSessIdP1, ?FILE_REF(FileGuid), ?FILE_REF(SpaceGuid), ?RAND_NAME()),
+    #dataset_object{
+        id = DatasetId,
+        archives = [#archive_object{id = ArchiveId}]
+    } = onenv_dataset_test_utils:set_up_and_sync_dataset(?USER1, LinkGuid, #dataset_spec{archives = [#archive_spec{
+        config = #archive_config{layout = Layout}
+    }]}),
+    archive_simple_dataset_test_base(LinkGuid, DatasetId, ArchiveId).
+
+archive_dataset_attached_to_symlink_test_base(Layout) ->
+    #object{name = DirName} = onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, #dir_spec{}),
+    SpaceIdPrefix = ?SYMLINK_SPACE_ID_ABS_PATH_PREFIX(oct_background:get_space_id(?SPACE)),
+    LinkTarget = filename:join([SpaceIdPrefix, DirName]),
+    #object{
+        guid = LinkGuid,
+        dataset = #dataset_object{
+            id = DatasetId,
+            archives = [#archive_object{id = ArchiveId}]
+        }
+    } = onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE,
+        #symlink_spec{
+            symlink_value = LinkTarget,
+            dataset = #dataset_spec{archives = [#archive_spec{
+                config = #archive_config{layout = Layout}
+            }]}
+        }
+    ),
+    archive_simple_dataset_test_base(LinkGuid, DatasetId, ArchiveId).
+
+
+archive_big_tree_test_base(Layout) ->
+    archive_dataset_tree_test_base([{10, 10}, {10, 10}, {10, 10}], Layout).
+
+
+archive_directory_with_number_of_files_exceeding_batch_size_test_base(Layout) ->
+    % default batch size is 1000
+    archive_dataset_tree_test_base([{0, 2048}], Layout).
 
 archive_simple_dataset_test_base(Guid, DatasetId, ArchiveId) ->
     SpaceId = oct_background:get_space_id(?SPACE),
@@ -330,7 +383,7 @@ archive_simple_dataset_test_base(Guid, DatasetId, ArchiveId) ->
         assert_archive_is_preserved(Node, SessionId, ArchiveId, DatasetId, Guid, FileCount, ExpSize)
     end, oct_background:get_space_supporting_providers(?SPACE)).
 
-archive_dataset_tree_test_base(FileStructure) ->
+archive_dataset_tree_test_base(FileStructure, ArchiveLayout) ->
     Provider = lists_utils:random_element(oct_background:get_space_supporting_providers(?SPACE)),
     Node = oct_background:get_random_provider_node(Provider),
     SessId = oct_background:get_user_session_id(?USER1, Provider),
@@ -342,7 +395,7 @@ archive_dataset_tree_test_base(FileStructure) ->
     {_, FileGuids} = lfm_test_utils:create_files_tree(Node, SessId, FileStructure, RootGuid),
 
     {ok, ArchiveId} =
-        lfm_proxy:archive_dataset(Node, SessId, DatasetId, #archive_config{layout = ?ARCHIVE_PLAIN_LAYOUT}, <<>>),
+        lfm_proxy:archive_dataset(Node, SessId, DatasetId, #archive_config{layout = ArchiveLayout}, <<>>),
 
     % created files are empty therefore expected size is 0
     assert_archive_is_preserved(Node, SessId, ArchiveId, DatasetId, RootGuid, length(FileGuids), 0).
@@ -460,11 +513,20 @@ assert_archive_is_preserved(Node, SessionId, ArchiveId, DatasetId, DatasetRootFi
     assert_layout(Node, SessionId, ArchiveId, DatasetRootFileGuid, ArchiveLayout).
 
 
-    assert_layout(Node, SessionId, ArchiveId, DatasetRootFileGuid, ?ARCHIVE_PLAIN_LAYOUT) ->
+assert_layout(Node, SessionId, ArchiveId, DatasetRootFileGuid, ?ARCHIVE_PLAIN_LAYOUT) ->
     ArchiveRootDirUuid = ?ARCHIVE_DIR_UUID(ArchiveId),
     ArchiveRootDirGuid = file_id:pack_guid(ArchiveRootDirUuid, oct_background:get_space_id(?SPACE)),
     {ok, [{TargetGuid, _}]} = lfm_proxy:get_children(Node, SessionId, ?FILE_REF(ArchiveRootDirGuid), 0, 10),
+    assert_copied(Node, SessionId, DatasetRootFileGuid, TargetGuid);
+assert_layout(Node, SessionId, ArchiveId, DatasetRootFileGuid, ?ARCHIVE_BAGIT_LAYOUT) ->
+    ArchiveRootDirUuid = ?ARCHIVE_DIR_UUID(ArchiveId),
+    ArchiveRootDirGuid = file_id:pack_guid(ArchiveRootDirUuid, oct_background:get_space_id(?SPACE)),
+    {ok, ArchiveRootDirPath} = lfm_proxy:get_file_path(Node, SessionId, ArchiveRootDirGuid),
+    ArchiveDataDirPath = filename:join([ArchiveRootDirPath, <<"data">>]),
+    {ok, #file_attr{guid = ArchiveDataDirGuid}} = lfm_proxy:stat(Node, SessionId, {path, ArchiveDataDirPath}),
+    {ok, [{TargetGuid, _}]} = lfm_proxy:get_children(Node, SessionId, ?FILE_REF(ArchiveDataDirGuid), 0, 10),
     assert_copied(Node, SessionId, DatasetRootFileGuid, TargetGuid).
+
 
 assert_copied(Node, SessionId, SourceGuid, TargetGuid) ->
     assert_attrs_copied(Node, SessionId, SourceGuid, TargetGuid),

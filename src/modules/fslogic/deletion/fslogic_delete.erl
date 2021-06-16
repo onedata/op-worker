@@ -503,6 +503,7 @@ detach_dataset(FileCtx) ->
     {FileDoc, FileCtx2} = file_ctx:get_file_doc_including_deleted(FileCtx),
     case file_meta_dataset:is_attached(FileDoc) of
         true ->
+            % todo uwaga, tutaj jak zawolamy to dataset moze miec wyliczony file-path z trasha
             dataset_api:detach(file_ctx:get_logical_uuid_const(FileCtx2));
         false ->
             ok

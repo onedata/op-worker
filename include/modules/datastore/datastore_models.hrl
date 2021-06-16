@@ -445,7 +445,8 @@
     preserved_callback :: archive:callback(),
     purged_callback :: archive:callback(),
     description :: archive:description(),
-    dir_guid :: undefined | file_id:file_guid(),
+    root_dir_guid :: undefined | file_id:file_guid(),
+    data_dir_guid :: undefined | file_id:file_guid(),
     stats = archive_stats:empty() :: archive_stats:record(),
 
     % if archive has been created directly it has no parent archive

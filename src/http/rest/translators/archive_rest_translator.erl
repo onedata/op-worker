@@ -56,7 +56,7 @@ translate_archive_info(#archive_info{
     id = ArchiveId,
     dataset_id = DatasetId,
     state = State,
-    dir_guid = DirGuid,
+    root_dir_guid = RootDirGuid,
     creation_time = CreationTime,
     config = Config,
     preserved_callback = PreservedCallback,
@@ -68,9 +68,9 @@ translate_archive_info(#archive_info{
         <<"archiveId">> => ArchiveId,
         <<"datasetId">> => DatasetId,
         <<"state">> => str_utils:to_binary(State),
-        <<"directoryId">> => case DirGuid =/= undefined of % todo rename in swagger
+        <<"rootDirectoryId">> => case RootDirGuid =/= undefined of % todo rename in swagger
             true ->
-                {ok, DirObjectId} = file_id:guid_to_objectid(DirGuid),
+                {ok, DirObjectId} = file_id:guid_to_objectid(RootDirGuid),
                 DirObjectId;
             false ->
                 null
