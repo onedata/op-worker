@@ -43,14 +43,16 @@ infer_phase(#atm_workflow_execution{status = ?FAILED_STATUS}) -> ?ENDED_PHASE.
     ?PREPARING_STATUS | ?ENQUEUED_STATUS
 ) ->
     {ok, atm_workflow_execution:doc()} | no_return().
-handle_transition_in_waiting_phase(AtmWorkflowExecutionId, WaitingStatus) when
-    WaitingStatus == ?PREPARING_STATUS;
-    WaitingStatus == ?ENQUEUED_STATUS
-->
+handle_transition_in_waiting_phase(AtmWorkflowExecutionId, NextStatus) ->
     Diff = fun(#atm_workflow_execution{status = Status} = AtmWorkflowExecution) ->
-        case atm_status_utils:is_transition_allowed(Status, WaitingStatus) of
+        IsTransitionAllowed = case {Status, NextStatus} of
+            {?SCHEDULED_STATUS, ?PREPARING_STATUS} -> true;
+            {?PREPARING_STATUS, ?ENQUEUED_STATUS} -> true;
+            _ -> false
+        end,
+        case IsTransitionAllowed of
             true ->
-                {ok, AtmWorkflowExecution#atm_workflow_execution{status = WaitingStatus}};
+                {ok, AtmWorkflowExecution#atm_workflow_execution{status = NextStatus}};
             false ->
                 {error, Status}
         end
@@ -60,25 +62,26 @@ handle_transition_in_waiting_phase(AtmWorkflowExecutionId, WaitingStatus) when
         {ok, _} = Result ->
             Result;
         {error, CurrStatus} ->
-            throw(?ERROR_ATM_INVALID_STATUS_TRANSITION(CurrStatus, WaitingStatus))
+            throw(?ERROR_ATM_INVALID_STATUS_TRANSITION(CurrStatus, NextStatus))
     end.
 
 
 -spec handle_transition_to_failed_status_from_waiting_phase(atm_workflow_execution:id()) ->
     ok | no_return().
 handle_transition_to_failed_status_from_waiting_phase(AtmWorkflowExecutionId) ->
-    % TODO VFS-7674 should fail here change status of all lanes, pboxes and tasks ??
-    Diff = fun
-        (AtmWorkflowExecution = #atm_workflow_execution{
-            status = WaitingStatus,
-            schedule_time = ScheduleTime
-        }) when WaitingStatus == ?PREPARING_STATUS; WaitingStatus == ?ENQUEUED_STATUS ->
-            {ok, AtmWorkflowExecution#atm_workflow_execution{
-                status = ?FAILED_STATUS,
-                finish_time = global_clock:monotonic_timestamp_seconds(ScheduleTime)
-            }};
-        (#atm_workflow_execution{status = Status}) ->
-            {error, Status}
+    Diff = fun(AtmWorkflowExecution = #atm_workflow_execution{
+        status = Status,
+        schedule_time = ScheduleTime
+    }) ->
+        case infer_phase(AtmWorkflowExecution) of
+            ?WAITING_PHASE ->
+                {ok, AtmWorkflowExecution#atm_workflow_execution{
+                    status = ?FAILED_STATUS,
+                    finish_time = global_clock:monotonic_timestamp_seconds(ScheduleTime)
+                }};
+            _ ->
+                {error, Status}
+        end
     end,
 
     case atm_workflow_execution:update(AtmWorkflowExecutionId, Diff) of

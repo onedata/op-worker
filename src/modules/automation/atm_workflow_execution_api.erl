@@ -23,7 +23,6 @@
     create/4,
     get/1, get_summary/1, get_summary/2
 ]).
--export([report_task_status_change/5]).
 
 
 -type listing_mode() :: basic | summary.
@@ -165,27 +164,6 @@ get_summary(AtmWorkflowExecutionId, #atm_workflow_execution{
         start_time = StartTime,
         finish_time = FinishTime
     }.
-
-
--spec report_task_status_change(
-    atm_workflow_execution:id(),
-    non_neg_integer(),
-    non_neg_integer(),
-    atm_task_execution:id(),
-    atm_task_execution:status()
-) ->
-    ok.
-report_task_status_change(
-    AtmWorkflowExecutionId,
-    AtmLaneExecutionIndex,
-    AtmParallelBoxExecutionIndex,
-    AtmTaskExecutionId,
-    NewStatus
-) ->
-    atm_workflow_execution_status:report_task_status_change(
-        AtmWorkflowExecutionId, AtmLaneExecutionIndex, AtmParallelBoxExecutionIndex,
-        AtmTaskExecutionId, NewStatus
-    ).
 
 
 %%%===================================================================
