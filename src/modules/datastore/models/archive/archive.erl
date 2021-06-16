@@ -23,11 +23,11 @@
 % getters
 -export([get_id/1, get_creation_time/1, get_dataset_id/1, get_dataset_root_file_guid/1, get_space_id/1,
     get_state/1, get_config/1, get_preserved_callback/1, get_purged_callback/1,
-    get_description/1, get_stats/1, get_root_file_guid/1, get_parent/1, get_parent_doc/1, is_finished/1
+    get_description/1, get_stats/1, get_dir_guid/1, get_parent/1, get_parent_doc/1, is_finished/1
 ]).
 
 % setters
--export([mark_building/1, mark_purging/2, mark_file_archived/3, mark_file_failed/1, mark_finished/2, set_root_file_guid/2]).
+-export([mark_building/1, mark_purging/2, mark_file_archived/2, mark_file_failed/1, mark_finished/2, set_dir_guid/2]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1]).
@@ -221,11 +221,11 @@ get_stats(#archive{stats = Stats}) ->
 get_stats(#document{value = Archive}) ->
     get_stats(Archive).
 
--spec get_root_file_guid(record() | doc()) -> {ok, file_id:file_guid()}.
-get_root_file_guid(#archive{root_file_guid = RootFileGuid}) ->
-    {ok, RootFileGuid};
-get_root_file_guid(#document{value = Archive}) ->
-    get_root_file_guid(Archive).
+-spec get_dir_guid(record() | doc()) -> {ok, file_id:file_guid()}.
+get_dir_guid(#archive{dir_guid = DirGuid}) ->
+    {ok, DirGuid};
+get_dir_guid(#document{value = Archive}) ->
+    get_dir_guid(Archive).
 
 -spec get_parent(record() | doc()) -> {ok, archive:id() | undefined}.
 get_parent(#archive{parent = Parent}) ->
@@ -239,7 +239,6 @@ get_parent_doc(Archive) ->
         {ok, undefined} -> {ok, undefined};
         {ok, ParentArchiveId} -> get(ParentArchiveId)
     end.
-
 
 -spec is_finished(record() | doc()) -> boolean().
 is_finished(#archive{state = State}) ->
@@ -297,15 +296,10 @@ mark_finished(ArchiveDocOrId, NestedArchivesStats) ->
     end)).
 
 
--spec mark_file_archived(id() | doc(), non_neg_integer(), file_id:file_guid() | undefined) -> ok | error().
-mark_file_archived(ArchiveDocOrId, FileSize, NewRootFileGuid) ->
+-spec mark_file_archived(id() | doc(), non_neg_integer()) -> ok | error().
+mark_file_archived(ArchiveDocOrId, FileSize) ->
     ?extract_ok(update(ArchiveDocOrId, fun(Archive0 = #archive{stats = Stats}) ->
-        Archive1 = Archive0#archive{stats = archive_stats:mark_file_archived(Stats, FileSize)},
-        Archive2 = case NewRootFileGuid =/= undefined of
-            true -> Archive1#archive{root_file_guid = NewRootFileGuid};
-            false -> Archive1
-        end,
-        {ok, Archive2}
+        {ok, Archive0#archive{stats = archive_stats:mark_file_archived(Stats, FileSize)}}
     end)).
 
 
@@ -316,10 +310,10 @@ mark_file_failed(ArchiveDocOrId) ->
     end)).
 
 
--spec set_root_file_guid(id() | doc(), file_id:file_guid()) -> {ok, doc()} | error().
-set_root_file_guid(ArchiveDocOrId, RootFileGuid) ->
+-spec set_dir_guid(id() | doc(), file_id:file_guid()) -> {ok, doc()} | error().
+set_dir_guid(ArchiveDocOrId, DirGuid) ->
     update(ArchiveDocOrId, fun(Archive) ->
-        {ok, Archive#archive{root_file_guid = RootFileGuid}}
+        {ok, Archive#archive{dir_guid = DirGuid}}
     end).
 
 %%%===================================================================
@@ -362,7 +356,7 @@ get_record_struct(1) ->
         {preserved_callback, string},
         {purged_callback, string},
         {description, string},
-        {root_file_guid, string},
+        {dir_guid, string},
         {stats, {custom, string, {persistent_record, encode, decode, archive_stats}}},
         {parent, string}
     ]}.

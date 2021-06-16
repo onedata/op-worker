@@ -514,14 +514,11 @@ simple_archive_crud_test_base(DatasetId, RootFileType, ExpSize) ->
     Timestamp = global_clock_timestamp(P1Node),
     Index = archives_list:index(ArchiveId, Timestamp),
 
-    {ok, [{CopyRootGuid, _}]} = ?assertMatch({ok, [_]},
-        lfm_proxy:get_children(P1Node, UserSessIdP1, ?FILE_REF(ArchiveRootDirGuid), 0, 10), ?ATTEMPTS),
-
     ExpArchiveInfo = #archive_info{
         id = ArchiveId,
         dataset_id = DatasetId,
         state = ?ARCHIVE_PRESERVED,
-        root_file_guid = CopyRootGuid,
+        dir_guid = ArchiveRootDirGuid,
         creation_time = Timestamp,
         index = Index,
         config = #archive_config{

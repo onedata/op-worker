@@ -121,12 +121,12 @@ maybe_sync_first_file_block(_SessionId, _FileGuids) ->
     cowboy_req:req()
 ) ->
     cowboy_req:req().
-handle_http_download(FileDownloadCode, SessionId, FileGuids, Req) ->
+ handle_http_download(FileDownloadCode, SessionId, FileGuids, Req) ->
     OzUrl = oneprovider:get_oz_url(),
     Req2 = gui_cors:allow_origin(OzUrl, Req),
     Req3 = gui_cors:allow_frame_origin(OzUrl, Req2),
     FileAttrsList = lists_utils:foldl_while(fun (FileGuid, Acc) ->
-        case lfm:stat(SessionId, ?FILE_REF(FileGuid)) of
+        case lfm:stat(SessionId, ?FILE_REF(FileGuid)) of % todo pass option here to follow links?
             {ok, #file_attr{} = FileAttr} -> {cont, [FileAttr | Acc]};
             {error, ?EACCES} -> {cont, Acc};
             {error, ?EPERM} -> {cont, Acc};

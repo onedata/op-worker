@@ -460,9 +460,11 @@ assert_archive_is_preserved(Node, SessionId, ArchiveId, DatasetId, DatasetRootFi
     assert_layout(Node, SessionId, ArchiveId, DatasetRootFileGuid, ArchiveLayout).
 
 
-assert_layout(Node, SessionId, ArchiveId, DatasetRootFileGuid, ?ARCHIVE_PLAIN_LAYOUT) ->
-    {ok, #archive_info{root_file_guid = CopyRootGuid}} = lfm_proxy:get_archive_info(Node, SessionId, ArchiveId),
-    assert_copied(Node, SessionId, DatasetRootFileGuid, CopyRootGuid).
+    assert_layout(Node, SessionId, ArchiveId, DatasetRootFileGuid, ?ARCHIVE_PLAIN_LAYOUT) ->
+    ArchiveRootDirUuid = ?ARCHIVE_DIR_UUID(ArchiveId),
+    ArchiveRootDirGuid = file_id:pack_guid(ArchiveRootDirUuid, oct_background:get_space_id(?SPACE)),
+    {ok, [{TargetGuid, _}]} = lfm_proxy:get_children(Node, SessionId, ?FILE_REF(ArchiveRootDirGuid), 0, 10),
+    assert_copied(Node, SessionId, DatasetRootFileGuid, TargetGuid).
 
 assert_copied(Node, SessionId, SourceGuid, TargetGuid) ->
     assert_attrs_copied(Node, SessionId, SourceGuid, TargetGuid),
@@ -483,13 +485,22 @@ assert_attrs_copied(Node, SessionId, SourceGuid, TargetGuid) ->
         lfm_proxy:stat(Node, SessionId, ?FILE_REF(Guid))
     end,
     {ok, SourceAttr} = Stat(SourceGuid),
+
     ?assertEqual(true, try
         {ok, TargetAttr} = ?assertMatch({ok, #file_attr{}}, Stat(TargetGuid), ?ATTEMPTS),
-        ?assertEqual(SourceAttr#file_attr.name, TargetAttr#file_attr.name),
-        ?assertEqual(SourceAttr#file_attr.mode, TargetAttr#file_attr.mode),
-        ?assertEqual(SourceAttr#file_attr.type, TargetAttr#file_attr.type),
-        ?assertEqual(SourceAttr#file_attr.size, TargetAttr#file_attr.size),
-        true
+        case SourceAttr#file_attr.type /= ?SYMLINK_TYPE andalso TargetAttr#file_attr.type == ?SYMLINK_TYPE of
+            true ->
+                ?assertEqual(SourceAttr#file_attr.name, TargetAttr#file_attr.name),
+                {ok, LinkTargetGuid} = lfm_proxy:resolve_symlink(Node, SessionId, ?FILE_REF(TargetAttr#file_attr.guid)),
+                assert_attrs_copied(Node, SessionId, SourceGuid, LinkTargetGuid),
+                true;
+            false ->
+                ?assertEqual(SourceAttr#file_attr.name, TargetAttr#file_attr.name),
+                ?assertEqual(SourceAttr#file_attr.mode, TargetAttr#file_attr.mode),
+                ?assertEqual(SourceAttr#file_attr.type, TargetAttr#file_attr.type),
+                ?assertEqual(SourceAttr#file_attr.size, TargetAttr#file_attr.size),
+                true
+        end
     catch
         _:_ ->
             false
@@ -534,7 +545,9 @@ assert_content_copied(Node, SessionId, SourceGuid, TargetGuid) ->
         lfm_proxy:read(Node, SourceHandle, 0, 10000), ?ATTEMPTS),
     lfm_proxy:close(Node, SourceHandle),
     lfm_proxy:close(Node, TargetHandle),
-    assert_file_is_flushed_from_buffer(Node, SessionId, SourceGuid, TargetGuid).
+
+    TargetGuid2 = maybe_resolve_symlink(Node, SessionId, TargetGuid),
+    assert_file_is_flushed_from_buffer(Node, SessionId, SourceGuid, TargetGuid2).
 
 
 assert_file_is_flushed_from_buffer(Node, SessionId, SourceGuid, TargetGuid) ->
@@ -559,3 +572,14 @@ get_storage_file_id(Node, Guid) ->
     FileCtx = rpc:call(Node, file_ctx, new_by_guid, [Guid]),
     {StorageFileId, _} = rpc:call(Node, file_ctx, get_storage_file_id, [FileCtx]),
     StorageFileId.
+
+
+maybe_resolve_symlink(Node, SessionId, Guid) ->
+    {ok, #file_attr{type = Type}} = lfm_proxy:stat(Node, SessionId, ?FILE_REF(Guid)),
+    case Type =:= ?SYMLINK_TYPE of
+        true ->
+            {ok, LinkTargetGuid} = lfm_proxy:resolve_symlink(Node, SessionId, ?FILE_REF(Guid)),
+            LinkTargetGuid;
+        false ->
+            Guid
+    end.
