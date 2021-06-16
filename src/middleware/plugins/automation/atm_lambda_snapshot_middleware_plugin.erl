@@ -93,7 +93,7 @@ authorize(#op_req{auth = ?GUEST}, _) ->
 authorize(#op_req{operation = get, auth = ?USER(UserId, SessionId), gri = #gri{
     aspect = instance
 }}, #atm_lambda_snapshot{atm_inventories = AtmInventories}) ->
-    % Caution!! Below checks should be always synchronized with one done by oz
+    % Caution!! Below checks should always be synchronized with one done by oz
     % when getting lambda
     user_logic:has_any_eff_atm_inventory(SessionId, UserId, AtmInventories).
 

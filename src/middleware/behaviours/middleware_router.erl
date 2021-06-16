@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This behaviour should be implemented by modules that routes requests
+%%% This behaviour should be implemented by modules that route requests
 %%% for specific entity type to given middleware_handler based on operation,
 %%% aspect and scope of request.
 %%%

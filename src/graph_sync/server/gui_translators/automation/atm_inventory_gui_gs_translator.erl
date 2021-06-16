@@ -7,7 +7,7 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module handles translation of middleware results concerning
-%%% automation inventories entities into GUI GRAPH SYNC responses.
+%%% automation inventory entities into GUI GRAPH SYNC responses.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_inventory_gui_gs_translator).
