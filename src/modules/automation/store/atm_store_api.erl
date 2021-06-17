@@ -13,6 +13,7 @@
 -author("Bartosz Walkowicz").
 
 -include("modules/automation/atm_execution.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% API
 -export([
@@ -143,9 +144,13 @@ delete_all(AtmStoreIds) ->
 
 -spec delete(atm_store:id()) -> ok | {error, term()}.
 delete(AtmStoreId) ->
-    {ok, #atm_store{container = AtmContainer}} = atm_store:get(AtmStoreId),
-    ok = atm_container:delete(AtmContainer),
-    atm_store:delete(AtmStoreId).
+    case atm_store:get(AtmStoreId) of
+        {ok, #atm_store{container = AtmContainer}} ->
+            atm_container:delete(AtmContainer),
+            atm_store:delete(AtmStoreId);
+        ?ERROR_NOT_FOUND ->
+            ok
+    end.
 
 
 -spec acquire_iterator(atm_workflow_execution_env:record(), atm_store_iterator_spec:record()) ->
