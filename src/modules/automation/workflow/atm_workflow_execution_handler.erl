@@ -36,9 +36,9 @@
 
 -spec prepare(atm_workflow_execution:id(), atm_workflow_execution_env:record()) ->
     ok | error.
-prepare(AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv) ->
+prepare(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv) ->
     try
-        prepare_internal(AtmWorkflowExecutionId)
+        prepare_internal(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv)
     catch _:Reason ->
         % TODO VFS-7637 use audit log
         ?error("FAILED TO PREPARE WORKFLOW ~p DUE TO: ~p", [
@@ -179,14 +179,21 @@ handle_lane_execution_ended(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, Atm
 
 
 %% @private
--spec prepare_internal(atm_workflow_execution:id()) -> ok | no_return().
-prepare_internal(AtmWorkflowExecutionId) ->
+-spec prepare_internal(
+    atm_workflow_execution:id(),
+    atm_workflow_execution_env:record()
+) ->
+    ok | no_return().
+prepare_internal(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv) ->
+    AtmWorkflowExecutionCtx = atm_workflow_execution_env:acquire_workflow_execution_ctx(
+        AtmWorkflowExecutionEnv
+    ),
     {ok, #document{value = #atm_workflow_execution{
         lanes = AtmLaneExecutions
     }}} = transition_to_preparing_status(AtmWorkflowExecutionId),
 
     try
-        atm_lane_execution:prepare_all(AtmLaneExecutions)
+        atm_lane_execution:prepare_all(AtmWorkflowExecutionCtx, AtmLaneExecutions)
     catch Type:Reason ->
         atm_workflow_execution_status:handle_transition_to_failed_status_from_waiting_phase(
             AtmWorkflowExecutionId

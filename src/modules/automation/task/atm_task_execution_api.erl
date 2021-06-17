@@ -18,7 +18,7 @@
 %% API
 -export([
     create_all/4, create/4,
-    prepare_all/1, prepare/1,
+    prepare_all/2, prepare/2,
     delete_all/1, delete/1,
 
     get_spec/1,
@@ -109,27 +109,32 @@ create(AtmWorkflowExecutionCreationCtx, AtmLaneIndex, AtmParallelBoxIndex, #atm_
     }).
 
 
--spec prepare_all([atm_task_execution:id()]) -> ok | no_return().
-prepare_all(AtmTaskExecutionIds) ->
+-spec prepare_all(atm_workflow_execution_ctx:record(), [atm_task_execution:id()]) ->
+    ok | no_return().
+prepare_all(AtmWorkflowExecutionCtx, AtmTaskExecutionIds) ->
     lists:foreach(fun(AtmTaskExecutionId) ->
         {ok, AtmTaskExecutionDoc = #document{value = #atm_task_execution{
             schema_id = AtmTaskSchemaId
         }}} = atm_task_execution:get(AtmTaskExecutionId),
 
         try
-            prepare(AtmTaskExecutionDoc)
+            prepare(AtmWorkflowExecutionCtx, AtmTaskExecutionDoc)
         catch _:Reason ->
             throw(?ERROR_ATM_TASK_EXECUTION_PREPARATION_FAILED(AtmTaskSchemaId, Reason))
         end
     end, AtmTaskExecutionIds).
 
 
--spec prepare(atm_task_execution:id() | atm_task_execution:doc()) -> ok | no_return().
-prepare(AtmTaskExecutionIdOrDoc) ->
+-spec prepare(
+    atm_workflow_execution_ctx:record(),
+    atm_task_execution:id() | atm_task_execution:doc()
+) ->
+    ok | no_return().
+prepare(AtmWorkflowExecutionCtx, AtmTaskExecutionIdOrDoc) ->
     #document{value = #atm_task_execution{executor = AtmTaskExecutor}} = ensure_atm_task_execution_doc(
         AtmTaskExecutionIdOrDoc
     ),
-    atm_task_executor:prepare(AtmTaskExecutor).
+    atm_task_executor:prepare(AtmWorkflowExecutionCtx, AtmTaskExecutor).
 
 
 -spec delete_all([atm_task_execution:id()]) -> ok.

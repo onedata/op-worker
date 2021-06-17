@@ -17,12 +17,13 @@
 -behaviour(persistent_record).
 
 -include("modules/automation/atm_execution.hrl").
+-include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/http/codes.hrl").
 -include_lib("ctool/include/http/headers.hrl").
 
 
 %% atm_task_executor callbacks
--export([create/2, prepare/1, get_spec/1, in_readonly_mode/1, run/3]).
+-export([create/2, prepare/2, get_spec/1, in_readonly_mode/1, run/3]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
@@ -42,6 +43,7 @@
 -type openfaas_config() :: #openfaas_config{}.
 
 -record(prepare_ctx, {
+    workflow_execution_ctx :: atm_workflow_execution_ctx:record(),
     openfaas_config :: openfaas_config(),
     executor :: record()
 }).
@@ -70,9 +72,10 @@ create(AtmWorkflowExecutionId, #atm_openfaas_operation_spec{} = OperationSpec) -
     }.
 
 
--spec prepare(record()) -> ok | no_return().
-prepare(AtmTaskExecutor) ->
+-spec prepare(atm_workflow_execution_ctx:record(), record()) -> ok | no_return().
+prepare(AtmWorkflowExecutionCtx, AtmTaskExecutor) ->
     PrepareCtx = #prepare_ctx{
+        workflow_execution_ctx = AtmWorkflowExecutionCtx,
         openfaas_config = get_openfaas_config(),
         executor = AtmTaskExecutor
     },
@@ -236,19 +239,32 @@ prepare_function_annotations(#prepare_ctx{executor = #atm_openfaas_task_executor
     }}
 }) ->
     #{};
-prepare_function_annotations(#prepare_ctx{executor = #atm_openfaas_task_executor{
-    operation_spec = #atm_openfaas_operation_spec{
-        docker_execution_options = #atm_docker_execution_options{
-            mount_oneclient = true,
-            oneclient_mount_point = MountPoint,
-            oneclient_options = OneclientOptions
+prepare_function_annotations(#prepare_ctx{
+    workflow_execution_ctx = AtmWorkflowExecutionCtx,
+    executor = AtmTaskExecutor = #atm_openfaas_task_executor{
+        operation_spec = #atm_openfaas_operation_spec{
+            docker_execution_options = #atm_docker_execution_options{
+                mount_oneclient = true,
+                oneclient_mount_point = MountPoint,
+                oneclient_options = OneclientOptions
+            }
         }
-    }}
+    }
 }) ->
+    SpaceId = atm_workflow_execution_ctx:get_space_id(AtmWorkflowExecutionCtx),
+    AccessToken = atm_workflow_execution_ctx:get_access_token(AtmWorkflowExecutionCtx),
+    {ok, OpDomain} = provider_logic:get_domain(),
+
     #{<<"annotations">> => #{
         % TODO VFS-7627 set proper annotation for oneclient mounts
+        <<"com.accessToken">> => case in_readonly_mode(AtmTaskExecutor) of
+            true -> tokens:confine(AccessToken, #cv_data_readonly{});
+            false -> AccessToken
+        end,
         <<"com.mountpoint">> => MountPoint,
-        <<"com.options">> => OneclientOptions
+        <<"com.options">> => OneclientOptions,
+        <<"com.host">> => OpDomain,
+        <<"com.spaceId">> => SpaceId
     }}.
 
 

@@ -19,7 +19,7 @@
 %% API
 -export([
     create_all/1, create/3,
-    prepare_all/1, prepare/1,
+    prepare_all/2, prepare/2,
     delete_all/1, delete/1
 ]).
 -export([get_parallel_box_execution_specs/1]).
@@ -87,20 +87,20 @@ create(AtmWorkflowExecutionCreationCtx, AtmLaneIndex, #atm_lane_schema{
     }.
 
 
--spec prepare_all([record()]) -> ok | no_return().
-prepare_all(AtmLaneExecutions) ->
+-spec prepare_all(atm_workflow_execution_ctx:record(), [record()]) -> ok | no_return().
+prepare_all(AtmWorkflowExecutionCtx, AtmLaneExecutions) ->
     lists:foreach(fun(#atm_lane_execution{schema_id = AtmLaneSchemaId} = AtmLaneExecution) ->
         try
-            prepare(AtmLaneExecution)
+            prepare(AtmWorkflowExecutionCtx, AtmLaneExecution)
         catch _:Reason ->
             throw(?ERROR_ATM_LANE_EXECUTION_PREPARATION_FAILED(AtmLaneSchemaId, Reason))
         end
     end, AtmLaneExecutions).
 
 
--spec prepare(record()) -> ok | no_return().
-prepare(#atm_lane_execution{parallel_boxes = AtmParallelBoxExecutions}) ->
-    atm_parallel_box_execution:prepare_all(AtmParallelBoxExecutions).
+-spec prepare(atm_workflow_execution_ctx:record(), record()) -> ok | no_return().
+prepare(AtmWorkflowExecutionCtx, #atm_lane_execution{parallel_boxes = AtmParallelBoxExecutions}) ->
+    atm_parallel_box_execution:prepare_all(AtmWorkflowExecutionCtx, AtmParallelBoxExecutions).
 
 
 -spec delete_all([record()]) -> ok.
