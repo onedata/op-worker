@@ -58,7 +58,7 @@ translate_archive_info(#archive_info{
             aspect = instance, scope = private
         }),
         <<"state">> => str_utils:to_binary(State),
-        <<"rootFile">> => case RootDirGuid =/= undefined of % todo rename this field to "rootDir"
+        <<"rootDir">> => case RootDirGuid =/= undefined of
             true -> gri:serialize(#gri{
                 type = op_file, id = RootDirGuid,
                 aspect = instance, scope = private

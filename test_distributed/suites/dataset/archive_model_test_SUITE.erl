@@ -70,7 +70,7 @@ groups() -> [
         archive_dataset_attached_to_dir,
         archive_dataset_attached_to_file,
         archive_dataset_attached_to_hardlink,
-        archive_dataset_attached_to_symlink,
+        % archive_dataset_attached_to_symlink, TODO VFS-7664
         archivisation_of_detached_dataset_should_be_impossible,
         archive_of_detached_dataset_should_be_accessible,
         archive_of_dataset_associated_with_deleted_file_should_be_accessible,
@@ -374,14 +374,14 @@ create_archive_privileges_test(_Config) ->
     #object{
         dataset = #dataset_object{
             id = DatasetId,
-            archives = [#archive_object{id = ArchiveId}]
+            archives = [#archive_object{id = ArchiveId, config = ArchiveConfig}]
         }
     } = onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE, #file_spec{dataset = #dataset_spec{archives = 1}}),
 
     RequiredPrivileges = privileges:from_list([?SPACE_MANAGE_DATASETS, ?SPACE_CREATE_ARCHIVES]),
     AllPrivileges = privileges:from_list(RequiredPrivileges ++ privileges:space_member()),
 
-    ?assertMatch({ok, #archive_info{state = ?ARCHIVE_PRESERVED}},
+    ?assertMatch({ok, #archive_info{state = ?ARCHIVE_PRESERVED, config = ArchiveConfig}},
         lfm_proxy:get_archive_info(P1Node, UserSessIdP1, ArchiveId), ?ATTEMPTS),
 
     lists:foreach(fun(Privilege) ->
@@ -419,11 +419,11 @@ view_archive_privileges_test(_Config) ->
     #object{
         dataset = #dataset_object{
             id = DatasetId,
-            archives = [#archive_object{id = ArchiveId}]
+            archives = [#archive_object{id = ArchiveId, config = ArchiveConfig}]
         }
     } = onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE, #file_spec{dataset = #dataset_spec{archives = 1}}),
 
-    ?assertMatch({ok, #archive_info{state = ?ARCHIVE_PRESERVED}},
+    ?assertMatch({ok, #archive_info{state = ?ARCHIVE_PRESERVED, config = ArchiveConfig}},
         lfm_proxy:get_archive_info(P1Node, UserSessIdP1, ArchiveId), ?ATTEMPTS),
 
     AllPrivileges = privileges:from_list([?SPACE_VIEW_ARCHIVES | privileges:space_member()]),
@@ -458,15 +458,15 @@ remove_archive_privileges_test(_Config) ->
     #object{
         dataset = #dataset_object{
             archives = [
-                #archive_object{id = ArchiveId1},
-                #archive_object{id = ArchiveId2}
+                #archive_object{id = ArchiveId1, config = ArchiveConfig1},
+                #archive_object{id = ArchiveId2, config = ArchiveConfig2}
             ]
         }
     } = onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE, #file_spec{dataset = #dataset_spec{archives = 2}}),
 
-    ?assertMatch({ok, #archive_info{state = ?ARCHIVE_PRESERVED}},
+    ?assertMatch({ok, #archive_info{state = ?ARCHIVE_PRESERVED, config = ArchiveConfig1}},
         lfm_proxy:get_archive_info(P1Node, UserSessIdP1, ArchiveId1), ?ATTEMPTS),
-    ?assertMatch({ok, #archive_info{state = ?ARCHIVE_PRESERVED}},
+    ?assertMatch({ok, #archive_info{state = ?ARCHIVE_PRESERVED, config = ArchiveConfig2}},
         lfm_proxy:get_archive_info(P1Node, UserSessIdP1, ArchiveId1), ?ATTEMPTS),
 
     RequiredPrivileges = privileges:from_list([?SPACE_MANAGE_DATASETS, ?SPACE_REMOVE_ARCHIVES]),
@@ -591,17 +591,17 @@ iterate_over_archives_test_base(ArchiveCount, ListingMethod, Limit) ->
     }} = onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE,
         #file_spec{dataset = #dataset_spec{archives = ArchiveCount}}),
 
-    UnsortedArchiveIdsAndIndices = [{Id, Index} || #archive_object{id = Id, index = Index} <- ArchiveObjects],
-
-    lists_utils:pforeach(fun({ArchiveId, _}) ->
-        ?assertMatch({ok, #archive_info{state = ?ARCHIVE_PRESERVED}},
-            lfm_proxy:get_archive_info(P1Node, UserSessIdP1, ArchiveId), ?ATTEMPTS)
-    end, UnsortedArchiveIdsAndIndices),
+    lists_utils:pforeach(fun(#archive_object{id = ArchiveId, config = Config}) ->
+        ?assertMatch({ok, #archive_info{
+            state = ?ARCHIVE_PRESERVED,
+            config = Config
+        }}, lfm_proxy:get_archive_info(P1Node, UserSessIdP1, ArchiveId), ?ATTEMPTS)
+    end, ArchiveObjects),
 
     % sort archives by their indices
-    ExpArchiveIdsAndIndices = lists:sort(fun({_Id1, Ind1}, {_Id2, Ind2}) ->
-        Ind1 =< Ind2
-    end, UnsortedArchiveIdsAndIndices),
+    ExpArchiveIdsAndIndices = lists:sort(fun(A1, A2) ->
+        A1#archive_object.index =< A2#archive_object.index
+    end, ArchiveObjects),
     ExpArchiveIds = [Id || {Id, _} <- ExpArchiveIdsAndIndices],
 
     ListingOpts = case ListingMethod of

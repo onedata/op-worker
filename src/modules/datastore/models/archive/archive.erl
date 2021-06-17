@@ -19,11 +19,13 @@
 
 %% API
 -export([create/7, create_nested/2, get/1, modify_attrs/2, delete/1]).
+-export([get_root_dir_ctx/1, get_all_ancestors/1]).
 
 % getters
 -export([get_id/1, get_creation_time/1, get_dataset_id/1, get_dataset_root_file_guid/1, get_space_id/1,
     get_state/1, get_config/1, get_preserved_callback/1, get_purged_callback/1,
-    get_description/1, get_stats/1, get_root_dir_guid/1, get_data_dir_guid/1, get_parent/1, get_parent_doc/1, is_finished/1
+    get_description/1, get_stats/1, get_root_dir_guid/1,
+    get_data_dir_guid/1, get_parent/1, get_parent_doc/1, is_finished/1
 ]).
 
 % setters
@@ -153,6 +155,19 @@ modify_attrs(ArchiveId, Diff) when is_map(Diff) ->
 delete(ArchiveId) ->
     datastore_model:delete(?CTX, ArchiveId).
 
+
+-spec get_root_dir_ctx(record() | doc()) -> {ok, file_ctx:ctx()}.
+get_root_dir_ctx(Archive) ->
+    {ok, RootDirGuid} = get_root_dir_guid(Archive),
+    {ok, file_ctx:new_by_guid(RootDirGuid)}.
+
+
+-spec get_all_ancestors(doc() | record()) -> {ok, [doc()]}.
+get_all_ancestors(#archive{parent = ParentArchive}) ->
+    get_all_ancestors(ParentArchive, []);
+get_all_ancestors(#document{value = Archive}) ->
+    get_all_ancestors(Archive).
+
 %%%===================================================================
 %%% Getters for #archive record
 %%%===================================================================
@@ -241,7 +256,9 @@ get_data_dir_guid(#document{value = Archive}) ->
 get_parent(#archive{parent = Parent}) ->
     {ok, Parent};
 get_parent(#document{value = Archive}) ->
-    get_parent(Archive).
+    get_parent(Archive);
+get_parent(ArchiveId) ->
+    ?get_field(ArchiveId, fun get_parent/1).
 
 -spec get_parent_doc(record() | doc()) -> {ok, doc() | undefined} | {error, term()}.
 get_parent_doc(Archive) ->
@@ -342,6 +359,15 @@ update(#document{key = ArchiveId}, Diff) ->
     update(ArchiveId, Diff);
 update(ArchiveId, Diff) ->
     datastore_model:update(?CTX, ArchiveId, Diff).
+
+
+-spec get_all_ancestors(undefined | id(), [doc()]) -> {ok, [doc()]}.
+get_all_ancestors(undefined, AncestorArchives) ->
+    {ok, lists:reverse(AncestorArchives)};
+get_all_ancestors(ArchiveId, AncestorArchives) ->
+    {ok, ArchiveDoc} = get(ArchiveId),
+    {ok, ParentArchiveId} = get_parent(ArchiveDoc),
+    get_all_ancestors(ParentArchiveId, [ArchiveDoc | AncestorArchives]).
 
 %%%===================================================================
 %%% Datastore callbacks

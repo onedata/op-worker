@@ -41,13 +41,14 @@
     archive_dataset_attached_to_file_plain_layout/1,
     archive_dataset_attached_to_hardlink_plain_layout/1,
     archive_dataset_attached_to_symlink_plain_layout/1,
+    archive_nested_datasets_plain_layout/1,
     archive_directory_with_number_of_files_exceeding_batch_size_plain_layout/1,
     archive_dataset_attached_to_dir_bagit_layout/1,
     archive_dataset_attached_to_file_bagit_layout/1,
     archive_dataset_attached_to_hardlink_bagit_layout/1,
     archive_dataset_attached_to_symlink_bagit_layout/1,
     archive_directory_with_number_of_files_exceeding_batch_size_bagit_layout/1,
-    archive_nested_datasets/1,
+    archive_nested_datasets_bagit_layout/1,
 
     % sequential tests
     archive_dataset_attached_to_space_dir/1,
@@ -61,14 +62,15 @@ groups() -> [
         archive_dataset_attached_to_dir_plain_layout,
         archive_dataset_attached_to_file_plain_layout,
         archive_dataset_attached_to_hardlink_plain_layout,
-        archive_dataset_attached_to_symlink_plain_layout,
+        % archive_dataset_attached_to_symlink_plain_layout, TODO VFS-7664
         archive_directory_with_number_of_files_exceeding_batch_size_plain_layout,
+        archive_nested_datasets_plain_layout,
         archive_dataset_attached_to_dir_bagit_layout,
         archive_dataset_attached_to_file_bagit_layout,
         archive_dataset_attached_to_hardlink_bagit_layout,
-        archive_dataset_attached_to_symlink_bagit_layout,
+        % archive_dataset_attached_to_symlink_bagit_layout TODO VFS-7664
         archive_directory_with_number_of_files_exceeding_batch_size_bagit_layout,
-        archive_nested_datasets
+        archive_nested_datasets_bagit_layout
     ]},
     {sequential_tests, [sequential], [
         archive_dataset_attached_to_space_dir,
@@ -83,7 +85,7 @@ all() -> [
     {group, sequential_tests}
 ].
 
--define(ATTEMPTS, 300).
+-define(ATTEMPTS, 600).
 
 -define(SPACE, space_krk_par_p).
 -define(USER1, user1).
@@ -156,6 +158,9 @@ archive_dataset_attached_to_hardlink_plain_layout(_Config) ->
 archive_dataset_attached_to_symlink_plain_layout(_Config) ->
     archive_dataset_attached_to_symlink_test_base(?ARCHIVE_PLAIN_LAYOUT).
 
+archive_nested_datasets_plain_layout(_Config) ->
+    archive_nested_datasets_test_base(?ARCHIVE_PLAIN_LAYOUT).
+
 archive_directory_with_number_of_files_exceeding_batch_size_plain_layout(_Config) ->
     archive_directory_with_number_of_files_exceeding_batch_size_test_base(?ARCHIVE_PLAIN_LAYOUT).
 
@@ -174,100 +179,8 @@ archive_dataset_attached_to_symlink_bagit_layout(_Config) ->
 archive_directory_with_number_of_files_exceeding_batch_size_bagit_layout(_Config) ->
     archive_directory_with_number_of_files_exceeding_batch_size_test_base(?ARCHIVE_BAGIT_LAYOUT).
 
-archive_nested_datasets(_Config) ->
-    #object{
-        guid = Dir11Guid,
-        dataset = #dataset_object{
-            id = DatasetDir11Id,
-            archives = [#archive_object{id = ArchiveDir11Id}]
-        },
-        children = [
-            #object{
-                guid = File21Guid,
-                dataset = #dataset_object{id = DatasetFile21Id},
-                content = File21Content
-            },
-            #object{
-                children = [
-                    #object{
-                        guid = Dir31Guid,
-                        dataset = #dataset_object{id = DatasetDir31Id},
-                        children = [
-                            #object{
-                                guid = File41Guid,
-                                dataset = #dataset_object{id = DatasetFile41Id},
-                                content = File41Content
-                            },
-                            #object{
-                                dataset = #dataset_object{id = DatasetFile42Id},
-                                content = File42Content
-                            }
-                        ]
-                    }
-                ]
-            },
-            #object{
-                guid = Dir22Guid,
-                dataset = #dataset_object{id = DatasetDir22Id}
-            }
-        ]
-    } = onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE,
-        #dir_spec{ % dataset
-            dataset = #dataset_spec{archives = 1},
-            children = [
-                #file_spec{ % dataset
-                    dataset = #dataset_spec{},
-                    content = ?RAND_CONTENT()
-                },
-                #dir_spec{
-                    children = [
-                        #dir_spec{
-                            dataset = #dataset_spec{}, % dataset
-                            children = [
-                                #file_spec{  % dataset
-                                    dataset = #dataset_spec{},
-                                    content = ?RAND_CONTENT()
-                                },
-                                #file_spec{ % archive shouldn't be created for this file
-                                    dataset = #dataset_spec{state = ?DETACHED_DATASET},
-                                    content = ?RAND_CONTENT()
-                                }
-                            ]
-                        }
-                    ]
-                },
-                #dir_spec{dataset = #dataset_spec{}} % dataset
-            ]
-        }
-    ),
-    % archiving top dataset should result in creation of archives also for
-    % nested datasets
-    Node = oct_background:get_random_provider_node(krakow),
-    SessionId = oct_background:get_user_session_id(?USER1, krakow),
-    ListOpts = #{offset => 0, limit => 10},
-    {ok, [{_, ArchiveFile21Id}], _} = ?assertMatch({ok, [_], true},
-        lfm_proxy:list_archives(Node, SessionId, DatasetFile21Id, ListOpts), ?ATTEMPTS),
-    {ok, [{_, ArchiveDir22Id}], _} = ?assertMatch({ok, [_], true},
-        lfm_proxy:list_archives(Node, SessionId, DatasetDir22Id, ListOpts), ?ATTEMPTS),
-    {ok, [{_, ArchiveDir31Id}], _} = ?assertMatch({ok, [_], true},
-        lfm_proxy:list_archives(Node, SessionId, DatasetDir31Id, ListOpts), ?ATTEMPTS),
-    {ok, [{_, ArchiveFile41Id}], _} = ?assertMatch({ok, [_], true},
-        lfm_proxy:list_archives(Node, SessionId, DatasetFile41Id, ListOpts), ?ATTEMPTS),
-    % DatasetFile4 is detached, therefore archive for this dataset shouldn't have been created
-    ?assertMatch({ok, [], true},
-        lfm_proxy:list_archives(Node, SessionId, DatasetFile42Id, ListOpts), ?ATTEMPTS),
-
-    File21Size = byte_size(File21Content),
-    File41Size = byte_size(File41Content),
-    File42Size = byte_size(File42Content),
-    ArchiveDir11Bytes = File21Size + File41Size + File42Size,
-    ArchiveDir31Bytes = File41Size + File42Size,
-
-    assert_archive_is_preserved(Node, SessionId, ArchiveDir11Id, DatasetDir11Id, Dir11Guid, 3, ArchiveDir11Bytes),
-    assert_archive_is_preserved(Node, SessionId, ArchiveFile21Id, DatasetFile21Id, File21Guid, 1, File21Size),
-    assert_archive_is_preserved(Node, SessionId, ArchiveDir22Id,  DatasetDir22Id, Dir22Guid, 0, 0),
-    assert_archive_is_preserved(Node, SessionId, ArchiveDir31Id, DatasetDir31Id, Dir31Guid, 2, ArchiveDir31Bytes),
-    assert_archive_is_preserved(Node, SessionId, ArchiveFile41Id, DatasetFile41Id, File41Guid, 1, File41Size).
+archive_nested_datasets_bagit_layout(_Config) ->
+    archive_nested_datasets_test_base(?ARCHIVE_BAGIT_LAYOUT).
 
 %===================================================================
 % Sequential tests - tests which must be performed one after another
@@ -400,6 +313,103 @@ archive_dataset_tree_test_base(FileStructure, ArchiveLayout) ->
     % created files are empty therefore expected size is 0
     assert_archive_is_preserved(Node, SessId, ArchiveId, DatasetId, RootGuid, length(FileGuids), 0).
 
+archive_nested_datasets_test_base(ArchiveLayout) ->
+    #object{
+        guid = Dir11Guid,
+        dataset = #dataset_object{
+            id = DatasetDir11Id,
+            archives = [#archive_object{id = ArchiveDir11Id}]
+        },
+        children = [
+            #object{
+                guid = File21Guid,
+                dataset = #dataset_object{id = DatasetFile21Id},
+                content = File21Content
+            },
+            #object{
+                children = [
+                    #object{
+                        guid = Dir31Guid,
+                        dataset = #dataset_object{id = DatasetDir31Id},
+                        children = [
+                            #object{
+                                guid = File41Guid,
+                                dataset = #dataset_object{id = DatasetFile41Id},
+                                content = File41Content
+                            },
+                            #object{
+                                dataset = #dataset_object{id = DatasetFile42Id},
+                                content = File42Content
+                            }
+                        ]
+                    }
+                ]
+            },
+            #object{
+                guid = Dir22Guid,
+                dataset = #dataset_object{id = DatasetDir22Id}
+            }
+        ]
+    } = onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE,
+        #dir_spec{ % dataset
+            dataset = #dataset_spec{archives = [#archive_spec{
+                config = #archive_config{layout = ArchiveLayout}
+            }]},
+            children = [
+                #file_spec{ % dataset
+                    dataset = #dataset_spec{},
+                    content = ?RAND_CONTENT()
+                },
+                #dir_spec{
+                    children = [
+                        #dir_spec{
+                            dataset = #dataset_spec{}, % dataset
+                            children = [
+                                #file_spec{  % dataset
+                                    dataset = #dataset_spec{},
+                                    content = ?RAND_CONTENT()
+                                },
+                                #file_spec{ % archive shouldn't be created for this file
+                                    dataset = #dataset_spec{state = ?DETACHED_DATASET},
+                                    content = ?RAND_CONTENT()
+                                }
+                            ]
+                        }
+                    ]
+                },
+                #dir_spec{dataset = #dataset_spec{}} % dataset
+            ]
+        }
+    ),
+    % archiving top dataset should result in creation of archives also for
+    % nested datasets
+    Node = oct_background:get_random_provider_node(krakow),
+    SessionId = oct_background:get_user_session_id(?USER1, krakow),
+    ListOpts = #{offset => 0, limit => 10},
+    {ok, [{_, ArchiveFile21Id}], _} = ?assertMatch({ok, [_], true},
+        lfm_proxy:list_archives(Node, SessionId, DatasetFile21Id, ListOpts), ?ATTEMPTS),
+    {ok, [{_, ArchiveDir22Id}], _} = ?assertMatch({ok, [_], true},
+        lfm_proxy:list_archives(Node, SessionId, DatasetDir22Id, ListOpts), ?ATTEMPTS),
+    {ok, [{_, ArchiveDir31Id}], _} = ?assertMatch({ok, [_], true},
+        lfm_proxy:list_archives(Node, SessionId, DatasetDir31Id, ListOpts), ?ATTEMPTS),
+    {ok, [{_, ArchiveFile41Id}], _} = ?assertMatch({ok, [_], true},
+        lfm_proxy:list_archives(Node, SessionId, DatasetFile41Id, ListOpts), ?ATTEMPTS),
+    % DatasetFile4 is detached, therefore archive for this dataset shouldn't have been created
+    ?assertMatch({ok, [], true},
+        lfm_proxy:list_archives(Node, SessionId, DatasetFile42Id, ListOpts), ?ATTEMPTS),
+
+    File21Size = byte_size(File21Content),
+    File41Size = byte_size(File41Content),
+    File42Size = byte_size(File42Content),
+    ArchiveDir11Bytes = File21Size + File41Size + File42Size,
+    ArchiveDir31Bytes = File41Size + File42Size,
+
+    assert_archive_is_preserved(Node, SessionId, ArchiveDir11Id, DatasetDir11Id, Dir11Guid, 3, ArchiveDir11Bytes),
+    assert_archive_is_preserved(Node, SessionId, ArchiveFile21Id, DatasetFile21Id, File21Guid, 1, File21Size),
+    assert_archive_is_preserved(Node, SessionId, ArchiveDir22Id,  DatasetDir22Id, Dir22Guid, 0, 0),
+    assert_archive_is_preserved(Node, SessionId, ArchiveDir31Id, DatasetDir31Id, Dir31Guid, 2, ArchiveDir31Bytes),
+    assert_archive_is_preserved(Node, SessionId, ArchiveFile41Id, DatasetFile41Id, File41Guid, 1, File41Size).
+
 %===================================================================
 % SetUp and TearDown functions
 %===================================================================
@@ -487,20 +497,19 @@ assert_archive_dir_exists(Node, SessionId, SpaceId, DatasetId, ArchiveId, UserId
 
 
 assert_archive_is_preserved(Node, SessionId, ArchiveId, DatasetId, DatasetRootFileGuid, FileCount, ExpSize) ->
-    {ok, #archive_info{
-        config = #archive_config{
-            layout = ArchiveLayout
-        }
-    }} = ?assertMatch({ok, #archive_info{
+    ?assertMatch({ok, #archive_info{
         state = ?ARCHIVE_PRESERVED,
         stats = #archive_stats{
             files_archived = FileCount,
             files_failed = 0,
             bytes_archived = ExpSize
         }
-    }}, lfm_proxy:get_archive_info(Node, SessionId, ArchiveId), ?ATTEMPTS),
+    }}, get_archive_info_without_config(Node, SessionId, ArchiveId), ?ATTEMPTS),
 
-    GetDatasetArchives = fun() ->
+    {ok, #archive_info{config = #archive_config{layout = ArchiveLayout}}} =
+        lfm_proxy:get_archive_info(Node, SessionId, ArchiveId),
+
+        GetDatasetArchives = fun() ->
         case lfm_proxy:list_archives(Node, SessionId, DatasetId, #{offset => 0, limit => 10000}) of
             {ok, ArchiveIdsAndIndices, _} ->
                 [AID || {_, AID} <- ArchiveIdsAndIndices];
@@ -510,15 +519,17 @@ assert_archive_is_preserved(Node, SessionId, ArchiveId, DatasetId, DatasetRootFi
     end,
     ?assertEqual(true, lists:member(ArchiveId, GetDatasetArchives()), ?ATTEMPTS),
 
-    assert_layout(Node, SessionId, ArchiveId, DatasetRootFileGuid, ArchiveLayout).
+    assert_structure(Node, SessionId, ArchiveId, DatasetRootFileGuid, ArchiveLayout),
+    assert_layout_custom_features(Node, SessionId, ArchiveId, ArchiveLayout).
 
 
-assert_layout(Node, SessionId, ArchiveId, DatasetRootFileGuid, ?ARCHIVE_PLAIN_LAYOUT) ->
+
+assert_structure(Node, SessionId, ArchiveId, DatasetRootFileGuid, ?ARCHIVE_PLAIN_LAYOUT) ->
     ArchiveRootDirUuid = ?ARCHIVE_DIR_UUID(ArchiveId),
     ArchiveRootDirGuid = file_id:pack_guid(ArchiveRootDirUuid, oct_background:get_space_id(?SPACE)),
     {ok, [{TargetGuid, _}]} = lfm_proxy:get_children(Node, SessionId, ?FILE_REF(ArchiveRootDirGuid), 0, 10),
     assert_copied(Node, SessionId, DatasetRootFileGuid, TargetGuid);
-assert_layout(Node, SessionId, ArchiveId, DatasetRootFileGuid, ?ARCHIVE_BAGIT_LAYOUT) ->
+assert_structure(Node, SessionId, ArchiveId, DatasetRootFileGuid, ?ARCHIVE_BAGIT_LAYOUT) ->
     ArchiveRootDirUuid = ?ARCHIVE_DIR_UUID(ArchiveId),
     ArchiveRootDirGuid = file_id:pack_guid(ArchiveRootDirUuid, oct_background:get_space_id(?SPACE)),
     {ok, ArchiveRootDirPath} = lfm_proxy:get_file_path(Node, SessionId, ArchiveRootDirGuid),
@@ -630,6 +641,15 @@ assert_symlink_values_copied(Node, SessionId, SourceGuid, TargetGuid) ->
     end,
     ?assertEqual(ReadSymlink(SourceGuid), ReadSymlink(TargetGuid), ?ATTEMPTS).
 
+
+assert_layout_custom_features(_Node, _SessionId, _ArchiveId, ?ARCHIVE_PLAIN_LAYOUT) ->
+    ok;
+assert_layout_custom_features(Node, SessionId, ArchiveId, ?ARCHIVE_BAGIT_LAYOUT) ->
+    ArchiveRootDirUuid = ?ARCHIVE_DIR_UUID(ArchiveId),
+    ArchiveRootDirGuid = file_id:pack_guid(ArchiveRootDirUuid, oct_background:get_space_id(?SPACE)),
+    bagit_test_utils:validate_all_files_checksums(Node, SessionId, ArchiveRootDirGuid).
+
+
 get_storage_file_id(Node, Guid) ->
     FileCtx = rpc:call(Node, file_ctx, new_by_guid, [Guid]),
     {StorageFileId, _} = rpc:call(Node, file_ctx, get_storage_file_id, [FileCtx]),
@@ -644,4 +664,12 @@ maybe_resolve_symlink(Node, SessionId, Guid) ->
             LinkTargetGuid;
         false ->
             Guid
+    end.
+
+get_archive_info_without_config(Node, SessionId, ArchiveId) ->
+    case lfm_proxy:get_archive_info(Node, SessionId, ArchiveId) of
+        {ok, ArchiveInfo} ->
+            {ok, ArchiveInfo#archive_info{config = undefined}};
+        Other ->
+            Other
     end.

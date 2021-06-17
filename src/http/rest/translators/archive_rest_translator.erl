@@ -68,7 +68,7 @@ translate_archive_info(#archive_info{
         <<"archiveId">> => ArchiveId,
         <<"datasetId">> => DatasetId,
         <<"state">> => str_utils:to_binary(State),
-        <<"rootDirectoryId">> => case RootDirGuid =/= undefined of % todo rename in swagger
+        <<"rootDirectoryId">> => case RootDirGuid =/= undefined of
             true ->
                 {ok, DirObjectId} = file_id:guid_to_objectid(RootDirGuid),
                 DirObjectId;

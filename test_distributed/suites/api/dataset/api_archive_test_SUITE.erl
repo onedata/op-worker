@@ -233,7 +233,7 @@ build_create_archive_validate_gs_call_result_fun(MemRef) ->
         ExpArchiveData = build_archive_gs_instance(ArchiveId, DatasetId, CreationTime, ?ARCHIVE_BUILDING, Config,
             Description, PreservedCallback, PurgedCallback, undefined),
         % state is removed from the map as it may be in pending, building or even preserved state when request is handled
-        IgnoredKeys = [<<"state">>, <<"stats">>, <<"rootFile">>],
+        IgnoredKeys = [<<"state">>, <<"stats">>, <<"rootDir">>],
         ExpArchiveData2 = maps:without(IgnoredKeys, ExpArchiveData),
         ArchiveData2 = maps:without(IgnoredKeys, ArchiveData),
         ?assertMatch(ExpArchiveData2, ArchiveData2)
