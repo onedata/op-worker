@@ -140,7 +140,7 @@
  {<<"observer_cli">>,{pkg,<<"observer_cli">>,<<"1.0.7">>},0},
  {<<"onenv_ct">>,
   {git,"ssh://git@git.onedata.org:7999/vfs/onenv-ct.git",
-       {ref,"ffbe10068c21903b947bc78ae42e9b74a0750345"}},
+       {ref,"47d1608f3cd3e33b5e4e69ed156c14f3da1a844b"}},
   0},
  {<<"parse_trans">>,
   {git,"git://github.com/uwiger/parse_trans.git",
