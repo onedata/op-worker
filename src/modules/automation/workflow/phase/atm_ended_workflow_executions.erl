@@ -14,7 +14,9 @@
 -include("modules/automation/atm_execution.hrl").
 
 %% API
--export([list/2, add/1, delete/1]).
+-export([list/2, list/3, add/1, delete/1]).
+
+-define(FOREST(__SPACE_ID), <<"ATM_ENDED_WORKFLOW_EXECUTIONS_FOREST_", __SPACE_ID/binary>>).
 
 
 %%%===================================================================
@@ -22,27 +24,39 @@
 %%%===================================================================
 
 
--spec list(od_space:id(), atm_workflow_executions_collection:listing_opts()) ->
-    [{atm_workflow_execution:id(), atm_workflow_executions_collection:index()}].
+-spec list(od_space:id(), atm_workflow_executions_forest:listing_opts()) ->
+    atm_workflow_executions_forest:entries().
 list(SpaceId, ListingOpts) ->
-    atm_workflow_executions_collection:list(SpaceId, ?ENDED_TREE, ListingOpts).
+    list(SpaceId, all, ListingOpts).
+
+
+-spec list(
+    od_space:id(),
+    atm_workflow_executions_forest:tree_ids(),
+    atm_workflow_executions_forest:listing_opts()
+) ->
+    atm_workflow_executions_forest:entries().
+list(SpaceId, AtmInventoryIds, ListingOpts) ->
+    atm_workflow_executions_forest:list(?FOREST(SpaceId), AtmInventoryIds, ListingOpts).
 
 
 -spec add(atm_workflow_execution:doc()) -> ok.
 add(#document{key = AtmWorkflowExecutionId, value = #atm_workflow_execution{
     space_id = SpaceId,
+    atm_inventory_id = AtmInventoryId,
     finish_time = FinishTime
 }}) ->
-    atm_workflow_executions_collection:add(
-        SpaceId, ?ENDED_TREE, AtmWorkflowExecutionId, FinishTime
+    atm_workflow_executions_forest:add(
+        ?FOREST(SpaceId), AtmInventoryId, AtmWorkflowExecutionId, FinishTime
     ).
 
 
 -spec delete(atm_workflow_execution:doc()) -> ok.
 delete(#document{key = AtmWorkflowExecutionId, value = #atm_workflow_execution{
     space_id = SpaceId,
+    atm_inventory_id = AtmInventoryId,
     finish_time = FinishTime
 }}) ->
-    atm_workflow_executions_collection:delete(
-        SpaceId, ?ENDED_TREE, AtmWorkflowExecutionId, FinishTime
+    atm_workflow_executions_forest:delete(
+        ?FOREST(SpaceId), AtmInventoryId, AtmWorkflowExecutionId, FinishTime
     ).

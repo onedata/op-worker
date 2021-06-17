@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Bartosz Walkowicz
-%%% @copyright (C) 2019 ACK CYFRONET AGH
+%%% @copyright (C) 2019-2021 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -14,10 +14,11 @@
 %%% - rdf metadata.
 %%% @end
 %%%-------------------------------------------------------------------
--module(file_middleware).
+-module(file_middleware_plugin).
 -author("Bartosz Walkowicz").
 
--behaviour(middleware_plugin).
+-behaviour(middleware_router).
+-behaviour(middleware_handler).
 
 -include("middleware/middleware.hrl").
 -include("modules/fslogic/acl.hrl").
@@ -27,44 +28,48 @@
 -include_lib("ctool/include/logging.hrl").
 
 
--export([
-    operation_supported/3,
-    data_spec/1,
-    fetch_entity/1,
-    authorize/2,
-    validate/2
-]).
+%% middleware_router callbacks
+-export([resolve_handler/3]).
+
+%% middleware_handler callbacks
+-export([data_spec/1, fetch_entity/1, authorize/2, validate/2]).
 -export([create/1, get/2, update/1, delete/1]).
+
 
 -define(DEFAULT_LIST_OFFSET, 0).
 -define(DEFAULT_LIST_ENTRIES, 1000).
 
 
 %%%===================================================================
-%%% API
+%%% middleware_router callbacks
 %%%===================================================================
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link middleware_plugin} callback operation_supported/3.
+%% {@link middleware_router} callback resolve_handler/3.
 %% @end
 %%--------------------------------------------------------------------
--spec operation_supported(middleware:operation(), gri:aspect(),
-    middleware:scope()) -> boolean().
-operation_supported(create, Aspect, Scope) ->
-    create_operation_supported(Aspect, Scope);
-operation_supported(get, Aspect, Scope) ->
-    get_operation_supported(Aspect, Scope);
-operation_supported(update, Aspect, Scope) ->
-    update_operation_supported(Aspect, Scope);
-operation_supported(delete, Aspect, Scope) ->
-    delete_operation_supported(Aspect, Scope).
+-spec resolve_handler(middleware:operation(), gri:aspect(), middleware:scope()) ->
+    module() | no_return().
+resolve_handler(create, Aspect, Scope) ->
+    resolve_create_operation_handler(Aspect, Scope);
+resolve_handler(get, Aspect, Scope) ->
+    resolve_get_operation_handler(Aspect, Scope);
+resolve_handler(update, Aspect, Scope) ->
+    resolve_update_operation_handler(Aspect, Scope);
+resolve_handler(delete, Aspect, Scope) ->
+    resolve_delete_operation_handler(Aspect, Scope).
+
+
+%%%===================================================================
+%%% middleware_handler callbacks
+%%%===================================================================
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link middleware_plugin} callback data_spec/1.
+%% {@link middleware_handler} callback data_spec/1.
 %% @end
 %%--------------------------------------------------------------------
 -spec data_spec(middleware:req()) -> undefined | middleware_sanitizer:data_spec().
@@ -80,18 +85,17 @@ data_spec(#op_req{operation = delete, gri = GRI}) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link middleware_plugin} callback fetch_entity/1.
+%% {@link middleware_handler} callback fetch_entity/1.
 %% @end
 %%--------------------------------------------------------------------
--spec fetch_entity(middleware:req()) ->
-    {ok, middleware:versioned_entity()} | errors:error().
+-spec fetch_entity(middleware:req()) -> {ok, middleware:versioned_entity()}.
 fetch_entity(_) ->
     {ok, {undefined, 1}}.
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link middleware_plugin} callback authorize/2.
+%% {@link middleware_handler} callback authorize/2.
 %%
 %% Checks only if user is in space in which file exists. File permissions
 %% are checked later by logical_file_manager (lfm).
@@ -110,7 +114,7 @@ authorize(#op_req{operation = delete} = Req, Entity) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link middleware_plugin} callback validate/2.
+%% {@link middleware_handler} callback validate/2.
 %% @end
 %%--------------------------------------------------------------------
 -spec validate(middleware:req(), middleware:entity()) -> ok | no_return().
@@ -130,16 +134,16 @@ validate(#op_req{operation = delete} = Req, Entity) ->
 
 
 %% @private
--spec create_operation_supported(gri:aspect(), middleware:scope()) ->
-    boolean().
-create_operation_supported(instance, private) -> true;
-create_operation_supported(object_id, private) -> true;
-create_operation_supported(attrs, private) -> true;                 % REST/gs
-create_operation_supported(xattrs, private) -> true;                % REST/gs
-create_operation_supported(json_metadata, private) -> true;         % REST/gs
-create_operation_supported(rdf_metadata, private) -> true;          % REST/gs
-create_operation_supported(register_file, private) -> true;
-create_operation_supported(_, _) -> false.
+-spec resolve_create_operation_handler(gri:aspect(), middleware:scope()) ->
+    module() | no_return().
+resolve_create_operation_handler(instance, private) -> ?MODULE;
+resolve_create_operation_handler(object_id, private) -> ?MODULE;
+resolve_create_operation_handler(attrs, private) -> ?MODULE;                 % REST/gs
+resolve_create_operation_handler(xattrs, private) -> ?MODULE;                % REST/gs
+resolve_create_operation_handler(json_metadata, private) -> ?MODULE;         % REST/gs
+resolve_create_operation_handler(rdf_metadata, private) -> ?MODULE;          % REST/gs
+resolve_create_operation_handler(register_file, private) -> ?MODULE;
+resolve_create_operation_handler(_, _) -> throw(?ERROR_NOT_SUPPORTED).
 
 
 %% @private
@@ -305,7 +309,7 @@ validate_create(#op_req{data = Data, gri = #gri{aspect = register_file}}, _) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link middleware_plugin} callback create/1.
+%% {@link middleware_handler} callback create/1.
 %% @end
 %%--------------------------------------------------------------------
 -spec create(middleware:req()) -> middleware:create_result().
@@ -399,36 +403,36 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = register_file}}) ->
 %%%===================================================================
 
 
--spec get_operation_supported(gri:gri(), middleware:scope()) ->
-    boolean().
-get_operation_supported(instance, private) -> true;             % gs only
-get_operation_supported(instance, public) -> true;              % gs only
-get_operation_supported(children, private) -> true;             % REST/gs
-get_operation_supported(children, public) -> true;              % REST/gs
-get_operation_supported(children_details, private) -> true;     % gs only
-get_operation_supported(children_details, public) -> true;      % gs only
-get_operation_supported(attrs, private) -> true;                % REST/gs
-get_operation_supported(attrs, public) -> true;                 % REST/gs
-get_operation_supported(xattrs, private) -> true;               % REST/gs
-get_operation_supported(xattrs, public) -> true;                % REST/gs
-get_operation_supported(json_metadata, private) -> true;        % REST/gs
-get_operation_supported(json_metadata, public) -> true;         % REST/gs
-get_operation_supported(rdf_metadata, private) -> true;         % REST/gs
-get_operation_supported(rdf_metadata, public) -> true;          % REST/gs
-get_operation_supported(distribution, private) -> true;         % REST/gs
-get_operation_supported(acl, private) -> true;
-get_operation_supported(shares, private) -> true;               % gs only
-get_operation_supported(transfers, private) -> true;
-get_operation_supported(qos_summary, private) -> true;          % REST/gs
-get_operation_supported(dataset_summary, private) -> true;
-get_operation_supported(download_url, private) -> true;         % gs only
-get_operation_supported(download_url, public) -> true;          % gs only
-get_operation_supported(hardlinks, private) -> true;
-get_operation_supported(symlink_value, public) -> true;
-get_operation_supported(symlink_value, private) -> true;
-get_operation_supported(symlink_target, public) -> true;
-get_operation_supported(symlink_target, private) -> true;
-get_operation_supported(_, _) -> false.
+-spec resolve_get_operation_handler(gri:aspect(), middleware:scope()) ->
+    module() | no_return().
+resolve_get_operation_handler(instance, private) -> ?MODULE;             % gs only
+resolve_get_operation_handler(instance, public) -> ?MODULE;              % gs only
+resolve_get_operation_handler(children, private) -> ?MODULE;             % REST/gs
+resolve_get_operation_handler(children, public) -> ?MODULE;              % REST/gs
+resolve_get_operation_handler(children_details, private) -> ?MODULE;     % gs only
+resolve_get_operation_handler(children_details, public) -> ?MODULE;      % gs only
+resolve_get_operation_handler(attrs, private) -> ?MODULE;                % REST/gs
+resolve_get_operation_handler(attrs, public) -> ?MODULE;                 % REST/gs
+resolve_get_operation_handler(xattrs, private) -> ?MODULE;               % REST/gs
+resolve_get_operation_handler(xattrs, public) -> ?MODULE;                % REST/gs
+resolve_get_operation_handler(json_metadata, private) -> ?MODULE;        % REST/gs
+resolve_get_operation_handler(json_metadata, public) -> ?MODULE;         % REST/gs
+resolve_get_operation_handler(rdf_metadata, private) -> ?MODULE;         % REST/gs
+resolve_get_operation_handler(rdf_metadata, public) -> ?MODULE;          % REST/gs
+resolve_get_operation_handler(distribution, private) -> ?MODULE;         % REST/gs
+resolve_get_operation_handler(acl, private) -> ?MODULE;
+resolve_get_operation_handler(shares, private) -> ?MODULE;               % gs only
+resolve_get_operation_handler(transfers, private) -> ?MODULE;
+resolve_get_operation_handler(qos_summary, private) -> ?MODULE;          % REST/gs
+resolve_get_operation_handler(dataset_summary, private) -> ?MODULE;
+resolve_get_operation_handler(download_url, private) -> ?MODULE;         % gs only
+resolve_get_operation_handler(download_url, public) -> ?MODULE;          % gs only
+resolve_get_operation_handler(hardlinks, private) -> ?MODULE;
+resolve_get_operation_handler(symlink_value, public) -> ?MODULE;
+resolve_get_operation_handler(symlink_value, private) -> ?MODULE;
+resolve_get_operation_handler(symlink_target, public) -> ?MODULE;
+resolve_get_operation_handler(symlink_target, private) -> ?MODULE;
+resolve_get_operation_handler(_, _) -> throw(?ERROR_NOT_SUPPORTED).
 
 
 %% @private
@@ -611,7 +615,7 @@ validate_get(#op_req{gri = #gri{aspect = download_url}, data = Data}, _) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link middleware_plugin} callback get/2.
+%% {@link middleware_handler} callback get/2.
 %% @end
 %%--------------------------------------------------------------------
 -spec get(middleware:req(), middleware:entity()) -> middleware:get_result().
@@ -790,11 +794,11 @@ get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = symlink_target, scop
 
 
 %% @private
--spec update_operation_supported(gri:aspect(), middleware:scope()) ->
-    boolean().
-update_operation_supported(instance, private) -> true;              % gs only
-update_operation_supported(acl, private) -> true;
-update_operation_supported(_, _) -> false.
+-spec resolve_update_operation_handler(gri:aspect(), middleware:scope()) ->
+    module() | no_return().
+resolve_update_operation_handler(instance, private) -> ?MODULE;              % gs only
+resolve_update_operation_handler(acl, private) -> ?MODULE;
+resolve_update_operation_handler(_, _) -> throw(?ERROR_NOT_SUPPORTED).
 
 
 %% @private
@@ -850,7 +854,7 @@ validate_update(#op_req{gri = #gri{id = Guid, aspect = As}}, _) when
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link middleware_plugin} callback update/1.
+%% {@link middleware_handler} callback update/1.
 %% @end
 %%--------------------------------------------------------------------
 -spec update(middleware:req()) -> middleware:update_result().
@@ -875,13 +879,13 @@ update(#op_req{auth = Auth, data = Data, gri = #gri{id = Guid, aspect = acl}}) -
 
 
 %% @private
--spec delete_operation_supported(gri:aspect(), middleware:scope()) ->
-    boolean().
-delete_operation_supported(instance, private) -> true;              % gs only
-delete_operation_supported(xattrs, private) -> true;                % REST/gs
-delete_operation_supported(json_metadata, private) -> true;         % REST/gs
-delete_operation_supported(rdf_metadata, private) -> true;          % REST/gs
-delete_operation_supported(_, _) -> false.
+-spec resolve_delete_operation_handler(gri:aspect(), middleware:scope()) ->
+    module() | no_return().
+resolve_delete_operation_handler(instance, private) -> ?MODULE;              % gs only
+resolve_delete_operation_handler(xattrs, private) -> ?MODULE;                % REST/gs
+resolve_delete_operation_handler(json_metadata, private) -> ?MODULE;         % REST/gs
+resolve_delete_operation_handler(rdf_metadata, private) -> ?MODULE;          % REST/gs
+resolve_delete_operation_handler(_, _) -> throw(?ERROR_NOT_SUPPORTED).
 
 
 %% @private
@@ -933,7 +937,7 @@ validate_delete(#op_req{gri = #gri{id = Guid, aspect = As}}, _) when
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link middleware_plugin} callback delete/1.
+%% {@link middleware_handler} callback delete/1.
 %% @end
 %%--------------------------------------------------------------------
 -spec delete(middleware:req()) -> middleware:delete_result().

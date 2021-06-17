@@ -22,7 +22,7 @@
 
 
 %% atm_task_executor callbacks
--export([create/2, prepare/1, get_spec/1, run/3]).
+-export([create/2, prepare/1, get_spec/1, in_readonly_mode/1, run/3]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
@@ -88,6 +88,13 @@ get_spec(_AtmTaskExecutor) ->
     #{type => async}.
 
 
+-spec in_readonly_mode(record()) -> boolean().
+in_readonly_mode(#atm_openfaas_task_executor{operation_spec = #atm_openfaas_operation_spec{
+    docker_execution_options = #atm_docker_execution_options{readonly = Readonly}
+}}) ->
+    Readonly.
+
+
 -spec run(atm_job_execution_ctx:record(), json_utils:json_map(), record()) ->
     ok | no_return().
 run(AtmJobExecutionCtx, Data, AtmTaskExecutor) ->
@@ -151,7 +158,7 @@ build_function_name(_AtmWorkflowExecutionId, #atm_openfaas_operation_spec{
     docker_image = DockerImage,
     docker_execution_options = #atm_docker_execution_options{mount_oneclient = false}
 }) ->
-    datastore_key:new_from_digest([DockerImage]);
+    <<"fun-", (datastore_key:new_from_digest([DockerImage]))/binary>>;
 
 build_function_name(AtmWorkflowExecutionId, #atm_openfaas_operation_spec{
     docker_image = DockerImage,
@@ -161,9 +168,9 @@ build_function_name(AtmWorkflowExecutionId, #atm_openfaas_operation_spec{
         oneclient_options = OneclientOptions
     }
 }) ->
-    datastore_key:new_from_digest([
+    <<"fun-", (datastore_key:new_from_digest([
         AtmWorkflowExecutionId, DockerImage, MountPoint, OneclientOptions
-    ]).
+    ]))/binary>>.
 
 
 %% @private
@@ -214,6 +221,8 @@ register_function(#prepare_ctx{
             % Possible race with other task registering function
             % (Openfaas returns 500 if function already exists)
             ok;
+        {ok, ?HTTP_400_BAD_REQUEST, _RespHeaders, ErrorReason} ->
+            throw(?ERROR_ATM_OPENFAAS_QUERY_FAILED(ErrorReason));
         _ ->
             throw(?ERROR_ATM_OPENFAAS_QUERY_FAILED)
     end.

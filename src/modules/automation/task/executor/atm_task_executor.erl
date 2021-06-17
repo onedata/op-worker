@@ -26,7 +26,7 @@
 -include("modules/automation/atm_tmp.hrl").
 
 %% API
--export([create/2, prepare/1, get_spec/1, run/3]).
+-export([create/2, prepare/1, get_spec/1, in_readonly_mode/1, run/3]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
@@ -49,6 +49,8 @@
 -callback prepare(record()) -> ok | no_return().
 
 -callback get_spec(record()) -> workflow_engine:task_spec().
+
+-callback in_readonly_mode(record()) -> boolean().
 
 -callback run(atm_job_execution_ctx:record(), json_utils:json_map(), record()) ->
     ok | no_return().
@@ -77,6 +79,12 @@ prepare(AtmTaskExecutor) ->
 get_spec(AtmTaskExecutor) ->
     Model = utils:record_type(AtmTaskExecutor),
     Model:get_spec(AtmTaskExecutor).
+
+
+-spec in_readonly_mode(record()) -> boolean().
+in_readonly_mode(AtmTaskExecutor) ->
+    Model = utils:record_type(AtmTaskExecutor),
+    Model:in_readonly_mode(AtmTaskExecutor).
 
 
 -spec run(atm_job_execution_ctx:record(), json_utils:json_map(), record()) ->

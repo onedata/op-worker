@@ -20,22 +20,24 @@
 -export([
     create_all/1, create/3,
     prepare_all/1, prepare/1,
-    delete_all/1, delete/1,
-
-    get_parallel_box_execution_specs/1,
-
-    gather_statuses/1,
-    update_task_status/4
+    delete_all/1, delete/1
 ]).
+-export([get_parallel_box_execution_specs/1]).
+-export([gather_statuses/1, update_task_status/4]).
+-export([to_json/1]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
 
 
--type status() :: atm_task_execution:status().
+-record(atm_lane_execution, {
+    schema_id :: automation:id(),
+    status :: atm_task_execution:status(),
+    parallel_boxes :: [atm_parallel_box_execution:record()]
+}).
 -type record() :: #atm_lane_execution{}.
 
--export_type([status/0, record/0]).
+-export_type([record/0]).
 
 
 %%%===================================================================
@@ -118,7 +120,7 @@ get_parallel_box_execution_specs(#atm_lane_execution{parallel_boxes = AtmParalle
     end, AtmParallelBoxExecutions).
 
 
--spec gather_statuses([record()]) -> [status()].
+-spec gather_statuses([record()]) -> [AtmLaneExecutionStatus :: atm_task_execution:status()].
 gather_statuses(AtmLaneExecutions) ->
     lists:map(fun(#atm_lane_execution{status = Status}) -> Status end, AtmLaneExecutions).
 
@@ -139,7 +141,7 @@ update_task_status(AtmParallelBoxIndex, AtmTaskExecutionId, NewStatus, #atm_lane
         AtmTaskExecutionId, NewStatus, AtmParallelBoxExecution
     ) of
         {ok, NewParallelBoxExecution} ->
-            NewAtmParallelBoxExecutions = atm_status_utils:replace_at(
+            NewAtmParallelBoxExecutions = lists_utils:replace_at(
                 NewParallelBoxExecution, AtmParallelBoxIndex, AtmParallelBoxExecutions
             ),
             {ok, AtmLaneExecution#atm_lane_execution{
@@ -151,6 +153,21 @@ update_task_status(AtmParallelBoxIndex, AtmTaskExecutionId, NewStatus, #atm_lane
         {error, _} = Error ->
             Error
     end.
+
+
+-spec to_json(record()) -> json_utils:json_term().
+to_json(#atm_lane_execution{
+    schema_id = AtmLaneSchemaId,
+    status = AtmLaneExecutionStatus,
+    parallel_boxes = AtmParallelBoxExecutions
+}) ->
+    #{
+        <<"schemaId">> => AtmLaneSchemaId,
+        <<"status">> => atom_to_binary(AtmLaneExecutionStatus, utf8),
+        <<"parallelBoxes">> => lists:map(
+            fun atm_parallel_box_execution:to_json/1, AtmParallelBoxExecutions
+        )
+    }.
 
 
 %%%===================================================================

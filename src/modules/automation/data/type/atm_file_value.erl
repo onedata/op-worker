@@ -22,7 +22,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% atm_data_validator callbacks
--export([validate/3]).
+-export([assert_meets_constraints/3]).
 
 %% atm_tree_forest_container_iterator callbacks
 -export([
@@ -44,13 +44,14 @@
 %%% atm_data_validator callbacks
 %%%===================================================================
 
--spec validate(
+
+-spec assert_meets_constraints(
     atm_workflow_execution_ctx:record(),
     atm_value:expanded(),
     atm_data_type:value_constraints()
 ) ->
     ok | no_return().
-validate(AtmWorkflowExecutionCtx, #{<<"file_id">> := ObjectId} = Value, ValueConstraints) ->
+assert_meets_constraints(AtmWorkflowExecutionCtx, #{<<"file_id">> := ObjectId} = Value, ValueConstraints) ->
     SpaceId = atm_workflow_execution_ctx:get_space_id(AtmWorkflowExecutionCtx),
     try
         {ok, Guid} = file_id:objectid_to_guid(ObjectId),
@@ -69,14 +70,13 @@ validate(AtmWorkflowExecutionCtx, #{<<"file_id">> := ObjectId} = Value, ValueCon
         {error, _} = Error -> throw(Error)
     catch _:_ ->
         throw(?ERROR_ATM_DATA_TYPE_UNVERIFIED(Value, atm_file_type))
-    end;
-validate(_AtmWorkflowExecutionCtx, Value, _ValueConstraints) ->
-    throw(?ERROR_ATM_DATA_TYPE_UNVERIFIED(Value, atm_file_type)).
+    end.
 
 
 %%%===================================================================
 %%% atm_tree_forest_container_iterator callbacks
 %%%===================================================================
+
 
 -spec list_children(atm_workflow_execution_ctx:record(), file_id:file_guid(), list_opts(), non_neg_integer()) ->
     {[{file_id:file_guid(), file_meta:name()}], [file_id:file_guid()], list_opts(), IsLast :: boolean()} | no_return().
@@ -122,6 +122,7 @@ decode_listing_options(#{<<"last_name">> := LastName, <<"last_tree">> := LastTre
 %%% atm_data_compressor callbacks
 %%%===================================================================
 
+
 -spec compress(atm_value:expanded()) -> file_id:file_guid().
 compress(#{<<"file_id">> := ObjectId}) ->
     {ok, Guid} = file_id:objectid_to_guid(ObjectId),
@@ -137,9 +138,11 @@ expand(AtmWorkflowExecutionCtx, Guid) ->
         {error, _} = Error -> Error 
     end.
 
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
 
 %% @private
 -spec check_constraints(lfm_attrs:file_attributes(), atm_data_type:value_constraints()) -> 
@@ -183,7 +186,7 @@ list_children_unsafe(SessionId, Guid, ListOpts) ->
 
 
 %% @private
--spec translate_file_attrs(lfm_attrs:file_attributes()) -> atm_api:item().
+-spec translate_file_attrs(lfm_attrs:file_attributes()) -> automation:item().
 translate_file_attrs(#file_attr{
     guid = Guid, 
     name = Name, 

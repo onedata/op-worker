@@ -10,10 +10,11 @@
 %%% corresponding to datasets.
 %%% @end
 %%%-------------------------------------------------------------------
--module(dataset_middleware).
+-module(dataset_middleware_plugin).
 -author("Bartosz Walkowicz").
 
--behaviour(middleware_plugin).
+-behaviour(middleware_router).
+-behaviour(middleware_handler).
 
 -include("middleware/middleware.hrl").
 -include("modules/dataset/dataset.hrl").
@@ -22,17 +23,16 @@
 -include("proto/oneprovider/provider_messages.hrl").
 -include_lib("ctool/include/errors.hrl").
 
--export([
-    operation_supported/3,
-    data_spec/1,
-    fetch_entity/1,
-    authorize/2,
-    validate/2
-]).
+%% middleware_router callbacks
+-export([resolve_handler/3]).
+
+%% middleware_handler callbacks
+-export([data_spec/1, fetch_entity/1, authorize/2, validate/2]).
 -export([create/1, get/2, update/1, delete/1]).
 
 % Util functions
 -export([gather_listing_opts/1]).
+
 
 -define(MAX_LIST_LIMIT, 1000).
 -define(DEFAULT_LIST_LIMIT, 1000).
@@ -40,35 +40,40 @@
 
 
 %%%===================================================================
-%%% API
+%%% middleware_router callbacks
 %%%===================================================================
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link middleware_plugin} callback operation_supported/3.
+%% {@link middleware_router} callback resolve_handler/3.
 %% @end
 %%--------------------------------------------------------------------
--spec operation_supported(middleware:operation(), gri:aspect(),
-    middleware:scope()) -> boolean().
-operation_supported(create, instance, private) -> true;
+-spec resolve_handler(middleware:operation(), gri:aspect(), middleware:scope()) ->
+    module() | no_return().
+resolve_handler(create, instance, private) -> ?MODULE;
 
-operation_supported(get, instance, private) -> true;
-operation_supported(get, children, private) -> true;
-operation_supported(get, children_details, private) -> true;
-operation_supported(get, archives, private) -> true;
-operation_supported(get, archives_details, private) -> true;
+resolve_handler(get, instance, private) -> ?MODULE;
+resolve_handler(get, children, private) -> ?MODULE;
+resolve_handler(get, children_details, private) -> ?MODULE;
+resolve_handler(get, archives, private) -> ?MODULE;
+resolve_handler(get, archives_details, private) -> ?MODULE;
 
-operation_supported(update, instance, private) -> true;
+resolve_handler(update, instance, private) -> ?MODULE;
 
-operation_supported(delete, instance, private) -> true;
+resolve_handler(delete, instance, private) -> ?MODULE;
 
-operation_supported(_, _, _) -> false.
+resolve_handler(_, _, _) -> throw(?ERROR_NOT_SUPPORTED).
+
+
+%%%===================================================================
+%%% middleware_handler callbacks
+%%%===================================================================
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link middleware_plugin} callback data_spec/1.
+%% {@link middleware_handler} callback data_spec/1.
 %% @end
 %%--------------------------------------------------------------------
 -spec data_spec(middleware:req()) -> undefined | middleware_sanitizer:data_spec().
@@ -124,7 +129,7 @@ data_spec(#op_req{operation = delete, gri = #gri{aspect = instance}}) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link middleware_plugin} callback fetch_entity/1.
+%% {@link middleware_handler} callback fetch_entity/1.
 %% @end
 %%--------------------------------------------------------------------
 -spec fetch_entity(middleware:req()) ->
@@ -155,7 +160,7 @@ fetch_entity(#op_req{operation = Op, auth = ?USER(_UserId), gri = #gri{
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link middleware_plugin} callback authorize/2.
+%% {@link middleware_handler} callback authorize/2.
 %%
 %% Checks only membership in space. Dataset management privileges
 %% are checked later by fslogic layer.
@@ -182,7 +187,7 @@ authorize(#op_req{operation = Op, auth = Auth, gri = #gri{aspect = As}}, Dataset
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link middleware_plugin} callback validate/2.
+%% {@link middleware_handler} callback validate/2.
 %% @end
 %%--------------------------------------------------------------------
 -spec validate(middleware:req(), middleware:entity()) -> ok | no_return().
@@ -206,7 +211,7 @@ validate(#op_req{operation = Op, gri = #gri{aspect = As}}, DatasetDoc) when
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link middleware_plugin} callback create/1.
+%% {@link middleware_handler} callback create/1.
 %% @end
 %%--------------------------------------------------------------------
 -spec create(middleware:req()) -> middleware:create_result().
@@ -223,7 +228,7 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = instance} = GRI}) -
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link middleware_plugin} callback get/2.
+%% {@link middleware_handler} callback get/2.
 %% @end
 %%--------------------------------------------------------------------
 -spec get(middleware:req(), middleware:entity()) -> middleware:get_result().
@@ -258,7 +263,7 @@ get(#op_req{auth = Auth, gri = #gri{id = DatasetId, aspect = Aspect}, data = Dat
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link middleware_plugin} callback update/1.
+%% {@link middleware_handler} callback update/1.
 %% @end
 %%--------------------------------------------------------------------
 -spec update(middleware:req()) -> middleware:update_result().
@@ -278,7 +283,7 @@ update(#op_req{auth = Auth, gri = #gri{id = DatasetId, aspect = instance}, data 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link middleware_plugin} callback delete/1.
+%% {@link middleware_handler} callback delete/1.
 %% @end
 %%--------------------------------------------------------------------
 -spec delete(middleware:req()) -> middleware:delete_result().

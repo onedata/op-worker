@@ -107,7 +107,7 @@ internal_error_when_handler_crashes(Config) ->
     % given
     Workers = [Worker | _] = ?config(op_worker_nodes, Config),
     Endpoint = rest_endpoint(Worker),
-    test_utils:mock_expect(Workers, space_middleware, get, fun test_crash/2),
+    test_utils:mock_expect(Workers, space_oz_middleware_handler, get, fun test_crash/2),
 
     % when
     {ok, Status, _, _} = do_request(Config, get, Endpoint ++ "spaces"),
@@ -119,7 +119,7 @@ custom_error_when_handler_throws_error(Config) ->
     % given
     Workers = [Worker | _] = ?config(op_worker_nodes, Config),
     Endpoint = rest_endpoint(Worker),
-    test_utils:mock_expect(Workers, space_middleware, get, fun(_, _) -> throw(?ERROR_BAD_VALUE_JSON(<<"dummy">>)) end),
+    test_utils:mock_expect(Workers, space_oz_middleware_handler, get, fun(_, _) -> throw(?ERROR_BAD_VALUE_JSON(<<"dummy">>)) end),
 
     % when
     {ok, Status, _, Body} = do_request(Config, get, Endpoint ++ "spaces"),
@@ -149,8 +149,8 @@ init_per_testcase(Case, Config) when
     Workers = ?config(op_worker_nodes, Config),
     ssl:start(),
     hackney:start(),
-    test_utils:mock_new(Workers, space_middleware),
-    test_utils:mock_expect(Workers, space_middleware, authorize, fun(_, _) -> true end),
+    test_utils:mock_new(Workers, space_oz_middleware_handler),
+    test_utils:mock_expect(Workers, space_oz_middleware_handler, authorize, fun(_, _) -> true end),
     mock_provider_id(Config),
     Config;
 init_per_testcase(_Case, Config) ->
@@ -167,7 +167,7 @@ end_per_testcase(Case, Config) when
     Case =:= custom_error_when_handler_throws_error
 ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_unload(Workers, space_middleware),
+    test_utils:mock_unload(Workers, space_oz_middleware_handler),
     unmock_provider_id(Config),
     hackney:stop(),
     ssl:stop();

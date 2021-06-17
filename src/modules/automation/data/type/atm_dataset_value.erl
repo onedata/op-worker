@@ -22,7 +22,7 @@
 -include("proto/oneprovider/provider_messages.hrl").
 
 %% atm_data_validator callbacks
--export([validate/3]).
+-export([assert_meets_constraints/3]).
 
 %% atm_tree_forest_container_iterator callbacks
 -export([
@@ -45,26 +45,26 @@
 %%% atm_data_validator callbacks
 %%%===================================================================
 
--spec validate(
+
+-spec assert_meets_constraints(
     atm_workflow_execution_ctx:record(),
     atm_value:expanded(),
     atm_data_type:value_constraints()
 ) ->
     ok | no_return().
-validate(AtmWorkflowExecutionCtx, #{<<"datasetId">> := DatasetId} = Value, _ValueConstraints) ->
+assert_meets_constraints(AtmWorkflowExecutionCtx, #{<<"datasetId">> := DatasetId} = Value, _ValueConstraints) ->
     try has_access(AtmWorkflowExecutionCtx, DatasetId) of
         true -> ok;
         false -> throw(?ERROR_NOT_FOUND)
     catch _:_ ->
         throw(?ERROR_ATM_DATA_TYPE_UNVERIFIED(Value, atm_dataset_type))
-    end;
-validate(_AtmWorkflowExecutionCtx, Value, _ValueConstraints) ->
-    throw(?ERROR_ATM_DATA_TYPE_UNVERIFIED(Value, atm_dataset_type)).
+    end.
 
 
 %%%===================================================================
 %%% atm_tree_forest_container_iterator callbacks
 %%%===================================================================
+
 
 -spec list_children(atm_workflow_execution_ctx:record(), id(), list_opts(), non_neg_integer()) ->
     {[{id(), dataset:name()}], [], list_opts(), IsLast :: boolean()} | no_return().
@@ -123,6 +123,7 @@ decode_listing_options(#{<<"offset">> := Offset, <<"startIndex">> := StartIndex}
 %%%===================================================================
 %%% atm_data_compressor callbacks
 %%%===================================================================
+
 
 -spec compress(atm_value:expanded()) -> id().
 compress(#{<<"datasetId">> := DatasetId}) -> DatasetId.

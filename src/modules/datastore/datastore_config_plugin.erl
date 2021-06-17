@@ -102,6 +102,7 @@ get_models() -> [
     atm_store,
     atm_task_execution,
     atm_workflow_schema_snapshot,
+    atm_lambda_snapshot,
     atm_workflow_execution,
     atm_list_store_backend,
     atm_tree_forest_iterator_queue,

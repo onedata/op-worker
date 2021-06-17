@@ -17,16 +17,11 @@
 
 %% API
 -export([
-    replace_at/3,
     is_transition_allowed/2,
     converge/1
 ]).
 
--type status() ::
-    atm_workflow_execution:status() |
-    atm_lane_execution:status() |
-    atm_parallel_box_execution:status() |
-    atm_task_execution:status().
+-type status() :: atm_workflow_execution:status() | atm_task_execution:status().
 
 -export_type([status/0]).
 
@@ -36,23 +31,12 @@
 %%%===================================================================
 
 
-% TODO VFS-7660 mv to ctool lists_utils
--spec replace_at(term(), pos_integer(), [term()]) -> [term()].
-replace_at(NewValue, 1, [_ | Rest]) ->
-    [NewValue | Rest];
-replace_at(NewValue, Index, [Element | Rest]) ->
-    [Element | replace_at(Rest, Index - 1, NewValue)].
-
-
 %% TODO VFS-7674 add missing transitions
 -spec is_transition_allowed(status(), status()) ->
     boolean().
-is_transition_allowed(?SCHEDULED_STATUS, ?PREPARING_STATUS) -> true;
-is_transition_allowed(?PREPARING_STATUS, ?ENQUEUED_STATUS) -> true;
-is_transition_allowed(?PREPARING_STATUS, ?FAILED_STATUS) -> true;
-is_transition_allowed(?ENQUEUED_STATUS, ?ACTIVE_STATUS) -> true;
-is_transition_allowed(?ENQUEUED_STATUS, ?ACTIVE_STATUS) -> true;
 is_transition_allowed(?PENDING_STATUS, ?ACTIVE_STATUS) -> true;
+is_transition_allowed(?ACTIVE_STATUS, ?FINISHED_STATUS) -> true;
+is_transition_allowed(?ACTIVE_STATUS, ?FAILED_STATUS) -> true;
 is_transition_allowed(_, _) -> false.
 
 

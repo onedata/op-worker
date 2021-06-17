@@ -17,6 +17,7 @@
 -module(atm_data_validator).
 -author("Bartosz Walkowicz").
 
+-include("modules/automation/atm_tmp.hrl").
 -include_lib("ctool/include/errors.hrl").
 
 %% API
@@ -30,10 +31,10 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Asserts that all value constraints hold for specified item.
+%% Asserts that all value constraints hold for specified value.
 %% @end
 %%--------------------------------------------------------------------
--callback validate(
+-callback assert_meets_constraints(
     atm_workflow_execution_ctx:record(),
     atm_value:expanded(),
     atm_data_type:value_constraints()
@@ -49,6 +50,13 @@
 -spec validate(atm_workflow_execution_ctx:record(), atm_value:expanded(), atm_data_spec:record()) ->
     ok | no_return().
 validate(AtmWorkflowExecutionCtx, Value, AtmDataSpec) ->
-    Module = atm_value:get_callback_module(atm_data_spec:get_type(AtmDataSpec)),
-    ValueConstraints = atm_data_spec:get_value_constraints(AtmDataSpec),
-    Module:validate(AtmWorkflowExecutionCtx, Value, ValueConstraints).
+    AtmDataType = atm_data_spec:get_type(AtmDataSpec),
+
+    case atm_data_type:is_instance(AtmDataType, Value) of
+        true ->
+            Module = atm_value:get_callback_module(AtmDataType),
+            ValueConstraints = atm_data_spec:get_value_constraints(AtmDataSpec),
+            Module:assert_meets_constraints(AtmWorkflowExecutionCtx, Value, ValueConstraints);
+        false ->
+            throw(?ERROR_ATM_DATA_TYPE_UNVERIFIED(Value, AtmDataType))
+    end.

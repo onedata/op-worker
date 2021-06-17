@@ -46,7 +46,7 @@
 
 
 -callback get_next_batch(atm_workflow_execution_ctx:record(), batch_size(), record()) ->
-    {ok, [atm_api:item()], record()} | stop.
+    {ok, [automation:item()], record()} | stop.
 
 -callback forget_before(record()) -> ok.
 
@@ -59,7 +59,7 @@
 
 
 -spec get_next_batch(atm_workflow_execution_ctx:record(), batch_size(), record()) ->
-    {ok, [atm_api:item()], record()} | stop.
+    {ok, [automation:item()], record()} | stop.
 get_next_batch(AtmWorkflowExecutionCtx, BatchSize, AtmContainerIterator) ->
     Module = utils:record_type(AtmContainerIterator),
     Module:get_next_batch(AtmWorkflowExecutionCtx, BatchSize, AtmContainerIterator).

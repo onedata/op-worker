@@ -1,36 +1,25 @@
 %%%-------------------------------------------------------------------
 %%% @author Lukasz Opiola
 %%% @author Bartosz Walkowicz
-%%% @copyright (C) 2019 ACK CYFRONET AGH
+%%% @copyright (C) 2019-2021 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This behaviour should be implemented by modules that implement middleware
-%%% operations. Every middleware plugin serves as a link between
+%%% operations. Every middleware handler serves as a link between
 %%% API and op-worker internals (e.g. lfm) in the context of specific
 %%% entity type (op_xxx records).
 %%% TODO VFS-5620
 %%%
 %%% NOTE !!!
-%%% The link between entity type and plugin module that should handle request
-%%% should be added to middleware:get_plugin function.
+%%% The link between {operation, aspect, scope} and plugin module that
+%%% should handle request should be added to middleware_router for given
+%%% entity type.
 %%% @end
 %%%-------------------------------------------------------------------
--module(middleware_plugin).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Determines if given operation is supported based on operation, aspect and
-%% scope (entity type is known based on the plugin itself).
-%% @end
-%%--------------------------------------------------------------------
--callback operation_supported(
-    middleware:operation(), gri:aspect(), middleware:scope()
-) ->
-    boolean().
+-module(middleware_handler).
 
 
 %%--------------------------------------------------------------------
