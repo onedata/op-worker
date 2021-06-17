@@ -81,13 +81,6 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = instance}}) ->
 %%--------------------------------------------------------------------
 -spec fetch_entity(middleware:req()) ->
     {ok, middleware:versioned_entity()} | errors:error().
-fetch_entity(#op_req{auth = Auth, gri = #gri{id = HandleId, scope = private}}) ->
-    case handle_logic:get(Auth#auth.session_id, HandleId) of
-        {ok, #document{value = Handle}} ->
-            {ok, {Handle, 1}};
-        {error, _} = Error ->
-            Error
-    end;
 fetch_entity(#op_req{auth = Auth, gri = #gri{id = HandleId, scope = public}}) ->
     case handle_logic:get_public_data(Auth#auth.session_id, HandleId) of
         {ok, #document{value = Handle}} ->
@@ -95,8 +88,17 @@ fetch_entity(#op_req{auth = Auth, gri = #gri{id = HandleId, scope = public}}) ->
         {error, _} = Error ->
             Error
     end;
-fetch_entity(_) ->
-    ?ERROR_FORBIDDEN.
+
+fetch_entity(#op_req{auth = ?NOBODY}) ->
+    ?ERROR_UNAUTHORIZED;
+
+fetch_entity(#op_req{auth = Auth, gri = #gri{id = HandleId, scope = private}}) ->
+    case handle_logic:get(Auth#auth.session_id, HandleId) of
+        {ok, #document{value = Handle}} ->
+            {ok, {Handle, 1}};
+        {error, _} = Error ->
+            Error
+    end.
 
 
 %%--------------------------------------------------------------------

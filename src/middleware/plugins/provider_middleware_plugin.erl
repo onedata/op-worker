@@ -124,6 +124,15 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = test_image}}) ->
 %%--------------------------------------------------------------------
 -spec fetch_entity(middleware:req()) ->
     {ok, middleware:versioned_entity()} | errors:error().
+fetch_entity(#op_req{gri = #gri{aspect = As, scope = public}}) when
+    As =:= configuration;
+    As =:= test_image
+->
+    {ok, {undefined, 1}};
+
+fetch_entity(#op_req{auth = ?NOBODY}) ->
+    ?ERROR_UNAUTHORIZED;
+
 fetch_entity(#op_req{auth = ?USER(_UserId, SessionId), auth_hint = AuthHint, gri = #gri{
     id = ProviderId,
     aspect = instance,
@@ -135,8 +144,9 @@ fetch_entity(#op_req{auth = ?USER(_UserId, SessionId), auth_hint = AuthHint, gri
         {error, _} = Error ->
             Error
     end;
+
 fetch_entity(_) ->
-    {ok, {undefined, 1}}.
+    ?ERROR_FORBIDDEN.
 
 
 %%--------------------------------------------------------------------
@@ -220,9 +230,11 @@ update(_) ->
 delete(_) ->
     ?ERROR_NOT_SUPPORTED.
 
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
 
 %% @private
 -spec query_compatibility_registry(Fun :: atom(), Args :: [term()]) -> term().

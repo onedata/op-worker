@@ -91,15 +91,16 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = As}}) when
 %%--------------------------------------------------------------------
 -spec fetch_entity(middleware:req()) ->
     {ok, middleware:versioned_entity()} | errors:error().
+fetch_entity(#op_req{auth = ?NOBODY}) ->
+    ?ERROR_UNAUTHORIZED;
+
 fetch_entity(#op_req{gri = #gri{id = AtmWorkflowExecutionId, scope = private}}) ->
     case atm_workflow_execution_api:get(AtmWorkflowExecutionId) of
         {ok, AtmWorkflowExecution} ->
             {ok, {AtmWorkflowExecution, 1}};
         {error, _} = Error ->
             Error
-    end;
-fetch_entity(_) ->
-    ?ERROR_FORBIDDEN.
+    end.
 
 
 %%--------------------------------------------------------------------

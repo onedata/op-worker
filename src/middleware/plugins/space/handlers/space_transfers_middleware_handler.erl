@@ -78,8 +78,7 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = {transfers_throughput_cha
 %% {@link middleware_handler} callback fetch_entity/1.
 %% @end
 %%--------------------------------------------------------------------
--spec fetch_entity(middleware:req()) ->
-    {ok, middleware:versioned_entity()} | errors:error().
+-spec fetch_entity(middleware:req()) -> {ok, middleware:versioned_entity()}.
 fetch_entity(_) ->
     {ok, {undefined, 1}}.
 

@@ -24,8 +24,7 @@
 %%%===================================================================
 
 
--spec translate_resource(gri:gri(), Data :: term()) ->
-    gs_protocol:data() | fun((aai:auth()) -> gs_protocol:data()).
+-spec translate_resource(gri:gri(), Data :: term()) -> gs_protocol:data().
 translate_resource(#gri{aspect = instance, scope = private}, #od_atm_workflow_schema{
     name = AtmWorkflowSchemaName,
     description = AtmWorkflowSchemaDescription,

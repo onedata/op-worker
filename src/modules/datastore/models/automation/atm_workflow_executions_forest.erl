@@ -35,9 +35,9 @@
 -type limit() :: pos_integer().
 
 -type listing_opts() :: #{
+    limit := limit(),
     start_index => index(),
-    offset => offset(),
-    limit := limit()
+    offset => offset()
 }.
 -type entries() :: [{index(), atm_workflow_execution:id()}].
 

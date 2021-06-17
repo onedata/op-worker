@@ -152,6 +152,9 @@ data_spec(#op_req{operation = delete, gri = #gri{aspect = cancel}}) ->
 %%--------------------------------------------------------------------
 -spec fetch_entity(middleware:req()) ->
     {ok, middleware:versioned_entity()} | errors:error().
+fetch_entity(#op_req{auth = ?NOBODY}) ->
+    ?ERROR_UNAUTHORIZED;
+
 fetch_entity(#op_req{gri = #gri{id = TransferId}}) ->
     case transfer:get(TransferId) of
         {ok, #document{value = Transfer}} ->

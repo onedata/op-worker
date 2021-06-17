@@ -34,10 +34,15 @@
     fslogic_worker:provider_response().
 schedule_workflow_execution(UserCtx, SpaceDirCtx, AtmWorkflowSchemaId, AtmStoreInitialValues) ->
     SpaceId = file_ctx:get_space_id_const(SpaceDirCtx),
-    {ok, AtmWorkflowExecutionId, AtmWorkflowExecution} = atm_workflow_execution_api:create(
-        UserCtx, SpaceId, AtmWorkflowSchemaId, AtmStoreInitialValues
-    ),
-    ?PROVIDER_OK_RESP(#atm_workflow_execution_scheduled{
-        id = AtmWorkflowExecutionId,
-        record = AtmWorkflowExecution
-    }).
+    try
+        {ok, AtmWorkflowExecutionId, AtmWorkflowExecution} = atm_workflow_execution_api:create(
+            UserCtx, SpaceId, AtmWorkflowSchemaId, AtmStoreInitialValues
+        ),
+        ?PROVIDER_OK_RESP(#atm_workflow_execution_scheduled{
+            id = AtmWorkflowExecutionId,
+            record = AtmWorkflowExecution
+        })
+    catch _:_ ->
+        %% TODO VFS-7208 do not catch errors after introducing API errors to fslogic
+        #provider_response{status = #status{code = ?EINVAL}}
+    end.

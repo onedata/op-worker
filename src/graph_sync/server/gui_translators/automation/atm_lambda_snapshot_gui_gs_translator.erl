@@ -24,8 +24,7 @@
 %%%===================================================================
 
 
--spec translate_resource(gri:gri(), Data :: term()) ->
-    gs_protocol:data() | fun((aai:auth()) -> gs_protocol:data()).
+-spec translate_resource(gri:gri(), Data :: term()) -> gs_protocol:data().
 translate_resource(#gri{aspect = instance, scope = private}, #atm_lambda_snapshot{
     name = AtmLambdaName,
     summary = AtmLambdaSummary,

@@ -70,15 +70,16 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = instance}}) ->
 %%--------------------------------------------------------------------
 -spec fetch_entity(middleware:req()) ->
     {ok, middleware:versioned_entity()} | errors:error().
+fetch_entity(#op_req{auth = ?NOBODY}) ->
+    ?ERROR_UNAUTHORIZED;
+
 fetch_entity(#op_req{auth = Auth, gri = #gri{id = AtmWorkflowSchemaId, scope = private}}) ->
     case atm_workflow_schema_logic:get(Auth#auth.session_id, AtmWorkflowSchemaId) of
         {ok, #document{value = AtmWorkflowSchema}} ->
             {ok, {AtmWorkflowSchema, 1}};
         {error, _} = Error ->
             Error
-    end;
-fetch_entity(_) ->
-    ?ERROR_FORBIDDEN.
+    end.
 
 
 %%--------------------------------------------------------------------

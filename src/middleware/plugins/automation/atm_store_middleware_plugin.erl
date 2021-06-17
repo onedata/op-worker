@@ -71,15 +71,16 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = instance}}) ->
 %%--------------------------------------------------------------------
 -spec fetch_entity(middleware:req()) ->
     {ok, middleware:versioned_entity()} | errors:error().
+fetch_entity(#op_req{auth = ?NOBODY}) ->
+    ?ERROR_UNAUTHORIZED;
+
 fetch_entity(#op_req{gri = #gri{id = AtmStoreId, scope = private}}) ->
     case atm_store:get(AtmStoreId) of
         {ok, AtmStore} ->
             {ok, {AtmStore, 1}};
         {error, _} = Error ->
             Error
-    end;
-fetch_entity(_) ->
-    ?ERROR_FORBIDDEN.
+    end.
 
 
 %%--------------------------------------------------------------------
