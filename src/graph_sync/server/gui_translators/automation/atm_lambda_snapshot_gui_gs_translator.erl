@@ -45,5 +45,5 @@ translate_resource(#gri{aspect = instance, scope = private}, #atm_lambda_snapsho
         <<"argumentSpecs">> => jsonable_record:list_to_json(AtmLambdaArgumentSpecs, atm_lambda_argument_spec),
         <<"resultSpecs">> => jsonable_record:list_to_json(AtmLambdaResultSpecs, atm_lambda_result_spec),
 
-        <<"atmInventoryList">> => AtmInventories
+        <<"atmInventories">> => AtmInventories
     }.

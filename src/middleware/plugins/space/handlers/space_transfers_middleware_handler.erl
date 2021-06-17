@@ -189,11 +189,13 @@ get(#op_req{data = Data, gri = #gri{id = SpaceId, aspect = transfers}}, _) ->
                 {[], undefined},
                 Transfers
             ),
+            %% TODO VFS-7806 add isLast field
             #{
                 <<"transfers">> => SynchronizedTransfers,
                 <<"nextPageToken">> => utils:undefined_to_null(NextPageToken)
             };
         _ ->
+            %% TODO VFS-7806 add isLast field
             #{
                 <<"transfers">> => Transfers,
                 <<"nextPageToken">> => null
