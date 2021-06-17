@@ -93,7 +93,7 @@ authorize(#op_req{auth = ?GUEST}, _) ->
 authorize(#op_req{operation = get, auth = ?USER(UserId, SessionId), gri = #gri{
     aspect = instance
 }}, #atm_workflow_schema_snapshot{atm_inventory = AtmInventoryId}) ->
-    % Caution!! Below checks should always be synchronized with one done by oz
+    % Caution!! Below checks should always mirror those done by oz
     % when getting workflow schema
     user_logic:has_eff_atm_inventory(SessionId, UserId, AtmInventoryId).
 

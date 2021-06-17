@@ -46,6 +46,7 @@ translate_resource(#gri{aspect = instance, scope = private}, #atm_store{
 
         <<"type">> => AtmStoreType,
         <<"dataSpec">> => jsonable_record:to_json(
-            atm_container:get_data_spec(AtmContainer), atm_data_spec
+            atm_container:get_data_spec(AtmContainer),
+            atm_data_spec
         )
     }.

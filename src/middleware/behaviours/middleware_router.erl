@@ -11,7 +11,7 @@
 %%% aspect and scope of request.
 %%%
 %%% NOTE !!!
-%%% Each new supported entity_type should have such router which in turn should
+%%% Every supported entity_type should have such router which in turn should
 %%% be registered in `middleware:get_router` function.
 %%% @end
 %%%-------------------------------------------------------------------

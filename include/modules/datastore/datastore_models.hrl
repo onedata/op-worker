@@ -1026,7 +1026,10 @@
     all_batches_listed = false :: boolean()
 }).
 
-%% Model storing information about automation store instance.
+%%%===================================================================
+%%% Automation related models
+%%%===================================================================
+
 -record(atm_store, {
     workflow_execution_id :: atm_workflow_execution:id(),
 
@@ -1041,7 +1044,6 @@
     container :: atm_container:record()
 }).
 
-%% Model storing information about automation task execution.
 -record(atm_task_execution, {
     workflow_execution_id :: atm_workflow_execution:id(),
     lane_index :: non_neg_integer(),
@@ -1064,7 +1066,6 @@
     items_failed = 0 :: non_neg_integer()
 }).
 
-%% Model that holds information about an automation workflow schema snapshot
 -record(atm_workflow_schema_snapshot, {
     schema_id :: automation:id(),
     name :: automation:name(),
@@ -1079,7 +1080,6 @@
     atm_lambdas :: [od_atm_lambda:id()]
 }).
 
-%% Model that holds information about an automation lambda snapshot
 -record(atm_lambda_snapshot, {
     lambda_id :: automation:id(),
 
@@ -1094,7 +1094,6 @@
     atm_inventories = [] :: [od_atm_inventory:id()]
 }).
 
-%% Model that holds information about an automation workflow execution
 -record(atm_workflow_execution, {
     space_id :: od_space:id(),
     atm_inventory_id :: od_atm_inventory:id(),

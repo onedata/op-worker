@@ -192,7 +192,7 @@ get(#op_req{data = Data, gri = #gri{id = SpaceId, aspect = transfers}}, _) ->
             ),
             #{
                 <<"transfers">> => SynchronizedTransfers,
-                <<"nextPageToken">> => NextPageToken
+                <<"nextPageToken">> => utils:undefined_to_null(NextPageToken)
             };
         _ ->
             #{
