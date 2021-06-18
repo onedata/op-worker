@@ -187,34 +187,43 @@ failure_test_base(Config, TaskToFail, LaneWithErrorIndex, BoxWithErrorIndex) ->
     ok.
 
 timeouts_test(Config) ->
+    timeouts_test(Config, <<"async_timeouts_workflow_task3_3_2">>, 3, 3).
+
+timeouts_test(Config, TaskToFail, LaneWithErrorIndex, BoxWithErrorIndex) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    WorkflowType = async,
+    Id = <<"async_timeouts_workflow">>,
+    Workflow = #{
+        id => Id,
+        workflow_handler => workflow_test_handler,
+        execution_context => #{type => WorkflowType, async_call_pools => [?ASYNC_CALL_POOL_ID]}
+    },
+
+    ItemToFail = <<"100">>,
+    ResultToFail = <<"result_", TaskToFail/binary>>,
+    set_task_execution_gatherer_option(Config, fail_job, {ResultToFail, ItemToFail}),
+    ?assertEqual(ok, rpc:call(Worker, workflow_engine, execute_workflow, [?ENGINE_ID, Workflow])),
+
+    Expected = get_expected_task_execution_order_with_timeout(
+        Workflow, LaneWithErrorIndex, BoxWithErrorIndex, ItemToFail, TaskToFail),
+    #{execution_history := ExecutionHistory} = ExtendedHistoryStats = get_task_execution_history(Config),
+    verify_execution_history_stats(ExtendedHistoryStats, WorkflowType),
+    ?assertNotEqual(timeout, ExecutionHistory),
+    ExecutionHistoryWithoutPrepare = verify_preparation_phase(Id, ExecutionHistory),
+    verify_execution_history(Expected, ExecutionHistoryWithoutPrepare, WorkflowType),
+    verify_memory(Config, true),
+    ct:print("Execution with error verified"),
+
+    unset_task_execution_gatherer_option(Config, fail_job),
+    ExpectedAfterRestart = get_expected_task_execution_order_after_restart(Workflow, LaneWithErrorIndex, ItemToFail),
+    ?assertEqual(ok, rpc:call(Worker, workflow_engine, execute_workflow, [?ENGINE_ID, Workflow])),
+    #{execution_history := ExecutionHistoryAfterRestart} = ExtendedHistoryStatsAfterRestart =
+        get_task_execution_history(Config),
+    verify_execution_history_stats(ExtendedHistoryStatsAfterRestart, WorkflowType),
+    ?assertNotEqual(timeout, ExecutionHistoryAfterRestart),
+    verify_execution_history(ExpectedAfterRestart, ExecutionHistoryAfterRestart, WorkflowType),
+    verify_memory(Config),
     ok.
-%%    [Worker | _] = ?config(op_worker_nodes, Config),
-%%    WorkflowType = async,
-%%    Id = <<"async_timeouts_workflow">>,
-%%    Workflow = #{
-%%        id => Id,
-%%        workflow_handler => workflow_test_handler,
-%%        execution_context => #{type => WorkflowType, async_call_pools => [?ASYNC_CALL_POOL_ID]}
-%%    },
-%%
-%%    % TODO VFS-7551 force timeout
-%%    TaskToFail = <<"async_timeouts_workflow_task3_3_2">>,
-%%    ItemToFail = <<"100">>,
-%%    set_task_execution_gatherer_option(Config, fail_job, {TaskToFail, ItemToFail}),
-%%    ?assertEqual(ok, rpc:call(Worker, workflow_engine, execute_workflow, [?ENGINE_ID, Workflow])),
-%%
-%%    Expected = get_expected_task_execution_order(Workflow, 3, 3, ItemToFail, TaskToFail),
-%%    #{execution_history := ExecutionHistory} = ExtendedHistoryStats = get_task_execution_history(Config),
-%%    verify_execution_history_stats(ExtendedHistoryStats, WorkflowType),
-%%    ?assertNotEqual(timeout, ExecutionHistory),
-%%
-%%    ExecutionHistoryWithoutPrepare = verify_preparation_phase(Id, ExecutionHistory),
-%%    verify_execution_history(Expected, ExecutionHistoryWithoutPrepare, WorkflowType),
-%%
-%%    unset_task_execution_gatherer_option(Config, fail_job),
-%%
-%%    verify_memory(Config),
-%%    ok.
 
 %%%===================================================================
 %%% Init/teardown functions
@@ -222,9 +231,17 @@ timeouts_test(Config) ->
 
 init_per_suite(Config) ->
     Posthook = fun(NewConfig) ->
-        [Worker | _] = ?config(op_worker_nodes, NewConfig),
+        [Worker | _] = Workers = ?config(op_worker_nodes, NewConfig),
+        test_utils:mock_new(Workers, [oneprovider]),
+        test_utils:mock_expect(Workers, oneprovider, get_domain, fun() ->
+            atom_to_binary(?GET_DOMAIN(node()), utf8)
+        end),
         ok = rpc:call(Worker, workflow_engine, init, [?ENGINE_ID,
-            #{workflow_async_call_pools_to_use => [{?ASYNC_CALL_POOL_ID, 60}]}]),
+            #{
+                workflow_async_call_pools_to_use => [{?ASYNC_CALL_POOL_ID, 60}],
+                init_workflow_timeout_server => {true, 2}
+            }
+        ]),
         NewConfig
     end,
     [
@@ -232,8 +249,9 @@ init_per_suite(Config) ->
         % {?LOAD_MODULES, [workflow_test_handler]},
         {?ENV_UP_POSTHOOK, Posthook} | Config].
 
-end_per_suite(_Config) ->
-    ok.
+end_per_suite(Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_unload(Workers, [oneprovider]).
 
 init_per_testcase(_, Config) ->
     Workers = ?config(op_worker_nodes, Config),
@@ -259,13 +277,16 @@ init_per_testcase(_, Config) ->
     test_utils:mock_expect(Workers, workflow_engine_callback_handler, handle_callback, fun(CallbackId, Result) ->
         {_CallbackType, ExecutionId, _EngineId, JobIdentifier, _CallPools} =
             workflow_engine_callback_handler:decode_callback_id(CallbackId),
-        {TaskId, ItemId} = get_task_and_item_ids(ExecutionId, JobIdentifier),
-        Master ! {task_processing, self(), <<"result_", TaskId/binary>>, ItemId},
+        {_, _, TaskId} = workflow_execution_state:get_result_processing_data(ExecutionId, JobIdentifier),
+        Item = workflow_cached_item:get_item(workflow_execution_state:get_item_id(ExecutionId, JobIdentifier)),
+        Master ! {task_processing, self(), <<"result_", TaskId/binary>>, Item},
         receive
-            history_saved -> ok
-        end,
-        % Warning: do not use meck:passthrough as it does not work when 2 mocks work within one process
-        apply(meck_util:original_name(workflow_engine_callback_handler), handle_callback, [CallbackId, Result])
+            history_saved ->
+                % Warning: do not use meck:passthrough as it does not work when 2 mocks work within one process
+                apply(meck_util:original_name(workflow_engine_callback_handler), handle_callback, [CallbackId, Result]);
+            fail_job ->
+                ok
+        end
     end),
 
     [{task_execution_gatherer, Master} | Config].
@@ -384,6 +405,13 @@ get_expected_task_execution_order_with_error(#{id := ExecutionId, execution_cont
         {expected_failure, LaneWithErrorIndex, BoxWithErrorIndex, ItemToFail, TaskToFail}
     ).
 
+get_expected_task_execution_order_with_timeout(#{id := ExecutionId, execution_context := Context},
+    LaneWithErrorIndex, BoxWithErrorIndex, ItemToFail, TaskToFail) ->
+    get_expected_task_execution_order(
+        1, ExecutionId, Context,
+        {expected_timeout, LaneWithErrorIndex, BoxWithErrorIndex, ItemToFail, TaskToFail}
+    ).
+
 get_expected_task_execution_order_after_restart(#{id := ExecutionId, execution_context := Context},
     RestartedLaneIndex, RestartedItem) ->
     get_expected_task_execution_order(1, ExecutionId, Context, {restarted_from, RestartedLaneIndex, RestartedItem}).
@@ -403,16 +431,18 @@ get_expected_task_execution_order(LaneIndex, ExecutionId, Context, Description) 
                 0 -> lists:sublist(Boxes, BoxWithErrorIndex - 1);
                 _ -> lists:sublist(Boxes, BoxWithErrorIndex - 1) ++ [TasksForFailedBox]
             end,
-            {{Boxes, Items, ItemToFail, TasksForFailedItem}, true};
+            {{Boxes, Items, ItemToFail, undefined, TasksForFailedItem}, true};
+        {expected_timeout, LaneIndex, BoxWithErrorIndex, ItemToFail, TaskToFail} ->
+            {{Boxes, Items, ItemToFail, TaskToFail, lists:sublist(Boxes, BoxWithErrorIndex)}, true};
         {restarted_from, RestartedLaneIndex, _RestartedItem} when LaneIndex < RestartedLaneIndex ->
             {undefined, IsLast};
         {restarted_from, LaneIndex, RestartedItem} ->
             FilteredItems = lists:filter(fun(Item) ->
                 binary_to_integer(Item) >= binary_to_integer(RestartedItem)
             end, Items),
-            {{Boxes, FilteredItems, undefined, []}, IsLast};
+            {{Boxes, FilteredItems, undefined, undefined, []}, IsLast};
         _ ->
-            {{Boxes, Items, undefined, []}, IsLast}
+            {{Boxes, Items, undefined, undefined, []}, IsLast}
     end,
 
     case {ShouldFinish, LaneSpec} of
@@ -440,12 +470,14 @@ verify_preparation_phase(ExecutionId, Gathered) ->
 % This function verifies if gathered execution history contains all expected elements
 verify_execution_history([], [], _WorkflowType) ->
     ok;
-verify_execution_history([{ExpectedTasks, ExpectedItems, ItemToFail, TasksForFailedItem} = LineExpected | ExpectedTail],
+verify_execution_history(
+    [{ExpectedTasks, ExpectedItems, ItemToFail, TaskToIgnoreResult, TasksForFailedItem} = LineExpected | ExpectedTail],
     Gathered, WorkflowType) ->
     TasksCount = calculate_tasks_count(LineExpected),
-    LaneElementsCount = case WorkflowType of
-        sync -> TasksCount;
-        async -> 2 * TasksCount
+    LaneElementsCount = case {WorkflowType, TaskToIgnoreResult} of
+        {sync, _} -> TasksCount;
+        {async, undefined} -> 2 * TasksCount;
+        {async, _} -> 2 * TasksCount - 1
     end,
     
     ct:print("Verify ~p history elements", [LaneElementsCount]),
@@ -453,11 +485,12 @@ verify_execution_history([{ExpectedTasks, ExpectedItems, ItemToFail, TasksForFai
 
     Remaining = lists:foldl(fun(Item, Acc) ->
         Filtered = lists:filtermap(fun({_Task, GatheredItem}) -> GatheredItem =:= Item end, Acc),
-        ExpectedTasksForItem = case Item of
-            ItemToFail -> TasksForFailedItem;
-            _ -> ExpectedTasks
+        case Item of
+            ItemToFail ->
+                verify_item_execution_history(Item, TasksForFailedItem, Filtered, WorkflowType, TaskToIgnoreResult);
+            _ ->
+                verify_item_execution_history(Item, ExpectedTasks, Filtered, WorkflowType, undefined)
         end,
-        verify_item_execution_history(Item, ExpectedTasksForItem, Filtered, WorkflowType),
         Acc -- Filtered
     end, GatheredForLane, ExpectedItems),
 
@@ -466,32 +499,33 @@ verify_execution_history([{ExpectedTasks, ExpectedItems, ItemToFail, TasksForFai
     verify_execution_history(ExpectedTail,
         lists:sublist(Gathered, LaneElementsCount + 1, length(Gathered) - LaneElementsCount), WorkflowType).
 
-calculate_tasks_count({ExpectedTasks, ExpectedItems, undefined, []}) ->
+calculate_tasks_count({ExpectedTasks, ExpectedItems, undefined, undefined, []}) ->
     TasksTypesCount = lists:foldl(fun(TasksList, Acc) -> maps:size(TasksList) + Acc end, 0, ExpectedTasks),
     TasksTypesCount * length(ExpectedItems);
-calculate_tasks_count({ExpectedTasks, ExpectedItems, _ItemToFail, TasksForFailedItem} ) ->
+calculate_tasks_count({ExpectedTasks, ExpectedItems, _ItemToFail, _TaskToIgnoreResult, TasksForFailedItem} ) ->
     TasksTypesCount = lists:foldl(fun(TasksList, Acc) -> maps:size(TasksList) + Acc end, 0, ExpectedTasks),
     TasksForFailedItemCount = lists:foldl(fun(TasksList, Acc) -> maps:size(TasksList) + Acc end, 0, TasksForFailedItem),
     TasksTypesCount * (length(ExpectedItems) - 1) + TasksForFailedItemCount.
 
 % Helper function for verify_execution_history/3 that verifies history for single item
-verify_item_execution_history(_Item, ExpectedTasks, [], _WorkflowType) ->
+verify_item_execution_history(_Item, ExpectedTasks, [], _WorkflowType, _TaskToIgnoreResult) ->
     ?assertEqual([], ExpectedTasks);
-verify_item_execution_history(Item, [TasksInBox | ExpectedTasks], [{Task, Item} | Gathered], WorkflowType) ->
+verify_item_execution_history(Item, [TasksInBox | ExpectedTasks], [{Task, Item} | Gathered], WorkflowType, TaskToIgnoreResult) ->
     ?assert(maps:is_key(Task, TasksInBox)),
 
-    NewTasksInBox = case {Task, WorkflowType} of
-        {<<"result_", _/binary>>, _} -> TasksInBox;
-        {_, sync} -> TasksInBox;
-        {_, async} -> TasksInBox#{<<"result_", Task/binary>> => undefined}
+    NewTasksInBox = case {Task, WorkflowType, Task =:= TaskToIgnoreResult} of
+        {<<"result_", _/binary>>, _, _} -> TasksInBox;
+        {_, sync, _} -> TasksInBox;
+        {_, async, true} -> TasksInBox;
+        {_, async, false} -> TasksInBox#{<<"result_", Task/binary>> => undefined}
     end,
     FinalTasksInBox = maps:remove(Task, NewTasksInBox),
 
     case maps:size(FinalTasksInBox) of
         0 ->
-            verify_item_execution_history(Item, ExpectedTasks, Gathered, WorkflowType);
+            verify_item_execution_history(Item, ExpectedTasks, Gathered, WorkflowType, TaskToIgnoreResult);
         _ ->
-            verify_item_execution_history(Item, [FinalTasksInBox | ExpectedTasks], Gathered, WorkflowType)
+            verify_item_execution_history(Item, [FinalTasksInBox | ExpectedTasks], Gathered, WorkflowType, TaskToIgnoreResult)
     end.
 
 verify_executions_started(0) ->
@@ -504,13 +538,6 @@ verify_executions_started(Count) ->
     end,
     ?assertEqual(ok, Check),
     verify_executions_started(Count - 1).
-
-get_task_and_item_ids(ExecutionId, {_, ItemIndex, BoxIndex, TaskIndex}) ->
-    {ok, LaneIndex} = workflow_execution_state:get_lane_index(ExecutionId),
-    TaskId = <<ExecutionId/binary, "_task", (integer_to_binary(LaneIndex))/binary, "_",
-        (integer_to_binary(BoxIndex))/binary, "_", (integer_to_binary(TaskIndex))/binary>>,
-    ItemId = integer_to_binary(ItemIndex),
-    {TaskId, ItemId}.
 
 verify_memory(Config) ->
     verify_memory(Config, false).

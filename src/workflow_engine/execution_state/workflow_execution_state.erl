@@ -22,9 +22,9 @@
 %% API
 -export([init/3, init_using_snapshot/3, cleanup/1, prepare_next_job/1,
     report_execution_status_update/4, report_execution_prepared/4, report_limit_reached_error/2,
-    check_timeouts/1, reset_keepalive_timer/2, get_result_processing_data/2]).
+    check_timeouts/2, reset_keepalive_timer/2, get_result_processing_data/2]).
 %% Test API
--export([get_lane_index/1]).
+-export([get_lane_index/1, get_item_id/2]).
 
 % Helper record to group fields containing information about lane currently being executed
 -record(current_lane, {
@@ -80,6 +80,7 @@
 -define(WF_ERROR_NO_CACHED_ITEMS(LaneIndex, ItemIndex, Iterator, Context),
     {error, {no_cached_items, LaneIndex, ItemIndex, Iterator, Context}}).
 -define(WF_ERROR_EXECUTION_PREPARATION_FAILED, {error, execution_preparation_failed}).
+-define(WF_ERROR_TIMEOUT, {error, timeout}).
 
 -type update_fun() :: datastore_doc:diff(state()).
 -type no_items_error() :: ?WF_ERROR_NO_WAITING_ITEMS |
@@ -202,16 +203,30 @@ report_limit_reached_error(ExecutionId, JobIdentifier) ->
     {ok, _} = update(ExecutionId, fun(State) -> pause_job(State, JobIdentifier) end),
     ok.
 
--spec check_timeouts(workflow_engine:execution_id()) -> ok.
-check_timeouts(ExecutionId) ->
+-spec check_timeouts(workflow_engine:execution_id(), workflow_engine:id()) -> ok.
+check_timeouts(ExecutionId, EngineId) ->
     case datastore_model:get(?CTX, ExecutionId) of
         {ok, #document{value = #workflow_execution_state{jobs = undefined}}} ->
             ok;
-        {ok, #document{value = #workflow_execution_state{jobs = Jobs}}} ->
-            case workflow_jobs:check_timeouts(Jobs) of
-                {ok, NewJobs} -> update(ExecutionId, fun(State) -> update_jobs(State, NewJobs) end);
-                ?ERROR_NOT_FOUND -> ok
-            end;
+        {ok, #document{value = #workflow_execution_state{
+            jobs = Jobs,
+            handler = Handler,
+            context = Context,
+            current_lane = #current_lane{parallel_boxes_spec = BoxesSpec}
+        }}} ->
+            {UpdatedJobs, Errors} = workflow_jobs:check_timeouts(Jobs),
+            case UpdatedJobs of
+                ?WF_ERROR_NO_TIMEOUTS_UPDATED -> ok;
+                NewJobs -> update(ExecutionId, fun(State) -> update_jobs(State, NewJobs) end)
+            end,
+
+            lists:foreach(fun(JobIdentifier) ->
+                {TaskId, TaskSpec} = workflow_jobs:get_task_details(JobIdentifier, BoxesSpec),
+                CallPools = workflow_engine:get_async_call_pools(TaskSpec),
+                ProcessedResult = Handler:process_result(ExecutionId, Context, TaskId, ?WF_ERROR_TIMEOUT),
+                workflow_engine:report_execution_status_update(
+                    ExecutionId, EngineId, ?ASYNC_CALL_FINISHED, JobIdentifier, CallPools, ProcessedResult)
+            end, Errors);
         ?ERROR_NOT_FOUND ->
             ok
     end.
@@ -631,3 +646,9 @@ get_lane_index(ExecutionId) ->
         Error ->
             Error
     end.
+
+-spec get_item_id(workflow_engine:execution_id(), workflow_jobs:job_identifier()) -> workflow_cached_item:id().
+get_item_id(ExecutionId, JobIdentifier) ->
+    {ok, #document{value = #workflow_execution_state{iteration_state = IterationState}}} =
+        datastore_model:get(?CTX, ExecutionId),
+    workflow_jobs:get_item_id(JobIdentifier, IterationState).

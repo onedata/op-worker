@@ -15,6 +15,7 @@
 
 -behaviour(workflow_handler).
 
+-include("http/gui_paths.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 
 -export([prepare/2, get_lane_spec/3, process_item/6, process_result/4,
@@ -44,7 +45,7 @@ get_lane_spec(ExecutionId, #{type := Type, async_call_pools := Pools} =_Executio
         lists:foldl(fun(TaskIndex, TaskAcc) ->
             TaskAcc#{<<ExecutionId/binary, "_task", (integer_to_binary(LaneIndex))/binary, "_",
                 (integer_to_binary(BoxIndex))/binary, "_", (integer_to_binary(TaskIndex))/binary>> =>
-                    #{type => Type, async_call_pools => Pools}}
+                    #{type => Type, async_call_pools => Pools, keepalive_timeout => 10}}
         end, #{}, lists:seq(1, BoxIndex))
     end, lists:seq(1, LaneIndex)),
 
@@ -70,8 +71,8 @@ process_item(_ExecutionId, _Context, <<"async", _/binary>> = _TaskId, Item, Fini
         case binary_to_integer(Item) =< 10 of
             true ->
                 % Use http_client only for part of items as it is much slower than direct `handle_callback` call
-                Domain = atom_to_binary(?GET_DOMAIN(node()), utf8),
-                http_client:put(<<"http://", Domain/binary, "/tasks/", FinishCallback/binary>>, #{}, <<"ok">>);
+                http_client:put(<<"http://", (oneprovider:get_domain())/binary,
+                    ?ATM_TASK_FINISHED_CALLBACK_PATH, FinishCallback/binary>>, #{}, <<"ok">>);
             false ->
                 workflow_engine_callback_handler:handle_callback(FinishCallback, <<"ok">>)
         end
@@ -88,6 +89,8 @@ process_item(_ExecutionId, _Context, _TaskId, _Item, _FinishCallback, _) ->
     workflow_handler:task_processing_result()
 ) ->
     workflow_handler:callback_execution_result().
+process_result(_, _, _, {error, _}) ->
+    error;
 process_result(_, _, _, Result) ->
     binary_to_atom(Result, utf8).
 

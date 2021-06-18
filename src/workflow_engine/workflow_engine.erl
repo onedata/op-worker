@@ -23,7 +23,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([init/1, init/2, execute_workflow/2, report_execution_status_update/6]).
+-export([init/1, init/2, execute_workflow/2, report_execution_status_update/6, get_async_call_pools/1]).
 
 %% Functions exported for internal_services engine - do not call directly
 -export([init_service/2, takeover_service/3]).
@@ -43,7 +43,7 @@
 -type options() :: #{
     slots_limit => non_neg_integer(),
     workflow_async_call_pools_to_use => [{workflow_async_call_pool:id(), SlotsLimit :: non_neg_integer()}],
-    init_workflow_timeout_server => boolean()
+    init_workflow_timeout_server => {true, workflow_timeout_monitor:check_period()} | false
 }.
 
 -type execution_spec() :: #{
@@ -74,7 +74,8 @@
 -define(POOL_ID(EngineId), binary_to_atom(EngineId, utf8)).
 -define(DEFAULT_SLOT_COUNT, 20).
 -define(DEFAULT_CALLS_LIMIT, 1000).
--define(USE_TIMEOUT_SERVER_DEFAULT, true).
+-define(DEFAULT_TIMEOUT_CHECK_PERIOD, timer:seconds(30)).
+-define(USE_TIMEOUT_SERVER_DEFAULT, {true, ?DEFAULT_TIMEOUT_CHECK_PERIOD}).
 -define(DEFAULT_KEEPALIVE_TIMEOUT_SEC, 300).
 
 -define(WF_ERROR_NOTHING_TO_START, {error, nothing_to_start}).
@@ -131,6 +132,8 @@ report_execution_status_update(ExecutionId, EngineId, ReportType, JobIdentifier,
     case CallPoolId of
         undefined ->
             ok;
+        [CallPoolMainId | _] -> % TODO VFS-7788 - support multiple pools
+            workflow_async_call_pool:decrement_slot_usage(CallPoolMainId);
         _ ->
             workflow_async_call_pool:decrement_slot_usage(CallPoolId)
     end,
@@ -144,6 +147,10 @@ report_execution_status_update(ExecutionId, EngineId, ReportType, JobIdentifier,
         _ ->
             trigger_job_scheduling(EngineId, ?FOR_CURRENT_SLOT_FIRST)
     end.
+
+-spec get_async_call_pools(task_spec()) -> [workflow_async_call_pool:id()] | undefined.
+get_async_call_pools(TaskSpec) ->
+    maps:get(async_call_pools, TaskSpec, [?DEFAULT_ASYNC_CALL_POOL_ID]).
 
 %%%===================================================================
 %%% Internal functions
@@ -162,7 +169,7 @@ init_service(Id, Options) ->
             end, AsyncCallPools),
 
             case maps:get(init_workflow_timeout_server, Options, ?USE_TIMEOUT_SERVER_DEFAULT) of
-                true -> workflow_timeout_monitor:init(Id);
+                {true, CheckPeriod} -> workflow_timeout_monitor:init(Id, CheckPeriod);
                 false -> ok
             end;
         ?ERROR_ALREADY_EXISTS ->
@@ -276,7 +283,7 @@ schedule_on_pool(EngineId, ExecutionId, #job_execution_spec{
 } = JobExecutionSpec) ->
     CallArgs = {?MODULE, process_item, [EngineId, ExecutionId, JobExecutionSpec]},
     TaskType = maps:get(type, TaskSpec),
-    CallPools = maps:get(async_call_pools, TaskSpec, [?DEFAULT_ASYNC_CALL_POOL_ID]),
+    CallPools = get_async_call_pools(TaskSpec),
     case {TaskType, CallPools} of
         {sync, _} ->
             ok = worker_pool:cast(?POOL_ID(EngineId), CallArgs);

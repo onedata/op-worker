@@ -218,10 +218,9 @@ register_async_call(Jobs = #workflow_jobs{
                 Jobs#workflow_jobs{raced_results = maps:remove(JobIdentifier, Unidentified)}}
     end.
 
--spec check_timeouts(jobs()) -> {ok, jobs()} | ?ERROR_NOT_FOUND.
+-spec check_timeouts(jobs()) -> {jobs() | ?WF_ERROR_NO_TIMEOUTS_UPDATED, [job_identifier()]} | ?ERROR_NOT_FOUND.
 check_timeouts(Jobs = #workflow_jobs{
-    pending_async_jobs = AsyncCalls,
-    ongoing = Ongoing
+    pending_async_jobs = AsyncCalls
 }) ->
     CheckAns = maps:fold(
         fun(JobIdentifier, AsyncJobTimer, {ExtendedTimeoutsAcc, ErrorsAcc} = Acc) ->
@@ -240,19 +239,9 @@ check_timeouts(Jobs = #workflow_jobs{
         end, {[], []}, AsyncCalls),
 
     case CheckAns of
-        {[], []} ->
-            ?ERROR_NOT_FOUND;
+        {[], Errors} ->
+            {?WF_ERROR_NO_TIMEOUTS_UPDATED, Errors};
         {UpdatedTimeouts, Errors} ->
-            % TODO VFS-7786 - delete iteration_state step when necessary
-            {AsyncCallsWithErrorsDeleted, NewOngoing} = lists:foldl(fun(JobIdentifier, {AsyncCallsAcc, OngoingAcc} = AccTuple) ->
-                case maps:get(JobIdentifier, AsyncCallsAcc, undefined) of
-                    undefined ->
-                        AccTuple; % Async call ended after timer check
-                    #async_job_timer{} ->
-                        {maps:remove(JobIdentifier, AsyncCallsAcc), gb_sets:delete(JobIdentifier, OngoingAcc)}
-                end
-            end, {AsyncCalls, Ongoing}, Errors),
-
             FinalAsyncCalls = lists:foldl(fun(JobIdentifier, Acc) ->
                 case maps:get(JobIdentifier, Acc, undefined) of
                     undefined ->
@@ -261,12 +250,9 @@ check_timeouts(Jobs = #workflow_jobs{
                         Acc#{JobIdentifier => AsyncJobTimer#async_job_timer{
                             keepalive_timer = countdown_timer:start_seconds(KeepaliveTimeout)}}
                 end
-            end, AsyncCallsWithErrorsDeleted, UpdatedTimeouts),
+            end, AsyncCalls, UpdatedTimeouts),
 
-            {ok, Jobs#workflow_jobs{
-                pending_async_jobs = FinalAsyncCalls,
-                ongoing = NewOngoing
-            }}
+            {Jobs#workflow_jobs{pending_async_jobs = FinalAsyncCalls}, Errors}
     end.
 
 -spec reset_keepalive_timer(jobs(), job_identifier()) -> jobs().
