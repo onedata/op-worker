@@ -212,7 +212,8 @@ register_function(#prepare_ctx{
         #{
             <<"service">> => FunctionName,
             <<"image">> => DockerImage,
-            <<"namespace">> => OpenfaasConfig#openfaas_config.function_namespace
+            <<"namespace">> => OpenfaasConfig#openfaas_config.function_namespace,
+            <<"envVars">> => prepare_function_timeouts()
         },
         prepare_function_annotations(PrepareCtx)
     )),
@@ -229,6 +230,21 @@ register_function(#prepare_ctx{
         _ ->
             throw(?ERROR_ATM_OPENFAAS_QUERY_FAILED)
     end.
+
+
+%% @private
+-spec prepare_function_timeouts() -> json_utils:json_map().
+prepare_function_timeouts() ->
+    lists:foldl(fun({Key, EnvVar}, Acc) ->
+        TimeoutSeconds = op_worker:get_env(EnvVar),
+        TimeoutSecondsBin = integer_to_binary(TimeoutSeconds),
+
+        Acc#{Key => <<TimeoutSecondsBin/binary, "s">>}
+    end, #{}, [
+        {<<"read_timeout">>, openfaas_read_timeout_seconds},
+        {<<"write_timeout">>, openfaas_write_timeout_seconds},
+        {<<"exec_timeout">>, openfaas_exec_timeout_seconds}
+    ]).
 
 
 %% @private
