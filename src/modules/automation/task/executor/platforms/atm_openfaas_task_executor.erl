@@ -272,16 +272,29 @@ prepare_function_annotations(#prepare_ctx{
     {ok, OpDomain} = provider_logic:get_domain(),
 
     #{<<"annotations">> => #{
-        % TODO VFS-7627 set proper annotation for oneclient mounts
-        <<"com.accessToken">> => case in_readonly_mode(AtmTaskExecutor) of
+        <<"oneclient.k8s-openfass.onedata.org/inject">> => <<"enabled">>,
+        <<"oneclient.k8s-openfass.onedata.org/oneclient_image">> => get_oneclient_image(),
+        <<"oneclient.k8s-openfaas.onedata.org/space_id">> => SpaceId,
+        <<"oneclient.k8s-openfaas.onedata.org/mount_point">> => MountPoint,
+        <<"oneclient.k8s-openfaas.onedata.org/options">> => OneclientOptions,
+        <<"oneclient.k8s-openfaas.onedata.org/oneprovider_host">> => OpDomain,
+        <<"oneclient.k8s-openfaas.onedata.org/token">> => case in_readonly_mode(AtmTaskExecutor) of
             true -> tokens:confine(AccessToken, #cv_data_readonly{});
             false -> AccessToken
-        end,
-        <<"com.mountpoint">> => MountPoint,
-        <<"com.options">> => OneclientOptions,
-        <<"com.host">> => OpDomain,
-        <<"com.spaceId">> => SpaceId
+        end
     }}.
+
+
+%% @private
+-spec get_oneclient_image() -> binary().
+get_oneclient_image() ->
+    case op_worker:get_env(openfaas_oneclient_image, undefined) of
+        undefined ->
+            ReleaseVersion = op_worker:get_release_version(),
+            <<"onedata/oneclient:", ReleaseVersion/binary>>;
+        OneclientImage ->
+            list_to_binary(OneclientImage)
+    end.
 
 
 %% @private
