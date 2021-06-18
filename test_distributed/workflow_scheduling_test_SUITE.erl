@@ -29,7 +29,8 @@
     multiple_async_workflow_execution_test/1,
     fail_one_of_many_task_in_box_test/1,
     fail_only_task_in_box_test/1,
-    timeouts_test/1
+    timeout_test/1,
+    heartbeat_test/1
 ]).
 
 all() ->
@@ -40,7 +41,8 @@ all() ->
         multiple_async_workflow_execution_test,
         fail_one_of_many_task_in_box_test,
         fail_only_task_in_box_test,
-        timeouts_test
+        timeout_test,
+        heartbeat_test
     ]).
 
 -define(ENGINE_ID, <<"test_engine">>).
@@ -186,10 +188,10 @@ failure_test_base(Config, TaskToFail, LaneWithErrorIndex, BoxWithErrorIndex) ->
     verify_memory(Config),
     ok.
 
-timeouts_test(Config) ->
-    timeouts_test(Config, <<"async_timeouts_workflow_task3_3_2">>, 3, 3).
+timeout_test(Config) ->
+    timeout_test(Config, <<"async_timeouts_workflow_task3_3_2">>, 3, 3).
 
-timeouts_test(Config, TaskToFail, LaneWithErrorIndex, BoxWithErrorIndex) ->
+timeout_test(Config, TaskToFail, LaneWithErrorIndex, BoxWithErrorIndex) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     WorkflowType = async,
     Id = <<"async_timeouts_workflow">>,
@@ -224,6 +226,14 @@ timeouts_test(Config, TaskToFail, LaneWithErrorIndex, BoxWithErrorIndex) ->
     verify_execution_history(ExpectedAfterRestart, ExecutionHistoryAfterRestart, WorkflowType),
     verify_memory(Config),
     ok.
+
+heartbeat_test(Config) ->
+    ResultToDelay = <<"result_async_test_workflow_task3_3_2">>,
+    ItemToDelay = <<"100">>,
+    set_task_execution_gatherer_option(Config, delay_execution, {ResultToDelay, ItemToDelay}),
+    single_workflow_execution_test_base(Config, async),
+    unset_task_execution_gatherer_option(Config, delay_execution).
+    
 
 %%%===================================================================
 %%% Init/teardown functions
@@ -275,13 +285,27 @@ init_per_testcase(_, Config) ->
     ),
     
     test_utils:mock_expect(Workers, workflow_engine_callback_handler, handle_callback, fun(CallbackId, Result) ->
-        {_CallbackType, ExecutionId, _EngineId, JobIdentifier, _CallPools} =
+        {_CallbackType, ExecutionId, EngineId, JobIdentifier, _CallPools} =
             workflow_engine_callback_handler:decode_callback_id(CallbackId),
         {_, _, TaskId} = workflow_execution_state:get_result_processing_data(ExecutionId, JobIdentifier),
         Item = workflow_cached_item:get_item(workflow_execution_state:get_item_id(ExecutionId, JobIdentifier)),
         Master ! {task_processing, self(), <<"result_", TaskId/binary>>, Item},
         receive
             history_saved ->
+                % Warning: do not use meck:passthrough as it does not work when 2 mocks work within one process
+                apply(meck_util:original_name(workflow_engine_callback_handler), handle_callback, [CallbackId, Result]);
+            delay_execution ->
+                spawn(fun() ->
+                    lists:foreach(fun(_) ->
+                        % Warning: do not use meck:passthrough as we are in spawned process
+                        HeartbeatCallbackId = apply(meck_util:original_name(workflow_engine_callback_handler),
+                            prepare_heartbeat_callback_id, [ExecutionId, EngineId, JobIdentifier]),
+                        apply(meck_util:original_name(workflow_engine_callback_handler),
+                            handle_callback, [HeartbeatCallbackId, undefined]),
+                        timer:sleep(timer:seconds(3))
+                    end, lists:seq(1,10))
+                end),
+                timer:sleep(timer:seconds(20)),
                 % Warning: do not use meck:passthrough as it does not work when 2 mocks work within one process
                 apply(meck_util:original_name(workflow_engine_callback_handler), handle_callback, [CallbackId, Result]);
             fail_job ->
@@ -314,6 +338,9 @@ task_execution_gatherer_loop(#{execution_history := History} = Acc, ProcWaitingF
                 #{fail_job := {Task, Item}} ->
                     Sender ! fail_job,
                     Acc3;
+                #{delay_execution := {Task, Item}} ->
+                    Sender ! delay_execution,
+                    Acc3#{execution_history => [{Task, Item} | History]};
                 _ ->
                     Sender ! history_saved,
                     Acc3#{execution_history => [{Task, Item} | History]}
