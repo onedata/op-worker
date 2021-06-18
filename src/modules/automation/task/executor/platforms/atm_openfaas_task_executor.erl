@@ -52,7 +52,7 @@
 -export_type([record/0]).
 
 
--define(AWAIT_READINESS_RETRIES, 180).
+-define(AWAIT_READINESS_RETRIES, 300).
 -define(AWAIT_READINESS_INTERVAL_SEC, 1).
 
 
@@ -272,13 +272,13 @@ prepare_function_annotations(#prepare_ctx{
     {ok, OpDomain} = provider_logic:get_domain(),
 
     #{<<"annotations">> => #{
-        <<"oneclient.k8s-openfass.onedata.org/inject">> => <<"enabled">>,
-        <<"oneclient.k8s-openfass.onedata.org/oneclient_image">> => get_oneclient_image(),
-        <<"oneclient.k8s-openfaas.onedata.org/space_id">> => SpaceId,
-        <<"oneclient.k8s-openfaas.onedata.org/mount_point">> => MountPoint,
-        <<"oneclient.k8s-openfaas.onedata.org/options">> => OneclientOptions,
-        <<"oneclient.k8s-openfaas.onedata.org/oneprovider_host">> => OpDomain,
-        <<"oneclient.k8s-openfaas.onedata.org/token">> => case in_readonly_mode(AtmTaskExecutor) of
+        <<"oneclient.openfass.onedata.org/inject">> => <<"enabled">>,
+        <<"oneclient.openfass.onedata.org/image">> => get_oneclient_image(),
+        <<"oneclient.openfaas.onedata.org/space_id">> => SpaceId,
+        <<"oneclient.openfaas.onedata.org/mount_point">> => MountPoint,
+        <<"oneclient.openfaas.onedata.org/options">> => OneclientOptions,
+        <<"oneclient.openfaas.onedata.org/oneprovider_host">> => OpDomain,
+        <<"oneclient.openfaas.onedata.org/token">> => case in_readonly_mode(AtmTaskExecutor) of
             true -> tokens:confine(AccessToken, #cv_data_readonly{});
             false -> AccessToken
         end
