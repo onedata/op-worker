@@ -28,15 +28,13 @@
 -export([version/0, db_encode/2, db_decode/2]).
 
 
--type item() :: json_utils:json_term().
-
 -record(atm_list_container_iterator, {
     backend_id :: atm_list_container:backend_id(),
     index = 0 :: non_neg_integer()
 }).
 -type record() :: #atm_list_container_iterator{}.
 
--export_type([item/0, record/0]).
+-export_type([record/0]).
 
 
 %%%===================================================================
@@ -55,7 +53,7 @@ build(BackendId) ->
 
 
 -spec get_next_batch(atm_workflow_execution_ctx:record(), atm_container_iterator:batch_size(), record()) ->
-    {ok, [item()], record()} | stop.
+    {ok, [atm_value:compressed()], record()} | stop.
 get_next_batch(_AtmWorkflowExecutionCtx, BatchSize, #atm_list_container_iterator{} = Record) ->
     #atm_list_container_iterator{backend_id = BackendId, index = StartIndex} = Record,
     {ok, {Marker, EntrySeries}} = atm_list_store_backend:list(

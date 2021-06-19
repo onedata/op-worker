@@ -36,7 +36,7 @@
     workflow_execution_ctx :: atm_workflow_execution_ctx:record(),
     workflow_schema_doc :: od_atm_workflow_schema:doc(),
     lambda_docs :: #{od_atm_lambda:id() => od_atm_lambda:doc()},
-    initial_values :: atm_workflow_execution_api:store_initial_values()
+    store_initial_values :: atm_workflow_execution_api:store_initial_values()
 }).
 
 -record(atm_container_operation, {

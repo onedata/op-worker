@@ -108,7 +108,7 @@ build(RootsIterator, DataSpec) ->
 %%%===================================================================
 
 -spec get_next_batch(atm_workflow_execution_ctx:record(), atm_container_iterator:batch_size(), record()) ->
-    {ok, [automation:item()], record()} | stop.
+    {ok, [atm_value:compressed()], record()} | stop.
 get_next_batch(AtmWorkflowExecutionCtx, BatchSize, #atm_tree_forest_container_iterator{} = Record) ->
     get_next_batch(AtmWorkflowExecutionCtx, BatchSize, Record, []).
 
@@ -131,9 +131,9 @@ mark_exhausted(#atm_tree_forest_container_iterator{queue_ref = QueueRef}) ->
     atm_workflow_execution_ctx:record(), 
     atm_container_iterator:batch_size(), 
     record(), 
-    [automation:item()]
+    [atm_value:compressed()]
 ) ->
-    {ok, [automation:item()], record()} | stop.
+    {ok, [atm_value:compressed()], record()} | stop.
 get_next_batch(_AtmWorkflowExecutionCtx, BatchSize, Record, ForestAcc) when BatchSize =< 0 ->
     {ok, ForestAcc, Record};
 get_next_batch(
@@ -175,9 +175,9 @@ get_next_batch(AtmWorkflowExecutionCtx, BatchSize, Record, ForestAcc) ->
     atm_workflow_execution_ctx:record(), 
     atm_container_iterator:batch_size(), 
     record(), 
-    [automation:item()]
+    [atm_value:compressed()]
 ) ->
-    {[automation:item()], record()}.
+    {[atm_value:compressed()], record()}.
 get_next_batch_from_single_tree(_AtmWorkflowExecutionCtx, BatchSize, Record, Acc) when BatchSize =< 0 ->
     {Acc, Record};
 get_next_batch_from_single_tree(
