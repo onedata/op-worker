@@ -89,19 +89,6 @@ list_children(AtmWorkflowExecutionCtx, DatasetId, ListOpts, BatchSize) ->
     end.
 
 
--spec has_access(atm_workflow_execution_ctx:record(), id()) -> boolean().
-has_access(AtmWorkflowExecutionCtx, DatasetId) ->
-    SessionId = atm_workflow_execution_ctx:get_session_id(AtmWorkflowExecutionCtx),
-    case lfm:get_dataset_info(SessionId, DatasetId) of
-        {ok, _} -> true;
-        {error, Type} = Error ->
-            case atm_value:is_error_ignored(Type) of
-                true -> false;
-                false -> throw(Error)
-            end
-    end.
-
-
 -spec initial_listing_options() -> list_opts().
 initial_listing_options() ->
     #{
@@ -136,4 +123,29 @@ expand(AtmWorkflowExecutionCtx, DatasetId) ->
     case lfm:get_dataset_info(SessionId, DatasetId) of
         {ok, DatasetInfo} -> {ok, dataset_utils:dataset_info_to_json(DatasetInfo)};
         {error, _} = Error -> Error
+    end.
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+
+%% @private
+-spec has_access(atm_workflow_execution_ctx:record(), id()) -> boolean() | no_return().
+has_access(AtmWorkflowExecutionCtx, DatasetId) ->
+    SpaceId = atm_workflow_execution_ctx:get_space_id(AtmWorkflowExecutionCtx),
+    SessionId = atm_workflow_execution_ctx:get_session_id(AtmWorkflowExecutionCtx),
+
+    case lfm:get_dataset_info(SessionId, DatasetId) of
+        {ok, #dataset_info{root_file_guid = RootFileGuid}} ->
+            case file_id:guid_to_space_id(RootFileGuid) of
+                SpaceId -> true;
+                _ -> false
+            end;
+        {error, Type} = Error ->
+            case atm_value:is_error_ignored(Type) of
+                true -> false;
+                false -> throw(Error)
+            end
     end.
