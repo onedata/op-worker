@@ -74,6 +74,12 @@ create_all(AtmWorkflowExecutionCreationCtx, AtmLaneIndex, AtmParallelBoxSchemas)
     atm_parallel_box_schema:record()
 ) ->
     record() | no_return().
+create(_AtmWorkflowExecutionCreationCtx, _AtmLaneIndex, _AtmParallelBoxIndex, #atm_parallel_box_schema{
+    id = AtmParallelBoxSchemaId,
+    tasks = []
+}) ->
+    throw(?ERROR_ATM_EMPTY_PARALLEL_BOX(AtmParallelBoxSchemaId));
+
 create(AtmWorkflowExecutionCreationCtx, AtmLaneIndex, AtmParallelBoxIndex, #atm_parallel_box_schema{
     id = AtmParallelBoxSchemaId,
     tasks = AtmTaskSchemas
@@ -148,6 +154,15 @@ gather_statuses(AtmParallelBoxExecutions) ->
     end, AtmParallelBoxExecutions).
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Updates specified task status.
+%%
+%%                              !! CAUTION !!
+%% This function is called when updating atm_workflow_execution_doc and as such
+%% shouldn't touch any other persistent models.
+%% @end
+%%--------------------------------------------------------------------
 -spec update_task_status(atm_task_execution:id(), atm_task_execution:status(), record()) ->
     {ok, record()} | {error, term()}.
 update_task_status(AtmTaskExecutionId, NewStatus, #atm_parallel_box_execution{
