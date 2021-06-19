@@ -187,13 +187,16 @@ run(AtmWorkflowExecutionEnv, AtmTaskExecutionId, Item, ReportResultUrl, Heartbea
 handle_results(_AtmWorkflowExecutionEnv, AtmTaskExecutionId, error) ->
     update_items_failed_and_processed(AtmTaskExecutionId);
 
-handle_results(AtmWorkflowExecutionEnv, AtmTaskExecutionId, Results) ->
+handle_results(AtmWorkflowExecutionEnv, AtmTaskExecutionId, Results) when is_map(Results) ->
     #document{value = #atm_task_execution{
         result_specs = AtmTaskExecutionResultSpecs
     }} = ensure_atm_task_execution_doc(AtmTaskExecutionId),
 
     atm_task_execution_results:apply(AtmWorkflowExecutionEnv, AtmTaskExecutionResultSpecs, Results),
-    update_items_processed(AtmTaskExecutionId).
+    update_items_processed(AtmTaskExecutionId);
+
+handle_results(_AtmWorkflowExecutionEnv, _AtmTaskExecutionId, _Results) ->
+    throw(?ERROR_ATM_BAD_DATA(<<"results">>, <<"not an object">>)).
 
 
 -spec mark_ended(atm_task_execution:id()) -> ok.

@@ -173,17 +173,20 @@ dispatch_spec_from_json(#{
     ok | no_return().
 validate_result(AtmWorkflowExecutionCtx, #atm_task_execution_result_spec{
     data_spec = AtmDataSpec,
+    is_batch = false
+}, Result) ->
+    atm_data_validator:validate(AtmWorkflowExecutionCtx, Result, AtmDataSpec);
+
+validate_result(AtmWorkflowExecutionCtx, #atm_task_execution_result_spec{
+    data_spec = AtmDataSpec,
     is_batch = true
-}, ResultsBatch) ->
+}, ResultsBatch) when is_list(ResultsBatch) ->
     lists:foreach(fun(Result) ->
         atm_data_validator:validate(AtmWorkflowExecutionCtx, Result, AtmDataSpec)
     end, ResultsBatch);
 
-validate_result(AtmWorkflowExecutionCtx, #atm_task_execution_result_spec{
-    data_spec = AtmDataSpec,
-    is_batch = false
-}, Result) ->
-    atm_data_validator:validate(AtmWorkflowExecutionCtx, Result, AtmDataSpec).
+validate_result(_AtmWorkflowExecutionCtx, _AtmTaskExecutionResultSpec, _Result) ->
+    throw(?ERROR_ATM_BAD_DATA(<<"result">>, <<"not a batch">>)).
 
 
 %% @private

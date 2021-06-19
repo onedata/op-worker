@@ -101,9 +101,7 @@ process_item(
         ?error("[~p] FAILED TO RUN TASK ~p DUE TO: ~p", [
             AtmWorkflowExecutionId, AtmTaskExecutionId, Reason
         ]),
-        catch atm_task_execution_api:handle_results(
-            AtmWorkflowExecutionEnv, AtmTaskExecutionId, error
-        ),
+        report_task_execution_failed(AtmWorkflowExecutionEnv, AtmTaskExecutionId),
         error
     end.
 
@@ -120,7 +118,7 @@ process_result(_, AtmWorkflowExecutionEnv, AtmTaskExecutionId, {error, _} = Erro
     ?error("ASYNC TASK EXECUTION ~p FAILED DUE TO: ~p", [
         AtmTaskExecutionId, Error
     ]),
-    catch atm_task_execution_api:handle_results(AtmWorkflowExecutionEnv, AtmTaskExecutionId, error),
+    report_task_execution_failed(AtmWorkflowExecutionEnv, AtmTaskExecutionId),
     error;
 
 process_result(_AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmTaskExecutionId, Results) ->
@@ -128,12 +126,12 @@ process_result(_AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmTaskExecutio
         atm_task_execution_api:handle_results(AtmWorkflowExecutionEnv, AtmTaskExecutionId, Results)
     catch _:Reason ->
         % TODO VFS-7637 use audit log
-        ?error("FAILED TO PROCESS RESULT FOR TASK EXECUTION ~p DUE TO: ~p", [
+        ?error("FAILED TO PROCESS RESULTS FOR TASK EXECUTION ~p DUE TO: ~p", [
             AtmTaskExecutionId, Reason
         ]),
-        catch atm_task_execution_api:handle_results(AtmWorkflowExecutionEnv, AtmTaskExecutionId, error)
-    end,
-    ok.
+        report_task_execution_failed(AtmWorkflowExecutionEnv, AtmTaskExecutionId),
+        error
+    end.
 
 
 -spec handle_task_execution_ended(
@@ -285,3 +283,11 @@ acquire_iterator_for_lane(AtmWorkflowExecutionEnv, #atm_lane_schema{
     store_iterator_spec = AtmStoreIteratorSpec
 }) ->
     atm_store_api:acquire_iterator(AtmWorkflowExecutionEnv, AtmStoreIteratorSpec).
+
+
+%% @private
+-spec report_task_execution_failed(atm_workflow_execution_env:record(), atm_task_execution:id()) ->
+    ok.
+report_task_execution_failed(AtmWorkflowExecutionEnv, AtmTaskExecutionId) ->
+    catch atm_task_execution_api:handle_results(AtmWorkflowExecutionEnv, AtmTaskExecutionId, error),
+    ok.

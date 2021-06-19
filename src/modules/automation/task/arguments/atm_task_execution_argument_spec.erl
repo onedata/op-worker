@@ -186,16 +186,19 @@ build_value(_AtmJobExecutionCtx, _InputSpec) ->
     record()
 ) ->
     ok | no_return().
-validate_value(AtmWorkflowExecutionCtx, ArgsBatch, #atm_task_execution_argument_spec{
-    data_spec = AtmDataSpec,
-    is_batch = true
-}) ->
-    lists:foreach(fun(ArgValue) ->
-        atm_data_validator:validate(AtmWorkflowExecutionCtx, ArgValue, AtmDataSpec)
-    end, ArgsBatch);
-
 validate_value(AtmWorkflowExecutionCtx, ArgValue, #atm_task_execution_argument_spec{
     data_spec = AtmDataSpec,
     is_batch = false
 }) ->
-    atm_data_validator:validate(AtmWorkflowExecutionCtx, ArgValue, AtmDataSpec).
+    atm_data_validator:validate(AtmWorkflowExecutionCtx, ArgValue, AtmDataSpec);
+
+validate_value(AtmWorkflowExecutionCtx, ArgsBatch, #atm_task_execution_argument_spec{
+    data_spec = AtmDataSpec,
+    is_batch = true
+}) when is_list(ArgsBatch) ->
+    lists:foreach(fun(ArgValue) ->
+        atm_data_validator:validate(AtmWorkflowExecutionCtx, ArgValue, AtmDataSpec)
+    end, ArgsBatch);
+
+validate_value(_AtmWorkflowExecutionCtx, _ArgsBatch, _AtmTaskExecutionArgSpec) ->
+    throw(?ERROR_ATM_BAD_DATA(<<"value">>, <<"not a batch">>)).
