@@ -7,8 +7,8 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module handles creation of all documents associated with automation
-%%% workflow (e.g. task execution docs, store docs, etc.). If creation of any
-%%% element fails then ones created before are deleted.
+%%% workflow execution (e.g. task execution docs, store docs, etc.). If creation
+%%% of any element fails then ones created before are deleted.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_workflow_execution_factory).
@@ -96,8 +96,15 @@ create_lambda_snapshots(#atm_workflow_execution_creation_ctx{
         AtmWorkflowExecutionCtx
     ),
     AtmLambdaSnapshotRegistry = lists:foldl(fun(#document{key = AtmLambdaId} = AtmLambdaDoc, Acc) ->
-        {ok, AtmLambdaSnapshotId} = atm_lambda_snapshot:create(AtmWorkflowExecutionId, AtmLambdaDoc),
-        Acc#{AtmLambdaId => AtmLambdaSnapshotId}
+        try
+            {ok, AtmLambdaSnapshotId} = atm_lambda_snapshot:create(
+                AtmWorkflowExecutionId, AtmLambdaDoc
+            ),
+            Acc#{AtmLambdaId => AtmLambdaSnapshotId}
+        catch Type:Reason ->
+            catch delete_lambda_snapshots(Acc),
+            erlang:Type(Reason)
+        end
     end, #{}, maps:values(AtmLambdaDocs)),
 
     ExecutionElements#execution_elements{lambda_snapshot_registry = AtmLambdaSnapshotRegistry}.
@@ -188,7 +195,7 @@ delete_execution_elements(#execution_elements{
 delete_execution_elements(#execution_elements{
     lambda_snapshot_registry = AtmLambdaSnapshotRegistry
 } = ExecutionElements) when AtmLambdaSnapshotRegistry /= undefined ->
-    lists:foreach(fun atm_lambda_snapshot:delete/1, maps:values(AtmLambdaSnapshotRegistry)),
+    catch delete_lambda_snapshots(AtmLambdaSnapshotRegistry),
 
     delete_execution_elements(ExecutionElements#execution_elements{
         lambda_snapshot_registry = undefined
@@ -199,15 +206,20 @@ delete_execution_elements(#execution_elements{
 } = ExecutionElements) when AtmStoreRegistry /= undefined ->
     catch atm_store_api:delete_all(maps:values(AtmStoreRegistry)),
 
-    delete_execution_elements(ExecutionElements#execution_elements{
-        store_registry = undefined
-    });
+    delete_execution_elements(ExecutionElements#execution_elements{store_registry = undefined});
 
 delete_execution_elements(#execution_elements{
     lanes = AtmLaneExecutions
 } = ExecutionElements) when AtmLaneExecutions /= undefined ->
     catch atm_lane_execution:delete_all(AtmLaneExecutions),
+
     delete_execution_elements(ExecutionElements#execution_elements{lanes = undefined});
 
 delete_execution_elements(_) ->
     ok.
+
+
+%% @private
+-spec delete_lambda_snapshots(atm_workflow_execution:lambda_snapshot_registry()) -> ok.
+delete_lambda_snapshots(AtmLambdaSnapshotRegistry) ->
+    lists:foreach(fun atm_lambda_snapshot:delete/1, maps:values(AtmLambdaSnapshotRegistry)).
