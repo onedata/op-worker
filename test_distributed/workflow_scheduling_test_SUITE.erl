@@ -30,7 +30,9 @@
     fail_one_of_many_task_in_box_test/1,
     fail_only_task_in_box_test/1,
     timeout_test/1,
-    heartbeat_test/1
+    heartbeat_test/1,
+    preparation_failure_test/1,
+    lane_preparation_failure_test/1
 ]).
 
 all() ->
@@ -42,7 +44,9 @@ all() ->
         fail_one_of_many_task_in_box_test,
         fail_only_task_in_box_test,
         timeout_test,
-        heartbeat_test
+        heartbeat_test,
+        preparation_failure_test,
+        lane_preparation_failure_test
     ]).
 
 -define(ENGINE_ID, <<"test_engine">>).
@@ -156,7 +160,7 @@ fail_only_task_in_box_test(Config) ->
 failure_test_base(Config, TaskToFail, LaneWithErrorIndex, BoxWithErrorIndex) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     WorkflowType = sync,
-    Id = <<"restart_test_workflow">>,
+    Id = <<"failure_test_workflow">>,
     Workflow = #{
         id => Id,
         workflow_handler => workflow_test_handler,
@@ -233,7 +237,84 @@ heartbeat_test(Config) ->
     set_task_execution_gatherer_option(Config, delay_execution, {ResultToDelay, ItemToDelay}),
     single_workflow_execution_test_base(Config, async),
     unset_task_execution_gatherer_option(Config, delay_execution).
-    
+
+preparation_failure_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    WorkflowType = sync,
+    Id = <<"preparation_failure_test_workflow">>,
+    Workflow = #{
+        id => Id,
+        workflow_handler => workflow_test_handler,
+        execution_context => #{type => WorkflowType, async_call_pools => [?ASYNC_CALL_POOL_ID]}
+    },
+
+    set_task_execution_gatherer_option(Config, fail_preparation, Id),
+    ?assertEqual(ok, rpc:call(Worker, workflow_engine, execute_workflow, [?ENGINE_ID, Workflow])),
+
+    #{execution_history := ExecutionHistory} = get_task_execution_history(Config),
+    ?assertNotEqual(timeout, ExecutionHistory),
+    ExecutionHistoryWithoutPrepare = verify_preparation_phase(Id, ExecutionHistory),
+    ?assertEqual([], ExecutionHistoryWithoutPrepare),
+    verify_memory(Config),
+    ct:print("Execution with error verified"),
+
+    unset_task_execution_gatherer_option(Config, fail_preparation),
+    ExpectedAfterRestart = get_expected_task_execution_order(Workflow),
+    ?assertEqual(ok, rpc:call(Worker, workflow_engine, execute_workflow, [?ENGINE_ID, Workflow])),
+    #{execution_history := ExecutionHistoryAfterRestart} = ExtendedHistoryStatsAfterRestart =
+        get_task_execution_history(Config),
+    verify_execution_history_stats(ExtendedHistoryStatsAfterRestart, WorkflowType),
+    ?assertNotEqual(timeout, ExecutionHistoryAfterRestart),
+    ExecutionHistoryAfterRestartWithoutPrepare = verify_preparation_phase(Id, ExecutionHistoryAfterRestart),
+
+    verify_execution_history(ExpectedAfterRestart, ExecutionHistoryAfterRestartWithoutPrepare, WorkflowType),
+    verify_memory(Config),
+    ok.
+
+lane_preparation_failure_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    WorkflowType = sync,
+    Id = <<"preparation_failure_test_workflow">>,
+    Workflow = #{
+        id => Id,
+        workflow_handler => workflow_test_handler,
+        execution_context => #{type => WorkflowType, async_call_pools => [?ASYNC_CALL_POOL_ID]}
+    },
+
+    set_task_execution_gatherer_option(Config, fail_lane_preparation, 1),
+    ?assertEqual(ok, rpc:call(Worker, workflow_engine, execute_workflow, [?ENGINE_ID, Workflow])),
+
+    #{execution_history := ExecutionHistoryWithoutTasks} = get_task_execution_history(Config),
+    ?assertNotEqual(timeout, ExecutionHistoryWithoutTasks),
+    ExecutionHistoryWithoutTasksAndPrepare = verify_preparation_phase(Id, ExecutionHistoryWithoutTasks),
+    ?assertEqual([], ExecutionHistoryWithoutTasksAndPrepare),
+    verify_memory(Config),
+    ct:print("Execution with error verified"),
+
+    set_task_execution_gatherer_option(Config, fail_lane_preparation, 3),
+    ?assertEqual(ok, rpc:call(Worker, workflow_engine, execute_workflow, [?ENGINE_ID, Workflow])),
+
+    Expected = get_expected_task_execution_order_with_lane_preparation_error(Workflow, 3),
+    #{execution_history := ExecutionHistory} = ExtendedHistoryStats = get_task_execution_history(Config),
+    verify_execution_history_stats(ExtendedHistoryStats, WorkflowType),
+    ?assertNotEqual(timeout, ExecutionHistory),
+    ExecutionHistoryWithoutPrepare = verify_preparation_phase(Id, ExecutionHistory),
+    verify_execution_history(Expected, ExecutionHistoryWithoutPrepare, WorkflowType),
+    verify_memory(Config, true),
+    ct:print("Execution with secoond error verified"),
+
+    unset_task_execution_gatherer_option(Config, fail_lane_preparation),
+    ExpectedAfterRestart = get_expected_task_execution_order_after_restart(Workflow, 3, <<"0">>),
+    ?assertEqual(ok, rpc:call(Worker, workflow_engine, execute_workflow, [?ENGINE_ID, Workflow])),
+    #{execution_history := ExecutionHistoryAfterRestart} = ExtendedHistoryStatsAfterRestart =
+        get_task_execution_history(Config),
+    verify_execution_history_stats(ExtendedHistoryStatsAfterRestart, WorkflowType),
+    ?assertNotEqual(timeout, ExecutionHistoryAfterRestart),
+    verify_execution_history(ExpectedAfterRestart, ExecutionHistoryAfterRestart, WorkflowType),
+    verify_memory(Config),
+    ok.
+
+
 
 %%%===================================================================
 %%% Init/teardown functions
@@ -269,8 +350,19 @@ init_per_testcase(_, Config) ->
     test_utils:mock_new(Workers, [workflow_test_handler, workflow_engine_callback_handler]),
 
     test_utils:mock_expect(Workers, workflow_test_handler, prepare, fun(ExecutionId, Context) ->
-        Master ! {task_processing, self(), <<ExecutionId/binary, "_prepare">>, undefined},
-        meck:passthrough([ExecutionId, Context])
+        Master ! {preparation, self(), <<ExecutionId/binary, "_prepare">>},
+        receive
+            history_saved -> meck:passthrough([ExecutionId, Context]);
+            fail_preparation -> error
+        end
+    end),
+
+    test_utils:mock_expect(Workers, workflow_test_handler, get_lane_spec, fun(ExecutionId, Context, LaneIndex) ->
+        Master ! {lane_preparation, self(), LaneIndex},
+        receive
+            history_saved -> meck:passthrough([ExecutionId, Context, LaneIndex]);
+            fail_preparation -> error
+        end
     end),
 
     test_utils:mock_expect(Workers, workflow_test_handler, process_item,
@@ -350,6 +442,23 @@ task_execution_gatherer_loop(#{execution_history := History} = Acc, ProcWaitingF
                 _ -> ProcWaitingForAns ! gathering_task_execution_history
             end,
             task_execution_gatherer_loop(Acc4, ProcWaitingForAns, Options);
+        {preparation, Sender, Log} ->
+            case Options of
+                #{fail_preparation := _} ->
+                    Sender ! fail_preparation;
+                _ ->
+                    Sender ! history_saved
+            end,
+            Acc2 = Acc#{execution_history => [{Log, undefined} | History]},
+            task_execution_gatherer_loop(Acc2, ProcWaitingForAns, Options);
+        {lane_preparation, Sender, LaneIndex} ->
+            case Options of
+                #{fail_lane_preparation := LaneIndex} ->
+                    Sender ! fail_preparation;
+                _ ->
+                    Sender ! history_saved
+            end,
+            task_execution_gatherer_loop(Acc, ProcWaitingForAns, Options);
         {get_task_execution_history, Sender} ->
             task_execution_gatherer_loop(Acc, Sender, Options);
         {set_option, Key, Value} ->
@@ -439,6 +548,10 @@ get_expected_task_execution_order_with_timeout(#{id := ExecutionId, execution_co
         {expected_timeout, LaneWithErrorIndex, BoxWithErrorIndex, ItemToFail, TaskToFail}
     ).
 
+get_expected_task_execution_order_with_lane_preparation_error(#{id := ExecutionId, execution_context := Context},
+    FailedLaneIndex) ->
+    get_expected_task_execution_order(1, ExecutionId, Context, {expect_lane_failure, FailedLaneIndex}).
+
 get_expected_task_execution_order_after_restart(#{id := ExecutionId, execution_context := Context},
     RestartedLaneIndex, RestartedItem) ->
     get_expected_task_execution_order(1, ExecutionId, Context, {restarted_from, RestartedLaneIndex, RestartedItem}).
@@ -461,6 +574,8 @@ get_expected_task_execution_order(LaneIndex, ExecutionId, Context, Description) 
             {{Boxes, Items, ItemToFail, undefined, TasksForFailedItem}, true};
         {expected_timeout, LaneIndex, BoxWithErrorIndex, ItemToFail, TaskToFail} ->
             {{Boxes, Items, ItemToFail, TaskToFail, lists:sublist(Boxes, BoxWithErrorIndex)}, true};
+        {expect_lane_failure, FailedLaneIndex} when LaneIndex =:= FailedLaneIndex ->
+            {undefined, true};
         {restarted_from, RestartedLaneIndex, _RestartedItem} when LaneIndex < RestartedLaneIndex ->
             {undefined, IsLast};
         {restarted_from, LaneIndex, RestartedItem} ->
@@ -473,6 +588,8 @@ get_expected_task_execution_order(LaneIndex, ExecutionId, Context, Description) 
     end,
 
     case {ShouldFinish, LaneSpec} of
+        {true, undefined} ->
+            [];
         {true, _} ->
             [LaneSpec];
         {false, undefined} ->
@@ -498,9 +615,9 @@ verify_preparation_phase(ExecutionId, Gathered) ->
 verify_execution_history([], [], _WorkflowType) ->
     ok;
 verify_execution_history(
-    [{ExpectedTasks, ExpectedItems, ItemToFail, TaskToIgnoreResult, TasksForFailedItem} = LineExpected | ExpectedTail],
+    [{ExpectedTasks, ExpectedItems, ItemToFail, TaskToIgnoreResult, TasksForFailedItem} = LaneExpected | ExpectedTail],
     Gathered, WorkflowType) ->
-    TasksCount = calculate_tasks_count(LineExpected),
+    TasksCount = calculate_tasks_count(LaneExpected),
     LaneElementsCount = case {WorkflowType, TaskToIgnoreResult} of
         {sync, _} -> TasksCount;
         {async, undefined} -> 2 * TasksCount;
@@ -588,7 +705,7 @@ get_keys(Worker, ets_driver, MemoryDriverCtx) ->
             ({_Key, #document{deleted = true}}) -> false;
             ({Key, #document{deleted = false}}) -> {true, Key}
         end, rpc:call(Worker, ets, tab2list, [Table]))
-    end, [], datastore_multiplier:get_names(MemoryDriverCtx));
+    end, [], rpc:call(Worker, datastore_multiplier, get_names, [MemoryDriverCtx]));
 get_keys(Worker, mnesia_driver, MemoryDriverCtx) ->
     lists:foldl(fun(#{table := Table}, AccOut) ->
         AccOut ++ mnesia:async_dirty(fun() ->
@@ -597,4 +714,4 @@ get_keys(Worker, mnesia_driver, MemoryDriverCtx) ->
                 ({entry, Key, #document{deleted = false}}, Acc) -> [Key | Acc]
             end, [], Table])
         end)
-    end, [], datastore_multiplier:get_names(MemoryDriverCtx)).
+    end, [], rpc:call(Worker, datastore_multiplier, get_names, [MemoryDriverCtx])).

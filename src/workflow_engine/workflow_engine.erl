@@ -250,10 +250,9 @@ schedule_next_job(EngineId, DeferredExecutions) ->
                                     ok
                             end,
                             schedule_next_job(EngineId, DeferredExecutions);
-                        ?END_EXECUTION ->
+                        ?END_EXECUTION -> % Workflow or lane preparation failed - cannot notify
                             case workflow_engine_state:remove_execution_id(EngineId, ExecutionId) of
                                 ok ->
-                                    workflow_iterator_snapshot:cleanup(ExecutionId),
                                     workflow_execution_state:cleanup(ExecutionId);
                                 ?WF_ERROR_ALREADY_REMOVED ->
                                     ok

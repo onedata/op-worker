@@ -77,9 +77,13 @@ get(ExecutionId) ->
 
 -spec cleanup(workflow_engine:execution_id()) -> ok.
 cleanup(ExecutionId) ->
-    {ok, _LaneIndex, Iterator} = ?MODULE:get(ExecutionId),
-    iterator:mark_exhausted(Iterator),
-    ok = datastore_model:delete(?CTX, ExecutionId).
+    case ?MODULE:get(ExecutionId) of
+        {ok, _LaneIndex, Iterator} ->
+            iterator:mark_exhausted(Iterator),
+            ok = datastore_model:delete(?CTX, ExecutionId);
+        ?ERROR_NOT_FOUND ->
+            ok
+    end.
 
 %%%===================================================================
 %%% datastore_model callbacks
