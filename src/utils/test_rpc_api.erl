@@ -217,8 +217,8 @@ schedule_atm_workflow_execution(SessId, SpaceId, AtmWorkflowSchemaId, AtmStoreIn
     atm_workflow_executions_forest:listing_opts()
 ) ->
     atm_workflow_executions_forest:entries().
-list_waiting_atm_workflow_executions(SpaceId, AtmWorkflowSchemaId, ListingOpts) ->
-    atm_waiting_workflow_executions:list(SpaceId, AtmWorkflowSchemaId, ListingOpts).
+list_waiting_atm_workflow_executions(SpaceId, AtmInventoryIds, ListingOpts) ->
+    atm_waiting_workflow_executions:list(SpaceId, AtmInventoryIds, ListingOpts).
 
 
 -spec list_ongoing_atm_workflow_executions(
@@ -227,8 +227,8 @@ list_waiting_atm_workflow_executions(SpaceId, AtmWorkflowSchemaId, ListingOpts) 
     atm_workflow_executions_forest:listing_opts()
 ) ->
     atm_workflow_executions_forest:entries().
-list_ongoing_atm_workflow_executions(SpaceId, AtmWorkflowSchemaId, ListingOpts) ->
-    atm_ongoing_workflow_executions:list(SpaceId, AtmWorkflowSchemaId, ListingOpts).
+list_ongoing_atm_workflow_executions(SpaceId, AtmInventoryIds, ListingOpts) ->
+    atm_ongoing_workflow_executions:list(SpaceId, AtmInventoryIds, ListingOpts).
 
 
 -spec perform_io_test(file_meta:path(), tokens:serialized()) -> ok | error.

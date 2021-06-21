@@ -154,7 +154,7 @@ create_and_execute_workflow_test(_Config) ->
     UserId = oct_background:get_user_id(user1),
     UserAuth = aai:user_auth(UserId),
 
-    InventoryId = ozw_test_rpc:create_inventory(UserAuth, UserId, ?INVENTORY_SCHEMA(<<"my_inventory">>)),
+    InventoryId = ozw_test_rpc:create_inventory_for_user(UserAuth, UserId, ?INVENTORY_SCHEMA(<<"my_inventory">>)),
     LambdaId = ozw_test_rpc:create_lambda(UserAuth, ?LAMBDA_SCHEMA(InventoryId)),
 
     StoreId = str_utils:rand_hex(15),
@@ -213,8 +213,8 @@ mock_openfaas() ->
     ok = test_utils:mock_expect(Worker, atm_openfaas_task_executor, prepare, fun(_) -> ok end),
     ok = test_utils:mock_expect(Worker, atm_openfaas_task_executor, run,
         fun(AtmJobExecutionCtx, Data, AtmTaskExecutor) ->
-            Image = getExecutorImage(AtmTaskExecutor),
-            FinishCallbackUrl = getJobExecutionCallback(AtmJobExecutionCtx),
+            Image = get_executor_image(AtmTaskExecutor),
+            FinishCallbackUrl = atm_job_execution_ctx:get_report_result_url(AtmJobExecutionCtx),
 
             spawn(fun() ->
                 %% sleep, to simulate openfaas calculation delay
@@ -231,16 +231,10 @@ mock_openfaas() ->
 
 
 %% @private
--spec getExecutorImage(term()) -> binary().
-getExecutorImage(AtmTaskExecutor) ->
+-spec get_executor_image(term()) -> binary().
+get_executor_image(AtmTaskExecutor) ->
     Record = element(3, AtmTaskExecutor),
     element(2, Record).
-
-
-%% @private
--spec getJobExecutionCallback(term()) -> binary().
-getJobExecutionCallback(AtmJobExecutionCtx) ->
-    element(5, AtmJobExecutionCtx).
 
 
 %% @private
@@ -248,7 +242,7 @@ getJobExecutionCallback(AtmJobExecutionCtx) ->
 workflow_is_waiting(ExecutionId, InventoryId) ->
     SpaceId = oct_background:get_space_id(space_krk),
     WaitingList = opw_test_rpc:list_waiting_atm_workflow_executions(krakow, SpaceId, InventoryId, ?LISTING_OPTS),
-    lists:all(fun({_, ItemExecutionId}) ->
+    lists:any(fun({_, ItemExecutionId}) ->
         ItemExecutionId == ExecutionId
     end, WaitingList).
 
@@ -258,6 +252,6 @@ workflow_is_waiting(ExecutionId, InventoryId) ->
 workflow_is_ongoing(ExecutionId, InventoryId) ->
     SpaceId = oct_background:get_space_id(space_krk),
     WaitingList = opw_test_rpc:list_ongoing_atm_workflow_executions(krakow, SpaceId, InventoryId, ?LISTING_OPTS),
-    lists:all(fun({_, ItemExecutionId}) ->
+    lists:any(fun({_, ItemExecutionId}) ->
         ItemExecutionId == ExecutionId
     end, WaitingList).
