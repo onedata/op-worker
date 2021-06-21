@@ -343,9 +343,9 @@ process_item(EngineId, ExecutionId, JobExecutionSpec = #job_execution_spec{
 
         report_execution_status_update(ExecutionId, EngineId, ReportType, JobIdentifier, undefined, FinalAns)
     catch
-        Error2:Reason2  ->
+        Error:Reason  ->
             ?error_stacktrace("Unexpected error handling task ~p for item id ~p: ~p:~p",
-                [TaskId, ItemId, Error2, Reason2])
+                [TaskId, ItemId, Error, Reason])
     end.
 
 -spec process_item(

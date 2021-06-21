@@ -29,6 +29,7 @@
     multiple_async_workflow_execution_test/1,
     fail_one_of_many_task_in_box_test/1,
     fail_only_task_in_box_test/1,
+    fail_only_task_in_lane_test/1,
     timeout_test/1,
     heartbeat_test/1,
     preparation_failure_test/1,
@@ -43,6 +44,7 @@ all() ->
         multiple_async_workflow_execution_test,
         fail_one_of_many_task_in_box_test,
         fail_only_task_in_box_test,
+        fail_only_task_in_lane_test,
         timeout_test,
         heartbeat_test,
         preparation_failure_test,
@@ -57,17 +59,15 @@ all() ->
 %%%===================================================================
 
 single_sync_workflow_execution_test(Config) ->
-    single_workflow_execution_test_base(Config, sync).
+    single_workflow_execution_test_base(Config, sync, <<"test_workflow">>).
 
 single_async_workflow_execution_test(Config) ->
-    single_workflow_execution_test_base(Config, async).
+    single_workflow_execution_test_base(Config, async, <<"async_test_workflow">>).
 
-single_workflow_execution_test_base(Config, WorkflowType) ->
+single_workflow_execution_test_base(Config, WorkflowType, Id) ->
+    InitialKeys = get_all_keys(Config),
+
     [Worker | _] = ?config(op_worker_nodes, Config),
-    Id = case WorkflowType of
-        sync -> <<"test_workflow">>;
-        async -> <<"async_test_workflow">>
-    end,
     Workflow = #{
         id => Id,
         workflow_handler => workflow_test_handler,
@@ -82,7 +82,7 @@ single_workflow_execution_test_base(Config, WorkflowType) ->
     ?assertNotEqual(timeout, ExecutionHistory),
     ExecutionHistoryWithoutPrepare = verify_preparation_phase(Id, ExecutionHistory),
     verify_execution_history(Expected, ExecutionHistoryWithoutPrepare, WorkflowType),
-    verify_memory(Config),
+    verify_memory(Config, InitialKeys),
     ok.
 
 multiple_sync_workflow_execution_test(Config) ->
@@ -92,6 +92,8 @@ multiple_async_workflow_execution_test(Config) ->
     multiple_workflow_execution_test_base(Config, async).
 
 multiple_workflow_execution_test_base(Config, WorkflowType) ->
+    InitialKeys = get_all_keys(Config),
+
     [Worker | _] = ?config(op_worker_nodes, Config),
     ExecutionIdsBase = [<<"wf1">>, <<"wf2">>, <<"wf3">>, <<"wf4">>, <<"wf5">>],
     Ids = case WorkflowType of
@@ -116,7 +118,7 @@ multiple_workflow_execution_test_base(Config, WorkflowType) ->
     verify_executions_started(length(Workflows)),
 
     #{execution_history := ExecutionHistory} = ExtendedHistoryStats = get_task_execution_history(Config),
-    verify_execution_history_stats(ExtendedHistoryStats, WorkflowType),
+    verify_execution_history_stats(ExtendedHistoryStats, WorkflowType, length(Workflows), false),
     ?assertNotEqual(timeout, ExecutionHistory),
 
     % Different id sizes - TODO VFS-7784 - add workflow id to history element
@@ -148,19 +150,25 @@ multiple_workflow_execution_test_base(Config, WorkflowType) ->
         verify_execution_history(LanesDefinitions, ExecutionHistoryWithoutPrepare, WorkflowType)
     end, lists:zip(Ids, Workflows)),
 
-    verify_memory(Config),
+    verify_memory(Config, InitialKeys),
     ok.
 
 fail_one_of_many_task_in_box_test(Config) ->
-    failure_test_base(Config, <<"restart_test_workflow_task3_3_2">>, 3, 3).
+    failure_test_base(Config, <<"fail_one_test_workflow">>, <<"fail_one_test_workflow_task3_3_2">>, 3, 3).
 
 fail_only_task_in_box_test(Config) ->
-    failure_test_base(Config, <<"restart_test_workflow_task3_1_1">>, 3, 1).
+    failure_test_base(Config, <<"fail_only_task_in_box_test_workflow">>,
+        <<"fail_only_task_in_box_test_workflow_task3_1_1">>, 3, 1).
 
-failure_test_base(Config, TaskToFail, LaneWithErrorIndex, BoxWithErrorIndex) ->
+fail_only_task_in_lane_test(Config) ->
+    failure_test_base(Config, <<"fail_only_task_in_lane_test_workflow">>,
+        <<"fail_only_task_in_lane_test_workflow_task1_1_1">>, 1, 1).
+
+failure_test_base(Config, Id, TaskToFail, LaneWithErrorIndex, BoxWithErrorIndex) ->
+    InitialKeys = get_all_keys(Config),
+
     [Worker | _] = ?config(op_worker_nodes, Config),
     WorkflowType = sync,
-    Id = <<"failure_test_workflow">>,
     Workflow = #{
         id => Id,
         workflow_handler => workflow_test_handler,
@@ -178,7 +186,7 @@ failure_test_base(Config, TaskToFail, LaneWithErrorIndex, BoxWithErrorIndex) ->
     ?assertNotEqual(timeout, ExecutionHistory),
     ExecutionHistoryWithoutPrepare = verify_preparation_phase(Id, ExecutionHistory),
     verify_execution_history(Expected, ExecutionHistoryWithoutPrepare, WorkflowType),
-    verify_memory(Config, true),
+    verify_memory(Config, InitialKeys, true),
     ct:print("Execution with error verified"),
 
     unset_task_execution_gatherer_option(Config, fail_job),
@@ -186,16 +194,18 @@ failure_test_base(Config, TaskToFail, LaneWithErrorIndex, BoxWithErrorIndex) ->
     ?assertEqual(ok, rpc:call(Worker, workflow_engine, execute_workflow, [?ENGINE_ID, Workflow])),
     #{execution_history := ExecutionHistoryAfterRestart} = ExtendedHistoryStatsAfterRestart =
         get_task_execution_history(Config),
-    verify_execution_history_stats(ExtendedHistoryStatsAfterRestart, WorkflowType),
+    verify_execution_history_stats(ExtendedHistoryStatsAfterRestart, WorkflowType, 1, true),
     ?assertNotEqual(timeout, ExecutionHistoryAfterRestart),
     verify_execution_history(ExpectedAfterRestart, ExecutionHistoryAfterRestart, WorkflowType),
-    verify_memory(Config),
+    verify_memory(Config, InitialKeys),
     ok.
 
 timeout_test(Config) ->
     timeout_test(Config, <<"async_timeouts_workflow_task3_3_2">>, 3, 3).
 
 timeout_test(Config, TaskToFail, LaneWithErrorIndex, BoxWithErrorIndex) ->
+    InitialKeys = get_all_keys(Config),
+
     [Worker | _] = ?config(op_worker_nodes, Config),
     WorkflowType = async,
     Id = <<"async_timeouts_workflow">>,
@@ -217,7 +227,7 @@ timeout_test(Config, TaskToFail, LaneWithErrorIndex, BoxWithErrorIndex) ->
     ?assertNotEqual(timeout, ExecutionHistory),
     ExecutionHistoryWithoutPrepare = verify_preparation_phase(Id, ExecutionHistory),
     verify_execution_history(Expected, ExecutionHistoryWithoutPrepare, WorkflowType),
-    verify_memory(Config, true),
+    verify_memory(Config, InitialKeys, true),
     ct:print("Execution with error verified"),
 
     unset_task_execution_gatherer_option(Config, fail_job),
@@ -225,20 +235,22 @@ timeout_test(Config, TaskToFail, LaneWithErrorIndex, BoxWithErrorIndex) ->
     ?assertEqual(ok, rpc:call(Worker, workflow_engine, execute_workflow, [?ENGINE_ID, Workflow])),
     #{execution_history := ExecutionHistoryAfterRestart} = ExtendedHistoryStatsAfterRestart =
         get_task_execution_history(Config),
-    verify_execution_history_stats(ExtendedHistoryStatsAfterRestart, WorkflowType),
+    verify_execution_history_stats(ExtendedHistoryStatsAfterRestart, WorkflowType, 1, true),
     ?assertNotEqual(timeout, ExecutionHistoryAfterRestart),
     verify_execution_history(ExpectedAfterRestart, ExecutionHistoryAfterRestart, WorkflowType),
-    verify_memory(Config),
+    verify_memory(Config, InitialKeys),
     ok.
 
 heartbeat_test(Config) ->
     ResultToDelay = <<"result_async_test_workflow_task3_3_2">>,
     ItemToDelay = <<"100">>,
     set_task_execution_gatherer_option(Config, delay_execution, {ResultToDelay, ItemToDelay}),
-    single_workflow_execution_test_base(Config, async),
+    single_workflow_execution_test_base(Config, async, <<"async_heartbeat_test_workflow">>),
     unset_task_execution_gatherer_option(Config, delay_execution).
 
 preparation_failure_test(Config) ->
+    InitialKeys = get_all_keys(Config),
+
     [Worker | _] = ?config(op_worker_nodes, Config),
     WorkflowType = sync,
     Id = <<"preparation_failure_test_workflow">>,
@@ -255,7 +267,7 @@ preparation_failure_test(Config) ->
     ?assertNotEqual(timeout, ExecutionHistory),
     ExecutionHistoryWithoutPrepare = verify_preparation_phase(Id, ExecutionHistory),
     ?assertEqual([], ExecutionHistoryWithoutPrepare),
-    verify_memory(Config),
+    verify_memory(Config, InitialKeys),
     ct:print("Execution with error verified"),
 
     unset_task_execution_gatherer_option(Config, fail_preparation),
@@ -268,13 +280,15 @@ preparation_failure_test(Config) ->
     ExecutionHistoryAfterRestartWithoutPrepare = verify_preparation_phase(Id, ExecutionHistoryAfterRestart),
 
     verify_execution_history(ExpectedAfterRestart, ExecutionHistoryAfterRestartWithoutPrepare, WorkflowType),
-    verify_memory(Config),
+    verify_memory(Config, InitialKeys),
     ok.
 
 lane_preparation_failure_test(Config) ->
+    InitialKeys = get_all_keys(Config),
+
     [Worker | _] = ?config(op_worker_nodes, Config),
     WorkflowType = sync,
-    Id = <<"preparation_failure_test_workflow">>,
+    Id = <<"lane_preparation_failure_test_workflow">>,
     Workflow = #{
         id => Id,
         workflow_handler => workflow_test_handler,
@@ -288,7 +302,7 @@ lane_preparation_failure_test(Config) ->
     ?assertNotEqual(timeout, ExecutionHistoryWithoutTasks),
     ExecutionHistoryWithoutTasksAndPrepare = verify_preparation_phase(Id, ExecutionHistoryWithoutTasks),
     ?assertEqual([], ExecutionHistoryWithoutTasksAndPrepare),
-    verify_memory(Config),
+    verify_memory(Config, InitialKeys),
     ct:print("Execution with error verified"),
 
     set_task_execution_gatherer_option(Config, fail_lane_preparation, 3),
@@ -300,7 +314,7 @@ lane_preparation_failure_test(Config) ->
     ?assertNotEqual(timeout, ExecutionHistory),
     ExecutionHistoryWithoutPrepare = verify_preparation_phase(Id, ExecutionHistory),
     verify_execution_history(Expected, ExecutionHistoryWithoutPrepare, WorkflowType),
-    verify_memory(Config, true),
+    verify_memory(Config, InitialKeys, true),
     ct:print("Execution with secoond error verified"),
 
     unset_task_execution_gatherer_option(Config, fail_lane_preparation),
@@ -308,10 +322,10 @@ lane_preparation_failure_test(Config) ->
     ?assertEqual(ok, rpc:call(Worker, workflow_engine, execute_workflow, [?ENGINE_ID, Workflow])),
     #{execution_history := ExecutionHistoryAfterRestart} = ExtendedHistoryStatsAfterRestart =
         get_task_execution_history(Config),
-    verify_execution_history_stats(ExtendedHistoryStatsAfterRestart, WorkflowType),
+    verify_execution_history_stats(ExtendedHistoryStatsAfterRestart, WorkflowType, 1, true),
     ?assertNotEqual(timeout, ExecutionHistoryAfterRestart),
     verify_execution_history(ExpectedAfterRestart, ExecutionHistoryAfterRestart, WorkflowType),
-    verify_memory(Config),
+    verify_memory(Config, InitialKeys),
     ok.
 
 
@@ -407,7 +421,7 @@ init_per_testcase(_, Config) ->
 
     test_utils:mock_expect(Workers, workflow_test_handler, handle_lane_execution_ended,
         fun(ExecutionId, Context, LaneIndex) ->
-            Master ! {lane_ended, LaneIndex, workflow_execution_state:is_finished_and_cleaned(ExecutionId)},
+            Master ! {lane_ended, LaneIndex, workflow_execution_state:is_finished_and_cleaned(ExecutionId, LaneIndex)},
             meck:passthrough([ExecutionId, Context, LaneIndex])
         end
     ),
@@ -450,22 +464,28 @@ task_execution_gatherer_loop(#{execution_history := History} = Acc, ProcWaitingF
             end,
             task_execution_gatherer_loop(Acc4, ProcWaitingForAns, Options);
         {preparation, Sender, Log} ->
+            Acc2 = update_slots_usage_statistics(Acc, async_slots_used_stats, rpc:call(node(Sender),
+                workflow_async_call_pool, get_slot_usage, [?ASYNC_CALL_POOL_ID])),
+            Acc3 = update_slots_usage_statistics(Acc2, pool_slots_used_stats, rpc:call(node(Sender),
+                workflow_engine_state, get_slots_used, [?ENGINE_ID])),
             case Options of
                 #{fail_preparation := _} ->
                     Sender ! fail_preparation;
                 _ ->
                     Sender ! history_saved
             end,
-            Acc2 = Acc#{execution_history => [{Log, undefined} | History]},
-            task_execution_gatherer_loop(Acc2, ProcWaitingForAns, Options);
+            Acc4 = Acc3#{execution_history => [{Log, undefined} | History]},
+            task_execution_gatherer_loop(Acc4, ProcWaitingForAns, Options);
         {lane_preparation, Sender, LaneIndex} ->
+            Acc2 = update_slots_usage_statistics(Acc, async_slots_used_stats, rpc:call(node(Sender),
+                workflow_async_call_pool, get_slot_usage, [?ASYNC_CALL_POOL_ID])),
             case Options of
                 #{fail_lane_preparation := LaneIndex} ->
                     Sender ! fail_preparation;
                 _ ->
                     Sender ! history_saved
             end,
-            task_execution_gatherer_loop(Acc, ProcWaitingForAns, Options);
+            task_execution_gatherer_loop(Acc2, ProcWaitingForAns, Options);
         {lane_ended, LaneIndex, IsFinished} ->
             IsFinishedList = maps:get(is_finished_and_cleaned, Acc, []),
             Acc2 = Acc#{is_finished_and_cleaned => [{LaneIndex, IsFinished} | IsFinishedList]},
@@ -509,35 +529,41 @@ get_task_execution_history(Config) ->
         30000 -> timeout
     end.
 
-% TODO VFS-7784 - uncomment checks in this function and fix tests
 verify_execution_history_stats(Acc, WorkflowType) ->
+    verify_execution_history_stats(Acc, WorkflowType, 1, false).
+
+% TODO VFS-7784 - uncomment checks in this function and fix tests
+verify_execution_history_stats(Acc, WorkflowType, WorkflowNumber, IsPrepared) ->
     lists:foreach(fun(IsFinished) ->
         ?assertMatch({_, true}, IsFinished)
     end, maps:get(is_finished_and_cleaned, Acc, [])),
 
     ?assertEqual(0, maps:get(final_async_slots_used, Acc)),
-%%    ?assertEqual(0, maps:get(final_pool_slots_used, Acc)),
+    ?assertEqual(0, maps:get(final_pool_slots_used, Acc)),
 
     {MinAsyncSlots, MaxAsyncSlots} = maps:get(async_slots_used_stats, Acc),
     {MinPoolSlots, MaxPoolSlots} = maps:get(pool_slots_used_stats, Acc),
+    ?assertEqual(0, MinAsyncSlots),
     case WorkflowType of
         sync ->
-            ?assertEqual(0, MinAsyncSlots),
             ?assertEqual(0, MaxAsyncSlots),
             % Task processing is initialized after pool slots count is incremented
             % and it is finished before pool slots count is decremented so '0' should not appear in history
-%%            ?assertEqual(1, MinPoolSlots);
-            ok;
+            ?assertNotEqual(0, MinPoolSlots),
+
+            case IsPrepared of
+                false ->
+                    % Each workflow can block only 2 slots for preparation
+                    % (one for preparation callback, one to check that nothing more can be executed)
+                    ?assert(MinPoolSlots =< 2 * WorkflowNumber);
+                true ->
+                    ok
+            end;
         async ->
-            % Task processing is initialized after async slots count is incremented
-            % and it is finished before async slots count is decremented so '0' should not appear in history
-%%            ?assertEqual(1, MinAsyncSlots),
             ?assertEqual(60, MaxAsyncSlots),
             % '0' should appear in history because slots count is decremented after async processing is scheduled
-%%            ?assertEqual(0, MinPoolSlots)
-            ok
+            ?assertEqual(0, MinPoolSlots)
     end,
-
     ?assertEqual(20, MaxPoolSlots).
 
 set_task_execution_gatherer_option(Config, Key, Value) ->
@@ -698,23 +724,30 @@ verify_executions_started(Count) ->
     ?assertEqual(ok, Check),
     verify_executions_started(Count - 1).
 
-verify_memory(Config) ->
-    verify_memory(Config, false).
+verify_memory(Config, InitialKeys) ->
+    verify_memory(Config, InitialKeys, false).
 
-verify_memory(Config, RestartDocPresent) ->
+verify_memory(Config, InitialKeys, RestartDocPresent) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
 
     ?assertEqual([], rpc:call(Worker, workflow_engine_state, get_execution_ids, [?ENGINE_ID])),
     ?assertEqual(0, rpc:call(Worker, workflow_engine_state, get_slots_used, [?ENGINE_ID])),
 
+    lists:foreach(fun({Model, Keys}) ->
+        case RestartDocPresent andalso Model =:= workflow_iterator_snapshot of
+            true -> ?assertMatch([_], Keys -- proplists:get_value(Model, InitialKeys));
+            false -> ?assertEqual([], Keys -- proplists:get_value(Model, InitialKeys))
+        end
+    end, get_all_keys(Config)).
+
+get_all_keys(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+
     Models = [workflow_cached_item, workflow_iterator_snapshot, workflow_execution_state],
-    lists:foreach(fun(Model) ->
+    lists:map(fun(Model) ->
         Ctx = datastore_model_default:set_defaults(datastore_model_default:get_ctx(Model)),
         #{memory_driver := MemoryDriver, memory_driver_ctx := MemoryDriverCtx} = Ctx,
-        case RestartDocPresent andalso Model =:= workflow_iterator_snapshot of
-            true -> ?assertMatch([_], get_keys(Worker, MemoryDriver, MemoryDriverCtx));
-            false -> ?assertEqual([], get_keys(Worker, MemoryDriver, MemoryDriverCtx))
-        end
+        {Model, get_keys(Worker, MemoryDriver, MemoryDriverCtx)}
     end, Models).
 
 

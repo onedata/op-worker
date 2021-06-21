@@ -168,12 +168,6 @@ remove_pending_async_job(Jobs = #workflow_jobs{
 
 -spec prepare_next_parallel_box(jobs(), job_identifier(), workflow_execution_state:boxes_map(), non_neg_integer()) ->
     {ok | ?WF_ERROR_ITEM_PROCESSING_FINISHED(workflow_execution_state:index(), item_processing_result()), jobs()}.
-prepare_next_parallel_box(Jobs,
-    #job_identifier{
-        parallel_box_index = BoxCount,
-        item_index = ItemIndex
-    }, _BoxesSpec, BoxCount) ->
-    {?WF_ERROR_ITEM_PROCESSING_FINISHED(ItemIndex, ?SUCCESS), Jobs};
 prepare_next_parallel_box(
     Jobs = #workflow_jobs{
         failed_items = Failed,
@@ -183,12 +177,14 @@ prepare_next_parallel_box(
         item_index = ItemIndex,
         parallel_box_index = BoxIndex
     },
-    BoxesSpec, _BoxCount) ->
-    case has_item(ItemIndex, Failed) of
-        true ->
+    BoxesSpec, BoxCount) ->
+    case {has_item(ItemIndex, Failed), BoxIndex} of
+        {true, _} ->
             {?WF_ERROR_ITEM_PROCESSING_FINISHED(ItemIndex, ?FAILURE),
                 Jobs#workflow_jobs{failed_items = sets:del_element(ItemIndex, Failed)}};
-        false ->
+        {false, BoxCount} ->
+            {?WF_ERROR_ITEM_PROCESSING_FINISHED(ItemIndex, ?SUCCESS), Jobs};
+        {false, _} ->
             NewBoxIndex = BoxIndex + 1,
             Tasks = maps:get(NewBoxIndex, BoxesSpec),
             NewWaiting = lists:foldl(fun(TaskIndex, TmpWaiting) ->

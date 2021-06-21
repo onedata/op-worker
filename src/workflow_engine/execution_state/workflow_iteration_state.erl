@@ -216,8 +216,6 @@ get_item_id(#iteration_state{pending_items = Pending}, ItemIndex) ->
 is_finished_and_cleaned(#iteration_state{
     pending_items = Pending,
     items_finished_ahead = FinishedAhead,
-    last_registered_iterator = LastIterator,
-    last_registered_iterator_index = LastIteratorIndex
+    last_registered_iterator = LastIterator
 }) ->
-    (LastIterator =:= undefined orelse LastIteratorIndex =:= 0)
-        andalso maps:size(Pending) =:= 0 andalso gb_trees:is_empty(FinishedAhead).
+    LastIterator =:= undefined orelse maps:size(Pending) =:= 0 andalso gb_trees:is_empty(FinishedAhead).
