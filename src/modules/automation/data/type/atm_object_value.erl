@@ -44,11 +44,11 @@ assert_meets_constraints(_AtmWorkflowExecutionCtx, _Value, _ValueConstraints) ->
 %%%===================================================================
 
 
--spec compress(atm_value:expanded()) -> map().
+-spec compress(atm_value:expanded()) -> json_utils:json_map().
 compress(Value) -> Value.
 
 
--spec expand(atm_workflow_execution_ctx:record(), map()) ->
+-spec expand(atm_workflow_execution_ctx:record(), json_utils:json_map()) ->
     {ok, atm_value:expanded()}.
 expand(_, Value) ->
     {ok, Value}.

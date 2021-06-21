@@ -35,11 +35,11 @@
 -export([compress/1, expand/2]).
 
 
--type id() :: atm_value:compressed(). % More precisely dataset:id() but without undefined. Specified this way for dialyzer.
 -type list_opts() :: #{
     start_index := dataset_api:index(),
     offset := non_neg_integer()
 }.
+
 
 %%%===================================================================
 %%% atm_data_validator callbacks
@@ -52,13 +52,8 @@
     atm_data_type:value_constraints()
 ) ->
     ok | no_return().
-assert_meets_constraints(AtmWorkflowExecutionCtx, #{<<"datasetId">> := DatasetId} = Value, _ValueConstraints) ->
-    try has_access(AtmWorkflowExecutionCtx, DatasetId) of
-        true -> ok;
-        false -> throw(?ERROR_NOT_FOUND)
-    catch _:_ ->
-        throw(?ERROR_ATM_DATA_TYPE_UNVERIFIED(Value, atm_dataset_type))
-    end.
+assert_meets_constraints(AtmWorkflowExecutionCtx, #{<<"datasetId">> := DatasetId}, _ValueConstraints) ->
+    check_implicit_constraints(AtmWorkflowExecutionCtx, DatasetId).
 
 
 %%%===================================================================
@@ -66,8 +61,8 @@ assert_meets_constraints(AtmWorkflowExecutionCtx, #{<<"datasetId">> := DatasetId
 %%%===================================================================
 
 
--spec list_children(atm_workflow_execution_ctx:record(), id(), list_opts(), non_neg_integer()) ->
-    {[{id(), dataset:name()}], [], list_opts(), IsLast :: boolean()} | no_return().
+-spec list_children(atm_workflow_execution_ctx:record(), dataset:id(), list_opts(), non_neg_integer()) ->
+    {[{dataset:id(), dataset:name()}], [], list_opts(), IsLast :: boolean()} | no_return().
 list_children(AtmWorkflowExecutionCtx, DatasetId, ListOpts, BatchSize) ->
     SessionId = atm_workflow_execution_ctx:get_session_id(AtmWorkflowExecutionCtx),
     case lfm:list_children_datasets(SessionId, DatasetId, ListOpts#{limit => BatchSize}) of
@@ -112,11 +107,11 @@ decode_listing_options(#{<<"offset">> := Offset, <<"startIndex">> := StartIndex}
 %%%===================================================================
 
 
--spec compress(atm_value:expanded()) -> id().
+-spec compress(atm_value:expanded()) -> dataset:id().
 compress(#{<<"datasetId">> := DatasetId}) -> DatasetId.
 
 
--spec expand(atm_workflow_execution_ctx:record(), id()) -> 
+-spec expand(atm_workflow_execution_ctx:record(), dataset:id()) ->
     {ok, atm_value:expanded()} | {error, term()}.
 expand(AtmWorkflowExecutionCtx, DatasetId) ->
     SessionId = atm_workflow_execution_ctx:get_session_id(AtmWorkflowExecutionCtx),
@@ -132,20 +127,25 @@ expand(AtmWorkflowExecutionCtx, DatasetId) ->
 
 
 %% @private
--spec has_access(atm_workflow_execution_ctx:record(), id()) -> boolean() | no_return().
-has_access(AtmWorkflowExecutionCtx, DatasetId) ->
+-spec check_implicit_constraints(atm_workflow_execution_ctx:record(), dataset:id()) ->
+    ok | no_return().
+check_implicit_constraints(AtmWorkflowExecutionCtx, DatasetId) ->
     SpaceId = atm_workflow_execution_ctx:get_space_id(AtmWorkflowExecutionCtx),
     SessionId = atm_workflow_execution_ctx:get_session_id(AtmWorkflowExecutionCtx),
 
     case lfm:get_dataset_info(SessionId, DatasetId) of
         {ok, #dataset_info{root_file_guid = RootFileGuid}} ->
             case file_id:guid_to_space_id(RootFileGuid) of
-                SpaceId -> true;
-                _ -> false
+                SpaceId ->
+                    ok;
+                _ ->
+                    throw(?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(#{<<"inSpace">> => SpaceId}))
             end;
         {error, Type} = Error ->
             case atm_value:is_error_ignored(Type) of
-                true -> false;
-                false -> throw(Error)
+                true ->
+                    throw(?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(#{<<"hasAccess">> => true}));
+                false ->
+                    throw(Error)
             end
     end.

@@ -29,8 +29,8 @@
     {error, {atm_data_type_unverified, __VALUE, __EXP_TYPE}}
 ).
 
--define(ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(__VALUE, __EXP_CONSTRAINT),
-    {error, {atm_data_value_constraint_unverified, __VALUE, __EXP_CONSTRAINT}}
+-define(ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(__VALUE_CONSTRAINT),
+    {error, {atm_data_value_constraint_unverified, __VALUE_CONSTRAINT}}
 ).
 
 -define(ERROR_ATM_REFERENCED_NONEXISTENT_STORE(__STORE_SCHEMA_ID),
