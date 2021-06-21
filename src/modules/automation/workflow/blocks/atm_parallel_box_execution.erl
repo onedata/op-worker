@@ -102,7 +102,7 @@ create(AtmWorkflowExecutionCreationCtx, AtmLaneIndex, AtmParallelBoxIndex, #atm_
 
     #atm_parallel_box_execution{
         schema_id = AtmParallelBoxSchemaId,
-        status = atm_status_utils:converge(maps:values(AtmTaskExecutionStatuses)),
+        status = atm_task_execution_status_utils:converge(maps:values(AtmTaskExecutionStatuses)),
         task_registry = AtmTaskRegistry,
         task_statuses = AtmTaskExecutionStatuses
     }.
@@ -170,13 +170,15 @@ update_task_status(AtmTaskExecutionId, NewStatus, #atm_parallel_box_execution{
 } = AtmParallelBoxExecution) ->
     AtmTaskExecutionStatus = maps:get(AtmTaskExecutionId, AtmTaskExecutionStatuses),
 
-    case atm_status_utils:is_transition_allowed(AtmTaskExecutionStatus, NewStatus) of
+    case atm_task_execution_status_utils:is_transition_allowed(AtmTaskExecutionStatus, NewStatus) of
         true ->
             NewAtmTaskExecutionStatuses = AtmTaskExecutionStatuses#{
                 AtmTaskExecutionId => NewStatus
             },
             {ok, AtmParallelBoxExecution#atm_parallel_box_execution{
-                status = atm_status_utils:converge(maps:values(NewAtmTaskExecutionStatuses)),
+                status = atm_task_execution_status_utils:converge(
+                    maps:values(NewAtmTaskExecutionStatuses)
+                ),
                 task_statuses = NewAtmTaskExecutionStatuses
             }};
         false ->

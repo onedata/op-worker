@@ -10,7 +10,7 @@
 %%% lanes, parallel boxes and task statuses.
 %%% @end
 %%%-------------------------------------------------------------------
--module(atm_status_utils).
+-module(atm_task_execution_status_utils).
 -author("Bartosz Walkowicz").
 
 -include("modules/automation/atm_execution.hrl").
@@ -21,7 +21,7 @@
     converge/1
 ]).
 
--type status() :: atm_workflow_execution:status() | atm_task_execution:status().
+-type status() :: atm_task_execution:status().
 
 -export_type([status/0]).
 
@@ -31,8 +31,7 @@
 %%%===================================================================
 
 
-%% TODO VFS-7674 add missing transitions
--spec is_transition_allowed(status(), status()) ->
+-spec is_transition_allowed(atm_task_execution:status(), atm_task_execution:status()) ->
     boolean().
 is_transition_allowed(?PENDING_STATUS, ?ACTIVE_STATUS) -> true;
 is_transition_allowed(?ACTIVE_STATUS, ?FINISHED_STATUS) -> true;
@@ -40,9 +39,9 @@ is_transition_allowed(?ACTIVE_STATUS, ?FAILED_STATUS) -> true;
 is_transition_allowed(_, _) -> false.
 
 
--spec converge([status()]) -> status().
+-spec converge([atm_task_execution:status()]) -> atm_task_execution:status().
 converge(Statuses) ->
-    converge_uniquely_sorted(lists:usort(Statuses)).
+    converge_unique(lists:usort(Statuses)).
 
 
 %%%===================================================================
@@ -50,10 +49,22 @@ converge(Statuses) ->
 %%%===================================================================
 
 
-%% TODO VFS-7674 handle all combination of statuses
 %% @private
--spec converge_uniquely_sorted([status()]) -> status().
-converge_uniquely_sorted([Status]) -> Status;
-converge_uniquely_sorted([?ACTIVE_STATUS | _]) -> ?ACTIVE_STATUS;
-converge_uniquely_sorted([?PENDING_STATUS | _]) -> ?ACTIVE_STATUS;
-converge_uniquely_sorted([?FAILED_STATUS, ?FINISHED_STATUS]) -> ?FAILED_STATUS.
+-spec converge_unique([atm_task_execution:status()]) ->
+    atm_task_execution:status().
+converge_unique([Status]) ->
+    Status;
+converge_unique(Statuses) ->
+    [LowestStatusPresent | _] = lists:dropwhile(
+        fun(Status) -> not lists:member(Status, Statuses) end,
+        [?ACTIVE_STATUS, ?PENDING_STATUS, ?FAILED_STATUS, ?FINISHED_STATUS]
+    ),
+
+    case LowestStatusPresent of
+        ?PENDING_STATUS ->
+            % Some elements must have ended execution while others are still
+            % pending - converged/overall status is active
+            ?ACTIVE_STATUS;
+        Status ->
+            Status
+    end.
