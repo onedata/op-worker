@@ -12,37 +12,37 @@
 -module(atm_workflow_execution_test_SUITE).
 -author("Piotr Duleba").
 
--include("modules/automation/atm_tmp.hrl").
--include("modules/automation/atm_execution.hrl").
--include("modules/datastore/datastore_runner.hrl").
-
--include_lib("ctool/include/automation/automation.hrl").
--include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
 
-
-%% exported for CT
 -export([
     groups/0, all/0,
     init_per_suite/1, end_per_suite/1,
     init_per_testcase/2, end_per_testcase/2
 ]).
 
-%% tests
 -export([
-    simple_test/1
+    create_and_execute_workflow_test/1
 ]).
 
 groups() -> [
     {all_tests, [parallel], [
-        simple_test
+        create_and_execute_workflow_test
     ]}
 ].
 
 all() -> [
     {group, all_tests}
 ].
+
+-define(ATTMEPTS, 30).
+
+-define(LISTING_OPTS, #{
+    limit => 300,
+    start_index => <<"">>,
+    offset => 0
+}).
+
 -define(INVENTORY_SCHEMA(InventoryName), #{
     <<"name">> => InventoryName
 }).
@@ -70,7 +70,7 @@ all() -> [
     ],
     <<"operationSpec">> => #{
         <<"engine">> => <<"openfaas">>,
-        <<"dockerImage">> => <<"my_docker_image">>,
+        <<"dockerImage">> => <<"inc_image">>,
         <<"dockerExecutionOptions">> => #{
             <<"mountOneclient">> => true,
             <<"oneclientMountPoint">> => <<"mnt/onedata">>,
@@ -89,7 +89,6 @@ all() -> [
         }
     ]
 }).
-
 
 -define(WORKFLOW_SCHEMA(AtmInventory, StoreId, LambdaId), #{
     <<"atmInventoryId">> => AtmInventory,
@@ -145,36 +144,34 @@ all() -> [
 
 }).
 
+
 %%%===================================================================
 %%% API functions
 %%%===================================================================
 
 
-simple_test(_Config) ->
+create_and_execute_workflow_test(_Config) ->
     UserId = oct_background:get_user_id(user1),
     UserAuth = aai:user_auth(UserId),
 
-    InventoryId = ozw_test_rpc:create_inventory(UserAuth, ?INVENTORY_SCHEMA(<<"my_inventory">>)),
-    ct:pal("InventoryId: ~p", [InventoryId]),
-
+    InventoryId = ozw_test_rpc:create_inventory(UserAuth, UserId, ?INVENTORY_SCHEMA(<<"my_inventory">>)),
     LambdaId = ozw_test_rpc:create_lambda(UserAuth, ?LAMBDA_SCHEMA(InventoryId)),
-    ct:pal("LambdaId: ~p", [LambdaId]),
 
     StoreId = str_utils:rand_hex(15),
     WorkflowSchemaId = ozw_test_rpc:create_workflow_schema(UserAuth, ?WORKFLOW_SCHEMA(InventoryId, StoreId, LambdaId)),
-    ct:pal("WorkflowSchemaId: ~p", [WorkflowSchemaId]),
 
     SpaceId = oct_background:get_space_id(space_krk),
-    SessionId = oct_background:get_user_session_id(admin, krakow),
+    SessionId = oct_background:get_user_session_id(user1, krakow),
 
     StoreInitialVales = #{
-        StoreId => [1,2,3,4]
+        StoreId => [1, 2, 3, 4, 5, 6, 7, 8]
     },
-    Res6 = rpc:call(hd(oct_background:get_provider_nodes(krakow)), lfm, schedule_atm_workflow_execution, [SessionId, SpaceId,WorkflowSchemaId, StoreInitialVales]),
+    {ExecutionId, _ExecutionRecord} = opw_test_rpc:schedule_atm_workflow_execution(
+        krakow, SessionId, SpaceId, WorkflowSchemaId, StoreInitialVales
+    ),
 
-    ct:pal("Schedule: ~p", [Res6]),
-
-    ok.
+    ?assert(workflow_is_waiting(ExecutionId, InventoryId)),
+    ?assertEqual(true, workflow_is_ongoing(ExecutionId, InventoryId), ?ATTMEPTS).
 
 
 %===================================================================
@@ -194,9 +191,73 @@ end_per_suite(_Config) ->
 
 
 init_per_testcase(_Case, Config) ->
+    mock_openfaas(),
     ct:timetrap({minutes, 5}),
     Config.
 
 
 end_per_testcase(_Case, _Config) ->
     ok.
+
+
+%===================================================================
+% Internal functions
+%===================================================================
+
+
+%% @private
+-spec mock_openfaas() -> ok.
+mock_openfaas() ->
+    Worker = hd(oct_background:get_provider_nodes(krakow)),
+    ok = test_utils:mock_new(Worker, atm_openfaas_task_executor),
+    ok = test_utils:mock_expect(Worker, atm_openfaas_task_executor, prepare, fun(_) -> ok end),
+    ok = test_utils:mock_expect(Worker, atm_openfaas_task_executor, run,
+        fun(AtmJobExecutionCtx, Data, AtmTaskExecutor) ->
+            Image = getExecutorImage(AtmTaskExecutor),
+            FinishCallbackUrl = getJobExecutionCallback(AtmJobExecutionCtx),
+
+            spawn(fun() ->
+                %% sleep, to simulate openfaas calculation delay
+                timer:sleep(5000),
+
+                Result = case Image of
+                    <<"inc_image">> -> integer_to_binary(maps:get(<<"arg1">>, Data) + 1);
+                    _ -> #{}
+                end,
+                http_client:post(FinishCallbackUrl, #{}, Result)
+            end),
+            ok
+        end).
+
+
+%% @private
+-spec getExecutorImage(term()) -> binary().
+getExecutorImage(AtmTaskExecutor) ->
+    Record = element(3, AtmTaskExecutor),
+    element(2, Record).
+
+
+%% @private
+-spec getJobExecutionCallback(term()) -> binary().
+getJobExecutionCallback(AtmJobExecutionCtx) ->
+    element(5, AtmJobExecutionCtx).
+
+
+%% @private
+-spec workflow_is_waiting(binary(), binary()) -> boolean().
+workflow_is_waiting(ExecutionId, InventoryId) ->
+    SpaceId = oct_background:get_space_id(space_krk),
+    WaitingList = opw_test_rpc:list_waiting_atm_workflow_executions(krakow, SpaceId, InventoryId, ?LISTING_OPTS),
+    lists:all(fun({_, ItemExecutionId}) ->
+        ItemExecutionId == ExecutionId
+    end, WaitingList).
+
+
+%% @private
+-spec workflow_is_ongoing(binary(), binary()) -> boolean().
+workflow_is_ongoing(ExecutionId, InventoryId) ->
+    SpaceId = oct_background:get_space_id(space_krk),
+    WaitingList = opw_test_rpc:list_ongoing_atm_workflow_executions(krakow, SpaceId, InventoryId, ?LISTING_OPTS),
+    lists:all(fun({_, ItemExecutionId}) ->
+        ItemExecutionId == ExecutionId
+    end, WaitingList).
