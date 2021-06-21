@@ -18,8 +18,6 @@
 
 -behaviour(atm_data_validator).
 
--include("modules/automation/atm_tmp.hrl").
-
 %% atm_data_validator callbacks
 -export([assert_meets_constraints/3]).
 

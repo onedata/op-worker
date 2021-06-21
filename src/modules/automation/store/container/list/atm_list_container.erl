@@ -158,7 +158,7 @@ create_container(AtmDataSpec) ->
     ok | no_return().
 validate_data_batch(AtmWorkflowExecutionCtx, AtmDataSpec, Batch) when is_list(Batch) ->
     lists:foreach(fun(Item) ->
-        atm_data_validator:validate(AtmWorkflowExecutionCtx, Item, AtmDataSpec)
+        atm_value:validate(AtmWorkflowExecutionCtx, Item, AtmDataSpec)
     end, Batch);
 validate_data_batch(_AtmWorkflowExecutionCtx, _AtmDataSpec, _Item) ->
     throw(?ERROR_ATM_BAD_DATA(<<"value">>, <<"not a batch">>)).
@@ -168,7 +168,7 @@ validate_data_batch(_AtmWorkflowExecutionCtx, _AtmDataSpec, _Item) ->
 -spec append_insecure([automation:item()], record()) -> record().
 append_insecure(Batch, #atm_list_container{data_spec = AtmDataSpec, backend_id = BackendId} = Record) ->
     lists:foreach(fun(Item) ->
-        CompressedItem = atm_data_compressor:compress(Item, AtmDataSpec),
+        CompressedItem = atm_value:compress(Item, AtmDataSpec),
         ok = atm_list_store_backend:append(BackendId, json_utils:encode(CompressedItem))
     end, Batch),
     Record.

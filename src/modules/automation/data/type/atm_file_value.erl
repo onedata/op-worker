@@ -14,6 +14,7 @@
 -author("Michal Stanisz").
 
 -behaviour(atm_data_validator).
+-behaviour(atm_data_compressor).
 -behaviour(atm_tree_forest_container_iterator).
 
 -include("modules/automation/atm_tmp.hrl").
@@ -76,7 +77,7 @@ list_children(AtmWorkflowExecutionCtx, Guid, ListOpts, BatchSize) ->
     try
         list_children_unsafe(SessionId, Guid, ListOpts#{size => BatchSize})
     catch _:Error ->
-        case atm_value:is_error_ignored(datastore_runner:normalize_error(Error)) of
+        case fslogic_errors:is_access_error(datastore_runner:normalize_error(Error)) of
             true ->
                 {[], [], #{}, true};
             _ -> 

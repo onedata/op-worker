@@ -75,7 +75,7 @@ list_children(AtmWorkflowExecutionCtx, DatasetId, ListOpts, BatchSize) ->
         {ok, [], IsLast} ->
             {[], [], #{}, IsLast};
         {error, Type} = Error ->
-            case atm_value:is_error_ignored(Type) of
+            case fslogic_errors:is_access_error(Type) of
                 true ->
                     {[], [], #{}, true};
                 false ->
@@ -142,7 +142,7 @@ check_implicit_constraints(AtmWorkflowExecutionCtx, DatasetId) ->
                     throw(?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(#{<<"inSpace">> => SpaceId}))
             end;
         {error, Type} = Error ->
-            case atm_value:is_error_ignored(Type) of
+            case fslogic_errors:is_access_error(Type) of
                 true ->
                     throw(?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(#{<<"hasAccess">> => true}));
                 false ->
