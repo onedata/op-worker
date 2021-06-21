@@ -103,5 +103,11 @@ process_result(_, _, _, Result) ->
 handle_task_execution_ended(_, _, _) ->
     ok.
 
+-spec handle_lane_execution_ended(
+    workflow_engine:execution_id(),
+    workflow_engine:execution_context(),
+    workflow_execution_state:index()
+) ->
+    ok.
 handle_lane_execution_ended(_, _, _) ->
     ok.

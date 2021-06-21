@@ -26,6 +26,8 @@
 %% Functions operating on job_identifier record
 -export([job_identifier_to_binary/1, binary_to_job_identifier/1, get_item_id/2,
     get_task_details/2, is_previous/2]).
+%% Test API
+-export([is_empty/1]).
 
 % Internal record used for scheduled jobs management
 -record(job_identifier, {
@@ -315,3 +317,18 @@ has_item(JobIdentifier = #job_identifier{item_index = ItemIndex}, Tree) ->
     end;
 has_item(ItemIndex, Set) ->
     sets:is_element(ItemIndex, Set).
+
+%%%===================================================================
+%%% Test API
+%%%===================================================================
+
+-spec is_empty(jobs()) -> boolean().
+is_empty(#workflow_jobs{
+    ongoing = Ongoing,
+    waiting = Waiting,
+    failed_items = Failed,
+    pending_async_jobs = AsyncCalls,
+    raced_results = Raced
+}) ->
+    gb_sets:is_empty(Ongoing) andalso gb_sets:is_empty(Waiting) andalso sets:size(Failed) =:= 0 andalso
+        maps:size(AsyncCalls) =:= 0 andalso maps:size(Raced) =:= 0.

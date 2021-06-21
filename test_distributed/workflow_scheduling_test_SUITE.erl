@@ -405,6 +405,13 @@ init_per_testcase(_, Config) ->
         end
     end),
 
+    test_utils:mock_expect(Workers, workflow_test_handler, handle_lane_execution_ended,
+        fun(ExecutionId, Context, LaneIndex) ->
+            Master ! {lane_ended, LaneIndex, workflow_execution_state:is_finished_and_cleaned(ExecutionId)},
+            meck:passthrough([ExecutionId, Context, LaneIndex])
+        end
+    ),
+
     [{task_execution_gatherer, Master} | Config].
 
 end_per_testcase(_, Config) ->
@@ -459,6 +466,10 @@ task_execution_gatherer_loop(#{execution_history := History} = Acc, ProcWaitingF
                     Sender ! history_saved
             end,
             task_execution_gatherer_loop(Acc, ProcWaitingForAns, Options);
+        {lane_ended, LaneIndex, IsFinished} ->
+            IsFinishedList = maps:get(is_finished_and_cleaned, Acc, []),
+            Acc2 = Acc#{is_finished_and_cleaned => [{LaneIndex, IsFinished} | IsFinishedList]},
+            task_execution_gatherer_loop(Acc2, ProcWaitingForAns, Options);
         {get_task_execution_history, Sender} ->
             task_execution_gatherer_loop(Acc, Sender, Options);
         {set_option, Key, Value} ->
@@ -500,6 +511,10 @@ get_task_execution_history(Config) ->
 
 % TODO VFS-7784 - uncomment checks in this function and fix tests
 verify_execution_history_stats(Acc, WorkflowType) ->
+    lists:foreach(fun(IsFinished) ->
+        ?assertMatch({_, true}, IsFinished)
+    end, maps:get(is_finished_and_cleaned, Acc, [])),
+
     ?assertEqual(0, maps:get(final_async_slots_used, Acc)),
 %%    ?assertEqual(0, maps:get(final_pool_slots_used, Acc)),
 
@@ -688,6 +703,10 @@ verify_memory(Config) ->
 
 verify_memory(Config, RestartDocPresent) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
+
+    ?assertEqual([], rpc:call(Worker, workflow_engine_state, get_execution_ids, [?ENGINE_ID])),
+    ?assertEqual(0, rpc:call(Worker, workflow_engine_state, get_slots_used, [?ENGINE_ID])),
+
     Models = [workflow_cached_item, workflow_iterator_snapshot, workflow_execution_state],
     lists:foreach(fun(Model) ->
         Ctx = datastore_model_default:set_defaults(datastore_model_default:get_ctx(Model)),

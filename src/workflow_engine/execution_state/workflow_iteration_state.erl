@@ -20,6 +20,8 @@
 %% API
 -export([init/1, handle_iteration_finished/1, get_last_registered/1, register_new_item/4,
     handle_item_processed/3, get_item_id/2]).
+%% Test API
+-export([is_finished_and_cleaned/1]).
 
 % Internal record to store information about all items currently being used and last registered
 % iterator that will be used to obtain next items.
@@ -205,3 +207,17 @@ handle_item_processed(
 -spec get_item_id(state(), workflow_execution_state:index()) -> workflow_cached_item:id().
 get_item_id(#iteration_state{pending_items = Pending}, ItemIndex) ->
     maps:get(ItemIndex, Pending).
+
+%%%===================================================================
+%%% Test API
+%%%===================================================================
+
+-spec is_finished_and_cleaned(state()) -> boolean().
+is_finished_and_cleaned(#iteration_state{
+    pending_items = Pending,
+    items_finished_ahead = FinishedAhead,
+    last_registered_iterator = LastIterator,
+    last_registered_iterator_index = LastIteratorIndex
+}) ->
+    (LastIterator =:= undefined orelse LastIteratorIndex =:= 0)
+        andalso maps:size(Pending) =:= 0 andalso gb_trees:is_empty(FinishedAhead).

@@ -24,7 +24,7 @@
     report_execution_status_update/4, report_execution_prepared/4, report_limit_reached_error/2,
     check_timeouts/2, reset_keepalive_timer/2, get_result_processing_data/2]).
 %% Test API
--export([get_lane_index/1, get_item_id/2]).
+-export([is_finished_and_cleaned/1, get_lane_index/1, get_item_id/2]).
 
 % Helper record to group fields containing information about lane currently being executed
 -record(current_lane, {
@@ -637,6 +637,15 @@ handle_no_waiting_items_error(#workflow_execution_state{
 %%%===================================================================
 %%% Test API
 %%%===================================================================
+
+-spec is_finished_and_cleaned(workflow_engine:execution_id()) -> true | {false, state()}.
+is_finished_and_cleaned(ExecutionId) ->
+    {ok, #document{value = #workflow_execution_state{jobs = Jobs, iteration_state = IterationState}}} =
+        Record = datastore_model:get(?CTX, ExecutionId),
+    case {workflow_jobs:is_empty(Jobs), workflow_iteration_state:is_finished_and_cleaned(IterationState)} of
+        {true, true} -> true;
+        _ -> {false, Record}
+    end.
 
 -spec get_lane_index(workflow_engine:execution_id()) -> {ok, index()} | {error, term()}.
 get_lane_index(ExecutionId) ->
