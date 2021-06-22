@@ -50,6 +50,10 @@
     get_cert_chain_ders/0,
     gs_protocol_supported_versions/0,
 
+    schedule_atm_workflow_execution/4,
+    list_waiting_atm_workflow_executions/3,
+    list_ongoing_atm_workflow_executions/3,
+
     perform_io_test/2
 ]).
 
@@ -193,6 +197,38 @@ get_cert_chain_ders() ->
 -spec gs_protocol_supported_versions() -> [gs_protocol:protocol_version()].
 gs_protocol_supported_versions() ->
     gs_protocol:supported_versions().
+
+
+-spec schedule_atm_workflow_execution(
+    session:id(),
+    od_space:id(),
+    od_atm_workflow_schema:id(),
+    atm_workflow_execution_api:store_initial_values()
+) ->
+    {ok, atm_workflow_execution:id(), atm_workflow_execution:record()} | errors:error().
+schedule_atm_workflow_execution(SessId, SpaceId, AtmWorkflowSchemaId, AtmStoreInitialValues) ->
+    lfm:schedule_atm_workflow_execution(SessId, SpaceId, AtmWorkflowSchemaId, AtmStoreInitialValues).
+
+
+
+-spec list_waiting_atm_workflow_executions(
+    od_space:id(),
+    atm_workflow_executions_forest:tree_ids(),
+    atm_workflow_executions_forest:listing_opts()
+) ->
+    atm_workflow_executions_forest:entries().
+list_waiting_atm_workflow_executions(SpaceId, AtmInventoryIds, ListingOpts) ->
+    atm_waiting_workflow_executions:list(SpaceId, AtmInventoryIds, ListingOpts).
+
+
+-spec list_ongoing_atm_workflow_executions(
+    od_space:id(),
+    atm_workflow_executions_forest:tree_ids(),
+    atm_workflow_executions_forest:listing_opts()
+) ->
+    atm_workflow_executions_forest:entries().
+list_ongoing_atm_workflow_executions(SpaceId, AtmInventoryIds, ListingOpts) ->
+    atm_ongoing_workflow_executions:list(SpaceId, AtmInventoryIds, ListingOpts).
 
 
 -spec perform_io_test(file_meta:path(), tokens:serialized()) -> ok | error.
