@@ -96,6 +96,7 @@ authorize(#op_req{operation = get, auth = ?USER(UserId, SessionId), gri = #gri{
 }}, #atm_workflow_schema_snapshot{atm_inventory = AtmInventoryId}) ->
     % Caution!! Below checks should always mirror those done by oz
     % when getting workflow schema
+    % TODO VFS-7810 - check if mirroring can be done automatically
     user_logic:has_eff_atm_inventory(SessionId, UserId, AtmInventoryId).
 
 

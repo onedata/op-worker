@@ -8,7 +8,7 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This behaviour should be implemented by modules that implement middleware
-%%% operations. Every middleware plugin serves as a link between
+%%% operations. Every middleware handler serves as a link between
 %%% API and op-worker internals (e.g. lfm) in the context of specific
 %%% entity type (op_xxx records).
 %%% TODO VFS-5620

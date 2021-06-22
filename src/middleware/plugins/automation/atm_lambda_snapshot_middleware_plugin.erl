@@ -96,6 +96,7 @@ authorize(#op_req{operation = get, auth = ?USER(UserId, SessionId), gri = #gri{
 }}, #atm_lambda_snapshot{atm_inventories = AtmInventories}) ->
     % Caution!! Below checks should always mirror those done by oz
     % when getting lambda
+    % TODO VFS-7810 - check if mirroring can be done automatically
     user_logic:has_any_eff_atm_inventory(SessionId, UserId, AtmInventories).
 
 
