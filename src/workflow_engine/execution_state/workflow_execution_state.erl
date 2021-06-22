@@ -214,7 +214,7 @@ check_timeouts(ExecutionId, EngineId) ->
             context = Context,
             current_lane = #current_lane{parallel_boxes_spec = BoxesSpec}
         }}} ->
-            {UpdatedJobs, Errors} = workflow_jobs:check_timeouts(Jobs),
+            {UpdatedJobs, ExpiredJobsIdentifiers} = workflow_jobs:check_timeouts(Jobs),
             case UpdatedJobs of
                 ?WF_ERROR_NO_TIMEOUTS_UPDATED -> ok;
                 NewJobs -> update(ExecutionId, fun(State) -> update_jobs(State, NewJobs) end)
@@ -226,7 +226,7 @@ check_timeouts(ExecutionId, EngineId) ->
                 ProcessedResult = Handler:process_result(ExecutionId, Context, TaskId, ?WF_ERROR_TIMEOUT),
                 workflow_engine:report_execution_status_update(
                     ExecutionId, EngineId, ?ASYNC_CALL_FINISHED, JobIdentifier, CallPools, ProcessedResult)
-            end, Errors);
+            end, ExpiredJobsIdentifiers);
         ?ERROR_NOT_FOUND ->
             ok
     end.
@@ -522,7 +522,7 @@ prepare_next_waiting_job(State = #workflow_execution_state{
                 jobs = NewJobs
             }};
         Error ->
-            case workflow_iteration_state:get_last_registered(IterationState) of
+            case workflow_iteration_state:get_last_registered_iterator(IterationState) of
                 undefined -> % iteration has finished
                     handle_no_waiting_items_error(State, Error);
                 {ItemIndex, Iterator} ->
@@ -549,7 +549,7 @@ prepare_next_parallel_box(State = #workflow_execution_state{
         parallel_boxes_spec = BoxesSpec,
         lane_index = LaneIndex
     },
-    error_encountered = ErrorEncountered,
+    lowest_error_encountered = LowestErrorEncountered,
     jobs = Jobs,
     iteration_state = IterationState
 }, JobIdentifier) ->
@@ -559,13 +559,14 @@ prepare_next_parallel_box(State = #workflow_execution_state{
         {?WF_ERROR_ITEM_PROCESSING_FINISHED(ItemIndex, SuccessOrFailure), NewJobs} ->
             {NewIterationState, ItemIdToSnapshot, ItemIdsToDelete} =
                 workflow_iteration_state:handle_item_processed(IterationState, ItemIndex, SuccessOrFailure),
-            FinalItemIdToSnapshot = case ErrorEncountered of
-                {true, FailedJobIdentifier} ->
-                    case workflow_jobs:is_previous(JobIdentifier, FailedJobIdentifier) of
+            FinalItemIdToSnapshot = case LowestErrorEncountered of
+                undefined ->
+                    ItemIdToSnapshot;
+                _ ->
+                    case workflow_jobs:is_previous(JobIdentifier, LowestErrorEncountered) of
                         true -> ItemIdToSnapshot;
                         false -> undefined
-                    end;
-                false -> ItemIdToSnapshot
+                    end
             end,
             {ok, State#workflow_execution_state{
                 jobs = NewJobs,
@@ -597,16 +598,16 @@ report_job_finish(State = #workflow_execution_state{
     end;
 report_job_finish(State = #workflow_execution_state{
     jobs = Jobs,
-    error_encountered = ErrorEncountered
+    lowest_error_encountered = LowestErrorEncountered
 }, JobIdentifier, error) ->
     {FinalJobs, RemainingForBox} = workflow_jobs:register_failure(Jobs, JobIdentifier),
-    State2 = case ErrorEncountered of
-        false ->
-            State#workflow_execution_state{jobs = FinalJobs, error_encountered = {true, JobIdentifier}};
-        {true, PrevErrorJobIdentifier} ->
-            case workflow_jobs:is_previous(PrevErrorJobIdentifier, JobIdentifier) of
+    State2 = case LowestErrorEncountered of
+        undefined ->
+            State#workflow_execution_state{jobs = FinalJobs, lowest_error_encountered = JobIdentifier};
+        _ ->
+            case workflow_jobs:is_previous(LowestErrorEncountered, JobIdentifier) of
                 true -> State#workflow_execution_state{jobs = FinalJobs};
-                false -> State#workflow_execution_state{jobs = FinalJobs, error_encountered = {true, JobIdentifier}}
+                false -> State#workflow_execution_state{jobs = FinalJobs, lowest_error_encountered = JobIdentifier}
             end
     end,
     case RemainingForBox of
@@ -620,13 +621,13 @@ report_job_finish(State = #workflow_execution_state{
 -spec handle_no_waiting_items_error(state(), ?WF_ERROR_NO_WAITING_ITEMS | ?ERROR_NOT_FOUND) -> no_items_error().
 handle_no_waiting_items_error(#workflow_execution_state{
     current_lane = #current_lane{lane_index = LaneIndex, is_last = IsLast},
-    error_encountered = ErrorEncountered,
+    lowest_error_encountered = LowestErrorEncountered,
     handler = Handler,
     context = Context
 }, Error) ->
-    HasErrorEncountered = case ErrorEncountered of
-        {true, _} -> true;
-        false -> false
+    HasErrorEncountered = case LowestErrorEncountered of
+        undefined -> false;
+        _ -> true
     end,
     case {Error, IsLast orelse HasErrorEncountered} of
         {?WF_ERROR_NO_WAITING_ITEMS, _} -> ?WF_ERROR_NO_WAITING_ITEMS;

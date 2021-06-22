@@ -72,9 +72,10 @@ process_item(_ExecutionId, _Context, <<"async", _/binary>> = _TaskId, Item, Fini
             true ->
                 % Use http_client only for part of items as it is much slower than direct `handle_callback` call
                 http_client:put(<<"http://", (oneprovider:get_domain())/binary,
-                    ?ATM_TASK_FINISHED_CALLBACK_PATH, FinishCallback/binary>>, #{}, <<"ok">>);
+                    ?ATM_TASK_FINISHED_CALLBACK_PATH, FinishCallback/binary>>, #{},
+                    json_utils:encode(#{<<"result">> => <<"ok">>}));
             false ->
-                workflow_engine_callback_handler:handle_callback(FinishCallback, <<"ok">>)
+                workflow_engine_callback_handler:handle_callback(FinishCallback, #{<<"result">> => <<"ok">>})
         end
     end),
     ok;
@@ -91,7 +92,7 @@ process_item(_ExecutionId, _Context, _TaskId, _Item, _FinishCallback, _) ->
     workflow_handler:callback_execution_result().
 process_result(_, _, _, {error, _}) ->
     error;
-process_result(_, _, _, Result) ->
+process_result(_, _, _, #{<<"result">> := Result}) ->
     binary_to_atom(Result, utf8).
 
 -spec handle_task_execution_ended(
