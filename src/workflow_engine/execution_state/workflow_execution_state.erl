@@ -549,7 +549,7 @@ prepare_next_parallel_box(State = #workflow_execution_state{
         parallel_boxes_spec = BoxesSpec,
         lane_index = LaneIndex
     },
-    lowest_error_encountered = LowestErrorEncountered,
+    lowest_failed_job_identifier = LowestFailedJobIdentifier,
     jobs = Jobs,
     iteration_state = IterationState
 }, JobIdentifier) ->
@@ -559,11 +559,11 @@ prepare_next_parallel_box(State = #workflow_execution_state{
         {?WF_ERROR_ITEM_PROCESSING_FINISHED(ItemIndex, SuccessOrFailure), NewJobs} ->
             {NewIterationState, ItemIdToSnapshot, ItemIdsToDelete} =
                 workflow_iteration_state:handle_item_processed(IterationState, ItemIndex, SuccessOrFailure),
-            FinalItemIdToSnapshot = case LowestErrorEncountered of
+            FinalItemIdToSnapshot = case LowestFailedJobIdentifier of
                 undefined ->
                     ItemIdToSnapshot;
                 _ ->
-                    case workflow_jobs:is_previous(JobIdentifier, LowestErrorEncountered) of
+                    case workflow_jobs:is_previous(JobIdentifier, LowestFailedJobIdentifier) of
                         true -> ItemIdToSnapshot;
                         false -> undefined
                     end
@@ -598,16 +598,16 @@ report_job_finish(State = #workflow_execution_state{
     end;
 report_job_finish(State = #workflow_execution_state{
     jobs = Jobs,
-    lowest_error_encountered = LowestErrorEncountered
+    lowest_failed_job_identifier = LowestFailedJobIdentifier
 }, JobIdentifier, error) ->
     {FinalJobs, RemainingForBox} = workflow_jobs:register_failure(Jobs, JobIdentifier),
-    State2 = case LowestErrorEncountered of
+    State2 = case LowestFailedJobIdentifier of
         undefined ->
-            State#workflow_execution_state{jobs = FinalJobs, lowest_error_encountered = JobIdentifier};
+            State#workflow_execution_state{jobs = FinalJobs, lowest_failed_job_identifier = JobIdentifier};
         _ ->
-            case workflow_jobs:is_previous(LowestErrorEncountered, JobIdentifier) of
+            case workflow_jobs:is_previous(LowestFailedJobIdentifier, JobIdentifier) of
                 true -> State#workflow_execution_state{jobs = FinalJobs};
-                false -> State#workflow_execution_state{jobs = FinalJobs, lowest_error_encountered = JobIdentifier}
+                false -> State#workflow_execution_state{jobs = FinalJobs, lowest_failed_job_identifier = JobIdentifier}
             end
     end,
     case RemainingForBox of
@@ -621,11 +621,11 @@ report_job_finish(State = #workflow_execution_state{
 -spec handle_no_waiting_items_error(state(), ?WF_ERROR_NO_WAITING_ITEMS | ?ERROR_NOT_FOUND) -> no_items_error().
 handle_no_waiting_items_error(#workflow_execution_state{
     current_lane = #current_lane{lane_index = LaneIndex, is_last = IsLast},
-    lowest_error_encountered = LowestErrorEncountered,
+    lowest_failed_job_identifier = LowestFailedJobIdentifier,
     handler = Handler,
     context = Context
 }, Error) ->
-    HasErrorEncountered = case LowestErrorEncountered of
+    HasErrorEncountered = case LowestFailedJobIdentifier of
         undefined -> false;
         _ -> true
     end,

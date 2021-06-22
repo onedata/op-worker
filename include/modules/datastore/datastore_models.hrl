@@ -1134,7 +1134,7 @@
 
     preparation_status = not_prepared :: workflow_execution_state:preparation_status(),
     current_lane :: workflow_execution_state:current_lane() | undefined,
-    lowest_error_encountered :: workflow_jobs:job_identifier() | undefined,
+    lowest_failed_job_identifier :: workflow_jobs:job_identifier() | undefined,
 
     iteration_state :: workflow_iteration_state:state() | undefined,
     jobs :: workflow_jobs:jobs() | undefined,
