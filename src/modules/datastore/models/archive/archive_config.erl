@@ -20,7 +20,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([from_json/1, to_json/1, sanitize/1, get_layout/1]).
+-export([from_json/1, to_json/1, sanitize/1, get_layout/1, should_create_nested_archives/1]).
 
 %% Getters
 -export([]).
@@ -31,6 +31,7 @@
 %%      <<"layout">> := layout(),
 %%      <<"incremental">> => incremental(),
 %%      <<"includeDip">> => include_dip(),
+%%      <<"createNestedArchives">> => boolean()
 %% }
 -type incremental() :: boolean().
 -type include_dip() :: boolean().
@@ -50,7 +51,8 @@ from_json(ConfigJson) ->
     #archive_config{
         layout = utils:to_atom(maps:get(<<"layout">>, ConfigJson, ?DEFAULT_LAYOUT)),
         incremental = utils:to_boolean(maps:get(<<"incremental">>, ConfigJson, ?DEFAULT_INCREMENTAL)),
-        include_dip = utils:to_boolean(maps:get(<<"includeDip">>, ConfigJson, ?DEFAULT_INCLUDE_DIP))
+        include_dip = utils:to_boolean(maps:get(<<"includeDip">>, ConfigJson, ?DEFAULT_INCLUDE_DIP)),
+        create_nested_archives = utils:to_boolean(maps:get(<<"createNestedArchives">>, ConfigJson, ?DEFAULT_CREATE_NESTED_ARCHIVES))
     }.
 
 
@@ -58,12 +60,14 @@ from_json(ConfigJson) ->
 to_json(#archive_config{
     incremental = Incremental,
     layout = Layout,
-    include_dip = IncludeDip
+    include_dip = IncludeDip,
+    create_nested_archives = CreateNestedArchives
 }) ->
     #{
         <<"incremental">> => Incremental,
         <<"layout">> => str_utils:to_binary(Layout),
-        <<"includeDip">> => IncludeDip
+        <<"includeDip">> => IncludeDip,
+        <<"createNestedArchives">> => CreateNestedArchives
     }.
 
 
@@ -74,7 +78,8 @@ sanitize(RawConfig) ->
             optional => #{
                 <<"layout">> => {atom, ?ARCHIVE_LAYOUTS},
                 <<"includeDip">> => {boolean, ?SUPPORTED_INCLUDE_DIP_VALUES}, % TODO VFS-7653 change to {boolean, any}
-                <<"incremental">> => {boolean, ?SUPPORTED_INCREMENTAL_VALUES} % TODO VFS-7780 change to {boolean, any}
+                <<"incremental">> => {boolean, ?SUPPORTED_INCREMENTAL_VALUES}, % TODO VFS-7780 change to {boolean, any},
+                <<"createNestedArchives">> => {boolean, any}
             }
         })
     catch
@@ -94,6 +99,11 @@ sanitize(RawConfig) ->
 -spec get_layout(record()) -> layout().
 get_layout(#archive_config{layout = Layout}) ->
     Layout.
+
+
+-spec should_create_nested_archives(record()) -> boolean().
+should_create_nested_archives(#archive_config{create_nested_archives = CreateNestedArchives}) ->
+    CreateNestedArchives.
 
 %%%===================================================================
 %%% persistent_record callbacks

@@ -19,7 +19,7 @@
 
 
 %% API
--export([validate_all_files_checksums/3]).
+-export([validate_all_files_checksums/3, validate_all_files_json_metadata/3]).
 
 -define(BUFFER_SIZE, 1073741824). % 1GB.
 -define(BATCH_SIZE, 10000).
@@ -32,9 +32,23 @@
 
 validate_all_files_checksums(Node, SessionId, ArchiveDirGuid) ->
     ChecksumsPerAlgorithm = collect_all_files_checksums_per_algorithms(Node, SessionId, ArchiveDirGuid),
+    ValidationFun = fun(FileGuid, FilePath) ->
+        validate_file_checksums(Node, SessionId, FileGuid, FilePath, ChecksumsPerAlgorithm)
+    end,
+    validate_all_files(Node, SessionId, ArchiveDirGuid, ValidationFun).
+
+validate_all_files_json_metadata(Node, SessionId, ArchiveDirGuid) ->
+    AllFilesMetadata = collect_all_files_json_metadata(Node, SessionId, ArchiveDirGuid),
+    ValidationFun = fun(FileGuid, FilePath) ->
+        validate_file_json_metadata(Node, SessionId, FileGuid, FilePath, AllFilesMetadata)
+    end,
+    validate_all_files(Node, SessionId, ArchiveDirGuid, ValidationFun).
+
+
+validate_all_files(Node, SessionId, ArchiveDirGuid, ValidationFun) ->
     Path = <<"data">>,
     DataDirGuid = get_child_guid(Node, SessionId, ArchiveDirGuid, Path),
-    traverse_and_validate_checksums(Node, SessionId, DataDirGuid, ChecksumsPerAlgorithm, Path).
+    traverse_and_validate(Node, SessionId, DataDirGuid, ValidationFun, Path).
 
 %%%===================================================================
 %%% Internal functions
@@ -48,7 +62,6 @@ collect_all_files_checksums_per_algorithms(Node, SessionId, ArchiveDirGuid) ->
     end, #{}, ?SUPPORTED_CHECKSUM_ALGORITHMS).
 
 
-
 collect_all_files_checksums(Node, SessionId, ManifestFileGuid) ->
     Content = read_whole_file(Node, SessionId, ManifestFileGuid),
     Lines = binary:split(Content, <<"\n">>, [global, trim_all]),
@@ -56,6 +69,12 @@ collect_all_files_checksums(Node, SessionId, ManifestFileGuid) ->
         [Checksum, FilePath] = binary:split(Line, <<" ">>, [global, trim_all]),
         ChecksumsAcc#{FilePath => Checksum}
     end, #{}, Lines).
+
+
+collect_all_files_json_metadata(Node, SessionId, ArchiveDirGuid) ->
+    MetadataFileGuid = get_metadata_file_guid(Node, SessionId, ArchiveDirGuid),
+    Content = read_whole_file(Node, SessionId, MetadataFileGuid),
+    json_utils:decode(Content).
 
 
 read_whole_file(Node, SessionId, FileGuid) ->
@@ -66,10 +85,10 @@ read_whole_file(Node, SessionId, FileGuid) ->
     ok = lfm_proxy:close(Node, Handle),
     Content.
 
-traverse_and_validate_checksums(Node, SessionId, ParentGuid, ChecksumsPerAlgorithm, Path) ->
-    traverse_and_validate_checksums(Node, SessionId, ParentGuid, ChecksumsPerAlgorithm, Path, 0).
+traverse_and_validate(Node, SessionId, ParentGuid, ValidationFun, Path) ->
+    traverse_and_validate(Node, SessionId, ParentGuid, ValidationFun, Path, 0).
 
-traverse_and_validate_checksums(Node, SessionId, ParentGuid, ChecksumsPerAlgorithm, Path, Offset) ->
+traverse_and_validate(Node, SessionId, ParentGuid, ValidationFun, Path, Offset) ->
     {ok, Children} = ?assertMatch({ok, _},
         lfm_proxy:get_children(Node, SessionId, ?FILE_REF(ParentGuid), Offset, ?BATCH_SIZE), ?ATTEMPTS),
 
@@ -79,9 +98,9 @@ traverse_and_validate_checksums(Node, SessionId, ParentGuid, ChecksumsPerAlgorit
             ?assertMatch({ok, _}, lfm_proxy:stat(Node, SessionId, ?FILE_REF(Guid, true)), ?ATTEMPTS),
         case Type of
             ?DIRECTORY_TYPE ->
-                traverse_and_validate_checksums(Node, SessionId, Guid, ChecksumsPerAlgorithm, NewPath);
+                traverse_and_validate(Node, SessionId, Guid, ValidationFun, NewPath);
             ?REGULAR_FILE_TYPE ->
-                validate_file_checksums(Node, SessionId, Guid, ChecksumsPerAlgorithm, NewPath)
+                ValidationFun(Guid, NewPath)
 
         end
 
@@ -92,10 +111,11 @@ traverse_and_validate_checksums(Node, SessionId, ParentGuid, ChecksumsPerAlgorit
         true ->
             ok;
         false ->
-            traverse_and_validate_checksums(Node, SessionId, ParentGuid, ChecksumsPerAlgorithm, Offset + ChildrenCount, Path)
+            traverse_and_validate(Node, SessionId, ParentGuid, ValidationFun, Offset + ChildrenCount, Path)
     end.
 
-validate_file_checksums(Node, SessionId, Guid, ChecksumsPerAlgorithm, FileRelativePath) ->
+
+validate_file_checksums(Node, SessionId, Guid, FileRelativePath, ChecksumsPerAlgorithm) ->
     Content = read_whole_file(Node, SessionId, Guid),
     lists:foreach(fun(Algorithm) ->
         ChecksumsPerFile = maps:get(Algorithm, ChecksumsPerAlgorithm),
@@ -104,8 +124,15 @@ validate_file_checksums(Node, SessionId, Guid, ChecksumsPerAlgorithm, FileRelati
     end, ?SUPPORTED_CHECKSUM_ALGORITHMS).
 
 
-get_checksum_manifest_file_guid(Node, SessionId, ParentGuid, ChecksumAlgorithm) ->
-    get_child_guid(Node, SessionId, ParentGuid, ?CHECKSUM_MANIFEST_FILE_NAME(ChecksumAlgorithm)).
+validate_file_json_metadata(Node, SessionId, Guid, FileRelativePath, AllFilesJsonMetadata) ->
+    {ok, JsonMetadata} = lfm_proxy:get_metadata(Node, SessionId, ?FILE_REF(Guid), json, [], false),
+    ?assertEqual(JsonMetadata, maps:get(FileRelativePath, AllFilesJsonMetadata)).
+
+get_metadata_file_guid(Node, SessionId, ArchiveDirGuid) ->
+    get_child_guid(Node, SessionId, ArchiveDirGuid, ?METADATA_FILE_NAME).
+
+get_checksum_manifest_file_guid(Node, SessionId, ArchiveDirGuid, ChecksumAlgorithm) ->
+    get_child_guid(Node, SessionId, ArchiveDirGuid, ?CHECKSUM_MANIFEST_FILE_NAME(ChecksumAlgorithm)).
 
 get_child_guid(Node, SessionId, ParentGuid, ChildName) ->
     {ok, ParentPath} = ?assertMatch({ok, _}, lfm_proxy:get_file_path(Node, SessionId, ParentGuid), ?ATTEMPTS),

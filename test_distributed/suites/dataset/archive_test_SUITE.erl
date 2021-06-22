@@ -58,31 +58,33 @@
 
 groups() -> [
     {parallel_tests, [parallel], [
-        create_archivisation_tree,
-        archive_dataset_attached_to_dir_plain_layout,
-        archive_dataset_attached_to_file_plain_layout,
-        archive_dataset_attached_to_hardlink_plain_layout,
+%%        create_archivisation_tree,
+%%        archive_dataset_attached_to_dir_plain_layout,
+%%        archive_dataset_attached_to_file_plain_layout,
+        archive_dataset_attached_to_hardlink_plain_layout
         % archive_dataset_attached_to_symlink_plain_layout, TODO VFS-7664
-        archive_directory_with_number_of_files_exceeding_batch_size_plain_layout,
-        archive_nested_datasets_plain_layout,
-        archive_dataset_attached_to_dir_bagit_layout,
-        archive_dataset_attached_to_file_bagit_layout,
-        archive_dataset_attached_to_hardlink_bagit_layout,
+%%        archive_directory_with_number_of_files_exceeding_batch_size_plain_layout,
+%%        archive_nested_datasets_plain_layout,
+%%        archive_dataset_attached_to_dir_bagit_layout,
+%%        archive_dataset_attached_to_file_bagit_layout,
+%%        archive_dataset_attached_to_hardlink_bagit_layout,
         % archive_dataset_attached_to_symlink_bagit_layout TODO VFS-7664
-        archive_directory_with_number_of_files_exceeding_batch_size_bagit_layout,
-        archive_nested_datasets_bagit_layout
-    ]},
-    {sequential_tests, [sequential], [
-        archive_dataset_attached_to_space_dir,
-        archive_big_tree_plain_layout,
-        archive_big_tree_bagit_layout
+%%        archive_directory_with_number_of_files_exceeding_batch_size_bagit_layout,
+%%        archive_nested_datasets_bagit_layout
     ]}
+%%    ,
+%%    {sequential_tests, [sequential], [
+%%        archive_dataset_attached_to_space_dir,
+%%        archive_big_tree_plain_layout,
+%%        archive_big_tree_bagit_layout
+%%    ]}
 ].
 
 
 all() -> [
-    {group, parallel_tests},
-    {group, sequential_tests}
+    {group, parallel_tests}
+%%    ,
+%%    {group, sequential_tests}
 ].
 
 -define(ATTEMPTS, 600).
@@ -112,6 +114,12 @@ all() -> [
 -define(DATASET_ID(), ?RAND_NAME(<<"datasetId">>)).
 -define(ARCHIVE_ID(), ?RAND_NAME(<<"archiveId">>)).
 -define(USER_ID(), ?RAND_NAME(<<"userId">>)).
+
+-define(RAND_JSON_METADATA(), begin
+    lists:foldl(fun(_, AccIn) ->
+        AccIn#{?RAND_NAME() => ?RAND_NAME()}
+    end, #{}, lists:seq(1, rand:uniform(10)))
+end).
 
 %===================================================================
 % Parallel tests - tests which can be safely run in parallel
@@ -228,6 +236,7 @@ archive_dataset_attached_to_file_test_base(Layout) ->
         dataset = #dataset_spec{archives = [#archive_spec{
             config = #archive_config{layout = Layout}
         }]},
+        metadata = #metadata_spec{json = ?RAND_JSON_METADATA()},
         content = ?RAND_CONTENT(Size)
     }),
     archive_simple_dataset_test_base(FileGuid, DatasetId, ArchiveId).
@@ -249,6 +258,13 @@ archive_dataset_attached_to_hardlink_test_base(Layout) ->
     } = onenv_dataset_test_utils:set_up_and_sync_dataset(?USER1, LinkGuid, #dataset_spec{archives = [#archive_spec{
         config = #archive_config{layout = Layout}
     }]}),
+    Json = ?RAND_JSON_METADATA(),
+    ok = lfm_proxy:set_metadata(P1Node, UserSessIdP1, ?FILE_REF(LinkGuid), json, ?RAND_JSON_METADATA(), []),
+    UserId = oct_background:get_user_id(?USER1),
+    onenv_file_test_utils:await_file_metadata_sync(oct_background:get_space_supporting_providers(?SPACE), UserId, #object{
+        metadata = #metadata_object{json = Json}
+    }),
+
     archive_simple_dataset_test_base(LinkGuid, DatasetId, ArchiveId).
 
 archive_dataset_attached_to_symlink_test_base(Layout) ->
@@ -353,12 +369,13 @@ archive_nested_datasets_test_base(ArchiveLayout) ->
     } = onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE,
         #dir_spec{ % dataset
             dataset = #dataset_spec{archives = [#archive_spec{
-                config = #archive_config{layout = ArchiveLayout}
+                config = #archive_config{layout = ArchiveLayout, create_nested_archives = true}
             }]},
             children = [
                 #file_spec{ % dataset
                     dataset = #dataset_spec{},
-                    content = ?RAND_CONTENT()
+                    content = ?RAND_CONTENT(),
+                    metadata = #metadata_spec{json = ?RAND_JSON_METADATA()}
                 },
                 #dir_spec{
                     children = [
@@ -367,11 +384,13 @@ archive_nested_datasets_test_base(ArchiveLayout) ->
                             children = [
                                 #file_spec{  % dataset
                                     dataset = #dataset_spec{},
-                                    content = ?RAND_CONTENT()
+                                    content = ?RAND_CONTENT(),
+                                    metadata = #metadata_spec{json = ?RAND_JSON_METADATA()}
                                 },
                                 #file_spec{ % archive shouldn't be created for this file
                                     dataset = #dataset_spec{state = ?DETACHED_DATASET},
-                                    content = ?RAND_CONTENT()
+                                    content = ?RAND_CONTENT(),
+                                    metadata = #metadata_spec{json = ?RAND_JSON_METADATA()}
                                 }
                             ]
                         }
@@ -428,10 +447,10 @@ init_per_group(_Group, Config) ->
 
 end_per_group(_Group, Config) ->
     SpaceId = oct_background:get_space_id(?SPACE),
-    Workers = oct_background:get_all_providers_nodes(),
-    lfm_test_utils:clean_space(Workers, SpaceId, ?ATTEMPTS),
-    onenv_dataset_test_utils:cleanup_all_datasets(krakow, ?SPACE),
-    lfm_proxy:teardown(Config).
+    Workers = oct_background:get_all_providers_nodes().
+%%    lfm_test_utils:clean_space(Workers, SpaceId, ?ATTEMPTS),
+%%    onenv_dataset_test_utils:cleanup_all_datasets(krakow, ?SPACE),
+%%    lfm_proxy:teardown(Config).
 
 init_per_testcase(_Case, Config) ->
     Config.
@@ -547,7 +566,8 @@ assert_copied(Node, SessionId, SourceGuid, TargetGuid) ->
         ?DIRECTORY_TYPE ->
             assert_children_copied(Node, SessionId, SourceGuid, TargetGuid);
         ?REGULAR_FILE_TYPE ->
-            assert_content_copied(Node, SessionId, SourceGuid, TargetGuid);
+            assert_content_copied(Node, SessionId, SourceGuid, TargetGuid),
+            assert_json_metadata_copied(Node, SessionId, SourceGuid, TargetGuid);
         ?SYMLINK_TYPE ->
             assert_symlink_values_copied(Node, SessionId, SourceGuid, TargetGuid)
     end.
@@ -623,6 +643,16 @@ assert_content_copied(Node, SessionId, SourceGuid, TargetGuid) ->
     assert_file_is_flushed_from_buffer(Node, SessionId, SourceGuid, TargetGuid2).
 
 
+assert_json_metadata_copied(Node, SessionId, SourceGuid, TargetGuid) ->
+    case lfm_proxy:get_metadata(Node, SessionId, ?FILE_REF(SourceGuid), json, [], false) of
+        {ok, SourceJson} ->
+            ?assertEqual({ok, SourceJson},
+                lfm_proxy:get_metadata(Node, SessionId, ?FILE_REF(TargetGuid), json, [], false), ?ATTEMPTS);
+        {error, ?ENODATA} ->
+            ok
+    end.
+
+
 assert_file_is_flushed_from_buffer(Node, SessionId, SourceGuid, TargetGuid) ->
     SpaceId = oct_background:get_space_id(?SPACE),
     {ok, #file_attr{size = SourceSize}} = lfm_proxy:stat(Node, SessionId, ?FILE_REF(SourceGuid)),
@@ -647,7 +677,8 @@ assert_layout_custom_features(_Node, _SessionId, _ArchiveId, ?ARCHIVE_PLAIN_LAYO
 assert_layout_custom_features(Node, SessionId, ArchiveId, ?ARCHIVE_BAGIT_LAYOUT) ->
     ArchiveRootDirUuid = ?ARCHIVE_DIR_UUID(ArchiveId),
     ArchiveRootDirGuid = file_id:pack_guid(ArchiveRootDirUuid, oct_background:get_space_id(?SPACE)),
-    bagit_test_utils:validate_all_files_checksums(Node, SessionId, ArchiveRootDirGuid).
+    bagit_test_utils:validate_all_files_checksums(Node, SessionId, ArchiveRootDirGuid),
+    bagit_test_utils:validate_all_files_json_metadata(Node, SessionId, ArchiveRootDirGuid).
 
 
 get_storage_file_id(Node, Guid) ->

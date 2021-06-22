@@ -140,6 +140,8 @@ create_archive(_Config) ->
                     % {<<"config">>, #{<<"includeDip">> => <<"not boolean">>}, ?ERROR_BAD_VALUE_BOOLEAN(<<"config.includeDip">>)},
                     {<<"config">>, #{<<"includeDip">> => true},
                         ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"config.includeDip">>, ?SUPPORTED_INCLUDE_DIP_VALUES)},
+                    {<<"config">>, #{<<"createNestedArchives">> => <<"not boolean">>},
+                        ?ERROR_BAD_VALUE_BOOLEAN(<<"config.createNestedArchives">>)},
                     {<<"config">>, #{<<"layout">> => <<"not allowed layout">>},
                         ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"config.layout">>, ensure_binaries(?ARCHIVE_LAYOUTS))},
                     {<<"description">>, [123, 456], ?ERROR_BAD_VALUE_BINARY(<<"description">>)},
@@ -156,15 +158,20 @@ generate_all_valid_configs() ->
     LayoutValues = [undefined | ?ARCHIVE_LAYOUTS],
     IncrementalValues = [undefined | ?SUPPORTED_INCREMENTAL_VALUES],
     IncludeDipValues = [undefined | ?SUPPORTED_INCLUDE_DIP_VALUES],
+    CreateNestedArchivesValues = [undefined, true, false],
     AllConfigsCombinations = [
-        {Layout, Incremental, IncludeDip}
-        || Layout <- LayoutValues, Incremental <- IncrementalValues, IncludeDip <- IncludeDipValues
+        {Layout, Incremental, IncludeDip, CreateNestedArchives} ||
+        Layout <- LayoutValues,
+        Incremental <- IncrementalValues,
+        IncludeDip <- IncludeDipValues,
+        CreateNestedArchives <- CreateNestedArchivesValues
     ],
-    lists:foldl(fun({L, I, ID}, Acc) ->
+    lists:foldl(fun({L, I, ID, CNA}, Acc) ->
         Config = maps_utils:put_if_defined(#{}, <<"layout">>, L),
         Config2 = maps_utils:put_if_defined(Config, <<"incremental">>, I),
         Config3 = maps_utils:put_if_defined(Config2, <<"includeDip">>, ID),
-        [Config3 | Acc]
+        Config4 = maps_utils:put_if_defined(Config3, <<"createNestedArchives">>, CNA),
+        [Config4 | Acc]
     end, [], AllConfigsCombinations).
 
 

@@ -37,13 +37,15 @@
 -define(DEFAULT_INCLUDE_DIP, false).
 -define(DEFAULT_INCREMENTAL, false).
 -define(DEFAULT_ARCHIVE_DESCRIPTION, <<>>).
+-define(DEFAULT_CREATE_NESTED_ARCHIVES, false).
 
 -record(archive_config, {
     incremental = ?DEFAULT_INCREMENTAL :: archive_config:incremental(),
     % This flag determines whether dissemination information package (DIP) is created alongside with
     % archival information package (AIP), on the storage.
     include_dip = ?DEFAULT_INCLUDE_DIP :: archive_config:include_dip(),
-    layout :: archive_config:layout()
+    layout :: archive_config:layout(),
+    create_nested_archives = ?DEFAULT_CREATE_NESTED_ARCHIVES :: boolean()
 }).
 
 -record(archive_stats, {
