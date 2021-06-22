@@ -235,15 +235,15 @@ register_function(#prepare_ctx{
 %% @private
 -spec prepare_function_timeouts() -> json_utils:json_map().
 prepare_function_timeouts() ->
-    lists:foldl(fun({Key, EnvVar}, Acc) ->
-        TimeoutSeconds = op_worker:get_env(EnvVar),
+    lists:foldl(fun({Key, EnvVar, Default}, Acc) ->
+        TimeoutSeconds = op_worker:get_env(EnvVar, Default),
         TimeoutSecondsBin = integer_to_binary(TimeoutSeconds),
 
         Acc#{Key => <<TimeoutSecondsBin/binary, "s">>}
     end, #{}, [
-        {<<"read_timeout">>, openfaas_read_timeout_seconds},
-        {<<"write_timeout">>, openfaas_write_timeout_seconds},
-        {<<"exec_timeout">>, openfaas_exec_timeout_seconds}
+        {<<"read_timeout">>, openfaas_read_timeout_seconds, 604800},
+        {<<"write_timeout">>, openfaas_write_timeout_seconds, 604800},
+        {<<"exec_timeout">>, openfaas_exec_timeout_seconds, 604800}
     ]).
 
 
@@ -293,7 +293,7 @@ get_oneclient_image() ->
             ReleaseVersion = op_worker:get_release_version(),
             <<"onedata/oneclient:", ReleaseVersion/binary>>;
         OneclientImage ->
-            list_to_binary(OneclientImage)
+            str_utils:to_binary(OneclientImage)
     end.
 
 
@@ -377,14 +377,14 @@ get_openfaas_config() ->
 
         AdminUsername = op_worker:get_env(openfaas_admin_username),
         AdminPassword = op_worker:get_env(openfaas_admin_password),
-        Hash = base64:encode(<<AdminUsername/binary, ":", AdminPassword/binary>>),
+        Hash = base64:encode(str_utils:format_bin("~s:~s", [AdminUsername, AdminPassword])),
 
         #openfaas_config{
             url = str_utils:format_bin("http://~s:~B", [Host, Port]),
             basic_auth = <<"Basic ", Hash/binary>>,
-            function_namespace = op_worker:get_env(openfaas_function_namespace)
+            function_namespace = str_utils:to_binary(op_worker:get_env(openfaas_function_namespace))
         }
-    catch error:{missing_env_variable, _} ->
+    catch _:_ ->
         throw(?ERROR_ATM_OPENFAAS_NOT_CONFIGURED)
     end.
 

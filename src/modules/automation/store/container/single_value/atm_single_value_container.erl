@@ -50,9 +50,11 @@ create(AtmDataSpec, undefined, _AtmWorkflowExecutionCtx) ->
         data_spec = AtmDataSpec
     };
 create(AtmDataSpec, InitialValue, AtmWorkflowExecutionCtx) ->
+    atm_value:validate(AtmWorkflowExecutionCtx, InitialValue, AtmDataSpec),
+
     #atm_single_value_container{
         data_spec = AtmDataSpec,
-        value = sanitize(AtmWorkflowExecutionCtx, InitialValue, AtmDataSpec)
+        value = atm_value:compress(InitialValue, AtmDataSpec)
     }.
 
 
@@ -73,9 +75,10 @@ apply_operation(#atm_single_value_container{} = Record, #atm_container_operation
     value = Item,
     workflow_execution_ctx = AtmWorkflowExecutionCtx
 }) ->
-    Record#atm_single_value_container{value = sanitize(
-        AtmWorkflowExecutionCtx, Item, Record#atm_single_value_container.data_spec
-    )};
+    #atm_single_value_container{data_spec = AtmDataSpec} = Record,
+    atm_value:validate(AtmWorkflowExecutionCtx, Item, AtmDataSpec),
+
+    Record#atm_single_value_container{value = atm_value:compress(Item, AtmDataSpec)};
 
 apply_operation(_Record, _Operation) ->
     throw(?ERROR_NOT_SUPPORTED).
@@ -115,16 +118,3 @@ db_decode(#{<<"dataSpec">> := AtmDataSpecJson} = AtmContainerJson, NestedRecordD
         data_spec = NestedRecordDecoder(AtmDataSpecJson, atm_data_spec),
         value = maps:get(<<"value">>, AtmContainerJson, undefined)
     }.
-
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-
-%% @private
--spec sanitize(atm_workflow_execution_ctx:record(), automation:item(), atm_data_spec:record()) ->
-    atm_value:compressed() | no_return().
-sanitize(AtmWorkflowExecutionCtx, Value, AtmDataSpec) ->
-    atm_value:validate(AtmWorkflowExecutionCtx, Value, AtmDataSpec),
-    atm_value:compress(Value, AtmDataSpec).
