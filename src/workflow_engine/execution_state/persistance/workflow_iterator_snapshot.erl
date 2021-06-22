@@ -8,7 +8,6 @@
 %%% @doc
 %%% Stores iterators used to restart workflow executions (one iterator per execution).
 %%% Each iterator is stored together with lane and item index to prevent races.
-%%% TODO VFS-7786 - delete not used iterators from cache (when execution is finished)
 %%% TODO VFS-7787 - save first iterator of lane
 %%% @end
 %%%-------------------------------------------------------------------
@@ -19,7 +18,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([save/4, get/1, mark_exhausted/1]).
+-export([save/4, get/1, cleanup/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1]).
@@ -76,10 +75,15 @@ get(ExecutionId) ->
             ?ERROR_NOT_FOUND
     end.
 
--spec mark_exhausted(workflow_engine:execution_id()) -> ok.
-mark_exhausted(ExecutionId) ->
-    {ok, _LaneIndex, Iterator} = ?MODULE:get(ExecutionId),
-    iterator:mark_exhausted(Iterator).
+-spec cleanup(workflow_engine:execution_id()) -> ok.
+cleanup(ExecutionId) ->
+    case ?MODULE:get(ExecutionId) of
+        {ok, _LaneIndex, Iterator} ->
+            iterator:mark_exhausted(Iterator),
+            ok = datastore_model:delete(?CTX, ExecutionId);
+        ?ERROR_NOT_FOUND ->
+            ok
+    end.
 
 %%%===================================================================
 %%% datastore_model callbacks

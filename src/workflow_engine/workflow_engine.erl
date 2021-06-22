@@ -23,7 +23,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([init/1, init/2, execute_workflow/2, report_execution_status_update/6]).
+-export([init/1, init/2, execute_workflow/2, report_execution_status_update/6, get_async_call_pools/1]).
 
 %% Functions exported for internal_services engine - do not call directly
 -export([init_service/2, takeover_service/3]).
@@ -43,7 +43,7 @@
 -type options() :: #{
     slots_limit => non_neg_integer(),
     workflow_async_call_pools_to_use => [{workflow_async_call_pool:id(), SlotsLimit :: non_neg_integer()}],
-    init_workflow_timeout_server => boolean()
+    init_workflow_timeout_server => {true, workflow_timeout_monitor:check_period()} | false
 }.
 
 -type execution_spec() :: #{
@@ -74,15 +74,15 @@
 -define(POOL_ID(EngineId), binary_to_atom(EngineId, utf8)).
 -define(DEFAULT_SLOT_COUNT, 20).
 -define(DEFAULT_CALLS_LIMIT, 1000).
--define(USE_TIMEOUT_SERVER_DEFAULT, true).
+-define(DEFAULT_TIMEOUT_CHECK_PERIOD, timer:seconds(30)).
+-define(USE_TIMEOUT_SERVER_DEFAULT, {true, ?DEFAULT_TIMEOUT_CHECK_PERIOD}).
 -define(DEFAULT_KEEPALIVE_TIMEOUT_SEC, 300).
 
 -define(WF_ERROR_NOTHING_TO_START, {error, nothing_to_start}).
--define(WF_ERROR_ALL_DEFERRED, {error, all_deferred}).
 
 % Job triggering modes (see function trigger_job_scheduling/2)
 -define(TAKE_UP_FREE_SLOTS, take_up_free_slots).
--define(FOR_CURRENT_SLOT, for_current_slot).
+-define(FOR_CURRENT_SLOT_FIRST, for_current_slot_first).
 
 %%%===================================================================
 %%% API
@@ -113,14 +113,18 @@ execute_workflow(EngineId, ExecutionSpec) ->
     Handler = maps:get(workflow_handler, ExecutionSpec),
     Context = maps:get(execution_context, ExecutionSpec, undefined),
 
-    case ExecutionSpec of
+    InitAns = case ExecutionSpec of
         #{force_clean_execution := true} -> workflow_execution_state:init(ExecutionId, Handler, Context);
         _ -> workflow_execution_state:init_using_snapshot(ExecutionId, Handler, Context)
     end,
 
-    workflow_engine_state:add_execution_id(EngineId, ExecutionId),
-    trigger_job_scheduling(EngineId, ?TAKE_UP_FREE_SLOTS),
-    ok.
+    case InitAns of
+        ok ->
+            workflow_engine_state:add_execution_id(EngineId, ExecutionId),
+            trigger_job_scheduling(EngineId, ?TAKE_UP_FREE_SLOTS);
+        ?WF_ERROR_PREPARATION_FAILED ->
+            ok
+    end.
 
 -spec report_execution_status_update(execution_id(), id(), processing_stage(),
     workflow_jobs:job_identifier(), workflow_async_call_pool:id() | undefined, processing_result()) -> ok.
@@ -128,6 +132,8 @@ report_execution_status_update(ExecutionId, EngineId, ReportType, JobIdentifier,
     case CallPoolId of
         undefined ->
             ok;
+        [CallPoolMainId | _] -> % TODO VFS-7788 - support multiple pools
+            workflow_async_call_pool:decrement_slot_usage(CallPoolMainId);
         _ ->
             workflow_async_call_pool:decrement_slot_usage(CallPoolId)
     end,
@@ -139,11 +145,12 @@ report_execution_status_update(ExecutionId, EngineId, ReportType, JobIdentifier,
             % Asynchronous job finish - it has no slot acquired
             trigger_job_scheduling(EngineId, ?TAKE_UP_FREE_SLOTS);
         _ ->
-            case trigger_job_scheduling(EngineId, ?FOR_CURRENT_SLOT) of
-                ok -> ok;
-                ?WF_ERROR_NOTHING_TO_START -> ok
-            end
+            trigger_job_scheduling(EngineId, ?FOR_CURRENT_SLOT_FIRST)
     end.
+
+-spec get_async_call_pools(task_spec()) -> [workflow_async_call_pool:id()] | undefined.
+get_async_call_pools(TaskSpec) ->
+    maps:get(async_call_pools, TaskSpec, [?DEFAULT_ASYNC_CALL_POOL_ID]).
 
 %%%===================================================================
 %%% Internal functions
@@ -162,7 +169,7 @@ init_service(Id, Options) ->
             end, AsyncCallPools),
 
             case maps:get(init_workflow_timeout_server, Options, ?USE_TIMEOUT_SERVER_DEFAULT) of
-                true -> workflow_timeout_monitor:init(Id);
+                {true, CheckPeriod} -> workflow_timeout_monitor:init(Id, CheckPeriod);
                 false -> ok
             end;
         ?ERROR_ALREADY_EXISTS ->
@@ -185,35 +192,36 @@ init_pool(EngineId, SlotsLimit) ->
             throw({error, already_exists})
     end.
 
--spec trigger_job_scheduling(id(), ?TAKE_UP_FREE_SLOTS | ?FOR_CURRENT_SLOT) -> ok | ?WF_ERROR_NOTHING_TO_START.
+-spec trigger_job_scheduling(id(), ?TAKE_UP_FREE_SLOTS | ?FOR_CURRENT_SLOT_FIRST) -> ok.
 trigger_job_scheduling(EngineId, ?TAKE_UP_FREE_SLOTS) ->
     case workflow_engine_state:increment_slot_usage(EngineId) of
         ok ->
-            case trigger_job_scheduling(EngineId, ?FOR_CURRENT_SLOT) of
+            case trigger_job_scheduling_for_acquired_slot(EngineId) of
                 ok -> trigger_job_scheduling(EngineId, ?TAKE_UP_FREE_SLOTS);
                 ?WF_ERROR_NOTHING_TO_START -> ok
             end;
         ?WF_ERROR_ALL_SLOTS_USED ->
             ok
     end;
-trigger_job_scheduling(EngineId, ?FOR_CURRENT_SLOT) ->
+trigger_job_scheduling(EngineId, ?FOR_CURRENT_SLOT_FIRST) ->
+    case trigger_job_scheduling_for_acquired_slot(EngineId) of
+        ok ->
+            trigger_job_scheduling(EngineId, ?TAKE_UP_FREE_SLOTS);
+        ?WF_ERROR_NOTHING_TO_START ->
+            ok
+    end.
+
+-spec trigger_job_scheduling_for_acquired_slot(id()) -> ok | ?WF_ERROR_NOTHING_TO_START.
+trigger_job_scheduling_for_acquired_slot(EngineId) ->
     case schedule_next_job(EngineId, []) of
         ok ->
             ok;
-        ?WF_ERROR_ALL_DEFERRED ->
-            workflow_engine_state:decrement_slot_usage(EngineId),
-            % TODO VFS-7787 - check without acquire to break spawning loop
-            spawn(fun() ->
-                timer:sleep(timer:seconds(5)),
-                trigger_job_scheduling(EngineId, ?TAKE_UP_FREE_SLOTS)
-            end),
-            ?WF_ERROR_NOTHING_TO_START;
         ?WF_ERROR_NOTHING_TO_START ->
             workflow_engine_state:decrement_slot_usage(EngineId),
             ?WF_ERROR_NOTHING_TO_START
-    end.
+    end.    
 
--spec schedule_next_job(id(), [execution_id()]) -> ok | ?WF_ERROR_ALL_DEFERRED | ?WF_ERROR_NOTHING_TO_START.
+-spec schedule_next_job(id(), [execution_id()]) -> ok | ?WF_ERROR_NOTHING_TO_START.
 schedule_next_job(EngineId, DeferredExecutions) ->
     case workflow_engine_state:poll_next_execution_id(EngineId) of
         {ok, ExecutionId} ->
@@ -229,17 +237,26 @@ schedule_next_job(EngineId, DeferredExecutions) ->
                             end;
                         ?PREPARE_EXECUTION(Handler, ExecutionContext) ->
                             schedule_prepare_on_pool(EngineId, ExecutionId, Handler, ExecutionContext);
-                        ?END_EXECUTION_AND_NOTIFY(Handler, Context, LaneIndex) ->
+                        ?END_EXECUTION_AND_NOTIFY(Handler, Context, LaneIndex, ErrorEncountered) ->
                             case workflow_engine_state:remove_execution_id(EngineId, ExecutionId) of
                                 ok ->
                                     Handler:handle_lane_execution_ended(ExecutionId, Context, LaneIndex),
-                                    workflow_iterator_snapshot:mark_exhausted(ExecutionId);
+                                    case ErrorEncountered of
+                                        true -> ok;
+                                        false -> workflow_iterator_snapshot:cleanup(ExecutionId)
+                                    end,
+                                    workflow_execution_state:cleanup(ExecutionId);
                                 ?WF_ERROR_ALREADY_REMOVED ->
                                     ok
                             end,
                             schedule_next_job(EngineId, DeferredExecutions);
-                        ?END_EXECUTION ->
-                            workflow_engine_state:remove_execution_id(EngineId, ExecutionId),
+                        ?END_EXECUTION -> % Workflow or lane preparation failed - cannot notify
+                            case workflow_engine_state:remove_execution_id(EngineId, ExecutionId) of
+                                ok ->
+                                    workflow_execution_state:cleanup(ExecutionId);
+                                ?WF_ERROR_ALREADY_REMOVED ->
+                                    ok
+                            end,
                             schedule_next_job(EngineId, DeferredExecutions);
                         ?DEFER_EXECUTION ->
                             % no jobs can be currently scheduled for this execution but new jobs will appear in future
@@ -248,7 +265,7 @@ schedule_next_job(EngineId, DeferredExecutions) ->
                 true ->
                     % no jobs can be currently scheduled for any execution (all executions has been checked and
                     % added to DeferredExecutions) but new jobs will appear in future
-                    ?WF_ERROR_ALL_DEFERRED
+                    ?WF_ERROR_NOTHING_TO_START
             end;
         ?ERROR_NOT_FOUND ->
             ?WF_ERROR_NOTHING_TO_START
@@ -265,7 +282,7 @@ schedule_on_pool(EngineId, ExecutionId, #job_execution_spec{
 } = JobExecutionSpec) ->
     CallArgs = {?MODULE, process_item, [EngineId, ExecutionId, JobExecutionSpec]},
     TaskType = maps:get(type, TaskSpec),
-    CallPools = maps:get(async_call_pools, TaskSpec, [?DEFAULT_ASYNC_CALL_POOL_ID]),
+    CallPools = get_async_call_pools(TaskSpec),
     case {TaskType, CallPools} of
         {sync, _} ->
             ok = worker_pool:cast(?POOL_ID(EngineId), CallArgs);
@@ -326,9 +343,9 @@ process_item(EngineId, ExecutionId, JobExecutionSpec = #job_execution_spec{
 
         report_execution_status_update(ExecutionId, EngineId, ReportType, JobIdentifier, undefined, FinalAns)
     catch
-        Error2:Reason2  ->
+        Error:Reason  ->
             ?error_stacktrace("Unexpected error handling task ~p for item id ~p: ~p:~p",
-                [TaskId, ItemId, Error2, Reason2])
+                [TaskId, ItemId, Error, Reason])
     end.
 
 -spec process_item(
@@ -343,7 +360,7 @@ process_item(ExecutionId, #job_execution_spec{
     task_id = TaskId,
     item_id = ItemId
 }, FinishCallback, HeartbeatCallback) ->
-    Item = workflow_cached_item:get(ItemId),
+    Item = workflow_cached_item:get_item(ItemId),
     try
         Handler:process_item(ExecutionId, ExecutionContext, TaskId, Item,
             FinishCallback, HeartbeatCallback)
@@ -365,10 +382,7 @@ prepare_execution(EngineId, ExecutionId, Handler, ExecutionContext) ->
     try
         Ans = Handler:prepare(ExecutionId, ExecutionContext),
         workflow_execution_state:report_execution_prepared(ExecutionId, Handler, ExecutionContext, Ans),
-        case trigger_job_scheduling(EngineId, ?FOR_CURRENT_SLOT) of
-            ok -> ok;
-            ?WF_ERROR_NOTHING_TO_START -> ok
-        end
+        trigger_job_scheduling(EngineId, ?FOR_CURRENT_SLOT_FIRST)
     catch
         Error:Reason  ->
             ?error_stacktrace("Unexpected error perparing execution ~p: ~p:~p", [ExecutionId, Error, Reason])

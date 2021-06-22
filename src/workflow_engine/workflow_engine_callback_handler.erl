@@ -16,6 +16,7 @@
 -behaviour(cowboy_handler).
 
 -include("workflow_engine.hrl").
+-include("http/gui_paths.hrl").
 -include_lib("ctool/include/http/codes.hrl").
 -include_lib("ctool/include/http/headers.hrl").
 
@@ -32,6 +33,7 @@
 -type callback() :: workflow_handler:finished_callback_id() | workflow_handler:heartbeat_callback_id().
 
 -define(SEPARATOR, "___").
+-define(DOMAIN_SEPARATOR, "/").
 -define(WF_ERROR_MALFORMED_REQUEST, {error, malformed_request}).
 
 %%%===================================================================
@@ -45,22 +47,15 @@
 %%--------------------------------------------------------------------
 -spec init(cowboy_req:req(), any()) -> {ok, cowboy_req:req(), any()}.
 init(Req, State) ->
-    Path = cowboy_req:path(Req),
-    <<"/tasks/", CallbackId/binary>> = Path,
-
-    {ContentType, _, _} = cowboy_req:parse_header(?HDR_CONTENT_TYPE, Req),
-    {ok, Body, _} = cowboy_req:read_body(Req),
-    ParsedBody = case ContentType of
-        <<"application/json">> ->
-            try
-                json_utils:decode(Body)
-            catch _:_ ->
-                ?WF_ERROR_MALFORMED_REQUEST
-            end;
-        _ ->
-            Body
+    ParsedBody = try
+        {ok, Body, _} = cowboy_req:read_body(Req),
+        json_utils:decode(Body)
+    catch _:_ ->
+        ?WF_ERROR_MALFORMED_REQUEST
     end,
-    ?MODULE:handle_callback(CallbackId, ParsedBody), % Call via ?MODULE for tests
+
+    Path = cowboy_req:path(Req),
+    ?MODULE:handle_callback(Path, ParsedBody), % Call via ?MODULE for tests
 
     {ok, cowboy_req:reply(?HTTP_204_NO_CONTENT, Req), State}.
 
@@ -87,7 +82,7 @@ prepare_heartbeat_callback_id(ExecutionId, EngineId, JobIdentifier) ->
     encode_callback_id(?HEARTBEAT_CALLBACK_TYPE, ExecutionId, EngineId, JobIdentifier, undefined).
 
 -spec handle_callback(
-    workflow_handler:finished_callback_id() | workflow_handler:heartbeat_callback_id(),
+    callback(),
     workflow_handler:task_processing_result() | ?WF_ERROR_MALFORMED_REQUEST | undefined
 ) -> ok.
 handle_callback(CallbackId, Message) ->
@@ -115,7 +110,11 @@ handle_callback(CallbackId, Message) ->
     [workflow_async_call_pool:id()] | undefined
 ) -> callback().
 encode_callback_id(CallbackType, ExecutionId, EngineId, JobIdentifier, CallPools) ->
-    <<(atom_to_binary(CallbackType, utf8))/binary, ?SEPARATOR,
+    <<"http://",
+        (oneprovider:get_domain())/binary,
+        ?DOMAIN_SEPARATOR,
+        ?ATM_TASK_FINISHED_CALLBACK_PATH,
+        (atom_to_binary(CallbackType, utf8))/binary, ?SEPARATOR,
         ExecutionId/binary, ?SEPARATOR,
         EngineId/binary, ?SEPARATOR,
         (workflow_jobs:job_identifier_to_binary(JobIdentifier))/binary, ?SEPARATOR,
@@ -128,6 +127,11 @@ encode_callback_id(CallbackType, ExecutionId, EngineId, JobIdentifier, CallPools
     workflow_jobs:job_identifier(),
     [workflow_async_call_pool:id()] | undefined
 }.
+decode_callback_id(<<"http://", Tail/binary>>) ->
+    [_Domain, Tail2] = binary:split(Tail, <<?DOMAIN_SEPARATOR>>),
+    decode_callback_id(Tail2);
+decode_callback_id(<<?ATM_TASK_FINISHED_CALLBACK_PATH, Tail/binary>>) ->
+    decode_callback_id(Tail);
 decode_callback_id(CallbackId) ->
     [CallbackTypeBin, ExecutionId, EngineId, JobIdentifierBin, CallPoolsBin] =
         binary:split(CallbackId, <<?SEPARATOR>>, [global, trim_all]),
