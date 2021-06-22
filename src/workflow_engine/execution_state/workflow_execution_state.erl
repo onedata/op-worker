@@ -388,6 +388,8 @@ prepare_next_job_using_iterator(ExecutionId, ItemIndex, CurrentIterator, LaneInd
             end
     end.
 
+notify_
+
 -spec update(workflow_engine:execution_id(), update_fun()) -> {ok, state()} | {error, term()}.
 update(ExecutionId, UpdateFun) ->
     % TODO VFS-7787 - should we add try/catch or allow functions fail?

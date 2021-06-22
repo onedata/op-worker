@@ -43,6 +43,11 @@
     keepalive_timeout :: time:seconds()
 }).
 
+-record(task_identifier, {
+    parallel_box_index :: workflow_execution_state:index(),
+    task_index :: workflow_execution_state:index()
+}).
+
 % Internal record that describe information about all jobs that are currently
 % known to workflow_execution_state. It does not store information about all jobs
 % that have appeared - information about job is deleted when it is no longer needed.
@@ -55,7 +60,9 @@
     failed_items = sets:new() :: items_set(),
 
     pending_async_jobs = #{} :: pending_async_jobs(),
-    raced_results = #{} :: raced_results() % TODO VFS-7787 - clean when they are not needed anymore (after integration with BW)
+    raced_results = #{} :: raced_results(), % TODO VFS-7787 - clean when they are not needed anymore (after integration with BW)
+
+    tasks_map
 }).
 
 -type job_identifier() :: #job_identifier{}.
@@ -74,6 +81,44 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+are_jobs_for_task(
+    #workflow_jobs{tasks_map = TasksMap},
+    #job_identifier{parallel_box_index = BoxIndex, task_index = TaskIndex}
+) ->
+    maps:is_key(#task_identifier{parallel_box_index = BoxIndex, task_index = TaskIndex}, TasksMap).
+
+build_tasks_map(Jobs = #workflow_jobs{
+    waiting = Waiting,
+    ongoing = Ongoing
+}) ->
+    TasksMap = lists:foldl(fun(#job_identifier{
+        item_index = ItemIndex,
+        parallel_box_index = BoxIndex,
+        task_index = TaskIndex
+    }, Acc) ->
+        TaskIdentifier = #task_identifier{parallel_box_index = BoxIndex, task_index = TaskIndex},
+        TaskItems = maps:get(TaskIdentifier, Acc, []),
+        Acc#{TaskIdentifier => [ItemIndex | TaskItems]}
+    end, #{}, gb_sets:to_list(Waiting) ++ gb_sets:to_list(Ongoing)),
+
+    Jobs#workflow_jobs{tasks_map = TasksMap}.
+
+remove_job_from_task_map(Jobs = #workflow_jobs{tasks_map = undefined}, _JobIdentifier) ->
+    Jobs;
+remove_job_from_task_map(Jobs = #workflow_jobs{tasks_map = TaskMap}, #job_identifier{
+    item_index = ItemIndex,
+    parallel_box_index = BoxIndex,
+    task_index = TaskIndex
+}) ->
+    TaskIdentifier = #task_identifier{parallel_box_index = BoxIndex, task_index = TaskIndex},
+    TaskItems = maps:get(TaskIdentifier, TaskMap, []),
+    UpdatedTaskMap = case TaskItems -- [ItemIndex] of
+        [] -> maps:remove(TaskIdentifier, TaskMap);
+        UpdatedTaskItems -> TaskMap#{TaskIdentifier => UpdatedTaskItems}
+    end,
+
+    Jobs#workflow_jobs{tasks_map = UpdatedTaskMap}.
 
 -spec init() -> jobs().
 init() ->
