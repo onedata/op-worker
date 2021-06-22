@@ -24,7 +24,8 @@
     get_workflow_execution_ctx/1,
     get_access_token/1,
     get_item/1,
-    get_report_result_url/1
+    get_report_result_url/1,
+    get_heartbeat_url/1
 ]).
 
 
@@ -93,3 +94,8 @@ get_item(#atm_job_execution_ctx{item = Item}) ->
 -spec get_report_result_url(record()) -> undefined | binary().
 get_report_result_url(#atm_job_execution_ctx{report_result_url = ReportResultUrl}) ->
     ReportResultUrl.
+
+
+-spec get_heartbeat_url(record()) -> undefined | binary().
+get_heartbeat_url(#atm_job_execution_ctx{heartbeat_url = HeartbeatUrl}) ->
+    HeartbeatUrl.

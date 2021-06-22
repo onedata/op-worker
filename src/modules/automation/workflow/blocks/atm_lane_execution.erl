@@ -19,7 +19,7 @@
 %% API
 -export([
     create_all/1, create/3,
-    prepare_all/1, prepare/1,
+    prepare_all/2, prepare/2,
     delete_all/1, delete/1
 ]).
 -export([get_parallel_box_execution_specs/1]).
@@ -70,6 +70,12 @@ create_all(#atm_workflow_execution_creation_ctx{
     atm_lane_schema:record()
 ) ->
     record() | no_return().
+create(_AtmWorkflowExecutionCreationCtx, _AtmLaneIndex, #atm_lane_schema{
+    id = AtmLaneSchemaId,
+    parallel_boxes = []
+}) ->
+    throw(?ERROR_ATM_EMPTY_LANE(AtmLaneSchemaId));
+
 create(AtmWorkflowExecutionCreationCtx, AtmLaneIndex, #atm_lane_schema{
     id = AtmLaneSchemaId,
     parallel_boxes = AtmParallelBoxSchemas
@@ -80,27 +86,27 @@ create(AtmWorkflowExecutionCreationCtx, AtmLaneIndex, #atm_lane_schema{
 
     #atm_lane_execution{
         schema_id = AtmLaneSchemaId,
-        status = atm_status_utils:converge(atm_parallel_box_execution:gather_statuses(
-            AtmParallelBoxExecutions
-        )),
+        status = atm_task_execution_status_utils:converge(
+            atm_parallel_box_execution:gather_statuses(AtmParallelBoxExecutions)
+        ),
         parallel_boxes = AtmParallelBoxExecutions
     }.
 
 
--spec prepare_all([record()]) -> ok | no_return().
-prepare_all(AtmLaneExecutions) ->
+-spec prepare_all(atm_workflow_execution_ctx:record(), [record()]) -> ok | no_return().
+prepare_all(AtmWorkflowExecutionCtx, AtmLaneExecutions) ->
     lists:foreach(fun(#atm_lane_execution{schema_id = AtmLaneSchemaId} = AtmLaneExecution) ->
         try
-            prepare(AtmLaneExecution)
+            prepare(AtmWorkflowExecutionCtx, AtmLaneExecution)
         catch _:Reason ->
             throw(?ERROR_ATM_LANE_EXECUTION_PREPARATION_FAILED(AtmLaneSchemaId, Reason))
         end
     end, AtmLaneExecutions).
 
 
--spec prepare(record()) -> ok | no_return().
-prepare(#atm_lane_execution{parallel_boxes = AtmParallelBoxExecutions}) ->
-    atm_parallel_box_execution:prepare_all(AtmParallelBoxExecutions).
+-spec prepare(atm_workflow_execution_ctx:record(), record()) -> ok | no_return().
+prepare(AtmWorkflowExecutionCtx, #atm_lane_execution{parallel_boxes = AtmParallelBoxExecutions}) ->
+    atm_parallel_box_execution:prepare_all(AtmWorkflowExecutionCtx, AtmParallelBoxExecutions).
 
 
 -spec delete_all([record()]) -> ok.
@@ -125,6 +131,15 @@ gather_statuses(AtmLaneExecutions) ->
     lists:map(fun(#atm_lane_execution{status = Status}) -> Status end, AtmLaneExecutions).
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Updates task status for specific parallel box execution within lane execution.
+%%
+%%                              !! CAUTION !!
+%% This function is called when updating atm_workflow_execution_doc and as such
+%% shouldn't touch any other persistent models.
+%% @end
+%%--------------------------------------------------------------------
 -spec update_task_status(
     non_neg_integer(),
     atm_task_execution:id(),
@@ -145,9 +160,9 @@ update_task_status(AtmParallelBoxIndex, AtmTaskExecutionId, NewStatus, #atm_lane
                 NewParallelBoxExecution, AtmParallelBoxIndex, AtmParallelBoxExecutions
             ),
             {ok, AtmLaneExecution#atm_lane_execution{
-                status = atm_status_utils:converge(atm_parallel_box_execution:gather_statuses(
-                    NewAtmParallelBoxExecutions
-                )),
+                status = atm_task_execution_status_utils:converge(
+                    atm_parallel_box_execution:gather_statuses(NewAtmParallelBoxExecutions)
+                ),
                 parallel_boxes = NewAtmParallelBoxExecutions
             }};
         {error, _} = Error ->

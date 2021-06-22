@@ -40,14 +40,14 @@ create_all(#atm_workflow_execution_creation_ctx{
     workflow_schema_doc = #document{value = #od_atm_workflow_schema{
         stores = AtmStoreSchemas
     }},
-    initial_values = InitialValues
+    store_initial_values = StoreInitialValues
 }) ->
     lists:reverse(lists:foldl(fun(#atm_store_schema{id = AtmStoreSchemaId} = AtmStoreSchema, Acc) ->
-        InitialValue = utils:null_to_undefined(maps:get(
-            AtmStoreSchemaId, InitialValues, undefined
+        StoreInitialValue = utils:null_to_undefined(maps:get(
+            AtmStoreSchemaId, StoreInitialValues, undefined
         )),
         try
-            {ok, AtmStoreDoc} = create(AtmWorkflowExecutionCtx, InitialValue, AtmStoreSchema),
+            {ok, AtmStoreDoc} = create(AtmWorkflowExecutionCtx, StoreInitialValue, AtmStoreSchema),
             [AtmStoreDoc | Acc]
         catch _:Reason ->
             catch delete_all([Doc#document.key || Doc <- Acc]),
@@ -74,7 +74,7 @@ create(AtmWorkflowExecutionCtx, InitialValue, #atm_store_schema{
     type = StoreType,
     data_spec = AtmDataSpec
 }) ->
-    ContainerModel = store_type_to_container_type(StoreType),
+    ContainerModel = get_container_type_for_store(StoreType),
     ActualInitialValue = utils:ensure_defined(InitialValue, DefaultInitialValue),
 
     {ok, _} = atm_store:create(#atm_store{
@@ -120,7 +120,6 @@ apply_operation(AtmWorkflowExecutionCtx, Operation, Item, Options, AtmStoreId) -
     %   * do not support any operation
     case atm_store:get(AtmStoreId) of
         {ok, #atm_store{container = AtmContainer, frozen = false}} ->
-            % TODO VFS-7691 maybe perform data validation here instead of specific container ??
             UpdatedContainer = atm_container:apply_operation(AtmContainer, #atm_container_operation{
                 type = Operation,
                 options = Options,
@@ -130,8 +129,8 @@ apply_operation(AtmWorkflowExecutionCtx, Operation, Item, Options, AtmStoreId) -
             atm_store:update(AtmStoreId, fun(#atm_store{} = PrevStore) ->
                 {ok, PrevStore#atm_store{container = UpdatedContainer}}
             end);
-        {ok, #atm_store{container = AtmContainer, frozen = true}} -> 
-            throw(?ERROR_ATM_STORE_FROZEN(AtmContainer));
+        {ok, #atm_store{schema_id = AtmStoreSchemaId, frozen = true}} ->
+            throw(?ERROR_ATM_STORE_FROZEN(AtmStoreSchemaId));
         {error, _} = Error ->
             throw(Error)
     end.
@@ -169,9 +168,9 @@ acquire_iterator(AtmWorkflowExecutionEnv, #atm_store_iterator_spec{
 
 
 %% @private
--spec store_type_to_container_type(automation:store_type()) ->
+-spec get_container_type_for_store(automation:store_type()) ->
     atm_container:type().
-store_type_to_container_type(list) -> atm_list_container;
-store_type_to_container_type(range) -> atm_range_container;
-store_type_to_container_type(single_value) -> atm_single_value_container;
-store_type_to_container_type(tree_forest) -> atm_tree_forest_container.
+get_container_type_for_store(list) -> atm_list_container;
+get_container_type_for_store(range) -> atm_range_container;
+get_container_type_for_store(single_value) -> atm_single_value_container;
+get_container_type_for_store(tree_forest) -> atm_tree_forest_container.

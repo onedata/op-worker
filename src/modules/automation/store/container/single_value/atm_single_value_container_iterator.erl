@@ -58,12 +58,12 @@ build(Value) ->
 
 
 -spec get_next_batch(atm_workflow_execution_ctx:record(), atm_container_iterator:batch_size(), record()) ->
-    {ok, [automation:item()], record()} | stop.
-get_next_batch(_AtmWorkflowExecutionCtx, _BatchSize, #atm_single_value_container_iterator{value = undefined}) ->
+    {ok, [atm_value:compressed()], record()} | stop.
+get_next_batch(_, _, #atm_single_value_container_iterator{value = undefined}) ->
     stop;
-get_next_batch(_AtmWorkflowExecutionCtx, _BatchSize, #atm_single_value_container_iterator{exhausted = true}) ->
+get_next_batch(_, _, #atm_single_value_container_iterator{exhausted = true}) ->
     stop;
-get_next_batch(_AtmWorkflowExecutionCtx, _BatchSize, #atm_single_value_container_iterator{value = Value} = AtmContainerIterator) ->
+get_next_batch(_, _, #atm_single_value_container_iterator{value = Value} = AtmContainerIterator) ->
     {ok, [Value], AtmContainerIterator#atm_single_value_container_iterator{
         exhausted = true
     }}.

@@ -103,6 +103,7 @@ forget_before(#atm_store_iterator{container_iterator = ContainerIterator}) ->
 mark_exhausted(#atm_store_iterator{container_iterator = ContainerIterator}) ->
     atm_container_iterator:mark_exhausted(ContainerIterator).
 
+
 %%%===================================================================
 %%% persistent_record callbacks
 %%%===================================================================
@@ -158,13 +159,13 @@ get_next_internal(AtmWorkflowExecutionCtx, AtmContainerIterator, Size, DataSpec)
     case atm_container_iterator:get_next_batch(AtmWorkflowExecutionCtx, Size, AtmContainerIterator) of
         stop ->
             stop;
-        {ok, Items, NewAtmContainerIterator} ->
+        {ok, CompressedItems, NewAtmContainerIterator} ->
             ExpandedItems = lists:filtermap(fun(CompressedItem) ->
-                case atm_data_compressor:expand(AtmWorkflowExecutionCtx, CompressedItem, DataSpec) of
+                case atm_value:expand(AtmWorkflowExecutionCtx, CompressedItem, DataSpec) of
                     {ok, ExpandedItem} -> {true, ExpandedItem};
                     {error, _} -> false
                 end
-            end, Items),
+            end, CompressedItems),
             case ExpandedItems of
                 [] ->
                     get_next_internal(AtmWorkflowExecutionCtx, NewAtmContainerIterator, Size, DataSpec);

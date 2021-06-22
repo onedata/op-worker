@@ -14,8 +14,7 @@
 -author("Bartosz Walkowicz").
 
 -behaviour(atm_data_validator).
-
--include("modules/automation/atm_tmp.hrl").
+-behaviour(atm_data_compressor).
 
 %% atm_data_validator callbacks
 -export([assert_meets_constraints/3]).

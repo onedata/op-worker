@@ -14,8 +14,7 @@
 -author("Bartosz Walkowicz").
 
 -behaviour(atm_data_validator).
-
--include("modules/automation/atm_tmp.hrl").
+-behaviour(atm_data_compressor).
 
 %% atm_data_validator callbacks
 -export([assert_meets_constraints/3]).
@@ -44,11 +43,11 @@ assert_meets_constraints(_AtmWorkflowExecutionCtx, _Value, _ValueConstraints) ->
 %%%===================================================================
 
 
--spec compress(atm_value:expanded()) -> map().
+-spec compress(atm_value:expanded()) -> json_utils:json_map().
 compress(Value) -> Value.
 
 
--spec expand(atm_workflow_execution_ctx:record(), map()) ->
+-spec expand(atm_workflow_execution_ctx:record(), json_utils:json_map()) ->
     {ok, atm_value:expanded()}.
 expand(_, Value) ->
     {ok, Value}.

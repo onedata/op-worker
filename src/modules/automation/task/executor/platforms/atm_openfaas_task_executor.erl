@@ -17,12 +17,13 @@
 -behaviour(persistent_record).
 
 -include("modules/automation/atm_execution.hrl").
+-include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/http/codes.hrl").
 -include_lib("ctool/include/http/headers.hrl").
 
 
 %% atm_task_executor callbacks
--export([create/2, prepare/1, get_spec/1, in_readonly_mode/1, run/3]).
+-export([create/2, prepare/2, get_spec/1, in_readonly_mode/1, run/3]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
@@ -42,6 +43,7 @@
 -type openfaas_config() :: #openfaas_config{}.
 
 -record(prepare_ctx, {
+    workflow_execution_ctx :: atm_workflow_execution_ctx:record(),
     openfaas_config :: openfaas_config(),
     executor :: record()
 }).
@@ -50,7 +52,7 @@
 -export_type([record/0]).
 
 
--define(AWAIT_READINESS_RETRIES, 180).
+-define(AWAIT_READINESS_RETRIES, 300).
 -define(AWAIT_READINESS_INTERVAL_SEC, 1).
 
 
@@ -70,9 +72,10 @@ create(AtmWorkflowExecutionId, #atm_openfaas_operation_spec{} = OperationSpec) -
     }.
 
 
--spec prepare(record()) -> ok | no_return().
-prepare(AtmTaskExecutor) ->
+-spec prepare(atm_workflow_execution_ctx:record(), record()) -> ok | no_return().
+prepare(AtmWorkflowExecutionCtx, AtmTaskExecutor) ->
     PrepareCtx = #prepare_ctx{
+        workflow_execution_ctx = AtmWorkflowExecutionCtx,
         openfaas_config = get_openfaas_config(),
         executor = AtmTaskExecutor
     },
@@ -209,7 +212,8 @@ register_function(#prepare_ctx{
         #{
             <<"service">> => FunctionName,
             <<"image">> => DockerImage,
-            <<"namespace">> => OpenfaasConfig#openfaas_config.function_namespace
+            <<"namespace">> => OpenfaasConfig#openfaas_config.function_namespace,
+            <<"envVars">> => prepare_function_timeouts()
         },
         prepare_function_annotations(PrepareCtx)
     )),
@@ -229,6 +233,21 @@ register_function(#prepare_ctx{
 
 
 %% @private
+-spec prepare_function_timeouts() -> json_utils:json_map().
+prepare_function_timeouts() ->
+    lists:foldl(fun({Key, EnvVar, Default}, Acc) ->
+        TimeoutSeconds = op_worker:get_env(EnvVar, Default),
+        TimeoutSecondsBin = integer_to_binary(TimeoutSeconds),
+
+        Acc#{Key => <<TimeoutSecondsBin/binary, "s">>}
+    end, #{}, [
+        {<<"read_timeout">>, openfaas_read_timeout_seconds, 604800},
+        {<<"write_timeout">>, openfaas_write_timeout_seconds, 604800},
+        {<<"exec_timeout">>, openfaas_exec_timeout_seconds, 604800}
+    ]).
+
+
+%% @private
 -spec prepare_function_annotations(prepare_ctx()) -> json_utils:json_map().
 prepare_function_annotations(#prepare_ctx{executor = #atm_openfaas_task_executor{
     operation_spec = #atm_openfaas_operation_spec{
@@ -236,20 +255,46 @@ prepare_function_annotations(#prepare_ctx{executor = #atm_openfaas_task_executor
     }}
 }) ->
     #{};
-prepare_function_annotations(#prepare_ctx{executor = #atm_openfaas_task_executor{
-    operation_spec = #atm_openfaas_operation_spec{
-        docker_execution_options = #atm_docker_execution_options{
-            mount_oneclient = true,
-            oneclient_mount_point = MountPoint,
-            oneclient_options = OneclientOptions
+prepare_function_annotations(#prepare_ctx{
+    workflow_execution_ctx = AtmWorkflowExecutionCtx,
+    executor = AtmTaskExecutor = #atm_openfaas_task_executor{
+        operation_spec = #atm_openfaas_operation_spec{
+            docker_execution_options = #atm_docker_execution_options{
+                mount_oneclient = true,
+                oneclient_mount_point = MountPoint,
+                oneclient_options = OneclientOptions
+            }
         }
-    }}
+    }
 }) ->
+    SpaceId = atm_workflow_execution_ctx:get_space_id(AtmWorkflowExecutionCtx),
+    AccessToken = atm_workflow_execution_ctx:get_access_token(AtmWorkflowExecutionCtx),
+    {ok, OpDomain} = provider_logic:get_domain(),
+
     #{<<"annotations">> => #{
-        % TODO VFS-7627 set proper annotation for oneclient mounts
-        <<"com.mountpoint">> => MountPoint,
-        <<"com.options">> => OneclientOptions
+        <<"oneclient.openfass.onedata.org/inject">> => <<"enabled">>,
+        <<"oneclient.openfass.onedata.org/image">> => get_oneclient_image(),
+        <<"oneclient.openfaas.onedata.org/space_id">> => SpaceId,
+        <<"oneclient.openfaas.onedata.org/mount_point">> => MountPoint,
+        <<"oneclient.openfaas.onedata.org/options">> => OneclientOptions,
+        <<"oneclient.openfaas.onedata.org/oneprovider_host">> => OpDomain,
+        <<"oneclient.openfaas.onedata.org/token">> => case in_readonly_mode(AtmTaskExecutor) of
+            true -> tokens:confine(AccessToken, #cv_data_readonly{});
+            false -> AccessToken
+        end
     }}.
+
+
+%% @private
+-spec get_oneclient_image() -> binary().
+get_oneclient_image() ->
+    case op_worker:get_env(openfaas_oneclient_image, undefined) of
+        undefined ->
+            ReleaseVersion = op_worker:get_release_version(),
+            <<"onedata/oneclient:", ReleaseVersion/binary>>;
+        OneclientImage ->
+            str_utils:to_binary(OneclientImage)
+    end.
 
 
 %% @private
@@ -332,14 +377,14 @@ get_openfaas_config() ->
 
         AdminUsername = op_worker:get_env(openfaas_admin_username),
         AdminPassword = op_worker:get_env(openfaas_admin_password),
-        Hash = base64:encode(<<AdminUsername/binary, ":", AdminPassword/binary>>),
+        Hash = base64:encode(str_utils:format_bin("~s:~s", [AdminUsername, AdminPassword])),
 
         #openfaas_config{
             url = str_utils:format_bin("http://~s:~B", [Host, Port]),
             basic_auth = <<"Basic ", Hash/binary>>,
-            function_namespace = op_worker:get_env(openfaas_function_namespace)
+            function_namespace = str_utils:to_binary(op_worker:get_env(openfaas_function_namespace))
         }
-    catch error:{missing_env_variable, _} ->
+    catch _:_ ->
         throw(?ERROR_ATM_OPENFAAS_NOT_CONFIGURED)
     end.
 

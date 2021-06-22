@@ -14,6 +14,7 @@
 -author("Michal Stanisz").
 
 -behaviour(atm_data_validator).
+-behaviour(atm_data_compressor).
 -behaviour(atm_tree_forest_container_iterator).
 
 -include("modules/automation/atm_tmp.hrl").
@@ -52,24 +53,15 @@
 ) ->
     ok | no_return().
 assert_meets_constraints(AtmWorkflowExecutionCtx, #{<<"file_id">> := ObjectId} = Value, ValueConstraints) ->
-    SpaceId = atm_workflow_execution_ctx:get_space_id(AtmWorkflowExecutionCtx),
     try
         {ok, Guid} = file_id:objectid_to_guid(ObjectId),
-        case file_id:guid_to_space_id(Guid) of
-            SpaceId ->
-                SessionId = atm_workflow_execution_ctx:get_session_id(AtmWorkflowExecutionCtx),
-                case lfm:stat(SessionId, ?FILE_REF(Guid)) of
-                    {ok, FileAttrs} -> check_constraints(FileAttrs, ValueConstraints);
-                    {error, Errno} -> ?ERROR_POSIX(Errno)
-                end;
-            _ -> 
-                ?ERROR_POSIX(?ENOENT)
-        end
-    of
-        ok -> ok;
-        {error, _} = Error -> throw(Error)
-    catch _:_ ->
-        throw(?ERROR_ATM_DATA_TYPE_UNVERIFIED(Value, atm_file_type))
+        FileAttrs = check_implicit_constraints(AtmWorkflowExecutionCtx, Guid),
+        check_explicit_constraints(FileAttrs, ValueConstraints)
+    catch
+        throw:Error ->
+            throw(Error);
+        _:_ ->
+            throw(?ERROR_ATM_DATA_TYPE_UNVERIFIED(Value, atm_file_type))
     end.
 
 
@@ -85,7 +77,7 @@ list_children(AtmWorkflowExecutionCtx, Guid, ListOpts, BatchSize) ->
     try
         list_children_unsafe(SessionId, Guid, ListOpts#{size => BatchSize})
     catch _:Error ->
-        case atm_value:is_error_ignored(datastore_runner:normalize_error(Error)) of
+        case fslogic_errors:is_access_error(datastore_runner:normalize_error(Error)) of
             true ->
                 {[], [], #{}, true};
             _ -> 
@@ -145,13 +137,38 @@ expand(AtmWorkflowExecutionCtx, Guid) ->
 
 
 %% @private
--spec check_constraints(lfm_attrs:file_attributes(), atm_data_type:value_constraints()) -> 
-    ok | {error, term()}.
-check_constraints(#file_attr{type = FileType}, Constraints) ->
+-spec check_implicit_constraints(atm_workflow_execution_ctx:record(), file_id:file_guid()) ->
+    lfm_attrs:file_attributes() | no_return().
+check_implicit_constraints(AtmWorkflowExecutionCtx, FileGuid) ->
+    SpaceId = atm_workflow_execution_ctx:get_space_id(AtmWorkflowExecutionCtx),
+
+    case file_id:guid_to_space_id(FileGuid) of
+        SpaceId ->
+            SessionId = atm_workflow_execution_ctx:get_session_id(AtmWorkflowExecutionCtx),
+
+            case lfm:stat(SessionId, ?FILE_REF(FileGuid)) of
+                {ok, FileAttrs} ->
+                    FileAttrs;
+                {error, _} ->
+                    throw(?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(#{<<"hasAccess">> => true}))
+            end;
+        _ ->
+            throw(?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(#{<<"inSpace">> => SpaceId}))
+    end.
+
+
+%% @private
+-spec check_explicit_constraints(lfm_attrs:file_attributes(), atm_data_type:value_constraints()) ->
+    ok | no_return().
+check_explicit_constraints(#file_attr{type = FileType}, Constraints) ->
     case maps:get(file_type, Constraints, 'ANY') of
-        'ANY' -> ok;
-        FileType -> ok;
-        Other -> ?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(Other, FileType)
+        'ANY' ->
+            ok;
+        FileType ->
+            ok;
+        Other ->
+            UnverifiedConstraint = atm_file_type:value_constraints_to_json(#{file_type => Other}),
+            throw(?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(UnverifiedConstraint))
     end.
 
 

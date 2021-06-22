@@ -29,8 +29,8 @@
     {error, {atm_data_type_unverified, __VALUE, __EXP_TYPE}}
 ).
 
--define(ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(__VALUE, __EXP_CONSTRAINT),
-    {error, {atm_data_value_constraint_unverified, __VALUE, __EXP_CONSTRAINT}}
+-define(ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(__VALUE_CONSTRAINT),
+    {error, {atm_data_value_constraint_unverified, __VALUE_CONSTRAINT}}
 ).
 
 -define(ERROR_ATM_REFERENCED_NONEXISTENT_STORE(__STORE_SCHEMA_ID),
@@ -76,8 +76,14 @@
 -define(ERROR_ATM_TASK_EXECUTION_CREATION_FAILED(__TASK_SCHEMA_ID, __REASON),
     {error, {atm_task_execution_creation_failed, __TASK_SCHEMA_ID, __REASON}}
 ).
+-define(ERROR_ATM_EMPTY_PARALLEL_BOX(__PARALLEL_BOX_SCHEMA_ID),
+    {error, {atm_parallel_box_empty, __PARALLEL_BOX_SCHEMA_ID}}
+).
 -define(ERROR_ATM_PARALLEL_BOX_EXECUTION_CREATION_FAILED(__PARALLEL_BOX_SCHEMA_ID, __REASON),
     {error, {atm_parallel_box_execution_creation_failed, __PARALLEL_BOX_SCHEMA_ID, __REASON}}
+).
+-define(ERROR_ATM_EMPTY_LANE(__LANE_SCHEMA_ID),
+    {error, {atm_lane_empty, __LANE_SCHEMA_ID}}
 ).
 -define(ERROR_ATM_LANE_EXECUTION_CREATION_FAILED(__LANE_SCHEMA_ID, __REASON),
     {error, {atm_lane_execution_creation_failed, __LANE_SCHEMA_ID, __REASON}}

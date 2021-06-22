@@ -79,7 +79,7 @@ create_store_with_invalid_args_test(_Config) ->
     ?assertEqual(?ERROR_ATM_STORE_MISSING_REQUIRED_INITIAL_VALUE, atm_store_test_utils:create_store(
         krakow, AtmWorkflowExecutionCtx, undefined, (?ATM_LIST_STORE_SCHEMA)#atm_store_schema{requires_initial_value = true}
     )),
-    ?assertEqual(?ERROR_ATM_BAD_DATA(<<"initialValue">>, <<"not a list">>), atm_store_test_utils:create_store(
+    ?assertEqual(?ERROR_ATM_BAD_DATA(<<"value">>, <<"not a batch">>), atm_store_test_utils:create_store(
         krakow, AtmWorkflowExecutionCtx, 8, ?ATM_LIST_STORE_SCHEMA
     )),
 

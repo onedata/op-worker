@@ -122,7 +122,7 @@ report_task_status_change(
                 NewAtmLaneExecutions = lists_utils:replace_at(
                     NewLaneExecution, AtmLaneExecutionIndex, AtmLaneExecutions
                 ),
-                NewAtmWorkflowExecutionStatus = atm_status_utils:converge(
+                NewAtmWorkflowExecutionStatus = atm_task_execution_status_utils:converge(
                     atm_lane_execution:gather_statuses(NewAtmLaneExecutions)
                 ),
                 NewAtmWorkflowExecution = AtmWorkflowExecution#atm_workflow_execution{

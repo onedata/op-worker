@@ -54,7 +54,7 @@ acquire(AtmWorkflowExecutionId) ->
                 )
             end),
             % TODO VFS-7693 cancel workflow
-            throw(?EACCES)
+            throw(?ERROR_FORBIDDEN)
     end.
 
 

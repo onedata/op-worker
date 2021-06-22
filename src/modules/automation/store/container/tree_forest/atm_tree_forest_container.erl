@@ -40,7 +40,8 @@
 %%% atm_container callbacks
 %%%===================================================================
 
--spec create(atm_data_spec:record(), initial_value(), atm_workflow_execution_ctx:record()) -> record() | no_return().
+-spec create(atm_data_spec:record(), initial_value(), atm_workflow_execution_ctx:record()) ->
+    record() | no_return().
 create(AtmDataSpec, InitialValue, AtmWorkflowExecutionCtx) ->
     #atm_tree_forest_container{
         roots_list = atm_list_container:create(AtmDataSpec, InitialValue, AtmWorkflowExecutionCtx)

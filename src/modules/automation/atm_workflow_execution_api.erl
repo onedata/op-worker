@@ -21,7 +21,7 @@
 -export([
     list/4,
     create/4,
-    get/1, get_summary/1, get_summary/2
+    get/1, get_summary/2
 ]).
 
 
@@ -111,7 +111,7 @@ create(UserCtx, SpaceId, AtmWorkflowSchemaId, StoreInitialValues) ->
         ),
         workflow_schema_doc = AtmWorkflowSchemaDoc,
         lambda_docs = AtmLambdaDocs,
-        initial_values = StoreInitialValues
+        store_initial_values = StoreInitialValues
     }),
 
     workflow_engine:execute_workflow(?ATM_WORKFLOW_EXECUTION_ENGINE, #{
@@ -134,15 +134,6 @@ get(AtmWorkflowExecutionId) ->
         ?ERROR_NOT_FOUND ->
             ?ERROR_NOT_FOUND
     end.
-
-
--spec get_summary(atm_workflow_execution:id() | atm_workflow_execution:doc()) ->
-    atm_workflow_execution:summary().
-get_summary(#document{key = AtmWorkflowExecutionId, value = AtmWorkflowExecution}) ->
-    get_summary(AtmWorkflowExecutionId, AtmWorkflowExecution);
-get_summary(AtmWorkflowExecutionId) ->
-    {ok, AtmWorkflowExecutionDoc} = atm_workflow_execution:get(AtmWorkflowExecutionId),
-    get_summary(AtmWorkflowExecutionDoc).
 
 
 -spec get_summary(atm_workflow_execution:id(), atm_workflow_execution:record()) ->
