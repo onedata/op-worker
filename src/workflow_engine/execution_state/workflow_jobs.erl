@@ -82,16 +82,28 @@
 %%% API
 %%%===================================================================
 
+are_jobs_for_task(#workflow_jobs{tasks_map = undefined}, _JobIdentifier) ->
+    undefined;
 are_jobs_for_task(
     #workflow_jobs{tasks_map = TasksMap},
     #job_identifier{parallel_box_index = BoxIndex, task_index = TaskIndex}
 ) ->
     maps:is_key(#task_identifier{parallel_box_index = BoxIndex, task_index = TaskIndex}, TasksMap).
 
+get_not_present_tasks(TasksMap, BoxesSpec) ->
+    maps:fold(fun(BoxIndex, Tasks, Acc) ->
+        maps:fold(fun(TaskIndex, {TaskId, _TaskSpec}, InternalAcc) ->
+            case maps:is_key(#task_identifier{parallel_box_index = BoxIndex, task_index = TaskIndex}, TasksMap) of
+                true -> InternalAcc;
+                false -> [TaskId | InternalAcc]
+            end
+        end, [], Tasks) ++ Acc
+    end, [], BoxesSpec).
+
 build_tasks_map(Jobs = #workflow_jobs{
     waiting = Waiting,
     ongoing = Ongoing
-}) ->
+}, BoxesSpec) ->
     TasksMap = lists:foldl(fun(#job_identifier{
         item_index = ItemIndex,
         parallel_box_index = BoxIndex,
@@ -102,7 +114,7 @@ build_tasks_map(Jobs = #workflow_jobs{
         Acc#{TaskIdentifier => [ItemIndex | TaskItems]}
     end, #{}, gb_sets:to_list(Waiting) ++ gb_sets:to_list(Ongoing)),
 
-    Jobs#workflow_jobs{tasks_map = TasksMap}.
+    {Jobs#workflow_jobs{tasks_map = TasksMap}, get_not_present_tasks(TasksMap, BoxesSpec)}.
 
 remove_job_from_task_map(Jobs = #workflow_jobs{tasks_map = undefined}, _JobIdentifier) ->
     Jobs;
@@ -188,7 +200,7 @@ mark_ongoing_job_finished(Jobs = #workflow_jobs{
         true -> ?AT_LEAST_ONE_JOB_LEFT_FOR_PARALLEL_BOX;
         false -> ?NO_JOBS_LEFT_FOR_PARALLEL_BOX
     end,
-    {Jobs#workflow_jobs{ongoing = NewOngoing}, RemainingForBox}.
+    {remove_job_from_task_map(Jobs#workflow_jobs{ongoing = NewOngoing}, JobIdentifier), RemainingForBox}.
 
 -spec register_failure(jobs(), job_identifier()) -> {jobs(), jobs_for_parallel_box()}.
 register_failure(Jobs = #workflow_jobs{

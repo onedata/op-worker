@@ -74,7 +74,7 @@
 -define(POOL_ID(EngineId), binary_to_atom(EngineId, utf8)).
 -define(DEFAULT_SLOT_COUNT, 20).
 -define(DEFAULT_CALLS_LIMIT, 1000).
--define(DEFAULT_TIMEOUT_CHECK_PERIOD, timer:seconds(30)).
+-define(DEFAULT_TIMEOUT_CHECK_PERIOD, timer:seconds(300)).
 -define(USE_TIMEOUT_SERVER_DEFAULT, {true, ?DEFAULT_TIMEOUT_CHECK_PERIOD}).
 -define(DEFAULT_KEEPALIVE_TIMEOUT_SEC, 300).
 
