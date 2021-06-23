@@ -119,3 +119,16 @@
     workflow_execution_state:index()
 ) ->
     ok.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Callback reporting that all tasks in given workflow have been
+%% executed for all items. It will be called exactly once.
+%% @end
+%%--------------------------------------------------------------------
+-callback handle_workflow_execution_ended(
+    workflow_engine:execution_id(),
+    workflow_engine:execution_context()
+) ->
+    ok.

@@ -26,6 +26,7 @@
 %% Functions operating on job_identifier record
 -export([job_identifier_to_binary/1, binary_to_job_identifier/1, get_item_id/2,
     get_task_details/2, is_previous/2]).
+-export([is_task_finished/2, build_tasks_tree/1]).
 %% Test API
 -export([is_empty/1]).
 
@@ -62,7 +63,7 @@
     pending_async_jobs = #{} :: pending_async_jobs(),
     raced_results = #{} :: raced_results(), % TODO VFS-7787 - clean when they are not needed anymore (after integration with BW)
 
-    tasks_map
+    tasks_tree
 }).
 
 -type job_identifier() :: #job_identifier{}.
@@ -82,55 +83,59 @@
 %%% API
 %%%===================================================================
 
-are_jobs_for_task(#workflow_jobs{tasks_map = undefined}, _JobIdentifier) ->
-    undefined;
-are_jobs_for_task(
-    #workflow_jobs{tasks_map = TasksMap},
+is_task_finished(#workflow_jobs{tasks_tree = undefined}, _JobIdentifier) ->
+    false;
+is_task_finished(
+    #workflow_jobs{tasks_tree = TasksTree},
     #job_identifier{parallel_box_index = BoxIndex, task_index = TaskIndex}
 ) ->
-    maps:is_key(#task_identifier{parallel_box_index = BoxIndex, task_index = TaskIndex}, TasksMap).
-
-get_not_present_tasks(TasksMap, BoxesSpec) ->
-    maps:fold(fun(BoxIndex, Tasks, Acc) ->
-        maps:fold(fun(TaskIndex, {TaskId, _TaskSpec}, InternalAcc) ->
-            case maps:is_key(#task_identifier{parallel_box_index = BoxIndex, task_index = TaskIndex}, TasksMap) of
-                true -> InternalAcc;
-                false -> [TaskId | InternalAcc]
+    case gb_trees:is_empty(TasksTree) of
+        true ->
+            true;
+        false ->
+            case gb_trees:smallest(TasksTree) of
+                {Key, _} when Key =< #task_identifier{parallel_box_index = BoxIndex, task_index = TaskIndex} -> false;
+                _ -> true
             end
-        end, [], Tasks) ++ Acc
-    end, [], BoxesSpec).
+    end.
 
-build_tasks_map(Jobs = #workflow_jobs{
+build_tasks_tree(Jobs = #workflow_jobs{
     waiting = Waiting,
     ongoing = Ongoing
-}, BoxesSpec) ->
-    TasksMap = lists:foldl(fun(#job_identifier{
+}) ->
+    TasksTree = lists:foldl(fun(#job_identifier{
         item_index = ItemIndex,
         parallel_box_index = BoxIndex,
         task_index = TaskIndex
     }, Acc) ->
         TaskIdentifier = #task_identifier{parallel_box_index = BoxIndex, task_index = TaskIndex},
-        TaskItems = maps:get(TaskIdentifier, Acc, []),
-        Acc#{TaskIdentifier => [ItemIndex | TaskItems]}
-    end, #{}, gb_sets:to_list(Waiting) ++ gb_sets:to_list(Ongoing)),
+        {TaskItems, AccWithoutKey} = case gb_trees:take_any(TaskIdentifier, Acc) of
+            error -> {[], Acc};
+            Other -> Other
+        end,
+        gb_trees:enter(TaskIdentifier, [ItemIndex | TaskItems], AccWithoutKey)
+    end, gb_trees:empty(), gb_sets:to_list(Waiting) ++ gb_sets:to_list(Ongoing)),
 
-    {Jobs#workflow_jobs{tasks_map = TasksMap}, get_not_present_tasks(TasksMap, BoxesSpec)}.
+    Jobs#workflow_jobs{tasks_tree = TasksTree}.
 
-remove_job_from_task_map(Jobs = #workflow_jobs{tasks_map = undefined}, _JobIdentifier) ->
+remove_job_from_task_map(Jobs = #workflow_jobs{tasks_tree = undefined}, _JobIdentifier) ->
     Jobs;
-remove_job_from_task_map(Jobs = #workflow_jobs{tasks_map = TaskMap}, #job_identifier{
+remove_job_from_task_map(Jobs = #workflow_jobs{tasks_tree = TasksTree}, #job_identifier{
     item_index = ItemIndex,
     parallel_box_index = BoxIndex,
     task_index = TaskIndex
 }) ->
     TaskIdentifier = #task_identifier{parallel_box_index = BoxIndex, task_index = TaskIndex},
-    TaskItems = maps:get(TaskIdentifier, TaskMap, []),
-    UpdatedTaskMap = case TaskItems -- [ItemIndex] of
-        [] -> maps:remove(TaskIdentifier, TaskMap);
-        UpdatedTaskItems -> TaskMap#{TaskIdentifier => UpdatedTaskItems}
+    {TaskItems, TasksTreeWithoutKey} = case gb_trees:take_any(TaskIdentifier, TasksTree) of
+        error -> {[], TasksTree};
+        Other -> Other
+    end,
+    FinalTasksTree = case TaskItems -- [ItemIndex] of
+        [] -> TasksTreeWithoutKey;
+        UpdatedTaskItems -> gb_trees:enter(TaskIdentifier, UpdatedTaskItems, TasksTreeWithoutKey)
     end,
 
-    Jobs#workflow_jobs{tasks_map = UpdatedTaskMap}.
+    Jobs#workflow_jobs{tasks_tree = FinalTasksTree}.
 
 -spec init() -> jobs().
 init() ->
