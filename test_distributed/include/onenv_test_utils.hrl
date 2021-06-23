@@ -33,7 +33,7 @@
 -record(metadata_spec, {
     json :: json_utils:json_term() | undefined,
     rdf :: binary() | undefined,
-    xattrs :: json_utils:json_term() | undefined
+    xattrs :: json_utils:json_map() | undefined
 }).
 
 -record(file_spec, {
@@ -85,7 +85,7 @@
 -record(metadata_object, {
     json :: json_utils:json_term() | undefined,
     rdf :: binary() | undefined,
-    xattrs :: json_utils:json_term() | undefined
+    xattrs :: json_utils:json_map() | undefined
 }).
 
 -record(object, {

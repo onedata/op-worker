@@ -94,7 +94,7 @@ calculate_file_checksums_helper(Handle, Offset, Buffers) ->
     ContentSize = byte_size(Content),
     case ContentSize =:= 0 of
         true -> calculate_hashes(UpdatedBuffers);
-        false -> calculate_file_checksums_helper(NewHandle, Offset + byte_size(Content), UpdatedBuffers)
+        false -> calculate_file_checksums_helper(NewHandle, Offset + ContentSize, UpdatedBuffers)
     end.
 
 %%--------------------------------------------------------------------

@@ -347,7 +347,7 @@ interpolate_chunks([], _FileSize, -1, _BytesAcc, ResChunks) ->
     ResChunks;
 interpolate_chunks([], _FileSize, _BarNum, 0, ResChunks) ->
     merge_chunks({0, 0}, ResChunks);
-interpolate_chunks([], _FileSize, BarNum, BytesAcc, ResChunks) ->
+interpolate_chunks([], FileSize, BarNum, BytesAcc, ResChunks) ->
     Fill = round(BytesAcc * 100 / ?bar_size),
     interpolate_chunks(
         [],
