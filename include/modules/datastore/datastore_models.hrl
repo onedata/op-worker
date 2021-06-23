@@ -1137,6 +1137,7 @@
     error_encountered = false :: {true, workflow_jobs:job_identifier()} | false,
 
     iteration_state :: workflow_iteration_state:state() | undefined,
+    prefetched_iteration_step :: workflow_execution_state:iteration_step() | undefined,
     jobs :: workflow_jobs:jobs() | undefined,
 
     % Field used to return additional information about document update procedure

@@ -18,7 +18,7 @@
 -include("workflow_engine.hrl").
 
 %% API
--export([init/1, handle_iteration_finished/1, get_last_registered/1, register_new_item/4,
+-export([init/0, handle_iteration_finished/1, get_last_registered_index/1, register_new_item/3,
     handle_item_processed/3, get_item_id/2]).
 %% Test API
 -export([is_finished_and_cleaned/1]).
@@ -28,9 +28,9 @@
 % Item is considered as finished when all tasks for item are executed.
 -record(iteration_state, {
     pending_items = #{} :: #{workflow_execution_state:index() => workflow_cached_item:id()},
-    last_registered_iterator :: iterator:iterator() | undefined, % undefined when iteration is finished (nothing has been
-                                                                 % returned trying to obtain next item and iterator)
-    last_registered_iterator_index = 0 :: workflow_execution_state:index(),
+    last_registered_iterator_index = 0 :: workflow_execution_state:index() | undefined, % undefined when iteration is
+                                                                                        % finished and all items are
+                                                                                        % registered
     first_not_finished_item_index = 1 :: workflow_execution_state:index(), % TODO VFS-7787 - maybe init as undefined?
     items_finished_ahead = gb_trees:empty() :: items_finished_ahead()
 }).
@@ -50,26 +50,19 @@
 %%% API
 %%%===================================================================
 
--spec init(iterator:iterator()) -> state().
-init(InitialIterator) ->
-    #iteration_state{
-        last_registered_iterator = InitialIterator
-    }.
+-spec init() -> state().
+init() ->
+    #iteration_state{}.
 
 -spec handle_iteration_finished(state()) -> state().
 handle_iteration_finished(Progress) ->
-    Progress#iteration_state{last_registered_iterator = undefined}.
+    Progress#iteration_state{last_registered_iterator_index = undefined}.
 
--spec get_last_registered(state()) -> {workflow_execution_state:index(), iterator:iterator()} | undefined.
-get_last_registered(#iteration_state{last_registered_iterator = undefined}) ->
-    undefined;
-get_last_registered(#iteration_state{
-    last_registered_iterator_index = Index,
-    last_registered_iterator = Iterator
-}) ->
-    {Index, Iterator}.
+-spec get_last_registered_index(state()) -> workflow_execution_state:index() | undefined.
+get_last_registered_index(#iteration_state{last_registered_iterator_index = Index}) ->
+    Index.
 
--spec register_new_item(state(), workflow_execution_state:index(), workflow_cached_item:id(), iterator:iterator()) ->
+-spec register_new_item(state(), workflow_execution_state:index(), workflow_cached_item:id()) ->
     state() | ?WF_ERROR_RACE_CONDITION.
 register_new_item(
     Progress = #iteration_state{
@@ -77,16 +70,14 @@ register_new_item(
         last_registered_iterator_index = LastItemIndex
     },
     LastItemIndex,
-    ItemId,
-    NewIterator
+    ItemId
 ) ->
     NewItemIndex = LastItemIndex + 1,
     {NewItemIndex, Progress#iteration_state{
         pending_items = Pending#{NewItemIndex => ItemId},
-        last_registered_iterator_index = NewItemIndex,
-        last_registered_iterator = NewIterator
+        last_registered_iterator_index = NewItemIndex
     }};
-register_new_item(_, _, _, _) ->
+register_new_item(_, _, _) ->
     ?WF_ERROR_RACE_CONDITION.
 
 -spec handle_item_processed(state(), workflow_execution_state:index(), workflow_jobs:item_processing_result()) ->
@@ -216,6 +207,6 @@ get_item_id(#iteration_state{pending_items = Pending}, ItemIndex) ->
 is_finished_and_cleaned(#iteration_state{
     pending_items = Pending,
     items_finished_ahead = FinishedAhead,
-    last_registered_iterator = LastIterator
+    last_registered_iterator_index = LastIteratorIndex
 }) ->
-    LastIterator =:= undefined orelse maps:size(Pending) =:= 0 andalso gb_trees:is_empty(FinishedAhead).
+    LastIteratorIndex =:= undefined orelse maps:size(Pending) =:= 0 andalso gb_trees:is_empty(FinishedAhead).

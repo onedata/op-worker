@@ -26,6 +26,7 @@
 %% Functions operating on job_identifier record
 -export([job_identifier_to_binary/1, binary_to_job_identifier/1, get_item_id/2,
     get_task_details/2, is_previous/2]).
+%% API used to check which tasks are finished for all items
 -export([is_task_finished/2, build_tasks_tree/1]).
 %% Test API
 -export([is_empty/1]).
@@ -44,6 +45,7 @@
     keepalive_timeout :: time:seconds()
 }).
 
+% Internal record used to check which tasks are finished for all items
 -record(task_identifier, {
     parallel_box_index :: workflow_execution_state:index(),
     task_index :: workflow_execution_state:index()
@@ -63,7 +65,7 @@
     pending_async_jobs = #{} :: pending_async_jobs(),
     raced_results = #{} :: raced_results(), % TODO VFS-7787 - clean when they are not needed anymore (after integration with BW)
 
-    tasks_tree
+    tasks_tree :: tasks_tree() | undefined
 }).
 
 -type job_identifier() :: #job_identifier{}.
@@ -71,6 +73,7 @@
 -type items_set() :: sets:set(workflow_execution_state:index()).
 -type pending_async_jobs() :: #{job_identifier() => #async_job_timer{}}.
 -type raced_results() :: #{job_identifier() => workflow_handler:callback_execution_result()}.
+-type tasks_tree() :: gb_trees:tree(job_identifier(), [workflow_execution_state:index()]).
 -type jobs() :: #workflow_jobs{}.
 -type jobs_for_parallel_box() :: ?NO_JOBS_LEFT_FOR_PARALLEL_BOX | ?AT_LEAST_ONE_JOB_LEFT_FOR_PARALLEL_BOX.
 -type item_processing_result() :: ?SUCCESS | ?FAILURE.
@@ -82,60 +85,6 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
-
-is_task_finished(#workflow_jobs{tasks_tree = undefined}, _JobIdentifier) ->
-    false;
-is_task_finished(
-    #workflow_jobs{tasks_tree = TasksTree},
-    #job_identifier{parallel_box_index = BoxIndex, task_index = TaskIndex}
-) ->
-    case gb_trees:is_empty(TasksTree) of
-        true ->
-            true;
-        false ->
-            case gb_trees:smallest(TasksTree) of
-                {Key, _} when Key =< #task_identifier{parallel_box_index = BoxIndex, task_index = TaskIndex} -> false;
-                _ -> true
-            end
-    end.
-
-build_tasks_tree(Jobs = #workflow_jobs{
-    waiting = Waiting,
-    ongoing = Ongoing
-}) ->
-    TasksTree = lists:foldl(fun(#job_identifier{
-        item_index = ItemIndex,
-        parallel_box_index = BoxIndex,
-        task_index = TaskIndex
-    }, Acc) ->
-        TaskIdentifier = #task_identifier{parallel_box_index = BoxIndex, task_index = TaskIndex},
-        {TaskItems, AccWithoutKey} = case gb_trees:take_any(TaskIdentifier, Acc) of
-            error -> {[], Acc};
-            Other -> Other
-        end,
-        gb_trees:enter(TaskIdentifier, [ItemIndex | TaskItems], AccWithoutKey)
-    end, gb_trees:empty(), gb_sets:to_list(Waiting) ++ gb_sets:to_list(Ongoing)),
-
-    Jobs#workflow_jobs{tasks_tree = TasksTree}.
-
-remove_job_from_task_map(Jobs = #workflow_jobs{tasks_tree = undefined}, _JobIdentifier) ->
-    Jobs;
-remove_job_from_task_map(Jobs = #workflow_jobs{tasks_tree = TasksTree}, #job_identifier{
-    item_index = ItemIndex,
-    parallel_box_index = BoxIndex,
-    task_index = TaskIndex
-}) ->
-    TaskIdentifier = #task_identifier{parallel_box_index = BoxIndex, task_index = TaskIndex},
-    {TaskItems, TasksTreeWithoutKey} = case gb_trees:take_any(TaskIdentifier, TasksTree) of
-        error -> {[], TasksTree};
-        Other -> Other
-    end,
-    FinalTasksTree = case TaskItems -- [ItemIndex] of
-        [] -> TasksTreeWithoutKey;
-        UpdatedTaskItems -> gb_trees:enter(TaskIdentifier, UpdatedTaskItems, TasksTreeWithoutKey)
-    end,
-
-    Jobs#workflow_jobs{tasks_tree = FinalTasksTree}.
 
 -spec init() -> jobs().
 init() ->
@@ -364,6 +313,47 @@ is_previous(#job_identifier{item_index = ItemIndex1}, #job_identifier{item_index
     ItemIndex1 < ItemIndex2.
 
 %%%===================================================================
+%%% API used to check which tasks are finished for all items
+%%%===================================================================
+
+-spec is_task_finished(jobs(), job_identifier()) -> boolean().
+is_task_finished(#workflow_jobs{tasks_tree = undefined}, _JobIdentifier) ->
+    false;
+is_task_finished(
+    #workflow_jobs{tasks_tree = TasksTree},
+    #job_identifier{parallel_box_index = BoxIndex, task_index = TaskIndex}
+) ->
+    case gb_trees:is_empty(TasksTree) of
+        true ->
+            true;
+        false ->
+            case gb_trees:smallest(TasksTree) of
+                {Key, _} when Key =< #task_identifier{parallel_box_index = BoxIndex, task_index = TaskIndex} -> false;
+                _ -> true
+            end
+    end.
+
+-spec build_tasks_tree(jobs()) -> jobs().
+build_tasks_tree(Jobs = #workflow_jobs{
+    waiting = Waiting,
+    ongoing = Ongoing
+}) ->
+    TasksTree = lists:foldl(fun(#job_identifier{
+        item_index = ItemIndex,
+        parallel_box_index = BoxIndex,
+        task_index = TaskIndex
+    }, Acc) ->
+        TaskIdentifier = #task_identifier{parallel_box_index = BoxIndex, task_index = TaskIndex},
+        {TaskItems, AccWithoutKey} = case gb_trees:take_any(TaskIdentifier, Acc) of
+            error -> {[], Acc};
+            Other -> Other
+        end,
+        gb_trees:enter(TaskIdentifier, [ItemIndex | TaskItems], AccWithoutKey)
+    end, gb_trees:empty(), gb_sets:to_list(Waiting) ++ gb_sets:to_list(Ongoing)),
+
+    Jobs#workflow_jobs{tasks_tree = TasksTree}.
+
+%%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
@@ -375,6 +365,26 @@ has_item(JobIdentifier = #job_identifier{item_index = ItemIndex}, Tree) ->
     end;
 has_item(ItemIndex, Set) ->
     sets:is_element(ItemIndex, Set).
+
+-spec remove_job_from_task_map(jobs(), job_identifier()) -> jobs().
+remove_job_from_task_map(Jobs = #workflow_jobs{tasks_tree = undefined}, _JobIdentifier) ->
+    Jobs;
+remove_job_from_task_map(Jobs = #workflow_jobs{tasks_tree = TasksTree}, #job_identifier{
+    item_index = ItemIndex,
+    parallel_box_index = BoxIndex,
+    task_index = TaskIndex
+}) ->
+    TaskIdentifier = #task_identifier{parallel_box_index = BoxIndex, task_index = TaskIndex},
+    {TaskItems, TasksTreeWithoutKey} = case gb_trees:take_any(TaskIdentifier, TasksTree) of
+        error -> {[], TasksTree};
+        Other -> Other
+    end,
+    FinalTasksTree = case TaskItems -- [ItemIndex] of
+        [] -> TasksTreeWithoutKey;
+        UpdatedTaskItems -> gb_trees:enter(TaskIdentifier, UpdatedTaskItems, TasksTreeWithoutKey)
+    end,
+
+    Jobs#workflow_jobs{tasks_tree = FinalTasksTree}.
 
 %%%===================================================================
 %%% Test API
