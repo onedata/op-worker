@@ -125,8 +125,12 @@ validate_file_checksums(Node, SessionId, Guid, FileRelativePath, ChecksumsPerAlg
 
 
 validate_file_json_metadata(Node, SessionId, Guid, FileRelativePath, AllFilesJsonMetadata) ->
-    {ok, JsonMetadata} = lfm_proxy:get_metadata(Node, SessionId, ?FILE_REF(Guid), json, [], false),
-    ?assertEqual(JsonMetadata, maps:get(FileRelativePath, AllFilesJsonMetadata)).
+    case lfm_proxy:get_metadata(Node, SessionId, ?FILE_REF(Guid), json, [], false) of
+        {ok, JsonMetadata} ->
+            ?assertEqual(JsonMetadata, maps:get(FileRelativePath, AllFilesJsonMetadata));
+        _ ->
+            ok
+    end.
 
 get_metadata_file_guid(Node, SessionId, ArchiveDirGuid) ->
     get_child_guid(Node, SessionId, ArchiveDirGuid, ?METADATA_FILE_NAME).

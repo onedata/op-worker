@@ -52,7 +52,7 @@
 % TODO VFS-7619 add tests concerning archives to permissions test suites
 % TODO VFS-7662 send precise error descriptions to archivisation webhook
 
-% TODO dodać do op-file info czy jest to archiwum
+% TODO followi links w tarze
 
 -define(MAX_LIST_EXTENDED_DATASET_INFO_PROCS,
     op_worker:get_env(max_list_extended_dataset_info_procs, 20)).

@@ -206,8 +206,6 @@ copy_children(SessId, ParentGuid, TargetParentGuid, Token, ChildEntriesAcc) ->
 copy_metadata(SessId, SourceGuid, TargetGuid, Mode) ->
     {ok, Xattrs} = lfm:list_xattr(SessId, ?FILE_REF(SourceGuid), false, true),
 
-    ?alert("COPY METADATA: ~p", [Xattrs]),
-
     lists:foreach(fun
         (?ACL_KEY) ->
             ok;

@@ -58,33 +58,31 @@
 
 groups() -> [
     {parallel_tests, [parallel], [
-%%        create_archivisation_tree,
-%%        archive_dataset_attached_to_dir_plain_layout,
-%%        archive_dataset_attached_to_file_plain_layout,
-        archive_dataset_attached_to_hardlink_plain_layout
+        create_archivisation_tree,
+        archive_dataset_attached_to_dir_plain_layout,
+        archive_dataset_attached_to_file_plain_layout,
+        archive_dataset_attached_to_hardlink_plain_layout,
         % archive_dataset_attached_to_symlink_plain_layout, TODO VFS-7664
-%%        archive_directory_with_number_of_files_exceeding_batch_size_plain_layout,
-%%        archive_nested_datasets_plain_layout,
-%%        archive_dataset_attached_to_dir_bagit_layout,
-%%        archive_dataset_attached_to_file_bagit_layout,
-%%        archive_dataset_attached_to_hardlink_bagit_layout,
+        archive_directory_with_number_of_files_exceeding_batch_size_plain_layout,
+        archive_nested_datasets_plain_layout,
+        archive_dataset_attached_to_dir_bagit_layout,
+        archive_dataset_attached_to_file_bagit_layout,
+        archive_dataset_attached_to_hardlink_bagit_layout,
         % archive_dataset_attached_to_symlink_bagit_layout TODO VFS-7664
-%%        archive_directory_with_number_of_files_exceeding_batch_size_bagit_layout,
-%%        archive_nested_datasets_bagit_layout
+        archive_directory_with_number_of_files_exceeding_batch_size_bagit_layout,
+        archive_nested_datasets_bagit_layout
+    ]},
+    {sequential_tests, [sequential], [
+        archive_dataset_attached_to_space_dir,
+        archive_big_tree_plain_layout,
+        archive_big_tree_bagit_layout
     ]}
-%%    ,
-%%    {sequential_tests, [sequential], [
-%%        archive_dataset_attached_to_space_dir,
-%%        archive_big_tree_plain_layout,
-%%        archive_big_tree_bagit_layout
-%%    ]}
 ].
 
 
 all() -> [
-    {group, parallel_tests}
-%%    ,
-%%    {group, sequential_tests}
+    {group, parallel_tests},
+    {group, sequential_tests}
 ].
 
 -define(ATTEMPTS, 600).
@@ -252,18 +250,19 @@ archive_dataset_attached_to_hardlink_test_base(Layout) ->
     }),
     {ok, #file_attr{guid = LinkGuid}} =
         lfm_proxy:make_link(P1Node, UserSessIdP1, ?FILE_REF(FileGuid), ?FILE_REF(SpaceGuid), ?RAND_NAME()),
+    Json = ?RAND_JSON_METADATA(),
+    ok = lfm_proxy:set_metadata(P1Node, UserSessIdP1, ?FILE_REF(LinkGuid), json, Json, []),
+    UserId = oct_background:get_user_id(?USER1),
+    onenv_file_test_utils:await_file_metadata_sync(oct_background:get_space_supporting_providers(?SPACE), UserId, #object{
+        guid = LinkGuid,
+        metadata = #metadata_object{json = Json}
+    }),
     #dataset_object{
         id = DatasetId,
         archives = [#archive_object{id = ArchiveId}]
     } = onenv_dataset_test_utils:set_up_and_sync_dataset(?USER1, LinkGuid, #dataset_spec{archives = [#archive_spec{
         config = #archive_config{layout = Layout}
     }]}),
-    Json = ?RAND_JSON_METADATA(),
-    ok = lfm_proxy:set_metadata(P1Node, UserSessIdP1, ?FILE_REF(LinkGuid), json, ?RAND_JSON_METADATA(), []),
-    UserId = oct_background:get_user_id(?USER1),
-    onenv_file_test_utils:await_file_metadata_sync(oct_background:get_space_supporting_providers(?SPACE), UserId, #object{
-        metadata = #metadata_object{json = Json}
-    }),
 
     archive_simple_dataset_test_base(LinkGuid, DatasetId, ArchiveId).
 
@@ -447,10 +446,10 @@ init_per_group(_Group, Config) ->
 
 end_per_group(_Group, Config) ->
     SpaceId = oct_background:get_space_id(?SPACE),
-    Workers = oct_background:get_all_providers_nodes().
-%%    lfm_test_utils:clean_space(Workers, SpaceId, ?ATTEMPTS),
-%%    onenv_dataset_test_utils:cleanup_all_datasets(krakow, ?SPACE),
-%%    lfm_proxy:teardown(Config).
+    Workers = oct_background:get_all_providers_nodes(),
+    lfm_test_utils:clean_space(Workers, SpaceId, ?ATTEMPTS),
+    onenv_dataset_test_utils:cleanup_all_datasets(krakow, ?SPACE),
+    lfm_proxy:teardown(Config).
 
 init_per_testcase(_Case, Config) ->
     Config.
