@@ -139,9 +139,7 @@ get_checksum_manifest_file_guid(Node, SessionId, ArchiveDirGuid, ChecksumAlgorit
     get_child_guid(Node, SessionId, ArchiveDirGuid, ?CHECKSUM_MANIFEST_FILE_NAME(ChecksumAlgorithm)).
 
 get_child_guid(Node, SessionId, ParentGuid, ChildName) ->
-    {ok, ParentPath} = ?assertMatch({ok, _}, lfm_proxy:get_file_path(Node, SessionId, ParentGuid), ?ATTEMPTS),
-    ChildPath = filename:join([ParentPath, ChildName]),
-    {ok, #file_attr{guid = ChildGuid}} = ?assertMatch({ok, _}, lfm_proxy:stat(Node, SessionId, {path, ChildPath}), ?ATTEMPTS),
+    {ok, #file_attr{guid = ChildGuid}} = ?assertMatch({ok, _}, lfm_proxy:get_child_attr(Node, SessionId, ParentGuid, ChildName), ?ATTEMPTS),
     ChildGuid.
 
 calculate_checksum(Data, HashAlgorithm) ->

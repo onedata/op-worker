@@ -45,6 +45,8 @@
     % archival information package (AIP), on the storage.
     include_dip = ?DEFAULT_INCLUDE_DIP :: archive_config:include_dip(),
     layout :: archive_config:layout(),
+    % this flag determines whether archives of nested datasets should be created
+    % during archivisation of a dataset
     create_nested_archives = ?DEFAULT_CREATE_NESTED_ARCHIVES :: boolean()
 }).
 

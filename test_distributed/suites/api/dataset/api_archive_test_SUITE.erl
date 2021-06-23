@@ -123,7 +123,8 @@ create_archive(_Config) ->
                 optional = [<<"config">>, <<"description">>, <<"preservedCallback">>, <<"purgedCallback">>],
                 correct_values = #{
                     <<"datasetId">> => [DatasetId],
-                    <<"config">> => generate_all_valid_configs(),
+                    % pick only 4 random out of all possible configs
+                    <<"config">> => lists_utils:random_sublist(generate_all_valid_configs(), 4, 4),
                     <<"description">> => [<<"Test description">>],
                     <<"preservedCallback">> => [?ARCHIVE_PRESERVED_CALLBACK_URL()],
                     <<"purgedCallback">> => [?ARCHIVE_PURGED_CALLBACK_URL()]

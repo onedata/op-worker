@@ -21,6 +21,7 @@
 %% API
 -export([init/2, add_entry/4]).
 
+% TODO VFS-7831 handle metadata files bigger than 1GB
 -define(MAX_METADATA_FILE_SIZE, 1073741824). % 1 GB
 -define(CRITICAL_SECTION(FileGuid, Fun), critical_section:run({?MODULE, FileGuid}, Fun)).
 

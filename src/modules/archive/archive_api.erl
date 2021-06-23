@@ -22,7 +22,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([create_archive_and_schedule_archivisation_job/6, update_archive/2, get_archive_info/1,
+-export([start_archivisation/6, update_archive/2, get_archive_info/1,
     list_archives/3, init_archive_purge/3, get_nested_archives_stats/1]).
 
 %% Exported for use in tests
@@ -52,8 +52,6 @@
 % TODO VFS-7619 add tests concerning archives to permissions test suites
 % TODO VFS-7662 send precise error descriptions to archivisation webhook
 
-% TODO followi links w tarze
-
 -define(MAX_LIST_EXTENDED_DATASET_INFO_PROCS,
     op_worker:get_env(max_list_extended_dataset_info_procs, 20)).
 
@@ -63,11 +61,11 @@
 %%% API functions
 %%%===================================================================
 
--spec create_archive_and_schedule_archivisation_job(
+-spec start_archivisation(
     dataset:id(), archive:config(), archive:callback(), archive:callback(),
     archive:description(), user_ctx:ctx()
 ) -> {ok, archive:id()} | error().
-create_archive_and_schedule_archivisation_job(
+start_archivisation(
     DatasetId, Config, PreservedCallback, PurgedCallback, Description, UserCtx
 ) ->
     {ok, DatasetDoc} = dataset:get(DatasetId),

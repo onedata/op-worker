@@ -14,11 +14,26 @@
 %%% that it won't be visible in the space.
 %%%
 %%% The subtree will have the following structure:
-%%% /<SPACE DIRECTORY>
-%%%     /.__onedata_archives, uuid: ?ARCHIVES_ROOT_DIR_UUID(SpaceId)
-%%%         /dataset_archives_<DatasetId>, uuid: ?DATASET_ARCHIVES_DIR_UUID(DatasetId)
-%%%             /archive_<ArchiveId>, uuid: ?ARCHIVE_DIR_UUID(ArchiveId)
-%%%                 /... (Dataset files and directories)
+%%% <SPACE DIRECTORY>
+%%% |--- .__onedata_archives, uuid: ?ARCHIVES_ROOT_DIR_UUID(SpaceId)
+%%%      |--- dataset_archives_<DatasetId>, uuid: ?DATASET_ARCHIVES_DIR_UUID(DatasetId)
+%%%           |--- archive_<ArchiveId>, uuid: ?ARCHIVE_DIR_UUID(ArchiveId)
+%%%                |--- ...
+%%%                |--- ... (Dataset files and directories)
+%%%                |--- ...
+%%%
+%%%
+%%% NOTE !!!
+%%% If createNestedArchives options is enabled, archivisation_traverse
+%%% (see archivisation_traverse.erl module) will create archives
+%%% for nested datasets.
+%%% Such archives are called nested archives.
+%%% Nested archives will be created in their own archive_<ArchiveId>
+%%% directories and symlinked from parent archives.
+%%%
+%%% Please see docs in plain_archive.erl and bagit_archive.erl to
+%%% learn about structure of nested archives in case of corresponding
+%%% layouts.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(archivisation_tree).

@@ -504,6 +504,7 @@ detach_dataset(FileCtx) ->
     case file_meta_dataset:is_attached(FileDoc) of
         true ->
             % TODO VFS-7822 if it's a directory, detached dataset's path will point to trash
+            % previous path should be passed here
             dataset_api:detach(file_ctx:get_logical_uuid_const(FileCtx2));
         false ->
             ok

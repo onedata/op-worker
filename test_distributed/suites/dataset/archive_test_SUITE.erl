@@ -638,7 +638,7 @@ assert_content_copied(Node, SessionId, SourceGuid, TargetGuid) ->
     lfm_proxy:close(Node, SourceHandle),
     lfm_proxy:close(Node, TargetHandle),
 
-    TargetGuid2 = maybe_resolve_symlink(Node, SessionId, TargetGuid),
+    TargetGuid2 = resolve_if_symlink(Node, SessionId, TargetGuid),
     assert_file_is_flushed_from_buffer(Node, SessionId, SourceGuid, TargetGuid2).
 
 
@@ -686,7 +686,7 @@ get_storage_file_id(Node, Guid) ->
     StorageFileId.
 
 
-maybe_resolve_symlink(Node, SessionId, Guid) ->
+resolve_if_symlink(Node, SessionId, Guid) ->
     {ok, #file_attr{type = Type}} = lfm_proxy:stat(Node, SessionId, ?FILE_REF(Guid)),
     case Type =:= ?SYMLINK_TYPE of
         true ->
