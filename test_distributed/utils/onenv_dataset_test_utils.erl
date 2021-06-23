@@ -144,10 +144,12 @@ await_dataset_sync(CreationProvider, SyncProviders, UserId, #dataset_object{
     CreationNode = ?OCT_RAND_OP_NODE(CreationProvider),
     CreationNodeSessId = oct_background:get_user_session_id(UserId, CreationProvider),
     Flags = file_meta:protection_flags_from_json(ProtectionFlagsJson),
+    ArchivesCount = length(ArchiveObjs),
 
     {ok, DatasetInfo} = ?assertMatch(
-        {ok, #dataset_info{state = State, id = DatasetId, protection_flags = Flags}},
-        lfm_proxy:get_dataset_info(CreationNode, CreationNodeSessId, DatasetId)
+        {ok, #dataset_info{state = State, id = DatasetId, protection_flags = Flags, archive_count = ArchivesCount}},
+        lfm_proxy:get_dataset_info(CreationNode, CreationNodeSessId, DatasetId),
+        ?ATTEMPTS
     ),
 
     lists_utils:pforeach(fun(SyncProvider) ->
