@@ -47,8 +47,10 @@
     lane_index :: index(),
     last_finished_item_index :: index(),
     item_id_to_snapshot :: workflow_cached_item:id() | undefined,
-    item_ids_to_delete :: [workflow_cached_item:id()]
+    item_ids_to_delete :: [workflow_cached_item:id()],
+    notify_task_finished :: boolean()
 }).
+-define(TASK_PROCESSED_REPORT(NotifyTaskFinished), {task_processed_report, NotifyTaskFinished}).
 
 -type index() :: non_neg_integer(). % scheduling is based on positions of elements (items, parallel_boxes, tasks)
                                     % to allow executions of tasks in chosen order
@@ -92,7 +94,7 @@
 % Type used to return additional information about document update procedure
 % (see #workflow_execution_state.update_report)
 -type update_report() :: ?EXECUTION_SET_TO_BE_PREPARED | #job_prepared_report{} | #items_processed_report{} |
-    no_items_error().
+    ?TASK_PROCESSED_REPORT(boolean()) | no_items_error().
 
 -export_type([index/0, iteration_step/0, current_lane/0, preparation_status/0, boxes_map/0, update_report/0]).
 
@@ -172,28 +174,36 @@ prepare_next_job(ExecutionId) ->
     workflow_engine:processing_result()
 ) -> ok.
 report_execution_status_update(ExecutionId, JobIdentifier, UpdateType, Ans) ->
-    UpdatedDoc = case update(ExecutionId, fun(State) ->
+    {UpdatedDoc, NotifyTaskExecutionEnded} = case update(ExecutionId, fun(State) ->
         report_execution_status_update_internal(State, JobIdentifier, UpdateType, Ans)
     end) of
         {ok, Doc = #document{value = #workflow_execution_state{update_report = #items_processed_report{
-            item_id_to_snapshot = undefined, item_ids_to_delete = ItemIdsToDelete}}}} ->
+            item_id_to_snapshot = undefined, 
+            item_ids_to_delete = ItemIdsToDelete, 
+            notify_task_finished = NotifyTaskFinished
+        }}}} ->
             lists:foreach(fun(ItemId) -> workflow_cached_item:delete(ItemId) end, ItemIdsToDelete),
-            Doc;
+            {Doc, NotifyTaskFinished};
         {ok, Doc = #document{value = #workflow_execution_state{update_report = #items_processed_report{
             lane_index = LaneIndex,
             last_finished_item_index = ItemIndex,
             item_id_to_snapshot = ItemIdToSnapshot,
-            item_ids_to_delete = ItemIdsToDelete
+            item_ids_to_delete = ItemIdsToDelete,
+            notify_task_finished = NotifyTaskFinished
         }}}} ->
             IteratorToSave = workflow_cached_item:get_iterator(ItemIdToSnapshot),
             workflow_iterator_snapshot:save(ExecutionId, LaneIndex, ItemIndex, IteratorToSave),
             lists:foreach(fun(ItemId) -> workflow_cached_item:delete(ItemId) end, ItemIdsToDelete),
-            Doc;
+            {Doc, NotifyTaskFinished};
+        {ok, Doc = #document{value = #workflow_execution_state{
+            update_report = ?TASK_PROCESSED_REPORT(NotifyTaskFinished)
+        }}} ->
+            {Doc, NotifyTaskFinished};
         {ok, Doc} ->
-            Doc
+            {Doc, false}
     end,
 
-    maybe_notify_task_execution_ended(UpdatedDoc, JobIdentifier, UpdateType).
+    maybe_notify_task_execution_ended(UpdatedDoc, JobIdentifier, NotifyTaskExecutionEnded).
 
 -spec report_execution_prepared(
     workflow_engine:execution_id(),
@@ -408,23 +418,16 @@ prepare_next_job_using_iterator(ExecutionId, ItemIndex, CurrentIterationStep, La
             prepare_next_job_for_current_lane(ExecutionId)
     end.
 
--spec maybe_notify_task_execution_ended(doc(), workflow_jobs:job_identifier(), workflow_engine:processing_stage()) ->
-    ok.
-maybe_notify_task_execution_ended(_Doc, _JobIdentifier, ?ASYNC_CALL_STARTED) ->
+-spec maybe_notify_task_execution_ended(doc(), workflow_jobs:job_identifier(), boolean()) -> ok.
+maybe_notify_task_execution_ended(_Doc, _JobIdentifier, false = _NotifyTaskExecutionEnded) ->
     ok;
 maybe_notify_task_execution_ended(#document{key = ExecutionId, value = #workflow_execution_state{
     handler = Handler,
     context = Context,
-    jobs = Jobs,
     current_lane = #current_lane{parallel_boxes_spec = BoxesSpec}
-}}, JobIdentifier, _UpdateType) ->
-    case workflow_jobs:is_task_finished(Jobs, JobIdentifier) of
-        true ->
-            {TaskId, _TaskSpec} = workflow_jobs:get_task_details(JobIdentifier, BoxesSpec),
-            Handler:handle_task_execution_ended(ExecutionId, Context, TaskId);
-        false ->
-            ok
-    end.
+}}, JobIdentifier, true = _NotifyTaskExecutionEnded) ->
+    {TaskId, _TaskSpec} = workflow_jobs:get_task_details(JobIdentifier, BoxesSpec),
+    Handler:handle_task_execution_ended(ExecutionId, Context, TaskId).
 
 -spec update(workflow_engine:execution_id(), update_fun()) -> {ok, state()} | {error, term()}.
 update(ExecutionId, UpdateFun) ->
@@ -492,13 +495,17 @@ handle_next_iteration_step(State = #workflow_execution_state{
                 {NewItemIndex, NewIterationState} ->
                     {NewJobs, ToStart} = workflow_jobs:populate_with_jobs_for_item(
                         Jobs, NewItemIndex, ParallelBoxToStart, BoxesSpec),
+                    FinalJobs = case NextIterationStep of
+                        undefined -> workflow_jobs:build_tasks_tree(NewJobs);
+                        _ -> NewJobs
+                    end,
                     {TaskId, TaskSpec} = workflow_jobs:get_task_details(ToStart, BoxesSpec),
                     {ok, State#workflow_execution_state{
                         update_report = #job_prepared_report{job_identifier = ToStart,
                             task_id = TaskId, task_spec = TaskSpec, item_id = PrefetchedItemId},
                         iteration_state = NewIterationState,
                         prefetched_iteration_step = NextIterationStep,
-                        jobs = NewJobs
+                        jobs = FinalJobs
                     }}
             end
     end;
@@ -602,7 +609,10 @@ prepare_next_parallel_box(State = #workflow_execution_state{
 }, JobIdentifier) ->
     case workflow_jobs:prepare_next_parallel_box(Jobs, JobIdentifier, BoxesSpec, BoxCount) of
         {ok, NewJobs} ->
-            {ok, State#workflow_execution_state{jobs = NewJobs}};
+            {ok, State#workflow_execution_state{
+                jobs = NewJobs,
+                update_report = ?TASK_PROCESSED_REPORT(workflow_jobs:is_task_finished(NewJobs, JobIdentifier))
+            }};
         {?WF_ERROR_ITEM_PROCESSING_FINISHED(ItemIndex, SuccessOrFailure), NewJobs} ->
             {NewIterationState, ItemIdToSnapshot, ItemIdsToDelete} =
                 workflow_iteration_state:handle_item_processed(IterationState, ItemIndex, SuccessOrFailure),
@@ -614,11 +624,13 @@ prepare_next_parallel_box(State = #workflow_execution_state{
                     end;
                 false -> ItemIdToSnapshot
             end,
+            NotifyTaskFinished = workflow_jobs:is_task_finished(NewJobs, JobIdentifier),
             {ok, State#workflow_execution_state{
                 jobs = NewJobs,
                 iteration_state = NewIterationState,
                 update_report = #items_processed_report{lane_index = LaneIndex, last_finished_item_index = ItemIndex,
-                    item_id_to_snapshot = FinalItemIdToSnapshot, item_ids_to_delete = ItemIdsToDelete}
+                    item_id_to_snapshot = FinalItemIdToSnapshot, item_ids_to_delete = ItemIdsToDelete, 
+                    notify_task_finished = NotifyTaskFinished}
             }}
     end.
 
@@ -638,7 +650,10 @@ report_job_finish(State = #workflow_execution_state{
     {NewJobs2, RemainingForBox} = workflow_jobs:mark_ongoing_job_finished(Jobs, JobIdentifier),
     case RemainingForBox of
         ?AT_LEAST_ONE_JOB_LEFT_FOR_PARALLEL_BOX ->
-            {ok, State#workflow_execution_state{jobs = NewJobs2}};
+            {ok, State#workflow_execution_state{
+                jobs = NewJobs2,
+                update_report = ?TASK_PROCESSED_REPORT(workflow_jobs:is_task_finished(NewJobs2, JobIdentifier))
+            }};
         ?NO_JOBS_LEFT_FOR_PARALLEL_BOX ->
             prepare_next_parallel_box(State#workflow_execution_state{jobs = NewJobs2}, JobIdentifier)
     end;
@@ -658,7 +673,9 @@ report_job_finish(State = #workflow_execution_state{
     end,
     case RemainingForBox of
         ?AT_LEAST_ONE_JOB_LEFT_FOR_PARALLEL_BOX ->
-            {ok, State2};
+            {ok, State2#workflow_execution_state{
+                update_report = ?TASK_PROCESSED_REPORT(workflow_jobs:is_task_finished(FinalJobs, JobIdentifier))
+            }};
         ?NO_JOBS_LEFT_FOR_PARALLEL_BOX ->
             % Call prepare_next_parallel_box/2 to delete metadata for failed item
             prepare_next_parallel_box(State2, JobIdentifier)

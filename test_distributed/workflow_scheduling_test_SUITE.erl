@@ -419,10 +419,24 @@ init_per_testcase(_, Config) ->
         end
     end),
 
+    test_utils:mock_expect(Workers, workflow_test_handler, handle_task_execution_ended,
+        fun(ExecutionId, Context, TaskId) ->
+            Master ! {task_ended, TaskId},
+            meck:passthrough([ExecutionId, Context, TaskId])
+        end
+    ),
+
     test_utils:mock_expect(Workers, workflow_test_handler, handle_lane_execution_ended,
         fun(ExecutionId, Context, LaneIndex) ->
             Master ! {lane_ended, LaneIndex, workflow_execution_state:is_finished_and_cleaned(ExecutionId, LaneIndex)},
             meck:passthrough([ExecutionId, Context, LaneIndex])
+        end
+    ),
+
+    test_utils:mock_expect(Workers, workflow_test_handler, handle_workflow_execution_ended,
+        fun(ExecutionId, Context) ->
+            Master ! {workflow_ended, ExecutionId},
+            meck:passthrough([ExecutionId, Context])
         end
     ),
 
@@ -486,9 +500,17 @@ task_execution_gatherer_loop(#{execution_history := History} = Acc, ProcWaitingF
                     Sender ! history_saved
             end,
             task_execution_gatherer_loop(Acc2, ProcWaitingForAns, Options);
+        {task_ended, TaskId} ->
+            IsFinishedList = maps:get(tasks_ended, Acc, []),
+            Acc2 = Acc#{tasks_ended => [TaskId | IsFinishedList]},
+            task_execution_gatherer_loop(Acc2, ProcWaitingForAns, Options);
         {lane_ended, LaneIndex, IsFinished} ->
             IsFinishedList = maps:get(is_finished_and_cleaned, Acc, []),
             Acc2 = Acc#{is_finished_and_cleaned => [{LaneIndex, IsFinished} | IsFinishedList]},
+            task_execution_gatherer_loop(Acc2, ProcWaitingForAns, Options);
+        {workflow_ended, ExecutionId} ->
+            IsFinishedList = maps:get(workflows_ended, Acc, []),
+            Acc2 = Acc#{workflows_ended => [ExecutionId | IsFinishedList]},
             task_execution_gatherer_loop(Acc2, ProcWaitingForAns, Options);
         {get_task_execution_history, Sender} ->
             task_execution_gatherer_loop(Acc, Sender, Options);
