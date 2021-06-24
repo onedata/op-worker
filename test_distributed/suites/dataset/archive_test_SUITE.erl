@@ -63,19 +63,19 @@ groups() -> [
         archive_dataset_attached_to_file_plain_layout,
         archive_dataset_attached_to_hardlink_plain_layout,
         % archive_dataset_attached_to_symlink_plain_layout, TODO VFS-7664
-        archive_directory_with_number_of_files_exceeding_batch_size_plain_layout,
         archive_nested_datasets_plain_layout,
         archive_dataset_attached_to_dir_bagit_layout,
         archive_dataset_attached_to_file_bagit_layout,
         archive_dataset_attached_to_hardlink_bagit_layout,
         % archive_dataset_attached_to_symlink_bagit_layout TODO VFS-7664
-        archive_directory_with_number_of_files_exceeding_batch_size_bagit_layout,
         archive_nested_datasets_bagit_layout
     ]},
     {sequential_tests, [sequential], [
         archive_dataset_attached_to_space_dir,
         archive_big_tree_plain_layout,
-        archive_big_tree_bagit_layout
+        archive_big_tree_bagit_layout,
+        archive_directory_with_number_of_files_exceeding_batch_size_plain_layout,
+        archive_directory_with_number_of_files_exceeding_batch_size_bagit_layout
     ]}
 ].
 
