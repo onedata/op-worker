@@ -326,6 +326,10 @@ prepare_lane(ExecutionId, Handler, Context, LaneIndex) ->
                 {ok, _} ->
                     {ok, Iterator};
                 ?WF_ERROR_LANE_ALREADY_PREPARED ->
+                    case NextIterationStep of
+                        undefined -> ok;
+                        {ItemId, _} -> workflow_cached_item:delete(ItemId)
+                    end,
                     {ok, Iterator}
             end;
         ?WF_ERROR_PREPARATION_FAILED ->
@@ -467,15 +471,19 @@ handle_next_iteration_step(State = #workflow_execution_state{
     prefetched_iteration_step = PrefetchedIterationStep,
     current_lane = #current_lane{lane_index = LaneIndex, parallel_boxes_spec = BoxesSpec}
 }, LaneIndex, PrevItemIndex, NextIterationStep, ParallelBoxToStart) ->
-    case PrefetchedIterationStep of
-        undefined ->
+    case {PrefetchedIterationStep, NextIterationStep} of
+        {undefined, undefined} ->
             State2 = State#workflow_execution_state{
                 iteration_state = workflow_iteration_state:handle_iteration_finished(IterationState)},
             case prepare_next_waiting_job(State2) of
                 {ok, _} = OkAns -> OkAns;
                 Error -> {ok, State2#workflow_execution_state{update_report = Error}}
             end;
-        {PrefetchedItemId, _PrefetchedIterator} ->
+        {undefined, _} ->
+            % TODO VFS-7787 - maybe call handle_iteration_finished/1 when NextIterationStep
+            % is undefined first time (next case) to prevent this race
+            ?WF_ERROR_RACE_CONDITION;
+        {{PrefetchedItemId, _PrefetchedIterator}, _} ->
             % TODO VFS-7789 - it may be needed to allow registration of waiting items as a result of async call processing finish
             case workflow_iteration_state:register_new_item(
                 IterationState, PrevItemIndex, PrefetchedItemId) of
