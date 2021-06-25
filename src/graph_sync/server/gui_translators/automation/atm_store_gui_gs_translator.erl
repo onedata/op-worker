@@ -16,12 +16,28 @@
 -include("middleware/middleware.hrl").
 
 %% API
--export([translate_resource/2]).
+-export([
+    translate_value/2,
+    translate_resource/2
+]).
 
 
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+
+-spec translate_value(gri:gri(), Value :: term()) -> gs_protocol:data().
+translate_value(#gri{aspect = content}, {Entries, IsLast}) ->
+    #{
+        <<"list">> => lists:map(fun({Index, Value}) ->
+            #{
+                <<"index">> => Index,
+                <<"value">> => Value
+            }
+        end, Entries),
+        <<"isLast">> => IsLast
+    }.
 
 
 -spec translate_resource(gri:gri(), Data :: term()) -> gs_protocol:data().

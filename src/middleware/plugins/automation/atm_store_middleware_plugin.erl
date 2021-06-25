@@ -30,6 +30,15 @@
 -export([create/1, get/2, update/1, delete/1]).
 
 
+-record(atm_store_ctx, {
+    store :: atm_store:record(),
+    workflow_execution :: atm_workflow_execution:record()
+}).
+
+-define(MAX_LIST_LIMIT, 1000).
+-define(DEFAULT_LIST_LIMIT, 1000).
+
+
 %%%===================================================================
 %%% middleware_router callbacks
 %%%===================================================================
@@ -43,6 +52,7 @@
 -spec resolve_handler(middleware:operation(), gri:aspect(), middleware:scope()) ->
     module() | no_return().
 resolve_handler(get, instance, private) -> ?MODULE;
+resolve_handler(get, content, private) -> ?MODULE;
 
 resolve_handler(_, _, _) -> throw(?ERROR_NOT_SUPPORTED).
 
@@ -59,7 +69,16 @@ resolve_handler(_, _, _) -> throw(?ERROR_NOT_SUPPORTED).
 %%--------------------------------------------------------------------
 -spec data_spec(middleware:req()) -> undefined | middleware_sanitizer:data_spec().
 data_spec(#op_req{operation = get, gri = #gri{aspect = instance}}) ->
-    undefined.
+    undefined;
+
+data_spec(#op_req{operation = get, gri = #gri{aspect = content}}) -> #{
+    optional => #{
+        <<"index">> => {binary, any},
+        <<"token">> => {binary, non_empty},
+        <<"offset">> => {integer, any},
+        <<"limit">> => {integer, {between, 1, ?MAX_LIST_LIMIT}}
+    }
+}.
 
 
 %%--------------------------------------------------------------------
@@ -76,8 +95,17 @@ fetch_entity(#op_req{auth = ?NOBODY}) ->
 
 fetch_entity(#op_req{gri = #gri{id = AtmStoreId, scope = private}}) ->
     case atm_store:get(AtmStoreId) of
-        {ok, AtmStore} ->
-            {ok, {AtmStore, 1}};
+        {ok, #atm_store{workflow_execution_id = AtmWorkflowExecutionId} = AtmStore} ->
+            case atm_workflow_execution_api:get(AtmWorkflowExecutionId) of
+                {ok, AtmWorkflowExecution} ->
+                    AtmStoreCtx = #atm_store_ctx{
+                        store = AtmStore,
+                        workflow_execution = AtmWorkflowExecution
+                    },
+                    {ok, {AtmStoreCtx, 1}};
+                {error, _} = Error ->
+                    Error
+            end;
         {error, _} = Error ->
             Error
     end.
@@ -92,11 +120,14 @@ fetch_entity(#op_req{gri = #gri{id = AtmStoreId, scope = private}}) ->
 authorize(#op_req{auth = ?GUEST}, _) ->
     false;
 
-authorize(#op_req{operation = get, auth = Auth, gri = #gri{aspect = instance}}, #atm_store{
-    workflow_execution_id = AtmWorkflowExecutionId
-}) ->
+authorize(#op_req{operation = get, auth = Auth, gri = #gri{aspect = As}}, #atm_store_ctx{
+    workflow_execution = AtmWorkflowExecution
+}) when
+    As =:= instance;
+    As =:= content
+->
     atm_workflow_execution_middleware_plugin:has_access_to_workflow_execution_details(
-        Auth, AtmWorkflowExecutionId
+        Auth, AtmWorkflowExecution
     ).
 
 
@@ -106,7 +137,10 @@ authorize(#op_req{operation = get, auth = Auth, gri = #gri{aspect = instance}}, 
 %% @end
 %%--------------------------------------------------------------------
 -spec validate(middleware:req(), middleware:entity()) -> ok | no_return().
-validate(#op_req{operation = get, gri = #gri{aspect = instance}}, _) ->
+validate(#op_req{operation = get, gri = #gri{aspect = As}}, _) when
+    As =:= instance;
+    As =:= content
+->
     % Doc was already fetched in 'fetch_entity' so space must be supported locally
     ok.
 
@@ -127,8 +161,34 @@ create(_) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get(middleware:req(), middleware:entity()) -> middleware:get_result().
-get(#op_req{gri = #gri{aspect = instance, scope = private}}, AtmStore) ->
-    {ok, AtmStore}.
+get(#op_req{gri = #gri{aspect = instance, scope = private}}, #atm_store_ctx{store = AtmStore}) ->
+    {ok, AtmStore};
+
+get(#op_req{data = Data, gri = #gri{aspect = content, scope = private}}, #atm_store_ctx{
+    store = #atm_store{workflow_execution_id = AtmWorkflowExecutionId} = AtmStore,
+    workflow_execution = #atm_workflow_execution{space_id = SpaceId}
+}) ->
+    AtmWorkflowExecutionCtx = atm_workflow_execution_ctx:build(SpaceId, AtmWorkflowExecutionId),
+
+    Offset = maps:get(<<"offset">>, Data, 0),
+    Limit = maps:get(<<"limit">>, Data, ?DEFAULT_LIST_LIMIT),
+
+    ViewOpts = case maps:get(<<"token">>, Data, undefined) of
+        undefined ->
+            Index = maps:get(<<"index">>, Data, undefined),
+            maps_utils:put_if_defined(#{offset => Offset, limit => Limit}, start_index, Index);
+        Token when is_binary(Token) ->
+            % if token is passed, offset has to be increased by 1
+            % to ensure that listing using token is exclusive
+            #{
+                start_index => http_utils:base64url_decode(Token),
+                offset => Offset + 1,
+                limit => Limit
+            }
+    end,
+
+    {ok, Entries, IsLast} = atm_store_api:view_content(AtmWorkflowExecutionCtx, ViewOpts, AtmStore),
+    {ok, value, {Entries, IsLast}}.
 
 
 %%--------------------------------------------------------------------
