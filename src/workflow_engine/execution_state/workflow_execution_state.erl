@@ -702,7 +702,8 @@ handle_no_waiting_items_error(#workflow_execution_state{
 %%% Test API
 %%%===================================================================
 
--spec is_finished_and_cleaned(workflow_engine:execution_id(), index()) -> true | {false, state()}.
+-spec is_finished_and_cleaned(workflow_engine:execution_id(), index()) ->
+    true | {false, state()} | ?WF_ERROR_LANE_CHANGED.
 is_finished_and_cleaned(ExecutionId, LaneIndex) ->
     case datastore_model:get(?CTX, ExecutionId) of
         {ok, #document{value = #workflow_execution_state{current_lane = #current_lane{lane_index = LaneIndex}} = Record}} ->
@@ -713,7 +714,7 @@ is_finished_and_cleaned(ExecutionId, LaneIndex) ->
             end;
         {ok, #document{value = #workflow_execution_state{current_lane = #current_lane{lane_index = Index}}}}
             when Index > LaneIndex ->
-            true;
+            ?WF_ERROR_LANE_CHANGED;
         {ok, #document{value = Record}} ->
             {false, Record}
     end.
