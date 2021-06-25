@@ -32,9 +32,9 @@
 -type batch_size() :: pos_integer().
 
 -type record() ::
-    atm_single_value_container_iterator:record() |
     atm_list_container_iterator:record() |
     atm_range_container_iterator:record() |
+    atm_single_value_container_iterator:record() |
     atm_tree_forest_container_iterator:record().
 
 -export_type([batch_size/0, record/0]).
@@ -46,7 +46,7 @@
 
 
 -callback get_next_batch(atm_workflow_execution_ctx:record(), batch_size(), record()) ->
-    {ok, [atm_api:item()], record()} | stop.
+    {ok, [atm_value:compressed()], record()} | stop.
 
 -callback forget_before(record()) -> ok.
 
@@ -59,7 +59,7 @@
 
 
 -spec get_next_batch(atm_workflow_execution_ctx:record(), batch_size(), record()) ->
-    {ok, [atm_api:item()], record()} | stop.
+    {ok, [atm_value:compressed()], record()} | stop.
 get_next_batch(AtmWorkflowExecutionCtx, BatchSize, AtmContainerIterator) ->
     Module = utils:record_type(AtmContainerIterator),
     Module:get_next_batch(AtmWorkflowExecutionCtx, BatchSize, AtmContainerIterator).

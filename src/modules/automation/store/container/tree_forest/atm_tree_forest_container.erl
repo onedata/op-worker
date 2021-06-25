@@ -26,7 +26,7 @@
 -export([version/0, db_encode/2, db_decode/2]).
 
 -type operation_options() :: #{binary() => boolean()}.
--type initial_value() :: [atm_api:item()] | undefined.
+-type initial_value() :: [automation:item()] | undefined.
 
 -record(atm_tree_forest_container, {
     roots_list :: atm_list_container:record()
@@ -40,7 +40,8 @@
 %%% atm_container callbacks
 %%%===================================================================
 
--spec create(atm_data_spec:record(), initial_value(), atm_workflow_execution_ctx:record()) -> record() | no_return().
+-spec create(atm_data_spec:record(), initial_value(), atm_workflow_execution_ctx:record()) ->
+    record() | no_return().
 create(AtmDataSpec, InitialValue, AtmWorkflowExecutionCtx) ->
     #atm_tree_forest_container{
         roots_list = atm_list_container:create(AtmDataSpec, InitialValue, AtmWorkflowExecutionCtx)

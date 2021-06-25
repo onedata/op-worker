@@ -74,7 +74,7 @@ create_store(ProviderSelector, AtmWorkflowExecutionCtx, InitialValue, AtmStoreSc
     oct_background:entity_selector(),
     atm_workflow_execution_ctx:record(),
     atm_container:operation(),
-    atm_api:item(),
+    automation:item(),
     atm_container:operation_options(),
     atm_store:id()
 ) ->
@@ -127,7 +127,7 @@ split_into_chunks(Size, Acc, [_ | _] = Items) ->
     split_into_chunks(Size, [Chunk | Acc], Items -- Chunk).
 
 
--spec example_data(atm_data_type:type()) -> atm_api:item().
+-spec example_data(atm_data_type:type()) -> automation:item().
 example_data(atm_integer_type) -> 
     rand:uniform(1000000);
 example_data(atm_string_type) -> 
@@ -140,7 +140,7 @@ example_data(atm_object_type) ->
     end, #{}, lists:seq(1, rand:uniform(3) - 1)).
 
 
--spec example_bad_data(atm_data_type:type()) -> atm_api:item().
+-spec example_bad_data(atm_data_type:type()) -> automation:item().
 example_bad_data(Type) -> 
     example_data(lists_utils:random_element(all_data_types() -- [Type])).
 

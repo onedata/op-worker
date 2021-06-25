@@ -242,7 +242,7 @@ check_timeouts(Jobs = #workflow_jobs{
     pending_async_jobs = AsyncCalls
 }) ->
     CheckAns = maps:fold(
-        fun(JobIdentifier, AsyncJobTimer, {ExtendedTimeoutsAcc, ErrorsAcc} = Acc) ->
+        fun(JobIdentifier, AsyncJobTimer, {ExtendedTimeoutsAcc, ExpiredJobsAcc} = Acc) ->
             #async_job_timer{keepalive_timer = Timer} = AsyncJobTimer,
             case countdown_timer:is_expired(Timer) of
                 true ->
@@ -251,16 +251,16 @@ check_timeouts(Jobs = #workflow_jobs{
 %%                        ok -> {[Ref | ExtendedTimeoutsAcc], ErrorsAcc};
 %%                        error -> {ExtendedTimeoutsAcc, [JobIdentifier | ErrorsAcc]}
 %%                    end;
-                    {ExtendedTimeoutsAcc, [JobIdentifier | ErrorsAcc]};
+                    {ExtendedTimeoutsAcc, [JobIdentifier | ExpiredJobsAcc]};
                 false ->
                     Acc
             end
         end, {[], []}, AsyncCalls),
 
     case CheckAns of
-        {[], Errors} ->
-            {?WF_ERROR_NO_TIMEOUTS_UPDATED, Errors};
-        {UpdatedTimeouts, Errors} ->
+        {[], ExpiredJobsIdentifiers} ->
+            {?WF_ERROR_NO_TIMEOUTS_UPDATED, ExpiredJobsIdentifiers};
+        {UpdatedTimeouts, ExpiredJobsIdentifiers} ->
             FinalAsyncCalls = lists:foldl(fun(JobIdentifier, Acc) ->
                 case maps:get(JobIdentifier, Acc, undefined) of
                     undefined ->
@@ -271,7 +271,7 @@ check_timeouts(Jobs = #workflow_jobs{
                 end
             end, AsyncCalls, UpdatedTimeouts),
 
-            {Jobs#workflow_jobs{pending_async_jobs = FinalAsyncCalls}, Errors}
+            {Jobs#workflow_jobs{pending_async_jobs = FinalAsyncCalls}, ExpiredJobsIdentifiers}
     end.
 
 -spec reset_keepalive_timer(jobs(), job_identifier()) -> jobs().

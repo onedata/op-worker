@@ -14,11 +14,10 @@
 -author("Bartosz Walkowicz").
 
 -behaviour(atm_data_validator).
-
--include("modules/automation/atm_tmp.hrl").
+-behaviour(atm_data_compressor).
 
 %% atm_data_validator callbacks
--export([validate/3]).
+-export([assert_meets_constraints/3]).
 
 %% atm_data_compressor callbacks
 -export([compress/1, expand/2]).
@@ -29,16 +28,14 @@
 %%%===================================================================
 
 
--spec validate(
+-spec assert_meets_constraints(
     atm_workflow_execution_ctx:record(),
     atm_value:expanded(),
     atm_data_type:value_constraints()
 ) ->
     ok | no_return().
-validate(_, Value, _ValueConstraints) when is_binary(Value) ->
-    ok;
-validate(_, Value, _ValueConstraints) ->
-    throw(?ERROR_ATM_DATA_TYPE_UNVERIFIED(Value, atm_string_type)).
+assert_meets_constraints(_AtmWorkflowExecutionCtx, _Value, _ValueConstraints) ->
+    ok.
 
 
 %%%===================================================================
@@ -48,6 +45,7 @@ validate(_, Value, _ValueConstraints) ->
 
 -spec compress(atm_value:expanded()) -> binary().
 compress(Value) -> Value.
+
 
 -spec expand(atm_workflow_execution_ctx:record(), binary()) ->
     {ok, atm_value:expanded()}.

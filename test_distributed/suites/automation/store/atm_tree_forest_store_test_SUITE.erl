@@ -95,7 +95,7 @@ create_store_with_invalid_args_test(_Config) ->
             krakow, AtmWorkflowExecutionCtx, undefined, 
             (?ATM_TREE_FOREST_STORE_SCHEMA)#atm_store_schema{requires_initial_value = true})
     ),
-    ?assertEqual(?ERROR_ATM_BAD_DATA(<<"initialValue">>, <<"not a list">>),
+    ?assertEqual(?ERROR_ATM_BAD_DATA(<<"value">>, <<"not a batch">>),
         atm_store_test_utils:create_store(
             krakow, AtmWorkflowExecutionCtx, 8, ?ATM_TREE_FOREST_STORE_SCHEMA)
     ),
@@ -117,11 +117,11 @@ apply_operation_test(_Config) ->
         atm_store_test_utils:apply_operation(
             krakow, AtmWorkflowExecutionCtx, append, <<"not a file">>, #{}, AtmStoreId)),
     {ok, BadId1} = file_id:guid_to_objectid(file_id:pack_guid(<<"dummy_uuid">>, <<"dummy_space_id">>)),
-    ?assertEqual(?ERROR_POSIX(?ENOENT),
+    ?assertEqual(?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(#{<<"inSpace">> => SpaceId}),
         atm_store_test_utils:apply_operation(
             krakow, AtmWorkflowExecutionCtx, append, #{<<"file_id">> => BadId1}, #{}, AtmStoreId)),
     {ok, BadId2} = file_id:guid_to_objectid(file_id:pack_guid(<<"dummy_uuid">>, SpaceId)),
-    ?assertEqual(?ERROR_POSIX(?ENOENT),
+    ?assertEqual(?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(#{<<"hasAccess">> => true}),
         atm_store_test_utils:apply_operation(
             krakow, AtmWorkflowExecutionCtx, append, #{<<"file_id">> => BadId2}, #{}, AtmStoreId)),
     ?assertEqual(?ERROR_NOT_SUPPORTED,
@@ -388,7 +388,7 @@ check_listed_values(Values, Expected, Type) ->
     Expected -- IdsList.
 
 
--spec retrieve_id(atm_data_type:type(), atm_api:item()) -> atm_api:item().
+-spec retrieve_id(atm_data_type:type(), automation:item()) -> automation:item().
 retrieve_id(atm_file_type, #{<<"file_id">> := CdmiId}) ->
     {ok, Guid} = file_id:objectid_to_guid(CdmiId),
     Guid;

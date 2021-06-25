@@ -1720,7 +1720,7 @@ transfer_files_to_source_provider(Config0) ->
             <<"limit">> => 100
         },
         {ok, value, #{<<"transfers">> := List}} = ?assertMatch({ok, value, #{}}, rpc:call(
-            Worker, space_middleware, get, [
+            Worker, space_transfers_middleware_handler, get, [
                 #op_req{data = Data, gri = #gri{id = SpaceName, aspect = transfers}}, anything
             ]
         )),

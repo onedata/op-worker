@@ -58,7 +58,7 @@ build(Start, End, Step) ->
 
 
 -spec get_next_batch(atm_workflow_execution_ctx:record(), atm_container_iterator:batch_size(), record()) ->
-    {ok, [atm_api:item()], record()} | stop.
+    {ok, [integer()], record()} | stop.
 get_next_batch(_AtmWorkflowExecutionCtx, BatchSize, #atm_range_container_iterator{
     curr_num = CurrNum,
     end_num = End,

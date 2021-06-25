@@ -47,17 +47,11 @@
 %%--------------------------------------------------------------------
 -spec init(cowboy_req:req(), any()) -> {ok, cowboy_req:req(), any()}.
 init(Req, State) ->
-    {ContentType, _, _} = cowboy_req:parse_header(?HDR_CONTENT_TYPE, Req),
-    {ok, Body, _} = cowboy_req:read_body(Req),
-    ParsedBody = case ContentType of
-        <<"application/json">> ->
-            try
-                json_utils:decode(Body)
-            catch _:_ ->
-                ?WF_ERROR_MALFORMED_REQUEST
-            end;
-        _ ->
-            Body
+    ParsedBody = try
+        {ok, Body, _} = cowboy_req:read_body(Req),
+        json_utils:decode(Body)
+    catch _:_ ->
+        ?WF_ERROR_MALFORMED_REQUEST
     end,
 
     Path = cowboy_req:path(Req),

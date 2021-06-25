@@ -166,7 +166,15 @@ build_value(AtmJobExecutionCtx, #atm_task_argument_value_builder{
         error -> throw(?ERROR_ATM_TASK_ARG_MAPPER_ITEM_QUERY_FAILED(Item, Query))
     end;
 
-build_value(_AtmTaskExecutionArgSpec, _InputSpec) ->
+build_value(AtmJobExecutionCtx, #atm_task_argument_value_builder{
+    type = onedatafs_credentials
+}) ->
+    #{
+        <<"host">> => oneprovider:get_domain(),
+        <<"accessToken">> => atm_job_execution_ctx:get_access_token(AtmJobExecutionCtx)
+    };
+
+build_value(_AtmJobExecutionCtx, _InputSpec) ->
     % TODO VFS-7660 handle rest of atm_task_argument_value_builder:type()
     throw(?ERROR_ATM_TASK_ARG_MAPPER_INVALID_INPUT_SPEC).
 
@@ -178,16 +186,19 @@ build_value(_AtmTaskExecutionArgSpec, _InputSpec) ->
     record()
 ) ->
     ok | no_return().
-validate_value(AtmWorkflowExecutionCtx, ArgsBatch, #atm_task_execution_argument_spec{
-    data_spec = AtmDataSpec,
-    is_batch = true
-}) ->
-    lists:foreach(fun(ArgValue) ->
-        atm_data_validator:validate(AtmWorkflowExecutionCtx, ArgValue, AtmDataSpec)
-    end, ArgsBatch);
-
 validate_value(AtmWorkflowExecutionCtx, ArgValue, #atm_task_execution_argument_spec{
     data_spec = AtmDataSpec,
     is_batch = false
 }) ->
-    atm_data_validator:validate(AtmWorkflowExecutionCtx, ArgValue, AtmDataSpec).
+    atm_value:validate(AtmWorkflowExecutionCtx, ArgValue, AtmDataSpec);
+
+validate_value(AtmWorkflowExecutionCtx, ArgsBatch, #atm_task_execution_argument_spec{
+    data_spec = AtmDataSpec,
+    is_batch = true
+}) when is_list(ArgsBatch) ->
+    lists:foreach(fun(ArgValue) ->
+        atm_value:validate(AtmWorkflowExecutionCtx, ArgValue, AtmDataSpec)
+    end, ArgsBatch);
+
+validate_value(_AtmWorkflowExecutionCtx, _ArgsBatch, _AtmTaskExecutionArgSpec) ->
+    throw(?ERROR_ATM_BAD_DATA(<<"value">>, <<"not a batch">>)).

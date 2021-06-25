@@ -196,7 +196,7 @@ init_dataset_eff_caches(Space) ->
 init(_Args) ->
     init_effective_caches(),
     transfer:init(),
-    atm_api:init_engine(),
+    atm_workflow_execution_api:init_engine(),
     replica_deletion_master:init_workers_pool(),
     file_registration:init_pool(),
     autocleaning_view_traverse:init_pool(),
@@ -798,7 +798,15 @@ handle_provider_request(UserCtx, #get_archive_info{id = ArchiveId}, SpaceDirCtx)
 handle_provider_request(UserCtx, #list_archives{dataset_id = DatasetId, opts = Opts, mode = ListingMode}, SpaceDirCtx) ->
     dataset_req:list_archives(SpaceDirCtx, DatasetId, Opts, ListingMode, UserCtx);
 handle_provider_request(UserCtx, #init_archive_purge{id = ArchiveId, callback = CallbackUrl}, SpaceDirCtx) ->
-    dataset_req:init_archive_purge(SpaceDirCtx, ArchiveId, CallbackUrl, UserCtx).
+    dataset_req:init_archive_purge(SpaceDirCtx, ArchiveId, CallbackUrl, UserCtx);
+
+handle_provider_request(UserCtx, #schedule_atm_workflow_execution{
+    atm_workflow_schema_id = AtmWorkflowSchemaId,
+    store_initial_values = AtmStoreInitialValues
+}, SpaceDirCtx) ->
+    atm_req:schedule_workflow_execution(
+        UserCtx, SpaceDirCtx, AtmWorkflowSchemaId, AtmStoreInitialValues
+    ).
 
 
 %%--------------------------------------------------------------------

@@ -14,7 +14,7 @@
 %%% 2) Modules implementing this behaviour must also implement `persistent_record`
 %%%    behaviour.
 %%% 3) Modules implementing this behaviour must be registered in
-%%%    `atm_store_api:store_type_to_container_type` function.
+%%%    `atm_store_api:get_container_type_for_store` function.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_container).
@@ -32,28 +32,29 @@
 
 
 -type type() ::
-    atm_single_value_container |
+    atm_list_container |
     atm_range_container |
-    atm_list_container.
+    atm_single_value_container |
+    atm_tree_forest_container.
 
 -type initial_value() ::
-    atm_single_value_container:initial_value() | 
-    atm_range_container:initial_value() |
     atm_list_container:initial_value() |
+    atm_range_container:initial_value() |
+    atm_single_value_container:initial_value() |
     atm_tree_forest_container:initial_value().
 
 -type record() ::
-    atm_single_value_container:record() | 
-    atm_range_container:record() |
     atm_list_container:record() |
+    atm_range_container:record() |
+    atm_single_value_container:record() |
     atm_tree_forest_container:record().
 
 -type operation_type() :: append | set.
 
 -type operation_options() ::
-    atm_single_value_container:operation_options() |
-    atm_range_container:operation_options() |
     atm_list_container:operation_options() |
+    atm_range_container:operation_options() |
+    atm_single_value_container:operation_options() |
     atm_tree_forest_container:operation_options().
 
 -type operation() :: #atm_container_operation{}.

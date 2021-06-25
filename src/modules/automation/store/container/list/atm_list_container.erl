@@ -26,7 +26,7 @@
 -export([version/0, db_encode/2, db_decode/2]).
 
 
--type initial_value() :: [atm_api:item()] | undefined.
+-type initial_value() :: [automation:item()] | undefined.
 %% Full 'operation_options' format can't be expressed directly in type spec due to
 %% dialyzer limitations in specifying individual binaries. Instead it is
 %% shown below:
@@ -57,11 +57,10 @@
     record() | no_return().
 create(AtmDataSpec, undefined, _AtmWorkflowExecutionCtx) ->
     create_container(AtmDataSpec);
-create(AtmDataSpec, InitialValueBatch, AtmWorkflowExecutionCtx) when is_list(InitialValueBatch) ->
+
+create(AtmDataSpec, InitialValueBatch, AtmWorkflowExecutionCtx) ->
     validate_data_batch(AtmWorkflowExecutionCtx, AtmDataSpec, InitialValueBatch),
-    append_insecure(InitialValueBatch, create_container(AtmDataSpec));
-create(_AtmDataSpec, _InitialValue, _AtmWorkflowExecutionCtx) ->
-    throw(?ERROR_ATM_BAD_DATA(<<"initialValue">>, <<"not a list">>)).
+    append_insecure(InitialValueBatch, create_container(AtmDataSpec)).
 
 
 -spec get_data_spec(record()) -> atm_data_spec:record().
@@ -85,11 +84,11 @@ apply_operation(#atm_list_container{data_spec = AtmDataSpec} = Record, #atm_cont
     validate_data_batch(AtmWorkflowExecutionCtx, AtmDataSpec, Batch),
     append_insecure(Batch, Record);
 
-apply_operation(#atm_list_container{} = Record, #atm_container_operation{
+apply_operation(#atm_list_container{} = Record, AtmContainerOperation = #atm_container_operation{
     type = append,
     value = Item,
     options = Options
-} = AtmContainerOperation) ->
+}) ->
     apply_operation(Record, AtmContainerOperation#atm_container_operation{
         options = Options#{<<"isBatch">> => true},
         value = [Item]
@@ -107,6 +106,7 @@ delete(#atm_list_container{backend_id = BackendId}) ->
 %%%===================================================================
 %%% persistent_record callbacks
 %%%===================================================================
+
 
 -spec version() -> persistent_record:record_version().
 version() ->
@@ -156,17 +156,19 @@ create_container(AtmDataSpec) ->
     [json_utils:json_term()]
 ) ->
     ok | no_return().
-validate_data_batch(AtmWorkflowExecutionCtx, AtmDataSpec, Batch) ->
+validate_data_batch(AtmWorkflowExecutionCtx, AtmDataSpec, Batch) when is_list(Batch) ->
     lists:foreach(fun(Item) ->
-        atm_data_validator:validate(AtmWorkflowExecutionCtx, Item, AtmDataSpec)
-    end, Batch).
+        atm_value:validate(AtmWorkflowExecutionCtx, Item, AtmDataSpec)
+    end, Batch);
+validate_data_batch(_AtmWorkflowExecutionCtx, _AtmDataSpec, _Item) ->
+    throw(?ERROR_ATM_BAD_DATA(<<"value">>, <<"not a batch">>)).
 
 
 %% @private
--spec append_insecure([atm_api:item()], record()) -> record().
+-spec append_insecure([automation:item()], record()) -> record().
 append_insecure(Batch, #atm_list_container{data_spec = AtmDataSpec, backend_id = BackendId} = Record) ->
     lists:foreach(fun(Item) ->
-        CompressedItem = atm_data_compressor:compress(Item, AtmDataSpec),
+        CompressedItem = atm_value:compress(Item, AtmDataSpec),
         ok = atm_list_store_backend:append(BackendId, json_utils:encode(CompressedItem))
     end, Batch),
     Record.
