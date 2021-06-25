@@ -7,6 +7,28 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% API module for performing operations on archives.
+%%%
+%%% Archivisation mechanism uses the following helper modules:
+%%%  * archivisation_tree - module for creating file structure, stored in
+%%%    .__onedata__archive hidden directory, in which archived files are stored
+%%%  * archivisation_callback - module for calling HTTP webhooks to notify users
+%%%    about finished archivisation or purging jobs
+%%%  * archivisation_traverse - module that uses tree_traverse to archive a dataset.
+%%%    It traverses the dataset and builds an archive (and nested archives if required
+%%%    by create_nested_archives parameter).
+%%%  * bagit_archive - module used by archivisation_traverse to archive single file,
+%%%    according to bagit specification. It also contains functions for initializing/
+%%%    and finalizing whole archive complying to bagit specification.
+%%%  * plain_layout - module used by archivisation_traverse to archive single file to
+%%%    a plain archive.
+%%%  * archive - module that implements archive datastore model
+%%%  * archive_config - module that implements persistent_record behaviour,
+%%%    which is stored in archive record and is used to store configuration of an archive
+%%%  * archive_stats - module that implements persistent_record behaviour,
+%%%    which is stored in archive record and is used to store statistics of archivisation procedure
+%%%  * archives_list - module that implements list structure which allows to track
+%%%    archives associated with given dataset
+%%%  * archives_forest - module that is used to track parent-nested archive relations
 %%% @end
 %%%-------------------------------------------------------------------
 -module(archive_api).

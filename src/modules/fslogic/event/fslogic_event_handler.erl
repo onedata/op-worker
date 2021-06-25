@@ -185,6 +185,7 @@ handle_file_read_event(#file_read_event{
 }, SessId) ->
     FileCtx = file_ctx:new_by_guid(FileGuid),
     SpaceId = file_ctx:get_space_id_const(FileCtx),
+    % TODO VFS-7851 handle case when get_user_id returns not_found
     case session:get_user_id(SessId) of
         {ok, UserId} ->
             monitoring_event_emitter:emit_file_read_statistics(SpaceId, UserId, Size, Counter);

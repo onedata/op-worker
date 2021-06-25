@@ -445,7 +445,14 @@
     preserved_callback :: archive:callback(),
     purged_callback :: archive:callback(),
     description :: archive:description(),
+    % This directory is root for archive.
+    % It has predefined uuid=?ARCHIVE_DIR_UUID(ArchiveId)
+    % See archivisation_tree.erl for more info.
     root_dir_guid :: undefined | file_id:file_guid(),
+    % This is directory in which data files (files archived from space)
+    % are stored.
+    % For plain layout it is root_dir_guid.
+    % For bagit layout it is "data" directory, that is child of root_dir_guid.
     data_dir_guid :: undefined | file_id:file_guid(),
     stats = archive_stats:empty() :: archive_stats:record(),
 

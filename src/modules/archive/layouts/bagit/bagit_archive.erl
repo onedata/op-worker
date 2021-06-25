@@ -9,34 +9,62 @@
 %%% This module is used to create an archive which is compliant
 %%% with Bagit format (RFC 8493).
 %%%
-%%% e. g.
+%%% In case of this layout, files' JSON metadata are also archived.
+%%% They are stored in metadata.json file.
+%%% JSON metadata object is associated with path to corresponding file.
+%%% See bagit_metadata.erl for more info.
+%%%
+%%% If archive is created with create_nested_archives=true,
+%%% archives for nested datasets are also created and symlinks to these
+%%% nested archives are created in parent archives.
+%%% If create_nested_archives=false, files are simply copied.
+%%%
+%%%-------------------------------------------------------------------
+%%% Example
+%%%-------------------------------------------------------------------
 %%% Following file structure
 %%%
 %%% Dir1(DS1)
-%%%    f.txt (DS2)
-%%%    f2.txt (DS3)
-%%%    f3.txt
-%%%    Dir1.1(DS4)
-%%%        hello.txt
+%%% |--- f.txt (DS2)
+%%% |--- f2.txt (DS3)
+%%% |--- f3.txt
+%%% |--- Dir1.1(DS4)
+%%%      |--- hello.txt
 %%%
-%%% will have the following archive structure:
+%%% will have the following archive structure, in case of create_nested_archives=true:
 %%%
-%%% .__onedata_archives
+%%% .__onedata_archive
 %%% |--- dataset_DS1
-%%% |    |--- archive_123  <- (A) archive_123
+%%% |    |--- archive_123
 %%% |         |--- bagit.txt
-%%% |         |---  manifest-md5.txt
-%%% |         |---  data
-%%% |               |--- Dir1
-%%% |                    |--- f.txt  (SL -> dataset_DS2/archive_1234/data/f.txt)
-%%% |                    |--- f2.txt (SL -> dataset_DS3/archive_1235/data/f2.txt)
-%%% |                    |--- f3.txt
-%%% |                    |--- Dir1.1 (SL -> dataset_DS4/archive_1236/data/Dir1.1)
+%%% |         |--- manifest-md5.txt
+%%% |         |--- manifest-sha1.txt
+%%% |         |--- manifest-sha256.txt
+%%% |         |--- manifest-sha512.txt
+%%% |         |--- metadata.json
+%%% |         |--- tagmanifest-md5.txt
+%%% |         |--- tagmanifest-sha1.txt
+%%% |         |--- tagmanifest-sha256.txt
+%%% |         |--- tagmanifest-sha512.txt
+%%% |         |--- data
+%%% |              |--- Dir1
+%%% |                   |--- f.txt  (SL -> dataset_DS2/archive_1234/data/f.txt)
+%%% |                   |--- f2.txt (SL -> dataset_DS3/archive_1235/data/f2.txt)
+%%% |                   |--- f3.txt
+%%% |                   |--- Dir1.1 (SL -> dataset_DS4/archive_1236/data/Dir1.1)
 %%% |
 %%% |--- dataset_DS2
 %%% |    |--- archive_1234
 %%% |         |--- bagit.txt
 %%% |         |--- manifest-md5.txt
+%%% |         |--- manifest-sha1.txt
+%%% |         |--- manifest-sha256.txt
+%%% |         |--- manifest-sha512.txt
+%%% |         |--- metadata.json
+%%% |         |--- tagmanifest-md5.txt
+%%% |         |--- tagmanifest-sha1.txt
+%%% |         |--- tagmanifest-sha256.txt
+%%% |         |--- tagmanifest-sha512.txt
 %%% |         |--- data
 %%% |              |--- f.txt
 %%% |
@@ -44,16 +72,55 @@
 %%% |    |--- archive_1235
 %%% |         |--- bagit.txt
 %%% |         |--- manifest-md5.txt
+%%% |         |--- manifest-sha1.txt
+%%% |         |--- manifest-sha256.txt
+%%% |         |--- manifest-sha512.txt
+%%% |         |--- metadata.json
+%%% |         |--- tagmanifest-md5.txt
+%%% |         |--- tagmanifest-sha1.txt
+%%% |         |--- tagmanifest-sha256.txt
+%%% |         |--- tagmanifest-sha512.txt
 %%% |         |--- data
 %%% |              |--- f2.txt
 %%% |
 %%% |--- dataset_DS4
-%%% |    |--- archive_1236
-%%% |         |--- bagit.txt
-%%% |         |--- manifest-md5.txt
-%%% |         |--- data
-%%% |              |--- Dir1.1
-%%% |                   |--- hello.txt
+%%%      |--- archive_1236
+%%%           |--- bagit.txt
+%%%           |--- manifest-md5.txt
+%%%           |--- manifest-sha1.txt
+%%%           |--- manifest-sha256.txt
+%%%           |--- manifest-sha512.txt
+%%%           |--- metadata.json
+%%%           |--- tagmanifest-md5.txt
+%%%           |--- tagmanifest-sha1.txt
+%%%           |--- tagmanifest-sha256.txt
+%%%           |--- tagmanifest-sha512.txt
+%%%           |--- data
+%%%                |--- Dir1.1
+%%%                     |--- hello.txt
+%%%
+%%% If create_nested_archives=false, the structure will be as follows:
+%%%
+%%% .__onedata_archive
+%%% |--- dataset_DS1
+%%%      |--- archive_123
+%%%           |--- bagit.txt
+%%%           |--- manifest-md5.txt
+%%%           |--- manifest-sha1.txt
+%%%           |--- manifest-sha256.txt
+%%%           |--- manifest-sha512.txt
+%%%           |--- metadata.json
+%%%           |--- tagmanifest-md5.txt
+%%%           |--- tagmanifest-sha1.txt
+%%%           |--- tagmanifest-sha256.txt
+%%%           |--- tagmanifest-sha512.txt
+%%%           |--- data
+%%%                |--- Dir1
+%%%                     |--- f.txt
+%%%                     |--- f2.txt
+%%%                     |--- f3.txt
+%%%                     |--- Dir1.1
+%%%                          |--- hello.txt
 %%% @end
 %%%-------------------------------------------------------------------
 -module(bagit_archive).
@@ -143,9 +210,9 @@ save_checksums_and_archive_custom_metadata(CurrentArchiveDoc, UserCtx, ArchivedF
 
     SessionId = user_ctx:get_session_id(UserCtx),
     ArchiveFileGuid = file_ctx:get_logical_guid_const(ArchivedFileCtx),
-    JsonMetadata2 = case lfm:get_metadata(SessionId, ?FILE_REF(ArchiveFileGuid), json, [], false) of
-        {ok, JsonMetadata} ->
-            JsonMetadata;
+    JsonMetadata = case lfm:get_metadata(SessionId, ?FILE_REF(ArchiveFileGuid), json, [], false) of
+        {ok, JM} ->
+            JM;
         {error, ?ENODATA} ->
             undefined
     end,
@@ -156,8 +223,8 @@ save_checksums_and_archive_custom_metadata(CurrentArchiveDoc, UserCtx, ArchivedF
         {ok, ArchiveDirCtx} = archive:get_root_dir_ctx(ArchiveDoc),
         bagit_checksums:add_entries_to_manifests(ArchiveDirCtx, UserCtx, RelativeFilePath, CalculatedChecksums,
             ChecksumAlgorithms),
-        JsonMetadata2 /= undefined
-            andalso bagit_metadata:add_entry(ArchiveDirCtx, UserCtx, RelativeFilePath, JsonMetadata2)
+        JsonMetadata /= undefined
+            andalso bagit_metadata:add_entry(ArchiveDirCtx, UserCtx, RelativeFilePath, JsonMetadata)
     end, [CurrentArchiveDoc | AncestorArchives]).
 
 

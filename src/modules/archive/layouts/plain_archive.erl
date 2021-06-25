@@ -8,22 +8,28 @@
 %%% @doc
 %%% This modules is used to create archive with plain layout.
 %%%
-%%% Nested archives are simply symlinked from parent archives.
-%%% e. g.
+%%% If archive is created with create_nested_archives=true,
+%%% archives for nested datasets are also created and symlinks to these
+%%% nested archives are created in parent archives.
+%%% If create_nested_archives=false, files are simply copied.
+%%%
+%%%-------------------------------------------------------------------
+%%% Example
+%%%-------------------------------------------------------------------
 %%% Following file structure
 %%%
 %%% Dir1(DS1)
-%%%    f.txt (DS2)
-%%%    f2.txt (DS3)
-%%%    f3.txt
-%%%    Dir1.1(DS4)
-%%%        hello.txt
+%%% |--- f.txt (DS2)
+%%% |--- f2.txt (DS3)
+%%% |--- f3.txt
+%%% |--- Dir1.1(DS4)
+%%%      |--- hello.txt
 %%%
-%%% will have the following archive structure:
+%%% will have the following archive structure, in case of create_nested_archives=true:
 %%%
-%%% .__onedata_archives
+%%% .__onedata_archive
 %%% |--- dataset_DS1
-%%% |    |--- archive_123  <- (A) archive_123
+%%% |    |--- archive_123
 %%% |         |--- Dir1
 %%% |              |---  f.txt  (SL -> dataset_DS2/archive_1234/f.txt)
 %%% |              |---  f2.txt (SL -> dataset_DS3/archive_1235/f2.txt)
@@ -39,9 +45,21 @@
 %%% |         |--- f2.txt
 %%% |
 %%% |--- dataset_DS4
-%%% |    |--- archive_1236
-%%% |         |--- Dir1.1
-%%% |              |--- hello.txt
+%%%      |--- archive_1236
+%%%           |--- Dir1.1
+%%%                |--- hello.txt
+%%%
+%%% If create_nested_archives=false, the structure will be as follows:
+%%%
+%%% .__onedata_archive
+%%% |--- dataset_DS1
+%%%      |--- archive_123
+%%%           |--- Dir1
+%%%                |--- f.txt
+%%%                |--- f2.txt
+%%%                |--- f3.txt
+%%%                |--- Dir1.1
+%%%                      |--- hello.txt
 %%% @end
 %%%-------------------------------------------------------------------
 -module(plain_archive).

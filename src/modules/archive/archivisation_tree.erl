@@ -10,12 +10,12 @@
 %%% It contains functions used to create directories in
 %%% which archive files will be stored.
 %%%
-%%% The subtree will be rooted in .__onedata_archives directory so
+%%% The subtree will be rooted in . directory so
 %%% that it won't be visible in the space.
 %%%
 %%% The subtree will have the following structure:
 %%% <SPACE DIRECTORY>
-%%% |--- .__onedata_archives, uuid: ?ARCHIVES_ROOT_DIR_UUID(SpaceId)
+%%% |--- .__onedata_archive, uuid: ?ARCHIVES_ROOT_DIR_UUID(SpaceId)
 %%%      |--- dataset_archives_<DatasetId>, uuid: ?DATASET_ARCHIVES_DIR_UUID(DatasetId)
 %%%           |--- archive_<ArchiveId>, uuid: ?ARCHIVE_DIR_UUID(ArchiveId)
 %%%                |--- ...
