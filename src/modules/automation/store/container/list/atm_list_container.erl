@@ -20,7 +20,12 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% atm_container callbacks
--export([create/3, get_data_spec/1, acquire_iterator/1, apply_operation/2, delete/1]).
+-export([
+    create/3,
+    get_data_spec/1, view_content/3, acquire_iterator/1,
+    apply_operation/2,
+    delete/1
+]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
@@ -66,6 +71,38 @@ create(AtmDataSpec, InitialValueBatch, AtmWorkflowExecutionCtx) ->
 -spec get_data_spec(record()) -> atm_data_spec:record().
 get_data_spec(#atm_list_container{data_spec = AtmDataSpec}) ->
     AtmDataSpec.
+
+
+-spec view_content(atm_workflow_execution_ctx:record(), atm_store_api:view_opts(), record()) ->
+    {ok, [{atm_store_api:index(), automation:item()}], IsLast :: boolean()} | no_return().
+view_content(AtmWorkflowExecutionCtx, ViewOpts, #atm_list_container{
+    data_spec = AtmDataSpec,
+    backend_id = BackendId
+}) ->
+    StartFrom = case maps:get(start_index, ViewOpts, undefined) of
+        undefined ->
+            undefined;
+        <<>> ->
+            undefined;
+        StartIndexBin ->
+            try
+                {index, binary_to_integer(StartIndexBin)}
+            catch _:_ ->
+                throw(?ERROR_ATM_BAD_DATA(<<"index">>, <<"not numerical">>))
+            end
+    end,
+    {ok, {Marker, Entries}} = atm_list_store_backend:list(BackendId, #{
+        start_from => StartFrom,
+        offset => maps:get(offset, ViewOpts, 0),
+        limit => maps:get(limit, ViewOpts)
+    }),
+    ExpandedEntries = lists:map(fun({EntryIndex, {_Timestamp, Value}}) ->
+        CompressedValue = json_utils:decode(Value),
+        ExpandedValue = atm_value:expand(AtmWorkflowExecutionCtx, CompressedValue, AtmDataSpec),
+        {integer_to_binary(EntryIndex), ExpandedValue}
+    end, Entries),
+
+    {ok, ExpandedEntries, Marker =:= done}.
 
 
 -spec acquire_iterator(record()) -> atm_list_container_iterator:record().

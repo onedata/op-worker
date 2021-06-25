@@ -20,7 +20,12 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% atm_container callbacks
--export([create/3, get_data_spec/1, acquire_iterator/1, apply_operation/2, delete/1]).
+-export([
+    create/3,
+    get_data_spec/1, view_content/3, acquire_iterator/1,
+    apply_operation/2,
+    delete/1
+]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
@@ -61,7 +66,7 @@ create(AtmDataSpec, #{<<"end">> := EndNum} = InitialArgs, AtmWorkflowExecutionCt
     Step = maps:get(<<"step">>, InitialArgs, 1),
 
     assert_supported_data_spec(AtmDataSpec),
-    validate_init_args(StartNum, EndNum, Step, AtmDataSpec, AtmWorkflowExecutionCtx),
+    validate_range(AtmWorkflowExecutionCtx, AtmDataSpec, StartNum, EndNum, Step),
 
     #atm_range_container{
         data_spec = AtmDataSpec,
@@ -78,6 +83,21 @@ get_data_spec(#atm_range_container{data_spec = AtmDataSpec}) ->
     AtmDataSpec.
 
 
+-spec view_content(atm_workflow_execution_ctx:record(), atm_store_api:view_opts(), record()) ->
+    {ok, [{atm_store_api:index(), automation:item()}], IsLast :: boolean()} | no_return().
+view_content(_AtmWorkflowExecutionCtx, _Opts, #atm_range_container{
+    start_num = StartNum,
+    end_num = EndNum,
+    step = Step
+}) ->
+    Content = #{
+        <<"start">> => StartNum,
+        <<"end">> => EndNum,
+        <<"step">> => Step
+    },
+    {ok, [{<<>>, Content}], true}.
+
+
 -spec acquire_iterator(record()) -> atm_range_container_iterator:record().
 acquire_iterator(#atm_range_container{
     start_num = StartNum,
@@ -87,8 +107,7 @@ acquire_iterator(#atm_range_container{
     atm_range_container_iterator:build(StartNum, EndNum, Step).
 
 
--spec apply_operation(record(), atm_container:operation()) ->
-    no_return().
+-spec apply_operation(record(), atm_container:operation()) -> no_return().
 apply_operation(_Record, _AtmContainerOperation) ->
     throw(?ERROR_NOT_SUPPORTED).
 
@@ -157,13 +176,13 @@ assert_supported_data_spec(AtmDataSpec) ->
 
 
 %% @private
--spec validate_init_args(
-    integer(), integer(), integer(),
+-spec validate_range(
+    atm_workflow_execution_ctx:record(),
     atm_data_spec:record(),
-    atm_workflow_execution_ctx:record()
+    integer(), integer(), integer()
 ) ->
     ok | no_return().
-validate_init_args(StartNum, EndNum, Step, AtmDataSpec, AtmWorkflowExecutionCtx) ->
+validate_range(AtmWorkflowExecutionCtx, AtmDataSpec, StartNum, EndNum, Step) ->
     lists:foreach(fun({ArgName, ArgValue}) ->
         try
             atm_value:validate(AtmWorkflowExecutionCtx, ArgValue, AtmDataSpec)

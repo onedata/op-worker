@@ -25,7 +25,12 @@
 -include("modules/automation/atm_execution.hrl").
 
 %% API
--export([create/4, get_data_spec/1, acquire_iterator/1, apply_operation/2, delete/1]).
+-export([
+    create/4,
+    get_data_spec/1, view_content/3, acquire_iterator/1,
+    apply_operation/2,
+    delete/1
+]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
@@ -77,6 +82,9 @@
 
 -callback get_data_spec(record()) -> atm_data_spec:record().
 
+-callback view_content(atm_workflow_execution_ctx:record(), atm_store_api:view_opts(), record()) ->
+    {ok, [{atm_store_api:index(), automation:item()}], IsLast :: boolean()} | no_return().
+
 -callback acquire_iterator(record()) -> atm_container_iterator:record().
 
 -callback apply_operation(record(), operation()) -> record() | no_return().
@@ -104,6 +112,13 @@ create(RecordType, AtmDataSpec, InitArgs, AtmWorkflowExecutionCtx) ->
 get_data_spec(AtmContainer) ->
     RecordType = utils:record_type(AtmContainer),
     RecordType:get_data_spec(AtmContainer).
+
+
+-spec view_content(atm_workflow_execution_ctx:record(), atm_store_api:view_opts(), record()) ->
+    {ok, [{atm_store_api:index(), automation:item()}], IsLast :: boolean()} | no_return().
+view_content(AtmWorkflowExecutionCtx, ListOpts, AtmContainer) ->
+    RecordType = utils:record_type(AtmContainer),
+    RecordType:list_content(AtmWorkflowExecutionCtx, ListOpts, AtmContainer).
 
 
 -spec acquire_iterator(record()) -> atm_container_iterator:record().

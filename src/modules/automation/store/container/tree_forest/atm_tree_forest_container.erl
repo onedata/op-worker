@@ -20,7 +20,12 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% atm_container callbacks
--export([create/3, get_data_spec/1, acquire_iterator/1, apply_operation/2, delete/1]).
+-export([
+    create/3,
+    get_data_spec/1, view_content/3, acquire_iterator/1,
+    apply_operation/2,
+    delete/1
+]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
@@ -53,6 +58,12 @@ get_data_spec(#atm_tree_forest_container{roots_list = RootsList}) ->
     atm_list_container:get_data_spec(RootsList).
 
 
+-spec view_content(atm_workflow_execution_ctx:record(), atm_store_api:view_opts(), record()) ->
+    {ok, [{atm_store_api:index(), automation:item()}], IsLast :: boolean()} | no_return().
+view_content(AtmWorkflowExecutionCtx, ViewOpts, #atm_tree_forest_container{roots_list = RootsList}) ->
+    atm_list_container:view_content(AtmWorkflowExecutionCtx, ViewOpts, RootsList).
+
+
 -spec acquire_iterator(record()) -> atm_tree_forest_container_iterator:record().
 acquire_iterator(#atm_tree_forest_container{roots_list = RootsList}) ->
     DataSpec = atm_list_container:get_data_spec(RootsList),
@@ -76,6 +87,7 @@ delete(#atm_tree_forest_container{roots_list = RootsList}) ->
 %%%===================================================================
 %%% persistent_record callbacks
 %%%===================================================================
+
 
 -spec version() -> persistent_record:record_version().
 version() ->

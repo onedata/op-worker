@@ -20,7 +20,12 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% atm_container callbacks
--export([create/3, get_data_spec/1, acquire_iterator/1, apply_operation/2, delete/1]).
+-export([
+    create/3,
+    get_data_spec/1, view_content/3, acquire_iterator/1,
+    apply_operation/2,
+    delete/1
+]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
@@ -61,6 +66,18 @@ create(AtmDataSpec, InitialValue, AtmWorkflowExecutionCtx) ->
 -spec get_data_spec(record()) -> atm_data_spec:record().
 get_data_spec(#atm_single_value_container{data_spec = AtmDataSpec}) ->
     AtmDataSpec.
+
+
+-spec view_content(atm_workflow_execution_ctx:record(), atm_store_api:view_opts(), record()) ->
+    {ok, [{atm_store_api:index(), automation:item()}], IsLast :: boolean()} | no_return().
+view_content(_AtmWorkflowExecutionCtx, _Opts, #atm_single_value_container{value = undefined}) ->
+    {ok, [], true};
+
+view_content(AtmWorkflowExecutionCtx, _Opts, #atm_single_value_container{
+    data_spec = AtmDataSpec,
+    value = Value
+}) ->
+    {ok, [{<<>>, atm_value:expand(AtmWorkflowExecutionCtx, Value, AtmDataSpec)}], true}.
 
 
 -spec acquire_iterator(record()) -> atm_single_value_container_iterator:record().
