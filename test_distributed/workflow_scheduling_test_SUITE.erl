@@ -599,7 +599,6 @@ get_task_execution_history(Config) ->
 verify_execution_history_stats(Acc, WorkflowType) ->
     verify_execution_history_stats(Acc, WorkflowType, 1, false).
 
-% TODO VFS-7784 - uncomment checks in this function and fix tests
 verify_execution_history_stats(Acc, WorkflowType, WorkflowNumber, IsPrepared) ->
     ?assertEqual(0, maps:get(final_async_slots_used, Acc)),
     ?assertEqual(0, maps:get(final_pool_slots_used, Acc)),
@@ -753,6 +752,7 @@ verify_task_and_lane_ended_notifications(Workflow,
         WorkflowType, LaneFinishLog, Gathered, TasksStats, LaneIndex, StopSpec, PrevLanesElementsCount);
 verify_task_and_lane_ended_notifications(Workflow,
     WorkflowType, LaneFinishLog, Gathered, TasksStats, {box, LaneIndex, _BoxIndex}, StopSpec, PrevLanesElementsCount) ->
+    % TODO VFS-7784 - verify notifications for this case
     {GatheredWithoutEndedNotifications, UpdatedTasksStats, IsLast} = clean_task_and_lane_ended_notifications(
         Workflow, Gathered, TasksStats, LaneIndex),
     case IsLast of
@@ -767,6 +767,7 @@ verify_task_and_lane_ended_notifications(_Workflow,
     {Gathered, TasksStats, LaneIndex - 1};
 verify_task_and_lane_ended_notifications(Workflow,
     _WorkflowType, _LaneFinishLog, Gathered, TasksStats, LaneIndex, {box, LaneIndex, _BoxToStop}, _PrevLanesElementsCount) ->
+    % TODO VFS-7784 - verify notifications for this case
     {GatheredWithoutEndedNotifications, UpdatedTasksStats, _} =
         clean_task_and_lane_ended_notifications(Workflow, Gathered, TasksStats, LaneIndex),
     {GatheredWithoutEndedNotifications, UpdatedTasksStats, LaneIndex};
