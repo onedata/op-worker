@@ -26,7 +26,7 @@
 
 -type initial_value() :: atm_store_container:initial_value().
 
-% index() TODO WRITEME .
+% Index of automation:item() stored in atm_store_container that uniquely identifies it.
 -type index() :: binary().
 -type offset() :: integer().
 -type limit() :: pos_integer().
@@ -100,6 +100,12 @@ create(AtmWorkflowExecutionCtx, InitialValue, #atm_store_schema{
     }).
 
 
+%%-------------------------------------------------------------------
+%% @doc
+%% Returns batch of items (and their indices) directly kept at store
+%% in accordance to specified view_opts().
+%% @end
+%%-------------------------------------------------------------------
 -spec view_content(
     atm_workflow_execution_ctx:record(),
     view_opts(),
@@ -127,6 +133,14 @@ view_content(AtmWorkflowExecutionCtx, ViewOpts, AtmStoreId) ->
     end.
 
 
+%%-------------------------------------------------------------------
+%% @doc
+%% Returns 'atm_store_iterator' allowing to iterate over all values produced by
+%% store. Those values are not only items directly kept in store but also objects
+%% associated/inferred from them (e.g. in case of file tree forest store entire
+%% files subtree for each file kept in store will be traversed and returned).
+%% @end
+%%-------------------------------------------------------------------
 -spec acquire_iterator(atm_workflow_execution_env:record(), atm_store_iterator_spec:record()) ->
     atm_store_iterator:record().
 acquire_iterator(AtmWorkflowExecutionEnv, #atm_store_iterator_spec{
