@@ -574,7 +574,7 @@ prepare_next_waiting_job(State = #workflow_execution_state{
                 jobs = NewJobs
             }};
         Error ->
-            case workflow_iteration_state:get_last_registered_index(IterationState) of
+            case workflow_iteration_state:get_last_registered_item_index(IterationState) of
                 undefined -> % iteration has finished
                     handle_no_waiting_items_error(State, Error);
                 ItemIndex ->

@@ -94,6 +94,10 @@
 %%--------------------------------------------------------------------
 %% @doc
 %% Callback reporting that task has been executed for all items.
+%% Warning: there is no guarantee that callbacks for tasks are called
+%% exactly the same order as the tasks were finished.
+%% Warning: This callback can be called after call of
+%% handle_lane_execution_ended callback for task's line.
 %% @end
 %%--------------------------------------------------------------------
 -callback handle_task_execution_ended(

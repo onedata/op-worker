@@ -324,6 +324,12 @@ is_previous(#job_identifier{item_index = ItemIndex1}, #job_identifier{item_index
 
 %%%===================================================================
 %%% API used to check which tasks are finished for all items
+%%%
+%%% Tasks tree is built when iteration is finished so there is guarantee
+%%% that tasks for new items will not appear. Thus, if task tree is
+%%% undefined, the iteration is not finished so no task can be finished
+%%% for all items. If tasks tree has been built, it shows if task is
+%%% finished for all items.
 %%%===================================================================
 
 -spec is_task_finished(jobs(), job_identifier()) -> boolean().

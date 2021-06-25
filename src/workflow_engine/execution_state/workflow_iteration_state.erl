@@ -18,7 +18,7 @@
 -include("workflow_engine.hrl").
 
 %% API
--export([init/0, handle_iteration_finished/1, get_last_registered_index/1, register_new_item/3,
+-export([init/0, handle_iteration_finished/1, get_last_registered_item_index/1, register_new_item/3,
     handle_item_processed/3, get_item_id/2]).
 %% Test API
 -export([is_finished_and_cleaned/1]).
@@ -28,9 +28,9 @@
 % Item is considered as finished when all tasks for item are executed.
 -record(iteration_state, {
     pending_items = #{} :: #{workflow_execution_state:index() => workflow_cached_item:id()},
-    last_registered_iterator_index = 0 :: workflow_execution_state:index() | undefined, % undefined when iteration is
-                                                                                        % finished and all items are
-                                                                                        % registered
+    last_registered_item_index = 0 :: workflow_execution_state:index() | undefined, % undefined when iteration is
+                                                                                    % finished and all items are
+                                                                                    % registered
     first_not_finished_item_index = 1 :: workflow_execution_state:index(), % TODO VFS-7787 - maybe init as undefined?
     items_finished_ahead = gb_trees:empty() :: items_finished_ahead()
 }).
@@ -56,10 +56,10 @@ init() ->
 
 -spec handle_iteration_finished(state()) -> state().
 handle_iteration_finished(Progress) ->
-    Progress#iteration_state{last_registered_iterator_index = undefined}.
+    Progress#iteration_state{last_registered_item_index = undefined}.
 
--spec get_last_registered_index(state()) -> workflow_execution_state:index() | undefined.
-get_last_registered_index(#iteration_state{last_registered_iterator_index = Index}) ->
+-spec get_last_registered_item_index(state()) -> workflow_execution_state:index() | undefined.
+get_last_registered_item_index(#iteration_state{last_registered_item_index = Index}) ->
     Index.
 
 -spec register_new_item(state(), workflow_execution_state:index(), workflow_cached_item:id()) ->
@@ -67,7 +67,7 @@ get_last_registered_index(#iteration_state{last_registered_iterator_index = Inde
 register_new_item(
     Progress = #iteration_state{
         pending_items = Pending,
-        last_registered_iterator_index = LastItemIndex
+        last_registered_item_index = LastItemIndex
     },
     LastItemIndex,
     ItemId
@@ -75,7 +75,7 @@ register_new_item(
     NewItemIndex = LastItemIndex + 1,
     {NewItemIndex, Progress#iteration_state{
         pending_items = Pending#{NewItemIndex => ItemId},
-        last_registered_iterator_index = NewItemIndex
+        last_registered_item_index = NewItemIndex
     }};
 register_new_item(_, _, _) ->
     ?WF_ERROR_RACE_CONDITION.
@@ -213,6 +213,6 @@ get_item_id(#iteration_state{pending_items = Pending}, ItemIndex) ->
 is_finished_and_cleaned(#iteration_state{
     pending_items = Pending,
     items_finished_ahead = FinishedAhead,
-    last_registered_iterator_index = LastIteratorIndex
+    last_registered_item_index = LastIteratorIndex
 }) ->
     LastIteratorIndex =:= undefined orelse maps:size(Pending) =:= 0 andalso gb_trees:is_empty(FinishedAhead).
