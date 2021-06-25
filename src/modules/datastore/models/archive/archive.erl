@@ -111,7 +111,8 @@ create_nested(DatasetId, #document{
     key = ParentArchiveId,
     value = #archive{
         config = Config,
-        creator = Creator
+        creator = Creator,
+        description = Description
     },
     scope = SpaceId
 }) ->
@@ -124,7 +125,7 @@ create_nested(DatasetId, #document{
             state = ?ARCHIVE_BUILDING,
             config = Config,
             parent = ParentArchiveId,
-            description = <<"">>,
+            description = Description,
             stats = archive_stats:empty()
         },
         scope = SpaceId
