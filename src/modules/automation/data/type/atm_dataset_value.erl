@@ -15,7 +15,7 @@
 
 -behaviour(atm_data_validator).
 -behaviour(atm_data_compressor).
--behaviour(atm_tree_forest_container_iterator).
+-behaviour(atm_tree_forest_store_container_iterator).
 
 -include("modules/automation/atm_tmp.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
@@ -57,7 +57,7 @@ assert_meets_constraints(AtmWorkflowExecutionCtx, #{<<"datasetId">> := DatasetId
 
 
 %%%===================================================================
-%%% atm_tree_forest_container_iterator callbacks
+%%% atm_tree_forest_store_container_iterator callbacks
 %%%===================================================================
 
 

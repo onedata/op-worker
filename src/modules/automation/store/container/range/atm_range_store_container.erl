@@ -6,20 +6,20 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module implements `atm_container` functionality for `range`
+%%% This module implements `atm_store_container` functionality for `range`
 %%% atm_store type.
 %%% @end
 %%%-------------------------------------------------------------------
--module(atm_range_container).
+-module(atm_range_store_container).
 -author("Bartosz Walkowicz").
 
--behaviour(atm_container).
+-behaviour(atm_store_container).
 -behaviour(persistent_record).
 
 -include("modules/automation/atm_tmp.hrl").
 -include_lib("ctool/include/errors.hrl").
 
-%% atm_container callbacks
+%% atm_store_container callbacks
 -export([
     create/3,
     get_data_spec/1, view_content/3, acquire_iterator/1,
@@ -43,49 +43,49 @@
 -type initial_value() :: #{binary() => integer()}.
 -type operation_options() :: #{binary() => boolean()}.
 
--record(atm_range_container, {
+-record(atm_range_store_container, {
     data_spec :: atm_data_spec:record(),
     start_num :: integer(),
     end_num :: integer(),
     step :: integer()
 }).
--type record() :: #atm_range_container{}.
+-type record() :: #atm_range_store_container{}.
 
 -export_type([initial_value/0, operation_options/0, record/0]).
 
 
 %%%===================================================================
-%%% atm_container callbacks
+%%% atm_store_container callbacks
 %%%===================================================================
 
 
--spec create(atm_data_spec:record(), initial_value(), atm_workflow_execution_ctx:record()) ->
+-spec create(atm_workflow_execution_ctx:record(), atm_data_spec:record(), initial_value()) ->
     record() | no_return().
-create(AtmDataSpec, #{<<"end">> := EndNum} = InitialArgs, AtmWorkflowExecutionCtx) ->
+create(AtmWorkflowExecutionCtx, AtmDataSpec, #{<<"end">> := EndNum} = InitialArgs) ->
     StartNum = maps:get(<<"start">>, InitialArgs, 0),
     Step = maps:get(<<"step">>, InitialArgs, 1),
 
     assert_supported_data_spec(AtmDataSpec),
     validate_range(AtmWorkflowExecutionCtx, AtmDataSpec, StartNum, EndNum, Step),
 
-    #atm_range_container{
+    #atm_range_store_container{
         data_spec = AtmDataSpec,
         start_num = StartNum,
         end_num = EndNum,
         step = Step
     };
-create(_AtmDataSpec, _InitialArgs, _AtmWorkflowExecutionCtx) ->
+create(_AtmWorkflowExecutionCtx, _AtmDataSpec, _InitialArgs) ->
     throw(?ERROR_MISSING_REQUIRED_VALUE(<<"end">>)).
 
 
 -spec get_data_spec(record()) -> atm_data_spec:record().
-get_data_spec(#atm_range_container{data_spec = AtmDataSpec}) ->
+get_data_spec(#atm_range_store_container{data_spec = AtmDataSpec}) ->
     AtmDataSpec.
 
 
 -spec view_content(atm_workflow_execution_ctx:record(), atm_store_api:view_opts(), record()) ->
-    {ok, [{atm_store_api:index(), automation:item()}], IsLast :: boolean()} | no_return().
-view_content(_AtmWorkflowExecutionCtx, _Opts, #atm_range_container{
+    {ok, [{atm_store_api:index(), automation:item()}], true} | no_return().
+view_content(_AtmWorkflowExecutionCtx, _Opts, #atm_range_store_container{
     start_num = StartNum,
     end_num = EndNum,
     step = Step
@@ -98,17 +98,17 @@ view_content(_AtmWorkflowExecutionCtx, _Opts, #atm_range_container{
     {ok, [{<<>>, Content}], true}.
 
 
--spec acquire_iterator(record()) -> atm_range_container_iterator:record().
-acquire_iterator(#atm_range_container{
+-spec acquire_iterator(record()) -> atm_range_store_container_iterator:record().
+acquire_iterator(#atm_range_store_container{
     start_num = StartNum,
     end_num = EndNum,
     step = Step
 }) ->
-    atm_range_container_iterator:build(StartNum, EndNum, Step).
+    atm_range_store_container_iterator:build(StartNum, EndNum, Step).
 
 
--spec apply_operation(record(), atm_container:operation()) -> no_return().
-apply_operation(_Record, _AtmContainerOperation) ->
+-spec apply_operation(record(), atm_store_container:operation()) -> no_return().
+apply_operation(_Record, _AtmStoreContainerOperation) ->
     throw(?ERROR_NOT_SUPPORTED).
 
 
@@ -129,7 +129,7 @@ version() ->
 
 -spec db_encode(record(), persistent_record:nested_record_encoder()) ->
     json_utils:json_term().
-db_encode(#atm_range_container{
+db_encode(#atm_range_store_container{
     data_spec = AtmDataSpec,
     start_num = StartNum,
     end_num = EndNum,
@@ -151,7 +151,7 @@ db_decode(#{
     <<"end">> := EndNum,
     <<"step">> := Step
 }, NestedRecordDecoder) ->
-    #atm_range_container{
+    #atm_range_store_container{
         data_spec = NestedRecordDecoder(AtmDataSpecJson, atm_data_spec),
         start_num = StartNum,
         end_num = EndNum,

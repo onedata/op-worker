@@ -73,9 +73,9 @@ create_store(ProviderSelector, AtmWorkflowExecutionCtx, InitialValue, AtmStoreSc
 -spec apply_operation(
     oct_background:entity_selector(),
     atm_workflow_execution_ctx:record(),
-    atm_container:operation(),
+    atm_store_container:operation(),
     automation:item(),
-    atm_container:operation_options(),
+    atm_store_container:operation_options(),
     atm_store:id()
 ) ->
     ok | {error, term()}.

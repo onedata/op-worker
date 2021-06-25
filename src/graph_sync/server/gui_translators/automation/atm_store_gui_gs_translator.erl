@@ -30,9 +30,10 @@ translate_resource(#gri{aspect = instance, scope = private}, #atm_store{
     schema_id = AtmStoreSchemaId,
     initial_value = InitialValue,
     frozen = Frozen,
-    type = AtmStoreType,
-    container = AtmContainer
+    container = AtmsStoreContainer
 }) ->
+    AtmDataSpec = atm_store_container:get_data_spec(AtmsStoreContainer),
+
     #{
         <<"atmWorkflowExecution">> => gri:serialize(#gri{
             type = op_atm_workflow_execution, id = AtmWorkflowExecutionId,
@@ -43,9 +44,6 @@ translate_resource(#gri{aspect = instance, scope = private}, #atm_store{
         <<"initialValue">> => InitialValue,
         <<"frozen">> => Frozen,
 
-        <<"type">> => AtmStoreType,
-        <<"dataSpec">> => jsonable_record:to_json(
-            atm_container:get_data_spec(AtmContainer),
-            atm_data_spec
-        )
+        <<"type">> => atm_store_container:get_store_type(AtmsStoreContainer),
+        <<"dataSpec">> => jsonable_record:to_json(AtmDataSpec, atm_data_spec)
     }.

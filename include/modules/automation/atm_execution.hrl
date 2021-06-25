@@ -39,9 +39,9 @@
     store_initial_values :: atm_workflow_execution_api:store_initial_values()
 }).
 
--record(atm_container_operation, {
-    type :: atm_container:operation_type(),
-    options :: atm_container:operation_options(),
+-record(atm_store_container_operation, {
+    type :: atm_store_container:operation_type(),
+    options :: atm_store_container:operation_options(),
     value :: automation:item(),
     workflow_execution_ctx :: atm_workflow_execution_ctx:record()
 }).

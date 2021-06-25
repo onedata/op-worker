@@ -6,20 +6,20 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module implements `atm_container` functionality for `list`
+%%% This module implements `atm_store_container` functionality for `list`
 %%% atm_store type.
 %%% @end
 %%%-------------------------------------------------------------------
--module(atm_list_container).
+-module(atm_list_store_container).
 -author("Michal Stanisz").
 
--behaviour(atm_container).
+-behaviour(atm_store_container).
 -behaviour(persistent_record).
 
 -include("modules/automation/atm_execution.hrl").
 -include_lib("ctool/include/errors.hrl").
 
-%% atm_container callbacks
+%% atm_store_container callbacks
 -export([
     create/3,
     get_data_spec/1, view_content/3, acquire_iterator/1,
@@ -44,38 +44,38 @@
 % id of underlying persistent record implemented by `atm_list_store_backend`
 -type backend_id() :: binary().
 
--record(atm_list_container, {
+-record(atm_list_store_container, {
     data_spec :: atm_data_spec:record(),
     backend_id :: backend_id()
 }).
--type record() :: #atm_list_container{}.
+-type record() :: #atm_list_store_container{}.
 
 -export_type([initial_value/0, operation_options/0, backend_id/0, record/0]).
 
 
 %%%===================================================================
-%%% atm_container callbacks
+%%% atm_store_container callbacks
 %%%===================================================================
 
 
--spec create(atm_data_spec:record(), initial_value(), atm_workflow_execution_ctx:record()) ->
+-spec create(atm_workflow_execution_ctx:record(), atm_data_spec:record(), initial_value()) ->
     record() | no_return().
-create(AtmDataSpec, undefined, _AtmWorkflowExecutionCtx) ->
+create(_AtmWorkflowExecutionCtx, AtmDataSpec, undefined) ->
     create_container(AtmDataSpec);
 
-create(AtmDataSpec, InitialValueBatch, AtmWorkflowExecutionCtx) ->
+create(AtmWorkflowExecutionCtx, AtmDataSpec, InitialValueBatch) ->
     validate_data_batch(AtmWorkflowExecutionCtx, AtmDataSpec, InitialValueBatch),
     append_insecure(InitialValueBatch, create_container(AtmDataSpec)).
 
 
 -spec get_data_spec(record()) -> atm_data_spec:record().
-get_data_spec(#atm_list_container{data_spec = AtmDataSpec}) ->
+get_data_spec(#atm_list_store_container{data_spec = AtmDataSpec}) ->
     AtmDataSpec.
 
 
 -spec view_content(atm_workflow_execution_ctx:record(), atm_store_api:view_opts(), record()) ->
     {ok, [{atm_store_api:index(), automation:item()}], IsLast :: boolean()} | no_return().
-view_content(AtmWorkflowExecutionCtx, ViewOpts, #atm_list_container{
+view_content(AtmWorkflowExecutionCtx, ViewOpts, #atm_list_store_container{
     data_spec = AtmDataSpec,
     backend_id = BackendId
 }) ->
@@ -105,14 +105,14 @@ view_content(AtmWorkflowExecutionCtx, ViewOpts, #atm_list_container{
     {ok, ExpandedEntries, Marker =:= done}.
 
 
--spec acquire_iterator(record()) -> atm_list_container_iterator:record().
-acquire_iterator(#atm_list_container{backend_id = BackendId}) ->
-    atm_list_container_iterator:build(BackendId).
+-spec acquire_iterator(record()) -> atm_list_store_container_iterator:record().
+acquire_iterator(#atm_list_store_container{backend_id = BackendId}) ->
+    atm_list_store_container_iterator:build(BackendId).
 
 
--spec apply_operation(record(), atm_container:operation()) ->
+-spec apply_operation(record(), atm_store_container:operation()) ->
     record() | no_return().
-apply_operation(#atm_list_container{data_spec = AtmDataSpec} = Record, #atm_container_operation{
+apply_operation(#atm_list_store_container{data_spec = AtmDataSpec} = Record, #atm_store_container_operation{
     type = append,
     options = #{<<"isBatch">> := true},
     value = Batch,
@@ -121,22 +121,22 @@ apply_operation(#atm_list_container{data_spec = AtmDataSpec} = Record, #atm_cont
     validate_data_batch(AtmWorkflowExecutionCtx, AtmDataSpec, Batch),
     append_insecure(Batch, Record);
 
-apply_operation(#atm_list_container{} = Record, AtmContainerOperation = #atm_container_operation{
+apply_operation(#atm_list_store_container{} = Record, Operation = #atm_store_container_operation{
     type = append,
     value = Item,
     options = Options
 }) ->
-    apply_operation(Record, AtmContainerOperation#atm_container_operation{
+    apply_operation(Record, Operation#atm_store_container_operation{
         options = Options#{<<"isBatch">> => true},
         value = [Item]
     });
 
-apply_operation(_Record, _AtmContainerOperation) ->
+apply_operation(_Record, _Operation) ->
     throw(?ERROR_NOT_SUPPORTED).
 
 
 -spec delete(record()) -> ok.
-delete(#atm_list_container{backend_id = BackendId}) ->
+delete(#atm_list_store_container{backend_id = BackendId}) ->
     atm_list_store_backend:destroy(BackendId).
 
 
@@ -152,7 +152,7 @@ version() ->
 
 -spec db_encode(record(), persistent_record:nested_record_encoder()) ->
     json_utils:json_term().
-db_encode(#atm_list_container{
+db_encode(#atm_list_store_container{
     data_spec = AtmDataSpec,
     backend_id = BackendId
 }, NestedRecordEncoder) ->
@@ -165,7 +165,7 @@ db_encode(#atm_list_container{
 -spec db_decode(json_utils:json_term(), persistent_record:nested_record_decoder()) ->
     record().
 db_decode(#{<<"dataSpec">> := AtmDataSpecJson, <<"backendId">> := BackendId}, NestedRecordDecoder) ->
-    #atm_list_container{
+    #atm_list_store_container{
         data_spec = NestedRecordDecoder(AtmDataSpecJson, atm_data_spec),
         backend_id = BackendId
     }.
@@ -180,7 +180,7 @@ db_decode(#{<<"dataSpec">> := AtmDataSpecJson, <<"backendId">> := BackendId}, Ne
 -spec create_container(atm_data_spec:record()) -> record().
 create_container(AtmDataSpec) ->
     {ok, Id} = atm_list_store_backend:create(#{}),
-    #atm_list_container{
+    #atm_list_store_container{
         data_spec = AtmDataSpec,
         backend_id = Id
     }.
@@ -203,7 +203,10 @@ validate_data_batch(_AtmWorkflowExecutionCtx, _AtmDataSpec, _Item) ->
 
 %% @private
 -spec append_insecure([automation:item()], record()) -> record().
-append_insecure(Batch, #atm_list_container{data_spec = AtmDataSpec, backend_id = BackendId} = Record) ->
+append_insecure(Batch, Record = #atm_list_store_container{
+    data_spec = AtmDataSpec,
+    backend_id = BackendId
+}) ->
     lists:foreach(fun(Item) ->
         CompressedItem = atm_value:compress(Item, AtmDataSpec),
         ok = atm_list_store_backend:append(BackendId, json_utils:encode(CompressedItem))

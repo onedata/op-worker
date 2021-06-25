@@ -24,7 +24,7 @@
     delete_all/1, delete/1
 ]).
 
--type initial_value() :: atm_container:initial_value().
+-type initial_value() :: atm_store_container:initial_value().
 
 % index() TODO WRITEME .
 -type index() :: binary().
@@ -85,7 +85,6 @@ create(AtmWorkflowExecutionCtx, InitialValue, #atm_store_schema{
     type = StoreType,
     data_spec = AtmDataSpec
 }) ->
-    ContainerModel = get_container_type_for_store(StoreType),
     ActualInitialValue = utils:ensure_defined(InitialValue, DefaultInitialValue),
 
     {ok, _} = atm_store:create(#atm_store{
@@ -95,9 +94,8 @@ create(AtmWorkflowExecutionCtx, InitialValue, #atm_store_schema{
         schema_id = AtmStoreSchemaId,
         initial_value = ActualInitialValue,
         frozen = false,
-        type = StoreType,
-        container = atm_container:create(
-            ContainerModel, AtmDataSpec, ActualInitialValue, AtmWorkflowExecutionCtx
+        container = atm_store_container:create(
+            StoreType, AtmWorkflowExecutionCtx, AtmDataSpec, ActualInitialValue
         )
     }).
 
@@ -108,7 +106,7 @@ create(AtmWorkflowExecutionCtx, InitialValue, #atm_store_schema{
     atm_store:id() | atm_store:record()
 ) ->
     {ok, [{index(), automation:item()}], IsLast :: boolean()} | no_return().
-view_content(AtmWorkflowExecutionCtx, ViewOpts, #atm_store{container = AtmContainer}) ->
+view_content(AtmWorkflowExecutionCtx, ViewOpts, #atm_store{container = AtmStoreContainer}) ->
     SanitizedViewOpts = middleware_sanitizer:sanitize_data(ViewOpts, #{
         required => #{
             limit => {integer, {not_lower_than, 1}}
@@ -118,7 +116,7 @@ view_content(AtmWorkflowExecutionCtx, ViewOpts, #atm_store{container = AtmContai
             start_index => {binary, any}
         }
     }),
-    atm_container:view_content(AtmWorkflowExecutionCtx, SanitizedViewOpts, AtmContainer);
+    atm_store_container:view_content(AtmWorkflowExecutionCtx, SanitizedViewOpts, AtmStoreContainer);
 
 view_content(AtmWorkflowExecutionCtx, ViewOpts, AtmStoreId) ->
     case atm_store:get(AtmStoreId) of
@@ -135,8 +133,8 @@ acquire_iterator(AtmWorkflowExecutionEnv, #atm_store_iterator_spec{
     store_schema_id = AtmStoreSchemaId
 } = AtmStoreIteratorConfig) ->
     AtmStoreId = atm_workflow_execution_env:get_store_id(AtmStoreSchemaId, AtmWorkflowExecutionEnv),
-    {ok, #atm_store{container = AtmContainer}} = atm_store:get(AtmStoreId),
-    atm_store_iterator:build(AtmStoreIteratorConfig, AtmContainer).
+    {ok, #atm_store{container = AtmStoreContainer}} = atm_store:get(AtmStoreId),
+    atm_store_iterator:build(AtmStoreIteratorConfig, AtmStoreContainer).
 
 
 -spec freeze(atm_store:id()) -> ok.
@@ -155,9 +153,9 @@ unfreeze(AtmStoreId) ->
 
 -spec apply_operation(
     atm_workflow_execution_ctx:record(),
-    atm_container:operation_type(),
+    atm_store_container:operation_type(),
     automation:item(),
-    atm_container:operation_options(),
+    atm_store_container:operation_options(),
     atm_store:id()
 ) ->
     ok | no_return().
@@ -167,15 +165,18 @@ apply_operation(AtmWorkflowExecutionCtx, Operation, Item, Options, AtmStoreId) -
     %   * store only one value and it will be overwritten 
     %   * do not support any operation
     case atm_store:get(AtmStoreId) of
-        {ok, #atm_store{container = AtmContainer, frozen = false}} ->
-            UpdatedContainer = atm_container:apply_operation(AtmContainer, #atm_container_operation{
+        {ok, #atm_store{container = AtmStoreContainer, frozen = false}} ->
+            AtmStoreContainerOperation = #atm_store_container_operation{
                 type = Operation,
                 options = Options,
                 value = Item,
                 workflow_execution_ctx = AtmWorkflowExecutionCtx
-            }),
+            },
+            UpdatedAtmStoreContainer = atm_store_container:apply_operation(
+                AtmStoreContainer, AtmStoreContainerOperation
+            ),
             atm_store:update(AtmStoreId, fun(#atm_store{} = PrevStore) ->
-                {ok, PrevStore#atm_store{container = UpdatedContainer}}
+                {ok, PrevStore#atm_store{container = UpdatedAtmStoreContainer}}
             end);
         {ok, #atm_store{schema_id = AtmStoreSchemaId, frozen = true}} ->
             throw(?ERROR_ATM_STORE_FROZEN(AtmStoreSchemaId));
@@ -192,23 +193,9 @@ delete_all(AtmStoreIds) ->
 -spec delete(atm_store:id()) -> ok | {error, term()}.
 delete(AtmStoreId) ->
     case atm_store:get(AtmStoreId) of
-        {ok, #atm_store{container = AtmContainer}} ->
-            atm_container:delete(AtmContainer),
+        {ok, #atm_store{container = AtmStoreContainer}} ->
+            atm_store_container:delete(AtmStoreContainer),
             atm_store:delete(AtmStoreId);
         ?ERROR_NOT_FOUND ->
             ok
     end.
-
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-
-%% @private
--spec get_container_type_for_store(automation:store_type()) ->
-    atm_container:type().
-get_container_type_for_store(list) -> atm_list_container;
-get_container_type_for_store(range) -> atm_range_container;
-get_container_type_for_store(single_value) -> atm_single_value_container;
-get_container_type_for_store(tree_forest) -> atm_tree_forest_container.
