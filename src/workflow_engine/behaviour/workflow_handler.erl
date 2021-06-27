@@ -94,6 +94,12 @@
 %%--------------------------------------------------------------------
 %% @doc
 %% Callback reporting that task has been executed for all items.
+%% Warning: there is no guarantee that callbacks for tasks are called
+%% exactly the same order as the tasks were finished.
+%% Warning: This callback can be called after call of
+%% handle_lane_execution_ended callback for task's line.
+%% TODO VFS-VFS-7848 - pause further processing until notification
+%% callback is processed
 %% @end
 %%--------------------------------------------------------------------
 -callback handle_task_execution_ended(
@@ -117,5 +123,18 @@
     workflow_engine:execution_id(),
     workflow_engine:execution_context(),
     workflow_execution_state:index()
+) ->
+    ok.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Callback reporting that all tasks in given workflow have been
+%% executed for all items. It will be called exactly once.
+%% @end
+%%--------------------------------------------------------------------
+-callback handle_workflow_execution_ended(
+    workflow_engine:execution_id(),
+    workflow_engine:execution_context()
 ) ->
     ok.

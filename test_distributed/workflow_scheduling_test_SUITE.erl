@@ -77,11 +77,15 @@ single_workflow_execution_test_base(Config, WorkflowType, Id) ->
     ?assertEqual(ok, rpc:call(Worker, workflow_engine, execute_workflow, [?ENGINE_ID, Workflow])),
 
     Expected = get_expected_task_execution_order(Workflow),
-    #{execution_history := ExecutionHistory} = ExtendedHistoryStats = get_task_execution_history(Config),
+    #{execution_history := ExecutionHistory, lane_finish_log := LaneFinishLog} = ExtendedHistoryStats =
+        get_task_execution_history(Config),
     verify_execution_history_stats(ExtendedHistoryStats, WorkflowType),
     ?assertNotEqual(timeout, ExecutionHistory),
     ExecutionHistoryWithoutPrepare = verify_preparation_phase(Id, ExecutionHistory),
-    verify_execution_history(Expected, ExecutionHistoryWithoutPrepare, WorkflowType),
+    ExecutionHistoryWithoutFinishMessage = verify_finish_notification(Id, ExecutionHistoryWithoutPrepare),
+    ExecutionHistoryWithoutEndedNotifications = verify_task_and_lane_ended_notifications(
+        Workflow, WorkflowType, maps:get(Id, LaneFinishLog, #{}), ExecutionHistoryWithoutFinishMessage),
+    verify_execution_history(Expected, ExecutionHistoryWithoutEndedNotifications, WorkflowType),
     verify_memory(Config, InitialKeys),
     ok.
 
@@ -117,7 +121,8 @@ multiple_workflow_execution_test_base(Config, WorkflowType) ->
 
     verify_executions_started(length(Workflows)),
 
-    #{execution_history := ExecutionHistory} = ExtendedHistoryStats = get_task_execution_history(Config),
+    #{execution_history := ExecutionHistory, lane_finish_log := LaneFinishLog} = ExtendedHistoryStats =
+        get_task_execution_history(Config),
     verify_execution_history_stats(ExtendedHistoryStats, WorkflowType, length(Workflows), false),
     ?assertNotEqual(timeout, ExecutionHistory),
 
@@ -147,7 +152,10 @@ multiple_workflow_execution_test_base(Config, WorkflowType) ->
         LanesDefinitions = get_expected_task_execution_order(Workflow),
         WorkflowExecutionHistory = maps:get(ExecutionId, ExecutionHistoryMap),
         ExecutionHistoryWithoutPrepare = verify_preparation_phase(ExecutionId, lists:reverse(WorkflowExecutionHistory)),
-        verify_execution_history(LanesDefinitions, ExecutionHistoryWithoutPrepare, WorkflowType)
+        ExecutionHistoryWithoutFinishMessage = verify_finish_notification(ExecutionId, ExecutionHistoryWithoutPrepare),
+        ExecutionHistoryWithoutEndedNotifications = verify_task_and_lane_ended_notifications(
+            Workflow, WorkflowType, maps:get(ExecutionId, LaneFinishLog, #{}), ExecutionHistoryWithoutFinishMessage),
+        verify_execution_history(LanesDefinitions, ExecutionHistoryWithoutEndedNotifications, WorkflowType)
     end, lists:zip(Ids, Workflows)),
 
     verify_memory(Config, InitialKeys),
@@ -175,28 +183,36 @@ failure_test_base(Config, Id, TaskToFail, LaneWithErrorIndex, BoxWithErrorIndex)
         execution_context => #{type => WorkflowType, async_call_pools => [?ASYNC_CALL_POOL_ID]}
     },
 
-    ItemToFail = <<"100">>,
+    ItemToFail = <<"5">>,
     set_task_execution_gatherer_option(Config, fail_job, {TaskToFail, ItemToFail}),
     ?assertEqual(ok, rpc:call(Worker, workflow_engine, execute_workflow, [?ENGINE_ID, Workflow])),
 
     Expected = get_expected_task_execution_order_with_error(
         Workflow, LaneWithErrorIndex, BoxWithErrorIndex, ItemToFail, TaskToFail),
-    #{execution_history := ExecutionHistory} = ExtendedHistoryStats = get_task_execution_history(Config),
+    #{execution_history := ExecutionHistory, lane_finish_log := LaneFinishLog} = ExtendedHistoryStats =
+        get_task_execution_history(Config),
     verify_execution_history_stats(ExtendedHistoryStats, WorkflowType),
     ?assertNotEqual(timeout, ExecutionHistory),
     ExecutionHistoryWithoutPrepare = verify_preparation_phase(Id, ExecutionHistory),
-    verify_execution_history(Expected, ExecutionHistoryWithoutPrepare, WorkflowType),
+    ExecutionHistoryWithoutFinishMessage = verify_finish_notification(Id, ExecutionHistoryWithoutPrepare),
+    ExecutionHistoryWithoutEndedNotifications = verify_task_and_lane_ended_notifications(Workflow, WorkflowType,
+        maps:get(Id, LaneFinishLog, #{}), ExecutionHistoryWithoutFinishMessage, {lane, 1}, {box, LaneWithErrorIndex, BoxWithErrorIndex}),
+    verify_execution_history(Expected, ExecutionHistoryWithoutEndedNotifications, WorkflowType),
     verify_memory(Config, InitialKeys, true),
     ct:print("Execution with error verified"),
 
     unset_task_execution_gatherer_option(Config, fail_job),
     ExpectedAfterRestart = get_expected_task_execution_order_after_restart(Workflow, LaneWithErrorIndex, ItemToFail),
     ?assertEqual(ok, rpc:call(Worker, workflow_engine, execute_workflow, [?ENGINE_ID, Workflow])),
-    #{execution_history := ExecutionHistoryAfterRestart} = ExtendedHistoryStatsAfterRestart =
-        get_task_execution_history(Config),
+    #{execution_history := ExecutionHistoryAfterRestart, lane_finish_log := LaneFinishLogAfterRestart} =
+        ExtendedHistoryStatsAfterRestart = get_task_execution_history(Config),
     verify_execution_history_stats(ExtendedHistoryStatsAfterRestart, WorkflowType, 1, true),
     ?assertNotEqual(timeout, ExecutionHistoryAfterRestart),
-    verify_execution_history(ExpectedAfterRestart, ExecutionHistoryAfterRestart, WorkflowType),
+    ExecutionHistoryAfterRestartWithoutFinishMessage = verify_finish_notification(Id, ExecutionHistoryAfterRestart),
+    ExecutionHistoryAfterRestartWithoutEndedNotifications = verify_task_and_lane_ended_notifications(Workflow, WorkflowType,
+        maps:get(Id, LaneFinishLogAfterRestart, #{}), ExecutionHistoryAfterRestartWithoutFinishMessage,
+        {box, LaneWithErrorIndex, BoxWithErrorIndex}),
+    verify_execution_history(ExpectedAfterRestart, ExecutionHistoryAfterRestartWithoutEndedNotifications, WorkflowType),
     verify_memory(Config, InitialKeys),
     ok.
 
@@ -222,22 +238,30 @@ timeout_test(Config, TaskToFail, LaneWithErrorIndex, BoxWithErrorIndex) ->
 
     Expected = get_expected_task_execution_order_with_timeout(
         Workflow, LaneWithErrorIndex, BoxWithErrorIndex, ItemToFail, TaskToFail),
-    #{execution_history := ExecutionHistory} = ExtendedHistoryStats = get_task_execution_history(Config),
+    #{execution_history := ExecutionHistory, lane_finish_log := LaneFinishLog} = ExtendedHistoryStats =
+        get_task_execution_history(Config),
     verify_execution_history_stats(ExtendedHistoryStats, WorkflowType),
     ?assertNotEqual(timeout, ExecutionHistory),
     ExecutionHistoryWithoutPrepare = verify_preparation_phase(Id, ExecutionHistory),
-    verify_execution_history(Expected, ExecutionHistoryWithoutPrepare, WorkflowType),
+    ExecutionHistoryWithoutFinishMessage = verify_finish_notification(Id, ExecutionHistoryWithoutPrepare),
+    ExecutionHistoryWithoutEndedNotifications = verify_task_and_lane_ended_notifications(Workflow, WorkflowType,
+        maps:get(Id, LaneFinishLog, #{}), ExecutionHistoryWithoutFinishMessage, {lane, 1}, {box, LaneWithErrorIndex, BoxWithErrorIndex}),
+    verify_execution_history(Expected, ExecutionHistoryWithoutEndedNotifications, WorkflowType),
     verify_memory(Config, InitialKeys, true),
     ct:print("Execution with error verified"),
 
     unset_task_execution_gatherer_option(Config, fail_job),
     ExpectedAfterRestart = get_expected_task_execution_order_after_restart(Workflow, LaneWithErrorIndex, ItemToFail),
     ?assertEqual(ok, rpc:call(Worker, workflow_engine, execute_workflow, [?ENGINE_ID, Workflow])),
-    #{execution_history := ExecutionHistoryAfterRestart} = ExtendedHistoryStatsAfterRestart =
-        get_task_execution_history(Config),
+    #{execution_history := ExecutionHistoryAfterRestart, lane_finish_log := LaneFinishLogAfterRestart} =
+        ExtendedHistoryStatsAfterRestart = get_task_execution_history(Config),
     verify_execution_history_stats(ExtendedHistoryStatsAfterRestart, WorkflowType, 1, true),
     ?assertNotEqual(timeout, ExecutionHistoryAfterRestart),
-    verify_execution_history(ExpectedAfterRestart, ExecutionHistoryAfterRestart, WorkflowType),
+    ExecutionHistoryAfterRestartWithoutFinishMessage = verify_finish_notification(Id, ExecutionHistoryAfterRestart),
+    ExecutionHistoryAfterRestartWithoutEndedNotifications = verify_task_and_lane_ended_notifications(Workflow, WorkflowType,
+        maps:get(Id, LaneFinishLogAfterRestart, #{}), ExecutionHistoryAfterRestartWithoutFinishMessage,
+        {box, LaneWithErrorIndex, BoxWithErrorIndex}),
+    verify_execution_history(ExpectedAfterRestart, ExecutionHistoryAfterRestartWithoutEndedNotifications, WorkflowType),
     verify_memory(Config, InitialKeys),
     ok.
 
@@ -266,20 +290,22 @@ preparation_failure_test(Config) ->
     #{execution_history := ExecutionHistory} = get_task_execution_history(Config),
     ?assertNotEqual(timeout, ExecutionHistory),
     ExecutionHistoryWithoutPrepare = verify_preparation_phase(Id, ExecutionHistory),
-    ?assertEqual([], ExecutionHistoryWithoutPrepare),
+    ?assertEqual([], verify_finish_notification(Id, ExecutionHistoryWithoutPrepare)),
     verify_memory(Config, InitialKeys),
     ct:print("Execution with error verified"),
 
     unset_task_execution_gatherer_option(Config, fail_preparation),
     ExpectedAfterRestart = get_expected_task_execution_order(Workflow),
     ?assertEqual(ok, rpc:call(Worker, workflow_engine, execute_workflow, [?ENGINE_ID, Workflow])),
-    #{execution_history := ExecutionHistoryAfterRestart} = ExtendedHistoryStatsAfterRestart =
-        get_task_execution_history(Config),
+    #{execution_history := ExecutionHistoryAfterRestart, lane_finish_log := LaneFinishLog} =
+        ExtendedHistoryStatsAfterRestart = get_task_execution_history(Config),
     verify_execution_history_stats(ExtendedHistoryStatsAfterRestart, WorkflowType),
     ?assertNotEqual(timeout, ExecutionHistoryAfterRestart),
     ExecutionHistoryAfterRestartWithoutPrepare = verify_preparation_phase(Id, ExecutionHistoryAfterRestart),
-
-    verify_execution_history(ExpectedAfterRestart, ExecutionHistoryAfterRestartWithoutPrepare, WorkflowType),
+    ExecutionHistoryWithoutFinishMessage = verify_finish_notification(Id, ExecutionHistoryAfterRestartWithoutPrepare),
+    ExecutionHistoryWithoutEndedNotifications = verify_task_and_lane_ended_notifications(
+        Workflow, WorkflowType, maps:get(Id, LaneFinishLog, #{}), ExecutionHistoryWithoutFinishMessage),
+    verify_execution_history(ExpectedAfterRestart, ExecutionHistoryWithoutEndedNotifications, WorkflowType),
     verify_memory(Config, InitialKeys),
     ok.
 
@@ -301,7 +327,7 @@ lane_preparation_failure_test(Config) ->
     #{execution_history := ExecutionHistoryWithoutTasks} = get_task_execution_history(Config),
     ?assertNotEqual(timeout, ExecutionHistoryWithoutTasks),
     ExecutionHistoryWithoutTasksAndPrepare = verify_preparation_phase(Id, ExecutionHistoryWithoutTasks),
-    ?assertEqual([], ExecutionHistoryWithoutTasksAndPrepare),
+    ?assertEqual([], verify_finish_notification(Id, ExecutionHistoryWithoutTasksAndPrepare)),
     verify_memory(Config, InitialKeys),
     ct:print("Execution with error verified"),
 
@@ -309,22 +335,29 @@ lane_preparation_failure_test(Config) ->
     ?assertEqual(ok, rpc:call(Worker, workflow_engine, execute_workflow, [?ENGINE_ID, Workflow])),
 
     Expected = get_expected_task_execution_order_with_lane_preparation_error(Workflow, 3),
-    #{execution_history := ExecutionHistory} = ExtendedHistoryStats = get_task_execution_history(Config),
+    #{execution_history := ExecutionHistory, lane_finish_log := LaneFinishLog} = ExtendedHistoryStats =
+        get_task_execution_history(Config),
     verify_execution_history_stats(ExtendedHistoryStats, WorkflowType),
     ?assertNotEqual(timeout, ExecutionHistory),
     ExecutionHistoryWithoutPrepare = verify_preparation_phase(Id, ExecutionHistory),
-    verify_execution_history(Expected, ExecutionHistoryWithoutPrepare, WorkflowType),
+    ExecutionHistoryWithoutFinishMessage = verify_finish_notification(Id, ExecutionHistoryWithoutPrepare),
+    ExecutionHistoryWithoutEndedNotifications = verify_task_and_lane_ended_notifications(
+        Workflow, WorkflowType, maps:get(Id, LaneFinishLog, #{}), ExecutionHistoryWithoutFinishMessage, {lane, 1}, {lane, 3}),
+    verify_execution_history(Expected, ExecutionHistoryWithoutEndedNotifications, WorkflowType),
     verify_memory(Config, InitialKeys, true),
     ct:print("Execution with secoond error verified"),
 
     unset_task_execution_gatherer_option(Config, fail_lane_preparation),
     ExpectedAfterRestart = get_expected_task_execution_order_after_restart(Workflow, 3, <<"0">>),
     ?assertEqual(ok, rpc:call(Worker, workflow_engine, execute_workflow, [?ENGINE_ID, Workflow])),
-    #{execution_history := ExecutionHistoryAfterRestart} = ExtendedHistoryStatsAfterRestart =
-        get_task_execution_history(Config),
+    #{execution_history := ExecutionHistoryAfterRestart, lane_finish_log := LaneFinishLogAfterRestart} =
+        ExtendedHistoryStatsAfterRestart = get_task_execution_history(Config),
     verify_execution_history_stats(ExtendedHistoryStatsAfterRestart, WorkflowType, 1, true),
     ?assertNotEqual(timeout, ExecutionHistoryAfterRestart),
-    verify_execution_history(ExpectedAfterRestart, ExecutionHistoryAfterRestart, WorkflowType),
+    ExecutionHistoryAfterRestartWithoutFinishMessage = verify_finish_notification(Id, ExecutionHistoryAfterRestart),
+    ExecutionHistoryAfterRestartWithoutEndedNotifications = verify_task_and_lane_ended_notifications(Workflow,
+        WorkflowType, maps:get(Id, LaneFinishLogAfterRestart, #{}), ExecutionHistoryAfterRestartWithoutFinishMessage, {lane, 3}),
+    verify_execution_history(ExpectedAfterRestart, ExecutionHistoryAfterRestartWithoutEndedNotifications, WorkflowType),
     verify_memory(Config, InitialKeys),
     ok.
 
@@ -364,7 +397,7 @@ init_per_testcase(_, Config) ->
     test_utils:mock_new(Workers, [workflow_test_handler, workflow_engine_callback_handler]),
 
     test_utils:mock_expect(Workers, workflow_test_handler, prepare, fun(ExecutionId, Context) ->
-        Master ! {preparation, self(), <<ExecutionId/binary, "_prepare">>},
+        Master ! {callback_processing, self(), <<ExecutionId/binary, "_prepare">>},
         receive
             history_saved -> meck:passthrough([ExecutionId, Context]);
             fail_preparation -> error
@@ -389,7 +422,7 @@ init_per_testcase(_, Config) ->
             end
         end
     ),
-    
+
     test_utils:mock_expect(Workers, workflow_engine_callback_handler, handle_callback, fun(CallbackId, Result) ->
         {_CallbackType, ExecutionId, EngineId, JobIdentifier, _CallPools} =
             workflow_engine_callback_handler:decode_callback_id(CallbackId),
@@ -419,10 +452,33 @@ init_per_testcase(_, Config) ->
         end
     end),
 
+    test_utils:mock_expect(Workers, workflow_test_handler, handle_task_execution_ended,
+        fun(ExecutionId, Context, TaskId) ->
+            Master ! {callback_processing, self(), <<TaskId/binary, "_task_ended">>},
+            receive
+                history_saved -> meck:passthrough([ExecutionId, Context, TaskId])
+            end
+        end
+    ),
+
     test_utils:mock_expect(Workers, workflow_test_handler, handle_lane_execution_ended,
         fun(ExecutionId, Context, LaneIndex) ->
-            Master ! {lane_ended, LaneIndex, workflow_execution_state:is_finished_and_cleaned(ExecutionId, LaneIndex)},
-            meck:passthrough([ExecutionId, Context, LaneIndex])
+            Master ! {lane_ended, self(), ExecutionId, LaneIndex,
+                workflow_execution_state:is_finished_and_cleaned(ExecutionId, LaneIndex)},
+            receive
+                history_saved -> meck:passthrough([ExecutionId, Context, LaneIndex])
+            end
+        end
+    ),
+
+    test_utils:mock_expect(Workers, workflow_test_handler, handle_workflow_execution_ended,
+        fun(ExecutionId, Context) ->
+            Master ! {callback_processing, self(), <<ExecutionId/binary, "_ended">>},
+            receive
+                history_saved -> meck:passthrough([ExecutionId, Context]);
+                % Callback is called also after failed preparation and it is using same message as prepare
+                fail_preparation -> meck:passthrough([ExecutionId, Context])
+            end
         end
     ),
 
@@ -463,7 +519,7 @@ task_execution_gatherer_loop(#{execution_history := History} = Acc, ProcWaitingF
                 _ -> ProcWaitingForAns ! gathering_task_execution_history
             end,
             task_execution_gatherer_loop(Acc4, ProcWaitingForAns, Options);
-        {preparation, Sender, Log} ->
+        {callback_processing, Sender, Log} ->
             Acc2 = update_slots_usage_statistics(Acc, async_slots_used_stats, rpc:call(node(Sender),
                 workflow_async_call_pool, get_slot_usage, [?ASYNC_CALL_POOL_ID])),
             Acc3 = update_slots_usage_statistics(Acc2, pool_slots_used_stats, rpc:call(node(Sender),
@@ -486,9 +542,20 @@ task_execution_gatherer_loop(#{execution_history := History} = Acc, ProcWaitingF
                     Sender ! history_saved
             end,
             task_execution_gatherer_loop(Acc2, ProcWaitingForAns, Options);
-        {lane_ended, LaneIndex, IsFinished} ->
-            IsFinishedList = maps:get(is_finished_and_cleaned, Acc, []),
-            Acc2 = Acc#{is_finished_and_cleaned => [{LaneIndex, IsFinished} | IsFinishedList]},
+        {lane_ended, Sender, ExecutionId, LaneIndex, IsFinished} ->
+            IsFinishedMap = maps:get(lane_finish_log, Acc, #{}),
+            MapForExecution = maps:get(ExecutionId, IsFinishedMap, #{}),
+            Acc2 = case {maps:get(LaneIndex, MapForExecution, undefined), IsFinished} of
+                {undefined, _} ->
+                    NewHistoryElement = <<ExecutionId/binary, (integer_to_binary(LaneIndex))/binary, "_lane_ended">>,
+                    Acc#{lane_finish_log => IsFinishedMap#{ExecutionId => MapForExecution#{LaneIndex => IsFinished}},
+                        execution_history => [{NewHistoryElement, undefined} | History]};
+                {_, {false, _}} ->
+                    Acc#{lane_finish_log => IsFinishedMap#{ExecutionId => MapForExecution#{LaneIndex => IsFinished}}};
+                _ ->
+                    Acc
+            end,
+            Sender ! history_saved,
             task_execution_gatherer_loop(Acc2, ProcWaitingForAns, Options);
         {get_task_execution_history, Sender} ->
             task_execution_gatherer_loop(Acc, Sender, Options);
@@ -532,12 +599,7 @@ get_task_execution_history(Config) ->
 verify_execution_history_stats(Acc, WorkflowType) ->
     verify_execution_history_stats(Acc, WorkflowType, 1, false).
 
-% TODO VFS-7784 - uncomment checks in this function and fix tests
 verify_execution_history_stats(Acc, WorkflowType, WorkflowNumber, IsPrepared) ->
-    lists:foreach(fun(IsFinished) ->
-        ?assertMatch({_, true}, IsFinished)
-    end, maps:get(is_finished_and_cleaned, Acc, [])),
-
     ?assertEqual(0, maps:get(final_async_slots_used, Acc)),
     ?assertEqual(0, maps:get(final_pool_slots_used, Acc)),
 
@@ -651,6 +713,174 @@ verify_preparation_phase(ExecutionId, Gathered) ->
     ExpectedHeadTask = <<ExecutionId/binary, "_prepare">>,
     ?assertEqual(ExpectedHeadTask, GatheredHeadTask),
     GatheredTail.
+
+verify_task_and_lane_ended_notifications(Workflow, WorkflowType, LaneFinishLog, Gathered) ->
+    verify_task_and_lane_ended_notifications(Workflow, WorkflowType, LaneFinishLog, Gathered, {lane, 1}).
+
+verify_task_and_lane_ended_notifications(Workflow, WorkflowType, LaneFinishLog, Gathered, StartSpec) ->
+    verify_task_and_lane_ended_notifications(Workflow, WorkflowType, LaneFinishLog, Gathered, StartSpec, undefined).
+
+verify_task_and_lane_ended_notifications(Workflow, WorkflowType, LaneFinishLog, [_ | GatheredTail] = Gathered,
+    StartSpec, StopSpec) ->
+    FilteredGathered = case StartSpec of
+        {lane, 1} -> Gathered;
+        {box, _, _} -> Gathered;
+        _ -> GatheredTail % Filter finish notification of lane prev to StartLane (we start from last iterator of prev lane)
+    end,
+
+    TasksStats = get_task_stats(FilteredGathered),
+    {GatheredWithoutEndedNotifications, UpdatedTasksStats, LastLaneIndex} =
+        verify_task_and_lane_ended_notifications(Workflow, WorkflowType, LaneFinishLog, FilteredGathered, TasksStats,
+            StartSpec, StopSpec, 0),
+
+    case StartSpec of
+        {lane, 1} ->
+            ?assertEqual(LastLaneIndex, maps:size(LaneFinishLog));
+        {box, StartLane, _} ->
+            ?assertEqual(LastLaneIndex - StartLane + 1, maps:size(LaneFinishLog));
+        {lane, StartLane} ->
+            % Additional log appears for lane prev to StartLane (we start from last iterator of prev lane)
+            ?assertEqual(LastLaneIndex - StartLane + 2, maps:size(LaneFinishLog))
+    end,
+
+    ?assertEqual(0, maps:size(UpdatedTasksStats)),
+    GatheredWithoutEndedNotifications.
+
+verify_task_and_lane_ended_notifications(Workflow,
+    WorkflowType, LaneFinishLog, Gathered, TasksStats, {lane, LaneIndex}, StopSpec, PrevLanesElementsCount) ->
+    verify_task_and_lane_ended_notifications(Workflow,
+        WorkflowType, LaneFinishLog, Gathered, TasksStats, LaneIndex, StopSpec, PrevLanesElementsCount);
+verify_task_and_lane_ended_notifications(Workflow,
+    WorkflowType, LaneFinishLog, Gathered, TasksStats, {box, LaneIndex, _BoxIndex}, StopSpec, PrevLanesElementsCount) ->
+    % TODO VFS-7784 - verify notifications for this case
+    {GatheredWithoutEndedNotifications, UpdatedTasksStats, IsLast} = clean_task_and_lane_ended_notifications(
+        Workflow, Gathered, TasksStats, LaneIndex),
+    case IsLast of
+        true ->
+            {GatheredWithoutEndedNotifications, UpdatedTasksStats, LaneIndex};
+        false ->
+            verify_task_and_lane_ended_notifications(Workflow, WorkflowType, LaneFinishLog, GatheredWithoutEndedNotifications,
+                UpdatedTasksStats, {box, LaneIndex + 1, _BoxIndex}, StopSpec, PrevLanesElementsCount)
+    end;
+verify_task_and_lane_ended_notifications(_Workflow,
+    _WorkflowType, _LaneFinishLog, Gathered, TasksStats, LaneIndex, {lane, LaneIndex}, _PrevLanesElementsCount) ->
+    {Gathered, TasksStats, LaneIndex - 1};
+verify_task_and_lane_ended_notifications(Workflow,
+    _WorkflowType, _LaneFinishLog, Gathered, TasksStats, LaneIndex, {box, LaneIndex, _BoxToStop}, _PrevLanesElementsCount) ->
+    % TODO VFS-7784 - verify notifications for this case
+    {GatheredWithoutEndedNotifications, UpdatedTasksStats, _} =
+        clean_task_and_lane_ended_notifications(Workflow, Gathered, TasksStats, LaneIndex),
+    {GatheredWithoutEndedNotifications, UpdatedTasksStats, LaneIndex};
+verify_task_and_lane_ended_notifications(#{id := ExecutionId, execution_context := Context} = Workflow,
+    WorkflowType, LaneFinishLog, Gathered, TasksStats, LaneIndex, StopSpec, PrevLanesElementsCount) ->
+    {ok, #{
+        parallel_boxes := Boxes,
+        iterator := Iterator,
+        is_last := IsLast
+    }} = workflow_test_handler:get_lane_spec(ExecutionId, Context, LaneIndex),
+
+    Items = get_items(Context, Iterator),
+
+    TaskIds = lists:foldl(fun(BoxTasks, Acc) ->
+        lists:foldl(fun(TaskId, InternalAcc) ->
+            [TaskId | InternalAcc]
+        end, Acc, maps:keys(BoxTasks))
+    end, [], Boxes),
+
+    ElementsPerTask = case WorkflowType of
+        sync -> length(Items);
+        async -> 2 * length(Items)
+    end,
+
+    {GatheredWithoutTaskEndedNotifications, UpdatedTasksStats} = lists:foldl(fun(TaskId, {GatheredAcc, TasksStatsAcc}) ->
+        ?assert(maps:is_key(TaskId, TasksStats)),
+        {Counter, LastElementPos, NotifyPos} = maps:get(TaskId, TasksStats),
+        ?assertEqual(ElementsPerTask, Counter),
+        ?assert(LastElementPos < NotifyPos),
+        {proplists:delete(<<TaskId/binary, "_task_ended">>, GatheredAcc), maps:remove(TaskId, TasksStatsAcc)}
+    end, {Gathered, TasksStats}, TaskIds),
+
+    ?assert(maps:get(LaneIndex, LaneFinishLog, undefined)),
+    LaneEndedElement = {<<ExecutionId/binary, (integer_to_binary(LaneIndex))/binary, "_lane_ended">>, undefined},
+    LanesElementsCount = PrevLanesElementsCount + ElementsPerTask * length(TaskIds),
+    ?assertEqual(LaneEndedElement, lists:nth(LanesElementsCount + 1, GatheredWithoutTaskEndedNotifications)),
+    GatheredWithoutEndedNotifications = lists:delete(LaneEndedElement, GatheredWithoutTaskEndedNotifications),
+
+    case IsLast of
+        true ->
+            {GatheredWithoutEndedNotifications, UpdatedTasksStats, LaneIndex};
+        false ->
+            verify_task_and_lane_ended_notifications(Workflow, WorkflowType, LaneFinishLog,
+                GatheredWithoutEndedNotifications, UpdatedTasksStats, LaneIndex + 1, StopSpec, LanesElementsCount)
+    end.
+
+get_task_stats(Gathered) ->
+    lists:foldl(fun
+        ({Pos, {<<"result_", GatheredElement/binary>>, _}}, Acc) ->
+            {Counter, LastElementPos, NotifyPos} = maps:get(GatheredElement, Acc, {0, 0, 0}),
+            Acc#{GatheredElement => {Counter + 1, Pos, NotifyPos}};
+        ({Pos, {GatheredElement, _}}, Acc) ->
+        case binary:longest_common_suffix([GatheredElement, <<"_lane_ended">>]) of
+            11 ->
+                Acc;
+            _ ->
+                case binary:longest_common_suffix([GatheredElement, <<"_task_ended">>]) of
+                    11 ->
+                        Key = binary:part(GatheredElement, 0, byte_size(GatheredElement) - 11),
+                        {Counter, LastElementPos, NotifyPos} = maps:get(Key, Acc, {0, 0, 0}),
+                        Acc#{Key => {Counter, LastElementPos, Pos}};
+                    _ ->
+                        {Counter, LastElementPos, NotifyPos} = maps:get(GatheredElement, Acc, {0, 0, 0}),
+                        Acc#{GatheredElement => {Counter + 1, Pos, NotifyPos}}
+                end
+        end
+    end, #{}, lists_utils:enumerate(Gathered)).
+
+clean_task_and_lane_ended_notifications(#{id := ExecutionId, execution_context := Context},
+    Gathered, TasksStats, LaneIndex) ->
+    {ok, #{
+        parallel_boxes := Boxes,
+        is_last := IsLast
+    }} = workflow_test_handler:get_lane_spec(ExecutionId, Context, LaneIndex),
+
+    TaskIds = lists:foldl(fun(BoxTasks, Acc) ->
+        lists:foldl(fun(TaskId, InternalAcc) ->
+            [TaskId | InternalAcc]
+        end, Acc, maps:keys(BoxTasks))
+    end, [], Boxes),
+
+    {GatheredWithoutTaskEndedNotifications, UpdatedTasksStats} = lists:foldl(fun(TaskId, {GatheredAcc, TasksStatsAcc}) ->
+        {proplists:delete(<<TaskId/binary, "_task_ended">>, GatheredAcc), maps:remove(TaskId, TasksStatsAcc)}
+    end, {Gathered, TasksStats}, TaskIds),
+
+    LaneEndedElement = {<<ExecutionId/binary, (integer_to_binary(LaneIndex))/binary, "_lane_ended">>, undefined},
+    GatheredWithoutEndedNotifications = lists:delete(LaneEndedElement, GatheredWithoutTaskEndedNotifications),
+
+    {GatheredWithoutEndedNotifications, UpdatedTasksStats, IsLast}.
+
+verify_finish_notification(ExecutionId, Gathered) ->
+    ExpectedTask = <<ExecutionId/binary, "_ended">>,
+    lists:reverse(verify_finish_notification_helper(ExpectedTask, lists:reverse(Gathered))).
+
+verify_finish_notification_helper(ExpectedTask, ReversedGathered) ->
+    ?assertNotEqual([], ReversedGathered),
+    [{Task, _} = Element | ReversedGatheredTail] = ReversedGathered,
+    case Task of
+        ExpectedTask ->
+            ReversedGatheredTail;
+        _ ->
+            case binary:longest_common_suffix([Task, <<"_lane_ended">>]) of
+                11 ->
+                    [Element | verify_finish_notification_helper(ExpectedTask, ReversedGatheredTail)];
+                _ ->
+                    case binary:longest_common_suffix([Task, <<"_task_ended">>]) of
+                        11 ->
+                            [Element | verify_finish_notification_helper(ExpectedTask, ReversedGatheredTail)];
+                        _ ->
+                            ?assertEqual(ExpectedTask, Task) % assert for nice error reporting
+                    end
+            end
+    end.
 
 % This function verifies if gathered execution history contains all expected elements
 verify_execution_history([], [], _WorkflowType) ->

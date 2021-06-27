@@ -28,7 +28,7 @@
 
     handle_task_execution_ended/3,
     handle_lane_execution_ended/3,
-    handle_workflow_execution_execution_ended/2
+    handle_workflow_execution_ended/2
 ]).
 
 
@@ -174,12 +174,12 @@ handle_lane_execution_ended(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, Atm
     end.
 
 
--spec handle_workflow_execution_execution_ended(
+-spec handle_workflow_execution_ended(
     atm_workflow_execution:id(),
     atm_workflow_execution_env:record()
 ) ->
     ok.
-handle_workflow_execution_execution_ended(AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv) ->
+handle_workflow_execution_ended(AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv) ->
     try
         atm_workflow_execution_session:terminate(AtmWorkflowExecutionId)
     catch _:Reason ->
