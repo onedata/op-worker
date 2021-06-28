@@ -122,9 +122,9 @@ report_task_status_change(
                 NewAtmLaneExecutions = lists_utils:replace_at(
                     NewLaneExecution, AtmLaneExecutionIndex, AtmLaneExecutions
                 ),
-                NewAtmWorkflowExecutionStatus = atm_task_execution_status_utils:converge(
+                NewAtmWorkflowExecutionStatus = converge_unique_statuses(lists:usort(
                     atm_lane_execution:gather_statuses(NewAtmLaneExecutions)
-                ),
+                )),
                 NewAtmWorkflowExecution = AtmWorkflowExecution#atm_workflow_execution{
                     status = NewAtmWorkflowExecutionStatus,
                     % 'status_changed' field must be changed manually here as it's value
@@ -150,6 +150,28 @@ report_task_status_change(
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+% TODO VFS-7853 - better handling of convergin lane statuses to workflow status
+%% @private
+-spec converge_unique_statuses([atm_task_execution:status()]) ->
+    atm_task_execution:status().
+converge_unique_statuses([Status]) ->
+    Status;
+converge_unique_statuses(Statuses) ->
+    [LowestStatusPresent | _] = lists:dropwhile(
+        fun(Status) -> not lists:member(Status, Statuses) end,
+        [?FAILED_STATUS, ?ACTIVE_STATUS, ?PENDING_STATUS, ?FINISHED_STATUS]
+    ),
+
+    case LowestStatusPresent of
+        ?PENDING_STATUS ->
+            % Some elements must have ended execution while others are still
+            % pending - converged/overall status is active
+            ?ACTIVE_STATUS;
+        Status ->
+            Status
+    end.
 
 
 %% @private
