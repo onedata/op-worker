@@ -123,7 +123,8 @@ create_archive(_Config) ->
                 optional = [<<"config">>, <<"description">>, <<"preservedCallback">>, <<"purgedCallback">>],
                 correct_values = #{
                     <<"datasetId">> => [DatasetId],
-                    <<"config">> => generate_all_valid_configs(),
+                    % pick only 4 random out of all possible configs
+                    <<"config">> => lists_utils:random_sublist(generate_all_valid_configs(), 4, 4),
                     <<"description">> => [<<"Test description">>],
                     <<"preservedCallback">> => [?ARCHIVE_PRESERVED_CALLBACK_URL()],
                     <<"purgedCallback">> => [?ARCHIVE_PURGED_CALLBACK_URL()]
@@ -132,7 +133,7 @@ create_archive(_Config) ->
                     {<<"datasetId">>, ?NON_EXISTENT_DATASET_ID, ?ERROR_FORBIDDEN},
                     {<<"datasetId">>, DetachedDatasetId,
                         ?ERROR_BAD_DATA(<<"datasetId">>, <<"Detached dataset cannot be modified.">>)},
-                    % TODO VFS-7652 uncomment following case and remove subsequent one
+                    % TODO VFS-7780 uncomment following case and remove subsequent one
                     % {<<"config">>, #{<<"incremental">> => <<"not boolean">>}, ?ERROR_BAD_VALUE_BOOLEAN(<<"config.incremental">>)},
                     {<<"config">>, #{<<"incremental">> => true},
                         ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"config.incremental">>, ?SUPPORTED_INCREMENTAL_VALUES)},
@@ -140,6 +141,8 @@ create_archive(_Config) ->
                     % {<<"config">>, #{<<"includeDip">> => <<"not boolean">>}, ?ERROR_BAD_VALUE_BOOLEAN(<<"config.includeDip">>)},
                     {<<"config">>, #{<<"includeDip">> => true},
                         ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"config.includeDip">>, ?SUPPORTED_INCLUDE_DIP_VALUES)},
+                    {<<"config">>, #{<<"createNestedArchives">> => <<"not boolean">>},
+                        ?ERROR_BAD_VALUE_BOOLEAN(<<"config.createNestedArchives">>)},
                     {<<"config">>, #{<<"layout">> => <<"not allowed layout">>},
                         ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"config.layout">>, ensure_binaries(?ARCHIVE_LAYOUTS))},
                     {<<"description">>, [123, 456], ?ERROR_BAD_VALUE_BINARY(<<"description">>)},
@@ -156,15 +159,20 @@ generate_all_valid_configs() ->
     LayoutValues = [undefined | ?ARCHIVE_LAYOUTS],
     IncrementalValues = [undefined | ?SUPPORTED_INCREMENTAL_VALUES],
     IncludeDipValues = [undefined | ?SUPPORTED_INCLUDE_DIP_VALUES],
+    CreateNestedArchivesValues = [undefined, true, false],
     AllConfigsCombinations = [
-        {Layout, Incremental, IncludeDip}
-        || Layout <- LayoutValues, Incremental <- IncrementalValues, IncludeDip <- IncludeDipValues
+        {Layout, Incremental, IncludeDip, CreateNestedArchives} ||
+        Layout <- LayoutValues,
+        Incremental <- IncrementalValues,
+        IncludeDip <- IncludeDipValues,
+        CreateNestedArchives <- CreateNestedArchivesValues
     ],
-    lists:foldl(fun({L, I, ID}, Acc) ->
+    lists:foldl(fun({L, I, ID, CNA}, Acc) ->
         Config = maps_utils:put_if_defined(#{}, <<"layout">>, L),
         Config2 = maps_utils:put_if_defined(Config, <<"incremental">>, I),
         Config3 = maps_utils:put_if_defined(Config2, <<"includeDip">>, ID),
-        [Config3 | Acc]
+        Config4 = maps_utils:put_if_defined(Config3, <<"createNestedArchives">>, CNA),
+        [Config4 | Acc]
     end, [], AllConfigsCombinations).
 
 
@@ -233,7 +241,7 @@ build_create_archive_validate_gs_call_result_fun(MemRef) ->
         ExpArchiveData = build_archive_gs_instance(ArchiveId, DatasetId, CreationTime, ?ARCHIVE_BUILDING, Config,
             Description, PreservedCallback, PurgedCallback, undefined),
         % state is removed from the map as it may be in pending, building or even preserved state when request is handled
-        IgnoredKeys = [<<"state">>, <<"stats">>, <<"rootFile">>],
+        IgnoredKeys = [<<"state">>, <<"stats">>, <<"rootDir">>],
         ExpArchiveData2 = maps:without(IgnoredKeys, ExpArchiveData),
         ArchiveData2 = maps:without(IgnoredKeys, ArchiveData),
         ?assertMatch(ExpArchiveData2, ArchiveData2)
@@ -316,13 +324,13 @@ get_archive_info(_Config) ->
                     prepare_args_fun = build_get_archive_prepare_rest_args_fun(ArchiveId),
                     validate_result_fun = fun(#api_test_ctx{node = TestNode}, {ok, RespCode, _, RespBody}) ->
                         CreationTime = time_test_utils:global_seconds(TestNode),
-                        RootFileGuid = get_root_file_guid(TestNode, ArchiveId),
-                        {ok, RootFileId} = file_id:guid_to_objectid(RootFileGuid),
+                        RootDirGuid = get_root_dir_guid(ArchiveId),
+                        {ok, DirObjectId} = file_id:guid_to_objectid(RootDirGuid),
                         ExpArchiveData = #{
                             <<"archiveId">> => ArchiveId,
                             <<"datasetId">> => DatasetId,
                             <<"state">> => atom_to_binary(?ARCHIVE_PRESERVED, utf8),
-                            <<"rootFileId">> => RootFileId,
+                            <<"rootDirectoryId">> => DirObjectId,
                             <<"creationTime">> => CreationTime,
                             <<"description">> => Description,
                             <<"config">> => ConfigJson,
@@ -344,9 +352,9 @@ get_archive_info(_Config) ->
                     prepare_args_fun = build_get_archive_prepare_gs_args_fun(ArchiveId),
                     validate_result_fun = fun(#api_test_ctx{node = TestNode}, {ok, Result}) ->
                         CreationTime = time_test_utils:global_seconds(TestNode),
-                        RootFileGuid = get_root_file_guid(TestNode, ArchiveId),
+                        DirGuid = get_root_dir_guid(ArchiveId),
                         ExpArchiveData = build_archive_gs_instance(ArchiveId, DatasetId, CreationTime, ?ARCHIVE_PRESERVED,
-                            Config, Description, undefined, undefined, RootFileGuid),
+                            Config, Description, undefined, undefined, DirGuid),
                         ?assertEqual(ExpArchiveData, Result)
                     end
                 }
@@ -848,14 +856,12 @@ verify_archive(
         ListOpts = #{offset => 0, limit => 1000},
         GetDatasetsFun =  fun() -> list_archive_ids(Node, UserSessId, DatasetId, ListOpts) end,
         ?assertEqual(true, lists:member(ArchiveId, GetDatasetsFun()), ?ATTEMPTS),
-
-        RootFileGuid = get_root_file_guid(Node, ArchiveId),
-
+        RootDirGuid = get_root_dir_guid(ArchiveId),
         ExpArchiveInfo = #archive_info{
             id = ArchiveId,
             dataset_id = DatasetId,
             state = ?ARCHIVE_PRESERVED,
-            root_file_guid = RootFileGuid,
+            root_dir_guid = RootDirGuid,
             creation_time = CreationTime,
             config = archive_config:from_json(Config),
             preserved_callback = PreservedCallback,
@@ -880,13 +886,13 @@ list_archive_ids(Node, UserSessId, DatasetId, ListOpts) ->
 -spec build_archive_gs_instance(archive:id(), dataset:id(), archive:timestamp(), archive:state(), archive:config(),
     archive:description(), archive:callback(), archive:callback(), file_id:file_guid()) -> json_utils:json_term().
 build_archive_gs_instance(ArchiveId, DatasetId, CreationTime, State, Config, Description, PreservedCallback, PurgedCallback,
-    RootFileGuid
+    RootDirGuid
 ) ->
     BasicInfo = archive_gui_gs_translator:translate_archive_info(#archive_info{
         id = ArchiveId,
         dataset_id = DatasetId,
         state = str_utils:to_binary(State),
-        root_file_guid = RootFileGuid,
+        root_dir_guid = RootDirGuid,
         creation_time = CreationTime,
         config = Config,
         description = Description,
@@ -909,12 +915,9 @@ take_random_archive(MemRef) ->
     end.
 
 
--spec get_root_file_guid(node(), archive:id()) -> file_id:file_guid().
-get_root_file_guid(Node, ArchiveId) ->
-    ArchiveDirGuid = file_id:pack_guid(?ARCHIVE_DIR_UUID(ArchiveId), oct_background:get_space_id(?SPACE)),
-    {ok, [{RootFileGuid, _}]} = ?assertMatch({ok, [_]},
-        lfm_proxy:get_children(Node, ?ROOT_SESS_ID, ?FILE_REF(ArchiveDirGuid), 0, 10), ?ATTEMPTS),
-    RootFileGuid.
+-spec get_root_dir_guid(archive:id()) -> file_id:file_guid().
+get_root_dir_guid(ArchiveId) ->
+    file_id:pack_guid(?ARCHIVE_DIR_UUID(ArchiveId), oct_background:get_space_id(?SPACE)).
 
 
 %%%===================================================================

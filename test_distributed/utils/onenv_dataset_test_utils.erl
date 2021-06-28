@@ -147,7 +147,8 @@ await_dataset_sync(CreationProvider, SyncProviders, UserId, #dataset_object{
 
     {ok, DatasetInfo} = ?assertMatch(
         {ok, #dataset_info{state = State, id = DatasetId, protection_flags = Flags}},
-        lfm_proxy:get_dataset_info(CreationNode, CreationNodeSessId, DatasetId)
+        get_dataset_info_without_archive_count(CreationNode, CreationNodeSessId, DatasetId),
+        ?ATTEMPTS
     ),
 
     lists_utils:pforeach(fun(SyncProvider) ->
@@ -156,7 +157,7 @@ await_dataset_sync(CreationProvider, SyncProviders, UserId, #dataset_object{
 
         ?assertEqual(
             {ok, DatasetInfo},
-            lfm_proxy:get_dataset_info(SyncNode, SessId, DatasetId),
+            get_dataset_info_without_archive_count(SyncNode, SessId, DatasetId),
             ?ATTEMPTS
         )
     end, SyncProviders),
@@ -317,4 +318,14 @@ get_archive_count(Node, DatasetId) ->
     case lfm_proxy:get_dataset_info(Node, ?ROOT_SESS_ID, DatasetId) of
         {ok, #dataset_info{archive_count = ArchiveCount}} -> ArchiveCount;
         {error, ?ENOENT} -> 0
+    end.
+
+
+%% @private
+-spec get_dataset_info_without_archive_count(node(), session:id(), dataset:id()) ->
+    {ok, lfm_datasets:info()} | {error, term()}.
+get_dataset_info_without_archive_count(Node, SessId, DatasetId) ->
+    case lfm_proxy:get_dataset_info(Node, SessId, DatasetId) of
+        {ok, DI} -> {ok, DI#dataset_info{archive_count = 0}};
+        Other -> Other
     end.

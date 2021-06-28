@@ -10,15 +10,30 @@
 %%% It contains functions used to create directories in
 %%% which archive files will be stored.
 %%%
-%%% The subtree will be rooted in .__onedata_archives directory so
+%%% The subtree will be rooted in . directory so
 %%% that it won't be visible in the space.
 %%%
 %%% The subtree will have the following structure:
-%%% /<SPACE DIRECTORY>
-%%%     /.__onedata_archives, uuid: ?ARCHIVES_ROOT_DIR_UUID(SpaceId)
-%%%         /dataset_archives_<DatasetId>, uuid: ?DATASET_ARCHIVES_DIR_UUID(DatasetId)
-%%%             /archive_<ArchiveId>, uuid: ?ARCHIVE_DIR_UUID(ArchiveId)
-%%%                 /... (Dataset files and directories)
+%%% <SPACE DIRECTORY>
+%%% |--- .__onedata_archive, uuid: ?ARCHIVES_ROOT_DIR_UUID(SpaceId)
+%%%      |--- dataset_archives_<DatasetId>, uuid: ?DATASET_ARCHIVES_DIR_UUID(DatasetId)
+%%%           |--- archive_<ArchiveId>, uuid: ?ARCHIVE_DIR_UUID(ArchiveId)
+%%%                |--- ...
+%%%                |--- ... (Dataset files and directories)
+%%%                |--- ...
+%%%
+%%%
+%%% NOTE !!!
+%%% If createNestedArchives options is enabled, archivisation_traverse
+%%% (see archivisation_traverse.erl module) will create archives
+%%% for nested datasets.
+%%% Such archives are called nested archives.
+%%% Nested archives will be created in their own archive_<ArchiveId>
+%%% directories and symlinked from parent archives.
+%%%
+%%% Please see docs in plain_archive.erl and bagit_archive.erl to
+%%% learn about structure of nested archives in case of corresponding
+%%% layouts.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(archivisation_tree).
@@ -30,7 +45,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([create_archive_dir/4, is_special_uuid/1, is_in_archive/1]).
+-export([create_archive_dir/4, is_special_uuid/1, is_in_archive/1, uuid_to_archive_id/1]).
 
 %%%===================================================================
 %%% API functions
@@ -63,6 +78,13 @@ is_special_uuid(<<?DATASET_ARCHIVES_DIR_UUID_PREFIX, _/binary>>) ->
     true;
 is_special_uuid(_) ->
     false.
+
+
+-spec uuid_to_archive_id(file_meta:uuid()) -> archive:id() | undefined.
+uuid_to_archive_id(?ARCHIVE_DIR_UUID(ArchiveId)) ->
+    ArchiveId;
+uuid_to_archive_id(_) ->
+    undefined.
 
 
 -spec is_in_archive(file_meta:path()) -> boolean().

@@ -7,6 +7,28 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% API module for performing operations on archives.
+%%%
+%%% Archivisation mechanism uses the following helper modules:
+%%%  * archivisation_tree - module for creating file structure, stored in
+%%%    .__onedata__archive hidden directory, in which archived files are stored
+%%%  * archivisation_callback - module for calling HTTP webhooks to notify users
+%%%    about finished archivisation or purging jobs
+%%%  * archivisation_traverse - module that uses tree_traverse to archive a dataset.
+%%%    It traverses the dataset and builds an archive (and nested archives if required
+%%%    by create_nested_archives parameter).
+%%%  * bagit_archive - module used by archivisation_traverse to archive single file,
+%%%    according to bagit specification. It also contains functions for initializing/
+%%%    and finalizing whole archive complying to bagit specification.
+%%%  * plain_layout - module used by archivisation_traverse to archive single file to
+%%%    a plain archive.
+%%%  * archive - module that implements archive datastore model
+%%%  * archive_config - module that implements persistent_record behaviour,
+%%%    which is stored in archive record and is used to store configuration of an archive
+%%%  * archive_stats - module that implements persistent_record behaviour,
+%%%    which is stored in archive record and is used to store statistics of archivisation procedure
+%%%  * archives_list - module that implements list structure which allows to track
+%%%    archives associated with given dataset
+%%%  * archives_forest - module that is used to track parent-nested archive relations
 %%% @end
 %%%-------------------------------------------------------------------
 -module(archive_api).
@@ -22,7 +44,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([create_archive/6, create_child_archive/2, update_archive/2, get_archive_info/1,
+-export([start_archivisation/6, update_archive/2, get_archive_info/1,
     list_archives/3, init_archive_purge/3, get_nested_archives_stats/1]).
 
 %% Exported for use in tests
@@ -44,8 +66,7 @@
 
 % TODO VFS-7617 implement recall operation of archives
 % TODO VFS-7718 improve purging so that archive record is deleted when files are removed from storage
-% TODO VFS-7651 implement archivisation with bagit layout archives
-% TODO VFS-7652 implement incremental archives
+% TODO VFS-7780 implement incremental archives
 % TODO VFS-7653 implement creating DIP for an archive
 % TODO VFS-7613 use datastore function for getting number of links in forest to acquire number of archives per dataset
 % TODO VFS-7664 add followLink option to archivisation job
@@ -62,9 +83,13 @@
 %%% API functions
 %%%===================================================================
 
--spec create_archive(dataset:id(), archive:config(), archive:callback(), archive:callback(),
-    archive:description(), user_ctx:ctx()) -> {ok, archive:id()} | error().
-create_archive(DatasetId, Config, PreservedCallback, PurgedCallback, Description, UserCtx) ->
+-spec start_archivisation(
+    dataset:id(), archive:config(), archive:callback(), archive:callback(),
+    archive:description(), user_ctx:ctx()
+) -> {ok, archive:id()} | error().
+start_archivisation(
+    DatasetId, Config, PreservedCallback, PurgedCallback, Description, UserCtx
+) ->
     {ok, DatasetDoc} = dataset:get(DatasetId),
     {ok, State} = dataset:get_state(DatasetDoc),
     case State of
@@ -95,22 +120,6 @@ create_archive(DatasetId, Config, PreservedCallback, PurgedCallback, Description
     end.
 
 
--spec create_child_archive(dataset:id(), archive:doc()) -> {ok, archive:doc()} | error().
-create_child_archive(DatasetId, ParentArchiveDoc) ->
-    {ok, SpaceId} = archive:get_space_id(ParentArchiveDoc),
-    {ok, ParentArchiveId} = archive:get_id(ParentArchiveDoc),
-    case archive:create_child(DatasetId, ParentArchiveDoc) of
-        {ok, ArchiveDoc} ->
-            {ok, ArchiveId} = archive:get_id(ArchiveDoc),
-            {ok, Timestamp} = archive:get_creation_time(ArchiveDoc),
-            archives_list:add(DatasetId, SpaceId, ArchiveId, Timestamp),
-            archives_forest:add(ParentArchiveId, SpaceId, ArchiveId),
-            {ok, ArchiveDoc};
-        {error, _} = Error ->
-            Error
-    end.
-
-
 -spec update_archive(archive:id(), archive:diff()) -> ok | error().
 update_archive(ArchiveId, Diff) ->
     archive:modify_attrs(ArchiveId, Diff).
@@ -129,7 +138,7 @@ get_archive_info(ArchiveDoc = #document{}, ArchiveIndex) ->
     {ok, Timestamp} = archive:get_creation_time(ArchiveDoc),
     {ok, State} = archive:get_state(ArchiveDoc),
     {ok, Config} = archive:get_config(ArchiveDoc),
-    {ok, RootFileGuid} = archive:get_root_file_guid(ArchiveDoc),
+    {ok, ArchiveRootDirGuid} = archive:get_root_dir_guid(ArchiveDoc),
     {ok, PreservedCallback} = archive:get_preserved_callback(ArchiveDoc),
     {ok, PurgedCallback} = archive:get_purged_callback(ArchiveDoc),
     {ok, Description} = archive:get_description(ArchiveDoc),
@@ -137,7 +146,7 @@ get_archive_info(ArchiveDoc = #document{}, ArchiveIndex) ->
         id = ArchiveId,
         dataset_id = DatasetId,
         state = State,
-        root_file_guid = RootFileGuid,
+        root_dir_guid = ArchiveRootDirGuid,
         creation_time = Timestamp,
         config = Config,
         preserved_callback = PreservedCallback,
