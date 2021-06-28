@@ -67,6 +67,8 @@
 
 groups() -> [
     {time_mock_parallel_tests, [parallel], [
+        % these tests has been moved to separate group so that
+        % mocking time does not interfere with other tests
         archive_dataset_attached_to_dir,
         archive_dataset_attached_to_file,
         archive_dataset_attached_to_hardlink
@@ -323,20 +325,18 @@ archive_dataset_many_times(_Config) ->
     #object{dataset = #dataset_object{id = DatasetId}} =
         onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE, #file_spec{dataset = #dataset_spec{}}),
 
-    Timestamp = global_clock_timestamp(P1Node),
-
-    ExpArchiveIdsReversed = lists:map(fun(I) ->
+    ExpArchiveIdsReversed = lists:map(fun(_) ->
         {ok, ArchiveId} = ?assertMatch({ok, _},
             lfm_proxy:archive_dataset(P1Node, UserSessIdP1, DatasetId, ?TEST_ARCHIVE_CONFIG, ?TEST_DESCRIPTION1)),
         % mock time lapse to ensure that archives will have different creation timestamps
-        time_test_utils:simulate_seconds_passing(1),
-        Index = archives_list:index(ArchiveId, Timestamp + I - 1),
-        {Index, ArchiveId}
+        time_test_utils:simulate_seconds_passing(2),
+        ArchiveId
     end, lists:seq(1, Count)),
 
-    lists:foreach(fun({_Index, ArchiveId}) ->
-        ?assertMatch({ok, #archive_info{state = ?ARCHIVE_PRESERVED}},
-            lfm_proxy:get_archive_info(P1Node, UserSessIdP1, ArchiveId), ?ATTEMPTS)
+    ExpArchiveIdsAndIndicesReversed = lists:map(fun(ArchiveId) ->
+        {ok, #archive_info{index = Index}} = ?assertMatch({ok, #archive_info{state = ?ARCHIVE_PRESERVED}},
+            lfm_proxy:get_archive_info(P1Node, UserSessIdP1, ArchiveId), ?ATTEMPTS),
+        {Index, ArchiveId}
     end, ExpArchiveIdsReversed),
 
     ?assertMatch({ok, #dataset_info{archive_count = Count}},
@@ -344,9 +344,11 @@ archive_dataset_many_times(_Config) ->
     ?assertMatch({ok, #dataset_info{archive_count = Count}},
         lfm_proxy:get_dataset_info(P2Node, UserSessIdP2, DatasetId), ?ATTEMPTS),
 
-    ?assertEqual({ok, lists:reverse(ExpArchiveIdsReversed), false},
+    ExpArchiveIdsAndIndices = lists:reverse(ExpArchiveIdsAndIndicesReversed),
+
+    ?assertEqual({ok, ExpArchiveIdsAndIndices, false},
         lfm_proxy:list_archives(P1Node, UserSessIdP1, DatasetId, #{offset => 0, limit => Count})),
-    ?assertEqual({ok, lists:reverse(ExpArchiveIdsReversed), false},
+    ?assertEqual({ok, ExpArchiveIdsAndIndices, false},
         lfm_proxy:list_archives(P2Node, UserSessIdP2, DatasetId, #{offset => 0, limit => Count}), ?ATTEMPTS).
 
 time_warp_test(_Config) ->
@@ -633,18 +635,18 @@ init_per_group(parallel_tests, Config) ->
     Config2 = oct_background:update_background_config(Config),
     lfm_proxy:init(Config2, false);
 init_per_group(_Group, Config) ->
+    ok = time_test_utils:freeze_time(Config),
     Config2 = oct_background:update_background_config(Config),
-    time_test_utils:freeze_time(Config2),
     lfm_proxy:init(Config2, false).
 
 end_per_group(_Group, Config) ->
-    time_test_utils:unfreeze_time(Config),
     SpaceId = oct_background:get_space_id(?SPACE),
     Workers = oct_background:get_all_providers_nodes(),
     CleaningWorker = oct_background:get_random_provider_node(krakow),
     lfm_test_utils:clean_space(CleaningWorker, Workers, SpaceId, ?ATTEMPTS),
     onenv_dataset_test_utils:cleanup_all_datasets(krakow, ?SPACE),
-    lfm_proxy:teardown(Config).
+    lfm_proxy:teardown(Config),
+    time_test_utils:unfreeze_time(Config).
 
 init_per_testcase(_Case, Config) ->
     Config.

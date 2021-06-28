@@ -440,7 +440,8 @@ end_per_suite(_Config) ->
     oct_background:end_per_suite().
 
 init_per_group(_Group, Config) ->
-    lfm_proxy:init(Config, false).
+    Config2 = oct_background:update_background_config(Config),
+    lfm_proxy:init(Config2, false).
 
 end_per_group(_Group, Config) ->
     SpaceId = oct_background:get_space_id(?SPACE),
