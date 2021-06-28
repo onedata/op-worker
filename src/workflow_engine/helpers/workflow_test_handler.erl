@@ -71,9 +71,7 @@ process_item(_ExecutionId, _Context, <<"async", _/binary>> = _TaskId, Item, Fini
         case binary_to_integer(Item) =< 10 of
             true ->
                 % Use http_client only for part of items as it is much slower than direct `handle_callback` call
-                http_client:put(<<"http://", (oneprovider:get_domain())/binary,
-                    ?ATM_TASK_FINISHED_CALLBACK_PATH, FinishCallback/binary>>, #{},
-                    json_utils:encode(#{<<"result">> => <<"ok">>}));
+                http_client:put(FinishCallback, #{}, json_utils:encode(#{<<"result">> => <<"ok">>}));
             false ->
                 workflow_engine_callback_handler:handle_callback(FinishCallback, #{<<"result">> => <<"ok">>})
         end

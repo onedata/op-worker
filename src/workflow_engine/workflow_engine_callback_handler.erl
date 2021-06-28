@@ -112,7 +112,6 @@ handle_callback(CallbackId, Message) ->
 encode_callback_id(CallbackType, ExecutionId, EngineId, JobIdentifier, CallPools) ->
     <<"http://",
         (oneprovider:get_domain())/binary,
-        ?DOMAIN_SEPARATOR,
         ?ATM_TASK_FINISHED_CALLBACK_PATH,
         (atom_to_binary(CallbackType, utf8))/binary, ?SEPARATOR,
         ExecutionId/binary, ?SEPARATOR,
@@ -129,7 +128,7 @@ encode_callback_id(CallbackType, ExecutionId, EngineId, JobIdentifier, CallPools
 }.
 decode_callback_id(<<"http://", Tail/binary>>) ->
     [_Domain, Tail2] = binary:split(Tail, <<?DOMAIN_SEPARATOR>>),
-    decode_callback_id(Tail2);
+    decode_callback_id(<<?DOMAIN_SEPARATOR, Tail2/binary>>);
 decode_callback_id(<<?ATM_TASK_FINISHED_CALLBACK_PATH, Tail/binary>>) ->
     decode_callback_id(Tail);
 decode_callback_id(CallbackId) ->
