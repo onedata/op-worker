@@ -625,7 +625,10 @@ iterate_over_archives_test_base(ArchiveCount, ListingMethod, Limit) ->
 init_per_suite(Config) ->
     oct_background:init_per_suite(Config, #onenv_test_config{
         onenv_scenario = "2op",
-        envs = [{op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}]
+        envs = [{op_worker, op_worker, [
+            {fuse_session_grace_period_seconds, 24 * 60 * 60},
+            {provider_token_ttl_sec, 24 * 60 * 60}
+        ]}]
     }).
 
 end_per_suite(_Config) ->
