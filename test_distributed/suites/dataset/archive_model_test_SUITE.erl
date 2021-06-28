@@ -629,7 +629,7 @@ init_per_suite(Config) ->
 end_per_suite(_Config) ->
     oct_background:end_per_suite().
 
-init_per_group(sequential_tests, Config) ->
+init_per_group(parallel_tests, Config) ->
     lfm_proxy:init(Config, false);
 init_per_group(_Group, Config) ->
     time_test_utils:freeze_time(Config),
