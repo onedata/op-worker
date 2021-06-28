@@ -236,9 +236,13 @@ update_items_in_processing(AtmTaskExecutionId) ->
 -spec update_items_processed(atm_task_execution:id()) -> ok.
 update_items_processed(AtmTaskExecutionId) ->
     {ok, _} = atm_task_execution:update(AtmTaskExecutionId, fun(#atm_task_execution{
+        items_in_processing = ItemsInProcessing,
         items_processed = ItemsProcessed
     } = AtmTaskExecution) ->
-        {ok, AtmTaskExecution#atm_task_execution{items_processed = ItemsProcessed + 1}}
+        {ok, AtmTaskExecution#atm_task_execution{
+            items_in_processing = ItemsInProcessing - 1,
+            items_processed = ItemsProcessed + 1
+        }}
     end),
     ok.
 
@@ -247,10 +251,12 @@ update_items_processed(AtmTaskExecutionId) ->
 -spec update_items_failed_and_processed(atm_task_execution:id()) -> ok.
 update_items_failed_and_processed(AtmTaskExecutionId) ->
     {ok, _} = atm_task_execution:update(AtmTaskExecutionId, fun(#atm_task_execution{
+        items_in_processing = ItemsInProcessing,
         items_processed = ItemsProcessed,
         items_failed = ItemsFailed
     } = AtmTaskExecution) ->
         {ok, AtmTaskExecution#atm_task_execution{
+            items_in_processing = ItemsInProcessing - 1,
             items_processed = ItemsProcessed + 1,
             items_failed = ItemsFailed + 1
         }}
