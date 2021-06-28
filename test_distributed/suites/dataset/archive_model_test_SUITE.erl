@@ -59,9 +59,9 @@
     % sequential tests
     archive_dataset_attached_to_space_dir/1,
     archive_dataset_many_times/1,
-    time_warp_test/1, 
-    create_archive_privileges_test/1, 
-    view_archive_privileges_test/1, 
+    time_warp_test/1,
+    create_archive_privileges_test/1,
+    view_archive_privileges_test/1,
     remove_archive_privileges_test/1
 ]).
 
@@ -630,10 +630,12 @@ end_per_suite(_Config) ->
     oct_background:end_per_suite().
 
 init_per_group(parallel_tests, Config) ->
-    lfm_proxy:init(Config, false);
+    Config2 = oct_background:update_background_config(Config),
+    lfm_proxy:init(Config2, false);
 init_per_group(_Group, Config) ->
-    time_test_utils:freeze_time(Config),
-    lfm_proxy:init(Config, false).
+    Config2 = oct_background:update_background_config(Config),
+    time_test_utils:freeze_time(Config2),
+    lfm_proxy:init(Config2, false).
 
 end_per_group(_Group, Config) ->
     time_test_utils:unfreeze_time(Config),

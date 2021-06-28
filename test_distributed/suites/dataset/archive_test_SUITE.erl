@@ -98,8 +98,6 @@ all() -> [
 -define(TEST_ARCHIVE_PURGED_CALLBACK2, <<"https://purged2.org">>).
 -define(TEST_ARCHIVE_PURGED_CALLBACK3, <<"https://purged3.org">>).
 
--define(TEST_TIMESTAMP, 1000000000).
-
 -define(RAND_NAME(), str_utils:rand_hex(20)).
 -define(RAND_SIZE(), rand:uniform(50)).
 -define(RAND_CONTENT(), crypto:strong_rand_bytes(?RAND_SIZE())).
