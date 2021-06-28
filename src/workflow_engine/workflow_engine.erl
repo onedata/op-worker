@@ -74,7 +74,7 @@
 -define(POOL_ID(EngineId), binary_to_atom(EngineId, utf8)).
 -define(DEFAULT_SLOT_COUNT, 20).
 -define(DEFAULT_CALLS_LIMIT, 1000).
--define(DEFAULT_TIMEOUT_CHECK_PERIOD, timer:seconds(30)).
+-define(DEFAULT_TIMEOUT_CHECK_PERIOD, timer:seconds(300)).
 -define(USE_TIMEOUT_SERVER_DEFAULT, {true, ?DEFAULT_TIMEOUT_CHECK_PERIOD}).
 -define(DEFAULT_KEEPALIVE_TIMEOUT_SEC, 300).
 
@@ -237,10 +237,11 @@ schedule_next_job(EngineId, DeferredExecutions) ->
                             end;
                         ?PREPARE_EXECUTION(Handler, ExecutionContext) ->
                             schedule_prepare_on_pool(EngineId, ExecutionId, Handler, ExecutionContext);
-                        ?END_EXECUTION_AND_NOTIFY(Handler, Context, LaneIndex, ErrorEncountered) ->
+                        ?END_EXECUTION(Handler, Context, LaneIndex, ErrorEncountered) ->
                             case workflow_engine_state:remove_execution_id(EngineId, ExecutionId) of
                                 ok ->
                                     Handler:handle_lane_execution_ended(ExecutionId, Context, LaneIndex),
+                                    Handler:handle_workflow_execution_ended(ExecutionId, Context),
                                     case ErrorEncountered of
                                         true -> ok;
                                         false -> workflow_iterator_snapshot:cleanup(ExecutionId)
@@ -250,9 +251,10 @@ schedule_next_job(EngineId, DeferredExecutions) ->
                                     ok
                             end,
                             schedule_next_job(EngineId, DeferredExecutions);
-                        ?END_EXECUTION -> % Workflow or lane preparation failed - cannot notify
+                        ?END_EXECUTION_AFTER_PREPARATION_ERROR(Handler, Context) ->
                             case workflow_engine_state:remove_execution_id(EngineId, ExecutionId) of
                                 ok ->
+                                    Handler:handle_workflow_execution_ended(ExecutionId, Context),
                                     workflow_execution_state:cleanup(ExecutionId);
                                 ?WF_ERROR_ALREADY_REMOVED ->
                                     ok
