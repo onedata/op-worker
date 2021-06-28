@@ -1034,7 +1034,10 @@
     all_batches_listed = false :: boolean()
 }).
 
-%% Model storing information about automation store instance.
+%%%===================================================================
+%%% Automation related models
+%%%===================================================================
+
 -record(atm_store, {
     workflow_execution_id :: atm_workflow_execution:id(),
 
@@ -1049,7 +1052,6 @@
     container :: atm_container:record()
 }).
 
-%% Model storing information about automation task execution.
 -record(atm_task_execution, {
     workflow_execution_id :: atm_workflow_execution:id(),
     lane_index :: non_neg_integer(),
@@ -1072,7 +1074,6 @@
     items_failed = 0 :: non_neg_integer()
 }).
 
-%% Model that holds information about an automation workflow schema snapshot
 -record(atm_workflow_schema_snapshot, {
     schema_id :: automation:id(),
     name :: automation:name(),
@@ -1087,10 +1088,27 @@
     atm_lambdas :: [od_atm_lambda:id()]
 }).
 
-%% Model that holds information about an automation workflow execution
+-record(atm_lambda_snapshot, {
+    lambda_id :: automation:id(),
+
+    name :: automation:name(),
+    summary :: automation:summary(),
+    description :: automation:description(),
+
+    operation_spec :: atm_lambda_operation_spec:record(),
+    argument_specs = [] :: [atm_lambda_argument_spec:record()],
+    result_specs = [] :: [atm_lambda_result_spec:record()],
+
+    atm_inventories = [] :: [od_atm_inventory:id()]
+}).
+
 -record(atm_workflow_execution, {
     space_id :: od_space:id(),
+    atm_inventory_id :: od_atm_inventory:id(),
+
+    name :: automation:name(),
     schema_snapshot_id :: atm_workflow_schema_snapshot:id(),
+    lambda_snapshot_registry :: atm_workflow_execution:lambda_snapshot_registry(),
 
     store_registry :: atm_workflow_execution:store_registry(),
     lanes :: [atm_lane_execution:record()],
@@ -1106,16 +1124,26 @@
     finish_time = 0 :: atm_workflow_execution:timestamp()
 }).
 
+%% Model for storing persistent state of a single tree forest iteration.
+-record(atm_tree_forest_iterator_queue, {
+    values = #{} :: atm_tree_forest_iterator_queue:values(),
+    last_pushed_value_index = 0 :: atm_tree_forest_iterator_queue:index(),
+    highest_peeked_value_index = 0 :: atm_tree_forest_iterator_queue:index(),
+    discriminator = {0, <<>>} :: atm_tree_forest_iterator_queue:discriminator(), 
+    last_pruned_node_num = 0 :: atm_tree_forest_iterator_queue:node_num()
+}).
+
 %%%===================================================================
 %%% Workflow engine connected models
 %%%===================================================================
 
 -record(workflow_cached_item, {
-    item :: workflow_store:item()
+    item :: iterator:item(),
+    iterator :: iterator:iterator()
 }).
 
 -record(workflow_iterator_snapshot, {
-    iterator :: workflow_store:iterator(),
+    iterator :: iterator:iterator(),
     lane_index = 0 :: workflow_execution_state:index(),
     item_index = 0 :: workflow_execution_state:index()
 }).
@@ -1127,10 +1155,15 @@
 }).
 
 -record(workflow_execution_state, {
-    lane_count = 0 :: non_neg_integer(), % TODO VFS-7551 - delete during integration with BW
+    handler :: workflow_handler:handler(),
+    context :: workflow_engine:execution_context(),
+
+    preparation_status = not_prepared :: workflow_execution_state:preparation_status(),
     current_lane :: workflow_execution_state:current_lane() | undefined,
+    lowest_failed_job_identifier :: workflow_jobs:job_identifier() | undefined,
 
     iteration_state :: workflow_iteration_state:state() | undefined,
+    prefetched_iteration_step :: workflow_execution_state:iteration_step() | undefined,
     jobs :: workflow_jobs:jobs() | undefined,
 
     % Field used to return additional information about document update procedure

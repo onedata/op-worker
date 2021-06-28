@@ -21,7 +21,9 @@
     create_store/4,
     apply_operation/6,
     acquire_store_iterator/3, 
-    iterator_get_next/2
+    iterator_get_next/3,
+    iterator_forget_before/2,
+    iterator_mark_exhausted/2
 ]).
 -export([
     split_into_chunks/3
@@ -72,7 +74,7 @@ create_store(ProviderSelector, AtmWorkflowExecutionCtx, InitialValue, AtmStoreSc
     oct_background:entity_selector(),
     atm_workflow_execution_ctx:record(),
     atm_container:operation(),
-    atm_api:item(),
+    automation:item(),
     atm_container:operation_options(),
     atm_store:id()
 ) ->
@@ -97,11 +99,23 @@ acquire_store_iterator(ProviderSelector, AtmWorkflowExecutionEnv, AtmStoreIterat
     ]).
 
 
--spec iterator_get_next(oct_background:entity_selector(), iterator:iterator()) ->
-    {ok, iterator:item(), iterator:iterato()} | stop.
-iterator_get_next(ProviderSelector, Iterator) ->
+-spec iterator_get_next(oct_background:entity_selector(), atm_workflow_execution_env:record(), iterator:iterator()) ->
+    {ok, iterator:item(), iterator:iterator()} | stop.
+iterator_get_next(ProviderSelector, AtmWorkflowExecutionEnv, Iterator) ->
     Node = oct_background:get_random_provider_node(ProviderSelector),
-    rpc:call(Node, iterator, get_next, [Iterator]).
+    rpc:call(Node, iterator, get_next, [AtmWorkflowExecutionEnv, Iterator]).
+
+
+-spec iterator_forget_before(oct_background:entity_selector(), iterator:iterator()) -> ok.
+iterator_forget_before(ProviderSelector, Iterator) ->
+    Node = oct_background:get_random_provider_node(ProviderSelector),
+    rpc:call(Node, iterator, forget_before, [Iterator]).
+
+
+-spec iterator_mark_exhausted(oct_background:entity_selector(), iterator:iterator()) -> ok.
+iterator_mark_exhausted(ProviderSelector, Iterator) ->
+    Node = oct_background:get_random_provider_node(ProviderSelector),
+    rpc:call(Node, iterator, mark_exhausted, [Iterator]).
 
 
 -spec split_into_chunks(pos_integer(), [[item()]], [item()]) ->
@@ -113,7 +127,7 @@ split_into_chunks(Size, Acc, [_ | _] = Items) ->
     split_into_chunks(Size, [Chunk | Acc], Items -- Chunk).
 
 
--spec example_data(atm_data_type:type()) -> atm_api:item().
+-spec example_data(atm_data_type:type()) -> automation:item().
 example_data(atm_integer_type) -> 
     rand:uniform(1000000);
 example_data(atm_string_type) -> 
@@ -126,7 +140,7 @@ example_data(atm_object_type) ->
     end, #{}, lists:seq(1, rand:uniform(3) - 1)).
 
 
--spec example_bad_data(atm_data_type:type()) -> atm_api:item().
+-spec example_bad_data(atm_data_type:type()) -> automation:item().
 example_bad_data(Type) -> 
     example_data(lists_utils:random_element(all_data_types() -- [Type])).
 

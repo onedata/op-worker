@@ -108,6 +108,20 @@ translate_value(ProtocolVersion, GRI, Data) ->
     Result :: gs_protocol:data() | errors:error() | no_return().
 translate_resource(_, #gri{type = op_archive} = GRI, Data) ->
     archive_gui_gs_translator:translate_resource(GRI, Data);
+translate_resource(_, #gri{type = op_atm_inventory} = GRI, Data) ->
+    atm_inventory_gui_gs_translator:translate_resource(GRI, Data);
+translate_resource(_, #gri{type = op_atm_lambda_snapshot} = GRI, Data) ->
+    atm_lambda_snapshot_gui_gs_translator:translate_resource(GRI, Data);
+translate_resource(_, #gri{type = op_atm_store} = GRI, Data) ->
+    atm_store_gui_gs_translator:translate_resource(GRI, Data);
+translate_resource(_, #gri{type = op_atm_task_execution} = GRI, Data) ->
+    atm_task_execution_gui_gs_translator:translate_resource(GRI, Data);
+translate_resource(_, #gri{type = op_atm_workflow_execution} = GRI, Data) ->
+    atm_workflow_execution_gui_gs_translator:translate_resource(GRI, Data);
+translate_resource(_, #gri{type = op_atm_workflow_schema} = GRI, Data) ->
+    atm_workflow_schema_gui_gs_translator:translate_resource(GRI, Data);
+translate_resource(_, #gri{type = op_atm_workflow_schema_snapshot} = GRI, Data) ->
+    atm_workflow_schema_snapshot_gui_gs_translator:translate_resource(GRI, Data);
 translate_resource(_, #gri{type = op_dataset} = GRI, Data) ->
     dataset_gui_gs_translator:translate_resource(GRI, Data);
 translate_resource(_, #gri{type = op_file} = GRI, Data) ->

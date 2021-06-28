@@ -166,7 +166,7 @@ assert_supported_data_spec(AtmDataSpec) ->
 validate_init_args(StartNum, EndNum, Step, AtmDataSpec, AtmWorkflowExecutionCtx) ->
     lists:foreach(fun({ArgName, ArgValue}) ->
         try
-            atm_data_validator:validate(AtmWorkflowExecutionCtx, ArgValue, AtmDataSpec)
+            atm_value:validate(AtmWorkflowExecutionCtx, ArgValue, AtmDataSpec)
         catch throw:Reason  ->
             throw(?ERROR_ATM_BAD_DATA(ArgName, Reason))
         end

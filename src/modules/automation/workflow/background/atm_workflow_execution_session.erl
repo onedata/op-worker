@@ -41,11 +41,11 @@ init(AtmWorkflowExecutionId, UserCtx) ->
     end.
 
 
--spec acquire(atm_workflow_execution:id()) -> session:id() | no_return().
+-spec acquire(atm_workflow_execution:id()) -> user_ctx:ctx() | no_return().
 acquire(AtmWorkflowExecutionId) ->
     case offline_access_manager:get_session_id(AtmWorkflowExecutionId) of
         {ok, SessionId} ->
-            SessionId;
+            user_ctx:new(SessionId);
         {error, _} = Error ->
             utils:throttle(?LOG_THROTTLING_INTERVAL, fun() ->
                 ?error(
@@ -54,7 +54,7 @@ acquire(AtmWorkflowExecutionId) ->
                 )
             end),
             % TODO VFS-7693 cancel workflow
-            throw(?EACCES)
+            throw(?ERROR_FORBIDDEN)
     end.
 
 

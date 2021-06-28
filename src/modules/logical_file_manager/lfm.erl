@@ -134,6 +134,10 @@
 ]).
 %% Archives related operations
 -export([archive_dataset/6, update_archive/3, get_archive_info/2, list_archives/4, init_archive_purge/3]).
+%% Automation related operations
+-export([
+    schedule_atm_workflow_execution/4
+]).
 
 %% Utility functions
 -export([check_result/1]).
@@ -513,8 +517,7 @@ get_child_attr(SessId, ParentGuid, ChildName)  ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Gets file basic attributes (see file_attr.hrl) for each directory children
-%% starting with Offset-th entry and up to Limit of entries.
+%% Gets file basic attributes (see file_attr.hrl) for each directory children.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_children_attrs(session:id(), file_key(), file_meta:list_opts()) ->
@@ -525,9 +528,7 @@ get_children_attrs(SessId, FileKey, ListOpts) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Gets file details (see file_details.hrl) for each directory children
-%% starting with Offset-th from specified StartId entry and up to Limit
-%% of entries.
+%% Gets file details (see file_details.hrl) for each directory children.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_children_details(session:id(), file_key(), file_meta:list_opts()) ->
@@ -856,6 +857,7 @@ get_file_eff_dataset_summary(SessId, FileKey) ->
 list_top_datasets(SessId, SpaceId, State, Opts) ->
     list_top_datasets(SessId, SpaceId, State, Opts, undefined).
 
+
 -spec list_top_datasets(session:id(), od_space:id(), dataset:state(), dataset_api:listing_opts(),
     undefined | dataset_api:listing_mode()) ->
     {ok, dataset_api:entries(), boolean()} | error_reply().
@@ -868,14 +870,17 @@ list_top_datasets(SessId, SpaceId, State, Opts, ListingMode) ->
 list_children_datasets(SessId, DatasetId, Opts) ->
     list_children_datasets(SessId, DatasetId, Opts, undefined).
 
+
 -spec list_children_datasets(session:id(), dataset:id(), dataset_api:listing_opts(),
     undefined | dataset_api:listing_mode()) -> {ok, dataset_api:entries(), boolean()} | error_reply().
 list_children_datasets(SessId, DatasetId, Opts, ListingMode) ->
     ?run(lfm_datasets:list_children_datasets(SessId, DatasetId, Opts, ListingMode)).
 
+
 %%%===================================================================
 %%% Archive related operations
 %%%===================================================================
+
 
 -spec archive_dataset(session:id(), dataset:id(), archive:config(), archive:callback(),
     archive:callback(), archive:description()) ->
@@ -904,6 +909,25 @@ list_archives(SessId, DatasetId, Opts, ListingMode) ->
 -spec init_archive_purge(session:id(), archive:id(), archive:callback()) -> ok | error_reply().
 init_archive_purge(SessId, ArchiveId, CallbackUrl) ->
     ?run(lfm_datasets:init_archive_purge(SessId, ArchiveId, CallbackUrl)).
+
+
+%%%===================================================================
+%%% Automation related operations
+%%%===================================================================
+
+
+-spec schedule_atm_workflow_execution(
+    session:id(),
+    od_space:id(),
+    od_atm_workflow_schema:id(),
+    atm_workflow_execution_api:store_initial_values()
+) ->
+    {ok, atm_workflow_execution:id(), atm_workflow_execution:record()} | error_reply().
+schedule_atm_workflow_execution(SessId, SpaceId, AtmWorkflowSchemaId, AtmStoreInitialValues) ->
+    ?run(lfm_atm:schedule_workflow_execution(
+        SessId, SpaceId, AtmWorkflowSchemaId, AtmStoreInitialValues
+    )).
+
 
 %%%===================================================================
 %%% Utility functions

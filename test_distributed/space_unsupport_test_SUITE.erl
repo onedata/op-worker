@@ -432,7 +432,8 @@ assert_local_documents_cleaned_up(Worker, SpaceId) ->
 assert_local_documents_cleaned_up(Worker) ->
     AllModels = datastore_config_plugin:get_models(),
     ModelsToCheck = AllModels
-        -- [storage_config, provider_auth, % Models not associated with space support
+        -- [storage_config, provider_auth, workflow_engine_state, workflow_async_call_pool, % Models not associated
+                                                                                            % with space support
             file_meta, times, %% These documents without scope are related to user root dir,
                               %% which is not cleaned up during unsupport
             dbsync_state,
@@ -467,7 +468,7 @@ assert_documents_cleaned_up(Worker, Scope, Models) ->
     ProviderId = ?GET_DOMAIN_BIN(Worker),
     ?assert(lists:foldl(fun(Model, AccOut) ->
         Keys = rpc:call(Worker, ?MODULE, get_keys, [Model]),
-        
+
         Ctx = datastore_model_default:set_defaults(datastore_model_default:get_ctx(Model)),
         #{disc_driver := DiscDriver} = Ctx,
         Result = case DiscDriver of

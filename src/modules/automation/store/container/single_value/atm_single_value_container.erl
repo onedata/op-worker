@@ -26,12 +26,12 @@
 -export([version/0, db_encode/2, db_decode/2]).
 
 
--type initial_value() :: undefined | atm_api:item().
+-type initial_value() :: undefined | automation:item().
 -type operation_options() :: #{binary() => boolean()}.
 
 -record(atm_single_value_container, {
     data_spec :: atm_data_spec:record(),
-    value :: undefined | atm_api:item()
+    value :: undefined | automation:item()
 }).
 -type record() :: #atm_single_value_container{}.
 
@@ -45,14 +45,16 @@
 
 -spec create(atm_data_spec:record(), initial_value(), atm_workflow_execution_ctx:record()) ->
     record() | no_return().
+create(AtmDataSpec, undefined, _AtmWorkflowExecutionCtx) ->
+    #atm_single_value_container{
+        data_spec = AtmDataSpec
+    };
 create(AtmDataSpec, InitialValue, AtmWorkflowExecutionCtx) ->
-    InitialValue == undefined orelse atm_data_validator:validate(
-        AtmWorkflowExecutionCtx, InitialValue, AtmDataSpec
-    ),
+    atm_value:validate(AtmWorkflowExecutionCtx, InitialValue, AtmDataSpec),
 
     #atm_single_value_container{
         data_spec = AtmDataSpec,
-        value = InitialValue
+        value = atm_value:compress(InitialValue, AtmDataSpec)
     }.
 
 
@@ -74,8 +76,9 @@ apply_operation(#atm_single_value_container{} = Record, #atm_container_operation
     workflow_execution_ctx = AtmWorkflowExecutionCtx
 }) ->
     #atm_single_value_container{data_spec = AtmDataSpec} = Record,
-    atm_data_validator:validate(AtmWorkflowExecutionCtx, Item, AtmDataSpec),
-    Record#atm_single_value_container{value = Item};
+    atm_value:validate(AtmWorkflowExecutionCtx, Item, AtmDataSpec),
+
+    Record#atm_single_value_container{value = atm_value:compress(Item, AtmDataSpec)};
 
 apply_operation(_Record, _Operation) ->
     throw(?ERROR_NOT_SUPPORTED).

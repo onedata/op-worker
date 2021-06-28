@@ -23,7 +23,7 @@
 -export([build/2]).
 
 %% iterator callbacks
--export([get_next/1, mark_exhausted/1]).
+-export([get_next/2, forget_before/1, mark_exhausted/1]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
@@ -58,12 +58,16 @@ build(AtmStoreIteratorSpec, AtmContainer) ->
 %%%===================================================================
 
 
--spec get_next(record()) -> {ok, atm_api:item(), record()} | stop.
-get_next(#atm_store_iterator{
+-spec get_next(atm_workflow_execution_env:record(), record()) -> 
+    {ok, automation:item(), record()} | stop.
+get_next(AtmWorkflowExecutionEnv, #atm_store_iterator{
     spec = #atm_store_iterator_spec{strategy = #atm_store_iterator_serial_strategy{}},
+    data_spec = DataSpec,
     container_iterator = AtmContainerIterator
 } = AtmStoreIterator) ->
-    case atm_container_iterator:get_next_batch(1, AtmContainerIterator) of
+    AtmWorkflowExecutionCtx = 
+        atm_workflow_execution_env:acquire_workflow_execution_ctx(AtmWorkflowExecutionEnv),
+    case get_next_internal(AtmWorkflowExecutionCtx, AtmContainerIterator, 1, DataSpec) of
         stop ->
             stop;
         {ok, [Item], NewAtmContainerIterator} ->
@@ -71,13 +75,16 @@ get_next(#atm_store_iterator{
                 container_iterator = NewAtmContainerIterator
             }}
     end;
-get_next(#atm_store_iterator{
+get_next(AtmWorkflowExecutionEnv, #atm_store_iterator{
+    data_spec = DataSpec,
     spec = #atm_store_iterator_spec{strategy = #atm_store_iterator_batch_strategy{
         size = Size
     }},
     container_iterator = AtmContainerIterator
 } = AtmStoreIterator) ->
-    case atm_container_iterator:get_next_batch(Size, AtmContainerIterator) of
+    AtmWorkflowExecutionCtx =
+        atm_workflow_execution_env:acquire_workflow_execution_ctx(AtmWorkflowExecutionEnv),
+    case get_next_internal(AtmWorkflowExecutionCtx, AtmContainerIterator, Size, DataSpec) of
         stop ->
             stop;
         {ok, Items, NewAtmContainerIterator} ->
@@ -87,9 +94,15 @@ get_next(#atm_store_iterator{
     end.
 
 
+-spec forget_before(record()) -> ok.
+forget_before(#atm_store_iterator{container_iterator = ContainerIterator}) ->
+    atm_container_iterator:forget_before(ContainerIterator).
+
+
 -spec mark_exhausted(record()) -> ok.
 mark_exhausted(#atm_store_iterator{container_iterator = ContainerIterator}) ->
     atm_container_iterator:mark_exhausted(ContainerIterator).
+
 
 %%%===================================================================
 %%% persistent_record callbacks
@@ -127,3 +140,36 @@ db_decode(#{
         data_spec = NestedRecordDecoder(AtmDataSpecJson, atm_data_spec),
         container_iterator = NestedRecordDecoder(AtmContainerIteratorJson, atm_container_iterator)
     }.
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+
+%% @private
+-spec get_next_internal(
+    atm_workflow_execution_ctx:record(), 
+    atm_container_iterator:record(), 
+    pos_integer(), 
+    atm_data_spec:record()
+) ->
+    {ok, [automation:item()], atm_container_iterator:record()} | stop.
+get_next_internal(AtmWorkflowExecutionCtx, AtmContainerIterator, Size, DataSpec) ->
+    case atm_container_iterator:get_next_batch(AtmWorkflowExecutionCtx, Size, AtmContainerIterator) of
+        stop ->
+            stop;
+        {ok, CompressedItems, NewAtmContainerIterator} ->
+            ExpandedItems = lists:filtermap(fun(CompressedItem) ->
+                case atm_value:expand(AtmWorkflowExecutionCtx, CompressedItem, DataSpec) of
+                    {ok, ExpandedItem} -> {true, ExpandedItem};
+                    {error, _} -> false
+                end
+            end, CompressedItems),
+            case ExpandedItems of
+                [] ->
+                    get_next_internal(AtmWorkflowExecutionCtx, NewAtmContainerIterator, Size, DataSpec);
+                _ ->
+                    {ok, ExpandedItems, NewAtmContainerIterator}
+            end
+    end.

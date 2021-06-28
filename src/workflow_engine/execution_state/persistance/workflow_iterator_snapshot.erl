@@ -8,16 +8,17 @@
 %%% @doc
 %%% Stores iterators used to restart workflow executions (one iterator per execution).
 %%% Each iterator is stored together with lane and item index to prevent races.
-%%% TODO VFS-7551 - delete not used iterators from cache (when lane is finished)
+%%% TODO VFS-7787 - save first iterator of lane
 %%% @end
 %%%-------------------------------------------------------------------
 -module(workflow_iterator_snapshot).
 -author("Michal Wrzeszcz").
 
 -include("modules/datastore/datastore_models.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% API
--export([save/4, get/1]).
+-export([save/4, get/1, cleanup/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1]).
@@ -34,9 +35,13 @@
     workflow_engine:execution_id(),
     workflow_execution_state:index(),
     workflow_execution_state:index(),
-    workflow_store:iterator()
+    iterator:iterator()
 ) -> ok.
 save(ExecutionId, LaneIndex, ItemIndex, Iterator) ->
+    {PrevLaneIndex, PrevIterator} = case ?MODULE:get(ExecutionId) of
+        {ok, ReturnedLineIndex, ReturnedIterator} -> {ReturnedLineIndex, ReturnedIterator};
+        ?ERROR_NOT_FOUND -> {undefined, undefined}
+    end,
     Record = #workflow_iterator_snapshot{lane_index = LaneIndex, item_index = ItemIndex, iterator = Iterator},
     Diff = fun
         (ExistingRecord = #workflow_iterator_snapshot{lane_index = SavedLaneIndex, item_index = SavedItemIndex}) when
@@ -44,19 +49,41 @@ save(ExecutionId, LaneIndex, ItemIndex, Iterator) ->
             {ok, ExistingRecord#workflow_iterator_snapshot{
                 lane_index = LaneIndex, item_index = ItemIndex, iterator = Iterator}};
         (_) ->
-            % Multiple processed have been saving iterators in parallel
+            % Multiple processes have been saving iterators in parallel
             {error, already_saved}
     end,
     case datastore_model:update(?CTX, ExecutionId, Diff, Record) of
-        {ok, _} -> ok;
-        {error, already_saved} -> ok
+        {ok, _} ->
+            % Mark iterator exhausted after change of line
+            % (each line has new iterator and iterator for previous line can be destroyed)
+            case PrevLaneIndex =/= undefined andalso PrevLaneIndex < LaneIndex of
+                true -> iterator:mark_exhausted(PrevIterator); % TODO VFS-7787 - handle without additional get
+                false -> ok
+            end,
+            iterator:forget_before(Iterator);
+        {error, already_saved} ->
+            ok
     end.
 
--spec get(workflow_engine:execution_id()) -> workflow_store:iterator().
+-spec get(workflow_engine:execution_id()) ->
+    {ok, workflow_execution_state:index(), iterator:iterator()} | ?ERROR_NOT_FOUND.
 get(ExecutionId) ->
-    {ok, #document{value = #workflow_iterator_snapshot{iterator = Iterator}}} =
-        datastore_model:get(?CTX, ExecutionId),
-    Iterator.
+    case datastore_model:get(?CTX, ExecutionId) of
+        {ok, #document{value = #workflow_iterator_snapshot{lane_index = LaneIndex, iterator = Iterator}}} ->
+            {ok, LaneIndex, Iterator};
+        ?ERROR_NOT_FOUND ->
+            ?ERROR_NOT_FOUND
+    end.
+
+-spec cleanup(workflow_engine:execution_id()) -> ok.
+cleanup(ExecutionId) ->
+    case ?MODULE:get(ExecutionId) of
+        {ok, _LaneIndex, Iterator} ->
+            iterator:mark_exhausted(Iterator),
+            ok = datastore_model:delete(?CTX, ExecutionId);
+        ?ERROR_NOT_FOUND ->
+            ok
+    end.
 
 %%%===================================================================
 %%% datastore_model callbacks
@@ -69,7 +96,7 @@ get_ctx() ->
 -spec get_record_struct(datastore_model:record_version()) -> datastore_model:record_struct().
 get_record_struct(1) ->
     {record, [
-        {iterator, {custom, json, {workflow_store, encode_iterator, decode_iterator}}},
+        {iterator, {custom, json, {iterator, encode, decode}}},
         {lane_index, integer},
         {item_index, integer}
     ]}.

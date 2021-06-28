@@ -18,7 +18,7 @@
 %% API
 -export([
     create_all/4, create/4,
-    prepare_all/1, prepare/1,
+    prepare_all/2, prepare/2,
     delete_all/1, delete/1,
 
     get_spec/1,
@@ -109,27 +109,32 @@ create(AtmWorkflowExecutionCreationCtx, AtmLaneIndex, AtmParallelBoxIndex, #atm_
     }).
 
 
--spec prepare_all([atm_task_execution:id()]) -> ok | no_return().
-prepare_all(AtmTaskExecutionIds) ->
+-spec prepare_all(atm_workflow_execution_ctx:record(), [atm_task_execution:id()]) ->
+    ok | no_return().
+prepare_all(AtmWorkflowExecutionCtx, AtmTaskExecutionIds) ->
     lists:foreach(fun(AtmTaskExecutionId) ->
         {ok, AtmTaskExecutionDoc = #document{value = #atm_task_execution{
             schema_id = AtmTaskSchemaId
         }}} = atm_task_execution:get(AtmTaskExecutionId),
 
         try
-            prepare(AtmTaskExecutionDoc)
+            prepare(AtmWorkflowExecutionCtx, AtmTaskExecutionDoc)
         catch _:Reason ->
             throw(?ERROR_ATM_TASK_EXECUTION_PREPARATION_FAILED(AtmTaskSchemaId, Reason))
         end
     end, AtmTaskExecutionIds).
 
 
--spec prepare(atm_task_execution:id() | atm_task_execution:doc()) -> ok | no_return().
-prepare(AtmTaskExecutionIdOrDoc) ->
+-spec prepare(
+    atm_workflow_execution_ctx:record(),
+    atm_task_execution:id() | atm_task_execution:doc()
+) ->
+    ok | no_return().
+prepare(AtmWorkflowExecutionCtx, AtmTaskExecutionIdOrDoc) ->
     #document{value = #atm_task_execution{executor = AtmTaskExecutor}} = ensure_atm_task_execution_doc(
         AtmTaskExecutionIdOrDoc
     ),
-    atm_task_executor:prepare(AtmTaskExecutor).
+    atm_task_executor:prepare(AtmWorkflowExecutionCtx, AtmTaskExecutor).
 
 
 -spec delete_all([atm_task_execution:id()]) -> ok.
@@ -165,7 +170,8 @@ run(AtmWorkflowExecutionEnv, AtmTaskExecutionId, Item, ReportResultUrl, Heartbea
     }} = update_items_in_processing(AtmTaskExecutionId),
 
     AtmJobExecutionCtx = atm_job_execution_ctx:build(
-        AtmWorkflowExecutionEnv, Item, ReportResultUrl, HeartbeatUrl
+        AtmWorkflowExecutionEnv, atm_task_executor:in_readonly_mode(AtmTaskExecutor),
+        Item, ReportResultUrl, HeartbeatUrl
     ),
     Args = atm_task_execution_arguments:construct_args(AtmJobExecutionCtx, AtmTaskExecutionArgSpecs),
 
@@ -181,13 +187,16 @@ run(AtmWorkflowExecutionEnv, AtmTaskExecutionId, Item, ReportResultUrl, Heartbea
 handle_results(_AtmWorkflowExecutionEnv, AtmTaskExecutionId, error) ->
     update_items_failed_and_processed(AtmTaskExecutionId);
 
-handle_results(AtmWorkflowExecutionEnv, AtmTaskExecutionId, Results) ->
+handle_results(AtmWorkflowExecutionEnv, AtmTaskExecutionId, Results) when is_map(Results) ->
     #document{value = #atm_task_execution{
         result_specs = AtmTaskExecutionResultSpecs
     }} = ensure_atm_task_execution_doc(AtmTaskExecutionId),
 
     atm_task_execution_results:apply(AtmWorkflowExecutionEnv, AtmTaskExecutionResultSpecs, Results),
-    update_items_processed(AtmTaskExecutionId).
+    update_items_processed(AtmTaskExecutionId);
+
+handle_results(_AtmWorkflowExecutionEnv, _AtmTaskExecutionId, _Results) ->
+    throw(?ERROR_ATM_BAD_DATA(<<"results">>, <<"not an object">>)).
 
 
 -spec mark_ended(atm_task_execution:id()) -> ok.
@@ -226,9 +235,10 @@ update_items_in_processing(AtmTaskExecutionId) ->
 %% @private
 -spec update_items_processed(atm_task_execution:id()) -> ok.
 update_items_processed(AtmTaskExecutionId) ->
-    {ok, _} = atm_task_execution:update(AtmTaskExecutionId, fun
-        (#atm_task_execution{items_processed = ItemsProcessed} = AtmTaskExecution) ->
-            {ok, AtmTaskExecution#atm_task_execution{items_processed = ItemsProcessed + 1}}
+    {ok, _} = atm_task_execution:update(AtmTaskExecutionId, fun(#atm_task_execution{
+        items_processed = ItemsProcessed
+    } = AtmTaskExecution) ->
+        {ok, AtmTaskExecution#atm_task_execution{items_processed = ItemsProcessed + 1}}
     end),
     ok.
 
@@ -236,15 +246,14 @@ update_items_processed(AtmTaskExecutionId) ->
 %% @private
 -spec update_items_failed_and_processed(atm_task_execution:id()) -> ok.
 update_items_failed_and_processed(AtmTaskExecutionId) ->
-    {ok, _} = atm_task_execution:update(AtmTaskExecutionId, fun
-        (#atm_task_execution{
-            items_processed = ItemsProcessed,
-            items_failed = ItemsFailed
-        } = AtmTaskExecution) ->
-            {ok, AtmTaskExecution#atm_task_execution{
-                items_processed = ItemsProcessed + 1,
-                items_failed = ItemsFailed + 1
-            }}
+    {ok, _} = atm_task_execution:update(AtmTaskExecutionId, fun(#atm_task_execution{
+        items_processed = ItemsProcessed,
+        items_failed = ItemsFailed
+    } = AtmTaskExecution) ->
+        {ok, AtmTaskExecution#atm_task_execution{
+            items_processed = ItemsProcessed + 1,
+            items_failed = ItemsFailed + 1
+        }}
     end),
     ok.
 
@@ -263,7 +272,7 @@ handle_status_change(#document{
         status_changed = true
     }
 }) ->
-    atm_workflow_execution_api:report_task_status_change(
+    atm_workflow_execution_status:report_task_status_change(
         AtmWorkflowExecutionId, AtmLaneIndex, AtmParallelBoxIndex,
         AtmTaskExecutionId, NewStatus
     ).
