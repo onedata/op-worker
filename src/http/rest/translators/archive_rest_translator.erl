@@ -56,7 +56,7 @@ translate_archive_info(#archive_info{
     id = ArchiveId,
     dataset_id = DatasetId,
     state = State,
-    root_file_guid = RootFileGuid,
+    root_dir_guid = RootDirGuid,
     creation_time = CreationTime,
     config = Config,
     preserved_callback = PreservedCallback,
@@ -68,10 +68,10 @@ translate_archive_info(#archive_info{
         <<"archiveId">> => ArchiveId,
         <<"datasetId">> => DatasetId,
         <<"state">> => str_utils:to_binary(State),
-        <<"rootFileId">> => case RootFileGuid =/= undefined of
+        <<"rootDirectoryId">> => case RootDirGuid =/= undefined of
             true ->
-                {ok, RootDirObjectId} = file_id:guid_to_objectid(RootFileGuid),
-                RootDirObjectId;
+                {ok, DirObjectId} = file_id:guid_to_objectid(RootDirGuid),
+                DirObjectId;
             false ->
                 null
         end,

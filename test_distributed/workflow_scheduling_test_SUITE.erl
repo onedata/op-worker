@@ -183,7 +183,7 @@ failure_test_base(Config, Id, TaskToFail, LaneWithErrorIndex, BoxWithErrorIndex)
         execution_context => #{type => WorkflowType, async_call_pools => [?ASYNC_CALL_POOL_ID]}
     },
 
-    ItemToFail = <<"5">>,
+    ItemToFail = <<"100">>,
     set_task_execution_gatherer_option(Config, fail_job, {TaskToFail, ItemToFail}),
     ?assertEqual(ok, rpc:call(Worker, workflow_engine, execute_workflow, [?ENGINE_ID, Workflow])),
 

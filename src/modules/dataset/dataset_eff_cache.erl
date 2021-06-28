@@ -17,8 +17,10 @@
 -author("Jakub Kudzia").
 
 -include("global_definitions.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include("modules/dataset/dataset.hrl").
 -include("modules/fslogic/data_access_control.hrl").
+-include("modules/dataset/archivisation_tree.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/errors.hrl").
 
@@ -211,6 +213,12 @@ calculate(Doc = #document{}, undefined) ->
         eff_dataset_protection_flags = ProtectionFlags,
         eff_file_protection_flags = ProtectionFlags
     };
+calculate(#document{key = ?ARCHIVES_ROOT_DIR_UUID(SpaceId), scope = SpaceId}, _) ->
+    % files in archives cannot be established as datasets nor should they inherit dataset membership
+    #entry{};
+calculate(#document{key = ?TRASH_DIR_UUID(SpaceId), scope = SpaceId}, _) ->
+    % files in archives cannot be established as datasets nor should they inherit dataset membership
+    #entry{};
 calculate(Doc = #document{}, #entry{
     direct_attached_dataset = ParentDirectAttachedDataset,
     eff_ancestor_datasets = ParentEffAncestorDatasets,

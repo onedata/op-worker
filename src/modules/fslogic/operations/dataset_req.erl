@@ -132,7 +132,7 @@ create_archive(SpaceDirCtx, DatasetId, Config, PreservedCallback, PurgedCallback
     assert_has_eff_privilege(SpaceDirCtx, UserCtx, ?SPACE_MANAGE_DATASETS),
     assert_has_eff_privilege(SpaceDirCtx, UserCtx, ?SPACE_CREATE_ARCHIVES),
 
-    {ok, ArchiveId} = archive_api:create_archive(DatasetId, Config, PreservedCallback, PurgedCallback,
+    {ok, ArchiveId} = archive_api:start_archivisation(DatasetId, Config, PreservedCallback, PurgedCallback,
         Description, UserCtx),
     ?PROVIDER_OK_RESP(#dataset_archived{id = ArchiveId}).
 

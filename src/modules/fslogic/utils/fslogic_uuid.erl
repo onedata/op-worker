@@ -35,7 +35,6 @@
 -define(USER_ROOT_PREFIX, "userRoot_").
 -define(SPACE_ROOT_PREFIX, "space_").
 -define(ROOT_DIR_VIRTUAL_SPACE_ID, <<"rootDirVirtualSpaceId">>).
--define(TRASH_DIR_UUID_PREFIX, "trash_").
 -define(SHARE_ROOT_DIR_UUID_PREFIX, "share_").
 % Macros for hard links (link is equal to hardlink - see file_meta_hardlinks.erl)
 -define(LINK_UUID_PREFIX, "link_").
@@ -91,7 +90,7 @@ space_dir_uuid_to_spaceid(<<?SPACE_ROOT_PREFIX, SpaceId/binary>>) ->
 
 -spec spaceid_to_trash_dir_uuid(od_space:id()) -> file_meta:uuid().
 spaceid_to_trash_dir_uuid(SpaceId) ->
-    <<?TRASH_DIR_UUID_PREFIX, SpaceId/binary>>.
+    ?TRASH_DIR_UUID(SpaceId).
 
 
 -spec spaceid_to_trash_dir_guid(od_space:id()) -> file_id:file_guid().

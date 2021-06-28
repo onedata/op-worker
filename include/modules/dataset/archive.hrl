@@ -26,10 +26,9 @@
 % Macros defining possible layouts of files and directories in an archive
 -define(ARCHIVE_PLAIN_LAYOUT, plain).
 -define(ARCHIVE_BAGIT_LAYOUT, bagit).
-% TODO VFS-7651 add ?ARCHIVE_BAGIT_LAYOUT to the following list
--define(ARCHIVE_LAYOUTS, [?ARCHIVE_PLAIN_LAYOUT]).
+-define(ARCHIVE_LAYOUTS, [?ARCHIVE_PLAIN_LAYOUT, ?ARCHIVE_BAGIT_LAYOUT]).
 
-% TODO VFS-7652 add true to the below list
+% TODO VFS-7780 add true to the below list
 -define(SUPPORTED_INCREMENTAL_VALUES, [false]).
 % TODO VFS-7653 add true to the below list
 -define(SUPPORTED_INCLUDE_DIP_VALUES, [false]).
@@ -38,13 +37,17 @@
 -define(DEFAULT_INCLUDE_DIP, false).
 -define(DEFAULT_INCREMENTAL, false).
 -define(DEFAULT_ARCHIVE_DESCRIPTION, <<>>).
+-define(DEFAULT_CREATE_NESTED_ARCHIVES, false).
 
 -record(archive_config, {
     incremental = ?DEFAULT_INCREMENTAL :: archive_config:incremental(),
     % This flag determines whether dissemination information package (DIP) is created alongside with
     % archival information package (AIP), on the storage.
     include_dip = ?DEFAULT_INCLUDE_DIP :: archive_config:include_dip(),
-    layout :: archive_config:layout()
+    layout :: archive_config:layout(),
+    % this flag determines whether archives of nested datasets should be created
+    % during archivisation of a dataset
+    create_nested_archives = ?DEFAULT_CREATE_NESTED_ARCHIVES :: boolean()
 }).
 
 -record(archive_stats, {

@@ -83,6 +83,8 @@
 
 % Trash associated macros
 -define(TRASH_DIR_NAME, <<".trash">>).
+-define(TRASH_DIR_UUID_PREFIX, "trash_").
+-define(TRASH_DIR_UUID(SpaceId), <<?TRASH_DIR_UUID_PREFIX, SpaceId/binary>>).
 
 % Token that should be passed as initial token to start listing using tokens.
 -define(INITIAL_LS_TOKEN, <<>>).

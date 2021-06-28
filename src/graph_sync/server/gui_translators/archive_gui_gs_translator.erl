@@ -39,7 +39,7 @@ translate_archive_info(#archive_info{
     id = ArchiveId,
     dataset_id = DatasetId,
     state = State,
-    root_file_guid = RootFileGuid,
+    root_dir_guid = RootDirGuid,
     creation_time = CreationTime,
     config = Config,
     preserved_callback = PreservedCallback,
@@ -58,9 +58,9 @@ translate_archive_info(#archive_info{
             aspect = instance, scope = private
         }),
         <<"state">> => str_utils:to_binary(State),
-        <<"rootFile">> => case RootFileGuid =/= undefined of
+        <<"rootDir">> => case RootDirGuid =/= undefined of
             true -> gri:serialize(#gri{
-                type = op_file, id = RootFileGuid,
+                type = op_file, id = RootDirGuid,
                 aspect = instance, scope = private
             });
             false ->

@@ -18,16 +18,21 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([create/7, create_child/2, get/1, modify_attrs/2, delete/1]).
+-export([create/7, create_nested/2, get/1, modify_attrs/2, delete/1]).
+-export([get_root_dir_ctx/1, get_all_ancestors/1]).
 
 % getters
 -export([get_id/1, get_creation_time/1, get_dataset_id/1, get_dataset_root_file_guid/1, get_space_id/1,
     get_state/1, get_config/1, get_preserved_callback/1, get_purged_callback/1,
-    get_description/1, get_stats/1, get_root_file_guid/1, get_parent/1, get_parent_doc/1, is_finished/1
+    get_description/1, get_stats/1, get_root_dir_guid/1,
+    get_data_dir_guid/1, get_parent/1, get_parent_doc/1, is_finished/1
 ]).
 
 % setters
--export([mark_building/1, mark_purging/2, mark_file_archived/3, mark_file_failed/1, mark_finished/2, set_root_file_guid/2]).
+-export([mark_building/1, mark_purging/2,
+    mark_file_archived/2, mark_file_failed/1, mark_finished/2,
+    set_root_dir_guid/2, set_data_dir_guid/2
+]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1]).
@@ -101,12 +106,13 @@ create(DatasetId, SpaceId, Creator, Config, PreservedCallback, PurgedCallback, D
     }).
 
 
--spec create_child(dataset:id(), doc()) -> {ok, doc()} | error().
-create_child(DatasetId, #document{
+-spec create_nested(dataset:id(), doc()) -> {ok, doc()} | error().
+create_nested(DatasetId, #document{
     key = ParentArchiveId,
     value = #archive{
         config = Config,
-        creator = Creator
+        creator = Creator,
+        description = Description
     },
     scope = SpaceId
 }) ->
@@ -114,11 +120,12 @@ create_child(DatasetId, #document{
         value = #archive{
             dataset_id = DatasetId,
             creation_time = global_clock:timestamp_seconds(),
-            config = Config,
-            state = ?ARCHIVE_BUILDING,
-            parent = ParentArchiveId,
             creator = Creator,
-            description = <<"">>,
+            % nested archive is created when parent archive is already in building state
+            state = ?ARCHIVE_BUILDING,
+            config = Config,
+            parent = ParentArchiveId,
+            description = Description,
             stats = archive_stats:empty()
         },
         scope = SpaceId
@@ -148,6 +155,19 @@ modify_attrs(ArchiveId, Diff) when is_map(Diff) ->
 -spec delete(archive:id()) -> ok | error().
 delete(ArchiveId) ->
     datastore_model:delete(?CTX, ArchiveId).
+
+
+-spec get_root_dir_ctx(record() | doc()) -> {ok, file_ctx:ctx()}.
+get_root_dir_ctx(Archive) ->
+    {ok, RootDirGuid} = get_root_dir_guid(Archive),
+    {ok, file_ctx:new_by_guid(RootDirGuid)}.
+
+
+-spec get_all_ancestors(doc() | record()) -> {ok, [doc()]}.
+get_all_ancestors(#archive{parent = ParentArchive}) ->
+    get_all_ancestors(ParentArchive, []);
+get_all_ancestors(#document{value = Archive}) ->
+    get_all_ancestors(Archive).
 
 %%%===================================================================
 %%% Getters for #archive record
@@ -221,17 +241,25 @@ get_stats(#archive{stats = Stats}) ->
 get_stats(#document{value = Archive}) ->
     get_stats(Archive).
 
--spec get_root_file_guid(record() | doc()) -> {ok, file_id:file_guid()}.
-get_root_file_guid(#archive{root_file_guid = RootFileGuid}) ->
-    {ok, RootFileGuid};
-get_root_file_guid(#document{value = Archive}) ->
-    get_root_file_guid(Archive).
+-spec get_root_dir_guid(record() | doc()) -> {ok, file_id:file_guid()}.
+get_root_dir_guid(#archive{root_dir_guid = RootDirGuid}) ->
+    {ok, RootDirGuid};
+get_root_dir_guid(#document{value = Archive}) ->
+    get_root_dir_guid(Archive).
+
+-spec get_data_dir_guid(record() | doc()) -> {ok, file_id:file_guid()}.
+get_data_dir_guid(#archive{data_dir_guid = DataDirGuid}) -> 
+    {ok, DataDirGuid};
+get_data_dir_guid(#document{value = Archive}) -> 
+    get_data_dir_guid(Archive).
 
 -spec get_parent(record() | doc()) -> {ok, archive:id() | undefined}.
 get_parent(#archive{parent = Parent}) ->
     {ok, Parent};
 get_parent(#document{value = Archive}) ->
-    get_parent(Archive).
+    get_parent(Archive);
+get_parent(ArchiveId) ->
+    ?get_field(ArchiveId, fun get_parent/1).
 
 -spec get_parent_doc(record() | doc()) -> {ok, doc() | undefined} | {error, term()}.
 get_parent_doc(Archive) ->
@@ -239,7 +267,6 @@ get_parent_doc(Archive) ->
         {ok, undefined} -> {ok, undefined};
         {ok, ParentArchiveId} -> get(ParentArchiveId)
     end.
-
 
 -spec is_finished(record() | doc()) -> boolean().
 is_finished(#archive{state = State}) ->
@@ -297,15 +324,10 @@ mark_finished(ArchiveDocOrId, NestedArchivesStats) ->
     end)).
 
 
--spec mark_file_archived(id() | doc(), non_neg_integer(), file_id:file_guid() | undefined) -> ok | error().
-mark_file_archived(ArchiveDocOrId, FileSize, NewRootFileGuid) ->
+-spec mark_file_archived(id() | doc(), non_neg_integer()) -> ok | error().
+mark_file_archived(ArchiveDocOrId, FileSize) ->
     ?extract_ok(update(ArchiveDocOrId, fun(Archive0 = #archive{stats = Stats}) ->
-        Archive1 = Archive0#archive{stats = archive_stats:mark_file_archived(Stats, FileSize)},
-        Archive2 = case NewRootFileGuid =/= undefined of
-            true -> Archive1#archive{root_file_guid = NewRootFileGuid};
-            false -> Archive1
-        end,
-        {ok, Archive2}
+        {ok, Archive0#archive{stats = archive_stats:mark_file_archived(Stats, FileSize)}}
     end)).
 
 
@@ -316,10 +338,16 @@ mark_file_failed(ArchiveDocOrId) ->
     end)).
 
 
--spec set_root_file_guid(id() | doc(), file_id:file_guid()) -> {ok, doc()} | error().
-set_root_file_guid(ArchiveDocOrId, RootFileGuid) ->
+-spec set_root_dir_guid(id() | doc(), file_id:file_guid()) -> {ok, doc()} | error().
+set_root_dir_guid(ArchiveDocOrId, RootDirGuid) ->
     update(ArchiveDocOrId, fun(Archive) ->
-        {ok, Archive#archive{root_file_guid = RootFileGuid}}
+        {ok, Archive#archive{root_dir_guid = RootDirGuid}}
+    end).
+
+-spec set_data_dir_guid(id() | doc(), file_id:file_guid()) -> {ok, doc()} | error().
+set_data_dir_guid(ArchiveDocOrId, DataDirGuid) ->
+    update(ArchiveDocOrId, fun(Archive) ->
+        {ok, Archive#archive{data_dir_guid = DataDirGuid}}
     end).
 
 %%%===================================================================
@@ -332,6 +360,15 @@ update(#document{key = ArchiveId}, Diff) ->
     update(ArchiveId, Diff);
 update(ArchiveId, Diff) ->
     datastore_model:update(?CTX, ArchiveId, Diff).
+
+
+-spec get_all_ancestors(undefined | id(), [doc()]) -> {ok, [doc()]}.
+get_all_ancestors(undefined, AncestorArchives) ->
+    {ok, lists:reverse(AncestorArchives)};
+get_all_ancestors(ArchiveId, AncestorArchives) ->
+    {ok, ArchiveDoc} = get(ArchiveId),
+    {ok, ParentArchiveId} = get_parent(ArchiveDoc),
+    get_all_ancestors(ParentArchiveId, [ArchiveDoc | AncestorArchives]).
 
 %%%===================================================================
 %%% Datastore callbacks
@@ -362,7 +399,8 @@ get_record_struct(1) ->
         {preserved_callback, string},
         {purged_callback, string},
         {description, string},
-        {root_file_guid, string},
+        {root_dir_guid, string},
+        {data_dir_guid, string},
         {stats, {custom, string, {persistent_record, encode, decode, archive_stats}}},
         {parent, string}
     ]}.
