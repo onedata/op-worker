@@ -66,11 +66,13 @@
 ]).
 
 groups() -> [
-    {parallel_tests, [parallel], [
+    {time_mock_parallel_tests, [parallel], [
         archive_dataset_attached_to_dir,
         archive_dataset_attached_to_file,
-        archive_dataset_attached_to_hardlink,
+        archive_dataset_attached_to_hardlink
         % archive_dataset_attached_to_symlink, TODO VFS-7664
+    ]},
+    {parallel_tests, [parallel], [
         archivisation_of_detached_dataset_should_be_impossible,
         archive_of_detached_dataset_should_be_accessible,
         archive_of_dataset_associated_with_deleted_file_should_be_accessible,
@@ -99,6 +101,7 @@ groups() -> [
 
 
 all() -> [
+    {group, time_mock_parallel_tests},
     {group, parallel_tests},
     {group, sequential_tests}
 ].
@@ -126,15 +129,8 @@ all() -> [
 -define(RAND_CONTENT(Size), crypto:strong_rand_bytes(Size)).
 
 %===================================================================
-% Parallel tests - tests which can be safely run in parallel
-% as they do not interfere with any other test.
+% Parallel tests that use clock freezer mock.
 %===================================================================
-
-archive_dataset_attached_to_space_dir(_Config) ->
-    SpaceId = oct_background:get_space_id(?SPACE),
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
-    #dataset_object{id = DatasetId} = onenv_dataset_test_utils:set_up_and_sync_dataset(user1, SpaceGuid),
-    simple_archive_crud_test_base(DatasetId, ?DIRECTORY_TYPE).
 
 archive_dataset_attached_to_dir(_Config) ->
     #object{dataset = #dataset_object{id = DatasetId}} =
@@ -173,6 +169,11 @@ archive_dataset_attached_to_symlink(_Config) ->
     ),
     simple_archive_crud_test_base(DatasetId, ?SYMLINK_TYPE).
 
+%===================================================================
+% Parallel tests - tests which can be safely run in parallel
+% as they do not interfere with any other test.
+%===================================================================
+
 archivisation_of_detached_dataset_should_be_impossible(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
@@ -190,9 +191,8 @@ archive_of_detached_dataset_should_be_accessible(_Config) ->
 
     {ok, ArchiveId} = ?assertMatch({ok, _},
         lfm_proxy:archive_dataset(P1Node, UserSessIdP1, DatasetId, ?TEST_ARCHIVE_CONFIG, ?TEST_DESCRIPTION1)),
-    ?assertMatch({ok, #archive_info{state = ?ARCHIVE_PRESERVED}},
+    {ok, #archive_info{index = Index}} = ?assertMatch({ok, #archive_info{state = ?ARCHIVE_PRESERVED}},
         lfm_proxy:get_archive_info(P1Node, UserSessIdP1, ArchiveId), ?ATTEMPTS),
-    Index = archives_list:index(ArchiveId, global_clock_timestamp(P1Node)),
     ?assertEqual({ok, [{Index, ArchiveId}], true},
         lfm_proxy:list_archives(P1Node, UserSessIdP1, DatasetId, #{offset => 0, limit => 10})),
 
@@ -211,9 +211,8 @@ archive_of_dataset_associated_with_deleted_file_should_be_accessible(_Config) ->
 
     {ok, ArchiveId} = ?assertMatch({ok, _},
         lfm_proxy:archive_dataset(P1Node, UserSessIdP1, DatasetId, ?TEST_ARCHIVE_CONFIG, ?TEST_DESCRIPTION1)),
-    ?assertMatch({ok, #archive_info{state = ?ARCHIVE_PRESERVED}},
+    {ok, #archive_info{index = Index}} = ?assertMatch({ok, #archive_info{state = ?ARCHIVE_PRESERVED}},
         lfm_proxy:get_archive_info(P1Node, UserSessIdP1, ArchiveId), ?ATTEMPTS),
-    Index = archives_list:index(ArchiveId, global_clock_timestamp(P1Node)),
     ?assertEqual({ok, [{Index, ArchiveId}], true},
         lfm_proxy:list_archives(P1Node, UserSessIdP1, DatasetId, #{offset => 0, limit => 10})),
 
@@ -232,9 +231,8 @@ archive_reattached_dataset(_Config) ->
 
     {ok, ArchiveId} = ?assertMatch({ok, _},
         lfm_proxy:archive_dataset(P1Node, UserSessIdP1, DatasetId, ?TEST_ARCHIVE_CONFIG, ?TEST_DESCRIPTION1)),
-    ?assertMatch({ok, #archive_info{state = ?ARCHIVE_PRESERVED}},
+    {ok, #archive_info{index = Index}} = ?assertMatch({ok, #archive_info{state = ?ARCHIVE_PRESERVED}},
         lfm_proxy:get_archive_info(P1Node, UserSessIdP1, ArchiveId), ?ATTEMPTS),
-    Index = archives_list:index(ArchiveId, global_clock_timestamp(P1Node)),
     ?assertEqual({ok, [{Index, ArchiveId}], true},
         lfm_proxy:list_archives(P1Node, UserSessIdP1, DatasetId, #{offset => 0, limit => 10})),
 
@@ -258,9 +256,8 @@ removal_of_not_empty_dataset_should_fail(_Config) ->
     {ok, ArchiveId} = ?assertMatch({ok, _},
         lfm_proxy:archive_dataset(P1Node, UserSessIdP1, DatasetId, ?TEST_ARCHIVE_CONFIG, ?TEST_DESCRIPTION1)),
 
-    ?assertMatch({ok, #archive_info{state = ?ARCHIVE_PRESERVED}},
+    {ok, #archive_info{index = Index}} = ?assertMatch({ok, #archive_info{state = ?ARCHIVE_PRESERVED}},
         lfm_proxy:get_archive_info(P1Node, UserSessIdP1, ArchiveId), ?ATTEMPTS),
-    Index = archives_list:index(ArchiveId, global_clock_timestamp(P1Node)),
     ?assertEqual({ok, [{Index, ArchiveId}], true},
         lfm_proxy:list_archives(P1Node, UserSessIdP1, DatasetId, #{offset => 0, limit => 10})),
 
@@ -308,6 +305,13 @@ iterate_over_100_archives_using_start_index_and_limit_10000(_Config) ->
 % to ensure that they do not interfere with each other (e. g. by
 % modifying mocked global_clock or changing user's privileges)
 %===================================================================
+
+archive_dataset_attached_to_space_dir(_Config) ->
+    SpaceId = oct_background:get_space_id(?SPACE),
+    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    #dataset_object{id = DatasetId} = onenv_dataset_test_utils:set_up_and_sync_dataset(user1, SpaceGuid),
+    simple_archive_crud_test_base(DatasetId, ?DIRECTORY_TYPE).
+
 
 archive_dataset_many_times(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
@@ -625,6 +629,8 @@ init_per_suite(Config) ->
 end_per_suite(_Config) ->
     oct_background:end_per_suite().
 
+init_per_group(sequential_tests, Config) ->
+    lfm_proxy:init(Config, false);
 init_per_group(_Group, Config) ->
     time_test_utils:freeze_time(Config),
     lfm_proxy:init(Config, false).
