@@ -77,9 +77,14 @@ view_content(_AtmWorkflowExecutionCtx, _Opts, #atm_single_value_store_container{
 
 view_content(AtmWorkflowExecutionCtx, _Opts, #atm_single_value_store_container{
     data_spec = AtmDataSpec,
-    value = Value
+    value = CompressedValue
 }) ->
-    {ok, [{<<>>, atm_value:expand(AtmWorkflowExecutionCtx, Value, AtmDataSpec)}], true}.
+    case atm_value:expand(AtmWorkflowExecutionCtx, CompressedValue, AtmDataSpec) of
+        {ok, ExpandedValue} ->
+            {ok, [{<<>>, ExpandedValue}], true};
+        {error, _} ->
+            {ok, [], true}
+    end.
 
 
 -spec acquire_iterator(record()) -> atm_single_value_store_container_iterator:record().
