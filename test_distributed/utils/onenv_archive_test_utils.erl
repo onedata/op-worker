@@ -32,7 +32,7 @@
 -export_type([archive_spec/0, archive_object/0]).
 
 
--define(ATTEMPTS, 120).
+-define(ATTEMPTS, 600).
 
 
 %%%===================================================================
