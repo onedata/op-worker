@@ -19,15 +19,15 @@
 -define(DEFAULT_ASYNC_CALL_POOL_ID, <<"def_call_pool">>).
 
 %%%===================================================================
-%%% Record describing job to be executed
+%%% Record describing execution on pool's process
 %%%===================================================================
 
--record(job_execution_spec, {
+-record(execution_spec, {
     handler :: workflow_handler:handler(),
     context :: workflow_engine:execution_context(),
     task_id :: workflow_engine:task_id(),
     task_spec :: workflow_engine:task_spec(),
-    item_id :: workflow_cached_item:id(),
+    subject_id :: workflow_engine:subject_id(),
     job_identifier :: workflow_jobs:job_identifier()
 }).
 
@@ -38,6 +38,7 @@
 -define(SYNC_CALL, sync_call).
 -define(ASYNC_CALL_STARTED, async_call_started).
 -define(ASYNC_CALL_FINISHED, async_call_finished).
+-define(ASYNC_RESULT_PROCESSED, async_result_processed).
 
 %%%===================================================================
 %%% Macros describing possible results of item processing
@@ -45,6 +46,13 @@
 
 -define(SUCCESS, success).
 -define(FAILURE, failure).
+
+%%%===================================================================
+%%% Macros describing possible types of processing on pool
+%%%===================================================================
+
+-define(JOB_PROCESSING, job_processing).
+-define(ASYNC_RESULT_PROCESSING, async_result_processing).
 
 %%%===================================================================
 %%% Macros used to describe processing of parallel box's jobs
@@ -74,8 +82,6 @@
 -define(WF_ERROR_PREPARATION_FAILED, {error, preparation_failed}).
 -define(WF_ERROR_NO_WAITING_ITEMS, {error, no_waiting_items}).
 -define(WF_ERROR_RACE_CONDITION, {error, race_condition}).
--define(WF_ERROR_UNKNOWN_JOB, {error, unknown_job}).
--define(WF_ERROR_ALREADY_FINISHED(Ans), {error, {already_finished, Ans}}).
 -define(WF_ERROR_ITEM_PROCESSING_FINISHED(Item, SuccessOrFailure),
     {error, {item_processing_finished, Item, SuccessOrFailure}}).
 
@@ -84,5 +90,9 @@
 
 % errors connected with timeouts verification
 -define(WF_ERROR_NO_TIMEOUTS_UPDATED, {error, no_timeouts_updated}).
+
+% errors connected with result encoding/decoding/waiting
+-define(WF_ERROR_MALFORMED_REQUEST, {error, malformed_request}).
+-define(WF_ERROR_TIMEOUT, {error, timeout}).
 
 -endif.

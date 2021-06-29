@@ -22,7 +22,7 @@
 %% API
 -export([init/3, init_using_snapshot/3, cleanup/1, prepare_next_job/1,
     report_execution_status_update/4, report_execution_prepared/4, report_limit_reached_error/2,
-    check_timeouts/2, reset_keepalive_timer/2, get_result_processing_data/2]).
+    check_timeouts/1, reset_keepalive_timer/2, get_result_processing_data/2]).
 %% Test API
 -export([is_finished_and_cleaned/2, get_lane_index/1, get_item_id/2]).
 
@@ -41,7 +41,7 @@
     job_identifier :: workflow_jobs:job_identifier(),
     task_id :: workflow_engine:task_id(),
     task_spec :: workflow_engine:task_spec(),
-    item_id :: workflow_cached_item:id() | undefined
+    subject_id :: workflow_engine:subject_id()
 }).
 -record(items_processed_report, {
     lane_index :: index(),
@@ -51,6 +51,7 @@
     notify_task_finished :: boolean()
 }).
 -define(TASK_PROCESSED_REPORT(NotifyTaskFinished), {task_processed_report, NotifyTaskFinished}).
+-define(JOBS_EXPIRED(AsyncPoolsChange), {jobs_expired, AsyncPoolsChange}).
 
 -type index() :: non_neg_integer(). % scheduling is based on positions of elements (items, parallel_boxes, tasks)
                                     % to allow executions of tasks in chosen order
@@ -64,8 +65,10 @@
 -define(PREPARATION_FAILED, preparation_failed).
 -define(PREPARATION_SUCCESSFUL, preparation_successful).
 -type preparation_status() :: ?NOT_PREPARED | ?PREPARING | ?PREPARATION_FAILED | ?PREPARATION_SUCCESSFUL.
+-type cached_processing_result() :: workflow_engine:callback_execution_result() | workflow_cached_async_result:id().
 
 -type current_lane() :: #current_lane{}.
+-type async_pools_change() :: #{workflow_async_call_pool:id() => non_neg_integer()}.
 
 %% @formatter:off
 -type boxes_map() :: #{
@@ -85,7 +88,7 @@
     {error, {no_cached_items, LaneIndex, ItemIndex, IterationStep, Context}}).
 -define(WF_ERROR_EXECUTION_PREPARATION_FAILED(Handler, Context),
     {error, {execution_preparation_failed, Handler, Context}}).
--define(WF_ERROR_TIMEOUT, {error, timeout}).
+-define(WF_ERROR_NOTHING_CHANGED, {error, nothing_changed}).
 
 -type update_fun() :: datastore_doc:diff(state()).
 -type no_items_error() :: ?WF_ERROR_NO_WAITING_ITEMS |
@@ -94,7 +97,7 @@
 % Type used to return additional information about document update procedure
 % (see #workflow_execution_state.update_report)
 -type update_report() :: ?EXECUTION_SET_TO_BE_PREPARED | #job_prepared_report{} | #items_processed_report{} |
-    ?TASK_PROCESSED_REPORT(boolean()) | no_items_error().
+    ?TASK_PROCESSED_REPORT(boolean()) | ?JOBS_EXPIRED(async_pools_change()) | no_items_error().
 
 -export_type([index/0, iteration_step/0, current_lane/0, preparation_status/0, boxes_map/0, update_report/0]).
 
@@ -145,7 +148,7 @@ cleanup(ExecutionId) ->
     ok = datastore_model:delete(?CTX, ExecutionId).
 
 -spec prepare_next_job(workflow_engine:execution_id()) ->
-    {ok, workflow_engine:job_execution_spec()} |
+    {ok, workflow_engine:execution_spec()} |
     ?END_EXECUTION(workflow_handler:handler(), workflow_engine:execution_context(), index(), boolean()) |
     ?PREPARE_EXECUTION(workflow_handler:handler(), workflow_engine:execution_context()) | ?DEFER_EXECUTION |
     ?END_EXECUTION_AFTER_PREPARATION_ERROR(workflow_handler:handler(), workflow_engine:execution_context()).
@@ -172,10 +175,15 @@ prepare_next_job(ExecutionId) ->
     workflow_jobs:job_identifier(),
     workflow_engine:processing_stage(),
     workflow_engine:processing_result()
-) -> ok.
+) -> workflow_engine:task_spec().
 report_execution_status_update(ExecutionId, JobIdentifier, UpdateType, Ans) ->
+    CachedAns = case UpdateType of
+        ?ASYNC_CALL_FINISHED -> workflow_cached_async_result:put(Ans);
+        _ -> Ans
+    end,
+
     {UpdatedDoc, NotifyTaskExecutionEnded} = case update(ExecutionId, fun(State) ->
-        report_execution_status_update_internal(State, JobIdentifier, UpdateType, Ans)
+        report_execution_status_update_internal(State, JobIdentifier, UpdateType, CachedAns)
     end) of
         {ok, Doc = #document{value = #workflow_execution_state{update_report = #items_processed_report{
             item_id_to_snapshot = undefined,
@@ -203,7 +211,13 @@ report_execution_status_update(ExecutionId, JobIdentifier, UpdateType, Ans) ->
             {Doc, false}
     end,
 
-    maybe_notify_task_execution_ended(UpdatedDoc, JobIdentifier, NotifyTaskExecutionEnded).
+    maybe_notify_task_execution_ended(UpdatedDoc, JobIdentifier, NotifyTaskExecutionEnded),
+
+    #document{value = #workflow_execution_state{
+        current_lane = #current_lane{parallel_boxes_spec = BoxesSpec}
+    }} = UpdatedDoc,
+    {_TaskId, TaskSpec} = workflow_jobs:get_task_details(JobIdentifier, BoxesSpec),
+    TaskSpec.
 
 -spec report_execution_prepared(
     workflow_engine:execution_id(),
@@ -227,32 +241,16 @@ report_limit_reached_error(ExecutionId, JobIdentifier) ->
     {ok, _} = update(ExecutionId, fun(State) -> pause_job(State, JobIdentifier) end),
     ok.
 
--spec check_timeouts(workflow_engine:execution_id(), workflow_engine:id()) -> ok.
-check_timeouts(ExecutionId, EngineId) ->
-    case datastore_model:get(?CTX, ExecutionId) of
-        {ok, #document{value = #workflow_execution_state{jobs = undefined}}} ->
-            ok;
-        {ok, #document{value = #workflow_execution_state{
-            jobs = Jobs,
-            handler = Handler,
-            context = Context,
-            current_lane = #current_lane{parallel_boxes_spec = BoxesSpec}
-        }}} ->
-            {UpdatedJobs, ExpiredJobsIdentifiers} = workflow_jobs:check_timeouts(Jobs),
-            case UpdatedJobs of
-                ?WF_ERROR_NO_TIMEOUTS_UPDATED -> ok;
-                NewJobs -> update(ExecutionId, fun(State) -> update_jobs(State, NewJobs) end)
-            end,
-
-            lists:foreach(fun(JobIdentifier) ->
-                {TaskId, TaskSpec} = workflow_jobs:get_task_details(JobIdentifier, BoxesSpec),
-                CallPools = workflow_engine:get_async_call_pools(TaskSpec),
-                ProcessedResult = Handler:process_result(ExecutionId, Context, TaskId, ?WF_ERROR_TIMEOUT),
-                workflow_engine:report_execution_status_update(
-                    ExecutionId, EngineId, ?ASYNC_CALL_FINISHED, JobIdentifier, CallPools, ProcessedResult)
-            end, ExpiredJobsIdentifiers);
-        ?ERROR_NOT_FOUND ->
-            ok
+-spec check_timeouts(workflow_engine:execution_id()) -> TimeoutAppeared :: boolean().
+check_timeouts(ExecutionId) ->
+    case update(ExecutionId, fun check_timeouts_internal/1) of
+        {ok, #document{value = #workflow_execution_state{update_report = ?JOBS_EXPIRED(AsyncPoolsChange)}}} ->
+            lists:foreach(fun({AsyncPoolId, Change}) ->
+                workflow_async_call_pool:decrement_slot_usage(AsyncPoolId, Change)
+            end, maps:to_list(AsyncPoolsChange)),
+            maps:size(AsyncPoolsChange) =/= 0;
+        ?WF_ERROR_NOTHING_CHANGED  ->
+            false
     end.
 
 -spec reset_keepalive_timer(workflow_engine:execution_id(), workflow_jobs:job_identifier()) -> ok.
@@ -350,7 +348,7 @@ prepare_lane(ExecutionId, Handler, Context, LaneIndex) ->
     end.
 
 -spec prepare_next_job_for_current_lane(workflow_engine:execution_id()) ->
-    {ok, workflow_engine:job_execution_spec()} |
+    {ok, workflow_engine:execution_spec()} |
     ?PREPARE_EXECUTION(workflow_handler:handler(), workflow_engine:execution_context()) | no_items_error() |
     ?WF_ERROR_EXECUTION_PREPARATION_FAILED(workflow_handler:handler(), workflow_engine:execution_context()).
 prepare_next_job_for_current_lane(ExecutionId) ->
@@ -359,14 +357,14 @@ prepare_next_job_for_current_lane(ExecutionId) ->
             handler = Handler, context = ExecutionContext}}} ->
             ?PREPARE_EXECUTION(Handler, ExecutionContext);
         {ok, #document{value = #workflow_execution_state{update_report = #job_prepared_report{
-            job_identifier = JobIdentifier, task_id = TaskId, task_spec = TaskSpec, item_id = ItemId},
+            job_identifier = JobIdentifier, task_id = TaskId, task_spec = TaskSpec, subject_id = SubjectId},
             handler = Handler, context = ExecutionContext}}} ->
-            {ok, #job_execution_spec{
+            {ok, #execution_spec{
                 handler = Handler,
                 context = ExecutionContext,
                 task_id = TaskId,
                 task_spec = TaskSpec,
-                item_id = ItemId,
+                subject_id = SubjectId,
                 job_identifier = JobIdentifier
             }};
         ?WF_ERROR_NO_CACHED_ITEMS(LaneIndex, ItemIndex, IterationStep, Context) ->
@@ -376,7 +374,7 @@ prepare_next_job_for_current_lane(ExecutionId) ->
     end.
 
 -spec prepare_next_job_using_iterator(workflow_engine:execution_id(), index(), iteration_step(),
-    index(), workflow_engine:execution_context()) -> {ok, workflow_engine:job_execution_spec()} | no_items_error().
+    index(), workflow_engine:execution_context()) -> {ok, workflow_engine:execution_spec()} | no_items_error().
 prepare_next_job_using_iterator(ExecutionId, ItemIndex, CurrentIterationStep, LaneIndex, Context) ->
     NextIterationStep = case CurrentIterationStep of
         undefined ->
@@ -385,6 +383,7 @@ prepare_next_job_using_iterator(ExecutionId, ItemIndex, CurrentIterationStep, La
             case iterator:get_next(Context, CurrentIterator) of
                 {ok, NextItem, NextIterator} ->
                     % TODO VFS-7787 return (to engine) item instead of item_id in this case (engine must read from cache when we have item here)
+                    % Maybe generate item_id using index (there will be no need to translate job to datastore key)?
                     {workflow_cached_item:put(NextItem, NextIterator), NextIterator};
                 stop ->
                     undefined
@@ -396,14 +395,14 @@ prepare_next_job_using_iterator(ExecutionId, ItemIndex, CurrentIterationStep, La
         handle_next_iteration_step(State, LaneIndex, ItemIndex, NextIterationStep, ParallelBoxToStart)
     end) of
         {ok, #document{value = #workflow_execution_state{update_report = #job_prepared_report{
-            job_identifier = JobIdentifier, task_id = TaskId, task_spec = TaskSpec, item_id = ItemId},
+            job_identifier = JobIdentifier, task_id = TaskId, task_spec = TaskSpec, subject_id = SubjectId},
             handler = Handler, context = ExecutionContext}}} ->
-            {ok, #job_execution_spec{
+            {ok, #execution_spec{
                 handler = Handler,
                 context = ExecutionContext,
                 task_id = TaskId,
                 task_spec = TaskSpec,
-                item_id = ItemId,
+                subject_id = SubjectId,
                 job_identifier = JobIdentifier
             }};
         {ok, #document{value = #workflow_execution_state{update_report = {error, _} = UpdateReport}}} ->
@@ -502,7 +501,7 @@ handle_next_iteration_step(State = #workflow_execution_state{
                     {TaskId, TaskSpec} = workflow_jobs:get_task_details(ToStart, BoxesSpec),
                     {ok, State#workflow_execution_state{
                         update_report = #job_prepared_report{job_identifier = ToStart,
-                            task_id = TaskId, task_spec = TaskSpec, item_id = PrefetchedItemId},
+                            task_id = TaskId, task_spec = TaskSpec, subject_id = PrefetchedItemId},
                         iteration_state = NewIterationState,
                         prefetched_iteration_step = NextIterationStep,
                         jobs = FinalJobs
@@ -518,37 +517,49 @@ pause_job(State = #workflow_execution_state{jobs = Jobs}, JobIdentifier) ->
         jobs = workflow_jobs:pause_job(Jobs, JobIdentifier)
     }}.
 
--spec update_jobs(state(), workflow_jobs:jobs()) -> {ok, state()}.
-update_jobs(State, Jobs) ->
-    {ok, State#workflow_execution_state{
-        jobs = Jobs
-    }}.
+-spec check_timeouts_internal(state()) -> {ok, state()} | ?WF_ERROR_NOTHING_CHANGED.
+check_timeouts_internal(State = #workflow_execution_state{
+    jobs = Jobs,
+    current_lane = #current_lane{parallel_boxes_spec = BoxesSpec}
+}) ->
+    % TODO VFS-7788 - check if task is expired (do it outside tp process)
+    {?WF_ERROR_NO_TIMEOUTS_UPDATED, ExpiredJobsIdentifiers} = workflow_jobs:check_timeouts(Jobs),
+
+    case length(ExpiredJobsIdentifiers) of
+        0 ->
+            ?WF_ERROR_NOTHING_CHANGED;
+        _ ->
+            {FinalState, AsyncPoolsChange} = lists:foldl(fun(JobIdentifier, {TmpState, TmpAsyncPoolsChange}) ->
+                {ok, NewTmpState} = report_execution_status_update_internal(
+                    TmpState, JobIdentifier, ?ASYNC_CALL_FINISHED, ?WF_ERROR_TIMEOUT),
+
+                {_, TaskSpec} = workflow_jobs:get_task_details(JobIdentifier, BoxesSpec),
+                NewTmpAsyncPoolsChange = lists:foldl(fun(AsyncPoolId, InternalTmpAsyncPoolsChange) ->
+                    TmpChange = maps:get(AsyncPoolId, InternalTmpAsyncPoolsChange, 0),
+                    InternalTmpAsyncPoolsChange#{AsyncPoolId => TmpChange + 1}
+                end, TmpAsyncPoolsChange, workflow_engine:get_async_call_pools(TaskSpec)),
+                {NewTmpState, NewTmpAsyncPoolsChange}
+            end, {State, #{}}, ExpiredJobsIdentifiers),
+
+            {ok, FinalState#workflow_execution_state{update_report = ?JOBS_EXPIRED(AsyncPoolsChange)}}
+    end.
 
 -spec report_execution_status_update_internal(
     state(),
     workflow_jobs:job_identifier(),
     workflow_engine:processing_stage(),
-    workflow_engine:processing_result()
+    cached_processing_result()
 ) -> {ok, state()}.
 report_execution_status_update_internal(State = #workflow_execution_state{
     jobs = Jobs
 }, JobIdentifier, ?ASYNC_CALL_STARTED, {ok, KeepaliveTimeout}) ->
-    case workflow_jobs:register_async_call(Jobs, JobIdentifier, KeepaliveTimeout) of
-        {ok, FinalJobs} ->
-            {ok, State#workflow_execution_state{jobs = FinalJobs}};
-        {?WF_ERROR_ALREADY_FINISHED(FinalAns), FinalJobs} ->
-            report_execution_status_update_internal(
-                State#workflow_execution_state{jobs = FinalJobs}, JobIdentifier, ?ASYNC_CALL_FINISHED, FinalAns)
-    end;
+    {ok, State#workflow_execution_state{
+        jobs = workflow_jobs:register_async_call(Jobs, JobIdentifier, KeepaliveTimeout)}};
 report_execution_status_update_internal(State = #workflow_execution_state{
     jobs = Jobs
-}, JobIdentifier, ?ASYNC_CALL_FINISHED, Ans) ->
-    case workflow_jobs:remove_pending_async_job(Jobs, JobIdentifier, Ans) of
-        {ok, NewJobs} ->
-            report_job_finish(State#workflow_execution_state{jobs = NewJobs}, JobIdentifier, Ans);
-        {?WF_ERROR_UNKNOWN_JOB, NewJobs} ->
-            {ok, State#workflow_execution_state{jobs = NewJobs}}
-    end;
+}, JobIdentifier, ?ASYNC_CALL_FINISHED, CachedResultId) ->
+    {ok, State#workflow_execution_state{
+        jobs = workflow_jobs:register_async_job_finish(Jobs, JobIdentifier, CachedResultId)}};
 report_execution_status_update_internal(State, JobIdentifier, _UpdateType, Ans) ->
     report_job_finish(State, JobIdentifier, Ans).
 
@@ -567,10 +578,11 @@ prepare_next_waiting_job(State = #workflow_execution_state{
     case workflow_jobs:prepare_next_waiting_job(Jobs) of
         {ok, JobIdentifier, NewJobs} ->
             {TaskId, TaskSpec} = workflow_jobs:get_task_details(JobIdentifier, BoxesSpec),
-            ItemId = workflow_jobs:get_item_id(JobIdentifier, IterationState),
+            % Use old `Jobs` as subject is no longer present in `NewJobs` (job is not waiting anymore)
+            SubjectId = workflow_jobs:get_subject_id(JobIdentifier, Jobs, IterationState),
             {ok, State#workflow_execution_state{
                 update_report = #job_prepared_report{job_identifier = JobIdentifier,
-                    task_id = TaskId, task_spec = TaskSpec, item_id = ItemId},
+                    task_id = TaskId, task_spec = TaskSpec, subject_id = SubjectId},
                 jobs = NewJobs
             }};
         Error ->
@@ -643,7 +655,8 @@ reset_keepalive_timer_internal(State = #workflow_execution_state{
         jobs = workflow_jobs:reset_keepalive_timer(Jobs, JobIdentifier)
     }}.
 
--spec report_job_finish(state(), workflow_jobs:job_identifier(), workflow_engine:processing_result()) -> {ok, state()}.
+-spec report_job_finish(state(), workflow_jobs:job_identifier(), workflow_handler:callback_execution_result()) ->
+    {ok, state()}.
 report_job_finish(State = #workflow_execution_state{
     jobs = Jobs
 }, JobIdentifier, ok) ->

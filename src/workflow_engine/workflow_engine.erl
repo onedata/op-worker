@@ -23,21 +23,24 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([init/1, init/2, execute_workflow/2, report_execution_status_update/6, get_async_call_pools/1]).
+-export([init/1, init/2, execute_workflow/2, report_execution_status_update/5, get_async_call_pools/1,
+    trigger_job_scheduling/1]).
 
 %% Functions exported for internal_services engine - do not call directly
 -export([init_service/2, takeover_service/3]).
 
 %% Function executed by wpool - do not call directly
--export([process_item/3, prepare_execution/4]).
+-export([process_job_or_result/3, prepare_execution/4]).
 
 -type id() :: binary(). % Id of an engine
 -type execution_id() :: binary().
 -type execution_context() :: term().
 -type task_id() :: binary().
--type job_execution_spec() :: #job_execution_spec{}.
--type processing_stage() :: ?SYNC_CALL | ?ASYNC_CALL_STARTED | ?ASYNC_CALL_FINISHED.
--type processing_result() :: workflow_handler:callback_execution_result() | {ok, KeepaliveTimeout :: time:seconds()}.
+-type subject_id() :: workflow_cached_item:id() | workflow_cached_async_result:id().
+-type execution_spec() :: #execution_spec{}.
+-type processing_stage() :: ?SYNC_CALL | ?ASYNC_CALL_STARTED | ?ASYNC_CALL_FINISHED | ?ASYNC_RESULT_PROCESSED.
+-type callback_execution_result() :: workflow_handler:callback_execution_result() | {ok, KeepaliveTimeout :: time:seconds()}.
+-type processing_result() :: callback_execution_result() | workflow_handler:task_processing_result().
 
 %% @formatter:off
 -type options() :: #{
@@ -46,7 +49,7 @@
     init_workflow_timeout_server => {true, workflow_timeout_monitor:check_period()} | false
 }.
 
--type execution_spec() :: #{
+-type workflow_execution_spec() :: #{
     id := id(),
     workflow_handler := workflow_handler:handler(),
     execution_context => execution_context(),
@@ -67,8 +70,8 @@
 }.
 %% @formatter:on
 
--export_type([id/0, execution_id/0, execution_context/0, task_id/0,
-    job_execution_spec/0, processing_stage/0, processing_result/0,
+-export_type([id/0, execution_id/0, execution_context/0, task_id/0, subject_id/0,
+    execution_spec/0, processing_stage/0, callback_execution_result/0, processing_result/0,
     task_spec/0, parallel_box_spec/0, lane_spec/0]).
 
 -define(POOL_ID(EngineId), binary_to_atom(EngineId, utf8)).
@@ -107,7 +110,7 @@ init(Id, Options) ->
     },
     ok = internal_services_manager:start_service(?MODULE, Id, ServiceOptions).
 
--spec execute_workflow(id(), execution_spec()) -> ok.
+-spec execute_workflow(id(), workflow_execution_spec()) -> ok.
 execute_workflow(EngineId, ExecutionSpec) ->
     ExecutionId = maps:get(id, ExecutionSpec),
     Handler = maps:get(workflow_handler, ExecutionSpec),
@@ -127,21 +130,15 @@ execute_workflow(EngineId, ExecutionSpec) ->
     end.
 
 -spec report_execution_status_update(execution_id(), id(), processing_stage(),
-    workflow_jobs:job_identifier(), workflow_async_call_pool:id() | undefined, processing_result()) -> ok.
-report_execution_status_update(ExecutionId, EngineId, ReportType, JobIdentifier, CallPoolId, Ans) ->
-    case CallPoolId of
-        undefined ->
-            ok;
-        [CallPoolMainId | _] -> % TODO VFS-7788 - support multiple pools
-            workflow_async_call_pool:decrement_slot_usage(CallPoolMainId);
-        _ ->
-            workflow_async_call_pool:decrement_slot_usage(CallPoolId)
-    end,
-
-    workflow_execution_state:report_execution_status_update(ExecutionId, JobIdentifier, ReportType, Ans),
+    workflow_jobs:job_identifier(), callback_execution_result()) -> ok.
+report_execution_status_update(ExecutionId, EngineId, ReportType, JobIdentifier, Ans) ->
+    TaskSpec = workflow_execution_state:report_execution_status_update(ExecutionId, JobIdentifier, ReportType, Ans),
 
     case ReportType of
         ?ASYNC_CALL_FINISHED ->
+            [CallPoolId] = get_async_call_pools(TaskSpec), % TODO VFS-7788 - support multiple pools
+            workflow_async_call_pool:decrement_slot_usage(CallPoolId),
+
             % Asynchronous job finish - it has no slot acquired
             trigger_job_scheduling(EngineId, ?TAKE_UP_FREE_SLOTS);
         _ ->
@@ -151,6 +148,10 @@ report_execution_status_update(ExecutionId, EngineId, ReportType, JobIdentifier,
 -spec get_async_call_pools(task_spec()) -> [workflow_async_call_pool:id()] | undefined.
 get_async_call_pools(TaskSpec) ->
     maps:get(async_call_pools, TaskSpec, [?DEFAULT_ASYNC_CALL_POOL_ID]).
+
+-spec trigger_job_scheduling(id()) -> ok.
+trigger_job_scheduling(EngineId) ->
+    trigger_job_scheduling(EngineId, ?TAKE_UP_FREE_SLOTS).
 
 %%%===================================================================
 %%% Internal functions
@@ -228,8 +229,8 @@ schedule_next_job(EngineId, DeferredExecutions) ->
             case lists:member(ExecutionId, DeferredExecutions) of
                 false ->
                     case workflow_execution_state:prepare_next_job(ExecutionId) of
-                        {ok, JobExecutionSpec} ->
-                            case schedule_on_pool(EngineId, ExecutionId, JobExecutionSpec) of
+                        {ok, ExecutionSpec} ->
+                            case schedule_on_pool(EngineId, ExecutionId, ExecutionSpec) of
                                 ok ->
                                     ok;
                                 ?WF_ERROR_LIMIT_REACHED ->
@@ -276,21 +277,18 @@ schedule_next_job(EngineId, DeferredExecutions) ->
 -spec schedule_on_pool(
     id(),
     execution_id(),
-    job_execution_spec()
+    execution_spec()
 ) -> ok | ?WF_ERROR_LIMIT_REACHED.
-schedule_on_pool(EngineId, ExecutionId, #job_execution_spec{
+schedule_on_pool(EngineId, ExecutionId, #execution_spec{
     task_spec = TaskSpec,
     job_identifier = JobIdentifier
-} = JobExecutionSpec) ->
-    CallArgs = {?MODULE, process_item, [EngineId, ExecutionId, JobExecutionSpec]},
+} = ExecutionSpec) ->
+    CallArgs = {?MODULE, process_job_or_result, [EngineId, ExecutionId, ExecutionSpec]},
     TaskType = maps:get(type, TaskSpec),
     CallPools = get_async_call_pools(TaskSpec),
-    case {TaskType, CallPools} of
-        {sync, _} ->
-            ok = worker_pool:cast(?POOL_ID(EngineId), CallArgs);
-        {async, undefined} ->
-            ok = worker_pool:cast(?POOL_ID(EngineId), CallArgs);
-        {async, [CallPoolId]} -> % TODO VFS-7788 - support multiple pools
+    ProcessingType = workflow_jobs:get_processing_type(JobIdentifier),
+    case {TaskType, CallPools, ProcessingType} of
+        {async, [CallPoolId], ?JOB_PROCESSING} -> % TODO VFS-7788 - support multiple pools
             case workflow_async_call_pool:increment_slot_usage(CallPoolId) of
                 ok ->
                     ok = worker_pool:cast(?POOL_ID(EngineId), CallArgs);
@@ -298,7 +296,9 @@ schedule_on_pool(EngineId, ExecutionId, #job_execution_spec{
                     % TODO VFS-7787 - handle case when other tasks can be started (limit of task, not task execution engine is reached)
                     workflow_execution_state:report_limit_reached_error(ExecutionId, JobIdentifier),
                     ?WF_ERROR_LIMIT_REACHED
-            end
+            end;
+        _ ->
+            ok = worker_pool:cast(?POOL_ID(EngineId), CallArgs)
     end.
 
 -spec schedule_prepare_on_pool(
@@ -316,25 +316,34 @@ schedule_prepare_on_pool(EngineId, ExecutionId, Handler, ExecutionContext) ->
 %%% Function executed on pool
 %%%===================================================================
 
--spec process_item(id(), execution_id(), job_execution_spec()) -> ok.
-process_item(EngineId, ExecutionId, JobExecutionSpec = #job_execution_spec{
+-spec process_job_or_result(id(), execution_id(), execution_spec()) -> ok.
+process_job_or_result(EngineId, ExecutionId, ExecutionSpec = #execution_spec{
+    job_identifier = JobIdentifier
+}) ->
+    case workflow_jobs:get_processing_type(JobIdentifier) of
+        ?JOB_PROCESSING -> process_item(EngineId, ExecutionId, ExecutionSpec);
+        ?ASYNC_RESULT_PROCESSING -> process_result(EngineId, ExecutionId, ExecutionSpec)
+    end.
+
+-spec process_item(id(), execution_id(), execution_spec()) -> ok.
+process_item(EngineId, ExecutionId, ExecutionSpec = #execution_spec{
     task_id = TaskId,
     task_spec = TaskSpec,
-    item_id = ItemId,
+    subject_id = ItemId,
     job_identifier = JobIdentifier
 }) ->
     try
         #{type := TaskType} = TaskSpec,
         {ReportType, FinalAns} = case TaskType of
             sync ->
-                {?SYNC_CALL, process_item(ExecutionId, JobExecutionSpec, <<>>, <<>>)};
+                {?SYNC_CALL, process_item(ExecutionId, ExecutionSpec, <<>>, <<>>)};
             async ->
                 FinishCallback = workflow_engine_callback_handler:prepare_finish_callback_id(
-                    ExecutionId, EngineId, JobIdentifier, TaskSpec),
+                    ExecutionId, EngineId, JobIdentifier),
                 HeartbeatCallback = workflow_engine_callback_handler:prepare_heartbeat_callback_id(
                     ExecutionId, EngineId, JobIdentifier),
 
-                case process_item(ExecutionId, JobExecutionSpec, FinishCallback, HeartbeatCallback) of
+                case process_item(ExecutionId, ExecutionSpec, FinishCallback, HeartbeatCallback) of
                     ok ->
                         Timeout = {ok, maps:get(keepalive_timeout, TaskSpec, ?DEFAULT_KEEPALIVE_TIMEOUT_SEC)},
                         {?ASYNC_CALL_STARTED, Timeout};
@@ -343,7 +352,7 @@ process_item(EngineId, ExecutionId, JobExecutionSpec = #job_execution_spec{
                 end
         end,
 
-        report_execution_status_update(ExecutionId, EngineId, ReportType, JobIdentifier, undefined, FinalAns)
+        report_execution_status_update(ExecutionId, EngineId, ReportType, JobIdentifier, FinalAns)
     catch
         Error:Reason  ->
             ?error_stacktrace("Unexpected error handling task ~p for item id ~p: ~p:~p",
@@ -352,15 +361,15 @@ process_item(EngineId, ExecutionId, JobExecutionSpec = #job_execution_spec{
 
 -spec process_item(
     execution_id(),
-    job_execution_spec(),
+    execution_spec(),
     workflow_handler:finished_callback_id(),
     workflow_handler:heartbeat_callback_id()
 ) -> workflow_handler:callback_execution_result().
-process_item(ExecutionId, #job_execution_spec{
+process_item(ExecutionId, #execution_spec{
     handler = Handler,
     context = ExecutionContext,
     task_id = TaskId,
-    item_id = ItemId
+    subject_id = ItemId
 }, FinishCallback, HeartbeatCallback) ->
     Item = workflow_cached_item:get_item(ItemId),
     try
@@ -372,6 +381,33 @@ process_item(ExecutionId, #job_execution_spec{
             ?error_stacktrace("Unexpected error handling task ~p for item ~p (id ~p): ~p:~p",
                 [TaskId, Item, ItemId, Error, Reason]),
             error
+    end.
+
+-spec process_result(id(), execution_id(), execution_spec()) -> ok.
+process_result(EngineId, ExecutionId, #execution_spec{
+    handler = Handler,
+    context = ExecutionContext,
+    task_id = TaskId,
+    subject_id = CachedResultId,
+    job_identifier = JobIdentifier
+}) ->
+    try
+        CachedResult = workflow_cached_async_result:get_and_delete(CachedResultId),
+        try
+            ProcessedResult = Handler:process_result(ExecutionId, ExecutionContext, TaskId, CachedResult),
+            workflow_engine:report_execution_status_update(
+                ExecutionId, EngineId, ?ASYNC_RESULT_PROCESSED, JobIdentifier, ProcessedResult)
+        catch
+            Error:Reason  ->
+                % TODO VFS-7788 - use callbacks to get human readable information about task
+                ?error_stacktrace("Unexpected error processing task ~p result ~p (id ~p): ~p:~p",
+                    [TaskId, CachedResult, CachedResultId, Error, Reason]),
+                error
+        end
+    catch
+        Error2:Reason2  ->
+            ?error_stacktrace("Unexpected error processing task ~p with result id ~p: ~p:~p",
+                [TaskId, CachedResultId, Error2, Reason2])
     end.
 
 -spec prepare_execution(
