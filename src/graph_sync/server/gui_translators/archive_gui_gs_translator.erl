@@ -47,7 +47,9 @@ translate_archive_info(#archive_info{
     description = Description,
     index = Index,
     stats = Stats,
-    base_archive_id = BaseArchive
+    base_archive_id = BaseArchive,
+    related_aip = RelatedAIP,
+    related_dip = RelatedDIP
 }) ->
     BaseArchiveGri = case utils:undefined_to_null(BaseArchive) of
         null -> 
@@ -83,5 +85,8 @@ translate_archive_info(#archive_info{
         <<"description">> => Description,
         <<"index">> => Index,
         <<"stats">> => archive_stats:to_json(Stats),
-        <<"baseArchive">> => BaseArchiveGri
+        <<"baseArchive">> => BaseArchiveGri,
+        % fixme gri
+        <<"relatedAIP">> => utils:undefined_to_null(RelatedAIP),
+        <<"relatedDIP">> => utils:undefined_to_null(RelatedDIP)
     }.

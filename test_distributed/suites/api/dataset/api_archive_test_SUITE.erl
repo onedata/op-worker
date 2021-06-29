@@ -134,10 +134,7 @@ create_archive(_Config) ->
                     {<<"datasetId">>, DetachedDatasetId,
                         ?ERROR_BAD_DATA(<<"datasetId">>, <<"Detached dataset cannot be modified.">>)},
                     {<<"config">>, #{<<"incremental">> => <<"not boolean">>}, ?ERROR_BAD_VALUE_BOOLEAN(<<"config.incremental">>)},
-                    % TODO VFS-7653 uncomment following case and remove subsequent one
-                    % {<<"config">>, #{<<"includeDip">> => <<"not boolean">>}, ?ERROR_BAD_VALUE_BOOLEAN(<<"config.includeDip">>)},
-                    {<<"config">>, #{<<"includeDip">> => true},
-                        ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"config.includeDip">>, ?SUPPORTED_INCLUDE_DIP_VALUES)},
+                    {<<"config">>, #{<<"includeDip">> => <<"not boolean">>}, ?ERROR_BAD_VALUE_BOOLEAN(<<"config.includeDip">>)},
                     {<<"config">>, #{<<"createNestedArchives">> => <<"not boolean">>},
                         ?ERROR_BAD_VALUE_BOOLEAN(<<"config.createNestedArchives">>)},
                     {<<"config">>, #{<<"layout">> => <<"not allowed layout">>},

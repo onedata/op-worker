@@ -458,7 +458,10 @@
 
     % if archive has been created directly it has no parent archive
     % if archive has been created indirectly, this fields points to it's parent archive
-    parent :: undefined | archive:id()
+    parent :: undefined | archive:id(),
+    
+    relatedDIP = undefined :: undefined | archive:id(),
+    relatedAIP = undefined :: undefined | archive:id()
 }).
 
 
