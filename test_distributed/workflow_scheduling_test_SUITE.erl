@@ -219,64 +219,20 @@ failure_test_base(Config, Id, TaskToFail, LaneWithErrorIndex, BoxWithErrorIndex)
     ok.
 
 timeout_test(Config) ->
-    timeout_test(Config, <<"async_timeouts_workflow_task3_3_2">>, 3, 3).
-
-timeout_test(Config, TaskToFail, LaneWithErrorIndex, BoxWithErrorIndex) ->
-    InitialKeys = get_all_keys(Config),
-
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    WorkflowType = async,
-    Id = <<"async_timeouts_workflow">>,
-    Workflow = #{
-        id => Id,
-        workflow_handler => workflow_test_handler,
-        execution_context => #{type => WorkflowType, async_call_pools => [?ASYNC_CALL_POOL_ID]}
-    },
-
-    ItemToFail = <<"100">>,
-    ResultToFail = <<"result_", TaskToFail/binary>>,
-    set_task_execution_gatherer_option(Config, fail_job, {ResultToFail, ItemToFail}),
-    ?assertEqual(ok, rpc:call(Worker, workflow_engine, execute_workflow, [?ENGINE_ID, Workflow])),
-
-    Expected = get_expected_task_execution_order_with_timeout(
-        Workflow, LaneWithErrorIndex, BoxWithErrorIndex, ItemToFail, TaskToFail),
-    #{execution_history := ExecutionHistory, lane_finish_log := LaneFinishLog} = ExtendedHistoryStats =
-        get_task_execution_history(Config),
-    verify_execution_history_stats(ExtendedHistoryStats, WorkflowType),
-    ?assertNotEqual(timeout, ExecutionHistory),
-    ExecutionHistoryWithoutPrepare = verify_preparation_phase(Id, ExecutionHistory),
-    ExecutionHistoryWithoutFinishMessage = verify_finish_notification(Id, ExecutionHistoryWithoutPrepare),
-    ExecutionHistoryWithoutEndedNotifications = verify_task_and_lane_ended_notifications(Workflow, WorkflowType,
-        maps:get(Id, LaneFinishLog, #{}), ExecutionHistoryWithoutFinishMessage, {lane, 1}, {box, LaneWithErrorIndex, BoxWithErrorIndex}),
-    verify_execution_history(Expected, ExecutionHistoryWithoutEndedNotifications, WorkflowType),
-    verify_memory(Config, InitialKeys, true),
-    ct:print("Execution with error verified"),
-
-    unset_task_execution_gatherer_option(Config, fail_job),
-    ExpectedAfterRestart = get_expected_task_execution_order_after_restart(Workflow, LaneWithErrorIndex, ItemToFail),
-    ?assertEqual(ok, rpc:call(Worker, workflow_engine, execute_workflow, [?ENGINE_ID, Workflow])),
-    #{execution_history := ExecutionHistoryAfterRestart, lane_finish_log := LaneFinishLogAfterRestart} =
-        ExtendedHistoryStatsAfterRestart = get_task_execution_history(Config),
-    verify_execution_history_stats(ExtendedHistoryStatsAfterRestart, WorkflowType, 1, true),
-    ?assertNotEqual(timeout, ExecutionHistoryAfterRestart),
-    ExecutionHistoryAfterRestartWithoutFinishMessage = verify_finish_notification(Id, ExecutionHistoryAfterRestart),
-    ExecutionHistoryAfterRestartWithoutEndedNotifications = verify_task_and_lane_ended_notifications(Workflow, WorkflowType,
-        maps:get(Id, LaneFinishLogAfterRestart, #{}), ExecutionHistoryAfterRestartWithoutFinishMessage,
-        {box, LaneWithErrorIndex, BoxWithErrorIndex}),
-    verify_execution_history(ExpectedAfterRestart, ExecutionHistoryAfterRestartWithoutEndedNotifications, WorkflowType),
-    verify_memory(Config, InitialKeys),
-    ok.
+    async_failure_test_base(Config, <<"async_timeouts_workflow">>, <<"async_timeouts_workflow_task3_3_2">>, timeout).
 
 result_processing_failure_test(Config) ->
+    async_failure_test_base(Config, <<"async_result_processing_failure">>,
+        <<"async_result_processing_failure_task3_3_2">>, result_processing).
+
+async_failure_test_base(Config, Id, TaskToFail, FailureType) ->
     InitialKeys = get_all_keys(Config),
 
-    TaskToFail = <<"async_result_processing_failure_task3_3_2">>,
     LaneWithErrorIndex = 3,
     BoxWithErrorIndex = 3,
 
     [Worker | _] = ?config(op_worker_nodes, Config),
     WorkflowType = async,
-    Id = <<"async_result_processing_failure">>,
     Workflow = #{
         id => Id,
         workflow_handler => workflow_test_handler,
@@ -284,12 +240,18 @@ result_processing_failure_test(Config) ->
     },
 
     ItemToFail = <<"100">>,
-    ResultProcessingToFail = <<"result_processing_", TaskToFail/binary>>,
-    set_task_execution_gatherer_option(Config, fail_job, {ResultProcessingToFail, ItemToFail}),
+    {ResultToFailPrefix, Expected} = case FailureType of
+        timeout ->
+            {<<"result_">>, get_expected_task_execution_order_with_timeout(
+                Workflow, LaneWithErrorIndex, BoxWithErrorIndex, ItemToFail, TaskToFail)};
+        result_processing ->
+            {<<"result_processing_">>, get_expected_task_execution_order_with_result_processing_failure(
+                Workflow, LaneWithErrorIndex, BoxWithErrorIndex, ItemToFail, TaskToFail)}
+    end,
+    ResultToFail = <<ResultToFailPrefix/binary, TaskToFail/binary>>,
+    set_task_execution_gatherer_option(Config, fail_job, {ResultToFail, ItemToFail}),
     ?assertEqual(ok, rpc:call(Worker, workflow_engine, execute_workflow, [?ENGINE_ID, Workflow])),
 
-    Expected = get_expected_task_execution_order_with_result_processing_failure(
-        Workflow, LaneWithErrorIndex, BoxWithErrorIndex, ItemToFail, TaskToFail),
     #{execution_history := ExecutionHistory, lane_finish_log := LaneFinishLog} = ExtendedHistoryStats =
         get_task_execution_history(Config),
     verify_execution_history_stats(ExtendedHistoryStats, WorkflowType),
