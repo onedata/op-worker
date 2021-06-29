@@ -33,7 +33,7 @@
 %%% API
 %%%===================================================================
 
--spec put(workflow_engine_callback_handler:task_processing_result()) -> id().
+-spec put(workflow_handler:task_processing_result()) -> id().
 put(?WF_ERROR_MALFORMED_REQUEST) ->
     ?WF_ERROR_MALFORMED_REQUEST;
 put(?WF_ERROR_TIMEOUT) ->
@@ -43,7 +43,7 @@ put(ProcessingResult) ->
     {ok, #document{key = Id}} = datastore_model:save(?CTX, Doc),
     Id.
 
--spec get_and_delete(id()) -> workflow_engine_callback_handler:task_processing_result().
+-spec get_and_delete(id()) -> workflow_handler:task_processing_result().
 get_and_delete(?WF_ERROR_MALFORMED_REQUEST) ->
     ?WF_ERROR_MALFORMED_REQUEST;
 get_and_delete(?WF_ERROR_TIMEOUT) ->

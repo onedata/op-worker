@@ -20,6 +20,7 @@
 
 %%%===================================================================
 %%% Record describing execution on pool's process
+%%% (processing of job or job's result)
 %%%===================================================================
 
 -record(execution_spec, {

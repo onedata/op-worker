@@ -68,14 +68,15 @@ get_lane_spec(ExecutionId, #{type := Type, async_call_pools := Pools} =_Executio
 process_item(_ExecutionId, _Context, <<"async", _/binary>> = _TaskId, Item, FinishCallback, _) ->
     spawn(fun() ->
         timer:sleep(100), % TODO VFS-7784 - test with different sleep times
+        Result = #{<<"result">> => <<"ok">>, <<"item">> => Item},
         case binary_to_integer(Item) =< 10 of
             true ->
                 % Use http_client only for part of items as it is much slower than direct `handle_callback` call
                 http_client:put(<<"http://", (oneprovider:get_domain())/binary,
                     ?ATM_TASK_FINISHED_CALLBACK_PATH, FinishCallback/binary>>, #{},
-                    json_utils:encode(#{<<"result">> => <<"ok">>}));
+                    json_utils:encode(Result));
             false ->
-                workflow_engine_callback_handler:handle_callback(FinishCallback, #{<<"result">> => <<"ok">>})
+                workflow_engine_callback_handler:handle_callback(FinishCallback, Result)
         end
     end),
     ok;

@@ -136,8 +136,11 @@ report_execution_status_update(ExecutionId, EngineId, ReportType, JobIdentifier,
 
     case ReportType of
         ?ASYNC_CALL_FINISHED ->
-            [CallPoolId] = get_async_call_pools(TaskSpec), % TODO VFS-7788 - support multiple pools
-            workflow_async_call_pool:decrement_slot_usage(CallPoolId),
+            % TODO VFS-7788 - support multiple pools
+            case get_async_call_pools(TaskSpec) of
+                [CallPoolId] -> workflow_async_call_pool:decrement_slot_usage(CallPoolId);
+                _ -> ok
+            end,
 
             % Asynchronous job finish - it has no slot acquired
             trigger_job_scheduling(EngineId, ?TAKE_UP_FREE_SLOTS);

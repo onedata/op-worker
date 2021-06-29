@@ -1135,7 +1135,7 @@
 }).
 
 -record(workflow_cached_async_result, {
-    result :: workflow_engine_callback_handler:task_processing_result()
+    result :: workflow_handler:task_processing_result()
 }).
 
 -record(workflow_iterator_snapshot, {

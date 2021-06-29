@@ -13,8 +13,11 @@
 -module(workflow_handler).
 -author("Michal Wrzeszcz").
 
+-include("workflow_engine.hrl").
+
 -type handler() :: module().
--type task_processing_result() :: term().
+-type task_processing_basic_result() :: term().
+-type task_processing_result() :: task_processing_basic_result() | ?WF_ERROR_MALFORMED_REQUEST | ?WF_ERROR_TIMEOUT.
 -type callback_execution_result() :: ok | error.
 % TODO VFS-7787 move following types to callback server:
 -type finished_callback_id() :: binary().
