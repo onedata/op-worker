@@ -18,11 +18,13 @@
 %% API
 -export([
     create_all/1, create/3,
-    view_content/3, acquire_iterator/2,
+    get/1, view_content/3, acquire_iterator/2,
     freeze/1, unfreeze/1,
     apply_operation/5,
     delete_all/1, delete/1
 ]).
+
+-compile({no_auto_import, [get/1]}).
 
 -type initial_value() :: atm_store_container:initial_value().
 
@@ -100,6 +102,16 @@ create(AtmWorkflowExecutionCtx, InitialValue, #atm_store_schema{
     }).
 
 
+-spec get(atm_store:id()) -> {ok, atm_store:record()} | ?ERROR_NOT_FOUND.
+get(AtmStoreId) ->
+    case atm_store:get(AtmStoreId) of
+        {ok, #document{value = AtmStore}} ->
+            {ok, AtmStore};
+        ?ERROR_NOT_FOUND ->
+            ?ERROR_NOT_FOUND
+    end.
+
+
 %%-------------------------------------------------------------------
 %% @doc
 %% Returns batch of items (and their indices) directly kept at store
@@ -125,11 +137,11 @@ view_content(AtmWorkflowExecutionCtx, ViewOpts, #atm_store{container = AtmStoreC
     atm_store_container:view_content(AtmWorkflowExecutionCtx, SanitizedViewOpts, AtmStoreContainer);
 
 view_content(AtmWorkflowExecutionCtx, ViewOpts, AtmStoreId) ->
-    case atm_store:get(AtmStoreId) of
+    case get(AtmStoreId) of
         {ok, AtmStore} ->
             view_content(AtmWorkflowExecutionCtx, ViewOpts, AtmStore);
         ?ERROR_NOT_FOUND ->
-            ?ERROR_NOT_FOUND
+            throw(?ERROR_NOT_FOUND)
     end.
 
 
@@ -147,7 +159,7 @@ acquire_iterator(AtmWorkflowExecutionEnv, #atm_store_iterator_spec{
     store_schema_id = AtmStoreSchemaId
 } = AtmStoreIteratorConfig) ->
     AtmStoreId = atm_workflow_execution_env:get_store_id(AtmStoreSchemaId, AtmWorkflowExecutionEnv),
-    {ok, #atm_store{container = AtmStoreContainer}} = atm_store:get(AtmStoreId),
+    {ok, #atm_store{container = AtmStoreContainer}} = get(AtmStoreId),
     atm_store_iterator:build(AtmStoreIteratorConfig, AtmStoreContainer).
 
 
@@ -178,7 +190,7 @@ apply_operation(AtmWorkflowExecutionCtx, Operation, Item, Options, AtmStoreId) -
     %   * are based on structure that support transaction operation on their own 
     %   * store only one value and it will be overwritten 
     %   * do not support any operation
-    case atm_store:get(AtmStoreId) of
+    case get(AtmStoreId) of
         {ok, #atm_store{container = AtmStoreContainer, frozen = false}} ->
             AtmStoreContainerOperation = #atm_store_container_operation{
                 type = Operation,
@@ -206,7 +218,7 @@ delete_all(AtmStoreIds) ->
 
 -spec delete(atm_store:id()) -> ok | {error, term()}.
 delete(AtmStoreId) ->
-    case atm_store:get(AtmStoreId) of
+    case get(AtmStoreId) of
         {ok, #atm_store{container = AtmStoreContainer}} ->
             atm_store_container:delete(AtmStoreContainer),
             atm_store:delete(AtmStoreId);

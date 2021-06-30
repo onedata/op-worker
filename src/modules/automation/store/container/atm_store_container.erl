@@ -120,9 +120,9 @@ get_data_spec(AtmStoreContainer) ->
 
 -spec view_content(atm_workflow_execution_ctx:record(), atm_store_api:view_opts(), record()) ->
     {ok, [{atm_store_api:index(), automation:item()}], IsLast :: boolean()} | no_return().
-view_content(AtmWorkflowExecutionCtx, ListOpts, AtmStoreContainer) ->
+view_content(AtmWorkflowExecutionCtx, ViewOpts, AtmStoreContainer) ->
     RecordType = utils:record_type(AtmStoreContainer),
-    RecordType:view_content(AtmWorkflowExecutionCtx, ListOpts, AtmStoreContainer).
+    RecordType:view_content(AtmWorkflowExecutionCtx, ViewOpts, AtmStoreContainer).
 
 
 -spec acquire_iterator(record()) -> atm_store_container_iterator:record().

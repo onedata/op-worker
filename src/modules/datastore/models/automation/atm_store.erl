@@ -44,14 +44,9 @@ create(AtmStoreRecord) ->
     datastore_model:create(?CTX, #document{value = AtmStoreRecord}).
 
 
--spec get(id()) -> {ok, record()} | {error, term()}.
+-spec get(id()) -> {ok, doc()} | {error, term()}.
 get(AtmStoreId) ->
-    case datastore_model:get(?CTX, AtmStoreId) of
-        {ok, #document{value = AtmStoreRecord}} ->
-            {ok, AtmStoreRecord};
-        {error, _} = Error ->
-            Error
-    end.
+    datastore_model:get(?CTX, AtmStoreId).
 
 
 -spec update(id(), diff()) -> ok | {error, term()}.

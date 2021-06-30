@@ -94,7 +94,7 @@ fetch_entity(#op_req{auth = ?NOBODY}) ->
     ?ERROR_UNAUTHORIZED;
 
 fetch_entity(#op_req{gri = #gri{id = AtmStoreId, scope = private}}) ->
-    case atm_store:get(AtmStoreId) of
+    case atm_store_api:get(AtmStoreId) of
         {ok, #atm_store{workflow_execution_id = AtmWorkflowExecutionId} = AtmStore} ->
             case atm_workflow_execution_api:get(AtmWorkflowExecutionId) of
                 {ok, AtmWorkflowExecution} ->
