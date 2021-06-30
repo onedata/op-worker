@@ -122,9 +122,9 @@ report_task_status_change(
                 NewAtmLaneExecutions = lists_utils:replace_at(
                     NewLaneExecution, AtmLaneExecutionIndex, AtmLaneExecutions
                 ),
-                NewAtmWorkflowExecutionStatus = converge_unique_statuses(lists:usort(
-                    atm_lane_execution:gather_statuses(NewAtmLaneExecutions)
-                )),
+                NewAtmWorkflowExecutionStatus = converge_lane_execution_statuses(
+                    NewAtmLaneExecutions
+                ),
                 NewAtmWorkflowExecution = AtmWorkflowExecution#atm_workflow_execution{
                     status = NewAtmWorkflowExecutionStatus,
                     % 'status_changed' field must be changed manually here as it's value
@@ -152,13 +152,22 @@ report_task_status_change(
 %%%===================================================================
 
 
-% TODO VFS-7853 - better handling of convergin lane statuses to workflow status
 %% @private
--spec converge_unique_statuses([atm_task_execution:status()]) ->
-    atm_task_execution:status().
-converge_unique_statuses([Status]) ->
+-spec converge_lane_execution_statuses([atm_lane_execution:record()]) ->
+    atm_workflow_execution:status().
+converge_lane_execution_statuses(AtmLaneExecutions) ->
+    AtmLaneExecutionStatuses = atm_lane_execution:gather_statuses(AtmLaneExecutions),
+    converge_unique_lane_execution_statuses(lists:usort(AtmLaneExecutionStatuses)).
+
+
+%% @private
+-spec converge_unique_lane_execution_statuses([atm_task_execution:status()]) ->
+    atm_workflow_execution:status().
+converge_unique_lane_execution_statuses([?PENDING_STATUS]) ->
+    ?ENQUEUED_STATUS;
+converge_unique_lane_execution_statuses([Status]) ->
     Status;
-converge_unique_statuses(Statuses) ->
+converge_unique_lane_execution_statuses(Statuses) ->
     [LowestStatusPresent | _] = lists:dropwhile(
         fun(Status) -> not lists:member(Status, Statuses) end,
         [?FAILED_STATUS, ?ACTIVE_STATUS, ?PENDING_STATUS, ?FINISHED_STATUS]
@@ -166,8 +175,8 @@ converge_unique_statuses(Statuses) ->
 
     case LowestStatusPresent of
         ?PENDING_STATUS ->
-            % Some elements must have ended execution while others are still
-            % pending - converged/overall status is active
+            % Some lanes must have ended execution while others are still
+            % pending - overall workflow execution status is active
             ?ACTIVE_STATUS;
         Status ->
             Status

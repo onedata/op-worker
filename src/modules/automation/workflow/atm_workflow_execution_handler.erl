@@ -181,7 +181,7 @@ handle_lane_execution_ended(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, Atm
     ok.
 handle_workflow_execution_ended(AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv) ->
     try
-        %% TODO uncomment after enabling other users to see stores content
+        %% TODO VFS-7862 uncomment after enabling other users to see stores content using their session
 %%        atm_workflow_execution_session:terminate(AtmWorkflowExecutionId)
         ok
     catch _:Reason ->
