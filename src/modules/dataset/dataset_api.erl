@@ -44,7 +44,7 @@
 % TODO VFS-7518 how should we handle race on creating dataset on the same file in 2 providers?
 % TODO VFS-7533 handle conflicts on remote modification of file-meta and dataset models
 % TODO VFS-7563 add tests concerning datasets to permissions test suites
-
+% TODO VFS-7849 does not allow to establish dataset on files in archives or in trash
 
 -define(CRITICAL_SECTION(DatasetId, Function), critical_section:run({dataset, DatasetId}, Function)).
 

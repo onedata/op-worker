@@ -26,6 +26,9 @@
 %%%    which is stored in archive record and is used to store configuration of an archive
 %%%  * archive_stats - module that implements persistent_record behaviour,
 %%%    which is stored in archive record and is used to store statistics of archivisation procedure
+%%%  * incremental_archive - module that is used for creating incremental archives. It contains functions
+%%%    for finding base archives and for determining whether file in the dataset has changed in comparison
+%%%    to its archived version.
 %%%  * archives_list - module that implements list structure which allows to track
 %%%    archives associated with given dataset
 %%%  * archives_forest - module that is used to track parent-nested archive relations
@@ -66,7 +69,6 @@
 
 % TODO VFS-7617 implement recall operation of archives
 % TODO VFS-7718 improve purging so that archive record is deleted when files are removed from storage
-% TODO VFS-7780 implement incremental archives
 % TODO VFS-7653 implement creating DIP for an archive
 % TODO VFS-7613 use datastore function for getting number of links in forest to acquire number of archives per dataset
 % TODO VFS-7664 add followLink option to archivisation job
@@ -96,7 +98,8 @@ start_archivisation(
         ?ATTACHED_DATASET ->
             {ok, SpaceId} = dataset:get_space_id(DatasetDoc),
             UserId = user_ctx:get_user_id(UserCtx),
-            case archive:create(DatasetId, SpaceId, UserId, Config,
+            Config2 = ensure_base_archive_is_set_if_applicable(Config, DatasetId),
+            case archive:create(DatasetId, SpaceId, UserId, Config2,
                 PreservedCallback, PurgedCallback, Description)
             of
                 {ok, ArchiveDoc} ->
@@ -303,3 +306,18 @@ get_nested_archives_stats(ArchiveId, Token, NestedArchiveStatsAccIn) when is_bin
         false -> get_nested_archives_stats(ArchiveId, Token2, NestedArchiveStatsAcc)
     end.
 
+
+-spec ensure_base_archive_is_set_if_applicable(archive:config(), dataset:id()) -> archive:config().
+ensure_base_archive_is_set_if_applicable(Config, DatasetId) ->
+    case archive_config:is_incremental(Config) of
+        true ->
+            case archive_config:get_base_archive_id(Config) =:= undefined of
+                 true ->
+                    BaseArchiveIdOrUndefined = incremental_archive:find_base_archive_id(DatasetId),
+                     archive_config:set_base_archive_id(Config, BaseArchiveIdOrUndefined);
+                false ->
+                    Config
+            end;
+        false ->
+            Config
+    end.

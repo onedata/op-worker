@@ -6,27 +6,28 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This is a helper for bagit_checksums module.
-%%% It contains utility functions for calculating files' checksums
-%%% when creating bagit archive.
+%%% This is a helper for calculating file's checksums using lfm.
 %%% @end
 %%%-------------------------------------------------------------------
--module(bagit_checksums_calculator).
+-module(file_checksum).
 -author("Jakub Kudzia").
 
--include("modules/dataset/bagit.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
+-include("modules/logical_file_manager/utils/file_checksum.hrl").
 
 %% API
 -export([calculate/3, get/2]).
 
+-type algorithm() :: ?MD5 | ?SHA1 | ?SHA256 | ?SHA512.
+-type algorithms() :: [algorithm()].
+
 -type buffer() :: term(). % crypto:hash_state() is not an exported type
--type buffers() :: #{bagit_checksums:algorithm() => buffer()}.
+-type buffers() :: #{algorithm() => buffer()}.
 
 -type checksum() :: binary().
--opaque checksums() :: #{bagit_checksums:algorithm() => checksum()}.
+-opaque checksums() :: #{algorithm() => checksum()}.
 
--export_type([checksums/0]).
+-export_type([algorithm/0, algorithms/0, checksum/0, checksums/0]).
 
 -define(BUFFER_SIZE, 52428800). % 50 M
 
@@ -42,9 +43,9 @@
 %% algorithms should be extracted using ?MODULE:get/2 function.
 %% @end
 %%--------------------------------------------------------------------
--spec calculate(file_ctx:ctx(), user_ctx:ctx(), bagit_checksums:algorithms()) -> checksums().
+-spec calculate(file_ctx:ctx(), user_ctx:ctx(), algorithm() | algorithms()) -> checksums().
 calculate(FileCtx, UserCtx, Algorithms) ->
-    Buffers = init_buffers(Algorithms),
+    Buffers = init_buffers(utils:ensure_list(Algorithms)),
     SessionId = user_ctx:get_session_id(UserCtx),
     Guid = file_ctx:get_logical_guid_const(FileCtx),
     {ok, Handle} = lfm:open(SessionId, ?FILE_REF(Guid), read),
@@ -53,7 +54,7 @@ calculate(FileCtx, UserCtx, Algorithms) ->
     Checksums.
 
 
--spec get(bagit_checksums:algorithm(), checksums()) -> checksum().
+-spec get(algorithm(), checksums()) -> checksum().
 get(Algorithm, Checksums) ->
     maps:get(Algorithm, Checksums).
 
@@ -62,7 +63,7 @@ get(Algorithm, Checksums) ->
 %%%===================================================================
 
 %% @private
--spec init_buffers(bagit_checksums:algorithms()) -> buffers().
+-spec init_buffers(algorithms()) -> buffers().
 init_buffers(Algorithms) ->
     lists:foldl(fun(Algorithm, Acc) ->
         Acc#{Algorithm => crypto:hash_init(ensure_compatible_algorithm_name(Algorithm))}
@@ -103,7 +104,7 @@ calculate_file_checksums_helper(Handle, Offset, Buffers) ->
 %% Maps checksum algorithm name to atom compatible with crypto module.
 %% @end
 %%--------------------------------------------------------------------
--spec ensure_compatible_algorithm_name(bagit_checksums:algorithm()) -> atom().
+-spec ensure_compatible_algorithm_name(algorithm()) -> atom().
 ensure_compatible_algorithm_name(?MD5) -> md5;
 ensure_compatible_algorithm_name(?SHA1) -> sha;
 ensure_compatible_algorithm_name(?SHA256) -> sha256;

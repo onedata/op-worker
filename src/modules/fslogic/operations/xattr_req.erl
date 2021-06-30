@@ -125,10 +125,9 @@ get_xattr_internal(UserCtx, FileCtx, ?RDF_METADATA_KEY, Inherited) ->
             provider_to_fuse_response(ErrorResponse)
     end;
 
-get_xattr_internal(_UserCtx, _FileCtx, <<?ONEDATA_PREFIX_STR, _/binary>>, _) ->
-    throw(?EPERM);
-
 get_xattr_internal(UserCtx, FileCtx, XattrName, Inherited) ->
+    assert_is_allowed_to_operate_on_xattr(UserCtx, XattrName),
+
     case xattr:get(UserCtx, FileCtx, XattrName, Inherited) of
         {ok, XattrValue} ->
             #fuse_response{
@@ -184,10 +183,9 @@ set_xattr_internal(UserCtx, FileCtx, ?XATTR(?RDF_METADATA_KEY, Rdf), Create, Rep
 set_xattr_internal(_UserCtx, _FileCtx, ?XATTR(?RDF_METADATA_KEY, _Rdf), _Create, _Replace) ->
     throw(?EINVAL);
 
-set_xattr_internal(_, _, ?XATTR(<<?ONEDATA_PREFIX_STR, _/binary>>, _), _Create, _Replace) ->
-    throw(?EPERM);
-
 set_xattr_internal(UserCtx, FileCtx0, ?XATTR(XattrName, XattrValue), Create, Replace) ->
+    assert_is_allowed_to_operate_on_xattr(UserCtx, XattrName),
+
     FileCtx1 = file_ctx:assert_file_exists(FileCtx0),
     {ok, _} = xattr:set(UserCtx, FileCtx1, XattrName, XattrValue, Create, Replace),
 
@@ -225,3 +223,14 @@ remove_xattr_internal(UserCtx, FileCtx0, XattrName) ->
     fslogic_worker:fuse_response().
 provider_to_fuse_response(#provider_response{status = Status}) ->
     #fuse_response{status = Status}.
+
+
+%% @private
+-spec assert_is_allowed_to_operate_on_xattr(user_ctx:ctx(), custom_metadata:name()) -> ok.
+assert_is_allowed_to_operate_on_xattr(UserCtx, <<?ONEDATA_PREFIX_STR, _/binary>> = _XattrName) ->
+    case user_ctx:is_root(UserCtx) of
+        true -> ok;
+        false -> throw(?EPERM)
+    end;
+assert_is_allowed_to_operate_on_xattr(_UserCtx, _XattrName) ->
+    ok.

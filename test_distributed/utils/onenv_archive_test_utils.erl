@@ -85,10 +85,12 @@ set_up_archive(CreationProvider, UserId, DatasetId, #archive_spec{
         lfm_proxy:archive_dataset(CreationNode, UserSessId, DatasetId, Config, Description)
     ),
 
-    {ok, ArchiveInfo} = lfm_proxy:get_archive_info(CreationNode, UserSessId, ArchiveId),
+    {ok, ArchiveInfo = #archive_info{
+        config = FinalConfig
+    }} = lfm_proxy:get_archive_info(CreationNode, UserSessId, ArchiveId),
     #archive_object{
         id = ArchiveId,
-        config = Config,
+        config = FinalConfig,
         description = Description,
         index = ArchiveInfo#archive_info.index
     }.
