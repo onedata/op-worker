@@ -24,7 +24,7 @@
 %% atm_data_validator callbacks
 -export([assert_meets_constraints/3]).
 
-%% atm_tree_forest_container_iterator callbacks
+%% atm_tree_forest_store_container_iterator callbacks
 -export([
     list_children/4,
     initial_listing_options/0,
