@@ -22,6 +22,9 @@
 -include_lib("ctool/include/http/headers.hrl").
 
 
+%% API
+-export([assert_openfaas_available/0]).
+
 %% atm_task_executor callbacks
 -export([create/2, prepare/2, get_spec/1, in_readonly_mode/1, run/3]).
 
@@ -57,6 +60,28 @@
 
 
 %%%===================================================================
+%%% API
+%%%===================================================================
+
+
+-spec assert_openfaas_available() -> ok | no_return().
+assert_openfaas_available() ->
+    OpenfaasConfig = get_openfaas_config(),
+
+    Endpoint = get_openfaas_endpoint(OpenfaasConfig, <<"/healthz">>),
+    Headers = get_basic_auth_header(OpenfaasConfig),
+
+    case http_client:get(Endpoint, Headers) of
+        {ok, ?HTTP_200_OK, _RespHeaders, _RespBody} ->
+            ok;
+        {ok, ?HTTP_500_INTERNAL_SERVER_ERROR, _RespHeaders, ErrorReason} ->
+            throw(?ERROR_ATM_OPENFAAS_QUERY_FAILED(ErrorReason));
+        _ ->
+            throw(?ERROR_ATM_OPENFAAS_UNREACHABLE)
+    end.
+
+
+%%%===================================================================
 %%% atm_task_executor callbacks
 %%%===================================================================
 
@@ -64,7 +89,7 @@
 -spec create(atm_workflow_execution:id(), atm_openfaas_operation_spec:record()) ->
     record() | no_return().
 create(AtmWorkflowExecutionId, #atm_openfaas_operation_spec{} = OperationSpec) ->
-    assert_openfaas_configured(),
+    assert_openfaas_available(),
 
     #atm_openfaas_task_executor{
         function_name = build_function_name(AtmWorkflowExecutionId, OperationSpec),
@@ -192,40 +217,7 @@ is_function_registered(#prepare_ctx{
             true;
         {ok, ?HTTP_404_NOT_FOUND, _RespHeaders, _RespBody} ->
             false;
-        _ ->
-            throw(?ERROR_ATM_OPENFAAS_QUERY_FAILED)
-    end.
-
-
-%% @private
--spec register_function(prepare_ctx()) -> ok | no_return().
-register_function(#prepare_ctx{
-    openfaas_config = OpenfaasConfig,
-    executor = #atm_openfaas_task_executor{
-        function_name = FunctionName,
-        operation_spec = #atm_openfaas_operation_spec{docker_image = DockerImage}
-    }
-} = PrepareCtx) ->
-    Endpoint = get_openfaas_endpoint(OpenfaasConfig, <<"/system/functions">>),
-    AuthHeaders = get_basic_auth_header(OpenfaasConfig),
-    Payload = json_utils:encode(maps:merge(
-        #{
-            <<"service">> => FunctionName,
-            <<"image">> => DockerImage,
-            <<"namespace">> => OpenfaasConfig#openfaas_config.function_namespace,
-            <<"envVars">> => prepare_function_timeouts()
-        },
-        prepare_function_annotations(PrepareCtx)
-    )),
-
-    case http_client:post(Endpoint, AuthHeaders, Payload) of
-        {ok, ?HTTP_202_ACCEPTED, _RespHeaders, _RespBody} ->
-            ok;
-        {ok, ?HTTP_500_INTERNAL_SERVER_ERROR, _RespHeaders, _RespBody} ->
-            % Possible race with other task registering function
-            % (Openfaas returns 500 if function already exists)
-            ok;
-        {ok, ?HTTP_400_BAD_REQUEST, _RespHeaders, ErrorReason} ->
+        {ok, ?HTTP_500_INTERNAL_SERVER_ERROR, _RespHeaders, ErrorReason} ->
             throw(?ERROR_ATM_OPENFAAS_QUERY_FAILED(ErrorReason));
         _ ->
             throw(?ERROR_ATM_OPENFAAS_QUERY_FAILED)
@@ -233,29 +225,81 @@ register_function(#prepare_ctx{
 
 
 %% @private
--spec prepare_function_timeouts() -> json_utils:json_map().
-prepare_function_timeouts() ->
-    lists:foldl(fun({Key, EnvVar, Default}, Acc) ->
-        TimeoutSeconds = op_worker:get_env(EnvVar, Default),
-        TimeoutSecondsBin = integer_to_binary(TimeoutSeconds),
+-spec register_function(prepare_ctx()) -> ok | no_return().
+register_function(#prepare_ctx{openfaas_config = OpenfaasConfig} = PrepareCtx) ->
+    Endpoint = get_openfaas_endpoint(OpenfaasConfig, <<"/system/functions">>),
+    AuthHeaders = get_basic_auth_header(OpenfaasConfig),
+    Payload = json_utils:encode(prepare_function_definition(PrepareCtx)),
 
-        Acc#{Key => <<TimeoutSecondsBin/binary, "s">>}
-    end, #{}, [
-        {<<"read_timeout">>, openfaas_read_timeout_seconds, 604800},
-        {<<"write_timeout">>, openfaas_write_timeout_seconds, 604800},
-        {<<"exec_timeout">>, openfaas_exec_timeout_seconds, 604800}
-    ]).
+    case http_client:post(Endpoint, AuthHeaders, Payload) of
+        {ok, ?HTTP_202_ACCEPTED, _RespHeaders, _RespBody} ->
+            ok;
+        {ok, ?HTTP_400_BAD_REQUEST, _RespHeaders, ErrorReason} ->
+            throw(?ERROR_ATM_OPENFAAS_QUERY_FAILED(ErrorReason));
+        {ok, ?HTTP_500_INTERNAL_SERVER_ERROR, _RespHeaders, ErrorReason} ->
+            % Possible race with other task registering function
+            % (Openfaas returns 500 if function already exists)
+            case is_function_registered(PrepareCtx) of
+                true -> ok;
+                false -> throw(?ERROR_ATM_OPENFAAS_QUERY_FAILED(ErrorReason))
+            end;
+        _ ->
+            throw(?ERROR_ATM_OPENFAAS_QUERY_FAILED)
+    end.
 
 
 %% @private
--spec prepare_function_annotations(prepare_ctx()) -> json_utils:json_map().
-prepare_function_annotations(#prepare_ctx{executor = #atm_openfaas_task_executor{
-    operation_spec = #atm_openfaas_operation_spec{
-        docker_execution_options = #atm_docker_execution_options{mount_oneclient = false}
-    }}
+-spec prepare_function_definition(prepare_ctx()) -> json_utils:json_map().
+prepare_function_definition(PrepareCtx = #prepare_ctx{
+    openfaas_config = #openfaas_config{
+        function_namespace = FunctionNamespace
+    },
+    executor = #atm_openfaas_task_executor{
+        function_name = FunctionName,
+        operation_spec = #atm_openfaas_operation_spec{docker_image = DockerImage}
+    }
 }) ->
-    #{};
-prepare_function_annotations(#prepare_ctx{
+    RequiredProperties = #{
+        <<"service">> => FunctionName,
+        <<"image">> => DockerImage,
+        <<"namespace">> => FunctionNamespace
+    },
+
+    AllProperties = lists:foldl(fun({Property, EnvVar}, Acc) ->
+        case op_worker:get_env(EnvVar, undefined) of
+            undefined ->
+                Acc;
+            Array when is_list(Array) ->
+                Acc#{Property => lists:map(fun str_utils:to_binary/1, Array)};
+            Map when is_map(Map) ->
+                Acc#{Property => lists:foldl(fun({Key, Value}, Values) ->
+                    Values#{str_utils:to_binary(Key) => str_utils:to_binary(Value)}
+                end, #{}, maps:to_list(Map))};
+            Value ->
+                Acc#{Property => str_utils:to_binary(Value)}
+        end
+    end, RequiredProperties, [
+        {<<"envVars">>, openfaas_function_env},
+        {<<"constraints">>, openfaas_function_constraints},
+        {<<"labels">>, openfaas_function_labels},
+        {<<"annotations">>, openfaas_function_annotations},
+        {<<"limits">>, openfaas_function_limits},
+        {<<"requests">>, openfaas_function_requests}
+    ]),
+
+    add_mount_oneclient_function_annotations(AllProperties, PrepareCtx).
+
+
+%% @private
+-spec add_mount_oneclient_function_annotations(json_utils:json_map(), prepare_ctx()) ->
+    json_utils:json_map().
+add_mount_oneclient_function_annotations(FunctionDefinition, #prepare_ctx{
+    executor = #atm_openfaas_task_executor{operation_spec = #atm_openfaas_operation_spec{
+        docker_execution_options = #atm_docker_execution_options{mount_oneclient = false}
+    }}}
+) ->
+    FunctionDefinition;
+add_mount_oneclient_function_annotations(FunctionDefinition, #prepare_ctx{
     workflow_execution_ctx = AtmWorkflowExecutionCtx,
     executor = AtmTaskExecutor = #atm_openfaas_task_executor{
         operation_spec = #atm_openfaas_operation_spec{
@@ -271,7 +315,7 @@ prepare_function_annotations(#prepare_ctx{
     AccessToken = atm_workflow_execution_ctx:get_access_token(AtmWorkflowExecutionCtx),
     {ok, OpDomain} = provider_logic:get_domain(),
 
-    #{<<"annotations">> => #{
+    OneclientMountRelatedAnnotations = #{
         <<"oneclient.openfass.onedata.org/inject">> => <<"enabled">>,
         <<"oneclient.openfass.onedata.org/image">> => get_oneclient_image(),
         <<"oneclient.openfaas.onedata.org/space_id">> => SpaceId,
@@ -282,7 +326,11 @@ prepare_function_annotations(#prepare_ctx{
             true -> tokens:confine(AccessToken, #cv_data_readonly{});
             false -> AccessToken
         end
-    }}.
+    },
+
+    maps:update_with(<<"annotations">>, fun(Annotations) ->
+        json_utils:merge([Annotations, OneclientMountRelatedAnnotations])
+    end, OneclientMountRelatedAnnotations, FunctionDefinition).
 
 
 %% @private
@@ -356,16 +404,11 @@ schedule_function_execution(AtmJobExecutionCtx, Data, #atm_openfaas_task_executo
     case http_client:post(Endpoint, AllHeaders, json_utils:encode(Data)) of
         {ok, ?HTTP_202_ACCEPTED, _, _} ->
             ok;
+        {ok, ?HTTP_500_INTERNAL_SERVER_ERROR, _RespHeaders, ErrorReason} ->
+            throw(?ERROR_ATM_OPENFAAS_QUERY_FAILED(ErrorReason));
         _ ->
             throw(?ERROR_ATM_OPENFAAS_QUERY_FAILED)
     end.
-
-
-%% @private
--spec assert_openfaas_configured() -> ok | no_return().
-assert_openfaas_configured() ->
-    get_openfaas_config(),
-    ok.
 
 
 %% @private
