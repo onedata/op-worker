@@ -159,7 +159,8 @@ get_archive_info(ArchiveDoc = #document{}, ArchiveIndex) ->
             true -> archives_list:index(ArchiveId, Timestamp);
             false -> ArchiveIndex
         end,
-        stats = get_aggregated_stats(ArchiveDoc)
+        stats = get_aggregated_stats(ArchiveDoc),
+        base_archive_id = archive_config:get_base_archive_id(Config)
     }};
 get_archive_info(ArchiveId, ArchiveIndex) ->
     {ok, ArchiveDoc} = archive:get(ArchiveId),

@@ -62,14 +62,12 @@ from_json(ConfigJson) ->
 -spec to_json(record()) -> json().
 to_json(#archive_config{
     incremental = Incremental,
-    base_archive_id = BaseArchive,
     layout = Layout,
     include_dip = IncludeDip,
     create_nested_archives = CreateNestedArchives
 }) ->
     #{
         <<"incremental">> => Incremental,
-        <<"baseArchiveId">> => utils:undefined_to_null(BaseArchive),
         <<"layout">> => str_utils:to_binary(Layout),
         <<"includeDip">> => IncludeDip,
         <<"createNestedArchives">> => CreateNestedArchives
