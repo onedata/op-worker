@@ -289,13 +289,15 @@ get_root_dir_guid(#archive{root_dir_guid = RootDirGuid}) ->
 get_root_dir_guid(#document{value = Archive}) ->
     get_root_dir_guid(Archive).
 
--spec get_data_dir_guid(record() | doc()) -> {ok, file_id:file_guid()}.
+-spec get_data_dir_guid(record() | doc() | id()) -> {ok, file_id:file_guid()}.
 get_data_dir_guid(#archive{data_dir_guid = DataDirGuid}) -> 
     {ok, DataDirGuid};
 get_data_dir_guid(#document{value = Archive}) -> 
-    get_data_dir_guid(Archive).
+    get_data_dir_guid(Archive);
+get_data_dir_guid(ArchiveId) ->
+    ?get_field(ArchiveId, fun get_data_dir_guid/1).
 
--spec get_parent(record() | doc()) -> {ok, archive:id() | undefined}.
+-spec get_parent(record() | doc() | id()) -> {ok, archive:id() | undefined}.
 get_parent(#archive{parent = Parent}) ->
     {ok, Parent};
 get_parent(#document{value = Archive}) ->

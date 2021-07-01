@@ -464,8 +464,8 @@ archive_dir_insecure(FileCtx, TargetParentCtx, UserCtx) ->
 archive_file_and_mark_finished(FileCtx, TargetParentCtx, CurrentArchiveDoc, BaseArchiveDoc, UserCtx) ->
     case archive_file(FileCtx, TargetParentCtx, CurrentArchiveDoc, BaseArchiveDoc, UserCtx) of
         {ok, ArchiveFileCtx} ->
-            {FileSize, _} = file_ctx:get_local_storage_file_size(ArchiveFileCtx),
-            archive:mark_file_archived(CurrentArchiveDoc, FileSize),
+            {FileSize, _} = file_ctx:get_file_size(ArchiveFileCtx),
+            ok = archive:mark_file_archived(CurrentArchiveDoc, FileSize),
             {ok, ArchiveFileCtx};
         {error, _} = Error ->
             archive:mark_file_failed(CurrentArchiveDoc),

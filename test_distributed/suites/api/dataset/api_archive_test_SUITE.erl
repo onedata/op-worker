@@ -134,8 +134,6 @@ create_archive(_Config) ->
                     {<<"datasetId">>, DetachedDatasetId,
                         ?ERROR_BAD_DATA(<<"datasetId">>, <<"Detached dataset cannot be modified.">>)},
                     {<<"config">>, #{<<"incremental">> => <<"not boolean">>}, ?ERROR_BAD_VALUE_BOOLEAN(<<"config.incremental">>)},
-                    {<<"config">>, #{<<"baseArchiveId">> => [<<"string">>]},
-                        ?ERROR_BAD_VALUE_BINARY(<<"config.baseArchiveId">>)},
                     % TODO VFS-7653 uncomment following case and remove subsequent one
                     % {<<"config">>, #{<<"includeDip">> => <<"not boolean">>}, ?ERROR_BAD_VALUE_BOOLEAN(<<"config.includeDip">>)},
                     {<<"config">>, #{<<"includeDip">> => true},
@@ -676,7 +674,7 @@ validate_listed_archives(ListingResult, Params, AllArchives, Format) ->
     ExpArchives2 = lists:map(fun(Info = #archive_info{id = ArchiveId, index = Index}) ->
         case Format of
             rest -> {Index, ArchiveId};
-            graph_sync -> Info
+            graph_sync -> Info#archive_info{base_archive_id = null}
         end
     end, ExpArchives1),
 

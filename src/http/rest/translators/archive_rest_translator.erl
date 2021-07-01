@@ -62,7 +62,8 @@ translate_archive_info(#archive_info{
     preserved_callback = PreservedCallback,
     purged_callback = PurgedCallback,
     description = Description,
-    stats = Stats
+    stats = Stats,
+    base_archive_id = BaseArchive
 }) ->
     #{
         <<"archiveId">> => ArchiveId,
@@ -80,6 +81,6 @@ translate_archive_info(#archive_info{
         <<"preservedCallback">> => utils:undefined_to_null(PreservedCallback),
         <<"purgedCallback">> => utils:undefined_to_null(PurgedCallback),
         <<"description">> => Description,
-        % fixme base dir
-        <<"stats">> => archive_stats:to_json(Stats)
+        <<"stats">> => archive_stats:to_json(Stats),
+        <<"baseArchive">> => BaseArchive
     }.

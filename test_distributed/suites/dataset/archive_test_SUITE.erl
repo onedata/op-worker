@@ -49,6 +49,13 @@
     archive_dataset_attached_to_symlink_bagit_layout/1,
     archive_directory_with_number_of_files_exceeding_batch_size_bagit_layout/1,
     archive_nested_datasets_bagit_layout/1,
+    
+    incremental_archive_plain_layout/1,
+    incremental_archive_bagit_layout/1,
+    incremental_archive_modified_content/1, 
+    incremental_archive_modified_metadata/1,
+    incremental_nested_archive_plain_layout/1,
+    incremental_nested_archive_bagit_layout/1,
 
     % sequential tests
     archive_dataset_attached_to_space_dir/1,
@@ -68,8 +75,16 @@ groups() -> [
         archive_dataset_attached_to_file_bagit_layout,
         archive_dataset_attached_to_hardlink_bagit_layout,
         % archive_dataset_attached_to_symlink_bagit_layout TODO VFS-7664
-        archive_nested_datasets_bagit_layout
-    ]},
+        archive_nested_datasets_bagit_layout,
+        
+        incremental_archive_plain_layout,
+        incremental_archive_bagit_layout,
+        incremental_archive_modified_content,
+        incremental_archive_modified_metadata,
+        incremental_nested_archive_plain_layout,
+        incremental_nested_archive_bagit_layout
+        
+    ]}, 
     {sequential_tests, [sequential], [
         archive_dataset_attached_to_space_dir,
         archive_big_tree_plain_layout,
@@ -185,6 +200,24 @@ archive_directory_with_number_of_files_exceeding_batch_size_bagit_layout(_Config
 
 archive_nested_datasets_bagit_layout(_Config) ->
     archive_nested_datasets_test_base(?ARCHIVE_BAGIT_LAYOUT).
+
+incremental_archive_plain_layout(_Config) ->
+    simple_incremental_archive_test_base(?ARCHIVE_PLAIN_LAYOUT, []).
+
+incremental_archive_bagit_layout(_Config) ->
+    simple_incremental_archive_test_base(?ARCHIVE_BAGIT_LAYOUT, []).
+
+incremental_archive_modified_content(_Config) ->
+    simple_incremental_archive_test_base(?ARCHIVE_PLAIN_LAYOUT, [content]).
+
+incremental_archive_modified_metadata(_Config) ->
+    simple_incremental_archive_test_base(?ARCHIVE_BAGIT_LAYOUT, [metadata]).
+
+incremental_nested_archive_plain_layout(_Config) ->
+    nested_incremental_archive_test_base(?ARCHIVE_PLAIN_LAYOUT).
+
+incremental_nested_archive_bagit_layout(_Config) ->
+    nested_incremental_archive_test_base(?ARCHIVE_BAGIT_LAYOUT).
 
 %===================================================================
 % Sequential tests - tests which must be performed one after another
@@ -426,6 +459,100 @@ archive_nested_datasets_test_base(ArchiveLayout) ->
     assert_archive_is_preserved(Node, SessionId, ArchiveDir31Id, DatasetDir31Id, Dir31Guid, 2, ArchiveDir31Bytes),
     assert_archive_is_preserved(Node, SessionId, ArchiveFile41Id, DatasetFile41Id, File41Guid, 1, File41Size).
 
+
+simple_incremental_archive_test_base(Layout, Modifications) ->
+    #object{
+        guid = DirGuid,
+        children = [#object{guid = ChildGuid}],
+        dataset = #dataset_object{
+            id = DatasetId,
+            archives = [#archive_object{id = BaseArchiveId}]
+        }} = onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, 
+            #dir_spec{
+                dataset = #dataset_spec{archives = [#archive_spec{config = #archive_config{layout = Layout}}]},
+                children = [#file_spec{content = ?RAND_CONTENT(), metadata = #metadata_spec{json = ?RAND_JSON_METADATA()}}]
+            }, paris),
+    assert_archive_state(BaseArchiveId, ?ARCHIVE_PRESERVED),
+    Node = oct_background:get_random_provider_node(krakow),
+    SessionId = oct_background:get_user_session_id(?USER1, krakow),
+    lists:foreach(fun(Mod) ->
+        ok = modify_file(Node, SessionId, ChildGuid, Mod)
+    end, Modifications),
+        
+    {ok, ArchiveId} = lfm_proxy:archive_dataset(Node, SessionId, DatasetId, #archive_config{
+        incremental = true,
+        base_archive_id = BaseArchiveId,
+        layout = Layout
+    }, <<>>),
+    assert_archive_state(ArchiveId, ?ARCHIVE_PRESERVED),
+    check_incremental_archive(BaseArchiveId, ArchiveId, length(Modifications) =/= 0),
+    {ok, #file_attr{size = Size}} = lfm_proxy:stat(Node, SessionId, ?FILE_REF(ChildGuid)),
+    assert_archive_is_preserved(Node, SessionId, ArchiveId, DatasetId, DirGuid, 1, Size).
+
+
+nested_incremental_archive_test_base(Layout) ->
+    #object{
+        guid = TopDirGuid,
+        dataset = #dataset_object{
+            id = TopDatasetId,
+            archives = [#archive_object{id = TopBaseArchiveId}]
+        },
+        children = [
+            #object{guid = FileGuid1},
+            #object{
+                guid = NestedDirGuid,
+                dataset = #dataset_object{
+                    id = NestedDatasetId
+                },
+                children = [#object{guid = FileGuid2}]
+            }
+        ]
+        } = onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE,
+        #dir_spec{
+            dataset = #dataset_spec{archives = [#archive_spec{config = #archive_config{layout = Layout, create_nested_archives = true}}]},
+            children = [
+                #file_spec{content = ?RAND_CONTENT(), metadata = #metadata_spec{json = ?RAND_JSON_METADATA()}},
+                #dir_spec{
+                    dataset = #dataset_spec{},
+                    children = [
+                        #file_spec{content = ?RAND_CONTENT(), metadata = #metadata_spec{json = ?RAND_JSON_METADATA()}}
+                    ]
+                }
+            ]
+        }, paris),
+    assert_archive_state(TopBaseArchiveId, ?ARCHIVE_PRESERVED),
+    Node = oct_background:get_random_provider_node(krakow),
+    SessionId = oct_background:get_user_session_id(?USER1, krakow),
+    
+    ListOpts = #{offset => 0, limit => 10},
+    {ok, [{_, NestedBaseArchiveId}], _} = ?assertMatch({ok, [_], true},
+        lfm_proxy:list_archives(Node, SessionId, NestedDatasetId, ListOpts), ?ATTEMPTS),
+    
+    {ok, TopArchiveId} = lfm_proxy:archive_dataset(Node, SessionId, TopDatasetId, #archive_config{
+        create_nested_archives = true,
+        incremental = true,
+        base_archive_id = TopBaseArchiveId,
+        layout = Layout
+    }, <<>>),
+    
+    {ok, NestedArchives, _} = ?assertMatch({ok, [_, _], true},
+        lfm_proxy:list_archives(Node, SessionId, NestedDatasetId, ListOpts), ?ATTEMPTS),
+    NestedArchivesIds = lists:map(fun({_, ArchiveId}) ->
+        ArchiveId
+    end, NestedArchives),
+    [NestedArchiveId] = NestedArchivesIds -- [NestedBaseArchiveId],
+    
+    {ok, #file_attr{size = Size1}} = lfm_proxy:stat(Node, SessionId, ?FILE_REF(FileGuid1)),
+    {ok, #file_attr{size = Size2}} = lfm_proxy:stat(Node, SessionId, ?FILE_REF(FileGuid2)),
+    
+    assert_archive_state(TopArchiveId, ?ARCHIVE_PRESERVED),
+    check_incremental_archive(TopBaseArchiveId, TopArchiveId, false),
+    assert_archive_is_preserved(Node, SessionId, TopArchiveId, TopDatasetId, TopDirGuid, 2, Size1 + Size2),
+    
+    assert_archive_state(NestedArchiveId, ?ARCHIVE_PRESERVED),
+    check_incremental_archive(NestedBaseArchiveId, NestedArchiveId, false),
+    assert_archive_is_preserved(Node, SessionId, NestedArchiveId, NestedDatasetId, NestedDirGuid, 1, Size2).
+
 %===================================================================
 % SetUp and TearDown functions
 %===================================================================
@@ -466,10 +593,12 @@ end_per_testcase(_Case, _Config) ->
 create_archive_dir(Node, ArchiveId, DatasetId, SpaceId, UserId) ->
     rpc:call(Node, archivisation_tree, create_archive_dir, [ArchiveId, DatasetId, SpaceId, UserId]).
 
+
 assert_archive_dir_structure_is_correct(Node, SessionId, SpaceId, DatasetId, ArchiveId, UserId) ->
     assert_archives_root_dir_exists(Node, SessionId, SpaceId),
     assert_dataset_archives_dir_exists(Node, SessionId, SpaceId, DatasetId),
     assert_archive_dir_exists(Node, SessionId, SpaceId, DatasetId, ArchiveId, UserId).
+
 
 assert_archives_root_dir_exists(Node, SessionId, SpaceId) ->
     ArchivesRootUuid = ?ARCHIVES_ROOT_DIR_UUID(SpaceId),
@@ -543,7 +672,6 @@ assert_archive_is_preserved(Node, SessionId, ArchiveId, DatasetId, DatasetRootFi
     assert_layout_custom_features(Node, SessionId, ArchiveId, ArchiveLayout).
 
 
-
 assert_structure(Node, SessionId, ArchiveId, DatasetRootFileGuid, ?ARCHIVE_PLAIN_LAYOUT) ->
     ArchiveRootDirUuid = ?ARCHIVE_DIR_UUID(ArchiveId),
     ArchiveRootDirGuid = file_id:pack_guid(ArchiveRootDirUuid, oct_background:get_space_id(?SPACE)),
@@ -599,6 +727,7 @@ assert_attrs_copied(Node, SessionId, SourceGuid, TargetGuid) ->
         _:_ ->
             false
     end, ?ATTEMPTS).
+
 
 assert_metadata_copied(Node, SessionId, SourceGuid, TargetGuid) ->
     GetXattrs = fun(Guid) ->
@@ -666,6 +795,7 @@ assert_file_is_flushed_from_buffer(Node, SessionId, SourceGuid, TargetGuid) ->
     end,
     ?assertEqual(SourceSize, GetStorageSize(TargetSDHandle), ?ATTEMPTS).
 
+
 assert_symlink_values_copied(Node, SessionId, SourceGuid, TargetGuid) ->
     ReadSymlink = fun(Guid) ->
         lfm_proxy:read_symlink(Node, SessionId, ?FILE_REF(Guid))
@@ -698,6 +828,7 @@ resolve_if_symlink(Node, SessionId, Guid) ->
             Guid
     end.
 
+
 get_archive_info_without_config(Node, SessionId, ArchiveId) ->
     case lfm_proxy:get_archive_info(Node, SessionId, ArchiveId) of
         {ok, ArchiveInfo} ->
@@ -705,3 +836,56 @@ get_archive_info_without_config(Node, SessionId, ArchiveId) ->
         Other ->
             Other
     end.
+
+
+modify_file(Node, SessionId, FileGuid, content) ->
+    {ok, H} = lfm_proxy:open(Node, SessionId, #file_ref{guid = FileGuid}, write),
+    ?assertMatch({ok, _}, lfm_proxy:write(Node, H, 0, ?RAND_CONTENT())),
+    ok = lfm_proxy:close(Node, H);
+modify_file(Node, SessionId, FileGuid, metadata) ->
+    ok = lfm_proxy:set_metadata(Node, SessionId, #file_ref{guid = FileGuid}, json, ?RAND_JSON_METADATA(), []).
+
+
+check_incremental_archive(BaseArchiveId, ArchiveId, ModifiedFiles) ->
+    lists:foreach(fun(Provider) ->
+        Node = oct_background:get_random_provider_node(Provider),
+        SessionId = oct_background:get_user_session_id(?USER1, Provider),
+        {ok, ArchiveDataDirGuid} = rpc:call(Node, archive, get_data_dir_guid, [ArchiveId]),
+        check_incremental_archive(Node, SessionId, BaseArchiveId, ArchiveDataDirGuid, ModifiedFiles)
+    end, oct_background:get_space_supporting_providers(?SPACE)).
+
+
+check_incremental_archive(Node, SessionId, BaseArchiveId, Guid, ModifiedFiles) ->
+    case lfm_proxy:stat(Node, SessionId, #file_ref{guid = Guid}) of
+        {ok, #file_attr{type = ?REGULAR_FILE_TYPE}} ->
+            case ModifiedFiles of
+                true -> ?assertNotEqual({ok, BaseArchiveId}, extract_archive_id(Node, SessionId, Guid));
+                false -> ?assertEqual({ok, BaseArchiveId}, extract_archive_id(Node, SessionId, Guid))
+            end;
+        {ok, #file_attr{type = ?SYMLINK_TYPE}} ->
+            ok;
+        {ok, #file_attr{type = ?DIRECTORY_TYPE}} ->
+            {ok, Children} = lfm_proxy:get_children(Node, SessionId, ?FILE_REF(Guid), 0, 10),
+            lists:foreach(fun({ChildGuid, _}) ->
+                check_incremental_archive(Node, SessionId, BaseArchiveId, ChildGuid, ModifiedFiles)
+            end, Children)
+    end.
+
+
+assert_archive_state(ArchiveId, ExpectedState) ->
+    lists:foreach(fun(Provider) ->
+        Node = oct_background:get_random_provider_node(Provider),
+        SessionId = oct_background:get_user_session_id(?USER1, Provider),
+        ?assertMatch({ok, #archive_info{state = ExpectedState}}, lfm_proxy:get_archive_info(Node, SessionId, ArchiveId), ?ATTEMPTS)
+    end, oct_background:get_space_supporting_providers(?SPACE)).
+
+
+extract_archive_id(Node, SessionId, Guid) ->
+    {ok, Path} = lfm_proxy:get_file_path(Node, SessionId, ensure_referenced_guid(Guid)),
+    archivisation_tree:extract_archive_id(Path).
+
+
+ensure_referenced_guid(Guid) ->
+    {Uuid, SpaceId} = file_id:unpack_guid(Guid),
+    ReferencedUuid = fslogic_uuid:ensure_referenced_uuid(Uuid),
+    file_id:pack_guid(ReferencedUuid, SpaceId).
