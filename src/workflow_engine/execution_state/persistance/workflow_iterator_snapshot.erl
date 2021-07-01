@@ -16,6 +16,7 @@
 
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/errors.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([save/4, get/1, cleanup/1]).
@@ -56,11 +57,23 @@ save(ExecutionId, LaneIndex, ItemIndex, Iterator) ->
         {ok, _} ->
             % Mark iterator exhausted after change of line
             % (each line has new iterator and iterator for previous line can be destroyed)
-            case PrevLaneIndex =/= undefined andalso PrevLaneIndex < LaneIndex of
-                true -> iterator:mark_exhausted(PrevIterator); % TODO VFS-7787 - handle without additional get
+            case PrevLaneIndex =/= 0 andalso PrevLaneIndex < LaneIndex of
+                true -> mark_exhausted(PrevIterator, ExecutionId); % TODO VFS-7787 - handle without additional get
                 false -> ok
             end,
-            iterator:forget_before(Iterator);
+            case ItemIndex of
+                0 ->
+                    ok;
+                _ ->
+                    try
+                        iterator:forget_before(Iterator)
+                    catch
+                        Error:Reason ->
+                            ?error_stacktrace("Unexpected error forgeting iterator for execution: ~p ~p:~p",
+                                [ExecutionId, Error, Reason]),
+                            ok
+                    end
+            end;
         {error, already_saved} ->
             ok
     end.
@@ -79,9 +92,24 @@ get(ExecutionId) ->
 cleanup(ExecutionId) ->
     case ?MODULE:get(ExecutionId) of
         {ok, _LaneIndex, Iterator} ->
-            iterator:mark_exhausted(Iterator),
+            mark_exhausted(Iterator, ExecutionId),
             ok = datastore_model:delete(?CTX, ExecutionId);
         ?ERROR_NOT_FOUND ->
+            ok
+    end.
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+-spec mark_exhausted(iterator:iterator(), workflow_engine:execution_id()) -> ok.
+mark_exhausted(Iterator, ExecutionId) ->
+    try
+        iterator:mark_exhausted(Iterator)
+    catch
+        Error:Reason ->
+            ?error_stacktrace("Unexpected error marking exhausted iterator for execution: ~p ~p:~p",
+                [ExecutionId, Error, Reason]),
             ok
     end.
 

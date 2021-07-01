@@ -244,8 +244,22 @@ schedule_next_job(EngineId, DeferredExecutions) ->
                         ?END_EXECUTION(Handler, Context, LaneIndex, ErrorEncountered) ->
                             case workflow_engine_state:remove_execution_id(EngineId, ExecutionId) of
                                 ok ->
-                                    Handler:handle_lane_execution_ended(ExecutionId, Context, LaneIndex),
-                                    Handler:handle_workflow_execution_ended(ExecutionId, Context),
+                                    try
+                                        Handler:handle_lane_execution_ended(ExecutionId, Context, LaneIndex)
+                                    catch
+                                        Error:Reason  ->
+                                            ?error_stacktrace("Unexpected error of line ~p ended hanlder for execution"
+                                                " ~p: ~p:~p", [LaneIndex, ExecutionId, Error, Reason]),
+                                            error
+                                    end,
+                                    try
+                                        Handler:handle_workflow_execution_ended(ExecutionId, Context)
+                                    catch
+                                        Error2:Reason2  ->
+                                            ?error_stacktrace("Unexpected error of execution ~p ended handler: ~p:~p",
+                                                [ExecutionId, Error2, Reason2]),
+                                            error
+                                    end,
                                     case ErrorEncountered of
                                         true -> ok;
                                         false -> workflow_iterator_snapshot:cleanup(ExecutionId)
@@ -258,7 +272,14 @@ schedule_next_job(EngineId, DeferredExecutions) ->
                         ?END_EXECUTION_AFTER_PREPARATION_ERROR(Handler, Context) ->
                             case workflow_engine_state:remove_execution_id(EngineId, ExecutionId) of
                                 ok ->
-                                    Handler:handle_workflow_execution_ended(ExecutionId, Context),
+                                    try
+                                        Handler:handle_workflow_execution_ended(ExecutionId, Context)
+                                    catch
+                                        Error:Reason  ->
+                                            ?error_stacktrace("Unexpected error of execution ~p ended handler: ~p:~p",
+                                                [ExecutionId, Error, Reason]),
+                                            error
+                                    end,
                                     workflow_execution_state:cleanup(ExecutionId);
                                 ?WF_ERROR_ALREADY_REMOVED ->
                                     ok
@@ -359,7 +380,8 @@ process_item(EngineId, ExecutionId, ExecutionSpec = #execution_spec{
     catch
         Error:Reason  ->
             ?error_stacktrace("Unexpected error handling task ~p for item id ~p: ~p:~p",
-                [TaskId, ItemId, Error, Reason])
+                [TaskId, ItemId, Error, Reason]),
+            trigger_job_scheduling(EngineId, ?FOR_CURRENT_SLOT_FIRST)
     end.
 
 -spec process_item(
@@ -396,21 +418,22 @@ process_result(EngineId, ExecutionId, #execution_spec{
 }) ->
     try
         CachedResult = workflow_cached_async_result:get_and_delete(CachedResultId),
-        try
-            ProcessedResult = Handler:process_result(ExecutionId, ExecutionContext, TaskId, CachedResult),
-            workflow_engine:report_execution_status_update(
-                ExecutionId, EngineId, ?ASYNC_RESULT_PROCESSED, JobIdentifier, ProcessedResult)
+        ProcessedResult = try
+            Handler:process_result(ExecutionId, ExecutionContext, TaskId, CachedResult)
         catch
             Error:Reason  ->
                 % TODO VFS-7788 - use callbacks to get human readable information about task
                 ?error_stacktrace("Unexpected error processing task ~p result ~p (id ~p): ~p:~p",
                     [TaskId, CachedResult, CachedResultId, Error, Reason]),
                 error
-        end
+        end,
+        workflow_engine:report_execution_status_update(
+            ExecutionId, EngineId, ?ASYNC_RESULT_PROCESSED, JobIdentifier, ProcessedResult)
     catch
         Error2:Reason2  ->
             ?error_stacktrace("Unexpected error processing task ~p with result id ~p: ~p:~p",
-                [TaskId, CachedResultId, Error2, Reason2])
+                [TaskId, CachedResultId, Error2, Reason2]),
+            trigger_job_scheduling(EngineId, ?FOR_CURRENT_SLOT_FIRST)
     end.
 
 -spec prepare_execution(
@@ -421,10 +444,17 @@ process_result(EngineId, ExecutionId, #execution_spec{
 ) -> ok.
 prepare_execution(EngineId, ExecutionId, Handler, ExecutionContext) ->
     try
-        Ans = Handler:prepare(ExecutionId, ExecutionContext),
+        Ans = try
+            Handler:prepare(ExecutionId, ExecutionContext)
+        catch
+            Error:Reason  ->
+                ?error_stacktrace("Unexpected error perparing execution ~p: ~p:~p", [ExecutionId, Error, Reason]),
+                error
+        end,
         workflow_execution_state:report_execution_prepared(ExecutionId, Handler, ExecutionContext, Ans),
         trigger_job_scheduling(EngineId, ?FOR_CURRENT_SLOT_FIRST)
     catch
-        Error:Reason  ->
-            ?error_stacktrace("Unexpected error perparing execution ~p: ~p:~p", [ExecutionId, Error, Reason])
+        Error2:Reason2  ->
+            ?error_stacktrace("Unexpected error perparing execution ~p: ~p:~p", [ExecutionId, Error2, Reason2]),
+            trigger_job_scheduling(EngineId, ?FOR_CURRENT_SLOT_FIRST)
     end.

@@ -18,6 +18,7 @@
 -include("workflow_engine.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/errors.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([init/3, init_using_snapshot/3, cleanup/1, prepare_next_job/1,
@@ -53,9 +54,23 @@
 -define(TASK_PROCESSED_REPORT(NotifyTaskFinished), {task_processed_report, NotifyTaskFinished}).
 -define(JOBS_EXPIRED(AsyncPoolsChanges), {jobs_expired, AsyncPoolsChanges}).
 
+% Definitions of possible errors
+-define(WF_ERROR_LANE_ALREADY_PREPARED, {error, lane_already_prepared}).
+-define(WF_ERROR_LANE_CHANGED, {error, lane_changed}).
+-define(WF_ERROR_EXECUTION_FINISHED(Handler, Context, LaneIndex, ErrorEncountered),
+    {error, {execution_finished, Handler, Context, LaneIndex, ErrorEncountered}}).
+-define(WF_ERROR_LANE_FINISHED(LaneIndex, Handler, Context), {error, {lane_finished, LaneIndex, Handler, Context}}).
+-define(WF_ERROR_NO_CACHED_ITEMS(LaneIndex, ItemIndex, IterationStep, Context),
+    {error, {no_cached_items, LaneIndex, ItemIndex, IterationStep, Context}}).
+-define(WF_ERROR_EXECUTION_PREPARATION_FAILED(Handler, Context),
+    {error, {execution_preparation_failed, Handler, Context}}).
+-define(WF_ERROR_NOTHING_CHANGED, {error, nothing_changed}).
+-define(WF_ERROR_ITERATION_FAILED, {error, iteration_failed}).
+
 -type index() :: non_neg_integer(). % scheduling is based on positions of elements (items, parallel_boxes, tasks)
                                     % to allow executions of tasks in chosen order
 -type iteration_step() :: {workflow_cached_item:id(), iterator:iterator()}.
+-type iteration_status() :: iteration_step() | undefined | ?WF_ERROR_ITERATION_FAILED.
 -type state() :: #workflow_execution_state{}.
 -type doc() :: datastore_doc:doc(state()).
 
@@ -78,18 +93,6 @@
 }.
 %% @formatter:on
 
-% Definitions of possible errors
--define(WF_ERROR_LANE_ALREADY_PREPARED, {error, lane_already_prepared}).
--define(WF_ERROR_LANE_CHANGED, {error, lane_changed}).
--define(WF_ERROR_EXECUTION_FINISHED(Handler, Context, LaneIndex, ErrorEncountered),
-    {error, {execution_finished, Handler, Context, LaneIndex, ErrorEncountered}}).
--define(WF_ERROR_LANE_FINISHED(LaneIndex, Handler, Context), {error, {lane_finished, LaneIndex, Handler, Context}}).
--define(WF_ERROR_NO_CACHED_ITEMS(LaneIndex, ItemIndex, IterationStep, Context),
-    {error, {no_cached_items, LaneIndex, ItemIndex, IterationStep, Context}}).
--define(WF_ERROR_EXECUTION_PREPARATION_FAILED(Handler, Context),
-    {error, {execution_preparation_failed, Handler, Context}}).
--define(WF_ERROR_NOTHING_CHANGED, {error, nothing_changed}).
-
 -type update_fun() :: datastore_doc:diff(state()).
 -type no_items_error() :: ?WF_ERROR_NO_WAITING_ITEMS |
     ?WF_ERROR_EXECUTION_FINISHED(workflow_handler:handler(), workflow_engine:execution_context(), index(), boolean()) |
@@ -99,7 +102,7 @@
 -type update_report() :: ?EXECUTION_SET_TO_BE_PREPARED | #job_prepared_report{} | #items_processed_report{} |
     ?TASK_PROCESSED_REPORT(boolean()) | ?JOBS_EXPIRED(async_pools_changes()) | no_items_error().
 
--export_type([index/0, iteration_step/0, current_lane/0, preparation_status/0, boxes_map/0, update_report/0]).
+-export_type([index/0, iteration_status/0, current_lane/0, preparation_status/0, boxes_map/0, update_report/0]).
 
 -define(CTX, #{
     model => ?MODULE,
@@ -124,12 +127,7 @@ init_using_snapshot(ExecutionId, Handler, Context) ->
         {ok, LaneIndex, Iterator} ->
             case get_initial_iterator_and_lane_spec(ExecutionId, Handler, Context, LaneIndex) of
                 {ok, _InitialIterator, CurrentLaneSpec} ->
-                    NextIterationStep = case iterator:get_next(Context, Iterator) of
-                        {ok, NextItem, NextIterator} ->
-                            {workflow_cached_item:put(NextItem, NextIterator), NextIterator};
-                        stop ->
-                            undefined
-                    end,
+                    NextIterationStep = get_next_iterator(Context, Iterator, ExecutionId),
                     {ok, Record} = prepare_lane(
                         #workflow_execution_state{handler = Handler, context = Context},
                         CurrentLaneSpec, NextIterationStep),
@@ -282,30 +280,44 @@ get_result_processing_data(ExecutionId, JobIdentifier) ->
     index()
 ) -> {ok, iterator:iterator(), current_lane()} | ?WF_ERROR_PREPARATION_FAILED.
 get_initial_iterator_and_lane_spec(ExecutionId, Handler, Context, LaneIndex) ->
-    case Handler:get_lane_spec(ExecutionId, Context, LaneIndex) of
-        {ok, #{
-            parallel_boxes := Boxes,
-            iterator := Iterator,
-            is_last := IsLast
-        }} ->
-            BoxesMap = lists:foldl(fun({BoxIndex, BoxSpec}, BoxesAcc) ->
-                Tasks = lists:foldl(fun({TaskIndex, {TaskId, TaskSpec}}, TaskAcc) ->
-                    TaskAcc#{TaskIndex => {TaskId, TaskSpec}}
-                end, #{}, lists_utils:enumerate(maps:to_list(BoxSpec))),
-                BoxesAcc#{BoxIndex => Tasks}
-            end, #{}, lists_utils:enumerate(Boxes)),
+    try
+        case Handler:get_lane_spec(ExecutionId, Context, LaneIndex) of
+            {ok, #{
+                parallel_boxes := Boxes,
+                iterator := Iterator,
+                is_last := IsLast
+            } = Lane} ->
+                case Boxes of
+                    [] ->
+                        % workflow_jobs require at least one parallel_boxes in lane
+                        ?error("No parallel boxes for lane ~p of execution id: ~p", [Lane, ExecutionId]),
+                        ?WF_ERROR_PREPARATION_FAILED;
+                    _ ->
+                        BoxesMap = lists:foldl(fun({BoxIndex, BoxSpec}, BoxesAcc) ->
+                            Tasks = lists:foldl(fun({TaskIndex, {TaskId, TaskSpec}}, TaskAcc) ->
+                                TaskAcc#{TaskIndex => {TaskId, TaskSpec}}
+                            end, #{}, lists_utils:enumerate(maps:to_list(BoxSpec))),
+                            BoxesAcc#{BoxIndex => Tasks}
+                        end, #{}, lists_utils:enumerate(Boxes)),
 
-            {
-                ok,
-                Iterator,
-                #current_lane{
-                    lane_index = LaneIndex,
-                    is_last = IsLast,
-                    parallel_boxes_count = length(Boxes),
-                    parallel_boxes_spec = BoxesMap
-                }
-            };
-        error ->
+                        {
+                            ok,
+                            Iterator,
+                            #current_lane{
+                                lane_index = LaneIndex,
+                                is_last = IsLast,
+                                parallel_boxes_count = length(Boxes),
+                                parallel_boxes_spec = BoxesMap
+                            }
+                        }
+                end;
+            error ->
+                ?WF_ERROR_PREPARATION_FAILED
+        end
+    catch
+        Error:Reason  ->
+            ?error_stacktrace("Unexpected error perparing lane ~p for execution ~p: ~p:~p",
+                [LaneIndex, ExecutionId, Error, Reason]),
             ?WF_ERROR_PREPARATION_FAILED
     end.
 
@@ -317,17 +329,20 @@ get_initial_iterator_and_lane_spec(ExecutionId, Handler, Context, LaneIndex) ->
 ) -> {ok, iterator:iterator()} | ?WF_ERROR_PREPARATION_FAILED.
 prepare_lane(ExecutionId, Handler, Context, LaneIndex) ->
     case LaneIndex > 1 of
-        true -> Handler:handle_lane_execution_ended(ExecutionId, Context, LaneIndex - 1);
-        false -> ok
+        true ->
+            try
+                Handler:handle_lane_execution_ended(ExecutionId, Context, LaneIndex - 1)
+            catch
+                Error:Reason  ->
+                    ?error_stacktrace("Unexpected error of line ~p ended hanlder for execution"
+                    " ~p: ~p:~p", [LaneIndex - 1, ExecutionId, Error, Reason])
+            end;
+        false ->
+            ok
     end,
     case get_initial_iterator_and_lane_spec(ExecutionId, Handler, Context, LaneIndex) of
         {ok, Iterator, CurrentLaneSpec} ->
-            NextIterationStep = case iterator:get_next(Context, Iterator) of
-                {ok, NextItem, NextIterator} ->
-                    {workflow_cached_item:put(NextItem, NextIterator), NextIterator};
-                stop ->
-                    undefined
-            end,
+            NextIterationStep = get_next_iterator(Context, Iterator, ExecutionId),
             case update(ExecutionId, fun(State) ->
                 prepare_lane(State, CurrentLaneSpec, NextIterationStep)
             end) of
@@ -373,21 +388,18 @@ prepare_next_job_for_current_lane(ExecutionId) ->
             Error
     end.
 
--spec prepare_next_job_using_iterator(workflow_engine:execution_id(), index(), iteration_step(),
+-spec prepare_next_job_using_iterator(workflow_engine:execution_id(), index(), iteration_status(),
     index(), workflow_engine:execution_context()) -> {ok, workflow_engine:execution_spec()} | no_items_error().
 prepare_next_job_using_iterator(ExecutionId, ItemIndex, CurrentIterationStep, LaneIndex, Context) ->
     NextIterationStep = case CurrentIterationStep of
         undefined ->
             undefined;
+        ?WF_ERROR_ITERATION_FAILED ->
+            undefined;
         {_, CurrentIterator} ->
-            case iterator:get_next(Context, CurrentIterator) of
-                {ok, NextItem, NextIterator} ->
-                    % TODO VFS-7787 return (to engine) item instead of item_id in this case (engine must read from cache when we have item here)
-                    % Maybe generate item_id using index (there will be no need to translate job to datastore key)?
-                    {workflow_cached_item:put(NextItem, NextIterator), NextIterator};
-                stop ->
-                    undefined
-            end
+            % TODO VFS-7787 return (to engine) item instead of item_id in this case (engine must read from cache when we have item here)
+            % Maybe generate item_id using index (there will be no need to translate job to datastore key)?
+            get_next_iterator(Context, CurrentIterator, ExecutionId)
     end,
 
     ParallelBoxToStart = 1, % TODO VFS-7788 - get ParallelBoxToStart from iterator
@@ -412,6 +424,7 @@ prepare_next_job_using_iterator(ExecutionId, ItemIndex, CurrentIterationStep, La
         ?WF_ERROR_RACE_CONDITION ->
             case NextIterationStep of
                 undefined -> ok;
+                ?WF_ERROR_ITERATION_FAILED -> ok;
                 {ItemId, _} -> workflow_cached_item:delete(ItemId)
             end,
             prepare_next_job_for_current_lane(ExecutionId)
@@ -426,7 +439,14 @@ maybe_notify_task_execution_ended(#document{key = ExecutionId, value = #workflow
     current_lane = #current_lane{parallel_boxes_spec = BoxesSpec}
 }}, JobIdentifier, true = _NotifyTaskExecutionEnded) ->
     {TaskId, _TaskSpec} = workflow_jobs:get_task_details(JobIdentifier, BoxesSpec),
-    Handler:handle_task_execution_ended(ExecutionId, Context, TaskId).
+    try
+        Handler:handle_task_execution_ended(ExecutionId, Context, TaskId)
+    catch
+        Error:Reason  ->
+            ?error_stacktrace("Unexpected error of task ~p ended hanlder for execution"
+            " ~p: ~p:~p", [TaskId, ExecutionId, Error, Reason]),
+            ok
+    end.
 
 -spec update(workflow_engine:execution_id(), update_fun()) -> {ok, state()} | {error, term()}.
 update(ExecutionId, UpdateFun) ->
@@ -434,6 +454,23 @@ update(ExecutionId, UpdateFun) ->
     datastore_model:update(?CTX, ExecutionId, fun(State) ->
         UpdateFun(State#workflow_execution_state{update_report = undefined})
     end).
+
+-spec get_next_iterator(workflow_engine:execution_context(), iterator:iterator(), workflow_engine:execution_id()) ->
+    iteration_status().
+get_next_iterator(Context, Iterator, ExecutionId) ->
+    try
+        case iterator:get_next(Context, Iterator) of
+            {ok, NextItem, NextIterator} ->
+                {workflow_cached_item:put(NextItem, NextIterator), NextIterator};
+            stop ->
+                undefined
+        end
+    catch
+        Error:Reason ->
+            ?error_stacktrace("Unexpected error getting next iterator for execution: ~p ~p:~p",
+                [ExecutionId, Error, Reason]),
+            ?WF_ERROR_ITERATION_FAILED
+    end.
 
 %%%===================================================================
 %%% Functions updating record
@@ -445,7 +482,7 @@ handle_preparation_failure(State) ->
         preparation_status = ?PREPARATION_FAILED
     }}.
 
--spec prepare_lane(state(), current_lane(), iteration_step()) ->
+-spec prepare_lane(state(), current_lane(), iteration_status()) ->
     {ok, state()} | ?WF_ERROR_LANE_ALREADY_PREPARED.
 prepare_lane(#workflow_execution_state{current_lane = #current_lane{lane_index = LaneIndex}},
     #current_lane{lane_index = LaneIndex} = _NextLaneSpec, _PrefetchedIterationStep) ->
@@ -463,7 +500,7 @@ prepare_lane(State, NextLaneSpec, PrefetchedIterationStep) ->
     state(),
     index(),
     index(),
-    iteration_step() | undefined,
+    iteration_status(),
     index()
 ) ->
     {ok, state()} | ?WF_ERROR_RACE_CONDITION | ?WF_ERROR_LANE_CHANGED.
@@ -473,19 +510,26 @@ handle_next_iteration_step(State = #workflow_execution_state{
     prefetched_iteration_step = PrefetchedIterationStep,
     current_lane = #current_lane{lane_index = LaneIndex, parallel_boxes_spec = BoxesSpec}
 }, LaneIndex, PrevItemIndex, NextIterationStep, ParallelBoxToStart) ->
-    case {PrefetchedIterationStep, NextIterationStep} of
-        {undefined, undefined} ->
+    CanUsePrefetchedIterationStep = case PrefetchedIterationStep of
+        undefined -> false;
+        ?WF_ERROR_ITERATION_FAILED -> false;
+        _ -> true
+    end,
+
+    case {CanUsePrefetchedIterationStep, NextIterationStep} of
+        {false, undefined} ->
             State2 = State#workflow_execution_state{
                 iteration_state = workflow_iteration_state:handle_iteration_finished(IterationState)},
             case prepare_next_waiting_job(State2) of
                 {ok, _} = OkAns -> OkAns;
                 Error -> {ok, State2#workflow_execution_state{update_report = Error}}
             end;
-        {undefined, _} ->
+        {false, _} ->
             % TODO VFS-7787 - maybe call handle_iteration_finished/1 when NextIterationStep
             % is undefined first time (next case) to prevent this race
             ?WF_ERROR_RACE_CONDITION;
-        {{PrefetchedItemId, _PrefetchedIterator}, _} ->
+        {true, _} ->
+            {PrefetchedItemId, _PrefetchedIterator} = PrefetchedIterationStep,
             % TODO VFS-7789 - it may be needed to allow registration of waiting items as a result of async call processing finish
             case workflow_iteration_state:register_new_item(
                 IterationState, PrevItemIndex, PrefetchedItemId) of
@@ -565,7 +609,7 @@ report_execution_status_update_internal(State, JobIdentifier, _UpdateType, Ans) 
 
 -spec prepare_next_waiting_job(state()) ->
     {ok, state()} | no_items_error() |
-    ?WF_ERROR_NO_CACHED_ITEMS(index(), index(), iteration_step(), workflow_engine:execution_context()) |
+    ?WF_ERROR_NO_CACHED_ITEMS(index(), index(), iteration_status(), workflow_engine:execution_context()) |
     ?WF_ERROR_EXECUTION_PREPARATION_FAILED(workflow_handler:handler(), workflow_engine:execution_context()).
 prepare_next_waiting_job(State = #workflow_execution_state{
     preparation_status = ?PREPARATION_SUCCESSFUL,
@@ -699,11 +743,12 @@ report_job_finish(State = #workflow_execution_state{
 handle_no_waiting_items_error(#workflow_execution_state{
     current_lane = #current_lane{lane_index = LaneIndex, is_last = IsLast},
     lowest_failed_job_identifier = LowestFailedJobIdentifier,
+    prefetched_iteration_step = PrefetchedIterationStep,
     handler = Handler,
     context = Context
 }, Error) ->
-    HasErrorEncountered = case LowestFailedJobIdentifier of
-        undefined -> false;
+    HasErrorEncountered = case {LowestFailedJobIdentifier, PrefetchedIterationStep} of
+        {undefined, undefined} -> false;
         _ -> true
     end,
     case {Error, IsLast orelse HasErrorEncountered} of
