@@ -173,7 +173,7 @@ prepare_next_job(ExecutionId) ->
     workflow_jobs:job_identifier(),
     workflow_engine:processing_stage(),
     workflow_engine:processing_result()
-) -> workflow_engine:task_spec().
+) -> workflow_engine:task_spec() | undefined.
 report_execution_status_update(ExecutionId, JobIdentifier, UpdateType, Ans) ->
     CachedAns = case UpdateType of
         ?ASYNC_CALL_FINISHED -> workflow_cached_async_result:put(Ans);
@@ -206,16 +206,27 @@ report_execution_status_update(ExecutionId, JobIdentifier, UpdateType, Ans) ->
         }}} ->
             {Doc, NotifyTaskFinished};
         {ok, Doc} ->
-            {Doc, false}
+            {Doc, false};
+        ?WF_ERROR_JOB_NOT_FOUND ->
+            ?debug("Result for not found job ~p of execution ~p", [JobIdentifier, ExecutionId]),
+            {undefined, false};
+        ?ERROR_NOT_FOUND ->
+            ?debug("Result for job ~p of ended execution ~p", [JobIdentifier, ExecutionId]),
+            {undefined, false}
     end,
 
-    maybe_notify_task_execution_ended(UpdatedDoc, JobIdentifier, NotifyTaskExecutionEnded),
+    case UpdatedDoc of
+        undefined ->
+            undefined;
+        _ ->
+            maybe_notify_task_execution_ended(UpdatedDoc, JobIdentifier, NotifyTaskExecutionEnded),
 
-    #document{value = #workflow_execution_state{
-        current_lane = #current_lane{parallel_boxes_spec = BoxesSpec}
-    }} = UpdatedDoc,
-    {_TaskId, TaskSpec} = workflow_jobs:get_task_details(JobIdentifier, BoxesSpec),
-    TaskSpec.
+            #document{value = #workflow_execution_state{
+                current_lane = #current_lane{parallel_boxes_spec = BoxesSpec}
+            }} = UpdatedDoc,
+            {_TaskId, TaskSpec} = workflow_jobs:get_task_details(JobIdentifier, BoxesSpec),
+            TaskSpec
+    end.
 
 -spec report_execution_prepared(
     workflow_engine:execution_id(),
@@ -593,7 +604,7 @@ check_timeouts_internal(State = #workflow_execution_state{
     workflow_jobs:job_identifier(),
     workflow_engine:processing_stage(),
     cached_processing_result()
-) -> {ok, state()}.
+) -> {ok, state()} | ?WF_ERROR_JOB_NOT_FOUND.
 report_execution_status_update_internal(State = #workflow_execution_state{
     jobs = Jobs
 }, JobIdentifier, ?ASYNC_CALL_STARTED, {ok, KeepaliveTimeout}) ->
@@ -602,8 +613,10 @@ report_execution_status_update_internal(State = #workflow_execution_state{
 report_execution_status_update_internal(State = #workflow_execution_state{
     jobs = Jobs
 }, JobIdentifier, ?ASYNC_CALL_FINISHED, CachedResultId) ->
-    {ok, State#workflow_execution_state{
-        jobs = workflow_jobs:register_async_job_finish(Jobs, JobIdentifier, CachedResultId)}};
+    case workflow_jobs:register_async_job_finish(Jobs, JobIdentifier, CachedResultId) of
+        {ok, NewJobs} -> {ok, State#workflow_execution_state{jobs = NewJobs}};
+        ?WF_ERROR_JOB_NOT_FOUND -> ?WF_ERROR_JOB_NOT_FOUND
+    end;
 report_execution_status_update_internal(State, JobIdentifier, _UpdateType, Ans) ->
     report_job_finish(State, JobIdentifier, Ans).
 

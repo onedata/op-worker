@@ -148,7 +148,9 @@ report_execution_status_update(ExecutionId, EngineId, ReportType, JobIdentifier,
             trigger_job_scheduling(EngineId, ?FOR_CURRENT_SLOT_FIRST)
     end.
 
--spec get_async_call_pools(task_spec()) -> [workflow_async_call_pool:id()] | undefined.
+-spec get_async_call_pools(task_spec() | undefined) -> [workflow_async_call_pool:id()] | undefined.
+get_async_call_pools(undefined) ->
+    undefined;
 get_async_call_pools(TaskSpec) ->
     maps:get(async_call_pools, TaskSpec, [?DEFAULT_ASYNC_CALL_POOL_ID]).
 

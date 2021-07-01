@@ -89,6 +89,9 @@
 % errors returned by workflow_async_call_pool to control workflow_engine
 -define(WF_ERROR_LIMIT_REACHED, {error, limit_reached}).
 
+% errors returned by workflow_jobs to control jobs scheduling
+-define(WF_ERROR_JOB_NOT_FOUND, {error, job_not_found}).
+
 % errors connected with timeouts verification
 -define(WF_ERROR_NO_TIMEOUTS_UPDATED, {error, no_timeouts_updated}).
 
