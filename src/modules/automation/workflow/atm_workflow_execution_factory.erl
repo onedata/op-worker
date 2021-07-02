@@ -36,7 +36,7 @@
 
 
 -spec create(atm_workflow_execution:creation_ctx()) ->
-    {ok, atm_workflow_execution:doc()} | no_return().
+    atm_workflow_execution:doc() | no_return().
 create(AtmWorkflowExecutionCreationCtx) ->
     AtmWorkflowExecutionDoc = create_workflow_execution_doc(
         AtmWorkflowExecutionCreationCtx,
@@ -44,7 +44,7 @@ create(AtmWorkflowExecutionCreationCtx) ->
     ),
     atm_waiting_workflow_executions:add(AtmWorkflowExecutionDoc),
 
-    {ok, AtmWorkflowExecutionDoc}.
+    AtmWorkflowExecutionDoc.
 
 
 %%%===================================================================

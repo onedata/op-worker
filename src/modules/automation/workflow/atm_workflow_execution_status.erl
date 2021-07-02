@@ -122,9 +122,9 @@ report_task_status_change(
                 NewAtmLaneExecutions = lists_utils:replace_at(
                     NewLaneExecution, AtmLaneExecutionIndex, AtmLaneExecutions
                 ),
-                NewAtmWorkflowExecutionStatus = converge_lane_execution_statuses(
-                    NewAtmLaneExecutions
-                ),
+                NewAtmWorkflowExecutionStatus = infer_workflow_execution_status(lists:usort(
+                    atm_lane_execution:gather_statuses(NewAtmLaneExecutions)
+                )),
                 NewAtmWorkflowExecution = AtmWorkflowExecution#atm_workflow_execution{
                     status = NewAtmWorkflowExecutionStatus,
                     % 'status_changed' field must be changed manually here as it's value
@@ -153,21 +153,13 @@ report_task_status_change(
 
 
 %% @private
--spec converge_lane_execution_statuses([atm_lane_execution:record()]) ->
+-spec infer_workflow_execution_status(UniqueAtmLaneExecutionStatuses :: [atm_task_execution:status()]) ->
     atm_workflow_execution:status().
-converge_lane_execution_statuses(AtmLaneExecutions) ->
-    AtmLaneExecutionStatuses = atm_lane_execution:gather_statuses(AtmLaneExecutions),
-    converge_unique_lane_execution_statuses(lists:usort(AtmLaneExecutionStatuses)).
-
-
-%% @private
--spec converge_unique_lane_execution_statuses([atm_task_execution:status()]) ->
-    atm_workflow_execution:status().
-converge_unique_lane_execution_statuses([?PENDING_STATUS]) ->
+infer_workflow_execution_status([?PENDING_STATUS]) ->
     ?ENQUEUED_STATUS;
-converge_unique_lane_execution_statuses([Status]) ->
+infer_workflow_execution_status([Status]) ->
     Status;
-converge_unique_lane_execution_statuses(Statuses) ->
+infer_workflow_execution_status(Statuses) ->
     [LowestStatusPresent | _] = lists:dropwhile(
         fun(Status) -> not lists:member(Status, Statuses) end,
         [?FAILED_STATUS, ?ACTIVE_STATUS, ?PENDING_STATUS, ?FINISHED_STATUS]

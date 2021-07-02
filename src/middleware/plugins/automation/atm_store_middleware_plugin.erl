@@ -173,7 +173,7 @@ get(#op_req{data = Data, gri = #gri{aspect = content, scope = private}}, #atm_st
     Offset = maps:get(<<"offset">>, Data, 0),
     Limit = maps:get(<<"limit">>, Data, ?DEFAULT_LIST_LIMIT),
 
-    ViewOpts = case maps:get(<<"token">>, Data, undefined) of
+    BrowseOpts = case maps:get(<<"token">>, Data, undefined) of
         undefined ->
             Index = maps:get(<<"index">>, Data, undefined),
             maps_utils:put_if_defined(#{offset => Offset, limit => Limit}, start_index, Index);
@@ -187,8 +187,7 @@ get(#op_req{data = Data, gri = #gri{aspect = content, scope = private}}, #atm_st
             }
     end,
 
-    {ok, Entries, IsLast} = atm_store_api:view_content(AtmWorkflowExecutionCtx, ViewOpts, AtmStore),
-    {ok, value, {Entries, IsLast}}.
+    {ok, value, atm_store_api:browse_content(AtmWorkflowExecutionCtx, BrowseOpts, AtmStore)}.
 
 
 %%--------------------------------------------------------------------
