@@ -8,6 +8,7 @@
 %%% @doc
 %%% This module provides helper functions for management of automation workflows,
 %%% lanes, parallel boxes and task statuses.
+%%% TODO VFS-7853 find better name for status/utils that are shared by tasks, pboxes and lanes
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_task_execution_status_utils).
