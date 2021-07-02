@@ -68,6 +68,8 @@
 assert_openfaas_available() ->
     OpenfaasConfig = get_openfaas_config(),
 
+    % /healthz is proper Openfaas endpoint defined in their swagger:
+    % https://raw.githubusercontent.com/openfaas/faas/master/api-docs/swagger.yml
     Endpoint = get_openfaas_endpoint(OpenfaasConfig, <<"/healthz">>),
     Headers = get_basic_auth_header(OpenfaasConfig),
 
