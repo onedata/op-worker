@@ -231,7 +231,7 @@ reattach(DatasetId, FlagsToSet, FlagsToUnset) ->
             attached_datasets:add(SpaceId, DatasetId, DatasetName),
             detached_datasets:delete(Doc),
             % Dataset was detached so prev flags have been ignored - check if any flag appeared
-            InvalidateDatasetsOnly = ?has_any_flags(NewProtectionFlags, ?DATA_PROTECTION bor ?METADATA_PROTECTION),
+            InvalidateDatasetsOnly = not ?has_any_flags(NewProtectionFlags, ?DATA_PROTECTION bor ?METADATA_PROTECTION),
             dataset_eff_cache:invalidate_on_all_nodes(SpaceId, InvalidateDatasetsOnly);
         {error, _} = Error ->
             Error
