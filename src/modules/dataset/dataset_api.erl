@@ -268,7 +268,7 @@ update_protection_flags(DatasetId, FlagsToSet, FlagsToUnset) ->
     {ok, SpaceId} = dataset:get_space_id(Doc),
     InvalidateDatasetsOnly = case file_meta:update_protection_flags(Uuid, FlagsToSet, FlagsToUnset) of
         ok -> false;
-        ?ERROR_NOTHING_CHANGED -> true
+        {error, nothing_changed} -> true
     end,
     dataset_eff_cache:invalidate_on_all_nodes(SpaceId, InvalidateDatasetsOnly).
 
