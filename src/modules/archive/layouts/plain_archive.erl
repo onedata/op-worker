@@ -114,7 +114,7 @@ archive_file_insecure(ArchiveDoc, FileCtx, TargetParentCtx, BaseArchiveDoc, User
                         false ->
                             make_hardlink_to_file_in_base_archive(FileCtx2, TargetParentCtx, BaseArchiveFileCtx, UserCtx)
                     end;
-                {error, ?ENOENT} ->
+                ?ERROR_NOT_FOUND ->
                     copy_file_to_archive(FileCtx2, TargetParentCtx, UserCtx)
             end;
         false ->

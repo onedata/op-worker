@@ -54,6 +54,7 @@
     incremental_archive_bagit_layout/1,
     incremental_archive_modified_content/1, 
     incremental_archive_modified_metadata/1,
+    incremental_archive_new_file/1,
     incremental_nested_archive_plain_layout/1,
     incremental_nested_archive_bagit_layout/1,
 
@@ -81,6 +82,7 @@ groups() -> [
         incremental_archive_bagit_layout,
         incremental_archive_modified_content,
         incremental_archive_modified_metadata,
+        incremental_archive_new_file,
         incremental_nested_archive_plain_layout,
         incremental_nested_archive_bagit_layout
         
@@ -100,7 +102,7 @@ all() -> [
     {group, sequential_tests}
 ].
 
--define(ATTEMPTS, 600).
+-define(ATTEMPTS, 60).
 
 -define(SPACE, space_krk_par_p).
 -define(USER1, user1).
@@ -117,6 +119,7 @@ all() -> [
 -define(RAND_SIZE(), rand:uniform(50)).
 -define(RAND_CONTENT(), crypto:strong_rand_bytes(?RAND_SIZE())).
 -define(RAND_CONTENT(Size), crypto:strong_rand_bytes(Size)).
+-define(FILE_IN_BASE_ARCHIVE_NAME, <<"file_in_base_archive">>).
 
 -define(RAND_NAME(Prefix), ?NAME(Prefix, rand:uniform(?RAND_RANGE))).
 -define(NAME(Prefix, Number), str_utils:join_binary([Prefix, integer_to_binary(Number)], <<"_">>)).
@@ -212,6 +215,9 @@ incremental_archive_modified_content(_Config) ->
 
 incremental_archive_modified_metadata(_Config) ->
     simple_incremental_archive_test_base(?ARCHIVE_BAGIT_LAYOUT, [metadata]).
+
+incremental_archive_new_file(_Config) ->
+    simple_incremental_archive_test_base(?ARCHIVE_BAGIT_LAYOUT, [new_file]).
 
 incremental_nested_archive_plain_layout(_Config) ->
     nested_incremental_archive_test_base(?ARCHIVE_PLAIN_LAYOUT).
@@ -470,14 +476,31 @@ simple_incremental_archive_test_base(Layout, Modifications) ->
         }} = onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, 
             #dir_spec{
                 dataset = #dataset_spec{archives = [#archive_spec{config = #archive_config{layout = Layout}}]},
-                children = [#file_spec{content = ?RAND_CONTENT(), metadata = #metadata_spec{json = ?RAND_JSON_METADATA()}}]
+                children = [#file_spec{
+                    name = ?FILE_IN_BASE_ARCHIVE_NAME,
+                    content = ?RAND_CONTENT(), 
+                    metadata = #metadata_spec{json = ?RAND_JSON_METADATA()}
+                }]
             }, paris),
     assert_archive_state(BaseArchiveId, ?ARCHIVE_PRESERVED),
     Node = oct_background:get_random_provider_node(krakow),
     SessionId = oct_background:get_user_session_id(?USER1, krakow),
-    lists:foreach(fun(Mod) ->
-        ok = modify_file(Node, SessionId, ChildGuid, Mod)
-    end, Modifications),
+    ModifiedFiles = lists:usort(lists:map(fun
+        (content) ->
+            {ok, H} = lfm_proxy:open(Node, SessionId, #file_ref{guid = ChildGuid}, write),
+            ?assertMatch({ok, _}, lfm_proxy:write(Node, H, 100, ?RAND_CONTENT())),
+            ok = lfm_proxy:close(Node, H),
+            ?FILE_IN_BASE_ARCHIVE_NAME;
+        (metadata) ->
+            ok = lfm_proxy:set_metadata(Node, SessionId, #file_ref{guid = ChildGuid}, json, ?RAND_JSON_METADATA(), []),
+            ?FILE_IN_BASE_ARCHIVE_NAME;
+        (new_file) ->
+            Name = ?RAND_NAME(),
+            {ok, {_, H}} = lfm_proxy:create_and_open(Node, SessionId, DirGuid, Name, ?DEFAULT_FILE_MODE),
+            ?assertMatch({ok, _}, lfm_proxy:write(Node, H, 0, ?RAND_CONTENT())),
+            ok = lfm_proxy:close(Node, H),
+            Name
+    end, Modifications)),
         
     {ok, ArchiveId} = lfm_proxy:archive_dataset(Node, SessionId, DatasetId, #archive_config{
         incremental = true,
@@ -485,9 +508,13 @@ simple_incremental_archive_test_base(Layout, Modifications) ->
         layout = Layout
     }, <<>>),
     assert_archive_state(ArchiveId, ?ARCHIVE_PRESERVED),
-    check_incremental_archive(BaseArchiveId, ArchiveId, length(Modifications) =/= 0),
-    {ok, #file_attr{size = Size}} = lfm_proxy:stat(Node, SessionId, ?FILE_REF(ChildGuid)),
-    assert_archive_is_preserved(Node, SessionId, ArchiveId, DatasetId, DirGuid, 1, Size).
+    check_incremental_archive(BaseArchiveId, ArchiveId, ModifiedFiles),
+    {ok, Children} = lfm_proxy:get_children(Node, SessionId, ?FILE_REF(DirGuid), 0, 10),
+    {FilesNum, TotalSize} = lists:foldl(fun({Guid, _}, {AccNum, AccSize}) ->
+        {ok, #file_attr{size = Size}} = lfm_proxy:stat(Node, SessionId, ?FILE_REF(Guid)),
+        {AccNum + 1, AccSize + Size}
+    end, {0, 0}, Children),
+    assert_archive_is_preserved(Node, SessionId, ArchiveId, DatasetId, DirGuid, FilesNum, TotalSize).
 
 
 nested_incremental_archive_test_base(Layout) ->
@@ -515,7 +542,10 @@ nested_incremental_archive_test_base(Layout) ->
                 #dir_spec{
                     dataset = #dataset_spec{},
                     children = [
-                        #file_spec{content = ?RAND_CONTENT(), metadata = #metadata_spec{json = ?RAND_JSON_METADATA()}}
+                        #file_spec{
+                            content = ?RAND_CONTENT(), 
+                            metadata = #metadata_spec{json = ?RAND_JSON_METADATA()}
+                        }
                     ]
                 }
             ]
@@ -546,11 +576,11 @@ nested_incremental_archive_test_base(Layout) ->
     {ok, #file_attr{size = Size2}} = lfm_proxy:stat(Node, SessionId, ?FILE_REF(FileGuid2)),
     
     assert_archive_state(TopArchiveId, ?ARCHIVE_PRESERVED),
-    check_incremental_archive(TopBaseArchiveId, TopArchiveId, false),
+    check_incremental_archive(TopBaseArchiveId, TopArchiveId, []),
     assert_archive_is_preserved(Node, SessionId, TopArchiveId, TopDatasetId, TopDirGuid, 2, Size1 + Size2),
     
     assert_archive_state(NestedArchiveId, ?ARCHIVE_PRESERVED),
-    check_incremental_archive(NestedBaseArchiveId, NestedArchiveId, false),
+    check_incremental_archive(NestedBaseArchiveId, NestedArchiveId, []),
     assert_archive_is_preserved(Node, SessionId, NestedArchiveId, NestedDatasetId, NestedDirGuid, 1, Size2).
 
 %===================================================================
@@ -838,14 +868,6 @@ get_archive_info_without_config(Node, SessionId, ArchiveId) ->
     end.
 
 
-modify_file(Node, SessionId, FileGuid, content) ->
-    {ok, H} = lfm_proxy:open(Node, SessionId, #file_ref{guid = FileGuid}, write),
-    ?assertMatch({ok, _}, lfm_proxy:write(Node, H, 0, ?RAND_CONTENT())),
-    ok = lfm_proxy:close(Node, H);
-modify_file(Node, SessionId, FileGuid, metadata) ->
-    ok = lfm_proxy:set_metadata(Node, SessionId, #file_ref{guid = FileGuid}, json, ?RAND_JSON_METADATA(), []).
-
-
 check_incremental_archive(BaseArchiveId, ArchiveId, ModifiedFiles) ->
     lists:foreach(fun(Provider) ->
         Node = oct_background:get_random_provider_node(Provider),
@@ -857,11 +879,13 @@ check_incremental_archive(BaseArchiveId, ArchiveId, ModifiedFiles) ->
 
 check_incremental_archive(Node, SessionId, BaseArchiveId, Guid, ModifiedFiles) ->
     case lfm_proxy:stat(Node, SessionId, #file_ref{guid = Guid}) of
-        {ok, #file_attr{type = ?REGULAR_FILE_TYPE}} ->
-            case ModifiedFiles of
-                true -> ?assertNotEqual({ok, BaseArchiveId}, extract_archive_id(Node, SessionId, Guid));
-                false -> ?assertEqual({ok, BaseArchiveId}, extract_archive_id(Node, SessionId, Guid))
+        {ok, #file_attr{type = ?REGULAR_FILE_TYPE, name = FileName}} ->
+            case lists:member(FileName, ModifiedFiles) of
+                true -> ?assertNotEqual({ok, BaseArchiveId}, extract_base_archive_id(Node, SessionId, Guid));
+                false -> ?assertEqual({ok, BaseArchiveId}, extract_base_archive_id(Node, SessionId, Guid))
             end;
+        {ok, #file_attr{type = ?REGULAR_FILE_TYPE}} ->
+            ?assertNotEqual({ok, BaseArchiveId}, extract_base_archive_id(Node, SessionId, Guid));
         {ok, #file_attr{type = ?SYMLINK_TYPE}} ->
             ok;
         {ok, #file_attr{type = ?DIRECTORY_TYPE}} ->
@@ -880,7 +904,7 @@ assert_archive_state(ArchiveId, ExpectedState) ->
     end, oct_background:get_space_supporting_providers(?SPACE)).
 
 
-extract_archive_id(Node, SessionId, Guid) ->
+extract_base_archive_id(Node, SessionId, Guid) ->
     {ok, Path} = lfm_proxy:get_file_path(Node, SessionId, ensure_referenced_guid(Guid)),
     archivisation_tree:extract_archive_id(Path).
 
