@@ -84,7 +84,7 @@ get_data_spec(#atm_range_store_container{data_spec = AtmDataSpec}) ->
 
 
 -spec browse_content(atm_workflow_execution_ctx:record(), atm_store_api:browse_opts(), record()) ->
-    {[{atm_store_api:index(), automation:item()}], true} | no_return().
+    atm_store_api:browse_result() | no_return().
 browse_content(_AtmWorkflowExecutionCtx, _Opts, #atm_range_store_container{
     start_num = StartNum,
     end_num = EndNum,

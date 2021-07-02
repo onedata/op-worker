@@ -74,7 +74,7 @@ get_data_spec(#atm_list_store_container{data_spec = AtmDataSpec}) ->
 
 
 -spec browse_content(atm_workflow_execution_ctx:record(), atm_store_api:browse_opts(), record()) ->
-    {[{atm_store_api:index(), automation:item()}], IsLast :: boolean()} | no_return().
+    atm_store_api:browse_result() | no_return().
 browse_content(AtmWorkflowExecutionCtx, BrowseOpts, #atm_list_store_container{
     data_spec = AtmDataSpec,
     backend_id = BackendId

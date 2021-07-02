@@ -38,8 +38,10 @@
     start_index => index(),
     offset => offset()
 }.
+-type browse_result() :: {[{index(), automation:item()}], IsLast :: boolean()}.
 
--export_type([initial_value/0, index/0, offset/0, limit/0, browse_opts/0]).
+-export_type([initial_value/0]).
+-export_type([index/0, offset/0, limit/0, browse_opts/0, browse_result/0]).
 
 
 %%%===================================================================
@@ -123,7 +125,7 @@ get(AtmStoreId) ->
     browse_opts(),
     atm_store:id() | atm_store:record()
 ) ->
-    {[{index(), automation:item()}], IsLast :: boolean()} | no_return().
+    browse_result() | no_return().
 browse_content(AtmWorkflowExecutionCtx, BrowseOpts, #atm_store{container = AtmStoreContainer}) ->
     SanitizedBrowsOpts = middleware_sanitizer:sanitize_data(BrowseOpts, #{
         required => #{

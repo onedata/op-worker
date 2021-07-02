@@ -80,7 +80,7 @@
 -callback get_data_spec(record()) -> atm_data_spec:record().
 
 -callback browse_content(atm_workflow_execution_ctx:record(), atm_store_api:browse_opts(), record()) ->
-    {[{atm_store_api:index(), automation:item()}], IsLast :: boolean()} | no_return().
+    atm_store_api:browse_result() | no_return().
 
 -callback acquire_iterator(record()) -> atm_store_container_iterator:record().
 
@@ -119,7 +119,7 @@ get_data_spec(AtmStoreContainer) ->
 
 
 -spec browse_content(atm_workflow_execution_ctx:record(), atm_store_api:browse_opts(), record()) ->
-    {[{atm_store_api:index(), automation:item()}], IsLast :: boolean()} | no_return().
+    atm_store_api:browse_result() | no_return().
 browse_content(AtmWorkflowExecutionCtx, BrowseOpts, AtmStoreContainer) ->
     RecordType = utils:record_type(AtmStoreContainer),
     RecordType:browse_content(AtmWorkflowExecutionCtx, BrowseOpts, AtmStoreContainer).

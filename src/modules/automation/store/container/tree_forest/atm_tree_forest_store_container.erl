@@ -60,7 +60,7 @@ get_data_spec(#atm_tree_forest_store_container{roots_list = RootsList}) ->
 
 
 -spec browse_content(atm_workflow_execution_ctx:record(), atm_store_api:browse_opts(), record()) ->
-    {[{atm_store_api:index(), automation:item()}], IsLast :: boolean()} | no_return().
+    atm_store_api:browse_result() | no_return().
 browse_content(AtmWorkflowExecutionCtx, BrowseOpts, #atm_tree_forest_store_container{
     roots_list = RootsList
 }) ->
