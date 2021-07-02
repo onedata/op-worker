@@ -82,5 +82,5 @@ translate_archive_info(#archive_info{
         <<"purgedCallback">> => utils:undefined_to_null(PurgedCallback),
         <<"description">> => Description,
         <<"stats">> => archive_stats:to_json(Stats),
-        <<"baseArchive">> => BaseArchive
+        <<"baseArchive">> => utils:undefined_to_null(BaseArchive)
     }.

@@ -218,8 +218,7 @@ build_create_archive_validate_rest_call_result_fun(MemRef) ->
 -spec build_create_archive_validate_gs_call_result_fun(api_test_memory:mem_ref()) ->
     onenv_api_test_runner:validate_call_result_fun().
 build_create_archive_validate_gs_call_result_fun(MemRef) ->
-    fun(#api_test_ctx{node = TestNode, data = Data}, Result) ->
-        CreationTime = time_test_utils:global_seconds(TestNode),
+    fun(#api_test_ctx{data = Data}, Result) ->
         DatasetId = maps:get(<<"datasetId">>, Data),
 
         {ok, #{<<"gri">> := ArchiveGri} = ArchiveData} = ?assertMatch({ok, _}, Result),
@@ -235,10 +234,10 @@ build_create_archive_validate_gs_call_result_fun(MemRef) ->
         PreservedCallback = maps:get(<<"preservedCallback">>, Data, undefined),
         PurgedCallback = maps:get(<<"purgedCallback">>, Data, undefined),
 
-        ExpArchiveData = build_archive_gs_instance(ArchiveId, DatasetId, CreationTime, ?ARCHIVE_BUILDING, Config,
+        ExpArchiveData = build_archive_gs_instance(ArchiveId, DatasetId, ?ARCHIVE_BUILDING, Config,
             Description, PreservedCallback, PurgedCallback, undefined),
         % state is removed from the map as it may be in pending, building or even preserved state when request is handled
-        IgnoredKeys = [<<"state">>, <<"stats">>, <<"rootDir">>],
+        IgnoredKeys = [<<"state">>, <<"stats">>, <<"rootDir">>, <<"creationTime">>, <<"index">>, <<"baseArchive">>],
         ExpArchiveData2 = maps:without(IgnoredKeys, ExpArchiveData),
         ArchiveData2 = maps:without(IgnoredKeys, ArchiveData),
         ?assertMatch(ExpArchiveData2, ArchiveData2)
@@ -319,8 +318,7 @@ get_archive_info(_Config) ->
                     name = <<"Get archive using REST API">>,
                     type = rest,
                     prepare_args_fun = build_get_archive_prepare_rest_args_fun(ArchiveId),
-                    validate_result_fun = fun(#api_test_ctx{node = TestNode}, {ok, RespCode, _, RespBody}) ->
-                        CreationTime = time_test_utils:global_seconds(TestNode),
+                    validate_result_fun = fun(#api_test_ctx{}, {ok, RespCode, _, RespBody}) ->
                         RootDirGuid = get_root_dir_guid(ArchiveId),
                         {ok, DirObjectId} = file_id:guid_to_objectid(RootDirGuid),
                         ExpArchiveData = #{
@@ -328,7 +326,6 @@ get_archive_info(_Config) ->
                             <<"datasetId">> => DatasetId,
                             <<"state">> => atom_to_binary(?ARCHIVE_PRESERVED, utf8),
                             <<"rootDirectoryId">> => DirObjectId,
-                            <<"creationTime">> => CreationTime,
                             <<"description">> => Description,
                             <<"config">> => ConfigJson,
                             <<"preservedCallback">> => null,
@@ -337,22 +334,22 @@ get_archive_info(_Config) ->
                                 <<"filesArchived">> => 1,
                                 <<"filesFailed">> => 0,
                                 <<"bytesArchived">> => 0
-                            }
+                            },
+                            <<"baseArchive">> => null
                         },
                         ?assertEqual(?HTTP_200_OK, RespCode),
-                        ?assertEqual(ExpArchiveData, RespBody)
+                        ?assertEqual(ExpArchiveData, maps:without([<<"creationTime">>], RespBody))
                     end
                 },
                 #scenario_template{
                     name = <<"Get archive using GS API">>,
                     type = gs,
                     prepare_args_fun = build_get_archive_prepare_gs_args_fun(ArchiveId),
-                    validate_result_fun = fun(#api_test_ctx{node = TestNode}, {ok, Result}) ->
-                        CreationTime = time_test_utils:global_seconds(TestNode),
+                    validate_result_fun = fun(#api_test_ctx{}, {ok, Result}) ->
                         DirGuid = get_root_dir_guid(ArchiveId),
-                        ExpArchiveData = build_archive_gs_instance(ArchiveId, DatasetId, CreationTime, ?ARCHIVE_PRESERVED,
+                        ExpArchiveData = build_archive_gs_instance(ArchiveId, DatasetId, ?ARCHIVE_PRESERVED,
                             Config, Description, undefined, undefined, DirGuid),
-                        ?assertEqual(ExpArchiveData, Result)
+                        ?assertEqual(ExpArchiveData, maps:without([<<"creationTime">>, <<"index">>], Result))
                     end
                 }
             ],
@@ -867,7 +864,12 @@ verify_archive(
             index = archives_list:index(ArchiveId, CreationTime),
             stats = archive_stats:new(1, 0, 0)
         },
-        ?assertEqual({ok, ExpArchiveInfo}, lfm_proxy:get_archive_info(Node, UserSessId, ArchiveId), ?ATTEMPTS)
+        GetArchiveInfoFun = fun() ->
+            {ok, ActualArchiveInfo} = lfm_proxy:get_archive_info(Node, UserSessId, ArchiveId),
+            % baseArchiveId is the id of the last successfully preserved, so it depends on previous test cases
+            ActualArchiveInfo#archive_info{base_archive_id = undefined}
+        end,
+        ?assertEqual(ExpArchiveInfo, GetArchiveInfoFun(), ?ATTEMPTS)
     end, Providers).
 
 
@@ -880,9 +882,9 @@ list_archive_ids(Node, UserSessId, DatasetId, ListOpts) ->
 
 
 %% @private
--spec build_archive_gs_instance(archive:id(), dataset:id(), archive:timestamp(), archive:state(), archive:config(),
+-spec build_archive_gs_instance(archive:id(), dataset:id(), archive:state(), archive:config(),
     archive:description(), archive:callback(), archive:callback(), file_id:file_guid()) -> json_utils:json_term().
-build_archive_gs_instance(ArchiveId, DatasetId, CreationTime, State, Config, Description, PreservedCallback, PurgedCallback,
+build_archive_gs_instance(ArchiveId, DatasetId, State, Config, Description, PreservedCallback, PurgedCallback,
     RootDirGuid
 ) ->
     BasicInfo = archive_gui_gs_translator:translate_archive_info(#archive_info{
@@ -890,15 +892,13 @@ build_archive_gs_instance(ArchiveId, DatasetId, CreationTime, State, Config, Des
         dataset_id = DatasetId,
         state = str_utils:to_binary(State),
         root_dir_guid = RootDirGuid,
-        creation_time = CreationTime,
         config = Config,
         description = Description,
         preserved_callback = PreservedCallback,
         purged_callback = PurgedCallback,
-        index = archives_list:index(ArchiveId, CreationTime),
         stats = archive_stats:new(1, 0, 0)
     }),
-    BasicInfo#{<<"revision">> => 1}.
+    maps:without([<<"creationTime">>, <<"index">>], BasicInfo#{<<"revision">> => 1}).
 
 
 -spec take_random_archive(api_test_memory:mem_ref()) -> onenv_archive_test_utils:archive_object().

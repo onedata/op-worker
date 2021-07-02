@@ -85,13 +85,14 @@ sanitize(RawConfig) ->
                 <<"createNestedArchives">> => {boolean, any}
             }
         }),
-        case maps:get(<<"incremental">>, SanitizedData) of
+        case maps:get(<<"incremental">>, SanitizedData, ?DEFAULT_INCREMENTAL) of
             true ->
                 BaseArchiveId = maps:get(<<"baseArchiveId">>, RawConfig, null),
                 case is_valid_base_archive(BaseArchiveId) of
                     {true, BaseArchiveId2} ->
                         SanitizedData#{<<"baseArchiveId">> => BaseArchiveId2};
                     false ->
+                        % fixme other error
                         throw(?ERROR_BAD_VALUE_BINARY(<<"baseArchiveId">>))
                 end;
             false ->

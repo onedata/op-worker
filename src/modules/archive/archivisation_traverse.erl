@@ -45,7 +45,9 @@
 %% @formatter:off
 -type info() :: #{
     current_archive_doc := archive:doc(),
+    % base for current_archive_doc
     base_archive_doc := archive:doc(),
+    % base for top archive, the one created from dataset on which archivisation was scheduled
     scheduled_dataset_base_archive_doc := archive:doc(),
     target_parent_guid := file_id:file_guid(),
     scheduled_dataset_root_guid := file_id:file_guid()
@@ -108,9 +110,7 @@ start(ArchiveDoc, DatasetDoc, UserCtx) ->
                 children_master_jobs_mode => async,
                 traverse_info => #{
                     current_archive_doc => ArchiveDoc2,
-                    % base for current_archive_doc
                     base_archive_doc => BaseArchiveDoc,
-                    % base for top archive, the one created from dataset on which archivisation was scheduled
                     scheduled_dataset_base_archive_doc => BaseArchiveDoc,
                     target_parent_guid => ArchiveDataDirGuid,
                     scheduled_dataset_root_guid => file_ctx:get_logical_guid_const(DatasetRootCtx)

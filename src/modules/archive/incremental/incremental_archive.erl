@@ -7,7 +7,13 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module has utility functions used when creating an
-%%% incremental archive.
+%%% incremental archive. 
+%%% Incremental archive is an archive that is created based on other archive 
+%%% (base archive) in the same dataset. If file in dataset did not change 
+%%% since the time the base archive was created, just a hardlink to the file 
+%%% in base archive is created instead of copying whole file content. If base archive 
+%%% is not provided during creation but incremental value is set to true last 
+%%% successfully preserved archive in dataset (if exists) is selected as base archive.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(incremental_archive).

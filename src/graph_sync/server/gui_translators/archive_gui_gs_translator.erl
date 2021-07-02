@@ -49,13 +49,14 @@ translate_archive_info(#archive_info{
     stats = Stats,
     base_archive_id = BaseArchive
 }) ->
-    BaseArchiveGri = case BaseArchive of
-        undefined -> null;
+    BaseArchiveGri = case utils:undefined_to_null(BaseArchive) of
+        null -> 
+            null;
         _ -> 
             gri:serialize(#gri{
-            type = op_archive, id = BaseArchive,
-            aspect = instance, scope = private
-        })
+                type = op_archive, id = BaseArchive,
+                aspect = instance, scope = private
+            })
     end, 
     #{
         <<"gri">> => gri:serialize(#gri{
