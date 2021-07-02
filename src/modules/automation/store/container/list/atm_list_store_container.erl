@@ -22,7 +22,7 @@
 %% atm_store_container callbacks
 -export([
     create/3,
-    get_data_spec/1, view_content/3, acquire_iterator/1,
+    get_data_spec/1, browse_content/3, acquire_iterator/1,
     apply_operation/2,
     delete/1
 ]).
@@ -73,13 +73,13 @@ get_data_spec(#atm_list_store_container{data_spec = AtmDataSpec}) ->
     AtmDataSpec.
 
 
--spec view_content(atm_workflow_execution_ctx:record(), atm_store_api:view_opts(), record()) ->
-    {ok, [{atm_store_api:index(), automation:item()}], IsLast :: boolean()} | no_return().
-view_content(AtmWorkflowExecutionCtx, ViewOpts, #atm_list_store_container{
+-spec browse_content(atm_workflow_execution_ctx:record(), atm_store_api:browse_opts(), record()) ->
+    {[{atm_store_api:index(), automation:item()}], IsLast :: boolean()} | no_return().
+browse_content(AtmWorkflowExecutionCtx, BrowseOpts, #atm_list_store_container{
     data_spec = AtmDataSpec,
     backend_id = BackendId
 }) ->
-    StartFrom = case maps:get(start_index, ViewOpts, undefined) of
+    StartFrom = case maps:get(start_index, BrowseOpts, undefined) of
         undefined ->
             undefined;
         <<>> ->
@@ -93,8 +93,8 @@ view_content(AtmWorkflowExecutionCtx, ViewOpts, #atm_list_store_container{
     end,
     {ok, {Marker, Entries}} = atm_list_store_backend:list(BackendId, #{
         start_from => StartFrom,
-        offset => maps:get(offset, ViewOpts, 0),
-        limit => maps:get(limit, ViewOpts)
+        offset => maps:get(offset, BrowseOpts, 0),
+        limit => maps:get(limit, BrowseOpts)
     }),
     ExpandedEntries = lists:filtermap(fun({EntryIndex, {_Timestamp, Value}}) ->
         CompressedValue = json_utils:decode(Value),
@@ -106,7 +106,7 @@ view_content(AtmWorkflowExecutionCtx, ViewOpts, #atm_list_store_container{
         end
     end, Entries),
 
-    {ok, ExpandedEntries, Marker =:= done}.
+    {ExpandedEntries, Marker =:= done}.
 
 
 -spec acquire_iterator(record()) -> atm_list_store_container_iterator:record().

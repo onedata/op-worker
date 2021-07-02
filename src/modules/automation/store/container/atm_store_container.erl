@@ -28,7 +28,7 @@
 %% API
 -export([
     create/4,
-    get_store_type/1, get_data_spec/1, view_content/3, acquire_iterator/1,
+    get_store_type/1, get_data_spec/1, browse_content/3, acquire_iterator/1,
     apply_operation/2,
     delete/1
 ]).
@@ -79,8 +79,8 @@
 
 -callback get_data_spec(record()) -> atm_data_spec:record().
 
--callback view_content(atm_workflow_execution_ctx:record(), atm_store_api:view_opts(), record()) ->
-    {ok, [{atm_store_api:index(), automation:item()}], IsLast :: boolean()} | no_return().
+-callback browse_content(atm_workflow_execution_ctx:record(), atm_store_api:browse_opts(), record()) ->
+    {[{atm_store_api:index(), automation:item()}], IsLast :: boolean()} | no_return().
 
 -callback acquire_iterator(record()) -> atm_store_container_iterator:record().
 
@@ -118,11 +118,11 @@ get_data_spec(AtmStoreContainer) ->
     RecordType:get_data_spec(AtmStoreContainer).
 
 
--spec view_content(atm_workflow_execution_ctx:record(), atm_store_api:view_opts(), record()) ->
-    {ok, [{atm_store_api:index(), automation:item()}], IsLast :: boolean()} | no_return().
-view_content(AtmWorkflowExecutionCtx, ViewOpts, AtmStoreContainer) ->
+-spec browse_content(atm_workflow_execution_ctx:record(), atm_store_api:browse_opts(), record()) ->
+    {[{atm_store_api:index(), automation:item()}], IsLast :: boolean()} | no_return().
+browse_content(AtmWorkflowExecutionCtx, BrowseOpts, AtmStoreContainer) ->
     RecordType = utils:record_type(AtmStoreContainer),
-    RecordType:view_content(AtmWorkflowExecutionCtx, ViewOpts, AtmStoreContainer).
+    RecordType:browse_content(AtmWorkflowExecutionCtx, BrowseOpts, AtmStoreContainer).
 
 
 -spec acquire_iterator(record()) -> atm_store_container_iterator:record().

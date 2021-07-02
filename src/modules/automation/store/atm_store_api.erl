@@ -18,7 +18,7 @@
 %% API
 -export([
     create_all/1, create/3,
-    get/1, view_content/3, acquire_iterator/2,
+    get/1, browse_content/3, acquire_iterator/2,
     freeze/1, unfreeze/1,
     apply_operation/5,
     delete_all/1, delete/1
@@ -33,13 +33,13 @@
 -type offset() :: integer().
 -type limit() :: pos_integer().
 
--type view_opts() :: #{
+-type browse_opts() :: #{
     limit := limit(),
     start_index => index(),
     offset => offset()
 }.
 
--export_type([initial_value/0, index/0, offset/0, limit/0, view_opts/0]).
+-export_type([initial_value/0, index/0, offset/0, limit/0, browse_opts/0]).
 
 
 %%%===================================================================
@@ -115,17 +115,17 @@ get(AtmStoreId) ->
 %%-------------------------------------------------------------------
 %% @doc
 %% Returns batch of items (and their indices) directly kept at store
-%% in accordance to specified view_opts().
+%% in accordance to specified browse_opts().
 %% @end
 %%-------------------------------------------------------------------
--spec view_content(
+-spec browse_content(
     atm_workflow_execution_ctx:record(),
-    view_opts(),
+    browse_opts(),
     atm_store:id() | atm_store:record()
 ) ->
-    {ok, [{index(), automation:item()}], IsLast :: boolean()} | no_return().
-view_content(AtmWorkflowExecutionCtx, ViewOpts, #atm_store{container = AtmStoreContainer}) ->
-    SanitizedViewOpts = middleware_sanitizer:sanitize_data(ViewOpts, #{
+    {[{index(), automation:item()}], IsLast :: boolean()} | no_return().
+browse_content(AtmWorkflowExecutionCtx, BrowseOpts, #atm_store{container = AtmStoreContainer}) ->
+    SanitizedBrowsOpts = middleware_sanitizer:sanitize_data(BrowseOpts, #{
         required => #{
             limit => {integer, {not_lower_than, 1}}
         },
@@ -134,12 +134,12 @@ view_content(AtmWorkflowExecutionCtx, ViewOpts, #atm_store{container = AtmStoreC
             start_index => {binary, any}
         }
     }),
-    atm_store_container:view_content(AtmWorkflowExecutionCtx, SanitizedViewOpts, AtmStoreContainer);
+    atm_store_container:browse_content(AtmWorkflowExecutionCtx, SanitizedBrowsOpts, AtmStoreContainer);
 
-view_content(AtmWorkflowExecutionCtx, ViewOpts, AtmStoreId) ->
+browse_content(AtmWorkflowExecutionCtx, BrowseOpts, AtmStoreId) ->
     case get(AtmStoreId) of
         {ok, AtmStore} ->
-            view_content(AtmWorkflowExecutionCtx, ViewOpts, AtmStore);
+            browse_content(AtmWorkflowExecutionCtx, BrowseOpts, AtmStore);
         ?ERROR_NOT_FOUND ->
             throw(?ERROR_NOT_FOUND)
     end.

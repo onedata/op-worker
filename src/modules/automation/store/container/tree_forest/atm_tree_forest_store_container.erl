@@ -22,7 +22,7 @@
 %% atm_store_container callbacks
 -export([
     create/3,
-    get_data_spec/1, view_content/3, acquire_iterator/1,
+    get_data_spec/1, browse_content/3, acquire_iterator/1,
     apply_operation/2,
     delete/1
 ]).
@@ -59,12 +59,12 @@ get_data_spec(#atm_tree_forest_store_container{roots_list = RootsList}) ->
     atm_list_store_container:get_data_spec(RootsList).
 
 
--spec view_content(atm_workflow_execution_ctx:record(), atm_store_api:view_opts(), record()) ->
-    {ok, [{atm_store_api:index(), automation:item()}], IsLast :: boolean()} | no_return().
-view_content(AtmWorkflowExecutionCtx, ViewOpts, #atm_tree_forest_store_container{
+-spec browse_content(atm_workflow_execution_ctx:record(), atm_store_api:browse_opts(), record()) ->
+    {[{atm_store_api:index(), automation:item()}], IsLast :: boolean()} | no_return().
+browse_content(AtmWorkflowExecutionCtx, BrowseOpts, #atm_tree_forest_store_container{
     roots_list = RootsList
 }) ->
-    atm_list_store_container:view_content(AtmWorkflowExecutionCtx, ViewOpts, RootsList).
+    atm_list_store_container:browse_content(AtmWorkflowExecutionCtx, BrowseOpts, RootsList).
 
 
 -spec acquire_iterator(record()) -> atm_tree_forest_store_container_iterator:record().

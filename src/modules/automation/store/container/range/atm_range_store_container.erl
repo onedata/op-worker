@@ -22,7 +22,7 @@
 %% atm_store_container callbacks
 -export([
     create/3,
-    get_data_spec/1, view_content/3, acquire_iterator/1,
+    get_data_spec/1, browse_content/3, acquire_iterator/1,
     apply_operation/2,
     delete/1
 ]).
@@ -83,9 +83,9 @@ get_data_spec(#atm_range_store_container{data_spec = AtmDataSpec}) ->
     AtmDataSpec.
 
 
--spec view_content(atm_workflow_execution_ctx:record(), atm_store_api:view_opts(), record()) ->
-    {ok, [{atm_store_api:index(), automation:item()}], true} | no_return().
-view_content(_AtmWorkflowExecutionCtx, _Opts, #atm_range_store_container{
+-spec browse_content(atm_workflow_execution_ctx:record(), atm_store_api:browse_opts(), record()) ->
+    {[{atm_store_api:index(), automation:item()}], true} | no_return().
+browse_content(_AtmWorkflowExecutionCtx, _Opts, #atm_range_store_container{
     start_num = StartNum,
     end_num = EndNum,
     step = Step
@@ -95,7 +95,7 @@ view_content(_AtmWorkflowExecutionCtx, _Opts, #atm_range_store_container{
         <<"end">> => EndNum,
         <<"step">> => Step
     },
-    {ok, [{<<>>, Content}], true}.
+    {[{<<>>, Content}], true}.
 
 
 -spec acquire_iterator(record()) -> atm_range_store_container_iterator:record().
