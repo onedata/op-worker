@@ -884,17 +884,15 @@ update_acl(FileUuid, NewAcl) ->
 
 
 -spec update_protection_flags(uuid(), data_access_control:bitmask(), data_access_control:bitmask()) ->
-    {ok, data_access_control:bitmask()} | {error, term()}.
+    ok | {error, term()}.
 update_protection_flags(FileUuid, FlagsToSet, FlagsToUnset) ->
-    UpdateAns = update({uuid, FileUuid}, fun(#file_meta{protection_flags = CurrFlags} = FileMeta) ->
+    ?extract_ok(update({uuid, FileUuid}, fun(#file_meta{protection_flags = CurrFlags} = FileMeta) ->
         NewFlags = ?set_flags(?reset_flags(CurrFlags, FlagsToUnset), FlagsToSet),
-        {ok, FileMeta#file_meta{protection_flags = NewFlags}}
-    end),
-
-    case UpdateAns of
-        {ok, #document{value = #file_meta{protection_flags = NewFlags}}} -> {ok, NewFlags};
-        _ -> UpdateAns
-    end.
+        case NewFlags =:= CurrFlags of
+            true -> ?ERROR_NOTHING_CHANGED;
+            fasle -> {ok, FileMeta#file_meta{protection_flags = NewFlags}}
+        end
+    end)).
 
 
 -spec protection_flags_to_json(data_access_control:bitmask()) -> [binary()].

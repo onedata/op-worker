@@ -223,12 +223,6 @@ get_associated_file_ctx(DatasetDoc) ->
 reattach(DatasetId, FlagsToSet, FlagsToUnset) ->
     {ok, Doc} = dataset:get(DatasetId),
     {ok, SpaceId} = dataset:get_space_id(Doc),
-    CurrProtectionFlags = case file_meta:get(DatasetId) of
-        {ok, FileMetaDoc} ->
-            file_meta:get_protection_flags(FileMetaDoc);
-        _ ->
-            undefined
-    end,
     case file_meta_dataset:reattach(DatasetId, FlagsToSet, FlagsToUnset) of
         {ok, NewProtectionFlags} ->
             FileCtx = get_associated_file_ctx(Doc),
@@ -236,7 +230,8 @@ reattach(DatasetId, FlagsToSet, FlagsToUnset) ->
             ok = dataset:mark_reattached(DatasetId),
             attached_datasets:add(SpaceId, DatasetId, DatasetName),
             detached_datasets:delete(Doc),
-            InvalidateDatasetsOnly = NewProtectionFlags =:= CurrProtectionFlags,
+            % Dataset was detached so prev flags have been ignored - check if any flag appeared
+            InvalidateDatasetsOnly = ?has_any_flags(NewProtectionFlags, ?DATA_PROTECTION bor ?METADATA_PROTECTION),
             dataset_eff_cache:invalidate_on_all_nodes(SpaceId, InvalidateDatasetsOnly);
         {error, _} = Error ->
             Error
@@ -270,15 +265,11 @@ detach_internal(DatasetId) ->
 update_protection_flags(DatasetId, FlagsToSet, FlagsToUnset) ->
     {ok, Doc} = dataset:get(DatasetId),
     {ok, Uuid} = dataset:get_root_file_uuid(Doc),
-    CurrProtectionFlags = case file_meta:get(Uuid) of
-        {ok, FileMetaDoc} ->
-            file_meta:get_protection_flags(FileMetaDoc);
-        _ ->
-            undefined
-    end,
     {ok, SpaceId} = dataset:get_space_id(Doc),
-    {ok, NewProtectionFlags} = file_meta:update_protection_flags(Uuid, FlagsToSet, FlagsToUnset),
-    InvalidateDatasetsOnly = NewProtectionFlags =:= CurrProtectionFlags,
+    InvalidateDatasetsOnly = case file_meta:update_protection_flags(Uuid, FlagsToSet, FlagsToUnset) of
+        ok -> false;
+        ?ERROR_NOTHING_CHANGED -> true
+    end,
     dataset_eff_cache:invalidate_on_all_nodes(SpaceId, InvalidateDatasetsOnly).
 
 
