@@ -16,6 +16,7 @@
 
 -include("modules/automation/atm_execution.hrl").
 
+%% API
 -export([
     create_all/3, create/4,
     prepare_all/2, prepare/2,
@@ -41,7 +42,7 @@
 
 
 %%%===================================================================
-%%% atm_container callbacks
+%%% API
 %%%===================================================================
 
 

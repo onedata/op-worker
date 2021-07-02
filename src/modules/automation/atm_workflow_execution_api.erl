@@ -85,7 +85,7 @@ list(SpaceId, Phase, summary, ListingOpts) ->
 
 
 -spec create(user_ctx:ctx(), od_space:id(), od_atm_workflow_schema:id(), store_initial_values()) ->
-    {ok, atm_workflow_execution:id(), atm_workflow_execution:record()} | no_return().
+    {atm_workflow_execution:id(), atm_workflow_execution:record()} | no_return().
 create(UserCtx, SpaceId, AtmWorkflowSchemaId, StoreInitialValues) ->
     SessionId = user_ctx:get_session_id(UserCtx),
 
@@ -101,11 +101,11 @@ create(UserCtx, SpaceId, AtmWorkflowSchemaId, StoreInitialValues) ->
     AtmWorkflowExecutionId = datastore_key:new(),
     ok = atm_workflow_execution_session:init(AtmWorkflowExecutionId, UserCtx),
 
-    {ok, #document{
+    #document{
         value = AtmWorkflowExecution = #atm_workflow_execution{
             store_registry = AtmStoreRegistry
         }
-    }} = atm_workflow_execution_factory:create(#atm_workflow_execution_creation_ctx{
+    } = atm_workflow_execution_factory:create(#atm_workflow_execution_creation_ctx{
         workflow_execution_ctx = atm_workflow_execution_ctx:build(
             SpaceId, AtmWorkflowExecutionId
         ),
@@ -122,7 +122,7 @@ create(UserCtx, SpaceId, AtmWorkflowSchemaId, StoreInitialValues) ->
         )
     }),
 
-    {ok, AtmWorkflowExecutionId, AtmWorkflowExecution}.
+    {AtmWorkflowExecutionId, AtmWorkflowExecution}.
 
 
 -spec get(atm_workflow_execution:id()) ->

@@ -1048,8 +1048,7 @@
     % (e.g when store is used as the iteration source for currently executed lane).
     frozen = false :: boolean(),
 
-    type :: automation:store_type(),
-    container :: atm_container:record()
+    container :: atm_store_container:record()
 }).
 
 -record(atm_task_execution, {
