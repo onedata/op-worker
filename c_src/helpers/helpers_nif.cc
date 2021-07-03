@@ -26,8 +26,8 @@ namespace {
  * @defgroup StaticAtoms Statically created atoms for ease of usage.
  * @{
  */
-nifpp::str_atom ok {"ok"};
-nifpp::str_atom error {"error"};
+nifpp::str_atom ok{"ok"};
+nifpp::str_atom error{"error"};
 /** @} */
 
 using helper_ptr = one::helpers::StorageHelperPtr;
@@ -36,128 +36,55 @@ using reqid_t = std::tuple<int, int, int>;
 using helper_args_t = std::unordered_map<folly::fbstring, folly::fbstring>;
 
 /**
- * Set CPU affinity for a given thread to all available CPU cores.
- */
-void setCPUAffinity(std::thread &t)
-{
-    cpu_set_t cpuset;
-    CPU_ZERO(&cpuset);
-    for (unsigned int cpuid = 0; cpuid < std::thread::hardware_concurrency();
-         cpuid++) {
-        CPU_SET(cpuid, &cpuset);
-    }
-
-    pthread_setaffinity_np(t.native_handle(), sizeof(cpu_set_t), &cpuset);
-};
-
-/**
- * Initializer for storage helper workers based on folly ThreadPool.
- */
-class StorageWorkerFactory : public folly::ThreadFactory {
-public:
-    explicit StorageWorkerFactory(folly::fbstring name)
-        : m_name {std::move(name)}
-        , m_id {0}
-    {
-    }
-
-    std::thread newThread(folly::Func &&func) override
-    {
-        auto t = std::thread(
-            [f = std::move(func),
-                n = fmt::format("{}-{}", m_name, m_id++)]() mutable {
-                folly::setThreadName(n);
-                f();
-            });
-
-        setCPUAffinity(t);
-
-        return t;
-    }
-
-private:
-    folly::fbstring m_name;
-    std::atomic<uint64_t> m_id;
-};
-
-/**
  * Static resource holder.
  */
 struct HelpersNIF {
-    struct HelperIOService {
-        asio::io_service service;
-        asio::executor_work_guard<asio::io_service::executor_type> work =
-            asio::make_work_guard(service);
-        folly::fbvector<std::thread> workers;
-    };
-
     HelpersNIF(std::unordered_map<folly::fbstring, folly::fbstring> args)
     {
         using namespace one::helpers;
 
         bufferingEnabled = (args["buffer_helpers"] == "true");
 
-        for (const auto &entry :
-            std::unordered_map<folly::fbstring,
-                std::pair<folly::fbstring, folly::fbstring>>(
-                {{CEPH_HELPER_NAME,
-                     {"ceph_helper_threads_number", "ceph_t"}},
-                    {CEPHRADOS_HELPER_NAME,
-                        {"cephrados_helper_threads_number",
-                            "crados_t"}},
-                    {POSIX_HELPER_NAME,
-                        {"posix_helper_threads_number", "posix_t"}},
-                    {S3_HELPER_NAME, {"s3_helper_threads_number", "s3_t"}},
-                    {SWIFT_HELPER_NAME,
-                        {"swift_helper_threads_number", "swift_t"}},
-                    {GLUSTERFS_HELPER_NAME,
-                        {"glusterfs_helper_threads_number",
-                            "gluster_t"}},
-                    {NULL_DEVICE_HELPER_NAME,
-                        {"nulldevice_helper_threads_number",
-                            "nulldev_t"}}})) {
+        for (const auto &entry : std::unordered_map<folly::fbstring,
+                 std::pair<folly::fbstring, folly::fbstring>>(
+                 {{CEPH_HELPER_NAME, {"ceph_helper_threads_number", "ceph_t"}},
+                     {CEPHRADOS_HELPER_NAME,
+                         {"cephrados_helper_threads_number", "crados_t"}},
+                     {POSIX_HELPER_NAME,
+                         {"posix_helper_threads_number", "posix_t"}},
+                     {S3_HELPER_NAME, {"s3_helper_threads_number", "s3_t"}},
+                     {SWIFT_HELPER_NAME,
+                         {"swift_helper_threads_number", "swift_t"}},
+                     {GLUSTERFS_HELPER_NAME,
+                         {"glusterfs_helper_threads_number", "gluster_t"}},
+                     {WEBDAV_HELPER_NAME,
+                         {"webdav_helper_threads_number", "webdav_t"}},
+                     {HTTP_HELPER_NAME,
+                         {"http_helper_threads_number", "http_t"}},
+                     {NULL_DEVICE_HELPER_NAME,
+                         {"nulldevice_helper_threads_number", "nulldev_t"}}})) {
             auto threads = std::stoul(args[entry.second.first].toStdString());
-            services.emplace(entry.first, std::make_unique<HelperIOService>());
-            auto &service = services[entry.first]->service;
-            auto &workers = services[entry.first]->workers;
-            for (std::size_t i = 0; i < threads; ++i) {
-                auto t = std::thread([&, i]() {
-                    folly::setThreadName(
-                        fmt::format("{}-{}", entry.second.second, i));
-                    service.run();
-                });
-
-                setCPUAffinity(t);
-
-                workers.push_back(std::move(t));
-            }
+            executors.emplace(entry.first,
+                std::make_shared<folly::IOThreadPoolExecutor>(threads,
+                    std::make_shared<StorageWorkerFactory>(
+                        entry.second.second)));
         }
 
-        webDAVExecutor = std::make_shared<folly::IOThreadPoolExecutor>(
-            std::stoul(args["webdav_helper_threads_number"].toStdString()),
-            std::make_shared<StorageWorkerFactory>("webdav_t"));
-
-        xrootdExecutor = std::make_shared<folly::IOThreadPoolExecutor>(
-            std::stoul(args["xrootd_helper_threads_number"].toStdString()),
-            std::make_shared<StorageWorkerFactory>("xrootd_t"));
-
         SHCreator = std::make_unique<one::helpers::StorageHelperCreator>(
-            services[CEPH_HELPER_NAME]->service,
-            services[CEPHRADOS_HELPER_NAME]->service,
-            services[POSIX_HELPER_NAME]->service,
-            services[S3_HELPER_NAME]->service,
-            services[SWIFT_HELPER_NAME]->service,
-            services[GLUSTERFS_HELPER_NAME]->service, webDAVExecutor,
-            xrootdExecutor, services[NULL_DEVICE_HELPER_NAME]->service,
+            executors[CEPH_HELPER_NAME], executors[CEPHRADOS_HELPER_NAME],
+            executors[POSIX_HELPER_NAME], executors[S3_HELPER_NAME],
+            executors[SWIFT_HELPER_NAME], executors[GLUSTERFS_HELPER_NAME],
+            executors[WEBDAV_HELPER_NAME], executors[HTTP_HELPER_NAME],
+            executors[NULL_DEVICE_HELPER_NAME],
             std::stoul(args["buffer_scheduler_threads_number"].toStdString()),
-            buffering::BufferLimits {
+            buffering::BufferLimits{
                 std::stoul(args["read_buffer_min_size"].toStdString()),
                 std::stoul(args["read_buffer_max_size"].toStdString()),
-                std::chrono::seconds {std::stoul(
+                std::chrono::seconds{std::stoul(
                     args["read_buffer_prefetch_duration"].toStdString())},
                 std::stoul(args["write_buffer_min_size"].toStdString()),
                 std::stoul(args["write_buffer_max_size"].toStdString()),
-                std::chrono::seconds {std::stoul(
+                std::chrono::seconds{std::stoul(
                     args["write_buffer_flush_delay"].toStdString())}});
 
         umask(0);
@@ -165,21 +92,15 @@ struct HelpersNIF {
 
     ~HelpersNIF()
     {
-        for (auto &service : services) {
-            service.second->service.stop();
-            for (auto &worker : service.second->workers) {
-                worker.join();
-            }
+        for (auto &executor : executors) {
+            executor.second->stop();
         }
-        webDAVExecutor->stop();
-        xrootdExecutor->stop();
     }
 
     bool bufferingEnabled = false;
-    std::unordered_map<folly::fbstring, std::unique_ptr<HelperIOService>>
-        services;
-    std::shared_ptr<folly::IOThreadPoolExecutor> webDAVExecutor;
-    std::shared_ptr<folly::IOThreadPoolExecutor> xrootdExecutor;
+    std::unordered_map<folly::fbstring,
+        std::shared_ptr<folly::IOThreadPoolExecutor>>
+        executors;
     std::unique_ptr<one::helpers::StorageHelperCreator> SHCreator;
 };
 
@@ -192,7 +113,7 @@ namespace {
  *           POSIX open mode / flag.
  * @{
  */
-const std::unordered_map<nifpp::str_atom, one::helpers::Flag> atom_to_flag {
+const std::unordered_map<nifpp::str_atom, one::helpers::Flag> atom_to_flag{
     {"O_NONBLOCK", one::helpers::Flag::NONBLOCK},
     {"O_APPEND", one::helpers::Flag::APPEND},
     {"O_ASYNC", one::helpers::Flag::ASYNC},
@@ -220,7 +141,7 @@ one::helpers::FlagsSet translateFlags(folly::fbvector<nifpp::str_atom> atoms)
             flags.insert(result->second);
         }
         else {
-            throw std::system_error {
+            throw std::system_error{
                 std::make_error_code(std::errc::invalid_argument)};
         }
     }
@@ -337,7 +258,7 @@ public:
      * deleter.
      */
     Env()
-        : env {enif_alloc_env(), enif_free_env}
+        : env{enif_alloc_env(), enif_free_env}
     {
     }
 
@@ -380,9 +301,9 @@ private:
     static thread_local std::default_random_engine gen;
     static thread_local std::uniform_int_distribution<int> dist;
 };
-thread_local std::random_device NifCTX::rd {};
-thread_local std::default_random_engine NifCTX::gen {NifCTX::rd()};
-thread_local std::uniform_int_distribution<int> NifCTX::dist {};
+thread_local std::random_device NifCTX::rd{};
+thread_local std::default_random_engine NifCTX::gen{NifCTX::rd()};
+thread_local std::uniform_int_distribution<int> NifCTX::dist{};
 
 /**
  * Runs given function and returns result or error term.
@@ -397,11 +318,11 @@ template <class T> ERL_NIF_TERM handle_errors(ErlNifEnv *env, T &&fun)
     }
     catch (const std::system_error &e) {
         return nifpp::make(
-            env, std::make_tuple(error, nifpp::str_atom {e.code().message()}));
+            env, std::make_tuple(error, nifpp::str_atom{e.code().message()}));
     }
     catch (const std::exception &e) {
         return nifpp::make(
-            env, std::make_tuple(error, folly::fbstring {e.what()}));
+            env, std::make_tuple(error, folly::fbstring{e.what()}));
     }
 }
 
@@ -410,14 +331,14 @@ ERL_NIF_TERM wrap_helper(ERL_NIF_TERM (*fun)(NifCTX ctx, Args...),
     ErlNifEnv *env, const ERL_NIF_TERM args[], std::index_sequence<I...>)
 {
     return handle_errors(env,
-        [&]() { return fun(NifCTX {env}, nifpp::get<Args>(env, args[I])...); });
+        [&]() { return fun(NifCTX{env}, nifpp::get<Args>(env, args[I])...); });
 }
 
 template <typename... Args>
 ERL_NIF_TERM wrap(ERL_NIF_TERM (*fun)(NifCTX, Args...), ErlNifEnv *env,
     const ERL_NIF_TERM args[])
 {
-    return wrap_helper(fun, env, args, std::index_sequence_for<Args...> {});
+    return wrap_helper(fun, env, args, std::index_sequence_for<Args...>{});
 }
 
 template <typename... Args, std::size_t... I>
@@ -433,7 +354,7 @@ ERL_NIF_TERM noctx_wrap(ERL_NIF_TERM (*fun)(ErlNifEnv *env, Args...),
     ErlNifEnv *env, const ERL_NIF_TERM args[])
 {
     return noctx_wrap_helper(
-        fun, env, args, std::index_sequence_for<Args...> {});
+        fun, env, args, std::index_sequence_for<Args...>{});
 }
 
 /**
@@ -482,14 +403,14 @@ template <class T> void handle_result(NifCTX ctx, folly::Future<T> future)
     future.then([ctx](T &&value) { handle_value(ctx, std::move(value)); })
         .onError([ctx](const std::system_error &e) {
             auto it = error_to_atom.find(e.code());
-            nifpp::str_atom reason {e.code().message()};
+            nifpp::str_atom reason{e.code().message()};
             if (it != error_to_atom.end())
                 reason = it->second;
 
             ctx.send(std::make_tuple(error, reason));
         })
         .onError([ctx](const std::exception &e) {
-            nifpp::str_atom reason {e.what()};
+            nifpp::str_atom reason{e.what()};
             ctx.send(std::make_tuple(error, reason));
         });
 }
