@@ -59,13 +59,14 @@ struct HelpersNIF {
                          {"glusterfs_helper_threads_number", "gluster_t"}},
                      {WEBDAV_HELPER_NAME,
                          {"webdav_helper_threads_number", "webdav_t"}},
-                     {HTTP_HELPER_NAME,
-                         {"http_helper_threads_number", "http_t"}},
+                     {XROOTD_HELPER_NAME,
+                         {"xrootd_helper_threads_number", "xrootd_t"}},
                      {NULL_DEVICE_HELPER_NAME,
                          {"nulldevice_helper_threads_number", "nulldev_t"}}})) {
-            auto threads = std::stoul(args[entry.second.first].toStdString());
+            auto threadNumber =
+                std::stoul(args[entry.second.first].toStdString());
             executors.emplace(entry.first,
-                std::make_shared<folly::IOThreadPoolExecutor>(threads,
+                std::make_shared<folly::IOThreadPoolExecutor>(threadNumber,
                     std::make_shared<StorageWorkerFactory>(
                         entry.second.second)));
         }
@@ -74,7 +75,7 @@ struct HelpersNIF {
             executors[CEPH_HELPER_NAME], executors[CEPHRADOS_HELPER_NAME],
             executors[POSIX_HELPER_NAME], executors[S3_HELPER_NAME],
             executors[SWIFT_HELPER_NAME], executors[GLUSTERFS_HELPER_NAME],
-            executors[WEBDAV_HELPER_NAME], executors[HTTP_HELPER_NAME],
+            executors[WEBDAV_HELPER_NAME], executors[XROOTD_HELPER_NAME],
             executors[NULL_DEVICE_HELPER_NAME],
             std::stoul(args["buffer_scheduler_threads_number"].toStdString()),
             buffering::BufferLimits{
