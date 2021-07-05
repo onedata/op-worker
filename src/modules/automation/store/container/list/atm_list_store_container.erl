@@ -96,14 +96,13 @@ browse_content(AtmWorkflowExecutionCtx, BrowseOpts, #atm_list_store_container{
         offset => maps:get(offset, BrowseOpts, 0),
         limit => maps:get(limit, BrowseOpts)
     }),
-    ExpandedEntries = lists:filtermap(fun({EntryIndex, {_Timestamp, Value}}) ->
+    ExpandedEntries = lists:map(fun({EntryIndex, {_Timestamp, Value}}) ->
         CompressedValue = json_utils:decode(Value),
-        case atm_value:expand(AtmWorkflowExecutionCtx, CompressedValue, AtmDataSpec) of
-            {ok, ExpandedValue} ->
-                {true, {integer_to_binary(EntryIndex), ExpandedValue}};
-            {error, _} ->
-                false
-        end
+        Item = case atm_value:expand(AtmWorkflowExecutionCtx, CompressedValue, AtmDataSpec) of
+            {ok, ExpandedValue} -> ExpandedValue;
+            {error, _} -> ?ERROR_FORBIDDEN
+        end,
+        {integer_to_binary(EntryIndex), Item}
     end, Entries),
 
     {ExpandedEntries, Marker =:= done}.

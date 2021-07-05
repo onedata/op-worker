@@ -30,11 +30,19 @@
 -spec translate_value(gri:gri(), Value :: term()) -> gs_protocol:data().
 translate_value(#gri{aspect = content}, {Entries, IsLast}) ->
     #{
-        <<"list">> => lists:map(fun({Index, Value}) ->
-            #{
-                <<"index">> => Index,
-                <<"value">> => Value
-            }
+        <<"list">> => lists:map(fun
+            ({Index, {error, _} = Error}) ->
+                #{
+                    <<"index">> => Index,
+                    <<"success">> => false,
+                    <<"error">> => errors:to_json(Error)
+                };
+            ({Index, Value}) ->
+                #{
+                    <<"index">> => Index,
+                    <<"success">> => true,
+                    <<"value">> => Value
+                }
         end, Entries),
         <<"isLast">> => IsLast
     }.

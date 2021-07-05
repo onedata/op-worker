@@ -83,7 +83,7 @@ browse_content(AtmWorkflowExecutionCtx, _Opts, #atm_single_value_store_container
         {ok, ExpandedValue} ->
             {[{<<>>, ExpandedValue}], true};
         {error, _} ->
-            {[], true}
+            {[{<<>>, ?ERROR_FORBIDDEN}], true}
     end.
 
 
