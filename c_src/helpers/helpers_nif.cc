@@ -683,8 +683,11 @@ ERL_NIF_TERM read(NifCTX ctx, file_handle_ptr handle, off_t offset, size_t size)
 }
 
 ERL_NIF_TERM write(NifCTX ctx, file_handle_ptr handle, const off_t offset,
-    folly::IOBufQueue buf)
+    std::pair<const uint8_t*, size_t> data)
 {
+    folly::IOBufQueue buf{folly::IOBufQueue::cacheChainLength()};
+    buf.wrapBuffer(data.first, data.second, handle->helper()->blockSize());
+
     handle_result(ctx, handle->write(offset, std::move(buf), {}));
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
