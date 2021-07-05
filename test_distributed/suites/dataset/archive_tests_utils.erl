@@ -31,6 +31,7 @@
 
 -define(SPACE, space_krk_par_p).
 -define(USER1, user1).
+-define(LISTED_CHILDREN_LIMIT, 1000).
 
 
 %===================================================================
@@ -205,7 +206,7 @@ assert_metadata_copied(Node, SessionId, SourceGuid, TargetGuid) ->
 
 
 assert_children_copied(Node, SessionId, SourceGuid, TargetGuid) ->
-    assert_children_copied(Node, SessionId, SourceGuid, TargetGuid, #{offset => 0, size => 1000}).
+    assert_children_copied(Node, SessionId, SourceGuid, TargetGuid, #{offset => 0, size => ?LISTED_CHILDREN_LIMIT}).
 
 assert_children_copied(Node, SessionId, SourceGuid, TargetGuid, ListOpts = #{offset := Offset}) ->
     {ok, SourceChildren, #{is_last := SourceIsLast}} =
@@ -316,7 +317,7 @@ assert_incremental_archive_links(Node, SessionId, BaseArchiveId, Guid, ModifiedF
         {ok, #file_attr{type = ?SYMLINK_TYPE}} ->
             ok;
         {ok, #file_attr{type = ?DIRECTORY_TYPE}} ->
-            {ok, Children} = lfm_proxy:get_children(Node, SessionId, ?FILE_REF(Guid), 0, 10),
+            {ok, Children} = lfm_proxy:get_children(Node, SessionId, ?FILE_REF(Guid), 0, ?LISTED_CHILDREN_LIMIT),
             lists:foreach(fun({ChildGuid, _}) ->
                 assert_incremental_archive_links(Node, SessionId, BaseArchiveId, ChildGuid, ModifiedFiles)
             end, Children)

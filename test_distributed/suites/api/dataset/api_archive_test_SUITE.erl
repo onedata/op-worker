@@ -134,6 +134,7 @@ create_archive(_Config) ->
                     {<<"datasetId">>, DetachedDatasetId,
                         ?ERROR_BAD_DATA(<<"datasetId">>, <<"Detached dataset cannot be modified.">>)},
                     {<<"config">>, #{<<"incremental">> => <<"not boolean">>}, ?ERROR_BAD_VALUE_BOOLEAN(<<"config.incremental">>)},
+                    {<<"config">>, #{<<"incremental">> => true, <<"baseArchiveId">> => <<"invalid_id">>}, ?ERROR_BAD_VALUE_IDENTIFIER(<<"config.baseArchiveId">>)},
                     % TODO VFS-7653 uncomment following case and remove subsequent one
                     % {<<"config">>, #{<<"includeDip">> => <<"not boolean">>}, ?ERROR_BAD_VALUE_BOOLEAN(<<"config.includeDip">>)},
                     {<<"config">>, #{<<"includeDip">> => true},

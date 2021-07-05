@@ -53,7 +53,7 @@ from_json(ConfigJson) ->
     #archive_config{
         layout = utils:to_atom(maps:get(<<"layout">>, ConfigJson, ?DEFAULT_LAYOUT)),
         incremental = utils:to_boolean(maps:get(<<"incremental">>, ConfigJson, ?DEFAULT_INCREMENTAL)),
-        base_archive_id = utils:null_to_undefined(maps:get(<<"baseArchive">>, ConfigJson, ?DEFAULT_BASE_ARCHIVE)),
+        base_archive_id = utils:null_to_undefined(maps:get(<<"baseArchiveId">>, ConfigJson, ?DEFAULT_BASE_ARCHIVE)),
         include_dip = utils:to_boolean(maps:get(<<"includeDip">>, ConfigJson, ?DEFAULT_INCLUDE_DIP)),
         create_nested_archives = utils:to_boolean(maps:get(<<"createNestedArchives">>, ConfigJson, ?DEFAULT_CREATE_NESTED_ARCHIVES))
     }.
@@ -76,7 +76,7 @@ to_json(#archive_config{
         <<"layout">> => str_utils:to_binary(Layout),
         <<"includeDip">> => IncludeDip,
         <<"createNestedArchives">> => CreateNestedArchives,
-        <<"baseArchive">> => utils:undefined_to_null(BaseArchiveId)
+        <<"baseArchiveId">> => utils:undefined_to_null(BaseArchiveId)
     }).
 
 

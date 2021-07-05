@@ -99,13 +99,11 @@ has_file_changed(BaseArchiveFileCtx, CurrentFileCtx, UserCtx) ->
 find_most_recent_preserved_archive(DatasetId, Opts) ->
     {ok, Archives, IsLast} = archive_api:list_archives(DatasetId, Opts, ?EXTENDED_INFO),
 
-    {BaseArchiveOrUndefined, LastArchiveIndex} = lists:foldl(fun
+    {BaseArchiveOrUndefined, LastArchiveIndex} = lists_utils:foldl_while(fun
         (#archive_info{state = ?ARCHIVE_PRESERVED, id = Id, index = Index}, {undefined, _}) ->
-            {Id, Index};
+            {halt, {Id, Index}};
         (#archive_info{index = Index}, {undefined, _}) ->
-            {undefined, Index};
-        (#archive_info{index = Index}, {BaseArchiveId, _}) ->
-            {BaseArchiveId, Index}
+            {cont, {undefined, Index}}
     end, {undefined, maps:get(start_index, Opts)}, Archives),
 
     case {BaseArchiveOrUndefined, IsLast} of
@@ -115,10 +113,10 @@ find_most_recent_preserved_archive(DatasetId, Opts) ->
     end.
 
 -spec has_checksum_changed(file_ctx:ctx(), file_ctx:ctx(), user_ctx:ctx()) -> boolean().
-has_checksum_changed(PrevFileCtx, CurrentFileCtx, UserCtx) ->
-    PrevFileChecksum = archivisation_checksum:get(PrevFileCtx),
+has_checksum_changed(BaseFileCtx, CurrentFileCtx, UserCtx) ->
+    BaseFileChecksum = archivisation_checksum:get(BaseFileCtx),
     CurrentFileChecksum = archivisation_checksum:calculate(CurrentFileCtx, UserCtx),
-    PrevFileChecksum =/= CurrentFileChecksum.
+    BaseFileChecksum =/= CurrentFileChecksum.
 
 
 -spec has_metadata_changed(file_ctx:ctx(), file_ctx:ctx(), user_ctx:ctx()) -> boolean().
