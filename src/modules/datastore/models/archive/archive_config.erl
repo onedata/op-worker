@@ -20,7 +20,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([from_json/1, to_json/1, sanitize/1]).
+-export([from_json/1, to_json/1, to_json/2, sanitize/1]).
 %% Getters
 -export([
     get_layout/1, should_include_dip/1, should_create_nested_archives/1, 
@@ -61,20 +61,26 @@ from_json(ConfigJson) ->
         create_nested_archives = utils:to_boolean(maps:get(<<"createNestedArchives">>, ConfigJson, ?DEFAULT_CREATE_NESTED_ARCHIVES))
     }.
 
-
 -spec to_json(record()) -> json().
+to_json(ArchiveConfig) ->
+    to_json(ArchiveConfig, []).
+
+
+-spec to_json(record(), [binary()]) -> json().
 to_json(#archive_config{
     incremental = Incremental,
+    base_archive_id = BaseArchiveId,
     layout = Layout,
     include_dip = IncludeDip,
     create_nested_archives = CreateNestedArchives
-}) ->
-    #{
+}, ExcludedFields) ->
+    maps:without(ExcludedFields, #{
         <<"incremental">> => Incremental,
         <<"layout">> => str_utils:to_binary(Layout),
         <<"includeDip">> => IncludeDip,
-        <<"createNestedArchives">> => CreateNestedArchives
-    }.
+        <<"createNestedArchives">> => CreateNestedArchives,
+        <<"baseArchiveId">> => utils:undefined_to_null(BaseArchiveId)
+    }).
 
 
 -spec sanitize(json_utils:json_map()) -> json().
@@ -95,8 +101,7 @@ sanitize(RawConfig) ->
                     {true, BaseArchiveId2} ->
                         SanitizedData#{<<"baseArchiveId">> => BaseArchiveId2};
                     false ->
-                        % fixme other error
-                        throw(?ERROR_BAD_VALUE_BINARY(<<"baseArchiveId">>))
+                        throw(?ERROR_BAD_VALUE_IDENTIFIER(<<"baseArchiveId">>))
                 end;
             false ->
                 SanitizedData
@@ -112,8 +117,8 @@ sanitize(RawConfig) ->
             throw(?ERROR_BAD_VALUE_BOOLEAN(str_utils:format_bin("config.~s", [Key])));
         throw:?ERROR_BAD_VALUE_ATOM(Key) ->
             throw(?ERROR_BAD_VALUE_ATOM(str_utils:format_bin("config.~s", [Key])));
-        throw:?ERROR_BAD_VALUE_BINARY(Key) ->
-            throw(?ERROR_BAD_VALUE_BINARY(str_utils:format_bin("config.~s", [Key])))
+        throw:?ERROR_BAD_VALUE_IDENTIFIER(Key) ->
+            throw(?ERROR_BAD_VALUE_IDENTIFIER(str_utils:format_bin("config.~s", [Key])))
     end.
 
 

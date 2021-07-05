@@ -227,10 +227,15 @@ provider_to_fuse_response(#provider_response{status = Status}) ->
 
 %% @private
 -spec assert_is_allowed_to_operate_on_xattr(user_ctx:ctx(), custom_metadata:name()) -> ok.
-assert_is_allowed_to_operate_on_xattr(UserCtx, <<?ONEDATA_PREFIX_STR, _/binary>> = _XattrName) ->
-    case user_ctx:is_root(UserCtx) of
+assert_is_allowed_to_operate_on_xattr(UserCtx, XattrName) ->
+    case user_ctx:is_root(UserCtx) andalso is_special_key(XattrName) of
         true -> ok;
         false -> throw(?EPERM)
-    end;
-assert_is_allowed_to_operate_on_xattr(_UserCtx, _XattrName) ->
-    ok.
+    end.
+
+
+%% @private
+-spec is_special_key(custom_metadata:name()) -> boolean().
+is_special_key(<<?ONEDATA_PREFIX_STR, _/binary>>) -> true;
+is_special_key(<<?CDMI_PREFIX_STR, _/binary>>) -> true;
+is_special_key(_) -> false.

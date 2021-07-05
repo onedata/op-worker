@@ -134,6 +134,7 @@ create_archive(_Config) ->
                     {<<"datasetId">>, DetachedDatasetId,
                         ?ERROR_BAD_DATA(<<"datasetId">>, <<"Detached dataset cannot be modified.">>)},
                     {<<"config">>, #{<<"incremental">> => <<"not boolean">>}, ?ERROR_BAD_VALUE_BOOLEAN(<<"config.incremental">>)},
+                    {<<"config">>, #{<<"incremental">> => true, <<"baseArchiveId">> => <<"invalid_id">>}, ?ERROR_BAD_VALUE_IDENTIFIER(<<"config.baseArchiveId">>)},
                     {<<"config">>, #{<<"includeDip">> => <<"not boolean">>}, ?ERROR_BAD_VALUE_BOOLEAN(<<"config.includeDip">>)},
                     {<<"config">>, #{<<"createNestedArchives">> => <<"not boolean">>},
                         ?ERROR_BAD_VALUE_BOOLEAN(<<"config.createNestedArchives">>)},
@@ -301,7 +302,7 @@ get_archive_info(_Config) ->
         #file_spec{dataset = #dataset_spec{archives = 1}}
     ),
 
-    ConfigJson = archive_config:to_json(Config),
+    ConfigJson = archive_config:to_json(Config, [<<"baseArchive">>]),
 
     Providers = [krakow, paris],
     maybe_detach_dataset(Providers, DatasetId),
@@ -331,11 +332,11 @@ get_archive_info(_Config) ->
                                 <<"filesArchived">> => 1,
                                 <<"filesFailed">> => 0,
                                 <<"bytesArchived">> => 0
-                            },
-                            <<"baseArchive">> => null
+                            }
                         },
                         ?assertEqual(?HTTP_200_OK, RespCode),
-                        ?assertEqual(ExpArchiveData, maps:without([<<"creationTime">>], RespBody))
+                        % do not check baseArchive here as its value depends on previous tests
+                        ?assertEqual(ExpArchiveData, maps:without([<<"baseArchive">>, <<"creationTime">>], RespBody))
                     end
                 },
                 #scenario_template{
@@ -668,7 +669,7 @@ validate_listed_archives(ListingResult, Params, AllArchives, Format) ->
     ExpArchives2 = lists:map(fun(Info = #archive_info{id = ArchiveId, index = Index}) ->
         case Format of
             rest -> {Index, ArchiveId};
-            graph_sync -> Info#archive_info{base_archive_id = null}
+            graph_sync -> Info
         end
     end, ExpArchives1),
 
