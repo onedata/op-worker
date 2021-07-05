@@ -16,6 +16,7 @@
 -behaviour(workflow_handler).
 
 -include("modules/automation/atm_execution.hrl").
+-include_lib("ctool/include/http/headers.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 % workflow_handler callbacks
@@ -30,6 +31,11 @@
     handle_lane_execution_ended/3,
     handle_workflow_execution_ended/2
 ]).
+
+
+-define(INITIAL_NOTIFICATION_INTERVAL(), rand:uniform(timer:seconds(2))).
+-define(MAX_NOTIFICATION_INTERVAL, timer:hours(2)).
+-define(MAX_NOTIFICATION_RETRIES, 30).
 
 
 %%%===================================================================
@@ -181,6 +187,8 @@ handle_lane_execution_ended(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, Atm
     ok.
 handle_workflow_execution_ended(AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv) ->
     try
+        {ok, AtmWorkflowExecutionDoc} = atm_workflow_execution:get(AtmWorkflowExecutionId),
+        notify_ended(AtmWorkflowExecutionDoc),
         %% TODO VFS-7862 uncomment after enabling other users to see stores content using their session
 %%        atm_workflow_execution_session:terminate(AtmWorkflowExecutionId)
         ok
@@ -312,3 +320,70 @@ acquire_iterator_for_lane(AtmWorkflowExecutionEnv, #atm_lane_schema{
 report_task_execution_failed(AtmWorkflowExecutionEnv, AtmTaskExecutionId) ->
     catch atm_task_execution_api:handle_results(AtmWorkflowExecutionEnv, AtmTaskExecutionId, error),
     ok.
+
+
+%% @private
+-spec notify_ended(atm_workflow_execution:doc()) -> ok.
+notify_ended(#document{value = #atm_workflow_execution{callback = undefined}}) ->
+    ok;
+notify_ended(#document{key = AtmWorkflowExecutionId, value = #atm_workflow_execution{
+    status = AtmWorkflowExecutionStatus,
+    callback = CallbackUrl
+}}) ->
+    spawn(fun() ->
+        Headers = #{
+            ?HDR_CONTENT_TYPE => <<"application/json">>
+        },
+        Payload = json_utils:encode(#{
+            <<"atmWorkflowExecutionId">> => AtmWorkflowExecutionId,
+            <<"status">> => AtmWorkflowExecutionStatus
+        }),
+        try_to_notify(
+            AtmWorkflowExecutionId, CallbackUrl, Headers, Payload,
+            ?INITIAL_NOTIFICATION_INTERVAL(), ?MAX_NOTIFICATION_RETRIES + 1
+        )
+    end),
+    ok.
+
+
+%% @private
+-spec try_to_notify(
+    atm_workflow_execution:id(),
+    http_client:url(),
+    http_client:headers(),
+    http_client:body(),
+    non_neg_integer(),
+    non_neg_integer()
+) ->
+    ok.
+try_to_notify(_AtmWorkflowExecutionId, _CallbackUrl, _Headers, _Payload, _Interval, 0) ->
+    ok;
+try_to_notify(AtmWorkflowExecutionId, CallbackUrl, Headers, Payload, Interval, RetriesLeft) ->
+    case send_notification(CallbackUrl, Headers, Payload) of
+        ok ->
+            ok;
+        {error, _} = Error ->
+            ?warning(
+                "Failed to send atm workflow execution (~s) notification to ~s due to ~p.~n"
+                "Next retry in ~p seconds. Number of retries left: ~p",
+                [AtmWorkflowExecutionId, CallbackUrl, Error, Interval / 1000, RetriesLeft - 1]
+            ),
+            timer:sleep(Interval),
+            NextInterval = min(2 * Interval, ?MAX_NOTIFICATION_INTERVAL),
+            try_to_notify(AtmWorkflowExecutionId, CallbackUrl, Headers, Payload, NextInterval, RetriesLeft - 1)
+    end.
+
+
+%% @private
+-spec send_notification(http_client:url(), http_client:headers(), http_client:body()) ->
+    ok | {error, term()}.
+send_notification(CallbackUrl, Headers, Payload) ->
+    case http_client:post(CallbackUrl, Headers, Payload) of
+        {ok, ResponseCode, _, ResponseBody} ->
+            case http_utils:is_success_code(ResponseCode) of
+                true -> ok;
+                false -> {error, {http_response, ResponseCode, ResponseBody}}
+            end;
+        {error, _} = Error ->
+            Error
+    end.

@@ -132,6 +132,8 @@ get_record_struct(1) ->
         {status, atom},
         {status_changed, boolean},
 
+        {callback, string},
+
         {schedule_time, integer},
         {start_time, integer},
         {finish_time, integer}
