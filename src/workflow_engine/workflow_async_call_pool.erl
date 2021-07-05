@@ -59,8 +59,8 @@ decrement_slot_usage(Id) ->
     decrement_slot_usage(Id, 1).
 
 -spec decrement_slot_usage(id(), non_neg_integer()) -> ok.
-decrement_slot_usage(Id, Change) ->
-    {ok, _} = datastore_model:update(?CTX, Id, fun(Record) -> decrement_slot_usage_internal(Record, Change) end),
+decrement_slot_usage(Id, Amount) ->
+    {ok, _} = datastore_model:update(?CTX, Id, fun(Record) -> decrement_slot_usage_internal(Record, Amount) end),
     ok.
 
 %%%===================================================================
@@ -85,7 +85,7 @@ increment_slot_usage_internal(Record = #workflow_async_call_pool{slots_used = Sl
     }}.
 
 -spec decrement_slot_usage_internal(record(), non_neg_integer()) -> {ok, record()}.
-decrement_slot_usage_internal(Record = #workflow_async_call_pool{slots_used = SlotsUsed}, Change) ->
+decrement_slot_usage_internal(Record = #workflow_async_call_pool{slots_used = SlotsUsed}, Amount) ->
     {ok, Record#workflow_async_call_pool{
-        slots_used = SlotsUsed - Change
+        slots_used = SlotsUsed - Amount
     }}.

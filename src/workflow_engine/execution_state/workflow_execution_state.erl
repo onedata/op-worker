@@ -65,10 +65,12 @@
 -define(PREPARATION_FAILED, preparation_failed).
 -define(PREPARATION_SUCCESSFUL, preparation_successful).
 -type preparation_status() :: ?NOT_PREPARED | ?PREPARING | ?PREPARATION_FAILED | ?PREPARATION_SUCCESSFUL.
--type cached_processing_result() :: workflow_engine:callback_execution_result() | workflow_cached_async_result:id().
+% TODO VFS-7919 better type name
+-type handler_execution_or_cached_async_result() ::
+    workflow_engine:handler_execution_result() | workflow_cached_async_result:result_ref().
 
 -type current_lane() :: #current_lane{}.
--type async_pools_changes() :: #{workflow_async_call_pool:id() => non_neg_integer()}.
+-type async_pools_slots_to_free() :: #{workflow_async_call_pool:id() => non_neg_integer()}.
 
 %% @formatter:off
 -type boxes_map() :: #{
@@ -97,7 +99,7 @@
 % Type used to return additional information about document update procedure
 % (see #workflow_execution_state.update_report)
 -type update_report() :: ?EXECUTION_SET_TO_BE_PREPARED | #job_prepared_report{} | #items_processed_report{} |
-    ?TASK_PROCESSED_REPORT(boolean()) | ?JOBS_EXPIRED(async_pools_changes()) | no_items_error().
+    ?TASK_PROCESSED_REPORT(boolean()) | ?JOBS_EXPIRED(async_pools_slots_to_free()) | no_items_error().
 
 -export_type([index/0, iteration_step/0, current_lane/0, preparation_status/0, boxes_map/0, update_report/0]).
 
@@ -223,7 +225,7 @@ report_execution_status_update(ExecutionId, JobIdentifier, UpdateType, Ans) ->
     workflow_engine:execution_id(),
     workflow_handler:handler(),
     workflow_engine:execution_context(),
-    workflow_handler:callback_execution_result()
+    workflow_handler:handler_execution_result()
 ) -> ok.
 report_execution_prepared(ExecutionId, Handler, ExecutionContext, ok) ->
     case prepare_lane(ExecutionId, Handler, ExecutionContext, 1) of
@@ -244,11 +246,11 @@ report_limit_reached_error(ExecutionId, JobIdentifier) ->
 -spec check_timeouts(workflow_engine:execution_id()) -> TimeoutAppeared :: boolean().
 check_timeouts(ExecutionId) ->
     case update(ExecutionId, fun check_timeouts_internal/1) of
-        {ok, #document{value = #workflow_execution_state{update_report = ?JOBS_EXPIRED(AsyncPoolsChanges)}}} ->
-            lists:foreach(fun({AsyncPoolId, Change}) ->
-                workflow_async_call_pool:decrement_slot_usage(AsyncPoolId, Change)
-            end, maps:to_list(AsyncPoolsChanges)),
-            maps:size(AsyncPoolsChanges) =/= 0;
+        {ok, #document{value = #workflow_execution_state{update_report = ?JOBS_EXPIRED(AsyncPoolsSlotsToFree)}}} ->
+            lists:foreach(fun({AsyncPoolId, SlotsToFreeCount}) ->
+                workflow_async_call_pool:decrement_slot_usage(AsyncPoolId, SlotsToFreeCount)
+            end, maps:to_list(AsyncPoolsSlotsToFree)),
+            maps:size(AsyncPoolsSlotsToFree) =/= 0;
         ?WF_ERROR_NOTHING_CHANGED  ->
             false
     end.
@@ -529,26 +531,26 @@ check_timeouts_internal(State = #workflow_execution_state{
         0 ->
             ?WF_ERROR_NOTHING_CHANGED;
         _ ->
-            {FinalState, AsyncPoolsChanges} = lists:foldl(fun(JobIdentifier, {TmpState, TmpAsyncPoolsChanges}) ->
+            {FinalState, AsyncPoolsSlotsToFree} = lists:foldl(fun(JobIdentifier, {TmpState, TmpAsyncPoolsSlotsToFree}) ->
                 {ok, NewTmpState} = report_execution_status_update_internal(
                     TmpState, JobIdentifier, ?ASYNC_CALL_FINISHED, ?WF_ERROR_TIMEOUT),
 
                 {_, TaskSpec} = workflow_jobs:get_task_details(JobIdentifier, BoxesSpec),
-                NewTmpAsyncPoolsChanges = lists:foldl(fun(AsyncPoolId, InternalTmpAsyncPoolsChange) ->
+                NewTmpAsyncPoolsSlotsToFree = lists:foldl(fun(AsyncPoolId, InternalTmpAsyncPoolsChange) ->
                     TmpChange = maps:get(AsyncPoolId, InternalTmpAsyncPoolsChange, 0),
                     InternalTmpAsyncPoolsChange#{AsyncPoolId => TmpChange + 1}
-                end, TmpAsyncPoolsChanges, workflow_engine:get_async_call_pools(TaskSpec)),
-                {NewTmpState, NewTmpAsyncPoolsChanges}
+                end, TmpAsyncPoolsSlotsToFree, workflow_engine:get_async_call_pools(TaskSpec)),
+                {NewTmpState, NewTmpAsyncPoolsSlotsToFree}
             end, {State, #{}}, ExpiredJobsIdentifiers),
 
-            {ok, FinalState#workflow_execution_state{update_report = ?JOBS_EXPIRED(AsyncPoolsChanges)}}
+            {ok, FinalState#workflow_execution_state{update_report = ?JOBS_EXPIRED(AsyncPoolsSlotsToFree)}}
     end.
 
 -spec report_execution_status_update_internal(
     state(),
     workflow_jobs:job_identifier(),
     workflow_engine:processing_stage(),
-    cached_processing_result()
+    handler_execution_or_cached_async_result()
 ) -> {ok, state()}.
 report_execution_status_update_internal(State = #workflow_execution_state{
     jobs = Jobs
@@ -655,7 +657,7 @@ reset_keepalive_timer_internal(State = #workflow_execution_state{
         jobs = workflow_jobs:reset_keepalive_timer(Jobs, JobIdentifier)
     }}.
 
--spec report_job_finish(state(), workflow_jobs:job_identifier(), workflow_handler:callback_execution_result()) ->
+-spec report_job_finish(state(), workflow_jobs:job_identifier(), workflow_handler:handler_execution_result()) ->
     {ok, state()}.
 report_job_finish(State = #workflow_execution_state{
     jobs = Jobs

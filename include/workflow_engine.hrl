@@ -23,6 +23,7 @@
 %%% (processing of job or job's result)
 %%%===================================================================
 
+% TODO VFS-7919 - better name for record and subject_id field
 -record(execution_spec, {
     handler :: workflow_handler:handler(),
     context :: workflow_engine:execution_context(),
@@ -52,6 +53,7 @@
 %%% Macros describing possible types of processing on pool
 %%%===================================================================
 
+% TODO VFS-7919 - better macros names
 -define(JOB_PROCESSING, job_processing).
 -define(ASYNC_RESULT_PROCESSING, async_result_processing).
 
