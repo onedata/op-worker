@@ -85,7 +85,7 @@ get_name(#atm_task_execution_argument_spec{name = ArgName}) ->
 
 
 -spec construct_arg(atm_job_execution_ctx:record(), record()) ->
-    {true, json_utils:json_term()} | false | no_return().
+    {ok, json_utils:json_term()} | skip | no_return().
 construct_arg(AtmJobExecutionCtx, AtmTaskExecutionArgSpec = #atm_task_execution_argument_spec{
     value_builder = ArgValueBuilder,
     is_optional = false
@@ -95,7 +95,7 @@ construct_arg(AtmJobExecutionCtx, AtmTaskExecutionArgSpec = #atm_task_execution_
     AtmWorkflowExecutionCtx = atm_job_execution_ctx:get_workflow_execution_ctx(AtmJobExecutionCtx),
     validate_value(AtmWorkflowExecutionCtx, ArgValue, AtmTaskExecutionArgSpec),
 
-    {true, ArgValue};
+    {ok, ArgValue};
 
 construct_arg(AtmJobExecutionCtx, AtmTaskExecutionArgSpec = #atm_task_execution_argument_spec{
     is_optional = true
@@ -105,7 +105,7 @@ construct_arg(AtmJobExecutionCtx, AtmTaskExecutionArgSpec = #atm_task_execution_
             is_optional = false
         })
     catch _:_ ->
-        false
+        skip
     end.
 
 
@@ -211,8 +211,9 @@ build_value(AtmJobExecutionCtx, #atm_task_argument_value_builder{
     end,
 
     AtmWorkflowExecutionCtx = atm_job_execution_ctx:get_workflow_execution_ctx(AtmJobExecutionCtx),
+    BrowseOpts = #{offset => 0, limit => 1},
 
-    case atm_store_api:browse_content(AtmWorkflowExecutionCtx, #{limit => 1}, AtmStore) of
+    case atm_store_api:browse_content(AtmWorkflowExecutionCtx, BrowseOpts, AtmStore) of
         {[], true} ->
             throw(?ERROR_ATM_STORE_EMPTY(AtmSingleValueStoreSchemaId));
         {[{_Index, {error, _} = Error}], true} ->
