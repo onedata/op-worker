@@ -48,18 +48,9 @@ translate_archive_info(#archive_info{
     index = Index,
     stats = Stats,
     base_archive_id = BaseArchive,
-    related_aip = RelatedAIP,
-    related_dip = RelatedDIP
+    related_aip = RelatedAip,
+    related_dip = RelatedDip
 }) ->
-    BaseArchiveGri = case utils:undefined_to_null(BaseArchive) of
-        null -> 
-            null;
-        _ -> 
-            gri:serialize(#gri{
-                type = op_archive, id = BaseArchive,
-                aspect = instance, scope = private
-            })
-    end, 
     #{
         <<"gri">> => gri:serialize(#gri{
             type = op_archive, id = ArchiveId,
@@ -85,8 +76,18 @@ translate_archive_info(#archive_info{
         <<"description">> => Description,
         <<"index">> => Index,
         <<"stats">> => archive_stats:to_json(Stats),
-        <<"baseArchive">> => BaseArchiveGri,
-        % fixme gri
-        <<"relatedAIP">> => utils:undefined_to_null(RelatedAIP),
-        <<"relatedDIP">> => utils:undefined_to_null(RelatedDIP)
+        <<"baseArchive">> => prepare_archive_instance_gri(utils:undefined_to_null(BaseArchive)),
+        <<"relatedAip">> => prepare_archive_instance_gri(utils:undefined_to_null(RelatedAip)),
+        <<"relatedDip">> => prepare_archive_instance_gri(utils:undefined_to_null(RelatedDip))
     }.
+
+
+-spec prepare_archive_instance_gri(null | archive:id()) -> gri:serialized().
+prepare_archive_instance_gri(null) ->
+    null;
+prepare_archive_instance_gri(ArchiveId) ->
+    gri:serialize(#gri{
+        type = op_archive, id = ArchiveId,
+        aspect = instance, scope = private
+    }).
+    
