@@ -160,10 +160,10 @@ prune(Id, Index) ->
                             values = #{}
                         }}
                     end,
-                    ?extract_ok(update_record(Id, 0, UpdateFirstNodeFun))
+                    ?ok_if_not_found(?extract_ok(update_record(Id, 0, UpdateFirstNodeFun)))
             end;
         {error, _} = Error ->
-            Error
+            ?ok_if_not_found(Error)
     end.
 
 
@@ -175,7 +175,7 @@ destroy(Id) ->
                 delete_record(Id, Num)
             end, lists:seq(0, LastEntryIndex div ?MAX_VALUES_PER_NODE));
         {error, _} = Error ->
-            Error
+            ?ok_if_not_found(Error)
     end.
 
 %%%===================================================================

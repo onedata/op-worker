@@ -28,6 +28,9 @@
 -include_lib("ctool/include/logging.hrl").
 
 
+%% API
+-export([file_attrs_to_json/1]).
+
 %% middleware_router callbacks
 -export([resolve_handler/3]).
 
@@ -38,6 +41,56 @@
 
 -define(DEFAULT_LIST_OFFSET, 0).
 -define(DEFAULT_LIST_ENTRIES, 1000).
+
+
+%%%===================================================================
+%%% API
+%%%===================================================================
+
+
+-spec file_attrs_to_json(lfm_attrs:file_attributes()) -> json_utils:json_map().
+file_attrs_to_json(#file_attr{
+    guid = Guid,
+    name = Name,
+    mode = Mode,
+    parent_guid = ParentGuid,
+    uid = Uid,
+    gid = Gid,
+    atime = Atime,
+    mtime = Mtime,
+    ctime = Ctime,
+    type = Type,
+    size = Size,
+    shares = Shares,
+    provider_id = ProviderId,
+    owner_id = OwnerId,
+    nlink = HardlinksCount
+}) ->
+    {ok, ObjectId} = file_id:guid_to_objectid(Guid),
+
+    #{
+        <<"file_id">> => ObjectId,
+        <<"name">> => Name,
+        <<"mode">> => <<"0", (integer_to_binary(Mode, 8))/binary>>,
+        <<"parent_id">> => case ParentGuid of
+            undefined ->
+                null;
+            _ ->
+                {ok, ParentObjectId} = file_id:guid_to_objectid(ParentGuid),
+                ParentObjectId
+        end,
+        <<"storage_user_id">> => Uid,
+        <<"storage_group_id">> => Gid,
+        <<"atime">> => Atime,
+        <<"mtime">> => Mtime,
+        <<"ctime">> => Ctime,
+        <<"type">> => str_utils:to_binary(Type),
+        <<"size">> => utils:null_to_undefined(Size),
+        <<"shares">> => Shares,
+        <<"provider_id">> => ProviderId,
+        <<"owner_id">> => OwnerId,
+        <<"hardlinks_count">> => utils:undefined_to_null(HardlinksCount)
+    }.
 
 
 %%%===================================================================
@@ -657,9 +710,7 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = attrs, 
     end,
     {ok, FileAttrs} = ?check(lfm:stat(Auth#auth.session_id, ?FILE_REF(FileGuid), true)),
 
-    {ok, value, lists:foldl(fun(RequestedAttr, Acc) ->
-        Acc#{RequestedAttr => get_attr(RequestedAttr, FileAttrs)}
-    end, #{}, RequestedAttributes)};
+    {ok, value, maps:with(RequestedAttributes, file_attrs_to_json(FileAttrs))};
 
 get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = xattrs}}, _) ->
     SessionId = Auth#auth.session_id,
@@ -1028,30 +1079,3 @@ create_file(SessionId, ParentGuid, Name, ?LINK_TYPE, TargetGuid) ->
     lfm:make_link(SessionId, ?FILE_REF(TargetGuid), ?FILE_REF(ParentGuid), Name);
 create_file(SessionId, ParentGuid, Name, ?SYMLINK_TYPE, TargetPath) ->
     lfm:make_symlink(SessionId, ?FILE_REF(ParentGuid), Name, TargetPath).
-
-
-%% @private
--spec get_attr(binary(), #file_attr{}) -> term().
-get_attr(<<"mode">>, #file_attr{mode = Mode}) ->
-    <<"0", (integer_to_binary(Mode, 8))/binary>>;
-get_attr(<<"name">>, #file_attr{name = Name}) -> Name;
-get_attr(<<"size">>, #file_attr{size = Size}) -> Size;
-get_attr(<<"atime">>, #file_attr{atime = ATime}) -> ATime;
-get_attr(<<"ctime">>, #file_attr{ctime = CTime}) -> CTime;
-get_attr(<<"mtime">>, #file_attr{mtime = MTime}) -> MTime;
-get_attr(<<"owner_id">>, #file_attr{owner_id = OwnerId}) -> OwnerId;
-get_attr(<<"provider_id">>, #file_attr{provider_id = ProviderId}) -> ProviderId;
-get_attr(<<"type">>, #file_attr{type = Type}) -> str_utils:to_binary(Type);
-get_attr(<<"shares">>, #file_attr{shares = Shares}) -> Shares;
-get_attr(<<"storage_user_id">>, #file_attr{uid = Uid}) -> Uid;
-get_attr(<<"storage_group_id">>, #file_attr{gid = Gid}) -> Gid;
-get_attr(<<"hardlinks_count">>, #file_attr{nlink = LinksCount}) ->
-    utils:undefined_to_null(LinksCount);
-get_attr(<<"file_id">>, #file_attr{guid = Guid}) ->
-    {ok, FileId} = file_id:guid_to_objectid(Guid),
-    FileId;
-get_attr(<<"parent_id">>, #file_attr{parent_guid = undefined}) ->
-    null;
-get_attr(<<"parent_id">>, #file_attr{parent_guid = ParentGuid}) ->
-    {ok, ParentId} = file_id:guid_to_objectid(ParentGuid),
-    ParentId.

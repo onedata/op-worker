@@ -44,14 +44,9 @@ create(AtmStoreRecord) ->
     datastore_model:create(?CTX, #document{value = AtmStoreRecord}).
 
 
--spec get(id()) -> {ok, record()} | {error, term()}.
+-spec get(id()) -> {ok, doc()} | {error, term()}.
 get(AtmStoreId) ->
-    case datastore_model:get(?CTX, AtmStoreId) of
-        {ok, #document{value = AtmStoreRecord}} ->
-            {ok, AtmStoreRecord};
-        {error, _} = Error ->
-            Error
-    end.
+    datastore_model:get(?CTX, AtmStoreId).
 
 
 -spec update(id(), diff()) -> ok | {error, term()}.
@@ -87,8 +82,7 @@ get_record_struct(1) ->
         {schema_id, string},
         {initial_value, {custom, string, {?MODULE, encode_initial_value, decode_initial_value}}},
         {frozen, boolean},
-        {type, atom},
-        {container, {custom, string, {persistent_record, encode, decode, atm_container}}}
+        {container, {custom, string, {persistent_record, encode, decode, atm_store_container}}}
     ]}.
 
 
