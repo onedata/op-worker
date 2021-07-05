@@ -27,7 +27,6 @@
 %% API
 -export([find_base_archive_id/1, has_file_changed/3, find_base_for_nested_archive/3]).
 
-% TODO VFS-7880 set appropriate GUI image in gui-image.conf
 
 %%%===================================================================
 %%% API functions
