@@ -188,10 +188,9 @@ handle_lane_execution_ended(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, Atm
 handle_workflow_execution_ended(AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv) ->
     try
         {ok, AtmWorkflowExecutionDoc} = atm_workflow_execution:get(AtmWorkflowExecutionId),
+
         notify_ended(AtmWorkflowExecutionDoc),
-        %% TODO VFS-7862 uncomment after enabling other users to see stores content using their session
-%%        atm_workflow_execution_session:terminate(AtmWorkflowExecutionId)
-        ok
+        atm_workflow_execution_session:terminate(AtmWorkflowExecutionId)
     catch _:Reason ->
         % TODO VFS-7637 use audit log
         ?error("[~p] FAILED TO MARK WORKFLOW EXECUTION AS ENDED DUE TO: ~p", [

@@ -164,11 +164,13 @@ create(_) ->
 get(#op_req{gri = #gri{aspect = instance, scope = private}}, #atm_store_ctx{store = AtmStore}) ->
     {ok, AtmStore};
 
-get(#op_req{data = Data, gri = #gri{aspect = content, scope = private}}, #atm_store_ctx{
+get(#op_req{auth = Auth, data = Data, gri = #gri{aspect = content, scope = private}}, #atm_store_ctx{
     store = #atm_store{workflow_execution_id = AtmWorkflowExecutionId} = AtmStore,
     workflow_execution = #atm_workflow_execution{space_id = SpaceId}
 }) ->
-    AtmWorkflowExecutionCtx = atm_workflow_execution_ctx:build(SpaceId, AtmWorkflowExecutionId),
+    AtmWorkflowExecutionCtx = atm_workflow_execution_ctx:build(
+        SpaceId, AtmWorkflowExecutionId, Auth#auth.session_id
+    ),
 
     Offset = maps:get(<<"offset">>, Data, 0),
     Limit = maps:get(<<"limit">>, Data, ?DEFAULT_LIST_LIMIT),

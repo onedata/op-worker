@@ -105,7 +105,6 @@ create(UserCtx, SpaceId, AtmWorkflowSchemaId, StoreInitialValues, CallbackUrl) -
     end, #{}, AtmLambdaIds),
 
     AtmWorkflowExecutionId = datastore_key:new(),
-    ok = atm_workflow_execution_session:init(AtmWorkflowExecutionId, UserCtx),
 
     #document{
         value = AtmWorkflowExecution = #atm_workflow_execution{
@@ -113,7 +112,7 @@ create(UserCtx, SpaceId, AtmWorkflowSchemaId, StoreInitialValues, CallbackUrl) -
         }
     } = atm_workflow_execution_factory:create(#atm_workflow_execution_creation_ctx{
         workflow_execution_ctx = atm_workflow_execution_ctx:build(
-            SpaceId, AtmWorkflowExecutionId
+            SpaceId, AtmWorkflowExecutionId, UserCtx
         ),
         workflow_schema_doc = AtmWorkflowSchemaDoc,
         lambda_docs = AtmLambdaDocs,
@@ -121,6 +120,7 @@ create(UserCtx, SpaceId, AtmWorkflowSchemaId, StoreInitialValues, CallbackUrl) -
         callback_url = CallbackUrl
     }),
 
+    ok = atm_workflow_execution_session:init(AtmWorkflowExecutionId, UserCtx),
     workflow_engine:execute_workflow(?ATM_WORKFLOW_EXECUTION_ENGINE, #{
         id => AtmWorkflowExecutionId,
         workflow_handler => atm_workflow_execution_handler,

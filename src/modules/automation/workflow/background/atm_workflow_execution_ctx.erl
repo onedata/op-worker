@@ -8,7 +8,7 @@
 %%% @doc
 %%% This module provides utility functions for management of automation
 %%% workflow execution ctx. The ctx contains information about space and
-%%% user in context of which the workflow execution is performed.
+%%% user in context of which the workflow execution is performed or accessed.
 %%% The context may change during an execution, as it includes the user session
 %%% that is refreshed periodically. For this reason, it must be rebuilt every
 %%% time it is needed.
@@ -25,7 +25,7 @@
 -include("modules/automation/atm_execution.hrl").
 
 %% API
--export([build/2]).
+-export([build/3]).
 -export([
     get_space_id/1,
     get_workflow_execution_id/1,
@@ -48,12 +48,15 @@
 %%%===================================================================
 
 
--spec build(od_space:id(), atm_workflow_execution:id()) -> record().
-build(SpaceId, AtmWorkflowExecutionId) ->
+-spec build(od_space:id(), atm_workflow_execution:id(), session:id() | user_ctx:ctx()) ->
+    record().
+build(SpaceId, AtmWorkflowExecutionId, SessionId) when is_binary(SessionId) ->
+    build(SpaceId, AtmWorkflowExecutionId, user_ctx:new(SessionId));
+build(SpaceId, AtmWorkflowExecutionId, UserCtx) ->
     #atm_workflow_execution_ctx{
         space_id = SpaceId,
         workflow_execution_id = AtmWorkflowExecutionId,
-        user_ctx = atm_workflow_execution_session:acquire(AtmWorkflowExecutionId)
+        user_ctx = UserCtx
     }.
 
 
