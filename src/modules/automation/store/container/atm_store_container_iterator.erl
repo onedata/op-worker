@@ -6,8 +6,8 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module defines `atm_container_iterator` interface - an object which can be
-%%% used for iteration over specific `atm_container` in batches.
+%%% This module defines `atm_store_container_iterator` interface - an object which
+%%% can be used for iteration over specific `atm_store_container` in batches.
 %%%
 %%%                             !!! Caution !!!
 %%% 1) This behaviour must be implemented by modules with records of the same name.
@@ -17,7 +17,7 @@
 %%%    is not defined and implementation dependent (it may e.g. return old values).
 %%% @end
 %%%-------------------------------------------------------------------
--module(atm_container_iterator).
+-module(atm_store_container_iterator).
 -author("Bartosz Walkowicz").
 
 -behaviour(persistent_record).
@@ -32,10 +32,10 @@
 -type batch_size() :: pos_integer().
 
 -type record() ::
-    atm_list_container_iterator:record() |
-    atm_range_container_iterator:record() |
-    atm_single_value_container_iterator:record() |
-    atm_tree_forest_container_iterator:record().
+    atm_list_store_container_iterator:record() |
+    atm_range_store_container_iterator:record() |
+    atm_single_value_store_container_iterator:record() |
+    atm_tree_forest_store_container_iterator:record().
 
 -export_type([batch_size/0, record/0]).
 
@@ -60,21 +60,21 @@
 
 -spec get_next_batch(atm_workflow_execution_ctx:record(), batch_size(), record()) ->
     {ok, [atm_value:compressed()], record()} | stop.
-get_next_batch(AtmWorkflowExecutionCtx, BatchSize, AtmContainerIterator) ->
-    Module = utils:record_type(AtmContainerIterator),
-    Module:get_next_batch(AtmWorkflowExecutionCtx, BatchSize, AtmContainerIterator).
+get_next_batch(AtmWorkflowExecutionCtx, BatchSize, AtmStoreContainerIterator) ->
+    Module = utils:record_type(AtmStoreContainerIterator),
+    Module:get_next_batch(AtmWorkflowExecutionCtx, BatchSize, AtmStoreContainerIterator).
 
 
 -spec forget_before(record()) -> ok.
-forget_before(AtmContainerIterator) ->
-    Module = utils:record_type(AtmContainerIterator),
-    Module:forget_before(AtmContainerIterator).
+forget_before(AtmStoreContainerIterator) ->
+    Module = utils:record_type(AtmStoreContainerIterator),
+    Module:forget_before(AtmStoreContainerIterator).
 
 
 -spec mark_exhausted(record()) -> ok.
-mark_exhausted(AtmContainerIterator) ->
-    Module = utils:record_type(AtmContainerIterator),
-    Module:mark_exhausted(AtmContainerIterator).
+mark_exhausted(AtmStoreContainerIterator) ->
+    Module = utils:record_type(AtmStoreContainerIterator),
+    Module:mark_exhausted(AtmStoreContainerIterator).
 
 
 %%%===================================================================
@@ -89,17 +89,17 @@ version() ->
 
 -spec db_encode(record(), persistent_record:nested_record_encoder()) ->
     json_utils:json_term().
-db_encode(AtmContainerIterator, NestedRecordEncoder) ->
-    RecordType = utils:record_type(AtmContainerIterator),
+db_encode(AtmStoreContainerIterator, NestedRecordEncoder) ->
+    RecordType = utils:record_type(AtmStoreContainerIterator),
 
     maps:merge(
         #{<<"_type">> => atom_to_binary(RecordType, utf8)},
-        NestedRecordEncoder(AtmContainerIterator, RecordType)
+        NestedRecordEncoder(AtmStoreContainerIterator, RecordType)
     ).
 
 
 -spec db_decode(json_utils:json_term(), persistent_record:nested_record_decoder()) ->
     record().
-db_decode(#{<<"_type">> := RecordTypeJson} = AtmContainerIteratorJson, NestedRecordDecoder) ->
+db_decode(#{<<"_type">> := RecordTypeJson} = AtmStoreContainerIteratorJson, NestedRecordDecoder) ->
     RecordType = binary_to_atom(RecordTypeJson, utf8),
-    NestedRecordDecoder(AtmContainerIteratorJson, RecordType).
+    NestedRecordDecoder(AtmStoreContainerIteratorJson, RecordType).

@@ -122,9 +122,9 @@ report_task_status_change(
                 NewAtmLaneExecutions = lists_utils:replace_at(
                     NewLaneExecution, AtmLaneExecutionIndex, AtmLaneExecutions
                 ),
-                NewAtmWorkflowExecutionStatus = atm_task_execution_status_utils:converge(
+                NewAtmWorkflowExecutionStatus = infer_workflow_execution_status(lists:usort(
                     atm_lane_execution:gather_statuses(NewAtmLaneExecutions)
-                ),
+                )),
                 NewAtmWorkflowExecution = AtmWorkflowExecution#atm_workflow_execution{
                     status = NewAtmWorkflowExecutionStatus,
                     % 'status_changed' field must be changed manually here as it's value
@@ -150,6 +150,29 @@ report_task_status_change(
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+%% @private
+-spec infer_workflow_execution_status(UniqueAtmLaneExecutionStatuses :: [atm_task_execution:status()]) ->
+    atm_workflow_execution:status().
+infer_workflow_execution_status([?PENDING_STATUS]) ->
+    ?ENQUEUED_STATUS;
+infer_workflow_execution_status([Status]) ->
+    Status;
+infer_workflow_execution_status(Statuses) ->
+    [LowestStatusPresent | _] = lists:dropwhile(
+        fun(Status) -> not lists:member(Status, Statuses) end,
+        [?FAILED_STATUS, ?ACTIVE_STATUS, ?PENDING_STATUS, ?FINISHED_STATUS]
+    ),
+
+    case LowestStatusPresent of
+        ?PENDING_STATUS ->
+            % Some lanes must have ended execution while others are still
+            % pending - overall workflow execution status is active
+            ?ACTIVE_STATUS;
+        Status ->
+            Status
+    end.
 
 
 %% @private

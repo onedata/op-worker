@@ -18,15 +18,30 @@
 %% API
 -export([
     create_all/1, create/3,
+    get/1, browse_content/3, acquire_iterator/2,
     freeze/1, unfreeze/1,
     apply_operation/5,
-    delete_all/1, delete/1,
-    acquire_iterator/2
+    delete_all/1, delete/1
 ]).
 
--type initial_value() :: atm_container:initial_value().
+-compile({no_auto_import, [get/1]}).
+
+-type initial_value() :: atm_store_container:initial_value().
+
+% Index of automation:item() stored in atm_store_container that uniquely identifies it.
+-type index() :: binary().
+-type offset() :: integer().
+-type limit() :: pos_integer().
+
+-type browse_opts() :: #{
+    limit := limit(),
+    start_index => index(),
+    offset => offset()
+}.
+-type browse_result() :: {[{index(), automation:item()}], IsLast :: boolean()}.
 
 -export_type([initial_value/0]).
+-export_type([index/0, offset/0, limit/0, browse_opts/0, browse_result/0]).
 
 
 %%%===================================================================
@@ -74,7 +89,6 @@ create(AtmWorkflowExecutionCtx, InitialValue, #atm_store_schema{
     type = StoreType,
     data_spec = AtmDataSpec
 }) ->
-    ContainerModel = get_container_type_for_store(StoreType),
     ActualInitialValue = utils:ensure_defined(InitialValue, DefaultInitialValue),
 
     {ok, _} = atm_store:create(#atm_store{
@@ -84,11 +98,71 @@ create(AtmWorkflowExecutionCtx, InitialValue, #atm_store_schema{
         schema_id = AtmStoreSchemaId,
         initial_value = ActualInitialValue,
         frozen = false,
-        type = StoreType,
-        container = atm_container:create(
-            ContainerModel, AtmDataSpec, ActualInitialValue, AtmWorkflowExecutionCtx
+        container = atm_store_container:create(
+            StoreType, AtmWorkflowExecutionCtx, AtmDataSpec, ActualInitialValue
         )
     }).
+
+
+-spec get(atm_store:id()) -> {ok, atm_store:record()} | ?ERROR_NOT_FOUND.
+get(AtmStoreId) ->
+    case atm_store:get(AtmStoreId) of
+        {ok, #document{value = AtmStore}} ->
+            {ok, AtmStore};
+        ?ERROR_NOT_FOUND ->
+            ?ERROR_NOT_FOUND
+    end.
+
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Returns batch of items (and their indices) directly kept at store
+%% in accordance to specified browse_opts().
+%% @end
+%%-------------------------------------------------------------------
+-spec browse_content(
+    atm_workflow_execution_ctx:record(),
+    browse_opts(),
+    atm_store:id() | atm_store:record()
+) ->
+    browse_result() | no_return().
+browse_content(AtmWorkflowExecutionCtx, BrowseOpts, #atm_store{container = AtmStoreContainer}) ->
+    SanitizedBrowsOpts = middleware_sanitizer:sanitize_data(BrowseOpts, #{
+        required => #{
+            limit => {integer, {not_lower_than, 1}}
+        },
+        at_least_one => #{
+            offset => {integer, any},
+            start_index => {binary, any}
+        }
+    }),
+    atm_store_container:browse_content(AtmWorkflowExecutionCtx, SanitizedBrowsOpts, AtmStoreContainer);
+
+browse_content(AtmWorkflowExecutionCtx, BrowseOpts, AtmStoreId) ->
+    case get(AtmStoreId) of
+        {ok, AtmStore} ->
+            browse_content(AtmWorkflowExecutionCtx, BrowseOpts, AtmStore);
+        ?ERROR_NOT_FOUND ->
+            throw(?ERROR_NOT_FOUND)
+    end.
+
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Returns 'atm_store_iterator' allowing to iterate over all values produced by
+%% store. Those values are not only items directly kept in store but also objects
+%% associated/inferred from them (e.g. in case of file tree forest store entire
+%% files subtree for each file kept in store will be traversed and returned).
+%% @end
+%%-------------------------------------------------------------------
+-spec acquire_iterator(atm_workflow_execution_env:record(), atm_store_iterator_spec:record()) ->
+    atm_store_iterator:record().
+acquire_iterator(AtmWorkflowExecutionEnv, #atm_store_iterator_spec{
+    store_schema_id = AtmStoreSchemaId
+} = AtmStoreIteratorConfig) ->
+    AtmStoreId = atm_workflow_execution_env:get_store_id(AtmStoreSchemaId, AtmWorkflowExecutionEnv),
+    {ok, #atm_store{container = AtmStoreContainer}} = get(AtmStoreId),
+    atm_store_iterator:build(AtmStoreIteratorConfig, AtmStoreContainer).
 
 
 -spec freeze(atm_store:id()) -> ok.
@@ -107,9 +181,9 @@ unfreeze(AtmStoreId) ->
 
 -spec apply_operation(
     atm_workflow_execution_ctx:record(),
-    atm_container:operation_type(),
+    atm_store_container:operation_type(),
     automation:item(),
-    atm_container:operation_options(),
+    atm_store_container:operation_options(),
     atm_store:id()
 ) ->
     ok | no_return().
@@ -118,16 +192,19 @@ apply_operation(AtmWorkflowExecutionCtx, Operation, Item, Options, AtmStoreId) -
     %   * are based on structure that support transaction operation on their own 
     %   * store only one value and it will be overwritten 
     %   * do not support any operation
-    case atm_store:get(AtmStoreId) of
-        {ok, #atm_store{container = AtmContainer, frozen = false}} ->
-            UpdatedContainer = atm_container:apply_operation(AtmContainer, #atm_container_operation{
+    case get(AtmStoreId) of
+        {ok, #atm_store{container = AtmStoreContainer, frozen = false}} ->
+            AtmStoreContainerOperation = #atm_store_container_operation{
                 type = Operation,
                 options = Options,
                 value = Item,
                 workflow_execution_ctx = AtmWorkflowExecutionCtx
-            }),
+            },
+            UpdatedAtmStoreContainer = atm_store_container:apply_operation(
+                AtmStoreContainer, AtmStoreContainerOperation
+            ),
             atm_store:update(AtmStoreId, fun(#atm_store{} = PrevStore) ->
-                {ok, PrevStore#atm_store{container = UpdatedContainer}}
+                {ok, PrevStore#atm_store{container = UpdatedAtmStoreContainer}}
             end);
         {ok, #atm_store{schema_id = AtmStoreSchemaId, frozen = true}} ->
             throw(?ERROR_ATM_STORE_FROZEN(AtmStoreSchemaId));
@@ -143,34 +220,10 @@ delete_all(AtmStoreIds) ->
 
 -spec delete(atm_store:id()) -> ok | {error, term()}.
 delete(AtmStoreId) ->
-    case atm_store:get(AtmStoreId) of
-        {ok, #atm_store{container = AtmContainer}} ->
-            atm_container:delete(AtmContainer),
+    case get(AtmStoreId) of
+        {ok, #atm_store{container = AtmStoreContainer}} ->
+            atm_store_container:delete(AtmStoreContainer),
             atm_store:delete(AtmStoreId);
         ?ERROR_NOT_FOUND ->
             ok
     end.
-
-
--spec acquire_iterator(atm_workflow_execution_env:record(), atm_store_iterator_spec:record()) ->
-    atm_store_iterator:record().
-acquire_iterator(AtmWorkflowExecutionEnv, #atm_store_iterator_spec{
-    store_schema_id = AtmStoreSchemaId
-} = AtmStoreIteratorConfig) ->
-    AtmStoreId = atm_workflow_execution_env:get_store_id(AtmStoreSchemaId, AtmWorkflowExecutionEnv),
-    {ok, #atm_store{container = AtmContainer}} = atm_store:get(AtmStoreId),
-    atm_store_iterator:build(AtmStoreIteratorConfig, AtmContainer).
-
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-
-%% @private
--spec get_container_type_for_store(automation:store_type()) ->
-    atm_container:type().
-get_container_type_for_store(list) -> atm_list_container;
-get_container_type_for_store(range) -> atm_range_container;
-get_container_type_for_store(single_value) -> atm_single_value_container;
-get_container_type_for_store(tree_forest) -> atm_tree_forest_container.

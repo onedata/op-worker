@@ -35,7 +35,7 @@
 schedule_workflow_execution(UserCtx, SpaceDirCtx, AtmWorkflowSchemaId, AtmStoreInitialValues) ->
     SpaceId = file_ctx:get_space_id_const(SpaceDirCtx),
     try
-        {ok, AtmWorkflowExecutionId, AtmWorkflowExecution} = atm_workflow_execution_api:create(
+        {AtmWorkflowExecutionId, AtmWorkflowExecution} = atm_workflow_execution_api:create(
             UserCtx, SpaceId, AtmWorkflowSchemaId, AtmStoreInitialValues
         ),
         ?PROVIDER_OK_RESP(#atm_workflow_execution_scheduled{
