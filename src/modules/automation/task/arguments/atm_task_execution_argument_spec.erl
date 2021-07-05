@@ -31,7 +31,8 @@
     name :: automation:name(),
     value_builder :: atm_task_argument_value_builder:record(),
     data_spec :: atm_data_spec:record(),
-    is_batch :: boolean()
+    is_batch :: boolean(),
+    is_optional :: boolean()
 }).
 -type record() :: #atm_task_execution_argument_spec{}.
 
@@ -52,25 +53,29 @@ build(#atm_lambda_argument_spec{
     name = Name,
     data_spec = AtmDataSpec,
     is_batch = IsBatch,
-    default_value = DefaultValue
+    default_value = DefaultValue,
+    is_optional = IsOptional
 }, undefined) ->
     #atm_task_execution_argument_spec{
         name = Name,
         value_builder = #atm_task_argument_value_builder{type = const, recipe = DefaultValue},
         data_spec = AtmDataSpec,
-        is_batch = IsBatch
+        is_batch = IsBatch,
+        is_optional = IsOptional
     };
 
 build(#atm_lambda_argument_spec{
     name = Name,
     data_spec = AtmDataSpec,
-    is_batch = IsBatch
+    is_batch = IsBatch,
+    is_optional = IsOptional
 }, #atm_task_schema_argument_mapper{value_builder = ValueBuilder}) ->
     #atm_task_execution_argument_spec{
         name = Name,
         value_builder = ValueBuilder,
         data_spec = AtmDataSpec,
-        is_batch = IsBatch
+        is_batch = IsBatch,
+        is_optional = IsOptional
     }.
 
 
@@ -80,16 +85,28 @@ get_name(#atm_task_execution_argument_spec{name = ArgName}) ->
 
 
 -spec construct_arg(atm_job_execution_ctx:record(), record()) ->
-    json_utils:json_term() | no_return().
+    {true, json_utils:json_term()} | false | no_return().
 construct_arg(AtmJobExecutionCtx, AtmTaskExecutionArgSpec = #atm_task_execution_argument_spec{
-    value_builder = ArgValueBuilder
+    value_builder = ArgValueBuilder,
+    is_optional = false
 }) ->
     ArgValue = build_value(AtmJobExecutionCtx, ArgValueBuilder),
 
     AtmWorkflowExecutionCtx = atm_job_execution_ctx:get_workflow_execution_ctx(AtmJobExecutionCtx),
     validate_value(AtmWorkflowExecutionCtx, ArgValue, AtmTaskExecutionArgSpec),
 
-    ArgValue.
+    {true, ArgValue};
+
+construct_arg(AtmJobExecutionCtx, AtmTaskExecutionArgSpec = #atm_task_execution_argument_spec{
+    is_optional = true
+}) ->
+    try
+        construct_arg(AtmJobExecutionCtx, AtmTaskExecutionArgSpec#atm_task_execution_argument_spec{
+            is_optional = false
+        })
+    catch _:_ ->
+        false
+    end.
 
 
 %%%===================================================================
@@ -108,13 +125,15 @@ db_encode(#atm_task_execution_argument_spec{
     name = Name,
     value_builder = ValueBuilder,
     data_spec = AtmDataSpec,
-    is_batch = IsBatch
+    is_batch = IsBatch,
+    is_optional = IsOptional
 }, NestedRecordEncoder) ->
     #{
         <<"name">> => Name,
         <<"valueBuilder">> => NestedRecordEncoder(ValueBuilder, atm_task_argument_value_builder),
         <<"dataSpec">> => NestedRecordEncoder(AtmDataSpec, atm_data_spec),
-        <<"isBatch">> => IsBatch
+        <<"isBatch">> => IsBatch,
+        <<"isOptional">> => IsOptional
     }.
 
 
@@ -124,13 +143,15 @@ db_decode(#{
     <<"name">> := Name,
     <<"valueBuilder">> := ValueBuilderJson,
     <<"dataSpec">> := AtmDataSpecJson,
-    <<"isBatch">> := IsBatch
+    <<"isBatch">> := IsBatch,
+    <<"isOptional">> := IsOptional
 }, NestedRecordDecoder) ->
     #atm_task_execution_argument_spec{
         name = Name,
         value_builder = NestedRecordDecoder(ValueBuilderJson, atm_task_argument_value_builder),
         data_spec = NestedRecordDecoder(AtmDataSpecJson, atm_data_spec),
-        is_batch = IsBatch
+        is_batch = IsBatch,
+        is_optional = IsOptional
     }.
 
 
@@ -173,6 +194,32 @@ build_value(AtmJobExecutionCtx, #atm_task_argument_value_builder{
         <<"host">> => oneprovider:get_domain(),
         <<"accessToken">> => atm_job_execution_ctx:get_access_token(AtmJobExecutionCtx)
     };
+
+build_value(AtmJobExecutionCtx, #atm_task_argument_value_builder{
+    type = single_value_store_content,
+    recipe = AtmSingleValueStoreSchemaId
+}) ->
+    AtmSingleValueStoreId = atm_workflow_execution_env:get_store_id(
+        AtmSingleValueStoreSchemaId,
+        atm_job_execution_ctx:get_workflow_execution_env(AtmJobExecutionCtx)
+    ),
+    {ok, AtmStore} = atm_store_api:get(AtmSingleValueStoreId),
+
+    case atm_store_container:get_store_type(AtmStore#atm_store.container) of
+        single_value -> ok;
+        AtmStoreType -> throw(?ERROR_ATM_STORE_TYPE_UNVERIFIED(AtmStoreType, single_value))
+    end,
+
+    AtmWorkflowExecutionCtx = atm_job_execution_ctx:get_workflow_execution_ctx(AtmJobExecutionCtx),
+
+    case atm_store_api:browse_content(AtmWorkflowExecutionCtx, #{limit => 1}, AtmStore) of
+        {[], true} ->
+            throw(?ERROR_ATM_STORE_EMPTY(AtmSingleValueStoreSchemaId));
+        {[{_Index, {error, _} = Error}], true} ->
+            throw(Error);
+        {[{_Index, Item}], true} ->
+            Item
+    end;
 
 build_value(_AtmJobExecutionCtx, _InputSpec) ->
     % TODO VFS-7660 handle rest of atm_task_argument_value_builder:type()

@@ -21,6 +21,7 @@
 %% API
 -export([build/5]).
 -export([
+    get_workflow_execution_env/1,
     get_workflow_execution_ctx/1,
     get_access_token/1,
     get_item/1,
@@ -30,6 +31,7 @@
 
 
 -record(atm_job_execution_ctx, {
+    workflow_execution_env :: atm_workflow_execution_env:record(),
     workflow_execution_ctx :: atm_workflow_execution_ctx:record(),
     in_readonly_mode :: boolean(),
     item :: json_utils:json_term(),
@@ -56,6 +58,7 @@
     record().
 build(AtmWorkflowExecutionEnv, InReadonlyMode, Item, ReportResultUrl, HeartbeatUrl) ->
     #atm_job_execution_ctx{
+        workflow_execution_env = AtmWorkflowExecutionEnv,
         workflow_execution_ctx = atm_workflow_execution_env:acquire_workflow_execution_ctx(
             AtmWorkflowExecutionEnv
         ),
@@ -66,10 +69,13 @@ build(AtmWorkflowExecutionEnv, InReadonlyMode, Item, ReportResultUrl, HeartbeatU
     }.
 
 
+-spec get_workflow_execution_env(record()) -> atm_workflow_execution_env:record().
+get_workflow_execution_env(#atm_job_execution_ctx{workflow_execution_env = AtmWorkflowExecutionEnv}) ->
+    AtmWorkflowExecutionEnv.
+
+
 -spec get_workflow_execution_ctx(record()) -> atm_workflow_execution_ctx:record().
-get_workflow_execution_ctx(#atm_job_execution_ctx{
-    workflow_execution_ctx = AtmWorkflowExecutionCtx
-}) ->
+get_workflow_execution_ctx(#atm_job_execution_ctx{workflow_execution_ctx = AtmWorkflowExecutionCtx}) ->
     AtmWorkflowExecutionCtx.
 
 

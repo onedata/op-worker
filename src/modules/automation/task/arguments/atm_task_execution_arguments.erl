@@ -44,10 +44,14 @@ build_specs(AtmLambdaArgSpecs, AtmTaskSchemaArgMappers) ->
 construct_args(AtmJobExecutionCtx, AtmTaskExecutionArgSpecs) ->
     BasicArgs = lists:foldl(fun(AtmTaskExecutionArgSpec, Args) ->
         ArgName = atm_task_execution_argument_spec:get_name(AtmTaskExecutionArgSpec),
-        try
-            Args#{ArgName => atm_task_execution_argument_spec:construct_arg(
-                AtmJobExecutionCtx, AtmTaskExecutionArgSpec
-            )}
+
+        try atm_task_execution_argument_spec:construct_arg(
+            AtmJobExecutionCtx, AtmTaskExecutionArgSpec
+        ) of
+            {true, ArgValue} ->
+                Args#{ArgName => ArgValue};
+            false ->
+                Args
         catch _:Reason ->
             throw(?ERROR_ATM_TASK_ARG_MAPPING_FAILED(ArgName, Reason))
         end
