@@ -313,9 +313,9 @@ ensure_base_archive_is_set_if_applicable(Config, DatasetId) ->
     case archive_config:is_incremental(Config) of
         true ->
             case archive_config:get_base_archive_id(Config) =:= undefined of
-                 true ->
-                    BaseArchiveIdOrUndefined = incremental_archive:find_base_archive_id(DatasetId),
-                     archive_config:set_base_archive_id(Config, BaseArchiveIdOrUndefined);
+                true ->
+                    BaseArchiveIdOrUndefined = incremental_archive:find_base_archive_id(DatasetId), 
+                    archive_config:set_base_archive_id(Config, BaseArchiveIdOrUndefined);
                 false ->
                     Config
             end;
