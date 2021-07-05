@@ -186,7 +186,7 @@ build_value(AtmJobExecutionCtx, #atm_task_argument_value_builder{
 
     case atm_store_container:get_store_type(AtmStore#atm_store.container) of
         single_value -> ok;
-        AtmStoreType -> throw(?ERROR_ATM_STORE_TYPE_UNVERIFIED(AtmStoreType, single_value))
+        AtmStoreType -> throw(?ERROR_ATM_STORE_TYPE_DISALLOWED(AtmStoreType, [single_value]))
     end,
 
     AtmWorkflowExecutionCtx = atm_job_execution_ctx:get_workflow_execution_ctx(AtmJobExecutionCtx),

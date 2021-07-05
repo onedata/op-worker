@@ -105,8 +105,8 @@
 -define(ERROR_ATM_STORE_FROZEN(__ATM_STORE_SCHEMA__ID),
     {error, {atm_store_frozen, __ATM_STORE_SCHEMA__ID}}
 ).
--define(ERROR_ATM_STORE_TYPE_UNVERIFIED(__TYPE, __EXP_TYPE),
-    {error, {atm_store_type_unverified, __TYPE, __EXP_TYPE}}
+-define(ERROR_ATM_STORE_TYPE_DISALLOWED(__TYPE, __ALLOWED_TYPES),
+    {error, {atm_store_type_unverified, __TYPE, __ALLOWED_TYPES}}
 ).
 -define(ERROR_ATM_STORE_EMPTY(__ATM_STORE_SCHEMA__ID),
     {error, {atm_store_empty, __ATM_STORE_SCHEMA__ID}}
