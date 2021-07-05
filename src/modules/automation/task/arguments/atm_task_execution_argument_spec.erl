@@ -31,8 +31,7 @@
     name :: automation:name(),
     value_builder :: atm_task_argument_value_builder:record(),
     data_spec :: atm_data_spec:record(),
-    is_batch :: boolean(),
-    is_optional :: boolean()
+    is_batch :: boolean()
 }).
 -type record() :: #atm_task_execution_argument_spec{}.
 
@@ -53,29 +52,25 @@ build(#atm_lambda_argument_spec{
     name = Name,
     data_spec = AtmDataSpec,
     is_batch = IsBatch,
-    default_value = DefaultValue,
-    is_optional = IsOptional
+    default_value = DefaultValue
 }, undefined) ->
     #atm_task_execution_argument_spec{
         name = Name,
         value_builder = #atm_task_argument_value_builder{type = const, recipe = DefaultValue},
         data_spec = AtmDataSpec,
-        is_batch = IsBatch,
-        is_optional = IsOptional
+        is_batch = IsBatch
     };
 
 build(#atm_lambda_argument_spec{
     name = Name,
     data_spec = AtmDataSpec,
-    is_batch = IsBatch,
-    is_optional = IsOptional
+    is_batch = IsBatch
 }, #atm_task_schema_argument_mapper{value_builder = ValueBuilder}) ->
     #atm_task_execution_argument_spec{
         name = Name,
         value_builder = ValueBuilder,
         data_spec = AtmDataSpec,
-        is_batch = IsBatch,
-        is_optional = IsOptional
+        is_batch = IsBatch
     }.
 
 
@@ -85,28 +80,16 @@ get_name(#atm_task_execution_argument_spec{name = ArgName}) ->
 
 
 -spec construct_arg(atm_job_execution_ctx:record(), record()) ->
-    {ok, json_utils:json_term()} | skip | no_return().
+    json_utils:json_term() | no_return().
 construct_arg(AtmJobExecutionCtx, AtmTaskExecutionArgSpec = #atm_task_execution_argument_spec{
-    value_builder = ArgValueBuilder,
-    is_optional = false
+    value_builder = ArgValueBuilder
 }) ->
     ArgValue = build_value(AtmJobExecutionCtx, ArgValueBuilder),
 
     AtmWorkflowExecutionCtx = atm_job_execution_ctx:get_workflow_execution_ctx(AtmJobExecutionCtx),
     validate_value(AtmWorkflowExecutionCtx, ArgValue, AtmTaskExecutionArgSpec),
 
-    {ok, ArgValue};
-
-construct_arg(AtmJobExecutionCtx, AtmTaskExecutionArgSpec = #atm_task_execution_argument_spec{
-    is_optional = true
-}) ->
-    try
-        construct_arg(AtmJobExecutionCtx, AtmTaskExecutionArgSpec#atm_task_execution_argument_spec{
-            is_optional = false
-        })
-    catch _:_ ->
-        skip
-    end.
+    ArgValue.
 
 
 %%%===================================================================
@@ -125,15 +108,13 @@ db_encode(#atm_task_execution_argument_spec{
     name = Name,
     value_builder = ValueBuilder,
     data_spec = AtmDataSpec,
-    is_batch = IsBatch,
-    is_optional = IsOptional
+    is_batch = IsBatch
 }, NestedRecordEncoder) ->
     #{
         <<"name">> => Name,
         <<"valueBuilder">> => NestedRecordEncoder(ValueBuilder, atm_task_argument_value_builder),
         <<"dataSpec">> => NestedRecordEncoder(AtmDataSpec, atm_data_spec),
-        <<"isBatch">> => IsBatch,
-        <<"isOptional">> => IsOptional
+        <<"isBatch">> => IsBatch
     }.
 
 
@@ -143,15 +124,13 @@ db_decode(#{
     <<"name">> := Name,
     <<"valueBuilder">> := ValueBuilderJson,
     <<"dataSpec">> := AtmDataSpecJson,
-    <<"isBatch">> := IsBatch,
-    <<"isOptional">> := IsOptional
+    <<"isBatch">> := IsBatch
 }, NestedRecordDecoder) ->
     #atm_task_execution_argument_spec{
         name = Name,
         value_builder = NestedRecordDecoder(ValueBuilderJson, atm_task_argument_value_builder),
         data_spec = NestedRecordDecoder(AtmDataSpecJson, atm_data_spec),
-        is_batch = IsBatch,
-        is_optional = IsOptional
+        is_batch = IsBatch
     }.
 
 
