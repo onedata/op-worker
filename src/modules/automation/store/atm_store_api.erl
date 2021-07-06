@@ -38,7 +38,7 @@
     start_index => index(),
     offset => offset()
 }.
--type browse_result() :: {[{index(), automation:item() | errors:error()}], IsLast :: boolean()}.
+-type browse_result() :: {[{index(), {ok, automation:item()} | errors:error()}], IsLast :: boolean()}.
 
 -export_type([initial_value/0]).
 -export_type([index/0, offset/0, limit/0, browse_opts/0, browse_result/0]).
