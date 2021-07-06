@@ -80,8 +80,8 @@ browse_content(AtmWorkflowExecutionCtx, _Opts, #atm_single_value_store_container
     value = CompressedValue
 }) ->
     case atm_value:expand(AtmWorkflowExecutionCtx, CompressedValue, AtmDataSpec) of
-        {ok, ExpandedValue} ->
-            {[{<<>>, ExpandedValue}], true};
+        {ok, _} = Result ->
+            {[{<<>>, Result}], true};
         {error, _} ->
             {[{<<>>, ?ERROR_FORBIDDEN}], true}
     end.
