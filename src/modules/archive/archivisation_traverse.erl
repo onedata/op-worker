@@ -93,7 +93,7 @@ start(ArchiveDoc, DatasetDoc, UserCtx) ->
             {ok, ArchiveDataDirGuid} = archive:get_data_dir_guid(ArchiveDoc2),
             {ok, Config} = archive:get_config(ArchiveDoc2),
             IsIncremental = archive_config:is_incremental(Config),
-            BaseArchiveId = archive_config:get_base_archive_id(Config),
+            {ok, BaseArchiveId} = archive:get_base_archive_id(ArchiveDoc2),
             BaseArchiveDoc = case IsIncremental andalso BaseArchiveId =/= undefined of
                 true ->
                     {ok, Doc} = archive:get(BaseArchiveId),

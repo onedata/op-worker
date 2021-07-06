@@ -133,8 +133,8 @@ create_archive(_Config) ->
                     {<<"datasetId">>, ?NON_EXISTENT_DATASET_ID, ?ERROR_FORBIDDEN},
                     {<<"datasetId">>, DetachedDatasetId,
                         ?ERROR_BAD_DATA(<<"datasetId">>, <<"Detached dataset cannot be modified.">>)},
-                    {<<"config">>, #{<<"incremental">> => <<"not boolean">>}, ?ERROR_BAD_VALUE_BOOLEAN(<<"config.incremental">>)},
-                    {<<"config">>, #{<<"incremental">> => true, <<"baseArchiveId">> => <<"invalid_id">>}, ?ERROR_BAD_VALUE_IDENTIFIER(<<"config.baseArchiveId">>)},
+                    {<<"config">>, #{<<"incremental">> => <<"not json">>}, ?ERROR_BAD_VALUE_JSON(<<"config.incremental">>)},
+                    {<<"config">>, #{<<"incremental">> => #{<<"enable">> => true, <<"basedOn">> => <<"invalid_id">>}}, ?ERROR_BAD_VALUE_IDENTIFIER(<<"config.baseArchiveId">>)},
                     {<<"config">>, #{<<"includeDip">> => <<"not boolean">>}, ?ERROR_BAD_VALUE_BOOLEAN(<<"config.includeDip">>)},
                     {<<"config">>, #{<<"createNestedArchives">> => <<"not boolean">>},
                         ?ERROR_BAD_VALUE_BOOLEAN(<<"config.createNestedArchives">>)},
@@ -863,9 +863,13 @@ verify_archive(
             stats = archive_stats:new(1, 0, 0)
         },
         GetArchiveInfoFun = fun() ->
-            {ok, ActualArchiveInfo} = lfm_proxy:get_archive_info(Node, UserSessId, ArchiveId),
-            % baseArchiveId is the id of the last successfully preserved, so it depends on previous test cases
-            ActualArchiveInfo#archive_info{base_archive_id = undefined}
+            case lfm_proxy:get_archive_info(Node, UserSessId, ArchiveId) of
+                {ok, ActualArchiveInfo} ->
+                    % baseArchiveId is the id of the last successfully preserved, so it depends on previous test cases
+                    ActualArchiveInfo#archive_info{base_archive_id = undefined};
+                {error, _} = Error  ->
+                    Error
+            end
         end,
         ?assertEqual(ExpArchiveInfo, GetArchiveInfoFun(), ?ATTEMPTS)
     end, Providers).

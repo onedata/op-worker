@@ -20,15 +20,15 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([create/7, create_nested/2, create_dip_archive/1, get/1, modify_attrs/2, delete/1]).
+-export([create/8, create_nested/2, create_dip_archive/1, get/1, modify_attrs/2, delete/1]).
 -export([get_root_dir_ctx/1, get_all_ancestors/1, get_dataset_root_file_ctx/1, find_file/3]).
 
 % getters
 -export([get_id/1, get_creation_time/1, get_dataset_id/1, get_dataset_root_file_guid/1, get_space_id/1,
     get_state/1, get_config/1, get_preserved_callback/1, get_purged_callback/1,
     get_description/1, get_stats/1, get_root_dir_guid/1,
-    get_data_dir_guid/1, get_parent/1, get_parent_doc/1, get_related_dip/1, get_related_aip/1, 
-    is_finished/1
+    get_data_dir_guid/1, get_parent/1, get_parent_doc/1, get_base_archive_id/1,
+    get_related_dip/1, get_related_aip/1, is_finished/1
 ]).
 
 % setters
@@ -86,9 +86,9 @@
 %%% API functions
 %%%===================================================================
 
--spec create(dataset:id(), od_space:id(), creator(), config(), callback(), callback(), description()) ->
+-spec create(dataset:id(), od_space:id(), creator(), config(), callback(), callback(), description(), archive:id() | undefined) ->
     {ok, doc()} | error().
-create(DatasetId, SpaceId, Creator, Config, PreservedCallback, PurgedCallback, Description) ->
+create(DatasetId, SpaceId, Creator, Config, PreservedCallback, PurgedCallback, Description, BaseArchiveId) ->
     datastore_model:create(?CTX, #document{
         value = #archive{
             dataset_id = DatasetId,
@@ -99,7 +99,8 @@ create(DatasetId, SpaceId, Creator, Config, PreservedCallback, PurgedCallback, D
             preserved_callback = PreservedCallback,
             purged_callback = PurgedCallback,
             description = Description,
-            stats = archive_stats:empty()
+            stats = archive_stats:empty(),
+            base_archive_id = BaseArchiveId
         },
         scope = SpaceId
     }).
@@ -332,6 +333,14 @@ get_parent_doc(Archive) ->
         {ok, ParentArchiveId} -> get(ParentArchiveId)
     end.
 
+-spec get_base_archive_id(record() | doc() | id()) -> {ok, archive:id() | undefined}.
+get_base_archive_id(#archive{base_archive_id = BaseArchiveId}) ->
+    {ok, BaseArchiveId};
+get_base_archive_id(#document{value = Archive}) ->
+    get_base_archive_id(Archive);
+get_base_archive_id(ArchiveId) ->
+    ?get_field(ArchiveId, fun get_base_archive_id/1).
+
 -spec get_related_dip(record() | doc()) -> {ok, archive:id() | undefined}.
 get_related_dip(#archive{related_dip = RelatedDip}) ->
     {ok, RelatedDip};
@@ -437,8 +446,8 @@ set_base_archive_id(ArchiveDoc, undefined) ->
 set_base_archive_id(ArchiveDoc, #document{key = BaseArchiveId}) when is_binary(BaseArchiveId) ->
     set_base_archive_id(ArchiveDoc, BaseArchiveId);
 set_base_archive_id(ArchiveDoc, BaseArchiveId) when is_binary(BaseArchiveId) ->
-    update(ArchiveDoc, fun(Archive = #archive{config = Config}) ->
-        {ok, Archive#archive{config = archive_config:set_base_archive_id(Config, BaseArchiveId)}}
+    update(ArchiveDoc, fun(Archive) ->
+        {ok, Archive#archive{base_archive_id = BaseArchiveId}}
     end).
 
 
@@ -509,6 +518,7 @@ get_record_struct(1) ->
         {data_dir_guid, string},
         {stats, {custom, string, {persistent_record, encode, decode, archive_stats}}},
         {parent, string},
+        {base_archive_id, string},
         {related_dip, string},
         {related_aip, string}
     ]}.

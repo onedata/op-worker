@@ -28,19 +28,18 @@
 -define(ARCHIVE_BAGIT_LAYOUT, bagit).
 -define(ARCHIVE_LAYOUTS, [?ARCHIVE_PLAIN_LAYOUT, ?ARCHIVE_BAGIT_LAYOUT]).
 
--define(SUPPORTED_INCREMENTAL_VALUES, [true, false]).
+-define(SUPPORTED_INCREMENTAL_VALUES, [#{<<"enable">> => false}, #{<<"enable">> => true}]).
 -define(SUPPORTED_INCLUDE_DIP_VALUES, [true, false]).
 
 -define(DEFAULT_LAYOUT, ?ARCHIVE_PLAIN_LAYOUT).
 -define(DEFAULT_INCLUDE_DIP, false).
--define(DEFAULT_INCREMENTAL, false).
+-define(DEFAULT_INCREMENTAL, #{<<"enable">> => false}).
 -define(DEFAULT_BASE_ARCHIVE, null).
 -define(DEFAULT_ARCHIVE_DESCRIPTION, <<>>).
 -define(DEFAULT_CREATE_NESTED_ARCHIVES, false).
 
 -record(archive_config, {
     incremental = ?DEFAULT_INCREMENTAL :: archive_config:incremental(),
-    base_archive_id :: undefined | archive:id(),
     % This flag determines whether dissemination information package (DIP) is created alongside with
     % archival information package (AIP), on the storage.
     include_dip = ?DEFAULT_INCLUDE_DIP :: archive_config:include_dip(),

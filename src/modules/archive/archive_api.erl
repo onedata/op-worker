@@ -97,15 +97,15 @@ start_archivisation(
         ?ATTACHED_DATASET ->
             {ok, SpaceId} = dataset:get_space_id(DatasetDoc),
             UserId = user_ctx:get_user_id(UserCtx),
-            Config2 = ensure_base_archive_is_set_if_applicable(Config, DatasetId),
-            case archive:create(DatasetId, SpaceId, UserId, Config2,
-                PreservedCallback, PurgedCallback, Description)
+            BaseArchiveId = ensure_base_archive_is_set_if_applicable(Config, DatasetId),
+            case archive:create(DatasetId, SpaceId, UserId, Config,
+                PreservedCallback, PurgedCallback, Description, BaseArchiveId)
             of
                 {ok, AipArchiveDoc} ->
                     {ok, AipArchiveId} = archive:get_id(AipArchiveDoc),
                     {ok, Timestamp} = archive:get_creation_time(AipArchiveDoc),
                     {ok, SpaceId} = dataset:get_space_id(DatasetDoc),
-                    {ok, FinalAipArchiveDoc} = case archive_config:should_include_dip(Config2) of
+                    {ok, FinalAipArchiveDoc} = case archive_config:should_include_dip(Config) of
                         true -> archive:create_dip_archive(AipArchiveDoc);
                         false -> {ok, AipArchiveDoc}
                     end, 
@@ -148,6 +148,7 @@ get_archive_info(ArchiveDoc = #document{}, ArchiveIndex) ->
     {ok, PreservedCallback} = archive:get_preserved_callback(ArchiveDoc),
     {ok, PurgedCallback} = archive:get_purged_callback(ArchiveDoc),
     {ok, Description} = archive:get_description(ArchiveDoc),
+    {ok, BaseArchiveId} = archive:get_base_archive_id(ArchiveDoc),
     {ok, RelatedAip} = archive:get_related_aip(ArchiveDoc),
     {ok, RelatedDip} = archive:get_related_dip(ArchiveDoc),
     {ok, #archive_info{
@@ -156,7 +157,7 @@ get_archive_info(ArchiveDoc = #document{}, ArchiveIndex) ->
         state = State,
         root_dir_guid = ArchiveRootDirGuid,
         creation_time = Timestamp,
-        config = archive_config:set_base_archive_id(Config, undefined),
+        config = Config,
         preserved_callback = PreservedCallback,
         purged_callback = PurgedCallback,
         description = Description,
@@ -165,7 +166,7 @@ get_archive_info(ArchiveDoc = #document{}, ArchiveIndex) ->
             false -> ArchiveIndex
         end,
         stats = get_aggregated_stats(ArchiveDoc),
-        base_archive_id = archive_config:get_base_archive_id(Config),
+        base_archive_id = BaseArchiveId,
         related_aip = RelatedAip,
         related_dip = RelatedDip
     }};
@@ -336,17 +337,15 @@ get_nested_archives_stats(ArchiveId, Token, NestedArchiveStatsAccIn) when is_bin
     end.
 
 
--spec ensure_base_archive_is_set_if_applicable(archive:config(), dataset:id()) -> archive:config().
+-spec ensure_base_archive_is_set_if_applicable(archive:config(), dataset:id()) -> 
+    archive:id() | undefined.
 ensure_base_archive_is_set_if_applicable(Config, DatasetId) ->
     case archive_config:is_incremental(Config) of
         true ->
-            case archive_config:get_base_archive_id(Config) =:= undefined of
-                true ->
-                    BaseArchiveIdOrUndefined = incremental_archive:find_base_archive_id(DatasetId), 
-                    archive_config:set_base_archive_id(Config, BaseArchiveIdOrUndefined);
-                false ->
-                    Config
+            case archive_config:get_incremental_based_on(Config) of
+                undefined -> incremental_archive:find_base_archive_id(DatasetId);
+                BaseArchiveId -> BaseArchiveId
             end;
         false ->
-            Config
+            undefined
     end.
