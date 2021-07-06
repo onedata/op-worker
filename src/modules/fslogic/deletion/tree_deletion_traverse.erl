@@ -72,7 +72,7 @@ start(RootDirCtx, UserCtx, EmitEvents, RootOriginalParentUuid) ->
     Options = #{
         task_id => TaskId,
         track_subtree_status => true,
-        children_master_jobs_mode => async,
+        children_master_jobs => async,
         use_listing_token => false,
         traverse_info => #{
             root_guid => file_ctx:get_logical_guid_const(RootDirCtx),
@@ -130,6 +130,7 @@ do_master_job(Job = #tree_traverse{
     MasterJobArgs = #{task_id := TaskId}
 ) ->
     BatchProcessingPrehook = fun(_SlaveJobs, _MasterJobs, _ListExtendedInfo, SubtreeProcessingStatus) ->
+%%        ?info("ddddd2 ~p", [{SubtreeProcessingStatus, file_ctx:get_logical_uuid_const(FileCtx)}]),
         delete_dir_if_subtree_processed(SubtreeProcessingStatus, FileCtx, UserId, TaskId, TraverseInfo)
     end,
     tree_traverse:do_master_job(Job, MasterJobArgs, BatchProcessingPrehook).
@@ -150,6 +151,7 @@ do_slave_job(#tree_traverse_slave{
 %% @private
 -spec delete_dir_if_subtree_processed(tree_traverse_progress:status(), file_ctx:ctx(), od_user:id(),
     id(), info()) -> ok.
+%%%%
 delete_dir_if_subtree_processed(?SUBTREE_PROCESSED, FileCtx, UserId, TaskId, TraverseInfo) ->
     delete_dir(FileCtx, UserId, TaskId, TraverseInfo);
 delete_dir_if_subtree_processed(?SUBTREE_NOT_PROCESSED, _FileCtx, _UserId, _TaskId, _TraverseInfo) ->
@@ -172,6 +174,7 @@ delete_dir(FileCtx, UserId, TaskId, TraverseInfo = #{
                 % get StorageFileId before location is deleted as it's stored in dir_location doc
                 {StorageFileId, FileCtx3} = file_ctx:get_storage_file_id(FileCtx2),
                 delete_req:delete(UserCtx, FileCtx3, not EmitEvents),
+                %%%
                 tree_traverse:delete_subtree_status_doc(TaskId, file_ctx:get_logical_uuid_const(FileCtx3)),
                 case file_ctx:get_logical_guid_const(FileCtx3) =:= RootGuid of
                     true ->
@@ -197,6 +200,7 @@ delete_file(FileCtx, UserId, TaskId, TraverseInfo = #{emit_events := EmitEvents}
         {ok, UserCtx} ->
             try
                 delete_req:delete(UserCtx, FileCtx, not EmitEvents),
+                    %%%
                 file_processed(FileCtx, UserCtx, TaskId, TraverseInfo)
             catch
                 throw:?EACCES ->
@@ -223,4 +227,5 @@ file_processed(FileCtx, UserCtx, TaskId, TraverseInfo = #{root_original_parent_u
     end,
     ParentUuid = file_ctx:get_logical_uuid_const(ParentFileCtx),
     ParentStatus = tree_traverse:report_child_processed(TaskId, ParentUuid),
+%%    ?info("ddddd1 ~p", [{ParentStatus, ParentUuid, file_ctx:get_logical_uuid_const(FileCtx)}]),
     delete_dir_if_subtree_processed(ParentStatus, ParentFileCtx, user_ctx:get_user_id(UserCtx), TaskId, TraverseInfo).
