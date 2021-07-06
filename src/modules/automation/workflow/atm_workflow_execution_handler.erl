@@ -357,7 +357,7 @@ notify_ended(#document{key = AtmWorkflowExecutionId, value = #atm_workflow_execu
     ok.
 try_to_notify(AtmWorkflowExecutionId, CallbackUrl, _Headers, _Payload, _Interval, 0) ->
     ?error(
-        "Failed to send atm workflow execution (~s) notification to ~s.~nNo retries left",
+        "Failed to send atm workflow execution (~s) notification to '~s' (no retries left)",
         [AtmWorkflowExecutionId, CallbackUrl]
     );
 try_to_notify(AtmWorkflowExecutionId, CallbackUrl, Headers, Payload, Interval, RetriesLeft) ->
