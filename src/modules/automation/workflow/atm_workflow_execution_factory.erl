@@ -142,7 +142,8 @@ create_workflow_execution_doc(
         workflow_schema_doc = #document{value = #od_atm_workflow_schema{
             name = AtmWorkflowSchemaName,
             atm_inventory = AtmInventoryId
-        }}
+        }},
+        callback_url = CallbackUrl
     },
     ExecutionElements = #execution_elements{
         schema_snapshot_id = AtmWorkflowSchemaSnapshotId,
@@ -168,6 +169,8 @@ create_workflow_execution_doc(
                 lanes = AtmLaneExecutions,
 
                 status = ?SCHEDULED_STATUS,
+
+                callback = CallbackUrl,
 
                 schedule_time = global_clock:timestamp_seconds(),
                 start_time = 0,

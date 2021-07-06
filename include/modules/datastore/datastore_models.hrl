@@ -1118,6 +1118,8 @@
     % otherwise getting document before update would be needed (to compare 2 docs).
     status_changed = false :: boolean(),
 
+    callback :: undefined | http_client:url(),
+
     schedule_time = 0 :: atm_workflow_execution:timestamp(),
     start_time = 0 :: atm_workflow_execution:timestamp(),
     finish_time = 0 :: atm_workflow_execution:timestamp()
