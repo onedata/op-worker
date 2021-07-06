@@ -64,7 +64,8 @@ establish(FileCtx, ProtectionFlags) ->
         {DatasetName, _FileCtx2} = file_ctx:get_aliased_name(FileCtx, user_ctx:new(?ROOT_SESS_ID)),
         ok = file_meta_dataset:establish(Uuid, ProtectionFlags),
         ok = attached_datasets:add(SpaceId, Uuid, DatasetName),
-        dataset_eff_cache:invalidate_on_all_nodes(SpaceId),
+        InvalidateDatasetsOnly = not ?has_any_flags(ProtectionFlags, ?DATA_PROTECTION bor ?METADATA_PROTECTION),
+        dataset_eff_cache:invalidate_on_all_nodes(SpaceId, InvalidateDatasetsOnly),
         {ok, DatasetId}
     end).
 
@@ -112,8 +113,15 @@ remove(Doc = #document{key = DatasetId}) ->
                 {ok, SpaceId} = dataset:get_space_id(Doc),
                 ok = dataset:delete(DatasetId),
                 {ok, Uuid} = dataset:get_root_file_uuid(Doc),
+                InvalidateDatasetsOnly = case file_meta:get(Uuid) of
+                    {ok, FileMetaDoc} ->
+                        ProtectionFlags = file_meta:get_protection_flags(FileMetaDoc),
+                        not ?has_any_flags(ProtectionFlags, ?DATA_PROTECTION bor ?METADATA_PROTECTION);
+                    _ ->
+                        false
+                end,
                 ok = file_meta_dataset:remove(Uuid),
-                dataset_eff_cache:invalidate_on_all_nodes(SpaceId);
+                dataset_eff_cache:invalidate_on_all_nodes(SpaceId, InvalidateDatasetsOnly);
             false ->
                 {error, ?ENOTEMPTY}
         end
@@ -216,14 +224,15 @@ reattach(DatasetId, FlagsToSet, FlagsToUnset) ->
     {ok, Doc} = dataset:get(DatasetId),
     {ok, SpaceId} = dataset:get_space_id(Doc),
     case file_meta_dataset:reattach(DatasetId, FlagsToSet, FlagsToUnset) of
-        ok ->
+        {ok, NewProtectionFlags} ->
             FileCtx = get_associated_file_ctx(Doc),
             {DatasetName, _} = file_ctx:get_aliased_name(FileCtx, user_ctx:new(?ROOT_SESS_ID)),
             ok = dataset:mark_reattached(DatasetId),
             attached_datasets:add(SpaceId, DatasetId, DatasetName),
             detached_datasets:delete(Doc),
-            dataset_eff_cache:invalidate_on_all_nodes(SpaceId),
-            ok;
+            % Dataset was detached so prev flags have been ignored - check if any flag appeared
+            InvalidateDatasetsOnly = not ?has_any_flags(NewProtectionFlags, ?DATA_PROTECTION bor ?METADATA_PROTECTION),
+            dataset_eff_cache:invalidate_on_all_nodes(SpaceId, InvalidateDatasetsOnly);
         {error, _} = Error ->
             Error
     end.
@@ -244,8 +253,11 @@ detach_internal(DatasetId) ->
     detached_datasets:add(SpaceId, DatasetPath, DatasetName),
     attached_datasets:delete(SpaceId, DatasetPath),
     case file_meta_dataset:detach(DatasetId) of
-        ok -> dataset_eff_cache:invalidate_on_all_nodes(SpaceId);
-        Error -> Error
+        ok ->
+            InvalidateDatasetsOnly = not ?has_any_flags(CurrProtectionFlags, ?DATA_PROTECTION bor ?METADATA_PROTECTION),
+            dataset_eff_cache:invalidate_on_all_nodes(SpaceId, InvalidateDatasetsOnly);
+        Error ->
+            Error
     end.
 
 
@@ -254,8 +266,12 @@ update_protection_flags(DatasetId, FlagsToSet, FlagsToUnset) ->
     {ok, Doc} = dataset:get(DatasetId),
     {ok, Uuid} = dataset:get_root_file_uuid(Doc),
     {ok, SpaceId} = dataset:get_space_id(Doc),
-    ok = file_meta:update_protection_flags(Uuid, FlagsToSet, FlagsToUnset),
-    dataset_eff_cache:invalidate_on_all_nodes(SpaceId).
+    InvalidateDatasetsOnly = case file_meta:update_protection_flags(Uuid, FlagsToSet, FlagsToUnset) of
+        ok -> false;
+        {error, nothing_changed} -> true
+    end,
+    dataset_eff_cache:invalidate_on_all_nodes(SpaceId, InvalidateDatasetsOnly).
+
 
 -spec remove_from_datasets_structure(dataset:doc()) -> ok.
 remove_from_datasets_structure(Doc) ->

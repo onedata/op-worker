@@ -43,9 +43,9 @@ establish(Uuid, ProtectionFlags) ->
 
 
 -spec reattach(file_meta:uuid(), data_access_control:bitmask(), data_access_control:bitmask()) ->
-    ok | {error, term()}.
+    {ok, data_access_control:bitmask()} | {error, term()}.
 reattach(Uuid, FlagsToSet, FlagsToUnset) ->
-    ?extract_ok(file_meta:update(Uuid, fun
+    UpdateAns = file_meta:update(Uuid, fun
         (FileMeta = #file_meta{
             dataset_state = ?DETACHED_DATASET,
             protection_flags = CurrFlags
@@ -59,7 +59,12 @@ reattach(Uuid, FlagsToSet, FlagsToUnset) ->
         (#file_meta{dataset_state = ?ATTACHED_DATASET}) ->
             % attached dataset cannot be reattached
             ?ERROR_ALREADY_EXISTS
-    end)).
+    end),
+
+    case UpdateAns of
+        {ok, #document{value = #file_meta{protection_flags = NewFlags}}} -> {ok, NewFlags};
+        _ -> UpdateAns
+    end.
 
 
 -spec detach(file_meta:uuid()) -> ok | {error, term()}.
