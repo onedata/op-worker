@@ -197,7 +197,7 @@ build_value(AtmJobExecutionCtx, #atm_task_argument_value_builder{
             throw(?ERROR_ATM_STORE_EMPTY(AtmSingleValueStoreSchemaId));
         {[{_Index, {error, _} = Error}], true} ->
             throw(Error);
-        {[{_Index, Item}], true} ->
+        {[{_Index, {ok, Item}}], true} ->
             Item
     end;
 
