@@ -16,7 +16,7 @@
 
 %% API
 -export([
-    schedule_workflow_execution/4
+    schedule_workflow_execution/5
 ]).
 
 
@@ -29,14 +29,15 @@
     user_ctx:ctx(),
     file_ctx:ctx(),
     od_atm_workflow_schema:id(),
-    atm_workflow_execution_api:store_initial_values()
+    atm_workflow_execution_api:store_initial_values(),
+    undefined | http_client:url()
 ) ->
     fslogic_worker:provider_response().
-schedule_workflow_execution(UserCtx, SpaceDirCtx, AtmWorkflowSchemaId, AtmStoreInitialValues) ->
+schedule_workflow_execution(UserCtx, SpaceDirCtx, AtmWorkflowSchemaId, AtmStoreInitialValues, CallbackUrl) ->
     SpaceId = file_ctx:get_space_id_const(SpaceDirCtx),
     try
         {AtmWorkflowExecutionId, AtmWorkflowExecution} = atm_workflow_execution_api:create(
-            UserCtx, SpaceId, AtmWorkflowSchemaId, AtmStoreInitialValues
+            UserCtx, SpaceId, AtmWorkflowSchemaId, AtmStoreInitialValues, CallbackUrl
         ),
         ?PROVIDER_OK_RESP(#atm_workflow_execution_scheduled{
             id = AtmWorkflowExecutionId,

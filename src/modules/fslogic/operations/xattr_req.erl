@@ -228,7 +228,7 @@ provider_to_fuse_response(#provider_response{status = Status}) ->
 %% @private
 -spec assert_is_allowed_to_operate_on_xattr(user_ctx:ctx(), custom_metadata:name()) -> ok.
 assert_is_allowed_to_operate_on_xattr(UserCtx, XattrName) ->
-    case (not is_special_key(XattrName)) andalso user_ctx:is_root(UserCtx) of
+    case (not is_special_key(XattrName)) orelse user_ctx:is_root(UserCtx)  of
         true -> ok;
         false -> throw(?EPERM)
     end.

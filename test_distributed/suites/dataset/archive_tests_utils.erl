@@ -156,7 +156,7 @@ assert_archive_dir_exists(Node, SessionId, SpaceId, DatasetId, ArchiveId, UserId
 assert_structure(Node, SessionId, ArchiveId, DatasetRootFileGuid, ?ARCHIVE_PLAIN_LAYOUT) ->
     ArchiveRootDirUuid = ?ARCHIVE_DIR_UUID(ArchiveId),
     ArchiveRootDirGuid = file_id:pack_guid(ArchiveRootDirUuid, oct_background:get_space_id(?SPACE)),
-    {ok, [{TargetGuid, _}]} = lfm_proxy:get_children(Node, SessionId, ?FILE_REF(ArchiveRootDirGuid), 0, 10),
+    {ok, [{TargetGuid, _}, _]} = lfm_proxy:get_children(Node, SessionId, ?FILE_REF(ArchiveRootDirGuid), 0, ?LISTED_CHILDREN_LIMIT),
     assert_copied(Node, SessionId, DatasetRootFileGuid, TargetGuid);
 assert_structure(Node, SessionId, ArchiveId, DatasetRootFileGuid, ?ARCHIVE_BAGIT_LAYOUT) ->
     ArchiveRootDirUuid = ?ARCHIVE_DIR_UUID(ArchiveId),
@@ -164,7 +164,7 @@ assert_structure(Node, SessionId, ArchiveId, DatasetRootFileGuid, ?ARCHIVE_BAGIT
     {ok, ArchiveRootDirPath} = lfm_proxy:get_file_path(Node, SessionId, ArchiveRootDirGuid),
     ArchiveDataDirPath = filename:join([ArchiveRootDirPath, <<"data">>]),
     {ok, #file_attr{guid = ArchiveDataDirGuid}} = lfm_proxy:stat(Node, SessionId, {path, ArchiveDataDirPath}),
-    {ok, [{TargetGuid, _}]} = lfm_proxy:get_children(Node, SessionId, ?FILE_REF(ArchiveDataDirGuid), 0, 10),
+    {ok, [{TargetGuid, _}, _]} = lfm_proxy:get_children(Node, SessionId, ?FILE_REF(ArchiveDataDirGuid), 0, ?LISTED_CHILDREN_LIMIT),
     assert_copied(Node, SessionId, DatasetRootFileGuid, TargetGuid).
 
 
@@ -242,16 +242,24 @@ assert_children_copied(Node, SessionId, SourceGuid, TargetGuid, ListOpts = #{off
 
 assert_content_copied(Node, SessionId, SourceGuid, TargetGuid) ->
     {ok, SourceHandle} = lfm_proxy:open(Node, SessionId, ?FILE_REF(SourceGuid), read),
-    {ok, SourceContent} = lfm_proxy:read(Node, SourceHandle, 0, 10000),
     {ok, TargetHandle} = ?assertMatch({ok, _},
         lfm_proxy:open(Node, SessionId, ?FILE_REF(TargetGuid), read), ?ATTEMPTS),
-    ?assertEqual({ok, SourceContent},
-        lfm_proxy:read(Node, SourceHandle, 0, 10000), ?ATTEMPTS),
+    assert_content_copied_internal(Node, SourceHandle, TargetHandle, 0),
+    
     lfm_proxy:close(Node, SourceHandle),
     lfm_proxy:close(Node, TargetHandle),
-
     TargetGuid2 = resolve_if_symlink(Node, SessionId, TargetGuid),
     assert_file_is_flushed_from_buffer(Node, SessionId, SourceGuid, TargetGuid2).
+
+assert_content_copied_internal(Node, SourceHandle, TargetHandle, Offset) ->
+    BytesToRead = 10000, 
+    {ok, SourceContent} = lfm_proxy:read(Node, SourceHandle, Offset, BytesToRead),
+    ?assertEqual({ok, SourceContent},
+        lfm_proxy:read(Node, TargetHandle, Offset, BytesToRead), ?ATTEMPTS),
+    case SourceContent of
+        <<>> -> ok;
+        _ -> assert_content_copied_internal(Node, SourceHandle, TargetHandle, Offset + BytesToRead)
+    end.
 
 
 assert_json_metadata_copied(Node, SessionId, SourceGuid, TargetGuid) ->

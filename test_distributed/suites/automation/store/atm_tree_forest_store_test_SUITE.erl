@@ -410,8 +410,9 @@ create_iteration_test_env(ProviderSelector, AtmStoreIteratorStrategy, Depth, Typ
     SpaceId = oct_background:get_space_id(space_krk),
     WorkflowId = datastore_key:new(),
     SessId = oct_background:get_user_session_id(WorkflowUserPlaceholder, krakow),
-    ok = rpc:call(Node, atm_workflow_execution_session, init, [WorkflowId, rpc:call(Node, user_ctx, new, [SessId])]),
-    AtmWorkflowExecutionCtx = rpc:call(Node, atm_workflow_execution_ctx, build, [SpaceId, WorkflowId]),
+    UserCtx = rpc:call(Node, user_ctx, new, [SessId]),
+    ok = rpc:call(Node, atm_workflow_execution_session, init, [WorkflowId, UserCtx]),
+    AtmWorkflowExecutionCtx = rpc:call(Node, atm_workflow_execution_ctx, build, [SpaceId, WorkflowId, UserCtx]),
     ChildrenSpecGen = fun
         F(0) -> [];
         F(Depth) ->

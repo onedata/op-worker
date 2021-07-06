@@ -15,7 +15,7 @@
 -include("proto/oneprovider/provider_messages.hrl").
 
 %% API
--export([schedule_workflow_execution/4]).
+-export([schedule_workflow_execution/5]).
 
 
 %%%===================================================================
@@ -27,17 +27,19 @@
     session:id(),
     od_space:id(),
     od_atm_workflow_schema:id(),
-    atm_workflow_execution_api:store_initial_values()
+    atm_workflow_execution_api:store_initial_values(),
+    undefined | http_client:url()
 ) ->
     {ok, atm_workflow_execution:id(), atm_workflow_execution:record()} | lfm:error_reply().
-schedule_workflow_execution(SessId, SpaceId, AtmWorkflowSchemaId, AtmStoreInitialValues) ->
+schedule_workflow_execution(SessId, SpaceId, AtmWorkflowSchemaId, AtmStoreInitialValues, CallbackUrl) ->
     remote_utils:call_fslogic(
         SessId,
         provider_request,
         fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
         #schedule_atm_workflow_execution{
             atm_workflow_schema_id = AtmWorkflowSchemaId,
-            store_initial_values = AtmStoreInitialValues
+            store_initial_values = AtmStoreInitialValues,
+            callback_url = CallbackUrl
         },
         fun(#atm_workflow_execution_scheduled{id = AtmWorkflowExecutionId, record = AtmWorkflowExecution}) ->
             {ok, AtmWorkflowExecutionId, AtmWorkflowExecution}
