@@ -169,7 +169,7 @@ create({uuid, ParentUuid}, FileDoc = #document{value = FileMeta = #file_meta{nam
         LocalTreeId = oneprovider:get_id(),
         % Warning: if uuid exists, two files with same #file_meta{} will be created
         % (names are checked for conflicts, not uuids)
-        case datastore_model:create(?CTX, FileDoc3) of
+        case file_meta:save(FileDoc3) of
             {ok, FileDocFinal = #document{key = FileUuid}} ->
                 case file_meta_forest:check_and_add(ParentUuid, ParentScopeId, TreesToCheck, FileName, FileUuid) of
                     ok ->
