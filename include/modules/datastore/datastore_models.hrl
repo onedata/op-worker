@@ -1143,6 +1143,10 @@
     iterator :: iterator:iterator()
 }).
 
+-record(workflow_cached_async_result, {
+    result :: workflow_handler:async_processing_result()
+}).
+
 -record(workflow_iterator_snapshot, {
     iterator :: iterator:iterator(),
     lane_index = 0 :: workflow_execution_state:index(),

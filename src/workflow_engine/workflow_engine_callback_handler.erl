@@ -23,7 +23,7 @@
 %% Cowboy callback
 -export([init/2]).
 %% API
--export([prepare_finish_callback_id/4, prepare_heartbeat_callback_id/3, handle_callback/2]).
+-export([prepare_finish_callback_id/3, prepare_heartbeat_callback_id/3, handle_callback/2]).
 %% Test API
 -export([decode_callback_id/1]).
 
@@ -34,7 +34,6 @@
 
 -define(SEPARATOR, "___").
 -define(DOMAIN_SEPARATOR, "/").
--define(WF_ERROR_MALFORMED_REQUEST, {error, malformed_request}).
 
 %%%===================================================================
 %%% Cowboy callback
@@ -66,12 +65,10 @@ init(Req, State) ->
 -spec prepare_finish_callback_id(
     workflow_engine:execution_id(),
     workflow_engine:id(),
-    workflow_jobs:job_identifier(),
-    workflow_engine:task_spec()
+    workflow_jobs:job_identifier()
 ) -> workflow_handler:finished_callback_id().
-prepare_finish_callback_id(ExecutionId, EngineId, JobIdentifier, TaskSpec) ->
-    CallPools = maps:get(async_call_pools, TaskSpec, [?DEFAULT_ASYNC_CALL_POOL_ID]),
-    encode_callback_id(?FINISH_CALLBACK_TYPE, ExecutionId, EngineId, JobIdentifier, CallPools).
+prepare_finish_callback_id(ExecutionId, EngineId, JobIdentifier) ->
+    encode_callback_id(?FINISH_CALLBACK_TYPE, ExecutionId, EngineId, JobIdentifier).
 
 -spec prepare_heartbeat_callback_id(
     workflow_engine:execution_id(),
@@ -79,21 +76,15 @@ prepare_finish_callback_id(ExecutionId, EngineId, JobIdentifier, TaskSpec) ->
     workflow_jobs:job_identifier()
 ) -> workflow_handler:heartbeat_callback_id().
 prepare_heartbeat_callback_id(ExecutionId, EngineId, JobIdentifier) ->
-    encode_callback_id(?HEARTBEAT_CALLBACK_TYPE, ExecutionId, EngineId, JobIdentifier, undefined).
+    encode_callback_id(?HEARTBEAT_CALLBACK_TYPE, ExecutionId, EngineId, JobIdentifier).
 
--spec handle_callback(
-    callback(),
-    workflow_handler:task_processing_result() | ?WF_ERROR_MALFORMED_REQUEST | undefined
-) -> ok.
+-spec handle_callback(callback(), workflow_handler:async_processing_result() | undefined) -> ok.
 handle_callback(CallbackId, Message) ->
-    {CallbackType, ExecutionId, EngineId, JobIdentifier, CallPools} = decode_callback_id(CallbackId),
+    {CallbackType, ExecutionId, EngineId, JobIdentifier} = decode_callback_id(CallbackId),
     case CallbackType of
         ?FINISH_CALLBACK_TYPE ->
-            % TODO VFS-7789 - process result on pool and get CallPools from state
-            {Handler, Context, TaskId} = workflow_execution_state:get_result_processing_data(ExecutionId, JobIdentifier),
-            ProcessedResult = Handler:process_result(ExecutionId, Context, TaskId, Message),
             workflow_engine:report_execution_status_update(
-                ExecutionId, EngineId, ?ASYNC_CALL_FINISHED, JobIdentifier, CallPools, ProcessedResult);
+                ExecutionId, EngineId, ?ASYNC_CALL_FINISHED, JobIdentifier, Message);
         ?HEARTBEAT_CALLBACK_TYPE ->
             workflow_timeout_monitor:report_heartbeat(ExecutionId, JobIdentifier)
     end.
@@ -106,25 +97,22 @@ handle_callback(CallbackId, Message) ->
     callback_type(),
     workflow_engine:execution_id(),
     workflow_engine:id(),
-    workflow_jobs:job_identifier(),
-    [workflow_async_call_pool:id()] | undefined
+    workflow_jobs:job_identifier()
 ) -> callback().
-encode_callback_id(CallbackType, ExecutionId, EngineId, JobIdentifier, CallPools) ->
+encode_callback_id(CallbackType, ExecutionId, EngineId, JobIdentifier) ->
     <<"http://",
         (oneprovider:get_domain())/binary,
         ?ATM_TASK_FINISHED_CALLBACK_PATH,
         (atom_to_binary(CallbackType, utf8))/binary, ?SEPARATOR,
         ExecutionId/binary, ?SEPARATOR,
         EngineId/binary, ?SEPARATOR,
-        (workflow_jobs:job_identifier_to_binary(JobIdentifier))/binary, ?SEPARATOR,
-        (call_pools_to_binary(CallPools))/binary>>.
+        (workflow_jobs:job_identifier_to_binary(JobIdentifier))/binary>>.
 
 -spec decode_callback_id(callback()) -> {
     callback_type(),
     workflow_engine:execution_id(),
     workflow_engine:id(),
-    workflow_jobs:job_identifier(),
-    [workflow_async_call_pool:id()] | undefined
+    workflow_jobs:job_identifier()
 }.
 decode_callback_id(<<"http://", Tail/binary>>) ->
     [_Domain, Tail2] = binary:split(Tail, <<?DOMAIN_SEPARATOR>>),
@@ -132,24 +120,11 @@ decode_callback_id(<<"http://", Tail/binary>>) ->
 decode_callback_id(<<?ATM_TASK_FINISHED_CALLBACK_PATH, Tail/binary>>) ->
     decode_callback_id(Tail);
 decode_callback_id(CallbackId) ->
-    [CallbackTypeBin, ExecutionId, EngineId, JobIdentifierBin, CallPoolsBin] =
+    [CallbackTypeBin, ExecutionId, EngineId, JobIdentifierBin] =
         binary:split(CallbackId, <<?SEPARATOR>>, [global, trim_all]),
     {
         binary_to_atom(CallbackTypeBin, utf8),
         ExecutionId,
         EngineId,
-        workflow_jobs:binary_to_job_identifier(JobIdentifierBin),
-        binary_to_call_pool(CallPoolsBin)
+        workflow_jobs:binary_to_job_identifier(JobIdentifierBin)
     }.
-
--spec call_pools_to_binary([workflow_async_call_pool:id()] | undefined) -> binary().
-call_pools_to_binary([CallPools]) ->
-    CallPools; % TODO VFS-7788 - support multiple pools
-call_pools_to_binary(undefined) ->
-    <<"undefined">>.
-
--spec binary_to_call_pool(binary()) -> workflow_async_call_pool:id() | undefined.
-binary_to_call_pool(<<"undefined">>) ->
-    undefined;
-binary_to_call_pool(CallPools) ->
-    CallPools.
