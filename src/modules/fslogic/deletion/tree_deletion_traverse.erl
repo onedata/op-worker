@@ -72,7 +72,7 @@ start(RootDirCtx, UserCtx, EmitEvents, RootOriginalParentUuid) ->
     Options = #{
         task_id => TaskId,
         track_subtree_status => true,
-        children_master_jobs => async,
+        children_master_jobs_mode => async,
         use_listing_token => false,
         traverse_info => #{
             root_guid => file_ctx:get_logical_guid_const(RootDirCtx),

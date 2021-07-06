@@ -132,12 +132,6 @@ invalidate_on_all_nodes(SpaceId, DatasetsOnly) ->
 get_eff_ancestor_datasets(#entry{eff_ancestor_datasets = EffAncestorDatasets}) ->
     {ok, EffAncestorDatasets};
 get_eff_ancestor_datasets(FileDoc) ->
-    {ok, SpaceId} = file_meta:get_scope_id(FileDoc),
-    case effective_value:get(?CACHE_NAME(SpaceId), ?INVALIDATE_ON_DATASETS_GET) of
-        {ok, true} -> invalidate(SpaceId, false);
-        _ -> ok
-    end,
-
     case get(FileDoc) of
         {ok, Entry} ->
             get_eff_ancestor_datasets(Entry);
@@ -145,12 +139,11 @@ get_eff_ancestor_datasets(FileDoc) ->
             Error
     end.
 
-
 -spec get_eff_dataset_protection_flags(entry() | file_meta:doc()) -> {ok, data_access_control:bitmask()} | error().
 get_eff_dataset_protection_flags(#entry{eff_dataset_protection_flags = EffProtectionFlags}) ->
     {ok, EffProtectionFlags};
 get_eff_dataset_protection_flags(FileDoc) ->
-    case get(FileDoc) of
+    case get(FileDoc, false) of
         {ok, Entry} ->
             get_eff_dataset_protection_flags(Entry);
         {error, _} = Error ->
@@ -162,7 +155,7 @@ get_eff_dataset_protection_flags(FileDoc) ->
 get_eff_file_protection_flags(#entry{eff_file_protection_flags = EffProtectionFlags}) ->
     {ok, EffProtectionFlags};
 get_eff_file_protection_flags(FileDoc) ->
-    case get(FileDoc) of
+    case get(FileDoc, false) of
         {ok, Entry} ->
             get_eff_file_protection_flags(Entry);
         {error, _} = Error ->
@@ -171,7 +164,20 @@ get_eff_file_protection_flags(FileDoc) ->
 
 
 -spec get(file_meta:doc()) -> {ok, entry()} | error().
-get(FileDoc = #document{key = FileUuid}) ->
+get(FileDoc) ->
+    get(FileDoc, true).
+
+
+-spec get(file_meta:doc(), boolean()) -> {ok, entry()} | error().
+get(FileDoc, true = _CheckInvalidateOnDatasetsGetFlag) ->
+    {ok, SpaceId} = file_meta:get_scope_id(FileDoc),
+    case effective_value:get(?CACHE_NAME(SpaceId), ?INVALIDATE_ON_DATASETS_GET) of
+        {ok, true} -> invalidate(SpaceId, false);
+        _ -> ok
+    end,
+
+    get(FileDoc, false);
+get(FileDoc = #document{key = FileUuid}, false = _CheckInvalidateOnDatasetsGetFlag) ->
     case fslogic_uuid:is_root_dir_uuid(FileUuid) orelse fslogic_uuid:is_share_root_dir_uuid(FileUuid) of
         true ->
             {ok, #entry{}};
