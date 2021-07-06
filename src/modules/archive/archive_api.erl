@@ -98,9 +98,9 @@ start_archivisation(
         ?ATTACHED_DATASET ->
             {ok, SpaceId} = dataset:get_space_id(DatasetDoc),
             UserId = user_ctx:get_user_id(UserCtx),
-            Config2 = ensure_base_archive_is_set_if_applicable(Config, DatasetId),
-            case archive:create(DatasetId, SpaceId, UserId, Config2,
-                PreservedCallback, PurgedCallback, Description)
+            BaseArchiveId = ensure_base_archive_is_set_if_applicable(Config, DatasetId),
+            case archive:create(DatasetId, SpaceId, UserId, Config,
+                PreservedCallback, PurgedCallback, Description, BaseArchiveId)
             of
                 {ok, ArchiveDoc} ->
                     {ok, ArchiveId} = archive:get_id(ArchiveDoc),
@@ -145,13 +145,14 @@ get_archive_info(ArchiveDoc = #document{}, ArchiveIndex) ->
     {ok, PreservedCallback} = archive:get_preserved_callback(ArchiveDoc),
     {ok, PurgedCallback} = archive:get_purged_callback(ArchiveDoc),
     {ok, Description} = archive:get_description(ArchiveDoc),
+    {ok, BaseArchiveId} = archive:get_base_archive_id(ArchiveDoc),
     {ok, #archive_info{
         id = ArchiveId,
         dataset_id = DatasetId,
         state = State,
         root_dir_guid = ArchiveRootDirGuid,
         creation_time = Timestamp,
-        config = archive_config:set_base_archive_id(Config, undefined),
+        config = Config,
         preserved_callback = PreservedCallback,
         purged_callback = PurgedCallback,
         description = Description,
@@ -160,7 +161,7 @@ get_archive_info(ArchiveDoc = #document{}, ArchiveIndex) ->
             false -> ArchiveIndex
         end,
         stats = get_aggregated_stats(ArchiveDoc),
-        base_archive_id = archive_config:get_base_archive_id(Config)
+        base_archive_id = BaseArchiveId
     }};
 get_archive_info(ArchiveId, ArchiveIndex) ->
     {ok, ArchiveDoc} = archive:get(ArchiveId),
@@ -308,17 +309,15 @@ get_nested_archives_stats(ArchiveId, Token, NestedArchiveStatsAccIn) when is_bin
     end.
 
 
--spec ensure_base_archive_is_set_if_applicable(archive:config(), dataset:id()) -> archive:config().
+-spec ensure_base_archive_is_set_if_applicable(archive:config(), dataset:id()) -> 
+    archive:id() | undefined.
 ensure_base_archive_is_set_if_applicable(Config, DatasetId) ->
     case archive_config:is_incremental(Config) of
         true ->
-            case archive_config:get_base_archive_id(Config) =:= undefined of
-                true ->
-                    BaseArchiveIdOrUndefined = incremental_archive:find_base_archive_id(DatasetId), 
-                    archive_config:set_base_archive_id(Config, BaseArchiveIdOrUndefined);
-                false ->
-                    Config
+            case archive_config:get_incremental_based_on(Config) of
+                undefined -> incremental_archive:find_base_archive_id(DatasetId);
+                BaseArchiveId -> BaseArchiveId
             end;
         false ->
-            Config
+            undefined
     end.

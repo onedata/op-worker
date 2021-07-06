@@ -433,8 +433,7 @@ simple_incremental_archive_test_base(Layout, Modifications) ->
     end, Modifications)),
         
     {ok, ArchiveId} = lfm_proxy:archive_dataset(Node, SessionId, DatasetId, #archive_config{
-        incremental = true,
-        base_archive_id = BaseArchiveId,
+        incremental = #{<<"enable">> => true, <<"basedOn">> => BaseArchiveId},
         layout = Layout
     }, <<>>),
     archive_tests_utils:assert_archive_state(ArchiveId, ?ARCHIVE_PRESERVED),
@@ -490,8 +489,7 @@ nested_incremental_archive_test_base(Layout) ->
     
     {ok, TopArchiveId} = lfm_proxy:archive_dataset(Node, SessionId, TopDatasetId, #archive_config{
         create_nested_archives = true,
-        incremental = true,
-        base_archive_id = TopBaseArchiveId,
+        incremental = #{<<"enable">> => true, <<"basedOn">> => TopBaseArchiveId},
         layout = Layout
     }, <<>>),
     
