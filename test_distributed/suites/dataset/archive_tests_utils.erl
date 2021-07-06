@@ -144,7 +144,7 @@ assert_archive_dir_exists(Node, SessionId, SpaceId, DatasetId, ArchiveId, UserId
 assert_structure(Node, SessionId, ArchiveId, DatasetRootFileGuid, ?ARCHIVE_PLAIN_LAYOUT) ->
     ArchiveRootDirUuid = ?ARCHIVE_DIR_UUID(ArchiveId),
     ArchiveRootDirGuid = file_id:pack_guid(ArchiveRootDirUuid, oct_background:get_space_id(?SPACE)),
-    {ok, [{TargetGuid, _}, _]} = lfm_proxy:get_children(Node, SessionId, ?FILE_REF(ArchiveRootDirGuid), 0, ?LISTED_CHILDREN_LIMIT),
+    {ok, [{TargetGuid, _} | _]} = lfm_proxy:get_children(Node, SessionId, ?FILE_REF(ArchiveRootDirGuid), 0, ?LISTED_CHILDREN_LIMIT),
     assert_copied(Node, SessionId, DatasetRootFileGuid, TargetGuid);
 assert_structure(Node, SessionId, ArchiveId, DatasetRootFileGuid, ?ARCHIVE_BAGIT_LAYOUT) ->
     ArchiveRootDirUuid = ?ARCHIVE_DIR_UUID(ArchiveId),
@@ -152,7 +152,7 @@ assert_structure(Node, SessionId, ArchiveId, DatasetRootFileGuid, ?ARCHIVE_BAGIT
     {ok, ArchiveRootDirPath} = lfm_proxy:get_file_path(Node, SessionId, ArchiveRootDirGuid),
     ArchiveDataDirPath = filename:join([ArchiveRootDirPath, <<"data">>]),
     {ok, #file_attr{guid = ArchiveDataDirGuid}} = lfm_proxy:stat(Node, SessionId, {path, ArchiveDataDirPath}),
-    {ok, [{TargetGuid, _}, _]} = lfm_proxy:get_children(Node, SessionId, ?FILE_REF(ArchiveDataDirGuid), 0, ?LISTED_CHILDREN_LIMIT),
+    {ok, [{TargetGuid, _} | _]} = lfm_proxy:get_children(Node, SessionId, ?FILE_REF(ArchiveDataDirGuid), 0, ?LISTED_CHILDREN_LIMIT),
     assert_copied(Node, SessionId, DatasetRootFileGuid, TargetGuid).
 
 
@@ -241,9 +241,9 @@ assert_content_copied(Node, SessionId, SourceGuid, TargetGuid) ->
 
 assert_content_copied_internal(Node, SourceHandle, TargetHandle, Offset) ->
     BytesToRead = 10000, 
-    {ok, SourceContent} = lfm_proxy:read(Node, SourceHandle, Offset, BytesToRead),
+    {ok, SourceContent} = lfm_proxy:check_size_and_read(Node, SourceHandle, Offset, BytesToRead),
     ?assertEqual({ok, SourceContent},
-        lfm_proxy:read(Node, TargetHandle, Offset, BytesToRead), ?ATTEMPTS),
+        lfm_proxy:check_size_and_read(Node, TargetHandle, Offset, BytesToRead), ?ATTEMPTS),
     case SourceContent of
         <<>> -> ok;
         _ -> assert_content_copied_internal(Node, SourceHandle, TargetHandle, Offset + BytesToRead)
