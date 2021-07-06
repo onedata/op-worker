@@ -150,7 +150,7 @@ report_execution_status_update(ExecutionId, EngineId, ReportType, JobIdentifier,
 
 -spec get_async_call_pools(task_spec() | undefined) -> [workflow_async_call_pool:id()] | undefined.
 get_async_call_pools(undefined) ->
-    undefined;
+    undefined; % TaskSpec is undefined because of previous error - cannot get pools
 get_async_call_pools(TaskSpec) ->
     maps:get(async_call_pools, TaskSpec, [?DEFAULT_ASYNC_CALL_POOL_ID]).
 
@@ -250,16 +250,16 @@ schedule_next_job(EngineId, DeferredExecutions) ->
                                         Handler:handle_lane_execution_ended(ExecutionId, Context, LaneIndex)
                                     catch
                                         Error:Reason  ->
-                                            ?error_stacktrace("Unexpected error of line ~p ended hanlder for execution"
-                                                " ~p: ~p:~p", [LaneIndex, ExecutionId, Error, Reason]),
+                                            ?error_stacktrace("Unexpected error of lane ended handler "
+                                                "(execution ~p, lane ~p): ~p:~p", [ExecutionId, LaneIndex, Error, Reason]),
                                             error
                                     end,
                                     try
                                         Handler:handle_workflow_execution_ended(ExecutionId, Context)
                                     catch
                                         Error2:Reason2  ->
-                                            ?error_stacktrace("Unexpected error of execution ~p ended handler: ~p:~p",
-                                                [ExecutionId, Error2, Reason2]),
+                                            ?error_stacktrace("Unexpected error of execution ended handler "
+                                                "(execution ~p): ~p:~p", [ExecutionId, Error2, Reason2]),
                                             error
                                     end,
                                     case ErrorEncountered of
@@ -278,8 +278,8 @@ schedule_next_job(EngineId, DeferredExecutions) ->
                                         Handler:handle_workflow_execution_ended(ExecutionId, Context)
                                     catch
                                         Error:Reason  ->
-                                            ?error_stacktrace("Unexpected error of execution ~p ended handler: ~p:~p",
-                                                [ExecutionId, Error, Reason]),
+                                            ?error_stacktrace("Unexpected error of execution ended handler "
+                                                "(execution ~p): ~p:~p", [ExecutionId, Error, Reason]),
                                             error
                                     end,
                                     workflow_execution_state:cleanup(ExecutionId);
@@ -450,13 +450,13 @@ prepare_execution(EngineId, ExecutionId, Handler, ExecutionContext) ->
             Handler:prepare(ExecutionId, ExecutionContext)
         catch
             Error:Reason  ->
-                ?error_stacktrace("Unexpected error perparing execution ~p: ~p:~p", [ExecutionId, Error, Reason]),
+                ?error_stacktrace("Unexpected error preparing execution ~p: ~p:~p", [ExecutionId, Error, Reason]),
                 error
         end,
         workflow_execution_state:report_execution_prepared(ExecutionId, Handler, ExecutionContext, Ans),
         trigger_job_scheduling(EngineId, ?FOR_CURRENT_SLOT_FIRST)
     catch
         Error2:Reason2  ->
-            ?error_stacktrace("Unexpected error perparing execution ~p: ~p:~p", [ExecutionId, Error2, Reason2]),
+            ?error_stacktrace("Unexpected error preparing execution ~p: ~p:~p", [ExecutionId, Error2, Reason2]),
             trigger_job_scheduling(EngineId, ?FOR_CURRENT_SLOT_FIRST)
     end.

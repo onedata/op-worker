@@ -55,8 +55,8 @@ save(ExecutionId, LaneIndex, ItemIndex, Iterator) ->
     end,
     case datastore_model:update(?CTX, ExecutionId, Diff, Record) of
         {ok, _} ->
-            % Mark iterator exhausted after change of line
-            % (each line has new iterator and iterator for previous line can be destroyed)
+            % Mark iterator exhausted after change of lane
+            % (each lane has new iterator and iterator for previous lane can be destroyed)
             case PrevLaneIndex =/= 0 andalso PrevLaneIndex < LaneIndex of
                 true -> mark_exhausted(PrevIterator, ExecutionId); % TODO VFS-7787 - handle without additional get
                 false -> ok
@@ -69,8 +69,8 @@ save(ExecutionId, LaneIndex, ItemIndex, Iterator) ->
                         iterator:forget_before(Iterator)
                     catch
                         Error:Reason ->
-                            ?error_stacktrace("Unexpected error forgeting iterator for execution: ~p ~p:~p",
-                                [ExecutionId, Error, Reason]),
+                            ?error_stacktrace("Unexpected error forgeting iteration data prevoius to current iterator "
+                                "(execution id: ~p): ~p:~p", [ExecutionId, Error, Reason]),
                             ok
                     end
             end;

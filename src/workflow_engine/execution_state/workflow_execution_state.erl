@@ -219,7 +219,7 @@ report_execution_status_update(ExecutionId, JobIdentifier, UpdateType, Ans) ->
 
     case UpdatedDoc of
         undefined ->
-            undefined;
+            undefined; % Error occurred - no task can be connected to result
         _ ->
             maybe_notify_task_execution_ended(UpdatedDoc, JobIdentifier, NotifyTaskExecutionEnded),
 
@@ -329,7 +329,7 @@ get_initial_iterator_and_lane_spec(ExecutionId, Handler, Context, LaneIndex) ->
         end
     catch
         Error:Reason  ->
-            ?error_stacktrace("Unexpected error perparing lane ~p for execution ~p: ~p:~p",
+            ?error_stacktrace("Unexpected error preparing lane ~p (execution ~p): ~p:~p",
                 [LaneIndex, ExecutionId, Error, Reason]),
             ?WF_ERROR_PREPARATION_FAILED
     end.
@@ -347,8 +347,8 @@ prepare_lane(ExecutionId, Handler, Context, LaneIndex) ->
                 Handler:handle_lane_execution_ended(ExecutionId, Context, LaneIndex - 1)
             catch
                 Error:Reason  ->
-                    ?error_stacktrace("Unexpected error of line ~p ended hanlder for execution"
-                    " ~p: ~p:~p", [LaneIndex - 1, ExecutionId, Error, Reason])
+                    ?error_stacktrace("Unexpected error of lane ended handler (execution ~p, lane ~p): ~p:~p",
+                        [ExecutionId, LaneIndex - 1, Error, Reason])
             end;
         false ->
             ok
@@ -456,8 +456,8 @@ maybe_notify_task_execution_ended(#document{key = ExecutionId, value = #workflow
         Handler:handle_task_execution_ended(ExecutionId, Context, TaskId)
     catch
         Error:Reason  ->
-            ?error_stacktrace("Unexpected error of task ~p ended hanlder for execution"
-            " ~p: ~p:~p", [TaskId, ExecutionId, Error, Reason]),
+            ?error_stacktrace("Unexpected error of task ended handler (execution ~p, task ~p): ~p:~p",
+                [ExecutionId, TaskId, Error, Reason]),
             ok
     end.
 
@@ -480,7 +480,7 @@ get_next_iterator(Context, Iterator, ExecutionId) ->
         end
     catch
         Error:Reason ->
-            ?error_stacktrace("Unexpected error getting next iterator for execution: ~p ~p:~p",
+            ?error_stacktrace("Unexpected error getting next iterator (execution ~p): ~p ~p:~p",
                 [ExecutionId, Error, Reason]),
             ?WF_ERROR_ITERATION_FAILED
     end.
