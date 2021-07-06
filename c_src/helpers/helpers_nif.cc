@@ -26,8 +26,8 @@ namespace {
  * @defgroup StaticAtoms Statically created atoms for ease of usage.
  * @{
  */
-nifpp::str_atom ok {"ok"};
-nifpp::str_atom error {"error"};
+nifpp::str_atom ok{"ok"};
+nifpp::str_atom error{"error"};
 /** @} */
 
 using helper_ptr = one::helpers::StorageHelperPtr;
@@ -56,8 +56,8 @@ void setCPUAffinity(std::thread &t)
 class StorageWorkerFactory : public folly::ThreadFactory {
 public:
     explicit StorageWorkerFactory(folly::fbstring name)
-        : m_name {std::move(name)}
-        , m_id {0}
+        : m_name{std::move(name)}
+        , m_id{0}
     {
     }
 
@@ -97,25 +97,20 @@ struct HelpersNIF {
 
         bufferingEnabled = (args["buffer_helpers"] == "true");
 
-        for (const auto &entry :
-            std::unordered_map<folly::fbstring,
-                std::pair<folly::fbstring, folly::fbstring>>(
-                {{CEPH_HELPER_NAME,
-                     {"ceph_helper_threads_number", "ceph_t"}},
-                    {CEPHRADOS_HELPER_NAME,
-                        {"cephrados_helper_threads_number",
-                            "crados_t"}},
-                    {POSIX_HELPER_NAME,
-                        {"posix_helper_threads_number", "posix_t"}},
-                    {S3_HELPER_NAME, {"s3_helper_threads_number", "s3_t"}},
-                    {SWIFT_HELPER_NAME,
-                        {"swift_helper_threads_number", "swift_t"}},
-                    {GLUSTERFS_HELPER_NAME,
-                        {"glusterfs_helper_threads_number",
-                            "gluster_t"}},
-                    {NULL_DEVICE_HELPER_NAME,
-                        {"nulldevice_helper_threads_number",
-                            "nulldev_t"}}})) {
+        for (const auto &entry : std::unordered_map<folly::fbstring,
+                 std::pair<folly::fbstring, folly::fbstring>>(
+                 {{CEPH_HELPER_NAME, {"ceph_helper_threads_number", "ceph_t"}},
+                     {CEPHRADOS_HELPER_NAME,
+                         {"cephrados_helper_threads_number", "crados_t"}},
+                     {POSIX_HELPER_NAME,
+                         {"posix_helper_threads_number", "posix_t"}},
+                     {S3_HELPER_NAME, {"s3_helper_threads_number", "s3_t"}},
+                     {SWIFT_HELPER_NAME,
+                         {"swift_helper_threads_number", "swift_t"}},
+                     {GLUSTERFS_HELPER_NAME,
+                         {"glusterfs_helper_threads_number", "gluster_t"}},
+                     {NULL_DEVICE_HELPER_NAME,
+                         {"nulldevice_helper_threads_number", "nulldev_t"}}})) {
             auto threads = std::stoul(args[entry.second.first].toStdString());
             services.emplace(entry.first, std::make_unique<HelperIOService>());
             auto &service = services[entry.first]->service;
@@ -150,14 +145,14 @@ struct HelpersNIF {
             services[GLUSTERFS_HELPER_NAME]->service, webDAVExecutor,
             xrootdExecutor, services[NULL_DEVICE_HELPER_NAME]->service,
             std::stoul(args["buffer_scheduler_threads_number"].toStdString()),
-            buffering::BufferLimits {
+            buffering::BufferLimits{
                 std::stoul(args["read_buffer_min_size"].toStdString()),
                 std::stoul(args["read_buffer_max_size"].toStdString()),
-                std::chrono::seconds {std::stoul(
+                std::chrono::seconds{std::stoul(
                     args["read_buffer_prefetch_duration"].toStdString())},
                 std::stoul(args["write_buffer_min_size"].toStdString()),
                 std::stoul(args["write_buffer_max_size"].toStdString()),
-                std::chrono::seconds {std::stoul(
+                std::chrono::seconds{std::stoul(
                     args["write_buffer_flush_delay"].toStdString())}});
 
         umask(0);
@@ -192,7 +187,7 @@ namespace {
  *           POSIX open mode / flag.
  * @{
  */
-const std::unordered_map<nifpp::str_atom, one::helpers::Flag> atom_to_flag {
+const std::unordered_map<nifpp::str_atom, one::helpers::Flag> atom_to_flag{
     {"O_NONBLOCK", one::helpers::Flag::NONBLOCK},
     {"O_APPEND", one::helpers::Flag::APPEND},
     {"O_ASYNC", one::helpers::Flag::ASYNC},
@@ -220,7 +215,7 @@ one::helpers::FlagsSet translateFlags(folly::fbvector<nifpp::str_atom> atoms)
             flags.insert(result->second);
         }
         else {
-            throw std::system_error {
+            throw std::system_error{
                 std::make_error_code(std::errc::invalid_argument)};
         }
     }
@@ -337,7 +332,7 @@ public:
      * deleter.
      */
     Env()
-        : env {enif_alloc_env(), enif_free_env}
+        : env{enif_alloc_env(), enif_free_env}
     {
     }
 
@@ -380,9 +375,9 @@ private:
     static thread_local std::default_random_engine gen;
     static thread_local std::uniform_int_distribution<int> dist;
 };
-thread_local std::random_device NifCTX::rd {};
-thread_local std::default_random_engine NifCTX::gen {NifCTX::rd()};
-thread_local std::uniform_int_distribution<int> NifCTX::dist {};
+thread_local std::random_device NifCTX::rd{};
+thread_local std::default_random_engine NifCTX::gen{NifCTX::rd()};
+thread_local std::uniform_int_distribution<int> NifCTX::dist{};
 
 /**
  * Runs given function and returns result or error term.
@@ -397,11 +392,11 @@ template <class T> ERL_NIF_TERM handle_errors(ErlNifEnv *env, T &&fun)
     }
     catch (const std::system_error &e) {
         return nifpp::make(
-            env, std::make_tuple(error, nifpp::str_atom {e.code().message()}));
+            env, std::make_tuple(error, nifpp::str_atom{e.code().message()}));
     }
     catch (const std::exception &e) {
         return nifpp::make(
-            env, std::make_tuple(error, folly::fbstring {e.what()}));
+            env, std::make_tuple(error, folly::fbstring{e.what()}));
     }
 }
 
@@ -410,14 +405,14 @@ ERL_NIF_TERM wrap_helper(ERL_NIF_TERM (*fun)(NifCTX ctx, Args...),
     ErlNifEnv *env, const ERL_NIF_TERM args[], std::index_sequence<I...>)
 {
     return handle_errors(env,
-        [&]() { return fun(NifCTX {env}, nifpp::get<Args>(env, args[I])...); });
+        [&]() { return fun(NifCTX{env}, nifpp::get<Args>(env, args[I])...); });
 }
 
 template <typename... Args>
 ERL_NIF_TERM wrap(ERL_NIF_TERM (*fun)(NifCTX, Args...), ErlNifEnv *env,
     const ERL_NIF_TERM args[])
 {
-    return wrap_helper(fun, env, args, std::index_sequence_for<Args...> {});
+    return wrap_helper(fun, env, args, std::index_sequence_for<Args...>{});
 }
 
 template <typename... Args, std::size_t... I>
@@ -433,7 +428,7 @@ ERL_NIF_TERM noctx_wrap(ERL_NIF_TERM (*fun)(ErlNifEnv *env, Args...),
     ErlNifEnv *env, const ERL_NIF_TERM args[])
 {
     return noctx_wrap_helper(
-        fun, env, args, std::index_sequence_for<Args...> {});
+        fun, env, args, std::index_sequence_for<Args...>{});
 }
 
 /**
@@ -482,14 +477,14 @@ template <class T> void handle_result(NifCTX ctx, folly::Future<T> future)
     future.then([ctx](T &&value) { handle_value(ctx, std::move(value)); })
         .onError([ctx](const std::system_error &e) {
             auto it = error_to_atom.find(e.code());
-            nifpp::str_atom reason {e.code().message()};
+            nifpp::str_atom reason{e.code().message()};
             if (it != error_to_atom.end())
                 reason = it->second;
 
             ctx.send(std::make_tuple(error, reason));
         })
         .onError([ctx](const std::exception &e) {
-            nifpp::str_atom reason {e.what()};
+            nifpp::str_atom reason{e.what()};
             ctx.send(std::make_tuple(error, reason));
         });
 }
@@ -994,23 +989,40 @@ static ERL_NIF_TERM sh_fsync(
     return wrap(fsync, env, argv);
 }
 
-static ErlNifFunc nif_funcs[] = {{"get_handle", 2, get_handle},
-    {"start_monitoring", 0, start_monitoring},
-    {"stop_monitoring", 0, stop_monitoring},
-    {"refresh_params", 2, sh_refresh_params},
-    {"refresh_helper_params", 2, sh_refresh_helper_params},
-    {"getattr", 2, sh_getattr}, {"access", 3, sh_access},
-    {"readdir", 4, sh_readdir}, {"listobjects", 5, sh_listobjects},
-    {"mknod", 5, sh_mknod}, {"mkdir", 3, sh_mkdir}, {"unlink", 3, sh_unlink},
-    {"rmdir", 2, sh_rmdir}, {"symlink", 3, sh_symlink},
-    {"rename", 3, sh_rename}, {"link", 3, sh_link}, {"chmod", 3, sh_chmod},
-    {"chown", 4, sh_chown}, {"truncate", 4, sh_truncate},
-    {"setxattr", 6, sh_setxattr}, {"getxattr", 3, sh_getxattr},
-    {"removexattr", 3, sh_removexattr}, {"listxattr", 2, sh_listxattr},
-    {"open", 3, sh_open}, {"read", 3, sh_read}, {"write", 3, sh_write},
-    {"release", 1, sh_release}, {"flush", 1, sh_flush}, {"fsync", 2, sh_fsync},
-    {"flushbuffer", 3, sh_flushbuffer},
-    {"blocksize_for_path", 2, sh_blocksize_for_path}};
+static ErlNifFunc nif_funcs[] = {
+    {"get_handle", 2, get_handle, ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"start_monitoring", 0, start_monitoring, ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"stop_monitoring", 0, stop_monitoring, ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"refresh_params", 2, sh_refresh_params, ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"refresh_helper_params", 2, sh_refresh_helper_params,
+        ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"getattr", 2, sh_getattr, ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"access", 3, sh_access, ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"readdir", 4, sh_readdir, ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"listobjects", 5, sh_listobjects, ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"mknod", 5, sh_mknod, ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"mkdir", 3, sh_mkdir, ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"unlink", 3, sh_unlink, ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"rmdir", 2, sh_rmdir, ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"symlink", 3, sh_symlink, ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"rename", 3, sh_rename, ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"link", 3, sh_link, ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"chmod", 3, sh_chmod, ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"chown", 4, sh_chown, ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"truncate", 4, sh_truncate, ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"setxattr", 6, sh_setxattr, ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"getxattr", 3, sh_getxattr, ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"removexattr", 3, sh_removexattr, ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"listxattr", 2, sh_listxattr, ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"open", 3, sh_open, ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"read", 3, sh_read, ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"write", 3, sh_write, ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"release", 1, sh_release, ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"flush", 1, sh_flush, ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"fsync", 2, sh_fsync, ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"flushbuffer", 3, sh_flushbuffer, ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"blocksize_for_path", 2, sh_blocksize_for_path,
+        ERL_NIF_DIRTY_JOB_IO_BOUND}};
 
 ERL_NIF_INIT(helpers_nif, nif_funcs, load, NULL, NULL, NULL);
 
