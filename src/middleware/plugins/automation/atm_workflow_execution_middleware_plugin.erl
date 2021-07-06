@@ -71,7 +71,8 @@ data_spec(#op_req{operation = create, gri = #gri{aspect = instance}}) ->
             <<"atmWorkflowSchemaId">> => {binary, non_empty}
         },
         optional => #{
-            <<"storeInitialValues">> => {json, any}
+            <<"storeInitialValues">> => {json, any},
+            <<"callback">> => {binary, fun(Callback) -> url_utils:is_valid(Callback) end}
         }
     };
 
@@ -156,12 +157,12 @@ validate(#op_req{operation = get, gri = #gri{aspect = As}}, _) when
 %%--------------------------------------------------------------------
 -spec create(middleware:req()) -> middleware:create_result().
 create(#op_req{auth = ?USER(_UserId, SessionId), data = Data, gri = #gri{aspect = instance} = GRI}) ->
-    SpaceId = maps:get(<<"spaceId">>, Data),
-    AtmWorkflowSchemaId = maps:get(<<"atmWorkflowSchemaId">>, Data),
-    AtmStoreInitialValues = maps:get(<<"storeInitialValues">>, Data, #{}),
-
     Result = lfm:schedule_atm_workflow_execution(
-        SessionId, SpaceId, AtmWorkflowSchemaId, AtmStoreInitialValues
+        SessionId,
+        maps:get(<<"spaceId">>, Data),
+        maps:get(<<"atmWorkflowSchemaId">>, Data),
+        maps:get(<<"storeInitialValues">>, Data, #{}),
+        maps:get(<<"callback">>, Data, undefined)
     ),
     case Result of
         {ok, AtmWorkflowExecutionId, AtmWorkflowExecution} ->

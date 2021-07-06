@@ -20,7 +20,7 @@
 -export([init_engine/0]).
 -export([
     list/4,
-    create/4,
+    create/5,
     get/1, get_summary/2
 ]).
 
@@ -84,9 +84,15 @@ list(SpaceId, Phase, summary, ListingOpts) ->
     {ok, AtmWorkflowExecutionSummaryEntries, IsLast}.
 
 
--spec create(user_ctx:ctx(), od_space:id(), od_atm_workflow_schema:id(), store_initial_values()) ->
-    {ok, atm_workflow_execution:id(), atm_workflow_execution:record()} | no_return().
-create(UserCtx, SpaceId, AtmWorkflowSchemaId, StoreInitialValues) ->
+-spec create(
+    user_ctx:ctx(),
+    od_space:id(),
+    od_atm_workflow_schema:id(),
+    store_initial_values(),
+    undefined | http_client:url()
+) ->
+    {atm_workflow_execution:id(), atm_workflow_execution:record()} | no_return().
+create(UserCtx, SpaceId, AtmWorkflowSchemaId, StoreInitialValues, CallbackUrl) ->
     SessionId = user_ctx:get_session_id(UserCtx),
 
     {ok, AtmWorkflowSchemaDoc = #document{value = #od_atm_workflow_schema{
@@ -99,21 +105,22 @@ create(UserCtx, SpaceId, AtmWorkflowSchemaId, StoreInitialValues) ->
     end, #{}, AtmLambdaIds),
 
     AtmWorkflowExecutionId = datastore_key:new(),
-    ok = atm_workflow_execution_session:init(AtmWorkflowExecutionId, UserCtx),
 
-    {ok, #document{
+    #document{
         value = AtmWorkflowExecution = #atm_workflow_execution{
             store_registry = AtmStoreRegistry
         }
-    }} = atm_workflow_execution_factory:create(#atm_workflow_execution_creation_ctx{
+    } = atm_workflow_execution_factory:create(#atm_workflow_execution_creation_ctx{
         workflow_execution_ctx = atm_workflow_execution_ctx:build(
-            SpaceId, AtmWorkflowExecutionId
+            SpaceId, AtmWorkflowExecutionId, UserCtx
         ),
         workflow_schema_doc = AtmWorkflowSchemaDoc,
         lambda_docs = AtmLambdaDocs,
-        store_initial_values = StoreInitialValues
+        store_initial_values = StoreInitialValues,
+        callback_url = CallbackUrl
     }),
 
+    ok = atm_workflow_execution_session:init(AtmWorkflowExecutionId, UserCtx),
     workflow_engine:execute_workflow(?ATM_WORKFLOW_EXECUTION_ENGINE, #{
         id => AtmWorkflowExecutionId,
         workflow_handler => atm_workflow_execution_handler,
@@ -122,7 +129,7 @@ create(UserCtx, SpaceId, AtmWorkflowSchemaId, StoreInitialValues) ->
         )
     }),
 
-    {ok, AtmWorkflowExecutionId, AtmWorkflowExecution}.
+    {AtmWorkflowExecutionId, AtmWorkflowExecution}.
 
 
 -spec get(atm_workflow_execution:id()) ->

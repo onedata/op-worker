@@ -53,7 +53,7 @@ create_workflow_execution_ctx(ProviderSelector, UserSelector, SpaceSelector) ->
     ok = rpc:call(Node, atm_workflow_execution_session, init, [AtmWorkflowExecutionId, UserCtx]),
 
     SpaceId = oct_background:get_space_id(SpaceSelector),
-    rpc:call(Node, atm_workflow_execution_ctx, build, [SpaceId, AtmWorkflowExecutionId]).
+    rpc:call(Node, atm_workflow_execution_ctx, build, [SpaceId, AtmWorkflowExecutionId, UserCtx]).
 
 
 -spec create_store(
@@ -73,9 +73,9 @@ create_store(ProviderSelector, AtmWorkflowExecutionCtx, InitialValue, AtmStoreSc
 -spec apply_operation(
     oct_background:entity_selector(),
     atm_workflow_execution_ctx:record(),
-    atm_container:operation(),
+    atm_store_container:operation(),
     automation:item(),
-    atm_container:operation_options(),
+    atm_store_container:operation_options(),
     atm_store:id()
 ) ->
     ok | {error, term()}.

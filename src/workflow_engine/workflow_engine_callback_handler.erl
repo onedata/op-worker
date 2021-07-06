@@ -78,7 +78,7 @@ prepare_finish_callback_id(ExecutionId, EngineId, JobIdentifier) ->
 prepare_heartbeat_callback_id(ExecutionId, EngineId, JobIdentifier) ->
     encode_callback_id(?HEARTBEAT_CALLBACK_TYPE, ExecutionId, EngineId, JobIdentifier).
 
--spec handle_callback(callback(), workflow_handler:task_processing_result() | undefined) -> ok.
+-spec handle_callback(callback(), workflow_handler:async_processing_result() | undefined) -> ok.
 handle_callback(CallbackId, Message) ->
     {CallbackType, ExecutionId, EngineId, JobIdentifier} = decode_callback_id(CallbackId),
     case CallbackType of

@@ -174,6 +174,33 @@ build_value(AtmJobExecutionCtx, #atm_task_argument_value_builder{
         <<"accessToken">> => atm_job_execution_ctx:get_access_token(AtmJobExecutionCtx)
     };
 
+build_value(AtmJobExecutionCtx, #atm_task_argument_value_builder{
+    type = single_value_store_content,
+    recipe = AtmSingleValueStoreSchemaId
+}) ->
+    AtmSingleValueStoreId = atm_workflow_execution_env:get_store_id(
+        AtmSingleValueStoreSchemaId,
+        atm_job_execution_ctx:get_workflow_execution_env(AtmJobExecutionCtx)
+    ),
+    {ok, AtmStore} = atm_store_api:get(AtmSingleValueStoreId),
+
+    case atm_store_container:get_store_type(AtmStore#atm_store.container) of
+        single_value -> ok;
+        AtmStoreType -> throw(?ERROR_ATM_STORE_TYPE_DISALLOWED(AtmStoreType, [single_value]))
+    end,
+
+    AtmWorkflowExecutionCtx = atm_job_execution_ctx:get_workflow_execution_ctx(AtmJobExecutionCtx),
+    BrowseOpts = #{offset => 0, limit => 1},
+
+    case atm_store_api:browse_content(AtmWorkflowExecutionCtx, BrowseOpts, AtmStore) of
+        {[], true} ->
+            throw(?ERROR_ATM_STORE_EMPTY(AtmSingleValueStoreSchemaId));
+        {[{_Index, {error, _} = Error}], true} ->
+            throw(Error);
+        {[{_Index, Item}], true} ->
+            Item
+    end;
+
 build_value(_AtmJobExecutionCtx, _InputSpec) ->
     % TODO VFS-7660 handle rest of atm_task_argument_value_builder:type()
     throw(?ERROR_ATM_TASK_ARG_MAPPER_INVALID_INPUT_SPEC).

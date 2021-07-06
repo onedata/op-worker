@@ -17,6 +17,7 @@
 
 %% TODO VFS-7637 better error handling and logging
 -define(ERROR_ATM_OPENFAAS_NOT_CONFIGURED, {error, openfaas_not_configured}).
+-define(ERROR_ATM_OPENFAAS_UNREACHABLE, {error, openfaas_unreachable}).
 -define(ERROR_ATM_OPENFAAS_QUERY_FAILED, {error, openfaas_query_failed}).
 -define(ERROR_ATM_OPENFAAS_QUERY_FAILED(__REASON),
     {error, {openfaas_query_failed, __REASON}}
@@ -101,8 +102,14 @@
 -define(ERROR_ATM_INVALID_STATUS_TRANSITION(__PREV_STATUS, __NEW_STATUS),
     {error, {atm_invalid_status_transition, __PREV_STATUS, __NEW_STATUS}}
 ).
--define(ERROR_ATM_STORE_FROZEN(__ATM_STORE_ID),
-    {error, {atm_store_frozen, __ATM_STORE_ID}}
+-define(ERROR_ATM_STORE_FROZEN(__ATM_STORE_SCHEMA__ID),
+    {error, {atm_store_frozen, __ATM_STORE_SCHEMA__ID}}
+).
+-define(ERROR_ATM_STORE_TYPE_DISALLOWED(__TYPE, __ALLOWED_TYPES),
+    {error, {atm_store_type_unverified, __TYPE, __ALLOWED_TYPES}}
+).
+-define(ERROR_ATM_STORE_EMPTY(__ATM_STORE_SCHEMA__ID),
+    {error, {atm_store_empty, __ATM_STORE_SCHEMA__ID}}
 ).
 
 

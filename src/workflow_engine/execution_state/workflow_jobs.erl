@@ -75,7 +75,7 @@
 -type jobs_set() :: gb_sets:set(job_identifier()).
 -type items_set() :: sets:set(workflow_execution_state:index()).
 -type pending_async_jobs() :: #{job_identifier() => #async_job_timer{}}.
--type async_results_map() :: #{job_identifier() => workflow_cached_async_result:id()}.
+-type async_results_map() :: #{job_identifier() => workflow_cached_async_result:result_ref()}.
 -type tasks_tree() :: gb_trees:tree(job_identifier(), [workflow_execution_state:index()]) | undefined.
 -type jobs() :: #workflow_jobs{}.
 -type jobs_for_parallel_box() :: ?NO_JOBS_LEFT_FOR_PARALLEL_BOX | ?AT_LEAST_ONE_JOB_LEFT_FOR_PARALLEL_BOX.
@@ -178,7 +178,7 @@ register_failure(Jobs = #workflow_jobs{
     % TODO VFS-7788 - count errors and stop workflow when errors limit is reached
     {Jobs2#workflow_jobs{failed_items = sets:add_element(ItemIndex, Failed)}, RemainingForBox}.
 
--spec register_async_job_finish(jobs(), job_identifier(), workflow_cached_async_result:id()) ->
+-spec register_async_job_finish(jobs(), job_identifier(), workflow_cached_async_result:result_ref()) ->
     {ok, jobs()} | ?WF_ERROR_JOB_NOT_FOUND.
 register_async_job_finish(Jobs = #workflow_jobs{
     ongoing = Ongoing,
@@ -458,7 +458,7 @@ remove_job_from_task_tree(TasksTree, #job_identifier{
         UpdatedTaskItems -> gb_trees:enter(TaskIdentifier, UpdatedTaskItems, TasksTreeWithoutKey)
     end.
 
--spec register_async_result_processing(jobs(), job_identifier(), workflow_cached_async_result:id()) -> jobs().
+-spec register_async_result_processing(jobs(), job_identifier(), workflow_cached_async_result:result_ref()) -> jobs().
 register_async_result_processing(
     Jobs = #workflow_jobs{
         waiting = Waiting,

@@ -15,7 +15,7 @@
 
 -behaviour(atm_data_validator).
 -behaviour(atm_data_compressor).
--behaviour(atm_tree_forest_container_iterator).
+-behaviour(atm_tree_forest_store_container_iterator).
 
 -include("modules/automation/atm_tmp.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
@@ -25,7 +25,7 @@
 %% atm_data_validator callbacks
 -export([assert_meets_constraints/3]).
 
-%% atm_tree_forest_container_iterator callbacks
+%% atm_tree_forest_store_container_iterator callbacks
 -export([
     list_children/4,
     initial_listing_options/0,
@@ -66,7 +66,7 @@ assert_meets_constraints(AtmWorkflowExecutionCtx, #{<<"file_id">> := ObjectId} =
 
 
 %%%===================================================================
-%%% atm_tree_forest_container_iterator callbacks
+%%% atm_tree_forest_store_container_iterator callbacks
 %%%===================================================================
 
 
@@ -125,8 +125,9 @@ compress(#{<<"file_id">> := ObjectId}) ->
     {ok, atm_value:expanded()} | {error, term()}.
 expand(AtmWorkflowExecutionCtx, Guid) ->
     SessionId = atm_workflow_execution_ctx:get_session_id(AtmWorkflowExecutionCtx),
-    case lfm:stat(SessionId, #file_ref{guid = Guid}) of
-        {ok, FileAttrs} -> {ok, translate_file_attrs(FileAttrs)};
+
+    case lfm:stat(SessionId, ?FILE_REF(Guid)) of
+        {ok, FileAttrs} -> {ok, file_middleware_plugin:file_attrs_to_json(FileAttrs)};
         {error, _} = Error -> Error 
     end.
 
@@ -200,43 +201,3 @@ list_children_unsafe(SessionId, Guid, ListOpts) ->
                 maps:get(is_last, ExtendedListInfo)
             }
     end.
-
-
-%% @private
--spec translate_file_attrs(lfm_attrs:file_attributes()) -> automation:item().
-translate_file_attrs(#file_attr{
-    guid = Guid, 
-    name = Name, 
-    mode = Mode, 
-    parent_guid = ParentGuid, 
-    uid = Uid, 
-    gid = Gid, 
-    atime = Atime, 
-    mtime = Mtime, 
-    ctime = Ctime, 
-    type = Type, 
-    size = Size, 
-    shares = Shares, 
-    provider_id = ProviderId, 
-    owner_id = Owner_id, 
-    nlink = Nlink
-}) ->
-    {ok, ObjectId} = file_id:guid_to_objectid(Guid),
-    {ok, ParentObjectId} = file_id:guid_to_objectid(ParentGuid),
-    #{
-        <<"file_id">> => ObjectId,
-        <<"name">> => Name,
-        <<"mode">> => Mode,
-        <<"parent_id">> => ParentObjectId,
-        <<"storage_user_id">> => Uid,
-        <<"storage_group_id">> => Gid,
-        <<"atime">> => Atime,
-        <<"mtime">> => Mtime,
-        <<"ctime">> => Ctime,
-        <<"type">> => Type,
-        <<"size">> => Size,
-        <<"shares">> => Shares,
-        <<"provider_id">> => ProviderId,
-        <<"owner_id">> => Owner_id,
-        <<"hardlinks_count">> => Nlink
-    }.

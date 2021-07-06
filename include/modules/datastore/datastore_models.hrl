@@ -1048,8 +1048,7 @@
     % (e.g when store is used as the iteration source for currently executed lane).
     frozen = false :: boolean(),
 
-    type :: automation:store_type(),
-    container :: atm_container:record()
+    container :: atm_store_container:record()
 }).
 
 -record(atm_task_execution, {
@@ -1119,6 +1118,8 @@
     % otherwise getting document before update would be needed (to compare 2 docs).
     status_changed = false :: boolean(),
 
+    callback :: undefined | http_client:url(),
+
     schedule_time = 0 :: atm_workflow_execution:timestamp(),
     start_time = 0 :: atm_workflow_execution:timestamp(),
     finish_time = 0 :: atm_workflow_execution:timestamp()
@@ -1143,7 +1144,7 @@
 }).
 
 -record(workflow_cached_async_result, {
-    result :: workflow_handler:task_processing_result()
+    result :: workflow_handler:async_processing_result()
 }).
 
 -record(workflow_iterator_snapshot, {

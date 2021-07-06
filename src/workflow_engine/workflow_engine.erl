@@ -36,11 +36,11 @@
 -type execution_id() :: binary().
 -type execution_context() :: term().
 -type task_id() :: binary().
--type subject_id() :: workflow_cached_item:id() | workflow_cached_async_result:id().
+-type subject_id() :: workflow_cached_item:id() | workflow_cached_async_result:result_ref().
 -type execution_spec() :: #execution_spec{}.
 -type processing_stage() :: ?SYNC_CALL | ?ASYNC_CALL_STARTED | ?ASYNC_CALL_FINISHED | ?ASYNC_RESULT_PROCESSED.
--type callback_execution_result() :: workflow_handler:callback_execution_result() | {ok, KeepaliveTimeout :: time:seconds()}.
--type processing_result() :: callback_execution_result() | workflow_handler:task_processing_result().
+-type handler_execution_result() :: workflow_handler:handler_execution_result() | {ok, KeepaliveTimeout :: time:seconds()}.
+-type processing_result() :: handler_execution_result() | workflow_handler:async_processing_result().
 
 %% @formatter:off
 -type options() :: #{
@@ -71,7 +71,7 @@
 %% @formatter:on
 
 -export_type([id/0, execution_id/0, execution_context/0, task_id/0, subject_id/0,
-    execution_spec/0, processing_stage/0, callback_execution_result/0, processing_result/0,
+    execution_spec/0, processing_stage/0, handler_execution_result/0, processing_result/0,
     task_spec/0, parallel_box_spec/0, lane_spec/0]).
 
 -define(POOL_ID(EngineId), binary_to_atom(EngineId, utf8)).
@@ -130,7 +130,7 @@ execute_workflow(EngineId, ExecutionSpec) ->
     end.
 
 -spec report_execution_status_update(execution_id(), id(), processing_stage(),
-    workflow_jobs:job_identifier(), callback_execution_result()) -> ok.
+    workflow_jobs:job_identifier(), handler_execution_result()) -> ok.
 report_execution_status_update(ExecutionId, EngineId, ReportType, JobIdentifier, Ans) ->
     TaskSpec = workflow_execution_state:report_execution_status_update(ExecutionId, JobIdentifier, ReportType, Ans),
 
@@ -391,7 +391,7 @@ process_item(EngineId, ExecutionId, ExecutionSpec = #execution_spec{
     execution_spec(),
     workflow_handler:finished_callback_id(),
     workflow_handler:heartbeat_callback_id()
-) -> workflow_handler:callback_execution_result().
+) -> workflow_handler:handler_execution_result().
 process_item(ExecutionId, #execution_spec{
     handler = Handler,
     context = ExecutionContext,
@@ -419,7 +419,7 @@ process_result(EngineId, ExecutionId, #execution_spec{
     job_identifier = JobIdentifier
 }) ->
     try
-        CachedResult = workflow_cached_async_result:get_and_delete(CachedResultId),
+        CachedResult = workflow_cached_async_result:take(CachedResultId),
         ProcessedResult = try
             Handler:process_result(ExecutionId, ExecutionContext, TaskId, CachedResult)
         catch

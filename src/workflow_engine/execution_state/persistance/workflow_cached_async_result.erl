@@ -8,6 +8,7 @@
 %%% @doc
 %%% Cache of results of jobs' processing. Results are processed on pool
 %%% so the result is cached until any pool process is ready to process it.
+%%% TODO VFS-7919 - improve doc
 %%% @end
 %%%-------------------------------------------------------------------
 -module(workflow_cached_async_result).
@@ -17,12 +18,12 @@
 -include("modules/datastore/datastore_models.hrl").
 
 %% API
--export([put/1, get_and_delete/1]).
+-export([put/1, take/1]).
 
--type internal_id() :: binary().
--type id() :: internal_id() | ?WF_ERROR_MALFORMED_REQUEST | ?WF_ERROR_TIMEOUT.
+-type id() :: binary().
+-type result_ref() :: id() | ?WF_ERROR_MALFORMED_REQUEST | ?WF_ERROR_TIMEOUT.
 
--export_type([id/0]).
+-export_type([result_ref/0]).
 
 -define(CTX, #{
     model => ?MODULE,
@@ -33,7 +34,7 @@
 %%% API
 %%%===================================================================
 
--spec put(workflow_handler:task_processing_result()) -> id().
+-spec put(workflow_handler:async_processing_result()) -> result_ref().
 put(?WF_ERROR_MALFORMED_REQUEST) ->
     ?WF_ERROR_MALFORMED_REQUEST;
 put(?WF_ERROR_TIMEOUT) ->
@@ -43,12 +44,12 @@ put(ProcessingResult) ->
     {ok, #document{key = Id}} = datastore_model:save(?CTX, Doc),
     Id.
 
--spec get_and_delete(id()) -> workflow_handler:task_processing_result().
-get_and_delete(?WF_ERROR_MALFORMED_REQUEST) ->
+-spec take(result_ref()) -> workflow_handler:async_processing_result().
+take(?WF_ERROR_MALFORMED_REQUEST) ->
     ?WF_ERROR_MALFORMED_REQUEST;
-get_and_delete(?WF_ERROR_TIMEOUT) ->
+take(?WF_ERROR_TIMEOUT) ->
     ?WF_ERROR_TIMEOUT;
-get_and_delete(Id) ->
+take(Id) ->
     {ok, #document{value = #workflow_cached_async_result{result = ProcessingResult}}} = datastore_model:get(?CTX, Id),
     ok = datastore_model:delete(?CTX, Id),
     ProcessingResult.

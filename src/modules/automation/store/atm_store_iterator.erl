@@ -32,7 +32,7 @@
 -record(atm_store_iterator, {
     spec :: atm_store_iterator_spec:record(),
     data_spec :: atm_data_spec:record(),
-    container_iterator :: atm_container_iterator:record()
+    store_container_iterator :: atm_store_container_iterator:record()
 }).
 -type record() :: #atm_store_iterator{}.
 
@@ -44,12 +44,12 @@
 %%%===================================================================
 
 
--spec build(atm_store_iterator_spec:record(), atm_container:record()) -> record().
-build(AtmStoreIteratorSpec, AtmContainer) ->
+-spec build(atm_store_iterator_spec:record(), atm_store_container:record()) -> record().
+build(AtmStoreIteratorSpec, AtmStoreContainer) ->
     #atm_store_iterator{
         spec = AtmStoreIteratorSpec,
-        data_spec = atm_container:get_data_spec(AtmContainer),
-        container_iterator = atm_container:acquire_iterator(AtmContainer)
+        data_spec = atm_store_container:get_data_spec(AtmStoreContainer),
+        store_container_iterator = atm_store_container:acquire_iterator(AtmStoreContainer)
     }.
 
 
@@ -60,48 +60,49 @@ build(AtmStoreIteratorSpec, AtmContainer) ->
 
 -spec get_next(atm_workflow_execution_env:record(), record()) -> 
     {ok, automation:item(), record()} | stop.
-get_next(AtmWorkflowExecutionEnv, #atm_store_iterator{
+get_next(AtmWorkflowExecutionEnv, AtmStoreIterator = #atm_store_iterator{
     spec = #atm_store_iterator_spec{strategy = #atm_store_iterator_serial_strategy{}},
     data_spec = DataSpec,
-    container_iterator = AtmContainerIterator
-} = AtmStoreIterator) ->
-    AtmWorkflowExecutionCtx = 
+    store_container_iterator = AtmStoreContainerIterator
+}) ->
+    AtmWorkflowExecutionCtx =
         atm_workflow_execution_env:acquire_workflow_execution_ctx(AtmWorkflowExecutionEnv),
-    case get_next_internal(AtmWorkflowExecutionCtx, AtmContainerIterator, 1, DataSpec) of
+    case get_next_internal(AtmWorkflowExecutionCtx, AtmStoreContainerIterator, 1, DataSpec) of
         stop ->
             stop;
-        {ok, [Item], NewAtmContainerIterator} ->
+        {ok, [Item], NewAtmStoreContainerIterator} ->
             {ok, Item, AtmStoreIterator#atm_store_iterator{
-                container_iterator = NewAtmContainerIterator
+                store_container_iterator = NewAtmStoreContainerIterator
             }}
     end;
-get_next(AtmWorkflowExecutionEnv, #atm_store_iterator{
+
+get_next(AtmWorkflowExecutionEnv, AtmStoreIterator = #atm_store_iterator{
     data_spec = DataSpec,
     spec = #atm_store_iterator_spec{strategy = #atm_store_iterator_batch_strategy{
         size = Size
     }},
-    container_iterator = AtmContainerIterator
-} = AtmStoreIterator) ->
+    store_container_iterator = AtmStoreContainerIterator
+}) ->
     AtmWorkflowExecutionCtx =
         atm_workflow_execution_env:acquire_workflow_execution_ctx(AtmWorkflowExecutionEnv),
-    case get_next_internal(AtmWorkflowExecutionCtx, AtmContainerIterator, Size, DataSpec) of
+    case get_next_internal(AtmWorkflowExecutionCtx, AtmStoreContainerIterator, Size, DataSpec) of
         stop ->
             stop;
-        {ok, Items, NewAtmContainerIterator} ->
+        {ok, Items, NewAtmStoreContainerIterator} ->
             {ok, Items, AtmStoreIterator#atm_store_iterator{
-                container_iterator = NewAtmContainerIterator
+                store_container_iterator = NewAtmStoreContainerIterator
             }}
     end.
 
 
 -spec forget_before(record()) -> ok.
-forget_before(#atm_store_iterator{container_iterator = ContainerIterator}) ->
-    atm_container_iterator:forget_before(ContainerIterator).
+forget_before(#atm_store_iterator{store_container_iterator = ContainerIterator}) ->
+    atm_store_container_iterator:forget_before(ContainerIterator).
 
 
 -spec mark_exhausted(record()) -> ok.
-mark_exhausted(#atm_store_iterator{container_iterator = ContainerIterator}) ->
-    atm_container_iterator:mark_exhausted(ContainerIterator).
+mark_exhausted(#atm_store_iterator{store_container_iterator = ContainerIterator}) ->
+    atm_store_container_iterator:mark_exhausted(ContainerIterator).
 
 
 %%%===================================================================
@@ -119,12 +120,14 @@ version() ->
 db_encode(#atm_store_iterator{
     spec = AtmStoreIteratorSpec,
     data_spec = AtmDataSpec,
-    container_iterator = AtmContainerIterator
+    store_container_iterator = AtmStoreContainerIterator
 }, NestedRecordEncoder) ->
     #{
         <<"spec">> => NestedRecordEncoder(AtmStoreIteratorSpec, atm_store_iterator_spec),
         <<"dataSpec">> => NestedRecordEncoder(AtmDataSpec, atm_data_spec),
-        <<"containerIterator">> => NestedRecordEncoder(AtmContainerIterator, atm_container_iterator)
+        <<"containerIterator">> => NestedRecordEncoder(
+            AtmStoreContainerIterator, atm_store_container_iterator
+        )
     }.
 
 
@@ -133,12 +136,14 @@ db_encode(#atm_store_iterator{
 db_decode(#{
     <<"spec">> := AtmStoreIteratorSpecJson,
     <<"dataSpec">> := AtmDataSpecJson,
-    <<"containerIterator">> := AtmContainerIteratorJson
+    <<"containerIterator">> := AtmStoreContainerIteratorJson
 }, NestedRecordDecoder) ->
     #atm_store_iterator{
         spec = NestedRecordDecoder(AtmStoreIteratorSpecJson, atm_store_iterator_spec),
         data_spec = NestedRecordDecoder(AtmDataSpecJson, atm_data_spec),
-        container_iterator = NestedRecordDecoder(AtmContainerIteratorJson, atm_container_iterator)
+        store_container_iterator = NestedRecordDecoder(
+            AtmStoreContainerIteratorJson, atm_store_container_iterator
+        )
     }.
 
 
@@ -150,16 +155,16 @@ db_decode(#{
 %% @private
 -spec get_next_internal(
     atm_workflow_execution_ctx:record(), 
-    atm_container_iterator:record(), 
+    atm_store_container_iterator:record(),
     pos_integer(), 
     atm_data_spec:record()
 ) ->
-    {ok, [automation:item()], atm_container_iterator:record()} | stop.
-get_next_internal(AtmWorkflowExecutionCtx, AtmContainerIterator, Size, DataSpec) ->
-    case atm_container_iterator:get_next_batch(AtmWorkflowExecutionCtx, Size, AtmContainerIterator) of
+    {ok, [automation:item()], atm_store_container_iterator:record()} | stop.
+get_next_internal(AtmWorkflowExecutionCtx, AtmStoreContainerIterator, Size, DataSpec) ->
+    case atm_store_container_iterator:get_next_batch(AtmWorkflowExecutionCtx, Size, AtmStoreContainerIterator) of
         stop ->
             stop;
-        {ok, CompressedItems, NewAtmContainerIterator} ->
+        {ok, CompressedItems, NewAtmStoreContainerIterator} ->
             ExpandedItems = lists:filtermap(fun(CompressedItem) ->
                 case atm_value:expand(AtmWorkflowExecutionCtx, CompressedItem, DataSpec) of
                     {ok, ExpandedItem} -> {true, ExpandedItem};
@@ -168,8 +173,8 @@ get_next_internal(AtmWorkflowExecutionCtx, AtmContainerIterator, Size, DataSpec)
             end, CompressedItems),
             case ExpandedItems of
                 [] ->
-                    get_next_internal(AtmWorkflowExecutionCtx, NewAtmContainerIterator, Size, DataSpec);
+                    get_next_internal(AtmWorkflowExecutionCtx, NewAtmStoreContainerIterator, Size, DataSpec);
                 _ ->
-                    {ok, ExpandedItems, NewAtmContainerIterator}
+                    {ok, ExpandedItems, NewAtmStoreContainerIterator}
             end
     end.
