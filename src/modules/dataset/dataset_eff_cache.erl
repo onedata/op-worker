@@ -128,6 +128,7 @@ invalidate_on_all_nodes(SpaceId, DatasetsOnly) ->
             )
     end, Res).
 
+
 -spec get_eff_ancestor_datasets(entry() | file_meta:doc()) -> {ok, [dataset:id()]} | error().
 get_eff_ancestor_datasets(#entry{eff_ancestor_datasets = EffAncestorDatasets}) ->
     {ok, EffAncestorDatasets};
@@ -138,6 +139,7 @@ get_eff_ancestor_datasets(FileDoc) ->
         {error, _} = Error ->
             Error
     end.
+
 
 -spec get_eff_dataset_protection_flags(entry() | file_meta:doc()) -> {ok, data_access_control:bitmask()} | error().
 get_eff_dataset_protection_flags(#entry{eff_dataset_protection_flags = EffProtectionFlags}) ->
