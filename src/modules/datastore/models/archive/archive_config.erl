@@ -27,7 +27,7 @@
     is_incremental/1, get_base_archive_id/1
 ]).
 %% Setters
--export([override_layout/1, set_base_archive_id/2]).
+-export([enforce_plain_layout/1, set_base_archive_id/2]).
 
 -type record() :: #archive_config{}.
 -type json() :: json_utils:json_map().
@@ -163,8 +163,8 @@ is_valid_base_archive(ArchiveId) ->
     end.
 
 
--spec override_layout(record()) -> record().
-override_layout(ArchiveConfig) ->
+-spec enforce_plain_layout(record()) -> record().
+enforce_plain_layout(ArchiveConfig) ->
     ArchiveConfig#archive_config{layout = ?ARCHIVE_PLAIN_LAYOUT}.
 
 %%%===================================================================

@@ -64,8 +64,8 @@ translate_archive_info(#archive_info{
     description = Description,
     stats = Stats,
     base_archive_id = BaseArchive,
-    related_aip = RelatedAIP,
-    related_dip = RelatedDIP
+    related_aip = RelatedAip,
+    related_dip = RelatedDip
 }) ->
     #{
         <<"archiveId">> => ArchiveId,
@@ -85,6 +85,6 @@ translate_archive_info(#archive_info{
         <<"description">> => Description,
         <<"stats">> => archive_stats:to_json(Stats),
         <<"baseArchive">> => utils:undefined_to_null(BaseArchive),
-        <<"relatedAip">> => utils:undefined_to_null(RelatedAIP),
-        <<"relatedDip">> => utils:undefined_to_null(RelatedDIP)
+        <<"relatedAip">> => utils:undefined_to_null(RelatedAip),
+        <<"relatedDip">> => utils:undefined_to_null(RelatedDip)
     }.

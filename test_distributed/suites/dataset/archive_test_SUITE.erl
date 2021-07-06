@@ -62,7 +62,7 @@
     dip_archive_dataset_attached_to_file_bagit_layout/1,
     dip_archive_dataset_attached_to_hardlink_bagit_layout/1,
     dip_archive_dataset_attached_to_symlink_bagit_layout/1,
-    dip_archive_nested_datasets_bagit_layout/1,
+    dip_archive_nested_datasets_bagit_layout/1
 ]).
 
 groups() -> [
@@ -78,7 +78,7 @@ groups() -> [
         archive_dataset_attached_to_hardlink_bagit_layout,
         % archive_dataset_attached_to_symlink_bagit_layout TODO VFS-7664
         archive_nested_datasets_bagit_layout,
-        
+
         incremental_archive_plain_layout,
         incremental_archive_bagit_layout,
         incremental_archive_modified_content,
@@ -86,7 +86,7 @@ groups() -> [
         incremental_archive_new_file,
         incremental_nested_archive_plain_layout,
         incremental_nested_archive_bagit_layout,
-        
+
         dip_archive_dataset_attached_to_dir_plain_layout,
         dip_archive_dataset_attached_to_file_plain_layout,
         dip_archive_dataset_attached_to_hardlink_plain_layout,

@@ -298,7 +298,7 @@ handle_nested_dataset_and_do_archive(FileCtx, UserCtx, TraverseInfo = #{
         false ->
             undefined
     end,
-    {AipArchiveCtxToReturn, DipArchiveCtxToReturn, FinalBaseArchiveDoc} = case NestedDatasetId =/= undefined of
+    {AipArchiveCtxToReturn, DipArchiveCtxToReturn, BaseArchiveDocToReturn} = case NestedDatasetId =/= undefined of
         true ->
             {ok, AipNestedArchiveCtx} = create_and_prepare_nested_archive_dir(NestedDatasetId, AipArchiveCtx, UserCtx, aip),
             {ok, DipNestedArchiveCtx} = create_and_prepare_nested_archive_dir(NestedDatasetId, DipArchiveCtx, UserCtx, dip),
@@ -311,32 +311,20 @@ handle_nested_dataset_and_do_archive(FileCtx, UserCtx, TraverseInfo = #{
                     undefined
             end,
             {ok, NestedAipArchiveDoc2} = archive:set_base_archive_id(get_archive_doc(AipNestedArchiveCtx), NestedBaseArchiveDoc),
-            {ok, NestedDipArchiveDoc2} = archive:set_base_archive_id(get_archive_doc(DipNestedArchiveCtx), NestedBaseArchiveDoc),
+            {ok, NestedDipArchiveDoc2} = case get_archive_doc(DipNestedArchiveCtx) of
+                undefined -> {ok, undefined};
+                NestedDipDoc -> archive:set_base_archive_id(NestedDipDoc, NestedBaseArchiveDoc)
+            end,
             AipNestedArchiveCtx2 = AipNestedArchiveCtx#archive_traverse_ctx{current_archive_doc = NestedAipArchiveDoc2},
             DipNestedArchiveCtx2 = DipNestedArchiveCtx#archive_traverse_ctx{current_archive_doc = NestedDipArchiveDoc2},
             
-            % fixme numeracja tych ctxów
-            % fixme rozbić na kilka funkcji?
-            {FinalAipArchiveCtx, FinalDipArchiveCtx} = 
+            {UpdatedAipArchiveCtx, UpdatedDipArchiveCtx} = 
                 do_archive(FileCtx, AipNestedArchiveCtx2, DipNestedArchiveCtx2, NestedBaseArchiveDoc, UserCtx),
-            make_symlink(get_file_ctx(FinalAipArchiveCtx), get_file_ctx(AipArchiveCtx), UserCtx),
-            make_symlink(get_file_ctx(FinalDipArchiveCtx), get_file_ctx(DipArchiveCtx), UserCtx),
+            make_symlink(get_file_ctx(UpdatedAipArchiveCtx), get_file_ctx(AipArchiveCtx), UserCtx),
+            make_symlink(get_file_ctx(UpdatedDipArchiveCtx), get_file_ctx(DipArchiveCtx), UserCtx),
     
-            {ok, NestedAipArchiveId} = archive:get_id(get_archive_doc(AipNestedArchiveCtx)),
-            {ok, NestedDipArchiveId} = case get_archive_doc(DipNestedArchiveCtx) of
-                undefined -> {ok, undefined};
-                NestedDipArchiveDoc -> archive:get_id(NestedDipArchiveDoc)
-            end,
-            {ok, UpdatedAipArchiveCtx} = archive:set_related_dip(get_archive_doc(AipNestedArchiveCtx), NestedDipArchiveId),
-            {ok, UpdatedDipArchiveCtx} = case get_archive_doc(DipNestedArchiveCtx) of
-                undefined -> {ok, undefined};
-                DipNestedArchiveDoc -> archive:set_related_aip(DipNestedArchiveDoc, NestedAipArchiveId)
-            end,
-            {
-                FinalAipArchiveCtx#archive_traverse_ctx{current_archive_doc = UpdatedAipArchiveCtx},
-                FinalDipArchiveCtx#archive_traverse_ctx{current_archive_doc = UpdatedDipArchiveCtx},
-                BaseArchiveDoc
-            };
+            {FinalAipArchiveCtx, FinalDipArchiveCtx} = set_aip_dip_relation(UpdatedAipArchiveCtx, UpdatedDipArchiveCtx),
+            {FinalAipArchiveCtx, FinalDipArchiveCtx, NestedBaseArchiveDoc};
         false ->
             {FinalAipArchiveCtx, FinalDipArchiveCtx} = do_archive(FileCtx, AipArchiveCtx, DipArchiveCtx, BaseArchiveDoc, UserCtx),
             {FinalAipArchiveCtx, FinalDipArchiveCtx, BaseArchiveDoc}
@@ -344,9 +332,9 @@ handle_nested_dataset_and_do_archive(FileCtx, UserCtx, TraverseInfo = #{
     TraverseInfo#{
         aip_ctx => AipArchiveCtxToReturn,
         dip_ctx => DipArchiveCtxToReturn,
-        base_archive_doc => FinalBaseArchiveDoc
+        base_archive_doc => BaseArchiveDocToReturn
     }.
-
+    
 
 -spec get_nested_dataset_id_if_attached(file_ctx:ctx(), archive:doc()) -> dataset:id() | undefined.
 get_nested_dataset_id_if_attached(FileCtx, ParentArchiveDoc) ->
@@ -385,6 +373,24 @@ create_and_prepare_nested_archive_dir(DatasetId, ParentArchiveCtx, UserCtx, Type
         {error, _} = Error ->
             Error
     end.
+
+
+-spec set_aip_dip_relation(archive_traverse_ctx(), archive_traverse_ctx()) -> {archive_traverse_ctx(), archive_traverse_ctx()}.
+set_aip_dip_relation(AipArchiveCtx, DipArchiveCtx) ->
+    {ok, NestedAipArchiveId} = archive:get_id(get_archive_doc(AipArchiveCtx)),
+    {ok, NestedDipArchiveId} = case get_archive_doc(DipArchiveCtx) of
+        undefined -> {ok, undefined};
+        NestedDipArchiveDoc -> archive:get_id(NestedDipArchiveDoc)
+    end,
+    {ok, UpdatedAipArchiveDoc} = archive:set_related_dip(get_archive_doc(AipArchiveCtx), NestedDipArchiveId),
+    {ok, UpdatedDipArchiveDoc} = case get_archive_doc(DipArchiveCtx) of
+        undefined -> {ok, undefined};
+        DipNestedArchiveDoc -> archive:set_related_aip(DipNestedArchiveDoc, NestedAipArchiveId)
+    end,
+    {
+        AipArchiveCtx#archive_traverse_ctx{current_archive_doc = UpdatedAipArchiveDoc},
+        DipArchiveCtx#archive_traverse_ctx{current_archive_doc = UpdatedDipArchiveDoc}
+    }.
 
 
 -spec mark_finished_and_propagate_up(file_ctx:ctx(), user_ctx:ctx(), info(), id()) -> ok.

@@ -20,7 +20,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([create/7, create/8, create_nested/2, get/1, modify_attrs/2, delete/1]).
+-export([create/7, create_nested/2, create_dip_archive/1, get/1, modify_attrs/2, delete/1]).
 -export([get_root_dir_ctx/1, get_all_ancestors/1, get_dataset_root_file_ctx/1, find_file/3]).
 
 % getters
@@ -89,12 +89,6 @@
 -spec create(dataset:id(), od_space:id(), creator(), config(), callback(), callback(), description()) ->
     {ok, doc()} | error().
 create(DatasetId, SpaceId, Creator, Config, PreservedCallback, PurgedCallback, Description) ->
-    create(DatasetId, SpaceId, Creator, Config, PreservedCallback, PurgedCallback, Description, undefined).
-
-
--spec create(dataset:id(), od_space:id(), creator(), config(), callback(), callback(), description(), archive:id() | undefined) ->
-    {ok, doc()} | error().
-create(DatasetId, SpaceId, Creator, Config, PreservedCallback, PurgedCallback, Description, RelatedAIP) ->
     datastore_model:create(?CTX, #document{
         value = #archive{
             dataset_id = DatasetId,
@@ -105,8 +99,7 @@ create(DatasetId, SpaceId, Creator, Config, PreservedCallback, PurgedCallback, D
             preserved_callback = PreservedCallback,
             purged_callback = PurgedCallback,
             description = Description,
-            stats = archive_stats:empty(),
-            relatedAIP = RelatedAIP
+            stats = archive_stats:empty()
         },
         scope = SpaceId
     }).
@@ -136,6 +129,21 @@ create_nested(DatasetId, #document{
         },
         scope = SpaceId
     }).
+
+
+-spec create_dip_archive(archive:doc()) -> {ok, archive:doc()} | {error, term()}.
+create_dip_archive(#document{key = AipArchiveId, value = AipArchiveValue} = AipArchiveDoc) ->
+    case datastore_model:create(?CTX, AipArchiveDoc#document{
+        key = undefined,
+        value = #archive{
+            related_aip = AipArchiveId
+        }
+    }) of
+        {ok, #document{key = DipArchiveId}} ->
+            {ok, AipArchiveDoc#document{value = AipArchiveValue#archive{related_dip = DipArchiveId}}};
+        {error, _} = Error ->
+            Error
+    end.
 
 
 -spec get(id()) -> {ok, doc()} | error().
@@ -299,8 +307,7 @@ get_root_dir_guid(#archive{root_dir_guid = RootDirGuid}) ->
 get_root_dir_guid(#document{value = Archive}) ->
     get_root_dir_guid(Archive).
 
-% fixme undefined
--spec get_data_dir_guid(record() | doc() | id()) -> {ok, file_id:file_guid()}.
+-spec get_data_dir_guid(record() | doc() | id() | undefined) -> {ok, file_id:file_guid()}.
 get_data_dir_guid(undefined) -> 
     {ok, undefined};
 get_data_dir_guid(#archive{data_dir_guid = DataDirGuid}) -> 
@@ -326,15 +333,15 @@ get_parent_doc(Archive) ->
     end.
 
 -spec get_related_dip(record() | doc()) -> {ok, archive:id() | undefined}.
-get_related_dip(#archive{relatedDIP = RelatedDIP}) ->
-    {ok, RelatedDIP};
+get_related_dip(#archive{related_dip = RelatedDip}) ->
+    {ok, RelatedDip};
 get_related_dip(#document{value = Archive}) ->
     get_related_dip(Archive);
 get_related_dip(ArchiveId) ->
     ?get_field(ArchiveId, fun get_related_dip/1).
 
 -spec get_related_aip(record() | doc()) -> {ok, archive:id() | undefined}.
-get_related_aip(#archive{relatedAIP = RelatedAIP}) ->
+get_related_aip(#archive{related_aip = RelatedAIP}) ->
     {ok, RelatedAIP};
 get_related_aip(#document{value = Archive}) ->
     get_related_aip(Archive);
@@ -439,14 +446,14 @@ set_base_archive_id(ArchiveDoc, BaseArchiveId) when is_binary(BaseArchiveId) ->
 -spec set_related_dip(id() | doc(), archive:id() | undefined) -> {ok, doc()} | error().
 set_related_dip(ArchiveDocOrId, DipArchiveId) ->
     update(ArchiveDocOrId, fun(Archive) ->
-        {ok, Archive#archive{relatedDIP = DipArchiveId}}
+        {ok, Archive#archive{related_dip = DipArchiveId}}
     end).
 
 
 -spec set_related_aip(id() | doc(), archive:id() | undefined) -> {ok, doc()} | error().
 set_related_aip(ArchiveDocOrId, AipArchiveId) ->
     update(ArchiveDocOrId, fun(Archive) ->
-        {ok, Archive#archive{relatedAIP = AipArchiveId}}
+        {ok, Archive#archive{related_aip = AipArchiveId}}
     end).
 
 %%%===================================================================

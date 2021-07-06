@@ -13,7 +13,8 @@
 %%% since the time the base archive was created, just a hardlink to the file 
 %%% in base archive is created instead of copying whole file content. If base archive 
 %%% is not provided during creation but incremental value is set to true last 
-%%% successfully preserved archive in dataset (if exists) is selected as base archive.
+%%% successfully preserved archive in dataset (if exists) is selected as base archive. 
+%%% When such archive is not found, files from dataset are copied.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(incremental_archive).
@@ -119,9 +120,9 @@ has_checksum_changed(BaseFileCtx, CurrentFileCtx, UserCtx) ->
 
 
 -spec has_metadata_changed(file_ctx:ctx(), file_ctx:ctx(), user_ctx:ctx()) -> boolean().
-has_metadata_changed(PrevFileCtx, CurrentFileCtx, UserCtx) ->
+has_metadata_changed(BaseFileCtx, CurrentFileCtx, UserCtx) ->
     % currently only json metadata are archived
-    get_json_metadata(PrevFileCtx, UserCtx) =/= get_json_metadata(CurrentFileCtx, UserCtx).
+    get_json_metadata(BaseFileCtx, UserCtx) =/= get_json_metadata(CurrentFileCtx, UserCtx).
 
 
 -spec get_json_metadata(file_ctx:ctx(), user_ctx:ctx()) -> json_utils:json_term() | undefined.
