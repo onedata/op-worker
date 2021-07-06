@@ -315,7 +315,7 @@ send_to_event_manager(Manager, Message, RetryCounter) ->
         exit:{timeout, _} ->
             ?debug("Timeout of event manager for message ~p, retry", [Message]),
             send_to_event_manager(Manager, Message, RetryCounter - 1);
-        Reason1:Reason2 ->
-            ?error_stacktrace("Cannot process event ~p due to: ~p", [Message, {Reason1, Reason2}]),
+        Reason1:Reason2:Stacktrace ->
+            ?error_stacktrace("Cannot process event ~p due to: ~p", [Message, {Reason1, Reason2}], Stacktrace),
             send_to_event_manager(Manager, Message, RetryCounter - 1)
     end.

@@ -616,14 +616,14 @@ init_per_suite(Config) ->
         ),
         initializer:mock_auth_manager(NewConfig2, _CheckIfUserIsSupported = true),
         ssl:start(),
-        hackney:start(),
+        application:ensure_all_started(hackney),
         NewConfig2
     end,
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer]} | Config].
 
 
 end_per_suite(Config) ->
-    hackney:stop(),
+     application:stop(hackney),
     ssl:stop(),
     initializer:clean_test_users_and_spaces_no_validate(Config),
     initializer:teardown_storage(Config).

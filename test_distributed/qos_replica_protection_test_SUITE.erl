@@ -736,7 +736,7 @@ init_per_suite(Config) ->
         end, ?config(op_worker_nodes, NewConfig)),
         initializer:mock_auth_manager(NewConfig),
         application:start(ssl),
-        hackney:start(),
+        application:ensure_all_started(hackney),
         initializer:create_test_users_and_spaces(?TEST_FILE(NewConfig, "env_desc.json"), NewConfig)
     end,
     [
@@ -766,7 +766,7 @@ end_per_testcase(_Case, Config) ->
 end_per_suite(Config) ->
     %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
     initializer:clean_test_users_and_spaces_no_validate(Config),
-    hackney:stop(),
+     application:stop(hackney),
     application:stop(ssl),
     initializer:teardown_storage(Config).
 

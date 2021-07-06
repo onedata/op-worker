@@ -63,7 +63,7 @@ get_last_registered_item_index(#iteration_state{last_registered_item_index = Ind
     Index.
 
 -spec register_new_item(state(), workflow_execution_state:index(), workflow_cached_item:id()) ->
-    state() | ?WF_ERROR_RACE_CONDITION.
+    {workflow_execution_state:index(), state()} | ?WF_ERROR_RACE_CONDITION.
 register_new_item(
     Progress = #iteration_state{
         pending_items = Pending,

@@ -67,7 +67,7 @@ configure_auto_mode(SpaceId, NewAutoConfigMap) ->
     update(SpaceId, UpdateFun, Default).
 
 
--spec to_map(doc() | record()) -> json_utils:json_term().
+-spec to_map(doc() | record()) -> auto_config_map().
 to_map(#document{value = StorageImportConfig}) ->
     to_map(StorageImportConfig);
 to_map(#storage_import_config{mode = ?MANUAL_IMPORT}) ->

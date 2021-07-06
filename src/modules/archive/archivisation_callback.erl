@@ -98,12 +98,12 @@ do_notify_or_retry(ArchiveId, DatasetId, CallbackUrl, Operation, ErrorDescriptio
                 wait_and_retry(ArchiveId, DatasetId, CallbackUrl, Operation, ErrorDescription, Sleep, RetriesLeft - 1)
         end
     catch
-        Type:Reason ->
+        Type:Reason:Stacktrace ->
             ?warning_stacktrace(
                 "Calling URL callback ~s, after ~s of "
                 "archive ~s created from dataset ~s, failed due to ~w:~w.~n"
                 "Next retry in ~p seconds. Number of retries left: ~p",
-                [CallbackUrl, Operation, ArchiveId, DatasetId, Type, Reason, Sleep / 1000, RetriesLeft - 1]),
+                [CallbackUrl, Operation, ArchiveId, DatasetId, Type, Reason, Sleep / 1000, RetriesLeft - 1], Stacktrace),
             wait_and_retry(ArchiveId, DatasetId, CallbackUrl, Operation, ErrorDescription, Sleep, RetriesLeft - 1)
     end.
 

@@ -92,8 +92,10 @@ get_preferable_storage_write_block_size(StorageId) ->
     case storage:get_block_size(StorageId) of
         0 ->
             ?DEFAULT_WRITE_BLOCK_SIZE;
+        undefined ->
+            undefined;
         BlockSize ->
-            BlockSize
+            3 * BlockSize
     end.
 
 

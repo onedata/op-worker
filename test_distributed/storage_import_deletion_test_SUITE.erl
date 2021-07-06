@@ -386,7 +386,7 @@ delete_children_files_test_base2(Config, ChildrenToStayNum, ChildrenToDeleteNum)
 init_per_suite(Config) ->
     Posthook = fun(NewConfig) ->
         ssl:start(),
-        hackney:start(),
+        application:ensure_all_started(hackney),
         initializer:disable_quota_limit(NewConfig),
         initializer:mock_provider_ids(NewConfig),
         NewConfig2 = multi_provider_file_ops_test_base:init_env(NewConfig),
@@ -487,9 +487,9 @@ run_test(TestFun, StorageConfig = {StorageType, IsImportedStorage}, [Config | Ot
         apply(TestFun, FinalArgs),
         ok
     catch
-        E:R ->
+        E:R:Stacktrace ->
             ct:pal("Testcase ~p failed due to ~p for storage config ~p~n"
-            "Stacktrace: ~p", [TestFun, {E, R}, StorageConfig, erlang:get_stacktrace()]),
+            "Stacktrace: ~p", [TestFun, {E, R}, StorageConfig, Stacktrace]),
             error
     after
         [W | _] = ?config(op_worker_nodes, Config),

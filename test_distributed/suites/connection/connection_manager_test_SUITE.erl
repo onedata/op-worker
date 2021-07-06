@@ -143,7 +143,7 @@ crashed_connection_should_be_restarted_test(_Config) ->
 
 init_per_suite(Config) ->
     ssl:start(),
-    hackney:start(),
+    application:ensure_all_started(hackney),
     oct_background:init_per_suite(Config, #onenv_test_config{
         onenv_scenario = "2op_no_common_spaces",
         envs = [{op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}]
@@ -151,7 +151,7 @@ init_per_suite(Config) ->
 
 
 end_per_suite(_Config) ->
-    hackney:stop(),
+     application:stop(hackney),
     ssl:stop().
 
 

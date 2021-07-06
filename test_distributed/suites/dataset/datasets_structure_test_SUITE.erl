@@ -910,11 +910,11 @@ iterate_over_datasets_test_base(ChildrenCount, Depth, Limit, ListingType, Starti
 
 init_per_suite(Config) ->
     ssl:start(),
-    hackney:start(),
+    application:ensure_all_started(hackney),
     oct_background:init_per_suite(Config, #onenv_test_config{onenv_scenario = "2op"}).
 
 end_per_suite(_Config) ->
-    hackney:stop(),
+     application:stop(hackney),
     ssl:stop().
 
 init_per_testcase(Case, Config)

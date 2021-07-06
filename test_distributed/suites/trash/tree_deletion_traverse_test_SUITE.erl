@@ -147,11 +147,11 @@ delete_files_structure_test_base(Config, FilesStructure, TimeWarpSecs, ExpectedR
 
 init_per_suite(Config) ->
     ssl:start(),
-    hackney:start(),
+    application:ensure_all_started(hackney),
     oct_background:init_per_suite(Config, #onenv_test_config{onenv_scenario = "2op-manual-import"}).
 
 end_per_suite(_Config) ->
-    hackney:stop(),
+     application:stop(hackney),
     ssl:stop().
 
 init_per_testcase(_Case, Config) ->

@@ -1421,9 +1421,9 @@ run_test(TestName, TestBaseFun, TestNo, Config, SpaceId, TestArgs) ->
         ct:pal("Test \"~p\" for space ~p and setup no. ~p PASSED.", [TestName, SpaceId, TestNo]),
         true
     catch
-        Error:Reason ->
+        Error:Reason:Stacktrace ->
             ct:pal("Test ~p for space ~p and setup no. ~p FAILED.~nError: ~p.~n"
-            "Stacktrace:~n~p", [TestName, SpaceId, TestNo, {Error, Reason}, erlang:get_stacktrace()]),
+            "Stacktrace:~n~p", [TestName, SpaceId, TestNo, {Error, Reason}, Stacktrace]),
             false
     end.
 

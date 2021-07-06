@@ -1793,7 +1793,7 @@ init_env(Config) ->
     end, ?config(op_worker_nodes, Config)),
 
     ssl:start(),
-    hackney:start(),
+    application:ensure_all_started(hackney),
     initializer:disable_quota_limit(Config),
     NewConfig = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
 
@@ -1806,7 +1806,7 @@ teardown_env(Config) ->
     %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
     initializer:clean_test_users_and_spaces_no_validate(Config),
     initializer:unload_quota_mocks(Config),
-    hackney:stop(),
+     application:stop(hackney),
     ssl:stop().
 
 mock_sync_and_rtransfer_errors(Config) ->
@@ -1923,8 +1923,8 @@ get_links(FileUuid) ->
         {ok, Links} = datastore_model:fold_links(Ctx, FileUuid, all, Fun, #{}, #{}),
         Links
     catch
-        _:Reason ->
-            ct:print("Get links failed: ~p~n~p", [Reason, erlang:get_stacktrace()]),
+        _:Reason:Stacktrace ->
+            ct:print("Get links failed: ~p~n~p", [Reason, Stacktrace]),
             #{}
     end.
 

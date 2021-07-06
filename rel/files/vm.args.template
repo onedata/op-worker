@@ -47,3 +47,7 @@
 ## Set default heap size (1024 MB with 8byte word), do not kill processes
 +hmax 134217728
 +hmaxk false
+
+# TODO VFS-7924 this is currently set only for op-worker,
+# unify in all components when the NIF sockets are no longer experimental
+-kernel inet_backend socket

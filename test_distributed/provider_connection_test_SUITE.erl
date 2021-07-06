@@ -298,7 +298,7 @@ init_per_testcase(provider_logic_correctly_resolves_nodes_to_connect, Config) ->
     Nodes = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Nodes, inet, [unstick, passthrough]),
     ssl:start(),
-    hackney:start(),
+    application:ensure_all_started(hackney),
 
     % Disable caching of resolved nodes
     rpc:multicall(Nodes, application, set_env, [?APP_NAME, provider_nodes_cache_ttl_seconds, -1]),
@@ -315,7 +315,7 @@ init_per_testcase(Case, Config) when
     Case == broken_compatibility_file_causes_unknown_entries_in_configuration;
     Case == deprecated_configuration_endpoint_is_served ->
     ssl:start(),
-    hackney:start(),
+    application:ensure_all_started(hackney),
     init_per_testcase(default, Config);
 
 init_per_testcase(_Case, Config) ->
@@ -331,7 +331,7 @@ end_per_testcase(Case, Config) when
     Case == configuration_endpoint_is_served;
     Case == broken_compatibility_file_causes_unknown_entries_in_configuration;
     Case == deprecated_configuration_endpoint_is_served ->
-    hackney:stop(),
+     application:stop(hackney),
     ssl:stop(),
     end_per_testcase(default, Config);
 

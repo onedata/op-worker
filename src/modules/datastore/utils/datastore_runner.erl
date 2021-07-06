@@ -35,13 +35,13 @@ run_and_normalize_error(Fun, Module) ->
     try Fun() of
         Other -> Other
     catch
-        error:Reason ->
+        error:Reason:Stacktrace ->
             Reason2 = normalize_error(Reason),
             case Reason2 of
                 not_found ->
-                    ?debug_stacktrace("~p error: ~p", [Module, Reason2]);
+                    ?debug_stacktrace("~p error: ~p", [Module, Reason2], Stacktrace);
                 _ ->
-                    ?error_stacktrace("~p error: ~p", [Module, Reason2])
+                    ?error_stacktrace("~p error: ~p", [Module, Reason2], Stacktrace)
             end,
             {error, Reason2}
     end.

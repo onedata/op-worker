@@ -184,10 +184,10 @@ request(Client, Req, Timeout) ->
     catch
         throw:{error, _} = Err2 ->
             Err2;
-        Type:Reason ->
+        Type:Reason:Stacktrace ->
             ?error_stacktrace("Unexpected error while processing GS request - ~p:~p", [
                 Type, Reason
-            ]),
+            ], Stacktrace),
             ?ERROR_INTERNAL_SERVER_ERROR
     end.
 
@@ -228,10 +228,10 @@ process_push_message(Message) ->
     spawn(fun() ->
         try
             process_push_message_async(Message)
-        catch Type:Reason ->
+        catch Type:Reason:Stacktrace ->
             ?error_stacktrace("Error processing GS push message from Onezone - ~w:~p", [
                 Type, Reason
-            ]),
+            ], Stacktrace),
             force_terminate()
         end
     end).
@@ -418,10 +418,10 @@ start_gs_connection() ->
     catch
         throw:{error, _} = Error ->
             Error;
-        Type:Reason ->
+        Type:Reason:Stacktrace ->
             ?error_stacktrace("Cannot start gs connection due to ~p:~p", [
                 Type, Reason
-            ]),
+            ], Stacktrace),
             {error, Reason}
     end.
 
@@ -570,10 +570,10 @@ call_onezone(ConnRef, Client, Request, Timeout) ->
         exit:{timeout, _} -> ?ERROR_TIMEOUT;
         exit:{normal, _} -> ?ERROR_NO_CONNECTION_TO_ONEZONE;
         throw:{error, _} = Err -> Err;
-        Type:Reason ->
+        Type:Reason:Stacktrace ->
             ?error_stacktrace("Unexpected error during call to gs_client_worker - ~p:~p", [
                 Type, Reason
-            ]),
+            ], Stacktrace),
             throw(?ERROR_INTERNAL_SERVER_ERROR)
     end.
 

@@ -178,8 +178,8 @@ auth_request(TransferData, ProviderId) ->
 
         {StorageId, FileId, FileGuid}
     catch
-        _:Err ->
-            ?error_stacktrace("Auth providerid=~p failed due to ~p", [ProviderId, Err]),
+        _:Err:Stacktrace ->
+            ?error_stacktrace("Auth providerid=~p failed due to ~p", [ProviderId, Err], Stacktrace),
             false
     end.
 
@@ -349,7 +349,7 @@ write_certs_to_temp(Contents) ->
     case lists:flatmap(fun public_key:pem_decode/1, Contents) of
         [] -> false;
         Ders ->
-            TempPath = lib:nonl(os:cmd("mktemp")),
+            TempPath = string:trim(os:cmd("mktemp")),
             OutData = public_key:pem_encode(Ders),
             ok = file:write_file(TempPath, OutData),
             TempPath

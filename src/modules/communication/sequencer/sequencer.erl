@@ -62,9 +62,7 @@ send_message(Msg, StmId, Ref) ->
 -spec term_to_stream_id(term()) -> stream_id().
 term_to_stream_id(Term) ->
     Binary = term_to_binary(Term),
-    PHash1 = erlang:phash(Binary, 4294967296) bsl 32,
-    PHash2 = erlang:phash2(Binary, 4294967296),
-    PHash1 + PHash2.
+    erlang:phash2(Binary, 4294967296).
 
 %%--------------------------------------------------------------------
 %% @doc

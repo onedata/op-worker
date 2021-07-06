@@ -52,7 +52,7 @@ helpers-deps: get-deps
 	make -C _build/default/lib/helpers submodules submodule=clproto
 
 ## Generates a production release
-generate: helpers-deps template compile inject-gui
+generate: helpers-deps template inject-gui
 	$(REBAR) release $(OVERLAY_VARS)
 
 clean: relclean pkgclean

@@ -124,8 +124,8 @@ handle(Manager, Request, RetryCounter) ->
         exit:{timeout, _} ->
             ?debug("Timeout of stream process for request ~p, retry", [Request]),
             handle(Manager, Request, RetryCounter - 1);
-        Reason1:Reason2 ->
-            ?error_stacktrace("Cannot process request ~p due to: ~p", [Request, {Reason1, Reason2}]),
+        Reason1:Reason2:Stacktrace ->
+            ?error_stacktrace("Cannot process request ~p due to: ~p", [Request, {Reason1, Reason2}], Stacktrace),
             handle(Manager, Request, RetryCounter - 1)
     end.
 
@@ -416,8 +416,8 @@ handle_in_process(Request, State, RetryCounter) ->
         exit:{timeout, _} ->
             ?debug("Timeout of stream process for request ~p, retry", [Request]),
             retry_handle(State, Request, RetryCounter);
-        Reason1:Reason2 ->
-            ?error_stacktrace("Cannot process request ~p due to: ~p", [Request, {Reason1, Reason2}]),
+        Reason1:Reason2:Stacktrace ->
+            ?error_stacktrace("Cannot process request ~p due to: ~p", [Request, {Reason1, Reason2}], Stacktrace),
             retry_handle(State, Request, RetryCounter)
     end.
 

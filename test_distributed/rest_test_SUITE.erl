@@ -148,14 +148,14 @@ init_per_testcase(Case, Config) when
 ->
     Workers = ?config(op_worker_nodes, Config),
     ssl:start(),
-    hackney:start(),
+    application:ensure_all_started(hackney),
     test_utils:mock_new(Workers, space_oz_middleware_handler),
     test_utils:mock_expect(Workers, space_oz_middleware_handler, authorize, fun(_, _) -> true end),
     mock_provider_id(Config),
     Config;
 init_per_testcase(_Case, Config) ->
     ssl:start(),
-    hackney:start(),
+    application:ensure_all_started(hackney),
     mock_provider_id(Config),
     mock_provider_logic(Config),
     mock_space_logic(Config),
@@ -169,14 +169,14 @@ end_per_testcase(Case, Config) when
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Workers, space_oz_middleware_handler),
     unmock_provider_id(Config),
-    hackney:stop(),
+    application:stop(hackney),
     ssl:stop();
 end_per_testcase(_Case, Config) ->
     unmock_provider_id(Config),
     unmock_provider_logic(Config),
     unmock_space_logic(Config),
     unmock_user_logic(Config),
-    hackney:stop(),
+    application:stop(hackney),
     ssl:stop().
 
 

@@ -370,7 +370,7 @@ get_offline_token_renewal_backoff_Intervals(Interval, Intervals) ->
 
 init_per_suite(Config) ->
     ssl:start(),
-    hackney:start(),
+    application:ensure_all_started(hackney),
     oct_background:init_per_suite(Config, #onenv_test_config{
         onenv_scenario = "1op",
         envs = [
@@ -384,7 +384,7 @@ init_per_suite(Config) ->
 
 
 end_per_suite(_Config) ->
-    hackney:stop(),
+     application:stop(hackney),
     ssl:stop().
 
 

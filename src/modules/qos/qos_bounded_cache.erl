@@ -147,8 +147,8 @@ init_qos_cache_for_space(SpaceId) ->
         Error = {error, _} ->
             ?error("Unable to initialize QoS bounded cache due to: ~p", [Error])
     catch
-        Error2:Reason ->
-            ?error_stacktrace("Unable to initialize qos bounded cache due to: ~p", [{Error2, Reason}])
+        Error2:Reason:Stacktrace ->
+            ?error_stacktrace("Unable to initialize qos bounded cache due to: ~p", [{Error2, Reason}], Stacktrace)
     end.
 
 
@@ -199,8 +199,8 @@ get_space_list() ->
         Error = {error, _} ->
             ?error("Unable to initialize QoS bounded cache due to: ~p", [Error])
     catch
-        Error2:Reason ->
-            ?error_stacktrace("Unable to initialize qos bounded cache due to: ~p", [{Error2, Reason}])
+        Error2:Reason:Stacktrace ->
+            ?error_stacktrace("Unable to initialize qos bounded cache due to: ~p", [{Error2, Reason}], Stacktrace)
     end.
 
 

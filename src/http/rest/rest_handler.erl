@@ -222,10 +222,10 @@ process_request(Req, #state{auth = #auth{session_id = SessionId} = Auth, rest_re
     catch
         throw:Error ->
             {stop, http_req:send_error(Error, Req), State};
-        Type:Message ->
+        Type:Message:Stacktrace ->
             ?error_stacktrace("Unexpected error in ~p:~p - ~p:~p", [
                 ?MODULE, ?FUNCTION_NAME, Type, Message
-            ]),
+            ], Stacktrace),
             NewReq = cowboy_req:reply(?HTTP_500_INTERNAL_SERVER_ERROR, Req),
             {stop, NewReq, State}
     end.

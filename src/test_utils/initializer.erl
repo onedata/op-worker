@@ -745,9 +745,9 @@ create_test_users_and_spaces(AllWorkers, ConfigPath, Config, NoHistory) ->
     try
         set_default_onezone_domain(Config),
         create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config, NoHistory)
-    catch Type:Message ->
+    catch Type:Message:Stacktrace ->
         ct:print("initializer:create_test_users_and_spaces crashed: ~p:~p~n~p", [
-            Type, Message, erlang:get_stacktrace()
+            Type, Message, Stacktrace
         ]),
         throw(cannot_create_test_users_and_spaces)
     end.

@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module implements gen_fsm behaviour and is responsible for sorting
+%%% This module implements gen_statem behaviour and is responsible for sorting
 %%% incoming stream messages in ascending order of sequence number and
 %%% forwarding them to the router. It is supervised by sequencer stream
 %%% supervisor and coordinated by sequencer manager.
@@ -15,7 +15,7 @@
 -module(sequencer_in_stream).
 -author("Krzysztof Trzepla").
 
--behaviour(gen_fsm).
+-behaviour(gen_statem).
 
 -include("global_definitions.hrl").
 -include("proto/oneclient/client_messages.hrl").
@@ -24,12 +24,11 @@
 %% API
 -export([start_link/3, send/2]).
 
-%% gen_fsm callbacks
--export([init/1, handle_event/3, handle_sync_event/4, handle_info/3, terminate/3,
-    code_change/4]).
+%% gen_statem callbacks
+-export([init/1, callback_mode/0, terminate/3, code_change/4]).
 
-%% gen_fsm states
--export([receiving/2, processing/2, requesting/2]).
+%% gen_statem states
+-export([receiving/3, processing/3, requesting/3]).
 
 -type stream_id() :: sequencer:stream_id().
 -type sequence_number() :: sequencer:sequence_number().
@@ -74,7 +73,7 @@
 -spec start_link(SeqMan :: pid(), StmId :: stream_id(), SessId :: session:id()) ->
     {ok, SeqStm :: pid()} | ignore | {error, Reason :: term()}.
 start_link(SeqMan, StmId, SessId) ->
-    gen_fsm:start_link(?MODULE, [SeqMan, StmId, SessId], []).
+    gen_statem:start_link(?MODULE, [SeqMan, StmId, SessId], []).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -83,10 +82,10 @@ start_link(SeqMan, StmId, SessId) ->
 %%--------------------------------------------------------------------
 -spec send(pid(), term()) -> ok.
 send(Manager, Message) ->
-    gen_fsm:send_event(Manager, Message).
+    gen_statem:cast(Manager, Message).
 
 %%%===================================================================
-%%% gen_fsm callbacks
+%%% gen_statem callbacks
 %%%===================================================================
 
 %%--------------------------------------------------------------------
@@ -113,78 +112,16 @@ init([SeqMan, StmId, SessId]) ->
         is_proxy = IsProxy
     }, ?RECEIVING_TIMEOUT}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Whenever a gen_fsm receives an event sent using
-%% gen_fsm:send_all_state_event/2, this function is called to handle
-%% the event.
-%% @end
-%%--------------------------------------------------------------------
--spec(handle_event(Event :: term(), StateName :: atom(),
-    StateData :: #state{}) ->
-    {next_state, NextStateName :: atom(), NewStateData :: #state{}} |
-    {next_state, NextStateName :: atom(), NewStateData :: #state{},
-        timeout() | hibernate} |
-    {stop, Reason :: term(), NewStateData :: #state{}}).
-handle_event(Event, StateName, State) ->
-    ?log_bad_request({Event, StateName, State}),
-    {next_state, StateName, State}.
+-spec callback_mode() -> state_functions.
+callback_mode() ->
+    state_functions.
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Whenever a gen_fsm receives an event sent using
-%% gen_fsm:sync_send_all_state_event/[2,3], this function is called
-%% to handle the event.
-%% @end
-%%--------------------------------------------------------------------
--spec(handle_sync_event(Event :: term(), From :: {pid(), Tag :: term()},
-    StateName :: atom(), StateData :: term()) ->
-    {reply, Reply :: term(), NextStateName :: atom(), NewStateData :: term()} |
-    {reply, Reply :: term(), NextStateName :: atom(), NewStateData :: term(),
-        timeout() | hibernate} |
-    {next_state, NextStateName :: atom(), NewStateData :: term()} |
-    {next_state, NextStateName :: atom(), NewStateData :: term(),
-        timeout() | hibernate} |
-    {stop, Reason :: term(), Reply :: term(), NewStateData :: term()} |
-    {stop, Reason :: term(), NewStateData :: term()}).
-handle_sync_event(Event, From, StateName, State) ->
-    ?log_bad_request({Event, From, StateName, State}),
-    {next_state, StateName, State}.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% This function is called by a gen_fsm when it receives any
-%% message other than a synchronous or asynchronous event
-%% (or a system message).
-%% @end
-%%--------------------------------------------------------------------
--spec(handle_info(Info :: term(), StateName :: atom(),
-    StateData :: term()) ->
-    {next_state, NextStateName :: atom(), NewStateData :: term()} |
-    {next_state, NextStateName :: atom(), NewStateData :: term(),
-        timeout() | hibernate} |
-    {stop, Reason :: normal | term(), NewStateData :: term()}).
-handle_info(reset_stream, receiving, #state{session_id = SessId,
-    stream_id = StmId, is_proxy = IsProxy} = State) ->
-    send_message_stream_reset(StmId, SessId, IsProxy),
-    {next_state, receiving, State, ?RECEIVING_TIMEOUT};
-
-handle_info({'EXIT', _, shutdown}, _, State) ->
-    {stop, normal, State};
-
-handle_info(Info, StateName, State) ->
-    ?log_bad_request({Info, StateName, State}),
-    {next_state, StateName, State}.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% This function is called by a gen_fsm when it is about to
+%% This function is called by a gen_statem when it is about to
 %% terminate. It should be the opposite of Module:init/1 and do any
-%% necessary cleaning up. When it returns, the gen_fsm terminates with
+%% necessary cleaning up. When it returns, the gen_statem terminates with
 %% Reason. The return value is ignored.
 %%
 %% @end
@@ -231,7 +168,7 @@ code_change(_OldVsn, StateName, State, _Extra) ->
     {ok, StateName, State}.
 
 %%%===================================================================
-%%% gen_fsm states
+%%% gen_statem states
 %%%===================================================================
 
 %%--------------------------------------------------------------------
@@ -247,24 +184,33 @@ code_change(_OldVsn, StateName, State, _Extra) ->
 %% in 'receiving' state.
 %% @end
 %%--------------------------------------------------------------------
--spec receiving(Event :: timeout | #client_message{}, State :: #state{}) ->
+-spec receiving(gen_statem:event_type(), Event :: #client_message{}, State :: #state{}) ->
     {next_state, NextStateName :: atom(), NextState :: #state{}, timeout()}.
-receiving(timeout, #state{sequence_number = SeqNum} = State) ->
+receiving(timeout, _, #state{sequence_number = SeqNum} = State) ->
     send_message_request(SeqNum, State),
     {next_state, receiving, State, ?RECEIVING_TIMEOUT};
 
-receiving(#client_message{message_stream = #message_stream{
+receiving(cast, #client_message{message_stream = #message_stream{
     sequence_number = SeqNum}} = Msg, #state{sequence_number = SeqNum} = State) ->
     {next_state, processing, forward_message(Msg, State), 0};
 
-receiving(#client_message{} = Msg, State) ->
+receiving(cast, #client_message{} = Msg, State) ->
     case store_message(Msg, State) of
         {false, NewState} ->
             {next_state, receiving, NewState, ?RECEIVING_TIMEOUT};
         {SeqNum, NewState} ->
             send_message_request(SeqNum - 1, State),
             {next_state, requesting, NewState, ?REQUESTING_TIMEOUT}
-    end.
+    end;
+
+receiving(info, reset_stream, #state{session_id = SessId,
+    stream_id = StmId, is_proxy = IsProxy} = State) ->
+    send_message_stream_reset(StmId, SessId, IsProxy),
+    {next_state, receiving, State, ?RECEIVING_TIMEOUT};
+
+
+receiving(info, Msg, State) ->
+    handle_info(Msg, receiving, State).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -276,9 +222,9 @@ receiving(#client_message{} = Msg, State) ->
 %% threshold is exceeded.
 %% @end
 %%--------------------------------------------------------------------
--spec processing(Event :: timeout | #client_message{}, State :: #state{}) ->
+-spec processing(gen_statem:event_type(), Event :: #client_message{}, State :: #state{}) ->
     {next_state, NextStateName :: atom(), NextState :: #state{}, timeout()}.
-processing(timeout, #state{sequence_number = SeqNum, messages = Msgs} = State) ->
+processing(timeout, _, #state{sequence_number = SeqNum, messages = Msgs} = State) ->
     case maps:find(SeqNum, Msgs) of
         {ok, Msg} ->
             {next_state, processing,
@@ -287,13 +233,16 @@ processing(timeout, #state{sequence_number = SeqNum, messages = Msgs} = State) -
             {next_state, requesting, maybe_send_message_acknowledgement(State), 0}
     end;
 
-processing(#client_message{message_stream = #message_stream{
+processing(cast, #client_message{message_stream = #message_stream{
     sequence_number = SeqNum}} = Msg, #state{sequence_number = SeqNum} = State) ->
     {next_state, processing, forward_message(Msg, State), 0};
 
-processing(#client_message{} = Msg, State) ->
+processing(cast, #client_message{} = Msg, State) ->
     {_, NewState} = store_message(Msg, State),
-    {next_state, processing, NewState, 0}.
+    {next_state, processing, NewState, 0};
+
+processing(info, Msg, State) ->
+    handle_info(Msg, processing, State).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -304,26 +253,43 @@ processing(#client_message{} = Msg, State) ->
 %% request for message with awaited sequence number.
 %% @end
 %%--------------------------------------------------------------------
--spec requesting(Event :: timeout | #client_message{}, State :: #state{}) ->
+-spec requesting(gen_statem:event_type(), Event :: #client_message{}, State :: #state{}) ->
     {next_state, NextStateName :: atom(), NextState :: #state{}, timeout()}.
-requesting(timeout, #state{messages = #{}} = State) ->
+requesting(timeout, _, #state{messages = #{}} = State) ->
     {next_state, receiving, State, ?RECEIVING_TIMEOUT};
 
-requesting(timeout, #state{sequence_number = SeqNum} = State) ->
+requesting(timeout, _, #state{sequence_number = SeqNum} = State) ->
     send_message_request(SeqNum, State),
     {next_state, requesting, State, ?REQUESTING_TIMEOUT};
 
-requesting(#client_message{message_stream = #message_stream{
+requesting(cast, #client_message{message_stream = #message_stream{
     sequence_number = SeqNum}} = Msg, #state{sequence_number = SeqNum} = State) ->
     {next_state, processing, forward_message(Msg, State), 0};
 
-requesting(#client_message{} = Msg, State) ->
+requesting(cast, #client_message{} = Msg, State) ->
     {_, NewState} = store_message(Msg, State),
-    {next_state, requesting, NewState, ?REQUESTING_TIMEOUT}.
+    {next_state, requesting, NewState, ?REQUESTING_TIMEOUT};
+
+requesting(info, Msg, State) ->
+    handle_info(Msg, requesting, State).
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%% @private
+-spec(handle_info(Info :: term(), StateName :: atom(),
+    StateData :: term()) ->
+    {next_state, NextStateName :: atom(), NewStateData :: term()} |
+    {next_state, NextStateName :: atom(), NewStateData :: term(),
+        timeout() | hibernate} |
+    {stop, Reason :: normal | term(), NewStateData :: term()}).
+handle_info({'EXIT', _, shutdown}, _, State) ->
+    {stop, normal, State};
+
+handle_info(Info, StateName, State) ->
+    ?log_bad_request({Info, StateName, State}),
+    {next_state, StateName, State}.
 
 %%--------------------------------------------------------------------
 %% @private

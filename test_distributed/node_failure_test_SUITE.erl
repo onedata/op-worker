@@ -150,7 +150,7 @@ test_base(Config, WorkerToKillP1, WorkerToKillP2) ->
 
 init_per_suite(Config) ->
     ssl:start(),
-    hackney:start(),
+    application:ensure_all_started(hackney),
     oct_background:init_per_suite(Config, #onenv_test_config{
         onenv_scenario = "2op-2nodes",
         posthook = fun provider_onenv_test_utils:setup_sessions/1
@@ -163,7 +163,7 @@ end_per_testcase(_Case, Config) ->
     lfm_proxy:teardown(Config).
 
 end_per_suite(_Config) ->
-    hackney:stop(),
+     application:stop(hackney),
     ssl:stop().
 
 %%%===================================================================

@@ -339,7 +339,7 @@ overall_test(Config) ->
 
 init_per_suite(Config) ->
     Posthook = fun(NewConfig) ->
-        hackney:start(),
+        application:ensure_all_started(hackney),
         application:start(ssl),
         initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), NewConfig)
     end,
@@ -347,7 +347,7 @@ init_per_suite(Config) ->
 
 
 end_per_suite(Config) ->
-    hackney:stop(),
+     application:stop(hackney),
     application:stop(ssl),
     initializer:clean_test_users_and_spaces_no_validate(Config).
 

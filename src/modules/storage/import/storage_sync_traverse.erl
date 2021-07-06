@@ -837,10 +837,10 @@ process_storage_file(StorageFileCtx, Info) ->
     catch
         throw:?ENOENT ->
             {error, ?ENOENT};
-        Error2:Reason2 ->
+        Error2:Reason2:Stacktrace2 ->
             ?error_stacktrace(
                 "Syncing file ~p on storage ~p supporting space ~p failed due to ~w:~w.",
-                [StorageFileId, StorageId, SpaceId, Error2, Reason2]),
+                [StorageFileId, StorageId, SpaceId, Error2, Reason2], Stacktrace2),
             {error, {Error2, Reason2}}
     end.
 

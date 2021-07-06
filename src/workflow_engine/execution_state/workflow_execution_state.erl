@@ -430,7 +430,7 @@ maybe_notify_task_execution_ended(#document{key = ExecutionId, value = #workflow
     {TaskId, _TaskSpec} = workflow_jobs:get_task_details(JobIdentifier, BoxesSpec),
     Handler:handle_task_execution_ended(ExecutionId, Context, TaskId).
 
--spec update(workflow_engine:execution_id(), update_fun()) -> {ok, state()} | {error, term()}.
+-spec update(workflow_engine:execution_id(), update_fun()) -> {ok, doc()} | {error, term()}.
 update(ExecutionId, UpdateFun) ->
     % TODO VFS-7787 - should we add try/catch or allow functions fail?
     datastore_model:update(?CTX, ExecutionId, fun(State) ->

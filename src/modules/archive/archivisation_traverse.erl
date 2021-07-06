@@ -70,7 +70,7 @@ start(ArchiveDoc, DatasetDoc, UserCtx) ->
             {ok, ArchiveId} = archive:get_id(ArchiveDoc),
             {ok, DatasetId} = archive:get_dataset_id(ArchiveDoc),
             UserId = user_ctx:get_user_id(UserCtx),
-            
+
             {ok, ArchiveDoc2} = prepare_archive_dir(ArchiveDoc, DatasetId, UserCtx),
             {ok, ArchiveDataDirGuid} = archive:get_data_dir_guid(ArchiveDoc2),
 
@@ -414,9 +414,13 @@ archive_dir(FileCtx, TargetParentCtx, UserCtx) ->
     try
         archive_dir_insecure(FileCtx, TargetParentCtx, UserCtx)
     catch
-        Class:Reason ->
+        Class:Reason:Stacktrace ->
             Guid = file_ctx:get_logical_guid_const(FileCtx),
-            ?error_stacktrace("Unexpected error ~p:~p occured during archivisation of directory ~s.", [Class, Reason, Guid]),
+            ?error_stacktrace(
+                "Unexpected error ~p:~p occured during archivisation of directory ~s.",
+                [Class, Reason, Guid],
+                Stacktrace
+            ),
             {error, Reason}
     end.
 

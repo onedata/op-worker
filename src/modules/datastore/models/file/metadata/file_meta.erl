@@ -138,7 +138,7 @@ save(Doc, GeneratedKey) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec create({uuid, ParentUuid :: uuid()}, doc()) ->
-    {ok, uuid()} | {error, term()}.
+    {ok, doc()} | {error, term()}.
 create(Parent, FileDoc) ->
     create(Parent, FileDoc, all).
 
@@ -634,10 +634,10 @@ setup_onedata_user(UserId, EffSpaces) ->
                 {error, already_exists} ->
                     ok
             end
-        catch Type:Message ->
+        catch Type:Message:Stacktrace ->
             ?error_stacktrace("Failed to setup user ~s - ~p:~p", [
                 UserId, Type, Message
-            ])
+            ], Stacktrace)
         end
     end).
 
@@ -869,7 +869,7 @@ get_active_perms_type(FileUuid) ->
     end.
 
 
--spec update_mode(uuid(), posix_permissions()) -> {ok, doc} | {error, term()}.
+-spec update_mode(uuid(), posix_permissions()) -> {ok, doc()} | {error, term()}.
 update_mode(FileUuid, NewMode) ->
     update({uuid, FileUuid}, fun(#file_meta{} = FileMeta) ->
         {ok, FileMeta#file_meta{mode = NewMode}}

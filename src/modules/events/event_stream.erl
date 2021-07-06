@@ -315,14 +315,14 @@ execute_event_handler(Force, #state{events = Evts, handler_ref = undefined,
         ?debug("Execution of handler on events ~p in event stream ~p and session
         ~p took ~p milliseconds", [EvtsList, StmKey, SessId, Duration])
     catch
-        Error:Reason ->
+        Error:Reason:Stacktrace ->
             case Ctx of
                 #{notify := NotifyFun} -> NotifyFun(#server_message{message_body = #status{code = ?EAGAIN}});
                 _ -> ok
             end,
 
             ?error_stacktrace("~p event handler of state ~p failed with ~p:~p",
-                [?MODULE, State, Error, Reason])
+                [?MODULE, State, Error, Reason], Stacktrace)
     end;
 
 execute_event_handler(Force, #state{handler_ref = {Pid, _}} = State) ->

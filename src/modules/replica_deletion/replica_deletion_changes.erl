@@ -147,7 +147,7 @@ handle_refusal(#document{
 %% Checks whether local replica of file is sufficient to support deletion.
 %% @end
 %%-------------------------------------------------------------------
--spec can_support_deletion(replica_deletion:record()) -> boolean().
+-spec can_support_deletion(replica_deletion:record()) -> {true, fslogic_blocks:blocks()} | false.
 can_support_deletion(#replica_deletion{
     file_uuid = FileUuid,
     space_id = SpaceId,

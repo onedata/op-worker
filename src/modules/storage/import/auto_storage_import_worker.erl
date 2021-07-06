@@ -252,9 +252,9 @@ check_spaces() ->
     catch
         throw:?STALLED_SCANS_NOT_FIXED_ERROR ->
             ok;
-        Error2:Reason ->
+        Error2:Reason:Stacktrace ->
             ?error_stacktrace("~s was unable to check spaces due to unexpected ~p:~p",
-                [?AUTO_STORAGE_IMPORT_WORKER, Error2, Reason])
+                [?AUTO_STORAGE_IMPORT_WORKER, Error2, Reason], Stacktrace)
     end.
 
 

@@ -181,7 +181,7 @@ init_per_suite(Config) ->
             test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_force_delay_ms, timer:seconds(2))
         end, ?config(op_worker_nodes, NewConfig2)),
         ssl:start(),
-        hackney:start(),
+        application:ensure_all_started(hackney),
         NewConfig3 = initializer:create_test_users_and_spaces(?TEST_FILE(NewConfig2, "env_desc.json"), NewConfig2),
         NewConfig3
     end,
@@ -190,7 +190,7 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
     initializer:clean_test_users_and_spaces_no_validate(Config),
-    hackney:stop(),
+     application:stop(hackney),
     ssl:stop(),
     initializer:teardown_storage(Config).
 

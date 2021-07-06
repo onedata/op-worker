@@ -65,10 +65,10 @@ download_single_file(SessionId, #file_attr{
                         execute_on_success_callback(FileGuid, OnSuccessCallback),
                         http_streamer:close_stream(Boundary, Req2),
                         Req2
-                    catch Type:Reason ->
+                    catch Type:Reason:Stacktrace ->
                         {ok, UserId} = session:get_user_id(SessionId),
                         ?error_stacktrace("Error while processing file (~p) download "
-                                          "for user ~p - ~p:~p", [FileGuid, UserId, Type, Reason]),
+                                          "for user ~p - ~p:~p", [FileGuid, UserId, Type, Reason], Stacktrace),
                         http_req:send_error(Reason, Req1)
                     after
                         lfm:monitored_release(FileHandle)

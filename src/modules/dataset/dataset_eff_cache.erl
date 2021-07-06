@@ -77,8 +77,8 @@ init(all) ->
         Error = {error, _} ->
             ?critical("Unable to initialize datasets effective cache due to: ~p", [Error])
     catch
-        Error2:Reason ->
-            ?critical_stacktrace("Unable to initialize datasets effective cache due to: ~p", [{Error2, Reason}])
+        Error2:Reason:Stacktrace ->
+            ?critical_stacktrace("Unable to initialize datasets effective cache due to: ~p", [{Error2, Reason}], Stacktrace)
     end;
 init(SpaceId) ->
     CacheName = ?CACHE_NAME(SpaceId),
@@ -96,9 +96,9 @@ init(SpaceId) ->
                 end
         end
     catch
-        Error2:Reason ->
+        Error2:Reason:Stacktrace ->
             ?critical_stacktrace("Unable to initialize datasets effective cache for space ~p due to: ~p",
-                [SpaceId, {Error2, Reason}])
+                [SpaceId, {Error2, Reason}], Stacktrace)
     end.
 
 

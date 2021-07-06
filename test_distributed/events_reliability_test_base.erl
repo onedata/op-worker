@@ -304,7 +304,7 @@ init_per_suite(Config) ->
     Posthook = fun(NewConfig) ->
         NewConfig1 = initializer:setup_storage(NewConfig),
         application:start(ssl),
-        hackney:start(),
+        application:ensure_all_started(hackney),
         FinalConfig = initializer:create_test_users_and_spaces(?TEST_FILE(NewConfig1, "env_desc.json"), NewConfig1),
         timer:sleep(2000), % Time to process events connected with initialization and connect providers
         FinalConfig
