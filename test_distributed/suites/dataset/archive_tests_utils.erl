@@ -246,7 +246,7 @@ assert_content_copied_internal(Node, SourceHandle, TargetHandle, Offset) ->
         lfm_proxy:read(Node, TargetHandle, Offset, BytesToRead), ?ATTEMPTS),
     case SourceContent of
         <<>> -> ok;
-        _ -> assert_content_copied_internal(Node, SourceHandle, TargetHandle, BytesToRead)
+        _ -> assert_content_copied_internal(Node, SourceHandle, TargetHandle, Offset + BytesToRead)
     end.
 
 
