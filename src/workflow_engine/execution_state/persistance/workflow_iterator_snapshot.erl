@@ -63,6 +63,9 @@ save(ExecutionId, LaneIndex, ItemIndex, Iterator) ->
             end,
             case ItemIndex of
                 0 ->
+                    % Execution of `forget_before` function results in forgetting all iteration data needed for
+                    % iterators previous to the argument. If `ItemIndex` is equal to 0, there are no previous iterators
+                    % so `forget_before` should not be called.
                     ok;
                 _ ->
                     try

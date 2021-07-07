@@ -175,7 +175,7 @@ prepare_next_job(ExecutionId) ->
     workflow_jobs:job_identifier(),
     workflow_engine:processing_stage(),
     workflow_engine:processing_result()
-) -> workflow_engine:task_spec() | undefined.
+) -> workflow_engine:task_spec() | ?WF_ERROR_JOB_NOT_FOUND.
 report_execution_status_update(ExecutionId, JobIdentifier, UpdateType, Ans) ->
     CachedAns = case UpdateType of
         ?ASYNC_CALL_FINISHED -> workflow_cached_async_result:put(Ans);
@@ -211,15 +211,15 @@ report_execution_status_update(ExecutionId, JobIdentifier, UpdateType, Ans) ->
             {Doc, false};
         ?WF_ERROR_JOB_NOT_FOUND ->
             ?debug("Result for not found job ~p of execution ~p", [JobIdentifier, ExecutionId]),
-            {undefined, false};
+            {?WF_ERROR_JOB_NOT_FOUND, false};
         ?ERROR_NOT_FOUND ->
             ?debug("Result for job ~p of ended execution ~p", [JobIdentifier, ExecutionId]),
-            {undefined, false}
+            {?WF_ERROR_JOB_NOT_FOUND, false}
     end,
 
     case UpdatedDoc of
-        undefined ->
-            undefined; % Error occurred - no task can be connected to result
+        ?WF_ERROR_JOB_NOT_FOUND ->
+            ?WF_ERROR_JOB_NOT_FOUND; % Error occurred - no task can be connected to result
         _ ->
             maybe_notify_task_execution_ended(UpdatedDoc, JobIdentifier, NotifyTaskExecutionEnded),
 
@@ -343,13 +343,7 @@ get_initial_iterator_and_lane_spec(ExecutionId, Handler, Context, LaneIndex) ->
 prepare_lane(ExecutionId, Handler, Context, LaneIndex) ->
     case LaneIndex > 1 of
         true ->
-            try
-                Handler:handle_lane_execution_ended(ExecutionId, Context, LaneIndex - 1)
-            catch
-                Error:Reason  ->
-                    ?error_stacktrace("Unexpected error of lane ended handler (execution ~p, lane ~p): ~p:~p",
-                        [ExecutionId, LaneIndex - 1, Error, Reason])
-            end;
+            workflow_engine:call_handler(ExecutionId, Context, Handler, handle_lane_execution_ended, [LaneIndex - 1]);
         false ->
             ok
     end,
@@ -452,14 +446,8 @@ maybe_notify_task_execution_ended(#document{key = ExecutionId, value = #workflow
     current_lane = #current_lane{parallel_boxes_spec = BoxesSpec}
 }}, JobIdentifier, true = _NotifyTaskExecutionEnded) ->
     {TaskId, _TaskSpec} = workflow_jobs:get_task_details(JobIdentifier, BoxesSpec),
-    try
-        Handler:handle_task_execution_ended(ExecutionId, Context, TaskId)
-    catch
-        Error:Reason  ->
-            ?error_stacktrace("Unexpected error of task ended handler (execution ~p, task ~p): ~p:~p",
-                [ExecutionId, TaskId, Error, Reason]),
-            ok
-    end.
+    workflow_engine:call_handler(ExecutionId, Context, Handler, handle_task_execution_ended, [TaskId]),
+    ok.
 
 -spec update(workflow_engine:execution_id(), update_fun()) -> {ok, state()} | {error, term()}.
 update(ExecutionId, UpdateFun) ->
@@ -480,7 +468,7 @@ get_next_iterator(Context, Iterator, ExecutionId) ->
         end
     catch
         Error:Reason ->
-            ?error_stacktrace("Unexpected error getting next iterator (execution ~p): ~p ~p:~p",
+            ?error_stacktrace("Unexpected error getting next iterator (execution ~p): ~p:~p",
                 [ExecutionId, Error, Reason]),
             ?WF_ERROR_ITERATION_FAILED
     end.

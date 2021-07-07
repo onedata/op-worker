@@ -24,7 +24,7 @@
 
 %% API
 -export([init/1, init/2, execute_workflow/2, report_execution_status_update/5, get_async_call_pools/1,
-    trigger_job_scheduling/1]).
+    trigger_job_scheduling/1, call_handler/5]).
 
 %% Functions exported for internal_services engine - do not call directly
 -export([init_service/2, takeover_service/3]).
@@ -73,6 +73,10 @@
 -export_type([id/0, execution_id/0, execution_context/0, task_id/0, subject_id/0,
     execution_spec/0, processing_stage/0, handler_execution_result/0, processing_result/0,
     task_spec/0, parallel_box_spec/0, lane_spec/0]).
+
+-type handler_function() :: atom().
+-type handler_args() :: [term()].
+-type handler_result() :: term().
 
 -define(POOL_ID(EngineId), binary_to_atom(EngineId, utf8)).
 -define(DEFAULT_SLOT_COUNT, 20).
@@ -148,8 +152,8 @@ report_execution_status_update(ExecutionId, EngineId, ReportType, JobIdentifier,
             trigger_job_scheduling(EngineId, ?FOR_CURRENT_SLOT_FIRST)
     end.
 
--spec get_async_call_pools(task_spec() | undefined) -> [workflow_async_call_pool:id()] | undefined.
-get_async_call_pools(undefined) ->
+-spec get_async_call_pools(task_spec() | ?WF_ERROR_JOB_NOT_FOUND) -> [workflow_async_call_pool:id()] | undefined.
+get_async_call_pools(?WF_ERROR_JOB_NOT_FOUND) ->
     undefined; % TaskSpec is undefined because of previous error - cannot get pools
 get_async_call_pools(TaskSpec) ->
     maps:get(async_call_pools, TaskSpec, [?DEFAULT_ASYNC_CALL_POOL_ID]).
@@ -157,6 +161,18 @@ get_async_call_pools(TaskSpec) ->
 -spec trigger_job_scheduling(id()) -> ok.
 trigger_job_scheduling(EngineId) ->
     trigger_job_scheduling(EngineId, ?TAKE_UP_FREE_SLOTS).
+
+-spec call_handler(execution_id(), execution_context(), workflow_handler:handler(), handler_function(), handler_args()) ->
+    handler_result() | error.
+call_handler(ExecutionId, Context, Handler, Function, Args) ->
+    try
+        apply(Handler, Function, [ExecutionId, Context] ++ Args)
+    catch
+        Error:Reason  ->
+            ?error_stacktrace("Unexpected error of handler ~p (execution id: ~p, args: ~p): ~p:~p",
+                [Handler, ExecutionId, Args, Error, Reason]),
+            error
+    end.
 
 %%%===================================================================
 %%% Internal functions
@@ -246,22 +262,8 @@ schedule_next_job(EngineId, DeferredExecutions) ->
                         ?END_EXECUTION(Handler, Context, LaneIndex, ErrorEncountered) ->
                             case workflow_engine_state:remove_execution_id(EngineId, ExecutionId) of
                                 ok ->
-                                    try
-                                        Handler:handle_lane_execution_ended(ExecutionId, Context, LaneIndex)
-                                    catch
-                                        Error:Reason  ->
-                                            ?error_stacktrace("Unexpected error of lane ended handler "
-                                                "(execution ~p, lane ~p): ~p:~p", [ExecutionId, LaneIndex, Error, Reason]),
-                                            error
-                                    end,
-                                    try
-                                        Handler:handle_workflow_execution_ended(ExecutionId, Context)
-                                    catch
-                                        Error2:Reason2  ->
-                                            ?error_stacktrace("Unexpected error of execution ended handler "
-                                                "(execution ~p): ~p:~p", [ExecutionId, Error2, Reason2]),
-                                            error
-                                    end,
+                                    call_handler(ExecutionId, Context, Handler, handle_lane_execution_ended, [LaneIndex]),
+                                    call_handler(ExecutionId, Context, Handler, handle_workflow_execution_ended, []),
                                     case ErrorEncountered of
                                         true -> ok;
                                         false -> workflow_iterator_snapshot:cleanup(ExecutionId)
@@ -274,14 +276,7 @@ schedule_next_job(EngineId, DeferredExecutions) ->
                         ?END_EXECUTION_AFTER_PREPARATION_ERROR(Handler, Context) ->
                             case workflow_engine_state:remove_execution_id(EngineId, ExecutionId) of
                                 ok ->
-                                    try
-                                        Handler:handle_workflow_execution_ended(ExecutionId, Context)
-                                    catch
-                                        Error:Reason  ->
-                                            ?error_stacktrace("Unexpected error of execution ended handler "
-                                                "(execution ~p): ~p:~p", [ExecutionId, Error, Reason]),
-                                            error
-                                    end,
+                                    call_handler(ExecutionId, Context, Handler, handle_workflow_execution_ended, []),
                                     workflow_execution_state:cleanup(ExecutionId);
                                 ?WF_ERROR_ALREADY_REMOVED ->
                                     ok
@@ -446,13 +441,7 @@ process_result(EngineId, ExecutionId, #execution_spec{
 ) -> ok.
 prepare_execution(EngineId, ExecutionId, Handler, ExecutionContext) ->
     try
-        Ans = try
-            Handler:prepare(ExecutionId, ExecutionContext)
-        catch
-            Error:Reason  ->
-                ?error_stacktrace("Unexpected error preparing execution ~p: ~p:~p", [ExecutionId, Error, Reason]),
-                error
-        end,
+        Ans = call_handler(ExecutionId, ExecutionContext, Handler, prepare, []),
         workflow_execution_state:report_execution_prepared(ExecutionId, Handler, ExecutionContext, Ans),
         trigger_job_scheduling(EngineId, ?FOR_CURRENT_SLOT_FIRST)
     catch
