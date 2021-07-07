@@ -26,7 +26,7 @@
 }).
 
 
-% NOTE the preferable write block size is 3x the storage block size
+% NOTE: the preferable write block size is 3x the storage block size
 % (see file_upload_utils:get_preferable_storage_write_block_size)
 -define(STORAGE_BLOCK_SIZE, 100).
 
@@ -99,7 +99,7 @@ small_chunk_that_exactly_fulfills_current_block_should_be_written(_) ->
     WrittenChunks = get_written_chunks([]),
 
     ?_assertEqual([
-        #chunk{offset = 270, size = 300},
+        #chunk{offset = 270, size = 30},
         #chunk{offset = 300, size = 300},
         #chunk{offset = 600, size = 300}
     ], WrittenChunks).
