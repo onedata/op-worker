@@ -95,9 +95,9 @@ sanitize(RawConfig) ->
             #{<<"enabled">> := false} ->
                 SanitizedData;
             #{<<"enabled">> := _NotBoolean} ->
-                throw(?ERROR_BAD_VALUE_BOOLEAN(<<"incremental.enable">>));
+                throw(?ERROR_BAD_VALUE_BOOLEAN(<<"incremental.enabled">>));
             _ ->
-                throw(?ERROR_MISSING_REQUIRED_VALUE(<<"incremental.enable">>))
+                throw(?ERROR_MISSING_REQUIRED_VALUE(<<"incremental.enabled">>))
         end
     catch
         % config is a nested object of the archive object,
