@@ -20,6 +20,7 @@
 -export([
     create_all/3, create/4,
     prepare_all/2, prepare/2,
+    clean_all/1, clean/1,
     delete_all/1, delete/1
 ]).
 -export([get_spec/1]).
@@ -129,6 +130,16 @@ prepare(AtmWorkflowExecutionCtx, #atm_parallel_box_execution{
     atm_task_execution_api:prepare_all(
         AtmWorkflowExecutionCtx, maps:values(AtmTaskExecutionRegistry)
     ).
+
+
+-spec clean_all([record()]) -> ok.
+clean_all(AtmParallelBoxExecutions) ->
+    lists:foreach(fun clean/1, AtmParallelBoxExecutions).
+
+
+-spec clean(record()) -> ok.
+clean(#atm_parallel_box_execution{task_registry = AtmTaskExecutionRegistry}) ->
+    atm_task_execution_api:clean_all(maps:values(AtmTaskExecutionRegistry)).
 
 
 -spec delete_all([record()]) -> ok.
