@@ -54,7 +54,7 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Marks all iterators in given iteration line as invalid - all auxiliary
+%% Marks all iterators in given iteration lane as invalid - all auxiliary
 %% data stored for purpose of serving next items can be cleaned up.
 %% Later calls to get_next/2 can result in undefined behaviour.
 %% @end
