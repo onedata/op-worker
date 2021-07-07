@@ -458,7 +458,9 @@
 
     % if archive has been created directly it has no parent archive
     % if archive has been created indirectly, this fields points to it's parent archive
-    parent :: undefined | archive:id()
+    parent :: undefined | archive:id(),
+    % id of archive that current one is based on if it is incremental
+    base_archive_id :: undefined | archive:id()
 }).
 
 
@@ -1168,7 +1170,7 @@
     lowest_failed_job_identifier :: workflow_jobs:job_identifier() | undefined,
 
     iteration_state :: workflow_iteration_state:state() | undefined,
-    prefetched_iteration_step :: workflow_execution_state:iteration_step() | undefined,
+    prefetched_iteration_step :: workflow_execution_state:iteration_status(),
     jobs :: workflow_jobs:jobs() | undefined,
 
     % Field used to return additional information about document update procedure

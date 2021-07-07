@@ -42,6 +42,17 @@
 -define(POOL_NAME, atom_to_binary(?MODULE, utf8)).
 
 -type id() :: tree_traverse:id().
+%% @formatter:off
+-type info() :: #{
+    current_archive_doc := archive:doc(),
+    % base for current_archive_doc
+    base_archive_doc := archive:doc(),
+    % base for top archive, the one created from dataset on which archivisation was scheduled
+    scheduled_dataset_base_archive_doc := archive:doc(),
+    target_parent_guid := file_id:file_guid(),
+    scheduled_dataset_root_guid := file_id:file_guid()
+}.
+%% @formatter:on
 
 -export_type([id/0]).
 
@@ -70,9 +81,19 @@ start(ArchiveDoc, DatasetDoc, UserCtx) ->
             {ok, ArchiveId} = archive:get_id(ArchiveDoc),
             {ok, DatasetId} = archive:get_dataset_id(ArchiveDoc),
             UserId = user_ctx:get_user_id(UserCtx),
-            
+
             {ok, ArchiveDoc2} = prepare_archive_dir(ArchiveDoc, DatasetId, UserCtx),
             {ok, ArchiveDataDirGuid} = archive:get_data_dir_guid(ArchiveDoc2),
+            {ok, Config} = archive:get_config(ArchiveDoc2),
+            IsIncremental = archive_config:is_incremental(Config),
+            {ok, BaseArchiveId} = archive:get_base_archive_id(ArchiveDoc2),
+            BaseArchiveDoc = case IsIncremental andalso BaseArchiveId =/= undefined of
+                true ->
+                    {ok, Doc} = archive:get(BaseArchiveId),
+                    Doc;
+                false ->
+                    undefined
+            end,
 
             AdditionalData = #{
                 <<"archiveId">> => ArchiveId,
@@ -89,6 +110,8 @@ start(ArchiveDoc, DatasetDoc, UserCtx) ->
                 children_master_jobs_mode => async,
                 traverse_info => #{
                     current_archive_doc => ArchiveDoc2,
+                    base_archive_doc => BaseArchiveDoc,
+                    scheduled_dataset_base_archive_doc => BaseArchiveDoc,
                     target_parent_guid => ArchiveDataDirGuid,
                     scheduled_dataset_root_guid => file_ctx:get_logical_guid_const(DatasetRootCtx)
                 },
@@ -130,7 +153,8 @@ task_finished(TaskId, _Pool) ->
         false ->
             % TODO VFS-7662 send more descriptive error description to archivisation callback
             ErrorDescription = <<"Errors occurered during archivisation job.">>,
-            archivisation_callback:notify_preservation_failed(ArchiveId, DatasetId, CallbackUrlOrUndefined, ErrorDescription)
+            archivisation_callback:notify_preservation_failed(ArchiveId, DatasetId, CallbackUrlOrUndefined,
+                ErrorDescription)
     end.
 
 
@@ -157,11 +181,7 @@ update_job_progress(Id, Job, Pool, TaskId, Status) ->
 do_master_job(Job = #tree_traverse{
     user_id = UserId,
     file_ctx = FileCtx,
-    traverse_info = TraverseInfo = #{
-        scheduled_dataset_root_guid := ScheduledDatasetRootGuid,
-        target_parent_guid := TargetParentGuid,
-        current_archive_doc := CurrentArchiveDoc
-    },
+    traverse_info = TraverseInfo,
     token = ListingToken
 },
     MasterJobArgs = #{task_id := TaskId}
@@ -173,28 +193,20 @@ do_master_job(Job = #tree_traverse{
     case IsDir of
         true ->
             {ok, UserCtx} = tree_traverse_session:acquire_for_task(UserId, ?POOL_NAME, TaskId),
-            TargetParentCtx = file_ctx:new_by_guid(TargetParentGuid),
-
-            {FinalArchiveDoc, FinalTargetParentCtx} = case IsFirstBatch of
-                true ->
-                    handle_nested_dataset_and_do_archive(CurrentArchiveDoc, FileCtx, TargetParentCtx, UserCtx);
-                false ->
-                    {CurrentArchiveDoc, TargetParentCtx}
+            TraverseInfo2 = case IsFirstBatch of
+                true -> handle_nested_dataset_and_do_archive(FileCtx, UserCtx, TraverseInfo);
+                false -> TraverseInfo
             end,
 
             NewJobsPreprocessor = fun(_SlaveJobs, _MasterJobs, _ListExtendedInfo, SubtreeProcessingStatus) ->
                 case SubtreeProcessingStatus of
                     ?SUBTREE_PROCESSED ->
-                        mark_finished_and_propagate_up(FileCtx2, UserCtx, ScheduledDatasetRootGuid, FinalArchiveDoc, TaskId);
+                        mark_finished_and_propagate_up(FileCtx2, UserCtx, TraverseInfo2, TaskId);
                     ?SUBTREE_NOT_PROCESSED ->
                         ok
                 end
             end,
 
-            TraverseInfo2 = TraverseInfo#{
-                target_parent_guid => file_ctx:get_logical_guid_const(FinalTargetParentCtx),
-                current_archive_doc => FinalArchiveDoc
-            },
             Job2 = Job#tree_traverse{traverse_info = TraverseInfo2},
             tree_traverse:do_master_job(Job2, MasterJobArgs, NewJobsPreprocessor);
         false ->
@@ -206,16 +218,11 @@ do_master_job(Job = #tree_traverse{
 do_slave_job(#tree_traverse_slave{
     user_id = UserId,
     file_ctx = FileCtx,
-    traverse_info = #{
-        target_parent_guid := TargetParentGuid,
-        scheduled_dataset_root_guid := ScheduledDatasetRootGuid,
-        current_archive_doc := CurrentArchiveDoc
-    }
+    traverse_info = TraverseInfo
 }, TaskId) ->
     {ok, UserCtx} = tree_traverse_session:acquire_for_task(UserId, ?POOL_NAME, TaskId),
-    TargetParentCtx = file_ctx:new_by_guid(TargetParentGuid),
-    {CurrentArchiveDoc2, _} = handle_nested_dataset_and_do_archive(CurrentArchiveDoc, FileCtx, TargetParentCtx, UserCtx),
-    mark_finished_and_propagate_up(FileCtx, UserCtx, ScheduledDatasetRootGuid, CurrentArchiveDoc2, TaskId).
+    TraverseInfo2 = handle_nested_dataset_and_do_archive(FileCtx, UserCtx, TraverseInfo),
+    mark_finished_and_propagate_up(FileCtx, UserCtx, TraverseInfo2, TaskId).
 
 %%%===================================================================
 %%% Internal functions
@@ -251,9 +258,14 @@ create_archive_data_dir(ArchiveDoc, UserCtx) ->
     archive:set_data_dir_guid(ArchiveDoc, DataDirGuid).
 
 
--spec handle_nested_dataset_and_do_archive(archive:doc(), file_ctx:ctx(), file_ctx:ctx(), user_ctx:ctx()) ->
-    {archive:doc(), file_ctx:ctx()}.
-handle_nested_dataset_and_do_archive(CurrentArchiveDoc, FileCtx, TargetParentCtx, UserCtx) ->
+-spec handle_nested_dataset_and_do_archive(file_ctx:ctx(), user_ctx:ctx(), info()) -> info().
+handle_nested_dataset_and_do_archive(FileCtx, UserCtx, TraverseInfo = #{
+    target_parent_guid := TargetParentGuid,
+    current_archive_doc := CurrentArchiveDoc,
+    base_archive_doc := BaseArchiveDoc,
+    scheduled_dataset_base_archive_doc := ScheduledDatasetBaseArchiveDoc
+}) ->
+    TargetParentCtx = file_ctx:new_by_guid(TargetParentGuid),
     {ok, Config} = archive:get_config(CurrentArchiveDoc),
     CreateNestedArchives = archive_config:should_create_nested_archives(Config),
     % check if there is dataset attached to current directory
@@ -264,19 +276,33 @@ handle_nested_dataset_and_do_archive(CurrentArchiveDoc, FileCtx, TargetParentCtx
         false ->
             undefined
     end,
-    case NestedDatasetId =/= undefined of
+    {FinalArchiveDoc, FinalTargetParentCtx, FinalBaseArchiveDoc} = case NestedDatasetId =/= undefined of
         true ->
             {ok, NestedArchiveDoc} = create_and_prepare_nested_archive_dir(NestedDatasetId, CurrentArchiveDoc, UserCtx),
             {ok, NestedArchiveDataDirGuid} = archive:get_data_dir_guid(NestedArchiveDoc),
             NestedArchiveDataDirCtx = file_ctx:new_by_guid(NestedArchiveDataDirGuid),
 
-            {ok, ArchivedFileCtx} = do_archive(FileCtx, NestedArchiveDataDirCtx, NestedArchiveDoc, UserCtx),
+            NestedBaseArchiveDoc = case ScheduledDatasetBaseArchiveDoc /= undefined of
+                true ->
+                    incremental_archive:find_base_for_nested_archive(NestedArchiveDoc, ScheduledDatasetBaseArchiveDoc,
+                        UserCtx);
+                false ->
+                    undefined
+            end,
+            {ok, NestedArchiveDoc2} = archive:set_base_archive_id(NestedArchiveDoc, NestedBaseArchiveDoc),
+            {ok, ArchivedFileCtx} =
+                do_archive(FileCtx, NestedArchiveDataDirCtx, NestedArchiveDoc2, NestedBaseArchiveDoc, UserCtx),
             make_symlink(ArchivedFileCtx, TargetParentCtx, UserCtx),
-            {NestedArchiveDoc, ArchivedFileCtx};
+            {NestedArchiveDoc2, ArchivedFileCtx, NestedBaseArchiveDoc};
         false ->
-            {ok, ArchivedFileCtx} = do_archive(FileCtx, TargetParentCtx, CurrentArchiveDoc, UserCtx),
-            {CurrentArchiveDoc, ArchivedFileCtx}
-    end.
+            {ok, ArchivedFileCtx} = do_archive(FileCtx, TargetParentCtx, CurrentArchiveDoc, BaseArchiveDoc, UserCtx),
+            {CurrentArchiveDoc, ArchivedFileCtx, BaseArchiveDoc}
+    end,
+    TraverseInfo#{
+        target_parent_guid => file_ctx:get_logical_guid_const(FinalTargetParentCtx),
+        current_archive_doc => FinalArchiveDoc,
+        base_archive_doc => FinalBaseArchiveDoc
+    }.
 
 
 -spec get_nested_dataset_id_if_attached(file_ctx:ctx(), archive:doc()) -> dataset:id() | undefined.
@@ -306,20 +332,19 @@ create_and_prepare_nested_archive_dir(DatasetId, ParentArchiveDoc, UserCtx) ->
     end.
 
 
--spec mark_finished_and_propagate_up(file_ctx:ctx(), user_ctx:ctx(), file_id:file_guid(), archive:doc(), id()) -> ok.
-mark_finished_and_propagate_up(CurrentFileCtx, UserCtx, ScheduledDatasetRootGuid, CurrentArchiveDoc, TaskId) ->
-    NextArchiveDocOrUndefined = mark_finished_if_current_archive_is_rooted_in_current_file(
-        ScheduledDatasetRootGuid, CurrentFileCtx, CurrentArchiveDoc, UserCtx),
+-spec mark_finished_and_propagate_up(file_ctx:ctx(), user_ctx:ctx(), info(), id()) -> ok.
+mark_finished_and_propagate_up(CurrentFileCtx, UserCtx, TraverseInfo, TaskId) ->
+    NextArchiveDocOrUndefined = mark_finished_if_current_archive_is_rooted_in_current_file(CurrentFileCtx, UserCtx, TraverseInfo),
     case NextArchiveDocOrUndefined of
         undefined ->
             ok;
         NextArchiveDoc ->
-            propagate_up(CurrentFileCtx, UserCtx, ScheduledDatasetRootGuid, NextArchiveDoc, TaskId)
+            propagate_up(CurrentFileCtx, UserCtx, TraverseInfo#{current_archive_doc => NextArchiveDoc}, TaskId)
     end.
 
 
--spec propagate_up(file_ctx:ctx(), user_ctx:ctx(), file_id:file_guid(), archive:doc(), id()) -> ok.
-propagate_up(FileCtx, UserCtx, ScheduledDatasetRootGuid, NextArchiveDoc, TaskId) ->
+-spec propagate_up(file_ctx:ctx(), user_ctx:ctx(), info(), id()) -> ok.
+propagate_up(FileCtx, UserCtx, TraverseInfo = #{scheduled_dataset_root_guid := ScheduledDatasetRootGuid}, TaskId) ->
     FileGuid = file_ctx:get_logical_guid_const(FileCtx),
     case FileGuid =:= ScheduledDatasetRootGuid of
         true ->
@@ -330,7 +355,7 @@ propagate_up(FileCtx, UserCtx, ScheduledDatasetRootGuid, NextArchiveDoc, TaskId)
             ParentStatus = tree_traverse:report_child_processed(TaskId, ParentUuid),
             case ParentStatus of
                 ?SUBTREE_PROCESSED ->
-                    mark_finished_and_propagate_up(ParentFileCtx, UserCtx, ScheduledDatasetRootGuid, NextArchiveDoc, TaskId);
+                    mark_finished_and_propagate_up(ParentFileCtx, UserCtx, TraverseInfo, TaskId);
                 ?SUBTREE_NOT_PROCESSED ->
                     ok
             end
@@ -362,15 +387,16 @@ is_first_job(Job = #tree_traverse{
     {IsDir, _} = file_ctx:is_dir(FileCtx),
     is_dataset_root(Job) andalso (
         (IsDir andalso (ListingToken =:= ?INITIAL_LS_TOKEN))
-        orelse not IsDir
+            orelse not IsDir
     ).
 
 
--spec mark_finished_if_current_archive_is_rooted_in_current_file(file_id:file_guid(), file_ctx:ctx(), archive:doc(),
-    user_ctx:ctx()) -> archive:doc() | undefined.
-mark_finished_if_current_archive_is_rooted_in_current_file(ScheduledDatasetRootGuid, CurrentFileCtx,
-    CurrentArchiveDoc, UserCtx
-) ->
+-spec mark_finished_if_current_archive_is_rooted_in_current_file(file_ctx:ctx(), user_ctx:ctx(), info()) ->
+    archive:doc() | undefined.
+mark_finished_if_current_archive_is_rooted_in_current_file(CurrentFileCtx, UserCtx, #{
+    scheduled_dataset_root_guid := ScheduledDatasetRootGuid,
+    current_archive_doc := CurrentArchiveDoc
+}) ->
     {ok, CurrentArchiveRootGuid} = archive:get_dataset_root_file_guid(CurrentArchiveDoc),
     {ok, Config} = archive:get_config(CurrentArchiveDoc),
     CreateNestedArchives = archive_config:should_create_nested_archives(Config),
@@ -398,14 +424,15 @@ calculate_stats_and_mark_finished(ArchiveDoc, UserCtx) ->
     ok = archive:mark_finished(ArchiveDoc, NestedArchiveStats).
 
 
--spec do_archive(file_ctx:ctx(), file_ctx:ctx(), archive:doc(), user_ctx:ctx()) -> {ok, file_ctx:ctx()}.
-do_archive(FileCtx, TargetParentCtx, CurrentArchiveDoc, UserCtx) ->
+-spec do_archive(file_ctx:ctx(), file_ctx:ctx(), archive:doc(), archive:doc() | undefined, user_ctx:ctx()) ->
+    {ok, file_ctx:ctx()}.
+do_archive(FileCtx, TargetParentCtx, CurrentArchiveDoc, BaseArchiveDoc, UserCtx) ->
     {IsDir, FileCtx2} = file_ctx:is_dir(FileCtx),
     case IsDir of
         true ->
             archive_dir(FileCtx2, TargetParentCtx, UserCtx);
         false ->
-            archive_file_and_mark_finished(FileCtx2, TargetParentCtx, CurrentArchiveDoc, UserCtx)
+            archive_file_and_mark_finished(FileCtx2, TargetParentCtx, CurrentArchiveDoc, BaseArchiveDoc, UserCtx)
     end.
 
 
@@ -416,7 +443,8 @@ archive_dir(FileCtx, TargetParentCtx, UserCtx) ->
     catch
         Class:Reason ->
             Guid = file_ctx:get_logical_guid_const(FileCtx),
-            ?error_stacktrace("Unexpected error ~p:~p occured during archivisation of directory ~s.", [Class, Reason, Guid]),
+            ?error_stacktrace("Unexpected error ~p:~p occured during archivisation of directory ~s.",
+                [Class, Reason, Guid]),
             {error, Reason}
     end.
 
@@ -431,13 +459,13 @@ archive_dir_insecure(FileCtx, TargetParentCtx, UserCtx) ->
     {ok, file_ctx:new_by_guid(CopyGuid)}.
 
 
--spec archive_file_and_mark_finished(file_ctx:ctx(), file_ctx:ctx(), archive:doc(), user_ctx:ctx()) ->
+-spec archive_file_and_mark_finished(file_ctx:ctx(), file_ctx:ctx(), archive:doc(), archive:doc() | undefined, user_ctx:ctx()) ->
     {ok, file_ctx:ctx()} | {error, term()}.
-archive_file_and_mark_finished(FileCtx, TargetParentCtx, CurrentArchiveDoc, UserCtx) ->
-    case archive_file(FileCtx, TargetParentCtx, CurrentArchiveDoc, UserCtx) of
+archive_file_and_mark_finished(FileCtx, TargetParentCtx, CurrentArchiveDoc, BaseArchiveDoc, UserCtx) ->
+    case archive_file(FileCtx, TargetParentCtx, CurrentArchiveDoc, BaseArchiveDoc, UserCtx) of
         {ok, ArchiveFileCtx} ->
-            {FileSize, _} = file_ctx:get_local_storage_file_size(ArchiveFileCtx),
-            archive:mark_file_archived(CurrentArchiveDoc, FileSize),
+            {FileSize, _} = file_ctx:get_file_size(ArchiveFileCtx),
+            ok = archive:mark_file_archived(CurrentArchiveDoc, FileSize),
             {ok, ArchiveFileCtx};
         {error, _} = Error ->
             archive:mark_file_failed(CurrentArchiveDoc),
@@ -445,14 +473,14 @@ archive_file_and_mark_finished(FileCtx, TargetParentCtx, CurrentArchiveDoc, User
     end.
 
 
--spec archive_file(file_ctx:ctx(), file_ctx:ctx(), archive:doc(), user_ctx:ctx()) ->
+-spec archive_file(file_ctx:ctx(), file_ctx:ctx(), archive:doc(), archive:doc() | undefined, user_ctx:ctx()) ->
     {ok, file_ctx:ctx()} | {error, term()}.
-archive_file(FileCtx, TargetParentCtx, CurrentArchiveDoc, UserCtx) ->
+archive_file(FileCtx, TargetParentCtx, CurrentArchiveDoc, BaseArchiveDoc, UserCtx) ->
     case is_bagit(CurrentArchiveDoc) of
         false ->
-            plain_archive:archive_file(FileCtx, TargetParentCtx, UserCtx);
+            plain_archive:archive_file(CurrentArchiveDoc, FileCtx, TargetParentCtx, BaseArchiveDoc, UserCtx);
         true ->
-            bagit_archive:archive_file(CurrentArchiveDoc, FileCtx, TargetParentCtx, UserCtx)
+            bagit_archive:archive_file(CurrentArchiveDoc, FileCtx, TargetParentCtx, BaseArchiveDoc, UserCtx)
     end.
 
 

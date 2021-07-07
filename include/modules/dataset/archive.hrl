@@ -28,14 +28,14 @@
 -define(ARCHIVE_BAGIT_LAYOUT, bagit).
 -define(ARCHIVE_LAYOUTS, [?ARCHIVE_PLAIN_LAYOUT, ?ARCHIVE_BAGIT_LAYOUT]).
 
-% TODO VFS-7780 add true to the below list
--define(SUPPORTED_INCREMENTAL_VALUES, [false]).
+-define(SUPPORTED_INCREMENTAL_ENABLED_VALUES, [false, true]).
 % TODO VFS-7653 add true to the below list
 -define(SUPPORTED_INCLUDE_DIP_VALUES, [false]).
 
 -define(DEFAULT_LAYOUT, ?ARCHIVE_PLAIN_LAYOUT).
 -define(DEFAULT_INCLUDE_DIP, false).
--define(DEFAULT_INCREMENTAL, false).
+-define(DEFAULT_INCREMENTAL, #{<<"enabled">> => false}).
+-define(DEFAULT_BASE_ARCHIVE, null).
 -define(DEFAULT_ARCHIVE_DESCRIPTION, <<>>).
 -define(DEFAULT_CREATE_NESTED_ARCHIVES, false).
 

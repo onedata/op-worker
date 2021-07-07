@@ -336,7 +336,8 @@
     purged_callback :: archive:callback(),
     description :: archive:description(),
     index :: archive_api:index(),
-    stats :: archive_stats:record()
+    stats :: archive_stats:record(),
+    base_archive_id :: archive:id() | undefined
 }).
 
 -record(archives, {
