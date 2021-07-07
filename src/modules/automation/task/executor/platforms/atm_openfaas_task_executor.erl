@@ -406,6 +406,7 @@ remove_function(#atm_openfaas_task_executor{function_name = FunctionName}) ->
     AuthHeaders = get_basic_auth_header(OpenfaasConfig),
     Payload = json_utils:encode(#{<<"functionName">> => FunctionName}),
 
+    % TODO VFS-7904 log warning in audit log if function removal failed
     http_client:delete(Endpoint, AuthHeaders, Payload),
     ok.
 
