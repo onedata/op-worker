@@ -240,7 +240,7 @@ write_req_body_to_file(SessionId, FileRef, Offset, Req) ->
 
     {ok, Req2} = file_upload_utils:upload_file(
         FileHandle, Offset, Req,
-        fun cowboy_req:read_body/2, #{}
+        fun cowboy_req:read_body/2, #{period => timer:seconds(15)}
     ),
 
     ?check(lfm:fsync(FileHandle)),
