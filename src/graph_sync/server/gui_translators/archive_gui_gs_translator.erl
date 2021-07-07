@@ -77,7 +77,7 @@ translate_archive_info(#archive_info{
                 null
         end,
         <<"creationTime">> => CreationTime,
-        <<"config">> => archive_config:to_json(Config, [<<"baseArchive">>]),
+        <<"config">> => archive_config:to_json(Config),
         <<"preservedCallback">> => utils:undefined_to_null(PreservedCallback),
         <<"purgedCallback">> => utils:undefined_to_null(PurgedCallback),
         <<"description">> => Description,

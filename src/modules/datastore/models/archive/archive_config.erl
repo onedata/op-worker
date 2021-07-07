@@ -20,7 +20,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([from_json/1, to_json/1, to_json/2, sanitize/1]).
+-export([from_json/1, to_json/1, sanitize/1]).
 %% Getters
 -export([get_layout/1, should_create_nested_archives/1, is_incremental/1, get_incremental_based_on/1]).
 
@@ -58,23 +58,18 @@ from_json(ConfigJson) ->
     }.
 
 -spec to_json(record()) -> json().
-to_json(ArchiveConfig) ->
-    to_json(ArchiveConfig, []).
-
-
--spec to_json(record(), [binary()]) -> json().
 to_json(#archive_config{
     incremental = Incremental,
     layout = Layout,
     include_dip = IncludeDip,
     create_nested_archives = CreateNestedArchives
-}, ExcludedFields) ->
-    maps:without(ExcludedFields, #{
+}) ->
+    #{
         <<"incremental">> => Incremental,
         <<"layout">> => str_utils:to_binary(Layout),
         <<"includeDip">> => IncludeDip,
         <<"createNestedArchives">> => CreateNestedArchives
-    }).
+    }.
 
 
 -spec sanitize(json_utils:json_map()) -> json().
@@ -95,10 +90,14 @@ sanitize(RawConfig) ->
                     {true, _} ->
                         SanitizedData;
                     false ->
-                        throw(?ERROR_BAD_VALUE_IDENTIFIER(<<"baseArchiveId">>))
+                        throw(?ERROR_BAD_VALUE_IDENTIFIER(<<"incremental.basedOn">>))
                 end;
             #{<<"enable">> := false} ->
-                SanitizedData
+                SanitizedData;
+            #{<<"enable">> := _NotBoolean} ->
+                throw(?ERROR_BAD_VALUE_BOOLEAN(<<"incremental.enable">>));
+            _ ->
+                throw(?ERROR_MISSING_REQUIRED_VALUE(<<"incremental.enable">>))
         end
     catch
         % config is a nested object of the archive object,

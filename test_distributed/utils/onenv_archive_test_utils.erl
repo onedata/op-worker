@@ -141,7 +141,7 @@ await_archive_sync(CreationProvider, SyncProviders, UserId, #archive_object{id =
 -spec random_archive_config() -> archive:config().
 random_archive_config() ->
     #archive_config{
-        incremental = lists_utils:random_element(?SUPPORTED_INCREMENTAL_VALUES),
+        incremental = #{<<"enable">> => lists_utils:random_element(?SUPPORTED_INCREMENTAL_ENABLE_VALUES)},
         include_dip = lists_utils:random_element(?SUPPORTED_INCLUDE_DIP_VALUES),
         layout = lists_utils:random_element(?ARCHIVE_LAYOUTS)
     }.
