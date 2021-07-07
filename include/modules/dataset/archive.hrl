@@ -28,12 +28,12 @@
 -define(ARCHIVE_BAGIT_LAYOUT, bagit).
 -define(ARCHIVE_LAYOUTS, [?ARCHIVE_PLAIN_LAYOUT, ?ARCHIVE_BAGIT_LAYOUT]).
 
--define(SUPPORTED_INCREMENTAL_ENABLE_VALUES, [false, true]).
+-define(SUPPORTED_INCREMENTAL_ENABLED_VALUES, [false, true]).
 -define(SUPPORTED_INCLUDE_DIP_VALUES, [true, false]).
 
 -define(DEFAULT_LAYOUT, ?ARCHIVE_PLAIN_LAYOUT).
 -define(DEFAULT_INCLUDE_DIP, false).
--define(DEFAULT_INCREMENTAL, #{<<"enable">> => false}).
+-define(DEFAULT_INCREMENTAL, #{<<"enabled">> => false}).
 -define(DEFAULT_BASE_ARCHIVE, null).
 -define(DEFAULT_ARCHIVE_DESCRIPTION, <<>>).
 -define(DEFAULT_CREATE_NESTED_ARCHIVES, false).
