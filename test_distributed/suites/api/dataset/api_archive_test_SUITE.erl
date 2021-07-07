@@ -154,7 +154,7 @@ create_archive(_Config) ->
 -spec generate_all_valid_configs() -> [archive_config:json()].
 generate_all_valid_configs() ->
     LayoutValues = [undefined | ?ARCHIVE_LAYOUTS],
-    IncrementalValues = lists:flatten([undefined | [#{<<"enabled">> => Enable || Enable <- ?SUPPORTED_INCREMENTAL_ENABLED_VALUES]]),
+    IncrementalValues = lists:flatten([undefined | [#{<<"enabled">> => Enable} || Enable <- ?SUPPORTED_INCREMENTAL_ENABLED_VALUES]]),
     IncludeDipValues = [undefined | ?SUPPORTED_INCLUDE_DIP_VALUES],
     CreateNestedArchivesValues = [undefined, true, false],
     AllConfigsCombinations = [
@@ -338,7 +338,7 @@ get_archive_info(_Config) ->
                         },
                         ?assertEqual(?HTTP_200_OK, RespCode),
                         % do not check baseArchive here as its value depends on previous tests
-                        ?assertEqual(ExpArchiveData, maps:without([<<"baseArchive">>, <<"creationTime">>], RespBody))
+                        ?assertEqual(ExpArchiveData, maps:without([<<"baseArchiveId">>, <<"creationTime">>], RespBody))
                     end
                 },
                 #scenario_template{

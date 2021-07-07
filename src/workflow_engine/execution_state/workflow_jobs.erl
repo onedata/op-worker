@@ -20,12 +20,12 @@
 %% API
 -export([init/0, prepare_next_waiting_job/1, populate_with_jobs_for_item/4,
     pause_job/2, mark_ongoing_job_finished/2, register_failure/2,
-    remove_pending_async_job/3, prepare_next_parallel_box/4]).
+    register_async_job_finish/3, prepare_next_parallel_box/4]).
 %% Functions returning/updating pending_async_jobs field
 -export([register_async_call/3, check_timeouts/1, reset_keepalive_timer/2]).
 %% Functions operating on job_identifier record
--export([job_identifier_to_binary/1, binary_to_job_identifier/1, get_item_id/2,
-    get_task_details/2, is_previous/2]).
+-export([job_identifier_to_binary/1, binary_to_job_identifier/1, get_item_id/2, get_subject_id/3,
+    get_task_details/2, get_processing_type/1, is_previous/2]).
 %% API used to check which tasks are finished for all items
 -export([is_task_finished/2, build_tasks_tree/1]).
 %% Test API
@@ -35,7 +35,8 @@
 -record(job_identifier, {
     item_index :: workflow_execution_state:index(),
     parallel_box_index :: workflow_execution_state:index(),
-    task_index :: workflow_execution_state:index()
+    task_index :: workflow_execution_state:index(),
+    processing_type :: processing_type()
 }).
 
 % Internal record used to control timeouts of jobs that are processed asynchronously
@@ -63,7 +64,8 @@
     failed_items = sets:new() :: items_set(),
 
     pending_async_jobs = #{} :: pending_async_jobs(),
-    raced_results = #{} :: raced_results(), % TODO VFS-7787 - clean when they are not needed anymore (after integration with BW)
+    raced_results = #{} :: async_results_map(), % TODO VFS-7787 - clean when they are not needed anymore (after integration with BW)
+    async_cached_results = #{} :: async_results_map(),
 
     tasks_tree :: tasks_tree()
 }).
@@ -72,15 +74,17 @@
 -type jobs_set() :: gb_sets:set(job_identifier()).
 -type items_set() :: sets:set(workflow_execution_state:index()).
 -type pending_async_jobs() :: #{job_identifier() => #async_job_timer{}}.
--type raced_results() :: #{job_identifier() => workflow_handler:callback_execution_result()}.
+-type async_results_map() :: #{job_identifier() => workflow_cached_async_result:result_ref()}.
 -type tasks_tree() :: gb_trees:tree(job_identifier(), [workflow_execution_state:index()]) | undefined.
 -type jobs() :: #workflow_jobs{}.
 -type jobs_for_parallel_box() :: ?NO_JOBS_LEFT_FOR_PARALLEL_BOX | ?AT_LEAST_ONE_JOB_LEFT_FOR_PARALLEL_BOX.
 -type item_processing_result() :: ?SUCCESS | ?FAILURE.
+-type processing_type() :: ?JOB_PROCESSING | ?ASYNC_RESULT_PROCESSING.
 
 -export_type([job_identifier/0, jobs/0, item_processing_result/0]).
 
 -define(SEPARATOR, "_").
+-define(OPERATION_UNSUPPORTED, operation_unsupported).
 
 %%%===================================================================
 %%% API
@@ -100,7 +104,8 @@ prepare_next_waiting_job(Jobs = #workflow_jobs{
         false ->
             {JobIdentifier, NewWaiting} = gb_sets:take_smallest(Waiting),
             NewOngoing = gb_sets:insert(JobIdentifier, Ongoing),
-            {ok, JobIdentifier, Jobs#workflow_jobs{waiting = NewWaiting, ongoing = NewOngoing}};
+            NewJobs = Jobs#workflow_jobs{waiting = NewWaiting, ongoing = NewOngoing},
+            {ok, JobIdentifier, maybe_remove_async_cached_result(NewJobs, JobIdentifier)};
         true ->
             case gb_sets:is_empty(Ongoing) of
                 true -> ?ERROR_NOT_FOUND;
@@ -123,6 +128,7 @@ populate_with_jobs_for_item(
     Tasks = maps:get(1, BoxesSpec),
     [ToStart | ToWait] = lists:map(fun(TaskIndex) ->
         #job_identifier{
+            processing_type = ?JOB_PROCESSING,
             item_index = ItemIndex,
             parallel_box_index = ParallelBoxToStartIndex,
             task_index = TaskIndex
@@ -171,17 +177,18 @@ register_failure(Jobs = #workflow_jobs{
     % TODO VFS-7788 - count errors and stop workflow when errors limit is reached
     {Jobs2#workflow_jobs{failed_items = sets:add_element(ItemIndex, Failed)}, RemainingForBox}.
 
--spec remove_pending_async_job(jobs(), job_identifier(), workflow_handler:callback_execution_result()) ->
-    {ok | ?WF_ERROR_UNKNOWN_JOB, jobs()}.
-remove_pending_async_job(Jobs = #workflow_jobs{
+-spec register_async_job_finish(jobs(), job_identifier(), workflow_cached_async_result:result_ref()) -> jobs().
+register_async_job_finish(Jobs = #workflow_jobs{
     pending_async_jobs = AsyncCalls,
     raced_results = Unidentified
-}, JobIdentifier, Ans) ->
+}, JobIdentifier, CachedResultId) ->
     case maps:get(JobIdentifier, AsyncCalls, undefined) of
         undefined ->
-            {?WF_ERROR_UNKNOWN_JOB, Jobs#workflow_jobs{raced_results = Unidentified#{JobIdentifier => Ans}}};
+            Jobs#workflow_jobs{raced_results = Unidentified#{JobIdentifier => CachedResultId}};
         _ ->
-            {ok, Jobs#workflow_jobs{pending_async_jobs = maps:remove(JobIdentifier, AsyncCalls)}}
+            register_async_result_processing(
+                Jobs#workflow_jobs{pending_async_jobs = maps:remove(JobIdentifier, AsyncCalls)},
+                JobIdentifier, CachedResultId)
     end.
 
 -spec prepare_next_parallel_box(jobs(), job_identifier(), workflow_execution_state:boxes_map(), non_neg_integer()) ->
@@ -192,7 +199,7 @@ prepare_next_parallel_box(
         waiting = Waiting,
         tasks_tree = TasksTree
     },
-    JobIdentifier = #job_identifier{
+    #job_identifier{
         item_index = ItemIndex,
         parallel_box_index = BoxIndex
     },
@@ -207,7 +214,12 @@ prepare_next_parallel_box(
             NewBoxIndex = BoxIndex + 1,
             Tasks = maps:get(NewBoxIndex, BoxesSpec),
             NewWaiting = lists:foldl(fun(TaskIndex, TmpWaiting) ->
-                [JobIdentifier#job_identifier{parallel_box_index = NewBoxIndex, task_index = TaskIndex} | TmpWaiting]
+                [#job_identifier{
+                    processing_type = ?JOB_PROCESSING,
+                    item_index = ItemIndex,
+                    parallel_box_index = NewBoxIndex,
+                    task_index = TaskIndex
+                } | TmpWaiting]
             end, [], lists:seq(1, maps:size(Tasks))),
             {ok, Jobs#workflow_jobs{
                 waiting = gb_sets:union(Waiting, gb_sets:from_list(NewWaiting)),
@@ -219,8 +231,7 @@ prepare_next_parallel_box(
 %%% Functions returning/updating pending_async_jobs field
 %%%===================================================================
 
--spec register_async_call(jobs(), job_identifier(), time:seconds()) -> 
-    {ok | ?WF_ERROR_ALREADY_FINISHED(workflow_handler:callback_execution_result()), jobs()}.
+-spec register_async_call(jobs(), job_identifier(), time:seconds()) -> jobs().
 register_async_call(Jobs = #workflow_jobs{
     pending_async_jobs = AsyncCalls,
     raced_results = Unidentified
@@ -231,10 +242,11 @@ register_async_call(Jobs = #workflow_jobs{
                 keepalive_timer = countdown_timer:start_seconds(KeepaliveTimeout),
                 keepalive_timeout = KeepaliveTimeout
             }},
-            {ok, Jobs#workflow_jobs{pending_async_jobs = NewAsyncCalls}};
-        FinalAns ->
-            {?WF_ERROR_ALREADY_FINISHED(FinalAns),
-                Jobs#workflow_jobs{raced_results = maps:remove(JobIdentifier, Unidentified)}}
+            Jobs#workflow_jobs{pending_async_jobs = NewAsyncCalls};
+        CachedResultId ->
+            register_async_result_processing(
+                Jobs#workflow_jobs{raced_results = maps:remove(JobIdentifier, Unidentified)},
+                JobIdentifier, CachedResultId)
     end.
 
 -spec check_timeouts(jobs()) -> {jobs() | ?WF_ERROR_NO_TIMEOUTS_UPDATED, [job_identifier()]} | ?ERROR_NOT_FOUND.
@@ -246,7 +258,7 @@ check_timeouts(Jobs = #workflow_jobs{
             #async_job_timer{keepalive_timer = Timer} = AsyncJobTimer,
             case countdown_timer:is_expired(Timer) of
                 true ->
-                    % TODO VFS-7788 - check if task is expired
+                    % TODO VFS-7788 - check if task is expired (do it outside tp process)
 %%                    case task_executor:check_ongoing_item_processing(TaskId, Ref) of
 %%                        ok -> {[Ref | ExtendedTimeoutsAcc], ErrorsAcc};
 %%                        error -> {ExtendedTimeoutsAcc, [JobIdentifier | ErrorsAcc]}
@@ -291,18 +303,22 @@ reset_keepalive_timer(Jobs = #workflow_jobs{pending_async_jobs = AsyncCalls}, Jo
 
 -spec job_identifier_to_binary(job_identifier()) -> binary().
 job_identifier_to_binary(#job_identifier{
+    processing_type = ?JOB_PROCESSING,
     item_index = ItemIndex,
     parallel_box_index = BoxIndex,
     task_index = TaskIndex
 }) ->
     <<(integer_to_binary(ItemIndex))/binary, ?SEPARATOR,
         (integer_to_binary(BoxIndex))/binary, ?SEPARATOR,
-        (integer_to_binary(TaskIndex))/binary>>.
+        (integer_to_binary(TaskIndex))/binary>>;
+job_identifier_to_binary(#job_identifier{processing_type = ?ASYNC_RESULT_PROCESSING}) ->
+    throw(?OPERATION_UNSUPPORTED).
 
 -spec binary_to_job_identifier(binary()) -> job_identifier().
 binary_to_job_identifier(Binary) ->
     [ItemIndexBin, BoxIndexBin, TaskIndexBin] = binary:split(Binary, <<?SEPARATOR>>, [global, trim_all]),
     #job_identifier{
+        processing_type = ?JOB_PROCESSING,
         item_index = binary_to_integer(ItemIndexBin),
         parallel_box_index = binary_to_integer(BoxIndexBin),
         task_index = binary_to_integer(TaskIndexBin)
@@ -312,11 +328,25 @@ binary_to_job_identifier(Binary) ->
 get_item_id(#job_identifier{item_index = ItemIndex}, IterationProgress) ->
     workflow_iteration_state:get_item_id(IterationProgress, ItemIndex).
 
+-spec get_subject_id(job_identifier(), jobs(), workflow_iteration_state:state()) -> workflow_engine:subject_id().
+get_subject_id(#job_identifier{processing_type = ?JOB_PROCESSING, item_index = ItemIndex}, _Jobs, IterationProgress) ->
+    workflow_iteration_state:get_item_id(IterationProgress, ItemIndex);
+get_subject_id(
+    #job_identifier{processing_type = ?ASYNC_RESULT_PROCESSING} = JobIdentifier,
+    #workflow_jobs{async_cached_results = Results},
+    _IterationProgress
+) ->
+    maps:get(JobIdentifier, Results).
+
 -spec get_task_details(job_identifier(), workflow_execution_state:boxes_map()) ->
     {workflow_engine:task_id(), workflow_engine:task_spec()}.
 get_task_details(#job_identifier{parallel_box_index = BoxIndex, task_index = TaskIndex}, BoxesSpec) ->
     Tasks = maps:get(BoxIndex, BoxesSpec),
     maps:get(TaskIndex, Tasks).
+
+-spec get_processing_type(job_identifier()) -> processing_type().
+get_processing_type(#job_identifier{processing_type = ProcessingType}) ->
+    ProcessingType.
 
 -spec is_previous(job_identifier(), job_identifier()) -> boolean().
 is_previous(#job_identifier{item_index = ItemIndex1}, #job_identifier{item_index = ItemIndex2}) ->
@@ -418,6 +448,30 @@ remove_job_from_task_tree(TasksTree, #job_identifier{
         UpdatedTaskItems -> gb_trees:enter(TaskIdentifier, UpdatedTaskItems, TasksTreeWithoutKey)
     end.
 
+-spec register_async_result_processing(jobs(), job_identifier(), workflow_cached_async_result:result_ref()) -> jobs().
+register_async_result_processing(
+    Jobs = #workflow_jobs{
+        waiting = Waiting,
+        ongoing = Ongoing,
+        async_cached_results = Results
+    },
+    JobIdentifier,
+    CachedResultId
+) ->
+    NewJobIdentifier = JobIdentifier#job_identifier{processing_type = ?ASYNC_RESULT_PROCESSING},
+    Jobs#workflow_jobs{
+        waiting = gb_sets:add(NewJobIdentifier, Waiting),
+        ongoing = gb_sets:delete(JobIdentifier, Ongoing),
+        async_cached_results = Results#{NewJobIdentifier => CachedResultId}
+    }.
+
+-spec maybe_remove_async_cached_result(jobs(), job_identifier()) -> jobs().
+maybe_remove_async_cached_result(#workflow_jobs{async_cached_results = Results} = Jobs,
+    #job_identifier{processing_type = ?ASYNC_RESULT_PROCESSING} = JobIdentifier) ->
+    Jobs#workflow_jobs{async_cached_results = maps:remove(JobIdentifier, Results)};
+maybe_remove_async_cached_result(Jobs, _JobIdentifier) ->
+    Jobs.
+
 %%%===================================================================
 %%% Test API
 %%%===================================================================
@@ -428,7 +482,8 @@ is_empty(#workflow_jobs{
     waiting = Waiting,
     failed_items = Failed,
     pending_async_jobs = AsyncCalls,
-    raced_results = Raced
+    raced_results = Raced,
+    async_cached_results = AsyncCached
 }) ->
     gb_sets:is_empty(Ongoing) andalso gb_sets:is_empty(Waiting) andalso sets:size(Failed) =:= 0 andalso
-        maps:size(AsyncCalls) =:= 0 andalso maps:size(Raced) =:= 0.
+        maps:size(AsyncCalls) =:= 0 andalso maps:size(Raced) =:= 0 andalso maps:size(AsyncCached) =:= 0.
