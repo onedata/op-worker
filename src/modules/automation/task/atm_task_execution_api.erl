@@ -19,6 +19,7 @@
 -export([
     create_all/4, create/4,
     prepare_all/2, prepare/2,
+    clean_all/1, clean/1,
     delete_all/1, delete/1,
 
     get_spec/1,
@@ -135,6 +136,22 @@ prepare(AtmWorkflowExecutionCtx, AtmTaskExecutionIdOrDoc) ->
         AtmTaskExecutionIdOrDoc
     ),
     atm_task_executor:prepare(AtmWorkflowExecutionCtx, AtmTaskExecutor).
+
+
+-spec clean_all([atm_task_execution:id()]) -> ok.
+clean_all(AtmTaskExecutionIds) ->
+    lists:foreach(
+        fun(AtmTaskExecutionId) -> catch clean(AtmTaskExecutionId) end,
+        AtmTaskExecutionIds
+    ).
+
+
+-spec clean(atm_task_execution:id()) -> ok | no_return().
+clean(AtmTaskExecutionId) ->
+    #document{value = #atm_task_execution{executor = AtmTaskExecutor}} = ensure_atm_task_execution_doc(
+        AtmTaskExecutionId
+    ),
+    atm_task_executor:clean(AtmTaskExecutor).
 
 
 -spec delete_all([atm_task_execution:id()]) -> ok.

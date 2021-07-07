@@ -20,6 +20,7 @@
 -export([
     create_all/1, create/3,
     prepare_all/2, prepare/2,
+    clean_all/1, clean/1,
     delete_all/1, delete/1
 ]).
 -export([get_parallel_box_execution_specs/1]).
@@ -107,6 +108,16 @@ prepare_all(AtmWorkflowExecutionCtx, AtmLaneExecutions) ->
 -spec prepare(atm_workflow_execution_ctx:record(), record()) -> ok | no_return().
 prepare(AtmWorkflowExecutionCtx, #atm_lane_execution{parallel_boxes = AtmParallelBoxExecutions}) ->
     atm_parallel_box_execution:prepare_all(AtmWorkflowExecutionCtx, AtmParallelBoxExecutions).
+
+
+-spec clean_all([record()]) -> ok.
+clean_all(AtmLaneExecutions) ->
+    lists:foreach(fun clean/1, AtmLaneExecutions).
+
+
+-spec clean(record()) -> ok.
+clean(#atm_lane_execution{parallel_boxes = AtmParallelBoxExecutions}) ->
+    atm_parallel_box_execution:clean_all(AtmParallelBoxExecutions).
 
 
 -spec delete_all([record()]) -> ok.

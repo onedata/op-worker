@@ -26,7 +26,7 @@
 -export([assert_openfaas_available/0]).
 
 %% atm_task_executor callbacks
--export([create/2, prepare/2, get_spec/1, in_readonly_mode/1, run/3]).
+-export([create/2, prepare/2, clean/1, get_spec/1, in_readonly_mode/1, run/3]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
@@ -111,6 +111,11 @@ prepare(AtmWorkflowExecutionCtx, AtmTaskExecutor) ->
         false -> register_function(PrepareCtx)
     end,
     await_function_readiness(PrepareCtx).
+
+
+-spec clean(record()) -> ok | no_return().
+clean(AtmTaskExecutor) ->
+    remove_function(AtmTaskExecutor).
 
 
 -spec get_spec(record()) -> workflow_engine:task_spec().
@@ -411,6 +416,19 @@ schedule_function_execution(AtmJobExecutionCtx, Data, #atm_openfaas_task_executo
         _ ->
             throw(?ERROR_ATM_OPENFAAS_QUERY_FAILED)
     end.
+
+
+%% @private
+-spec remove_function(record()) -> ok | no_return().
+remove_function(#atm_openfaas_task_executor{function_name = FunctionName}) ->
+    OpenfaasConfig = get_openfaas_config(),
+
+    Endpoint = get_openfaas_endpoint(OpenfaasConfig, <<"/system/functions">>),
+    AuthHeaders = get_basic_auth_header(OpenfaasConfig),
+    Payload = json_utils:encode(#{<<"functionName">> => FunctionName}),
+
+    http_client:delete(Endpoint, AuthHeaders, Payload),
+    ok.
 
 
 %% @private
