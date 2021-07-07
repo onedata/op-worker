@@ -25,7 +25,7 @@
 
 
 %% API
--export([start/3]).
+-export([start/4]).
 -export([init_pool/0, stop_pool/0]).
 -export([get_pool_name/0]).
 
@@ -39,9 +39,9 @@
 %%% API
 %%%===================================================================
 
--spec start(bulk_download:id(), user_ctx:ctx(), fslogic_worker:file_guid()) -> 
+-spec start(bulk_download:id(), user_ctx:ctx(), fslogic_worker:file_guid(), boolean()) -> 
     {ok, bulk_download:id()}.
-start(BulkDownloadId, UserCtx, Guid) ->
+start(BulkDownloadId, UserCtx, Guid, FollowLinks) ->
     %% @TODO VFS-6212 start traverse with cleanup option
     traverse_task:delete_ended(?POOL_NAME, BulkDownloadId),
     Options = #{
@@ -50,7 +50,8 @@ start(BulkDownloadId, UserCtx, Guid) ->
         children_master_jobs_mode => sync,
         child_dirs_job_generation_policy => generate_slave_and_master_jobs,
         additional_data => #{<<"main_pid">> => utils:encode_pid(self())},
-        master_job_mode => single
+        master_job_mode => single,
+        follow_links => FollowLinks
     },
     {ok, _} = tree_traverse:run(
         ?POOL_NAME, file_ctx:new_by_guid(Guid), user_ctx:get_user_id(UserCtx), Options).
@@ -110,12 +111,12 @@ do_master_job(Job, MasterJobArgs) ->
 
 
 -spec do_slave_job(tree_traverse:slave_job(), bulk_download:id()) -> ok.
-do_slave_job(#tree_traverse_slave{file_ctx = FileCtx, user_id = UserId}, BulkDownloadId) ->
+do_slave_job(#tree_traverse_slave{file_ctx = FileCtx, user_id = UserId, relative_path = RelativePath}, BulkDownloadId) ->
     {ok, UserCtx} = tree_traverse_session:acquire_for_task(UserId, ?POOL_NAME, BulkDownloadId),
     #fuse_response{status = #status{code = ?OK}, fuse_response = FileAttrs} = 
         attr_req:get_file_attr(UserCtx, FileCtx, false, false),
     Pid = get_main_pid(BulkDownloadId),
-    bulk_download_main_process:report_next_file(Pid, FileAttrs),
+    bulk_download_main_process:report_next_file(Pid, FileAttrs, RelativePath),
     case slave_job_loop(Pid) of
         ok -> 
             ok;

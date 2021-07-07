@@ -22,7 +22,7 @@
 %% API
 -export([
     download_single_file/3, download_single_file/4,
-    download_tarball/4
+    download_tarball/5
 ]).
 
 
@@ -83,15 +83,16 @@ download_single_file(SessionId, #file_attr{
     bulk_download:id(),
     session:id(),
     [lfm_attrs:file_attributes()],
+    boolean(),
     cowboy_req:req()
 ) ->
     cowboy_req:req().
-download_tarball(BulkDownloadId, SessionId, FileAttrsList, Req0) ->
+download_tarball(BulkDownloadId, SessionId, FileAttrsList, FollowLinks, Req0) ->
     case http_parser:parse_range_header(Req0, unknown) of
         undefined ->
-            stream_whole_tarball(BulkDownloadId, SessionId, FileAttrsList, Req0);
+            stream_whole_tarball(BulkDownloadId, SessionId, FileAttrsList, FollowLinks, Req0);
         [{0, unknown}] -> 
-            stream_whole_tarball(BulkDownloadId, SessionId, FileAttrsList, Req0);
+            stream_whole_tarball(BulkDownloadId, SessionId, FileAttrsList, FollowLinks, Req0);
         Range ->
             stream_partial_tarball(BulkDownloadId, Req0, Range)
     end.
@@ -177,14 +178,14 @@ stream_multipart_ranged_body(Ranges, FileHandle, FileSize, Req0) ->
 
 %% @private
 -spec stream_whole_tarball(bulk_download:id(), session:id(), [lfm_attrs:file_attributes()], 
-    cowboy_req:req()) -> cowboy_req:req().
-stream_whole_tarball(_BulkDownloadId, _SessionId, [], Req0) ->
+    boolean(), cowboy_req:req()) -> cowboy_req:req().
+stream_whole_tarball(_BulkDownloadId, _SessionId, [], _FollowLinks, Req0) ->
     % can happen when requested download from the beginning and download 
     % code has expired but bulk download still allowed for resume
     http_req:send_error(?ERROR_BAD_VALUE_ID_NOT_FOUND(<<"code">>), Req0);
-stream_whole_tarball(BulkDownloadId, SessionId, FileAttrsList, Req0) ->
+stream_whole_tarball(BulkDownloadId, SessionId, FileAttrsList, FollowLinks, Req0) ->
     Req1 = http_streamer:init_stream(?HTTP_200_OK, Req0),
-    ok = bulk_download:run(BulkDownloadId, FileAttrsList, SessionId, Req1),
+    ok = bulk_download:run(BulkDownloadId, FileAttrsList, SessionId, FollowLinks, Req1),
     http_streamer:close_stream(undefined, Req1),
     Req1.
 

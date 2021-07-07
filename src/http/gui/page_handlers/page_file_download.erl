@@ -21,7 +21,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 
--export([gen_file_download_url/2, handle/2]).
+-export([gen_file_download_url/3, handle/2]).
 
 
 %%%===================================================================
@@ -37,13 +37,13 @@
 %% download no such test is performed - inaccessible files are ignored during streaming.
 %% @end
 %%--------------------------------------------------------------------
--spec gen_file_download_url(session:id(), [fslogic_worker:file_guid()]) ->
+-spec gen_file_download_url(session:id(), [fslogic_worker:file_guid()], boolean()) ->
     {ok, binary()} | errors:error().
-gen_file_download_url(SessionId, FileGuids) ->
+gen_file_download_url(SessionId, FileGuids, FollowLinks) ->
     try
         maybe_sync_first_file_block(SessionId, FileGuids),
         Hostname = oneprovider:get_domain(),
-        {ok, Code} = file_download_code:create(SessionId, FileGuids),
+        {ok, Code} = file_download_code:create(SessionId, FileGuids, FollowLinks),
         URL = str_utils:format_bin("https://~s~s/~s", [
             Hostname, ?FILE_DOWNLOAD_PATH, Code
         ]),
@@ -65,12 +65,13 @@ gen_file_download_url(SessionId, FileGuids) ->
 handle(<<"GET">>, Req) ->
     FileDownloadCode = cowboy_req:binding(code, Req),
     case file_download_code:verify(FileDownloadCode) of
-        {true, SessionId, FileGuids} ->
-            handle_http_download(FileDownloadCode, SessionId, FileGuids, Req);
+        {true, SessionId, FileGuids, FollowLinks} ->
+            handle_http_download(FileDownloadCode, SessionId, FileGuids, FollowLinks, Req);
         false ->
             case bulk_download:can_continue(FileDownloadCode) of
                 true -> 
-                    handle_http_download(FileDownloadCode, <<>>, [], Req);
+                    % follow links parameter is not important, as it will be overwritten by an existing bulk download instance
+                    handle_http_download(FileDownloadCode, <<>>, [], true, Req);
                 false -> 
                     http_req:send_error(?ERROR_BAD_VALUE_ID_NOT_FOUND(<<"code">>), Req)
             end
@@ -118,10 +119,11 @@ maybe_sync_first_file_block(_SessionId, _FileGuids) ->
     file_download_code:code(),
     session:id(),
     [fslogic_worker:file_guid()],
+    boolean(),
     cowboy_req:req()
 ) ->
     cowboy_req:req().
-handle_http_download(FileDownloadCode, SessionId, FileGuids, Req) ->
+handle_http_download(FileDownloadCode, SessionId, FileGuids, FollowLinks, Req) ->
     OzUrl = oneprovider:get_oz_url(),
     Req2 = gui_cors:allow_origin(OzUrl, Req),
     Req3 = gui_cors:allow_frame_origin(OzUrl, Req2),
@@ -140,7 +142,7 @@ handle_http_download(FileDownloadCode, SessionId, FileGuids, Req) ->
         [#file_attr{name = FileName, type = ?DIRECTORY_TYPE}] ->
             Req4 = set_content_disposition_header(<<(normalize_filename(FileName))/binary, ".tar">>, Req3),
             file_download_utils:download_tarball(
-                FileDownloadCode, SessionId, FileAttrsList, Req4
+                FileDownloadCode, SessionId, FileAttrsList, FollowLinks, Req4
             );
         [#file_attr{name = FileName, type = ?REGULAR_FILE_TYPE} = Attr] ->
             Req4 = set_content_disposition_header(normalize_filename(FileName), Req3),
@@ -151,7 +153,7 @@ handle_http_download(FileDownloadCode, SessionId, FileGuids, Req) ->
             Timestamp = integer_to_binary(global_clock:timestamp_seconds()),
             Req4 = set_content_disposition_header(<<"onedata-download-", Timestamp/binary, ".tar">>, Req3),
             file_download_utils:download_tarball(
-                FileDownloadCode, SessionId, FileAttrsList, Req4
+                FileDownloadCode, SessionId, FileAttrsList, FollowLinks, Req4
             )
     end.
 

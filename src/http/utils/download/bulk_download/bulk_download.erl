@@ -57,7 +57,7 @@
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
--export([run/4, can_continue/1, is_offset_allowed/2, continue/3]).
+-export([run/5, can_continue/1, is_offset_allowed/2, continue/3]).
 
 -type id() :: binary().
 
@@ -69,15 +69,16 @@
 %%% API
 %%%===================================================================
 
--spec run(id(), [lfm_attrs:file_attributes()], session:id(), cowboy_req:req()) -> 
+-spec run(id(), [lfm_attrs:file_attributes()], session:id(), boolean(), cowboy_req:req()) -> 
     ok | {error, term()}.
-run(BulkDownloadId, FileAttrsList, SessionId, CowboyReq) ->
+run(BulkDownloadId, FileAttrsList, SessionId, FollowLinks, CowboyReq) ->
     Conn = self(),
     case bulk_download_task:get_main_pid(BulkDownloadId) of
         {ok, Pid} -> bulk_download_main_process:abort(Pid);
         _ -> ok
     end,
-    {ok, MainPid} = bulk_download_main_process:start(BulkDownloadId, FileAttrsList, SessionId, Conn),
+    {ok, MainPid} = bulk_download_main_process:start(
+        BulkDownloadId, FileAttrsList, SessionId, Conn, FollowLinks),
     data_streaming_loop(BulkDownloadId, MainPid, CowboyReq).
     
 

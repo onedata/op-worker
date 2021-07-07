@@ -277,7 +277,8 @@
 -record(file_download_code, {
     expires :: time:seconds(),
     session_id :: session:id(),
-    file_guids :: [fslogic_worker:file_guid()]
+    file_guids :: [fslogic_worker:file_guid()],
+    follow_links :: boolean()
 }).
 
 -record(offline_access_credentials, {
@@ -1020,7 +1021,13 @@
     children_master_jobs_mode :: tree_traverse:children_master_jobs_mode(),
     track_subtree_status :: boolean(),
     batch_size :: tree_traverse:batch_size(),
-    traverse_info :: binary()
+    traverse_info :: binary(),
+    follow_links = false :: boolean(),
+    % relative path of the processed file to the traverse root
+    relative_path = <<>> :: file_meta:path(),
+    % Map of encountered files on the path from the traverse root to the currently processed one. 
+    % It is required to efficiently prevent loops when resolving symlinks
+    encountered_files = #{} :: #{file_meta:uuid() => true}
 }).
 
 %% Model that holds information necessary to tell whether whole subtree

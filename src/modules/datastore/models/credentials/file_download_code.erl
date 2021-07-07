@@ -21,7 +21,7 @@
 -include("modules/datastore/datastore_runner.hrl").
 
 %% API
--export([create/2, verify/1, remove/1]).
+-export([create/3, verify/1, remove/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_version/0, get_record_struct/1, upgrade_record/2]).
@@ -48,8 +48,8 @@
 %%%===================================================================
 
 
--spec create(session:id(), [fslogic_worker:file_guid()]) -> {ok, code()} | {error, term()}.
-create(SessionId, FileGuids) ->
+-spec create(session:id(), [fslogic_worker:file_guid()], boolean()) -> {ok, code()} | {error, term()}.
+create(SessionId, FileGuids, FollowLinks) ->
     Ctx = ?CTX,
 
     ExpirationInterval = ?EXPIRATION_INTERVAL,
@@ -61,7 +61,8 @@ create(SessionId, FileGuids) ->
             % remove document from db and not from memory
             expires = ?NOW() + ExpirationInterval,
             session_id = SessionId,
-            file_guids = FileGuids
+            file_guids = FileGuids,
+            follow_links = FollowLinks
         }
     },
     case datastore_model:save(CtxWithExpiration, Doc) of
@@ -70,7 +71,7 @@ create(SessionId, FileGuids) ->
     end.
 
 
--spec verify(code()) -> false | {true, session:id(), [fslogic_worker:file_guid()]}.
+-spec verify(code()) -> false | {true, session:id(), [fslogic_worker:file_guid()], boolean()}.
 verify(Code) ->
     Now = ?NOW(),
 
@@ -78,9 +79,10 @@ verify(Code) ->
         {ok, #document{value = #file_download_code{
             expires = Expires,
             session_id = SessionId,
-            file_guids = FileGuids
+            file_guids = FileGuids,
+            follow_links = FollowLinks
         }}} when Now < Expires ->
-            {true, SessionId, FileGuids};
+            {true, SessionId, FileGuids, FollowLinks};
         {ok, _} ->
             ok = datastore_model:delete(?CTX, Code),
             false;
@@ -116,7 +118,7 @@ get_ctx() ->
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    2.
+    3.
 
 
 %%--------------------------------------------------------------------
@@ -137,6 +139,13 @@ get_record_struct(2) ->
         {expires, integer},
         {session_id, string},
         {file_guids, [string]} % modified field
+    ]};
+get_record_struct(3) ->
+    {record, [
+        {expires, integer},
+        {session_id, string},
+        {file_guids, [string]},
+        {follow_links, boolean}
     ]}.
 
 
@@ -159,4 +168,18 @@ upgrade_record(1, Record) ->
         Expires,
         SessionId,
         [FileGuid]
+    }};
+upgrade_record(2, Record) ->
+    {
+        file_download_code,
+        Expires,
+        SessionId,
+        FileGuid
+    } = Record,
+    
+    {3, {file_download_code,
+        Expires,
+        SessionId,
+        [FileGuid],
+        false
     }}.

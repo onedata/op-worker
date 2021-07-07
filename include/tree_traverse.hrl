@@ -43,7 +43,14 @@
     track_subtree_status = ?DEFAULT_TRACK_SUBTREE_STATUS :: boolean(),
 
     % info passed to every slave job
-    traverse_info :: tree_traverse:traverse_info()
+    traverse_info :: tree_traverse:traverse_info(),
+    
+    follow_links = false :: boolean(),
+    % relative path of the processed file to the traverse root
+    relative_path = <<>> :: file_meta:path(),
+    % Map of encountered files on the path from the traverse root to the currently processed one. 
+    % It is required to efficiently prevent loops when resolving symlinks
+    encountered_files = #{} :: #{file_meta:uuid() => true}
 }).
 
 % Record that defines slave job
@@ -52,7 +59,8 @@
     % User who scheduled the traverse
     user_id :: od_user:id(),
     traverse_info :: tree_traverse:traverse_info(),
-    track_subtree_status = ?DEFAULT_TRACK_SUBTREE_STATUS :: boolean()
+    track_subtree_status = ?DEFAULT_TRACK_SUBTREE_STATUS :: boolean(),
+    relative_path :: file_meta:path()
 }).
 
 
