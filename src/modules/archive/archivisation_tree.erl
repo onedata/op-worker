@@ -24,12 +24,16 @@
 %%%
 %%%
 %%% NOTE !!!
-%%% If createNestedArchives options is enabled, archivisation_traverse
+%%% If createNestedArchives option is enabled, archivisation_traverse
 %%% (see archivisation_traverse.erl module) will create archives
 %%% for nested datasets.
 %%% Such archives are called nested archives.
 %%% Nested archives will be created in their own archive_<ArchiveId>
-%%% directories and symlinked from parent archives.
+%%% directories and symlinked from parent archives. 
+%%% 
+%%% When includeDip option is enabled, alongside with archival information 
+%%% package (AIP), additional archive representing dissemination information 
+%%% package (DIP) is created in its own archive_<ArchiveId> directory.
 %%%
 %%% Please see docs in plain_archive.erl and bagit_archive.erl to
 %%% learn about structure of nested archives in case of corresponding

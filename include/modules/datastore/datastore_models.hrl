@@ -462,8 +462,10 @@
     % id of archive that current one is based on if it is incremental
     base_archive_id :: undefined | archive:id(),
     
-    related_dip = undefined :: undefined | archive:id(),
-    related_aip = undefined :: undefined | archive:id()
+    % Relations between dissemination information package (DIP) 
+    % and archival information package (AIP) archives.
+    related_aip = undefined :: undefined | archive:id(),
+    related_dip = undefined :: undefined | archive:id()
 }).
 
 

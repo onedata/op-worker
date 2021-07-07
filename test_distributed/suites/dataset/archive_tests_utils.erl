@@ -86,8 +86,8 @@ assert_archive_is_preserved(Node, SessionId, ArchiveId, DatasetId, DatasetRootFi
         undefined ->
             ?assertEqual(true, lists:member(ArchiveId, GetDatasetArchives()), ?ATTEMPTS);
         _ ->
-            % DIP archives are not on the dataset list
-            ok
+            % DIP archives are not on the dataset list but check that they have enforced plain layout
+            ?assertEqual(?ARCHIVE_PLAIN_LAYOUT, ArchiveLayout)
     end,
     
     assert_structure(Node, SessionId, ArchiveId, DatasetRootFileGuid, ArchiveLayout),

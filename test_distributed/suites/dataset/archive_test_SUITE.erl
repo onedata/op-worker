@@ -172,34 +172,34 @@ create_archivisation_tree(_Config) ->
 
 
 archive_dataset_attached_to_dir_plain_layout(_Config) ->
-    archive_dataset_attached_to_dir_test_base(?ARCHIVE_PLAIN_LAYOUT, ?DEFAULT_INCLUDE_DIP).
+    archive_dataset_attached_to_dir_test_base(?ARCHIVE_PLAIN_LAYOUT, false).
 
 archive_dataset_attached_to_file_plain_layout(_Config) ->
-    archive_dataset_attached_to_file_test_base(?ARCHIVE_PLAIN_LAYOUT, ?DEFAULT_INCLUDE_DIP).
+    archive_dataset_attached_to_file_test_base(?ARCHIVE_PLAIN_LAYOUT, false).
 
 archive_dataset_attached_to_hardlink_plain_layout(_Config) ->
-    archive_dataset_attached_to_hardlink_test_base(?ARCHIVE_PLAIN_LAYOUT, ?DEFAULT_INCLUDE_DIP).
+    archive_dataset_attached_to_hardlink_test_base(?ARCHIVE_PLAIN_LAYOUT, false).
 
 archive_dataset_attached_to_symlink_plain_layout(_Config) ->
-    archive_dataset_attached_to_symlink_test_base(?ARCHIVE_PLAIN_LAYOUT, ?DEFAULT_INCLUDE_DIP).
+    archive_dataset_attached_to_symlink_test_base(?ARCHIVE_PLAIN_LAYOUT, false).
 
 archive_nested_datasets_plain_layout(_Config) ->
-    archive_nested_datasets_test_base(?ARCHIVE_PLAIN_LAYOUT, ?DEFAULT_INCLUDE_DIP).
+    archive_nested_datasets_test_base(?ARCHIVE_PLAIN_LAYOUT, false).
 
 archive_dataset_attached_to_dir_bagit_layout(_Config) ->
-    archive_dataset_attached_to_dir_test_base(?ARCHIVE_BAGIT_LAYOUT, ?DEFAULT_INCLUDE_DIP).
+    archive_dataset_attached_to_dir_test_base(?ARCHIVE_BAGIT_LAYOUT, false).
 
 archive_dataset_attached_to_file_bagit_layout(_Config) ->
-    archive_dataset_attached_to_file_test_base(?ARCHIVE_BAGIT_LAYOUT, ?DEFAULT_INCLUDE_DIP).
+    archive_dataset_attached_to_file_test_base(?ARCHIVE_BAGIT_LAYOUT, false).
 
 archive_dataset_attached_to_hardlink_bagit_layout(_Config) ->
-    archive_dataset_attached_to_hardlink_test_base(?ARCHIVE_BAGIT_LAYOUT, ?DEFAULT_INCLUDE_DIP).
+    archive_dataset_attached_to_hardlink_test_base(?ARCHIVE_BAGIT_LAYOUT, false).
 
 archive_dataset_attached_to_symlink_bagit_layout(_Config) ->
-    archive_dataset_attached_to_symlink_test_base(?ARCHIVE_BAGIT_LAYOUT, ?DEFAULT_INCLUDE_DIP).
+    archive_dataset_attached_to_symlink_test_base(?ARCHIVE_BAGIT_LAYOUT, false).
 
 archive_nested_datasets_bagit_layout(_Config) ->
-    archive_nested_datasets_test_base(?ARCHIVE_BAGIT_LAYOUT, ?DEFAULT_INCLUDE_DIP).
+    archive_nested_datasets_test_base(?ARCHIVE_BAGIT_LAYOUT, false).
 
 
 dip_archive_dataset_attached_to_dir_plain_layout(_Config) ->

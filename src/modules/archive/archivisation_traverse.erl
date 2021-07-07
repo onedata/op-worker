@@ -330,8 +330,8 @@ handle_nested_dataset_and_do_archive(FileCtx, UserCtx, TraverseInfo = #{
             {FinalAipArchiveCtx, FinalDipArchiveCtx, BaseArchiveDoc}
     end,
     TraverseInfo#{
-        aip_ctx => AipArchiveCtxToReturn,
-        dip_ctx => DipArchiveCtxToReturn,
+        aip_ctx => ensure_guid_in_ctx(AipArchiveCtxToReturn),
+        dip_ctx => ensure_guid_in_ctx(DipArchiveCtxToReturn),
         base_archive_doc => BaseArchiveDocToReturn
     }.
     

@@ -76,14 +76,14 @@ translate_archive_info(#archive_info{
         <<"description">> => Description,
         <<"index">> => Index,
         <<"stats">> => archive_stats:to_json(Stats),
-        <<"baseArchive">> => prepare_archive_instance_gri(utils:undefined_to_null(BaseArchive)),
-        <<"relatedAip">> => prepare_archive_instance_gri(utils:undefined_to_null(RelatedAip)),
-        <<"relatedDip">> => prepare_archive_instance_gri(utils:undefined_to_null(RelatedDip))
+        <<"baseArchive">> => prepare_archive_instance_gri(BaseArchive),
+        <<"relatedAip">> => prepare_archive_instance_gri(RelatedAip),
+        <<"relatedDip">> => prepare_archive_instance_gri(RelatedDip)
     }.
 
 
--spec prepare_archive_instance_gri(null | archive:id()) -> gri:serialized().
-prepare_archive_instance_gri(null) ->
+-spec prepare_archive_instance_gri(undefined | archive:id()) -> gri:serialized() | null.
+prepare_archive_instance_gri(undefined) ->
     null;
 prepare_archive_instance_gri(ArchiveId) ->
     gri:serialize(#gri{

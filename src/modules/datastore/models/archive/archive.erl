@@ -133,12 +133,12 @@ create_nested(DatasetId, #document{
 
 
 -spec create_dip_archive(archive:doc()) -> {ok, archive:doc()} | {error, term()}.
-create_dip_archive(#document{key = AipArchiveId, value = AipArchiveValue} = AipArchiveDoc) ->
-    case datastore_model:create(?CTX, AipArchiveDoc#document{
-        key = undefined,
-        value = #archive{
+create_dip_archive(#document{key = AipArchiveId, value = AipArchiveValue, scope = Scope} = AipArchiveDoc) ->
+    case datastore_model:create(?CTX, #document{
+        value = AipArchiveValue#archive{
             related_aip = AipArchiveId
-        }
+        },
+        scope = Scope
     }) of
         {ok, #document{key = DipArchiveId}} ->
             {ok, AipArchiveDoc#document{value = AipArchiveValue#archive{related_dip = DipArchiveId}}};
