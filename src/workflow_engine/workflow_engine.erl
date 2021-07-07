@@ -138,8 +138,11 @@ execute_workflow(EngineId, ExecutionSpec) ->
 report_execution_status_update(ExecutionId, EngineId, ReportType, JobIdentifier, Ans) ->
     TaskSpec = workflow_execution_state:report_execution_status_update(ExecutionId, JobIdentifier, ReportType, Ans),
 
-    case ReportType of
-        ?ASYNC_CALL_FINISHED ->
+    case {ReportType, TaskSpec} of
+        {?ASYNC_CALL_FINISHED, ?WF_ERROR_JOB_NOT_FOUND} ->
+            % Asynchronous job finish - it has no slot acquired
+            trigger_job_scheduling(EngineId, ?TAKE_UP_FREE_SLOTS);
+        {?ASYNC_CALL_FINISHED, _} ->
             % TODO VFS-7788 - support multiple pools
             case get_async_call_pools(TaskSpec) of
                 [CallPoolId] -> workflow_async_call_pool:decrement_slot_usage(CallPoolId);
@@ -152,9 +155,7 @@ report_execution_status_update(ExecutionId, EngineId, ReportType, JobIdentifier,
             trigger_job_scheduling(EngineId, ?FOR_CURRENT_SLOT_FIRST)
     end.
 
--spec get_async_call_pools(task_spec() | ?WF_ERROR_JOB_NOT_FOUND) -> [workflow_async_call_pool:id()] | undefined.
-get_async_call_pools(?WF_ERROR_JOB_NOT_FOUND) ->
-    undefined; % TaskSpec is undefined because of previous error - cannot get pools
+-spec get_async_call_pools(task_spec()) -> [workflow_async_call_pool:id()].
 get_async_call_pools(TaskSpec) ->
     maps:get(async_call_pools, TaskSpec, [?DEFAULT_ASYNC_CALL_POOL_ID]).
 
@@ -169,8 +170,8 @@ call_handler(ExecutionId, Context, Handler, Function, Args) ->
         apply(Handler, Function, [ExecutionId, Context] ++ Args)
     catch
         Error:Reason  ->
-            ?error_stacktrace("Unexpected error of handler ~p (execution id: ~p, args: ~p): ~p:~p",
-                [Handler, ExecutionId, Args, Error, Reason]),
+            ?error_stacktrace("Unexpected error in ~w:~w (execution ~s, args: ~p): ~w:~p",
+                [Handler, Function, ExecutionId, Args, Error, Reason]),
             error
     end.
 
