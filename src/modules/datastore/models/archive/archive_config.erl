@@ -20,7 +20,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([from_json/1, to_json/1, to_json/2, sanitize/1]).
+-export([from_json/1, to_json/1, sanitize/1]).
 %% Getters
 -export([
     get_layout/1, should_include_dip/1, should_create_nested_archives/1, 
@@ -34,7 +34,7 @@
 %% #{
 %%      <<"layout">> := layout(),
 %%      <<"incremental">> => #{
-%%          <<"enable">> := boolean(), 
+%%          <<"enabled">> := boolean(), 
 %%          <<"basedOn">> => archive:id()
 %%      },
 %%      <<"includeDip">> => include_dip(),
@@ -63,23 +63,18 @@ from_json(ConfigJson) ->
     }.
 
 -spec to_json(record()) -> json().
-to_json(ArchiveConfig) ->
-    to_json(ArchiveConfig, []).
-
-
--spec to_json(record(), [binary()]) -> json().
 to_json(#archive_config{
     incremental = Incremental,
     layout = Layout,
     include_dip = IncludeDip,
     create_nested_archives = CreateNestedArchives
-}, ExcludedFields) ->
-    maps:without(ExcludedFields, #{
+}) ->
+    #{
         <<"incremental">> => Incremental,
         <<"layout">> => str_utils:to_binary(Layout),
         <<"includeDip">> => IncludeDip,
         <<"createNestedArchives">> => CreateNestedArchives
-    }).
+    }.
 
 
 -spec sanitize(json_utils:json_map()) -> json().
@@ -94,16 +89,20 @@ sanitize(RawConfig) ->
             }
         }),
         case maps:get(<<"incremental">>, SanitizedData, ?DEFAULT_INCREMENTAL) of
-            #{<<"enable">> := true} = IncrementalConfig ->
+            #{<<"enabled">> := true} = IncrementalConfig ->
                 BaseArchiveId = maps:get(<<"basedOn">>, IncrementalConfig, null),
                 case is_valid_base_archive(BaseArchiveId) of
                     {true, _} ->
                         SanitizedData;
                     false ->
-                        throw(?ERROR_BAD_VALUE_IDENTIFIER(<<"baseArchiveId">>))
+                        throw(?ERROR_BAD_VALUE_IDENTIFIER(<<"incremental.basedOn">>))
                 end;
-            #{<<"enable">> := false} ->
-                SanitizedData
+            #{<<"enabled">> := false} ->
+                SanitizedData;
+            #{<<"enabled">> := _NotBoolean} ->
+                throw(?ERROR_BAD_VALUE_BOOLEAN(<<"incremental.enable">>));
+            _ ->
+                throw(?ERROR_MISSING_REQUIRED_VALUE(<<"incremental.enable">>))
         end
     catch
         % config is a nested object of the archive object,
@@ -130,7 +129,7 @@ get_layout(#archive_config{layout = Layout}) ->
 
 -spec is_incremental(record()) -> boolean().
 is_incremental(#archive_config{incremental = Incremental}) ->
-    maps:get(<<"enable">>, Incremental).
+    maps:get(<<"enabled">>, Incremental).
 
 
 -spec get_incremental_based_on(record()) -> archive:id() | undefined.

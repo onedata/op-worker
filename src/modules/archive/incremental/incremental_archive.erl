@@ -42,7 +42,7 @@
 %%--------------------------------------------------------------------
 -spec find_base_archive_id(dataset:id()) -> archive:id() | undefined.
 find_base_archive_id(DatasetId) ->
-    find_most_recent_preserved_archive(DatasetId, #{start_index => <<>>, limit => 1000}).
+    find_most_recent_preserved_archive(DatasetId, <<>>).
 
 
 %%--------------------------------------------------------------------
@@ -50,7 +50,8 @@ find_base_archive_id(DatasetId) ->
 %% Returns id of the archive, nested in the ParentBaseArchiveDoc
 %% that is created from the same dataset as NestedArchiveDoc.
 %% Found archive will become base for NestedArchiveDoc.
-%% If corresponding archive is not found, undefined is returned.
+%% If corresponding archive is not found, undefined is returned. 
+%% See `archivisation_tree.erl` for nested archives description.
 %% @end
 %%--------------------------------------------------------------------
 -spec find_base_for_nested_archive(archive:doc(), archive:doc(), user_ctx:ctx()) -> archive:id() | undefined.
@@ -95,20 +96,21 @@ has_file_changed(BaseArchiveFileCtx, CurrentFileCtx, UserCtx) ->
 %%% Internal functions
 %%%===================================================================
 
--spec find_most_recent_preserved_archive(dataset:id(), archive_api:listing_opts()) -> archive:id() | undefined.
-find_most_recent_preserved_archive(DatasetId, Opts) ->
-    {ok, Archives, IsLast} = archive_api:list_archives(DatasetId, Opts, ?EXTENDED_INFO),
+-spec find_most_recent_preserved_archive(dataset:id(), archive_api:index()) -> archive:id() | undefined.
+find_most_recent_preserved_archive(DatasetId, StartIndex) ->
+    ListingOpts = #{start_index => StartIndex, limit => 1000},
+    {ok, Archives, IsLast} = archive_api:list_archives(DatasetId, ListingOpts, ?EXTENDED_INFO),
 
     {BaseArchiveOrUndefined, LastArchiveIndex} = lists_utils:foldl_while(fun
         (#archive_info{state = ?ARCHIVE_PRESERVED, id = Id, index = Index}, {undefined, _}) ->
             {halt, {Id, Index}};
         (#archive_info{index = Index}, {undefined, _}) ->
             {cont, {undefined, Index}}
-    end, {undefined, maps:get(start_index, Opts)}, Archives),
+    end, {undefined, StartIndex}, Archives),
 
     case {BaseArchiveOrUndefined, IsLast} of
         {undefined, true} -> undefined;
-        {undefined, false} -> find_most_recent_preserved_archive(DatasetId, Opts#{start_index => LastArchiveIndex});
+        {undefined, false} -> find_most_recent_preserved_archive(DatasetId, LastArchiveIndex);
         {BaseArchiveId, _} -> BaseArchiveId
     end.
 

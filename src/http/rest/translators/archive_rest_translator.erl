@@ -79,12 +79,12 @@ translate_archive_info(#archive_info{
                 null
         end,
         <<"creationTime">> => CreationTime,
-        <<"config">> => archive_config:to_json(Config, [<<"baseArchive">>]),
+        <<"config">> => archive_config:to_json(Config),
         <<"preservedCallback">> => utils:undefined_to_null(PreservedCallback),
         <<"purgedCallback">> => utils:undefined_to_null(PurgedCallback),
         <<"description">> => Description,
         <<"stats">> => archive_stats:to_json(Stats),
-        <<"baseArchive">> => utils:undefined_to_null(BaseArchive),
-        <<"relatedAip">> => utils:undefined_to_null(RelatedAip),
-        <<"relatedDip">> => utils:undefined_to_null(RelatedDip)
+        <<"baseArchiveId">> => utils:undefined_to_null(BaseArchive),
+        <<"relatedAipId">> => utils:undefined_to_null(RelatedAip),
+        <<"relatedDipId">> => utils:undefined_to_null(RelatedDip)
     }.

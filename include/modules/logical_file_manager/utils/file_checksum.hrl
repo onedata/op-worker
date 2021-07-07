@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Macros used in file_checksum.erl module.
+%%% Macros used for calculating file's checksums.
 %%% @end
 %%%-------------------------------------------------------------------
 

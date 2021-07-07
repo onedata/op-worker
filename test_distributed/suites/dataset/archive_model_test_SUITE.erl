@@ -114,8 +114,7 @@ all() -> [
 
 
 -define(TEST_ARCHIVE_CONFIG, #archive_config{
-    incremental = false,
-    base_archive_id = undefined,
+    incremental = #{<<"enabled">> => false},
     include_dip = false,
     layout = ?ARCHIVE_PLAIN_LAYOUT
 }).
@@ -529,8 +528,7 @@ simple_archive_crud_test_base(DatasetId, RootFileType, ExpSize) ->
         creation_time = Timestamp,
         index = Index,
         config = #archive_config{
-            incremental = false,
-            base_archive_id = undefined,
+            incremental = #{<<"enabled">> => false},
             include_dip = false,
             layout = ?ARCHIVE_PLAIN_LAYOUT
         },

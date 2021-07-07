@@ -28,7 +28,7 @@
 -define(ARCHIVE_BAGIT_LAYOUT, bagit).
 -define(ARCHIVE_LAYOUTS, [?ARCHIVE_PLAIN_LAYOUT, ?ARCHIVE_BAGIT_LAYOUT]).
 
--define(SUPPORTED_INCREMENTAL_VALUES, [#{<<"enable">> => false}, #{<<"enable">> => true}]).
+-define(SUPPORTED_INCREMENTAL_ENABLE_VALUES, [false, true]).
 -define(SUPPORTED_INCLUDE_DIP_VALUES, [true, false]).
 
 -define(DEFAULT_LAYOUT, ?ARCHIVE_PLAIN_LAYOUT).

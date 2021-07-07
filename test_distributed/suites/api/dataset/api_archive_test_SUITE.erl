@@ -134,7 +134,9 @@ create_archive(_Config) ->
                     {<<"datasetId">>, DetachedDatasetId,
                         ?ERROR_BAD_DATA(<<"datasetId">>, <<"Detached dataset cannot be modified.">>)},
                     {<<"config">>, #{<<"incremental">> => <<"not json">>}, ?ERROR_BAD_VALUE_JSON(<<"config.incremental">>)},
-                    {<<"config">>, #{<<"incremental">> => #{<<"enable">> => true, <<"basedOn">> => <<"invalid_id">>}}, ?ERROR_BAD_VALUE_IDENTIFIER(<<"config.baseArchiveId">>)},
+                    {<<"config">>, #{<<"incremental">> => #{<<"enabled">> => <<"not a boolean">>}}, ?ERROR_BAD_VALUE_BOOLEAN(<<"config.incremental.enable">>)},
+                    {<<"config">>, #{<<"incremental">> => #{<<"not_enable">> => true}}, ?ERROR_MISSING_REQUIRED_VALUE(<<"config.incremental.enable">>)},
+                    {<<"config">>, #{<<"incremental">> => #{<<"enabled">> => true, <<"basedOn">> => <<"invalid_id">>}}, ?ERROR_BAD_VALUE_IDENTIFIER(<<"config.incremental.basedOn">>)},
                     {<<"config">>, #{<<"includeDip">> => <<"not boolean">>}, ?ERROR_BAD_VALUE_BOOLEAN(<<"config.includeDip">>)},
                     {<<"config">>, #{<<"createNestedArchives">> => <<"not boolean">>},
                         ?ERROR_BAD_VALUE_BOOLEAN(<<"config.createNestedArchives">>)},
@@ -152,7 +154,7 @@ create_archive(_Config) ->
 -spec generate_all_valid_configs() -> [archive_config:json()].
 generate_all_valid_configs() ->
     LayoutValues = [undefined | ?ARCHIVE_LAYOUTS],
-    IncrementalValues = [undefined | ?SUPPORTED_INCREMENTAL_VALUES],
+    IncrementalValues = lists:flatten([undefined | [#{<<"enabled">> => Enable || Enable <- ?SUPPORTED_INCREMENTAL_ENABLE_VALUES]]),
     IncludeDipValues = [undefined | ?SUPPORTED_INCLUDE_DIP_VALUES],
     CreateNestedArchivesValues = [undefined, true, false],
     AllConfigsCombinations = [
@@ -302,7 +304,7 @@ get_archive_info(_Config) ->
         #file_spec{dataset = #dataset_spec{archives = 1}}
     ),
 
-    ConfigJson = archive_config:to_json(Config, [<<"baseArchive">>]),
+    ConfigJson = archive_config:to_json(Config),
 
     Providers = [krakow, paris],
     maybe_detach_dataset(Providers, DatasetId),
