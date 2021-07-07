@@ -10,7 +10,7 @@
 %%% It contains functions used to create directories in
 %%% which archive files will be stored.
 %%%
-%%% The subtree will be rooted in . directory so
+%%% The subtree will be rooted in .__onedata_archive directory so
 %%% that it won't be visible in the space.
 %%%
 %%% The subtree will have the following structure:
@@ -43,9 +43,11 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/datastore/datastore_runner.hrl").
 -include_lib("ctool/include/errors.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
--export([create_archive_dir/4, is_special_uuid/1, is_in_archive/1, uuid_to_archive_id/1]).
+-export([create_archive_dir/4, is_special_uuid/1, is_in_archive/1,
+    uuid_to_archive_id/1, extract_archive_id/1]).
 
 %%%===================================================================
 %%% API functions
@@ -57,7 +59,7 @@ create_archive_dir(ArchiveId, DatasetId, SpaceId, ArchiveCreatorId) ->
     DatasetArchivesDirUuid = ?DATASET_ARCHIVES_DIR_UUID(DatasetId),
     ArchiveDirUuid = ?ARCHIVE_DIR_UUID(ArchiveId),
     ArchiveDirDoc = file_meta:new_doc(
-        ArchiveDirUuid, ArchiveDirUuid,
+        ArchiveDirUuid, ?ARCHIVE_DIR_NAME(ArchiveId),
         ?DIRECTORY_TYPE, ?DEFAULT_DIR_PERMS, ArchiveCreatorId,
         DatasetArchivesDirUuid, SpaceId
     ),
@@ -95,6 +97,23 @@ is_in_archive(CanonicalPath) ->
         _ -> false
     end.
 
+
+-spec extract_archive_id(file_meta:path()) -> {ok, archive:id()} | {error, term()}.
+extract_archive_id(CanonicalPath) ->
+    ArchivesRootDirName = ?ARCHIVES_ROOT_DIR_NAME,
+    case filename:split(CanonicalPath) of
+        [
+            ?DIRECTORY_SEPARATOR_BIN,
+            _SpaceId, ArchivesRootDirName,
+            ?DATASET_ARCHIVES_DIR_NAME(_),
+            ?ARCHIVE_DIR_NAME(ArchiveId)
+            | _Rest
+        ] ->
+            {ok, ArchiveId};
+        _ ->
+            ?ERROR_NOT_FOUND
+    end.
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -104,7 +123,7 @@ create_dataset_archives_dir(DatasetId, SpaceId) ->
     ArchivesRootDirUuid = ?ARCHIVES_ROOT_DIR_UUID(SpaceId),
     DatasetArchivesDirUuid = ?DATASET_ARCHIVES_DIR_UUID(DatasetId),
     DatasetArchivedDirDoc = file_meta:new_doc(
-        DatasetArchivesDirUuid, DatasetArchivesDirUuid,
+        DatasetArchivesDirUuid, ?DATASET_ARCHIVES_DIR_NAME(DatasetId),
         ?DIRECTORY_TYPE, ?DEFAULT_DIR_PERMS, ?SPACE_OWNER_ID(SpaceId),
         ArchivesRootDirUuid, SpaceId
     ),

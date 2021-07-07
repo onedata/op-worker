@@ -85,10 +85,12 @@ set_up_archive(CreationProvider, UserId, DatasetId, #archive_spec{
         lfm_proxy:archive_dataset(CreationNode, UserSessId, DatasetId, Config, Description)
     ),
 
-    {ok, ArchiveInfo} = lfm_proxy:get_archive_info(CreationNode, UserSessId, ArchiveId),
+    {ok, ArchiveInfo = #archive_info{
+        config = FinalConfig
+    }} = lfm_proxy:get_archive_info(CreationNode, UserSessId, ArchiveId),
     #archive_object{
         id = ArchiveId,
-        config = Config,
+        config = FinalConfig,
         description = Description,
         index = ArchiveInfo#archive_info.index
     }.
@@ -139,7 +141,7 @@ await_archive_sync(CreationProvider, SyncProviders, UserId, #archive_object{id =
 -spec random_archive_config() -> archive:config().
 random_archive_config() ->
     #archive_config{
-        incremental = lists_utils:random_element(?SUPPORTED_INCREMENTAL_VALUES),
+        incremental = #{<<"enabled">> => lists_utils:random_element(?SUPPORTED_INCREMENTAL_ENABLED_VALUES)},
         include_dip = lists_utils:random_element(?SUPPORTED_INCLUDE_DIP_VALUES),
         layout = lists_utils:random_element(?ARCHIVE_LAYOUTS)
     }.

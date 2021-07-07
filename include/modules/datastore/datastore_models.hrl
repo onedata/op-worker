@@ -458,7 +458,9 @@
 
     % if archive has been created directly it has no parent archive
     % if archive has been created indirectly, this fields points to it's parent archive
-    parent :: undefined | archive:id()
+    parent :: undefined | archive:id(),
+    % id of archive that current one is based on if it is incremental
+    base_archive_id :: undefined | archive:id()
 }).
 
 

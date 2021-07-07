@@ -46,8 +46,18 @@ translate_archive_info(#archive_info{
     purged_callback = PurgedCallback,
     description = Description,
     index = Index,
-    stats = Stats
+    stats = Stats,
+    base_archive_id = BaseArchive
 }) ->
+    BaseArchiveGri = case utils:undefined_to_null(BaseArchive) of
+        null -> 
+            null;
+        _ -> 
+            gri:serialize(#gri{
+                type = op_archive, id = BaseArchive,
+                aspect = instance, scope = private
+            })
+    end, 
     #{
         <<"gri">> => gri:serialize(#gri{
             type = op_archive, id = ArchiveId,
@@ -72,5 +82,6 @@ translate_archive_info(#archive_info{
         <<"purgedCallback">> => utils:undefined_to_null(PurgedCallback),
         <<"description">> => Description,
         <<"index">> => Index,
-        <<"stats">> => archive_stats:to_json(Stats)
+        <<"stats">> => archive_stats:to_json(Stats),
+        <<"baseArchive">> => BaseArchiveGri
     }.

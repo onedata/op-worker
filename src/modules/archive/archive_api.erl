@@ -26,6 +26,9 @@
 %%%    which is stored in archive record and is used to store configuration of an archive
 %%%  * archive_stats - module that implements persistent_record behaviour,
 %%%    which is stored in archive record and is used to store statistics of archivisation procedure
+%%%  * incremental_archive - module that is used for creating incremental archives. It contains functions
+%%%    for finding base archives and for determining whether file in the dataset has changed in comparison
+%%%    to its archived version.
 %%%  * archives_list - module that implements list structure which allows to track
 %%%    archives associated with given dataset
 %%%  * archives_forest - module that is used to track parent-nested archive relations
@@ -66,7 +69,6 @@
 
 % TODO VFS-7617 implement recall operation of archives
 % TODO VFS-7718 improve purging so that archive record is deleted when files are removed from storage
-% TODO VFS-7780 implement incremental archives
 % TODO VFS-7653 implement creating DIP for an archive
 % TODO VFS-7613 use datastore function for getting number of links in forest to acquire number of archives per dataset
 % TODO VFS-7664 add followLink option to archivisation job
@@ -96,8 +98,9 @@ start_archivisation(
         ?ATTACHED_DATASET ->
             {ok, SpaceId} = dataset:get_space_id(DatasetDoc),
             UserId = user_ctx:get_user_id(UserCtx),
+            BaseArchiveId = ensure_base_archive_is_set_if_applicable(Config, DatasetId),
             case archive:create(DatasetId, SpaceId, UserId, Config,
-                PreservedCallback, PurgedCallback, Description)
+                PreservedCallback, PurgedCallback, Description, BaseArchiveId)
             of
                 {ok, ArchiveDoc} ->
                     {ok, ArchiveId} = archive:get_id(ArchiveDoc),
@@ -142,6 +145,7 @@ get_archive_info(ArchiveDoc = #document{}, ArchiveIndex) ->
     {ok, PreservedCallback} = archive:get_preserved_callback(ArchiveDoc),
     {ok, PurgedCallback} = archive:get_purged_callback(ArchiveDoc),
     {ok, Description} = archive:get_description(ArchiveDoc),
+    {ok, BaseArchiveId} = archive:get_base_archive_id(ArchiveDoc),
     {ok, #archive_info{
         id = ArchiveId,
         dataset_id = DatasetId,
@@ -156,7 +160,8 @@ get_archive_info(ArchiveDoc = #document{}, ArchiveIndex) ->
             true -> archives_list:index(ArchiveId, Timestamp);
             false -> ArchiveIndex
         end,
-        stats = get_aggregated_stats(ArchiveDoc)
+        stats = get_aggregated_stats(ArchiveDoc),
+        base_archive_id = BaseArchiveId
     }};
 get_archive_info(ArchiveId, ArchiveIndex) ->
     {ok, ArchiveDoc} = archive:get(ArchiveId),
@@ -303,3 +308,16 @@ get_nested_archives_stats(ArchiveId, Token, NestedArchiveStatsAccIn) when is_bin
         false -> get_nested_archives_stats(ArchiveId, Token2, NestedArchiveStatsAcc)
     end.
 
+
+-spec ensure_base_archive_is_set_if_applicable(archive:config(), dataset:id()) -> 
+    archive:id() | undefined.
+ensure_base_archive_is_set_if_applicable(Config, DatasetId) ->
+    case archive_config:is_incremental(Config) of
+        true ->
+            case archive_config:get_incremental_based_on(Config) of
+                undefined -> incremental_archive:find_base_archive_id(DatasetId);
+                BaseArchiveId -> BaseArchiveId
+            end;
+        false ->
+            undefined
+    end.

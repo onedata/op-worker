@@ -20,9 +20,11 @@
 
 -define(DATASET_ARCHIVES_DIR_UUID_PREFIX, "dataset_archives_").
 -define(DATASET_ARCHIVES_DIR_UUID(DatasetId), <<?DATASET_ARCHIVES_DIR_UUID_PREFIX, DatasetId/binary>>).
+-define(DATASET_ARCHIVES_DIR_NAME(DatasetId), ?DATASET_ARCHIVES_DIR_UUID(DatasetId)).
 
 -define(ARCHIVE_DIR_UUID_PREFIX, "archive_").
 -define(ARCHIVE_DIR_UUID(ArchiveId), <<?ARCHIVE_DIR_UUID_PREFIX, ArchiveId/binary>>).
+-define(ARCHIVE_DIR_NAME(ArchiveId), ?ARCHIVE_DIR_UUID(ArchiveId)).
 
 -define(ARCHIVES_ROOT_DIR_PERMS, 8#755).
 -define(DATASET_ARCHIVES_DIR_PERMS, 8#755).
