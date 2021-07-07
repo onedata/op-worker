@@ -64,16 +64,17 @@ get_lane_spec(ExecutionId, #{type := Type, async_call_pools := Pools} =_Executio
     workflow_handler:finished_callback_id(),
     workflow_handler:heartbeat_callback_id()
 ) ->
-    workflow_handler:callback_execution_result().
+    workflow_handler:handler_execution_result().
 process_item(_ExecutionId, _Context, <<"async", _/binary>> = _TaskId, Item, FinishCallback, _) ->
     spawn(fun() ->
         timer:sleep(100), % TODO VFS-7784 - test with different sleep times
+        Result = #{<<"result">> => <<"ok">>, <<"item">> => Item},
         case binary_to_integer(Item) =< 10 of
             true ->
                 % Use http_client only for part of items as it is much slower than direct `handle_callback` call
-                http_client:put(FinishCallback, #{}, json_utils:encode(#{<<"result">> => <<"ok">>}));
+                http_client:put(FinishCallback, #{}, json_utils:encode(Result));
             false ->
-                workflow_engine_callback_handler:handle_callback(FinishCallback, #{<<"result">> => <<"ok">>})
+                workflow_engine_callback_handler:handle_callback(FinishCallback, Result)
         end
     end),
     ok;
@@ -85,9 +86,9 @@ process_item(_ExecutionId, _Context, _TaskId, _Item, _FinishCallback, _) ->
     workflow_engine:execution_id(),
     workflow_engine:execution_context(),
     workflow_engine:task_id(),
-    workflow_handler:task_processing_result()
+    workflow_handler:async_processing_result()
 ) ->
-    workflow_handler:callback_execution_result().
+    workflow_handler:handler_execution_result().
 process_result(_, _, _, {error, _}) ->
     error;
 process_result(_, _, _, #{<<"result">> := Result}) ->

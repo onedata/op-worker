@@ -102,8 +102,14 @@
 -define(ERROR_ATM_INVALID_STATUS_TRANSITION(__PREV_STATUS, __NEW_STATUS),
     {error, {atm_invalid_status_transition, __PREV_STATUS, __NEW_STATUS}}
 ).
--define(ERROR_ATM_STORE_FROZEN(__ATM_STORE_ID),
-    {error, {atm_store_frozen, __ATM_STORE_ID}}
+-define(ERROR_ATM_STORE_FROZEN(__ATM_STORE_SCHEMA__ID),
+    {error, {atm_store_frozen, __ATM_STORE_SCHEMA__ID}}
+).
+-define(ERROR_ATM_STORE_TYPE_DISALLOWED(__TYPE, __ALLOWED_TYPES),
+    {error, {atm_store_type_unverified, __TYPE, __ALLOWED_TYPES}}
+).
+-define(ERROR_ATM_STORE_EMPTY(__ATM_STORE_SCHEMA__ID),
+    {error, {atm_store_empty, __ATM_STORE_SCHEMA__ID}}
 ).
 
 

@@ -31,6 +31,7 @@
     fail_only_task_in_box_test/1,
     fail_only_task_in_lane_test/1,
     timeout_test/1,
+    result_processing_failure_test/1,
     heartbeat_test/1,
     preparation_failure_test/1,
     lane_preparation_failure_test/1
@@ -46,6 +47,7 @@ all() ->
         fail_only_task_in_box_test,
         fail_only_task_in_lane_test,
         timeout_test,
+        result_processing_failure_test,
         heartbeat_test,
         preparation_failure_test,
         lane_preparation_failure_test
@@ -130,15 +132,15 @@ multiple_workflow_execution_test_base(Config, WorkflowType) ->
     ExecutionHistoryMap = case WorkflowType of
         sync ->
             lists:foldl(fun
-                ({<<"result_", Id:3/binary, _/binary>>, _} = Element, Acc) ->
-                    ElementsPerExecutionId = maps:get(Id, Acc),
-                    Acc#{Id => [Element | ElementsPerExecutionId]};
                 ({<<Id:3/binary, _/binary>>, _} = Element, Acc) ->
                     ElementsPerExecutionId = maps:get(Id, Acc),
                     Acc#{Id => [Element | ElementsPerExecutionId]}
             end, maps:from_list(lists:map(fun(ExecutionId) -> {ExecutionId, []} end, Ids)), ExecutionHistory);
         async ->
             lists:foldl(fun
+                ({<<"result_processing_", Id:9/binary, _/binary>>, _} = Element, Acc) ->
+                    ElementsPerExecutionId = maps:get(Id, Acc),
+                    Acc#{Id => [Element | ElementsPerExecutionId]};
                 ({<<"result_", Id:9/binary, _/binary>>, _} = Element, Acc) ->
                     ElementsPerExecutionId = maps:get(Id, Acc),
                     Acc#{Id => [Element | ElementsPerExecutionId]};
@@ -217,14 +219,20 @@ failure_test_base(Config, Id, TaskToFail, LaneWithErrorIndex, BoxWithErrorIndex)
     ok.
 
 timeout_test(Config) ->
-    timeout_test(Config, <<"async_timeouts_workflow_task3_3_2">>, 3, 3).
+    async_failure_test_base(Config, <<"async_timeouts_workflow">>, <<"async_timeouts_workflow_task3_3_2">>, timeout).
 
-timeout_test(Config, TaskToFail, LaneWithErrorIndex, BoxWithErrorIndex) ->
+result_processing_failure_test(Config) ->
+    async_failure_test_base(Config, <<"async_result_processing_failure">>,
+        <<"async_result_processing_failure_task3_3_2">>, result_processing).
+
+async_failure_test_base(Config, Id, TaskToFail, FailureType) ->
     InitialKeys = get_all_keys(Config),
+
+    LaneWithErrorIndex = 3,
+    BoxWithErrorIndex = 3,
 
     [Worker | _] = ?config(op_worker_nodes, Config),
     WorkflowType = async,
-    Id = <<"async_timeouts_workflow">>,
     Workflow = #{
         id => Id,
         workflow_handler => workflow_test_handler,
@@ -232,12 +240,18 @@ timeout_test(Config, TaskToFail, LaneWithErrorIndex, BoxWithErrorIndex) ->
     },
 
     ItemToFail = <<"100">>,
-    ResultToFail = <<"result_", TaskToFail/binary>>,
+    {ResultToFailPrefix, Expected} = case FailureType of
+        timeout ->
+            {<<"result_">>, get_expected_task_execution_order_with_timeout(
+                Workflow, LaneWithErrorIndex, BoxWithErrorIndex, ItemToFail, TaskToFail)};
+        result_processing ->
+            {<<"result_processing_">>, get_expected_task_execution_order_with_result_processing_failure(
+                Workflow, LaneWithErrorIndex, BoxWithErrorIndex, ItemToFail, TaskToFail)}
+    end,
+    ResultToFail = <<ResultToFailPrefix/binary, TaskToFail/binary>>,
     set_task_execution_gatherer_option(Config, fail_job, {ResultToFail, ItemToFail}),
     ?assertEqual(ok, rpc:call(Worker, workflow_engine, execute_workflow, [?ENGINE_ID, Workflow])),
 
-    Expected = get_expected_task_execution_order_with_timeout(
-        Workflow, LaneWithErrorIndex, BoxWithErrorIndex, ItemToFail, TaskToFail),
     #{execution_history := ExecutionHistory, lane_finish_log := LaneFinishLog} = ExtendedHistoryStats =
         get_task_execution_history(Config),
     verify_execution_history_stats(ExtendedHistoryStats, WorkflowType),
@@ -423,8 +437,20 @@ init_per_testcase(_, Config) ->
         end
     ),
 
+    test_utils:mock_expect(Workers, workflow_test_handler, process_result, fun
+        (ExecutionId, Context, TaskId, Result = #{<<"item">> := Item}) ->
+            Master ! {task_processing, self(), <<"result_processing_", TaskId/binary>>, Item},
+            receive
+                history_saved -> meck:passthrough([ExecutionId, Context, TaskId, Result]);
+                fail_job -> error
+            end;
+        (ExecutionId, Context, TaskId, Result) ->
+            meck:passthrough([ExecutionId, Context, TaskId, Result])
+    end),
+
+
     test_utils:mock_expect(Workers, workflow_engine_callback_handler, handle_callback, fun(CallbackId, Result) ->
-        {_CallbackType, ExecutionId, EngineId, JobIdentifier, _CallPools} =
+        {_CallbackType, ExecutionId, EngineId, JobIdentifier} =
             workflow_engine_callback_handler:decode_callback_id(CallbackId),
         {_, _, TaskId} = workflow_execution_state:get_result_processing_data(ExecutionId, JobIdentifier),
         Item = workflow_cached_item:get_item(workflow_execution_state:get_item_id(ExecutionId, JobIdentifier)),
@@ -651,6 +677,13 @@ get_expected_task_execution_order_with_timeout(#{id := ExecutionId, execution_co
         {expected_timeout, LaneWithErrorIndex, BoxWithErrorIndex, ItemToFail, TaskToFail}
     ).
 
+get_expected_task_execution_order_with_result_processing_failure(#{id := ExecutionId, execution_context := Context},
+    LaneWithErrorIndex, BoxWithErrorIndex, ItemToFail, TaskToFail) ->
+    get_expected_task_execution_order(
+        1, ExecutionId, Context,
+        {expected_result_processing_failure, LaneWithErrorIndex, BoxWithErrorIndex, ItemToFail, TaskToFail}
+    ).
+
 get_expected_task_execution_order_with_lane_preparation_error(#{id := ExecutionId, execution_context := Context},
     FailedLaneIndex) ->
     get_expected_task_execution_order(1, ExecutionId, Context, {expect_lane_failure, FailedLaneIndex}).
@@ -676,7 +709,9 @@ get_expected_task_execution_order(LaneIndex, ExecutionId, Context, Description) 
             end,
             {{Boxes, Items, ItemToFail, undefined, TasksForFailedItem}, true};
         {expected_timeout, LaneIndex, BoxWithErrorIndex, ItemToFail, TaskToFail} ->
-            {{Boxes, Items, ItemToFail, TaskToFail, lists:sublist(Boxes, BoxWithErrorIndex)}, true};
+            {{Boxes, Items, ItemToFail, {skip_result, TaskToFail}, lists:sublist(Boxes, BoxWithErrorIndex)}, true};
+        {expected_result_processing_failure, LaneIndex, BoxWithErrorIndex, ItemToFail, TaskToFail} ->
+            {{Boxes, Items, ItemToFail, {skip_processing, TaskToFail}, lists:sublist(Boxes, BoxWithErrorIndex)}, true};
         {expect_lane_failure, FailedLaneIndex} when LaneIndex =:= FailedLaneIndex ->
             {undefined, true};
         {restarted_from, RestartedLaneIndex, _RestartedItem} when LaneIndex < RestartedLaneIndex ->
@@ -789,7 +824,7 @@ verify_task_and_lane_ended_notifications(#{id := ExecutionId, execution_context 
 
     ElementsPerTask = case WorkflowType of
         sync -> length(Items);
-        async -> 2 * length(Items)
+        async -> 3 * length(Items)
     end,
 
     {GatheredWithoutTaskEndedNotifications, UpdatedTasksStats} = lists:foldl(fun(TaskId, {GatheredAcc, TasksStatsAcc}) ->
@@ -816,6 +851,9 @@ verify_task_and_lane_ended_notifications(#{id := ExecutionId, execution_context 
 
 get_task_stats(Gathered) ->
     lists:foldl(fun
+        ({Pos, {<<"result_processing_", GatheredElement/binary>>, _}}, Acc) ->
+            {Counter, LastElementPos, NotifyPos} = maps:get(GatheredElement, Acc, {0, 0, 0}),
+            Acc#{GatheredElement => {Counter + 1, Pos, NotifyPos}};
         ({Pos, {<<"result_", GatheredElement/binary>>, _}}, Acc) ->
             {Counter, LastElementPos, NotifyPos} = maps:get(GatheredElement, Acc, {0, 0, 0}),
             Acc#{GatheredElement => {Counter + 1, Pos, NotifyPos}};
@@ -891,8 +929,9 @@ verify_execution_history(
     TasksCount = calculate_tasks_count(LaneExpected),
     LaneElementsCount = case {WorkflowType, TaskToIgnoreResult} of
         {sync, _} -> TasksCount;
-        {async, undefined} -> 2 * TasksCount;
-        {async, _} -> 2 * TasksCount - 1
+        {async, undefined} -> 3 * TasksCount;
+        {async, {skip_processing, _}} -> 3 * TasksCount - 1;
+        {async, {skip_result, _}} -> 3 * TasksCount - 2
     end,
     
     ct:print("Verify ~p history elements", [LaneElementsCount]),
@@ -928,11 +967,13 @@ verify_item_execution_history(_Item, ExpectedTasks, [], _WorkflowType, _TaskToIg
 verify_item_execution_history(Item, [TasksInBox | ExpectedTasks], [{Task, Item} | Gathered], WorkflowType, TaskToIgnoreResult) ->
     ?assert(maps:is_key(Task, TasksInBox)),
 
-    NewTasksInBox = case {Task, WorkflowType, Task =:= TaskToIgnoreResult} of
-        {<<"result_", _/binary>>, _, _} -> TasksInBox;
-        {_, sync, _} -> TasksInBox;
-        {_, async, true} -> TasksInBox;
-        {_, async, false} -> TasksInBox#{<<"result_", Task/binary>> => undefined}
+    NewTasksInBox = case {Task, WorkflowType} of
+        {<<"result_processing_", _/binary>>, _} -> TasksInBox;
+        {<<"result_", TaskId/binary>>, _} when TaskToIgnoreResult =:= {skip_processing, TaskId} -> TasksInBox;
+        {<<"result_", TaskId/binary>>, _} -> TasksInBox#{<<"result_processing_", TaskId/binary>> => undefined};
+        {_, sync} -> TasksInBox;
+        {_, async} when TaskToIgnoreResult =:= {skip_result, Task} -> TasksInBox;
+        {_, async} -> TasksInBox#{<<"result_", Task/binary>> => undefined}
     end,
     FinalTasksInBox = maps:remove(Task, NewTasksInBox),
 
@@ -973,7 +1014,7 @@ verify_memory(Config, InitialKeys, RestartDocPresent) ->
 get_all_keys(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
 
-    Models = [workflow_cached_item, workflow_iterator_snapshot, workflow_execution_state],
+    Models = [workflow_cached_item, workflow_cached_async_result, workflow_iterator_snapshot, workflow_execution_state],
     lists:map(fun(Model) ->
         Ctx = datastore_model_default:set_defaults(datastore_model_default:get_ctx(Model)),
         #{memory_driver := MemoryDriver, memory_driver_ctx := MemoryDriverCtx} = Ctx,

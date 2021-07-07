@@ -13,15 +13,18 @@
 -module(workflow_handler).
 -author("Michal Wrzeszcz").
 
+-include("workflow_engine.hrl").
+
 -type handler() :: module().
--type task_processing_result() :: term().
--type callback_execution_result() :: ok | error.
+-type async_processing_basic_result() :: term().
+-type async_processing_result() :: async_processing_basic_result() | ?WF_ERROR_MALFORMED_REQUEST | ?WF_ERROR_TIMEOUT.
+-type handler_execution_result() :: ok | error.
 % TODO VFS-7787 move following types to callback server:
 -type finished_callback_id() :: binary().
 -type heartbeat_callback_id() :: binary().
 
--export_type([handler/0, task_processing_result/0,
-    finished_callback_id/0, heartbeat_callback_id/0, callback_execution_result/0]).
+-export_type([handler/0, async_processing_result/0,
+    finished_callback_id/0, heartbeat_callback_id/0, handler_execution_result/0]).
 
 %%%===================================================================
 %%% Callbacks descriptions
@@ -38,7 +41,7 @@
     workflow_engine:execution_id(),
     workflow_engine:execution_context()
 ) ->
-    callback_execution_result().
+    handler_execution_result().
 
 
 %%--------------------------------------------------------------------
@@ -73,7 +76,7 @@
     finished_callback_id(),
     heartbeat_callback_id()
 ) ->
-    callback_execution_result().
+    handler_execution_result().
 
 
 %%--------------------------------------------------------------------
@@ -86,9 +89,9 @@
     workflow_engine:execution_id(),
     workflow_engine:execution_context(),
     workflow_engine:task_id(),
-    task_processing_result()
+    async_processing_result()
 ) ->
-    callback_execution_result().
+    handler_execution_result().
 
 
 %%--------------------------------------------------------------------

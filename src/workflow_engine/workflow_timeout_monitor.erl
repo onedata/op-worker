@@ -56,5 +56,8 @@ server_loop(EngineId, CheckPeriod) ->
 check_timeouts(EngineId) ->
     ExecutionIds = workflow_engine_state:get_execution_ids(EngineId),
     lists:foreach(fun(ExecutionId) ->
-        workflow_execution_state:check_timeouts(ExecutionId, EngineId)
+        case workflow_execution_state:check_timeouts(ExecutionId) of
+            true -> workflow_engine:trigger_job_scheduling(EngineId);
+            false -> ok
+        end
     end, ExecutionIds).
