@@ -81,8 +81,7 @@ create(AtmWorkflowExecutionCreationCtx, AtmLaneIndex, AtmParallelBoxIndex, #atm_
         AtmWorkflowExecutionCtx
     ),
 
-    #document{value = #od_atm_lambda{
-        operation_spec = AtmLambdaOperationSpec,
+    AtmLambdaDoc = #document{value = #od_atm_lambda{
         argument_specs = AtmLambdaArgSpecs,
         result_specs = AtmLambdaResultSpecs
     }} = maps:get(AtmLambdaId, AtmLambdaDocs),
@@ -94,7 +93,7 @@ create(AtmWorkflowExecutionCreationCtx, AtmLaneIndex, AtmParallelBoxIndex, #atm_
 
         schema_id = AtmTaskSchemaId,
 
-        executor = atm_task_executor:create(AtmWorkflowExecutionId, AtmLambdaOperationSpec),
+        executor = atm_task_executor:create(AtmWorkflowExecutionId, AtmLambdaDoc),
         argument_specs = atm_task_execution_arguments:build_specs(
             AtmLambdaArgSpecs, AtmTaskSchemaArgMappers
         ),

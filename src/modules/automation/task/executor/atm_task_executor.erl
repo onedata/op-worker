@@ -24,6 +24,7 @@
 -behaviour(persistent_record).
 
 -include("modules/automation/atm_tmp.hrl").
+-include("modules/datastore/datastore_models.hrl").
 
 %% API
 -export([create/2, prepare/2, clean/1, get_spec/1, in_readonly_mode/1, run/3]).
@@ -43,7 +44,7 @@
 %%%===================================================================
 
 
--callback create(atm_workflow_execution:id(), atm_lambda_operation_spec:record()) ->
+-callback create(atm_workflow_execution:id(), od_atm_lambda:doc()) ->
     record() | no_return().
 
 -callback prepare(atm_workflow_execution_ctx:record(), record()) -> ok | no_return().
@@ -63,12 +64,14 @@
 %%%===================================================================
 
 
--spec create(atm_workflow_execution:id(), atm_lambda_operation_spec:record()) ->
+-spec create(atm_workflow_execution:id(), od_atm_lambda:doc()) ->
     record() | no_return().
-create(AtmWorkflowExecutionId, AtmLambadaOperationSpec) ->
+create(AtmWorkflowExecutionId, AtmLambdaDoc = #document{value = #od_atm_lambda{
+    operation_spec = AtmLambadaOperationSpec
+}}) ->
     Engine = atm_lambda_operation_spec:get_engine(AtmLambadaOperationSpec),
     Model = engine_to_executor_model(Engine),
-    Model:create(AtmWorkflowExecutionId, AtmLambadaOperationSpec).
+    Model:create(AtmWorkflowExecutionId, AtmLambdaDoc).
 
 
 -spec prepare(atm_workflow_execution_ctx:record(), record()) -> ok | no_return().

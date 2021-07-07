@@ -88,14 +88,16 @@ assert_openfaas_available() ->
 %%%===================================================================
 
 
--spec create(atm_workflow_execution:id(), atm_openfaas_operation_spec:record()) ->
+-spec create(atm_workflow_execution:id(), od_atm_lambda:doc()) ->
     record() | no_return().
-create(AtmWorkflowExecutionId, #atm_openfaas_operation_spec{} = OperationSpec) ->
+create(AtmWorkflowExecutionId, AtmLambdaDoc = #document{value = #od_atm_lambda{
+    operation_spec = AtmLambadaOperationSpec
+}}) ->
     assert_openfaas_available(),
 
     #atm_openfaas_task_executor{
-        function_name = build_function_name(AtmWorkflowExecutionId, OperationSpec),
-        operation_spec = OperationSpec
+        function_name = build_function_name(AtmWorkflowExecutionId, AtmLambdaDoc),
+        operation_spec = AtmLambadaOperationSpec
     }.
 
 
@@ -175,37 +177,14 @@ db_decode(#{
 %%%===================================================================
 
 
-%%-------------------------------------------------------------------
 %% @private
-%% @doc
-%% Generates name under which docker image with specific configuration
-%% will be registered in Openfaas. As long as oneclient is not mounted
-%% the function can be reused by various tasks from various workflow
-%% executions. To that end simple digest from docker image is made.
-%% Otherwise, the function cannot be reused (mounting requires specifying
-%% token which in turn is unique for each workflow execution) and the name
-%% must be unique.
-%% @end
-%%-------------------------------------------------------------------
--spec build_function_name(atm_workflow_execution:id(), atm_openfaas_operation_spec:record()) ->
+-spec build_function_name(atm_workflow_execution:id(), od_atm_lambda:doc()) ->
     binary().
-build_function_name(_AtmWorkflowExecutionId, #atm_openfaas_operation_spec{
-    docker_image = DockerImage,
-    docker_execution_options = #atm_docker_execution_options{mount_oneclient = false}
-}) ->
-    <<"fun-", (datastore_key:new_from_digest([DockerImage]))/binary>>;
-
-build_function_name(AtmWorkflowExecutionId, #atm_openfaas_operation_spec{
-    docker_image = DockerImage,
-    docker_execution_options = #atm_docker_execution_options{
-        mount_oneclient = true,
-        oneclient_mount_point = MountPoint,
-        oneclient_options = OneclientOptions
-    }
-}) ->
-    <<"fun-", (datastore_key:new_from_digest([
-        AtmWorkflowExecutionId, DockerImage, MountPoint, OneclientOptions
-    ]))/binary>>.
+build_function_name(AtmWorkflowExecutionId, #document{key = AtmLambdaId}) ->
+    str_utils:format_bin("wf-~s-signature-~s", [
+        binary:part(AtmWorkflowExecutionId, 0, 10),
+        str_utils:md5_digest([AtmWorkflowExecutionId, AtmLambdaId])
+    ]).
 
 
 %% @private
