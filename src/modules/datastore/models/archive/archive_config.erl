@@ -29,7 +29,7 @@
 %% #{
 %%      <<"layout">> := layout(),
 %%      <<"incremental">> => #{
-%%          <<"enable">> := boolean(), 
+%%          <<"enabled">> := boolean(), 
 %%          <<"basedOn">> => archive:id()
 %%      },
 %%      <<"includeDip">> => include_dip(),
@@ -84,7 +84,7 @@ sanitize(RawConfig) ->
             }
         }),
         case maps:get(<<"incremental">>, SanitizedData, ?DEFAULT_INCREMENTAL) of
-            #{<<"enable">> := true} = IncrementalConfig ->
+            #{<<"enabled">> := true} = IncrementalConfig ->
                 BaseArchiveId = maps:get(<<"basedOn">>, IncrementalConfig, null),
                 case is_valid_base_archive(BaseArchiveId) of
                     {true, _} ->
@@ -92,9 +92,9 @@ sanitize(RawConfig) ->
                     false ->
                         throw(?ERROR_BAD_VALUE_IDENTIFIER(<<"incremental.basedOn">>))
                 end;
-            #{<<"enable">> := false} ->
+            #{<<"enabled">> := false} ->
                 SanitizedData;
-            #{<<"enable">> := _NotBoolean} ->
+            #{<<"enabled">> := _NotBoolean} ->
                 throw(?ERROR_BAD_VALUE_BOOLEAN(<<"incremental.enable">>));
             _ ->
                 throw(?ERROR_MISSING_REQUIRED_VALUE(<<"incremental.enable">>))
@@ -124,7 +124,7 @@ get_layout(#archive_config{layout = Layout}) ->
 
 -spec is_incremental(record()) -> boolean().
 is_incremental(#archive_config{incremental = Incremental}) ->
-    maps:get(<<"enable">>, Incremental).
+    maps:get(<<"enabled">>, Incremental).
 
 
 -spec get_incremental_based_on(record()) -> archive:id() | undefined.

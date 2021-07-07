@@ -134,9 +134,9 @@ create_archive(_Config) ->
                     {<<"datasetId">>, DetachedDatasetId,
                         ?ERROR_BAD_DATA(<<"datasetId">>, <<"Detached dataset cannot be modified.">>)},
                     {<<"config">>, #{<<"incremental">> => <<"not json">>}, ?ERROR_BAD_VALUE_JSON(<<"config.incremental">>)},
-                    {<<"config">>, #{<<"incremental">> => #{<<"enable">> => <<"not a boolean">>}}, ?ERROR_BAD_VALUE_BOOLEAN(<<"config.incremental.enable">>)},
+                    {<<"config">>, #{<<"incremental">> => #{<<"enabled">> => <<"not a boolean">>}}, ?ERROR_BAD_VALUE_BOOLEAN(<<"config.incremental.enable">>)},
                     {<<"config">>, #{<<"incremental">> => #{<<"not_enable">> => true}}, ?ERROR_MISSING_REQUIRED_VALUE(<<"config.incremental.enable">>)},
-                    {<<"config">>, #{<<"incremental">> => #{<<"enable">> => true, <<"basedOn">> => <<"invalid_id">>}}, ?ERROR_BAD_VALUE_IDENTIFIER(<<"config.incremental.basedOn">>)},
+                    {<<"config">>, #{<<"incremental">> => #{<<"enabled">> => true, <<"basedOn">> => <<"invalid_id">>}}, ?ERROR_BAD_VALUE_IDENTIFIER(<<"config.incremental.basedOn">>)},
                     % TODO VFS-7653 uncomment following case and remove subsequent one
                     % {<<"config">>, #{<<"includeDip">> => <<"not boolean">>}, ?ERROR_BAD_VALUE_BOOLEAN(<<"config.includeDip">>)},
                     {<<"config">>, #{<<"includeDip">> => true},
@@ -157,7 +157,7 @@ create_archive(_Config) ->
 -spec generate_all_valid_configs() -> [archive_config:json()].
 generate_all_valid_configs() ->
     LayoutValues = [undefined | ?ARCHIVE_LAYOUTS],
-    IncrementalValues = lists:flatten([undefined | [#{<<"enable">> => Enable || Enable <- ?SUPPORTED_INCREMENTAL_ENABLE_VALUES]]),
+    IncrementalValues = lists:flatten([undefined | [#{<<"enabled">> => Enable || Enable <- ?SUPPORTED_INCREMENTAL_ENABLE_VALUES]]),
     IncludeDipValues = [undefined | ?SUPPORTED_INCLUDE_DIP_VALUES],
     CreateNestedArchivesValues = [undefined, true, false],
     AllConfigsCombinations = [
