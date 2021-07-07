@@ -308,7 +308,9 @@ get_root_dir_guid(#archive{root_dir_guid = RootDirGuid}) ->
 get_root_dir_guid(#document{value = Archive}) ->
     get_root_dir_guid(Archive).
 
--spec get_data_dir_guid(record() | doc() | id() | undefined) -> {ok, file_id:file_guid()}.
+-spec get_data_dir_guid
+    (record() | doc() | id()) -> {ok, file_id:file_guid()};
+    (undefined) -> {ok, undefined}.
 get_data_dir_guid(undefined) -> 
     {ok, undefined};
 get_data_dir_guid(#archive{data_dir_guid = DataDirGuid}) -> 

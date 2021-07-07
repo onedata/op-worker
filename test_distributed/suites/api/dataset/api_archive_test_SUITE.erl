@@ -334,7 +334,9 @@ get_archive_info(_Config) ->
                                 <<"filesArchived">> => 1,
                                 <<"filesFailed">> => 0,
                                 <<"bytesArchived">> => 0
-                            }
+                            },
+                            <<"relatedAipId">> => null,
+                            <<"relatedDipId">> => null
                         },
                         ?assertEqual(?HTTP_200_OK, RespCode),
                         % do not check baseArchive here as its value depends on previous tests

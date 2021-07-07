@@ -245,8 +245,9 @@ do_slave_job(#tree_traverse_slave{
 %%% Internal functions
 %%%===================================================================
 
--spec prepare_archive_dir(archive:doc() | archive:id() | undefined, dataset:id(), user_ctx:ctx()) -> 
-    {ok, archive:doc() | undefined}.
+-spec prepare_archive_dir
+    (archive:doc() | archive:id(), dataset:id(), user_ctx:ctx()) -> {ok, archive:doc()};
+    (undefined, dataset:id(), user_ctx:ctx()) -> {ok, undefined}.
 prepare_archive_dir(undefined, _DatasetId, _UserCtx) ->
     {ok, undefined};
 prepare_archive_dir(ArchiveId, DatasetId, UserCtx) when is_binary(ArchiveId) ->
@@ -513,7 +514,9 @@ do_archive(FileCtx, AipArchiveCtx, DipArchiveCtx, BaseArchiveDoc, UserCtx) ->
     end.
 
 
--spec archive_dir(file_ctx:ctx(), file_ctx:ctx() | undefined, user_ctx:ctx()) -> {ok, file_ctx:ctx()} | {error, term()}.
+-spec archive_dir
+    (file_ctx:ctx(), file_ctx:ctx(), user_ctx:ctx()) -> {ok, file_ctx:ctx()} | {error, term()};
+    (file_ctx:ctx(), undefined, user_ctx:ctx()) -> {ok, undefined}.
 archive_dir(_FileCtx, undefined, _UserCtx) ->
     {ok, undefined};
 archive_dir(FileCtx, TargetParentCtx, UserCtx) ->
@@ -568,8 +571,9 @@ archive_file(FileCtx, TargetParentCtx, CurrentArchiveDoc, BaseArchiveDoc, UserCt
     end.
 
 
--spec dip_archive_file(file_ctx:ctx(), undefined | file_id:file_guid(), user_ctx:ctx()) ->
-    {ok, file_ctx:ctx() | undefined}.
+-spec dip_archive_file
+    (file_ctx:ctx(), file_id:file_guid(), user_ctx:ctx()) -> {ok, file_ctx:ctx()};
+    (file_ctx:ctx(), undefined, user_ctx:ctx()) -> {ok, undefined}.
 dip_archive_file(_FileCtx, undefined, _UserCtx) ->
     {ok, undefined};
 dip_archive_file(FileCtx, DipTargetParentCtx, UserCtx) ->
