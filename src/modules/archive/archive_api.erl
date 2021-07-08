@@ -106,8 +106,11 @@ start_archivisation(
                     {ok, Timestamp} = archive:get_creation_time(AipArchiveDoc),
                     {ok, SpaceId} = dataset:get_space_id(DatasetDoc),
                     {ok, FinalAipArchiveDoc} = case archive_config:should_include_dip(Config) of
-                        true -> archive:create_dip_archive(AipArchiveDoc);
-                        false -> {ok, AipArchiveDoc}
+                        true -> 
+                            {ok, #document{key = DipArchiveId}} = archive:create_dip_archive(AipArchiveDoc),
+                            archive:set_related_dip(AipArchiveDoc, DipArchiveId);
+                        false -> 
+                            {ok, AipArchiveDoc}
                     end, 
                     archives_list:add(DatasetId, SpaceId, AipArchiveId, Timestamp),
                     case archivisation_traverse:start(FinalAipArchiveDoc, DatasetDoc, UserCtx) of
