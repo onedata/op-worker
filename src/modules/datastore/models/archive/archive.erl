@@ -133,9 +133,10 @@ create_nested(DatasetId, #document{
 
 
 -spec create_dip_archive(archive:doc()) -> {ok, archive:doc()} | {error, term()}.
-create_dip_archive(#document{key = AipArchiveId, value = AipArchiveValue, scope = Scope}) -> 
+create_dip_archive(#document{key = AipArchiveId, value = #archive{config = AipConfig} = AipArchiveValue, scope = Scope}) -> 
     datastore_model:create(?CTX, #document{
         value = AipArchiveValue#archive{
+            config = archive_config:enforce_plain_layout(AipConfig),
             related_aip = AipArchiveId
         },
         scope = Scope
