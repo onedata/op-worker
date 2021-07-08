@@ -24,7 +24,7 @@
 
 %% API
 -export([init/1, init/2, execute_workflow/2, report_execution_status_update/5, get_async_call_pools/1,
-    trigger_job_scheduling/1]).
+    trigger_job_scheduling/1, call_handler/5]).
 
 %% Functions exported for internal_services engine - do not call directly
 -export([init_service/2, takeover_service/3]).
@@ -74,11 +74,15 @@
     execution_spec/0, processing_stage/0, handler_execution_result/0, processing_result/0,
     task_spec/0, parallel_box_spec/0, lane_spec/0]).
 
+-type handler_function() :: atom().
+-type handler_args() :: [term()].
+-type handler_result() :: term().
+
 -define(POOL_ID(EngineId), binary_to_atom(EngineId, utf8)).
 -define(DEFAULT_SLOT_COUNT, 20).
 -define(DEFAULT_CALLS_LIMIT, 1000).
--define(DEFAULT_TIMEOUT_CHECK_PERIOD, timer:seconds(300)).
--define(USE_TIMEOUT_SERVER_DEFAULT, {true, ?DEFAULT_TIMEOUT_CHECK_PERIOD}).
+-define(DEFAULT_TIMEOUT_CHECK_PERIOD_SEC, 300).
+-define(USE_TIMEOUT_SERVER_DEFAULT, {true, ?DEFAULT_TIMEOUT_CHECK_PERIOD_SEC}).
 -define(DEFAULT_KEEPALIVE_TIMEOUT_SEC, 300).
 
 -define(WF_ERROR_NOTHING_TO_START, {error, nothing_to_start}).
@@ -134,8 +138,11 @@ execute_workflow(EngineId, ExecutionSpec) ->
 report_execution_status_update(ExecutionId, EngineId, ReportType, JobIdentifier, Ans) ->
     TaskSpec = workflow_execution_state:report_execution_status_update(ExecutionId, JobIdentifier, ReportType, Ans),
 
-    case ReportType of
-        ?ASYNC_CALL_FINISHED ->
+    case {ReportType, TaskSpec} of
+        {?ASYNC_CALL_FINISHED, ?WF_ERROR_JOB_NOT_FOUND} ->
+            % Asynchronous job finish - it has no slot acquired
+            trigger_job_scheduling(EngineId, ?TAKE_UP_FREE_SLOTS);
+        {?ASYNC_CALL_FINISHED, _} ->
             % TODO VFS-7788 - support multiple pools
             case get_async_call_pools(TaskSpec) of
                 [CallPoolId] -> workflow_async_call_pool:decrement_slot_usage(CallPoolId);
@@ -148,13 +155,25 @@ report_execution_status_update(ExecutionId, EngineId, ReportType, JobIdentifier,
             trigger_job_scheduling(EngineId, ?FOR_CURRENT_SLOT_FIRST)
     end.
 
--spec get_async_call_pools(task_spec()) -> [workflow_async_call_pool:id()] | undefined.
+-spec get_async_call_pools(task_spec()) -> [workflow_async_call_pool:id()].
 get_async_call_pools(TaskSpec) ->
     maps:get(async_call_pools, TaskSpec, [?DEFAULT_ASYNC_CALL_POOL_ID]).
 
 -spec trigger_job_scheduling(id()) -> ok.
 trigger_job_scheduling(EngineId) ->
     trigger_job_scheduling(EngineId, ?TAKE_UP_FREE_SLOTS).
+
+-spec call_handler(execution_id(), execution_context(), workflow_handler:handler(), handler_function(), handler_args()) ->
+    handler_result() | error.
+call_handler(ExecutionId, Context, Handler, Function, Args) ->
+    try
+        apply(Handler, Function, [ExecutionId, Context] ++ Args)
+    catch
+        Error:Reason  ->
+            ?error_stacktrace("Unexpected error in ~w:~w (execution ~s, args: ~p): ~w:~p",
+                [Handler, Function, ExecutionId, Args, Error, Reason]),
+            error
+    end.
 
 %%%===================================================================
 %%% Internal functions
@@ -244,8 +263,8 @@ schedule_next_job(EngineId, DeferredExecutions) ->
                         ?END_EXECUTION(Handler, Context, LaneIndex, ErrorEncountered) ->
                             case workflow_engine_state:remove_execution_id(EngineId, ExecutionId) of
                                 ok ->
-                                    Handler:handle_lane_execution_ended(ExecutionId, Context, LaneIndex),
-                                    Handler:handle_workflow_execution_ended(ExecutionId, Context),
+                                    call_handler(ExecutionId, Context, Handler, handle_lane_execution_ended, [LaneIndex]),
+                                    call_handler(ExecutionId, Context, Handler, handle_workflow_execution_ended, []),
                                     case ErrorEncountered of
                                         true -> ok;
                                         false -> workflow_iterator_snapshot:cleanup(ExecutionId)
@@ -258,7 +277,7 @@ schedule_next_job(EngineId, DeferredExecutions) ->
                         ?END_EXECUTION_AFTER_PREPARATION_ERROR(Handler, Context) ->
                             case workflow_engine_state:remove_execution_id(EngineId, ExecutionId) of
                                 ok ->
-                                    Handler:handle_workflow_execution_ended(ExecutionId, Context),
+                                    call_handler(ExecutionId, Context, Handler, handle_workflow_execution_ended, []),
                                     workflow_execution_state:cleanup(ExecutionId);
                                 ?WF_ERROR_ALREADY_REMOVED ->
                                     ok
@@ -359,7 +378,8 @@ process_item(EngineId, ExecutionId, ExecutionSpec = #execution_spec{
     catch
         Error:Reason  ->
             ?error_stacktrace("Unexpected error handling task ~p for item id ~p: ~p:~p",
-                [TaskId, ItemId, Error, Reason])
+                [TaskId, ItemId, Error, Reason]),
+            trigger_job_scheduling(EngineId, ?FOR_CURRENT_SLOT_FIRST)
     end.
 
 -spec process_item(
@@ -399,10 +419,8 @@ process_result(EngineId, ExecutionId, #execution_spec{
 }) ->
     try
         CachedResult = workflow_cached_async_result:take(CachedResultId),
-        try
-            ProcessedResult = Handler:process_result(ExecutionId, ExecutionContext, TaskId, CachedResult),
-            workflow_engine:report_execution_status_update(
-                ExecutionId, EngineId, ?ASYNC_RESULT_PROCESSED, JobIdentifier, ProcessedResult)
+        ProcessedResult = try
+            Handler:process_result(ExecutionId, ExecutionContext, TaskId, CachedResult)
         catch
             Error:Reason:Stacktrace  ->
                 % TODO VFS-7788 - use callbacks to get human readable information about task
@@ -412,14 +430,17 @@ process_result(EngineId, ExecutionId, #execution_spec{
                     Stacktrace
                 ),
                 error
-        end
+        end,
+        workflow_engine:report_execution_status_update(
+            ExecutionId, EngineId, ?ASYNC_RESULT_PROCESSED, JobIdentifier, ProcessedResult)
     catch
         Error2:Reason2:Stacktrace2  ->
             ?error_stacktrace(
                 "Unexpected error processing task ~p with result id ~p: ~p:~p",
                 [TaskId, CachedResultId, Error2, Reason2],
                 Stacktrace2
-            )
+            ),
+            trigger_job_scheduling(EngineId, ?FOR_CURRENT_SLOT_FIRST)
     end.
 
 -spec prepare_execution(
@@ -430,14 +451,15 @@ process_result(EngineId, ExecutionId, #execution_spec{
 ) -> ok.
 prepare_execution(EngineId, ExecutionId, Handler, ExecutionContext) ->
     try
-        Ans = Handler:prepare(ExecutionId, ExecutionContext),
+        Ans = call_handler(ExecutionId, ExecutionContext, Handler, prepare, []),
         workflow_execution_state:report_execution_prepared(ExecutionId, Handler, ExecutionContext, Ans),
         trigger_job_scheduling(EngineId, ?FOR_CURRENT_SLOT_FIRST)
     catch
         Error:Reason:Stacktrace  ->
             ?error_stacktrace(
-                "Unexpected error perparing execution ~p: ~p:~p",
+                "Unexpected error preparing execution ~p: ~p:~p",
                 [ExecutionId, Error, Reason],
                 Stacktrace
-            )
+            ),
+            trigger_job_scheduling(EngineId, ?FOR_CURRENT_SLOT_FIRST)
     end.

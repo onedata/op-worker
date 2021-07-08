@@ -149,7 +149,7 @@ run(Pool, FileCtx, UserId, Opts) ->
     end,
     BatchSize = maps:get(batch_size, Opts, ?DEFAULT_BATCH_SIZE),
     ChildDirsJobGenerationPolicy = maps:get(child_dirs_job_generation_policy, Opts, ?DEFAULT_CHILD_DIRS_JOB_GENERATION_POLICY),
-    ChildrenMasterJobsMode = maps:get(children_master_jobs, Opts, ?DEFAULT_CHILDREN_MASTER_JOBS_MODE),
+    ChildrenMasterJobsMode = maps:get(children_master_jobs_mode, Opts, ?DEFAULT_CHILDREN_MASTER_JOBS_MODE),
     TrackSubtreeStatus = maps:get(track_subtree_status, Opts, ?DEFAULT_TRACK_SUBTREE_STATUS),
     TraverseInfo = maps:get(traverse_info, Opts, #{}),
     TraverseInfo2 = TraverseInfo#{pool => Pool},

@@ -167,6 +167,8 @@ create({uuid, ParentUuid}, FileDoc = #document{value = FileMeta = #file_meta{nam
             }
         },
         LocalTreeId = oneprovider:get_id(),
+        % Warning: if uuid exists, two files with same #file_meta{} will be created
+        % (names are checked for conflicts, not uuids)
         case file_meta:save(FileDoc3) of
             {ok, FileDocFinal = #document{key = FileUuid}} ->
                 case file_meta_forest:check_and_add(ParentUuid, ParentScopeId, TreesToCheck, FileName, FileUuid) of
@@ -884,11 +886,14 @@ update_acl(FileUuid, NewAcl) ->
 
 
 -spec update_protection_flags(uuid(), data_access_control:bitmask(), data_access_control:bitmask()) ->
-    ok | {error, term()}.
+    ok | {error, nothing_changed} | {error, term()}.
 update_protection_flags(FileUuid, FlagsToSet, FlagsToUnset) ->
     ?extract_ok(update({uuid, FileUuid}, fun(#file_meta{protection_flags = CurrFlags} = FileMeta) ->
         NewFlags = ?set_flags(?reset_flags(CurrFlags, FlagsToUnset), FlagsToSet),
-        {ok, FileMeta#file_meta{protection_flags = NewFlags}}
+        case NewFlags =:= CurrFlags of
+            true -> {error, nothing_changed};
+            false -> {ok, FileMeta#file_meta{protection_flags = NewFlags}}
+        end
     end)).
 
 

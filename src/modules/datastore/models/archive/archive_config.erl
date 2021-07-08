@@ -20,20 +20,22 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([from_json/1, to_json/1, sanitize/1, get_layout/1, should_create_nested_archives/1]).
-
+-export([from_json/1, to_json/1, sanitize/1]).
 %% Getters
--export([]).
+-export([get_layout/1, should_create_nested_archives/1, is_incremental/1, get_incremental_based_on/1]).
 
 -type record() :: #archive_config{}.
 -type json() :: json_utils:json_map().
 %% #{
 %%      <<"layout">> := layout(),
-%%      <<"incremental">> => incremental(),
+%%      <<"incremental">> => #{
+%%          <<"enabled">> := boolean(), 
+%%          <<"basedOn">> => archive:id()
+%%      },
 %%      <<"includeDip">> => include_dip(),
 %%      <<"createNestedArchives">> => boolean()
 %% }
--type incremental() :: boolean().
+-type incremental() :: json_utils:json_map().
 -type include_dip() :: boolean().
 -type layout() :: ?ARCHIVE_BAGIT_LAYOUT | ?ARCHIVE_PLAIN_LAYOUT.
 
@@ -50,11 +52,10 @@
 from_json(ConfigJson) ->
     #archive_config{
         layout = utils:to_atom(maps:get(<<"layout">>, ConfigJson, ?DEFAULT_LAYOUT)),
-        incremental = utils:to_boolean(maps:get(<<"incremental">>, ConfigJson, ?DEFAULT_INCREMENTAL)),
+        incremental = maps:get(<<"incremental">>, ConfigJson, ?DEFAULT_INCREMENTAL),
         include_dip = utils:to_boolean(maps:get(<<"includeDip">>, ConfigJson, ?DEFAULT_INCLUDE_DIP)),
         create_nested_archives = utils:to_boolean(maps:get(<<"createNestedArchives">>, ConfigJson, ?DEFAULT_CREATE_NESTED_ARCHIVES))
     }.
-
 
 -spec to_json(record()) -> json().
 to_json(#archive_config{
@@ -74,14 +75,30 @@ to_json(#archive_config{
 -spec sanitize(json_utils:json_map()) -> json().
 sanitize(RawConfig) ->
     try
-        middleware_sanitizer:sanitize_data(RawConfig, #{
+        SanitizedData = middleware_sanitizer:sanitize_data(RawConfig, #{
             optional => #{
                 <<"layout">> => {atom, ?ARCHIVE_LAYOUTS},
                 <<"includeDip">> => {boolean, ?SUPPORTED_INCLUDE_DIP_VALUES}, % TODO VFS-7653 change to {boolean, any}
-                <<"incremental">> => {boolean, ?SUPPORTED_INCREMENTAL_VALUES}, % TODO VFS-7780 change to {boolean, any},
+                <<"incremental">> => {json, non_empty},
                 <<"createNestedArchives">> => {boolean, any}
             }
-        })
+        }),
+        case maps:get(<<"incremental">>, SanitizedData, ?DEFAULT_INCREMENTAL) of
+            #{<<"enabled">> := true} = IncrementalConfig ->
+                BaseArchiveId = maps:get(<<"basedOn">>, IncrementalConfig, null),
+                case is_valid_base_archive(BaseArchiveId) of
+                    {true, _} ->
+                        SanitizedData;
+                    false ->
+                        throw(?ERROR_BAD_VALUE_IDENTIFIER(<<"incremental.basedOn">>))
+                end;
+            #{<<"enabled">> := false} ->
+                SanitizedData;
+            #{<<"enabled">> := _NotBoolean} ->
+                throw(?ERROR_BAD_VALUE_BOOLEAN(<<"incremental.enabled">>));
+            _ ->
+                throw(?ERROR_MISSING_REQUIRED_VALUE(<<"incremental.enabled">>))
+        end
     catch
         % config is a nested object of the archive object,
         % therefore catch errors and add "config." to name of the key associated with the error
@@ -91,8 +108,12 @@ sanitize(RawConfig) ->
             throw(?ERROR_BAD_VALUE_NOT_ALLOWED(str_utils:format_bin("config.~s", [Key]), AllowedVals));
         throw:?ERROR_BAD_VALUE_BOOLEAN(Key) ->
             throw(?ERROR_BAD_VALUE_BOOLEAN(str_utils:format_bin("config.~s", [Key])));
+        throw:?ERROR_BAD_VALUE_JSON(Key) ->
+            throw(?ERROR_BAD_VALUE_JSON(str_utils:format_bin("config.~s", [Key])));
         throw:?ERROR_BAD_VALUE_ATOM(Key) ->
-            throw(?ERROR_BAD_VALUE_ATOM(str_utils:format_bin("config.~s", [Key])))
+            throw(?ERROR_BAD_VALUE_ATOM(str_utils:format_bin("config.~s", [Key])));
+        throw:?ERROR_BAD_VALUE_IDENTIFIER(Key) ->
+            throw(?ERROR_BAD_VALUE_IDENTIFIER(str_utils:format_bin("config.~s", [Key])))
     end.
 
 
@@ -101,9 +122,32 @@ get_layout(#archive_config{layout = Layout}) ->
     Layout.
 
 
+-spec is_incremental(record()) -> boolean().
+is_incremental(#archive_config{incremental = Incremental}) ->
+    maps:get(<<"enabled">>, Incremental).
+
+
+-spec get_incremental_based_on(record()) -> archive:id() | undefined.
+get_incremental_based_on(#archive_config{incremental = IncrementalConfig}) ->
+    utils:null_to_undefined(maps:get(<<"basedOn">>, IncrementalConfig, undefined)).
+
+
 -spec should_create_nested_archives(record()) -> boolean().
 should_create_nested_archives(#archive_config{create_nested_archives = CreateNestedArchives}) ->
     CreateNestedArchives.
+
+
+-spec is_valid_base_archive(null | archive:id()) -> false | {true, null | archive:id()}.
+is_valid_base_archive(null) ->
+    {true, null};
+is_valid_base_archive(<<"null">>) ->
+    {true, null};
+is_valid_base_archive(ArchiveId) ->
+    case archive:get_state(ArchiveId) of
+        {ok, ?ARCHIVE_PRESERVED} -> {true, ArchiveId};
+        {ok, _OtherState} -> false;
+        ?ERROR_NOT_FOUND -> false
+    end.
 
 %%%===================================================================
 %%% persistent_record callbacks

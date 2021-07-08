@@ -13,10 +13,7 @@
 -ifndef(BAGIT_HRL).
 -define(BAGIT_HRL, 1).
 
--define(MD5, md5).
--define(SHA1, sha1).
--define(SHA256, sha256).
--define(SHA512, sha512).
+-include("modules/logical_file_manager/utils/file_checksum.hrl").
 
 -define(SUPPORTED_CHECKSUM_ALGORITHMS, [?MD5, ?SHA1, ?SHA256, ?SHA512]).
 

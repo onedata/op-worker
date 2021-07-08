@@ -16,6 +16,7 @@
 
 -include("workflow_engine.hrl").
 -include_lib("ctool/include/errors.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([init/0, prepare_next_waiting_job/1, populate_with_jobs_for_item/4,
@@ -177,18 +178,27 @@ register_failure(Jobs = #workflow_jobs{
     % TODO VFS-7788 - count errors and stop workflow when errors limit is reached
     {Jobs2#workflow_jobs{failed_items = sets:add_element(ItemIndex, Failed)}, RemainingForBox}.
 
--spec register_async_job_finish(jobs(), job_identifier(), workflow_cached_async_result:result_ref()) -> jobs().
+-spec register_async_job_finish(jobs(), job_identifier(), workflow_cached_async_result:result_ref()) ->
+    {ok, jobs()} | ?WF_ERROR_JOB_NOT_FOUND.
 register_async_job_finish(Jobs = #workflow_jobs{
+    ongoing = Ongoing,
     pending_async_jobs = AsyncCalls,
     raced_results = Unidentified
 }, JobIdentifier, CachedResultId) ->
-    case maps:get(JobIdentifier, AsyncCalls, undefined) of
-        undefined ->
-            Jobs#workflow_jobs{raced_results = Unidentified#{JobIdentifier => CachedResultId}};
-        _ ->
-            register_async_result_processing(
-                Jobs#workflow_jobs{pending_async_jobs = maps:remove(JobIdentifier, AsyncCalls)},
-                JobIdentifier, CachedResultId)
+    case gb_sets:is_member(JobIdentifier, Ongoing) of
+        true ->
+            NewJobs = case maps:get(JobIdentifier, AsyncCalls, undefined) of
+                undefined ->
+                    Jobs#workflow_jobs{raced_results = Unidentified#{JobIdentifier => CachedResultId}};
+                _ ->
+                    register_async_result_processing(
+                        Jobs#workflow_jobs{pending_async_jobs = maps:remove(JobIdentifier, AsyncCalls)},
+                        JobIdentifier, CachedResultId)
+            end,
+            {ok, NewJobs};
+        false ->
+            ?debug("Result for unknown job ~p", [JobIdentifier]),
+            ?WF_ERROR_JOB_NOT_FOUND
     end.
 
 -spec prepare_next_parallel_box(jobs(), job_identifier(), workflow_execution_state:boxes_map(), non_neg_integer()) ->

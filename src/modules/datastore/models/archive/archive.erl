@@ -13,25 +13,27 @@
 -author("Jakub Kudzia").
 
 -include("modules/dataset/archive.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
 -include_lib("ctool/include/errors.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
--export([create/7, create_nested/2, get/1, modify_attrs/2, delete/1]).
--export([get_root_dir_ctx/1, get_all_ancestors/1]).
+-export([create/8, create_nested/2, get/1, modify_attrs/2, delete/1]).
+-export([get_root_dir_ctx/1, get_all_ancestors/1, get_dataset_root_file_ctx/1, find_file/3]).
 
 % getters
 -export([get_id/1, get_creation_time/1, get_dataset_id/1, get_dataset_root_file_guid/1, get_space_id/1,
     get_state/1, get_config/1, get_preserved_callback/1, get_purged_callback/1,
     get_description/1, get_stats/1, get_root_dir_guid/1,
-    get_data_dir_guid/1, get_parent/1, get_parent_doc/1, is_finished/1
+    get_data_dir_guid/1, get_parent/1, get_parent_doc/1, get_base_archive_id/1, is_finished/1
 ]).
 
 % setters
 -export([mark_building/1, mark_purging/2,
     mark_file_archived/2, mark_file_failed/1, mark_finished/2,
-    set_root_dir_guid/2, set_data_dir_guid/2
+    set_root_dir_guid/2, set_data_dir_guid/2, set_base_archive_id/2
 ]).
 
 %% datastore_model callbacks
@@ -52,10 +54,6 @@
 
 -type creator() :: od_user:id().
 
--type type() :: archive_config:incremental().
--type include_dip() :: archive_config:include_dip().
--type layout() :: archive_config:layout().
-
 -type state() :: ?ARCHIVE_PENDING | ?ARCHIVE_BUILDING | ?ARCHIVE_PRESERVED | ?ARCHIVE_PURGING | ?ARCHIVE_FAILED.
 -type timestamp() :: time:seconds().
 -type description() :: binary().
@@ -66,9 +64,8 @@
 -type error() :: {error, term()}.
 
 -export_type([
-    id/0, doc/0,
-    creator/0, type/0, state/0, include_dip/0,
-    layout/0, timestamp/0, description/0,
+    id/0, doc/0, creator/0,
+    state/0, timestamp/0, description/0,
     config/0, callback/0, diff/0
 ]).
 
@@ -87,9 +84,9 @@
 %%% API functions
 %%%===================================================================
 
--spec create(dataset:id(), od_space:id(), creator(), config(), callback(), callback(), description()) ->
+-spec create(dataset:id(), od_space:id(), creator(), config(), callback(), callback(), description(), archive:id() | undefined) ->
     {ok, doc()} | error().
-create(DatasetId, SpaceId, Creator, Config, PreservedCallback, PurgedCallback, Description) ->
+create(DatasetId, SpaceId, Creator, Config, PreservedCallback, PurgedCallback, Description, BaseArchiveId) ->
     datastore_model:create(?CTX, #document{
         value = #archive{
             dataset_id = DatasetId,
@@ -100,7 +97,8 @@ create(DatasetId, SpaceId, Creator, Config, PreservedCallback, PurgedCallback, D
             preserved_callback = PreservedCallback,
             purged_callback = PurgedCallback,
             description = Description,
-            stats = archive_stats:empty()
+            stats = archive_stats:empty(),
+            base_archive_id = BaseArchiveId
         },
         scope = SpaceId
     }).
@@ -163,11 +161,55 @@ get_root_dir_ctx(Archive) ->
     {ok, file_ctx:new_by_guid(RootDirGuid)}.
 
 
+-spec get_dataset_root_file_ctx(record() | doc()) -> {ok, file_ctx:ctx()}.
+get_dataset_root_file_ctx(Archive) ->
+    {ok, DatasetRootFileGuid} = archive:get_dataset_root_file_guid(Archive),
+    {ok, file_ctx:new_by_guid(DatasetRootFileGuid)}.
+
+
 -spec get_all_ancestors(doc() | record()) -> {ok, [doc()]}.
 get_all_ancestors(#archive{parent = ParentArchive}) ->
     get_all_ancestors(ParentArchive, []);
 get_all_ancestors(#document{value = Archive}) ->
     get_all_ancestors(Archive).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns file_ctx:ctx() of file that can be found under
+%% RelativeFilePath in archive associated with ArchiveDoc.
+%% @end
+%%--------------------------------------------------------------------
+-spec find_file(archive:doc(), file_meta:path(), user_ctx:ctx()) ->
+    {ok, file_ctx:ctx()} | {error, term()}.
+find_file(ArchiveDoc, RelativeFilePath, UserCtx) ->
+    SessionId = user_ctx:get_session_id(UserCtx),
+    {ok, DataDirGuid} = get_data_dir_guid(ArchiveDoc),
+    DataDirCtx = file_ctx:new_by_guid(DataDirGuid),
+    RelativeFilePathTokens = filename:split(RelativeFilePath),
+    SessionId = user_ctx:get_session_id(UserCtx),
+    try
+        lists:foldl(fun
+            (ChildName, {ok, Ctx}) ->
+                {ChildCtx, _} = files_tree:get_child(Ctx, ChildName, UserCtx),
+                %% @TODO VFS-7923 - use unified symlink resolving functionality
+                case file_ctx:is_symlink_const(ChildCtx) of
+                    true ->
+                        ChildGuid = file_ctx:get_logical_guid_const(ChildCtx),
+                        case lfm:resolve_symlink(SessionId, ?FILE_REF(ChildGuid)) of
+                            {ok, Guid} -> {ok, file_ctx:new_by_guid(Guid)};
+                            {error, ?ENOENT} -> ?ERROR_NOT_FOUND
+                        end;
+                    false ->
+                        {ok, ChildCtx}
+                end;
+            (_, {error, _} = Error) ->
+                Error
+        end, {ok, DataDirCtx}, RelativeFilePathTokens)
+    catch
+        throw:?ENOENT ->
+            ?ERROR_NOT_FOUND
+    end.
 
 %%%===================================================================
 %%% Getters for #archive record
@@ -205,11 +247,13 @@ get_space_id(#document{scope = SpaceId}) ->
 get_space_id(ArchiveId) ->
     ?get_field(ArchiveId, fun get_space_id/1).
 
--spec get_state(record() | doc()) -> {ok, state()}.
+-spec get_state(id() | record() | doc()) -> {ok, state()} | error().
 get_state(#archive{state = State}) ->
     {ok, State};
 get_state(#document{value = Archive}) ->
-    get_state(Archive).
+    get_state(Archive);
+get_state(ArchiveId) ->
+    ?get_field(ArchiveId, fun get_state/1).
 
 -spec get_config(record() | doc()) -> {ok, config()}.
 get_config(#archive{config = Config}) ->
@@ -247,13 +291,15 @@ get_root_dir_guid(#archive{root_dir_guid = RootDirGuid}) ->
 get_root_dir_guid(#document{value = Archive}) ->
     get_root_dir_guid(Archive).
 
--spec get_data_dir_guid(record() | doc()) -> {ok, file_id:file_guid()}.
+-spec get_data_dir_guid(record() | doc() | id()) -> {ok, file_id:file_guid()}.
 get_data_dir_guid(#archive{data_dir_guid = DataDirGuid}) -> 
     {ok, DataDirGuid};
 get_data_dir_guid(#document{value = Archive}) -> 
-    get_data_dir_guid(Archive).
+    get_data_dir_guid(Archive);
+get_data_dir_guid(ArchiveId) ->
+    ?get_field(ArchiveId, fun get_data_dir_guid/1).
 
--spec get_parent(record() | doc()) -> {ok, archive:id() | undefined}.
+-spec get_parent(record() | doc() | id()) -> {ok, archive:id() | undefined}.
 get_parent(#archive{parent = Parent}) ->
     {ok, Parent};
 get_parent(#document{value = Archive}) ->
@@ -267,6 +313,14 @@ get_parent_doc(Archive) ->
         {ok, undefined} -> {ok, undefined};
         {ok, ParentArchiveId} -> get(ParentArchiveId)
     end.
+
+-spec get_base_archive_id(record() | doc() | id()) -> {ok, archive:id() | undefined}.
+get_base_archive_id(#archive{base_archive_id = BaseArchiveId}) ->
+    {ok, BaseArchiveId};
+get_base_archive_id(#document{value = Archive}) ->
+    get_base_archive_id(Archive);
+get_base_archive_id(ArchiveId) ->
+    ?get_field(ArchiveId, fun get_base_archive_id/1).
 
 -spec is_finished(record() | doc()) -> boolean().
 is_finished(#archive{state = State}) ->
@@ -350,6 +404,18 @@ set_data_dir_guid(ArchiveDocOrId, DataDirGuid) ->
         {ok, Archive#archive{data_dir_guid = DataDirGuid}}
     end).
 
+
+-spec set_base_archive_id(doc(), undefined | id()) -> {ok, doc()} | error().
+set_base_archive_id(ArchiveDoc, undefined) ->
+    {ok, ArchiveDoc};
+set_base_archive_id(ArchiveDoc, #document{key = BaseArchiveId}) when is_binary(BaseArchiveId) ->
+    set_base_archive_id(ArchiveDoc, BaseArchiveId);
+set_base_archive_id(ArchiveDoc, BaseArchiveId) when is_binary(BaseArchiveId) ->
+    update(ArchiveDoc, fun(Archive) ->
+        {ok, Archive#archive{base_archive_id = BaseArchiveId}}
+    end).
+
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -402,5 +468,6 @@ get_record_struct(1) ->
         {root_dir_guid, string},
         {data_dir_guid, string},
         {stats, {custom, string, {persistent_record, encode, decode, archive_stats}}},
-        {parent, string}
+        {parent, string},
+        {base_archive_id, string}
     ]}.
