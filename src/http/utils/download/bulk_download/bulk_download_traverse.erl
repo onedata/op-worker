@@ -51,7 +51,7 @@ start(BulkDownloadId, UserCtx, Guid, FollowLinks) ->
         child_dirs_job_generation_policy => generate_slave_and_master_jobs,
         additional_data => #{<<"main_pid">> => utils:encode_pid(self())},
         master_job_mode => single,
-        follow_links => FollowLinks
+        follow_symlinks => FollowLinks
     },
     {ok, _} = tree_traverse:run(
         ?POOL_NAME, file_ctx:new_by_guid(Guid), user_ctx:get_user_id(UserCtx), Options).

@@ -41,7 +41,7 @@
     connection_pid :: pid(),
     tar_stream :: tar_utils:stream(),
     send_retry_delay = 100 :: time:millis(),
-    follow_links = true :: boolean()
+    follow_symlinks = true :: boolean()
 }).
 
 -type state() :: #state{}.
@@ -119,7 +119,7 @@ main(BulkDownloadId, FileAttrsList, SessionId, InitialConn, FollowLinks) ->
         id = BulkDownloadId, 
         connection_pid = InitialConn, 
         tar_stream = TarStream, 
-        follow_links = FollowLinks
+        follow_symlinks = FollowLinks
     },
     {ok, UserId} = session:get_user_id(SessionId),
     {ok, UserCtx} = tree_traverse_session:acquire_for_task(UserId, ?TARBALL_DOWNLOAD_TRAVERSE_POOL_NAME, BulkDownloadId),
@@ -144,7 +144,7 @@ handle_multiple_files(
     % add starting dir to the tarball here as traverse does not execute slave job on it
     {Bytes, UpdatedState} = new_tar_file_entry(State, FileAttrs, Name),
     UpdatedState1 = send_data(Bytes, UpdatedState),
-    bulk_download_traverse:start(BulkDownloadId, UserCtx, Guid, State#state.follow_links),
+    bulk_download_traverse:start(BulkDownloadId, UserCtx, Guid, State#state.follow_symlinks),
     FinalState = wait_for_traverse(UpdatedState1, user_ctx:get_session_id(UserCtx)),
     handle_multiple_files(Tail, BulkDownloadId, UserCtx, FinalState);
 handle_multiple_files(

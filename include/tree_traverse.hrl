@@ -45,7 +45,7 @@
     % info passed to every slave job
     traverse_info :: tree_traverse:traverse_info(),
     
-    follow_links = false :: boolean(),
+    follow_symlinks = false :: boolean(),
     % relative path of the processed file to the traverse root
     relative_path = <<>> :: file_meta:path(),
     % Map of encountered files on the path from the traverse root to the currently processed one. 

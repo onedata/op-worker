@@ -73,7 +73,7 @@ ensure_operation_supported(_, _, _) -> throw(?ERROR_NOT_SUPPORTED).
 -spec sanitize_params(middleware:req()) -> middleware:req() | no_return().
 sanitize_params(#op_req{operation = get, data = RawParams, gri = #gri{aspect = content}} = OpReq) ->
     OpReq#op_req{data = middleware_sanitizer:sanitize_data(RawParams, #{
-        optional => #{<<"follow_links">> => {boolean, any}}
+        optional => #{<<"follow_symlinks">> => {boolean, any}}
     })};
 sanitize_params(#op_req{
     operation = create,
@@ -149,7 +149,7 @@ process_request(#op_req{
         {ok, #file_attr{type = ?REGULAR_FILE_TYPE} = FileAttrs} ->
             file_download_utils:download_single_file(SessionId, FileAttrs, Req);
         {ok, #file_attr{} = FileAttrs} ->
-            FollowLinks = maps:get(<<"follow_links">>, Data, true),
+            FollowLinks = maps:get(<<"follow_symlinks">>, Data, true),
             case page_file_download:gen_file_download_url(SessionId, [FileGuid], FollowLinks) of
                 {ok, Url} -> 
                     cowboy_req:reply(?HTTP_302_FOUND, #{?HDR_LOCATION => Url}, Req);

@@ -62,7 +62,7 @@ save_master_job(Key, Job = #tree_traverse{
     track_subtree_status = TrackSubtreeStatus,
     batch_size = BatchSize,
     traverse_info = TraverseInfo,
-    follow_links = FollowLinks,
+    follow_symlinks = FollowLinks,
     relative_path = RelativePath,
     encountered_files = EncounteredFilesMap
 }, Pool, TaskId, CallbackModule) ->
@@ -82,7 +82,7 @@ save_master_job(Key, Job = #tree_traverse{
         track_subtree_status = TrackSubtreeStatus,
         batch_size = BatchSize,
         traverse_info = term_to_binary(TraverseInfo),
-        follow_links = FollowLinks,
+        follow_symlinks = FollowLinks,
         relative_path = RelativePath,
         encountered_files = EncounteredFilesMap
     },
@@ -116,7 +116,7 @@ get_master_job(#document{value = #tree_traverse_job{
     track_subtree_status = TrackSubtreeStatus,
     batch_size = BatchSize,
     traverse_info = TraverseInfo,
-    follow_links = FollowLinks,
+    follow_symlinks = FollowLinks,
     relative_path = RelativePath,
     encountered_files = EncounteredFilesMap
 }}) ->
@@ -137,7 +137,7 @@ get_master_job(#document{value = #tree_traverse_job{
                 track_subtree_status = TrackSubtreeStatus,
                 batch_size = BatchSize,
                 traverse_info = binary_to_term(TraverseInfo),
-                follow_links = FollowLinks,
+                follow_symlinks = FollowLinks,
                 relative_path = RelativePath,
                 encountered_files = EncounteredFilesMap
             },
@@ -243,8 +243,8 @@ get_record_struct(4) ->
         {track_subtree_status, boolean},
         {batch_size, integer},
         {traverse_info, binary},
-        % new fields - follow_links, relative_path and encountered_files
-        {follow_links, boolean},
+        % new fields - follow_symlinks, relative_path and encountered_files
+        {follow_symlinks, boolean},
         {relative_path, binary},
         {encountered_files, #{string => boolean}}
     ]}.
@@ -354,7 +354,7 @@ upgrade_record(3, Record) ->
         TrackSubtreeStatus,
         BatchSize,
         TraverseInfo,
-        % new fields follow_links, relative path and encountered files
+        % new fields follow_symlinks, relative path and encountered files
         false,
         <<>>,
         #{}

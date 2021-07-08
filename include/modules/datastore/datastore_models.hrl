@@ -278,7 +278,7 @@
     expires :: time:seconds(),
     session_id :: session:id(),
     file_guids :: [fslogic_worker:file_guid()],
-    follow_links :: boolean()
+    follow_symlinks :: boolean()
 }).
 
 -record(offline_access_credentials, {
@@ -1022,7 +1022,7 @@
     track_subtree_status :: boolean(),
     batch_size :: tree_traverse:batch_size(),
     traverse_info :: binary(),
-    follow_links = false :: boolean(),
+    follow_symlinks = false :: boolean(),
     % relative path of the processed file to the traverse root
     relative_path = <<>> :: file_meta:path(),
     % Map of encountered files on the path from the traverse root to the currently processed one. 

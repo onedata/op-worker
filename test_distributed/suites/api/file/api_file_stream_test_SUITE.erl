@@ -298,11 +298,11 @@ gui_download_test_base(Config, FileTreeSpec, ClientSpec, ScenarioPrefix, Downloa
 
     DataSpec = #data_spec{
         required = [<<"file_ids">>],
-        optional = [<<"follow_links">>],
+        optional = [<<"follow_symlinks">>],
         % correct values are injected in function maybe_inject_guids/3 based on provided FileTreeSpec
         correct_values = #{
             <<"file_ids">> => [injected_guids],
-            <<"follow_links">> => [true, false]
+            <<"follow_symlinks">> => [true, false]
         }, 
         bad_values = [
             {<<"file_ids">>, [<<"incorrect_guid">>], ?ERROR_BAD_VALUE_IDENTIFIER(<<"file_ids">>)},
@@ -313,7 +313,7 @@ gui_download_test_base(Config, FileTreeSpec, ClientSpec, ScenarioPrefix, Downloa
                 end}
             },
             {<<"file_ids">>, <<"not_a_list">>, ?ERROR_BAD_VALUE_LIST_OF_BINARIES(<<"file_ids">>)},
-            {<<"follow_links">>, <<"not_a_boolean">>, ?ERROR_BAD_VALUE_BOOLEAN(<<"follow_links">>)}
+            {<<"follow_symlinks">>, <<"not_a_boolean">>, ?ERROR_BAD_VALUE_BOOLEAN(<<"follow_symlinks">>)}
         ]
     },
     ?assert(onenv_api_test_runner:run_tests([
@@ -367,7 +367,7 @@ gui_download_test_base(Config, FileTreeSpec, ClientSpec, ScenarioPrefix, Downloa
 build_get_download_url_prepare_gs_args_fun(MemRef, TestMode, Scope) ->
     fun(#api_test_ctx{data = Data0}) ->
         api_test_memory:set(MemRef, scope, Scope),
-        api_test_memory:set(MemRef, follow_links, maps:get(<<"follow_links">>, Data0, false)),
+        api_test_memory:set(MemRef, follow_symlinks, maps:get(<<"follow_symlinks">>, Data0, false)),
         Data1 = maybe_inject_guids(MemRef, Data0, TestMode),
         #gs_args{
             operation = get,
@@ -706,12 +706,12 @@ rest_download_dir_test(Config) ->
         end
     end,
     DataSpec = #data_spec{
-        optional = [<<"follow_links">>],
+        optional = [<<"follow_symlinks">>],
         correct_values = #{
-            <<"follow_links">> => [true, false]
+            <<"follow_symlinks">> => [true, false]
         },
         bad_values = [
-            {<<"follow_links">>, <<"not_a_boolean">>, ?ERROR_BAD_VALUE_BOOLEAN(<<"follow_links">>)}
+            {<<"follow_symlinks">>, <<"not_a_boolean">>, ?ERROR_BAD_VALUE_BOOLEAN(<<"follow_symlinks">>)}
         ]
     },
     
@@ -760,7 +760,7 @@ rest_download_dir_test(Config) ->
 build_rest_download_prepare_args_fun(MemRef, TestMode) ->
     fun(#api_test_ctx{data = Data0}) ->
         api_test_memory:set(MemRef, test_mode, TestMode),
-        api_test_memory:set(MemRef, follow_links, maps:get(<<"follow_links">>, Data0, true)),
+        api_test_memory:set(MemRef, follow_symlinks, maps:get(<<"follow_symlinks">>, Data0, true)),
         [#object{guid = Guid, shares = Shares}] = api_test_memory:get(MemRef, file_tree_object),
         FileGuid = case TestMode of
             normal_mode -> 
@@ -1080,7 +1080,7 @@ check_extracted_tarball_structure(_MemRef, #object{name = Filename}, no_files, C
 -spec check_symlink(api_test_memory:mem_ref(), file_meta:path(), onenv_file_test_utils:object_spec()) -> ok.
 check_symlink(MemRef, CurrentPath, Object) ->
     #object{name = Filename, symlink_value = LinkPath} = Object,
-    case api_test_memory:get(MemRef, follow_links) of
+    case api_test_memory:get(MemRef, follow_symlinks) of
         true ->
             ?assertEqual({ok, Filename}, file:read_file(filename:join(CurrentPath, Filename)));
         false ->

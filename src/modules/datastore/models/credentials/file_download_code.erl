@@ -62,7 +62,7 @@ create(SessionId, FileGuids, FollowLinks) ->
             expires = ?NOW() + ExpirationInterval,
             session_id = SessionId,
             file_guids = FileGuids,
-            follow_links = FollowLinks
+            follow_symlinks = FollowLinks
         }
     },
     case datastore_model:save(CtxWithExpiration, Doc) of
@@ -80,7 +80,7 @@ verify(Code) ->
             expires = Expires,
             session_id = SessionId,
             file_guids = FileGuids,
-            follow_links = FollowLinks
+            follow_symlinks = FollowLinks
         }}} when Now < Expires ->
             {true, SessionId, FileGuids, FollowLinks};
         {ok, _} ->
@@ -145,7 +145,7 @@ get_record_struct(3) ->
         {expires, integer},
         {session_id, string},
         {file_guids, [string]},
-        {follow_links, boolean}
+        {follow_symlinks, boolean}
     ]}.
 
 
