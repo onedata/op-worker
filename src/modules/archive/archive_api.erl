@@ -292,6 +292,7 @@ extend_with_archive_info(ArchiveEntries) ->
     lists_utils:pfiltermap(FilterMapFun, ArchiveEntries, ?MAX_LIST_EXTENDED_DATASET_INFO_PROCS).
 
 
+%% @TODO VFS-7932 calculate state separately for DIP and AIP
 -spec get_state(archive:doc() | archive:id()) -> {ok, archive:state()}.
 get_state(#document{value = #archive{related_aip = RelatedAip}}) when is_binary(RelatedAip) ->
     {ok, AipArchiveDoc} = archive:get(RelatedAip),
@@ -301,6 +302,7 @@ get_state(ArchiveDoc = #document{}) ->
 
 
 
+%% @TODO VFS-7932 calculate stats separately for DIP and AIP
 -spec get_aggregated_stats(archive:doc() | archive:id()) -> archive_stats:record().
 get_aggregated_stats(#document{value = #archive{related_aip = RelatedAip}}) when is_binary(RelatedAip) ->
     {ok, AipArchiveDoc} = archive:get(RelatedAip),

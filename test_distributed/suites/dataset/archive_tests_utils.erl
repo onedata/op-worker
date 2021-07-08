@@ -27,7 +27,7 @@
 ]).
 
 
--define(ATTEMPTS, 600).
+-define(ATTEMPTS, 1200).
 
 -define(SPACE, space_krk_par_p).
 -define(USER1, user1).
