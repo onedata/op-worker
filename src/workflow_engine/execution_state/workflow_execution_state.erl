@@ -21,7 +21,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([init/3, init_using_snapshot/3, cleanup/1, prepare_next_job/1,
+-export([init/3, init_using_snapshot/3, cancel/1, cleanup/1, prepare_next_job/1,
     report_execution_status_update/4, report_execution_prepared/4, report_limit_reached_error/2,
     check_timeouts/1, reset_keepalive_timer/2, get_result_processing_data/2]).
 %% Test API
@@ -52,6 +52,7 @@
     notify_task_finished :: boolean()
 }).
 -define(TASK_PROCESSED_REPORT(NotifyTaskFinished), {task_processed_report, NotifyTaskFinished}).
+-define(EXECUTION_FINISHED_REPORT(ItemIdsToDelete), {execution_finished_report, ItemIdsToDelete}).
 -define(JOBS_EXPIRED(AsyncPoolsChanges), {jobs_expired, AsyncPoolsChanges}).
 
 % Definitions of possible errors
@@ -79,6 +80,7 @@
 -define(PREPARING, preparing).
 -define(PREPARATION_FAILED, preparation_failed).
 -define(PREPARATION_SUCCESSFUL, preparation_successful).
+-define(EXECUTION_CANCELLED, execution_cancelled).
 -type preparation_status() :: ?NOT_PREPARED | ?PREPARING | ?PREPARATION_FAILED | ?PREPARATION_SUCCESSFUL.
 % TODO VFS-7919 better type name
 -type handler_execution_or_cached_async_result() ::
@@ -142,6 +144,12 @@ init_using_snapshot(ExecutionId, Handler, Context) ->
         ?ERROR_NOT_FOUND ->
             init(ExecutionId, Handler, Context)
     end.
+
+cancel(ExecutionId) ->
+    {ok, _} = update(ExecutionId, fun(State) ->
+        handle_status_change(State, ?EXECUTION_CANCELLED)
+    end),
+    ok.
 
 -spec cleanup(workflow_engine:execution_id()) -> ok.
 cleanup(ExecutionId) ->
@@ -243,7 +251,7 @@ report_execution_prepared(ExecutionId, Handler, ExecutionContext, ok) ->
     end;
 report_execution_prepared(ExecutionId, _Handler, _ExecutionContext, error) ->
     {ok, _} = update(ExecutionId, fun(State) ->
-        handle_preparation_failure(State)
+        handle_status_change(State, ?PREPARATION_FAILED)
     end),
     ok.
 
@@ -364,7 +372,7 @@ prepare_lane(ExecutionId, Handler, Context, LaneIndex) ->
             end;
         ?WF_ERROR_PREPARATION_FAILED ->
             {ok, _} = update(ExecutionId, fun(State) ->
-                handle_preparation_failure(State)
+                handle_status_change(State, ?PREPARATION_FAILED)
             end),
             ?WF_ERROR_PREPARATION_FAILED
     end.
@@ -389,6 +397,21 @@ prepare_next_job_for_current_lane(ExecutionId) ->
                 subject_id = SubjectId,
                 job_identifier = JobIdentifier
             }};
+        {ok, #document{value = #workflow_execution_state{update_report = ?EXECUTION_FINISHED_REPORT(ItemIdsToDelete),
+            handler = Handler, context = ExecutionContext,
+            current_lane = #current_lane{lane_index = LaneIndex},
+            lowest_failed_job_identifier = LowestFailedJobIdentifier,
+            prefetched_iteration_step = PrefetchedIterationStep}}} ->
+            HasErrorEncountered = case {LowestFailedJobIdentifier, PrefetchedIterationStep} of
+                {undefined, undefined} -> false;
+                _ -> true
+            end,
+            lists:foreach(fun(ItemId) -> workflow_cached_item:delete(ItemId) end, ItemIdsToDelete),
+            case PrefetchedIterationStep of
+                {PrefetchedItemId, _} -> workflow_cached_item:delete(PrefetchedItemId);
+                _ -> ok
+            end,
+            ?WF_ERROR_EXECUTION_FINISHED(Handler, ExecutionContext, LaneIndex, HasErrorEncountered);
         ?WF_ERROR_NO_CACHED_ITEMS(LaneIndex, ItemIndex, IterationStep, Context) ->
             prepare_next_job_using_iterator(ExecutionId, ItemIndex, IterationStep, LaneIndex, Context);
         {error, _} = Error ->
@@ -477,10 +500,10 @@ get_next_iterator(Context, Iterator, ExecutionId) ->
 %%% Functions updating record
 %%%===================================================================
 
--spec handle_preparation_failure(state()) -> {ok, state()}.
-handle_preparation_failure(State) ->
+%%-spec handle_status_change(state()) -> {ok, state()}.
+handle_status_change(State, NewStatus) ->
     {ok, State#workflow_execution_state{
-        preparation_status = ?PREPARATION_FAILED
+        preparation_status = NewStatus
     }}.
 
 -spec prepare_lane(state(), current_lane(), iteration_status()) ->
@@ -653,7 +676,33 @@ prepare_next_waiting_job(#workflow_execution_state{
     handler = Handler,
     context = Context
 }) ->
-    ?WF_ERROR_EXECUTION_PREPARATION_FAILED(Handler, Context).
+    ?WF_ERROR_EXECUTION_PREPARATION_FAILED(Handler, Context);
+prepare_next_waiting_job(State = #workflow_execution_state{
+    preparation_status = ?EXECUTION_CANCELLED,
+    jobs = Jobs,
+    iteration_state = IterationState,
+    current_lane = #current_lane{parallel_boxes_spec = BoxesSpec}
+}) ->
+    case workflow_jobs:prepare_next_waiting_result(Jobs) of
+        {ok, JobIdentifier, NewJobs} ->
+            {TaskId, TaskSpec} = workflow_jobs:get_task_details(JobIdentifier, BoxesSpec),
+            % Use old `Jobs` as subject is no longer present in `NewJobs` (job is not waiting anymore)
+            SubjectId = workflow_jobs:get_subject_id(JobIdentifier, Jobs, IterationState),
+            {ok, State#workflow_execution_state{
+                update_report = #job_prepared_report{job_identifier = JobIdentifier,
+                    task_id = TaskId, task_spec = TaskSpec, subject_id = SubjectId},
+                jobs = NewJobs
+            }};
+        ?ERROR_NOT_FOUND ->
+            case workflow_jobs:has_ongoing_jobs(Jobs) of
+                true ->
+                    ?WF_ERROR_NO_WAITING_ITEMS;
+                false ->
+                    ItemIds = workflow_iteration_state:get_all_item_ids(IterationState),
+                    {ok, State#workflow_execution_state{iteration_state = workflow_iteration_state:init(),
+                        update_report = ?EXECUTION_FINISHED_REPORT(ItemIds)}}
+            end
+    end.
 
 -spec prepare_next_parallel_box(state(), workflow_jobs:job_identifier()) -> {ok, state()}.
 prepare_next_parallel_box(State = #workflow_execution_state{

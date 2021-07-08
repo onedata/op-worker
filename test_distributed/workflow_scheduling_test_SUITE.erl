@@ -34,7 +34,10 @@
     result_processing_failure_test/1,
     heartbeat_test/1,
     preparation_failure_test/1,
-    lane_preparation_failure_test/1
+    lane_preparation_failure_test/1,
+    sync_workflow_single_task_lane_cancel_test/1,
+    sync_workflow_cancel_test/1,
+    async_workflow_cancel_test/1
 ]).
 
 all() ->
@@ -50,7 +53,10 @@ all() ->
         result_processing_failure_test,
         heartbeat_test,
         preparation_failure_test,
-        lane_preparation_failure_test
+        lane_preparation_failure_test,
+        sync_workflow_single_task_lane_cancel_test,
+        sync_workflow_cancel_test,
+        async_workflow_cancel_test
     ]).
 
 -define(ENGINE_ID, <<"test_engine">>).
@@ -375,6 +381,57 @@ lane_preparation_failure_test(Config) ->
     verify_memory(Config, InitialKeys),
     ok.
 
+sync_workflow_single_task_lane_cancel_test(Config) ->
+    cancel_test_base(Config, sync, <<"cancel_test_workflow">>, <<"cancel_test_workflow_task1_1_1">>).
+
+sync_workflow_cancel_test(Config) ->
+    cancel_test_base(Config, sync, <<"cancel_test_workflow">>, <<"cancel_test_workflow_task3_3_2">>).
+
+async_workflow_cancel_test(Config) ->
+    cancel_test_base(Config, async, <<"async_cancel_test_workflow">>, <<"async_cancel_test_workflow_task3_3_2">>).
+
+cancel_test_base(Config, WorkflowType, Id, CancelOnTask) ->
+    InitialKeys = get_all_keys(Config),
+
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    Workflow = #{
+        id => Id,
+        workflow_handler => workflow_test_handler,
+        execution_context => #{type => WorkflowType, async_call_pools => [?ASYNC_CALL_POOL_ID]}
+    },
+
+    CancelOnItem = <<"100">>,
+    set_task_execution_gatherer_option(Config, cancel_execution, {CancelOnTask, CancelOnItem, Id}),
+    ?assertEqual(ok, rpc:call(Worker, workflow_engine, execute_workflow, [?ENGINE_ID, Workflow])),
+    Expected = get_expected_task_execution_order(Workflow),
+
+    #{execution_history := ExecutionHistory, lane_finish_log := LaneFinishLog, cancel_ans := CancelAns} =
+        ExtendedHistoryStats = get_task_execution_history(Config),
+    ?assertEqual(ok, CancelAns),
+    verify_execution_history_stats(ExtendedHistoryStats, WorkflowType),
+    ?assertNotEqual(timeout, ExecutionHistory),
+    verify_memory(Config, InitialKeys, true),
+
+    unset_task_execution_gatherer_option(Config, cancel_execution),
+    ?assertEqual(ok, rpc:call(Worker, workflow_engine, execute_workflow, [?ENGINE_ID, Workflow])),
+    #{execution_history := ExecutionHistory2, lane_finish_log := LaneFinishLog2} = ExtendedHistoryStats2 =
+        get_task_execution_history(Config),
+    verify_execution_history_stats(ExtendedHistoryStats2, WorkflowType),
+    ?assertNotEqual(timeout, ExecutionHistory2),
+
+    MergedExecutionHistory = (ExecutionHistory -- ExecutionHistory2) ++ ExecutionHistory2,
+    ?assert(length(ExecutionHistory) < MergedExecutionHistory),
+    ?assert(length(ExecutionHistory2) < MergedExecutionHistory),
+
+    ExecutionHistoryWithoutPrepare = verify_preparation_phase(Id, MergedExecutionHistory),
+    ExecutionHistoryWithoutFinishMessage = verify_finish_notification(Id, ExecutionHistoryWithoutPrepare),
+    ExecutionLaneFinishLog = maps:merge(maps:get(Id, LaneFinishLog, #{}), maps:get(Id, LaneFinishLog2, #{})),
+    ExecutionHistoryWithoutEndedNotifications = verify_task_and_lane_ended_notifications(
+        Workflow, WorkflowType, ExecutionLaneFinishLog, ExecutionHistoryWithoutFinishMessage),
+    verify_execution_history(Expected, ExecutionHistoryWithoutEndedNotifications, WorkflowType),
+    verify_memory(Config, InitialKeys),
+
+    ok.
 
 
 %%%===================================================================
@@ -538,6 +595,10 @@ task_execution_gatherer_loop(#{execution_history := History} = Acc, ProcWaitingF
                 #{delay_execution := {Task, Item}} ->
                     Sender ! delay_execution,
                     Acc3#{execution_history => [{Task, Item} | History]};
+                #{cancel_execution := {Task, Item, ExecutionId}} ->
+                    CancelAns = rpc:call(node(Sender), workflow_engine, cancel_execution, [ExecutionId]),
+                    Sender ! history_saved,
+                    Acc3#{execution_history => [{Task, Item} | History], cancel_ans => CancelAns};
                 _ ->
                     Sender ! history_saved,
                     Acc3#{execution_history => [{Task, Item} | History]}

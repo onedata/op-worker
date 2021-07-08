@@ -19,9 +19,9 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([init/0, prepare_next_waiting_job/1, populate_with_jobs_for_item/4,
+-export([init/0, prepare_next_waiting_job/1, prepare_next_waiting_result/1, populate_with_jobs_for_item/4,
     pause_job/2, mark_ongoing_job_finished/2, register_failure/2,
-    register_async_job_finish/3, prepare_next_parallel_box/4]).
+    register_async_job_finish/3, prepare_next_parallel_box/4, has_ongoing_jobs/1]).
 %% Functions returning/updating pending_async_jobs field
 -export([register_async_call/3, check_timeouts/1, reset_keepalive_timer/2]).
 %% Functions operating on job_identifier record
@@ -68,7 +68,8 @@
     raced_results = #{} :: async_results_map(), % TODO VFS-7787 - clean when they are not needed anymore (after integration with BW)
     async_cached_results = #{} :: async_results_map(),
 
-    tasks_tree :: tasks_tree()
+    tasks_tree :: tasks_tree(),
+    results_iterator
 }).
 
 -type job_identifier() :: #job_identifier{}.
@@ -112,6 +113,28 @@ prepare_next_waiting_job(Jobs = #workflow_jobs{
                 true -> ?ERROR_NOT_FOUND;
                 false -> ?WF_ERROR_NO_WAITING_ITEMS
             end
+    end.
+
+-spec prepare_next_waiting_result(jobs()) -> {ok, job_identifier(), jobs()} | ?ERROR_NOT_FOUND.
+prepare_next_waiting_result(Jobs = #workflow_jobs{results_iterator = undefined, waiting = Waiting}) ->
+    prepare_next_waiting_result(Jobs#workflow_jobs{results_iterator = gb_sets:iterator(Waiting)});
+prepare_next_waiting_result(#workflow_jobs{results_iterator = none}) ->
+    ?ERROR_NOT_FOUND;
+prepare_next_waiting_result(Jobs = #workflow_jobs{
+    waiting = Waiting,
+    ongoing = Ongoing,
+    results_iterator = Iterator
+}) ->
+    case gb_sets:next(Iterator) of
+        {#job_identifier{processing_type = ?ASYNC_RESULT_PROCESSING} = JobIdentifier, NextIterator} ->
+            NewWaiting = gb_sets:delete(JobIdentifier, Waiting),
+            NewOngoing = gb_sets:insert(JobIdentifier, Ongoing),
+            NewJobs = Jobs#workflow_jobs{waiting = NewWaiting, ongoing = NewOngoing, results_iterator = NextIterator},
+            {ok, JobIdentifier, maybe_remove_async_cached_result(NewJobs, JobIdentifier)};
+        {_, NextIterator} ->
+            prepare_next_waiting_result(Jobs#workflow_jobs{results_iterator = NextIterator});
+        none ->
+            prepare_next_waiting_result(Jobs#workflow_jobs{results_iterator = none})
     end.
 
 -spec populate_with_jobs_for_item(
@@ -236,6 +259,9 @@ prepare_next_parallel_box(
                 tasks_tree = add_jobs_to_not_empty_task_tree(TasksTree, NewWaiting)
             }}
     end.
+
+has_ongoing_jobs(#workflow_jobs{ongoing = Ongoing}) ->
+    not gb_sets:is_empty(Ongoing).
 
 %%%===================================================================
 %%% Functions returning/updating pending_async_jobs field
@@ -472,7 +498,8 @@ register_async_result_processing(
     Jobs#workflow_jobs{
         waiting = gb_sets:add(NewJobIdentifier, Waiting),
         ongoing = gb_sets:delete(JobIdentifier, Ongoing),
-        async_cached_results = Results#{NewJobIdentifier => CachedResultId}
+        async_cached_results = Results#{NewJobIdentifier => CachedResultId},
+        results_iterator = undefined
     }.
 
 -spec maybe_remove_async_cached_result(jobs(), job_identifier()) -> jobs().
