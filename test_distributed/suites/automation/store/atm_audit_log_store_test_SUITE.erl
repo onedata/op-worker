@@ -36,7 +36,7 @@
     iterate_one_by_one_test/1,
     iterate_in_chunks_test/1,
     reuse_iterator_test/1
-    % @fixme test browsing from offset
+    % @todo VFS-7903 test browsing from offset
 ]).
 
 groups() -> [
