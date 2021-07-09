@@ -41,10 +41,10 @@
 %%%===================================================================
 
 
--spec build(atm_list_store_container:backend_id()) -> record().
-build(BackendId) ->
+-spec build(atm_infinite_log_container_iterator:record()) -> record().
+build(AtmInfiniteLogContainerIterator) ->
     #atm_list_store_container_iterator{
-        atm_infinite_log_container_iterator = atm_infinite_log_container_iterator:build(BackendId)
+        atm_infinite_log_container_iterator = AtmInfiniteLogContainerIterator
     }.
 
 

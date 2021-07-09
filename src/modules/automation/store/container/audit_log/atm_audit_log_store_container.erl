@@ -33,14 +33,13 @@
 
 -type initial_value() :: atm_infinite_log_container:initial_value().
 -type operation_options() :: atm_infinite_log_container:operation_options().
--type backend_id() :: atm_infinite_log_container:backend_id().
 
 -record(atm_audit_log_store_container, {
     atm_infinite_log_container :: atm_infinite_log_container:record()
 }).
 -type record() :: #atm_audit_log_store_container{}.
 
--export_type([initial_value/0, operation_options/0, backend_id/0, record/0]).
+-export_type([initial_value/0, operation_options/0, record/0]).
 
 
 %%%===================================================================
@@ -74,7 +73,8 @@ browse_content(AtmWorkflowExecutionCtx, BrowseOpts, #atm_audit_log_store_contain
 
 -spec acquire_iterator(record()) -> atm_audit_log_store_container_iterator:record().
 acquire_iterator(#atm_audit_log_store_container{atm_infinite_log_container = AtmInfiniteLogContainer}) ->
-    atm_infinite_log_container:acquire_iterator(AtmInfiniteLogContainer).
+    AtmInfiniteLogContainerIterator = atm_infinite_log_container:acquire_iterator(AtmInfiniteLogContainer),
+    atm_audit_log_store_container_iterator:build(AtmInfiniteLogContainerIterator).
 
 
 -spec apply_operation(record(), atm_store_container:operation()) ->
