@@ -19,7 +19,7 @@
 -include("modules/automation/atm_execution.hrl").
 -include_lib("ctool/include/errors.hrl").
 
-%% atm_store_container callbacks
+%% API
 -export([
     create/3,
     get_data_spec/1, browse_content/3, acquire_iterator/1,
@@ -54,7 +54,7 @@
 
 
 %%%===================================================================
-%%% atm_store_container callbacks
+%%% API
 %%%===================================================================
 
 

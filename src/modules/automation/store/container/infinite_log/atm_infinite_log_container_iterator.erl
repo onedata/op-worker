@@ -14,16 +14,12 @@
 -author("Michal Stanisz").
 -author("Lukasz Opiola").
 
--behaviour(atm_store_container_iterator).
 -behaviour(persistent_record).
 
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([build/1]).
-
-% atm_store_container_iterator callbacks
--export([get_next_batch/3, forget_before/1, mark_exhausted/1]).
+-export([build/1, get_next_batch/3, forget_before/1, mark_exhausted/1]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
@@ -46,11 +42,6 @@
 -spec build(atm_infinite_log_container:backend_id()) -> record().
 build(BackendId) ->
     #atm_infinite_log_container_iterator{backend_id = BackendId}.
-
-
-%%%===================================================================
-%%% atm_store_container_iterator callbacks
-%%%===================================================================
 
 
 -spec get_next_batch(atm_workflow_execution_ctx:record(), atm_store_container_iterator:batch_size(), record()) ->
