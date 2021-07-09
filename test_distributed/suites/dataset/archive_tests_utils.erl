@@ -27,7 +27,7 @@
 ]).
 
 
--define(ATTEMPTS, 600).
+-define(ATTEMPTS, 1200).
 
 -define(SPACE, space_krk_par_p).
 -define(USER1, user1).
@@ -56,8 +56,13 @@ assert_archive_state(ArchiveId, ExpectedState) ->
     end, oct_background:get_space_supporting_providers(?SPACE)).
 
 
+assert_archive_is_preserved(_Node, _SessionId, undefined, _DatasetId, _DatasetRootFileGuid, _FileCount, _ExpSize) ->
+    ok;
 assert_archive_is_preserved(Node, SessionId, ArchiveId, DatasetId, DatasetRootFileGuid, FileCount, ExpSize) ->
-    ?assertMatch({ok, #archive_info{
+    {ok, #archive_info{
+        related_aip = RelatedAip,
+        related_dip = RelatedDip
+    }} = ?assertMatch({ok, #archive_info{
         state = ?ARCHIVE_PRESERVED,
         stats = #archive_stats{
             files_archived = FileCount,
@@ -77,10 +82,17 @@ assert_archive_is_preserved(Node, SessionId, ArchiveId, DatasetId, DatasetRootFi
                 error
         end
     end,
-    ?assertEqual(true, lists:member(ArchiveId, GetDatasetArchives()), ?ATTEMPTS),
+    case RelatedAip of
+        undefined ->
+            ?assertEqual(true, lists:member(ArchiveId, GetDatasetArchives()), ?ATTEMPTS);
+        _ ->
+            % DIP archives are not on the dataset list but check that they have enforced plain layout
+            ?assertEqual(?ARCHIVE_PLAIN_LAYOUT, ArchiveLayout)
+    end,
     
     assert_structure(Node, SessionId, ArchiveId, DatasetRootFileGuid, ArchiveLayout),
-    assert_layout_custom_features(Node, SessionId, ArchiveId, ArchiveLayout).
+    assert_layout_custom_features(Node, SessionId, ArchiveId, ArchiveLayout),
+    assert_archive_is_preserved(Node, SessionId, RelatedDip, DatasetId, DatasetRootFileGuid, FileCount, ExpSize).
 
 
 assert_incremental_archive_links(BaseArchiveId, ArchiveId, ModifiedFiles) ->

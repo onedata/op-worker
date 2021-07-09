@@ -137,10 +137,7 @@ create_archive(_Config) ->
                     {<<"config">>, #{<<"incremental">> => #{<<"enabled">> => <<"not a boolean">>}}, ?ERROR_BAD_VALUE_BOOLEAN(<<"config.incremental.enabled">>)},
                     {<<"config">>, #{<<"incremental">> => #{<<"not_enable">> => true}}, ?ERROR_MISSING_REQUIRED_VALUE(<<"config.incremental.enabled">>)},
                     {<<"config">>, #{<<"incremental">> => #{<<"enabled">> => true, <<"basedOn">> => <<"invalid_id">>}}, ?ERROR_BAD_VALUE_IDENTIFIER(<<"config.incremental.basedOn">>)},
-                    % TODO VFS-7653 uncomment following case and remove subsequent one
-                    % {<<"config">>, #{<<"includeDip">> => <<"not boolean">>}, ?ERROR_BAD_VALUE_BOOLEAN(<<"config.includeDip">>)},
-                    {<<"config">>, #{<<"includeDip">> => true},
-                        ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"config.includeDip">>, ?SUPPORTED_INCLUDE_DIP_VALUES)},
+                    {<<"config">>, #{<<"includeDip">> => <<"not boolean">>}, ?ERROR_BAD_VALUE_BOOLEAN(<<"config.includeDip">>)},
                     {<<"config">>, #{<<"createNestedArchives">> => <<"not boolean">>},
                         ?ERROR_BAD_VALUE_BOOLEAN(<<"config.createNestedArchives">>)},
                     {<<"config">>, #{<<"layout">> => <<"not allowed layout">>},
@@ -337,7 +334,9 @@ get_archive_info(_Config) ->
                                 <<"filesArchived">> => 1,
                                 <<"filesFailed">> => 0,
                                 <<"bytesArchived">> => 0
-                            }
+                            },
+                            <<"relatedAipId">> => null,
+                            <<"relatedDipId">> => null
                         },
                         ?assertEqual(?HTTP_200_OK, RespCode),
                         % do not check baseArchive here as its value depends on previous tests

@@ -19,7 +19,7 @@
 %%%  * bagit_archive - module used by archivisation_traverse to archive single file,
 %%%    according to bagit specification. It also contains functions for initializing/
 %%%    and finalizing whole archive complying to bagit specification.
-%%%  * plain_layout - module used by archivisation_traverse to archive single file to
+%%%  * plain_archive - module used by archivisation_traverse to archive single file to
 %%%    a plain archive.
 %%%  * archive - module that implements archive datastore model
 %%%  * archive_config - module that implements persistent_record behaviour,
@@ -69,7 +69,6 @@
 
 % TODO VFS-7617 implement recall operation of archives
 % TODO VFS-7718 improve purging so that archive record is deleted when files are removed from storage
-% TODO VFS-7653 implement creating DIP for an archive
 % TODO VFS-7613 use datastore function for getting number of links in forest to acquire number of archives per dataset
 % TODO VFS-7664 add followLink option to archivisation job
 % TODO VFS-7616 refine archives' attributes
@@ -102,14 +101,21 @@ start_archivisation(
             case archive:create(DatasetId, SpaceId, UserId, Config,
                 PreservedCallback, PurgedCallback, Description, BaseArchiveId)
             of
-                {ok, ArchiveDoc} ->
-                    {ok, ArchiveId} = archive:get_id(ArchiveDoc),
-                    {ok, Timestamp} = archive:get_creation_time(ArchiveDoc),
+                {ok, AipArchiveDoc} ->
+                    {ok, AipArchiveId} = archive:get_id(AipArchiveDoc),
+                    {ok, Timestamp} = archive:get_creation_time(AipArchiveDoc),
                     {ok, SpaceId} = dataset:get_space_id(DatasetDoc),
-                    archives_list:add(DatasetId, SpaceId, ArchiveId, Timestamp),
-                    case archivisation_traverse:start(ArchiveDoc, DatasetDoc, UserCtx) of
+                    {ok, FinalAipArchiveDoc} = case archive_config:should_include_dip(Config) of
+                        true -> 
+                            {ok, #document{key = DipArchiveId}} = archive:create_dip_archive(AipArchiveDoc),
+                            archive:set_related_dip(AipArchiveDoc, DipArchiveId);
+                        false -> 
+                            {ok, AipArchiveDoc}
+                    end, 
+                    archives_list:add(DatasetId, SpaceId, AipArchiveId, Timestamp),
+                    case archivisation_traverse:start(FinalAipArchiveDoc, DatasetDoc, UserCtx) of
                         ok ->
-                            {ok, ArchiveId};
+                            {ok, AipArchiveId};
                         {error, _} = Error ->
                             Error
                     end;
@@ -139,13 +145,15 @@ get_archive_info(ArchiveDoc = #document{}, ArchiveIndex) ->
     {ok, ArchiveId} = archive:get_id(ArchiveDoc),
     {ok, DatasetId} = archive:get_dataset_id(ArchiveDoc),
     {ok, Timestamp} = archive:get_creation_time(ArchiveDoc),
-    {ok, State} = archive:get_state(ArchiveDoc),
+    {ok, State} = get_state(ArchiveDoc),
     {ok, Config} = archive:get_config(ArchiveDoc),
     {ok, ArchiveRootDirGuid} = archive:get_root_dir_guid(ArchiveDoc),
     {ok, PreservedCallback} = archive:get_preserved_callback(ArchiveDoc),
     {ok, PurgedCallback} = archive:get_purged_callback(ArchiveDoc),
     {ok, Description} = archive:get_description(ArchiveDoc),
     {ok, BaseArchiveId} = archive:get_base_archive_id(ArchiveDoc),
+    {ok, RelatedAip} = archive:get_related_aip(ArchiveDoc),
+    {ok, RelatedDip} = archive:get_related_dip(ArchiveDoc),
     {ok, #archive_info{
         id = ArchiveId,
         dataset_id = DatasetId,
@@ -161,7 +169,9 @@ get_archive_info(ArchiveDoc = #document{}, ArchiveIndex) ->
             false -> ArchiveIndex
         end,
         stats = get_aggregated_stats(ArchiveDoc),
-        base_archive_id = BaseArchiveId
+        base_archive_id = BaseArchiveId,
+        related_aip = RelatedAip,
+        related_dip = RelatedDip
     }};
 get_archive_info(ArchiveId, ArchiveIndex) ->
     {ok, ArchiveDoc} = archive:get(ArchiveId),
@@ -208,6 +218,7 @@ remove_archive_recursive(ArchiveDocOrId) ->
 %%% Internal functions
 %%%===================================================================
 
+
 -spec remove_archive_recursive(archive:doc() | archive:id(), archives_forest:token()) -> ok.
 remove_archive_recursive(ArchiveDocOrId, Token) ->
     {ok, ArchiveId} = case ArchiveDocOrId of
@@ -236,8 +247,17 @@ remove_archive(Archive) ->
 
 
 -spec remove_archive(archive:id() | archive:doc(), user_ctx:ctx()) -> ok | error().
+remove_archive(undefined, _UserCtx) ->
+    ok;
 remove_archive(ArchiveDoc = #document{}, _UserCtx) ->
     {ok, ArchiveId} = archive:get_id(ArchiveDoc),
+    {ok, RelatedDip} = archive:get_related_dip(ArchiveDoc),
+    {ok, RelatedAip} = archive:get_related_aip(ArchiveDoc),
+    ok = remove_archive(RelatedDip),
+    case RelatedAip of
+        undefined -> ok;
+        _ -> {ok, _} = archive:set_related_dip(RelatedAip, undefined)
+    end,
     case archive:delete(ArchiveId) of
         ok ->
             {ok, SpaceId} = archive:get_space_id(ArchiveDoc),
@@ -272,8 +292,21 @@ extend_with_archive_info(ArchiveEntries) ->
     lists_utils:pfiltermap(FilterMapFun, ArchiveEntries, ?MAX_LIST_EXTENDED_DATASET_INFO_PROCS).
 
 
+%% @TODO VFS-7932 calculate state separately for DIP and AIP
+-spec get_state(archive:doc() | archive:id()) -> {ok, archive:state()}.
+get_state(#document{value = #archive{related_aip = RelatedAip}}) when is_binary(RelatedAip) ->
+    {ok, AipArchiveDoc} = archive:get(RelatedAip),
+    get_state(AipArchiveDoc);
+get_state(ArchiveDoc = #document{}) ->
+    archive:get_state(ArchiveDoc).
 
+
+
+%% @TODO VFS-7932 calculate stats separately for DIP and AIP
 -spec get_aggregated_stats(archive:doc() | archive:id()) -> archive_stats:record().
+get_aggregated_stats(#document{value = #archive{related_aip = RelatedAip}}) when is_binary(RelatedAip) ->
+    {ok, AipArchiveDoc} = archive:get(RelatedAip),
+    get_aggregated_stats(AipArchiveDoc);
 get_aggregated_stats(ArchiveDoc = #document{}) ->
     {ok, ArchiveStats} = archive:get_stats(ArchiveDoc),
     case archive:is_finished(ArchiveDoc) of

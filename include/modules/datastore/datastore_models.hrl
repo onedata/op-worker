@@ -456,11 +456,21 @@
     data_dir_guid :: undefined | file_id:file_guid(),
     stats = archive_stats:empty() :: archive_stats:record(),
 
+    % Related archives
+    % NOTE: all archive relations are optional and depend on options provided in config. 
+    % Additionally related_aip and related_dip cannot be simultaneously set (not undefined), 
+    % as one archive cannot be AIP and DIP at the same time.
+    
     % if archive has been created directly it has no parent archive
     % if archive has been created indirectly, this fields points to it's parent archive
     parent :: undefined | archive:id(),
     % id of archive that current one is based on if it is incremental
-    base_archive_id :: undefined | archive:id()
+    base_archive_id :: undefined | archive:id(),
+    
+    % Relations between dissemination information package (DIP) 
+    % and archival information package (AIP) archives.
+    related_aip = undefined :: undefined | archive:id(),
+    related_dip = undefined :: undefined | archive:id()
 }).
 
 

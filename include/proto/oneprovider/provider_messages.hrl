@@ -337,7 +337,9 @@
     description :: archive:description(),
     index :: archive_api:index(),
     stats :: archive_stats:record(),
-    base_archive_id :: archive:id() | undefined
+    base_archive_id :: archive:id() | undefined,
+    related_aip :: undefined | archive:id(),
+    related_dip :: undefined | archive:id()
 }).
 
 -record(archives, {

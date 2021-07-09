@@ -20,20 +20,22 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([create/8, create_nested/2, get/1, modify_attrs/2, delete/1]).
+-export([create/8, create_nested/2, create_dip_archive/1, get/1, modify_attrs/2, delete/1]).
 -export([get_root_dir_ctx/1, get_all_ancestors/1, get_dataset_root_file_ctx/1, find_file/3]).
 
 % getters
 -export([get_id/1, get_creation_time/1, get_dataset_id/1, get_dataset_root_file_guid/1, get_space_id/1,
     get_state/1, get_config/1, get_preserved_callback/1, get_purged_callback/1,
     get_description/1, get_stats/1, get_root_dir_guid/1,
-    get_data_dir_guid/1, get_parent/1, get_parent_doc/1, get_base_archive_id/1, is_finished/1
+    get_data_dir_guid/1, get_parent/1, get_parent_doc/1, get_base_archive_id/1,
+    get_related_dip/1, get_related_aip/1, is_finished/1
 ]).
 
 % setters
 -export([mark_building/1, mark_purging/2,
     mark_file_archived/2, mark_file_failed/1, mark_finished/2,
-    set_root_dir_guid/2, set_data_dir_guid/2, set_base_archive_id/2
+    set_root_dir_guid/2, set_data_dir_guid/2, set_base_archive_id/2,
+    set_related_dip/2, set_related_aip/2
 ]).
 
 %% datastore_model callbacks
@@ -127,6 +129,17 @@ create_nested(DatasetId, #document{
             stats = archive_stats:empty()
         },
         scope = SpaceId
+    }).
+
+
+-spec create_dip_archive(archive:doc()) -> {ok, archive:doc()} | {error, term()}.
+create_dip_archive(#document{key = AipArchiveId, value = #archive{config = AipConfig} = AipArchiveValue, scope = Scope}) -> 
+    datastore_model:create(?CTX, #document{
+        value = AipArchiveValue#archive{
+            config = archive_config:enforce_plain_layout(AipConfig),
+            related_aip = AipArchiveId
+        },
+        scope = Scope
     }).
 
 
@@ -291,7 +304,11 @@ get_root_dir_guid(#archive{root_dir_guid = RootDirGuid}) ->
 get_root_dir_guid(#document{value = Archive}) ->
     get_root_dir_guid(Archive).
 
--spec get_data_dir_guid(record() | doc() | id()) -> {ok, file_id:file_guid()}.
+-spec get_data_dir_guid
+    (record() | doc() | id()) -> {ok, file_id:file_guid()};
+    (undefined) -> {ok, undefined}.
+get_data_dir_guid(undefined) -> 
+    {ok, undefined};
 get_data_dir_guid(#archive{data_dir_guid = DataDirGuid}) -> 
     {ok, DataDirGuid};
 get_data_dir_guid(#document{value = Archive}) -> 
@@ -321,6 +338,22 @@ get_base_archive_id(#document{value = Archive}) ->
     get_base_archive_id(Archive);
 get_base_archive_id(ArchiveId) ->
     ?get_field(ArchiveId, fun get_base_archive_id/1).
+
+-spec get_related_dip(record() | doc()) -> {ok, archive:id() | undefined}.
+get_related_dip(#archive{related_dip = RelatedDip}) ->
+    {ok, RelatedDip};
+get_related_dip(#document{value = Archive}) ->
+    get_related_dip(Archive);
+get_related_dip(ArchiveId) ->
+    ?get_field(ArchiveId, fun get_related_dip/1).
+
+-spec get_related_aip(record() | doc()) -> {ok, archive:id() | undefined}.
+get_related_aip(#archive{related_aip = RelatedAIP}) ->
+    {ok, RelatedAIP};
+get_related_aip(#document{value = Archive}) ->
+    get_related_aip(Archive);
+get_related_aip(ArchiveId) ->
+    ?get_field(ArchiveId, fun get_related_aip/1).
 
 -spec is_finished(record() | doc()) -> boolean().
 is_finished(#archive{state = State}) ->
@@ -416,6 +449,20 @@ set_base_archive_id(ArchiveDoc, BaseArchiveId) when is_binary(BaseArchiveId) ->
     end).
 
 
+
+-spec set_related_dip(id() | doc(), archive:id() | undefined) -> {ok, doc()} | error().
+set_related_dip(ArchiveDocOrId, DipArchiveId) ->
+    update(ArchiveDocOrId, fun(Archive) ->
+        {ok, Archive#archive{related_dip = DipArchiveId}}
+    end).
+
+
+-spec set_related_aip(id() | doc(), archive:id() | undefined) -> {ok, doc()} | error().
+set_related_aip(ArchiveDocOrId, AipArchiveId) ->
+    update(ArchiveDocOrId, fun(Archive) ->
+        {ok, Archive#archive{related_aip = AipArchiveId}}
+    end).
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -469,5 +516,7 @@ get_record_struct(1) ->
         {data_dir_guid, string},
         {stats, {custom, string, {persistent_record, encode, decode, archive_stats}}},
         {parent, string},
-        {base_archive_id, string}
+        {base_archive_id, string},
+        {related_dip, string},
+        {related_aip, string}
     ]}.

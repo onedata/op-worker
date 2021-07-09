@@ -63,7 +63,9 @@ translate_archive_info(#archive_info{
     purged_callback = PurgedCallback,
     description = Description,
     stats = Stats,
-    base_archive_id = BaseArchive
+    base_archive_id = BaseArchive,
+    related_aip = RelatedAip,
+    related_dip = RelatedDip
 }) ->
     #{
         <<"archiveId">> => ArchiveId,
@@ -82,5 +84,7 @@ translate_archive_info(#archive_info{
         <<"purgedCallback">> => utils:undefined_to_null(PurgedCallback),
         <<"description">> => Description,
         <<"stats">> => archive_stats:to_json(Stats),
-        <<"baseArchiveId">> => utils:undefined_to_null(BaseArchive)
+        <<"baseArchiveId">> => utils:undefined_to_null(BaseArchive),
+        <<"relatedAipId">> => utils:undefined_to_null(RelatedAip),
+        <<"relatedDipId">> => utils:undefined_to_null(RelatedDip)
     }.
