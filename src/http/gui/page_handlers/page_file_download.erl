@@ -19,6 +19,7 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/errors.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 
 -export([gen_file_download_url/3, handle/2]).
@@ -128,14 +129,13 @@ handle_http_download(FileDownloadCode, SessionId, FileGuids, FollowSymlinks, Req
     Req2 = gui_cors:allow_origin(OzUrl, Req),
     Req3 = gui_cors:allow_frame_origin(OzUrl, Req2),
     FileAttrsList = lists_utils:foldl_while(fun (FileGuid, Acc) ->
-        case lfm:stat(SessionId, ?FILE_REF(FileGuid)) of
+        case lfm:stat(SessionId, ?FILE_REF(FileGuid, false)) of
             {ok, #file_attr{} = FileAttr} -> {cont, [FileAttr | Acc]};
             {error, ?EACCES} -> {cont, Acc};
             {error, ?EPERM} -> {cont, Acc};
             {error, _Errno} = Error -> {halt, Error}
         end
     end, [], FileGuids),
-
     case FileAttrsList of
         {error, Errno} ->
             http_req:send_error(?ERROR_POSIX(Errno), Req3);
@@ -147,7 +147,12 @@ handle_http_download(FileDownloadCode, SessionId, FileGuids, FollowSymlinks, Req
         [#file_attr{name = FileName, type = ?REGULAR_FILE_TYPE} = Attr] ->
             Req4 = set_content_disposition_header(normalize_filename(FileName), Req3),
             file_download_utils:download_single_file(
-                SessionId, Attr, fun() -> file_download_code:remove(FileDownloadCode) end, Req4
+                SessionId, Attr, fun() -> file_download_code:remove(FileDownloadCode) end, FollowSymlinks, Req4
+            );
+        [#file_attr{name = FileName, type = ?SYMLINK_TYPE} = Attr] ->
+            Req4 = set_content_disposition_header(normalize_filename(FileName), Req3),
+            file_download_utils:download_single_file(
+                SessionId, Attr, fun() -> file_download_code:remove(FileDownloadCode) end, FollowSymlinks, Req4
             );
         _ ->
             Timestamp = integer_to_binary(global_clock:timestamp_seconds()),

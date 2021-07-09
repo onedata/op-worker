@@ -148,9 +148,9 @@ process_request(#op_req{
     FollowSymlinks = maps:get(<<"follow_symlinks">>, Data, true),
     case ?check(lfm:stat(SessionId, ?FILE_REF(FileGuid, FollowSymlinks))) of
         {ok, #file_attr{type = ?REGULAR_FILE_TYPE} = FileAttrs} ->
-            file_download_utils:download_single_file(SessionId, FileAttrs, Req);
+            file_download_utils:download_single_file(SessionId, FileAttrs, FollowSymlinks, Req);
         {ok, #file_attr{type = ?SYMLINK_TYPE} = FileAttrs} ->
-            file_download_utils:download_single_file(SessionId, FileAttrs, Req);
+            file_download_utils:download_single_file(SessionId, FileAttrs, FollowSymlinks, Req);
         {ok, #file_attr{guid = ResolvedGuid} = FileAttrs} ->
             case page_file_download:gen_file_download_url(SessionId, [ResolvedGuid], FollowSymlinks) of
                 {ok, Url} -> 

@@ -86,7 +86,9 @@
     % Provider which should execute task
     target_provider_id => oneprovider:id(),
     % if set to 'single', only one master job is performed in parallel for each task - see master_job_mode type definition
-    master_job_mode => traverse:master_job_mode()
+    master_job_mode => traverse:master_job_mode(),
+    % if set to `true` all encountered symlinks will be resolved
+    follow_symlinks => boolean()
 }.
 
 

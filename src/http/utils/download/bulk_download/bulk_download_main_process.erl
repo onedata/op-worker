@@ -154,8 +154,18 @@ handle_multiple_files(
     UpdatedState = stream_file(State, user_ctx:get_session_id(UserCtx), FileAttrs, Name),
     handle_multiple_files(Tail, BulkDownloadId, UserCtx, UpdatedState);
 handle_multiple_files(
+    [#file_attr{type = ?SYMLINK_TYPE, name = Name, guid = Guid}| Tail],
+    BulkDownloadId, UserCtx, #state{follow_symlinks = true} = State
+) ->
+    case check_result(lfm:stat(user_ctx:get_session_id(UserCtx), #file_ref{guid = Guid, follow_symlink = true})) of
+        {ok, ResolvedFileAttrs} ->
+            handle_multiple_files([ResolvedFileAttrs#file_attr{name = Name} | Tail], BulkDownloadId, UserCtx, State);
+        ignored ->
+            handle_multiple_files(Tail, BulkDownloadId, UserCtx, State)
+    end;
+handle_multiple_files(
     [#file_attr{type = ?SYMLINK_TYPE, name = Name} = FileAttrs | Tail],
-    BulkDownloadId, UserCtx, State
+    BulkDownloadId, UserCtx, #state{follow_symlinks = false} = State
 ) ->
     UpdatedState = stream_symlink(State, user_ctx:get_session_id(UserCtx), FileAttrs, Name),
     handle_multiple_files(Tail, BulkDownloadId, UserCtx, UpdatedState).
@@ -166,7 +176,7 @@ handle_multiple_files(
     file_meta:path()) -> state().
 stream_file(State, SessionId, FileAttrs, FileRelativePath) ->
     #file_attr{size = FileSize, guid = Guid} = FileAttrs,
-    case check_read_result(lfm:monitored_open(SessionId, ?FILE_REF(Guid), read)) of
+    case check_result(lfm:monitored_open(SessionId, ?FILE_REF(Guid), read)) of
         {ok, FileHandle} ->
             {Bytes, UpdatedState} = new_tar_file_entry(State, FileAttrs, FileRelativePath),
             UpdatedState1 = send_data(Bytes, UpdatedState),
@@ -195,11 +205,11 @@ stream_file(State, SessionId, FileAttrs, FileRelativePath) ->
 
 %% @private
 -spec stream_symlink(state(), session:id(), lfm_attrs:file_attributes(), file_meta:path()) -> state().
-stream_symlink(State, SessionId, FileAttrs, StartingDirPath) ->
+stream_symlink(State, SessionId, FileAttrs, Path) ->
     #file_attr{guid = Guid} = FileAttrs,
-    case check_read_result(lfm:read_symlink(SessionId, ?FILE_REF(Guid))) of
+    case check_result(lfm:read_symlink(SessionId, ?FILE_REF(Guid))) of
         {ok, LinkPath} ->
-            {Bytes, UpdatedState} = new_tar_file_entry(State, FileAttrs, StartingDirPath, LinkPath),
+            {Bytes, UpdatedState} = new_tar_file_entry(State, FileAttrs, Path, LinkPath),
             send_data(Bytes, UpdatedState);
         ignored ->
             State;
@@ -366,9 +376,9 @@ finalize(#state{id = Id, tar_stream = TarStream}) ->
 
 
 %% @private
--spec check_read_result({ok, term()} | {error, term()}) -> {ok, term()} | {error, term()} | ignored.
-check_read_result({ok, _} = Result) -> Result;
-check_read_result({error, ?ENOENT}) -> ignored;
-check_read_result({error, ?EPERM}) -> ignored;
-check_read_result({error, ?EACCES}) -> ignored;
-check_read_result({error, _} = Error) -> Error.
+-spec check_result({ok, term()} | {error, term()}) -> {ok, term()} | {error, term()} | ignored.
+check_result({ok, _} = Result) -> Result;
+check_result({error, ?ENOENT}) -> ignored;
+check_result({error, ?EPERM}) -> ignored;
+check_result({error, ?EACCES}) -> ignored;
+check_result({error, _} = Error) -> Error.
