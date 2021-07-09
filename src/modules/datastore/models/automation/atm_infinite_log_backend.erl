@@ -9,7 +9,7 @@
 %%% Module with the persistent list store backend implemented using infinite log.
 %%% @end
 %%%-------------------------------------------------------------------
--module(atm_list_store_backend).
+-module(atm_infinite_log_backend).
 -author("Michal Stanisz").
 
 %% API

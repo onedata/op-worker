@@ -1,17 +1,17 @@
 %%%-------------------------------------------------------------------
-%%% @author Michal Stanisz
+%%% @author Lukasz Opiola
 %%% @copyright (C) 2021 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module implements `atm_store_container` functionality for `list`
+%%% This module implements `atm_store_container` functionality for `audit_log`
 %%% atm_store type.
 %%% @end
 %%%-------------------------------------------------------------------
--module(atm_list_store_container).
--author("Michal Stanisz").
+-module(atm_audit_log_store_container).
+-author("Lukasz Opiola").
 
 -behaviour(atm_store_container).
 -behaviour(persistent_record).
@@ -35,10 +35,10 @@
 -type operation_options() :: atm_infinite_log_container:operation_options().
 -type backend_id() :: atm_infinite_log_container:backend_id().
 
--record(atm_list_store_container, {
+-record(atm_audit_log_store_container, {
     atm_infinite_log_container :: atm_infinite_log_container:record()
 }).
--type record() :: #atm_list_store_container{}.
+-type record() :: #atm_audit_log_store_container{}.
 
 -export_type([initial_value/0, operation_options/0, backend_id/0, record/0]).
 
@@ -51,7 +51,7 @@
 -spec create(atm_workflow_execution_ctx:record(), atm_data_spec:record(), initial_value()) ->
     record() | no_return().
 create(AtmWorkflowExecutionCtx, AtmDataSpec, InitialValueBatch) ->
-    #atm_list_store_container{
+    #atm_audit_log_store_container{
         atm_infinite_log_container = atm_infinite_log_container:create(
             AtmWorkflowExecutionCtx, AtmDataSpec, InitialValueBatch
         )
@@ -59,33 +59,34 @@ create(AtmWorkflowExecutionCtx, AtmDataSpec, InitialValueBatch) ->
 
 
 -spec get_data_spec(record()) -> atm_data_spec:record().
-get_data_spec(#atm_list_store_container{atm_infinite_log_container = AtmInfiniteLogContainer}) ->
+get_data_spec(#atm_audit_log_store_container{atm_infinite_log_container = AtmInfiniteLogContainer}) ->
     atm_infinite_log_container:get_data_spec(AtmInfiniteLogContainer).
 
 
+% @fixme add browsing by timestamp
 -spec browse_content(atm_workflow_execution_ctx:record(), atm_store_api:browse_opts(), record()) ->
     atm_store_api:browse_result() | no_return().
-browse_content(AtmWorkflowExecutionCtx, BrowseOpts, #atm_list_store_container{
+browse_content(AtmWorkflowExecutionCtx, BrowseOpts, #atm_audit_log_store_container{
     atm_infinite_log_container = AtmInfiniteLogContainer
 }) ->
     atm_infinite_log_container:browse_content(AtmWorkflowExecutionCtx, BrowseOpts, AtmInfiniteLogContainer).
 
 
--spec acquire_iterator(record()) -> atm_list_store_container_iterator:record().
-acquire_iterator(#atm_list_store_container{atm_infinite_log_container = AtmInfiniteLogContainer}) ->
+-spec acquire_iterator(record()) -> atm_audit_log_store_container_iterator:record().
+acquire_iterator(#atm_audit_log_store_container{atm_infinite_log_container = AtmInfiniteLogContainer}) ->
     atm_infinite_log_container:acquire_iterator(AtmInfiniteLogContainer).
 
 
 -spec apply_operation(record(), atm_store_container:operation()) ->
     record() | no_return().
-apply_operation(#atm_list_store_container{
+apply_operation(#atm_audit_log_store_container{
     atm_infinite_log_container = AtmInfiniteLogContainer
 }, AtmStoreContainerOperation) ->
     atm_infinite_log_container:apply_operation(AtmInfiniteLogContainer, AtmStoreContainerOperation).
 
 
 -spec delete(record()) -> ok.
-delete(#atm_list_store_container{atm_infinite_log_container = AtmInfiniteLogContainer}) ->
+delete(#atm_audit_log_store_container{atm_infinite_log_container = AtmInfiniteLogContainer}) ->
     atm_infinite_log_container:delete(AtmInfiniteLogContainer).
 
 
@@ -101,7 +102,7 @@ version() ->
 
 -spec db_encode(record(), persistent_record:nested_record_encoder()) ->
     json_utils:json_term().
-db_encode(#atm_list_store_container{
+db_encode(#atm_audit_log_store_container{
     atm_infinite_log_container = AtmInfiniteLogContainer
 }, NestedRecordEncoder) ->
         #{
@@ -114,7 +115,7 @@ db_encode(#atm_list_store_container{
 -spec db_decode(json_utils:json_term(), persistent_record:nested_record_decoder()) ->
     record().
 db_decode(#{<<"atmInfiniteLogContainer">> := AtmInfiniteLogContainerJson}, NestedRecordDecoder) ->
-    #atm_list_store_container{
+    #atm_audit_log_store_container{
         atm_infinite_log_container = NestedRecordDecoder(
             AtmInfiniteLogContainerJson, atm_infinite_log_container
         )
