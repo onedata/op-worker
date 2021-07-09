@@ -106,8 +106,13 @@
 
 %formatter:on
 
+% Set of encountered files on the path from the traverse root to the currently processed one. 
+% It is required to efficiently prevent loops when resolving symlinks.
+% Implemented as a map with single possible value (`true`) for performance reason.
+-type encountered_files_set() :: #{file_meta:uuid() => true}.
+
 -export_type([id/0, pool/0, job/0, master_job/0, slave_job/0, child_dirs_job_generation_policy/0,
-    children_master_jobs_mode/0, batch_size/0, traverse_info/0]).
+    children_master_jobs_mode/0, batch_size/0, traverse_info/0, encountered_files_set/0]).
 
 %%%===================================================================
 %%% Main API
@@ -193,7 +198,7 @@ run(Pool, FileCtx, UserId, Opts) ->
         traverse_info = TraverseInfo2,
         follow_symlinks = FollowSymlinks,
         relative_path = InitialRelativePath,
-        encountered_files = #{file_ctx:get_logical_uuid_const(FileCtx2) => true}
+        encountered_files = add_to_set(file_ctx:get_logical_uuid_const(FileCtx2), #{})
     },
     maybe_create_status_doc(Job, TaskId),
     ok = traverse:run(Pool, TaskId, Job, RunOpts4),
@@ -358,10 +363,12 @@ do_master_job_internal(?DIRECTORY_TYPE, Job, TaskId, NewJobsPreprocessor, UserCt
             end,
             {ok, #{slave_jobs => SlaveJobs, ChildrenMasterJobsKey => FinalMasterJobs}}
     end;
-do_master_job_internal(?REGULAR_FILE_TYPE, Job = #tree_traverse{file_ctx = FileCtx, relative_path = RelPath}, _, _, _) ->
-    {ok, #{slave_jobs => [get_child_slave_job(Job, FileCtx, filename:basename(RelPath))]}};
-do_master_job_internal(?SYMLINK_TYPE, Job = #tree_traverse{follow_symlinks = false, file_ctx = FileCtx, relative_path = RelPath}, _, _, _) ->
-    {ok, #{slave_jobs => [get_child_slave_job(Job, FileCtx, filename:basename(RelPath))]}};
+do_master_job_internal(?REGULAR_FILE_TYPE, Job = #tree_traverse{file_ctx = FileCtx}, _, _, _) ->
+    % correct relative path to this file is already set in Job, so passing <<>> as Filename will not extend it
+    {ok, #{slave_jobs => [get_child_slave_job(Job, FileCtx, <<>>)]}};
+do_master_job_internal(?SYMLINK_TYPE, Job = #tree_traverse{follow_symlinks = false, file_ctx = FileCtx}, _, _, _) ->
+    % correct relative path to this file is already set in Job, so passing <<>> as Filename will not extend it
+    {ok, #{slave_jobs => [get_child_slave_job(Job, FileCtx, <<>>)]}};
 do_master_job_internal(?SYMLINK_TYPE, Job = #tree_traverse{follow_symlinks = true, file_ctx = FileCtx}, TaskId, NewJobsPreprocessor, UserCtx) ->
     case resolve_symlink(Job, FileCtx, UserCtx) of
         {ok, ResolvedCtx} ->
@@ -461,20 +468,20 @@ generate_child_jobs(?SYMLINK_TYPE, #tree_traverse{follow_symlinks = true} = Mast
 get_child_master_job(MasterJob = #tree_traverse{
     relative_path = ParentRelativePath, 
     follow_symlinks = FollowSymlinks,
-    encountered_files = PrevEncounteredFiles
+    encountered_files = PrevEncounteredFilesSet
 }, ChildCtx, Filename) ->
     MasterJob2 = reset_list_options(MasterJob),
-    EncounteredFiles = case FollowSymlinks of
+    EncounteredFilesSet = case FollowSymlinks of
         true ->
-            PrevEncounteredFiles#{file_ctx:get_logical_uuid_const(ChildCtx) => true};
+            add_to_set(file_ctx:get_logical_uuid_const(ChildCtx), PrevEncounteredFilesSet);
         false ->
             % there is no need to keeping track of encountered files when there is no symlinks following
-            PrevEncounteredFiles
+            PrevEncounteredFilesSet
     end,
     MasterJob2#tree_traverse{
         file_ctx = ChildCtx, 
         relative_path = filename:join(ParentRelativePath, Filename),
-        encountered_files = EncounteredFiles
+        encountered_files = EncounteredFilesSet
     }.
 
 
@@ -496,12 +503,12 @@ get_child_slave_job(#tree_traverse{
 
 %% @TODO VFS-7923 Unify all symlinks resolution across op_worker
 -spec resolve_symlink(master_job(), file_ctx:ctx(), user_ctx:ctx()) -> {ok, file_ctx:ctx()} | ignore.
-resolve_symlink(#tree_traverse{encountered_files = EncounteredFiles}, SymlinkCtx, UserCtx) ->
+resolve_symlink(#tree_traverse{encountered_files = EncounteredFilesSet}, SymlinkCtx, UserCtx) ->
     SessionId = user_ctx:get_session_id(UserCtx),
     SymlinkGuid = file_ctx:get_logical_guid_const(SymlinkCtx),
     case lfm:resolve_symlink(SessionId, #file_ref{guid = SymlinkGuid}) of
         {ok, ResolvedGuid} ->
-            case maps:get(file_id:guid_to_uuid(ResolvedGuid), EncounteredFiles, false) of
+            case is_set_element(file_id:guid_to_uuid(ResolvedGuid), EncounteredFilesSet) of
                 true -> ignore; % this file was already encountered, there is a loop in symlinks
                 false -> {ok, file_ctx:new_by_guid(ResolvedGuid)}
             end;
@@ -542,3 +549,13 @@ reset_list_options(Job) ->
         last_name = <<>>,
         last_tree = <<>>
     }.
+
+
+-spec is_set_element(file_meta:uuid(), encountered_files_set()) -> boolean().
+is_set_element(Uuid, EncounteredFiles) ->
+    maps:get(Uuid, EncounteredFiles, false).
+
+
+-spec add_to_set(file_meta:uuid(), encountered_files_set()) -> encountered_files_set().
+add_to_set(Uuid, PrevEncounteredFiles) ->
+    PrevEncounteredFiles#{Uuid => true}.

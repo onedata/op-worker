@@ -48,9 +48,9 @@
     follow_symlinks = false :: boolean(),
     % relative path of the processed file to the traverse root
     relative_path = <<>> :: file_meta:path(),
-    % Map of encountered files on the path from the traverse root to the currently processed one. 
+    % Set of encountered files on the path from the traverse root to the currently processed one. 
     % It is required to efficiently prevent loops when resolving symlinks
-    encountered_files = #{} :: #{file_meta:uuid() => true}
+    encountered_files = #{} :: tree_traverse:encountered_files_set()
 }).
 
 % Record that defines slave job
