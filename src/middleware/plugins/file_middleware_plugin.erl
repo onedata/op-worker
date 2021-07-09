@@ -579,7 +579,8 @@ data_spec_get(#gri{aspect = As}) when
 };
 
 data_spec_get(#gri{aspect = download_url}) -> #{
-    required => #{<<"file_ids">> => {list_of_binaries, guid}}
+    required => #{<<"file_ids">> => {list_of_binaries, guid}},
+    optional => #{<<"follow_symlinks">> => {boolean, any}}
 }.
 
 
@@ -805,7 +806,8 @@ get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = dataset_summary}}, _
 get(#op_req{auth = Auth, gri = #gri{aspect = download_url}, data = Data}, _) ->
     SessionId = Auth#auth.session_id,
     FileGuids = maps:get(<<"file_ids">>, Data),
-    case page_file_download:gen_file_download_url(SessionId, FileGuids) of
+    FollowSymlinks = maps:get(<<"follow_symlinks">>, Data, true),
+    case page_file_download:gen_file_download_url(SessionId, FileGuids, FollowSymlinks) of
         {ok, URL} ->
             {ok, value, URL};
         {error, _} = Error ->

@@ -71,8 +71,10 @@ ensure_operation_supported(_, _, _) -> throw(?ERROR_NOT_SUPPORTED).
 
 %% @private
 -spec sanitize_params(middleware:req()) -> middleware:req() | no_return().
-sanitize_params(#op_req{operation = get, gri = #gri{aspect = content}} = OpReq) ->
-    OpReq;
+sanitize_params(#op_req{operation = get, data = RawParams, gri = #gri{aspect = content}} = OpReq) ->
+    OpReq#op_req{data = middleware_sanitizer:sanitize_data(RawParams, #{
+        optional => #{<<"follow_symlinks">> => {boolean, any}}
+    })};
 sanitize_params(#op_req{
     operation = create,
     data = RawParams,
@@ -140,13 +142,17 @@ ensure_has_access_to_file(#op_req{auth = Auth, gri = #gri{id = Guid}}) ->
 process_request(#op_req{
     operation = get,
     auth = #auth{session_id = SessionId},
-    gri = #gri{id = FileGuid, aspect = content}
+    gri = #gri{id = FileGuid, aspect = content},
+    data = Data
 }, Req) ->
-    case ?check(lfm:stat(SessionId, ?FILE_REF(FileGuid, true))) of
+    FollowSymlinks = maps:get(<<"follow_symlinks">>, Data, true),
+    case ?check(lfm:stat(SessionId, ?FILE_REF(FileGuid, FollowSymlinks))) of
         {ok, #file_attr{type = ?REGULAR_FILE_TYPE} = FileAttrs} ->
             file_download_utils:download_single_file(SessionId, FileAttrs, Req);
+        {ok, #file_attr{type = ?SYMLINK_TYPE} = FileAttrs} ->
+            file_download_utils:download_single_file(SessionId, FileAttrs, Req);
         {ok, #file_attr{} = FileAttrs} ->
-            case page_file_download:gen_file_download_url(SessionId, [FileGuid]) of
+            case page_file_download:gen_file_download_url(SessionId, [FileGuid], FollowSymlinks) of
                 {ok, Url} -> 
                     cowboy_req:reply(?HTTP_302_FOUND, #{?HDR_LOCATION => Url}, Req);
                 {error, _} = Error ->

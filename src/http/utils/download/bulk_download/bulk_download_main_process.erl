@@ -30,8 +30,8 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([start/4, resume/2, abort/1]).
--export([report_next_file/2, report_data_sent/2, report_traverse_done/1]).
+-export([start/5, resume/2, abort/1]).
+-export([report_next_file/3, report_data_sent/2, report_traverse_done/1]).
 -export([is_offset_allowed/2]).
 
 -record(state, {
@@ -40,7 +40,8 @@
     buffer = <<>> :: binary(),
     connection_pid :: pid(),
     tar_stream :: tar_utils:stream(),
-    send_retry_delay = 100 :: time:millis()
+    send_retry_delay = 100 :: time:millis(),
+    follow_symlinks = true :: boolean()
 }).
 
 -type state() :: #state{}.
@@ -57,11 +58,11 @@
 %%% API
 %%%===================================================================
 
--spec start(bulk_download:id(), [lfm_attrs:file_attributes()], session:id(), pid()) -> 
+-spec start(bulk_download:id(), [lfm_attrs:file_attributes()], session:id(), pid(), boolean()) -> 
     {ok, pid()} | {error, term()}.
-start(BulkDownloadId, FileAttrsList, SessionId, InitialConn) ->
+start(BulkDownloadId, FileAttrsList, SessionId, InitialConn, FollowSymlinks) ->
     case tree_traverse_session:setup_for_task(user_ctx:new(SessionId), BulkDownloadId) of
-        ok -> {ok, spawn(fun() -> main(BulkDownloadId, FileAttrsList, SessionId, InitialConn) end)};
+        ok -> {ok, spawn(fun() -> main(BulkDownloadId, FileAttrsList, SessionId, InitialConn, FollowSymlinks) end)};
         {error, _} = Error -> Error
     end.
 
@@ -84,9 +85,9 @@ report_data_sent(MainPid, NewDelay) ->
     ok.
 
 
--spec report_next_file(pid(), lfm_attrs:file_attributes()) -> ok.
-report_next_file(MainPid, FileAttrs) -> 
-    MainPid ! ?MSG_NEXT_FILE(FileAttrs, self()),
+-spec report_next_file(pid(), lfm_attrs:file_attributes(), file_meta:path()) -> ok.
+report_next_file(MainPid, FileAttrs, RelativePath) -> 
+    MainPid ! ?MSG_NEXT_FILE(FileAttrs, RelativePath, self()),
     ok.
 
 
@@ -110,11 +111,16 @@ is_offset_allowed(MainPid, Offset) ->
 %%%===================================================================
 
 %% @private
--spec main(bulk_download:id(), [lfm_attrs:file_attributes()], session:id(), pid()) -> no_return().
-main(BulkDownloadId, FileAttrsList, SessionId, InitialConn) ->
+-spec main(bulk_download:id(), [lfm_attrs:file_attributes()], session:id(), pid(), boolean()) -> no_return().
+main(BulkDownloadId, FileAttrsList, SessionId, InitialConn, FollowSymlinks) ->
     bulk_download_task:save_main_pid(BulkDownloadId, self()),
     TarStream = tar_utils:open_archive_stream(#{gzip => false}),
-    State = #state{id = BulkDownloadId, connection_pid = InitialConn, tar_stream = TarStream},
+    State = #state{
+        id = BulkDownloadId, 
+        connection_pid = InitialConn, 
+        tar_stream = TarStream, 
+        follow_symlinks = FollowSymlinks
+    },
     {ok, UserId} = session:get_user_id(SessionId),
     {ok, UserCtx} = tree_traverse_session:acquire_for_task(UserId, ?TARBALL_DOWNLOAD_TRAVERSE_POOL_NAME, BulkDownloadId),
     #state{tar_stream = FinalTarStream} = UpdatedState = 
@@ -132,43 +138,47 @@ main(BulkDownloadId, FileAttrsList, SessionId, InitialConn) ->
 handle_multiple_files([], _BulkDownloadId, _UserCtx, State) -> 
     State;
 handle_multiple_files(
-    [#file_attr{guid = Guid, type = ?DIRECTORY_TYPE} = FileAttrs | Tail],
+    [#file_attr{guid = Guid, type = ?DIRECTORY_TYPE, name = Name} = FileAttrs | Tail],
     BulkDownloadId, UserCtx, State
 ) ->
-    {ok, Path} = get_file_path(Guid),
-    PathPrefix = str_utils:ensure_suffix(filename:dirname(Path), <<"/">>),
     % add starting dir to the tarball here as traverse does not execute slave job on it
-    {Bytes, UpdatedState} = new_tar_file_entry(State, FileAttrs, PathPrefix),
+    {Bytes, UpdatedState} = new_tar_file_entry(State, FileAttrs, Name),
     UpdatedState1 = send_data(Bytes, UpdatedState),
-    bulk_download_traverse:start(BulkDownloadId, UserCtx, Guid),
-    FinalState = wait_for_traverse(UpdatedState1, user_ctx:get_session_id(UserCtx), PathPrefix),
+    bulk_download_traverse:start(BulkDownloadId, UserCtx, Guid, State#state.follow_symlinks, Name),
+    FinalState = wait_for_traverse(UpdatedState1, user_ctx:get_session_id(UserCtx)),
     handle_multiple_files(Tail, BulkDownloadId, UserCtx, FinalState);
 handle_multiple_files(
-    [#file_attr{guid = Guid, type = ?REGULAR_FILE_TYPE} = FileAttrs | Tail], 
+    [#file_attr{type = ?REGULAR_FILE_TYPE, name = Name} = FileAttrs | Tail], 
     BulkDownloadId, UserCtx, State
 ) ->
-    {ok, Path} = get_file_path(Guid),
-    PathPrefix = str_utils:ensure_suffix(filename:dirname(Path), <<"/">>),
-    UpdatedState = stream_file(State, user_ctx:get_session_id(UserCtx), FileAttrs, PathPrefix),
+    UpdatedState = stream_file(State, user_ctx:get_session_id(UserCtx), FileAttrs, Name),
     handle_multiple_files(Tail, BulkDownloadId, UserCtx, UpdatedState);
 handle_multiple_files(
-    [#file_attr{guid = Guid, type = ?SYMLINK_TYPE} = FileAttrs | Tail],
-    BulkDownloadId, UserCtx, State
+    [#file_attr{type = ?SYMLINK_TYPE, name = Name, guid = Guid} | Tail],
+    BulkDownloadId, UserCtx, #state{follow_symlinks = true} = State
 ) ->
-    {ok, Path} = get_file_path(Guid),
-    PathPrefix = str_utils:ensure_suffix(filename:dirname(Path), <<"/">>),
-    UpdatedState = stream_symlink(State, user_ctx:get_session_id(UserCtx), FileAttrs, PathPrefix),
+    case check_result(lfm:stat(user_ctx:get_session_id(UserCtx), #file_ref{guid = Guid, follow_symlink = true})) of
+        {ok, ResolvedFileAttrs} ->
+            handle_multiple_files([ResolvedFileAttrs#file_attr{name = Name} | Tail], BulkDownloadId, UserCtx, State);
+        ignored ->
+            handle_multiple_files(Tail, BulkDownloadId, UserCtx, State)
+    end;
+handle_multiple_files(
+    [#file_attr{type = ?SYMLINK_TYPE, name = Name} = FileAttrs | Tail],
+    BulkDownloadId, UserCtx, #state{follow_symlinks = false} = State
+) ->
+    UpdatedState = stream_symlink(State, user_ctx:get_session_id(UserCtx), FileAttrs, Name),
     handle_multiple_files(Tail, BulkDownloadId, UserCtx, UpdatedState).
 
 
 %% @private
 -spec stream_file(state(), session:id(), lfm_attrs:file_attributes(),
     file_meta:path()) -> state().
-stream_file(State, SessionId, FileAttrs, StartingDirPath) ->
+stream_file(State, SessionId, FileAttrs, FileRelativePath) ->
     #file_attr{size = FileSize, guid = Guid} = FileAttrs,
-    case check_read_result(lfm:monitored_open(SessionId, ?FILE_REF(Guid), read)) of
+    case check_result(lfm:monitored_open(SessionId, ?FILE_REF(Guid), read)) of
         {ok, FileHandle} ->
-            {Bytes, UpdatedState} = new_tar_file_entry(State, FileAttrs, StartingDirPath),
+            {Bytes, UpdatedState} = new_tar_file_entry(State, FileAttrs, FileRelativePath),
             UpdatedState1 = send_data(Bytes, UpdatedState),
             Range = {0, FileSize - 1},
             StreamingCtx = http_streamer:build_ctx(FileHandle, FileSize),
@@ -195,11 +205,11 @@ stream_file(State, SessionId, FileAttrs, StartingDirPath) ->
 
 %% @private
 -spec stream_symlink(state(), session:id(), lfm_attrs:file_attributes(), file_meta:path()) -> state().
-stream_symlink(State, SessionId, FileAttrs, StartingDirPath) ->
+stream_symlink(State, SessionId, FileAttrs, Path) ->
     #file_attr{guid = Guid} = FileAttrs,
-    case check_read_result(lfm:read_symlink(SessionId, ?FILE_REF(Guid))) of
+    case check_result(lfm:read_symlink(SessionId, ?FILE_REF(Guid))) of
         {ok, LinkPath} ->
-            {Bytes, UpdatedState} = new_tar_file_entry(State, FileAttrs, StartingDirPath, LinkPath),
+            {Bytes, UpdatedState} = new_tar_file_entry(State, FileAttrs, Path, LinkPath),
             send_data(Bytes, UpdatedState);
         ignored ->
             State;
@@ -210,22 +220,22 @@ stream_symlink(State, SessionId, FileAttrs, StartingDirPath) ->
 
 
 %% @private
--spec wait_for_traverse(state(), session:id(), file_meta:path()) -> state().
-wait_for_traverse(State, SessionId, RootDirPath) ->
+-spec wait_for_traverse(state(), session:id()) -> state().
+wait_for_traverse(State, SessionId) ->
     receive
-        ?MSG_NEXT_FILE(#file_attr{type = ?REGULAR_FILE_TYPE} = FileAttrs, TraversePid) ->
-            State2 = stream_file(State, SessionId, FileAttrs, RootDirPath),
+        ?MSG_NEXT_FILE(#file_attr{type = ?REGULAR_FILE_TYPE} = FileAttrs, RelativePath, TraversePid) ->
+            State2 = stream_file(State, SessionId, FileAttrs, RelativePath),
             TraversePid ! ?MSG_DONE,
-            wait_for_traverse(State2, SessionId, RootDirPath);
-        ?MSG_NEXT_FILE(#file_attr{type = ?SYMLINK_TYPE} = FileAttrs, TraversePid) ->
-            State2 = stream_symlink(State, SessionId, FileAttrs, RootDirPath),
+            wait_for_traverse(State2, SessionId);
+        ?MSG_NEXT_FILE(#file_attr{type = ?SYMLINK_TYPE} = FileAttrs, RelativePath, TraversePid) ->
+            State2 = stream_symlink(State, SessionId, FileAttrs, RelativePath),
             TraversePid ! ?MSG_DONE,
-            wait_for_traverse(State2, SessionId, RootDirPath);
-        ?MSG_NEXT_FILE(#file_attr{type = ?DIRECTORY_TYPE} = FileAttrs, TraversePid) ->
-            {Bytes, State2} = new_tar_file_entry(State, FileAttrs, RootDirPath),
+            wait_for_traverse(State2, SessionId);
+        ?MSG_NEXT_FILE(#file_attr{type = ?DIRECTORY_TYPE} = FileAttrs, RelativePath, TraversePid) ->
+            {Bytes, State2} = new_tar_file_entry(State, FileAttrs, RelativePath),
             State3 = send_data(Bytes, State2),
             TraversePid ! ?MSG_DONE,
-            wait_for_traverse(State3, SessionId, RootDirPath);
+            wait_for_traverse(State3, SessionId);
         ?MSG_DONE -> 
             State
     end.
@@ -257,28 +267,26 @@ update_sent_bytes_buffer(SentChunk, State) ->
 %% @private
 -spec new_tar_file_entry(state(), lfm_attrs:file_attributes(), file_meta:path()) ->
     {binary(), state()}.
-new_tar_file_entry(TarStream, FileAttrs, StartingDirPath) ->
-    new_tar_file_entry(TarStream, FileAttrs, StartingDirPath, undefined).
+new_tar_file_entry(TarStream, FileAttrs, FileRelativePath) ->
+    new_tar_file_entry(TarStream, FileAttrs, FileRelativePath, undefined).
 
 
 %% @private
 -spec new_tar_file_entry(state(), lfm_attrs:file_attributes(), file_meta:path(), 
     file_meta_symlinks:symlink() | undefined) -> {binary(), state()}.
-new_tar_file_entry(#state{tar_stream = TarStream} = State, FileAttrs, StartingDirPath, SymlinkPath) ->
+new_tar_file_entry(#state{tar_stream = TarStream} = State, FileAttrs, FileRelativePath, SymlinkPath) ->
     #file_attr{mode = Mode, mtime = MTime, type = Type, size = FileSize, guid = Guid} = FileAttrs,
     FinalMode = case {file_id:is_share_guid(Guid), Type} of
         {true, ?REGULAR_FILE_TYPE} -> ?DEFAULT_FILE_PERMS;
         {true, ?DIRECTORY_TYPE} -> ?DEFAULT_DIR_PERMS;
         {_, _} -> Mode
     end,
-    {ok, Path} = get_file_path(Guid),
-    FileRelPath = string:prefix(Path, StartingDirPath),
     TypeSpec = case Type of
         ?DIRECTORY_TYPE -> ?DIRECTORY_TYPE;
         ?REGULAR_FILE_TYPE -> ?REGULAR_FILE_TYPE;
         ?SYMLINK_TYPE -> {?SYMLINK_TYPE, SymlinkPath}
     end,
-    UpdatedTarStream = tar_utils:new_file_entry(TarStream, FileRelPath, FileSize, FinalMode, MTime, TypeSpec),
+    UpdatedTarStream = tar_utils:new_file_entry(TarStream, FileRelativePath, FileSize, FinalMode, MTime, TypeSpec),
     {Bytes, FinalTarStream} = tar_utils:flush_buffer(UpdatedTarStream),
     {Bytes, State#state{tar_stream = FinalTarStream}}.
 
@@ -367,19 +375,10 @@ finalize(#state{id = Id, tar_stream = TarStream}) ->
     exit(kill).
 
 
-%% TODO VFS-6057 resolve share path up to share not user root dir
 %% @private
--spec get_file_path(fslogic_worker:file_guid()) -> {ok, file_meta:path()} | {error, term()}.
-get_file_path(ShareGuid) ->
-    {Uuid, SpaceId, _} = file_id:unpack_share_guid(ShareGuid),
-    Guid = file_id:pack_guid(Uuid, SpaceId),
-    lfm:get_file_path(?ROOT_SESS_ID, Guid).
-
-
-%% @private
--spec check_read_result({ok, term()} | {error, term()}) -> {ok, term()} | {error, term()} | ignored.
-check_read_result({ok, _} = Result) -> Result;
-check_read_result({error, ?ENOENT}) -> ignored;
-check_read_result({error, ?EPERM}) -> ignored;
-check_read_result({error, ?EACCES}) -> ignored;
-check_read_result({error, _} = Error) -> Error.
+-spec check_result({ok, term()} | {error, term()}) -> {ok, term()} | {error, term()} | ignored.
+check_result({ok, _} = Result) -> Result;
+check_result({error, ?ENOENT}) -> ignored;
+check_result({error, ?EPERM}) -> ignored;
+check_result({error, ?EACCES}) -> ignored;
+check_result({error, _} = Error) -> Error.
