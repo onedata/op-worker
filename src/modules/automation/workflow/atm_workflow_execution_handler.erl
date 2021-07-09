@@ -187,9 +187,12 @@ handle_lane_execution_ended(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, Atm
     ok.
 handle_workflow_execution_ended(AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv) ->
     try
-        {ok, AtmWorkflowExecutionDoc} = atm_workflow_execution:get(AtmWorkflowExecutionId),
+        {ok, AtmWorkflowExecutionDoc = #document{value = #atm_workflow_execution{
+            lanes = AtmLaneExecutions
+        }}} = atm_workflow_execution:get(AtmWorkflowExecutionId),
 
         notify_ended(AtmWorkflowExecutionDoc),
+        atm_lane_execution:clean_all(AtmLaneExecutions),
         atm_workflow_execution_session:terminate(AtmWorkflowExecutionId)
     catch _:Reason ->
         % TODO VFS-7637 use audit log

@@ -457,9 +457,21 @@
     data_dir_guid :: undefined | file_id:file_guid(),
     stats = archive_stats:empty() :: archive_stats:record(),
 
+    % Related archives
+    % NOTE: all archive relations are optional and depend on options provided in config. 
+    % Additionally related_aip and related_dip cannot be simultaneously set (not undefined), 
+    % as one archive cannot be AIP and DIP at the same time.
+    
     % if archive has been created directly it has no parent archive
     % if archive has been created indirectly, this fields points to it's parent archive
-    parent :: undefined | archive:id()
+    parent :: undefined | archive:id(),
+    % id of archive that current one is based on if it is incremental
+    base_archive_id :: undefined | archive:id(),
+    
+    % Relations between dissemination information package (DIP) 
+    % and archival information package (AIP) archives.
+    related_aip = undefined :: undefined | archive:id(),
+    related_dip = undefined :: undefined | archive:id()
 }).
 
 
@@ -1175,7 +1187,7 @@
     lowest_failed_job_identifier :: workflow_jobs:job_identifier() | undefined,
 
     iteration_state :: workflow_iteration_state:state() | undefined,
-    prefetched_iteration_step :: workflow_execution_state:iteration_step() | undefined,
+    prefetched_iteration_step :: workflow_execution_state:iteration_status(),
     jobs :: workflow_jobs:jobs() | undefined,
 
     % Field used to return additional information about document update procedure

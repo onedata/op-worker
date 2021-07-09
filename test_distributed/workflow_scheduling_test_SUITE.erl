@@ -408,6 +408,8 @@ end_per_suite(Config) ->
 init_per_testcase(_, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     Master = spawn(fun start_task_execution_gatherer/0),
+    % TODO VFS-7784 - mock iterator and check if forget_before and mark_exhausted after iterators are not needed anymore
+    % TODO VFS-7784 - test iteration failure
     test_utils:mock_new(Workers, [workflow_test_handler, workflow_engine_callback_handler]),
 
     test_utils:mock_expect(Workers, workflow_test_handler, prepare, fun(ExecutionId, Context) ->

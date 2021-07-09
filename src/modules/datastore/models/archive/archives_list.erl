@@ -55,7 +55,9 @@
 %%% API functions
 %%%===================================================================
 
--spec add(dataset:id(), od_space:id(), archive:id(), archive:timestamp()) -> ok.
+-spec add(dataset:id(), od_space:id(), archive:id() | undefined, archive:timestamp()) -> ok.
+add(_DatasetId, _SpaceId, undefined, _Timestamp) ->
+    ok;
 add(DatasetId, SpaceId, ArchiveId, Timestamp) ->
     Link = ?LINK(index(ArchiveId, Timestamp), ArchiveId),
     case datastore_model:add_links(?CTX(SpaceId), ?FOREST(DatasetId), ?LOCAL_TREE_ID, Link) of
