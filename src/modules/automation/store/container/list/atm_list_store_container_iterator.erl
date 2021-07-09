@@ -57,10 +57,17 @@ build(AtmInfiniteLogContainerIterator) ->
     {ok, [atm_value:compressed()], record()} | stop.
 get_next_batch(AtmWorkflowExecutionCtx, BatchSize, #atm_list_store_container_iterator{
     atm_infinite_log_container_iterator = AtmInfiniteLogContainerIterator
-}) ->
-    atm_infinite_log_container_iterator:get_next_batch(
+} = AtmListStoreContainerIterator) ->
+    case atm_infinite_log_container_iterator:get_next_batch(
         AtmWorkflowExecutionCtx, BatchSize, AtmInfiniteLogContainerIterator
-    ).
+    ) of
+        stop ->
+            stop;
+        {ok, Items, NewAtmInfiniteLogContainerIterator} ->
+            {ok, Items, AtmListStoreContainerIterator#atm_list_store_container_iterator{
+                atm_infinite_log_container_iterator = NewAtmInfiniteLogContainerIterator
+            }}
+    end.
 
 
 -spec forget_before(record()) -> ok.
@@ -75,6 +82,7 @@ mark_exhausted(#atm_list_store_container_iterator{
     atm_infinite_log_container_iterator = AtmInfiniteLogContainerIterator
 }) ->
     atm_infinite_log_container_iterator:mark_exhausted(AtmInfiniteLogContainerIterator).
+
 
 %%%===================================================================
 %%% persistent_record callbacks

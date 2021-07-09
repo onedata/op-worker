@@ -62,7 +62,7 @@ get_data_spec(#atm_audit_log_store_container{atm_infinite_log_container = AtmInf
     atm_infinite_log_container:get_data_spec(AtmInfiniteLogContainer).
 
 
-% @fixme add browsing by timestamp
+% @todo VFS-7903 add browsing by timestamp
 -spec browse_content(atm_workflow_execution_ctx:record(), atm_store_api:browse_opts(), record()) ->
     atm_store_api:browse_result() | no_return().
 browse_content(AtmWorkflowExecutionCtx, BrowseOpts, #atm_audit_log_store_container{
@@ -79,10 +79,14 @@ acquire_iterator(#atm_audit_log_store_container{atm_infinite_log_container = Atm
 
 -spec apply_operation(record(), atm_store_container:operation()) ->
     record() | no_return().
-apply_operation(#atm_audit_log_store_container{
+apply_operation(AtmAuditLogStoreContainer = #atm_audit_log_store_container{
     atm_infinite_log_container = AtmInfiniteLogContainer
 }, AtmStoreContainerOperation) ->
-    atm_infinite_log_container:apply_operation(AtmInfiniteLogContainer, AtmStoreContainerOperation).
+    AtmAuditLogStoreContainer#atm_audit_log_store_container{
+        atm_infinite_log_container = atm_infinite_log_container:apply_operation(
+            AtmInfiniteLogContainer, AtmStoreContainerOperation
+        )
+    }.
 
 
 -spec delete(record()) -> ok.

@@ -78,6 +78,7 @@ forget_before(_AtmStoreContainerIterator) ->
 mark_exhausted(_AtmStoreContainerIterator) ->
     ok.
 
+
 %%%===================================================================
 %%% persistent_record callbacks
 %%%===================================================================

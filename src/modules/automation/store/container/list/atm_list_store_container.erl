@@ -78,10 +78,14 @@ acquire_iterator(#atm_list_store_container{atm_infinite_log_container = AtmInfin
 
 -spec apply_operation(record(), atm_store_container:operation()) ->
     record() | no_return().
-apply_operation(#atm_list_store_container{
+apply_operation(AtmListStoreContainer = #atm_list_store_container{
     atm_infinite_log_container = AtmInfiniteLogContainer
 }, AtmStoreContainerOperation) ->
-    atm_infinite_log_container:apply_operation(AtmInfiniteLogContainer, AtmStoreContainerOperation).
+    AtmListStoreContainer#atm_list_store_container{
+        atm_infinite_log_container = atm_infinite_log_container:apply_operation(
+            AtmInfiniteLogContainer, AtmStoreContainerOperation
+        )
+    }.
 
 
 -spec delete(record()) -> ok.
