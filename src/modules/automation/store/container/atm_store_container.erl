@@ -41,19 +41,22 @@
     atm_list_store_container |
     atm_range_store_container |
     atm_single_value_store_container |
-    atm_tree_forest_store_container.
+    atm_tree_forest_store_container |
+    atm_audit_log_store_container.
 
 -type initial_value() ::
     atm_list_store_container:initial_value() |
     atm_range_store_container:initial_value() |
     atm_single_value_store_container:initial_value() |
-    atm_tree_forest_store_container:initial_value().
+    atm_tree_forest_store_container:initial_value() |
+    atm_audit_log_store_container:initial_value().
 
 -type record() ::
     atm_list_store_container:record() |
     atm_range_store_container:record() |
     atm_single_value_store_container:record() |
-    atm_tree_forest_store_container:record().
+    atm_tree_forest_store_container:record() |
+    atm_audit_log_store_container:record().
 
 -type operation_type() :: append | set.
 
@@ -61,7 +64,8 @@
     atm_list_store_container:operation_options() |
     atm_range_store_container:operation_options() |
     atm_single_value_store_container:operation_options() |
-    atm_tree_forest_store_container:operation_options().
+    atm_tree_forest_store_container:operation_options() |
+    atm_audit_log_store_container:operation_options().
 
 -type operation() :: #atm_store_container_operation{}.
 
@@ -182,6 +186,7 @@ db_decode(#{<<"type">> := AtmStoreTypeJson} = AtmStoreContainerJson, NestedRecor
 %% @private
 -spec atm_store_type_to_atm_store_container_type(automation:store_type()) ->
     atm_store_container:type().
+atm_store_type_to_atm_store_container_type(audit_log) -> atm_audit_log_store_container;
 atm_store_type_to_atm_store_container_type(list) -> atm_list_store_container;
 atm_store_type_to_atm_store_container_type(range) -> atm_range_store_container;
 atm_store_type_to_atm_store_container_type(single_value) -> atm_single_value_store_container;
@@ -191,6 +196,7 @@ atm_store_type_to_atm_store_container_type(tree_forest) -> atm_tree_forest_store
 %% @private
 -spec atm_store_container_type_to_atm_store_type(atm_store_container:type()) ->
     automation:store_type().
+atm_store_container_type_to_atm_store_type(atm_audit_log_store_container) -> audit_log;
 atm_store_container_type_to_atm_store_type(atm_list_store_container) -> list;
 atm_store_container_type_to_atm_store_type(atm_range_store_container) -> range;
 atm_store_container_type_to_atm_store_type(atm_single_value_store_container) -> single_value;
