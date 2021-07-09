@@ -69,7 +69,7 @@
     async_cached_results = #{} :: async_results_map(),
 
     tasks_tree :: tasks_tree(),
-    results_iterator
+    results_iterator :: undefined | results_iterator()
 }).
 
 -type job_identifier() :: #job_identifier{}.
@@ -82,6 +82,9 @@
 -type jobs_for_parallel_box() :: ?NO_JOBS_LEFT_FOR_PARALLEL_BOX | ?AT_LEAST_ONE_JOB_LEFT_FOR_PARALLEL_BOX.
 -type item_processing_result() :: ?SUCCESS | ?FAILURE.
 -type processing_type() :: ?JOB_PROCESSING | ?ASYNC_RESULT_PROCESSING.
+
+-define(ITERATION_FINISHED, iteration_finished).
+-type results_iterator() :: gb_sets:iter(job_identifier()) | ?ITERATION_FINISHED.
 
 -export_type([job_identifier/0, jobs/0, item_processing_result/0]).
 
@@ -115,11 +118,12 @@ prepare_next_waiting_job(Jobs = #workflow_jobs{
             end
     end.
 
--spec prepare_next_waiting_result(jobs()) -> {ok, job_identifier(), jobs()} | ?ERROR_NOT_FOUND.
+-spec prepare_next_waiting_result(jobs()) ->
+    {{ok, job_identifier()} | ?ERROR_NOT_FOUND, jobs()} | ?WF_ERROR_ITERATION_FINISHED.
 prepare_next_waiting_result(Jobs = #workflow_jobs{results_iterator = undefined, waiting = Waiting}) ->
     prepare_next_waiting_result(Jobs#workflow_jobs{results_iterator = gb_sets:iterator(Waiting)});
-prepare_next_waiting_result(#workflow_jobs{results_iterator = none}) ->
-    ?ERROR_NOT_FOUND;
+prepare_next_waiting_result(#workflow_jobs{results_iterator = ?ITERATION_FINISHED}) ->
+    ?WF_ERROR_ITERATION_FINISHED;
 prepare_next_waiting_result(Jobs = #workflow_jobs{
     waiting = Waiting,
     ongoing = Ongoing,
@@ -130,11 +134,11 @@ prepare_next_waiting_result(Jobs = #workflow_jobs{
             NewWaiting = gb_sets:delete(JobIdentifier, Waiting),
             NewOngoing = gb_sets:insert(JobIdentifier, Ongoing),
             NewJobs = Jobs#workflow_jobs{waiting = NewWaiting, ongoing = NewOngoing, results_iterator = NextIterator},
-            {ok, JobIdentifier, maybe_remove_async_cached_result(NewJobs, JobIdentifier)};
+            {{ok, JobIdentifier}, maybe_remove_async_cached_result(NewJobs, JobIdentifier)};
         {_, NextIterator} ->
             prepare_next_waiting_result(Jobs#workflow_jobs{results_iterator = NextIterator});
         none ->
-            prepare_next_waiting_result(Jobs#workflow_jobs{results_iterator = none})
+            {?ERROR_NOT_FOUND, Jobs#workflow_jobs{results_iterator = ?ITERATION_FINISHED}}
     end.
 
 -spec populate_with_jobs_for_item(
@@ -260,6 +264,7 @@ prepare_next_parallel_box(
             }}
     end.
 
+-spec has_ongoing_jobs(jobs()) -> boolean().
 has_ongoing_jobs(#workflow_jobs{ongoing = Ongoing}) ->
     not gb_sets:is_empty(Ongoing).
 

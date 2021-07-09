@@ -1165,7 +1165,7 @@
     handler :: workflow_handler:handler(),
     context :: workflow_engine:execution_context(),
 
-    preparation_status = not_prepared :: workflow_execution_state:preparation_status(),
+    execution_status = not_prepared :: workflow_execution_state:execution_status(),
     current_lane :: workflow_execution_state:current_lane() | undefined,
     lowest_failed_job_identifier :: workflow_jobs:job_identifier() | undefined,
 

@@ -201,6 +201,7 @@ handle_item_processed(
         items_finished_ahead = FinalFinishedAhead
     }, undefined, IdsToDelete}.
 
+-spec get_all_item_ids(state()) -> [workflow_cached_item:id()].
 get_all_item_ids(#iteration_state{pending_items = Pending, items_finished_ahead = FinishedAhead}) ->
     maps:values(Pending) ++ gb_trees:values(FinishedAhead).
 

@@ -134,6 +134,7 @@ execute_workflow(EngineId, ExecutionSpec) ->
             ok
     end.
 
+-spec cancel_execution(execution_id()) -> ok.
 cancel_execution(ExecutionId) ->
     workflow_execution_state:cancel(ExecutionId).
 
