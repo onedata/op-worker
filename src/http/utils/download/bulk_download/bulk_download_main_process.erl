@@ -144,7 +144,7 @@ handle_multiple_files(
     % add starting dir to the tarball here as traverse does not execute slave job on it
     {Bytes, UpdatedState} = new_tar_file_entry(State, FileAttrs, Name),
     UpdatedState1 = send_data(Bytes, UpdatedState),
-    bulk_download_traverse:start(BulkDownloadId, UserCtx, Guid, State#state.follow_symlinks),
+    bulk_download_traverse:start(BulkDownloadId, UserCtx, Guid, State#state.follow_symlinks, Name),
     FinalState = wait_for_traverse(UpdatedState1, user_ctx:get_session_id(UserCtx)),
     handle_multiple_files(Tail, BulkDownloadId, UserCtx, FinalState);
 handle_multiple_files(
@@ -154,7 +154,7 @@ handle_multiple_files(
     UpdatedState = stream_file(State, user_ctx:get_session_id(UserCtx), FileAttrs, Name),
     handle_multiple_files(Tail, BulkDownloadId, UserCtx, UpdatedState);
 handle_multiple_files(
-    [#file_attr{type = ?SYMLINK_TYPE, name = Name, guid = Guid}| Tail],
+    [#file_attr{type = ?SYMLINK_TYPE, name = Name, guid = Guid} | Tail],
     BulkDownloadId, UserCtx, #state{follow_symlinks = true} = State
 ) ->
     case check_result(lfm:stat(user_ctx:get_session_id(UserCtx), #file_ref{guid = Guid, follow_symlink = true})) of

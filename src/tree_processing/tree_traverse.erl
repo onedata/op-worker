@@ -88,7 +88,8 @@
     % if set to 'single', only one master job is performed in parallel for each task - see master_job_mode type definition
     master_job_mode => traverse:master_job_mode(),
     % if set to `true` all encountered symlinks will be resolved
-    follow_symlinks => boolean()
+    follow_symlinks => boolean(),
+    initial_relative_path => file_meta:path()
 }.
 
 
@@ -161,6 +162,8 @@ run(Pool, FileCtx, UserId, Opts) ->
         false -> undefined
     end,
     FollowSymlinks = maps:get(follow_symlinks, Opts, false),
+    {Filename, FileCtx2} = file_ctx:get_aliased_name(FileCtx, undefined),
+    InitialRelativePath = maps:get(initial_relative_path, Opts, Filename),
 
     RunOpts = case maps:get(target_provider_id, Opts, undefined) of
         undefined -> #{executor => oneprovider:get_id_or_undefined()};
@@ -179,7 +182,6 @@ run(Pool, FileCtx, UserId, Opts) ->
         AdditionalData -> RunOpts3#{additional_data => AdditionalData}
     end,
 
-    {Filename, FileCtx2} = file_ctx:get_aliased_name(FileCtx, undefined),
     Job = #tree_traverse{
         file_ctx = FileCtx2,
         user_id = UserId,
@@ -190,7 +192,7 @@ run(Pool, FileCtx, UserId, Opts) ->
         batch_size = BatchSize,
         traverse_info = TraverseInfo2,
         follow_symlinks = FollowSymlinks,
-        relative_path = Filename,
+        relative_path = InitialRelativePath,
         encountered_files = #{file_ctx:get_logical_uuid_const(FileCtx2) => true}
     },
     maybe_create_status_doc(Job, TaskId),

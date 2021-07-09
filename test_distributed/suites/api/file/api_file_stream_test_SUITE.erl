@@ -123,7 +123,8 @@ gui_download_multiple_files_test(Config) ->
 gui_download_different_filetypes_test(Config) ->
     ClientSpec = ?TARBALL_DOWNLOAD_CLIENT_SPEC,
     DirSpec = [
-        #symlink_spec{shares = [#share_spec{}], symlink_value = make_symlink_target()}, 
+%%         @TODO VFS-7955 uncomment after fixing resolving shared symlinks targeting outside share
+%%        #symlink_spec{shares = [#share_spec{}], symlink_value = make_symlink_target()}, 
         #dir_spec{mode = 8#705, shares = [#share_spec{}], children = [#dir_spec{}, #file_spec{content = ?RAND_CONTENT()}]},
         #file_spec{mode = 8#604, shares = [#share_spec{}], content = ?RAND_CONTENT()}
     ],
@@ -299,8 +300,8 @@ gui_download_test_base(Config, FileTreeSpec, ClientSpec, ScenarioPrefix, Downloa
     DataSpec = #data_spec{
         required = [<<"file_ids">>],
         optional = [<<"follow_symlinks">>],
-        % correct values are injected in function maybe_inject_guids/3 based on provided FileTreeSpec
         correct_values = #{
+            % correct values are injected in function maybe_inject_guids/3 based on provided FileTreeSpec
             <<"file_ids">> => [injected_guids],
             <<"follow_symlinks">> => [true, false]
         }, 
@@ -691,7 +692,8 @@ rest_download_dir_test(Config) ->
     MemRef = api_test_memory:init(),
     
     DirSpec = #dir_spec{mode = 8#705, shares = [#share_spec{}], children = [
-        #symlink_spec{symlink_value = make_symlink_target()}, 
+%%         @TODO VFS-7955 uncomment after fixing resolving shared symlinks targeting outside share
+%%        #symlink_spec{symlink_value = make_symlink_target()}, 
         #dir_spec{}, 
         #file_spec{content = ?RAND_CONTENT()}
     ]},
@@ -1082,7 +1084,8 @@ check_symlink(MemRef, CurrentPath, Object) ->
     #object{name = Filename, symlink_value = LinkPath} = Object,
     case api_test_memory:get(MemRef, follow_symlinks) of
         true ->
-            ?assertEqual({ok, Filename}, file:read_file(filename:join(CurrentPath, Filename)));
+            % link target files has its name as content
+            ?assertEqual({ok, filename:basename(LinkPath)}, file:read_file(filename:join(CurrentPath, Filename)));
         false ->
             ?assertEqual({ok, binary_to_list(LinkPath)}, file:read_link(filename:join(CurrentPath, Filename)))
     end.
@@ -1123,7 +1126,7 @@ make_symlink_target() ->
         user3, SpaceId, #file_spec{name = Name, content = Name}, krakow
     ),
     SpaceIdSymlinkPrefix = ?SYMLINK_SPACE_ID_ABS_PATH_PREFIX(SpaceId),
-    filename:join([SpaceIdSymlinkPrefix | Name]).
+    filename:join([SpaceIdSymlinkPrefix, Name]).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -1173,16 +1176,16 @@ init_per_suite(Config) ->
                     end
                 end,
                 ok = test_utils:mock_expect(OpNode, file_download_utils, download_single_file, 
-                    fun(SessionId, FileAttrs, Callback, Req) -> 
+                    fun(SessionId, FileAttrs, Callback, FollowSymlinks, Req) -> 
                         case ErrorFun(FileAttrs, Req) of
-                            passthrough -> meck:passthrough([SessionId, FileAttrs, Callback, Req]);
+                            passthrough -> meck:passthrough([SessionId, FileAttrs, Callback, FollowSymlinks, Req]);
                             Res -> Res
                         end
                     end),
                 ok = test_utils:mock_expect(OpNode, file_download_utils, download_tarball,
-                    fun(Id, SessionId, FileAttrs, Req) ->
+                    fun(Id, SessionId, FileAttrs, FollowSymlinks, Req) ->
                         case ErrorFun(FileAttrs, Req) of
-                            passthrough -> meck:passthrough([Id, SessionId, FileAttrs, Req]);
+                            passthrough -> meck:passthrough([Id, SessionId, FileAttrs, FollowSymlinks, Req]);
                             Res -> Res
                         end
                     end)

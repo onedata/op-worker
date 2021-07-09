@@ -50,8 +50,8 @@ download_single_file(SessionId, #file_attr{type = ?SYMLINK_TYPE, guid = Guid}, O
     case lfm:stat(SessionId, #file_ref{guid = Guid, follow_symlink = true}) of
         {ok, ResolvedFileAttr} ->
             download_single_file(SessionId, ResolvedFileAttr, OnSuccessCallback, true, Req0);
-        {error, _} = Error ->
-            cowboy_req:reply(errors:to_http_code(Error), Req0)
+        {error, Errno} ->
+            http_req:send_error(?ERROR_POSIX(Errno), Req0)
     end;
 download_single_file(SessionId, #file_attr{type = ?SYMLINK_TYPE} = FileAttr, OnSuccessCallback, false, Req0) ->
     download_single_symlink(SessionId, FileAttr, OnSuccessCallback, Req0).
@@ -144,8 +144,8 @@ download_single_symlink(SessionId, #file_attr{guid = Guid}, OnSuccessCallback, R
             execute_on_success_callback(Guid, OnSuccessCallback),
             http_streamer:close_stream(undefined, Req1),
             Req1;
-        {error, _} = Error ->
-            cowboy_req:reply(errors:to_http_code(Error), Req0)
+        {error, Errno} ->
+            http_req:send_error(?ERROR_POSIX(Errno), Req0)
     end.
 
 
