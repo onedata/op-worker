@@ -39,7 +39,7 @@
 % Macros for hard links (link is equal to hardlink - see file_meta_hardlinks.erl)
 -define(LINK_UUID_PREFIX, "link_").
 -define(LINK_UUID_SEPARATOR, "_file_").
--define(LINK_UUID_RAND_PART_BYTES, 4).
+-define(LINK_UUID_RAND_PART_BYTES, 8).
 % Macro for symlinks
 -define(SYMLINK_UUID_PREFIX, "smlnk_").
 

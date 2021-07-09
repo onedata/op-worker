@@ -16,6 +16,7 @@
 
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/errors.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([save/4, get/1, cleanup/1]).
@@ -54,13 +55,28 @@ save(ExecutionId, LaneIndex, ItemIndex, Iterator) ->
     end,
     case datastore_model:update(?CTX, ExecutionId, Diff, Record) of
         {ok, _} ->
-            % Mark iterator exhausted after change of line
-            % (each line has new iterator and iterator for previous line can be destroyed)
-            case PrevLaneIndex =/= undefined andalso PrevLaneIndex < LaneIndex of
-                true -> iterator:mark_exhausted(PrevIterator); % TODO VFS-7787 - handle without additional get
+            % Mark iterator exhausted after change of lane
+            % (each lane has new iterator and iterator for previous lane can be destroyed)
+            case PrevLaneIndex =/= 0 andalso PrevLaneIndex < LaneIndex of
+                true -> mark_exhausted(PrevIterator, ExecutionId); % TODO VFS-7787 - handle without additional get
                 false -> ok
             end,
-            iterator:forget_before(Iterator);
+            case ItemIndex of
+                0 ->
+                    % Execution of `forget_before` function results in forgetting all iteration data needed for
+                    % iterators previous to the argument. If `ItemIndex` is equal to 0, there are no previous iterators
+                    % so `forget_before` should not be called.
+                    ok;
+                _ ->
+                    try
+                        iterator:forget_before(Iterator)
+                    catch
+                        Error:Reason ->
+                            ?error_stacktrace("Unexpected error forgeting iteration data prevoius to current iterator "
+                                "(execution id: ~p): ~p:~p", [ExecutionId, Error, Reason]),
+                            ok
+                    end
+            end;
         {error, already_saved} ->
             ok
     end.
@@ -79,9 +95,24 @@ get(ExecutionId) ->
 cleanup(ExecutionId) ->
     case ?MODULE:get(ExecutionId) of
         {ok, _LaneIndex, Iterator} ->
-            iterator:mark_exhausted(Iterator),
+            mark_exhausted(Iterator, ExecutionId),
             ok = datastore_model:delete(?CTX, ExecutionId);
         ?ERROR_NOT_FOUND ->
+            ok
+    end.
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+-spec mark_exhausted(iterator:iterator(), workflow_engine:execution_id()) -> ok.
+mark_exhausted(Iterator, ExecutionId) ->
+    try
+        iterator:mark_exhausted(Iterator)
+    catch
+        Error:Reason ->
+            ?error_stacktrace("Unexpected error marking exhausted iterator for execution: ~p ~p:~p",
+                [ExecutionId, Error, Reason]),
             ok
     end.
 

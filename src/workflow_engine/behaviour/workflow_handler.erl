@@ -34,7 +34,7 @@
 %%--------------------------------------------------------------------
 %% @doc
 %% Callback that prepares workflow execution. It will be called once
-%% before get_lane_spec is called for the first line.
+%% before get_lane_spec is called for the first lane.
 %% @end
 %%--------------------------------------------------------------------
 -callback prepare(
@@ -100,7 +100,7 @@
 %% Warning: there is no guarantee that callbacks for tasks are called
 %% exactly the same order as the tasks were finished.
 %% Warning: This callback can be called after call of
-%% handle_lane_execution_ended callback for task's line.
+%% handle_lane_execution_ended callback for task's lane.
 %% TODO VFS-VFS-7848 - pause further processing until notification
 %% callback is processed
 %% @end
@@ -118,8 +118,8 @@
 %% Callback reporting that all tasks in given lane have been executed
 %% for all items.
 %% Warning: this callback can be called multiple times for single lane
-%% even after next line processing start. However, it is guaranteed that
-%% it will be called at least once before next line processing start.
+%% even after next lane processing start. However, it is guaranteed that
+%% it will be called at least once before next lane processing start.
 %% @end
 %%--------------------------------------------------------------------
 -callback handle_lane_execution_ended(

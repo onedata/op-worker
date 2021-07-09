@@ -25,13 +25,13 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([init/1, init_group/0, invalidate_on_all_nodes/1]).
+-export([init/1, init_group/0, invalidate_on_all_nodes/1, invalidate_on_all_nodes/2]).
 -export([get/1, get_eff_ancestor_datasets/1, get_eff_dataset_protection_flags/1, get_eff_file_protection_flags/1]).
 -compile([{no_auto_import, [get/1]}]).
 
 
 %% RPC API
--export([invalidate/1]).
+-export([invalidate/2]).
 
 -define(CACHE_GROUP, <<"dataset_effective_cache_group">>).
 -define(CACHE_NAME(SpaceId),
@@ -40,6 +40,8 @@
 -define(CACHE_SIZE, op_worker:get_env(dataset_eff_cache_size, 65536)).
 -define(CHECK_FREQUENCY, op_worker:get_env(dataset_check_frequency, 30000)).
 -define(CACHE_OPTS, #{group => ?CACHE_GROUP}).
+
+-define(INVALIDATE_ON_DATASETS_GET, invalidate_on_datasets_get).
 
 -record(entry, {
     direct_attached_dataset :: undefined | dataset:id(),
@@ -104,8 +106,13 @@ init(SpaceId) ->
 
 -spec invalidate_on_all_nodes(od_space:id()) -> ok.
 invalidate_on_all_nodes(SpaceId) ->
+    invalidate_on_all_nodes(SpaceId, false).
+
+
+-spec invalidate_on_all_nodes(od_space:id(), boolean()) -> ok.
+invalidate_on_all_nodes(SpaceId, DatasetsOnly) ->
     Nodes = consistent_hashing:get_all_nodes(),
-    {Res, BadNodes} = rpc:multicall(Nodes, ?MODULE, invalidate, [SpaceId]),
+    {Res, BadNodes} = rpc:multicall(Nodes, ?MODULE, invalidate, [SpaceId, DatasetsOnly]),
 
     case BadNodes of
         [] ->
@@ -140,7 +147,7 @@ get_eff_ancestor_datasets(FileDoc) ->
 get_eff_dataset_protection_flags(#entry{eff_dataset_protection_flags = EffProtectionFlags}) ->
     {ok, EffProtectionFlags};
 get_eff_dataset_protection_flags(FileDoc) ->
-    case get(FileDoc) of
+    case get(FileDoc, false) of
         {ok, Entry} ->
             get_eff_dataset_protection_flags(Entry);
         {error, _} = Error ->
@@ -152,7 +159,7 @@ get_eff_dataset_protection_flags(FileDoc) ->
 get_eff_file_protection_flags(#entry{eff_file_protection_flags = EffProtectionFlags}) ->
     {ok, EffProtectionFlags};
 get_eff_file_protection_flags(FileDoc) ->
-    case get(FileDoc) of
+    case get(FileDoc, false) of
         {ok, Entry} ->
             get_eff_file_protection_flags(Entry);
         {error, _} = Error ->
@@ -161,7 +168,20 @@ get_eff_file_protection_flags(FileDoc) ->
 
 
 -spec get(file_meta:doc()) -> {ok, entry()} | error().
-get(FileDoc = #document{key = FileUuid}) ->
+get(FileDoc) ->
+    get(FileDoc, true).
+
+
+-spec get(file_meta:doc(), boolean()) -> {ok, entry()} | error().
+get(FileDoc, true = _CheckInvalidateOnDatasetsGetFlag) ->
+    {ok, SpaceId} = file_meta:get_scope_id(FileDoc),
+    case effective_value:get(?CACHE_NAME(SpaceId), ?INVALIDATE_ON_DATASETS_GET) of
+        {ok, true} -> invalidate(SpaceId, false);
+        _ -> ok
+    end,
+
+    get(FileDoc, false);
+get(FileDoc = #document{key = FileUuid}, false = _CheckInvalidateOnDatasetsGetFlag) ->
     case fslogic_uuid:is_root_dir_uuid(FileUuid) orelse fslogic_uuid:is_share_root_dir_uuid(FileUuid) of
         true ->
             {ok, #entry{}};
@@ -194,10 +214,12 @@ get(FileDoc = #document{key = FileUuid}) ->
 %%% RPC API functions
 %%%===================================================================
 
--spec invalidate(od_space:id()) -> ok.
-invalidate(SpaceId) ->
+-spec invalidate(od_space:id(), boolean()) -> ok.
+invalidate(SpaceId, false = _DatasetsOnly) ->
     ok = effective_value:invalidate(?CACHE_NAME(SpaceId)),
-    ok = permissions_cache:invalidate_on_node().
+    ok = permissions_cache:invalidate_on_node();
+invalidate(SpaceId, true = _DatasetsOnly) ->
+    effective_value:cache(?CACHE_NAME(SpaceId), ?INVALIDATE_ON_DATASETS_GET, true).
 
 %%%===================================================================
 %%% Internal functions

@@ -17,12 +17,6 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 
-
--type algorithm() :: ?MD5 | ?SHA1 | ?SHA256 | ?SHA512.
--type algorithms() :: [algorithm()].
-
--export_type([algorithm/0, algorithms/0]).
-
 %% API
 -export([create_manifests/3, add_entries_to_manifests/5]).
 
@@ -32,18 +26,18 @@
 %%% API functions
 %%%===================================================================
 
--spec create_manifests(file_ctx:ctx(), user_ctx:ctx(), algorithms()) -> ok.
+-spec create_manifests(file_ctx:ctx(), user_ctx:ctx(), file_checksum:algorithms()) -> ok.
 create_manifests(ArchiveDirCtx, UserCtx, Algorithms) ->
     lists:foreach(fun(Algorithm) ->
         create_manifest(ArchiveDirCtx, UserCtx, Algorithm)
     end, Algorithms).
 
 
--spec add_entries_to_manifests(file_ctx:ctx(), user_ctx:ctx(), file_meta:path(), bagit_checksums_calculator:checksums(),
-    algorithms()) -> ok.
+-spec add_entries_to_manifests(file_ctx:ctx(), user_ctx:ctx(), file_meta:path(), file_checksum:checksums(),
+    file_checksum:algorithms()) -> ok.
 add_entries_to_manifests(ArchiveDirCtx, UserCtx, RelativeFilePath, CalculatedChecksums, Algorithms) ->
     lists:foreach(fun(Algorithm) ->
-        Checksum = bagit_checksums_calculator:get(Algorithm, CalculatedChecksums),
+        Checksum = file_checksum:get(Algorithm, CalculatedChecksums),
         ManifestFileCtx = get_manifest_file_ctx(ArchiveDirCtx, UserCtx, Algorithm),
         add_entry_to_manifest(ManifestFileCtx, UserCtx, RelativeFilePath, Checksum)
     end, Algorithms).
@@ -52,7 +46,7 @@ add_entries_to_manifests(ArchiveDirCtx, UserCtx, RelativeFilePath, CalculatedChe
 %%% Internal functions
 %%%===================================================================
 
--spec create_manifest(file_ctx:ctx(), user_ctx:ctx(), algorithm()) -> ok.
+-spec create_manifest(file_ctx:ctx(), user_ctx:ctx(), file_checksum:algorithm()) -> ok.
 create_manifest(ArchiveDirCtx, UserCtx, Algorithm) ->
     SessionId = user_ctx:get_session_id(UserCtx),
     ParentGuid = file_ctx:get_logical_guid_const(ArchiveDirCtx),
@@ -75,7 +69,7 @@ add_entry_to_manifest(ManifestFileCtx, UserCtx, FilePath, Checksum) ->
     end).
 
 
--spec get_manifest_file_ctx(file_ctx:ctx(), user_ctx:ctx(), algorithm()) -> file_ctx:ctx().
+-spec get_manifest_file_ctx(file_ctx:ctx(), user_ctx:ctx(), file_checksum:algorithm()) -> file_ctx:ctx().
 get_manifest_file_ctx(ArchiveRootDirCtx, UserCtx, Algorithm) ->
     {ManifestFileCtx, _} = files_tree:get_child(ArchiveRootDirCtx, ?CHECKSUM_MANIFEST_FILE_NAME(Algorithm), UserCtx),
     ManifestFileCtx.

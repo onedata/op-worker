@@ -134,7 +134,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([prepare/2, finalize/2, archive_file/4]).
+-export([prepare/2, finalize/2, archive_file/5]).
 
 
 %%%===================================================================
@@ -157,10 +157,10 @@ finalize(ArchiveDirCtx, UserCtx) ->
     create_tag_manifests(ArchiveDirCtx, UserCtx).
 
 
--spec archive_file(archive:doc(), file_ctx:ctx(), file_ctx:ctx(), user_ctx:ctx()) ->
+-spec archive_file(archive:doc(), file_ctx:ctx(), file_ctx:ctx(), archive:doc() | undefined, user_ctx:ctx()) ->
     {ok, file_ctx:ctx()} | {error, term()}.
-archive_file(ArchiveDoc, FileCtx, TargetParentCtx, UserCtx) ->
-    case plain_archive:archive_file(FileCtx, TargetParentCtx, UserCtx) of
+archive_file(ArchiveDoc, FileCtx, TargetParentCtx, BaseArchiveDoc, UserCtx) ->
+    case plain_archive:archive_file(ArchiveDoc, FileCtx, TargetParentCtx, BaseArchiveDoc, UserCtx) of
         {ok, ArchivedFileCtx} ->
             {FileDoc, ArchivedFileCtx2} = file_ctx:get_file_doc(ArchivedFileCtx),
             case file_meta:get_effective_type(FileDoc) =:= ?REGULAR_FILE_TYPE of
@@ -205,8 +205,7 @@ create_bag_declaration(ParentCtx, UserCtx) ->
 save_checksums_and_archive_custom_metadata(CurrentArchiveDoc, UserCtx, ArchivedFileCtx, SourceFileCtx) ->
     % TODO VFS-7819 allow to pass this algorithms in archivisation request as param
     ChecksumAlgorithms = ?SUPPORTED_CHECKSUM_ALGORITHMS,
-
-    CalculatedChecksums = bagit_checksums_calculator:calculate(ArchivedFileCtx, UserCtx, ChecksumAlgorithms),
+    CalculatedChecksums = file_checksum:calculate(ArchivedFileCtx, UserCtx, ChecksumAlgorithms),
 
     SessionId = user_ctx:get_session_id(UserCtx),
     ArchiveFileGuid = file_ctx:get_logical_guid_const(ArchivedFileCtx),
@@ -231,13 +230,11 @@ save_checksums_and_archive_custom_metadata(CurrentArchiveDoc, UserCtx, ArchivedF
 -spec calculate_relative_path(archive:doc(), file_ctx:ctx(), user_ctx:ctx()) -> file_meta:path().
 calculate_relative_path(ArchiveDoc, SourceFileCtx, UserCtx) ->
     {SourceFilePath, _SourceFileCtx2} = file_ctx:get_logical_path(SourceFileCtx, UserCtx),
-    {ok, DatasetRootFileGuid} = archive:get_dataset_root_file_guid(ArchiveDoc),
-    {DatasetRootPath, _} = file_ctx:get_logical_path(file_ctx:new_by_guid(DatasetRootFileGuid), UserCtx),
+    {ok, DatasetRootFileCtx} = archive:get_dataset_root_file_ctx(ArchiveDoc),
+    {DatasetRootPath, _} = file_ctx:get_logical_path(DatasetRootFileCtx, UserCtx),
     {_, DatasetRootParentPath} = filepath_utils:basename_and_parent_dir(DatasetRootPath),
-    DatasetRootParentPathTokens = filename:split(DatasetRootParentPath),
-    SourceFilePathTokens = filename:split(SourceFilePath),
 
-    filename:join([?DATA_DIR_NAME | SourceFilePathTokens -- DatasetRootParentPathTokens]).
+    filename:join([?DATA_DIR_NAME, filepath_utils:relative(DatasetRootParentPath, SourceFilePath)]).
 
 
 -spec create_tag_manifests(file_ctx:ctx(), user_ctx:ctx()) -> ok.
@@ -251,7 +248,7 @@ create_tag_manifests(ArchiveDirCtx, UserCtx) ->
 
     AllTagFilesNamesAndChecksums = lists:map(fun(TagFileName) ->
         {TagFileCtx, _} = files_tree:get_child(ArchiveDirCtx, TagFileName, UserCtx),
-        {TagFileName, bagit_checksums_calculator:calculate(TagFileCtx, UserCtx, ChecksumAlgorithms)}
+        {TagFileName, file_checksum:calculate(TagFileCtx, UserCtx, ChecksumAlgorithms)}
     end, AllTagFileNames),
 
     lists:foreach(fun(ChecksumAlgorithm) ->
@@ -259,7 +256,7 @@ create_tag_manifests(ArchiveDirCtx, UserCtx) ->
             ?TAG_MANIFEST_FILE_NAME(ChecksumAlgorithm), ?DEFAULT_FILE_MODE, write),
 
         {_, FinalHandle} = lists:foldl(fun({TagFileName, TagFileChecksums}, {OffsetAcc, HandleAcc}) ->
-            Checksum = bagit_checksums_calculator:get(ChecksumAlgorithm, TagFileChecksums),
+            Checksum = file_checksum:get(ChecksumAlgorithm, TagFileChecksums),
             Entry = ?MANIFEST_FILE_ENTRY(Checksum, TagFileName),
             {ok, NewHandle, WrittenBytes} = lfm:write(HandleAcc, OffsetAcc, Entry),
             {OffsetAcc + WrittenBytes, NewHandle}

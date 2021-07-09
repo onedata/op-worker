@@ -19,6 +19,7 @@
 -export([
     create_all/4, create/4,
     prepare_all/2, prepare/2,
+    clean_all/1, clean/1,
     delete_all/1, delete/1,
 
     get_spec/1,
@@ -80,8 +81,7 @@ create(AtmWorkflowExecutionCreationCtx, AtmLaneIndex, AtmParallelBoxIndex, #atm_
         AtmWorkflowExecutionCtx
     ),
 
-    #document{value = #od_atm_lambda{
-        operation_spec = AtmLambdaOperationSpec,
+    AtmLambdaDoc = #document{value = #od_atm_lambda{
         argument_specs = AtmLambdaArgSpecs,
         result_specs = AtmLambdaResultSpecs
     }} = maps:get(AtmLambdaId, AtmLambdaDocs),
@@ -93,7 +93,7 @@ create(AtmWorkflowExecutionCreationCtx, AtmLaneIndex, AtmParallelBoxIndex, #atm_
 
         schema_id = AtmTaskSchemaId,
 
-        executor = atm_task_executor:create(AtmWorkflowExecutionId, AtmLambdaOperationSpec),
+        executor = atm_task_executor:create(AtmWorkflowExecutionId, AtmLambdaDoc),
         argument_specs = atm_task_execution_arguments:build_specs(
             AtmLambdaArgSpecs, AtmTaskSchemaArgMappers
         ),
@@ -135,6 +135,22 @@ prepare(AtmWorkflowExecutionCtx, AtmTaskExecutionIdOrDoc) ->
         AtmTaskExecutionIdOrDoc
     ),
     atm_task_executor:prepare(AtmWorkflowExecutionCtx, AtmTaskExecutor).
+
+
+-spec clean_all([atm_task_execution:id()]) -> ok.
+clean_all(AtmTaskExecutionIds) ->
+    lists:foreach(
+        fun(AtmTaskExecutionId) -> catch clean(AtmTaskExecutionId) end,
+        AtmTaskExecutionIds
+    ).
+
+
+-spec clean(atm_task_execution:id()) -> ok | no_return().
+clean(AtmTaskExecutionId) ->
+    #document{value = #atm_task_execution{executor = AtmTaskExecutor}} = ensure_atm_task_execution_doc(
+        AtmTaskExecutionId
+    ),
+    atm_task_executor:clean(AtmTaskExecutor).
 
 
 -spec delete_all([atm_task_execution:id()]) -> ok.
