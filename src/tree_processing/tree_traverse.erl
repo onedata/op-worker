@@ -551,6 +551,10 @@ reset_list_options(Job) ->
     }.
 
 
+%%%===================================================================
+%% Files set API
+%%%===================================================================
+
 -spec is_set_element(file_meta:uuid(), encountered_files_set()) -> boolean().
 is_set_element(Uuid, EncounteredFiles) ->
     maps:get(Uuid, EncounteredFiles, false).

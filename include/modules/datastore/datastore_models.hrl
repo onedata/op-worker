@@ -1039,7 +1039,7 @@
     relative_path = <<>> :: file_meta:path(),
     % Set of encountered files on the path from the traverse root to the currently processed one. 
     % It is required to efficiently prevent loops when resolving symlinks
-    encountered_files = #{} :: tree_traverse:encountered_files_set()
+    encountered_files :: tree_traverse:encountered_files_set()
 }).
 
 %% Model that holds information necessary to tell whether whole subtree
