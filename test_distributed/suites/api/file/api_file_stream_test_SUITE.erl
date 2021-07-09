@@ -707,15 +707,6 @@ rest_download_dir_test(Config) ->
             _ -> check_tarball(MemRef, RespBody, FileTreeObject)
         end
     end,
-    DataSpec = #data_spec{
-        optional = [<<"follow_symlinks">>],
-        correct_values = #{
-            <<"follow_symlinks">> => [true, false]
-        },
-        bad_values = [
-            {<<"follow_symlinks">>, <<"not_a_boolean">>, ?ERROR_BAD_VALUE_BOOLEAN(<<"follow_symlinks">>)}
-        ]
-    },
     
     ?assert(onenv_api_test_runner:run_tests([
         #scenario_spec{
@@ -731,7 +722,7 @@ rest_download_dir_test(Config) ->
     
             % correct data is set up in build_rest_download_prepare_args_fun/2
             data_spec = api_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
-                DirGuid, undefined, DataSpec)
+                DirGuid, undefined, #data_spec{})
         },
         #scenario_spec{
             name = <<"Download shared dir using rest endpoint">>,
@@ -746,7 +737,7 @@ rest_download_dir_test(Config) ->
             
             % correct data is set up in build_rest_download_prepare_args_fun/2
             data_spec = api_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
-                DirGuid, DirShareId, DataSpec
+                DirGuid, DirShareId, #data_spec{}
             )
         }
     ])).
@@ -780,7 +771,7 @@ build_rest_download_prepare_args_fun(MemRef, TestMode) ->
 
         #rest_args{
             method = get,
-            path = http_utils:append_url_parameters(<<"data/", Id/binary, "/content">>, Data1),
+            path = <<"data/", Id/binary, "/content">>,
             headers = case maps:get(<<"range">>, Data1, undefined) of
                 undefined -> #{};
                 Range -> #{<<"range">> => element(1, Range)}
