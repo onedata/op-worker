@@ -358,10 +358,10 @@ do_master_job_internal(?DIRECTORY_TYPE, Job, TaskId, NewJobsPreprocessor, UserCt
             end,
             {ok, #{slave_jobs => SlaveJobs, ChildrenMasterJobsKey => FinalMasterJobs}}
     end;
-do_master_job_internal(?REGULAR_FILE_TYPE, Job = #tree_traverse{file_ctx = FileCtx, relative_path = Filename}, _, _, _) ->
-    {ok, #{slave_jobs => [get_child_slave_job(Job, FileCtx, Filename)]}};
-do_master_job_internal(?SYMLINK_TYPE, Job = #tree_traverse{follow_symlinks = false, file_ctx = FileCtx, relative_path = Filename}, _, _, _) ->
-    {ok, #{slave_jobs => [get_child_slave_job(Job, FileCtx, Filename)]}};
+do_master_job_internal(?REGULAR_FILE_TYPE, Job = #tree_traverse{file_ctx = FileCtx, relative_path = RelPath}, _, _, _) ->
+    {ok, #{slave_jobs => [get_child_slave_job(Job, FileCtx, filename:basename(RelPath))]}};
+do_master_job_internal(?SYMLINK_TYPE, Job = #tree_traverse{follow_symlinks = false, file_ctx = FileCtx, relative_path = RelPath}, _, _, _) ->
+    {ok, #{slave_jobs => [get_child_slave_job(Job, FileCtx, filename:basename(RelPath))]}};
 do_master_job_internal(?SYMLINK_TYPE, Job = #tree_traverse{follow_symlinks = true, file_ctx = FileCtx}, TaskId, NewJobsPreprocessor, UserCtx) ->
     case resolve_symlink(Job, FileCtx, UserCtx) of
         {ok, ResolvedCtx} ->
@@ -460,13 +460,21 @@ generate_child_jobs(?SYMLINK_TYPE, #tree_traverse{follow_symlinks = true} = Mast
 -spec get_child_master_job(master_job(), file_ctx:ctx(), file_meta:name()) -> master_job().
 get_child_master_job(MasterJob = #tree_traverse{
     relative_path = ParentRelativePath, 
+    follow_symlinks = FollowSymlinks,
     encountered_files = PrevEncounteredFiles
 }, ChildCtx, Filename) ->
     MasterJob2 = reset_list_options(MasterJob),
+    EncounteredFiles = case FollowSymlinks of
+        true ->
+            PrevEncounteredFiles#{file_ctx:get_logical_uuid_const(ChildCtx) => true};
+        false ->
+            % there is no need to keeping track of encountered files when there is no symlinks following
+            PrevEncounteredFiles
+    end,
     MasterJob2#tree_traverse{
         file_ctx = ChildCtx, 
         relative_path = filename:join(ParentRelativePath, Filename),
-        encountered_files = PrevEncounteredFiles#{file_ctx:get_logical_uuid_const(ChildCtx) => true}
+        encountered_files = EncounteredFiles
     }.
 
 
