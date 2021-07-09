@@ -39,11 +39,11 @@
 %%--------------------------------------------------------------------
 -spec gen_file_download_url(session:id(), [fslogic_worker:file_guid()], boolean()) ->
     {ok, binary()} | errors:error().
-gen_file_download_url(SessionId, FileGuids, FollowLinks) ->
+gen_file_download_url(SessionId, FileGuids, FollowSymlinks) ->
     try
         maybe_sync_first_file_block(SessionId, FileGuids),
         Hostname = oneprovider:get_domain(),
-        {ok, Code} = file_download_code:create(SessionId, FileGuids, FollowLinks),
+        {ok, Code} = file_download_code:create(SessionId, FileGuids, FollowSymlinks),
         URL = str_utils:format_bin("https://~s~s/~s", [
             Hostname, ?FILE_DOWNLOAD_PATH, Code
         ]),
@@ -65,8 +65,8 @@ gen_file_download_url(SessionId, FileGuids, FollowLinks) ->
 handle(<<"GET">>, Req) ->
     FileDownloadCode = cowboy_req:binding(code, Req),
     case file_download_code:verify(FileDownloadCode) of
-        {true, SessionId, FileGuids, FollowLinks} ->
-            handle_http_download(FileDownloadCode, SessionId, FileGuids, FollowLinks, Req);
+        {true, SessionId, FileGuids, FollowSymlinks} ->
+            handle_http_download(FileDownloadCode, SessionId, FileGuids, FollowSymlinks, Req);
         false ->
             case bulk_download:can_continue(FileDownloadCode) of
                 true -> 
@@ -123,7 +123,7 @@ maybe_sync_first_file_block(_SessionId, _FileGuids) ->
     cowboy_req:req()
 ) ->
     cowboy_req:req().
-handle_http_download(FileDownloadCode, SessionId, FileGuids, FollowLinks, Req) ->
+handle_http_download(FileDownloadCode, SessionId, FileGuids, FollowSymlinks, Req) ->
     OzUrl = oneprovider:get_oz_url(),
     Req2 = gui_cors:allow_origin(OzUrl, Req),
     Req3 = gui_cors:allow_frame_origin(OzUrl, Req2),
@@ -142,7 +142,7 @@ handle_http_download(FileDownloadCode, SessionId, FileGuids, FollowLinks, Req) -
         [#file_attr{name = FileName, type = ?DIRECTORY_TYPE}] ->
             Req4 = set_content_disposition_header(<<(normalize_filename(FileName))/binary, ".tar">>, Req3),
             file_download_utils:download_tarball(
-                FileDownloadCode, SessionId, FileAttrsList, FollowLinks, Req4
+                FileDownloadCode, SessionId, FileAttrsList, FollowSymlinks, Req4
             );
         [#file_attr{name = FileName, type = ?REGULAR_FILE_TYPE} = Attr] ->
             Req4 = set_content_disposition_header(normalize_filename(FileName), Req3),
@@ -153,7 +153,7 @@ handle_http_download(FileDownloadCode, SessionId, FileGuids, FollowLinks, Req) -
             Timestamp = integer_to_binary(global_clock:timestamp_seconds()),
             Req4 = set_content_disposition_header(<<"onedata-download-", Timestamp/binary, ".tar">>, Req3),
             file_download_utils:download_tarball(
-                FileDownloadCode, SessionId, FileAttrsList, FollowLinks, Req4
+                FileDownloadCode, SessionId, FileAttrsList, FollowSymlinks, Req4
             )
     end.
 

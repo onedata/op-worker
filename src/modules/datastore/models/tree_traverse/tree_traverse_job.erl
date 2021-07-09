@@ -62,7 +62,7 @@ save_master_job(Key, Job = #tree_traverse{
     track_subtree_status = TrackSubtreeStatus,
     batch_size = BatchSize,
     traverse_info = TraverseInfo,
-    follow_symlinks = FollowLinks,
+    follow_symlinks = FollowSymlinks,
     relative_path = RelativePath,
     encountered_files = EncounteredFilesMap
 }, Pool, TaskId, CallbackModule) ->
@@ -82,7 +82,7 @@ save_master_job(Key, Job = #tree_traverse{
         track_subtree_status = TrackSubtreeStatus,
         batch_size = BatchSize,
         traverse_info = term_to_binary(TraverseInfo),
-        follow_symlinks = FollowLinks,
+        follow_symlinks = FollowSymlinks,
         relative_path = RelativePath,
         encountered_files = EncounteredFilesMap
     },
@@ -116,7 +116,7 @@ get_master_job(#document{value = #tree_traverse_job{
     track_subtree_status = TrackSubtreeStatus,
     batch_size = BatchSize,
     traverse_info = TraverseInfo,
-    follow_symlinks = FollowLinks,
+    follow_symlinks = FollowSymlinks,
     relative_path = RelativePath,
     encountered_files = EncounteredFilesMap
 }}) ->
@@ -137,7 +137,7 @@ get_master_job(#document{value = #tree_traverse_job{
                 track_subtree_status = TrackSubtreeStatus,
                 batch_size = BatchSize,
                 traverse_info = binary_to_term(TraverseInfo),
-                follow_symlinks = FollowLinks,
+                follow_symlinks = FollowSymlinks,
                 relative_path = RelativePath,
                 encountered_files = EncounteredFilesMap
             },
@@ -328,17 +328,12 @@ upgrade_record(3, Record) ->
         UseListingToken,
         LastName,
         LastTree,
-        ExecuteSlaveOnDir,
+        ChildDirsJobGenerationPolicy ,
         ChildrenMasterJobsMode,
         TrackSubtreeStatus,
         BatchSize,
         TraverseInfo
     } = Record,
-    
-    ChildDirsJobGenerationPolicy = case ExecuteSlaveOnDir of
-        false -> generate_master_jobs;
-        true -> generate_slave_and_master_jobs
-    end,
     
     {4, {?MODULE,
         Pool,

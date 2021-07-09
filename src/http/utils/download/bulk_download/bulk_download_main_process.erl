@@ -60,9 +60,9 @@
 
 -spec start(bulk_download:id(), [lfm_attrs:file_attributes()], session:id(), pid(), boolean()) -> 
     {ok, pid()} | {error, term()}.
-start(BulkDownloadId, FileAttrsList, SessionId, InitialConn, FollowLinks) ->
+start(BulkDownloadId, FileAttrsList, SessionId, InitialConn, FollowSymlinks) ->
     case tree_traverse_session:setup_for_task(user_ctx:new(SessionId), BulkDownloadId) of
-        ok -> {ok, spawn(fun() -> main(BulkDownloadId, FileAttrsList, SessionId, InitialConn, FollowLinks) end)};
+        ok -> {ok, spawn(fun() -> main(BulkDownloadId, FileAttrsList, SessionId, InitialConn, FollowSymlinks) end)};
         {error, _} = Error -> Error
     end.
 
@@ -112,14 +112,14 @@ is_offset_allowed(MainPid, Offset) ->
 
 %% @private
 -spec main(bulk_download:id(), [lfm_attrs:file_attributes()], session:id(), pid(), boolean()) -> no_return().
-main(BulkDownloadId, FileAttrsList, SessionId, InitialConn, FollowLinks) ->
+main(BulkDownloadId, FileAttrsList, SessionId, InitialConn, FollowSymlinks) ->
     bulk_download_task:save_main_pid(BulkDownloadId, self()),
     TarStream = tar_utils:open_archive_stream(#{gzip => false}),
     State = #state{
         id = BulkDownloadId, 
         connection_pid = InitialConn, 
         tar_stream = TarStream, 
-        follow_symlinks = FollowLinks
+        follow_symlinks = FollowSymlinks
     },
     {ok, UserId} = session:get_user_id(SessionId),
     {ok, UserCtx} = tree_traverse_session:acquire_for_task(UserId, ?TARBALL_DOWNLOAD_TRAVERSE_POOL_NAME, BulkDownloadId),

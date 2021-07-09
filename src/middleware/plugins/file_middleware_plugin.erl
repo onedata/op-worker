@@ -806,8 +806,8 @@ get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = dataset_summary}}, _
 get(#op_req{auth = Auth, gri = #gri{aspect = download_url}, data = Data}, _) ->
     SessionId = Auth#auth.session_id,
     FileGuids = maps:get(<<"file_ids">>, Data),
-    FollowLinks = maps:get(<<"follow_symlinks">>, Data, true),
-    case page_file_download:gen_file_download_url(SessionId, FileGuids, FollowLinks) of
+    FollowSymlinks = maps:get(<<"follow_symlinks">>, Data, true),
+    case page_file_download:gen_file_download_url(SessionId, FileGuids, FollowSymlinks) of
         {ok, URL} ->
             {ok, value, URL};
         {error, _} = Error ->

@@ -49,7 +49,7 @@
 
 
 -spec create(session:id(), [fslogic_worker:file_guid()], boolean()) -> {ok, code()} | {error, term()}.
-create(SessionId, FileGuids, FollowLinks) ->
+create(SessionId, FileGuids, FollowSymlinks) ->
     Ctx = ?CTX,
 
     ExpirationInterval = ?EXPIRATION_INTERVAL,
@@ -62,7 +62,7 @@ create(SessionId, FileGuids, FollowLinks) ->
             expires = ?NOW() + ExpirationInterval,
             session_id = SessionId,
             file_guids = FileGuids,
-            follow_symlinks = FollowLinks
+            follow_symlinks = FollowSymlinks
         }
     },
     case datastore_model:save(CtxWithExpiration, Doc) of
@@ -80,9 +80,9 @@ verify(Code) ->
             expires = Expires,
             session_id = SessionId,
             file_guids = FileGuids,
-            follow_symlinks = FollowLinks
+            follow_symlinks = FollowSymlinks
         }}} when Now < Expires ->
-            {true, SessionId, FileGuids, FollowLinks};
+            {true, SessionId, FileGuids, FollowSymlinks};
         {ok, _} ->
             ok = datastore_model:delete(?CTX, Code),
             false;

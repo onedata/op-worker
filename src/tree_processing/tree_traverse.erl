@@ -158,7 +158,7 @@ run(Pool, FileCtx, UserId, Opts) ->
         true -> ?INITIAL_LS_TOKEN;
         false -> undefined
     end,
-    FollowLinks = maps:get(follow_symlinks, Opts, false),
+    FollowSymlinks = maps:get(follow_symlinks, Opts, false),
 
     RunOpts = case maps:get(target_provider_id, Opts, undefined) of
         undefined -> #{executor => oneprovider:get_id_or_undefined()};
@@ -187,7 +187,7 @@ run(Pool, FileCtx, UserId, Opts) ->
         track_subtree_status = TrackSubtreeStatus,
         batch_size = BatchSize,
         traverse_info = TraverseInfo2,
-        follow_symlinks = FollowLinks,
+        follow_symlinks = FollowSymlinks,
         relative_path = Filename,
         encountered_files = #{file_ctx:get_logical_uuid_const(FileCtx2) => true}
     },

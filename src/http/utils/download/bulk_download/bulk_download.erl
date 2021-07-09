@@ -71,14 +71,14 @@
 
 -spec run(id(), [lfm_attrs:file_attributes()], session:id(), boolean(), cowboy_req:req()) -> 
     ok | {error, term()}.
-run(BulkDownloadId, FileAttrsList, SessionId, FollowLinks, CowboyReq) ->
+run(BulkDownloadId, FileAttrsList, SessionId, FollowSymlinks, CowboyReq) ->
     Conn = self(),
     case bulk_download_task:get_main_pid(BulkDownloadId) of
         {ok, Pid} -> bulk_download_main_process:abort(Pid);
         _ -> ok
     end,
     {ok, MainPid} = bulk_download_main_process:start(
-        BulkDownloadId, FileAttrsList, SessionId, Conn, FollowLinks),
+        BulkDownloadId, FileAttrsList, SessionId, Conn, FollowSymlinks),
     data_streaming_loop(BulkDownloadId, MainPid, CowboyReq).
     
 
