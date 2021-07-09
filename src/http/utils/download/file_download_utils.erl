@@ -21,7 +21,7 @@
 
 %% API
 -export([
-    download_single_file/4, download_single_file/5,
+    download_single_file/3, download_single_file/4,
     download_tarball/5
 ]).
 
@@ -30,30 +30,22 @@
 %%% API
 %%%===================================================================
 
--spec download_single_file(session:id(), lfm_attrs:file_attributes(), boolean(), cowboy_req:req()) ->
+-spec download_single_file(session:id(), lfm_attrs:file_attributes(), cowboy_req:req()) ->
     cowboy_req:req().
-download_single_file(SessionId, FileAttrs, FollowSymlinks, Req) ->
-    download_single_file(SessionId, FileAttrs, fun() -> ok end, FollowSymlinks, Req).
+download_single_file(SessionId, FileAttrs, Req) ->
+    download_single_file(SessionId, FileAttrs, fun() -> ok end, Req).
 
 
 -spec download_single_file(
     session:id(),
     lfm_attrs:file_attributes(),
     OnSuccessCallback :: fun(() -> ok),
-    boolean(),
     cowboy_req:req()
 ) ->
     cowboy_req:req().
-download_single_file(SessionId, #file_attr{type = ?REGULAR_FILE_TYPE} = FileAttr, OnSuccessCallback, _FollowSymlinks, Req0) -> 
+download_single_file(SessionId, #file_attr{type = ?REGULAR_FILE_TYPE} = FileAttr, OnSuccessCallback, Req0) -> 
     download_single_regular_file(SessionId, FileAttr, OnSuccessCallback, Req0);
-download_single_file(SessionId, #file_attr{type = ?SYMLINK_TYPE, guid = Guid}, OnSuccessCallback, true, Req0) ->
-    case lfm:stat(SessionId, #file_ref{guid = Guid, follow_symlink = true}) of
-        {ok, ResolvedFileAttr} ->
-            download_single_file(SessionId, ResolvedFileAttr, OnSuccessCallback, true, Req0);
-        {error, Errno} ->
-            http_req:send_error(?ERROR_POSIX(Errno), Req0)
-    end;
-download_single_file(SessionId, #file_attr{type = ?SYMLINK_TYPE} = FileAttr, OnSuccessCallback, false, Req0) ->
+download_single_file(SessionId, #file_attr{type = ?SYMLINK_TYPE} = FileAttr, OnSuccessCallback, Req0) ->
     download_single_symlink(SessionId, FileAttr, OnSuccessCallback, Req0).
     
 

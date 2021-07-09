@@ -328,7 +328,7 @@ upgrade_record(3, Record) ->
         UseListingToken,
         LastName,
         LastTree,
-        ChildDirsJobGenerationPolicy ,
+        ChildDirsJobGenerationPolicy,
         ChildrenMasterJobsMode,
         TrackSubtreeStatus,
         BatchSize,

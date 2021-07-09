@@ -1176,9 +1176,9 @@ init_per_suite(Config) ->
                     end
                 end,
                 ok = test_utils:mock_expect(OpNode, file_download_utils, download_single_file, 
-                    fun(SessionId, FileAttrs, Callback, FollowSymlinks, Req) -> 
+                    fun(SessionId, FileAttrs, Callback, Req) -> 
                         case ErrorFun(FileAttrs, Req) of
-                            passthrough -> meck:passthrough([SessionId, FileAttrs, Callback, FollowSymlinks, Req]);
+                            passthrough -> meck:passthrough([SessionId, FileAttrs, Callback, Req]);
                             Res -> Res
                         end
                     end),

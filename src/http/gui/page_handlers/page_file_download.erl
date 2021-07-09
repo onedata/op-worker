@@ -136,23 +136,38 @@ handle_http_download(FileDownloadCode, SessionId, FileGuids, FollowSymlinks, Req
             {error, _Errno} = Error -> {halt, Error}
         end
     end, [], FileGuids),
-    case FileAttrsList of
-        {error, Errno} ->
+    case {FileAttrsList, FollowSymlinks} of
+        {{error, Errno}, _} ->
             http_req:send_error(?ERROR_POSIX(Errno), Req3);
-        [#file_attr{name = FileName, type = ?DIRECTORY_TYPE}] ->
+        {[#file_attr{name = FileName, type = ?DIRECTORY_TYPE}], _} ->
             Req4 = set_content_disposition_header(<<(normalize_filename(FileName))/binary, ".tar">>, Req3),
             file_download_utils:download_tarball(
                 FileDownloadCode, SessionId, FileAttrsList, FollowSymlinks, Req4
             );
-        [#file_attr{name = FileName, type = ?REGULAR_FILE_TYPE} = Attr] ->
+        {[#file_attr{name = FileName, type = ?REGULAR_FILE_TYPE} = Attr], _} ->
             Req4 = set_content_disposition_header(normalize_filename(FileName), Req3),
             file_download_utils:download_single_file(
-                SessionId, Attr, fun() -> file_download_code:remove(FileDownloadCode) end, FollowSymlinks, Req4
+                SessionId, Attr, fun() -> file_download_code:remove(FileDownloadCode) end, Req4
             );
-        [#file_attr{name = FileName, type = ?SYMLINK_TYPE} = Attr] ->
+        {[#file_attr{name = FileName, type = ?SYMLINK_TYPE, guid = Guid} = Attr], true} ->
+            case lfm:stat(SessionId, ?FILE_REF(Guid, true)) of
+                {ok, #file_attr{type = ?DIRECTORY_TYPE}} ->
+                    Req4 = set_content_disposition_header(<<(normalize_filename(FileName))/binary, ".tar">>, Req3),
+                    file_download_utils:download_tarball(
+                        FileDownloadCode, SessionId, FileAttrsList, FollowSymlinks, Req4
+                    );
+                {ok, #file_attr{} = ResolvedAttr} ->
+                    Req4 = set_content_disposition_header(normalize_filename(FileName), Req3),
+                    file_download_utils:download_single_file(
+                        SessionId, ResolvedAttr, fun() -> file_download_code:remove(FileDownloadCode) end, Req4
+                    );
+                {error, Errno} ->
+                    http_req:send_error(?ERROR_POSIX(Errno), Req3)
+            end;
+        {[#file_attr{name = FileName, type = ?SYMLINK_TYPE} = Attr], false} ->
             Req4 = set_content_disposition_header(normalize_filename(FileName), Req3),
             file_download_utils:download_single_file(
-                SessionId, Attr, fun() -> file_download_code:remove(FileDownloadCode) end, FollowSymlinks, Req4
+                SessionId, Attr, fun() -> file_download_code:remove(FileDownloadCode) end, Req4
             );
         _ ->
             Timestamp = integer_to_binary(global_clock:timestamp_seconds()),
