@@ -344,7 +344,8 @@ read(Handle, Offset, Size) ->
     {ok, Size :: non_neg_integer()} | {error, Reason :: term()}.
 write(Handle, Offset, Data) ->
     Res = ?MODULE:apply_helper_nif(Handle, write, [Offset, Data]),
-    % TODO VFS-7934 Make sure Data is not released until write is complete
+    % Make sure Data is not released until write is complete
+    % TODO VFS-7934 - check if next line is necessary
     _ = byte_size(Data),
     Res.
 
