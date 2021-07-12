@@ -343,7 +343,11 @@ read(Handle, Offset, Size) ->
 -spec write(file_handle(), Offset :: non_neg_integer(), Data :: binary()) ->
     {ok, Size :: non_neg_integer()} | {error, Reason :: term()}.
 write(Handle, Offset, Data) ->
-    ?MODULE:apply_helper_nif(Handle, write, [Offset, Data]).
+    Res = ?MODULE:apply_helper_nif(Handle, write, [Offset, Data]),
+    % Make sure Data is not released until write is complete
+    % TODO VFS-7934 - check if next line is necessary
+    _ = byte_size(Data),
+    Res.
 
 %%--------------------------------------------------------------------
 %% @doc
