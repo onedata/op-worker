@@ -19,7 +19,7 @@
 
 %% API
 -export([init/0, handle_iteration_finished/1, get_last_registered_item_index/1, register_new_item/3,
-    handle_item_processed/3, get_item_id/2]).
+    handle_item_processed/3, get_all_item_ids/1, get_item_id/2]).
 %% Test API
 -export([is_finished_and_cleaned/1]).
 
@@ -200,6 +200,10 @@ handle_item_processed(
         pending_items = maps:remove(ItemIndex, Pending),
         items_finished_ahead = FinalFinishedAhead
     }, undefined, IdsToDelete}.
+
+-spec get_all_item_ids(state()) -> [workflow_cached_item:id()].
+get_all_item_ids(#iteration_state{pending_items = Pending, items_finished_ahead = FinishedAhead}) ->
+    maps:values(Pending) ++ gb_trees:values(FinishedAhead).
 
 -spec get_item_id(state(), workflow_execution_state:index()) -> workflow_cached_item:id().
 get_item_id(#iteration_state{pending_items = Pending}, ItemIndex) ->

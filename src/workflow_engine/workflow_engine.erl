@@ -23,7 +23,8 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([init/1, init/2, execute_workflow/2, report_execution_status_update/5, get_async_call_pools/1,
+-export([init/1, init/2, execute_workflow/2, cancel_execution/1,
+    report_execution_status_update/5, get_async_call_pools/1,
     trigger_job_scheduling/1, call_handler/5]).
 
 %% Functions exported for internal_services engine - do not call directly
@@ -132,6 +133,10 @@ execute_workflow(EngineId, ExecutionSpec) ->
         ?WF_ERROR_PREPARATION_FAILED ->
             ok
     end.
+
+-spec cancel_execution(execution_id()) -> ok.
+cancel_execution(ExecutionId) ->
+    workflow_execution_state:cancel(ExecutionId).
 
 -spec report_execution_status_update(execution_id(), id(), processing_stage(),
     workflow_jobs:job_identifier(), handler_execution_result()) -> ok.
