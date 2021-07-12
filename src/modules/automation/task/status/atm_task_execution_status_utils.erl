@@ -35,6 +35,7 @@
 -spec is_transition_allowed(atm_task_execution:status(), atm_task_execution:status()) ->
     boolean().
 is_transition_allowed(?PENDING_STATUS, ?ACTIVE_STATUS) -> true;
+is_transition_allowed(?PENDING_STATUS, ?FINISHED_STATUS) -> true;  % possible e.g. for empty store
 is_transition_allowed(?ACTIVE_STATUS, ?FINISHED_STATUS) -> true;
 is_transition_allowed(?ACTIVE_STATUS, ?FAILED_STATUS) -> true;
 is_transition_allowed(_, _) -> false.
