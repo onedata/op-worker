@@ -23,7 +23,7 @@
 -behaviour(persistent_record).
 
 %% API
--export([get_next_batch/3, forget_before/1, mark_exhausted/1]).
+-export([get_next_batch/4, forget_before/1, mark_exhausted/1]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
@@ -45,9 +45,8 @@
 %%% Callbacks
 %%%===================================================================
 
-
--callback get_next_batch(atm_workflow_execution_ctx:record(), batch_size(), record()) ->
-    {ok, [atm_value:compressed()], record()} | stop.
+-callback get_next_batch(atm_workflow_execution_ctx:record(), batch_size(), record(), atm_data_spec:record()) ->
+    {ok, [atm_value:expanded()], record()} | stop.
 
 -callback forget_before(record()) -> ok.
 
@@ -59,11 +58,11 @@
 %%%===================================================================
 
 
--spec get_next_batch(atm_workflow_execution_ctx:record(), batch_size(), record()) ->
-    {ok, [atm_value:compressed()], record()} | stop.
-get_next_batch(AtmWorkflowExecutionCtx, BatchSize, AtmStoreContainerIterator) ->
+-spec get_next_batch(atm_workflow_execution_ctx:record(), batch_size(), record(), atm_data_spec:record()) ->
+    {ok, [atm_value:expanded()], record()} | stop.
+get_next_batch(AtmWorkflowExecutionCtx, BatchSize, AtmStoreContainerIterator, DataSpec) ->
     Module = utils:record_type(AtmStoreContainerIterator),
-    Module:get_next_batch(AtmWorkflowExecutionCtx, BatchSize, AtmStoreContainerIterator).
+    Module:get_next_batch(AtmWorkflowExecutionCtx, BatchSize, AtmStoreContainerIterator, DataSpec).
 
 
 -spec forget_before(record()) -> ok.

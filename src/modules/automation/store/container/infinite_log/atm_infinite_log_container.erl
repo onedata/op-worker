@@ -79,33 +79,12 @@ browse_content(AtmWorkflowExecutionCtx, BrowseOpts, #atm_infinite_log_container{
     data_spec = AtmDataSpec,
     backend_id = BackendId
 }) ->
-    StartFrom = case maps:get(start_index, BrowseOpts, undefined) of
-        undefined ->
-            undefined;
-        <<>> ->
-            undefined;
-        StartIndexBin ->
-            try
-                {index, binary_to_integer(StartIndexBin)}
-            catch _:_ ->
-                throw(?ERROR_ATM_BAD_DATA(<<"index">>, <<"not numerical">>))
-            end
-    end,
-    {ok, {Marker, Entries}} = atm_infinite_log_backend:list(BackendId, #{
-        start_from => StartFrom,
+    {ok, {Marker, Entries}} = atm_infinite_log_backend:list(AtmWorkflowExecutionCtx, BackendId, #{
+        start_from => map_to_backend_start_from(BrowseOpts),
         offset => maps:get(offset, BrowseOpts, 0),
         limit => maps:get(limit, BrowseOpts)
-    }),
-    ExpandedEntries = lists:map(fun({EntryIndex, {_Timestamp, Value}}) ->
-        CompressedValue = json_utils:decode(Value),
-        Item = case atm_value:expand(AtmWorkflowExecutionCtx, CompressedValue, AtmDataSpec) of
-            {ok, _} = Res -> Res;
-            {error, _} -> ?ERROR_FORBIDDEN
-        end,
-        {integer_to_binary(EntryIndex), Item}
-    end, Entries),
-
-    {ExpandedEntries, Marker =:= done}.
+    }, AtmDataSpec),
+    {Entries, Marker =:= done}.
 
 
 -spec acquire_iterator(record()) -> atm_infinite_log_container_iterator:record().
@@ -211,7 +190,23 @@ append_insecure(Batch, Record = #atm_infinite_log_container{
     backend_id = BackendId
 }) ->
     lists:foreach(fun(Item) ->
-        CompressedItem = atm_value:compress(Item, AtmDataSpec),
-        ok = atm_infinite_log_backend:append(BackendId, json_utils:encode(CompressedItem))
+        ok = atm_infinite_log_backend:append(BackendId, Item, AtmDataSpec)
     end, Batch),
     Record.
+
+
+%% @private
+-spec map_to_backend_start_from(atm_store_api:browse_opts()) ->
+    infinite_log_browser:start_from().
+map_to_backend_start_from(#{start_index := <<>>}) ->
+    undefined;
+map_to_backend_start_from(#{start_index := StartIndexBin}) ->
+    try
+        {index, binary_to_integer(StartIndexBin)}
+    catch _:_ ->
+        throw(?ERROR_ATM_BAD_DATA(<<"index">>, <<"not numerical">>))
+    end;
+map_to_backend_start_from(#{start_timestamp := StartTimestamp}) ->
+    {timestamp, StartTimestamp};
+map_to_backend_start_from(_) ->
+    undefined.

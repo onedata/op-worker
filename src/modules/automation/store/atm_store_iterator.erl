@@ -161,20 +161,18 @@ db_decode(#{
 ) ->
     {ok, [automation:item()], atm_store_container_iterator:record()} | stop.
 get_next_internal(AtmWorkflowExecutionCtx, AtmStoreContainerIterator, Size, DataSpec) ->
-    case atm_store_container_iterator:get_next_batch(AtmWorkflowExecutionCtx, Size, AtmStoreContainerIterator) of
+    case 
+        atm_store_container_iterator:get_next_batch(
+            AtmWorkflowExecutionCtx, Size, AtmStoreContainerIterator, DataSpec)
+    of
         stop ->
             stop;
-        {ok, CompressedItems, NewAtmStoreContainerIterator} ->
-            ExpandedItems = lists:filtermap(fun(CompressedItem) ->
-                case atm_value:expand(AtmWorkflowExecutionCtx, CompressedItem, DataSpec) of
-                    {ok, ExpandedItem} -> {true, ExpandedItem};
-                    {error, _} -> false
-                end
-            end, CompressedItems),
-            case ExpandedItems of
+        {ok, Items, NewAtmStoreContainerIterator} ->
+            case Items of
                 [] ->
-                    get_next_internal(AtmWorkflowExecutionCtx, NewAtmStoreContainerIterator, Size, DataSpec);
+                    get_next_internal(
+                        AtmWorkflowExecutionCtx, NewAtmStoreContainerIterator, Size, DataSpec);
                 _ ->
-                    {ok, ExpandedItems, NewAtmStoreContainerIterator}
+                    {ok, Items, NewAtmStoreContainerIterator}
             end
     end.

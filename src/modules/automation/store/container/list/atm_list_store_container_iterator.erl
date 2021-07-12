@@ -22,7 +22,7 @@
 -export([build/1]).
 
 % atm_store_container_iterator callbacks
--export([get_next_batch/3, forget_before/1, mark_exhausted/1]).
+-export([get_next_batch/4, forget_before/1, mark_exhausted/1]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
@@ -53,18 +53,21 @@ build(AtmInfiniteLogContainerIterator) ->
 %%%===================================================================
 
 
--spec get_next_batch(atm_workflow_execution_ctx:record(), atm_store_container_iterator:batch_size(), record()) ->
-    {ok, [atm_value:compressed()], record()} | stop.
+-spec get_next_batch(atm_workflow_execution_ctx:record(), atm_store_container_iterator:batch_size(), 
+    record(), atm_data_spec:record()
+) ->
+    {ok, [atm_value:expanded()], record()} | stop.
 get_next_batch(AtmWorkflowExecutionCtx, BatchSize, #atm_list_store_container_iterator{
     atm_infinite_log_container_iterator = AtmInfiniteLogContainerIterator
-} = AtmListStoreContainerIterator) ->
+} = AtmListStoreContainerIterator, AtmDataSpec) ->
     case atm_infinite_log_container_iterator:get_next_batch(
-        AtmWorkflowExecutionCtx, BatchSize, AtmInfiniteLogContainerIterator
+        AtmWorkflowExecutionCtx, BatchSize, AtmInfiniteLogContainerIterator, AtmDataSpec
     ) of
         stop ->
             stop;
         {ok, Items, NewAtmInfiniteLogContainerIterator} ->
-            {ok, Items, AtmListStoreContainerIterator#atm_list_store_container_iterator{
+            MappedItems = lists:map(fun(#{<<"entry">> := Entry}) -> Entry end, Items),
+            {ok, MappedItems, AtmListStoreContainerIterator#atm_list_store_container_iterator{
                 atm_infinite_log_container_iterator = NewAtmInfiniteLogContainerIterator
             }}
     end.

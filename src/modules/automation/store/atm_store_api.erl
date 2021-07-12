@@ -36,6 +36,7 @@
 -type browse_opts() :: #{
     limit := limit(),
     start_index => index(),
+    start_timestamp => time:millis(),
     offset => offset()
 }.
 -type browse_result() :: {[{index(), {ok, automation:item()} | errors:error()}], IsLast :: boolean()}.
@@ -133,7 +134,8 @@ browse_content(AtmWorkflowExecutionCtx, BrowseOpts, #atm_store{container = AtmSt
         },
         at_least_one => #{
             offset => {integer, any},
-            start_index => {binary, any}
+            start_index => {binary, any},
+            start_timestamp => {integer, any}
         }
     }),
     atm_store_container:browse_content(AtmWorkflowExecutionCtx, SanitizedBrowsOpts, AtmStoreContainer);

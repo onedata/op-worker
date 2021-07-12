@@ -22,7 +22,7 @@
 -export([build/3]).
 
 % atm_store_container_iterator callbacks
--export([get_next_batch/3, forget_before/1, mark_exhausted/1]).
+-export([get_next_batch/4, forget_before/1, mark_exhausted/1]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
@@ -57,13 +57,15 @@ build(Start, End, Step) ->
 %%%===================================================================
 
 
--spec get_next_batch(atm_workflow_execution_ctx:record(), atm_store_container_iterator:batch_size(), record()) ->
+-spec get_next_batch(atm_workflow_execution_ctx:record(), atm_store_container_iterator:batch_size(), 
+    record(), atm_data_spec:record()
+) ->
     {ok, [integer()], record()} | stop.
-get_next_batch(_AtmWorkflowExecutionCtx, BatchSize, #atm_range_store_container_iterator{
+get_next_batch(AtmWorkflowExecutionCtx, BatchSize, #atm_range_store_container_iterator{
     curr_num = CurrNum,
     end_num = End,
     step = Step
-} = Record) ->
+} = Record, DataSpec) ->
     RequestedEndNum = CurrNum + (BatchSize - 1) * Step,
     Threshold = case Step > 0 of
         true -> min(RequestedEndNum, End);
@@ -72,10 +74,10 @@ get_next_batch(_AtmWorkflowExecutionCtx, BatchSize, #atm_range_store_container_i
     case lists:seq(CurrNum, Threshold, Step) of
         [] ->
             stop;
-        Items ->
+        CompressedItems ->
             NewCurrNum = Threshold + Step,
             NewRecord = Record#atm_range_store_container_iterator{curr_num = NewCurrNum},
-            {ok, Items, NewRecord}
+            {ok, atm_value:expand_list(AtmWorkflowExecutionCtx, CompressedItems, DataSpec), NewRecord}
     end.
 
 

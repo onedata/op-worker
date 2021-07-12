@@ -20,6 +20,8 @@
 -export([
     create_store/4,
     apply_operation/6,
+    get/2,
+    browse_content/4,
     acquire_store_iterator/3, 
     iterator_get_next/3,
     iterator_forget_before/2,
@@ -83,6 +85,32 @@ apply_operation(ProviderSelector, AtmWorkflowExecutionCtx, Operation, Item, Opti
     Node = oct_background:get_random_provider_node(ProviderSelector),
     rpc:call(Node, atm_store_api, apply_operation, [
         AtmWorkflowExecutionCtx, Operation, Item, Options, AtmStoreId
+    ]).
+
+
+-spec get(
+    oct_background:entity_selector(),
+    atm_store:id()
+) ->
+    {ok, atm_store:record()} | {error, term()}.
+get(ProviderSelector, AtmStoreId) ->
+    Node = oct_background:get_random_provider_node(ProviderSelector),
+    rpc:call(Node, atm_store_api, get, [
+        AtmStoreId
+    ]).
+
+
+-spec browse_content(
+    oct_background:entity_selector(),
+    atm_workflow_execution_ctx:record(),
+    atm_store_api:browse_opts(),
+    atm_store:record()
+) ->
+    atm_store_api:browse_result() | {error, term()}.
+browse_content(ProviderSelector, AtmWorkflowExecutionCtx, BrowseOptions, AtmStore) ->
+    Node = oct_background:get_random_provider_node(ProviderSelector),
+    rpc:call(Node, atm_store_api, browse_content, [
+        AtmWorkflowExecutionCtx, BrowseOptions, AtmStore
     ]).
 
 

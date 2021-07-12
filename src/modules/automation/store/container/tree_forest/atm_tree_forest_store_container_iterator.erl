@@ -34,7 +34,7 @@
 -export([build/2]).
 
 % atm_store_container_iterator callbacks
--export([get_next_batch/3, forget_before/1, mark_exhausted/1]).
+-export([get_next_batch/4, forget_before/1, mark_exhausted/1]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
@@ -107,10 +107,18 @@ build(RootsIterator, DataSpec) ->
 %%% atm_store_container_iterator callbacks
 %%%===================================================================
 
--spec get_next_batch(atm_workflow_execution_ctx:record(), atm_store_container_iterator:batch_size(), record()) ->
-    {ok, [atm_value:compressed()], record()} | stop.
-get_next_batch(AtmWorkflowExecutionCtx, BatchSize, #atm_tree_forest_store_container_iterator{} = Record) ->
-    get_next_batch(AtmWorkflowExecutionCtx, BatchSize, Record, []).
+-spec get_next_batch(atm_workflow_execution_ctx:record(), atm_store_container_iterator:batch_size(), 
+    record(), atm_data_spec:record()
+) ->
+    {ok, [atm_value:expanded()], record()} | stop.
+get_next_batch(AtmWorkflowExecutionCtx, BatchSize, #atm_tree_forest_store_container_iterator{} = Record, DataSpec) ->
+    case get_next_batch(AtmWorkflowExecutionCtx, BatchSize, Record, [], DataSpec) of
+        {ok, CompressedItems, UpdatedRecord} ->
+            ExpandedItems = atm_value:expand_list(AtmWorkflowExecutionCtx, CompressedItems, DataSpec),
+            {ok, ExpandedItems, UpdatedRecord};
+        stop -> 
+            stop
+    end.
 
 
 -spec forget_before(record()) -> ok.
@@ -131,24 +139,27 @@ mark_exhausted(#atm_tree_forest_store_container_iterator{queue_ref = QueueRef}) 
     atm_workflow_execution_ctx:record(), 
     atm_store_container_iterator:batch_size(),
     record(), 
-    [atm_value:compressed()]
+    [atm_value:compressed()],
+    atm_data_spec:record()
 ) ->
     {ok, [atm_value:compressed()], record()} | stop.
-get_next_batch(_AtmWorkflowExecutionCtx, BatchSize, Record, ForestAcc) when BatchSize =< 0 ->
+get_next_batch(_AtmWorkflowExecutionCtx, BatchSize, Record, ForestAcc, _DataSpec) when BatchSize =< 0 ->
     {ok, ForestAcc, Record};
 get_next_batch(
     AtmWorkflowExecutionCtx, 
     BatchSize, 
     #atm_tree_forest_store_container_iterator{tree_listing_finished = true} = Record,
-    ForestAcc
+    ForestAcc,
+    DataSpec
 ) ->
     #atm_tree_forest_store_container_iterator{
         callback_module = Module, 
         roots_iterator = ListIterator, 
         queue_ref = QueueRef
     } = Record,
-    case atm_list_store_container_iterator:get_next_batch(AtmWorkflowExecutionCtx, 1, ListIterator) of
-        {ok, [CurrentTreeRoot], NextRootsIterator} ->
+    case atm_list_store_container_iterator:get_next_batch(AtmWorkflowExecutionCtx, 1, ListIterator, DataSpec) of
+        {ok, [CurrentTreeRootExpanded], NextRootsIterator} ->
+            CurrentTreeRoot = atm_value:compress(CurrentTreeRootExpanded, DataSpec),
             UpdatedRecord = Record#atm_tree_forest_store_container_iterator{
                 current_traversable_item = CurrentTreeRoot,
                 tree_listing_finished = false,
@@ -157,17 +168,26 @@ get_next_batch(
                 queue_ref = queue_report_new_tree(QueueRef)
             },
             get_next_batch(
-                AtmWorkflowExecutionCtx, BatchSize - 1, UpdatedRecord, [CurrentTreeRoot | ForestAcc]);
+                AtmWorkflowExecutionCtx, BatchSize - 1, UpdatedRecord, [CurrentTreeRoot | ForestAcc], DataSpec);
+        {ok, [], NextRootsIterator} ->
+            UpdatedRecord = Record#atm_tree_forest_store_container_iterator{
+                tree_listing_finished = true,
+                roots_iterator = NextRootsIterator,
+                tree_list_opts = Module:initial_listing_options(),
+                queue_ref = queue_report_new_tree(QueueRef)
+            },
+            get_next_batch(
+                AtmWorkflowExecutionCtx, BatchSize, UpdatedRecord, ForestAcc, DataSpec);
         stop ->
             case length(ForestAcc) of
                 0 -> stop;
                 _ -> {ok, ForestAcc, Record}
             end
     end;
-get_next_batch(AtmWorkflowExecutionCtx, BatchSize, Record, ForestAcc) ->
+get_next_batch(AtmWorkflowExecutionCtx, BatchSize, Record, ForestAcc, DataSpec) ->
     {TreeAcc, NewRecord} = get_next_batch_from_single_tree(
         AtmWorkflowExecutionCtx, BatchSize, Record, ForestAcc),
-    get_next_batch(AtmWorkflowExecutionCtx, BatchSize - length(TreeAcc), NewRecord, TreeAcc).
+    get_next_batch(AtmWorkflowExecutionCtx, BatchSize - length(TreeAcc), NewRecord, TreeAcc, DataSpec).
 
 
 %% @private

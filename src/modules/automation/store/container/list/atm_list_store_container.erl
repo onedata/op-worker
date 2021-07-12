@@ -67,7 +67,15 @@ get_data_spec(#atm_list_store_container{atm_infinite_log_container = AtmInfinite
 browse_content(AtmWorkflowExecutionCtx, BrowseOpts, #atm_list_store_container{
     atm_infinite_log_container = AtmInfiniteLogContainer
 }) ->
-    atm_infinite_log_container:browse_content(AtmWorkflowExecutionCtx, BrowseOpts, AtmInfiniteLogContainer).
+    {Entries, IsLast} = atm_infinite_log_container:browse_content(
+        AtmWorkflowExecutionCtx, BrowseOpts, AtmInfiniteLogContainer),
+    MappedEntries = lists:map(fun
+        ({Index, {ok, #{<<"entry">> := Entry}}}) ->
+            {Index, {ok, Entry}};
+        ({Index, Error}) ->
+            {Index, Error}
+    end, Entries),
+    {MappedEntries, IsLast}.
 
 
 -spec acquire_iterator(record()) -> atm_list_store_container_iterator:record().
