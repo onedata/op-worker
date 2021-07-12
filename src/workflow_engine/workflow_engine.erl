@@ -358,14 +358,14 @@ set_default_keepalive_timeout(Id, Timeout) ->
         [] ->
             ok;
         _ ->
-            ?error("Engine ~p: setting default keepalive timeout faild on nodes: ~p (RPC error)", [Id, BadNodes])
+            ?error("Engine ~p: setting default keepalive timeout failed on nodes: ~p (RPC error)", [Id, BadNodes])
     end,
 
     lists:foreach(fun
         (ok) -> ok;
         ({badrpc, _} = Error) ->
             ?error(
-                "Engine ~p: setting default keepalive timeout faild.~n"
+                "Engine ~p: setting default keepalive timeout failed.~n"
                 "Reason: ~p", [Id, Error]
             )
     end, Res).
