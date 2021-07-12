@@ -22,7 +22,12 @@
 %% API
 -export([from_json/1, to_json/1, sanitize/1]).
 %% Getters
--export([get_layout/1, should_create_nested_archives/1, is_incremental/1, get_incremental_based_on/1]).
+-export([
+    get_layout/1, should_include_dip/1, should_create_nested_archives/1, 
+    is_incremental/1, get_incremental_based_on/1
+]).
+%% Setters
+-export([enforce_plain_layout/1]).
 
 -type record() :: #archive_config{}.
 -type json() :: json_utils:json_map().
@@ -78,7 +83,7 @@ sanitize(RawConfig) ->
         SanitizedData = middleware_sanitizer:sanitize_data(RawConfig, #{
             optional => #{
                 <<"layout">> => {atom, ?ARCHIVE_LAYOUTS},
-                <<"includeDip">> => {boolean, ?SUPPORTED_INCLUDE_DIP_VALUES}, % TODO VFS-7653 change to {boolean, any}
+                <<"includeDip">> => {boolean, any},
                 <<"incremental">> => {json, non_empty},
                 <<"createNestedArchives">> => {boolean, any}
             }
@@ -137,6 +142,11 @@ should_create_nested_archives(#archive_config{create_nested_archives = CreateNes
     CreateNestedArchives.
 
 
+-spec should_include_dip(record()) -> boolean().
+should_include_dip(#archive_config{include_dip = IncludeDip}) ->
+    IncludeDip.
+
+
 -spec is_valid_base_archive(null | archive:id()) -> false | {true, null | archive:id()}.
 is_valid_base_archive(null) ->
     {true, null};
@@ -148,6 +158,11 @@ is_valid_base_archive(ArchiveId) ->
         {ok, _OtherState} -> false;
         ?ERROR_NOT_FOUND -> false
     end.
+
+
+-spec enforce_plain_layout(record()) -> record().
+enforce_plain_layout(ArchiveConfig) ->
+    ArchiveConfig#archive_config{layout = ?ARCHIVE_PLAIN_LAYOUT}.
 
 %%%===================================================================
 %%% persistent_record callbacks

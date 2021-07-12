@@ -587,7 +587,9 @@ check_timeouts_internal(State = #workflow_execution_state{
             end, {State, #{}}, ExpiredJobsIdentifiers),
 
             {ok, FinalState#workflow_execution_state{update_report = ?JOBS_EXPIRED(AsyncPoolsSlotsToFree)}}
-    end.
+    end;
+check_timeouts_internal(#workflow_execution_state{current_lane = undefined}) ->
+    ?WF_ERROR_NOTHING_CHANGED.
 
 -spec report_execution_status_update_internal(
     state(),

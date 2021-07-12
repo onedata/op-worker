@@ -7,10 +7,10 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module provides `atm_store_container_iterator` functionality for
-%%% `atm_list_store_container`.
+%%% `atm_audit_log_store_container`.
 %%% @end
 %%%-------------------------------------------------------------------
--module(atm_list_store_container_iterator).
+-module(atm_audit_log_store_container_iterator).
 -author("Michal Stanisz").
 
 -behaviour(atm_store_container_iterator).
@@ -28,10 +28,10 @@
 -export([version/0, db_encode/2, db_decode/2]).
 
 
--record(atm_list_store_container_iterator, {
+-record(atm_audit_log_store_container_iterator, {
     atm_infinite_log_container_iterator :: atm_infinite_log_container_iterator:record()
 }).
--type record() :: #atm_list_store_container_iterator{}.
+-type record() :: #atm_audit_log_store_container_iterator{}.
 
 -export_type([record/0]).
 
@@ -43,7 +43,7 @@
 
 -spec build(atm_infinite_log_container_iterator:record()) -> record().
 build(AtmInfiniteLogContainerIterator) ->
-    #atm_list_store_container_iterator{
+    #atm_audit_log_store_container_iterator{
         atm_infinite_log_container_iterator = AtmInfiniteLogContainerIterator
     }.
 
@@ -55,30 +55,30 @@ build(AtmInfiniteLogContainerIterator) ->
 
 -spec get_next_batch(atm_workflow_execution_ctx:record(), atm_store_container_iterator:batch_size(), record()) ->
     {ok, [atm_value:compressed()], record()} | stop.
-get_next_batch(AtmWorkflowExecutionCtx, BatchSize, #atm_list_store_container_iterator{
+get_next_batch(AtmWorkflowExecutionCtx, BatchSize, #atm_audit_log_store_container_iterator{
     atm_infinite_log_container_iterator = AtmInfiniteLogContainerIterator
-} = AtmListStoreContainerIterator) ->
+} = AtmAuditLogStoreBackendIterator) ->
     case atm_infinite_log_container_iterator:get_next_batch(
         AtmWorkflowExecutionCtx, BatchSize, AtmInfiniteLogContainerIterator
     ) of
         stop ->
             stop;
         {ok, Items, NewAtmInfiniteLogContainerIterator} ->
-            {ok, Items, AtmListStoreContainerIterator#atm_list_store_container_iterator{
+            {ok, Items, AtmAuditLogStoreBackendIterator#atm_audit_log_store_container_iterator{
                 atm_infinite_log_container_iterator = NewAtmInfiniteLogContainerIterator
             }}
     end.
 
 
 -spec forget_before(record()) -> ok.
-forget_before(#atm_list_store_container_iterator{
+forget_before(#atm_audit_log_store_container_iterator{
     atm_infinite_log_container_iterator = AtmInfiniteLogContainerIterator
 }) ->
     atm_infinite_log_container_iterator:forget_before(AtmInfiniteLogContainerIterator).
 
 
 -spec mark_exhausted(record()) -> ok.
-mark_exhausted(#atm_list_store_container_iterator{
+mark_exhausted(#atm_audit_log_store_container_iterator{
     atm_infinite_log_container_iterator = AtmInfiniteLogContainerIterator
 }) ->
     atm_infinite_log_container_iterator:mark_exhausted(AtmInfiniteLogContainerIterator).
@@ -96,7 +96,7 @@ version() ->
 
 -spec db_encode(record(), persistent_record:nested_record_encoder()) ->
     json_utils:json_term().
-db_encode(#atm_list_store_container_iterator{
+db_encode(#atm_audit_log_store_container_iterator{
     atm_infinite_log_container_iterator = AtmInfiniteLogContainerIterator
 }, NestedRecordEncoder) ->
     #{
@@ -109,7 +109,7 @@ db_encode(#atm_list_store_container_iterator{
 -spec db_decode(json_utils:json_term(), persistent_record:nested_record_decoder()) ->
     record().
 db_decode(#{<<"atmInfiniteLogContainer">> := AtmInfiniteLogContainerIteratorJson}, NestedRecordDecoder) ->
-    #atm_list_store_container_iterator{
+    #atm_audit_log_store_container_iterator{
         atm_infinite_log_container_iterator = NestedRecordDecoder(
             AtmInfiniteLogContainerIteratorJson, atm_infinite_log_container_iterator
         )

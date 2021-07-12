@@ -1,16 +1,16 @@
 %%%-------------------------------------------------------------------
-%%% @author Michal Stanisz
+%%% @author Lukasz Opiola
 %%% @copyright (C) 2021 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Tests of automation list store.
+%%% Tests of automation audit_log store.
 %%% @end
 %%%-------------------------------------------------------------------
--module(atm_list_store_test_SUITE).
--author("Michal Stanisz").
+-module(atm_audit_log_store_test_SUITE).
+-author("Lukasz Opiola").
 
 -include("modules/automation/atm_tmp.hrl").
 -include("modules/automation/atm_execution.hrl").
@@ -36,6 +36,7 @@
     iterate_one_by_one_test/1,
     iterate_in_chunks_test/1,
     reuse_iterator_test/1
+    % @todo VFS-7903 test browsing from offset
 ]).
 
 groups() -> [
@@ -53,12 +54,12 @@ all() -> [
 ].
 
 
--define(ATM_LIST_STORE_SCHEMA, #atm_store_schema{
+-define(ATM_AUDIT_LOG_STORE_SCHEMA, #atm_store_schema{
     id = <<"dummyId">>,
-    name = <<"list_store">>,
+    name = <<"audit_log_store">>,
     description = <<"description">>,
     requires_initial_value = false,
-    type = list,
+    type = audit_log,
     data_spec = #atm_data_spec{type = atm_integer_type}
 }).
 
@@ -71,23 +72,23 @@ all() -> [
 
 
 create_store_with_invalid_args_test(_Config) ->
-    atm_infinite_log_based_stores_test_common:create_store_with_invalid_args_test_base(?ATM_LIST_STORE_SCHEMA).
+    atm_infinite_log_based_stores_test_common:create_store_with_invalid_args_test_base(?ATM_AUDIT_LOG_STORE_SCHEMA).
 
 
 apply_operation_test(_Config) ->
-    atm_infinite_log_based_stores_test_common:apply_operation_test_base(?ATM_LIST_STORE_SCHEMA).
+    atm_infinite_log_based_stores_test_common:apply_operation_test_base(?ATM_AUDIT_LOG_STORE_SCHEMA).
 
 
 iterate_one_by_one_test(_Config) ->
-    atm_infinite_log_based_stores_test_common:iterate_one_by_one_test_base(?ATM_LIST_STORE_SCHEMA).
+    atm_infinite_log_based_stores_test_common:iterate_one_by_one_test_base(?ATM_AUDIT_LOG_STORE_SCHEMA).
 
 
 iterate_in_chunks_test(_Config) ->
-    atm_infinite_log_based_stores_test_common:iterate_in_chunks_test_base(?ATM_LIST_STORE_SCHEMA).
+    atm_infinite_log_based_stores_test_common:iterate_in_chunks_test_base(?ATM_AUDIT_LOG_STORE_SCHEMA).
 
 
 reuse_iterator_test(_Config) ->
-    atm_infinite_log_based_stores_test_common:reuse_iterator_test_base(?ATM_LIST_STORE_SCHEMA).
+    atm_infinite_log_based_stores_test_common:reuse_iterator_test_base(?ATM_AUDIT_LOG_STORE_SCHEMA).
 
 
 %===================================================================

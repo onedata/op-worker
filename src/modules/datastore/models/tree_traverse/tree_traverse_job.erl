@@ -61,7 +61,10 @@ save_master_job(Key, Job = #tree_traverse{
     children_master_jobs_mode = ChildrenMasterJobsMode,
     track_subtree_status = TrackSubtreeStatus,
     batch_size = BatchSize,
-    traverse_info = TraverseInfo
+    traverse_info = TraverseInfo,
+    follow_symlinks = FollowSymlinks,
+    relative_path = RelativePath,
+    encountered_files = EncounteredFilesMap
 }, Pool, TaskId, CallbackModule) ->
     Uuid = file_ctx:get_logical_uuid_const(FileCtx),
     Scope = file_ctx:get_space_id_const(FileCtx),
@@ -78,7 +81,10 @@ save_master_job(Key, Job = #tree_traverse{
         children_master_jobs_mode = ChildrenMasterJobsMode,
         track_subtree_status = TrackSubtreeStatus,
         batch_size = BatchSize,
-        traverse_info = term_to_binary(TraverseInfo)
+        traverse_info = term_to_binary(TraverseInfo),
+        follow_symlinks = FollowSymlinks,
+        relative_path = RelativePath,
+        encountered_files = EncounteredFilesMap
     },
     Ctx = get_extended_ctx(Job, CallbackModule),
     save(Key, Scope, Record, Ctx).
@@ -109,7 +115,10 @@ get_master_job(#document{value = #tree_traverse_job{
     children_master_jobs_mode = ChildrenMasterJobsMode,
     track_subtree_status = TrackSubtreeStatus,
     batch_size = BatchSize,
-    traverse_info = TraverseInfo
+    traverse_info = TraverseInfo,
+    follow_symlinks = FollowSymlinks,
+    relative_path = RelativePath,
+    encountered_files = EncounteredFilesMap
 }}) ->
     case file_meta:get_including_deleted(DocId) of
         {ok, Doc = #document{scope = SpaceId}} ->
@@ -127,7 +136,10 @@ get_master_job(#document{value = #tree_traverse_job{
                 children_master_jobs_mode = ChildrenMasterJobsMode,
                 track_subtree_status = TrackSubtreeStatus,
                 batch_size = BatchSize,
-                traverse_info = binary_to_term(TraverseInfo)
+                traverse_info = binary_to_term(TraverseInfo),
+                follow_symlinks = FollowSymlinks,
+                relative_path = RelativePath,
+                encountered_files = EncounteredFilesMap
             },
             {ok, Job, Pool, TaskId};
         {error, _} = Error ->
@@ -162,7 +174,7 @@ get_ctx() ->
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    3.
+    4.
 
 
 -spec get_record_struct(datastore_model:record_version()) ->
@@ -215,6 +227,26 @@ get_record_struct(3) ->
         {track_subtree_status, boolean},
         {batch_size, integer},
         {traverse_info, binary}
+    ]};
+get_record_struct(4) ->
+    {record, [
+        {pool, string},
+        {callback_module, atom},
+        {task_id, string},
+        {doc_id, string},
+        {user_id, string},
+        {use_listing_token, boolean},
+        {last_name, string},
+        {last_tree, string},
+        {child_dirs_job_generation_policy, atom},
+        {children_master_jobs_mode, atom},
+        {track_subtree_status, boolean},
+        {batch_size, integer},
+        {traverse_info, binary},
+        % new fields - follow_symlinks, relative_path and encountered_files
+        {follow_symlinks, boolean},
+        {relative_path, binary},
+        {encountered_files, #{string => boolean}}
     ]}.
 
 
@@ -284,6 +316,43 @@ upgrade_record(2, Record) ->
         TrackSubtreeStatus,
         BatchSize,
         TraverseInfo
+    }};
+upgrade_record(3, Record) ->
+    {
+        ?MODULE,
+        Pool,
+        CallbackModule,
+        TaskId,
+        DocId,
+        UserId,
+        UseListingToken,
+        LastName,
+        LastTree,
+        ChildDirsJobGenerationPolicy,
+        ChildrenMasterJobsMode,
+        TrackSubtreeStatus,
+        BatchSize,
+        TraverseInfo
+    } = Record,
+    
+    {4, {?MODULE,
+        Pool,
+        CallbackModule,
+        TaskId,
+        DocId,
+        UserId,
+        UseListingToken,
+        LastName,
+        LastTree,
+        ChildDirsJobGenerationPolicy,
+        ChildrenMasterJobsMode,
+        TrackSubtreeStatus,
+        BatchSize,
+        TraverseInfo,
+        % new fields follow_symlinks, relative path and encountered files
+        false,
+        <<>>,
+        #{}
     }}.
 
 %%%===================================================================

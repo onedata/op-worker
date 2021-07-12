@@ -123,7 +123,8 @@ gui_download_multiple_files_test(Config) ->
 gui_download_different_filetypes_test(Config) ->
     ClientSpec = ?TARBALL_DOWNLOAD_CLIENT_SPEC,
     DirSpec = [
-        #symlink_spec{shares = [#share_spec{}], symlink_value = <<"some_link_path">>}, 
+%%         @TODO VFS-7955 uncomment after fixing resolving shared symlinks targeting outside share
+%%        #symlink_spec{shares = [#share_spec{}], symlink_value = make_symlink_target()}, 
         #dir_spec{mode = 8#705, shares = [#share_spec{}], children = [#dir_spec{}, #file_spec{content = ?RAND_CONTENT()}]},
         #file_spec{mode = 8#604, shares = [#share_spec{}], content = ?RAND_CONTENT()}
     ],
@@ -298,8 +299,12 @@ gui_download_test_base(Config, FileTreeSpec, ClientSpec, ScenarioPrefix, Downloa
 
     DataSpec = #data_spec{
         required = [<<"file_ids">>],
-        % correct values are injected in function maybe_inject_guids/3 based on provided FileTreeSpec
-        correct_values = #{<<"file_ids">> => [injected_guids]}, 
+        optional = [<<"follow_symlinks">>],
+        correct_values = #{
+            % correct values are injected in function maybe_inject_guids/3 based on provided FileTreeSpec
+            <<"file_ids">> => [injected_guids],
+            <<"follow_symlinks">> => [true, false]
+        }, 
         bad_values = [
             {<<"file_ids">>, [<<"incorrect_guid">>], ?ERROR_BAD_VALUE_IDENTIFIER(<<"file_ids">>)},
             {<<"file_ids">>, [file_id:pack_guid(<<"uuid">>, <<"incorrent_space_id">>)], 
@@ -308,7 +313,8 @@ gui_download_test_base(Config, FileTreeSpec, ClientSpec, ScenarioPrefix, Downloa
                         ?ERROR_SPACE_NOT_SUPPORTED_BY(?GET_DOMAIN_BIN(Node))
                 end}
             },
-            {<<"file_ids">>, <<"not_a_list">>, ?ERROR_BAD_VALUE_LIST_OF_BINARIES(<<"file_ids">>)}
+            {<<"file_ids">>, <<"not_a_list">>, ?ERROR_BAD_VALUE_LIST_OF_BINARIES(<<"file_ids">>)},
+            {<<"follow_symlinks">>, <<"not_a_boolean">>, ?ERROR_BAD_VALUE_BOOLEAN(<<"follow_symlinks">>)}
         ]
     },
     ?assert(onenv_api_test_runner:run_tests([
@@ -362,6 +368,7 @@ gui_download_test_base(Config, FileTreeSpec, ClientSpec, ScenarioPrefix, Downloa
 build_get_download_url_prepare_gs_args_fun(MemRef, TestMode, Scope) ->
     fun(#api_test_ctx{data = Data0}) ->
         api_test_memory:set(MemRef, scope, Scope),
+        api_test_memory:set(MemRef, follow_symlinks, maps:get(<<"follow_symlinks">>, Data0, false)),
         Data1 = maybe_inject_guids(MemRef, Data0, TestMode),
         #gs_args{
             operation = get,
@@ -436,9 +443,9 @@ build_get_download_url_validate_gs_call_fun(MemRef) ->
                         lists:foreach(fun(Object) ->
                             case {Client, api_test_memory:get(MemRef, scope)} of
                                 {?USER(User4Id), private} ->
-                                    check_tarball(Bytes, Object, no_files);
+                                    check_tarball(MemRef, Bytes, Object, no_files);
                                 _ ->
-                                    check_tarball(Bytes, Object)
+                                    check_tarball(MemRef, Bytes, Object)
                             end
                         end, utils:ensure_list(FileTreeObject))
                 end,
@@ -685,7 +692,8 @@ rest_download_dir_test(Config) ->
     MemRef = api_test_memory:init(),
     
     DirSpec = #dir_spec{mode = 8#705, shares = [#share_spec{}], children = [
-        #symlink_spec{symlink_value = <<"link_path">>}, 
+%%         @TODO VFS-7955 uncomment after fixing resolving shared symlinks targeting outside share
+%%        #symlink_spec{symlink_value = make_symlink_target()}, 
         #dir_spec{}, 
         #file_spec{content = ?RAND_CONTENT()}
     ]},
@@ -695,8 +703,8 @@ rest_download_dir_test(Config) ->
         [FileTreeObject] = api_test_memory:get(MemRef, file_tree_object),
         User4Id = oct_background:get_user_id(user4),
         case {Client, api_test_memory:get(MemRef, test_mode)} of
-            {?USER(User4Id), normal_mode} -> check_tarball(RespBody, FileTreeObject, no_files);
-            _ -> check_tarball(RespBody, FileTreeObject)
+            {?USER(User4Id), normal_mode} -> check_tarball(MemRef, RespBody, FileTreeObject, no_files);
+            _ -> check_tarball(MemRef, RespBody, FileTreeObject)
         end
     end,
     
@@ -745,6 +753,7 @@ rest_download_dir_test(Config) ->
 build_rest_download_prepare_args_fun(MemRef, TestMode) ->
     fun(#api_test_ctx{data = Data0}) ->
         api_test_memory:set(MemRef, test_mode, TestMode),
+        api_test_memory:set(MemRef, follow_symlinks, maps:get(<<"follow_symlinks">>, Data0, true)),
         [#object{guid = Guid, shares = Shares}] = api_test_memory:get(MemRef, file_tree_object),
         FileGuid = case TestMode of
             normal_mode -> 
@@ -1024,40 +1033,53 @@ failing_download_client(Pid, ChunksUntilFail) ->
 %%      no_files -> checks that there are no files.
 %% @end
 %%--------------------------------------------------------------------
--spec check_tarball(binary(), binary()) -> ok.
-check_tarball(Bytes, FileTreeObject) ->
-    check_tarball(Bytes, FileTreeObject, check_files_content).
+-spec check_tarball(api_test_memory:mem_ref(), binary(), binary()) -> ok.
+check_tarball(MemRef, Bytes, FileTreeObject) ->
+    check_tarball(MemRef, Bytes, FileTreeObject, check_files_content).
 
 
 %% @private
--spec check_tarball(binary(), binary(), files_strategy()) -> ok.
-check_tarball(Bytes, FileTreeObject, FilesStrategy) ->
-    check_extracted_tarball_structure(FileTreeObject, FilesStrategy, unpack_tarball(Bytes), root_dir).
+-spec check_tarball(api_test_memory:mem_ref(), binary(), binary(), files_strategy()) -> ok.
+check_tarball(MemRef, Bytes, FileTreeObject, FilesStrategy) ->
+    check_extracted_tarball_structure(MemRef, FileTreeObject, FilesStrategy, unpack_tarball(Bytes), root_dir).
 
 
 %% @private
--spec check_extracted_tarball_structure(onenv_file_test_utils:object_spec(), files_strategy(), binary(), child | root_dir) -> 
+-spec check_extracted_tarball_structure(
+    api_test_memory:mem_ref(), onenv_file_test_utils:object_spec(), files_strategy(), binary(), child | root_dir
+) -> 
     ok.
-check_extracted_tarball_structure(#object{type = ?DIRECTORY_TYPE} = Object, FilesStrategy, CurrentPath, DirType) ->
+check_extracted_tarball_structure(MemRef, #object{type = ?DIRECTORY_TYPE} = Object, FilesStrategy, CurrentPath, DirType) ->
     #object{name = Dirname, children = Children} = Object,
     {ok, TmpDirContentAfter} = file:list_dir(CurrentPath),
     ExpectDir = FilesStrategy == check_files_content orelse DirType == root_dir,
     ?assertEqual(ExpectDir, lists:member(binary_to_list(Dirname), TmpDirContentAfter)),
     lists:foreach(fun(Child) ->
-        check_extracted_tarball_structure(Child, FilesStrategy, filename:join(CurrentPath, Dirname), child)
+        check_extracted_tarball_structure(MemRef, Child, FilesStrategy, filename:join(CurrentPath, Dirname), child)
     end, Children);
-check_extracted_tarball_structure(#object{type = ?REGULAR_FILE_TYPE} = Object, check_files_content, CurrentPath, _) ->
+check_extracted_tarball_structure(_MemRef, #object{type = ?REGULAR_FILE_TYPE} = Object, check_files_content, CurrentPath, _) ->
     #object{name = Filename, content = ExpContent} = Object,
     ?assertEqual({ok, ExpContent}, file:read_file(filename:join(CurrentPath, Filename)));
-check_extracted_tarball_structure(#object{type = ?SYMLINK_TYPE} = Object, check_files_content, CurrentPath, _) ->
-    #object{name = Filename, symlink_value = LinkPath} = Object,
-    ?assertEqual({ok, binary_to_list(LinkPath)}, file:read_link(filename:join(CurrentPath, Filename)));
-check_extracted_tarball_structure(#object{type = ?SYMLINK_TYPE} = Object, _, CurrentPath, root_dir) ->
-    #object{name = Filename, symlink_value = LinkPath} = Object,
-    ?assertEqual({ok, binary_to_list(LinkPath)}, file:read_link(filename:join(CurrentPath, Filename)));
-check_extracted_tarball_structure(#object{name = Filename}, no_files, CurrentPath, _ParentDirType) ->
+check_extracted_tarball_structure(MemRef, #object{type = ?SYMLINK_TYPE} = Object, check_files_content, CurrentPath, _) ->
+    check_symlink(MemRef, CurrentPath, Object);
+check_extracted_tarball_structure(MemRef, #object{type = ?SYMLINK_TYPE} = Object, _, CurrentPath, root_dir) ->
+    check_symlink(MemRef, CurrentPath, Object);
+check_extracted_tarball_structure(_MemRef, #object{name = Filename}, no_files, CurrentPath, _ParentDirType) ->
     {ok, TmpDirContentAfter} = file:list_dir(CurrentPath),
     ?assertEqual(false, lists:member(binary_to_list(Filename), TmpDirContentAfter)).
+
+
+%% @private
+-spec check_symlink(api_test_memory:mem_ref(), file_meta:path(), onenv_file_test_utils:object_spec()) -> ok.
+check_symlink(MemRef, CurrentPath, Object) ->
+    #object{name = Filename, symlink_value = LinkPath} = Object,
+    case api_test_memory:get(MemRef, follow_symlinks) of
+        true ->
+            % link target files has its name as content
+            ?assertEqual({ok, filename:basename(LinkPath)}, file:read_file(filename:join(CurrentPath, Filename)));
+        false ->
+            ?assertEqual({ok, binary_to_list(LinkPath)}, file:read_link(filename:join(CurrentPath, Filename)))
+    end.
 
 
 %% @private
@@ -1084,6 +1106,18 @@ make_hardlink(Config, TargetGuid, ParentGuid) ->
         ?assertMatch({ok, _},  lfm_proxy:stat(Worker, SessId, ?FILE_REF(LinkGuid)), ?ATTEMPTS)
     end, Providers),
     onenv_file_test_utils:get_object_attributes(Node, UserSessId, LinkGuid).
+
+
+%% @private
+-spec make_symlink_target() -> file_meta_symlinks:symlink().
+make_symlink_target() ->
+    SpaceId = oct_background:get_space_id(space_krk_par),
+    Name = ?RANDOM_FILE_NAME(),
+    _Object = onenv_file_test_utils:create_and_sync_file_tree(
+        user3, SpaceId, #file_spec{name = Name, content = Name}, krakow
+    ),
+    SpaceIdSymlinkPrefix = ?SYMLINK_SPACE_ID_ABS_PATH_PREFIX(SpaceId),
+    filename:join([SpaceIdSymlinkPrefix, Name]).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -1140,9 +1174,9 @@ init_per_suite(Config) ->
                         end
                     end),
                 ok = test_utils:mock_expect(OpNode, file_download_utils, download_tarball,
-                    fun(Id, SessionId, FileAttrs, Req) ->
+                    fun(Id, SessionId, FileAttrs, FollowSymlinks, Req) ->
                         case ErrorFun(FileAttrs, Req) of
-                            passthrough -> meck:passthrough([Id, SessionId, FileAttrs, Req]);
+                            passthrough -> meck:passthrough([Id, SessionId, FileAttrs, FollowSymlinks, Req]);
                             Res -> Res
                         end
                     end)
