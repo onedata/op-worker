@@ -541,6 +541,7 @@ get_next_iterator(Context, Iterator, ExecutionId) ->
 handle_status_change(#workflow_execution_state{execution_status = ?PREPARING} = State, ?EXECUTION_CANCELLED) ->
     {ok, State#workflow_execution_state{execution_status = ?PREPARATION_CANCELLED}};
 handle_status_change(#workflow_execution_state{execution_status = ?PREPARATION_FAILED} = State, ?EXECUTION_CANCELLED) ->
+    % TODO VFS-7787 Return error to prevent document update
     {ok, State};
 handle_status_change(State, NewStatus) ->
     {ok, State#workflow_execution_state{execution_status = NewStatus}}.
@@ -731,6 +732,12 @@ prepare_next_waiting_job(#workflow_execution_state{
     context = Context
 }) ->
     ?WF_ERROR_EXECUTION_PREPARATION_FAILED(Handler, Context);
+prepare_next_waiting_job(State = #workflow_execution_state{
+    execution_status = ?EXECUTION_CANCELLED,
+    current_lane = undefined
+}) ->
+    % TODO VFS-7787 Return error to prevent document update
+    {ok, State#workflow_execution_state{update_report = ?EXECUTION_FINISHED_REPORT([])}};
 prepare_next_waiting_job(State = #workflow_execution_state{
     execution_status = ?EXECUTION_CANCELLED,
     jobs = Jobs,
