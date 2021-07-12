@@ -47,6 +47,7 @@
 -type options() :: #{
     slots_limit => non_neg_integer(),
     workflow_async_call_pools_to_use => [{workflow_async_call_pool:id(), SlotsLimit :: non_neg_integer()}],
+    default_keepalive_timeout => time:seconds(),
     init_workflow_timeout_server => {true, workflow_timeout_monitor:check_period()} | false
 }.
 
@@ -131,6 +132,7 @@ execute_workflow(EngineId, ExecutionSpec) ->
             workflow_engine_state:add_execution_id(EngineId, ExecutionId),
             trigger_job_scheduling(EngineId, ?TAKE_UP_FREE_SLOTS);
         ?WF_ERROR_PREPARATION_FAILED ->
+            call_handler(ExecutionId, Context, Handler, handle_workflow_execution_ended, []),
             ok
     end.
 
@@ -190,6 +192,11 @@ init_service(Id, Options) ->
     init_pool(Id, SlotsLimit),
     case workflow_engine_state:init(Id, SlotsLimit) of
         ok ->
+            case maps:get(default_keepalive_timeout, Options, undefined) of
+                undefined -> ok;
+                KeepaliveTimeout -> set_default_keepalive_timeout(Id, KeepaliveTimeout)
+            end,
+
             AsyncCallPools = maps:get(workflow_async_call_pools_to_use, Options,
                 [{?DEFAULT_ASYNC_CALL_POOL_ID, ?DEFAULT_CALLS_LIMIT}]),
             lists:foreach(fun({AsyncCallPoolId, AsyncCallPoolSlotsLimit}) ->
@@ -338,6 +345,31 @@ schedule_prepare_on_pool(EngineId, ExecutionId, Handler, ExecutionContext) ->
     CallArgs = {?MODULE, prepare_execution, [EngineId, ExecutionId, Handler, ExecutionContext]},
     ok = worker_pool:cast(?POOL_ID(EngineId), CallArgs).
 
+-spec get_default_keepalive_timeout(id()) -> time:seconds().
+get_default_keepalive_timeout(EngineId) ->
+    node_cache:get({default_keepalive_timeout, EngineId}, ?DEFAULT_KEEPALIVE_TIMEOUT_SEC).
+
+-spec set_default_keepalive_timeout(id(), time:seconds()) -> ok.
+set_default_keepalive_timeout(Id, Timeout) ->
+    Nodes = consistent_hashing:get_all_nodes(),
+    {Res, BadNodes} = rpc:multicall(Nodes, node_cache, put, [{default_keepalive_timeout, Id}, Timeout]),
+
+    case BadNodes of
+        [] ->
+            ok;
+        _ ->
+            ?error("Engine ~p: setting default keepalive timeout faild on nodes: ~p (RPC error)", [Id, BadNodes])
+    end,
+
+    lists:foreach(fun
+        (ok) -> ok;
+        ({badrpc, _} = Error) ->
+            ?error(
+                "Engine ~p: setting default keepalive timeout faild.~n"
+                "Reason: ~p", [Id, Error]
+            )
+    end, Res).
+
 
 %%%===================================================================
 %%% Function executed on pool
@@ -372,8 +404,9 @@ process_item(EngineId, ExecutionId, ExecutionSpec = #execution_spec{
 
                 case process_item(ExecutionId, ExecutionSpec, FinishCallback, HeartbeatCallback) of
                     ok ->
-                        Timeout = {ok, maps:get(keepalive_timeout, TaskSpec, ?DEFAULT_KEEPALIVE_TIMEOUT_SEC)},
-                        {?ASYNC_CALL_STARTED, Timeout};
+                        DefaultTimeout = get_default_keepalive_timeout(EngineId),
+                        AnsWithTimeout = {ok, maps:get(keepalive_timeout, TaskSpec, DefaultTimeout)},
+                        {?ASYNC_CALL_STARTED, AnsWithTimeout};
                     Other ->
                         {?ASYNC_CALL_STARTED, Other}
                 end
