@@ -358,8 +358,23 @@ prepare_lane(ExecutionId, Handler, Context, LaneIndex) ->
             ok
     end,
     case get_initial_iterator_and_lane_spec(ExecutionId, Handler, Context, LaneIndex) of
-        {ok, Iterator, CurrentLaneSpec} ->
+        {ok, Iterator, #current_lane{parallel_boxes_spec = BoxesMap} = CurrentLaneSpec} ->
             NextIterationStep = get_next_iterator(Context, Iterator, ExecutionId),
+
+            case NextIterationStep =:= undefined orelse NextIterationStep =:= ?WF_ERROR_ITERATION_FAILED of
+                true ->
+                    lists:foreach(fun(BoxIndex) ->
+                        BoxSpec = maps:get(BoxIndex, BoxesMap),
+                        lists:foreach(fun(TaskIndex) ->
+                            {TaskId, _TaskSpec} = maps:get(TaskIndex, BoxSpec),
+                            workflow_engine:call_handler(
+                                ExecutionId, Context, Handler, handle_task_execution_ended, [TaskId])
+                        end, lists:seq(1, maps:size(BoxSpec)))
+                    end, lists:seq(1, maps:size(BoxesMap)));
+                _ ->
+                    ok
+            end,
+
             case update(ExecutionId, fun(State) ->
                 prepare_lane(State, CurrentLaneSpec, NextIterationStep)
             end) of
@@ -408,7 +423,7 @@ prepare_next_job_for_current_lane(ExecutionId) ->
                 {undefined, undefined} -> false;
                 _ -> true
             end,
-            lists:foreach(fun(ItemId) -> workflow_cached_item:delete(ItemId) end, ItemIdsToDelete),
+            lists:foreach(fun workflow_cached_item:delete/1, ItemIdsToDelete),
             case PrefetchedIterationStep of
                 {PrefetchedItemId, _} -> workflow_cached_item:delete(PrefetchedItemId);
                 _ -> ok

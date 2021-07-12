@@ -101,6 +101,7 @@
 %% exactly the same order as the tasks were finished.
 %% Warning: This callback can be called after call of
 %% handle_lane_execution_ended callback for task's lane.
+%% It can be called multiple times if lane is empty.
 %% TODO VFS-VFS-7848 - pause further processing until notification
 %% callback is processed
 %% @end

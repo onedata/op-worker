@@ -23,6 +23,7 @@
 
 %% tests
 -export([
+    empty_workflow_execution_test/1,
     single_sync_workflow_execution_test/1,
     single_async_workflow_execution_test/1,
     multiple_sync_workflow_execution_test/1,
@@ -42,6 +43,7 @@
 
 all() ->
     ?ALL([
+        empty_workflow_execution_test,
         single_sync_workflow_execution_test,
         single_async_workflow_execution_test,
         multiple_sync_workflow_execution_test,
@@ -65,6 +67,33 @@ all() ->
 %%%===================================================================
 %%% Test functions
 %%%===================================================================
+
+empty_workflow_execution_test(Config) ->
+    InitialKeys = get_all_keys(Config),
+    WorkflowType = sync,
+    Id = <<"empty_test_workflow">>,
+
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    Workflow = #{
+        id => Id,
+        workflow_handler => workflow_test_handler,
+        execution_context => #{type => WorkflowType, async_call_pools => [?ASYNC_CALL_POOL_ID], is_empty => true}
+    },
+
+    ?assertEqual(ok, rpc:call(Worker, workflow_engine, execute_workflow, [?ENGINE_ID, Workflow])),
+    #{execution_history := ExecutionHistory, lane_finish_log := LaneFinishLog} = ExtendedHistoryStats =
+        get_task_execution_history(Config),
+    ?assertEqual(0, maps:get(final_async_slots_used, ExtendedHistoryStats)),
+    ?assertEqual(0, maps:get(final_pool_slots_used, ExtendedHistoryStats)),
+
+    ?assertNotEqual(timeout, ExecutionHistory),
+    ExecutionHistoryWithoutPrepare = verify_preparation_phase(Id, ExecutionHistory),
+    ExecutionHistoryWithoutFinishMessage = verify_finish_notification(Id, ExecutionHistoryWithoutPrepare),
+    ExecutionHistoryWithoutEndedNotifications = verify_task_and_lane_ended_notifications(
+        Workflow, WorkflowType, maps:get(Id, LaneFinishLog, #{}), ExecutionHistoryWithoutFinishMessage),
+    ?assertEqual([], ExecutionHistoryWithoutEndedNotifications),
+    verify_memory(Config, InitialKeys),
+    ok.
 
 single_sync_workflow_execution_test(Config) ->
     single_workflow_execution_test_base(Config, sync, <<"test_workflow">>).
@@ -619,7 +648,10 @@ task_execution_gatherer_loop(#{execution_history := History} = Acc, ProcWaitingF
                 _ ->
                     Sender ! history_saved
             end,
-            Acc4 = Acc3#{execution_history => [{Log, undefined} | History]},
+            Acc4 = case lists:member({Log, undefined}, History) of
+                true -> Acc3; % Some callbacks can be called multiple times - log only first call
+                false -> Acc3#{execution_history => [{Log, undefined} | History]}
+            end,
             task_execution_gatherer_loop(Acc4, ProcWaitingForAns, Options);
         {lane_preparation, Sender, LaneIndex} ->
             Acc2 = update_slots_usage_statistics(Acc, async_slots_used_stats, rpc:call(node(Sender),
