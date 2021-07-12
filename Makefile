@@ -48,11 +48,12 @@ compile:
 inject-gui:
 	$(LIB_DIR)/gui/pull-gui.sh gui-image.conf
 
-helpers-deps: get-deps
-	make -C _build/default/lib/helpers submodules submodule=clproto
+submodules-in-deps: get-deps
+	make -C _build/default/lib/clproto submodules
+	make -C _build/default/lib/helpers submodules
 
 ## Generates a production release
-generate: helpers-deps template inject-gui
+generate: submodules-in-deps template inject-gui
 	$(REBAR) release $(OVERLAY_VARS)
 
 clean: relclean pkgclean
@@ -140,7 +141,7 @@ package/$(PKG_ID).tar.gz:
 	rm -rf package/$(PKG_ID)
 	git archive --format=tar --prefix=$(PKG_ID)/ $(PKG_REVISION) | (cd package && tar -xf -)
 	git submodule foreach --recursive "git archive --prefix=$(PKG_ID)/\$$path/ \$$sha1 | (cd \$$toplevel/package && tar -xf -)"
-	${MAKE} -C package/$(PKG_ID) get-deps helpers-deps inject-gui
+	${MAKE} -C package/$(PKG_ID) get-deps submodules-in-deps inject-gui
 	for dep in package/$(PKG_ID) package/$(PKG_ID)/$(LIB_DIR)/*; do \
 	     echo "Processing dependency: `basename $${dep}`"; \
 	     vsn=`git --git-dir=$${dep}/.git describe --tags 2>/dev/null`; \

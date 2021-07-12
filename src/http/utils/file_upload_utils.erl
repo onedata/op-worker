@@ -40,7 +40,13 @@
 ).
 
 
+% default write block size for storages without defined block size
 -define(DEFAULT_WRITE_BLOCK_SIZE, 10485760). % 10 MB
+
+
+% how many blocks should be written at once (on storages with defined block size)
+% the value was decided upon experimentally
+-define(PREFERRED_STORAGE_WRITE_BLOCK_MULTIPLE, 3).
 
 
 %%%===================================================================
@@ -95,7 +101,7 @@ get_preferable_storage_write_block_size(StorageId) ->
         undefined ->
             undefined;
         BlockSize ->
-            3 * BlockSize
+            BlockSize * ?PREFERRED_STORAGE_WRITE_BLOCK_MULTIPLE
     end.
 
 

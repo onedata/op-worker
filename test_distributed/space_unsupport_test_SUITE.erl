@@ -347,7 +347,7 @@ init_per_suite(Config) ->
 
 
 end_per_suite(Config) ->
-     application:stop(hackney),
+    application:stop(hackney),
     application:stop(ssl),
     initializer:clean_test_users_and_spaces_no_validate(Config).
 

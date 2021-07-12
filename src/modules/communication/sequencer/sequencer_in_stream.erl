@@ -208,7 +208,6 @@ receiving(info, reset_stream, #state{session_id = SessId,
     send_message_stream_reset(StmId, SessId, IsProxy),
     {next_state, receiving, State, ?RECEIVING_TIMEOUT};
 
-
 receiving(info, Msg, State) ->
     handle_info(Msg, receiving, State).
 
@@ -278,12 +277,9 @@ requesting(info, Msg, State) ->
 %%%===================================================================
 
 %% @private
--spec(handle_info(Info :: term(), StateName :: atom(),
-    StateData :: term()) ->
+-spec(handle_info(Info :: term(), StateName :: atom(), StateData :: term()) ->
     {next_state, NextStateName :: atom(), NewStateData :: term()} |
-    {next_state, NextStateName :: atom(), NewStateData :: term(),
-        timeout() | hibernate} |
-    {stop, Reason :: normal | term(), NewStateData :: term()}).
+    {stop, normal, NewStateData :: term()}).
 handle_info({'EXIT', _, shutdown}, _, State) ->
     {stop, normal, State};
 

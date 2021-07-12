@@ -523,7 +523,7 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
     true = worker_pool:stop_pool(?VERIFY_POOL),
-     application:stop(hackney),
+    application:stop(hackney),
     application:stop(ssl),
     initializer:teardown_storage(Config).
 

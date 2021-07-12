@@ -93,7 +93,7 @@ end_per_testcase(stress_test, Config) ->
   %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
   initializer:clean_test_users_and_spaces_no_validate(Config),
   initializer:unload_quota_mocks(Config),
-   application:stop(hackney),
+  application:stop(hackney),
   ssl:stop(),
 
   lists:foreach(fun(Worker) ->

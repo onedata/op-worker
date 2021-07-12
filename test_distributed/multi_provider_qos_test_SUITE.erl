@@ -1063,7 +1063,7 @@ init_per_suite(Config) ->
 
 
 end_per_suite(Config) ->
-     application:stop(hackney),
+    application:stop(hackney),
     application:stop(ssl),
     initializer:unmock_auth_manager(Config).
 

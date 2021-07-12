@@ -651,13 +651,10 @@ long_lasting_deletion_test_base(_Config, TimeWarpsCount,
 %===================================================================
 
 init_per_suite(Config) ->
-    ssl:start(),
-    application:ensure_all_started(hackney),
     oct_background:init_per_suite(Config, #onenv_test_config{onenv_scenario = "2op-manual-import"}).
 
 end_per_suite(_Config) ->
-     application:stop(hackney),
-    ssl:stop().
+    oct_background:end_per_suite().
 
 init_per_testcase(Case, Config) when
     Case =:= deletion_lasting_for_4_days_should_succeed orelse

@@ -766,7 +766,7 @@ end_per_testcase(_Case, Config) ->
 end_per_suite(Config) ->
     %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
     initializer:clean_test_users_and_spaces_no_validate(Config),
-     application:stop(hackney),
+    application:stop(hackney),
     application:stop(ssl),
     initializer:teardown_storage(Config).
 

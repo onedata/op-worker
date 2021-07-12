@@ -24,6 +24,11 @@
 -export([handle_request/2]).
 
 
+% timeout after which cowboy returns the data read from socket, regardless of its size
+% the value was decided upon experimentally
+-define(COWBOY_READ_BODY_PERIOD_SECONDS, 15).
+
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -240,7 +245,7 @@ write_req_body_to_file(SessionId, FileRef, Offset, Req) ->
 
     {ok, Req2} = file_upload_utils:upload_file(
         FileHandle, Offset, Req,
-        fun cowboy_req:read_body/2, #{period => timer:seconds(15)}
+        fun cowboy_req:read_body/2, #{period => timer:seconds(?COWBOY_READ_BODY_PERIOD_SECONDS)}
     ),
 
     ?check(lfm:fsync(FileHandle)),

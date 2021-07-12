@@ -331,7 +331,7 @@ end_per_testcase(Case, Config) when
     Case == configuration_endpoint_is_served;
     Case == broken_compatibility_file_causes_unknown_entries_in_configuration;
     Case == deprecated_configuration_endpoint_is_served ->
-     application:stop(hackney),
+    application:stop(hackney),
     ssl:stop(),
     end_per_testcase(default, Config);
 

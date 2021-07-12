@@ -409,7 +409,7 @@ end_per_suite(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     stop_pool(W),
     initializer:clean_test_users_and_spaces_no_validate(Config),
-     application:stop(hackney),
+    application:stop(hackney),
     application:stop(ssl).
 
 %%%===================================================================

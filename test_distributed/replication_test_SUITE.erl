@@ -1297,7 +1297,7 @@ end_per_testcase(_Case, Config) ->
     lfm_proxy:teardown(Config),
     initializer:unload_quota_mocks(Config),
     initializer:clean_test_users_and_spaces_no_validate(Config),
-     application:stop(hackney),
+    application:stop(hackney),
     ssl:stop().
 
 %%%===================================================================

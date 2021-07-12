@@ -577,7 +577,7 @@ init_per_suite(Config) ->
 
 
 end_per_suite(Config) ->
-     application:stop(hackney),
+    application:stop(hackney),
     application:stop(ssl),
     initializer:teardown_storage(Config).
 

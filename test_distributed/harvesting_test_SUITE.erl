@@ -1638,7 +1638,7 @@ init_per_suite(Config) ->
 
 end_per_suite(Config) ->
     initializer:teardown_storage(Config),
-     application:stop(hackney),
+    application:stop(hackney),
     ssl:stop().
 
 init_per_testcase(_Case, Config) ->
