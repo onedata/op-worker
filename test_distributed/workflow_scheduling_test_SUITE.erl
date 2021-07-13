@@ -61,7 +61,7 @@ all() ->
         sync_workflow_single_task_lane_cancel_test,
         sync_workflow_cancel_test,
         async_workflow_cancel_test,
-        cancel_preparation_test,
+        cancel_execution_preparation_test,
         cancel_lane_preparation_test
     ]).
 
