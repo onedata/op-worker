@@ -59,6 +59,7 @@
 -define(ACTIVE_STATUS, active).
 -define(FINISHED_STATUS, finished).
 -define(FAILED_STATUS, failed).
+-define(SKIPPED_STATUS, skipped).
 
 
 -endif.
