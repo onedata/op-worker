@@ -96,7 +96,7 @@ create(AtmWorkflowExecutionCreationCtx, AtmLaneIndex, #atm_lane_schema{
 
 -spec prepare_all(atm_workflow_execution_ctx:record(), [record()]) -> ok | no_return().
 prepare_all(AtmWorkflowExecutionCtx, AtmLaneExecutions) ->
-    lists:foreach(fun(#atm_lane_execution{schema_id = AtmLaneSchemaId} = AtmLaneExecution) ->
+    atm_parallel_runner:foreach(fun(#atm_lane_execution{schema_id = AtmLaneSchemaId} = AtmLaneExecution) ->
         try
             prepare(AtmWorkflowExecutionCtx, AtmLaneExecution)
         catch _:Reason ->

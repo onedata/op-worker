@@ -112,7 +112,7 @@ create(AtmWorkflowExecutionCreationCtx, AtmLaneIndex, AtmParallelBoxIndex, #atm_
 
 -spec prepare_all(atm_workflow_execution_ctx:record(), [record()]) -> ok | no_return().
 prepare_all(AtmWorkflowExecutionCtx, AtmParallelBoxExecutions) ->
-    lists:foreach(fun(#atm_parallel_box_execution{
+    atm_parallel_runner:foreach(fun(#atm_parallel_box_execution{
         schema_id = AtmParallelBoxSchemaId
     } = AtmParallelBoxExecution) ->
         try

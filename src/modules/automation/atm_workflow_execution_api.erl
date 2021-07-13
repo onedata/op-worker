@@ -14,6 +14,7 @@
 -author("Bartosz Walkowicz").
 
 -include("modules/automation/atm_execution.hrl").
+-include("workflow_engine.hrl").
 -include_lib("ctool/include/errors.hrl").
 
 %% API
@@ -40,7 +41,10 @@
 
 
 -define(ATM_WORKFLOW_EXECUTION_ENGINE, <<"atm_workflow_execution_engine">>).
-
+-define(ENGINE_ASYNC_CALLS_LIMIT, op_worker:get_env(atm_workflow_engine_async_calls_limit, 1000)).
+-define(ENGINE_SLOTS_COUNT, op_worker:get_env(atm_workflow_engine_slots_count, 20)).
+-define(JOB_TIMEOUT_SEC, op_worker:get_env(atm_workflow_job_timeout_sec, 300)).
+-define(JOB_TIMEOUT_CHECK_PERIOD_SEC, op_worker:get_env(atm_workflow_job_timeout_check_period_sec, 300)).
 
 %%%===================================================================
 %%% API
@@ -49,7 +53,13 @@
 
 -spec init_engine() -> ok.
 init_engine() ->
-    workflow_engine:init(?ATM_WORKFLOW_EXECUTION_ENGINE).
+    Options = #{
+        workflow_async_call_pools_to_use => [{?DEFAULT_ASYNC_CALL_POOL_ID, ?ENGINE_ASYNC_CALLS_LIMIT}],
+        slots_limit => ?ENGINE_SLOTS_COUNT,
+        default_keepalive_timeout => ?JOB_TIMEOUT_SEC,
+        init_workflow_timeout_server => {true, ?JOB_TIMEOUT_CHECK_PERIOD_SEC}
+    },
+    workflow_engine:init(?ATM_WORKFLOW_EXECUTION_ENGINE, Options).
 
 
 -spec list(

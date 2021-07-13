@@ -23,6 +23,7 @@
 
 %% tests
 -export([
+    empty_workflow_execution_test/1,
     single_sync_workflow_execution_test/1,
     single_async_workflow_execution_test/1,
     multiple_sync_workflow_execution_test/1,
@@ -34,11 +35,17 @@
     result_processing_failure_test/1,
     heartbeat_test/1,
     preparation_failure_test/1,
-    lane_preparation_failure_test/1
+    lane_preparation_failure_test/1,
+    sync_workflow_single_task_lane_cancel_test/1,
+    sync_workflow_cancel_test/1,
+    async_workflow_cancel_test/1,
+    cancel_execution_preparation_test/1,
+    cancel_lane_preparation_test/1
 ]).
 
 all() ->
     ?ALL([
+        empty_workflow_execution_test,
         single_sync_workflow_execution_test,
         single_async_workflow_execution_test,
         multiple_sync_workflow_execution_test,
@@ -50,7 +57,12 @@ all() ->
         result_processing_failure_test,
         heartbeat_test,
         preparation_failure_test,
-        lane_preparation_failure_test
+        lane_preparation_failure_test,
+        sync_workflow_single_task_lane_cancel_test,
+        sync_workflow_cancel_test,
+        async_workflow_cancel_test,
+        cancel_preparation_test,
+        cancel_lane_preparation_test
     ]).
 
 -define(ENGINE_ID, <<"test_engine">>).
@@ -59,6 +71,33 @@ all() ->
 %%%===================================================================
 %%% Test functions
 %%%===================================================================
+
+empty_workflow_execution_test(Config) ->
+    InitialKeys = get_all_keys(Config),
+    WorkflowType = sync,
+    Id = <<"empty_test_workflow">>,
+
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    Workflow = #{
+        id => Id,
+        workflow_handler => workflow_test_handler,
+        execution_context => #{type => WorkflowType, async_call_pools => [?ASYNC_CALL_POOL_ID], is_empty => true}
+    },
+
+    ?assertEqual(ok, rpc:call(Worker, workflow_engine, execute_workflow, [?ENGINE_ID, Workflow])),
+    #{execution_history := ExecutionHistory, lane_finish_log := LaneFinishLog} = ExtendedHistoryStats =
+        get_task_execution_history(Config),
+    ?assertEqual(0, maps:get(final_async_slots_used, ExtendedHistoryStats)),
+    ?assertEqual(0, maps:get(final_pool_slots_used, ExtendedHistoryStats)),
+
+    ?assertNotEqual(timeout, ExecutionHistory),
+    ExecutionHistoryWithoutPrepare = verify_preparation_phase(Id, ExecutionHistory),
+    ExecutionHistoryWithoutFinishMessage = verify_finish_notification(Id, ExecutionHistoryWithoutPrepare),
+    ExecutionHistoryWithoutEndedNotifications = verify_task_and_lane_ended_notifications(
+        Workflow, WorkflowType, maps:get(Id, LaneFinishLog, #{}), ExecutionHistoryWithoutFinishMessage),
+    ?assertEqual([], ExecutionHistoryWithoutEndedNotifications),
+    verify_memory(Config, InitialKeys),
+    ok.
 
 single_sync_workflow_execution_test(Config) ->
     single_workflow_execution_test_base(Config, sync, <<"test_workflow">>).
@@ -375,7 +414,106 @@ lane_preparation_failure_test(Config) ->
     verify_memory(Config, InitialKeys),
     ok.
 
+sync_workflow_single_task_lane_cancel_test(Config) ->
+    cancel_test_base(Config, sync, <<"cancel_test_workflow">>, <<"cancel_test_workflow_task1_1_1">>).
 
+sync_workflow_cancel_test(Config) ->
+    cancel_test_base(Config, sync, <<"cancel_test_workflow">>, <<"cancel_test_workflow_task3_3_2">>).
+
+async_workflow_cancel_test(Config) ->
+    cancel_test_base(Config, async, <<"async_cancel_test_workflow">>, <<"async_cancel_test_workflow_task3_3_2">>).
+
+cancel_test_base(Config, WorkflowType, Id, CancelOnTask) ->
+    InitialKeys = get_all_keys(Config),
+
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    Workflow = #{
+        id => Id,
+        workflow_handler => workflow_test_handler,
+        execution_context => #{type => WorkflowType, async_call_pools => [?ASYNC_CALL_POOL_ID]}
+    },
+
+    CancelOnItem = <<"100">>,
+    set_task_execution_gatherer_option(Config, cancel_execution, {CancelOnTask, CancelOnItem, Id}),
+    ?assertEqual(ok, rpc:call(Worker, workflow_engine, execute_workflow, [?ENGINE_ID, Workflow])),
+    Expected = get_expected_task_execution_order(Workflow),
+
+    #{execution_history := ExecutionHistory, lane_finish_log := LaneFinishLog, cancel_ans := CancelAns} =
+        ExtendedHistoryStats = get_task_execution_history(Config),
+    ?assertEqual(ok, CancelAns),
+    verify_execution_history_stats(ExtendedHistoryStats, WorkflowType),
+    ?assertNotEqual(timeout, ExecutionHistory),
+    verify_memory(Config, InitialKeys, true),
+
+    unset_task_execution_gatherer_option(Config, cancel_execution),
+    ?assertEqual(ok, rpc:call(Worker, workflow_engine, execute_workflow, [?ENGINE_ID, Workflow])),
+    #{execution_history := ExecutionHistory2, lane_finish_log := LaneFinishLog2} = ExtendedHistoryStats2 =
+        get_task_execution_history(Config),
+    verify_execution_history_stats(ExtendedHistoryStats2, WorkflowType),
+    ?assertNotEqual(timeout, ExecutionHistory2),
+
+    MergedExecutionHistory = (ExecutionHistory -- ExecutionHistory2) ++ ExecutionHistory2,
+    ?assert(length(ExecutionHistory) < MergedExecutionHistory),
+    ?assert(length(ExecutionHistory2) < MergedExecutionHistory),
+
+    ExecutionHistoryWithoutPrepare = verify_preparation_phase(Id, MergedExecutionHistory),
+    ExecutionHistoryWithoutFinishMessage = verify_finish_notification(Id, ExecutionHistoryWithoutPrepare),
+    ExecutionLaneFinishLog = maps:merge(maps:get(Id, LaneFinishLog, #{}), maps:get(Id, LaneFinishLog2, #{})),
+    ExecutionHistoryWithoutEndedNotifications = verify_task_and_lane_ended_notifications(
+        Workflow, WorkflowType, ExecutionLaneFinishLog, ExecutionHistoryWithoutFinishMessage),
+    verify_execution_history(Expected, ExecutionHistoryWithoutEndedNotifications, WorkflowType),
+    verify_memory(Config, InitialKeys),
+
+    ok.
+
+cancel_execution_preparation_test(Config) ->
+    cancel_preparation_test_base(Config, <<"cancel_execution_preparation_test_workflow">>, cancel_execution_preparation).
+
+cancel_lane_preparation_test(Config) ->
+    cancel_preparation_test_base(Config, <<"cancel_lane_preparation_test_workflow">>, cancel_lane_preparation).
+
+cancel_preparation_test_base(Config, Id, OptionKey) ->
+    InitialKeys = get_all_keys(Config),
+    WorkflowType = sync,
+
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    Workflow = #{
+        id => Id,
+        workflow_handler => workflow_test_handler,
+        execution_context => #{type => WorkflowType, async_call_pools => [?ASYNC_CALL_POOL_ID]}
+    },
+
+    set_task_execution_gatherer_option(Config, OptionKey, Id),
+    ?assertEqual(ok, rpc:call(Worker, workflow_engine, execute_workflow, [?ENGINE_ID, Workflow])),
+    Expected = get_expected_task_execution_order(Workflow),
+
+    #{execution_history := ExecutionHistory, lane_finish_log := LaneFinishLog, cancel_ans := CancelAns} =
+        get_task_execution_history(Config),
+    ?assertEqual(ok, CancelAns),
+    ?assertNotEqual(timeout, ExecutionHistory),
+    ExecutionHistoryWithoutPrepare = verify_preparation_phase(Id, ExecutionHistory),
+    ExecutionHistoryWithoutFinishMessage = verify_finish_notification(Id, ExecutionHistoryWithoutPrepare),
+    ?assertEqual([
+        {<<Id/binary, "_task1_1_1_task_ended">>, undefined},
+        {<<Id/binary, "1_lane_ended">>, undefined}
+    ], ExecutionHistoryWithoutFinishMessage),
+    ?assertEqual(#{1 => true}, maps:get(Id, LaneFinishLog, #{})),
+    verify_memory(Config, InitialKeys, true),
+
+    unset_task_execution_gatherer_option(Config, OptionKey),
+    ?assertEqual(ok, rpc:call(Worker, workflow_engine, execute_workflow, [?ENGINE_ID, Workflow])),
+    #{execution_history := ExecutionHistory2, lane_finish_log := LaneFinishLog2} = ExtendedHistoryStats2 =
+        get_task_execution_history(Config),
+
+    verify_execution_history_stats(ExtendedHistoryStats2, WorkflowType),
+    ?assertNotEqual(timeout, ExecutionHistory2),
+    ExecutionHistoryWithoutFinishMessage2 = verify_finish_notification(Id, ExecutionHistory2),
+    ExecutionHistoryWithoutEndedNotifications = verify_task_and_lane_ended_notifications(
+        Workflow, WorkflowType, maps:get(Id, LaneFinishLog2, #{}), ExecutionHistoryWithoutFinishMessage2),
+    verify_execution_history(Expected, ExecutionHistoryWithoutEndedNotifications, WorkflowType),
+    verify_memory(Config, InitialKeys),
+
+    ok.
 
 %%%===================================================================
 %%% Init/teardown functions
@@ -538,6 +676,10 @@ task_execution_gatherer_loop(#{execution_history := History} = Acc, ProcWaitingF
                 #{delay_execution := {Task, Item}} ->
                     Sender ! delay_execution,
                     Acc3#{execution_history => [{Task, Item} | History]};
+                #{cancel_execution := {Task, Item, ExecutionId}} ->
+                    CancelAns = rpc:call(node(Sender), workflow_engine, cancel_execution, [ExecutionId]),
+                    Sender ! history_saved,
+                    Acc3#{execution_history => [{Task, Item} | History], cancel_ans => CancelAns};
                 _ ->
                     Sender ! history_saved,
                     Acc3#{execution_history => [{Task, Item} | History]}
@@ -552,24 +694,39 @@ task_execution_gatherer_loop(#{execution_history := History} = Acc, ProcWaitingF
                 workflow_async_call_pool, get_slot_usage, [?ASYNC_CALL_POOL_ID])),
             Acc3 = update_slots_usage_statistics(Acc2, pool_slots_used_stats, rpc:call(node(Sender),
                 workflow_engine_state, get_slots_used, [?ENGINE_ID])),
-            case Options of
+            Acc4 = case Options of
                 #{fail_preparation := _} ->
-                    Sender ! fail_preparation;
+                    Sender ! fail_preparation,
+                    Acc3;
+                #{cancel_execution_preparation := ExecutionId} ->
+                    CancelAns = rpc:call(node(Sender), workflow_engine, cancel_execution, [ExecutionId]),
+                    Sender ! history_saved,
+                    Acc3#{cancel_ans => CancelAns};
                 _ ->
-                    Sender ! history_saved
+                    Sender ! history_saved,
+                    Acc3
             end,
-            Acc4 = Acc3#{execution_history => [{Log, undefined} | History]},
-            task_execution_gatherer_loop(Acc4, ProcWaitingForAns, Options);
+            Acc5 = case lists:member({Log, undefined}, History) of
+                true -> Acc4; % Some callbacks can be called multiple times - log only first call
+                false -> Acc4#{execution_history => [{Log, undefined} | History]}
+            end,
+            task_execution_gatherer_loop(Acc5, ProcWaitingForAns, Options);
         {lane_preparation, Sender, LaneIndex} ->
             Acc2 = update_slots_usage_statistics(Acc, async_slots_used_stats, rpc:call(node(Sender),
                 workflow_async_call_pool, get_slot_usage, [?ASYNC_CALL_POOL_ID])),
-            case Options of
+            Acc3 = case Options of
                 #{fail_lane_preparation := LaneIndex} ->
-                    Sender ! fail_preparation;
+                    Sender ! fail_preparation,
+                    Acc2;
+                #{cancel_lane_preparation := ExecutionId} ->
+                    CancelAns = rpc:call(node(Sender), workflow_engine, cancel_execution, [ExecutionId]),
+                    Sender ! history_saved,
+                    Acc2#{cancel_ans => CancelAns};
                 _ ->
-                    Sender ! history_saved
+                    Sender ! history_saved,
+                    Acc2
             end,
-            task_execution_gatherer_loop(Acc2, ProcWaitingForAns, Options);
+            task_execution_gatherer_loop(Acc3, ProcWaitingForAns, Options);
         {lane_ended, Sender, ExecutionId, LaneIndex, IsFinished} ->
             IsFinishedMap = maps:get(lane_finish_log, Acc, #{}),
             MapForExecution = maps:get(ExecutionId, IsFinishedMap, #{}),
@@ -854,10 +1011,10 @@ verify_task_and_lane_ended_notifications(#{id := ExecutionId, execution_context 
 get_task_stats(Gathered) ->
     lists:foldl(fun
         ({Pos, {<<"result_processing_", GatheredElement/binary>>, _}}, Acc) ->
-            {Counter, LastElementPos, NotifyPos} = maps:get(GatheredElement, Acc, {0, 0, 0}),
+            {Counter, _LastElementPos, NotifyPos} = maps:get(GatheredElement, Acc, {0, 0, 0}),
             Acc#{GatheredElement => {Counter + 1, Pos, NotifyPos}};
         ({Pos, {<<"result_", GatheredElement/binary>>, _}}, Acc) ->
-            {Counter, LastElementPos, NotifyPos} = maps:get(GatheredElement, Acc, {0, 0, 0}),
+            {Counter, _LastElementPos, NotifyPos} = maps:get(GatheredElement, Acc, {0, 0, 0}),
             Acc#{GatheredElement => {Counter + 1, Pos, NotifyPos}};
         ({Pos, {GatheredElement, _}}, Acc) ->
         case binary:longest_common_suffix([GatheredElement, <<"_lane_ended">>]) of
@@ -867,10 +1024,10 @@ get_task_stats(Gathered) ->
                 case binary:longest_common_suffix([GatheredElement, <<"_task_ended">>]) of
                     11 ->
                         Key = binary:part(GatheredElement, 0, byte_size(GatheredElement) - 11),
-                        {Counter, LastElementPos, NotifyPos} = maps:get(Key, Acc, {0, 0, 0}),
+                        {Counter, LastElementPos, _NotifyPos} = maps:get(Key, Acc, {0, 0, 0}),
                         Acc#{Key => {Counter, LastElementPos, Pos}};
                     _ ->
-                        {Counter, LastElementPos, NotifyPos} = maps:get(GatheredElement, Acc, {0, 0, 0}),
+                        {Counter, _LastElementPos, NotifyPos} = maps:get(GatheredElement, Acc, {0, 0, 0}),
                         Acc#{GatheredElement => {Counter + 1, Pos, NotifyPos}}
                 end
         end
