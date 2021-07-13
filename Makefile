@@ -49,7 +49,6 @@ inject-gui:
 	$(LIB_DIR)/gui/pull-gui.sh gui-image.conf
 
 submodules-in-deps: get-deps
-	make -C _build/default/lib/clproto submodules
 	make -C _build/default/lib/helpers submodules
 
 ## Generates a production release
