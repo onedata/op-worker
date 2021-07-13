@@ -237,10 +237,16 @@ build_create_archive_validate_gs_call_result_fun(MemRef) ->
         ExpArchiveData = build_archive_gs_instance(ArchiveId, DatasetId, ?ARCHIVE_BUILDING, Config,
             Description, PreservedCallback, PurgedCallback, undefined),
         % state is removed from the map as it may be in pending, building or even preserved state when request is handled
-        IgnoredKeys = [<<"state">>, <<"stats">>, <<"rootDir">>, <<"creationTime">>, <<"index">>, <<"baseArchive">>],
+        IgnoredKeys = [<<"state">>, <<"stats">>, <<"rootDir">>, <<"creationTime">>, <<"index">>, <<"baseArchive">>, <<"relatedDip">>],
         ExpArchiveData2 = maps:without(IgnoredKeys, ExpArchiveData),
         ArchiveData2 = maps:without(IgnoredKeys, ArchiveData),
-        ?assertMatch(ExpArchiveData2, ArchiveData2)
+        ?assertMatch(ExpArchiveData2, ArchiveData2),
+        case archive_config:should_include_dip(Config) of
+            false ->
+                ?assertEqual(null, maps:get(<<"relatedDip">>, ArchiveData));
+            true ->
+                ?assertNotEqual(null, maps:get(<<"relatedDip">>, ArchiveData))
+        end
     end.
 
 
@@ -261,7 +267,7 @@ build_verify_archive_created_fun(MemRef, Providers) ->
 
             CreationTime = time_test_utils:global_seconds(TestNode),
             DatasetId = maps:get(<<"datasetId">>, Data),
-            Config = maps:get(<<"config">>, Data, #{}),
+            ConfigJson = maps:get(<<"config">>, Data, #{}),
             Description = maps:get(<<"description">>, Data, ?DEFAULT_ARCHIVE_DESCRIPTION),
             PreservedCallback = maps:get(<<"preservedCallback">>, Data, undefined),
             PurgedCallback = maps:get(<<"purgedCallback">>, Data, undefined),
@@ -270,7 +276,7 @@ build_verify_archive_created_fun(MemRef, Providers) ->
                 false -> ok
             end,
             verify_archive(
-                UserId, Providers, ArchiveId, DatasetId, CreationTime, Config,
+                UserId, Providers, ArchiveId, DatasetId, CreationTime, ConfigJson,
                 PreservedCallback, PurgedCallback, Description
             );
         (expected_failure, _) ->
@@ -335,12 +341,12 @@ get_archive_info(_Config) ->
                                 <<"filesFailed">> => 0,
                                 <<"bytesArchived">> => 0
                             },
-                            <<"relatedAipId">> => null,
-                            <<"relatedDipId">> => null
+                            <<"relatedAipId">> => null
                         },
                         ?assertEqual(?HTTP_200_OK, RespCode),
                         % do not check baseArchive here as its value depends on previous tests
-                        ?assertEqual(ExpArchiveData, maps:without([<<"baseArchiveId">>, <<"creationTime">>], RespBody))
+                        ?assertEqual(ExpArchiveData, maps:without([<<"baseArchiveId">>, <<"creationTime">>, <<"relatedDipId">>], RespBody)),
+                        ?assertEqual(archive_config:should_include_dip(Config), maps:get(<<"relatedDipId">>, RespBody) =/= null)
                     end
                 },
                 #scenario_template{
@@ -351,7 +357,8 @@ get_archive_info(_Config) ->
                         DirGuid = get_root_dir_guid(ArchiveId),
                         ExpArchiveData = build_archive_gs_instance(ArchiveId, DatasetId, ?ARCHIVE_PRESERVED,
                             Config, Description, undefined, undefined, DirGuid),
-                        ?assertEqual(ExpArchiveData, maps:without([<<"creationTime">>, <<"index">>], Result))
+                        ?assertEqual(ExpArchiveData, maps:without([<<"creationTime">>, <<"index">>, <<"relatedDip">>], Result)),
+                        ?assertEqual(archive_config:should_include_dip(Config), maps:get(<<"relatedDip">>, Result) =/= null)
                     end
                 }
             ],
@@ -839,11 +846,11 @@ await_archive_purged_callback_called(ArchiveId, DatasetId) ->
 %% @private
 -spec verify_archive(
     od_user:id(), [oct_background:entity_selector()], archive:id(), dataset:id(), archive:timestamp(),
-    archive:config(), archive:callback(), archive:callback(), archive:description()
+    json_utils:json_map(), archive:callback(), archive:callback(), archive:description()
 ) ->
     ok.
 verify_archive(
-    UserId, Providers, ArchiveId, DatasetId, CreationTime, Config,
+    UserId, Providers, ArchiveId, DatasetId, CreationTime, ConfigJson,
     PreservedCallback, PurgedCallback, Description
 ) ->
     lists:foreach(fun(Provider) ->
@@ -853,13 +860,14 @@ verify_archive(
         GetDatasetsFun =  fun() -> list_archive_ids(Node, UserSessId, DatasetId, ListOpts) end,
         ?assertEqual(true, lists:member(ArchiveId, GetDatasetsFun()), ?ATTEMPTS),
         RootDirGuid = get_root_dir_guid(ArchiveId),
+        Config = archive_config:from_json(ConfigJson),
         ExpArchiveInfo = #archive_info{
             id = ArchiveId,
             dataset_id = DatasetId,
             state = ?ARCHIVE_PRESERVED,
             root_dir_guid = RootDirGuid,
             creation_time = CreationTime,
-            config = archive_config:from_json(Config),
+            config = Config,
             preserved_callback = PreservedCallback,
             purged_callback = PurgedCallback,
             description = Description,
@@ -869,8 +877,13 @@ verify_archive(
         GetArchiveInfoFun = fun() ->
             case lfm_proxy:get_archive_info(Node, UserSessId, ArchiveId) of
                 {ok, ActualArchiveInfo} ->
-                    % baseArchiveId is the id of the last successfully preserved, so it depends on previous test cases
-                    ActualArchiveInfo#archive_info{base_archive_id = undefined};
+                    ?assertEqual(archive_config:should_include_dip(Config), ActualArchiveInfo#archive_info.related_dip =/= undefined),
+                    ActualArchiveInfo#archive_info{
+                        % baseArchiveId is the id of the last successfully preserved, so it depends on previous test cases.
+                        base_archive_id = undefined,
+                        % DIP is created alongside AIP archive, so value of `relatedDip` field is not know beforehand. 
+                        related_dip = undefined
+                    };
                 {error, _} = Error  ->
                     Error
             end
@@ -904,7 +917,7 @@ build_archive_gs_instance(ArchiveId, DatasetId, State, Config, Description, Pres
         purged_callback = PurgedCallback,
         stats = archive_stats:new(1, 0, 0)
     }),
-    maps:without([<<"creationTime">>, <<"index">>], BasicInfo#{<<"revision">> => 1}).
+    maps:without([<<"creationTime">>, <<"index">>, <<"relatedDip">>], BasicInfo#{<<"revision">> => 1}).
 
 
 -spec take_random_archive(api_test_memory:mem_ref()) -> onenv_archive_test_utils:archive_object().

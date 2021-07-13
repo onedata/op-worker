@@ -43,6 +43,8 @@ get_first() ->
 %%%===================================================================
 
 -spec get_next(workflow_engine:execution_context(), iterator()) -> {ok, item(), iterator()} | stop.
+get_next(#{is_empty := true}, _) ->
+    stop;
 get_next(_Context, #workflow_test_iterator{item_number = 1001}) ->
     stop;
 get_next(_Context, #workflow_test_iterator{item_number = Number}) ->

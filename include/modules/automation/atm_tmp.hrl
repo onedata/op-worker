@@ -16,6 +16,7 @@
 
 
 %% TODO VFS-7637 better error handling and logging
+-define(ERROR_ATM_INTERNAL_SERVER_ERROR, {error, atm_internal_server_error}).
 -define(ERROR_ATM_OPENFAAS_NOT_CONFIGURED, {error, openfaas_not_configured}).
 -define(ERROR_ATM_OPENFAAS_UNREACHABLE, {error, openfaas_unreachable}).
 -define(ERROR_ATM_OPENFAAS_QUERY_FAILED, {error, openfaas_query_failed}).

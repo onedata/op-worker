@@ -292,7 +292,7 @@ add_mount_oneclient_function_annotations(FunctionDefinition, #prepare_ctx{
             docker_execution_options = #atm_docker_execution_options{
                 mount_oneclient = true,
                 oneclient_mount_point = MountPoint,
-                oneclient_options = OneclientOptions
+                oneclient_options = LambdaSpecificOneclientOptions
             }
         }
     }
@@ -301,12 +301,18 @@ add_mount_oneclient_function_annotations(FunctionDefinition, #prepare_ctx{
     AccessToken = atm_workflow_execution_ctx:get_access_token(AtmWorkflowExecutionCtx),
     {ok, OpDomain} = provider_logic:get_domain(),
 
+    EnvSpecificOneclientOptions = str_utils:to_binary(op_worker:get_env(
+        openfaas_oneclient_options, <<"">>
+    )),
+
     OneclientMountRelatedAnnotations = #{
         <<"oneclient.openfass.onedata.org/inject">> => <<"enabled">>,
         <<"oneclient.openfass.onedata.org/image">> => get_oneclient_image(),
         <<"oneclient.openfaas.onedata.org/space_id">> => SpaceId,
         <<"oneclient.openfaas.onedata.org/mount_point">> => MountPoint,
-        <<"oneclient.openfaas.onedata.org/options">> => OneclientOptions,
+        <<"oneclient.openfaas.onedata.org/options">> => <<
+            EnvSpecificOneclientOptions/binary, " ", LambdaSpecificOneclientOptions/binary
+        >>,
         <<"oneclient.openfaas.onedata.org/oneprovider_host">> => OpDomain,
         <<"oneclient.openfaas.onedata.org/token">> => case in_readonly_mode(AtmTaskExecutor) of
             true -> tokens:confine(AccessToken, #cv_data_readonly{});

@@ -198,7 +198,7 @@ run(Pool, FileCtx, UserId, Opts) ->
         traverse_info = TraverseInfo2,
         follow_symlinks = FollowSymlinks,
         relative_path = InitialRelativePath,
-        encountered_files = add_to_set_if_links_followed(
+        encountered_files = add_to_set_if_symlinks_followed(
             file_ctx:get_logical_uuid_const(FileCtx2), #{}, FollowSymlinks)
     },
     maybe_create_status_doc(Job, TaskId),
@@ -475,7 +475,7 @@ get_child_master_job(MasterJob = #tree_traverse{
     MasterJob2#tree_traverse{
         file_ctx = ChildCtx, 
         relative_path = filename:join(ParentRelativePath, Filename),
-        encountered_files = add_to_set_if_links_followed(
+        encountered_files = add_to_set_if_symlinks_followed(
             file_ctx:get_logical_uuid_const(ChildCtx), PrevEncounteredFilesSet, FollowSymlinks)
     }.
 
@@ -546,11 +546,11 @@ reset_list_options(Job) ->
     }.
 
 
--spec add_to_set_if_links_followed(file_meta:uuid(), encountered_files_set(), FollowSymlinks :: boolean()) ->
+-spec add_to_set_if_symlinks_followed(file_meta:uuid(), encountered_files_set(), FollowSymlinks :: boolean()) ->
     encountered_files_set().
-add_to_set_if_links_followed(Uuid, EncounteredFilesSet, true) ->
+add_to_set_if_symlinks_followed(Uuid, EncounteredFilesSet, true) ->
     add_to_set(Uuid, EncounteredFilesSet);
-add_to_set_if_links_followed(_Uuid, EncounteredFilesSet, false) ->
+add_to_set_if_symlinks_followed(_Uuid, EncounteredFilesSet, false) ->
     % there is no need to keeping track of encountered files when there is no symlinks following
     EncounteredFilesSet.
 
