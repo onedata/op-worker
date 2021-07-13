@@ -16,8 +16,15 @@
 -behaviour(workflow_handler).
 
 -include("modules/automation/atm_execution.hrl").
+-include("workflow_engine.hrl").
 -include_lib("ctool/include/http/headers.hrl").
 -include_lib("ctool/include/logging.hrl").
+
+% API
+-export([
+    init_engine/0,
+    start/2
+]).
 
 % workflow_handler callbacks
 -export([
@@ -33,9 +40,51 @@
 ]).
 
 
+-define(ATM_WORKFLOW_EXECUTION_ENGINE, <<"atm_workflow_execution_engine">>).
+
+-define(ENGINE_ASYNC_CALLS_LIMIT, op_worker:get_env(atm_workflow_engine_async_calls_limit, 1000)).
+-define(ENGINE_SLOTS_COUNT, op_worker:get_env(atm_workflow_engine_slots_count, 20)).
+-define(JOB_TIMEOUT_SEC, op_worker:get_env(atm_workflow_job_timeout_sec, 300)).
+-define(JOB_TIMEOUT_CHECK_PERIOD_SEC, op_worker:get_env(atm_workflow_job_timeout_check_period_sec, 300)).
+
 -define(INITIAL_NOTIFICATION_INTERVAL(), rand:uniform(timer:seconds(2))).
 -define(MAX_NOTIFICATION_INTERVAL, timer:hours(2)).
 -define(MAX_NOTIFICATION_RETRIES, 30).
+
+
+%%%===================================================================
+%%% API
+%%%===================================================================
+
+
+-spec init_engine() -> ok.
+init_engine() ->
+    Options = #{
+        workflow_async_call_pools_to_use => [{?DEFAULT_ASYNC_CALL_POOL_ID, ?ENGINE_ASYNC_CALLS_LIMIT}],
+        slots_limit => ?ENGINE_SLOTS_COUNT,
+        default_keepalive_timeout => ?JOB_TIMEOUT_SEC,
+        init_workflow_timeout_server => {true, ?JOB_TIMEOUT_CHECK_PERIOD_SEC}
+    },
+    workflow_engine:init(?ATM_WORKFLOW_EXECUTION_ENGINE, Options).
+
+
+-spec start(user_ctx:ctx(), atm_workflow_execution:doc()) -> ok.
+start(UserCtx, #document{
+    key = AtmWorkflowExecutionId,
+    value = #atm_workflow_execution{
+        space_id = SpaceId,
+        store_registry = AtmStoreRegistry
+    }
+}) ->
+    ok = atm_workflow_execution_session:init(AtmWorkflowExecutionId, UserCtx),
+
+    workflow_engine:execute_workflow(?ATM_WORKFLOW_EXECUTION_ENGINE, #{
+        id => AtmWorkflowExecutionId,
+        workflow_handler => ?MODULE,
+        execution_context => atm_workflow_execution_env:build(
+            SpaceId, AtmWorkflowExecutionId, AtmStoreRegistry
+        )
+    }).
 
 
 %%%===================================================================
