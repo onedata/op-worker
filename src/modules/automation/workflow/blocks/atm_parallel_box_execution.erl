@@ -20,6 +20,7 @@
 -export([
     create_all/3, create/4,
     prepare_all/2, prepare/2,
+    ensure_all_ended/1,
     clean_all/1, clean/1,
     delete_all/1, delete/1
 ]).
@@ -130,6 +131,11 @@ prepare(AtmWorkflowExecutionCtx, #atm_parallel_box_execution{
     atm_task_execution_api:prepare_all(
         AtmWorkflowExecutionCtx, maps:values(AtmTaskExecutionRegistry)
     ).
+
+
+-spec ensure_all_ended([record()]) -> ok | no_return().
+ensure_all_ended(AtmParallelBoxExecutions) ->
+    pforeach_not_ended_task(fun atm_task_execution_api:mark_ended/1, AtmParallelBoxExecutions).
 
 
 -spec clean_all([record()]) -> ok.
@@ -255,3 +261,33 @@ db_decode(#{
             binary_to_atom(AtmTaskExecutionStatusBin, utf8)
         end, AtmTaskExecutionStatusesJson)
     }.
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+
+%% @private
+-spec pforeach_not_ended_task(
+    fun((atm_task_execution:id()) -> ok | {error, term()}),
+    [atm_task_execution:id()]
+) ->
+    ok | no_return().
+pforeach_not_ended_task(Callback, AtmParallelBoxExecutions) ->
+    atm_parallel_runner:foreach(fun(#atm_parallel_box_execution{
+        status = AtmParallelBoxExecutionStatus,
+        task_statuses = AtmTaskExecutionStatuses
+    }) ->
+        case atm_task_execution_status_utils:is_ended(AtmParallelBoxExecutionStatus) of
+            true ->
+                ok;
+            false ->
+                atm_parallel_runner:foreach(fun({AtmTaskExecutionId, AtmTaskExecutionStatus}) ->
+                    case atm_task_execution_status_utils:is_ended(AtmTaskExecutionStatus) of
+                        true -> ok;
+                        false -> Callback(AtmTaskExecutionId)
+                    end
+                end, maps:to_list(AtmTaskExecutionStatuses))
+        end
+    end, AtmParallelBoxExecutions).

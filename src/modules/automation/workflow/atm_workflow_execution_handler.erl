@@ -243,13 +243,12 @@ handle_lane_execution_ended(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, Atm
     ok.
 handle_workflow_execution_ended(AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv) ->
     try
-        {ok, AtmWorkflowExecutionDoc = #document{value = #atm_workflow_execution{
-            lanes = AtmLaneExecutions
-        }}} = atm_workflow_execution:get(AtmWorkflowExecutionId),
+        ensure_all_tasks_ended(AtmWorkflowExecutionId),
 
-        notify_ended(AtmWorkflowExecutionDoc),
-        atm_lane_execution:clean_all(AtmLaneExecutions),
-        atm_workflow_execution_session:terminate(AtmWorkflowExecutionId)
+        {ok, AtmWorkflowExecutionDoc} = atm_workflow_execution:get(AtmWorkflowExecutionId),
+
+        teardown(AtmWorkflowExecutionDoc),
+        notify_ended(AtmWorkflowExecutionDoc)
     catch _:Reason ->
         % TODO VFS-7637 use audit log
         ?error("[~p] FAILED TO MARK WORKFLOW EXECUTION AS ENDED DUE TO: ~p", [
@@ -378,6 +377,26 @@ acquire_iterator_for_lane(AtmWorkflowExecutionEnv, #atm_lane_schema{
 report_task_execution_failed(AtmWorkflowExecutionEnv, AtmTaskExecutionId) ->
     catch atm_task_execution_api:handle_results(AtmWorkflowExecutionEnv, AtmTaskExecutionId, error),
     ok.
+
+
+%% @private
+-spec ensure_all_tasks_ended(atm_workflow_execution:id()) -> ok | no_return().
+ensure_all_tasks_ended(AtmWorkflowExecutionId) ->
+    {ok, #document{value = #atm_workflow_execution{
+        lanes = AtmLaneExecutions
+    }}} = atm_workflow_execution:get(AtmWorkflowExecutionId),
+
+    atm_lane_execution:ensure_all_ended(AtmLaneExecutions).
+
+
+%% @private
+-spec teardown(atm_workflow_execution:doc()) -> ok.
+teardown(#document{
+    key = AtmWorkflowExecutionId,
+    value = #atm_workflow_execution{lanes = AtmLaneExecutions}
+}) ->
+    atm_lane_execution:clean_all(AtmLaneExecutions),
+    atm_workflow_execution_session:terminate(AtmWorkflowExecutionId).
 
 
 %% @private

@@ -20,6 +20,7 @@
 -export([
     create_all/1, create/3,
     prepare_all/2, prepare/2,
+    ensure_all_ended/1,
     clean_all/1, clean/1,
     delete_all/1, delete/1
 ]).
@@ -108,6 +109,13 @@ prepare_all(AtmWorkflowExecutionCtx, AtmLaneExecutions) ->
 -spec prepare(atm_workflow_execution_ctx:record(), record()) -> ok | no_return().
 prepare(AtmWorkflowExecutionCtx, #atm_lane_execution{parallel_boxes = AtmParallelBoxExecutions}) ->
     atm_parallel_box_execution:prepare_all(AtmWorkflowExecutionCtx, AtmParallelBoxExecutions).
+
+
+-spec ensure_all_ended([record()]) -> ok | no_return().
+ensure_all_ended(AtmLaneExecutions) ->
+    pforeach_not_ended(fun(#atm_lane_execution{parallel_boxes = AtmParallelBoxExecutions}) ->
+        atm_parallel_box_execution:ensure_all_ended(AtmParallelBoxExecutions)
+    end, AtmLaneExecutions).
 
 
 -spec clean_all([record()]) -> ok.
@@ -236,3 +244,20 @@ db_decode(#{
             NestedRecordDecoder(AtmParallelBoxExecutionJson, atm_parallel_box_execution)
         end, AtmParallelBoxExecutionsJson)
     }.
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+
+%% @private
+-spec pforeach_not_ended(fun((record()) -> ok | {error, term()}), [record()]) ->
+    ok | no_return().
+pforeach_not_ended(Callback, AtmLaneExecutions) ->
+    atm_parallel_runner:foreach(fun(#atm_lane_execution{status = Status} = AtmLaneExecution) ->
+        case atm_task_execution_status_utils:is_ended(Status) of
+            true -> ok;
+            false -> Callback(AtmLaneExecution)
+        end
+    end, AtmLaneExecutions).
