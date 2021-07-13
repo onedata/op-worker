@@ -23,7 +23,8 @@
 % API
 -export([
     init_engine/0,
-    start/2
+    start/2,
+    cancel/1
 ]).
 
 % workflow_handler callbacks
@@ -85,6 +86,12 @@ start(UserCtx, #document{
             SpaceId, AtmWorkflowExecutionId, AtmStoreRegistry
         )
     }).
+
+
+-spec cancel(atm_workflow_execution:id()) -> ok | {error, already_ended}.
+cancel(_AtmWorkflowExecutionId) ->
+    % TODO implement
+    ok.
 
 
 %%%===================================================================

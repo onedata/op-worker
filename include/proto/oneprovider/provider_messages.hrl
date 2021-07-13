@@ -225,6 +225,10 @@
     callback_url :: undefined | http_client:url()
 }).
 
+-record(cancel_atm_workflow_execution, {
+    atm_workflow_execution_id :: atm_workflow_execution:id()
+}).
+
 -type provider_request_type() ::
     #get_parent{} | #get_acl{} | #set_acl{} | #remove_acl{} |
     #get_transfer_encoding{} | #set_transfer_encoding{} |
@@ -239,7 +243,7 @@
     #establish_dataset{} | #update_dataset{} | #remove_dataset{} |
     #get_dataset_info{} | #get_file_eff_dataset_summary{} | #list_top_datasets{} | #list_children_datasets{} |
     #archive_dataset{} | #update_archive{} | #get_archive_info{} | #list_archives{} | #init_archive_purge{} |
-    #schedule_atm_workflow_execution{}.
+    #schedule_atm_workflow_execution{} | #cancel_atm_workflow_execution{}.
 
 -record(transfer_encoding, {
     value :: binary()

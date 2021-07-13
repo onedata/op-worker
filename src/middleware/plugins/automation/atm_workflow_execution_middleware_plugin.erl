@@ -50,6 +50,8 @@ resolve_handler(create, instance, private) -> ?MODULE;
 resolve_handler(get, instance, private) -> ?MODULE;
 resolve_handler(get, summary, private) -> ?MODULE;
 
+resolve_handler(delete, process, private) -> ?MODULE;
+
 resolve_handler(_, _, _) -> throw(?ERROR_NOT_SUPPORTED).
 
 
@@ -80,6 +82,9 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = As}}) when
     As =:= instance;
     As =:= summary
 ->
+    undefined;
+
+data_spec(#op_req{operation = delete, gri = #gri{aspect = process}}) ->
     undefined.
 
 
@@ -124,12 +129,16 @@ authorize(#op_req{operation = create, auth = ?USER(UserId), data = Data, gri = #
 authorize(#op_req{operation = get, auth = Auth, gri = #gri{aspect = instance}}, AtmWorkflowExecution) ->
     has_access_to_workflow_execution_details(Auth, AtmWorkflowExecution);
 
-authorize(#op_req{
-    operation = get,
-    auth = ?USER(UserId),
-    gri = #gri{aspect = summary}
-}, #atm_workflow_execution{space_id = SpaceId}) ->
-    space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW_ATM_WORKFLOW_EXECUTIONS).
+authorize(#op_req{operation = get, auth = ?USER(UserId), gri = #gri{
+    aspect = summary
+}}, #atm_workflow_execution{space_id = SpaceId}) ->
+    space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW_ATM_WORKFLOW_EXECUTIONS);
+
+authorize(#op_req{operation = delete, auth = ?USER(UserId), gri = #gri{
+    aspect = process
+}}, #atm_workflow_execution{space_id = SpaceId}) ->
+    % TODO add privilege to cancel workflow executions
+    space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_SCHEDULE_ATM_WORKFLOW_EXECUTIONS).
 
 
 %%--------------------------------------------------------------------
@@ -146,6 +155,10 @@ validate(#op_req{operation = get, gri = #gri{aspect = As}}, _) when
     As =:= instance;
     As =:= summary
 ->
+    % Doc was already fetched in 'fetch_entity' so space must be supported locally
+    ok;
+
+validate(#op_req{operation = delete, gri = #gri{aspect = process}}, _) ->
     % Doc was already fetched in 'fetch_entity' so space must be supported locally
     ok.
 
@@ -213,8 +226,14 @@ update(_) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec delete(middleware:req()) -> middleware:delete_result().
-delete(_) ->
-    ?ERROR_NOT_SUPPORTED.
+delete(#op_req{auth = ?USER(_UserId, SessionId), gri = #gri{
+    id = AtmWorkflowExecutionId,
+    aspect = process
+}}) ->
+    case lfm:cancel_atm_workflow_execution(SessionId, AtmWorkflowExecutionId) of
+        ok -> ok;
+        {error, _} -> ?ERROR_MALFORMED_DATA
+    end.
 
 
 %%%===================================================================

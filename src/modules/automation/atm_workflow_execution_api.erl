@@ -21,7 +21,8 @@
 -export([
     list/4,
     create/5,
-    get/1, get_summary/2
+    get/1, get_summary/2,
+    cancel/1
 ]).
 
 
@@ -147,6 +148,11 @@ get_summary(AtmWorkflowExecutionId, #atm_workflow_execution{
         start_time = StartTime,
         finish_time = FinishTime
     }.
+
+
+-spec cancel(atm_workflow_execution:id()) -> ok | {error, already_ended}.
+cancel(AtmWorkflowExecutionId) ->
+    atm_workflow_execution_handler:cancel(AtmWorkflowExecutionId).
 
 
 %%%===================================================================
