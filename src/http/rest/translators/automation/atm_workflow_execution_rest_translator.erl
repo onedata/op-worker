@@ -45,21 +45,21 @@ create_response(#gri{aspect = instance}, _, resource, {#gri{id = AtmWorkflowExec
 %%--------------------------------------------------------------------
 -spec get_response(gri:gri(), Resource :: term()) -> #rest_resp{}.
 get_response(#gri{id = AtmWorkflowExecutionId}, #atm_workflow_execution{
-    space_id = SpaceId,
-    atm_inventory_id = AtmInventoryId,
-
-    name = Name,
     schema_snapshot_id = AtmWorkflowSchemaSnapshotId,
-    lambda_snapshot_registry = AtmLambdaSnapshotRegistry,
-
-    store_registry = AtmStoreRegistry,
-    lanes = AtmLaneExecutions,
+    name = Name,
+    atm_inventory_id = AtmInventoryId,
+    space_id = SpaceId,
+    user_id = UserId,
 
     status = Status,
 
     schedule_time = ScheduleTime,
     start_time = StartTime,
-    finish_time = FinishTime
+    finish_time = FinishTime,
+
+    lambda_snapshot_registry = AtmLambdaSnapshotRegistry,
+    store_registry = AtmStoreRegistry,
+    lanes = AtmLaneExecutions
 }) ->
     ?OK_REPLY(#{
         <<"atmWorkflowExecutionId">> => AtmWorkflowExecutionId,
@@ -67,6 +67,7 @@ get_response(#gri{id = AtmWorkflowExecutionId}, #atm_workflow_execution{
         <<"name">> => Name,
         <<"atmInventoryId">> => AtmInventoryId,
         <<"spaceId">> => SpaceId,
+        <<"userId">> => UserId,
 
         <<"status">> => atom_to_binary(Status, utf8),
 
