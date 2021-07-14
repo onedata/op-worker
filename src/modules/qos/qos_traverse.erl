@@ -230,16 +230,19 @@ slave_job_traverse(TaskId, UserCtx, FileCtx, AdditionalData) ->
 slave_job_reconcile(TaskId, UserCtx, FileCtx) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     {FileDoc, FileCtx1} = file_ctx:get_file_doc(FileCtx),
-    {ok, EffectiveFileQos} = file_qos:get_effective(FileDoc),
-    % start transfer only for existing entries
-    QosEntries = case file_qos:is_in_trash(EffectiveFileQos) of
-        true ->
-            [];
-        false ->
-            {ok, [StorageId | _]} = space_logic:get_local_storages(SpaceId),
-            file_qos:get_assigned_entries_for_storage(EffectiveFileQos, StorageId)
-    end,
-    ok = synchronize_file_for_entries(TaskId, UserCtx, FileCtx1, QosEntries).
+    case file_qos:get_effective(FileDoc) of
+        undefined -> ok;
+        {ok, EffectiveFileQos} ->
+            QosEntries = case file_qos:is_in_trash(EffectiveFileQos) of
+                true ->
+                    [];
+                false ->
+                    % start transfer only for existing entries
+                    {ok, [StorageId | _]} = space_logic:get_local_storages(SpaceId),
+                    file_qos:get_assigned_entries_for_storage(EffectiveFileQos, StorageId)
+            end,
+            ok = synchronize_file_for_entries(TaskId, UserCtx, FileCtx1, QosEntries)
+    end.
 
 
 %% @private
