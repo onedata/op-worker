@@ -28,7 +28,7 @@
   0},
  {<<"compatibility_reference">>,
   {raw,{git,"ssh://git@git.onedata.org:7999/vfs/compatibility-reference.git",
-            {ref,"b92e9ee95428bbd287b208723aa1f3174ea490b8"}}},
+            {ref,"42a23c7c4c37ef0626c123a17c9229917ab6e8b0"}}},
   0},
  {<<"cowboy">>,
   {git,"git://github.com/ninenines/cowboy.git",
