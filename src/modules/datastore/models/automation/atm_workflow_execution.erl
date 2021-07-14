@@ -18,7 +18,7 @@
 -export([create/1, get/1, update/2, delete/1]).
 
 %% datastore_model callbacks
--export([get_ctx/0, get_record_version/0, get_record_struct/1]).
+-export([get_ctx/0, get_record_version/0, get_record_struct/1, upgrade_record/2]).
 
 
 -type id() :: binary().
@@ -69,14 +69,7 @@ get(AtmWorkflowExecutionId) ->
 -spec update(id(), diff()) -> {ok, doc()} | {error, term()}.
 update(AtmWorkflowExecutionId, Diff1) ->
     Diff2 = fun(#atm_workflow_execution{status = PrevStatus} = AtmWorkflowExecution) ->
-        case Diff1(AtmWorkflowExecution#atm_workflow_execution{status_changed = false}) of
-            {ok, #atm_workflow_execution{status = NewStatus} = NewAtmWorkflowExecution} ->
-                {ok, NewAtmWorkflowExecution#atm_workflow_execution{
-                    status_changed = NewStatus /= PrevStatus
-                }};
-            {error, _} = Error ->
-                Error
-        end
+        Diff1(AtmWorkflowExecution#atm_workflow_execution{prev_status = PrevStatus})
     end,
     datastore_model:update(?CTX, AtmWorkflowExecutionId, Diff2).
 
@@ -108,7 +101,7 @@ get_ctx() ->
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    1.
+    2.
 
 
 %%--------------------------------------------------------------------
@@ -137,4 +130,70 @@ get_record_struct(1) ->
         {schedule_time, integer},
         {start_time, integer},
         {finish_time, integer}
+    ]};
+get_record_struct(2) ->
+    {record, [
+        {space_id, string},
+        {atm_inventory_id, string},
+
+        {name, string},
+        {schema_snapshot_id, string},
+        {lambda_snapshot_registry, #{string => string}},
+
+        {store_registry, #{string => string}},
+        {lanes, [{custom, string, {persistent_record, encode, decode, atm_lane_execution}}]},
+
+        {status, atom},
+        {prev_status, atom},  %% This field was previously `status_changed`
+
+        {callback, string},
+
+        {schedule_time, integer},
+        {start_time, integer},
+        {finish_time, integer}
     ]}.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Upgrades model's record from provided version to the next one.
+%% @end
+%%--------------------------------------------------------------------
+-spec upgrade_record(datastore_model:record_version(), datastore_model:record()) ->
+    {datastore_model:record_version(), datastore_model:record()}.
+upgrade_record(1, {
+    ?MODULE,
+    SpaceId,
+    AtmInventoryId,
+    Name,
+    SchemaSnapshotId,
+    LambdaSnapshotRegistry,
+    StoreRegistry,
+    Lanes,
+    Status,
+    _StatusChanged,
+    Callback,
+    ScheduleTime,
+    StartTime,
+    FinishTime
+}) ->
+    {2, #atm_workflow_execution{
+        space_id = SpaceId,
+        atm_inventory_id = AtmInventoryId,
+
+        name = Name,
+        schema_snapshot_id = SchemaSnapshotId,
+        lambda_snapshot_registry = LambdaSnapshotRegistry,
+
+        store_registry = StoreRegistry,
+        lanes = Lanes,
+
+        status = Status,
+        prev_status = Status,
+
+        callback = Callback,
+
+        schedule_time = ScheduleTime,
+        start_time = StartTime,
+        finish_time = FinishTime
+    }}.

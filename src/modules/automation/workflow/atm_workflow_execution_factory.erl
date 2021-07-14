@@ -169,6 +169,7 @@ create_workflow_execution_doc(
                 lanes = AtmLaneExecutions,
 
                 status = ?SCHEDULED_STATUS,
+                prev_status = ?SCHEDULED_STATUS,
 
                 callback = CallbackUrl,
 

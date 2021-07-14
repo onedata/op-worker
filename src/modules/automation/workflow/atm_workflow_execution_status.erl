@@ -47,16 +47,13 @@ handle_enqueued(AtmWorkflowExecutionId) ->
 -spec handle_failed_in_waiting_phase(atm_workflow_execution:id()) ->
     ok | no_return().
 handle_failed_in_waiting_phase(AtmWorkflowExecutionId) ->
-    Diff = fun(AtmWorkflowExecution = #atm_workflow_execution{
-        status = Status,
-        schedule_time = ScheduleTime
-    }) ->
+    Diff = fun(#atm_workflow_execution{status = Status} = AtmWorkflowExecution) ->
         case status_to_phase(Status) of
             ?WAITING_PHASE ->
-                {ok, AtmWorkflowExecution#atm_workflow_execution{
-                    status = ?FAILED_STATUS,
-                    finish_time = global_clock:monotonic_timestamp_seconds(ScheduleTime)
-                }};
+                NewAtmWorkflowExecution = AtmWorkflowExecution#atm_workflow_execution{
+                    status = ?FAILED_STATUS
+                },
+                {ok, set_times_on_phase_transition(NewAtmWorkflowExecution)};
             _ ->
                 {error, Status}
         end
@@ -64,8 +61,7 @@ handle_failed_in_waiting_phase(AtmWorkflowExecutionId) ->
 
     case atm_workflow_execution:update(AtmWorkflowExecutionId, Diff) of
         {ok, AtmWorkflowExecutionDoc} ->
-            move_from_waiting_to_ended_phase(AtmWorkflowExecutionDoc),
-            ok;
+            ensure_in_proper_phase_tree(AtmWorkflowExecutionDoc);
         {error, CurrStatus} ->
             throw(?ERROR_ATM_INVALID_STATUS_TRANSITION(CurrStatus, ?FAILED_STATUS))
     end.
@@ -91,10 +87,7 @@ report_task_status_change(
     AtmTaskExecutionId,
     NewAtmTaskExecutionStatus
 ) ->
-    Diff = fun(AtmWorkflowExecution = #atm_workflow_execution{
-        status = AtmWorkflowExecutionStatus,
-        lanes = AtmLaneExecutions
-    }) ->
+    Diff = fun(AtmWorkflowExecution = #atm_workflow_execution{lanes = AtmLaneExecutions}) ->
         AtmLanExecution = lists:nth(AtmLaneExecutionIndex, AtmLaneExecutions),
 
         case atm_lane_execution:update_task_status(
@@ -110,10 +103,6 @@ report_task_status_change(
                 )),
                 NewAtmWorkflowExecution = AtmWorkflowExecution#atm_workflow_execution{
                     status = NewAtmWorkflowExecutionStatus,
-                    % 'status_changed' field must be changed manually here as it's value
-                    % is checked right below when still in update fun (automatic update
-                    % happens after returning from Diff fun)
-                    status_changed = NewAtmWorkflowExecutionStatus /= AtmWorkflowExecutionStatus,
                     lanes = NewAtmLaneExecutions
                 },
                 {ok, set_times_on_phase_transition(NewAtmWorkflowExecution)};
@@ -123,7 +112,7 @@ report_task_status_change(
     end,
     case atm_workflow_execution:update(AtmWorkflowExecutionId, Diff) of
         {ok, AtmWorkflowExecutionDoc} ->
-            ensure_proper_phase(AtmWorkflowExecutionDoc);
+            ensure_in_proper_phase_tree(AtmWorkflowExecutionDoc);
         {error, _} ->
             % Race with other process which must have already updated task status
             ok
@@ -206,11 +195,15 @@ set_times_on_phase_transition(AtmWorkflowExecution = #atm_workflow_execution{
     start_time = StartTime
 }) ->
     case has_phase_transition_occurred(AtmWorkflowExecution) of
-        {true, ?ONGOING_PHASE} ->
+        {true, ?WAITING_PHASE, ?ENDED_PHASE} ->
+            AtmWorkflowExecution#atm_workflow_execution{
+                finish_time = global_clock:monotonic_timestamp_seconds(ScheduleTime)
+            };
+        {true, ?WAITING_PHASE, ?ONGOING_PHASE} ->
             AtmWorkflowExecution#atm_workflow_execution{
                 start_time = global_clock:monotonic_timestamp_seconds(ScheduleTime)
             };
-        {true, ?ENDED_PHASE} ->
+        {true, ?ONGOING_PHASE, ?ENDED_PHASE} ->
             AtmWorkflowExecution#atm_workflow_execution{
                 finish_time = global_clock:monotonic_timestamp_seconds(StartTime)
             };
@@ -220,54 +213,30 @@ set_times_on_phase_transition(AtmWorkflowExecution = #atm_workflow_execution{
 
 
 %% @private
--spec ensure_proper_phase(atm_workflow_execution:doc()) -> ok.
-ensure_proper_phase(Doc = #document{value = AtmWorkflowExecution}) ->
+-spec ensure_in_proper_phase_tree(atm_workflow_execution:doc()) -> ok.
+ensure_in_proper_phase_tree(#document{value = AtmWorkflowExecution} = AtmWorkflowExecutionDoc) ->
     case has_phase_transition_occurred(AtmWorkflowExecution) of
-        {true, ?ONGOING_PHASE} ->
-            move_from_waiting_to_ongoing_phase(Doc);
-        {true, ?ENDED_PHASE} ->
-            move_from_ongoing_to_ended_phase(Doc);
+        {true, ?WAITING_PHASE, ?ENDED_PHASE} ->
+            atm_ended_workflow_executions:add(AtmWorkflowExecutionDoc),
+            atm_waiting_workflow_executions:delete(AtmWorkflowExecutionDoc);
+        {true, ?WAITING_PHASE, ?ONGOING_PHASE} ->
+            atm_ongoing_workflow_executions:add(AtmWorkflowExecutionDoc),
+            atm_waiting_workflow_executions:delete(AtmWorkflowExecutionDoc);
+        {true, ?ONGOING_PHASE, ?ENDED_PHASE} ->
+            atm_ended_workflow_executions:add(AtmWorkflowExecutionDoc),
+            atm_ongoing_workflow_executions:delete(AtmWorkflowExecutionDoc);
         false ->
             ok
     end.
 
 
 -spec has_phase_transition_occurred(atm_workflow_execution:record()) ->
-    {true, atm_workflow_execution:phase()} | false.
-has_phase_transition_occurred(#atm_workflow_execution{status_changed = false}) ->
-    % no phase transition
-    false;
-
-has_phase_transition_occurred(#atm_workflow_execution{status = ?ACTIVE_STATUS}) ->
-    {true, ?ONGOING_PHASE};
-
-has_phase_transition_occurred(#atm_workflow_execution{status = EndedStatus}) when
-    EndedStatus == ?FINISHED_STATUS;
-    EndedStatus == ?FAILED_STATUS
-->
-    {true, ?ENDED_PHASE};
-
-has_phase_transition_occurred(#atm_workflow_execution{}) ->
-    % status transition within one phase
-    false.
-
-
-%% @private
--spec move_from_waiting_to_ended_phase(atm_workflow_execution:doc()) -> ok.
-move_from_waiting_to_ended_phase(AtmWorkflowExecutionDoc) ->
-    atm_ended_workflow_executions:add(AtmWorkflowExecutionDoc),
-    atm_waiting_workflow_executions:delete(AtmWorkflowExecutionDoc).
-
-
-%% @private
--spec move_from_waiting_to_ongoing_phase(atm_workflow_execution:doc()) -> ok.
-move_from_waiting_to_ongoing_phase(AtmWorkflowExecutionDoc) ->
-    atm_ongoing_workflow_executions:add(AtmWorkflowExecutionDoc),
-    atm_waiting_workflow_executions:delete(AtmWorkflowExecutionDoc).
-
-
-%% @private
--spec move_from_ongoing_to_ended_phase(atm_workflow_execution:doc()) -> ok.
-move_from_ongoing_to_ended_phase(AtmWorkflowExecutionDoc) ->
-    atm_ended_workflow_executions:add(AtmWorkflowExecutionDoc),
-    atm_ongoing_workflow_executions:delete(AtmWorkflowExecutionDoc).
+    false | {true, atm_workflow_execution:phase(), atm_workflow_execution:phase()}.
+has_phase_transition_occurred(#atm_workflow_execution{
+    status = CurrStatus,
+    prev_status = PrevStatus
+}) ->
+    case {status_to_phase(PrevStatus), status_to_phase(CurrStatus)} of
+        {SamePhase, SamePhase} -> false;
+        {PrevPhase, CurrPhase} -> {true, PrevPhase, CurrPhase}
+    end.
