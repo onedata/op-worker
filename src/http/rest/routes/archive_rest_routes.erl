@@ -7,7 +7,7 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%--------------------------------------------------------------------
-%%% @doc
+%%% @doc 
 %%% This module contains definitions of archive REST methods.
 %%% @end
 %%%--------------------------------------------------------------------
@@ -35,9 +35,9 @@ routes() -> [
         method = 'GET',
         produces = [<<"application/json">>],
         b_gri = #b_gri{
-            type = op_dataset,
-            id = ?BINDING(did),
-            aspect = archives,
+            type = op_dataset, 
+            id = ?BINDING(did), 
+            aspect = archives, 
             scope = private
         }
     }},
@@ -48,9 +48,9 @@ routes() -> [
         consumes = [<<"application/json">>],
         produces = [<<"application/json">>],
         b_gri = #b_gri{
-            type = op_archive,
-            id = undefined,
-            aspect = instance,
+            type = op_archive, 
+            id = undefined, 
+            aspect = instance, 
             scope = private
         }
     }},
@@ -59,9 +59,9 @@ routes() -> [
         method = 'GET',
         produces = [<<"application/json">>],
         b_gri = #b_gri{
-            type = op_archive,
-            id = ?BINDING(aid),
-            aspect = instance,
+            type = op_archive, 
+            id = ?BINDING(aid), 
+            aspect = instance, 
             scope = private
         }
     }},
@@ -71,9 +71,9 @@ routes() -> [
         parse_body = as_json_params,
         consumes = [<<"application/json">>],
         b_gri = #b_gri{
-            type = op_archive,
-            id = ?BINDING(aid),
-            aspect = instance,
+            type = op_archive, 
+            id = ?BINDING(aid), 
+            aspect = instance, 
             scope = private
         }
     }},
@@ -83,9 +83,9 @@ routes() -> [
         parse_body = as_json_params,
         consumes = [<<"application/json">>],
         b_gri = #b_gri{
-            type = op_archive,
-            id = ?BINDING(aid),
-            aspect = purge,
+            type = op_archive, 
+            id = ?BINDING(aid), 
+            aspect = purge, 
             scope = private
         }
     }}
