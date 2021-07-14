@@ -16,7 +16,8 @@
 
 %% API
 -export([
-    schedule_workflow_execution/5
+    schedule_workflow_execution/5,
+    cancel_workflow_execution/1
 ]).
 
 
@@ -43,6 +44,18 @@ schedule_workflow_execution(UserCtx, SpaceDirCtx, AtmWorkflowSchemaId, AtmStoreI
             id = AtmWorkflowExecutionId,
             record = AtmWorkflowExecution
         })
+    catch _:_ ->
+        %% TODO VFS-7208 do not catch errors after introducing API errors to fslogic
+        #provider_response{status = #status{code = ?EINVAL}}
+    end.
+
+
+-spec cancel_workflow_execution(atm_workflow_execution:id())->
+    fslogic_worker:provider_response().
+cancel_workflow_execution(AtmWorkflowExecutionId) ->
+    try
+        ok = atm_workflow_execution_api:cancel(AtmWorkflowExecutionId),
+        ?PROVIDER_OK_RESP
     catch _:_ ->
         %% TODO VFS-7208 do not catch errors after introducing API errors to fslogic
         #provider_response{status = #status{code = ?EINVAL}}

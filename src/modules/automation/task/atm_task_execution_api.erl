@@ -217,13 +217,22 @@ handle_results(_AtmWorkflowExecutionEnv, _AtmTaskExecutionId, _Results) ->
 
 -spec mark_ended(atm_task_execution:id()) -> ok.
 mark_ended(AtmTaskExecutionId) ->
-    {ok, AtmTaskExecutionDoc} = atm_task_execution:update(AtmTaskExecutionId, fun
-        (#atm_task_execution{items_failed = 0} = AtmTaskExecution) ->
+    Diff = fun
+        (#atm_task_execution{status = ?PENDING_STATUS} = AtmTaskExecution) ->
+            {ok, AtmTaskExecution#atm_task_execution{status = ?SKIPPED_STATUS}};
+        (#atm_task_execution{status = ?ACTIVE_STATUS, items_failed = 0} = AtmTaskExecution) ->
             {ok, AtmTaskExecution#atm_task_execution{status = ?FINISHED_STATUS}};
-        (#atm_task_execution{} = AtmTaskExecution) ->
-            {ok, AtmTaskExecution#atm_task_execution{status = ?FAILED_STATUS}}
-    end),
-    handle_status_change(AtmTaskExecutionDoc).
+        (#atm_task_execution{status = ?ACTIVE_STATUS} = AtmTaskExecution) ->
+            {ok, AtmTaskExecution#atm_task_execution{status = ?FAILED_STATUS}};
+        (_) ->
+            {error, already_ended}
+    end,
+    case atm_task_execution:update(AtmTaskExecutionId, Diff) of
+        {ok, AtmTaskExecutionDoc} ->
+            handle_status_change(AtmTaskExecutionDoc);
+        {error, already_ended} ->
+            ok
+    end.
 
 
 %%%===================================================================
@@ -235,17 +244,24 @@ mark_ended(AtmTaskExecutionId) ->
 -spec update_items_in_processing(atm_task_execution:id()) ->
     atm_task_execution:doc().
 update_items_in_processing(AtmTaskExecutionId) ->
-    {ok, AtmTaskExecutionDoc} = atm_task_execution:update(AtmTaskExecutionId, fun
+    Diff = fun
         (#atm_task_execution{status = ?PENDING_STATUS, items_in_processing = 0} = AtmTaskExecution) ->
             {ok, AtmTaskExecution#atm_task_execution{
                 status = ?ACTIVE_STATUS,
                 items_in_processing = 1
             }};
-        (#atm_task_execution{items_in_processing = ItemsInProcessing} = AtmTaskExecution) ->
-            {ok, AtmTaskExecution#atm_task_execution{items_in_processing = ItemsInProcessing + 1}}
-    end),
-    handle_status_change(AtmTaskExecutionDoc),
-    AtmTaskExecutionDoc.
+        (#atm_task_execution{status = ?ACTIVE_STATUS, items_in_processing = Num} = AtmTaskExecution) ->
+            {ok, AtmTaskExecution#atm_task_execution{items_in_processing = Num + 1}};
+        (_) ->
+            {error, already_ended}
+    end,
+    case atm_task_execution:update(AtmTaskExecutionId, Diff) of
+        {ok, AtmTaskExecutionDoc} ->
+            handle_status_change(AtmTaskExecutionDoc),
+            AtmTaskExecutionDoc;
+        {error, already_ended} ->
+            throw(?ERROR_ATM_TASK_EXECUTION_ENDED)
+    end.
 
 
 %% @private

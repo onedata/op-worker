@@ -14,7 +14,6 @@
 -author("Bartosz Walkowicz").
 
 -include("modules/automation/atm_execution.hrl").
--include("workflow_engine.hrl").
 -include_lib("ctool/include/errors.hrl").
 
 %% API
@@ -22,7 +21,8 @@
 -export([
     list/4,
     create/5,
-    get/1, get_summary/2
+    get/1, get_summary/2,
+    cancel/1
 ]).
 
 
@@ -40,12 +40,6 @@
 -export_type([store_initial_values/0]).
 
 
--define(ATM_WORKFLOW_EXECUTION_ENGINE, <<"atm_workflow_execution_engine">>).
--define(ENGINE_ASYNC_CALLS_LIMIT, op_worker:get_env(atm_workflow_engine_async_calls_limit, 1000)).
--define(ENGINE_SLOTS_COUNT, op_worker:get_env(atm_workflow_engine_slots_count, 20)).
--define(JOB_TIMEOUT_SEC, op_worker:get_env(atm_workflow_job_timeout_sec, 300)).
--define(JOB_TIMEOUT_CHECK_PERIOD_SEC, op_worker:get_env(atm_workflow_job_timeout_check_period_sec, 300)).
-
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -53,13 +47,7 @@
 
 -spec init_engine() -> ok.
 init_engine() ->
-    Options = #{
-        workflow_async_call_pools_to_use => [{?DEFAULT_ASYNC_CALL_POOL_ID, ?ENGINE_ASYNC_CALLS_LIMIT}],
-        slots_limit => ?ENGINE_SLOTS_COUNT,
-        default_keepalive_timeout => ?JOB_TIMEOUT_SEC,
-        init_workflow_timeout_server => {true, ?JOB_TIMEOUT_CHECK_PERIOD_SEC}
-    },
-    workflow_engine:init(?ATM_WORKFLOW_EXECUTION_ENGINE, Options).
+    atm_workflow_execution_handler:init_engine().
 
 
 -spec list(
@@ -116,11 +104,7 @@ create(UserCtx, SpaceId, AtmWorkflowSchemaId, StoreInitialValues, CallbackUrl) -
 
     AtmWorkflowExecutionId = datastore_key:new(),
 
-    #document{
-        value = AtmWorkflowExecution = #atm_workflow_execution{
-            store_registry = AtmStoreRegistry
-        }
-    } = atm_workflow_execution_factory:create(#atm_workflow_execution_creation_ctx{
+    AtmWorkflowExecutionDoc = atm_workflow_execution_factory:create(#atm_workflow_execution_creation_ctx{
         workflow_execution_ctx = atm_workflow_execution_ctx:build(
             SpaceId, AtmWorkflowExecutionId, UserCtx
         ),
@@ -129,17 +113,9 @@ create(UserCtx, SpaceId, AtmWorkflowSchemaId, StoreInitialValues, CallbackUrl) -
         store_initial_values = StoreInitialValues,
         callback_url = CallbackUrl
     }),
+    atm_workflow_execution_handler:start(UserCtx, AtmWorkflowExecutionDoc),
 
-    ok = atm_workflow_execution_session:init(AtmWorkflowExecutionId, UserCtx),
-    workflow_engine:execute_workflow(?ATM_WORKFLOW_EXECUTION_ENGINE, #{
-        id => AtmWorkflowExecutionId,
-        workflow_handler => atm_workflow_execution_handler,
-        execution_context => atm_workflow_execution_env:build(
-            SpaceId, AtmWorkflowExecutionId, AtmStoreRegistry
-        )
-    }),
-
-    {AtmWorkflowExecutionId, AtmWorkflowExecution}.
+    {AtmWorkflowExecutionId, AtmWorkflowExecutionDoc#document.value}.
 
 
 -spec get(atm_workflow_execution:id()) ->
@@ -172,6 +148,11 @@ get_summary(AtmWorkflowExecutionId, #atm_workflow_execution{
         start_time = StartTime,
         finish_time = FinishTime
     }.
+
+
+-spec cancel(atm_workflow_execution:id()) -> ok | {error, already_ended}.
+cancel(AtmWorkflowExecutionId) ->
+    atm_workflow_execution_handler:cancel(AtmWorkflowExecutionId).
 
 
 %%%===================================================================
