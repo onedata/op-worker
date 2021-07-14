@@ -57,7 +57,9 @@
 -define(ENQUEUED_STATUS, enqueued).
 -define(PENDING_STATUS, pending).
 -define(ACTIVE_STATUS, active).
+-define(ABORTING_STATUS, aborting).
 -define(FINISHED_STATUS, finished).
+-define(CANCELLED_STATUS, cancelled).
 -define(FAILED_STATUS, failed).
 -define(SKIPPED_STATUS, skipped).
 
