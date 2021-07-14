@@ -268,7 +268,14 @@ db_decode(#{
 %%%===================================================================
 
 
+%%--------------------------------------------------------------------
 %% @private
+%% @doc
+%% Executes given Callback for each not ended task. Specified function
+%% must take into account possible race conditions when task transition to
+%% ended phase just right before Callback is called.
+%% @end
+%%--------------------------------------------------------------------
 -spec pforeach_not_ended_task(
     fun((atm_task_execution:id()) -> ok | {error, term()}),
     [atm_task_execution:id()]

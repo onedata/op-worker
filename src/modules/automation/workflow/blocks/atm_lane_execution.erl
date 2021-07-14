@@ -251,7 +251,14 @@ db_decode(#{
 %%%===================================================================
 
 
+%%--------------------------------------------------------------------
 %% @private
+%% @doc
+%% Executes given Callback for each not ended lane execution. Specified function
+%% must take into account possible race conditions when lane transition to
+%% ended phase just right before Callback is called.
+%% @end
+%%--------------------------------------------------------------------
 -spec pforeach_not_ended(fun((record()) -> ok | {error, term()}), [record()]) ->
     ok | no_return().
 pforeach_not_ended(Callback, AtmLaneExecutions) ->

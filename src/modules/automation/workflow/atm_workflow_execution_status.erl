@@ -36,13 +36,13 @@
 -spec handle_preparing(atm_workflow_execution:id()) ->
     {ok, atm_workflow_execution:doc()} | no_return().
 handle_preparing(AtmWorkflowExecutionId) ->
-    handle_transition_in_waiting_phase(AtmWorkflowExecutionId, ?PREPARING_STATUS).
+    handle_transition_within_waiting_phase(AtmWorkflowExecutionId, ?PREPARING_STATUS).
 
 
 -spec handle_enqueued(atm_workflow_execution:id()) ->
     {ok, atm_workflow_execution:doc()} | no_return().
 handle_enqueued(AtmWorkflowExecutionId) ->
-    handle_transition_in_waiting_phase(AtmWorkflowExecutionId, ?ENQUEUED_STATUS).
+    handle_transition_within_waiting_phase(AtmWorkflowExecutionId, ?ENQUEUED_STATUS).
 
 
 -spec handle_cancel(atm_workflow_execution:id()) -> ok | {error, already_ended}.
@@ -71,6 +71,8 @@ handle_cancel(AtmWorkflowExecutionId) ->
 handle_ended(AtmWorkflowExecutionId) ->
     Diff = fun
         (#atm_workflow_execution{status = ?PREPARING_STATUS} = AtmWorkflowExecution) ->
+            % Workflow preparation must have failed as otherwise it is not possible to
+            % transition from waiting phase to ended phase directly
             {ok, set_times_on_phase_transition(AtmWorkflowExecution#atm_workflow_execution{
                 status = ?FAILED_STATUS
             })};
@@ -176,12 +178,12 @@ status_to_phase(?FAILED_STATUS) -> ?ENDED_PHASE.
 
 
 %% @private
--spec handle_transition_in_waiting_phase(
+-spec handle_transition_within_waiting_phase(
     atm_workflow_execution:id(),
     ?PREPARING_STATUS | ?ENQUEUED_STATUS
 ) ->
     {ok, atm_workflow_execution:doc()} | no_return().
-handle_transition_in_waiting_phase(AtmWorkflowExecutionId, NextStatus) ->
+handle_transition_within_waiting_phase(AtmWorkflowExecutionId, NextStatus) ->
     Diff = fun(#atm_workflow_execution{status = Status} = AtmWorkflowExecution) ->
         IsTransitionAllowed = case {Status, NextStatus} of
             {?SCHEDULED_STATUS, ?PREPARING_STATUS} -> true;

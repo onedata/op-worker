@@ -46,11 +46,10 @@
 -spec resolve_handler(middleware:operation(), gri:aspect(), middleware:scope()) ->
     module() | no_return().
 resolve_handler(create, instance, private) -> ?MODULE;
+resolve_handler(create, cancel, private) -> ?MODULE;
 
 resolve_handler(get, instance, private) -> ?MODULE;
 resolve_handler(get, summary, private) -> ?MODULE;
-
-resolve_handler(delete, process, private) -> ?MODULE;
 
 resolve_handler(_, _, _) -> throw(?ERROR_NOT_SUPPORTED).
 
@@ -77,14 +76,13 @@ data_spec(#op_req{operation = create, gri = #gri{aspect = instance}}) ->
             <<"callback">> => {binary, fun(Callback) -> url_utils:is_valid(Callback) end}
         }
     };
+data_spec(#op_req{operation = create, gri = #gri{aspect = cancel}}) ->
+    undefined;
 
 data_spec(#op_req{operation = get, gri = #gri{aspect = As}}) when
     As =:= instance;
     As =:= summary
 ->
-    undefined;
-
-data_spec(#op_req{operation = delete, gri = #gri{aspect = process}}) ->
     undefined.
 
 
@@ -126,20 +124,20 @@ authorize(#op_req{operation = create, auth = ?USER(UserId), data = Data, gri = #
     SpaceId = maps:get(<<"spaceId">>, Data),
     space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_SCHEDULE_ATM_WORKFLOW_EXECUTIONS);
 
+authorize(#op_req{operation = create, auth = ?USER(UserId), gri = #gri{
+    aspect = cancel
+}}, #atm_workflow_execution{user_id = CreatorUserId, space_id = SpaceId}) ->
+    UserId == CreatorUserId orelse space_logic:has_eff_privilege(
+        SpaceId, UserId, ?SPACE_CANCEL_ATM_WORKFLOW_EXECUTIONS
+    );
+
 authorize(#op_req{operation = get, auth = Auth, gri = #gri{aspect = instance}}, AtmWorkflowExecution) ->
     has_access_to_workflow_execution_details(Auth, AtmWorkflowExecution);
 
 authorize(#op_req{operation = get, auth = ?USER(UserId), gri = #gri{
     aspect = summary
 }}, #atm_workflow_execution{space_id = SpaceId}) ->
-    space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW_ATM_WORKFLOW_EXECUTIONS);
-
-authorize(#op_req{operation = delete, auth = ?USER(UserId), gri = #gri{
-    aspect = process
-}}, #atm_workflow_execution{user_id = CreatorUserId, space_id = SpaceId}) ->
-    UserId == CreatorUserId orelse space_logic:has_eff_privilege(
-        SpaceId, UserId, ?SPACE_CANCEL_ATM_WORKFLOW_EXECUTIONS
-    ).
+    space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW_ATM_WORKFLOW_EXECUTIONS).
 
 
 %%--------------------------------------------------------------------
@@ -152,14 +150,14 @@ validate(#op_req{operation = create, data = Data, gri = #gri{aspect = instance}}
     SpaceId = maps:get(<<"spaceId">>, Data),
     middleware_utils:assert_space_supported_locally(SpaceId);
 
+validate(#op_req{operation = create, gri = #gri{aspect = cancel}}, _) ->
+    % Doc was already fetched in 'fetch_entity' so space must be supported locally
+    ok;
+
 validate(#op_req{operation = get, gri = #gri{aspect = As}}, _) when
     As =:= instance;
     As =:= summary
 ->
-    % Doc was already fetched in 'fetch_entity' so space must be supported locally
-    ok;
-
-validate(#op_req{operation = delete, gri = #gri{aspect = process}}, _) ->
     % Doc was already fetched in 'fetch_entity' so space must be supported locally
     ok.
 
@@ -191,6 +189,15 @@ create(#op_req{auth = ?USER(_UserId, SessionId), data = Data, gri = #gri{aspect 
             ?ERROR_FORBIDDEN;
         {error, _} ->
             ?ERROR_MALFORMED_DATA
+    end;
+
+create(#op_req{auth = ?USER(_UserId, SessionId), gri = #gri{
+    id = AtmWorkflowExecutionId,
+    aspect = cancel
+}}) ->
+    case lfm:cancel_atm_workflow_execution(SessionId, AtmWorkflowExecutionId) of
+        ok -> ok;
+        {error, _} -> ?ERROR_MALFORMED_DATA
     end.
 
 
@@ -227,14 +234,8 @@ update(_) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec delete(middleware:req()) -> middleware:delete_result().
-delete(#op_req{auth = ?USER(_UserId, SessionId), gri = #gri{
-    id = AtmWorkflowExecutionId,
-    aspect = process
-}}) ->
-    case lfm:cancel_atm_workflow_execution(SessionId, AtmWorkflowExecutionId) of
-        ok -> ok;
-        {error, _} -> ?ERROR_MALFORMED_DATA
-    end.
+delete(_) ->
+    ?ERROR_NOT_SUPPORTED.
 
 
 %%%===================================================================
