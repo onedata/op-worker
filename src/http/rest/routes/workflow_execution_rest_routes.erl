@@ -30,7 +30,7 @@
 %%--------------------------------------------------------------------
 -spec routes() -> [{binary(), module(), #rest_req{}}].
 routes() -> [
-    %% Create workflow execution
+    %% Schedule workflow execution
     {<<"/automation/execution/workflows">>, rest_handler, #rest_req{
         method = 'POST',
         parse_body = as_json_params,
