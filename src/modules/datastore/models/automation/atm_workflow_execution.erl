@@ -133,6 +133,7 @@ get_record_struct(1) ->
     ]};
 get_record_struct(2) ->
     {record, [
+        {user_id, string},  %% new field
         {space_id, string},
         {atm_inventory_id, string},
 
@@ -178,6 +179,7 @@ upgrade_record(1, {
     FinishTime
 }) ->
     {2, #atm_workflow_execution{
+        user_id = <<"unknown">>,
         space_id = SpaceId,
         atm_inventory_id = AtmInventoryId,
 

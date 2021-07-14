@@ -136,9 +136,11 @@ authorize(#op_req{operation = get, auth = ?USER(UserId), gri = #gri{
 
 authorize(#op_req{operation = delete, auth = ?USER(UserId), gri = #gri{
     aspect = process
-}}, #atm_workflow_execution{space_id = SpaceId}) ->
+}}, #atm_workflow_execution{user_id = CreatorUserId, space_id = SpaceId}) ->
     % TODO add privilege to cancel workflow executions
-    space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_SCHEDULE_ATM_WORKFLOW_EXECUTIONS).
+    UserId == CreatorUserId orelse space_logic:has_eff_privilege(
+        SpaceId, UserId, ?SPACE_SCHEDULE_ATM_WORKFLOW_EXECUTIONS
+    ).
 
 
 %%--------------------------------------------------------------------

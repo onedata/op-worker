@@ -1121,6 +1121,7 @@
 }).
 
 -record(atm_workflow_execution, {
+    user_id :: od_user:id(),
     space_id :: od_space:id(),
     atm_inventory_id :: od_atm_inventory:id(),
 
