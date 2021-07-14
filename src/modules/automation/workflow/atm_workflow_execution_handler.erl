@@ -245,8 +245,9 @@ handle_workflow_execution_ended(AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv
     try
         ensure_all_tasks_ended(AtmWorkflowExecutionId),
 
-        {ok, AtmWorkflowExecutionDoc} = atm_workflow_execution:get(AtmWorkflowExecutionId),
-
+        {ok, AtmWorkflowExecutionDoc} = atm_workflow_execution_status:handle_ended(
+            AtmWorkflowExecutionId
+        ),
         teardown(AtmWorkflowExecutionDoc),
         notify_ended(AtmWorkflowExecutionDoc)
     catch _:Reason ->
@@ -269,19 +270,14 @@ handle_workflow_execution_ended(AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv
 ) ->
     ok | no_return().
 prepare_internal(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv) ->
-    AtmWorkflowExecutionCtx = atm_workflow_execution_env:acquire_workflow_execution_ctx(
-        AtmWorkflowExecutionEnv
-    ),
     {ok, #document{value = #atm_workflow_execution{
         lanes = AtmLaneExecutions
     }}} = atm_workflow_execution_status:handle_preparing(AtmWorkflowExecutionId),
 
-    try
-        atm_lane_execution:prepare_all(AtmWorkflowExecutionCtx, AtmLaneExecutions)
-    catch Type:Reason ->
-        atm_workflow_execution_status:handle_failed_in_waiting_phase(AtmWorkflowExecutionId),
-        erlang:Type(Reason)
-    end,
+    AtmWorkflowExecutionCtx = atm_workflow_execution_env:acquire_workflow_execution_ctx(
+        AtmWorkflowExecutionEnv
+    ),
+    atm_lane_execution:prepare_all(AtmWorkflowExecutionCtx, AtmLaneExecutions),
 
     atm_workflow_execution_status:handle_enqueued(AtmWorkflowExecutionId),
     ok.
