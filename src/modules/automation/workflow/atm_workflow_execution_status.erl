@@ -19,6 +19,7 @@
 -export([
     handle_preparing/1,
     handle_enqueued/1,
+    handle_cancel/1,
     handle_ended/1
 ]).
 -export([
@@ -44,6 +45,27 @@ handle_enqueued(AtmWorkflowExecutionId) ->
     handle_transition_in_waiting_phase(AtmWorkflowExecutionId, ?ENQUEUED_STATUS).
 
 
+-spec handle_cancel(atm_workflow_execution:id()) -> ok | {error, already_ended}.
+handle_cancel(AtmWorkflowExecutionId) ->
+    Diff = fun(AtmWorkflowExecution) ->
+        case infer_phase(AtmWorkflowExecution) of
+            ?ENDED_PHASE ->
+                {error, already_ended};
+            _ ->
+                {ok, set_times_on_phase_transition(AtmWorkflowExecution#atm_workflow_execution{
+                    status = ?ABORTING_STATUS
+                })}
+        end
+    end,
+
+    case atm_workflow_execution:update(AtmWorkflowExecutionId, Diff) of
+        {ok, AtmWorkflowExecutionDoc} ->
+            ensure_in_proper_phase_tree(AtmWorkflowExecutionDoc);
+        {error, already_ended} = Error ->
+            Error
+    end.
+
+
 -spec handle_ended(atm_workflow_execution:id()) ->
     {ok, atm_workflow_execution:doc()} | no_return().
 handle_ended(AtmWorkflowExecutionId) ->
@@ -51,6 +73,10 @@ handle_ended(AtmWorkflowExecutionId) ->
         (#atm_workflow_execution{status = ?PREPARING_STATUS} = AtmWorkflowExecution) ->
             {ok, set_times_on_phase_transition(AtmWorkflowExecution#atm_workflow_execution{
                 status = ?FAILED_STATUS
+            })};
+        (#atm_workflow_execution{status = ?ABORTING_STATUS} = AtmWorkflowExecution) ->
+            {ok, set_times_on_phase_transition(AtmWorkflowExecution#atm_workflow_execution{
+                status = ?CANCELLED_STATUS
             })};
         (#atm_workflow_execution{status = ?ACTIVE_STATUS} = AtmWorkflowExecution) ->
             AtmLaneExecutionUniqueStatuses = lists:usort(atm_lane_execution:gather_statuses(
@@ -143,7 +169,9 @@ status_to_phase(?SCHEDULED_STATUS) -> ?WAITING_PHASE;
 status_to_phase(?PREPARING_STATUS) -> ?WAITING_PHASE;
 status_to_phase(?ENQUEUED_STATUS) -> ?WAITING_PHASE;
 status_to_phase(?ACTIVE_STATUS) -> ?ONGOING_PHASE;
+status_to_phase(?ABORTING_STATUS) -> ?ONGOING_PHASE;
 status_to_phase(?FINISHED_STATUS) -> ?ENDED_PHASE;
+status_to_phase(?CANCELLED_STATUS) -> ?ENDED_PHASE;
 status_to_phase(?FAILED_STATUS) -> ?ENDED_PHASE.
 
 

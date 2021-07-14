@@ -89,9 +89,13 @@ start(UserCtx, #document{
 
 
 -spec cancel(atm_workflow_execution:id()) -> ok | {error, already_ended}.
-cancel(_AtmWorkflowExecutionId) ->
-    % TODO implement
-    ok.
+cancel(AtmWorkflowExecutionId) ->
+    case atm_workflow_execution_status:handle_cancel(AtmWorkflowExecutionId) of
+        ok ->
+            workflow_engine:cancel_execution(AtmWorkflowExecutionId);
+        {error, _} = Error ->
+            Error
+    end.
 
 
 %%%===================================================================
