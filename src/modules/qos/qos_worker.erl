@@ -16,7 +16,6 @@
 -include("global_definitions.hrl").
 -include("modules/datastore/qos.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/errors.hrl").
 
 %% API
 -export([init_qos_cache_for_space/1, init_retry_failed_files/0, init_traverse_pools/0]).
@@ -28,7 +27,6 @@
 -define(INIT_QOS_CACHE_FOR_SPACE, init_qos_cache_for_space).
 -define(CHECK_QOS_CACHE, bounded_cache_timer).
 -define(RETRY_FAILED_FILES, retry_failed_files).
--define(ZONE_CONNECTION_RETRIES, 180).
 
 -define(RETRY_FAILED_FILES_INTERVAL_SECONDS,
     op_worker:get_env(qos_retry_failed_files_interval_seconds, 300)). % 5 minutes
