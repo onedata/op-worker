@@ -807,7 +807,11 @@ handle_provider_request(UserCtx, #schedule_atm_workflow_execution{
 }, SpaceDirCtx) ->
     atm_req:schedule_workflow_execution(
         UserCtx, SpaceDirCtx, AtmWorkflowSchemaId, AtmStoreInitialValues, CallbackUrl
-    ).
+    );
+handle_provider_request(_UserCtx, #cancel_atm_workflow_execution{
+    atm_workflow_execution_id = AtmWorkflowExecutionId
+}, _SpaceDirCtx) ->
+    atm_req:cancel_workflow_execution(AtmWorkflowExecutionId).
 
 
 %%--------------------------------------------------------------------

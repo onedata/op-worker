@@ -16,8 +16,16 @@
 -behaviour(workflow_handler).
 
 -include("modules/automation/atm_execution.hrl").
+-include("workflow_engine.hrl").
 -include_lib("ctool/include/http/headers.hrl").
 -include_lib("ctool/include/logging.hrl").
+
+% API
+-export([
+    init_engine/0,
+    start/2,
+    cancel/1
+]).
 
 % workflow_handler callbacks
 -export([
@@ -33,9 +41,61 @@
 ]).
 
 
+-define(ATM_WORKFLOW_EXECUTION_ENGINE, <<"atm_workflow_execution_engine">>).
+
+-define(ENGINE_ASYNC_CALLS_LIMIT, op_worker:get_env(atm_workflow_engine_async_calls_limit, 1000)).
+-define(ENGINE_SLOTS_COUNT, op_worker:get_env(atm_workflow_engine_slots_count, 20)).
+-define(JOB_TIMEOUT_SEC, op_worker:get_env(atm_workflow_job_timeout_sec, 300)).
+-define(JOB_TIMEOUT_CHECK_PERIOD_SEC, op_worker:get_env(atm_workflow_job_timeout_check_period_sec, 300)).
+
 -define(INITIAL_NOTIFICATION_INTERVAL(), rand:uniform(timer:seconds(2))).
 -define(MAX_NOTIFICATION_INTERVAL, timer:hours(2)).
 -define(MAX_NOTIFICATION_RETRIES, 30).
+
+
+%%%===================================================================
+%%% API
+%%%===================================================================
+
+
+-spec init_engine() -> ok.
+init_engine() ->
+    Options = #{
+        workflow_async_call_pools_to_use => [{?DEFAULT_ASYNC_CALL_POOL_ID, ?ENGINE_ASYNC_CALLS_LIMIT}],
+        slots_limit => ?ENGINE_SLOTS_COUNT,
+        default_keepalive_timeout => ?JOB_TIMEOUT_SEC,
+        init_workflow_timeout_server => {true, ?JOB_TIMEOUT_CHECK_PERIOD_SEC}
+    },
+    workflow_engine:init(?ATM_WORKFLOW_EXECUTION_ENGINE, Options).
+
+
+-spec start(user_ctx:ctx(), atm_workflow_execution:doc()) -> ok.
+start(UserCtx, #document{
+    key = AtmWorkflowExecutionId,
+    value = #atm_workflow_execution{
+        space_id = SpaceId,
+        store_registry = AtmStoreRegistry
+    }
+}) ->
+    ok = atm_workflow_execution_session:init(AtmWorkflowExecutionId, UserCtx),
+
+    workflow_engine:execute_workflow(?ATM_WORKFLOW_EXECUTION_ENGINE, #{
+        id => AtmWorkflowExecutionId,
+        workflow_handler => ?MODULE,
+        execution_context => atm_workflow_execution_env:build(
+            SpaceId, AtmWorkflowExecutionId, AtmStoreRegistry
+        )
+    }).
+
+
+-spec cancel(atm_workflow_execution:id()) -> ok | {error, already_ended}.
+cancel(AtmWorkflowExecutionId) ->
+    case atm_workflow_execution_status:handle_cancel(AtmWorkflowExecutionId) of
+        ok ->
+            workflow_engine:cancel_execution(AtmWorkflowExecutionId);
+        {error, _} = Error ->
+            Error
+    end.
 
 
 %%%===================================================================
@@ -187,13 +247,13 @@ handle_lane_execution_ended(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, Atm
     ok.
 handle_workflow_execution_ended(AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv) ->
     try
-        {ok, AtmWorkflowExecutionDoc = #document{value = #atm_workflow_execution{
-            lanes = AtmLaneExecutions
-        }}} = atm_workflow_execution:get(AtmWorkflowExecutionId),
+        ensure_all_tasks_ended(AtmWorkflowExecutionId),
 
-        notify_ended(AtmWorkflowExecutionDoc),
-        atm_lane_execution:clean_all(AtmLaneExecutions),
-        atm_workflow_execution_session:terminate(AtmWorkflowExecutionId)
+        {ok, AtmWorkflowExecutionDoc} = atm_workflow_execution_status:handle_ended(
+            AtmWorkflowExecutionId
+        ),
+        teardown(AtmWorkflowExecutionDoc),
+        notify_ended(AtmWorkflowExecutionDoc)
     catch _:Reason ->
         % TODO VFS-7637 use audit log
         ?error("[~p] FAILED TO MARK WORKFLOW EXECUTION AS ENDED DUE TO: ~p", [
@@ -214,40 +274,16 @@ handle_workflow_execution_ended(AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv
 ) ->
     ok | no_return().
 prepare_internal(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv) ->
+    {ok, #document{value = #atm_workflow_execution{
+        lanes = AtmLaneExecutions
+    }}} = atm_workflow_execution_status:handle_preparing(AtmWorkflowExecutionId),
+
     AtmWorkflowExecutionCtx = atm_workflow_execution_env:acquire_workflow_execution_ctx(
         AtmWorkflowExecutionEnv
     ),
-    {ok, #document{value = #atm_workflow_execution{
-        lanes = AtmLaneExecutions
-    }}} = transition_to_preparing_status(AtmWorkflowExecutionId),
+    atm_lane_execution:prepare_all(AtmWorkflowExecutionCtx, AtmLaneExecutions),
 
-    try
-        atm_lane_execution:prepare_all(AtmWorkflowExecutionCtx, AtmLaneExecutions)
-    catch Type:Reason ->
-        atm_workflow_execution_status:handle_transition_to_failed_status_from_waiting_phase(
-            AtmWorkflowExecutionId
-        ),
-        erlang:Type(Reason)
-    end,
-
-    transition_to_enqueued_status(AtmWorkflowExecutionId).
-
-
-%% @private
--spec transition_to_preparing_status(atm_workflow_execution:id()) ->
-    {ok, atm_workflow_execution:doc()} | no_return().
-transition_to_preparing_status(AtmWorkflowExecutionId) ->
-    {ok, _} = atm_workflow_execution_status:handle_transition_in_waiting_phase(
-        AtmWorkflowExecutionId, ?PREPARING_STATUS
-    ).
-
-
-%% @private
--spec transition_to_enqueued_status(atm_workflow_execution:id()) -> ok | no_return().
-transition_to_enqueued_status(AtmWorkflowExecutionId) ->
-    {ok, _} = atm_workflow_execution_status:handle_transition_in_waiting_phase(
-        AtmWorkflowExecutionId, ?ENQUEUED_STATUS
-    ),
+    atm_workflow_execution_status:handle_enqueued(AtmWorkflowExecutionId),
     ok.
 
 
@@ -322,6 +358,26 @@ acquire_iterator_for_lane(AtmWorkflowExecutionEnv, #atm_lane_schema{
 report_task_execution_failed(AtmWorkflowExecutionEnv, AtmTaskExecutionId) ->
     catch atm_task_execution_api:handle_results(AtmWorkflowExecutionEnv, AtmTaskExecutionId, error),
     ok.
+
+
+%% @private
+-spec ensure_all_tasks_ended(atm_workflow_execution:id()) -> ok | no_return().
+ensure_all_tasks_ended(AtmWorkflowExecutionId) ->
+    {ok, #document{value = #atm_workflow_execution{
+        lanes = AtmLaneExecutions
+    }}} = atm_workflow_execution:get(AtmWorkflowExecutionId),
+
+    atm_lane_execution:ensure_all_ended(AtmLaneExecutions).
+
+
+%% @private
+-spec teardown(atm_workflow_execution:doc()) -> ok.
+teardown(#document{
+    key = AtmWorkflowExecutionId,
+    value = #atm_workflow_execution{lanes = AtmLaneExecutions}
+}) ->
+    atm_lane_execution:clean_all(AtmLaneExecutions),
+    atm_workflow_execution_session:terminate(AtmWorkflowExecutionId).
 
 
 %% @private
