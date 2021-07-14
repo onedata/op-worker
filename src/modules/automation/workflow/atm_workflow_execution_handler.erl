@@ -274,35 +274,16 @@ prepare_internal(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv) ->
     ),
     {ok, #document{value = #atm_workflow_execution{
         lanes = AtmLaneExecutions
-    }}} = transition_to_preparing_status(AtmWorkflowExecutionId),
+    }}} = atm_workflow_execution_status:handle_preparing(AtmWorkflowExecutionId),
 
     try
         atm_lane_execution:prepare_all(AtmWorkflowExecutionCtx, AtmLaneExecutions)
     catch Type:Reason ->
-        atm_workflow_execution_status:handle_transition_to_failed_status_from_waiting_phase(
-            AtmWorkflowExecutionId
-        ),
+        atm_workflow_execution_status:handle_failed_in_waiting_phase(AtmWorkflowExecutionId),
         erlang:Type(Reason)
     end,
 
-    transition_to_enqueued_status(AtmWorkflowExecutionId).
-
-
-%% @private
--spec transition_to_preparing_status(atm_workflow_execution:id()) ->
-    {ok, atm_workflow_execution:doc()} | no_return().
-transition_to_preparing_status(AtmWorkflowExecutionId) ->
-    {ok, _} = atm_workflow_execution_status:handle_transition_in_waiting_phase(
-        AtmWorkflowExecutionId, ?PREPARING_STATUS
-    ).
-
-
-%% @private
--spec transition_to_enqueued_status(atm_workflow_execution:id()) -> ok | no_return().
-transition_to_enqueued_status(AtmWorkflowExecutionId) ->
-    {ok, _} = atm_workflow_execution_status:handle_transition_in_waiting_phase(
-        AtmWorkflowExecutionId, ?ENQUEUED_STATUS
-    ),
+    atm_workflow_execution_status:handle_enqueued(AtmWorkflowExecutionId),
     ok.
 
 

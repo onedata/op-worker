@@ -17,9 +17,12 @@
 
 %% API
 -export([
+    handle_preparing/1,
+    handle_enqueued/1,
+    handle_failed_in_waiting_phase/1
+]).
+-export([
     infer_phase/1,
-    handle_transition_in_waiting_phase/2,
-    handle_transition_to_failed_status_from_waiting_phase/1,
     report_task_status_change/5
 ]).
 
@@ -29,51 +32,26 @@
 %%%===================================================================
 
 
--spec infer_phase(atm_workflow_execution:record()) -> atm_workflow_execution:phase().
-infer_phase(#atm_workflow_execution{status = ?SCHEDULED_STATUS}) -> ?WAITING_PHASE;
-infer_phase(#atm_workflow_execution{status = ?PREPARING_STATUS}) -> ?WAITING_PHASE;
-infer_phase(#atm_workflow_execution{status = ?ENQUEUED_STATUS}) -> ?WAITING_PHASE;
-infer_phase(#atm_workflow_execution{status = ?ACTIVE_STATUS}) -> ?ONGOING_PHASE;
-infer_phase(#atm_workflow_execution{status = ?FINISHED_STATUS}) -> ?ENDED_PHASE;
-infer_phase(#atm_workflow_execution{status = ?FAILED_STATUS}) -> ?ENDED_PHASE.
-
-
--spec handle_transition_in_waiting_phase(
-    atm_workflow_execution:id(),
-    ?PREPARING_STATUS | ?ENQUEUED_STATUS
-) ->
+-spec handle_preparing(atm_workflow_execution:id()) ->
     {ok, atm_workflow_execution:doc()} | no_return().
-handle_transition_in_waiting_phase(AtmWorkflowExecutionId, NextStatus) ->
-    Diff = fun(#atm_workflow_execution{status = Status} = AtmWorkflowExecution) ->
-        IsTransitionAllowed = case {Status, NextStatus} of
-            {?SCHEDULED_STATUS, ?PREPARING_STATUS} -> true;
-            {?PREPARING_STATUS, ?ENQUEUED_STATUS} -> true;
-            _ -> false
-        end,
-        case IsTransitionAllowed of
-            true ->
-                {ok, AtmWorkflowExecution#atm_workflow_execution{status = NextStatus}};
-            false ->
-                {error, Status}
-        end
-    end,
-
-    case atm_workflow_execution:update(AtmWorkflowExecutionId, Diff) of
-        {ok, _} = Result ->
-            Result;
-        {error, CurrStatus} ->
-            throw(?ERROR_ATM_INVALID_STATUS_TRANSITION(CurrStatus, NextStatus))
-    end.
+handle_preparing(AtmWorkflowExecutionId) ->
+    handle_transition_in_waiting_phase(AtmWorkflowExecutionId, ?PREPARING_STATUS).
 
 
--spec handle_transition_to_failed_status_from_waiting_phase(atm_workflow_execution:id()) ->
+-spec handle_enqueued(atm_workflow_execution:id()) ->
+    {ok, atm_workflow_execution:doc()} | no_return().
+handle_enqueued(AtmWorkflowExecutionId) ->
+    handle_transition_in_waiting_phase(AtmWorkflowExecutionId, ?ENQUEUED_STATUS).
+
+
+-spec handle_failed_in_waiting_phase(atm_workflow_execution:id()) ->
     ok | no_return().
-handle_transition_to_failed_status_from_waiting_phase(AtmWorkflowExecutionId) ->
+handle_failed_in_waiting_phase(AtmWorkflowExecutionId) ->
     Diff = fun(AtmWorkflowExecution = #atm_workflow_execution{
         status = Status,
         schedule_time = ScheduleTime
     }) ->
-        case infer_phase(AtmWorkflowExecution) of
+        case status_to_phase(Status) of
             ?WAITING_PHASE ->
                 {ok, AtmWorkflowExecution#atm_workflow_execution{
                     status = ?FAILED_STATUS,
@@ -91,6 +69,11 @@ handle_transition_to_failed_status_from_waiting_phase(AtmWorkflowExecutionId) ->
         {error, CurrStatus} ->
             throw(?ERROR_ATM_INVALID_STATUS_TRANSITION(CurrStatus, ?FAILED_STATUS))
     end.
+
+
+-spec infer_phase(atm_workflow_execution:record()) -> atm_workflow_execution:phase().
+infer_phase(#atm_workflow_execution{status = Status}) ->
+    status_to_phase(Status).
 
 
 -spec report_task_status_change(
@@ -150,6 +133,46 @@ report_task_status_change(
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+%% @private
+-spec status_to_phase(atm_workflow_execution:status()) ->
+    atm_workflow_execution:phase().
+status_to_phase(?SCHEDULED_STATUS) -> ?WAITING_PHASE;
+status_to_phase(?PREPARING_STATUS) -> ?WAITING_PHASE;
+status_to_phase(?ENQUEUED_STATUS) -> ?WAITING_PHASE;
+status_to_phase(?ACTIVE_STATUS) -> ?ONGOING_PHASE;
+status_to_phase(?FINISHED_STATUS) -> ?ENDED_PHASE;
+status_to_phase(?FAILED_STATUS) -> ?ENDED_PHASE.
+
+
+%% @private
+-spec handle_transition_in_waiting_phase(
+    atm_workflow_execution:id(),
+    ?PREPARING_STATUS | ?ENQUEUED_STATUS
+) ->
+    {ok, atm_workflow_execution:doc()} | no_return().
+handle_transition_in_waiting_phase(AtmWorkflowExecutionId, NextStatus) ->
+    Diff = fun(#atm_workflow_execution{status = Status} = AtmWorkflowExecution) ->
+        IsTransitionAllowed = case {Status, NextStatus} of
+            {?SCHEDULED_STATUS, ?PREPARING_STATUS} -> true;
+            {?PREPARING_STATUS, ?ENQUEUED_STATUS} -> true;
+            _ -> false
+        end,
+        case IsTransitionAllowed of
+            true ->
+                {ok, AtmWorkflowExecution#atm_workflow_execution{status = NextStatus}};
+            false ->
+                {error, Status}
+        end
+    end,
+
+    case atm_workflow_execution:update(AtmWorkflowExecutionId, Diff) of
+        {ok, _} = Result ->
+            Result;
+        {error, CurrStatus} ->
+            throw(?ERROR_ATM_INVALID_STATUS_TRANSITION(CurrStatus, NextStatus))
+    end.
 
 
 %% @private
