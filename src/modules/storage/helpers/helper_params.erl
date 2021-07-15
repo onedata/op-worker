@@ -178,8 +178,8 @@ default_admin_ctx(HelperName, Args) when
     HelperName == ?NULL_DEVICE_HELPER_NAME;
     HelperName == ?GLUSTERFS_HELPER_NAME ->
     #{
-        <<"uid">> => integer_to_binary(maps:get(<<"rootUid">>, Args, 0)), 
-        <<"gid">> => integer_to_binary(maps:get(<<"rootGid">>, Args, 0))
+        <<"uid">> => maps:get(<<"rootUid">>, Args, 0),
+        <<"gid">> => maps:get(<<"rootGid">>, Args, 0)
     };
 
 default_admin_ctx(_, _Args) ->
@@ -204,6 +204,8 @@ expected_custom_helper_args(?CEPHRADOS_HELPER_NAME) -> [
     <<"monitorHostname">>, <<"clusterName">>, <<"poolName">>,
     {optional, <<"blockSize">>}];
 expected_custom_helper_args(?POSIX_HELPER_NAME) -> [
+    {optional, <<"rootUid">>},
+    {optional, <<"rootGid">>},
     <<"mountPoint">>];
 expected_custom_helper_args(?S3_HELPER_NAME) -> [
     <<"hostname">>, <<"bucketName">>, <<"scheme">>,
