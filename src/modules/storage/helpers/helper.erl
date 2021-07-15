@@ -64,7 +64,7 @@ new_helper(HelperName, Args, AdminCtx) ->
     ok = helper_params:validate_user_ctx(HelperName, FullAdminCtx),
     {ok, #helper{
         name = HelperName,
-        args = maps:without([<<"adminUid">>, <<"adminGid">>], Args),
+        args = maps:without([<<"rootUid">>, <<"rootGid">>], Args),
         admin_ctx = FullAdminCtx
     }}.
 
