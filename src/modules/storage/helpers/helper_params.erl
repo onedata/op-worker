@@ -23,7 +23,7 @@
 
 %% API
 -export([validate_args/2, validate_user_ctx/2]).
--export([default_admin_ctx/1]).
+-export([default_admin_ctx/2]).
 
 %% Onepanel RPC API
 -export([prepare_helper_args/2, prepare_user_ctx_params/2]).
@@ -172,14 +172,17 @@ validate_user_ctx(StorageType, UserCtx) ->
     validate_fields(Fields, UserCtx).
 
 
--spec default_admin_ctx(name()) -> user_ctx().
-default_admin_ctx(HelperName) when
+-spec default_admin_ctx(name(), args()) -> user_ctx().
+default_admin_ctx(HelperName, Args) when
     HelperName == ?POSIX_HELPER_NAME;
     HelperName == ?NULL_DEVICE_HELPER_NAME;
     HelperName == ?GLUSTERFS_HELPER_NAME ->
-    #{<<"uid">> => <<"0">>, <<"gid">> => <<"0">>};
+    #{
+        <<"uid">> => integer_to_binary(maps:get(<<"rootUid">>, Args, 0)), 
+        <<"gid">> => integer_to_binary(maps:get(<<"rootGid">>, Args, 0))
+    };
 
-default_admin_ctx(_) ->
+default_admin_ctx(_, _Args) ->
     #{}.
 
 %%%===================================================================

@@ -58,13 +58,13 @@
 
 -spec new_helper(name(), args(), user_ctx()) -> {ok, helpers:helper()}.
 new_helper(HelperName, Args, AdminCtx) ->
-    BaseAdminCtx = helper_params:default_admin_ctx(HelperName),
+    BaseAdminCtx = helper_params:default_admin_ctx(HelperName, Args),
     FullAdminCtx = maps:merge(BaseAdminCtx, AdminCtx),
     ok = helper_params:validate_args(HelperName, Args),
     ok = helper_params:validate_user_ctx(HelperName, FullAdminCtx),
     {ok, #helper{
         name = HelperName,
-        args = Args,
+        args = maps:without([<<"adminUid">>, <<"adminGid">>], Args),
         admin_ctx = FullAdminCtx
     }}.
 
