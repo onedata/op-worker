@@ -159,6 +159,7 @@ update(Key, Diff) ->
 
 -spec delete(id()) -> ok | {error, term()}.
 delete(QosEntryId) ->
+    qos_entry_audit_log:destroy(QosEntryId),
     datastore_model:delete(?CTX, QosEntryId).
 
 

@@ -14,6 +14,7 @@
 
 -include("api_test_runner.hrl").
 -include("global_definitions.hrl").
+-include("modules/datastore/qos.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/http/codes.hrl").
@@ -32,7 +33,8 @@
     delete_qos_test/1,
     get_qos_summary_test/1,
     get_available_qos_parameters_test/1,
-    evaluate_qos_expression_test/1
+    evaluate_qos_expression_test/1,
+    get_qos_entry_audit_log/1
 ]).
 
 
@@ -42,7 +44,8 @@ all() -> [
     delete_qos_test,
     get_qos_summary_test,
     get_available_qos_parameters_test,
-    evaluate_qos_expression_test
+    evaluate_qos_expression_test,
+    get_qos_entry_audit_log
 ].
 
 create_qos_test(Config) ->
@@ -290,6 +293,51 @@ evaluate_qos_expression_test(Config) ->
     ])),
     ok.
 
+get_qos_entry_audit_log(Config) ->
+    [P2, P1] = ?config(op_worker_nodes, Config),
+    SessIdP1 = ?USER_IN_BOTH_SPACES_SESS_ID(P1, Config),
+    SessIdP2 = ?USER_IN_BOTH_SPACES_SESS_ID(P2, Config),
+    FilePath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME()]),
+    {ok, Guid} = api_test_utils:create_file(<<"file">>, P1, SessIdP1, FilePath),
+    ProviderId1 = ?GET_DOMAIN_BIN(P1),
+    {ok, QosEntryId} = lfm_proxy:add_qos_entry(P1, SessIdP1, ?FILE_REF(Guid), <<"providerId=", ProviderId1/binary>>, 1),
+    % wait for qos entries to be dbsynced to other provider
+    ?assertMatch({ok, _}, lfm_proxy:get_qos_entry(P2, SessIdP2, QosEntryId), 20),
+    ?assertEqual({ok, ?FULFILLED_QOS_STATUS}, lfm_proxy:check_qos_status(P1, SessIdP1, QosEntryId)),
+    
+    MemRef = api_test_memory:init(),
+    
+    ?assert(api_test_runner:run_tests(Config, [
+        #suite_spec{
+            target_nodes = [P1],
+            client_spec = ?CLIENT_SPEC_FOR_SPACE_2_SCENARIOS(Config),
+            setup_fun = fun() ->
+                api_test_memory:set(MemRef, qos_entry_id, QosEntryId)
+            end,
+            scenario_templates = [
+                #scenario_template{
+                    name = <<"Get QoS audit log using rest endpoint">>,
+                    type = rest,
+                    prepare_args_fun = prepare_args_fun_rest(MemRef, qos_audit_log),
+                    validate_result_fun = validate_result_fun_rest(MemRef, qos_audit_log)
+                }
+            ],
+            data_spec = #data_spec{
+                optional = [<<"timestamp">>, <<"offset">>],
+                correct_values = #{
+                    <<"timestamp">> => [0],
+                    <<"offset">> => [0]
+                },
+                bad_values = [
+                    {<<"timestamp">>, <<"aaa">>, ?ERROR_BAD_VALUE_INTEGER(<<"timestamp">>)},
+                    {<<"timestamp">>, -8, ?ERROR_BAD_VALUE_TOO_LOW(<<"timestamp">>, 0)},
+                    {<<"offset">>, <<"aaa">>, ?ERROR_BAD_VALUE_INTEGER(<<"offset">>)}
+                ]
+            }
+        }
+    ])),
+    ok.
+
 
 %%%===================================================================
 %%% Setup functions
@@ -349,6 +397,18 @@ prepare_args_fun_rest(MemRef, evaluate_qos_expression) ->
             path = <<"spaces/", SpaceId/binary, "/evaluate_qos_expression">>,
             body = json_utils:encode(Data),
             headers = #{<<"content-type">> => <<"application/json">>}
+        }
+    end;
+
+prepare_args_fun_rest(MemRef, qos_audit_log) ->
+    fun(#api_test_ctx{data = Data}) ->
+        QosEntryId = api_test_memory:get(MemRef, qos_entry_id),
+        
+        #rest_args{
+            method = get,
+            path = http_utils:append_url_parameters(
+                <<"qos_requirements/", QosEntryId/binary, "/audit_log">>, Data
+            )
         }
     end;
 
@@ -461,6 +521,22 @@ validate_result_fun_rest(MemRef, evaluate_qos_expression) ->
         SpaceId = api_test_memory:get(MemRef, space_id),
         Expression = qos_expression:parse(maps:get(<<"expression">>, Data)),
         check_evaluate_expression_result_storages(Node, SpaceId, Expression, maps:get(<<"matchingStorages">>, Result))
+    end;
+
+validate_result_fun_rest(_MemRef, qos_audit_log) ->
+    fun(_, {ok, RespCode, _RespHeaders, RespBody}) ->
+        
+        ?assertEqual(?HTTP_200_OK, RespCode),
+        ?assertMatch(#{
+            <<"isLast">> := true,
+            <<"auditLog">> := [#{
+                <<"timestamp">> := _,
+                <<"status">> := <<"synchronized">>,
+                <<"severity">> := <<"info">>,
+                <<"fileId">> := _
+            }]
+        }, RespBody),
+        ok
     end.
 
 

@@ -282,8 +282,9 @@ handle_traverse_finished_for_dir(TraverseId, FileCtx, LinkStrategy) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx1),
     case LinkStrategy of
         add_link ->
-            {ok, _} = qos_status_links:add_link( SpaceId, ?TRAVERSE_LINKS_KEY(TraverseId), {Path, Uuid});
-        no_link -> ok
+            ok = qos_status_links:add_link( SpaceId, ?TRAVERSE_LINKS_KEY(TraverseId), {Path, Uuid});
+        no_link -> 
+            ok
     end,
     ok = qos_status_links:delete_all_local_links_with_prefix(
         SpaceId, ?TRAVERSE_LINKS_KEY(TraverseId), <<Path/binary, "/">>),

@@ -45,6 +45,7 @@
 resolve_handler(create, instance, private) -> ?MODULE;
 
 resolve_handler(get, instance, private) -> ?MODULE;
+resolve_handler(get, audit_log, private) -> ?MODULE;
 
 resolve_handler(delete, instance, private) -> ?MODULE;
 
@@ -74,6 +75,13 @@ data_spec(#op_req{operation = create, gri = #gri{aspect = instance}}) -> #{
 
 data_spec(#op_req{operation = get, gri = #gri{aspect = instance}}) ->
     undefined;
+data_spec(#op_req{operation = get, gri = #gri{aspect = audit_log}}) -> #{
+    optional => #{
+        <<"offset">> => {integer, any},
+        <<"timestamp">> => {integer, {not_lower_than, 0}},
+        <<"limit">> => {integer, {not_lower_than, 1}}
+    }
+};
 
 data_spec(#op_req{operation = delete, gri = #gri{aspect = instance}}) ->
     undefined.
@@ -94,6 +102,8 @@ fetch_entity(#op_req{operation = get, auth = Auth, gri = #gri{
     aspect = instance
 }}) ->
     fetch_qos_entry(Auth, QosEntryId);
+fetch_entity(#op_req{operation = get, gri = #gri{aspect = audit_log}}) ->
+    {ok, {undefined, 1}};
 
 fetch_entity(#op_req{operation = delete, auth = Auth, gri = #gri{
     id = QosEntryId,
@@ -121,8 +131,8 @@ authorize(#op_req{operation = create, auth = ?USER(UserId), gri = #gri{aspect = 
 
 authorize(#op_req{operation = get, auth = ?USER(UserId), gri = #gri{
     id = QosEntryId,
-    aspect = instance
-}}, _QosEntry) ->
+    aspect = Aspect
+}}, _QosEntry) when Aspect =:= instance orelse Aspect =:= audit_log ->
     {ok, SpaceId} = ?check(qos_entry:get_space_id(QosEntryId)),
     space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW_QOS);
 
@@ -148,8 +158,8 @@ validate(#op_req{operation = create, gri = #gri{aspect = instance}, data = #{
 
 validate(#op_req{operation = get, gri = #gri{
     id = QosEntryId,
-    aspect = instance
-}}, _QosEntry) ->
+    aspect = Aspect
+}}, _QosEntry) when Aspect =:= instance orelse Aspect =:= audit_log ->
     {ok, SpaceId} = ?check(qos_entry:get_space_id(QosEntryId)),
     middleware_utils:assert_space_supported_locally(SpaceId);
 
@@ -180,8 +190,8 @@ create(#op_req{auth = Auth, gri = #gri{aspect = instance} = GRI} = Req) ->
     {ok, QosEntry} = ?check(lfm:get_qos_entry(SessionId, QosEntryId)),
 
     Status = case qos_entry:is_possible(QosEntry) of
-        true -> ?PENDING;
-        false -> ?IMPOSSIBLE
+        true -> ?PENDING_QOS_STATUS;
+        false -> ?IMPOSSIBLE_QOS_STATUS
     end,
     {ok, resource, {GRI#gri{id = QosEntryId}, entry_to_details(QosEntry, Status, SpaceId)}}.
 
@@ -196,7 +206,22 @@ get(#op_req{auth = Auth, gri = #gri{id = QosEntryId, aspect = instance}}, QosEnt
     SessionId = Auth#auth.session_id,
     {ok, SpaceId} = qos_entry:get_space_id(QosEntryId),
     {ok, Status} = ?check(lfm_qos:check_qos_status(SessionId, QosEntryId)),
-    {ok, entry_to_details(QosEntry, Status, SpaceId)}.
+    {ok, entry_to_details(QosEntry, Status, SpaceId)};
+
+get(#op_req{gri = #gri{id = QosEntryId, aspect = audit_log}, data = Data}, _QosEntry) ->
+    Opts = #{
+        offset => maps:get(<<"offset">>, Data, 0),
+        start_from => {timestamp, maps:get(<<"timestamp">>, Data, 0)}
+    },
+    case qos_entry_audit_log:list(QosEntryId, Opts) of
+        {ok, Result, IsLast} ->
+            {ok, #{
+                <<"isLast">> => IsLast,
+                <<"auditLog">> => Result
+            }};
+        {error, _} = Error ->
+            throw(Error)
+    end.
 
 
 %%--------------------------------------------------------------------

@@ -63,7 +63,8 @@ handle_entry_delete(#document{key = QosEntryId, scope = SpaceId} = QosEntryDoc) 
     ok = ?ok_if_not_found(file_qos:remove_qos_entry_id(SpaceId, FileUuid, QosEntryId)),
     ok = qos_entry:remove_from_impossible_list(SpaceId, QosEntryId),
     ok = qos_traverse:report_entry_deleted(QosEntryDoc),
-    ok = qos_status:report_entry_deleted(SpaceId, QosEntryId).
+    ok = qos_status:report_entry_deleted(SpaceId, QosEntryId),
+    ok = qos_entry_audit_log:destroy(QosEntryId).
 
 
 %%--------------------------------------------------------------------

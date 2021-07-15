@@ -249,11 +249,11 @@ wait_for_qos_fulfillment_in_parallel(Config, QosToWaitForList, QosNameIdMapping,
         ExpectedFulfillmentStatus = case LookupExpectedQosEntry of
             [ExpectedQosEntry] ->
                 case ExpectedQosEntry#expected_qos_entry.possibility_check of
-                    {possible, _} -> ?FULFILLED;
-                    {impossible, _} -> ?IMPOSSIBLE
+                    {possible, _} -> ?FULFILLED_QOS_STATUS;
+                    {impossible, _} -> ?IMPOSSIBLE_QOS_STATUS
                 end;
             [] ->
-                ?FULFILLED
+                ?FULFILLED_QOS_STATUS
         end,
 
         % wait for QoS fulfillment on different worker nodes
@@ -273,7 +273,7 @@ wait_for_qos_fulfilment_in_parallel(Config, Worker, QosEntryId, QosName, Expecte
                 traverse_reqs = TraversReqs
             }} ->
                 case ExpectedFulfillmentStatus of
-                    ?FULFILLED ->
+                    ?FULFILLED_QOS_STATUS ->
                         str_utils:format(
                             "QoS is not fulfilled while it should be. ~n"
                             "Worker: ~p ~n"
@@ -282,7 +282,7 @@ wait_for_qos_fulfilment_in_parallel(Config, Worker, QosEntryId, QosName, Expecte
                             "TraverseReqs: ~p ~n",
                             [Worker, QosName, PossibilityCheck, TraversReqs]
                         );
-                    ?IMPOSSIBLE ->
+                    ?IMPOSSIBLE_QOS_STATUS ->
                         str_utils:format(
                             "QoS is fulfilled while it shouldn't be. ~n"
                             "Worker: ~p ~n"

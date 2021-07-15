@@ -19,6 +19,7 @@
 -behavior(traverse_behaviour).
 
 -include("global_definitions.hrl").
+-include("modules/datastore/datastore_runner.hrl").
 -include("modules/datastore/qos.hrl").
 -include("proto/oneclient/common_messages.hrl").
 -include("tree_traverse.hrl").
@@ -246,11 +247,25 @@ slave_job_reconcile(TaskId, UserCtx, FileCtx) ->
 
 
 %% @private
--spec synchronize_file_for_entries(id(), user_ctx:ctx(), file_ctx:ctx(), [qos_entry:id()]) -> 
+-spec synchronize_file_for_entries(id(), user_ctx:ctx(), file_ctx:ctx(), [qos_entry:id()]) ->
     ok.
-synchronize_file_for_entries(_TaskId, _UserCtx, _FileCtx, []) -> 
-    ok;
 synchronize_file_for_entries(TaskId, UserCtx, FileCtx, QosEntries) ->
+    try
+        synchronize_file_for_entries_insecure(TaskId, UserCtx, FileCtx, QosEntries)
+    catch E:T ->
+        ?error("Unexpected error during QoS synchronization for file ~p: ~p", 
+            [file_ctx:get_logical_uuid_const(FileCtx), {E, T}]),
+        ok = qos_status:report_file_transfer_failure(FileCtx, QosEntries),
+        ok = report_file_failed_for_entries(QosEntries, FileCtx, T)
+    end.
+
+
+%% @private
+-spec synchronize_file_for_entries_insecure(id(), user_ctx:ctx(), file_ctx:ctx(), [qos_entry:id()]) -> 
+    ok.
+synchronize_file_for_entries_insecure(_TaskId, _UserCtx, _FileCtx, []) -> 
+    ok;
+synchronize_file_for_entries_insecure(TaskId, UserCtx, FileCtx, QosEntries) ->
     {Size, FileCtx2} = file_ctx:get_file_size(FileCtx),
     FileBlock = #file_block{offset = 0, size = Size},
     Uuid = file_ctx:get_logical_uuid_const(FileCtx),
@@ -277,14 +292,33 @@ synchronize_file_for_entries(TaskId, UserCtx, FileCtx, QosEntries) ->
     end, QosEntries),
     
     case SyncResult of
-        ok -> ok;
-        {ok, _} -> ok;
+        ok ->
+            ok = report_file_finished_for_entries(QosEntries, FileCtx2);
+        {ok, _} -> 
+            ok = report_file_finished_for_entries(QosEntries, FileCtx2);
         {error, cancelled} -> 
             ?debug("QoS file synchronization failed due to cancellation");
         {error, _} = Error ->
-            qos_status:report_file_transfer_failure(FileCtx2, QosEntries),
+            ok = report_file_failed_for_entries(QosEntries, FileCtx2, Error),
+            ok = qos_status:report_file_transfer_failure(FileCtx2, QosEntries),
             ?error("Error during QoS file synchronization: ~p", [Error])
     end.
+
+
+%% @private
+-spec report_file_finished_for_entries([qos_entry:id()], file_ctx:ctx()) -> ok.
+report_file_finished_for_entries(QosEntries, FileCtx) ->
+    lists:foreach(fun(QosEntryId) ->
+        ok = qos_entry_audit_log:report_file_synchronized(QosEntryId, file_ctx:get_logical_guid_const(FileCtx))
+    end, QosEntries).
+
+
+%% @private
+-spec report_file_failed_for_entries([qos_entry:id()], file_ctx:ctx(), {error, term()}) -> ok.
+report_file_failed_for_entries(QosEntries, FileCtx, Error) ->
+    lists:foreach(fun(QosEntryId) ->
+        ok = qos_entry_audit_log:report_file_failed(QosEntryId, file_ctx:get_logical_guid_const(FileCtx), Error)
+    end, QosEntries).
 
 
 %% @private

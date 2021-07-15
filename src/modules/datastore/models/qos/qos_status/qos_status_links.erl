@@ -41,9 +41,9 @@
 %%% API
 %%%===================================================================
 
--spec add_link(scope(), key(), link()) -> {ok, datastore:link()} | {error, term()}.
+-spec add_link(scope(), key(), link()) -> ok | {error, term()}.
 add_link(SpaceId, Key, Link) ->
-    datastore_model:add_links(?CTX#{scope => SpaceId}, Key, oneprovider:get_id(), Link).
+    ?extract_ok(?ok_if_exists(datastore_model:add_links(?CTX#{scope => SpaceId}, Key, oneprovider:get_id(), Link))).
 
 
 -spec delete_link(scope(), key(), link_name()) -> ok | {error, term()}.
