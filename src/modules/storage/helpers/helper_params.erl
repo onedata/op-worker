@@ -94,7 +94,12 @@ prepare_user_ctx_params(?WEBDAV_HELPER_NAME = HelperName, Params) ->
     filter_fields(expected_user_ctx_params(HelperName), Ctx2);
 
 prepare_user_ctx_params(HelperName, Params) ->
-    filter_fields(expected_user_ctx_params(HelperName), Params).
+    MappedParams = maps:fold(
+        fun (<<"rootUid">>, Value, Acc) -> Acc#{<<"uid">> => Value};
+            (<<"rootGid">>, Value, Acc) -> Acc#{<<"gid">> => Value};
+            (Key, Value, Acc) -> Acc#{Key => Value}
+        end, #{}, Params),
+    filter_fields(expected_user_ctx_params(HelperName), MappedParams).
 
 
 %% @private

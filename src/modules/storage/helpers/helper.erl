@@ -143,8 +143,12 @@ get_admin_ctx(#helper{admin_ctx = Ctx}) ->
 %%--------------------------------------------------------------------
 -spec get_redacted_admin_ctx(helpers:helper()) -> user_ctx().
 get_redacted_admin_ctx(Helper) ->
-    maps:with([<<"username">>, <<"accessKey">>, <<"credentialsType">>],
-        get_admin_ctx(Helper)).
+    AdminCtx = get_admin_ctx(Helper),
+    Base  = maps:with([<<"username">>, <<"accessKey">>, <<"credentialsType">>], AdminCtx),
+    Base#{
+        <<"rootUid">> => maps:get(<<"uid">>, AdminCtx, <<"0">>),
+        <<"rootGid">> => maps:get(<<"gid">>, AdminCtx, <<"0">>)
+    }.
 
 
 %%--------------------------------------------------------------------
