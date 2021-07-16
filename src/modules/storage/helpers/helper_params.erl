@@ -178,8 +178,8 @@ default_admin_ctx(HelperName, Args) when
     HelperName == ?NULL_DEVICE_HELPER_NAME;
     HelperName == ?GLUSTERFS_HELPER_NAME ->
     #{
-        <<"uid">> => maps:get(<<"rootUid">>, Args, 0),
-        <<"gid">> => maps:get(<<"rootGid">>, Args, 0)
+        <<"uid">> => maps:get(<<"rootUid">>, Args, <<"0">>),
+        <<"gid">> => maps:get(<<"rootGid">>, Args, <<"0">>)
     };
 
 default_admin_ctx(_, _Args) ->
