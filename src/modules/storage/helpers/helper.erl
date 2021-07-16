@@ -375,6 +375,7 @@ translate_arg_name(<<"credentials_type">>) -> <<"credentialsType">>;
 translate_arg_name(<<"authorization_header">>) -> <<"authorizationHeader">>;
 translate_arg_name(<<"range_write_support">>) -> <<"rangeWriteSupport">>;
 translate_arg_name(<<"connection_pool_size">>) -> <<"connectionPoolSize">>;
+translate_arg_name(<<"max_requests_per_session">>) -> <<"maxRequestsPerSession">>;
 translate_arg_name(<<"maximum_upload_size">>) -> <<"maximumUploadSize">>;
 translate_arg_name(<<"latency_min">>) -> <<"latencyMin">>;
 translate_arg_name(<<"latency_max">>) -> <<"latencyMax">>;
