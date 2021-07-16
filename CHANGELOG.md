@@ -4,6 +4,11 @@ Release notes for project op-worker
 CHANGELOG
 ---------
 
+### 20.02.11
+
+-   **VFS-8017** Added support for allowing setting of UID and GID in
+    the admin context on the POSIX storage to be other than 0:0.
+
 ### 20.02.10
 
 -   **VFS-7739** Improved CPU affinity of storage driver threads in
