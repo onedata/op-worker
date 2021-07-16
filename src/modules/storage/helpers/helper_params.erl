@@ -23,7 +23,7 @@
 
 %% API
 -export([validate_args/2, validate_user_ctx/2]).
--export([default_admin_ctx/2]).
+-export([default_admin_ctx/1]).
 
 %% Onepanel RPC API
 -export([prepare_helper_args/2, prepare_user_ctx_params/2]).
@@ -94,7 +94,12 @@ prepare_user_ctx_params(?WEBDAV_HELPER_NAME = HelperName, Params) ->
     filter_fields(expected_user_ctx_params(HelperName), Ctx2);
 
 prepare_user_ctx_params(HelperName, Params) ->
-    filter_fields(expected_user_ctx_params(HelperName), Params).
+    MappedParams = maps:fold(
+        fun (<<"rootUid">>, Value, Acc) -> Acc#{<<"uid">> => Value};
+            (<<"rootGid">>, Value, Acc) -> Acc#{<<"gid">> => Value};
+            (Key, Value, Acc) -> Acc#{Key => Value}
+        end, #{}, Params),
+    filter_fields(expected_user_ctx_params(HelperName), MappedParams).
 
 
 %% @private
@@ -172,17 +177,14 @@ validate_user_ctx(StorageType, UserCtx) ->
     validate_fields(Fields, UserCtx).
 
 
--spec default_admin_ctx(name(), args()) -> user_ctx().
-default_admin_ctx(HelperName, Args) when
+-spec default_admin_ctx(name()) -> user_ctx().
+default_admin_ctx(HelperName) when
     HelperName == ?POSIX_HELPER_NAME;
     HelperName == ?NULL_DEVICE_HELPER_NAME;
     HelperName == ?GLUSTERFS_HELPER_NAME ->
-    #{
-        <<"uid">> => maps:get(<<"rootUid">>, Args, <<"0">>),
-        <<"gid">> => maps:get(<<"rootGid">>, Args, <<"0">>)
-    };
+    #{<<"uid">> => <<"0">>, <<"gid">> => <<"0">>};
 
-default_admin_ctx(_, _Args) ->
+default_admin_ctx(_) ->
     #{}.
 
 %%%===================================================================
@@ -204,8 +206,6 @@ expected_custom_helper_args(?CEPHRADOS_HELPER_NAME) -> [
     <<"monitorHostname">>, <<"clusterName">>, <<"poolName">>,
     {optional, <<"blockSize">>}];
 expected_custom_helper_args(?POSIX_HELPER_NAME) -> [
-    {optional, <<"rootUid">>},
-    {optional, <<"rootGid">>},
     <<"mountPoint">>];
 expected_custom_helper_args(?S3_HELPER_NAME) -> [
     <<"hostname">>, <<"bucketName">>, <<"scheme">>,
