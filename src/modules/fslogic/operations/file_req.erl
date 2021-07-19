@@ -271,8 +271,7 @@ create_file_insecure(UserCtx, ParentFileCtx, Name, Mode, _Flag) ->
         }
     catch
         Error:Reason:Stacktrace ->
-            ?error_stacktrace("create_file_insecure error: ~p:~p",
-                [Error, Reason], Stacktrace),
+            ?error_stacktrace("create_file_insecure error: ~p:~p", [Error, Reason], Stacktrace),
             sd_utils:unlink(FileCtx, UserCtx),
             FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
             fslogic_location_cache:delete_local_location(FileUuid),

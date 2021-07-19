@@ -176,9 +176,12 @@ call_handler(ExecutionId, Context, Handler, Function, Args) ->
     try
         apply(Handler, Function, [ExecutionId, Context] ++ Args)
     catch
-        Error:Reason  ->
-            ?error_stacktrace("Unexpected error in ~w:~w (execution ~s, args: ~p): ~w:~p",
-                [Handler, Function, ExecutionId, Args, Error, Reason]),
+        Error:Reason:Stacktrace  ->
+            ?error_stacktrace(
+                "Unexpected error in ~w:~w (execution ~s, args: ~p): ~w:~p",
+                [Handler, Function, ExecutionId, Args, Error, Reason],
+                Stacktrace
+            ),
             error
     end.
 
@@ -414,9 +417,12 @@ process_item(EngineId, ExecutionId, ExecutionSpec = #execution_spec{
 
         report_execution_status_update(ExecutionId, EngineId, ReportType, JobIdentifier, FinalAns)
     catch
-        Error:Reason  ->
-            ?error_stacktrace("Unexpected error handling task ~p for item id ~p: ~p:~p",
-                [TaskId, ItemId, Error, Reason]),
+        Error:Reason:Stacktrace  ->
+            ?error_stacktrace(
+                "Unexpected error handling task ~p for item id ~p: ~p:~p",
+                [TaskId, ItemId, Error, Reason],
+                Stacktrace
+            ),
             trigger_job_scheduling(EngineId, ?FOR_CURRENT_SLOT_FIRST)
     end.
 

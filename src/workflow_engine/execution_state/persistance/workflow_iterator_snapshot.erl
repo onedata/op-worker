@@ -71,9 +71,10 @@ save(ExecutionId, LaneIndex, ItemIndex, Iterator) ->
                     try
                         iterator:forget_before(Iterator)
                     catch
-                        Error:Reason ->
-                            ?error_stacktrace("Unexpected error forgeting iteration data prevoius to current iterator "
-                                "(execution id: ~p): ~p:~p", [ExecutionId, Error, Reason]),
+                        Error:Reason:Stacktrace ->
+                            ?error_stacktrace(
+                                "Unexpected error forgeting iteration data prevoius to current iterator "
+                                "(execution id: ~p): ~p:~p", [ExecutionId, Error, Reason], Stacktrace),
                             ok
                     end
             end;
@@ -110,9 +111,12 @@ mark_exhausted(Iterator, ExecutionId) ->
     try
         iterator:mark_exhausted(Iterator)
     catch
-        Error:Reason ->
-            ?error_stacktrace("Unexpected error marking exhausted iterator for execution: ~p ~p:~p",
-                [ExecutionId, Error, Reason]),
+        Error:Reason:Stacktrace ->
+            ?error_stacktrace(
+                "Unexpected error marking exhausted iterator for execution: ~p ~p:~p",
+                [ExecutionId, Error, Reason],
+                Stacktrace
+            ),
             ok
     end.
 

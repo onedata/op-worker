@@ -125,8 +125,7 @@ before_init() ->
         ok = helpers_nif:init()
     catch
         _:Error:Stacktrace   ->
-            ?error_stacktrace("Error in node_manager_plugin:before_init: ~p",
-                [Error], Stacktrace),
+            ?error_stacktrace("Error in node_manager_plugin:before_init: ~p", [Error], Stacktrace),
             {error, cannot_start_node_manager_plugin}
     end.
 

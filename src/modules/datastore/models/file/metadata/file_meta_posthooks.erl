@@ -82,7 +82,8 @@ execute_hooks(FileUuid) ->
         catch Error:Type:Stacktrace  ->
             ?debug_stacktrace(
                 "Error during execution of file meta posthook (~p) for file ~p ~p:~p",
-                [Identifier, FileUuid, Error, Type], Stacktrace
+                [Identifier, FileUuid, Error, Type],
+                Stacktrace
             ),
             ok
         end

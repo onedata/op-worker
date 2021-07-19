@@ -200,8 +200,12 @@ check_openfaas_availability() ->
         catch
             throw:{error, _} = Error ->
                 Error;
-            Class:Reason ->
-                ?error_stacktrace("Unexpected error during OpenFaaS healthcheck - ~w:~p", [Class, Reason]),
+            Class:Reason:Stacktrace ->
+                ?error_stacktrace(
+                    "Unexpected error during OpenFaaS healthcheck - ~w:~p",
+                    [Class, Reason],
+                    Stacktrace
+                ),
                 ?ERROR_ATM_INTERNAL_SERVER_ERROR
         end,
         {ok, HealthcheckResult, ?HEALTHCHECK_CACHE_TTL_SECONDS}

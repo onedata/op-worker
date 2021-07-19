@@ -147,8 +147,11 @@ init(Space, Name) ->
         end
     catch
         Error2:Reason:Stacktrace ->
-            ?critical_stacktrace("Unable to initialize paths cache for space ~p due to: ~p",
-                [Space, {Error2, Reason}], Stacktrace)
+            ?critical_stacktrace(
+                "Unable to initialize paths cache for space ~p due to: ~p",
+                [Space, {Error2, Reason}],
+                Stacktrace
+            )
     end.
 
 

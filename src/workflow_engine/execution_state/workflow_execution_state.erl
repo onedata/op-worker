@@ -343,9 +343,12 @@ get_initial_iterator_and_lane_spec(ExecutionId, Handler, Context, LaneIndex) ->
                 ?WF_ERROR_PREPARATION_FAILED
         end
     catch
-        Error:Reason  ->
-            ?error_stacktrace("Unexpected error preparing lane ~p (execution ~p): ~p:~p",
-                [LaneIndex, ExecutionId, Error, Reason]),
+        Error:Reason:Stacktrace ->
+            ?error_stacktrace(
+                "Unexpected error preparing lane ~p (execution ~p): ~p:~p",
+                [LaneIndex, ExecutionId, Error, Reason],
+                Stacktrace
+            ),
             ?WF_ERROR_PREPARATION_FAILED
     end.
 
@@ -527,9 +530,12 @@ get_next_iterator(Context, Iterator, ExecutionId) ->
                 undefined
         end
     catch
-        Error:Reason ->
-            ?error_stacktrace("Unexpected error getting next iterator (execution ~p): ~p:~p",
-                [ExecutionId, Error, Reason]),
+        Error:Reason:Stacktrace ->
+            ?error_stacktrace(
+                "Unexpected error getting next iterator (execution ~p): ~p:~p",
+                [ExecutionId, Error, Reason],
+                Stacktrace
+            ),
             ?WF_ERROR_ITERATION_FAILED
     end.
 

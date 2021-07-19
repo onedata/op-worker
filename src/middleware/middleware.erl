@@ -124,9 +124,7 @@ handle(#op_req{} = OpReq, VersionedEntity) ->
         % Unexpected errors are logged and internal server error is returned
         % to client instead
         Type:Reason:Stacktrace ->
-            ?error_stacktrace("Unexpected error in ~p - ~p:~p", [
-                ?MODULE, Type, Reason
-            ], Stacktrace),
+            ?error_stacktrace("Unexpected error in ~p - ~p:~p", [?MODULE, Type, Reason], Stacktrace),
             ?ERROR_INTERNAL_SERVER_ERROR
     end.
 

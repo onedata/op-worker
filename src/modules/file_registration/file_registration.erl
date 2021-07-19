@@ -151,7 +151,9 @@ register_internal(SessId, SpaceId, DestinationPath, StorageId, StorageFileId, Sp
             ?error_stacktrace(
                 "Failed registration of file ~s located on storage ~s in space ~s under path ~s.~n"
                 "stat (or equivalent) operation is not supported by the storage.",
-                [StorageFileId, StorageId, SpaceId, DestinationPath], Stacktrace),
+                [StorageFileId, StorageId, SpaceId, DestinationPath],
+                Stacktrace
+            ),
             ?ERROR_STAT_OPERATION_NOT_SUPPORTED(StorageId);
         throw:{error, _} = Error ->
             Error;
@@ -162,7 +164,9 @@ register_internal(SessId, SpaceId, DestinationPath, StorageId, StorageFileId, Sp
             ?error_stacktrace(
                 "Failed registration of file ~s located on storage ~s in space ~s under path ~s.~n"
                 "Operation failed due to ~p:~p",
-                [StorageFileId, StorageId, SpaceId, DestinationPath, Error, Reason], Stacktrace2),
+                [StorageFileId, StorageId, SpaceId, DestinationPath, Error, Reason],
+                Stacktrace2
+            ),
             {error, Reason}
     end.
 
@@ -239,8 +243,11 @@ create_missing_directories(ParentCtx, [DirectChildPartialCtx | Rest], UserId) ->
         create_missing_directories(DirectChildCtx, Rest, UserId)
     catch
         Error:Reason:Stacktrace ->
-            ?error_stacktrace("Creating missing directories for file being registered has failed with ~p:~p",
-                [Error, Reason], Stacktrace),
+            ?error_stacktrace(
+                "Creating missing directories for file being registered has failed with ~p:~p",
+                [Error, Reason],
+                Stacktrace
+            ),
             throw(?ERROR_POSIX(?ENOENT))
     end.
 

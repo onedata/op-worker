@@ -69,8 +69,7 @@ create_and_update(SpaceId, MonitoringId, UpdateValue) ->
         exit:{noproc, _} ->
             ok;
         T:M:Stacktrace ->
-            ?error_stacktrace("Cannot update monitoring state for ~w - ~p:~p",
-                [MonitoringId, T, M], Stacktrace)
+            ?error_stacktrace("Cannot update monitoring state for ~w - ~p:~p", [MonitoringId, T, M], Stacktrace)
     end.
 
 
