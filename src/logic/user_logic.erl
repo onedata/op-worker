@@ -120,7 +120,7 @@ get_full_name(UserId) ->
 
 
 -spec get_full_name(gs_client_worker:client(), od_user:id(), gs_protocol:auth_hint()) ->
-    od_user:full_name() | errors:error().
+    {ok, od_user:full_name()} | errors:error().
 get_full_name(Client, UserId, AuthHint) ->
     case get_shared_data(Client, UserId, AuthHint) of
         {ok, #document{value = #od_user{full_name = FullName}}} ->

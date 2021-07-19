@@ -44,10 +44,10 @@ handle_connected_to_oz() ->
         _:{_, ?ERROR_NO_CONNECTION_TO_ONEZONE} ->
             ?warning("Connection lost while running on-connect-to-oz procedures"),
             error;
-        Class:Reason ->
+        Class:Reason:Stacktrace ->
             ?error_stacktrace("Failed to execute on-connect-to-oz procedures, disconnecting - ~w:~p", [
                 Class, Reason
-            ]),
+            ], Stacktrace),
             error
     end.
 
@@ -62,10 +62,10 @@ handle_connected_to_oz() ->
 handle_disconnected_from_oz() ->
     try
         on_disconnect_from_oz()
-    catch Class:Reason ->
+    catch Class:Reason:Stacktrace ->
         ?error_stacktrace("Failed to run on-disconnect-from-oz procedures - ~w:~p", [
             Class, Reason
-        ])
+        ], Stacktrace)
     end.
 
 
@@ -81,10 +81,10 @@ handle_deregistered_from_oz() ->
         ?notice("Provider has been deregistered - cleaning up credentials and config..."),
         on_deregister_from_oz(),
         ?notice("Oneprovider cleanup complete")
-    catch Class:Reason ->
+    catch Class:Reason:Stacktrace ->
         ?error_stacktrace("Failed to run on-deregister-from-oz procedures - ~w:~p", [
             Class, Reason
-        ])
+        ], Stacktrace)
     end.
 
 
@@ -99,10 +99,10 @@ handle_entity_deleted(GRI) ->
     try
         on_entity_deleted(GRI),
         ok
-    catch Class:Reason ->
+    catch Class:Reason:Stacktrace ->
         ?error_stacktrace("Failed to run on-entity-deleted procedures for ~ts - ~w:~p", [
             gri:serialize(GRI), Class, Reason
-        ])
+        ], Stacktrace)
     end.
 
 

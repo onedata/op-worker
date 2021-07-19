@@ -161,8 +161,8 @@
             {error, ?ENOENT};
         _:{badmatch, Error} ->
             Error;
-        _:___Reason ->
-            ?error_stacktrace("logical_file_manager generic error: ~p", [___Reason]),
+        _:___Reason:Stacktrace ->
+            ?error_stacktrace("logical_file_manager generic error: ~p", [___Reason], Stacktrace),
             {error, ___Reason}
     end).
 

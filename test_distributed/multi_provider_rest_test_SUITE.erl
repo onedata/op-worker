@@ -508,7 +508,7 @@ init_per_suite(Config) ->
             test_utils:set_env(Worker, ?APP_NAME, public_block_percent_treshold, 0)
         end, ?config(op_worker_nodes, NewConfig1)),
         application:start(ssl),
-        hackney:start(),
+        application:ensure_all_started(hackney),
         NewConfig1
     end,
     {ok, _} = application:ensure_all_started(worker_pool),
@@ -523,7 +523,7 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
     true = worker_pool:stop_pool(?VERIFY_POOL),
-    hackney:stop(),
+    application:stop(hackney),
     application:stop(ssl),
     initializer:teardown_storage(Config).
 

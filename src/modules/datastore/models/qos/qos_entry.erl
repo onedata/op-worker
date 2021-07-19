@@ -116,7 +116,7 @@
 %%%===================================================================
 
 -spec create(od_space:id(), file_meta:uuid(), qos_expression:expression(),
-    replicas_num(), type()) -> {ok, doc()} | {error, term()}.
+    replicas_num(), type()) -> {ok, id()} | {error, term()}.
 create(SpaceId, FileUuid, Expression, ReplicasNum, EntryType) ->
     create(SpaceId, FileUuid, Expression, ReplicasNum, EntryType, false, 
         qos_traverse_req:build_traverse_reqs(FileUuid, [])).

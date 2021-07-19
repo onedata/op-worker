@@ -1700,7 +1700,7 @@ change_file_type3_test(Config) ->
 init_per_suite(Config) ->
     Posthook = fun(NewConfig) ->
         ssl:start(),
-        hackney:start(),
+        application:ensure_all_started(hackney),
         initializer:disable_quota_limit(NewConfig),
         initializer:mock_provider_ids(NewConfig),
         NewConfig2 = multi_provider_file_ops_test_base:init_env(NewConfig),

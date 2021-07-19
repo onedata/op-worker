@@ -234,8 +234,8 @@ spawn_at_nodes([N | Nodes], Nodes2, Threads, DocsSetNum, DocNumInSet, Conflicted
             receive start -> ok end,
             Fun(integer_to_list(DocsSetNum) ++ FileBeg)
         catch
-            E1:E2 ->
-                Master ! {store_ans, AnswerDesc, {uncatched_error, E1, E2, erlang:get_stacktrace()}, 0}
+            E1:E2:Stacktrace ->
+                Master ! {store_ans, AnswerDesc, {uncatched_error, E1, E2, Stacktrace}, 0}
         end
     end),
     spawn_at_nodes(Nodes, [N | Nodes2], Threads - 1, DocsSetNum, DocNumInSet + 1, ConflictedThreads, Fun, [Pid | Pids]).

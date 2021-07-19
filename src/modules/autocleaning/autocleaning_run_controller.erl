@@ -494,9 +494,9 @@ handle_cast(#message{type = MessageType, run_id = ARId}, State = #state{
     try
         handle_cast_internal(MessageType, State)
     catch
-        E:R ->
+        E:R:Stacktrace ->
             ?error_stacktrace("autocleaning_run_controller of run ~p failed unexpectedly due to ~p:~p",
-                [ARId, E, R]
+                [ARId, E, R], Stacktrace
             ),
             lists:foreach(fun(BatchNo) ->
                 cancel_replica_deletion_request(SpaceId, ARId, BatchNo)

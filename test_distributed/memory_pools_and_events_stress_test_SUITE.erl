@@ -98,8 +98,8 @@ many_files_test_base(Config, TestScenario) ->
                         {ok, {Sock, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], SessionId),
                         start_slave(Config, Sock, SpaceGuid, Master, TestScenario)
                     catch
-                        E1:E2 ->
-                            Master ! {start_ans, {E1, E2, erlang:get_stacktrace()}}
+                        E1:E2:Stacktrace ->
+                            Master ! {start_ans, {E1, E2, Stacktrace}}
                     end
                 end)
             end, lists:seq(1, ProcNum)),
@@ -181,8 +181,8 @@ many_files_slave_loop(Config, Sock, SpaceGuid, Master) ->
                 end, lists:seq(1, Repeats)),
                 Master ! {test_ans, ok}
             catch
-                E1:E2 ->
-                    Master ! {test_ans, {E1, E2, erlang:get_stacktrace()}}
+                E1:E2:Stacktrace ->
+                    Master ! {test_ans, {E1, E2, Stacktrace}}
             end,
             many_files_slave_loop(Config, Sock, SpaceGuid, Master)
     end.
@@ -197,8 +197,8 @@ long_usage_slave_loop(Config, Sock, FileGuid, HandleId, SubId, Master) ->
                 end, lists:seq(1, Repeats)),
                 Master ! {test_ans, ok}
             catch
-                E1:E2 ->
-                    Master ! {test_ans, {E1, E2, erlang:get_stacktrace()}}
+                E1:E2:Stacktrace ->
+                    Master ! {test_ans, {E1, E2, Stacktrace}}
             end,
             long_usage_slave_loop(Config, Sock, FileGuid, HandleId, SubId, Master)
     end.

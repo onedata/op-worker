@@ -107,7 +107,7 @@ create_and_update_quota(Doc = #document{value = #file_location{
     end.
 
 
--spec save_and_bump_version(doc(), od_user:id()) -> {ok, doc()} | {error, term()}.
+-spec save_and_bump_version(doc(), od_user:id()) -> {ok, file_location:id()} | {error, term()}.
 save_and_bump_version(FileLocationDoc, UserId) ->
     fslogic_location_cache:save_location(
         version_vector:bump_version(FileLocationDoc), UserId).

@@ -99,7 +99,7 @@ log(Format, Args, SpaceId) ->
     LogFile = audit_log_file_name(SpaceId),
     MaxSize = application:get_env(?APP_NAME,
         storage_import_audit_log_file_max_size, 524288000), % 500 MB
-    logger:log_with_rotation(LogFile, Format, Args, MaxSize).
+    onedata_logger:log_with_rotation(LogFile, Format, Args, MaxSize).
 
 %%-------------------------------------------------------------------
 %% @private

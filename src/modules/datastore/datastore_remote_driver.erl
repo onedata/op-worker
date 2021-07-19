@@ -105,8 +105,8 @@ get_async(#{
                 {SendAns, SessId}
         end
     catch
-        _:Reason2 ->
-            ?error_stacktrace("Datastore remote get failed due to: ~p", [Reason2]),
+        _:Reason2:Stacktrace ->
+            ?error_stacktrace("Datastore remote get failed due to: ~p", [Reason2], Stacktrace),
             {error, Reason2}
     end.
 

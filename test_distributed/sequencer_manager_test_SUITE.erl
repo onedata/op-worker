@@ -83,7 +83,7 @@ sequencer_manager_should_register_sequencer_in_stream(Config) ->
     gen_server:cast(SeqMan, {register_in_stream, 1, self()}),
     timer:sleep(100), % sleep to finish cast handling
     rpc:call(Worker, sequencer_manager, handle, [SeqMan, client_message()]),
-    ?assertReceivedMatch({'$gen_event', #client_message{}}, ?TIMEOUT).
+    ?assertReceivedMatch({'$gen_cast', #client_message{}}, ?TIMEOUT).
 
 sequencer_manager_should_unregister_sequencer_in_stream(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -170,7 +170,7 @@ sequencer_manager_should_start_sequencer_in_stream_on_first_message(Config) ->
     rpc:call(Worker, sequencer_manager, handle,
         [?config(sequencer_manager, Config), client_message()]),
     ?assertReceivedMatch({start_sequencer_stream, _}, ?TIMEOUT),
-    ?assertReceivedMatch({'$gen_event', #client_message{}}, ?TIMEOUT).
+    ?assertReceivedMatch({'$gen_cast', #client_message{}}, ?TIMEOUT).
 
 %%%===================================================================
 %%% SetUp and TearDown functions

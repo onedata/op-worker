@@ -855,7 +855,7 @@ time_warp_test(Config) ->
 init_per_suite(Config) ->
     Posthook = fun(NewConfig) ->
         application:start(ssl),
-        hackney:start(),
+        application:ensure_all_started(hackney),
         NewConfig2 = initializer:create_test_users_and_spaces(?TEST_FILE(NewConfig, "env_desc.json"), NewConfig),
         Workers = ?config(op_worker_nodes, NewConfig2),
         test_utils:set_env(Workers, op_worker, autocleaning_restart_runs, false),
@@ -926,7 +926,7 @@ end_per_testcase(_Case, Config) ->
 
 end_per_suite(Config) ->
     initializer:clean_test_users_and_spaces_no_validate(Config),
-    hackney:stop(),
+    application:stop(hackney),
     application:stop(ssl).
 
 %%%===================================================================

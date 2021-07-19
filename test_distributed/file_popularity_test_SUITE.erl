@@ -363,7 +363,7 @@ file_should_have_correct_popularity_value_base(Config, LastOpenW, AvgOpenW) ->
 init_per_suite(Config) ->
     Posthook = fun(NewConfig) ->
         application:start(ssl),
-        hackney:start(),
+        application:ensure_all_started(hackney),
         initializer:create_test_users_and_spaces(?TEST_FILE(NewConfig, "env_desc.json"), NewConfig)
     end,
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer, ?MODULE]} | Config].
@@ -409,7 +409,7 @@ end_per_suite(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     stop_pool(W),
     initializer:clean_test_users_and_spaces_no_validate(Config),
-    hackney:stop(),
+    application:stop(hackney),
     application:stop(ssl).
 
 %%%===================================================================
@@ -443,7 +443,7 @@ run(SpaceId, Opts) ->
 %%%===================================================================
 
 start_collector(TestMasterPid) ->
-    register(?COLLECTOR, spawn_link(?MODULE, collector_loop, [TestMasterPid])).
+    register(?COLLECTOR, spawn(?MODULE, collector_loop, [TestMasterPid])).
 
 collector_loop(TestMaster) ->
     collector_loop(TestMaster, #{}).

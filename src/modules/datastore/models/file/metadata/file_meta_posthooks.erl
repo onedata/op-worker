@@ -79,10 +79,11 @@ execute_hooks(FileUuid) ->
     maps:fold(fun(Identifier, #hook{module = Module, function = Function, args = Args}, _) ->
         try
             ok = erlang:apply(Module, Function, binary_to_term(Args))
-        catch Error:Type  ->
+        catch Error:Type:Stacktrace  ->
             ?debug_stacktrace(
                 "Error during execution of file meta posthook (~p) for file ~p ~p:~p",
-                [Identifier, FileUuid, Error, Type]
+                [Identifier, FileUuid, Error, Type],
+                Stacktrace
             ),
             ok
         end

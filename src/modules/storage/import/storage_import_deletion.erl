@@ -373,9 +373,9 @@ maybe_delete_file_and_update_counters(FileCtx, SpaceId, StorageId) ->
         error:{badmatch, ?ERROR_NOT_FOUND} ->
             storage_import_monitoring:mark_processed_job(SpaceId),
             ok;
-        Error:Reason ->
+        Error:Reason:Stacktrace ->
             ?error_stacktrace("~p:maybe_delete_file_and_update_counters failed due to ~p",
-                [?MODULE, {Error, Reason}]),
+                [?MODULE, {Error, Reason}], Stacktrace),
             storage_import_monitoring:mark_failed_file(SpaceId)
     end.
 

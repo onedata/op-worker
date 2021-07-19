@@ -43,11 +43,11 @@ download_single_file(SessionId, FileAttrs, Req) ->
     cowboy_req:req()
 ) ->
     cowboy_req:req().
-download_single_file(SessionId, #file_attr{type = ?REGULAR_FILE_TYPE} = FileAttr, OnSuccessCallback, Req0) -> 
+download_single_file(SessionId, #file_attr{type = ?REGULAR_FILE_TYPE} = FileAttr, OnSuccessCallback, Req0) ->
     download_single_regular_file(SessionId, FileAttr, OnSuccessCallback, Req0);
 download_single_file(SessionId, #file_attr{type = ?SYMLINK_TYPE} = FileAttr, OnSuccessCallback, Req0) ->
     download_single_symlink(SessionId, FileAttr, OnSuccessCallback, Req0).
-    
+
 
 -spec download_tarball(
     bulk_download:id(),
@@ -61,7 +61,7 @@ download_tarball(BulkDownloadId, SessionId, FileAttrsList, FollowSymlinks, Req0)
     case http_parser:parse_range_header(Req0, unknown) of
         undefined ->
             stream_whole_tarball(BulkDownloadId, SessionId, FileAttrsList, FollowSymlinks, Req0);
-        [{0, unknown}] -> 
+        [{0, unknown}] ->
             stream_whole_tarball(BulkDownloadId, SessionId, FileAttrsList, FollowSymlinks, Req0);
         Range ->
             stream_partial_tarball(BulkDownloadId, Req0, Range)
@@ -94,7 +94,7 @@ download_single_regular_file(SessionId, #file_attr{
             );
         Ranges ->
             Req1 = ensure_content_type_header_set(FileName, Req0),
-            
+
             case lfm:monitored_open(SessionId, ?FILE_REF(FileGuid), read) of
                 {ok, FileHandle} ->
                     try
@@ -102,10 +102,13 @@ download_single_regular_file(SessionId, #file_attr{
                         execute_on_success_callback(FileGuid, OnSuccessCallback),
                         http_streamer:close_stream(Boundary, Req2),
                         Req2
-                    catch Type:Reason ->
+                    catch Type:Reason:Stacktrace ->
                         {ok, UserId} = session:get_user_id(SessionId),
-                        ?error_stacktrace("Error while processing file (~p) download "
-                        "for user ~p - ~p:~p", [FileGuid, UserId, Type, Reason]),
+                        ?error_stacktrace(
+                            "Error while processing file (~p) download for user ~p - ~p:~p",
+                            [FileGuid, UserId, Type, Reason],
+                            Stacktrace
+                        ),
                         http_req:send_error(Reason, Req1)
                     after
                         lfm:monitored_release(FileHandle)

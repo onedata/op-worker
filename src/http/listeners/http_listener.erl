@@ -67,14 +67,19 @@ start() ->
         ]}
     ]),
     Result = cowboy:start_clear(?HTTP_LISTENER,
-        [
-            {port, port()},
-            {num_acceptors, ?ACCEPTORS_NUM}
-        ], #{
+        #{
+            num_acceptors => ?ACCEPTORS_NUM,
+            socket_opts => [
+                {ip, any},
+                {port, port()}
+            ]
+        },
+        #{
             env => #{dispatch => Dispatch},
             max_keepalive => 1,
             request_timeout => ?REQUEST_TIMEOUT
-        }),
+        }
+    ),
     case Result of
         {ok, _} ->
             ?info("Server '~p' started successfully", [?HTTP_LISTENER]);

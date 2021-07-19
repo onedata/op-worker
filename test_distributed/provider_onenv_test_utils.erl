@@ -55,7 +55,7 @@ setup_sessions(Config) ->
 
 
 -spec find_importing_provider(test_config:config(), od_space:id()) -> od_provider:id() | undefined.
-find_importing_provider(Config, SpaceId) ->
+find_importing_provider(_Config, SpaceId) ->
     Providers = [oct_background:get_provider_id(krakow), oct_background:get_provider_id(paris)],
     lists:foldl(fun
         (ProviderId, undefined) ->

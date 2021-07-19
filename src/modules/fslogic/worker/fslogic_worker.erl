@@ -378,8 +378,8 @@ handle_request_and_process_response(SessId, Request) ->
                 handle_request_remotely(UserCtx, Request, Providers)
         end
     catch
-        Type2:Error2 ->
-            fslogic_errors:handle_error(Request, Type2, Error2)
+        Type2:Error2:Stacktrace ->
+            fslogic_errors:handle_error(Request, Type2, Error2, Stacktrace)
     end.
 
 %%--------------------------------------------------------------------
@@ -421,8 +421,8 @@ handle_request_and_process_response_locally(UserCtx0, Request, FilePartialCtx) -
         end,
         handle_request_locally(UserCtx1, Request, FileCtx1)
     catch
-        Type:Error ->
-            fslogic_errors:handle_error(Request, Type, Error)
+        Type:Error:Stacktrace ->
+            fslogic_errors:handle_error(Request, Type, Error, Stacktrace)
     end.
 
 
@@ -862,8 +862,8 @@ invalidate_permissions_cache() ->
     try
         permissions_cache:invalidate_on_node()
     catch
-        _:Reason ->
-            ?error_stacktrace("Failed to invalidate permissions cache due to: ~p", [Reason])
+        _:Reason:Stacktrace ->
+            ?error_stacktrace("Failed to invalidate permissions cache due to: ~p", [Reason], Stacktrace)
     end.
 
 -spec periodical_spaces_autocleaning_check() -> ok.
@@ -884,8 +884,8 @@ periodical_spaces_autocleaning_check() ->
         Error = {error, _} ->
             ?error("Unable to trigger spaces auto-cleaning check due to: ~p", [Error])
     catch
-        Error2:Reason ->
-            ?error_stacktrace("Unable to trigger spaces auto-cleaning check due to: ~p", [{Error2, Reason}])
+        Error2:Reason:Stacktrace ->
+            ?error_stacktrace("Unable to trigger spaces auto-cleaning check due to: ~p", [{Error2, Reason}], Stacktrace)
     end.
 
 -spec rerun_transfers() -> ok.
@@ -905,8 +905,8 @@ rerun_transfers() ->
                 Error = {error, _} ->
                     ?error("Unable to rerun transfers due to: ~p", [Error])
             catch
-                Error2:Reason ->
-                    ?error_stacktrace("Unable to rerun transfers due to: ~p", [{Error2, Reason}])
+                Error2:Reason:Stacktrace ->
+                    ?error_stacktrace("Unable to rerun transfers due to: ~p", [{Error2, Reason}], Stacktrace)
             end;
         false ->
             ok
@@ -928,8 +928,8 @@ restart_autocleaning_runs() ->
                 Error = {error, _} ->
                     ?error("Unable to restart auto-cleaning runs due to: ~p", [Error])
             catch
-                Error2:Reason ->
-                    ?error_stacktrace("Unable to restart autocleaning-runs due to: ~p", [{Error2, Reason}])
+                Error2:Reason:Stacktrace ->
+                    ?error_stacktrace("Unable to restart autocleaning-runs due to: ~p", [{Error2, Reason}], Stacktrace)
             end;
         false ->
             ok
