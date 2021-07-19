@@ -148,7 +148,7 @@ handle_file_written_event(#file_written_event{
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     monitoring_event_emitter:emit_file_written_statistics(SpaceId, UserId, Size, Counter),
 
-    replica_synchronizer:force_flush_events(file_ctx:get_uuid_const(FileCtx)),
+    replica_synchronizer:force_flush_events(file_ctx:get_logical_uuid_const(FileCtx)),
     case replica_synchronizer:update_replica(FileCtx, Blocks, FileSize, true) of
         {ok, ReplicaUpdateResult} ->
             LocationChanges = replica_updater:get_location_changes(ReplicaUpdateResult),
@@ -185,6 +185,11 @@ handle_file_read_event(#file_read_event{
 }, SessId) ->
     FileCtx = file_ctx:new_by_guid(FileGuid),
     SpaceId = file_ctx:get_space_id_const(FileCtx),
-    {ok, UserId} = session:get_user_id(SessId),
-    monitoring_event_emitter:emit_file_read_statistics(SpaceId, UserId, Size, Counter),
+    % TODO VFS-7851 handle case when get_user_id returns not_found
+    case session:get_user_id(SessId) of
+        {ok, UserId} ->
+            monitoring_event_emitter:emit_file_read_statistics(SpaceId, UserId, Size, Counter);
+        ?ERROR_NOT_FOUND ->
+            ok
+    end,
     fslogic_times:update_atime(FileCtx).

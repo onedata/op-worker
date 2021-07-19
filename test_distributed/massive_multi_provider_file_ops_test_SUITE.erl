@@ -17,12 +17,12 @@
 -include("global_definitions.hrl").
 -include("tree_traverse.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/fslogic/file_attr.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
 -include_lib("ctool/include/errors.hrl").
--include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("cluster_worker/include/global_definitions.hrl").
 
 %% API
@@ -728,8 +728,8 @@ check_ended(Worker, Tasks) ->
 
 save_callback(Callback, TaskId) ->
     critical_section:run(save_callback, fun() ->
-        List = application:get_env(?APP_NAME, Callback, []),
-        application:set_env(?APP_NAME, Callback, [{TaskId, stopwatch:start()} | List])
+        List = op_worker:get_env(Callback, []),
+        op_worker:set_env(Callback, [{TaskId, stopwatch:start()} | List])
     end),
     ok.
 

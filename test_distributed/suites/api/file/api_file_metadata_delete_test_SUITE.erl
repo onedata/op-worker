@@ -20,8 +20,9 @@
 
 %% API
 -export([
-    all/0,
+    groups/0, all/0,
     init_per_suite/1, end_per_suite/1,
+    init_per_group/2, end_per_group/2,
     init_per_testcase/2, end_per_testcase/2
 ]).
 
@@ -38,14 +39,21 @@
     delete_file_xattrs/1
 ]).
 
+
+groups() -> [
+    {all_tests, [parallel], [
+        delete_file_rdf_metadata_with_rdf_set_test,
+        delete_file_rdf_metadata_without_rdf_set_test,
+
+        delete_file_json_metadata_with_json_set_test,
+        delete_file_json_metadata_without_json_set_test,
+
+        delete_file_xattrs
+    ]}
+].
+
 all() -> [
-    delete_file_rdf_metadata_with_rdf_set_test,
-    delete_file_rdf_metadata_without_rdf_set_test,
-
-    delete_file_json_metadata_with_json_set_test,
-    delete_file_json_metadata_without_json_set_test,
-
-    delete_file_xattrs
+    {group, all_tests}
 ].
 
 
@@ -330,10 +338,18 @@ end_per_suite(_Config) ->
     oct_background:end_per_suite().
 
 
-init_per_testcase(_Case, Config) ->
-    ct:timetrap({minutes, 30}),
-    lfm_proxy:init(Config).
+init_per_group(_Group, Config) ->
+    lfm_proxy:init(Config, false).
 
 
-end_per_testcase(_Case, Config) ->
+end_per_group(_Group, Config) ->
     lfm_proxy:teardown(Config).
+
+
+init_per_testcase(_Case, Config) ->
+    ct:timetrap({minutes, 10}),
+    Config.
+
+
+end_per_testcase(_Case, _Config) ->
+    ok.

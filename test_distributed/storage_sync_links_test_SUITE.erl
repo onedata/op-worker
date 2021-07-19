@@ -454,7 +454,7 @@ delete_many_children_links_recursive_test_base(Config, ImportedStorage) ->
 init_per_suite(Config) ->
     Posthook = fun(NewConfig) ->
         ssl:start(),
-        hackney:start(),
+        application:ensure_all_started(hackney),
         initializer:disable_quota_limit(NewConfig),
         initializer:mock_provider_ids(NewConfig),
         multi_provider_file_ops_test_base:init_env(NewConfig)

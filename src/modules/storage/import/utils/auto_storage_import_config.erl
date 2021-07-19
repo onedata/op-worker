@@ -34,6 +34,7 @@
 
 %% @formatter:off
 -type config_map() :: #{
+    mode => ?AUTO_IMPORT | ?MANUAL_IMPORT,
     max_depth => non_neg_integer(),
     sync_acl => boolean(),
     continuous_scan => boolean(),

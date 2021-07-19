@@ -80,7 +80,7 @@ handle(Manager, Message) ->
 %% @private
 -spec handle(pid(), term(), integer()) -> ok.
 handle(_Manager, Request, -1) ->
-    case application:get_env(?APP_NAME, log_event_manager_errors, false) of
+    case op_worker:get_env(log_event_manager_errors, false) of
         true -> ?error("Max retries for request: ~p", [Request]);
         false -> ?debug("Max retries for request: ~p", [Request])
     end,
@@ -124,8 +124,8 @@ handle(Manager, Request, RetryCounter) ->
         exit:{timeout, _} ->
             ?debug("Timeout of stream process for request ~p, retry", [Request]),
             handle(Manager, Request, RetryCounter - 1);
-        Reason1:Reason2 ->
-            ?error_stacktrace("Cannot process request ~p due to: ~p", [Request, {Reason1, Reason2}]),
+        Reason1:Reason2:Stacktrace ->
+            ?error_stacktrace("Cannot process request ~p due to: ~p", [Request, {Reason1, Reason2}], Stacktrace),
             handle(Manager, Request, RetryCounter - 1)
     end.
 
@@ -171,7 +171,7 @@ init([MgrSup, SessId]) ->
     {stop, Reason :: term(), Reply :: term(), NewState :: #state{}} |
     {stop, Reason :: term(), NewState :: #state{}}.
 handle_call(Request, _From, State) ->
-    Retries = application:get_env(?APP_NAME, event_manager_retries, 1),
+    Retries = op_worker:get_env(event_manager_retries, 1),
     handle_in_process(Request, State, Retries),
     {reply, ok, State}.
 
@@ -288,7 +288,7 @@ get_provider(Request, Manager) ->
         undefined ->
             self;
         {file, FileCtx} ->
-            FileGuid = file_ctx:get_guid_const(FileCtx),
+            FileGuid = file_ctx:get_logical_guid_const(FileCtx), % TODO VFS-7448 - test production of events for hardlinks
             case get_from_memory(Manager, guid_to_provider, FileGuid) of
                 {ok, ID} ->
                     ID;
@@ -416,8 +416,8 @@ handle_in_process(Request, State, RetryCounter) ->
         exit:{timeout, _} ->
             ?debug("Timeout of stream process for request ~p, retry", [Request]),
             retry_handle(State, Request, RetryCounter);
-        Reason1:Reason2 ->
-            ?error_stacktrace("Cannot process request ~p due to: ~p", [Request, {Reason1, Reason2}]),
+        Reason1:Reason2:Stacktrace ->
+            ?error_stacktrace("Cannot process request ~p due to: ~p", [Request, {Reason1, Reason2}], Stacktrace),
             retry_handle(State, Request, RetryCounter)
     end.
 
@@ -479,13 +479,16 @@ handle_in_process(Request, _State) ->
     session:id()) -> ok.
 handle_remotely(#flush_events{} = Request, ProviderId, SessId) ->
     #flush_events{context = Context, notify = Notify} = Request,
-    {ok, Credentials} = session:get_credentials(SessId),
+    {ok, SessDoc} = session:get(SessId),
+    Credentials = session:get_credentials(SessDoc),
+    {ok, SessMode} = session:get_mode(SessDoc),
     StreamId = sequencer:term_to_stream_id(Context),
     ClientMsg = #client_message{
         message_stream = #message_stream{stream_id = StreamId},
         message_body = Request,
         effective_session_id = SessId,
-        effective_client_tokens = auth_manager:get_client_tokens(Credentials)
+        effective_client_tokens = auth_manager:get_client_tokens(Credentials),
+        effective_session_mode = SessMode
     },
     Ref = session_utils:get_provider_session_id(outgoing, ProviderId),
     RequestTranslator = spawn(fun() ->
@@ -506,13 +509,16 @@ handle_remotely(#event{} = Evt, ProviderId, SessId) ->
 handle_remotely(Request, ProviderId, SessId) ->
     {file, FileUuid} = get_context(Request),
     StreamId = sequencer:term_to_stream_id(FileUuid),
-    {ok, Credentials} = session:get_credentials(SessId),
+    {ok, SessDoc} = session:get(SessId),
+    Credentials = session:get_credentials(SessDoc),
+    {ok, SessMode} = session:get_mode(SessDoc),
     communicator:stream_to_provider(
         session_utils:get_provider_session_id(outgoing, ProviderId),
         #client_message{
             message_body = Request,
             effective_session_id = SessId,
-            effective_client_tokens = auth_manager:get_client_tokens(Credentials)
+            effective_client_tokens = auth_manager:get_client_tokens(Credentials),
+            effective_session_mode = SessMode
         },
         StreamId, undefined
     ),
@@ -531,7 +537,7 @@ cache_provider(#subscription{id = Id} = Sub, Provider) ->
         undefined ->
             ok;
         {file, FileCtx} ->
-            FileGuid = file_ctx:get_guid_const(FileCtx),
+            FileGuid = file_ctx:get_logical_guid_const(FileCtx),
             add_to_memory(guid_to_provider, FileGuid, Provider),
             add_to_memory(sub_to_guid, Id, FileGuid)
     end.
@@ -605,7 +611,7 @@ start_event_streams(#state{streams_sup = StmsSup, session_id = SessId} = State) 
 %%--------------------------------------------------------------------
 -spec retry_handle(#state{}, Request :: term(), RetryCounter :: non_neg_integer()) -> ok.
 retry_handle(_State, Request, 0) ->
-    case application:get_env(?APP_NAME, log_event_manager_errors, false) of
+    case op_worker:get_env(log_event_manager_errors, false) of
         true -> ?error("Max retries for request: ~p", [Request]);
         false -> ?debug("Max retries for request: ~p", [Request])
     end,

@@ -194,7 +194,8 @@ python_client_test_base(Config) ->
         #'ClientHandshakeRequest'{
             session_id = <<"session_id">>,
             macaroon = #'Macaroon'{macaroon = SerializedToken},
-            version = Version
+            version = Version,
+            session_mode = 'NORMAL'
         }
     }},
     HandshakeMessageRaw = messages:encode_msg(HandshakeMessage),

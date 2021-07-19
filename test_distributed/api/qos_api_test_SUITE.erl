@@ -14,6 +14,7 @@
 
 -include("api_test_runner.hrl").
 -include("global_definitions.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/http/codes.hrl").
 -include_lib("ctool/include/graph_sync/gri.hrl").
@@ -52,15 +53,15 @@ create_qos_test(Config) ->
     
     {ok, FileToShareGuid} = api_test_utils:create_file(
         FileType, P1, SessIdP1, filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME()])),
-    ?assertMatch({ok, _}, lfm_proxy:stat(P2, SessIdP2, {guid, FileToShareGuid}), 20),
-    {ok, ShareId} = lfm_proxy:create_share(P1, SessIdP1, {guid, FileToShareGuid}, <<"share">>),
+    ?assertMatch({ok, _}, lfm_proxy:stat(P2, SessIdP2, ?FILE_REF(FileToShareGuid)), 20),
+    {ok, ShareId} = lfm_proxy:create_share(P1, SessIdP1, ?FILE_REF(FileToShareGuid), <<"share">>),
 
     MemRef = api_test_memory:init(),
 
     SetupFun = fun() ->
         FilePath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME()]),
         {ok, Guid} = api_test_utils:create_file(FileType, P1, SessIdP1, FilePath),
-        ?assertMatch({ok, _}, lfm_proxy:stat(P2, SessIdP2, {guid, Guid}), 20),
+        ?assertMatch({ok, _}, lfm_proxy:stat(P2, SessIdP2, ?FILE_REF(Guid)), 20),
         api_test_memory:set(MemRef, guid, Guid)
     end, 
     
@@ -193,12 +194,12 @@ get_qos_summary_test(Config) ->
     FilePath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME()]),
     {ok, DirGuid} = api_test_utils:create_file(<<"dir">>, P1, SessIdP1, FilePath),
     {ok, Guid} = api_test_utils:create_file(FileType, P1, SessIdP1, filename:join(FilePath, ?RANDOM_FILE_NAME())),
-    {ok, QosEntryIdInherited} = lfm_proxy:add_qos_entry(P1, SessIdP1, {guid, DirGuid}, <<"key=value">>, 8),
-    {ok, QosEntryIdDirect} = lfm_proxy:add_qos_entry(P1, SessIdP1, {guid, Guid}, <<"key=value">>, 3),
+    {ok, QosEntryIdInherited} = lfm_proxy:add_qos_entry(P1, SessIdP1, ?FILE_REF(DirGuid), <<"key=value">>, 8),
+    {ok, QosEntryIdDirect} = lfm_proxy:add_qos_entry(P1, SessIdP1, ?FILE_REF(Guid), <<"key=value">>, 3),
     % wait for qos entries to be dbsynced to other provider
     ?assertMatch({ok, _}, lfm_proxy:get_qos_entry(P2, SessIdP2, QosEntryIdInherited), 20),
     ?assertMatch({ok, _}, lfm_proxy:get_qos_entry(P2, SessIdP2, QosEntryIdDirect), 20),
-    {ok, ShareId} = lfm_proxy:create_share(P1, SessIdP1, {guid, Guid}, <<"share">>),
+    {ok, ShareId} = lfm_proxy:create_share(P1, SessIdP1, ?FILE_REF(Guid), <<"share">>),
 
     MemRef = api_test_memory:init(),
 
@@ -301,7 +302,7 @@ setup_fun(MemRef, Config, Guid) ->
         SessIdP2 = ?USER_IN_BOTH_SPACES_SESS_ID(P2, Config),
         ReplicasNum = rand:uniform(10),
         Expression = <<"key=value & a=b">>,
-        {ok, QosEntryId} = lfm_proxy:add_qos_entry(P1, SessIdP1, {guid, Guid}, Expression, ReplicasNum),
+        {ok, QosEntryId} = lfm_proxy:add_qos_entry(P1, SessIdP1, ?FILE_REF(Guid), Expression, ReplicasNum),
         % wait for qos entry to be dbsynced to other provider
         ?assertMatch({ok, _}, lfm_proxy:get_qos_entry(P2, SessIdP2, QosEntryId), 20),
 
@@ -336,7 +337,7 @@ prepare_args_fun_rest(MemRef, qos_summary) ->
         {Id, _} = api_test_utils:maybe_substitute_bad_id(ObjectId, Data),
         #rest_args{
             method = get,
-            path = <<"data/", Id/binary, "/qos_summary">>
+            path = <<"data/", Id/binary, "/qos/summary">>
         } 
     end;
 
@@ -380,7 +381,7 @@ prepare_args_fun_gs(MemRef, qos_summary) ->
         {Id, _} = api_test_utils:maybe_substitute_bad_id(Guid, Data),
         #gs_args{
             operation = get,
-            gri = #gri{type = op_file, id = Id, aspect = file_qos_summary, scope = private}
+            gri = #gri{type = op_file, id = Id, aspect = qos_summary, scope = private}
         } 
     end;
 prepare_args_fun_gs(_MemRef, available_qos_parameters) ->
@@ -559,8 +560,8 @@ verify_fun(MemRef, Config, create) ->
             true;
         (expected_failure, _) ->
             Guid = api_test_memory:get(MemRef, guid),
-            ?assertEqual({ok, {#{}, #{}}}, lfm_proxy:get_effective_file_qos(P1, SessIdP1, {guid, Guid})),
-            ?assertEqual({ok, {#{}, #{}}}, lfm_proxy:get_effective_file_qos(P2, SessIdP2, {guid, Guid})),
+            ?assertEqual({ok, {#{}, #{}}}, lfm_proxy:get_effective_file_qos(P1, SessIdP1, ?FILE_REF(Guid))),
+            ?assertEqual({ok, {#{}, #{}}}, lfm_proxy:get_effective_file_qos(P2, SessIdP2, ?FILE_REF(Guid))),
             true
     end;
 
@@ -608,22 +609,21 @@ check_evaluate_expression_result_storages(Node, SpaceId, Expression, Result) ->
 
 init_per_suite(Config) ->
     Posthook = fun(NewConfig) ->
-        NewConfig1 = [{space_storage_mock, false} | NewConfig],
-        NewConfig2 = initializer:setup_storage(NewConfig1),
-        NewConfig3 = initializer:create_test_users_and_spaces(
-            ?TEST_FILE(NewConfig2, "env_desc.json"),
-            NewConfig2
+        NewConfig1 = initializer:setup_storage(NewConfig),
+        NewConfig2 = initializer:create_test_users_and_spaces(
+            ?TEST_FILE(NewConfig1, "env_desc.json"),
+            NewConfig1
         ),
-        initializer:mock_auth_manager(NewConfig3, _CheckIfUserIsSupported = true),
+        initializer:mock_auth_manager(NewConfig2, _CheckIfUserIsSupported = true),
         ssl:start(),
-        hackney:start(),
-        NewConfig3
+        application:ensure_all_started(hackney),
+        NewConfig2
     end,
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer]} | Config].
 
 
 end_per_suite(Config) ->
-    hackney:stop(),
+    application:stop(hackney),
     ssl:stop(),
     initializer:clean_test_users_and_spaces_no_validate(Config),
     initializer:teardown_storage(Config).

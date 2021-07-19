@@ -12,6 +12,7 @@
 -module(event).
 -author("Krzysztof Trzepla").
 
+-include("modules/events/routing.hrl").
 -include("modules/events/definitions.hrl").
 -include("proto/oneclient/client_messages.hrl").
 -include("proto/oneclient/server_messages.hrl").
@@ -93,15 +94,36 @@ emit(Evt, MgrRef) ->
     ok | {error, Reason :: term()}.
 emit_to_filtered_subscribers(Evt, RoutingInfo, []) ->
     case subscription_manager:get_subscribers(Evt, RoutingInfo) of
-        {ok, SessIds} -> emit(Evt, SessIds);
+        #event_subscribers{subscribers = SessIds, subscribers_for_links = SessIdsForLinks} ->
+            emit(Evt, SessIds),
+            lists:foreach(fun({Context, AdditionalSessIds}) ->
+                try
+                    emit(fslogic_event_emitter:clone_event(Evt, Context), AdditionalSessIds)
+                catch
+                    Class:Reason ->
+                        % Race with file/link deletion can result in error logged here
+                        ?warning("Error emitting event for additional guid - ~w:~p~ncontext: ~s~noriginal event: ~p",
+                            [Class, Reason, Context, Evt])
+                end
+            end, SessIdsForLinks);
         {error, Reason} -> {error, Reason}
     end;
 emit_to_filtered_subscribers(Evt, RoutingInfo, ExcludedRef) ->
     case subscription_manager:get_subscribers(Evt, RoutingInfo) of
-        {ok, SessIds} ->
+        #event_subscribers{subscribers = SessIds, subscribers_for_links = SessIdsForLinks} ->
             Excluded = get_event_managers(ExcludedRef),
             Subscribed = get_event_managers(SessIds),
-            emit(Evt, subtract_unique(Subscribed, Excluded));
+            emit(Evt, subtract_unique(Subscribed, Excluded)),
+            lists:foreach(fun({Context, AdditionalSessIds}) ->
+                try
+                    emit(fslogic_event_emitter:clone_event(Evt, Context), AdditionalSessIds)
+                catch
+                    Class:Reason ->
+                        % Race with file/link deletion can result in error logged here
+                        ?warning("Error emitting event for additional guid - ~w:~p~ncontext: ~s~noriginal event: ~p",
+                            [Class, Reason, Context, Evt])
+                end
+            end, SessIdsForLinks);
         {error, Reason} ->
             {error, Reason}
     end.
@@ -293,7 +315,7 @@ send_to_event_manager(Manager, Message, RetryCounter) ->
         exit:{timeout, _} ->
             ?debug("Timeout of event manager for message ~p, retry", [Message]),
             send_to_event_manager(Manager, Message, RetryCounter - 1);
-        Reason1:Reason2 ->
-            ?error_stacktrace("Cannot process event ~p due to: ~p", [Message, {Reason1, Reason2}]),
+        Reason1:Reason2:Stacktrace ->
+            ?error_stacktrace("Cannot process event ~p due to: ~p", [Message, {Reason1, Reason2}], Stacktrace),
             send_to_event_manager(Manager, Message, RetryCounter - 1)
     end.

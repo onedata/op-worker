@@ -14,8 +14,10 @@
 
 -include("api_test_runner.hrl").
 -include("api_file_test_utils.hrl").
+-include("modules/dataset/dataset.hrl").
 -include("modules/fslogic/file_details.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include("proto/oneclient/common_messages.hrl").
 -include("test_utils/initializer.hrl").
 
@@ -57,8 +59,11 @@
 ]).
 -export([
     add_file_id_errors_for_operations_available_in_share_mode/3,
+    add_file_id_errors_for_operations_available_in_share_mode/4,
     add_file_id_errors_for_operations_not_available_in_share_mode/3,
+    add_file_id_errors_for_operations_not_available_in_share_mode/4,
     add_cdmi_id_errors_for_operations_not_available_in_share_mode/4,
+    add_cdmi_id_errors_for_operations_not_available_in_share_mode/5,
     maybe_substitute_bad_id/2
 ]).
 
@@ -94,7 +99,7 @@ create_shared_file_in_space_krk() ->
     FileType = randomly_choose_file_type_for_test(),
     FilePath = filename:join(["/", ?SPACE_KRK, ?RANDOM_FILE_NAME()]),
     {ok, FileGuid} = create_file(FileType, P1Node, UserSessId, FilePath),
-    {ok, ShareId} = lfm_proxy:create_share(P1Node, SpaceOwnerSessId, {guid, FileGuid}, <<"share">>),
+    {ok, ShareId} = lfm_proxy:create_share(P1Node, SpaceOwnerSessId, ?FILE_REF(FileGuid), <<"share">>),
 
     {FileType, FilePath, FileGuid, ShareId}.
 
@@ -126,7 +131,7 @@ create_and_sync_shared_file_in_space_krk_par(FileType, FileName, Mode) ->
 
     FilePath = filename:join(["/", ?SPACE_KRK_PAR, FileName]),
     {ok, FileGuid} = create_file(FileType, P1Node, UserSessIdP1, FilePath, Mode),
-    {ok, ShareId} = lfm_proxy:create_share(P1Node, SpaceOwnerSessIdP1, {guid, FileGuid}, <<"share">>),
+    {ok, ShareId} = lfm_proxy:create_share(P1Node, SpaceOwnerSessIdP1, ?FILE_REF(FileGuid), <<"share">>),
 
     file_test_utils:await_sync(P2Node, FileGuid),
 
@@ -194,9 +199,14 @@ create_file_in_space_krk_par_with_additional_metadata(ParentPath, HasParentQos, 
             true -> acl;
             false -> posix
         end,
-        has_metadata = HasMetadata,
-        has_direct_qos = HasDirectQos,
-        has_eff_qos = HasParentQos orelse HasDirectQos
+        eff_protection_flags = ?no_flags_mask,
+        eff_qos_membership = case {HasDirectQos, HasParentQos} of
+            {true, _} -> ?DIRECT_QOS_MEMBERSHIP;
+            {_, true} -> ?ANCESTOR_QOS_MEMBERSHIP;
+            _ -> ?NONE_QOS_MEMBERSHIP
+        end,
+        eff_dataset_membership = ?NONE_DATASET_MEMBERSHIP,
+        has_metadata = HasMetadata
     },
 
     {FileType, FilePath, FileGuid, FileDetails}.
@@ -245,7 +255,7 @@ fill_file_with_dummy_data(Node, SessId, FileGuid, Offset, Size) ->
 -spec write_file(node(), session:id(), file_id:file_guid(), Offset :: non_neg_integer(),
     Size :: non_neg_integer()) -> ok.
 write_file(Node, SessId, FileGuid, Offset, Content) ->
-    {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(Node, SessId, {guid, FileGuid}, write)),
+    {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(Node, SessId, ?FILE_REF(FileGuid), write)),
     ?assertMatch({ok, _}, lfm_proxy:write(Node, Handle, Offset, Content)),
     ?assertMatch(ok, lfm_proxy:fsync(Node, Handle)),
     ?assertMatch(ok, lfm_proxy:close(Node, Handle)).
@@ -254,7 +264,7 @@ write_file(Node, SessId, FileGuid, Offset, Content) ->
 -spec read_file(node(), session:id(), file_id:file_guid(), Size :: non_neg_integer()) ->
     Content :: binary().
 read_file(Node, SessId, FileGuid, Size) ->
-    {ok, ReadHandle} = lfm_proxy:open(Node, SessId, {guid, FileGuid}, read),
+    {ok, ReadHandle} = lfm_proxy:open(Node, SessId, ?FILE_REF(FileGuid), read),
     {ok, Content} = lfm_proxy:read(Node, ReadHandle, 0, Size),
     ok = lfm_proxy:close(Node, ReadHandle),
     Content.
@@ -265,7 +275,7 @@ read_file(Node, SessId, FileGuid, Size) ->
 share_file_and_sync_file_attrs(CreationNode, SessionId, SyncNodes, FileGuid) ->
     {ok, ShareId} = ?assertMatch(
         {ok, _},
-        lfm_proxy:create_share(CreationNode, SessionId, {guid, FileGuid}, <<"share">>),
+        lfm_proxy:create_share(CreationNode, SessionId, ?FILE_REF(FileGuid), <<"share">>),
         ?ATTEMPTS
     ),
     lists:foreach(fun(Node) ->
@@ -291,18 +301,18 @@ set_and_sync_metadata(Nodes, FileGuid, MetadataType, Metadata) ->
 
 -spec set_metadata(node(), file_id:file_guid(), metadata_type(), term()) -> ok.
 set_metadata(Node, FileGuid, <<"rdf">>, Metadata) ->
-    lfm_proxy:set_metadata(Node, ?ROOT_SESS_ID, {guid, FileGuid}, rdf, Metadata, []);
+    lfm_proxy:set_metadata(Node, ?ROOT_SESS_ID, ?FILE_REF(FileGuid), rdf, Metadata, []);
 set_metadata(Node, FileGuid, <<"json">>, Metadata) ->
-    lfm_proxy:set_metadata(Node, ?ROOT_SESS_ID, {guid, FileGuid}, json, Metadata, []);
+    lfm_proxy:set_metadata(Node, ?ROOT_SESS_ID, ?FILE_REF(FileGuid), json, Metadata, []);
 set_metadata(Node, FileGuid, <<"xattrs">>, Metadata) ->
     set_xattrs(Node, FileGuid, Metadata).
 
 
 -spec get_metadata(node(), file_id:file_guid(), metadata_type()) -> {ok, term()}.
 get_metadata(Node, FileGuid, <<"rdf">>) ->
-    lfm_proxy:get_metadata(Node, ?ROOT_SESS_ID, {guid, FileGuid}, rdf, [], false);
+    lfm_proxy:get_metadata(Node, ?ROOT_SESS_ID, ?FILE_REF(FileGuid), rdf, [], false);
 get_metadata(Node, FileGuid, <<"json">>) ->
-    lfm_proxy:get_metadata(Node, ?ROOT_SESS_ID, {guid, FileGuid}, json, [], false);
+    lfm_proxy:get_metadata(Node, ?ROOT_SESS_ID, ?FILE_REF(FileGuid), json, [], false);
 get_metadata(Node, FileGuid, <<"xattrs">>) ->
     get_xattrs(Node, FileGuid).
 
@@ -311,7 +321,7 @@ get_metadata(Node, FileGuid, <<"xattrs">>) ->
 set_xattrs(Node, FileGuid, Xattrs) ->
     lists:foreach(fun({Key, Val}) ->
         ?assertMatch(ok, lfm_proxy:set_xattr(
-            Node, ?ROOT_SESS_ID, {guid, FileGuid}, #xattr{
+            Node, ?ROOT_SESS_ID, ?FILE_REF(FileGuid), #xattr{
                 name = Key,
                 value = Val
             }
@@ -321,7 +331,7 @@ set_xattrs(Node, FileGuid, Xattrs) ->
 
 -spec get_xattrs(node(), file_id:file_guid()) -> {ok, map()}.
 get_xattrs(Node, FileGuid) ->
-    FileKey = {guid, FileGuid},
+    FileKey = ?FILE_REF(FileGuid),
 
     {ok, Keys} = ?assertMatch(
         {ok, _}, lfm_proxy:list_xattr(Node, ?ROOT_SESS_ID, FileKey, false, true), ?ATTEMPTS
@@ -344,7 +354,7 @@ randomly_add_qos(Nodes, FileGuid, Expression, ReplicasNum) ->
         1 ->
             RandNode = lists_utils:random_element(Nodes),
             {ok, QosEntryId} = ?assertMatch({ok, _}, lfm_proxy:add_qos_entry(
-                RandNode, ?ROOT_SESS_ID, {guid, FileGuid}, Expression, ReplicasNum
+                RandNode, ?ROOT_SESS_ID, ?FILE_REF(FileGuid), Expression, ReplicasNum
             ), ?ATTEMPTS),
             lists:foreach(fun(Node) ->
                 ?assertMatch({ok, _}, lfm_proxy:get_qos_entry(Node, ?ROOT_SESS_ID, QosEntryId), ?ATTEMPTS)
@@ -359,7 +369,7 @@ randomly_add_qos(Nodes, FileGuid, Expression, ReplicasNum) ->
 randomly_set_metadata(Nodes, FileGuid) ->
     case rand:uniform(2) of
         1 ->
-            FileKey = {guid, FileGuid},
+            FileKey = ?FILE_REF(FileGuid),
             RandNode = lists_utils:random_element(Nodes),
             ?assertMatch(ok, lfm_proxy:set_metadata(
                 RandNode, ?ROOT_SESS_ID, FileKey, rdf, ?RDF_METADATA_1, []
@@ -381,10 +391,10 @@ randomly_set_metadata(Nodes, FileGuid) ->
 randomly_set_acl(Nodes, FileGuid) ->
     case rand:uniform(2) of
         1 ->
-            FileKey = {guid, FileGuid},
+            FileKey = ?FILE_REF(FileGuid),
             RandNode = lists_utils:random_element(Nodes),
             ?assertMatch(ok, lfm_proxy:set_acl(
-                RandNode, ?ROOT_SESS_ID, {guid, FileGuid}, acl:from_json(?OWNER_ONLY_ALLOW_ACL, cdmi)
+                RandNode, ?ROOT_SESS_ID, ?FILE_REF(FileGuid), acl:from_json(?OWNER_ONLY_ALLOW_ACL, cdmi)
             ), ?ATTEMPTS),
             lists:foreach(fun(Node) ->
                 ?assertMatch({ok, [_]}, lfm_proxy:get_acl(Node, ?ROOT_SESS_ID, FileKey), ?ATTEMPTS)
@@ -401,7 +411,7 @@ randomly_create_share(Node, SessionId, FileGuid) ->
     case rand:uniform(2) of
         1 ->
             {ok, ShId} = ?assertMatch({ok, _}, lfm_proxy:create_share(
-                Node, SessionId, {guid, FileGuid}, <<"share">>
+                Node, SessionId, ?FILE_REF(FileGuid), <<"share">>
             )),
             ShId;
         2 ->
@@ -429,19 +439,19 @@ file_details_to_gs_json(undefined, #file_details{
         mtime = MTime,
         shares = Shares,
         owner_id = OwnerId,
-        provider_id = ProviderId
+        provider_id = ProviderId,
+        nlink = LinksCount
     },
     index_startid = IndexStartId,
     active_permissions_type = ActivePermissionsType,
-    has_metadata = HasMetadata,
-    has_direct_qos = HasDirectQos,
-    has_eff_qos = HasEffQos
+    eff_protection_flags = EffFileProtectionFlags,
+    eff_qos_membership = EffQosMembership,
+    eff_dataset_membership = EffDatasetMembership,
+    has_metadata = HasMetadata
 }) ->
-    {DisplayedType, DisplayedSize} = case Type of
-        ?DIRECTORY_TYPE ->
-            {<<"dir">>, null};
-        _ ->
-            {<<"file">>, Size}
+    DisplayedSize = case Type of
+        ?DIRECTORY_TYPE -> null;
+        _ -> Size
     end,
 
     #{
@@ -450,6 +460,7 @@ file_details_to_gs_json(undefined, #file_details{
         <<"name">> => FileName,
         <<"index">> => IndexStartId,
         <<"posixPermissions">> => list_to_binary(string:right(integer_to_list(Mode, 8), 3, $0)),
+        <<"effProtectionFlags">> => file_meta:protection_flags_to_json(EffFileProtectionFlags),
         % For space dir gs returns null as parentId instead of user root dir
         % (gui doesn't know about user root dir)
         <<"parentId">> => case fslogic_uuid:is_space_dir_guid(FileGuid) of
@@ -457,14 +468,15 @@ file_details_to_gs_json(undefined, #file_details{
             false -> ParentGuid
         end,
         <<"mtime">> => MTime,
-        <<"type">> => DisplayedType,
+        <<"type">> => str_utils:to_binary(Type),
         <<"size">> => DisplayedSize,
         <<"shares">> => Shares,
         <<"activePermissionsType">> => atom_to_binary(ActivePermissionsType, utf8),
         <<"providerId">> => ProviderId,
         <<"ownerId">> => OwnerId,
-        <<"hasDirectQos">> => HasDirectQos,
-        <<"hasEffQos">> => HasEffQos
+        <<"effQosMembership">> => atom_to_binary(EffQosMembership, utf8),
+        <<"effDatasetMembership">> => atom_to_binary(EffDatasetMembership, utf8),
+        <<"hardlinksCount">> => utils:undefined_to_null(LinksCount)
     };
 file_details_to_gs_json(ShareId, #file_details{
     file_attr = #file_attr{
@@ -481,11 +493,9 @@ file_details_to_gs_json(ShareId, #file_details{
     active_permissions_type = ActivePermissionsType,
     has_metadata = HasMetadata
 }) ->
-    {DisplayedType, DisplayedSize} = case Type of
-        ?DIRECTORY_TYPE ->
-            {<<"dir">>, null};
-        _ ->
-            {<<"file">>, Size}
+    DisplayedSize = case Type of
+        ?DIRECTORY_TYPE -> null;
+        _ -> Size
     end,
     IsShareRoot = lists:member(ShareId, Shares),
 
@@ -500,7 +510,7 @@ file_details_to_gs_json(ShareId, #file_details{
             false -> file_id:guid_to_share_guid(ParentGuid, ShareId)
         end,
         <<"mtime">> => MTime,
-        <<"type">> => DisplayedType,
+        <<"type">> => str_utils:to_binary(Type),
         <<"size">> => DisplayedSize,
         <<"shares">> => case IsShareRoot of
             true -> [ShareId];
@@ -530,7 +540,18 @@ file_details_to_gs_json(ShareId, #file_details{
 ) ->
     onenv_api_test_runner:data_spec().
 add_file_id_errors_for_operations_available_in_share_mode(FileGuid, ShareId, DataSpec) ->
-    InvalidFileIdErrors = get_invalid_file_id_errors(),
+    add_file_id_errors_for_operations_available_in_share_mode(<<"id">>, FileGuid, ShareId, DataSpec).
+
+
+-spec add_file_id_errors_for_operations_available_in_share_mode(
+    IdKey :: binary(),
+    file_id:file_guid(),
+    undefined | od_share:id(),
+    undefined | onenv_api_test_runner:data_spec()
+) ->
+    onenv_api_test_runner:data_spec().
+add_file_id_errors_for_operations_available_in_share_mode(IdKey, FileGuid, ShareId, DataSpec) ->
+    InvalidFileIdErrors = get_invalid_file_id_errors(IdKey),
 
     NonExistentSpaceGuid = file_id:pack_share_guid(<<"InvalidUuid">>, ?NOT_SUPPORTED_SPACE_ID, ShareId),
     {ok, NonExistentSpaceObjectId} = file_id:guid_to_objectid(NonExistentSpaceGuid),
@@ -585,7 +606,18 @@ add_file_id_errors_for_operations_available_in_share_mode(FileGuid, ShareId, Dat
 ) ->
     onenv_api_test_runner:data_spec().
 add_file_id_errors_for_operations_not_available_in_share_mode(FileGuid, ShareId, DataSpec) ->
-    InvalidFileIdErrors = get_invalid_file_id_errors(),
+    add_file_id_errors_for_operations_not_available_in_share_mode(<<"id">>, FileGuid, ShareId, DataSpec).
+
+
+-spec add_file_id_errors_for_operations_not_available_in_share_mode(
+    IdKey :: binary(),
+    file_id:file_guid(),
+    od_share:id(),
+    undefined | onenv_api_test_runner:data_spec()
+) ->
+    onenv_api_test_runner:data_spec().
+add_file_id_errors_for_operations_not_available_in_share_mode(IdKey, FileGuid, ShareId, DataSpec) ->
+    InvalidFileIdErrors = get_invalid_file_id_errors(IdKey),
 
     NonExistentSpaceGuid = file_id:pack_guid(<<"InvalidUuid">>, ?NOT_SUPPORTED_SPACE_ID),
     {ok, NonExistentSpaceObjectId} = file_id:guid_to_objectid(NonExistentSpaceGuid),
@@ -628,7 +660,7 @@ add_file_id_errors_for_operations_not_available_in_share_mode(FileGuid, ShareId,
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Extends data_spec() with file id bad values and errors for operations 
+%% Extends data_spec() with file id bad values and errors for operations
 %% not available in share mode that provide file id as parameter in data spec map.
 %% All added bad values are in cdmi form and are stored under <<"fileId">> key.
 %% @end
@@ -641,6 +673,18 @@ add_file_id_errors_for_operations_not_available_in_share_mode(FileGuid, ShareId,
 ) ->
     onenv_api_test_runner:data_spec().
 add_cdmi_id_errors_for_operations_not_available_in_share_mode(FileGuid, SpaceId, ShareId, DataSpec) ->
+    add_cdmi_id_errors_for_operations_not_available_in_share_mode(<<"fileId">>, FileGuid, SpaceId, ShareId, DataSpec).
+
+
+-spec add_cdmi_id_errors_for_operations_not_available_in_share_mode(
+    IdKey :: binary(),
+    file_id:file_guid(),
+    od_space:id(),
+    od_share:id(),
+    onenv_api_test_runner:data_spec()
+) ->
+    onenv_api_test_runner:data_spec().
+add_cdmi_id_errors_for_operations_not_available_in_share_mode(IdKey, FileGuid, SpaceId, ShareId, DataSpec) ->
     {ok, DummyObjectId} = file_id:guid_to_objectid(<<"DummyGuid">>),
 
     NonExistentSpaceGuid = file_id:pack_guid(<<"InvalidUuid">>, ?NOT_SUPPORTED_SPACE_ID),
@@ -659,18 +703,18 @@ add_cdmi_id_errors_for_operations_not_available_in_share_mode(FileGuid, SpaceId,
     {ok, ShareFileObjectId} = file_id:guid_to_objectid(ShareFileGuid),
 
     BadFileIdValues = [
-        {<<"fileId">>, <<"InvalidObjectId">>, ?ERROR_BAD_VALUE_IDENTIFIER(<<"fileId">>)},
-        {<<"fileId">>, DummyObjectId, ?ERROR_BAD_VALUE_IDENTIFIER(<<"fileId">>)},
+        {IdKey, <<"InvalidObjectId">>, ?ERROR_BAD_VALUE_IDENTIFIER(IdKey)},
+        {IdKey, DummyObjectId, ?ERROR_BAD_VALUE_IDENTIFIER(IdKey)},
 
         % user has no privileges in non existent space and so he should receive ?ERROR_FORBIDDEN
-        {<<"fileId">>, NonExistentSpaceObjectId, ?ERROR_FORBIDDEN},
-        {<<"fileId">>, NonExistentSpaceShareObjectId, ?ERROR_FORBIDDEN},
+        {IdKey, NonExistentSpaceObjectId, ?ERROR_FORBIDDEN},
+        {IdKey, NonExistentSpaceShareObjectId, ?ERROR_FORBIDDEN},
 
-        {<<"fileId">>, NonExistentFileObjectId, ?ERROR_POSIX(?ENOENT)},
+        {IdKey, NonExistentFileObjectId, ?ERROR_POSIX(?ENOENT)},
 
-        % operation on shared file is forbidden - it should result in ?EACCES
-        {<<"fileId">>, ShareFileObjectId, ?ERROR_POSIX(?EACCES)},
-        {<<"fileId">>, NonExistentFileShareObjectId, ?ERROR_POSIX(?EACCES)}
+        % operation is not available in share mode - it should result in ?EPERM
+        {IdKey, ShareFileObjectId, ?ERROR_POSIX(?EPERM)},
+        {IdKey, NonExistentFileShareObjectId, ?ERROR_POSIX(?EPERM)}
     ],
 
     add_bad_values_to_data_spec(BadFileIdValues, DataSpec).
@@ -698,15 +742,15 @@ add_bad_values_to_data_spec(BadValuesToAdd, #data_spec{bad_values = BadValues} =
 
 
 %% @private
-get_invalid_file_id_errors() ->
+get_invalid_file_id_errors(IdKey) ->
     InvalidGuid = <<"InvalidGuid">>,
     {ok, InvalidObjectId} = file_id:guid_to_objectid(InvalidGuid),
-    InvalidIdExpError = ?ERROR_BAD_VALUE_IDENTIFIER(<<"id">>),
+    InvalidIdExpError = ?ERROR_BAD_VALUE_IDENTIFIER(IdKey),
 
     [
         % Errors thrown by rest_handler, which failed to convert file path/cdmi_id to guid
         {bad_id, <<"/NonExistentPath">>, {rest_with_file_path, ?ERROR_POSIX(?ENOENT)}},
-        {bad_id, <<"InvalidObjectId">>, {rest, ?ERROR_BAD_VALUE_IDENTIFIER(<<"id">>)}},
+        {bad_id, <<"InvalidObjectId">>, {rest, ?ERROR_BAD_VALUE_IDENTIFIER(IdKey)}},
 
         % Errors thrown by middleware and internal logic
         {bad_id, InvalidObjectId, {rest, InvalidIdExpError}},

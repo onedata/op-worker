@@ -73,10 +73,10 @@
     catch
         throw:__Err ->
             {stop, http_req:send_error(__Err, __Req), __CdmiReq};
-        Type:Message ->
+        Type:Message:Stacktrace ->
             ?error_stacktrace("Unexpected error in ~p:~p - ~p:~p", [
                 ?MODULE, ?FUNCTION_NAME, Type, Message
-            ]),
+            ], Stacktrace),
             {stop, http_req:send_error(?ERROR_INTERNAL_SERVER_ERROR, __Req), __CdmiReq}
     end
 ).
@@ -110,10 +110,10 @@ init(Req, ReqTypeResolutionMethod) ->
     catch
         throw:Err ->
             {ok, http_req:send_error(Err, Req), undefined};
-        Type:Message ->
+        Type:Message:Stacktrace ->
             ?error_stacktrace("Unexpected error in ~p:~p - ~p:~p", [
                 ?MODULE, ?FUNCTION_NAME, Type, Message
-            ]),
+            ], Stacktrace),
             {ok, http_req:send_error(?ERROR_INTERNAL_SERVER_ERROR, Req), undefined}
     end.
 
@@ -156,10 +156,10 @@ malformed_request(Req, #cdmi_req{resource = Type} = CdmiReq) ->
     catch
         throw:Err ->
             {stop, http_req:send_error(Err, Req), CdmiReq};
-        Type:Message ->
+        Type:Message:Stacktrace ->
             ?error_stacktrace("Unexpected error in ~p:~p - ~p:~p", [
                 ?MODULE, ?FUNCTION_NAME, Type, Message
-            ]),
+            ], Stacktrace),
             {stop, http_req:send_error(?ERROR_INTERNAL_SERVER_ERROR, Req), CdmiReq}
     end.
 
@@ -208,7 +208,7 @@ resource_exists(Req, #cdmi_req{
 } = CdmiReq) ->
     try
         {ok, FileGuid} = middleware_utils:resolve_file_path(SessionId, Path),
-        case ?check(lfm:stat(SessionId, {guid, FileGuid})) of
+        case ?check(lfm:stat(SessionId, ?FILE_REF(FileGuid))) of
             {ok, #file_attr{type = ?DIRECTORY_TYPE} = Attr} when Type == container ->
                 {true, Req, CdmiReq#cdmi_req{file_attrs = Attr}};
             {ok, #file_attr{type = ?DIRECTORY_TYPE}} when Type == dataobject ->
@@ -225,10 +225,10 @@ resource_exists(Req, #cdmi_req{
             {false, Req, CdmiReq};
         throw:Error ->
             {stop, http_req:send_error(Error, Req), CdmiReq};
-        Type:Reason ->
+        Type:Reason:Stacktrace ->
             ?error_stacktrace("Unexpected error in ~p:~p - ~p:~p", [
                 ?MODULE, ?FUNCTION_NAME, Type, Reason
-            ]),
+            ], Stacktrace),
             NewReq = cowboy_req:reply(?HTTP_500_INTERNAL_SERVER_ERROR, Req),
             {stop, NewReq, CdmiReq}
     end.

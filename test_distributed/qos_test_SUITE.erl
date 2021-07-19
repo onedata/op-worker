@@ -15,6 +15,7 @@
 -include("global_definitions.hrl").
 -include("modules/datastore/qos.hrl").
 -include("modules/datastore/datastore_models.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include("qos_tests_utils.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
@@ -107,7 +108,7 @@ all() -> [
 
     % QoS clean up tests
     qos_cleanup_test,
-    
+
     % QoS status tests
     qos_status_during_traverse_test,
     qos_status_during_traverse_multi_batch_test,
@@ -519,7 +520,7 @@ qos_cleanup_test(Config) ->
     
     #{files := [{FileGuid, _FilePath} | _]} = GuidsAndPaths,
     
-    ok = lfm_proxy:unlink(Worker, SessId, {guid, FileGuid}),
+    ok = lfm_proxy:unlink(Worker, SessId, ?FILE_REF(FileGuid)),
     FileUuid = file_id:guid_to_uuid(FileGuid),
     QosEntryId = maps:get(?QOS1, QosNameIdMapping),
     
@@ -566,7 +567,7 @@ qos_status_after_failed_transfers_deleted_entry(Config) ->
 
 init_per_suite(Config) ->
     Posthook = fun(NewConfig) ->
-        hackney:start(),
+        application:ensure_all_started(hackney),
         application:start(ssl),
         Workers = ?config(op_worker_nodes, NewConfig),
         test_utils:set_env(Workers, ?APP_NAME, qos_retry_failed_files_interval_seconds, 5),
@@ -576,7 +577,7 @@ init_per_suite(Config) ->
 
 
 end_per_suite(Config) ->
-    hackney:stop(),
+    application:stop(hackney),
     application:stop(ssl),
     initializer:teardown_storage(Config).
 

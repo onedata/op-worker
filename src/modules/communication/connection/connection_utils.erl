@@ -43,6 +43,7 @@
     #client_message{}) -> ok | {error, term()}.
 maybe_create_proxied_session(ProviderId, ProviderIp, #client_message{
     effective_session_id = EffSessionId,
+    effective_session_mode = EffSessMode,
     effective_client_tokens = #client_tokens{
         access_token = AccessToken,
         consumer_token = ConsumerToken
@@ -53,7 +54,7 @@ maybe_create_proxied_session(ProviderId, ProviderIp, #client_message{
         ProviderIp, oneclient, allow_data_access_caveats
     ),
     Res = session_manager:reuse_or_create_proxied_session(
-        EffSessionId, ProviderId, TokenCredentials, fuse
+        EffSessionId, ProviderId, TokenCredentials, fuse, EffSessMode
     ),
     case Res of
         {ok, _} -> ok;
@@ -86,7 +87,7 @@ protocol_upgrade_request(Hostname) -> <<
 %% @end
 %%--------------------------------------------------------------------
 -spec process_protocol_upgrade_request(cowboy_req:req()) ->
-    ok | {error, update_required}.
+    ok | {error, upgrade_required}.
 process_protocol_upgrade_request(Req) ->
     ConnTokens = cowboy_req:parse_header(?HDR_CONNECTION, Req, []),
     case lists:member(<<"upgrade">>, ConnTokens) of

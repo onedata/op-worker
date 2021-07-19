@@ -13,6 +13,7 @@
 -author("Bartosz Walkowicz").
 
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include("proto/oneclient/common_messages.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 
@@ -52,7 +53,7 @@ get_content(Node, FileGuid) ->
 get_content(Node, FileGuid, Offset) ->
     case get_attrs(Node, FileGuid) of
         {ok, #file_attr{size = FileSize}} ->
-            {ok, FileHandle} = lfm_proxy:open(Node, ?ROOT_SESS_ID, {guid, FileGuid}, read),
+            {ok, FileHandle} = lfm_proxy:open(Node, ?ROOT_SESS_ID, ?FILE_REF(FileGuid), read),
             Result = lfm_proxy:read(Node, FileHandle, Offset, FileSize),
             lfm_proxy:close(Node, FileHandle),
             Result;
@@ -70,7 +71,7 @@ get_attrs(Node, FileGuid) ->
 -spec get_attrs(node(), session:id(), file_id:file_guid()) ->
     {ok, lfm_attrs:file_attributes()} | error().
 get_attrs(Node, SessId, FileGuid) ->
-    case lfm_proxy:stat(Node, SessId, {guid, FileGuid}) of
+    case lfm_proxy:stat(Node, SessId, ?FILE_REF(FileGuid), true) of
         % File attrs are constructed from several records so it is possible that
         % even if 'file_meta' (the main doc) was synchronized 'times' doc wasn't
         {ok, #file_attr{mtime = 0}} ->
@@ -153,7 +154,7 @@ await_distribution(Nodes, Files, ExpSizeOrBlocksPerProvider) ->
     end, ExpSizeOrBlocksPerProvider)),
 
     FetchDistributionFun = fun(Node, FileGuid) ->
-        {ok, Distribution} = lfm_proxy:get_file_distribution(Node, ?ROOT_SESS_ID, {guid, FileGuid}),
+        {ok, Distribution} = lfm_proxy:get_file_distribution(Node, ?ROOT_SESS_ID, ?FILE_REF(FileGuid)),
         lists:sort(Distribution)
     end,
 

@@ -14,15 +14,15 @@
 
 -include("global_definitions.hrl").
 -include("http/rest.hrl").
+-include("modules/fslogic/acl.hrl").
+-include("modules/fslogic/file_attr.hrl").
 -include("proto/common/credentials.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
--include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("ctool/include/http/headers.hrl").
 -include_lib("ctool/include/errors.hrl").
--include("modules/auth/acl.hrl").
 -include_lib("cluster_worker/include/global_definitions.hrl").
 
 %% API
@@ -178,10 +178,10 @@ init_per_suite(Config) ->
         lists:foreach(fun(Worker) ->
             test_utils:set_env(Worker, ?APP_NAME, dbsync_changes_broadcast_interval, timer:seconds(1)),
             test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_delay_ms, timer:seconds(1)),
-            test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_force_delay_ms, timer:seconds(1)) % TODO - change to 2 seconds
+            test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_force_delay_ms, timer:seconds(2))
         end, ?config(op_worker_nodes, NewConfig2)),
         ssl:start(),
-        hackney:start(),
+        application:ensure_all_started(hackney),
         NewConfig3 = initializer:create_test_users_and_spaces(?TEST_FILE(NewConfig2, "env_desc.json"), NewConfig2),
         NewConfig3
     end,
@@ -190,7 +190,7 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
     initializer:clean_test_users_and_spaces_no_validate(Config),
-    hackney:stop(),
+    application:stop(hackney),
     ssl:stop(),
     initializer:teardown_storage(Config).
 

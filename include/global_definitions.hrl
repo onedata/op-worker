@@ -40,4 +40,6 @@
 %% ID of provider that is not currently registered in Onezone
 -define(UNREGISTERED_PROVIDER_ID, <<"unregistered_provider">>).
 
+-define(EPOCH_INFINITY, 9999999999). % GMT: Saturday, 20 November 2286 17:46:39
+
 -endif.

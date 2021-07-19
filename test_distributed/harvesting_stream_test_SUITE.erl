@@ -17,8 +17,8 @@
 -include("modules/fslogic/fslogic_common.hrl").
 
 -include("modules/harvesting/harvesting.hrl").
+-include("modules/fslogic/file_attr.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
--include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -1258,7 +1258,7 @@ init_per_testcase(harvesting_stream_batch_test, Config) ->
 
 init_per_testcase(_, Config) ->
     [N | _] = Nodes = ?config(op_worker_nodes, Config),
-    couchbase_changes_stream_mock_registry_start_link(N),
+    couchbase_changes_stream_mock_registry_start(N),
     ok = mock_harvesting_stream_changes_stream_start_link(Nodes),
     ok = mock_changes_stream(Nodes),
     add_mocked_od_space_synchronization_posthook(Nodes),
@@ -1457,8 +1457,8 @@ get_aux_stream_pid(Node, SpaceId, HarvesterId, IndexId) ->
 harvesting_state_get_seen_seq(Node, SpaceId, HarvesterId, IndexId) ->
     rpc:call(Node, harvesting_state, get_seen_seq, [SpaceId, HarvesterId, IndexId]).
 
-couchbase_changes_stream_mock_registry_start_link(Node) ->
-    {ok, _} = rpc:call(Node, couchbase_changes_stream_mock_registry, start_link, []).
+couchbase_changes_stream_mock_registry_start(Node) ->
+    {ok, _} = rpc:call(Node, couchbase_changes_stream_mock_registry, start, []).
 
 couchbase_changes_stream_mock_registry_stop(Node) ->
     ok = rpc:call(Node, couchbase_changes_stream_mock_registry, stop, []).

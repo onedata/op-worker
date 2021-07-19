@@ -12,6 +12,7 @@
 -module(cdmi_test_SUITE).
 -author("Tomasz Lichon").
 
+-include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/performance.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -225,7 +226,7 @@ download_empty_file(Config) ->
     {ok, FileGuid} = lfm_proxy:create(WorkerP2, SessionId, FilePath),
     {ok, ObjectId} = file_id:guid_to_objectid(FileGuid),
 
-    ?assertMatch(ok, lfm_proxy:truncate(WorkerP2, SessionId, {guid, FileGuid}, 0)),
+    ?assertMatch(ok, lfm_proxy:truncate(WorkerP2, SessionId, ?FILE_REF(FileGuid), 0)),
 
     {ok, _, _, Response} = ?assertMatch(
         {ok, 200, _Headers, _Response},
@@ -261,7 +262,7 @@ download_file_in_blocks(Config) ->
 
     % Create file
     {ok, Guid} = lfm_proxy:create(WorkerP2, SessionId, FilePath),
-    {ok, Handle} = lfm_proxy:open(WorkerP2, SessionId, {guid, Guid}, write),
+    {ok, Handle} = lfm_proxy:open(WorkerP2, SessionId, ?FILE_REF(Guid), write),
     {ok, _} = lfm_proxy:write(WorkerP2, Handle, 0, Data),
     ok = lfm_proxy:close(WorkerP2, Handle),
 
@@ -312,7 +313,7 @@ download_file_in_blocks(Config) ->
 init_per_suite(Config) ->
     Posthook = fun(NewConfig) ->
         ssl:start(),
-        hackney:start(),
+        application:ensure_all_started(hackney),
         initializer:disable_quota_limit(NewConfig),
         initializer:mock_provider_ids(NewConfig),
         initializer:create_test_users_and_spaces(?TEST_FILE(NewConfig, "env_desc.json"), NewConfig)
@@ -323,7 +324,7 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
     initializer:clean_test_users_and_spaces_no_validate(Config),
-    hackney:stop(),
+    application:stop(hackney),
     ssl:stop().
 
 

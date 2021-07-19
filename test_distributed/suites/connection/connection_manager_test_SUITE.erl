@@ -142,8 +142,6 @@ crashed_connection_should_be_restarted_test(_Config) ->
 
 
 init_per_suite(Config) ->
-    ssl:start(),
-    hackney:start(),
     oct_background:init_per_suite(Config, #onenv_test_config{
         onenv_scenario = "2op_no_common_spaces",
         envs = [{op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}]
@@ -151,8 +149,7 @@ init_per_suite(Config) ->
 
 
 end_per_suite(_Config) ->
-    hackney:stop(),
-    ssl:stop().
+    oct_background:end_per_suite().
 
 
 init_per_testcase(consecutive_failures_to_verify_peer_should_terminate_session_test = Case, Config) ->
@@ -271,13 +268,13 @@ mock_handshake_to_succeed_after_n_retries(Nodes, MaxFailedAttempts) ->
 
     test_utils:mock_new(Nodes, connection_auth, [passthrough]),
     test_utils:mock_expect(Nodes, connection_auth, handle_handshake, fun(Request, IpAddress) ->
-        case application:get_env(?APP_NAME, test_handshake_failed_attempts, 0) of
+        case op_worker:get_env(test_handshake_failed_attempts, 0) of
             infinity ->
                 throw(invalid_token);
             0 ->
                 meck:passthrough([Request, IpAddress]);
             Num ->
-                application:set_env(?APP_NAME, test_handshake_failed_attempts, Num - 1),
+                op_worker:set_env(test_handshake_failed_attempts, Num - 1),
                 throw(invalid_token)
         end
     end).
