@@ -83,9 +83,13 @@ archive_file(ArchiveDoc, FileCtx, TargetParentCtx, BaseArchiveDoc, UserCtx) ->
     try
         archive_file_insecure(ArchiveDoc, FileCtx, TargetParentCtx, BaseArchiveDoc, UserCtx)
     catch
-        Class:Reason ->
+        Class:Reason:Stacktrace ->
             Guid = file_ctx:get_logical_guid_const(FileCtx),
-            ?error_stacktrace("Unexpected error ~p:~p occured during archivisation of file ~s.", [Class, Reason, Guid]),
+            ?error_stacktrace(
+                "Unexpected error ~p:~p occured during archivisation of file ~s.",
+                [Class, Reason, Guid],
+                Stacktrace
+            ),
             {error, Reason}
     end.
 

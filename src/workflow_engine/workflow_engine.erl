@@ -176,9 +176,12 @@ call_handler(ExecutionId, Context, Handler, Function, Args) ->
     try
         apply(Handler, Function, [ExecutionId, Context] ++ Args)
     catch
-        Error:Reason  ->
-            ?error_stacktrace("Unexpected error in ~w:~w (execution ~s, args: ~p): ~w:~p",
-                [Handler, Function, ExecutionId, Args, Error, Reason]),
+        Error:Reason:Stacktrace  ->
+            ?error_stacktrace(
+                "Unexpected error in ~w:~w (execution ~s, args: ~p): ~w:~p",
+                [Handler, Function, ExecutionId, Args, Error, Reason],
+                Stacktrace
+            ),
             error
     end.
 
@@ -254,7 +257,7 @@ trigger_job_scheduling_for_acquired_slot(EngineId) ->
         ?WF_ERROR_NOTHING_TO_START ->
             workflow_engine_state:decrement_slot_usage(EngineId),
             ?WF_ERROR_NOTHING_TO_START
-    end.    
+    end.
 
 -spec schedule_next_job(id(), [execution_id()]) -> ok | ?WF_ERROR_NOTHING_TO_START.
 schedule_next_job(EngineId, DeferredExecutions) ->
@@ -414,9 +417,12 @@ process_item(EngineId, ExecutionId, ExecutionSpec = #execution_spec{
 
         report_execution_status_update(ExecutionId, EngineId, ReportType, JobIdentifier, FinalAns)
     catch
-        Error:Reason  ->
-            ?error_stacktrace("Unexpected error handling task ~p for item id ~p: ~p:~p",
-                [TaskId, ItemId, Error, Reason]),
+        Error:Reason:Stacktrace  ->
+            ?error_stacktrace(
+                "Unexpected error handling task ~p for item id ~p: ~p:~p",
+                [TaskId, ItemId, Error, Reason],
+                Stacktrace
+            ),
             trigger_job_scheduling(EngineId, ?FOR_CURRENT_SLOT_FIRST)
     end.
 
@@ -437,10 +443,13 @@ process_item(ExecutionId, #execution_spec{
         Handler:process_item(ExecutionId, ExecutionContext, TaskId, Item,
             FinishCallback, HeartbeatCallback)
     catch
-        Error:Reason  ->
+        Error:Reason:Stacktrace  ->
             % TODO VFS-7788 - use callbacks to get human readable information about item and task
-            ?error_stacktrace("Unexpected error handling task ~p for item ~p (id ~p): ~p:~p",
-                [TaskId, Item, ItemId, Error, Reason]),
+            ?error_stacktrace(
+                "Unexpected error handling task ~p for item ~p (id ~p): ~p:~p",
+                [TaskId, Item, ItemId, Error, Reason],
+                Stacktrace
+            ),
             error
     end.
 
@@ -457,18 +466,24 @@ process_result(EngineId, ExecutionId, #execution_spec{
         ProcessedResult = try
             Handler:process_result(ExecutionId, ExecutionContext, TaskId, CachedResult)
         catch
-            Error:Reason  ->
+            Error:Reason:Stacktrace  ->
                 % TODO VFS-7788 - use callbacks to get human readable information about task
-                ?error_stacktrace("Unexpected error processing task ~p result ~p (id ~p): ~p:~p",
-                    [TaskId, CachedResult, CachedResultId, Error, Reason]),
+                ?error_stacktrace(
+                    "Unexpected error processing task ~p result ~p (id ~p): ~p:~p",
+                    [TaskId, CachedResult, CachedResultId, Error, Reason],
+                    Stacktrace
+                ),
                 error
         end,
         workflow_engine:report_execution_status_update(
             ExecutionId, EngineId, ?ASYNC_RESULT_PROCESSED, JobIdentifier, ProcessedResult)
     catch
-        Error2:Reason2  ->
-            ?error_stacktrace("Unexpected error processing task ~p with result id ~p: ~p:~p",
-                [TaskId, CachedResultId, Error2, Reason2]),
+        Error2:Reason2:Stacktrace2  ->
+            ?error_stacktrace(
+                "Unexpected error processing task ~p with result id ~p: ~p:~p",
+                [TaskId, CachedResultId, Error2, Reason2],
+                Stacktrace2
+            ),
             trigger_job_scheduling(EngineId, ?FOR_CURRENT_SLOT_FIRST)
     end.
 
@@ -484,7 +499,11 @@ prepare_execution(EngineId, ExecutionId, Handler, ExecutionContext) ->
         workflow_execution_state:report_execution_prepared(ExecutionId, Handler, ExecutionContext, Ans),
         trigger_job_scheduling(EngineId, ?FOR_CURRENT_SLOT_FIRST)
     catch
-        Error2:Reason2  ->
-            ?error_stacktrace("Unexpected error preparing execution ~p: ~p:~p", [ExecutionId, Error2, Reason2]),
+        Error:Reason:Stacktrace  ->
+            ?error_stacktrace(
+                "Unexpected error preparing execution ~p: ~p:~p",
+                [ExecutionId, Error, Reason],
+                Stacktrace
+            ),
             trigger_job_scheduling(EngineId, ?FOR_CURRENT_SLOT_FIRST)
     end.

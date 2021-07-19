@@ -24,6 +24,11 @@
 -export([handle_request/2]).
 
 
+% timeout after which cowboy returns the data read from socket, regardless of its size
+% the value was decided upon experimentally
+-define(COWBOY_READ_BODY_PERIOD_SECONDS, 15).
+
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -151,7 +156,7 @@ process_request(#op_req{
             file_download_utils:download_single_file(SessionId, FileAttrs, Req);
         {ok, #file_attr{type = ?SYMLINK_TYPE} = FileAttrs} ->
             file_download_utils:download_single_file(SessionId, FileAttrs, Req);
-        {ok, #file_attr{} = FileAttrs} ->
+        {ok, #file_attr{}} ->
             case page_file_download:gen_file_download_url(SessionId, [FileGuid], FollowSymlinks) of
                 {ok, Url} -> 
                     cowboy_req:reply(?HTTP_302_FOUND, #{?HDR_LOCATION => Url}, Req);
@@ -246,7 +251,8 @@ write_req_body_to_file(SessionId, FileRef, Offset, Req) ->
 
     {ok, Req2} = file_upload_utils:upload_file(
         FileHandle, Offset, Req,
-        fun cowboy_req:read_body/2, #{}
+        fun cowboy_req:read_body/2,
+        #{period => timer:seconds(?COWBOY_READ_BODY_PERIOD_SECONDS)}
     ),
 
     ?check(lfm:fsync(FileHandle)),

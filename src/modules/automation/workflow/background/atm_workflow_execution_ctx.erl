@@ -29,7 +29,7 @@
 -export([
     get_space_id/1,
     get_workflow_execution_id/1,
-    get_session_id/1, get_access_token/1
+    get_user_id/1, get_session_id/1, get_access_token/1
 ]).
 
 
@@ -70,6 +70,11 @@ get_workflow_execution_id(#atm_workflow_execution_ctx{
     workflow_execution_id = AtmWorkflowExecutionId
 }) ->
     AtmWorkflowExecutionId.
+
+
+-spec get_user_id(record()) -> od_user:id().
+get_user_id(#atm_workflow_execution_ctx{user_ctx = UserCtx}) ->
+    user_ctx:get_user_id(UserCtx).
 
 
 -spec get_session_id(record()) -> session:id().

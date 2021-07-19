@@ -381,9 +381,9 @@ truncate_created_file(FileCtx) ->
                 {ok, FileCtx3}
         end
     catch
-        Error:Reason ->
+        Error:Reason:Stacktrace ->
             ?warning_stacktrace("Error truncating newly created storage file ~p: ~p:~p",
-                [file_ctx:get_logical_guid_const(FileCtx), Error, Reason]),
+                [file_ctx:get_logical_guid_const(FileCtx), Error, Reason], Stacktrace),
             {ok, FileCtx}
     end.
 

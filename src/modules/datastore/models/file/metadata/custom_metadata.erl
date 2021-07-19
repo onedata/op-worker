@@ -150,7 +150,7 @@ set_xattr(FileUuid, SpaceId, Name, Value, Create, Replace) ->
     end,
     case Replace of
         true ->
-            case datastore_model:update(?CTX, EffectiveFileUuid, Diff) of
+            case ?extract_key(datastore_model:update(?CTX, EffectiveFileUuid, Diff)) of
                 {error, not_found} ->
                     {error, ?ENODATA};
                 Other ->
@@ -164,9 +164,9 @@ set_xattr(FileUuid, SpaceId, Name, Value, Create, Replace) ->
                 file_objectid = FileObjectId,
                 value = #{Name => Value}
             },
-            datastore_model:update(
+            ?extract_key(datastore_model:update(
                 ?CTX#{scope => SpaceId}, EffectiveFileUuid, Diff, Default
-            )
+            ))
     end.
 
 

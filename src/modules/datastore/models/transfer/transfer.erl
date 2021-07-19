@@ -128,7 +128,7 @@ cleanup() ->
 %% @end
 %%--------------------------------------------------------------------
 -spec start(session:id(), fslogic_worker:file_guid(), file_meta:path(),
-    undefined | od_provider:id(), undefined | od_provider:id(), binary(),
+    undefined | od_provider:id(), undefined | od_provider:id(), undefined | binary(),
     view_name(), query_view_params()) -> {ok, id()} | ignore | {error, Reason :: term()}.
 start(SessionId, FileGuid, FilePath, SourceProviderId, TargetProviderId,
     Callback, IndexName, QueryViewParams

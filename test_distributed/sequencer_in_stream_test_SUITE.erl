@@ -187,7 +187,7 @@ end_per_testcase(_Case, Config) ->
 -spec start_sequencer_in_stream(Worker :: node()) -> {ok, SeqStm :: pid()}.
 start_sequencer_in_stream(Worker) ->
     SeqMan = self(),
-    ?assertMatch({ok, _}, rpc:call(Worker, gen_fsm, start, [
+    ?assertMatch({ok, _}, rpc:call(Worker, gen_statem, start, [
         sequencer_in_stream, [SeqMan, 1, <<"session_id">>], []
     ])).
 
@@ -209,7 +209,7 @@ stop_sequencer_in_stream(SeqStm) ->
 %%--------------------------------------------------------------------
 -spec route_message(SeqStm :: pid(), Msg :: #client_message{}) -> ok.
 route_message(SeqStm, Msg) ->
-    gen_fsm:send_event(SeqStm, Msg).
+    gen_statem:cast(SeqStm, Msg).
 
 %%--------------------------------------------------------------------
 %% @private

@@ -35,7 +35,7 @@
 response(#op_req{operation = Operation, gri = GRI} = OpReq, Result) ->
     try
         response_insecure(OpReq, Result)
-    catch Type:Message ->
+    catch Type:Message:Stacktrace ->
         ?error_stacktrace("Cannot translate REST result for:~n"
                           "Operation: ~p~n"
                           "GRI: ~p~n"
@@ -43,7 +43,7 @@ response(#op_req{operation = Operation, gri = GRI} = OpReq, Result) ->
                           "---------~n"
                           "Error was: ~w:~p", [
             Operation, GRI, Result, Type, Message
-        ]),
+        ], Stacktrace),
         error_response(?ERROR_INTERNAL_SERVER_ERROR)
     end.
 
@@ -103,4 +103,5 @@ entity_type_to_translator(op_provider) -> provider_rest_translator;
 entity_type_to_translator(op_qos) -> qos_rest_translator;
 entity_type_to_translator(op_share) -> share_rest_translator;
 entity_type_to_translator(op_space) -> space_rest_translator;
-entity_type_to_translator(op_transfer) -> transfer_rest_translator.
+entity_type_to_translator(op_transfer) -> transfer_rest_translator;
+entity_type_to_translator(op_atm_workflow_execution) -> atm_workflow_execution_rest_translator.

@@ -263,10 +263,10 @@ stream_space_changes(Req, State) ->
     catch
         throw:Error ->
             {stop, http_req:send_error(Error, Req), State};
-        Type:Message ->
+        Type:Message:Stacktrace ->
             ?error_stacktrace("Unexpected error in ~p:process_request - ~p:~p", [
                 ?MODULE, Type, Message
-            ]),
+            ], Stacktrace),
             NewReq = cowboy_req:reply(?HTTP_500_INTERNAL_SERVER_ERROR, Req),
             {stop, NewReq, State}
     end.
@@ -540,11 +540,11 @@ stream_loop(Req, State = #{
             lists:foreach(fun(ChangedDoc) ->
                 try
                     send_change(Req, ChangedDoc, State)
-                catch Type:Reason ->
+                catch Type:Reason:Stacktrace ->
                     % Can appear when document connected with deleted file_meta appears
                     ?debug_stacktrace("Cannot stream change of ~p due to ~p:~p", [
                         ChangedDoc, Type, Reason
-                    ])
+                    ], Stacktrace)
                 end
             end, ChangedDocs),
             stream_loop(Req, State);

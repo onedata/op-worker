@@ -229,9 +229,12 @@ map_to_display_credentials(OwnerId, SpaceId, Storage) ->
             false -> map_normal_user_to_display_credentials(OwnerId, Storage, SpaceId)
         end
     catch
-        Error:Reason ->
-            ?error_stacktrace("luma:map_to_display_credentials for user: ~p on storage: ~p failed with "
-                "unexpected error ~p:~p.", [OwnerId, storage:get_id(Storage), Error, Reason]),
+        Error:Reason:Stacktrace ->
+            ?error_stacktrace(
+                "luma:map_to_display_credentials for user: ~p on storage: ~p failed with unexpected error ~p:~p.",
+                [OwnerId, storage:get_id(Storage), Error, Reason],
+                Stacktrace
+            ),
             {error, ?EACCES}
     end.
 
@@ -346,9 +349,12 @@ map_to_storage_credentials_internal(UserId, SpaceId, Storage) ->
                 map_onedata_user_to_storage_credentials(UserId, StorageData, SpaceId)
         end
     catch
-        Error2:Reason ->
-            ?error_stacktrace("luma:map_to_storage_credentials for user: ~p on storage: ~p failed with "
-            "unexpected error ~p:~p.", [UserId, storage:get_id(Storage), Error2, Reason]),
+        Error2:Reason:Stacktrace ->
+            ?error_stacktrace(
+                "luma:map_to_storage_credentials for user: ~p on storage: ~p failed with unexpected error ~p:~p.",
+                [UserId, storage:get_id(Storage), Error2, Reason],
+                Stacktrace
+            ),
             {error, ?EACCES}
     end.
 

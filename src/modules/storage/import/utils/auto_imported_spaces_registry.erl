@@ -140,8 +140,8 @@ init() ->
                 ?NOT_INITIALIZED
         end
     catch
-        Error2:Reason ->
-            ?error_stacktrace("auto_storage_import_worker was unable to collect auto imported spaces due to unexpected ~p:~p", [Error2, Reason]),
+        Error2:Reason:Stacktrace ->
+            ?error_stacktrace("auto_storage_import_worker was unable to collect auto imported spaces due to unexpected ~p:~p", [Error2, Reason], Stacktrace),
             catch ets:delete(?REGISTRY),
             ?NOT_INITIALIZED
     end.
@@ -205,8 +205,8 @@ check_if_auto_imported_and_register(SpaceId) ->
                 ?error("Could not check if space ~s is auto imported due to ~p", [SpaceId, Error])
         end
     catch
-        E:R ->
-            ?error_stacktrace("Could not check if space ~s is auto imported due to unexpected ~p:~p", [SpaceId, E, R])
+        E:R:Stacktrace ->
+            ?error_stacktrace("Could not check if space ~s is auto imported due to unexpected ~p:~p", [SpaceId, E, R], Stacktrace)
     end.
 
 

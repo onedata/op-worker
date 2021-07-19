@@ -178,8 +178,8 @@ process_event_routing_keys(
             subscribers_for_links = SubscribersForLinks
         }
     catch
-        Error:Reason ->
-            ?error_stacktrace("Processing event routing keys error ~p~p for keys ~p", [Error, Reason, Record]),
+        Error:Reason:Stacktrace ->
+            ?error_stacktrace("Processing event routing keys error ~p~p for keys ~p", [Error, Reason, Record], Stacktrace),
             {error, processing_event_routing_keys_failed}
     end.
 

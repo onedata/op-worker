@@ -136,7 +136,8 @@
 -export([archive_dataset/6, update_archive/3, get_archive_info/2, list_archives/4, init_archive_purge/3]).
 %% Automation related operations
 -export([
-    schedule_atm_workflow_execution/4, schedule_atm_workflow_execution/5
+    schedule_atm_workflow_execution/4, schedule_atm_workflow_execution/5,
+    cancel_atm_workflow_execution/2
 ]).
 
 %% Utility functions
@@ -160,8 +161,8 @@
             {error, ?ENOENT};
         _:{badmatch, Error} ->
             Error;
-        _:___Reason ->
-            ?error_stacktrace("logical_file_manager generic error: ~p", [___Reason]),
+        _:___Reason:Stacktrace ->
+            ?error_stacktrace("logical_file_manager generic error: ~p", [___Reason], Stacktrace),
             {error, ___Reason}
     end).
 
@@ -939,6 +940,12 @@ schedule_atm_workflow_execution(SessId, SpaceId, AtmWorkflowSchemaId, AtmStoreIn
     ?run(lfm_atm:schedule_workflow_execution(
         SessId, SpaceId, AtmWorkflowSchemaId, AtmStoreInitialValues, CallbackUrl
     )).
+
+
+-spec cancel_atm_workflow_execution(session:id(), atm_workflow_execution:id()) ->
+    ok | error_reply().
+cancel_atm_workflow_execution(SessId, AtmWorkflowExecutionId) ->
+    ?run(lfm_atm:cancel_workflow_execution(SessId, AtmWorkflowExecutionId)).
 
 
 %%%===================================================================

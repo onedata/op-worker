@@ -124,9 +124,8 @@ before_init() ->
         op_worker_sup:start_link(),
         ok = helpers_nif:init()
     catch
-        _:Error ->
-            ?error_stacktrace("Error in node_manager_plugin:before_init: ~p",
-                [Error]),
+        _:Error:Stacktrace   ->
+            ?error_stacktrace("Error in node_manager_plugin:before_init: ~p", [Error], Stacktrace),
             {error, cannot_start_node_manager_plugin}
     end.
 
@@ -158,7 +157,8 @@ upgrade_cluster(3) ->
 %% Overrides {@link node_manager_plugin_default:custom_workers/0}.
 %% @end
 %%--------------------------------------------------------------------
--spec custom_workers() -> [{module(), [any()]}].
+-spec custom_workers() ->
+    [{atom(), [any()]} | {singleton, atom(), [any()]} | {atom(), [any()], list()}].
 custom_workers() -> filter_disabled_workers([
     {session_manager_worker, [
         {supervisor_flags, session_manager_worker:supervisor_flags()},
@@ -233,8 +233,8 @@ exometer_reporters() -> [].
 %% @end
 %%-------------------------------------------------------------------
 -spec filter_disabled_workers(
-    [{atom(), [any()]} |{singleton, atom(), [any()]}] | {atom(), [any()], list()}) ->
-    [{atom(), [any()]} |{singleton, atom(), [any()]}] | {atom(), [any()], list()}.
+    [{atom(), [any()]} | {singleton, atom(), [any()]} | {atom(), [any()], list()}]) ->
+    [{atom(), [any()]} | {singleton, atom(), [any()]} | {atom(), [any()], list()}].
 filter_disabled_workers(WorkersSpecs) ->
     DisabledWorkers = application:get_env(?APP_NAME, disabled_workers, []),
     DisabledWorkersSet = sets:from_list(DisabledWorkers),

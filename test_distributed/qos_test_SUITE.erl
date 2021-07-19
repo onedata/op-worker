@@ -567,7 +567,7 @@ qos_status_after_failed_transfers_deleted_entry(Config) ->
 
 init_per_suite(Config) ->
     Posthook = fun(NewConfig) ->
-        hackney:start(),
+        application:ensure_all_started(hackney),
         application:start(ssl),
         Workers = ?config(op_worker_nodes, NewConfig),
         test_utils:set_env(Workers, ?APP_NAME, qos_retry_failed_files_interval_seconds, 5),
@@ -577,7 +577,7 @@ init_per_suite(Config) ->
 
 
 end_per_suite(Config) ->
-    hackney:stop(),
+    application:stop(hackney),
     application:stop(ssl),
     initializer:teardown_storage(Config).
 

@@ -62,11 +62,12 @@ handle(<<"POST">>, InitialReq) ->
                     reply_with_error(?ERROR_FORBIDDEN, Req);
                 throw:Error ->
                     reply_with_error(Error, Req);
-                Type:Message ->
-                    ?error_stacktrace("Error while processing file upload "
-                                      "from user ~p - ~p:~p", [
-                        UserId, Type, Message
-                    ]),
+                Type:Message:Stacktrace ->
+                    ?error_stacktrace(
+                        "Error while processing file upload from user ~p - ~p:~p",
+                        [UserId, Type, Message],
+                        Stacktrace
+                    ),
                     reply_with_error(?ERROR_INTERNAL_SERVER_ERROR, Req)
             end;
         {ok, ?GUEST} ->

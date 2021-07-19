@@ -155,8 +155,8 @@ available_size(SpaceId) ->
         CSize = ?MODULE:current_size(SpaceId),
         SupSize - CSize
     catch
-        _:Reason ->
-            ?error_stacktrace("Unable to calculate quota due to: ~p", [Reason]),
+        _:Reason:Stacktrace ->
+            ?error_stacktrace("Unable to calculate quota due to: ~p", [Reason], Stacktrace),
             throw({unable_to_calc_quota, Reason})
     end.
 
@@ -191,7 +191,7 @@ assert_write(SpaceId, _WriteSize) ->
 %% Returns list of spaces that are currently over quota limit.
 %% @end
 %%--------------------------------------------------------------------
--spec get_disabled_spaces() -> [id()] | {error, term()}.
+-spec get_disabled_spaces() -> {ok, [id()]} | {error, term()}.
 get_disabled_spaces() ->
     case provider_logic:get_spaces() of
         {ok, SpaceIds} ->

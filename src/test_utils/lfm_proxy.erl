@@ -982,8 +982,8 @@ exec(Worker, Fun, Timeout) ->
             try
                 Fun(Host)
             catch
-                _:Reason ->
-                    Host ! {self(), {error, {test_exec, Reason, erlang:get_stacktrace()}}}
+                _:Reason:Stacktrace ->
+                    Host ! {self(), {error, {test_exec, Reason, Stacktrace}}}
             end
         end),
     receive

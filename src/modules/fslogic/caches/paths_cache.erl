@@ -58,8 +58,8 @@ init(all) ->
         Error = {error, _} ->
             ?critical("Unable to initialize paths caches due to: ~p", [Error])
     catch
-        Error2:Reason ->
-            ?critical_stacktrace("Unable to initialize paths caches due to: ~p", [{Error2, Reason}])
+        Error2:Reason:Stacktrace ->
+            ?critical_stacktrace("Unable to initialize paths caches due to: ~p", [{Error2, Reason}], Stacktrace)
     end;
 init(SpaceId) ->
     ok = init(SpaceId, ?CANONICAL_PATHS_CACHE_NAME(SpaceId)),
@@ -146,9 +146,12 @@ init(Space, Name) ->
                 end
         end
     catch
-        Error2:Reason ->
-            ?critical_stacktrace("Unable to initialize paths cache for space ~p due to: ~p",
-                [Space, {Error2, Reason}])
+        Error2:Reason:Stacktrace ->
+            ?critical_stacktrace(
+                "Unable to initialize paths cache for space ~p due to: ~p",
+                [Space, {Error2, Reason}],
+                Stacktrace
+            )
     end.
 
 

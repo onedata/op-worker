@@ -104,10 +104,10 @@ strip_names(Acl) ->
 from_json(JsonAcl, Format) ->
     try
         [ace:from_json(JsonAce, Format) || JsonAce <- JsonAcl]
-    catch Type:Reason ->
+    catch Type:Reason:Stacktrace ->
         ?debug_stacktrace("Failed to translate json(~p) to acl due to: ~p:~p", [
             Format, Type, Reason
-        ]),
+        ], Stacktrace),
         throw({error, ?EINVAL})
     end.
 
@@ -116,10 +116,10 @@ from_json(JsonAcl, Format) ->
 to_json(Acl, Format) ->
     try
         [ace:to_json(Ace, Format) || Ace <- Acl]
-    catch Type:Reason ->
+    catch Type:Reason:Stacktrace ->
         ?debug_stacktrace("Failed to convert acl to json(~p) due to: ~p:~p", [
             Format, Type, Reason
-        ]),
+        ], Stacktrace),
         throw({error, ?EINVAL})
     end.
 

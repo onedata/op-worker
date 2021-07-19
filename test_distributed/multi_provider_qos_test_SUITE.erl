@@ -1052,7 +1052,7 @@ init_per_suite(Config) ->
         end, ?config(op_worker_nodes, NewConfig)),
         initializer:mock_auth_manager(NewConfig),
         application:start(ssl),
-        hackney:start(),
+        application:ensure_all_started(hackney),
         NewConfig
     end,
     [
@@ -1063,7 +1063,7 @@ init_per_suite(Config) ->
 
 
 end_per_suite(Config) ->
-    hackney:stop(),
+    application:stop(hackney),
     application:stop(ssl),
     initializer:unmock_auth_manager(Config).
 

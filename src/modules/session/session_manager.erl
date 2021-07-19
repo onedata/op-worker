@@ -187,7 +187,7 @@ restart_session_if_dead(SessId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec restore_session_on_slave_node(session:id(), pid(), node()) ->
-    {ok, session:record()} | {error, update_not_needed}.
+    {ok, session:doc()} | {error, supervisor_alive}.
 restore_session_on_slave_node(SessId, NewSup, NewSupNode) ->
     session:update(SessId, fun(#session{supervisor = Sup, connections = Cons} = Sess) ->
         case is_pid_alive(Sup) of

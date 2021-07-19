@@ -56,10 +56,10 @@ authenticate(TokenCredentials) ->
     catch
         throw:Error ->
             ?ERROR_UNAUTHORIZED(Error);
-        Type:Message ->
+        Type:Message:Stacktrace ->
             ?error_stacktrace("Unexpected error in ~p:~p - ~p:~p", [
                 ?MODULE, ?FUNCTION_NAME, Type, Message
-            ]),
+            ], Stacktrace),
             ?ERROR_UNAUTHORIZED(?ERROR_INTERNAL_SERVER_ERROR)
     end.
 

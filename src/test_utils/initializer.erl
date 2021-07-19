@@ -745,9 +745,9 @@ create_test_users_and_spaces(AllWorkers, ConfigPath, Config, NoHistory) ->
     try
         set_default_onezone_domain(Config),
         create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config, NoHistory)
-    catch Type:Message ->
+    catch Type:Message:Stacktrace ->
         ct:print("initializer:create_test_users_and_spaces crashed: ~p:~p~n~p", [
-            Type, Message, erlang:get_stacktrace()
+            Type, Message, Stacktrace
         ]),
         throw(cannot_create_test_users_and_spaces)
     end.
@@ -926,6 +926,8 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config, NoHistory) -
         test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, couchbase_changes_stream_update_interval, timer:seconds(1))
     end, AllWorkers),
     rpc:multicall(AllWorkers, dbsync_worker, start_streams, []),
+    
+    rpc:multicall(AllWorkers, qos_traverse, init_pool, []),
 
     lists:foreach(
         fun({_, #user_config{id = UserId, spaces = UserSpaces}}) ->

@@ -143,8 +143,8 @@ create_archive(_Config) ->
                     {<<"config">>, #{<<"layout">> => <<"not allowed layout">>},
                         ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"config.layout">>, ensure_binaries(?ARCHIVE_LAYOUTS))},
                     {<<"description">>, [123, 456], ?ERROR_BAD_VALUE_BINARY(<<"description">>)},
-                    {<<"preservedCallback">>, <<"htp:/wrong-url.org">>, ?ERROR_BAD_DATA(<<"preservedCallback">>)},
-                    {<<"purgedCallback">>, <<"htp:/wrong-url.org">>, ?ERROR_BAD_DATA(<<"purgedCallback">>)}
+                    {<<"preservedCallback">>, <<"htp://wrong-url.org">>, ?ERROR_BAD_DATA(<<"preservedCallback">>)},
+                    {<<"purgedCallback">>, <<"htp://wrong-url.org">>, ?ERROR_BAD_DATA(<<"purgedCallback">>)}
                 ]
             }
         }
@@ -739,7 +739,7 @@ init_archive_purge_test(_Config) ->
                 },
                 bad_values = [
                     {bad_id, ?NON_EXISTENT_ARCHIVE_ID, ?ERROR_NOT_FOUND},
-                    {<<"purgedCallback">>, <<"htp:/wrong-url.org">>, ?ERROR_BAD_DATA(<<"purgedCallback">>)}
+                    {<<"purgedCallback">>, <<"htp://wrong-url.org">>, ?ERROR_BAD_DATA(<<"purgedCallback">>)}
                 ]
             }
         }

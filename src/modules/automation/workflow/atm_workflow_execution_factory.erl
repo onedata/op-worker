@@ -158,6 +158,7 @@ create_workflow_execution_doc(
                 AtmWorkflowExecutionCtx
             ),
             value = #atm_workflow_execution{
+                user_id = atm_workflow_execution_ctx:get_user_id(AtmWorkflowExecutionCtx),
                 space_id = atm_workflow_execution_ctx:get_space_id(AtmWorkflowExecutionCtx),
                 atm_inventory_id = AtmInventoryId,
 
@@ -169,6 +170,7 @@ create_workflow_execution_doc(
                 lanes = AtmLaneExecutions,
 
                 status = ?SCHEDULED_STATUS,
+                prev_status = ?SCHEDULED_STATUS,
 
                 callback = CallbackUrl,
 

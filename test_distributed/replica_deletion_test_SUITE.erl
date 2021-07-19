@@ -263,7 +263,7 @@ init_per_suite(Config) ->
         end, ?config(op_worker_nodes, NewConfig1)),
 
         application:start(ssl),
-        hackney:start(),
+        application:ensure_all_started(hackney),
         initializer:create_test_users_and_spaces(?TEST_FILE(NewConfig1, "env_desc.json"), NewConfig1)
     end,
     [
@@ -293,7 +293,7 @@ end_per_testcase(_Case, Config) ->
 end_per_suite(Config) ->
     %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
     initializer:clean_test_users_and_spaces_no_validate(Config),
-    hackney:stop(),
+    application:stop(hackney),
     application:stop(ssl),
     initializer:teardown_storage(Config).
 
@@ -381,9 +381,9 @@ run_test(Config, Testcase, TestcaseName, FilesAndJobsNums) ->
             Testcase(Config, FilesNum, JobsNum),
             ok
         catch
-            E:R ->
+            E:R:Stacktrace ->
                 ct:print("Testcase ~p failed due to ~p for FilesNum = ~p, JobsNum = ~p.~nStacktrace: ~n~p",
-                    [TestcaseName, {E, R}, FilesNum, JobsNum, erlang:get_stacktrace()]),
+                    [TestcaseName, {E, R}, FilesNum, JobsNum, Stacktrace]),
                 error
         after
             cleanup(Config)

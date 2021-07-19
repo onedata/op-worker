@@ -526,10 +526,13 @@ archive_dir(FileCtx, TargetParentCtx, UserCtx) ->
     try
         archive_dir_insecure(FileCtx, TargetParentCtx, UserCtx)
     catch
-        Class:Reason ->
+        Class:Reason:Stacktrace ->
             Guid = file_ctx:get_logical_guid_const(FileCtx),
-            ?error_stacktrace("Unexpected error ~p:~p occured during archivisation of directory ~s.",
-                [Class, Reason, Guid]),
+            ?error_stacktrace(
+                "Unexpected error ~p:~p occured during archivisation of directory ~s.",
+                [Class, Reason, Guid],
+                Stacktrace
+            ),
             {error, Reason}
     end.
 

@@ -301,8 +301,8 @@ init([CallbackModule | OtherArgs]) ->
     try
         init_internal(CallbackModule, OtherArgs)
     catch
-        _:Reason ->
-            ?error_stacktrace("Unable to start harvesting_stream due to ~p", [Reason]),
+        _:Reason:Stacktrace ->
+            ?error_stacktrace("Unable to start harvesting_stream due to ~p", [Reason], Stacktrace),
             {stop, Reason}
     end.
 

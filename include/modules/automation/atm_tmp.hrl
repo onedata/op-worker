@@ -113,5 +113,6 @@
     {error, {atm_store_empty, __ATM_STORE_SCHEMA__ID}}
 ).
 
+-define(ERROR_ATM_TASK_EXECUTION_ENDED, {error, atm_task_execution_ended}).
 
 -endif.

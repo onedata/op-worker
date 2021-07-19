@@ -1121,6 +1121,7 @@
 }).
 
 -record(atm_workflow_execution, {
+    user_id :: od_user:id(),
     space_id :: od_space:id(),
     atm_inventory_id :: od_atm_inventory:id(),
 
@@ -1135,7 +1136,7 @@
     % Flag used to tell if status was changed during doc update (set automatically
     % when updating doc). It is necessary due to limitation of datastore as
     % otherwise getting document before update would be needed (to compare 2 docs).
-    status_changed = false :: boolean(),
+    prev_status :: atm_workflow_execution:status(),
 
     callback :: undefined | http_client:url(),
 

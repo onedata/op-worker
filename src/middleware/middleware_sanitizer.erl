@@ -176,10 +176,10 @@ sanitize_param(TypeConstraint, ValueConstraint, Param, RawValue) ->
     catch
         throw:Error ->
             throw(Error);
-        Type:Message ->
+        Type:Message:Stacktrace ->
             ?error_stacktrace("Error in ~p:~p - ~p:~p", [
                 ?MODULE, ?FUNCTION_NAME, Type, Message
-            ]),
+            ], Stacktrace),
             throw(?ERROR_BAD_DATA(Param))
     end.
 

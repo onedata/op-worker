@@ -45,7 +45,8 @@ routes() ->
         share_rest_routes:routes(),
         space_rest_routes:routes(),
         transfer_rest_routes:routes(),
-        view_rest_routes:routes()
+        view_rest_routes:routes(),
+        workflow_execution_rest_routes:routes()
     ]),
 
     SortedRoutes = sort_routes(AllRoutes),

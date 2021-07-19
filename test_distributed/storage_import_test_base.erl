@@ -6631,7 +6631,7 @@ assert_monitoring_state(Worker, ExpectedSSM, SpaceId, Attempts) ->
         assert(ExpectedSSM, SSM2),
         SSM2
     catch
-        throw:{assertion_error, Key, ExpectedValue, Value} ->
+        throw:{assertion_error, Key, ExpectedValue, Value}:Stacktrace ->
             case Attempts == 0 of
                 false ->
                     timer:sleep(timer:seconds(1)),
@@ -6644,7 +6644,7 @@ assert_monitoring_state(Worker, ExpectedSSM, SpaceId, Attempts) ->
                         "    Value: ~p~n"
                         ++ Format ++
                         "~nStacktrace:~n~p",
-                        [Key, SpaceId, ExpectedValue, Value] ++ Args ++ [erlang:get_stacktrace()]),
+                        [Key, SpaceId, ExpectedValue, Value] ++ Args ++ [Stacktrace]),
                     ct:fail("assertion failed")
             end
     end.
@@ -6758,7 +6758,7 @@ close_if_applicable(Node, Handle, _) ->
 init_per_suite(Config) ->
     Posthook = fun(NewConfig) ->
         ssl:start(),
-        hackney:start(),
+        application:ensure_all_started(hackney),
         initializer:disable_quota_limit(NewConfig),
         initializer:mock_provider_ids(NewConfig),
         initializer:mock_auth_manager(NewConfig),

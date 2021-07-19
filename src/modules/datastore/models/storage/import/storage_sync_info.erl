@@ -262,7 +262,7 @@ default_doc(Key, Diff, SpaceId) ->
         scope = SpaceId
     }.
 
--spec update(helpers:file_id(), od_space:id(), diff()) -> ok | error().
+-spec update(helpers:file_id(), od_space:id(), diff()) -> {ok, doc()} | error().
 update(StorageFileId, SpaceId, Diff) ->
     Id = id(StorageFileId, SpaceId),
     datastore_model:update(?CTX, Id, Diff).
