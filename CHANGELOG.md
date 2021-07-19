@@ -4,6 +4,12 @@ Release notes for project op-worker
 CHANGELOG
 ---------
 
+### 21.02.0-alpha17
+
+-   **VFS-8018** Added HTTP storage driver option to limit on the client
+    side maximum number of requests per single session, after which the
+    session is closed and reconnected.
+
 ### 21.02.0-alpha16
 
 -   **VFS-7976** Ported oneclient communicator async event stream
