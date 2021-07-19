@@ -19,6 +19,7 @@
 %% API
 -export([
     is_transition_allowed/2,
+    is_ended/1,
     converge/1
 ]).
 
@@ -36,9 +37,17 @@
     boolean().
 is_transition_allowed(?PENDING_STATUS, ?ACTIVE_STATUS) -> true;
 is_transition_allowed(?PENDING_STATUS, ?FINISHED_STATUS) -> true;  % possible e.g. for empty store
+is_transition_allowed(?PENDING_STATUS, ?SKIPPED_STATUS) -> true;
 is_transition_allowed(?ACTIVE_STATUS, ?FINISHED_STATUS) -> true;
 is_transition_allowed(?ACTIVE_STATUS, ?FAILED_STATUS) -> true;
 is_transition_allowed(_, _) -> false.
+
+
+-spec is_ended(atm_task_execution:status()) -> boolean().
+is_ended(?FINISHED_STATUS) -> true;
+is_ended(?FAILED_STATUS) -> true;
+is_ended(?SKIPPED_STATUS) -> true;
+is_ended(_) -> false.
 
 
 -spec converge([atm_task_execution:status()]) -> atm_task_execution:status().

@@ -45,9 +45,12 @@ foreach(Callback, Elements) ->
             (ok) -> ok;
             ({error, _} = Error) -> throw(Error)
         end, Results)
-    catch Class:Reason ->
-        ?error_stacktrace("Unexpected error in ~w:~w - ~w:~p", [
-            ?MODULE, ?FUNCTION_NAME, Class, Reason
-        ]),
-        throw(?ERROR_ATM_INTERNAL_SERVER_ERROR)
+    catch
+        throw:{error, _} = Error ->
+            throw(Error);
+        Class:Reason ->
+            ?error_stacktrace("Unexpected error in ~w:~w - ~w:~p", [
+                ?MODULE, ?FUNCTION_NAME, Class, Reason
+            ]),
+            throw(?ERROR_ATM_INTERNAL_SERVER_ERROR)
     end.

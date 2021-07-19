@@ -17,13 +17,14 @@
 -behaviour(persistent_record).
 
 -include("modules/automation/atm_execution.hrl").
+-include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/http/codes.hrl").
 -include_lib("ctool/include/http/headers.hrl").
 
 
 %% API
--export([assert_openfaas_available/0]).
+-export([is_openfaas_available/0, assert_openfaas_available/0]).
 
 %% atm_task_executor callbacks
 -export([create/2, prepare/2, clean/1, get_spec/1, in_readonly_mode/1, run/3]).
@@ -55,6 +56,8 @@
 -export_type([record/0]).
 
 
+-define(HEALTHCHECK_CACHE_TTL_SECONDS, 15).
+
 -define(AWAIT_READINESS_RETRIES, 300).
 -define(AWAIT_READINESS_INTERVAL_SEC, 1).
 
@@ -64,22 +67,19 @@
 %%%===================================================================
 
 
+-spec is_openfaas_available() -> boolean().
+is_openfaas_available() ->
+    case check_openfaas_availability() of
+        ok -> true;
+        {error, _} -> false
+    end.
+
+
 -spec assert_openfaas_available() -> ok | no_return().
 assert_openfaas_available() ->
-    OpenfaasConfig = get_openfaas_config(),
-
-    % /healthz is proper Openfaas endpoint defined in their swagger:
-    % https://raw.githubusercontent.com/openfaas/faas/master/api-docs/swagger.yml
-    Endpoint = get_openfaas_endpoint(OpenfaasConfig, <<"/healthz">>),
-    Headers = get_basic_auth_header(OpenfaasConfig),
-
-    case http_client:get(Endpoint, Headers) of
-        {ok, ?HTTP_200_OK, _RespHeaders, _RespBody} ->
-            ok;
-        {ok, ?HTTP_500_INTERNAL_SERVER_ERROR, _RespHeaders, ErrorReason} ->
-            throw(?ERROR_ATM_OPENFAAS_QUERY_FAILED(ErrorReason));
-        _ ->
-            throw(?ERROR_ATM_OPENFAAS_UNREACHABLE)
+    case check_openfaas_availability() of
+        ok -> ok;
+        {error, _} = Error -> throw(Error)
     end.
 
 
@@ -175,6 +175,38 @@ db_decode(#{
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+%% @private
+-spec check_openfaas_availability() -> ok | {error, term()}.
+check_openfaas_availability() ->
+    {ok, Result} = node_cache:acquire(?FUNCTION_NAME, fun() ->
+        HealthcheckResult = try
+            OpenfaasConfig = get_openfaas_config(),
+
+            % /healthz is proper Openfaas endpoint defined in their swagger:
+            % https://raw.githubusercontent.com/openfaas/faas/master/api-docs/swagger.yml
+            Endpoint = get_openfaas_endpoint(OpenfaasConfig, <<"/healthz">>),
+            Headers = get_basic_auth_header(OpenfaasConfig),
+
+            case http_client:get(Endpoint, Headers) of
+                {ok, ?HTTP_200_OK, _RespHeaders, _RespBody} ->
+                    ok;
+                {ok, ?HTTP_500_INTERNAL_SERVER_ERROR, _RespHeaders, ErrorReason} ->
+                    ?ERROR_ATM_OPENFAAS_QUERY_FAILED(ErrorReason);
+                _ ->
+                    ?ERROR_ATM_OPENFAAS_UNREACHABLE
+            end
+        catch
+            throw:{error, _} = Error ->
+                Error;
+            Class:Reason ->
+                ?error_stacktrace("Unexpected error during OpenFaaS healthcheck - ~w:~p", [Class, Reason]),
+                ?ERROR_ATM_INTERNAL_SERVER_ERROR
+        end,
+        {ok, HealthcheckResult, ?HEALTHCHECK_CACHE_TTL_SECONDS}
+    end),
+    Result.
 
 
 %% @private

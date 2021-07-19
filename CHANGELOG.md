@@ -4,10 +4,24 @@ Release notes for project op-worker
 CHANGELOG
 ---------
 
-### 21.02.0-alpha15
+### 21.02.0-alpha16
 
+-   **VFS-7976** Ported oneclient communicator async event stream
+    implementation from asio to folly IOThreadPoolExecutor.
+-   **VFS-7975** Added possibility to cancel running automation
+    workflow.
 -   **VFS-7892** Improved write performance on object storages by
     minimizing the number of memory copying from Erlang to C++.
+-   **VFS-7856** Web GUI: added support for uploading, creating
+    directories and renaming files in files selector.
+-   **VFS-7846** Added action \"Upload BagIt\" to file browser, which is
+    available when OpenFaaS and special \"BagIt uploader\" workflow are
+    available.
+-   **VFS-7702** Add basic REST API for scheduling and retrieving
+    workflow executions.
+
+### 21.02.0-alpha15
+
 -   **VFS-7747** Upgrade the codebase to Erlang OTP 24.
 
 ### 21.02.0-alpha14

@@ -52,11 +52,15 @@ handshake_attributes(_Client) ->
             }}
     end,
 
+    BagitUploaderWorkflowSchemaId = maps:get(<<"bagitUploaderWorkflowSchemaId">>, OnezoneConfiguration, null),
+
     #{
         <<"providerName">> => ProviderName,
         <<"serviceVersion">> => op_worker:get_release_version(),
         <<"onezoneUrl">> => oneprovider:get_oz_url(),
         <<"transfersHistoryLimitPerFile">> => transferred_file:get_history_limit(),
+        <<"openfaasAvailable">> => atm_openfaas_task_executor:is_openfaas_available(),
+        <<"bagitUploaderWorkflowSchemaId">> => utils:undefined_to_null(BagitUploaderWorkflowSchemaId),
         <<"apiTemplates">> => XRootDApiTemplates#{
             <<"rest">> => #{
                 <<"listSharedDirectoryChildren">> => ?ZONE_SHARED_DATA_CURL_COMMAND_TEMPLATE("/children"),
