@@ -60,9 +60,9 @@
 
 -spec get_next_batch(atm_workflow_execution_ctx:record(), batch_size(), record(), atm_data_spec:record()) ->
     {ok, [atm_value:expanded()], record()} | stop.
-get_next_batch(AtmWorkflowExecutionCtx, BatchSize, AtmStoreContainerIterator, DataSpec) ->
+get_next_batch(AtmWorkflowExecutionCtx, BatchSize, AtmStoreContainerIterator, AtmDataSpec) ->
     Module = utils:record_type(AtmStoreContainerIterator),
-    Module:get_next_batch(AtmWorkflowExecutionCtx, BatchSize, AtmStoreContainerIterator, DataSpec).
+    Module:get_next_batch(AtmWorkflowExecutionCtx, BatchSize, AtmStoreContainerIterator, AtmDataSpec).
 
 
 -spec forget_before(record()) -> ok.

@@ -114,7 +114,7 @@ build(RootsIterator, DataSpec) ->
 get_next_batch(AtmWorkflowExecutionCtx, BatchSize, #atm_tree_forest_store_container_iterator{} = Record, DataSpec) ->
     case get_next_batch(AtmWorkflowExecutionCtx, BatchSize, Record, [], DataSpec) of
         {ok, CompressedItems, UpdatedRecord} ->
-            ExpandedItems = atm_value:expand_list(AtmWorkflowExecutionCtx, CompressedItems, DataSpec),
+            ExpandedItems = atm_value:filterexpand_list(AtmWorkflowExecutionCtx, CompressedItems, DataSpec),
             {ok, ExpandedItems, UpdatedRecord};
         stop -> 
             stop

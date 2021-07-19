@@ -75,7 +75,7 @@ all() -> [
 -define(ATTEMPTS, 30).
 
 -define(ITERATION_RESULT_MAPPER, fun(
-    #{<<"entry">> := Entry, <<"timestamp">> := _Timestamp}) -> 
+    #{<<"entry">> := Entry, <<"timestamp">> := _Timestamp, <<"severity">> := _Severity}) -> 
         Entry;
     (BadFormatResult) -> 
         ct:print("Audit log result in bad format: ~p", [BadFormatResult]),
@@ -116,6 +116,7 @@ browse_by_offset_test(_Config) ->
 
 
 browse_by_timestamp_test(_Config) ->
+    ok = clock_freezer_mock:set_current_time_millis(123),
     AtmWorkflowExecutionCtx = atm_store_test_utils:create_workflow_execution_ctx(
         krakow, user1, space_krk
     ),
@@ -130,6 +131,7 @@ browse_by_timestamp_test(_Config) ->
         ?assertEqual(ok, atm_store_test_utils:apply_operation(
             krakow, AtmWorkflowExecutionCtx, append, Index, #{}, AtmStoreId
         )),
+        clock_freezer_mock:simulate_millis_passing(1),
         Timestamp
     end, Items),
     {ok, AtmStore} = atm_store_test_utils:get(krakow, AtmStoreId),
@@ -137,7 +139,7 @@ browse_by_timestamp_test(_Config) ->
         StartIndex = rand:uniform(ItemsNum),
         Limit = rand:uniform(ItemsNum),
         Expected = lists:map(fun(Index) ->
-            {integer_to_binary(Index), {ok, #{<<"entry">> => Index + 1, <<"timestamp">> => FirstTimestamp + Index}}}
+            {integer_to_binary(Index), {ok, #{<<"entry">> => Index + 1, <<"timestamp">> => FirstTimestamp + Index, <<"severity">> => <<"info">>}}}
         end, lists:seq(StartIndex, min(StartIndex + Limit - 1, ItemsNum - 1))),
         {Result, IsLast} = atm_store_test_utils:browse_content(krakow, AtmWorkflowExecutionCtx, #{
             start_timestamp => StartIndex + FirstTimestamp,
@@ -165,25 +167,8 @@ end_per_suite(_Config) ->
 
 init_per_testcase(browse_by_timestamp_test, Config) ->
     ct:timetrap({minutes, 5}),
-    P = spawn(fun F() ->
-        receive append_finished ->
-            clock_freezer_mock:simulate_millis_passing(1),
-            F()
-        end
-    end),
     
     ok = clock_freezer_mock:setup_on_nodes(oct_background:get_all_providers_nodes(), [global_clock, ?MODULE]),
-    ok = clock_freezer_mock:set_current_time_millis(0),
-    ProviderNodes = oct_background:get_all_providers_nodes(),
-    lists:foreach(fun(OpNode) ->
-        test_node_starter:load_modules([OpNode], [?MODULE, time_test_utils]),
-        ok = test_utils:mock_new(OpNode, atm_infinite_log_backend),
-        ok = test_utils:mock_expect(OpNode, atm_infinite_log_backend, append, fun(Id, Item, AtmDataSpec) ->
-            Res = meck:passthrough([Id, Item, AtmDataSpec]),
-            P ! append_finished,
-            Res
-        end)
-    end, ProviderNodes),
     Config;
 init_per_testcase(_Case, Config) ->
     Config.

@@ -15,13 +15,12 @@
 -author("Lukasz Opiola").
 
 -behaviour(persistent_record).
--behaviour(atm_store_container_iterator).
 
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([build/1, get_next_batch/4, forget_before/1, mark_exhausted/1]).
+-export([build/1, get_next_batch/5, forget_before/1, mark_exhausted/1]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
@@ -32,6 +31,8 @@
     index = 0 :: non_neg_integer()
 }).
 -type record() :: #atm_infinite_log_container_iterator{}.
+
+-type result_mapper() :: fun((infinite_log:timestamp(), json_utils:json_term()) -> automation:item()).
 
 -export_type([record/0]).
 
@@ -47,21 +48,21 @@ build(BackendId) ->
 
 
 -spec get_next_batch(atm_workflow_execution_ctx:record(), atm_store_container_iterator:batch_size(), 
-    record(), atm_data_spec:record()
+    record(), atm_data_spec:record(), result_mapper()
 ) ->
     {ok, [atm_value:expanded()], record()} | stop.
-get_next_batch(AtmWorkflowExecutionCtx, BatchSize, #atm_infinite_log_container_iterator{} = Record, AtmDataSpec) ->
+get_next_batch(AtmWorkflowExecutionCtx, BatchSize, #atm_infinite_log_container_iterator{} = Record, AtmDataSpec, ResultMapper) ->
     #atm_infinite_log_container_iterator{backend_id = BackendId, index = StartIndex} = Record,
-    {ok, {Marker, EntrySeries}} = atm_infinite_log_backend:list(
+    {ok, {IsLast, EntrySeries}} = atm_infinite_log_backend:list(
         AtmWorkflowExecutionCtx, BackendId, #{start_from => {index, StartIndex}, limit => BatchSize}, AtmDataSpec),
     FilteredEntries = lists:filtermap(fun
-        ({_Index, {ok, Item}}) ->
-            {true, Item};
+        ({_Index, {ok, Timestamp, Item}}) ->
+            {true, ResultMapper(Timestamp, Item)};
         ({_Index, _Error}) ->
             false
     end, EntrySeries),
-    case {EntrySeries, Marker} of
-        {[], done} -> 
+    case {EntrySeries, IsLast} of
+        {[], true} -> 
             stop;
         _ ->
             {LastIndex, _} = lists:last(EntrySeries),

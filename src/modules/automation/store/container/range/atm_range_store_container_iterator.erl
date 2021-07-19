@@ -77,7 +77,7 @@ get_next_batch(AtmWorkflowExecutionCtx, BatchSize, #atm_range_store_container_it
         CompressedItems ->
             NewCurrNum = Threshold + Step,
             NewRecord = Record#atm_range_store_container_iterator{curr_num = NewCurrNum},
-            {ok, atm_value:expand_list(AtmWorkflowExecutionCtx, CompressedItems, DataSpec), NewRecord}
+            {ok, atm_value:filterexpand_list(AtmWorkflowExecutionCtx, CompressedItems, DataSpec), NewRecord}
     end.
 
 

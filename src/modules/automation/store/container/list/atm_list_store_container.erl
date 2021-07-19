@@ -33,13 +33,18 @@
 
 -type initial_value() :: atm_infinite_log_container:initial_value().
 -type operation_options() :: atm_infinite_log_container:operation_options().
+-type browse_options() :: #{
+    limit := atm_store_api:limit(),
+    start_index => atm_store_api:index(),
+    offset => atm_store_api:offset()
+}.
 
 -record(atm_list_store_container, {
     atm_infinite_log_container :: atm_infinite_log_container:record()
 }).
 -type record() :: #atm_list_store_container{}.
 
--export_type([initial_value/0, operation_options/0, record/0]).
+-export_type([initial_value/0, operation_options/0, browse_options/0, record/0]).
 
 
 %%%===================================================================
@@ -52,7 +57,7 @@
 create(AtmWorkflowExecutionCtx, AtmDataSpec, InitialValueBatch) ->
     #atm_list_store_container{
         atm_infinite_log_container = atm_infinite_log_container:create(
-            AtmWorkflowExecutionCtx, AtmDataSpec, InitialValueBatch
+            AtmWorkflowExecutionCtx, AtmDataSpec, InitialValueBatch, fun(Item) -> Item end
         )
     }.
 
@@ -62,15 +67,16 @@ get_data_spec(#atm_list_store_container{atm_infinite_log_container = AtmInfinite
     atm_infinite_log_container:get_data_spec(AtmInfiniteLogContainer).
 
 
--spec browse_content(atm_workflow_execution_ctx:record(), atm_store_api:browse_opts(), record()) ->
+-spec browse_content(atm_workflow_execution_ctx:record(), atm_store_api:browse_options(), record()) ->
     atm_store_api:browse_result() | no_return().
 browse_content(AtmWorkflowExecutionCtx, BrowseOpts, #atm_list_store_container{
     atm_infinite_log_container = AtmInfiniteLogContainer
 }) ->
+    SanitizedBrowseOpts = sanitize_browse_options(BrowseOpts),
     {Entries, IsLast} = atm_infinite_log_container:browse_content(
-        AtmWorkflowExecutionCtx, BrowseOpts, AtmInfiniteLogContainer),
+        AtmWorkflowExecutionCtx, SanitizedBrowseOpts, AtmInfiniteLogContainer),
     MappedEntries = lists:map(fun
-        ({Index, {ok, #{<<"entry">> := Entry}}}) ->
+        ({Index, {ok, _Timestamp, Entry}}) ->
             {Index, {ok, Entry}};
         ({Index, Error}) ->
             {Index, Error}
@@ -91,7 +97,7 @@ apply_operation(AtmListStoreContainer = #atm_list_store_container{
 }, AtmStoreContainerOperation) ->
     AtmListStoreContainer#atm_list_store_container{
         atm_infinite_log_container = atm_infinite_log_container:apply_operation(
-            AtmInfiniteLogContainer, AtmStoreContainerOperation
+            AtmInfiniteLogContainer, AtmStoreContainerOperation, fun(Item) -> Item end
         )
     }.
 
@@ -131,3 +137,21 @@ db_decode(#{<<"atmInfiniteLogContainer">> := AtmInfiniteLogContainerJson}, Neste
             AtmInfiniteLogContainerJson, atm_infinite_log_container
         )
     }.
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%% @private
+-spec sanitize_browse_options(atm_store_container:browse_options()) -> browse_options().
+sanitize_browse_options(BrowseOpts) ->
+    maps:without([start_timestamp], middleware_sanitizer:sanitize_data(BrowseOpts, #{
+        required => #{
+            limit => {integer, {not_lower_than, 1}}
+        },
+        at_least_one => #{
+            offset => {integer, any},
+            start_index => {binary, any}
+        }
+    })).

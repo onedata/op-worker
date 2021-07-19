@@ -244,4 +244,5 @@ browse_content_test_base(AtmStoreSchema, ResultMapper, Type) ->
 map_iteration_result({ok, Result, Iterator}, ResultMapper) when is_list(Result) ->
     {ok, lists:map(ResultMapper, Result), Iterator};
 map_iteration_result({ok, Result, Iterator}, ResultMapper) ->
-    {ok, ResultMapper(Result), Iterator}.
+    {ok, ResultMapper(Result), Iterator};
+map_iteration_result(Result, _ResultMapper) -> Result.

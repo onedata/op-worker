@@ -31,6 +31,11 @@
 -export([version/0, db_encode/2, db_decode/2]).
 
 -type operation_options() :: #{binary() => boolean()}.
+-type browse_options() :: #{
+    limit := atm_store_api:limit(),
+    start_index => atm_store_api:index(),
+    offset => atm_store_api:offset()
+}.
 -type initial_value() :: [automation:item()] | undefined.
 
 -record(atm_tree_forest_store_container, {
@@ -38,7 +43,7 @@
 }).
 -type record() :: #atm_tree_forest_store_container{}.
 
--export_type([initial_value/0, operation_options/0, record/0]).
+-export_type([initial_value/0, operation_options/0, browse_options/0, record/0]).
 
 
 %%%===================================================================

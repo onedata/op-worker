@@ -167,12 +167,9 @@ get_next_internal(AtmWorkflowExecutionCtx, AtmStoreContainerIterator, Size, Data
     of
         stop ->
             stop;
-        {ok, Items, NewAtmStoreContainerIterator} ->
-            case Items of
-                [] ->
-                    get_next_internal(
-                        AtmWorkflowExecutionCtx, NewAtmStoreContainerIterator, Size, DataSpec);
-                _ ->
-                    {ok, Items, NewAtmStoreContainerIterator}
-            end
+        {ok, [], NewAtmStoreContainerIterator} ->
+            get_next_internal(
+                AtmWorkflowExecutionCtx, NewAtmStoreContainerIterator, Size, DataSpec);
+        {ok, _Items, _NewAtmStoreContainerIterator} = Result ->
+            Result
     end.

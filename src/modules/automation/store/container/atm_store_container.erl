@@ -67,10 +67,15 @@
     atm_tree_forest_store_container:operation_options() |
     atm_audit_log_store_container:operation_options().
 
+-type browse_options() ::
+    atm_list_store_container:browse_options() |
+    atm_tree_forest_store_container:browse_options() |
+    atm_audit_log_store_container:browse_options().
+
 -type operation() :: #atm_store_container_operation{}.
 
 -export_type([type/0, initial_value/0, record/0]).
--export_type([operation_type/0, operation_options/0, operation/0]).
+-export_type([operation_type/0, operation_options/0, browse_options/0, operation/0]).
 
 
 %%%===================================================================

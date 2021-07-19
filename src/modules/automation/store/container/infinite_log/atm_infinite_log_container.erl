@@ -21,9 +21,9 @@
 
 %% API
 -export([
-    create/3,
+    create/4,
     get_data_spec/1, browse_content/3, acquire_iterator/1,
-    apply_operation/2,
+    apply_operation/3,
     delete/1
 ]).
 
@@ -50,6 +50,8 @@
 }).
 -type record() :: #atm_infinite_log_container{}.
 
+-type item_mapper() :: fun((automation:item()) -> json_utils:json_term()).
+
 -export_type([initial_value/0, operation_options/0, backend_id/0, record/0]).
 
 
@@ -58,14 +60,14 @@
 %%%===================================================================
 
 
--spec create(atm_workflow_execution_ctx:record(), atm_data_spec:record(), initial_value()) ->
+-spec create(atm_workflow_execution_ctx:record(), atm_data_spec:record(), initial_value(), item_mapper()) ->
     record() | no_return().
-create(_AtmWorkflowExecutionCtx, AtmDataSpec, undefined) ->
+create(_AtmWorkflowExecutionCtx, AtmDataSpec, undefined, _ItemMapper) ->
     create_container(AtmDataSpec);
 
-create(AtmWorkflowExecutionCtx, AtmDataSpec, InitialValueBatch) ->
+create(AtmWorkflowExecutionCtx, AtmDataSpec, InitialValueBatch, ItemMapper) ->
     validate_data_batch(AtmWorkflowExecutionCtx, AtmDataSpec, InitialValueBatch),
-    append_insecure(InitialValueBatch, create_container(AtmDataSpec)).
+    append_insecure(InitialValueBatch, create_container(AtmDataSpec), ItemMapper).
 
 
 -spec get_data_spec(record()) -> atm_data_spec:record().
@@ -74,17 +76,17 @@ get_data_spec(#atm_infinite_log_container{data_spec = AtmDataSpec}) ->
 
 
 -spec browse_content(atm_workflow_execution_ctx:record(), atm_store_api:browse_opts(), record()) ->
-    atm_store_api:browse_result() | no_return().
+    {[atm_infinite_log_backend:entry()], boolean()} | no_return().
 browse_content(AtmWorkflowExecutionCtx, BrowseOpts, #atm_infinite_log_container{
     data_spec = AtmDataSpec,
     backend_id = BackendId
 }) ->
-    {ok, {Marker, Entries}} = atm_infinite_log_backend:list(AtmWorkflowExecutionCtx, BackendId, #{
-        start_from => map_to_backend_start_from(BrowseOpts),
+    {ok, {IsLast, Entries}} = atm_infinite_log_backend:list(AtmWorkflowExecutionCtx, BackendId, #{
+        start_from => infer_start_from(BrowseOpts),
         offset => maps:get(offset, BrowseOpts, 0),
         limit => maps:get(limit, BrowseOpts)
     }, AtmDataSpec),
-    {Entries, Marker =:= done}.
+    {Entries, IsLast}.
 
 
 -spec acquire_iterator(record()) -> atm_infinite_log_container_iterator:record().
@@ -92,28 +94,28 @@ acquire_iterator(#atm_infinite_log_container{backend_id = BackendId}) ->
     atm_infinite_log_container_iterator:build(BackendId).
 
 
--spec apply_operation(record(), atm_store_container:operation()) ->
+-spec apply_operation(record(), atm_store_container:operation(), item_mapper()) ->
     record() | no_return().
 apply_operation(#atm_infinite_log_container{data_spec = AtmDataSpec} = Record, #atm_store_container_operation{
     type = append,
     options = #{<<"isBatch">> := true},
     value = Batch,
     workflow_execution_ctx = AtmWorkflowExecutionCtx
-}) ->
+}, ItemMapper) ->
     validate_data_batch(AtmWorkflowExecutionCtx, AtmDataSpec, Batch),
-    append_insecure(Batch, Record);
+    append_insecure(Batch, Record, ItemMapper);
 
 apply_operation(#atm_infinite_log_container{} = Record, Operation = #atm_store_container_operation{
     type = append,
     value = Item,
     options = Options
-}) ->
+}, ItemMapper) ->
     apply_operation(Record, Operation#atm_store_container_operation{
         options = Options#{<<"isBatch">> => true},
         value = [Item]
-    });
+    }, ItemMapper);
 
-apply_operation(_Record, _Operation) ->
+apply_operation(_Record, _Operation, _ItemMapper) ->
     throw(?ERROR_NOT_SUPPORTED).
 
 
@@ -184,29 +186,29 @@ validate_data_batch(_AtmWorkflowExecutionCtx, _AtmDataSpec, _Item) ->
 
 
 %% @private
--spec append_insecure([automation:item()], record()) -> record().
+-spec append_insecure([automation:item()], record(), item_mapper()) -> record().
 append_insecure(Batch, Record = #atm_infinite_log_container{
     data_spec = AtmDataSpec,
     backend_id = BackendId
-}) ->
+}, ItemMapper) ->
     lists:foreach(fun(Item) ->
-        ok = atm_infinite_log_backend:append(BackendId, Item, AtmDataSpec)
+        ok = atm_infinite_log_backend:append(BackendId, ItemMapper(Item), AtmDataSpec)
     end, Batch),
     Record.
 
 
 %% @private
--spec map_to_backend_start_from(atm_store_api:browse_opts()) ->
+-spec infer_start_from(atm_store_api:browse_opts()) ->
     infinite_log_browser:start_from().
-map_to_backend_start_from(#{start_index := <<>>}) ->
+infer_start_from(#{start_index := <<>>}) ->
     undefined;
-map_to_backend_start_from(#{start_index := StartIndexBin}) ->
+infer_start_from(#{start_index := StartIndexBin}) ->
     try
         {index, binary_to_integer(StartIndexBin)}
     catch _:_ ->
         throw(?ERROR_ATM_BAD_DATA(<<"index">>, <<"not numerical">>))
     end;
-map_to_backend_start_from(#{start_timestamp := StartTimestamp}) ->
+infer_start_from(#{start_timestamp := StartTimestamp}) ->
     {timestamp, StartTimestamp};
-map_to_backend_start_from(_) ->
+infer_start_from(_) ->
     undefined.

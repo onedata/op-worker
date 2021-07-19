@@ -22,8 +22,13 @@
 -export([get_ctx/0]).
 
 -type id() :: datastore_infinite_log:key().
+-type entry() :: {
+        atm_store_api:index(), 
+        {ok, infinite_log:timestamp(), json_utils:json_term()} | {error, term()}
+    }.
+-type listing_result() :: {boolean(), [entry()]}.
 
--export_type([id/0]).
+-export_type([id/0, entry/0, listing_result/0]).
 
 
 -define(CTX, #{model => ?MODULE}).
@@ -52,11 +57,11 @@ destroy(Id) ->
 
 
 -spec list(atm_workflow_execution_ctx:record(), id(), infinite_log_browser:listing_opts(), 
-    atm_data_spec:record()) -> {ok, infinite_log_browser:listing_result()} | {error, term()}.
+    atm_data_spec:record()) -> {ok, listing_result()} | {error, term()}. 
 list(AtmWorkflowExecutionCtx, Id, Opts, AtmDataSpec) ->
     case datastore_infinite_log:list(?CTX, Id, Opts) of
         {ok, {Marker, Entries}} ->
-            {ok, {Marker, expand_entries(AtmWorkflowExecutionCtx, Entries, AtmDataSpec)}};
+            {ok, {Marker =:= done, expand_entries(AtmWorkflowExecutionCtx, Entries, AtmDataSpec)}};
         {error, _} = Error ->
             Error
     end.
@@ -75,17 +80,18 @@ get_ctx() ->
 %%% Internal functions
 %%%===================================================================
 
--spec expand_entries(atm_workflow_execution_ctx:record(), infinite_log_browser:entry_series(), 
-    atm_data_spec:record()) -> infinite_log_browser:entry_series().
+-spec expand_entries(
+    atm_workflow_execution_ctx:record(), 
+    [{infinite_log:entry_index(), infinite_log:entry()}], 
+    atm_data_spec:record()
+) -> 
+    [entry()].
 expand_entries(AtmWorkflowExecutionCtx, Entries, AtmDataSpec) ->
     lists:map(fun({EntryIndex, {Timestamp, Value}}) ->
         CompressedValue = json_utils:decode(Value),
         Item = case atm_value:expand(AtmWorkflowExecutionCtx, CompressedValue, AtmDataSpec) of
             {ok, Res} -> 
-                {ok, #{
-                    <<"timestamp">> => Timestamp, 
-                    <<"entry">> => Res
-                }};
+                {ok, Timestamp, Res};
             {error, _} -> 
                 ?ERROR_FORBIDDEN
         end,
