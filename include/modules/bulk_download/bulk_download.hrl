@@ -14,7 +14,7 @@
 -define(BULK_DOWNLOAD_HRL, 1).
 
 % Macros representing messages sent between processes responsible for bulk download
--define(MSG_NEXT_FILE(__FileAttrs, __Pid), {next_file, __FileAttrs, __Pid}).
+-define(MSG_NEXT_FILE(__FileAttrs, __RelativePath, __Pid), {next_file, __FileAttrs, __RelativePath, __Pid}).
 -define(MSG_DATA_CHUNK(__Chunk, __RetryDelay), {data_chunk, __Chunk, __RetryDelay}).
 -define(MSG_RESUMED(__NewConn, __Offset), {resumed, __NewConn, __Offset}).
 -define(MSG_DATA_SENT(__RetryDelay), {data_sent, __RetryDelay}).
