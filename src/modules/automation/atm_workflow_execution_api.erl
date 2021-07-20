@@ -22,7 +22,8 @@
     list/4,
     create/5,
     get/1, get_summary/2,
-    cancel/1
+    cancel/1,
+    terminate_not_ended/1
 ]).
 
 
@@ -155,6 +156,29 @@ cancel(AtmWorkflowExecutionId) ->
     atm_workflow_execution_handler:cancel(AtmWorkflowExecutionId).
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Terminates all waiting and ongoing workflow executions for given space.
+%% This function should be called only after provider restart to terminate
+%% stale (processes handling execution no longer exists) workflows.
+%% @end
+%%--------------------------------------------------------------------
+terminate_not_ended(SpaceId) ->
+    TerminateFun = fun(AtmWorkflowExecutionId) ->
+        {ok, #document{value = #atm_workflow_execution{
+            store_registry = AtmStoreRegistry
+        }}} = atm_workflow_execution:get(AtmWorkflowExecutionId),
+
+        atm_workflow_execution_handler:handle_workflow_execution_ended(
+            AtmWorkflowExecutionId,
+            atm_workflow_execution_env:build(SpaceId, AtmWorkflowExecutionId, AtmStoreRegistry)
+        )
+    end,
+
+    foreach_atm_workflow_execution(TerminateFun, SpaceId, ?WAITING_PHASE),
+    foreach_atm_workflow_execution(TerminateFun, SpaceId, ?ONGOING_PHASE).
+
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -173,3 +197,40 @@ list_basic_entries(SpaceId, ?ONGOING_PHASE, ListingOpts) ->
     atm_ongoing_workflow_executions:list(SpaceId, ListingOpts);
 list_basic_entries(SpaceId, ?ENDED_PHASE, ListingOpts) ->
     atm_ended_workflow_executions:list(SpaceId, ListingOpts).
+
+
+%% @private
+-spec foreach_atm_workflow_execution(
+    fun((atm_workflow_execution:id()) -> ok),
+    od_space:id(),
+    atm_workflow_execution:phase()
+) ->
+    ok.
+foreach_atm_workflow_execution(Callback, SpaceId, Phase) ->
+    foreach_workflow(Callback, SpaceId, Phase, #{limit => 1000, start_index => <<>>}).
+
+
+%% @private
+-spec foreach_workflow(
+    fun((atm_workflow_execution:id()) -> ok),
+    od_space:id(),
+    atm_workflow_execution:phase(),
+    atm_workflow_executions_forest:listing_opts()
+) ->
+    ok.
+foreach_workflow(Callback, SpaceId, Phase, ListingOpts) ->
+    {ok, AtmWorkflowExecutionBasicEntries, IsLast} = list(SpaceId, Phase, basic, ListingOpts),
+
+    LastEntryIndex = lists:foldl(fun({Index, AtmWorkflowExecutionId}, _) ->
+        Callback(AtmWorkflowExecutionId),
+        Index
+    end, <<>>, AtmWorkflowExecutionBasicEntries),
+
+    case IsLast of
+        true ->
+            ok;
+        false ->
+            foreach_workflow(Callback, SpaceId, Phase, ListingOpts#{
+                start_index => LastEntryIndex, offset => 1
+            })
+    end.
