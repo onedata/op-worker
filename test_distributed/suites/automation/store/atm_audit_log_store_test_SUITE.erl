@@ -33,7 +33,9 @@
 %% tests
 -export([
     create_store_with_invalid_args_test/1,
+    create_store_with_severity_details_test/1,
     apply_operation_test/1,
+    apply_operation_with_severity_details_test/1,
     iterate_one_by_one_test/1,
     iterate_in_chunks_test/1,
     reuse_iterator_test/1,
@@ -45,7 +47,9 @@
 groups() -> [
     {parallel, [parallel], [
         create_store_with_invalid_args_test,
+        create_store_with_severity_details_test,
         apply_operation_test,
+        apply_operation_with_severity_details_test,
         iterate_one_by_one_test,
         iterate_in_chunks_test,
         reuse_iterator_test,
@@ -91,8 +95,31 @@ create_store_with_invalid_args_test(_Config) ->
     atm_infinite_log_based_stores_test_common:create_store_with_invalid_args_test_base(?ATM_AUDIT_LOG_STORE_SCHEMA).
 
 
+create_store_with_severity_details_test(_Config) ->
+    AtmWorkflowExecutionCtx = atm_store_test_utils:create_workflow_execution_ctx(
+        krakow, user1, space_krk
+    ),
+    
+    ?assertMatch({ok, _}, atm_store_test_utils:create_store(
+        krakow, AtmWorkflowExecutionCtx, [#{<<"entry">> => 8, <<"severity">> => <<"error">>}], ?ATM_AUDIT_LOG_STORE_SCHEMA
+    )).
+
+
 apply_operation_test(_Config) ->
     atm_infinite_log_based_stores_test_common:apply_operation_test_base(?ATM_AUDIT_LOG_STORE_SCHEMA).
+
+
+apply_operation_with_severity_details_test(_Config) ->
+    AtmWorkflowExecutionCtx = atm_store_test_utils:create_workflow_execution_ctx(
+        krakow, user1, space_krk
+    ),
+    
+    {ok, AtmStoreId} = atm_store_test_utils:create_store(
+        krakow, AtmWorkflowExecutionCtx, undefined, ?ATM_AUDIT_LOG_STORE_SCHEMA
+    ),
+    ?assertEqual(ok, atm_store_test_utils:apply_operation(
+        krakow, AtmWorkflowExecutionCtx, append, [8, #{<<"entry">> => 9, <<"severity">> => <<"notice">>}], #{<<"isBatch">> => true}, AtmStoreId
+    )).
 
 
 iterate_one_by_one_test(_Config) ->
@@ -128,8 +155,12 @@ browse_by_timestamp_test(_Config) ->
     ),
     [FirstTimestamp | _] = lists:map(fun(Index) ->
         Timestamp = rpc:call(Node, global_clock, timestamp_millis, []),
+        ItemToAdd = case rand:uniform(2) of
+            1 -> Index;
+            2 -> #{<<"entry">> => Index, <<"severity">> => <<"info">>}
+        end,
         ?assertEqual(ok, atm_store_test_utils:apply_operation(
-            krakow, AtmWorkflowExecutionCtx, append, Index, #{}, AtmStoreId
+            krakow, AtmWorkflowExecutionCtx, append, ItemToAdd, #{}, AtmStoreId
         )),
         clock_freezer_mock:simulate_millis_passing(1),
         Timestamp

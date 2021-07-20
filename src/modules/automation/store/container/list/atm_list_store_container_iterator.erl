@@ -29,6 +29,7 @@
 
 
 -record(atm_list_store_container_iterator, {
+%%    @TODO VFS-8068 Do not use atm_infinite_log_container_iterator
     atm_infinite_log_container_iterator :: atm_infinite_log_container_iterator:record()
 }).
 -type record() :: #atm_list_store_container_iterator{}.

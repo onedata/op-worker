@@ -38,41 +38,41 @@
 
 
 -type type() ::
+    atm_audit_log_store_container |
     atm_list_store_container |
     atm_range_store_container |
     atm_single_value_store_container |
-    atm_tree_forest_store_container |
-    atm_audit_log_store_container.
+    atm_tree_forest_store_container.
 
 -type initial_value() ::
+    atm_audit_log_store_container:initial_value() |
     atm_list_store_container:initial_value() |
     atm_range_store_container:initial_value() |
     atm_single_value_store_container:initial_value() |
-    atm_tree_forest_store_container:initial_value() |
-    atm_audit_log_store_container:initial_value().
+    atm_tree_forest_store_container:initial_value().
 
 -type record() ::
+    atm_audit_log_store_container:record() |
     atm_list_store_container:record() |
     atm_range_store_container:record() |
     atm_single_value_store_container:record() |
-    atm_tree_forest_store_container:record() |
-    atm_audit_log_store_container:record().
+    atm_tree_forest_store_container:record().
 
 -type operation_type() :: append | set.
 
 -type operation_options() ::
+    atm_audit_log_store_container:operation_options() | 
     atm_list_store_container:operation_options() |
     atm_range_store_container:operation_options() |
     atm_single_value_store_container:operation_options() |
-    atm_tree_forest_store_container:operation_options() |
-    atm_audit_log_store_container:operation_options().
+    atm_tree_forest_store_container:operation_options().
 
 -type browse_options() ::
+atm_audit_log_store_container:browse_options() |
     atm_list_store_container:browse_options() |
     atm_range_store_container:browse_options() |
     atm_single_value_store_container:browse_options() |
-    atm_tree_forest_store_container:browse_options() |
-    atm_audit_log_store_container:browse_options().
+    atm_tree_forest_store_container:browse_options().
 
 -type operation() :: #atm_store_container_operation{}.
 

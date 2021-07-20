@@ -40,6 +40,7 @@
 }.
 
 -record(atm_list_store_container, {
+%%    @TODO VFS-8068 Do not use atm_infinite_log_container
     atm_infinite_log_container :: atm_infinite_log_container:record()
 }).
 -type record() :: #atm_list_store_container{}.
@@ -57,7 +58,7 @@
 create(AtmWorkflowExecutionCtx, AtmDataSpec, InitialValueBatch) ->
     #atm_list_store_container{
         atm_infinite_log_container = atm_infinite_log_container:create(
-            AtmWorkflowExecutionCtx, AtmDataSpec, InitialValueBatch, fun(Item) -> Item end
+            AtmWorkflowExecutionCtx, AtmDataSpec, InitialValueBatch
         )
     }.
 
@@ -97,7 +98,7 @@ apply_operation(AtmListStoreContainer = #atm_list_store_container{
 }, AtmStoreContainerOperation) ->
     AtmListStoreContainer#atm_list_store_container{
         atm_infinite_log_container = atm_infinite_log_container:apply_operation(
-            AtmInfiniteLogContainer, AtmStoreContainerOperation, fun(Item) -> Item end
+            AtmInfiniteLogContainer, AtmStoreContainerOperation
         )
     }.
 

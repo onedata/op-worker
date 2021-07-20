@@ -22,13 +22,8 @@
 -export([get_ctx/0]).
 
 -type id() :: datastore_infinite_log:key().
--type entry() :: {
-        atm_store_api:index(), 
-        {ok, infinite_log:timestamp(), json_utils:json_term()} | {error, term()}
-    }.
--type listing_result() :: {boolean(), [entry()]}.
 
--export_type([id/0, entry/0, listing_result/0]).
+-export_type([id/0]).
 
 
 -define(CTX, #{model => ?MODULE}).
@@ -62,7 +57,7 @@ list(Id, Opts) ->
 
 
 -spec extract_listed_entry({infinite_log:entry_index(), infinite_log:entry()}) -> 
-    {atm_store_api:index(), atm_value:compressed(), time:millis()}.
+    {atm_store_api:index(), {atm_value:compressed(), time:millis()}}.
 extract_listed_entry({EntryIndex, {Timestamp, Value}}) ->
     CompressedValue = json_utils:decode(Value),
     {integer_to_binary(EntryIndex), CompressedValue, Timestamp}.

@@ -150,16 +150,16 @@ get_next_batch(
     BatchSize, 
     #atm_tree_forest_store_container_iterator{tree_listing_finished = true} = Record,
     ForestAcc,
-    DataSpec
+    AtmDataSpec
 ) ->
     #atm_tree_forest_store_container_iterator{
         callback_module = Module, 
         roots_iterator = ListIterator, 
         queue_ref = QueueRef
     } = Record,
-    case atm_list_store_container_iterator:get_next_batch(AtmWorkflowExecutionCtx, 1, ListIterator, DataSpec) of
+    case atm_list_store_container_iterator:get_next_batch(AtmWorkflowExecutionCtx, 1, ListIterator, AtmDataSpec) of
         {ok, [CurrentTreeRootExpanded], NextRootsIterator} ->
-            CurrentTreeRoot = atm_value:compress(CurrentTreeRootExpanded, DataSpec),
+            CurrentTreeRoot = atm_value:compress(CurrentTreeRootExpanded, AtmDataSpec),
             UpdatedRecord = Record#atm_tree_forest_store_container_iterator{
                 current_traversable_item = CurrentTreeRoot,
                 tree_listing_finished = false,
@@ -168,7 +168,7 @@ get_next_batch(
                 queue_ref = queue_report_new_tree(QueueRef)
             },
             get_next_batch(
-                AtmWorkflowExecutionCtx, BatchSize - 1, UpdatedRecord, [CurrentTreeRoot | ForestAcc], DataSpec);
+                AtmWorkflowExecutionCtx, BatchSize - 1, UpdatedRecord, [CurrentTreeRoot | ForestAcc], AtmDataSpec);
         {ok, [], NextRootsIterator} ->
             UpdatedRecord = Record#atm_tree_forest_store_container_iterator{
                 tree_listing_finished = true,
@@ -177,7 +177,7 @@ get_next_batch(
                 queue_ref = queue_report_new_tree(QueueRef)
             },
             get_next_batch(
-                AtmWorkflowExecutionCtx, BatchSize, UpdatedRecord, ForestAcc, DataSpec);
+                AtmWorkflowExecutionCtx, BatchSize, UpdatedRecord, ForestAcc, AtmDataSpec);
         stop ->
             case length(ForestAcc) of
                 0 -> stop;

@@ -32,12 +32,26 @@
 -export([version/0, db_encode/2, db_decode/2]).
 
 
--type initial_value() :: atm_infinite_log_container:initial_value().
--type operation_options() :: atm_infinite_log_container:operation_options().
--type browse_options() :: atm_infinite_log_container:browse_options().
+-type initial_value() :: [automation:item()] | undefined.
+%% Full 'operation_options' format can't be expressed directly in type spec due to
+%% dialyzer limitations in specifying individual binaries. Instead it is
+%% shown below:
+%%
+%% #{
+%%      <<"isBatch">> := boolean()
+%% }
+-type operation_options() :: #{binary() => boolean()}.
+
+-type browse_options() :: #{
+    limit := atm_store_api:limit(),
+    start_index => atm_store_api:index(),
+    start_timestamp => time:millis(),
+    offset => atm_store_api:offset()
+}.
 
 -record(atm_audit_log_store_container, {
-    atm_infinite_log_container :: atm_infinite_log_container:record()
+    data_spec :: atm_data_spec:record(),
+    backend_id :: atm_infinite_log_backend:id()
 }).
 -type record() :: #atm_audit_log_store_container{}.
 
@@ -48,6 +62,7 @@
     <<"error">>, <<"critical">>, <<"alert">>, <<"emergency">>
 ]).
 
+%% @TODO VFS-8068 Reuse duplicated code with atm_list_store_container and atm_infinite_log_container
 
 %%%===================================================================
 %%% atm_store_container callbacks
@@ -56,31 +71,35 @@
 
 -spec create(atm_workflow_execution_ctx:record(), atm_data_spec:record(), initial_value()) ->
     record() | no_return().
+create(_AtmWorkflowExecutionCtx, AtmDataSpec, undefined) ->
+    create_container(AtmDataSpec);
+
 create(AtmWorkflowExecutionCtx, AtmDataSpec, InitialValueBatch) ->
-    #atm_audit_log_store_container{
-        atm_infinite_log_container = atm_infinite_log_container:create(
-            AtmWorkflowExecutionCtx, AtmDataSpec, InitialValueBatch, fun prepare_audit_log_object/1
-        )
-    }.
+    validate_data_batch(AtmWorkflowExecutionCtx, AtmDataSpec, InitialValueBatch),
+    append_insecure(InitialValueBatch, create_container(AtmDataSpec)).
 
 
 -spec get_data_spec(record()) -> atm_data_spec:record().
-get_data_spec(#atm_audit_log_store_container{atm_infinite_log_container = AtmInfiniteLogContainer}) ->
-    atm_infinite_log_container:get_data_spec(AtmInfiniteLogContainer).
+get_data_spec(#atm_audit_log_store_container{data_spec = AtmDataSpec}) ->
+    AtmDataSpec.
+
 
 
 -spec browse_content(atm_workflow_execution_ctx:record(), browse_options(), record()) ->
     atm_store_api:browse_result() | no_return().
 browse_content(AtmWorkflowExecutionCtx, BrowseOpts, #atm_audit_log_store_container{
-    atm_infinite_log_container = AtmInfiniteLogContainer
+    backend_id = BackendId,
+    data_spec = AtmDataSpec
 }) ->
     SanitizedBrowseOpts = sanitize_browse_options(BrowseOpts),
-    {Entries, IsLast} = atm_infinite_log_container:browse_content(
-        SanitizedBrowseOpts, AtmInfiniteLogContainer),
+    {ok, {Marker, Entries}} = atm_infinite_log_backend:list(BackendId, #{
+        start_from => infer_start_from(SanitizedBrowseOpts),
+        offset => maps:get(offset, SanitizedBrowseOpts, 0),
+        limit => maps:get(limit, SanitizedBrowseOpts)
+    }),
     MappedEntries = lists:map(fun(ListedEntry) ->
         {Index, Compressed, Timestamp} =
             atm_infinite_log_backend:extract_listed_entry(ListedEntry),
-        AtmDataSpec = atm_infinite_log_container:get_data_spec(AtmInfiniteLogContainer),
         case atm_value:expand(AtmWorkflowExecutionCtx, Compressed, AtmDataSpec) of
             {ok, Object} ->
                 {Index, {ok, #{
@@ -92,30 +111,42 @@ browse_content(AtmWorkflowExecutionCtx, BrowseOpts, #atm_audit_log_store_contain
                 {Index, Error}
         end
     end, Entries),
-    {MappedEntries, IsLast}.
+    {MappedEntries, Marker =:= done}.
 
 
 -spec acquire_iterator(record()) -> atm_audit_log_store_container_iterator:record().
-acquire_iterator(#atm_audit_log_store_container{atm_infinite_log_container = AtmInfiniteLogContainer}) ->
-    AtmInfiniteLogContainerIterator = atm_infinite_log_container:acquire_iterator(AtmInfiniteLogContainer),
-    atm_audit_log_store_container_iterator:build(AtmInfiniteLogContainerIterator).
+acquire_iterator(#atm_audit_log_store_container{backend_id = BackendId}) ->
+    atm_audit_log_store_container_iterator:build(BackendId).
 
 
 -spec apply_operation(record(), atm_store_container:operation()) ->
     record() | no_return().
-apply_operation(AtmAuditLogStoreContainer = #atm_audit_log_store_container{
-    atm_infinite_log_container = AtmInfiniteLogContainer
-}, AtmStoreContainerOperation) ->
-    AtmAuditLogStoreContainer#atm_audit_log_store_container{
-        atm_infinite_log_container = atm_infinite_log_container:apply_operation(
-            AtmInfiniteLogContainer, AtmStoreContainerOperation, fun prepare_audit_log_object/1
-        )
-    }.
+apply_operation(#atm_audit_log_store_container{data_spec = AtmDataSpec} = Record, #atm_store_container_operation{
+    type = append,
+    options = #{<<"isBatch">> := true},
+    value = Batch,
+    workflow_execution_ctx = AtmWorkflowExecutionCtx
+}) ->
+    validate_data_batch(AtmWorkflowExecutionCtx, AtmDataSpec, Batch),
+    append_insecure(Batch, Record);
+
+apply_operation(#atm_audit_log_store_container{} = Record, Operation = #atm_store_container_operation{
+    type = append,
+    value = Item,
+    options = Options
+}) ->
+    apply_operation(Record, Operation#atm_store_container_operation{
+        options = Options#{<<"isBatch">> => true},
+        value = [Item]
+    });
+
+apply_operation(_Record, _Operation) ->
+    throw(?ERROR_NOT_SUPPORTED).
 
 
 -spec delete(record()) -> ok.
-delete(#atm_audit_log_store_container{atm_infinite_log_container = AtmInfiniteLogContainer}) ->
-    atm_infinite_log_container:delete(AtmInfiniteLogContainer).
+delete(#atm_audit_log_store_container{backend_id = BackendId}) ->
+    atm_infinite_log_backend:destroy(BackendId).
 
 
 %%%===================================================================
@@ -131,28 +162,91 @@ version() ->
 -spec db_encode(record(), persistent_record:nested_record_encoder()) ->
     json_utils:json_term().
 db_encode(#atm_audit_log_store_container{
-    atm_infinite_log_container = AtmInfiniteLogContainer
+    data_spec = AtmDataSpec,
+    backend_id = BackendId
 }, NestedRecordEncoder) ->
-        #{
-            <<"atmInfiniteLogContainer">> => NestedRecordEncoder(
-                AtmInfiniteLogContainer, atm_infinite_log_container
-            )
-        }.
+    #{
+        <<"dataSpec">> => NestedRecordEncoder(AtmDataSpec, atm_data_spec),
+        <<"backendId">> => BackendId
+    }.
 
 
 -spec db_decode(json_utils:json_term(), persistent_record:nested_record_decoder()) ->
     record().
-db_decode(#{<<"atmInfiniteLogContainer">> := AtmInfiniteLogContainerJson}, NestedRecordDecoder) ->
+db_decode(#{<<"dataSpec">> := AtmDataSpecJson, <<"backendId">> := BackendId}, NestedRecordDecoder) ->
     #atm_audit_log_store_container{
-        atm_infinite_log_container = NestedRecordDecoder(
-            AtmInfiniteLogContainerJson, atm_infinite_log_container
-        )
+        data_spec = NestedRecordDecoder(AtmDataSpecJson, atm_data_spec),
+        backend_id = BackendId
     }.
 
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%% @private
+-spec create_container(atm_data_spec:record()) -> record().
+create_container(AtmDataSpec) ->
+    {ok, Id} = atm_infinite_log_backend:create(#{}),
+    #atm_audit_log_store_container{
+        data_spec = AtmDataSpec,
+        backend_id = Id
+    }.
+
+
+%% @private
+-spec validate_data_batch(
+    atm_workflow_execution_ctx:record(),
+    atm_data_spec:record(),
+    [json_utils:json_term()]
+) ->
+    ok | no_return().
+validate_data_batch(AtmWorkflowExecutionCtx, AtmDataSpec, Batch) when is_list(Batch) ->
+    lists:foreach(fun
+        (#{<<"entry">> := Item, <<"severity">> := _}) ->
+            atm_value:validate(AtmWorkflowExecutionCtx, Item, AtmDataSpec);
+        (Item) ->
+            atm_value:validate(AtmWorkflowExecutionCtx, Item, AtmDataSpec)
+    end, Batch);
+validate_data_batch(_AtmWorkflowExecutionCtx, _AtmDataSpec, _Item) ->
+    throw(?ERROR_ATM_BAD_DATA(<<"value">>, <<"not a batch">>)).
+
+
+
+%% @private
+-spec append_insecure([automation:item()], record()) -> record().
+append_insecure(Batch, Record = #atm_audit_log_store_container{
+    data_spec = AtmDataSpec,
+    backend_id = BackendId
+}) ->
+    lists:foreach(fun
+        (#{<<"entry">> := Item} = Object) ->
+           ok = atm_infinite_log_backend:append(
+            BackendId, prepare_audit_log_object(Object#{
+                   <<"entry">> => atm_value:compress(Item, AtmDataSpec)
+               })); 
+        (Item) -> ok = atm_infinite_log_backend:append(
+            BackendId, prepare_audit_log_object(atm_value:compress(Item, AtmDataSpec)))
+    end, Batch),
+    Record.
+
+
+%% @private
+-spec infer_start_from(atm_store_api:browse_options()) ->
+    undefined | {index, infinite_log:entry_index()} | {timestamp, infinite_log:timestamp()}.
+infer_start_from(#{start_index := <<>>}) ->
+    undefined;
+infer_start_from(#{start_index := StartIndexBin}) ->
+    try
+        {index, binary_to_integer(StartIndexBin)}
+    catch _:_ ->
+        throw(?ERROR_ATM_BAD_DATA(<<"index">>, <<"not numerical">>))
+    end;
+infer_start_from(#{start_timestamp := StartTimestamp}) ->
+    {timestamp, StartTimestamp};
+infer_start_from(_) ->
+    undefined.
+
 
 %% @private
 -spec sanitize_browse_options(browse_options()) -> browse_options().

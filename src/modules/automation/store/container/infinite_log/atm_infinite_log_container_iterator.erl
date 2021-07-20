@@ -10,6 +10,7 @@
 %%% `atm_infinite_log_container`.
 %%% @end
 %%%-------------------------------------------------------------------
+%% @TODO VFS-8068 Get rid of this module
 -module(atm_infinite_log_container_iterator).
 -author("Michal Stanisz").
 -author("Lukasz Opiola").

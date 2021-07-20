@@ -10,6 +10,7 @@
 %%% backend for stores based on infinite_log.
 %%% @end
 %%%-------------------------------------------------------------------
+%% @TODO VFS-8068 Get rid of this module
 -module(atm_infinite_log_container).
 -author("Michal Stanisz").
 -author("Lukasz Opiola").
@@ -21,9 +22,9 @@
 
 %% API
 -export([
-    create/4,
+    create/3,
     get_data_spec/1, browse_content/2, acquire_iterator/1,
-    apply_operation/3,
+    apply_operation/2,
     delete/1
 ]).
 
@@ -57,9 +58,7 @@
 }).
 -type record() :: #atm_infinite_log_container{}.
 
--type item_sanitizer() :: fun((automation:item()) -> json_utils:json_term()).
-
--export_type([initial_value/0, operation_options/0, browse_options/0, backend_id/0, record/0, item_sanitizer/0]).
+-export_type([initial_value/0, operation_options/0, browse_options/0, backend_id/0, record/0]).
 
 
 %%%===================================================================
@@ -67,14 +66,14 @@
 %%%===================================================================
 
 
--spec create(atm_workflow_execution_ctx:record(), atm_data_spec:record(), initial_value(), item_sanitizer()) ->
+-spec create(atm_workflow_execution_ctx:record(), atm_data_spec:record(), initial_value()) ->
     record() | no_return().
-create(_AtmWorkflowExecutionCtx, AtmDataSpec, undefined, _ItemMapper) ->
+create(_AtmWorkflowExecutionCtx, AtmDataSpec, undefined) ->
     create_container(AtmDataSpec);
 
-create(AtmWorkflowExecutionCtx, AtmDataSpec, InitialValueBatch, ItemMapper) ->
+create(AtmWorkflowExecutionCtx, AtmDataSpec, InitialValueBatch) ->
     validate_data_batch(AtmWorkflowExecutionCtx, AtmDataSpec, InitialValueBatch),
-    append_insecure(InitialValueBatch, create_container(AtmDataSpec), ItemMapper).
+    append_insecure(InitialValueBatch, create_container(AtmDataSpec)).
 
 
 -spec get_data_spec(record()) -> atm_data_spec:record().
@@ -83,7 +82,7 @@ get_data_spec(#atm_infinite_log_container{data_spec = AtmDataSpec}) ->
 
 
 -spec browse_content(browse_options(), record()) ->
-    {[atm_infinite_log_backend:entry()], boolean()} | no_return().
+    {[{atm_store_api:index(), {atm_value:compressed(), time:millis()}}], boolean()} | no_return().
 browse_content(BrowseOpts, #atm_infinite_log_container{
     backend_id = BackendId
 }) ->
@@ -100,28 +99,28 @@ acquire_iterator(#atm_infinite_log_container{backend_id = BackendId}) ->
     atm_infinite_log_container_iterator:build(BackendId).
 
 
--spec apply_operation(record(), atm_store_container:operation(), item_sanitizer()) ->
+-spec apply_operation(record(), atm_store_container:operation()) ->
     record() | no_return().
 apply_operation(#atm_infinite_log_container{data_spec = AtmDataSpec} = Record, #atm_store_container_operation{
     type = append,
     options = #{<<"isBatch">> := true},
     value = Batch,
     workflow_execution_ctx = AtmWorkflowExecutionCtx
-}, ItemMapper) ->
+}) ->
     validate_data_batch(AtmWorkflowExecutionCtx, AtmDataSpec, Batch),
-    append_insecure(Batch, Record, ItemMapper);
+    append_insecure(Batch, Record);
 
 apply_operation(#atm_infinite_log_container{} = Record, Operation = #atm_store_container_operation{
     type = append,
     value = Item,
     options = Options
-}, ItemMapper) ->
+}) ->
     apply_operation(Record, Operation#atm_store_container_operation{
         options = Options#{<<"isBatch">> => true},
         value = [Item]
-    }, ItemMapper);
+    });
 
-apply_operation(_Record, _Operation, _ItemMapper) ->
+apply_operation(_Record, _Operation) ->
     throw(?ERROR_NOT_SUPPORTED).
 
 
@@ -192,14 +191,14 @@ validate_data_batch(_AtmWorkflowExecutionCtx, _AtmDataSpec, _Item) ->
 
 
 %% @private
--spec append_insecure([automation:item()], record(), item_sanitizer()) -> record().
+-spec append_insecure([automation:item()], record()) -> record().
 append_insecure(Batch, Record = #atm_infinite_log_container{
     data_spec = AtmDataSpec,
     backend_id = BackendId
-}, ItemMapper) ->
+}) ->
     lists:foreach(fun(Item) ->
         ok = atm_infinite_log_backend:append(
-            BackendId, ItemMapper(atm_value:compress(Item, AtmDataSpec)))
+            BackendId, atm_value:compress(Item, AtmDataSpec))
     end, Batch),
     Record.
 
