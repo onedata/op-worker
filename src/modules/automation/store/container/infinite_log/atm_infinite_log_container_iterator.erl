@@ -20,7 +20,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([build/1, get_next_batch/5, forget_before/1, mark_exhausted/1]).
+-export([build/1, get_next_batch/3, forget_before/1, mark_exhausted/1]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
@@ -32,7 +32,8 @@
 }).
 -type record() :: #atm_infinite_log_container_iterator{}.
 
--type result_mapper() :: fun((infinite_log:timestamp(), json_utils:json_term()) -> automation:item()).
+-type result_mapper() :: fun((infinite_log:timestamp(), atm_value:compressed()) -> 
+    {true, automation:item()} | false).
 
 -export_type([record/0]).
 
@@ -47,27 +48,24 @@ build(BackendId) ->
     #atm_infinite_log_container_iterator{backend_id = BackendId}.
 
 
--spec get_next_batch(atm_workflow_execution_ctx:record(), atm_store_container_iterator:batch_size(), 
-    record(), atm_data_spec:record(), result_mapper()
-) ->
+-spec get_next_batch(atm_store_container_iterator:batch_size(), record(), result_mapper()) ->
     {ok, [atm_value:expanded()], record()} | stop.
-get_next_batch(AtmWorkflowExecutionCtx, BatchSize, #atm_infinite_log_container_iterator{} = Record, AtmDataSpec, ResultMapper) ->
+get_next_batch(BatchSize, #atm_infinite_log_container_iterator{} = Record, ResultMapper) ->
     #atm_infinite_log_container_iterator{backend_id = BackendId, index = StartIndex} = Record,
-    {ok, {IsLast, EntrySeries}} = atm_infinite_log_backend:list(
-        AtmWorkflowExecutionCtx, BackendId, #{start_from => {index, StartIndex}, limit => BatchSize}, AtmDataSpec),
-    FilteredEntries = lists:filtermap(fun
-        ({_Index, {ok, Timestamp, Item}}) ->
-            {true, ResultMapper(Timestamp, Item)};
-        ({_Index, _Error}) ->
-            false
+    {ok, {Marker, EntrySeries}} = atm_infinite_log_backend:list(
+        BackendId, #{start_from => {index, StartIndex}, limit => BatchSize}),
+    FilteredEntries = lists:filtermap(fun(ListedEntry) ->
+        {_Index, Compressed, Timestamp} =
+            atm_infinite_log_backend:extract_listed_entry(ListedEntry),
+        ResultMapper(Timestamp, Compressed)
     end, EntrySeries),
-    case {EntrySeries, IsLast} of
-        {[], true} -> 
+    case {EntrySeries, Marker} of
+        {[], done} -> 
             stop;
         _ ->
             {LastIndex, _} = lists:last(EntrySeries),
             {ok, FilteredEntries, Record#atm_infinite_log_container_iterator{
-                index = binary_to_integer(LastIndex) + 1}
+                index = LastIndex + 1}
             }
     end.
 

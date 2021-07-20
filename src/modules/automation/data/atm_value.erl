@@ -64,7 +64,7 @@ expand(AtmWorkflowExecutionCtx, Value, AtmDataSpec) ->
 
 
 -spec filterexpand_list(atm_workflow_execution_ctx:record(), [compressed()] | compressed(), atm_data_spec:record()) ->
-    {ok, [expanded()]} | {error, term()}.
+    [expanded()].
 filterexpand_list(AtmWorkflowExecutionCtx, CompressedItems, AtmDataSpec) ->
     lists:filtermap(fun(CompressedItem) ->
         case atm_value:expand(AtmWorkflowExecutionCtx, CompressedItem, AtmDataSpec) of

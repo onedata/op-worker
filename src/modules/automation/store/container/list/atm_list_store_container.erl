@@ -67,19 +67,19 @@ get_data_spec(#atm_list_store_container{atm_infinite_log_container = AtmInfinite
     atm_infinite_log_container:get_data_spec(AtmInfiniteLogContainer).
 
 
--spec browse_content(atm_workflow_execution_ctx:record(), atm_store_api:browse_options(), record()) ->
+-spec browse_content(atm_workflow_execution_ctx:record(), browse_options(), record()) ->
     atm_store_api:browse_result() | no_return().
 browse_content(AtmWorkflowExecutionCtx, BrowseOpts, #atm_list_store_container{
     atm_infinite_log_container = AtmInfiniteLogContainer
 }) ->
     SanitizedBrowseOpts = sanitize_browse_options(BrowseOpts),
     {Entries, IsLast} = atm_infinite_log_container:browse_content(
-        AtmWorkflowExecutionCtx, SanitizedBrowseOpts, AtmInfiniteLogContainer),
-    MappedEntries = lists:map(fun
-        ({Index, {ok, _Timestamp, Entry}}) ->
-            {Index, {ok, Entry}};
-        ({Index, Error}) ->
-            {Index, Error}
+        SanitizedBrowseOpts, AtmInfiniteLogContainer),
+    MappedEntries = lists:map(fun(ListedEntry) ->
+        {Index, Compressed, _Timestamp} = 
+            atm_infinite_log_backend:extract_listed_entry(ListedEntry),
+        AtmDataSpec = atm_infinite_log_container:get_data_spec(AtmInfiniteLogContainer),
+        {Index, atm_value:expand(AtmWorkflowExecutionCtx, Compressed, AtmDataSpec)}
     end, Entries),
     {MappedEntries, IsLast}.
 
@@ -144,7 +144,7 @@ db_decode(#{<<"atmInfiniteLogContainer">> := AtmInfiniteLogContainerJson}, Neste
 %%%===================================================================
 
 %% @private
--spec sanitize_browse_options(atm_store_container:browse_options()) -> browse_options().
+-spec sanitize_browse_options(browse_options()) -> browse_options().
 sanitize_browse_options(BrowseOpts) ->
     maps:without([start_timestamp], middleware_sanitizer:sanitize_data(BrowseOpts, #{
         required => #{

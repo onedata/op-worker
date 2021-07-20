@@ -34,12 +34,7 @@
 
 -type initial_value() :: atm_infinite_log_container:initial_value().
 -type operation_options() :: atm_infinite_log_container:operation_options().
--type browse_options() :: #{
-    limit := atm_store_api:limit(),
-    start_index => atm_store_api:index(),
-    start_timestamp => time:millis(),
-    offset => atm_store_api:offset()
-}.
+-type browse_options() :: atm_infinite_log_container:browse_options().
 
 -record(atm_audit_log_store_container, {
     atm_infinite_log_container :: atm_infinite_log_container:record()
@@ -74,23 +69,28 @@ get_data_spec(#atm_audit_log_store_container{atm_infinite_log_container = AtmInf
     atm_infinite_log_container:get_data_spec(AtmInfiniteLogContainer).
 
 
--spec browse_content(atm_workflow_execution_ctx:record(), atm_store_api:browse_opts(), record()) ->
+-spec browse_content(atm_workflow_execution_ctx:record(), browse_options(), record()) ->
     atm_store_api:browse_result() | no_return().
 browse_content(AtmWorkflowExecutionCtx, BrowseOpts, #atm_audit_log_store_container{
     atm_infinite_log_container = AtmInfiniteLogContainer
 }) ->
     SanitizedBrowseOpts = sanitize_browse_options(BrowseOpts),
     {Entries, IsLast} = atm_infinite_log_container:browse_content(
-        AtmWorkflowExecutionCtx, SanitizedBrowseOpts, AtmInfiniteLogContainer),
-    MappedEntries = lists:map(fun
-        ({Index, {ok, Timestamp, Object}}) ->
-            {Index, {ok, #{
-                <<"timestamp">> => Timestamp, 
-                <<"entry">> => maps:get(<<"entry">>, Object), 
-                <<"severity">> => maps:get(<<"severity">>, Object)}
-            }};
-        ({Index, {error, _} = Error}) ->
-            {Index, Error}
+        SanitizedBrowseOpts, AtmInfiniteLogContainer),
+    MappedEntries = lists:map(fun(ListedEntry) ->
+        {Index, Compressed, Timestamp} =
+            atm_infinite_log_backend:extract_listed_entry(ListedEntry),
+        AtmDataSpec = atm_infinite_log_container:get_data_spec(AtmInfiniteLogContainer),
+        case atm_value:expand(AtmWorkflowExecutionCtx, Compressed, AtmDataSpec) of
+            {ok, Object} ->
+                {Index, {ok, #{
+                    <<"timestamp">> => Timestamp, 
+                    <<"entry">> => maps:get(<<"entry">>, Object), 
+                    <<"severity">> => maps:get(<<"severity">>, Object)}
+                }};
+            {error, _} = Error ->
+                {Index, Error}
+        end
     end, Entries),
     {MappedEntries, IsLast}.
 
@@ -155,7 +155,7 @@ db_decode(#{<<"atmInfiniteLogContainer">> := AtmInfiniteLogContainerJson}, Neste
 %%%===================================================================
 
 %% @private
--spec sanitize_browse_options(atm_store_container:browse_options()) -> browse_options().
+-spec sanitize_browse_options(browse_options()) -> browse_options().
 sanitize_browse_options(BrowseOpts) ->
     middleware_sanitizer:sanitize_data(BrowseOpts, #{
         required => #{
@@ -164,7 +164,7 @@ sanitize_browse_options(BrowseOpts) ->
         at_least_one => #{
             offset => {integer, any},
             start_index => {binary, any},
-            start_timestamp => {integer, any}
+            start_timestamp => {integer, {not_lower_than, 0}}
         }
     }).
 
@@ -183,7 +183,7 @@ prepare_audit_log_object(#{<<"entry">> := Entry}) ->
     };
 prepare_audit_log_object(#{<<"severity">> := Severity} = Object) ->
     #{
-        <<"entry">> => maps:without(<<"severity">>, Object), 
+        <<"entry">> => maps:without([<<"severity">>], Object), 
         <<"severity">> => normalize_severity(Severity)
     };
 prepare_audit_log_object(Entry) ->

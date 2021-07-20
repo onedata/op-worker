@@ -69,6 +69,8 @@
 
 -type browse_options() ::
     atm_list_store_container:browse_options() |
+    atm_range_store_container:browse_options() |
+    atm_single_value_store_container:browse_options() |
     atm_tree_forest_store_container:browse_options() |
     atm_audit_log_store_container:browse_options().
 
@@ -88,7 +90,7 @@
 
 -callback get_data_spec(record()) -> atm_data_spec:record().
 
--callback browse_content(atm_workflow_execution_ctx:record(), atm_store_api:browse_opts(), record()) ->
+-callback browse_content(atm_workflow_execution_ctx:record(), atm_store_api:browse_options(), record()) ->
     atm_store_api:browse_result() | no_return().
 
 -callback acquire_iterator(record()) -> atm_store_container_iterator:record().
@@ -127,7 +129,7 @@ get_data_spec(AtmStoreContainer) ->
     RecordType:get_data_spec(AtmStoreContainer).
 
 
--spec browse_content(atm_workflow_execution_ctx:record(), atm_store_api:browse_opts(), record()) ->
+-spec browse_content(atm_workflow_execution_ctx:record(), atm_store_api:browse_options(), record()) ->
     atm_store_api:browse_result() | no_return().
 browse_content(AtmWorkflowExecutionCtx, BrowseOpts, AtmStoreContainer) ->
     RecordType = utils:record_type(AtmStoreContainer),

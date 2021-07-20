@@ -16,7 +16,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([create/1, append/3, destroy/1, list/4]).
+-export([create/1, append/2, destroy/1, list/2, extract_listed_entry/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0]).
@@ -45,10 +45,9 @@ create(Opts) ->
     {ok, Id}.
 
 
--spec append(id(), infinite_log:content(), atm_data_spec:record()) -> ok.
-append(Id, Item, AtmDataSpec) ->
-    CompressedItem = atm_value:compress(Item, AtmDataSpec),
-    datastore_infinite_log:append(?CTX, Id, json_utils:encode(CompressedItem)).
+-spec append(id(), atm_value:compressed()) -> ok.
+append(Id, Item) ->
+    datastore_infinite_log:append(?CTX, Id, json_utils:encode(Item)).
 
 
 -spec destroy(id()) -> ok | {error, term()}.
@@ -56,44 +55,23 @@ destroy(Id) ->
     datastore_infinite_log:destroy(?CTX, Id).
 
 
--spec list(atm_workflow_execution_ctx:record(), id(), infinite_log_browser:listing_opts(), 
-    atm_data_spec:record()) -> {ok, listing_result()} | {error, term()}. 
-list(AtmWorkflowExecutionCtx, Id, Opts, AtmDataSpec) ->
-    case datastore_infinite_log:list(?CTX, Id, Opts) of
-        {ok, {Marker, Entries}} ->
-            {ok, {Marker =:= done, expand_entries(AtmWorkflowExecutionCtx, Entries, AtmDataSpec)}};
-        {error, _} = Error ->
-            Error
-    end.
+-spec list(id(), infinite_log_browser:listing_opts()) ->
+    {ok, infinite_log_browser:listing_result()} | {error, term()}.
+list(Id, Opts) ->
+    datastore_infinite_log:list(?CTX, Id, Opts).
+
+
+-spec extract_listed_entry({infinite_log:entry_index(), infinite_log:entry()}) -> 
+    {atm_store_api:index(), atm_value:compressed(), time:millis()}.
+extract_listed_entry({EntryIndex, {Timestamp, Value}}) ->
+    CompressedValue = json_utils:decode(Value),
+    {integer_to_binary(EntryIndex), CompressedValue, Timestamp}.
+    
 
 %%%===================================================================
 %%% datastore_model callbacks
 %%%===================================================================
 
-
 -spec get_ctx() -> datastore:ctx().
 get_ctx() ->
     ?CTX.
-
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
--spec expand_entries(
-    atm_workflow_execution_ctx:record(), 
-    [{infinite_log:entry_index(), infinite_log:entry()}], 
-    atm_data_spec:record()
-) -> 
-    [entry()].
-expand_entries(AtmWorkflowExecutionCtx, Entries, AtmDataSpec) ->
-    lists:map(fun({EntryIndex, {Timestamp, Value}}) ->
-        CompressedValue = json_utils:decode(Value),
-        Item = case atm_value:expand(AtmWorkflowExecutionCtx, CompressedValue, AtmDataSpec) of
-            {ok, Res} -> 
-                {ok, Timestamp, Res};
-            {error, _} -> 
-                ?ERROR_FORBIDDEN
-        end,
-        {integer_to_binary(EntryIndex), Item}
-    end, Entries).

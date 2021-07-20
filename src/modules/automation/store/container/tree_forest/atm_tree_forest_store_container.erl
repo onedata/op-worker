@@ -31,11 +31,7 @@
 -export([version/0, db_encode/2, db_decode/2]).
 
 -type operation_options() :: #{binary() => boolean()}.
--type browse_options() :: #{
-    limit := atm_store_api:limit(),
-    start_index => atm_store_api:index(),
-    offset => atm_store_api:offset()
-}.
+-type browse_options() :: atm_list_store_container:browse_options().
 -type initial_value() :: [automation:item()] | undefined.
 
 -record(atm_tree_forest_store_container, {
@@ -64,7 +60,7 @@ get_data_spec(#atm_tree_forest_store_container{roots_list = RootsList}) ->
     atm_list_store_container:get_data_spec(RootsList).
 
 
--spec browse_content(atm_workflow_execution_ctx:record(), atm_store_api:browse_opts(), record()) ->
+-spec browse_content(atm_workflow_execution_ctx:record(), browse_options(), record()) ->
     atm_store_api:browse_result() | no_return().
 browse_content(AtmWorkflowExecutionCtx, BrowseOpts, #atm_tree_forest_store_container{
     roots_list = RootsList

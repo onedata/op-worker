@@ -103,7 +103,7 @@ get(ProviderSelector, AtmStoreId) ->
 -spec browse_content(
     oct_background:entity_selector(),
     atm_workflow_execution_ctx:record(),
-    atm_store_api:browse_opts(),
+    atm_store_api:browse_options(),
     atm_store:record()
 ) ->
     atm_store_api:browse_result() | {error, term()}.

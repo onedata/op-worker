@@ -33,11 +33,11 @@
 -type offset() :: integer().
 -type limit() :: pos_integer().
 
--type browse_opts() :: atm_store_container:browse_options().
+-type browse_options() :: atm_store_container:browse_options().
 -type browse_result() :: {[{index(), {ok, automation:item()} | errors:error()}], IsLast :: boolean()}.
 
 -export_type([initial_value/0]).
--export_type([index/0, offset/0, limit/0, browse_opts/0, browse_result/0]).
+-export_type([index/0, offset/0, limit/0, browse_options/0, browse_result/0]).
 
 
 %%%===================================================================
@@ -118,7 +118,7 @@ get(AtmStoreId) ->
 %%-------------------------------------------------------------------
 -spec browse_content(
     atm_workflow_execution_ctx:record(),
-    browse_opts(),
+    browse_options(),
     atm_store:id() | atm_store:record()
 ) ->
     browse_result() | no_return().

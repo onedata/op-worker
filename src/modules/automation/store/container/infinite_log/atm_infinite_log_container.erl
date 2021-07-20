@@ -22,7 +22,7 @@
 %% API
 -export([
     create/4,
-    get_data_spec/1, browse_content/3, acquire_iterator/1,
+    get_data_spec/1, browse_content/2, acquire_iterator/1,
     apply_operation/3,
     delete/1
 ]).
@@ -41,6 +41,13 @@
 %% }
 -type operation_options() :: #{binary() => boolean()}.
 
+-type browse_options() :: #{
+    limit := atm_store_api:limit(),
+    start_index => atm_store_api:index(),
+    start_timestamp => time:millis(),
+    offset => atm_store_api:offset()
+}.
+
 % id of underlying persistent record implemented by `atm_infinite_log_backend`
 -type backend_id() :: binary().
 
@@ -50,9 +57,9 @@
 }).
 -type record() :: #atm_infinite_log_container{}.
 
--type item_mapper() :: fun((automation:item()) -> json_utils:json_term()).
+-type item_sanitizer() :: fun((automation:item()) -> json_utils:json_term()).
 
--export_type([initial_value/0, operation_options/0, backend_id/0, record/0]).
+-export_type([initial_value/0, operation_options/0, browse_options/0, backend_id/0, record/0, item_sanitizer/0]).
 
 
 %%%===================================================================
@@ -60,7 +67,7 @@
 %%%===================================================================
 
 
--spec create(atm_workflow_execution_ctx:record(), atm_data_spec:record(), initial_value(), item_mapper()) ->
+-spec create(atm_workflow_execution_ctx:record(), atm_data_spec:record(), initial_value(), item_sanitizer()) ->
     record() | no_return().
 create(_AtmWorkflowExecutionCtx, AtmDataSpec, undefined, _ItemMapper) ->
     create_container(AtmDataSpec);
@@ -75,18 +82,17 @@ get_data_spec(#atm_infinite_log_container{data_spec = AtmDataSpec}) ->
     AtmDataSpec.
 
 
--spec browse_content(atm_workflow_execution_ctx:record(), atm_store_api:browse_opts(), record()) ->
+-spec browse_content(browse_options(), record()) ->
     {[atm_infinite_log_backend:entry()], boolean()} | no_return().
-browse_content(AtmWorkflowExecutionCtx, BrowseOpts, #atm_infinite_log_container{
-    data_spec = AtmDataSpec,
+browse_content(BrowseOpts, #atm_infinite_log_container{
     backend_id = BackendId
 }) ->
-    {ok, {IsLast, Entries}} = atm_infinite_log_backend:list(AtmWorkflowExecutionCtx, BackendId, #{
+    {ok, {Marker, Entries}} = atm_infinite_log_backend:list(BackendId, #{
         start_from => infer_start_from(BrowseOpts),
         offset => maps:get(offset, BrowseOpts, 0),
         limit => maps:get(limit, BrowseOpts)
-    }, AtmDataSpec),
-    {Entries, IsLast}.
+    }),
+    {Entries, Marker =:= done}.
 
 
 -spec acquire_iterator(record()) -> atm_infinite_log_container_iterator:record().
@@ -94,7 +100,7 @@ acquire_iterator(#atm_infinite_log_container{backend_id = BackendId}) ->
     atm_infinite_log_container_iterator:build(BackendId).
 
 
--spec apply_operation(record(), atm_store_container:operation(), item_mapper()) ->
+-spec apply_operation(record(), atm_store_container:operation(), item_sanitizer()) ->
     record() | no_return().
 apply_operation(#atm_infinite_log_container{data_spec = AtmDataSpec} = Record, #atm_store_container_operation{
     type = append,
@@ -186,20 +192,21 @@ validate_data_batch(_AtmWorkflowExecutionCtx, _AtmDataSpec, _Item) ->
 
 
 %% @private
--spec append_insecure([automation:item()], record(), item_mapper()) -> record().
+-spec append_insecure([automation:item()], record(), item_sanitizer()) -> record().
 append_insecure(Batch, Record = #atm_infinite_log_container{
     data_spec = AtmDataSpec,
     backend_id = BackendId
 }, ItemMapper) ->
     lists:foreach(fun(Item) ->
-        ok = atm_infinite_log_backend:append(BackendId, ItemMapper(Item), AtmDataSpec)
+        ok = atm_infinite_log_backend:append(
+            BackendId, ItemMapper(atm_value:compress(Item, AtmDataSpec)))
     end, Batch),
     Record.
 
 
 %% @private
--spec infer_start_from(atm_store_api:browse_opts()) ->
-    infinite_log_browser:start_from().
+-spec infer_start_from(atm_store_api:browse_options()) ->
+    undefined | {index, infinite_log:entry_index()} | {timestamp, infinite_log:timestamp()}.
 infer_start_from(#{start_index := <<>>}) ->
     undefined;
 infer_start_from(#{start_index := StartIndexBin}) ->
