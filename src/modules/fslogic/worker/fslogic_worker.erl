@@ -911,10 +911,10 @@ terminate_stale_atm_workflow_executions() ->
             schedule_stale_atm_workflow_executions_termination();
         Error = {error, _} ->
             ?error("Unable to terminate stale atm workflow executions due to: ~p", [Error])
-    catch Error2:Reason:Stacktrace ->
+    catch Class:Reason:Stacktrace ->
         ?error_stacktrace(
             "Unable to terminate stale atm workflow executions due to: ~p",
-            [{Error2, Reason}],
+            [{Class, Reason}],
             Stacktrace
         )
     end.

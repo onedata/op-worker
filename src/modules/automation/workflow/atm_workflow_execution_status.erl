@@ -69,33 +69,30 @@ handle_cancel(AtmWorkflowExecutionId) ->
 -spec handle_ended(atm_workflow_execution:id()) ->
     {ok, atm_workflow_execution:doc()} | no_return().
 handle_ended(AtmWorkflowExecutionId) ->
-    Diff = fun
-        (AtmWorkflowExecution = #atm_workflow_execution{status = WaitingStatus}) when
-            WaitingStatus == ?PREPARING_STATUS;
-            WaitingStatus == ?PREPARING_STATUS;
-            WaitingStatus == ?ENQUEUED_STATUS
-        ->
-            % Workflow preparation must have failed or provider was restarted
-            % as otherwise it is not possible to transition from waiting phase
-            % to ended phase directly
-            {ok, set_times_on_phase_transition(AtmWorkflowExecution#atm_workflow_execution{
-                status = ?FAILED_STATUS
-            })};
-        (AtmWorkflowExecution= #atm_workflow_execution{status = ?ABORTING_STATUS}) ->
-            {ok, set_times_on_phase_transition(AtmWorkflowExecution#atm_workflow_execution{
-                status = ?CANCELLED_STATUS
-            })};
-        (AtmWorkflowExecution = #atm_workflow_execution{status = ?ACTIVE_STATUS}) ->
-            AtmLaneExecutionStatuses = atm_lane_execution:gather_statuses(
-                AtmWorkflowExecution#atm_workflow_execution.lanes
-            ),
-            NewAtmWorkflowExecution = AtmWorkflowExecution#atm_workflow_execution{
-                status = case lists:usort(AtmLaneExecutionStatuses) of
+    Diff = fun(#atm_workflow_execution{status = CurrStatus} = AtmWorkflowExecution) ->
+        EndedStatus = case status_to_phase(CurrStatus) of
+            ?WAITING_PHASE ->
+                % Workflow preparation must have failed or provider was restarted
+                % as otherwise it is not possible to transition from waiting phase
+                % to ended phase directly
+                ?FAILED_STATUS;
+            ?ONGOING_PHASE when CurrStatus == ?ABORTING_STATUS ->
+                ?CANCELLED_STATUS;
+            ?ONGOING_PHASE when CurrStatus == ?ACTIVE_STATUS ->
+                AtmLaneExecutionStatuses = atm_lane_execution:gather_statuses(
+                    AtmWorkflowExecution#atm_workflow_execution.lanes
+                ),
+                case lists:usort(AtmLaneExecutionStatuses) of
                     [?FINISHED_STATUS] -> ?FINISHED_STATUS;
                     _ -> ?FAILED_STATUS
-                end
-            },
-            {ok, set_times_on_phase_transition(NewAtmWorkflowExecution)}
+                end;
+            ?ENDED_PHASE ->
+                CurrStatus
+        end,
+
+        {ok, set_times_on_phase_transition(AtmWorkflowExecution#atm_workflow_execution{
+            status = EndedStatus
+        })}
     end,
 
     Result = {ok, AtmWorkflowExecutionDoc} = atm_workflow_execution:update(
