@@ -212,7 +212,7 @@ add_storage(StorageId) ->
     AdminCtx = helper:get_admin_ctx(Helper),
     {ok, HelperArgs} = helper:get_args_with_user_ctx(Helper, AdminCtx),
     HelperName = helper:get_name(Helper),
-    {NodesAns, BadNodes} = rpc:multicall(consistent_hashing:get_all_nodes(),
+    {NodesAns, BadNodes} = utils:rpc_multicall(consistent_hashing:get_all_nodes(),
                                   rtransfer_link, add_storage,
                                   [StorageId, HelperName, maps:to_list(HelperArgs)]),
 
@@ -245,7 +245,7 @@ add_storages() ->
 -spec generate_secret(ProviderId :: binary(), PeerSecret :: binary()) -> binary().
 generate_secret(ProviderId, PeerSecret) ->
     MySecret = do_generate_secret(),
-    {_, BadNodes} = rpc:multicall(consistent_hashing:get_all_nodes(),
+    {_, BadNodes} = utils:rpc_multicall(consistent_hashing:get_all_nodes(),
                                   rtransfer_link, allow_connection,
                                   [ProviderId, MySecret, PeerSecret, 60000]),
     BadNodes =/= [] andalso

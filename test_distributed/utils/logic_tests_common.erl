@@ -106,7 +106,7 @@ mock_gs_client(Config) ->
     ok = test_utils:mock_expect(Nodes, rtransfer_config, add_storages, fun() -> ok end),
 
     % Fetch dummy provider so it is cached and does not generate Graph Sync requests.
-    rpc:multicall(Nodes, provider_logic, get, []).
+    utils:rpc_multicall(Nodes, provider_logic, get, []).
 
 
 unmock_gs_client(Config) ->

@@ -262,7 +262,7 @@ unmock_provider_identity_verification(Node) ->
 %% @private
 -spec mock_handshake_to_succeed_after_n_retries([node()], infinity | non_neg_integer()) -> ok.
 mock_handshake_to_succeed_after_n_retries(Nodes, MaxFailedAttempts) ->
-    {_, []} = rpc:multicall(Nodes, application, set_env, [
+    {_, []} = utils:rpc_multicall(Nodes, application, set_env, [
         ?APP_NAME, test_handshake_failed_attempts, MaxFailedAttempts
     ]),
 

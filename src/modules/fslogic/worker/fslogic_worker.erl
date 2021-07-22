@@ -175,7 +175,7 @@ supervisor_children_spec() ->
 -spec init_paths_caches(od_space:id() | all) -> ok.
 init_paths_caches(Space) ->
     Nodes = consistent_hashing:get_all_nodes(),
-    rpc:multicall(Nodes, ?MODULE, schedule_init_paths_caches, [Space]),
+    utils:rpc_multicall(Nodes, ?MODULE, schedule_init_paths_caches, [Space]),
     ok.
 
 

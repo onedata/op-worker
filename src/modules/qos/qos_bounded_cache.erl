@@ -76,7 +76,7 @@ ensure_exists_for_all_spaces() ->
 -spec ensure_exists_on_all_nodes(od_space:id()) -> ok.
 ensure_exists_on_all_nodes(SpaceId) ->
     Nodes = consistent_hashing:get_all_nodes(),
-    {Res, BadNodes} = rpc:multicall(Nodes, ?MODULE, ensure_exists, [SpaceId]),
+    {Res, BadNodes} = utils:rpc_multicall(Nodes, ?MODULE, ensure_exists, [SpaceId]),
 
     case BadNodes of
         [] ->
@@ -160,7 +160,7 @@ init_qos_cache_for_space(SpaceId) ->
 -spec invalidate_on_all_nodes(od_space:id()) -> ok.
 invalidate_on_all_nodes(SpaceId) ->
     Nodes = consistent_hashing:get_all_nodes(),
-    {Res, BadNodes} = rpc:multicall(Nodes, effective_value, invalidate, [?CACHE_TABLE_NAME(SpaceId)]),
+    {Res, BadNodes} = utils:rpc_multicall(Nodes, effective_value, invalidate, [?CACHE_TABLE_NAME(SpaceId)]),
 
     case BadNodes of
         [] ->
