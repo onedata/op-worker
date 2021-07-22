@@ -202,13 +202,10 @@ create_container(AtmDataSpec) ->
 ) ->
     ok | no_return().
 sanitize_data_batch(AtmWorkflowExecutionCtx, AtmDataSpec, Batch) when is_list(Batch) ->
-    lists:map(fun
-        (#{<<"entry">> := Item} = Object) ->
-            atm_value:validate(AtmWorkflowExecutionCtx, Item, AtmDataSpec),
-            prepare_audit_log_object(Object);
-        (Item) ->
-            atm_value:validate(AtmWorkflowExecutionCtx, Item, AtmDataSpec),
-            prepare_audit_log_object(Item)
+    lists:map(fun(Item) ->
+        #{<<"entry">> := Entry} = Object = prepare_audit_log_object(Item),
+        atm_value:validate(AtmWorkflowExecutionCtx, Entry, AtmDataSpec),
+        Object
     end, Batch);
 sanitize_data_batch(_AtmWorkflowExecutionCtx, _AtmDataSpec, _Item) ->
     throw(?ERROR_ATM_BAD_DATA(<<"value">>, <<"not a batch">>)).

@@ -62,9 +62,9 @@ get_next_batch(BatchSize, #atm_infinite_log_container_iterator{} = Record, Resul
         {[], done} -> 
             stop;
         _ ->
-            {LastIndex, _} = lists:last(EntrySeries),
+            {LastIndex, _, _} = lists:last(EntrySeries),
             {ok, FilteredEntries, Record#atm_infinite_log_container_iterator{
-                index = LastIndex + 1}
+                index = binary_to_integer(LastIndex) + 1}
             }
     end.
 

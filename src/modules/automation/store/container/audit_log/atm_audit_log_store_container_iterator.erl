@@ -79,7 +79,7 @@ get_next_batch(AtmWorkflowExecutionCtx, BatchSize, #atm_audit_log_store_containe
         {[], done} ->
             stop;
         _ ->
-            {LastIndex, _} = lists:last(EntrySeries),
+            {LastIndex, _, _} = lists:last(EntrySeries),
             {ok, FilteredEntries, Record#atm_audit_log_store_container_iterator{
                 index = binary_to_integer(LastIndex) + 1}
             }
