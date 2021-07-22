@@ -10,6 +10,7 @@
 %%% backend for stores based on infinite_log.
 %%% @end
 %%%-------------------------------------------------------------------
+%% @TODO VFS-8068 Get rid of this module
 -module(atm_infinite_log_container).
 -author("Michal Stanisz").
 -author("Lukasz Opiola").
@@ -22,7 +23,7 @@
 %% API
 -export([
     create/3,
-    get_data_spec/1, browse_content/3, acquire_iterator/1,
+    get_data_spec/1, browse_content/2, acquire_iterator/1,
     apply_operation/2,
     delete/1
 ]).
@@ -41,6 +42,13 @@
 %% }
 -type operation_options() :: #{binary() => boolean()}.
 
+-type browse_options() :: #{
+    limit := atm_store_api:limit(),
+    start_index => atm_store_api:index(),
+    start_timestamp => time:millis(),
+    offset => atm_store_api:offset()
+}.
+
 % id of underlying persistent record implemented by `atm_infinite_log_backend`
 -type backend_id() :: binary().
 
@@ -50,7 +58,7 @@
 }).
 -type record() :: #atm_infinite_log_container{}.
 
--export_type([initial_value/0, operation_options/0, backend_id/0, record/0]).
+-export_type([initial_value/0, operation_options/0, browse_options/0, backend_id/0, record/0]).
 
 
 %%%===================================================================
@@ -73,39 +81,17 @@ get_data_spec(#atm_infinite_log_container{data_spec = AtmDataSpec}) ->
     AtmDataSpec.
 
 
--spec browse_content(atm_workflow_execution_ctx:record(), atm_store_api:browse_opts(), record()) ->
-    atm_store_api:browse_result() | no_return().
-browse_content(AtmWorkflowExecutionCtx, BrowseOpts, #atm_infinite_log_container{
-    data_spec = AtmDataSpec,
+-spec browse_content(browse_options(), record()) ->
+    {[{atm_store_api:index(), atm_value:compressed(), time:millis()}], boolean()} | no_return().
+browse_content(BrowseOpts, #atm_infinite_log_container{
     backend_id = BackendId
 }) ->
-    StartFrom = case maps:get(start_index, BrowseOpts, undefined) of
-        undefined ->
-            undefined;
-        <<>> ->
-            undefined;
-        StartIndexBin ->
-            try
-                {index, binary_to_integer(StartIndexBin)}
-            catch _:_ ->
-                throw(?ERROR_ATM_BAD_DATA(<<"index">>, <<"not numerical">>))
-            end
-    end,
     {ok, {Marker, Entries}} = atm_infinite_log_backend:list(BackendId, #{
-        start_from => StartFrom,
+        start_from => infer_start_from(BrowseOpts),
         offset => maps:get(offset, BrowseOpts, 0),
         limit => maps:get(limit, BrowseOpts)
     }),
-    ExpandedEntries = lists:map(fun({EntryIndex, {_Timestamp, Value}}) ->
-        CompressedValue = json_utils:decode(Value),
-        Item = case atm_value:expand(AtmWorkflowExecutionCtx, CompressedValue, AtmDataSpec) of
-            {ok, _} = Res -> Res;
-            {error, _} -> ?ERROR_FORBIDDEN
-        end,
-        {integer_to_binary(EntryIndex), Item}
-    end, Entries),
-
-    {ExpandedEntries, Marker =:= done}.
+    {Entries, Marker =:= done}.
 
 
 -spec acquire_iterator(record()) -> atm_infinite_log_container_iterator:record().
@@ -211,7 +197,24 @@ append_insecure(Batch, Record = #atm_infinite_log_container{
     backend_id = BackendId
 }) ->
     lists:foreach(fun(Item) ->
-        CompressedItem = atm_value:compress(Item, AtmDataSpec),
-        ok = atm_infinite_log_backend:append(BackendId, json_utils:encode(CompressedItem))
+        ok = atm_infinite_log_backend:append(
+            BackendId, atm_value:compress(Item, AtmDataSpec))
     end, Batch),
     Record.
+
+
+%% @private
+-spec infer_start_from(atm_store_api:browse_options()) ->
+    undefined | {index, infinite_log:entry_index()} | {timestamp, infinite_log:timestamp()}.
+infer_start_from(#{start_index := <<>>}) ->
+    undefined;
+infer_start_from(#{start_index := StartIndexBin}) ->
+    try
+        {index, binary_to_integer(StartIndexBin)}
+    catch _:_ ->
+        throw(?ERROR_ATM_BAD_DATA(<<"index">>, <<"not numerical">>))
+    end;
+infer_start_from(#{start_timestamp := StartTimestamp}) ->
+    {timestamp, StartTimestamp};
+infer_start_from(_) ->
+    undefined.

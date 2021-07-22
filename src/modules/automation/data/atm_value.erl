@@ -21,7 +21,7 @@
 
 %% API
 -export([validate/3]).
--export([compress/2, expand/3]).
+-export([compress/2, expand/3, filterexpand_list/3]).
 
 
 -type compressed() :: term().
@@ -61,6 +61,17 @@ compress(Value, AtmDataSpec) ->
 expand(AtmWorkflowExecutionCtx, Value, AtmDataSpec) ->
     Module = get_callback_module(atm_data_spec:get_type(AtmDataSpec)),
     Module:expand(AtmWorkflowExecutionCtx, Value).
+
+
+-spec filterexpand_list(atm_workflow_execution_ctx:record(), [compressed()] | compressed(), atm_data_spec:record()) ->
+    [expanded()].
+filterexpand_list(AtmWorkflowExecutionCtx, CompressedItems, AtmDataSpec) ->
+    lists:filtermap(fun(CompressedItem) ->
+        case atm_value:expand(AtmWorkflowExecutionCtx, CompressedItem, AtmDataSpec) of
+            {ok, ExpandedItem} -> {true, ExpandedItem};
+            {error, _} -> false
+        end
+    end, utils:ensure_list(CompressedItems)).
 
 
 %%%===================================================================

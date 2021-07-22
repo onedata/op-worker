@@ -38,39 +38,46 @@
 
 
 -type type() ::
+    atm_audit_log_store_container |
     atm_list_store_container |
     atm_range_store_container |
     atm_single_value_store_container |
-    atm_tree_forest_store_container |
-    atm_audit_log_store_container.
+    atm_tree_forest_store_container.
 
 -type initial_value() ::
+    atm_audit_log_store_container:initial_value() |
     atm_list_store_container:initial_value() |
     atm_range_store_container:initial_value() |
     atm_single_value_store_container:initial_value() |
-    atm_tree_forest_store_container:initial_value() |
-    atm_audit_log_store_container:initial_value().
+    atm_tree_forest_store_container:initial_value().
 
 -type record() ::
+    atm_audit_log_store_container:record() |
     atm_list_store_container:record() |
     atm_range_store_container:record() |
     atm_single_value_store_container:record() |
-    atm_tree_forest_store_container:record() |
-    atm_audit_log_store_container:record().
+    atm_tree_forest_store_container:record().
 
 -type operation_type() :: append | set.
 
 -type operation_options() ::
+    atm_audit_log_store_container:operation_options() | 
     atm_list_store_container:operation_options() |
     atm_range_store_container:operation_options() |
     atm_single_value_store_container:operation_options() |
-    atm_tree_forest_store_container:operation_options() |
-    atm_audit_log_store_container:operation_options().
+    atm_tree_forest_store_container:operation_options().
+
+-type browse_options() ::
+    atm_audit_log_store_container:browse_options() |
+    atm_list_store_container:browse_options() |
+    atm_range_store_container:browse_options() |
+    atm_single_value_store_container:browse_options() |
+    atm_tree_forest_store_container:browse_options().
 
 -type operation() :: #atm_store_container_operation{}.
 
 -export_type([type/0, initial_value/0, record/0]).
--export_type([operation_type/0, operation_options/0, operation/0]).
+-export_type([operation_type/0, operation_options/0, browse_options/0, operation/0]).
 
 
 %%%===================================================================
@@ -83,7 +90,7 @@
 
 -callback get_data_spec(record()) -> atm_data_spec:record().
 
--callback browse_content(atm_workflow_execution_ctx:record(), atm_store_api:browse_opts(), record()) ->
+-callback browse_content(atm_workflow_execution_ctx:record(), atm_store_api:browse_options(), record()) ->
     atm_store_api:browse_result() | no_return().
 
 -callback acquire_iterator(record()) -> atm_store_container_iterator:record().
@@ -122,7 +129,7 @@ get_data_spec(AtmStoreContainer) ->
     RecordType:get_data_spec(AtmStoreContainer).
 
 
--spec browse_content(atm_workflow_execution_ctx:record(), atm_store_api:browse_opts(), record()) ->
+-spec browse_content(atm_workflow_execution_ctx:record(), atm_store_api:browse_options(), record()) ->
     atm_store_api:browse_result() | no_return().
 browse_content(AtmWorkflowExecutionCtx, BrowseOpts, AtmStoreContainer) ->
     RecordType = utils:record_type(AtmStoreContainer),

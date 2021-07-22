@@ -22,14 +22,15 @@
 -export([build/1]).
 
 % atm_store_container_iterator callbacks
--export([get_next_batch/3, forget_before/1, mark_exhausted/1]).
+-export([get_next_batch/4, forget_before/1, mark_exhausted/1]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
 
 
 -record(atm_audit_log_store_container_iterator, {
-    atm_infinite_log_container_iterator :: atm_infinite_log_container_iterator:record()
+    backend_id :: atm_infinite_log_container:backend_id(),
+    index = 0 :: non_neg_integer()
 }).
 -type record() :: #atm_audit_log_store_container_iterator{}.
 
@@ -41,11 +42,9 @@
 %%%===================================================================
 
 
--spec build(atm_infinite_log_container_iterator:record()) -> record().
-build(AtmInfiniteLogContainerIterator) ->
-    #atm_audit_log_store_container_iterator{
-        atm_infinite_log_container_iterator = AtmInfiniteLogContainerIterator
-    }.
+-spec build(atm_infinite_log_container:backend_id()) -> record().
+build(BackendId) ->
+    #atm_audit_log_store_container_iterator{backend_id = BackendId}.
 
 
 %%%===================================================================
@@ -53,35 +52,45 @@ build(AtmInfiniteLogContainerIterator) ->
 %%%===================================================================
 
 
--spec get_next_batch(atm_workflow_execution_ctx:record(), atm_store_container_iterator:batch_size(), record()) ->
-    {ok, [atm_value:compressed()], record()} | stop.
-get_next_batch(AtmWorkflowExecutionCtx, BatchSize, #atm_audit_log_store_container_iterator{
-    atm_infinite_log_container_iterator = AtmInfiniteLogContainerIterator
-} = AtmAuditLogStoreBackendIterator) ->
-    case atm_infinite_log_container_iterator:get_next_batch(
-        AtmWorkflowExecutionCtx, BatchSize, AtmInfiniteLogContainerIterator
-    ) of
-        stop ->
+-spec get_next_batch(atm_workflow_execution_ctx:record(), atm_store_container_iterator:batch_size(), 
+    record(), atm_data_spec:record()
+) ->
+    {ok, [atm_value:expanded()], record()} | stop.
+get_next_batch(AtmWorkflowExecutionCtx, BatchSize, #atm_audit_log_store_container_iterator{} = Record, AtmDataSpec) ->
+    #atm_audit_log_store_container_iterator{backend_id = BackendId, index = StartIndex} = Record,
+    {ok, {Marker, EntrySeries}} = atm_infinite_log_backend:list(
+        BackendId, #{start_from => {index, StartIndex}, limit => BatchSize}),
+    FilteredEntries = lists:filtermap(fun({_Index, Object, Timestamp}) ->
+        case atm_value:expand(AtmWorkflowExecutionCtx, maps:get(<<"entry">>, Object), AtmDataSpec) of
+            {ok, ExpandedItem} ->
+                {true, Object#{
+                    <<"timestamp">> => Timestamp,
+                    <<"entry">> => ExpandedItem,
+                    <<"severity">> => maps:get(<<"severity">>, Object)
+                }};
+            {error, _} ->
+                false
+        end
+    end, EntrySeries),
+    case {EntrySeries, Marker} of
+        {[], done} ->
             stop;
-        {ok, Items, NewAtmInfiniteLogContainerIterator} ->
-            {ok, Items, AtmAuditLogStoreBackendIterator#atm_audit_log_store_container_iterator{
-                atm_infinite_log_container_iterator = NewAtmInfiniteLogContainerIterator
-            }}
+        _ ->
+            {LastIndex, _, _} = lists:last(EntrySeries),
+            {ok, FilteredEntries, Record#atm_audit_log_store_container_iterator{
+                index = binary_to_integer(LastIndex) + 1}
+            }
     end.
 
 
 -spec forget_before(record()) -> ok.
-forget_before(#atm_audit_log_store_container_iterator{
-    atm_infinite_log_container_iterator = AtmInfiniteLogContainerIterator
-}) ->
-    atm_infinite_log_container_iterator:forget_before(AtmInfiniteLogContainerIterator).
+forget_before(_AtmStoreContainerIterator) ->
+    ok.
 
 
 -spec mark_exhausted(record()) -> ok.
-mark_exhausted(#atm_audit_log_store_container_iterator{
-    atm_infinite_log_container_iterator = AtmInfiniteLogContainerIterator
-}) ->
-    atm_infinite_log_container_iterator:mark_exhausted(AtmInfiniteLogContainerIterator).
+mark_exhausted(_AtmStoreContainerIterator) ->
+    ok.
 
 
 %%%===================================================================
@@ -97,20 +106,16 @@ version() ->
 -spec db_encode(record(), persistent_record:nested_record_encoder()) ->
     json_utils:json_term().
 db_encode(#atm_audit_log_store_container_iterator{
-    atm_infinite_log_container_iterator = AtmInfiniteLogContainerIterator
-}, NestedRecordEncoder) ->
-    #{
-        <<"atmInfiniteLogContainerIterator">> => NestedRecordEncoder(
-            AtmInfiniteLogContainerIterator, atm_infinite_log_container_iterator
-        )
-    }.
+    backend_id = BackendId,
+    index = Index
+}, _NestedRecordEncoder) ->
+    #{<<"backendId">> => BackendId, <<"index">> => Index}.
 
 
 -spec db_decode(json_utils:json_term(), persistent_record:nested_record_decoder()) ->
     record().
-db_decode(#{<<"atmInfiniteLogContainer">> := AtmInfiniteLogContainerIteratorJson}, NestedRecordDecoder) ->
+db_decode(#{<<"backendId">> := BackendId, <<"index">> := Index}, _NestedRecordDecoder) ->
     #atm_audit_log_store_container_iterator{
-        atm_infinite_log_container_iterator = NestedRecordDecoder(
-            AtmInfiniteLogContainerIteratorJson, atm_infinite_log_container_iterator
-        )
+        backend_id = BackendId,
+        index = Index
     }.

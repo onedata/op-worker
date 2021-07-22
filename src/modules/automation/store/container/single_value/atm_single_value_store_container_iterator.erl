@@ -27,7 +27,7 @@
 -export([build/1]).
 
 % atm_store_container_iterator callbacks
--export([get_next_batch/3, forget_before/1, mark_exhausted/1]).
+-export([get_next_batch/4, forget_before/1, mark_exhausted/1]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
@@ -57,14 +57,17 @@ build(Value) ->
 %%%===================================================================
 
 
--spec get_next_batch(atm_workflow_execution_ctx:record(), atm_store_container_iterator:batch_size(), record()) ->
-    {ok, [atm_value:compressed()], record()} | stop.
-get_next_batch(_, _, #atm_single_value_store_container_iterator{value = undefined}) ->
+-spec get_next_batch(atm_workflow_execution_ctx:record(), atm_store_container_iterator:batch_size(), 
+    record(), atm_data_spec:record()
+) ->
+    {ok, [atm_value:expanded()], record()} | stop.
+get_next_batch(_, _, #atm_single_value_store_container_iterator{value = undefined}, _) ->
     stop;
-get_next_batch(_, _, #atm_single_value_store_container_iterator{exhausted = true}) ->
+get_next_batch(_, _, #atm_single_value_store_container_iterator{exhausted = true}, _) ->
     stop;
-get_next_batch(_, _, #atm_single_value_store_container_iterator{value = Value} = Iterator) ->
-    {ok, [Value], Iterator#atm_single_value_store_container_iterator{exhausted = true}}.
+get_next_batch(AtmWorkflowExecutionCtx, _, #atm_single_value_store_container_iterator{value = Value} = Iterator, AtmDataSpec) ->
+    {ok, atm_value:filterexpand_list(AtmWorkflowExecutionCtx, Value, AtmDataSpec), 
+        Iterator#atm_single_value_store_container_iterator{exhausted = true}}.
 
 
 -spec forget_before(record()) -> ok.

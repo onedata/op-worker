@@ -33,15 +33,11 @@
 -type offset() :: integer().
 -type limit() :: pos_integer().
 
--type browse_opts() :: #{
-    limit := limit(),
-    start_index => index(),
-    offset => offset()
-}.
+-type browse_options() :: atm_store_container:browse_options().
 -type browse_result() :: {[{index(), {ok, automation:item()} | errors:error()}], IsLast :: boolean()}.
 
 -export_type([initial_value/0]).
--export_type([index/0, offset/0, limit/0, browse_opts/0, browse_result/0]).
+-export_type([index/0, offset/0, limit/0, browse_options/0, browse_result/0]).
 
 
 %%%===================================================================
@@ -122,21 +118,12 @@ get(AtmStoreId) ->
 %%-------------------------------------------------------------------
 -spec browse_content(
     atm_workflow_execution_ctx:record(),
-    browse_opts(),
+    browse_options(),
     atm_store:id() | atm_store:record()
 ) ->
     browse_result() | no_return().
 browse_content(AtmWorkflowExecutionCtx, BrowseOpts, #atm_store{container = AtmStoreContainer}) ->
-    SanitizedBrowsOpts = middleware_sanitizer:sanitize_data(BrowseOpts, #{
-        required => #{
-            limit => {integer, {not_lower_than, 1}}
-        },
-        at_least_one => #{
-            offset => {integer, any},
-            start_index => {binary, any}
-        }
-    }),
-    atm_store_container:browse_content(AtmWorkflowExecutionCtx, SanitizedBrowsOpts, AtmStoreContainer);
+    atm_store_container:browse_content(AtmWorkflowExecutionCtx, BrowseOpts, AtmStoreContainer);
 
 browse_content(AtmWorkflowExecutionCtx, BrowseOpts, AtmStoreId) ->
     case get(AtmStoreId) of
