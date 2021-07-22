@@ -220,10 +220,27 @@ mark_ended(AtmTaskExecutionId) ->
     Diff = fun
         (#atm_task_execution{status = ?PENDING_STATUS} = AtmTaskExecution) ->
             {ok, AtmTaskExecution#atm_task_execution{status = ?SKIPPED_STATUS}};
-        (#atm_task_execution{status = ?ACTIVE_STATUS, items_failed = 0} = AtmTaskExecution) ->
-            {ok, AtmTaskExecution#atm_task_execution{status = ?FINISHED_STATUS}};
-        (#atm_task_execution{status = ?ACTIVE_STATUS} = AtmTaskExecution) ->
-            {ok, AtmTaskExecution#atm_task_execution{status = ?FAILED_STATUS}};
+        (#atm_task_execution{
+            status = ?ACTIVE_STATUS,
+            items_in_processing = ItemsInProcessing,
+            items_processed = ItemsProcessed,
+            items_failed = ItemsFailed
+        } = AtmTaskExecution) ->
+            % atm workflow execution may have been abruptly interrupted by e.g.
+            % provider restart which results in hanging `items_in_processing` -
+            % they should be treated the same way as failed items
+            NewAtmTaskExecution = case ItemsFailed + ItemsInProcessing of
+                0 ->
+                    AtmTaskExecution#atm_task_execution{status = ?FINISHED_STATUS};
+                AllFailedItems ->
+                    AtmTaskExecution#atm_task_execution{
+                        status = ?FAILED_STATUS,
+                        items_in_processing = 0,
+                        items_processed = ItemsProcessed + ItemsInProcessing,
+                        items_failed = AllFailedItems
+                    }
+            end,
+            {ok, NewAtmTaskExecution};
         (_) ->
             {error, already_ended}
     end,
