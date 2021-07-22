@@ -34,9 +34,12 @@
 
 -record(atm_workflow_execution_creation_ctx, {
     workflow_execution_ctx :: atm_workflow_execution_ctx:record(),
-    workflow_schema_doc :: od_atm_workflow_schema:doc(),
-    lambda_docs :: #{od_atm_lambda:id() => od_atm_lambda:doc()},
     store_initial_values :: atm_workflow_execution_api:store_initial_values(),
+
+    lambda_docs :: #{od_atm_lambda:id() => od_atm_lambda:doc()},
+    workflow_schema_doc :: od_atm_workflow_schema:doc(),
+    system_audit_log_schema :: atm_store_schema:record(),
+
     callback_url :: undefined | http_client:url()
 }).
 

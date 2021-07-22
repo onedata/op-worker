@@ -92,31 +92,15 @@ list(SpaceId, Phase, summary, ListingOpts) ->
 ) ->
     {atm_workflow_execution:id(), atm_workflow_execution:record()} | no_return().
 create(UserCtx, SpaceId, AtmWorkflowSchemaId, StoreInitialValues, CallbackUrl) ->
-    SessionId = user_ctx:get_session_id(UserCtx),
-
-    {ok, AtmWorkflowSchemaDoc = #document{value = #od_atm_workflow_schema{
-        atm_lambdas = AtmLambdaIds
-    }}} = atm_workflow_schema_logic:get(SessionId, AtmWorkflowSchemaId),
-
-    AtmLambdaDocs = lists:foldl(fun(AtmLambdaId, Acc) ->
-        {ok, AtmLambdaDoc} = atm_lambda_logic:get(SessionId, AtmLambdaId),
-        Acc#{AtmLambdaId => AtmLambdaDoc}
-    end, #{}, AtmLambdaIds),
-
-    AtmWorkflowExecutionId = datastore_key:new(),
-
-    AtmWorkflowExecutionDoc = atm_workflow_execution_factory:create(#atm_workflow_execution_creation_ctx{
-        workflow_execution_ctx = atm_workflow_execution_ctx:build(
-            SpaceId, AtmWorkflowExecutionId, UserCtx
-        ),
-        workflow_schema_doc = AtmWorkflowSchemaDoc,
-        lambda_docs = AtmLambdaDocs,
-        store_initial_values = StoreInitialValues,
-        callback_url = CallbackUrl
-    }),
+    AtmWorkflowExecutionDoc = #document{
+        key = AtmWorkflowExecutionId,
+        value = AtmWorkflowExecution
+    } = atm_workflow_execution_factory:create(
+        UserCtx, SpaceId, AtmWorkflowSchemaId, StoreInitialValues, CallbackUrl
+    ),
     atm_workflow_execution_handler:start(UserCtx, AtmWorkflowExecutionDoc),
 
-    {AtmWorkflowExecutionId, AtmWorkflowExecutionDoc#document.value}.
+    {AtmWorkflowExecutionId, AtmWorkflowExecution}.
 
 
 -spec get(atm_workflow_execution:id()) ->

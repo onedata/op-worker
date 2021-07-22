@@ -18,13 +18,14 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([create/1]).
+-export([create/5]).
 
 
 -record(execution_elements, {
     schema_snapshot_id = undefined :: undefined | atm_workflow_schema_snapshot:id(),
     lambda_snapshot_registry = undefined :: undefined | atm_workflow_execution:lambda_snapshot_registry(),
     store_registry = undefined :: undefined | atm_workflow_execution:store_registry(),
+    system_audit_log_id = undefined :: undefined | atm_store:id(),
     lanes = undefined :: undefined | [atm_lane_execution:record()]
 }).
 -type execution_elements() :: #execution_elements{}.
@@ -35,9 +36,47 @@
 %%%===================================================================
 
 
--spec create(atm_workflow_execution:creation_ctx()) ->
+-spec create(
+    user_ctx:ctx(),
+    od_space:id(),
+    od_atm_workflow_schema:id(),
+    atm_workflow_execution_api:store_initial_values(),
+    undefined | http_client:url()
+) ->
     atm_workflow_execution:doc() | no_return().
-create(AtmWorkflowExecutionCreationCtx) ->
+create(UserCtx, SpaceId, AtmWorkflowSchemaId, StoreInitialValues, CallbackUrl) ->
+    AtmWorkflowExecutionId = datastore_key:new(),
+
+    SessionId = user_ctx:get_session_id(UserCtx),
+
+    {ok, AtmWorkflowSchemaDoc = #document{value = #od_atm_workflow_schema{
+        atm_lambdas = AtmLambdaIds
+    }}} = atm_workflow_schema_logic:get(SessionId, AtmWorkflowSchemaId),
+
+    AtmLambdaDocs = lists:foldl(fun(AtmLambdaId, Acc) ->
+        {ok, AtmLambdaDoc} = atm_lambda_logic:get(SessionId, AtmLambdaId),
+        Acc#{AtmLambdaId => AtmLambdaDoc}
+    end, #{}, AtmLambdaIds),
+
+    AtmWorkflowExecutionCreationCtx = #atm_workflow_execution_creation_ctx{
+        workflow_execution_ctx = atm_workflow_execution_ctx:build(
+            SpaceId, AtmWorkflowExecutionId, UserCtx
+        ),
+        store_initial_values = StoreInitialValues,
+        lambda_docs = AtmLambdaDocs,
+        workflow_schema_doc = AtmWorkflowSchemaDoc,
+        system_audit_log_schema = #atm_store_schema{
+            id = <<"system_audit_log">>,
+            name = <<"system_audit_log">>,
+            description = <<>>,
+            type = audit_log,
+            data_spec = #atm_data_spec{type = atm_object_type},
+            requires_initial_value = false,
+            default_initial_value = [#{<<"TEST">> => <<"TEST">>}]  %% TODO rm
+        },
+        callback_url = CallbackUrl
+    },
+
     AtmWorkflowExecutionDoc = create_workflow_execution_doc(
         AtmWorkflowExecutionCreationCtx,
         create_execution_elements(AtmWorkflowExecutionCreationCtx)
@@ -67,6 +106,7 @@ create_execution_elements(AtmWorkflowExecutionCreationCtx) ->
         fun create_schema_snapshot/2,
         fun create_lambda_snapshots/2,
         fun create_stores/2,
+        fun create_system_audit_log/2,
         fun create_lane_executions/2
     ]).
 
@@ -125,6 +165,20 @@ create_stores(AtmWorkflowExecutionCreationCtx, ExecutionElements) ->
 
 
 %% @private
+-spec create_system_audit_log(atm_workflow_execution:creation_ctx(), execution_elements()) ->
+    execution_elements().
+create_system_audit_log(#atm_workflow_execution_creation_ctx{
+    workflow_execution_ctx = AtmWorkflowExecutionCtx,
+    system_audit_log_schema = AtmSystemAuditLogSchema
+}, ExecutionElements) ->
+    {ok, #document{key = AtmSystemAuditLogId}} = atm_store_api:create(
+        AtmWorkflowExecutionCtx, undefined, AtmSystemAuditLogSchema
+    ),
+
+    ExecutionElements#execution_elements{system_audit_log_id = AtmSystemAuditLogId}.
+
+
+%% @private
 -spec create_lane_executions(atm_workflow_execution:creation_ctx(), execution_elements()) ->
     execution_elements().
 create_lane_executions(AtmWorkflowExecutionCreationCtx, ExecutionElements) ->
@@ -149,6 +203,7 @@ create_workflow_execution_doc(
         schema_snapshot_id = AtmWorkflowSchemaSnapshotId,
         lambda_snapshot_registry = AtmLambdaSnapshotRegistry,
         store_registry = AtmStoreRegistry,
+        system_audit_log_id = AtmSystemAuditLogId,
         lanes = AtmLaneExecutions
     }
 ) ->
@@ -167,6 +222,7 @@ create_workflow_execution_doc(
                 lambda_snapshot_registry = AtmLambdaSnapshotRegistry,
 
                 store_registry = AtmStoreRegistry,
+                system_audit_log_id = AtmSystemAuditLogId,
                 lanes = AtmLaneExecutions,
 
                 status = ?SCHEDULED_STATUS,
@@ -212,6 +268,13 @@ delete_execution_elements(#execution_elements{
     catch atm_store_api:delete_all(maps:values(AtmStoreRegistry)),
 
     delete_execution_elements(ExecutionElements#execution_elements{store_registry = undefined});
+
+delete_execution_elements(#execution_elements{
+    system_audit_log_id = AtmSystemAuditLogId
+} = ExecutionElements) when AtmSystemAuditLogId /= undefined ->
+    catch atm_store_api:delete(AtmSystemAuditLogId),
+
+    delete_execution_elements(ExecutionElements#execution_elements{system_audit_log_id = undefined});
 
 delete_execution_elements(#execution_elements{
     lanes = AtmLaneExecutions
