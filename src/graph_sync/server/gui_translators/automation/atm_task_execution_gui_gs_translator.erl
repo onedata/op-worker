@@ -30,6 +30,8 @@ translate_resource(#gri{aspect = instance, scope = private}, #atm_task_execution
 
     schema_id = AtmTaskSchemaId,
 
+    system_audit_log_id = AtmSystemAuditLogId,
+
     status = AtmTaskExecutionStatus,
 
     items_in_processing = ItemsInProcessing,
@@ -42,6 +44,8 @@ translate_resource(#gri{aspect = instance, scope = private}, #atm_task_execution
             aspect = instance, scope = private
         }),
         <<"schemaId">> => AtmTaskSchemaId,
+
+        <<"systemAuditLogId">> => AtmSystemAuditLogId,
 
         <<"status">> => atom_to_binary(AtmTaskExecutionStatus, utf8),
 

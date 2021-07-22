@@ -25,7 +25,7 @@
     delete_all/1, delete/1
 ]).
 -export([get_parallel_box_execution_specs/1]).
--export([gather_statuses/1, update_task_status/4]).
+-export([get_statuses/1, update_task_status/4]).
 -export([to_json/1]).
 
 %% persistent_record callbacks
@@ -89,7 +89,7 @@ create(AtmWorkflowExecutionCreationCtx, AtmLaneIndex, #atm_lane_schema{
     #atm_lane_execution{
         schema_id = AtmLaneSchemaId,
         status = atm_task_execution_status_utils:converge(
-            atm_parallel_box_execution:gather_statuses(AtmParallelBoxExecutions)
+            atm_parallel_box_execution:get_statuses(AtmParallelBoxExecutions)
         ),
         parallel_boxes = AtmParallelBoxExecutions
     }.
@@ -145,8 +145,8 @@ get_parallel_box_execution_specs(#atm_lane_execution{parallel_boxes = AtmParalle
     end, AtmParallelBoxExecutions).
 
 
--spec gather_statuses([record()]) -> [AtmLaneExecutionStatus :: atm_task_execution:status()].
-gather_statuses(AtmLaneExecutions) ->
+-spec get_statuses([record()]) -> [AtmLaneExecutionStatus :: atm_task_execution:status()].
+get_statuses(AtmLaneExecutions) ->
     lists:map(fun(#atm_lane_execution{status = Status}) -> Status end, AtmLaneExecutions).
 
 
@@ -180,7 +180,7 @@ update_task_status(AtmParallelBoxIndex, AtmTaskExecutionId, NewStatus, #atm_lane
             ),
             {ok, AtmLaneExecution#atm_lane_execution{
                 status = atm_task_execution_status_utils:converge(
-                    atm_parallel_box_execution:gather_statuses(NewAtmParallelBoxExecutions)
+                    atm_parallel_box_execution:get_statuses(NewAtmParallelBoxExecutions)
                 ),
                 parallel_boxes = NewAtmParallelBoxExecutions
             }};

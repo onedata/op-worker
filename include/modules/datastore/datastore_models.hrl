@@ -1081,6 +1081,8 @@
     argument_specs :: [atm_task_execution_argument_spec:record()],
     result_specs :: [atm_task_execution_result_spec:record()],
 
+    system_audit_log_id :: undefined | atm_store:id(),
+
     status :: atm_task_execution:status(),
     % Flag used to tell if status was changed during doc update (set automatically
     % when updating doc). It is necessary due to limitation of datastore as

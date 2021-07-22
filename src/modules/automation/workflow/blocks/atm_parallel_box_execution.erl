@@ -25,7 +25,7 @@
     delete_all/1, delete/1
 ]).
 -export([get_spec/1]).
--export([gather_statuses/1, update_task_status/3]).
+-export([get_statuses/1, update_task_status/3]).
 -export([to_json/1]).
 
 %% persistent_record callbacks
@@ -165,8 +165,8 @@ get_spec(#atm_parallel_box_execution{task_registry = AtmTaskExecutions}) ->
     end, #{}, maps:values(AtmTaskExecutions)).
 
 
--spec gather_statuses([record()]) -> [AtmParallelBoxExecutionStatus :: atm_task_execution:status()].
-gather_statuses(AtmParallelBoxExecutions) ->
+-spec get_statuses([record()]) -> [AtmParallelBoxExecutionStatus :: atm_task_execution:status()].
+get_statuses(AtmParallelBoxExecutions) ->
     lists:map(fun(#atm_parallel_box_execution{status = Status}) ->
         Status
     end, AtmParallelBoxExecutions).

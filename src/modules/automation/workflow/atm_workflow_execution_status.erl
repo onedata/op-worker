@@ -79,7 +79,7 @@ handle_ended(AtmWorkflowExecutionId) ->
             ?ONGOING_PHASE when CurrStatus == ?ABORTING_STATUS ->
                 ?CANCELLED_STATUS;
             ?ONGOING_PHASE when CurrStatus == ?ACTIVE_STATUS ->
-                AtmLaneExecutionStatuses = atm_lane_execution:gather_statuses(
+                AtmLaneExecutionStatuses = atm_lane_execution:get_statuses(
                     AtmWorkflowExecution#atm_workflow_execution.lanes
                 ),
                 case lists:usort(AtmLaneExecutionStatuses) of

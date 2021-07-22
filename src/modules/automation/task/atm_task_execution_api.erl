@@ -14,6 +14,7 @@
 
 -include("modules/automation/atm_execution.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% API
 -export([
@@ -26,11 +27,6 @@
     run/5, handle_results/3,
     mark_ended/1
 ]).
-
-
--type task_id() :: binary().
-
--export_type([task_id/0]).
 
 
 %%%===================================================================
@@ -74,7 +70,8 @@ create(AtmWorkflowExecutionCreationCtx, AtmLaneIndex, AtmParallelBoxIndex, #atm_
 }) ->
     #atm_workflow_execution_creation_ctx{
         workflow_execution_ctx = AtmWorkflowExecutionCtx,
-        lambda_docs = AtmLambdaDocs
+        lambda_docs = AtmLambdaDocs,
+        system_audit_log_schema = AtmSystemAuditLogSchema
     } = AtmWorkflowExecutionCreationCtx,
 
     AtmWorkflowExecutionId = atm_workflow_execution_ctx:get_workflow_execution_id(
@@ -86,7 +83,11 @@ create(AtmWorkflowExecutionCreationCtx, AtmLaneIndex, AtmParallelBoxIndex, #atm_
         result_specs = AtmLambdaResultSpecs
     }} = maps:get(AtmLambdaId, AtmLambdaDocs),
 
-    {ok, _} = atm_task_execution:create(#atm_task_execution{
+    {ok, #document{key = AtmSystemAuditLogId}} = atm_store_api:create(
+        AtmWorkflowExecutionCtx, undefined, AtmSystemAuditLogSchema
+    ),
+
+    AtmTaskExecution = #atm_task_execution{
         workflow_execution_id = AtmWorkflowExecutionId,
         lane_index = AtmLaneIndex,
         parallel_box_index = AtmParallelBoxIndex,
@@ -101,12 +102,21 @@ create(AtmWorkflowExecutionCreationCtx, AtmLaneIndex, AtmParallelBoxIndex, #atm_
             AtmLambdaResultSpecs, AtmTaskSchemaResultMappers
         ),
 
+        system_audit_log_id = AtmSystemAuditLogId,
+
         status = ?PENDING_STATUS,
 
         items_in_processing = 0,
         items_processed = 0,
         items_failed = 0
-    }).
+    },
+
+    try
+        {ok, _} = atm_task_execution:create(AtmTaskExecution)
+    catch Type:Reason ->
+        catch atm_store_api:delete(AtmSystemAuditLogId),
+        erlang:Type(Reason)
+    end.
 
 
 -spec prepare_all(atm_workflow_execution_ctx:record(), [atm_task_execution:id()]) ->
@@ -160,7 +170,13 @@ delete_all(AtmTaskExecutionIds) ->
 
 -spec delete(atm_task_execution:id()) -> ok | {error, term()}.
 delete(AtmTaskExecutionId) ->
-    atm_task_execution:delete(AtmTaskExecutionId).
+    case atm_task_execution:get(AtmTaskExecutionId) of
+        {ok, #document{value = #atm_task_execution{system_audit_log_id = AtmSystemAuditLogId}}} ->
+            atm_store_api:delete(AtmSystemAuditLogId),
+            atm_task_execution:delete(AtmTaskExecutionId);
+        ?ERROR_NOT_FOUND ->
+            ok
+    end.
 
 
 -spec get_spec(atm_task_execution:id()) -> workflow_engine:task_spec().
