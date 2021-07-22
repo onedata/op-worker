@@ -35,7 +35,7 @@
 %%--------------------------------------------------------------------
 -spec refresh_helpers_by_storage(storage:id()) -> ok.
 refresh_helpers_by_storage(StorageId) ->
-    rpc:multicall(consistent_hashing:get_all_nodes(), ?MODULE, local_refresh_helpers, [StorageId]),
+    utils:rpc_multicall(consistent_hashing:get_all_nodes(), ?MODULE, local_refresh_helpers, [StorageId]),
     ok.
 
 

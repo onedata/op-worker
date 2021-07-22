@@ -1197,7 +1197,7 @@ init_per_testcase(rtransfer_fetch_test, Config) ->
     {ok, HoleSize} = rpc:call(Node, application, get_env, [
         ?APP_NAME, rtransfer_min_hole_size
     ]),
-    rpc:multicall(Nodes, application, set_env, [
+    utils:rpc_multicall(Nodes, application, set_env, [
         ?APP_NAME, rtransfer_min_hole_size, 6
     ]),
 
@@ -1238,7 +1238,7 @@ end_per_testcase(file_consistency_test, Config) ->
 end_per_testcase(rtransfer_fetch_test, Config) ->
     Nodes = ?config(op_worker_nodes, Config),
     MinHoleSize = ?config(default_min_hole_size, Config),
-    rpc:multicall(Nodes, application, set_env, [
+    utils:rpc_multicall(Nodes, application, set_env, [
         ?APP_NAME, rtransfer_min_hole_size, MinHoleSize
     ]),
     end_per_testcase(?DEFAULT_CASE(rtransfer_fetch_test), Config);

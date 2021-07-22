@@ -60,7 +60,7 @@ deregister(SessId, FileGuid) ->
 -spec invalidate_entries(session:id()) -> ok.
 invalidate_entries(SessId) ->
     {AnsList, BadNodes} =
-        rpc:multicall(consistent_hashing:get_all_nodes(), ?MODULE, invalidate_local_entries, [SessId]),
+        utils:rpc_multicall(consistent_hashing:get_all_nodes(), ?MODULE, invalidate_local_entries, [SessId]),
     lists:foreach(fun(Ans) -> ok = Ans end, AnsList),
     lists:foreach(fun(FailedNode) ->
         [Node | _] = ha_datastore:get_backup_nodes(FailedNode),

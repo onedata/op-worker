@@ -112,7 +112,7 @@ invalidate_on_all_nodes(SpaceId) ->
 -spec invalidate_on_all_nodes(od_space:id(), boolean()) -> ok.
 invalidate_on_all_nodes(SpaceId, DatasetsOnly) ->
     Nodes = consistent_hashing:get_all_nodes(),
-    {Res, BadNodes} = rpc:multicall(Nodes, ?MODULE, invalidate, [SpaceId, DatasetsOnly]),
+    {Res, BadNodes} = utils:rpc_multicall(Nodes, ?MODULE, invalidate, [SpaceId, DatasetsOnly]),
 
     case BadNodes of
         [] ->
