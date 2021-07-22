@@ -134,7 +134,7 @@ create(SpaceId, FileUuid, Expression, ReplicasNum, EntryType, Possible, Traverse
             ok = add_to_impossible_list(SpaceId, QosEntryId),
             {impossible, oneprovider:get_id()}
     end,
-    ?extract_key(datastore_model:create(?CTX, #document{key = QosEntryId, scope = SpaceId,
+    case ?extract_key(datastore_model:create(?CTX, #document{key = QosEntryId, scope = SpaceId,
         value = #qos_entry{
             file_uuid = FileUuid,
             expression = Expression,
@@ -143,7 +143,13 @@ create(SpaceId, FileUuid, Expression, ReplicasNum, EntryType, Possible, Traverse
             traverse_reqs = TraverseReqs,
             type = EntryType
         }
-    })).
+    })) of
+        {ok, QosEntryId} -> 
+            ok = qos_entry_audit_log:create(QosEntryId),
+            {ok, QosEntryId};
+        {error, _} = Error -> 
+            Error
+    end.
 
 
 -spec get(id()) -> {ok, doc()} | {error, term()}.

@@ -79,6 +79,7 @@ start_initial_traverse(FileCtx, QosEntryId, TaskId) ->
 reconcile_file_for_qos_entries(_FileCtx, []) ->
     ok;
 reconcile_file_for_qos_entries(FileCtx, QosEntries) ->
+    ?warning("reconcile"),
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     TaskId = datastore_key:new(),
     FileUuid = file_ctx:get_referenced_uuid_const(FileCtx),
@@ -252,11 +253,11 @@ slave_job_reconcile(TaskId, UserCtx, FileCtx) ->
 synchronize_file_for_entries(TaskId, UserCtx, FileCtx, QosEntries) ->
     try
         synchronize_file_for_entries_insecure(TaskId, UserCtx, FileCtx, QosEntries)
-    catch E:T ->
-        ?error("Unexpected error during QoS synchronization for file ~p: ~p", 
-            [file_ctx:get_logical_uuid_const(FileCtx), {E, T}]),
+    catch Class:Reason:Stacktrace ->
+        ?error_stacktrace("Unexpected error during QoS synchronization for file ~p: ~p", 
+            [file_ctx:get_logical_uuid_const(FileCtx), {Class, Reason}], Stacktrace),
         ok = qos_status:report_file_transfer_failure(FileCtx, QosEntries),
-        ok = report_file_failed_for_entries(QosEntries, FileCtx, T)
+        ok = report_file_failed_for_entries(QosEntries, FileCtx, Reason)
     end.
 
 
@@ -293,9 +294,9 @@ synchronize_file_for_entries_insecure(TaskId, UserCtx, FileCtx, QosEntries) ->
     
     case SyncResult of
         ok ->
-            ok = report_file_finished_for_entries(QosEntries, FileCtx2);
+            ok = report_file_synchronized_for_entries(QosEntries, FileCtx2);
         {ok, _} -> 
-            ok = report_file_finished_for_entries(QosEntries, FileCtx2);
+            ok = report_file_synchronized_for_entries(QosEntries, FileCtx2);
         {error, cancelled} -> 
             ?debug("QoS file synchronization failed due to cancellation");
         {error, _} = Error ->
@@ -306,18 +307,20 @@ synchronize_file_for_entries_insecure(TaskId, UserCtx, FileCtx, QosEntries) ->
 
 
 %% @private
--spec report_file_finished_for_entries([qos_entry:id()], file_ctx:ctx()) -> ok.
-report_file_finished_for_entries(QosEntries, FileCtx) ->
+-spec report_file_synchronized_for_entries([qos_entry:id()], file_ctx:ctx()) -> ok.
+report_file_synchronized_for_entries(QosEntries, FileCtx) ->
+    FileGuid = file_ctx:get_logical_guid_const(FileCtx),
     lists:foreach(fun(QosEntryId) ->
-        ok = qos_entry_audit_log:report_file_synchronized(QosEntryId, file_ctx:get_logical_guid_const(FileCtx))
+        ok = qos_entry_audit_log:report_file_synchronized(QosEntryId, FileGuid)
     end, QosEntries).
 
 
 %% @private
 -spec report_file_failed_for_entries([qos_entry:id()], file_ctx:ctx(), {error, term()}) -> ok.
 report_file_failed_for_entries(QosEntries, FileCtx, Error) ->
+    FileGuid = file_ctx:get_logical_guid_const(FileCtx),
     lists:foreach(fun(QosEntryId) ->
-        ok = qos_entry_audit_log:report_file_failed(QosEntryId, file_ctx:get_logical_guid_const(FileCtx), Error)
+        ok = qos_entry_audit_log:report_file_failed(QosEntryId, FileGuid, Error)
     end, QosEntries).
 
 

@@ -42,6 +42,7 @@ handle_qos_entry_change(_SpaceId, #document{deleted = true} = QosEntryDoc) ->
     handle_entry_delete(QosEntryDoc);
 handle_qos_entry_change(SpaceId, #document{key = QosEntryId, value = QosEntry} = QosEntryDoc) ->
     {ok, FileUuid} = qos_entry:get_file_uuid(QosEntry),
+    ok = ?ok_if_exists(qos_entry_audit_log:create(QosEntryId)),
     ok = file_qos:add_qos_entry_id(SpaceId, FileUuid, QosEntryId),
     case qos_entry:is_possible(QosEntry) of
         true ->

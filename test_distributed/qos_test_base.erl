@@ -1097,7 +1097,7 @@ qos_status_during_traverse_test_base(Config, SpaceId, NumberOfFilesInDir) ->
 
 
 qos_status_during_traverse_with_file_deletion_test_base(Config, SpaceId, NumberOfFilesInDir) ->
-    [Worker1 | _] = Workers = qos_tests_utils:get_op_nodes_sorted(Config),
+    [Worker1 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
     SessId = fun(Worker) -> ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config) end,
     Name = generator:gen_name(),
     DirStructure =

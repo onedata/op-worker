@@ -7,7 +7,7 @@
 %%%-------------------------------------------------------------------
 %%% @doc 
 %%% This module is responsible for storing audit log of QoS operations on files. 
-%%% Audit log is stores entries for single QoS entry.
+%%% The audit log stores logs concerning all files affected by a specific QoS entry.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(qos_entry_audit_log).
@@ -43,46 +43,35 @@
 %%% API
 %%%===================================================================
 
--spec create(id()) -> {ok, id()}.
+-spec create(id()) -> ok | {error, term()}.
 create(Id) ->
-    ok = datastore_infinite_log:create(?CTX, Id, #{
+    datastore_infinite_log:create(?CTX, Id, #{
         size_pruning_threshold => ?LOG_MAX_SIZE,
         age_pruning_threshold => ?LOG_EXPIRATION
-    }),
-    {ok, Id}.
+    }).
 
 
--spec report_file_synchronized(id(), file_id:file_guid()) -> ok.
+-spec report_file_synchronized(id(), file_id:file_guid()) -> ok | {error, term()}.
 report_file_synchronized(Id, FileGuid) ->
+    {ok, ObjectId} = file_id:guid_to_objectid(FileGuid),
     Content = #{
         <<"status">> => <<"synchronized">>,
         <<"severity">> => <<"info">>,
-        <<"fileId">> => FileGuid
+        <<"fileId">> => ObjectId
     },
-    append(Id, json_utils:encode(Content)).
+    datastore_infinite_log:append(?CTX, Id, json_utils:encode(Content)).
 
 
--spec report_file_failed(id(), file_id:file_guid(), {error, term()}) -> ok.
+-spec report_file_failed(id(), file_id:file_guid(), {error, term()}) -> ok | {error, term()}.
 report_file_failed(Id, FileGuid, Error) ->
+    {ok, ObjectId} = file_id:guid_to_objectid(FileGuid),
     Content = #{
         <<"status">> => <<"failed">>,
         <<"severity">> => <<"error">>,
-        <<"fileId">> => FileGuid,
-        <<"error">> => maps:get(<<"description">>, errors:to_json(Error))
+        <<"fileId">> => ObjectId,
+        <<"error">> => errors:to_json(Error)
     },
-    append(Id, json_utils:encode(Content)).
-
-
--spec append(id(), infinite_log:content()) -> ok.
-append(Id, BinaryContent) ->
-    case datastore_infinite_log:append(?CTX, Id, BinaryContent) of
-        ok -> 
-            ok;
-        ?ERROR_NOT_FOUND ->
-            {ok, Id} = create(Id),
-            append(Id, BinaryContent);
-        {error, _} = Error -> Error
-    end.
+    datastore_infinite_log:append(?CTX, Id, json_utils:encode(Content)).
 
 
 -spec destroy(id()) -> ok | {error, term()}.

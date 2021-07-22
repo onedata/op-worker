@@ -209,9 +209,13 @@ get(#op_req{auth = Auth, gri = #gri{id = QosEntryId, aspect = instance}}, QosEnt
     {ok, entry_to_details(QosEntry, Status, SpaceId)};
 
 get(#op_req{gri = #gri{id = QosEntryId, aspect = audit_log}, data = Data}, _QosEntry) ->
+    StartFrom = case maps:get(<<"timestamp">>, Data, undefined) of
+        undefined -> undefined;
+        Timestamp -> {timestamp, Timestamp}
+    end,
     Opts = #{
         offset => maps:get(<<"offset">>, Data, 0),
-        start_from => {timestamp, maps:get(<<"timestamp">>, Data, 0)}
+        start_from => StartFrom
     },
     case qos_entry_audit_log:list(QosEntryId, Opts) of
         {ok, Result, IsLast} ->

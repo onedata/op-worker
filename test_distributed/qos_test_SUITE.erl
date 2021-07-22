@@ -598,13 +598,14 @@ qos_audit_log_base_test(Config, ExpectedStatus) ->
     SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(P1)}}, Config),
     FilePath = filename:join(["/", ?SPACE_PATH1, generator:gen_name()]),
     {ok, Guid} = api_test_utils:create_file(<<"file">>, P1, SessId, FilePath),
+    {ok, ObjectId} = file_id:guid_to_objectid(Guid),
     {ok, QosEntryId} = lfm_proxy:add_qos_entry(P1, SessId, ?FILE_REF(Guid), <<"country=PL">>, 1),
     ExpectedSeverity = case ExpectedStatus of
         <<"synchronized">> -> <<"info">>;
         <<"failed">> -> <<"error">>
     end,
     {ok, [#{
-        <<"fileId">> := Guid,
+        <<"fileId">> := ObjectId,
         <<"status">> := ExpectedStatus,
         <<"severity">> := ExpectedSeverity,
         <<"timestamp">> := _
