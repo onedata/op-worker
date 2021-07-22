@@ -72,9 +72,7 @@ get_next_batch(AtmWorkflowExecutionCtx, BatchSize, #atm_audit_log_store_containe
                 false
         end
     end,
-    FilteredEntries = lists:filtermap(fun(ListedEntry) ->
-        {_Index, Compressed, Timestamp} =
-            atm_infinite_log_backend:extract_listed_entry(ListedEntry),
+    FilteredEntries = lists:filtermap(fun({_Index, Compressed, Timestamp}) ->
         ResultMapper(Timestamp, Compressed)
     end, EntrySeries),
     case {EntrySeries, Marker} of
@@ -83,7 +81,7 @@ get_next_batch(AtmWorkflowExecutionCtx, BatchSize, #atm_audit_log_store_containe
         _ ->
             {LastIndex, _} = lists:last(EntrySeries),
             {ok, FilteredEntries, Record#atm_audit_log_store_container_iterator{
-                index = LastIndex + 1}
+                index = binary_to_integer(LastIndex) + 1}
             }
     end.
 

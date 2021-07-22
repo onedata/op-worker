@@ -55,9 +55,7 @@ get_next_batch(BatchSize, #atm_infinite_log_container_iterator{} = Record, Resul
     #atm_infinite_log_container_iterator{backend_id = BackendId, index = StartIndex} = Record,
     {ok, {Marker, EntrySeries}} = atm_infinite_log_backend:list(
         BackendId, #{start_from => {index, StartIndex}, limit => BatchSize}),
-    FilteredEntries = lists:filtermap(fun(ListedEntry) ->
-        {_Index, Compressed, Timestamp} =
-            atm_infinite_log_backend:extract_listed_entry(ListedEntry),
+    FilteredEntries = lists:filtermap(fun({_Index, Compressed, Timestamp}) ->
         ResultMapper(Timestamp, Compressed)
     end, EntrySeries),
     case {EntrySeries, Marker} of

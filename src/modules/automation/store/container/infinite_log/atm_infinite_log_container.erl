@@ -82,7 +82,7 @@ get_data_spec(#atm_infinite_log_container{data_spec = AtmDataSpec}) ->
 
 
 -spec browse_content(browse_options(), record()) ->
-    {[{atm_store_api:index(), {atm_value:compressed(), time:millis()}}], boolean()} | no_return().
+    {[{atm_store_api:index(), atm_value:compressed(), time:millis()}], boolean()} | no_return().
 browse_content(BrowseOpts, #atm_infinite_log_container{
     backend_id = BackendId
 }) ->

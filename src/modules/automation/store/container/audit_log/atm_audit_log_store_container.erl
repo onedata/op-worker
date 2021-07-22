@@ -75,8 +75,9 @@ create(_AtmWorkflowExecutionCtx, AtmDataSpec, undefined) ->
     create_container(AtmDataSpec);
 
 create(AtmWorkflowExecutionCtx, AtmDataSpec, InitialValueBatch) ->
+    % validate and sanitize given batch first, to simulate atomic operation
     SanitizedBatch = sanitize_data_batch(AtmWorkflowExecutionCtx, AtmDataSpec, InitialValueBatch),
-    append_insecure(SanitizedBatch, create_container(AtmDataSpec)).
+    append_sanitized_batch(SanitizedBatch, create_container(AtmDataSpec)).
 
 
 -spec get_data_spec(record()) -> atm_data_spec:record().
@@ -97,9 +98,7 @@ browse_content(AtmWorkflowExecutionCtx, BrowseOpts, #atm_audit_log_store_contain
         offset => maps:get(offset, SanitizedBrowseOpts, 0),
         limit => maps:get(limit, SanitizedBrowseOpts)
     }),
-    MappedEntries = lists:map(fun(ListedEntry) ->
-        {Index, Object, Timestamp} =
-            atm_infinite_log_backend:extract_listed_entry(ListedEntry),
+    MappedEntries = lists:map(fun({Index, Object, Timestamp}) ->
         case atm_value:expand(AtmWorkflowExecutionCtx, maps:get(<<"entry">>, Object), AtmDataSpec) of
             {ok, ExpandedEntry} ->
                 {Index, {ok, Object#{
@@ -127,8 +126,9 @@ apply_operation(#atm_audit_log_store_container{data_spec = AtmDataSpec} = Record
     value = Batch,
     workflow_execution_ctx = AtmWorkflowExecutionCtx
 }) ->
+    % validate and sanitize given batch first, to simulate atomic operation
     SanitizedBatch = sanitize_data_batch(AtmWorkflowExecutionCtx, AtmDataSpec, Batch),
-    append_insecure(SanitizedBatch, Record);
+    append_sanitized_batch(SanitizedBatch, Record);
 
 apply_operation(#atm_audit_log_store_container{} = Record, Operation = #atm_store_container_operation{
     type = append,
@@ -214,10 +214,9 @@ sanitize_data_batch(_AtmWorkflowExecutionCtx, _AtmDataSpec, _Item) ->
     throw(?ERROR_ATM_BAD_DATA(<<"value">>, <<"not a batch">>)).
 
 
-
 %% @private
--spec append_insecure([automation:item()], record()) -> record().
-append_insecure(Batch, Record = #atm_audit_log_store_container{
+-spec append_sanitized_batch([automation:item()], record()) -> record().
+append_sanitized_batch(Batch, Record = #atm_audit_log_store_container{
     data_spec = AtmDataSpec,
     backend_id = BackendId
 }) ->

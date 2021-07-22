@@ -51,16 +51,14 @@ destroy(Id) ->
 
 
 -spec list(id(), infinite_log_browser:listing_opts()) ->
-    {ok, infinite_log_browser:listing_result()} | {error, term()}.
+    {ok, {done | more, [{atm_store_api:index(), atm_value:compressed(), time:millis()}]}} | {error, term()}.
 list(Id, Opts) ->
-    datastore_infinite_log:list(?CTX, Id, Opts).
-
-
--spec extract_listed_entry({infinite_log:entry_index(), infinite_log:entry()}) -> 
-    {atm_store_api:index(), atm_value:compressed(), time:millis()}.
-extract_listed_entry({EntryIndex, {Timestamp, Value}}) ->
-    CompressedValue = json_utils:decode(Value),
-    {integer_to_binary(EntryIndex), CompressedValue, Timestamp}.
+    case datastore_infinite_log:list(?CTX, Id, Opts) of
+        {ok, {Marker, EntrySeries}} ->
+            {ok, {Marker, lists:map(fun extract_listed_entry/1, EntrySeries)}};
+        {error, _} = Error ->
+            Error
+    end.
     
 
 %%%===================================================================
@@ -70,3 +68,15 @@ extract_listed_entry({EntryIndex, {Timestamp, Value}}) ->
 -spec get_ctx() -> datastore:ctx().
 get_ctx() ->
     ?CTX.
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%% @private
+-spec extract_listed_entry({infinite_log:entry_index(), infinite_log:entry()}) ->
+    {atm_store_api:index(), atm_value:compressed(), time:millis()}.
+extract_listed_entry({EntryIndex, {Timestamp, Value}}) ->
+    CompressedValue = json_utils:decode(Value),
+    {integer_to_binary(EntryIndex), CompressedValue, Timestamp}.
