@@ -200,7 +200,7 @@ create_container(AtmDataSpec) ->
     atm_data_spec:record(),
     [json_utils:json_term()]
 ) ->
-    ok | no_return().
+    [atm_value:expanded()] | no_return().
 sanitize_data_batch(AtmWorkflowExecutionCtx, AtmDataSpec, Batch) when is_list(Batch) ->
     lists:map(fun(Item) ->
         #{<<"entry">> := Entry} = Object = prepare_audit_log_object(Item),
@@ -212,7 +212,7 @@ sanitize_data_batch(_AtmWorkflowExecutionCtx, _AtmDataSpec, _Item) ->
 
 
 %% @private
--spec append_sanitized_batch([automation:item()], record()) -> record().
+-spec append_sanitized_batch([atm_value:expanded()], record()) -> record().
 append_sanitized_batch(Batch, Record = #atm_audit_log_store_container{
     data_spec = AtmDataSpec,
     backend_id = BackendId
