@@ -65,8 +65,8 @@ get_next_batch(_, _, #atm_single_value_store_container_iterator{value = undefine
     stop;
 get_next_batch(_, _, #atm_single_value_store_container_iterator{exhausted = true}, _) ->
     stop;
-get_next_batch(AtmWorkflowExecutionCtx, _, #atm_single_value_store_container_iterator{value = Value} = Iterator, DataSpec) ->
-    {ok, atm_value:filterexpand_list(AtmWorkflowExecutionCtx, Value, DataSpec), 
+get_next_batch(AtmWorkflowExecutionCtx, _, #atm_single_value_store_container_iterator{value = Value} = Iterator, AtmDataSpec) ->
+    {ok, atm_value:filterexpand_list(AtmWorkflowExecutionCtx, Value, AtmDataSpec), 
         Iterator#atm_single_value_store_container_iterator{exhausted = true}}.
 
 

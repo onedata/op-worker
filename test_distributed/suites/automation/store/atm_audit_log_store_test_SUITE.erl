@@ -151,13 +151,17 @@ browse_by_timestamp_test(_Config) ->
     ItemsNum = rand:uniform(1000),
     Items = lists:seq(1, ItemsNum),
     {ok, AtmStoreId} = atm_store_test_utils:create_store(
-        krakow, AtmWorkflowExecutionCtx, undefined, ?ATM_AUDIT_LOG_STORE_SCHEMA
+        krakow, AtmWorkflowExecutionCtx, undefined, 
+        ?ATM_AUDIT_LOG_STORE_SCHEMA#atm_store_schema{data_spec = #atm_data_spec{type = atm_object_type}}
     ),
     [FirstTimestamp | _] = lists:map(fun(Index) ->
         Timestamp = rpc:call(Node, global_clock, timestamp_millis, []),
-        ItemToAdd = case rand:uniform(2) of
-            1 -> Index;
-            2 -> #{<<"entry">> => Index, <<"severity">> => <<"info">>}
+        Entry = #{<<"value">> => Index},
+        ItemToAdd = case rand:uniform(4) of
+            1 -> Entry;
+            2 -> #{<<"entry">> => Entry, <<"severity">> => <<"info">>};
+            3 -> #{<<"entry">> => Entry};
+            4 -> Entry#{<<"severity">> => <<"info">>}
         end,
         ?assertEqual(ok, atm_store_test_utils:apply_operation(
             krakow, AtmWorkflowExecutionCtx, append, ItemToAdd, #{}, AtmStoreId
@@ -170,7 +174,14 @@ browse_by_timestamp_test(_Config) ->
         StartIndex = rand:uniform(ItemsNum),
         Limit = rand:uniform(ItemsNum),
         Expected = lists:map(fun(Index) ->
-            {integer_to_binary(Index), {ok, #{<<"entry">> => Index + 1, <<"timestamp">> => FirstTimestamp + Index, <<"severity">> => <<"info">>}}}
+            {
+                integer_to_binary(Index), 
+                {ok, #{
+                    <<"entry">> => #{<<"value">> => Index + 1}, 
+                    <<"timestamp">> => FirstTimestamp + Index, 
+                    <<"severity">> => <<"info">>}
+                }
+            }
         end, lists:seq(StartIndex, min(StartIndex + Limit - 1, ItemsNum - 1))),
         {Result, IsLast} = atm_store_test_utils:browse_content(krakow, AtmWorkflowExecutionCtx, #{
             start_timestamp => StartIndex + FirstTimestamp,

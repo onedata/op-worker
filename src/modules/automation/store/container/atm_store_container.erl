@@ -68,7 +68,7 @@
     atm_tree_forest_store_container:operation_options().
 
 -type browse_options() ::
-atm_audit_log_store_container:browse_options() |
+    atm_audit_log_store_container:browse_options() |
     atm_list_store_container:browse_options() |
     atm_range_store_container:browse_options() |
     atm_single_value_store_container:browse_options() |

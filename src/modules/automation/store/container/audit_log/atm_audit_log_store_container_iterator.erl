@@ -60,12 +60,12 @@ get_next_batch(AtmWorkflowExecutionCtx, BatchSize, #atm_audit_log_store_containe
     #atm_audit_log_store_container_iterator{backend_id = BackendId, index = StartIndex} = Record,
     {ok, {Marker, EntrySeries}} = atm_infinite_log_backend:list(
         BackendId, #{start_from => {index, StartIndex}, limit => BatchSize}),
-    ResultMapper = fun(Timestamp, Compressed) ->
-        case atm_value:expand(AtmWorkflowExecutionCtx, Compressed, AtmDataSpec) of
-            {ok, Object} ->
-                {true, #{
+    ResultMapper = fun(Timestamp, Object) ->
+        case atm_value:expand(AtmWorkflowExecutionCtx, maps:get(<<"entry">>, Object), AtmDataSpec) of
+            {ok, ExpandedItem} ->
+                {true, Object#{
                     <<"timestamp">> => Timestamp,
-                    <<"entry">> => maps:get(<<"entry">>, Object),
+                    <<"entry">> => ExpandedItem,
                     <<"severity">> => maps:get(<<"severity">>, Object)
                 }};
             {error, _} ->

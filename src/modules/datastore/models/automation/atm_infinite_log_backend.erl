@@ -57,7 +57,7 @@ list(Id, Opts) ->
 
 
 -spec extract_listed_entry({infinite_log:entry_index(), infinite_log:entry()}) -> 
-    {atm_store_api:index(), {atm_value:compressed(), time:millis()}}.
+    {atm_store_api:index(), atm_value:compressed(), time:millis()}.
 extract_listed_entry({EntryIndex, {Timestamp, Value}}) ->
     CompressedValue = json_utils:decode(Value),
     {integer_to_binary(EntryIndex), CompressedValue, Timestamp}.

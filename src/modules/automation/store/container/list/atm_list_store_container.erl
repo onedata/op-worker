@@ -76,10 +76,10 @@ browse_content(AtmWorkflowExecutionCtx, BrowseOpts, #atm_list_store_container{
     SanitizedBrowseOpts = sanitize_browse_options(BrowseOpts),
     {Entries, IsLast} = atm_infinite_log_container:browse_content(
         SanitizedBrowseOpts, AtmInfiniteLogContainer),
+    AtmDataSpec = atm_infinite_log_container:get_data_spec(AtmInfiniteLogContainer),
     MappedEntries = lists:map(fun(ListedEntry) ->
         {Index, Compressed, _Timestamp} = 
             atm_infinite_log_backend:extract_listed_entry(ListedEntry),
-        AtmDataSpec = atm_infinite_log_container:get_data_spec(AtmInfiniteLogContainer),
         {Index, atm_value:expand(AtmWorkflowExecutionCtx, Compressed, AtmDataSpec)}
     end, Entries),
     {MappedEntries, IsLast}.

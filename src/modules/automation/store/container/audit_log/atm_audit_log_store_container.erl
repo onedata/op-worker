@@ -75,8 +75,8 @@ create(_AtmWorkflowExecutionCtx, AtmDataSpec, undefined) ->
     create_container(AtmDataSpec);
 
 create(AtmWorkflowExecutionCtx, AtmDataSpec, InitialValueBatch) ->
-    validate_data_batch(AtmWorkflowExecutionCtx, AtmDataSpec, InitialValueBatch),
-    append_insecure(InitialValueBatch, create_container(AtmDataSpec)).
+    SanitizedBatch = sanitize_data_batch(AtmWorkflowExecutionCtx, AtmDataSpec, InitialValueBatch),
+    append_insecure(SanitizedBatch, create_container(AtmDataSpec)).
 
 
 -spec get_data_spec(record()) -> atm_data_spec:record().
@@ -98,13 +98,13 @@ browse_content(AtmWorkflowExecutionCtx, BrowseOpts, #atm_audit_log_store_contain
         limit => maps:get(limit, SanitizedBrowseOpts)
     }),
     MappedEntries = lists:map(fun(ListedEntry) ->
-        {Index, Compressed, Timestamp} =
+        {Index, Object, Timestamp} =
             atm_infinite_log_backend:extract_listed_entry(ListedEntry),
-        case atm_value:expand(AtmWorkflowExecutionCtx, Compressed, AtmDataSpec) of
-            {ok, Object} ->
-                {Index, {ok, #{
+        case atm_value:expand(AtmWorkflowExecutionCtx, maps:get(<<"entry">>, Object), AtmDataSpec) of
+            {ok, ExpandedEntry} ->
+                {Index, {ok, Object#{
                     <<"timestamp">> => Timestamp, 
-                    <<"entry">> => maps:get(<<"entry">>, Object), 
+                    <<"entry">> => ExpandedEntry, 
                     <<"severity">> => maps:get(<<"severity">>, Object)}
                 }};
             {error, _} = Error ->
@@ -127,8 +127,8 @@ apply_operation(#atm_audit_log_store_container{data_spec = AtmDataSpec} = Record
     value = Batch,
     workflow_execution_ctx = AtmWorkflowExecutionCtx
 }) ->
-    validate_data_batch(AtmWorkflowExecutionCtx, AtmDataSpec, Batch),
-    append_insecure(Batch, Record);
+    SanitizedBatch = sanitize_data_batch(AtmWorkflowExecutionCtx, AtmDataSpec, Batch),
+    append_insecure(SanitizedBatch, Record);
 
 apply_operation(#atm_audit_log_store_container{} = Record, Operation = #atm_store_container_operation{
     type = append,
@@ -195,20 +195,22 @@ create_container(AtmDataSpec) ->
 
 
 %% @private
--spec validate_data_batch(
+-spec sanitize_data_batch(
     atm_workflow_execution_ctx:record(),
     atm_data_spec:record(),
     [json_utils:json_term()]
 ) ->
     ok | no_return().
-validate_data_batch(AtmWorkflowExecutionCtx, AtmDataSpec, Batch) when is_list(Batch) ->
-    lists:foreach(fun
-        (#{<<"entry">> := Item, <<"severity">> := _}) ->
-            atm_value:validate(AtmWorkflowExecutionCtx, Item, AtmDataSpec);
+sanitize_data_batch(AtmWorkflowExecutionCtx, AtmDataSpec, Batch) when is_list(Batch) ->
+    lists:map(fun
+        (#{<<"entry">> := Item} = Object) ->
+            atm_value:validate(AtmWorkflowExecutionCtx, Item, AtmDataSpec),
+            prepare_audit_log_object(Object);
         (Item) ->
-            atm_value:validate(AtmWorkflowExecutionCtx, Item, AtmDataSpec)
+            atm_value:validate(AtmWorkflowExecutionCtx, Item, AtmDataSpec),
+            prepare_audit_log_object(Item)
     end, Batch);
-validate_data_batch(_AtmWorkflowExecutionCtx, _AtmDataSpec, _Item) ->
+sanitize_data_batch(_AtmWorkflowExecutionCtx, _AtmDataSpec, _Item) ->
     throw(?ERROR_ATM_BAD_DATA(<<"value">>, <<"not a batch">>)).
 
 
@@ -219,14 +221,10 @@ append_insecure(Batch, Record = #atm_audit_log_store_container{
     data_spec = AtmDataSpec,
     backend_id = BackendId
 }) ->
-    lists:foreach(fun
-        (#{<<"entry">> := Item} = Object) ->
-           ok = atm_infinite_log_backend:append(
-            BackendId, prepare_audit_log_object(Object#{
-                   <<"entry">> => atm_value:compress(Item, AtmDataSpec)
-               })); 
-        (Item) -> ok = atm_infinite_log_backend:append(
-            BackendId, prepare_audit_log_object(atm_value:compress(Item, AtmDataSpec)))
+    lists:foreach(fun(#{<<"entry">> := Item} = Object) ->
+        ok = atm_infinite_log_backend:append(BackendId, Object#{
+            <<"entry">> => atm_value:compress(Item, AtmDataSpec)
+        }) 
     end, Batch),
     Record.
 

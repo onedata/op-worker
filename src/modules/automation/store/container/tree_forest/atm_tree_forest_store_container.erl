@@ -70,9 +70,9 @@ browse_content(AtmWorkflowExecutionCtx, BrowseOpts, #atm_tree_forest_store_conta
 
 -spec acquire_iterator(record()) -> atm_tree_forest_store_container_iterator:record().
 acquire_iterator(#atm_tree_forest_store_container{roots_list = RootsList}) ->
-    DataSpec = atm_list_store_container:get_data_spec(RootsList),
+    AtmDataSpec = atm_list_store_container:get_data_spec(RootsList),
     RootsIterator = atm_list_store_container:acquire_iterator(RootsList),
-    atm_tree_forest_store_container_iterator:build(RootsIterator, DataSpec).
+    atm_tree_forest_store_container_iterator:build(RootsIterator, AtmDataSpec).
 
 
 -spec apply_operation(record(), atm_store_container:operation()) ->
