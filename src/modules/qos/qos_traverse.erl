@@ -79,7 +79,6 @@ start_initial_traverse(FileCtx, QosEntryId, TaskId) ->
 reconcile_file_for_qos_entries(_FileCtx, []) ->
     ok;
 reconcile_file_for_qos_entries(FileCtx, QosEntries) ->
-    ?warning("reconcile"),
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     TaskId = datastore_key:new(),
     FileUuid = file_ctx:get_referenced_uuid_const(FileCtx),
@@ -116,9 +115,9 @@ init_pool() ->
     % Get pool limits from app.config
     MasterJobsLimit = op_worker:get_env(qos_traverse_master_jobs_limit, 10),
     SlaveJobsLimit = op_worker:get_env(qos_traverse_slave_jobs_limit, 20),
-    ParallelismLimit = op_worker:get_env(qos_traverse_parallelism_limit, 20),
 
-    tree_traverse:init(?MODULE, MasterJobsLimit, SlaveJobsLimit, ParallelismLimit).
+    % set parallelism limit equal to master jobs limit
+    tree_traverse:init(?MODULE, MasterJobsLimit, SlaveJobsLimit, MasterJobsLimit).
 
 
 -spec stop_pool() -> ok.

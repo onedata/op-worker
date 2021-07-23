@@ -345,6 +345,11 @@ mock_replica_synchronizer(Workers, passthrough) ->
         fun(UserCtx, FileCtx, Block, Prefetch, TransferId, Priority) ->
             meck:passthrough([UserCtx, FileCtx, Block, Prefetch, TransferId, Priority])
         end);
+mock_replica_synchronizer(Workers, {throw, Error}) ->
+    ok = test_utils:mock_expect(Workers, replica_synchronizer, synchronize,
+        fun(_, _, _, _, _, _) ->
+            throw(Error)
+        end);
 mock_replica_synchronizer(Workers, Expected) ->
     ok = test_utils:mock_expect(Workers, replica_synchronizer, synchronize,
         fun(_, _, _, _, _, _) ->

@@ -38,7 +38,7 @@ update_atime(FileCtx) ->
             ok = update_times_and_emit(FileCtx, fun(Times = #times{atime = Time}) ->
                 case Time of
                     NewATime ->
-                        {error, not_changed};
+                        {error, {not_changed, Times}};
                     _ ->
                         {ok, Times#times{atime = NewATime}}
                 end
@@ -63,7 +63,7 @@ update_ctime(FileCtx, CurrentTime) ->
     ok = update_times_and_emit(FileCtx, fun(Times = #times{ctime = Time}) ->
         case Time of
             CurrentTime ->
-                {error, not_changed};
+                {error, {not_changed, Times}};
             _ ->
                 {ok, Times#times{ctime = CurrentTime}}
         end
@@ -88,7 +88,7 @@ update_mtime_ctime(FileCtx, CurrentTime) ->
     ok = update_times_and_emit(FileCtx, fun(Times = #times{mtime = MTime, ctime = CTime}) ->
         case {MTime, CTime} of
             {CurrentTime, CurrentTime} ->
-                {error, not_changed};
+                {error, {not_changed, Times}};
             _ ->
                 {ok, Times#times{mtime = CurrentTime, ctime = CurrentTime}}
         end
@@ -114,7 +114,7 @@ update_times_and_emit(FileCtx, TimesDiff) ->
                         fslogic_event_emitter:emit_sizeless_file_attrs_changed(FileCtx)
                     end),
                     ok;
-                {error, not_changed} ->
+                {error, {not_changed, _}} ->
                     ok
             end
     end.
@@ -156,5 +156,7 @@ calculate_atime(FileCtx, CurrentTime) ->
 %%--------------------------------------------------------------------
 -spec prepare_times(times:diff()) -> #times{}.
 prepare_times(TimesDiff) ->
-    {ok, Times} = TimesDiff(#times{}),
-    Times.
+    case TimesDiff(#times{}) of
+        {ok, Times} -> Times;
+        {error, {not_changed, Times}} -> Times
+    end.

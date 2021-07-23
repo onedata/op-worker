@@ -76,7 +76,10 @@
     % QoS entry audit log
     qos_audit_log_successful_synchronization/1,
     qos_audit_log_transfer_error/1,
-    qos_audit_log_failure/1
+    qos_audit_log_failure/1,
+    effective_qos_audit_log_successful_synchronization/1,
+    effective_qos_audit_log_transfer_error/1,
+    effective_qos_audit_log_failure/1
 ]).
 
 all() -> [
@@ -126,7 +129,10 @@ all() -> [
     
     qos_audit_log_successful_synchronization,
     qos_audit_log_transfer_error,
-    qos_audit_log_failure
+    qos_audit_log_failure,
+    effective_qos_audit_log_successful_synchronization,
+    effective_qos_audit_log_transfer_error,
+    effective_qos_audit_log_failure
 ].
 
 % Although this test SUITE is single provider, QoS parameters
@@ -580,40 +586,88 @@ qos_status_after_failed_transfers_deleted_entry(Config) ->
 %%%===================================================================
 
 qos_audit_log_successful_synchronization(Config) ->
-    qos_audit_log_base_test(Config, <<"synchronized">>).
+    qos_audit_log_base_test(Config, <<"synchronized">>, single_file).
 
 
 qos_audit_log_transfer_error(Config) ->
-    % errors mocked in init_per_testcase
-    qos_audit_log_base_test(Config, <<"failed">>).
+    % error mocked in init_per_testcase
+    qos_audit_log_base_test(Config, <<"failed">>, single_file).
 
 
 qos_audit_log_failure(Config) ->
-    % errors mocked in init_per_testcase
-    qos_audit_log_base_test(Config, <<"failed">>).
+    % error mocked in init_per_testcase
+    qos_audit_log_base_test(Config, <<"failed">>, single_file).
 
 
-qos_audit_log_base_test(Config, ExpectedStatus) ->
+effective_qos_audit_log_successful_synchronization(Config) ->
+    qos_audit_log_base_test(Config, <<"synchronized">>, effective).
+
+
+effective_qos_audit_log_transfer_error(Config) ->
+    % error mocked in init_per_testcase
+    qos_audit_log_base_test(Config, <<"failed">>, effective).
+
+
+effective_qos_audit_log_failure(Config) ->
+    % error mocked in init_per_testcase
+    qos_audit_log_base_test(Config, <<"failed">>, effective).
+
+
+qos_audit_log_base_test(Config, ExpectedStatus, Type) ->
+    ok = clock_freezer_mock:set_current_time_millis(123),
     [P1 | _] = ?config(op_worker_nodes, Config),
+    Timestamp = rpc:call(P1, global_clock, timestamp_millis, []),
     SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(P1)}}, Config),
     FilePath = filename:join(["/", ?SPACE_PATH1, generator:gen_name()]),
-    {ok, Guid} = api_test_utils:create_file(<<"file">>, P1, SessId, FilePath),
-    {ok, ObjectId} = file_id:guid_to_objectid(Guid),
-    {ok, QosEntryId} = lfm_proxy:add_qos_entry(P1, SessId, ?FILE_REF(Guid), <<"country=PL">>, 1),
-    ExpectedSeverity = case ExpectedStatus of
-        <<"synchronized">> -> <<"info">>;
-        <<"failed">> -> <<"error">>
+    {RootGuid, FileIds} = prepare_audit_log_test_env(Type, P1, SessId, FilePath),
+    {ok, QosEntryId} = lfm_proxy:add_qos_entry(P1, SessId, ?FILE_REF(RootGuid), <<"country=PL">>, 1),
+    BaseExpected = case ExpectedStatus of
+        <<"synchronized">> -> 
+            #{<<"severity">> => <<"info">>};
+        <<"failed">> -> 
+            #{
+                <<"severity">> => <<"error">>,
+                % error mocked in init_per_testcase
+                <<"error">> => #{
+                    <<"description">> => <<"Operation failed with POSIX error: enoent.">>,
+                    <<"details">> => #{<<"errno">> => <<"enoent">>},
+                    <<"id">> => <<"posix">>
+                }
+            }
     end,
-    {ok, [#{
-        <<"fileId">> := ObjectId,
-        <<"status">> := ExpectedStatus,
-        <<"severity">> := ExpectedSeverity,
-        <<"timestamp">> := _
-    }], true} = ?assertMatch(
-        {ok, [_], true}, 
-        rpc:call(P1, qos_entry_audit_log, list, [QosEntryId, #{}]),
-        10
-    ).
+    SortFun = fun(#{<<"fileId">> := FileIdA}, #{<<"fileId">> := FileIdB}) -> FileIdA =< FileIdB end,
+    Expected = lists:sort(SortFun, lists:map(fun(ObjectId) ->
+        BaseExpected#{
+            <<"fileId">> => ObjectId,
+            <<"status">> => ExpectedStatus,
+            <<"timestamp">> => Timestamp
+        }
+    end, FileIds)),
+    GetAuditLogFun = fun() -> 
+        case rpc:call(P1, qos_entry_audit_log, list, [QosEntryId, #{}]) of
+            {ok, Result, IsLast} ->
+                {ok, lists:sort(SortFun, Result), IsLast};
+            {error, _} = Error ->
+                Error
+        end
+    end,
+    ?assertMatch({ok, Expected, true}, GetAuditLogFun(), 10).
+
+
+prepare_audit_log_test_env(single_file, Worker, SessId, RootFilePath) ->
+    {ok, Guid} = api_test_utils:create_file(<<"file">>, Worker, SessId, RootFilePath),
+    {ok, ObjectId} = file_id:guid_to_objectid(Guid),
+    {Guid, [ObjectId]};
+prepare_audit_log_test_env(effective, Worker, SessId, RootFilePath) ->
+    {ok, DirGuid} = api_test_utils:create_file(<<"dir">>, Worker, SessId, RootFilePath),
+    ChildrenNum = rand:uniform(50),
+    ChildrenIds = lists_utils:pmap(fun(Num) ->
+        FilePath = filename:join(RootFilePath, integer_to_binary(Num)),
+        {ok, Guid} = api_test_utils:create_file(<<"file">>, Worker, SessId, FilePath),
+        {ok, ObjectId} = file_id:guid_to_objectid(Guid),
+        ObjectId
+    end, lists:seq(1, ChildrenNum)),
+    {DirGuid, ChildrenIds}.
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -650,30 +704,20 @@ init_per_testcase(Case, Config) when
         fun(EffFileQos, _) -> lists:flatten(maps:values(file_qos:get_assigned_entries(EffFileQos))) end
     ),
     init_per_testcase(qos_status_default , Config);
-init_per_testcase(qos_audit_log_transfer_error, Config) ->
+init_per_testcase(Case, Config) when
+    Case =:= qos_audit_log_transfer_error;
+    Case =:= effective_qos_audit_log_transfer_error ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, replica_synchronizer, [passthrough]),
-    ok = test_utils:mock_expect(Workers, replica_synchronizer, synchronize,
-        fun(_, _, _, _, _, _) ->
-            {error, some_error}
-        end),
-    ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
-    mock_space_storages(ConfigWithSessionInfo, maps:keys(?TEST_PROVIDERS_QOS)),
-    mock_storage_qos_parameters(Workers, ?TEST_PROVIDERS_QOS),
-    mock_storage_get_provider(ConfigWithSessionInfo),
-    lfm_proxy:init(ConfigWithSessionInfo);
-init_per_testcase(qos_audit_log_failure, Config) ->
+    qos_tests_utils:mock_replica_synchronizer(Workers, ?ERROR_POSIX(?ENOENT)),
+    common_init_per_testcase(Config);
+init_per_testcase(Case, Config) when 
+    Case =:= qos_audit_log_failure;
+    Case =:= effective_qos_audit_log_failure ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, replica_synchronizer, [passthrough]),
-    ok = test_utils:mock_expect(Workers, replica_synchronizer, synchronize,
-        fun(_, _, _, _, _, _) ->
-            throw({error, some_error})
-        end),
-    ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
-    mock_space_storages(ConfigWithSessionInfo, maps:keys(?TEST_PROVIDERS_QOS)),
-    mock_storage_qos_parameters(Workers, ?TEST_PROVIDERS_QOS),
-    mock_storage_get_provider(ConfigWithSessionInfo),
-    lfm_proxy:init(ConfigWithSessionInfo);
+    qos_tests_utils:mock_replica_synchronizer(Workers, {throw, ?ERROR_POSIX(?ENOENT)}),
+    common_init_per_testcase(Config);
 init_per_testcase(Case, Config) when
     Case =:= qos_status_during_traverse_test;
     Case =:= qos_status_during_traverse_with_file_deletion;
@@ -682,18 +726,20 @@ init_per_testcase(Case, Config) when
     Case =:= qos_status_default ->
     
     Workers = ?config(op_worker_nodes, Config),
-    ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
     qos_tests_utils:mock_transfers(Workers),
-    mock_space_storages(ConfigWithSessionInfo, maps:keys(?TEST_PROVIDERS_QOS)),
-    mock_storage_qos_parameters(Workers, ?TEST_PROVIDERS_QOS),
-    mock_storage_get_provider(ConfigWithSessionInfo),
-    lfm_proxy:init(ConfigWithSessionInfo);
+    common_init_per_testcase(Config);
 init_per_testcase(_, Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
     % do not start file synchronization
     test_utils:mock_new(Workers, replica_synchronizer, [passthrough]),
     qos_tests_utils:mock_replica_synchronizer(Workers, {ok, ok}),
+    common_init_per_testcase(Config).
+
+
+common_init_per_testcase(Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    ok = clock_freezer_mock:setup_on_nodes(Workers, [global_clock, ?MODULE]),
+    ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
     mock_space_storages(ConfigWithSessionInfo, maps:keys(?TEST_PROVIDERS_QOS)),
     mock_storage_qos_parameters(Workers, ?TEST_PROVIDERS_QOS),
     mock_storage_get_provider(ConfigWithSessionInfo),
