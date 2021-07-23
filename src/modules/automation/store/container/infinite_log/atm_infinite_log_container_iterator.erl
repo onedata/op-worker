@@ -10,6 +10,7 @@
 %%% `atm_infinite_log_container`.
 %%% @end
 %%%-------------------------------------------------------------------
+%% @TODO VFS-8068 Get rid of this module
 -module(atm_infinite_log_container_iterator).
 -author("Michal Stanisz").
 -author("Lukasz Opiola").
@@ -17,6 +18,7 @@
 -behaviour(persistent_record).
 
 -include_lib("ctool/include/errors.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([build/1, get_next_batch/3, forget_before/1, mark_exhausted/1]).
@@ -31,6 +33,9 @@
 }).
 -type record() :: #atm_infinite_log_container_iterator{}.
 
+-type result_mapper() :: fun((infinite_log:timestamp(), atm_value:compressed()) -> 
+    {true, automation:item()} | false).
+
 -export_type([record/0]).
 
 
@@ -44,19 +49,23 @@ build(BackendId) ->
     #atm_infinite_log_container_iterator{backend_id = BackendId}.
 
 
--spec get_next_batch(atm_workflow_execution_ctx:record(), atm_store_container_iterator:batch_size(), record()) ->
-    {ok, [atm_value:compressed()], record()} | stop.
-get_next_batch(_AtmWorkflowExecutionCtx, BatchSize, #atm_infinite_log_container_iterator{} = Record) ->
+-spec get_next_batch(atm_store_container_iterator:batch_size(), record(), result_mapper()) ->
+    {ok, [atm_value:expanded()], record()} | stop.
+get_next_batch(BatchSize, #atm_infinite_log_container_iterator{} = Record, ResultMapper) ->
     #atm_infinite_log_container_iterator{backend_id = BackendId, index = StartIndex} = Record,
     {ok, {Marker, EntrySeries}} = atm_infinite_log_backend:list(
         BackendId, #{start_from => {index, StartIndex}, limit => BatchSize}),
-    Res = lists:map(fun({_Index, {_Timestamp, V}}) -> json_utils:decode(V) end, EntrySeries),
-    case {Res, Marker} of
+    FilteredEntries = lists:filtermap(fun({_Index, Compressed, Timestamp}) ->
+        ResultMapper(Timestamp, Compressed)
+    end, EntrySeries),
+    case {EntrySeries, Marker} of
         {[], done} -> 
             stop;
         _ ->
-            {LastIndex, _} = lists:last(EntrySeries),
-            {ok, Res, Record#atm_infinite_log_container_iterator{index = LastIndex + 1}}
+            {LastIndex, _, _} = lists:last(EntrySeries),
+            {ok, FilteredEntries, Record#atm_infinite_log_container_iterator{
+                index = binary_to_integer(LastIndex) + 1}
+            }
     end.
 
 

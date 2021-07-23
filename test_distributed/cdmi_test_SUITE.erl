@@ -353,8 +353,8 @@ init_per_testcase(_Case, Config) ->
 end_per_testcase(choose_adequate_handler_test = Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     ok = test_utils:mock_unload(Workers, [cdmi_object_handler, cdmi_container_handler]),
-    rpc:multicall(Workers, code, ensure_loaded, [cdmi_object_handler]),
-    rpc:multicall(Workers, code, ensure_loaded, [cdmi_container_handler]),
+    utils:rpc_multicall(Workers, code, ensure_loaded, [cdmi_object_handler]),
+    utils:rpc_multicall(Workers, code, ensure_loaded, [cdmi_container_handler]),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 
 end_per_testcase(download_file_in_blocks = Case, Config) ->
@@ -399,5 +399,5 @@ unmock_storage_get_block_size(Workers) ->
 set_storage_block_size(Workers, BlockSize) ->
     ?assertMatch(
         {_, []},
-        rpc:multicall(Workers, node_cache, put, [storage_block_size, BlockSize])
+        utils:rpc_multicall(Workers, node_cache, put, [storage_block_size, BlockSize])
     ).

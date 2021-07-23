@@ -355,7 +355,7 @@ get_default_keepalive_timeout(EngineId) ->
 -spec set_default_keepalive_timeout(id(), time:seconds()) -> ok.
 set_default_keepalive_timeout(Id, Timeout) ->
     Nodes = consistent_hashing:get_all_nodes(),
-    {Res, BadNodes} = rpc:multicall(Nodes, node_cache, put, [{default_keepalive_timeout, Id}, Timeout]),
+    {Res, BadNodes} = utils:rpc_multicall(Nodes, node_cache, put, [{default_keepalive_timeout, Id}, Timeout]),
 
     case BadNodes of
         [] ->

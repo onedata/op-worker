@@ -288,7 +288,7 @@ prepare_function_definition(PrepareCtx = #prepare_ctx{
     },
 
     AllProperties = lists:foldl(fun({Property, EnvVar}, Acc) ->
-        case op_worker:get_env(EnvVar, undefined) of
+        case get_env(EnvVar, undefined) of
             undefined ->
                 Acc;
             Array when is_list(Array) ->
@@ -337,7 +337,7 @@ add_mount_oneclient_function_annotations(FunctionDefinition, #prepare_ctx{
     AccessToken = atm_workflow_execution_ctx:get_access_token(AtmWorkflowExecutionCtx),
     {ok, OpDomain} = provider_logic:get_domain(),
 
-    EnvSpecificOneclientOptions = str_utils:to_binary(op_worker:get_env(
+    EnvSpecificOneclientOptions = str_utils:to_binary(get_env(
         openfaas_oneclient_options, <<"">>
     )),
 
@@ -364,7 +364,7 @@ add_mount_oneclient_function_annotations(FunctionDefinition, #prepare_ctx{
 %% @private
 -spec get_oneclient_image() -> binary().
 get_oneclient_image() ->
-    case op_worker:get_env(openfaas_oneclient_image, undefined) of
+    case get_env(openfaas_oneclient_image, undefined) of
         undefined ->
             ReleaseVersion = op_worker:get_release_version(),
             <<"onedata/oneclient:", ReleaseVersion/binary>>;
@@ -456,22 +456,33 @@ remove_function(#atm_openfaas_task_executor{function_name = FunctionName}) ->
 %% @private
 -spec get_openfaas_config() -> openfaas_config() | no_return().
 get_openfaas_config() ->
-    try
-        Host = op_worker:get_env(openfaas_host),
-        Port = op_worker:get_env(openfaas_port),
+    Host = get_env(openfaas_host),
+    Port = get_env(openfaas_port),
 
-        AdminUsername = op_worker:get_env(openfaas_admin_username),
-        AdminPassword = op_worker:get_env(openfaas_admin_password),
-        Hash = base64:encode(str_utils:format_bin("~s:~s", [AdminUsername, AdminPassword])),
+    AdminUsername = get_env(openfaas_admin_username),
+    AdminPassword = get_env(openfaas_admin_password),
+    Hash = base64:encode(str_utils:format_bin("~s:~s", [AdminUsername, AdminPassword])),
 
-        #openfaas_config{
-            url = str_utils:format_bin("http://~s:~B", [Host, Port]),
-            basic_auth = <<"Basic ", Hash/binary>>,
-            function_namespace = str_utils:to_binary(op_worker:get_env(openfaas_function_namespace))
-        }
-    catch _:_ ->
-        throw(?ERROR_ATM_OPENFAAS_NOT_CONFIGURED)
+    #openfaas_config{
+        url = str_utils:format_bin("http://~s:~B", [Host, Port]),
+        basic_auth = <<"Basic ", Hash/binary>>,
+        function_namespace = str_utils:to_binary(get_env(openfaas_function_namespace))
+    }.
+
+
+%% @private
+-spec get_env(atom()) -> term() | no_return().
+get_env(Key) ->
+    case get_env(Key, undefined) of
+        undefined -> throw(?ERROR_ATM_OPENFAAS_NOT_CONFIGURED);
+        Value -> Value
     end.
+
+
+%% @private
+-spec get_env(atom(), term()) -> term().
+get_env(Key, Default) ->
+    op_worker:get_env(Key, Default).
 
 
 %% @private

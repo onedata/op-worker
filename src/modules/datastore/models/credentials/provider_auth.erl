@@ -183,7 +183,7 @@ get_root_token_file_path() ->
 -spec delete() -> ok | {error, term()}.
 delete() ->
     ok = datastore_model:delete(?CTX, ?PROVIDER_AUTH_KEY),
-    rpc:multicall(consistent_hashing:get_all_nodes(), ?MODULE, clear_provider_id_cache, []),
+    utils:rpc_multicall(consistent_hashing:get_all_nodes(), ?MODULE, clear_provider_id_cache, []),
     ok.
 
 %%--------------------------------------------------------------------
@@ -288,7 +288,7 @@ write_to_file(ProviderId, RootToken, Nodes) ->
         <<"provider_id">> => ProviderId, <<"root_token">> => RootToken},
     Formatted = json_utils:encode(Map, [pretty]),
 
-    {Results, BadNodes} = rpc:multicall(Nodes, file, write_file,
+    {Results, BadNodes} = utils:rpc_multicall(Nodes, file, write_file,
         [ProviderRootTokenFile, Formatted]),
     case lists:filter(fun(Result) -> Result /= ok end, Results ++ BadNodes) of
         [] -> ok;

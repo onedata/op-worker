@@ -46,7 +46,8 @@
     iterate_in_chunks_7_with_start_50_end_minus_50_step_minus_3_test/1,
     iterate_in_chunks_3_with_start_10_end_10_step_2_test/1,
 
-    reuse_iterator_test/1
+    reuse_iterator_test/1,
+    browse_test/1
 ]).
 
 groups() -> [
@@ -66,7 +67,8 @@ groups() -> [
         iterate_in_chunks_7_with_start_50_end_minus_50_step_minus_3_test,
         iterate_in_chunks_3_with_start_10_end_10_step_2_test,
 
-        reuse_iterator_test
+        reuse_iterator_test,
+        browse_test
     ]}
 ].
 
@@ -295,6 +297,19 @@ reuse_iterator_test(_Config) ->
 
     {ok, _, AtmSerialIterator9} = ?assertMatch({ok, 5, _}, atm_store_test_utils:iterator_get_next(krakow, AtmWorkflowExecutionEnv, AtmSerialIterator1)),
     ?assertMatch({ok, 8, _}, atm_store_test_utils:iterator_get_next(krakow, AtmWorkflowExecutionEnv, AtmSerialIterator9)).
+
+
+browse_test(_Config) ->
+    AtmWorkflowExecutionCtx = atm_store_test_utils:create_workflow_execution_ctx(
+        krakow, user1, space_krk
+    ),
+    InitialValue = #{<<"start">> => 2, <<"end">> => 16, <<"step">> => 3},
+    {ok, AtmStoreId} = atm_store_test_utils:create_store(
+        krakow, AtmWorkflowExecutionCtx, InitialValue, ?ATM_RANGE_STORE_SCHEMA
+    ),
+    {ok, AtmStore} = atm_store_test_utils:get(krakow, AtmStoreId),
+    ?assertEqual({[{<<>>, {ok, InitialValue}}], true},
+        atm_store_test_utils:browse_content(krakow, AtmWorkflowExecutionCtx, #{}, AtmStore)).
 
 
 %===================================================================

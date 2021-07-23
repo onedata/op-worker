@@ -692,7 +692,7 @@ end_per_suite(Config) ->
 
 init_per_testcase(qos_status_during_traverse_multi_batch_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    rpc:multicall(Workers, application, set_env, [op_worker, qos_traverse_batch_size, 2]),
+    utils:rpc_multicall(Workers, application, set_env, [op_worker, qos_traverse_batch_size, 2]),
     init_per_testcase(qos_status_default , Config);
 init_per_testcase(Case, Config) when 
     Case =:= qos_status_after_failed_transfers;
@@ -748,7 +748,7 @@ common_init_per_testcase(Config) ->
 
 end_per_testcase(qos_status_during_traverse_multi_batch_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    rpc:multicall(Workers, application, set_env, [op_worker, qos_traverse_batch_size, 40]),
+    utils:rpc_multicall(Workers, application, set_env, [op_worker, qos_traverse_batch_size, 40]),
     end_per_testcase(default, Config);
 end_per_testcase(Case, Config) when
     Case =:= qos_status_after_failed_transfers;

@@ -4,6 +4,11 @@ Release notes for project op-worker
 CHANGELOG
 ---------
 
+### 21.02.0-alpha18
+
+-   **VFS-7736** Fixed latency and timeout simulation in nulldevice
+    storage helper.
+
 ### 21.02.0-alpha17
 
 -   **VFS-8018** Added HTTP storage driver option to limit on the client
@@ -155,7 +160,12 @@ CHANGELOG
 -   **VFS-6566** Improved UX and fixed minor issues in share views.
     Fixed inability to open share hosted by Oneprovider 19.02.x using
     Onezone 20.02.x.
--
+
+### 20.02.11
+
+-   **VFS-8017** Added support for allowing setting of UID and GID in
+    the admin context on the POSIX storage to be other than 0:0.
+
 ### 20.02.10
 
 -   **VFS-7739** Improved CPU affinity of storage driver threads in

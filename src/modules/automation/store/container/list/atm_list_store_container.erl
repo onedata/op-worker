@@ -33,13 +33,19 @@
 
 -type initial_value() :: atm_infinite_log_container:initial_value().
 -type operation_options() :: atm_infinite_log_container:operation_options().
+-type browse_options() :: #{
+    limit := atm_store_api:limit(),
+    start_index => atm_store_api:index(),
+    offset => atm_store_api:offset()
+}.
 
 -record(atm_list_store_container, {
+%%    @TODO VFS-8068 Do not use atm_infinite_log_container
     atm_infinite_log_container :: atm_infinite_log_container:record()
 }).
 -type record() :: #atm_list_store_container{}.
 
--export_type([initial_value/0, operation_options/0, record/0]).
+-export_type([initial_value/0, operation_options/0, browse_options/0, record/0]).
 
 
 %%%===================================================================
@@ -62,12 +68,19 @@ get_data_spec(#atm_list_store_container{atm_infinite_log_container = AtmInfinite
     atm_infinite_log_container:get_data_spec(AtmInfiniteLogContainer).
 
 
--spec browse_content(atm_workflow_execution_ctx:record(), atm_store_api:browse_opts(), record()) ->
+-spec browse_content(atm_workflow_execution_ctx:record(), browse_options(), record()) ->
     atm_store_api:browse_result() | no_return().
 browse_content(AtmWorkflowExecutionCtx, BrowseOpts, #atm_list_store_container{
     atm_infinite_log_container = AtmInfiniteLogContainer
 }) ->
-    atm_infinite_log_container:browse_content(AtmWorkflowExecutionCtx, BrowseOpts, AtmInfiniteLogContainer).
+    SanitizedBrowseOpts = sanitize_browse_options(BrowseOpts),
+    {Entries, IsLast} = atm_infinite_log_container:browse_content(
+        SanitizedBrowseOpts, AtmInfiniteLogContainer),
+    AtmDataSpec = atm_infinite_log_container:get_data_spec(AtmInfiniteLogContainer),
+    MappedEntries = lists:map(fun({Index, Compressed, _Timestamp}) ->
+        {Index, atm_value:expand(AtmWorkflowExecutionCtx, Compressed, AtmDataSpec)}
+    end, Entries),
+    {MappedEntries, IsLast}.
 
 
 -spec acquire_iterator(record()) -> atm_list_store_container_iterator:record().
@@ -123,3 +136,21 @@ db_decode(#{<<"atmInfiniteLogContainer">> := AtmInfiniteLogContainerJson}, Neste
             AtmInfiniteLogContainerJson, atm_infinite_log_container
         )
     }.
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%% @private
+-spec sanitize_browse_options(browse_options()) -> browse_options().
+sanitize_browse_options(BrowseOpts) ->
+    maps:without([start_timestamp], middleware_sanitizer:sanitize_data(BrowseOpts, #{
+        required => #{
+            limit => {integer, {not_lower_than, 1}}
+        },
+        at_least_one => #{
+            offset => {integer, any},
+            start_index => {binary, any}
+        }
+    })).

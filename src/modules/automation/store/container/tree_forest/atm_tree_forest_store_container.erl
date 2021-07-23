@@ -31,6 +31,7 @@
 -export([version/0, db_encode/2, db_decode/2]).
 
 -type operation_options() :: #{binary() => boolean()}.
+-type browse_options() :: atm_list_store_container:browse_options().
 -type initial_value() :: [automation:item()] | undefined.
 
 -record(atm_tree_forest_store_container, {
@@ -38,7 +39,7 @@
 }).
 -type record() :: #atm_tree_forest_store_container{}.
 
--export_type([initial_value/0, operation_options/0, record/0]).
+-export_type([initial_value/0, operation_options/0, browse_options/0, record/0]).
 
 
 %%%===================================================================
@@ -59,7 +60,7 @@ get_data_spec(#atm_tree_forest_store_container{roots_list = RootsList}) ->
     atm_list_store_container:get_data_spec(RootsList).
 
 
--spec browse_content(atm_workflow_execution_ctx:record(), atm_store_api:browse_opts(), record()) ->
+-spec browse_content(atm_workflow_execution_ctx:record(), browse_options(), record()) ->
     atm_store_api:browse_result() | no_return().
 browse_content(AtmWorkflowExecutionCtx, BrowseOpts, #atm_tree_forest_store_container{
     roots_list = RootsList
@@ -69,9 +70,9 @@ browse_content(AtmWorkflowExecutionCtx, BrowseOpts, #atm_tree_forest_store_conta
 
 -spec acquire_iterator(record()) -> atm_tree_forest_store_container_iterator:record().
 acquire_iterator(#atm_tree_forest_store_container{roots_list = RootsList}) ->
-    DataSpec = atm_list_store_container:get_data_spec(RootsList),
+    AtmDataSpec = atm_list_store_container:get_data_spec(RootsList),
     RootsIterator = atm_list_store_container:acquire_iterator(RootsList),
-    atm_tree_forest_store_container_iterator:build(RootsIterator, DataSpec).
+    atm_tree_forest_store_container_iterator:build(RootsIterator, AtmDataSpec).
 
 
 -spec apply_operation(record(), atm_store_container:operation()) ->

@@ -68,7 +68,7 @@ converge_unique([Status]) ->
 converge_unique(Statuses) ->
     [LowestStatusPresent | _] = lists:dropwhile(
         fun(Status) -> not lists:member(Status, Statuses) end,
-        [?ACTIVE_STATUS, ?PENDING_STATUS, ?FAILED_STATUS, ?FINISHED_STATUS]
+        [?ACTIVE_STATUS, ?PENDING_STATUS, ?FAILED_STATUS, ?SKIPPED_STATUS, ?FINISHED_STATUS]
     ),
 
     case LowestStatusPresent of
@@ -76,6 +76,11 @@ converge_unique(Statuses) ->
             % Some elements must have ended execution while others are still
             % pending - converged/overall status is active
             ?ACTIVE_STATUS;
+        ?SKIPPED_STATUS ->
+            % Some elements must have ended execution with ?FINISHED_STATUS while
+            % others were skipped - as not all tasks ended successfully the overall
+            % status is failed
+            ?FAILED_STATUS;
         Status ->
             Status
     end.

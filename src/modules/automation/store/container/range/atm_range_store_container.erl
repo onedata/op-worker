@@ -42,6 +42,7 @@
 %% }
 -type initial_value() :: #{binary() => integer()}.
 -type operation_options() :: #{binary() => boolean()}.
+-type browse_options() :: any().
 
 -record(atm_range_store_container, {
     data_spec :: atm_data_spec:record(),
@@ -51,7 +52,7 @@
 }).
 -type record() :: #atm_range_store_container{}.
 
--export_type([initial_value/0, operation_options/0, record/0]).
+-export_type([initial_value/0, operation_options/0, browse_options/0, record/0]).
 
 
 %%%===================================================================
@@ -83,7 +84,7 @@ get_data_spec(#atm_range_store_container{data_spec = AtmDataSpec}) ->
     AtmDataSpec.
 
 
--spec browse_content(atm_workflow_execution_ctx:record(), atm_store_api:browse_opts(), record()) ->
+-spec browse_content(atm_workflow_execution_ctx:record(), browse_options(), record()) ->
     atm_store_api:browse_result() | no_return().
 browse_content(_AtmWorkflowExecutionCtx, _Opts, #atm_range_store_container{
     start_num = StartNum,
