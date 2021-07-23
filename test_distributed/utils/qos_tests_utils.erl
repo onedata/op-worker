@@ -315,10 +315,14 @@ mock_transfers(Workers) ->
     test_utils:mock_new(Workers, replica_synchronizer, [passthrough]),
     TestPid = self(),
     ok = test_utils:mock_expect(Workers, replica_synchronizer, synchronize,
-        fun(_, FileCtx, _, _, _, _) ->
+        fun(UserCtx, FileCtx, Block, Prefetch, TransferId, Priority) ->
             FileGuid = file_ctx:get_referenced_guid_const(FileCtx),
             TestPid ! {qos_slave_job, self(), FileGuid},
-            receive {completed, FileGuid} -> {ok, FileGuid} end
+            receive
+                {completed, FileGuid} ->
+                    meck:passthrough([UserCtx, FileCtx, Block, Prefetch, TransferId, Priority]),
+                    {ok, FileGuid}
+            end
         end).
 
 
