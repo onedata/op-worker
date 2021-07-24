@@ -47,7 +47,7 @@
 -type openfaas_config() :: #openfaas_config{}.
 
 -record(prepare_ctx, {
-    workflow_execution_ctx :: atm_workflow_execution_ctx:record(),
+    workflow_execution_auth :: atm_workflow_execution_auth:record(),
     openfaas_config :: openfaas_config(),
     executor :: record()
 }).
@@ -101,10 +101,10 @@ create(AtmWorkflowExecutionId, AtmLambdaDoc = #document{value = #od_atm_lambda{
     }.
 
 
--spec prepare(atm_workflow_execution_ctx:record(), record()) -> ok | no_return().
-prepare(AtmWorkflowExecutionCtx, AtmTaskExecutor) ->
+-spec prepare(atm_workflow_execution_auth:record(), record()) -> ok | no_return().
+prepare(AtmWorkflowExecutionAuth, AtmTaskExecutor) ->
     PrepareCtx = #prepare_ctx{
-        workflow_execution_ctx = AtmWorkflowExecutionCtx,
+        workflow_execution_auth = AtmWorkflowExecutionAuth,
         openfaas_config = get_openfaas_config(),
         executor = AtmTaskExecutor
     },
@@ -322,7 +322,7 @@ add_mount_oneclient_function_annotations(FunctionDefinition, #prepare_ctx{
 ) ->
     FunctionDefinition;
 add_mount_oneclient_function_annotations(FunctionDefinition, #prepare_ctx{
-    workflow_execution_ctx = AtmWorkflowExecutionCtx,
+    workflow_execution_auth = AtmWorkflowExecutionAuth,
     executor = AtmTaskExecutor = #atm_openfaas_task_executor{
         operation_spec = #atm_openfaas_operation_spec{
             docker_execution_options = #atm_docker_execution_options{
@@ -333,8 +333,8 @@ add_mount_oneclient_function_annotations(FunctionDefinition, #prepare_ctx{
         }
     }
 }) ->
-    SpaceId = atm_workflow_execution_ctx:get_space_id(AtmWorkflowExecutionCtx),
-    AccessToken = atm_workflow_execution_ctx:get_access_token(AtmWorkflowExecutionCtx),
+    SpaceId = atm_workflow_execution_auth:get_space_id(AtmWorkflowExecutionAuth),
+    AccessToken = atm_workflow_execution_auth:get_access_token(AtmWorkflowExecutionAuth),
     {ok, OpDomain} = provider_logic:get_domain(),
 
     EnvSpecificOneclientOptions = str_utils:to_binary(get_env(

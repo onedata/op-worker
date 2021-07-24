@@ -278,10 +278,10 @@ prepare_internal(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv) ->
         lanes = AtmLaneExecutions
     }}} = atm_workflow_execution_status:handle_preparing(AtmWorkflowExecutionId),
 
-    AtmWorkflowExecutionCtx = atm_workflow_execution_env:acquire_workflow_execution_ctx(
+    AtmWorkflowExecutionAuth = atm_workflow_execution_env:acquire_workflow_execution_auth(
         AtmWorkflowExecutionEnv
     ),
-    atm_lane_execution:prepare_all(AtmWorkflowExecutionCtx, AtmLaneExecutions),
+    atm_lane_execution:prepare_all(AtmWorkflowExecutionAuth, AtmLaneExecutions),
 
     atm_workflow_execution_status:handle_enqueued(AtmWorkflowExecutionId),
     ok.

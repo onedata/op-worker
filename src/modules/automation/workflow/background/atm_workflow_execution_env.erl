@@ -24,7 +24,7 @@
 -export([
     build/3,
     get_store_id/2,
-    acquire_workflow_execution_ctx/1
+    acquire_workflow_execution_auth/1
 ]).
 
 
@@ -69,10 +69,10 @@ get_store_id(AtmStoreSchemaId, #atm_workflow_execution_env{
     end.
 
 
--spec acquire_workflow_execution_ctx(record()) -> atm_workflow_execution_ctx:record().
-acquire_workflow_execution_ctx(#atm_workflow_execution_env{
+-spec acquire_workflow_execution_auth(record()) -> atm_workflow_execution_auth:record().
+acquire_workflow_execution_auth(#atm_workflow_execution_env{
     space_id = SpaceId,
     workflow_execution_id = AtmWorkflowExecutionId
 }) ->
     CreatorUserCtx = atm_workflow_execution_session:acquire(AtmWorkflowExecutionId),
-    atm_workflow_execution_ctx:build(SpaceId, AtmWorkflowExecutionId, CreatorUserCtx).
+    atm_workflow_execution_auth:build(SpaceId, AtmWorkflowExecutionId, CreatorUserCtx).

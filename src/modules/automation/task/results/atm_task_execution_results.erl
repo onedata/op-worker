@@ -51,7 +51,7 @@ build_specs(AtmLambdaResultSpecs, AtmTaskSchemaResultMappers) ->
 ) ->
     ok | no_return().
 apply(AtmWorkflowExecutionEnv, AtmTaskExecutionResultSpecs, Results) ->
-    AtmWorkflowExecutionCtx = atm_workflow_execution_env:acquire_workflow_execution_ctx(
+    AtmWorkflowExecutionAuth = atm_workflow_execution_env:acquire_workflow_execution_auth(
         AtmWorkflowExecutionEnv
     ),
     lists:foreach(fun(AtmTaskExecutionResultSpec) ->
@@ -63,7 +63,7 @@ apply(AtmWorkflowExecutionEnv, AtmTaskExecutionResultSpecs, Results) ->
             Result ->
                 try
                     atm_task_execution_result_spec:apply_result(
-                        AtmWorkflowExecutionEnv, AtmWorkflowExecutionCtx,
+                        AtmWorkflowExecutionEnv, AtmWorkflowExecutionAuth,
                         AtmTaskExecutionResultSpec, Result
                     )
                 catch _:Reason ->

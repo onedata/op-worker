@@ -21,7 +21,7 @@
 -export([build/5]).
 -export([
     get_workflow_execution_env/1,
-    get_workflow_execution_ctx/1,
+    get_workflow_execution_auth/1,
     get_access_token/1,
     get_item/1,
     get_report_result_url/1,
@@ -31,7 +31,7 @@
 
 -record(atm_task_execution_ctx, {
     workflow_execution_env :: atm_workflow_execution_env:record(),
-    workflow_execution_ctx :: atm_workflow_execution_ctx:record(),
+    workflow_execution_auth :: atm_workflow_execution_auth:record(),
     in_readonly_mode :: boolean(),
     item :: json_utils:json_term(),
     report_result_url :: undefined | binary(),
@@ -58,7 +58,7 @@
 build(AtmWorkflowExecutionEnv, InReadonlyMode, Item, ReportResultUrl, HeartbeatUrl) ->
     #atm_task_execution_ctx{
         workflow_execution_env = AtmWorkflowExecutionEnv,
-        workflow_execution_ctx = atm_workflow_execution_env:acquire_workflow_execution_ctx(
+        workflow_execution_auth = atm_workflow_execution_env:acquire_workflow_execution_auth(
             AtmWorkflowExecutionEnv
         ),
         in_readonly_mode = InReadonlyMode,
@@ -73,17 +73,17 @@ get_workflow_execution_env(#atm_task_execution_ctx{workflow_execution_env = AtmW
     AtmWorkflowExecutionEnv.
 
 
--spec get_workflow_execution_ctx(record()) -> atm_workflow_execution_ctx:record().
-get_workflow_execution_ctx(#atm_task_execution_ctx{workflow_execution_ctx = AtmWorkflowExecutionCtx}) ->
-    AtmWorkflowExecutionCtx.
+-spec get_workflow_execution_auth(record()) -> atm_workflow_execution_auth:record().
+get_workflow_execution_auth(#atm_task_execution_ctx{workflow_execution_auth = AtmWorkflowExecutionAuth}) ->
+    AtmWorkflowExecutionAuth.
 
 
 -spec get_access_token(record()) -> auth_manager:access_token().
 get_access_token(#atm_task_execution_ctx{
-    workflow_execution_ctx = AtmWorkflowExecutionCtx,
+    workflow_execution_auth = AtmWorkflowExecutionAuth,
     in_readonly_mode = InReadonlyMode
 }) ->
-    AccessToken = atm_workflow_execution_ctx:get_access_token(AtmWorkflowExecutionCtx),
+    AccessToken = atm_workflow_execution_auth:get_access_token(AtmWorkflowExecutionAuth),
 
     case InReadonlyMode of
         true -> tokens:confine(AccessToken, #cv_data_readonly{});

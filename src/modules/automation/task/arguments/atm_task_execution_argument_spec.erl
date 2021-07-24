@@ -86,8 +86,8 @@ construct_arg(AtmTaskExecutionCtx, AtmTaskExecutionArgSpec = #atm_task_execution
 }) ->
     ArgValue = build_value(AtmTaskExecutionCtx, ArgValueBuilder),
 
-    AtmWorkflowExecutionCtx = atm_task_execution_ctx:get_workflow_execution_ctx(AtmTaskExecutionCtx),
-    validate_value(AtmWorkflowExecutionCtx, ArgValue, AtmTaskExecutionArgSpec),
+    AtmWorkflowExecutionAuth = atm_task_execution_ctx:get_workflow_execution_auth(AtmTaskExecutionCtx),
+    validate_value(AtmWorkflowExecutionAuth, ArgValue, AtmTaskExecutionArgSpec),
 
     ArgValue.
 
@@ -189,10 +189,10 @@ build_value(AtmTaskExecutionCtx, #atm_task_argument_value_builder{
         AtmStoreType -> throw(?ERROR_ATM_STORE_TYPE_DISALLOWED(AtmStoreType, [single_value]))
     end,
 
-    AtmWorkflowExecutionCtx = atm_task_execution_ctx:get_workflow_execution_ctx(AtmTaskExecutionCtx),
+    AtmWorkflowExecutionAuth = atm_task_execution_ctx:get_workflow_execution_auth(AtmTaskExecutionCtx),
     BrowseOpts = #{offset => 0, limit => 1},
 
-    case atm_store_api:browse_content(AtmWorkflowExecutionCtx, BrowseOpts, AtmStore) of
+    case atm_store_api:browse_content(AtmWorkflowExecutionAuth, BrowseOpts, AtmStore) of
         {[], true} ->
             throw(?ERROR_ATM_STORE_EMPTY(AtmSingleValueStoreSchemaId));
         {[{_Index, {error, _} = Error}], true} ->
@@ -208,24 +208,24 @@ build_value(_AtmTaskExecutionCtx, _InputSpec) ->
 
 %% @private
 -spec validate_value(
-    atm_workflow_execution_ctx:record(),
+    atm_workflow_execution_auth:record(),
     json_utils:json_term() | [json_utils:json_term()],
     record()
 ) ->
     ok | no_return().
-validate_value(AtmWorkflowExecutionCtx, ArgValue, #atm_task_execution_argument_spec{
+validate_value(AtmWorkflowExecutionAuth, ArgValue, #atm_task_execution_argument_spec{
     data_spec = AtmDataSpec,
     is_batch = false
 }) ->
-    atm_value:validate(AtmWorkflowExecutionCtx, ArgValue, AtmDataSpec);
+    atm_value:validate(AtmWorkflowExecutionAuth, ArgValue, AtmDataSpec);
 
-validate_value(AtmWorkflowExecutionCtx, ArgsBatch, #atm_task_execution_argument_spec{
+validate_value(AtmWorkflowExecutionAuth, ArgsBatch, #atm_task_execution_argument_spec{
     data_spec = AtmDataSpec,
     is_batch = true
 }) when is_list(ArgsBatch) ->
     lists:foreach(fun(ArgValue) ->
-        atm_value:validate(AtmWorkflowExecutionCtx, ArgValue, AtmDataSpec)
+        atm_value:validate(AtmWorkflowExecutionAuth, ArgValue, AtmDataSpec)
     end, ArgsBatch);
 
-validate_value(_AtmWorkflowExecutionCtx, _ArgsBatch, _AtmTaskExecutionArgSpec) ->
+validate_value(_AtmWorkflowExecutionAuth, _ArgsBatch, _AtmTaskExecutionArgSpec) ->
     throw(?ERROR_ATM_BAD_DATA(<<"value">>, <<"not a batch">>)).

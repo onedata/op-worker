@@ -29,12 +29,12 @@
 
 
 -spec assert_meets_constraints(
-    atm_workflow_execution_ctx:record(),
+    atm_workflow_execution_auth:record(),
     atm_value:expanded(),
     atm_data_type:value_constraints()
 ) ->
     ok | no_return().
-assert_meets_constraints(_AtmWorkflowExecutionCtx, _Value, _ValueConstraints) ->
+assert_meets_constraints(_AtmWorkflowExecutionAuth, _Value, _ValueConstraints) ->
     ok.
 
 
@@ -47,7 +47,7 @@ assert_meets_constraints(_AtmWorkflowExecutionCtx, _Value, _ValueConstraints) ->
 compress(Value) -> Value.
 
 
--spec expand(atm_workflow_execution_ctx:record(), binary()) ->
+-spec expand(atm_workflow_execution_auth:record(), binary()) ->
     {ok, atm_value:expanded()}.
 expand(_, Value) ->
     {ok, Value}.

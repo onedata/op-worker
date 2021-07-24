@@ -53,12 +53,12 @@
 %%%===================================================================
 
 
--spec create(atm_workflow_execution_ctx:record(), atm_data_spec:record(), initial_value()) ->
+-spec create(atm_workflow_execution_auth:record(), atm_data_spec:record(), initial_value()) ->
     record() | no_return().
-create(AtmWorkflowExecutionCtx, AtmDataSpec, InitialValueBatch) ->
+create(AtmWorkflowExecutionAuth, AtmDataSpec, InitialValueBatch) ->
     #atm_list_store_container{
         atm_infinite_log_container = atm_infinite_log_container:create(
-            AtmWorkflowExecutionCtx, AtmDataSpec, InitialValueBatch
+            AtmWorkflowExecutionAuth, AtmDataSpec, InitialValueBatch
         )
     }.
 
@@ -68,9 +68,9 @@ get_data_spec(#atm_list_store_container{atm_infinite_log_container = AtmInfinite
     atm_infinite_log_container:get_data_spec(AtmInfiniteLogContainer).
 
 
--spec browse_content(atm_workflow_execution_ctx:record(), browse_options(), record()) ->
+-spec browse_content(atm_workflow_execution_auth:record(), browse_options(), record()) ->
     atm_store_api:browse_result() | no_return().
-browse_content(AtmWorkflowExecutionCtx, BrowseOpts, #atm_list_store_container{
+browse_content(AtmWorkflowExecutionAuth, BrowseOpts, #atm_list_store_container{
     atm_infinite_log_container = AtmInfiniteLogContainer
 }) ->
     SanitizedBrowseOpts = sanitize_browse_options(BrowseOpts),
@@ -78,7 +78,7 @@ browse_content(AtmWorkflowExecutionCtx, BrowseOpts, #atm_list_store_container{
         SanitizedBrowseOpts, AtmInfiniteLogContainer),
     AtmDataSpec = atm_infinite_log_container:get_data_spec(AtmInfiniteLogContainer),
     MappedEntries = lists:map(fun({Index, Compressed, _Timestamp}) ->
-        {Index, atm_value:expand(AtmWorkflowExecutionCtx, Compressed, AtmDataSpec)}
+        {Index, atm_value:expand(AtmWorkflowExecutionAuth, Compressed, AtmDataSpec)}
     end, Entries),
     {MappedEntries, IsLast}.
 

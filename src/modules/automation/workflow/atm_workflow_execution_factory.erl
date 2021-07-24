@@ -59,7 +59,7 @@ create(UserCtx, SpaceId, AtmWorkflowSchemaId, StoreInitialValues, CallbackUrl) -
     end, #{}, AtmLambdaIds),
 
     AtmWorkflowExecutionCreationCtx = #atm_workflow_execution_creation_ctx{
-        workflow_execution_ctx = atm_workflow_execution_ctx:build(
+        workflow_execution_auth = atm_workflow_execution_auth:build(
             SpaceId, AtmWorkflowExecutionId, UserCtx
         ),
         store_initial_values = StoreInitialValues,
@@ -115,11 +115,11 @@ create_execution_elements(AtmWorkflowExecutionCreationCtx) ->
 -spec create_schema_snapshot(atm_workflow_execution:creation_ctx(), execution_elements()) ->
     execution_elements().
 create_schema_snapshot(#atm_workflow_execution_creation_ctx{
-    workflow_execution_ctx = AtmWorkflowExecutionCtx,
+    workflow_execution_auth = AtmWorkflowExecutionAuth,
     workflow_schema_doc = AtmWorkflowSchemaDoc
 }, ExecutionElements) ->
     {ok, AtmWorkflowSchemaSnapshotId} = atm_workflow_schema_snapshot:create(
-        atm_workflow_execution_ctx:get_workflow_execution_id(AtmWorkflowExecutionCtx),
+        atm_workflow_execution_auth:get_workflow_execution_id(AtmWorkflowExecutionAuth),
         AtmWorkflowSchemaDoc
     ),
     ExecutionElements#execution_elements{schema_snapshot_id = AtmWorkflowSchemaSnapshotId}.
@@ -129,11 +129,11 @@ create_schema_snapshot(#atm_workflow_execution_creation_ctx{
 -spec create_lambda_snapshots(atm_workflow_execution:creation_ctx(), execution_elements()) ->
     execution_elements().
 create_lambda_snapshots(#atm_workflow_execution_creation_ctx{
-    workflow_execution_ctx = AtmWorkflowExecutionCtx,
+    workflow_execution_auth = AtmWorkflowExecutionAuth,
     lambda_docs = AtmLambdaDocs
 }, ExecutionElements) ->
-    AtmWorkflowExecutionId = atm_workflow_execution_ctx:get_workflow_execution_id(
-        AtmWorkflowExecutionCtx
+    AtmWorkflowExecutionId = atm_workflow_execution_auth:get_workflow_execution_id(
+        AtmWorkflowExecutionAuth
     ),
     AtmLambdaSnapshotRegistry = lists:foldl(fun(#document{key = AtmLambdaId} = AtmLambdaDoc, Acc) ->
         try
@@ -168,11 +168,11 @@ create_stores(AtmWorkflowExecutionCreationCtx, ExecutionElements) ->
 -spec create_system_audit_log(atm_workflow_execution:creation_ctx(), execution_elements()) ->
     execution_elements().
 create_system_audit_log(#atm_workflow_execution_creation_ctx{
-    workflow_execution_ctx = AtmWorkflowExecutionCtx,
+    workflow_execution_auth = AtmWorkflowExecutionAuth,
     system_audit_log_schema = AtmSystemAuditLogSchema
 }, ExecutionElements) ->
     {ok, #document{key = AtmSystemAuditLogId}} = atm_store_api:create(
-        AtmWorkflowExecutionCtx, undefined, AtmSystemAuditLogSchema
+        AtmWorkflowExecutionAuth, undefined, AtmSystemAuditLogSchema
     ),
 
     ExecutionElements#execution_elements{system_audit_log_id = AtmSystemAuditLogId}.
@@ -192,7 +192,7 @@ create_lane_executions(AtmWorkflowExecutionCreationCtx, ExecutionElements) ->
     atm_workflow_execution:doc() | no_return().
 create_workflow_execution_doc(
     #atm_workflow_execution_creation_ctx{
-        workflow_execution_ctx = AtmWorkflowExecutionCtx,
+        workflow_execution_auth = AtmWorkflowExecutionAuth,
         workflow_schema_doc = #document{value = #od_atm_workflow_schema{
             name = AtmWorkflowSchemaName,
             atm_inventory = AtmInventoryId
@@ -209,12 +209,12 @@ create_workflow_execution_doc(
 ) ->
     try
         {ok, AtmWorkflowExecutionDoc} = atm_workflow_execution:create(#document{
-            key = atm_workflow_execution_ctx:get_workflow_execution_id(
-                AtmWorkflowExecutionCtx
+            key = atm_workflow_execution_auth:get_workflow_execution_id(
+                AtmWorkflowExecutionAuth
             ),
             value = #atm_workflow_execution{
-                user_id = atm_workflow_execution_ctx:get_user_id(AtmWorkflowExecutionCtx),
-                space_id = atm_workflow_execution_ctx:get_space_id(AtmWorkflowExecutionCtx),
+                user_id = atm_workflow_execution_auth:get_user_id(AtmWorkflowExecutionAuth),
+                space_id = atm_workflow_execution_auth:get_space_id(AtmWorkflowExecutionAuth),
                 atm_inventory_id = AtmInventoryId,
 
                 name = AtmWorkflowSchemaName,

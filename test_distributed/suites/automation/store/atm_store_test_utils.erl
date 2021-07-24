@@ -16,7 +16,7 @@
 -include("modules/datastore/datastore_runner.hrl").
 
 %% API
--export([create_workflow_execution_ctx/3]).
+-export([create_workflow_execution_auth/3]).
 -export([
     create_store/4,
     apply_operation/6,
@@ -39,13 +39,13 @@
 %%%===================================================================
 
 
--spec create_workflow_execution_ctx(
+-spec create_workflow_execution_auth(
     oct_background:entity_selector(),
     oct_background:entity_selector(),
     oct_background:entity_selector()
 ) ->
-    atm_workflow_execution_ctx:record() | no_return().
-create_workflow_execution_ctx(ProviderSelector, UserSelector, SpaceSelector) ->
+    atm_workflow_execution_auth:record() | no_return().
+create_workflow_execution_auth(ProviderSelector, UserSelector, SpaceSelector) ->
     Node = oct_background:get_random_provider_node(ProviderSelector),
 
     AtmWorkflowExecutionId = str_utils:rand_hex(32),
@@ -55,36 +55,36 @@ create_workflow_execution_ctx(ProviderSelector, UserSelector, SpaceSelector) ->
     ok = rpc:call(Node, atm_workflow_execution_session, init, [AtmWorkflowExecutionId, UserCtx]),
 
     SpaceId = oct_background:get_space_id(SpaceSelector),
-    rpc:call(Node, atm_workflow_execution_ctx, build, [SpaceId, AtmWorkflowExecutionId, UserCtx]).
+    rpc:call(Node, atm_workflow_execution_auth, build, [SpaceId, AtmWorkflowExecutionId, UserCtx]).
 
 
 -spec create_store(
     oct_background:entity_selector(),
-    atm_workflow_execution_ctx:record(),
+    atm_workflow_execution_auth:record(),
     atm_store_api:initial_value(),
     atm_store_schema:record()
 ) ->
     {ok, atm_store:id()} | {error, term()}.
-create_store(ProviderSelector, AtmWorkflowExecutionCtx, InitialValue, AtmStoreSchema) ->
+create_store(ProviderSelector, AtmWorkflowExecutionAuth, InitialValue, AtmStoreSchema) ->
     Node = oct_background:get_random_provider_node(ProviderSelector),
     ?extract_key(rpc:call(Node, atm_store_api, create, [
-        AtmWorkflowExecutionCtx, InitialValue, AtmStoreSchema
+        AtmWorkflowExecutionAuth, InitialValue, AtmStoreSchema
     ])).
 
 
 -spec apply_operation(
     oct_background:entity_selector(),
-    atm_workflow_execution_ctx:record(),
+    atm_workflow_execution_auth:record(),
     atm_store_container:operation(),
     automation:item(),
     atm_store_container:operation_options(),
     atm_store:id()
 ) ->
     ok | {error, term()}.
-apply_operation(ProviderSelector, AtmWorkflowExecutionCtx, Operation, Item, Options, AtmStoreId) ->
+apply_operation(ProviderSelector, AtmWorkflowExecutionAuth, Operation, Item, Options, AtmStoreId) ->
     Node = oct_background:get_random_provider_node(ProviderSelector),
     rpc:call(Node, atm_store_api, apply_operation, [
-        AtmWorkflowExecutionCtx, Operation, Item, Options, AtmStoreId
+        AtmWorkflowExecutionAuth, Operation, Item, Options, AtmStoreId
     ]).
 
 
@@ -102,15 +102,15 @@ get(ProviderSelector, AtmStoreId) ->
 
 -spec browse_content(
     oct_background:entity_selector(),
-    atm_workflow_execution_ctx:record(),
+    atm_workflow_execution_auth:record(),
     atm_store_api:browse_options(),
     atm_store:record()
 ) ->
     atm_store_api:browse_result() | {error, term()}.
-browse_content(ProviderSelector, AtmWorkflowExecutionCtx, BrowseOptions, AtmStore) ->
+browse_content(ProviderSelector, AtmWorkflowExecutionAuth, BrowseOptions, AtmStore) ->
     Node = oct_background:get_random_provider_node(ProviderSelector),
     rpc:call(Node, atm_store_api, browse_content, [
-        AtmWorkflowExecutionCtx, BrowseOptions, AtmStore
+        AtmWorkflowExecutionAuth, BrowseOptions, AtmStore
     ]).
 
 

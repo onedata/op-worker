@@ -23,5 +23,5 @@
 -callback compress(atm_value:expanded()) -> atm_value:compressed() | no_return().
 
 
--callback expand(atm_workflow_execution_ctx:record(), atm_value:compressed()) ->
+-callback expand(atm_workflow_execution_auth:record(), atm_value:compressed()) ->
     {ok, atm_value:expanded()} | {error, term()}.

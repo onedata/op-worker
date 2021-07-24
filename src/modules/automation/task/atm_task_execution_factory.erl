@@ -76,11 +76,11 @@ create(AtmWorkflowExecutionCreationCtx, AtmLaneIndex, AtmParallelBoxIndex, AtmTa
 -spec create_audit_log(atm_workflow_execution:creation_ctx()) ->
     atm_store:id() | no_return().
 create_audit_log(#atm_workflow_execution_creation_ctx{
-    workflow_execution_ctx = AtmWorkflowExecutionCtx,
+    workflow_execution_auth = AtmWorkflowExecutionAuth,
     system_audit_log_schema = AtmSystemAuditLogSchema
 }) ->
     {ok, #document{key = AtmAuditLogStoreId}} = atm_store_api:create(
-        AtmWorkflowExecutionCtx, undefined, AtmSystemAuditLogSchema
+        AtmWorkflowExecutionAuth, undefined, AtmSystemAuditLogSchema
     ),
     AtmAuditLogStoreId.
 
@@ -95,9 +95,9 @@ delete_audit_log(AtmSystemAuditLogId) ->
 -spec get_workflow_execution_id(atm_workflow_execution:creation_ctx()) ->
     atm_workflow_execution:id().
 get_workflow_execution_id(#atm_workflow_execution_creation_ctx{
-    workflow_execution_ctx = AtmWorkflowExecutionCtx
+    workflow_execution_auth = AtmWorkflowExecutionAuth
 }) ->
-    atm_workflow_execution_ctx:get_workflow_execution_id(AtmWorkflowExecutionCtx).
+    atm_workflow_execution_auth:get_workflow_execution_id(AtmWorkflowExecutionAuth).
 
 
 %% @private

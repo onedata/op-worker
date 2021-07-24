@@ -33,7 +33,7 @@
 }).
 
 -record(atm_workflow_execution_creation_ctx, {
-    workflow_execution_ctx :: atm_workflow_execution_ctx:record(),
+    workflow_execution_auth :: atm_workflow_execution_auth:record(),
     store_initial_values :: atm_workflow_execution_api:store_initial_values(),
 
     lambda_docs :: #{od_atm_lambda:id() => od_atm_lambda:doc()},
@@ -46,8 +46,8 @@
 -record(atm_store_container_operation, {
     type :: atm_store_container:operation_type(),
     options :: atm_store_container:operation_options(),
-    value :: automation:item(),
-    workflow_execution_ctx :: atm_workflow_execution_ctx:record()
+    argument :: automation:item(),
+    workflow_execution_auth :: atm_workflow_execution_auth:record()
 }).
 
 

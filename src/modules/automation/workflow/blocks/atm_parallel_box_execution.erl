@@ -111,25 +111,25 @@ create(AtmWorkflowExecutionCreationCtx, AtmLaneIndex, AtmParallelBoxIndex, #atm_
     }.
 
 
--spec prepare_all(atm_workflow_execution_ctx:record(), [record()]) -> ok | no_return().
-prepare_all(AtmWorkflowExecutionCtx, AtmParallelBoxExecutions) ->
+-spec prepare_all(atm_workflow_execution_auth:record(), [record()]) -> ok | no_return().
+prepare_all(AtmWorkflowExecutionAuth, AtmParallelBoxExecutions) ->
     atm_parallel_runner:foreach(fun(#atm_parallel_box_execution{
         schema_id = AtmParallelBoxSchemaId
     } = AtmParallelBoxExecution) ->
         try
-            prepare(AtmWorkflowExecutionCtx, AtmParallelBoxExecution)
+            prepare(AtmWorkflowExecutionAuth, AtmParallelBoxExecution)
         catch _:Reason ->
             throw(?ERROR_ATM_PARALLEL_BOX_EXECUTION_PREPARATION_FAILED(AtmParallelBoxSchemaId, Reason))
         end
     end, AtmParallelBoxExecutions).
 
 
--spec prepare(atm_workflow_execution_ctx:record(), record()) -> ok | no_return().
-prepare(AtmWorkflowExecutionCtx, #atm_parallel_box_execution{
+-spec prepare(atm_workflow_execution_auth:record(), record()) -> ok | no_return().
+prepare(AtmWorkflowExecutionAuth, #atm_parallel_box_execution{
     task_registry = AtmTaskExecutionRegistry
 }) ->
     atm_task_execution_api:prepare_all(
-        AtmWorkflowExecutionCtx, maps:values(AtmTaskExecutionRegistry)
+        AtmWorkflowExecutionAuth, maps:values(AtmTaskExecutionRegistry)
     ).
 
 

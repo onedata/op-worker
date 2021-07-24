@@ -47,7 +47,7 @@
 -callback create(atm_workflow_execution:id(), od_atm_lambda:doc()) ->
     record() | no_return().
 
--callback prepare(atm_workflow_execution_ctx:record(), record()) -> ok | no_return().
+-callback prepare(atm_workflow_execution_auth:record(), record()) -> ok | no_return().
 
 -callback clean(record()) -> ok | no_return().
 
@@ -74,10 +74,10 @@ create(AtmWorkflowExecutionId, AtmLambdaDoc = #document{value = #od_atm_lambda{
     Model:create(AtmWorkflowExecutionId, AtmLambdaDoc).
 
 
--spec prepare(atm_workflow_execution_ctx:record(), record()) -> ok | no_return().
-prepare(AtmWorkflowExecutionCtx, AtmTaskExecutor) ->
+-spec prepare(atm_workflow_execution_auth:record(), record()) -> ok | no_return().
+prepare(AtmWorkflowExecutionAuth, AtmTaskExecutor) ->
     Model = utils:record_type(AtmTaskExecutor),
-    Model:prepare(AtmWorkflowExecutionCtx, AtmTaskExecutor).
+    Model:prepare(AtmWorkflowExecutionAuth, AtmTaskExecutor).
 
 
 -spec clean(record()) -> ok | no_return().
