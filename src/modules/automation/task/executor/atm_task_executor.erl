@@ -55,7 +55,7 @@
 
 -callback in_readonly_mode(record()) -> boolean().
 
--callback run(atm_job_execution_ctx:record(), json_utils:json_map(), record()) ->
+-callback run(atm_task_execution_ctx:record(), json_utils:json_map(), record()) ->
     ok | no_return().
 
 
@@ -98,7 +98,7 @@ in_readonly_mode(AtmTaskExecutor) ->
     Model:in_readonly_mode(AtmTaskExecutor).
 
 
--spec run(atm_job_execution_ctx:record(), json_utils:json_map(), record()) ->
+-spec run(atm_task_execution_ctx:record(), json_utils:json_map(), record()) ->
     ok | no_return().
 run(AtmTaskExecutionCtx, Arguments, AtmTaskExecutor) ->
     Model = utils:record_type(AtmTaskExecutor),

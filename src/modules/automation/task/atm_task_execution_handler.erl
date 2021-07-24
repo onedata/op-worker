@@ -42,13 +42,13 @@ process_item(AtmWorkflowExecutionEnv, AtmTaskExecutionId, Item, ReportResultUrl,
         argument_specs = AtmTaskExecutionArgSpecs
     }} = update_items_in_processing(AtmTaskExecutionId),
 
-    AtmJobExecutionCtx = atm_job_execution_ctx:build(
+    AtmTaskExecutionCtx = atm_task_execution_ctx:build(
         AtmWorkflowExecutionEnv, atm_task_executor:in_readonly_mode(AtmTaskExecutor),
         Item, ReportResultUrl, HeartbeatUrl
     ),
-    Args = atm_task_execution_arguments:construct_args(AtmJobExecutionCtx, AtmTaskExecutionArgSpecs),
+    Args = atm_task_execution_arguments:construct_args(AtmTaskExecutionCtx, AtmTaskExecutionArgSpecs),
 
-    atm_task_executor:run(AtmJobExecutionCtx, Args, AtmTaskExecutor).
+    atm_task_executor:run(AtmTaskExecutionCtx, Args, AtmTaskExecutor).
 
 
 -spec process_results(

@@ -79,14 +79,14 @@ get_name(#atm_task_execution_argument_spec{name = ArgName}) ->
     ArgName.
 
 
--spec construct_arg(atm_job_execution_ctx:record(), record()) ->
+-spec construct_arg(atm_task_execution_ctx:record(), record()) ->
     json_utils:json_term() | no_return().
-construct_arg(AtmJobExecutionCtx, AtmTaskExecutionArgSpec = #atm_task_execution_argument_spec{
+construct_arg(AtmTaskExecutionCtx, AtmTaskExecutionArgSpec = #atm_task_execution_argument_spec{
     value_builder = ArgValueBuilder
 }) ->
-    ArgValue = build_value(AtmJobExecutionCtx, ArgValueBuilder),
+    ArgValue = build_value(AtmTaskExecutionCtx, ArgValueBuilder),
 
-    AtmWorkflowExecutionCtx = atm_job_execution_ctx:get_workflow_execution_ctx(AtmJobExecutionCtx),
+    AtmWorkflowExecutionCtx = atm_task_execution_ctx:get_workflow_execution_ctx(AtmTaskExecutionCtx),
     validate_value(AtmWorkflowExecutionCtx, ArgValue, AtmTaskExecutionArgSpec),
 
     ArgValue.
@@ -140,25 +140,25 @@ db_decode(#{
 
 
 %% @private
--spec build_value(atm_job_execution_ctx:record(), atm_task_argument_value_builder:record()) ->
+-spec build_value(atm_task_execution_ctx:record(), atm_task_argument_value_builder:record()) ->
     json_utils:json_term() | no_return().
-build_value(_AtmJobExecutionCtx, #atm_task_argument_value_builder{
+build_value(_AtmTaskExecutionCtx, #atm_task_argument_value_builder{
     type = const,
     recipe = ConstValue
 }) ->
     ConstValue;
 
-build_value(AtmJobExecutionCtx, #atm_task_argument_value_builder{
+build_value(AtmTaskExecutionCtx, #atm_task_argument_value_builder{
     type = iterated_item,
     recipe = undefined
 }) ->
-    atm_job_execution_ctx:get_item(AtmJobExecutionCtx);
+    atm_task_execution_ctx:get_item(AtmTaskExecutionCtx);
 
-build_value(AtmJobExecutionCtx, #atm_task_argument_value_builder{
+build_value(AtmTaskExecutionCtx, #atm_task_argument_value_builder{
     type = iterated_item,
     recipe = Query
 }) ->
-    Item = atm_job_execution_ctx:get_item(AtmJobExecutionCtx),
+    Item = atm_task_execution_ctx:get_item(AtmTaskExecutionCtx),
 
     % TODO VFS-7660 fix query in case of array indices
     case json_utils:query(Item, Query) of
@@ -166,21 +166,21 @@ build_value(AtmJobExecutionCtx, #atm_task_argument_value_builder{
         error -> throw(?ERROR_ATM_TASK_ARG_MAPPER_ITEM_QUERY_FAILED(Item, Query))
     end;
 
-build_value(AtmJobExecutionCtx, #atm_task_argument_value_builder{
+build_value(AtmTaskExecutionCtx, #atm_task_argument_value_builder{
     type = onedatafs_credentials
 }) ->
     #{
         <<"host">> => oneprovider:get_domain(),
-        <<"accessToken">> => atm_job_execution_ctx:get_access_token(AtmJobExecutionCtx)
+        <<"accessToken">> => atm_task_execution_ctx:get_access_token(AtmTaskExecutionCtx)
     };
 
-build_value(AtmJobExecutionCtx, #atm_task_argument_value_builder{
+build_value(AtmTaskExecutionCtx, #atm_task_argument_value_builder{
     type = single_value_store_content,
     recipe = AtmSingleValueStoreSchemaId
 }) ->
     AtmSingleValueStoreId = atm_workflow_execution_env:get_store_id(
         AtmSingleValueStoreSchemaId,
-        atm_job_execution_ctx:get_workflow_execution_env(AtmJobExecutionCtx)
+        atm_task_execution_ctx:get_workflow_execution_env(AtmTaskExecutionCtx)
     ),
     {ok, AtmStore} = atm_store_api:get(AtmSingleValueStoreId),
 
@@ -189,7 +189,7 @@ build_value(AtmJobExecutionCtx, #atm_task_argument_value_builder{
         AtmStoreType -> throw(?ERROR_ATM_STORE_TYPE_DISALLOWED(AtmStoreType, [single_value]))
     end,
 
-    AtmWorkflowExecutionCtx = atm_job_execution_ctx:get_workflow_execution_ctx(AtmJobExecutionCtx),
+    AtmWorkflowExecutionCtx = atm_task_execution_ctx:get_workflow_execution_ctx(AtmTaskExecutionCtx),
     BrowseOpts = #{offset => 0, limit => 1},
 
     case atm_store_api:browse_content(AtmWorkflowExecutionCtx, BrowseOpts, AtmStore) of
@@ -201,7 +201,7 @@ build_value(AtmJobExecutionCtx, #atm_task_argument_value_builder{
             Item
     end;
 
-build_value(_AtmJobExecutionCtx, _InputSpec) ->
+build_value(_AtmTaskExecutionCtx, _InputSpec) ->
     % TODO VFS-7660 handle rest of atm_task_argument_value_builder:type()
     throw(?ERROR_ATM_TASK_ARG_MAPPER_INVALID_INPUT_SPEC).
 
