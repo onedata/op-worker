@@ -27,18 +27,18 @@
     [atm_lambda_result_spec:record()],
     [atm_task_schema_result_mapper:record()]
 ) ->
-    [atm_task_execution_result_spec:record()].
+    [atm_task_execution_result_spec:record()] | no_return().
 build_specs(AtmLambdaResultSpecs, AtmTaskSchemaResultMappers) ->
     AtmTaskSchemaResultMappersGroupedByName = group_atm_task_schema_result_mappers_by_name(
         AtmTaskSchemaResultMappers
     ),
 
     lists:foldl(fun(AtmLambdaResultSpec = #atm_lambda_result_spec{name = Name}, Acc) ->
-        AtmTaskSchemaResultMapperForName = maps:get(
+        AtmTaskSchemaResultMappersForName = maps:get(
             Name, AtmTaskSchemaResultMappersGroupedByName, []
         ),
         AtmTaskExecutionResultSpec = atm_task_execution_result_spec:build(
-            AtmLambdaResultSpec, AtmTaskSchemaResultMapperForName
+            AtmLambdaResultSpec, AtmTaskSchemaResultMappersForName
         ),
         [AtmTaskExecutionResultSpec | Acc]
     end, [], lists:usort(fun order_atm_lambda_result_specs_by_name/2, AtmLambdaResultSpecs)).

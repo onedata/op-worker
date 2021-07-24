@@ -27,7 +27,7 @@
     [atm_lambda_argument_spec:record()],
     [atm_task_schema_argument_mapper:record()]
 ) ->
-    [atm_task_execution_argument_spec:record()].
+    [atm_task_execution_argument_spec:record()] | no_return().
 build_specs(AtmLambdaArgSpecs, AtmTaskSchemaArgMappers) ->
     build_specs(
         lists:usort(fun order_atm_lambda_arg_specs_by_name/2, AtmLambdaArgSpecs),
