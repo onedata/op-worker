@@ -135,7 +135,7 @@ prepare(AtmWorkflowExecutionCtx, #atm_parallel_box_execution{
 
 -spec ensure_all_ended([record()]) -> ok | no_return().
 ensure_all_ended(AtmParallelBoxExecutions) ->
-    pforeach_not_ended_task(fun atm_task_execution_api:mark_ended/1, AtmParallelBoxExecutions).
+    pforeach_not_ended_task(fun atm_task_execution_handler:handle_ended/1, AtmParallelBoxExecutions).
 
 
 -spec clean_all([record()]) -> ok.
