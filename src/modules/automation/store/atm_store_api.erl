@@ -45,7 +45,8 @@
 %%%===================================================================
 
 
--spec create_all(atm_workflow_execution:creation_ctx()) -> [atm_store:doc()] | no_return().
+-spec create_all(atm_workflow_execution_factory:creation_ctx()) ->
+    [atm_store:doc()] | no_return().
 create_all(#atm_workflow_execution_creation_ctx{
     workflow_execution_auth = AtmWorkflowExecutionAuth,
     workflow_schema_doc = #document{value = #od_atm_workflow_schema{
@@ -147,7 +148,7 @@ browse_content(AtmWorkflowExecutionAuth, BrowseOpts, AtmStoreId) ->
 acquire_iterator(AtmWorkflowExecutionEnv, #atm_store_iterator_spec{
     store_schema_id = AtmStoreSchemaId
 } = AtmStoreIteratorConfig) ->
-    AtmStoreId = atm_workflow_execution_env:get_store_id(AtmStoreSchemaId, AtmWorkflowExecutionEnv),
+    AtmStoreId = atm_workflow_execution_env:get_workflow_store_id(AtmStoreSchemaId, AtmWorkflowExecutionEnv),
     {ok, #atm_store{container = AtmStoreContainer}} = get(AtmStoreId),
     atm_store_iterator:build(AtmStoreIteratorConfig, AtmStoreContainer).
 

@@ -90,6 +90,7 @@
 -define(ERROR_ATM_LANE_EXECUTION_CREATION_FAILED(__LANE_SCHEMA_ID, __REASON),
     {error, {atm_lane_execution_creation_failed, __LANE_SCHEMA_ID, __REASON}}
 ).
+-define(ERROR_ATM_EMPTY_WORKFLOW, {error, atm_workflow_empty}).
 
 -define(ERROR_ATM_TASK_EXECUTION_PREPARATION_FAILED(__TASK_SCHEMA_ID, __REASON),
     {error, {atm_task_execution_preparation_failed, __TASK_SCHEMA_ID, __REASON}}

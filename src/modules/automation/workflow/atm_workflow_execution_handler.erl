@@ -23,7 +23,7 @@
 % API
 -export([
     init_engine/0,
-    start/2,
+    start/3,
     cancel/1
 ]).
 
@@ -69,22 +69,15 @@ init_engine() ->
     workflow_engine:init(?ATM_WORKFLOW_EXECUTION_ENGINE, Options).
 
 
--spec start(user_ctx:ctx(), atm_workflow_execution:doc()) -> ok.
-start(UserCtx, #document{
-    key = AtmWorkflowExecutionId,
-    value = #atm_workflow_execution{
-        space_id = SpaceId,
-        store_registry = AtmStoreRegistry
-    }
-}) ->
+-spec start(user_ctx:ctx(), atm_workflow_execution:id(), atm_workflow_execution_env:record()) ->
+    ok.
+start(UserCtx, AtmWorkflowExecutionId, AtmWorkflowExecutionEnv) ->
     ok = atm_workflow_execution_session:init(AtmWorkflowExecutionId, UserCtx),
 
     workflow_engine:execute_workflow(?ATM_WORKFLOW_EXECUTION_ENGINE, #{
         id => AtmWorkflowExecutionId,
         workflow_handler => ?MODULE,
-        execution_context => atm_workflow_execution_env:build(
-            SpaceId, AtmWorkflowExecutionId, AtmStoreRegistry
-        )
+        execution_context => AtmWorkflowExecutionEnv
     }).
 
 
@@ -340,7 +333,7 @@ unfreeze_lane_iteration_store(AtmWorkflowExecutionEnv, AtmLaneSchema) ->
 get_lane_iteration_store_id(AtmWorkflowExecutionEnv, #atm_lane_schema{
     store_iterator_spec = #atm_store_iterator_spec{store_schema_id = AtmStoreSchemaId}
 }) ->
-    atm_workflow_execution_env:get_store_id(AtmStoreSchemaId, AtmWorkflowExecutionEnv).
+    atm_workflow_execution_env:get_workflow_store_id(AtmStoreSchemaId, AtmWorkflowExecutionEnv).
 
 
 %% @private

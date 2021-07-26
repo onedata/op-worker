@@ -205,7 +205,7 @@ dispatch_result(AtmWorkflowExecutionEnv, AtmWorkflowExecutionAuth, #atm_task_exe
 
     lists:foreach(fun(#dispatch_spec{store_schema_id = AtmStoreSchemaId, function = DispatchFun}) ->
         try
-            AtmStoreId = atm_workflow_execution_env:get_store_id(
+            AtmStoreId = atm_workflow_execution_env:get_workflow_store_id(
                 AtmStoreSchemaId, AtmWorkflowExecutionEnv
             ),
             atm_store_api:apply_operation(

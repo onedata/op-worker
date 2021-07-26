@@ -18,11 +18,8 @@
 
 %% API
 -export([
-    create_all/4, create/4,
     prepare_all/2, prepare/2,
     clean_all/1, clean/1,
-    delete_all/1, delete/1,
-
     get_spec/1
 ]).
 
@@ -30,40 +27,6 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
-
-
--spec create_all(
-    atm_workflow_execution:creation_ctx(),
-    non_neg_integer(),
-    non_neg_integer(),
-    [atm_task_schema:record()]
-) ->
-    [atm_task_execution:doc()] | no_return().
-create_all(AtmWorkflowExecutionCreationCtx, AtmLaneIndex, AtmParallelBoxIndex, AtmTaskSchemas) ->
-    lists:reverse(lists:foldl(fun(#atm_task_schema{id = AtmTaskSchemaId} = AtmTaskSchema, Acc) ->
-        try
-            AtmTaskExecutionDoc = create(
-                AtmWorkflowExecutionCreationCtx, AtmLaneIndex, AtmParallelBoxIndex, AtmTaskSchema
-            ),
-            [AtmTaskExecutionDoc | Acc]
-        catch _:Reason ->
-            catch delete_all([Doc#document.key || Doc <- Acc]),
-            throw(?ERROR_ATM_TASK_EXECUTION_CREATION_FAILED(AtmTaskSchemaId, Reason))
-        end
-    end, [], AtmTaskSchemas)).
-
-
--spec create(
-    atm_workflow_execution:creation_ctx(),
-    non_neg_integer(),
-    non_neg_integer(),
-    atm_task_schema:record()
-) ->
-    atm_task_execution:doc() | no_return().
-create(AtmWorkflowExecutionCreationCtx, AtmLaneIndex, AtmParallelBoxIndex, AtmTaskSchema) ->
-    atm_task_execution_factory:create(
-        AtmWorkflowExecutionCreationCtx, AtmLaneIndex, AtmParallelBoxIndex, AtmTaskSchema
-    ).
 
 
 -spec prepare_all(atm_workflow_execution_auth:record(), [atm_task_execution:id()]) ->
@@ -108,22 +71,6 @@ clean(AtmTaskExecutionId) ->
         AtmTaskExecutionId
     ),
     atm_task_executor:clean(AtmTaskExecutor).
-
-
--spec delete_all([atm_task_execution:id()]) -> ok.
-delete_all(AtmTaskExecutionIds) ->
-    lists:foreach(fun delete/1, AtmTaskExecutionIds).
-
-
--spec delete(atm_task_execution:id()) -> ok | {error, term()}.
-delete(AtmTaskExecutionId) ->
-    case atm_task_execution:get(AtmTaskExecutionId) of
-        {ok, #document{value = #atm_task_execution{system_audit_log_id = AtmSystemAuditLogId}}} ->
-            atm_store_api:delete(AtmSystemAuditLogId),
-            atm_task_execution:delete(AtmTaskExecutionId);
-        ?ERROR_NOT_FOUND ->
-            ok
-    end.
 
 
 -spec get_spec(atm_task_execution:id()) -> workflow_engine:task_spec().

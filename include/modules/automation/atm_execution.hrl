@@ -33,6 +33,7 @@
 }).
 
 -record(atm_workflow_execution_creation_ctx, {
+    workflow_execution_id :: atm_workflow_execution:id(),
     workflow_execution_auth :: atm_workflow_execution_auth:record(),
     store_initial_values :: atm_workflow_execution_api:store_initial_values(),
 

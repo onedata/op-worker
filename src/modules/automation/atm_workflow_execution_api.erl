@@ -20,7 +20,7 @@
 -export([init_engine/0]).
 -export([
     list/4,
-    create/5,
+    schedule/5,
     get/1, get_summary/2,
     cancel/1,
     terminate_not_ended/1
@@ -83,7 +83,7 @@ list(SpaceId, Phase, summary, ListingOpts) ->
     {ok, AtmWorkflowExecutionSummaryEntries, IsLast}.
 
 
--spec create(
+-spec schedule(
     user_ctx:ctx(),
     od_space:id(),
     od_atm_workflow_schema:id(),
@@ -91,16 +91,15 @@ list(SpaceId, Phase, summary, ListingOpts) ->
     undefined | http_client:url()
 ) ->
     {atm_workflow_execution:id(), atm_workflow_execution:record()} | no_return().
-create(UserCtx, SpaceId, AtmWorkflowSchemaId, StoreInitialValues, CallbackUrl) ->
-    AtmWorkflowExecutionDoc = #document{
-        key = AtmWorkflowExecutionId,
-        value = AtmWorkflowExecution
-    } = atm_workflow_execution_factory:create(
+schedule(UserCtx, SpaceId, AtmWorkflowSchemaId, StoreInitialValues, CallbackUrl) ->
+    {AtmWorkflowExecutionDoc, AtmWorkflowExecutionEnv} = atm_workflow_execution_factory:create(
         UserCtx, SpaceId, AtmWorkflowSchemaId, StoreInitialValues, CallbackUrl
     ),
-    atm_workflow_execution_handler:start(UserCtx, AtmWorkflowExecutionDoc),
+    AtmWorkflowExecutionId = AtmWorkflowExecutionDoc#document.key,
 
-    {AtmWorkflowExecutionId, AtmWorkflowExecution}.
+    atm_workflow_execution_handler:start(UserCtx, AtmWorkflowExecutionId, AtmWorkflowExecutionEnv),
+
+    {AtmWorkflowExecutionId, AtmWorkflowExecutionDoc#document.value}.
 
 
 -spec get(atm_workflow_execution:id()) ->
@@ -155,7 +154,10 @@ terminate_not_ended(SpaceId) ->
 
         atm_workflow_execution_handler:handle_workflow_execution_ended(
             AtmWorkflowExecutionId,
-            atm_workflow_execution_env:build(SpaceId, AtmWorkflowExecutionId, AtmStoreRegistry)
+            atm_workflow_execution_env:build(
+                SpaceId, AtmWorkflowExecutionId, AtmStoreRegistry,
+                undefined, undefined
+            )
         )
     end,
 

@@ -15,9 +15,17 @@
 -author("Bartosz Walkowicz").
 
 -include("modules/automation/atm_execution.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% API
--export([create/4]).
+-export([
+    create_all/4, create/4,
+    delete_all/1, delete/1
+]).
+
+-type task_store_registry() :: #{atm_task_execution:id() => atm_store_container:record()}.
+
+-export_type([task_store_registry/0]).
 
 
 %%%===================================================================
@@ -25,17 +33,43 @@
 %%%===================================================================
 
 
+-spec create_all(
+    atm_workflow_execution_factory:creation_ctx(),
+    non_neg_integer(),
+    non_neg_integer(),
+    [atm_task_schema:record()]
+) ->
+    [{atm_task_execution:doc(), atm_store_container:record()}] | no_return().
+create_all(AtmWorkflowExecutionCreationCtx, AtmLaneIndex, AtmParallelBoxIndex, AtmTaskSchemas) ->
+    lists:reverse(lists:foldl(fun(#atm_task_schema{id = AtmTaskSchemaId} = AtmTaskSchema, Acc) ->
+        try
+            Result = create(
+                AtmWorkflowExecutionCreationCtx, AtmLaneIndex, AtmParallelBoxIndex, AtmTaskSchema
+            ),
+            [Result | Acc]
+        catch _:Reason ->
+            catch delete_all([Doc#document.key || Doc <- Acc]),
+            throw(?ERROR_ATM_TASK_EXECUTION_CREATION_FAILED(AtmTaskSchemaId, Reason))
+        end
+    end, [], AtmTaskSchemas)).
+
+
 -spec create(
-    atm_workflow_execution:creation_ctx(),
+    atm_workflow_execution_factory:creation_ctx(),
     non_neg_integer(),
     non_neg_integer(),
     atm_task_schema:record()
 ) ->
-    atm_task_execution:doc() | no_return().
+    {atm_task_execution:doc(), atm_store_container:record()} | no_return().
 create(AtmWorkflowExecutionCreationCtx, AtmLaneIndex, AtmParallelBoxIndex, AtmTaskSchema) ->
     AtmWorkflowExecutionId = get_workflow_execution_id(AtmWorkflowExecutionCreationCtx),
 
-    AtmSystemAuditLogId = create_audit_log(AtmWorkflowExecutionCreationCtx),
+    #document{
+        key = AtmTaskAuditLogId,
+        value = #atm_store{
+            container = AtmTaskAuditLogStoreContainer
+        }
+    } = create_audit_log(AtmWorkflowExecutionCreationCtx),
 
     try
         AtmLambdaDoc = #document{value = AtmLambda} = get_lambda_doc(
@@ -52,7 +86,7 @@ create(AtmWorkflowExecutionCreationCtx, AtmLaneIndex, AtmParallelBoxIndex, AtmTa
             argument_specs = build_argument_specs(AtmLambda, AtmTaskSchema),
             result_specs = build_result_specs(AtmLambda, AtmTaskSchema),
 
-            system_audit_log_id = AtmSystemAuditLogId,
+            system_audit_log_id = AtmTaskAuditLogId,
 
             status = ?PENDING_STATUS,
 
@@ -60,10 +94,26 @@ create(AtmWorkflowExecutionCreationCtx, AtmLaneIndex, AtmParallelBoxIndex, AtmTa
             items_processed = 0,
             items_failed = 0
         }),
-        AtmTaskExecutionDoc
+        {AtmTaskExecutionDoc, AtmTaskAuditLogStoreContainer}
     catch Type:Reason ->
-        delete_audit_log(AtmSystemAuditLogId),
+        delete_audit_log(AtmTaskAuditLogId),
         erlang:Type(Reason)
+    end.
+
+
+-spec delete_all([atm_task_execution:id()]) -> ok.
+delete_all(AtmTaskExecutionIds) ->
+    lists:foreach(fun delete/1, AtmTaskExecutionIds).
+
+
+-spec delete(atm_task_execution:id()) -> ok.
+delete(AtmTaskExecutionId) ->
+    case atm_task_execution:get(AtmTaskExecutionId) of
+        {ok, #document{value = #atm_task_execution{system_audit_log_id = AtmSystemAuditLogId}}} ->
+            atm_store_api:delete(AtmSystemAuditLogId),
+            atm_task_execution:delete(AtmTaskExecutionId);
+        ?ERROR_NOT_FOUND ->
+            ok
     end.
 
 
@@ -73,16 +123,16 @@ create(AtmWorkflowExecutionCreationCtx, AtmLaneIndex, AtmParallelBoxIndex, AtmTa
 
 
 %% @private
--spec create_audit_log(atm_workflow_execution:creation_ctx()) ->
-    atm_store:id() | no_return().
+-spec create_audit_log(atm_workflow_execution_factory:creation_ctx()) ->
+    atm_store:doc() | no_return().
 create_audit_log(#atm_workflow_execution_creation_ctx{
     workflow_execution_auth = AtmWorkflowExecutionAuth,
     system_audit_log_schema = AtmSystemAuditLogSchema
 }) ->
-    {ok, #document{key = AtmAuditLogStoreId}} = atm_store_api:create(
+    {ok, AtmSystemAuditLogDoc} = atm_store_api:create(
         AtmWorkflowExecutionAuth, undefined, AtmSystemAuditLogSchema
     ),
-    AtmAuditLogStoreId.
+    AtmSystemAuditLogDoc.
 
 
 %% @private
@@ -92,7 +142,7 @@ delete_audit_log(AtmSystemAuditLogId) ->
 
 
 %% @private
--spec get_workflow_execution_id(atm_workflow_execution:creation_ctx()) ->
+-spec get_workflow_execution_id(atm_workflow_execution_factory:creation_ctx()) ->
     atm_workflow_execution:id().
 get_workflow_execution_id(#atm_workflow_execution_creation_ctx{
     workflow_execution_auth = AtmWorkflowExecutionAuth
@@ -101,7 +151,7 @@ get_workflow_execution_id(#atm_workflow_execution_creation_ctx{
 
 
 %% @private
--spec get_lambda_doc(atm_workflow_execution:creation_ctx(), atm_task_schema:record()) ->
+-spec get_lambda_doc(atm_workflow_execution_factory:creation_ctx(), atm_task_schema:record()) ->
     od_atm_lambda:doc().
 get_lambda_doc(
     #atm_workflow_execution_creation_ctx{lambda_docs = AtmLambdaDocs},

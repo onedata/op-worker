@@ -26,8 +26,6 @@
 -type record() :: #atm_workflow_execution{}.
 -type doc() :: datastore_doc:doc(record()).
 
--type creation_ctx() :: #atm_workflow_execution_creation_ctx{}.
-
 -type store_registry() :: #{AtmStoreSchemaId :: automation:id() => atm_store:id()}.
 -type lambda_snapshot_registry() :: #{od_atm_lambda:id() => atm_lambda_snapshot:id()}.
 
@@ -43,7 +41,7 @@
 -type summary() :: #atm_workflow_execution_summary{}.
 
 -export_type([id/0, diff/0, record/0, doc/0]).
--export_type([creation_ctx/0, store_registry/0, lambda_snapshot_registry/0]).
+-export_type([store_registry/0, lambda_snapshot_registry/0]).
 -export_type([phase/0, status/0, timestamp/0]).
 -export_type([summary/0]).
 
