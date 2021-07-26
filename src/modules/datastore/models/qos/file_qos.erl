@@ -118,7 +118,7 @@ get_effective(FileUuid) when is_binary(FileUuid) ->
         {ok, FileDoc} -> get_effective(FileDoc);
         ?ERROR_NOT_FOUND -> {error, {file_meta_missing, FileUuid}}
     end;
-get_effective(FileDoc) ->
+get_effective(#document{} = FileDoc) ->
     get_effective(FileDoc, undefined).
 
 
@@ -169,8 +169,10 @@ add_qos_entry_id(SpaceId, FileUuid, QosEntryId, Storage) ->
         }
     end,
     case datastore_model:update(?CTX, FileUuid, UpdateFun, NewDoc) of
-        {ok, _} -> ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId);
-        {error, _} = Error -> Error
+        {ok, _} ->
+            ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId);
+        {error, _} = Error -> 
+            Error
     end.
 
 
@@ -275,9 +277,11 @@ has_any_qos_entry(UuidOrDoc, effective) ->
 %% Performs cleanup necessary for each file reference deletion.
 %% @end
 %%--------------------------------------------------------------------
+-spec cleanup_reference_related_documents(file_ctx:ctx()) -> ok.
 cleanup_reference_related_documents(FileCtx) ->
     cleanup_reference_related_documents(FileCtx, undefined).
 
+-spec cleanup_reference_related_documents(file_ctx:ctx(), file_ctx:ctx() | undefined) -> ok.
 cleanup_reference_related_documents(FileCtx, OriginalParentCtx) ->
     {FileDoc, FileCtx1} = file_ctx:get_file_doc_including_deleted(FileCtx),
     %% This is used when directory is being moved to trash. In such case, to 
@@ -357,21 +361,24 @@ get_assigned_entries_for_storage(EffectiveFileQos, StorageId) ->
 %% @private
 -spec get_effective(file_meta:doc(), undefined | file_meta:doc()) ->
     {ok, effective_file_qos()} | {error, {file_meta_missing, binary()}} | undefined.
-get_effective(#document{key = FileUuid} = FileDoc, OriginalParentDoc) ->
-    Callback = fun([#document{key = Uuid, value = #file_meta{}}, ParentEffQos, CalculationInfo]) ->
-        case fslogic_uuid:is_trash_dir_uuid(Uuid) of
-            true ->
-                % qos cannot be set on trash directory
-                {ok, #effective_file_qos{in_trash = true}, CalculationInfo};
-            false ->
-                case get(Uuid) of
-                    ?ERROR_NOT_FOUND ->
-                        {ok, ParentEffQos, CalculationInfo};
-                    {ok, #document{value = FileQos}} ->
-                        EffQos = merge_file_qos(ParentEffQos, FileQos),
-                        {ok, EffQos, CalculationInfo}
-                end
-        end
+get_effective(#document{} = FileDoc, OriginalParentDoc) ->
+    Callback = fun
+        ([_, {error, _} = Error, _CalculationInfo]) ->
+            Error;
+        ([#document{key = Uuid, value = #file_meta{}}, ParentEffQos, CalculationInfo]) ->
+            case fslogic_uuid:is_trash_dir_uuid(Uuid) of
+                true ->
+                    % qos cannot be set on trash directory
+                    {ok, #effective_file_qos{in_trash = true}, CalculationInfo};
+                false ->
+                    case get(Uuid) of
+                        ?ERROR_NOT_FOUND ->
+                            {ok, ParentEffQos, CalculationInfo};
+                        {ok, #document{value = FileQos}} ->
+                            EffQos = merge_file_qos(ParentEffQos, FileQos),
+                            {ok, EffQos, CalculationInfo}
+                    end
+            end
     end,
     MergeCallback = fun(NewEntry, Acc, _EntryCalculationInfo, CalculationInfoAcc) ->
         {ok, merge_file_qos(NewEntry, Acc), CalculationInfoAcc}

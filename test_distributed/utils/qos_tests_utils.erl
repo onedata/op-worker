@@ -204,7 +204,7 @@ create_and_open(Worker, SessId, ParentGuid, TypeSpec) ->
 create_and_open(Worker, SessId, ParentGuid, Filename, reg_file) ->
     lfm_proxy:create_and_open(Worker, SessId, ParentGuid, Filename, ?DEFAULT_FILE_PERMS);
 create_and_open(Worker, SessId, ParentGuid, Filename, {hardlink, FileToLinkGuid}) ->
-    {ok, #file_attr{guid = LinkGuid}} = lfm_proxy:make_link(Worker, SessId, ?FILE_REF(FileToLinkGuid), ParentGuid, Filename),
+    {ok, #file_attr{guid = LinkGuid}} = lfm_proxy:make_link(Worker, SessId, ?FILE_REF(FileToLinkGuid), ?FILE_REF(ParentGuid), Filename),
     {ok, Handle} = lfm_proxy:open(Worker, SessId, ?FILE_REF(LinkGuid), rdwr),
     {ok, {LinkGuid, Handle}}.
 
@@ -235,7 +235,7 @@ fill_in_expected_distribution(ExpectedDistribution, FileContent) ->
 
 
 get_guid(Path, #{files := FilesGuidsAndPaths, dirs := DirsGuidsAndPaths}) ->
-    lists:foldl(fun(?FILE_REF(P), _) when P == Path -> Guid;
+    lists:foldl(fun({Guid, P}, _) when P == Path -> Guid;
                    ({_, _}, Acc) -> Acc
     end, undefined, FilesGuidsAndPaths ++ DirsGuidsAndPaths).
 
@@ -778,9 +778,3 @@ make_rest_request(Config, Worker, URL, Method, Headers, ReqBody, SpaceId, Requir
     after
         initializer:testmaster_mock_space_user_privileges(AllWorkers, SpaceId, ?USER_ID, UserSpacePrivs)
     end.
-
-
-%% @private
-get_referenced_guid(Guid) ->
-    {FileUuid, SpaceId} = file_id:unpack_guid(Guid),
-    file_id:pack_guid(fslogic_uuid:ensure_referenced_uuid(FileUuid), SpaceId).

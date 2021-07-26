@@ -66,12 +66,12 @@ delete_all_local_links_with_prefix(SpaceId, Key, Prefix) ->
 -spec get_next_links(key(), qos_status:path(), non_neg_integer(), tree_ids()) ->
     {ok, [qos_status:path()]}.
 get_next_links(Key, Path, BatchSize, TreeId) ->
-    {ok, Links} = fold_links(Key, TreeId,
+    {ok, ReversedLinks} = fold_links(Key, TreeId,
         fun(#link{name = Name}, Acc) -> {ok, [Name | Acc]} end,
         [],
         #{prev_link_name => Path, size => BatchSize}
     ),
-    {ok, lists:reverse(Links)}.
+    {ok, lists:reverse(ReversedLinks)}.
 
 %%%===================================================================
 %%% Internal functions

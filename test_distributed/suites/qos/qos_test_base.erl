@@ -1115,7 +1115,7 @@ qos_status_during_traverse_with_hardlinks_test_base(Config, SpaceId) ->
     
     {ok, FileGuid1} = lfm_proxy:create(Worker1, SessId(Worker1), Dir1Guid, generator:gen_name(), ?DEFAULT_FILE_PERMS),
     {ok, FileGuid2} = lfm_proxy:create(Worker1, SessId(Worker1), Dir1Guid, generator:gen_name(), ?DEFAULT_FILE_PERMS),
-    {ok, #file_attr{guid = LinkGuid}} = lfm_proxy:make_link(Worker1, SessId(Worker1), ?FILE_REF(FileGuid1), Dir2Guid, generator:gen_name()),
+    {ok, #file_attr{guid = LinkGuid}} = lfm_proxy:make_link(Worker1, SessId(Worker1), ?FILE_REF(FileGuid1), ?FILE_REF(Dir2Guid), generator:gen_name()),
     
     await_files_sync_between_workers(Workers, [FileGuid1, FileGuid2, LinkGuid], SessId),
     qos_tests_utils:mock_transfers(Workers),
@@ -1302,7 +1302,7 @@ qos_status_during_reconciliation_with_file_deletion_test_base(Config, SpaceId, N
         lists:foreach(fun(FileGuid) ->
             ok = lfm_proxy:unlink(Worker, SessId(Worker), ?FILE_REF(FileGuid))
         end, Guids),
-        ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, FilesAndDirsGuids, QosList, ?FULFILLED), 30),
+        ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, FilesAndDirsGuids, QosList, ?FULFILLED), ?ATTEMPTS),
         % finish transfer to unlock waiting slave job process
         ok = qos_tests_utils:finish_all_transfers(Guids, non_strict) % all hardlinks are to the same file so only one transfer started
     end, Workers).
@@ -1475,7 +1475,7 @@ qos_with_hardlink_test_base(Config, SpaceId, Mode) ->
     end,
     
     {ok, FileGuid} = lfm_proxy:create(Worker1, SessId(Worker1), FileParent, generator:gen_name(), ?DEFAULT_FILE_PERMS),
-    {ok, #file_attr{guid = LinkGuid}} = lfm_proxy:make_link(Worker1, SessId(Worker1), ?FILE_REF(FileGuid), LinkParent, generator:gen_name()),
+    {ok, #file_attr{guid = LinkGuid}} = lfm_proxy:make_link(Worker1, SessId(Worker1), ?FILE_REF(FileGuid), ?FILE_REF(LinkParent), generator:gen_name()),
     await_files_sync_between_workers(Workers, [FileGuid, LinkGuid], SessId),
     
     QosTargets = case Mode of
@@ -1514,7 +1514,7 @@ qos_with_hardlink_deletion_test_base(Config, SpaceId, ToDelete) ->
     SpaceGuid = rpc:call(Worker1, fslogic_uuid, spaceid_to_space_dir_guid, [SpaceId]),
     
     {ok, FileGuid} = lfm_proxy:create(Worker1, SessId(Worker1), SpaceGuid, generator:gen_name(), ?DEFAULT_FILE_PERMS),
-    {ok, #file_attr{guid = LinkGuid}} = lfm_proxy:make_link(Worker1, SessId(Worker1), ?FILE_REF(FileGuid), SpaceGuid, generator:gen_name()),
+    {ok, #file_attr{guid = LinkGuid}} = lfm_proxy:make_link(Worker1, SessId(Worker1), ?FILE_REF(FileGuid), ?FILE_REF(SpaceGuid), generator:gen_name()),
     await_files_sync_between_workers(Workers, [FileGuid, LinkGuid], SessId),
     Guids = [FileGuid, LinkGuid],
     
