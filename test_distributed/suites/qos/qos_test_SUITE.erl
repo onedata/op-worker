@@ -557,7 +557,7 @@ qos_status_after_failed_transfers_deleted_entry(Config) ->
 
 init_per_suite(Config) ->
     Posthook = fun(NewConfig) ->
-        hackney:start(),
+        application:ensure_all_started(hackney),
         application:start(ssl),
         Workers = ?config(op_worker_nodes, NewConfig),
         test_utils:set_env(Workers, ?APP_NAME, qos_retry_failed_files_interval_seconds, 5),
@@ -567,14 +567,14 @@ init_per_suite(Config) ->
 
 
 end_per_suite(Config) ->
-    hackney:stop(),
+    application:stop(hackney),
     application:stop(ssl),
     initializer:teardown_storage(Config).
 
 
 init_per_testcase(qos_status_during_traverse_multi_batch_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    rpc:multicall(Workers, application, set_env, [op_worker, qos_traverse_batch_size, 2]),
+    utils:rpc_multicall(Workers, application, set_env, [op_worker, qos_traverse_batch_size, 2]),
     init_per_testcase(qos_status_default , Config);
 init_per_testcase(Case, Config) when 
     Case =:= qos_status_after_failed_transfers;
@@ -614,7 +614,7 @@ init_per_testcase(_, Config) ->
 
 end_per_testcase(qos_status_during_traverse_multi_batch_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    rpc:multicall(Workers, application, set_env, [op_worker, qos_traverse_batch_size, 40]),
+    utils:rpc_multicall(Workers, application, set_env, [op_worker, qos_traverse_batch_size, 40]),
     end_per_testcase(default, Config);
 end_per_testcase(Case, Config) when
     Case =:= qos_status_after_failed_transfers;

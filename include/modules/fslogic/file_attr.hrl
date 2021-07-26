@@ -19,20 +19,20 @@
 -define(SYMLINK_TYPE, 'SYMLNK'). % symbolic link
 
 -record(file_attr, {
-    guid :: undefined | binary() | atom() | integer(),
-    name :: binary(),
-    mode :: non_neg_integer(),
-    parent_guid :: undefined | binary(),
+    guid :: fslogic_worker:file_guid(),
+    name :: file_meta:name(),
+    mode :: file_meta:mode(),
+    parent_guid :: undefined | fslogic_worker:file_guid(),
     uid = 0 :: non_neg_integer(),
     gid = 0 :: non_neg_integer(),
-    atime = 0 :: non_neg_integer(),
-    mtime = 0 :: non_neg_integer(),
-    ctime = 0 :: non_neg_integer(),
+    atime = 0 :: times:a_time(),
+    mtime = 0 :: times:m_time(),
+    ctime = 0 :: times:c_time(),
     type :: ?REGULAR_FILE_TYPE | ?DIRECTORY_TYPE | ?LINK_TYPE | ?SYMLINK_TYPE,
-    size = 0 :: undefined | non_neg_integer(),
-    shares = [] :: [binary()],
-    provider_id :: binary(),
-    owner_id :: binary(),
+    size = 0 :: undefined | file_meta:size(),
+    shares = [] :: [od_share:id()],
+    provider_id :: od_provider:id(),
+    owner_id :: od_user:id(),
     fully_replicated :: undefined | boolean(),
     nlink :: undefined | non_neg_integer()
 }).

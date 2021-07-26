@@ -41,7 +41,7 @@
 ]).
 -export([fetch_name/1, fetch_name_of_remote_storage/2, fetch_provider_id_of_remote_storage/2, 
     fetch_qos_parameters_of_local_storage/1, fetch_qos_parameters_of_remote_storage/2]).
--export([should_skip_storage_detection/1, is_imported/1, is_posix_compatible/1, is_local_storage_readonly/1, is_storage_readonly/2]).
+-export([should_skip_storage_detection/1, is_imported/1, is_posix_compatible/1, is_local_storage_readonly/1, is_storage_readonly/2, is_archive/1]).
 -export([has_non_auto_luma_feed/1]).
 -export([is_local/1]).
 -export([verify_configuration/3]).
@@ -114,7 +114,7 @@ create(Name, Helper, LumaConfig, ImportedStorage, Readonly, QosParameters) ->
 -spec get(id() | data()) -> {ok, data()} | {error, term()}.
 get(StorageId) when is_binary(StorageId) ->
     storage_config:get(StorageId);
-get(StorageData) ->
+get(StorageData = #document{}) ->
     {ok, StorageData}.
 
 
@@ -335,6 +335,12 @@ is_posix_compatible(StorageDataOrId) ->
     Helper = get_helper(StorageDataOrId),
     helper:is_posix_compatible(Helper).
 
+
+-spec is_archive(id() | data()) -> boolean().
+is_archive(StorageDataOrId) ->
+    Helper = get_helper(StorageDataOrId),
+    helper:is_archive_storage(Helper).
+
 %%%===================================================================
 %%% Functions to modify storage details
 %%%===================================================================
@@ -508,7 +514,7 @@ on_space_unsupported(SpaceId, StorageId) ->
 on_helper_changed(StorageId) ->
     fslogic_event_emitter:emit_helper_params_changed(StorageId),
     rtransfer_config:add_storage(StorageId),
-    rpc:multicall(consistent_hashing:get_all_nodes(), rtransfer_config, restart_link, []),
+    utils:rpc_multicall(consistent_hashing:get_all_nodes(), rtransfer_config, restart_link, []),
     helpers_reload:refresh_helpers_by_storage(StorageId).
 
 
@@ -552,15 +558,13 @@ sanitize_readonly_option(IdOrName, #{
     readonly := Readonly,
     importedStorage := Imported
 }) ->
-    case {ensure_boolean(Readonly), ensure_boolean(SkipStorageDetection), ensure_boolean(Imported)} of
+    case {
+        utils:to_boolean(Readonly),
+        utils:to_boolean(SkipStorageDetection),
+        utils:to_boolean(Imported)
+    } of
         {false, _, _} -> ok;
         {true, false, _} -> throw(?ERROR_BAD_VALUE_NOT_ALLOWED(skipStorageDetection, [true]));
         {true, true, false} -> throw(?ERROR_REQUIRES_IMPORTED_STORAGE(IdOrName));
         {true, true, true} -> ok
     end.
-
-
--spec ensure_boolean(binary() | boolean()) -> boolean().
-ensure_boolean(<<"true">>) -> true;
-ensure_boolean(<<"false">>) -> false;
-ensure_boolean(Boolean) when is_boolean(Boolean) -> Boolean.

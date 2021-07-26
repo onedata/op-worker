@@ -63,23 +63,26 @@
 % requests
 -define(INVALIDATE_PERMISSIONS_CACHE, invalidate_permissions_cache).
 -define(PERIODICAL_SPACES_AUTOCLEANING_CHECK, periodical_spaces_autocleaning_check).
+-define(TERMINATE_STALE_ATM_WORKFLOW_EXECUTIONS, terminate_stale_atm_workflow_executions).
 -define(RERUN_TRANSFERS, rerun_transfers).
 -define(RESTART_AUTOCLEANING_RUNS, restart_autocleaning_runs).
 -define(INIT_PATHS_CACHES(Space), {init_paths_caches, Space}).
 -define(INIT_DATASETS_CACHE(Space), {init_datasets_cache, Space}).
 
 -define(SHOULD_PERFORM_PERIODICAL_SPACES_AUTOCLEANING_CHECK,
-    application:get_env(?APP_NAME, autocleaning_periodical_spaces_check_enabled, true)).
+    op_worker:get_env(autocleaning_periodical_spaces_check_enabled, true)).
 
 % delays and intervals
 -define(INVALIDATE_PERMISSIONS_CACHE_INTERVAL,
-    application:get_env(?APP_NAME, invalidate_permissions_cache_interval, timer:seconds(30))).
+    op_worker:get_env(invalidate_permissions_cache_interval, timer:seconds(30))).
 -define(AUTOCLEANING_PERIODICAL_SPACES_CHECK_INTERVAL,
-    application:get_env(?APP_NAME, autocleaning_periodical_spaces_check_interval, timer:minutes(1))).
+    op_worker:get_env(autocleaning_periodical_spaces_check_interval, timer:minutes(1))).
+-define(TERMINATE_STALE_ATM_WORKFLOW_EXECUTIONS_DELAY,
+    op_worker:get_env(terminate_stale_atm_workflow_executions_delay, 10000)).
 -define(RERUN_TRANSFERS_DELAY,
-    application:get_env(?APP_NAME, rerun_transfers_delay, 10000)).
+    op_worker:get_env(rerun_transfers_delay, 10000)).
 -define(RESTART_AUTOCLEANING_RUNS_DELAY,
-    application:get_env(?APP_NAME, restart_autocleaning_runs_delay, 10000)).
+    op_worker:get_env(restart_autocleaning_runs_delay, 10000)).
 
 % exometer macros
 -define(EXOMETER_NAME(Param), ?exometer_name(?MODULE, count, Param)).
@@ -94,10 +97,10 @@
 -define(EXOMETER_DEFAULT_DATA_POINTS_NUMBER, 10000).
 
 % This macro is used to disable automatic rerun of transfers in tests
--define(SHOULD_RERUN_TRANSFERS, application:get_env(?APP_NAME, rerun_transfers, true)).
+-define(SHOULD_RERUN_TRANSFERS, op_worker:get_env(rerun_transfers, true)).
 
 % This macro is used to disable automatic restart of autocleaning runs in tests
--define(SHOULD_RESTART_AUTOCLEANING_RUNS, application:get_env(?APP_NAME, autocleaning_restart_runs, true)).
+-define(SHOULD_RESTART_AUTOCLEANING_RUNS, op_worker:get_env(autocleaning_restart_runs, true)).
 
 -define(OPERATIONS_AVAILABLE_IN_SHARE_MODE, [
     % Checking perms for operations other than 'read' should result in immediate ?EACCES
@@ -172,7 +175,7 @@ supervisor_children_spec() ->
 -spec init_paths_caches(od_space:id() | all) -> ok.
 init_paths_caches(Space) ->
     Nodes = consistent_hashing:get_all_nodes(),
-    rpc:multicall(Nodes, ?MODULE, schedule_init_paths_caches, [Space]),
+    utils:rpc_multicall(Nodes, ?MODULE, schedule_init_paths_caches, [Space]),
     ok.
 
 
@@ -196,15 +199,18 @@ init_dataset_eff_caches(Space) ->
 init(_Args) ->
     init_effective_caches(),
     transfer:init(),
+    atm_workflow_execution_api:init_engine(),
     replica_deletion_master:init_workers_pool(),
     file_registration:init_pool(),
     autocleaning_view_traverse:init_pool(),
     tree_deletion_traverse:init_pool(),
-    tarball_download_traverse:init_pool(),
+    bulk_download_traverse:init_pool(),
     clproto_serializer:load_msg_defs(),
+    archivisation_traverse:init_pool(),
 
     schedule_invalidate_permissions_cache(),
     schedule_rerun_transfers(),
+    schedule_stale_atm_workflow_executions_termination(),
     schedule_restart_autocleaning_runs(),
     schedule_periodical_spaces_autocleaning_check(),
 
@@ -246,6 +252,10 @@ handle(?INVALIDATE_PERMISSIONS_CACHE) ->
     ?debug("Invalidating permissions cache"),
     invalidate_permissions_cache(),
     schedule_invalidate_permissions_cache();
+handle(?TERMINATE_STALE_ATM_WORKFLOW_EXECUTIONS) ->
+    ?debug("Terminating stale atm workflow executions"),
+    terminate_stale_atm_workflow_executions(),
+    ok;
 handle(?RERUN_TRANSFERS) ->
     ?debug("Rerunning unfinished transfers"),
     rerun_transfers(),
@@ -301,8 +311,9 @@ cleanup() ->
     file_registration:stop_pool(),
     replica_deletion_master:stop_workers_pool(),
     tree_deletion_traverse:stop_pool(),
-    tarball_download_traverse:stop_pool(),
+    bulk_download_traverse:stop_pool(),
     replica_synchronizer:terminate_all(),
+    archivisation_traverse:stop_pool(),
     ok.
 
 %%%===================================================================
@@ -375,8 +386,8 @@ handle_request_and_process_response(SessId, Request) ->
                 handle_request_remotely(UserCtx, Request, Providers)
         end
     catch
-        Type2:Error2 ->
-            fslogic_errors:handle_error(Request, Type2, Error2)
+        Type2:Error2:Stacktrace ->
+            fslogic_errors:handle_error(Request, Type2, Error2, Stacktrace)
     end.
 
 %%--------------------------------------------------------------------
@@ -418,8 +429,8 @@ handle_request_and_process_response_locally(UserCtx0, Request, FilePartialCtx) -
         end,
         handle_request_locally(UserCtx1, Request, FileCtx1)
     catch
-        Type:Error ->
-            fslogic_errors:handle_error(Request, Type, Error)
+        Type:Error:Stacktrace ->
+            fslogic_errors:handle_error(Request, Type, Error, Stacktrace)
     end.
 
 
@@ -780,16 +791,35 @@ handle_provider_request(UserCtx, #list_top_datasets{state = State, opts = Opts, 
     dataset_req:list_top_datasets(file_ctx:get_space_id_const(SpaceDirCtx), State, Opts, ListingMode, UserCtx);
 handle_provider_request(UserCtx, #list_children_datasets{id = DatasetId, opts = Opts, mode = ListingMode}, SpaceDirCtx) ->
     dataset_req:list_children_datasets(SpaceDirCtx, DatasetId, Opts, ListingMode, UserCtx);
-handle_provider_request(UserCtx, #archive_dataset{id = DatasetId, params = Params, attrs = Attrs}, SpaceDirCtx) ->
-    dataset_req:archive(SpaceDirCtx, DatasetId, Params, Attrs, UserCtx);
-handle_provider_request(UserCtx, #update_archive{id = ArchiveId, attrs = Params}, SpaceDirCtx) ->
-    dataset_req:update_archive(SpaceDirCtx, ArchiveId, Params, UserCtx);
+handle_provider_request(UserCtx, #archive_dataset{
+    id = DatasetId,
+    config = Config,
+    preserved_callback = PreservedCallback,
+    purged_callback = PurgedCallback,
+    description = Description
+}, SpaceDirCtx) ->
+    dataset_req:create_archive(SpaceDirCtx, DatasetId, Config, PreservedCallback, PurgedCallback, Description, UserCtx);
+handle_provider_request(UserCtx, #update_archive{id = ArchiveId, diff = Diff}, SpaceDirCtx) ->
+    dataset_req:update_archive(SpaceDirCtx, ArchiveId, Diff, UserCtx);
 handle_provider_request(UserCtx, #get_archive_info{id = ArchiveId}, SpaceDirCtx) ->
     dataset_req:get_archive_info(SpaceDirCtx, ArchiveId, UserCtx);
 handle_provider_request(UserCtx, #list_archives{dataset_id = DatasetId, opts = Opts, mode = ListingMode}, SpaceDirCtx) ->
     dataset_req:list_archives(SpaceDirCtx, DatasetId, Opts, ListingMode, UserCtx);
-handle_provider_request(UserCtx, #remove_archive{id = DatasetId}, SpaceDirCtx) ->
-    dataset_req:remove_archive(SpaceDirCtx, DatasetId, UserCtx).
+handle_provider_request(UserCtx, #init_archive_purge{id = ArchiveId, callback = CallbackUrl}, SpaceDirCtx) ->
+    dataset_req:init_archive_purge(SpaceDirCtx, ArchiveId, CallbackUrl, UserCtx);
+
+handle_provider_request(UserCtx, #schedule_atm_workflow_execution{
+    atm_workflow_schema_id = AtmWorkflowSchemaId,
+    store_initial_values = AtmStoreInitialValues,
+    callback_url = CallbackUrl
+}, SpaceDirCtx) ->
+    atm_req:schedule_workflow_execution(
+        UserCtx, SpaceDirCtx, AtmWorkflowSchemaId, AtmStoreInitialValues, CallbackUrl
+    );
+handle_provider_request(_UserCtx, #cancel_atm_workflow_execution{
+    atm_workflow_execution_id = AtmWorkflowExecutionId
+}, _SpaceDirCtx) ->
+    atm_req:cancel_workflow_execution(AtmWorkflowExecutionId).
 
 
 %%--------------------------------------------------------------------
@@ -811,6 +841,10 @@ handle_proxyio_request(UserCtx, #remote_read{offset = Offset, size = Size}, File
 -spec schedule_invalidate_permissions_cache() -> ok.
 schedule_invalidate_permissions_cache() ->
     schedule(?INVALIDATE_PERMISSIONS_CACHE, ?INVALIDATE_PERMISSIONS_CACHE_INTERVAL).
+
+-spec schedule_stale_atm_workflow_executions_termination() -> ok.
+schedule_stale_atm_workflow_executions_termination() ->
+    schedule(?TERMINATE_STALE_ATM_WORKFLOW_EXECUTIONS, ?TERMINATE_STALE_ATM_WORKFLOW_EXECUTIONS_DELAY).
 
 -spec schedule_rerun_transfers() -> ok.
 schedule_rerun_transfers() ->
@@ -840,8 +874,8 @@ invalidate_permissions_cache() ->
     try
         permissions_cache:invalidate_on_node()
     catch
-        _:Reason ->
-            ?error_stacktrace("Failed to invalidate permissions cache due to: ~p", [Reason])
+        _:Reason:Stacktrace ->
+            ?error_stacktrace("Failed to invalidate permissions cache due to: ~p", [Reason], Stacktrace)
     end.
 
 -spec periodical_spaces_autocleaning_check() -> ok.
@@ -862,8 +896,27 @@ periodical_spaces_autocleaning_check() ->
         Error = {error, _} ->
             ?error("Unable to trigger spaces auto-cleaning check due to: ~p", [Error])
     catch
-        Error2:Reason ->
-            ?error_stacktrace("Unable to trigger spaces auto-cleaning check due to: ~p", [{Error2, Reason}])
+        Error2:Reason:Stacktrace ->
+            ?error_stacktrace("Unable to trigger spaces auto-cleaning check due to: ~p", [{Error2, Reason}], Stacktrace)
+    end.
+
+-spec terminate_stale_atm_workflow_executions() -> ok.
+terminate_stale_atm_workflow_executions() ->
+    try provider_logic:get_spaces() of
+        {ok, SpaceIds} ->
+            lists:foreach(fun atm_workflow_execution_api:terminate_not_ended/1, SpaceIds);
+        ?ERROR_UNREGISTERED_ONEPROVIDER ->
+            schedule_stale_atm_workflow_executions_termination();
+        ?ERROR_NO_CONNECTION_TO_ONEZONE ->
+            schedule_stale_atm_workflow_executions_termination();
+        Error = {error, _} ->
+            ?error("Unable to terminate stale atm workflow executions due to: ~p", [Error])
+    catch Class:Reason:Stacktrace ->
+        ?error_stacktrace(
+            "Unable to terminate stale atm workflow executions due to: ~p",
+            [{Class, Reason}],
+            Stacktrace
+        )
     end.
 
 -spec rerun_transfers() -> ok.
@@ -883,8 +936,8 @@ rerun_transfers() ->
                 Error = {error, _} ->
                     ?error("Unable to rerun transfers due to: ~p", [Error])
             catch
-                Error2:Reason ->
-                    ?error_stacktrace("Unable to rerun transfers due to: ~p", [{Error2, Reason}])
+                Error2:Reason:Stacktrace ->
+                    ?error_stacktrace("Unable to rerun transfers due to: ~p", [{Error2, Reason}], Stacktrace)
             end;
         false ->
             ok
@@ -906,8 +959,8 @@ restart_autocleaning_runs() ->
                 Error = {error, _} ->
                     ?error("Unable to restart auto-cleaning runs due to: ~p", [Error])
             catch
-                Error2:Reason ->
-                    ?error_stacktrace("Unable to restart autocleaning-runs due to: ~p", [{Error2, Reason}])
+                Error2:Reason:Stacktrace ->
+                    ?error_stacktrace("Unable to restart autocleaning-runs due to: ~p", [{Error2, Reason}], Stacktrace)
             end;
         false ->
             ok

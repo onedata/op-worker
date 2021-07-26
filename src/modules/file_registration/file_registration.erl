@@ -57,8 +57,8 @@
 -export_type([spec/0]).
 
 -define(FILE_REGISTRATION_POOL, file_registration_pool).
--define(FILE_REGISTRATION_POOL_SIZE, application:get_env(?APP_NAME, file_registration_pool_size, 20)).
--define(FILE_REGISTRATION_TIMEOUT, application:get_env(?APP_NAME, file_registration_timeout, 30000)).
+-define(FILE_REGISTRATION_POOL_SIZE, op_worker:get_env(file_registration_pool_size, 20)).
+-define(FILE_REGISTRATION_TIMEOUT, op_worker:get_env(file_registration_timeout, 30000)).
 
 %%%===================================================================
 %%% API functions
@@ -147,22 +147,26 @@ register_internal(SessId, SpaceId, DestinationPath, StorageId, StorageFileId, Sp
                 ?ERROR_POSIX(?EINPROGRESS)
         end
     catch
-        throw:?ENOTSUP ->
+        throw:?ENOTSUP:Stacktrace ->
             ?error_stacktrace(
                 "Failed registration of file ~s located on storage ~s in space ~s under path ~s.~n"
                 "stat (or equivalent) operation is not supported by the storage.",
-                [StorageFileId, StorageId, SpaceId, DestinationPath]),
+                [StorageFileId, StorageId, SpaceId, DestinationPath],
+                Stacktrace
+            ),
             ?ERROR_STAT_OPERATION_NOT_SUPPORTED(StorageId);
         throw:{error, _} = Error ->
             Error;
         throw:PosixError ->
             % posix errors are thrown as single atoms
             ?ERROR_POSIX(PosixError);
-        Error:Reason ->
+        Error:Reason:Stacktrace2 ->
             ?error_stacktrace(
                 "Failed registration of file ~s located on storage ~s in space ~s under path ~s.~n"
                 "Operation failed due to ~p:~p",
-                [StorageFileId, StorageId, SpaceId, DestinationPath, Error, Reason]),
+                [StorageFileId, StorageId, SpaceId, DestinationPath, Error, Reason],
+                Stacktrace2
+            ),
             {error, Reason}
     end.
 
@@ -238,9 +242,12 @@ create_missing_directories(ParentCtx, [DirectChildPartialCtx | Rest], UserId) ->
         {ok, DirectChildCtx} = create_missing_directory_secure(ParentCtx, DirectChildName, UserId),
         create_missing_directories(DirectChildCtx, Rest, UserId)
     catch
-        Error:Reason ->
-            ?error_stacktrace("Creating missing directories for file being registered has failed with ~p:~p",
-                [Error, Reason]),
+        Error:Reason:Stacktrace ->
+            ?error_stacktrace(
+                "Creating missing directories for file being registered has failed with ~p:~p",
+                [Error, Reason],
+                Stacktrace
+            ),
             throw(?ERROR_POSIX(?ENOENT))
     end.
 

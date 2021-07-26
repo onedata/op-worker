@@ -24,7 +24,8 @@
     set_size/1, calculate_size/1, increase_size/2,
     get_storage_file_id/1, get_storage_id/1]).
 -export([mkdir/2, mkdir/3, mv/2, chmod/2, chown/3, link/2, readdir/3,
-    get_child_handle/2, listobjects/4]).
+    get_child_handle/2, listobjects/4, flushbuffer/2,
+    blocksize_for_path/1]).
 -export([stat/1, read/3, write/3, create/2, open/2, release/1,
     truncate/3, unlink/2, fsync/2, rmdir/1, exists/1]).
 -export([setxattr/5, getxattr/2, removexattr/2, listxattr/1]).
@@ -215,7 +216,6 @@ mkdir(Handle, Mode) ->
     ok | error_reply().
 mkdir(#sd_handle{file = FileId} = SDHandle, Mode, Recursive) ->
     run_with_helper_handle(retry_as_root_and_chown, SDHandle, fun(HelperHandle) ->
-        fun(_) -> ok end,
         case helpers:mkdir(HelperHandle, FileId, Mode) of
             ok ->
                 ok;
@@ -501,6 +501,34 @@ removexattr(SDHandle = #sd_handle{file = FileId}, Name) ->
 listxattr(SDHandle = #sd_handle{file = FileId}) ->
     run_with_helper_handle(retry_as_root, SDHandle, fun(HelperHandle) ->
         helpers:listxattr(HelperHandle, FileId)
+    end).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Flush buffer of BufferedStorageHelper for specific file.
+%% @end
+%%--------------------------------------------------------------------
+-spec flushbuffer(handle(), CurrentSize :: integer()) -> ok | error_reply().
+flushbuffer(SDHandle = #sd_handle{file = FileId}, CurrentSize) ->
+    run_with_helper_handle(retry_as_root, SDHandle, fun(HelperHandle) ->
+        case helpers:flushbuffer(HelperHandle, FileId, CurrentSize) of
+            ok -> ok;
+            {error, ?ENOENT} -> ok;
+            {error, __} = Error -> Error
+        end
+    end, ?READWRITE).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Return block size optimal for writing to a specific file.
+%% @end
+%%--------------------------------------------------------------------
+-spec blocksize_for_path(handle()) -> {ok, non_neg_integer()} | error_reply().
+blocksize_for_path(SDHandle = #sd_handle{file = FileId}) ->
+    run_with_helper_handle(retry_as_root, SDHandle, fun(HelperHandle) ->
+        helpers:blocksize_for_path(HelperHandle, FileId)
     end).
 
 

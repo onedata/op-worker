@@ -2,7 +2,7 @@
 %%% This file has been automatically generated from Swagger
 %%% specification - DO NOT EDIT!
 %%%
-%%% @copyright (C) 2019-2020 ACK CYFRONET AGH
+%%% @copyright (C) 2019-2021 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -86,7 +86,7 @@ routes() -> [
             scope = private
         }
     }},
-    %% Download file content
+    %% Download file or directory content
     {<<"/data/:id/content">>, rest_handler, #rest_req{
         method = 'GET',
         produces = [<<"application/octet-stream">>],

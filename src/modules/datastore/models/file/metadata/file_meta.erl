@@ -138,7 +138,7 @@ save(Doc, GeneratedKey) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec create({uuid, ParentUuid :: uuid()}, doc()) ->
-    {ok, uuid()} | {error, term()}.
+    {ok, doc()} | {error, term()}.
 create(Parent, FileDoc) ->
     create(Parent, FileDoc, all).
 
@@ -167,6 +167,8 @@ create({uuid, ParentUuid}, FileDoc = #document{value = FileMeta = #file_meta{nam
             }
         },
         LocalTreeId = oneprovider:get_id(),
+        % Warning: if uuid exists, two files with same #file_meta{} will be created
+        % (names are checked for conflicts, not uuids)
         case file_meta:save(FileDoc3) of
             {ok, FileDocFinal = #document{key = FileUuid}} ->
                 case file_meta_forest:check_and_add(ParentUuid, ParentScopeId, TreesToCheck, FileName, FileUuid) of
@@ -634,10 +636,10 @@ setup_onedata_user(UserId, EffSpaces) ->
                 {error, already_exists} ->
                     ok
             end
-        catch Type:Message ->
+        catch Type:Message:Stacktrace ->
             ?error_stacktrace("Failed to setup user ~s - ~p:~p", [
                 UserId, Type, Message
-            ])
+            ], Stacktrace)
         end
     end).
 
@@ -700,7 +702,7 @@ make_space_exist(SpaceId) ->
         value = #file_meta{
             name = SpaceId,
             type = ?DIRECTORY_TYPE,
-            mode = ?DEFAULT_DIR_PERMS,
+            mode = ?DEFAULT_DIR_MODE,
             owner = ?SPACE_OWNER_ID(SpaceId),
             is_scope = true,
             parent_uuid = ?GLOBAL_ROOT_DIR_UUID
@@ -869,7 +871,7 @@ get_active_perms_type(FileUuid) ->
     end.
 
 
--spec update_mode(uuid(), posix_permissions()) -> {ok, doc} | {error, term()}.
+-spec update_mode(uuid(), posix_permissions()) -> {ok, doc()} | {error, term()}.
 update_mode(FileUuid, NewMode) ->
     update({uuid, FileUuid}, fun(#file_meta{} = FileMeta) ->
         {ok, FileMeta#file_meta{mode = NewMode}}
@@ -884,11 +886,14 @@ update_acl(FileUuid, NewAcl) ->
 
 
 -spec update_protection_flags(uuid(), data_access_control:bitmask(), data_access_control:bitmask()) ->
-    ok | {error, term()}.
+    ok | {error, nothing_changed} | {error, term()}.
 update_protection_flags(FileUuid, FlagsToSet, FlagsToUnset) ->
     ?extract_ok(update({uuid, FileUuid}, fun(#file_meta{protection_flags = CurrFlags} = FileMeta) ->
         NewFlags = ?set_flags(?reset_flags(CurrFlags, FlagsToUnset), FlagsToSet),
-        {ok, FileMeta#file_meta{protection_flags = NewFlags}}
+        case NewFlags =:= CurrFlags of
+            true -> {error, nothing_changed};
+            false -> {ok, FileMeta#file_meta{protection_flags = NewFlags}}
+        end
     end)).
 
 

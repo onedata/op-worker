@@ -246,8 +246,8 @@ register_in_oz_dev(NodeList, ProviderName, Token) ->
         provider_auth:save(ProviderId, RootToken),
         {ok, ProviderId}
     catch
-        T:M ->
-            ?error_stacktrace("Cannot register in OZ - ~p:~p", [T, M]),
+        T:M:Stacktrace   ->
+            ?error_stacktrace("Cannot register in OZ - ~p:~p", [T, M], Stacktrace),
             {error, M}
     end.
 

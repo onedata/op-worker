@@ -55,9 +55,9 @@
 
 -spec init_pool() -> ok.
 init_pool() ->
-    MasterJobsLimit = application:get_env(?APP_NAME, tree_deletion_traverse_master_jobs_limit, 10),
-    SlaveJobsLimit = application:get_env(?APP_NAME, tree_deletion_traverse_slave_jobs_limit, 10),
-    ParallelismLimit = application:get_env(?APP_NAME, tree_deletion_traverse_parallelism_limit, 10),
+    MasterJobsLimit = op_worker:get_env(tree_deletion_traverse_master_jobs_limit, 10),
+    SlaveJobsLimit = op_worker:get_env(tree_deletion_traverse_slave_jobs_limit, 10),
+    ParallelismLimit = op_worker:get_env(tree_deletion_traverse_parallelism_limit, 10),
     tree_traverse:init(?POOL_NAME, MasterJobsLimit, SlaveJobsLimit, ParallelismLimit).
 
 
@@ -98,7 +98,7 @@ start(RootDirCtx, UserCtx, EmitEvents, RootOriginalParentUuid) ->
 task_started(TaskId, _Pool) ->
     ?debug("dir deletion job ~p started", [TaskId]).
 
--spec task_canceled(traverse:id(), traverse:pool()) -> ok.
+-spec task_canceled(id(), tree_traverse:pool()) -> ok.
 task_canceled(TaskId, _PoolName) ->
     tree_traverse_session:close_for_task(TaskId),
     ?debug("dir deletion job ~p cancelled", [TaskId]).
@@ -109,12 +109,12 @@ task_finished(TaskId, _Pool) ->
     ?debug("dir deletion job ~p finished", [TaskId]).
 
 -spec get_job(traverse:job_id() | tree_traverse_job:doc()) ->
-    {ok, tree_traverse:master_job(), traverse:pool(), id()}  | {error, term()}.
-get_job(DocOrID) ->
-    tree_traverse:get_job(DocOrID).
+    {ok, tree_traverse:master_job(), tree_traverse:pool(), id()}  | {error, term()}.
+get_job(DocOrId) ->
+    tree_traverse:get_job(DocOrId).
 
 -spec update_job_progress(undefined | main_job | traverse:job_id(),
-    tree_traverse:master_job(), traverse:pool(), id(),
+    tree_traverse:master_job(), tree_traverse:pool(), id(),
     traverse:job_status()) -> {ok, traverse:job_id()}  | {error, term()}.
 update_job_progress(Id, Job, Pool, TaskId, Status) ->
     tree_traverse:update_job_progress(Id, Job, Pool, TaskId, Status, ?MODULE).

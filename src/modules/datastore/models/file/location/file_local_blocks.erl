@@ -40,7 +40,7 @@
 }).
 
 -define(MAX_DOC_SIZE,
-    application:get_env(?APP_NAME, blocks_doc_max_size, 50000)).
+    op_worker:get_env(blocks_doc_max_size, 50000)).
 
 %%%===================================================================
 %%% API

@@ -25,7 +25,7 @@
 -export([
     resolve_file/1,
     create_and_sync_file_tree/3, create_and_sync_file_tree/4,
-    mv_and_sync_file/3, rm_and_sync_file/2
+    mv_and_sync_file/3, rm_and_sync_file/2, await_file_metadata_sync/3
 ]).
 -export([get_object_attributes/3]).
 
@@ -33,15 +33,19 @@
 
 -type space_selector() :: oct_background:entity_selector().
 -type object_selector() :: file_id:file_guid() | space_selector().
--type object_spec() :: #file_spec{} | #dir_spec{} | #symlink_spec{}.
+-type object_spec() :: #file_spec{} | #dir_spec{} | #symlink_spec{} | metadata_spec().
 
 -type object() :: #object{}.
+-type metadata_object() :: #metadata_object{}.
+-type metadata_spec() :: #metadata_spec{}.
 
--export_type([share_spec/0, space_selector/0, object_selector/0, object_spec/0, object/0]).
+-export_type([share_spec/0, space_selector/0, object_selector/0, object_spec/0, object/0,
+    metadata_spec/0, metadata_object/0
+]).
 
 -define(LS_SIZE, 1000).
 
--define(ATTEMPTS, 30).
+-define(ATTEMPTS, 60).
 
 
 %%%===================================================================
@@ -168,7 +172,8 @@ create_file_tree(UserId, ParentGuid, CreationProvider, #file_spec{
     mode = FileMode,
     shares = ShareSpecs,
     dataset = DatasetSpec,
-    content = Content
+    content = Content,
+    metadata = MetadataSpec
 }) ->
     FileName = utils:ensure_defined(NameOrUndefined, str_utils:rand_hex(20)),
     UserSessId = oct_background:get_user_session_id(UserId, CreationProvider),
@@ -176,6 +181,7 @@ create_file_tree(UserId, ParentGuid, CreationProvider, #file_spec{
 
     {ok, FileGuid} = create_file(CreationNode, UserSessId, ParentGuid, FileName, FileMode),
     Content /= <<>> andalso write_file(CreationNode, UserSessId, FileGuid, Content),
+    MetadataObj = create_metadata(CreationNode, UserSessId, FileGuid, MetadataSpec),
 
     DatasetObj = onenv_dataset_test_utils:set_up_dataset(
         CreationProvider, UserId, FileGuid, DatasetSpec
@@ -189,19 +195,25 @@ create_file_tree(UserId, ParentGuid, CreationProvider, #file_spec{
         shares = create_shares(CreationProvider, UserSessId, FileGuid, ShareSpecs),
         dataset = DatasetObj,
         content = Content,
-        children = undefined
+        children = undefined,
+        metadata = MetadataObj
     };
 
 create_file_tree(UserId, ParentGuid, CreationProvider, #symlink_spec{
     name = NameOrUndefined,
     shares = ShareSpecs,
-    symlink_value = SymlinkValue
+    symlink_value = SymlinkValue,
+    dataset = DatasetSpec
 }) ->
     FileName = utils:ensure_defined(NameOrUndefined, str_utils:rand_hex(20)),
     UserSessId = oct_background:get_user_session_id(UserId, CreationProvider),
     CreationNode = lists_utils:random_element(oct_background:get_provider_nodes(CreationProvider)),
 
     {ok, #file_attr{guid = SymlinkGuid}} = create_symlink(CreationNode, UserSessId, ParentGuid, FileName, SymlinkValue),
+
+    DatasetObj = onenv_dataset_test_utils:set_up_dataset(
+        CreationProvider, UserId, SymlinkGuid, DatasetSpec
+    ),
 
     #object{
         guid = SymlinkGuid,
@@ -210,6 +222,7 @@ create_file_tree(UserId, ParentGuid, CreationProvider, #symlink_spec{
         shares = create_shares(CreationProvider, UserSessId, SymlinkGuid, ShareSpecs),
         children = undefined,
         content = undefined,
+        dataset = DatasetObj,
         mode = ?DEFAULT_SYMLINK_PERMS,
         symlink_value = SymlinkValue
     };
@@ -269,12 +282,17 @@ await_sync(CreationProvider, SyncProviders, UserId, #object{
     dataset = DatasetObj
 } = Object) ->
     await_file_attr_sync(SyncProviders, UserId, Object),
+    await_file_metadata_sync(SyncProviders, UserId, Object),
     onenv_dataset_test_utils:await_dataset_sync(CreationProvider, SyncProviders, UserId, DatasetObj),
     await_file_distribution_sync(CreationProvider, SyncProviders, UserId, Object);
 
-await_sync(_CreationProvider, SyncProviders, UserId, #object{type = ?SYMLINK_TYPE} = Object) ->
+await_sync(CreationProvider, SyncProviders, UserId, #object{
+    type = ?SYMLINK_TYPE,
+    dataset = DatasetObj
+} = Object) ->
     % file_attr construction uses file_meta document, so this checks symlink value synchronization
-    await_file_attr_sync(SyncProviders, UserId, Object);
+    await_file_attr_sync(SyncProviders, UserId, Object),
+    onenv_dataset_test_utils:await_dataset_sync(CreationProvider, SyncProviders, UserId, DatasetObj);
 
 await_sync(CreationProvider, SyncProviders, UserId, #object{
     guid = DirGuid,
@@ -300,9 +318,74 @@ await_file_attr_sync(SyncProviders, UserId, #object{guid = Guid} = Object) ->
     lists:foreach(fun(SyncProvider) ->
         SessId = oct_background:get_user_session_id(UserId, SyncProvider),
         SyncNode = ?OCT_RAND_OP_NODE(SyncProvider),
-        ExpObjectAttrs = Object#object{dataset = undefined, content = undefined, children = undefined, symlink_value = undefined},
+        ExpObjectAttrs = Object#object{
+            dataset = undefined,
+            content = undefined,
+            children = undefined,
+            symlink_value = undefined,
+            metadata = undefined
+        },
         ?assertEqual({ok, ExpObjectAttrs}, get_object_attributes(SyncNode, SessId, Guid), ?ATTEMPTS)
     end, SyncProviders).
+
+
+-spec await_file_metadata_sync([oct_background:entity_selector()], od_user:id(), object()) ->
+    ok | no_return().
+await_file_metadata_sync(_SyncProviders, _UserId, #object{metadata = undefined}) ->
+    ok;
+await_file_metadata_sync(SyncProviders, UserId, #object{guid = Guid, metadata = #metadata_object{
+    json = ExpJson,
+    rdf = ExpRdf,
+    xattrs = ExpXattrs
+}}) ->
+    lists:foreach(fun(SyncProvider) ->
+        SessId = oct_background:get_user_session_id(UserId, SyncProvider),
+        SyncNode = ?OCT_RAND_OP_NODE(SyncProvider),
+
+        await_json_metadata_sync(SyncNode, SessId, Guid, ExpJson),
+        await_rdf_metadata_sync(SyncNode, SessId, Guid, ExpRdf),
+        await_xattrs_sync(SyncNode, SessId, Guid, ExpXattrs)
+
+    end, SyncProviders).
+
+
+%% @private
+-spec await_json_metadata_sync(node(), session:id(), file_id:file_guid(), undefined | json_utils:json_term()) -> ok.
+await_json_metadata_sync(_SyncNode, _SessId, _FileGuid, undefined) ->
+    ok;
+await_json_metadata_sync(SyncNode, SessId, FileGuid, ExpJson) ->
+    ?assertEqual({ok, ExpJson}, lfm_proxy:get_metadata(SyncNode, SessId, ?FILE_REF(FileGuid), json, [], false), ?ATTEMPTS),
+    ok.
+
+
+%% @private
+-spec await_rdf_metadata_sync(node(), session:id(), file_id:file_guid(), undefined | binary()) -> ok.
+await_rdf_metadata_sync(_SyncNode, _SessId, _FileGuid, undefined) ->
+    ok;
+await_rdf_metadata_sync(SyncNode, SessId, FileGuid, ExpRdf) ->
+    ?assertEqual({ok, ExpRdf}, lfm_proxy:get_metadata(SyncNode, SessId, ?FILE_REF(FileGuid), rdf, [], false), ?ATTEMPTS),
+    ok.
+
+
+%% @private
+-spec await_xattrs_sync(node(), session:id(), file_id:file_guid(), undefined | json_utils:json_term()) -> ok.
+await_xattrs_sync(_SyncNode, _SessId, _FileGuid, undefined) ->
+    ok;
+await_xattrs_sync(SyncNode, SessId, FileGuid, ExpXattrs) ->
+    ExpXattrsNamesSorted = lists:sort(maps:keys(ExpXattrs)),
+    ListXattr = fun() ->
+        case lfm_proxy:list_xattr(SyncNode, SessId, ?FILE_REF(FileGuid), false, false) of
+            {ok, XattrNames} -> {ok, lists:sort(XattrNames)};
+            Other -> Other
+        end
+    end,
+    ?assertEqual({ok, ExpXattrsNamesSorted}, ListXattr(), ?ATTEMPTS),
+
+    maps:fold(fun(XattrName, XattrValue, _) ->
+        ?assertMatch({ok, #xattr{name = XattrName, value = XattrValue}},
+            lfm_proxy:get_xattr(SyncNode, SessId, ?FILE_REF(FileGuid), XattrName), ?ATTEMPTS)
+    end, undefined, ExpXattrs),
+    ok.
 
 
 %% @private
@@ -426,6 +509,48 @@ write_file(Node, SessId, FileGuid, Content) ->
 
 
 %% @private
+-spec create_metadata(node(), session:id(), file_id:file_guid(), #metadata_spec{}) ->
+    ok | no_return().
+create_metadata(Node, SessId, FileGuid, #metadata_spec{
+    json = Json,
+    rdf = Rdf,
+    xattrs = Xattrs
+}) ->
+    Json /= undefined andalso create_json_metadata(Node, SessId, FileGuid, Json),
+    Rdf /= undefined andalso create_rdf_metadata(Node, SessId, FileGuid, Rdf),
+    Xattrs /= undefined andalso create_xattrs(Node, SessId, FileGuid, Xattrs),
+    
+    #metadata_object{
+        json = Json,
+        rdf = Rdf,
+        xattrs = Xattrs
+    }.
+
+
+%% @private
+-spec create_json_metadata(node(), session:id(), file_id:file_guid(), json_utils:json_term()) -> ok.
+create_json_metadata(Node, SessionId, FileGuid, Json) ->
+    ?assertEqual(ok, lfm_proxy:set_metadata(Node, SessionId, ?FILE_REF(FileGuid), json, Json, [])).
+
+
+%% @private
+-spec create_rdf_metadata(node(), session:id(), file_id:file_guid(), binary()) -> ok.
+create_rdf_metadata(Node, SessionId, FileGuid, Rdf) ->
+    ?assertEqual(ok, lfm_proxy:set_metadata(Node, SessionId, ?FILE_REF(FileGuid), rdf, Rdf, [])).
+
+
+%% @private
+-spec create_xattrs(node(), session:id(), file_id:file_guid(), json_utils:json_term()) -> ok.
+create_xattrs(Node, SessionId, FileGuid, Xattrs) ->
+    maps:fold(fun(XattrKey, XattrValue, _) ->
+        ?assertEqual(ok, lfm_proxy:set_xattr(Node, SessionId, ?FILE_REF(FileGuid), #xattr{
+            name = XattrKey, value = XattrValue
+        }))
+    end, undefined, Xattrs),
+    ok.
+
+
+    %% @private
 -spec mv_file(od_user:id(), file_id:file_guid(), file_meta:path(), oct_background:entity_selector()) ->
     ok.
 mv_file(UserId, FileGuid, DstPath, MvProvider) ->

@@ -37,7 +37,7 @@
 %% API
 -export([init_cache/2, cache_exists/1, invalidate/1]).
 -export([init_group/2]).
--export([get_or_calculate/3, get_or_calculate/4]).
+-export([get/2, cache/3, get_or_calculate/3, get_or_calculate/4]).
 
 -type cache() :: bounded_cache:cache().
 -type init_options() :: bounded_cache:cache_options().
@@ -51,12 +51,12 @@
 -type args() :: list().
 -type critical_section_level() :: no | direct | parent. % parent = use section starting from parent directory
 % Type that defines return value of get_or_calculate functions and helper functions (used to shorten specs)
--type get_return_value() :: {ok, bounded_cache:value(), calculation_info()} | {error, term()}.
+-type get_or_calculate_return_value() :: {ok, bounded_cache:value(), calculation_info()} | {error, term()}.
 -type callback() :: bounded_cache:callback().
 % Merge callback is used to merge values calculated using different references of file.
 % If it is not present, only reference pointing at file doc passed by get_or_calculate function argument is used.
 -type merge_callback() :: fun((RefValue :: bounded_cache:value(), ValueAcc :: bounded_cache:value(),
-    RefCalculationInfo :: calculation_info(), CalculationInfoAcc :: calculation_info()) -> get_return_value()).
+    RefCalculationInfo :: calculation_info(), CalculationInfoAcc :: calculation_info()) -> get_or_calculate_return_value()).
 % Callback that allows caching of different values for different references of the same file during single call.
 % It uses value calculated for reference and value provided by merge_callback to obtain final value for particular
 % reference.
@@ -103,8 +103,15 @@ cache_exists(Cache) ->
 invalidate(Cache) ->
     bounded_cache:invalidate(Cache).
 
+-spec get(cache(), term()) -> {ok, term()} | {error, not_found}.
+get(Cache, Key) ->
+    bounded_cache:get(Cache, Key).
 
--spec get_or_calculate(cache(), file_meta:doc(), callback()) -> get_return_value().
+-spec cache(cache(), term(), term()) -> ok.
+cache(Cache, Key, Value) ->
+    bounded_cache:cache(Cache, Key, Value, bounded_cache:get_timestamp()).
+
+-spec get_or_calculate(cache(), file_meta:doc(), callback()) -> get_or_calculate_return_value().
 get_or_calculate(Cache, FileDoc, CalculateCallback) ->
     get_or_calculate(Cache, FileDoc, CalculateCallback, #{}).
 
@@ -122,7 +129,7 @@ get_or_calculate(Cache, FileDoc, CalculateCallback) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_or_calculate(cache(), file_meta:doc(), callback(), get_or_calculate_options()) ->
-    get_return_value().
+    get_or_calculate_return_value().
 get_or_calculate(Cache, #document{key = DocKey} = FileDoc, CalculateCallback, Options) ->
     % use_referenced_key option should be used only for file for which function is called, set false for ancestors
     {Key, Options2} = case maps:get(use_referenced_key, Options, false) of
@@ -153,7 +160,7 @@ get_or_calculate(Cache, #document{key = DocKey} = FileDoc, CalculateCallback, Op
 %%%===================================================================
 
 -spec get_or_calculate_in_critical_section(cache(), file_meta:uuid(), file_meta:doc(),
-    callback(), get_or_calculate_options()) -> get_return_value().
+    callback(), get_or_calculate_options()) -> get_or_calculate_return_value().
 get_or_calculate_in_critical_section(Cache, Key, FileDoc, CalculateCallback, Options) ->
     case bounded_cache:get(Cache, Key) of
         {ok, Value} ->
@@ -165,7 +172,7 @@ get_or_calculate_in_critical_section(Cache, Key, FileDoc, CalculateCallback, Opt
     end.
 
 -spec get_or_calculate_internal(cache(), file_meta:uuid(), file_meta:doc(), callback(),
-    get_or_calculate_options()) -> get_return_value().
+    get_or_calculate_options()) -> get_or_calculate_return_value().
 get_or_calculate_internal(Cache, Key, FileDoc, CalculateCallback, Options) ->
     % Note - argument Key and field key if FileDoc can differ - see use_referenced_key option
     case bounded_cache:get(Cache, Key) of
@@ -197,7 +204,7 @@ get_or_calculate_internal(Cache, Key, FileDoc, CalculateCallback, Options) ->
     end.
 
 -spec get_or_calculate_single_reference(cache(), file_meta:uuid(), file_meta:doc(),
-    callback(), get_or_calculate_options()) -> get_return_value().
+    callback(), get_or_calculate_options()) -> get_or_calculate_return_value().
 get_or_calculate_single_reference(Cache, Key, FileDoc, CalculateCallback, Options) ->
     case calculate_for_parent(Cache, Key, FileDoc, CalculateCallback, Options) of
         {ok, ParentValue, CalculationInfo} ->
@@ -210,7 +217,7 @@ get_or_calculate_single_reference(Cache, Key, FileDoc, CalculateCallback, Option
     end.
 
 -spec get_or_calculate_multiple_references(cache(), file_meta:uuid(), file_meta:doc(),
-    callback(), get_or_calculate_options()) -> get_return_value().
+    callback(), get_or_calculate_options()) -> get_or_calculate_return_value().
 get_or_calculate_multiple_references(Cache, Key, #document{key = DocKey} = FileDoc, CalculateCallback, Options) ->
     MergeCallback = maps:get(merge_callback, Options),
     References = get_references(FileDoc),
@@ -245,7 +252,7 @@ get_or_calculate_multiple_references(Cache, Key, #document{key = DocKey} = FileD
 %%%===================================================================
 
 -spec calculate_for_parent(cache(), file_meta:uuid(), file_meta:doc(), callback(),
-    get_or_calculate_options()) -> get_return_value().
+    get_or_calculate_options()) -> get_or_calculate_return_value().
 calculate_for_parent(Cache, Key, FileDoc, CalculateCallback, Options) ->
     {ok, ParentUuid} = get_parent(Key, FileDoc),
     case file_meta:get_including_deleted(ParentUuid) of
@@ -265,7 +272,7 @@ calculate_for_parent(Cache, Key, FileDoc, CalculateCallback, Options) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec calculate_for_reference(cache(), file_meta:doc(), callback(), get_or_calculate_options()) ->
-    get_return_value().
+    get_or_calculate_return_value().
 calculate_for_reference(Cache, #document{key = Key} = FileDoc, CalculateCallback, Options) ->
     case calculate_for_parent(Cache, Key, FileDoc, CalculateCallback, Options) of
         {ok, ParentValue, ParentCalculationInfo} ->
@@ -275,8 +282,8 @@ calculate_for_reference(Cache, #document{key = Key} = FileDoc, CalculateCallback
             Error
     end.
 
--spec merge_references_values([get_return_value()], undefined | get_return_value(), merge_callback()) ->
-    get_return_value().
+-spec merge_references_values([get_or_calculate_return_value()], undefined | get_or_calculate_return_value(),
+    merge_callback()) -> get_or_calculate_return_value().
 merge_references_values([], Acc, _MergeCallback) ->
     Acc; % No references left - return answer
 merge_references_values([Value | Tail], undefined, MergeCallback) ->
@@ -287,8 +294,8 @@ merge_references_values([{ok, Value, CalculationInfo} | Tail], {ok, AccValue, Ac
     merge_references_values(Tail, MergeCallback(Value, AccValue, CalculationInfo, AccCalculationInfo), MergeCallback).
 
 -spec differentiate_and_cache_references(cache(), file_meta:uuid(), bounded_cache:value(),
-    calculation_info(), [file_meta:doc()], [get_return_value()], get_or_calculate_options()) ->
-    get_return_value().
+    calculation_info(), [file_meta:doc()], [get_or_calculate_return_value()], get_or_calculate_options()) ->
+    get_or_calculate_return_value().
 differentiate_and_cache_references(Cache, _Key, MergedValue, CalculationInfo,
     References, ReferencesValues, #{timestamp := Timestamp, differentiate_callback := DifferentiateCallback}) ->
     % Apply callback for all references
@@ -321,7 +328,7 @@ differentiate_and_cache_references(Cache, Key, MergedValue, CalculationInfo,
     {ok, MergedValue, CalculationInfo}.
 
 -spec force_execution_on_referenced_key(file_meta:uuid(), callback(), merge_callback(),
-    calculation_info(), bounded_cache:value(), get_or_calculate_options()) -> get_return_value().
+    calculation_info(), bounded_cache:value(), get_or_calculate_options()) -> get_or_calculate_return_value().
 force_execution_on_referenced_key(INodeKey, CalculateCallback, MergeCallback, CalculationInfo, Acc, Options) ->
     case file_meta:get_including_deleted(INodeKey) of
         {ok, FileDoc} ->

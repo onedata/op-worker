@@ -37,8 +37,8 @@
 
 -spec init_group() -> ok.
 init_group() ->
-    CheckFrequency = application:get_env(?APP_NAME, canonical_paths_cache_frequency, 30000),
-    Size = application:get_env(?APP_NAME, canonical_paths_cache_size, 20000),
+    CheckFrequency = op_worker:get_env(canonical_paths_cache_frequency, 30000),
+    Size = op_worker:get_env(canonical_paths_cache_size, 20000),
     ok = effective_value:init_group(?PATH_CACHE_GROUP, #{
         check_frequency => CheckFrequency,
         size => Size,
@@ -58,8 +58,8 @@ init(all) ->
         Error = {error, _} ->
             ?critical("Unable to initialize paths caches due to: ~p", [Error])
     catch
-        Error2:Reason ->
-            ?critical_stacktrace("Unable to initialize paths caches due to: ~p", [{Error2, Reason}])
+        Error2:Reason:Stacktrace ->
+            ?critical_stacktrace("Unable to initialize paths caches due to: ~p", [{Error2, Reason}], Stacktrace)
     end;
 init(SpaceId) ->
     ok = init(SpaceId, ?CANONICAL_PATHS_CACHE_NAME(SpaceId)),
@@ -69,7 +69,7 @@ init(SpaceId) ->
 -spec invalidate_on_all_nodes(od_space:id()) -> ok.
 invalidate_on_all_nodes(SpaceId) ->
     Nodes = consistent_hashing:get_all_nodes(),
-    {Res, BadNodes} = rpc:multicall(Nodes, ?MODULE, invalidate, [SpaceId]),
+    {Res, BadNodes} = utils:rpc_multicall(Nodes, ?MODULE, invalidate, [SpaceId]),
 
     case BadNodes of
         [] ->
@@ -146,9 +146,12 @@ init(Space, Name) ->
                 end
         end
     catch
-        Error2:Reason ->
-            ?critical_stacktrace("Unable to initialize paths cache for space ~p due to: ~p",
-                [Space, {Error2, Reason}])
+        Error2:Reason:Stacktrace ->
+            ?critical_stacktrace(
+                "Unable to initialize paths cache for space ~p due to: ~p",
+                [Space, {Error2, Reason}],
+                Stacktrace
+            )
     end.
 
 

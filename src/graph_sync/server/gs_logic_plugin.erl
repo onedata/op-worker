@@ -177,6 +177,14 @@ is_subscribable(_) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec is_type_supported(gri:gri()) -> boolean().
+is_type_supported(#gri{type = op_archive}) -> true;
+is_type_supported(#gri{type = op_atm_inventory}) -> true;
+is_type_supported(#gri{type = op_atm_lambda_snapshot}) -> true;
+is_type_supported(#gri{type = op_atm_store}) -> true;
+is_type_supported(#gri{type = op_atm_task_execution}) -> true;
+is_type_supported(#gri{type = op_atm_workflow_execution}) -> true;
+is_type_supported(#gri{type = op_atm_workflow_schema}) -> true;
+is_type_supported(#gri{type = op_atm_workflow_schema_snapshot}) -> true;
 is_type_supported(#gri{type = op_dataset}) -> true;
 is_type_supported(#gri{type = op_file}) -> true;
 is_type_supported(#gri{type = op_group}) -> true;

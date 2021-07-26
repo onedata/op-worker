@@ -1064,7 +1064,7 @@ space_directory_mode_and_owner_test_base(TestName, Config, SpaceId, TestArgs) ->
     ?assertMatch({ok, #file_attr{
         uid = ExpectedDisplayUid,
         gid = ExpectedDisplayGid,
-        mode = ?DEFAULT_DIR_PERMS
+        mode = ?DEFAULT_DIR_MODE
     }}, lfm_proxy:stat(Worker, SessId, ?FILE_REF(SpaceGuid))),
 
     ?EXEC_IF_SUPPORTED_BY_POSIX(Worker, SpaceId, fun() ->
@@ -1421,9 +1421,9 @@ run_test(TestName, TestBaseFun, TestNo, Config, SpaceId, TestArgs) ->
         ct:pal("Test \"~p\" for space ~p and setup no. ~p PASSED.", [TestName, SpaceId, TestNo]),
         true
     catch
-        Error:Reason ->
+        Error:Reason:Stacktrace ->
             ct:pal("Test ~p for space ~p and setup no. ~p FAILED.~nError: ~p.~n"
-            "Stacktrace:~n~p", [TestName, SpaceId, TestNo, {Error, Reason}, erlang:get_stacktrace()]),
+            "Stacktrace:~n~p", [TestName, SpaceId, TestNo, {Error, Reason}, Stacktrace]),
             false
     end.
 

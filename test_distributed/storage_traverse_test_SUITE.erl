@@ -374,7 +374,7 @@ custom_compute_test_base(Config, SpaceId, Opts, ExpectedComputeValue) ->
 init_per_suite(Config) ->
     Posthook = fun(NewConfig) ->
         ssl:start(),
-        hackney:start(),
+        application:ensure_all_started(hackney),
         initializer:disable_quota_limit(NewConfig),
         initializer:mock_provider_ids(NewConfig),
         initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), NewConfig)

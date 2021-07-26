@@ -169,9 +169,9 @@ run_tests(SpecTemplates) ->
         catch
             throw:fail ->
                 false;
-            Type:Reason ->
+            Type:Reason:Stacktrace ->
                 ct:pal("Unexpected error while running test suite ~p:~p ~p", [
-                    Type, Reason, erlang:get_stacktrace()
+                    Type, Reason, Stacktrace
                 ]),
                 false
         end
@@ -583,8 +583,8 @@ run_exp_error_testcase(TargetNode, Client, DataSet, ScenarioError, VerifyFun, #s
                 validate_error_result(ScenarioType, ExpError, RequestResult),
                 VerifyFun(expected_failure, TestCaseCtx),
                 true
-            catch T:R ->
-                log_failure(ScenarioName, TestCaseCtx, Args, ExpError, RequestResult, T, R),
+            catch T:R:Stacktrace ->
+                log_failure(ScenarioName, TestCaseCtx, Args, ExpError, RequestResult, T, R, Stacktrace),
                 false
             end
     end.
@@ -615,8 +615,8 @@ run_exp_success_testcase(TargetNode, Client, DataSet, VerifyFun, #scenario_templ
                         VerifyFun(expected_failure, TestCaseCtx)
                 end,
                 true
-            catch T:R ->
-                log_failure(ScenarioName, TestCaseCtx, Args, success, Result, T, R),
+            catch T:R:Stacktrace ->
+                log_failure(ScenarioName, TestCaseCtx, Args, success, Result, T, R, Stacktrace),
                 false
             end
     end.
@@ -656,7 +656,8 @@ validate_error_result(Type, ExpError, Result) when
     Expected :: term(),
     Got :: term(),
     ErrType :: error | exit | throw,
-    ErrReason :: term()
+    ErrReason :: term(),
+    Stacktrace :: list()
 ) ->
     ok.
 log_failure(
@@ -666,7 +667,8 @@ log_failure(
     Expected,
     Got,
     ErrType,
-    ErrReason
+    ErrReason,
+    Stacktrace
 ) ->
     ct:pal("~s test case failed:~n"
     "Node: ~p~n"
@@ -683,7 +685,7 @@ log_failure(
         Expected,
         Got,
         ErrType, ErrReason,
-        erlang:get_stacktrace()
+        Stacktrace
     ]).
 
 
@@ -1061,7 +1063,9 @@ make_rest_request(Node, Client, #rest_args{
     URL = get_rest_endpoint(Node, Path),
     HeadersWithAuth = maps:merge(Headers, get_rest_auth_headers(Client)),
     Opts = [
-        {ssl_options, [{cacerts, get_cert_chain_ders()}]},
+        {ssl_options, [
+            {cacerts, get_cert_chain_ders()}
+        ]},
         {recv_timeout, 15000},
         {follow_redirect, true},
         {max_redirect, 5}

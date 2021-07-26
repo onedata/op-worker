@@ -109,14 +109,14 @@
 -define(TRANSFERS_KEY(QosEntryId), <<"transfer_qos_key_", QosEntryId/binary>>).
 -define(FAILED_FILES_KEY(SpaceId), <<"failed_files_qos_key_", SpaceId/binary>>).
 
--define(FOLD_LINKS_BATCH_SIZE, application:get_env(?APP_NAME, qos_fold_links_batch_size, 100)).
+-define(FOLD_LINKS_BATCH_SIZE, op_worker:get_env(qos_fold_links_batch_size, 100)).
 
 %%%===================================================================
 %%% Functions operating on document using datastore_model API
 %%%===================================================================
 
 -spec create(od_space:id(), file_meta:uuid(), qos_expression:expression(),
-    replicas_num(), type()) -> {ok, doc()} | {error, term()}.
+    replicas_num(), type()) -> {ok, id()} | {error, term()}.
 create(SpaceId, FileUuid, Expression, ReplicasNum, EntryType) ->
     create(SpaceId, FileUuid, Expression, ReplicasNum, EntryType, false, 
         qos_traverse_req:build_traverse_reqs(FileUuid, [])).

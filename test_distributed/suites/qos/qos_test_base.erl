@@ -1358,7 +1358,7 @@ qos_status_after_failed_transfer(Config, SpaceId, TargetWorker) ->
     % check file distribution (file blocks should be only on source provider)
     ?assert(qos_tests_utils:assert_distribution_in_dir_structure(Config, DirStructure([?GET_DOMAIN_BIN(Worker1)]), GuidsAndPaths)),
     % initialize periodic check of failed files
-    rpc:multicall(Workers, qos_worker, init_retry_failed_files, []),
+    utils:rpc_multicall(Workers, qos_worker, init_retry_failed_files, []),
     
     % check that after a successful transfer QoS entry is eventually fulfilled
     qos_tests_utils:mock_replica_synchronizer(Workers, passthrough),
@@ -1394,7 +1394,7 @@ qos_status_after_failed_transfer_deleted_file(Config, SpaceId, TargetWorker) ->
     % check file distribution (file blocks should be only on source provider)
     ?assert(qos_tests_utils:assert_distribution_in_dir_structure(Config, DirStructure([?GET_DOMAIN_BIN(Worker1)]), GuidsAndPaths)),
     % initialize periodic check of failed files
-    rpc:multicall(Workers, qos_worker, init_retry_failed_files, []),
+    utils:rpc_multicall(Workers, qos_worker, init_retry_failed_files, []),
     
     % delete file on random worker
     DirGuid = qos_tests_utils:get_guid(resolve_path(SpaceId, Name, []), GuidsAndPaths),
@@ -1435,7 +1435,7 @@ qos_status_after_failed_transfer_deleted_entry(Config, SpaceId, TargetWorker) ->
     % check file distribution (file blocks should be only on source provider)
     ?assert(qos_tests_utils:assert_distribution_in_dir_structure(Config, DirStructure([?GET_DOMAIN_BIN(Worker1)]), GuidsAndPaths)),
     % initialize periodic check of failed files
-    rpc:multicall(Workers, qos_worker, init_retry_failed_files, []),
+    utils:rpc_multicall(Workers, qos_worker, init_retry_failed_files, []),
     
     % delete one QoS entry on random worker
     DeletingWorker = lists_utils:random_element(Workers),
@@ -1592,7 +1592,7 @@ init_per_suite(Config) ->
         end, ?config(op_worker_nodes, NewConfig)),
         initializer:mock_auth_manager(NewConfig),
         application:start(ssl),
-        hackney:start(),
+        application:ensure_all_started(hackney),
         NewConfig
     end,
     [
@@ -1603,7 +1603,7 @@ init_per_suite(Config) ->
 
 
 end_per_suite(_Config) ->
-    hackney:stop(),
+    application:stop(hackney),
     application:stop(ssl).
 
 

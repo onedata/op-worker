@@ -39,7 +39,7 @@
 -export_type([id/0]).
 
 -define(POOL_NAME, atom_to_binary(?MODULE, utf8)).
--define(TRAVERSE_BATCH_SIZE, application:get_env(?APP_NAME, qos_traverse_batch_size, 40)).
+-define(TRAVERSE_BATCH_SIZE, op_worker:get_env(qos_traverse_batch_size, 40)).
 
 %%%===================================================================
 %%% API
@@ -112,9 +112,9 @@ report_entry_deleted(#document{key = QosEntryId} = QosEntryDoc) ->
 -spec init_pool() -> ok  | no_return().
 init_pool() ->
     % Get pool limits from app.config
-    MasterJobsLimit = application:get_env(?APP_NAME, qos_traverse_master_jobs_limit, 10),
-    SlaveJobsLimit = application:get_env(?APP_NAME, qos_traverse_slave_jobs_limit, 20),
-    ParallelismLimit = application:get_env(?APP_NAME, qos_traverse_parallelism_limit, 20),
+    MasterJobsLimit = op_worker:get_env(qos_traverse_master_jobs_limit, 10),
+    SlaveJobsLimit = op_worker:get_env(qos_traverse_slave_jobs_limit, 20),
+    ParallelismLimit = op_worker:get_env(qos_traverse_parallelism_limit, 20),
 
     tree_traverse:init(?MODULE, MasterJobsLimit, SlaveJobsLimit, ParallelismLimit).
 
@@ -230,16 +230,19 @@ slave_job_traverse(TaskId, UserCtx, FileCtx, AdditionalData) ->
 slave_job_reconcile(TaskId, UserCtx, FileCtx) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     {FileDoc, FileCtx1} = file_ctx:get_file_doc(FileCtx),
-    {ok, EffectiveFileQos} = file_qos:get_effective(FileDoc),
-    % start transfer only for existing entries
-    QosEntries = case file_qos:is_in_trash(EffectiveFileQos) of
-        true ->
-            [];
-        false ->
-            {ok, [StorageId | _]} = space_logic:get_local_storages(SpaceId),
-            file_qos:get_assigned_entries_for_storage(EffectiveFileQos, StorageId)
-    end,
-    ok = synchronize_file_for_entries(TaskId, UserCtx, FileCtx1, QosEntries).
+    case file_qos:get_effective(FileDoc) of
+        undefined -> ok;
+        {ok, EffectiveFileQos} ->
+            QosEntries = case file_qos:is_in_trash(EffectiveFileQos) of
+                true ->
+                    [];
+                false ->
+                    % start transfer only for existing entries
+                    {ok, [StorageId | _]} = space_logic:get_local_storages(SpaceId),
+                    file_qos:get_assigned_entries_for_storage(EffectiveFileQos, StorageId)
+            end,
+            ok = synchronize_file_for_entries(TaskId, UserCtx, FileCtx1, QosEntries)
+    end.
 
 
 %% @private
@@ -261,8 +264,13 @@ synchronize_file_for_entries(TaskId, UserCtx, FileCtx, QosEntries) ->
         true -> 
             ok;
         false ->
-            replica_synchronizer:synchronize(UserCtx, FileCtx2, FileBlock, 
-                false, TransferId, ?QOS_SYNCHRONIZATION_PRIORITY)
+            Res = replica_synchronizer:synchronize(UserCtx, FileCtx2, FileBlock, 
+                false, TransferId, ?QOS_SYNCHRONIZATION_PRIORITY),
+            case file_popularity:increment_open(FileCtx) of
+                ok -> ok;
+                {error, not_found} -> ok
+            end,
+            Res
     end,
     lists:foreach(fun(QosEntry) ->
         qos_entry:remove_transfer_from_list(QosEntry, TransferId)

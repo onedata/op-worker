@@ -19,9 +19,10 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/errors.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 
--export([get_file_download_url/2, handle/2]).
+-export([gen_file_download_url/3, handle/2]).
 
 
 %%%===================================================================
@@ -37,13 +38,13 @@
 %% download no such test is performed - inaccessible files are ignored during streaming.
 %% @end
 %%--------------------------------------------------------------------
--spec get_file_download_url(session:id(), [fslogic_worker:file_guid()]) ->
+-spec gen_file_download_url(session:id(), [fslogic_worker:file_guid()], boolean()) ->
     {ok, binary()} | errors:error().
-get_file_download_url(SessionId, FileGuids) ->
+gen_file_download_url(SessionId, FileGuids, FollowSymlinks) ->
     try
         maybe_sync_first_file_block(SessionId, FileGuids),
         Hostname = oneprovider:get_domain(),
-        {ok, Code} = file_download_code:create(SessionId, FileGuids),
+        {ok, Code} = file_download_code:create(SessionId, FileGuids, FollowSymlinks),
         URL = str_utils:format_bin("https://~s~s/~s", [
             Hostname, ?FILE_DOWNLOAD_PATH, Code
         ]),
@@ -65,17 +66,16 @@ get_file_download_url(SessionId, FileGuids) ->
 handle(<<"GET">>, Req) ->
     FileDownloadCode = cowboy_req:binding(code, Req),
     case file_download_code:verify(FileDownloadCode) of
-        {true, SessionId, FileGuids} ->
-            OzUrl = oneprovider:get_oz_url(),
-            Req2 = gui_cors:allow_origin(OzUrl, Req),
-            Req3 = gui_cors:allow_frame_origin(OzUrl, Req2),
-            handle_http_download(
-                SessionId, FileGuids,
-                fun() -> file_download_code:remove(FileDownloadCode) end,
-                Req3
-            );
+        {true, SessionId, FileGuids, FollowSymlinks} ->
+            handle_http_download(FileDownloadCode, SessionId, FileGuids, FollowSymlinks, Req);
         false ->
-            http_req:send_error(?ERROR_BAD_VALUE_ID_NOT_FOUND(<<"code">>), Req)
+            case bulk_download:can_continue(FileDownloadCode) of
+                true -> 
+                    % follow links parameter is not important, as it will be overwritten by an existing bulk download instance
+                    handle_http_download(FileDownloadCode, <<>>, [], true, Req);
+                false -> 
+                    http_req:send_error(?ERROR_BAD_VALUE_ID_NOT_FOUND(<<"code">>), Req)
+            end
     end.
 
 
@@ -89,8 +89,8 @@ handle(<<"GET">>, Req) ->
 %% Checks file permissions and syncs first file block when downloading single 
 %% regular file. In case of multi file/directory download access test is not 
 %% performed, as inaccessible files will be ignored. Also first block sync is 
-%% not needed, because first bytes (gzip header) are sent instantly after 
-%% streaming started.
+%% not needed, because first bytes (first file TAR header) are sent instantly 
+%% after streaming started.
 %% @end
 %%--------------------------------------------------------------------
 -spec maybe_sync_first_file_block(session:id(), [file_id:file_guid()]) -> ok.
@@ -117,40 +117,63 @@ maybe_sync_first_file_block(_SessionId, _FileGuids) ->
 
 
 -spec handle_http_download(
+    file_download_code:code(),
     session:id(),
     [fslogic_worker:file_guid()],
-    OnSuccessCallback :: fun(() -> ok),
+    boolean(),
     cowboy_req:req()
 ) ->
     cowboy_req:req().
-handle_http_download(SessionId, FileGuids, OnSuccessCallback, Req0) ->
+handle_http_download(FileDownloadCode, SessionId, FileGuids, FollowSymlinks, Req) ->
+    OzUrl = oneprovider:get_oz_url(),
+    Req2 = gui_cors:allow_origin(OzUrl, Req),
+    Req3 = gui_cors:allow_frame_origin(OzUrl, Req2),
     FileAttrsList = lists_utils:foldl_while(fun (FileGuid, Acc) ->
-        case lfm:stat(SessionId, ?FILE_REF(FileGuid)) of
+        case lfm:stat(SessionId, ?FILE_REF(FileGuid, false)) of
             {ok, #file_attr{} = FileAttr} -> {cont, [FileAttr | Acc]};
             {error, ?EACCES} -> {cont, Acc};
             {error, ?EPERM} -> {cont, Acc};
             {error, _Errno} = Error -> {halt, Error}
         end
     end, [], FileGuids),
-
-    case FileAttrsList of
-        {error, Errno} ->
-            http_req:send_error(?ERROR_POSIX(Errno), Req0);
-        [#file_attr{name = FileName, type = ?DIRECTORY_TYPE}] ->
-            Req1 = set_content_disposition_header(<<(normalize_filename(FileName))/binary, ".tar.gz">>, Req0),
+    case {FileAttrsList, FollowSymlinks} of
+        {{error, Errno}, _} ->
+            http_req:send_error(?ERROR_POSIX(Errno), Req3);
+        {[#file_attr{name = FileName, type = ?DIRECTORY_TYPE}], _} ->
+            Req4 = set_content_disposition_header(<<(normalize_filename(FileName))/binary, ".tar">>, Req3),
             file_download_utils:download_tarball(
-                SessionId, FileAttrsList, OnSuccessCallback, Req1
+                FileDownloadCode, SessionId, FileAttrsList, FollowSymlinks, Req4
             );
-        [#file_attr{name = FileName, type = ?REGULAR_FILE_TYPE} = Attr] ->
-            Req1 = set_content_disposition_header(normalize_filename(FileName), Req0),
+        {[#file_attr{name = FileName, type = ?REGULAR_FILE_TYPE} = Attr], _} ->
+            Req4 = set_content_disposition_header(normalize_filename(FileName), Req3),
             file_download_utils:download_single_file(
-                SessionId, Attr, OnSuccessCallback, Req1
+                SessionId, Attr, fun() -> file_download_code:remove(FileDownloadCode) end, Req4
+            );
+        {[#file_attr{name = FileName, type = ?SYMLINK_TYPE, guid = Guid} = Attr], true} ->
+            case lfm:stat(SessionId, ?FILE_REF(Guid, true)) of
+                {ok, #file_attr{type = ?DIRECTORY_TYPE}} ->
+                    Req4 = set_content_disposition_header(<<(normalize_filename(FileName))/binary, ".tar">>, Req3),
+                    file_download_utils:download_tarball(
+                        FileDownloadCode, SessionId, FileAttrsList, FollowSymlinks, Req4
+                    );
+                {ok, #file_attr{} = ResolvedAttr} ->
+                    Req4 = set_content_disposition_header(normalize_filename(FileName), Req3),
+                    file_download_utils:download_single_file(
+                        SessionId, ResolvedAttr, fun() -> file_download_code:remove(FileDownloadCode) end, Req4
+                    );
+                {error, Errno} ->
+                    http_req:send_error(?ERROR_POSIX(Errno), Req3)
+            end;
+        {[#file_attr{name = FileName, type = ?SYMLINK_TYPE} = Attr], false} ->
+            Req4 = set_content_disposition_header(normalize_filename(FileName), Req3),
+            file_download_utils:download_single_file(
+                SessionId, Attr, fun() -> file_download_code:remove(FileDownloadCode) end, Req4
             );
         _ ->
             Timestamp = integer_to_binary(global_clock:timestamp_seconds()),
-            Req1 = set_content_disposition_header(<<"onedata-download-", Timestamp/binary, ".tar.gz">>, Req0),
+            Req4 = set_content_disposition_header(<<"onedata-download-", Timestamp/binary, ".tar">>, Req3),
             file_download_utils:download_tarball(
-                SessionId, FileAttrsList, OnSuccessCallback, Req1
+                FileDownloadCode, SessionId, FileAttrsList, FollowSymlinks, Req4
             )
     end.
 

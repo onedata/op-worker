@@ -41,11 +41,11 @@
 %% @formatter:on
 
 -define(AUTOCLEANING_MASTER_JOBS_NUM,
-    application:get_env(?APP_NAME, autocleaning_master_jobs_num, 10)).
+    op_worker:get_env(autocleaning_master_jobs_num, 10)).
 -define(AUTOCLEANING_SLAVE_JOBS_NUM,
-    application:get_env(?APP_NAME, autocleaning_slave_jobs_num, 50)).
+    op_worker:get_env(autocleaning_slave_jobs_num, 50)).
 -define(AUTOCLEANING_PARALLEL_ORDERS_LIMIT,
-    application:get_env(?APP_NAME, autocleaning_parallel_orders_limit, 10)).
+    op_worker:get_env(autocleaning_parallel_orders_limit, 10)).
 
 -define(TASK_ID_SEPARATOR, <<"$$">>).
 
@@ -113,12 +113,12 @@ process_row(Row, #{
         _ ->
             autocleaning_run_controller:notify_processed_file(SpaceId, AutocleaningRunId, BatchNo)
     catch
-        Error:Reason ->
+        Error:Reason:Stacktrace ->
             Uuid = file_ctx:get_logical_uuid_const(FileCtx),
             SpaceId = file_ctx:get_space_id_const(FileCtx),
             autocleaning_run_controller:notify_processed_file(SpaceId, AutocleaningRunId, BatchNo),
             ?error_stacktrace("Filtering preselected file with uuid ~p in space ~p failed due to ~p:~p",
-                [Uuid, SpaceId, Error, Reason]),
+                [Uuid, SpaceId, Error, Reason], Stacktrace),
             ok
     end.
 

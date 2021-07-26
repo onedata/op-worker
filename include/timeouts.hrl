@@ -27,7 +27,7 @@
 
 -define(PROTO_CONNECTION_TIMEOUT, timer:hours(24)).
 % Uncomment to use connection_test_SUITE:socket_timeout_test
-%%-define(PROTO_CONNECTION_TIMEOUT, application:get_env(?APP_NAME,
+%%-define(PROTO_CONNECTION_TIMEOUT, op_worker:get_env(
 %%  proto_connection_timeout, timer:hours(24))).
 
 -endif.

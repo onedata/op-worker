@@ -31,7 +31,7 @@
 -type file_meta_children() :: [file_meta:link()].
 -type sync_links_children() :: [storage_sync_links:link()].
 
--define(BATCH_SIZE, application:get_env(?APP_NAME, storage_import_deletion_batch_size, 1000)).
+-define(BATCH_SIZE, op_worker:get_env(storage_import_deletion_batch_size, 1000)).
 
 %%%===================================================================
 %%% API functions
@@ -373,9 +373,9 @@ maybe_delete_file_and_update_counters(FileCtx, SpaceId, StorageId) ->
         error:{badmatch, ?ERROR_NOT_FOUND} ->
             storage_import_monitoring:mark_processed_job(SpaceId),
             ok;
-        Error:Reason ->
+        Error:Reason:Stacktrace ->
             ?error_stacktrace("~p:maybe_delete_file_and_update_counters failed due to ~p",
-                [?MODULE, {Error, Reason}]),
+                [?MODULE, {Error, Reason}], Stacktrace),
             storage_import_monitoring:mark_failed_file(SpaceId)
     end.
 
@@ -426,7 +426,7 @@ delete_regular_file_and_update_counters(FileCtx, SpaceId) ->
 -spec delete_dir_recursive(file_ctx:ctx(), od_space:id(), storage:id()) -> ok.
 delete_dir_recursive(FileCtx, SpaceId, StorageId) ->
     RootUserCtx = user_ctx:new(?ROOT_SESS_ID),
-    {ok, BatchSize} = application:get_env(?APP_NAME, ls_batch_size),
+    BatchSize = op_worker:get_env(ls_batch_size),
     ListOpts = #{token => ?INITIAL_LS_TOKEN, size => BatchSize},
     {ok, FileCtx2} = delete_children(FileCtx, RootUserCtx, ListOpts, SpaceId, StorageId),
     delete_file(FileCtx2).

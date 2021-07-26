@@ -26,9 +26,9 @@
 
 -behaviour(gen_server).
 
--define(MINIMAL_SYNC_REQUEST, application:get_env(?APP_NAME, minimal_sync_request, 32768)).
--define(TRIGGER_BYTE, application:get_env(?APP_NAME, trigger_byte, 52428800)).
--define(PREFETCH_SIZE, application:get_env(?APP_NAME, prefetch_size, 104857600)).
+-define(MINIMAL_SYNC_REQUEST, op_worker:get_env(minimal_sync_request, 32768)).
+-define(TRIGGER_BYTE, op_worker:get_env(trigger_byte, 52428800)).
+-define(PREFETCH_SIZE, op_worker:get_env(prefetch_size, 104857600)).
 
 %% The process is supposed to die after ?DIE_AFTER time of idling (no requests in flight)
 -define(DIE_AFTER, 60000).
@@ -50,11 +50,11 @@
 -define(REF_TO_TIDS_CLEARING_MSG(__Ref), {clear_ref_to_tids_association, __Ref}).
 
 -define(PREFETCH_PRIORITY,
-    application:get_env(?APP_NAME, default_prefetch_priority, 96)).
--define(MAX_RETRIES, application:get_env(?APP_NAME, synchronizer_max_retries, 0)).
--define(MIN_BACKOFF, application:get_env(?APP_NAME, synchronizer_min_backoff, timer:seconds(1))).
--define(BACKOFF_RATE, application:get_env(?APP_NAME, synchronizer_backoff_rate, 1.5)).
--define(MAX_BACKOFF, application:get_env(?APP_NAME, synchronizer_max_backoff, timer:minutes(5))).
+    op_worker:get_env(default_prefetch_priority, 96)).
+-define(MAX_RETRIES, op_worker:get_env(synchronizer_max_retries, 0)).
+-define(MIN_BACKOFF, op_worker:get_env(synchronizer_min_backoff, timer:seconds(1))).
+-define(BACKOFF_RATE, op_worker:get_env(synchronizer_backoff_rate, 1.5)).
+-define(MAX_BACKOFF, op_worker:get_env(synchronizer_max_backoff, timer:minutes(5))).
 
 -define(FLUSH_STATS, flush_stats).
 -define(FLUSH_BLOCKS, flush_blocks).
@@ -612,9 +612,9 @@ handle_call({synchronize, FileCtx, Block, Prefetch, TransferId, Session, Priorit
                 end
         end
     catch
-        E1:E2 ->
+        E1:E2:Stacktrace ->
             ?error_stacktrace("Unable to start transfer due to error ~p:~p",
-                [E1, E2]),
+                [E1, E2], Stacktrace),
             {reply, {error, E2}, State0, ?DIE_AFTER}
     end;
 
@@ -640,8 +640,8 @@ handle_cast({cancel, TransferId}, State) ->
         NewState = cancel_transfer_id(TransferId, State),
         {noreply, NewState, ?DIE_AFTER}
     catch
-        _:Reason ->
-            ?error_stacktrace("Unable to cancel ~p: ~p", [TransferId, Reason]),
+        _:Reason:Stacktrace ->
+            ?error_stacktrace("Unable to cancel ~p: ~p", [TransferId, Reason], Stacktrace),
             {noreply, State, ?DIE_AFTER}
     end;
 
@@ -698,11 +698,13 @@ handle_info(?FLUSH_BLOCKS, State) ->
 handle_info(?FLUSH_EVENTS, State) ->
     {noreply, flush_events(State), ?DIE_AFTER};
 
-handle_info({Ref, complete, {ok, _} = _Status}, #state{retries_number = Retries} = State) ->
+handle_info({Ref, complete, {ok, _} = _Status}, #state{retries_number = Retries, file_ctx = FileCtx} = State) ->
     {Block, _Priority, _AffectedFroms, FinishedFroms, State1} =
         disassociate_ref(Ref, State),
     {FinishedBlocks, ExcludeSessions, EndedTransfers, State2} =
         disassociate_froms(FinishedFroms, State1),
+
+    flush_archive_helper_buffer_if_applicable(FileCtx),
 
     {Ans, State3} = flush_blocks(State2, ExcludeSessions, FinishedBlocks,
         EndedTransfers =/= []),
@@ -770,9 +772,9 @@ handle_info({replace_failed_transfer, FailedRef}, #state{retries_number = Retrie
                 {noreply, State3#state{retries_number = NewRetriesMap}, ?DIE_AFTER}
         end
     catch
-        E1:E2 ->
+        E1:E2:Stacktrace ->
             ?error_stacktrace("Unable to restart transfer due to error ~p:~p",
-                [E1, E2]),
+                [E1, E2], Stacktrace),
             handle_info({FailedRef, complete, {error, restart_failed}}, State)
     end;
 
@@ -792,10 +794,10 @@ handle_info({Ref, complete, {error, {connection, <<"canceled">>}}}, #state{
             % replications should be also cancelled and registry/state cleared.
             try
                 cancel_froms(AffectedFroms, State)
-            catch _:Reason ->
+            catch _:Reason:Stacktrace ->
                 ?error_stacktrace("Unable to cancel transfers associated with ~p due to ~p", [
                     Ref, Reason
-                ]),
+                ], Stacktrace),
                 State
             end
     end,
@@ -807,7 +809,7 @@ handle_info({Ref, complete, ErrorStatus}, State) ->
 handle_info(fslogic_cache_check_flush, State) ->
     fslogic_cache:check_flush(),
 
-    case application:get_env(?APP_NAME, synchronizer_gc, on_flush_location) of
+    case op_worker:get_env(synchronizer_gc, on_flush_location) of
         on_flush_location ->
             erlang:garbage_collect();
         _ ->
@@ -1002,10 +1004,10 @@ cancel_session(SessionId, State) ->
                 })
         end
     catch
-        _:Reason ->
+        _:Reason:Stacktrace ->
             ?error_stacktrace("Unable to cancel transfers of ~p: ~p", [
                 SessionId, Reason
-            ]),
+            ], Stacktrace),
             State
     end.
 
@@ -1296,7 +1298,7 @@ prefetch([], _TransferId, State) -> State;
 prefetch(_NewTransfers, _TransferId, #state{in_sequence_hits = 0} = State) ->
     State;
 prefetch(_, TransferId, #state{in_sequence_hits = Hits, last_transfer = Block} = State) ->
-    case application:get_env(?APP_NAME, synchronizer_prefetch, true) of
+    case op_worker:get_env(synchronizer_prefetch, true) of
         true ->
             #file_block{offset = O, size = S} = Block,
             Offset = O + S,
@@ -1392,7 +1394,7 @@ cache_stats_and_blocks(TransferIds, ProviderId, Block, State) ->
         StatsPerTransfer#{TransferId => NewTransferStats}
     end, State#state.cached_stats, TransferIds),
 
-    CachedBlocks = case application:get_env(?APP_NAME, synchronizer_in_progress_events, transfers_only) of
+    CachedBlocks = case op_worker:get_env(synchronizer_in_progress_events, transfers_only) of
         transfers_only ->
             case TransferIds of
                 [undefined] ->
@@ -1435,9 +1437,9 @@ flush_blocks(#state{cached_blocks = Blocks, file_ctx = FileCtx} = State, Exclude
 
     FlushFinalBlocks = case IsTransfer of
         true ->
-            application:get_env(?APP_NAME, synchronizer_transfer_finished_events, all);
+            op_worker:get_env(synchronizer_transfer_finished_events, all);
         _ ->
-            application:get_env(?APP_NAME, synchronizer_on_fly_finished_events, all)
+            op_worker:get_env(synchronizer_on_fly_finished_events, all)
     end,
 
     Ans = lists:foldl(fun({From, FinalBlock, Type}, Acc) ->
@@ -1451,7 +1453,7 @@ flush_blocks(#state{cached_blocks = Blocks, file_ctx = FileCtx} = State, Exclude
         end
     end, [], FinalBlocks),
 
-    case application:get_env(?APP_NAME, synchronizer_in_progress_events, transfers_only) of
+    case op_worker:get_env(synchronizer_in_progress_events, transfers_only) of
         off ->
             false;
         _ ->
@@ -1462,7 +1464,7 @@ flush_blocks(#state{cached_blocks = Blocks, file_ctx = FileCtx} = State, Exclude
             end, Blocks2)
     end,
 
-    case application:get_env(?APP_NAME, synchronizer_gc, on_flush_location) of
+    case op_worker:get_env(synchronizer_gc, on_flush_location) of
         on_flush_blocks ->
             erlang:garbage_collect();
         _ ->
@@ -1555,7 +1557,7 @@ flush_stats(#state{space_id = SpaceId} = State, CancelTimer) ->
             State#state{cached_stats = #{}}
     end,
 
-    case application:get_env(?APP_NAME, synchronizer_gc, on_flush_location) of
+    case op_worker:get_env(synchronizer_gc, on_flush_location) of
         on_flush_stats ->
             erlang:garbage_collect();
         _ ->
@@ -1715,9 +1717,9 @@ delete_whole_file_replica_internal(AllowedVV, RequestedBy, #state{file_ctx = Fil
                 {error, file_modified_locally}
         end
     catch
-        Error:Reason ->
+        Error:Reason:Stacktrace ->
             ?error_stacktrace("Deletion of replica of file ~p failed due to ~p",
-                [FileUuid, {Error, Reason}]),
+                [FileUuid, {Error, Reason}], Stacktrace),
             {error, Reason}
     end.
 
@@ -1734,9 +1736,9 @@ spawn_block_clearing(FileCtx, EmitEvents, RequestedBy) ->
             #fuse_response{status = #status{code = ?OK}} = truncate_req:truncate_insecure(UserCtx, FileCtx, 0, false),
             ok
         catch
-            E:R ->
+            E:R:Stacktrace ->
                 FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
-                ?error_stacktrace("Unexpected error ~p:~p when truncating file ~p.", [E, R, FileUuid]),
+                ?error_stacktrace("Unexpected error ~p:~p when truncating file ~p.", [E, R, FileUuid], Stacktrace),
                 {error, {E, R}}
         end,
         Master ! {file_truncated, Ans, EmitEvents, RequestedBy}
@@ -1759,4 +1761,23 @@ assert_smaller_than_local_support_size(TotalSize, SpaceId) ->
     case TotalSize > LocalSupportSize of
         true -> throw(?ENOSPC);
         false -> ok
+    end.
+
+
+-spec flush_archive_helper_buffer_if_applicable(file_ctx:ctx()) -> ok.
+flush_archive_helper_buffer_if_applicable(FileCtx) ->
+    {Storage, FileCtx2} = file_ctx:get_storage(FileCtx),
+    case storage:is_archive(Storage) of
+        true ->
+            {CanonicalPath, FileCtx3} = file_ctx:get_canonical_path(FileCtx2),
+            case archivisation_tree:is_in_archive(CanonicalPath) of
+                true ->
+                    {SDHandle, FileCtx4} = storage_driver:new_handle(?ROOT_SESS_ID, FileCtx3),
+                    {FileSize, _} = file_ctx:get_local_storage_file_size(FileCtx4),
+                    ok = storage_driver:flushbuffer(SDHandle, FileSize);
+                false ->
+                    ok
+            end;
+        false ->
+            ok
     end.

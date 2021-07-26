@@ -40,7 +40,7 @@
 -type state() :: #state{}.
 
 -define(DOC_ID_MISSING, doc_id_missing).
--define(DEFAULT_LS_BATCH_SIZE, application:get_env(?APP_NAME, ls_batch_size, 5000)).
+-define(DEFAULT_LS_BATCH_SIZE, op_worker:get_env(ls_batch_size, 5000)).
 
 %%%===================================================================
 %%% Callbacks
@@ -262,10 +262,10 @@ transfer_data(State = #state{mod = Mod}, FileCtx0, Params, RetriesLeft) ->
             {error, already_ended};
         error:{badmatch, Error = {error, not_found}} ->
             maybe_retry(FileCtx0, Params, RetriesLeft, Error);
-        Error:Reason ->
+        Error:Reason:Stacktrace   ->
             ?error_stacktrace("Unexpected error ~p:~p during transfer ~p", [
                 Error, Reason, Params#transfer_params.transfer_id
-            ]),
+            ], Stacktrace),
             maybe_retry(FileCtx0, Params, RetriesLeft, {Error, Reason})
     end.
 
@@ -479,13 +479,14 @@ transfer_files_from_view(State, FileCtx, Params, Chunk, LastDocId) ->
                                 false
                         end
                     catch
-                        Error:Reason ->
+                        Error:Reason:Stacktrace   ->
                             transfer:increment_files_failed_and_processed_counters(TransferId),
                             ?error_stacktrace(
                                 "Processing result of query view ~p "
                                 "in space ~p failed due to ~p:~p", [
                                     ViewName, SpaceId, Error, Reason
-                                ]
+                                ],
+                                Stacktrace  
                             ),
                             false
                     end

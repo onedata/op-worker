@@ -87,7 +87,7 @@ protocol_upgrade_request(Hostname) -> <<
 %% @end
 %%--------------------------------------------------------------------
 -spec process_protocol_upgrade_request(cowboy_req:req()) ->
-    ok | {error, update_required}.
+    ok | {error, upgrade_required}.
 process_protocol_upgrade_request(Req) ->
     ConnTokens = cowboy_req:parse_header(?HDR_CONNECTION, Req, []),
     case lists:member(<<"upgrade">>, ConnTokens) of

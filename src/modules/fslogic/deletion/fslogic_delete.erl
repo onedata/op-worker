@@ -194,8 +194,8 @@ cleanup_opened_files() ->
                     FileCtx = file_ctx:new_by_guid(FileGuid),
                     ok = remove_file(FileCtx, UserCtx, true, ?SPEC(?TWO_STEP_DEL_FIN, ?ALL_DOCS))
                 catch
-                    E1:E2 ->
-                        ?warning_stacktrace("Cannot remove old opened file ~p: ~p:~p", [Doc, E1, E2])
+                    E1:E2:Stacktrace ->
+                        ?warning_stacktrace("Cannot remove old opened file ~p: ~p:~p", [Doc, E1, E2], Stacktrace)
                 end
             end, RemovedFiles),
 
@@ -356,8 +356,8 @@ delete_storage_file(FileCtx, UserCtx) ->
                 OtherError
         end
     catch
-        Class:Reason ->
-            log_storage_file_deletion_error(FileCtx, {Class, Reason}, true),
+        Class:Reason:Stacktrace ->
+            log_storage_file_deletion_error(FileCtx, {Class, Reason}, {true, Stacktrace}),
             {error, Reason}
     end.
 
@@ -505,6 +505,8 @@ detach_dataset(FileCtx) ->
     {FileDoc, FileCtx2} = file_ctx:get_file_doc_including_deleted(FileCtx),
     case file_meta_dataset:is_attached(FileDoc) of
         true ->
+            % TODO VFS-7822 if it's a directory, detached dataset's path will point to trash
+            % previous path should be passed here
             dataset_api:detach(file_ctx:get_logical_uuid_const(FileCtx2));
         false ->
             ok
@@ -710,7 +712,7 @@ delete_location(FileCtx) ->
     FileCtx2.
 
 
--spec log_storage_file_deletion_error(file_ctx:ctx(), term(), boolean()) -> ok.
+-spec log_storage_file_deletion_error(file_ctx:ctx(), term(), false | {true, list()}) -> ok.
 log_storage_file_deletion_error(FileCtx, Error, IncludeStacktrace) ->
     {StorageFileId, FileCtx2} = file_ctx:get_storage_file_id(FileCtx),
     {StorageId, FileCtx3} = file_ctx:get_storage_id(FileCtx2),
@@ -718,6 +720,6 @@ log_storage_file_deletion_error(FileCtx, Error, IncludeStacktrace) ->
     Format = "Deleting file ~s on storage ~s with guid ~s failed due to ~p.",
     Args = [StorageFileId, StorageId, FileGuid, Error],
     case IncludeStacktrace of
-        true -> ?error_stacktrace(Format, Args);
+        {true, Stacktrace} -> ?error_stacktrace(Format, Args, Stacktrace);
         false -> ?error(Format, Args)
     end.

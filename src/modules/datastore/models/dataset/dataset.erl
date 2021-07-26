@@ -23,7 +23,12 @@
 
 %% API
 -export([create/2, delete/1]).
--export([get_id/1, get_space_id/1, get_state/1, get_detached_info/1, get_creation_time/1, get/1]).
+-export([
+    get_id/1, get_root_file_uuid/1,
+    get_space_id/1, get_state/1,
+    get_detached_info/1, get_creation_time/1,
+    get/1
+]).
 -export([mark_detached/5, mark_reattached/1]).
 
 %% datastore_model callbacks
@@ -55,14 +60,13 @@
 }).
 % @formatter:off
 
-
 %%%===================================================================
 %%% API functions
 %%%===================================================================
 
--spec create(file_meta:uuid(), od_space:id()) -> ok | error().
+-spec create(file_meta:uuid(), od_space:id()) -> {ok, id()} | error().
 create(FileUuid, SpaceId) ->
-  ?extract_ok(datastore_model:create(?CTX, #document{
+  ?extract_key(datastore_model:create(?CTX, #document{
       key = FileUuid,
       value = #dataset{
           creation_time = global_clock:timestamp_seconds(),
@@ -82,44 +86,46 @@ get_id(#document{key = DatasetId}) ->
     {ok, DatasetId}.
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns uuid of dataset root file.
+%% NOTE !!!
+%% DatasetId is uuid of a root file.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_root_file_uuid(id() | doc()) -> {ok, file_meta:uuid()}.
+get_root_file_uuid(#document{} = DatasetDoc) ->
+    get_id(DatasetDoc);
+get_root_file_uuid(DatasetId) ->
+    {ok, DatasetId}.
+
+
 -spec get_space_id(doc() | dataset:id()) -> {ok, od_space:id()}.
 get_space_id(#document{scope = SpaceId}) ->
     {ok, SpaceId};
 get_space_id(DatasetId) ->
-    case get(DatasetId) of
-        {ok, Doc} -> get_space_id(Doc);
-        {error, _} = Error -> Error
-    end.
+    ?get_field(DatasetId, fun get_space_id/1).
 
 
 -spec get_state(id() | doc()) -> {ok, state()} | error().
 get_state(#document{value = #dataset{state = State}}) ->
     {ok, State};
 get_state(DatasetId) ->
-    case get(DatasetId) of
-        {ok, Doc} -> get_state(Doc);
-        {error, _} = Error -> Error
-    end.
+    ?get_field(DatasetId, fun get_state/1).
 
 
 -spec get_creation_time(id() | doc()) -> {ok, time:seconds()} | error().
 get_creation_time(#document{value = #dataset{creation_time = CreationTime}}) ->
     {ok, CreationTime};
 get_creation_time(DatasetId) ->
-    case get(DatasetId) of
-        {ok, Doc} -> get_creation_time(Doc);
-        {error, _} = Error -> Error
-    end.
+    ?get_field(DatasetId, fun get_creation_time/1).
 
 
 -spec get_detached_info(id() | doc()) -> {ok, detached_info()} | error().
 get_detached_info(#document{value = #dataset{detached_info = Info}}) ->
     {ok, Info};
 get_detached_info(DatasetId) ->
-    case get(DatasetId) of
-        {ok, Doc} -> get_detached_info(Doc);
-        {error, _} = Error -> Error
-    end.
+    ?get_field(DatasetId, fun get_detached_info/1).
 
 
 -spec get(id()) -> {ok, doc()} | error().

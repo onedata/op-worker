@@ -35,12 +35,11 @@
 -define(USER_ROOT_PREFIX, "userRoot_").
 -define(SPACE_ROOT_PREFIX, "space_").
 -define(ROOT_DIR_VIRTUAL_SPACE_ID, <<"rootDirVirtualSpaceId">>).
--define(TRASH_DIR_UUID_PREFIX, "trash_").
 -define(SHARE_ROOT_DIR_UUID_PREFIX, "share_").
 % Macros for hard links (link is equal to hardlink - see file_meta_hardlinks.erl)
 -define(LINK_UUID_PREFIX, "link_").
 -define(LINK_UUID_SEPARATOR, "_file_").
--define(LINK_UUID_RAND_PART_BYTES, 4).
+-define(LINK_UUID_RAND_PART_BYTES, 8).
 % Macro for symlinks
 -define(SYMLINK_UUID_PREFIX, "smlnk_").
 
@@ -91,7 +90,7 @@ space_dir_uuid_to_spaceid(<<?SPACE_ROOT_PREFIX, SpaceId/binary>>) ->
 
 -spec spaceid_to_trash_dir_uuid(od_space:id()) -> file_meta:uuid().
 spaceid_to_trash_dir_uuid(SpaceId) ->
-    <<?TRASH_DIR_UUID_PREFIX, SpaceId/binary>>.
+    ?TRASH_DIR_UUID(SpaceId).
 
 
 -spec spaceid_to_trash_dir_guid(od_space:id()) -> file_id:file_guid().
@@ -119,7 +118,8 @@ is_special_uuid(FileUuid) ->
     is_root_dir_uuid(FileUuid)
         orelse is_space_dir_uuid(FileUuid)
         orelse is_trash_dir_uuid(FileUuid)
-        orelse is_share_root_dir_uuid(FileUuid).
+        orelse is_share_root_dir_uuid(FileUuid)
+        orelse archivisation_tree:is_special_uuid(FileUuid).
 
 
 -spec is_special_guid(file_id:file_guid()) -> boolean().

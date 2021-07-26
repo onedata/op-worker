@@ -1284,7 +1284,7 @@ init_per_testcase(local_file_location_should_be_chowned_when_missing_user_appear
     init_per_testcase(default, Config);
 init_per_testcase(_Case, Config) ->
     ssl:start(),
-    hackney:start(),
+    application:ensure_all_started(hackney),
     initializer:disable_quota_limit(Config),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
     lfm_proxy:init(ConfigWithSessionInfo).
@@ -1297,7 +1297,7 @@ end_per_testcase(_Case, Config) ->
     lfm_proxy:teardown(Config),
     initializer:unload_quota_mocks(Config),
     initializer:clean_test_users_and_spaces_no_validate(Config),
-    hackney:stop(),
+    application:stop(hackney),
     ssl:stop().
 
 %%%===================================================================

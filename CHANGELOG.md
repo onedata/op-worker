@@ -4,6 +4,93 @@ Release notes for project op-worker
 CHANGELOG
 ---------
 
+### 21.02.0-alpha18
+
+-   **VFS-7947** Added possibility to run workflows directly from file
+    browser.
+-   **VFS-7736** Fixed latency and timeout simulation in nulldevice
+    storage helper.
+
+### 21.02.0-alpha17
+
+-   **VFS-8018** Added HTTP storage driver option to limit on the client
+    side maximum number of requests per single session, after which the
+    session is closed and reconnected.
+
+### 21.02.0-alpha16
+
+-   **VFS-7976** Ported oneclient communicator async event stream
+    implementation from asio to folly IOThreadPoolExecutor.
+-   **VFS-7975** Added possibility to cancel running automation
+    workflow.
+-   **VFS-7892** Improved write performance on object storages by
+    minimizing the number of memory copying from Erlang to C++.
+-   **VFS-7856** Web GUI: added support for uploading, creating
+    directories and renaming files in files selector.
+-   **VFS-7846** Added action \"Upload BagIt\" to file browser, which is
+    available when OpenFaaS and special \"BagIt uploader\" workflow are
+    available.
+-   **VFS-7702** Add basic REST API for scheduling and retrieving
+    workflow executions.
+
+### 21.02.0-alpha15
+
+-   **VFS-7747** Upgrade the codebase to Erlang OTP 24.
+
+### 21.02.0-alpha14
+
+-   **VFS-7880** Introduce the concept of automation; tools for defining
+    and executing automated workflows, made up of lambdas that are
+    submitted to a local OpenFaaS platform. These functionalities
+    currently have experimental status.
+-   **VFS-7817** GUI improvements in automation GUI: added navigation
+    via URL to specific execution, creating stores during task and lane
+    creation, showing inventory name for each execution entry.
+-   **VFS-7808** Added support for symbolic links resolution during TAR
+    download. By default all symbolic links are resolved.
+-   **VFS-7796** Added support for navigating through symlinked
+    directories without changing active directory path.
+-   **VFS-7780** Added support for creating incremental archives, which
+    results in storing only files that have changed in comparison to the
+    base archive while unchanged files are preserved as hard links to
+    the corresponding files in the base archive.
+-   **VFS-7738** Fixed issues with navigation between datasets, archives
+    and archive files browsers.
+-   **VFS-7653** Added support for creating Dissemination Information
+    Package (DIP) alongside with Archival Information Package (AIP).
+-   **VFS-7651** Implement dataset archivization with BagIt layout.
+-   **VFS-7329** Added automation GUI - inventories, lambdas and
+    workflows views in Onezone and workflows execution overview in
+    Oneprovider.
+
+### 21.02.0-alpha13
+
+-   **VFS-7649** Added support for purging archives in GUI.
+
+### 21.02.0-alpha12
+
+-   **VFS-7705** Added more file actions to archive file browser GUI:
+    share, metadata, permissions read, data distribution and quality of
+    service.
+
+### 21.02.0-alpha11
+
+-   **VFS-7648** Added Web GUI views for browsing and creating datasets
+    and archives.
+-   **VFS-7589** Added StorageRouter and BufferedStorage helpers to
+    handling of aggregate storages such as archive storage.
+-   **VFS-7304** Add preliminary REST API for dataset archivization - to
+    be extended in near future.
+
+### 21.02.0-alpha10
+
+### 21.02.0-alpha9
+
+-   **VFS-7592** Added support for the Range header during directory or
+    multi file (bulk) downloads, making it possible to resume them in
+    case of interruption or network failure.
+
+
 ### 21.02.0-alpha8
 
 -   **VFS-7575** Add the possibility to incorporate an XRootD server
@@ -75,6 +162,16 @@ CHANGELOG
 -   **VFS-6566** Improved UX and fixed minor issues in share views.
     Fixed inability to open share hosted by Oneprovider 19.02.x using
     Onezone 20.02.x.
+
+### 20.02.11
+
+-   **VFS-8017** Added support for allowing setting of UID and GID in
+    the admin context on the POSIX storage to be other than 0:0.
+
+### 20.02.10
+
+-   **VFS-7739** Improved CPU affinity of storage driver threads in
+    Oneprovider.
 
 ### 20.02.9
 

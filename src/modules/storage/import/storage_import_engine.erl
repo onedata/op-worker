@@ -548,12 +548,12 @@ import_file(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
         throw:?ENOENT ->
             rollback_file_creation(ParentCtx, StorageFileCtx),
             {error, ?ENOENT};
-        Error:Reason ->
+        Error:Reason:Stacktrace ->
             FileName = storage_file_ctx:get_file_name_const(StorageFileCtx),
             SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
             StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
             ?error_stacktrace("importing file ~p on storage ~p in space ~p failed due to ~w:~w",
-                [FileName, StorageId, SpaceId, Error, Reason]),
+                [FileName, StorageId, SpaceId, Error, Reason], Stacktrace),
             rollback_file_creation(ParentCtx, StorageFileCtx),
             {error, Reason}
     end.
@@ -568,12 +568,12 @@ create_missing_parent(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
         throw:?ENOENT ->
             rollback_file_creation(ParentCtx, StorageFileCtx),
             {error, ?ENOENT};
-        Error:Reason ->
+        Error:Reason:Stacktrace ->
             FileName = storage_file_ctx:get_file_name_const(StorageFileCtx),
             SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
             StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
             ?error_stacktrace("importing file ~p on storage ~p in space ~p failed due to ~w:~w",
-                [FileName, StorageId, SpaceId, Error, Reason]),
+                [FileName, StorageId, SpaceId, Error, Reason], Stacktrace),
             rollback_file_creation(ParentCtx, StorageFileCtx),
             {error, Reason}
     end.
@@ -702,7 +702,7 @@ create_file_location(FileUuid, OwnerId, StorageFileCtx) ->
     {ok, StorageFileCtx3}.
 
 
--spec get_attr_including_deleted(file_ctx:ctx()) -> {ok, #file_attr{}} | {error, term()}.
+-spec get_attr_including_deleted(file_ctx:ctx()) -> {ok, #file_attr{}, boolean()} | {error, term()}.
 get_attr_including_deleted(FileCtx) ->
     try
         {#fuse_response{
@@ -716,13 +716,13 @@ get_attr_including_deleted(FileCtx) ->
             }),
         {ok, FileAttr, IsDeleted}
     catch
-        _:Reason ->
+        _:Reason:Stacktrace ->
             #status{code = Error} = fslogic_errors:gen_status_message(Reason),
             FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
             SpaceId = file_ctx:get_space_id_const(FileCtx),
             ?debug_stacktrace(
                 "Error {error, ~p} occured when getting attr of file: ~p during auto storage import procedure in space: ~p.",
-                [Error, FileUuid, SpaceId]
+                [Error, FileUuid, SpaceId], Stacktrace
             ),
             {error, Error}
     end.
@@ -909,13 +909,13 @@ maybe_update_file(StorageFileCtx, FileAttr, FileCtx, Info) ->
             {?FILE_UNMODIFIED, FileCtx, StorageFileCtx};
         throw:?ENOENT ->
             {?FILE_UNMODIFIED, FileCtx, StorageFileCtx};
-        Error:Reason ->
+        Error:Reason:Stacktrace ->
             FileName = storage_file_ctx:get_file_name_const(StorageFileCtx),
             SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
             ?error_stacktrace(
                 "storage_sync_engine:maybe_update_file file for file ~p in space ~p"
                 " failed due to ~w:~w",
-                [FileName, SpaceId, Error, Reason]),
+                [FileName, SpaceId, Error, Reason], Stacktrace),
             {error, Reason}
     end.
 

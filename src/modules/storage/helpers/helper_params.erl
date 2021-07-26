@@ -36,7 +36,6 @@
 -type optional_field() :: {optional, field()}.
 -type field_spec() :: field() | optional_field().
 
-
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -61,8 +60,16 @@ prepare_helper_args(HelperName, Params) ->
 
 %% @private
 -spec derive_scheme_from_url(args()) -> args().
-derive_scheme_from_url(#{<<"hostname">> := URL} = Params) ->
-    {ok, UrlScheme, Host} = parse_url(URL),
+derive_scheme_from_url(#{<<"hostname">> := Hostname, <<"scheme">> := Scheme} = Params) ->
+    HostnameWithScheme = str_utils:join_binary([Scheme, <<"://">>, Hostname]),
+    {ok, UrlScheme, Host} = get_scheme_and_hostname(HostnameWithScheme),
+    Scheme = case UrlScheme of
+        https -> <<"https">>;
+        _ -> <<"http">>
+    end,
+    Params#{<<"scheme">> => Scheme, <<"hostname">> => Host};
+derive_scheme_from_url(#{<<"hostname">> := HostnameWithScheme} = Params) ->
+    {ok, UrlScheme, Host} = get_scheme_and_hostname(HostnameWithScheme),
     Scheme = case UrlScheme of
         https -> <<"https">>;
         _ -> <<"http">>
@@ -87,7 +94,12 @@ prepare_user_ctx_params(?WEBDAV_HELPER_NAME = HelperName, Params) ->
     filter_fields(expected_user_ctx_params(HelperName), Ctx2);
 
 prepare_user_ctx_params(HelperName, Params) ->
-    filter_fields(expected_user_ctx_params(HelperName), Params).
+    MappedParams = maps:fold(
+        fun (<<"rootUid">>, Value, Acc) -> Acc#{<<"uid">> => Value};
+            (<<"rootGid">>, Value, Acc) -> Acc#{<<"gid">> => Value};
+            (Key, Value, Acc) -> Acc#{Key => Value}
+        end, #{}, Params),
+    filter_fields(expected_user_ctx_params(HelperName), MappedParams).
 
 
 %% @private
@@ -220,7 +232,7 @@ expected_custom_helper_args(?HTTP_HELPER_NAME) -> [
     <<"endpoint">>,
     {optional, <<"oauth2IdP">>}, {optional, <<"verifyServerCertificate">>},
     {optional, <<"authorizationHeader">>}, {optional, <<"connectionPoolSize">>},
-    {optional, <<"fileMode">>}];
+    {optional, <<"maxRequestsPerSession">>},{optional, <<"fileMode">>}];
 expected_custom_helper_args(?XROOTD_HELPER_NAME) -> [
     <<"url">>,
     {optional, <<"fileModeMask">>}, {optional, <<"dirModeMask">>}];
@@ -237,7 +249,8 @@ expected_custom_helper_args(?NULL_DEVICE_HELPER_NAME) -> [
 expected_generic_helper_args() -> [
     <<"storagePathType">>,
     {optional, <<"skipStorageDetection">>},
-    {optional, <<"timeout">>}
+    {optional, <<"timeout">>},
+    {optional, <<"archiveStorage">>}
 ].
 
 %%--------------------------------------------------------------------
@@ -312,13 +325,6 @@ remove_field(ToRemove, Fields) ->
     end end, Fields).
 
 
-%% @private
--spec parse_url(URL :: binary()) ->
-    {ok, Scheme :: http | https, HostAndPort :: binary()}.
-parse_url(URL) ->
-    #{scheme := Scheme, host := Host, port := Port, path := Path} = url_utils:parse(URL),
-    {ok, Scheme, str_utils:format_bin("~ts:~B~ts", [Host, Port, Path])}.
-
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -359,3 +365,11 @@ validate_field(Field, Params) ->
         #{} ->
             {error, {missing_field, Field}}
     end.
+
+
+%% @private
+-spec get_scheme_and_hostname(binary()) ->
+    {ok, Scheme :: http | https, HostAndPort :: binary()} | no_return().
+get_scheme_and_hostname(Url) ->
+    #{scheme := Scheme, host := Host, port := Port, path := Path} = url_utils:infer_components(Url),
+    {ok, Scheme, str_utils:format_bin("~ts:~B~ts", [Host, Port, Path])}.

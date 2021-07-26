@@ -22,7 +22,7 @@
 
 %% API
 -export([establish/2, reattach/3, detach/1, remove/1]).
--export([get_state/1, is_attached/1, get_id_if_attached/1]).
+-export([get_state/1, is_attached/1, get_id/1, get_id_if_attached/1]).
 
 
 %%%===================================================================
@@ -43,9 +43,9 @@ establish(Uuid, ProtectionFlags) ->
 
 
 -spec reattach(file_meta:uuid(), data_access_control:bitmask(), data_access_control:bitmask()) ->
-    ok | {error, term()}.
+    {ok, data_access_control:bitmask()} | {error, term()}.
 reattach(Uuid, FlagsToSet, FlagsToUnset) ->
-    ?extract_ok(file_meta:update(Uuid, fun
+    UpdateAns = file_meta:update(Uuid, fun
         (FileMeta = #file_meta{
             dataset_state = ?DETACHED_DATASET,
             protection_flags = CurrFlags
@@ -59,7 +59,12 @@ reattach(Uuid, FlagsToSet, FlagsToUnset) ->
         (#file_meta{dataset_state = ?ATTACHED_DATASET}) ->
             % attached dataset cannot be reattached
             ?ERROR_ALREADY_EXISTS
-    end)).
+    end),
+
+    case UpdateAns of
+        {ok, #document{value = #file_meta{protection_flags = NewFlags}}} -> {ok, NewFlags};
+        _ -> UpdateAns
+    end.
 
 
 -spec detach(file_meta:uuid()) -> ok | {error, term()}.
@@ -89,7 +94,7 @@ remove(Uuid) ->
     end.
 
 
--spec get_state(file_meta:file_meta() | file_meta:doc()) -> dataset:state().
+-spec get_state(file_meta:file_meta() | file_meta:doc()) -> dataset:state() | undefined.
 get_state(#document{value = FM}) ->
     get_state(FM);
 get_state(#file_meta{dataset_state = DatasetState}) ->
@@ -103,14 +108,27 @@ is_attached(#file_meta{dataset_state = DatasetState}) ->
     DatasetState =:= ?ATTACHED_DATASET.
 
 
--spec get_id_if_attached(file_meta:doc()) -> file_meta:uuid() | undefined.
+-spec get_id_if_attached(file_meta:doc()) -> dataset:id() | undefined.
 get_id_if_attached(FileDoc) ->
     case is_attached(FileDoc) of
+        true -> get_id(FileDoc);
+        false -> undefined
+    end.
+
+
+-spec has_dataset_established(file_meta:doc() | file_meta:file_meta()) -> boolean().
+has_dataset_established(#file_meta{dataset_state = State}) ->
+    State =/= undefined;
+has_dataset_established(#document{value = FileMeta}) ->
+    has_dataset_established(FileMeta).
+
+
+-spec get_id(file_meta:doc()) -> dataset:id() | undefined.
+get_id(FileDoc = #document{}) ->
+    case has_dataset_established(FileDoc) of
         true ->
             {ok, Uuid} = file_meta:get_uuid(FileDoc),
             Uuid;
         false ->
             undefined
     end.
-
-

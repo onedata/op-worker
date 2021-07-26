@@ -45,28 +45,29 @@
 %
 % The below ASCII visual shows possible relations in entities graph.
 %
-%           provider
-%              ^
-%              |
-%           storage                              share
-%              ^                                   ^
-%              |                                   |
-%            space            handle_service<----handle
-%           ^ ^ ^ ^             ^         ^       ^  ^
-%          /  | |  \           /          |      /   |
-%         /   | |   \         /           |     /    |
-%        /   /   \   \       /            |    /     |
-%       /   /     \   \     /             |   /      |
-% share user harvester group             user      group
-%              ^    ^     ^                          ^
-%             /      \    |                          |
-%            /        \   |                          |
-%          user        group                        user
-%                      ^   ^
-%                     /     \
-%                    /       \
-%                  user      user
-%
+%           provider----------------------------->cluster
+%              ^                                    ^  ^
+%              |                                    |  |
+%           storage                       share     |  |
+%              ^                            ^       |  |
+%              |                            |       |  |
+%            space     handle_service<----handle    |  |
+%           ^ ^ ^ ^          ^     ^       ^  ^     |  |
+%          /  | |  \         |     |      /   |     |  |
+%         /   | |   \        |     |     /    |    /   |
+%        /   /   \   \       /      \   /     |   /    |    atm_inventory
+%       /   /     \   \     /       user      |  /     /     ^  ^  ^  ^
+% share user harvester group                group     /     /   |  |  |
+%              ^    ^     ^                   ^      /  group   |  |  |
+%             /      \    |                   |     /     ^     |  |  |
+%            /        \   |                   |    /     /     /   |  |
+%          user        group                 user-'-----------'   /    \
+%                      ^   ^                                     /      \
+%                     /     \                      atm_workflow_schema   \
+%                    /       \                                ^           \
+%                  user      user                              \           \
+%                                                               '-- atm_lambda
+
 
 -record(od_user, {
     full_name :: undefined | binary(),
@@ -87,6 +88,7 @@
     eff_spaces = [] :: [od_space:id()],
     eff_handle_services = [] :: [od_handle_service:id()],
     eff_handles = [] :: [od_handle:id()],
+    eff_atm_inventories = [] :: [od_atm_inventory:id()],
 
     cache_state = #{} :: cache_state()
 }).
@@ -221,6 +223,44 @@
     cache_state = #{} :: cache_state()
 }).
 
+-record(od_atm_inventory, {
+    name :: automation:name(),
+
+    atm_lambdas :: [od_atm_lambda:id()],
+    atm_workflow_schemas :: [od_atm_workflow_schema:id()],
+
+    cache_state = #{} :: cache_state()
+}).
+
+-record(od_atm_lambda, {
+    name :: automation:name(),
+    summary :: automation:summary(),
+    description :: automation:description(),
+    
+    operation_spec :: atm_lambda_operation_spec:record(),
+    argument_specs = [] :: [atm_lambda_argument_spec:record()],
+    result_specs = [] :: [atm_lambda_result_spec:record()],
+    
+    atm_inventories = [] :: [od_atm_inventory:id()],
+    
+    cache_state = #{} :: cache_state()
+}).
+
+-record(od_atm_workflow_schema, {
+    name :: automation:name(),
+    description :: automation:description(),
+
+    stores = [] :: [atm_store_schema:record()],
+    lanes = [] :: [atm_lane_schema:record()],
+
+    state :: automation:workflow_schema_state(),
+
+    atm_inventory :: od_atm_inventory:id(),
+    atm_lambdas :: [od_atm_lambda:id()],
+
+    cache_state = #{} :: cache_state()
+}).
+
 %%%===================================================================
 %%% Records specific for oneprovider
 %%%===================================================================
@@ -237,7 +277,8 @@
 -record(file_download_code, {
     expires :: time:seconds(),
     session_id :: session:id(),
-    file_guids :: [fslogic_worker:file_guid()]
+    file_guids :: [fslogic_worker:file_guid()],
+    follow_symlinks :: boolean()
 }).
 
 -record(offline_access_credentials, {
@@ -385,7 +426,9 @@
     shares = [] :: [od_share:id()], % VFS-7437 Handle conflict resolution similarly to hardlinks
     deleted = false :: boolean(),
     parent_uuid :: file_meta:uuid(),
-    references = file_meta_hardlinks:empty_references() :: file_meta_hardlinks:references(),
+    % references are not always present in document to prevent copying large amounts of data
+    % in such a case references are undefined
+    references = file_meta_hardlinks:empty_references() :: file_meta_hardlinks:references() | undefined,
     symlink_value :: undefined | file_meta_symlinks:symlink(),
     % this field is used to cache value from #dataset.state field
     % TODO VFS-7533 handle conflict on file_meta with remote provider
@@ -396,17 +439,39 @@
 % One documents is stored for one archive.
 -record(archive, {
     dataset_id :: dataset:id(),
-    % TODO VFS-7601 set guid of directory in which archive is stored
-    % TODO VFS-7601 consider generating uuid basing ArchiveId
-    root_dir :: undefined | file_id:file_guid(),
-    creation_timestamp :: time:seconds(),
+    creation_time :: time:seconds(),
     creator :: archive:creator(),
-    type :: archive:type(),
     state :: archive:state(),
-    character :: archive:character(),
-    data_structure :: archive:data_structure(),
-    metadata_structure :: archive:metadata_structure(),
-    description :: binary()
+    config :: archive:config(),
+    preserved_callback :: archive:callback(),
+    purged_callback :: archive:callback(),
+    description :: archive:description(),
+    % This directory is root for archive.
+    % It has predefined uuid=?ARCHIVE_DIR_UUID(ArchiveId)
+    % See archivisation_tree.erl for more info.
+    root_dir_guid :: undefined | file_id:file_guid(),
+    % This is directory in which data files (files archived from space)
+    % are stored.
+    % For plain layout it is root_dir_guid.
+    % For bagit layout it is "data" directory, that is child of root_dir_guid.
+    data_dir_guid :: undefined | file_id:file_guid(),
+    stats = archive_stats:empty() :: archive_stats:record(),
+
+    % Related archives
+    % NOTE: all archive relations are optional and depend on options provided in config. 
+    % Additionally related_aip and related_dip cannot be simultaneously set (not undefined), 
+    % as one archive cannot be AIP and DIP at the same time.
+    
+    % if archive has been created directly it has no parent archive
+    % if archive has been created indirectly, this fields points to it's parent archive
+    parent :: undefined | archive:id(),
+    % id of archive that current one is based on if it is incremental
+    base_archive_id :: undefined | archive:id(),
+    
+    % Relations between dissemination information package (DIP) 
+    % and archival information package (AIP) archives.
+    related_aip = undefined :: undefined | archive:id(),
+    related_dip = undefined :: undefined | archive:id()
 }).
 
 
@@ -968,7 +1033,13 @@
     children_master_jobs_mode :: tree_traverse:children_master_jobs_mode(),
     track_subtree_status :: boolean(),
     batch_size :: tree_traverse:batch_size(),
-    traverse_info :: binary()
+    traverse_info :: binary(),
+    follow_symlinks = false :: boolean(),
+    % relative path of the processed file to the traverse root
+    relative_path = <<>> :: file_meta:path(),
+    % Set of encountered files on the path from the traverse root to the currently processed one. 
+    % It is required to efficiently prevent loops when resolving symlinks
+    encountered_files :: tree_traverse:encountered_files_set()
 }).
 
 %% Model that holds information necessary to tell whether whole subtree
@@ -982,23 +1053,153 @@
     all_batches_listed = false :: boolean()
 }).
 
-%% Model storing information about automation store instance.
+%%%===================================================================
+%%% Automation related models
+%%%===================================================================
+
 -record(atm_store, {
-    type :: atm_store:type(),
-    name :: atm_store:name(),
-    summary :: atm_store:summary(),
-    description :: atm_store:description(),
+    workflow_execution_id :: atm_workflow_execution:id(),
+
+    schema_id :: automation:id(),
+    initial_value :: undefined | json_utils:json_term(),
+
+    % Flag used to tell if content (items) update operation should be blocked
+    % (e.g when store is used as the iteration source for currently executed lane).
     frozen = false :: boolean(),
-    is_input_store :: boolean(),
-    container :: atm_container:container()
+
+    container :: atm_store_container:record()
 }).
 
-%% Model that holds information about an automation workflow execution
+-record(atm_task_execution, {
+    workflow_execution_id :: atm_workflow_execution:id(),
+    lane_index :: non_neg_integer(),
+    parallel_box_index :: non_neg_integer(),
+
+    schema_id :: automation:id(),
+
+    executor :: atm_task_executor:record(),
+    argument_specs :: [atm_task_execution_argument_spec:record()],
+    result_specs :: [atm_task_execution_result_spec:record()],
+
+    status :: atm_task_execution:status(),
+    % Flag used to tell if status was changed during doc update (set automatically
+    % when updating doc). It is necessary due to limitation of datastore as
+    % otherwise getting document before update would be needed (to compare 2 docs).
+    status_changed = false :: boolean(),
+
+    items_in_processing = 0 :: non_neg_integer(),
+    items_processed = 0 :: non_neg_integer(),
+    items_failed = 0 :: non_neg_integer()
+}).
+
+-record(atm_workflow_schema_snapshot, {
+    schema_id :: automation:id(),
+    name :: automation:name(),
+    description :: automation:description(),
+
+    stores = [] :: [atm_store_schema:record()],
+    lanes = [] :: [atm_lane_schema:record()],
+
+    state :: automation:workflow_schema_state(),
+
+    atm_inventory :: od_atm_inventory:id(),
+    atm_lambdas :: [od_atm_lambda:id()]
+}).
+
+-record(atm_lambda_snapshot, {
+    lambda_id :: automation:id(),
+
+    name :: automation:name(),
+    summary :: automation:summary(),
+    description :: automation:description(),
+
+    operation_spec :: atm_lambda_operation_spec:record(),
+    argument_specs = [] :: [atm_lambda_argument_spec:record()],
+    result_specs = [] :: [atm_lambda_result_spec:record()],
+
+    atm_inventories = [] :: [od_atm_inventory:id()]
+}).
+
 -record(atm_workflow_execution, {
-    space_id :: binary(),
+    user_id :: od_user:id(),
+    space_id :: od_space:id(),
+    atm_inventory_id :: od_atm_inventory:id(),
+
+    name :: automation:name(),
+    schema_snapshot_id :: atm_workflow_schema_snapshot:id(),
+    lambda_snapshot_registry :: atm_workflow_execution:lambda_snapshot_registry(),
+
+    store_registry :: atm_workflow_execution:store_registry(),
+    lanes :: [atm_lane_execution:record()],
+
+    status :: atm_workflow_execution:status(),
+    % Flag used to tell if status was changed during doc update (set automatically
+    % when updating doc). It is necessary due to limitation of datastore as
+    % otherwise getting document before update would be needed (to compare 2 docs).
+    prev_status :: atm_workflow_execution:status(),
+
+    callback :: undefined | http_client:url(),
+
     schedule_time = 0 :: atm_workflow_execution:timestamp(),
     start_time = 0 :: atm_workflow_execution:timestamp(),
     finish_time = 0 :: atm_workflow_execution:timestamp()
+}).
+
+%% Model for storing persistent state of a single tree forest iteration.
+-record(atm_tree_forest_iterator_queue, {
+    values = #{} :: atm_tree_forest_iterator_queue:values(),
+    last_pushed_value_index = 0 :: atm_tree_forest_iterator_queue:index(),
+    highest_peeked_value_index = 0 :: atm_tree_forest_iterator_queue:index(),
+    discriminator = {0, <<>>} :: atm_tree_forest_iterator_queue:discriminator(), 
+    last_pruned_node_num = 0 :: atm_tree_forest_iterator_queue:node_num()
+}).
+
+%%%===================================================================
+%%% Workflow engine connected models
+%%%===================================================================
+
+-record(workflow_cached_item, {
+    item :: iterator:item(),
+    iterator :: iterator:iterator()
+}).
+
+-record(workflow_cached_async_result, {
+    result :: workflow_handler:async_processing_result()
+}).
+
+-record(workflow_iterator_snapshot, {
+    iterator :: iterator:iterator(),
+    lane_index = 0 :: workflow_execution_state:index(),
+    item_index = 0 :: workflow_execution_state:index()
+}).
+
+-record(workflow_engine_state, {
+    executions = [] :: [workflow_engine:execution_id()],
+    slots_used = 0 :: non_neg_integer(),
+    slots_limit :: non_neg_integer()
+}).
+
+-record(workflow_execution_state, {
+    handler :: workflow_handler:handler(),
+    context :: workflow_engine:execution_context(),
+
+    execution_status = not_prepared :: workflow_execution_state:execution_status(),
+    current_lane :: workflow_execution_state:current_lane() | undefined,
+    lowest_failed_job_identifier :: workflow_jobs:job_identifier() | undefined,
+
+    iteration_state :: workflow_iteration_state:state() | undefined,
+    prefetched_iteration_step :: workflow_execution_state:iteration_status(),
+    jobs :: workflow_jobs:jobs() | undefined,
+
+    % Field used to return additional information about document update procedure
+    % (datastore:update returns {ok, #document{}} or {error, term()}
+    % so such information has to be returned via record's field).
+    update_report :: workflow_execution_state:update_report() | undefined
+}).
+
+-record(workflow_async_call_pool, {
+    slots_used = 0 :: non_neg_integer(),
+    slots_limit :: non_neg_integer()
 }).
 
 -endif.

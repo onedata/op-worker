@@ -740,7 +740,7 @@ end_per_testcase(_Case, Config) ->
 
     lists:foreach(
         fun({SpaceId, _}) ->
-            rpc:multicall(Workers, space_quota, delete, [SpaceId])
+            utils:rpc_multicall(Workers, space_quota, delete, [SpaceId])
         end, ?config(spaces, Config)).
 
 %%%===================================================================

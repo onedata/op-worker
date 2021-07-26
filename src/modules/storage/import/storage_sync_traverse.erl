@@ -88,7 +88,7 @@
 -define(TASK_ID_SEP, <<"###">>).
 -define(TASK_ID_PREFIX, <<"storage_sync">>).
 
--define(BATCH_SIZE, application:get_env(?APP_NAME, storage_import_dir_batch_size, 1000)).
+-define(BATCH_SIZE, op_worker:get_env(storage_import_dir_batch_size, 1000)).
 
 %%%===================================================================
 %%% API functions
@@ -97,9 +97,9 @@
 -spec init_pool() -> ok.
 init_pool() ->
     % Get pool limits from app.config
-    MasterJobsLimit = application:get_env(?APP_NAME, storage_import_master_jobs_limit, 10),
-    SlaveJobsLimit = application:get_env(?APP_NAME, storage_import_slave_workers_limit, 10),
-    ParallelSyncedSpacesLimit = application:get_env(?APP_NAME, storage_import_parallel_synced_spaces_limit, 10),
+    MasterJobsLimit = op_worker:get_env(storage_import_master_jobs_limit, 10),
+    SlaveJobsLimit = op_worker:get_env(storage_import_slave_workers_limit, 10),
+    ParallelSyncedSpacesLimit = op_worker:get_env(storage_import_parallel_synced_spaces_limit, 10),
     storage_traverse:init(?POOL, MasterJobsLimit, SlaveJobsLimit, ParallelSyncedSpacesLimit).
 
 -spec stop_pool() -> ok.
@@ -837,10 +837,10 @@ process_storage_file(StorageFileCtx, Info) ->
     catch
         throw:?ENOENT ->
             {error, ?ENOENT};
-        Error2:Reason2 ->
+        Error2:Reason2:Stacktrace2 ->
             ?error_stacktrace(
                 "Syncing file ~p on storage ~p supporting space ~p failed due to ~w:~w.",
-                [StorageFileId, StorageId, SpaceId, Error2, Reason2]),
+                [StorageFileId, StorageId, SpaceId, Error2, Reason2], Stacktrace2),
             {error, {Error2, Reason2}}
     end.
 

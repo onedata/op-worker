@@ -266,11 +266,22 @@ translate_file_details(#file_details{
         _ ->
             BasicPublicFields
     end,
-    case Scope of
-        public ->
-            PublicFields;
-        private ->
-            PublicFields#{
+    PublicFields2 = case archivisation_tree:uuid_to_archive_id(file_id:guid_to_uuid(FileGuid)) of
+        undefined -> PublicFields;
+        ArchiveId -> PublicFields#{<<"archiveId">> => ArchiveId}
+    end,
+    case {Scope, EffQosMembership} of
+        {public, _} ->
+            PublicFields2;
+        {private, undefined} -> % all or none effective fields are undefined
+            PublicFields2#{
+                <<"hardlinksCount">> => utils:undefined_to_null(NLink),
+                <<"effProtectionFlags">> => [],
+                <<"providerId">> => ProviderId,
+                <<"ownerId">> => OwnerId
+            };
+        {private, _} ->
+            PublicFields2#{
                 <<"hardlinksCount">> => utils:undefined_to_null(NLink),
                 <<"effProtectionFlags">> => file_meta:protection_flags_to_json(
                     EffFileProtectionFlags

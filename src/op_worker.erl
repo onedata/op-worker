@@ -16,7 +16,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([get_env/1, get_env/2, set_env/2]).
+-export([get_env/1, get_env/2, set_env/2, unset_env/1]).
 -export([get_release_version/0, get_build_version/0]).
 
 %%%===================================================================
@@ -42,6 +42,11 @@ get_env(Key, Default) ->
 -spec set_env(Key :: atom(), Value :: term()) -> ok.
 set_env(Key, Value) ->
     application:set_env(?APP_NAME, Key, Value).
+
+
+-spec unset_env(Key :: atom()) -> ok.
+unset_env(Key) ->
+    application:unset_env(?APP_NAME, Key).
 
 
 -spec get_release_version() -> binary().

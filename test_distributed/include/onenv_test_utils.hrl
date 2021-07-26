@@ -19,20 +19,21 @@
 -include("modules/fslogic/fslogic_common.hrl").
 
 
--record(share_spec, {
-    name = <<"share">> :: binary(),
-    description = <<>> :: binary()
+-record(archive_spec, {
+    config :: undefined | archive:config(),
+    description :: undefined | archive:description()
 }).
 
 -record(dataset_spec, {
     state = ?ATTACHED_DATASET :: dataset:state(),
-    protection_flags = [] :: [binary()]
+    protection_flags = [] :: [binary()],
+    archives = 0 :: non_neg_integer() | [onenv_archive_test_utils:archive_spec()]
 }).
 
--record(dataset_object, {
-    id :: dataset:id(),
-    state :: dataset:state(),
-    protection_flags :: [binary()]
+-record(metadata_spec, {
+    json :: json_utils:json_term() | undefined,
+    rdf :: binary() | undefined,
+    xattrs :: json_utils:json_map() | undefined
 }).
 
 -record(file_spec, {
@@ -40,7 +41,8 @@
     mode = ?DEFAULT_FILE_MODE :: file_meta:mode(),
     shares = [] :: [onenv_file_test_utils:share_spec()],
     dataset = undefined :: undefined | onenv_dataset_test_utils:dataset_spec(),
-    content = <<"">> :: binary()
+    content = <<"">> :: binary(),
+    metadata = #metadata_spec{} :: onenv_file_test_utils:object_spec()
 }).
 
 -record(dir_spec, {
@@ -54,7 +56,36 @@
 -record(symlink_spec, {
     name = undefined :: undefined | binary(),
     shares = [] :: [onenv_file_test_utils:share_spec()],
+    dataset = undefined :: undefined | onenv_dataset_test_utils:dataset_spec(),
     symlink_value :: binary()
+}).
+
+-record(share_spec, {
+    name = <<"share">> :: binary(),
+    description = <<>> :: binary()
+}).
+
+
+-record(archive_object, {
+    id :: archive:id(),
+    config :: archive:config(),
+    description :: archive:description(),
+    index :: archive_api:index()
+}).
+
+
+-record(dataset_object, {
+    id :: dataset:id(),
+    state :: dataset:state(),
+    protection_flags :: [binary()],
+    space_id :: od_space:id(),
+    archives = [] :: [onenv_archive_test_utils:archive_object()]
+}).
+
+-record(metadata_object, {
+    json :: json_utils:json_term() | undefined,
+    rdf :: binary() | undefined,
+    xattrs :: json_utils:json_map() | undefined
 }).
 
 -record(object, {
@@ -66,7 +97,8 @@
     dataset = undefined :: undefined | onenv_dataset_test_utils:dataset_object(),
     content = undefined :: undefined | binary(),  % set only for files
     children = undefined :: undefined | [onenv_file_test_utils:object()],  % set only for dirs
-    symlink_value = undefined :: undefined | file_meta_symlinks:symlink()  % set only for symlinks
+    symlink_value = undefined :: undefined | file_meta_symlinks:symlink(),  % set only for symlinks
+    metadata :: undefined | onenv_file_test_utils:metadata_object()
 }).
 
 

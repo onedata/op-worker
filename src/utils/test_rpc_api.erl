@@ -12,6 +12,7 @@
 -module(test_rpc_api).
 -author("Piotr Duleba").
 
+-include("modules/logical_file_manager/lfm.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/errors.hrl").
@@ -27,6 +28,8 @@
     get_storages/0,
     storage_describe/1,
     is_storage_imported/1,
+
+    get_user_space_by_name/2,
 
     get_spaces/0,
     get_space_details/1,
@@ -45,7 +48,13 @@
     get_provider_eff_users/0,
 
     get_cert_chain_ders/0,
-    gs_protocol_supported_versions/0
+    gs_protocol_supported_versions/0,
+
+    schedule_atm_workflow_execution/4,
+    list_waiting_atm_workflow_executions/3,
+    list_ongoing_atm_workflow_executions/3,
+
+    perform_io_test/2
 ]).
 
 
@@ -100,6 +109,14 @@ storage_describe(StorageId) ->
 -spec is_storage_imported(storage:id()) -> boolean().
 is_storage_imported(StorageId) ->
     rpc_api:storage_is_imported_storage(StorageId).
+
+
+-spec get_user_space_by_name(od_space:name(), tokens:serialized()) ->
+    {true, od_space:id()} | false.
+get_user_space_by_name(SpaceName, AccessToken) ->
+    UserId = get_user_id_from_token(AccessToken),
+    SessionId = create_session(UserId, AccessToken),
+    user_logic:get_space_by_name(SessionId, UserId, SpaceName).
 
 
 -spec get_spaces() -> {ok, [od_space:id()]} | errors:error().
@@ -180,3 +197,96 @@ get_cert_chain_ders() ->
 -spec gs_protocol_supported_versions() -> [gs_protocol:protocol_version()].
 gs_protocol_supported_versions() ->
     gs_protocol:supported_versions().
+
+
+-spec schedule_atm_workflow_execution(
+    session:id(),
+    od_space:id(),
+    od_atm_workflow_schema:id(),
+    atm_workflow_execution_api:store_initial_values()
+) ->
+    {ok, atm_workflow_execution:id(), atm_workflow_execution:record()} | errors:error().
+schedule_atm_workflow_execution(SessId, SpaceId, AtmWorkflowSchemaId, AtmStoreInitialValues) ->
+    lfm:schedule_atm_workflow_execution(SessId, SpaceId, AtmWorkflowSchemaId, AtmStoreInitialValues).
+
+
+
+-spec list_waiting_atm_workflow_executions(
+    od_space:id(),
+    atm_workflow_executions_forest:tree_ids(),
+    atm_workflow_executions_forest:listing_opts()
+) ->
+    atm_workflow_executions_forest:entries().
+list_waiting_atm_workflow_executions(SpaceId, AtmInventoryIds, ListingOpts) ->
+    atm_waiting_workflow_executions:list(SpaceId, AtmInventoryIds, ListingOpts).
+
+
+-spec list_ongoing_atm_workflow_executions(
+    od_space:id(),
+    atm_workflow_executions_forest:tree_ids(),
+    atm_workflow_executions_forest:listing_opts()
+) ->
+    atm_workflow_executions_forest:entries().
+list_ongoing_atm_workflow_executions(SpaceId, AtmInventoryIds, ListingOpts) ->
+    atm_ongoing_workflow_executions:list(SpaceId, AtmInventoryIds, ListingOpts).
+
+
+-spec perform_io_test(file_meta:path(), tokens:serialized()) -> ok | error.
+perform_io_test(Path, AccessToken) ->
+    UserId = get_user_id_from_token(AccessToken),
+    SessionId = create_session(UserId, AccessToken),
+    BytesSize = 5000,
+    SampleFileContent = str_utils:rand_hex(BytesSize),
+
+    % Note, that SampleFileSize will be 2 times larger than
+    % ByteSize due to str_utils:rand_hex/1 function encoding.
+    SampleFileSize = byte_size(SampleFileContent),
+    FilePath = filename:join([Path, <<"test_file">>]),
+
+    IOFun = fun() ->
+        {ok, Guid} = lfm:create(SessionId, FilePath),
+        {ok, OpenHandle} = lfm:open(SessionId, ?FILE_REF(Guid), rdwr),
+        {ok, WriteHandle, Size} = lfm:write(OpenHandle, 0, SampleFileContent),
+        {ok, _ReadHandle, Data} = lfm:read(WriteHandle, 0, Size),
+        case {Size, Data} of
+            {SampleFileSize, SampleFileContent} -> ok;
+            _ -> error
+        end
+    end,
+
+    try IOFun()
+    catch
+        error:_ -> error
+    end.
+
+
+%%%===================================================================
+%%% Helpers
+%%%===================================================================
+
+
+%% @private
+-spec create_session(od_user:id(), tokens:serialized()) -> session:id().
+create_session(UserId, AccessToken) ->
+    Nonce = crypto:strong_rand_bytes(10),
+    Identity = ?SUB(user, UserId),
+    TokenCredentials = build_token_credentials(AccessToken, undefined, local_ip_v4(), oneclient, allow_data_access_caveats),
+    {ok, SessionId} = create_fuse_session(Nonce, Identity, TokenCredentials),
+    SessionId.
+
+
+%% @private
+-spec local_ip_v4() -> inet:ip_address().
+local_ip_v4() ->
+    {ok, Addrs} = inet:getifaddrs(),
+    hd([
+        Addr || {_, Opts} <- Addrs, {addr, Addr} <- Opts,
+        size(Addr) == 4, Addr =/= {127, 0, 0, 1}
+    ]).
+
+
+%% @private
+-spec get_user_id_from_token(binary()) -> od_user:id().
+get_user_id_from_token(Token) ->
+    {ok, #token{subject = #subject{id = Id}}} = tokens:deserialize(Token),
+    Id.

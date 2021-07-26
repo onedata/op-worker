@@ -40,14 +40,14 @@
     cowboy_req:req() | no_return().
 stream_cdmi(Req, #cdmi_req{
     auth = ?USER(_UserId, SessionId),
-    file_attrs = #file_attr{guid = Guid, size = Size}
+    file_attrs = #file_attr{guid = Guid, size = FileSize}
 }, Range0, Encoding, JsonBodyPrefix, JsonBodySuffix) ->
     Range1 = case Range0 of
-        default -> {0, Size - 1};
+        default -> {0, FileSize - 1};
         _ -> Range0
     end,
     StreamSize = cdmi_stream_size(
-        Range1, Size, Encoding, JsonBodyPrefix, JsonBodySuffix
+        Range1, FileSize, Encoding, JsonBodyPrefix, JsonBodySuffix
     ),
 
     {ok, FileHandle} = ?check(lfm:monitored_open(SessionId, ?FILE_REF(Guid), read)),
@@ -69,10 +69,10 @@ stream_cdmi(Req, #cdmi_req{
             ?HDR_CONTENT_LENGTH => integer_to_binary(StreamSize)
         }, Req),
         cowboy_req:stream_body(JsonBodyPrefix, nofin, Req2),
-        http_streamer:stream_bytes_range(
-            FileHandle, Size, Range1, Req2,
-            fun(Data) -> cdmi_encoder:encode(Data, Encoding) end, ReadBlockSize
-        ),
+        StreamingCtx = http_streamer:build_ctx(FileHandle, FileSize),
+        StreamingCtx2 = http_streamer:set_encoding_fun(StreamingCtx, fun(Data) -> cdmi_encoder:encode(Data, Encoding) end),
+        StreamingCtx3 = http_streamer:set_read_block_size(StreamingCtx2, ReadBlockSize),
+        http_streamer:stream_bytes_range(StreamingCtx3, Range1, Req2),
         cowboy_req:stream_body(JsonBodySuffix, fin, Req2),
 
         Req2
@@ -96,9 +96,9 @@ stream_cdmi(Req, #cdmi_req{
 -spec cdmi_stream_size(http_parser:bytes_range(), FileSize :: non_neg_integer(),
     Encoding :: binary(), DataPrefix :: binary(), DataSuffix :: binary()) ->
     non_neg_integer().
-cdmi_stream_size({0, -1}, _FileSize, _Encoding, _DataPrefix, _DataSuffix) ->
-    % Empty file
-    0;
+cdmi_stream_size({0, -1}, _FileSize, _Encoding, DataPrefix, DataSuffix) ->
+    % Empty file - only data prefix and suffix is sent
+    byte_size(DataPrefix) + byte_size(DataSuffix);
 cdmi_stream_size({From, To}, FileSize, Encoding, DataPrefix, DataSuffix) when To >= From ->
     DataSize = min(FileSize - 1, To) - From + 1,
     EncodedDataSize = case Encoding of

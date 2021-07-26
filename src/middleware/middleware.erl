@@ -36,7 +36,7 @@
 -type req() :: #op_req{}.
 -type operation() :: gs_protocol:operation().
 % The resource the request operates on (creates, gets, updates or deletes).
--type entity() :: undefined | #od_share{} | #transfer{} | #od_user{} | #od_group{} | #qos_entry{}.
+-type entity() :: undefined | tuple().
 -type revision() :: gs_protocol:revision().
 -type versioned_entity() :: gs_protocol:versioned_entity().
 -type scope() :: gs_protocol:scope().
@@ -70,7 +70,7 @@
 % Internal record containing the request data and state.
 -record(req_ctx, {
     req = #op_req{} :: req(),
-    plugin = undefined :: module(),
+    handler = undefined :: module(),
     versioned_entity = {undefined, 1} :: versioned_entity()
 }).
 -type req_ctx() :: #req_ctx{}.
@@ -84,6 +84,7 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -102,14 +103,13 @@ handle(OpReq) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle(req(), versioned_entity()) -> result().
-handle(#op_req{gri = #gri{type = EntityType}} = OpReq, VersionedEntity) ->
+handle(#op_req{} = OpReq, VersionedEntity) ->
     try
         ReqCtx0 = #req_ctx{
             req = middleware_utils:switch_context_if_shared_file_request(OpReq),
-            plugin = get_plugin(EntityType),
+            handler = get_handler(OpReq),
             versioned_entity = VersionedEntity
         },
-        ensure_operation_supported(ReqCtx0),
         ReqCtx1 = sanitize_request(ReqCtx0),
         ReqCtx2 = maybe_fetch_entity(ReqCtx1),
 
@@ -123,10 +123,8 @@ handle(#op_req{gri = #gri{type = EntityType}} = OpReq, VersionedEntity) ->
             Error;
         % Unexpected errors are logged and internal server error is returned
         % to client instead
-        Type:Reason ->
-            ?error_stacktrace("Unexpected error in ~p - ~p:~p", [
-                ?MODULE, Type, Reason
-            ]),
+        Type:Reason:Stacktrace ->
+            ?error_stacktrace("Unexpected error in ~p - ~p:~p", [?MODULE, Type, Reason], Stacktrace),
             ?ERROR_INTERNAL_SERVER_ERROR
     end.
 
@@ -139,11 +137,11 @@ handle(#op_req{gri = #gri{type = EntityType}} = OpReq, VersionedEntity) ->
 %%--------------------------------------------------------------------
 -spec is_authorized(req(), versioned_entity()) ->
     {true, gri:gri()} | false.
-is_authorized(#op_req{gri = #gri{type = EntityType} = GRI} = OpReq, VersionedEntity) ->
+is_authorized(#op_req{gri = GRI} = OpReq, VersionedEntity) ->
     try
         ensure_authorized(#req_ctx{
             req = OpReq,
-            plugin = get_plugin(EntityType),
+            handler = get_handler(OpReq),
             versioned_entity = VersionedEntity
         }),
         {true, GRI}
@@ -170,42 +168,46 @@ client_to_string(?USER(UId)) -> str_utils:format("user:~s", [UId]).
 
 
 %% @private
--spec get_plugin(gri:entity_type()) -> module() | no_return().
-get_plugin(op_dataset) -> dataset_middleware;
-get_plugin(op_file) -> file_middleware;
-get_plugin(op_group) -> group_middleware;
-get_plugin(op_handle) -> handle_middleware;
-get_plugin(op_handle_service) -> handle_service_middleware;
-get_plugin(op_metrics) -> metrics_middleware;
-get_plugin(op_provider) -> provider_middleware;
-get_plugin(op_qos) -> qos_middleware;
-get_plugin(op_share) -> share_middleware;
-get_plugin(op_space) -> space_middleware;
-get_plugin(op_transfer) -> transfer_middleware;
-get_plugin(op_user) -> user_middleware;
-get_plugin(_) -> throw(?ERROR_NOT_SUPPORTED).
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Ensures requested operation is supported by calling back
-%% proper middleware plugin, throws a proper error if not.
-%% @end
-%%--------------------------------------------------------------------
--spec ensure_operation_supported(req_ctx()) -> ok | no_return().
-ensure_operation_supported(#req_ctx{plugin = Plugin, req = #op_req{
-    operation = Op,
-    gri = #gri{aspect = Asp, scope = Scp}
+-spec get_handler(req()) -> module() | no_return().
+get_handler(#op_req{operation = Operation, gri = #gri{
+    type = EntityType,
+    aspect = Aspect,
+    scope = Scope
 }}) ->
-    try Plugin:operation_supported(Op, Asp, Scp) of
-        true -> ok;
-        false -> throw(?ERROR_NOT_SUPPORTED)
+    Router = get_router(EntityType),
+
+    try
+        Router:resolve_handler(Operation, Aspect, Scope)
     catch _:_ ->
-        % No need for log here, 'operation_supported' may crash depending on
+        % No need for log here, 'resolve_handler' may crash depending on
         % what the request contains and this is expected.
         throw(?ERROR_NOT_SUPPORTED)
     end.
+
+
+%% @private
+-spec get_router(gri:entity_type()) -> module() | no_return().
+get_router(op_archive) -> archive_middleware_plugin;
+get_router(op_atm_inventory) -> atm_inventory_middleware_plugin;
+get_router(op_atm_lambda_snapshot) -> atm_lambda_snapshot_middleware_plugin;
+get_router(op_atm_store) -> atm_store_middleware_plugin;
+get_router(op_atm_task_execution) -> atm_task_execution_middleware_plugin;
+get_router(op_atm_workflow_execution) -> atm_workflow_execution_middleware_plugin;
+get_router(op_atm_workflow_schema) -> atm_workflow_schema_middleware_plugin;
+get_router(op_atm_workflow_schema_snapshot) -> atm_workflow_schema_snapshot_middleware_plugin;
+get_router(op_dataset) -> dataset_middleware_plugin;
+get_router(op_file) -> file_middleware_plugin;
+get_router(op_group) -> group_middleware_plugin;
+get_router(op_handle) -> handle_middleware_plugin;
+get_router(op_handle_service) -> handle_service_middleware_plugin;
+get_router(op_metrics) -> metrics_middleware_plugin;
+get_router(op_provider) -> provider_middleware_plugin;
+get_router(op_qos) -> qos_middleware_plugin;
+get_router(op_share) -> share_middleware_plugin;
+get_router(op_space) -> space_middleware_router;
+get_router(op_transfer) -> transfer_middleware_plugin;
+get_router(op_user) -> user_middleware_plugin;
+get_router(_) -> throw(?ERROR_NOT_SUPPORTED).
 
 
 %%--------------------------------------------------------------------
@@ -215,11 +217,11 @@ ensure_operation_supported(#req_ctx{plugin = Plugin, req = #op_req{
 %% @end
 %%--------------------------------------------------------------------
 -spec sanitize_request(req_ctx()) -> req_ctx().
-sanitize_request(#req_ctx{plugin = Plugin, req = #op_req{
+sanitize_request(#req_ctx{handler = Handler, req = #op_req{
     gri = #gri{id = Id, aspect = Aspect},
     data = RawData
 } = Req} = ReqCtx) ->
-    case Plugin:data_spec(Req) of
+    case Handler:data_spec(Req) of
         undefined ->
             ReqCtx;
         DataSpec ->
@@ -244,9 +246,9 @@ sanitize_request(#req_ctx{plugin = Plugin, req = #op_req{
 %% @private
 %% @doc
 %% Retrieves the entity specified in request by calling back proper
-%% middleware plugin. Does nothing if the entity is prefetched, GRI of the
+%% middleware handler. Does nothing if the entity is prefetched, GRI of the
 %% request is not related to any entity or callback is not
-%% implemented by plugin.
+%% implemented by handler.
 %% @end
 %%--------------------------------------------------------------------
 -spec maybe_fetch_entity(req_ctx()) -> req_ctx().
@@ -255,8 +257,8 @@ maybe_fetch_entity(#req_ctx{versioned_entity = {Entity, _}} = ReqCtx) when Entit
 maybe_fetch_entity(#req_ctx{req = #op_req{gri = #gri{id = undefined}}} = ReqCtx) ->
     % Skip when creating an instance with predefined Id, set revision to 1
     ReqCtx#req_ctx{versioned_entity = {undefined, 1}};
-maybe_fetch_entity(#req_ctx{plugin = Plugin, req = Req} = ReqCtx) ->
-    case Plugin:fetch_entity(Req) of
+maybe_fetch_entity(#req_ctx{handler = Handler, req = Req} = ReqCtx) ->
+    case Handler:fetch_entity(Req) of
         {ok, {_Entity, _Revision} = VersionedEntity} ->
             ReqCtx#req_ctx{versioned_entity = VersionedEntity};
         {error, _} = Error ->
@@ -277,7 +279,7 @@ ensure_authorized(#req_ctx{req = #op_req{auth = ?ROOT}}) ->
     % internally).
     ok;
 ensure_authorized(#req_ctx{
-    plugin = Plugin,
+    handler = Handler,
     versioned_entity = {Entity, _},
     req = #op_req{operation = Operation, auth = Auth, gri = GRI} = OpReq
 }) ->
@@ -287,7 +289,7 @@ ensure_authorized(#req_ctx{
     end,
 
     Result = try
-        Plugin:authorize(OpReq, Entity)
+        Handler:authorize(OpReq, Entity)
     catch _:_ ->
         % No need for log here, 'authorize' may crash depending on what the
         % request contains and this is expected.
@@ -316,8 +318,8 @@ ensure_authorized(#req_ctx{
 %% @end
 %%--------------------------------------------------------------------
 -spec validate_request(req_ctx()) -> ok | no_return().
-validate_request(#req_ctx{plugin = Plugin, versioned_entity = {Entity, _}, req = Req}) ->
-    ok = Plugin:validate(Req, Entity).
+validate_request(#req_ctx{handler = Handler, versioned_entity = {Entity, _}, req = Req}) ->
+    ok = Handler:validate(Req, Entity).
 
 
 %%--------------------------------------------------------------------
@@ -328,10 +330,10 @@ validate_request(#req_ctx{plugin = Plugin, versioned_entity = {Entity, _}, req =
 %%--------------------------------------------------------------------
 -spec process_request(req_ctx()) -> result().
 process_request(#req_ctx{
-    plugin = Plugin,
+    handler = Handler,
     req = #op_req{operation = create, return_revision = RR} = Req
 }) ->
-    Result = Plugin:create(Req),
+    Result = Handler:create(Req),
     case {Result, Req} of
         {{ok, resource, Resource}, #op_req{gri = #gri{aspect = instance}, auth = Cl}} ->
             % If an entity instance is created, log an information about it
@@ -358,11 +360,11 @@ process_request(#req_ctx{
     end;
 
 process_request(#req_ctx{
-    plugin = Plugin,
+    handler = Handler,
     req = #op_req{operation = get, return_revision = true} = Req,
     versioned_entity = {Entity, Rev}
 }) ->
-    case Plugin:get(Req, Entity) of
+    case Handler:get(Req, Entity) of
         {ok, value, _} = Res -> Res;
         {ok, ResultGri, Data} -> {ok, ResultGri, {Data, Rev}};
         {ok, Data} -> {ok, {Data, Rev}};
@@ -370,23 +372,23 @@ process_request(#req_ctx{
     end;
 
 process_request(#req_ctx{
-    plugin = Plugin,
+    handler = Handler,
     req = #op_req{operation = get} = Req,
     versioned_entity = {Entity, _}
 }) ->
-    Plugin:get(Req, Entity);
+    Handler:get(Req, Entity);
 
 process_request(#req_ctx{
-    plugin = Plugin, 
+    handler = Handler,
     req = #op_req{operation = update} = Req
 }) ->
-    Plugin:update(Req);
+    Handler:update(Req);
 
 process_request(#req_ctx{
-    plugin = Plugin, 
+    handler = Handler,
     req = #op_req{operation = delete, auth = Cl, gri = GRI} = Req
 }) ->
-    case {Plugin:delete(Req), GRI} of
+    case {Handler:delete(Req), GRI} of
         {ok, #gri{type = Type, id = Id, aspect = instance}} ->
             % If an entity instance is deleted, log an information about it
             % (it's a significant operation and this information might be useful).

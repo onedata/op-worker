@@ -772,7 +772,7 @@ init_per_testcase(Case = redirecting_event_to_renamed_file_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     Self = self(),
     Stm = event_stream_factory:create(#file_written_subscription{time_threshold = 1000}),
-    rpc:multicall(Workers, subscription, save, [#document{
+    utils:rpc_multicall(Workers, subscription, save, [#document{
         key = ?FILE_WRITTEN_SUB_ID,
         value = #subscription{
             id = ?FILE_WRITTEN_SUB_ID,

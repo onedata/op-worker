@@ -39,6 +39,6 @@ handle(<<"GET">>, Req) ->
         ?HTTP_200_OK,
         #{?HDR_CONTENT_TYPE => <<"application/json">>},
         % TODO VFS-5622
-        json_utils:encode(provider_middleware:gather_configuration()),
+        json_utils:encode(provider_middleware_plugin:gather_configuration()),
         Req
     ).

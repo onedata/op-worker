@@ -84,11 +84,15 @@ backward_time_warp_test(Config) ->
     delete_files_structure_test_base(Config, [{10, 10}, {10, 10}, {10, 10}], TimeWarp, success).
 
 forward_time_warp_smaller_than_7_days_test(Config) ->
-    TimeWarp = 3600 * 24 * 6, % 6 days
+    [OZNode | _] = oct_background:get_zone_nodes(),
+    {ok, MaxTemporaryTokenTTl} = test_utils:get_env(OZNode, oz_worker, max_temporary_token_ttl),
+    TimeWarp = MaxTemporaryTokenTTl div 2,
     delete_files_structure_test_base(Config, [{10, 10}, {10, 10}, {10, 10}], TimeWarp, success).
 
 forward_time_warp_greater_than_7_days_test(Config) ->
-    TimeWarp = 3600 * 24 * 8, % 8 days
+    [OZNode | _] = oct_background:get_zone_nodes(),
+    {ok, MaxTemporaryTokenTTl} = test_utils:get_env(OZNode, oz_worker, max_temporary_token_ttl),
+    TimeWarp = MaxTemporaryTokenTTl + 1,
     delete_files_structure_test_base(Config, [{10, 10}, {10, 10}, {10, 10}], TimeWarp, failure).
 
 %%%===================================================================
@@ -142,13 +146,10 @@ delete_files_structure_test_base(Config, FilesStructure, TimeWarpSecs, ExpectedR
 %===================================================================
 
 init_per_suite(Config) ->
-    ssl:start(),
-    hackney:start(),
     oct_background:init_per_suite(Config, #onenv_test_config{onenv_scenario = "2op-manual-import"}).
 
 end_per_suite(_Config) ->
-    hackney:stop(),
-    ssl:stop().
+    oct_background:end_per_suite().
 
 init_per_testcase(_Case, Config) ->
     % update background config to update sessions

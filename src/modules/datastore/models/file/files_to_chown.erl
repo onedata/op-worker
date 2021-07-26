@@ -120,8 +120,8 @@ chown_deferred_file(FileGuid) ->
         FileCtx = file_ctx:new_by_guid(FileGuid),
         chown_file(FileCtx)
     catch
-        _:Error ->
-            ?error_stacktrace("Cannot chown deferred file ~p due to error ~p", [FileGuid, Error])
+        _:Error:Stacktrace ->
+            ?error_stacktrace("Cannot chown deferred file ~p due to error ~p", [FileGuid, Error], Stacktrace)
     end.
 
 -spec chown_file(file_ctx:ctx()) -> file_ctx:ctx().

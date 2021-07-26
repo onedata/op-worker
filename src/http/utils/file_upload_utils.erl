@@ -10,8 +10,8 @@
 %%% Depending on underlying storage file can be uploaded using one of the
 %%% following modes:
 %%% - block/buffered - request body will be read and buffered. When the buffer
-%%%                    accumulates one or more full blocks, they are flushed
-%%%                    and the excess bytes stay in buffer.
+%%%                    accumulates a full block, it is flushed and the excess
+%%%                    bytes stay in buffer.
 %%%                    The exception may be the first block, which may be of smaller
 %%%                    size so that offset (for next writes) will be aligned to
 %%%                    smallest multiple of block size (accessing blocks at well
@@ -33,14 +33,20 @@
 
 
 -type offset() :: non_neg_integer().
--type block_multiples_policy() :: allow_block_multiples | disallow_block_multiples.
+
 
 -type read_req_body_fun() :: fun((cowboy_req:req(), cowboy_req:read_body_opts()) ->
     {ok, binary(), cowboy_req:req()} | {more, binary(), cowboy_req:req()}
 ).
 
 
+% default write block size for storages without defined block size
 -define(DEFAULT_WRITE_BLOCK_SIZE, 10485760). % 10 MB
+
+
+% how many blocks should be written at once (on storages with defined block size)
+% the value was decided upon experimentally
+-define(PREFERRED_STORAGE_WRITE_BLOCK_MULTIPLE, 3).
 
 
 %%%===================================================================
@@ -74,8 +80,8 @@ upload_file(FileHandle, Offset, Req, ReadReqBodyFun, ReadReqBodyOpts) ->
             );
         BlockSize ->
             write_req_body_to_file_in_blocks(
-                FileHandle, Offset, Req, BlockSize,
-                ReadReqBodyFun, ReadReqBodyOpts
+                FileHandle, Offset, Req, <<>>,
+                BlockSize, ReadReqBodyFun, ReadReqBodyOpts
             )
     end.
 
@@ -92,8 +98,10 @@ get_preferable_storage_write_block_size(StorageId) ->
     case storage:get_block_size(StorageId) of
         0 ->
             ?DEFAULT_WRITE_BLOCK_SIZE;
+        undefined ->
+            undefined;
         BlockSize ->
-            BlockSize
+            BlockSize * ?PREFERRED_STORAGE_WRITE_BLOCK_MULTIPLE
     end.
 
 
@@ -110,7 +118,7 @@ write_req_body_to_file_in_stream(
     FileHandle, Offset, Req0,
     ReadReqBodyFun, ReadReqBodyOpts
 ) ->
-    {Status, Data, Req1} = ReadReqBodyFun(Req0, ReadReqBodyOpts),
+    {Status, Data, Req1} = ReadReqBodyFun(Req0, ReadReqBodyOpts#{length => ?DEFAULT_WRITE_BLOCK_SIZE}),
     {ok, NewHandle, Bytes} = ?check(lfm:write(FileHandle, Offset, Data)),
     case Status of
         more ->
@@ -128,131 +136,39 @@ write_req_body_to_file_in_stream(
     lfm:handle(),
     offset(),
     cowboy_req:req(),
+    Buffer :: binary(),
     MaxBlockSize :: non_neg_integer(),
     ReadReqBodyFun :: read_req_body_fun(),
     ReadReqBodyOpts :: cowboy_req:read_body_opts()
 ) ->
     {ok, cowboy_req:req()}.
 write_req_body_to_file_in_blocks(
-    FileHandle, Offset, Req, MaxBlockSize,
-    ReadReqBodyFun, ReadReqBodyOpts
+    FileHandle, Offset, Req0, Buffer, BlockSize, ReadReqBodyFun, ReadReqBodyOpts
 ) ->
-    AlignmentResult = write_first_block_if_partial(
-        FileHandle, Offset, Req, <<>>, MaxBlockSize,
-        ReadReqBodyFun, ReadReqBodyOpts
-    ),
-    case AlignmentResult of
-        {ok, _} ->
-            AlignmentResult;
-        {more, NewHandle, NewOffset, Req1, Buffer} ->
-            write_remaining_blocks_to_file(
-                NewHandle, NewOffset, Req1, Buffer, MaxBlockSize,
-                ReadReqBodyFun, ReadReqBodyOpts
-            )
-    end.
-
-
-%% @private
--spec write_first_block_if_partial(
-    lfm:handle(),
-    offset(),
-    cowboy_req:req(),
-    Buffer :: binary(),
-    MaxBlockSize :: non_neg_integer(),
-    ReadReqBodyFun :: read_req_body_fun(),
-    ReadReqBodyOpts :: cowboy_req:read_body_opts()
-) ->
-    {ok, cowboy_req:req()} |
-    {more, lfm:handle(), offset(), cowboy_req:req(), ExcessBytes :: binary()}.
-write_first_block_if_partial(
-    FileHandle, Offset, Req, Buffer, MaxBlockSize,
-    ReadReqBodyFun, ReadReqBodyOpts
-) ->
-    case Offset rem MaxBlockSize of
-        0 ->
-            {more, FileHandle, Offset, Req, Buffer};
-        FirstBlockCurrentSize ->
-            write_next_block_to_file(
-                FileHandle, Offset, Req, Buffer,
-                MaxBlockSize - FirstBlockCurrentSize, disallow_block_multiples,
-                ReadReqBodyFun, ReadReqBodyOpts
-            )
-    end.
-
-
-%% @private
--spec write_remaining_blocks_to_file(
-    lfm:handle(),
-    offset(),
-    cowboy_req:req(),
-    Buffer :: binary(),
-    MaxBlockSize :: non_neg_integer(),
-    ReadReqBodyFun :: read_req_body_fun(),
-    ReadReqBodyOpts :: cowboy_req:read_body_opts()
-) ->
-    {ok, cowboy_req:req()}.
-write_remaining_blocks_to_file(
-    FileHandle, Offset, Req0, Buffer, MaxBlockSize,
-    ReadReqBodyFun, ReadReqBodyOpts
-) ->
-    NextBlockWriteResult = write_next_block_to_file(
-        FileHandle, Offset, Req0, Buffer, MaxBlockSize, allow_block_multiples,
-        ReadReqBodyFun, ReadReqBodyOpts
-    ),
-    case NextBlockWriteResult of
-        {ok, _} ->
-            NextBlockWriteResult;
-        {more, NewHandle, NewOffset, Req1, NewBuffer} ->
-            write_remaining_blocks_to_file(
-                NewHandle, NewOffset, Req1, NewBuffer, MaxBlockSize,
-                ReadReqBodyFun, ReadReqBodyOpts
-            )
-    end.
-
-
-%% @private
--spec write_next_block_to_file(
-    lfm:handle(),
-    offset(),
-    cowboy_req:req(),
-    Buffer :: binary(),
-    MaxBlockSize :: non_neg_integer(),
-    block_multiples_policy(),
-    ReadReqBodyFun :: read_req_body_fun(),
-    ReadReqBodyOpts :: cowboy_req:read_body_opts()
-) ->
-    {ok, cowboy_req:req()} |
-    {more, lfm:handle(), offset(), cowboy_req:req(), ExcessBytes :: binary()}.
-write_next_block_to_file(
-    FileHandle, Offset, Req0, Buffer, MaxBlockSize, BlockMultiplesPolicy,
-    ReadReqBodyFun, ReadReqBodyOpts
-) ->
-    case ReadReqBodyFun(Req0, ReadReqBodyOpts) of
-        {ok, Body, Req1} ->
-            ?check(lfm:write(FileHandle, Offset, <<Buffer/binary, Body/binary>>)),
+    % if the offset is not aligned with a multiple of MaxBlockSize, write a smaller chunk to make it so
+    BytesRemainingInCurrentBlock = BlockSize - (Offset rem BlockSize),
+    PreferredChunkSize = BytesRemainingInCurrentBlock - byte_size(Buffer),
+    case ReadReqBodyFun(Req0, ReadReqBodyOpts#{length => PreferredChunkSize}) of
+        {ok, ReceivedChunk, Req1} ->
+            ?check(lfm:write(FileHandle, Offset, <<Buffer/binary, ReceivedChunk/binary>>)),
             {ok, Req1};
-        {more, Body, Req1} ->
-            DataToWrite = <<Buffer/binary, Body/binary>>,
-            DataToWriteSize = byte_size(DataToWrite),
-
-            case DataToWriteSize >= MaxBlockSize of
-                true ->
-                    ChunkSize = case BlockMultiplesPolicy of
-                        allow_block_multiples ->
-                            MaxBlockSize * (DataToWriteSize div MaxBlockSize);
-                        disallow_block_multiples ->
-                            MaxBlockSize
-                    end,
-                    <<Chunk:ChunkSize/binary, ExcessBytes/binary>> = DataToWrite,
-
-                    {ok, NewHandle, ChunkSize} = ?check(lfm:write(
-                        FileHandle, Offset, Chunk
-                    )),
-                    {more, NewHandle, Offset + ChunkSize, Req1, ExcessBytes};
+        {more, ReceivedChunk, Req1} ->
+            ReceivedChunkSize = byte_size(ReceivedChunk),
+            case ReceivedChunkSize >= PreferredChunkSize of
                 false ->
-                    write_next_block_to_file(
-                        FileHandle, Offset, Req1, DataToWrite, MaxBlockSize,
-                        BlockMultiplesPolicy, ReadReqBodyFun, ReadReqBodyOpts
+                    write_req_body_to_file_in_blocks(
+                        FileHandle, Offset, Req1, <<Buffer/binary, ReceivedChunk/binary>>, BlockSize,
+                        ReadReqBodyFun, ReadReqBodyOpts
+                    );
+                true ->
+                    ExcessSize = ReceivedChunkSize - PreferredChunkSize,
+                    <<ChunkToWrite:PreferredChunkSize/binary, ExcessBytes:ExcessSize/binary>> = ReceivedChunk,
+                    {ok, NewHandle, _} = ?check(lfm:write(
+                        FileHandle, Offset, <<Buffer/binary, ChunkToWrite/binary>>
+                    )),
+                    write_req_body_to_file_in_blocks(
+                        NewHandle, Offset + BytesRemainingInCurrentBlock, Req1, ExcessBytes, BlockSize,
+                        ReadReqBodyFun, ReadReqBodyOpts
                     )
             end
     end.

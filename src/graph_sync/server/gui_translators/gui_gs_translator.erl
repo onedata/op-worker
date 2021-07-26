@@ -52,11 +52,15 @@ handshake_attributes(_Client) ->
             }}
     end,
 
+    BagitUploaderWorkflowSchemaId = maps:get(<<"bagitUploaderWorkflowSchemaId">>, OnezoneConfiguration, null),
+
     #{
         <<"providerName">> => ProviderName,
         <<"serviceVersion">> => op_worker:get_release_version(),
         <<"onezoneUrl">> => oneprovider:get_oz_url(),
         <<"transfersHistoryLimitPerFile">> => transferred_file:get_history_limit(),
+        <<"openfaasAvailable">> => atm_openfaas_task_executor:is_openfaas_available(),
+        <<"bagitUploaderWorkflowSchemaId">> => utils:undefined_to_null(BagitUploaderWorkflowSchemaId),
         <<"apiTemplates">> => XRootDApiTemplates#{
             <<"rest">> => #{
                 <<"listSharedDirectoryChildren">> => ?ZONE_SHARED_DATA_CURL_COMMAND_TEMPLATE("/children"),
@@ -77,6 +81,8 @@ handshake_attributes(_Client) ->
 %%--------------------------------------------------------------------
 -spec translate_value(gs_protocol:protocol_version(), gri:gri(),
     Value :: term()) -> no_return().
+translate_value(_, #gri{type = op_atm_store} = GRI, Data) ->
+    atm_store_gui_gs_translator:translate_value(GRI, Data);
 translate_value(_, #gri{type = op_dataset} = GRI, Value) ->
     dataset_gui_gs_translator:translate_value(GRI, Value);
 translate_value(_, #gri{type = op_file} = GRI, Value) ->
@@ -106,6 +112,22 @@ translate_value(ProtocolVersion, GRI, Data) ->
 -spec translate_resource(gs_protocol:protocol_version(), gri:gri(),
     ResourceData :: term()) -> Result | fun((aai:auth()) -> Result) when
     Result :: gs_protocol:data() | errors:error() | no_return().
+translate_resource(_, #gri{type = op_archive} = GRI, Data) ->
+    archive_gui_gs_translator:translate_resource(GRI, Data);
+translate_resource(_, #gri{type = op_atm_inventory} = GRI, Data) ->
+    atm_inventory_gui_gs_translator:translate_resource(GRI, Data);
+translate_resource(_, #gri{type = op_atm_lambda_snapshot} = GRI, Data) ->
+    atm_lambda_snapshot_gui_gs_translator:translate_resource(GRI, Data);
+translate_resource(_, #gri{type = op_atm_store} = GRI, Data) ->
+    atm_store_gui_gs_translator:translate_resource(GRI, Data);
+translate_resource(_, #gri{type = op_atm_task_execution} = GRI, Data) ->
+    atm_task_execution_gui_gs_translator:translate_resource(GRI, Data);
+translate_resource(_, #gri{type = op_atm_workflow_execution} = GRI, Data) ->
+    atm_workflow_execution_gui_gs_translator:translate_resource(GRI, Data);
+translate_resource(_, #gri{type = op_atm_workflow_schema} = GRI, Data) ->
+    atm_workflow_schema_gui_gs_translator:translate_resource(GRI, Data);
+translate_resource(_, #gri{type = op_atm_workflow_schema_snapshot} = GRI, Data) ->
+    atm_workflow_schema_snapshot_gui_gs_translator:translate_resource(GRI, Data);
 translate_resource(_, #gri{type = op_dataset} = GRI, Data) ->
     dataset_gui_gs_translator:translate_resource(GRI, Data);
 translate_resource(_, #gri{type = op_file} = GRI, Data) ->

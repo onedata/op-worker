@@ -83,6 +83,8 @@
 
 % Trash associated macros
 -define(TRASH_DIR_NAME, <<".trash">>).
+-define(TRASH_DIR_UUID_PREFIX, "trash_").
+-define(TRASH_DIR_UUID(SpaceId), <<?TRASH_DIR_UUID_PREFIX, SpaceId/binary>>).
 
 % Token that should be passed as initial token to start listing using tokens.
 -define(INITIAL_LS_TOKEN, <<>>).
@@ -92,5 +94,15 @@
 % Path types
 -define(CANONICAL_PATH, canonical_path).
 -define(UUID_BASED_PATH, uuid_based_path).
+
+% Following macros are used so that symlinks with absolute paths
+% can be used in Oneclient.
+% Oneclient replaces the ?SYMLINK_SPACE_ID_ABS_PATH_PREFIX(SpaceId) with
+% a mountpoint.
+-define(SYMLINK_SPACE_ID_PREFIX, "<__onedata_space_id:").
+-define(SYMLINK_SPACE_ID_SUFFIX, ">").
+-define(SYMLINK_SPACE_ID_ABS_PATH_PREFIX(SpaceId),
+    <<?SYMLINK_SPACE_ID_PREFIX, (SpaceId)/binary, ?SYMLINK_SPACE_ID_SUFFIX>>
+).
 
 -endif.
