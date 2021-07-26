@@ -17,6 +17,7 @@
 -include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/http/codes.hrl").
+-include_lib("ctool/include/http/headers.hrl").
 -include_lib("ctool/include/graph_sync/gri.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 
@@ -325,7 +326,7 @@ prepare_args_fun_rest(MemRef, create) ->
             method = post,
             path = <<"qos_requirements">>,
             body = json_utils:encode(maybe_inject_object_id(Data, Guid)),
-            headers = #{<<"content-type">> => <<"application/json">>}
+            headers = #{?HDR_CONTENT_TYPE => <<"application/json">>}
         } 
     end;
 
@@ -348,7 +349,7 @@ prepare_args_fun_rest(MemRef, evaluate_qos_expression) ->
             method = post,
             path = <<"spaces/", SpaceId/binary, "/evaluate_qos_expression">>,
             body = json_utils:encode(Data),
-            headers = #{<<"content-type">> => <<"application/json">>}
+            headers = #{?HDR_CONTENT_TYPE => <<"application/json">>}
         }
     end;
 

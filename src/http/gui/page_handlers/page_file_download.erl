@@ -20,6 +20,7 @@
 -include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/http/headers.hrl").
 
 
 -export([gen_file_download_url/3, handle/2]).
@@ -184,7 +185,7 @@ set_content_disposition_header(Filename, Req) ->
     %% @todo VFS-2073 - check if needed
     %% FileNameUrlEncoded = http_utils:url_encode(FileName),
     cowboy_req:set_resp_header(
-        <<"content-disposition">>,
+        ?HDR_CONTENT_DISPOSITION,
         <<"attachment; filename=\"", Filename/binary, "\"">>,
         %% @todo VFS-2073 - check if needed
         %% "filename*=UTF-8''", FileNameUrlEncoded/binary>>

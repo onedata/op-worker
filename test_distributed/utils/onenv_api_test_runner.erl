@@ -1072,7 +1072,7 @@ make_rest_request(Node, Client, #rest_args{
     ],
     case http_client:request(Method, URL, HeadersWithAuth, Body, Opts) of
         {ok, RespCode, RespHeaders, RespBody} ->
-            case maps:get(<<"content-type">>, RespHeaders, undefined) of
+            case maps:get(?HDR_CONTENT_TYPE, RespHeaders, undefined) of
                 <<"application/json">> ->
                     {ok, RespCode, RespHeaders, json_utils:decode(RespBody)};
                 _ ->

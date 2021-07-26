@@ -16,6 +16,7 @@
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/performance.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/http/headers.hrl").
 
 %% API
 -export([
@@ -288,7 +289,7 @@ download_file_in_blocks(Config) ->
     % remaining bytes.
     set_storage_block_size(Workers, 50),
     DataPart = binary:part(Data, {33, 100}),
-    RangeHeader = {<<"range">>, <<"bytes=33-132">>},    % 33-132 inclusive
+    RangeHeader = {?HDR_RANGE, <<"bytes=33-132">>},    % 33-132 inclusive
     {ok, _, _, Response2} = ?assertMatch(
         {ok, 206, _Headers, _Response},
         cdmi_test_utils:do_request(WorkerP2, FilePath, get, [RangeHeader | AuthHeaders], <<>>)
