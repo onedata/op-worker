@@ -68,4 +68,15 @@
 -define(SKIPPED_STATUS, skipped).
 
 
+%% Atm logging related macros
+
+-define(LOGGER_DEBUG, <<"debug">>).
+-define(LOGGER_INFO, <<"info">>).
+-define(LOGGER_NOTICE, <<"notice">>).
+-define(LOGGER_WARNING, <<"warning">>).
+-define(LOGGER_ALERT, <<"alert">>).
+-define(LOGGER_ERROR, <<"error">>).
+-define(LOGGER_CRITICAL, <<"critical">>).
+-define(LOGGER_EMERGENCY, <<"emergency">>).
+
 -endif.

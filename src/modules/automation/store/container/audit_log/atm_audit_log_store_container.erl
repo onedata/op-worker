@@ -8,6 +8,12 @@
 %%% @doc
 %%% This module implements `atm_store_container` functionality for `audit_log`
 %%% atm_store type.
+%%%
+%%%                             !! CAUTION !!
+%%% This store container is directly used by `atm_workflow_execution_logger`
+%%% which in turn depends that `apply_operation` doesn't change container.
+%%% Any changes made in this module may affect logger and should be
+%%% accounted for.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_audit_log_store_container).
@@ -58,8 +64,9 @@
 -export_type([initial_value/0, operation_options/0, browse_options/0, record/0]).
 
 -define(ALLOWED_SEVERITY, [
-    <<"debug">>, <<"info">>, <<"notice">>, <<"warning">>, 
-    <<"error">>, <<"critical">>, <<"alert">>, <<"emergency">>
+    ?LOGGER_DEBUG, ?LOGGER_INFO, ?LOGGER_NOTICE,
+    ?LOGGER_WARNING, ?LOGGER_ALERT,
+    ?LOGGER_ERROR, ?LOGGER_CRITICAL, ?LOGGER_EMERGENCY
 ]).
 
 %% @TODO VFS-8068 Reuse duplicated code with atm_list_store_container and atm_infinite_log_container

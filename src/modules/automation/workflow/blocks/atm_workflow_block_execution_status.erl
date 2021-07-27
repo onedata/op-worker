@@ -8,7 +8,7 @@
 %%% @doc
 %%% This module provides helper functions for management of automation workflow
 %%% block status.
-%%% An automation workflow execution block is an entity which  consists of
+%%% An automation workflow execution block is an entity which consists of
 %%% one or many execution elements (e.g atm lane is made of atm parallel boxes
 %%% which are themselves made of atm tasks). The status of such entity is naturally
 %%% inferred based on statuses of all it's elements and may only change

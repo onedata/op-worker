@@ -150,33 +150,33 @@ get_record_struct(2) ->
 upgrade_record(1, {
     ?MODULE,
     AtmWorkflowExecutionId,
-    AtmLaneIndex,
-    AtmParallelBoxIndex,
-    AtmTaskSchemaId,
-    AtmTaskExecutor,
-    AtmTaskArgumentSpecs,
-    AtmTaskResultSpecs,
-    AtmTaskStatus,
-    AtmTaskStatusChanged,
+    LaneIndex,
+    ParallelBoxIndex,
+    SchemaId,
+    Executor,
+    ArgumentSpecs,
+    ResultSpecs,
+    Status,
+    StatusChanged,
     ItemsInProcessing,
     ItemsProcessed,
     ItemsFailed
 }) ->
     {2, #atm_task_execution{
         workflow_execution_id = AtmWorkflowExecutionId,
-        lane_index = AtmLaneIndex,
-        parallel_box_index = AtmParallelBoxIndex,
+        lane_index = LaneIndex,
+        parallel_box_index = ParallelBoxIndex,
 
-        schema_id = AtmTaskSchemaId,
+        schema_id = SchemaId,
 
-        executor = AtmTaskExecutor,
-        argument_specs = AtmTaskArgumentSpecs,
-        result_specs = AtmTaskResultSpecs,
+        executor = Executor,
+        argument_specs = ArgumentSpecs,
+        result_specs = ResultSpecs,
 
         system_audit_log_id = undefined,
 
-        status = AtmTaskStatus,
-        status_changed = AtmTaskStatusChanged,
+        status = Status,
+        status_changed = StatusChanged,
 
         items_in_processing = ItemsInProcessing,
         items_processed = ItemsProcessed,

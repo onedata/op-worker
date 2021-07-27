@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% The module handling the task execution process.
+%%% This module handles the task execution process.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_task_execution_handler).

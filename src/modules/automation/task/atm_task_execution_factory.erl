@@ -138,7 +138,8 @@ create_audit_log(#atm_workflow_execution_creation_ctx{
 %% @private
 -spec delete_audit_log(atm_store:id()) -> ok.
 delete_audit_log(AtmSystemAuditLogId) ->
-    catch atm_store_api:delete(AtmSystemAuditLogId), ok.
+    catch atm_store_api:delete(AtmSystemAuditLogId),
+    ok.
 
 
 %% @private
