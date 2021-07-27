@@ -210,7 +210,7 @@ end_per_suite(_Config) ->
 init_per_testcase(browse_by_timestamp_test, Config) ->
     ct:timetrap({minutes, 5}),
     
-    ok = clock_freezer_mock:setup_on_nodes(oct_background:get_all_providers_nodes(), [global_clock, ?MODULE]),
+    ok = clock_freezer_mock:setup_for_ct(oct_background:get_all_providers_nodes(), [global_clock, ?MODULE]),
     Config;
 init_per_testcase(_Case, Config) ->
     Config.

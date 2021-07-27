@@ -21,7 +21,6 @@
     get_frozen_time_hours/0,
     simulate_seconds_passing/1,
     set_current_time_seconds/1,
-
     global_seconds/1
 ]).
 
@@ -38,12 +37,12 @@
 %%--------------------------------------------------------------------
 -spec freeze_time(Config :: term()) -> ok.
 freeze_time(Config) ->
-    clock_freezer_mock:setup_on_nodes(all_nodes(Config), [global_clock]).
+    clock_freezer_mock:setup_for_ct(all_nodes(Config), [global_clock]).
 
 
 -spec unfreeze_time(Config :: term()) -> ok.
 unfreeze_time(Config) ->
-    clock_freezer_mock:teardown_on_nodes(all_nodes(Config)).
+    clock_freezer_mock:teardown_for_ct(all_nodes(Config)).
 
 
 -spec get_frozen_time_seconds() -> time:seconds().
