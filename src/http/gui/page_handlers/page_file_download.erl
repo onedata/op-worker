@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Lukasz Opiola
-%%% @copyright (C) 2018-2020 ACK CYFRONET AGH
+%%% @copyright (C) 2018-2021 ACK CYFRONET AGH
 %%% This software is released under the MIT license 
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -140,8 +140,8 @@ handle_http_download(FileDownloadCode, SessionId, FileGuids, FollowSymlinks, Req
     case {FileAttrsList, FollowSymlinks} of
         {{error, Errno}, _} ->
             http_req:send_error(?ERROR_POSIX(Errno), Req3);
-        {[#file_attr{name = FileName, type = ?DIRECTORY_TYPE}], _} ->
-            Req4 = set_content_disposition_header(<<(normalize_filename(FileName))/binary, ".tar">>, Req3),
+        {[#file_attr{type = ?DIRECTORY_TYPE} = Attr], _} ->
+            Req4 = set_dir_content_disposition_header(Attr, Req3),
             file_download_utils:download_tarball(
                 FileDownloadCode, SessionId, FileAttrsList, FollowSymlinks, Req4
             );
@@ -150,7 +150,7 @@ handle_http_download(FileDownloadCode, SessionId, FileGuids, FollowSymlinks, Req
             file_download_utils:download_single_file(
                 SessionId, Attr, fun() -> file_download_code:remove(FileDownloadCode) end, Req4
             );
-        {[#file_attr{name = FileName, type = ?SYMLINK_TYPE, guid = Guid} = Attr], true} ->
+        {[#file_attr{name = FileName, type = ?SYMLINK_TYPE, guid = Guid}], true} ->
             case lfm:stat(SessionId, ?FILE_REF(Guid, true)) of
                 {ok, #file_attr{type = ?DIRECTORY_TYPE}} ->
                     Req4 = set_content_disposition_header(<<(normalize_filename(FileName))/binary, ".tar">>, Req3),
@@ -177,6 +177,19 @@ handle_http_download(FileDownloadCode, SessionId, FileGuids, FollowSymlinks, Req
                 FileDownloadCode, SessionId, FileAttrsList, FollowSymlinks, Req4
             )
     end.
+
+
+%% @private
+-spec set_dir_content_disposition_header(lfm_attrs:file_attributes(), cowboy_req:req()) -> cowboy_req:req().
+set_dir_content_disposition_header(#file_attr{guid = Guid, name = FileName}, Req) ->
+   FinalFileName = case archivisation_tree:uuid_to_archive_id(file_id:guid_to_uuid(Guid)) of
+       undefined ->
+           FileName;
+       ArchiveId ->
+           {ok, CustomFileName} = archivisation_tree:get_custom_archive_name(ArchiveId),
+           CustomFileName
+    end,
+    set_content_disposition_header(<<(normalize_filename(FinalFileName))/binary, ".tar">>, Req).
 
 
 %% @private

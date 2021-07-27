@@ -51,7 +51,7 @@
 
 %% API
 -export([create_archive_dir/4, is_special_uuid/1, is_in_archive/1,
-    uuid_to_archive_id/1, extract_archive_id/1]).
+    uuid_to_archive_id/1, extract_archive_id/1, get_custom_archive_name/1]).
 
 %%%===================================================================
 %%% API functions
@@ -116,6 +116,21 @@ extract_archive_id(CanonicalPath) ->
             {ok, ArchiveId};
         _ ->
             ?ERROR_NOT_FOUND
+    end.
+
+
+-spec get_custom_archive_name(archive:id()) -> {ok, binary()} | {error, term()}.
+get_custom_archive_name(ArchiveId) ->
+    case archive:get_description(ArchiveId) of
+        {ok, Description} ->
+            case re:run(Description, <<"_USE_FILENAME: *([a-zA-Z-_]+)">>, [{capture, all_but_first, binary}]) of
+                {match, [Filename]} ->
+                    {ok, Filename};
+                nomatch ->
+                    {ok, ?ARCHIVE_DIR_NAME(ArchiveId)}
+            end;
+        {error, _} = Error -> 
+            Error
     end.
 
 %%%===================================================================
