@@ -19,6 +19,7 @@
 -include("proto/oneprovider/provider_messages.hrl").
 -include_lib("ctool/include/graph_sync/gri.hrl").
 -include_lib("ctool/include/http/codes.hrl").
+-include_lib("ctool/include/http/headers.hrl").
 -include_lib("ctool/include/privileges.hrl").
 
 -export([
@@ -154,7 +155,7 @@ build_establish_dataset_prepare_rest_args_fun(MemRef) ->
         #rest_args{
             method = post,
             path = <<"datasets">>,
-            headers = #{<<"content-type">> => <<"application/json">>},
+            headers = #{?HDR_CONTENT_TYPE => <<"application/json">>},
             body = json_utils:encode(substitute_root_file(MemRef, Data))
         }
     end.
@@ -190,14 +191,14 @@ substitute_root_file(MemRef, Data) ->
 build_establish_dataset_validate_rest_call_result_fun(MemRef) ->
     fun(#api_test_ctx{node = TestNode}, Result) ->
         {ok, _, Headers, Body} = ?assertMatch(
-            {ok, ?HTTP_201_CREATED, #{<<"Location">> := _}, #{<<"datasetId">> := _}},
+            {ok, ?HTTP_201_CREATED, #{?HDR_LOCATION := _}, #{<<"datasetId">> := _}},
             Result
         ),
         DatasetId = maps:get(<<"datasetId">>, Body),
         api_test_memory:set(MemRef, dataset_id, DatasetId),
 
         ExpLocation = api_test_utils:build_rest_url(TestNode, [<<"datasets">>, DatasetId]),
-        ?assertEqual(ExpLocation, maps:get(<<"Location">>, Headers))
+        ?assertEqual(ExpLocation, maps:get(?HDR_LOCATION, Headers))
     end.
 
 
@@ -518,7 +519,7 @@ build_update_dataset_prepare_rest_args_fun(DatasetId) ->
         #rest_args{
             method = patch,
             path = <<"datasets/", Id/binary>>,
-            headers = #{<<"content-type">> => <<"application/json">>},
+            headers = #{?HDR_CONTENT_TYPE => <<"application/json">>},
             body = json_utils:encode(Data1)
         }
     end.

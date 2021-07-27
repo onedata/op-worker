@@ -19,8 +19,9 @@
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
--include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/privileges.hrl").
+-include_lib("ctool/include/http/headers.hrl").
+-include_lib("ctool/include/test/test_utils.hrl").
 
 
 % assertions
@@ -131,7 +132,7 @@ add_qos_by_rest(Config, Worker, FilePath, QosExpression, ReplicasNum) ->
     FileGuid = qos_tests_utils:get_guid(Worker, ?SESS_ID(Config, Worker), FilePath),
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
     URL = <<"qos_requirements">>,
-    Headers = [?USER_TOKEN_HEADER(Config, ?USER_ID), {<<"Content-type">>, <<"application/json">>}],
+    Headers = [?USER_TOKEN_HEADER(Config, ?USER_ID), {?HDR_CONTENT_TYPE, <<"application/json">>}],
     ReqBody = #{
         <<"expression">> => QosExpression,
         <<"replicasNum">> => ReplicasNum,

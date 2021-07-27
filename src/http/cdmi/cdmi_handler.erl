@@ -23,6 +23,7 @@
 -include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/errors.hrl").
+-include_lib("ctool/include/http/headers.hrl").
 
 %% cowboy rest handler API
 -export([
@@ -613,8 +614,8 @@ redirect_to(Req, CdmiReq, Path) ->
         _ -> <<"https://", Hostname/binary, "/cdmi", Path/binary, "?", Qs/binary>>
     end,
     NewReq = cowboy_req:reply(?HTTP_302_FOUND, #{
-        <<"location">> => Location,
-        <<"cache-control">> => <<"max-age=3600">>
+        ?HDR_LOCATION => Location,
+        ?HDR_CACHE_CONTROL => <<"max-age=3600">>
     }, Req),
     {stop, NewReq, CdmiReq}.
 

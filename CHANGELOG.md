@@ -4,6 +4,8 @@ Release notes for project op-worker
 CHANGELOG
 ---------
 
+### 21.02.0-alpha19
+
 ### 21.02.0-alpha18
 
 -   **VFS-7947** Added possibility to run workflows directly from file
