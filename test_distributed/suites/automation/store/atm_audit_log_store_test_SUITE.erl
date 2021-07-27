@@ -143,11 +143,10 @@ browse_by_offset_test(_Config) ->
 
 
 browse_by_timestamp_test(_Config) ->
-    ok = clock_freezer_mock:set_current_time_millis(123),
+    ok = time_test_utils:set_current_time_millis(123),
     AtmWorkflowExecutionCtx = atm_store_test_utils:create_workflow_execution_ctx(
         krakow, user1, space_krk
     ),
-    [Node | _] = oct_background:get_provider_nodes(krakow),
     ItemsNum = rand:uniform(1000),
     Items = lists:seq(1, ItemsNum),
     {ok, AtmStoreId} = atm_store_test_utils:create_store(
@@ -155,7 +154,7 @@ browse_by_timestamp_test(_Config) ->
         ?ATM_AUDIT_LOG_STORE_SCHEMA#atm_store_schema{data_spec = #atm_data_spec{type = atm_object_type}}
     ),
     [FirstTimestamp | _] = lists:map(fun(Index) ->
-        Timestamp = rpc:call(Node, global_clock, timestamp_millis, []),
+        Timestamp = time_test_utils:get_frozen_time_millis(),
         Entry = #{<<"value">> => Index},
         ItemToAdd = case rand:uniform(4) of
             1 -> Entry;
@@ -166,7 +165,7 @@ browse_by_timestamp_test(_Config) ->
         ?assertEqual(ok, atm_store_test_utils:apply_operation(
             krakow, AtmWorkflowExecutionCtx, append, ItemToAdd, #{}, AtmStoreId
         )),
-        clock_freezer_mock:simulate_millis_passing(1),
+        time_test_utils:simulate_millis_passing(1),
         Timestamp
     end, Items),
     {ok, AtmStore} = atm_store_test_utils:get(krakow, AtmStoreId),
@@ -209,10 +208,11 @@ end_per_suite(_Config) ->
 
 init_per_testcase(browse_by_timestamp_test, Config) ->
     ct:timetrap({minutes, 5}),
-    
-    ok = clock_freezer_mock:setup_for_ct(oct_background:get_all_providers_nodes(), [global_clock, ?MODULE]),
+
+    ok = time_test_utils:freeze_time(Config),
     Config;
 init_per_testcase(_Case, Config) ->
+    time_test_utils:unfreeze_time(Config),
     Config.
 
 

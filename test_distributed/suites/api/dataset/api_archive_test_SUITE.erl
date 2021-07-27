@@ -266,7 +266,7 @@ build_verify_archive_created_fun(MemRef, Providers) ->
         }) ->
             ArchiveId = api_test_memory:get(MemRef, archive_id),
 
-            CreationTime = time_test_utils:global_seconds(TestNode),
+            CreationTime = time_test_utils:get_frozen_time_seconds(TestNode),
             DatasetId = maps:get(<<"datasetId">>, Data),
             ConfigJson = maps:get(<<"config">>, Data, #{}),
             Description = maps:get(<<"description">>, Data, ?DEFAULT_ARCHIVE_DESCRIPTION),

@@ -16,12 +16,10 @@
 
 
 -export([
-    freeze_time/1, unfreeze_time/1,
-    get_frozen_time_seconds/0,
-    get_frozen_time_hours/0,
-    simulate_seconds_passing/1,
-    set_current_time_seconds/1,
-    global_seconds/1
+    freeze_time/1, freeze_time/2, unfreeze_time/1,
+    get_frozen_time_millis/0, get_frozen_time_seconds/0, get_frozen_time_hours/0,
+    simulate_millis_passing/1, simulate_seconds_passing/1,
+    set_current_time_millis/1, set_current_time_seconds/1
 ]).
 
 
@@ -45,6 +43,11 @@ unfreeze_time(Config) ->
     clock_freezer_mock:teardown_for_ct(all_nodes(Config)).
 
 
+-spec get_frozen_time_millis() -> time:millis().
+get_frozen_time_millis() ->
+    clock_freezer_mock:current_time_millis().
+
+
 -spec get_frozen_time_seconds() -> time:seconds().
 get_frozen_time_seconds() ->
     clock_freezer_mock:current_time_seconds().
@@ -60,13 +63,19 @@ simulate_seconds_passing(Seconds) ->
     clock_freezer_mock:simulate_seconds_passing(Seconds).
 
 
+-spec simulate_millis_passing(time:millis()) -> time:millis().
+simulate_millis_passing(Seconds) ->
+    clock_freezer_mock:simulate_millis_passing(Seconds).
+
+
+-spec set_current_time_millis(time:millis()) -> ok.
+set_current_time_millis(Millis) ->
+    clock_freezer_mock:set_current_time_millis(Millis).
+
+
 -spec set_current_time_seconds(time:seconds()) -> ok.
 set_current_time_seconds(Seconds) ->
     clock_freezer_mock:set_current_time_millis(Seconds * 1000).
-
--spec global_seconds(node()) -> time:seconds().
-global_seconds(Node) ->
-    rpc:call(Node, global_clock, timestamp_seconds, []).
 
 %% ====================================================================
 %% Internal functions
@@ -76,4 +85,4 @@ global_seconds(Node) ->
 all_nodes(Config) ->
     ?config(oz_worker_nodes, Config, []) ++ ?config(op_worker_nodes, Config, []) ++
         ?config(oz_panel_nodes, Config, []) ++ ?config(op_panel_nodes, Config, []) ++
-            ?config(cm_nodes, Config, []).
+        ?config(cm_nodes, Config, []).
