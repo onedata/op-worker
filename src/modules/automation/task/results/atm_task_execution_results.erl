@@ -45,15 +45,12 @@ build_specs(AtmLambdaResultSpecs, AtmTaskSchemaResultMappers) ->
 
 
 -spec apply(
-    atm_workflow_execution_env:record(),
+    atm_workflow_execution_ctx:record(),
     [atm_task_execution_result_spec:record()],
     json_utils:json_map()
 ) ->
     ok | no_return().
-apply(AtmWorkflowExecutionEnv, AtmTaskExecutionResultSpecs, Results) ->
-    AtmWorkflowExecutionAuth = atm_workflow_execution_env:acquire_workflow_execution_auth(
-        AtmWorkflowExecutionEnv
-    ),
+apply(AtmWorkflowExecutionCtx, AtmTaskExecutionResultSpecs, Results) ->
     lists:foreach(fun(AtmTaskExecutionResultSpec) ->
         ResultName = atm_task_execution_result_spec:get_name(AtmTaskExecutionResultSpec),
 
@@ -63,8 +60,7 @@ apply(AtmWorkflowExecutionEnv, AtmTaskExecutionResultSpecs, Results) ->
             Result ->
                 try
                     atm_task_execution_result_spec:apply_result(
-                        AtmWorkflowExecutionEnv, AtmWorkflowExecutionAuth,
-                        AtmTaskExecutionResultSpec, Result
+                        AtmWorkflowExecutionCtx, AtmTaskExecutionResultSpec, Result
                     )
                 catch _:Reason ->
                     throw(?ERROR_ATM_TASK_RESULT_MAPPING_FAILED(ResultName, Reason))

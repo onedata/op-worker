@@ -25,7 +25,7 @@
     delete_all/1, delete/1
 ]).
 -export([get_spec/1]).
--export([get_statuses/1, update_task_status/3]).
+-export([gather_statuses/1, update_task_status/3]).
 -export([to_json/1]).
 
 %% persistent_record callbacks
@@ -120,25 +120,25 @@ create(AtmWorkflowExecutionCreationCtx, AtmLaneIndex, AtmParallelBoxIndex, #atm_
     {AtmParallelBoxExecution, AtmTaskStoresRegistry}.
 
 
--spec prepare_all(atm_workflow_execution_auth:record(), [record()]) -> ok | no_return().
-prepare_all(AtmWorkflowExecutionAuth, AtmParallelBoxExecutions) ->
+-spec prepare_all(atm_workflow_execution_ctx:record(), [record()]) -> ok | no_return().
+prepare_all(AtmWorkflowExecutionCtx, AtmParallelBoxExecutions) ->
     atm_parallel_runner:foreach(fun(#atm_parallel_box_execution{
         schema_id = AtmParallelBoxSchemaId
     } = AtmParallelBoxExecution) ->
         try
-            prepare(AtmWorkflowExecutionAuth, AtmParallelBoxExecution)
+            prepare(AtmWorkflowExecutionCtx, AtmParallelBoxExecution)
         catch _:Reason ->
             throw(?ERROR_ATM_PARALLEL_BOX_EXECUTION_PREPARATION_FAILED(AtmParallelBoxSchemaId, Reason))
         end
     end, AtmParallelBoxExecutions).
 
 
--spec prepare(atm_workflow_execution_auth:record(), record()) -> ok | no_return().
-prepare(AtmWorkflowExecutionAuth, #atm_parallel_box_execution{
+-spec prepare(atm_workflow_execution_ctx:record(), record()) -> ok | no_return().
+prepare(AtmWorkflowExecutionCtx, #atm_parallel_box_execution{
     task_registry = AtmTaskExecutionRegistry
 }) ->
     atm_task_execution_api:prepare_all(
-        AtmWorkflowExecutionAuth, maps:values(AtmTaskExecutionRegistry)
+        AtmWorkflowExecutionCtx, maps:values(AtmTaskExecutionRegistry)
     ).
 
 
@@ -174,8 +174,8 @@ get_spec(#atm_parallel_box_execution{task_registry = AtmTaskExecutions}) ->
     end, #{}, maps:values(AtmTaskExecutions)).
 
 
--spec get_statuses([record()]) -> [AtmParallelBoxExecutionStatus :: atm_task_execution:status()].
-get_statuses(AtmParallelBoxExecutions) ->
+-spec gather_statuses([record()]) -> [AtmParallelBoxExecutionStatus :: atm_task_execution:status()].
+gather_statuses(AtmParallelBoxExecutions) ->
     lists:map(fun(#atm_parallel_box_execution{status = Status}) ->
         Status
     end, AtmParallelBoxExecutions).

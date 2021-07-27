@@ -145,7 +145,7 @@ iterate_test_base(AtmStoreIteratorStrategy, ValueToSet, ExpectedValue) ->
         strategy = AtmStoreIteratorStrategy
     },
     AtmStoreIterator = atm_store_test_utils:acquire_store_iterator(
-        krakow, AtmWorkflowExecutionEnv, AtmStoreIteratorSpec
+        krakow, AtmStoreId, AtmStoreIteratorSpec
     ),
     
     ?assertEqual(stop, atm_store_test_utils:iterator_get_next(krakow, AtmWorkflowExecutionEnv, AtmStoreIterator)),
@@ -178,7 +178,7 @@ reuse_iterator_test(_Config) ->
         strategy = #atm_store_iterator_serial_strategy{}
     },
     AtmSerialIterator0 = atm_store_test_utils:acquire_store_iterator(
-        krakow, AtmWorkflowExecutionEnv, AtmStoreIteratorSpec
+        krakow, AtmStoreId, AtmStoreIteratorSpec
     ),
 
     {ok, _, AtmSerialIterator1} = ?assertMatch({ok, 8, _}, atm_store_test_utils:iterator_get_next(krakow, AtmWorkflowExecutionEnv, AtmSerialIterator0)),

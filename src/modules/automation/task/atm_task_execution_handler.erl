@@ -29,43 +29,43 @@
 
 
 -spec process_item(
-    atm_workflow_execution_env:record(),
+    atm_workflow_execution_ctx:record(),
     atm_task_execution:id(),
     json_utils:json_term(),
     binary(),
     binary()
 ) ->
     ok | no_return().
-process_item(AtmWorkflowExecutionEnv, AtmTaskExecutionId, Item, ReportResultUrl, HeartbeatUrl) ->
+process_item(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, ReportResultUrl, HeartbeatUrl) ->
     #document{value = #atm_task_execution{
         executor = AtmTaskExecutor,
         argument_specs = AtmTaskExecutionArgSpecs
     }} = update_items_in_processing(AtmTaskExecutionId),
 
-    AtmTaskExecutionCtx = atm_task_execution_ctx:build(
-        AtmWorkflowExecutionEnv, atm_task_executor:in_readonly_mode(AtmTaskExecutor),
+    AtmJobExecutionCtx = atm_job_execution_ctx:build(
+        AtmWorkflowExecutionCtx, atm_task_executor:in_readonly_mode(AtmTaskExecutor),
         Item, ReportResultUrl, HeartbeatUrl
     ),
-    Args = atm_task_execution_arguments:construct_args(AtmTaskExecutionCtx, AtmTaskExecutionArgSpecs),
+    Args = atm_task_execution_arguments:construct_args(AtmJobExecutionCtx, AtmTaskExecutionArgSpecs),
 
-    atm_task_executor:run(AtmTaskExecutionCtx, Args, AtmTaskExecutor).
+    atm_task_executor:run(AtmJobExecutionCtx, Args, AtmTaskExecutor).
 
 
 -spec process_results(
-    atm_workflow_execution_env:record(),
+    atm_workflow_execution_ctx:record(),
     atm_task_execution:id(),
     error | json_utils:json_map()
 ) ->
     ok | no_return().
-process_results(_AtmWorkflowExecutionEnv, AtmTaskExecutionId, error) ->
+process_results(_AtmWorkflowExecutionCtx, AtmTaskExecutionId, error) ->
     update_items_failed_and_processed(AtmTaskExecutionId);
 
-process_results(AtmWorkflowExecutionEnv, AtmTaskExecutionId, Results) when is_map(Results) ->
+process_results(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Results) when is_map(Results) ->
     {ok, #document{value = #atm_task_execution{
         result_specs = AtmTaskExecutionResultSpecs
     }}} = atm_task_execution:get(AtmTaskExecutionId),
 
-    atm_task_execution_results:apply(AtmWorkflowExecutionEnv, AtmTaskExecutionResultSpecs, Results),
+    atm_task_execution_results:apply(AtmWorkflowExecutionCtx, AtmTaskExecutionResultSpecs, Results),
     update_items_processed(AtmTaskExecutionId);
 
 process_results(_AtmWorkflowExecutionEnv, _AtmTaskExecutionId, _Results) ->

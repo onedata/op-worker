@@ -141,7 +141,7 @@ iterate_test_base_internal(AtmStoreSchema, AtmStoreIteratorStrategy, Length, Exp
         strategy = AtmStoreIteratorStrategy
     },
     AtmStoreIterator0 = atm_store_test_utils:acquire_store_iterator(
-        krakow, AtmWorkflowExecutionEnv, AtmStoreIteratorSpec
+        krakow, AtmStoreId, AtmStoreIteratorSpec
     ),
 
     lists:foldl(fun(Expected, Iterator) ->
@@ -173,7 +173,7 @@ reuse_iterator_test_base(AtmStoreSchema, ResultMapper) ->
         store_schema_id = AtmStoreDummySchemaId,
         strategy = #atm_store_iterator_serial_strategy{}
     },
-    AtmSerialIterator0 = atm_store_test_utils:acquire_store_iterator(krakow, AtmWorkflowExecutionEnv, AtmStoreIteratorSpec),
+    AtmSerialIterator0 = atm_store_test_utils:acquire_store_iterator(krakow, AtmStoreId, AtmStoreIteratorSpec),
 
     {ok, _, AtmSerialIterator1} = ?assertMatch({ok, 1, _}, 
         map_iteration_result(atm_store_test_utils:iterator_get_next(krakow, AtmWorkflowExecutionEnv, AtmSerialIterator0), ResultMapper)),

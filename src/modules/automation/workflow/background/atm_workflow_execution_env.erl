@@ -24,7 +24,8 @@
 -export([
     build/5,
     get_workflow_store_id/2,
-    acquire_workflow_execution_auth/1
+    acquire_workflow_execution_auth/1,
+    acquire_workflow_execution_ctx/2
 ]).
 
 
@@ -81,10 +82,49 @@ get_workflow_store_id(AtmStoreSchemaId, #atm_workflow_execution_env{
     end.
 
 
--spec acquire_workflow_execution_auth(record()) -> atm_workflow_execution_auth:record().
+-spec acquire_workflow_execution_ctx(undefined | atm_task_execution:id(), record()) ->
+    atm_workflow_execution_ctx:record() | no_return().
+acquire_workflow_execution_ctx(AtmTaskExecutionId, Record = #atm_workflow_execution_env{
+    workflow_store_registry = AtmWorkflowStoreRegistry,
+    workflow_audit_log_store_container = AtmWorkflowAuditLogStoreContainer
+}) ->
+    AtmWorkflowExecutionAuth = acquire_workflow_execution_auth(Record),
+
+    AtmWorkflowExecutionLogger = atm_workflow_execution_logger:build(
+        AtmWorkflowExecutionAuth,
+        get_task_audit_log_store_container(AtmTaskExecutionId, Record),
+        AtmWorkflowAuditLogStoreContainer
+    ),
+
+    atm_workflow_execution_ctx:build(
+        AtmWorkflowExecutionAuth, AtmWorkflowExecutionLogger, AtmWorkflowStoreRegistry
+    ).
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+
+%% @private
+-spec acquire_workflow_execution_auth(record()) ->
+    atm_workflow_execution_auth:record() | no_return().
 acquire_workflow_execution_auth(#atm_workflow_execution_env{
     space_id = SpaceId,
     workflow_execution_id = AtmWorkflowExecutionId
 }) ->
     CreatorUserCtx = atm_workflow_execution_session:acquire(AtmWorkflowExecutionId),
     atm_workflow_execution_auth:build(SpaceId, AtmWorkflowExecutionId, CreatorUserCtx).
+
+
+%% @private
+-spec get_task_audit_log_store_container(undefined | atm_task_execution:id(), record()) ->
+    undefined | atm_store_container:record().
+get_task_audit_log_store_container(_AtmTaskExecutionId, #atm_workflow_execution_env{
+    task_store_registry = undefined
+}) ->
+    undefined;
+get_task_audit_log_store_container(AtmTaskExecutionId, #atm_workflow_execution_env{
+    task_store_registry = AtmTaskStoreRegistry
+}) ->
+    maps:get(AtmTaskExecutionId, AtmTaskStoreRegistry, undefined).
