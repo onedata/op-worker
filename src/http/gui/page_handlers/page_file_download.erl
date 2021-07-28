@@ -186,8 +186,7 @@ set_dir_content_disposition_header(#file_attr{guid = Guid, name = FileName}, Req
        undefined ->
            FileName;
        ArchiveId ->
-           {ok, CustomFileName} = archivisation_tree:get_custom_archive_name(ArchiveId),
-           CustomFileName
+           archivisation_tree:get_filename_for_download(ArchiveId)
     end,
     set_content_disposition_header(<<(normalize_filename(FinalFileName))/binary, ".tar">>, Req).
 
