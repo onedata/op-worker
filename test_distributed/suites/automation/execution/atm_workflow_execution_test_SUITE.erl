@@ -221,7 +221,7 @@ mock_openfaas() ->
     ok = test_utils:mock_expect(Worker, atm_openfaas_task_executor, run,
         fun(AtmJobExecutionCtx, Data, AtmTaskExecutor) ->
             Image = get_executor_image(AtmTaskExecutor),
-            FinishCallbackUrl = atm_job_execution_ctx:get_report_result_url(AtmJobExecutionCtx),
+            FinishCallbackUrl = atm_job_ctx:get_report_result_url(AtmJobExecutionCtx),
 
             spawn(fun() ->
                 %% sleep, to simulate openfaas calculation delay

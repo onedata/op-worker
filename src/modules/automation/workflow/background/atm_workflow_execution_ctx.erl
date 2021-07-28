@@ -47,7 +47,7 @@ acquire(AtmTaskExecutionId, AtmWorkflowExecutionEnv) ->
 
     #atm_workflow_execution_ctx{
         workflow_execution_auth = AtmWorkflowExecutionAuth,
-        workflow_execution_logger = atm_workflow_execution_env:get_logger(
+        workflow_execution_logger = atm_workflow_execution_env:acquire_logger(
             AtmTaskExecutionId, AtmWorkflowExecutionAuth, AtmWorkflowExecutionEnv
         ),
         workflow_execution_env = AtmWorkflowExecutionEnv

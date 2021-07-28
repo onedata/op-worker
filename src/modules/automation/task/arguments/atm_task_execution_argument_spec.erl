@@ -79,13 +79,13 @@ get_name(#atm_task_execution_argument_spec{name = ArgName}) ->
     ArgName.
 
 
--spec construct_arg(atm_job_execution_ctx:record(), record()) ->
+-spec construct_arg(atm_job_ctx:record(), record()) ->
     json_utils:json_term() | no_return().
-construct_arg(AtmJobExecutionCtx, AtmTaskExecutionArgSpec = #atm_task_execution_argument_spec{
+construct_arg(AtmJobCtx, AtmTaskExecutionArgSpec = #atm_task_execution_argument_spec{
     value_builder = ArgValueBuilder
 }) ->
-    ArgValue = build_value(AtmJobExecutionCtx, ArgValueBuilder),
-    validate_value(AtmJobExecutionCtx, ArgValue, AtmTaskExecutionArgSpec),
+    ArgValue = build_value(AtmJobCtx, ArgValueBuilder),
+    validate_value(AtmJobCtx, ArgValue, AtmTaskExecutionArgSpec),
 
     ArgValue.
 
@@ -138,25 +138,25 @@ db_decode(#{
 
 
 %% @private
--spec build_value(atm_job_execution_ctx:record(), atm_task_argument_value_builder:record()) ->
+-spec build_value(atm_job_ctx:record(), atm_task_argument_value_builder:record()) ->
     json_utils:json_term() | no_return().
-build_value(_AtmJobExecutionCtx, #atm_task_argument_value_builder{
+build_value(_AtmJobCtx, #atm_task_argument_value_builder{
     type = const,
     recipe = ConstValue
 }) ->
     ConstValue;
 
-build_value(AtmJobExecutionCtx, #atm_task_argument_value_builder{
+build_value(AtmJobCtx, #atm_task_argument_value_builder{
     type = iterated_item,
     recipe = undefined
 }) ->
-    atm_job_execution_ctx:get_item(AtmJobExecutionCtx);
+    atm_job_ctx:get_item(AtmJobCtx);
 
-build_value(AtmJobExecutionCtx, #atm_task_argument_value_builder{
+build_value(AtmJobCtx, #atm_task_argument_value_builder{
     type = iterated_item,
     recipe = Query
 }) ->
-    Item = atm_job_execution_ctx:get_item(AtmJobExecutionCtx),
+    Item = atm_job_ctx:get_item(AtmJobCtx),
 
     % TODO VFS-7660 fix query in case of array indices
     case json_utils:query(Item, Query) of
@@ -164,21 +164,21 @@ build_value(AtmJobExecutionCtx, #atm_task_argument_value_builder{
         error -> throw(?ERROR_ATM_TASK_ARG_MAPPER_ITEM_QUERY_FAILED(Item, Query))
     end;
 
-build_value(AtmJobExecutionCtx, #atm_task_argument_value_builder{
+build_value(AtmJobCtx, #atm_task_argument_value_builder{
     type = onedatafs_credentials
 }) ->
     #{
         <<"host">> => oneprovider:get_domain(),
-        <<"accessToken">> => atm_job_execution_ctx:get_access_token(AtmJobExecutionCtx)
+        <<"accessToken">> => atm_job_ctx:get_access_token(AtmJobCtx)
     };
 
-build_value(AtmJobExecutionCtx, #atm_task_argument_value_builder{
+build_value(AtmJobCtx, #atm_task_argument_value_builder{
     type = single_value_store_content,
     recipe = AtmSingleValueStoreSchemaId
 }) ->
     AtmSingleValueStoreId = atm_workflow_execution_ctx:get_workflow_store_id(
         AtmSingleValueStoreSchemaId,
-        atm_job_execution_ctx:get_workflow_execution_ctx(AtmJobExecutionCtx)
+        atm_job_ctx:get_workflow_execution_ctx(AtmJobCtx)
     ),
     {ok, AtmStore} = atm_store_api:get(AtmSingleValueStoreId),
 
@@ -187,7 +187,7 @@ build_value(AtmJobExecutionCtx, #atm_task_argument_value_builder{
         AtmStoreType -> throw(?ERROR_ATM_STORE_TYPE_DISALLOWED(AtmStoreType, [single_value]))
     end,
 
-    AtmWorkflowExecutionAuth = atm_job_execution_ctx:get_workflow_execution_auth(AtmJobExecutionCtx),
+    AtmWorkflowExecutionAuth = atm_job_ctx:get_workflow_execution_auth(AtmJobCtx),
     BrowseOpts = #{offset => 0, limit => 1},
 
     case atm_store_api:browse_content(AtmWorkflowExecutionAuth, BrowseOpts, AtmStore) of
@@ -199,30 +199,30 @@ build_value(AtmJobExecutionCtx, #atm_task_argument_value_builder{
             Item
     end;
 
-build_value(_AtmJobExecutionCtx, _InputSpec) ->
+build_value(_AtmJobCtx, _InputSpec) ->
     % TODO VFS-7660 handle rest of atm_task_argument_value_builder:type()
     throw(?ERROR_ATM_TASK_ARG_MAPPER_INVALID_INPUT_SPEC).
 
 
 %% @private
 -spec validate_value(
-    atm_job_execution_ctx:record(),
+    atm_job_ctx:record(),
     json_utils:json_term() | [json_utils:json_term()],
     record()
 ) ->
     ok | no_return().
-validate_value(AtmJobExecutionCtx, ArgValue, #atm_task_execution_argument_spec{
+validate_value(AtmJobCtx, ArgValue, #atm_task_execution_argument_spec{
     data_spec = AtmDataSpec,
     is_batch = false
 }) ->
-    AtmWorkflowExecutionAuth = atm_job_execution_ctx:get_workflow_execution_auth(AtmJobExecutionCtx),
+    AtmWorkflowExecutionAuth = atm_job_ctx:get_workflow_execution_auth(AtmJobCtx),
     atm_value:validate(AtmWorkflowExecutionAuth, ArgValue, AtmDataSpec);
 
-validate_value(AtmJobExecutionCtx, ArgsBatch, #atm_task_execution_argument_spec{
+validate_value(AtmJobCtx, ArgsBatch, #atm_task_execution_argument_spec{
     data_spec = AtmDataSpec,
     is_batch = true
 }) when is_list(ArgsBatch) ->
-    AtmWorkflowExecutionAuth = atm_job_execution_ctx:get_workflow_execution_auth(AtmJobExecutionCtx),
+    AtmWorkflowExecutionAuth = atm_job_ctx:get_workflow_execution_auth(AtmJobCtx),
 
     lists:foreach(fun(ArgValue) ->
         atm_value:validate(AtmWorkflowExecutionAuth, ArgValue, AtmDataSpec)

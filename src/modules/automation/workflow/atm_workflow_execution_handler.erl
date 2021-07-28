@@ -162,7 +162,7 @@ process_item(
     ),
     AtmWorkflowExecutionLogger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
 
-    log_processing_item(Item, AtmWorkflowExecutionLogger),
+    log_item_processing(Item, AtmWorkflowExecutionLogger),
 
     try
         ok = atm_task_execution_handler:process_item(
@@ -375,9 +375,9 @@ acquire_iterator_for_lane(AtmWorkflowExecutionCtx, #atm_lane_schema{
 
 % TODO VFS-8101 Better debug logs about items in processing
 %% @private
--spec log_processing_item(automation:item(), atm_workflow_execution_logger:record()) ->
+-spec log_item_processing(automation:item(), atm_workflow_execution_logger:record()) ->
     ok.
-log_processing_item(Item, AtmWorkflowExecutionLogger) ->
+log_item_processing(Item, AtmWorkflowExecutionLogger) ->
     EncodedItem = try
         json_utils:encode(Item)
     catch _:_ ->

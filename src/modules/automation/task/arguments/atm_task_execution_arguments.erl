@@ -36,24 +36,21 @@ build_specs(AtmLambdaArgSpecs, AtmTaskSchemaArgMappers) ->
     ).
 
 
--spec construct_args(
-    atm_job_execution_ctx:record(),
-    [atm_task_execution_argument_spec:record()]
-) ->
+-spec construct_args(atm_job_ctx:record(), [atm_task_execution_argument_spec:record()]) ->
     json_utils:json_map() | no_return().
-construct_args(AtmJobExecutionCtx, AtmTaskExecutionArgSpecs) ->
+construct_args(AtmJobCtx, AtmTaskExecutionArgSpecs) ->
     BasicArgs = lists:foldl(fun(AtmTaskExecutionArgSpec, Args) ->
         ArgName = atm_task_execution_argument_spec:get_name(AtmTaskExecutionArgSpec),
         try
             Args#{ArgName => atm_task_execution_argument_spec:construct_arg(
-                AtmJobExecutionCtx, AtmTaskExecutionArgSpec
+                AtmJobCtx, AtmTaskExecutionArgSpec
             )}
         catch _:Reason ->
             throw(?ERROR_ATM_TASK_ARG_MAPPING_FAILED(ArgName, Reason))
         end
     end, #{}, AtmTaskExecutionArgSpecs),
 
-    BasicArgs#{<<"heartbeatUrl">> => atm_job_execution_ctx:get_heartbeat_url(AtmJobExecutionCtx)}.
+    BasicArgs#{<<"heartbeatUrl">> => atm_job_ctx:get_heartbeat_url(AtmJobCtx)}.
 
 
 %%%===================================================================
