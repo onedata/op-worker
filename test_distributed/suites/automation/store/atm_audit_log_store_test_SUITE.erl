@@ -212,9 +212,9 @@ init_per_testcase(browse_by_timestamp_test, Config) ->
     ok = time_test_utils:freeze_time(Config),
     Config;
 init_per_testcase(_Case, Config) ->
-    time_test_utils:unfreeze_time(Config),
     Config.
 
 
-end_per_testcase(_Case, _Config) ->
+end_per_testcase(_Case, Config) ->
+    time_test_utils:unfreeze_time(Config),
     ok.

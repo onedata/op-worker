@@ -16,7 +16,7 @@
 
 
 -export([
-    freeze_time/1, freeze_time/2, unfreeze_time/1,
+    freeze_time/1, unfreeze_time/1,
     get_frozen_time_millis/0, get_frozen_time_seconds/0, get_frozen_time_hours/0,
     simulate_millis_passing/1, simulate_seconds_passing/1,
     set_current_time_millis/1, set_current_time_seconds/1
@@ -58,14 +58,14 @@ get_frozen_time_hours() ->
     clock_freezer_mock:current_time_hours().
 
 
--spec simulate_seconds_passing(time:seconds()) -> time:seconds().
-simulate_seconds_passing(Seconds) ->
-    clock_freezer_mock:simulate_seconds_passing(Seconds).
-
-
 -spec simulate_millis_passing(time:millis()) -> time:millis().
 simulate_millis_passing(Seconds) ->
     clock_freezer_mock:simulate_millis_passing(Seconds).
+
+
+-spec simulate_seconds_passing(time:seconds()) -> time:seconds().
+simulate_seconds_passing(Seconds) ->
+    clock_freezer_mock:simulate_seconds_passing(Seconds).
 
 
 -spec set_current_time_millis(time:millis()) -> ok.

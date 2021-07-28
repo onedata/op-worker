@@ -208,11 +208,11 @@ build_establish_dataset_validate_rest_call_result_fun(MemRef) ->
 build_establish_dataset_validate_gs_call_result_fun(MemRef, Config) ->
     SpaceDirDatasetId = ?config(space_dir_dataset, Config),
 
-    fun(#api_test_ctx{node = TestNode, data = Data}, Result) ->
+    fun(#api_test_ctx{data = Data}, Result) ->
         RootFileGuid = api_test_memory:get(MemRef, file_guid),
         RootFileType = api_test_memory:get(MemRef, file_type),
         RootFilePath = api_test_memory:get(MemRef, file_path),
-        CreationTime = time_test_utils:get_frozen_time_seconds(TestNode),
+        CreationTime = time_test_utils:get_frozen_time_seconds(),
         ProtectionFlags = maps:get(<<"protectionFlags">>, Data, []),
 
         {ok, #{<<"gri">> := DatasetGri} = DatasetData} = ?assertMatch({ok, _}, Result),
@@ -244,7 +244,6 @@ build_verify_establish_dataset_fun(MemRef, Providers, SpaceId, Config) ->
 
     fun
         (expected_success, #api_test_ctx{
-            node = TestNode,
             client = ?USER(UserId),
             data = Data
         }) ->
@@ -252,7 +251,7 @@ build_verify_establish_dataset_fun(MemRef, Providers, SpaceId, Config) ->
             RootFileGuid = api_test_memory:get(MemRef, file_guid),
             RootFileType = api_test_memory:get(MemRef, file_type),
             RootFilePath = api_test_memory:get(MemRef, file_path),
-            CreationTime = time_test_utils:get_frozen_time_seconds(TestNode),
+            CreationTime = time_test_utils:get_frozen_time_seconds(),
             ProtectionFlags = maps:get(<<"protectionFlags">>, Data, []),
 
             verify_dataset(
@@ -347,8 +346,8 @@ get_dataset_test_base(
                     name = <<"Get dataset using REST API">>,
                     type = rest,
                     prepare_args_fun = build_get_dataset_prepare_rest_args_fun(DatasetId),
-                    validate_result_fun = fun(#api_test_ctx{node = TestNode}, {ok, RespCode, _, RespBody}) ->
-                        CreationTime = time_test_utils:get_frozen_time_seconds(TestNode),
+                    validate_result_fun = fun(_, {ok, RespCode, _, RespBody}) ->
+                        CreationTime = time_test_utils:get_frozen_time_seconds(),
                         EffProtectionFlags = case State of
                             ?ATTACHED_DATASET -> ProtectionFlags;
                             ?DETACHED_DATASET -> []
@@ -372,8 +371,8 @@ get_dataset_test_base(
                     name = <<"Get dataset using GS API">>,
                     type = gs,
                     prepare_args_fun = build_get_dataset_prepare_gs_args_fun(DatasetId),
-                    validate_result_fun = fun(#api_test_ctx{node = TestNode}, {ok, Result}) ->
-                        CreationTime = time_test_utils:get_frozen_time_seconds(TestNode),
+                    validate_result_fun = fun(_, {ok, Result}) ->
+                        CreationTime = time_test_utils:get_frozen_time_seconds(),
 
                         ExpDatasetData = build_dataset_gs_instance(
                             State, DatasetId, ParentId, ProtectionFlags, CreationTime,
@@ -550,8 +549,8 @@ build_update_dataset_prepare_gs_args_fun(DatasetId) ->
 build_verify_update_dataset_fun(MemRef, Providers, SpaceId, DatasetId, FileGuid, FileType, FilePath, Config) ->
     SpaceDirDatasetId = ?config(space_dir_dataset, Config),
 
-    fun(ExpTestResult, #api_test_ctx{node = TestNode, data = Data}) ->
-        CreationTime = time_test_utils:get_frozen_time_seconds(TestNode),
+    fun(ExpTestResult, #api_test_ctx{data = Data}) ->
+        CreationTime = time_test_utils:get_frozen_time_seconds(),
 
         PrevState = api_test_memory:get(MemRef, previous_state),
         PrevProtectionFlags = api_test_memory:get(MemRef, previous_protection_flags),
