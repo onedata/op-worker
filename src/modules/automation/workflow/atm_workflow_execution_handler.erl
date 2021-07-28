@@ -160,6 +160,9 @@ process_item(
     AtmWorkflowExecutionCtx = atm_workflow_execution_ctx:acquire(
         AtmTaskExecutionId, AtmWorkflowExecutionEnv
     ),
+    AtmWorkflowExecutionLogger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
+
+    log_processing_item(Item, AtmWorkflowExecutionLogger),
 
     try
         ok = atm_task_execution_handler:process_item(
@@ -363,6 +366,29 @@ acquire_iterator_for_lane(AtmWorkflowExecutionCtx, #atm_lane_schema{
         AtmStoreSchemaId, AtmWorkflowExecutionCtx
     ),
     atm_store_api:acquire_iterator(AtmStoreId, AtmStoreIteratorSpec).
+
+
+% TODO VFS-8101 Better debug logs about items in processing
+%% @private
+-spec log_processing_item(automation:item(), atm_workflow_execution_logger:record()) ->
+    ok.
+log_processing_item(Item, AtmWorkflowExecutionLogger) ->
+    EncodedItem = try
+        json_utils:encode(Item)
+    catch _:_ ->
+        str_utils:format_bin("~p", [Item])
+    end,
+    Entry = #{
+        <<"description">> => <<"Processing item">>,
+        %% TODO VFS-8101 replace magic numbers with size limit for each atm data type
+        <<"item">> => case size(EncodedItem) > 1000 of
+            true ->
+                <<Chunk:996/binary, _/binary>> = EncodedItem,
+                <<Chunk/binary, "...\"">>;
+            false -> Item
+        end
+    },
+    atm_workflow_execution_logger:task_debug(Entry, AtmWorkflowExecutionLogger).
 
 
 %% @private
