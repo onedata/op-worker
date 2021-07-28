@@ -134,7 +134,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([prepare/2, finalize/2, archive_file/5]).
+-export([prepare/2, finalize/2, archive_file/5, archive_dir/4]).
 
 
 %%%===================================================================
@@ -174,10 +174,19 @@ archive_file(ArchiveDoc, FileCtx, TargetParentCtx, BaseArchiveDoc, UserCtx) ->
             Error
     end.
 
+
+-spec archive_dir(archive:doc(), file_ctx:ctx(), file_ctx:ctx(), user_ctx:ctx()) -> ok.
+archive_dir(ArchiveDoc, FileCtx, ArchivedFileCtx, UserCtx) -> 
+    {ok, ArchiveDirCtx} = archive:get_root_dir_ctx(ArchiveDoc),
+    RelativeFilePath = calculate_relative_path(ArchiveDoc, FileCtx, UserCtx),
+    archive_metadata(ArchiveDirCtx, UserCtx, RelativeFilePath, ArchivedFileCtx).
+
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
+%% @private
 -spec create_data_dir(file_ctx:ctx(), user_ctx:ctx()) -> file_ctx:ctx().
 create_data_dir(ArchiveDirCtx, UserCtx) ->
     SessionId = user_ctx:get_session_id(UserCtx),
@@ -186,6 +195,7 @@ create_data_dir(ArchiveDirCtx, UserCtx) ->
     file_ctx:new_by_guid(DataDirGuid).
 
 
+%% @private
 -spec create_bag_declaration(file_ctx:ctx(), user_ctx:ctx()) -> ok.
 create_bag_declaration(ParentCtx, UserCtx) ->
     SessionId = user_ctx:get_session_id(UserCtx),
@@ -201,12 +211,26 @@ create_bag_declaration(ParentCtx, UserCtx) ->
     ok = lfm:release(Handle).
 
 
+%% @private
 -spec save_checksums_and_archive_custom_metadata(archive:doc(), user_ctx:ctx(), file_ctx:ctx(), file_ctx:ctx()) -> ok.
 save_checksums_and_archive_custom_metadata(CurrentArchiveDoc, UserCtx, ArchivedFileCtx, SourceFileCtx) ->
     % TODO VFS-7819 allow to pass this algorithms in archivisation request as param
     ChecksumAlgorithms = ?SUPPORTED_CHECKSUM_ALGORITHMS,
     CalculatedChecksums = file_checksum:calculate(ArchivedFileCtx, UserCtx, ChecksumAlgorithms),
 
+    {ok, AncestorArchives} = archive:get_all_ancestors(CurrentArchiveDoc),
+    lists:foreach(fun(ArchiveDoc) ->
+        RelativeFilePath = calculate_relative_path(ArchiveDoc, SourceFileCtx, UserCtx),
+        {ok, ArchiveDirCtx} = archive:get_root_dir_ctx(ArchiveDoc),
+        bagit_checksums:add_entries_to_manifests(ArchiveDirCtx, UserCtx, RelativeFilePath, CalculatedChecksums,
+            ChecksumAlgorithms),
+        archive_metadata(ArchiveDirCtx, UserCtx, RelativeFilePath, ArchivedFileCtx)
+    end, [CurrentArchiveDoc | AncestorArchives]).
+
+
+%% @private
+-spec archive_metadata(file_ctx:ctx(), user_ctx:ctx(), file_meta:path(), file_ctx:ctx()) -> ok.
+archive_metadata(ArchiveDirCtx, UserCtx, RelativeFilePath, ArchivedFileCtx) ->
     SessionId = user_ctx:get_session_id(UserCtx),
     ArchiveFileGuid = file_ctx:get_logical_guid_const(ArchivedFileCtx),
     JsonMetadata = case lfm:get_metadata(SessionId, ?FILE_REF(ArchiveFileGuid), json, [], false) of
@@ -215,18 +239,10 @@ save_checksums_and_archive_custom_metadata(CurrentArchiveDoc, UserCtx, ArchivedF
         {error, ?ENODATA} ->
             undefined
     end,
-
-    {ok, AncestorArchives} = archive:get_all_ancestors(CurrentArchiveDoc),
-    lists:foreach(fun(ArchiveDoc) ->
-        RelativeFilePath = calculate_relative_path(ArchiveDoc, SourceFileCtx, UserCtx),
-        {ok, ArchiveDirCtx} = archive:get_root_dir_ctx(ArchiveDoc),
-        bagit_checksums:add_entries_to_manifests(ArchiveDirCtx, UserCtx, RelativeFilePath, CalculatedChecksums,
-            ChecksumAlgorithms),
-        JsonMetadata /= undefined
-            andalso bagit_metadata:add_entry(ArchiveDirCtx, UserCtx, RelativeFilePath, JsonMetadata)
-    end, [CurrentArchiveDoc | AncestorArchives]).
+    bagit_metadata:add_entry(ArchiveDirCtx, UserCtx, RelativeFilePath, JsonMetadata).
 
 
+%% @private
 -spec calculate_relative_path(archive:doc(), file_ctx:ctx(), user_ctx:ctx()) -> file_meta:path().
 calculate_relative_path(ArchiveDoc, SourceFileCtx, UserCtx) ->
     {SourceFilePath, _SourceFileCtx2} = file_ctx:get_logical_path(SourceFileCtx, UserCtx),
@@ -237,6 +253,7 @@ calculate_relative_path(ArchiveDoc, SourceFileCtx, UserCtx) ->
     filename:join([?DATA_DIR_NAME, filepath_utils:relative(DatasetRootParentPath, SourceFilePath)]).
 
 
+%% @private
 -spec create_tag_manifests(file_ctx:ctx(), user_ctx:ctx()) -> ok.
 create_tag_manifests(ArchiveDirCtx, UserCtx) ->
     % TODO VFS-7819 allow to pass this algorithms in archivisation request as param
