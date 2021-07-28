@@ -196,7 +196,9 @@ create_audit_log(#atm_workflow_execution_creation_ctx{
     system_audit_log_schema = AtmAuditLogSchema
 }, ExecutionElements) ->
     {ok, AtmWorkflowAuditLogDoc} = atm_store_api:create(
-        AtmWorkflowExecutionAuth, undefined, AtmAuditLogSchema
+        AtmWorkflowExecutionAuth, undefined, AtmAuditLogSchema#atm_store_schema{
+            id = ?WORKFLOW_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID
+        }
     ),
 
     ExecutionElements#execution_elements{workflow_audit_log = AtmWorkflowAuditLogDoc}.
