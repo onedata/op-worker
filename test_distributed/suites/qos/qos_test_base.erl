@@ -66,7 +66,8 @@
     qos_with_hardlink_test_base/3,
     qos_with_hardlink_deletion_test_base/3,
     qos_on_symlink_test_base/2,
-    effective_qos_with_symlink_test_base/2
+    effective_qos_with_symlink_test_base/2,
+    create_hardlink_in_dir_with_qos/2
 ]).
 
 -export([
@@ -1287,7 +1288,7 @@ qos_status_during_reconciliation_with_file_deletion_test_base(Config, SpaceId, N
     
     {GuidsAndPaths, QosList} = prepare_qos_status_test_env(Config, DirStructure, SpaceId, Name),
     
-    TypeSpec = prepare_type_spec(FileType, Workers, SessId, {space_id, SpaceId}),
+    TypeSpec = prepare_type_spec(FileType, Workers, SessId, {target, create_link_target(Worker1, SessId(Worker1), SpaceId)}),
     ok = qos_tests_utils:finish_all_transfers([F || {F, _} <- maps:get(files, GuidsAndPaths)]),
     
     FilesAndDirs = maps:get(files, GuidsAndPaths) ++ maps:get(dirs, GuidsAndPaths),
@@ -1324,7 +1325,7 @@ qos_status_during_reconciliation_with_dir_deletion_test_base(Config, SpaceId, Nu
     Dir1 = qos_tests_utils:get_guid(resolve_path(SpaceId, Name, []), GuidsAndPaths),
     ok = qos_tests_utils:finish_all_transfers([F || {F, _} <- maps:get(files, GuidsAndPaths)]),
     ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [Dir1], QosList, ?FULFILLED), ?ATTEMPTS),
-    TypeSpec = prepare_type_spec(FileType, Workers, SessId, {space_id, SpaceId}),
+    TypeSpec = prepare_type_spec(FileType, Workers, SessId, {target, create_link_target(Worker1, SessId(Worker1), SpaceId)}),
     
     lists:foreach(fun(Worker) ->
         ct:print("Deleting worker: ~p", [Worker]), % log current deleting worker for greater verbosity during failures
@@ -1579,6 +1580,28 @@ effective_qos_with_symlink_test_base(Config, SpaceId) ->
     qos_tests_utils:finish_all_transfers([FileGuid]),
     ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [FileGuid, LinkGuid], QosList, ?FULFILLED), ?ATTEMPTS).
 
+
+create_hardlink_in_dir_with_qos(Config, SpaceId) ->
+    [Worker1 | _] = Workers = qos_tests_utils:get_op_nodes_sorted(Config),
+    SessId = fun(Worker) -> ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config) end,
+    SpaceGuid = rpc:call(Worker1, fslogic_uuid, spaceid_to_space_dir_guid, [SpaceId]),
+    {ok, Dir1Guid} = lfm_proxy:mkdir(Worker1, SessId(Worker1), SpaceGuid, generator:gen_name(), ?DEFAULT_DIR_PERMS),
+    {ok, FileGuid} = lfm_proxy:create(Worker1, SessId(Worker1), SpaceGuid, generator:gen_name(), ?DEFAULT_FILE_PERMS),
+    {ok, QosEntryId} = lfm_proxy:add_qos_entry(Worker1, SessId(Worker1), ?FILE_REF(Dir1Guid), <<"country=FR">>, 1),
+    
+    ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [FileGuid, Dir1Guid], [QosEntryId], ?FULFILLED), ?ATTEMPTS),
+    
+    qos_tests_utils:mock_transfers(Workers),
+    lists:foreach(fun(Worker) ->
+        {ok, #file_attr{guid = LinkGuid}} = lfm_proxy:make_link(Worker, SessId(Worker), ?FILE_REF(FileGuid), ?FILE_REF(Dir1Guid), generator:gen_name()),
+        await_files_sync_between_workers(Workers, [FileGuid, LinkGuid], SessId),
+        assert_effective_entry(Worker, SessId(Worker), QosEntryId, [LinkGuid, FileGuid], []),
+        ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [Dir1Guid, LinkGuid], [QosEntryId], ?PENDING), ?ATTEMPTS),
+        qos_tests_utils:finish_all_transfers([LinkGuid]),
+        ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [Dir1Guid, LinkGuid], [QosEntryId], ?FULFILLED), ?ATTEMPTS)
+    end, Workers).
+    
+
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
@@ -1707,22 +1730,25 @@ get_workers_list_without_provider(Workers, ProviderId) ->
 
 
 %% @private
-prepare_type_spec(reg_file, _Workers, _SessIdFun, _SpaceIdOrTarget) -> reg_file;
-prepare_type_spec(hardlink, [Worker1 | _] = Workers, SessIdFun, {space_id, SpaceId}) ->
-    SpaceGuid = rpc:call(Worker1, fslogic_uuid, spaceid_to_space_dir_guid, [SpaceId]),
-    {ok, FileToLinkGuid} = lfm_proxy:create(Worker1, SessIdFun(Worker1), SpaceGuid, generator:gen_name(), ?DEFAULT_FILE_PERMS),
-    prepare_type_spec(hardlink, [Worker1 | _] = Workers, SessIdFun, {target, FileToLinkGuid});
+prepare_type_spec(reg_file, _Workers, _SessIdFun, _Target) -> reg_file;
 prepare_type_spec(hardlink, Workers, SessIdFun, {target, FileToLinkGuid}) ->
     lists:foreach(fun(Worker) ->
         ?assertMatch({ok, _}, lfm_proxy:stat(Worker, SessIdFun(Worker), ?FILE_REF(FileToLinkGuid)), ?ATTEMPTS)
     end, Workers),
     {hardlink, FileToLinkGuid};
-prepare_type_spec(random, Workers, SessIdFun, SpaceIdOrTarget) -> 
+prepare_type_spec(random, Workers, SessIdFun, Target) -> 
     NewFileType = case rand:uniform(2) of
         1 -> reg_file;
         2 -> hardlink
     end,
-    prepare_type_spec(NewFileType, Workers, SessIdFun, SpaceIdOrTarget).
+    prepare_type_spec(NewFileType, Workers, SessIdFun, Target).
+
+
+%% @private
+create_link_target(Worker, SessId, SpaceId) ->
+    SpaceGuid = rpc:call(Worker, fslogic_uuid, spaceid_to_space_dir_guid, [SpaceId]),
+    {ok, FileToLinkGuid} = lfm_proxy:create(Worker, SessId, SpaceGuid, generator:gen_name(), ?DEFAULT_FILE_PERMS),
+    FileToLinkGuid.
 
 
 %% @private

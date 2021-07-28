@@ -71,7 +71,8 @@
     qos_with_hardlink_deletion_test/1,
     qos_with_mixed_deletion_test/1,
     qos_on_symlink_test/1,
-    effective_qos_with_symlink_test/1
+    effective_qos_with_symlink_test/1,
+    create_hardlink_in_dir_with_qos/1
 ]).
 
 all() -> [
@@ -115,7 +116,8 @@ all() -> [
     qos_with_hardlink_deletion_test,
     qos_with_mixed_deletion_test,
     qos_on_symlink_test,
-    effective_qos_with_symlink_test
+    effective_qos_with_symlink_test,
+    create_hardlink_in_dir_with_qos
 ].
 
 
@@ -939,6 +941,9 @@ qos_on_symlink_test(Config) ->
 
 effective_qos_with_symlink_test(Config) ->
     qos_test_base:effective_qos_with_symlink_test_base(Config, ?SPACE_ID).
+
+create_hardlink_in_dir_with_qos(Config) ->
+    qos_test_base:create_hardlink_in_dir_with_qos(Config, ?SPACE_ID).
     
 
 %%%===================================================================
