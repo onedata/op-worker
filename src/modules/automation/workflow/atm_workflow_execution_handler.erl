@@ -83,7 +83,7 @@ start(UserCtx, AtmWorkflowExecutionId, AtmWorkflowExecutionEnv) ->
 
 -spec cancel(atm_workflow_execution:id()) -> ok | {error, already_ended}.
 cancel(AtmWorkflowExecutionId) ->
-    case atm_workflow_execution_status:handle_cancel(AtmWorkflowExecutionId) of
+    case atm_workflow_execution_status:handle_aborting(AtmWorkflowExecutionId, cancel) of
         ok ->
             workflow_engine:cancel_execution(AtmWorkflowExecutionId);
         {error, _} = Error ->
@@ -292,7 +292,12 @@ prepare_internal(AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
         lanes = AtmLaneExecutions
     }}} = atm_workflow_execution_status:handle_preparing(AtmWorkflowExecutionId),
 
-    atm_lane_execution:prepare_all(AtmWorkflowExecutionCtx, AtmLaneExecutions),
+    try
+        atm_lane_execution:prepare_all(AtmWorkflowExecutionCtx, AtmLaneExecutions)
+    catch Type:Reason ->
+        atm_workflow_execution_status:handle_aborting(AtmWorkflowExecutionId, failure),
+        erlang:Type(Reason)
+    end,
 
     atm_workflow_execution_status:handle_enqueued(AtmWorkflowExecutionId),
     ok.

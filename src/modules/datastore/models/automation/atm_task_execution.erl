@@ -133,6 +133,7 @@ get_record_struct(2) ->
 
         {status, atom},
         {status_changed, boolean},
+        {aborting_reason, atom},  %% new field
 
         {items_in_processing, integer},
         {items_processed, integer},
@@ -177,6 +178,7 @@ upgrade_record(1, {
 
         status = Status,
         status_changed = StatusChanged,
+        aborting_reason = undefined,
 
         items_in_processing = ItemsInProcessing,
         items_processed = ItemsProcessed,
