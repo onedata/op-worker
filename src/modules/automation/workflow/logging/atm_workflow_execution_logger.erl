@@ -21,14 +21,26 @@
 %% API
 -export([build/3]).
 -export([
-    task_debug/2, task_info/2, task_notice/2,
-    task_warning/2, task_alert/2,
-    task_error/2, task_critical/2, task_emergency/2
+    task_append_log/2,
+    task_debug/2, task_debug/3,
+    task_info/2, task_info/3,
+    task_notice/2, task_notice/3,
+    task_warning/2, task_warning/3,
+    task_alert/2, task_alert/3,
+    task_error/2, task_error/3,
+    task_critical/2, task_critical/3,
+    task_emergency/2, task_emergency/3
 ]).
 -export([
-    workflow_debug/2, workflow_info/2, workflow_notice/2,
-    workflow_warning/2, workflow_alert/2,
-    workflow_error/2, workflow_critical/2, workflow_emergency/2
+    workflow_append_log/2,
+    workflow_debug/2, workflow_debug/3,
+    workflow_info/2, workflow_info/3,
+    workflow_notice/2, workflow_notice/3,
+    workflow_warning/2, workflow_warning/3,
+    workflow_alert/2, workflow_alert/3,
+    workflow_error/2, workflow_error/3,
+    workflow_critical/2, workflow_critical/3,
+    workflow_emergency/2, workflow_emergency/3
 ]).
 
 %% Possible severities:
@@ -43,6 +55,7 @@
 -type severity() :: binary().
 
 -type entry() :: binary() | json_utils:json_map().
+-type log() :: json_utils:json_map().
 
 -record(atm_workflow_execution_logger, {
     atm_workflow_execution_auth :: atm_workflow_execution_auth:record(),
@@ -51,7 +64,7 @@
 }).
 -type record() :: #atm_workflow_execution_logger{}.
 
--export_type([record/0]).
+-export_type([severity/0, entry/0, log/0, record/0]).
 
 
 %%%===================================================================
@@ -73,84 +86,180 @@ build(AtmWorkflowExecutionAuth, AtmTaskAuditLogStoreContainer, AtmWorkflowAuditL
     }.
 
 
+-spec task_append_log(log(), record()) -> ok.
+task_append_log(AuditLogObject, #atm_workflow_execution_logger{
+    atm_workflow_execution_auth = AtmWorkflowExecutionAuth,
+    task_audit_log_store_container = AtmTaskAuditLogStoreContainer
+}) ->
+    append_log(AuditLogObject, AtmWorkflowExecutionAuth, AtmTaskAuditLogStoreContainer).
+
+
 -spec task_debug(entry(), record()) -> ok.
 task_debug(Entry, AtmWorkflowExecutionLogger) ->
-    task_append_log(Entry, ?LOGGER_DEBUG, AtmWorkflowExecutionLogger).
+    task_append_system_log(Entry, ?LOGGER_DEBUG, AtmWorkflowExecutionLogger).
+
+
+-spec task_debug(string(), [term()], record()) -> ok.
+task_debug(Format, Args, AtmWorkflowExecutionLogger) ->
+    task_debug(str_utils:format_bin(Format, Args), AtmWorkflowExecutionLogger).
 
 
 -spec task_info(entry(), record()) -> ok.
 task_info(Entry, AtmWorkflowExecutionLogger) ->
-    task_append_log(Entry, ?LOGGER_INFO, AtmWorkflowExecutionLogger).
+    task_append_system_log(Entry, ?LOGGER_INFO, AtmWorkflowExecutionLogger).
+
+
+-spec task_info(string(), [term()], record()) -> ok.
+task_info(Format, Args, AtmWorkflowExecutionLogger) ->
+    task_info(str_utils:format_bin(Format, Args), AtmWorkflowExecutionLogger).
 
 
 -spec task_notice(entry(), record()) -> ok.
 task_notice(Entry, AtmWorkflowExecutionLogger) ->
-    task_append_log(Entry, ?LOGGER_NOTICE, AtmWorkflowExecutionLogger).
+    task_append_system_log(Entry, ?LOGGER_NOTICE, AtmWorkflowExecutionLogger).
+
+
+-spec task_notice(string(), [term()], record()) -> ok.
+task_notice(Format, Args, AtmWorkflowExecutionLogger) ->
+    task_notice(str_utils:format_bin(Format, Args), AtmWorkflowExecutionLogger).
 
 
 -spec task_warning(entry(), record()) -> ok.
 task_warning(Entry, AtmWorkflowExecutionLogger) ->
-    task_append_log(Entry, ?LOGGER_WARNING, AtmWorkflowExecutionLogger).
+    task_append_system_log(Entry, ?LOGGER_WARNING, AtmWorkflowExecutionLogger).
+
+
+-spec task_warning(string(), [term()], record()) -> ok.
+task_warning(Format, Args, AtmWorkflowExecutionLogger) ->
+    task_warning(str_utils:format_bin(Format, Args), AtmWorkflowExecutionLogger).
 
 
 -spec task_alert(entry(), record()) -> ok.
 task_alert(Entry, AtmWorkflowExecutionLogger) ->
-    task_append_log(Entry, ?LOGGER_ALERT, AtmWorkflowExecutionLogger).
+    task_append_system_log(Entry, ?LOGGER_ALERT, AtmWorkflowExecutionLogger).
+
+
+-spec task_alert(string(), [term()], record()) -> ok.
+task_alert(Format, Args, AtmWorkflowExecutionLogger) ->
+    task_alert(str_utils:format_bin(Format, Args), AtmWorkflowExecutionLogger).
 
 
 -spec task_error(entry(), record()) -> ok.
 task_error(Entry, AtmWorkflowExecutionLogger) ->
-    task_append_log(Entry, ?LOGGER_ERROR, AtmWorkflowExecutionLogger).
+    task_append_system_log(Entry, ?LOGGER_ERROR, AtmWorkflowExecutionLogger).
+
+
+-spec task_error(string(), [term()], record()) -> ok.
+task_error(Format, Args, AtmWorkflowExecutionLogger) ->
+    task_error(str_utils:format_bin(Format, Args), AtmWorkflowExecutionLogger).
 
 
 -spec task_critical(entry(), record()) -> ok.
 task_critical(Entry, AtmWorkflowExecutionLogger) ->
-    task_append_log(Entry, ?LOGGER_CRITICAL, AtmWorkflowExecutionLogger).
+    task_append_system_log(Entry, ?LOGGER_CRITICAL, AtmWorkflowExecutionLogger).
+
+
+-spec task_critical(string(), [term()], record()) -> ok.
+task_critical(Format, Args, AtmWorkflowExecutionLogger) ->
+    task_critical(str_utils:format_bin(Format, Args), AtmWorkflowExecutionLogger).
 
 
 -spec task_emergency(entry(), record()) -> ok.
 task_emergency(Entry, AtmWorkflowExecutionLogger) ->
-    task_append_log(Entry, ?LOGGER_EMERGENCY, AtmWorkflowExecutionLogger).
+    task_append_system_log(Entry, ?LOGGER_EMERGENCY, AtmWorkflowExecutionLogger).
+
+
+-spec task_emergency(string(), [term()], record()) -> ok.
+task_emergency(Format, Args, AtmWorkflowExecutionLogger) ->
+    task_emergency(str_utils:format_bin(Format, Args), AtmWorkflowExecutionLogger).
+
+
+-spec workflow_append_log(log(), record()) -> ok.
+workflow_append_log(AuditLogObject, #atm_workflow_execution_logger{
+    atm_workflow_execution_auth = AtmWorkflowExecutionAuth,
+    workflow_audit_log_store_container = AtmWorkflowAuditLogStoreContainer
+}) ->
+    append_log(AuditLogObject, AtmWorkflowExecutionAuth, AtmWorkflowAuditLogStoreContainer).
 
 
 -spec workflow_debug(entry(), record()) -> ok.
 workflow_debug(Entry, AtmWorkflowExecutionLogger) ->
-    workflow_append_log(Entry, ?LOGGER_DEBUG, AtmWorkflowExecutionLogger).
+    workflow_append_system_log(Entry, ?LOGGER_DEBUG, AtmWorkflowExecutionLogger).
+
+
+-spec workflow_debug(string(), [term()], record()) -> ok.
+workflow_debug(Format, Args, AtmWorkflowExecutionLogger) ->
+    workflow_debug(str_utils:format_bin(Format, Args), AtmWorkflowExecutionLogger).
 
 
 -spec workflow_info(entry(), record()) -> ok.
 workflow_info(Entry, AtmWorkflowExecutionLogger) ->
-    workflow_append_log(Entry, ?LOGGER_INFO, AtmWorkflowExecutionLogger).
+    workflow_append_system_log(Entry, ?LOGGER_INFO, AtmWorkflowExecutionLogger).
+
+
+-spec workflow_info(string(), [term()], record()) -> ok.
+workflow_info(Format, Args, AtmWorkflowExecutionLogger) ->
+    workflow_info(str_utils:format_bin(Format, Args), AtmWorkflowExecutionLogger).
 
 
 -spec workflow_notice(entry(), record()) -> ok.
 workflow_notice(Entry, AtmWorkflowExecutionLogger) ->
-    workflow_append_log(Entry, ?LOGGER_NOTICE, AtmWorkflowExecutionLogger).
+    workflow_append_system_log(Entry, ?LOGGER_NOTICE, AtmWorkflowExecutionLogger).
+
+
+-spec workflow_notice(string(), [term()], record()) -> ok.
+workflow_notice(Format, Args, AtmWorkflowExecutionLogger) ->
+    workflow_notice(str_utils:format_bin(Format, Args), AtmWorkflowExecutionLogger).
 
 
 -spec workflow_warning(entry(), record()) -> ok.
 workflow_warning(Entry, AtmWorkflowExecutionLogger) ->
-    workflow_append_log(Entry, ?LOGGER_WARNING, AtmWorkflowExecutionLogger).
+    workflow_append_system_log(Entry, ?LOGGER_WARNING, AtmWorkflowExecutionLogger).
+
+
+-spec workflow_warning(string(), [term()], record()) -> ok.
+workflow_warning(Format, Args, AtmWorkflowExecutionLogger) ->
+    workflow_warning(str_utils:format_bin(Format, Args), AtmWorkflowExecutionLogger).
 
 
 -spec workflow_alert(entry(), record()) -> ok.
 workflow_alert(Entry, AtmWorkflowExecutionLogger) ->
-    workflow_append_log(Entry, ?LOGGER_ALERT, AtmWorkflowExecutionLogger).
+    workflow_append_system_log(Entry, ?LOGGER_ALERT, AtmWorkflowExecutionLogger).
+
+
+-spec workflow_alert(string(), [term()], record()) -> ok.
+workflow_alert(Format, Args, AtmWorkflowExecutionLogger) ->
+    workflow_alert(str_utils:format_bin(Format, Args), AtmWorkflowExecutionLogger).
 
 
 -spec workflow_error(entry(), record()) -> ok.
 workflow_error(Entry, AtmWorkflowExecutionLogger) ->
-    workflow_append_log(Entry, ?LOGGER_ERROR, AtmWorkflowExecutionLogger).
+    workflow_append_system_log(Entry, ?LOGGER_ERROR, AtmWorkflowExecutionLogger).
+
+
+-spec workflow_error(string(), [term()], record()) -> ok.
+workflow_error(Format, Args, AtmWorkflowExecutionLogger) ->
+    workflow_error(str_utils:format_bin(Format, Args), AtmWorkflowExecutionLogger).
 
 
 -spec workflow_critical(entry(), record()) -> ok.
 workflow_critical(Entry, AtmWorkflowExecutionLogger) ->
-    workflow_append_log(Entry, ?LOGGER_CRITICAL, AtmWorkflowExecutionLogger).
+    workflow_append_system_log(Entry, ?LOGGER_CRITICAL, AtmWorkflowExecutionLogger).
+
+
+-spec workflow_critical(string(), [term()], record()) -> ok.
+workflow_critical(Format, Args, AtmWorkflowExecutionLogger) ->
+    workflow_critical(str_utils:format_bin(Format, Args), AtmWorkflowExecutionLogger).
 
 
 -spec workflow_emergency(entry(), record()) -> ok.
 workflow_emergency(Entry, AtmWorkflowExecutionLogger) ->
-    workflow_append_log(Entry, ?LOGGER_EMERGENCY, AtmWorkflowExecutionLogger).
+    workflow_append_system_log(Entry, ?LOGGER_EMERGENCY, AtmWorkflowExecutionLogger).
+
+
+-spec workflow_emergency(string(), [term()], record()) -> ok.
+workflow_emergency(Format, Args, AtmWorkflowExecutionLogger) ->
+    workflow_emergency(str_utils:format_bin(Format, Args), AtmWorkflowExecutionLogger).
 
 
 %%%===================================================================
@@ -159,49 +268,42 @@ workflow_emergency(Entry, AtmWorkflowExecutionLogger) ->
 
 
 %% @private
--spec task_append_log(entry(), severity(), record()) -> ok.
-task_append_log(Entry, Severity, #atm_workflow_execution_logger{
-    atm_workflow_execution_auth = AtmWorkflowExecutionAuth,
-    task_audit_log_store_container = AtmTaskAuditLogStoreContainer
-}) ->
-    append_log(Entry, Severity, AtmWorkflowExecutionAuth, AtmTaskAuditLogStoreContainer).
+-spec task_append_system_log(entry(), severity(), record()) -> ok.
+task_append_system_log(Entry, Severity, AtmWorkflowExecutionLogger) ->
+    SystemLog = ensure_system_audit_log_object(Entry, Severity),
+    task_append_log(SystemLog, AtmWorkflowExecutionLogger).
 
 
 %% @private
--spec workflow_append_log(entry(), severity(), record()) -> ok.
-workflow_append_log(Entry, Severity, #atm_workflow_execution_logger{
-    atm_workflow_execution_auth = AtmWorkflowExecutionAuth,
-    workflow_audit_log_store_container = AtmWorkflowAuditLogStoreContainer
-}) ->
-    append_log(Entry, Severity, AtmWorkflowExecutionAuth, AtmWorkflowAuditLogStoreContainer).
+-spec workflow_append_system_log(entry(), severity(), record()) -> ok.
+workflow_append_system_log(Entry, Severity, AtmWorkflowExecutionLogger) ->
+    SystemLog = ensure_system_audit_log_object(Entry, Severity),
+    workflow_append_log(SystemLog, AtmWorkflowExecutionLogger).
 
 
 %% @private
--spec append_log(
-    entry(),
-    severity(),
-    atm_workflow_execution_auth:record(),
-    undefined | atm_store_container:record()
-) ->
-    ok.
-append_log(_Entry, _Severity, _AtmWorkflowExecutionAuth, undefined) ->
-    ok;
-append_log(Entry, Severity, AtmWorkflowExecutionAuth, AtmAuditLogStoreContainer) ->
-    AtmAuditLogStoreContainerOperation = #atm_store_container_operation{
-        type = append,
-        options = #{},
-        argument = ensure_system_audit_log_object(Entry, Severity),
-        workflow_execution_auth = AtmWorkflowExecutionAuth
-    },
-    catch atm_audit_log_store_container:apply_operation(
-        AtmAuditLogStoreContainer, AtmAuditLogStoreContainerOperation
-    ),
-    ok.
-
-
-%% @private
--spec ensure_system_audit_log_object(entry(), severity()) -> json_utils:json_map().
+-spec ensure_system_audit_log_object(entry(), severity()) -> log().
 ensure_system_audit_log_object(Entry, Severity) when is_map(Entry) ->
     Entry#{<<"severity">> => Severity};
 ensure_system_audit_log_object(Entry, Severity) when is_binary(Entry) ->
     #{<<"severity">> => Severity, <<"entry">> => #{<<"description">> => Entry}}.
+
+
+%% @private
+-spec append_log(
+    log(),
+    atm_workflow_execution_auth:record(),
+    undefined | atm_store_container:record()
+) ->
+    ok.
+append_log(_AuditLogObject, _AtmWorkflowExecutionAuth, undefined) ->
+    ok;
+append_log(AuditLogObject, AtmWorkflowExecutionAuth, AtmAuditLogStoreContainer) ->
+    Operation = #atm_store_container_operation{
+        type = append,
+        options = #{},
+        argument = AuditLogObject,
+        workflow_execution_auth = AtmWorkflowExecutionAuth
+    },
+    catch atm_audit_log_store_container:apply_operation(AtmAuditLogStoreContainer, Operation),
+    ok.
