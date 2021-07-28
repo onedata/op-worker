@@ -17,7 +17,7 @@
 -include("modules/automation/atm_execution.hrl").
 
 %% API
--export([build/3]).
+-export([acquire/2]).
 -export([
     get_auth/1,
     get_logger/1,
@@ -26,9 +26,9 @@
 
 
 -record(atm_workflow_execution_ctx, {
-    auth :: atm_workflow_execution_auth:record(),
-    logger :: atm_workflow_execution_logger:record(),
-    workflow_store_registry :: atm_workflow_execution:store_registry()
+    workflow_execution_auth :: atm_workflow_execution_auth:record(),
+    workflow_execution_logger :: atm_workflow_execution_logger:record(),
+    workflow_execution_env :: atm_workflow_execution_env:record()
 }).
 -type record() :: #atm_workflow_execution_ctx{}.
 
@@ -40,37 +40,32 @@
 %%%===================================================================
 
 
--spec build(
-    atm_workflow_execution_auth:record(),
-    atm_workflow_execution_logger:record(),
-    atm_workflow_execution:store_registry()
-) ->
-    record().
-build(AtmWorkflowExecutionAuth, AtmWorkflowExecutionLogger, AtmWorkflowStoreRegistry) ->
+-spec acquire(undefined | atm_task_execution:id(), atm_workflow_execution_env:record()) ->
+    record() | no_return().
+acquire(AtmTaskExecutionId, AtmWorkflowExecutionEnv) ->
+    AtmWorkflowExecutionAuth = atm_workflow_execution_env:acquire_auth(AtmWorkflowExecutionEnv),
+
     #atm_workflow_execution_ctx{
-        auth = AtmWorkflowExecutionAuth,
-        logger = AtmWorkflowExecutionLogger,
-        workflow_store_registry = AtmWorkflowStoreRegistry
+        workflow_execution_auth = AtmWorkflowExecutionAuth,
+        workflow_execution_logger = atm_workflow_execution_env:get_logger(
+            AtmTaskExecutionId, AtmWorkflowExecutionAuth, AtmWorkflowExecutionEnv
+        ),
+        workflow_execution_env = AtmWorkflowExecutionEnv
     }.
 
 
 -spec get_auth(record()) -> atm_workflow_execution_auth:record().
-get_auth(#atm_workflow_execution_ctx{auth = AtmWorkflowExecutionAuth}) ->
+get_auth(#atm_workflow_execution_ctx{workflow_execution_auth = AtmWorkflowExecutionAuth}) ->
     AtmWorkflowExecutionAuth.
 
 
 -spec get_logger(record()) -> atm_workflow_execution_logger:record().
-get_logger(#atm_workflow_execution_ctx{logger = AtmWorkflowExecutionLogger}) ->
+get_logger(#atm_workflow_execution_ctx{workflow_execution_logger = AtmWorkflowExecutionLogger}) ->
     AtmWorkflowExecutionLogger.
 
 
 -spec get_workflow_store_id(automation:id(), record()) -> atm_store:id() | no_return().
 get_workflow_store_id(AtmStoreSchemaId, #atm_workflow_execution_ctx{
-    workflow_store_registry = AtmStoreRegistry
+    workflow_execution_env = AtmWorkflowExecutionEnv
 }) ->
-    case maps:get(AtmStoreSchemaId, AtmStoreRegistry, undefined) of
-        undefined ->
-            throw(?ERROR_ATM_REFERENCED_NONEXISTENT_STORE(AtmStoreSchemaId));
-        AtmStoreId ->
-            AtmStoreId
-    end.
+    atm_workflow_execution_env:get_workflow_store_id(AtmStoreSchemaId, AtmWorkflowExecutionEnv).

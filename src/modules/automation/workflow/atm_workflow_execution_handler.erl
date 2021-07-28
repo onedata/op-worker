@@ -99,9 +99,7 @@ cancel(AtmWorkflowExecutionId) ->
 -spec prepare(atm_workflow_execution:id(), atm_workflow_execution_env:record()) ->
     ok | error.
 prepare(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv) ->
-    AtmWorkflowExecutionCtx = atm_workflow_execution_env:acquire_workflow_execution_ctx(
-        undefined, AtmWorkflowExecutionEnv
-    ),
+    AtmWorkflowExecutionCtx = atm_workflow_execution_ctx:acquire(undefined, AtmWorkflowExecutionEnv),
 
     try
         prepare_internal(AtmWorkflowExecutionId, AtmWorkflowExecutionCtx)
@@ -121,9 +119,7 @@ prepare(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv) ->
 ) ->
     {ok, workflow_engine:lane_spec()} | error.
 get_lane_spec(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmLaneIndex) ->
-    AtmWorkflowExecutionCtx = atm_workflow_execution_env:acquire_workflow_execution_ctx(
-        undefined, AtmWorkflowExecutionEnv
-    ),
+    AtmWorkflowExecutionCtx = atm_workflow_execution_ctx:acquire(undefined, AtmWorkflowExecutionEnv),
 
     try
         {ok, AtmWorkflowExecutionDoc} = atm_workflow_execution:get(AtmWorkflowExecutionId),
@@ -161,7 +157,7 @@ process_item(
     AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmTaskExecutionId,
     Item, ReportResultUrl, HeartbeatUrl
 ) ->
-    AtmWorkflowExecutionCtx = atm_workflow_execution_env:acquire_workflow_execution_ctx(
+    AtmWorkflowExecutionCtx = atm_workflow_execution_ctx:acquire(
         AtmTaskExecutionId, AtmWorkflowExecutionEnv
     ),
 
@@ -188,7 +184,7 @@ process_item(
 ) ->
     ok | error.
 process_result(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmTaskExecutionId, {error, _} = Error) ->
-    AtmWorkflowExecutionCtx = atm_workflow_execution_env:acquire_workflow_execution_ctx(
+    AtmWorkflowExecutionCtx = atm_workflow_execution_ctx:acquire(
         AtmTaskExecutionId, AtmWorkflowExecutionEnv
     ),
     % TODO VFS-7637 use audit log
@@ -200,7 +196,7 @@ process_result(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmTaskExecution
     error;
 
 process_result(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmTaskExecutionId, Results) ->
-    AtmWorkflowExecutionCtx = atm_workflow_execution_env:acquire_workflow_execution_ctx(
+    AtmWorkflowExecutionCtx = atm_workflow_execution_ctx:acquire(
         AtmTaskExecutionId, AtmWorkflowExecutionEnv
     ),
 
@@ -240,9 +236,7 @@ handle_task_execution_ended(AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv, At
 ) ->
     ok.
 handle_lane_execution_ended(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmLaneIndex) ->
-    AtmWorkflowExecutionCtx = atm_workflow_execution_env:acquire_workflow_execution_ctx(
-        undefined, AtmWorkflowExecutionEnv
-    ),
+    AtmWorkflowExecutionCtx = atm_workflow_execution_ctx:acquire(undefined, AtmWorkflowExecutionEnv),
 
     try
         {ok, AtmWorkflowExecutionDoc} = atm_workflow_execution:get(AtmWorkflowExecutionId),

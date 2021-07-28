@@ -111,8 +111,7 @@ build_creation_ctx(UserCtx, SpaceId, AtmWorkflowSchemaId, StoreInitialValues, Ca
             description = <<>>,
             type = audit_log,
             data_spec = #atm_data_spec{type = atm_object_type},
-            requires_initial_value = false,
-            default_initial_value = [#{<<"TEST">> => <<"TEST">>}]  %% TODO rm
+            requires_initial_value = false
         },
         store_initial_values = StoreInitialValues,
         callback_url = CallbackUrl

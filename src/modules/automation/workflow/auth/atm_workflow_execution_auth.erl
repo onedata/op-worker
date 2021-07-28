@@ -12,7 +12,7 @@
 %%%
 %%%                              !!! NOTE !!!
 %%% The auth used by internal atm workflow execution machinery is created using
-%%% offline creator session. Because of that it must not be cached but rather
+%%% creator's offline session. Because of that it must not be cached but rather
 %%% recreated each time it is needed (this causes necessary periodic offline
 %%% session refresh).
 %%% @end
