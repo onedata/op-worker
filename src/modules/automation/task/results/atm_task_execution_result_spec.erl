@@ -77,9 +77,20 @@ get_name(#atm_task_execution_result_spec{name = Name}) ->
     json_utils:json_term()
 ) ->
     ok | no_return().
-apply_result(AtmWorkflowExecutionCtx, AtmTaskExecutionResultSpec, Result) ->
+apply_result(AtmWorkflowExecutionCtx, AtmTaskExecutionResultSpec = #atm_task_execution_result_spec{
+    dispatch_specs = DispatchSpecs,
+    is_batch = IsBatch
+}, Result) ->
     validate_result(AtmWorkflowExecutionCtx, AtmTaskExecutionResultSpec, Result),
-    dispatch_result(AtmWorkflowExecutionCtx, AtmTaskExecutionResultSpec, Result).
+
+    Options = #{<<"isBatch">> => IsBatch},
+    lists:foreach(fun(#dispatch_spec{store_schema_id = AtmStoreSchemaId} = DispatchSpec) ->
+        try
+            dispatch_result(AtmWorkflowExecutionCtx, Result, Options, DispatchSpec)
+        catch _:Reason ->
+            throw(?ERROR_ATM_TASK_RESULT_DISPATCH_FAILED(AtmStoreSchemaId, Reason))
+        end
+    end, DispatchSpecs).
 
 
 %%%===================================================================
@@ -190,32 +201,33 @@ validate_result(_AtmWorkflowExecutionAuth, _AtmTaskExecutionResultSpec, _Result)
 
 
 %% @private
--spec dispatch_result(atm_workflow_execution_ctx:record(), record(), json_utils:json_term()) ->
+-spec dispatch_result(
+    atm_workflow_execution_ctx:record(),
+    json_utils:json_term(),
+    atm_store_container:operation_options(),
+    dispatch_spec()
+) ->
     ok | no_return().
-dispatch_result(AtmWorkflowExecutionCtx, #atm_task_execution_result_spec{
-    dispatch_specs = DispatchSpecs,
-    is_batch = IsBatch
-}, Result) ->
-    AtmWorkflowExecutionAuth = atm_workflow_execution_ctx:get_auth(AtmWorkflowExecutionCtx),
+dispatch_result(AtmWorkflowExecutionCtx, Result, _Options, #dispatch_spec{
+    store_schema_id = ?CURRENT_TASK_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID
+}) ->
     AtmWorkflowExecutionLogger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
-    Options = #{<<"isBatch">> => IsBatch},
+    atm_workflow_execution_logger:task_append_log(Result, AtmWorkflowExecutionLogger);
 
-    lists:foreach(fun(#dispatch_spec{store_schema_id = AtmStoreSchemaId, function = DispatchFun}) ->
-        try
-            case AtmStoreSchemaId of
-                ?CURRENT_TASK_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID ->
-                    atm_workflow_execution_logger:task_append_log(Result, AtmWorkflowExecutionLogger);
-                ?WORKFLOW_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID ->
-                    atm_workflow_execution_logger:workflow_append_log(Result, AtmWorkflowExecutionLogger);
-                _ ->
-                    AtmStoreId = atm_workflow_execution_ctx:get_workflow_store_id(
-                        AtmStoreSchemaId, AtmWorkflowExecutionCtx
-                    ),
-                    atm_store_api:apply_operation(
-                        AtmWorkflowExecutionAuth, DispatchFun, Result, Options, AtmStoreId
-                    )
-            end
-        catch _:Reason ->
-            throw(?ERROR_ATM_TASK_RESULT_DISPATCH_FAILED(AtmStoreSchemaId, Reason))
-        end
-    end, DispatchSpecs).
+dispatch_result(AtmWorkflowExecutionCtx, Result, _Options, #dispatch_spec{
+    store_schema_id = ?WORKFLOW_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID
+}) ->
+    AtmWorkflowExecutionLogger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
+    atm_workflow_execution_logger:workflow_append_log(Result, AtmWorkflowExecutionLogger);
+
+dispatch_result(AtmWorkflowExecutionCtx, Result, Options, #dispatch_spec{
+    store_schema_id = AtmStoreSchemaId,
+    function = DispatchFun
+}) ->
+    AtmWorkflowExecutionAuth = atm_workflow_execution_ctx:get_auth(AtmWorkflowExecutionCtx),
+    AtmStoreId = atm_workflow_execution_ctx:get_workflow_store_id(
+        AtmStoreSchemaId, AtmWorkflowExecutionCtx
+    ),
+    atm_store_api:apply_operation(
+        AtmWorkflowExecutionAuth, DispatchFun, Result, Options, AtmStoreId
+    ).
