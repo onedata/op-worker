@@ -1088,6 +1088,8 @@
     % when updating doc). It is necessary due to limitation of datastore as
     % otherwise getting document before update would be needed (to compare 2 docs).
     status_changed = false :: boolean(),
+    % Flag used to differentiate reasons why task is aborting
+    aborting_reason = undefined :: undefined | cancel | failure,
 
     items_in_processing = 0 :: non_neg_integer(),
     items_processed = 0 :: non_neg_integer(),
@@ -1140,6 +1142,8 @@
     % when updating doc). It is necessary due to limitation of datastore as
     % otherwise getting document before update would be needed (to compare 2 docs).
     prev_status :: atm_workflow_execution:status(),
+    % Flag used to differentiate reasons why workflow is aborting
+    aborting_reason = undefined :: undefined | cancel | failure,
 
     callback :: undefined | http_client:url(),
 

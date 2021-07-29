@@ -45,7 +45,7 @@ translate_resource(#gri{aspect = instance, scope = private}, #atm_task_execution
         }),
         <<"schemaId">> => AtmTaskSchemaId,
 
-        <<"systemAuditLogId">> => AtmTaskAuditLogId,
+        <<"systemAuditLogId">> => utils:undefined_to_null(AtmTaskAuditLogId),
 
         <<"status">> => atom_to_binary(AtmTaskExecutionStatus, utf8),
 

@@ -19,7 +19,7 @@
 -export([
     handle_preparing/1,
     handle_enqueued/1,
-    handle_cancel/1,
+    handle_aborting/2,
     handle_ended/1
 ]).
 -export([
@@ -45,15 +45,17 @@ handle_enqueued(AtmWorkflowExecutionId) ->
     handle_transition_within_waiting_phase(AtmWorkflowExecutionId, ?ENQUEUED_STATUS).
 
 
--spec handle_cancel(atm_workflow_execution:id()) -> ok | {error, already_ended}.
-handle_cancel(AtmWorkflowExecutionId) ->
+-spec handle_aborting(atm_workflow_execution:id(), cancel | failure) ->
+    ok | {error, already_ended}.
+handle_aborting(AtmWorkflowExecutionId, Reason) ->
     Diff = fun(AtmWorkflowExecution) ->
         case infer_phase(AtmWorkflowExecution) of
             ?ENDED_PHASE ->
                 {error, already_ended};
             _ ->
                 {ok, set_times_on_phase_transition(AtmWorkflowExecution#atm_workflow_execution{
-                    status = ?ABORTING_STATUS
+                    status = ?ABORTING_STATUS,
+                    aborting_reason = Reason
                 })}
         end
     end,
@@ -76,15 +78,23 @@ handle_ended(AtmWorkflowExecutionId) ->
                 % as otherwise it is not possible to transition from waiting phase
                 % to ended phase directly
                 ?FAILED_STATUS;
-            ?ONGOING_PHASE when CurrStatus == ?ABORTING_STATUS ->
-                ?CANCELLED_STATUS;
             ?ONGOING_PHASE when CurrStatus == ?ACTIVE_STATUS ->
-                AtmLaneExecutionStatuses = atm_lane_execution:get_statuses(
+                AtmLaneExecutionStatuses = lists:usort(atm_lane_execution:gather_statuses(
                     AtmWorkflowExecution#atm_workflow_execution.lanes
-                ),
-                case lists:usort(AtmLaneExecutionStatuses) of
-                    [?FINISHED_STATUS] -> ?FINISHED_STATUS;
-                    _ -> ?FAILED_STATUS
+                )),
+                case lists:member(?FAILED_STATUS, AtmLaneExecutionStatuses) of
+                    true ->
+                        % Workflow may not have been aborted as maximum failed items threshold
+                        % has not been breached but still after execution end it is considered
+                        % as failed
+                        ?FAILED_STATUS;
+                    false ->
+                        ?FINISHED_STATUS
+                end;
+            ?ONGOING_PHASE when CurrStatus == ?ABORTING_STATUS ->
+                case AtmWorkflowExecution#atm_workflow_execution.aborting_reason of
+                    cancel -> ?CANCELLED_STATUS;
+                    failure -> ?FAILED_STATUS
                 end;
             ?ENDED_PHASE ->
                 CurrStatus
@@ -123,6 +133,8 @@ report_task_status_change(
     AtmTaskExecutionId,
     NewAtmTaskExecutionStatus
 ) ->
+    HasTaskStarted = lists:member(NewAtmTaskExecutionStatus, [?ACTIVE_STATUS, ?SKIPPED_STATUS]),
+
     Diff = fun(AtmWorkflowExecution = #atm_workflow_execution{
         status = CurrStatus,
         lanes = AtmLaneExecutions
@@ -138,9 +150,9 @@ report_task_status_change(
                     NewLaneExecution, AtmLaneExecutionIndex, AtmLaneExecutions
                 ),
                 NewAtmWorkflowExecution = AtmWorkflowExecution#atm_workflow_execution{
-                    status = case {CurrStatus, NewAtmTaskExecutionStatus} of
-                        {?ENQUEUED_STATUS, ?ACTIVE_STATUS} ->
-                            % Workflow transition to ?ACTIVE_STATUS when first task does
+                    status = case {CurrStatus, HasTaskStarted} of
+                        {?ENQUEUED_STATUS, true} ->
+                            % Workflow transition to ?ACTIVE_STATUS when first task has started
                             ?ACTIVE_STATUS;
                         _ ->
                             CurrStatus

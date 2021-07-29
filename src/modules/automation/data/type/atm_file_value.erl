@@ -77,11 +77,12 @@ list_children(AtmWorkflowExecutionAuth, Guid, ListOpts, BatchSize) ->
     try
         list_children_unsafe(SessionId, Guid, ListOpts#{size => BatchSize})
     catch _:Error ->
-        case fslogic_errors:is_access_error(datastore_runner:normalize_error(Error)) of
+        Errno = datastore_runner:normalize_error(Error),
+        case fslogic_errors:is_access_error(Errno) of
             true ->
                 {[], [], #{}, true};
             _ -> 
-                throw(Error)
+                throw(?ERROR_POSIX(Errno))
         end
     end.
 
@@ -128,7 +129,7 @@ expand(AtmWorkflowExecutionAuth, Guid) ->
 
     case lfm:stat(SessionId, ?FILE_REF(Guid)) of
         {ok, FileAttrs} -> {ok, file_middleware_plugin:file_attrs_to_json(FileAttrs)};
-        {error, _} = Error -> Error 
+        {error, Errno} -> ?ERROR_POSIX(Errno)
     end.
 
 
@@ -144,17 +145,22 @@ check_implicit_constraints(AtmWorkflowExecutionAuth, FileGuid) ->
     SpaceId = atm_workflow_execution_auth:get_space_id(AtmWorkflowExecutionAuth),
 
     case file_id:guid_to_space_id(FileGuid) of
-        SpaceId ->
-            SessionId = atm_workflow_execution_auth:get_session_id(AtmWorkflowExecutionAuth),
+        SpaceId -> ok;
+        _ -> throw(?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(#{<<"inSpace">> => SpaceId}))
+    end,
 
-            case lfm:stat(SessionId, ?FILE_REF(FileGuid)) of
-                {ok, FileAttrs} ->
-                    FileAttrs;
-                {error, _} ->
-                    throw(?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(#{<<"hasAccess">> => true}))
-            end;
-        _ ->
-            throw(?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(#{<<"inSpace">> => SpaceId}))
+    SessionId = atm_workflow_execution_auth:get_session_id(AtmWorkflowExecutionAuth),
+
+    case lfm:stat(SessionId, ?FILE_REF(FileGuid)) of
+        {ok, FileAttrs} ->
+            FileAttrs;
+        {error, Errno} ->
+            case fslogic_errors:is_access_error(Errno) of
+                true ->
+                    throw(?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(#{<<"hasAccess">> => true}));
+                false ->
+                    throw(?ERROR_POSIX(Errno))
+            end
     end.
 
 

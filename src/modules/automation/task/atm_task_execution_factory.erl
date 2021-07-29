@@ -130,7 +130,9 @@ create_audit_log(#atm_workflow_execution_creation_ctx{
     system_audit_log_schema = AtmSystemAuditLogSchema
 }) ->
     {ok, AtmSystemAuditLogDoc} = atm_store_api:create(
-        AtmWorkflowExecutionAuth, undefined, AtmSystemAuditLogSchema
+        AtmWorkflowExecutionAuth, undefined, AtmSystemAuditLogSchema#atm_store_schema{
+            id = ?CURRENT_TASK_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID
+        }
     ),
     AtmSystemAuditLogDoc.
 

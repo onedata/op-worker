@@ -167,6 +167,7 @@ get_record_struct(3) ->
 
         {status, atom},
         {prev_status, atom},
+        {aborting_reason, atom},  %% new field
 
         {callback, string},
 
@@ -252,6 +253,7 @@ upgrade_record(2, {
 
         status = Status,
         prev_status = PrevStatus,
+        aborting_reason = undefined,
 
         callback = Callback,
 

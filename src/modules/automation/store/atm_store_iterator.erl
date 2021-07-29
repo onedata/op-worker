@@ -65,8 +65,9 @@ get_next(AtmWorkflowExecutionEnv, AtmStoreIterator = #atm_store_iterator{
     data_spec = AtmDataSpec,
     store_container_iterator = AtmStoreContainerIterator
 }) ->
-    AtmWorkflowExecutionAuth =
-        atm_workflow_execution_env:acquire_workflow_execution_auth(AtmWorkflowExecutionEnv),
+    AtmWorkflowExecutionCtx = atm_workflow_execution_ctx:acquire(undefined, AtmWorkflowExecutionEnv),
+    AtmWorkflowExecutionAuth = atm_workflow_execution_ctx:get_auth(AtmWorkflowExecutionCtx),
+
     case get_next_internal(AtmWorkflowExecutionAuth, AtmStoreContainerIterator, 1, AtmDataSpec) of
         stop ->
             stop;
@@ -83,8 +84,9 @@ get_next(AtmWorkflowExecutionEnv, AtmStoreIterator = #atm_store_iterator{
     }},
     store_container_iterator = AtmStoreContainerIterator
 }) ->
-    AtmWorkflowExecutionAuth =
-        atm_workflow_execution_env:acquire_workflow_execution_auth(AtmWorkflowExecutionEnv),
+    AtmWorkflowExecutionCtx = atm_workflow_execution_ctx:acquire(undefined, AtmWorkflowExecutionEnv),
+    AtmWorkflowExecutionAuth = atm_workflow_execution_ctx:get_auth(AtmWorkflowExecutionCtx),
+
     case get_next_internal(AtmWorkflowExecutionAuth, AtmStoreContainerIterator, Size, AtmDataSpec) of
         stop ->
             stop;

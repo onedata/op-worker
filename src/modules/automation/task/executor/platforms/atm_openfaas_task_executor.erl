@@ -47,7 +47,7 @@
 -type openfaas_config() :: #openfaas_config{}.
 
 -record(prepare_ctx, {
-    workflow_execution_auth :: atm_workflow_execution_auth:record(),
+    workflow_execution_ctx :: atm_workflow_execution_ctx:record(),
     openfaas_config :: openfaas_config(),
     executor :: record()
 }).
@@ -101,10 +101,10 @@ create(AtmWorkflowExecutionId, AtmLambdaDoc = #document{value = #od_atm_lambda{
     }.
 
 
--spec prepare(atm_workflow_execution_auth:record(), record()) -> ok | no_return().
-prepare(AtmWorkflowExecutionAuth, AtmTaskExecutor) ->
+-spec prepare(atm_workflow_execution_ctx:record(), record()) -> ok | no_return().
+prepare(AtmWorkflowExecutionCtx, AtmTaskExecutor) ->
     PrepareCtx = #prepare_ctx{
-        workflow_execution_auth = AtmWorkflowExecutionAuth,
+        workflow_execution_ctx = AtmWorkflowExecutionCtx,
         openfaas_config = get_openfaas_config(),
         executor = AtmTaskExecutor
     },
@@ -132,10 +132,10 @@ in_readonly_mode(#atm_openfaas_task_executor{operation_spec = #atm_openfaas_oper
     Readonly.
 
 
--spec run(atm_task_execution_ctx:record(), json_utils:json_map(), record()) ->
+-spec run(atm_job_ctx:record(), json_utils:json_map(), record()) ->
     ok | no_return().
-run(AtmTaskExecutionCtx, Data, AtmTaskExecutor) ->
-    schedule_function_execution(AtmTaskExecutionCtx, Data, AtmTaskExecutor).
+run(AtmJobCtx, Data, AtmTaskExecutor) ->
+    schedule_function_execution(AtmJobCtx, Data, AtmTaskExecutor).
 
 
 %%%===================================================================
@@ -322,7 +322,7 @@ add_mount_oneclient_function_annotations(FunctionDefinition, #prepare_ctx{
 ) ->
     FunctionDefinition;
 add_mount_oneclient_function_annotations(FunctionDefinition, #prepare_ctx{
-    workflow_execution_auth = AtmWorkflowExecutionAuth,
+    workflow_execution_ctx = AtmWorkflowExecutionCtx,
     executor = AtmTaskExecutor = #atm_openfaas_task_executor{
         operation_spec = #atm_openfaas_operation_spec{
             docker_execution_options = #atm_docker_execution_options{
@@ -333,6 +333,7 @@ add_mount_oneclient_function_annotations(FunctionDefinition, #prepare_ctx{
         }
     }
 }) ->
+    AtmWorkflowExecutionAuth = atm_workflow_execution_ctx:get_auth(AtmWorkflowExecutionCtx),
     SpaceId = atm_workflow_execution_auth:get_space_id(AtmWorkflowExecutionAuth),
     AccessToken = atm_workflow_execution_auth:get_access_token(AtmWorkflowExecutionAuth),
     {ok, OpDomain} = provider_logic:get_domain(),
@@ -415,9 +416,9 @@ await_function_readiness(#prepare_ctx{
 
 
 %% @private
--spec schedule_function_execution(atm_task_execution_ctx:record(), json_utils:json_map(), record()) ->
+-spec schedule_function_execution(atm_job_ctx:record(), json_utils:json_map(), record()) ->
     ok | no_return().
-schedule_function_execution(AtmTaskExecutionCtx, Data, #atm_openfaas_task_executor{
+schedule_function_execution(AtmJobCtx, Data, #atm_openfaas_task_executor{
     function_name = FunctionName
 }) ->
     OpenfaasConfig = get_openfaas_config(),
@@ -426,7 +427,7 @@ schedule_function_execution(AtmTaskExecutionCtx, Data, #atm_openfaas_task_execut
     ),
     AuthHeaders = get_basic_auth_header(OpenfaasConfig),
     AllHeaders = AuthHeaders#{
-        <<"X-Callback-Url">> => atm_task_execution_ctx:get_report_result_url(AtmTaskExecutionCtx)
+        <<"X-Callback-Url">> => atm_job_ctx:get_report_result_url(AtmJobCtx)
     },
 
     case http_client:post(Endpoint, AllHeaders, json_utils:encode(Data)) of

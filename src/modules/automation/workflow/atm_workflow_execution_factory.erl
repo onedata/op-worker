@@ -111,8 +111,7 @@ build_creation_ctx(UserCtx, SpaceId, AtmWorkflowSchemaId, StoreInitialValues, Ca
             description = <<>>,
             type = audit_log,
             data_spec = #atm_data_spec{type = atm_object_type},
-            requires_initial_value = false,
-            default_initial_value = [#{<<"TEST">> => <<"TEST">>}]  %% TODO rm
+            requires_initial_value = false
         },
         store_initial_values = StoreInitialValues,
         callback_url = CallbackUrl
@@ -197,7 +196,9 @@ create_audit_log(#atm_workflow_execution_creation_ctx{
     system_audit_log_schema = AtmAuditLogSchema
 }, ExecutionElements) ->
     {ok, AtmWorkflowAuditLogDoc} = atm_store_api:create(
-        AtmWorkflowExecutionAuth, undefined, AtmAuditLogSchema
+        AtmWorkflowExecutionAuth, undefined, AtmAuditLogSchema#atm_store_schema{
+            id = ?WORKFLOW_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID
+        }
     ),
 
     ExecutionElements#execution_elements{workflow_audit_log = AtmWorkflowAuditLogDoc}.

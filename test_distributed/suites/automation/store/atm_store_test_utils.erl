@@ -116,7 +116,7 @@ browse_content(ProviderSelector, AtmWorkflowExecutionAuth, BrowseOptions, AtmSto
 
 -spec acquire_store_iterator(
     oct_background:entity_selector(),
-    atm_workflow_execution_env:record(),
+    atm_store:id(),
     atm_store_iterator_spec:record()
 ) ->
     atm_store_iterator:record().

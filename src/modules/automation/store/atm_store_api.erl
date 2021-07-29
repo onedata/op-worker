@@ -143,14 +143,11 @@ browse_content(AtmWorkflowExecutionAuth, BrowseOpts, AtmStoreId) ->
 %% files subtree for each file kept in store will be traversed and returned).
 %% @end
 %%-------------------------------------------------------------------
--spec acquire_iterator(atm_workflow_execution_env:record(), atm_store_iterator_spec:record()) ->
+-spec acquire_iterator(atm_store:id(), atm_store_iterator_spec:record()) ->
     atm_store_iterator:record().
-acquire_iterator(AtmWorkflowExecutionEnv, #atm_store_iterator_spec{
-    store_schema_id = AtmStoreSchemaId
-} = AtmStoreIteratorConfig) ->
-    AtmStoreId = atm_workflow_execution_env:get_workflow_store_id(AtmStoreSchemaId, AtmWorkflowExecutionEnv),
+acquire_iterator(AtmStoreId, AtmStoreIteratorSpec) ->
     {ok, #atm_store{container = AtmStoreContainer}} = get(AtmStoreId),
-    atm_store_iterator:build(AtmStoreIteratorConfig, AtmStoreContainer).
+    atm_store_iterator:build(AtmStoreIteratorSpec, AtmStoreContainer).
 
 
 -spec freeze(atm_store:id()) -> ok.

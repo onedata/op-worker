@@ -74,12 +74,12 @@ list_children(AtmWorkflowExecutionAuth, DatasetId, ListOpts, BatchSize) ->
             {ResultEntries, [], #{offset => 1, start_index => LastIndex}, IsLast};
         {ok, [], IsLast} ->
             {[], [], #{}, IsLast};
-        {error, Type} = Error ->
-            case fslogic_errors:is_access_error(Type) of
+        {error, Errno} ->
+            case fslogic_errors:is_access_error(Errno) of
                 true ->
                     {[], [], #{}, true};
                 false ->
-                    throw(Error)
+                    throw(?ERROR_POSIX(Errno))
             end
     end.
 
@@ -117,7 +117,7 @@ expand(AtmWorkflowExecutionAuth, DatasetId) ->
     SessionId = atm_workflow_execution_auth:get_session_id(AtmWorkflowExecutionAuth),
     case lfm:get_dataset_info(SessionId, DatasetId) of
         {ok, DatasetInfo} -> {ok, dataset_utils:dataset_info_to_json(DatasetInfo)};
-        {error, _} = Error -> Error
+        {error, Errno} -> ?ERROR_POSIX(Errno)
     end.
 
 
@@ -141,11 +141,11 @@ check_implicit_constraints(AtmWorkflowExecutionAuth, DatasetId) ->
                 _ ->
                     throw(?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(#{<<"inSpace">> => SpaceId}))
             end;
-        {error, Type} = Error ->
-            case fslogic_errors:is_access_error(Type) of
+        {error, Errno} ->
+            case fslogic_errors:is_access_error(Errno) of
                 true ->
                     throw(?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(#{<<"hasAccess">> => true}));
                 false ->
-                    throw(Error)
+                    throw(?ERROR_POSIX(Errno))
             end
     end.

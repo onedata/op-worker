@@ -29,16 +29,16 @@
 %%%===================================================================
 
 
--spec prepare_all(atm_workflow_execution_auth:record(), [atm_task_execution:id()]) ->
+-spec prepare_all(atm_workflow_execution_ctx:record(), [atm_task_execution:id()]) ->
     ok | no_return().
-prepare_all(AtmWorkflowExecutionAuth, AtmTaskExecutionIds) ->
+prepare_all(AtmWorkflowExecutionCtx, AtmTaskExecutionIds) ->
     atm_parallel_runner:foreach(fun(AtmTaskExecutionId) ->
         {ok, AtmTaskExecutionDoc = #document{value = #atm_task_execution{
             schema_id = AtmTaskSchemaId
         }}} = atm_task_execution:get(AtmTaskExecutionId),
 
         try
-            prepare(AtmWorkflowExecutionAuth, AtmTaskExecutionDoc)
+            prepare(AtmWorkflowExecutionCtx, AtmTaskExecutionDoc)
         catch _:Reason ->
             throw(?ERROR_ATM_TASK_EXECUTION_PREPARATION_FAILED(AtmTaskSchemaId, Reason))
         end
@@ -46,15 +46,15 @@ prepare_all(AtmWorkflowExecutionAuth, AtmTaskExecutionIds) ->
 
 
 -spec prepare(
-    atm_workflow_execution_auth:record(),
+    atm_workflow_execution_ctx:record(),
     atm_task_execution:id() | atm_task_execution:doc()
 ) ->
     ok | no_return().
-prepare(AtmWorkflowExecutionAuth, AtmTaskExecutionIdOrDoc) ->
+prepare(AtmWorkflowExecutionCtx, AtmTaskExecutionIdOrDoc) ->
     #document{value = #atm_task_execution{executor = AtmTaskExecutor}} = ensure_atm_task_execution_doc(
         AtmTaskExecutionIdOrDoc
     ),
-    atm_task_executor:prepare(AtmWorkflowExecutionAuth, AtmTaskExecutor).
+    atm_task_executor:prepare(AtmWorkflowExecutionCtx, AtmTaskExecutor).
 
 
 -spec clean_all([atm_task_execution:id()]) -> ok.

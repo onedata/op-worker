@@ -47,7 +47,7 @@
 -callback create(atm_workflow_execution:id(), od_atm_lambda:doc()) ->
     record() | no_return().
 
--callback prepare(atm_workflow_execution_auth:record(), record()) -> ok | no_return().
+-callback prepare(atm_workflow_execution_ctx:record(), record()) -> ok | no_return().
 
 -callback clean(record()) -> ok | no_return().
 
@@ -55,7 +55,7 @@
 
 -callback in_readonly_mode(record()) -> boolean().
 
--callback run(atm_task_execution_ctx:record(), json_utils:json_map(), record()) ->
+-callback run(atm_job_ctx:record(), json_utils:json_map(), record()) ->
     ok | no_return().
 
 
@@ -74,10 +74,10 @@ create(AtmWorkflowExecutionId, AtmLambdaDoc = #document{value = #od_atm_lambda{
     Model:create(AtmWorkflowExecutionId, AtmLambdaDoc).
 
 
--spec prepare(atm_workflow_execution_auth:record(), record()) -> ok | no_return().
-prepare(AtmWorkflowExecutionAuth, AtmTaskExecutor) ->
+-spec prepare(atm_workflow_execution_ctx:record(), record()) -> ok | no_return().
+prepare(AtmWorkflowExecutionCtx, AtmTaskExecutor) ->
     Model = utils:record_type(AtmTaskExecutor),
-    Model:prepare(AtmWorkflowExecutionAuth, AtmTaskExecutor).
+    Model:prepare(AtmWorkflowExecutionCtx, AtmTaskExecutor).
 
 
 -spec clean(record()) -> ok | no_return().
@@ -98,11 +98,11 @@ in_readonly_mode(AtmTaskExecutor) ->
     Model:in_readonly_mode(AtmTaskExecutor).
 
 
--spec run(atm_task_execution_ctx:record(), json_utils:json_map(), record()) ->
+-spec run(atm_job_ctx:record(), json_utils:json_map(), record()) ->
     ok | no_return().
-run(AtmTaskExecutionCtx, Arguments, AtmTaskExecutor) ->
+run(AtmJobCtx, Arguments, AtmTaskExecutor) ->
     Model = utils:record_type(AtmTaskExecutor),
-    Model:run(AtmTaskExecutionCtx, Arguments, AtmTaskExecutor).
+    Model:run(AtmJobCtx, Arguments, AtmTaskExecutor).
 
 
 %%%===================================================================
