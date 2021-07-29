@@ -19,9 +19,10 @@
 
 %% API
 -export([
-    create/1, 
+    create/1,
+    report_synchronization_started/2, 
     report_file_synchronized/2, 
-    report_file_failed/3, 
+    report_file_synchronization_failed/3, 
     destroy/1, 
     list/2
 ]).
@@ -30,8 +31,9 @@
 -export([get_ctx/0]).
 
 -type id() :: qos_entry:id().
+-type is_last() :: boolean().
 
--export_type([id/0]).
+-export_type([id/0, is_last/0]).
 
 
 -define(CTX, #{model => ?MODULE}).
@@ -51,6 +53,17 @@ create(Id) ->
     }).
 
 
+-spec report_synchronization_started(id(), file_id:file_guid()) -> ok | {error, term()}.
+report_synchronization_started(Id, FileGuid) ->
+    {ok, ObjectId} = file_id:guid_to_objectid(FileGuid),
+    Content = #{
+        <<"status">> => <<"synchronization_started">>,
+        <<"severity">> => <<"info">>,
+        <<"fileId">> => ObjectId
+    },
+    datastore_infinite_log:append(?CTX, Id, json_utils:encode(Content)).
+
+
 -spec report_file_synchronized(id(), file_id:file_guid()) -> ok | {error, term()}.
 report_file_synchronized(Id, FileGuid) ->
     {ok, ObjectId} = file_id:guid_to_objectid(FileGuid),
@@ -62,11 +75,11 @@ report_file_synchronized(Id, FileGuid) ->
     datastore_infinite_log:append(?CTX, Id, json_utils:encode(Content)).
 
 
--spec report_file_failed(id(), file_id:file_guid(), {error, term()}) -> ok | {error, term()}.
-report_file_failed(Id, FileGuid, Error) ->
+-spec report_file_synchronization_failed(id(), file_id:file_guid(), {error, term()}) -> ok | {error, term()}.
+report_file_synchronization_failed(Id, FileGuid, Error) ->
     {ok, ObjectId} = file_id:guid_to_objectid(FileGuid),
     Content = #{
-        <<"status">> => <<"failed">>,
+        <<"status">> => <<"synchronization_failed">>,
         <<"severity">> => <<"error">>,
         <<"fileId">> => ObjectId,
         <<"error">> => errors:to_json(Error)
@@ -80,7 +93,7 @@ destroy(Id) ->
 
 
 -spec list(id(), infinite_log_browser:listing_opts()) -> 
-    {ok, [json_utils:json_map()], boolean()} | {error, term()}.
+    {ok, [json_utils:json_map()], is_last()} | {error, term()}.
 list(Id, Opts) ->
     case datastore_infinite_log:list(?CTX, Id, Opts#{direction => ?FORWARD}) of
         {ok, {ProgressMarker, ListingResult}} -> 

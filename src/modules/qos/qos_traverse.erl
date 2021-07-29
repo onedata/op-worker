@@ -275,6 +275,7 @@ synchronize_file_for_entries_insecure(TaskId, UserCtx, FileCtx, QosEntries) ->
     lists:foreach(fun(QosEntry) -> 
         qos_entry:add_transfer_to_list(QosEntry, TransferId) 
     end, QosEntries),
+    ok = report_file_synchronization_started_for_entries(QosEntries, FileCtx),
     SyncResult = case IsSymlink of
         true -> 
             ok;
@@ -306,20 +307,32 @@ synchronize_file_for_entries_insecure(TaskId, UserCtx, FileCtx, QosEntries) ->
 
 
 %% @private
+-spec report_file_synchronization_started_for_entries([qos_entry:id()], file_ctx:ctx()) -> ok.
+report_file_synchronization_started_for_entries(QosEntries, FileCtx) ->
+    report_to_audit_log(
+        QosEntries, FileCtx, [], fun qos_entry_audit_log:report_synchronization_started/2).
+
+
+%% @private
 -spec report_file_synchronized_for_entries([qos_entry:id()], file_ctx:ctx()) -> ok.
 report_file_synchronized_for_entries(QosEntries, FileCtx) ->
-    FileGuid = file_ctx:get_logical_guid_const(FileCtx),
-    lists:foreach(fun(QosEntryId) ->
-        ok = qos_entry_audit_log:report_file_synchronized(QosEntryId, FileGuid)
-    end, QosEntries).
+    report_to_audit_log(
+        QosEntries, FileCtx, [], fun qos_entry_audit_log:report_file_synchronized/2).
 
 
 %% @private
 -spec report_file_failed_for_entries([qos_entry:id()], file_ctx:ctx(), {error, term()}) -> ok.
 report_file_failed_for_entries(QosEntries, FileCtx, Error) ->
+    report_to_audit_log(
+        QosEntries, FileCtx, [Error], fun qos_entry_audit_log:report_file_synchronization_failed/3).
+
+
+%% @private
+-spec report_to_audit_log([qos_entry:id()], file_ctx:ctx(), [term()], fun((...) -> ok)) -> ok.
+report_to_audit_log(QosEntries, FileCtx, Args, ReportFun) ->
     FileGuid = file_ctx:get_logical_guid_const(FileCtx),
     lists:foreach(fun(QosEntryId) ->
-        ok = qos_entry_audit_log:report_file_failed(QosEntryId, FileGuid, Error)
+        ok = erlang:apply(ReportFun, [QosEntryId, FileGuid | Args])
     end, QosEntries).
 
 

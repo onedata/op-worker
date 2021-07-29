@@ -591,12 +591,12 @@ qos_audit_log_successful_synchronization(Config) ->
 
 qos_audit_log_transfer_error(Config) ->
     % error mocked in init_per_testcase
-    qos_audit_log_base_test(Config, <<"failed">>, single_file).
+    qos_audit_log_base_test(Config, <<"synchronization_failed">>, single_file).
 
 
 qos_audit_log_failure(Config) ->
     % error mocked in init_per_testcase
-    qos_audit_log_base_test(Config, <<"failed">>, single_file).
+    qos_audit_log_base_test(Config, <<"synchronization_failed">>, single_file).
 
 
 effective_qos_audit_log_successful_synchronization(Config) ->
@@ -605,12 +605,12 @@ effective_qos_audit_log_successful_synchronization(Config) ->
 
 effective_qos_audit_log_transfer_error(Config) ->
     % error mocked in init_per_testcase
-    qos_audit_log_base_test(Config, <<"failed">>, effective).
+    qos_audit_log_base_test(Config, <<"synchronization_failed">>, effective).
 
 
 effective_qos_audit_log_failure(Config) ->
     % error mocked in init_per_testcase
-    qos_audit_log_base_test(Config, <<"failed">>, effective).
+    qos_audit_log_base_test(Config, <<"synchronization_failed">>, effective).
 
 
 qos_audit_log_base_test(Config, ExpectedStatus, Type) ->
@@ -624,7 +624,7 @@ qos_audit_log_base_test(Config, ExpectedStatus, Type) ->
     BaseExpected = case ExpectedStatus of
         <<"synchronized">> -> 
             #{<<"severity">> => <<"info">>};
-        <<"failed">> -> 
+        <<"synchronization_failed">> -> 
             #{
                 <<"severity">> => <<"error">>,
                 % error mocked in init_per_testcase
@@ -636,12 +636,20 @@ qos_audit_log_base_test(Config, ExpectedStatus, Type) ->
             }
     end,
     SortFun = fun(#{<<"fileId">> := FileIdA}, #{<<"fileId">> := FileIdB}) -> FileIdA =< FileIdB end,
-    Expected = lists:sort(SortFun, lists:map(fun(ObjectId) ->
-        BaseExpected#{
-            <<"fileId">> => ObjectId,
-            <<"status">> => ExpectedStatus,
-            <<"timestamp">> => Timestamp
-        }
+    Expected = lists:sort(SortFun, lists:flatmap(fun(ObjectId) ->
+        [
+            #{
+                <<"severity">> => <<"info">>,
+                <<"status">> => <<"synchronization_started">>,
+                <<"fileId">> => ObjectId,
+                <<"timestamp">> => Timestamp
+            },
+            BaseExpected#{
+                <<"fileId">> => ObjectId,
+                <<"status">> => ExpectedStatus,
+                <<"timestamp">> => Timestamp
+            }
+        ]
     end, FileIds)),
     GetAuditLogFun = fun() -> 
         case rpc:call(P1, qos_entry_audit_log, list, [QosEntryId, #{}]) of
