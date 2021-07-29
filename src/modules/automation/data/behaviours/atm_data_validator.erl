@@ -30,7 +30,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -callback assert_meets_constraints(
-    atm_workflow_execution_ctx:record(),
+    atm_workflow_execution_auth:record(),
     atm_value:expanded(),
     atm_data_type:value_constraints()
 ) ->

@@ -96,12 +96,12 @@ create_store_with_invalid_args_test(_Config) ->
 
 
 create_store_with_severity_details_test(_Config) ->
-    AtmWorkflowExecutionCtx = atm_store_test_utils:create_workflow_execution_ctx(
+    AtmWorkflowExecutionAuth = atm_store_test_utils:create_workflow_execution_auth(
         krakow, user1, space_krk
     ),
     
     ?assertMatch({ok, _}, atm_store_test_utils:create_store(
-        krakow, AtmWorkflowExecutionCtx, [#{<<"entry">> => 8, <<"severity">> => <<"error">>}], ?ATM_AUDIT_LOG_STORE_SCHEMA
+        krakow, AtmWorkflowExecutionAuth, [#{<<"entry">> => 8, <<"severity">> => <<"error">>}], ?ATM_AUDIT_LOG_STORE_SCHEMA
     )).
 
 
@@ -110,15 +110,15 @@ apply_operation_test(_Config) ->
 
 
 apply_operation_with_severity_details_test(_Config) ->
-    AtmWorkflowExecutionCtx = atm_store_test_utils:create_workflow_execution_ctx(
+    AtmWorkflowExecutionAuth = atm_store_test_utils:create_workflow_execution_auth(
         krakow, user1, space_krk
     ),
     
     {ok, AtmStoreId} = atm_store_test_utils:create_store(
-        krakow, AtmWorkflowExecutionCtx, undefined, ?ATM_AUDIT_LOG_STORE_SCHEMA
+        krakow, AtmWorkflowExecutionAuth, undefined, ?ATM_AUDIT_LOG_STORE_SCHEMA
     ),
     ?assertEqual(ok, atm_store_test_utils:apply_operation(
-        krakow, AtmWorkflowExecutionCtx, append, [8, #{<<"entry">> => 9, <<"severity">> => <<"notice">>}], #{<<"isBatch">> => true}, AtmStoreId
+        krakow, AtmWorkflowExecutionAuth, append, [8, #{<<"entry">> => 9, <<"severity">> => <<"notice">>}], #{<<"isBatch">> => true}, AtmStoreId
     )).
 
 
@@ -144,13 +144,13 @@ browse_by_offset_test(_Config) ->
 
 browse_by_timestamp_test(_Config) ->
     ok = time_test_utils:set_current_time_millis(123),
-    AtmWorkflowExecutionCtx = atm_store_test_utils:create_workflow_execution_ctx(
+    AtmWorkflowExecutionAuth = atm_store_test_utils:create_workflow_execution_auth(
         krakow, user1, space_krk
     ),
     ItemsNum = rand:uniform(1000),
     Items = lists:seq(1, ItemsNum),
     {ok, AtmStoreId} = atm_store_test_utils:create_store(
-        krakow, AtmWorkflowExecutionCtx, undefined, 
+        krakow, AtmWorkflowExecutionAuth, undefined,
         ?ATM_AUDIT_LOG_STORE_SCHEMA#atm_store_schema{data_spec = #atm_data_spec{type = atm_object_type}}
     ),
     [FirstTimestamp | _] = lists:map(fun(Index) ->
@@ -163,7 +163,7 @@ browse_by_timestamp_test(_Config) ->
             4 -> Entry#{<<"severity">> => <<"info">>}
         end,
         ?assertEqual(ok, atm_store_test_utils:apply_operation(
-            krakow, AtmWorkflowExecutionCtx, append, ItemToAdd, #{}, AtmStoreId
+            krakow, AtmWorkflowExecutionAuth, append, ItemToAdd, #{}, AtmStoreId
         )),
         time_test_utils:simulate_millis_passing(1),
         Timestamp
@@ -182,7 +182,7 @@ browse_by_timestamp_test(_Config) ->
                 }
             }
         end, lists:seq(StartIndex, min(StartIndex + Limit - 1, ItemsNum - 1))),
-        {Result, IsLast} = atm_store_test_utils:browse_content(krakow, AtmWorkflowExecutionCtx, #{
+        {Result, IsLast} = atm_store_test_utils:browse_content(krakow, AtmWorkflowExecutionAuth, #{
             start_timestamp => StartIndex + FirstTimestamp,
             limit => Limit
         }, AtmStore),

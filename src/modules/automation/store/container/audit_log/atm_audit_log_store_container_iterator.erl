@@ -52,16 +52,18 @@ build(BackendId) ->
 %%%===================================================================
 
 
--spec get_next_batch(atm_workflow_execution_ctx:record(), atm_store_container_iterator:batch_size(), 
+-spec get_next_batch(atm_workflow_execution_auth:record(), atm_store_container_iterator:batch_size(),
     record(), atm_data_spec:record()
 ) ->
     {ok, [atm_value:expanded()], record()} | stop.
-get_next_batch(AtmWorkflowExecutionCtx, BatchSize, #atm_audit_log_store_container_iterator{} = Record, AtmDataSpec) ->
+get_next_batch(AtmWorkflowExecutionAuth, BatchSize, #atm_audit_log_store_container_iterator{} = Record, AtmDataSpec) ->
     #atm_audit_log_store_container_iterator{backend_id = BackendId, index = StartIndex} = Record,
-    {ok, {Marker, EntrySeries}} = atm_infinite_log_backend:list(
-        BackendId, #{start_from => {index, StartIndex}, limit => BatchSize}),
+    {ok, {Marker, EntrySeries}} = atm_infinite_log_backend:list(BackendId, #{
+        start_from => {index, StartIndex},
+        limit => BatchSize
+    }),
     FilteredEntries = lists:filtermap(fun({_Index, Object, Timestamp}) ->
-        case atm_value:expand(AtmWorkflowExecutionCtx, maps:get(<<"entry">>, Object), AtmDataSpec) of
+        case atm_value:expand(AtmWorkflowExecutionAuth, maps:get(<<"entry">>, Object), AtmDataSpec) of
             {ok, ExpandedItem} ->
                 {true, Object#{
                     <<"timestamp">> => Timestamp,

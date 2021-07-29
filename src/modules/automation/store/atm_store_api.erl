@@ -45,9 +45,10 @@
 %%%===================================================================
 
 
--spec create_all(atm_workflow_execution:creation_ctx()) -> [atm_store:doc()] | no_return().
+-spec create_all(atm_workflow_execution_factory:creation_ctx()) ->
+    [atm_store:doc()] | no_return().
 create_all(#atm_workflow_execution_creation_ctx{
-    workflow_execution_ctx = AtmWorkflowExecutionCtx,
+    workflow_execution_auth = AtmWorkflowExecutionAuth,
     workflow_schema_doc = #document{value = #od_atm_workflow_schema{
         stores = AtmStoreSchemas
     }},
@@ -58,7 +59,7 @@ create_all(#atm_workflow_execution_creation_ctx{
             AtmStoreSchemaId, StoreInitialValues, undefined
         )),
         try
-            {ok, AtmStoreDoc} = create(AtmWorkflowExecutionCtx, StoreInitialValue, AtmStoreSchema),
+            {ok, AtmStoreDoc} = create(AtmWorkflowExecutionAuth, StoreInitialValue, AtmStoreSchema),
             [AtmStoreDoc | Acc]
         catch _:Reason ->
             catch delete_all([Doc#document.key || Doc <- Acc]),
@@ -68,18 +69,18 @@ create_all(#atm_workflow_execution_creation_ctx{
 
 
 -spec create(
-    atm_workflow_execution_ctx:record(),
+    atm_workflow_execution_auth:record(),
     undefined | initial_value(),
     atm_store_schema:record()
 ) ->
     {ok, atm_store:doc()} | no_return().
-create(_AtmWorkflowExecutionCtx, undefined, #atm_store_schema{
+create(_AtmWorkflowExecutionAuth, undefined, #atm_store_schema{
     requires_initial_value = true,
     default_initial_value = undefined
 }) ->
     throw(?ERROR_ATM_STORE_MISSING_REQUIRED_INITIAL_VALUE);
 
-create(AtmWorkflowExecutionCtx, InitialValue, #atm_store_schema{
+create(AtmWorkflowExecutionAuth, InitialValue, #atm_store_schema{
     id = AtmStoreSchemaId,
     default_initial_value = DefaultInitialValue,
     type = StoreType,
@@ -88,14 +89,14 @@ create(AtmWorkflowExecutionCtx, InitialValue, #atm_store_schema{
     ActualInitialValue = utils:ensure_defined(InitialValue, DefaultInitialValue),
 
     {ok, _} = atm_store:create(#atm_store{
-        workflow_execution_id = atm_workflow_execution_ctx:get_workflow_execution_id(
-            AtmWorkflowExecutionCtx
+        workflow_execution_id = atm_workflow_execution_auth:get_workflow_execution_id(
+            AtmWorkflowExecutionAuth
         ),
         schema_id = AtmStoreSchemaId,
         initial_value = ActualInitialValue,
         frozen = false,
         container = atm_store_container:create(
-            StoreType, AtmWorkflowExecutionCtx, AtmDataSpec, ActualInitialValue
+            StoreType, AtmWorkflowExecutionAuth, AtmDataSpec, ActualInitialValue
         )
     }).
 
@@ -117,18 +118,18 @@ get(AtmStoreId) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec browse_content(
-    atm_workflow_execution_ctx:record(),
+    atm_workflow_execution_auth:record(),
     browse_options(),
     atm_store:id() | atm_store:record()
 ) ->
     browse_result() | no_return().
-browse_content(AtmWorkflowExecutionCtx, BrowseOpts, #atm_store{container = AtmStoreContainer}) ->
-    atm_store_container:browse_content(AtmWorkflowExecutionCtx, BrowseOpts, AtmStoreContainer);
+browse_content(AtmWorkflowExecutionAuth, BrowseOpts, #atm_store{container = AtmStoreContainer}) ->
+    atm_store_container:browse_content(AtmWorkflowExecutionAuth, BrowseOpts, AtmStoreContainer);
 
-browse_content(AtmWorkflowExecutionCtx, BrowseOpts, AtmStoreId) ->
+browse_content(AtmWorkflowExecutionAuth, BrowseOpts, AtmStoreId) ->
     case get(AtmStoreId) of
         {ok, AtmStore} ->
-            browse_content(AtmWorkflowExecutionCtx, BrowseOpts, AtmStore);
+            browse_content(AtmWorkflowExecutionAuth, BrowseOpts, AtmStore);
         ?ERROR_NOT_FOUND ->
             throw(?ERROR_NOT_FOUND)
     end.
@@ -142,14 +143,11 @@ browse_content(AtmWorkflowExecutionCtx, BrowseOpts, AtmStoreId) ->
 %% files subtree for each file kept in store will be traversed and returned).
 %% @end
 %%-------------------------------------------------------------------
--spec acquire_iterator(atm_workflow_execution_env:record(), atm_store_iterator_spec:record()) ->
+-spec acquire_iterator(atm_store:id(), atm_store_iterator_spec:record()) ->
     atm_store_iterator:record().
-acquire_iterator(AtmWorkflowExecutionEnv, #atm_store_iterator_spec{
-    store_schema_id = AtmStoreSchemaId
-} = AtmStoreIteratorConfig) ->
-    AtmStoreId = atm_workflow_execution_env:get_store_id(AtmStoreSchemaId, AtmWorkflowExecutionEnv),
+acquire_iterator(AtmStoreId, AtmStoreIteratorSpec) ->
     {ok, #atm_store{container = AtmStoreContainer}} = get(AtmStoreId),
-    atm_store_iterator:build(AtmStoreIteratorConfig, AtmStoreContainer).
+    atm_store_iterator:build(AtmStoreIteratorSpec, AtmStoreContainer).
 
 
 -spec freeze(atm_store:id()) -> ok.
@@ -167,14 +165,14 @@ unfreeze(AtmStoreId) ->
 
 
 -spec apply_operation(
-    atm_workflow_execution_ctx:record(),
+    atm_workflow_execution_auth:record(),
     atm_store_container:operation_type(),
     automation:item(),
     atm_store_container:operation_options(),
     atm_store:id()
 ) ->
     ok | no_return().
-apply_operation(AtmWorkflowExecutionCtx, Operation, Item, Options, AtmStoreId) ->
+apply_operation(AtmWorkflowExecutionAuth, Operation, Item, Options, AtmStoreId) ->
     % NOTE: no need to use critical section here as containers either:
     %   * are based on structure that support transaction operation on their own 
     %   * store only one value and it will be overwritten 
@@ -184,8 +182,8 @@ apply_operation(AtmWorkflowExecutionCtx, Operation, Item, Options, AtmStoreId) -
             AtmStoreContainerOperation = #atm_store_container_operation{
                 type = Operation,
                 options = Options,
-                value = Item,
-                workflow_execution_ctx = AtmWorkflowExecutionCtx
+                argument = Item,
+                workflow_execution_auth = AtmWorkflowExecutionAuth
             },
             UpdatedAtmStoreContainer = atm_store_container:apply_operation(
                 AtmStoreContainer, AtmStoreContainerOperation

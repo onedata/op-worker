@@ -60,14 +60,14 @@
 %%%===================================================================
 
 
--spec create(atm_workflow_execution_ctx:record(), atm_data_spec:record(), initial_value()) ->
+-spec create(atm_workflow_execution_auth:record(), atm_data_spec:record(), initial_value()) ->
     record() | no_return().
-create(AtmWorkflowExecutionCtx, AtmDataSpec, #{<<"end">> := EndNum} = InitialArgs) ->
+create(AtmWorkflowExecutionAuth, AtmDataSpec, #{<<"end">> := EndNum} = InitialArgs) ->
     StartNum = maps:get(<<"start">>, InitialArgs, 0),
     Step = maps:get(<<"step">>, InitialArgs, 1),
 
     assert_supported_data_spec(AtmDataSpec),
-    validate_range(AtmWorkflowExecutionCtx, AtmDataSpec, StartNum, EndNum, Step),
+    validate_range(AtmWorkflowExecutionAuth, AtmDataSpec, StartNum, EndNum, Step),
 
     #atm_range_store_container{
         data_spec = AtmDataSpec,
@@ -75,7 +75,7 @@ create(AtmWorkflowExecutionCtx, AtmDataSpec, #{<<"end">> := EndNum} = InitialArg
         end_num = EndNum,
         step = Step
     };
-create(_AtmWorkflowExecutionCtx, _AtmDataSpec, _InitialArgs) ->
+create(_AtmWorkflowExecutionAuth, _AtmDataSpec, _InitialArgs) ->
     throw(?ERROR_MISSING_REQUIRED_VALUE(<<"end">>)).
 
 
@@ -84,9 +84,9 @@ get_data_spec(#atm_range_store_container{data_spec = AtmDataSpec}) ->
     AtmDataSpec.
 
 
--spec browse_content(atm_workflow_execution_ctx:record(), browse_options(), record()) ->
+-spec browse_content(atm_workflow_execution_auth:record(), browse_options(), record()) ->
     atm_store_api:browse_result() | no_return().
-browse_content(_AtmWorkflowExecutionCtx, _Opts, #atm_range_store_container{
+browse_content(_AtmWorkflowExecutionAuth, _Opts, #atm_range_store_container{
     start_num = StartNum,
     end_num = EndNum,
     step = Step
@@ -178,15 +178,15 @@ assert_supported_data_spec(AtmDataSpec) ->
 
 %% @private
 -spec validate_range(
-    atm_workflow_execution_ctx:record(),
+    atm_workflow_execution_auth:record(),
     atm_data_spec:record(),
     integer(), integer(), integer()
 ) ->
     ok | no_return().
-validate_range(AtmWorkflowExecutionCtx, AtmDataSpec, StartNum, EndNum, Step) ->
+validate_range(AtmWorkflowExecutionAuth, AtmDataSpec, StartNum, EndNum, Step) ->
     lists:foreach(fun({ArgName, ArgValue}) ->
         try
-            atm_value:validate(AtmWorkflowExecutionCtx, ArgValue, AtmDataSpec)
+            atm_value:validate(AtmWorkflowExecutionAuth, ArgValue, AtmDataSpec)
         catch throw:Reason  ->
             throw(?ERROR_ATM_BAD_DATA(ArgName, Reason))
         end

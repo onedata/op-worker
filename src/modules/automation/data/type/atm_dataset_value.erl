@@ -47,13 +47,13 @@
 
 
 -spec assert_meets_constraints(
-    atm_workflow_execution_ctx:record(),
+    atm_workflow_execution_auth:record(),
     atm_value:expanded(),
     atm_data_type:value_constraints()
 ) ->
     ok | no_return().
-assert_meets_constraints(AtmWorkflowExecutionCtx, #{<<"datasetId">> := DatasetId}, _ValueConstraints) ->
-    check_implicit_constraints(AtmWorkflowExecutionCtx, DatasetId).
+assert_meets_constraints(AtmWorkflowExecutionAuth, #{<<"datasetId">> := DatasetId}, _ValueConstraints) ->
+    check_implicit_constraints(AtmWorkflowExecutionAuth, DatasetId).
 
 
 %%%===================================================================
@@ -61,10 +61,10 @@ assert_meets_constraints(AtmWorkflowExecutionCtx, #{<<"datasetId">> := DatasetId
 %%%===================================================================
 
 
--spec list_children(atm_workflow_execution_ctx:record(), dataset:id(), list_opts(), non_neg_integer()) ->
+-spec list_children(atm_workflow_execution_auth:record(), dataset:id(), list_opts(), non_neg_integer()) ->
     {[{dataset:id(), dataset:name()}], [], list_opts(), IsLast :: boolean()} | no_return().
-list_children(AtmWorkflowExecutionCtx, DatasetId, ListOpts, BatchSize) ->
-    SessionId = atm_workflow_execution_ctx:get_session_id(AtmWorkflowExecutionCtx),
+list_children(AtmWorkflowExecutionAuth, DatasetId, ListOpts, BatchSize) ->
+    SessionId = atm_workflow_execution_auth:get_session_id(AtmWorkflowExecutionAuth),
     case lfm:list_children_datasets(SessionId, DatasetId, ListOpts#{limit => BatchSize}) of
         {ok, Entries, IsLast} when length(Entries) > 0 ->
             {_LastId, _LastName, LastIndex} = lists:last(Entries),
@@ -74,12 +74,12 @@ list_children(AtmWorkflowExecutionCtx, DatasetId, ListOpts, BatchSize) ->
             {ResultEntries, [], #{offset => 1, start_index => LastIndex}, IsLast};
         {ok, [], IsLast} ->
             {[], [], #{}, IsLast};
-        {error, Type} = Error ->
-            case fslogic_errors:is_access_error(Type) of
+        {error, Errno} ->
+            case fslogic_errors:is_access_error(Errno) of
                 true ->
                     {[], [], #{}, true};
                 false ->
-                    throw(Error)
+                    throw(?ERROR_POSIX(Errno))
             end
     end.
 
@@ -111,13 +111,13 @@ decode_listing_options(#{<<"offset">> := Offset, <<"startIndex">> := StartIndex}
 compress(#{<<"datasetId">> := DatasetId}) -> DatasetId.
 
 
--spec expand(atm_workflow_execution_ctx:record(), dataset:id()) ->
+-spec expand(atm_workflow_execution_auth:record(), dataset:id()) ->
     {ok, atm_value:expanded()} | {error, term()}.
-expand(AtmWorkflowExecutionCtx, DatasetId) ->
-    SessionId = atm_workflow_execution_ctx:get_session_id(AtmWorkflowExecutionCtx),
+expand(AtmWorkflowExecutionAuth, DatasetId) ->
+    SessionId = atm_workflow_execution_auth:get_session_id(AtmWorkflowExecutionAuth),
     case lfm:get_dataset_info(SessionId, DatasetId) of
         {ok, DatasetInfo} -> {ok, dataset_utils:dataset_info_to_json(DatasetInfo)};
-        {error, _} = Error -> Error
+        {error, Errno} -> ?ERROR_POSIX(Errno)
     end.
 
 
@@ -127,11 +127,11 @@ expand(AtmWorkflowExecutionCtx, DatasetId) ->
 
 
 %% @private
--spec check_implicit_constraints(atm_workflow_execution_ctx:record(), dataset:id()) ->
+-spec check_implicit_constraints(atm_workflow_execution_auth:record(), dataset:id()) ->
     ok | no_return().
-check_implicit_constraints(AtmWorkflowExecutionCtx, DatasetId) ->
-    SpaceId = atm_workflow_execution_ctx:get_space_id(AtmWorkflowExecutionCtx),
-    SessionId = atm_workflow_execution_ctx:get_session_id(AtmWorkflowExecutionCtx),
+check_implicit_constraints(AtmWorkflowExecutionAuth, DatasetId) ->
+    SpaceId = atm_workflow_execution_auth:get_space_id(AtmWorkflowExecutionAuth),
+    SessionId = atm_workflow_execution_auth:get_session_id(AtmWorkflowExecutionAuth),
 
     case lfm:get_dataset_info(SessionId, DatasetId) of
         {ok, #dataset_info{root_file_guid = RootFileGuid}} ->
@@ -141,11 +141,11 @@ check_implicit_constraints(AtmWorkflowExecutionCtx, DatasetId) ->
                 _ ->
                     throw(?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(#{<<"inSpace">> => SpaceId}))
             end;
-        {error, Type} = Error ->
-            case fslogic_errors:is_access_error(Type) of
+        {error, Errno} ->
+            case fslogic_errors:is_access_error(Errno) of
                 true ->
                     throw(?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(#{<<"hasAccess">> => true}));
                 false ->
-                    throw(Error)
+                    throw(?ERROR_POSIX(Errno))
             end
     end.

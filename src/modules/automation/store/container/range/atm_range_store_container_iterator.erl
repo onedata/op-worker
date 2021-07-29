@@ -57,11 +57,11 @@ build(Start, End, Step) ->
 %%%===================================================================
 
 
--spec get_next_batch(atm_workflow_execution_ctx:record(), atm_store_container_iterator:batch_size(), 
+-spec get_next_batch(atm_workflow_execution_auth:record(), atm_store_container_iterator:batch_size(),
     record(), atm_data_spec:record()
 ) ->
     {ok, [integer()], record()} | stop.
-get_next_batch(AtmWorkflowExecutionCtx, BatchSize, #atm_range_store_container_iterator{
+get_next_batch(AtmWorkflowExecutionAuth, BatchSize, #atm_range_store_container_iterator{
     curr_num = CurrNum,
     end_num = End,
     step = Step
@@ -75,9 +75,8 @@ get_next_batch(AtmWorkflowExecutionCtx, BatchSize, #atm_range_store_container_it
         [] ->
             stop;
         CompressedItems ->
-            NewCurrNum = Threshold + Step,
-            NewRecord = Record#atm_range_store_container_iterator{curr_num = NewCurrNum},
-            {ok, atm_value:filterexpand_list(AtmWorkflowExecutionCtx, CompressedItems, AtmDataSpec), NewRecord}
+            Batch = atm_value:filterexpand_list(AtmWorkflowExecutionAuth, CompressedItems, AtmDataSpec),
+            {ok, Batch, Record#atm_range_store_container_iterator{curr_num = Threshold + Step}}
     end.
 
 

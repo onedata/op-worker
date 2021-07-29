@@ -49,14 +49,14 @@
 %%%===================================================================
 
 
--spec create(atm_workflow_execution_ctx:record(), atm_data_spec:record(), initial_value()) ->
+-spec create(atm_workflow_execution_auth:record(), atm_data_spec:record(), initial_value()) ->
     record() | no_return().
-create(_AtmWorkflowExecutionCtx, AtmDataSpec, undefined) ->
+create(_AtmWorkflowExecutionAuth, AtmDataSpec, undefined) ->
     #atm_single_value_store_container{
         data_spec = AtmDataSpec
     };
-create(AtmWorkflowExecutionCtx, AtmDataSpec, InitialValue) ->
-    atm_value:validate(AtmWorkflowExecutionCtx, InitialValue, AtmDataSpec),
+create(AtmWorkflowExecutionAuth, AtmDataSpec, InitialValue) ->
+    atm_value:validate(AtmWorkflowExecutionAuth, InitialValue, AtmDataSpec),
 
     #atm_single_value_store_container{
         data_spec = AtmDataSpec,
@@ -69,18 +69,18 @@ get_data_spec(#atm_single_value_store_container{data_spec = AtmDataSpec}) ->
     AtmDataSpec.
 
 
--spec browse_content(atm_workflow_execution_ctx:record(), browse_options(), record()) ->
+-spec browse_content(atm_workflow_execution_auth:record(), browse_options(), record()) ->
     atm_store_api:browse_result() | no_return().
-browse_content(_AtmWorkflowExecutionCtx, _Opts, #atm_single_value_store_container{
+browse_content(_AtmWorkflowExecutionAuth, _Opts, #atm_single_value_store_container{
     value = undefined
 }) ->
     {[], true};
 
-browse_content(AtmWorkflowExecutionCtx, _Opts, #atm_single_value_store_container{
+browse_content(AtmWorkflowExecutionAuth, _Opts, #atm_single_value_store_container{
     data_spec = AtmDataSpec,
     value = CompressedValue
 }) ->
-    case atm_value:expand(AtmWorkflowExecutionCtx, CompressedValue, AtmDataSpec) of
+    case atm_value:expand(AtmWorkflowExecutionAuth, CompressedValue, AtmDataSpec) of
         {ok, _} = Result ->
             {[{<<>>, Result}], true};
         {error, _} ->
@@ -97,11 +97,11 @@ acquire_iterator(#atm_single_value_store_container{value = Value}) ->
     record() | no_return().
 apply_operation(#atm_single_value_store_container{} = Record, #atm_store_container_operation{
     type = set,
-    value = Item,
-    workflow_execution_ctx = AtmWorkflowExecutionCtx
+    argument = Item,
+    workflow_execution_auth = AtmWorkflowExecutionAuth
 }) ->
     #atm_single_value_store_container{data_spec = AtmDataSpec} = Record,
-    atm_value:validate(AtmWorkflowExecutionCtx, Item, AtmDataSpec),
+    atm_value:validate(AtmWorkflowExecutionAuth, Item, AtmDataSpec),
 
     Record#atm_single_value_store_container{value = atm_value:compress(Item, AtmDataSpec)};
 

@@ -66,13 +66,13 @@
 %%%===================================================================
 
 
--spec create(atm_workflow_execution_ctx:record(), atm_data_spec:record(), initial_value()) ->
+-spec create(atm_workflow_execution_auth:record(), atm_data_spec:record(), initial_value()) ->
     record() | no_return().
-create(_AtmWorkflowExecutionCtx, AtmDataSpec, undefined) ->
+create(_AtmWorkflowExecutionAuth, AtmDataSpec, undefined) ->
     create_container(AtmDataSpec);
 
-create(AtmWorkflowExecutionCtx, AtmDataSpec, InitialValueBatch) ->
-    validate_data_batch(AtmWorkflowExecutionCtx, AtmDataSpec, InitialValueBatch),
+create(AtmWorkflowExecutionAuth, AtmDataSpec, InitialValueBatch) ->
+    validate_data_batch(AtmWorkflowExecutionAuth, AtmDataSpec, InitialValueBatch),
     append_insecure(InitialValueBatch, create_container(AtmDataSpec)).
 
 
@@ -104,20 +104,20 @@ acquire_iterator(#atm_infinite_log_container{backend_id = BackendId}) ->
 apply_operation(#atm_infinite_log_container{data_spec = AtmDataSpec} = Record, #atm_store_container_operation{
     type = append,
     options = #{<<"isBatch">> := true},
-    value = Batch,
-    workflow_execution_ctx = AtmWorkflowExecutionCtx
+    argument = Batch,
+    workflow_execution_auth = AtmWorkflowExecutionAuth
 }) ->
-    validate_data_batch(AtmWorkflowExecutionCtx, AtmDataSpec, Batch),
+    validate_data_batch(AtmWorkflowExecutionAuth, AtmDataSpec, Batch),
     append_insecure(Batch, Record);
 
 apply_operation(#atm_infinite_log_container{} = Record, Operation = #atm_store_container_operation{
     type = append,
-    value = Item,
+    argument = Item,
     options = Options
 }) ->
     apply_operation(Record, Operation#atm_store_container_operation{
         options = Options#{<<"isBatch">> => true},
-        value = [Item]
+        argument = [Item]
     });
 
 apply_operation(_Record, _Operation) ->
@@ -177,16 +177,16 @@ create_container(AtmDataSpec) ->
 
 %% @private
 -spec validate_data_batch(
-    atm_workflow_execution_ctx:record(),
+    atm_workflow_execution_auth:record(),
     atm_data_spec:record(),
     [json_utils:json_term()]
 ) ->
     ok | no_return().
-validate_data_batch(AtmWorkflowExecutionCtx, AtmDataSpec, Batch) when is_list(Batch) ->
+validate_data_batch(AtmWorkflowExecutionAuth, AtmDataSpec, Batch) when is_list(Batch) ->
     lists:foreach(fun(Item) ->
-        atm_value:validate(AtmWorkflowExecutionCtx, Item, AtmDataSpec)
+        atm_value:validate(AtmWorkflowExecutionAuth, Item, AtmDataSpec)
     end, Batch);
-validate_data_batch(_AtmWorkflowExecutionCtx, _AtmDataSpec, _Item) ->
+validate_data_batch(_AtmWorkflowExecutionAuth, _AtmDataSpec, _Item) ->
     throw(?ERROR_ATM_BAD_DATA(<<"value">>, <<"not a batch">>)).
 
 
