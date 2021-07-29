@@ -19,6 +19,7 @@
 -include("proto/oneprovider/provider_messages.hrl").
 -include_lib("ctool/include/graph_sync/gri.hrl").
 -include_lib("ctool/include/http/codes.hrl").
+-include_lib("ctool/include/http/headers.hrl").
 -include_lib("ctool/include/privileges.hrl").
 
 -export([
@@ -154,7 +155,7 @@ build_establish_dataset_prepare_rest_args_fun(MemRef) ->
         #rest_args{
             method = post,
             path = <<"datasets">>,
-            headers = #{<<"content-type">> => <<"application/json">>},
+            headers = #{?HDR_CONTENT_TYPE => <<"application/json">>},
             body = json_utils:encode(substitute_root_file(MemRef, Data))
         }
     end.
@@ -190,14 +191,14 @@ substitute_root_file(MemRef, Data) ->
 build_establish_dataset_validate_rest_call_result_fun(MemRef) ->
     fun(#api_test_ctx{node = TestNode}, Result) ->
         {ok, _, Headers, Body} = ?assertMatch(
-            {ok, ?HTTP_201_CREATED, #{<<"Location">> := _}, #{<<"datasetId">> := _}},
+            {ok, ?HTTP_201_CREATED, #{?HDR_LOCATION := _}, #{<<"datasetId">> := _}},
             Result
         ),
         DatasetId = maps:get(<<"datasetId">>, Body),
         api_test_memory:set(MemRef, dataset_id, DatasetId),
 
         ExpLocation = api_test_utils:build_rest_url(TestNode, [<<"datasets">>, DatasetId]),
-        ?assertEqual(ExpLocation, maps:get(<<"Location">>, Headers))
+        ?assertEqual(ExpLocation, maps:get(?HDR_LOCATION, Headers))
     end.
 
 
@@ -207,11 +208,11 @@ build_establish_dataset_validate_rest_call_result_fun(MemRef) ->
 build_establish_dataset_validate_gs_call_result_fun(MemRef, Config) ->
     SpaceDirDatasetId = ?config(space_dir_dataset, Config),
 
-    fun(#api_test_ctx{node = TestNode, data = Data}, Result) ->
+    fun(#api_test_ctx{data = Data}, Result) ->
         RootFileGuid = api_test_memory:get(MemRef, file_guid),
         RootFileType = api_test_memory:get(MemRef, file_type),
         RootFilePath = api_test_memory:get(MemRef, file_path),
-        CreationTime = time_test_utils:global_seconds(TestNode),
+        CreationTime = time_test_utils:get_frozen_time_seconds(),
         ProtectionFlags = maps:get(<<"protectionFlags">>, Data, []),
 
         {ok, #{<<"gri">> := DatasetGri} = DatasetData} = ?assertMatch({ok, _}, Result),
@@ -243,7 +244,6 @@ build_verify_establish_dataset_fun(MemRef, Providers, SpaceId, Config) ->
 
     fun
         (expected_success, #api_test_ctx{
-            node = TestNode,
             client = ?USER(UserId),
             data = Data
         }) ->
@@ -251,7 +251,7 @@ build_verify_establish_dataset_fun(MemRef, Providers, SpaceId, Config) ->
             RootFileGuid = api_test_memory:get(MemRef, file_guid),
             RootFileType = api_test_memory:get(MemRef, file_type),
             RootFilePath = api_test_memory:get(MemRef, file_path),
-            CreationTime = time_test_utils:global_seconds(TestNode),
+            CreationTime = time_test_utils:get_frozen_time_seconds(),
             ProtectionFlags = maps:get(<<"protectionFlags">>, Data, []),
 
             verify_dataset(
@@ -346,8 +346,8 @@ get_dataset_test_base(
                     name = <<"Get dataset using REST API">>,
                     type = rest,
                     prepare_args_fun = build_get_dataset_prepare_rest_args_fun(DatasetId),
-                    validate_result_fun = fun(#api_test_ctx{node = TestNode}, {ok, RespCode, _, RespBody}) ->
-                        CreationTime = time_test_utils:global_seconds(TestNode),
+                    validate_result_fun = fun(_, {ok, RespCode, _, RespBody}) ->
+                        CreationTime = time_test_utils:get_frozen_time_seconds(),
                         EffProtectionFlags = case State of
                             ?ATTACHED_DATASET -> ProtectionFlags;
                             ?DETACHED_DATASET -> []
@@ -371,8 +371,8 @@ get_dataset_test_base(
                     name = <<"Get dataset using GS API">>,
                     type = gs,
                     prepare_args_fun = build_get_dataset_prepare_gs_args_fun(DatasetId),
-                    validate_result_fun = fun(#api_test_ctx{node = TestNode}, {ok, Result}) ->
-                        CreationTime = time_test_utils:global_seconds(TestNode),
+                    validate_result_fun = fun(_, {ok, Result}) ->
+                        CreationTime = time_test_utils:get_frozen_time_seconds(),
 
                         ExpDatasetData = build_dataset_gs_instance(
                             State, DatasetId, ParentId, ProtectionFlags, CreationTime,
@@ -518,7 +518,7 @@ build_update_dataset_prepare_rest_args_fun(DatasetId) ->
         #rest_args{
             method = patch,
             path = <<"datasets/", Id/binary>>,
-            headers = #{<<"content-type">> => <<"application/json">>},
+            headers = #{?HDR_CONTENT_TYPE => <<"application/json">>},
             body = json_utils:encode(Data1)
         }
     end.
@@ -549,8 +549,8 @@ build_update_dataset_prepare_gs_args_fun(DatasetId) ->
 build_verify_update_dataset_fun(MemRef, Providers, SpaceId, DatasetId, FileGuid, FileType, FilePath, Config) ->
     SpaceDirDatasetId = ?config(space_dir_dataset, Config),
 
-    fun(ExpTestResult, #api_test_ctx{node = TestNode, data = Data}) ->
-        CreationTime = time_test_utils:global_seconds(TestNode),
+    fun(ExpTestResult, #api_test_ctx{data = Data}) ->
+        CreationTime = time_test_utils:get_frozen_time_seconds(),
 
         PrevState = api_test_memory:get(MemRef, previous_state),
         PrevProtectionFlags = api_test_memory:get(MemRef, previous_protection_flags),

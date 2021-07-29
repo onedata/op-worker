@@ -46,8 +46,8 @@ on_file_location_change(FileCtx, ChangedLocationDoc = #document{
                 FileCtx3 = file_ctx:set_is_dir(FileCtx2, false),
                 case file_ctx:get_local_file_location_doc(FileCtx3) of
                     {undefined, FileCtx4} ->
-                        fslogic_event_emitter:emit_file_attr_changed_with_replication_status(FileCtx4, true, []),
-                        qos_hooks:reconcile_qos(FileCtx4);
+                        ok = fslogic_event_emitter:emit_file_attr_changed_with_replication_status(FileCtx4, true, []),
+                        ok = qos_hooks:reconcile_qos(FileCtx4);
                     {LocalLocation, FileCtx4} ->
                         update_local_location_replica(FileCtx4, LocalLocation, ChangedLocationDoc)
                 end;
@@ -80,11 +80,9 @@ update_local_location_replica(FileCtx,
         identical -> ok;
         greater -> ok;
         lesser ->
-            update_outdated_local_location_replica(FileCtx, LocalDoc, RemoteDoc),
-            qos_hooks:reconcile_qos(FileCtx);
+            update_outdated_local_location_replica(FileCtx, LocalDoc, RemoteDoc);
         concurrent ->
-            reconcile_replicas(FileCtx, LocalDoc, RemoteDoc),
-            qos_hooks:reconcile_qos(FileCtx)
+            reconcile_replicas(FileCtx, LocalDoc, RemoteDoc)
     end.
 
 %%--------------------------------------------------------------------
@@ -285,7 +283,8 @@ notify_attrs_change_if_necessary(FileCtx,
         FirstLocalBlocksBeforeUpdate, FirstLocalBlocks, OldSize, NewSize),
     case {ReplicaStatusChanged, OldSize =/= NewSize} of
         {true, SizeChanged} ->
-            ok = fslogic_event_emitter:emit_file_attr_changed_with_replication_status(FileCtx, SizeChanged, []);
+            ok = fslogic_event_emitter:emit_file_attr_changed_with_replication_status(FileCtx, SizeChanged, []),
+            ok = qos_hooks:reconcile_qos(FileCtx);
         {false, true} ->
             ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, []);
         {false, false} ->

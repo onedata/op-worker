@@ -392,6 +392,7 @@ make_link_insecure(UserCtx, TargetFileCtx, TargetParentFileCtx, Name) ->
                     name_conflicts_resolution_policy => allow_name_conflicts
                 }),
                 ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, FileAttr, [user_ctx:get_session_id(UserCtx)]),
+                ok = qos_hooks:invalidate_cache_and_reconcile(FileCtx),    
                 Ans#fuse_response{fuse_response = FileAttr}
             catch
                 Error:Reason ->

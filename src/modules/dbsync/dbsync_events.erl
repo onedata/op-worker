@@ -165,6 +165,8 @@ file_meta_change_replicated(SpaceId, #document{
         {ok, ReferencedDoc} ->
             {ok, MergedDoc} = file_meta_hardlinks:merge_link_and_file_doc(LinkDoc, ReferencedDoc),
             FileCtx = file_ctx:new_by_doc(MergedDoc, SpaceId),
+            % TODO VFS-7914 - Do not invalidate cache, when it is not needed
+            ok = qos_hooks:invalidate_cache_and_reconcile(FileCtx),
             ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, []);
         Error ->
             % TODO VFS-7531 - Handle dbsync events for hardlinks when referenced file_meta is missing

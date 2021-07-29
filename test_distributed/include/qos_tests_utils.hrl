@@ -127,3 +127,28 @@
     expected_effective_qos :: [#expected_file_qos{}],
     expected_dir_structure :: undefined | #test_dir_structure{}
 }).
+
+
+-define(simple_dir_structure(SpaceId, Name, Distribution),
+    {SpaceId, [
+        {Name, ?TEST_DATA, Distribution}
+    ]}
+).
+-define(nested_dir_structure(SpaceId, Name, Distribution),
+    {SpaceId, [
+        {Name, [
+            {?filename(Name, 1), [
+                {?filename(Name, 1), ?TEST_DATA, Distribution},
+                {?filename(Name, 2), ?TEST_DATA, Distribution},
+                {?filename(Name, 3), ?TEST_DATA, Distribution},
+                {?filename(Name, 4), ?TEST_DATA, Distribution}
+            ]},
+            {?filename(Name, 2), [
+                {?filename(Name, 1), ?TEST_DATA, Distribution},
+                {?filename(Name, 2), ?TEST_DATA, Distribution},
+                {?filename(Name, 3), ?TEST_DATA, Distribution},
+                {?filename(Name, 4), ?TEST_DATA, Distribution}
+            ]}
+        ]}
+    ]}
+).

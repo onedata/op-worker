@@ -232,7 +232,8 @@ create_file_tree(UserId, ParentGuid, CreationProvider, #dir_spec{
     mode = DirMode,
     shares = ShareSpecs,
     dataset = DatasetSpec,
-    children = ChildrenSpec
+    children = ChildrenSpec,
+    metadata = MetadataSpec
 }) ->
     DirName = utils:ensure_defined(NameOrUndefined, str_utils:rand_hex(20)),
     UserSessId = oct_background:get_user_session_id(UserId, CreationProvider),
@@ -243,11 +244,12 @@ create_file_tree(UserId, ParentGuid, CreationProvider, #dir_spec{
     Children = lists_utils:pmap(fun(File) ->
         create_file_tree(UserId, DirGuid, CreationProvider, File)
     end, ChildrenSpec),
-
+    MetadataObj = create_metadata(CreationNode, UserSessId, DirGuid, MetadataSpec),
+    
     DatasetObj = onenv_dataset_test_utils:set_up_dataset(
         CreationProvider, UserId, DirGuid, DatasetSpec
     ),
-
+    
     #object{
         guid = DirGuid,
         name = DirName,
@@ -255,7 +257,8 @@ create_file_tree(UserId, ParentGuid, CreationProvider, #dir_spec{
         mode = DirMode,
         shares = create_shares(CreationProvider, UserSessId, DirGuid, ShareSpecs),
         dataset = DatasetObj,
-        children = Children
+        children = Children,
+        metadata = MetadataObj
     }.
 
 

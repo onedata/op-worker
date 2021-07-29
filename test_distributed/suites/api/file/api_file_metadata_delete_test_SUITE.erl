@@ -16,7 +16,6 @@
 -include("api_file_test_utils.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/graph_sync/gri.hrl").
--include_lib("ctool/include/http/codes.hrl").
 
 %% API
 -export([
@@ -310,7 +309,7 @@ build_delete_metadata_prepare_rest_args_fun(MetadataType, FileGuid) ->
             method = delete,
             path = ?NEW_ID_METADATA_REST_PATH(FileId, MetadataType),
             headers = case MetadataType of
-                <<"xattrs">> -> #{<<"content-type">> => <<"application/json">>};
+                <<"xattrs">> -> #{?HDR_CONTENT_TYPE => <<"application/json">>};
                 _ -> #{}
             end,
             body = case Data1 of
