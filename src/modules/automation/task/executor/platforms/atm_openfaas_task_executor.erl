@@ -249,13 +249,15 @@ is_function_registered(#prepare_ctx{
 %% @private
 -spec register_function(prepare_ctx()) -> ok | no_return().
 register_function(#prepare_ctx{openfaas_config = OpenfaasConfig} = PrepareCtx) ->
+    log_function_registering(PrepareCtx),
+
     Endpoint = get_openfaas_endpoint(OpenfaasConfig, <<"/system/functions">>),
     AuthHeaders = get_basic_auth_header(OpenfaasConfig),
     Payload = json_utils:encode(prepare_function_definition(PrepareCtx)),
 
     case http_client:post(Endpoint, AuthHeaders, Payload) of
         {ok, ?HTTP_202_ACCEPTED, _RespHeaders, _RespBody} ->
-            ok;
+            log_function_registered(PrepareCtx);
         {ok, ?HTTP_400_BAD_REQUEST, _RespHeaders, ErrorReason} ->
             throw(?ERROR_ATM_OPENFAAS_QUERY_FAILED(ErrorReason));
         {ok, ?HTTP_500_INTERNAL_SERVER_ERROR, _RespHeaders, ErrorReason} ->
@@ -268,6 +270,34 @@ register_function(#prepare_ctx{openfaas_config = OpenfaasConfig} = PrepareCtx) -
         _ ->
             throw(?ERROR_ATM_OPENFAAS_QUERY_FAILED)
     end.
+
+
+%% @private
+-spec log_function_registering(prepare_ctx()) -> ok.
+log_function_registering(#prepare_ctx{
+    workflow_execution_ctx = AtmWorkflowExecutionCtx,
+    executor = #atm_openfaas_task_executor{
+        function_name = FunctionName,
+        operation_spec = #atm_openfaas_operation_spec{docker_image = DockerImage}
+    }
+}) ->
+    AtmWorkflowExecutionLogger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
+    atm_workflow_execution_logger:workflow_info(
+        "Registering docker '~ts' as function '~ts' in OpenFaas", [DockerImage, FunctionName],
+        AtmWorkflowExecutionLogger
+    ).
+
+
+%% @private
+-spec log_function_registered(prepare_ctx()) -> ok.
+log_function_registered(#prepare_ctx{
+    workflow_execution_ctx = AtmWorkflowExecutionCtx,
+    executor = #atm_openfaas_task_executor{function_name = FunctionName}
+}) ->
+    AtmWorkflowExecutionLogger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
+    atm_workflow_execution_logger:workflow_info(
+        "Function '~ts' registered in OpenFaas", [FunctionName], AtmWorkflowExecutionLogger
+    ).
 
 
 %% @private
@@ -343,8 +373,11 @@ add_mount_oneclient_function_annotations(FunctionDefinition, #prepare_ctx{
     )),
 
     OneclientMountRelatedAnnotations = #{
+        % TODO VFS-8141 rm deprecated oneclient.openfass.*
         <<"oneclient.openfass.onedata.org/inject">> => <<"enabled">>,
         <<"oneclient.openfass.onedata.org/image">> => get_oneclient_image(),
+        <<"oneclient.openfaas.onedata.org/inject">> => <<"enabled">>,
+        <<"oneclient.openfaas.onedata.org/image">> => get_oneclient_image(),
         <<"oneclient.openfaas.onedata.org/space_id">> => SpaceId,
         <<"oneclient.openfaas.onedata.org/mount_point">> => MountPoint,
         <<"oneclient.openfaas.onedata.org/options">> => <<
@@ -408,11 +441,23 @@ await_function_readiness(#prepare_ctx{
 
     case Result of
         ready ->
-            ok;
+            log_function_ready(PrepareCtx);
         not_ready ->
             timer:sleep(timer:seconds(?AWAIT_READINESS_INTERVAL_SEC)),
             await_function_readiness(PrepareCtx, RetriesLeft - 1)
     end.
+
+
+%% @private
+-spec log_function_ready(prepare_ctx()) -> ok.
+log_function_ready(#prepare_ctx{
+    workflow_execution_ctx = AtmWorkflowExecutionCtx,
+    executor = #atm_openfaas_task_executor{function_name = FunctionName}
+}) ->
+    AtmWorkflowExecutionLogger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
+    atm_workflow_execution_logger:workflow_info(
+        "Function '~ts' ready to use in OpenFaas", [FunctionName], AtmWorkflowExecutionLogger
+    ).
 
 
 %% @private
@@ -449,7 +494,7 @@ remove_function(#atm_openfaas_task_executor{function_name = FunctionName}) ->
     AuthHeaders = get_basic_auth_header(OpenfaasConfig),
     Payload = json_utils:encode(#{<<"functionName">> => FunctionName}),
 
-    % TODO VFS-7904 log warning in audit log if function removal failed
+    % TODO VFS-8041 log warning in audit log if function removal failed
     http_client:delete(Endpoint, AuthHeaders, Payload),
     ok.
 

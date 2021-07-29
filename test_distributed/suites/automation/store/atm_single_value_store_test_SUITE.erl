@@ -152,7 +152,7 @@ iterate_test_base(AtmStoreIteratorStrategy, ValueToSet, ExpectedValue) ->
     ?assertEqual(ok, atm_store_test_utils:apply_operation(
         krakow, AtmWorkflowExecutionAuth, set, ValueToSet, #{}, AtmStoreId)
     ),
-    AtmStoreIterator1 = atm_store_test_utils:acquire_store_iterator(krakow, AtmWorkflowExecutionEnv, AtmStoreIteratorSpec),
+    AtmStoreIterator1 = atm_store_test_utils:acquire_store_iterator(krakow, AtmStoreId, AtmStoreIteratorSpec),
     {ok, _, AtmIterator2} = ?assertMatch({ok, ExpectedValue, _}, atm_store_test_utils:iterator_get_next(krakow, AtmWorkflowExecutionEnv, AtmStoreIterator1)),
     ?assertEqual(stop, atm_store_test_utils:iterator_get_next(krakow, AtmWorkflowExecutionEnv, AtmIterator2)).
 
