@@ -122,7 +122,7 @@ all() -> [
     qos_status_after_failed_transfers,
     qos_status_after_failed_transfers_deleted_file,
     qos_status_after_failed_transfers_deleted_entry,
-    
+
     qos_audit_log_successful_synchronization,
     qos_audit_log_transfer_error,
     qos_audit_log_failure,
@@ -581,12 +581,12 @@ qos_audit_log_successful_synchronization(Config) ->
 
 qos_audit_log_transfer_error(Config) ->
     % error mocked in init_per_testcase
-    qos_audit_log_base_test(Config, <<"synchronization_failed">>, single_file).
+    qos_audit_log_base_test(Config, <<"synchronization failed">>, single_file).
 
 
 qos_audit_log_failure(Config) ->
     % error mocked in init_per_testcase
-    qos_audit_log_base_test(Config, <<"synchronization_failed">>, single_file).
+    qos_audit_log_base_test(Config, <<"synchronization failed">>, single_file).
 
 
 effective_qos_audit_log_successful_synchronization(Config) ->
@@ -595,12 +595,12 @@ effective_qos_audit_log_successful_synchronization(Config) ->
 
 effective_qos_audit_log_transfer_error(Config) ->
     % error mocked in init_per_testcase
-    qos_audit_log_base_test(Config, <<"synchronization_failed">>, effective).
+    qos_audit_log_base_test(Config, <<"synchronization failed">>, effective).
 
 
 effective_qos_audit_log_failure(Config) ->
     % error mocked in init_per_testcase
-    qos_audit_log_base_test(Config, <<"synchronization_failed">>, effective).
+    qos_audit_log_base_test(Config, <<"synchronization failed">>, effective).
 
 
 qos_audit_log_base_test(Config, ExpectedStatus, Type) ->
@@ -614,11 +614,11 @@ qos_audit_log_base_test(Config, ExpectedStatus, Type) ->
     BaseExpected = case ExpectedStatus of
         <<"synchronized">> -> 
             #{<<"severity">> => <<"info">>};
-        <<"synchronization_failed">> -> 
+        <<"synchronization failed">> -> 
             #{
                 <<"severity">> => <<"error">>,
                 % error mocked in init_per_testcase
-                <<"error">> => #{
+                <<"reason">> => #{
                     <<"description">> => <<"Operation failed with POSIX error: enoent.">>,
                     <<"details">> => #{<<"errno">> => <<"enoent">>},
                     <<"id">> => <<"posix">>
@@ -630,7 +630,7 @@ qos_audit_log_base_test(Config, ExpectedStatus, Type) ->
         [
             #{
                 <<"severity">> => <<"info">>,
-                <<"status">> => <<"synchronization_started">>,
+                <<"status">> => <<"synchronization started">>,
                 <<"fileId">> => ObjectId,
                 <<"timestamp">> => Timestamp
             },
@@ -736,7 +736,7 @@ init_per_testcase(_, Config) ->
 
 common_init_per_testcase(Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    ok = clock_freezer_mock:setup_on_nodes(Workers, [global_clock, ?MODULE]),
+    ok = clock_freezer_mock:setup_for_ct(Workers, [global_clock, ?MODULE]),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
     mock_space_storages(ConfigWithSessionInfo, maps:keys(?TEST_PROVIDERS_QOS)),
     mock_storage_qos_parameters(Workers, ?TEST_PROVIDERS_QOS),

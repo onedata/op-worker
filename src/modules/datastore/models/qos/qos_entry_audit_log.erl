@@ -22,6 +22,7 @@
     create/1,
     report_synchronization_started/2, 
     report_file_synchronized/2, 
+    report_file_synchronization_skipped/3,
     report_file_synchronization_failed/3, 
     destroy/1, 
     list/2
@@ -57,7 +58,7 @@ create(Id) ->
 report_synchronization_started(Id, FileGuid) ->
     {ok, ObjectId} = file_id:guid_to_objectid(FileGuid),
     Content = #{
-        <<"status">> => <<"synchronization_started">>,
+        <<"status">> => <<"synchronization started">>,
         <<"severity">> => <<"info">>,
         <<"fileId">> => ObjectId
     },
@@ -75,14 +76,27 @@ report_file_synchronized(Id, FileGuid) ->
     datastore_infinite_log:append(?CTX, Id, json_utils:encode(Content)).
 
 
+-spec report_file_synchronization_skipped(id(), file_id:file_guid(), Reason :: binary()) -> 
+    ok | {error, term()}.
+report_file_synchronization_skipped(Id, FileGuid, Reason) ->
+    {ok, ObjectId} = file_id:guid_to_objectid(FileGuid),
+    Content = #{
+        <<"status">> => <<"synchronization skipped">>,
+        <<"reason">> => Reason,
+        <<"severity">> => <<"info">>,
+        <<"fileId">> => ObjectId
+    },
+    datastore_infinite_log:append(?CTX, Id, json_utils:encode(Content)).
+
+
 -spec report_file_synchronization_failed(id(), file_id:file_guid(), {error, term()}) -> ok | {error, term()}.
 report_file_synchronization_failed(Id, FileGuid, Error) ->
     {ok, ObjectId} = file_id:guid_to_objectid(FileGuid),
     Content = #{
-        <<"status">> => <<"synchronization_failed">>,
+        <<"status">> => <<"synchronization failed">>,
         <<"severity">> => <<"error">>,
         <<"fileId">> => ObjectId,
-        <<"error">> => errors:to_json(Error)
+        <<"reason">> => errors:to_json(Error)
     },
     datastore_infinite_log:append(?CTX, Id, json_utils:encode(Content)).
 

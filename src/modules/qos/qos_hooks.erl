@@ -24,6 +24,7 @@
     handle_qos_entry_change/2,
     handle_entry_delete/1,
     reconcile_qos/1, reconcile_qos/2, invalidate_cache_and_reconcile/1,
+    report_synchronization_skipped/1,
     reevaluate_all_impossible_qos_in_space/1,
     retry_failed_files/1
 ]).
@@ -127,12 +128,33 @@ reconcile_qos_internal(FileCtx, Options) when is_list(Options) ->
                     QosEntriesToUpdate = file_qos:get_assigned_entries_for_storage(EffFileQos, StorageId),
                     ok = qos_traverse:reconcile_file_for_qos_entries(FileCtx1, QosEntriesToUpdate);
                 true ->
-                    ok
+                    QosEntries = file_qos:get_qos_entries(EffFileQos),
+                    FileGuid = file_ctx:get_logical_guid_const(FileCtx),
+                    lists:foreach(fun(QosEntryId) ->
+                        ok = qos_entry_audit_log:report_file_synchronization_skipped(
+                            QosEntryId, FileGuid, <<"file deleted">>)
+                    end, QosEntries)
             end;
         undefined ->
             ok
     end.
 
+
+-spec report_synchronization_skipped(file_ctx:ctx()) -> ok.
+report_synchronization_skipped(FileCtx) ->
+    InodeUuid = file_ctx:get_referenced_uuid_const(FileCtx),
+    case file_qos:get_effective(InodeUuid) of
+        {ok, EffFileQos} ->
+            QosEntries = file_qos:get_qos_entries(EffFileQos),
+            FileGuid = file_ctx:get_logical_guid_const(FileCtx),
+            lists:foreach(fun(QosEntryId) ->
+                ok = qos_entry_audit_log:report_file_synchronization_skipped(
+                    QosEntryId, FileGuid, <<"file already replicated">>)
+            end, QosEntries);
+        _ ->
+            ok
+    end.
+    
 
 %%--------------------------------------------------------------------
 %% @doc
