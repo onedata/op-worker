@@ -70,6 +70,7 @@
 
 -spec delete_file_locally(user_ctx:ctx(), file_ctx:ctx(), od_provider:id(), boolean()) -> ok.
 delete_file_locally(UserCtx, FileCtx, Creator, Silent) ->
+    file_qos:cleanup_reference_related_documents(FileCtx),
     % TODO VFS-7448 - test events production
     case {file_ctx:is_link_const(FileCtx), oneprovider:is_self(Creator)} of
         {false, _} ->
@@ -115,6 +116,7 @@ delete_hardlink_locally(UserCtx, FileCtx, Silent) ->
 
 -spec handle_remotely_deleted_file(file_ctx:ctx()) -> ok.
 handle_remotely_deleted_file(FileCtx) ->
+    file_qos:cleanup_reference_related_documents(FileCtx),
     % TODO VFS-7445 - test race between hardlink and original file file_meta documents
     % when last hardlink is deleted and file has been deleted before
     {FileDoc, FileCtx2} = file_ctx:get_file_doc(FileCtx),
@@ -666,8 +668,8 @@ remove_local_associated_documents(FileCtx, StorageFileDeleted, StorageFileId) ->
     % TODO VFS-7377 use file_location:get_deleted instead of passing StorageFileId
     FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
     StorageFileDeleted andalso maybe_delete_storage_sync_info(FileCtx, StorageFileId),
-    ok = file_qos:clean_up_on_no_reference(FileCtx),
     ok = file_meta_posthooks:delete(FileUuid),
+    ok = file_qos:cleanup_on_no_reference(FileCtx),
     ok = file_popularity:delete(FileUuid).
 
 

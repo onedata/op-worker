@@ -11,7 +11,7 @@
 {application, op_worker,
     [
         {description, "Application starts node of oneprovider cluster"},
-        {vsn, "21.02.0-alpha18"},
+        {vsn, "21.02.0-alpha19"},
         {registered, [op_worker_sup]},
         {applications, [
             kernel,

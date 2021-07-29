@@ -728,7 +728,7 @@ schedule_file_replication(Worker, ProviderId, FileGuid, Config) ->
         Worker,
         <<"transfers">>,
         post,
-        ?USER_1_AUTH_HEADERS(Config, [{<<"Content-Type">>, <<"application/json">>}]),
+        ?USER_1_AUTH_HEADERS(Config, [{?HDR_CONTENT_TYPE, <<"application/json">>}]),
         json_utils:encode(#{
             <<"type">> => <<"replication">>,
             <<"replicatingProviderId">> => ProviderId,

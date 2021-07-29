@@ -156,7 +156,8 @@ assert_archive_dir_exists(Node, SessionId, SpaceId, DatasetId, ArchiveId, UserId
 assert_structure(Node, SessionId, ArchiveId, DatasetRootFileGuid, ?ARCHIVE_PLAIN_LAYOUT) ->
     ArchiveRootDirUuid = ?ARCHIVE_DIR_UUID(ArchiveId),
     ArchiveRootDirGuid = file_id:pack_guid(ArchiveRootDirUuid, oct_background:get_space_id(?SPACE)),
-    {ok, [{TargetGuid, _} | _]} = lfm_proxy:get_children(Node, SessionId, ?FILE_REF(ArchiveRootDirGuid), 0, ?LISTED_CHILDREN_LIMIT),
+    {ok, [{TargetGuid, _} | _]} = 
+        ?assertMatch({ok, [_ | _]}, lfm_proxy:get_children(Node, SessionId, ?FILE_REF(ArchiveRootDirGuid), 0, ?LISTED_CHILDREN_LIMIT), ?ATTEMPTS),
     assert_copied(Node, SessionId, DatasetRootFileGuid, TargetGuid);
 assert_structure(Node, SessionId, ArchiveId, DatasetRootFileGuid, ?ARCHIVE_BAGIT_LAYOUT) ->
     ArchiveRootDirUuid = ?ARCHIVE_DIR_UUID(ArchiveId),
@@ -164,7 +165,8 @@ assert_structure(Node, SessionId, ArchiveId, DatasetRootFileGuid, ?ARCHIVE_BAGIT
     {ok, ArchiveRootDirPath} = lfm_proxy:get_file_path(Node, SessionId, ArchiveRootDirGuid),
     ArchiveDataDirPath = filename:join([ArchiveRootDirPath, <<"data">>]),
     {ok, #file_attr{guid = ArchiveDataDirGuid}} = lfm_proxy:stat(Node, SessionId, {path, ArchiveDataDirPath}),
-    {ok, [{TargetGuid, _} | _]} = lfm_proxy:get_children(Node, SessionId, ?FILE_REF(ArchiveDataDirGuid), 0, ?LISTED_CHILDREN_LIMIT),
+    {ok, [{TargetGuid, _} | _]} = 
+        ?assertMatch({ok, [_ | _]}, lfm_proxy:get_children(Node, SessionId, ?FILE_REF(ArchiveDataDirGuid), 0, ?LISTED_CHILDREN_LIMIT), ?ATTEMPTS),
     assert_copied(Node, SessionId, DatasetRootFileGuid, TargetGuid).
 
 
@@ -174,7 +176,8 @@ assert_copied(Node, SessionId, SourceGuid, TargetGuid) ->
     {ok, SourceAttr} = lfm_proxy:stat(Node, SessionId, ?FILE_REF(SourceGuid)),
     case SourceAttr#file_attr.type of
         ?DIRECTORY_TYPE ->
-            assert_children_copied(Node, SessionId, SourceGuid, TargetGuid);
+            assert_children_copied(Node, SessionId, SourceGuid, TargetGuid),
+            assert_json_metadata_copied(Node, SessionId, SourceGuid, TargetGuid);
         ?REGULAR_FILE_TYPE ->
             assert_content_copied(Node, SessionId, SourceGuid, TargetGuid),
             assert_json_metadata_copied(Node, SessionId, SourceGuid, TargetGuid);

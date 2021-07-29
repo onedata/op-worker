@@ -17,6 +17,7 @@
 -include("onenv_test_utils.hrl").
 -include("proto/oneclient/common_messages.hrl").
 -include_lib("ctool/include/http/codes.hrl").
+-include_lib("ctool/include/http/headers.hrl").
 -include_lib("ctool/include/privileges.hrl").
 
 -export([
@@ -223,7 +224,7 @@ build_rest_create_file_validate_call_fun(MemRef, SpaceOwnerId) ->
                 #{<<"fileId">> := FileObjectId} = ?assertMatch(#{<<"fileId">> := <<_/binary>>}, RespBody),
 
                 ExpLocation = api_test_utils:build_rest_url(TestNode, [<<"data">>, FileObjectId]),
-                ?assertEqual(ExpLocation, maps:get(<<"Location">>, RespHeaders)),
+                ?assertEqual(ExpLocation, maps:get(?HDR_LOCATION, RespHeaders)),
 
                 {ok, FileGuid} = file_id:objectid_to_guid(FileObjectId),
 

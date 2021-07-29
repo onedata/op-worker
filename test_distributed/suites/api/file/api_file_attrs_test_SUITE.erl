@@ -17,6 +17,7 @@
 -include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/graph_sync/gri.hrl").
 -include_lib("ctool/include/http/codes.hrl").
+-include_lib("ctool/include/http/headers.hrl").
 
 -export([
     groups/0, all/0,
@@ -661,7 +662,7 @@ build_set_mode_prepare_rest_args_fun(ValidId) ->
                 RestPath,
                 maps:with([<<"attribute">>], Data1)
             ),
-            headers = #{<<"content-type">> => <<"application/json">>},
+            headers = #{?HDR_CONTENT_TYPE => <<"application/json">>},
             body = json_utils:encode(Data1)
         }
     end.

@@ -772,9 +772,9 @@ build_rest_download_prepare_args_fun(MemRef, TestMode) ->
         #rest_args{
             method = get,
             path = <<"data/", Id/binary, "/content">>,
-            headers = case maps:get(<<"range">>, Data1, undefined) of
+            headers = case maps:get(?HDR_RANGE, Data1, undefined) of
                 undefined -> #{};
-                Range -> #{<<"range">> => element(1, Range)}
+                Range -> #{?HDR_RANGE => element(1, Range)}
             end
         }
     end.

@@ -501,8 +501,10 @@ do_archive(FileCtx, AipArchiveCtx, DipArchiveCtx, BaseArchiveDoc, UserCtx) ->
     {IsDir, FileCtx2} = file_ctx:is_dir(FileCtx),
     case IsDir of
         true ->
-            {ok, ArchivedAipFileCtx} = archive_dir(FileCtx2, get_file_ctx(AipArchiveCtx), UserCtx),
-            {ok, ArchivedDipFileCtx} = archive_dir(FileCtx2, get_file_ctx(DipArchiveCtx), UserCtx),
+            {ok, ArchivedAipFileCtx} = archive_dir(
+                get_archive_doc(AipArchiveCtx), FileCtx2, get_file_ctx(AipArchiveCtx), UserCtx),
+            {ok, ArchivedDipFileCtx} = archive_dir(
+                get_archive_doc(DipArchiveCtx), FileCtx2, get_file_ctx(DipArchiveCtx), UserCtx),
             {
                 AipArchiveCtx#archive_ctx{target_parent = ArchivedAipFileCtx},
                 DipArchiveCtx#archive_ctx{target_parent = ArchivedDipFileCtx}
@@ -518,13 +520,15 @@ do_archive(FileCtx, AipArchiveCtx, DipArchiveCtx, BaseArchiveDoc, UserCtx) ->
 
 
 -spec archive_dir
-    (file_ctx:ctx(), file_ctx:ctx(), user_ctx:ctx()) -> {ok, file_ctx:ctx()} | {error, term()};
-    (file_ctx:ctx(), undefined, user_ctx:ctx()) -> {ok, undefined}.
-archive_dir(_FileCtx, undefined, _UserCtx) ->
+    (archive:doc(), file_ctx:ctx(), file_ctx:ctx(), user_ctx:ctx()) -> 
+        {ok, file_ctx:ctx()} | {error, term()};
+    (archive:doc(), file_ctx:ctx(), undefined, user_ctx:ctx()) -> 
+        {ok, undefined}.
+archive_dir(_ArchiveDoc, _FileCtx, undefined, _UserCtx) ->
     {ok, undefined};
-archive_dir(FileCtx, TargetParentCtx, UserCtx) ->
+archive_dir(ArchiveDoc, FileCtx, TargetParentCtx, UserCtx) ->
     try
-        archive_dir_insecure(FileCtx, TargetParentCtx, UserCtx)
+        archive_dir_insecure(ArchiveDoc, FileCtx, TargetParentCtx, UserCtx)
     catch
         Class:Reason:Stacktrace ->
             Guid = file_ctx:get_logical_guid_const(FileCtx),
@@ -537,14 +541,21 @@ archive_dir(FileCtx, TargetParentCtx, UserCtx) ->
     end.
 
 
--spec archive_dir_insecure(file_ctx:ctx(), file_ctx:ctx(), user_ctx:ctx()) -> {ok, file_ctx:ctx()}.
-archive_dir_insecure(FileCtx, TargetParentCtx, UserCtx) ->
+-spec archive_dir_insecure(archive:doc(), file_ctx:ctx(), file_ctx:ctx(), user_ctx:ctx()) -> {ok, file_ctx:ctx()}.
+archive_dir_insecure(ArchiveDoc, FileCtx, TargetParentCtx, UserCtx) ->
     {DirName, FileCtx2} = file_ctx:get_aliased_name(FileCtx, UserCtx),
     DirGuid = file_ctx:get_logical_guid_const(FileCtx2),
     TargetParentGuid = file_ctx:get_logical_guid_const(TargetParentCtx),
     % only directory is copied therefore recursive=false is passed to copy function
     {ok, CopyGuid, _} = file_copy:copy(user_ctx:get_session_id(UserCtx), DirGuid, TargetParentGuid, DirName, false),
-    {ok, file_ctx:new_by_guid(CopyGuid)}.
+    ArchivedFileCtx = file_ctx:new_by_guid(CopyGuid),
+    case is_bagit(ArchiveDoc) of
+        false ->
+            ok;
+        true ->
+            bagit_archive:archive_dir(ArchiveDoc, FileCtx2, ArchivedFileCtx, UserCtx)
+    end,
+    {ok, ArchivedFileCtx}.
 
 
 -spec archive_file_and_mark_finished(file_ctx:ctx(), archive_ctx(), archive_ctx(), archive:doc() | undefined, user_ctx:ctx()) ->

@@ -23,7 +23,7 @@
 -export([
     handle_qos_entry_change/2,
     handle_entry_delete/1,
-    reconcile_qos/1, reconcile_qos/2,
+    reconcile_qos/1, reconcile_qos/2, invalidate_cache_and_reconcile/1,
     reevaluate_all_impossible_qos_in_space/1,
     retry_failed_files/1
 ]).
@@ -89,6 +89,12 @@ reconcile_qos(FileCtx) ->
 reconcile_qos(FileUuid, SpaceId) ->
     FileCtx = file_ctx:new_by_uuid(FileUuid, SpaceId),
     reconcile_qos(FileCtx).
+
+
+-spec invalidate_cache_and_reconcile(file_ctx:ctx()) -> ok.
+invalidate_cache_and_reconcile(FileCtx) ->
+    ok = qos_bounded_cache:invalidate_on_all_nodes(file_ctx:get_space_id_const(FileCtx)),
+    ok = qos_hooks:reconcile_qos(FileCtx).
 
 
 %%--------------------------------------------------------------------

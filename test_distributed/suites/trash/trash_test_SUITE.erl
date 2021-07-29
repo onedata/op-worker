@@ -61,7 +61,7 @@
     files_from_trash_are_not_reimported/1,
     deletion_lasting_for_4_days_should_succeed/1,
     deletion_lasting_for_40_days_should_succeed/1,
-    deletion_lasting_for_10_days_should_fail_if_session_is_not_refreshed_within_expected_time/1
+    deletion_lasting_for_40_days_should_fail_if_session_is_not_refreshed_within_expected_time/1
 ]).
 
 
@@ -96,9 +96,9 @@ all() -> ?ALL([
     qos_set_on_parent_directory_does_not_affect_files_in_trash,
     qos_set_on_space_directory_does_not_affect_files_in_trash,
     files_from_trash_are_not_reimported,
-    deletion_lasting_for_4_days_should_succeed
-    % TODO VFS-7338 uncomment after fixing clock synchronization mechanism
-    % deletion_lasting_for_40_days_should_succeed,
+    deletion_lasting_for_4_days_should_succeed,
+    deletion_lasting_for_40_days_should_succeed
+    % TODO VFS-7348 this test should pass when deletion is scheduled as user not by root
     % deletion_lasting_for_10_days_should_fail_if_session_is_not_refreshed_within_expected_time
 ]).
 
@@ -525,9 +525,10 @@ deletion_lasting_for_40_days_should_succeed(Config) ->
     % deletion from trash will last for (simulated) 40 days
     long_lasting_deletion_test_base(Config, TimeWarpsCount, TimeWarp, Interval, success).
 
-deletion_lasting_for_10_days_should_fail_if_session_is_not_refreshed_within_expected_time(Config) ->
-    % This test simulates a 10 day time warp which will result in failed refresh of offline session
-    TimeWarp = 10 * 24 * 3600, % 10 days
+deletion_lasting_for_40_days_should_fail_if_session_is_not_refreshed_within_expected_time(Config) ->
+    % This test simulates a 40 day time warp which will result in failed refresh of offline session
+    % (offline sessions are valid for a month)
+    TimeWarp = 40 * 24 * 3600, % 40 days
     long_lasting_deletion_test_base(Config, 1, TimeWarp, 1, failure).
 
 %===================================================================
@@ -615,7 +616,7 @@ long_lasting_deletion_test_base(_Config, TimeWarpsCount,
     {ok, TaskId} = schedule_deletion_from_trash(P1Node, DirCtx, UserSessIdP1, ?SPACE_UUID),
 
     lists:foreach(fun(_) ->
-    % simulate that a TimeWarpPeriod time warp occurred during deletion from trash
+        % simulate that a TimeWarpPeriod time warp occurred during deletion from trash
         time_test_utils:simulate_seconds_passing(TimeWarpPeriod),
         timer:sleep(timer:seconds(TimeWarpInterval))
     end, lists:seq(1, TimeWarpsCount)),
@@ -659,7 +660,7 @@ end_per_suite(_Config) ->
 init_per_testcase(Case, Config) when
     Case =:= deletion_lasting_for_4_days_should_succeed orelse
     Case =:= deletion_lasting_for_40_days_should_succeed orelse
-    Case =:= deletion_lasting_for_10_days_should_fail_if_session_is_not_refreshed_within_expected_time
+    Case =:= deletion_lasting_for_40_days_should_fail_if_session_is_not_refreshed_within_expected_time
 ->
     time_test_utils:freeze_time(Config),
     init_per_testcase(default, Config);

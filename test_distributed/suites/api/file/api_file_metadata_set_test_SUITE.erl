@@ -670,8 +670,8 @@ build_set_metadata_prepare_rest_args_fun(MetadataType, ValidId, QsParams) ->
                 #rest_args{
                     method = put,
                     headers = case MetadataType of
-                        <<"rdf">> -> #{<<"content-type">> => <<"application/rdf+xml">>};
-                        _ -> #{<<"content-type">> => <<"application/json">>}
+                        <<"rdf">> -> #{?HDR_CONTENT_TYPE => <<"application/rdf+xml">>};
+                        _ -> #{?HDR_CONTENT_TYPE => <<"application/json">>}
                     end,
                     path = http_utils:append_url_parameters(
                         RestPath,
