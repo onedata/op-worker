@@ -68,12 +68,15 @@
 -spec stat(SessId :: session:id(), lfm:file_key(), boolean()) ->
     {ok, file_attributes()} | lfm:error_reply().
 stat(SessId, FileKey, IncludeLinksCount) ->
-    FileGuid = lfm_file_key:resolve_file_key(SessId, FileKey, do_not_resolve_symlink),
-
-    remote_utils:call_fslogic(
-        SessId, file_request, FileGuid, #get_file_attr{include_link_count = IncludeLinksCount},
-        fun(#file_attr{} = Attrs) -> {ok, Attrs} end
-    ).
+    case lfm_file_key:resolve_file_key(SessId, FileKey, do_not_resolve_symlink) of
+        {error, _} = Error -> 
+            Error;
+        FileGuid ->
+            remote_utils:call_fslogic(
+                SessId, file_request, FileGuid, #get_file_attr{include_link_count = IncludeLinksCount},
+                fun(#file_attr{} = Attrs) -> {ok, Attrs} end
+            )
+    end.
 
 
 %%--------------------------------------------------------------------
