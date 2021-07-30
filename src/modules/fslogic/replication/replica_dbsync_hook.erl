@@ -286,9 +286,10 @@ notify_attrs_change_if_necessary(FileCtx,
             ok = fslogic_event_emitter:emit_file_attr_changed_with_replication_status(FileCtx, SizeChanged, []),
             ok = qos_hooks:reconcile_qos(FileCtx);
         {false, true} ->
-            ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, []);
+            ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, []),
+            ok = qos_hooks:report_synchronization_skipped(FileCtx);
         {false, false} ->
-            ok
+            ok = qos_hooks:report_synchronization_skipped(FileCtx)
     end.
 
 %%-------------------------------------------------------------------

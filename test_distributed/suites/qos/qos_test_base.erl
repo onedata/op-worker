@@ -1096,15 +1096,15 @@ qos_status_during_traverse_test_base(Config, SpaceId, NumberOfFilesInDir) ->
     
     
     ok = qos_tests_utils:finish_all_transfers(Guids1),
-    ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, Guids1, QosList, ?FULFILLED), ?ATTEMPTS),
-    ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, Guids2 ++ Guids3 ++ [Dir1, Dir2, Dir3, Dir4], QosList, ?PENDING), ?ATTEMPTS),
+    ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, Guids1, QosList, ?FULFILLED_QOS_STATUS), ?ATTEMPTS),
+    ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, Guids2 ++ Guids3 ++ [Dir1, Dir2, Dir3, Dir4], QosList, ?PENDING_QOS_STATUS), ?ATTEMPTS),
     
     ok = qos_tests_utils:finish_all_transfers(Guids2),
-    ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, Guids1 ++ Guids2 ++ [Dir2], QosList, ?FULFILLED), ?ATTEMPTS),
-    ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, Guids3 ++ [Dir1, Dir3, Dir4], QosList, ?PENDING), ?ATTEMPTS),
+    ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, Guids1 ++ Guids2 ++ [Dir2], QosList, ?FULFILLED_QOS_STATUS), ?ATTEMPTS),
+    ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, Guids3 ++ [Dir1, Dir3, Dir4], QosList, ?PENDING_QOS_STATUS), ?ATTEMPTS),
     
     ok = qos_tests_utils:finish_all_transfers(Guids3),
-    ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, Guids1 ++ Guids2 ++ Guids3 ++ [Dir1, Dir2, Dir3, Dir4], QosList, ?FULFILLED), ?ATTEMPTS).
+    ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, Guids1 ++ Guids2 ++ Guids3 ++ [Dir1, Dir2, Dir3, Dir4], QosList, ?FULFILLED_QOS_STATUS), ?ATTEMPTS).
 
 
 qos_status_during_traverse_with_hardlinks_test_base(Config, SpaceId) ->
@@ -1124,12 +1124,12 @@ qos_status_during_traverse_with_hardlinks_test_base(Config, SpaceId) ->
     {ok, QosEntryId} = lfm_proxy:add_qos_entry(Worker1, SessId(Worker1), ?FILE_REF(Dir1Guid), <<"country=FR">>, 1),
     assert_effective_entry(Worker1, SessId(Worker1), QosEntryId, [FileGuid1, FileGuid2, LinkGuid], []),
     
-    ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [FileGuid1, FileGuid2, LinkGuid], [QosEntryId], ?PENDING), ?ATTEMPTS),
+    ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [FileGuid1, FileGuid2, LinkGuid], [QosEntryId], ?PENDING_QOS_STATUS), ?ATTEMPTS),
     qos_tests_utils:finish_all_transfers([FileGuid1]),
-    ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [FileGuid1, LinkGuid], [QosEntryId], ?FULFILLED), ?ATTEMPTS),
-    ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [FileGuid2], [QosEntryId], ?PENDING), ?ATTEMPTS),
+    ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [FileGuid1, LinkGuid], [QosEntryId], ?FULFILLED_QOS_STATUS), ?ATTEMPTS),
+    ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [FileGuid2], [QosEntryId], ?PENDING_QOS_STATUS), ?ATTEMPTS),
     qos_tests_utils:finish_all_transfers([FileGuid2]),
-    ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [FileGuid1, FileGuid2, LinkGuid], [QosEntryId], ?FULFILLED), ?ATTEMPTS).
+    ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [FileGuid1, FileGuid2, LinkGuid], [QosEntryId], ?FULFILLED_QOS_STATUS), ?ATTEMPTS).
 
 
 -spec qos_status_during_traverse_with_file_deletion_test_base(test_config:config(), od_space:id(), pos_integer(), file_type()) -> ok.
@@ -1166,7 +1166,7 @@ qos_status_during_traverse_with_file_deletion_test_base(Config, SpaceId, NumberO
     ok = qos_tests_utils:finish_all_transfers(ToFinish),
     
     Dir1 = qos_tests_utils:get_guid(resolve_path(SpaceId, Name, []), GuidsAndPaths),
-    ok = ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, ToFinish ++ [Dir1], QosList, ?FULFILLED), ?ATTEMPTS),
+    ok = ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, ToFinish ++ [Dir1], QosList, ?FULFILLED_QOS_STATUS), ?ATTEMPTS),
     % finish transfers to unlock waiting slave job processes
     ok = qos_tests_utils:finish_all_transfers(ToDelete),
     % These files where deleted so QoS is not fulfilled
@@ -1199,7 +1199,7 @@ qos_status_during_traverse_with_dir_deletion_test_base(Config, SpaceId, NumberOf
     
     ok = lfm_proxy:rm_recursive(Worker1, SessId(Worker1), ?FILE_REF(Dir2)),
     
-    ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [Dir1], QosList, ?FULFILLED), ?ATTEMPTS),
+    ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [Dir1], QosList, ?FULFILLED_QOS_STATUS), ?ATTEMPTS),
     
     % finish transfers to unlock waiting slave job processes
     ok = qos_tests_utils:finish_all_transfers([F || {F, _} <- maps:get(files, GuidsAndPaths)]).
@@ -1230,7 +1230,7 @@ qos_status_during_traverse_file_without_qos_test_base(Config, SpaceId) ->
         ?assertMatch({ok, _}, lfm_proxy:stat(W, SessId(W), ?FILE_REF(FileGuid)), ?ATTEMPTS)
     end, Workers),
     
-    ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [Dir1, FileGuid], QosList, ?FULFILLED), ?ATTEMPTS),
+    ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [Dir1, FileGuid], QosList, ?FULFILLED_QOS_STATUS), ?ATTEMPTS),
     
     % finish transfer to unlock waiting slave job process
     ok = qos_tests_utils:finish_all_transfers([F || {F, _} <- maps:get(files, GuidsAndPaths)]).
@@ -1247,7 +1247,7 @@ qos_status_during_reconciliation_test_base(Config, SpaceId, DirStructure, Filena
     FilesAndDirs = maps:get(files, GuidsAndPaths) ++ maps:get(dirs, GuidsAndPaths),
     FilesAndDirsGuids = lists:map(fun({G, _}) -> G end, FilesAndDirs),
     
-    ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, FilesAndDirsGuids, QosList, ?FULFILLED), ?ATTEMPTS),
+    ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, FilesAndDirsGuids, QosList, ?FULFILLED_QOS_STATUS), ?ATTEMPTS),
     
     IsAncestor = fun
         (F, F) -> true;
@@ -1262,14 +1262,14 @@ qos_status_during_reconciliation_test_base(Config, SpaceId, DirStructure, Filena
         lists:foreach(fun({G, P}) ->
             ct:pal("Checking file: ~p~n\tis_ancestor: ~p", [P, IsAncestor(P, FilePath)]),
             ExpectedStatus = case IsAncestor(P, FilePath) of
-                true -> ?PENDING;
-                false -> ?FULFILLED
+                true -> ?PENDING_QOS_STATUS;
+                false -> ?FULFILLED_QOS_STATUS
             end,
             ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [G], QosList, ExpectedStatus), ?ATTEMPTS)
         end, FilesAndDirs),
         ok = qos_tests_utils:finish_all_transfers([FileGuid]),
         ct:pal("Checking after finish"),
-        ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, FilesAndDirsGuids, QosList, ?FULFILLED), ?ATTEMPTS)
+        ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, FilesAndDirsGuids, QosList, ?FULFILLED_QOS_STATUS), ?ATTEMPTS)
     end, maps:get(files, GuidsAndPaths)).
 
 
@@ -1295,15 +1295,15 @@ qos_status_during_reconciliation_with_file_deletion_test_base(Config, SpaceId, N
     FilesAndDirsGuids = lists:map(fun({G, _}) -> G end, FilesAndDirs),
     [{Dir1, _}] = maps:get(dirs, GuidsAndPaths),
     
-    ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, FilesAndDirsGuids, QosList, ?FULFILLED), ?ATTEMPTS),
+    ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, FilesAndDirsGuids, QosList, ?FULFILLED_QOS_STATUS), ?ATTEMPTS),
     
     lists:foreach(fun(Worker) ->
         Guids = create_files_and_write(Worker1, SessId(Worker1), Dir1, TypeSpec, NumOfFiles),
-        ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [Dir1 | Guids], QosList, ?PENDING), ?ATTEMPTS),
+        ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [Dir1 | Guids], QosList, ?PENDING_QOS_STATUS), ?ATTEMPTS),
         lists:foreach(fun(FileGuid) ->
             ok = lfm_proxy:unlink(Worker, SessId(Worker), ?FILE_REF(FileGuid))
         end, Guids),
-        ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, FilesAndDirsGuids, QosList, ?FULFILLED), ?ATTEMPTS),
+        ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, FilesAndDirsGuids, QosList, ?FULFILLED_QOS_STATUS), ?ATTEMPTS),
         % finish transfer to unlock waiting slave job process
         ok = qos_tests_utils:finish_all_transfers(Guids, non_strict) % all hardlinks are to the same file so only one transfer started
     end, Workers).
@@ -1324,16 +1324,16 @@ qos_status_during_reconciliation_with_dir_deletion_test_base(Config, SpaceId, Nu
     {GuidsAndPaths, QosList} = prepare_qos_status_test_env(Config, DirStructure, SpaceId, Name),
     Dir1 = qos_tests_utils:get_guid(resolve_path(SpaceId, Name, []), GuidsAndPaths),
     ok = qos_tests_utils:finish_all_transfers([F || {F, _} <- maps:get(files, GuidsAndPaths)]),
-    ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [Dir1], QosList, ?FULFILLED), ?ATTEMPTS),
+    ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [Dir1], QosList, ?FULFILLED_QOS_STATUS), ?ATTEMPTS),
     TypeSpec = prepare_type_spec(FileType, Workers, SessId, {target, create_link_target(Worker1, SessId(Worker1), SpaceId)}),
     
     lists:foreach(fun(Worker) ->
         ct:print("Deleting worker: ~p", [Worker]), % log current deleting worker for greater verbosity during failures
         {ok, DirGuid} = lfm_proxy:mkdir(Worker1, SessId(Worker1), Dir1, generator:gen_name(), ?DEFAULT_DIR_PERMS),
         Guids = create_files_and_write(Worker1, SessId(Worker1), DirGuid, TypeSpec, NumOfFiles),
-        ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [Dir1], QosList, ?PENDING), ?ATTEMPTS),
+        ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [Dir1], QosList, ?PENDING_QOS_STATUS), ?ATTEMPTS),
         ok = lfm_proxy:rm_recursive(Worker, SessId(Worker), ?FILE_REF(DirGuid)),
-        ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [Dir1], QosList, ?FULFILLED), ?ATTEMPTS),
+        ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [Dir1], QosList, ?FULFILLED_QOS_STATUS), ?ATTEMPTS),
         % finish transfer to unlock waiting slave job process
         ok = qos_tests_utils:finish_all_transfers(Guids, non_strict) % all hardlinks are to the same file so only one transfer started
     end, Workers).
@@ -1363,7 +1363,7 @@ qos_status_after_failed_transfer(Config, SpaceId, TargetWorker) ->
     
     % check that after a successful transfer QoS entry is eventually fulfilled
     qos_tests_utils:mock_replica_synchronizer(Workers, passthrough),
-    ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [FileGuid], QosList, ?FULFILLED), ?ATTEMPTS),
+    ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [FileGuid], QosList, ?FULFILLED_QOS_STATUS), ?ATTEMPTS),
     % check file distribution again (file blocks should be on both source and target provider)
     ?assertEqual(true, qos_tests_utils:assert_distribution_in_dir_structure(
         Config, DirStructure(lists:usort([?GET_DOMAIN_BIN(Worker1), ?GET_DOMAIN_BIN(TargetWorker)])), GuidsAndPaths)),
@@ -1405,7 +1405,7 @@ qos_status_after_failed_transfer_deleted_file(Config, SpaceId, TargetWorker) ->
         ?assertEqual({error, enoent}, lfm_proxy:stat(W, SessId(W), ?FILE_REF(FileGuid)), ?ATTEMPTS)
     end, Workers),
     % check that QoS entry is eventually fulfilled
-    ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [DirGuid], QosList, ?FULFILLED), ?ATTEMPTS),
+    ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [DirGuid], QosList, ?FULFILLED_QOS_STATUS), ?ATTEMPTS),
     % no need to check distribution as file was deleted
     % check that failed files list is empty (attempts needed to wait for failed 
     % files retry to execute - qos status change was triggered by file deletion)
@@ -1447,7 +1447,7 @@ qos_status_after_failed_transfer_deleted_entry(Config, SpaceId, TargetWorker) ->
     
     % check that after a successful transfer QoS entry is eventually fulfilled
     qos_tests_utils:mock_replica_synchronizer(Workers, passthrough),
-    ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [FileGuid], QosEntryList, ?FULFILLED), ?ATTEMPTS),
+    ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [FileGuid], QosEntryList, ?FULFILLED_QOS_STATUS), ?ATTEMPTS),
     % check file distribution again (file blocks should be on both source and target provider)
     ?assertEqual(true, qos_tests_utils:assert_distribution_in_dir_structure(
         Config, DirStructure(lists:usort([?GET_DOMAIN_BIN(Worker1), ?GET_DOMAIN_BIN(TargetWorker)])), GuidsAndPaths)),
@@ -1490,17 +1490,17 @@ qos_with_hardlink_test_base(Config, SpaceId, Mode) ->
         QosEntryId
     end, QosTargets),
     
-    ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [FileGuid, LinkGuid], QosList, ?FULFILLED), ?ATTEMPTS),
+    ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [FileGuid, LinkGuid], QosList, ?FULFILLED_QOS_STATUS), ?ATTEMPTS),
     
     qos_tests_utils:mock_transfers(Workers),
     lists:foreach(fun(GuidToWrite) ->
         {ok, Handle} = lfm_proxy:open(Worker1, SessId(Worker1), ?FILE_REF(GuidToWrite), write),
         {ok, _} = lfm_proxy:write(Worker1, Handle, 0, crypto:strong_rand_bytes(123)),
         ok = lfm_proxy:close(Worker1, Handle),
-        ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [FileGuid, LinkGuid], QosList, ?PENDING), ?ATTEMPTS),
+        ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [FileGuid, LinkGuid], QosList, ?PENDING_QOS_STATUS), ?ATTEMPTS),
         
         qos_tests_utils:finish_all_transfers([FileGuid]),
-        ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [FileGuid, LinkGuid], QosList, ?FULFILLED), ?ATTEMPTS)
+        ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [FileGuid, LinkGuid], QosList, ?FULFILLED_QOS_STATUS), ?ATTEMPTS)
     end, [FileGuid, LinkGuid]).
 
 
@@ -1547,7 +1547,7 @@ qos_on_symlink_test_base(Config, SpaceId) ->
     {ok, QosEntryId} = lfm_proxy:add_qos_entry(Worker1, SessId(Worker1), ?FILE_REF(LinkGuid), <<"country=FR">>, 1),
     assert_effective_entry(Worker1, SessId(Worker1), QosEntryId, [LinkGuid], [FileGuid]),
     
-    ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [FileGuid, LinkGuid], QosEntryId, ?FULFILLED), ?ATTEMPTS).
+    ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [FileGuid, LinkGuid], QosEntryId, ?FULFILLED_QOS_STATUS), ?ATTEMPTS).
 
 
 effective_qos_with_symlink_test_base(Config, SpaceId) ->
@@ -1568,17 +1568,17 @@ effective_qos_with_symlink_test_base(Config, SpaceId) ->
     assert_effective_entry(Worker1, SessId(Worker1), QosEntryId2, [LinkGuid], [FileGuid]),
     
     QosList = [QosEntryId1, QosEntryId2],
-    ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [FileGuid, LinkGuid], QosList, ?FULFILLED), ?ATTEMPTS),
+    ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [FileGuid, LinkGuid], QosList, ?FULFILLED_QOS_STATUS), ?ATTEMPTS),
     
     qos_tests_utils:mock_transfers(Workers),
     {ok, Handle} = lfm_proxy:open(Worker1, SessId(Worker1), ?FILE_REF(FileGuid), write),
     {ok, _} = lfm_proxy:write(Worker1, Handle, 0, crypto:strong_rand_bytes(123)),
     ok = lfm_proxy:close(Worker1, Handle),
-    ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [FileGuid], QosList, ?PENDING), ?ATTEMPTS),
-    ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [LinkGuid], QosList, ?FULFILLED), ?ATTEMPTS),
+    ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [FileGuid], QosList, ?PENDING_QOS_STATUS), ?ATTEMPTS),
+    ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [LinkGuid], QosList, ?FULFILLED_QOS_STATUS), ?ATTEMPTS),
     
     qos_tests_utils:finish_all_transfers([FileGuid]),
-    ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [FileGuid, LinkGuid], QosList, ?FULFILLED), ?ATTEMPTS).
+    ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [FileGuid, LinkGuid], QosList, ?FULFILLED_QOS_STATUS), ?ATTEMPTS).
 
 
 create_hardlink_in_dir_with_qos(Config, SpaceId) ->
@@ -1589,16 +1589,16 @@ create_hardlink_in_dir_with_qos(Config, SpaceId) ->
     {ok, FileGuid} = lfm_proxy:create(Worker1, SessId(Worker1), SpaceGuid, generator:gen_name(), ?DEFAULT_FILE_PERMS),
     {ok, QosEntryId} = lfm_proxy:add_qos_entry(Worker1, SessId(Worker1), ?FILE_REF(Dir1Guid), <<"country=FR">>, 1),
     
-    ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [FileGuid, Dir1Guid], [QosEntryId], ?FULFILLED), ?ATTEMPTS),
+    ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [FileGuid, Dir1Guid], [QosEntryId], ?FULFILLED_QOS_STATUS), ?ATTEMPTS),
     
     qos_tests_utils:mock_transfers(Workers),
     lists:foreach(fun(Worker) ->
         {ok, #file_attr{guid = LinkGuid}} = lfm_proxy:make_link(Worker, SessId(Worker), ?FILE_REF(FileGuid), ?FILE_REF(Dir1Guid), generator:gen_name()),
         await_files_sync_between_workers(Workers, [FileGuid, LinkGuid], SessId),
         assert_effective_entry(Worker, SessId(Worker), QosEntryId, [LinkGuid, FileGuid], []),
-        ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [Dir1Guid, LinkGuid], [QosEntryId], ?PENDING), ?ATTEMPTS),
+        ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [Dir1Guid, LinkGuid], [QosEntryId], ?PENDING_QOS_STATUS), ?ATTEMPTS),
         qos_tests_utils:finish_all_transfers([LinkGuid]),
-        ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [Dir1Guid, LinkGuid], [QosEntryId], ?FULFILLED), ?ATTEMPTS)
+        ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, [Dir1Guid, LinkGuid], [QosEntryId], ?FULFILLED_QOS_STATUS), ?ATTEMPTS)
     end, Workers).
     
 
@@ -1685,7 +1685,7 @@ prepare_qos_status_test_env(Config, DirStructure, SpaceId, Name) ->
     
     FilesAndDirs = maps:get(files, GuidsAndPaths, []) ++ maps:get(dirs, GuidsAndPaths, []),
     FilesAndDirsGuids = lists:filtermap(fun({G, P}) when P >= QosRootFilePath -> {true, G}; (_) -> false end, FilesAndDirs),
-    ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, FilesAndDirsGuids, QosList, ?PENDING)),
+    ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, FilesAndDirsGuids, QosList, ?PENDING_QOS_STATUS)),
     {GuidsAndPaths, QosList}.
 
 

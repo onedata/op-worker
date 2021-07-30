@@ -38,9 +38,9 @@
 
 
 % macros with QoS status
--define(IMPOSSIBLE, impossible).
--define(PENDING, pending).
--define(FULFILLED, fulfilled).
+-define(IMPOSSIBLE_QOS_STATUS, impossible).
+-define(PENDING_QOS_STATUS, pending).
+-define(FULFILLED_QOS_STATUS, fulfilled).
 
 % Macros representing directory type during QoS traverse. 
 % Start directory is a directory, that traverse originated from (one per traverse),

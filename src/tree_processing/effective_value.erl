@@ -290,6 +290,8 @@ merge_references_values([Value | Tail], undefined, MergeCallback) ->
     merge_references_values(Tail, Value, MergeCallback); % First value - nothing to be merged
 merge_references_values(_ReferenceValues, {error, _} = Acc, _MergeCallback) ->
     Acc; % Error occurred - return answer
+merge_references_values([{error, _} = Error | _Tail], _Acc, _MergeCallback) ->
+    Error; % Error occurred - return it
 merge_references_values([{ok, Value, CalculationInfo} | Tail], {ok, AccValue, AccCalculationInfo}, MergeCallback) ->
     merge_references_values(Tail, MergeCallback(Value, AccValue, CalculationInfo, AccCalculationInfo), MergeCallback).
 

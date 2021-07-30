@@ -85,7 +85,7 @@
 -export([get_ctx/0, get_record_struct/1, get_record_version/0]).
 
 -type path() :: file_meta:path().
--type summary() :: ?PENDING | ?FULFILLED | ?IMPOSSIBLE.
+-type summary() :: ?PENDING_QOS_STATUS | ?FULFILLED_QOS_STATUS | ?IMPOSSIBLE_QOS_STATUS.
 
 -export_type([path/0, summary/0]).
 
@@ -106,10 +106,10 @@ check(FileCtx, QosEntryId) ->
     {ok, QosEntryDoc} = qos_entry:get(QosEntryId),
     
     case qos_entry:is_possible(QosEntryDoc) of
-        false -> ?IMPOSSIBLE;
+        false -> ?IMPOSSIBLE_QOS_STATUS;
         true -> case check_possible_entry_status(FileCtx, QosEntryDoc, QosEntryId) of
-            true -> ?FULFILLED;
-            false -> ?PENDING
+            true -> ?FULFILLED_QOS_STATUS;
+            false -> ?PENDING_QOS_STATUS
         end
     end.
 
@@ -117,11 +117,11 @@ check(FileCtx, QosEntryId) ->
 -spec aggregate([qos_status:summary()]) -> qos_status:summary().
 aggregate(Statuses) ->
     lists:foldl(
-        fun (_, ?IMPOSSIBLE) -> ?IMPOSSIBLE;
-            (?IMPOSSIBLE, _) -> ?IMPOSSIBLE;
-            (_, ?PENDING) -> ?PENDING;
+        fun (_, ?IMPOSSIBLE_QOS_STATUS) -> ?IMPOSSIBLE_QOS_STATUS;
+            (?IMPOSSIBLE_QOS_STATUS, _) -> ?IMPOSSIBLE_QOS_STATUS;
+            (_, ?PENDING_QOS_STATUS) -> ?PENDING_QOS_STATUS;
             (Status, _Acc) -> Status
-        end, ?FULFILLED, Statuses).
+        end, ?FULFILLED_QOS_STATUS, Statuses).
 
 
 -spec report_traverse_start(traverse:id(), file_ctx:ctx()) -> {ok, file_ctx:ctx()}.

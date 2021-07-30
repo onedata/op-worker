@@ -48,4 +48,6 @@ get_response(#gri{id = QosEntryId, aspect = instance}, QosData) ->
     ?OK_REPLY(QosData1#{
         <<"expression">> => qos_expression:to_infix(Expression),
         <<"qosRequirementId">> => QosEntryId
-    }).
+    });
+get_response(#gri{aspect = audit_log}, Result) ->
+    ?OK_REPLY(Result).

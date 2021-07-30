@@ -64,6 +64,17 @@ routes() -> [
             scope = private
         }
     }},
+    %% Get QoS audit log
+    {<<"/qos_requirements/:qid/audit_log">>, rest_handler, #rest_req{
+        method = 'GET',
+        produces = [<<"application/json">>],
+        b_gri = #b_gri{
+            type = op_qos,
+            id = ?BINDING(qid),
+            aspect = audit_log,
+            scope = private
+        }
+    }},
     %% Get QoS summary for file or directory
     {<<"/data/:id/qos/summary">>, rest_handler, #rest_req{
         method = 'GET',
