@@ -221,15 +221,14 @@ gui_download_incorrect_uuid_test(Config) ->
 gui_download_tarball_with_symlink_loop_test(Config) ->
     MemRef = api_test_memory:init(),
     SpaceId = oct_background:get_space_id(space_krk_par),
-    Spec = #dir_spec{},
-    #object{guid = DirGuid} = DirObject = onenv_file_test_utils:create_and_sync_file_tree(user3, SpaceId, Spec, krakow),
-    Spec1 = [
+    #object{guid = DirGuid} = DirObject = onenv_file_test_utils:create_and_sync_file_tree(user3, SpaceId, #dir_spec{}, krakow),
+    Spec = [
         #file_spec{content = ?RAND_CONTENT(), mode = 8#604},
         #dir_spec{mode = 8#705, children = [#symlink_spec{symlink_value = make_symlink_target(SpaceId, DirObject)}]},
         #symlink_spec{symlink_value = make_symlink_target(SpaceId, DirObject)}
     ],
     [FileObject, #object{guid = ChildDirGuid, children = [#object{name = SymlinkName}]} = ChildDirObject, _SymlinkObject] = 
-        onenv_file_test_utils:create_and_sync_file_tree(user3, DirGuid, Spec1, krakow),
+        onenv_file_test_utils:create_and_sync_file_tree(user3, DirGuid, Spec, krakow),
     
     ExpectedObject = ChildDirObject#object{
         children = [
@@ -763,6 +762,13 @@ rest_download_dir_test(Config) ->
         end
     end,
     
+    DataSpec = #data_spec{
+        optional = [<<"follow_symlinks">>],
+        correct_values = #{
+            <<"follow_symlinks">> => [true, false]
+        }
+    },
+    
     ?assert(onenv_api_test_runner:run_tests([
         #scenario_spec{
             name = <<"Download dir using rest endpoint">>,
@@ -777,7 +783,7 @@ rest_download_dir_test(Config) ->
     
             % correct data is set up in build_rest_download_prepare_args_fun/2
             data_spec = api_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
-                DirGuid, undefined, #data_spec{})
+                DirGuid, undefined, DataSpec)
         },
         #scenario_spec{
             name = <<"Download shared dir using rest endpoint">>,
@@ -792,7 +798,7 @@ rest_download_dir_test(Config) ->
             
             % correct data is set up in build_rest_download_prepare_args_fun/2
             data_spec = api_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
-                DirGuid, DirShareId, #data_spec{}
+                DirGuid, DirShareId, DataSpec
             )
         }
     ])).
@@ -824,9 +830,13 @@ build_rest_download_prepare_args_fun(MemRef, TestMode) ->
         {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
         {Id, Data1} = api_test_utils:maybe_substitute_bad_id(FileObjectId, Data0),
 
+        RestPath = <<"data/", Id/binary, "/content">>,
         #rest_args{
             method = get,
-            path = <<"data/", Id/binary, "/content">>,
+            path = http_utils:append_url_parameters(
+                RestPath,
+                maps:with([<<"follow_symlinks">>], Data1)
+            ),
             headers = case maps:get(?HDR_RANGE, Data1, undefined) of
                 undefined -> #{};
                 Range -> #{?HDR_RANGE => element(1, Range)}
@@ -1179,11 +1189,18 @@ make_symlink_target() ->
 
 
 %% @private
--spec make_symlink_target(od_space:id(), onenv_file_test_utils:object_spec()) -> 
+-spec make_symlink_target(od_space:id(), onenv_file_test_utils:object_spec()) ->
     file_meta_symlinks:symlink().
-make_symlink_target(SpaceId, #object{name = Name}) ->
+make_symlink_target(SpaceId, Object) ->
+    make_symlink_target(SpaceId, <<"">>, Object).
+
+
+%% @private
+-spec make_symlink_target(od_space:id(), file_meta:path(), onenv_file_test_utils:object_spec()) -> 
+    file_meta_symlinks:symlink().
+make_symlink_target(SpaceId, ParentPath, #object{name = Name}) ->
     SpaceIdSymlinkPrefix = ?SYMLINK_SPACE_ID_ABS_PATH_PREFIX(SpaceId),
-    filename:join([SpaceIdSymlinkPrefix, Name]).
+    filename:join([SpaceIdSymlinkPrefix, ParentPath, Name]).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
