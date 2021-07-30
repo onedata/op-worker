@@ -536,11 +536,18 @@ validate_result_fun_rest(_MemRef, qos_audit_log) ->
         ?assertEqual(?HTTP_200_OK, RespCode),
         ?assertMatch(#{
             <<"isLast">> := true,
-            <<"auditLog">> := [#{
-                <<"timestamp">> := _,
-                <<"status">> := <<"synchronized">>,
-                <<"severity">> := <<"info">>,
-                <<"fileId">> := _
+            <<"auditLog">> := [
+               #{
+                    <<"timestamp">> := _,
+                    <<"status">> := <<"synchronization started">>,
+                    <<"severity">> := <<"info">>,
+                    <<"fileId">> := _
+                },
+                #{
+                    <<"timestamp">> := _,
+                    <<"status">> := <<"synchronized">>,
+                    <<"severity">> := <<"info">>,
+                    <<"fileId">> := _
             }]
         }, RespBody),
         ok
