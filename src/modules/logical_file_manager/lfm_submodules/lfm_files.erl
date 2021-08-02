@@ -789,7 +789,7 @@ sync_block(SessId, FileGuid, Block, PrefetchData, Priority, RetryNum) ->
 
 %% @private
 -spec maybe_retry_sync(SessId :: session:id(), FileGuid :: file_id:file_guid(), Block :: fslogic_blocks:block(),
-    PrefetchData :: boolean(), Priority :: non_neg_integer(), RetryNum :: non_neg_integer(), Error :: code()) ->
+    PrefetchData :: boolean(), Priority :: non_neg_integer(), RetryNum :: non_neg_integer(), Error :: {error, code()}) ->
     ok | no_return().
 maybe_retry_sync(SessId, FileGuid, Block, PrefetchData, Priority, RetryNum, Error) ->
     MaxRetires = ?SYNC_MAX_RETRIES,
