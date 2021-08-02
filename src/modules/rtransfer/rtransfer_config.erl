@@ -245,12 +245,15 @@ add_storages() ->
 -spec generate_secret(ProviderId :: binary(), PeerSecret :: binary()) -> binary().
 generate_secret(ProviderId, PeerSecret) ->
     MySecret = do_generate_secret(),
-    {_, BadNodes} = utils:rpc_multicall(consistent_hashing:get_all_nodes(),
+    {NodesAns, BadNodes} = utils:rpc_multicall(consistent_hashing:get_all_nodes(),
                                   rtransfer_link, allow_connection,
                                   [ProviderId, MySecret, PeerSecret, 60000]),
     BadNodes =/= [] andalso
         ?error("Failed to allow rtransfer connection from ~p on nodes ~p",
                [ProviderId, BadNodes]),
+    FilteredNodesAns = lists:filter(fun(NodeAns) -> NodeAns =/= ok end, NodesAns),
+    FilteredNodesAns =/= [] andalso
+        ?error("Failed to allow rtransfer connection from ~p, rpc answer: ~p", [ProviderId, NodesAns]),
     MySecret.
 
 %%--------------------------------------------------------------------
