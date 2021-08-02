@@ -61,11 +61,17 @@ start_rtransfer() ->
 restart_link() ->
     case whereis(rtransfer_link_port) of
         undefined -> {error, not_running};
-        Pid ->
+        CurrentPortPid ->
             prepare_ssl_opts(),
             prepare_graphite_opts(),
-            erlang:exit(Pid, restarting),
-            ok
+            erlang:exit(CurrentPortPid, restarting),
+            utils:wait_until(fun() ->
+                case whereis(rtransfer_link_port) of
+                    undefined -> false;
+                    CurrentPortPid -> false;
+                    OtherPid when is_pid(OtherPid) -> true
+                end
+            end, 100)
     end.
 
 %%--------------------------------------------------------------------
