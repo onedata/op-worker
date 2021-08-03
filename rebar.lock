@@ -17,7 +17,7 @@
   0},
  {<<"cluster_manager">>,
   {raw,"ssh://git@git.onedata.org:7999/vfs/cluster-manager.git",
-       {mod_ref,git,{ref,"ae782f07b637687f23fc61f1588d079203b14f1f"},[]}},
+       {mod_ref,git,{ref,"8566cf182ac74533a28566a8779e28d32cca37d8"},[]}},
   0},
  {<<"cluster_worker">>,
   {git,"ssh://git@git.onedata.org:7999/vfs/cluster-worker.git",
