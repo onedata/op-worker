@@ -16,10 +16,10 @@
 -behaviour(supervisor).
 
 %% API
--export([start_link/0]).
+-export([start_link/0, start_stream/4, ping/1]).
 
 %% Supervisor callbacks
--export([init/1, start_stream/4]).
+-export([init/1]).
 
 %%%===================================================================
 %%% API functions
@@ -44,6 +44,17 @@ start_link() ->
     SessId :: session:id()) -> supervisor:startchild_ret().
 start_stream(StmsSup, Mgr, Sub, SessId) ->
     supervisor:start_child(StmsSup, [Mgr, Sub, SessId]).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Pings supervisor. The function is used to wait until some operation
+%% is finished by supervisor (supervisor executes operations synchronously).
+%% @end
+%%--------------------------------------------------------------------
+-spec ping(StmsSup :: pid()) -> ok.
+ping(StmsSup) ->
+    supervisor:count_children(StmsSup),
+    ok.
 
 %%%===================================================================
 %%% Supervisor callbacks
