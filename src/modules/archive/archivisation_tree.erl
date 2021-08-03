@@ -122,7 +122,7 @@ extract_archive_id(CanonicalPath) ->
 -spec get_filename_for_download(archive:id()) -> binary() | no_return().
 get_filename_for_download(ArchiveId) ->
     {ok, Description} = archive:get_description(ArchiveId),
-    case re:run(Description, <<"_USE_FILENAME: *([a-zA-Z-_]+)">>, [{capture, all_but_first, binary}]) of
+    case re:run(Description, <<"_USE_FILENAME: *([a-zA-Z0-9+_-]+)">>, [{capture, all_but_first, binary}]) of
         {match, [Filename]} ->
             Filename;
         nomatch ->
