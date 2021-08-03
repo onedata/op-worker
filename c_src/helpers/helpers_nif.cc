@@ -417,6 +417,29 @@ template <class T> void handle_result(NifCTX ctx, folly::Future<T> future)
 }
 
 /**
+ * Handles open file handle callback result.
+ */
+template <class T>
+void handle_result(NifCTX ctx, file_handle_ptr handle, folly::Future<T> future)
+{
+    future
+        .then([ctx, handle = std::move(handle)](
+                  T &&value) { handle_value(ctx, std::move(value)); })
+        .onError([ctx](const std::system_error &e) {
+            auto it = error_to_atom.find(e.code());
+            nifpp::str_atom reason {e.code().message()};
+            if (it != error_to_atom.end())
+                reason = it->second;
+
+            ctx.send(std::make_tuple(error, reason));
+        })
+        .onError([ctx](const std::exception &e) {
+            nifpp::str_atom reason{e.what()};
+            ctx.send(std::make_tuple(error, reason));
+        });
+}
+
+/**
  * Configure performance monitoring metrics based on environment
  * configuration.
  */
@@ -678,7 +701,7 @@ ERL_NIF_TERM open(NifCTX ctx, helper_ptr helper, folly::fbstring file,
 
 ERL_NIF_TERM read(NifCTX ctx, file_handle_ptr handle, off_t offset, size_t size)
 {
-    handle_result(ctx, handle->read(offset, size));
+    handle_result(ctx, handle, handle->read(offset, size));
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
 
@@ -693,25 +716,25 @@ ERL_NIF_TERM write(NifCTX ctx, file_handle_ptr handle, const off_t offset,
 
     buf.wrapBuffer(data.first, data.second, bufferBlockSize);
 
-    handle_result(ctx, handle->write(offset, std::move(buf), {}));
+    handle_result(ctx, handle, handle->write(offset, std::move(buf), {}));
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
 
 ERL_NIF_TERM release(NifCTX ctx, file_handle_ptr handle)
 {
-    handle_result(ctx, handle->release());
+    handle_result(ctx, handle, handle->release());
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
 
 ERL_NIF_TERM flush(NifCTX ctx, file_handle_ptr handle)
 {
-    handle_result(ctx, handle->flush());
+    handle_result(ctx, handle, handle->flush());
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
 
 ERL_NIF_TERM fsync(NifCTX ctx, file_handle_ptr handle, const int isdatasync)
 {
-    handle_result(ctx, handle->fsync(isdatasync));
+    handle_result(ctx, handle, handle->fsync(isdatasync));
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
 
