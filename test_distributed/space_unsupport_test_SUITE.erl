@@ -69,6 +69,11 @@ replicate_stage_test(Config) ->
     StorageId = initializer:get_supporting_storage_id(Worker1, ?SPACE_ID),
     
     {{DirGuid, _}, {G1, _}, {G2, _}} = create_files_and_dirs(Worker1, SessId),
+    % TODO VFS-8198 - remove following foreach when QoS triggering is fixed
+    lists:foreach(fun(Guid) ->
+        ?assertMatch({ok, _}, lfm_proxy:stat(Worker2, SessId(Worker2), ?FILE_REF(Guid)), ?ATTEMPTS)
+    end, [G1, G2]),
+
     StageJob = #space_unsupport_job{
         stage = replicate,
         space_id = ?SPACE_ID,
@@ -94,7 +99,7 @@ replicate_stage_test(Config) ->
     check_distribution(Workers, SessId, [{Worker1, Size}, {Worker2, Size}], G1),
     check_distribution(Workers, SessId, [{Worker1, Size}, {Worker2, Size}], G2),
 
-    clean_and_wait(Worker1, Worker2, SessId, [G1, G2, DirGuid]).
+    delete_files_and_wait_for_sync(Worker1, Workers, SessId, [G1, G2, DirGuid]).
 
 
 replicate_stage_persistence_test(Config) ->
@@ -152,8 +157,7 @@ cleanup_traverse_stage_test(Config) ->
     check_distribution(Workers, SessId, [], G1),
     check_distribution(Workers, SessId, [], G2),
 
-    [Worker2] = Workers -- [Worker],
-    clean_and_wait(Worker, Worker2, SessId, [G1, G2, DirGuid]).
+    delete_files_and_wait_for_sync(Worker, Workers, SessId, [G1, G2, DirGuid]).
 
 
 cleanup_traverse_stage_with_import_test(Config) ->
@@ -183,8 +187,7 @@ cleanup_traverse_stage_with_import_test(Config) ->
     check_distribution(Workers, SessId, [], G1),
     check_distribution(Workers, SessId, [], G2),
 
-    [Worker2] = Workers -- [Worker],
-    clean_and_wait(Worker, Worker2, SessId, [G1, G2, DirGuid]),
+    delete_files_and_wait_for_sync(Worker, Workers, SessId, [G1, G2, DirGuid]),
     
     % files on storage have to be deleted manually as only file location documents have 
     % been deleted during cleanup traverse on imported storage
@@ -251,7 +254,7 @@ delete_synced_documents_stage_test(Config) ->
     
     assert_synced_documents_cleaned_up(Worker1, ?SPACE_ID),
 
-    clean_and_wait(Worker2, Worker1, SessId, [G1, G2, DirGuid]).
+    delete_files_and_wait_for_sync(Worker2, Workers, SessId, [G1, G2, DirGuid]).
     
 
 delete_local_documents_stage_test(Config) ->
@@ -398,7 +401,7 @@ end_per_testcase(_, Config) ->
 %%%===================================================================
 
 assert_storage_cleaned_up(Worker, Path) ->
-    assert_storage_cleaned_up(Worker, Path, 0).
+    assert_storage_cleaned_up(Worker, Path, 1).
 
 
 assert_storage_cleaned_up(Worker, Path, Attempts) ->
@@ -619,11 +622,14 @@ select_provider_by_imported_storage_value(Workers, Expected) ->
     end, Workers),
     Worker.
 
-clean_and_wait(CleanOnWorker, CheckOnWorker, SessId, Guids) ->
+delete_files_and_wait_for_sync(DeletingWorker, AllWorkers, SessId, Guids) ->
     lists:foreach(fun(Guid) ->
-        ?assertEqual(ok, lfm_proxy:unlink(CleanOnWorker, SessId(CleanOnWorker), ?FILE_REF(Guid)))
+        ?assertEqual(ok, lfm_proxy:unlink(DeletingWorker, SessId(DeletingWorker), ?FILE_REF(Guid)))
     end, Guids),
 
-    lists:foreach(fun(Guid) ->
-        ?assertEqual({error, ?ENOENT}, lfm_proxy:stat(CheckOnWorker, SessId(CheckOnWorker), ?FILE_REF(Guid)), ?ATTEMPTS)
-    end, Guids).
+    SyncWorkers = AllWorkers -- [DeletingWorker],
+    lists:foreach(fun(SyncWorker) ->
+        lists:foreach(fun(Guid) ->
+            ?assertEqual({error, ?ENOENT}, lfm_proxy:stat(SyncWorker, SessId(SyncWorker), ?FILE_REF(Guid)), ?ATTEMPTS)
+        end, Guids)
+    end, SyncWorkers).
