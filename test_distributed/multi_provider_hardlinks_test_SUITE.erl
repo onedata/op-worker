@@ -327,12 +327,16 @@ write(Worker, SessId, Link, FileContent) ->
     write(Worker, SessId, Link, FileContent, 1).
 
 write(Worker, SessId, Link, FileContent, Attempts) ->
-    {ok, Ans} = ?assertMatch({ok, _}, begin
-        {ok, LinkHandle11} = ?assertMatch({ok, _}, lfm_proxy:open(Worker, SessId(Worker), {path, Link}, rdwr)),
-        NewFileContent = <<FileContent/binary, "xyz">>,
-        FileSize = byte_size(FileContent),
-        ?assertEqual({ok, 3}, lfm_proxy:write(Worker, LinkHandle11, FileSize, <<"xyz">>)),
-        ?assertEqual(ok, lfm_proxy:close(Worker, LinkHandle11)),
-        {ok, NewFileContent}
-    end, Attempts),
+    {ok, Ans} = ?assertMatch({ok, _},
+        try
+            {ok, LinkHandle11} = lfm_proxy:open(Worker, SessId(Worker), {path, Link}, rdwr),
+            NewFileContent = <<FileContent/binary, "xyz">>,
+            FileSize = byte_size(FileContent),
+            {ok, 3} = lfm_proxy:write(Worker, LinkHandle11, FileSize, <<"xyz">>),
+            ok = lfm_proxy:close(Worker, LinkHandle11),
+            {ok, NewFileContent}
+        catch
+            E1:E2 ->
+                {error, {E1, E2}}
+        end, Attempts),
     Ans.
