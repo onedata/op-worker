@@ -93,10 +93,8 @@ replicate_stage_test(Config) ->
     Size = size(?TEST_DATA),
     check_distribution(Workers, SessId, [{Worker1, Size}, {Worker2, Size}], G1),
     check_distribution(Workers, SessId, [{Worker1, Size}, {Worker2, Size}], G2),
-    
-    ok = lfm_proxy:unlink(Worker1, SessId(Worker1), ?FILE_REF(G1)),
-    ok = lfm_proxy:unlink(Worker1, SessId(Worker1), ?FILE_REF(G2)),
-    ok = lfm_proxy:unlink(Worker1, SessId(Worker1), ?FILE_REF(DirGuid)).
+
+    clean_and_wait(Worker1, Worker2, SessId, [G1, G2, DirGuid]).
 
 
 replicate_stage_persistence_test(Config) ->
@@ -153,10 +151,9 @@ cleanup_traverse_stage_test(Config) ->
     assert_storage_cleaned_up(Worker, storage_mount_point(Worker, StorageId)),
     check_distribution(Workers, SessId, [], G1),
     check_distribution(Workers, SessId, [], G2),
-    
-    ok = lfm_proxy:unlink(Worker, SessId(Worker), ?FILE_REF(G1)),
-    ok = lfm_proxy:unlink(Worker, SessId(Worker), ?FILE_REF(G2)),
-    ok = lfm_proxy:unlink(Worker, SessId(Worker), ?FILE_REF(DirGuid)).
+
+    [Worker2] = Workers -- [Worker],
+    clean_and_wait(Worker, Worker2, SessId, [G1, G2, DirGuid]).
 
 
 cleanup_traverse_stage_with_import_test(Config) ->
@@ -186,9 +183,8 @@ cleanup_traverse_stage_with_import_test(Config) ->
     check_distribution(Workers, SessId, [], G1),
     check_distribution(Workers, SessId, [], G2),
 
-    ok = lfm_proxy:unlink(Worker, SessId(Worker), ?FILE_REF(G1)),
-    ok = lfm_proxy:unlink(Worker, SessId(Worker), ?FILE_REF(G2)),
-    ok = lfm_proxy:unlink(Worker, SessId(Worker), ?FILE_REF(DirGuid)),
+    [Worker2] = Workers -- [Worker],
+    clean_and_wait(Worker, Worker2, SessId, [G1, G2, DirGuid]),
     
     % files on storage have to be deleted manually as only file location documents have 
     % been deleted during cleanup traverse on imported storage
@@ -254,10 +250,8 @@ delete_synced_documents_stage_test(Config) ->
     timer:sleep(timer:seconds(70)),
     
     assert_synced_documents_cleaned_up(Worker1, ?SPACE_ID),
-    
-    ok = lfm_proxy:unlink(Worker2, SessId(Worker2), ?FILE_REF(G1)),
-    ok = lfm_proxy:unlink(Worker2, SessId(Worker2), ?FILE_REF(G2)),
-    ok = lfm_proxy:unlink(Worker2, SessId(Worker2), ?FILE_REF(DirGuid)).
+
+    clean_and_wait(Worker2, Worker1, SessId, [G1, G2, DirGuid]).
     
 
 delete_local_documents_stage_test(Config) ->
@@ -404,18 +398,21 @@ end_per_testcase(_, Config) ->
 %%%===================================================================
 
 assert_storage_cleaned_up(Worker, Path) ->
+    assert_storage_cleaned_up(Worker, Path, 0).
+
+
+assert_storage_cleaned_up(Worker, Path, Attempts) ->
     case check_exists_on_storage(Worker, Path) of
         true ->
-            {ok, FileList} = rpc:call(Worker, file, list_dir_all, [Path]),
-            ?assertEqual([], FileList);
+            ?assertEqual({ok, []}, rpc:call(Worker, file, list_dir_all, [Path]), Attempts);
         false -> ok
     end.
 
 
 assert_space_on_storage_cleaned_up(Worker, StorageId, SpaceId) ->
     case rpc:call(Worker, storage, is_imported, [StorageId]) of
-        true -> assert_storage_cleaned_up(Worker, storage_mount_point(Worker, StorageId));
-        false -> assert_storage_cleaned_up(Worker, filename:join(get_space_mount_point(Worker, SpaceId), SpaceId))
+        true -> assert_storage_cleaned_up(Worker, storage_mount_point(Worker, StorageId), ?ATTEMPTS);
+        false -> assert_storage_cleaned_up(Worker, filename:join(get_space_mount_point(Worker, SpaceId), SpaceId), ?ATTEMPTS)
     end.
 
 
@@ -621,3 +618,12 @@ select_provider_by_imported_storage_value(Workers, Expected) ->
         Expected == rpc:call(W, storage, is_imported, [StorageId])
     end, Workers),
     Worker.
+
+clean_and_wait(CleanOnWorker, CheckOnWorker, SessId, Guids) ->
+    lists:foreach(fun(Guid) ->
+        ?assertEqual(ok, lfm_proxy:unlink(CleanOnWorker, SessId(CleanOnWorker), ?FILE_REF(Guid)))
+    end, Guids),
+
+    lists:foreach(fun(Guid) ->
+        ?assertEqual({error, ?ENOENT}, lfm_proxy:stat(CheckOnWorker, SessId(CheckOnWorker), ?FILE_REF(Guid)), ?ATTEMPTS)
+    end, Guids).

@@ -39,9 +39,9 @@ restart_nodes(Config, Nodes) when is_list(Nodes) ->
     end, Nodes),
 
     lists:foreach(fun(Node) ->
-        ?assertMatch({ok, _}, rpc:call(Node, provider_auth, get_provider_id, []), 60),
+        ?assertMatch({ok, _}, rpc:call(Node, provider_auth, get_provider_id, []), 180),
         {ok, _} = rpc:call(Node, mock_manager, start, []),
-        ?assertEqual(true, rpc:call(Node, gs_channel_service, is_connected, []), 30)
+        ?assertEqual(true, rpc:call(Node, gs_channel_service, is_connected, []), 60)
     end, Nodes),
 
     UpdatedConfig = provider_onenv_test_utils:setup_sessions(proplists:delete(sess_id, Config)),
