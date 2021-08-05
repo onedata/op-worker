@@ -505,9 +505,10 @@ detach_dataset(FileCtx) ->
     {FileDoc, FileCtx2} = file_ctx:get_file_doc_including_deleted(FileCtx),
     case file_meta_dataset:is_attached(FileDoc) of
         true ->
-            % TODO VFS-7822 if it's a directory, detached dataset's path will point to trash
-            % previous path should be passed here
-            dataset_api:detach(file_ctx:get_logical_uuid_const(FileCtx2));
+            {Path, FileCtx3} = file_ctx:get_logical_path(FileCtx, user_ctx:new(?ROOT_SESS_ID)),
+            PathBeforeDeletion = file_ctx:get_from_request_specific_cache_const(FileCtx2, original_path, Path),
+            dataset_api:detach(
+                file_ctx:get_logical_uuid_const(FileCtx3), PathBeforeDeletion);
         false ->
             ok
     end,

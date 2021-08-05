@@ -52,7 +52,8 @@
     storage :: undefined | storage:data(),
     file_location_ids :: undefined | [file_location:id()],
     is_dir :: undefined | boolean(),
-    is_imported_storage :: undefined | boolean()
+    is_imported_storage :: undefined | boolean(),
+    request_specific_cache = #{} :: #{any() => any()}
 }).
 
 -type ctx() :: #file_ctx{}.
@@ -64,6 +65,7 @@
     new_by_doc/2, new_by_doc/3, new_root_ctx/0]).
 -export([reset/1, new_by_partial_context/1, set_file_location/2, set_file_id/2,
     set_file_doc/2, set_is_dir/2, ensure_based_on_referenced_guid/1]).
+-export([put_in_request_specific_cache/3]).
 
 %% Functions that do not modify context
 -export([get_share_id_const/1, get_space_id_const/1, get_space_dir_uuid_const/1,
@@ -75,6 +77,7 @@
     is_user_root_dir_const/2, is_root_dir_const/1, file_exists_const/1, file_exists_or_is_deleted/1,
     is_in_user_space_const/2, assert_not_special_const/1, assert_is_dir/1, assert_not_dir/1,
     assert_not_trash_dir_const/1, assert_not_trash_dir_const/2]).
+-export([get_from_request_specific_cache_const/2, get_from_request_specific_cache_const/3]).
 -export([equals/2]).
 -export([assert_not_readonly_target_storage_const/2]).
 
@@ -220,6 +223,15 @@ set_is_dir(FileCtx, IsDir) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Sets dataset path in context record
+%% @end
+%%--------------------------------------------------------------------
+-spec put_in_request_specific_cache(ctx(), Key :: any(), Value :: any()) -> ctx().
+put_in_request_specific_cache(#file_ctx{request_specific_cache = Cache} = FileCtx, Key, Value) ->
+    FileCtx#file_ctx{request_specific_cache = Cache#{Key => Value}}.
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Returns file's share ID.
 %% @end
 %%--------------------------------------------------------------------
@@ -317,6 +329,7 @@ get_uuid_based_path(FileCtx = #file_ctx{uuid_based_path = undefined}) ->
     {UuidBasedPath, FileCtx2#file_ctx{uuid_based_path = UuidBasedPath}};
 get_uuid_based_path(FileCtx = #file_ctx{uuid_based_path = UuidPath}) ->
     {UuidPath, FileCtx}.
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -1256,6 +1269,16 @@ assert_file_exists(FileCtx0) ->
     % translate it to ?ENOENT
     {#document{}, FileCtx1} = file_ctx:get_file_doc(FileCtx0),
     FileCtx1.
+
+
+-spec get_from_request_specific_cache_const(ctx(), Key :: any()) -> Value :: any().
+get_from_request_specific_cache_const(FileCtx = #file_ctx{request_specific_cache = Cache}, Key) ->
+    maps:get(Key, Cache).
+
+
+-spec get_from_request_specific_cache_const(ctx(), Key :: any(), Default :: any()) -> Value :: any().
+get_from_request_specific_cache_const(FileCtx = #file_ctx{request_specific_cache = Cache}, Key, Default) ->
+    maps:get(Key, Cache, Default).
 
 %%%===================================================================
 %%% Internal functions
