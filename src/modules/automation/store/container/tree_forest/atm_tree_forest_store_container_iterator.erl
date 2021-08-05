@@ -259,7 +259,7 @@ get_next_batch_from_single_tree(AtmWorkflowExecutionAuth, BatchSize, Record, Acc
 %% @private
 -spec queue_init() -> queue_ref() | no_return().
 queue_init() ->
-    case atm_tree_forest_iterator_queue:init() of
+    case atm_tree_forest_iterator_queue:init(10000) of
         {ok, Id} -> #queue_ref{id = Id};
         {error, _} = Error -> throw(Error)
     end.

@@ -1158,7 +1158,8 @@
     last_pushed_value_index = 0 :: atm_tree_forest_iterator_queue:index(),
     highest_peeked_value_index = 0 :: atm_tree_forest_iterator_queue:index(),
     discriminator = {0, <<>>} :: atm_tree_forest_iterator_queue:discriminator(), 
-    last_pruned_node_num = 0 :: atm_tree_forest_iterator_queue:node_num()
+    last_pruned_node_num = 0 :: atm_tree_forest_iterator_queue:node_num(),
+    max_values_per_node = 10000 :: pos_integer()
 }).
 
 %%%===================================================================
