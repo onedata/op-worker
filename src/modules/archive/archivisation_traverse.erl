@@ -431,10 +431,18 @@ propagate_up(FileCtx, UserCtx, TraverseInfo = #{scheduled_dataset_root_guid := S
 
 
 -spec mark_building_if_first_job(tree_traverse:master_job()) -> ok.
-mark_building_if_first_job(Job = #tree_traverse{traverse_info = #{aip_ctx := AipArchiveCtx}}) ->
+mark_building_if_first_job(Job = #tree_traverse{traverse_info = #{
+    aip_ctx := AipArchiveCtx,
+    dip_ctx := DipArchiveCtx
+}}) ->
     case is_first_job(Job) of
         true -> 
-            ok = archive:mark_building(get_archive_doc(AipArchiveCtx));
+            ok = archive:mark_building(get_archive_doc(AipArchiveCtx)),
+            case get_archive_doc(DipArchiveCtx) of
+                undefined -> ok;
+                DipArchiveDoc ->
+                    ok = archive:mark_building(DipArchiveDoc)
+            end;
         false -> 
             ok
     end.
@@ -465,28 +473,32 @@ is_first_job(Job = #tree_traverse{
     archive:doc() | undefined.
 mark_finished_if_current_archive_is_rooted_in_current_file(CurrentFileCtx, UserCtx, #{
     scheduled_dataset_root_guid := ScheduledDatasetRootGuid,
-    aip_ctx := AipArchiveCtx
+    aip_ctx := AipArchiveCtx,
+    dip_ctx := DipArchiveCtx
 }) ->
-    CurrentArchiveDoc = get_archive_doc(AipArchiveCtx),
-    {ok, CurrentArchiveRootGuid} = archive:get_dataset_root_file_guid(CurrentArchiveDoc),
-    {ok, Config} = archive:get_config(CurrentArchiveDoc),
+    CurrentAipDoc = get_archive_doc(AipArchiveCtx),
+    {ok, CurrentArchiveRootGuid} = archive:get_dataset_root_file_guid(CurrentAipDoc),
+    {ok, Config} = archive:get_config(CurrentAipDoc),
     CreateNestedArchives = archive_config:should_create_nested_archives(Config),
     CurrentFileGuid = file_ctx:get_logical_guid_const(CurrentFileCtx),
     case CurrentFileGuid =:= ScheduledDatasetRootGuid orelse
         (CurrentFileGuid =:= CurrentArchiveRootGuid andalso CreateNestedArchives)
     of
         true ->
-            calculate_stats_and_mark_finished(CurrentArchiveDoc, UserCtx),
-            {ok, ParentDocOrUndefined} = archive:get_parent_doc(CurrentArchiveDoc),
+            NestedArchiveStats = archive_api:get_nested_archives_stats(CurrentAipDoc),
+            mark_finished(CurrentAipDoc, UserCtx, NestedArchiveStats),
+            mark_finished(get_archive_doc(DipArchiveCtx), UserCtx, NestedArchiveStats),
+            {ok, ParentDocOrUndefined} = archive:get_parent_doc(CurrentAipDoc),
             ParentDocOrUndefined;
         false ->
-            CurrentArchiveDoc
+            CurrentAipDoc
     end.
 
 
--spec calculate_stats_and_mark_finished(archive:doc(), user_ctx:ctx()) -> ok.
-calculate_stats_and_mark_finished(ArchiveDoc, UserCtx) ->
-    NestedArchiveStats = archive_api:get_nested_archives_stats(ArchiveDoc),
+-spec mark_finished(archive:doc() | undefined, user_ctx:ctx(), archive_stats:record()) -> ok.
+mark_finished(undefined, _UserCtx, _NestedArchiveStats) ->
+    ok;
+mark_finished(ArchiveDoc, UserCtx, NestedArchiveStats) ->
     {ok, ArchiveRootDirCtx} = archive:get_root_dir_ctx(ArchiveDoc),
     case is_bagit(ArchiveDoc) of
         true -> bagit_archive:finalize(ArchiveRootDirCtx, UserCtx);
