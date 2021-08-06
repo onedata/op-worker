@@ -91,7 +91,7 @@
 -spec create(name(), helpers:helper(), luma_config(),
     imported(), readonly(), qos_parameters()) -> {ok, id()} | {error, term()}.
 create(Name, Helper, LumaConfig, ImportedStorage, Readonly, QosParameters) ->
-    case storage_logic:create_in_zone(Name, ImportedStorage, Readonly, QosParameters) of
+    Result = case storage_logic:create_in_zone(Name, ImportedStorage, Readonly, QosParameters) of
         {ok, Id} ->
             case storage_config:create(Id, Helper, LumaConfig) of
                 {ok, Id} ->
@@ -99,16 +99,25 @@ create(Name, Helper, LumaConfig, ImportedStorage, Readonly, QosParameters) ->
                     {ok, Id};
                 StorageConfigError ->
                     case storage_logic:delete_in_zone(Id) of
-                        ok -> ok;
-                        {error, _} = Error ->
-                            ?error("Could not revert creation of storage ~p in Onezone: ~p",
-                                [Id, Error])
+                        ok ->
+                            ok;
+                        {error, _} = DeleteError ->
+                            ?error("Could not revert creation of storage ~p in Onezone: ~p", [
+                                Id, DeleteError
+                            ])
                     end,
                     StorageConfigError
             end;
         StorageLogicError ->
             StorageLogicError
-    end.
+    end,
+    case Result of
+        {ok, StorageId} ->
+            ?notice("Successfully added storage '~ts' with Id: '~s'", [Name, StorageId]);
+        {error, _} = Error ->
+            ?error("Failed to add storage '~ts' due to: ~p", [Name, Error])
+    end,
+    Result.
 
 
 -spec get(id() | data()) -> {ok, data()} | {error, term()}.
