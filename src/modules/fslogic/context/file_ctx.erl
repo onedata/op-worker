@@ -1272,12 +1272,12 @@ assert_file_exists(FileCtx0) ->
 
 
 -spec get_from_request_specific_cache_const(ctx(), Key :: any()) -> Value :: any().
-get_from_request_specific_cache_const(FileCtx = #file_ctx{request_specific_cache = Cache}, Key) ->
+get_from_request_specific_cache_const(#file_ctx{request_specific_cache = Cache}, Key) ->
     maps:get(Key, Cache).
 
 
 -spec get_from_request_specific_cache_const(ctx(), Key :: any(), Default :: any()) -> Value :: any().
-get_from_request_specific_cache_const(FileCtx = #file_ctx{request_specific_cache = Cache}, Key, Default) ->
+get_from_request_specific_cache_const(#file_ctx{request_specific_cache = Cache}, Key, Default) ->
     maps:get(Key, Cache, Default).
 
 %%%===================================================================
