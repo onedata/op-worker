@@ -44,7 +44,7 @@
 -export([init/1, push/3, peek/2, report_new_tree/2, prune/2, destroy/1]).
 
 %% datastore_model callbacks
--export([get_ctx/0, get_record_version/0, get_record_struct/1]).
+-export([get_ctx/0, get_record_version/0, get_record_struct/1, upgrade_record/2]).
 
 -type id() :: datastore:key().
 -type index() :: non_neg_integer().
