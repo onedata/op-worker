@@ -1716,7 +1716,7 @@ end_per_suite(Config) ->
     ok = wpool:stop_sup_pool(?VERIFY_POOL),
     initializer:clean_test_users_and_spaces_no_validate(Config),
     initializer:unload_quota_mocks(Config),
-    initializer:unmock_provider_ids(Config),
+    initializer:unmock_provider_ids(?config(op_worker_nodes, Config)),
     ssl:stop().
 
 init_per_testcase(Case, Config) ->
