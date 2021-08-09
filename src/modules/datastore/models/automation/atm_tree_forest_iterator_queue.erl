@@ -102,25 +102,23 @@ push(Id, Entries, OriginIndex) ->
 
 -spec peek(id(), index()) -> {ok, value() | undefined} | {error, term()}.
 peek(Id, Index) ->
-    {ok, #atm_tree_forest_iterator_queue{max_values_per_node = MaxValuesPerNode} = FirstRecord} = get_record(Id, 0),
-    NodeNum = Index div MaxValuesPerNode,
-    Record = case NodeNum of
-        0 -> 
-            {ok, FirstRecord};
-        _ ->
-            get_record(Id, NodeNum) 
-    end,
-    case Record of
-        {ok, #atm_tree_forest_iterator_queue{values = Values}} ->
-            case maps:get(Index, Values, undefined) of
-                undefined -> 
+    case get_record(Id, 0) of
+        {ok, #atm_tree_forest_iterator_queue{max_values_per_node = MaxValuesPerNode} = FirstRecord} ->
+            NodeNum = Index div MaxValuesPerNode,
+            GetRecordResult = case NodeNum of
+                0 -> 
+                    {ok, FirstRecord};
+                _ ->
+                    get_record(Id, NodeNum) 
+            end,
+            case GetRecordResult of
+                {ok, Record} ->
+                    peek_internal(Id, Index, Record);
+                {error, not_found} ->
                     {ok, undefined};
-                Value ->
-                    ok = update_highest_peeked_value_index(Id, Index),
-                    {ok, Value}
+                {error, _} = Error ->
+                    Error
             end;
-        {error, not_found} ->
-            {ok, undefined};
         {error, _} = Error ->
             Error
     end.
@@ -263,9 +261,15 @@ prepare_values(LastEntryIndex, Entries, MaxValuesPerNode) ->
 
 
 %% @private
--spec prune_values(index(), index(), values()) -> values().
-prune_values(StartIndex, EndIndex, Entries) ->
-    maps:without(lists:seq(StartIndex, EndIndex), Entries).
+-spec peek_internal(id(), index(), record()) -> {ok, value() | undefined}.
+peek_internal(Id, Index, #atm_tree_forest_iterator_queue{values = Values}) ->
+    case maps:get(Index, Values, undefined) of
+        undefined ->
+            {ok, undefined};
+        Value ->
+            ok = update_highest_peeked_value_index(Id, Index),
+            {ok, Value}
+    end.
 
 
 %% @private
@@ -279,6 +283,12 @@ update_highest_peeked_value_index(Id, Index) ->
         }
     end,
     ?extract_ok(update_record(Id, 0, UpdateFirstNodeFun)).
+
+
+%% @private
+-spec prune_values(index(), index(), values()) -> values().
+prune_values(StartIndex, EndIndex, Entries) ->
+    maps:without(lists:seq(StartIndex, EndIndex), Entries).
 
 
 %%%===================================================================
