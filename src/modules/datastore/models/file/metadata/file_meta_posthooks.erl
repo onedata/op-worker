@@ -19,6 +19,7 @@
 -author("Michal Stanisz").
 
 -include("modules/datastore/datastore_models.hrl").
+-include("modules/datastore/datastore_runner.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% functions operating on record using datastore model API
@@ -36,8 +37,9 @@
 
 -type hook() :: #hook{}.
 -type hook_identifier() :: binary().
+-type hooks() :: #{hook_identifier() => hook()}.
 
--export_type([hook/0, hook_identifier/0]).
+-export_type([hooks/0]).
 
 -define(CTX, #{
     model => ?MODULE
@@ -47,11 +49,6 @@
 %%% Functions operating on record using datastore_model API
 %%%===================================================================
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Registers new hook for given file.
-%% @end
-%%--------------------------------------------------------------------
 -spec add_hook(file_meta:uuid(), hook_identifier(), module(), atom(), [term()]) ->
     {ok, file_meta:uuid()} | {error, term()}.
 add_hook(FileUuid, Identifier, Module, Function, Args) ->
@@ -65,20 +62,24 @@ add_hook(FileUuid, Identifier, Module, Function, Args) ->
         {ok, FileMetaPosthooks#file_meta_posthooks{hooks = Hooks#{Identifier => Hook}}}
     end, #file_meta_posthooks{hooks = #{Identifier => Hook}}).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Executes all hooks registered for given file, then clears hook list.
-%% @end
-%%--------------------------------------------------------------------
+
 -spec execute_hooks(file_meta:uuid()) -> ok | {error, term()}.
 execute_hooks(FileUuid) ->
-    Hooks = case datastore_model:get(?CTX, FileUuid) of
-        {ok, #document{value = #file_meta_posthooks{hooks = H}}} -> H;
-        _ -> #{}
-    end,
-    maps:fold(fun(Identifier, #hook{module = Module, function = Function, args = Args}, _) ->
+    case datastore_model:get(?CTX, FileUuid) of
+        {ok, #document{value = #file_meta_posthooks{hooks = Hooks}}} -> 
+            execute_hooks_internal(FileUuid, Hooks);
+        _ ->
+            ok
+    end.
+
+
+%% @private
+-spec execute_hooks_internal(file_meta:uuid(), hooks()) -> ok | {error, term()}.
+execute_hooks_internal(FileUuid, Hooks) ->
+    SuccessfulHooks = maps:fold(fun(Identifier, #hook{module = Module, function = Function, args = Args}, Acc) ->
         try
-            ok = erlang:apply(Module, Function, binary_to_term(Args))
+            ok = erlang:apply(Module, Function, binary_to_term(Args)),
+            [Identifier | Acc]
         catch Error:Type:Stacktrace  ->
             ?debug_stacktrace(
                 "Error during execution of file meta posthook (~p) for file ~p ~p:~p",
@@ -87,15 +88,12 @@ execute_hooks(FileUuid) ->
             ),
             ok
         end
-    end, ok, Hooks),
+    end, [], Hooks),
+    ?extract_ok(datastore_model:update(?CTX, FileUuid, fun(#file_meta_posthooks{hooks = Hooks} = FileMetaPosthooks) ->
+        {ok, FileMetaPosthooks#file_meta_posthooks{hooks = maps:without(SuccessfulHooks, Hooks)}}
+    end)).
 
-    delete(FileUuid).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Deletes document from datastore.
-%% @end
-%%--------------------------------------------------------------------
 -spec delete(file_meta:uuid()) -> ok | {error, term()}.
 delete(Key) ->
     case datastore_model:delete(?CTX, Key) of
@@ -108,29 +106,14 @@ delete(Key) ->
 %%% datastore_model callbacks
 %%%===================================================================
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns model's context.
-%% @end
-%%--------------------------------------------------------------------
 -spec get_ctx() -> datastore:ctx().
 get_ctx() ->
     ?CTX.
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns model's record version.
-%% @end
-%%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
     1.
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns model's record structure in provided version.
-%% @end
-%%--------------------------------------------------------------------
 -spec get_record_struct(datastore_model:record_version()) ->
     datastore_model:record_struct().
 get_record_struct(1) ->

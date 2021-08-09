@@ -69,10 +69,6 @@ replicate_stage_test(Config) ->
     StorageId = initializer:get_supporting_storage_id(Worker1, ?SPACE_ID),
     
     {{DirGuid, _}, {G1, _}, {G2, _}} = create_files_and_dirs(Worker1, SessId),
-    % TODO VFS-8198 - remove following foreach when QoS triggering is fixed
-    lists:foreach(fun(Guid) ->
-        ?assertMatch({ok, _}, lfm_proxy:stat(Worker2, SessId(Worker2), ?FILE_REF(Guid)), ?ATTEMPTS)
-    end, [G1, G2]),
 
     StageJob = #space_unsupport_job{
         stage = replicate,

@@ -76,6 +76,24 @@ handle_entry_delete(#document{key = QosEntryId, scope = SpaceId} = QosEntryDoc) 
 %%--------------------------------------------------------------------
 -spec reconcile_qos(file_ctx:ctx()) -> ok.
 reconcile_qos(FileCtx) ->
+    try
+        {CanonicalPath, FileCtx1} = file_ctx:get_canonical_path(FileCtx),
+        {UuidBasedPath, FileCtx2} = file_ctx:get_uuid_based_path(FileCtx1),
+        FileUuid = file_ctx:get_logical_uuid_const(FileCtx2),
+        [_ | Names] = binary:split(CanonicalPath, <<"/">>, [global, trim_all]),
+        ParentsUuids = lists:droplast(binary:split(UuidBasedPath, <<"/">>, [global, trim_all])),
+        lists:foreach(fun({ParentUuid, Name}) ->
+            case file_meta_forest:get(ParentUuid, all, Name) of
+                {ok, _} -> ok;
+                {error, _} ->
+                    file_meta_posthooks:add_hook(
+                        ParentUuid, <<"check_qos_missing_link_", FileUuid/binary>>,
+                        ?MODULE, reconcile_qos, [FileUuid, file_ctx:get_space_id_const(FileCtx2)])
+            end
+        end, lists:zip(ParentsUuids, Names))
+    catch _:_ ->
+        ok % no file meta document on path - hook will be registered in reconcile_qos_internal
+    end,
     reconcile_qos_internal(FileCtx, []).
 
 
@@ -103,15 +121,15 @@ invalidate_cache_and_reconcile(FileCtx) ->
 %% @doc
 %% Schedules file replication if it is required by effective_file_qos.
 %% Uses QoS traverse pool.
-%% If `ignore_missing_files` is not provided in Options, file_meta_posthook 
-%% is registered for the missing file.
+%% If `ignore_missing_files` is provided in Options, file_meta_posthook 
+%% is NOT registered for the missing file.
 %% @end
 %%--------------------------------------------------------------------
 -spec reconcile_qos_internal(file_ctx:ctx(), [Option]) -> ok  
     when Option :: ignore_missing_files.
 reconcile_qos_internal(FileCtx, Options) when is_list(Options) ->
+    InodeUuid = file_ctx:get_referenced_uuid_const(FileCtx),
     {StorageId, FileCtx1} = file_ctx:get_storage_id(FileCtx),
-    InodeUuid = file_ctx:get_referenced_uuid_const(FileCtx1),
     SpaceId = file_ctx:get_space_id_const(FileCtx1),
     case file_qos:get_effective(InodeUuid) of
         {error, {file_meta_missing, MissingUuid}} ->

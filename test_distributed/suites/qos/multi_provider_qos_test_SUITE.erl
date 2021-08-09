@@ -58,6 +58,7 @@
     qos_reconciliation_file_test/1,
     qos_reconciliation_dir_test/1,
     reconcile_qos_using_file_meta_posthooks_test/1,
+    reconcile_with_links_race_test/1,
 
     reevaluate_impossible_qos_test/1,
     reevaluate_impossible_qos_race_test/1,
@@ -103,6 +104,7 @@ all() -> [
     qos_reconciliation_file_test,
     qos_reconciliation_dir_test,
     reconcile_qos_using_file_meta_posthooks_test,
+    reconcile_with_links_race_test,
 
     reevaluate_impossible_qos_test,
     reevaluate_impossible_qos_race_test,
@@ -591,7 +593,7 @@ effective_qos_for_files_in_different_directories_of_tree_structure(Config) ->
 
 
 %%%===================================================================
-%%% QoS restoration tests
+%%% QoS reconciliation tests
 %%%===================================================================
 
 qos_reconciliation_file_test(Config) ->
@@ -649,6 +651,46 @@ reconcile_qos_using_file_meta_posthooks_test(Config) ->
     DirStructureAfter = get_expected_structure_for_single_dir([?PROVIDER_ID(Worker1), ?PROVIDER_ID(Worker2)]),
     qos_tests_utils:assert_distribution_in_dir_structure(Config, DirStructureAfter,  #{files => [{Guid, FilePath}], dirs => []}).
 
+
+reconcile_with_links_race_test(Config) ->
+    [Worker1, Worker2 | _] = Workers = qos_tests_utils:get_op_nodes_sorted(Config),
+    SessId = fun(Worker) -> ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config) end,
+    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(?SPACE_ID),
+    
+    Name = generator:gen_name(),
+    {ok, DirGuid} = lfm_proxy:mkdir(Worker1, SessId(Worker1), SpaceGuid, ?filename(Name, 0), ?DEFAULT_DIR_PERMS),
+    Guids = lists:map(
+        fun
+            (250 = Seq) ->
+                lfm_proxy:add_qos_entry(Worker1, SessId(Worker1), ?FILE_REF(SpaceGuid), <<"providerId=", (?GET_DOMAIN_BIN(Worker2))/binary>>, 1),
+                create_file_with_content(Worker1, SessId(Worker1), DirGuid, ?filename(Name, Seq));
+            (Seq) ->
+                create_file_with_content(Worker1, SessId(Worker1), DirGuid, ?filename(Name, Seq))
+        end, lists:seq(1, 500)),
+    
+    ?assertMatch({ok, {Map, _}} when map_size(Map) =/= 0,
+        lfm_proxy:get_effective_file_qos(Worker1, SessId(Worker1), ?FILE_REF(SpaceGuid)),
+        3 * ?ATTEMPTS),
+    
+    Size = size(?TEST_DATA),
+    ExpectedDistribution = lists:map(fun({W, TotalBlocksSize}) ->
+        #{
+            <<"providerId">> => ?GET_DOMAIN_BIN(W),
+            <<"totalBlocksSize">> => TotalBlocksSize,
+            <<"blocks">> => [[0, TotalBlocksSize]]
+        }
+    end, [{Worker1, Size}, {Worker2, Size}]),
+    ExpectedDistributionSorted = lists:sort(fun(#{<<"providerId">> := ProviderIdA}, #{<<"providerId">> := ProviderIdB}) ->
+        ProviderIdA =< ProviderIdB
+    end, ExpectedDistribution),
+    ct:print("Checking distribution..."),
+    lists:foreach(fun(G) ->
+        lists:foreach(fun(Worker) ->
+            ?assertEqual({ok, ExpectedDistributionSorted},
+                lfm_proxy:get_file_distribution(Worker, SessId(Worker), ?FILE_REF(G)), ?ATTEMPTS
+            )
+        end, Workers)
+    end, Guids).
 
 %%%===================================================================
 %%% QoS reevaluate
@@ -1204,3 +1246,10 @@ save_file_meta_docs(Config) ->
     after 0 ->
         ok
     end.
+
+
+create_file_with_content(Worker, SessId, ParentGuid, Name) ->
+    {ok, {G, H1}} = lfm_proxy:create_and_open(Worker, SessId, ParentGuid, Name, ?DEFAULT_FILE_PERMS),
+    {ok, _} = lfm_proxy:write(Worker, H1, 0, ?TEST_DATA),
+    ok = lfm_proxy:close(Worker, H1),
+    G.
