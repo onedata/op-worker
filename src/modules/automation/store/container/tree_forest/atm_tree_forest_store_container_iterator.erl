@@ -65,7 +65,8 @@
 
 -export_type([list_opts/0, record/0]).
 
--define(TREE_FOREST_ITERATOR_QUEUE_NODE_SIZE, 10000).
+-define(TREE_FOREST_ITERATOR_QUEUE_NODE_SIZE, 
+    op_worker:get_env(atm_tree_forest_iterator_queue_max_values_per_node, 10000)).
 
 %%%===================================================================
 %%% Callbacks
