@@ -368,6 +368,6 @@ upgrade_record(1,
         HighestPeekedValueIndex, 
         Discriminator, 
         LastPrunedNodeNum, 
-        10000
+        10000 % default value in previous version
     }}.
 
