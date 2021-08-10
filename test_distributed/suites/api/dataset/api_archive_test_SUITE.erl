@@ -56,7 +56,13 @@ groups() -> [
 ].
 
 all() -> [
-    {group, all_tests}
+    create_archive,
+    get_archive_info,
+    modify_archive_description,
+    get_dataset_archives,
+    init_archive_purge_test
+    % TODO VFS-8199 - Execute in parallel after fixing problems with timeouts
+%%    {group, all_tests}
 ].
 
 -define(ATTEMPTS, 120).
@@ -975,11 +981,13 @@ end_per_group(_Group, Config) ->
 
 init_per_testcase(_Case, Config) ->
     ct:timetrap({minutes, 20}),
-    Config.
+    % TODO VFS-8199 - Execute in parallel after fixing problems with timeouts
+    init_per_group(default, Config).
 
 
-end_per_testcase(_Case, _Config) ->
-    ok.
+end_per_testcase(_Case, Config) ->
+    % TODO VFS-8199 - Execute in parallel after fixing problems with timeouts
+    end_per_group(default, Config).
 
 %%%===================================================================
 %%% HTTP server used for checking HTTP callbacks
