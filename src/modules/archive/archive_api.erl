@@ -325,7 +325,7 @@ extend_with_archive_info(ArchiveEntries) ->
 
 
 %% @private
--spec get_state(archive:doc() | archive:id()) -> {ok, archive:state()}.
+-spec get_state(archive:doc()) -> {ok, archive:state()}.
 get_state(ArchiveDoc = #document{}) ->
     archive:get_state(ArchiveDoc).
 
