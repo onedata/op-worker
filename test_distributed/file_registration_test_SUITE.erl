@@ -610,7 +610,7 @@ register_many_files_test(Config) ->
 
         % check whether file is visible on 2nd provider
         ?assertFile(W2, SessId2, LogicalFilePath, ?TEST_DATA, ?XATTRS, ?JSON1, ?RDF1, ?ATTEMPTS)
-    end, timer:seconds(60)).
+    end, timer:minutes(5)).
 
 register_many_nested_files_test(Config) ->
     [W1, W2 | _] = ?config(op_worker_nodes, Config),
@@ -665,7 +665,7 @@ register_many_nested_files_test(Config) ->
 
         % check whether file is visible on 2nd provider
         ?assertFile(W2, SessId2, LogicalFilePath, ?TEST_DATA, ?XATTRS, ?JSON1, ?RDF1, ?ATTEMPTS)
-    end, timer:seconds(60)).
+    end, timer:minutes(5)).
 
 
 %===================================================================
@@ -694,7 +694,7 @@ end_per_suite(Config) ->
     ssl:stop().
 
 init_per_testcase(_Case, Config) ->
-    ct:timetrap({minutes, 5}),
+    ct:timetrap({minutes, 10}),
     lfm_proxy:init(Config).
 
 end_per_testcase(_Case, Config) ->
