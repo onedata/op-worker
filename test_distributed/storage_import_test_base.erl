@@ -2403,7 +2403,9 @@ create_subfiles_and_delete_before_import_is_finished_test(Config) ->
 
     ok = sd_test_utils:recursive_rm(W1, SDHandle),
     ?assertMatch({error, ?ENOENT}, sd_test_utils:ls(W1, SDHandle, 0, 100)),
-    assertScanFinished(W1, ?SPACE_ID, 3, 5 * ?ATTEMPTS),
+    % Deleting may not be finished when 3rd scan starts so we need to wait for 4th scan
+    % to be sure that all files are deleted
+    assertScanFinished(W1, ?SPACE_ID, 4, 10 * ?ATTEMPTS),
     ?assertMatch({ok, []}, lfm_proxy:get_children(W1, SessId, {path, ?SPACE_PATH}, 0, 100), ?ATTEMPTS),
     disable_continuous_scan(Config).
 
@@ -6775,7 +6777,7 @@ end_per_suite(Config) ->
     ok = wpool:stop_sup_pool(?VERIFY_POOL),
     multi_provider_file_ops_test_base:teardown_env(Config),
     initializer:unmock_auth_manager(Config),
-    initializer:unmock_provider_ids(Config).
+    initializer:unmock_provider_ids(?config(op_worker_nodes, Config)).
 
 
 init_per_testcase(Case, Config)
