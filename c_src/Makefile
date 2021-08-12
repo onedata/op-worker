@@ -8,7 +8,7 @@ LDFLAGS += -shared -Wl,-rpath -Wl,\$$ORIGIN/helpers/lib -L $(HELPERS_DIR)/priv/l
 	-lhelpers $(shell pkg-config --libs botan-1.10 tbb fuse) -laws-cpp-sdk-s3 \
 	-laws-cpp-sdk-core -laws-c-event-stream -laws-checksums -laws-c-common -lcurl \
 	-lrados -lradosstriper -lSwift -lPocoUtil -lPocoXML -lsodium \
-	-lPocoNet -lPocoFoundation -lpthread -lfolly -lproxygen -lwangle -lz \
+	-lPocoNet -lPocoFoundation -lpthread -lfolly -Wl,--whole-archive -lfizz -lproxygen -lwangle -Wl,--no-whole-archive -lz \
 	-lglog -lnss3 -lnspr4 -lboost_system -lboost_filesystem -lboost_log -lboost_thread \
 	-lboost_context -liberty -levent -ldouble-conversion -lboost_iostreams -lboost_regex \
 	-lacl -lgfapi -lglusterfs -lgfrpc -lgfxdr -lXrdCl -lXrdPosixPreload -lXrdXml \
