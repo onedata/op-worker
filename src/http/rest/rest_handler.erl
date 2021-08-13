@@ -337,7 +337,8 @@ route_to_proper_handler(#op_req{operation = Operation, gri = #gri{
 }} = OpReq, Req) when
     (Operation == create andalso As == child);
     (Operation == create andalso As == content);
-    (Operation == get andalso As == content)
+    (Operation == get andalso As == content);
+    (Operation == create andalso As == file_on_path)
 ->
     file_content_rest_handler:handle_request(OpReq, Req);
 route_to_proper_handler(OpReq, Req) ->

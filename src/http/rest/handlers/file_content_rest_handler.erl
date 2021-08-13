@@ -48,7 +48,7 @@ handle_request(OpReq0, Req) ->
     } = middleware_utils:switch_context_if_shared_file_request(OpReq0),
 
     ensure_operation_supported(Operation, Aspect, Scope),
-    OpReq2 = sanitize_params(OpReq1),
+    OpReq2 = sanitize_params(OpReq1, Req),
 
     case api_auth:check_authorization(Auth, ?OP_WORKER, Operation, GRI) of
         ok -> ensure_has_access_to_file(OpReq1);
@@ -71,12 +71,13 @@ ensure_operation_supported(create, child, private) -> true;
 ensure_operation_supported(create, content, private) -> true;
 ensure_operation_supported(get, content, public) -> true;
 ensure_operation_supported(get, content, private) -> true;
+ensure_operation_supported(create, file_on_path, private) -> true;
 ensure_operation_supported(_, _, _) -> throw(?ERROR_NOT_SUPPORTED).
 
 
 %% @private
--spec sanitize_params(middleware:req()) -> middleware:req() | no_return().
-sanitize_params(#op_req{operation = get, data = RawParams, gri = #gri{aspect = content}} = OpReq) ->
+-spec sanitize_params(middleware:req(), cowboy_req:req()) -> middleware:req() | no_return().
+sanitize_params(#op_req{operation = get, data = RawParams, gri = #gri{aspect = content}} = OpReq, _Req) ->
     OpReq#op_req{data = middleware_sanitizer:sanitize_data(RawParams, #{
         optional => #{<<"follow_symlinks">> => {boolean, any}}
     })};
@@ -84,7 +85,7 @@ sanitize_params(#op_req{
     operation = create,
     data = RawParams,
     gri = #gri{aspect = content}
-} = OpReq) ->
+} = OpReq, _Req) ->
     OpReq#op_req{data = middleware_sanitizer:sanitize_data(RawParams, #{
         optional => #{<<"offset">> => {integer, {not_lower_than, 0}}}
     })};
@@ -92,7 +93,7 @@ sanitize_params(#op_req{
     operation = create,
     data = RawParams,
     gri = #gri{aspect = child}
-} = OpReq) ->
+} = OpReq, _Req) ->
     AlwaysRequiredParams = #{
         <<"name">> => {binary, non_empty}
     },
@@ -128,7 +129,57 @@ sanitize_params(#op_req{
     OpReq#op_req{data = middleware_sanitizer:sanitize_data(RawParams, #{
         required => ParamsRequiredDependingOnType,
         optional => OptionalParams
-    })}.
+    })};
+sanitize_params(#op_req{
+    operation = create,
+    data = RawParams,
+    auth = #auth{session_id = SessionId},
+    gri = #gri{aspect = file_on_path, id = GriId}
+} = OpReq, Req) ->
+    Mode = undefined,
+    PathInfo = maps:get(path_info, Req),
+    ParentGuid = create_dirs_on_path(SessionId, GriId, PathInfo, Mode),
+
+    AlwaysRequiredParams = #{
+        <<"name">> => {binary, non_empty}
+    },
+    ParamsRequiredDependingOnType = case maps:get(<<"type">>, RawParams, undefined) of
+        <<"LNK">> ->
+            AlwaysRequiredParams#{<<"target_file_id">> => {binary, fun(ObjectId) ->
+                {true, middleware_utils:decode_object_id(ObjectId, <<"target_file_id">>)}
+            end}};
+        <<"SYMLNK">> ->
+            AlwaysRequiredParams#{<<"target_file_path">> => {binary, non_empty}};
+        _ ->
+            % Do not do anything - exception will be raised by middleware_sanitizer
+            AlwaysRequiredParams
+    end,
+    OptionalParams = #{
+        <<"type">> => {atom, [
+            ?REGULAR_FILE_TYPE, ?DIRECTORY_TYPE, ?LINK_TYPE, ?SYMLINK_TYPE
+        ]},
+        <<"mode">> => {binary, fun(Mode) ->
+            try binary_to_integer(Mode, 8) of
+                ValidMode when ValidMode >= 0 andalso ValidMode =< 8#1777 ->
+                    {true, ValidMode};
+                _ ->
+                    % TODO VFS-7536 add basis of number system to ?ERROR_BAD_VALUE_NOT_IN_RANGE
+                    throw(?ERROR_BAD_VALUE_NOT_IN_RANGE(<<"mode">>, 0, 8#1777))
+            catch _:_ ->
+                % TODO VFS-7536 add basis of number system to ?ERROR_BAD_VALUE_NOT_IN_RANGE
+                throw(?ERROR_BAD_VALUE_INTEGER(<<"mode">>))
+            end
+        end},
+        <<"offset">> => {integer, {not_lower_than, 0}}
+    },
+    RawParams2 = maps:put(<<"name">>, lists:last(PathInfo), RawParams),
+    OpReq#op_req{
+        data = middleware_sanitizer:sanitize_data(RawParams2, #{
+            required => ParamsRequiredDependingOnType,
+            optional => OptionalParams
+        }#{<<"name">> => lists:last(PathInfo)}),
+        gri = #gri{aspect = file_on_path, id = ParentGuid}
+    }.
 
 
 %% @private
@@ -158,7 +209,7 @@ process_request(#op_req{
             file_download_utils:download_single_file(SessionId, FileAttrs, Req);
         {ok, #file_attr{}} ->
             case page_file_download:gen_file_download_url(SessionId, [FileGuid], FollowSymlinks) of
-                {ok, Url} -> 
+                {ok, Url} ->
                     cowboy_req:reply(?HTTP_302_FOUND, #{?HDR_LOCATION => Url}, Req);
                 {error, _} = Error ->
                     http_req:send_error(Error, Req)
@@ -235,6 +286,56 @@ process_request(#op_req{
     http_req:send_response(
         ?CREATED_REPLY([<<"data">>, ObjectId], #{<<"fileId">> => ObjectId}),
         Req3
+    );
+process_request(#op_req{
+    operation = create,
+    auth = #auth{session_id = SessionId},
+    gri = #gri{id = ParentGuid, aspect = file_on_path},
+    data = Params
+}, Req) ->
+    Name = maps:get(<<"name">>, Params),
+    Mode = maps:get(<<"mode">>, Params, undefined),
+
+    {Guid, Req3} = case maps:get(<<"type">>, Params, ?REGULAR_FILE_TYPE) of
+        ?DIRECTORY_TYPE ->
+            {ok, DirGuid} = ?check(lfm:mkdir(SessionId, ParentGuid, Name, Mode)),
+            {DirGuid, Req};
+        ?REGULAR_FILE_TYPE ->
+            {ok, FileGuid} = ?check(lfm:create(SessionId, ParentGuid, Name, Mode)),
+            FileRef = ?FILE_REF(FileGuid),
+
+            case {maps:get(<<"offset">>, Params, 0), cowboy_req:has_body(Req)} of
+                {0, false} ->
+                    {FileGuid, Req};
+                {Offset, _} ->
+                    try
+                        Req2 = write_req_body_to_file(SessionId, FileRef, Offset, Req),
+                        {FileGuid, Req2}
+                    catch Type:Reason ->
+                        lfm:unlink(SessionId, FileRef, false),
+                        erlang:Type(Reason)
+                    end
+            end;
+        ?LINK_TYPE ->
+            TargetFileGuid = maps:get(<<"target_file_id">>, Params),
+
+            {ok, #file_attr{guid = LinkGuid}} = ?check(lfm:make_link(
+                SessionId, ?FILE_REF(TargetFileGuid), ?FILE_REF(ParentGuid), Name
+            )),
+            {LinkGuid, Req};
+        ?SYMLINK_TYPE ->
+            TargetFilePath = maps:get(<<"target_file_path">>, Params),
+
+            {ok, #file_attr{guid = SymlinkGuid}} = ?check(lfm:make_symlink(
+                SessionId, ?FILE_REF(ParentGuid), Name, TargetFilePath
+            )),
+            {SymlinkGuid, Req}
+    end,
+    {ok, ObjectId} = file_id:guid_to_objectid(Guid),
+
+    http_req:send_response(
+        ?CREATED_REPLY([<<"data">>, ObjectId], #{<<"fileId">> => ObjectId}),
+        Req3
     ).
 
 
@@ -259,3 +360,29 @@ write_req_body_to_file(SessionId, FileRef, Offset, Req) ->
     ?check(lfm:monitored_release(FileHandle)),
 
     Req2.
+
+
+create_dirs_on_path(SessionId, ParentId, PathInfo, Mode) ->
+    case length(PathInfo) of
+        0 ->
+            throw(?ERROR_BAD_DATA(<<"path">>));
+        1 ->
+            ParentId;
+        _ ->
+            lists:foldl(
+                fun(DirName, ParentIdAcc) ->
+                    {ok, ParentPath} = lfm_files:get_file_path(SessionId, ParentIdAcc),
+                    Path = str_utils:join_as_binaries([ParentPath, DirName], <<"/">>),
+
+                    case lfm:is_dir(SessionId, {path, Path}) of
+                        true ->
+                            {ok, ExistingDirId} = lfm:get_file_guid(SessionId, Path),
+                            ExistingDirId;
+                        _ ->
+                            {ok, DirGuid} = lfm:mkdir(SessionId, ParentIdAcc, DirName, Mode),
+                            DirGuid
+                    end
+
+                end,
+                ParentId, lists:droplast(PathInfo))
+    end.
