@@ -685,7 +685,7 @@ do_slave_job(Job = #tree_traverse_slave{
         <<"2">> ->
             timer:sleep(500),
             Pid ! {cancel, DirName},
-            timer:sleep(15000);
+            timer:sleep(30000);
         _ -> ok
     end,
     do_slave_job(Job#tree_traverse_slave{traverse_info = #{pid => Pid}}, TaskId);

@@ -405,7 +405,7 @@ end_per_suite(Config) ->
     ok = worker_pool:stop_sup_pool(?POOL),
     initializer:clean_test_users_and_spaces_no_validate(Config),
     initializer:unload_quota_mocks(Config),
-    initializer:unmock_provider_ids(Config),
+    initializer:unmock_provider_ids(?config(op_worker_nodes, Config)),
     unmock_storage_import_monitoring(W),
     ssl:stop().
 
