@@ -1269,7 +1269,7 @@ assert_file_exists(FileCtx0) ->
     FileCtx1.
 
 
--spec get_path_before_deletion(ctx()) -> file_meta:path().
+-spec get_path_before_deletion(ctx()) -> file_meta:path() | undefined.
 get_path_before_deletion(#file_ctx{path_before_deletion = PathBeforeDeletion}) ->
     PathBeforeDeletion.
 
