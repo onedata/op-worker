@@ -467,7 +467,7 @@ is_first_job(Job = #tree_traverse{
 
 
 -spec mark_finished_if_current_archive_is_rooted_in_current_file(file_ctx:ctx(), user_ctx:ctx(), info()) ->
-    archive:doc() | undefined.
+    info() | undefined.
 mark_finished_if_current_archive_is_rooted_in_current_file(CurrentFileCtx, UserCtx, #{
     scheduled_dataset_root_guid := ScheduledDatasetRootGuid,
     aip_ctx := AipArchiveCtx,
