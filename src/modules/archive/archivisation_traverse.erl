@@ -398,16 +398,13 @@ set_aip_dip_relation(AipArchiveCtx, DipArchiveCtx) ->
 
 -spec mark_finished_and_propagate_up(file_ctx:ctx(), user_ctx:ctx(), info(), id()) -> ok.
 mark_finished_and_propagate_up(CurrentFileCtx, UserCtx, TraverseInfo, TaskId) ->
-    NextArchiveDocOrUndefined = mark_finished_if_current_archive_is_rooted_in_current_file(CurrentFileCtx, UserCtx, TraverseInfo),
-    case NextArchiveDocOrUndefined of
+    NextTraverseInfoOrUndefined = 
+        mark_finished_if_current_archive_is_rooted_in_current_file(CurrentFileCtx, UserCtx, TraverseInfo),
+    case NextTraverseInfoOrUndefined of
         undefined ->
             ok;
-        NextArchiveDoc ->
-            #{aip_ctx := AipArchiveCtx} = TraverseInfo,
-            TraverseInfo2 = TraverseInfo#{
-                aip_ctx => AipArchiveCtx#archive_ctx{current_archive_doc = NextArchiveDoc}
-            },
-            propagate_up(CurrentFileCtx, UserCtx, TraverseInfo2, TaskId)
+        NextTraverseInfo ->
+            propagate_up(CurrentFileCtx, UserCtx, NextTraverseInfo, TaskId)
     end.
 
 
@@ -475,8 +472,9 @@ mark_finished_if_current_archive_is_rooted_in_current_file(CurrentFileCtx, UserC
     scheduled_dataset_root_guid := ScheduledDatasetRootGuid,
     aip_ctx := AipArchiveCtx,
     dip_ctx := DipArchiveCtx
-}) ->
+} = TraverseInfo) ->
     CurrentAipDoc = get_archive_doc(AipArchiveCtx),
+    CurrentDipDoc = get_archive_doc(DipArchiveCtx),
     {ok, CurrentArchiveRootGuid} = archive:get_dataset_root_file_guid(CurrentAipDoc),
     {ok, Config} = archive:get_config(CurrentAipDoc),
     CreateNestedArchives = archive_config:should_create_nested_archives(Config),
@@ -487,11 +485,30 @@ mark_finished_if_current_archive_is_rooted_in_current_file(CurrentFileCtx, UserC
         true ->
             NestedArchiveStats = archive_api:get_nested_archives_stats(CurrentAipDoc),
             mark_finished(CurrentAipDoc, UserCtx, NestedArchiveStats),
-            mark_finished(get_archive_doc(DipArchiveCtx), UserCtx, NestedArchiveStats),
-            {ok, ParentDocOrUndefined} = archive:get_parent_doc(CurrentAipDoc),
-            ParentDocOrUndefined;
+            {ok, AipParentDocOrUndefined} = archive:get_parent_doc(CurrentAipDoc),
+            mark_finished(CurrentDipDoc, UserCtx, NestedArchiveStats),
+            {ok, DipParentDocOrUndefined} = case CurrentDipDoc of
+                undefined -> {ok, undefined};
+                _ -> archive:get_parent_doc(CurrentDipDoc)
+            end,
+            case {AipParentDocOrUndefined, DipParentDocOrUndefined} of
+                {undefined, _} -> undefined;
+                {AipParentDoc, DipParentDocOrUndefined} ->
+                    ParentAipArchiveCtx = AipArchiveCtx#archive_ctx{current_archive_doc = AipParentDoc},
+                    case DipParentDocOrUndefined of
+                        undefined ->
+                            TraverseInfo#{
+                                aip_ctx => ParentAipArchiveCtx
+                            };
+                        DipParentDoc ->
+                            TraverseInfo#{
+                                aip_ctx => ParentAipArchiveCtx,
+                                dip_ctx => DipArchiveCtx#archive_ctx{current_archive_doc = DipParentDoc}
+                            }
+                    end
+            end;
         false ->
-            CurrentAipDoc
+            TraverseInfo
     end.
 
 
