@@ -506,7 +506,10 @@ detach_dataset(FileCtx) ->
     case file_meta_dataset:is_attached(FileDoc) of
         true ->
             {Path, FileCtx3} = file_ctx:get_logical_path(FileCtx2, user_ctx:new(?ROOT_SESS_ID)),
-            PathBeforeDeletion = file_ctx:get_from_request_specific_cache_const(FileCtx3, original_path, Path),
+            PathBeforeDeletion = case file_ctx:get_path_before_deletion(FileCtx3) of
+                undefined -> Path;
+                P -> P
+            end,
             dataset_api:detach(
                 file_ctx:get_logical_uuid_const(FileCtx3), PathBeforeDeletion);
         false ->

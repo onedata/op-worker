@@ -53,7 +53,7 @@
     file_location_ids :: undefined | [file_location:id()],
     is_dir :: undefined | boolean(),
     is_imported_storage :: undefined | boolean(),
-    request_specific_cache = #{} :: #{any() => any()}
+    path_before_deletion :: undefined | file_meta:path()
 }).
 
 -type ctx() :: #file_ctx{}.
@@ -64,8 +64,7 @@
     new_by_uuid/2, new_by_uuid/3, new_by_uuid/4,
     new_by_doc/2, new_by_doc/3, new_root_ctx/0]).
 -export([reset/1, new_by_partial_context/1, set_file_location/2, set_file_id/2,
-    set_file_doc/2, set_is_dir/2, ensure_based_on_referenced_guid/1]).
--export([put_in_request_specific_cache/3]).
+    set_file_doc/2, set_is_dir/2, set_path_before_deletion/2, ensure_based_on_referenced_guid/1]).
 
 %% Functions that do not modify context
 -export([get_share_id_const/1, get_space_id_const/1, get_space_dir_uuid_const/1,
@@ -77,7 +76,6 @@
     is_user_root_dir_const/2, is_root_dir_const/1, file_exists_const/1, file_exists_or_is_deleted/1,
     is_in_user_space_const/2, assert_not_special_const/1, assert_is_dir/1, assert_not_dir/1,
     assert_not_trash_dir_const/1, assert_not_trash_dir_const/2]).
--export([get_from_request_specific_cache_const/2, get_from_request_specific_cache_const/3]).
 -export([equals/2]).
 -export([assert_not_readonly_target_storage_const/2]).
 
@@ -93,7 +91,7 @@
     get_storage_file_id/1, get_storage_file_id/2,
     get_new_storage_file_id/1, get_aliased_name/2,
     get_display_credentials/1, get_times/1,
-    get_logical_path/2,
+    get_logical_path/2, get_path_before_deletion/1,
     get_storage_id/1, get_storage/1, get_file_location_with_filled_gaps/1,
     get_file_location_with_filled_gaps/2,
     get_or_create_local_file_location_doc/1, get_or_create_local_file_location_doc/2,
@@ -226,9 +224,9 @@ set_is_dir(FileCtx, IsDir) ->
 %% Sets dataset path in context record
 %% @end
 %%--------------------------------------------------------------------
--spec put_in_request_specific_cache(ctx(), Key :: any(), Value :: any()) -> ctx().
-put_in_request_specific_cache(#file_ctx{request_specific_cache = Cache} = FileCtx, Key, Value) ->
-    FileCtx#file_ctx{request_specific_cache = Cache#{Key => Value}}.
+-spec set_path_before_deletion(ctx(), file_meta:path()) -> ctx().
+set_path_before_deletion(FileCtx, PathBeforeDeletion) ->
+    FileCtx#file_ctx{path_before_deletion = PathBeforeDeletion}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -1271,14 +1269,9 @@ assert_file_exists(FileCtx0) ->
     FileCtx1.
 
 
--spec get_from_request_specific_cache_const(ctx(), Key :: any()) -> Value :: any().
-get_from_request_specific_cache_const(#file_ctx{request_specific_cache = Cache}, Key) ->
-    maps:get(Key, Cache).
-
-
--spec get_from_request_specific_cache_const(ctx(), Key :: any(), Default :: any()) -> Value :: any().
-get_from_request_specific_cache_const(#file_ctx{request_specific_cache = Cache}, Key, Default) ->
-    maps:get(Key, Cache, Default).
+-spec get_path_before_deletion(ctx()) -> file_meta:path().
+get_path_before_deletion(#file_ctx{path_before_deletion = PathBeforeDeletion}) ->
+    PathBeforeDeletion.
 
 %%%===================================================================
 %%% Internal functions
