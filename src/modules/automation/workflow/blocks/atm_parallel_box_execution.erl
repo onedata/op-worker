@@ -81,7 +81,7 @@ create(_AtmWorkflowExecutionCreationCtx, _AtmLaneIndex, _AtmParallelBoxIndex, #a
     id = AtmParallelBoxSchemaId,
     tasks = []
 }) ->
-    throw(?ERROR_ATM_EMPTY_PARALLEL_BOX(AtmParallelBoxSchemaId));
+    throw(?ERROR_ATM_PARALLEL_BOX_EMPTY(AtmParallelBoxSchemaId));
 
 create(AtmWorkflowExecutionCreationCtx, AtmLaneIndex, AtmParallelBoxIndex, #atm_parallel_box_schema{
     id = AtmParallelBoxSchemaId,

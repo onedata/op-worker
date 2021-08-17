@@ -212,7 +212,7 @@ create_lane_executions(#atm_workflow_execution_creation_ctx{
         lanes = []
     }}
 }, _ExecutionElements) ->
-    throw(?ERROR_ATM_EMPTY_WORKFLOW);
+    throw(?ERROR_ATM_WORKFLOW_EMPTY);
 
 create_lane_executions(AtmWorkflowExecutionCreationCtx, ExecutionElements) ->
     AtmLaneExecutionsAndTaskStoreRegistries = atm_lane_execution:create_all(

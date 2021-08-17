@@ -12,7 +12,6 @@
 -module(atm_tree_forest_store_test_SUITE).
 -author("Michal Stanisz").
 
--include("modules/automation/atm_tmp.hrl").
 -include("modules/automation/atm_execution.hrl").
 -include("modules/datastore/datastore_runner.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
@@ -113,20 +112,29 @@ apply_operation_test(_Config) ->
     {ok, AtmStoreId} = atm_store_test_utils:create_store(krakow, AtmWorkflowExecutionAuth, undefined, ?ATM_TREE_FOREST_STORE_SCHEMA),
     
     SpaceId = oct_background:get_space_id(space_krk),
-    ?assertEqual(?ERROR_ATM_DATA_TYPE_UNVERIFIED(<<"not a file">>, atm_file_type),
-        atm_store_test_utils:apply_operation(
-            krakow, AtmWorkflowExecutionAuth, append, <<"not a file">>, #{}, AtmStoreId)),
+
     {ok, BadId1} = file_id:guid_to_objectid(file_id:pack_guid(<<"dummy_uuid">>, <<"dummy_space_id">>)),
-    ?assertEqual(?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(#{<<"inSpace">> => SpaceId}),
-        atm_store_test_utils:apply_operation(
-            krakow, AtmWorkflowExecutionAuth, append, #{<<"file_id">> => BadId1}, #{}, AtmStoreId)),
+    BadFile1 = #{<<"file_id">> => BadId1},
+
     {ok, BadId2} = file_id:guid_to_objectid(file_id:pack_guid(<<"dummy_uuid">>, SpaceId)),
-    ?assertEqual(?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(#{<<"hasAccess">> => true}),
-        atm_store_test_utils:apply_operation(
-            krakow, AtmWorkflowExecutionAuth, append, #{<<"file_id">> => BadId2}, #{}, AtmStoreId)),
-    ?assertEqual(?ERROR_NOT_SUPPORTED,
-        atm_store_test_utils:apply_operation(
-            krakow, AtmWorkflowExecutionAuth, set, <<"NaN">>, #{}, AtmStoreId)).
+    BadFile2 = #{<<"file_id">> => BadId2},
+
+    ?assertEqual(
+        ?ERROR_ATM_DATA_TYPE_UNVERIFIED(<<"not a file">>, atm_file_type),
+        atm_store_test_utils:apply_operation(krakow, AtmWorkflowExecutionAuth, append, <<"not a file">>, #{}, AtmStoreId)
+    ),
+    ?assertEqual(
+        ?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(BadFile1, atm_file_type, #{<<"inSpace">> => SpaceId}),
+        atm_store_test_utils:apply_operation(krakow, AtmWorkflowExecutionAuth, append, BadFile1, #{}, AtmStoreId)
+    ),
+    ?assertEqual(
+        ?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(BadFile2, atm_file_type, #{<<"hasAccess">> => true}),
+        atm_store_test_utils:apply_operation(krakow, AtmWorkflowExecutionAuth, append, BadFile2, #{}, AtmStoreId)
+    ),
+    ?assertEqual(
+        ?ERROR_NOT_SUPPORTED,
+        atm_store_test_utils:apply_operation(krakow, AtmWorkflowExecutionAuth, set, <<"NaN">>, #{}, AtmStoreId)
+    ).
 
 
 iterator_queue_test(_Config) ->

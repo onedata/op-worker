@@ -161,7 +161,7 @@ build_value(AtmJobCtx, #atm_task_argument_value_builder{
     % TODO VFS-7660 fix query in case of array indices
     case json_utils:query(Item, Query) of
         {ok, Value} -> Value;
-        error -> throw(?ERROR_ATM_TASK_ARG_MAPPER_ITEM_QUERY_FAILED(Item, Query))
+        error -> throw(?ERROR_ATM_TASK_ARG_MAPPER_ITERATED_ITEM_QUERY_FAILED(Item, Query))
     end;
 
 build_value(AtmJobCtx, #atm_task_argument_value_builder{
@@ -183,8 +183,10 @@ build_value(AtmJobCtx, #atm_task_argument_value_builder{
     {ok, AtmStore} = atm_store_api:get(AtmSingleValueStoreId),
 
     case atm_store_container:get_store_type(AtmStore#atm_store.container) of
-        single_value -> ok;
-        AtmStoreType -> throw(?ERROR_ATM_STORE_TYPE_DISALLOWED(AtmStoreType, [single_value]))
+        single_value ->
+            ok;
+        _ ->
+            throw(?ERROR_ATM_STORE_TYPE_DISALLOWED(AtmSingleValueStoreSchemaId, [single_value]))
     end,
 
     AtmWorkflowExecutionAuth = atm_job_ctx:get_workflow_execution_auth(AtmJobCtx),
@@ -199,9 +201,13 @@ build_value(AtmJobCtx, #atm_task_argument_value_builder{
             Item
     end;
 
-build_value(_AtmJobCtx, _InputSpec) ->
+build_value(_AtmJobCtx, #atm_task_argument_value_builder{
+    type = ValueBuilderType
+}) ->
     % TODO VFS-7660 handle rest of atm_task_argument_value_builder:type()
-    throw(?ERROR_ATM_TASK_ARG_MAPPER_INVALID_INPUT_SPEC).
+    throw(?ERROR_ATM_TASK_ARG_MAPPER_UNSUPPORTED_VALUE_BUILDER(ValueBuilderType, [
+        const, iterated_item, onedatafs_credentials, single_value_store_content
+    ])).
 
 
 %% @private

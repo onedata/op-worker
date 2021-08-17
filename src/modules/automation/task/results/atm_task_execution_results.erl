@@ -13,6 +13,7 @@
 -author("Bartosz Walkowicz").
 
 -include("modules/automation/atm_execution.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% API
 -export([build_specs/2, apply/3]).
@@ -103,7 +104,7 @@ apply_result(_AtmWorkflowExecutionCtx, _, <<"exception">>, _) ->
     ok;
 
 apply_result(_AtmWorkflowExecutionCtx, _AtmTaskExecutionResultSpec, ResultName, undefined) ->
-    throw(?ERROR_ATM_TASK_MISSING_RESULT(ResultName));
+    throw(?ERROR_ATM_TASK_RESULT_MISSING(ResultName));
 
 apply_result(AtmWorkflowExecutionCtx, AtmTaskExecutionResultSpec, ResultName, ResultValue) ->
     try

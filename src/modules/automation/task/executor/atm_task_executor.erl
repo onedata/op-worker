@@ -23,8 +23,8 @@
 
 -behaviour(persistent_record).
 
--include("modules/automation/atm_tmp.hrl").
 -include("modules/datastore/datastore_models.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% API
 -export([create/2, prepare/2, clean/1, get_spec/1, in_readonly_mode/1, run/3]).

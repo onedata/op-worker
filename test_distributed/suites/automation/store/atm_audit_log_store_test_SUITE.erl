@@ -12,7 +12,6 @@
 -module(atm_audit_log_store_test_SUITE).
 -author("Lukasz Opiola").
 
--include("modules/automation/atm_tmp.hrl").
 -include("modules/automation/atm_execution.hrl").
 -include("modules/datastore/datastore_runner.hrl").
 

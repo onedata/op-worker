@@ -14,9 +14,9 @@
 -define(ATM_EXECUTION_HRL, 1).
 
 
--include("modules/automation/atm_tmp.hrl").
 -include("global_definitions.hrl").
 -include_lib("ctool/include/automation/automation.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 
 -record(atm_workflow_execution_summary, {

@@ -17,10 +17,10 @@
 -behaviour(persistent_record).
 
 -include("modules/automation/atm_execution.hrl").
--include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/http/codes.hrl").
 -include_lib("ctool/include/http/headers.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 
 %% API
