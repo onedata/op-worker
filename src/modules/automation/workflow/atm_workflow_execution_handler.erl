@@ -160,9 +160,9 @@ process_item(
     AtmWorkflowExecutionCtx = atm_workflow_execution_ctx:acquire(
         AtmTaskExecutionId, AtmWorkflowExecutionEnv
     ),
-    AtmWorkflowExecutionLogger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
-
-    log_item_processing(Item, AtmWorkflowExecutionLogger),
+    % TODO VFS-8101 Better debug logs about items in processing
+%%    AtmWorkflowExecutionLogger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
+%%    log_item_processing(Item, AtmWorkflowExecutionLogger),
 
     try
         ok = atm_task_execution_handler:process_item(
