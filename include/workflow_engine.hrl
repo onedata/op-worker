@@ -98,8 +98,4 @@
 % errors connected with timeouts verification
 -define(WF_ERROR_NO_TIMEOUTS_UPDATED, {error, no_timeouts_updated}).
 
-% errors connected with result encoding/decoding/waiting
--define(WF_ERROR_MALFORMED_REQUEST, {error, malformed_request}).
--define(WF_ERROR_TIMEOUT, {error, timeout}).
-
 -endif.

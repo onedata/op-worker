@@ -18,7 +18,7 @@
 -include("http/gui_paths.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 
--export([prepare/2, get_lane_spec/3, process_item/6, process_result/4,
+-export([prepare/2, get_lane_spec/3, process_item/6, process_result/5,
     handle_task_execution_ended/3, handle_lane_execution_ended/3, handle_workflow_execution_ended/2]).
 
 %%%===================================================================
@@ -86,12 +86,13 @@ process_item(_ExecutionId, _Context, _TaskId, _Item, _FinishCallback, _) ->
     workflow_engine:execution_id(),
     workflow_engine:execution_context(),
     workflow_engine:task_id(),
+    iterator:item(),
     workflow_handler:async_processing_result()
 ) ->
     workflow_handler:handler_execution_result().
-process_result(_, _, _, {error, _}) ->
+process_result(_, _, _, _, {error, _}) ->
     error;
-process_result(_, _, _, #{<<"result">> := Result}) ->
+process_result(_, _, _, _, #{<<"result">> := Result}) ->
     binary_to_atom(Result, utf8).
 
 -spec handle_task_execution_ended(

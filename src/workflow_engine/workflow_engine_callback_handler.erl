@@ -17,6 +17,7 @@
 
 -include("workflow_engine.hrl").
 -include("http/gui_paths.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/http/codes.hrl").
 -include_lib("ctool/include/http/headers.hrl").
 
@@ -50,7 +51,7 @@ init(Req0, State) ->
         {Req1, Body} = read_body(Req0, <<>>),
         {Req1, json_utils:decode(Body)}
     catch _:_ ->
-        {Req0, ?WF_ERROR_MALFORMED_REQUEST}
+        {Req0, ?ERROR_MALFORMED_DATA}
     end,
 
     Path = cowboy_req:path(Req2),
