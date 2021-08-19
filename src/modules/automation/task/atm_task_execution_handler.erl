@@ -13,11 +13,12 @@
 -author("Bartosz Walkowicz").
 
 -include("modules/automation/atm_execution.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% API
 -export([
     process_item/5,
-    process_results/3,
+    process_results/4,
 
     handle_ended/1
 ]).
@@ -42,6 +43,7 @@ process_item(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, ReportResultUrl,
         argument_specs = AtmTaskExecutionArgSpecs
     }} = update_items_in_processing(AtmTaskExecutionId),
 
+    % TODO VFS-8248 catch errors here, transform to exceptions and call process_results
     AtmJobCtx = atm_job_ctx:build(
         AtmWorkflowExecutionCtx, atm_task_executor:in_readonly_mode(AtmTaskExecutor),
         Item, ReportResultUrl, HeartbeatUrl
@@ -51,16 +53,22 @@ process_item(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, ReportResultUrl,
     atm_task_executor:run(AtmJobCtx, Args, AtmTaskExecutor).
 
 
+% TODO VFS-8248 Accept only objects as results: either proper result or exception
 -spec process_results(
     atm_workflow_execution_ctx:record(),
     atm_task_execution:id(),
+    automation:item(),
     error | json_utils:json_map()
 ) ->
-    ok | no_return().
-process_results(_AtmWorkflowExecutionCtx, AtmTaskExecutionId, error) ->
-    update_items_failed_and_processed(AtmTaskExecutionId);
+    ok | error | no_return().
+process_results(_AtmWorkflowExecutionCtx, AtmTaskExecutionId, _Item, error) ->
+    update_items_failed_and_processed(AtmTaskExecutionId),
+    error;
 
-process_results(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Results) when is_map(Results) ->
+process_results(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, #{<<"exception">> := _} = Exception) ->
+    handle_exception(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, Exception);
+
+process_results(AtmWorkflowExecutionCtx, AtmTaskExecutionId, _Item, Results) when is_map(Results) ->
     {ok, #document{value = #atm_task_execution{
         result_specs = AtmTaskExecutionResultSpecs
     }}} = atm_task_execution:get(AtmTaskExecutionId),
@@ -68,8 +76,8 @@ process_results(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Results) when is_ma
     atm_task_execution_results:apply(AtmWorkflowExecutionCtx, AtmTaskExecutionResultSpecs, Results),
     update_items_processed(AtmTaskExecutionId);
 
-process_results(_AtmWorkflowExecutionEnv, _AtmTaskExecutionId, _Results) ->
-    throw(?ERROR_ATM_BAD_DATA(<<"results">>, <<"not an object">>)).
+process_results(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, _MalformedResults) ->
+    handle_exception(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, ?ERROR_MALFORMED_DATA).
 
 
 -spec handle_ended(atm_task_execution:id()) -> ok.
@@ -111,6 +119,32 @@ handle_ended(AtmTaskExecutionId) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+%% @private
+-spec handle_exception(
+    atm_workflow_execution_ctx:record(),
+    atm_task_execution:id(),
+    automation:item(),
+    errors:error() | json_utils:json_map()
+) ->
+    error.
+handle_exception(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, #{<<"exception">> := Reason}) ->
+    EnrichedExceptionLog = #{
+        <<"severity">> => ?LOGGER_ERROR,
+        <<"item">> => Item,
+        <<"reason">> => Reason
+    },
+    AtmWorkflowExecutionLogger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
+
+    atm_workflow_execution_logger:task_append_logs(
+        EnrichedExceptionLog, #{}, AtmWorkflowExecutionLogger
+    ),
+    update_items_failed_and_processed(AtmTaskExecutionId),
+    error;
+
+handle_exception(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, {error, _} = Error) ->
+    handle_exception(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, errors:to_json(Error)).
 
 
 %% @private
