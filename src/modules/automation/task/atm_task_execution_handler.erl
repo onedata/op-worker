@@ -60,7 +60,7 @@ process_item(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, ReportResultUrl,
     automation:item(),
     error | json_utils:json_map()
 ) ->
-    ok | error | no_return().
+    ok | no_return().
 process_results(_AtmWorkflowExecutionCtx, AtmTaskExecutionId, _Item, error) ->
     update_items_failed_and_processed(AtmTaskExecutionId),
     error;
@@ -128,7 +128,7 @@ handle_ended(AtmTaskExecutionId) ->
     automation:item(),
     errors:error() | json_utils:json_map()
 ) ->
-    error.
+    ok.
 handle_exception(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, #{<<"exception">> := Reason}) ->
     EnrichedExceptionLog = #{
         <<"severity">> => ?LOGGER_ERROR,
@@ -140,8 +140,7 @@ handle_exception(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, #{<<"excepti
     atm_workflow_execution_logger:task_append_logs(
         EnrichedExceptionLog, #{}, AtmWorkflowExecutionLogger
     ),
-    update_items_failed_and_processed(AtmTaskExecutionId),
-    error;
+    update_items_failed_and_processed(AtmTaskExecutionId);
 
 handle_exception(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, {error, _} = Error) ->
     handle_exception(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, errors:to_json(Error)).
