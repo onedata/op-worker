@@ -53,19 +53,8 @@ build_specs(AtmLambdaResultSpecs, AtmTaskSchemaResultMappers) ->
 apply(AtmWorkflowExecutionCtx, AtmTaskExecutionResultSpecs, Results) ->
     lists:foreach(fun(AtmTaskExecutionResultSpec) ->
         ResultName = atm_task_execution_result_spec:get_name(AtmTaskExecutionResultSpec),
-
-        case maps:get(ResultName, Results, undefined) of
-            undefined ->
-                throw(?ERROR_ATM_TASK_MISSING_RESULT(ResultName));
-            Result ->
-                try
-                    atm_task_execution_result_spec:apply_result(
-                        AtmWorkflowExecutionCtx, AtmTaskExecutionResultSpec, Result
-                    )
-                catch _:Reason ->
-                    throw(?ERROR_ATM_TASK_RESULT_MAPPING_FAILED(ResultName, Reason))
-                end
-        end
+        ResultValue = maps:get(ResultName, Results, undefined),
+        apply_result(AtmWorkflowExecutionCtx, AtmTaskExecutionResultSpec, ResultName, ResultValue)
     end, AtmTaskExecutionResultSpecs).
 
 
@@ -96,3 +85,31 @@ group_atm_task_schema_result_mappers_by_name(AtmTaskSchemaResultMappers) ->
         AtmTaskSchemaResultMapperForName = maps:get(Name, Acc, []),
         Acc#{Name => [AtmTaskSchemaResultMapper | AtmTaskSchemaResultMapperForName]}
     end, #{}, AtmTaskSchemaResultMappers).
+
+
+%% @private
+-spec apply_result(
+    atm_workflow_execution_ctx:record(),
+    atm_task_execution_result_spec:record(),
+    binary(),
+    undefined | json_utils:json_term()
+) ->
+    ok | no_return().
+apply_result(_AtmWorkflowExecutionCtx, _, <<"exception">>, _) ->
+    % TODO VFS-8248 rm case when 'exception' result name became be forbidden
+    % 'exception' result is optional - if it is present it should be handled
+    % before code comes here and this case should never be called.
+    % Since it was, exception hasn't occurred.
+    ok;
+
+apply_result(_AtmWorkflowExecutionCtx, _AtmTaskExecutionResultSpec, ResultName, undefined) ->
+    throw(?ERROR_ATM_TASK_MISSING_RESULT(ResultName));
+
+apply_result(AtmWorkflowExecutionCtx, AtmTaskExecutionResultSpec, ResultName, ResultValue) ->
+    try
+        atm_task_execution_result_spec:apply_result(
+            AtmWorkflowExecutionCtx, AtmTaskExecutionResultSpec, ResultValue
+        )
+    catch _:Reason ->
+        throw(?ERROR_ATM_TASK_RESULT_MAPPING_FAILED(ResultName, Reason))
+    end.

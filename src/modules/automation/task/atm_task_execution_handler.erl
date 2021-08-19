@@ -60,7 +60,7 @@ process_item(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, ReportResultUrl,
     automation:item(),
     error | json_utils:json_map()
 ) ->
-    ok | no_return().
+    ok | error | no_return().
 process_results(_AtmWorkflowExecutionCtx, AtmTaskExecutionId, _Item, error) ->
     update_items_failed_and_processed(AtmTaskExecutionId),
     error;
@@ -89,14 +89,27 @@ handle_ended(AtmTaskExecutionId) ->
             status = ?ACTIVE_STATUS,
             items_in_processing = ItemsInProcessing,
             items_processed = ItemsProcessed,
-            items_failed = ItemsFailed
+            items_failed = ItemsFailed,
+            result_specs = AtmTaskExecutionResultSpecs
         } = AtmTaskExecution) ->
+            % TODO VFS-8248 rm ended status hack when proper exception/retry solution is implemented
+            % For now if task has exception mapper defined then even if some items failed task
+            % should be considered as finished as maybe there is lane that retries failed items
+            HasExceptionMapper = lists:any(fun(AtmTaskExecutionResultSpec) ->
+                case atm_task_execution_result_spec:get_name(AtmTaskExecutionResultSpec) of
+                    <<"exception">> -> atm_task_execution_result_spec:is_dispatched(AtmTaskExecutionResultSpec);
+                    _ -> false
+                end
+            end, AtmTaskExecutionResultSpecs),
+
             % atm workflow execution may have been abruptly interrupted by e.g.
             % provider restart which resulted in stale `items_in_processing`
-            NewAtmTaskExecution = case ItemsFailed + ItemsInProcessing of
-                0 ->
+            NewAtmTaskExecution = case {HasExceptionMapper, ItemsFailed + ItemsInProcessing} of
+                {true, _} ->
                     AtmTaskExecution#atm_task_execution{status = ?FINISHED_STATUS};
-                AllFailedItems ->
+                {false, 0} ->
+                    AtmTaskExecution#atm_task_execution{status = ?FINISHED_STATUS};
+                {false, AllFailedItems} ->
                     AtmTaskExecution#atm_task_execution{
                         status = ?FAILED_STATUS,
                         items_in_processing = 0,
@@ -128,7 +141,7 @@ handle_ended(AtmTaskExecutionId) ->
     automation:item(),
     errors:error() | json_utils:json_map()
 ) ->
-    ok.
+    ok | error.
 handle_exception(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, #{<<"exception">> := Reason}) ->
     EnrichedExceptionLog = #{
         <<"severity">> => ?LOGGER_ERROR,
@@ -140,15 +153,45 @@ handle_exception(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, #{<<"excepti
     atm_workflow_execution_logger:task_append_logs(
         EnrichedExceptionLog, #{}, AtmWorkflowExecutionLogger
     ),
-    update_items_failed_and_processed(AtmTaskExecutionId);
+
+    AtmTaskExecutionDoc = update_items_failed_and_processed(AtmTaskExecutionId),
+
+    % TODO VFS-8248 rm mapping hack when proper exception/retry solution is implemented
+    % For now "normal" result mapping machinery is used to save failed items when exception occurs
+    % so that retrying lane can be defined
+    #document{value = #atm_task_execution{
+        result_specs = AtmTaskExecutionResultSpecs
+    }} = AtmTaskExecutionDoc,
+
+    lists:foldl(fun
+        (AtmTaskExecutionResultSpec, error) ->
+            case atm_task_execution_result_spec:get_name(AtmTaskExecutionResultSpec) of
+                <<"exception">> ->
+                    case atm_task_execution_result_spec:is_dispatched(AtmTaskExecutionResultSpec) of
+                        true ->
+                            % TODO VFS-8248 rm hack when proper exception/retry solution is implemented
+                            % For now when exception mapper is defined exception should stop executing
+                            % rest of workflow
+                            catch atm_task_execution_result_spec:apply_result(
+                                AtmWorkflowExecutionCtx, AtmTaskExecutionResultSpec, Item
+                            ),
+                            ok;
+                        false ->
+                            error
+                    end;
+                _ ->
+                    error
+            end;
+        (_AtmTaskExecutionResultSpec, ok) ->
+            ok
+    end, error, AtmTaskExecutionResultSpecs);
 
 handle_exception(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, {error, _} = Error) ->
     handle_exception(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, errors:to_json(Error)).
 
 
 %% @private
--spec update_items_in_processing(atm_task_execution:id()) ->
-    atm_task_execution:doc().
+-spec update_items_in_processing(atm_task_execution:id()) -> atm_task_execution:doc().
 update_items_in_processing(AtmTaskExecutionId) ->
     Diff = fun
         (#atm_task_execution{status = ?PENDING_STATUS, items_in_processing = 0} = AtmTaskExecution) ->
@@ -186,9 +229,9 @@ update_items_processed(AtmTaskExecutionId) ->
 
 
 %% @private
--spec update_items_failed_and_processed(atm_task_execution:id()) -> ok.
+-spec update_items_failed_and_processed(atm_task_execution:id()) -> atm_task_execution:doc().
 update_items_failed_and_processed(AtmTaskExecutionId) ->
-    {ok, _} = atm_task_execution:update(AtmTaskExecutionId, fun(#atm_task_execution{
+    {ok, AtmTaskExecutionDoc} = atm_task_execution:update(AtmTaskExecutionId, fun(#atm_task_execution{
         items_in_processing = ItemsInProcessing,
         items_processed = ItemsProcessed,
         items_failed = ItemsFailed
@@ -199,7 +242,7 @@ update_items_failed_and_processed(AtmTaskExecutionId) ->
             items_failed = ItemsFailed + 1
         }}
     end),
-    ok.
+    AtmTaskExecutionDoc.
 
 
 %% @private
