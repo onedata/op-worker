@@ -1027,8 +1027,8 @@ cancel_migration_on_target_nodes_by_scheduling_user(Config, Type) ->
                     files_to_process => fun(X) -> X =< 111 end,
                     files_processed => fun(X) -> X =< 111 end,
                     failed_files => 0,
-                    files_replicated => fun(X) -> X < 100 end,
-                    files_evicted => fun(X) -> X < 100 end
+                    files_replicated => fun(X) -> X =< 100 end,
+                    files_evicted => fun(X) -> X =< 100 end
                 },
                 attempts = 120,
                 distribution = undefined,
@@ -1075,8 +1075,8 @@ cancel_migration_on_target_nodes_by_other_user(Config, Type) ->
                     files_to_process => fun(X) -> X =< 111 end,
                     files_processed => fun(X) -> X =< 111 end,
                     failed_files => 0,
-                    files_replicated => fun(X) -> X < 100 end,
-                    files_evicted => fun(X) -> X < 100 end
+                    files_replicated => fun(X) -> X =< 100 end,
+                    files_evicted => fun(X) -> X =< 100 end
                 },
                 distribution = undefined,
                 assertion_nodes = [WorkerP1, WorkerP2]
