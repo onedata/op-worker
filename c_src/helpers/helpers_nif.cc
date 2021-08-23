@@ -425,19 +425,21 @@ template <class T> void handle_result(NifCTX ctx, folly::Future<T> future)
 template <class T>
 void handle_result(NifCTX ctx, file_handle_ptr handle, folly::Future<T> future)
 {
-    future
-        .then([ctx, handle = std::move(handle)](
-                  T &&value) { handle_value(ctx, std::move(value)); })
-        .onError([ctx](const std::system_error &e) {
-            auto it = error_to_atom.find(e.code());
-            nifpp::str_atom reason {e.code().message()};
-            if (it != error_to_atom.end())
-                reason = it->second;
-
-            ctx.send(std::make_tuple(error, reason));
+    std::move(future)
+        .thenValue([ctx, handle = std::move(handle)](T &&value) {
+            handle_value(ctx, std::forward<T>(value));
         })
-        .onError([ctx](const std::exception &e) {
-            nifpp::str_atom reason{e.what()};
+        .thenError(folly::tag_t<std::system_error> {},
+            [ctx](auto &&e) {
+                auto it = error_to_atom.find(e.code());
+                nifpp::str_atom reason {e.code().message()};
+                if (it != error_to_atom.end())
+                    reason = it->second;
+
+                ctx.send(std::make_tuple(error, reason));
+            })
+        .thenError(folly::tag_t<std::exception> {}, [ctx](auto &&e) {
+            nifpp::str_atom reason {e.what()};
             ctx.send(std::make_tuple(error, reason));
         });
 }
