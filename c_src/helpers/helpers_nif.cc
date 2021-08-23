@@ -26,8 +26,8 @@ namespace {
  * @defgroup StaticAtoms Statically created atoms for ease of usage.
  * @{
  */
-nifpp::str_atom ok{"ok"};
-nifpp::str_atom error{"error"};
+nifpp::str_atom ok {"ok"};
+nifpp::str_atom error {"error"};
 /** @} */
 
 using helper_ptr = one::helpers::StorageHelperPtr;
@@ -78,14 +78,14 @@ struct HelpersNIF {
             executors[WEBDAV_HELPER_NAME], executors[XROOTD_HELPER_NAME],
             executors[NULL_DEVICE_HELPER_NAME],
             std::stoul(args["buffer_scheduler_threads_number"].toStdString()),
-            buffering::BufferLimits{
+            buffering::BufferLimits {
                 std::stoul(args["read_buffer_min_size"].toStdString()),
                 std::stoul(args["read_buffer_max_size"].toStdString()),
-                std::chrono::seconds{std::stoul(
+                std::chrono::seconds {std::stoul(
                     args["read_buffer_prefetch_duration"].toStdString())},
                 std::stoul(args["write_buffer_min_size"].toStdString()),
                 std::stoul(args["write_buffer_max_size"].toStdString()),
-                std::chrono::seconds{std::stoul(
+                std::chrono::seconds {std::stoul(
                     args["write_buffer_flush_delay"].toStdString())}});
 
         umask(0);
@@ -114,7 +114,7 @@ namespace {
  *           POSIX open mode / flag.
  * @{
  */
-const std::unordered_map<nifpp::str_atom, one::helpers::Flag> atom_to_flag{
+const std::unordered_map<nifpp::str_atom, one::helpers::Flag> atom_to_flag {
     {"O_NONBLOCK", one::helpers::Flag::NONBLOCK},
     {"O_APPEND", one::helpers::Flag::APPEND},
     {"O_ASYNC", one::helpers::Flag::ASYNC},
@@ -142,7 +142,7 @@ one::helpers::FlagsSet translateFlags(folly::fbvector<nifpp::str_atom> atoms)
             flags.insert(result->second);
         }
         else {
-            throw std::system_error{
+            throw std::system_error {
                 std::make_error_code(std::errc::invalid_argument)};
         }
     }
@@ -259,7 +259,7 @@ public:
      * deleter.
      */
     Env()
-        : env{enif_alloc_env(), enif_free_env}
+        : env {enif_alloc_env(), enif_free_env}
     {
     }
 
@@ -302,9 +302,9 @@ private:
     static thread_local std::default_random_engine gen;
     static thread_local std::uniform_int_distribution<int> dist;
 };
-thread_local std::random_device NifCTX::rd{};
-thread_local std::default_random_engine NifCTX::gen{NifCTX::rd()};
-thread_local std::uniform_int_distribution<int> NifCTX::dist{};
+thread_local std::random_device NifCTX::rd {};
+thread_local std::default_random_engine NifCTX::gen {NifCTX::rd()};
+thread_local std::uniform_int_distribution<int> NifCTX::dist {};
 
 /**
  * Runs given function and returns result or error term.
@@ -319,11 +319,11 @@ template <class T> ERL_NIF_TERM handle_errors(ErlNifEnv *env, T &&fun)
     }
     catch (const std::system_error &e) {
         return nifpp::make(
-            env, std::make_tuple(error, nifpp::str_atom{e.code().message()}));
+            env, std::make_tuple(error, nifpp::str_atom {e.code().message()}));
     }
     catch (const std::exception &e) {
         return nifpp::make(
-            env, std::make_tuple(error, folly::fbstring{e.what()}));
+            env, std::make_tuple(error, folly::fbstring {e.what()}));
     }
 }
 
@@ -332,14 +332,14 @@ ERL_NIF_TERM wrap_helper(ERL_NIF_TERM (*fun)(NifCTX ctx, Args...),
     ErlNifEnv *env, const ERL_NIF_TERM args[], std::index_sequence<I...>)
 {
     return handle_errors(env,
-        [&]() { return fun(NifCTX{env}, nifpp::get<Args>(env, args[I])...); });
+        [&]() { return fun(NifCTX {env}, nifpp::get<Args>(env, args[I])...); });
 }
 
 template <typename... Args>
 ERL_NIF_TERM wrap(ERL_NIF_TERM (*fun)(NifCTX, Args...), ErlNifEnv *env,
     const ERL_NIF_TERM args[])
 {
-    return wrap_helper(fun, env, args, std::index_sequence_for<Args...>{});
+    return wrap_helper(fun, env, args, std::index_sequence_for<Args...> {});
 }
 
 template <typename... Args, std::size_t... I>
@@ -355,7 +355,7 @@ ERL_NIF_TERM noctx_wrap(ERL_NIF_TERM (*fun)(ErlNifEnv *env, Args...),
     ErlNifEnv *env, const ERL_NIF_TERM args[])
 {
     return noctx_wrap_helper(
-        fun, env, args, std::index_sequence_for<Args...>{});
+        fun, env, args, std::index_sequence_for<Args...> {});
 }
 
 /**
@@ -401,17 +401,20 @@ void handle_value(const NifCTX &ctx, folly::Unit) { ctx.send(ok); }
  */
 template <class T> void handle_result(NifCTX ctx, folly::Future<T> future)
 {
-    future.then([ctx](T &&value) { handle_value(ctx, std::move(value)); })
-        .onError([ctx](const std::system_error &e) {
-            auto it = error_to_atom.find(e.code());
-            nifpp::str_atom reason{e.code().message()};
-            if (it != error_to_atom.end())
-                reason = it->second;
+    std::move(future)
+        .thenValue(
+            [ctx](T &&value) { handle_value(ctx, std::forward<T>(value)); })
+        .thenError(folly::tag_t<std::system_error> {},
+            [ctx](auto &&e) {
+                auto it = error_to_atom.find(e.code());
+                nifpp::str_atom reason {e.code().message()};
+                if (it != error_to_atom.end())
+                    reason = it->second;
 
-            ctx.send(std::make_tuple(error, reason));
-        })
-        .onError([ctx](const std::exception &e) {
-            nifpp::str_atom reason{e.what()};
+                ctx.send(std::make_tuple(error, reason));
+            })
+        .thenError(folly::tag_t<std::exception> {}, [ctx](auto &&e) {
+            nifpp::str_atom reason {e.what()};
             ctx.send(std::make_tuple(error, reason));
         });
 }
@@ -708,7 +711,7 @@ ERL_NIF_TERM read(NifCTX ctx, file_handle_ptr handle, off_t offset, size_t size)
 ERL_NIF_TERM write(NifCTX ctx, file_handle_ptr handle, const off_t offset,
     std::pair<const uint8_t *, size_t> data)
 {
-    folly::IOBufQueue buf{folly::IOBufQueue::cacheChainLength()};
+    folly::IOBufQueue buf {folly::IOBufQueue::cacheChainLength()};
 
     auto helperBlockSize = handle->helper()->blockSize();
     auto bufferBlockSize =

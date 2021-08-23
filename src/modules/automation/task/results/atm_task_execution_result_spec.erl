@@ -208,17 +208,17 @@ validate_result(_AtmWorkflowExecutionAuth, _AtmTaskExecutionResultSpec, _Result)
     dispatch_spec()
 ) ->
     ok | no_return().
-dispatch_result(AtmWorkflowExecutionCtx, Result, _Options, #dispatch_spec{
+dispatch_result(AtmWorkflowExecutionCtx, Result, Options, #dispatch_spec{
     store_schema_id = ?CURRENT_TASK_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID
 }) ->
     AtmWorkflowExecutionLogger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
-    atm_workflow_execution_logger:task_append_log(Result, AtmWorkflowExecutionLogger);
+    atm_workflow_execution_logger:task_append_logs(Result, Options, AtmWorkflowExecutionLogger);
 
-dispatch_result(AtmWorkflowExecutionCtx, Result, _Options, #dispatch_spec{
+dispatch_result(AtmWorkflowExecutionCtx, Result, Options, #dispatch_spec{
     store_schema_id = ?WORKFLOW_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID
 }) ->
     AtmWorkflowExecutionLogger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
-    atm_workflow_execution_logger:workflow_append_log(Result, AtmWorkflowExecutionLogger);
+    atm_workflow_execution_logger:workflow_append_logs(Result, Options, AtmWorkflowExecutionLogger);
 
 dispatch_result(AtmWorkflowExecutionCtx, Result, Options, #dispatch_spec{
     store_schema_id = AtmStoreSchemaId,
