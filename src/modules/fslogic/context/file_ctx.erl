@@ -52,7 +52,8 @@
     storage :: undefined | storage:data(),
     file_location_ids :: undefined | [file_location:id()],
     is_dir :: undefined | boolean(),
-    is_imported_storage :: undefined | boolean()
+    is_imported_storage :: undefined | boolean(),
+    path_before_deletion :: undefined | file_meta:path()
 }).
 
 -type ctx() :: #file_ctx{}.
@@ -63,7 +64,7 @@
     new_by_uuid/2, new_by_uuid/3, new_by_uuid/4,
     new_by_doc/2, new_by_doc/3, new_root_ctx/0]).
 -export([reset/1, new_by_partial_context/1, set_file_location/2, set_file_id/2,
-    set_file_doc/2, set_is_dir/2, ensure_based_on_referenced_guid/1]).
+    set_file_doc/2, set_is_dir/2, set_path_before_deletion/2, ensure_based_on_referenced_guid/1]).
 
 %% Functions that do not modify context
 -export([get_share_id_const/1, get_space_id_const/1, get_space_dir_uuid_const/1,
@@ -90,7 +91,7 @@
     get_storage_file_id/1, get_storage_file_id/2,
     get_new_storage_file_id/1, get_aliased_name/2,
     get_display_credentials/1, get_times/1,
-    get_logical_path/2,
+    get_logical_path/2, get_path_before_deletion/1,
     get_storage_id/1, get_storage/1, get_file_location_with_filled_gaps/1,
     get_file_location_with_filled_gaps/2,
     get_or_create_local_file_location_doc/1, get_or_create_local_file_location_doc/2,
@@ -220,6 +221,15 @@ set_is_dir(FileCtx, IsDir) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Sets dataset path in context record
+%% @end
+%%--------------------------------------------------------------------
+-spec set_path_before_deletion(ctx(), file_meta:path()) -> ctx().
+set_path_before_deletion(FileCtx, PathBeforeDeletion) ->
+    FileCtx#file_ctx{path_before_deletion = PathBeforeDeletion}.
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Returns file's share ID.
 %% @end
 %%--------------------------------------------------------------------
@@ -317,6 +327,7 @@ get_uuid_based_path(FileCtx = #file_ctx{uuid_based_path = undefined}) ->
     {UuidBasedPath, FileCtx2#file_ctx{uuid_based_path = UuidBasedPath}};
 get_uuid_based_path(FileCtx = #file_ctx{uuid_based_path = UuidPath}) ->
     {UuidPath, FileCtx}.
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -1256,6 +1267,11 @@ assert_file_exists(FileCtx0) ->
     % translate it to ?ENOENT
     {#document{}, FileCtx1} = file_ctx:get_file_doc(FileCtx0),
     FileCtx1.
+
+
+-spec get_path_before_deletion(ctx()) -> file_meta:path() | undefined.
+get_path_before_deletion(#file_ctx{path_before_deletion = PathBeforeDeletion}) ->
+    PathBeforeDeletion.
 
 %%%===================================================================
 %%% Internal functions

@@ -69,11 +69,17 @@ stop_pool() ->
 -spec start(file_ctx:ctx(), user_ctx:ctx(), boolean(), file_meta:uuid()) -> {ok, id()} | {error, term()}.
 start(RootDirCtx, UserCtx, EmitEvents, RootOriginalParentUuid) ->
     TaskId = datastore_key:new(),
+    SpaceId = file_ctx:get_space_id_const(RootDirCtx),
+    ParentFileCtx = file_ctx:new_by_uuid(RootOriginalParentUuid, SpaceId),
+    {ParentPath, _FileCtx2} = file_ctx:get_logical_path(ParentFileCtx, user_ctx:new(?ROOT_SESS_ID)),
+    {RootDirName, RootDirCtx2} = file_ctx:get_aliased_name(RootDirCtx, undefined),
     Options = #{
         task_id => TaskId,
         track_subtree_status => true,
         children_master_jobs_mode => async,
         use_listing_token => false,
+        % NOTE: do not use RootDir path, as file is already moved to trash
+        initial_relative_path => filename:join(ParentPath, RootDirName),
         traverse_info => #{
             root_guid => file_ctx:get_logical_guid_const(RootDirCtx),
             emit_events => EmitEvents,
@@ -84,7 +90,7 @@ start(RootDirCtx, UserCtx, EmitEvents, RootOriginalParentUuid) ->
     },
     case tree_traverse_session:setup_for_task(UserCtx, TaskId) of
         ok ->
-            tree_traverse:run(?POOL_NAME, RootDirCtx, user_ctx:get_user_id(UserCtx), Options);
+            tree_traverse:run(?POOL_NAME, RootDirCtx2, user_ctx:get_user_id(UserCtx), Options);
         {error, _} = Error ->
             Error
     end.
@@ -125,12 +131,14 @@ update_job_progress(Id, Job, Pool, TaskId, Status) ->
 do_master_job(Job = #tree_traverse{
     file_ctx = FileCtx,
     user_id = UserId,
-    traverse_info = TraverseInfo
+    traverse_info = TraverseInfo,
+    relative_path = RelPath
 },
     MasterJobArgs = #{task_id := TaskId}
 ) ->
+    FileCtx1 = file_ctx:set_path_before_deletion(FileCtx, RelPath),
     BatchProcessingPrehook = fun(_SlaveJobs, _MasterJobs, _ListExtendedInfo, SubtreeProcessingStatus) ->
-        delete_dir_if_subtree_processed(SubtreeProcessingStatus, FileCtx, UserId, TaskId, TraverseInfo)
+        delete_dir_if_subtree_processed(SubtreeProcessingStatus, FileCtx1, UserId, TaskId, TraverseInfo)
     end,
     tree_traverse:do_master_job(Job, MasterJobArgs, BatchProcessingPrehook).
 
@@ -139,9 +147,10 @@ do_master_job(Job = #tree_traverse{
 do_slave_job(#tree_traverse_slave{
     file_ctx = FileCtx,
     user_id = UserId,
-    traverse_info = TraverseInfo
+    traverse_info = TraverseInfo,
+    relative_path = RelPath
 }, TaskId) ->
-   delete_file(FileCtx, UserId, TaskId, TraverseInfo).
+    delete_file(file_ctx:set_path_before_deletion(FileCtx, RelPath), UserId, TaskId, TraverseInfo).
 
 %%%===================================================================
 %%% Internal functions
@@ -221,6 +230,14 @@ file_processed(FileCtx, UserCtx, TaskId, TraverseInfo = #{root_original_parent_u
         _ ->
             ok
     end,
+    RootFilePath = file_ctx:get_path_before_deletion(FileCtx),
     ParentUuid = file_ctx:get_logical_uuid_const(ParentFileCtx),
     ParentStatus = tree_traverse:report_child_processed(TaskId, ParentUuid),
-    delete_dir_if_subtree_processed(ParentStatus, ParentFileCtx, user_ctx:get_user_id(UserCtx), TaskId, TraverseInfo).
+    ParentPath = filename:dirname(RootFilePath),
+    delete_dir_if_subtree_processed(
+        ParentStatus, 
+        file_ctx:set_path_before_deletion(ParentFileCtx, ParentPath), 
+        user_ctx:get_user_id(UserCtx), 
+        TaskId, 
+        TraverseInfo
+    ).
