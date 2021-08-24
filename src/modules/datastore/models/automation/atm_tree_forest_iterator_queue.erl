@@ -26,7 +26,7 @@
 %%% In order to avoid storing to many values in one datastore document whole structure is 
 %%% stored between multiple nodes saved in individual datastore documents. Division of 
 %%% values between nodes is as follows -> value with index I is stored in node number 
-%%% I div ?MAX_VALUES_PER_NODE. 
+%%% I div MaxValuesPerNode. MaxValuesPerNode is provided during queue init.
 %%% All structure statistics are kept in node number 0 which is never pruned.
 %%%
 %%% NOTE: this module does NOT provide any security for concurrent usage. 
@@ -41,10 +41,10 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([init/0, push/3, peek/2, report_new_tree/2, prune/2, destroy/1]).
+-export([init/1, push/3, peek/2, report_new_tree/2, prune/2, destroy/1]).
 
 %% datastore_model callbacks
--export([get_ctx/0, get_record_version/0, get_record_struct/1]).
+-export([get_ctx/0, get_record_version/0, get_record_struct/1, upgrade_record/2]).
 
 -type id() :: datastore:key().
 -type index() :: non_neg_integer().
@@ -62,18 +62,19 @@
 
 -define(CTX, #{model => ?MODULE}).
 
-%% @TODO VFS-7778 store node size in 0th node
--define(MAX_VALUES_PER_NODE, op_worker:get_env(atm_tree_forest_iterator_queue_max_values_per_node, 10000)).
-
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
--spec init() -> {ok, id()} | {error, term()}.
-init() ->
+-spec init(pos_integer()) -> {ok, id()} | {error, term()}.
+init(MaxValuesPerNode) ->
     Id = datastore_key:new(),
-    case datastore_model:create(?CTX, #document{value = #atm_tree_forest_iterator_queue{}, key = get_node_id(Id, 0)}) of
+    Document = #document{
+        key = get_node_id(Id, 0),
+        value = #atm_tree_forest_iterator_queue{max_values_per_node = MaxValuesPerNode
+    }},
+    case datastore_model:create(?CTX, Document) of
         {ok, _} -> {ok, Id};
         {error, _} = Error -> Error
     end.
@@ -84,13 +85,14 @@ push(_Id, [], _OriginIndex) -> ok;
 push(Id, Entries, OriginIndex) ->
     case get_record(Id, 0) of
         {ok, #atm_tree_forest_iterator_queue{
-            highest_peeked_value_index = HighestPeekedIndex
+            highest_peeked_value_index = HighestPeekedIndex,
+            max_values_per_node = MaxValuesPerNode
         } = FirstRecord} when HighestPeekedIndex =< OriginIndex ->
             #atm_tree_forest_iterator_queue{
                 discriminator = Discriminator
             } = FirstRecord,
             FilteredEntries = filter_by_discriminator(Discriminator, OriginIndex, Entries),
-            push(Id, FirstRecord, OriginIndex, FilteredEntries);
+            push(Id, FirstRecord, OriginIndex, FilteredEntries, MaxValuesPerNode);
         {ok, _} ->
             ok;
         {error, _} = Error ->
@@ -100,18 +102,23 @@ push(Id, Entries, OriginIndex) ->
 
 -spec peek(id(), index()) -> {ok, value() | undefined} | {error, term()}.
 peek(Id, Index) ->
-    NodeNum = Index div ?MAX_VALUES_PER_NODE,
-    case get_record(Id, NodeNum) of
-        {ok, #atm_tree_forest_iterator_queue{values = Values}} ->
-            case maps:get(Index, Values, undefined) of
-                undefined -> 
+    case get_record(Id, 0) of
+        {ok, #atm_tree_forest_iterator_queue{max_values_per_node = MaxValuesPerNode} = FirstRecord} ->
+            NodeNum = Index div MaxValuesPerNode,
+            GetRecordResult = case NodeNum of
+                0 -> 
+                    {ok, FirstRecord};
+                _ ->
+                    get_record(Id, NodeNum) 
+            end,
+            case GetRecordResult of
+                {ok, Record} ->
+                    peek_internal(Id, Index, Record);
+                {error, not_found} ->
                     {ok, undefined};
-                Value ->
-                    ok = update_highest_peeked_value_index(Id, Index),
-                    {ok, Value}
+                {error, _} = Error ->
+                    Error
             end;
-        {error, not_found} ->
-            {ok, undefined};
         {error, _} = Error ->
             Error
     end.
@@ -136,15 +143,18 @@ report_new_tree(Id, Index) ->
 
 -spec prune(id(), index()) -> ok | {error, term()}.
 prune(Id, Index) ->
-    LastToPruneNodeNum = Index div ?MAX_VALUES_PER_NODE,
     case get_record(Id, 0) of
-        {ok, #atm_tree_forest_iterator_queue{last_pruned_node_num = StartNodeNum}} ->
+        {ok, #atm_tree_forest_iterator_queue{
+            last_pruned_node_num = StartNodeNum, 
+            max_values_per_node = MaxValuesPerNode
+        }} ->
+            LastToPruneNodeNum = Index div MaxValuesPerNode,
             lists:foreach(fun(Num) ->
                 delete_record(Id, Num)
             end, lists:seq(StartNodeNum, max(StartNodeNum - 1, LastToPruneNodeNum - 1)) -- [0]), % do not delete 0th node
             UpdateFinalNodeFun = fun(#atm_tree_forest_iterator_queue{values = Values} = Record) ->
                 {ok, Record#atm_tree_forest_iterator_queue{
-                    values = prune_values(LastToPruneNodeNum * ?MAX_VALUES_PER_NODE, max(Index, 0), Values)
+                    values = prune_values(LastToPruneNodeNum * MaxValuesPerNode, max(Index, 0), Values)
                 }}
             end,
             ok = ?ok_if_not_found(?extract_ok(update_record(Id, LastToPruneNodeNum, UpdateFinalNodeFun))),
@@ -170,10 +180,13 @@ prune(Id, Index) ->
 -spec destroy(id()) -> ok | {error, term()}.
 destroy(Id) ->
     case get_record(Id, 0) of
-        {ok, #atm_tree_forest_iterator_queue{last_pushed_value_index = LastEntryIndex}} ->
+        {ok, #atm_tree_forest_iterator_queue{
+            last_pushed_value_index = LastEntryIndex, 
+            max_values_per_node = MaxValuesPerNode
+        }} ->
             lists:foreach(fun(Num) ->
                 delete_record(Id, Num)
-            end, lists:seq(0, LastEntryIndex div ?MAX_VALUES_PER_NODE));
+            end, lists:seq(0, LastEntryIndex div MaxValuesPerNode));
         {error, _} = Error ->
             ?ok_if_not_found(Error)
     end.
@@ -183,12 +196,12 @@ destroy(Id) ->
 %%%===================================================================
 
 %% @private
--spec push(id(), record(), index(), [entry()]) -> ok.
-push(_Id, _FirstRecord, _OriginIndex, []) -> ok;
-push(Id, FirstRecord, OriginIndex, Entries) ->
+-spec push(id(), record(), index(), [entry()], pos_integer()) -> ok.
+push(_Id, _FirstRecord, _OriginIndex, [], _MaxValuesPerNode) -> ok;
+push(Id, FirstRecord, OriginIndex, Entries, MaxValuesPerNode) ->
     #atm_tree_forest_iterator_queue{values = ValuesBefore, last_pushed_value_index = LastEntryIndex} = FirstRecord,
     {UpdatedLastValueIndex, [{LowestNodeNum, LowestNodeValues} | ValuesPerNodeTail]} =
-        prepare_values(LastEntryIndex, Entries),
+        prepare_values(LastEntryIndex, Entries, MaxValuesPerNode),
     {_, Name} = lists:last(Entries),
     UpdatedFirstRecord = case LowestNodeNum of
         0 ->
@@ -230,27 +243,33 @@ filter_by_discriminator(_, _OriginIndex, Entries) ->
 
 
 %% @private
--spec prepare_values(index(), [entry()]) -> 
+-spec prepare_values(index(), [entry()], pos_integer()) -> 
     {index(), [{node_num(), values()}]}.
-prepare_values(LastEntryIndex, Entries) ->
+prepare_values(LastEntryIndex, Entries, MaxValuesPerNode) ->
     {FinalLastEntryIndex, ReversedValuesPerNode} = lists:foldl(
         fun({Value, _}, {CurrentIndex, [{NodeNum, Map} | Tail] = Acc}) ->
             NewIndex = CurrentIndex + 1,
-            case NewIndex div ?MAX_VALUES_PER_NODE of
+            case NewIndex div MaxValuesPerNode of
                 NodeNum ->
                     NewMap = Map#{NewIndex => Value},
                     {NewIndex, [{NodeNum, NewMap} | Tail]};
                 NewNodeNum ->
                     {NewIndex, [{NewNodeNum, #{NewIndex => Value}} | Acc]}
             end
-        end, {LastEntryIndex, [{(LastEntryIndex + 1) div ?MAX_VALUES_PER_NODE, #{}}]}, Entries),
+        end, {LastEntryIndex, [{(LastEntryIndex + 1) div MaxValuesPerNode, #{}}]}, Entries),
     {FinalLastEntryIndex, lists:reverse(ReversedValuesPerNode)}.
 
 
 %% @private
--spec prune_values(index(), index(), values()) -> values().
-prune_values(StartIndex, EndIndex, Entries) ->
-    maps:without(lists:seq(StartIndex, EndIndex), Entries).
+-spec peek_internal(id(), index(), record()) -> {ok, value() | undefined}.
+peek_internal(Id, Index, #atm_tree_forest_iterator_queue{values = Values}) ->
+    case maps:get(Index, Values, undefined) of
+        undefined ->
+            {ok, undefined};
+        Value ->
+            ok = update_highest_peeked_value_index(Id, Index),
+            {ok, Value}
+    end.
 
 
 %% @private
@@ -264,6 +283,12 @@ update_highest_peeked_value_index(Id, Index) ->
         }
     end,
     ?extract_ok(update_record(Id, 0, UpdateFirstNodeFun)).
+
+
+%% @private
+-spec prune_values(index(), index(), values()) -> values().
+prune_values(StartIndex, EndIndex, Entries) ->
+    maps:without(lists:seq(StartIndex, EndIndex), Entries).
 
 
 %%%===================================================================
@@ -308,7 +333,7 @@ get_ctx() ->
 
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    1.
+    2.
 
 
 -spec get_record_struct(datastore_model:record_version()) ->
@@ -320,5 +345,29 @@ get_record_struct(1) ->
         {highest_peeked_value_index , integer},
         {discriminator, {integer, binary}},
         {last_pruned_node_num , integer}
+    ]};
+get_record_struct(2) ->
+    {record, [
+        {values, #{integer => string}},
+        {last_pushed_value_index , integer},
+        {highest_peeked_value_index , integer},
+        {discriminator, {integer, binary}},
+        {last_pruned_node_num , integer},
+        {max_values_per_node, integer}
     ]}.
+
+
+-spec upgrade_record(datastore_model:record_version(), datastore_model:record()) ->
+    {datastore_model:record_version(), datastore_model:record()}.
+upgrade_record(1, 
+    {?MODULE, Values, LastPushedValueIndex, HighestPeekedValueIndex, Discriminator, LastPrunedNodeNum}
+) ->
+    {2, {?MODULE, 
+        Values, 
+        LastPushedValueIndex, 
+        HighestPeekedValueIndex, 
+        Discriminator, 
+        LastPrunedNodeNum, 
+        10000 % default value in previous version
+    }}.
 

@@ -137,7 +137,8 @@ create_dip_archive(#document{key = AipArchiveId, value = #archive{config = AipCo
     datastore_model:create(?CTX, #document{
         value = AipArchiveValue#archive{
             config = archive_config:enforce_plain_layout(AipConfig),
-            related_aip = AipArchiveId
+            related_aip = AipArchiveId,
+            related_dip = undefined
         },
         scope = Scope
     }).
