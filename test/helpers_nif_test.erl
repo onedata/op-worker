@@ -47,7 +47,7 @@ readdir() ->
         receive
             {Guard, Res} ->
                 Res
-        after 1000 ->
+        after 2500 ->
             {error, nif_timeout}
         end,
 
@@ -67,7 +67,7 @@ refresh_params() ->
         receive
             {Guard, Res} ->
                 Res
-        after 1000 ->
+        after 2500 ->
             {error, nif_timeout}
         end,
 
@@ -79,7 +79,7 @@ refresh_params() ->
         receive
             {Guard2, Res2} ->
                 Res2
-        after 1000 ->
+        after 2500 ->
             {error, nif_timeout}
         end,
 
@@ -88,7 +88,7 @@ refresh_params() ->
         receive
             {Guard3, Res3} ->
                 Res3
-        after 1000 ->
+        after 2500 ->
             {error, nif_timeout}
         end,
     ?assertEqual({ok, BinaryResult}, NifResult).
