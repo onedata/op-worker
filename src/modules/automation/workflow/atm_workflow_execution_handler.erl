@@ -53,6 +53,20 @@
 -define(MAX_NOTIFICATION_RETRIES, 30).
 
 
+-define(run(__EXPR),
+    try
+        __EXPR
+    catch __TYPE:__REASON:__STACKTRACE ->
+        ?error_stacktrace(
+            "Unexpected error in ~w:~w - ~w:~p",
+            [?MODULE, ?FUNCTION_NAME, __TYPE, __REASON],
+            __STACKTRACE
+        ),
+        error
+    end
+).
+
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -154,26 +168,16 @@ get_lane_spec(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmLaneIndex) ->
 ) ->
     ok | error.
 process_item(
-    AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmTaskExecutionId,
+    _AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmTaskExecutionId,
     Item, ReportResultUrl, HeartbeatUrl
 ) ->
     AtmWorkflowExecutionCtx = atm_workflow_execution_ctx:acquire(
         AtmTaskExecutionId, AtmWorkflowExecutionEnv
     ),
-
-    try
-        ok = atm_task_execution_handler:process_item(
-            AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item,
-            ReportResultUrl, HeartbeatUrl
-        )
-    catch _:Reason ->
-        % TODO VFS-7637 use audit log
-        ?error("[~p] FAILED TO RUN TASK ~p DUE TO: ~p", [
-            AtmWorkflowExecutionId, AtmTaskExecutionId, Reason
-        ]),
-        report_task_execution_failed(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item),
-        error
-    end.
+    ?run(atm_task_execution_handler:process_item(
+        AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item,
+        ReportResultUrl, HeartbeatUrl
+    )).
 
 
 -spec process_result(
@@ -184,28 +188,13 @@ process_item(
     {error, term()} | json_utils:json_map()
 ) ->
     ok | error.
-process_result(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmTaskExecutionId, Item, {error, _} = Error) ->
-    process_result(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmTaskExecutionId, Item, #{
-        <<"exception">> => errors:to_json(Error)
-    });
-
-process_result(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmTaskExecutionId, Item, Results) ->
+process_result(_AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmTaskExecutionId, Item, Results) ->
     AtmWorkflowExecutionCtx = atm_workflow_execution_ctx:acquire(
         AtmTaskExecutionId, AtmWorkflowExecutionEnv
     ),
-
-    try
-        atm_task_execution_handler:process_results(
-            AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, Results
-        )
-    catch _:Reason ->
-        % TODO VFS-7637 use audit log
-        ?error("[~p] FAILED TO PROCESS RESULTS FOR TASK EXECUTION ~p DUE TO: ~p", [
-            AtmWorkflowExecutionId, AtmTaskExecutionId, Reason
-        ]),
-        report_task_execution_failed(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item),
-        error
-    end.
+    ?run(atm_task_execution_handler:process_results(
+        AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, Results
+    )).
 
 
 -spec handle_task_execution_ended(
@@ -364,18 +353,6 @@ acquire_iterator_for_lane(AtmWorkflowExecutionCtx, #atm_lane_schema{
         AtmStoreSchemaId, AtmWorkflowExecutionCtx
     ),
     atm_store_api:acquire_iterator(AtmStoreId, AtmStoreIteratorSpec).
-
-
-%% @private
--spec report_task_execution_failed(
-    atm_workflow_execution_ctx:record(),
-    atm_task_execution:id(),
-    automation:item()
-) ->
-    ok.
-report_task_execution_failed(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item) ->
-    catch atm_task_execution_handler:process_results(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, error),
-    ok.
 
 
 %% @private
