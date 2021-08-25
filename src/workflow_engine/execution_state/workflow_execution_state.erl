@@ -654,7 +654,7 @@ check_timeouts_internal(State = #workflow_execution_state{
         _ ->
             {FinalState, AsyncPoolsSlotsToFree} = lists:foldl(fun(JobIdentifier, {TmpState, TmpAsyncPoolsSlotsToFree}) ->
                 {ok, NewTmpState} = report_execution_status_update_internal(
-                    TmpState, JobIdentifier, ?ASYNC_CALL_FINISHED, ?WF_ERROR_TIMEOUT),
+                    TmpState, JobIdentifier, ?ASYNC_CALL_FINISHED, ?ERROR_TIMEOUT),
 
                 {_, TaskSpec} = workflow_jobs:get_task_details(JobIdentifier, BoxesSpec),
                 NewTmpAsyncPoolsSlotsToFree = lists:foldl(fun(AsyncPoolId, InternalTmpAsyncPoolsChange) ->

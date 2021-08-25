@@ -20,7 +20,7 @@
 -include("modules/automation/atm_execution.hrl").
 
 %% API
--export([build/2, get_name/1, apply_result/3]).
+-export([build/2, get_name/1, is_dispatched/1, consume_result/3]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
@@ -71,13 +71,20 @@ get_name(#atm_task_execution_result_spec{name = Name}) ->
     Name.
 
 
--spec apply_result(
+-spec is_dispatched(record()) -> boolean().
+is_dispatched(#atm_task_execution_result_spec{dispatch_specs = []}) ->
+    false;
+is_dispatched(_) ->
+    true.
+
+
+-spec consume_result(
     atm_workflow_execution_ctx:record(),
     record(),
     json_utils:json_term()
 ) ->
     ok | no_return().
-apply_result(AtmWorkflowExecutionCtx, AtmTaskExecutionResultSpec = #atm_task_execution_result_spec{
+consume_result(AtmWorkflowExecutionCtx, AtmTaskExecutionResultSpec = #atm_task_execution_result_spec{
     dispatch_specs = DispatchSpecs,
     is_batch = IsBatch
 }, Result) ->
