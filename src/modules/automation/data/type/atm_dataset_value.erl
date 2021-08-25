@@ -17,9 +17,9 @@
 -behaviour(atm_data_compressor).
 -behaviour(atm_tree_forest_store_container_iterator).
 
--include("modules/automation/atm_tmp.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% atm_data_validator callbacks
 -export([assert_meets_constraints/3]).
@@ -52,8 +52,8 @@
     atm_data_type:value_constraints()
 ) ->
     ok | no_return().
-assert_meets_constraints(AtmWorkflowExecutionAuth, #{<<"datasetId">> := DatasetId}, _ValueConstraints) ->
-    check_implicit_constraints(AtmWorkflowExecutionAuth, DatasetId).
+assert_meets_constraints(AtmWorkflowExecutionAuth, Value, _ValueConstraints) ->
+    check_implicit_constraints(AtmWorkflowExecutionAuth, Value).
 
 
 %%%===================================================================
@@ -127,9 +127,9 @@ expand(AtmWorkflowExecutionAuth, DatasetId) ->
 
 
 %% @private
--spec check_implicit_constraints(atm_workflow_execution_auth:record(), dataset:id()) ->
+-spec check_implicit_constraints(atm_workflow_execution_auth:record(), atm_value:expanded()) ->
     ok | no_return().
-check_implicit_constraints(AtmWorkflowExecutionAuth, DatasetId) ->
+check_implicit_constraints(AtmWorkflowExecutionAuth, #{<<"datasetId">> := DatasetId} = Value) ->
     SpaceId = atm_workflow_execution_auth:get_space_id(AtmWorkflowExecutionAuth),
     SessionId = atm_workflow_execution_auth:get_session_id(AtmWorkflowExecutionAuth),
 
@@ -139,12 +139,16 @@ check_implicit_constraints(AtmWorkflowExecutionAuth, DatasetId) ->
                 SpaceId ->
                     ok;
                 _ ->
-                    throw(?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(#{<<"inSpace">> => SpaceId}))
+                    throw(?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(
+                        Value, atm_dataset_type, #{<<"inSpace">> => SpaceId}
+                    ))
             end;
         {error, Errno} ->
             case fslogic_errors:is_access_error(Errno) of
                 true ->
-                    throw(?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(#{<<"hasAccess">> => true}));
+                    throw(?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(
+                        Value, atm_dataset_type, #{<<"hasAccess">> => true}
+                    ));
                 false ->
                     throw(?ERROR_POSIX(Errno))
             end

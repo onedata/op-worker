@@ -17,7 +17,6 @@
 -behaviour(atm_data_compressor).
 -behaviour(atm_tree_forest_store_container_iterator).
 
--include("modules/automation/atm_tmp.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/errors.hrl").
@@ -58,6 +57,8 @@ assert_meets_constraints(AtmWorkflowExecutionAuth, #{<<"file_id">> := ObjectId} 
         FileAttrs = check_implicit_constraints(AtmWorkflowExecutionAuth, Guid),
         check_explicit_constraints(FileAttrs, ValueConstraints)
     catch
+        throw:{unverified_constraints, UnverifiedConstraints} ->
+            throw(?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(Value, atm_file_type, UnverifiedConstraints));
         throw:Error ->
             throw(Error);
         _:_ ->
@@ -146,7 +147,7 @@ check_implicit_constraints(AtmWorkflowExecutionAuth, FileGuid) ->
 
     case file_id:guid_to_space_id(FileGuid) of
         SpaceId -> ok;
-        _ -> throw(?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(#{<<"inSpace">> => SpaceId}))
+        _ -> throw({unverified_constraints, #{<<"inSpace">> => SpaceId}})
     end,
 
     SessionId = atm_workflow_execution_auth:get_session_id(AtmWorkflowExecutionAuth),
@@ -157,7 +158,7 @@ check_implicit_constraints(AtmWorkflowExecutionAuth, FileGuid) ->
         {error, Errno} ->
             case fslogic_errors:is_access_error(Errno) of
                 true ->
-                    throw(?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(#{<<"hasAccess">> => true}));
+                    throw({unverified_constraints, #{<<"hasAccess">> => true}});
                 false ->
                     throw(?ERROR_POSIX(Errno))
             end
@@ -175,7 +176,7 @@ check_explicit_constraints(#file_attr{type = FileType}, Constraints) ->
             ok;
         Other ->
             UnverifiedConstraint = atm_file_type:value_constraints_to_json(#{file_type => Other}),
-            throw(?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(UnverifiedConstraint))
+            throw({unverified_constraints, UnverifiedConstraint})
     end.
 
 

@@ -16,7 +16,6 @@
 -behaviour(atm_store_container).
 -behaviour(persistent_record).
 
--include("modules/automation/atm_tmp.hrl").
 -include_lib("ctool/include/errors.hrl").
 
 %% atm_store_container callbacks

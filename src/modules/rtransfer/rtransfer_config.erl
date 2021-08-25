@@ -54,7 +54,8 @@ start_rtransfer() ->
 %% @doc
 %% Restarts only `link` native application, forcing a reload of
 %% certificates and state. Ongoing tasks will be briefly interrupted
-%% but then resumed.
+%% but then resumed. Waits until 'rtransfer_link_port' and 'rtransfer_link'
+%% gen servers are up and running.
 %% @end
 %%--------------------------------------------------------------------
 -spec restart_link() -> ok | {error, not_running}.

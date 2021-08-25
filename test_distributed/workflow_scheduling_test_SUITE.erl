@@ -578,14 +578,14 @@ init_per_testcase(_, Config) ->
     ),
 
     test_utils:mock_expect(Workers, workflow_test_handler, process_result, fun
-        (ExecutionId, Context, TaskId, Result = #{<<"item">> := Item}) ->
+        (ExecutionId, Context, TaskId, Item, Result = #{<<"item">> := Item}) ->
             Master ! {task_processing, self(), <<"result_processing_", TaskId/binary>>, Item},
             receive
-                history_saved -> meck:passthrough([ExecutionId, Context, TaskId, Result]);
+                history_saved -> meck:passthrough([ExecutionId, Context, TaskId, Item, Result]);
                 fail_job -> error
             end;
-        (ExecutionId, Context, TaskId, Result) ->
-            meck:passthrough([ExecutionId, Context, TaskId, Result])
+        (ExecutionId, Context, TaskId, Item, Result) ->
+            meck:passthrough([ExecutionId, Context, TaskId, Item, Result])
     end),
 
 

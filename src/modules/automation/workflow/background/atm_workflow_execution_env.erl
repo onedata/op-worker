@@ -117,7 +117,7 @@ get_workflow_store_id(AtmStoreSchemaId, #atm_workflow_execution_env{
 }) ->
     case maps:get(AtmStoreSchemaId, AtmStoreRegistry, undefined) of
         undefined ->
-            throw(?ERROR_ATM_REFERENCED_NONEXISTENT_STORE(AtmStoreSchemaId));
+            throw(?ERROR_ATM_STORE_NOT_FOUND(AtmStoreSchemaId));
         AtmStoreId ->
             AtmStoreId
     end.

@@ -17,10 +17,10 @@
 -behaviour(persistent_record).
 
 -include("modules/automation/atm_execution.hrl").
--include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/http/codes.hrl").
 -include_lib("ctool/include/http/headers.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 
 %% API
@@ -494,7 +494,7 @@ remove_function(#atm_openfaas_task_executor{function_name = FunctionName}) ->
     AuthHeaders = get_basic_auth_header(OpenfaasConfig),
     Payload = json_utils:encode(#{<<"functionName">> => FunctionName}),
 
-    % TODO VFS-8041 log warning in audit log if function removal failed
+    % TODO VFS-8273 log warning in audit log if function removal failed
     http_client:delete(Endpoint, AuthHeaders, Payload),
     ok.
 

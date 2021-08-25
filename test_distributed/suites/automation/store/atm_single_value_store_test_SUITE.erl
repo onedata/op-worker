@@ -12,7 +12,6 @@
 -module(atm_single_value_store_test_SUITE).
 -author("Michal Stanisz").
 
--include("modules/automation/atm_tmp.hrl").
 -include("modules/automation/atm_execution.hrl").
 -include("modules/datastore/datastore_runner.hrl").
 

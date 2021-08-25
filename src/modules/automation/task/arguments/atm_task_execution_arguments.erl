@@ -126,7 +126,7 @@ build_specs(
     _AtmTaskSchemaArgMappers,
     _AtmTaskExecutionArgSpecs
 ) ->
-    throw(?ERROR_ATM_NO_TASK_ARG_MAPPER_FOR_REQUIRED_LAMBDA_ARG(Name));
+    throw(?ERROR_ATM_TASK_ARG_MAPPER_FOR_REQUIRED_LAMBDA_ARG_MISSING(Name));
 
 build_specs(
     [],
