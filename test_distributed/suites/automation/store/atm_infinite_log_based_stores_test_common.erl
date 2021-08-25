@@ -12,7 +12,6 @@
 -module(atm_infinite_log_based_stores_test_common).
 -author("Michal Stanisz").
 
--include("modules/automation/atm_tmp.hrl").
 -include("modules/automation/atm_execution.hrl").
 -include("modules/datastore/datastore_runner.hrl").
 

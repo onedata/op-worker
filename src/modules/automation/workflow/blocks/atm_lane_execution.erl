@@ -76,7 +76,7 @@ create(_AtmWorkflowExecutionCreationCtx, _AtmLaneIndex, #atm_lane_schema{
     id = AtmLaneSchemaId,
     parallel_boxes = []
 }) ->
-    throw(?ERROR_ATM_EMPTY_LANE(AtmLaneSchemaId));
+    throw(?ERROR_ATM_LANE_EMPTY(AtmLaneSchemaId));
 
 create(AtmWorkflowExecutionCreationCtx, AtmLaneIndex, #atm_lane_schema{
     id = AtmLaneSchemaId,

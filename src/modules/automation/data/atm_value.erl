@@ -16,7 +16,6 @@
 -module(atm_value).
 -author("Michal Stanisz").
 
--include("modules/automation/atm_tmp.hrl").
 -include_lib("ctool/include/errors.hrl").
 
 %% API
