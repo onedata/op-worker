@@ -218,8 +218,10 @@ get(#op_req{gri = #gri{aspect = test_image}}, _) ->
         113, 100, 166, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130
     >>}};
 get(#op_req{gri = #gri{aspect = health}}, _) ->
-    {ok, value, #{<<"status">> => <<"healthy">>}}.
-
+    case node_manager:is_cluster_healthy() of
+        true -> {ok, value, #{<<"status">> => <<"healthy">>}};
+        false -> throw(?ERROR_INTERNAL_SERVER_ERROR)
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
