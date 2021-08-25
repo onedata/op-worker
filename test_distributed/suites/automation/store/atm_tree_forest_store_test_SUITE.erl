@@ -141,7 +141,7 @@ iterator_queue_test(_Config) ->
     Name0 = <<"name0">>,
     Name1 = <<"name1">>,
     Name2 = <<"name2">>,
-    {ok, TestQueueId} = ?assertMatch({ok, _}, queue_init()),
+    {ok, TestQueueId} = ?assertMatch({ok, _}, queue_init(10)),
     ?assertEqual(ok, queue_push(TestQueueId, lists:map(fun(Num) -> {<<"entry", (integer_to_binary(Num))/binary>>, Name1} end, lists:seq(1, 19)), 0)),
     #atm_tree_forest_iterator_queue{values = FirstNodeValues} = 
         ?assertMatch(#atm_tree_forest_iterator_queue{
@@ -478,9 +478,9 @@ create_iteration_test_env(ProviderSelector, AtmStoreIteratorStrategy, Depth, Typ
     {AtmWorkflowExecutionEnv, AtmStoreIterator0, FilesMap, Expected}.
 
 
-queue_init() ->
+queue_init(MaxValuesPerNode) ->
     Node = oct_background:get_random_provider_node(krakow),
-    rpc:call(Node, atm_tree_forest_iterator_queue, init, []).
+    rpc:call(Node, atm_tree_forest_iterator_queue, init, [MaxValuesPerNode]).
 
 
 queue_push(Id, Entries, OriginIndex) ->
@@ -527,8 +527,7 @@ init_per_suite(Config) ->
     oct_background:init_per_suite(Config, #onenv_test_config{
         onenv_scenario = "1op",
         envs = [{op_worker, op_worker, [
-            {fuse_session_grace_period_seconds, 24 * 60 * 60},
-            {atm_tree_forest_iterator_queue_max_values_per_node, 10}
+            {fuse_session_grace_period_seconds, 24 * 60 * 60}
         ]}]
     }).
 

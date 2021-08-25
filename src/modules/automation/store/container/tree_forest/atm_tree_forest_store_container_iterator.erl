@@ -65,6 +65,8 @@
 
 -export_type([list_opts/0, record/0]).
 
+-define(TREE_FOREST_ITERATOR_QUEUE_NODE_SIZE, 
+    op_worker:get_env(atm_tree_forest_iterator_queue_max_values_per_node, 10000)).
 
 %%%===================================================================
 %%% Callbacks
@@ -259,7 +261,7 @@ get_next_batch_from_single_tree(AtmWorkflowExecutionAuth, BatchSize, Record, Acc
 %% @private
 -spec queue_init() -> queue_ref() | no_return().
 queue_init() ->
-    case atm_tree_forest_iterator_queue:init() of
+    case atm_tree_forest_iterator_queue:init(?TREE_FOREST_ITERATOR_QUEUE_NODE_SIZE) of
         {ok, Id} -> #queue_ref{id = Id};
         {error, _} = Error -> throw(Error)
     end.

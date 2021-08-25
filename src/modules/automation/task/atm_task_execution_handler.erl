@@ -66,7 +66,7 @@ process_results(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, Results) when
     }}} = atm_task_execution:get(AtmTaskExecutionId),
 
     try
-        atm_task_execution_results:apply(AtmWorkflowExecutionCtx, AtmTaskExecutionResultSpecs, Results),
+        atm_task_execution_results:consume_results(AtmWorkflowExecutionCtx, AtmTaskExecutionResultSpecs, Results),
         update_items_processed(AtmTaskExecutionId)
     catch throw:{error, _} = Error ->
         handle_exception(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, Error)
@@ -194,7 +194,7 @@ handle_exception(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, #{<<"excepti
                             % TODO VFS-8248 rm hack when proper exception/retry solution is implemented
                             % For now when exception mapper is defined exception should stop executing
                             % rest of workflow
-                            catch atm_task_execution_result_spec:apply_result(
+                            catch atm_task_execution_result_spec:consume_result(
                                 AtmWorkflowExecutionCtx, AtmTaskExecutionResultSpec, Item
                             ),
                             ok;
