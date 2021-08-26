@@ -272,24 +272,28 @@ submission_batch_entry(FileId, Seq,
 -spec prepare_archive_details(file_meta:doc()) -> map().
 prepare_archive_details(#document{scope = SpaceId} = FileMetaDoc) ->
     FileCtx = file_ctx:new_by_doc(FileMetaDoc, SpaceId),
-    {Path, _FileCtx2} = file_ctx:get_canonical_path(FileCtx),
-    case archivisation_tree:extract_archive_id(Path) of
-        {ok, ArchiveId} -> 
-            case archive_api:get_archive_info(ArchiveId) of
-                {ok, #archive_info{
-                    description = Description,
-                    creation_time = CreationTime
-                }} ->
-                    #{
-                        <<"archiveId">> => ArchiveId,
-                        <<"archiveDescription">> => Description,
-                        <<"archiveCreationTime">> => CreationTime
-                    };
-                ?ERROR_NOT_FOUND->
-                    #{}
-            end;
-        ?ERROR_NOT_FOUND ->
-            #{}
+    try
+        {Path, _FileCtx2} = file_ctx:get_canonical_path(FileCtx),
+        case archivisation_tree:extract_archive_id(Path) of
+            {ok, ArchiveId} ->
+                case archive_api:get_archive_info(ArchiveId) of
+                    {ok, #archive_info{
+                        description = Description,
+                        creation_time = CreationTime
+                    }} ->
+                        #{
+                            <<"archiveId">> => ArchiveId,
+                            <<"archiveDescription">> => Description,
+                            <<"archiveCreationTime">> => CreationTime
+                        };
+                    ?ERROR_NOT_FOUND->
+                        #{}
+                end;
+            ?ERROR_NOT_FOUND ->
+                #{}
+        end
+    catch _:_ ->
+        #{}
     end.
 
 

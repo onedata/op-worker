@@ -134,7 +134,7 @@ update_archive(ArchiveId, Diff) ->
     archive:modify_attrs(ArchiveId, Diff).
 
 
--spec get_archive_info(archive:id()) -> {ok, info()}.
+-spec get_archive_info(archive:id()) -> {ok, info()} | {error, term()}.
 get_archive_info(ArchiveId) ->
     get_archive_info(ArchiveId, undefined).
 
@@ -201,7 +201,6 @@ init_archive_purge(ArchiveId, CallbackUrl, _UserCtx) ->
     case archive:mark_purging(ArchiveId, CallbackUrl) of
         {ok, ArchiveDoc} ->
             {ok, DatasetId} = archive:get_dataset_id(ArchiveDoc),
-            % TODO VFS-7718 Should it be possible to register many callbacks in case of parallel purge requests?
             % TODO VFS-7718 removal of archive doc and callback should be executed when deleting from trash is finished
             % (now it's done before archive files are deleted from storage)
             ok = remove_archive_recursive(ArchiveDoc),
@@ -294,6 +293,7 @@ remove_single_archive(ArchiveDoc = #document{}, UserCtx) ->
         ok ->
             {ok, SpaceId} = archive:get_space_id(ArchiveDoc),
             ArchiveDocCtx = file_ctx:new_by_uuid(?ARCHIVE_DIR_UUID(ArchiveId), SpaceId),
+            % TODO VFS-7718 Should it be possible to register many callbacks in case of parallel purge requests?
             delete_req:delete_using_trash(UserCtx, ArchiveDocCtx, true),
             
             {ok, DatasetId} = archive:get_dataset_id(ArchiveDoc),
