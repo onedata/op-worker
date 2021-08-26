@@ -45,8 +45,8 @@
 -type error() :: {error, Reason :: term()}.
 
 -define(NOW(), global_clock:timestamp_seconds()).
--define(INACTIVITY_PERIOD, 60).
--define(UPLOADS_CHECKUP_INTERVAL, ?INACTIVITY_PERIOD * 1000).
+-define(INACTIVITY_PERIOD_SEC(), op_worker:get_env(upload_inactivity_period_sec, 60)).
+-define(UPLOADS_CHECKUP_INTERVAL, timer:minutes(1)).
 
 
 %%%===================================================================
@@ -146,7 +146,7 @@ init(_) ->
     {stop, Reason :: term(), NewState :: state()}.
 handle_call({register, UserId, FileGuid}, _, #state{uploads = Uploads} = State) ->
     {reply, ok, maybe_schedule_uploads_checkup(State#state{
-        uploads = Uploads#{FileGuid => {UserId, ?NOW() + ?INACTIVITY_PERIOD}}
+        uploads = Uploads#{FileGuid => {UserId, ?NOW() + ?INACTIVITY_PERIOD_SEC()}}
     })};
 handle_call({is_registered, UserId, FileGuid}, _, State) ->
     IsRegistered = case maps:find(FileGuid, State#state.uploads) of
@@ -251,20 +251,22 @@ code_change(_OldVsn, State, _Extra) ->
 %% @private
 %% @doc
 %% Checks time since last modification of file and if it's beyond
-%% ?INACTIVITY_PERIOD deletes file because of interrupted and
+%% inactivity period deletes file because of interrupted and
 %% unfinished upload.
 %% @end
 %%--------------------------------------------------------------------
 -spec remove_stale_uploads(uploads()) -> uploads().
 remove_stale_uploads(Uploads) ->
     Now = ?NOW(),
+    InactivityPeriod = ?INACTIVITY_PERIOD_SEC(),
+
     maps:fold(fun
         (FileGuid, {UserId, CheckupTime}, Acc) when CheckupTime < Now ->
             FileRef = ?FILE_REF(FileGuid),
 
             case lfm:stat(?ROOT_SESS_ID, FileRef) of
-                {ok, #file_attr{mtime = MTime}} when MTime + ?INACTIVITY_PERIOD > Now ->
-                    Acc#{FileGuid => {UserId, MTime + ?INACTIVITY_PERIOD}};
+                {ok, #file_attr{mtime = MTime}} when MTime + InactivityPeriod > Now ->
+                    Acc#{FileGuid => {UserId, MTime + InactivityPeriod}};
                 {ok, _} ->
                     lfm:unlink(?ROOT_SESS_ID, FileRef, false),
                     Acc;
