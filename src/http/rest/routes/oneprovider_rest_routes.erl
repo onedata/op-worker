@@ -52,7 +52,7 @@ routes() -> [
             scope = public
         }
     }},
-    %% Perform health check
+    %% Check cluster health
     {<<"/health">>, rest_handler, #rest_req{
         method = 'GET',
         produces = [<<"application/json">>],
