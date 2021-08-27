@@ -57,7 +57,7 @@ build(Value) ->
 %%%===================================================================
 
 
--spec get_next_batch(atm_workflow_execution_ctx:record(), atm_store_container_iterator:batch_size(), 
+-spec get_next_batch(atm_workflow_execution_auth:record(), atm_store_container_iterator:batch_size(),
     record(), atm_data_spec:record()
 ) ->
     {ok, [atm_value:expanded()], record()} | stop.
@@ -65,9 +65,11 @@ get_next_batch(_, _, #atm_single_value_store_container_iterator{value = undefine
     stop;
 get_next_batch(_, _, #atm_single_value_store_container_iterator{exhausted = true}, _) ->
     stop;
-get_next_batch(AtmWorkflowExecutionCtx, _, #atm_single_value_store_container_iterator{value = Value} = Iterator, AtmDataSpec) ->
-    {ok, atm_value:filterexpand_list(AtmWorkflowExecutionCtx, Value, AtmDataSpec), 
-        Iterator#atm_single_value_store_container_iterator{exhausted = true}}.
+get_next_batch(AtmWorkflowExecutionAuth, _, Iterator = #atm_single_value_store_container_iterator{
+    value = CompressedItem
+}, AtmDataSpec) ->
+    Batch = atm_value:filterexpand_list(AtmWorkflowExecutionAuth, CompressedItem, AtmDataSpec),
+    {ok, Batch, Iterator#atm_single_value_store_container_iterator{exhausted = true}}.
 
 
 -spec forget_before(record()) -> ok.

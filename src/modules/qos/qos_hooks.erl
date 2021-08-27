@@ -23,7 +23,8 @@
 -export([
     handle_qos_entry_change/2,
     handle_entry_delete/1,
-    reconcile_qos/1, reconcile_qos/2,
+    reconcile_qos/1, reconcile_qos/2, invalidate_cache_and_reconcile/1,
+    report_synchronization_skipped/1,
     reevaluate_all_impossible_qos_in_space/1,
     retry_failed_files/1
 ]).
@@ -42,6 +43,7 @@ handle_qos_entry_change(_SpaceId, #document{deleted = true} = QosEntryDoc) ->
     handle_entry_delete(QosEntryDoc);
 handle_qos_entry_change(SpaceId, #document{key = QosEntryId, value = QosEntry} = QosEntryDoc) ->
     {ok, FileUuid} = qos_entry:get_file_uuid(QosEntry),
+    ok = ?ok_if_exists(qos_entry_audit_log:create(QosEntryId)),
     ok = file_qos:add_qos_entry_id(SpaceId, FileUuid, QosEntryId),
     case qos_entry:is_possible(QosEntry) of
         true ->
@@ -63,7 +65,8 @@ handle_entry_delete(#document{key = QosEntryId, scope = SpaceId} = QosEntryDoc) 
     ok = ?ok_if_not_found(file_qos:remove_qos_entry_id(SpaceId, FileUuid, QosEntryId)),
     ok = qos_entry:remove_from_impossible_list(SpaceId, QosEntryId),
     ok = qos_traverse:report_entry_deleted(QosEntryDoc),
-    ok = qos_status:report_entry_deleted(SpaceId, QosEntryId).
+    ok = qos_status:report_entry_deleted(SpaceId, QosEntryId),
+    ok = qos_entry_audit_log:destroy(QosEntryId).
 
 
 %%--------------------------------------------------------------------
@@ -87,6 +90,12 @@ reconcile_qos(FileCtx) ->
 reconcile_qos(FileUuid, SpaceId) ->
     FileCtx = file_ctx:new_by_uuid(FileUuid, SpaceId),
     reconcile_qos(FileCtx).
+
+
+-spec invalidate_cache_and_reconcile(file_ctx:ctx()) -> ok.
+invalidate_cache_and_reconcile(FileCtx) ->
+    ok = qos_bounded_cache:invalidate_on_all_nodes(file_ctx:get_space_id_const(FileCtx)),
+    ok = qos_hooks:reconcile_qos(FileCtx).
 
 
 %%--------------------------------------------------------------------
@@ -119,12 +128,33 @@ reconcile_qos_internal(FileCtx, Options) when is_list(Options) ->
                     QosEntriesToUpdate = file_qos:get_assigned_entries_for_storage(EffFileQos, StorageId),
                     ok = qos_traverse:reconcile_file_for_qos_entries(FileCtx1, QosEntriesToUpdate);
                 true ->
-                    ok
+                    QosEntries = file_qos:get_qos_entries(EffFileQos),
+                    FileGuid = file_ctx:get_logical_guid_const(FileCtx),
+                    lists:foreach(fun(QosEntryId) ->
+                        ok = qos_entry_audit_log:report_file_synchronization_skipped(
+                            QosEntryId, FileGuid, <<"file deleted">>)
+                    end, QosEntries)
             end;
         undefined ->
             ok
     end.
 
+
+-spec report_synchronization_skipped(file_ctx:ctx()) -> ok.
+report_synchronization_skipped(FileCtx) ->
+    InodeUuid = file_ctx:get_referenced_uuid_const(FileCtx),
+    case file_qos:get_effective(InodeUuid) of
+        {ok, EffFileQos} ->
+            QosEntries = file_qos:get_qos_entries(EffFileQos),
+            FileGuid = file_ctx:get_logical_guid_const(FileCtx),
+            lists:foreach(fun(QosEntryId) ->
+                ok = qos_entry_audit_log:report_file_synchronization_skipped(
+                    QosEntryId, FileGuid, <<"file already replicated">>)
+            end, QosEntries);
+        _ ->
+            ok
+    end.
+    
 
 %%--------------------------------------------------------------------
 %% @doc

@@ -50,7 +50,8 @@
     mode = ?DEFAULT_DIR_MODE :: file_meta:mode(),
     shares = [] :: [onenv_file_test_utils:share_spec()],
     dataset = undefined :: undefined | onenv_dataset_test_utils:dataset_spec(),
-    children = [] :: [#dir_spec{} | #file_spec{}]
+    children = [] :: [#dir_spec{} | #file_spec{}],
+    metadata = #metadata_spec{} :: onenv_file_test_utils:object_spec()
 }).
 
 -record(symlink_spec, {

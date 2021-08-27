@@ -21,7 +21,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([establish/2, update/4, detach/1, remove/1, move_if_applicable/2]).
+-export([establish/2, update/4, detach/2, remove/1, move_if_applicable/2]).
 -export([get_info/1, get_effective_membership_and_protection_flags/1, get_effective_summary/1]).
 -export([list_top_datasets/4, list_children_datasets/3]).
 
@@ -89,8 +89,12 @@ update(DatasetDoc, NewState, FlagsToSet, FlagsToUnset) ->
             %% TODO VFS-7208 uncomment after introducing API errors to fslogic
             % throw(?ERROR_BAD_DATA(state, <<"Detached dataset cannot be modified.">>));
             {?ATTACHED_DATASET, ?DETACHED_DATASET, ?no_flags_mask, ?no_flags_mask} ->
+                {ok, SpaceId} = dataset:get_space_id(DatasetDoc),
+                {ok, Uuid} = dataset:get_root_file_uuid(DatasetDoc),
+                FileCtx = file_ctx:new_by_uuid(Uuid, SpaceId),
+                {FilePath, _FileCtx2} = file_ctx:get_logical_path(FileCtx, user_ctx:new(?ROOT_SESS_ID)),
                 % it's forbidden to change flags while detaching dataset
-                detach(DatasetId);
+                detach(DatasetId, FilePath);
             {?ATTACHED_DATASET, ?DETACHED_DATASET, _, _} ->
                 {error, ?EINVAL};
             {?ATTACHED_DATASET, undefined, _, _} ->
@@ -99,9 +103,9 @@ update(DatasetDoc, NewState, FlagsToSet, FlagsToUnset) ->
     end).
 
 
--spec detach(dataset:id()) -> ok | error().
-detach(DatasetId) ->
-    ?CRITICAL_SECTION(DatasetId, fun() -> detach_internal(DatasetId) end).
+-spec detach(dataset:id(), file_meta:path()) -> ok | error().
+detach(DatasetId, RootFilePath) ->
+    ?CRITICAL_SECTION(DatasetId, fun() -> detach_internal(DatasetId, RootFilePath) end).
 
 
 -spec remove(dataset:id() | dataset:doc()) -> ok | error().
@@ -238,18 +242,16 @@ reattach(DatasetId, FlagsToSet, FlagsToUnset) ->
     end.
 
 
--spec detach_internal(dataset:id()) -> ok | error().
-detach_internal(DatasetId) ->
+-spec detach_internal(dataset:id(), file_meta:path()) -> ok | error().
+detach_internal(DatasetId, RootFilePath) ->
     {ok, Doc} = dataset:get(DatasetId),
     {ok, FileDoc} = file_meta:get_including_deleted(DatasetId),
     {ok, SpaceId} = dataset:get_space_id(Doc),
     CurrProtectionFlags = file_meta:get_protection_flags(FileDoc),
     {ok, DatasetPath} = dataset_path:get(SpaceId, DatasetId),
-    FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId),
-    {FilePath, _FileCtx2} = file_ctx:get_logical_path(FileCtx, user_ctx:new(?ROOT_SESS_ID)),
     FileType = file_meta:get_effective_type(FileDoc),
-    DatasetName = filename:basename(FilePath),
-    ok = dataset:mark_detached(DatasetId, DatasetPath, FilePath, FileType, CurrProtectionFlags),
+    DatasetName = filename:basename(RootFilePath),
+    ok = dataset:mark_detached(DatasetId, DatasetPath, RootFilePath, FileType, CurrProtectionFlags),
     detached_datasets:add(SpaceId, DatasetPath, DatasetName),
     attached_datasets:delete(SpaceId, DatasetPath),
     case file_meta_dataset:detach(DatasetId) of

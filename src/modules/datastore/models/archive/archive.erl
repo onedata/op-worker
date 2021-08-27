@@ -137,7 +137,8 @@ create_dip_archive(#document{key = AipArchiveId, value = #archive{config = AipCo
     datastore_model:create(?CTX, #document{
         value = AipArchiveValue#archive{
             config = archive_config:enforce_plain_layout(AipConfig),
-            related_aip = AipArchiveId
+            related_aip = AipArchiveId,
+            related_dip = undefined
         },
         scope = Scope
     }).
@@ -286,11 +287,13 @@ get_purged_callback(#archive{purged_callback = PurgedCallback}) ->
 get_purged_callback(#document{value = Archive}) ->
     get_purged_callback(Archive).
 
--spec get_description(record() | doc()) -> {ok, description()}.
+-spec get_description(id() | record() | doc()) -> {ok, description()}.
 get_description(#archive{description = Description}) ->
     {ok, Description};
 get_description(#document{value = Archive}) ->
-    get_description(Archive).
+    get_description(Archive);
+get_description(ArchiveId) ->
+    ?get_field(ArchiveId, fun get_description/1).
 
 -spec get_stats(record() | doc()) -> {ok, archive_stats:record()}.
 get_stats(#archive{stats = Stats}) ->

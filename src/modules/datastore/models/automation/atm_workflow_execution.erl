@@ -26,8 +26,6 @@
 -type record() :: #atm_workflow_execution{}.
 -type doc() :: datastore_doc:doc(record()).
 
--type creation_ctx() :: #atm_workflow_execution_creation_ctx{}.
-
 -type store_registry() :: #{AtmStoreSchemaId :: automation:id() => atm_store:id()}.
 -type lambda_snapshot_registry() :: #{od_atm_lambda:id() => atm_lambda_snapshot:id()}.
 
@@ -43,7 +41,7 @@
 -type summary() :: #atm_workflow_execution_summary{}.
 
 -export_type([id/0, diff/0, record/0, doc/0]).
--export_type([creation_ctx/0, store_registry/0, lambda_snapshot_registry/0]).
+-export_type([store_registry/0, lambda_snapshot_registry/0]).
 -export_type([phase/0, status/0, timestamp/0]).
 -export_type([summary/0]).
 
@@ -101,7 +99,7 @@ get_ctx() ->
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    2.
+    3.
 
 
 %%--------------------------------------------------------------------
@@ -152,6 +150,30 @@ get_record_struct(2) ->
         {schedule_time, integer},
         {start_time, integer},
         {finish_time, integer}
+    ]};
+get_record_struct(3) ->
+    {record, [
+        {user_id, string},
+        {space_id, string},
+        {atm_inventory_id, string},
+
+        {name, string},
+        {schema_snapshot_id, string},
+        {lambda_snapshot_registry, #{string => string}},
+
+        {store_registry, #{string => string}},
+        {system_audit_log_id, string},  %% new field
+        {lanes, [{custom, string, {persistent_record, encode, decode, atm_lane_execution}}]},
+
+        {status, atom},
+        {prev_status, atom},
+        {aborting_reason, atom},  %% new field
+
+        {callback, string},
+
+        {schedule_time, integer},
+        {start_time, integer},
+        {finish_time, integer}
     ]}.
 
 
@@ -178,8 +200,46 @@ upgrade_record(1, {
     StartTime,
     FinishTime
 }) ->
-    {2, #atm_workflow_execution{
-        user_id = <<"unknown">>,
+    {2, {?MODULE,
+        <<"unknown">>,
+        SpaceId,
+        AtmInventoryId,
+
+        Name,
+        SchemaSnapshotId,
+        LambdaSnapshotRegistry,
+
+        StoreRegistry,
+        Lanes,
+
+        Status,
+        Status,
+
+        Callback,
+
+        ScheduleTime,
+        StartTime,
+        FinishTime
+    }};
+upgrade_record(2, {
+    ?MODULE,
+    UserId,
+    SpaceId,
+    AtmInventoryId,
+    Name,
+    SchemaSnapshotId,
+    LambdaSnapshotRegistry,
+    StoreRegistry,
+    Lanes,
+    Status,
+    PrevStatus,
+    Callback,
+    ScheduleTime,
+    StartTime,
+    FinishTime
+}) ->
+    {3, #atm_workflow_execution{
+        user_id = UserId,
         space_id = SpaceId,
         atm_inventory_id = AtmInventoryId,
 
@@ -188,10 +248,12 @@ upgrade_record(1, {
         lambda_snapshot_registry = LambdaSnapshotRegistry,
 
         store_registry = StoreRegistry,
+        system_audit_log_id = undefined,
         lanes = Lanes,
 
         status = Status,
-        prev_status = Status,
+        prev_status = PrevStatus,
+        aborting_reason = undefined,
 
         callback = Callback,
 

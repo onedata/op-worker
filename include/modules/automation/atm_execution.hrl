@@ -14,9 +14,9 @@
 -define(ATM_EXECUTION_HRL, 1).
 
 
--include("modules/automation/atm_tmp.hrl").
 -include("global_definitions.hrl").
 -include_lib("ctool/include/automation/automation.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 
 -record(atm_workflow_execution_summary, {
@@ -33,18 +33,22 @@
 }).
 
 -record(atm_workflow_execution_creation_ctx, {
-    workflow_execution_ctx :: atm_workflow_execution_ctx:record(),
-    workflow_schema_doc :: od_atm_workflow_schema:doc(),
-    lambda_docs :: #{od_atm_lambda:id() => od_atm_lambda:doc()},
+    workflow_execution_id :: atm_workflow_execution:id(),
+    workflow_execution_auth :: atm_workflow_execution_auth:record(),
     store_initial_values :: atm_workflow_execution_api:store_initial_values(),
+
+    lambda_docs :: #{od_atm_lambda:id() => od_atm_lambda:doc()},
+    workflow_schema_doc :: od_atm_workflow_schema:doc(),
+    system_audit_log_schema :: atm_store_schema:record(),
+
     callback_url :: undefined | http_client:url()
 }).
 
 -record(atm_store_container_operation, {
     type :: atm_store_container:operation_type(),
     options :: atm_store_container:operation_options(),
-    value :: automation:item(),
-    workflow_execution_ctx :: atm_workflow_execution_ctx:record()
+    argument :: automation:item(),
+    workflow_execution_auth :: atm_workflow_execution_auth:record()
 }).
 
 
@@ -63,5 +67,16 @@
 -define(FAILED_STATUS, failed).
 -define(SKIPPED_STATUS, skipped).
 
+
+%% Atm logging related macros
+
+-define(LOGGER_DEBUG, <<"debug">>).
+-define(LOGGER_INFO, <<"info">>).
+-define(LOGGER_NOTICE, <<"notice">>).
+-define(LOGGER_WARNING, <<"warning">>).
+-define(LOGGER_ALERT, <<"alert">>).
+-define(LOGGER_ERROR, <<"error">>).
+-define(LOGGER_CRITICAL, <<"critical">>).
+-define(LOGGER_EMERGENCY, <<"emergency">>).
 
 -endif.

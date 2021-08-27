@@ -18,6 +18,7 @@
 -include("onenv_test_utils.hrl").
 -include_lib("ctool/include/graph_sync/gri.hrl").
 -include_lib("ctool/include/http/codes.hrl").
+-include_lib("ctool/include/http/headers.hrl").
 -include_lib("ctool/include/privileges.hrl").
 
 -export([
@@ -122,7 +123,7 @@ create_share_prepare_rest_args_fun(#api_test_ctx{data = Data}) ->
     #rest_args{
         method = post,
         path = <<"shares">>,
-        headers = #{<<"content-type">> => <<"application/json">>},
+        headers = #{?HDR_CONTENT_TYPE => <<"application/json">>},
         body = json_utils:encode(Data)
     }.
 
@@ -156,7 +157,7 @@ build_create_share_validate_rest_call_result_fun(MemRef, Providers, FileType, Sp
         Description = maps:get(<<"description">>, Data, <<"">>),
 
         {ok, _, Headers, Body} = ?assertMatch(
-            {ok, ?HTTP_201_CREATED, #{<<"Location">> := _}, #{<<"shareId">> := _}},
+            {ok, ?HTTP_201_CREATED, #{?HDR_LOCATION := _}, #{<<"shareId">> := _}},
             Result
         ),
         ShareId = maps:get(<<"shareId">>, Body),
@@ -164,7 +165,7 @@ build_create_share_validate_rest_call_result_fun(MemRef, Providers, FileType, Sp
         api_test_memory:set(MemRef, shares, [ShareId | api_test_memory:get(MemRef, shares, [])]),
 
         ExpLocation = api_test_utils:build_rest_url(TestNode, [<<"shares">>, ShareId]),
-        ?assertEqual(ExpLocation, maps:get(<<"Location">>, Headers)),
+        ?assertEqual(ExpLocation, maps:get(?HDR_LOCATION, Headers)),
 
         verify_share_doc(
             Providers, ShareId, ShareName, Description,
@@ -418,7 +419,7 @@ build_update_share_prepare_rest_args_fun(ShareId) ->
         #rest_args{
             method = patch,
             path = <<"shares/", Id/binary>>,
-            headers = #{<<"content-type">> => <<"application/json">>},
+            headers = #{?HDR_CONTENT_TYPE => <<"application/json">>},
             body = json_utils:encode(Data1)
         }
     end.

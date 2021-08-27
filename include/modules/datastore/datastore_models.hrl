@@ -1081,11 +1081,15 @@
     argument_specs :: [atm_task_execution_argument_spec:record()],
     result_specs :: [atm_task_execution_result_spec:record()],
 
+    system_audit_log_id :: undefined | atm_store:id(),
+
     status :: atm_task_execution:status(),
     % Flag used to tell if status was changed during doc update (set automatically
     % when updating doc). It is necessary due to limitation of datastore as
     % otherwise getting document before update would be needed (to compare 2 docs).
     status_changed = false :: boolean(),
+    % Flag used to differentiate reasons why task is aborting
+    aborting_reason = undefined :: undefined | cancel | failure,
 
     items_in_processing = 0 :: non_neg_integer(),
     items_processed = 0 :: non_neg_integer(),
@@ -1130,6 +1134,7 @@
     lambda_snapshot_registry :: atm_workflow_execution:lambda_snapshot_registry(),
 
     store_registry :: atm_workflow_execution:store_registry(),
+    system_audit_log_id :: undefined | atm_store:id(),
     lanes :: [atm_lane_execution:record()],
 
     status :: atm_workflow_execution:status(),
@@ -1137,6 +1142,8 @@
     % when updating doc). It is necessary due to limitation of datastore as
     % otherwise getting document before update would be needed (to compare 2 docs).
     prev_status :: atm_workflow_execution:status(),
+    % Flag used to differentiate reasons why workflow is aborting
+    aborting_reason = undefined :: undefined | cancel | failure,
 
     callback :: undefined | http_client:url(),
 
@@ -1151,7 +1158,8 @@
     last_pushed_value_index = 0 :: atm_tree_forest_iterator_queue:index(),
     highest_peeked_value_index = 0 :: atm_tree_forest_iterator_queue:index(),
     discriminator = {0, <<>>} :: atm_tree_forest_iterator_queue:discriminator(), 
-    last_pruned_node_num = 0 :: atm_tree_forest_iterator_queue:node_num()
+    last_pruned_node_num = 0 :: atm_tree_forest_iterator_queue:node_num(),
+    max_values_per_node :: pos_integer() | undefined
 }).
 
 %%%===================================================================

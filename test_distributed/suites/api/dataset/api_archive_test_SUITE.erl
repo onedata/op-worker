@@ -21,6 +21,7 @@
 -include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/graph_sync/gri.hrl").
 -include_lib("ctool/include/http/codes.hrl").
+-include_lib("ctool/include/http/headers.hrl").
 -include_lib("ctool/include/privileges.hrl").
 -include_lib("inets/include/httpd.hrl").
 
@@ -55,7 +56,13 @@ groups() -> [
 ].
 
 all() -> [
-    {group, all_tests}
+    create_archive,
+    get_archive_info,
+    modify_archive_description,
+    get_dataset_archives,
+    init_archive_purge_test
+    % TODO VFS-8199 - Execute in parallel after fixing problems with timeouts
+%%    {group, all_tests}
 ].
 
 -define(ATTEMPTS, 120).
@@ -180,7 +187,7 @@ create_archive_prepare_rest_args_fun(#api_test_ctx{data = Data}) ->
     #rest_args{
         method = post,
         path = <<"archives">>,
-        headers = #{<<"content-type">> => <<"application/json">>},
+        headers = #{?HDR_CONTENT_TYPE => <<"application/json">>},
         body = json_utils:encode(Data)
     }.
 
@@ -203,14 +210,14 @@ build_create_archive_validate_rest_call_result_fun(MemRef) ->
     fun(#api_test_ctx{node = TestNode}, Result) ->
 
         {ok, _, Headers, Body} = ?assertMatch(
-            {ok, ?HTTP_201_CREATED, #{<<"Location">> := _}, #{<<"archiveId">> := _}},
+            {ok, ?HTTP_201_CREATED, #{?HDR_LOCATION := _}, #{<<"archiveId">> := _}},
             Result
         ),
         ArchiveId = maps:get(<<"archiveId">>, Body),
         api_test_memory:set(MemRef, archive_id, ArchiveId),
 
         ExpLocation = api_test_utils:build_rest_url(TestNode, [<<"archives">>, ArchiveId]),
-        ?assertEqual(ExpLocation, maps:get(<<"Location">>, Headers))
+        ?assertEqual(ExpLocation, maps:get(?HDR_LOCATION, Headers))
     end.
 
 
@@ -259,13 +266,12 @@ build_create_archive_validate_gs_call_result_fun(MemRef) ->
 build_verify_archive_created_fun(MemRef, Providers) ->
     fun
         (expected_success, #api_test_ctx{
-            node = TestNode,
             client = ?USER(UserId),
             data = Data
         }) ->
             ArchiveId = api_test_memory:get(MemRef, archive_id),
 
-            CreationTime = time_test_utils:global_seconds(TestNode),
+            CreationTime = time_test_utils:get_frozen_time_seconds(),
             DatasetId = maps:get(<<"datasetId">>, Data),
             ConfigJson = maps:get(<<"config">>, Data, #{}),
             Description = maps:get(<<"description">>, Data, ?DEFAULT_ARCHIVE_DESCRIPTION),
@@ -464,7 +470,7 @@ build_update_archive_description_prepare_rest_args_fun(MemRef) ->
         #rest_args{
             method = patch,
             path = <<"archives/", Id/binary>>,
-            headers = #{<<"content-type">> => <<"application/json">>},
+            headers = #{?HDR_CONTENT_TYPE => <<"application/json">>},
             body = json_utils:encode(Data1)
         }
     end.
@@ -757,7 +763,7 @@ build_init_purge_archive_prepare_rest_args_fun(MemRef) ->
 
         #rest_args{
             method = post,
-            headers = #{<<"content-type">> => <<"application/json">>},
+            headers = #{?HDR_CONTENT_TYPE => <<"application/json">>},
             path = <<"archives/", Id/binary, "/init_purge">>,
             body = json_utils:encode(Data0)
         }
@@ -975,11 +981,13 @@ end_per_group(_Group, Config) ->
 
 init_per_testcase(_Case, Config) ->
     ct:timetrap({minutes, 20}),
-    Config.
+    % TODO VFS-8199 - Execute in parallel after fixing problems with timeouts
+    init_per_group(default, Config).
 
 
-end_per_testcase(_Case, _Config) ->
-    ok.
+end_per_testcase(_Case, Config) ->
+    % TODO VFS-8199 - Execute in parallel after fixing problems with timeouts
+    end_per_group(default, Config).
 
 %%%===================================================================
 %%% HTTP server used for checking HTTP callbacks

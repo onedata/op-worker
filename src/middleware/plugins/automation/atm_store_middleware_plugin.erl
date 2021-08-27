@@ -168,7 +168,7 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{aspect = content, scope = priva
     store = #atm_store{workflow_execution_id = AtmWorkflowExecutionId} = AtmStore,
     workflow_execution = #atm_workflow_execution{space_id = SpaceId}
 }) ->
-    AtmWorkflowExecutionCtx = atm_workflow_execution_ctx:build(
+    AtmWorkflowExecutionAuth = atm_workflow_execution_auth:build(
         SpaceId, AtmWorkflowExecutionId, Auth#auth.session_id
     ),
 
@@ -189,7 +189,7 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{aspect = content, scope = priva
             }
     end,
 
-    {ok, value, atm_store_api:browse_content(AtmWorkflowExecutionCtx, BrowseOpts, AtmStore)}.
+    {ok, value, atm_store_api:browse_content(AtmWorkflowExecutionAuth, BrowseOpts, AtmStore)}.
 
 
 %%--------------------------------------------------------------------

@@ -134,13 +134,14 @@ update_archive(ArchiveId, Diff) ->
     archive:modify_attrs(ArchiveId, Diff).
 
 
--spec get_archive_info(archive:id()) -> {ok, info()}.
+-spec get_archive_info(archive:id()) -> {ok, info()} | {error, term()}.
 get_archive_info(ArchiveId) ->
     get_archive_info(ArchiveId, undefined).
 
 
 %% @private
--spec get_archive_info(archive:id() | archive:doc(), index() | undefined) -> {ok, info()}.
+-spec get_archive_info(archive:id() | archive:doc(), index() | undefined) -> 
+    {ok, info()} | {error, term()}.
 get_archive_info(ArchiveDoc = #document{}, ArchiveIndex) ->
     {ok, ArchiveId} = archive:get_id(ArchiveDoc),
     {ok, DatasetId} = archive:get_dataset_id(ArchiveDoc),
@@ -174,8 +175,12 @@ get_archive_info(ArchiveDoc = #document{}, ArchiveIndex) ->
         related_dip = RelatedDip
     }};
 get_archive_info(ArchiveId, ArchiveIndex) ->
-    {ok, ArchiveDoc} = archive:get(ArchiveId),
-    get_archive_info(ArchiveDoc, ArchiveIndex).
+    case archive:get(ArchiveId) of
+        {ok, ArchiveDoc} ->
+            get_archive_info(ArchiveDoc, ArchiveIndex);
+        {error, _} = Error ->
+            Error
+    end.
 
 
 -spec list_archives(dataset:id(), archives_list:opts(), listing_mode()) ->
@@ -192,15 +197,10 @@ list_archives(DatasetId, ListingOpts, ListingMode) ->
 
 
 -spec init_archive_purge(archive:id(), archive:callback(), user_ctx:ctx()) -> ok | error().
-init_archive_purge(ArchiveId, CallbackUrl, UserCtx) ->
+init_archive_purge(ArchiveId, CallbackUrl, _UserCtx) ->
     case archive:mark_purging(ArchiveId, CallbackUrl) of
         {ok, ArchiveDoc} ->
             {ok, DatasetId} = archive:get_dataset_id(ArchiveDoc),
-            % TODO VFS-7718 Should it be possible to register many callbacks in case of parallel purge requests?
-            {ok, SpaceId} = archive:get_space_id(ArchiveDoc),
-            ArchiveDocCtx = file_ctx:new_by_uuid(?ARCHIVE_DIR_UUID(ArchiveId), SpaceId),
-            delete_req:delete_using_trash(UserCtx, ArchiveDocCtx, true),
-
             % TODO VFS-7718 removal of archive doc and callback should be executed when deleting from trash is finished
             % (now it's done before archive files are deleted from storage)
             ok = remove_archive_recursive(ArchiveDoc),
@@ -214,11 +214,31 @@ init_archive_purge(ArchiveId, CallbackUrl, UserCtx) ->
 remove_archive_recursive(ArchiveDocOrId) ->
     remove_archive_recursive(ArchiveDocOrId, #link_token{}).
 
+
+-spec get_nested_archives_stats(archive:id() | archive:doc()) -> archive_stats:record().
+get_nested_archives_stats(ArchiveIdOrDoc) ->
+    get_nested_archives_stats(ArchiveIdOrDoc, #link_token{}, archive_stats:empty()).
+
+-spec get_nested_archives_stats(archive:id() | archive:doc(), archives_forest:token(), archive_stats:record()) ->
+    archive_stats:record().
+get_nested_archives_stats(#document{key = ArchiveId}, Token, NestedArchiveStatsAccIn) ->
+    get_nested_archives_stats(ArchiveId, Token, NestedArchiveStatsAccIn);
+get_nested_archives_stats(ArchiveId, Token, NestedArchiveStatsAccIn) when is_binary(ArchiveId) ->
+    {ok, NestedArchives, Token2} = archives_forest:list(ArchiveId, Token, ?BATCH_SIZE),
+    NestedArchiveStatsAcc = lists:foldl(fun(NestedArchiveId, Acc) ->
+        NestedArchiveStats = get_aggregated_stats(NestedArchiveId),
+        archive_stats:sum(Acc, NestedArchiveStats)
+    end, NestedArchiveStatsAccIn, NestedArchives),
+    case Token2#link_token.is_last of
+        true -> NestedArchiveStatsAcc;
+        false -> get_nested_archives_stats(ArchiveId, Token2, NestedArchiveStatsAcc)
+    end.
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
-
+%% @private
 -spec remove_archive_recursive(archive:doc() | archive:id(), archives_forest:token()) -> ok.
 remove_archive_recursive(ArchiveDocOrId, Token) ->
     {ok, ArchiveId} = case ArchiveDocOrId of
@@ -241,26 +261,41 @@ remove_archive_recursive(ArchiveDocOrId, Token) ->
     end.
 
 
+%% @private
 -spec remove_archive(archive:doc() | archive:id()) -> ok | error().
-remove_archive(Archive) ->
-    remove_archive(Archive, user_ctx:new(?ROOT_SESS_ID)).
+remove_archive(ArchiveDoc = #document{value = #archive{related_dip = undefined, related_aip = RelatedAip}}) ->
+    remove_archives(ArchiveDoc, RelatedAip);
+remove_archive(ArchiveDoc = #document{value = #archive{related_aip = undefined, related_dip = RelatedDip}}) ->
+    remove_archives(ArchiveDoc, RelatedDip);
+remove_archive(ArchiveId) ->
+    case archive:get(ArchiveId) of
+        {ok, ArchiveDoc} -> remove_archive(ArchiveDoc);
+        ?ERROR_NOT_FOUND -> ok;
+        {error, _} = Error -> Error
+    end.
 
 
--spec remove_archive(archive:id() | archive:doc(), user_ctx:ctx()) -> ok | error().
-remove_archive(undefined, _UserCtx) ->
+%% @private
+-spec remove_archives(archive:id() | archive:doc(), archive:id() | undefined) -> ok | error().
+remove_archives(Archive, RelatedArchive) ->
+    UserCtx = user_ctx:new(?ROOT_SESS_ID),
+    ok = remove_single_archive(Archive, UserCtx),
+    ok = remove_single_archive(RelatedArchive, UserCtx).
+
+
+%% @private
+-spec remove_single_archive(archive:id() | archive:doc(), user_ctx:ctx()) -> ok | error().
+remove_single_archive(undefined, _UserCtx) ->
     ok;
-remove_archive(ArchiveDoc = #document{}, _UserCtx) ->
+remove_single_archive(ArchiveDoc = #document{}, UserCtx) ->
     {ok, ArchiveId} = archive:get_id(ArchiveDoc),
-    {ok, RelatedDip} = archive:get_related_dip(ArchiveDoc),
-    {ok, RelatedAip} = archive:get_related_aip(ArchiveDoc),
-    ok = remove_archive(RelatedDip),
-    case RelatedAip of
-        undefined -> ok;
-        _ -> {ok, _} = archive:set_related_dip(RelatedAip, undefined)
-    end,
     case archive:delete(ArchiveId) of
         ok ->
             {ok, SpaceId} = archive:get_space_id(ArchiveDoc),
+            ArchiveDocCtx = file_ctx:new_by_uuid(?ARCHIVE_DIR_UUID(ArchiveId), SpaceId),
+            % TODO VFS-7718 Should it be possible to register many callbacks in case of parallel purge requests?
+            delete_req:delete_using_trash(UserCtx, ArchiveDocCtx, true),
+            
             {ok, DatasetId} = archive:get_dataset_id(ArchiveDoc),
             {ok, Timestamp} = archive:get_creation_time(ArchiveDoc),
             {ok, ParentArchiveId} = archive:get_parent(ArchiveDoc),
@@ -270,14 +305,15 @@ remove_archive(ArchiveDoc = #document{}, _UserCtx) ->
             % there was race with other process removing the archive
             ok
     end;
-remove_archive(ArchiveId, UserCtx) ->
+remove_single_archive(ArchiveId, UserCtx) ->
     case archive:get(ArchiveId) of
-        {ok, ArchiveDoc} -> remove_archive(ArchiveDoc, UserCtx);
+        {ok, ArchiveDoc} -> remove_single_archive(ArchiveDoc, UserCtx);
         ?ERROR_NOT_FOUND -> ok;
         {error, _} = Error -> Error
     end.
 
 
+%% @private
 -spec extend_with_archive_info(basic_entries()) -> extended_entries().
 extend_with_archive_info(ArchiveEntries) ->
     FilterMapFun = fun({ArchiveIndex, ArchiveId}) ->
@@ -292,21 +328,14 @@ extend_with_archive_info(ArchiveEntries) ->
     lists_utils:pfiltermap(FilterMapFun, ArchiveEntries, ?MAX_LIST_EXTENDED_DATASET_INFO_PROCS).
 
 
-%% @TODO VFS-7932 calculate state separately for DIP and AIP
--spec get_state(archive:doc() | archive:id()) -> {ok, archive:state()}.
-get_state(#document{value = #archive{related_aip = RelatedAip}}) when is_binary(RelatedAip) ->
-    {ok, AipArchiveDoc} = archive:get(RelatedAip),
-    get_state(AipArchiveDoc);
+%% @private
+-spec get_state(archive:doc()) -> {ok, archive:state()}.
 get_state(ArchiveDoc = #document{}) ->
     archive:get_state(ArchiveDoc).
 
 
-
-%% @TODO VFS-7932 calculate stats separately for DIP and AIP
+%% @private
 -spec get_aggregated_stats(archive:doc() | archive:id()) -> archive_stats:record().
-get_aggregated_stats(#document{value = #archive{related_aip = RelatedAip}}) when is_binary(RelatedAip) ->
-    {ok, AipArchiveDoc} = archive:get(RelatedAip),
-    get_aggregated_stats(AipArchiveDoc);
 get_aggregated_stats(ArchiveDoc = #document{}) ->
     {ok, ArchiveStats} = archive:get_stats(ArchiveDoc),
     case archive:is_finished(ArchiveDoc) of
@@ -322,26 +351,7 @@ get_aggregated_stats(ArchiveId) ->
     get_aggregated_stats(ArchiveDoc).
 
 
--spec get_nested_archives_stats(archive:id() | archive:doc()) -> archive_stats:record().
-get_nested_archives_stats(ArchiveIdOrDoc) ->
-    get_nested_archives_stats(ArchiveIdOrDoc, #link_token{}, archive_stats:empty()).
-
--spec get_nested_archives_stats(archive:id() | archive:doc(), archives_forest:token(), archive_stats:record()) ->
-    archive_stats:record().
-get_nested_archives_stats(#document{key = ArchiveId}, Token, NestedArchiveStatsAccIn) ->
-    get_nested_archives_stats(ArchiveId, Token, NestedArchiveStatsAccIn);
-get_nested_archives_stats(ArchiveId, Token, NestedArchiveStatsAccIn) when is_binary(ArchiveId) ->
-    {ok, NestedArchives, Token2} = archives_forest:list(ArchiveId, Token, ?BATCH_SIZE),
-    NestedArchiveStatsAcc = lists:foldl(fun(NestedArchiveId, Acc) ->
-        NestedArchiveStats = get_aggregated_stats(NestedArchiveId),
-        archive_stats:sum(Acc, NestedArchiveStats)
-    end, NestedArchiveStatsAccIn, NestedArchives),
-    case Token2#link_token.is_last of
-        true -> NestedArchiveStatsAcc;
-        false -> get_nested_archives_stats(ArchiveId, Token2, NestedArchiveStatsAcc)
-    end.
-
-
+%% @private
 -spec ensure_base_archive_is_set_if_applicable(archive:config(), dataset:id()) -> 
     archive:id() | undefined.
 ensure_base_archive_is_set_if_applicable(Config, DatasetId) ->

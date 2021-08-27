@@ -56,6 +56,8 @@
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/fslogic/metadata.hrl").
 -include("modules/dataset/dataset.hrl").
+-include("proto/oneprovider/provider_messages.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% API
 -export([new_accumulator/0, size/1, is_empty/1, accumulate/2, prepare_to_send/1,
@@ -236,7 +238,8 @@ submission_batch_entry(FileId, Seq,
         <<"fileType">> => get_file_type(FileMetaDoc),
         <<"payload">> => Metadata
     },
-    maps_utils:put_if_defined(Entry, <<"datasetId">>, file_meta_dataset:get_id_if_attached(FileMetaDoc));
+    ExtendedEntry = maps:merge(Entry, prepare_archive_details(FileMetaDoc)),
+    maps_utils:put_if_defined(ExtendedEntry, <<"datasetId">>, file_meta_dataset:get_id_if_attached(FileMetaDoc));
 submission_batch_entry(FileId, Seq,
     FileMetaDoc = #document{value = #file_meta{}, scope = SpaceId},
     undefined
@@ -250,7 +253,8 @@ submission_batch_entry(FileId, Seq,
         <<"fileType">> => get_file_type(FileMetaDoc),
         <<"payload">> => #{}
     },
-    maps_utils:put_if_defined(Entry, <<"datasetId">>, file_meta_dataset:get_id_if_attached(FileMetaDoc));
+    ExtendedEntry = maps:merge(Entry, prepare_archive_details(FileMetaDoc)),
+    maps_utils:put_if_defined(ExtendedEntry, <<"datasetId">>, file_meta_dataset:get_id_if_attached(FileMetaDoc));
 submission_batch_entry(FileId, Seq,
     undefined,
     #document{value = #custom_metadata{value = Metadata}, scope = SpaceId}
@@ -263,6 +267,34 @@ submission_batch_entry(FileId, Seq,
         <<"fileName">> => <<>>,
         <<"payload">> => Metadata
     }.
+
+
+-spec prepare_archive_details(file_meta:doc()) -> map().
+prepare_archive_details(#document{scope = SpaceId} = FileMetaDoc) ->
+    FileCtx = file_ctx:new_by_doc(FileMetaDoc, SpaceId),
+    try
+        {Path, _FileCtx2} = file_ctx:get_canonical_path(FileCtx),
+        case archivisation_tree:extract_archive_id(Path) of
+            {ok, ArchiveId} ->
+                case archive_api:get_archive_info(ArchiveId) of
+                    {ok, #archive_info{
+                        description = Description,
+                        creation_time = CreationTime
+                    }} ->
+                        #{
+                            <<"archiveId">> => ArchiveId,
+                            <<"archiveDescription">> => Description,
+                            <<"archiveCreationTime">> => CreationTime
+                        };
+                    ?ERROR_NOT_FOUND->
+                        #{}
+                end;
+            ?ERROR_NOT_FOUND ->
+                #{}
+        end
+    catch _:_ ->
+        #{}
+    end.
 
 
 -spec deletion_batch_entry(file_id(), couchbase_changes:seq()) -> any().
@@ -289,7 +321,7 @@ encode_payload(Payload) ->
         (<<"onedata_rdf">>, RDF, PayloadIn) ->
             PayloadIn#{<<"rdf">> => RDF};
         (Key, Value, PayloadIn) ->
-            case is_cdmi_xattr(Key) orelse is_faas_xattr(Key) of
+            case is_cdmi_xattr(Key) orelse is_faas_xattr(Key) orelse is_onedata_xattr(Key) of
                 true ->
                     PayloadIn;
                 false ->
@@ -310,6 +342,11 @@ is_cdmi_xattr(XattrKey) ->
 -spec is_faas_xattr(binary()) -> boolean().
 is_faas_xattr(<<?FAAS_PREFIX_STR, _/binary>>) -> true;
 is_faas_xattr(_) -> false.
+
+
+-spec is_onedata_xattr(binary()) -> boolean().
+is_onedata_xattr(<<?ONEDATA_PREFIX_STR, _/binary>>) -> true;
+is_onedata_xattr(_) -> false.
 
 
 -spec get_seq(batch_entry()) -> seq().

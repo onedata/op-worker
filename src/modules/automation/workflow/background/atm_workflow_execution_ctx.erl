@@ -7,16 +7,8 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module provides utility functions for management of automation
-%%% workflow execution ctx. The ctx contains information about space and
-%%% user in context of which the workflow execution is performed or accessed.
-%%% The context may change during an execution, as it includes the user session
-%%% that is refreshed periodically. For this reason, it must be rebuilt every
-%%% time it is needed.
-%%% Main uses of automation workflow context are:
-%%% 1) iteration (e.g. when iterating file or dataset tree forest store
-%%%    it is necessary to check user access privileges).
-%%% 2) data validation (e.g. when adding file to some store it is necessary
-%%%    to assert files existence within this space and user's access to them).
+%%% workflow execution ctx which consists of information necessary to
+%%% validate data, access stores or perform logging.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_workflow_execution_ctx).
@@ -25,18 +17,18 @@
 -include("modules/automation/atm_execution.hrl").
 
 %% API
--export([build/3]).
+-export([acquire/2]).
 -export([
-    get_space_id/1,
-    get_workflow_execution_id/1,
-    get_user_id/1, get_session_id/1, get_access_token/1
+    get_auth/1,
+    get_logger/1,
+    get_workflow_store_id/2
 ]).
 
 
 -record(atm_workflow_execution_ctx, {
-    space_id :: od_space:id(),
-    workflow_execution_id :: atm_workflow_execution:id(),
-    user_ctx :: user_ctx:ctx()
+    workflow_execution_auth :: atm_workflow_execution_auth:record(),
+    workflow_execution_logger :: atm_workflow_execution_logger:record(),
+    workflow_execution_env :: atm_workflow_execution_env:record()
 }).
 -type record() :: #atm_workflow_execution_ctx{}.
 
@@ -48,41 +40,32 @@
 %%%===================================================================
 
 
--spec build(od_space:id(), atm_workflow_execution:id(), session:id() | user_ctx:ctx()) ->
-    record().
-build(SpaceId, AtmWorkflowExecutionId, SessionId) when is_binary(SessionId) ->
-    build(SpaceId, AtmWorkflowExecutionId, user_ctx:new(SessionId));
-build(SpaceId, AtmWorkflowExecutionId, UserCtx) ->
+-spec acquire(undefined | atm_task_execution:id(), atm_workflow_execution_env:record()) ->
+    record() | no_return().
+acquire(AtmTaskExecutionId, AtmWorkflowExecutionEnv) ->
+    AtmWorkflowExecutionAuth = atm_workflow_execution_env:acquire_auth(AtmWorkflowExecutionEnv),
+
     #atm_workflow_execution_ctx{
-        space_id = SpaceId,
-        workflow_execution_id = AtmWorkflowExecutionId,
-        user_ctx = UserCtx
+        workflow_execution_auth = AtmWorkflowExecutionAuth,
+        workflow_execution_logger = atm_workflow_execution_env:acquire_logger(
+            AtmTaskExecutionId, AtmWorkflowExecutionAuth, AtmWorkflowExecutionEnv
+        ),
+        workflow_execution_env = AtmWorkflowExecutionEnv
     }.
 
 
--spec get_space_id(record()) -> od_space:id().
-get_space_id(#atm_workflow_execution_ctx{space_id = SpaceId}) ->
-    SpaceId.
+-spec get_auth(record()) -> atm_workflow_execution_auth:record().
+get_auth(#atm_workflow_execution_ctx{workflow_execution_auth = AtmWorkflowExecutionAuth}) ->
+    AtmWorkflowExecutionAuth.
 
 
--spec get_workflow_execution_id(record()) -> atm_workflow_execution:id().
-get_workflow_execution_id(#atm_workflow_execution_ctx{
-    workflow_execution_id = AtmWorkflowExecutionId
+-spec get_logger(record()) -> atm_workflow_execution_logger:record().
+get_logger(#atm_workflow_execution_ctx{workflow_execution_logger = AtmWorkflowExecutionLogger}) ->
+    AtmWorkflowExecutionLogger.
+
+
+-spec get_workflow_store_id(automation:id(), record()) -> atm_store:id() | no_return().
+get_workflow_store_id(AtmStoreSchemaId, #atm_workflow_execution_ctx{
+    workflow_execution_env = AtmWorkflowExecutionEnv
 }) ->
-    AtmWorkflowExecutionId.
-
-
--spec get_user_id(record()) -> od_user:id().
-get_user_id(#atm_workflow_execution_ctx{user_ctx = UserCtx}) ->
-    user_ctx:get_user_id(UserCtx).
-
-
--spec get_session_id(record()) -> session:id().
-get_session_id(#atm_workflow_execution_ctx{user_ctx = UserCtx}) ->
-    user_ctx:get_session_id(UserCtx).
-
-
--spec get_access_token(record()) -> auth_manager:access_token().
-get_access_token(#atm_workflow_execution_ctx{user_ctx = UserCtx}) ->
-    TokenCredentials = user_ctx:get_credentials(UserCtx),
-    auth_manager:get_access_token(TokenCredentials).
+    atm_workflow_execution_env:get_workflow_store_id(AtmStoreSchemaId, AtmWorkflowExecutionEnv).

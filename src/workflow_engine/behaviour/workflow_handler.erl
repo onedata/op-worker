@@ -14,10 +14,11 @@
 -author("Michal Wrzeszcz").
 
 -include("workflow_engine.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 -type handler() :: module().
 -type async_processing_basic_result() :: term().
--type async_processing_result() :: async_processing_basic_result() | ?WF_ERROR_MALFORMED_REQUEST | ?WF_ERROR_TIMEOUT.
+-type async_processing_result() :: async_processing_basic_result() | ?ERROR_MALFORMED_DATA | ?ERROR_TIMEOUT.
 -type handler_execution_result() :: ok | error.
 % TODO VFS-7787 move following types to callback server:
 -type finished_callback_id() :: binary().
@@ -89,6 +90,7 @@
     workflow_engine:execution_id(),
     workflow_engine:execution_context(),
     workflow_engine:task_id(),
+    iterator:item(),
     async_processing_result()
 ) ->
     handler_execution_result().

@@ -8,6 +8,12 @@
 %%% @doc
 %%% This module implements `atm_store_container` functionality for `audit_log`
 %%% atm_store type.
+%%%
+%%%                             !! CAUTION !!
+%%% This store container is directly used by `atm_workflow_execution_logger`
+%%% which in turn depends that `apply_operation` doesn't change container.
+%%% Any changes made in this module may affect logger and should be
+%%% accounted for.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_audit_log_store_container).
@@ -58,8 +64,9 @@
 -export_type([initial_value/0, operation_options/0, browse_options/0, record/0]).
 
 -define(ALLOWED_SEVERITY, [
-    <<"debug">>, <<"info">>, <<"notice">>, <<"warning">>, 
-    <<"error">>, <<"critical">>, <<"alert">>, <<"emergency">>
+    ?LOGGER_DEBUG, ?LOGGER_INFO, ?LOGGER_NOTICE,
+    ?LOGGER_WARNING, ?LOGGER_ALERT,
+    ?LOGGER_ERROR, ?LOGGER_CRITICAL, ?LOGGER_EMERGENCY
 ]).
 
 %% @TODO VFS-8068 Reuse duplicated code with atm_list_store_container and atm_infinite_log_container
@@ -69,14 +76,14 @@
 %%%===================================================================
 
 
--spec create(atm_workflow_execution_ctx:record(), atm_data_spec:record(), initial_value()) ->
+-spec create(atm_workflow_execution_auth:record(), atm_data_spec:record(), initial_value()) ->
     record() | no_return().
-create(_AtmWorkflowExecutionCtx, AtmDataSpec, undefined) ->
+create(_AtmWorkflowExecutionAuth, AtmDataSpec, undefined) ->
     create_container(AtmDataSpec);
 
-create(AtmWorkflowExecutionCtx, AtmDataSpec, InitialValueBatch) ->
+create(AtmWorkflowExecutionAuth, AtmDataSpec, InitialValueBatch) ->
     % validate and sanitize given batch first, to simulate atomic operation
-    SanitizedBatch = sanitize_data_batch(AtmWorkflowExecutionCtx, AtmDataSpec, InitialValueBatch),
+    SanitizedBatch = sanitize_data_batch(AtmWorkflowExecutionAuth, AtmDataSpec, InitialValueBatch),
     append_sanitized_batch(SanitizedBatch, create_container(AtmDataSpec)).
 
 
@@ -85,10 +92,9 @@ get_data_spec(#atm_audit_log_store_container{data_spec = AtmDataSpec}) ->
     AtmDataSpec.
 
 
-
--spec browse_content(atm_workflow_execution_ctx:record(), browse_options(), record()) ->
+-spec browse_content(atm_workflow_execution_auth:record(), browse_options(), record()) ->
     atm_store_api:browse_result() | no_return().
-browse_content(AtmWorkflowExecutionCtx, BrowseOpts, #atm_audit_log_store_container{
+browse_content(AtmWorkflowExecutionAuth, BrowseOpts, #atm_audit_log_store_container{
     backend_id = BackendId,
     data_spec = AtmDataSpec
 }) ->
@@ -99,7 +105,7 @@ browse_content(AtmWorkflowExecutionCtx, BrowseOpts, #atm_audit_log_store_contain
         limit => maps:get(limit, SanitizedBrowseOpts)
     }),
     MappedEntries = lists:map(fun({Index, Object, Timestamp}) ->
-        case atm_value:expand(AtmWorkflowExecutionCtx, maps:get(<<"entry">>, Object), AtmDataSpec) of
+        case atm_value:expand(AtmWorkflowExecutionAuth, maps:get(<<"entry">>, Object), AtmDataSpec) of
             {ok, ExpandedEntry} ->
                 {Index, {ok, Object#{
                     <<"timestamp">> => Timestamp, 
@@ -123,21 +129,21 @@ acquire_iterator(#atm_audit_log_store_container{backend_id = BackendId}) ->
 apply_operation(#atm_audit_log_store_container{data_spec = AtmDataSpec} = Record, #atm_store_container_operation{
     type = append,
     options = #{<<"isBatch">> := true},
-    value = Batch,
-    workflow_execution_ctx = AtmWorkflowExecutionCtx
+    argument = Batch,
+    workflow_execution_auth = AtmWorkflowExecutionAuth
 }) ->
     % validate and sanitize given batch first, to simulate atomic operation
-    SanitizedBatch = sanitize_data_batch(AtmWorkflowExecutionCtx, AtmDataSpec, Batch),
+    SanitizedBatch = sanitize_data_batch(AtmWorkflowExecutionAuth, AtmDataSpec, Batch),
     append_sanitized_batch(SanitizedBatch, Record);
 
 apply_operation(#atm_audit_log_store_container{} = Record, Operation = #atm_store_container_operation{
     type = append,
-    value = Item,
+    argument = Item,
     options = Options
 }) ->
     apply_operation(Record, Operation#atm_store_container_operation{
         options = Options#{<<"isBatch">> => true},
-        value = [Item]
+        argument = [Item]
     });
 
 apply_operation(_Record, _Operation) ->
@@ -196,18 +202,18 @@ create_container(AtmDataSpec) ->
 
 %% @private
 -spec sanitize_data_batch(
-    atm_workflow_execution_ctx:record(),
+    atm_workflow_execution_auth:record(),
     atm_data_spec:record(),
     [json_utils:json_term()]
 ) ->
     [atm_value:expanded()] | no_return().
-sanitize_data_batch(AtmWorkflowExecutionCtx, AtmDataSpec, Batch) when is_list(Batch) ->
+sanitize_data_batch(AtmWorkflowExecutionAuth, AtmDataSpec, Batch) when is_list(Batch) ->
     lists:map(fun(Item) ->
         #{<<"entry">> := Entry} = Object = prepare_audit_log_object(Item),
-        atm_value:validate(AtmWorkflowExecutionCtx, Entry, AtmDataSpec),
+        atm_value:validate(AtmWorkflowExecutionAuth, Entry, AtmDataSpec),
         Object
     end, Batch);
-sanitize_data_batch(_AtmWorkflowExecutionCtx, _AtmDataSpec, _Item) ->
+sanitize_data_batch(_AtmWorkflowExecutionAuth, _AtmDataSpec, _Item) ->
     throw(?ERROR_ATM_BAD_DATA(<<"value">>, <<"not a batch">>)).
 
 

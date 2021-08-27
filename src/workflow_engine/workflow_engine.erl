@@ -462,9 +462,12 @@ process_result(EngineId, ExecutionId, #execution_spec{
     job_identifier = JobIdentifier
 }) ->
     try
+        ItemId = workflow_execution_state:get_item_id(ExecutionId, JobIdentifier),
+        CachedItem = workflow_cached_item:get_item(ItemId),
         CachedResult = workflow_cached_async_result:take(CachedResultId),
+
         ProcessedResult = try
-            Handler:process_result(ExecutionId, ExecutionContext, TaskId, CachedResult)
+            Handler:process_result(ExecutionId, ExecutionContext, TaskId, CachedItem, CachedResult)
         catch
             Error:Reason:Stacktrace  ->
                 % TODO VFS-7788 - use callbacks to get human readable information about task

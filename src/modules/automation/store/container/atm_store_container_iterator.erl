@@ -45,7 +45,7 @@
 %%% Callbacks
 %%%===================================================================
 
--callback get_next_batch(atm_workflow_execution_ctx:record(), batch_size(), record(), atm_data_spec:record()) ->
+-callback get_next_batch(atm_workflow_execution_auth:record(), batch_size(), record(), atm_data_spec:record()) ->
     {ok, [atm_value:expanded()], record()} | stop.
 
 -callback forget_before(record()) -> ok.
@@ -58,11 +58,11 @@
 %%%===================================================================
 
 
--spec get_next_batch(atm_workflow_execution_ctx:record(), batch_size(), record(), atm_data_spec:record()) ->
+-spec get_next_batch(atm_workflow_execution_auth:record(), batch_size(), record(), atm_data_spec:record()) ->
     {ok, [atm_value:expanded()], record()} | stop.
-get_next_batch(AtmWorkflowExecutionCtx, BatchSize, AtmStoreContainerIterator, AtmDataSpec) ->
+get_next_batch(AtmWorkflowExecutionAuth, BatchSize, AtmStoreContainerIterator, AtmDataSpec) ->
     Module = utils:record_type(AtmStoreContainerIterator),
-    Module:get_next_batch(AtmWorkflowExecutionCtx, BatchSize, AtmStoreContainerIterator, AtmDataSpec).
+    Module:get_next_batch(AtmWorkflowExecutionAuth, BatchSize, AtmStoreContainerIterator, AtmDataSpec).
 
 
 -spec forget_before(record()) -> ok.

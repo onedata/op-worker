@@ -4,6 +4,16 @@ Release notes for project op-worker
 CHANGELOG
 ---------
 
+### 21.02.0-alpha21
+
+### 21.02.0-alpha20
+
+-   **VFS-7904** Add system audit log for each workflow execution and
+    each task in the execution, with the possibility to append custom
+    logs during lambda execution (using the result mappers).
+
+### 21.02.0-alpha19
+
 ### 21.02.0-alpha18
 
 -   **VFS-7947** Added possibility to run workflows directly from file
@@ -162,6 +172,8 @@ CHANGELOG
 -   **VFS-6566** Improved UX and fixed minor issues in share views.
     Fixed inability to open share hosted by Oneprovider 19.02.x using
     Onezone 20.02.x.
+
+### 20.02.12
 
 ### 20.02.11
 

@@ -17,6 +17,7 @@
 
 -include("workflow_engine.hrl").
 -include("http/gui_paths.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/http/codes.hrl").
 -include_lib("ctool/include/http/headers.hrl").
 
@@ -45,18 +46,18 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec init(cowboy_req:req(), any()) -> {ok, cowboy_req:req(), any()}.
-init(Req, State) ->
-    ParsedBody = try
-        {ok, Body, _} = cowboy_req:read_body(Req),
-        json_utils:decode(Body)
+init(Req0, State) ->
+    {Req2, Result} = try
+        {Req1, Body} = read_body(Req0, <<>>),
+        {Req1, json_utils:decode(Body)}
     catch _:_ ->
-        ?WF_ERROR_MALFORMED_REQUEST
+        {Req0, ?ERROR_MALFORMED_DATA}
     end,
 
-    Path = cowboy_req:path(Req),
-    ?MODULE:handle_callback(Path, ParsedBody), % Call via ?MODULE for tests
+    Path = cowboy_req:path(Req2),
+    ?MODULE:handle_callback(Path, Result), % Call via ?MODULE for tests
 
-    {ok, cowboy_req:reply(?HTTP_204_NO_CONTENT, Req), State}.
+    {ok, cowboy_req:reply(?HTTP_204_NO_CONTENT, Req2), State}.
 
 %%%===================================================================
 %%% API
@@ -92,6 +93,16 @@ handle_callback(CallbackId, Message) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%% @private
+-spec read_body(cowboy_req:req(), binary()) -> {cowboy_req:req(), binary()}.
+read_body(Req0, Acc) ->
+    case cowboy_req:read_body(Req0) of
+        {ok, Data, Req1} ->
+            {Req1, <<Acc/binary, Data/binary>>};
+        {more, Data, Req1} ->
+            read_body(Req1, <<Acc/binary, Data/binary>>)
+    end.
 
 -spec encode_callback_id(
     callback_type(),

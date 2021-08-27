@@ -23,6 +23,7 @@
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/graph_sync/gri.hrl").
 -include_lib("ctool/include/http/codes.hrl").
+-include_lib("ctool/include/http/headers.hrl").
 -include_lib("ctool/include/privileges.hrl").
 -include_lib("ctool/include/test/performance.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
@@ -357,7 +358,7 @@ build_create_transfer_prepare_rest_args_fun(MemRef) ->
         #rest_args{
             method = post,
             path = <<"transfers">>,
-            headers = #{<<"content-type">> => <<"application/json">>},
+            headers = #{?HDR_CONTENT_TYPE => <<"application/json">>},
             body = json_utils:encode(substitute_transfer_data_source(TransferDetails, Data))
         }
     end.
@@ -390,7 +391,7 @@ substitute_transfer_data_source(Env, Data) ->
 build_create_transfer_validate_rest_call_result_fun(MemRef) ->
     fun(#api_test_ctx{node = Node} = TestCtx, Result) ->
         {ok, _, Headers, Body} = ?assertMatch(
-            {ok, ?HTTP_201_CREATED, #{<<"Location">> := _}, #{<<"transferId">> := _}},
+            {ok, ?HTTP_201_CREATED, #{?HDR_LOCATION := _}, #{<<"transferId">> := _}},
             Result
         ),
         TransferId = maps:get(<<"transferId">>, Body),
@@ -398,7 +399,7 @@ build_create_transfer_validate_rest_call_result_fun(MemRef) ->
         ExpLocation = rpc:call(Node, oneprovider, get_rest_endpoint, [
             string:trim(filename:join([<<"/">>, <<"transfers">>, TransferId]), leading, [$/])
         ]),
-        ?assertEqual(ExpLocation, maps:get(<<"Location">>, Headers)),
+        ?assertEqual(ExpLocation, maps:get(?HDR_LOCATION, Headers)),
 
         build_create_transfer_validate_call_result(MemRef, TransferId, TestCtx)
     end.

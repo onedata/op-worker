@@ -16,7 +16,6 @@
 -behaviour(atm_store_container).
 -behaviour(persistent_record).
 
--include("modules/automation/atm_tmp.hrl").
 -include_lib("ctool/include/errors.hrl").
 
 %% atm_store_container callbacks
@@ -47,11 +46,11 @@
 %%%===================================================================
 
 
--spec create(atm_workflow_execution_ctx:record(), atm_data_spec:record(), initial_value()) ->
+-spec create(atm_workflow_execution_auth:record(), atm_data_spec:record(), initial_value()) ->
     record() | no_return().
-create(AtmWorkflowExecutionCtx, AtmDataSpec, InitialValue) ->
+create(AtmWorkflowExecutionAuth, AtmDataSpec, InitialValue) ->
     #atm_tree_forest_store_container{roots_list = atm_list_store_container:create(
-        AtmWorkflowExecutionCtx, AtmDataSpec, InitialValue
+        AtmWorkflowExecutionAuth, AtmDataSpec, InitialValue
     )}.
 
 
@@ -60,12 +59,12 @@ get_data_spec(#atm_tree_forest_store_container{roots_list = RootsList}) ->
     atm_list_store_container:get_data_spec(RootsList).
 
 
--spec browse_content(atm_workflow_execution_ctx:record(), browse_options(), record()) ->
+-spec browse_content(atm_workflow_execution_auth:record(), browse_options(), record()) ->
     atm_store_api:browse_result() | no_return().
-browse_content(AtmWorkflowExecutionCtx, BrowseOpts, #atm_tree_forest_store_container{
+browse_content(AtmWorkflowExecutionAuth, BrowseOpts, #atm_tree_forest_store_container{
     roots_list = RootsList
 }) ->
-    atm_list_store_container:browse_content(AtmWorkflowExecutionCtx, BrowseOpts, RootsList).
+    atm_list_store_container:browse_content(AtmWorkflowExecutionAuth, BrowseOpts, RootsList).
 
 
 -spec acquire_iterator(record()) -> atm_tree_forest_store_container_iterator:record().

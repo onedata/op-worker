@@ -16,7 +16,6 @@
 -module(atm_value).
 -author("Michal Stanisz").
 
--include("modules/automation/atm_tmp.hrl").
 -include_lib("ctool/include/errors.hrl").
 
 %% API
@@ -35,16 +34,16 @@
 %%%===================================================================
 
 
--spec validate(atm_workflow_execution_ctx:record(), expanded(), atm_data_spec:record()) ->
+-spec validate(atm_workflow_execution_auth:record(), expanded(), atm_data_spec:record()) ->
     ok | no_return().
-validate(AtmWorkflowExecutionCtx, Value, AtmDataSpec) ->
+validate(AtmWorkflowExecutionAuth, Value, AtmDataSpec) ->
     AtmDataType = atm_data_spec:get_type(AtmDataSpec),
 
     case atm_data_type:is_instance(AtmDataType, Value) of
         true ->
             Module = get_callback_module(AtmDataType),
             ValueConstraints = atm_data_spec:get_value_constraints(AtmDataSpec),
-            Module:assert_meets_constraints(AtmWorkflowExecutionCtx, Value, ValueConstraints);
+            Module:assert_meets_constraints(AtmWorkflowExecutionAuth, Value, ValueConstraints);
         false ->
             throw(?ERROR_ATM_DATA_TYPE_UNVERIFIED(Value, AtmDataType))
     end.
@@ -56,18 +55,18 @@ compress(Value, AtmDataSpec) ->
     Module:compress(Value).
 
 
--spec expand(atm_workflow_execution_ctx:record(), compressed(), atm_data_spec:record()) ->
+-spec expand(atm_workflow_execution_auth:record(), compressed(), atm_data_spec:record()) ->
     {ok, expanded()} | {error, term()}.
-expand(AtmWorkflowExecutionCtx, Value, AtmDataSpec) ->
+expand(AtmWorkflowExecutionAuth, Value, AtmDataSpec) ->
     Module = get_callback_module(atm_data_spec:get_type(AtmDataSpec)),
-    Module:expand(AtmWorkflowExecutionCtx, Value).
+    Module:expand(AtmWorkflowExecutionAuth, Value).
 
 
--spec filterexpand_list(atm_workflow_execution_ctx:record(), [compressed()] | compressed(), atm_data_spec:record()) ->
+-spec filterexpand_list(atm_workflow_execution_auth:record(), [compressed()] | compressed(), atm_data_spec:record()) ->
     [expanded()].
-filterexpand_list(AtmWorkflowExecutionCtx, CompressedItems, AtmDataSpec) ->
+filterexpand_list(AtmWorkflowExecutionAuth, CompressedItems, AtmDataSpec) ->
     lists:filtermap(fun(CompressedItem) ->
-        case atm_value:expand(AtmWorkflowExecutionCtx, CompressedItem, AtmDataSpec) of
+        case atm_value:expand(AtmWorkflowExecutionAuth, CompressedItem, AtmDataSpec) of
             {ok, ExpandedItem} -> {true, ExpandedItem};
             {error, _} -> false
         end

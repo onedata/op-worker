@@ -264,9 +264,10 @@ archive_dataset_attached_to_dir_test_base(Layout, IncludeDip) ->
         dataset = #dataset_object{
             id = DatasetId,
             archives = [#archive_object{id = ArchiveId}]
-        }} = onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, #dir_spec{dataset = #dataset_spec{archives = [#archive_spec{
-        config = #archive_config{layout = Layout, include_dip = IncludeDip}
-    }]}}),
+        }} = onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, #dir_spec{
+            dataset = #dataset_spec{archives = [#archive_spec{config = #archive_config{layout = Layout, include_dip = IncludeDip}}]},
+            metadata = #metadata_spec{json = ?RAND_JSON_METADATA()}
+    }),
     archive_simple_dataset_test_base(DirGuid, DatasetId, ArchiveId).
 
 archive_dataset_attached_to_file_test_base(Layout, IncludeDip) ->

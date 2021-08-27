@@ -85,12 +85,12 @@
 %%%===================================================================
 
 
--callback create(atm_workflow_execution_ctx:record(), atm_data_spec:record(), initial_value()) ->
+-callback create(atm_workflow_execution_auth:record(), atm_data_spec:record(), initial_value()) ->
     record() | no_return().
 
 -callback get_data_spec(record()) -> atm_data_spec:record().
 
--callback browse_content(atm_workflow_execution_ctx:record(), atm_store_api:browse_options(), record()) ->
+-callback browse_content(atm_workflow_execution_auth:record(), atm_store_api:browse_options(), record()) ->
     atm_store_api:browse_result() | no_return().
 
 -callback acquire_iterator(record()) -> atm_store_container_iterator:record().
@@ -107,14 +107,14 @@
 
 -spec create(
     automation:store_type(),
-    atm_workflow_execution_ctx:record(),
+    atm_workflow_execution_auth:record(),
     atm_data_spec:record(),
     initial_value()
 ) ->
     record().
-create(AtmStoreType, AtmWorkflowExecutionCtx, AtmDataSpec, InitArgs) ->
+create(AtmStoreType, AtmWorkflowExecutionAuth, AtmDataSpec, InitArgs) ->
     RecordType = atm_store_type_to_atm_store_container_type(AtmStoreType),
-    RecordType:create(AtmWorkflowExecutionCtx, AtmDataSpec, InitArgs).
+    RecordType:create(AtmWorkflowExecutionAuth, AtmDataSpec, InitArgs).
 
 
 -spec get_store_type(record()) -> automation:store_type().
@@ -129,11 +129,11 @@ get_data_spec(AtmStoreContainer) ->
     RecordType:get_data_spec(AtmStoreContainer).
 
 
--spec browse_content(atm_workflow_execution_ctx:record(), atm_store_api:browse_options(), record()) ->
+-spec browse_content(atm_workflow_execution_auth:record(), atm_store_api:browse_options(), record()) ->
     atm_store_api:browse_result() | no_return().
-browse_content(AtmWorkflowExecutionCtx, BrowseOpts, AtmStoreContainer) ->
+browse_content(AtmWorkflowExecutionAuth, BrowseOpts, AtmStoreContainer) ->
     RecordType = utils:record_type(AtmStoreContainer),
-    RecordType:browse_content(AtmWorkflowExecutionCtx, BrowseOpts, AtmStoreContainer).
+    RecordType:browse_content(AtmWorkflowExecutionAuth, BrowseOpts, AtmStoreContainer).
 
 
 -spec acquire_iterator(record()) -> atm_store_container_iterator:record().

@@ -12,7 +12,6 @@
 -module(atm_tree_forest_store_test_SUITE).
 -author("Michal Stanisz").
 
--include("modules/automation/atm_tmp.hrl").
 -include("modules/automation/atm_execution.hrl").
 -include("modules/datastore/datastore_runner.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
@@ -89,51 +88,60 @@ all() -> [
 %%%===================================================================
 
 create_store_with_invalid_args_test(_Config) ->
-    AtmWorkflowExecutionCtx = atm_store_test_utils:create_workflow_execution_ctx(krakow, user1, space_krk),
+    AtmWorkflowExecutionAuth = atm_store_test_utils:create_workflow_execution_auth(krakow, user1, space_krk),
     ?assertEqual(?ERROR_ATM_STORE_MISSING_REQUIRED_INITIAL_VALUE,
         atm_store_test_utils:create_store(
-            krakow, AtmWorkflowExecutionCtx, undefined, 
+            krakow, AtmWorkflowExecutionAuth, undefined,
             (?ATM_TREE_FOREST_STORE_SCHEMA)#atm_store_schema{requires_initial_value = true})
     ),
     ?assertEqual(?ERROR_ATM_BAD_DATA(<<"value">>, <<"not a batch">>),
         atm_store_test_utils:create_store(
-            krakow, AtmWorkflowExecutionCtx, 8, ?ATM_TREE_FOREST_STORE_SCHEMA)
+            krakow, AtmWorkflowExecutionAuth, 8, ?ATM_TREE_FOREST_STORE_SCHEMA)
     ),
     lists:foreach(fun(DataType) ->
         BadValue = atm_store_test_utils:example_bad_data(DataType),
         ValidValue = atm_store_test_utils:example_data(DataType),
         ?assertEqual(?ERROR_ATM_DATA_TYPE_UNVERIFIED(BadValue, DataType), atm_store_test_utils:create_store(
-            krakow, AtmWorkflowExecutionCtx, [ValidValue, BadValue, ValidValue], ?ATM_TREE_FOREST_STORE_SCHEMA(DataType)
+            krakow, AtmWorkflowExecutionAuth, [ValidValue, BadValue, ValidValue], ?ATM_TREE_FOREST_STORE_SCHEMA(DataType)
         ))
     end, atm_store_test_utils:all_data_types()).
 
 
 apply_operation_test(_Config) ->
-    AtmWorkflowExecutionCtx = atm_store_test_utils:create_workflow_execution_ctx(krakow, user1, space_krk),
-    {ok, AtmStoreId} = atm_store_test_utils:create_store(krakow, AtmWorkflowExecutionCtx, undefined, ?ATM_TREE_FOREST_STORE_SCHEMA),
+    AtmWorkflowExecutionAuth = atm_store_test_utils:create_workflow_execution_auth(krakow, user1, space_krk),
+    {ok, AtmStoreId} = atm_store_test_utils:create_store(krakow, AtmWorkflowExecutionAuth, undefined, ?ATM_TREE_FOREST_STORE_SCHEMA),
     
     SpaceId = oct_background:get_space_id(space_krk),
-    ?assertEqual(?ERROR_ATM_DATA_TYPE_UNVERIFIED(<<"not a file">>, atm_file_type),
-        atm_store_test_utils:apply_operation(
-            krakow, AtmWorkflowExecutionCtx, append, <<"not a file">>, #{}, AtmStoreId)),
+
     {ok, BadId1} = file_id:guid_to_objectid(file_id:pack_guid(<<"dummy_uuid">>, <<"dummy_space_id">>)),
-    ?assertEqual(?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(#{<<"inSpace">> => SpaceId}),
-        atm_store_test_utils:apply_operation(
-            krakow, AtmWorkflowExecutionCtx, append, #{<<"file_id">> => BadId1}, #{}, AtmStoreId)),
+    BadFile1 = #{<<"file_id">> => BadId1},
+
     {ok, BadId2} = file_id:guid_to_objectid(file_id:pack_guid(<<"dummy_uuid">>, SpaceId)),
-    ?assertEqual(?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(#{<<"hasAccess">> => true}),
-        atm_store_test_utils:apply_operation(
-            krakow, AtmWorkflowExecutionCtx, append, #{<<"file_id">> => BadId2}, #{}, AtmStoreId)),
-    ?assertEqual(?ERROR_NOT_SUPPORTED,
-        atm_store_test_utils:apply_operation(
-            krakow, AtmWorkflowExecutionCtx, set, <<"NaN">>, #{}, AtmStoreId)).
+    BadFile2 = #{<<"file_id">> => BadId2},
+
+    ?assertEqual(
+        ?ERROR_ATM_DATA_TYPE_UNVERIFIED(<<"not a file">>, atm_file_type),
+        atm_store_test_utils:apply_operation(krakow, AtmWorkflowExecutionAuth, append, <<"not a file">>, #{}, AtmStoreId)
+    ),
+    ?assertEqual(
+        ?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(BadFile1, atm_file_type, #{<<"inSpace">> => SpaceId}),
+        atm_store_test_utils:apply_operation(krakow, AtmWorkflowExecutionAuth, append, BadFile1, #{}, AtmStoreId)
+    ),
+    ?assertEqual(
+        ?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(BadFile2, atm_file_type, #{<<"hasAccess">> => true}),
+        atm_store_test_utils:apply_operation(krakow, AtmWorkflowExecutionAuth, append, BadFile2, #{}, AtmStoreId)
+    ),
+    ?assertEqual(
+        ?ERROR_NOT_SUPPORTED,
+        atm_store_test_utils:apply_operation(krakow, AtmWorkflowExecutionAuth, set, <<"NaN">>, #{}, AtmStoreId)
+    ).
 
 
 iterator_queue_test(_Config) ->
     Name0 = <<"name0">>,
     Name1 = <<"name1">>,
     Name2 = <<"name2">>,
-    {ok, TestQueueId} = ?assertMatch({ok, _}, queue_init()),
+    {ok, TestQueueId} = ?assertMatch({ok, _}, queue_init(10)),
     ?assertEqual(ok, queue_push(TestQueueId, lists:map(fun(Num) -> {<<"entry", (integer_to_binary(Num))/binary>>, Name1} end, lists:seq(1, 19)), 0)),
     #atm_tree_forest_iterator_queue{values = FirstNodeValues} = 
         ?assertMatch(#atm_tree_forest_iterator_queue{
@@ -412,7 +420,7 @@ create_iteration_test_env(ProviderSelector, AtmStoreIteratorStrategy, Depth, Typ
     SessId = oct_background:get_user_session_id(WorkflowUserPlaceholder, krakow),
     UserCtx = rpc:call(Node, user_ctx, new, [SessId]),
     ok = rpc:call(Node, atm_workflow_execution_session, init, [WorkflowId, UserCtx]),
-    AtmWorkflowExecutionCtx = rpc:call(Node, atm_workflow_execution_ctx, build, [SpaceId, WorkflowId, UserCtx]),
+    AtmWorkflowExecutionAuth = rpc:call(Node, atm_workflow_execution_auth, build, [SpaceId, WorkflowId, UserCtx]),
     ChildrenSpecGen = fun
         F(0) -> [];
         F(Depth) ->
@@ -458,19 +466,21 @@ create_iteration_test_env(ProviderSelector, AtmStoreIteratorStrategy, Depth, Typ
             atm_dataset_type -> #{<<"datasetId">> => Root}
         end
     end, Roots),
-    {ok, AtmStoreId} = atm_store_test_utils:create_store(ProviderSelector, AtmWorkflowExecutionCtx, RootsToAdd, ?ATM_TREE_FOREST_STORE_SCHEMA(Type)),
+    {ok, AtmStoreId} = atm_store_test_utils:create_store(ProviderSelector, AtmWorkflowExecutionAuth, RootsToAdd, ?ATM_TREE_FOREST_STORE_SCHEMA(Type)),
     AtmStoreIteratorSpec = #atm_store_iterator_spec{
         store_schema_id = AtmStoreDummySchemaId,
         strategy = AtmStoreIteratorStrategy
     },
-    AtmWorkflowExecutionEnv = atm_workflow_execution_env:build(SpaceId, WorkflowId, #{AtmStoreDummySchemaId => AtmStoreId}),
-    AtmStoreIterator0 = atm_store_test_utils:acquire_store_iterator(ProviderSelector, AtmWorkflowExecutionEnv, AtmStoreIteratorSpec),
+    AtmWorkflowExecutionEnv = atm_workflow_execution_env:build(
+        SpaceId, WorkflowId, #{AtmStoreDummySchemaId => AtmStoreId}, undefined, undefined
+    ),
+    AtmStoreIterator0 = atm_store_test_utils:acquire_store_iterator(ProviderSelector, AtmStoreId, AtmStoreIteratorSpec),
     {AtmWorkflowExecutionEnv, AtmStoreIterator0, FilesMap, Expected}.
 
 
-queue_init() ->
+queue_init(MaxValuesPerNode) ->
     Node = oct_background:get_random_provider_node(krakow),
-    rpc:call(Node, atm_tree_forest_iterator_queue, init, []).
+    rpc:call(Node, atm_tree_forest_iterator_queue, init, [MaxValuesPerNode]).
 
 
 queue_push(Id, Entries, OriginIndex) ->
@@ -517,8 +527,7 @@ init_per_suite(Config) ->
     oct_background:init_per_suite(Config, #onenv_test_config{
         onenv_scenario = "1op",
         envs = [{op_worker, op_worker, [
-            {fuse_session_grace_period_seconds, 24 * 60 * 60},
-            {atm_tree_forest_iterator_queue_max_values_per_node, 10}
+            {fuse_session_grace_period_seconds, 24 * 60 * 60}
         ]}]
     }).
 

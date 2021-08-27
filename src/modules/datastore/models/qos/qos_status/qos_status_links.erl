@@ -41,9 +41,9 @@
 %%% API
 %%%===================================================================
 
--spec add_link(scope(), key(), link()) -> {ok, datastore:link()} | {error, term()}.
+-spec add_link(scope(), key(), link()) -> ok | {error, term()}.
 add_link(SpaceId, Key, Link) ->
-    datastore_model:add_links(?CTX#{scope => SpaceId}, Key, oneprovider:get_id(), Link).
+    ?extract_ok(?ok_if_exists(datastore_model:add_links(?CTX#{scope => SpaceId}, Key, oneprovider:get_id(), Link))).
 
 
 -spec delete_link(scope(), key(), link_name()) -> ok | {error, term()}.
@@ -66,11 +66,12 @@ delete_all_local_links_with_prefix(SpaceId, Key, Prefix) ->
 -spec get_next_links(key(), qos_status:path(), non_neg_integer(), tree_ids()) ->
     {ok, [qos_status:path()]}.
 get_next_links(Key, Path, BatchSize, TreeId) ->
-    fold_links(Key, TreeId,
+    {ok, ReversedLinks} = fold_links(Key, TreeId,
         fun(#link{name = Name}, Acc) -> {ok, [Name | Acc]} end,
         [],
         #{prev_link_name => Path, size => BatchSize}
-    ).
+    ),
+    {ok, lists:reverse(ReversedLinks)}.
 
 %%%===================================================================
 %%% Internal functions

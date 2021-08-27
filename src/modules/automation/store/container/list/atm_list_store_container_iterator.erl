@@ -54,15 +54,15 @@ build(AtmInfiniteLogContainerIterator) ->
 %%%===================================================================
 
 
--spec get_next_batch(atm_workflow_execution_ctx:record(), atm_store_container_iterator:batch_size(), 
+-spec get_next_batch(atm_workflow_execution_auth:record(), atm_store_container_iterator:batch_size(),
     record(), atm_data_spec:record()
 ) ->
     {ok, [atm_value:expanded()], record()} | stop.
-get_next_batch(AtmWorkflowExecutionCtx, BatchSize, #atm_list_store_container_iterator{
+get_next_batch(AtmWorkflowExecutionAuth, BatchSize, Iterator = #atm_list_store_container_iterator{
     atm_infinite_log_container_iterator = AtmInfiniteLogContainerIterator
-} = AtmListStoreContainerIterator, AtmDataSpec) ->
+}, AtmDataSpec) ->
     ResultMapper = fun(_Timestamp, Compressed) -> 
-        case atm_value:expand(AtmWorkflowExecutionCtx, Compressed, AtmDataSpec) of
+        case atm_value:expand(AtmWorkflowExecutionAuth, Compressed, AtmDataSpec) of
             {ok, Item} -> {true, Item};
             {error, _} -> false
         end
@@ -73,7 +73,7 @@ get_next_batch(AtmWorkflowExecutionCtx, BatchSize, #atm_list_store_container_ite
         stop ->
             stop;
         {ok, Items, NewAtmInfiniteLogContainerIterator} ->
-            {ok, Items, AtmListStoreContainerIterator#atm_list_store_container_iterator{
+            {ok, Items, Iterator#atm_list_store_container_iterator{
                 atm_infinite_log_container_iterator = NewAtmInfiniteLogContainerIterator
             }}
     end.

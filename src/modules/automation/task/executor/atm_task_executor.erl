@@ -23,8 +23,8 @@
 
 -behaviour(persistent_record).
 
--include("modules/automation/atm_tmp.hrl").
 -include("modules/datastore/datastore_models.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% API
 -export([create/2, prepare/2, clean/1, get_spec/1, in_readonly_mode/1, run/3]).
@@ -55,7 +55,7 @@
 
 -callback in_readonly_mode(record()) -> boolean().
 
--callback run(atm_job_execution_ctx:record(), json_utils:json_map(), record()) ->
+-callback run(atm_job_ctx:record(), json_utils:json_map(), record()) ->
     ok | no_return().
 
 
@@ -98,11 +98,11 @@ in_readonly_mode(AtmTaskExecutor) ->
     Model:in_readonly_mode(AtmTaskExecutor).
 
 
--spec run(atm_job_execution_ctx:record(), json_utils:json_map(), record()) ->
+-spec run(atm_job_ctx:record(), json_utils:json_map(), record()) ->
     ok | no_return().
-run(AtmTaskExecutionCtx, Arguments, AtmTaskExecutor) ->
+run(AtmJobCtx, Arguments, AtmTaskExecutor) ->
     Model = utils:record_type(AtmTaskExecutor),
-    Model:run(AtmTaskExecutionCtx, Arguments, AtmTaskExecutor).
+    Model:run(AtmJobCtx, Arguments, AtmTaskExecutor).
 
 
 %%%===================================================================

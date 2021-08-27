@@ -124,8 +124,14 @@ handle(Manager, Request, RetryCounter) ->
         exit:{timeout, _} ->
             ?debug("Timeout of stream process for request ~p, retry", [Request]),
             handle(Manager, Request, RetryCounter - 1);
+        exit:Reason:Stacktrace ->
+            ?error_stacktrace("Cannot process request ~p due to: exit:~p", [Request, Reason], Stacktrace),
+            % Stream process crashed - wait and ping supervisor to wait for restart to stream by supervisor
+            timer:sleep(50),
+            call_manager(Manager, ping_stream_sup),
+            handle(Manager, Request, RetryCounter - 1);
         Reason1:Reason2:Stacktrace ->
-            ?error_stacktrace("Cannot process request ~p due to: ~p", [Request, {Reason1, Reason2}], Stacktrace),
+            ?error_stacktrace("Cannot process request ~p due to: ~p:~p", [Request, Reason1, Reason2], Stacktrace),
             handle(Manager, Request, RetryCounter - 1)
     end.
 
@@ -170,6 +176,9 @@ init([MgrSup, SessId]) ->
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), Reply :: term(), NewState :: #state{}} |
     {stop, Reason :: term(), NewState :: #state{}}.
+handle_call(ping_stream_sup, _From, #state{streams_sup = StmsSup} = State) ->
+    event_stream_sup:ping(StmsSup),
+    {reply, ok, State};
 handle_call(Request, _From, State) ->
     Retries = op_worker:get_env(event_manager_retries, 1),
     handle_in_process(Request, State, Retries),
@@ -403,7 +412,7 @@ maybe_retry_flush(FlushRequest, Manager, true) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_in_process(Request :: term(), State :: #state{}, non_neg_integer()) -> ok.
-handle_in_process(Request, State, RetryCounter) ->
+handle_in_process(Request, #state{streams_sup = StmsSup} = State, RetryCounter) ->
     try
         handle_in_process(Request, State)
     catch
@@ -415,6 +424,12 @@ handle_in_process(Request, State, RetryCounter) ->
             retry_handle(State, Request, RetryCounter);
         exit:{timeout, _} ->
             ?debug("Timeout of stream process for request ~p, retry", [Request]),
+            retry_handle(State, Request, RetryCounter);
+        exit:Reason:Stacktrace ->
+            ?error_stacktrace("Cannot process request ~p due to: exit:~p", [Request, Reason], Stacktrace),
+            % Stream process crashed - wait and ping supervisor to wait for restart to stream by supervisor
+            timer:sleep(50),
+            event_stream_sup:ping(StmsSup),
             retry_handle(State, Request, RetryCounter);
         Reason1:Reason2:Stacktrace ->
             ?error_stacktrace("Cannot process request ~p due to: ~p", [Request, {Reason1, Reason2}], Stacktrace),

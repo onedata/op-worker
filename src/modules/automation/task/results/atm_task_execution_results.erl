@@ -13,9 +13,10 @@
 -author("Bartosz Walkowicz").
 
 -include("modules/automation/atm_execution.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% API
--export([build_specs/2, apply/3]).
+-export([build_specs/2, consume_results/3]).
 
 
 %%%===================================================================
@@ -27,49 +28,34 @@
     [atm_lambda_result_spec:record()],
     [atm_task_schema_result_mapper:record()]
 ) ->
-    [atm_task_execution_result_spec:record()].
+    [atm_task_execution_result_spec:record()] | no_return().
 build_specs(AtmLambdaResultSpecs, AtmTaskSchemaResultMappers) ->
     AtmTaskSchemaResultMappersGroupedByName = group_atm_task_schema_result_mappers_by_name(
         AtmTaskSchemaResultMappers
     ),
 
     lists:foldl(fun(AtmLambdaResultSpec = #atm_lambda_result_spec{name = Name}, Acc) ->
-        AtmTaskSchemaResultMapperForName = maps:get(
+        AtmTaskSchemaResultMappersForName = maps:get(
             Name, AtmTaskSchemaResultMappersGroupedByName, []
         ),
         AtmTaskExecutionResultSpec = atm_task_execution_result_spec:build(
-            AtmLambdaResultSpec, AtmTaskSchemaResultMapperForName
+            AtmLambdaResultSpec, AtmTaskSchemaResultMappersForName
         ),
         [AtmTaskExecutionResultSpec | Acc]
     end, [], lists:usort(fun order_atm_lambda_result_specs_by_name/2, AtmLambdaResultSpecs)).
 
 
--spec apply(
-    atm_workflow_execution_env:record(),
+-spec consume_results(
+    atm_workflow_execution_ctx:record(),
     [atm_task_execution_result_spec:record()],
     json_utils:json_map()
 ) ->
     ok | no_return().
-apply(AtmWorkflowExecutionEnv, AtmTaskExecutionResultSpecs, Results) ->
-    AtmWorkflowExecutionCtx = atm_workflow_execution_env:acquire_workflow_execution_ctx(
-        AtmWorkflowExecutionEnv
-    ),
+consume_results(AtmWorkflowExecutionCtx, AtmTaskExecutionResultSpecs, Results) ->
     lists:foreach(fun(AtmTaskExecutionResultSpec) ->
         ResultName = atm_task_execution_result_spec:get_name(AtmTaskExecutionResultSpec),
-
-        case maps:get(ResultName, Results, undefined) of
-            undefined ->
-                throw(?ERROR_ATM_TASK_MISSING_RESULT(ResultName));
-            Result ->
-                try
-                    atm_task_execution_result_spec:apply_result(
-                        AtmWorkflowExecutionEnv, AtmWorkflowExecutionCtx,
-                        AtmTaskExecutionResultSpec, Result
-                    )
-                catch _:Reason ->
-                    throw(?ERROR_ATM_TASK_RESULT_MAPPING_FAILED(ResultName, Reason))
-                end
-        end
+        ResultValue = maps:get(ResultName, Results, undefined),
+        consume_result(AtmWorkflowExecutionCtx, AtmTaskExecutionResultSpec, ResultName, ResultValue)
     end, AtmTaskExecutionResultSpecs).
 
 
@@ -100,3 +86,31 @@ group_atm_task_schema_result_mappers_by_name(AtmTaskSchemaResultMappers) ->
         AtmTaskSchemaResultMapperForName = maps:get(Name, Acc, []),
         Acc#{Name => [AtmTaskSchemaResultMapper | AtmTaskSchemaResultMapperForName]}
     end, #{}, AtmTaskSchemaResultMappers).
+
+
+%% @private
+-spec consume_result(
+    atm_workflow_execution_ctx:record(),
+    atm_task_execution_result_spec:record(),
+    binary(),
+    undefined | json_utils:json_term()
+) ->
+    ok | no_return().
+consume_result(_AtmWorkflowExecutionCtx, _, <<"exception">>, _) ->
+    % TODO VFS-8248 rm case when 'exception' result will be forbidden
+    % 'exception' result is optional - if it is present it should be handled
+    % before code comes here and this case should never be called.
+    % Since it was, exception hasn't occurred.
+    ok;
+
+consume_result(_AtmWorkflowExecutionCtx, _AtmTaskExecutionResultSpec, ResultName, undefined) ->
+    throw(?ERROR_ATM_TASK_RESULT_MISSING(ResultName));
+
+consume_result(AtmWorkflowExecutionCtx, AtmTaskExecutionResultSpec, ResultName, ResultValue) ->
+    try
+        atm_task_execution_result_spec:consume_result(
+            AtmWorkflowExecutionCtx, AtmTaskExecutionResultSpec, ResultValue
+        )
+    catch _:Reason ->
+        throw(?ERROR_ATM_TASK_RESULT_MAPPING_FAILED(ResultName, Reason))
+    end.

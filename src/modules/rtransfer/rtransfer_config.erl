@@ -54,18 +54,34 @@ start_rtransfer() ->
 %% @doc
 %% Restarts only `link` native application, forcing a reload of
 %% certificates and state. Ongoing tasks will be briefly interrupted
-%% but then resumed.
+%% but then resumed. Waits until 'rtransfer_link_port' and 'rtransfer_link'
+%% gen servers are up and running.
 %% @end
 %%--------------------------------------------------------------------
 -spec restart_link() -> ok | {error, not_running}.
 restart_link() ->
     case whereis(rtransfer_link_port) of
-        undefined -> {error, not_running};
-        Pid ->
+        undefined ->
+            {error, not_running};
+        CurrentPortPid ->
             prepare_ssl_opts(),
             prepare_graphite_opts(),
-            erlang:exit(Pid, restarting),
-            ok
+            erlang:exit(CurrentPortPid, restarting),
+            utils:wait_until(fun() ->
+                case whereis(rtransfer_link_port) of
+                    undefined ->
+                        false;
+                    CurrentPortPid ->
+                        false;
+                    OtherPid when is_pid(OtherPid) ->
+                        case whereis(rtransfer_link) of
+                            LinkPid when is_pid(LinkPid) ->
+                                true;
+                            _ ->
+                                false
+                        end
+                end
+            end, 100)
     end.
 
 %%--------------------------------------------------------------------
@@ -245,12 +261,18 @@ add_storages() ->
 -spec generate_secret(ProviderId :: binary(), PeerSecret :: binary()) -> binary().
 generate_secret(ProviderId, PeerSecret) ->
     MySecret = do_generate_secret(),
-    {_, BadNodes} = utils:rpc_multicall(consistent_hashing:get_all_nodes(),
+    {NodesAns, BadNodes} = utils:rpc_multicall(consistent_hashing:get_all_nodes(),
                                   rtransfer_link, allow_connection,
                                   [ProviderId, MySecret, PeerSecret, 60000]),
     BadNodes =/= [] andalso
         ?error("Failed to allow rtransfer connection from ~p on nodes ~p",
                [ProviderId, BadNodes]),
+    FilteredNodesAns = lists:filter(fun
+        (#{<<"done">> := true}) -> false;
+        (_) -> true
+    end, NodesAns),
+    FilteredNodesAns =/= [] andalso
+        ?error("Failed to allow rtransfer connection from ~p, rpc answer: ~p", [ProviderId, NodesAns]),
     MySecret.
 
 %%--------------------------------------------------------------------

@@ -34,7 +34,7 @@
 
 -record(atm_lane_execution, {
     schema_id :: automation:id(),
-    status :: atm_task_execution:status(),
+    status :: atm_workflow_block_execution_status:status(),
     parallel_boxes :: [atm_parallel_box_execution:record()]
 }).
 -type record() :: #atm_lane_execution{}.
@@ -47,7 +47,8 @@
 %%%===================================================================
 
 
--spec create_all(atm_workflow_execution:creation_ctx()) -> [record()] | no_return().
+-spec create_all(atm_workflow_execution_factory:creation_ctx()) ->
+    [{record(), atm_task_execution_factory:task_store_registry()}] | no_return().
 create_all(#atm_workflow_execution_creation_ctx{
     workflow_schema_doc = #document{value = #od_atm_workflow_schema{
         lanes = AtmLaneSchemas
@@ -57,42 +58,52 @@ create_all(#atm_workflow_execution_creation_ctx{
         id = AtmLaneSchemaId
     } = AtmLaneSchema}, Acc) ->
         try
-            AtmLaneExecution = create(AtmWorkflowExecutionCreationCtx, AtmLaneIndex, AtmLaneSchema),
-            [AtmLaneExecution | Acc]
+            [create(AtmWorkflowExecutionCreationCtx, AtmLaneIndex, AtmLaneSchema) | Acc]
         catch _:Reason ->
-            catch delete_all(Acc),
+            catch delete_all([Rec || {Rec, _} <- Acc]),
             throw(?ERROR_ATM_LANE_EXECUTION_CREATION_FAILED(AtmLaneSchemaId, Reason))
         end
     end, [], lists_utils:enumerate(AtmLaneSchemas))).
 
 
 -spec create(
-    atm_workflow_execution:creation_ctx(),
+    atm_workflow_execution_factory:creation_ctx(),
     non_neg_integer(),
     atm_lane_schema:record()
 ) ->
-    record() | no_return().
+    {record(), atm_task_execution_factory:task_store_registry()} | no_return().
 create(_AtmWorkflowExecutionCreationCtx, _AtmLaneIndex, #atm_lane_schema{
     id = AtmLaneSchemaId,
     parallel_boxes = []
 }) ->
-    throw(?ERROR_ATM_EMPTY_LANE(AtmLaneSchemaId));
+    throw(?ERROR_ATM_LANE_EMPTY(AtmLaneSchemaId));
 
 create(AtmWorkflowExecutionCreationCtx, AtmLaneIndex, #atm_lane_schema{
     id = AtmLaneSchemaId,
     parallel_boxes = AtmParallelBoxSchemas
 }) ->
-    AtmParallelBoxExecutions = atm_parallel_box_execution:create_all(
+    AtmParallelBoxExecutionsAndTaskStoreRegistries = atm_parallel_box_execution:create_all(
         AtmWorkflowExecutionCreationCtx, AtmLaneIndex, AtmParallelBoxSchemas
     ),
+    {AtmParallelBoxExecutions, AtmLaneTaskStoreRegistry} = lists:foldr(fun(
+        {AtmParallelBoxExecution, AtmParallelBoxTaskStoreRegistry},
+        {AtmParallelBoxExecutionsAcc, AtmLaneTaskStoreRegistryAcc}
+    ) ->
+        {
+            [AtmParallelBoxExecution | AtmParallelBoxExecutionsAcc],
+            maps:merge(AtmParallelBoxTaskStoreRegistry, AtmLaneTaskStoreRegistryAcc)
+        }
+    end, {[], #{}}, AtmParallelBoxExecutionsAndTaskStoreRegistries),
 
-    #atm_lane_execution{
+    AtmLaneExecution = #atm_lane_execution{
         schema_id = AtmLaneSchemaId,
-        status = atm_task_execution_status_utils:converge(
+        status = atm_workflow_block_execution_status:infer(
             atm_parallel_box_execution:gather_statuses(AtmParallelBoxExecutions)
         ),
         parallel_boxes = AtmParallelBoxExecutions
-    }.
+    },
+
+    {AtmLaneExecution, AtmLaneTaskStoreRegistry}.
 
 
 -spec prepare_all(atm_workflow_execution_ctx:record(), [record()]) -> ok | no_return().
@@ -179,7 +190,7 @@ update_task_status(AtmParallelBoxIndex, AtmTaskExecutionId, NewStatus, #atm_lane
                 NewParallelBoxExecution, AtmParallelBoxIndex, AtmParallelBoxExecutions
             ),
             {ok, AtmLaneExecution#atm_lane_execution{
-                status = atm_task_execution_status_utils:converge(
+                status = atm_workflow_block_execution_status:infer(
                     atm_parallel_box_execution:gather_statuses(NewAtmParallelBoxExecutions)
                 ),
                 parallel_boxes = NewAtmParallelBoxExecutions
@@ -263,7 +274,7 @@ db_decode(#{
     ok | no_return().
 pforeach_not_ended(Callback, AtmLaneExecutions) ->
     atm_parallel_runner:foreach(fun(#atm_lane_execution{status = Status} = AtmLaneExecution) ->
-        case atm_task_execution_status_utils:is_ended(Status) of
+        case atm_workflow_block_execution_status:is_ended(Status) of
             true -> ok;
             false -> Callback(AtmLaneExecution)
         end
