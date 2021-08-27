@@ -94,6 +94,7 @@ gather_configuration() ->
 resolve_handler(get, instance, protected) -> ?MODULE;
 resolve_handler(get, configuration, public) -> ?MODULE;
 resolve_handler(get, test_image, public) -> ?MODULE;
+resolve_handler(get, health, public) -> ?MODULE;
 
 resolve_handler(_, _, _) -> throw(?ERROR_NOT_SUPPORTED).
 
@@ -114,6 +115,8 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = instance}}) ->
 data_spec(#op_req{operation = get, gri = #gri{aspect = configuration}}) ->
     undefined;
 data_spec(#op_req{operation = get, gri = #gri{aspect = test_image}}) ->
+    undefined;
+data_spec(#op_req{operation = get, gri = #gri{aspect = health}}) ->
     undefined.
 
 
@@ -126,7 +129,8 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = test_image}}) ->
     {ok, middleware:versioned_entity()} | errors:error().
 fetch_entity(#op_req{gri = #gri{aspect = As, scope = public}}) when
     As =:= configuration;
-    As =:= test_image
+    As =:= test_image;
+    As =:= health
 ->
     {ok, {undefined, 1}};
 
@@ -161,6 +165,8 @@ authorize(#op_req{operation = get, gri = #gri{aspect = instance}}, _) ->
 authorize(#op_req{operation = get, gri = #gri{aspect = configuration}}, _) ->
     true;
 authorize(#op_req{operation = get, gri = #gri{aspect = test_image}}, _) ->
+    true;
+authorize(#op_req{operation = get, gri = #gri{aspect = health}}, _) ->
     true.
 
 
@@ -176,6 +182,8 @@ validate(#op_req{operation = get, gri = #gri{aspect = instance}}, _) ->
 validate(#op_req{operation = get, gri = #gri{aspect = configuration}}, _) ->
     ok;
 validate(#op_req{operation = get, gri = #gri{aspect = test_image}}, _) ->
+    ok;
+validate(#op_req{operation = get, gri = #gri{aspect = health}}, _) ->
     ok.
 
 
@@ -208,8 +216,12 @@ get(#op_req{gri = #gri{aspect = test_image}}, _) ->
         112, 72, 89, 115, 0, 0, 14, 196, 0, 0, 14, 196, 1, 149, 43, 14, 27,
         0, 0, 0, 10, 73, 68, 65, 84, 8, 153, 99, 96, 0, 0, 0, 2, 0, 1, 244,
         113, 100, 166, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130
-    >>}}.
-
+    >>}};
+get(#op_req{gri = #gri{aspect = health}}, _) ->
+    case node_manager:is_cluster_healthy() of
+        true -> {ok, value, #{<<"status">> => <<"healthy">>}};
+        false -> throw(?ERROR_INTERNAL_SERVER_ERROR)
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc

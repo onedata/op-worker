@@ -12,8 +12,8 @@
 -module(atm_store_test_utils).
 -author("Michal Stanisz").
 
--include("modules/automation/atm_tmp.hrl").
 -include("modules/datastore/datastore_runner.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% API
 -export([create_workflow_execution_auth/3]).

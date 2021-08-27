@@ -68,7 +68,7 @@
 %%% There are 2 modules, that implement this behaviour:
 %%%   * main_harvesting_stream - responsible for harvesting metadata changes
 %%%                              in given space. It is always the stream that
-%%%                              hast the highest processed sequence number in
+%%%                              has the highest processed sequence number in
 %%%                              the space, out of all streams harvesting given
 %%%                              space. It also reacts on changes in the harvesters'
 %%%                              structure by updating its own Destination and by
@@ -782,4 +782,6 @@ is_harvested_model(_) -> false.
 
 -spec is_uuid_restricted(file_meta:uuid()) -> boolean().
 is_uuid_restricted(Uuid) ->
-    fslogic_uuid:is_trash_dir_uuid(Uuid).
+    fslogic_uuid:is_trash_dir_uuid(Uuid) orelse
+        archivisation_tree:is_special_uuid(Uuid) orelse 
+            archivisation_tree:uuid_to_archive_id(Uuid) =/= undefined.

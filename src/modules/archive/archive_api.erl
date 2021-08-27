@@ -134,13 +134,14 @@ update_archive(ArchiveId, Diff) ->
     archive:modify_attrs(ArchiveId, Diff).
 
 
--spec get_archive_info(archive:id()) -> {ok, info()}.
+-spec get_archive_info(archive:id()) -> {ok, info()} | {error, term()}.
 get_archive_info(ArchiveId) ->
     get_archive_info(ArchiveId, undefined).
 
 
 %% @private
--spec get_archive_info(archive:id() | archive:doc(), index() | undefined) -> {ok, info()}.
+-spec get_archive_info(archive:id() | archive:doc(), index() | undefined) -> 
+    {ok, info()} | {error, term()}.
 get_archive_info(ArchiveDoc = #document{}, ArchiveIndex) ->
     {ok, ArchiveId} = archive:get_id(ArchiveDoc),
     {ok, DatasetId} = archive:get_dataset_id(ArchiveDoc),
@@ -174,8 +175,12 @@ get_archive_info(ArchiveDoc = #document{}, ArchiveIndex) ->
         related_dip = RelatedDip
     }};
 get_archive_info(ArchiveId, ArchiveIndex) ->
-    {ok, ArchiveDoc} = archive:get(ArchiveId),
-    get_archive_info(ArchiveDoc, ArchiveIndex).
+    case archive:get(ArchiveId) of
+        {ok, ArchiveDoc} ->
+            get_archive_info(ArchiveDoc, ArchiveIndex);
+        {error, _} = Error ->
+            Error
+    end.
 
 
 -spec list_archives(dataset:id(), archives_list:opts(), listing_mode()) ->
@@ -192,15 +197,10 @@ list_archives(DatasetId, ListingOpts, ListingMode) ->
 
 
 -spec init_archive_purge(archive:id(), archive:callback(), user_ctx:ctx()) -> ok | error().
-init_archive_purge(ArchiveId, CallbackUrl, UserCtx) ->
+init_archive_purge(ArchiveId, CallbackUrl, _UserCtx) ->
     case archive:mark_purging(ArchiveId, CallbackUrl) of
         {ok, ArchiveDoc} ->
             {ok, DatasetId} = archive:get_dataset_id(ArchiveDoc),
-            % TODO VFS-7718 Should it be possible to register many callbacks in case of parallel purge requests?
-            {ok, SpaceId} = archive:get_space_id(ArchiveDoc),
-            ArchiveDocCtx = file_ctx:new_by_uuid(?ARCHIVE_DIR_UUID(ArchiveId), SpaceId),
-            delete_req:delete_using_trash(UserCtx, ArchiveDocCtx, true),
-
             % TODO VFS-7718 removal of archive doc and callback should be executed when deleting from trash is finished
             % (now it's done before archive files are deleted from storage)
             ok = remove_archive_recursive(ArchiveDoc),
@@ -287,11 +287,15 @@ remove_archives(Archive, RelatedArchive) ->
 -spec remove_single_archive(archive:id() | archive:doc(), user_ctx:ctx()) -> ok | error().
 remove_single_archive(undefined, _UserCtx) ->
     ok;
-remove_single_archive(ArchiveDoc = #document{}, _UserCtx) ->
+remove_single_archive(ArchiveDoc = #document{}, UserCtx) ->
     {ok, ArchiveId} = archive:get_id(ArchiveDoc),
     case archive:delete(ArchiveId) of
         ok ->
             {ok, SpaceId} = archive:get_space_id(ArchiveDoc),
+            ArchiveDocCtx = file_ctx:new_by_uuid(?ARCHIVE_DIR_UUID(ArchiveId), SpaceId),
+            % TODO VFS-7718 Should it be possible to register many callbacks in case of parallel purge requests?
+            delete_req:delete_using_trash(UserCtx, ArchiveDocCtx, true),
+            
             {ok, DatasetId} = archive:get_dataset_id(ArchiveDoc),
             {ok, Timestamp} = archive:get_creation_time(ArchiveDoc),
             {ok, ParentArchiveId} = archive:get_parent(ArchiveDoc),

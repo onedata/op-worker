@@ -53,6 +53,20 @@
 -define(MAX_NOTIFICATION_RETRIES, 30).
 
 
+-define(run(__ATM_WORKFLOW_EXECUTION_ID, __EXPR),
+    try
+        __EXPR
+    catch __TYPE:__REASON:__STACKTRACE ->
+        ?error_stacktrace(
+            "Unexpected error during atm workflow execution (~p) in ~w:~w - ~w:~p",
+            [__ATM_WORKFLOW_EXECUTION_ID, ?MODULE, ?FUNCTION_NAME, __TYPE, __REASON],
+            __STACKTRACE
+        ),
+        error
+    end
+).
+
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -104,7 +118,7 @@ prepare(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv) ->
     try
         prepare_internal(AtmWorkflowExecutionId, AtmWorkflowExecutionCtx)
     catch _:Reason ->
-        % TODO VFS-7637 use audit log
+        % TODO VFS-8273 use audit log
         ?error("[~p] FAILED TO PREPARE WORKFLOW DUE TO: ~p", [
             AtmWorkflowExecutionId, Reason
         ]),
@@ -136,7 +150,7 @@ get_lane_spec(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmLaneIndex) ->
             is_last => is_last_lane(AtmLaneIndex, AtmWorkflowExecutionDoc)
         }}
     catch _:Reason ->
-        % TODO VFS-7637 use audit log
+        % TODO VFS-8273 use audit log
         ?error("[~p] FAILED TO GET LANE ~p SPEC DUE TO: ~p", [
             AtmWorkflowExecutionId, AtmLaneIndex, Reason
         ]),
@@ -160,20 +174,10 @@ process_item(
     AtmWorkflowExecutionCtx = atm_workflow_execution_ctx:acquire(
         AtmTaskExecutionId, AtmWorkflowExecutionEnv
     ),
-
-    try
-        ok = atm_task_execution_handler:process_item(
-            AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item,
-            ReportResultUrl, HeartbeatUrl
-        )
-    catch _:Reason ->
-        % TODO VFS-7637 use audit log
-        ?error("[~p] FAILED TO RUN TASK ~p DUE TO: ~p", [
-            AtmWorkflowExecutionId, AtmTaskExecutionId, Reason
-        ]),
-        report_task_execution_failed(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item),
-        error
-    end.
+    ?run(AtmWorkflowExecutionId, atm_task_execution_handler:process_item(
+        AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item,
+        ReportResultUrl, HeartbeatUrl
+    )).
 
 
 -spec process_result(
@@ -184,28 +188,13 @@ process_item(
     {error, term()} | json_utils:json_map()
 ) ->
     ok | error.
-process_result(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmTaskExecutionId, Item, {error, _} = Error) ->
-    process_result(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmTaskExecutionId, Item, #{
-        <<"exception">> => errors:to_json(Error)
-    });
-
 process_result(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmTaskExecutionId, Item, Results) ->
     AtmWorkflowExecutionCtx = atm_workflow_execution_ctx:acquire(
         AtmTaskExecutionId, AtmWorkflowExecutionEnv
     ),
-
-    try
-        atm_task_execution_handler:process_results(
-            AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, Results
-        )
-    catch _:Reason ->
-        % TODO VFS-7637 use audit log
-        ?error("[~p] FAILED TO PROCESS RESULTS FOR TASK EXECUTION ~p DUE TO: ~p", [
-            AtmWorkflowExecutionId, AtmTaskExecutionId, Reason
-        ]),
-        report_task_execution_failed(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item),
-        error
-    end.
+    ?run(AtmWorkflowExecutionId, atm_task_execution_handler:process_results(
+        AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, Results
+    )).
 
 
 -spec handle_task_execution_ended(
@@ -218,7 +207,7 @@ handle_task_execution_ended(AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv, At
     try
         ok = atm_task_execution_handler:handle_ended(AtmTaskExecutionId)
     catch _:Reason ->
-        % TODO VFS-7637 use audit log
+        % TODO VFS-8273 use audit log
         ?error("[~p] FAILED TO MARK TASK EXECUTION ~p AS ENDED DUE TO: ~p", [
             AtmWorkflowExecutionId, AtmTaskExecutionId, Reason
         ])
@@ -240,7 +229,7 @@ handle_lane_execution_ended(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, Atm
 
         unfreeze_lane_iteration_store(AtmWorkflowExecutionCtx, AtmLaneSchema)
     catch _:Reason ->
-        % TODO VFS-7637 use audit log
+        % TODO VFS-8273 use audit log
         ?error("[~p] FAILED TO MARK LANE EXECUTION ~p AS ENDED DUE TO: ~p", [
             AtmWorkflowExecutionId, AtmLaneIndex, Reason
         ])
@@ -262,7 +251,7 @@ handle_workflow_execution_ended(AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv
         teardown(AtmWorkflowExecutionDoc),
         notify_ended(AtmWorkflowExecutionDoc)
     catch _:Reason ->
-        % TODO VFS-7637 use audit log
+        % TODO VFS-8273 use audit log
         ?error("[~p] FAILED TO MARK WORKFLOW EXECUTION AS ENDED DUE TO: ~p", [
             AtmWorkflowExecutionId, Reason
         ])
@@ -364,18 +353,6 @@ acquire_iterator_for_lane(AtmWorkflowExecutionCtx, #atm_lane_schema{
         AtmStoreSchemaId, AtmWorkflowExecutionCtx
     ),
     atm_store_api:acquire_iterator(AtmStoreId, AtmStoreIteratorSpec).
-
-
-%% @private
--spec report_task_execution_failed(
-    atm_workflow_execution_ctx:record(),
-    atm_task_execution:id(),
-    automation:item()
-) ->
-    ok.
-report_task_execution_failed(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item) ->
-    catch atm_task_execution_handler:process_results(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, error),
-    ok.
 
 
 %% @private

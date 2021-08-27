@@ -51,5 +51,16 @@ routes() -> [
             aspect = test_image, 
             scope = public
         }
+    }},
+    %% Check cluster health
+    {<<"/health">>, rest_handler, #rest_req{
+        method = 'GET',
+        produces = [<<"application/json">>],
+        b_gri = #b_gri{
+            type = op_provider, 
+            id = undefined, 
+            aspect = health, 
+            scope = public
+        }
     }}
 ].
