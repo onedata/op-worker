@@ -67,6 +67,7 @@
 -export([enable_cache/0]).
 -export([request/1, request/2, request/3]).
 -export([invalidate_cache/1, invalidate_cache/2]).
+-export([force_fetch_entity/1]).
 -export([process_push_message/1]).
 
 %% gen_server callbacks
@@ -177,7 +178,7 @@ request(Client, Req, Timeout) ->
     try
         case check_api_authorization(client_to_credentials(Client), Req) of
             ok ->
-                do_request(Client, Req, Timeout);
+                do_request(Client, Req, Timeout, reuse_cached);
             {error, _} = Err1 ->
                 Err1
         end
@@ -190,6 +191,24 @@ request(Client, Req, Timeout) ->
             ], Stacktrace),
             ?ERROR_INTERNAL_SERVER_ERROR
     end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Fetches the entity from Onezone, ignoring the local cache. This guarantees
+%% that the newest version of the entity (at the moment of serving the request
+%% by Onezone) is fetched and then cached locally. Should be called whenever the
+%% Oneprovider causes an update of an entity to force cache convergence as soon
+%% as possible.
+%% @end
+%%--------------------------------------------------------------------
+-spec force_fetch_entity(gri:gri()) -> result().
+force_fetch_entity(GRI) ->
+    do_request(?ROOT_SESS_ID, #gs_req_graph{
+        operation = get,
+        gri = GRI,
+        subscribe = true
+    }, ?GS_REQUEST_TIMEOUT, ignore_cached).
 
 
 %%--------------------------------------------------------------------
@@ -472,31 +491,33 @@ check_api_authorization(TokenCredentials, #gs_req_graph{operation = Operation, g
 
 
 %% @private
--spec do_request(client(), gs_protocol:graph_req(), timeout()) ->
+-spec do_request(client(), gs_protocol:graph_req(), timeout(), reuse_cached | ignore_cached) ->
     result().
-do_request(Client, #gs_req_graph{operation = get} = GraphReq, Timeout) ->
+do_request(Client, #gs_req_graph{operation = get} = GraphReq, Timeout, reuse_cached) ->
     case maybe_serve_from_cache(Client, GraphReq) of
         {error, _} = Err1 ->
             Err1;
         {true, Doc} ->
             {ok, Doc};
         false ->
-            case call_onezone(Client, GraphReq, Timeout) of
-                {error, _} = Err2 ->
-                    Err2;
-                {ok, #gs_resp_graph{data_format = resource, data = Resource}} ->
-                    GRIStr = maps:get(<<"gri">>, Resource),
-                    Revision = maps:get(<<"revision">>, Resource),
-                    NewGRI = gri:deserialize(GRIStr),
-                    Doc = gs_client_translator:translate(NewGRI, Resource),
-                    case maybe_coalesce_cache(get_connection_pid(), NewGRI, Doc, Revision) of
-                        {ok, NewestDoc} -> {ok, NewestDoc};
-                        % In case a stale record is detected, repeat the request
-                        {error, stale_record} -> do_request(Client, GraphReq, Timeout)
-                    end
+            do_request(Client, GraphReq, Timeout, ignore_cached)
+    end;
+do_request(Client, #gs_req_graph{operation = get} = GraphReq, Timeout, ignore_cached) ->
+    case call_onezone(Client, GraphReq, Timeout) of
+        {error, _} = Error ->
+            Error;
+        {ok, #gs_resp_graph{data_format = resource, data = Resource}} ->
+            GRIStr = maps:get(<<"gri">>, Resource),
+            Revision = maps:get(<<"revision">>, Resource),
+            NewGRI = gri:deserialize(GRIStr),
+            Doc = gs_client_translator:translate(NewGRI, Resource),
+            case maybe_coalesce_cache(get_connection_pid(), NewGRI, Doc, Revision) of
+                {ok, NewestDoc} -> {ok, NewestDoc};
+                % in case a stale record is detected, repeat the request
+                {error, stale_record} -> do_request(Client, GraphReq, Timeout, ignore_cached)
             end
     end;
-do_request(Client, #gs_req_graph{operation = create} = GraphReq, Timeout) ->
+do_request(Client, #gs_req_graph{operation = create} = GraphReq, Timeout, _) ->
     case call_onezone(Client, GraphReq, Timeout) of
         {error, _} = Error ->
             Error;
@@ -511,14 +532,17 @@ do_request(Client, #gs_req_graph{operation = create} = GraphReq, Timeout) ->
                     Revision = maps:get(<<"revision">>, Resource),
                     Doc = gs_client_translator:translate(NewGRI, Resource),
                     case maybe_coalesce_cache(get_connection_pid(), NewGRI, Doc, Revision) of
-                        {ok, NewestDoc} -> {ok, {NewGRI, NewestDoc}};
-                        % In case a stale record is detected, repeat the request
-                        {error, stale_record} -> do_request(Client, GraphReq, Timeout)
+                        {ok, NewestDoc} ->
+                            {ok, {NewGRI, NewestDoc}};
+                        {error, stale_record} ->
+                            % in case a stale record is detected, force fetch the created entity
+                            {ok, FetchedDoc} = force_fetch_entity(NewGRI),
+                            {ok, {NewGRI, FetchedDoc}}
                     end
             end
     end;
 % covers 'delete' and 'update' operations
-do_request(Client, #gs_req_graph{} = GraphReq, Timeout) ->
+do_request(Client, #gs_req_graph{} = GraphReq, Timeout, _) ->
     case call_onezone(Client, GraphReq, Timeout) of
         {error, _} = Error ->
             Error;

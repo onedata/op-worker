@@ -96,6 +96,7 @@ create(Name, Helper, LumaConfig, ImportedStorage, Readonly, QosParameters) ->
             case storage_config:create(Id, Helper, LumaConfig) of
                 {ok, Id} ->
                     on_storage_created(Id),
+                    ?notice("Successfully added storage '~ts' with Id: '~s'", [Name, Id]),
                     {ok, Id};
                 StorageConfigError ->
                     case storage_logic:delete_in_zone(Id) of

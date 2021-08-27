@@ -29,6 +29,7 @@
 -include_lib("ctool/include/onedata.hrl").
 
 -export([get/0, get/1, get/2, get_protected_data/2, get_protected_data/3]).
+-export([force_fetch/0]).
 -export([to_printable/1]).
 -export([update/1, update/2]).
 -export([get_name/0, get_name/1, get_name/2]).
@@ -141,6 +142,11 @@ get_protected_data(SessionId, ProviderId, AuthHint) ->
     }).
 
 
+-spec force_fetch() -> {ok, od_provider:doc()} | errors:error().
+force_fetch() ->
+    gs_client_worker:force_fetch_entity(#gri{type = od_provider, id = oneprovider:get_id(), aspect = instance}).
+
+
 -spec to_printable(od_provider:id()) -> string().
 to_printable(ProviderId) ->
     case provider_logic:get_name(ProviderId) of
@@ -173,7 +179,7 @@ update(SessionId, Data) ->
         gri = #gri{type = od_provider, id = ?SELF, aspect = instance}
     }),
     ?ON_SUCCESS(Result, fun(_) ->
-        gs_client_worker:invalidate_cache(od_provider, oneprovider:get_id())
+        provider_logic:force_fetch()
     end).
 
 
@@ -482,7 +488,7 @@ set_delegated_subdomain(Subdomain) ->
     IPs = node_manager:get_cluster_ips(),
     case set_subdomain_delegation(Subdomain, IPs) of
         ok ->
-            gs_client_worker:invalidate_cache(od_provider, oneprovider:get_id()),
+            provider_logic:force_fetch(),
             ok;
         Error ->
             Error
@@ -555,7 +561,7 @@ set_domain(Domain) ->
             aspect = domain_config}
     }),
     ?ON_SUCCESS(Result, fun(_) ->
-        gs_client_worker:invalidate_cache(od_provider, oneprovider:get_id())
+        provider_logic:force_fetch()
     end).
 
 
@@ -617,7 +623,7 @@ set_subdomain_delegation(Subdomain, IPs) ->
         gri = #gri{type = od_provider, id = ?SELF, aspect = domain_config}
     }),
     ?ON_SUCCESS(Result, fun(_) ->
-        gs_client_worker:invalidate_cache(od_provider, oneprovider:get_id())
+        provider_logic:force_fetch()
     end).
 
 

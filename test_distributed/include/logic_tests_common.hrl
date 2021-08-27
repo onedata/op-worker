@@ -99,7 +99,6 @@
 -define(USER_EFF_GROUPS(__User), [?GROUP_1, ?GROUP_2]).
 -define(USER_EFF_SPACES(__User), [?SPACE_1, ?SPACE_2]).
 -define(USER_EFF_HANDLE_SERVICES(__User), [?HANDLE_SERVICE_1, ?HANDLE_SERVICE_2]).
--define(USER_EFF_HANDLES(__User), [?HANDLE_1, ?HANDLE_2]).
 -define(USER_EFF_ATM_INVENTORIES(__User), [?ATM_INVENTORY_1]).
 
 % Mocked group data
@@ -422,7 +421,6 @@ end).
     eff_groups = ?USER_EFF_GROUPS(__User),
     eff_spaces = ?USER_EFF_SPACES(__User),
     eff_handle_services = ?USER_EFF_HANDLE_SERVICES(__User),
-    eff_handles = ?USER_EFF_HANDLES(__User),
     eff_atm_inventories = ?USER_EFF_ATM_INVENTORIES(__User)
 }}).
 -define(USER_PROTECTED_DATA_MATCHER(__User), #document{key = __User, value = #od_user{
@@ -435,7 +433,7 @@ end).
     eff_groups = [],
     eff_spaces = [],
     eff_handle_services = [],
-    eff_handles = []
+    eff_atm_inventories = []
 }}).
 -define(USER_SHARED_DATA_MATCHER(__User), #document{key = __User, value = #od_user{
     full_name = ?USER_FULL_NAME(__User),
@@ -447,7 +445,7 @@ end).
     eff_groups = [],
     eff_spaces = [],
     eff_handle_services = [],
-    eff_handles = []
+    eff_atm_inventories = []
 }}).
 
 
@@ -628,7 +626,6 @@ end).
         <<"effectiveGroups">> => ?USER_EFF_GROUPS(__UserId),
         <<"effectiveSpaces">> => ?USER_EFF_SPACES(__UserId),
         <<"effectiveHandleServices">> => ?USER_EFF_HANDLE_SERVICES(__UserId),
-        <<"effectiveHandles">> => ?USER_EFF_HANDLES(__UserId),
         <<"effectiveAtmInventories">> => ?USER_EFF_ATM_INVENTORIES(__UserId)
     }
 end).

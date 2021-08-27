@@ -332,34 +332,35 @@ create_update_delete_test(Config) ->
             <<"description">> => <<"New share description">>
         }])
     ),
-    ?assertEqual(GraphCalls + 3, logic_tests_common:count_reqs(Config, graph, ShareGriMatcher)),
+    % two requests should be done - one for update and one for force fetch
+    ?assertEqual(GraphCalls + 4, logic_tests_common:count_reqs(Config, graph, ShareGriMatcher)),
     ?assertMatch(
         ?ERROR_BAD_VALUE_BINARY(<<"name">>),
         rpc:call(Node, share_logic, update, [User1Sess, ?SHARE_1, #{<<"name">> => 1234}])
     ),
-    ?assertEqual(GraphCalls + 4, logic_tests_common:count_reqs(Config, graph, ShareGriMatcher)),
+    ?assertEqual(GraphCalls + 5, logic_tests_common:count_reqs(Config, graph, ShareGriMatcher)),
     ?assertMatch(
         ?ERROR_BAD_VALUE_BINARY(<<"description">>),
         rpc:call(Node, share_logic, update, [User1Sess, ?SHARE_1, #{<<"description">> => 87.9}])
     ),
-    ?assertEqual(GraphCalls + 5, logic_tests_common:count_reqs(Config, graph, ShareGriMatcher)),
+    ?assertEqual(GraphCalls + 6, logic_tests_common:count_reqs(Config, graph, ShareGriMatcher)),
     ?assertMatch(
         ?ERROR_MISSING_AT_LEAST_ONE_VALUE([<<"description">>, <<"name">>]),
         rpc:call(Node, share_logic, update, [User1Sess, ?SHARE_1, #{}])
     ),
-    ?assertEqual(GraphCalls + 6, logic_tests_common:count_reqs(Config, graph, ShareGriMatcher)),
+    ?assertEqual(GraphCalls + 7, logic_tests_common:count_reqs(Config, graph, ShareGriMatcher)),
 
     % Delete
     ?assertMatch(
         ok,
         rpc:call(Node, share_logic, delete, [User1Sess, ?SHARE_1])
     ),
-    ?assertEqual(GraphCalls + 7, logic_tests_common:count_reqs(Config, graph, ShareGriMatcher)),
+    ?assertEqual(GraphCalls + 8, logic_tests_common:count_reqs(Config, graph, ShareGriMatcher)),
     ?assertMatch(
         ?ERROR_NOT_FOUND,
         rpc:call(Node, share_logic, delete, [User1Sess, <<"wrongId">>])
     ),
-    ?assertEqual(GraphCalls + 8, logic_tests_common:count_reqs(Config, graph, ShareGriMatcher)),
+    ?assertEqual(GraphCalls + 9, logic_tests_common:count_reqs(Config, graph, ShareGriMatcher)),
 
     ok.
 

@@ -27,6 +27,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 -export([get/2, get_protected_data/2]).
+-export([force_fetch/1]).
 -export([get_name/2]).
 -export([get_eff_users/2, has_eff_user/2, has_eff_user/3]).
 -export([has_eff_privilege/3, has_eff_privileges/3, get_eff_privileges/2]).
@@ -96,6 +97,11 @@ get_name(SessionId, SpaceId) ->
         {error, _} = Error ->
             Error
     end.
+
+
+-spec force_fetch(od_space:id()) -> {ok, od_space:doc()} | errors:error().
+force_fetch(SpaceId) ->
+    gs_client_worker:force_fetch_entity(#gri{type = od_space, id = SpaceId, aspect = instance}).
 
 
 -spec get_eff_users(gs_client_worker:client(), od_space:id()) ->

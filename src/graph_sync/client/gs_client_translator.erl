@@ -55,7 +55,6 @@ translate(#gri{type = od_user, id = Id, aspect = instance, scope = private}, Res
             eff_groups = maps:get(<<"effectiveGroups">>, Result),
             eff_spaces = maps:get(<<"effectiveSpaces">>, Result),
             eff_handle_services = maps:get(<<"effectiveHandleServices">>, Result),
-            eff_handles = maps:get(<<"effectiveHandles">>, Result),
             eff_atm_inventories = maps:get(<<"effectiveAtmInventories">>, Result)
         }
     };
@@ -387,7 +386,7 @@ apply_scope_mask(Doc = #document{value = User = #od_user{}}, protected) ->
             eff_groups = [],
             eff_spaces = [],
             eff_handle_services = [],
-            eff_handles = []
+            eff_atm_inventories = []
         }
     };
 apply_scope_mask(Doc = #document{value = User = #od_user{}}, shared) ->
@@ -402,7 +401,7 @@ apply_scope_mask(Doc = #document{value = User = #od_user{}}, shared) ->
             eff_groups = [],
             eff_spaces = [],
             eff_handle_services = [],
-            eff_handles = []
+            eff_atm_inventories = []
         }
     };
 
