@@ -504,8 +504,8 @@ do_request(Client, #gs_req_graph{operation = get} = GraphReq, Timeout, reuse_cac
     end;
 do_request(Client, #gs_req_graph{operation = get} = GraphReq, Timeout, ignore_cached) ->
     case call_onezone(Client, GraphReq, Timeout) of
-        {error, _} = Err2 ->
-            Err2;
+        {error, _} = Error ->
+            Error;
         {ok, #gs_resp_graph{data_format = resource, data = Resource}} ->
             GRIStr = maps:get(<<"gri">>, Resource),
             Revision = maps:get(<<"revision">>, Resource),

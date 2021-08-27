@@ -59,7 +59,7 @@ get_public_data(SessionId, ShareId) ->
     }).
 
 
--spec force_fetch(share:id()) -> {ok, od_share:doc()} | errors:error().
+-spec force_fetch(od_share:id()) -> {ok, od_share:doc()} | errors:error().
 force_fetch(ShareId) ->
     gs_client_worker:force_fetch_entity(#gri{type = od_share, id = ShareId, aspect = instance}).
 
