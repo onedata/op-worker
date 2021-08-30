@@ -643,12 +643,12 @@ gui_upload_test(_Config) ->
     ?assertMatch({ok, _}, lfm_proxy:stat(Worker, UserSessId, ?FILE_REF(FileGuid))),
 
     ?assertMatch({ok, _}, initialize_gui_upload(UserId, UserSessId, FileGuid, Worker)),
-    ?assertMatch(true, is_gui_upload_registered(UserId, FileGuid, Worker)),
+    ?assertMatch(true, authorize_chunk_upload(UserId, FileGuid, Worker)),
 
     do_multipart(Worker, ?USER(UserId, UserSessId), 5, 10, 5, FileGuid),
 
     ?assertMatch({ok, _}, finalize_gui_upload(UserId, UserSessId, FileGuid, Worker)),
-    ?assertMatch(false, is_gui_upload_registered(UserId, FileGuid, Worker), ?ATTEMPTS),
+    ?assertMatch(false, authorize_chunk_upload(UserId, FileGuid, Worker), ?ATTEMPTS),
 
     ?assertMatch(
         {ok, #file_attr{size = 250}},
@@ -670,15 +670,15 @@ gui_stale_upload_file_should_be_deleted(_Config) ->
     ?assertMatch({ok, _}, lfm_proxy:stat(Worker, UserSessId, ?FILE_REF(FileGuid))),
 
     ?assertMatch({ok, _}, initialize_gui_upload(UserId, UserSessId, FileGuid, Worker)),
-    ?assertMatch(true, is_gui_upload_registered(UserId, FileGuid, Worker)),
+    ?assertMatch(true, authorize_chunk_upload(UserId, FileGuid, Worker)),
 
     % file being uploaded shouldn't be deleted after only 30s of inactivity
     timer:sleep(timer:seconds(30)),
     ?assertMatch({ok, _}, lfm_proxy:stat(Worker, UserSessId, ?FILE_REF(FileGuid))),
-    ?assertMatch(true, is_gui_upload_registered(UserId, FileGuid, Worker)),
+    ?assertMatch(true, authorize_chunk_upload(UserId, FileGuid, Worker)),
 
     % but if upload is not resumed or finished before INACTIVITY_PERIOD then file should be deleted
-    ?assertMatch(false, is_gui_upload_registered(UserId, FileGuid, Worker), 100),
+    ?assertMatch(false, authorize_chunk_upload(UserId, FileGuid, Worker), 100),
     ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(Worker, UserSessId, ?FILE_REF(FileGuid)), ?ATTEMPTS).
 
 
@@ -694,19 +694,19 @@ gui_upload_with_time_warps_test(_Config) ->
     ?assertMatch({ok, #file_attr{mtime = CurrTime}}, lfm_proxy:stat(Worker, UserSessId, FileKey)),
 
     ?assertMatch({ok, _}, initialize_gui_upload(UserId, UserSessId, FileGuid, Worker)),
-    ?assertMatch(true, is_gui_upload_registered(UserId, FileGuid, Worker)),
+    ?assertMatch(true, authorize_chunk_upload(UserId, FileGuid, Worker)),
 
     % upload should not be canceled if time warps backward (whether write occurred or not)
     PastTime = time_test_utils:simulate_seconds_passing(-1000),
 
     ?assertMatch({ok, #file_attr{mtime = CurrTime}}, lfm_proxy:stat(Worker, UserSessId, FileKey)),
     force_stale_gui_uploads_removal(Worker),
-    ?assertMatch(true, is_gui_upload_registered(UserId, FileGuid, Worker)),
+    ?assertMatch(true, authorize_chunk_upload(UserId, FileGuid, Worker)),
 
     do_multipart(Worker, ?USER(UserId, UserSessId), 5, 10, 1, FileGuid),
     ?assertMatch({ok, #file_attr{mtime = PastTime}}, lfm_proxy:stat(Worker, UserSessId, FileKey), ?ATTEMPTS),
     force_stale_gui_uploads_removal(Worker),
-    ?assertMatch(true, is_gui_upload_registered(UserId, FileGuid, Worker)),
+    ?assertMatch(true, authorize_chunk_upload(UserId, FileGuid, Worker)),
 
     % in case of forward time warp if next chunk was written to file (this updates file mtime)
     % it should be left. Otherwise it will be deleted as stale upload.
@@ -715,13 +715,13 @@ gui_upload_with_time_warps_test(_Config) ->
     do_multipart(Worker, ?USER(UserId, UserSessId), 5, 10, 1, FileGuid),
     ?assertMatch({ok, #file_attr{mtime = FutureTime}}, lfm_proxy:stat(Worker, UserSessId, FileKey), ?ATTEMPTS),
     force_stale_gui_uploads_removal(Worker),
-    ?assertMatch(true, is_gui_upload_registered(UserId, FileGuid, Worker)),
+    ?assertMatch(true, authorize_chunk_upload(UserId, FileGuid, Worker)),
 
     time_test_utils:simulate_seconds_passing(2000),
 
     ?assertMatch({ok, #file_attr{mtime = FutureTime}}, lfm_proxy:stat(Worker, UserSessId, FileKey)),
     force_stale_gui_uploads_removal(Worker),
-    ?assertMatch(false, is_gui_upload_registered(UserId, FileGuid, Worker)),
+    ?assertMatch(false, authorize_chunk_upload(UserId, FileGuid, Worker)),
     ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(Worker, UserSessId, FileKey), ?ATTEMPTS).
 
 
@@ -744,9 +744,9 @@ finalize_gui_upload(UserId, SessionId, FileGuid, Worker) ->
 
 
 %% @private
--spec is_gui_upload_registered(od_user:id(), file_id:file_guid(), node()) -> boolean().
-is_gui_upload_registered(UserId, FileGuid, Worker) ->
-    rpc:call(Worker, file_upload_manager, is_upload_registered, [UserId, FileGuid]).
+-spec authorize_chunk_upload(od_user:id(), file_id:file_guid(), node()) -> boolean().
+authorize_chunk_upload(UserId, FileGuid, Worker) ->
+    rpc:call(Worker, file_upload_manager, authorize_chunk_upload, [UserId, FileGuid]).
 
 
 %% @private

@@ -6,10 +6,12 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Monitors activity of file uploads. If no activity (writes) happens
-%%% for longer than allowed ?INACTIVITY_PERIOD it is assumed that GUI
-%%% lost connection to backend and no more file chunks will be uploaded.
-%%% Such damaged files will be deleted.
+%%% Monitors activity of file uploads which is measured by existence of processes
+%%% uploading chunks of file (it is assumed that each chunk is handled by separate
+%%% process which terminates right after uploading entire chunk).
+%%% If no activity (writes) happens for longer than allowed inactivity period
+%%% it is assumed that GUI lost connection to backend and no more file chunks
+%%% will be uploaded. Such partially uploaded files will be deleted.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(file_upload_manager).
@@ -25,7 +27,7 @@
 
 %% API
 -export([start_service/0, start_internal/0]).
--export([register_upload/2, is_upload_registered/2, deregister_upload/2]).
+-export([register_upload/2, authorize_chunk_upload/2, deregister_upload/2]).
 
 %% gen_server callbacks
 -export([
@@ -35,10 +37,18 @@
 ]).
 
 
--type uploads() :: #{file_id:file_guid() => {od_user:id(), non_neg_integer()}}.
+-record(upload_ctx, {
+    user_id :: od_user:id(),
+    monitors :: ordsets:ordset(reference()),
+    latest_chunk_upload_ended_timestamp :: time:seconds()
+}).
+-type upload_ctx() :: #upload_ctx{}.
+-type uploads() :: #{file_id:file_guid() => upload_ctx()}.
 
 -record(state, {
     uploads = #{} :: uploads(),
+    monitor_to_file_mapping = #{} :: #{reference() => file_id:file_guid()},
+
     checkup_timer = undefined :: undefined | reference()
 }).
 -type state() :: #state{}.
@@ -51,7 +61,7 @@
 -define(CHECK_UPLOADS_REQ, check_uploads).
 
 -define(REGISTER_UPLOAD_REQ(UserId, FileGuid), {register, UserId, FileGuid}).
--define(IS_UPLOAD_REGISTERED(UserId, FileGuid), {is_registered, UserId, FileGuid}).
+-define(AUTHORIZE_CHUNK_UPLOAD(UserId, FileGuid), {authorize_chunk, UserId, FileGuid}).
 -define(DEREGISTER_UPLOAD_REQ(UserId, FileGuid), {deregister, UserId, FileGuid}).
 
 -define(NOW(), global_clock:timestamp_seconds()).
@@ -84,9 +94,9 @@ register_upload(UserId, FileGuid) ->
     call_server(?REGISTER_UPLOAD_REQ(UserId, FileGuid)).
 
 
--spec is_upload_registered(od_user:id(), file_id:file_guid()) -> boolean().
-is_upload_registered(UserId, FileGuid) ->
-    case call_server(?IS_UPLOAD_REGISTERED(UserId, FileGuid)) of
+-spec authorize_chunk_upload(od_user:id(), file_id:file_guid()) -> boolean().
+authorize_chunk_upload(UserId, FileGuid) ->
+    case call_server(?AUTHORIZE_CHUNK_UPLOAD(UserId, FileGuid)) of
         true -> true;
         _ -> false
     end.
@@ -123,18 +133,36 @@ init(_) ->
     {reply, Reply :: term(), NewState :: state()} |
     {reply, Reply :: term(), NewState :: state(), timeout() | hibernate}.
 handle_call(?REGISTER_UPLOAD_REQ(UserId, FileGuid), _, #state{uploads = Uploads} = State) ->
-    {reply, ok, maybe_schedule_uploads_checkup(State#state{
-        uploads = Uploads#{FileGuid => {UserId, ?NOW() + ?INACTIVITY_PERIOD_SEC()}}
-    })};
+    UploadCtx = #upload_ctx{
+        user_id = UserId,
+        monitors = ordsets:new(),
+        latest_chunk_upload_ended_timestamp = ?NOW()
+    },
+    {reply, ok, maybe_schedule_uploads_checkup(State#state{uploads = Uploads#{
+        FileGuid => UploadCtx
+    }})};
 
-handle_call(?IS_UPLOAD_REGISTERED(UserId, FileGuid), _, #state{uploads = Uploads} = State) ->
-    IsRegistered = case maps:find(FileGuid, Uploads) of
-        {ok, {UserId, _}} ->
-            true;
+handle_call(?AUTHORIZE_CHUNK_UPLOAD(UserId, FileGuid), {ClientPid, _}, State = #state{
+    uploads = Uploads,
+    monitor_to_file_mapping = MonitorToFileMapping
+}) ->
+    {IsAllowed, NewState} = case maps:find(FileGuid, Uploads) of
+        {ok, #upload_ctx{user_id = UserId, monitors = Monitors} = UploadCtx} ->
+            Monitor = erlang:monitor(process, ClientPid),
+            NewUploadCtx = UploadCtx#upload_ctx{monitors = ordsets:add_element(
+                Monitor, Monitors
+            )},
+            {true, State#state{
+                uploads = #{FileGuid => NewUploadCtx},
+                monitor_to_file_mapping = MonitorToFileMapping#{Monitor => FileGuid}
+            }};
         _ ->
-            false
+            {false, State}
     end,
-    {reply, IsRegistered, State};
+    case maps:size(NewState#state.uploads) of
+        0 -> {reply, IsAllowed, NewState, hibernate};
+        _ -> {reply, IsAllowed, NewState}
+    end;
 
 handle_call(Request, _From, State) ->
     ?log_bad_request(Request),
@@ -150,10 +178,19 @@ handle_call(Request, _From, State) ->
 -spec handle_cast(Request :: term(), state()) ->
     {noreply, NewState :: state()} |
     {noreply, NewState :: state(), hibernate}.
-handle_cast(?DEREGISTER_UPLOAD_REQ(UserId, FileGuid), #state{uploads = Uploads} = State) ->
+handle_cast(?DEREGISTER_UPLOAD_REQ(UserId, FileGuid), State = #state{
+    uploads = Uploads,
+    monitor_to_file_mapping = MonitorToFileMapping
+}) ->
     NewState = case maps:take(FileGuid, Uploads) of
-        {{UserId, _}, ActiveUploads} ->
-            State#state{uploads = ActiveUploads};
+        {#upload_ctx{user_id = UserId, monitors = Monitors}, ActiveUploads} ->
+            MonitorsList = ordsets:to_list(Monitors),
+            lists:foreach(fun(Ref) -> erlang:demonitor(Ref, [flush]) end, MonitorsList),
+
+            State#state{
+                uploads = ActiveUploads,
+                monitor_to_file_mapping = maps:without(MonitorsList, MonitorToFileMapping)
+            };
         _ ->
             State
     end,
@@ -176,6 +213,29 @@ handle_cast(Request, State) ->
 -spec handle_info(Info :: term(), state()) ->
     {noreply, NewState :: state()} |
     {noreply, NewState :: state(), hibernate}.
+handle_info({'DOWN', Monitor, process, _, _}, State = #state{
+    uploads = Uploads,
+    monitor_to_file_mapping = MonitorToFileMapping
+}) ->
+    NewState = case maps:take(Monitor, MonitorToFileMapping) of
+        error ->
+            State;
+        {FileGuid, NewMonitorToFileMapping} ->
+            UploadCtx = #upload_ctx{monitors = Monitors} = maps:get(FileGuid, Uploads),
+            NewUploadCtx = UploadCtx#upload_ctx{
+                monitors = ordsets:del_element(Monitor, Monitors),
+                latest_chunk_upload_ended_timestamp = ?NOW()
+            },
+            State#state{
+                uploads = Uploads#{FileGuid => NewUploadCtx},
+                monitor_to_file_mapping = NewMonitorToFileMapping
+            }
+    end,
+    case maps:size(NewState#state.uploads) of
+        0 -> {noreply, NewState, hibernate};
+        _ -> {noreply, NewState}
+    end;
+
 handle_info(?CHECK_UPLOADS_REQ, #state{uploads = Uploads} = State) ->
     NewState = State#state{
         uploads = ActiveUploads = remove_stale_uploads(Uploads),
@@ -223,34 +283,23 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 
 
-%%--------------------------------------------------------------------
 %% @private
-%% @doc
-%% Checks time since last modification of file and if it's beyond
-%% inactivity period deletes file because of interrupted and
-%% unfinished upload.
-%% @end
-%%--------------------------------------------------------------------
 -spec remove_stale_uploads(uploads()) -> uploads().
 remove_stale_uploads(Uploads) ->
     Now = ?NOW(),
     InactivityPeriod = ?INACTIVITY_PERIOD_SEC(),
 
-    maps:fold(fun
-        (FileGuid, {UserId, CheckupTime}, Acc) when CheckupTime < Now ->
-            FileRef = ?FILE_REF(FileGuid),
-
-            case lfm:stat(?ROOT_SESS_ID, FileRef) of
-                {ok, #file_attr{mtime = MTime}} when MTime + InactivityPeriod > Now ->
-                    Acc#{FileGuid => {UserId, MTime + InactivityPeriod}};
-                {ok, _} ->
-                    lfm:unlink(?ROOT_SESS_ID, FileRef, false),
-                    Acc;
-                {error, _} ->
-                    Acc
-            end;
-        (FileGuid, FileCheckup, Acc) ->
-            Acc#{FileGuid => FileCheckup}
+    maps:fold(fun(FileGuid, UploadCtx = #upload_ctx{
+        monitors = Monitors,
+        latest_chunk_upload_ended_timestamp = Timestamp
+    }, Acc) ->
+        case ordsets:is_empty(Monitors) andalso Timestamp + InactivityPeriod < Now of
+            true ->
+                lfm:unlink(?ROOT_SESS_ID, ?FILE_REF(FileGuid), false),
+                Acc;
+            false ->
+                Acc#{FileGuid => UploadCtx}
+        end
     end, #{}, Uploads).
 
 
