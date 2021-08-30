@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Bartosz Walkowicz
-%%% @copyright (C) 2019 ACK CYFRONET AGH
+%%% @copyright (C) 2019-2021 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -17,15 +17,14 @@
 
 -behaviour(gen_server).
 
--include("timeouts.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
--include("modules/fslogic/file_attr.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
--include_lib("ctool/include/logging.hrl").
+-include("timeouts.hrl").
 -include_lib("ctool/include/errors.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
--export([start_link/0, spec/0]).
+-export([start_service/0, start_internal/0]).
 -export([register_upload/2, is_upload_registered/2, deregister_upload/2]).
 
 %% gen_server callbacks
@@ -35,14 +34,25 @@
     terminate/2, code_change/3
 ]).
 
+
+-type uploads() :: #{file_id:file_guid() => {od_user:id(), non_neg_integer()}}.
+
 -record(state, {
     uploads = #{} :: uploads(),
     checkup_timer = undefined :: undefined | reference()
 }).
-
--type uploads() :: #{file_id:file_guid() => {od_user:id(), non_neg_integer()}}.
 -type state() :: #state{}.
+
 -type error() :: {error, Reason :: term()}.
+
+
+-define(SERVER, {global, ?MODULE}).
+
+-define(CHECK_UPLOADS_REQ, check_uploads).
+
+-define(REGISTER_UPLOAD_REQ(UserId, FileGuid), {register, UserId, FileGuid}).
+-define(IS_UPLOAD_REGISTERED(UserId, FileGuid), {is_registered, UserId, FileGuid}).
+-define(DEREGISTER_UPLOAD_REQ(UserId, FileGuid), {deregister, UserId, FileGuid}).
 
 -define(NOW(), global_clock:timestamp_seconds()).
 -define(INACTIVITY_PERIOD_SEC(), op_worker:get_env(upload_inactivity_period_sec, 60)).
@@ -54,63 +64,37 @@
 %%%===================================================================
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Starts the file_upload_manager server.
-%% @end
-%%--------------------------------------------------------------------
--spec start_link() -> {ok, pid()} | ignore | error().
-start_link() ->
-    gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
+-spec start_service() -> ok | aborted.
+start_service() ->
+    internal_services_manager:start_service(?MODULE, <<?MODULE_STRING>>, #{
+        start_function => start_internal
+    }).
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Registers upload monitoring for specified file.
-%% @end
-%%--------------------------------------------------------------------
+-spec start_internal() -> ok | abort.
+start_internal() ->
+    case gen_server2:start(?SERVER, ?MODULE, [], []) of
+        {ok, _} -> ok;
+        _ -> abort
+    end.
+
+
 -spec register_upload(od_user:id(), file_id:file_guid()) -> ok | error().
 register_upload(UserId, FileGuid) ->
-    call({register, UserId, FileGuid}).
+    call_server(?REGISTER_UPLOAD_REQ(UserId, FileGuid)).
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Checks if upload for specified session and file is registered.
-%% @end
-%%--------------------------------------------------------------------
 -spec is_upload_registered(od_user:id(), file_id:file_guid()) -> boolean().
 is_upload_registered(UserId, FileGuid) ->
-    case call({is_registered, UserId, FileGuid}) of
+    case call_server(?IS_UPLOAD_REGISTERED(UserId, FileGuid)) of
         true -> true;
         _ -> false
     end.
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Deregisters upload monitoring for specified file.
-%% @end
-%%--------------------------------------------------------------------
 -spec deregister_upload(od_user:id(), file_id:file_guid()) -> ok.
 deregister_upload(UserId, FileGuid) ->
-    gen_server2:cast(?MODULE, {deregister, UserId, FileGuid}).
-
-
-%%-------------------------------------------------------------------
-%% @doc
-%% Returns child spec for ?MODULE to attach it to supervision.
-%% @end
-%%-------------------------------------------------------------------
--spec spec() -> supervisor:child_spec().
-spec() -> #{
-    id => ?MODULE,
-    start => {?MODULE, start_link, []},
-    restart => permanent,
-    shutdown => timer:seconds(10),
-    type => worker,
-    modules => [?MODULE]
-}.
+    gen_server2:cast(?SERVER, ?DEREGISTER_UPLOAD_REQ(UserId, FileGuid)).
 
 
 %%%===================================================================
@@ -124,9 +108,7 @@ spec() -> #{
 %% Initializes the server.
 %% @end
 %%--------------------------------------------------------------------
--spec init(Args :: term()) ->
-    {ok, state()} | {ok, state(), timeout() | hibernate} |
-    {stop, Reason :: term()} | ignore.
+-spec init(Args :: term()) -> {ok, state(), hibernate}.
 init(_) ->
     {ok, #state{}, hibernate}.
 
@@ -139,23 +121,21 @@ init(_) ->
 %%--------------------------------------------------------------------
 -spec handle_call(Request :: term(), From :: {pid(), Tag :: term()}, state()) ->
     {reply, Reply :: term(), NewState :: state()} |
-    {reply, Reply :: term(), NewState :: state(), timeout() | hibernate} |
-    {noreply, NewState :: state()} |
-    {noreply, NewState :: state(), timeout() | hibernate} |
-    {stop, Reason :: term(), Reply :: term(), NewState :: state()} |
-    {stop, Reason :: term(), NewState :: state()}.
-handle_call({register, UserId, FileGuid}, _, #state{uploads = Uploads} = State) ->
+    {reply, Reply :: term(), NewState :: state(), timeout() | hibernate}.
+handle_call(?REGISTER_UPLOAD_REQ(UserId, FileGuid), _, #state{uploads = Uploads} = State) ->
     {reply, ok, maybe_schedule_uploads_checkup(State#state{
         uploads = Uploads#{FileGuid => {UserId, ?NOW() + ?INACTIVITY_PERIOD_SEC()}}
     })};
-handle_call({is_registered, UserId, FileGuid}, _, State) ->
-    IsRegistered = case maps:find(FileGuid, State#state.uploads) of
+
+handle_call(?IS_UPLOAD_REGISTERED(UserId, FileGuid), _, #state{uploads = Uploads} = State) ->
+    IsRegistered = case maps:find(FileGuid, Uploads) of
         {ok, {UserId, _}} ->
             true;
         _ ->
             false
     end,
     {reply, IsRegistered, State};
+
 handle_call(Request, _From, State) ->
     ?log_bad_request(Request),
     {reply, {error, wrong_request}, State}.
@@ -169,21 +149,19 @@ handle_call(Request, _From, State) ->
 %%--------------------------------------------------------------------
 -spec handle_cast(Request :: term(), state()) ->
     {noreply, NewState :: state()} |
-    {noreply, NewState :: state(), timeout() | hibernate} |
-    {stop, Reason :: term(), NewState :: state()}.
-handle_cast({deregister, UserId, FileGuid}, #state{uploads = Uploads} = State) ->
-    case maps:take(FileGuid, Uploads) of
+    {noreply, NewState :: state(), hibernate}.
+handle_cast(?DEREGISTER_UPLOAD_REQ(UserId, FileGuid), #state{uploads = Uploads} = State) ->
+    NewState = case maps:take(FileGuid, Uploads) of
         {{UserId, _}, ActiveUploads} ->
-            NewState = State#state{uploads = ActiveUploads},
-            case maps:size(ActiveUploads) of
-                0 ->
-                    {noreply, cancel_uploads_checkup(NewState), hibernate};
-                _ ->
-                    {noreply, NewState}
-            end;
+            State#state{uploads = ActiveUploads};
         _ ->
-            {noreply, State}
+            State
+    end,
+    case maps:size(NewState#state.uploads) of
+        0 -> {noreply, cancel_uploads_checkup(NewState), hibernate};
+        _ -> {noreply, NewState}
     end;
+
 handle_cast(Request, State) ->
     ?log_bad_request(Request),
     {noreply, State}.
@@ -195,21 +173,19 @@ handle_cast(Request, State) ->
 %% Handles all non call/cast messages
 %% @end
 %%--------------------------------------------------------------------
--spec handle_info(Info :: timeout() | term(), state()) ->
+-spec handle_info(Info :: term(), state()) ->
     {noreply, NewState :: state()} |
-    {noreply, NewState :: state(), timeout() | hibernate} |
-    {stop, Reason :: term(), NewState :: state()}.
-handle_info(check_uploads, #state{uploads = Uploads} = State) ->
+    {noreply, NewState :: state(), hibernate}.
+handle_info(?CHECK_UPLOADS_REQ, #state{uploads = Uploads} = State) ->
     NewState = State#state{
         uploads = ActiveUploads = remove_stale_uploads(Uploads),
         checkup_timer = undefined
     },
     case maps:size(ActiveUploads) of
-        0 ->
-            {noreply, NewState, hibernate};
-        _ ->
-            {noreply, maybe_schedule_uploads_checkup(NewState)}
+        0 -> {noreply, NewState, hibernate};
+        _ -> {noreply, maybe_schedule_uploads_checkup(NewState)}
     end;
+
 handle_info(Info, State) ->
     ?log_bad_request(Info),
     {noreply, State}.
@@ -279,24 +255,22 @@ remove_stale_uploads(Uploads) ->
 
 
 %% @private
--spec call(term()) -> ok | boolean() | error().
-call(Msg) ->
+-spec call_server(term()) -> ok | boolean() | error().
+call_server(Request) ->
     try
-        gen_server2:call(?MODULE, Msg, ?DEFAULT_REQUEST_TIMEOUT)
+        gen_server2:call(?SERVER, Request, ?DEFAULT_REQUEST_TIMEOUT)
     catch
         exit:{noproc, _} ->
-            ?debug("File upload manager process does not exist"),
-            {error, no_file_upload_manager};
+            ?debug("Process '~p' does not exist", [?MODULE]),
+            ?ERROR_NOT_FOUND;
         exit:{normal, _} ->
-            ?debug("Exit of file upload manager process"),
-            {error, no_file_upload_manager};
+            ?debug("Exit of '~p' process", [?MODULE]),
+            ?ERROR_NOT_FOUND;
         exit:{timeout, _} ->
-            ?debug("Timeout of file upload manager process"),
+            ?debug("Timeout of '~p' process", [?MODULE]),
             ?ERROR_TIMEOUT;
         Type:Reason ->
-            ?error("Cannot call file upload manager due to ~p:~p", [
-                Type, Reason
-            ]),
+            ?error("Cannot call '~p' due to ~p:~p", [?MODULE, Type, Reason]),
             {error, Reason}
     end.
 
@@ -305,7 +279,7 @@ call(Msg) ->
 -spec maybe_schedule_uploads_checkup(state()) -> state().
 maybe_schedule_uploads_checkup(#state{checkup_timer = undefined} = State) ->
     State#state{checkup_timer = erlang:send_after(
-        ?UPLOADS_CHECKUP_INTERVAL, self(), check_uploads
+        ?UPLOADS_CHECKUP_INTERVAL, self(), ?CHECK_UPLOADS_REQ
     )};
 maybe_schedule_uploads_checkup(State) ->
     State.
