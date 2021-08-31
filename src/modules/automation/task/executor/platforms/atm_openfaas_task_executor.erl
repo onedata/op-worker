@@ -233,10 +233,10 @@ build_function_name(AtmWorkflowExecutionId, #document{
         <<(sanitize_character(Char))/integer>> || <<Char>> <= AtmLambdaName
     >>,
 
-    str_utils:format_bin("wf-~s-sig-~s-nm-~s", [
+    str_utils:format_bin("~s-~s-~s", [
         binary:part(AtmWorkflowExecutionId, 0, min(size(AtmWorkflowExecutionId), 10)),
         binary:part(Signature, 0, min(size(Signature), 10)),
-        binary:part(SanitizedAtmLambdaName, 0, min(size(SanitizedAtmLambdaName), 31))
+        binary:part(SanitizedAtmLambdaName, 0, min(size(SanitizedAtmLambdaName), 41))
     ]).
 
 
