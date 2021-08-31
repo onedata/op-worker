@@ -213,14 +213,39 @@ check_openfaas_availability() ->
     Result.
 
 
+%%--------------------------------------------------------------------
 %% @private
+%% @doc
+%% Build name for function under which it will be registered in OpenFaaS service
+%% taking into account following limitations (enforced by OpenFaaS):
+%% - max 63 characters
+%% - alphanumeric and '-' characters only
+%% @end
+%%--------------------------------------------------------------------
 -spec build_function_name(atm_workflow_execution:id(), od_atm_lambda:doc()) ->
     binary().
-build_function_name(AtmWorkflowExecutionId, #document{key = AtmLambdaId}) ->
-    str_utils:format_bin("wf-~s-signature-~s", [
-        binary:part(AtmWorkflowExecutionId, 0, 10),
-        str_utils:md5_digest([AtmWorkflowExecutionId, AtmLambdaId])
+build_function_name(AtmWorkflowExecutionId, #document{
+    key = AtmLambdaId,
+    value = #od_atm_lambda{name = AtmLambdaName}
+}) ->
+    Signature = str_utils:md5_digest([AtmWorkflowExecutionId, AtmLambdaId]),
+    SanitizedAtmLambdaName = <<
+        <<(sanitize_character(Char))/integer>> || <<Char>> <= AtmLambdaName
+    >>,
+
+    str_utils:format_bin("~s-~s-~s", [
+        binary:part(AtmWorkflowExecutionId, 0, min(size(AtmWorkflowExecutionId), 10)),
+        binary:part(Signature, 0, min(size(Signature), 10)),
+        binary:part(SanitizedAtmLambdaName, 0, min(size(SanitizedAtmLambdaName), 41))
     ]).
+
+
+%% @private
+-spec sanitize_character(integer()) -> integer().
+sanitize_character(Char) when Char >= $a, Char =< $z -> Char;
+sanitize_character(Char) when Char >= $A, Char =< $Z -> Char;
+sanitize_character(Char) when Char >= $0, Char =< $9 -> Char;
+sanitize_character(_) -> $-.
 
 
 %% @private
@@ -283,7 +308,7 @@ log_function_registering(#prepare_ctx{
 }) ->
     AtmWorkflowExecutionLogger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
     atm_workflow_execution_logger:workflow_info(
-        "Registering docker '~ts' as function '~ts' in OpenFaas", [DockerImage, FunctionName],
+        "Registering docker '~ts' as function '~ts' in OpenFaaS", [DockerImage, FunctionName],
         AtmWorkflowExecutionLogger
     ).
 
@@ -296,7 +321,7 @@ log_function_registered(#prepare_ctx{
 }) ->
     AtmWorkflowExecutionLogger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
     atm_workflow_execution_logger:workflow_info(
-        "Function '~ts' registered in OpenFaas", [FunctionName], AtmWorkflowExecutionLogger
+        "Function '~ts' registered in OpenFaaS", [FunctionName], AtmWorkflowExecutionLogger
     ).
 
 
@@ -456,7 +481,7 @@ log_function_ready(#prepare_ctx{
 }) ->
     AtmWorkflowExecutionLogger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
     atm_workflow_execution_logger:workflow_info(
-        "Function '~ts' ready to use in OpenFaas", [FunctionName], AtmWorkflowExecutionLogger
+        "Function '~ts' ready to use in OpenFaaS", [FunctionName], AtmWorkflowExecutionLogger
     ).
 
 
