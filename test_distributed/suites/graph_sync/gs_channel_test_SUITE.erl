@@ -193,16 +193,27 @@ async_request_handling_test(Config) ->
     % Check that in case of a race condition between many async requests
     % fetching the same entity, the cache will still hold the newest version.
     % ?USER_INCREASING_REV is mocked to return a higher rev with every fetch.
-    {_, _, StartingRev} = get_cached_user(Config, ?USER_INCREASING_REV),
     logic_tests_common:invalidate_cache(Config, od_user, ?USER_INCREASING_REV),
     logic_tests_common:mock_request_processing_time(Config, 2000, 2500),
     UserIncRevSess = logic_tests_common:get_user_session(Config, ?USER_INCREASING_REV),
-    lists_utils:pforeach(fun(_) ->
-        rpc:call(Node, user_logic, get, [UserIncRevSess, ?USER_INCREASING_REV])
+    % When multiple processes request the resource and its revision keeps changing,
+    % some of the processes will receive stale results (with revisions older than
+    % the one cached) and retry the request. It is impossible to anticipate how
+    % many requests in total will this generate (and consequently how many revisions
+    % of the ?USER_INCREASING_REV), but after all processes finish, the cache should
+    % contain the result with the highest revision.
+    ReceivedRevisions = lists_utils:pmap(fun(_) ->
+        {ok, #document{
+            value = #od_user{
+                cache_state = #{
+                    revision := Revision
+                }
+            }
+        }} = rpc:call(Node, user_logic, get, [UserIncRevSess, ?USER_INCREASING_REV]),
+        Revision
     end, lists:seq(1, 20)),
-
-    EndRev = StartingRev + 20,
-    ?assertMatch({_, _, EndRev}, get_cached_user(Config, ?USER_INCREASING_REV)),
+    ExpEndRev = lists:max(ReceivedRevisions),
+    ?assertMatch({_, _, ExpEndRev}, get_cached_user(Config, ?USER_INCREASING_REV)),
 
 
     % Check that timeouts are properly handled

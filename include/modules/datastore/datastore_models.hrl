@@ -87,7 +87,6 @@
     eff_groups = [] :: [od_group:id()],
     eff_spaces = [] :: [od_space:id()],
     eff_handle_services = [] :: [od_handle_service:id()],
-    eff_handles = [] :: [od_handle:id()],
     eff_atm_inventories = [] :: [od_atm_inventory:id()],
 
     cache_state = #{} :: cache_state()
