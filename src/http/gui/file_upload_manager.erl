@@ -131,42 +131,36 @@ init(_) ->
 %%--------------------------------------------------------------------
 -spec handle_call(Request :: term(), From :: {pid(), Tag :: term()}, state()) ->
     {reply, Reply :: term(), NewState :: state()} |
-    {reply, Reply :: term(), NewState :: state(), timeout() | hibernate}.
+    {reply, Reply :: term(), NewState :: state(), hibernate}.
 handle_call(?REGISTER_UPLOAD_REQ(UserId, FileGuid), _, #state{uploads = Uploads} = State) ->
     UploadCtx = #upload_ctx{
         user_id = UserId,
         monitors = ordsets:new(),
         latest_chunk_upload_ended_timestamp = ?NOW()
-    },
-    {reply, ok, maybe_schedule_uploads_checkup(State#state{uploads = Uploads#{
-        FileGuid => UploadCtx
-    }})};
+    },  %% TODO check if not registered ?
+    reply(ok, State#state{uploads = Uploads#{FileGuid => UploadCtx}});
 
 handle_call(?AUTHORIZE_CHUNK_UPLOAD(UserId, FileGuid), {ClientPid, _}, State = #state{
     uploads = Uploads,
     monitor_to_file_mapping = MonitorToFileMapping
 }) ->
-    {IsAllowed, NewState} = case maps:find(FileGuid, Uploads) of
+    case maps:find(FileGuid, Uploads) of
         {ok, #upload_ctx{user_id = UserId, monitors = Monitors} = UploadCtx} ->
             Monitor = erlang:monitor(process, ClientPid),
             NewUploadCtx = UploadCtx#upload_ctx{monitors = ordsets:add_element(
                 Monitor, Monitors
             )},
-            {true, State#state{
-                uploads = #{FileGuid => NewUploadCtx},
+            reply(true, State#state{
+                uploads = Uploads#{FileGuid => NewUploadCtx},
                 monitor_to_file_mapping = MonitorToFileMapping#{Monitor => FileGuid}
-            }};
+            });
         _ ->
-            {false, State}
-    end,
-    case maps:size(NewState#state.uploads) of
-        0 -> {reply, IsAllowed, NewState, hibernate};
-        _ -> {reply, IsAllowed, NewState}
+            reply(false, State)
     end;
 
 handle_call(Request, _From, State) ->
     ?log_bad_request(Request),
-    {reply, {error, wrong_request}, State}.
+    reply({error, wrong_request}, State).
 
 
 %%--------------------------------------------------------------------
@@ -194,14 +188,11 @@ handle_cast(?DEREGISTER_UPLOAD_REQ(UserId, FileGuid), State = #state{
         _ ->
             State
     end,
-    case maps:size(NewState#state.uploads) of
-        0 -> {noreply, cancel_uploads_checkup(NewState), hibernate};
-        _ -> {noreply, NewState}
-    end;
+    noreply(NewState);
 
 handle_cast(Request, State) ->
     ?log_bad_request(Request),
-    {noreply, State}.
+    noreply(State).
 
 
 %%--------------------------------------------------------------------
@@ -231,24 +222,17 @@ handle_info({'DOWN', Monitor, process, _, _}, State = #state{
                 monitor_to_file_mapping = NewMonitorToFileMapping
             }
     end,
-    case maps:size(NewState#state.uploads) of
-        0 -> {noreply, NewState, hibernate};
-        _ -> {noreply, NewState}
-    end;
+    noreply(NewState);
 
 handle_info(?CHECK_UPLOADS_REQ, #state{uploads = Uploads} = State) ->
-    NewState = State#state{
-        uploads = ActiveUploads = remove_stale_uploads(Uploads),
+    noreply(State#state{
+        uploads = remove_stale_uploads(Uploads),
         checkup_timer = undefined
-    },
-    case maps:size(ActiveUploads) of
-        0 -> {noreply, NewState, hibernate};
-        _ -> {noreply, maybe_schedule_uploads_checkup(NewState)}
-    end;
+    });
 
 handle_info(Info, State) ->
     ?log_bad_request(Info),
-    {noreply, State}.
+    noreply(State).
 
 
 %%--------------------------------------------------------------------
@@ -281,6 +265,28 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+%% @private
+-spec reply(Response :: term(), state()) ->
+    {reply, Reply :: term(), NewState :: state()} |
+    {reply, Reply :: term(), NewState :: state(), hibernate}.
+reply(Response, #state{uploads = Uploads} = State) ->
+    case maps:size(Uploads) of
+        0 -> {reply, Response, cancel_uploads_checkup(State), hibernate};
+        _ -> {reply, Response, schedule_uploads_checkup(State)}
+    end.
+
+
+%% @private
+-spec noreply(state()) ->
+    {noreply, NewState :: state()} |
+    {noreply, NewState :: state(), hibernate}.
+noreply(#state{uploads = Uploads} = State) ->
+    case maps:size(Uploads) of
+        0 -> {noreply, cancel_uploads_checkup(State), hibernate};
+        _ -> {noreply, schedule_uploads_checkup(State)}
+    end.
 
 
 %% @private
@@ -325,12 +331,12 @@ call_server(Request) ->
 
 
 %% @private
--spec maybe_schedule_uploads_checkup(state()) -> state().
-maybe_schedule_uploads_checkup(#state{checkup_timer = undefined} = State) ->
+-spec schedule_uploads_checkup(state()) -> state().
+schedule_uploads_checkup(#state{checkup_timer = undefined} = State) ->
     State#state{checkup_timer = erlang:send_after(
         ?UPLOADS_CHECKUP_INTERVAL, self(), ?CHECK_UPLOADS_REQ
     )};
-maybe_schedule_uploads_checkup(State) ->
+schedule_uploads_checkup(State) ->
     State.
 
 
