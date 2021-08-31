@@ -60,7 +60,8 @@ all() ->
     ?ALL([
         lookup_file_objectid,
         transfers_should_be_ordered_by_timestamps,
-        metric_get,
+        % @TODO VFS-8297 currently disabled
+        % metric_get,
         list_spaces,
         get_space,
         create_share,
