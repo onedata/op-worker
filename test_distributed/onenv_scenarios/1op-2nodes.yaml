@@ -63,6 +63,9 @@ users:
   - &user1
     name: user1
     password: password
+  - &user2
+    name: user2
+    password: password
 
 
 spaces:
@@ -72,3 +75,11 @@ spaces:
       - provider: "oneprovider-1"
         storage_name: "IdealNullStorage"
         size: '1000000000'
+  - name: space_krk
+    user: *user1
+    users:
+      - user: *user2
+    supports:
+      - provider: "oneprovider-1"
+        storage_name: "posix"
+        size: '1073741824'
