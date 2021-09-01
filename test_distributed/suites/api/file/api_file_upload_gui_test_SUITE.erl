@@ -29,10 +29,10 @@
     registering_upload_for_non_empty_file_should_fail_test/1,
     registering_upload_for_not_owned_file_should_fail_test/1,
     not_registered_upload_should_fail_test/1,
-    upload_test/1
-%%    stale_upload_file_should_be_deleted_test/1,
-%%
-%%    % sequential tests
+    upload_test/1,
+
+    % sequential tests
+    stale_upload_file_should_be_deleted_test/1
 %%    upload_with_time_warps_test/1
 ]).
 
@@ -46,19 +46,16 @@ groups() -> [
         registering_upload_for_not_owned_file_should_fail_test,
         not_registered_upload_should_fail_test,
         upload_test
-%%        stale_upload_file_should_be_deleted_test
     ]},
-    {sequential_tests, [sequential], [
-        upload_with_time_warps_test_test
+    {time_mock_tests, [sequential], [
+        stale_upload_file_should_be_deleted_test
+%%        upload_with_time_warps_test_test
     ]}
 ].
 all() -> [
-    {group, parallel_tests}
-%%    {group, sequential_tests}
+    {group, parallel_tests},
+    {group, time_mock_tests}
 ].
-
-
--define(FILE_PATH, <<"/space_krk/", (str_utils:rand_hex(12))/binary>>).
 
 -define(ATTEMPTS, 30).
 
@@ -105,11 +102,11 @@ not_registered_upload_should_fail_test(_Config) ->
 
     UserId = oct_background:get_user_id(user1),
     UserSessId = oct_background:get_user_session_id(user1, krakow),
-    Worker = oct_background:get_random_provider_node(krakow),
+    Node = oct_background:get_random_provider_node(krakow),
 
     ?assertMatch(
         upload_not_authorized,
-        rpc:call(Worker, page_file_upload, handle_multipart_req, [
+        rpc:call(Node, page_file_upload, handle_multipart_req, [
             #{size => 20, left => 1},
             ?USER(UserId, UserSessId),
             #{
@@ -137,68 +134,87 @@ upload_test(_Config) ->
     assert_file_uploaded(krakow, user1, FileGuid, 250).
 
 
-%%stale_upload_file_should_be_deleted_test(_Config) ->
-%%    UserId = oct_background:get_user_id(user3),
-%%    UserSessId = oct_background:get_user_session_id(user3, krakow),
-%%    [Worker] = oct_background:get_provider_nodes(krakow),
-%%
-%%    {ok, FileGuid} = lfm_proxy:create(Worker, UserSessId, ?FILE_PATH),
-%%    ?assertMatch({ok, _}, lfm_proxy:stat(Worker, UserSessId, ?FILE_REF(FileGuid))),
-%%
-%%    ?assertMatch({ok, _}, initialize_gui_upload(UserId, UserSessId, FileGuid, Worker)),
-%%    ?assertMatch(true, authorize_chunk_upload(UserId, FileGuid, Worker)),
-%%
-%%    % file being uploaded shouldn't be deleted after only 30s of inactivity
-%%    timer:sleep(timer:seconds(30)),
-%%    ?assertMatch({ok, _}, lfm_proxy:stat(Worker, UserSessId, ?FILE_REF(FileGuid))),
-%%    ?assertMatch(true, authorize_chunk_upload(UserId, FileGuid, Worker)),
-%%
-%%    % but if upload is not resumed or finished before INACTIVITY_PERIOD then file should be deleted
-%%    ?assertMatch(false, authorize_chunk_upload(UserId, FileGuid, Worker), 100),
-%%    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(Worker, UserSessId, ?FILE_REF(FileGuid)), ?ATTEMPTS).
-%%
-%%
+stale_upload_file_should_be_deleted_test(_Config) ->
+    [#object{guid = FileGuid}] = onenv_file_test_utils:create_and_sync_file_tree(
+        user1, space_krk, #file_spec{}
+    ),
+
+    ?assertMatch({ok, _}, initialize_gui_upload(krakow, user1, FileGuid)),
+    ?assertMatch(true, authorize_chunk_upload(krakow, user1, FileGuid)),
+
+    [StallProcess | StallProcesses] = spawn_stall_processes(krakow, user1, FileGuid),
+
+    % upload should not be removed as long as there is at least one uploading process alive
+    time_test_utils:simulate_seconds_passing(1000),
+    force_stale_uploads_removal(krakow),
+    ?assertMatch(true, authorize_chunk_upload(krakow, user1, FileGuid)),
+
+    lists:foreach(fun stop_stall_process/1, StallProcesses),
+    time_test_utils:simulate_seconds_passing(1000),
+    force_stale_uploads_removal(krakow),
+    ?assertMatch(true, authorize_chunk_upload(krakow, user1, FileGuid)),
+
+    % and will be removed if no such process exists for longer than 1 minute
+    stop_stall_process(StallProcess),
+    time_test_utils:simulate_seconds_passing(59),
+    force_stale_uploads_removal(krakow),
+    ?assertMatch(true, authorize_chunk_upload(krakow, user1, FileGuid)),
+
+    time_test_utils:simulate_seconds_passing(2),
+    force_stale_uploads_removal(krakow),
+    ?assertMatch(false, authorize_chunk_upload(krakow, user1, FileGuid)),
+
+    Node = oct_background:get_random_provider_node(krakow),
+    UserSessId = oct_background:get_user_session_id(user1, krakow),
+
+    ?assertMatch(
+        {error, ?ENOENT},
+        onenv_file_test_utils:get_object_attributes(Node, UserSessId, FileGuid),
+        ?ATTEMPTS
+    ).
+
+
 %%upload_with_time_warps_test(_Config) ->
-%%    UserId = oct_background:get_user_id(user3),
-%%    UserSessId = oct_background:get_user_session_id(user3, krakow),
-%%    [Worker] = oct_background:get_provider_nodes(krakow),
+%%    UserId = oct_background:get_user_id(user1),
+%%    UserSessId = oct_background:get_user_session_id(user1, krakow),
+%%    [Node] = oct_background:get_provider_nodes(krakow),
 %%
 %%    CurrTime = time_test_utils:get_frozen_time_seconds(),
-%%    {ok, FileGuid} = lfm_proxy:create(Worker, UserSessId, ?FILE_PATH),
+%%    {ok, FileGuid} = lfm_proxy:create(Node, UserSessId, ?FILE_PATH),
 %%
 %%    FileKey = ?FILE_REF(FileGuid),
-%%    ?assertMatch({ok, #file_attr{mtime = CurrTime}}, lfm_proxy:stat(Worker, UserSessId, FileKey)),
+%%    ?assertMatch({ok, #file_attr{mtime = CurrTime}}, lfm_proxy:stat(Node, UserSessId, FileKey)),
 %%
-%%    ?assertMatch({ok, _}, initialize_gui_upload(UserId, UserSessId, FileGuid, Worker)),
-%%    ?assertMatch(true, authorize_chunk_upload(UserId, FileGuid, Worker)),
+%%    ?assertMatch({ok, _}, initialize_gui_upload(UserId, UserSessId, FileGuid, Node)),
+%%    ?assertMatch(true, authorize_chunk_upload(UserId, FileGuid, Node)),
 %%
 %%    % upload should not be canceled if time warps backward (whether write occurred or not)
 %%    PastTime = time_test_utils:simulate_seconds_passing(-1000),
 %%
-%%    ?assertMatch({ok, #file_attr{mtime = CurrTime}}, lfm_proxy:stat(Worker, UserSessId, FileKey)),
-%%    force_stale_gui_uploads_removal(Worker),
-%%    ?assertMatch(true, authorize_chunk_upload(UserId, FileGuid, Worker)),
+%%    ?assertMatch({ok, #file_attr{mtime = CurrTime}}, lfm_proxy:stat(Node, UserSessId, FileKey)),
+%%    force_stale_uploads_removal(krakow),
+%%    ?assertMatch(true, authorize_chunk_upload(UserId, FileGuid, Node)),
 %%
-%%    do_multipart(Worker, ?USER(UserId, UserSessId), FileGuid, 5, 10, 1),
-%%    ?assertMatch({ok, #file_attr{mtime = PastTime}}, lfm_proxy:stat(Worker, UserSessId, FileKey), ?ATTEMPTS),
-%%    force_stale_gui_uploads_removal(Worker),
-%%    ?assertMatch(true, authorize_chunk_upload(UserId, FileGuid, Worker)),
+%%    do_multipart(Node, ?USER(UserId, UserSessId), FileGuid, 5, 10, 1),
+%%    ?assertMatch({ok, #file_attr{mtime = PastTime}}, lfm_proxy:stat(Node, UserSessId, FileKey), ?ATTEMPTS),
+%%    force_stale_uploads_removal(krakow),
+%%    ?assertMatch(true, authorize_chunk_upload(UserId, FileGuid, Node)),
 %%
 %%    % in case of forward time warp if next chunk was written to file (this updates file mtime)
 %%    % it should be left. Otherwise it will be deleted as stale upload.
 %%    FutureTime = time_test_utils:simulate_seconds_passing(3000),
 %%
-%%    do_multipart(Worker, ?USER(UserId, UserSessId), FileGuid, 5, 10, 1),
-%%    ?assertMatch({ok, #file_attr{mtime = FutureTime}}, lfm_proxy:stat(Worker, UserSessId, FileKey), ?ATTEMPTS),
-%%    force_stale_gui_uploads_removal(Worker),
-%%    ?assertMatch(true, authorize_chunk_upload(UserId, FileGuid, Worker)),
+%%    do_multipart(Node, ?USER(UserId, UserSessId), FileGuid, 5, 10, 1),
+%%    ?assertMatch({ok, #file_attr{mtime = FutureTime}}, lfm_proxy:stat(Node, UserSessId, FileKey), ?ATTEMPTS),
+%%    force_stale_uploads_removal(krakow),
+%%    ?assertMatch(true, authorize_chunk_upload(UserId, FileGuid, Node)),
 %%
 %%    time_test_utils:simulate_seconds_passing(2000),
 %%
-%%    ?assertMatch({ok, #file_attr{mtime = FutureTime}}, lfm_proxy:stat(Worker, UserSessId, FileKey)),
-%%    force_stale_gui_uploads_removal(Worker),
-%%    ?assertMatch(false, authorize_chunk_upload(UserId, FileGuid, Worker)),
-%%    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(Worker, UserSessId, FileKey), ?ATTEMPTS).
+%%    ?assertMatch({ok, #file_attr{mtime = FutureTime}}, lfm_proxy:stat(Node, UserSessId, FileKey)),
+%%    force_stale_uploads_removal(krakow),
+%%    ?assertMatch(false, authorize_chunk_upload(UserId, FileGuid, Node)),
+%%    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(Node, UserSessId, FileKey), ?ATTEMPTS).
 
 
 %%%===================================================================
@@ -219,28 +235,28 @@ end_per_suite(_Config) ->
     oct_background:end_per_suite().
 
 
+init_per_group(time_mock_tests = Group, Config) ->
+    time_test_utils:freeze_time(Config),
+    init_per_group(?DEFAULT_CASE(Group), Config);
+
 init_per_group(_Group, Config) ->
     mock_cowboy_multipart(krakow),
     lfm_proxy:init(Config, false).
 
+
+end_per_group(time_mock_tests = Group, Config) ->
+    time_test_utils:unfreeze_time(Config),
+    end_per_group(?DEFAULT_CASE(Group), Config);
 
 end_per_group(_Group, Config) ->
     unmock_cowboy_multipart(krakow),
     lfm_proxy:teardown(Config).
 
 
-init_per_testcase(upload_with_time_warps_test = Case, Config) ->
-    time_test_utils:freeze_time(Config),
-    init_per_testcase(?DEFAULT_CASE(Case), Config);
-
 init_per_testcase(_Case, Config) ->
     ct:timetrap({minutes, 5}),
     Config.
 
-
-end_per_testcase(upload_with_time_warps_test = Case, Config) ->
-    time_test_utils:unfreeze_time(Config),
-    end_per_testcase(?DEFAULT_CASE(Case), Config);
 
 end_per_testcase(_Case, _Config) ->
     ok.
@@ -261,9 +277,9 @@ end_per_testcase(_Case, _Config) ->
 initialize_gui_upload(ProviderSelector, UserSelector, FileGuid) ->
     UserId = oct_background:get_user_id(UserSelector),
     UserSessId = oct_background:get_user_session_id(UserSelector, ProviderSelector),
-    Worker = oct_background:get_random_provider_node(ProviderSelector),
+    Node = oct_background:get_random_provider_node(ProviderSelector),
 
-    rpc:call(Worker, gs_rpc, handle, [
+    rpc:call(Node, gs_rpc, handle, [
         ?USER(UserId, UserSessId), <<"initializeFileUpload">>, #{<<"guid">> => FileGuid}
     ]).
 
@@ -278,9 +294,9 @@ initialize_gui_upload(ProviderSelector, UserSelector, FileGuid) ->
 finalize_gui_upload(ProviderSelector, UserSelector, FileGuid) ->
     UserId = oct_background:get_user_id(UserSelector),
     UserSessId = oct_background:get_user_session_id(UserSelector, ProviderSelector),
-    Worker = oct_background:get_random_provider_node(ProviderSelector),
+    Node = oct_background:get_random_provider_node(ProviderSelector),
 
-    rpc:call(Worker, gs_rpc, handle, [
+    rpc:call(Node, gs_rpc, handle, [
         ?USER(UserId, UserSessId), <<"finalizeFileUpload">>, #{<<"guid">> => FileGuid}
     ]).
 
@@ -294,15 +310,50 @@ finalize_gui_upload(ProviderSelector, UserSelector, FileGuid) ->
     boolean().
 authorize_chunk_upload(ProviderSelector, UserSelector, FileGuid) ->
     UserId = oct_background:get_user_id(UserSelector),
-    Worker = oct_background:get_random_provider_node(ProviderSelector),
+    Node = oct_background:get_random_provider_node(ProviderSelector),
 
-    rpc:call(Worker, file_upload_manager, authorize_chunk_upload, [UserId, FileGuid]).
+    rpc:call(Node, file_upload_manager, authorize_chunk_upload, [UserId, FileGuid]).
 
 
 %% @private
--spec force_stale_gui_uploads_removal(node()) -> ok.
-force_stale_gui_uploads_removal(Worker) ->
-    {file_upload_manager, Worker} ! check_uploads,
+-spec spawn_stall_processes(
+    [node()] | oct_background:entity_selector(),
+    oct_background:entity_selector(),
+    file_id:file_guid()
+) ->
+    [pid()].
+spawn_stall_processes(Nodes, UserSelector, FileGuid) when is_list(Nodes) ->
+    UserId = oct_background:get_user_id(UserSelector),
+    TestProcessPid = self(),
+
+    StallProcessDef = fun() ->
+        file_upload_manager:authorize_chunk_upload(UserId, FileGuid),
+        receive
+            stop -> TestProcessPid ! ok
+        end
+    end,
+
+    lists:map(fun(Node) -> spawn(Node, StallProcessDef) end, Nodes);
+
+spawn_stall_processes(ProviderSelector, UserSelector, FileGuid) ->
+    Nodes = oct_background:get_provider_nodes(ProviderSelector),
+    spawn_stall_processes(Nodes, UserSelector, FileGuid).
+
+
+%% @private
+-spec stop_stall_process(pid()) -> ok.
+stop_stall_process(Pid) ->
+    Pid ! stop,
+    receive ok -> ok end,
+    % Await some time so that file_upload_manager has time to deregister dead process
+    timer:sleep(timer:seconds(2)).
+
+
+%% @private
+-spec force_stale_uploads_removal(oct_background:entity_selector()) -> ok.
+force_stale_uploads_removal(ProviderSelector) ->
+    Node = oct_background:get_random_provider_node(ProviderSelector),
+    {file_upload_manager, Node} ! check_uploads,  %% TODO fix
     ok.
 
 
@@ -322,8 +373,8 @@ do_multipart(ProviderSelector, UserSelector, FileGuid, PartsNumber, PartSize, Ch
     Auth = ?USER(UserId, UserSessId),
 
     ?assertMatch(ok, lists_utils:pforeach(fun(ChunkNo) ->
-        Worker = oct_background:get_random_provider_node(ProviderSelector),
-        rpc:call(Worker, ?MODULE, upload_chunk, [Auth, FileGuid, PartsNumber, PartSize, ChunkNo])
+        Node = oct_background:get_random_provider_node(ProviderSelector),
+        rpc:call(Node, ?MODULE, upload_chunk, [Auth, FileGuid, PartsNumber, PartSize, ChunkNo])
     end, lists:seq(1, ChunksNumber))).
 
 
@@ -353,29 +404,29 @@ upload_chunk(?USER(UserId, _) = Auth, FileGuid, PartsNumber, PartSize, ChunkNo) 
     boolean().
 assert_file_uploaded(ProviderSelector, UserSelector, FileGuid, ExpSize) ->
     UserSessId = oct_background:get_user_session_id(UserSelector, ProviderSelector),
-    Worker = oct_background:get_random_provider_node(ProviderSelector),
+    Node = oct_background:get_random_provider_node(ProviderSelector),
 
     ?assertMatch(
         {ok, #file_attr{size = ExpSize}},
-        lfm_proxy:stat(Worker, UserSessId, ?FILE_REF(FileGuid)),
+        lfm_proxy:stat(Node, UserSessId, ?FILE_REF(FileGuid)),
         ?ATTEMPTS
     ),
-    {ok, FileHandle} = lfm_proxy:open(Worker, UserSessId, ?FILE_REF(FileGuid), read),
-    {ok, Data} = ?assertMatch({ok, _}, lfm_proxy:read(Worker, FileHandle, 0, ExpSize)),
+    {ok, FileHandle} = lfm_proxy:open(Node, UserSessId, ?FILE_REF(FileGuid), read),
+    {ok, Data} = ?assertMatch({ok, _}, lfm_proxy:read(Node, FileHandle, 0, ExpSize)),
     ?assert(lists:all(fun(X) -> X == true end, [$a == Char || <<Char>> <= Data])),
-    lfm_proxy:close(Worker, FileHandle).
+    lfm_proxy:close(Node, FileHandle).
 
 
 %% @private
 -spec mock_cowboy_multipart(oct_background:entity_selector()) -> ok.
 mock_cowboy_multipart(ProviderPlaceholder) ->
-    Workers = oct_background:get_provider_nodes(ProviderPlaceholder),
-    ok = test_utils:mock_new(Workers, cow_multipart),
-    ok = test_utils:mock_new(Workers, cowboy_req),
-    ok = test_utils:mock_expect(Workers, cow_multipart, form_data,
+    Nodes = oct_background:get_provider_nodes(ProviderPlaceholder),
+    ok = test_utils:mock_new(Nodes, cow_multipart),
+    ok = test_utils:mock_new(Nodes, cowboy_req),
+    ok = test_utils:mock_expect(Nodes, cow_multipart, form_data,
         fun(_) -> {file, ok, ok, ok} end
     ),
-    ok = test_utils:mock_expect(Workers, cowboy_req, read_part,
+    ok = test_utils:mock_expect(Nodes, cowboy_req, read_part,
         fun
             (#{done := true} = Req) ->
                 {done, Req};
@@ -383,7 +434,7 @@ mock_cowboy_multipart(ProviderPlaceholder) ->
                 {ok, [], Req}
         end
     ),
-    ok = test_utils:mock_expect(Workers, cowboy_req, read_part_body,
+    ok = test_utils:mock_expect(Nodes, cowboy_req, read_part_body,
         fun
             (#{left := 1, size := Size} = Req, _) ->
                 {ok, <<<<$a>> || _ <- lists:seq(1, Size)>>, Req#{done => true}};
@@ -396,6 +447,6 @@ mock_cowboy_multipart(ProviderPlaceholder) ->
 %% @private
 -spec unmock_cowboy_multipart(oct_background:entity_selector()) -> ok.
 unmock_cowboy_multipart(ProviderPlaceholder) ->
-    Workers = oct_background:get_provider_nodes(ProviderPlaceholder),
-    test_utils:mock_unload(Workers, cowboy_req),
-    test_utils:mock_unload(Workers, cow_multipart).
+    Nodes = oct_background:get_provider_nodes(ProviderPlaceholder),
+    test_utils:mock_unload(Nodes, cowboy_req),
+    test_utils:mock_unload(Nodes, cow_multipart).
