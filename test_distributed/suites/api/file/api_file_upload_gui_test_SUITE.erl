@@ -33,7 +33,8 @@
 
     % sequential tests
     stale_upload_file_should_be_deleted_test/1,
-    upload_with_time_warps_test/1
+    upload_with_backward_time_warps_test/1,
+    upload_with_forward_time_warps_test/1
 ]).
 
 % Exported for rpc calls
@@ -49,7 +50,8 @@ groups() -> [
     ]},
     {time_mock_tests, [sequential], [
         stale_upload_file_should_be_deleted_test,
-        upload_with_time_warps_test_test
+        upload_with_backward_time_warps_test,
+        upload_with_forward_time_warps_test
     ]}
 ].
 
@@ -162,16 +164,13 @@ stale_upload_file_should_be_deleted_test(_Config) ->
     force_stale_uploads_removal(krakow),
     ?assertMatch(true, authorize_chunk_upload(krakow, user1, FileGuid)),
 
-    time_test_utils:simulate_seconds_passing(2),
+    time_test_utils:simulate_seconds_passing(61),
     force_stale_uploads_removal(krakow),
     ?assertMatch(false, authorize_chunk_upload(krakow, user1, FileGuid)),
-
-    Node = oct_background:get_random_provider_node(krakow),
-    UserSessId = oct_background:get_user_session_id(user1, krakow),
-    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(Node, UserSessId, ?FILE_REF(FileGuid)), ?ATTEMPTS).
+    assert_file_does_not_exist(krakow, user1, FileGuid).
 
 
-upload_with_time_warps_test(_Config) ->
+upload_with_backward_time_warps_test(_Config) ->
     [#object{guid = FileGuid}] = onenv_file_test_utils:create_and_sync_file_tree(
         user1, space_krk, #file_spec{}
     ),
@@ -184,21 +183,33 @@ upload_with_time_warps_test(_Config) ->
     force_stale_uploads_removal(krakow),
     ?assertMatch(true, authorize_chunk_upload(krakow, user1, FileGuid)),
 
+    % but will de removed if time equal to inactivity period (currently 1 minute)
+    % passes from this new point in time (if no new activity occurred)
+    time_test_utils:simulate_seconds_passing(61),
+    force_stale_uploads_removal(krakow),
+    ?assertMatch(false, authorize_chunk_upload(krakow, user1, FileGuid)),
+    assert_file_does_not_exist(krakow, user1, FileGuid).
+
+
+upload_with_forward_time_warps_test(_Config) ->
+    [#object{guid = FileGuid}] = onenv_file_test_utils:create_and_sync_file_tree(
+        user1, space_krk, #file_spec{}
+    ),
+    ?assertMatch({ok, _}, initialize_gui_upload(krakow, user1, FileGuid)),
+    ?assertMatch(true, authorize_chunk_upload(krakow, user1, FileGuid)),
+
     % upload should not be canceled in case of forward time warp if next chunk
     % was written before stale uploads checkup
     time_test_utils:simulate_seconds_passing(3000),
-    do_multipart(krakow, user1, FileGuid, 5, 10, 5),
+    do_multipart(krakow, user1, FileGuid, 5, 10, 1),
     force_stale_uploads_removal(krakow),
     ?assertMatch(true, authorize_chunk_upload(krakow, user1, FileGuid)),
 
-    % otherwise it will be removed
-    time_test_utils:simulate_seconds_passing(2000),
+    % otherwise it will be removed after inactivity period (currently 1 minute)
+    time_test_utils:simulate_seconds_passing(61),
     force_stale_uploads_removal(krakow),
     ?assertMatch(false, authorize_chunk_upload(krakow, user1, FileGuid)),
-
-    Node = oct_background:get_random_provider_node(krakow),
-    UserSessId = oct_background:get_user_session_id(user1, krakow),
-    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(Node, UserSessId, ?FILE_REF(FileGuid)), ?ATTEMPTS).
+    assert_file_does_not_exist(krakow, user1, FileGuid).
 
 
 %%%===================================================================
@@ -249,6 +260,19 @@ end_per_testcase(_Case, _Config) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+%% @private
+-spec assert_file_does_not_exist(
+    oct_background:entity_selector(),
+    oct_background:entity_selector(),
+    file_id:file_guid()
+) ->
+    ok.
+assert_file_does_not_exist(ProviderSelector, UserSelector, FileGuid) ->
+    Node = oct_background:get_random_provider_node(ProviderSelector),
+    UserSessId = oct_background:get_user_session_id(UserSelector, ProviderSelector),
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(Node, UserSessId, ?FILE_REF(FileGuid)), ?ATTEMPTS).
 
 
 %% @private
