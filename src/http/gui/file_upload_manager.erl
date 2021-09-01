@@ -40,7 +40,7 @@
 -record(upload_ctx, {
     user_id :: od_user:id(),
     monitors :: ordsets:ordset(reference()),
-    latest_chunk_upload_ended_timestamp :: time:seconds()
+    latest_activity_timestamp :: time:seconds()
 }).
 -type upload_ctx() :: #upload_ctx{}.
 -type uploads() :: #{file_id:file_guid() => upload_ctx()}.
@@ -136,7 +136,7 @@ handle_call(?REGISTER_UPLOAD_REQ(UserId, FileGuid), _, #state{uploads = Uploads}
     UploadCtx = #upload_ctx{
         user_id = UserId,
         monitors = ordsets:new(),
-        latest_chunk_upload_ended_timestamp = ?NOW()
+        latest_activity_timestamp = ?NOW()
     },  %% TODO check if not registered ?
     reply(ok, State#state{uploads = Uploads#{FileGuid => UploadCtx}});
 
@@ -215,7 +215,7 @@ handle_info({'DOWN', Monitor, process, _, _}, State = #state{
             UploadCtx = #upload_ctx{monitors = Monitors} = maps:get(FileGuid, Uploads),
             NewUploadCtx = UploadCtx#upload_ctx{
                 monitors = ordsets:del_element(Monitor, Monitors),
-                latest_chunk_upload_ended_timestamp = ?NOW()
+                latest_activity_timestamp = ?NOW()
             },
             State#state{
                 uploads = Uploads#{FileGuid => NewUploadCtx},
@@ -295,17 +295,23 @@ remove_stale_uploads(Uploads) ->
     Now = ?NOW(),
     InactivityPeriod = ?INACTIVITY_PERIOD_SEC(),
 
-    maps:fold(fun(FileGuid, UploadCtx = #upload_ctx{
-        monitors = Monitors,
-        latest_chunk_upload_ended_timestamp = Timestamp
-    }, Acc) ->
-        case ordsets:is_empty(Monitors) andalso Timestamp + InactivityPeriod < Now of
-            true ->
-                lfm:unlink(?ROOT_SESS_ID, ?FILE_REF(FileGuid), false),
-                Acc;
-            false ->
-                Acc#{FileGuid => UploadCtx}
-        end
+    maps:fold(fun
+        (FileGuid, UploadCtx = #upload_ctx{latest_activity_timestamp = Timestamp}, Acc) when
+            Now < Timestamp - InactivityPeriod
+        ->
+            % backward time warp must have occurred - timestamp must be adjusted to new point in time
+            Acc#{FileGuid => UploadCtx#upload_ctx{latest_activity_timestamp = Now}};
+        (FileGuid, UploadCtx, Acc) ->
+            Monitors = UploadCtx#upload_ctx.monitors,
+            Timestamp = UploadCtx#upload_ctx.latest_activity_timestamp,
+
+            case ordsets:is_empty(Monitors) andalso Timestamp + InactivityPeriod < Now of
+                true ->
+                    lfm:unlink(?ROOT_SESS_ID, ?FILE_REF(FileGuid), false),
+                    Acc;
+                false ->
+                    Acc#{FileGuid => UploadCtx}
+            end
     end, #{}, Uploads).
 
 
