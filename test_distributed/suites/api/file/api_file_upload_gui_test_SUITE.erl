@@ -32,8 +32,8 @@
     upload_test/1,
 
     % sequential tests
-    stale_upload_file_should_be_deleted_test/1
-%%    upload_with_time_warps_test/1
+    stale_upload_file_should_be_deleted_test/1,
+    upload_with_time_warps_test/1
 ]).
 
 % Exported for rpc calls
@@ -48,14 +48,16 @@ groups() -> [
         upload_test
     ]},
     {time_mock_tests, [sequential], [
-        stale_upload_file_should_be_deleted_test
-%%        upload_with_time_warps_test_test
+        stale_upload_file_should_be_deleted_test,
+        upload_with_time_warps_test_test
     ]}
 ].
+
 all() -> [
     {group, parallel_tests},
     {group, time_mock_tests}
 ].
+
 
 -define(ATTEMPTS, 30).
 
@@ -166,55 +168,37 @@ stale_upload_file_should_be_deleted_test(_Config) ->
 
     Node = oct_background:get_random_provider_node(krakow),
     UserSessId = oct_background:get_user_session_id(user1, krakow),
-
-    ?assertMatch(
-        {error, ?ENOENT},
-        onenv_file_test_utils:get_object_attributes(Node, UserSessId, FileGuid),
-        ?ATTEMPTS
-    ).
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(Node, UserSessId, ?FILE_REF(FileGuid)), ?ATTEMPTS).
 
 
-%%upload_with_time_warps_test(_Config) ->
-%%    UserId = oct_background:get_user_id(user1),
-%%    UserSessId = oct_background:get_user_session_id(user1, krakow),
-%%    [Node] = oct_background:get_provider_nodes(krakow),
-%%
-%%    CurrTime = time_test_utils:get_frozen_time_seconds(),
-%%    {ok, FileGuid} = lfm_proxy:create(Node, UserSessId, ?FILE_PATH),
-%%
-%%    FileKey = ?FILE_REF(FileGuid),
-%%    ?assertMatch({ok, #file_attr{mtime = CurrTime}}, lfm_proxy:stat(Node, UserSessId, FileKey)),
-%%
-%%    ?assertMatch({ok, _}, initialize_gui_upload(UserId, UserSessId, FileGuid, Node)),
-%%    ?assertMatch(true, authorize_chunk_upload(UserId, FileGuid, Node)),
-%%
-%%    % upload should not be canceled if time warps backward (whether write occurred or not)
-%%    PastTime = time_test_utils:simulate_seconds_passing(-1000),
-%%
-%%    ?assertMatch({ok, #file_attr{mtime = CurrTime}}, lfm_proxy:stat(Node, UserSessId, FileKey)),
-%%    force_stale_uploads_removal(krakow),
-%%    ?assertMatch(true, authorize_chunk_upload(UserId, FileGuid, Node)),
-%%
-%%    do_multipart(Node, ?USER(UserId, UserSessId), FileGuid, 5, 10, 1),
-%%    ?assertMatch({ok, #file_attr{mtime = PastTime}}, lfm_proxy:stat(Node, UserSessId, FileKey), ?ATTEMPTS),
-%%    force_stale_uploads_removal(krakow),
-%%    ?assertMatch(true, authorize_chunk_upload(UserId, FileGuid, Node)),
-%%
-%%    % in case of forward time warp if next chunk was written to file (this updates file mtime)
-%%    % it should be left. Otherwise it will be deleted as stale upload.
-%%    FutureTime = time_test_utils:simulate_seconds_passing(3000),
-%%
-%%    do_multipart(Node, ?USER(UserId, UserSessId), FileGuid, 5, 10, 1),
-%%    ?assertMatch({ok, #file_attr{mtime = FutureTime}}, lfm_proxy:stat(Node, UserSessId, FileKey), ?ATTEMPTS),
-%%    force_stale_uploads_removal(krakow),
-%%    ?assertMatch(true, authorize_chunk_upload(UserId, FileGuid, Node)),
-%%
-%%    time_test_utils:simulate_seconds_passing(2000),
-%%
-%%    ?assertMatch({ok, #file_attr{mtime = FutureTime}}, lfm_proxy:stat(Node, UserSessId, FileKey)),
-%%    force_stale_uploads_removal(krakow),
-%%    ?assertMatch(false, authorize_chunk_upload(UserId, FileGuid, Node)),
-%%    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(Node, UserSessId, FileKey), ?ATTEMPTS).
+upload_with_time_warps_test(_Config) ->
+    [#object{guid = FileGuid}] = onenv_file_test_utils:create_and_sync_file_tree(
+        user1, space_krk, #file_spec{}
+    ),
+
+    ?assertMatch({ok, _}, initialize_gui_upload(krakow, user1, FileGuid)),
+    ?assertMatch(true, authorize_chunk_upload(krakow, user1, FileGuid)),
+
+    % upload should not be canceled if time warps backward (whether write occurred or not)
+    time_test_utils:simulate_seconds_passing(-1000),
+    force_stale_uploads_removal(krakow),
+    ?assertMatch(true, authorize_chunk_upload(krakow, user1, FileGuid)),
+
+    % upload should not be canceled in case of forward time warp if next chunk
+    % was written before stale uploads checkup
+    time_test_utils:simulate_seconds_passing(3000),
+    do_multipart(krakow, user1, FileGuid, 5, 10, 5),
+    force_stale_uploads_removal(krakow),
+    ?assertMatch(true, authorize_chunk_upload(krakow, user1, FileGuid)),
+
+    % otherwise it will be removed
+    time_test_utils:simulate_seconds_passing(2000),
+    force_stale_uploads_removal(krakow),
+    ?assertMatch(false, authorize_chunk_upload(krakow, user1, FileGuid)),
+
+    Node = oct_background:get_random_provider_node(krakow),
+    UserSessId = oct_background:get_user_session_id(user1, krakow),
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(Node, UserSessId, ?FILE_REF(FileGuid)), ?ATTEMPTS).
 
 
 %%%===================================================================
