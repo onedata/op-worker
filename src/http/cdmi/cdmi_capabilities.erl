@@ -42,7 +42,7 @@ root_capabilities(RequestedOptions) ->
         (<<"capabilities">>, Acc) ->
             Acc#{<<"capabilities">> => ?ROOT_CAPABILITY_MAP};
         (<<"childrenrange">>, Acc) ->
-            %todo hardcoded children, when adding childrenranges or new capabilities, this has to be changed
+            %TODO VFS-7290 hardcoded children, when adding childrenranges or new capabilities, this has to be changed
             Acc#{<<"childrenrange">> => <<"0-1">>};
         (<<"children">>, Acc) ->
             Acc#{<<"children">> => [

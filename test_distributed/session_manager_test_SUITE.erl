@@ -365,8 +365,8 @@ init_per_testcase(session_supervisor_child_crash_test, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
 
     initializer:communicator_mock(Worker),
-    test_utils:mock_new(Worker, logger),
-    test_utils:mock_expect(Worker, logger, dispatch_log, fun
+    test_utils:mock_new(Worker, onedata_logger),
+    test_utils:mock_expect(Worker, onedata_logger, dispatch_log, fun
         (_, _, _, [_, _, kill], _) -> meck:exception(throw, crash);
         (A, B, C, D, E) -> meck:passthrough([A, B, C, D, E])
     end),
@@ -408,7 +408,7 @@ end_per_testcase(session_getters_test, Config) ->
 
 end_per_testcase(session_supervisor_child_crash_test, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    test_utils:mock_validate_and_unload(Worker, logger);
+    test_utils:mock_validate_and_unload(Worker, onedata_logger);
 
 end_per_testcase(Case, Config) when
     Case =:= session_creation_reuse_and_cleaning_test;

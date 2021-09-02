@@ -199,10 +199,10 @@ delegate_and_supervise(WorkerRef, ReqOrHandlerFun, MsgId, RespondVia) ->
         ReqId = {make_ref(), MsgId},
         ok = delegate_request_insecure(WorkerRef, ReqOrHandlerFun, ReqId, RespondVia)
     catch
-        Type:Error ->
+        Type:Error:Stacktrace ->
             ?error_stacktrace("Failed to delegate request (~p) due to: ~p:~p", [
                 MsgId, Type, Error
-            ]),
+            ], Stacktrace),
             {ok, ?ERROR_MSG(MsgId)}
     end.
 

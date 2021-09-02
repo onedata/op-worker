@@ -454,7 +454,7 @@ delete_many_children_links_recursive_test_base(Config, ImportedStorage) ->
 init_per_suite(Config) ->
     Posthook = fun(NewConfig) ->
         ssl:start(),
-        hackney:start(),
+        application:ensure_all_started(hackney),
         initializer:disable_quota_limit(NewConfig),
         initializer:mock_provider_ids(NewConfig),
         multi_provider_file_ops_test_base:init_env(NewConfig)
@@ -467,7 +467,7 @@ end_per_suite(Config) ->
     ok = worker_pool:stop_sup_pool(?POOL),
     initializer:clean_test_users_and_spaces_no_validate(Config),
     initializer:unload_quota_mocks(Config),
-    initializer:unmock_provider_ids(Config),
+    initializer:unmock_provider_ids(?config(op_worker_nodes, Config)),
     ssl:stop().
 
 init_per_testcase(_Case, Config) ->

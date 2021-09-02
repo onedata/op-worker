@@ -253,19 +253,18 @@ throttle_test_loop(Worker, ScheduledCounters, MaxParallelRequests) ->
 
 init_per_suite(Config) ->
     Posthook = fun(NewConfig) ->
-        NewConfig1 = [{space_storage_mock, false} | NewConfig],
-        NewConfig2 = initializer:setup_storage(NewConfig1),
+        NewConfig1 = initializer:setup_storage(NewConfig),
         lists:foreach(fun(Worker) ->
             test_utils:set_env(Worker, ?APP_NAME, dbsync_changes_broadcast_interval, timer:seconds(1)),
             test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_delay_ms, timer:seconds(1)),
             test_utils:set_env(Worker, ?APP_NAME, rerun_transfers, false),
             test_utils:set_env(Worker, op_worker, max_file_replication_retries_per_file, 5),
             test_utils:set_env(Worker, op_worker, max_eviction_retries_per_file_replica, 5)
-        end, ?config(op_worker_nodes, NewConfig2)),
+        end, ?config(op_worker_nodes, NewConfig1)),
 
         application:start(ssl),
-        hackney:start(),
-        initializer:create_test_users_and_spaces(?TEST_FILE(NewConfig2, "env_desc.json"), NewConfig2)
+        application:ensure_all_started(hackney),
+        initializer:create_test_users_and_spaces(?TEST_FILE(NewConfig1, "env_desc.json"), NewConfig1)
     end,
     [
         {?ENV_UP_POSTHOOK, Posthook},
@@ -294,7 +293,7 @@ end_per_testcase(_Case, Config) ->
 end_per_suite(Config) ->
     %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
     initializer:clean_test_users_and_spaces_no_validate(Config),
-    hackney:stop(),
+    application:stop(hackney),
     application:stop(ssl),
     initializer:teardown_storage(Config).
 
@@ -382,9 +381,9 @@ run_test(Config, Testcase, TestcaseName, FilesAndJobsNums) ->
             Testcase(Config, FilesNum, JobsNum),
             ok
         catch
-            E:R ->
+            E:R:Stacktrace ->
                 ct:print("Testcase ~p failed due to ~p for FilesNum = ~p, JobsNum = ~p.~nStacktrace: ~n~p",
-                    [TestcaseName, {E, R}, FilesNum, JobsNum, erlang:get_stacktrace()]),
+                    [TestcaseName, {E, R}, FilesNum, JobsNum, Stacktrace]),
                 error
         after
             cleanup(Config)

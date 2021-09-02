@@ -30,8 +30,8 @@
 -export([refresh_params/2, refresh_helper_params/2, getattr/2, access/3,
     mknod/5, mkdir/3, unlink/3, rmdir/2, symlink/3, rename/3, link/3,
     chmod/3, chown/4, truncate/4, setxattr/6, getxattr/3, removexattr/3,
-    listxattr/2, open/3, read/3, write/3, release/1, flush/1, fsync/2,
-    readdir/4, listobjects/5]).
+    listxattr/2, flushbuffer/3, open/3, read/3, write/3, release/1, flush/1,
+    fsync/2, readdir/4, listobjects/5, blocksize_for_path/2]).
 -export([start_monitoring/0, stop_monitoring/0]).
 
 %%%===================================================================
@@ -168,6 +168,18 @@ listxattr(_Handle, _FileId) ->
     erlang:nif_error(helpers_nif_not_loaded).
 
 
+-spec flushbuffer(helper_handle(), helpers:file_id(), Size :: non_neg_integer()) ->
+    {ok, response_ref()} | {error, Reason :: term()}.
+flushbuffer(_Handle, _FileId, _Size) ->
+    erlang:nif_error(helpers_nif_not_loaded).
+
+
+-spec blocksize_for_path(helper_handle(), helpers:file_id()) ->
+    {ok, response_ref()} | {error, Reason :: term()}.
+blocksize_for_path(_Handle, _FileId) ->
+    erlang:nif_error(helpers_nif_not_loaded).
+
+
 -spec open(helper_handle(), helpers:file_id(), Flags :: [open_flag()]) ->
     {ok, response_ref()} | {error, Reason :: term()}.
 open(_Handle, _FileId, _Flags) ->
@@ -256,7 +268,7 @@ stop_monitoring() ->
 -spec prepare_args() -> #{binary() => binary()}.
 prepare_args() ->
     OpWorkerArgs = lists:foldl(fun(EnvKey, Map) ->
-        {ok, EnvValue} = application:get_env(?APP_NAME, EnvKey),
+        EnvValue = op_worker:get_env(EnvKey),
         maps:put(str_utils:to_binary(EnvKey), str_utils:to_binary(EnvValue), Map)
     end, #{}, [
         ceph_helper_threads_number,

@@ -19,9 +19,13 @@
 -record(client_message, {
     message_id :: undefined | clproto_message_id:id(),
     session_id :: undefined | session:id(),
-    % session id on behalf which operations should be carried
+
+    % Parameters describing what session should be created on peer provider
+    % (used only by proxy)
     effective_session_id :: undefined | session:id(),
     effective_client_tokens :: undefined | auth_manager:client_tokens(),
+    effective_session_mode = normal :: session:mode(),
+
     message_stream :: undefined | #message_stream{},
     message_body :: tuple()
 }).

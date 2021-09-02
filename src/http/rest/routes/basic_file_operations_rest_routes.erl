@@ -2,7 +2,7 @@
 %%% This file has been automatically generated from Swagger
 %%% specification - DO NOT EDIT!
 %%%
-%%% @copyright (C) 2019-2020 ACK CYFRONET AGH
+%%% @copyright (C) 2019-2021 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -47,8 +47,8 @@ routes() -> [
         consumes = [<<"application/octet-stream">>],
         produces = [<<"application/json">>],
         b_gri = #b_gri{
-            type = op_file,
-            id = ?OBJECTID_BINDING(id),
+            type = op_file, 
+            id = ?OBJECTID_BINDING(id), 
             aspect = child, 
             scope = private
         }
@@ -86,7 +86,7 @@ routes() -> [
             scope = private
         }
     }},
-    %% Download file content
+    %% Download file or directory content
     {<<"/data/:id/content">>, rest_handler, #rest_req{
         method = 'GET',
         produces = [<<"application/octet-stream">>],
@@ -105,6 +105,28 @@ routes() -> [
             type = op_file, 
             id = ?OBJECTID_BINDING(id), 
             aspect = content, 
+            scope = private
+        }
+    }},
+    %% Get file hard links
+    {<<"/data/:id/hardlinks">>, rest_handler, #rest_req{
+        method = 'GET',
+        produces = [<<"application/octet-stream">>],
+        b_gri = #b_gri{
+            type = op_file, 
+            id = ?OBJECTID_BINDING(id), 
+            aspect = hardlinks, 
+            scope = private
+        }
+    }},
+    %% Get symbolic link value
+    {<<"/data/:id/symlink_value">>, rest_handler, #rest_req{
+        method = 'GET',
+        produces = [<<"application/octet-stream">>],
+        b_gri = #b_gri{
+            type = op_file, 
+            id = ?OBJECTID_BINDING(id), 
+            aspect = symlink_value, 
             scope = private
         }
     }}

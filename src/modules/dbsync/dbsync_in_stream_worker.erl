@@ -271,7 +271,7 @@ stash_changes_batch(Since, Until, Timestamp, Docs, State = #state{
     changes_stash = Stash,
     seq = Seq
 }) ->
-    Max = application:get_env(?APP_NAME, dbsync_changes_stash_max_size, 100000),
+    Max = op_worker:get_env(dbsync_changes_stash_max_size, 100000),
     case Until > Seq + Max of
         true ->
             case ets:first(Stash) of
@@ -301,7 +301,7 @@ apply_changes_batch(Since, Until, Timestamp, Docs, State) ->
     {Docs2, Timestamp2, Until2, State3} = prepare_batch(Docs, Timestamp, Until, State2),
     dbsync_changes:apply_batch(Docs2, {Since, Until2}, Timestamp2),
 
-    case application:get_env(?APP_NAME, dbsync_in_stream_worker_gc, on) of
+    case op_worker:get_env(dbsync_in_stream_worker_gc, on) of
         on ->
             erlang:garbage_collect();
         _ ->

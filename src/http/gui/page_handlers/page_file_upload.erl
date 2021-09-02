@@ -62,11 +62,12 @@ handle(<<"POST">>, InitialReq) ->
                     reply_with_error(?ERROR_FORBIDDEN, Req);
                 throw:Error ->
                     reply_with_error(Error, Req);
-                Type:Message ->
-                    ?error_stacktrace("Error while processing file upload "
-                                      "from user ~p - ~p:~p", [
-                        UserId, Type, Message
-                    ]),
+                Type:Message:Stacktrace ->
+                    ?error_stacktrace(
+                        "Error while processing file upload from user ~p - ~p:~p",
+                        [UserId, Type, Message],
+                        Stacktrace
+                    ),
                     reply_with_error(?ERROR_INTERNAL_SERVER_ERROR, Req)
             end;
         {ok, ?GUEST} ->
@@ -121,7 +122,7 @@ write_chunk(Req, ?USER(UserId, SessionId), Params) ->
 
     SpaceId = file_id:guid_to_space_id(FileGuid),
     Offset = ChunkSize * (ChunkNumber - 1),
-    {ok, FileHandle} = ?check(lfm:monitored_open(SessionId, {guid, FileGuid}, write)),
+    {ok, FileHandle} = ?check(lfm:monitored_open(SessionId, ?FILE_REF(FileGuid), write)),
 
     try
         file_upload_utils:upload_file(
@@ -148,9 +149,9 @@ assert_file_upload_registered(UserId, FileGuid) ->
 read_body_opts(SpaceId) ->
     WriteBlockSize = file_upload_utils:get_preferable_write_block_size(SpaceId),
 
-    {ok, UploadWriteSize} = application:get_env(?APP_NAME, upload_write_size),
-    {ok, UploadReadTimeout} = application:get_env(?APP_NAME, upload_read_timeout),
-    {ok, UploadPeriod} = application:get_env(?APP_NAME, upload_read_period),
+    UploadWriteSize = op_worker:get_env(upload_write_size),
+    UploadReadTimeout = op_worker:get_env(upload_read_timeout),
+    UploadPeriod = op_worker:get_env(upload_read_period),
 
     #{
         % length is chunk size - how much the cowboy read

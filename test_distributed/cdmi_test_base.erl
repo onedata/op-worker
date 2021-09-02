@@ -13,16 +13,16 @@
 -author("Tomasz Lichon").
 
 -include("global_definitions.hrl").
--include("http/rest.hrl").
 -include("http/cdmi.hrl").
--include("proto/common/credentials.hrl").
--include("modules/auth/acl.hrl").
--include("modules/fslogic/metadata.hrl").
+-include("http/rest.hrl").
+-include("modules/fslogic/acl.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/fslogic/file_attr.hrl").
+-include("modules/fslogic/metadata.hrl").
+-include("proto/common/credentials.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/http/headers.hrl").
--include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
@@ -279,7 +279,7 @@ get_file(Config) ->
     ?assertMatch(
         {ok, ?HTTP_206_PARTIAL_CONTENT, #{?HDR_CONTENT_RANGE := <<"bytes 5-8/15">>}, <<"cont">>},
         do_request(Workers, FilledFileName, get, [
-            {<<"range">>, <<"bytes=5-8">>}, user_1_token_header(Config)
+            {?HDR_RANGE, <<"bytes=5-8">>}, user_1_token_header(Config)
         ])
     ),
     %%------------------------------
@@ -290,7 +290,7 @@ get_file(Config) ->
     }, Response8} = ?assertMatch(
         {ok, ?HTTP_206_PARTIAL_CONTENT, #{?HDR_CONTENT_TYPE := <<"multipart/byteranges", _/binary>>}, _},
         do_request(Workers, FilledFileName, get, [
-            {<<"range">>, <<"bytes=1-3,5-5,-3">>}, user_1_token_header(Config)
+            {?HDR_RANGE, <<"bytes=1-3,5-5,-3">>}, user_1_token_header(Config)
         ])
     ),
     ExpResponse8 = <<
@@ -313,7 +313,7 @@ get_file(Config) ->
         ?assertMatch(
             {ok, ?HTTP_416_RANGE_NOT_SATISFIABLE, #{?HDR_CONTENT_RANGE := <<"bytes */15">>}, <<>>},
             do_request(Workers, FilledFileName, get, [
-                {<<"range">>, InvalidRange}, user_1_token_header(Config)
+                {?HDR_RANGE, InvalidRange}, user_1_token_header(Config)
             ])
         )
     end, [
@@ -338,9 +338,9 @@ get_file(Config) ->
 
     %% read empty file non-cdmi with Range should return 416
     ?assertMatch(
-        {ok, ?HTTP_416_RANGE_NOT_SATISFIABLE, #{<<"content-range">> := <<"bytes */0">>}, <<>>},
+        {ok, ?HTTP_416_RANGE_NOT_SATISFIABLE, #{?HDR_CONTENT_RANGE := <<"bytes */0">>}, <<>>},
         do_request(Workers, EmptyFileName, get, [
-            {<<"range">>, <<"bytes=10-15">>}, user_1_token_header(Config)
+            {?HDR_RANGE, <<"bytes=10-15">>}, user_1_token_header(Config)
         ])
     ).
 
@@ -1111,7 +1111,7 @@ moved_permanently(Config) ->
     {ok, Code1, Headers1, _Response1} =
         do_request(WorkerP2, DirNameWithoutSlash, get, RequestHeaders1, []),
     ?assertEqual(?HTTP_302_FOUND, Code1),
-    ?assertMatch(#{<<"location">> := Location1}, Headers1),
+    ?assertMatch(#{?HDR_LOCATION := Location1}, Headers1),
     %%------------------------------
 
     %%--------- dir test with QS-----------
@@ -1124,7 +1124,7 @@ moved_permanently(Config) ->
     {ok, Code2, Headers2, _Response2} =
         do_request(WorkerP2, DirNameWithoutSlash ++ "?example_qs=1", get, RequestHeaders2, []),
     ?assertEqual(?HTTP_302_FOUND, Code2),
-    ?assertMatch(#{<<"location">> := Location2}, Headers2),
+    ?assertMatch(#{?HDR_LOCATION := Location2}, Headers2),
     %%------------------------------
 
     %%--------- file test ----------
@@ -1137,7 +1137,7 @@ moved_permanently(Config) ->
     {ok, Code3, Headers3, _Response3} =
         do_request(WorkerP2, FileNameWithSlash, get, RequestHeaders3, []),
     ?assertEqual(?HTTP_302_FOUND, Code3),
-    ?assertMatch(#{<<"location">> := Location3}, Headers3).
+    ?assertMatch(#{?HDR_LOCATION := Location3}, Headers3).
 %%------------------------------
 
 % tests req format checking
@@ -1215,7 +1215,7 @@ mimetype_and_encoding(Config) ->
     ?assertEqual(?HTTP_200_OK, Code5),
     CdmiResponse5 = (json_utils:decode(Response5)),
     ?assertMatch(#{<<"mimetype">> := <<"text/plain">>}, CdmiResponse5),
-    ?assertMatch(#{<<"valuetransferencoding">> := <<"utf-8">>}, CdmiResponse5), %todo what do we return here if file contains valid utf-8 string and we read byte range?
+    ?assertMatch(#{<<"valuetransferencoding">> := <<"utf-8">>}, CdmiResponse5), %TODO VFS-7376 what do we return here if file contains valid utf-8 string and we read byte range?
     ?assertMatch(#{<<"value">> := FileContent4}, CdmiResponse5),
     %%------------------------------
 

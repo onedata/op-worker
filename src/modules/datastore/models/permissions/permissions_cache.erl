@@ -171,7 +171,7 @@ cache_permission(Rule, Value) ->
 %%--------------------------------------------------------------------
 -spec invalidate() -> ok.
 invalidate() ->
-    rpc:multicall(consistent_hashing:get_all_nodes(), ?MODULE, invalidate_on_node, []),
+    utils:rpc_multicall(consistent_hashing:get_all_nodes(), ?MODULE, invalidate_on_node, []),
     ok.
 
 %%--------------------------------------------------------------------

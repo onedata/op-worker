@@ -2,7 +2,7 @@
 %%% This file has been automatically generated from Swagger
 %%% specification - DO NOT EDIT!
 %%%
-%%% @copyright (C) 2019-2020 ACK CYFRONET AGH
+%%% @copyright (C) 2019-2021 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -49,6 +49,17 @@ routes() -> [
             type = op_provider, 
             id = undefined, 
             aspect = test_image, 
+            scope = public
+        }
+    }},
+    %% Check cluster health
+    {<<"/health">>, rest_handler, #rest_req{
+        method = 'GET',
+        produces = [<<"application/json">>],
+        b_gri = #b_gri{
+            type = op_provider, 
+            id = undefined, 
+            aspect = health, 
             scope = public
         }
     }}

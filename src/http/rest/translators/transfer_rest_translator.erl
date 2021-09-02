@@ -32,10 +32,11 @@
 -spec create_response(gri:gri(), middleware:auth_hint(),
     middleware:data_format(), Result :: term() | {gri:gri(), term()} |
     {gri:gri(), middleware:auth_hint(), term()}) -> #rest_resp{}.
-create_response(#gri{aspect = As}, _, value, TransferId) when
-    As =:= instance;
-    As =:= rerun
-->
+create_response(#gri{aspect = instance}, _, resource, {#gri{id = TransferId}, _}) ->
+    PathTokens = [<<"transfers">>, TransferId],
+    ?CREATED_REPLY(PathTokens, #{<<"transferId">> => TransferId});
+
+create_response(#gri{aspect = rerun}, _, value, TransferId) ->
     PathTokens = [<<"transfers">>, TransferId],
     ?CREATED_REPLY(PathTokens, #{<<"transferId">> => TransferId}).
 
@@ -94,8 +95,6 @@ get_response(#gri{aspect = instance, id = TransferId}, #transfer{
         file ->
             #{
                 <<"fileId">> => FileObjectId,
-                % TODO VFS-6365 remove deprecated transfer
-                <<"path">> => Path,
                 <<"filePath">> => Path
             };
         view ->
@@ -119,8 +118,6 @@ get_response(#gri{aspect = instance, id = TransferId}, #transfer{
 
         <<"transferStatus">> => transfer:status(Transfer),
         <<"replicationStatus">> => ReplicationStatus,
-        % TODO VFS-6365 remove deprecated transfer
-        <<"replicaEvictionStatus">> => EvictionStatus,
         <<"evictionStatus">> => EvictionStatus,
 
         <<"effectiveJobStatus">> => transfer:status(EffJobTransfer),
@@ -130,11 +127,7 @@ get_response(#gri{aspect = instance, id = TransferId}, #transfer{
         <<"filesProcessed">> => FilesProcessed,
         <<"filesReplicated">> => FilesReplicated,
         <<"bytesReplicated">> => BytesReplicated,
-        % TODO VFS-6365 remove deprecated transfer
-        <<"fileReplicasEvicted">> => FilesEvicted,
         <<"filesEvicted">> => FilesEvicted,
-        % TODO VFS-6365 remove deprecated transfer
-        <<"failedFiles">> => FailedFiles,
         <<"filesFailed">> => FailedFiles,
 
         <<"scheduleTime">> => ScheduleTime,

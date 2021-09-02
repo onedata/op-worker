@@ -14,6 +14,7 @@
 
 -include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/performance.hrl").
 
@@ -153,23 +154,23 @@ sparse_files_should_be_created(Config0) ->
         <<"/space1/", (generator:gen_name())/binary>>)),
     file_ops_test_utils:write_byte_to_file(Worker1, SessId1, FileGuid5, 0),
     verify_sparse_file(Worker2, SessId2, FileGuid5, 1, {Provider1Id, [[0, 1]]}, false),
-    ?assertEqual(ok, lfm_proxy:truncate(Worker1, SessId1, {guid, FileGuid5}, 10)),
-    ?assertEqual(ok, lfm_proxy:fsync(Worker1, SessId1, {guid, FileGuid5}, Provider1Id)),
+    ?assertEqual(ok, lfm_proxy:truncate(Worker1, SessId1, ?FILE_REF(FileGuid5), 10)),
+    ?assertEqual(ok, lfm_proxy:fsync(Worker1, SessId1, ?FILE_REF(FileGuid5), Provider1Id)),
     verify_sparse_file(Worker2, SessId2, FileGuid5, 10, {Provider1Id, [[0, 1]]}),
 
     % Creation of hole using truncate on other provider on empty file
     {ok, FileGuid6} = ?assertMatch({ok, _}, lfm_proxy:create(Worker1, SessId1,
         <<"/space1/", (generator:gen_name())/binary>>)),
-    ?assertEqual(ok, lfm_proxy:truncate(Worker1, SessId1, {guid, FileGuid6}, 10)),
-    ?assertEqual(ok, lfm_proxy:fsync(Worker1, SessId1, {guid, FileGuid5}, Provider1Id)),
+    ?assertEqual(ok, lfm_proxy:truncate(Worker1, SessId1, ?FILE_REF(FileGuid6), 10)),
+    ?assertEqual(ok, lfm_proxy:fsync(Worker1, SessId1, ?FILE_REF(FileGuid5), Provider1Id)),
     verify_sparse_file(Worker2, SessId2, FileGuid6, 10, {Provider1Id, []}),
 
     % Truncate on empty file and read by other provider
     {ok, FileGuid7} = ?assertMatch({ok, _}, lfm_proxy:create(Worker1, SessId1,
         <<"/space1/", (generator:gen_name())/binary>>)),
     verify_sparse_file(Worker2, SessId2, FileGuid7, 0, {Provider1Id, []}, false),
-    ?assertEqual(ok, lfm_proxy:truncate(Worker2, SessId2, {guid, FileGuid7}, 10)),
-    ?assertEqual(ok, lfm_proxy:fsync(Worker2, SessId2, {guid, FileGuid7}, Provider2Id)),
+    ?assertEqual(ok, lfm_proxy:truncate(Worker2, SessId2, ?FILE_REF(FileGuid7), 10)),
+    ?assertEqual(ok, lfm_proxy:fsync(Worker2, SessId2, ?FILE_REF(FileGuid7), Provider2Id)),
     verify_sparse_file(Worker1, SessId1, FileGuid7, 10, {Provider2Id, []}),
 
     % Truncate on not empty file and read by other provider
@@ -177,8 +178,8 @@ sparse_files_should_be_created(Config0) ->
         <<"/space1/", (generator:gen_name())/binary>>)),
     file_ops_test_utils:write_byte_to_file(Worker1, SessId1, FileGuid8, 0),
     verify_sparse_file(Worker2, SessId2, FileGuid8, 1, {Provider1Id, [[0, 1]]}, false),
-    ?assertEqual(ok, lfm_proxy:truncate(Worker2, SessId2, {guid, FileGuid8}, 10)),
-    ?assertEqual(ok, lfm_proxy:fsync(Worker2, SessId2, {guid, FileGuid8}, Provider2Id)),
+    ?assertEqual(ok, lfm_proxy:truncate(Worker2, SessId2, ?FILE_REF(FileGuid8), 10)),
+    ?assertEqual(ok, lfm_proxy:fsync(Worker2, SessId2, ?FILE_REF(FileGuid8), Provider2Id)),
     verify_sparse_file(Worker1, SessId1, FileGuid8, 10, {Provider1Id, [[0, 1]]}),
 
     % Write to empty file and read by other provider
@@ -205,7 +206,7 @@ verify_sparse_file(W, SessId, FileGuid, FileSize, ExpectedBlocks, ReadFile) when
     lists:foreach(fun({ProviderId, Blocks}) ->
         BlocksSize = lists:foldl(fun([_, Size], Acc) -> Acc + Size end, 0, Blocks),
         GetProviderBlocks = fun() ->
-            case lfm_proxy:get_file_distribution(W, SessId, {guid, FileGuid}) of
+            case lfm_proxy:get_file_distribution(W, SessId, ?FILE_REF(FileGuid)) of
                 {ok, Distribution} ->
                     lists:filter(fun(#{<<"providerId">> := Id}) -> ProviderId =:= Id end, Distribution);
                 Other ->
@@ -216,12 +217,12 @@ verify_sparse_file(W, SessId, FileGuid, FileSize, ExpectedBlocks, ReadFile) when
         ?assertMatch([#{<<"blocks">> := Blocks, <<"totalBlocksSize">> := BlocksSize}], GetProviderBlocks(), 30)
     end, ExpectedBlocks),
 
-    ?assertMatch({ok, #file_attr{size = FileSize}}, lfm_proxy:stat(W, SessId, {guid, FileGuid}), 30),
+    ?assertMatch({ok, #file_attr{size = FileSize}}, lfm_proxy:stat(W, SessId, ?FILE_REF(FileGuid)), 30),
 
     case ReadFile of
         true ->
             ExpectedFileContent = file_ops_test_utils:get_sparse_file_content(ExpectedBlocks, FileSize),
-            {ok, Handle} = lfm_proxy:open(W, SessId, {guid, FileGuid}, rdwr),
+            {ok, Handle} = lfm_proxy:open(W, SessId, ?FILE_REF(FileGuid), rdwr),
             ?assertMatch({ok, ExpectedFileContent}, lfm_proxy:read(W, Handle, 0, 100)),
             ?assertEqual(ok, lfm_proxy:close(W, Handle));
         false ->

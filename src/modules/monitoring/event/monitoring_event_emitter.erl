@@ -41,7 +41,7 @@ emit_storage_used_updated(SpaceId, UserId, SizeDifference) ->
     emit(#monitoring_event{type = Type#storage_used_updated{user_id = undefined}}),
     case UserId of
         ?ROOT_USER_ID -> ok;
-        ?GUEST_USER_ID -> ok; % todo store guest statistics
+        ?GUEST_USER_ID -> ok; % TODO VFS-7343 store guest statistics
         _ ->
             emit(#monitoring_event{type = Type#storage_used_updated{user_id = UserId}})
     end.

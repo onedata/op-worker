@@ -32,7 +32,7 @@
 %%%===================================================================
 
 request(Node, URL, Method, Headers, Body) ->
-    request(Node, URL, Method, Headers, Body, [{recv_timeout, 15000}]).
+    request(Node, URL, Method, Headers, Body, [{recv_timeout, 60000}]).
 
 request(Node, URL, Method, Headers, Body, Opts) ->
     CaCerts = rpc:call(Node, https_listener, get_cert_chain_ders, []),

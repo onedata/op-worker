@@ -27,6 +27,10 @@
 
 -define(QOS_ANY_STORAGE, "anyStorage").
 
+-define(NONE_QOS_MEMBERSHIP, none).
+-define(DIRECT_QOS_MEMBERSHIP, direct).
+-define(ANCESTOR_QOS_MEMBERSHIP, ancestor).
+
 % macros used for operations on QoS bounded cache
 -define(CACHE_TABLE_NAME(SpaceId),
     binary_to_atom(<<SpaceId/binary, "_qos_bounded_cache_table">>, utf8)).
@@ -34,10 +38,15 @@
 
 
 % macros with QoS status
--define(IMPOSSIBLE, impossible).
--define(PENDING, pending).
--define(FULFILLED, fulfilled).
+-define(IMPOSSIBLE_QOS_STATUS, impossible).
+-define(PENDING_QOS_STATUS, pending).
+-define(FULFILLED_QOS_STATUS, fulfilled).
 
+% Macros representing directory type during QoS traverse. 
+% Start directory is a directory, that traverse originated from (one per traverse),
+% child directory is any other directory.
+-define(QOS_STATUS_TRAVERSE_START_DIR, start_dir).
+-define(QOS_STATUS_TRAVERSE_CHILD_DIR, child_dir).
 
 % Request to remote providers to start QoS traverse.
 % This record is used as an element of datastore document (qos_entry).

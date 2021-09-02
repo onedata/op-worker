@@ -610,7 +610,7 @@ register_many_files_test(Config) ->
 
         % check whether file is visible on 2nd provider
         ?assertFile(W2, SessId2, LogicalFilePath, ?TEST_DATA, ?XATTRS, ?JSON1, ?RDF1, ?ATTEMPTS)
-    end, timer:seconds(60)).
+    end, timer:minutes(5)).
 
 register_many_nested_files_test(Config) ->
     [W1, W2 | _] = ?config(op_worker_nodes, Config),
@@ -665,7 +665,7 @@ register_many_nested_files_test(Config) ->
 
         % check whether file is visible on 2nd provider
         ?assertFile(W2, SessId2, LogicalFilePath, ?TEST_DATA, ?XATTRS, ?JSON1, ?RDF1, ?ATTEMPTS)
-    end, timer:seconds(60)).
+    end, timer:minutes(5)).
 
 
 %===================================================================
@@ -675,7 +675,7 @@ register_many_nested_files_test(Config) ->
 init_per_suite(Config) ->
     Posthook = fun(NewConfig) ->
         ssl:start(),
-        hackney:start(),
+        application:ensure_all_started(hackney),
         initializer:disable_quota_limit(NewConfig),
         initializer:mock_provider_ids(NewConfig),
         NewConfig2 = multi_provider_file_ops_test_base:init_env(NewConfig),
@@ -690,10 +690,11 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     initializer:clean_test_users_and_spaces_no_validate(Config),
     initializer:unload_quota_mocks(Config),
-    initializer:unmock_provider_ids(Config),
+    initializer:unmock_provider_ids(?config(op_worker_nodes, Config)),
     ssl:stop().
 
 init_per_testcase(_Case, Config) ->
+    ct:timetrap({minutes, 10}),
     lfm_proxy:init(Config).
 
 end_per_testcase(_Case, Config) ->

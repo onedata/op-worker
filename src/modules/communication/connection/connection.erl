@@ -131,10 +131,10 @@
 -define(PACKET_VALUE, 4).
 
 -define(DEFAULT_SOCKET_MODE,
-    application:get_env(?APP_NAME, default_socket_mode, active_once)
+    op_worker:get_env(default_socket_mode, active_once)
 ).
 -define(DEFAULT_VERIFY_MSG_FLAG,
-    application:get_env(?APP_NAME, verify_msg_before_encoding, true)
+    op_worker:get_env(verify_msg_before_encoding, true)
 ).
 
 %% API
@@ -167,11 +167,11 @@
         end)
     end
 ).
--define(THROTTLE_ERROR_STACKTRACE(__SESSION_ID, __FORMAT, __ARGS),
+-define(THROTTLE_ERROR_STACKTRACE(__SESSION_ID, __FORMAT, __ARGS, __STACKTRACE),
     begin
-        ?debug_stacktrace(__FORMAT, __ARGS),
+        ?debug_stacktrace(__FORMAT, __ARGS, __STACKTRACE),
         utils:throttle({?MODULE, __SESSION_ID, ?LINE}, ?CONNECTION_AWAIT_LOG_INTERVAL, fun() ->
-            ?error_stacktrace(__FORMAT, __ARGS)
+            ?error_stacktrace(__FORMAT, __ARGS, __STACKTRACE)
         end)
     end
 ).
@@ -367,10 +367,10 @@ handle_info({Ok, Socket, Data}, #state{
         throw:{error, _} = Error ->
             ?THROTTLE_ERROR(SessId, "Protocol upgrade failed due to ~p", [Error]),
             {stop, normal, State};
-        Type:Reason ->
+        Type:Reason:Stacktrace ->
             ?THROTTLE_ERROR_STACKTRACE(SessId, "Unexpected error during protocol upgrade: ~p:~p", [
                 Type, Reason
-            ]),
+            ], Stacktrace),
             {stop, normal, State}
     end;
 
@@ -392,11 +392,12 @@ handle_info({Ok, Socket, Data}, #state{
             % Concrete errors were already logged in 'handle_handshake' so
             % terminate gracefully as to not spam more error logs
             {stop, normal, State}
-    catch Type:Reason ->
+    catch Type:Reason:Stacktrace ->
         ?THROTTLE_ERROR_STACKTRACE(
             OutgoingSessIdOrUndefined,
             "Unexpected error while performing handshake: ~p:~p",
-            [Type, Reason]
+            [Type, Reason],
+            Stacktrace
         ),
         {stop, normal, State}
     end;
@@ -532,7 +533,7 @@ takeover(_Parent, Ref, Socket, Transport, _Opts, _Buffer, _HandlerState) ->
     ranch:remove_connection(Ref),
 
     {ok, {IpAddress, _Port}} = ssl:peername(Socket),
-    {Ok, Closed, Error} = Transport:messages(),
+    {Ok, Closed, Error, _} = Transport:messages(),
 
     State = #state{
         socket = Socket,
@@ -607,13 +608,13 @@ open_socket_to_provider(SessId, ProviderId, Domain,
     Host, Port, Transport, Timeout, ConnManager
 ) ->
     SslOpts = provider_logic:provider_connection_ssl_opts(Domain),
-    ConnectOpts = secure_ssl_opts:expand(Host, SslOpts),
+    ConnectOpts = secure_ssl_opts:expand(SslOpts),
     {ok, Socket} = Transport:connect(
         binary_to_list(Host), Port, ConnectOpts, Timeout
     ),
     {ok, {IpAddress, _Port}} = ssl:peername(Socket),
 
-    {Ok, Closed, Error} = Transport:messages(),
+    {Ok, Closed, Error, _} = Transport:messages(),
     #state{
         socket = Socket,
         socket_mode = ?DEFAULT_SOCKET_MODE,
@@ -856,7 +857,7 @@ send_message(#state{type = outgoing} = State, #client_message{} = Msg) ->
 send_message(#state{type = incoming} = State, #server_message{} = Msg) ->
     send_server_message(State, Msg);
 send_message(#state{type = ConnType}, Msg) ->
-    ?warning_stacktrace("Attempt to send msg ~s via wrong connection ~p", [
+    ?warning("Attempt to send msg ~s via wrong connection ~p", [
         clproto_utils:msg_to_string(Msg), ConnType
     ]),
     {error, sending_msg_via_wrong_conn_type}.
@@ -874,10 +875,10 @@ send_client_message(#state{
             ClientMsg, VerifyMsg
         ),
         socket_send(State, Data)
-    catch _:Reason ->
+    catch _:Reason:Stacktrace ->
         ?THROTTLE_ERROR_STACKTRACE(SessId, "Unable to serialize client_message ~s due to: ~p", [
             clproto_utils:msg_to_string(ClientMsg), Reason
-        ]),
+        ], Stacktrace),
         {error, serialization_failed}
     end.
 
@@ -894,10 +895,10 @@ send_server_message(#state{
             ServerMsg, VerifyMsg
         ),
         socket_send(State, Data)
-    catch _:Reason ->
+    catch _:Reason:Stacktrace ->
         ?THROTTLE_ERROR_STACKTRACE(SessId, "Unable to serialize server_message ~s due to: ~p", [
             clproto_utils:msg_to_string(ServerMsg), Reason
-        ]),
+        ], Stacktrace),
         {error, serialization_failed}
     end.
 

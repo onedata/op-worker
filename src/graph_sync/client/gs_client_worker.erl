@@ -67,6 +67,7 @@
 -export([enable_cache/0]).
 -export([request/1, request/2, request/3]).
 -export([invalidate_cache/1, invalidate_cache/2]).
+-export([force_fetch_entity/1]).
 -export([process_push_message/1]).
 
 %% gen_server callbacks
@@ -177,19 +178,37 @@ request(Client, Req, Timeout) ->
     try
         case check_api_authorization(client_to_credentials(Client), Req) of
             ok ->
-                do_request(Client, Req, Timeout);
+                do_request(Client, Req, Timeout, reuse_cached);
             {error, _} = Err1 ->
                 Err1
         end
     catch
         throw:{error, _} = Err2 ->
             Err2;
-        Type:Reason ->
+        Type:Reason:Stacktrace ->
             ?error_stacktrace("Unexpected error while processing GS request - ~p:~p", [
                 Type, Reason
-            ]),
+            ], Stacktrace),
             ?ERROR_INTERNAL_SERVER_ERROR
     end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Fetches the entity from Onezone, ignoring the local cache. This guarantees
+%% that the newest version of the entity (at the moment of serving the request
+%% by Onezone) is fetched and then cached locally. Should be called whenever the
+%% Oneprovider causes an update of an entity to force cache convergence as soon
+%% as possible.
+%% @end
+%%--------------------------------------------------------------------
+-spec force_fetch_entity(gri:gri()) -> result().
+force_fetch_entity(GRI) ->
+    do_request(?ROOT_SESS_ID, #gs_req_graph{
+        operation = get,
+        gri = GRI,
+        subscribe = true
+    }, ?GS_REQUEST_TIMEOUT, ignore_cached).
 
 
 %%--------------------------------------------------------------------
@@ -228,10 +247,10 @@ process_push_message(Message) ->
     spawn(fun() ->
         try
             process_push_message_async(Message)
-        catch Type:Reason ->
+        catch Type:Reason:Stacktrace ->
             ?error_stacktrace("Error processing GS push message from Onezone - ~w:~p", [
                 Type, Reason
-            ]),
+            ], Stacktrace),
             force_terminate()
         end
     end).
@@ -418,10 +437,10 @@ start_gs_connection() ->
     catch
         throw:{error, _} = Error ->
             Error;
-        Type:Reason ->
+        Type:Reason:Stacktrace ->
             ?error_stacktrace("Cannot start gs connection due to ~p:~p", [
                 Type, Reason
-            ]),
+            ], Stacktrace),
             {error, Reason}
     end.
 
@@ -472,31 +491,33 @@ check_api_authorization(TokenCredentials, #gs_req_graph{operation = Operation, g
 
 
 %% @private
--spec do_request(client(), gs_protocol:graph_req(), timeout()) ->
+-spec do_request(client(), gs_protocol:graph_req(), timeout(), reuse_cached | ignore_cached) ->
     result().
-do_request(Client, #gs_req_graph{operation = get} = GraphReq, Timeout) ->
+do_request(Client, #gs_req_graph{operation = get} = GraphReq, Timeout, reuse_cached) ->
     case maybe_serve_from_cache(Client, GraphReq) of
         {error, _} = Err1 ->
             Err1;
         {true, Doc} ->
             {ok, Doc};
         false ->
-            case call_onezone(Client, GraphReq, Timeout) of
-                {error, _} = Err2 ->
-                    Err2;
-                {ok, #gs_resp_graph{data_format = resource, data = Resource}} ->
-                    GRIStr = maps:get(<<"gri">>, Resource),
-                    Revision = maps:get(<<"revision">>, Resource),
-                    NewGRI = gri:deserialize(GRIStr),
-                    Doc = gs_client_translator:translate(NewGRI, Resource),
-                    case maybe_coalesce_cache(get_connection_pid(), NewGRI, Doc, Revision) of
-                        {ok, NewestDoc} -> {ok, NewestDoc};
-                        % In case a stale record is detected, repeat the request
-                        {error, stale_record} -> do_request(Client, GraphReq, Timeout)
-                    end
+            do_request(Client, GraphReq, Timeout, ignore_cached)
+    end;
+do_request(Client, #gs_req_graph{operation = get} = GraphReq, Timeout, ignore_cached) ->
+    case call_onezone(Client, GraphReq, Timeout) of
+        {error, _} = Error ->
+            Error;
+        {ok, #gs_resp_graph{data_format = resource, data = Resource}} ->
+            GRIStr = maps:get(<<"gri">>, Resource),
+            Revision = maps:get(<<"revision">>, Resource),
+            NewGRI = gri:deserialize(GRIStr),
+            Doc = gs_client_translator:translate(NewGRI, Resource),
+            case maybe_coalesce_cache(get_connection_pid(), NewGRI, Doc, Revision) of
+                {ok, NewestDoc} -> {ok, NewestDoc};
+                % in case a stale record is detected, repeat the request
+                {error, stale_record} -> do_request(Client, GraphReq, Timeout, ignore_cached)
             end
     end;
-do_request(Client, #gs_req_graph{operation = create} = GraphReq, Timeout) ->
+do_request(Client, #gs_req_graph{operation = create} = GraphReq, Timeout, _) ->
     case call_onezone(Client, GraphReq, Timeout) of
         {error, _} = Error ->
             Error;
@@ -511,14 +532,17 @@ do_request(Client, #gs_req_graph{operation = create} = GraphReq, Timeout) ->
                     Revision = maps:get(<<"revision">>, Resource),
                     Doc = gs_client_translator:translate(NewGRI, Resource),
                     case maybe_coalesce_cache(get_connection_pid(), NewGRI, Doc, Revision) of
-                        {ok, NewestDoc} -> {ok, {NewGRI, NewestDoc}};
-                        % In case a stale record is detected, repeat the request
-                        {error, stale_record} -> do_request(Client, GraphReq, Timeout)
+                        {ok, NewestDoc} ->
+                            {ok, {NewGRI, NewestDoc}};
+                        {error, stale_record} ->
+                            % in case a stale record is detected, force fetch the created entity
+                            {ok, FetchedDoc} = force_fetch_entity(NewGRI),
+                            {ok, {NewGRI, FetchedDoc}}
                     end
             end
     end;
 % covers 'delete' and 'update' operations
-do_request(Client, #gs_req_graph{} = GraphReq, Timeout) ->
+do_request(Client, #gs_req_graph{} = GraphReq, Timeout, _) ->
     case call_onezone(Client, GraphReq, Timeout) of
         {error, _} = Error ->
             Error;
@@ -570,10 +594,10 @@ call_onezone(ConnRef, Client, Request, Timeout) ->
         exit:{timeout, _} -> ?ERROR_TIMEOUT;
         exit:{normal, _} -> ?ERROR_NO_CONNECTION_TO_ONEZONE;
         throw:{error, _} = Err -> Err;
-        Type:Reason ->
+        Type:Reason:Stacktrace ->
             ?error_stacktrace("Unexpected error during call to gs_client_worker - ~p:~p", [
                 Type, Reason
-            ]),
+            ], Stacktrace),
             throw(?ERROR_INTERNAL_SERVER_ERROR)
     end.
 
@@ -731,7 +755,13 @@ put_cache_state(Storage = #od_storage{}, CacheState) ->
 put_cache_state(Token = #od_token{}, CacheState) ->
     Token#od_token{cache_state = CacheState};
 put_cache_state(TTS = #temporary_token_secret{}, CacheState) ->
-    TTS#temporary_token_secret{cache_state = CacheState}.
+    TTS#temporary_token_secret{cache_state = CacheState};
+put_cache_state(AtmInventory = #od_atm_inventory{}, CacheState) ->
+    AtmInventory#od_atm_inventory{cache_state = CacheState};
+put_cache_state(AtmLambda = #od_atm_lambda{}, CacheState) ->
+    AtmLambda#od_atm_lambda{cache_state = CacheState};
+put_cache_state(AtmWorkflowSchema = #od_atm_workflow_schema{}, CacheState) ->
+    AtmWorkflowSchema#od_atm_workflow_schema{cache_state = CacheState}.
 
 
 %% @private
@@ -759,6 +789,12 @@ get_cache_state(#od_storage{cache_state = CacheState}) ->
 get_cache_state(#od_token{cache_state = CacheState}) ->
     CacheState;
 get_cache_state(#temporary_token_secret{cache_state = CacheState}) ->
+    CacheState;
+get_cache_state(#od_atm_inventory{cache_state = CacheState}) ->
+    CacheState;
+get_cache_state(#od_atm_lambda{cache_state = CacheState}) ->
+    CacheState;
+get_cache_state(#od_atm_workflow_schema{cache_state = CacheState}) ->
     CacheState.
 
 
@@ -932,6 +968,17 @@ is_user_authorized_to_get(UserId, _, _, #gri{type = od_handle_service, scope = p
 
 is_user_authorized_to_get(UserId, _, _, #gri{type = od_handle, scope = private}, CachedDoc) ->
     handle_logic:has_eff_user(CachedDoc, UserId);
+
+is_user_authorized_to_get(UserId, SessionId, _, #gri{type = od_atm_inventory, scope = private}, CachedDoc) ->
+    user_logic:has_eff_atm_inventory(SessionId, UserId, CachedDoc#document.key);
+
+is_user_authorized_to_get(UserId, SessionId, _, #gri{type = od_atm_lambda, scope = private}, CachedDoc) ->
+    #document{value = #od_atm_lambda{atm_inventories = AtmInventories}} = CachedDoc,
+    user_logic:has_any_eff_atm_inventory(SessionId, UserId, AtmInventories);
+
+is_user_authorized_to_get(UserId, SessionId, _, #gri{type = od_atm_workflow_schema, scope = private}, CachedDoc) ->
+    #document{value = #od_atm_workflow_schema{atm_inventory = AtmInventory}} = CachedDoc,
+    user_logic:has_eff_atm_inventory(SessionId, UserId, AtmInventory);
 
 is_user_authorized_to_get(_, _, _, _, _) ->
     false.

@@ -6,6 +6,9 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc Model for holding files' location data.
+%%% Note: file_location should operate always on referenced uuids. Thus, it is only permitted
+%%% to generate document's id using local_id/1 and id/2 functions. Moreover, the document
+%%% should be modified only within replica_synchronizer process.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(file_location).
@@ -67,7 +70,8 @@ local_id(FileUuid) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec id(file_meta:uuid(), od_provider:id()) -> file_location:id().
-id(FileUuid, ProviderId) ->
+id(Uuid, ProviderId) ->
+    FileUuid = fslogic_uuid:ensure_referenced_uuid(Uuid),
     datastore_key:build_adjacent(ProviderId, FileUuid).
 
 
@@ -103,7 +107,7 @@ create_and_update_quota(Doc = #document{value = #file_location{
     end.
 
 
--spec save_and_bump_version(doc(), od_user:id()) -> {ok, doc()} | {error, term()}.
+-spec save_and_bump_version(doc(), od_user:id()) -> {ok, file_location:id()} | {error, term()}.
 save_and_bump_version(FileLocationDoc, UserId) ->
     fslogic_location_cache:save_location(
         version_vector:bump_version(FileLocationDoc), UserId).

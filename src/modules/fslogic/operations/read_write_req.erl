@@ -131,18 +131,20 @@ get_handle(UserCtx, FileCtx, HandleId, Operation) ->
 create_handle(UserCtx, FileCtx, HandleId, Operation) ->
     try
         create_handle_helper(UserCtx, FileCtx, HandleId, rdwr, open_file)
-    catch
-        _:Reason
-            when Reason =:= ?EACCES
-            orelse Reason =:= ?EROFS
-        ->
-            case file_handles:get_creation_handle(file_ctx:get_uuid_const(FileCtx)) of
+    catch _:Reason when
+        Reason =:= ?EACCES;
+        Reason =:= ?EPERM;
+        Reason =:= ?EROFS
+    ->
+        case file_handles:get_creation_handle(file_ctx:get_logical_uuid_const(FileCtx)) of
+            {ok, HandleId} ->
                 % opening file with handle received from creation procedure
                 % (should open even if the user does not have permissions)
-                {ok, HandleId} -> create_handle_helper(UserCtx, FileCtx, HandleId, rdwr, open_file_insecure);
+                create_handle_helper(UserCtx, FileCtx, HandleId, rdwr, open_file_insecure);
+            _ ->
                 % try opening for limited usage (read or write only)
-                _ -> create_handle_helper(UserCtx, FileCtx, HandleId, Operation, open_file)
-            end
+                create_handle_helper(UserCtx, FileCtx, HandleId, Operation, open_file)
+        end
     end.
 
 %%--------------------------------------------------------------------

@@ -16,11 +16,17 @@
 -include("middleware/middleware.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/errors.hrl").
+-include_lib("ctool/include/http/headers.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 
 %% API
 -export([handle_request/2]).
+
+
+% timeout after which cowboy returns the data read from socket, regardless of its size
+% the value was decided upon experimentally
+-define(COWBOY_READ_BODY_PERIOD_SECONDS, 15).
 
 
 %%%===================================================================
@@ -70,8 +76,10 @@ ensure_operation_supported(_, _, _) -> throw(?ERROR_NOT_SUPPORTED).
 
 %% @private
 -spec sanitize_params(middleware:req()) -> middleware:req() | no_return().
-sanitize_params(#op_req{operation = get, gri = #gri{aspect = content}} = OpReq) ->
-    OpReq;
+sanitize_params(#op_req{operation = get, data = RawParams, gri = #gri{aspect = content}} = OpReq) ->
+    OpReq#op_req{data = middleware_sanitizer:sanitize_data(RawParams, #{
+        optional => #{<<"follow_symlinks">> => {boolean, any}}
+    })};
 sanitize_params(#op_req{
     operation = create,
     data = RawParams,
@@ -85,26 +93,41 @@ sanitize_params(#op_req{
     data = RawParams,
     gri = #gri{aspect = child}
 } = OpReq) ->
-    ModeParam = <<"mode">>,
-
+    AlwaysRequiredParams = #{
+        <<"name">> => {binary, non_empty}
+    },
+    ParamsRequiredDependingOnType = case maps:get(<<"type">>, RawParams, undefined) of
+        <<"LNK">> ->
+            AlwaysRequiredParams#{<<"target_file_id">> => {binary, fun(ObjectId) ->
+                {true, middleware_utils:decode_object_id(ObjectId, <<"target_file_id">>)}
+            end}};
+        <<"SYMLNK">> ->
+            AlwaysRequiredParams#{<<"target_file_path">> => {binary, non_empty}};
+        _ ->
+            % Do not do anything - exception will be raised by middleware_sanitizer
+            AlwaysRequiredParams
+    end,
+    OptionalParams = #{
+        <<"type">> => {atom, [
+            ?REGULAR_FILE_TYPE, ?DIRECTORY_TYPE, ?LINK_TYPE, ?SYMLINK_TYPE
+        ]},
+        <<"mode">> => {binary, fun(Mode) ->
+            try binary_to_integer(Mode, 8) of
+                ValidMode when ValidMode >= 0 andalso ValidMode =< 8#1777 ->
+                    {true, ValidMode};
+                _ ->
+                    % TODO VFS-7536 add basis of number system to ?ERROR_BAD_VALUE_NOT_IN_RANGE
+                    throw(?ERROR_BAD_VALUE_NOT_IN_RANGE(<<"mode">>, 0, 8#1777))
+            catch _:_ ->
+                % TODO VFS-7536 add basis of number system to ?ERROR_BAD_VALUE_NOT_IN_RANGE
+                throw(?ERROR_BAD_VALUE_INTEGER(<<"mode">>))
+            end
+        end},
+        <<"offset">> => {integer, {not_lower_than, 0}}
+    },
     OpReq#op_req{data = middleware_sanitizer:sanitize_data(RawParams, #{
-        required => #{
-            <<"name">> => {binary, non_empty}
-        },
-        optional => #{
-            <<"type">> => {binary, [<<"reg">>, <<"dir">>]},
-            ModeParam => {binary, fun(Mode) ->
-                try binary_to_integer(Mode, 8) of
-                    ValidMode when ValidMode >= 0 andalso ValidMode =< 8#1777 ->
-                        {true, ValidMode};
-                    _ ->
-                        throw(?ERROR_BAD_VALUE_NOT_IN_RANGE(ModeParam, 0, 8#1777))
-                catch _:_ ->
-                    throw(?ERROR_BAD_VALUE_INTEGER(ModeParam))
-                end
-            end},
-            <<"offset">> => {integer, {not_lower_than, 0}}
-        }
+        required => ParamsRequiredDependingOnType,
+        optional => OptionalParams
     })}.
 
 
@@ -124,13 +147,22 @@ ensure_has_access_to_file(#op_req{auth = Auth, gri = #gri{id = Guid}}) ->
 process_request(#op_req{
     operation = get,
     auth = #auth{session_id = SessionId},
-    gri = #gri{id = FileGuid, aspect = content}
+    gri = #gri{id = FileGuid, aspect = content},
+    data = Data
 }, Req) ->
-    case ?check(lfm:stat(SessionId, {guid, FileGuid})) of
+    FollowSymlinks = maps:get(<<"follow_symlinks">>, Data, true),
+    case ?check(lfm:stat(SessionId, ?FILE_REF(FileGuid, FollowSymlinks))) of
         {ok, #file_attr{type = ?REGULAR_FILE_TYPE} = FileAttrs} ->
-            http_download_utils:stream_file(SessionId, FileAttrs, Req);
-        {ok, #file_attr{type = ?DIRECTORY_TYPE}} ->
-            throw(?ERROR_POSIX(?EISDIR))
+            file_download_utils:download_single_file(SessionId, FileAttrs, Req);
+        {ok, #file_attr{type = ?SYMLINK_TYPE} = FileAttrs} ->
+            file_download_utils:download_single_file(SessionId, FileAttrs, Req);
+        {ok, #file_attr{}} ->
+            case page_file_download:gen_file_download_url(SessionId, [FileGuid], FollowSymlinks) of
+                {ok, Url} -> 
+                    cowboy_req:reply(?HTTP_302_FOUND, #{?HDR_LOCATION => Url}, Req);
+                {error, _} = Error ->
+                    http_req:send_error(Error, Req)
+            end
     end;
 
 process_request(#op_req{
@@ -139,19 +171,19 @@ process_request(#op_req{
     gri = #gri{id = FileGuid, aspect = content},
     data = Params
 }, Req) ->
-    FileKey = {guid, FileGuid},
+    FileRef = ?FILE_REF(FileGuid),
 
     Offset = case maps:get(<<"offset">>, Params, undefined) of
         undefined ->
             % Overwrite file if no explicit offset was given
-            ?check(lfm:truncate(SessionId, FileKey, 0)),
+            ?check(lfm:truncate(SessionId, FileRef, 0)),
             0;
         Num ->
             % Otherwise leave previous content and start writing from specified offset
             Num
     end,
 
-    Req2 = write_req_body_to_file(SessionId, FileKey, Offset, Req),
+    Req2 = write_req_body_to_file(SessionId, FileRef, Offset, Req),
     http_req:send_response(?NO_CONTENT_REPLY, Req2);
 
 process_request(#op_req{
@@ -163,25 +195,40 @@ process_request(#op_req{
     Name = maps:get(<<"name">>, Params),
     Mode = maps:get(<<"mode">>, Params, undefined),
 
-    {Guid, Req3} = case maps:get(<<"type">>, Params, <<"reg">>) of
-        <<"reg">> ->
+    {Guid, Req3} = case maps:get(<<"type">>, Params, ?REGULAR_FILE_TYPE) of
+        ?DIRECTORY_TYPE ->
+            {ok, DirGuid} = ?check(lfm:mkdir(SessionId, ParentGuid, Name, Mode)),
+            {DirGuid, Req};
+        ?REGULAR_FILE_TYPE ->
             {ok, FileGuid} = ?check(lfm:create(SessionId, ParentGuid, Name, Mode)),
+            FileRef = ?FILE_REF(FileGuid),
 
             case {maps:get(<<"offset">>, Params, 0), cowboy_req:has_body(Req)} of
                 {0, false} ->
                     {FileGuid, Req};
                 {Offset, _} ->
                     try
-                        Req2 = write_req_body_to_file(SessionId, {guid, FileGuid}, Offset, Req),
+                        Req2 = write_req_body_to_file(SessionId, FileRef, Offset, Req),
                         {FileGuid, Req2}
                     catch Type:Reason ->
-                        lfm:unlink(SessionId, {guid, FileGuid}, false),
+                        lfm:unlink(SessionId, FileRef, false),
                         erlang:Type(Reason)
                     end
             end;
-        <<"dir">> ->
-            {ok, DirGuid} = ?check(lfm:mkdir(SessionId, ParentGuid, Name, Mode)),
-            {DirGuid, Req}
+        ?LINK_TYPE ->
+            TargetFileGuid = maps:get(<<"target_file_id">>, Params),
+
+            {ok, #file_attr{guid = LinkGuid}} = ?check(lfm:make_link(
+                SessionId, ?FILE_REF(TargetFileGuid), ?FILE_REF(ParentGuid), Name
+            )),
+            {LinkGuid, Req};
+        ?SYMLINK_TYPE ->
+            TargetFilePath = maps:get(<<"target_file_path">>, Params),
+
+            {ok, #file_attr{guid = SymlinkGuid}} = ?check(lfm:make_symlink(
+                SessionId, ?FILE_REF(ParentGuid), Name, TargetFilePath
+            )),
+            {SymlinkGuid, Req}
     end,
     {ok, ObjectId} = file_id:guid_to_objectid(Guid),
 
@@ -194,17 +241,18 @@ process_request(#op_req{
 %% @private
 -spec write_req_body_to_file(
     session:id(),
-    lfm:file_key(),
+    lfm:file_ref(),
     Offset :: non_neg_integer(),
     cowboy_req:req()
 ) ->
     cowboy_req:req() | no_return().
-write_req_body_to_file(SessionId, FileKey, Offset, Req) ->
-    {ok, FileHandle} = ?check(lfm:monitored_open(SessionId, FileKey, write)),
+write_req_body_to_file(SessionId, FileRef, Offset, Req) ->
+    {ok, FileHandle} = ?check(lfm:monitored_open(SessionId, FileRef, write)),
 
     {ok, Req2} = file_upload_utils:upload_file(
         FileHandle, Offset, Req,
-        fun cowboy_req:read_body/2, #{}
+        fun cowboy_req:read_body/2,
+        #{period => timer:seconds(?COWBOY_READ_BODY_PERIOD_SECONDS)}
     ),
 
     ?check(lfm:fsync(FileHandle)),
