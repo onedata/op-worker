@@ -207,13 +207,6 @@ create_audit_log(#atm_workflow_execution_creation_ctx{
 %% @private
 -spec create_lane_executions(creation_ctx(), execution_elements()) ->
     execution_elements().
-create_lane_executions(#atm_workflow_execution_creation_ctx{
-    workflow_schema_doc = #document{value = #od_atm_workflow_schema{
-        lanes = []
-    }}
-}, _ExecutionElements) ->
-    throw(?ERROR_ATM_WORKFLOW_EMPTY);
-
 create_lane_executions(AtmWorkflowExecutionCreationCtx, ExecutionElements) ->
     AtmLaneExecutionsAndTaskStoreRegistries = atm_lane_execution:create_all(
         AtmWorkflowExecutionCreationCtx

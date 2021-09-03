@@ -72,12 +72,6 @@ create_all(#atm_workflow_execution_creation_ctx{
     atm_lane_schema:record()
 ) ->
     {record(), atm_task_execution_factory:task_store_registry()} | no_return().
-create(_AtmWorkflowExecutionCreationCtx, _AtmLaneIndex, #atm_lane_schema{
-    id = AtmLaneSchemaId,
-    parallel_boxes = []
-}) ->
-    throw(?ERROR_ATM_LANE_EMPTY(AtmLaneSchemaId));
-
 create(AtmWorkflowExecutionCreationCtx, AtmLaneIndex, #atm_lane_schema{
     id = AtmLaneSchemaId,
     parallel_boxes = AtmParallelBoxSchemas
