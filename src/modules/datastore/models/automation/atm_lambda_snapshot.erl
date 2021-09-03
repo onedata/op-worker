@@ -39,17 +39,22 @@
 
 -spec create(atm_workflow_execution:id(), od_atm_lambda:doc()) ->
     {ok, id()} | {error, term()}.
-create(AtmWorkflowExecutionId, #document{key = AtmLambdaId, value = #od_atm_lambda{
-    name = AtmLambdaName,
-    summary = AtmLambdaSummary,
-    description = AtmLambdaDescription,
+create(AtmWorkflowExecutionId, #document{
+    key = AtmLambdaId,
+    value = AtmLambdaRecord = #od_atm_lambda{
+        name = AtmLambdaName,
+        summary = AtmLambdaSummary,
+        description = AtmLambdaDescription,
 
-    operation_spec = AtmLambdaOperationSpec,
-    argument_specs = AtmLambdaArgumentSpecs,
-    result_specs = AtmLambdaResultSpecs,
+        operation_spec = AtmLambdaOperationSpec,
+        argument_specs = AtmLambdaArgumentSpecs,
+        result_specs = AtmLambdaResultSpecs,
 
-    atm_inventories = AtmInventories
-}}) ->
+        atm_inventories = AtmInventories
+    }
+}) ->
+    assert_executable(AtmLambdaRecord),
+
     %% TODO VFS-7685 add ref count and gen snapshot id based on doc revision
     ?extract_key(datastore_model:create(?CTX, #document{
         key = datastore_key:new_from_digest([AtmWorkflowExecutionId, AtmLambdaId]),
@@ -77,6 +82,24 @@ get(AtmLambdaSnapshotId) ->
 -spec delete(id()) -> ok | {error, term()}.
 delete(AtmLambdaSnapshotId) ->
     datastore_model:delete(?CTX, AtmLambdaSnapshotId).
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Checks whether given atm lambda can be executed as not all valid features may
+%% be supported by this provider (e.g. OpenFaaS service may not be configured).
+%% @end
+%%-------------------------------------------------------------------
+-spec assert_executable(od_atm_lambda:record()) ->
+    ok | no_return().
+assert_executable(#od_atm_lambda{operation_spec = #atm_openfaas_operation_spec{}}) ->
+    atm_openfaas_task_executor:assert_openfaas_available().
 
 
 %%%===================================================================
