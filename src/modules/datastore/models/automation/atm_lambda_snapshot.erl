@@ -53,8 +53,6 @@ create(AtmWorkflowExecutionId, #document{
         atm_inventories = AtmInventories
     }
 }) ->
-    assert_executable(AtmLambdaRecord),
-
     %% TODO VFS-7685 add ref count and gen snapshot id based on doc revision
     ?extract_key(datastore_model:create(?CTX, #document{
         key = datastore_key:new_from_digest([AtmWorkflowExecutionId, AtmLambdaId]),
@@ -87,19 +85,6 @@ delete(AtmLambdaSnapshotId) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% Checks whether given atm lambda can be executed as not all valid features may
-%% be supported by this provider (e.g. OpenFaaS service may not be configured).
-%% @end
-%%-------------------------------------------------------------------
--spec assert_executable(od_atm_lambda:record()) ->
-    ok | no_return().
-assert_executable(#od_atm_lambda{operation_spec = #atm_openfaas_operation_spec{}}) ->
-    atm_openfaas_task_executor:assert_openfaas_available().
 
 
 %%%===================================================================

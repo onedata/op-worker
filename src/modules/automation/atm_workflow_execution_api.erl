@@ -148,16 +148,9 @@ cancel(AtmWorkflowExecutionId) ->
 %%--------------------------------------------------------------------
 terminate_not_ended(SpaceId) ->
     TerminateFun = fun(AtmWorkflowExecutionId) ->
-        {ok, #document{value = #atm_workflow_execution{
-            store_registry = AtmStoreRegistry
-        }}} = atm_workflow_execution:get(AtmWorkflowExecutionId),
-
         atm_workflow_execution_handler:handle_workflow_execution_ended(
             AtmWorkflowExecutionId,
-            atm_workflow_execution_env:build(
-                SpaceId, AtmWorkflowExecutionId, AtmStoreRegistry,
-                undefined, undefined
-            )
+            atm_workflow_execution_env:build(SpaceId, AtmWorkflowExecutionId)
         )
     end,
 

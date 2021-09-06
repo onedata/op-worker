@@ -51,8 +51,6 @@ create(AtmWorkflowExecutionId, #document{
         atm_lambdas = AtmLambdaIds
     }
 }) ->
-    assert_executable(AtmWorkflowSchemaRecord),
-
     %% TODO VFS-7685 add ref count and gen snapshot id based on doc revision
     ?extract_key(datastore_model:create(?CTX, #document{
         key = AtmWorkflowExecutionId,
@@ -77,49 +75,6 @@ get(AtmWorkflowSchemaSnapshotId) ->
 -spec delete(id()) -> ok | {error, term()}.
 delete(AtmWorkflowSchemaSnapshotId) ->
     datastore_model:delete(?CTX, AtmWorkflowSchemaSnapshotId).
-
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% Checks whether given atm workflow schema can be executed as not all
-%% valid features are supported yet (e.g. empty lanes, etc.).
-%% @end
-%%-------------------------------------------------------------------
--spec assert_executable(od_atm_workflow_schema:record()) ->
-    ok | no_return().
-assert_executable(#od_atm_workflow_schema{lanes = []}) ->
-    throw(?ERROR_ATM_WORKFLOW_EMPTY);
-
-assert_executable(#od_atm_workflow_schema{lanes = AtmLaneSchemas}) ->
-    lists:foreach(fun assert_lane_schema_executable/1, AtmLaneSchemas).
-
-
-%% @private
--spec assert_lane_schema_executable(atm_lane_schema:record()) -> ok | no_return().
-assert_lane_schema_executable(#atm_lane_schema{id = AtmLaneSchemaId, parallel_boxes = []}) ->
-    throw(?ERROR_ATM_LANE_EMPTY(AtmLaneSchemaId));
-
-assert_lane_schema_executable(#atm_lane_schema{parallel_boxes = AtmParallelBoxSchemas}) ->
-    lists:foreach(fun assert_parallel_box_schema_executable/1, AtmParallelBoxSchemas).
-
-
-%% @private
--spec assert_parallel_box_schema_executable(atm_parallel_box_schema:record()) ->
-    ok | no_return().
-assert_parallel_box_schema_executable(#atm_parallel_box_schema{
-    id = AtmParallelBoxSchemaId,
-    tasks = []
-}) ->
-    throw(?ERROR_ATM_PARALLEL_BOX_EMPTY(AtmParallelBoxSchemaId));
-
-assert_parallel_box_schema_executable(#atm_parallel_box_schema{}) ->
-    ok.
 
 
 %%%===================================================================
