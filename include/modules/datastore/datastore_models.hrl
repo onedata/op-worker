@@ -1134,7 +1134,7 @@
 
     store_registry :: atm_workflow_execution:store_registry(),
     system_audit_log_id :: undefined | atm_store:id(),
-    lanes :: [atm_lane_execution:record()],
+    lanes :: [atm_lane_execution:record() | atm_lane_execution:record2()],
 
     status :: atm_workflow_execution:status(),
     % Flag used to tell if status was changed during doc update (set automatically

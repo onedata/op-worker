@@ -51,6 +51,21 @@
     workflow_execution_auth :: atm_workflow_execution_auth:record()
 }).
 
+-record(atm_lane_execution_run, {
+    run_no :: pos_integer(),
+    status :: atm_workflow_execution:status(),
+
+    iterated_store_id :: undefined | atm_store:id(),
+    exception_store_id :: undefined | atm_store:id(),
+
+    parallel_boxes :: [atm_parallel_box_execution:record()]
+}).
+
+-record(atm_lane_execution_rec, {
+    schema_id :: automation:id(),
+    runs :: [atm_lane_execution:run()]
+}).
+
 
 -define(WAITING_PHASE, waiting).
 -define(ONGOING_PHASE, ongoing).

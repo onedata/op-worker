@@ -41,6 +41,11 @@
 
 -export_type([record/0]).
 
+-type run() :: #atm_lane_execution_run{}.
+-type record2() :: #atm_lane_execution_rec{}.
+
+-export_type([run/0, record2/0]).
+
 
 %%%===================================================================
 %%% API
