@@ -27,7 +27,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([create/2, prepare/2, clean/1, get_spec/1, in_readonly_mode/1, run/3]).
+-export([create/3, prepare/2, clean/1, get_spec/1, in_readonly_mode/1, run/3]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
@@ -44,7 +44,7 @@
 %%%===================================================================
 
 
--callback create(atm_workflow_execution:id(), od_atm_lambda:doc()) ->
+-callback create(atm_workflow_execution:id(), pos_integer(), atm_lambda_snapshot:record()) ->
     record() | no_return().
 
 -callback prepare(atm_workflow_execution_ctx:record(), record()) -> ok | no_return().
@@ -64,14 +64,14 @@
 %%%===================================================================
 
 
--spec create(atm_workflow_execution:id(), od_atm_lambda:doc()) ->
+-spec create(atm_workflow_execution:id(), pos_integer(), atm_lambda_snapshot:record()) ->
     record() | no_return().
-create(AtmWorkflowExecutionId, AtmLambdaDoc = #document{value = #od_atm_lambda{
+create(AtmWorkflowExecutionId, AtmLaneIndex, AtmLambdaSnapshot = #atm_lambda_snapshot{
     operation_spec = AtmLambadaOperationSpec
-}}) ->
+}) ->
     Engine = atm_lambda_operation_spec:get_engine(AtmLambadaOperationSpec),
     Model = engine_to_executor_model(Engine),
-    Model:create(AtmWorkflowExecutionId, AtmLambdaDoc).
+    Model:create(AtmWorkflowExecutionId, AtmLaneIndex, AtmLambdaSnapshot).
 
 
 -spec prepare(atm_workflow_execution_ctx:record(), record()) -> ok | no_return().

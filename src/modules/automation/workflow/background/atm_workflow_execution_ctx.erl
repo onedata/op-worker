@@ -19,6 +19,7 @@
 %% API
 -export([acquire/2]).
 -export([
+    get_env/1,
     get_auth/1,
     get_logger/1,
     get_workflow_store_id/2
@@ -52,6 +53,11 @@ acquire(AtmTaskExecutionId, AtmWorkflowExecutionEnv) ->
         ),
         workflow_execution_env = AtmWorkflowExecutionEnv
     }.
+
+
+-spec get_env(record()) -> atm_workflow_execution_env:record().
+get_env(#atm_workflow_execution_ctx{workflow_execution_env = AtmWorkflowExecutionEnv}) ->
+    AtmWorkflowExecutionEnv.
 
 
 -spec get_auth(record()) -> atm_workflow_execution_auth:record().

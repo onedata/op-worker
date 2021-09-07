@@ -32,18 +32,6 @@
     finish_time :: atm_workflow_execution:timestamp()
 }).
 
--record(atm_workflow_execution_creation_ctx, {
-    workflow_execution_id :: atm_workflow_execution:id(),
-    workflow_execution_auth :: atm_workflow_execution_auth:record(),
-    store_initial_values :: atm_workflow_execution_api:store_initial_values(),
-
-    lambda_docs :: #{od_atm_lambda:id() => od_atm_lambda:doc()},
-    workflow_schema_doc :: od_atm_workflow_schema:doc(),
-    system_audit_log_schema :: atm_store_schema:record(),
-
-    callback_url :: undefined | http_client:url()
-}).
-
 -record(atm_store_container_operation, {
     type :: atm_store_container:operation_type(),
     options :: atm_store_container:operation_options(),
@@ -51,14 +39,20 @@
     workflow_execution_auth :: atm_workflow_execution_auth:record()
 }).
 
--record(atm_lane_execution_run, {
-    run_no :: pos_integer(),
-    status :: atm_workflow_execution:status(),
+-record(atm_lane_execution_create_ctx, {
+    workflow_execution_ctx :: atm_workflow_execution_ctx:record(),
+    workflow_execution_env :: atm_workflow_execution_env:record(),
 
-    iterated_store_id :: undefined | atm_store:id(),
-    exception_store_id :: undefined | atm_store:id(),
+    workflow_schema_snapshot_doc :: atm_workflow_schema_snapshot:doc(),
+    workflow_execution_doc :: atm_workflow_execution:doc(),
 
-    parallel_boxes :: [atm_parallel_box_execution:record()]
+    lane_index :: pos_integer(),
+    lane_schema :: atm_lane_schema:record(),
+    iterated_store_id :: atm_store:id(),
+
+    % execution elements having their own documents
+    exception_store_id = undefined :: undefined | atm_store:id(),
+    parallel_boxes = undefined :: undefined | [atm_parallel_box_execution:record()]
 }).
 
 -record(atm_lane_execution_rec, {
@@ -66,6 +60,39 @@
     runs :: [atm_lane_execution:run()]
 }).
 
+-record(atm_lane_execution_run, {
+    run_no :: undefined | pos_integer(),
+    status :: atm_workflow_execution:status(),
+
+    iterated_store_id = undefined :: undefined | atm_store:id(),
+    exception_store_id = undefined :: undefined | atm_store:id(),
+
+    parallel_boxes = [] :: [atm_parallel_box_execution:record()]
+}).
+
+-record(atm_parallel_box_execution_create_ctx, {
+    lane_execution_create_ctx :: atm_lane_execution_handler:create_ctx(),
+
+    parallel_box_index :: pos_integer(),
+    parallel_box_schema :: atm_parallel_box_schema:record(),
+
+    record :: atm_parallel_box_execution:record()
+}).
+
+-record(atm_parallel_box_execution, {
+    schema_id :: automation:id(),
+    status :: atm_workflow_block_execution_status:status(),
+    task_registry :: #{AtmTaskSchemaId :: automation:id() => atm_task_execution:id()},
+    task_statuses :: #{atm_task_execution:id() => atm_task_execution:status()}
+}).
+
+
+%% Atm system stores related macros
+
+-define(CURRENT_LANE_EXCEPTION_STORE_SCHEMA_ID, <<"CURRENT_LANE_EXCEPTION_STORE">>).
+
+
+%% Atm status and phase related macros
 
 -define(WAITING_PHASE, waiting).
 -define(ONGOING_PHASE, ongoing).

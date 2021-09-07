@@ -27,7 +27,7 @@
 -export([is_openfaas_available/0, assert_openfaas_available/0]).
 
 %% atm_task_executor callbacks
--export([create/2, prepare/2, clean/1, get_spec/1, in_readonly_mode/1, run/3]).
+-export([create/3, prepare/2, clean/1, get_spec/1, in_readonly_mode/1, run/3]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
@@ -88,15 +88,15 @@ assert_openfaas_available() ->
 %%%===================================================================
 
 
--spec create(atm_workflow_execution:id(), od_atm_lambda:doc()) ->
+-spec create(atm_workflow_execution:id(), pos_integer(), atm_lambda_snapshot:record()) ->
     record() | no_return().
-create(AtmWorkflowExecutionId, AtmLambdaDoc = #document{value = #od_atm_lambda{
+create(AtmWorkflowExecutionId, AtmLaneIndex, AtmLambdaSnapshot = #atm_lambda_snapshot{
     operation_spec = AtmLambadaOperationSpec
-}}) ->
+}) ->
     assert_openfaas_available(),
 
     #atm_openfaas_task_executor{
-        function_name = build_function_name(AtmWorkflowExecutionId, AtmLambdaDoc),
+        function_name = build_function_name(AtmWorkflowExecutionId, AtmLaneIndex, AtmLambdaSnapshot),
         operation_spec = AtmLambadaOperationSpec
     }.
 
@@ -223,13 +223,17 @@ check_openfaas_availability() ->
 %% OpenFaaS service is '[a-z]([-a-z0-9]{0,61}[a-z0-9])?').
 %% @end
 %%--------------------------------------------------------------------
--spec build_function_name(atm_workflow_execution:id(), od_atm_lambda:doc()) ->
+-spec build_function_name(
+    atm_workflow_execution:id(),
+    pos_integer(),
+    atm_lambda_snapshot:record()
+) ->
     binary().
-build_function_name(AtmWorkflowExecutionId, #document{
-    key = AtmLambdaId,
-    value = #od_atm_lambda{name = AtmLambdaName}
+build_function_name(AtmWorkflowExecutionId, AtmLaneIndex, #atm_lambda_snapshot{
+    lambda_id = AtmLambdaId,
+    name = AtmLambdaName
 }) ->
-    Signature = str_utils:md5_digest([AtmWorkflowExecutionId, AtmLambdaId]),
+    Signature = str_utils:md5_digest([AtmWorkflowExecutionId, AtmLaneIndex, AtmLambdaId]),
 
     Name = str_utils:format_bin("w~s-s~s-~s", [
         binary:part(AtmWorkflowExecutionId, 0, min(size(AtmWorkflowExecutionId), 10)),

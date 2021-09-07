@@ -41,7 +41,7 @@
     {ok, id()} | {error, term()}.
 create(AtmWorkflowExecutionId, #document{
     key = AtmWorkflowSchemaId,
-    value = AtmWorkflowSchemaRecord = #od_atm_workflow_schema{
+    value = #od_atm_workflow_schema{
         name = AtmWorkflowSchemaName,
         description = AtmWorkflowSchemaDescription,
         stores = AtmStoreSchemas,

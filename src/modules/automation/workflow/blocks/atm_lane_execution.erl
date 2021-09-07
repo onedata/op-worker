@@ -18,7 +18,6 @@
 
 %% API
 -export([
-    create_all/1, create/3,
     prepare_all/2, prepare/2,
     ensure_all_ended/1,
     clean_all/1, clean/1,
@@ -50,59 +49,6 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
-
-
--spec create_all(atm_workflow_execution_factory:creation_ctx()) ->
-    [{record(), atm_task_execution_factory:task_store_registry()}] | no_return().
-create_all(#atm_workflow_execution_creation_ctx{
-    workflow_schema_doc = #document{value = #od_atm_workflow_schema{
-        lanes = AtmLaneSchemas
-    }}
-} = AtmWorkflowExecutionCreationCtx) ->
-    lists:reverse(lists:foldl(fun({AtmLaneIndex, #atm_lane_schema{
-        id = AtmLaneSchemaId
-    } = AtmLaneSchema}, Acc) ->
-        try
-            [create(AtmWorkflowExecutionCreationCtx, AtmLaneIndex, AtmLaneSchema) | Acc]
-        catch _:Reason ->
-            catch delete_all([Rec || {Rec, _} <- Acc]),
-            throw(?ERROR_ATM_LANE_EXECUTION_CREATION_FAILED(AtmLaneSchemaId, Reason))
-        end
-    end, [], lists_utils:enumerate(AtmLaneSchemas))).
-
-
--spec create(
-    atm_workflow_execution_factory:creation_ctx(),
-    non_neg_integer(),
-    atm_lane_schema:record()
-) ->
-    {record(), atm_task_execution_factory:task_store_registry()} | no_return().
-create(AtmWorkflowExecutionCreationCtx, AtmLaneIndex, #atm_lane_schema{
-    id = AtmLaneSchemaId,
-    parallel_boxes = AtmParallelBoxSchemas
-}) ->
-    AtmParallelBoxExecutionsAndTaskStoreRegistries = atm_parallel_box_execution:create_all(
-        AtmWorkflowExecutionCreationCtx, AtmLaneIndex, AtmParallelBoxSchemas
-    ),
-    {AtmParallelBoxExecutions, AtmLaneTaskStoreRegistry} = lists:foldr(fun(
-        {AtmParallelBoxExecution, AtmParallelBoxTaskStoreRegistry},
-        {AtmParallelBoxExecutionsAcc, AtmLaneTaskStoreRegistryAcc}
-    ) ->
-        {
-            [AtmParallelBoxExecution | AtmParallelBoxExecutionsAcc],
-            maps:merge(AtmParallelBoxTaskStoreRegistry, AtmLaneTaskStoreRegistryAcc)
-        }
-    end, {[], #{}}, AtmParallelBoxExecutionsAndTaskStoreRegistries),
-
-    AtmLaneExecution = #atm_lane_execution{
-        schema_id = AtmLaneSchemaId,
-        status = atm_workflow_block_execution_status:infer(
-            atm_parallel_box_execution:gather_statuses(AtmParallelBoxExecutions)
-        ),
-        parallel_boxes = AtmParallelBoxExecutions
-    },
-
-    {AtmLaneExecution, AtmLaneTaskStoreRegistry}.
 
 
 -spec prepare_all(atm_workflow_execution_ctx:record(), [record()]) -> ok | no_return().

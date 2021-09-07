@@ -22,9 +22,11 @@
 
 %% API
 -export([
-    build/2, build/3, build/5,
+    build/2, build/3,
     add_workflow_store/3,
     set_workflow_audit_log_store_container/2,
+    set_lane_exception_store_container/2,
+    set_task_audit_log_store_container/3,
 
     acquire_auth/1,
     acquire_logger/3,
@@ -34,13 +36,15 @@
     get_workflow_store_id/2
 ]).
 
+-type task_audit_logs_registry() :: #{atm_task_execution:id() => atm_store_container:record()}.
 
 -record(atm_workflow_execution_env, {
     space_id :: od_space:id(),
     workflow_execution_id :: atm_workflow_execution:id(),
     workflow_store_registry :: atm_workflow_execution:store_registry(),
     workflow_audit_log_store_container :: undefined | atm_store_container:record(),
-    task_store_registry :: atm_task_execution_factory:task_store_registry()
+    lane_exception_store_container :: undefined | atm_store_container:record(),
+    task_audit_logs_registry :: task_audit_logs_registry()
 }).
 -type record() :: #atm_workflow_execution_env{}.
 
@@ -60,30 +64,13 @@ build(SpaceId, AtmWorkflowExecutionId) ->
 -spec build(od_space:id(), atm_workflow_execution:id(), atm_workflow_execution:store_registry()) ->
     record().
 build(SpaceId, AtmWorkflowExecutionId, AtmWorkflowStoreRegistry) ->
-    build(SpaceId, AtmWorkflowExecutionId, AtmWorkflowStoreRegistry, undefined, #{}).
-
-
--spec build(
-    od_space:id(),
-    atm_workflow_execution:id(),
-    atm_workflow_execution:store_registry(),
-    undefined | atm_store_container:record(),
-    atm_task_execution_factory:task_store_registry()
-) ->
-    record().
-build(
-    SpaceId,
-    AtmWorkflowExecutionId,
-    AtmWorkflowStoreRegistry,
-    AtmWorkflowAuditLogStoreContainer,
-    AtmTaskStoreRegistry
-) ->
     #atm_workflow_execution_env{
         space_id = SpaceId,
         workflow_execution_id = AtmWorkflowExecutionId,
         workflow_store_registry = AtmWorkflowStoreRegistry,
-        workflow_audit_log_store_container = AtmWorkflowAuditLogStoreContainer,
-        task_store_registry = AtmTaskStoreRegistry
+        workflow_audit_log_store_container = undefined,
+        lane_exception_store_container = undefined,
+        task_audit_logs_registry = #{}
     }.
 
 
@@ -102,6 +89,30 @@ set_workflow_audit_log_store_container(AtmWorkflowAuditLogStoreContainer, Record
     Record#atm_workflow_execution_env{
         workflow_audit_log_store_container = AtmWorkflowAuditLogStoreContainer
     }.
+
+
+-spec set_lane_exception_store_container(undefined | atm_store_container:record(), record()) ->
+    record().
+set_lane_exception_store_container(AtmLaneExceptionStoreContainer, Record) ->
+    Record#atm_workflow_execution_env{
+        lane_exception_store_container = AtmLaneExceptionStoreContainer
+    }.
+
+
+-spec set_task_audit_log_store_container(
+    atm_task_execution:id(),
+    undefined | atm_store_container:record(),
+    record()
+) ->
+    record().
+set_task_audit_log_store_container(
+    AtmTaskExecutionId,
+    AtmTaskAuditLogStoreContainer,
+    #atm_workflow_execution_env{task_audit_logs_registry = AtmTaskAuditLogsRegistry} = Record
+) ->
+    Record#atm_workflow_execution_env{task_audit_logs_registry = AtmTaskAuditLogsRegistry#{
+        AtmTaskExecutionId => AtmTaskAuditLogStoreContainer
+    }}.
 
 
 -spec acquire_auth(record()) -> atm_workflow_execution_auth:record() | no_return().
@@ -162,6 +173,6 @@ get_workflow_store_id(AtmStoreSchemaId, #atm_workflow_execution_env{
 -spec get_task_audit_log_store_container(undefined | atm_task_execution:id(), record()) ->
     undefined | atm_store_container:record().
 get_task_audit_log_store_container(AtmTaskExecutionId, #atm_workflow_execution_env{
-    task_store_registry = AtmTaskStoreRegistry
+    task_audit_logs_registry = AtmTaskAuditLogsRegistry
 }) ->
-    maps:get(AtmTaskExecutionId, AtmTaskStoreRegistry, undefined).
+    maps:get(AtmTaskExecutionId, AtmTaskAuditLogsRegistry, undefined).
