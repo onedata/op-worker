@@ -138,17 +138,17 @@ create_execution_elements(AtmWorkflowExecutionCreateCtx) ->
             erlang:Type(Reason)
         end
     end, AtmWorkflowExecutionCreateCtx, [
-        fun create_schema_snapshot/1,
+        fun create_workflow_schema_snapshot/1,
         fun create_lambda_snapshots/1,
-        fun create_stores/1,
-        fun create_audit_log/1
+        fun create_workflow_stores/1,
+        fun create_workflow_audit_log/1
     ]).
 
 
 %% @private
--spec create_schema_snapshot(atm_workflow_execution_create_ctx()) ->
+-spec create_workflow_schema_snapshot(atm_workflow_execution_create_ctx()) ->
     atm_workflow_execution_create_ctx().
-create_schema_snapshot(AtmWorkflowExecutionCreateCtx = #atm_workflow_execution_create_ctx{
+create_workflow_schema_snapshot(AtmWorkflowExecutionCreateCtx = #atm_workflow_execution_create_ctx{
     params = #atm_workflow_execution_params{
         workflow_execution_id = AtmWorkflowExecutionId,
         workflow_schema_doc = AtmWorkflowSchemaDoc
@@ -190,9 +190,9 @@ create_lambda_snapshots(AtmWorkflowExecutionCreateCtx = #atm_workflow_execution_
 
 
 %% @private
--spec create_stores(atm_workflow_execution_create_ctx()) ->
+-spec create_workflow_stores(atm_workflow_execution_create_ctx()) ->
     atm_workflow_execution_create_ctx() | no_return().
-create_stores(AtmWorkflowExecutionCreateCtx = #atm_workflow_execution_create_ctx{
+create_workflow_stores(AtmWorkflowExecutionCreateCtx = #atm_workflow_execution_create_ctx{
     params = #atm_workflow_execution_params{
         workflow_execution_auth = AtmWorkflowExecutionAuth,
         workflow_schema_doc = #document{value = #od_atm_workflow_schema{
@@ -231,9 +231,9 @@ create_stores(AtmWorkflowExecutionCreateCtx = #atm_workflow_execution_create_ctx
 
 
 %% @private
--spec create_audit_log(atm_workflow_execution_create_ctx()) ->
+-spec create_workflow_audit_log(atm_workflow_execution_create_ctx()) ->
     atm_workflow_execution_create_ctx().
-create_audit_log(AtmWorkflowExecutionCreateCtx = #atm_workflow_execution_create_ctx{
+create_workflow_audit_log(AtmWorkflowExecutionCreateCtx = #atm_workflow_execution_create_ctx{
     env = AtmWorkflowExecutionEnv,
     params = #atm_workflow_execution_params{
         workflow_execution_auth = AtmWorkflowExecutionAuth
@@ -270,7 +270,8 @@ create_workflow_execution_doc(#atm_workflow_execution_create_ctx{
         workflow_execution_auth = AtmWorkflowExecutionAuth,
         workflow_schema_doc = #document{value = #od_atm_workflow_schema{
             name = AtmWorkflowSchemaName,
-            atm_inventory = AtmInventoryId
+            atm_inventory = AtmInventoryId,
+            lanes = AtmLaneSchemas
         }},
         callback_url = CallbackUrl
     },
@@ -292,7 +293,7 @@ create_workflow_execution_doc(#atm_workflow_execution_create_ctx{
 
             store_registry = AtmWorkflowStoreRegistry,
             system_audit_log_id = AtmWorkflowAuditLogId,
-            lanes = [],  %% TODO empty lane schemas
+            lanes = build_lane_executions(AtmLaneSchemas),
 
             status = ?SCHEDULED_STATUS,
             prev_status = ?SCHEDULED_STATUS,
@@ -305,6 +306,28 @@ create_workflow_execution_doc(#atm_workflow_execution_create_ctx{
         }
     }),
     AtmWorkflowExecutionDoc.
+
+
+%% @private
+-spec build_lane_executions([atm_lane_schema:record()]) ->
+    [atm_lane_execution:record2()].
+build_lane_executions([FirstAtmLaneSchema | RestAtmLaneSchemas]) ->
+    FirstAtmLaneExecution = #atm_lane_execution_rec{
+        schema_id = FirstAtmLaneSchema#atm_lane_schema.id,
+        runs = [#atm_lane_execution_run{
+            run_no = 1,
+            status = ?SCHEDULED_STATUS,
+            iterated_store_id = undefined,
+            exception_store_id = undefined,
+            parallel_boxes = []
+        }]
+    },
+    RestAtmLaneExecutions = lists:map(fun(AtmLaneSchema) ->
+        AtmLaneSchemaId = AtmLaneSchema#atm_lane_schema.id,
+        #atm_lane_execution_rec{schema_id = AtmLaneSchemaId, runs = []}
+    end, RestAtmLaneSchemas),
+
+    [FirstAtmLaneExecution | RestAtmLaneExecutions].
 
 
 %% @private
