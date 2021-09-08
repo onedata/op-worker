@@ -17,6 +17,9 @@
 
 %% API
 -export([
+    setup/2,
+    teardown/1,
+
     process_item/5,
     process_results/4,
 
@@ -27,6 +30,26 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+
+-spec setup(
+    atm_workflow_execution_ctx:record(),
+    atm_task_execution:id() | atm_task_execution:doc()
+) ->
+    workflow_engine:task_spec() | no_return().
+setup(AtmWorkflowExecutionCtx, AtmTaskExecutionIdOrDoc) ->
+    #document{value = #atm_task_execution{executor = AtmTaskExecutor}} = ensure_atm_task_execution_doc(
+        AtmTaskExecutionIdOrDoc
+    ),
+    atm_task_executor:setup(AtmWorkflowExecutionCtx, AtmTaskExecutor).
+
+
+-spec teardown(atm_task_execution:id()) -> ok | no_return().
+teardown(AtmTaskExecutionId) ->
+    #document{value = #atm_task_execution{executor = AtmTaskExecutor}} = ensure_atm_task_execution_doc(
+        AtmTaskExecutionId
+    ),
+    atm_task_executor:teardown(AtmTaskExecutor).
 
 
 -spec process_item(
@@ -128,6 +151,16 @@ handle_ended(AtmTaskExecutionId) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+%% @private
+-spec ensure_atm_task_execution_doc(atm_task_execution:id() | atm_task_execution:doc()) ->
+    atm_task_execution:doc().
+ensure_atm_task_execution_doc(#document{value = #atm_task_execution{}} = AtmTaskExecutionDoc) ->
+    AtmTaskExecutionDoc;
+ensure_atm_task_execution_doc(AtmTaskExecutionId) ->
+    {ok, AtmTaskExecutionDoc = #document{}} = atm_task_execution:get(AtmTaskExecutionId),
+    AtmTaskExecutionDoc.
 
 
 %% @private

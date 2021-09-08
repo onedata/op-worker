@@ -107,9 +107,18 @@ prepare_all(AtmWorkflowExecutionCtx, AtmParallelBoxExecutions) ->
 prepare(AtmWorkflowExecutionCtx, #atm_parallel_box_execution{
     task_registry = AtmTaskExecutionRegistry
 }) ->
-    atm_task_execution_api:prepare_all(
-        AtmWorkflowExecutionCtx, maps:values(AtmTaskExecutionRegistry)
-    ).
+    atm_parallel_runner:foreach(fun(AtmTaskExecutionId) ->
+        {ok, AtmTaskExecutionDoc = #document{value = #atm_task_execution{
+            schema_id = AtmTaskSchemaId
+        }}} = atm_task_execution:get(AtmTaskExecutionId),
+
+        try
+            atm_task_execution_handler:setup(AtmWorkflowExecutionCtx, AtmTaskExecutionDoc),
+            ok
+        catch _:Reason ->
+            throw(?ERROR_ATM_TASK_EXECUTION_PREPARATION_FAILED(AtmTaskSchemaId, Reason))  % TODO error prepare -> setup
+        end
+    end, maps:values(AtmTaskExecutionRegistry)).
 
 
 -spec ensure_all_ended([record()]) -> ok | no_return().
@@ -124,7 +133,9 @@ clean_all(AtmParallelBoxExecutions) ->
 
 -spec clean(record()) -> ok.
 clean(#atm_parallel_box_execution{task_registry = AtmTaskExecutionRegistry}) ->
-    atm_task_execution_api:clean_all(maps:values(AtmTaskExecutionRegistry)).
+    lists:foreach(fun(AtmTaskExecutionId) ->
+        catch atm_task_execution_handler:teardown(AtmTaskExecutionId)
+    end, maps:values(AtmTaskExecutionRegistry)).
 
 
 -spec delete_all([record()]) -> ok.
@@ -140,7 +151,7 @@ delete(#atm_parallel_box_execution{task_registry = AtmTaskExecutions}) ->
 -spec get_spec(record()) -> workflow_engine:parallel_box_spec().
 get_spec(#atm_parallel_box_execution{task_registry = AtmTaskExecutions}) ->
     lists:foldl(fun(AtmTaskExecutionId, Acc) ->
-        Acc#{AtmTaskExecutionId => atm_task_execution_api:get_spec(AtmTaskExecutionId)}
+        Acc#{AtmTaskExecutionId => #{type => async}}  %% TODO rm
     end, #{}, maps:values(AtmTaskExecutions)).
 
 
