@@ -18,7 +18,6 @@
 
 %% API
 -export([
-    prepare_all/2, prepare/2,
     ensure_all_ended/1,
     clean_all/1, clean/1,
     delete_all/1, delete/1
@@ -51,22 +50,6 @@
 %%%===================================================================
 
 
--spec prepare_all(atm_workflow_execution_ctx:record(), [record()]) -> ok | no_return().
-prepare_all(AtmWorkflowExecutionCtx, AtmLaneExecutions) ->
-    atm_parallel_runner:foreach(fun(#atm_lane_execution{schema_id = AtmLaneSchemaId} = AtmLaneExecution) ->
-        try
-            prepare(AtmWorkflowExecutionCtx, AtmLaneExecution)
-        catch _:Reason ->
-            throw(?ERROR_ATM_LANE_EXECUTION_PREPARATION_FAILED(AtmLaneSchemaId, Reason))
-        end
-    end, AtmLaneExecutions).
-
-
--spec prepare(atm_workflow_execution_ctx:record(), record()) -> ok | no_return().
-prepare(AtmWorkflowExecutionCtx, #atm_lane_execution{parallel_boxes = AtmParallelBoxExecutions}) ->
-    atm_parallel_box_execution:prepare_all(AtmWorkflowExecutionCtx, AtmParallelBoxExecutions).
-
-
 -spec ensure_all_ended([record()]) -> ok | no_return().
 ensure_all_ended(AtmLaneExecutions) ->
     pforeach_not_ended(fun(#atm_lane_execution{parallel_boxes = AtmParallelBoxExecutions}) ->
@@ -81,7 +64,7 @@ clean_all(AtmLaneExecutions) ->
 
 -spec clean(record()) -> ok.
 clean(#atm_lane_execution{parallel_boxes = AtmParallelBoxExecutions}) ->
-    atm_parallel_box_execution:clean_all(AtmParallelBoxExecutions).
+    atm_parallel_box_execution:teardown_all(AtmParallelBoxExecutions).
 
 
 -spec delete_all([record()]) -> ok.
@@ -95,10 +78,8 @@ delete(#atm_lane_execution{parallel_boxes = AtmParallelBoxExecutions}) ->
 
 
 -spec get_parallel_box_execution_specs(record()) -> [workflow_engine:parallel_box_spec()].
-get_parallel_box_execution_specs(#atm_lane_execution{parallel_boxes = AtmParallelBoxExecutions}) ->
-    lists:map(fun(AtmParallelBoxExecution) ->
-        atm_parallel_box_execution:get_spec(AtmParallelBoxExecution)
-    end, AtmParallelBoxExecutions).
+get_parallel_box_execution_specs(#atm_lane_execution{}) ->
+    []. %% TODO rm
 
 
 -spec gather_statuses([record()]) -> [AtmLaneExecutionStatus :: atm_task_execution:status()].

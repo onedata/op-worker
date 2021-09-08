@@ -269,13 +269,9 @@ handle_workflow_execution_ended(AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv
     atm_workflow_execution_ctx:record()
 ) ->
     ok | no_return().
-prepare_internal(AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
-    {ok, #document{value = #atm_workflow_execution{
-        lanes = AtmLaneExecutions
-    }}} = atm_workflow_execution_status:handle_preparing(AtmWorkflowExecutionId),
-
+prepare_internal(AtmWorkflowExecutionId, _AtmWorkflowExecutionCtx) ->
     try
-        atm_lane_execution:prepare_all(AtmWorkflowExecutionCtx, AtmLaneExecutions)
+        ok  %% TODO replace with prepare for each lane
     catch Type:Reason ->
         atm_workflow_execution_status:handle_aborting(AtmWorkflowExecutionId, failure),
         erlang:Type(Reason)

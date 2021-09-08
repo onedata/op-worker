@@ -39,6 +39,23 @@ prepare(AtmLaneIndex, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
     ok.
 
 
+%%-spec prepare_all(atm_workflow_execution_ctx:record(), [record()]) -> ok | no_return().
+%%prepare_all(AtmWorkflowExecutionCtx, AtmLaneExecutions) ->
+%%    atm_parallel_runner:foreach(fun(#atm_lane_execution{schema_id = AtmLaneSchemaId} = AtmLaneExecution) ->
+%%        try
+%%            prepare(AtmWorkflowExecutionCtx, AtmLaneExecution)
+%%        catch _:Reason ->
+%%            throw(?ERROR_ATM_LANE_EXECUTION_PREPARATION_FAILED(AtmLaneSchemaId, Reason))
+%%        end
+%%    end, AtmLaneExecutions).
+%%
+%%
+%%-spec prepare(atm_workflow_execution_ctx:record(), record()) -> ok | no_return().
+%%prepare(AtmWorkflowExecutionCtx, #atm_lane_execution{parallel_boxes = AtmParallelBoxExecutions}) ->
+%%    atm_parallel_box_execution:setup_all(AtmWorkflowExecutionCtx, AtmParallelBoxExecutions),
+%%    ok.
+
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -108,12 +125,18 @@ build_lane_execution_create_ctx(AtmLaneIndex, AtmWorkflowExecutionDoc = #documen
         lanes = AtmLaneExecutions
     }
 }, AtmWorkflowExecutionCtx) ->
-    #atm_lane_execution_rec{runs = [CurrentRun | _]} = lists:nth(
-        AtmLaneIndex, AtmLaneExecutions
-    ),
+    #atm_lane_execution_rec{runs = [
+        #atm_lane_execution_run{iterated_store_id = IteratedStoreId}
+        | _
+    ]} = lists:nth(AtmLaneIndex, AtmLaneExecutions),
+
     {ok, AtmWorkflowSchemaSnapshotDoc = #document{value = #atm_workflow_schema_snapshot{
         lanes = AtmLaneSchemas
     }}} = atm_workflow_schema_snapshot:get(AtmWorkflowSchemaSnapshotId),
+
+    AtmLaneSchema = #atm_lane_schema{store_iterator_spec = #atm_store_iterator_spec{
+        store_schema_id = AtmStoreSchemaId
+    }} = lists:nth(AtmLaneIndex, AtmLaneSchemas),
 
     #atm_lane_execution_create_ctx{
         workflow_execution_ctx = AtmWorkflowExecutionCtx,
@@ -123,38 +146,20 @@ build_lane_execution_create_ctx(AtmLaneIndex, AtmWorkflowExecutionDoc = #documen
         workflow_execution_doc = AtmWorkflowExecutionDoc,
 
         lane_index = AtmLaneIndex,
-        lane_schema = lists:nth(AtmLaneIndex, AtmLaneSchemas),
-        iterated_store_id = case CurrentRun of
-            #atm_lane_execution_run{iterated_store_id = undefined} ->
-                get_lane_designated_iteration_store(
-                    AtmLaneIndex, AtmWorkflowSchemaSnapshotDoc, AtmWorkflowExecutionCtx
+        lane_schema = AtmLaneSchema,
+
+        iterated_store_id = case IteratedStoreId of
+            undefined ->
+                atm_workflow_execution_ctx:get_workflow_store_id(
+                    AtmStoreSchemaId, AtmWorkflowExecutionCtx
                 );
-            #atm_lane_execution_run{iterated_store_id = IteratedStoreId} ->
+            _ ->
                 IteratedStoreId
         end,
-
         exception_store_id = undefined,
+
         parallel_boxes = undefined
     }.
-
-
-%% @private
--spec get_lane_designated_iteration_store(
-    pos_integer(),
-    atm_workflow_schema_snapshot:doc(),
-    atm_workflow_execution_ctx:record()
-) ->
-    atm_store:id().
-get_lane_designated_iteration_store(AtmLaneIndex, #document{value = #atm_workflow_schema_snapshot{
-    lanes = AtmLaneSchemas
-}}, AtmWorkflowExecutionCtx) ->
-    #atm_lane_schema{
-        store_iterator_spec = #atm_store_iterator_spec{
-            store_schema_id = AtmStoreSchemaId
-        }
-    } = lists:nth(AtmLaneIndex, AtmLaneSchemas),
-
-    atm_workflow_execution_ctx:get_workflow_store_id(AtmStoreSchemaId, AtmWorkflowExecutionCtx).
 
 
 %% @private

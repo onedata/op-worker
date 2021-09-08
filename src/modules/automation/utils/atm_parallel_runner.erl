@@ -16,22 +16,37 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([foreach/2]).
+-export([foreach/2, map/2]).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Runs the callback for each element on the list, in parallel. The call is
-%% considered successful when all processes return 'ok', otherwise the first
+%% considered successful when no process return '{error, _}', otherwise the first
 %% encountered error is thrown to the calling process. The parallel processes
 %% may throw an error themselves and it will be propagated.
 %% @end
 %%--------------------------------------------------------------------
 -spec foreach(fun((X) -> ok | {error, term()}), [X]) -> ok | no_return().
 foreach(Callback, Elements) ->
+    map(Callback, Elements),
+    ok.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Maps, using callback, each element on the list, in parallel. The call is
+%% considered successful when no process return '{error, _}', otherwise the first
+%% encountered error is thrown to the calling process. The parallel processes
+%% may throw an error themselves and it will be propagated.
+%% @end
+%%--------------------------------------------------------------------
+-spec map(fun((X) -> {error, term()} | term()), [X]) -> term() | no_return().
+map(Callback, Elements) ->
     try
         Results = lists_utils:pmap(fun(Element) ->
             try
@@ -41,10 +56,13 @@ foreach(Callback, Elements) ->
                     Error
             end
         end, Elements),
+
         lists:foreach(fun
-            (ok) -> ok;
-            ({error, _} = Error) -> throw(Error)
-        end, Results)
+            ({error, _} = Error) -> throw(Error);
+            (_) -> ok
+        end, Results),
+
+        Results
     catch
         throw:{error, _} = Error ->
             throw(Error);

@@ -79,6 +79,7 @@
     record :: atm_parallel_box_execution:record()
 }).
 
+% TODO maybe hide in atm_parallel_box_execution.erl ?
 -record(atm_parallel_box_execution, {
     schema_id :: automation:id(),
     status :: atm_workflow_block_execution_status:status(),
