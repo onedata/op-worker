@@ -69,29 +69,16 @@ get_configuration(SessId) ->
 -spec get_helper_params(user_ctx:ctx(), storage:id(),
     od_space:id(), atom()) -> #fuse_response{}.
 get_helper_params(UserCtx, StorageId, SpaceId, HelperMode) ->
-    {ok, Storage} = storage:get(StorageId),
-    Helper = storage:get_helper(Storage),
     SessionId = user_ctx:get_session_id(UserCtx),
     UserId = user_ctx:get_user_id(UserCtx),
-    case {HelperMode, is_root_credentials(SessionId, UserId)} of
+    case {storage:get(StorageId), is_root_credentials(SessionId, UserId)} of
         {_, true} ->
             % This should never happen as client cannot pass root credentials
             #fuse_response{status = #status{code = ?EACCES}};
-        {?FORCE_DIRECT_HELPER_MODE, false} when Helper =/= undefined ->
-            case luma:map_to_storage_credentials(SessionId, UserId, SpaceId, Storage) of
-                {ok, ClientStorageUserCtx} ->
-                    HelperParams = helper:get_params(Helper, ClientStorageUserCtx),
-                    #fuse_response{
-                        status = #status{code = ?OK},
-                        fuse_response = HelperParams};
-                {error, _} ->
-                    #fuse_response{status = #status{code = ?ENOENT}}
-            end;
-        {_ProxyOrAutoMode, false} ->
-            HelperParams = helper:get_proxy_params(Helper, StorageId),
-            #fuse_response{
-               status = #status{code = ?OK},
-               fuse_response = HelperParams}
+        {{ok, StorageData}, _} ->
+            get_local_storage_helper_params(SessionId, UserId, SpaceId, HelperMode, StorageData);
+        {?ERROR_NOT_FOUND, _} ->
+            get_proxy_storage_helper_params(StorageId, undefined)
     end.
 
 %%--------------------------------------------------------------------
@@ -184,6 +171,36 @@ verify_storage_test_file(UserCtx, SpaceId, StorageId, FileId, FileContent) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%% @private
+-spec get_local_storage_helper_params(session:id(), od_user:id(), od_space:id(), atom(),
+    storage:data()) -> #fuse_response{}.
+get_local_storage_helper_params(SessionId, UserId, SpaceId, HelperMode, StorageData) ->
+    Helper = storage:get_helper(StorageData),
+    case HelperMode of
+        ?FORCE_DIRECT_HELPER_MODE ->
+            case luma:map_to_storage_credentials(SessionId, UserId, SpaceId, StorageData) of
+                {ok, ClientStorageUserCtx} ->
+                    HelperParams = helper:get_params(Helper, ClientStorageUserCtx),
+                    #fuse_response{
+                        status = #status{code = ?OK},
+                        fuse_response = HelperParams};
+                {error, _} ->
+                    #fuse_response{status = #status{code = ?ENOENT}}
+            end;
+        _ProxyOrAutoMode ->
+            get_proxy_storage_helper_params(storage:get_id(StorageData), Helper)
+    end.
+
+%% @private
+-spec get_proxy_storage_helper_params(storage:id(), helpers:helper() | undefined) ->
+    #fuse_response{}.
+get_proxy_storage_helper_params(StorageId, Helper) ->
+    Timeout = helper:get_timeout(Helper),
+    HelperParams = helper:get_proxy_params(Timeout, StorageId),
+    #fuse_response{
+        status = #status{code = ?OK},
+        fuse_response = HelperParams}.
 
 %%--------------------------------------------------------------------
 %% @private
