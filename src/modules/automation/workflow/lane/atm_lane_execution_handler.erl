@@ -32,9 +32,13 @@
 prepare(AtmLaneIndex, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
     AtmWorkflowExecutionDoc = mark_as_preparing(AtmLaneIndex, AtmWorkflowExecutionId),
 
-    AtmLaneExecutionCreateCtx = create_execution_elements(build_lane_execution_create_ctx(
-        AtmLaneIndex, AtmWorkflowExecutionDoc, AtmWorkflowExecutionCtx
-    )),
+    try
+        create_lane(AtmLaneIndex, AtmWorkflowExecutionDoc, AtmWorkflowExecutionCtx),
+        ok
+    catch throw:{error, _} ->
+        % TODO log error
+        ok
+    end,
 
     ok.
 
@@ -66,6 +70,7 @@ prepare(AtmLaneIndex, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
     atm_workflow_execution:doc() | no_return().
 mark_as_preparing(AtmLaneIndex, AtmWorkflowExecutionId) ->
     Diff = fun(#atm_workflow_execution{lanes = AtmLaneExecutions} = AtmWorkflowExecution) ->
+        % TODO check that workflow in ongoing/is not aborting; maybe change workflow status to active?
         AtmLaneExecution = lists:nth(AtmLaneIndex, AtmLaneExecutions),
 
         case mark_current_run_as_preparing(AtmLaneExecution#atm_lane_execution_rec.runs) of
@@ -109,6 +114,54 @@ mark_current_run_as_preparing([#atm_lane_execution_run{status = Status} | _] = P
             {ok, [NewRun | PreviousRuns]};
         _ ->
             ?ERROR_ATM_INVALID_STATUS_TRANSITION(Status, ?PREPARING_STATUS)
+    end.
+
+
+%% @private
+-spec create_lane(pos_integer(), atm_workflow_execution:doc(), atm_workflow_execution_ctx:record()) ->
+    {atm_workflow_execution:doc(), atm_workflow_execution_env:record()}.
+create_lane(AtmLaneIndex, AtmWorkflowExecutionDoc, AtmWorkflowExecutionCtx) ->
+    AtmLaneExecutionCreateCtx = #atm_lane_execution_create_ctx{
+        workflow_execution_env = AtmWorkflowExecutionEnv,
+        iterated_store_id = IteratedStoreId,
+        exception_store_id = ExceptionStoreId,
+        parallel_boxes = AtmParallelBoxExecutions
+    } = create_execution_elements(build_lane_execution_create_ctx(
+        AtmLaneIndex, AtmWorkflowExecutionDoc, AtmWorkflowExecutionCtx
+    )),
+
+    Diff = fun(#atm_workflow_execution{lanes = AtmLaneExecutions} = AtmWorkflowExecution) ->
+        #atm_lane_execution_rec{runs = [CurrRun | PrevRuns]} = AtmLaneExecution = lists:nth(
+            AtmLaneIndex, AtmLaneExecutions
+        ),
+        case CurrRun of
+            #atm_lane_execution_run{
+                status = ?PREPARING_STATUS,
+                exception_store_id = undefined,
+                parallel_boxes = []
+            } ->
+                UpdatedCurrRun = CurrRun#atm_lane_execution_run{
+                    iterated_store_id = IteratedStoreId,
+                    exception_store_id = ExceptionStoreId,
+                    parallel_boxes = AtmParallelBoxExecutions
+                },
+                NewAtmLaneExecution = AtmLaneExecution#atm_lane_execution_rec{
+                    runs = [UpdatedCurrRun | PrevRuns]
+                },
+                NewAtmLaneExecutions = lists_utils:replace_at(
+                    NewAtmLaneExecution, AtmLaneIndex, AtmLaneExecutions
+                ),
+                {ok, AtmWorkflowExecution#atm_workflow_execution{lanes = NewAtmLaneExecutions}};
+            _ ->
+                ?ERROR_ALREADY_EXISTS
+        end
+    end,
+    case atm_workflow_execution:update(AtmWorkflowExecutionDoc#document.key, Diff) of
+        {ok, AtmWorkflowExecutionDoc} ->
+            {AtmWorkflowExecutionDoc, AtmWorkflowExecutionEnv};
+        ?ERROR_ALREADY_EXISTS = Error ->
+            delete_execution_elements(AtmLaneExecutionCreateCtx),
+            throw(Error)
     end.
 
 
@@ -163,8 +216,7 @@ build_lane_execution_create_ctx(AtmLaneIndex, AtmWorkflowExecutionDoc = #documen
 
 
 %% @private
--spec create_execution_elements(create_ctx()) ->
-    create_ctx() | no_return().
+-spec create_execution_elements(create_ctx()) -> create_ctx() | no_return().
 create_execution_elements(AtmLaneExecutionCreateCtx) ->
     lists:foldl(fun(CreateExecutionElementFun, NewAtmLaneExecutionCreateCtx) ->
         try
@@ -180,8 +232,7 @@ create_execution_elements(AtmLaneExecutionCreateCtx) ->
 
 
 %% @private
--spec create_exception_store(create_ctx()) ->
-    create_ctx().
+-spec create_exception_store(create_ctx()) -> create_ctx().
 create_exception_store(AtmLaneExecutionCreateCtx = #atm_lane_execution_create_ctx{
     workflow_execution_ctx = AtmWorkflowExecutionCtx,
     workflow_execution_env = AtmWorkflowExecutionEnv,
