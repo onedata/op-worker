@@ -204,7 +204,7 @@ check_openfaas_availability() ->
                     [Class, Reason],
                     Stacktrace
                 ),
-                ?ERROR_ATM_INTERNAL_SERVER_ERROR
+                ?ERROR_INTERNAL_SERVER_ERROR
         end,
         {ok, HealthcheckResult, ?HEALTHCHECK_CACHE_TTL_SECONDS}
     end),

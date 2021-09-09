@@ -214,7 +214,7 @@ sanitize_data_batch(AtmWorkflowExecutionAuth, AtmDataSpec, Batch) when is_list(B
         Object
     end, Batch);
 sanitize_data_batch(_AtmWorkflowExecutionAuth, _AtmDataSpec, _Item) ->
-    throw(?ERROR_ATM_BAD_DATA(<<"value">>, <<"not a batch">>)).
+    throw(?ERROR_BAD_DATA(<<"value">>, <<"not a batch">>)).
 
 
 %% @private
@@ -240,7 +240,7 @@ infer_start_from(#{start_index := StartIndexBin}) ->
     try
         {index, binary_to_integer(StartIndexBin)}
     catch _:_ ->
-        throw(?ERROR_ATM_BAD_DATA(<<"index">>, <<"not numerical">>))
+        throw(?ERROR_BAD_DATA(<<"index">>, <<"not numerical">>))
     end;
 infer_start_from(#{start_timestamp := StartTimestamp}) ->
     {timestamp, StartTimestamp};

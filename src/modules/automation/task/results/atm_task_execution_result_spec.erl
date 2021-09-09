@@ -204,7 +204,7 @@ validate_result(AtmWorkflowExecutionCtx, #atm_task_execution_result_spec{
     end, ResultsBatch);
 
 validate_result(_AtmWorkflowExecutionAuth, _AtmTaskExecutionResultSpec, _Result) ->
-    throw(?ERROR_ATM_BAD_DATA(<<"result">>, <<"not a batch">>)).
+    throw(?ERROR_BAD_DATA(<<"result">>, <<"not a batch">>)).
 
 
 %% @private

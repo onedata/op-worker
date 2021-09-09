@@ -94,7 +94,7 @@ create_store_with_invalid_args_test(_Config) ->
             krakow, AtmWorkflowExecutionAuth, undefined,
             (?ATM_TREE_FOREST_STORE_SCHEMA)#atm_store_schema{requires_initial_value = true})
     ),
-    ?assertEqual(?ERROR_ATM_BAD_DATA(<<"value">>, <<"not a batch">>),
+    ?assertEqual(?ERROR_BAD_DATA(<<"value">>, <<"not a batch">>),
         atm_store_test_utils:create_store(
             krakow, AtmWorkflowExecutionAuth, 8, ?ATM_TREE_FOREST_STORE_SCHEMA)
     ),

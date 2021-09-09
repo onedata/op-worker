@@ -72,5 +72,5 @@ map(Callback, Elements) ->
                 [?MODULE, ?FUNCTION_NAME, Class, Reason],
                 Stacktrace
             ),
-            throw(?ERROR_ATM_INTERNAL_SERVER_ERROR)
+            throw(?ERROR_INTERNAL_SERVER_ERROR)
     end.
