@@ -115,12 +115,15 @@ change_replicated_internal(SpaceId, QosEntry = #document{
 }) ->
     ?debug("change_replicated_internal: qos_entry ~p", [QosEntryId]),
     qos_hooks:handle_qos_entry_change(SpaceId, QosEntry);
-change_replicated_internal(SpaceId, #document{value = #links_forest{}} = Doc) ->
-   link_replicated(SpaceId, Doc);
-change_replicated_internal(SpaceId, #document{value = #links_node{}} = Doc) ->
-   link_replicated(SpaceId, Doc);
-change_replicated_internal(SpaceId, #document{value = #links_mask{}} = Doc) ->
-   link_replicated(SpaceId, Doc);
+change_replicated_internal(_SpaceId, #document{value = #links_forest{key = LinkKey, model = Model}}) ->
+    ?debug("change_replicated_internal: links_forest ~p", [LinkKey]),
+   link_replicated(Model, LinkKey);
+change_replicated_internal(_SpaceId, #document{value = #links_node{key = LinkKey, model = Model}}) ->
+    ?debug("change_replicated_internal: links_node ~p", [LinkKey]),
+   link_replicated(Model, LinkKey);
+change_replicated_internal(_SpaceId, #document{value = #links_mask{key = LinkKey, model = Model}}) ->
+    ?debug("change_replicated_internal: links_mask ~p", [LinkKey]),
+   link_replicated(Model, LinkKey);
 change_replicated_internal(_SpaceId, _Change) ->
     ok.
 
@@ -196,30 +199,8 @@ file_meta_change_replicated(SpaceId, #document{
 %% @private
 -spec link_replicated(od_space:id(), datastore:doc()) ->
     any() | no_return().
-link_replicated(_SpaceId, #document{value = #links_forest{key = LinkKey, model = file_meta}}) ->
-    ?debug("links_replicated: links_forest ~p", [LinkKey]),
-    execute_file_meta_posthooks(LinkKey);
-link_replicated(_SpaceId, #document{value = #links_node{key = LinkKey, model = file_meta}}) ->
-    ?debug("links_replicated: links_node ~p", [LinkKey]),
-    execute_file_meta_posthooks(LinkKey);
-link_replicated(_SpaceId, #document{value = #links_mask{key = LinkKey, model = file_meta}}) ->
-    ?debug("links_replicated: links_mask ~p", [LinkKey]),
-    execute_file_meta_posthooks(LinkKey);
-link_replicated(_SpaceId, _Doc) ->
+link_replicated(file_meta, LinkKey) ->
+    GenericKey = datastore_model:get_generic_key(file_meta, LinkKey),
+    file_meta_posthooks:execute_hooks(GenericKey);
+link_replicated(_Model, _LinkKey) ->
     ok.
-
-
-%% @private
--spec execute_file_meta_posthooks(datastore_key:key()) -> ok.
-execute_file_meta_posthooks(LinkKey) ->
-    case datastore_key:to_basic_key_and_chash_label(LinkKey) of
-        {_, undefined} ->
-            % Key is in older format (created before version 19.02); 
-            % ignore it as we cannot retrieve original file_meta key.
-            ok;
-        {ExtendedKey, CHashLabel} ->
-            KeySize = byte_size(ExtendedKey) - 9,
-            <<Key:KeySize/binary, "file_meta">> = ExtendedKey,
-            ParentKey = datastore_key:concatenate_chash_label(Key, CHashLabel),
-            file_meta_posthooks:execute_hooks(ParentKey)
-    end.

@@ -67,15 +67,15 @@ add_hook(FileUuid, Identifier, Module, Function, Args) ->
 execute_hooks(FileUuid) ->
     case datastore_model:get(?CTX, FileUuid) of
         {ok, #document{value = #file_meta_posthooks{hooks = Hooks}}} -> 
-            execute_hooks_internal(FileUuid, Hooks);
+            execute_hooks(FileUuid, Hooks);
         _ ->
             ok
     end.
 
 
 %% @private
--spec execute_hooks_internal(file_meta:uuid(), hooks()) -> ok | {error, term()}.
-execute_hooks_internal(FileUuid, Hooks) ->
+-spec execute_hooks(file_meta:uuid(), hooks()) -> ok | {error, term()}.
+execute_hooks(FileUuid, Hooks) ->
     SuccessfulHooks = maps:fold(fun(Identifier, #hook{module = Module, function = Function, args = Args}, Acc) ->
         try
             ok = erlang:apply(Module, Function, binary_to_term(Args)),
@@ -86,12 +86,20 @@ execute_hooks_internal(FileUuid, Hooks) ->
                 [Identifier, FileUuid, Error, Type],
                 Stacktrace
             ),
-            ok
+            Acc
         end
     end, [], Hooks),
-    ?extract_ok(datastore_model:update(?CTX, FileUuid, fun(#file_meta_posthooks{hooks = Hooks} = FileMetaPosthooks) ->
+    UpdateFun = fun(#file_meta_posthooks{hooks = Hooks} = FileMetaPosthooks) ->
         {ok, FileMetaPosthooks#file_meta_posthooks{hooks = maps:without(SuccessfulHooks, Hooks)}}
-    end)).
+    end,
+    case datastore_model:update(?CTX, FileUuid, UpdateFun) of
+        {ok, #document{value = #file_meta_posthooks{hooks = []}}} ->
+            datastore_model:delete(?CTX, FileUuid, fun(#file_meta_posthooks{hooks = H}) -> H == [] end);
+        {ok, _} -> 
+            ok;
+        {error, _} = Error ->
+            Error
+    end.
 
 
 -spec delete(file_meta:uuid()) -> ok | {error, term()}.
