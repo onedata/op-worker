@@ -71,7 +71,7 @@
 }).
 
 -record(atm_parallel_box_execution_create_ctx, {
-    lane_execution_create_ctx :: atm_lane_execution_handler:create_ctx(),
+    lane_execution_create_ctx :: atm_lane_execution_factory:create_ctx(),
 
     parallel_box_index :: pos_integer(),
     parallel_box_schema :: atm_parallel_box_schema:record(),

@@ -49,8 +49,8 @@
 %%%===================================================================
 
 
--spec create_all(atm_lane_execution_handler:create_ctx()) ->
-    atm_lane_execution_handler:create_ctx() | no_return().
+-spec create_all(atm_lane_execution_factory:create_ctx()) ->
+    atm_lane_execution_factory:create_ctx() | no_return().
 create_all(AtmLaneExecutionCreateCtx = #atm_lane_execution_create_ctx{lane_schema = #atm_lane_schema{
     parallel_boxes = AtmParallelBoxSchemas
 }}) ->
@@ -67,11 +67,11 @@ create_all(AtmLaneExecutionCreateCtx = #atm_lane_execution_create_ctx{lane_schem
 
 
 -spec create(
-    atm_lane_execution_handler:create_ctx(),
+    atm_lane_execution_factory:create_ctx(),
     pos_integer(),
     atm_parallel_box_schema:record()
 ) ->
-    atm_lane_execution_handler:create_ctx().
+    atm_lane_execution_factory:create_ctx().
 create(AtmLaneExecutionCreateCtx, AtmParallelBoxIndex, AtmParallelBoxSchema = #atm_parallel_box_schema{
     id = AtmParallelBoxSchemaId
 }) ->
