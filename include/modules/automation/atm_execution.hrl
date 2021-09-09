@@ -76,15 +76,7 @@
     parallel_box_index :: pos_integer(),
     parallel_box_schema :: atm_parallel_box_schema:record(),
 
-    record :: atm_parallel_box_execution:record()
-}).
-
-% TODO maybe hide in atm_parallel_box_execution.erl ?
--record(atm_parallel_box_execution, {
-    schema_id :: automation:id(),
-    status :: atm_workflow_block_execution_status:status(),
-    task_registry :: #{AtmTaskSchemaId :: automation:id() => atm_task_execution:id()},
-    task_statuses :: #{atm_task_execution:id() => atm_task_execution:status()}
+    tasks :: [atm_task_execution:doc()]
 }).
 
 

@@ -32,6 +32,13 @@
 
 
 -type create_ctx() :: #atm_parallel_box_execution_create_ctx{}.
+
+-record(atm_parallel_box_execution, {
+    schema_id :: automation:id(),
+    status :: atm_workflow_block_execution_status:status(),
+    task_registry :: #{AtmTaskSchemaId :: automation:id() => atm_task_execution:id()},
+    task_statuses :: #{atm_task_execution:id() => atm_task_execution:status()}
+}).
 -type record() :: #atm_parallel_box_execution{}.
 
 -export_type([create_ctx/0, record/0]).
@@ -69,7 +76,7 @@ create(AtmLaneExecutionCreateCtx, AtmParallelBoxIndex, AtmParallelBoxSchema = #a
     id = AtmParallelBoxSchemaId
 }) ->
     #atm_parallel_box_execution_create_ctx{
-        record = AtmParallelBoxExecution,
+        tasks = AtmTaskExecutionDocs,
         lane_execution_create_ctx = NewAtmLaneExecutionCtx = #atm_lane_execution_create_ctx{
             parallel_boxes = AtmParallelBoxExecutions
         }
@@ -77,13 +84,29 @@ create(AtmLaneExecutionCreateCtx, AtmParallelBoxIndex, AtmParallelBoxSchema = #a
         lane_execution_create_ctx = AtmLaneExecutionCreateCtx,
         parallel_box_index = AtmParallelBoxIndex,
         parallel_box_schema = AtmParallelBoxSchema,
-        record = #atm_parallel_box_execution{
-            schema_id = AtmParallelBoxSchemaId,
-            status = ?PENDING_STATUS,
-            task_registry = #{},
-            task_statuses = #{}
-        }
+        tasks = []
     }),
+
+    {AtmTaskExecutionRegistry, AtmTaskExecutionStatuses} = lists:foldl(fun(
+        #document{key = AtmTaskExecutionId, value = #atm_task_execution{
+            schema_id = AtmTaskSchemaId,
+            status = AtmTaskExecutionStatus
+        }},
+        {AtmTaskRegistryAcc, AtmTaskExecutionStatusesAcc}
+    ) ->
+        {
+            AtmTaskRegistryAcc#{AtmTaskSchemaId => AtmTaskExecutionId},
+            AtmTaskExecutionStatusesAcc#{AtmTaskExecutionId => AtmTaskExecutionStatus}
+        }
+    end, {#{}, #{}}, AtmTaskExecutionDocs),
+
+    AtmParallelBoxExecution = #atm_parallel_box_execution{
+        schema_id = AtmParallelBoxSchemaId,
+        status = atm_workflow_block_execution_status:infer(maps:values(AtmTaskExecutionStatuses)),
+        task_registry = AtmTaskExecutionRegistry,
+        task_statuses = AtmTaskExecutionStatuses
+    },
+
     NewAtmLaneExecutionCtx#atm_lane_execution_create_ctx{
         parallel_boxes = [AtmParallelBoxExecution | AtmParallelBoxExecutions]
     }.

@@ -48,13 +48,13 @@ create_all(AtmParallelBoxExecutionCreateCtx = #atm_parallel_box_execution_create
     lists:foldl(fun(
         AtmTaskSchema = #atm_task_schema{id = AtmTaskSchemaId},
         NewAtmParallelBoxExecutionCreateCtx = #atm_parallel_box_execution_create_ctx{
-            record = #atm_parallel_box_execution{task_registry = AtmTaskRegistry}
+            tasks = AtmTaskExecutionDocs
         }
     ) ->
         try
             create(NewAtmParallelBoxExecutionCreateCtx, AtmTaskSchema)
         catch _:Reason ->
-            catch delete_all(maps:values(AtmTaskRegistry)),
+            catch delete_all([Doc#document.key || Doc <- AtmTaskExecutionDocs]),
             throw(?ERROR_ATM_TASK_EXECUTION_CREATION_FAILED(AtmTaskSchemaId, Reason))
         end
     end, AtmParallelBoxExecutionCreateCtx, AtmTaskSchemas).
@@ -248,16 +248,10 @@ update_parallel_box_execution_create_ctx(
             lane_execution_create_ctx = AtmLaneExecutionCreateCtx = #atm_lane_execution_create_ctx{
                 workflow_execution_env = AtmWorkflowExecutionEnv
             },
-            record = AtmParallelBoxExecutionRecord = #atm_parallel_box_execution{
-                task_registry = AtmTaskRegistry,
-                task_statuses = AtmTaskStatuses
-            }
+            tasks = AtmTaskExecutionDocs
         } = AtmParallelBoxExecutionCreateCtx
     },
-    #document{key = AtmTaskExecutionId, value = #atm_task_execution{
-        schema_id = AtmTaskSchemaId,
-        status = AtmTaskExecutionStatus
-    }}
+    AtmTaskExecutionDoc = #document{key = AtmTaskExecutionId}
 ) ->
     AtmParallelBoxExecutionCreateCtx#atm_parallel_box_execution_create_ctx{
         lane_execution_create_ctx = AtmLaneExecutionCreateCtx#atm_lane_execution_create_ctx{
@@ -265,8 +259,5 @@ update_parallel_box_execution_create_ctx(
                 AtmTaskExecutionId, AtmTaskStoreAuditLogContainer, AtmWorkflowExecutionEnv
             )
         },
-        record = AtmParallelBoxExecutionRecord#atm_parallel_box_execution{
-            task_registry = AtmTaskRegistry#{AtmTaskSchemaId => AtmTaskExecutionId},
-            task_statuses = AtmTaskStatuses#{AtmTaskExecutionId => AtmTaskExecutionStatus}
-        }
+        tasks = [AtmTaskExecutionDoc | AtmTaskExecutionDocs]
     }.
