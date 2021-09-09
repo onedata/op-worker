@@ -20,12 +20,16 @@
 -type async_processing_basic_result() :: term().
 -type async_processing_result() :: async_processing_basic_result() | ?ERROR_MALFORMED_DATA | ?ERROR_TIMEOUT.
 -type handler_execution_result() :: ok | error.
+-type prepare_result() :: {ok, workflow_engine:lane_spec(), workflow_engine:execution_context()} | error.
+% engine does not distinguish reason of execution finish - finish_execution is returned
+% if processed lane is last lane as well as on error
+-type lane_ended_callback_result() :: {continue, NextLaneId :: workflow_engine:lane_id()} | finish_execution.
 % TODO VFS-7787 move following types to callback server:
 -type finished_callback_id() :: binary().
 -type heartbeat_callback_id() :: binary().
 
--export_type([handler/0, async_processing_result/0,
-    finished_callback_id/0, heartbeat_callback_id/0, handler_execution_result/0]).
+-export_type([handler/0, async_processing_result/0, handler_execution_result/0, prepare_result/0,
+    finished_callback_id/0, heartbeat_callback_id/0]).
 
 %%%===================================================================
 %%% Callbacks descriptions
@@ -34,29 +38,29 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Callback that prepares workflow execution. It will be called once
-%% before get_lane_spec is called for the first lane.
+%% Callback that prepares workflow lane execution.
+%% It will be called exactly once for each lane.
 %% @end
 %%--------------------------------------------------------------------
--callback prepare(
+-callback prepare_lane(
     workflow_engine:execution_id(),
-    workflow_engine:execution_context()
+    workflow_engine:execution_context(),
+    workflow_engine:lane_id()
 ) ->
-    handler_execution_result().
+    prepare_result().
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Callback to get lane spec.
-%% Warning: this callback can be called multiple times for single lane.
+%% Callback to get lane spec when execution is restarted from snapshot.
 %% @end
 %%--------------------------------------------------------------------
--callback get_lane_spec(
+-callback restart_lane(
     workflow_engine:execution_id(),
     workflow_engine:execution_context(),
-    workflow_execution_state:index()
+    workflow_engine:lane_id()
 ) ->
-    {ok, workflow_engine:lane_spec()} | error.
+    prepare_result().
 
 
 %%--------------------------------------------------------------------
@@ -130,7 +134,7 @@
     workflow_engine:execution_context(),
     workflow_execution_state:index()
 ) ->
-    ok.
+    lane_ended_callback_result().
 
 
 %%--------------------------------------------------------------------

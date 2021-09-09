@@ -1176,8 +1176,9 @@
 
 -record(workflow_iterator_snapshot, {
     iterator :: iterator:iterator(),
-    lane_index = 0 :: workflow_execution_state:index(),
-    item_index = 0 :: workflow_execution_state:index()
+    lane_index = workflow_execution_state:index(),
+    lane_id :: workflow_engine:lane_id(),
+    item_index = workflow_execution_state:index()
 }).
 
 -record(workflow_engine_state, {
@@ -1188,10 +1189,10 @@
 
 -record(workflow_execution_state, {
     handler :: workflow_handler:handler(),
-    context :: workflow_engine:execution_context(),
+    initial_context :: workflow_engine:execution_context(),
 
     execution_status = not_prepared :: workflow_execution_state:execution_status(),
-    current_lane :: workflow_execution_state:current_lane() | undefined,
+    current_lane :: workflow_execution_state:current_lane(),
     lowest_failed_job_identifier :: workflow_jobs:job_identifier() | undefined,
 
     iteration_state :: workflow_iteration_state:state() | undefined,

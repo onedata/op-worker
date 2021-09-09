@@ -31,11 +31,12 @@
 -export([init_service/2, takeover_service/3]).
 
 %% Function executed by wpool - do not call directly
--export([process_job_or_result/3, prepare_execution/4]).
+-export([process_job_or_result/3, prepare_lane/5]).
 
 -type id() :: binary(). % Id of an engine
 -type execution_id() :: binary().
 -type execution_context() :: term().
+-type lane_id() :: term().
 -type task_id() :: binary().
 -type subject_id() :: workflow_cached_item:id() | workflow_cached_async_result:result_ref().
 -type execution_spec() :: #execution_spec{}.
@@ -55,7 +56,8 @@
     id := id(),
     workflow_handler := workflow_handler:handler(),
     execution_context => execution_context(),
-    force_clean_execution => boolean()
+    first_lane_id => lane_id(), % does not have to be defined if execution is started from snapshot
+    force_clean_execution => boolean() % TODO - aborted zostawia snapshot, jesli padnie z ilosci bledow to jest abored, jak prepare to error
 }.
 
 -type task_type() :: sync | async.
@@ -67,12 +69,11 @@
 -type parallel_box_spec() :: #{task_id() => task_spec()}.
 -type lane_spec() :: #{
     parallel_boxes := [parallel_box_spec()],
-    iterator := iterator:iterator(),
-    is_last => boolean()
+    iterator := iterator:iterator()
 }.
 %% @formatter:on
 
--export_type([id/0, execution_id/0, execution_context/0, task_id/0, subject_id/0,
+-export_type([id/0, execution_id/0, execution_context/0, lane_id/0, task_id/0, subject_id/0,
     execution_spec/0, processing_stage/0, handler_execution_result/0, processing_result/0,
     task_spec/0, parallel_box_spec/0, lane_spec/0]).
 
@@ -121,10 +122,11 @@ execute_workflow(EngineId, ExecutionSpec) ->
     ExecutionId = maps:get(id, ExecutionSpec),
     Handler = maps:get(workflow_handler, ExecutionSpec),
     Context = maps:get(execution_context, ExecutionSpec, undefined),
+    FirstLaneId = maps:get(first_lane_id, ExecutionSpec, undefined),
 
     InitAns = case ExecutionSpec of
-        #{force_clean_execution := true} -> workflow_execution_state:init(ExecutionId, Handler, Context);
-        _ -> workflow_execution_state:init_using_snapshot(ExecutionId, Handler, Context)
+        #{force_clean_execution := true} -> workflow_execution_state:init(ExecutionId, Handler, Context, FirstLaneId);
+        _ -> workflow_execution_state:init_using_snapshot(ExecutionId, Handler, Context, FirstLaneId)
     end,
 
     case InitAns of
@@ -273,26 +275,16 @@ schedule_next_job(EngineId, DeferredExecutions) ->
                                 ?WF_ERROR_LIMIT_REACHED ->
                                     schedule_next_job(EngineId, [ExecutionId | DeferredExecutions])
                             end;
-                        ?PREPARE_EXECUTION(Handler, ExecutionContext) ->
-                            schedule_prepare_on_pool(EngineId, ExecutionId, Handler, ExecutionContext);
-                        ?END_EXECUTION(Handler, Context, LaneIndex, ErrorEncountered) ->
+                        ?PREPARE_LANE_EXECUTION(Handler, ExecutionContext, LaneId) ->
+                            schedule_lane_prepare_on_pool(EngineId, ExecutionId, Handler, ExecutionContext, LaneId);
+                        ?END_EXECUTION(Handler, Context, KeepSnapshot) ->
                             case workflow_engine_state:remove_execution_id(EngineId, ExecutionId) of
                                 ok ->
-                                    call_handler(ExecutionId, Context, Handler, handle_lane_execution_ended, [LaneIndex]),
                                     call_handler(ExecutionId, Context, Handler, handle_workflow_execution_ended, []),
-                                    case ErrorEncountered of
+                                    case KeepSnapshot of
                                         true -> ok;
                                         false -> workflow_iterator_snapshot:cleanup(ExecutionId)
                                     end,
-                                    workflow_execution_state:cleanup(ExecutionId);
-                                ?WF_ERROR_ALREADY_REMOVED ->
-                                    ok
-                            end,
-                            schedule_next_job(EngineId, DeferredExecutions);
-                        ?END_EXECUTION_AFTER_PREPARATION_ERROR(Handler, Context) ->
-                            case workflow_engine_state:remove_execution_id(EngineId, ExecutionId) of
-                                ok ->
-                                    call_handler(ExecutionId, Context, Handler, handle_workflow_execution_ended, []),
                                     workflow_execution_state:cleanup(ExecutionId);
                                 ?WF_ERROR_ALREADY_REMOVED ->
                                     ok
@@ -338,14 +330,15 @@ schedule_on_pool(EngineId, ExecutionId, #execution_spec{
             ok = worker_pool:cast(?POOL_ID(EngineId), CallArgs)
     end.
 
--spec schedule_prepare_on_pool(
+-spec schedule_lane_prepare_on_pool(
     id(),
     execution_id(),
     workflow_handler:handler(),
-    execution_context()
+    execution_context(),
+    lane_id()
 ) -> ok.
-schedule_prepare_on_pool(EngineId, ExecutionId, Handler, ExecutionContext) ->
-    CallArgs = {?MODULE, prepare_execution, [EngineId, ExecutionId, Handler, ExecutionContext]},
+schedule_lane_prepare_on_pool(EngineId, ExecutionId, Handler, ExecutionContext, LaneId) ->
+    CallArgs = {?MODULE, prepare_lane, [EngineId, ExecutionId, Handler, ExecutionContext, LaneId]},
     ok = worker_pool:cast(?POOL_ID(EngineId), CallArgs).
 
 -spec get_default_keepalive_timeout(id()) -> time:seconds().
@@ -490,22 +483,23 @@ process_result(EngineId, ExecutionId, #execution_spec{
             trigger_job_scheduling(EngineId, ?FOR_CURRENT_SLOT_FIRST)
     end.
 
--spec prepare_execution(
+-spec prepare_lane(
     id(),
     execution_id(),
     workflow_handler:handler(),
-    execution_context()
+    execution_context(),
+    lane_id()
 ) -> ok.
-prepare_execution(EngineId, ExecutionId, Handler, ExecutionContext) ->
+prepare_lane(EngineId, ExecutionId, Handler, ExecutionContext, LaneId) ->
     try
-        Ans = call_handler(ExecutionId, ExecutionContext, Handler, prepare, []),
-        workflow_execution_state:report_execution_prepared(ExecutionId, Handler, ExecutionContext, Ans),
+        Ans = call_handler(ExecutionId, ExecutionContext, Handler, prepare_lane, [LaneId]),
+        workflow_execution_state:report_lane_execution_prepared(ExecutionId, Handler, Ans),
         trigger_job_scheduling(EngineId, ?FOR_CURRENT_SLOT_FIRST)
     catch
         Error:Reason:Stacktrace  ->
             ?error_stacktrace(
-                "Unexpected error preparing execution ~p: ~p:~p",
-                [ExecutionId, Error, Reason],
+                "Unexpected error preparing lane ~p for execution ~p: ~p:~p",
+                [LaneId, ExecutionId, Error, Reason],
                 Stacktrace
             ),
             trigger_job_scheduling(EngineId, ?FOR_CURRENT_SLOT_FIRST)

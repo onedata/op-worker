@@ -69,13 +69,11 @@
 %%%===================================================================
 
 % Macros used to control workflow_engine actions
--define(END_EXECUTION(Handler, Context, LaneIndex, ErrorEncountered),
-    {end_execution, Handler, Context, LaneIndex, ErrorEncountered}).
--define(END_EXECUTION_AFTER_PREPARATION_ERROR(Handler, Context),
-    {end_execution_after_preparation_error, Handler, Context}).
+-define(END_EXECUTION(Handler, Context, KeepSnapshot),
+    {end_execution, Handler, Context, KeepSnapshot}).
 -define(DEFER_EXECUTION, defer_execution).
--define(PREPARE_EXECUTION(Handler, ExecutionContext),
-    {prepare_execution, Handler, ExecutionContext}).
+-define(PREPARE_LANE_EXECUTION(Handler, ExecutionContext, LaneId),
+    {prepare_lane_execution, Handler, ExecutionContext, LaneId}).
 
 % errors returned by workflow_engine_state to control workflow_engine
 -define(WF_ERROR_ALL_SLOTS_USED, {error, all_slots_used}).

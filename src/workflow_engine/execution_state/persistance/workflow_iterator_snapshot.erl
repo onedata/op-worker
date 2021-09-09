@@ -19,7 +19,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([save/4, get/1, cleanup/1]).
+-export([save/5, get/1, cleanup/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1]).
@@ -35,20 +35,22 @@
 -spec save(
     workflow_engine:execution_id(),
     workflow_execution_state:index(),
+    workflow_engine:lane_id(),
     workflow_execution_state:index(),
     iterator:iterator()
 ) -> ok.
-save(ExecutionId, LaneIndex, ItemIndex, Iterator) ->
+save(ExecutionId, LaneIndex, LaneId, ItemIndex, Iterator) ->
     {PrevLaneIndex, PrevIterator} = case ?MODULE:get(ExecutionId) of
         {ok, ReturnedLineIndex, ReturnedIterator} -> {ReturnedLineIndex, ReturnedIterator};
         ?ERROR_NOT_FOUND -> {undefined, undefined}
     end,
-    Record = #workflow_iterator_snapshot{lane_index = LaneIndex, item_index = ItemIndex, iterator = Iterator},
+    Record = #workflow_iterator_snapshot{lane_index = LaneIndex, lane_id = LaneId,
+        item_index = ItemIndex, iterator = Iterator},
     Diff = fun
         (ExistingRecord = #workflow_iterator_snapshot{lane_index = SavedLaneIndex, item_index = SavedItemIndex}) when
             SavedLaneIndex < LaneIndex orelse (SavedLaneIndex == LaneIndex andalso SavedItemIndex < ItemIndex) ->
             {ok, ExistingRecord#workflow_iterator_snapshot{
-                lane_index = LaneIndex, item_index = ItemIndex, iterator = Iterator}};
+                lane_index = LaneIndex, lane_id = LaneId, item_index = ItemIndex, iterator = Iterator}};
         (_) ->
             % Multiple processes have been saving iterators in parallel
             {error, already_saved}
@@ -86,8 +88,10 @@ save(ExecutionId, LaneIndex, ItemIndex, Iterator) ->
     {ok, workflow_execution_state:index(), iterator:iterator()} | ?ERROR_NOT_FOUND.
 get(ExecutionId) ->
     case datastore_model:get(?CTX, ExecutionId) of
-        {ok, #document{value = #workflow_iterator_snapshot{lane_index = LaneIndex, iterator = Iterator}}} ->
-            {ok, LaneIndex, Iterator};
+        {ok, #document{
+            value = #workflow_iterator_snapshot{lane_index = LaneIndex, lane_id = LaneId, iterator = Iterator}
+        }} ->
+            {ok, LaneIndex, LaneId, Iterator};
         ?ERROR_NOT_FOUND ->
             ?ERROR_NOT_FOUND
     end.
@@ -95,7 +99,7 @@ get(ExecutionId) ->
 -spec cleanup(workflow_engine:execution_id()) -> ok.
 cleanup(ExecutionId) ->
     case ?MODULE:get(ExecutionId) of
-        {ok, _LaneIndex, Iterator} ->
+        {ok, _LaneIndex, _LaneId, Iterator} ->
             mark_exhausted(Iterator, ExecutionId),
             ok = datastore_model:delete(?CTX, ExecutionId);
         ?ERROR_NOT_FOUND ->
