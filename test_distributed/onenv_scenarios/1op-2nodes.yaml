@@ -59,6 +59,10 @@ forceImagePull: false
 # By default spaces supported by all providers are created. For custom
 # space configuration please refer to one of MyValues.yaml file in
 # scenario directory.
+storages:
+  - s3
+
+
 users:
   - &user1
     name: user1
@@ -81,5 +85,5 @@ spaces:
       - user: *user2
     supports:
       - provider: "oneprovider-1"
-        storage_name: "posix"
+        storage_name: "s3"
         size: '1073741824'
