@@ -106,25 +106,25 @@ create_store_with_invalid_args_test(_Config) ->
         {undefined, ?ERROR_ATM_STORE_MISSING_REQUIRED_INITIAL_VALUE},
         {#{}, ?ERROR_MISSING_REQUIRED_VALUE(<<"end">>)},
         {#{<<"end">> => <<"NaN">>},
-            ?ERROR_ATM_BAD_DATA(<<"end">>, ?ERROR_ATM_DATA_TYPE_UNVERIFIED(<<"NaN">>, atm_integer_type))
+            ?ERROR_BAD_DATA(<<"end">>, ?ERROR_ATM_DATA_TYPE_UNVERIFIED(<<"NaN">>, atm_integer_type))
         },
         {#{<<"start">> => <<"NaN">>, <<"end">> => 10},
-            ?ERROR_ATM_BAD_DATA(<<"start">>, ?ERROR_ATM_DATA_TYPE_UNVERIFIED(<<"NaN">>, atm_integer_type))
+            ?ERROR_BAD_DATA(<<"start">>, ?ERROR_ATM_DATA_TYPE_UNVERIFIED(<<"NaN">>, atm_integer_type))
         },
         {#{<<"start">> => 5, <<"end">> => 10, <<"step">> => <<"NaN">>},
-            ?ERROR_ATM_BAD_DATA(<<"step">>, ?ERROR_ATM_DATA_TYPE_UNVERIFIED(<<"NaN">>, atm_integer_type))
+            ?ERROR_BAD_DATA(<<"step">>, ?ERROR_ATM_DATA_TYPE_UNVERIFIED(<<"NaN">>, atm_integer_type))
         },
         {#{<<"start">> => 5, <<"end">> => 10, <<"step">> => 0},
-            ?ERROR_ATM_BAD_DATA(<<"range">>, <<"invalid range specification">>)
+            ?ERROR_BAD_DATA(<<"range">>, <<"invalid range specification">>)
         },
         {#{<<"start">> => 15, <<"end">> => 10, <<"step">> => 1},
-            ?ERROR_ATM_BAD_DATA(<<"range">>, <<"invalid range specification">>)
+            ?ERROR_BAD_DATA(<<"range">>, <<"invalid range specification">>)
         },
         {#{<<"start">> => -15, <<"end">> => -10, <<"step">> => -1},
-            ?ERROR_ATM_BAD_DATA(<<"range">>, <<"invalid range specification">>)
+            ?ERROR_BAD_DATA(<<"range">>, <<"invalid range specification">>)
         },
         {#{<<"start">> => 10, <<"end">> => 15, <<"step">> => -1},
-            ?ERROR_ATM_BAD_DATA(<<"range">>, <<"invalid range specification">>)
+            ?ERROR_BAD_DATA(<<"range">>, <<"invalid range specification">>)
         }
     ]).
 

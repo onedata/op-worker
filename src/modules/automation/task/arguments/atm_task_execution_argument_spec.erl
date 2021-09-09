@@ -235,4 +235,4 @@ validate_value(AtmJobCtx, ArgsBatch, #atm_task_execution_argument_spec{
     end, ArgsBatch);
 
 validate_value(_AtmWorkflowExecutionAuth, _ArgsBatch, _AtmTaskExecutionArgSpec) ->
-    throw(?ERROR_ATM_BAD_DATA(<<"value">>, <<"not a batch">>)).
+    throw(?ERROR_BAD_DATA(<<"value">>, <<"not a batch">>)).

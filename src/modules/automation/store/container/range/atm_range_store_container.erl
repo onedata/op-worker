@@ -187,7 +187,7 @@ validate_range(AtmWorkflowExecutionAuth, AtmDataSpec, StartNum, EndNum, Step) ->
         try
             atm_value:validate(AtmWorkflowExecutionAuth, ArgValue, AtmDataSpec)
         catch throw:Reason  ->
-            throw(?ERROR_ATM_BAD_DATA(ArgName, Reason))
+            throw(?ERROR_BAD_DATA(ArgName, Reason))
         end
     end, [
         {<<"start">>, StartNum},
@@ -204,4 +204,4 @@ assert_proper_range(Start, End, Step) when Start =< End, Step > 0 ->
 assert_proper_range(Start, End, Step) when Start >= End, Step < 0 ->
     ok;
 assert_proper_range(_Start, _End, _Step) ->
-    throw(?ERROR_ATM_BAD_DATA(<<"range">>, <<"invalid range specification">>)).
+    throw(?ERROR_BAD_DATA(<<"range">>, <<"invalid range specification">>)).

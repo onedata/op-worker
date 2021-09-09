@@ -206,7 +206,7 @@ check_openfaas_availability() ->
                     [Class, Reason],
                     Stacktrace
                 ),
-                ?ERROR_ATM_INTERNAL_SERVER_ERROR
+                ?ERROR_INTERNAL_SERVER_ERROR
         end,
         {ok, HealthcheckResult, ?HEALTHCHECK_CACHE_TTL_SECONDS}
     end),
@@ -216,10 +216,11 @@ check_openfaas_availability() ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Build name for function under which it will be registered in OpenFaaS service
-%% taking into account following limitations (enforced by OpenFaaS):
-%% - max 63 characters
-%% - alphanumeric and '-' characters only
+%% Build name for function under which it will be registered in OpenFaaS service.
+%% To be accepted the name must consist of lower case alphanumeric characters
+%% or '-', start with an alphabetic character, and end with an alphanumeric
+%% character (e.g. 'my-name',  or 'abc-123', regex used for validation by
+%% OpenFaaS service is '[a-z]([-a-z0-9]{0,61}[a-z0-9])?').
 %% @end
 %%--------------------------------------------------------------------
 -spec build_function_name(atm_workflow_execution:id(), od_atm_lambda:doc()) ->
@@ -229,21 +230,27 @@ build_function_name(AtmWorkflowExecutionId, #document{
     value = #od_atm_lambda{name = AtmLambdaName}
 }) ->
     Signature = str_utils:md5_digest([AtmWorkflowExecutionId, AtmLambdaId]),
-    SanitizedAtmLambdaName = <<
-        <<(sanitize_character(Char))/integer>> || <<Char>> <= AtmLambdaName
-    >>,
 
-    str_utils:format_bin("~s-~s-~s", [
+    Name = str_utils:format_bin("w~s-s~s-~s", [
         binary:part(AtmWorkflowExecutionId, 0, min(size(AtmWorkflowExecutionId), 10)),
         binary:part(Signature, 0, min(size(Signature), 10)),
-        binary:part(SanitizedAtmLambdaName, 0, min(size(SanitizedAtmLambdaName), 41))
-    ]).
+        binary:part(AtmLambdaName, 0, min(size(AtmLambdaName), 39))
+    ]),
+    SanitizedName = << <<(sanitize_character(Char))/integer>> || <<Char>> <= Name>>,
+
+    case binary:last(SanitizedName) == $- of
+        true ->
+            TrimmedSanitizedName = binary:part(SanitizedName, 0, size(SanitizedName)-1),
+            <<TrimmedSanitizedName/binary, "x">>;
+        false ->
+            SanitizedName
+    end.
 
 
 %% @private
 -spec sanitize_character(integer()) -> integer().
 sanitize_character(Char) when Char >= $a, Char =< $z -> Char;
-sanitize_character(Char) when Char >= $A, Char =< $Z -> Char;
+sanitize_character(Char) when Char >= $A, Char =< $Z -> Char + 32;
 sanitize_character(Char) when Char >= $0, Char =< $9 -> Char;
 sanitize_character(_) -> $-.
 
