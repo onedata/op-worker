@@ -70,7 +70,7 @@ all() -> [
 
 
 registering_upload_for_directory_should_fail_test(_Config) ->
-    [#object{guid = DirGuid}] = onenv_file_test_utils:create_and_sync_file_tree(
+    #object{guid = DirGuid} = onenv_file_test_utils:create_and_sync_file_tree(
         user1, space_krk, #dir_spec{}
     ),
     ?assertMatch(
@@ -80,7 +80,7 @@ registering_upload_for_directory_should_fail_test(_Config) ->
 
 
 registering_upload_for_non_empty_file_should_fail_test(_Config) ->
-    [#object{guid = FileGuid}] = onenv_file_test_utils:create_and_sync_file_tree(
+    #object{guid = FileGuid} = onenv_file_test_utils:create_and_sync_file_tree(
         user1, space_krk, #file_spec{content = crypto:strong_rand_bytes(5)}
     ),
     ?assertMatch(
@@ -90,8 +90,8 @@ registering_upload_for_non_empty_file_should_fail_test(_Config) ->
 
 
 registering_upload_for_not_owned_file_should_fail_test(_Config) ->
-    [#object{guid = FileGuid}] = onenv_file_test_utils:create_and_sync_file_tree(
-        user1, space_krk, #file_spec{content = crypto:strong_rand_bytes(5)}
+    #object{guid = FileGuid} = onenv_file_test_utils:create_and_sync_file_tree(
+        user1, space_krk, #file_spec{}
     ),
     ?assertMatch(
         ?ERROR_BAD_DATA(<<"guid">>, <<"file is not owned by user">>),
@@ -100,7 +100,7 @@ registering_upload_for_not_owned_file_should_fail_test(_Config) ->
 
 
 not_registered_upload_should_fail_test(_Config) ->
-    [#object{guid = FileGuid}] = onenv_file_test_utils:create_and_sync_file_tree(
+    #object{guid = FileGuid} = onenv_file_test_utils:create_and_sync_file_tree(
         user1, space_krk, #file_spec{content = crypto:strong_rand_bytes(5)}
     ),
 
@@ -123,7 +123,7 @@ not_registered_upload_should_fail_test(_Config) ->
 
 
 upload_test(_Config) ->
-    [#object{guid = FileGuid}] = onenv_file_test_utils:create_and_sync_file_tree(
+    #object{guid = FileGuid} = onenv_file_test_utils:create_and_sync_file_tree(
         user1, space_krk, #file_spec{}
     ),
 
@@ -139,7 +139,7 @@ upload_test(_Config) ->
 
 
 stale_upload_file_should_be_deleted_test(_Config) ->
-    [#object{guid = FileGuid}] = onenv_file_test_utils:create_and_sync_file_tree(
+    #object{guid = FileGuid} = onenv_file_test_utils:create_and_sync_file_tree(
         user1, space_krk, #file_spec{}
     ),
 
@@ -171,7 +171,7 @@ stale_upload_file_should_be_deleted_test(_Config) ->
 
 
 upload_with_backward_time_warps_test(_Config) ->
-    [#object{guid = FileGuid}] = onenv_file_test_utils:create_and_sync_file_tree(
+    #object{guid = FileGuid} = onenv_file_test_utils:create_and_sync_file_tree(
         user1, space_krk, #file_spec{}
     ),
 
@@ -192,7 +192,7 @@ upload_with_backward_time_warps_test(_Config) ->
 
 
 upload_with_forward_time_warps_test(_Config) ->
-    [#object{guid = FileGuid}] = onenv_file_test_utils:create_and_sync_file_tree(
+    #object{guid = FileGuid} = onenv_file_test_utils:create_and_sync_file_tree(
         user1, space_krk, #file_spec{}
     ),
     ?assertMatch({ok, _}, initialize_gui_upload(krakow, user1, FileGuid)),
@@ -429,11 +429,13 @@ assert_file_uploaded(ProviderSelector, UserSelector, FileGuid, ExpSize) ->
 -spec mock_cowboy_multipart(oct_background:entity_selector()) -> ok.
 mock_cowboy_multipart(ProviderPlaceholder) ->
     Nodes = oct_background:get_provider_nodes(ProviderPlaceholder),
+
     ok = test_utils:mock_new(Nodes, cow_multipart),
-    ok = test_utils:mock_new(Nodes, cowboy_req),
     ok = test_utils:mock_expect(Nodes, cow_multipart, form_data,
         fun(_) -> {file, ok, ok, ok} end
     ),
+
+    ok = test_utils:mock_new(Nodes, cowboy_req),
     ok = test_utils:mock_expect(Nodes, cowboy_req, read_part,
         fun
             (#{done := true} = Req) ->
