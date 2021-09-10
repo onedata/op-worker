@@ -9,15 +9,13 @@
 %%% This file contains tests concerning file upload via REST API.
 %%% @end
 %%%-------------------------------------------------------------------
--module(api_file_upload_test_SUITE).
+-module(api_file_upload_rest_test_SUITE).
 -author("Bartosz Walkowicz").
 
 -include("api_file_test_utils.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("onenv_test_utils.hrl").
 -include("proto/oneclient/common_messages.hrl").
--include_lib("ctool/include/http/codes.hrl").
--include_lib("ctool/include/http/headers.hrl").
 -include_lib("ctool/include/privileges.hrl").
 
 -export([
@@ -27,13 +25,13 @@
 ]).
 
 -export([
-    rest_create_file_test/1,
-    rest_update_file_content_test/1
+    create_file_test/1,
+    update_file_content_test/1
 ]).
 
 all() -> [
-    rest_create_file_test,
-    rest_update_file_content_test
+    create_file_test,
+    update_file_content_test
 ].
 
 
@@ -41,11 +39,11 @@ all() -> [
 
 
 %%%===================================================================
-%%% REST File upload test functions
+%%% Test functions
 %%%===================================================================
 
 
-rest_create_file_test(_Config) ->
+create_file_test(_Config) ->
     Providers = lists:flatten([
         oct_background:get_provider_nodes(krakow),
         oct_background:get_provider_nodes(paris)
@@ -93,9 +91,9 @@ rest_create_file_test(_Config) ->
                 forbidden_in_space = [{user4, ?ERROR_POSIX(?EACCES)}]  % forbidden by file perms
             },
 
-            prepare_args_fun = build_rest_create_file_prepare_args_fun(MemRef, DirObjectId),
-            validate_result_fun = build_rest_create_file_validate_call_fun(MemRef, SpaceOwnerId),
-            verify_fun = build_rest_create_file_verify_fun(MemRef, DirGuid, Providers),
+            prepare_args_fun = build_create_file_prepare_args_fun(MemRef, DirObjectId),
+            validate_result_fun = build_create_file_validate_call_fun(MemRef, SpaceOwnerId),
+            verify_fun = build_create_file_verify_fun(MemRef, DirGuid, Providers),
 
             data_spec = api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
                 DirGuid, DirShareId, #data_spec{
@@ -151,9 +149,9 @@ rest_create_file_test(_Config) ->
 
 
 %% @private
--spec build_rest_create_file_prepare_args_fun(api_test_memory:mem_ref(), file_id:objectid()) ->
+-spec build_create_file_prepare_args_fun(api_test_memory:mem_ref(), file_id:objectid()) ->
     onenv_api_test_runner:prepare_args_fun().
-build_rest_create_file_prepare_args_fun(MemRef, ParentDirObjectId) ->
+build_create_file_prepare_args_fun(MemRef, ParentDirObjectId) ->
     fun(#api_test_ctx{data = Data0}) ->
         {ParentId, Data1} = api_test_utils:maybe_substitute_bad_id(ParentDirObjectId, Data0),
 
@@ -176,9 +174,9 @@ build_rest_create_file_prepare_args_fun(MemRef, ParentDirObjectId) ->
 
 
 %% @private
--spec build_rest_create_file_validate_call_fun(api_test_memory:mem_ref(), od_user:id()) ->
+-spec build_create_file_validate_call_fun(api_test_memory:mem_ref(), od_user:id()) ->
     onenv_api_test_runner:validate_call_result_fun().
-build_rest_create_file_validate_call_fun(MemRef, SpaceOwnerId) ->
+build_create_file_validate_call_fun(MemRef, SpaceOwnerId) ->
     fun(#api_test_ctx{
         node = TestNode,
         client = #auth{subject = #subject{id = UserId}},
@@ -216,9 +214,9 @@ build_rest_create_file_validate_call_fun(MemRef, SpaceOwnerId) ->
 
 
 %% @private
--spec build_rest_create_file_verify_fun(api_test_memory:mem_ref(), file_id:file_guid(), [node()]) ->
+-spec build_create_file_verify_fun(api_test_memory:mem_ref(), file_id:file_guid(), [node()]) ->
     boolean().
-build_rest_create_file_verify_fun(MemRef, DirGuid, Providers) ->
+build_create_file_verify_fun(MemRef, DirGuid, Providers) ->
     fun
         (expected_failure, #api_test_ctx{node = TestNode}) ->
             ExpFilesInDir = api_test_memory:get(MemRef, files),
@@ -253,7 +251,7 @@ build_rest_create_file_verify_fun(MemRef, DirGuid, Providers) ->
 
                     case ExpType of
                         ?REGULAR_FILE_TYPE ->
-                            verify_rest_file_content_update(
+                            verify_file_content_update(
                                 FileGuid, TestNode, TestNode, Providers, <<>>,
                                 maps:get(<<"offset">>, Data, undefined), maps:get(body, Data, <<>>)
                             );
@@ -278,7 +276,7 @@ ls(Node, DirGuid) ->
     end.
 
 
-rest_update_file_content_test(_Config) ->
+update_file_content_test(_Config) ->
     Providers = lists:flatten([
         oct_background:get_provider_nodes(krakow),
         oct_background:get_provider_nodes(paris)
@@ -316,10 +314,10 @@ rest_update_file_content_test(_Config) ->
                 forbidden_in_space = [{user4, ?ERROR_POSIX(?EACCES)}]  % forbidden by file perms
             },
 
-            setup_fun = build_rest_update_file_content_setup_fun(MemRef, OriginalFileContent),
-            prepare_args_fun = build_rest_update_file_content_prepare_args_fun(MemRef),
-            validate_result_fun = build_rest_update_file_content_validate_call_fun(),
-            verify_fun = build_rest_update_file_content_verify_fun(MemRef, OriginalFileContent),
+            setup_fun = build_update_file_content_setup_fun(MemRef, OriginalFileContent),
+            prepare_args_fun = build_update_file_content_prepare_args_fun(MemRef),
+            validate_result_fun = build_update_file_content_validate_call_fun(),
+            verify_fun = build_update_file_content_verify_fun(MemRef, OriginalFileContent),
 
             data_spec = api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
                 DirGuid, DirShareId, #data_spec{
@@ -348,12 +346,12 @@ rest_update_file_content_test(_Config) ->
 
 
 %% @private
--spec build_rest_update_file_content_setup_fun(
+-spec build_update_file_content_setup_fun(
     api_test_memory:mem_ref(),
     FileContent :: binary()
 ) ->
     onenv_api_test_runner:setup_fun().
-build_rest_update_file_content_setup_fun(MemRef, Content) ->
+build_update_file_content_setup_fun(MemRef, Content) ->
     UserSessIdP1 = oct_background:get_user_session_id(user3, krakow),
     [P1Node] = oct_background:get_provider_nodes(krakow),
     [P2Node] = oct_background:get_provider_nodes(paris),
@@ -374,9 +372,9 @@ build_rest_update_file_content_setup_fun(MemRef, Content) ->
 
 
 %% @private
--spec build_rest_update_file_content_prepare_args_fun(api_test_memory:mem_ref()) ->
+-spec build_update_file_content_prepare_args_fun(api_test_memory:mem_ref()) ->
     onenv_api_test_runner:prepare_args_fun().
-build_rest_update_file_content_prepare_args_fun(MemRef) ->
+build_update_file_content_prepare_args_fun(MemRef) ->
     fun(#api_test_ctx{data = Data0}) ->
         FileGuid = api_test_memory:get(MemRef, file_guid),
         {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
@@ -394,21 +392,21 @@ build_rest_update_file_content_prepare_args_fun(MemRef) ->
 
 
 %% @private
--spec build_rest_update_file_content_validate_call_fun() ->
+-spec build_update_file_content_validate_call_fun() ->
     onenv_api_test_runner:validate_call_result_fun().
-build_rest_update_file_content_validate_call_fun() ->
+build_update_file_content_validate_call_fun() ->
     fun(#api_test_ctx{}, {ok, RespCode, _RespHeaders, _RespBody}) ->
         ?assertEqual(?HTTP_204_NO_CONTENT, RespCode)
     end.
 
 
 %% @private
--spec build_rest_update_file_content_verify_fun(
+-spec build_update_file_content_verify_fun(
     api_test_memory:mem_ref(),
     OriginalFileContent :: binary()
 ) ->
     boolean().
-build_rest_update_file_content_verify_fun(MemRef, OriginalFileContent) ->
+build_update_file_content_verify_fun(MemRef, OriginalFileContent) ->
     [CreationNode = P1Node] = oct_background:get_provider_nodes(krakow),
     [P2Node] = oct_background:get_provider_nodes(paris),
     AllProviders = [P1Node, P2Node],
@@ -424,7 +422,7 @@ build_rest_update_file_content_verify_fun(MemRef, OriginalFileContent) ->
             Offset = maps:get(<<"offset">>, Data, undefined),
             DataSent = maps:get(body, Data, <<>>),
 
-            verify_rest_file_content_update(
+            verify_file_content_update(
                 FileGuid, CreationNode, UpdateNode, AllProviders,
                 OriginalFileContent, Offset, DataSent
             )
@@ -432,7 +430,7 @@ build_rest_update_file_content_verify_fun(MemRef, OriginalFileContent) ->
 
 
 %% @private
--spec verify_rest_file_content_update(
+-spec verify_file_content_update(
     file_id:file_guid(),
     CreationNode :: node(),
     UpdateNode :: node(),
@@ -442,7 +440,7 @@ build_rest_update_file_content_verify_fun(MemRef, OriginalFileContent) ->
     DataSent :: binary()
 ) ->
     true.
-verify_rest_file_content_update(
+verify_file_content_update(
     FileGuid, CreationNode, UpdateNode, AllProviders,
     OriginalContent, Offset, DataSent
 ) ->
