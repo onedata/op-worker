@@ -41,7 +41,7 @@
 ) -> ok.
 save(ExecutionId, LaneIndex, LaneId, ItemIndex, Iterator) ->
     {PrevLaneIndex, PrevIterator} = case ?MODULE:get(ExecutionId) of
-        {ok, ReturnedLineIndex, ReturnedIterator} -> {ReturnedLineIndex, ReturnedIterator};
+        {ok, ReturnedLineIndex, _ReturnedLineId, ReturnedIterator} -> {ReturnedLineIndex, ReturnedIterator};
         ?ERROR_NOT_FOUND -> {undefined, undefined}
     end,
     Record = #workflow_iterator_snapshot{lane_index = LaneIndex, lane_id = LaneId,
@@ -85,7 +85,7 @@ save(ExecutionId, LaneIndex, LaneId, ItemIndex, Iterator) ->
     end.
 
 -spec get(workflow_engine:execution_id()) ->
-    {ok, workflow_execution_state:index(), iterator:iterator()} | ?ERROR_NOT_FOUND.
+    {ok, workflow_execution_state:index(), workflow_engine:lane_id(), iterator:iterator()} | ?ERROR_NOT_FOUND.
 get(ExecutionId) ->
     case datastore_model:get(?CTX, ExecutionId) of
         {ok, #document{
