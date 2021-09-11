@@ -38,7 +38,7 @@
 ]).
 
 % Exported for rpc calls
--export([upload_chunk/5]).
+-export([force_uploads_check/0, upload_chunk/5]).
 
 groups() -> [
     {parallel_tests, [parallel], [
@@ -146,14 +146,14 @@ stale_upload_file_should_be_deleted_test(_Config) ->
     ?assertMatch({ok, _}, initialize_gui_upload(krakow, user1, FileGuid)),
     ?assertMatch(true, authorize_chunk_upload(krakow, user1, FileGuid)),
 
-    [StallProcess | StallProcesses] = spawn_stall_processes(krakow, user1, FileGuid),
+    [StallProcess | RestStallProcesses] = spawn_stall_processes(krakow, user1, FileGuid),
 
     % upload should not be removed as long as there is at least one uploading process alive
     time_test_utils:simulate_seconds_passing(1000),
     force_stale_uploads_removal(krakow),
     ?assertMatch(true, authorize_chunk_upload(krakow, user1, FileGuid)),
 
-    lists:foreach(fun stop_stall_process/1, StallProcesses),
+    lists:foreach(fun stop_stall_process/1, RestStallProcesses),
     time_test_utils:simulate_seconds_passing(1000),
     force_stale_uploads_removal(krakow),
     ?assertMatch(true, authorize_chunk_upload(krakow, user1, FileGuid)),
@@ -249,7 +249,7 @@ end_per_group(_Group, Config) ->
 
 
 init_per_testcase(_Case, Config) ->
-    ct:timetrap({minutes, 5}),
+    ct:timetrap({minutes, 3}),
     Config.
 
 
@@ -361,7 +361,16 @@ stop_stall_process(Pid) ->
 -spec force_stale_uploads_removal(oct_background:entity_selector()) -> ok.
 force_stale_uploads_removal(ProviderSelector) ->
     Node = oct_background:get_random_provider_node(ProviderSelector),
-    {file_upload_manager, Node} ! check_uploads,  %% TODO fix
+    ?assertMatch(ok, rpc:call(Node, ?MODULE, force_uploads_check, [])).
+
+
+-spec force_uploads_check() -> ok.
+force_uploads_check() ->
+    FileUploadManagerPid = global:whereis_name(file_upload_manager),
+    FileUploadManagerPid ! check_uploads,
+
+    % Send next request and await response to know that previous one was processed
+    {error, wrong_request} = gen_server2:call(FileUploadManagerPid, wrong_request),
     ok.
 
 

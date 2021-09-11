@@ -120,6 +120,7 @@ deregister_upload(UserId, FileGuid) ->
 %%--------------------------------------------------------------------
 -spec init(Args :: term()) -> {ok, state(), hibernate}.
 init(_) ->
+    process_flag(trap_exit, true),
     {ok, #state{}, hibernate}.
 
 
