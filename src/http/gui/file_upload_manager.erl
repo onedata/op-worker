@@ -134,12 +134,22 @@ init(_) ->
     {reply, Reply :: term(), NewState :: state()} |
     {reply, Reply :: term(), NewState :: state(), hibernate}.
 handle_call(?REGISTER_UPLOAD_REQ(UserId, FileGuid), _, #state{uploads = Uploads} = State) ->
-    UploadCtx = #upload_ctx{
-        user_id = UserId,
-        monitors = ordsets:new(),
-        latest_activity_timestamp = ?NOW()
-    },  %% TODO check if not registered ?
-    reply(ok, State#state{uploads = Uploads#{FileGuid => UploadCtx}});
+    case maps:find(FileGuid, Uploads) of
+        {ok, #upload_ctx{user_id = UserId} = UploadCtx} ->
+            reply(ok, State#state{uploads = Uploads#{FileGuid => UploadCtx#upload_ctx{
+                latest_activity_timestamp = ?NOW()
+            }}});
+        {ok, _} ->
+            % upload registered by other user
+            reply(?ERROR_FORBIDDEN, State);
+        error ->
+            UploadCtx = #upload_ctx{
+                user_id = UserId,
+                monitors = ordsets:new(),
+                latest_activity_timestamp = ?NOW()
+            },
+            reply(ok, State#state{uploads = Uploads#{FileGuid => UploadCtx}})
+    end;
 
 handle_call(?AUTHORIZE_CHUNK_UPLOAD(UserId, FileGuid), {ClientPid, _}, State = #state{
     uploads = Uploads,
@@ -211,6 +221,7 @@ handle_info({'DOWN', Monitor, process, _, _}, State = #state{
 }) ->
     NewState = case maps:take(Monitor, MonitorToFileMapping) of
         error ->
+            % potential race with deregistering upload
             State;
         {FileGuid, NewMonitorToFileMapping} ->
             UploadCtx = #upload_ctx{monitors = Monitors} = maps:get(FileGuid, Uploads),
