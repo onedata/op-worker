@@ -1202,7 +1202,8 @@
     % Field used to return additional information about document update procedure
     % (datastore:update returns {ok, #document{}} or {error, term()}
     % so such information has to be returned via record's field).
-    update_report :: workflow_execution_state:update_report() | undefined
+    update_report :: workflow_execution_state:update_report() | undefined,
+    waiting_notifications = [] :: [workflow_jobs:job_identifier()]
 }).
 
 -record(workflow_async_call_pool, {

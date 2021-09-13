@@ -501,6 +501,7 @@ maybe_notify_task_execution_ended(#document{key = ExecutionId, value = #workflow
 }}, JobIdentifier, true = _NotifyTaskExecutionEnded) ->
     {TaskId, _TaskSpec} = workflow_jobs:get_task_details(JobIdentifier, BoxesSpec),
     workflow_engine:call_handler(ExecutionId, Context, Handler, handle_task_execution_ended, [TaskId]),
+    {ok, _} = update(ExecutionId, fun(State) -> remove_waiting_notification(State, JobIdentifier) end),
     ok.
 
 -spec update(workflow_engine:execution_id(), update_fun()) -> {ok, doc()} | {error, term()}.
@@ -797,10 +798,11 @@ prepare_next_parallel_box(State = #workflow_execution_state{
 }, JobIdentifier) ->
     case workflow_jobs:prepare_next_parallel_box(Jobs, JobIdentifier, BoxesSpec, BoxCount) of
         {ok, NewJobs} ->
-            {ok, State#workflow_execution_state{
+            NotifyTaskFinished = workflow_jobs:is_task_finished(NewJobs, JobIdentifier),
+            {ok, maybe_add_waiting_notification(State#workflow_execution_state{
                 jobs = NewJobs,
-                update_report = ?TASK_PROCESSED_REPORT(workflow_jobs:is_task_finished(NewJobs, JobIdentifier))
-            }};
+                update_report = ?TASK_PROCESSED_REPORT(NotifyTaskFinished)
+            }, JobIdentifier, NotifyTaskFinished)};
         {?WF_ERROR_ITEM_PROCESSING_FINISHED(ItemIndex, SuccessOrFailure), NewJobs} ->
             {NewIterationState, ItemIdToSnapshot, ItemIdsToDelete} =
                 workflow_iteration_state:handle_item_processed(IterationState, ItemIndex, SuccessOrFailure),
@@ -814,14 +816,26 @@ prepare_next_parallel_box(State = #workflow_execution_state{
                     end
             end,
             NotifyTaskFinished = workflow_jobs:is_task_finished(NewJobs, JobIdentifier),
-            {ok, State#workflow_execution_state{
+            {ok, maybe_add_waiting_notification(State#workflow_execution_state{
                 jobs = NewJobs,
                 iteration_state = NewIterationState,
                 update_report = #items_processed_report{lane_index = LaneIndex, lane_id = LaneId,
                     last_finished_item_index = ItemIndex, item_id_to_snapshot = FinalItemIdToSnapshot,
                     item_ids_to_delete = ItemIdsToDelete, notify_task_finished = NotifyTaskFinished}
-            }}
+            }, JobIdentifier, NotifyTaskFinished)}
     end.
+
+-spec maybe_add_waiting_notification(state(), workflow_jobs:job_identifier(), boolean()) -> state().
+maybe_add_waiting_notification(#workflow_execution_state{waiting_notifications = WaitingNotifications} = State,
+    JobIdentifier, true = _TaskFinished) ->
+    State#workflow_execution_state{waiting_notifications = [JobIdentifier | WaitingNotifications]};
+maybe_add_waiting_notification(State, _JobIdentifier, false = _TaskFinished) ->
+    State.
+
+-spec remove_waiting_notification(state(), workflow_jobs:job_identifier()) -> {ok, state()}.
+remove_waiting_notification(#workflow_execution_state{waiting_notifications = WaitingNotifications} = State,
+    JobIdentifier) ->
+    {ok, State#workflow_execution_state{waiting_notifications = WaitingNotifications -- [JobIdentifier]}}.
 
 -spec reset_keepalive_timer_internal(state(), workflow_jobs:job_identifier()) -> {ok, state()}.
 reset_keepalive_timer_internal(State = #workflow_execution_state{
@@ -873,6 +887,8 @@ report_job_finish(State = #workflow_execution_state{
 
 -spec handle_no_waiting_items_error(state(), ?WF_ERROR_NO_WAITING_ITEMS | ?ERROR_NOT_FOUND) -> no_items_error().
 handle_no_waiting_items_error(#workflow_execution_state{current_lane = #current_lane{id = undefined}}, _Error) ->
+    ?WF_ERROR_NO_WAITING_ITEMS;
+handle_no_waiting_items_error(#workflow_execution_state{waiting_notifications = []}, _Error) ->
     ?WF_ERROR_NO_WAITING_ITEMS;
 handle_no_waiting_items_error(#workflow_execution_state{
     current_lane = #current_lane{index = LaneIndex, id = LaneId, execution_context = LaneContext},
