@@ -1073,8 +1073,7 @@ truncate_on_storage_does_not_block_synchronizer(Config0) ->
 
 recreate_file_on_storage(Config0) ->
     User = <<"user1">>,
-%%    Config = multi_provider_file_ops_test_base:extend_config(Config0, User, {4,0,0,2}, 60),
-    Config = multi_provider_file_ops_test_base:extend_config(Config0, User, {2,0,0,1}, 60),
+    Config = multi_provider_file_ops_test_base:extend_config(Config0, User, {4,0,0,2}, 60),
     Worker1 = ?config(worker1, Config),
     [Worker2 | _] = ?config(workers2, Config),
     Workers = ?config(op_worker_nodes, Config),

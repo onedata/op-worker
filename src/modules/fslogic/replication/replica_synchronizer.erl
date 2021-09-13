@@ -871,7 +871,6 @@ handle_retry(FailedRef, ErrorStatus, #state{retries_number = Retries} = State) -
     MaxRetriesNum = ?MAX_RETRIES,
     case RetriesNum >= MaxRetriesNum of
         true ->
-            ?error("eeeee ~p", [FailedRef]),
             handle_error(FailedRef, ErrorStatus, State);
         false ->
             Delay = min(round(?MIN_BACKOFF * math:pow(?BACKOFF_RATE, RetriesNum)), ?MAX_BACKOFF),
