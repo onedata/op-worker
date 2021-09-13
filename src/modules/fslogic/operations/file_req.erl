@@ -24,7 +24,7 @@
     fsync/4, release/3, flush_event_queue/2]).
 
 %% Export for RPC
--export([open_on_storage/4]).
+-export([open_on_storage/5]).
 
 %% Exported for mocking in test
 -export([create_file_doc/4]).
@@ -563,7 +563,7 @@ open_file_internal(UserCtx, FileCtx0, Flag, HandleId0, NewFile, CheckLocationExi
     try
         {FileLocation, FileCtx3} = create_location(FileCtx2, UserCtx, NewFile, CheckLocationExists),
         IsDirectIO = user_ctx:is_direct_io(UserCtx, SpaceID) andalso HandleId0 =:= undefined,
-        maybe_open_on_storage(FileCtx3, SessId, Flag, IsDirectIO, HandleId),
+        maybe_open_on_storage(UserCtx, FileCtx3, SessId, Flag, IsDirectIO, HandleId),
         {HandleId, FileLocation, FileCtx3}
     catch
         throw:?EROFS ->
@@ -588,13 +588,13 @@ open_file_internal(UserCtx, FileCtx0, Flag, HandleId0, NewFile, CheckLocationExi
 %% Opens a file on storage if needed. Chooses appropriate node.
 %% @end
 %%--------------------------------------------------------------------
--spec maybe_open_on_storage(file_ctx:ctx(), session:id(), fslogic_worker:open_flag(),
+-spec maybe_open_on_storage(user_ctx:ctx(), file_ctx:ctx(), session:id(), fslogic_worker:open_flag(),
     DirectIO :: boolean(), handle_id()) -> ok | no_return().
-maybe_open_on_storage(_FileCtx, _SessId, _Flag, true, _) ->
+maybe_open_on_storage(_UserCtx, _FileCtx, _SessId, _Flag, true, _) ->
     ok; % Files are not open on server-side when client uses directIO
-maybe_open_on_storage(FileCtx, SessId, Flag, _DirectIO, HandleId) ->
+maybe_open_on_storage(UserCtx, FileCtx, SessId, Flag, _DirectIO, HandleId) ->
     Node = read_write_req:get_proxyio_node(file_ctx:get_logical_uuid_const(FileCtx)),
-    case rpc:call(Node, ?MODULE, open_on_storage, [FileCtx, SessId, Flag, HandleId]) of
+    case rpc:call(Node, ?MODULE, open_on_storage, [UserCtx, FileCtx, SessId, Flag, HandleId]) of
         ok -> ok;
         {error, Reason} ->
             throw(Reason)
@@ -607,14 +607,22 @@ maybe_open_on_storage(FileCtx, SessId, Flag, _DirectIO, HandleId) ->
 %% Opens a file on storage.
 %% @end
 %%--------------------------------------------------------------------
--spec open_on_storage(file_ctx:ctx(), session:id(), fslogic_worker:open_flag(),
+-spec open_on_storage(user_ctx:ctx(), file_ctx:ctx(), session:id(), fslogic_worker:open_flag(),
     handle_id()) -> ok | no_return().
-open_on_storage(FileCtx, SessId, Flag, HandleId) ->
-    {SDHandle, _FileCtx2} = storage_driver:new_handle(SessId, FileCtx),
+open_on_storage(UserCtx, FileCtx, SessId, Flag, HandleId) ->
+    {SDHandle, FileCtx2} = storage_driver:new_handle(SessId, FileCtx),
     SDHandle2 = storage_driver:set_size(SDHandle),
     case storage_driver:open(SDHandle2, Flag) of
         {ok, Handle} ->
             ok = session_handles:add(SessId, HandleId, Handle);
+        {error, ?ENOENT} ->
+            sd_utils:restore_storage_file(FileCtx2, UserCtx),
+            case storage_driver:open(SDHandle2, Flag) of
+                {ok, Handle} ->
+                    ok = session_handles:add(SessId, HandleId, Handle);
+                {error, _} = Error ->
+                    Error
+            end;
         {error, _} = Error ->
             Error
     end.

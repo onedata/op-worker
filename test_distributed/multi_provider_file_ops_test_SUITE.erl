@@ -52,7 +52,8 @@
     registered_user_opens_remotely_created_share_test/1,
     guest_user_opens_remotely_created_file_test/1,
     guest_user_opens_remotely_created_share_test/1,
-    truncate_on_storage_does_not_block_synchronizer/1
+    truncate_on_storage_does_not_block_synchronizer/1,
+    recreate_file_on_storage/1
 ]).
 
 -define(TEST_CASES, [
@@ -79,7 +80,8 @@
     registered_user_opens_remotely_created_share_test,
     guest_user_opens_remotely_created_file_test,
     guest_user_opens_remotely_created_share_test,
-    truncate_on_storage_does_not_block_synchronizer
+    truncate_on_storage_does_not_block_synchronizer,
+    recreate_file_on_storage
 ]).
 
 -define(PERFORMANCE_TEST_CASES, [
@@ -1069,6 +1071,49 @@ truncate_on_storage_does_not_block_synchronizer(Config0) ->
     ?assertMatch({ok, #file_attr{size = 0}}, lfm_proxy:stat(Worker2, SessId(Worker2), ?FILE_REF(Guid)), 60),
 
     ok.
+
+recreate_file_on_storage(Config0) ->
+    User = <<"user1">>,
+%%    Config = multi_provider_file_ops_test_base:extend_config(Config0, User, {4,0,0,2}, 60),
+    Config = multi_provider_file_ops_test_base:extend_config(Config0, User, {2,0,0,1}, 60),
+    Worker1 = ?config(worker1, Config),
+    [Worker2 | _] = ?config(workers2, Config),
+    Workers = ?config(op_worker_nodes, Config),
+    SessId = ?config(session, Config),
+    SpaceId = <<"space1">>,
+    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    FileContent = <<"xxx">>,
+    FileSize = byte_size(FileContent),
+
+    % Mock to prevent storage file creation (only metadata will be set)
+    ?assertEqual(ok, test_utils:mock_new(Workers, storage_driver)),
+    ?assertEqual(ok, test_utils:mock_expect(Workers, storage_driver, create, fun(_SDHandle, _Mode) -> ok end)),
+    ?assertEqual(ok, test_utils:mock_expect(Workers, storage_driver, open, fun(SDHandle, _Flag) -> {ok, SDHandle} end)),
+    ?assertEqual(ok, test_utils:mock_expect(Workers, storage_driver, release, fun(_SDHandle) -> ok end)),
+
+    % Create file on worker1
+    {ok, {Guid, Handle0}} = ?assertMatch({ok, _},
+        lfm_proxy:create_and_open(Worker1, SessId(Worker1), SpaceGuid, <<"recreate_file_on_storage">>, undefined)),
+    ?assertEqual(ok, lfm_proxy:close(Worker1, Handle0)),
+
+    % Unload mock - file is created according to metadata but it has not been created on storage
+    ?assertEqual(ok, test_utils:mock_unload(Workers, storage_driver)),
+
+    % Wait for file sync
+    ?assertMatch({ok, #file_attr{size = 0}}, lfm_proxy:stat(Worker2, SessId(Worker2), ?FILE_REF(Guid)), 60),
+
+    % Add data to file
+    {ok, Handle} = lfm_proxy:open(Worker2, SessId(Worker2), ?FILE_REF(Guid), write),
+    {ok, _} = lfm_proxy:write(Worker2, Handle, 0, FileContent),
+    ok = lfm_proxy:close(Worker2, Handle),
+
+    % Wait for file sync and read (file should be created on disk and read should succeed)
+    ?assertMatch({ok, #file_attr{size = FileSize}}, lfm_proxy:stat(Worker1, SessId(Worker1), ?FILE_REF(Guid)), 60),
+    ProviderId = rpc:call(Worker1, oneprovider, get_id_or_undefined, []),
+    {ok, TransferID} = ?assertMatch({ok, _}, lfm_proxy:schedule_file_replication(Worker1, SessId(Worker1),
+        ?FILE_REF(Guid), ProviderId)),
+    multi_provider_file_ops_test_base:await_replication_end(Worker1 ,TransferID, 60).
+
 
 %%%===================================================================
 %%% Internal functions
