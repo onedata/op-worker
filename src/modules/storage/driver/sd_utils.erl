@@ -208,6 +208,7 @@ restore_storage_file(FileCtx, UserCtx) ->
         try
             case fslogic_location:is_file_created(FileUuid, FileLocationId) of
                 true ->
+                    ?info("restoring storage file ~p", [file_ctx:get_guid_const(FileCtx2)]),
                     {ok, _} = sd_utils:generic_create_deferred(UserCtx, FileCtx2, true);
                 _ ->
                     ok
@@ -216,7 +217,7 @@ restore_storage_file(FileCtx, UserCtx) ->
         catch
             Type:Error ->
                 ?error_stacktrace("restore_storage_file failed for file ~p due to: ~p:~p", [
-                    file_ctx:get_guid_const (FileCtx2), Type, Error
+                    file_ctx:get_guid_const(FileCtx2), Type, Error
                 ]),
                 ok
         end

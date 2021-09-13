@@ -724,20 +724,9 @@ handle_info({Ref, complete, {ok, _} = _Status}, #state{retries_number = Retries}
     State5 = associate_ref_with_tids(Ref, EndedTransfers, State4),
     {noreply, State5#state{retries_number = maps:remove(Ref, Retries)}, ?DIE_AFTER};
 
-handle_info({FailedRef, complete, {error, disconnected} = ErrorStatus}, #state{retries_number = Retries} = State) ->
-    RetriesNum = maps:get(FailedRef, Retries, 0),
-    MaxRetriesNum = ?MAX_RETRIES,
-    case RetriesNum >= MaxRetriesNum of
-        true ->
-            {noreply, handle_error(FailedRef, ErrorStatus, State), ?DIE_AFTER};
-        false ->
-            Delay = min(round(?MIN_BACKOFF * math:pow(?BACKOFF_RATE, RetriesNum)), ?MAX_BACKOFF),
-            ?warning("Failed transfer ~p, replacing with new transfers after ~p seconds", [
-                FailedRef, Delay
-            ]),
-            erlang:send_after(round(Delay), self(), {replace_failed_transfer, FailedRef}),
-            {noreply, State, ?DIE_AFTER}
-    end;
+handle_info({FailedRef, complete, {error, disconnected} = ErrorStatus}, State) ->
+    NewState = handle_retry(FailedRef, ErrorStatus, State),
+    {noreply, NewState, ?DIE_AFTER};
 
 handle_info({replace_failed_transfer, FailedRef}, #state{retries_number = RetriesMap} = State) ->
     try
@@ -795,6 +784,13 @@ handle_info({Ref, complete, {error, {connection, <<"canceled">>}}}, #state{
             end
     end,
     {noreply, State2, ?DIE_AFTER};
+
+handle_info({FailedRef, complete, {error, {connection, <<"No such file or directory">>}} = ErrorStatus},
+    #state{file_ctx = FileCtx} = State) ->
+    ?info("restoring storage file ~p", [file_ctx:get_guid_const(FileCtx)]),
+    sd_utils:restore_storage_file(FileCtx, user_ctx:new(?ROOT_SESS_ID)),
+    NewState = handle_retry(FailedRef, ErrorStatus, State),
+    {noreply, NewState, ?DIE_AFTER};
 
 handle_info({Ref, complete, ErrorStatus}, State) ->
     {noreply, handle_error(Ref, ErrorStatus, State), ?DIE_AFTER};
@@ -867,6 +863,24 @@ handle_error(Ref, ErrorStatus, State) ->
     State3 = lists:foldl(fun cancel_transfer_id/2, State2, AffectedTransferIds),
 
     associate_ref_with_tids(Ref, FailedTransfers, State3).
+
+%% @private
+-spec handle_retry(fetch_ref(), Error :: term(), #state{}) -> #state{}.
+handle_retry(FailedRef, ErrorStatus, #state{retries_number = Retries} = State) ->
+    RetriesNum = maps:get(FailedRef, Retries, 0),
+    MaxRetriesNum = ?MAX_RETRIES,
+    case RetriesNum >= MaxRetriesNum of
+        true ->
+            ?error("eeeee ~p", [FailedRef]),
+            handle_error(FailedRef, ErrorStatus, State);
+        false ->
+            Delay = min(round(?MIN_BACKOFF * math:pow(?BACKOFF_RATE, RetriesNum)), ?MAX_BACKOFF),
+            ?warning("Failed transfer ~p, replacing with new transfers after ~p seconds", [
+                FailedRef, Delay
+            ]),
+            erlang:send_after(round(Delay), self(), {replace_failed_transfer, FailedRef}),
+            State
+    end.
 
 %%--------------------------------------------------------------------
 %% @private
