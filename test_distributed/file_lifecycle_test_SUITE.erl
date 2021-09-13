@@ -56,8 +56,8 @@ open_race_test(Config) ->
 
     test_utils:mock_new(W, sd_utils, [passthrough]),
     test_utils:mock_expect(W, sd_utils, generic_create_deferred,
-        fun(UserCtx, FileCtx, VerifyLink) ->
-            Ans = meck:passthrough([UserCtx, FileCtx, VerifyLink]),
+        fun(UserCtx, FileCtx, IgnoreEexist) ->
+            Ans = meck:passthrough([UserCtx, FileCtx, IgnoreEexist]),
             timer:sleep(2000),
             Ans
         end),
@@ -357,8 +357,8 @@ open_delete_race_test_base(Config, MockDeletionLink) ->
 
     test_utils:mock_new(W, file_req, [passthrough]),
     test_utils:mock_expect(W, file_req, open_on_storage,
-        fun(FileCtx, SessId, Flag, HandleId) ->
-            Ans = meck:passthrough([FileCtx, SessId, Flag, HandleId]),
+        fun(UserCtx, FileCtx, SessId, Flag, HandleId) ->
+            Ans = meck:passthrough([UserCtx, FileCtx, SessId, Flag, HandleId]),
 
             Master ! {delete_file, self()},
             ok = receive

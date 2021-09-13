@@ -104,7 +104,8 @@
     mkdir_removed_opened_file_test/1,
     rename_removed_opened_file_races_test/1,
     rename_removed_opened_file_races_test2/1,
-    lfm_monitored_open/1
+    lfm_monitored_open/1,
+    recreate_file_on_storage/1
 ]).
 
 
@@ -187,7 +188,8 @@
     mkdir_removed_opened_file_test,
     rename_removed_opened_file_races_test,
     rename_removed_opened_file_races_test2,
-    lfm_monitored_open
+    lfm_monitored_open,
+    recreate_file_on_storage
 ]).
 
 
@@ -805,6 +807,31 @@ lfm_monitored_open(Config) ->
     end,
 
     ?assertEqual(ExpFileIds, lists:usort(GetAllDocsFun(undefined)), Attempts).
+
+
+recreate_file_on_storage(Config) ->
+    [Worker | _] = Workers = ?config(op_worker_nodes, Config),
+    {SessId, _UserId} =
+        {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+
+    % Mock to prevent storage file creation (only metadata will be set)
+    ?assertEqual(ok, test_utils:mock_new(Workers, storage_driver)),
+    ?assertEqual(ok, test_utils:mock_expect(Workers, storage_driver, create, fun(_SDHandle, _Mode) -> ok end)),
+    ?assertEqual(ok, test_utils:mock_expect(Workers, storage_driver, open, fun(SDHandle, _Flag) -> {ok, SDHandle} end)),
+    ?assertEqual(ok, test_utils:mock_expect(Workers, storage_driver, release, fun(_SDHandle) -> ok end)),
+
+    % Create file on worker1
+    {ok, {Guid, Handle0}} = ?assertMatch({ok, _},
+        lfm_proxy:create_and_open(Worker, SessId, <<"/space_name1/recreate_file_on_storage">>, undefined)),
+    ?assertEqual(ok, lfm_proxy:close(Worker, Handle0)),
+
+    % Unload mock - file is created according to metadata but it has not been created on storage
+    ?assertEqual(ok, test_utils:mock_unload(Workers, storage_driver)),
+
+    % File should be created on disk and read should succeed
+    {ok, Handle2} = ?assertMatch({ok, _}, lfm_proxy:open(Worker, SessId, {guid, Guid}, read)),
+    ?assertEqual({ok, <<>>}, lfm_proxy:read(Worker, Handle2, 0, 10)),
+    ?assertEqual(ok, lfm_proxy:close(Worker, Handle2)).
 
 
 %%%===================================================================

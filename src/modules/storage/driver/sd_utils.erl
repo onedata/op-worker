@@ -29,7 +29,7 @@
 
 %% API
 -export([chmod/2, chmod/3, rename/7]).
--export([create_deferred/1, create_deferred/4, mkdir_deferred/2]).
+-export([create_deferred/1, create_deferred/4, mkdir_deferred/2, restore_storage_file/2]).
 -export([delete/2, unlink/2, rmdir/2]).
 
 
@@ -165,7 +165,7 @@ create_deferred(FileCtx) ->
 %%--------------------------------------------------------------------
 -spec create_deferred(file_ctx:ctx(), user_ctx:ctx(), boolean(), boolean()) ->
     {file_location:doc(), file_ctx:ctx()} | {error, cancelled}.
-create_deferred(FileCtx, UserCtx, VerifyDeletionLink, CheckLocationExists) ->
+create_deferred(FileCtx, UserCtx, _VerifyDeletionLink, CheckLocationExists) ->
     FileCtx2 = share_to_standard_file_ctx(FileCtx),
     {#document{
         key = FileLocationId,
@@ -176,13 +176,13 @@ create_deferred(FileCtx, UserCtx, VerifyDeletionLink, CheckLocationExists) ->
         false ->
             FileUuid = file_ctx:get_uuid_const(FileCtx3),
             % TODO VFS-5270
-            replica_synchronizer:apply(FileCtx, fun() ->
+            replica_synchronizer:apply(FileCtx3, fun() ->
                 try
                     case fslogic_location:is_file_created(FileUuid, FileLocationId) of
                         true ->
                             Ans;
                         _ ->
-                            {ok, FileCtx4} = sd_utils:generic_create_deferred(UserCtx, FileCtx3, VerifyDeletionLink),
+                            {ok, FileCtx4} = sd_utils:generic_create_deferred(UserCtx, FileCtx3, false),
                             {StorageFileId, FileCtx5} = file_ctx:get_storage_file_id(FileCtx4),
                             {ok, Doc} = fslogic_location:mark_file_created(FileUuid,
                                 FileLocationId, StorageFileId),
@@ -199,13 +199,37 @@ create_deferred(FileCtx, UserCtx, VerifyDeletionLink, CheckLocationExists) ->
             Ans
     end.
 
+-spec restore_storage_file(file_ctx:ctx(), user_ctx:ctx()) -> ok.
+restore_storage_file(FileCtx, UserCtx) ->
+    FileCtx2 = share_to_standard_file_ctx(FileCtx),
+    FileUuid = file_ctx:get_uuid_const(FileCtx2),
+    FileLocationId = file_location:local_id(FileUuid),
+    replica_synchronizer:apply(FileCtx, fun() ->
+        try
+            case fslogic_location:is_file_created(FileUuid, FileLocationId) of
+                true ->
+                    {ok, _} = sd_utils:generic_create_deferred(UserCtx, FileCtx2, true);
+                _ ->
+                    ok
+            end,
+            ok
+        catch
+            Type:Error ->
+                ?error_stacktrace("restore_storage_file failed for file ~p due to: ~p:~p", [
+                    file_ctx:get_guid_const (FileCtx2), Type, Error
+                ]),
+                ok
+        end
+    end).
+
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Creates file (regular or directory !!!) on storage.
 %% @end
 %%--------------------------------------------------------------------
 -spec generic_create_deferred(user_ctx:ctx(), file_ctx:ctx(), boolean()) -> {ok, file_ctx:ctx()}.
-generic_create_deferred(UserCtx, FileCtx, VerifyDeletionLink) ->
+generic_create_deferred(UserCtx, FileCtx, IgnoreEexist) ->
     {ShouldChown, FileCtx2} = should_chown(UserCtx, FileCtx),
     SessId = case ShouldChown of
         true -> ?ROOT_SESS_ID;
@@ -217,7 +241,7 @@ generic_create_deferred(UserCtx, FileCtx, VerifyDeletionLink) ->
             FileCtx4 = create_missing_parent_dirs(UserCtx, FileCtx3),
             create_storage_file(SDHandle, FileCtx4);
         {error, ?EEXIST} ->
-            handle_eexists(VerifyDeletionLink, UserCtx, SDHandle, FileCtx3);
+            handle_eexists(IgnoreEexist, SDHandle, FileCtx3);
          {error, ?EACCES} ->
             % eacces is possible because there is race condition
             % on creating and chowning parent dir
@@ -506,18 +530,19 @@ mkdir_and_maybe_chown(UserCtx, FileCtx, Mode) ->
 %% Handles eexists error on storage.
 %% @end
 %%-------------------------------------------------------------------
--spec handle_eexists(boolean(), user_ctx:ctx(), storage_driver:handle(),
+-spec handle_eexists(boolean(), storage_driver:handle(),
     file_ctx:ctx()) -> {ok, file_ctx:ctx()}.
-handle_eexists(VerifyDeletionLink, UserCtx, SDHandle, FileCtx) ->
+handle_eexists(true = _IgnoreEexist, _SDHandle, FileCtx) ->
+    {ok, FileCtx};
+handle_eexists(false = _IgnoreEexist, SDHandle, FileCtx) ->
     {FileDoc, FileCtx2} = file_ctx:get_file_doc(FileCtx),
     case file_meta:get_type(FileDoc) of
-        ?REGULAR_FILE_TYPE -> handle_conflicting_file(VerifyDeletionLink, UserCtx, SDHandle, FileCtx);
+        ?REGULAR_FILE_TYPE -> handle_conflicting_file(SDHandle, FileCtx);
         ?DIRECTORY_TYPE -> handle_conflicting_directory(FileCtx2)
     end.
 
--spec handle_conflicting_file(boolean(), user_ctx:ctx(), storage_driver:handle(), file_ctx:ctx()) ->
-    {ok, file_ctx:ctx()}.
-handle_conflicting_file(_VerifyDeletionLink, _UserCtx, SDHandle, FileCtx) ->
+-spec handle_conflicting_file(storage_driver:handle(), file_ctx:ctx()) -> {ok, file_ctx:ctx()}.
+handle_conflicting_file(SDHandle, FileCtx) ->
     {FileDoc, FileCtx2} = file_ctx:get_file_doc(FileCtx),
     {ok, StorageFileId} = create_storage_file_with_suffix(SDHandle, file_meta:get_mode(FileDoc)),
     {ok, file_ctx:set_file_id(FileCtx2, StorageFileId)}.
