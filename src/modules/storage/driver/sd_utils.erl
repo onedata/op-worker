@@ -207,6 +207,7 @@ restore_storage_file(FileCtx, UserCtx) ->
         try
             case fslogic_location:is_file_created(FileUuid, FileLocationId) of
                 true ->
+                    ?info("restoring storage file ~p", [file_ctx:get_logical_guid_const(FileCtx2)]),
                     {ok, _} = sd_utils:generic_create_deferred(UserCtx, FileCtx2, true);
                 _ ->
                     ok
