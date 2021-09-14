@@ -62,7 +62,7 @@
 
 -record(atm_lane_execution_run, {
     run_no :: undefined | pos_integer(),
-    status :: atm_workflow_execution:status(),
+    status :: atm_lane_execution:status(),
 
     iterated_store_id = undefined :: undefined | atm_store:id(),
     exception_store_id = undefined :: undefined | atm_store:id(),

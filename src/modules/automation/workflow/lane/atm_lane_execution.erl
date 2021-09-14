@@ -19,8 +19,7 @@
 %% API
 -export([
     ensure_all_ended/1,
-    clean_all/1, clean/1,
-    delete_all/1, delete/1
+    clean_all/1, clean/1
 ]).
 -export([get_parallel_box_execution_specs/1]).
 -export([gather_statuses/1, update_task_status/4]).
@@ -30,6 +29,16 @@
 -export([version/0, db_encode/2, db_decode/2]).
 
 
+-type status() ::
+    ?SCHEDULED_STATUS | ?PREPARING_STATUS | ?ENQUEUED_STATUS |
+    ?ACTIVE_STATUS | ?ABORTING_STATUS |
+    ?FINISHED_STATUS | ?CANCELLED_STATUS | ?FAILED_STATUS.
+
+-type run() :: #atm_lane_execution_run{}.
+-type record2() :: #atm_lane_execution_rec{}.
+
+-export_type([status/0, run/0, record2/0]).
+
 -record(atm_lane_execution, {
     schema_id :: automation:id(),
     status :: atm_workflow_block_execution_status:status(),
@@ -38,11 +47,6 @@
 -type record() :: #atm_lane_execution{}.
 
 -export_type([record/0]).
-
--type run() :: #atm_lane_execution_run{}.
--type record2() :: #atm_lane_execution_rec{}.
-
--export_type([run/0, record2/0]).
 
 
 %%%===================================================================
@@ -65,16 +69,6 @@ clean_all(AtmLaneExecutions) ->
 -spec clean(record()) -> ok.
 clean(#atm_lane_execution{parallel_boxes = AtmParallelBoxExecutions}) ->
     atm_parallel_box_execution:teardown_all(AtmParallelBoxExecutions).
-
-
--spec delete_all([record()]) -> ok.
-delete_all(AtmLaneExecutions) ->
-    lists:foreach(fun delete/1, AtmLaneExecutions).
-
-
--spec delete(record()) -> ok.
-delete(#atm_lane_execution{parallel_boxes = AtmParallelBoxExecutions}) ->
-    atm_parallel_box_execution:delete_all(AtmParallelBoxExecutions).
 
 
 -spec get_parallel_box_execution_specs(record()) -> [workflow_engine:parallel_box_spec()].
