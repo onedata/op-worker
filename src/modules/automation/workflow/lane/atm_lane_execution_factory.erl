@@ -40,10 +40,10 @@ create(AtmLaneIndex, AtmWorkflowExecutionDoc, AtmWorkflowExecutionCtx) ->
     try
         create_internal(AtmLaneIndex, AtmWorkflowExecutionDoc, AtmWorkflowExecutionCtx)
     catch _:Reason ->
-        #atm_lane_execution_rec{schema_id = AtmParallelBoxSchemaId} = lists:nth(
+        #atm_lane_execution_rec{schema_id = AtmLaneSchemaId} = lists:nth(
             AtmLaneIndex, AtmWorkflowExecutionDoc#document.value#atm_workflow_execution.lanes
         ),
-        throw(?ERROR_ATM_LANE_EXECUTION_CREATION_FAILED(AtmParallelBoxSchemaId, Reason))
+        throw(?ERROR_ATM_LANE_EXECUTION_CREATION_FAILED(AtmLaneSchemaId, Reason))
     end.
 
 
