@@ -24,38 +24,26 @@
 
 
 -spec prepare(pos_integer(), atm_workflow_execution:id(), atm_workflow_execution_ctx:record()) ->
-    ok.
+    {workflow_engine:lane_spec() , atm_workflow_execution_env:record()} | no_return().
 prepare(AtmLaneIndex, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
-    AtmWorkflowExecutionDoc = mark_as_preparing(AtmLaneIndex, AtmWorkflowExecutionId),
+    AtmWorkflowExecutionDoc = atm_lane_execution_status:handle_preparing(
+        AtmLaneIndex, AtmWorkflowExecutionId
+    ),
 
     try
-        atm_lane_execution_factory:create(
+        {NewAtmWorkflowExecutionDoc, AtmWorkflowExecutionEnv} = atm_lane_execution_factory:create(
             AtmLaneIndex, AtmWorkflowExecutionDoc, AtmWorkflowExecutionCtx
         ),
-        ok
+        AtmLaneExecutionSpec = setup_lane(
+            AtmLaneIndex, NewAtmWorkflowExecutionDoc, AtmWorkflowExecutionCtx
+        ),
+        %% TODO handle_enqueued
+        {AtmLaneExecutionSpec, AtmWorkflowExecutionEnv}
     catch throw:{error, _} ->
         % TODO log error
-        ok
-    end,
-
-    ok.
-
-
-%%-spec prepare_all(atm_workflow_execution_ctx:record(), [record()]) -> ok | no_return().
-%%prepare_all(AtmWorkflowExecutionCtx, AtmLaneExecutions) ->
-%%    atm_parallel_runner:foreach(fun(#atm_lane_execution{schema_id = AtmLaneSchemaId} = AtmLaneExecution) ->
-%%        try
-%%            prepare(AtmWorkflowExecutionCtx, AtmLaneExecution)
-%%        catch _:Reason ->
-%%            throw(?ERROR_ATM_LANE_EXECUTION_PREPARATION_FAILED(AtmLaneSchemaId, Reason))
-%%        end
-%%    end, AtmLaneExecutions).
-%%
-%%
-%%-spec prepare(atm_workflow_execution_ctx:record(), record()) -> ok | no_return().
-%%prepare(AtmWorkflowExecutionCtx, #atm_lane_execution{parallel_boxes = AtmParallelBoxExecutions}) ->
-%%    atm_parallel_box_execution:setup_all(AtmWorkflowExecutionCtx, AtmParallelBoxExecutions),
-%%    ok.
+        % TODO handle aborting
+        throw(error)
+    end.
 
 
 %%%===================================================================
@@ -64,73 +52,64 @@ prepare(AtmLaneIndex, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
 
 
 %% @private
--spec mark_as_preparing(pos_integer(), atm_workflow_execution:id()) ->
-    atm_workflow_execution:doc() | no_return().
-mark_as_preparing(AtmLaneIndex, AtmWorkflowExecutionId) ->
-    Diff = fun(#atm_workflow_execution{lanes = AtmLaneExecutions} = AtmWorkflowExecution) ->
-        % TODO check that workflow in ongoing/is not aborting; maybe change workflow status to active?
-        AtmLaneExecution = lists:nth(AtmLaneIndex, AtmLaneExecutions),
-
-        case mark_current_run_as_preparing(AtmLaneExecution#atm_lane_execution_rec.runs) of
-            {ok, UpdatedRuns} ->
-                NewAtmLaneExecution = AtmLaneExecution#atm_lane_execution_rec{runs = UpdatedRuns},
-                NewAtmLaneExecutions = lists_utils:replace_at(
-                    NewAtmLaneExecution, AtmLaneIndex, AtmLaneExecutions
-                ),
-                {ok, AtmWorkflowExecution#atm_workflow_execution{lanes = NewAtmLaneExecutions}};
-            {error, _} = Error ->
-                Error
-        end
-    end,
-
-    case atm_workflow_execution:update(AtmWorkflowExecutionId, Diff) of
-        {ok, AtmWorkflowExecutionDoc} ->
-            AtmWorkflowExecutionDoc;
-        ?ERROR_ATM_INVALID_STATUS_TRANSITION(_, _) = Error ->
-            throw(Error)
+-spec setup_lane(pos_integer(), atm_workflow_execution:doc(), atm_workflow_execution_ctx:record()) ->
+    workflow_engine:lane_spec() | no_return().
+setup_lane(AtmLaneIndex, AtmWorkflowExecutionDoc, AtmWorkflowExecutionCtx) ->
+    try
+        setup_lane_insecure(AtmLaneIndex, AtmWorkflowExecutionDoc, AtmWorkflowExecutionCtx)
+    catch _:Reason ->
+        #atm_lane_execution_rec{schema_id = AtmLaneSchemaId} = get_lane_execution(
+            AtmLaneIndex, AtmWorkflowExecutionDoc
+        ),
+        throw(?ERROR_ATM_LANE_EXECUTION_PREPARATION_FAILED(AtmLaneSchemaId, Reason))  %% TODO preparation -> setup
     end.
 
 
 %% @private
--spec mark_current_run_as_preparing([atm_lane_execution:run()]) ->
-    {ok, [atm_lane_execution:run()]} | errors:error().
-mark_current_run_as_preparing([]) ->
-    % preparing in advance
-    {ok, [#atm_lane_execution_run{run_no = undefined, status = ?PREPARING_STATUS}]};
+-spec setup_lane_insecure(
+    pos_integer(),
+    atm_workflow_execution:doc(),
+    atm_workflow_execution_ctx:record()
+) ->
+    workflow_engine:lane_spec() | no_return().
+setup_lane_insecure(AtmLaneIndex, AtmWorkflowExecutionDoc, AtmWorkflowExecutionCtx) ->
+    #atm_lane_schema{store_iterator_spec = AtmStoreIteratorSpec} = get_lane_schema(
+        AtmLaneIndex, AtmWorkflowExecutionDoc
+    ),
 
-mark_current_run_as_preparing([
-    #atm_lane_execution_run{status = ?SCHEDULED_STATUS} = CurrentRun
-    | RestRuns
-]) ->
-    {ok, [CurrentRun#atm_lane_execution_run{status = ?PREPARING_STATUS} | RestRuns]};
+    #atm_lane_execution_rec{runs = [
+        _CurrRun = #atm_lane_execution_run{
+            iterated_store_id = AtmIteratedStoreId,
+            parallel_boxes = AtmParallelBoxExecutions
+        }
+        | _
+    ]} = get_lane_execution(AtmLaneIndex, AtmWorkflowExecutionDoc),
 
-mark_current_run_as_preparing([#atm_lane_execution_run{status = Status} | _] = PreviousRuns) ->
-    case status_to_phase(Status) of
-        ?ENDED_PHASE ->
-            % preparing in advance
-            NewRun = #atm_lane_execution_run{run_no = undefined, status = ?PREPARING_STATUS},
-            {ok, [NewRun | PreviousRuns]};
-        _ ->
-            ?ERROR_ATM_INVALID_STATUS_TRANSITION(Status, ?PREPARING_STATUS)
-    end.
-
-
-
-
-
-
-
-
+    #{
+        parallel_boxes => atm_parallel_box_execution:setup_all(
+            AtmWorkflowExecutionCtx, AtmParallelBoxExecutions
+        ),
+        iterator => atm_store_api:acquire_iterator(AtmIteratedStoreId, AtmStoreIteratorSpec)
+    }.
 
 
 %% @private
--spec status_to_phase(atm_workflow_execution:status()) ->
-    atm_workflow_execution:phase().
-status_to_phase(?SCHEDULED_STATUS) -> ?WAITING_PHASE;
-status_to_phase(?PREPARING_STATUS) -> ?WAITING_PHASE;
-status_to_phase(?ENQUEUED_STATUS) -> ?WAITING_PHASE;
-status_to_phase(?ACTIVE_STATUS) -> ?ONGOING_PHASE;
-status_to_phase(?ABORTING_STATUS) -> ?ONGOING_PHASE;
-status_to_phase(?FINISHED_STATUS) -> ?ENDED_PHASE;
-status_to_phase(?CANCELLED_STATUS) -> ?ENDED_PHASE;
-status_to_phase(?FAILED_STATUS) -> ?ENDED_PHASE.
+-spec get_lane_execution(pos_integer(), atm_workflow_execution:doc()) ->
+    atm_lane_execution:record2().
+get_lane_execution(AtmLaneIndex, #document{value = #atm_workflow_execution{
+    lanes = AtmLaneExecutions
+}}) ->
+    lists:nth(AtmLaneIndex, AtmLaneExecutions).
+
+
+%% @private
+-spec get_lane_schema(non_neg_integer(), atm_workflow_execution:doc()) ->
+    atm_lane_schema:record().
+get_lane_schema(AtmLaneIndex, #document{value = #atm_workflow_execution{
+    schema_snapshot_id = AtmWorkflowSchemaSnapshotId
+}}) ->
+    {ok, #document{value = #atm_workflow_schema_snapshot{
+        lanes = AtmLaneSchemas
+    }}} = atm_workflow_schema_snapshot:get(AtmWorkflowSchemaSnapshotId),
+
+    lists:nth(AtmLaneIndex, AtmLaneSchemas).
