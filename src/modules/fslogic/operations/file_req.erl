@@ -616,12 +616,18 @@ open_on_storage(UserCtx, FileCtx, SessId, Flag, HandleId) ->
         {ok, Handle} ->
             ok = session_handles:add(SessId, HandleId, Handle);
         {error, ?ENOENT} ->
-            sd_utils:restore_storage_file(FileCtx2, UserCtx),
-            case storage_driver:open(SDHandle2, Flag) of
-                {ok, Handle} ->
-                    ok = session_handles:add(SessId, HandleId, Handle);
-                {error, _} = Error ->
-                    Error
+            {Storage, FileCtx3} = file_ctx:get_storage(FileCtx2),
+            case storage:is_imported(Storage) orelse storage:is_local_storage_readonly(Storage) of
+                true ->
+                    {error, ?ENOENT};
+                false ->
+                    sd_utils:restore_storage_file(FileCtx3, UserCtx),
+                    case storage_driver:open(SDHandle2, Flag) of
+                        {ok, Handle} ->
+                            ok = session_handles:add(SessId, HandleId, Handle);
+                        {error, _} = Error ->
+                            Error
+                    end
             end;
         {error, _} = Error ->
             Error
