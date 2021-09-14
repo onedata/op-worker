@@ -616,8 +616,8 @@ open_on_storage(UserCtx, FileCtx, SessId, Flag, HandleId) ->
         {ok, Handle} ->
             ok = session_handles:add(SessId, HandleId, Handle);
         {error, ?ENOENT} ->
-            {Storage, FileCtx3} = file_ctx:get_storage(FileCtx2),
-            case storage:is_imported(Storage) orelse storage:is_local_storage_readonly(Storage) of
+            {StorageId, FileCtx3} = file_ctx:get_storage_id(FileCtx2),
+            case storage:is_imported(StorageId) orelse storage:is_local_storage_readonly(StorageId) of
                 true ->
                     {error, ?ENOENT};
                 false ->
