@@ -27,7 +27,6 @@
     atm_workflow_execution:doc() | no_return().
 handle_preparing(AtmLaneIndex, AtmWorkflowExecutionId) ->
     Diff = fun(#atm_workflow_execution{lanes = AtmLaneExecutions} = AtmWorkflowExecution) ->
-        % TODO check that workflow in ongoing/is not aborting; maybe change workflow status to active?
         AtmLaneExecution = lists:nth(AtmLaneIndex, AtmLaneExecutions),
 
         case mark_current_run_as_preparing(AtmLaneExecution#atm_lane_execution_rec.runs) of
@@ -42,7 +41,7 @@ handle_preparing(AtmLaneIndex, AtmWorkflowExecutionId) ->
         end
     end,
 
-    case atm_workflow_execution:update(AtmWorkflowExecutionId, Diff) of
+    case atm_workflow_execution_status:handle_lane_preparing(AtmWorkflowExecutionId, Diff) of
         {ok, AtmWorkflowExecutionDoc} ->
             AtmWorkflowExecutionDoc;
         {error, _} = Error ->
@@ -77,14 +76,6 @@ mark_current_run_as_preparing([#atm_lane_execution_run{status = Status} | _] = P
         _ ->
             ?ERROR_ATM_INVALID_STATUS_TRANSITION(Status, ?PREPARING_STATUS)
     end.
-
-
-
-
-
-
-
-
 
 
 %% @private

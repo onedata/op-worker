@@ -16,6 +16,7 @@
 -include("modules/automation/atm_execution.hrl").
 
 %% API
+-export([handle_lane_preparing/2]).
 -export([
     handle_preparing/1,
     handle_enqueued/1,
@@ -31,6 +32,49 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+
+-spec handle_lane_preparing(
+    atm_workflow_execution:id(),
+    fun((atm_workflow_execution:record()) -> atm_workflow_execution:record() | errors:error())
+) ->
+    {ok, atm_workflow_execution:doc()} | errors:error().
+handle_lane_preparing(AtmWorkflowExecutionId, AtmLaneExecutionDiff) ->
+    Diff = fun
+        (AtmWorkflowExecution = #atm_workflow_execution{status = ?SCHEDULED_STATUS}) ->
+            case AtmLaneExecutionDiff(AtmWorkflowExecution) of
+                {ok, NewAtmWorkflowExecution} ->
+                    {ok, set_times_on_phase_transition(NewAtmWorkflowExecution#atm_workflow_execution{
+                        status = ?ACTIVE_STATUS
+                    })};
+                {error, _} = Error ->
+                    Error
+            end;
+        (AtmWorkflowExecution = #atm_workflow_execution{status = ?ACTIVE_STATUS}) ->
+            AtmLaneExecutionDiff(AtmWorkflowExecution);
+        (#atm_workflow_execution{status = ?ABORTING_STATUS}) ->
+            ?ERROR_ATM_TASK_EXECUTION_ENDED;  %% TODO new error atm_workflow_execution_aborting
+        (#atm_workflow_execution{status = _EndedStatus}) ->
+            ?ERROR_ATM_TASK_EXECUTION_ENDED  %% TODO new error atm_workflow_execution_ended
+    end,
+    case atm_workflow_execution:update(AtmWorkflowExecutionId, Diff) of
+        {ok, AtmWorkflowExecutionDoc} = Result ->
+            ensure_in_proper_phase_tree(AtmWorkflowExecutionDoc),
+            Result;
+        {error, _} = Error ->
+            Error
+    end.
+
+
+
+
+
+
+
+
+
+
+
 
 
 -spec handle_preparing(atm_workflow_execution:id()) ->

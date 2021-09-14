@@ -40,7 +40,6 @@ prepare(AtmLaneIndex, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
         %% TODO handle_enqueued
         {AtmLaneExecutionSpec, AtmWorkflowExecutionEnv}
     catch throw:{error, _} ->
-        % TODO log error
         % TODO handle aborting
         throw(error)
     end.
