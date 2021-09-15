@@ -1193,7 +1193,11 @@
 
     execution_status = not_prepared :: workflow_execution_state:execution_status(),
     current_lane :: workflow_execution_state:current_lane(),
+    lane_prepared_in_advance_status = not_prepared :: workflow_execution_state:execution_status(),
+    lane_prepared_in_advance :: workflow_execution_state:lane_prepared_in_advance() | undefined,
+
     lowest_failed_job_identifier :: workflow_jobs:job_identifier() | undefined,
+    failed_jobs_count = 0 :: non_neg_integer(),
 
     iteration_state :: workflow_iteration_state:state() | undefined,
     prefetched_iteration_step :: workflow_execution_state:iteration_status(),

@@ -72,8 +72,8 @@
 -define(END_EXECUTION(Handler, Context, KeepSnapshot),
     {end_execution, Handler, Context, KeepSnapshot}).
 -define(DEFER_EXECUTION, defer_execution).
--define(PREPARE_LANE_EXECUTION(Handler, ExecutionContext, LaneId),
-    {prepare_lane_execution, Handler, ExecutionContext, LaneId}).
+-define(PREPARE_LANE_EXECUTION(Handler, ExecutionContext, LaneId, LaneType),
+    {prepare_lane_execution, Handler, ExecutionContext, LaneId, LaneType}).
 
 % errors returned by workflow_engine_state to control workflow_engine
 -define(WF_ERROR_ALL_SLOTS_USED, {error, all_slots_used}).
