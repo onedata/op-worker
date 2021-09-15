@@ -206,21 +206,53 @@ check_openfaas_availability() ->
                     [Class, Reason],
                     Stacktrace
                 ),
-                ?ERROR_ATM_INTERNAL_SERVER_ERROR
+                ?ERROR_INTERNAL_SERVER_ERROR
         end,
         {ok, HealthcheckResult, ?HEALTHCHECK_CACHE_TTL_SECONDS}
     end),
     Result.
 
 
+%%--------------------------------------------------------------------
 %% @private
+%% @doc
+%% Build name for function under which it will be registered in OpenFaaS service.
+%% To be accepted the name must consist of lower case alphanumeric characters
+%% or '-', start with an alphabetic character, and end with an alphanumeric
+%% character (e.g. 'my-name',  or 'abc-123', regex used for validation by
+%% OpenFaaS service is '[a-z]([-a-z0-9]{0,61}[a-z0-9])?').
+%% @end
+%%--------------------------------------------------------------------
 -spec build_function_name(atm_workflow_execution:id(), od_atm_lambda:doc()) ->
     binary().
-build_function_name(AtmWorkflowExecutionId, #document{key = AtmLambdaId}) ->
-    str_utils:format_bin("wf-~s-signature-~s", [
-        binary:part(AtmWorkflowExecutionId, 0, 10),
-        str_utils:md5_digest([AtmWorkflowExecutionId, AtmLambdaId])
-    ]).
+build_function_name(AtmWorkflowExecutionId, #document{
+    key = AtmLambdaId,
+    value = #od_atm_lambda{name = AtmLambdaName}
+}) ->
+    Signature = str_utils:md5_digest([AtmWorkflowExecutionId, AtmLambdaId]),
+
+    Name = str_utils:format_bin("w~s-s~s-~s", [
+        binary:part(AtmWorkflowExecutionId, 0, min(size(AtmWorkflowExecutionId), 10)),
+        binary:part(Signature, 0, min(size(Signature), 10)),
+        binary:part(AtmLambdaName, 0, min(size(AtmLambdaName), 39))
+    ]),
+    SanitizedName = << <<(sanitize_character(Char))/integer>> || <<Char>> <= Name>>,
+
+    case binary:last(SanitizedName) == $- of
+        true ->
+            TrimmedSanitizedName = binary:part(SanitizedName, 0, size(SanitizedName)-1),
+            <<TrimmedSanitizedName/binary, "x">>;
+        false ->
+            SanitizedName
+    end.
+
+
+%% @private
+-spec sanitize_character(integer()) -> integer().
+sanitize_character(Char) when Char >= $a, Char =< $z -> Char;
+sanitize_character(Char) when Char >= $A, Char =< $Z -> Char + 32;
+sanitize_character(Char) when Char >= $0, Char =< $9 -> Char;
+sanitize_character(_) -> $-.
 
 
 %% @private
@@ -283,7 +315,7 @@ log_function_registering(#prepare_ctx{
 }) ->
     AtmWorkflowExecutionLogger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
     atm_workflow_execution_logger:workflow_info(
-        "Registering docker '~ts' as function '~ts' in OpenFaas", [DockerImage, FunctionName],
+        "Registering docker '~ts' as function '~ts' in OpenFaaS", [DockerImage, FunctionName],
         AtmWorkflowExecutionLogger
     ).
 
@@ -296,7 +328,7 @@ log_function_registered(#prepare_ctx{
 }) ->
     AtmWorkflowExecutionLogger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
     atm_workflow_execution_logger:workflow_info(
-        "Function '~ts' registered in OpenFaas", [FunctionName], AtmWorkflowExecutionLogger
+        "Function '~ts' registered in OpenFaaS", [FunctionName], AtmWorkflowExecutionLogger
     ).
 
 
@@ -456,7 +488,7 @@ log_function_ready(#prepare_ctx{
 }) ->
     AtmWorkflowExecutionLogger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
     atm_workflow_execution_logger:workflow_info(
-        "Function '~ts' ready to use in OpenFaas", [FunctionName], AtmWorkflowExecutionLogger
+        "Function '~ts' ready to use in OpenFaaS", [FunctionName], AtmWorkflowExecutionLogger
     ).
 
 

@@ -196,9 +196,8 @@ get_params(#helper{name = Name} = Helper, UserCtx) ->
 %% Returns proxy helper parameters.
 %% @end
 %%--------------------------------------------------------------------
--spec get_proxy_params(helpers:helper() | undefined, storage:id()) -> params().
-get_proxy_params(Helper, StorageId) ->
-    Timeout = get_timeout(Helper),
+-spec get_proxy_params(timeout(), storage:id()) -> params().
+get_proxy_params(Timeout, StorageId) ->
     Latency = op_worker:get_env(proxy_helper_latency_milliseconds),
     TimeoutValue = integer_to_binary(Timeout + Latency),
     #helper_params{
