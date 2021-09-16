@@ -296,7 +296,7 @@ cleanup_dataset_archives(Node, DatasetId, Offset) ->
     {ok, Archives, IsLast} =
         lfm_proxy:list_archives(Node, ?ROOT_SESS_ID, DatasetId, #{offset => Offset, limit => Limit}),
     lists:foreach(fun({_Index, ArchiveId}) ->
-        rpc:call(Node, archive_api, remove_archive_recursive, [ArchiveId])
+        ?assertEqual(ok, rpc:call(Node, archive_api, remove_archive_recursive, [ArchiveId]))
     end, Archives),
     case IsLast of
         true -> ok;
