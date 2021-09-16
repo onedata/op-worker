@@ -50,7 +50,7 @@
 %%%===================================================================
 
 -spec add_hook(file_meta:uuid(), hook_identifier(), module(), atom(), [term()]) ->
-    {ok, file_meta:uuid()} | {error, term()}.
+    ok | {error, term()}.
 add_hook(FileUuid, Identifier, Module, Function, Args) ->
     EncodedArgs = term_to_binary(Args),
     Hook = #hook{
@@ -58,9 +58,9 @@ add_hook(FileUuid, Identifier, Module, Function, Args) ->
         function = Function,
         args = EncodedArgs
     },
-    datastore_model:update(?CTX, FileUuid, fun(#file_meta_posthooks{hooks = Hooks} = FileMetaPosthooks) ->
+    ?extract_ok(datastore_model:update(?CTX, FileUuid, fun(#file_meta_posthooks{hooks = Hooks} = FileMetaPosthooks) ->
         {ok, FileMetaPosthooks#file_meta_posthooks{hooks = Hooks#{Identifier => Hook}}}
-    end, #file_meta_posthooks{hooks = #{Identifier => Hook}}).
+    end, #file_meta_posthooks{hooks = #{Identifier => Hook}})).
 
 
 -spec execute_hooks(file_meta:uuid()) -> ok | {error, term()}.
@@ -75,7 +75,7 @@ execute_hooks(FileUuid) ->
 
 %% @private
 -spec execute_hooks(file_meta:uuid(), hooks()) -> ok | {error, term()}.
-execute_hooks(FileUuid, Hooks) ->
+execute_hooks(FileUuid, HooksToExecute) ->
     SuccessfulHooks = maps:fold(fun(Identifier, #hook{module = Module, function = Function, args = Args}, Acc) ->
         try
             ok = erlang:apply(Module, Function, binary_to_term(Args)),
@@ -88,7 +88,7 @@ execute_hooks(FileUuid, Hooks) ->
             ),
             Acc
         end
-    end, [], Hooks),
+    end, [], HooksToExecute),
     UpdateFun = fun(#file_meta_posthooks{hooks = Hooks} = FileMetaPosthooks) ->
         {ok, FileMetaPosthooks#file_meta_posthooks{hooks = maps:without(SuccessfulHooks, Hooks)}}
     end,

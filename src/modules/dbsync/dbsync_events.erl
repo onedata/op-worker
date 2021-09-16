@@ -200,7 +200,10 @@ file_meta_change_replicated(SpaceId, #document{
 -spec link_replicated(od_space:id(), datastore:doc()) ->
     any() | no_return().
 link_replicated(file_meta, LinkKey) ->
-    GenericKey = datastore_model:get_generic_key(file_meta, LinkKey),
-    file_meta_posthooks:execute_hooks(GenericKey);
+    case datastore_model:get_generic_key(file_meta, LinkKey) of
+        undefined -> ok;
+        GenericKey ->
+            file_meta_posthooks:execute_hooks(GenericKey)
+    end;
 link_replicated(_Model, _LinkKey) ->
     ok.

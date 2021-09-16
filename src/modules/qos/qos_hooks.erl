@@ -76,26 +76,18 @@ handle_entry_delete(#document{key = QosEntryId, scope = SpaceId} = QosEntryDoc) 
 %%--------------------------------------------------------------------
 -spec reconcile_qos(file_ctx:ctx()) -> ok.
 reconcile_qos(FileCtx) ->
-    try
-        {CanonicalPath, FileCtx1} = file_ctx:get_canonical_path(FileCtx),
-        {UuidBasedPath, FileCtx2} = file_ctx:get_uuid_based_path(FileCtx1),
-        FileUuid = file_ctx:get_logical_uuid_const(FileCtx2),
-        [_ | Names] = binary:split(CanonicalPath, <<"/">>, [global, trim_all]),
-        ParentsUuids = lists:droplast(binary:split(UuidBasedPath, <<"/">>, [global, trim_all])),
-        lists:foreach(fun({ParentUuid, Name}) ->
-            case file_meta_forest:get(ParentUuid, all, Name) of
-                {ok, _} -> ok;
-                {error, _} ->
-                    file_meta_posthooks:add_hook(
-                        ParentUuid, <<"check_qos_missing_link_", FileUuid/binary>>,
-                        ?MODULE, reconcile_qos, [FileUuid, file_ctx:get_space_id_const(FileCtx2)])
-            end
-        end, lists:zip(ParentsUuids, Names))
-    catch _:_ ->
-        ok % no file meta document on path - hook will be registered in reconcile_qos_internal
-    end,
-    reconcile_qos_internal(FileCtx, []).
-
+    SpaceId = file_ctx:get_space_id_const(FileCtx),
+    InodeUuid = file_ctx:get_referenced_uuid_const(FileCtx),
+    case file_meta_links_sync_status_cache:get(SpaceId, InodeUuid) of
+        {ok, synced} ->
+            reconcile_qos_internal(FileCtx, []);
+        {error, {file_meta_missing, MissingUuid}} ->
+            add_reconcile_file_meta_posthook(FileCtx, MissingUuid, <<"qos_missing_file_meta">>);
+        {error, {link_missing, MissingUuid}} ->
+            add_reconcile_file_meta_posthook(FileCtx, MissingUuid, <<"qos_missing_link">>);
+        ?ERROR_NOT_FOUND ->
+            add_reconcile_file_meta_posthook(FileCtx, InodeUuid, <<"qos_missing_file_meta">>)
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -130,15 +122,12 @@ invalidate_cache_and_reconcile(FileCtx) ->
 reconcile_qos_internal(FileCtx, Options) when is_list(Options) ->
     InodeUuid = file_ctx:get_referenced_uuid_const(FileCtx),
     {StorageId, FileCtx1} = file_ctx:get_storage_id(FileCtx),
-    SpaceId = file_ctx:get_space_id_const(FileCtx1),
     case file_qos:get_effective(InodeUuid) of
         {error, {file_meta_missing, MissingUuid}} ->
             % new file_ctx will be generated when file_meta_posthook
             % will be executed (see function reconcile_qos/2).
-            lists:member(ignore_missing_files, Options) orelse 
-                file_meta_posthooks:add_hook(
-                    MissingUuid, <<"check_qos_", InodeUuid/binary>>,
-                    ?MODULE, reconcile_qos, [InodeUuid, SpaceId]),
+            lists:member(ignore_missing_files, Options) orelse
+                add_reconcile_file_meta_posthook(FileCtx, MissingUuid, <<"qos_missing_file_meta">>),
             ok;
         {ok, EffFileQos} ->
             case file_qos:is_in_trash(EffFileQos) of
@@ -154,6 +143,7 @@ reconcile_qos_internal(FileCtx, Options) when is_list(Options) ->
                     end, QosEntries)
             end;
         undefined ->
+            ?error("ignoring reconciliation: ~p", [file_ctx:get_logical_uuid_const(FileCtx)]),
             ok
     end.
 
@@ -225,4 +215,15 @@ retry_failed_files(SpaceId) ->
         ok = qos_entry:remove_from_failed_files_list(SpaceId, FileUuid),
         ok = reconcile_qos_internal(FileCtx, [ignore_missing_files])
     end).
-    
+
+
+
+%% @private
+-spec add_reconcile_file_meta_posthook(file_ctx:ctx(), file_meta:uuid(), binary()) -> 
+    ok | {error, term()}.
+add_reconcile_file_meta_posthook(FileCtx, MissingUuid, IdentifierPrefix) ->
+    SpaceId = file_ctx:get_space_id_const(FileCtx),
+    InodeUuid = file_ctx:get_referenced_uuid_const(FileCtx),
+    file_meta_posthooks:add_hook(
+        MissingUuid, <<IdentifierPrefix/binary, "_", InodeUuid/binary, "_", (generator:gen_name())/binary>>,
+        ?MODULE, reconcile_qos, [InodeUuid, SpaceId]).

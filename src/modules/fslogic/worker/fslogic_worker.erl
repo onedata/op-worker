@@ -23,17 +23,15 @@
 -include_lib("ctool/include/errors.hrl").
 
 -export([supervisor_flags/0, supervisor_children_spec/0]).
--export([
-    init_paths_caches/1,
-    init_dataset_eff_caches/1
-]).
+-export([init_effective_caches/1]).
 -export([init/1, handle/1, cleanup/0]).
 -export([init_counters/0, init_report/0]).
 
 % exported for RPC
 -export([
     schedule_init_paths_caches/1,
-    schedule_init_datasets_cache/1
+    schedule_init_datasets_cache/1,
+    schedule_init_file_meta_links_cache/1
 ]).
 
 %%%===================================================================
@@ -68,6 +66,7 @@
 -define(RESTART_AUTOCLEANING_RUNS, restart_autocleaning_runs).
 -define(INIT_PATHS_CACHES(Space), {init_paths_caches, Space}).
 -define(INIT_DATASETS_CACHE(Space), {init_datasets_cache, Space}).
+-define(INIT_FILE_META_LINKS_CACHE(Space), {init_file_meta_links_cache, Space}).
 
 -define(SHOULD_PERFORM_PERIODICAL_SPACES_AUTOCLEANING_CHECK,
     op_worker:get_env(autocleaning_periodical_spaces_check_enabled, true)).
@@ -169,21 +168,16 @@ supervisor_children_spec() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Initializes paths caches on all nodes.
+%% Initializes effective caches on all nodes.
 %% @end
 %%--------------------------------------------------------------------
--spec init_paths_caches(od_space:id() | all) -> ok.
-init_paths_caches(Space) ->
+-spec init_effective_caches(od_space:id() | all) -> ok.
+init_effective_caches(Space) ->
     Nodes = consistent_hashing:get_all_nodes(),
     utils:rpc_multicall(Nodes, ?MODULE, schedule_init_paths_caches, [Space]),
+    utils:rpc_multicall(Nodes, ?MODULE, schedule_init_datasets_cache, [Space]),
+    utils:rpc_multicall(Nodes, ?MODULE, schedule_init_file_meta_links_cache, [Space]),
     ok.
-
-
--spec init_dataset_eff_caches(od_space:id() | all) -> ok.
-init_dataset_eff_caches(Space) ->
-    lists:foreach(fun(Node) ->
-        rpc:call(Node, ?MODULE, schedule_init_datasets_cache, [Space])
-    end, consistent_hashing:get_all_nodes()).
 
 %%%===================================================================
 %%% worker_plugin_behaviour callbacks
@@ -293,6 +287,8 @@ handle(?INIT_PATHS_CACHES(Space)) ->
     paths_cache:init(Space);
 handle(?INIT_DATASETS_CACHE(Space)) ->
     dataset_eff_cache:init(Space);
+handle(?INIT_FILE_META_LINKS_CACHE(Space)) ->
+    file_meta_links_sync_status_cache:init(Space);
 handle(_Request) ->
     ?log_bad_request(_Request),
     {error, wrong_request}.
@@ -361,8 +357,10 @@ init_effective_caches() ->
     % TODO VFS-7412 refactor effective_value cache
     paths_cache:init_group(),
     dataset_eff_cache:init_group(),
+    file_meta_links_sync_status_cache:init_group(),
     schedule_init_paths_caches(all),
-    schedule_init_datasets_cache(all).
+    schedule_init_datasets_cache(all),
+    schedule_init_file_meta_links_cache(all).
 
 
 %%--------------------------------------------------------------------
@@ -863,6 +861,9 @@ schedule_init_paths_caches(Space) ->
 
 schedule_init_datasets_cache(Space) ->
     schedule(?INIT_DATASETS_CACHE(Space), 0).
+
+schedule_init_file_meta_links_cache(Space) ->
+    schedule(?INIT_FILE_META_LINKS_CACHE(Space), 0).
 
 -spec schedule(term(), non_neg_integer()) -> ok.
 schedule(Request, Timeout) ->
