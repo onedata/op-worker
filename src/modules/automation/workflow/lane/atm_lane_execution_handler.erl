@@ -37,7 +37,8 @@ prepare(AtmLaneIndex, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
         AtmLaneExecutionSpec = setup_lane(
             AtmLaneIndex, NewAtmWorkflowExecutionDoc, AtmWorkflowExecutionCtx
         ),
-        %% TODO handle_enqueued
+        atm_lane_execution_status:handle_enqueued(AtmLaneIndex, AtmWorkflowExecutionId),
+
         {AtmLaneExecutionSpec, AtmWorkflowExecutionEnv}
     catch throw:{error, _} ->
         % TODO handle aborting

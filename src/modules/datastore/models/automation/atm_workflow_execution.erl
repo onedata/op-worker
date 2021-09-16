@@ -32,7 +32,7 @@
 -type phase() :: ?WAITING_PHASE | ?ONGOING_PHASE | ?ENDED_PHASE.
 
 -type status() ::
-    ?SCHEDULED_STATUS | ?PREPARING_STATUS | ?ENQUEUED_STATUS |
+    ?SCHEDULED_STATUS |
     ?ACTIVE_STATUS | ?ABORTING_STATUS |
     ?FINISHED_STATUS | ?CANCELLED_STATUS | ?FAILED_STATUS.
 
@@ -176,6 +176,7 @@ get_record_struct(3) ->
         {finish_time, integer}
     ]}.
 
+%% TODO struct and upgrader
 
 %%--------------------------------------------------------------------
 %% @doc

@@ -1136,6 +1136,8 @@
     system_audit_log_id :: undefined | atm_store:id(),
     lanes :: [atm_lane_execution:record() | atm_lane_execution:record2()],
 
+    curr_lane_index = undefined :: undefined | pos_integer(),
+
     status :: atm_workflow_execution:status(),
     % Flag used to tell if status was changed during doc update (set automatically
     % when updating doc). It is necessary due to limitation of datastore as

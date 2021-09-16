@@ -276,8 +276,6 @@ prepare_internal(AtmWorkflowExecutionId, _AtmWorkflowExecutionCtx) ->
         atm_workflow_execution_status:handle_aborting(AtmWorkflowExecutionId, failure),
         erlang:Type(Reason)
     end,
-
-    atm_workflow_execution_status:handle_enqueued(AtmWorkflowExecutionId),
     ok.
 
 

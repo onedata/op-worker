@@ -15,7 +15,10 @@
 -include("modules/automation/atm_execution.hrl").
 
 %% API
--export([handle_preparing/2]).
+-export([
+    handle_preparing/2,
+    handle_enqueued/2
+]).
 
 
 %%%===================================================================
@@ -41,7 +44,38 @@ handle_preparing(AtmLaneIndex, AtmWorkflowExecutionId) ->
         end
     end,
 
-    case atm_workflow_execution_status:handle_lane_preparing(AtmWorkflowExecutionId, Diff) of
+    case atm_workflow_execution_status:handle_lane_preparing(
+        AtmLaneIndex, AtmWorkflowExecutionId, Diff
+    ) of
+        {ok, AtmWorkflowExecutionDoc} ->
+            AtmWorkflowExecutionDoc;
+        {error, _} = Error ->
+            throw(Error)
+    end.
+
+
+-spec handle_enqueued(pos_integer(), atm_workflow_execution:id()) ->
+    atm_workflow_execution:doc() | no_return().
+handle_enqueued(AtmLaneIndex, AtmWorkflowExecutionId) ->
+    Diff = fun(#atm_workflow_execution{lanes = AtmLaneExecutions} = AtmWorkflowExecution) ->
+        #atm_lane_execution_rec{runs = [CurrRun | RestRuns]} = AtmLaneExecution = lists:nth(
+            AtmLaneIndex, AtmLaneExecutions
+        ),
+        case CurrRun of
+            #atm_lane_execution_run{status = ?PREPARING_STATUS} ->
+                NewAtmLaneExecution = AtmLaneExecution#atm_lane_execution_rec{
+                    runs = [CurrRun#atm_lane_execution_run{status = ?ENQUEUED_STATUS} | RestRuns]
+                },
+                NewAtmLaneExecutions = lists_utils:replace_at(
+                    NewAtmLaneExecution, AtmLaneIndex, AtmLaneExecutions
+                ),
+                {ok, AtmWorkflowExecution#atm_workflow_execution{lanes = NewAtmLaneExecutions}};
+            #atm_lane_execution_run{status = Status} ->
+                ?ERROR_ATM_INVALID_STATUS_TRANSITION(Status, ?ENQUEUED_STATUS)
+        end
+    end,
+
+    case atm_workflow_execution:update(AtmWorkflowExecutionId, Diff) of
         {ok, AtmWorkflowExecutionDoc} ->
             AtmWorkflowExecutionDoc;
         {error, _} = Error ->
