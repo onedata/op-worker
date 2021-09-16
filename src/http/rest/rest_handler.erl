@@ -267,8 +267,17 @@ resolve_gri_bindings(SessionId, #b_gri{type = Tp, id = Id, aspect = As, scope = 
     cowboy_req:req()) -> binary() | {atom(), binary()}.
 resolve_bindings(_SessionId, ?BINDING(Key), Req) ->
     cowboy_req:binding(Key, Req);
-resolve_bindings(_SessionId, ?OBJECTID_BINDING(Key), Req) ->
-    middleware_utils:decode_object_id(cowboy_req:binding(Key, Req), Key);
+resolve_bindings(SessionId, ?OBJECTID_BINDING(Key), Req) ->
+    {ok,SpaceIds} = provider_logic:get_spaces(),
+    Id = kv_utils:get([bindings, Key], Req),
+    case lists:member(Id, SpaceIds) of
+        true ->
+            {ok, SpaceName} = space_logic:get_name(SessionId, Id),
+            {ok, Guid} = lfm:get_file_guid(SessionId, <<"/", SpaceName/binary>>),
+            Guid;
+        false ->
+            middleware_utils:decode_object_id(cowboy_req:binding(Key, Req), Key)
+    end;
 resolve_bindings(SessionId, ?PATH_BINDING, Req) ->
     Path = filename:join([<<"/">> | cowboy_req:path_info(Req)]),
     {ok, Guid} = middleware_utils:resolve_file_path(SessionId, Path),
