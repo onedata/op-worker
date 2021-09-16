@@ -59,6 +59,8 @@
     qos_reconciliation_dir_test/1,
     reconcile_qos_using_file_meta_posthooks_test/1,
     reconcile_with_links_race_test/1,
+    reconcile_with_links_race_nested_file_test/1,
+    reconcile_with_links_and_file_meta_race_nested_file_test/1,
 
     reevaluate_impossible_qos_test/1,
     reevaluate_impossible_qos_race_test/1,
@@ -105,6 +107,8 @@ all() -> [
     qos_reconciliation_dir_test,
     reconcile_qos_using_file_meta_posthooks_test,
     reconcile_with_links_race_test,
+    reconcile_with_links_race_nested_file_test,
+    reconcile_with_links_and_file_meta_race_nested_file_test,
 
     reevaluate_impossible_qos_test,
     reevaluate_impossible_qos_race_test,
@@ -622,75 +626,128 @@ reconcile_qos_using_file_meta_posthooks_test(Config) ->
                 worker = Worker1,
                 qos_name = ?QOS1,
                 path = DirPath,
-                expression = <<"country=FR">>
+                expression = <<"providerId=", (?GET_DOMAIN_BIN(Worker2))/binary>>
             }
         ]
     },
 
     {_, _} = qos_tests_utils:fulfill_qos_test_base(Config, QosSpec),
 
-    mock_dbsync_changes(Config),
+    mock_dbsync_changes(Worker2),
     mock_file_meta_posthooks(Config),
 
     Guid = qos_tests_utils:create_file(Worker1, SessId, FilePath, <<"test_data">>),
 
     DirStructureBefore = get_expected_structure_for_single_dir([?PROVIDER_ID(Worker1)]),
     DirStructureBefore2 = DirStructureBefore#test_dir_structure{assertion_workers = [Worker1]},
-    qos_tests_utils:assert_distribution_in_dir_structure(
+    ?assert(qos_tests_utils:assert_distribution_in_dir_structure(
         Config, DirStructureBefore2, #{files => [{Guid, FilePath}], dirs => []}
-    ),
-
+    )),
+    
+    Filters = [{file_meta, file_id:guid_to_uuid(Guid)}],
+    ensure_docs_received(Filters),
+    unmock_dbsync_changes(Worker2),
+    save_not_matching_docs(Worker2, Filters),
     receive
         post_hook_created ->
-            unmock_file_meta_posthooks(Config),
-            unmock_dbsync_changes(Config)
+            unmock_file_meta_posthooks(Config)
     end,
-
-    save_file_meta_docs(Config),
+    save_matching_docs(Worker2, Filters),
 
     DirStructureAfter = get_expected_structure_for_single_dir([?PROVIDER_ID(Worker1), ?PROVIDER_ID(Worker2)]),
-    qos_tests_utils:assert_distribution_in_dir_structure(Config, DirStructureAfter,  #{files => [{Guid, FilePath}], dirs => []}).
+    ?assert(qos_tests_utils:assert_distribution_in_dir_structure(Config, DirStructureAfter,  #{files => [{Guid, FilePath}], dirs => []})).
 
 
 reconcile_with_links_race_test(Config) ->
+    reconcile_with_links_race_test_base(Config, 0, [qos_entry, links_forest]).
+
+
+reconcile_with_links_race_nested_file_test(Config) ->
+    reconcile_with_links_race_test_base(Config, 8, [qos_entry, links_forest]).
+
+
+reconcile_with_links_and_file_meta_race_nested_file_test(Config) ->
+    reconcile_with_links_race_test_base(Config, 8, [qos_entry, file_meta, links_forest]).
+
+
+reconcile_with_links_race_test_base(Config, Depth, RecordsToBlock) ->
     [Worker1, Worker2 | _] = Workers = qos_tests_utils:get_op_nodes_sorted(Config),
     SessId = fun(Worker) -> ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config) end,
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(?SPACE_ID),
     
     Name = generator:gen_name(),
+    
     {ok, DirGuid} = lfm_proxy:mkdir(Worker1, SessId(Worker1), SpaceGuid, ?filename(Name, 0), ?DEFAULT_DIR_PERMS),
-    Guids = lists:map(
-        fun
-            (250 = Seq) ->
-                lfm_proxy:add_qos_entry(Worker1, SessId(Worker1), ?FILE_REF(SpaceGuid), <<"providerId=", (?GET_DOMAIN_BIN(Worker2))/binary>>, 1),
-                create_file_with_content(Worker1, SessId(Worker1), DirGuid, ?filename(Name, Seq));
-            (Seq) ->
-                create_file_with_content(Worker1, SessId(Worker1), DirGuid, ?filename(Name, Seq))
-        end, lists:seq(1, 500)),
+    % ensure that link in space is synchronized - in env_up tests space uuid is a legacy key and therefore file_meta posthooks are NOT executed for it
+    ?assertMatch({ok, _}, rpc:call(Worker2, file_meta_forest, get, [file_id:guid_to_uuid(SpaceGuid), all, ?filename(Name, 0)]), ?ATTEMPTS),
+    
+    mock_dbsync_changes(Worker2),
+    {ok, QosEntryId} = lfm_proxy:add_qos_entry(Worker1, SessId(Worker1), ?FILE_REF(DirGuid), <<"providerId=", (?GET_DOMAIN_BIN(Worker2))/binary>>, 1),
+    
+    
+    ParentGuid = lists:foldl(fun(_, TmpParentGuid) ->
+        {ok, G} = lfm_proxy:mkdir(Worker1, SessId(Worker1), TmpParentGuid, ?filename(Name, 0), ?DEFAULT_DIR_PERMS),
+        G
+    end, DirGuid, lists:seq(1, Depth)),
+    Guid = create_file_with_content(Worker1, SessId(Worker1), ParentGuid, ?filename(Name, 0)),
     
     ?assertMatch({ok, {Map, _}} when map_size(Map) =/= 0,
-        lfm_proxy:get_effective_file_qos(Worker1, SessId(Worker1), ?FILE_REF(SpaceGuid)),
+        lfm_proxy:get_effective_file_qos(Worker1, SessId(Worker1), ?FILE_REF(DirGuid)),
         3 * ?ATTEMPTS),
     
     Size = size(?TEST_DATA),
-    ExpectedDistribution = lists:map(fun({W, TotalBlocksSize}) ->
-        #{
-            <<"providerId">> => ?GET_DOMAIN_BIN(W),
-            <<"totalBlocksSize">> => TotalBlocksSize,
-            <<"blocks">> => [[0, TotalBlocksSize]]
-        }
-    end, [{Worker1, Size}, {Worker2, Size}]),
-    ExpectedDistributionSorted = lists:sort(fun(#{<<"providerId">> := ProviderIdA}, #{<<"providerId">> := ProviderIdB}) ->
-        ProviderIdA =< ProviderIdB
-    end, ExpectedDistribution),
-    ct:print("Checking distribution..."),
-    lists:foreach(fun(G) ->
+    ExpectedDistributionFun = fun(List) -> 
+        Distribution = lists:map(fun({W, TotalBlocksSize}) ->
+            #{
+                <<"providerId">> => ?GET_DOMAIN_BIN(W),
+                <<"totalBlocksSize">> => TotalBlocksSize,
+                <<"blocks">> => [[0, TotalBlocksSize]]
+            }
+        end, List),
+        lists:sort(fun(#{<<"providerId">> := ProviderIdA}, #{<<"providerId">> := ProviderIdB}) ->
+            ProviderIdA =< ProviderIdB
+        end, Distribution)
+    end,
+    
+    CheckDistributionFun = fun(ExpectedWorkersDistribution) ->
         lists:foreach(fun(Worker) ->
-            ?assertEqual({ok, ExpectedDistributionSorted},
-                lfm_proxy:get_file_distribution(Worker, SessId(Worker), ?FILE_REF(G)), ?ATTEMPTS
+            ?assertEqual({ok, ExpectedDistributionFun(ExpectedWorkersDistribution)},
+                lfm_proxy:get_file_distribution(Worker, SessId(Worker), ?FILE_REF(Guid)), ?ATTEMPTS
             )
         end, Workers)
-    end, Guids).
+    end,
+    
+    LinksKey = datastore_model:get_unique_key(file_meta, file_id:guid_to_uuid(DirGuid)),
+    Filters = lists:map(fun
+        (qos_entry) -> {qos_entry, QosEntryId};
+        (file_meta) -> {file_meta, file_id:guid_to_uuid(ParentGuid)};
+        (links_forest) -> {links, links_forest, LinksKey}
+    end, RecordsToBlock),
+    
+    ensure_docs_received(Filters),
+    unmock_dbsync_changes(Worker2),
+    % mock fslogic_authz:ensure_authorized/3 to bypass its fail on non existing ancestor file meta document
+    mock_fslogic_authz_ensure_authorized(Worker2),
+    save_not_matching_docs(Worker2, Filters),
+    
+    CheckDistributionFun([{Worker1, Size}]),
+    
+    save_matching_docs(Worker2, [{qos_entry, QosEntryId}]),
+    lists:foreach(fun(Worker) ->
+        ?assertEqual({ok, ?FULFILLED_QOS_STATUS}, lfm_proxy:check_qos_status(Worker, SessId(Worker), QosEntryId), ?ATTEMPTS)
+    end, Workers),
+    CheckDistributionFun([{Worker1, Size}]),
+    
+    save_matching_docs(Worker2, [{links, links_forest, LinksKey}]),
+    case lists:member(file_meta, RecordsToBlock) of
+        false ->
+            CheckDistributionFun([{Worker1, Size}, {Worker2, Size}]);
+        true ->
+            CheckDistributionFun([{Worker1, Size}]),
+            save_matching_docs(Worker2, [{file_meta, file_id:guid_to_uuid(ParentGuid)}]),
+            CheckDistributionFun([{Worker1, Size}, {Worker2, Size}])
+    end.
+    
 
 %%%===================================================================
 %%% QoS reevaluate
@@ -1200,21 +1257,6 @@ get_provider_to_storage_mappings(Config) ->
     }.
 
 
-mock_dbsync_changes(Config) ->
-    [Worker1 | _] = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Worker1, dbsync_changes, [passthrough]),
-    TestPid = self(),
-
-    ok = test_utils:mock_expect(Worker1, dbsync_changes, apply,
-        fun
-            (Doc = #document{value = #file_meta{}}) ->
-                TestPid ! {file_meta, Doc},
-                ok;
-            (Doc) ->
-                meck:passthrough([Doc])
-        end).
-
-
 mock_file_meta_posthooks(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, file_meta_posthooks, [passthrough]),
@@ -1227,25 +1269,9 @@ mock_file_meta_posthooks(Config) ->
         end).
 
 
-unmock_dbsync_changes(Config) ->
-    [Worker1 | _] = ?config(op_worker_nodes, Config),
-    test_utils:mock_unload(Worker1, dbsync_changes).
-
-
 unmock_file_meta_posthooks(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Workers, file_meta_posthooks).
-
-
-save_file_meta_docs(Config) ->
-    [Worker1 | _] = ?config(op_worker_nodes, Config),
-    receive
-        {file_meta, Doc} ->
-            ?assertMatch(ok, rpc:call(Worker1, dbsync_changes, apply, [Doc])),
-            save_file_meta_docs(Config)
-    after 0 ->
-        ok
-    end.
 
 
 create_file_with_content(Worker, SessId, ParentGuid, Name) ->
@@ -1253,3 +1279,97 @@ create_file_with_content(Worker, SessId, ParentGuid, Name) ->
     {ok, _} = lfm_proxy:write(Worker, H1, 0, ?TEST_DATA),
     ok = lfm_proxy:close(Worker, H1),
     G.
+
+
+mock_fslogic_authz_ensure_authorized(Worker) ->
+    test_utils:mock_new(Worker, fslogic_authz, [passthrough]),
+    ok = test_utils:mock_expect(Worker, fslogic_authz, ensure_authorized,
+        fun(_, FileCtx, _) ->
+            FileCtx
+        end).
+
+%%%===================================================================
+%%% DBSync mocks
+%%%===================================================================
+
+mock_dbsync_changes(Worker) ->
+    test_utils:mock_new(Worker, dbsync_changes, [passthrough]),
+    TestPid = self(),
+
+    ok = test_utils:mock_expect(Worker, dbsync_changes, apply,
+        fun(#document{value = Value} = Doc) ->
+            RecordType = element(1, Value),
+            TestPid ! {RecordType, Doc},
+            ok
+        end).
+
+
+unmock_dbsync_changes(Worker) ->
+    test_utils:mock_unload(Worker, dbsync_changes).
+
+
+save_matching_docs(Worker, Filters) ->
+    save_docs(Worker, Filters, matching).
+
+
+save_not_matching_docs(Worker, Filters) ->
+    save_docs(Worker, Filters, not_matching).
+
+
+save_docs(Worker, Filters, Strategy) ->
+    LeftOutDocs = save_docs(Worker, Filters, [], Strategy),
+    lists:foreach(fun(#document{value = Value} = Doc) ->
+        RecordType = element(1, Value),
+        self() ! {RecordType, Doc}
+    end, LeftOutDocs).
+
+
+save_docs(Worker, Filters, LeftOutDocs, Strategy) ->
+    ExpectedMatch = Strategy == matching,
+    receive
+        {_, Doc} ->
+            case matches_doc(Doc, Filters) of
+                ExpectedMatch ->
+                    ?assertMatch(ok, rpc:call(Worker, dbsync_changes, apply, [Doc])),
+                    save_docs(Worker, Filters, LeftOutDocs, Strategy);
+                _ ->
+                    save_docs(Worker, Filters, [Doc | LeftOutDocs], Strategy)
+            end
+    after 0 ->
+        LeftOutDocs
+    end.
+
+
+matches_doc(#document{key = Key, value = Value}, Filters) ->
+    RecordType = element(1, Value),
+    lists:any(fun
+        (R) when R =:= RecordType ->
+            true;
+        ({R, K}) when R =:= RecordType andalso K =:= Key ->
+            true;
+        ({links, R, LinksKey}) when R =:= RecordType -> 
+            matches_link_doc(Value, LinksKey);
+        (_) ->
+            false
+    end, Filters).
+
+
+matches_link_doc(#links_node{key = Key}, Key) -> true;
+matches_link_doc(#links_forest{key = Key}, Key) -> true;
+matches_link_doc(#links_mask{key = Key}, Key) -> true;
+matches_link_doc(_, _) -> false.
+
+
+ensure_docs_received([]) -> ok;
+ensure_docs_received([{RecordType, _} | Tail]) ->
+    wait_for_doc(RecordType),
+    ensure_docs_received(Tail);
+ensure_docs_received([{links, RecordType, _} | Tail]) ->
+    wait_for_doc(RecordType),
+    ensure_docs_received(Tail).
+
+
+wait_for_doc(RecordType) ->
+    receive {RecordType, _} = Msg ->
+        self() ! Msg
+    end.
