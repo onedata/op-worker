@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Helper module operating on automation lane executions.
+%%% TODO WRITEME
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_lane_execution).
@@ -21,12 +21,11 @@
     ensure_all_ended/1,
     clean_all/1, clean/1
 ]).
--export([get_parallel_box_execution_specs/1]).
 -export([gather_statuses/1, update_task_status/4]).
 -export([to_json/1]).
 
 %% persistent_record callbacks
--export([version/0, db_encode/2, db_decode/2]).
+-export([version/0, upgrade_encoded_record/2, db_encode/2, db_decode/2]).
 
 
 -type status() ::
@@ -69,11 +68,6 @@ clean_all(AtmLaneExecutions) ->
 -spec clean(record()) -> ok.
 clean(#atm_lane_execution{parallel_boxes = AtmParallelBoxExecutions}) ->
     atm_parallel_box_execution:teardown_all(AtmParallelBoxExecutions).
-
-
--spec get_parallel_box_execution_specs(record()) -> [workflow_engine:parallel_box_spec()].
-get_parallel_box_execution_specs(#atm_lane_execution{}) ->
-    []. %% TODO rm
 
 
 -spec gather_statuses([record()]) -> [AtmLaneExecutionStatus :: atm_task_execution:status()].
@@ -120,18 +114,42 @@ update_task_status(AtmParallelBoxIndex, AtmTaskExecutionId, NewStatus, #atm_lane
     end.
 
 
--spec to_json(record()) -> json_utils:json_term().
-to_json(#atm_lane_execution{
+-spec to_json(record2()) -> json_utils:json_map().
+to_json(#atm_lane_execution_rec{
     schema_id = AtmLaneSchemaId,
-    status = AtmLaneExecutionStatus,
+    runs = AllRuns
+}) ->
+    VisibleRuns = lists:dropwhile(fun(#atm_lane_execution_run{run_no = RunNo}) ->
+        RunNo == undefined
+    end, AllRuns),
+
+    #{
+        <<"schemaId">> => AtmLaneSchemaId,
+        <<"runs">> => lists:map(fun run_to_json/1, VisibleRuns)
+    }.
+
+
+%% @private
+-spec run_to_json(run()) -> json_utils:json_map().
+run_to_json(#atm_lane_execution_run{
+    run_no = RunNo,
+    status = Status,
+    iterated_store_id = IteratedStoreId,
+    exception_store_id = ExceptionStoreId,
     parallel_boxes = AtmParallelBoxExecutions
 }) ->
     #{
-        <<"schemaId">> => AtmLaneSchemaId,
-        <<"status">> => atom_to_binary(AtmLaneExecutionStatus, utf8),
+        <<"runNo">> => RunNo,
+        <<"iteratedStoreId">> => IteratedStoreId,
+        <<"exceptionStoreId">> => ExceptionStoreId,
+        <<"status">> => atom_to_binary(Status, utf8),
         <<"parallelBoxes">> => lists:map(
             fun atm_parallel_box_execution:to_json/1, AtmParallelBoxExecutions
-        )
+        ),
+
+        % TODO VFS-8226 add more types after implementing restarts/reruns
+        <<"runType">> => <<"regular">>,
+        <<"srcRunNo">> => null
     }.
 
 
@@ -142,35 +160,84 @@ to_json(#atm_lane_execution{
 
 -spec version() -> persistent_record:record_version().
 version() ->
-    1.
+    2.
 
 
--spec db_encode(record(), persistent_record:nested_record_encoder()) ->
-    json_utils:json_term().
-db_encode(#atm_lane_execution{
+-spec upgrade_encoded_record(persistent_record:record_version(), json_utils:json_map()) ->
+    {persistent_record:record_version(), json_utils:json_map()}.
+upgrade_encoded_record(1, #{
+    <<"schemaId">> := AtmLaneSchemaId,
+    <<"status">> := StatusBin,
+    <<"parallelBoxes">> := AtmParallelBoxExecutionsJson
+}) ->
+    {2, #{<<"schemaId">> => AtmLaneSchemaId, <<"runs">> => [#{
+        #{
+            <<"runNo">> => 1,
+            <<"iteratedStoreId">> => null,
+            <<"exceptionStoreId">> => null,
+            <<"status">> => StatusBin,
+            <<"parallelBoxes">> => AtmParallelBoxExecutionsJson
+        }
+    }]}}.
+
+
+-spec db_encode(record2(), persistent_record:nested_record_encoder()) ->
+    json_utils:json_map().
+db_encode(#atm_lane_execution_rec{
     schema_id = AtmLaneSchemaId,
-    status = AtmLaneExecutionStatus,
-    parallel_boxes = AtmParallelBoxExecutions
+    runs = Runs
 }, NestedRecordEncoder) ->
     #{
         <<"schemaId">> => AtmLaneSchemaId,
-        <<"status">> => atom_to_binary(AtmLaneExecutionStatus, utf8),
+        <<"runs">> => lists:map(fun(Run) -> encode_run(NestedRecordEncoder, Run) end, Runs)
+    }.
+
+
+%% @private
+-spec encode_run(persistent_record:nested_record_encoder(), run()) ->
+    json_utils:json_map().
+encode_run(NestedRecordEncoder, #atm_lane_execution_run{
+    run_no = RunNo,
+    status = Status,
+    iterated_store_id = IteratedStoreId,
+    exception_store_id = ExceptionStoreId,
+    parallel_boxes = AtmParallelBoxExecutions
+}) ->
+    #{
+        <<"runNo">> => RunNo,
+        <<"iteratedStoreId">> => utils:undefined_to_null(IteratedStoreId),
+        <<"exceptionStoreId">> => utils:undefined_to_null(ExceptionStoreId),
+        <<"status">> => atom_to_binary(Status, utf8),
         <<"parallelBoxes">> => lists:map(fun(AtmParallelBoxExecution) ->
             NestedRecordEncoder(AtmParallelBoxExecution, atm_parallel_box_execution)
         end, AtmParallelBoxExecutions)
     }.
 
 
--spec db_decode(json_utils:json_term(), persistent_record:nested_record_decoder()) ->
+-spec db_decode(json_utils:json_map(), persistent_record:nested_record_decoder()) ->
     record().
-db_decode(#{
-    <<"schemaId">> := AtmLaneSchemaId,
-    <<"status">> := AtmLaneExecutionStatusBin,
-    <<"parallelBoxes">> := AtmParallelBoxExecutionsJson
-}, NestedRecordDecoder) ->
-    #atm_lane_execution{
+db_decode(#{<<"schemaId">> := AtmLaneSchemaId, <<"runs">> := RunsJson}, NestedRecordDecoder) ->
+    #atm_lane_execution_rec{
         schema_id = AtmLaneSchemaId,
-        status = binary_to_atom(AtmLaneExecutionStatusBin, utf8),
+        runs = lists:map(fun(RunJson) -> decode_run(NestedRecordDecoder, RunJson) end, RunsJson)
+    }.
+
+
+%% @private
+-spec decode_run(persistent_record:nested_record_decoder(), run()) ->
+    json_utils:json_map().
+decode_run(NestedRecordDecoder, #{
+    <<"runNo">> := RunNo,
+    <<"iteratedStoreId">> := IteratedStoreId,
+    <<"exceptionStoreId">> := ExceptionStoreId,
+    <<"status">> := StatusBin,
+    <<"parallelBoxes">> := AtmParallelBoxExecutionsJson
+}) ->
+    #atm_lane_execution_run{
+        run_no = RunNo,
+        status = binary_to_atom(StatusBin, utf8),
+        iterated_store_id = utils:null_to_undefined(IteratedStoreId),
+        exception_store_id = utils:null_to_undefined(ExceptionStoreId),
         parallel_boxes = lists:map(fun(AtmParallelBoxExecutionJson) ->
             NestedRecordDecoder(AtmParallelBoxExecutionJson, atm_parallel_box_execution)
         end, AtmParallelBoxExecutionsJson)

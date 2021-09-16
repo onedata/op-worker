@@ -143,9 +143,6 @@ get_lane_spec(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmLaneIndex) ->
         freeze_lane_iteration_store(AtmWorkflowExecutionCtx, AtmLaneSchema),
 
         {ok, #{
-            parallel_boxes => atm_lane_execution:get_parallel_box_execution_specs(
-                AtmLaneExecution
-            ),
             iterator => acquire_iterator_for_lane(AtmWorkflowExecutionCtx, AtmLaneSchema),
             is_last => is_last_lane(AtmLaneIndex, AtmWorkflowExecutionDoc)
         }}
