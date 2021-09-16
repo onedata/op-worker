@@ -97,7 +97,7 @@ start(UserCtx, AtmWorkflowExecutionId, AtmWorkflowExecutionEnv) ->
 
 -spec cancel(atm_workflow_execution:id()) -> ok | {error, already_ended}.
 cancel(AtmWorkflowExecutionId) ->
-    case atm_workflow_execution_status:handle_aborting(AtmWorkflowExecutionId, cancel) of
+    case atm_lane_execution_status:handle_aborting(undefined, AtmWorkflowExecutionId, cancel) of
         ok ->
             workflow_engine:cancel_execution(AtmWorkflowExecutionId);
         {error, _} = Error ->
@@ -273,7 +273,6 @@ prepare_internal(AtmWorkflowExecutionId, _AtmWorkflowExecutionCtx) ->
     try
         ok  %% TODO replace with prepare for each lane
     catch Type:Reason ->
-        atm_workflow_execution_status:handle_aborting(AtmWorkflowExecutionId, failure),
         erlang:Type(Reason)
     end,
     ok.

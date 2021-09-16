@@ -40,9 +40,9 @@ prepare(AtmLaneIndex, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
         atm_lane_execution_status:handle_enqueued(AtmLaneIndex, AtmWorkflowExecutionId),
 
         {AtmLaneExecutionSpec, AtmWorkflowExecutionEnv}
-    catch throw:{error, _} ->
-        % TODO handle aborting
-        throw(error)
+    catch Type:Reason ->
+        atm_lane_execution_status:handle_aborting(AtmLaneIndex, AtmWorkflowExecutionId, failure),
+        erlang:Type(Reason)
     end.
 
 
