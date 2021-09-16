@@ -23,7 +23,7 @@
 -type prepare_result() :: {ok, workflow_engine:lane_spec(), workflow_engine:execution_context()} | error.
 % engine does not distinguish reason of execution finish - finish_execution is returned
 % if processed lane is last lane as well as on error
--type lane_ended_callback_result() :: {continue, NextLaneId :: workflow_engine:lane_id()} | finish_execution.
+-type lane_ended_callback_result() :: ?FINISH_EXECUTION | ?CONTINUE(workflow_engine:lane_id(), workflow_engine:lane_id()).
 % TODO VFS-7787 move following types to callback server:
 -type finished_callback_id() :: binary().
 -type heartbeat_callback_id() :: binary().
@@ -103,7 +103,7 @@
 %%--------------------------------------------------------------------
 %% @doc
 %% Callback reporting that task has been executed for all items.
-%% This callback is executes once for each task. It is guarantees that
+%% This callback is executed once for each task. It is guaranteed that
 %% callback is called before call of handle_lane_execution_ended
 %% callback for task's lane.
 %% Warning: there is no guarantee that callbacks for tasks are called

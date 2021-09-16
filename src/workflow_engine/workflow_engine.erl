@@ -23,15 +23,15 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([init/1, init/2, execute_workflow/2, cancel_execution/1,
-    report_execution_status_update/5, get_async_call_pools/1,
+-export([init/1, init/2, execute_workflow/2, cancel_execution/1, cleanup_execution/1]).
+-export([report_execution_status_update/5, get_async_call_pools/1,
     trigger_job_scheduling/1, call_handler/5]).
 
 %% Functions exported for internal_services engine - do not call directly
 -export([init_service/2, takeover_service/3]).
 
 %% Function executed by wpool - do not call directly
--export([process_job_or_result/3, prepare_lane/5]).
+-export([process_job_or_result/3, prepare_lane/6]).
 
 -type id() :: binary(). % Id of an engine
 -type execution_id() :: binary().
@@ -43,6 +43,7 @@
 -type processing_stage() :: ?SYNC_CALL | ?ASYNC_CALL_STARTED | ?ASYNC_CALL_FINISHED | ?ASYNC_RESULT_PROCESSED.
 -type handler_execution_result() :: workflow_handler:handler_execution_result() | {ok, KeepaliveTimeout :: time:seconds()}.
 -type processing_result() :: handler_execution_result() | workflow_handler:async_processing_result().
+-type preparation_mode() :: ?PREPARE_SYNC | ?PREPARE_IN_ADVANCE.
 
 %% @formatter:off
 -type options() :: #{
@@ -57,8 +58,8 @@
     workflow_handler := workflow_handler:handler(),
     execution_context => execution_context(),
     first_lane_id => lane_id(), % does not have to be defined if execution is started from snapshot
-    force_clean_execution => boolean() % TODO - aborted zostawia snapshot, jesli padnie z ilosci bledow to jest abored, jak prepare to error
-    % TODO - mozna podac lane do prefetchowania i ilosc bledow do abortowania
+    prepared_in_advance_lane_id => lane_id(),
+    force_clean_execution => boolean()
 }.
 
 -type task_type() :: sync | async.
@@ -70,13 +71,14 @@
 -type parallel_box_spec() :: #{task_id() => task_spec()}.
 -type lane_spec() :: #{
     parallel_boxes := [parallel_box_spec()],
-    iterator := iterator:iterator()
+    iterator := iterator:iterator(),
+    failures_count_to_abort => non_neg_integer()
 }.
 %% @formatter:on
 
 -export_type([id/0, execution_id/0, execution_context/0, lane_id/0, task_id/0, subject_id/0,
     execution_spec/0, processing_stage/0, handler_execution_result/0, processing_result/0,
-    task_spec/0, parallel_box_spec/0, lane_spec/0]).
+    task_spec/0, parallel_box_spec/0, lane_spec/0, preparation_mode/0]).
 
 -type handler_function() :: atom().
 -type handler_args() :: [term()].
@@ -124,10 +126,14 @@ execute_workflow(EngineId, ExecutionSpec) ->
     Handler = maps:get(workflow_handler, ExecutionSpec),
     Context = maps:get(execution_context, ExecutionSpec, undefined),
     FirstLaneId = maps:get(first_lane_id, ExecutionSpec, undefined),
+    PreparedInAdvanceLaneId = maps:get(prepared_in_advance_lane_id, ExecutionSpec, undefined),
 
     InitAns = case ExecutionSpec of
-        #{force_clean_execution := true} -> workflow_execution_state:init(ExecutionId, Handler, Context, FirstLaneId);
-        _ -> workflow_execution_state:init_using_snapshot(ExecutionId, Handler, Context, FirstLaneId)
+        #{force_clean_execution := true} -> 
+            workflow_execution_state:init(ExecutionId, Handler, Context, FirstLaneId, PreparedInAdvanceLaneId);
+        _ ->
+            workflow_execution_state:init_using_snapshot(
+                ExecutionId, Handler, Context, FirstLaneId, PreparedInAdvanceLaneId)
     end,
 
     case InitAns of
@@ -142,6 +148,10 @@ execute_workflow(EngineId, ExecutionSpec) ->
 -spec cancel_execution(execution_id()) -> ok.
 cancel_execution(ExecutionId) ->
     workflow_execution_state:cancel(ExecutionId).
+
+-spec cleanup_execution(execution_id()) -> ok.
+cleanup_execution(ExecutionId) ->
+    workflow_iterator_snapshot:cleanup(ExecutionId).
 
 -spec report_execution_status_update(execution_id(), id(), processing_stage(),
     workflow_jobs:job_identifier(), handler_execution_result()) -> ok.
@@ -276,8 +286,9 @@ schedule_next_job(EngineId, DeferredExecutions) ->
                                 ?WF_ERROR_LIMIT_REACHED ->
                                     schedule_next_job(EngineId, [ExecutionId | DeferredExecutions])
                             end;
-                        ?PREPARE_LANE_EXECUTION(Handler, ExecutionContext, LaneId, LaneType) ->
-                            schedule_lane_prepare_on_pool(EngineId, ExecutionId, Handler, ExecutionContext, LaneId, LaneType);
+                        ?PREPARE_LANE_EXECUTION(Handler, ExecutionContext, LaneId, PreparationMode) ->
+                            schedule_lane_prepare_on_pool(
+                                EngineId, ExecutionId, Handler, ExecutionContext, LaneId, PreparationMode);
                         ?END_EXECUTION(Handler, Context, KeepSnapshot) ->
                             case workflow_engine_state:remove_execution_id(EngineId, ExecutionId) of
                                 ok ->
@@ -336,10 +347,11 @@ schedule_on_pool(EngineId, ExecutionId, #execution_spec{
     execution_id(),
     workflow_handler:handler(),
     execution_context(),
-    lane_id()
+    lane_id(),
+    preparation_mode()
 ) -> ok.
-schedule_lane_prepare_on_pool(EngineId, ExecutionId, Handler, ExecutionContext, LaneId, LaneType) ->
-    CallArgs = {?MODULE, prepare_lane, [EngineId, ExecutionId, Handler, ExecutionContext, LaneId, LaneType]},
+schedule_lane_prepare_on_pool(EngineId, ExecutionId, Handler, ExecutionContext, LaneId, PreparationMode) ->
+    CallArgs = {?MODULE, prepare_lane, [EngineId, ExecutionId, Handler, ExecutionContext, LaneId, PreparationMode]},
     ok = worker_pool:cast(?POOL_ID(EngineId), CallArgs).
 
 -spec get_default_keepalive_timeout(id()) -> time:seconds().
@@ -489,12 +501,13 @@ process_result(EngineId, ExecutionId, #execution_spec{
     execution_id(),
     workflow_handler:handler(),
     execution_context(),
-    lane_id()
+    lane_id(),
+    preparation_mode()
 ) -> ok.
-prepare_lane(EngineId, ExecutionId, Handler, ExecutionContext, LaneId, LaneType) ->
+prepare_lane(EngineId, ExecutionId, Handler, ExecutionContext, LaneId, PreparationMode) ->
     try
         Ans = call_handler(ExecutionId, ExecutionContext, Handler, prepare_lane, [LaneId]),
-        workflow_execution_state:report_lane_execution_prepared(ExecutionId, Handler, LaneType, Ans),
+        workflow_execution_state:report_lane_execution_prepared(ExecutionId, Handler, PreparationMode, Ans),
         trigger_job_scheduling(EngineId, ?FOR_CURRENT_SLOT_FIRST)
     catch
         Error:Reason:Stacktrace  ->

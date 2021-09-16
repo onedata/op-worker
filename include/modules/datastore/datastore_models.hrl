@@ -17,6 +17,7 @@
 -include("modules/fslogic/fslogic_delete.hrl").
 -include("modules/storage/luma/luma.hrl").
 -include("modules/fslogic/file_attr.hrl").
+-include("workflow_engine.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_models.hrl").
 
 -type file_descriptors() :: #{session:id() => non_neg_integer()}.
@@ -1178,7 +1179,8 @@
     iterator :: iterator:iterator(),
     lane_index = workflow_execution_state:index(),
     lane_id :: workflow_engine:lane_id(),
-    item_index = workflow_execution_state:index()
+    item_index = workflow_execution_state:index(),
+    prepared_in_advance_lane_id :: workflow_engine:lane_id() | undefined
 }).
 
 -record(workflow_engine_state, {
@@ -1191,9 +1193,10 @@
     handler :: workflow_handler:handler(),
     initial_context :: workflow_engine:execution_context(),
 
-    execution_status = not_prepared :: workflow_execution_state:execution_status(),
+    execution_status = ?NOT_PREPARED :: workflow_execution_state:execution_status(),
     current_lane :: workflow_execution_state:current_lane(),
-    lane_prepared_in_advance_status = not_prepared :: workflow_execution_state:execution_status(),
+
+    lane_prepared_in_advance_status = ?NOT_PREPARED :: workflow_execution_state:execution_status(),
     lane_prepared_in_advance :: workflow_execution_state:lane_prepared_in_advance() | undefined,
 
     lowest_failed_job_identifier :: workflow_jobs:job_identifier() | undefined,
@@ -1203,11 +1206,12 @@
     prefetched_iteration_step :: workflow_execution_state:iteration_status(),
     jobs :: workflow_jobs:jobs() | undefined,
 
+    waiting_notifications = [] :: [workflow_jobs:job_identifier()],
+
     % Field used to return additional information about document update procedure
     % (datastore:update returns {ok, #document{}} or {error, term()}
     % so such information has to be returned via record's field).
-    update_report :: workflow_execution_state:update_report() | undefined,
-    waiting_notifications = [] :: [workflow_jobs:job_identifier()]
+    update_report :: workflow_execution_state:update_report() | undefined
 }).
 
 -record(workflow_async_call_pool, {
