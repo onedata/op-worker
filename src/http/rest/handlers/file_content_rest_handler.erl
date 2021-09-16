@@ -72,6 +72,8 @@ ensure_operation_supported(create, content, private) -> true;
 ensure_operation_supported(get, content, public) -> true;
 ensure_operation_supported(get, content, private) -> true;
 ensure_operation_supported(create, file_on_path, private) -> true;
+ensure_operation_supported(get, file_on_path, private) -> true;
+ensure_operation_supported(delete, file_on_path, private) -> true;
 ensure_operation_supported(_, _, _) -> throw(?ERROR_NOT_SUPPORTED).
 
 
@@ -179,6 +181,38 @@ sanitize_params(#op_req{
             optional => OptionalParams
         }#{<<"name">> => lists:last(PathInfo)}),
         gri = #gri{aspect = file_on_path, id = ParentGuid}
+    };
+
+sanitize_params(#op_req{
+    operation = get,
+    data = RawParams,
+    auth = #auth{session_id = SessionId},
+    gri = #gri{aspect = file_on_path, id = GriId}
+} = OpReq, Req) ->
+    PathInfo = maps:get(path_info, Req),
+    FileGuid = get_file_guid_from_path(SessionId, GriId, PathInfo),
+    RawParams2 = maps:put(<<"name">>, lists:last(PathInfo), RawParams),
+    OpReq#op_req{
+        data = middleware_sanitizer:sanitize_data(RawParams2, #{
+            optional => #{<<"follow_symlinks">> => {boolean, any}}
+        }#{<<"name">> => lists:last(PathInfo)}),
+        gri = #gri{aspect = content, id = FileGuid}
+    };
+
+sanitize_params(#op_req{
+    operation = delete,
+    data = RawParams,
+    auth = #auth{session_id = SessionId},
+    gri = #gri{aspect = file_on_path, id = GriId}
+} = OpReq, Req) ->
+    PathInfo = maps:get(path_info, Req),
+    FileGuid = get_file_guid_from_path(SessionId, GriId, PathInfo),
+    RawParams2 = maps:put(<<"name">>, lists:last(PathInfo), RawParams),
+    OpReq#op_req{
+        data = middleware_sanitizer:sanitize_data(RawParams2, #{
+            optional => #{<<"follow_symlinks">> => {boolean, any}}
+        }#{<<"name">> => lists:last(PathInfo)}),
+        gri = #gri{aspect = content, id = FileGuid}
     }.
 
 
@@ -215,6 +249,14 @@ process_request(#op_req{
                     http_req:send_error(Error, Req)
             end
     end;
+
+process_request(#op_req{
+    operation = delete,
+    auth = #auth{session_id = SessionId},
+    gri = #gri{id = FileGuid, aspect = content}
+}, _Req) ->
+    {ok, FilePath} = lfm:get_file_path(SessionId, FileGuid),
+    lfm:rm_recursive(SessionId, {path, FilePath});
 
 process_request(#op_req{
     operation = create,
@@ -362,6 +404,7 @@ write_req_body_to_file(SessionId, FileRef, Offset, Req) ->
     Req2.
 
 
+-spec create_dirs_on_path(session:id(), fslogic_worker:file_guid(), list(), atom()) -> fslogic_worker:file_guid().
 create_dirs_on_path(SessionId, ParentId, PathInfo, Mode) ->
     case length(PathInfo) of
         0 ->
@@ -382,7 +425,19 @@ create_dirs_on_path(SessionId, ParentId, PathInfo, Mode) ->
                             {ok, DirGuid} = lfm:mkdir(SessionId, ParentIdAcc, DirName, Mode),
                             DirGuid
                     end
-
                 end,
                 ParentId, lists:droplast(PathInfo))
+    end.
+
+
+-spec get_file_guid_from_path(session:id(), fslogic_worker:file_guid(), list()) -> fslogic_worker:file_guid().
+get_file_guid_from_path(SessionId, ParentId, PathInfo) ->
+    case length(PathInfo) of
+        0 ->
+            throw(?ERROR_BAD_DATA(<<"path">>));
+        _ ->
+            {ok, ParentPath} = lfm_files:get_file_path(SessionId, ParentId),
+            FilePath = str_utils:join_as_binaries(lists:append([ParentPath], PathInfo), <<"/">>),
+            {ok, Guid} = lfm:get_file_guid(SessionId, FilePath),
+            Guid
     end.
