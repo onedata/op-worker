@@ -163,55 +163,19 @@ handle_lane_task_status_change(AtmWorkflowExecutionId, AtmLaneExecutionDiff) ->
     end.
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 -spec handle_ended(atm_workflow_execution:id()) ->
     {ok, atm_workflow_execution:doc()} | no_return().
 handle_ended(AtmWorkflowExecutionId) ->
-    Diff = fun(#atm_workflow_execution{status = CurrStatus} = AtmWorkflowExecution) ->
-        EndedStatus = case status_to_phase(CurrStatus) of
-            ?WAITING_PHASE ->
-                % Workflow preparation must have failed or provider was restarted
-                % as otherwise it is not possible to transition from waiting phase
-                % to ended phase directly
-                ?FAILED_STATUS;
-            ?ONGOING_PHASE when CurrStatus == ?ACTIVE_STATUS ->
-                AtmLaneExecutionStatuses = lists:usort(atm_lane_execution:gather_statuses(
-                    AtmWorkflowExecution#atm_workflow_execution.lanes
-                )),
-                case lists:member(?FAILED_STATUS, AtmLaneExecutionStatuses) of
-                    true ->
-                        % Workflow may not have been aborted as maximum failed items threshold
-                        % has not been breached but still after execution end it is considered
-                        % as failed
-                        ?FAILED_STATUS;
-                    false ->
-                        ?FINISHED_STATUS
-                end;
-            ?ONGOING_PHASE when CurrStatus == ?ABORTING_STATUS ->
-                case AtmWorkflowExecution#atm_workflow_execution.aborting_reason of
-                    cancel -> ?CANCELLED_STATUS;
-                    failure -> ?FAILED_STATUS
-                end;
-            ?ENDED_PHASE ->
-                CurrStatus
-        end,
+    Diff = fun(AtmWorkflowExecution = #atm_workflow_execution{
+        curr_lane_index = CurrLaneIndex,
+        lanes = AtmLaneExecutions
+    }) ->
+        #atm_lane_execution{runs = [#atm_lane_execution_run{status = Status} | _]} = lists:nth(
+            CurrLaneIndex, AtmLaneExecutions
+        ),
 
         {ok, set_times_on_phase_transition(AtmWorkflowExecution#atm_workflow_execution{
-            status = EndedStatus
+            status = Status
         })}
     end,
 
@@ -221,7 +185,6 @@ handle_ended(AtmWorkflowExecutionId) ->
     ensure_in_proper_phase_tree(AtmWorkflowExecutionDoc),
 
     Result.
-
 
 
 %%%===================================================================
