@@ -58,11 +58,13 @@ handle_ended(AtmLaneIndex, AtmWorkflowExecutionId) ->
     #atm_lane_execution{
         runs = [#atm_lane_execution_run{
             iterated_store_id = AtmIteratedStoreId,
+            exception_store_id = AtmExceptionStoreId,
             parallel_boxes = AtmParallelBoxExecutions
         } | _]
     } = get_lane_execution(AtmLaneIndex, AtmWorkflowExecutionDoc),
 
     atm_store_api:unfreeze(AtmIteratedStoreId),
+    atm_store_api:freeze(AtmExceptionStoreId),
 
     atm_parallel_box_execution:ensure_all_ended(AtmParallelBoxExecutions),
     atm_parallel_box_execution:teardown_all(AtmParallelBoxExecutions),
