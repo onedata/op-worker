@@ -38,17 +38,27 @@
 ) ->
     workflow_engine:task_spec() | no_return().
 setup(AtmWorkflowExecutionCtx, AtmTaskExecutionIdOrDoc) ->
-    #document{value = #atm_task_execution{executor = AtmTaskExecutor}} = ensure_atm_task_execution_doc(
-        AtmTaskExecutionIdOrDoc
-    ),
+    #document{
+        value = #atm_task_execution{
+            executor = AtmTaskExecutor,
+            system_audit_log_id = AtmSystemAuditLogId
+        }
+    } = ensure_atm_task_execution_doc(AtmTaskExecutionIdOrDoc),
+
+    atm_store_api:unfreeze(AtmSystemAuditLogId),
     atm_task_executor:setup(AtmWorkflowExecutionCtx, AtmTaskExecutor).
 
 
 -spec teardown(atm_task_execution:id()) -> ok | no_return().
 teardown(AtmTaskExecutionId) ->
-    #document{value = #atm_task_execution{executor = AtmTaskExecutor}} = ensure_atm_task_execution_doc(
-        AtmTaskExecutionId
-    ),
+    #document{
+        value = #atm_task_execution{
+            executor = AtmTaskExecutor,
+            system_audit_log_id = AtmSystemAuditLogId
+        }
+    } = ensure_atm_task_execution_doc(AtmTaskExecutionId),
+
+    atm_store_api:freeze(AtmSystemAuditLogId),
     atm_task_executor:teardown(AtmTaskExecutor).
 
 

@@ -17,10 +17,7 @@
 -include("modules/automation/atm_execution.hrl").
 
 %% API
--export([
-    ensure_all_ended/1,
-    clean_all/1, clean/1
-]).
+-export([ensure_all_ended/1]).
 -export([gather_statuses/1]).
 -export([to_json/1]).
 
@@ -58,16 +55,6 @@ ensure_all_ended(AtmLaneExecutions) ->
     pforeach_not_ended(fun(#atm_lane_execution{parallel_boxes = AtmParallelBoxExecutions}) ->
         atm_parallel_box_execution:ensure_all_ended(AtmParallelBoxExecutions)
     end, AtmLaneExecutions).
-
-
--spec clean_all([record()]) -> ok.
-clean_all(AtmLaneExecutions) ->
-    lists:foreach(fun clean/1, AtmLaneExecutions).
-
-
--spec clean(record()) -> ok.
-clean(#atm_lane_execution{parallel_boxes = AtmParallelBoxExecutions}) ->
-    atm_parallel_box_execution:teardown_all(AtmParallelBoxExecutions).
 
 
 -spec gather_statuses([record()]) -> [AtmLaneExecutionStatus :: atm_task_execution:status()].

@@ -357,11 +357,7 @@ ensure_all_tasks_ended(AtmWorkflowExecutionId) ->
 
 %% @private
 -spec teardown(atm_workflow_execution:doc()) -> ok.
-teardown(#document{
-    key = AtmWorkflowExecutionId,
-    value = #atm_workflow_execution{lanes = AtmLaneExecutions}
-}) ->
-    atm_lane_execution:clean_all(AtmLaneExecutions),
+teardown(#document{key = AtmWorkflowExecutionId}) ->
     atm_workflow_execution_session:terminate(AtmWorkflowExecutionId).
 
 

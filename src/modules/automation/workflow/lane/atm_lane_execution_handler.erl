@@ -15,7 +15,10 @@
 -include("modules/automation/atm_execution.hrl").
 
 %% API
--export([prepare/3]).
+-export([
+    prepare/3,
+    handle_ended/3
+]).
 
 
 %%%===================================================================
@@ -44,6 +47,21 @@ prepare(AtmLaneIndex, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
         atm_lane_execution_status:handle_aborting(AtmLaneIndex, AtmWorkflowExecutionId, failure),
         erlang:Type(Reason)
     end.
+
+
+-spec handle_ended(
+    pos_integer(),
+    atm_workflow_execution:id(),
+    atm_workflow_execution_ctx:record()
+) ->
+    ok | no_return().
+handle_ended(AtmLaneIndex, AtmWorkflowExecutionId, _AtmWorkflowExecutionCtx) ->
+    {ok, AtmWorkflowExecutionDoc} = atm_workflow_execution:get(AtmWorkflowExecutionId),
+
+    teardown_lane(AtmLaneIndex, AtmWorkflowExecutionDoc),
+
+
+    ok.
 
 
 %%%===================================================================
@@ -113,3 +131,15 @@ get_lane_schema(AtmLaneIndex, #document{value = #atm_workflow_execution{
     }}} = atm_workflow_schema_snapshot:get(AtmWorkflowSchemaSnapshotId),
 
     lists:nth(AtmLaneIndex, AtmLaneSchemas).
+
+
+%% @private
+-spec teardown_lane(pos_integer(), atm_workflow_execution:doc()) -> ok.
+teardown_lane(AtmLaneIndex, AtmWorkflowExecutionDoc) ->
+    #atm_lane_execution_rec{runs = [#atm_lane_execution_run{
+        iterated_store_id = AtmIteratedStoreId,
+        parallel_boxes = AtmParallelBoxExecutions
+    } | _]} = get_lane_execution(AtmLaneIndex, AtmWorkflowExecutionDoc),
+
+    atm_store_api:unfreeze(AtmIteratedStoreId),
+    atm_parallel_box_execution:teardown_all(AtmParallelBoxExecutions).
