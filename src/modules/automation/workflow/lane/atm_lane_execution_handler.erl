@@ -17,7 +17,7 @@
 %% API
 -export([
     prepare/3,
-    handle_ended/3
+    handle_ended/2
 ]).
 
 
@@ -45,20 +45,27 @@ prepare(AtmLaneIndex, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
         {AtmLaneExecutionSpec, AtmWorkflowExecutionEnv}
     catch Type:Reason ->
         atm_lane_execution_status:handle_aborting(AtmLaneIndex, AtmWorkflowExecutionId, failure),
+        handle_ended(AtmLaneIndex, AtmWorkflowExecutionId),
         erlang:Type(Reason)
     end.
 
 
--spec handle_ended(
-    pos_integer(),
-    atm_workflow_execution:id(),
-    atm_workflow_execution_ctx:record()
-) ->
+-spec handle_ended(pos_integer(), atm_workflow_execution:id()) ->
     ok | no_return().
-handle_ended(AtmLaneIndex, AtmWorkflowExecutionId, _AtmWorkflowExecutionCtx) ->
+handle_ended(AtmLaneIndex, AtmWorkflowExecutionId) ->
     {ok, AtmWorkflowExecutionDoc} = atm_workflow_execution:get(AtmWorkflowExecutionId),
 
-    teardown_lane(AtmLaneIndex, AtmWorkflowExecutionDoc),
+    #atm_lane_execution{
+        runs = [#atm_lane_execution_run{
+            iterated_store_id = AtmIteratedStoreId,
+            parallel_boxes = AtmParallelBoxExecutions
+        } | _]
+    } = get_lane_execution(AtmLaneIndex, AtmWorkflowExecutionDoc),
+
+    atm_store_api:unfreeze(AtmIteratedStoreId),
+
+    atm_parallel_box_execution:ensure_all_ended(AtmParallelBoxExecutions),
+    atm_parallel_box_execution:teardown_all(AtmParallelBoxExecutions),
 
 
     ok.
@@ -76,7 +83,7 @@ setup_lane(AtmLaneIndex, AtmWorkflowExecutionDoc, AtmWorkflowExecutionCtx) ->
     try
         setup_lane_insecure(AtmLaneIndex, AtmWorkflowExecutionDoc, AtmWorkflowExecutionCtx)
     catch _:Reason ->
-        #atm_lane_execution_rec{schema_id = AtmLaneSchemaId} = get_lane_execution(
+        #atm_lane_execution{schema_id = AtmLaneSchemaId} = get_lane_execution(
             AtmLaneIndex, AtmWorkflowExecutionDoc
         ),
         throw(?ERROR_ATM_LANE_EXECUTION_PREPARATION_FAILED(AtmLaneSchemaId, Reason))  %% TODO preparation -> setup
@@ -94,14 +101,10 @@ setup_lane_insecure(AtmLaneIndex, AtmWorkflowExecutionDoc, AtmWorkflowExecutionC
     #atm_lane_schema{store_iterator_spec = AtmStoreIteratorSpec} = get_lane_schema(
         AtmLaneIndex, AtmWorkflowExecutionDoc
     ),
-
-    #atm_lane_execution_rec{runs = [
-        _CurrRun = #atm_lane_execution_run{
-            iterated_store_id = AtmIteratedStoreId,
-            parallel_boxes = AtmParallelBoxExecutions
-        }
-        | _
-    ]} = get_lane_execution(AtmLaneIndex, AtmWorkflowExecutionDoc),
+    #atm_lane_execution{runs = [#atm_lane_execution_run{
+        iterated_store_id = AtmIteratedStoreId,
+        parallel_boxes = AtmParallelBoxExecutions
+    } | _]} = get_lane_execution(AtmLaneIndex, AtmWorkflowExecutionDoc),
 
     #{
         parallel_boxes => atm_parallel_box_execution:setup_all(
@@ -109,15 +112,6 @@ setup_lane_insecure(AtmLaneIndex, AtmWorkflowExecutionDoc, AtmWorkflowExecutionC
         ),
         iterator => atm_store_api:acquire_iterator(AtmIteratedStoreId, AtmStoreIteratorSpec)
     }.
-
-
-%% @private
--spec get_lane_execution(pos_integer(), atm_workflow_execution:doc()) ->
-    atm_lane_execution:record2().
-get_lane_execution(AtmLaneIndex, #document{value = #atm_workflow_execution{
-    lanes = AtmLaneExecutions
-}}) ->
-    lists:nth(AtmLaneIndex, AtmLaneExecutions).
 
 
 %% @private
@@ -134,12 +128,9 @@ get_lane_schema(AtmLaneIndex, #document{value = #atm_workflow_execution{
 
 
 %% @private
--spec teardown_lane(pos_integer(), atm_workflow_execution:doc()) -> ok.
-teardown_lane(AtmLaneIndex, AtmWorkflowExecutionDoc) ->
-    #atm_lane_execution_rec{runs = [#atm_lane_execution_run{
-        iterated_store_id = AtmIteratedStoreId,
-        parallel_boxes = AtmParallelBoxExecutions
-    } | _]} = get_lane_execution(AtmLaneIndex, AtmWorkflowExecutionDoc),
-
-    atm_store_api:unfreeze(AtmIteratedStoreId),
-    atm_parallel_box_execution:teardown_all(AtmParallelBoxExecutions).
+-spec get_lane_execution(pos_integer(), atm_workflow_execution:doc()) ->
+    atm_lane_execution:record().
+get_lane_execution(AtmLaneIndex, #document{value = #atm_workflow_execution{
+    lanes = AtmLaneExecutions
+}}) ->
+    lists:nth(AtmLaneIndex, AtmLaneExecutions).

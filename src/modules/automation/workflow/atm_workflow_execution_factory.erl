@@ -302,14 +302,14 @@ create_workflow_execution_doc(#atm_workflow_execution_create_ctx{
 
 %% @private
 -spec build_lane_executions([atm_lane_schema:record()]) ->
-    [atm_lane_execution:record2()].
+    [atm_lane_execution:record()].
 build_lane_executions([FirstAtmLaneSchema | RestAtmLaneSchemas]) ->
-    FirstAtmLaneExecution = #atm_lane_execution_rec{
+    FirstAtmLaneExecution = #atm_lane_execution{
         schema_id = FirstAtmLaneSchema#atm_lane_schema.id,
         runs = [#atm_lane_execution_run{run_no = 1, status = ?SCHEDULED_STATUS}]
     },
     RestAtmLaneExecutions = lists:map(fun(AtmLaneSchema) ->
-        #atm_lane_execution_rec{
+        #atm_lane_execution{
             schema_id = AtmLaneSchema#atm_lane_schema.id,
             runs = []
         }

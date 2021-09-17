@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% TODO WRITEME
+%%% Model storing information about automation lane execution.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_lane_execution).
@@ -17,8 +17,6 @@
 -include("modules/automation/atm_execution.hrl").
 
 %% API
--export([ensure_all_ended/1]).
--export([gather_statuses/1]).
 -export([to_json/1]).
 
 %% persistent_record callbacks
@@ -31,18 +29,9 @@
     ?FINISHED_STATUS | ?CANCELLED_STATUS | ?FAILED_STATUS.
 
 -type run() :: #atm_lane_execution_run{}.
--type record2() :: #atm_lane_execution_rec{}.
-
--export_type([status/0, run/0, record2/0]).
-
--record(atm_lane_execution, {
-    schema_id :: automation:id(),
-    status :: atm_parallel_box_execution_status:status(),
-    parallel_boxes :: [atm_parallel_box_execution:record()]
-}).
 -type record() :: #atm_lane_execution{}.
 
--export_type([record/0]).
+-export_type([status/0, run/0, record/0]).
 
 
 %%%===================================================================
@@ -50,23 +39,8 @@
 %%%===================================================================
 
 
--spec ensure_all_ended([record()]) -> ok | no_return().
-ensure_all_ended(AtmLaneExecutions) ->
-    pforeach_not_ended(fun(#atm_lane_execution{parallel_boxes = AtmParallelBoxExecutions}) ->
-        atm_parallel_box_execution:ensure_all_ended(AtmParallelBoxExecutions)
-    end, AtmLaneExecutions).
-
-
--spec gather_statuses([record()]) -> [AtmLaneExecutionStatus :: atm_task_execution:status()].
-gather_statuses(AtmLaneExecutions) ->
-    lists:map(fun(#atm_lane_execution{status = Status}) -> Status end, AtmLaneExecutions).
-
-
--spec to_json(record2()) -> json_utils:json_map().
-to_json(#atm_lane_execution_rec{
-    schema_id = AtmLaneSchemaId,
-    runs = AllRuns
-}) ->
+-spec to_json(record()) -> json_utils:json_map().
+to_json(#atm_lane_execution{schema_id = AtmLaneSchemaId, runs = AllRuns}) ->
     VisibleRuns = lists:dropwhile(fun(#atm_lane_execution_run{run_no = RunNo}) ->
         RunNo == undefined
     end, AllRuns),
@@ -95,7 +69,7 @@ run_to_json(#atm_lane_execution_run{
             fun atm_parallel_box_execution:to_json/1, AtmParallelBoxExecutions
         ),
 
-        % TODO VFS-8226 add more types after implementing restarts/reruns
+        % TODO VFS-8226 add more types after implementing retries/reruns
         <<"runType">> => <<"regular">>,
         <<"srcRunNo">> => null
     }.
@@ -127,12 +101,9 @@ upgrade_encoded_record(1, #{
     }]}}.
 
 
--spec db_encode(record2(), persistent_record:nested_record_encoder()) ->
+-spec db_encode(record(), persistent_record:nested_record_encoder()) ->
     json_utils:json_map().
-db_encode(#atm_lane_execution_rec{
-    schema_id = AtmLaneSchemaId,
-    runs = Runs
-}, NestedRecordEncoder) ->
+db_encode(#atm_lane_execution{schema_id = AtmLaneSchemaId, runs = Runs}, NestedRecordEncoder) ->
     #{
         <<"schemaId">> => AtmLaneSchemaId,
         <<"runs">> => lists:map(fun(Run) -> encode_run(NestedRecordEncoder, Run) end, Runs)
@@ -161,9 +132,9 @@ encode_run(NestedRecordEncoder, #atm_lane_execution_run{
 
 
 -spec db_decode(json_utils:json_map(), persistent_record:nested_record_decoder()) ->
-    record2().
+    record().
 db_decode(#{<<"schemaId">> := AtmLaneSchemaId, <<"runs">> := RunsJson}, NestedRecordDecoder) ->
-    #atm_lane_execution_rec{
+    #atm_lane_execution{
         schema_id = AtmLaneSchemaId,
         runs = lists:map(fun(RunJson) -> decode_run(NestedRecordDecoder, RunJson) end, RunsJson)
     }.
@@ -188,27 +159,3 @@ decode_run(NestedRecordDecoder, #{
             NestedRecordDecoder(AtmParallelBoxExecutionJson, atm_parallel_box_execution)
         end, AtmParallelBoxExecutionsJson)
     }.
-
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Executes given Callback for each not ended lane execution. Specified function
-%% must take into account possible race conditions when lane transition to
-%% ended phase just right before Callback is called.
-%% @end
-%%--------------------------------------------------------------------
--spec pforeach_not_ended(fun((record()) -> ok | {error, term()}), [record()]) ->
-    ok | no_return().
-pforeach_not_ended(Callback, AtmLaneExecutions) ->
-    atm_parallel_runner:foreach(fun(#atm_lane_execution{status = Status} = AtmLaneExecution) ->
-        case atm_parallel_box_execution_status:is_ended(Status) of
-            true -> ok;
-            false -> Callback(AtmLaneExecution)
-        end
-    end, AtmLaneExecutions).

@@ -240,8 +240,6 @@ handle_lane_execution_ended(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, Atm
     ok.
 handle_workflow_execution_ended(AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv) ->
     try
-        ensure_all_tasks_ended(AtmWorkflowExecutionId),
-
         {ok, AtmWorkflowExecutionDoc} = atm_workflow_execution_status:handle_ended(
             AtmWorkflowExecutionId
         ),
@@ -343,16 +341,6 @@ acquire_iterator_for_lane(AtmWorkflowExecutionCtx, #atm_lane_schema{
         AtmStoreSchemaId, AtmWorkflowExecutionCtx
     ),
     atm_store_api:acquire_iterator(AtmStoreId, AtmStoreIteratorSpec).
-
-
-%% @private
--spec ensure_all_tasks_ended(atm_workflow_execution:id()) -> ok | no_return().
-ensure_all_tasks_ended(AtmWorkflowExecutionId) ->
-    {ok, #document{value = #atm_workflow_execution{
-        lanes = AtmLaneExecutions
-    }}} = atm_workflow_execution:get(AtmWorkflowExecutionId),
-
-    atm_lane_execution:ensure_all_ended(AtmLaneExecutions).
 
 
 %% @private

@@ -55,7 +55,7 @@
     parallel_boxes = undefined :: undefined | [atm_parallel_box_execution:record()]
 }).
 
--record(atm_lane_execution_rec, {
+-record(atm_lane_execution, {
     schema_id :: automation:id(),
     runs :: [atm_lane_execution:run()]
 }).

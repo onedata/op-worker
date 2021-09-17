@@ -40,7 +40,7 @@ create(AtmLaneIndex, AtmWorkflowExecutionDoc, AtmWorkflowExecutionCtx) ->
     try
         create_internal(AtmLaneIndex, AtmWorkflowExecutionDoc, AtmWorkflowExecutionCtx)
     catch _:Reason ->
-        #atm_lane_execution_rec{schema_id = AtmLaneSchemaId} = lists:nth(
+        #atm_lane_execution{schema_id = AtmLaneSchemaId} = lists:nth(
             AtmLaneIndex, AtmWorkflowExecutionDoc#document.value#atm_workflow_execution.lanes
         ),
         throw(?ERROR_ATM_LANE_EXECUTION_CREATION_FAILED(AtmLaneSchemaId, Reason))
@@ -70,7 +70,7 @@ create_internal(AtmLaneIndex, AtmWorkflowExecutionDoc, AtmWorkflowExecutionCtx) 
     )),
 
     Diff = fun(#atm_workflow_execution{lanes = AtmLaneExecutions} = AtmWorkflowExecution) ->
-        #atm_lane_execution_rec{runs = [CurrRun | PrevRuns]} = AtmLaneExecution = lists:nth(
+        #atm_lane_execution{runs = [CurrRun | PrevRuns]} = AtmLaneExecution = lists:nth(
             AtmLaneIndex, AtmLaneExecutions
         ),
         case CurrRun of
@@ -84,7 +84,7 @@ create_internal(AtmLaneIndex, AtmWorkflowExecutionDoc, AtmWorkflowExecutionCtx) 
                     exception_store_id = ExceptionStoreId,
                     parallel_boxes = AtmParallelBoxExecutions
                 },
-                NewAtmLaneExecution = AtmLaneExecution#atm_lane_execution_rec{
+                NewAtmLaneExecution = AtmLaneExecution#atm_lane_execution{
                     runs = [UpdatedCurrRun | PrevRuns]
                 },
                 NewAtmLaneExecutions = lists_utils:replace_at(
@@ -117,7 +117,7 @@ build_lane_execution_create_ctx(AtmLaneIndex, AtmWorkflowExecutionDoc = #documen
         lanes = AtmLaneExecutions
     }
 }, AtmWorkflowExecutionCtx) ->
-    #atm_lane_execution_rec{runs = [
+    #atm_lane_execution{runs = [
         #atm_lane_execution_run{status = ?PREPARING_STATUS, iterated_store_id = IteratedStoreId}
         | _
     ]} = lists:nth(AtmLaneIndex, AtmLaneExecutions),

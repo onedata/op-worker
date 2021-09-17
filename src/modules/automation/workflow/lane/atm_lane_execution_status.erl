@@ -123,9 +123,9 @@ update_runs_at_lane(SpecificLaneIndex, UpdateFun, UpdateArgs, #atm_workflow_exec
     end,
     AtmLaneExecution = lists:nth(AtmLaneIndex, AtmLaneExecutions),
 
-    case erlang:apply(UpdateFun, UpdateArgs ++ AtmLaneExecution#atm_lane_execution_rec.runs) of
+    case erlang:apply(UpdateFun, UpdateArgs ++ [AtmLaneExecution#atm_lane_execution.runs]) of
         {ok, UpdatedRuns} ->
-            NewAtmLaneExecution = AtmLaneExecution#atm_lane_execution_rec{runs = UpdatedRuns},
+            NewAtmLaneExecution = AtmLaneExecution#atm_lane_execution{runs = UpdatedRuns},
             NewAtmLaneExecutions = lists_utils:replace_at(
                 NewAtmLaneExecution, AtmLaneIndex, AtmLaneExecutions
             ),

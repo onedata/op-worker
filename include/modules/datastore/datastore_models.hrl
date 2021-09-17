@@ -1134,7 +1134,7 @@
 
     store_registry :: atm_workflow_execution:store_registry(),
     system_audit_log_id :: undefined | atm_store:id(),
-    lanes :: [atm_lane_execution:record() | atm_lane_execution:record2()],
+    lanes :: [atm_lane_execution:record() | atm_lane_execution:record()],
 
     curr_lane_index = undefined :: undefined | pos_integer(),
 
