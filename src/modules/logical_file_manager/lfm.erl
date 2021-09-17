@@ -230,7 +230,7 @@ get_file_path(SessId, FileGuid) ->
     ?run(lfm_files:get_file_path(SessId, FileGuid)).
 
 
--spec get_file_guid(session:id(), file_key()) ->
+-spec get_file_guid(session:id(), file_meta:path()) ->
     {ok, fslogic_worker:file_guid()}.
 get_file_guid(SessId, FilePath) ->
     ?run(lfm_files:get_file_guid(SessId, FilePath)).

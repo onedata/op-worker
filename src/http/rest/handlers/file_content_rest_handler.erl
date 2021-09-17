@@ -418,7 +418,7 @@ create_dirs_on_path(SessionId, ParentId, PathInfo, Mode) ->
                     Path = str_utils:join_as_binaries([ParentPath, DirName], <<"/">>),
 
                     case lfm:is_dir(SessionId, {path, Path}) of
-                        true ->
+                        ok ->
                             {ok, ExistingDirId} = lfm:get_file_guid(SessionId, Path),
                             ExistingDirId;
                         _ ->
