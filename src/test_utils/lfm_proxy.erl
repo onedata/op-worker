@@ -920,6 +920,8 @@ list_children_datasets(Worker, SessId, DatasetId, Opts) ->
 
 %%%===================================================================
 %%% Archives functions
+%%% TODO - VFS-8382 investigate low performance of archives functions
+%%% (higher than default timeout is currently necessary)
 %%%===================================================================
 
 -spec archive_dataset(node(), session:id(), dataset:id(), archive:config(),
