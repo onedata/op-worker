@@ -316,7 +316,7 @@ handle_status_change(#document{
         status_changed = true
     }
 }) ->
-    atm_lane_execution_status:handle_task_status_change(
+    ok = atm_lane_execution_status:handle_task_status_change(
         AtmWorkflowExecutionId, AtmLaneIndex, AtmParallelBoxIndex,
         AtmTaskExecutionId, NewStatus
     ).

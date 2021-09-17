@@ -15,7 +15,7 @@
 %%% if one of it's underlying element changes status.
 %%% @end
 %%%-------------------------------------------------------------------
--module(atm_workflow_block_execution_status).
+-module(atm_parallel_box_execution_status).
 -author("Bartosz Walkowicz").
 
 -include("modules/automation/atm_execution.hrl").

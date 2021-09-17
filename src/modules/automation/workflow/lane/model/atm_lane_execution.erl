@@ -40,7 +40,7 @@
 
 -record(atm_lane_execution, {
     schema_id :: automation:id(),
-    status :: atm_workflow_block_execution_status:status(),
+    status :: atm_parallel_box_execution_status:status(),
     parallel_boxes :: [atm_parallel_box_execution:record()]
 }).
 -type record() :: #atm_lane_execution{}.
@@ -220,7 +220,7 @@ decode_run(NestedRecordDecoder, #{
     ok | no_return().
 pforeach_not_ended(Callback, AtmLaneExecutions) ->
     atm_parallel_runner:foreach(fun(#atm_lane_execution{status = Status} = AtmLaneExecution) ->
-        case atm_workflow_block_execution_status:is_ended(Status) of
+        case atm_parallel_box_execution_status:is_ended(Status) of
             true -> ok;
             false -> Callback(AtmLaneExecution)
         end

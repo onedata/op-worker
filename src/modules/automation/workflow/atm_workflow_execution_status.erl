@@ -141,7 +141,7 @@ handle_lane_aborting(AtmLaneIndex, AtmWorkflowExecutionId, AtmLaneExecutionDiff)
     atm_workflow_execution:id(),
     fun((atm_workflow_execution:record()) -> atm_workflow_execution:record() | errors:error())
 ) ->
-    ok.
+    ok | errors:error().
 handle_lane_task_status_change(AtmWorkflowExecutionId, AtmLaneExecutionDiff) ->
     Diff = fun(Record) ->
         case infer_phase(Record) of

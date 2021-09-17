@@ -35,7 +35,7 @@
 
 -record(atm_parallel_box_execution, {
     schema_id :: automation:id(),
-    status :: atm_workflow_block_execution_status:status(),
+    status :: atm_parallel_box_execution_status:status(),
     task_registry :: #{AtmTaskSchemaId :: automation:id() => atm_task_execution:id()},
     task_statuses :: #{atm_task_execution:id() => atm_task_execution:status()}
 }).
@@ -102,7 +102,7 @@ create(AtmLaneExecutionCreateCtx, AtmParallelBoxIndex, AtmParallelBoxSchema = #a
 
     AtmParallelBoxExecution = #atm_parallel_box_execution{
         schema_id = AtmParallelBoxSchemaId,
-        status = atm_workflow_block_execution_status:infer(maps:values(AtmTaskExecutionStatuses)),
+        status = atm_parallel_box_execution_status:infer(maps:values(AtmTaskExecutionStatuses)),
         task_registry = AtmTaskExecutionRegistry,
         task_statuses = AtmTaskExecutionStatuses
     },
@@ -204,7 +204,7 @@ update_task_status(AtmTaskExecutionId, NewStatus, #atm_parallel_box_execution{
                 AtmTaskExecutionId => NewStatus
             },
             {ok, AtmParallelBoxExecution#atm_parallel_box_execution{
-                status = atm_workflow_block_execution_status:infer(
+                status = atm_parallel_box_execution_status:infer(
                     maps:values(NewAtmTaskExecutionStatuses)
                 ),
                 task_statuses = NewAtmTaskExecutionStatuses
@@ -296,7 +296,7 @@ pforeach_not_ended_task(Callback, AtmParallelBoxExecutions) ->
         status = AtmParallelBoxExecutionStatus,
         task_statuses = AtmTaskExecutionStatuses
     }) ->
-        case atm_workflow_block_execution_status:is_ended(AtmParallelBoxExecutionStatus) of
+        case atm_parallel_box_execution_status:is_ended(AtmParallelBoxExecutionStatus) of
             true ->
                 ok;
             false ->
