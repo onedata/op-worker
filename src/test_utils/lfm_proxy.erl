@@ -930,18 +930,19 @@ archive_dataset(Worker, SessId, DatasetId, Config, Description) ->
 -spec archive_dataset(node(), session:id(), dataset:id(), archive:config(), archive:callback(),
     archive:callback(), archive:description()) -> {ok, archive:id()} | lfm:error_reply().
 archive_dataset(Worker, SessId, DatasetId, Config, PreservedCallback, PurgedCallback, Description) ->
-    ?EXEC(Worker, lfm:archive_dataset(SessId, DatasetId, Config, PreservedCallback, PurgedCallback, Description)).
+    ?EXEC_TIMEOUT(Worker,
+        lfm:archive_dataset(SessId, DatasetId, Config, PreservedCallback, PurgedCallback, Description), timer:minutes(3)).
 
 
 -spec update_archive(node(), session:id(), archive:id(), archive:diff()) -> ok | lfm:error_reply().
 update_archive(Worker, SessId, ArchiveId, Diff) ->
-    ?EXEC(Worker, lfm:update_archive(SessId, ArchiveId, Diff)).
+    ?EXEC_TIMEOUT(Worker, lfm:update_archive(SessId, ArchiveId, Diff), timer:minutes(3)).
 
 
 -spec get_archive_info(node(), session:id(), archive:id()) ->
     {ok, lfm_datasets:archive_info()} | lfm:error_reply().
 get_archive_info(Worker, SessId, ArchiveId) ->
-    ?EXEC(Worker, lfm:get_archive_info(SessId, ArchiveId)).
+    ?EXEC_TIMEOUT(Worker, lfm:get_archive_info(SessId, ArchiveId), timer:minutes(3)).
 
 
 -spec list_archives(node(), session:id(), dataset:id(), dataset_api:listing_opts()) ->
@@ -954,7 +955,7 @@ list_archives(Worker, SessId, DatasetId, Opts) ->
     dataset_api:listing_mode() | undefined) ->
     {ok, archive_api:entries(), boolean()} | lfm:error_reply().
 list_archives(Worker, SessId, DatasetId, Opts, ListingMode) ->
-    ?EXEC(Worker, lfm:list_archives(SessId, DatasetId, Opts, ListingMode)).
+    ?EXEC_TIMEOUT(Worker, lfm:list_archives(SessId, DatasetId, Opts, ListingMode), timer:minutes(3)).
 
 
 -spec init_archive_purge(node(), session:id(), archive:id()) -> ok | lfm:error_reply().
@@ -964,7 +965,7 @@ init_archive_purge(Worker, SessId, ArchiveId) ->
 -spec init_archive_purge(node(), session:id(), archive:id(), archive:callback()) ->
     ok | lfm:error_reply().
 init_archive_purge(Worker, SessId, ArchiveId, Callback) ->
-    ?EXEC(Worker, lfm:init_archive_purge(SessId, ArchiveId, Callback)).
+    ?EXEC_TIMEOUT(Worker, lfm:init_archive_purge(SessId, ArchiveId, Callback), timer:minutes(3)).
 
 %%%===================================================================
 %%% Internal functions
