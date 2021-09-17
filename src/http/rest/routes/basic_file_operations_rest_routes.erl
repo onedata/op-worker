@@ -53,7 +53,7 @@ routes() -> [
             scope = private
         }
     }},
-    %% Remove file
+    %% Remove file under path
     {<<"/data/:id/path/[...]">>, rest_handler, #rest_req{
         method = 'DELETE',
         b_gri = #b_gri{
@@ -66,7 +66,7 @@ routes() -> [
     %% Get content of file under given path.
     {<<"/data/:id/path/[...]">>, rest_handler, #rest_req{
         method = 'GET',
-        produces = [<<"application/json">>],
+        produces = [<<"application/octet-stream">>],
         b_gri = #b_gri{
             type = op_file, 
             id = ?OBJECTID_BINDING(id), 
@@ -74,7 +74,7 @@ routes() -> [
             scope = private
         }
     }},
-    %% Create file
+    %% Create file under path
     {<<"/data/:id/path/[...]">>, rest_handler, #rest_req{
         method = 'PUT',
         consumes = [<<"application/octet-stream">>],
