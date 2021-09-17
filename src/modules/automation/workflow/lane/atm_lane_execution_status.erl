@@ -18,7 +18,8 @@
 -export([
     handle_preparing/2,
     handle_enqueued/2,
-    handle_aborting/3
+    handle_aborting/3,
+    handle_task_status_change/5
 ]).
 
 
@@ -64,6 +65,32 @@ handle_aborting(AtmLaneIndex, AtmWorkflowExecutionId, Reason) ->
         AtmLaneIndex, fun mark_current_run_as_aborting/2, [Reason], AtmWorkflowExecution
     ) end,
     atm_workflow_execution_status:handle_lane_aborting(AtmLaneIndex, AtmWorkflowExecutionId, Diff).
+
+
+-spec handle_task_status_change(
+    atm_workflow_execution:id(),
+    pos_integer(),
+    pos_integer(),
+    atm_task_execution:id(),
+    atm_task_execution:status()
+) ->
+    ok | errors:error().
+handle_task_status_change(
+    AtmWorkflowExecutionId,
+    AtmLaneIndex,
+    AtmParallelBoxIndex,
+    AtmTaskExecutionId,
+    NewAtmTaskExecutionStatus
+) ->
+    Diff = fun(AtmWorkflowExecution) ->
+        update_runs_at_lane(
+            AtmLaneIndex,
+            fun handle_task_status_change_in_current_run/4,
+            [AtmParallelBoxIndex, AtmTaskExecutionId, NewAtmTaskExecutionStatus],
+            AtmWorkflowExecution
+        )
+    end,
+    atm_workflow_execution_status:handle_lane_task_status_change(AtmWorkflowExecutionId, Diff).
 
 
 %%%===================================================================
@@ -171,6 +198,45 @@ mark_current_run_as_aborting(
                 aborting_reason = AbortingReason
             },
             [NewRun | RestRuns]
+    end.
+
+
+%% @private
+-spec handle_task_status_change_in_current_run(
+    pos_integer(),
+    atm_task_execution:id(),
+    atm_task_execution:status(),
+    [atm_lane_execution:run()]
+) ->
+    {ok, [atm_lane_execution:run()]} | errors:error().
+handle_task_status_change_in_current_run(
+    AtmParallelBoxIndex,
+    AtmTaskExecutionId,
+    NewAtmTaskExecutionStatus,
+    [#atm_lane_execution_run{parallel_boxes = AtmParallelBoxExecutions} = Run | RestRuns]
+) ->
+    HasTaskStarted = lists:member(NewAtmTaskExecutionStatus, [?ACTIVE_STATUS, ?SKIPPED_STATUS]),
+    AtmParallelBoxExecution = lists:nth(AtmParallelBoxIndex, AtmParallelBoxExecutions),
+
+    case atm_parallel_box_execution:update_task_status(
+        AtmTaskExecutionId, NewAtmTaskExecutionStatus, AtmParallelBoxExecution
+    ) of
+        {ok, NewParallelBoxExecution} ->
+            UpdatedRun = Run#atm_lane_execution_run{
+                status = case {Run#atm_lane_execution_run.status, HasTaskStarted} of
+                    {?ENQUEUED_STATUS, true} ->
+                        % lane transition to ?ACTIVE_STATUS when first task has started
+                        ?ACTIVE_STATUS;
+                    CurrentStatus ->
+                        CurrentStatus
+                end,
+                parallel_boxes = lists_utils:replace_at(
+                    NewParallelBoxExecution, AtmParallelBoxIndex, AtmParallelBoxExecutions
+                )
+            },
+            {ok, [UpdatedRun | RestRuns]};
+        {error, _} = Error ->
+            Error
     end.
 
 

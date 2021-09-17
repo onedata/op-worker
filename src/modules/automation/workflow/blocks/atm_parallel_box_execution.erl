@@ -210,7 +210,7 @@ update_task_status(AtmTaskExecutionId, NewStatus, #atm_parallel_box_execution{
                 task_statuses = NewAtmTaskExecutionStatuses
             }};
         false ->
-            {error, AtmTaskExecutionStatus}
+            ?ERROR_ATM_INVALID_STATUS_TRANSITION(AtmTaskExecutionStatus, NewStatus)
     end.
 
 

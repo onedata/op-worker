@@ -21,7 +21,7 @@
     ensure_all_ended/1,
     clean_all/1, clean/1
 ]).
--export([gather_statuses/1, update_task_status/4]).
+-export([gather_statuses/1]).
 -export([to_json/1]).
 
 %% persistent_record callbacks
@@ -73,45 +73,6 @@ clean(#atm_lane_execution{parallel_boxes = AtmParallelBoxExecutions}) ->
 -spec gather_statuses([record()]) -> [AtmLaneExecutionStatus :: atm_task_execution:status()].
 gather_statuses(AtmLaneExecutions) ->
     lists:map(fun(#atm_lane_execution{status = Status}) -> Status end, AtmLaneExecutions).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Updates task status for specific parallel box execution within lane execution.
-%%
-%%                              !! CAUTION !!
-%% This function is called when updating atm_workflow_execution_doc and as such
-%% shouldn't touch any other persistent models.
-%% @end
-%%--------------------------------------------------------------------
--spec update_task_status(
-    non_neg_integer(),
-    atm_task_execution:id(),
-    atm_task_execution:status(),
-    record()
-) ->
-    {ok, record()} | {error, term()}.
-update_task_status(AtmParallelBoxIndex, AtmTaskExecutionId, NewStatus, #atm_lane_execution{
-    parallel_boxes = AtmParallelBoxExecutions
-} = AtmLaneExecution) ->
-    AtmParallelBoxExecution = lists:nth(AtmParallelBoxIndex, AtmParallelBoxExecutions),
-
-    case atm_parallel_box_execution:update_task_status(
-        AtmTaskExecutionId, NewStatus, AtmParallelBoxExecution
-    ) of
-        {ok, NewParallelBoxExecution} ->
-            NewAtmParallelBoxExecutions = lists_utils:replace_at(
-                NewParallelBoxExecution, AtmParallelBoxIndex, AtmParallelBoxExecutions
-            ),
-            {ok, AtmLaneExecution#atm_lane_execution{
-                status = atm_workflow_block_execution_status:infer(
-                    atm_parallel_box_execution:gather_statuses(NewAtmParallelBoxExecutions)
-                ),
-                parallel_boxes = NewAtmParallelBoxExecutions
-            }};
-        {error, _} = Error ->
-            Error
-    end.
 
 
 -spec to_json(record2()) -> json_utils:json_map().
@@ -171,13 +132,11 @@ upgrade_encoded_record(1, #{
     <<"parallelBoxes">> := AtmParallelBoxExecutionsJson
 }) ->
     {2, #{<<"schemaId">> => AtmLaneSchemaId, <<"runs">> => [#{
-        #{
-            <<"runNo">> => 1,
-            <<"iteratedStoreId">> => null,
-            <<"exceptionStoreId">> => null,
-            <<"status">> => StatusBin,
-            <<"parallelBoxes">> => AtmParallelBoxExecutionsJson
-        }
+        <<"runNo">> => 1,
+        <<"iteratedStoreId">> => null,
+        <<"exceptionStoreId">> => null,
+        <<"status">> => StatusBin,
+        <<"parallelBoxes">> => AtmParallelBoxExecutionsJson
     }]}}.
 
 
@@ -215,7 +174,7 @@ encode_run(NestedRecordEncoder, #atm_lane_execution_run{
 
 
 -spec db_decode(json_utils:json_map(), persistent_record:nested_record_decoder()) ->
-    record().
+    record2().
 db_decode(#{<<"schemaId">> := AtmLaneSchemaId, <<"runs">> := RunsJson}, NestedRecordDecoder) ->
     #atm_lane_execution_rec{
         schema_id = AtmLaneSchemaId,
@@ -224,8 +183,8 @@ db_decode(#{<<"schemaId">> := AtmLaneSchemaId, <<"runs">> := RunsJson}, NestedRe
 
 
 %% @private
--spec decode_run(persistent_record:nested_record_decoder(), run()) ->
-    json_utils:json_map().
+-spec decode_run(persistent_record:nested_record_decoder(), json_utils:json_map()) ->
+    run().
 decode_run(NestedRecordDecoder, #{
     <<"runNo">> := RunNo,
     <<"iteratedStoreId">> := IteratedStoreId,

@@ -20,12 +20,10 @@
 -export([
     handle_lane_preparing/3,
     handle_lane_enqueued/2,
-    handle_lane_aborting/3
+    handle_lane_aborting/3,
+    handle_lane_task_status_change/2
 ]).
--export([
-    handle_ended/1,
-    report_task_status_change/5
-]).
+-export([handle_ended/1]).
 
 
 %%%===================================================================
@@ -139,8 +137,30 @@ handle_lane_aborting(AtmLaneIndex, AtmWorkflowExecutionId, AtmLaneExecutionDiff)
     end.
 
 
+-spec handle_lane_task_status_change(
+    atm_workflow_execution:id(),
+    fun((atm_workflow_execution:record()) -> atm_workflow_execution:record() | errors:error())
+) ->
+    ok.
+handle_lane_task_status_change(AtmWorkflowExecutionId, AtmLaneExecutionDiff) ->
+    Diff = fun(Record) ->
+        case infer_phase(Record) of
+            ?ENDED_PHASE ->
+                ?ERROR_ATM_TASK_EXECUTION_ENDED;   %% TODO new error atm_workflow_execution_ended
+            _ ->
+                AtmLaneExecutionDiff(Record)
+        end
+    end,
 
-
+    case atm_workflow_execution:update(AtmWorkflowExecutionId, Diff) of
+        {ok, _} ->
+            ok;
+        ?ERROR_ATM_INVALID_STATUS_TRANSITION(_, _) ->
+            % Race with other process which must have already updated task status
+            ok;
+        {error, _} = Error ->
+            Error
+    end.
 
 
 
@@ -202,60 +222,6 @@ handle_ended(AtmWorkflowExecutionId) ->
 
     Result.
 
-
--spec report_task_status_change(
-    atm_workflow_execution:id(),
-    non_neg_integer(),
-    non_neg_integer(),
-    atm_task_execution:id(),
-    atm_task_execution:status()
-) ->
-    ok.
-report_task_status_change(
-    AtmWorkflowExecutionId,
-    AtmLaneExecutionIndex,
-    AtmParallelBoxExecutionIndex,
-    AtmTaskExecutionId,
-    NewAtmTaskExecutionStatus
-) ->
-    HasTaskStarted = lists:member(NewAtmTaskExecutionStatus, [?ACTIVE_STATUS, ?SKIPPED_STATUS]),
-
-    Diff = fun(AtmWorkflowExecution = #atm_workflow_execution{
-        status = CurrStatus,
-        lanes = AtmLaneExecutions
-    }) ->
-        AtmLanExecution = lists:nth(AtmLaneExecutionIndex, AtmLaneExecutions),
-
-        case atm_lane_execution:update_task_status(
-            AtmParallelBoxExecutionIndex, AtmTaskExecutionId,
-            NewAtmTaskExecutionStatus, AtmLanExecution
-        ) of
-            {ok, NewLaneExecution} ->
-                NewAtmLaneExecutions = lists_utils:replace_at(
-                    NewLaneExecution, AtmLaneExecutionIndex, AtmLaneExecutions
-                ),
-                NewAtmWorkflowExecution = AtmWorkflowExecution#atm_workflow_execution{
-                    status = case {CurrStatus, HasTaskStarted} of
-                        {?ENQUEUED_STATUS, true} ->
-                            % Workflow transition to ?ACTIVE_STATUS when first task has started
-                            ?ACTIVE_STATUS;
-                        _ ->
-                            CurrStatus
-                    end,
-                    lanes = NewAtmLaneExecutions
-                },
-                {ok, set_times_on_phase_transition(NewAtmWorkflowExecution)};
-            {error, _} = Error ->
-                Error
-        end
-    end,
-    case atm_workflow_execution:update(AtmWorkflowExecutionId, Diff) of
-        {ok, AtmWorkflowExecutionDoc} ->
-            ensure_in_proper_phase_tree(AtmWorkflowExecutionDoc);
-        {error, _} ->
-            % Race with other process which must have already updated task status
-            ok
-    end.
 
 
 %%%===================================================================
