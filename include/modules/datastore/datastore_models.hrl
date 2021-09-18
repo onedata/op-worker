@@ -1134,17 +1134,18 @@
 
     store_registry :: atm_workflow_execution:store_registry(),
     system_audit_log_id :: undefined | atm_store:id(),
-    lanes :: [atm_lane_execution:record() | atm_lane_execution:record()],
 
-    curr_lane_index = undefined :: undefined | pos_integer(),
+    lanes :: [atm_lane_execution:record() | atm_lane_execution:record()],
+    lanes_num :: non_neg_integer(),
+
+    curr_lane_index :: pos_integer(),
+    curr_run_no :: pos_integer(),
 
     status :: atm_workflow_execution:status(),
     % Flag used to tell if status was changed during doc update (set automatically
     % when updating doc). It is necessary due to limitation of datastore as
     % otherwise getting document before update would be needed (to compare 2 docs).
     prev_status :: atm_workflow_execution:status(),
-    % Flag used to differentiate reasons why workflow is aborting
-    aborting_reason = undefined :: undefined | cancel | failure,
 
     callback :: undefined | http_client:url(),
 

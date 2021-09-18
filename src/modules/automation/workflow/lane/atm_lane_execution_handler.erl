@@ -63,8 +63,8 @@ handle_ended(AtmLaneIndex, AtmWorkflowExecutionId) ->
         } | _]
     } = get_lane_execution(AtmLaneIndex, AtmWorkflowExecutionDoc),
 
-    atm_store_api:unfreeze(AtmIteratedStoreId),
-    atm_store_api:freeze(AtmExceptionStoreId),
+    atm_store_api:unfreeze(AtmIteratedStoreId),  %% TODO handle undefined
+    atm_store_api:freeze(AtmExceptionStoreId),  %% TODO handle undefined
 
     atm_parallel_box_execution:ensure_all_ended(AtmParallelBoxExecutions),
     atm_parallel_box_execution:teardown_all(AtmParallelBoxExecutions),

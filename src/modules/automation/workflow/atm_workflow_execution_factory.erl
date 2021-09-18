@@ -287,6 +287,9 @@ create_workflow_execution_doc(#atm_workflow_execution_create_ctx{
             system_audit_log_id = AtmWorkflowAuditLogId,
             lanes = build_lane_executions(AtmLaneSchemas),
 
+            curr_lane_index = 1,
+            curr_run_no = 1,
+
             status = ?SCHEDULED_STATUS,
             prev_status = ?SCHEDULED_STATUS,
 

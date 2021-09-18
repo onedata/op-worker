@@ -99,7 +99,7 @@ get_ctx() ->
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    3.
+    4.
 
 
 %%--------------------------------------------------------------------
@@ -174,9 +174,38 @@ get_record_struct(3) ->
         {schedule_time, integer},
         {start_time, integer},
         {finish_time, integer}
+    ]};
+get_record_struct(4) ->
+    % 'aborting_reason' field was removed
+    {record, [
+        {user_id, string},
+        {space_id, string},
+        {atm_inventory_id, string},
+
+        {name, string},
+        {schema_snapshot_id, string},
+        {lambda_snapshot_registry, #{string => string}},
+
+        {store_registry, #{string => string}},
+        {system_audit_log_id, string},
+
+        {lanes, [{custom, string, {persistent_record, encode, decode, atm_lane_execution}}]},
+        {lanes_num, integer},
+
+        {curr_lane_index, integer},  %% new field
+        {curr_run_no, integer},      %% new field
+
+        % ?PREPARING_STATUS and ?ENQUEUED_STATUS were removed from possible workflow statuses
+        {status, atom},
+        {prev_status, atom},
+
+        {callback, string},
+
+        {schedule_time, integer},
+        {start_time, integer},
+        {finish_time, integer}
     ]}.
 
-%% TODO struct and upgrader
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -239,7 +268,60 @@ upgrade_record(2, {
     StartTime,
     FinishTime
 }) ->
-    {3, #atm_workflow_execution{
+    {3, {?MODULE,
+        UserId,
+        SpaceId,
+        AtmInventoryId,
+
+        Name,
+        SchemaSnapshotId,
+        LambdaSnapshotRegistry,
+
+        StoreRegistry,
+        undefined,
+        Lanes,
+
+        Status,
+        PrevStatus,
+        undefined,
+
+        Callback,
+
+        ScheduleTime,
+        StartTime,
+        FinishTime
+    }};
+upgrade_record(3, {?MODULE,
+    UserId,
+    SpaceId,
+    AtmInventoryId,
+
+    Name,
+    SchemaSnapshotId,
+    LambdaSnapshotRegistry,
+
+    StoreRegistry,
+    AtmSystemAuditLogId,
+    Lanes,
+
+    Status,
+    PrevStatus,
+    _AbortingReason,
+
+    Callback,
+
+    ScheduleTime,
+    StartTime,
+    FinishTime
+}) ->
+    CurrLaneIndex = lists_utils:foldl_while(fun(#atm_lane_execution{runs = [Run]}, PrevLaneIndex) ->
+        case atm_lane_execution_status:status_to_phase(Run#atm_lane_execution_run.status) of
+            ?ENDED_PHASE -> {cont, PrevLaneIndex + 1};
+            _ -> {halt, PrevLaneIndex + 1}
+        end
+    end, 0, Lanes),
+
+    {4, #atm_workflow_execution{
         user_id = UserId,
         space_id = SpaceId,
         atm_inventory_id = AtmInventoryId,
@@ -249,12 +331,22 @@ upgrade_record(2, {
         lambda_snapshot_registry = LambdaSnapshotRegistry,
 
         store_registry = StoreRegistry,
-        system_audit_log_id = undefined,
-        lanes = Lanes,
+        system_audit_log_id = AtmSystemAuditLogId,
 
-        status = Status,
-        prev_status = PrevStatus,
-        aborting_reason = undefined,
+        lanes = Lanes,
+        lanes_num = length(Lanes),
+
+        curr_lane_index = CurrLaneIndex,
+        curr_run_no = 1,
+
+        status = case lists:member(Status, [?PREPARING_STATUS, ?ENQUEUED_STATUS]) of
+            true -> ?SCHEDULED_STATUS;
+            false -> Status
+        end,
+        prev_status = case lists:member(PrevStatus, [?PREPARING_STATUS, ?ENQUEUED_STATUS]) of
+            true -> ?SCHEDULED_STATUS;
+            false -> Status
+        end,
 
         callback = Callback,
 

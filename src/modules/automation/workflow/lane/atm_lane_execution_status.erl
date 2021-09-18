@@ -15,6 +15,7 @@
 -include("modules/automation/atm_execution.hrl").
 
 %% API
+-export([status_to_phase/1]).
 -export([
     handle_preparing/2,
     handle_enqueued/2,
@@ -34,6 +35,19 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+
+-spec status_to_phase(atm_lane_execution:status()) ->
+    atm_workflow_execution:phase().
+status_to_phase(?SCHEDULED_STATUS) -> ?WAITING_PHASE;
+status_to_phase(?PREPARING_STATUS) -> ?WAITING_PHASE;
+status_to_phase(?ENQUEUED_STATUS) -> ?WAITING_PHASE;
+status_to_phase(?ACTIVE_STATUS) -> ?ONGOING_PHASE;
+status_to_phase(?ABORTING_STATUS) -> ?ONGOING_PHASE;
+status_to_phase(?FINISHED_STATUS) -> ?ENDED_PHASE;
+status_to_phase(?SKIPPED_STATUS) -> ?ENDED_PHASE;
+status_to_phase(?CANCELLED_STATUS) -> ?ENDED_PHASE;
+status_to_phase(?FAILED_STATUS) -> ?ENDED_PHASE.
 
 
 -spec handle_preparing(pos_integer(), atm_workflow_execution:id()) ->
@@ -238,16 +252,3 @@ handle_task_status_change_in_current_run(
         {error, _} = Error ->
             Error
     end.
-
-
-%% @private
--spec status_to_phase(atm_lane_execution:status()) ->
-    atm_workflow_execution:phase().
-status_to_phase(?SCHEDULED_STATUS) -> ?WAITING_PHASE;
-status_to_phase(?PREPARING_STATUS) -> ?WAITING_PHASE;
-status_to_phase(?ENQUEUED_STATUS) -> ?WAITING_PHASE;
-status_to_phase(?ACTIVE_STATUS) -> ?ONGOING_PHASE;
-status_to_phase(?ABORTING_STATUS) -> ?ONGOING_PHASE;
-status_to_phase(?FINISHED_STATUS) -> ?ENDED_PHASE;
-status_to_phase(?CANCELLED_STATUS) -> ?ENDED_PHASE;
-status_to_phase(?FAILED_STATUS) -> ?ENDED_PHASE.
