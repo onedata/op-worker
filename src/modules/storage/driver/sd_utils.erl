@@ -28,7 +28,7 @@
 
 %% API
 -export([chmod/2, chmod/3, rename/7]).
--export([create_deferred/1, create_deferred/4, mkdir_deferred/2, restore_storage_file/2]).
+-export([create_deferred/1, create_deferred/3, mkdir_deferred/2, restore_storage_file/2]).
 -export([delete/2, unlink/2, rmdir/2]).
 
 
@@ -154,7 +154,7 @@ mkdir_deferred(FileCtx, UserCtx) ->
 %%--------------------------------------------------------------------
 -spec create_deferred(file_ctx:ctx()) -> {file_meta:doc(), file_ctx:ctx()} | {error, cancelled}.
 create_deferred(FileCtx) ->
-    create_deferred(FileCtx, user_ctx:new(?ROOT_SESS_ID), false, true).
+    create_deferred(FileCtx, user_ctx:new(?ROOT_SESS_ID), true).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -162,9 +162,9 @@ create_deferred(FileCtx) ->
 %% (its creation has been deferred).
 %% @end
 %%--------------------------------------------------------------------
--spec create_deferred(file_ctx:ctx(), user_ctx:ctx(), boolean(), boolean()) ->
+-spec create_deferred(file_ctx:ctx(), user_ctx:ctx(), boolean()) ->
     {file_location:doc(), file_ctx:ctx()} | {error, cancelled}.
-create_deferred(FileCtx, UserCtx, _VerifyDeletionLink, CheckLocationExists) ->
+create_deferred(FileCtx, UserCtx, CheckLocationExists) ->
     FileCtx2 = share_to_standard_file_ctx(FileCtx),
     {#document{
         key = FileLocationId,
