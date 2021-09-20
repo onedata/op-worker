@@ -646,8 +646,8 @@ end_per_group(_Group, Config) ->
     SpaceId = oct_background:get_space_id(?SPACE),
     Workers = oct_background:get_all_providers_nodes(),
     CleaningWorker = oct_background:get_random_provider_node(krakow),
-    lfm_test_utils:clean_space(CleaningWorker, Workers, SpaceId, ?ATTEMPTS),
     onenv_dataset_test_utils:cleanup_all_datasets(krakow, ?SPACE),
+    lfm_test_utils:clean_space(CleaningWorker, Workers, SpaceId, ?ATTEMPTS),
     lfm_proxy:teardown(Config),
     time_test_utils:unfreeze_time(Config).
 
