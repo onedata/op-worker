@@ -27,14 +27,16 @@
 
 
 -spec prepare(pos_integer(), atm_workflow_execution:id(), atm_workflow_execution_ctx:record()) ->
-    {workflow_engine:lane_spec() , atm_workflow_execution_env:record()} | no_return().
+    workflow_engine:lane_spec() | no_return().
 prepare(AtmLaneIndex, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
     AtmWorkflowExecutionDoc = atm_lane_execution_status:handle_preparing(
         AtmLaneIndex, AtmWorkflowExecutionId
     ),
 
     try
-        {NewAtmWorkflowExecutionDoc, AtmWorkflowExecutionEnv} = atm_lane_execution_factory:create(
+        % TODO add env to lane spec
+        % TODO add next lane index to spec
+        {NewAtmWorkflowExecutionDoc, _AtmWorkflowExecutionEnv} = atm_lane_execution_factory:create(
             AtmLaneIndex, AtmWorkflowExecutionDoc, AtmWorkflowExecutionCtx
         ),
         AtmLaneExecutionSpec = setup_lane(
@@ -42,7 +44,7 @@ prepare(AtmLaneIndex, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
         ),
         atm_lane_execution_status:handle_enqueued(AtmLaneIndex, AtmWorkflowExecutionId),
 
-        {AtmLaneExecutionSpec, AtmWorkflowExecutionEnv}
+        AtmLaneExecutionSpec
     catch Type:Reason ->
         atm_lane_execution_status:handle_aborting(AtmLaneIndex, AtmWorkflowExecutionId, failure),
         handle_ended(AtmLaneIndex, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx),
@@ -74,6 +76,7 @@ handle_ended(AtmLaneIndex, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
     ),
     %% TODO freeze next lane iterated store ??
 
+    %% TODO return is_last
     ok.
 
 
