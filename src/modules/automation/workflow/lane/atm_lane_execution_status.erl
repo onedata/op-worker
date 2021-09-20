@@ -20,7 +20,8 @@
     handle_preparing/2,
     handle_enqueued/2,
     handle_aborting/3,
-    handle_task_status_change/5
+    handle_task_status_change/5,
+    handle_ended/2
 ]).
 
 
@@ -105,6 +106,35 @@ handle_task_status_change(
         )
     end,
     atm_workflow_execution_status:handle_lane_task_status_change(AtmWorkflowExecutionId, Diff).
+
+
+-spec handle_ended(pos_integer(), atm_workflow_execution:id()) ->
+    atm_workflow_execution:doc() | no_return().
+handle_ended(AtmLaneIndex, AtmWorkflowExecutionId) ->
+    Diff = fun(AtmWorkflowExecution = #atm_workflow_execution{
+        lanes = AtmLaneExecutions,
+        lanes_num = AtmLanesNum,
+        curr_lane_index = CurrLaneIndex,
+        curr_run_no = CurrRunNo
+    }) ->
+        {EndedStatus, NewAtmLaneExecutions} = end_lane_run(AtmLaneIndex, AtmLaneExecutions),
+        IsCurrentlyExecutedLane = CurrLaneIndex == AtmLaneIndex,
+        IsNotLastLane = AtmLaneIndex < AtmLanesNum,
+
+        case EndedStatus == ?FINISHED_STATUS andalso IsCurrentlyExecutedLane andalso IsNotLastLane of
+            true ->
+                NextAtmLaneIndex = AtmLaneIndex + 1,
+
+                {ok, AtmWorkflowExecution#atm_workflow_execution{
+                    lanes = schedule_lane_run(NextAtmLaneIndex, CurrRunNo, NewAtmLaneExecutions),
+                    curr_lane_index = NextAtmLaneIndex
+                }};
+            false ->
+                {ok, AtmWorkflowExecution#atm_workflow_execution{lanes = NewAtmLaneExecutions}}
+        end
+    end,
+
+    ?extract_atm_workflow_execution_doc(atm_workflow_execution:update(AtmWorkflowExecutionId, Diff)).
 
 
 %%%===================================================================
@@ -252,3 +282,59 @@ handle_task_status_change_in_current_run(
         {error, _} = Error ->
             Error
     end.
+
+
+%% @private
+-spec end_lane_run(pos_integer(), [atm_lane_execution:record()]) ->
+    {atm_lane_execution:status(), [atm_lane_execution:record()]}.
+end_lane_run(AtmLaneIndex, AtmLaneExecutions) ->
+    AtmLaneExecution = #atm_lane_execution{runs = [Run = #atm_lane_execution_run{
+        status = CurrStatus,
+        parallel_boxes = AtmParallelBoxExecutions
+    } | RestRuns]} = lists:nth(AtmLaneIndex, AtmLaneExecutions),
+
+    EndedStatus = case atm_lane_execution_status:status_to_phase(CurrStatus) of
+        ?WAITING_PHASE ->
+            % Lane preparation must have failed or provider was restarted
+            % as otherwise it is not possible to transition from waiting phase
+            % to ended phase directly
+            ?FAILED_STATUS;
+        ?ONGOING_PHASE when CurrStatus == ?ACTIVE_STATUS ->
+            AtmParallelBoxExecutionStatuses = atm_parallel_box_execution:gather_statuses(
+                AtmParallelBoxExecutions
+            ),
+            case lists:member(?FAILED_STATUS, AtmParallelBoxExecutionStatuses) of
+                true -> ?FAILED_STATUS;
+                false -> ?FINISHED_STATUS
+            end;
+        ?ONGOING_PHASE when CurrStatus == ?ABORTING_STATUS ->
+            case Run#atm_lane_execution_run.aborting_reason of
+                cancel -> ?CANCELLED_STATUS;
+                failure -> ?FAILED_STATUS
+            end;
+        ?ENDED_PHASE ->
+            CurrStatus
+    end,
+    EndedAtmLaneExecution = AtmLaneExecution#atm_lane_execution{
+        runs = [Run#atm_lane_execution_run{status = EndedStatus} | RestRuns]
+    },
+
+    {EndedStatus, lists_utils:replace_at(EndedAtmLaneExecution, AtmLaneIndex, AtmLaneExecutions)}.
+
+
+%% @private
+-spec schedule_lane_run(pos_integer(), pos_integer(), [atm_lane_execution:record()]) ->
+    [atm_lane_execution:record()].
+schedule_lane_run(AtmLaneIndex, CurrRunNo, AtmLaneExecutions) ->
+    AtmLaneExecution = lists:nth(AtmLaneIndex, AtmLaneExecutions),
+
+    NewRuns = case AtmLaneExecution#atm_lane_execution.runs of
+        [#atm_lane_execution_run{run_no = undefined} = Run | RestRuns] ->
+            % lane preparing in advance
+            [Run#atm_lane_execution_run{run_no = CurrRunNo} | RestRuns];
+        Runs ->
+            [#atm_lane_execution_run{run_no = CurrRunNo, status = ?SCHEDULED_STATUS} | Runs]
+    end,
+    NewAtmLaneExecution = AtmLaneExecution#atm_lane_execution{runs = NewRuns},
+
+    lists_utils:replace_at(NewAtmLaneExecution, AtmLaneIndex, AtmLaneExecutions).

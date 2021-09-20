@@ -69,6 +69,10 @@ handle_ended(AtmLaneIndex, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
     atm_parallel_box_execution:ensure_all_ended(AtmParallelBoxExecutions),
     atm_parallel_box_execution:teardown_all(AtmParallelBoxExecutions),
 
+    NewAtmWorkflowExecutionDoc = atm_lane_execution_status:handle_ended(
+        AtmLaneIndex, AtmWorkflowExecutionId
+    ),
+    %% TODO freeze next lane iterated store ??
 
     ok.
 
