@@ -197,7 +197,7 @@ file_meta_change_replicated(SpaceId, #document{
 
 
 %% @private
--spec link_replicated(od_space:id(), datastore:doc()) ->
+-spec link_replicated(module(), datastore:key()) ->
     any() | no_return().
 link_replicated(file_meta, LinkKey) ->
     case datastore_model:get_generic_key(file_meta, LinkKey) of

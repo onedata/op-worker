@@ -82,7 +82,7 @@ init(SpaceId) ->
 
 
 -spec get(od_space:id(), file_meta:uuid() | file_meta:doc()) ->
-    {ok, synced} | {error, {file_meta_missing, file_meta:uuid()}} | {error, {link_missing, file_meta:uuid()}}.
+    {ok, synced} | {error, {file_meta_missing, file_meta:uuid()}} | {error, {link_missing, file_meta:uuid()}} | {error, term()}.
 get(SpaceId, Doc = #document{value = #file_meta{}}) ->
     CacheName = ?CACHE_NAME(SpaceId),
     case effective_value:get_or_calculate(CacheName, Doc, calculate_links_sync_status()) of

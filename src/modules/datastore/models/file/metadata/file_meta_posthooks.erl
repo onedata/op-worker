@@ -93,8 +93,8 @@ execute_hooks(FileUuid, HooksToExecute) ->
         {ok, FileMetaPosthooks#file_meta_posthooks{hooks = maps:without(SuccessfulHooks, Hooks)}}
     end,
     case datastore_model:update(?CTX, FileUuid, UpdateFun) of
-        {ok, #document{value = #file_meta_posthooks{hooks = []}}} ->
-            datastore_model:delete(?CTX, FileUuid, fun(#file_meta_posthooks{hooks = H}) -> H == [] end);
+        {ok, #document{value = #file_meta_posthooks{hooks = H}}} when map_size(H) == 0 ->
+            datastore_model:delete(?CTX, FileUuid, fun(#file_meta_posthooks{hooks = H}) -> map_size(H) == 0 end);
         {ok, _} -> 
             ok;
         {error, _} = Error ->
