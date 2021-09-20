@@ -192,9 +192,9 @@ handle_task_execution_ended(AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv, At
 -spec handle_lane_execution_ended(
     atm_workflow_execution:id(),
     atm_workflow_execution_env:record(),
-    non_neg_integer()
+    pos_integer()
 ) ->
-    ok.
+    stop | {next_lane, pos_integer()}.
 handle_lane_execution_ended(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmLaneIndex) ->
     AtmWorkflowExecutionCtx = atm_workflow_execution_ctx:acquire(undefined, AtmWorkflowExecutionEnv),
 
@@ -217,13 +217,17 @@ handle_lane_execution_ended(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, Atm
     ok.
 handle_workflow_execution_ended(AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv) ->
     try
-        % TODO rm prepared in advance lanes in case of failure
-        % TODO freeze workflow stores
-        {ok, AtmWorkflowExecutionDoc} = atm_workflow_execution_status:handle_ended(
+        {ok, AtmWorkflowExecutionDoc} = atm_workflow_execution:get(AtmWorkflowExecutionId),
+        %% TODO ensure all lanes ended
+        %% TODO rm prepared in advance lanes in case of failure
+        freeze_workflow_stores(AtmWorkflowExecutionDoc),
+
+        atm_workflow_execution_session:terminate(AtmWorkflowExecutionId),
+
+        {ok, EndedAtmWorkflowExecutionDoc} = atm_workflow_execution_status:handle_ended(
             AtmWorkflowExecutionId
         ),
-        teardown(AtmWorkflowExecutionDoc),
-        notify_ended(AtmWorkflowExecutionDoc)
+        notify_ended(EndedAtmWorkflowExecutionDoc)
     catch _:Reason ->
         % TODO VFS-8273 use audit log
         ?error("[~p] FAILED TO MARK WORKFLOW EXECUTION AS ENDED DUE TO: ~p", [
@@ -238,9 +242,14 @@ handle_workflow_execution_ended(AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv
 
 
 %% @private
--spec teardown(atm_workflow_execution:doc()) -> ok.
-teardown(#document{key = AtmWorkflowExecutionId}) ->
-    atm_workflow_execution_session:terminate(AtmWorkflowExecutionId).
+-spec freeze_workflow_stores(atm_workflow_execution:doc()) -> ok.
+freeze_workflow_stores(#document{value = #atm_workflow_execution{
+    store_registry = AtmStoreRegistry
+}}) ->
+    lists:foreach(
+        fun(AtmStoreId) -> catch atm_store_api:freeze(AtmStoreId) end,
+        maps:values(AtmStoreRegistry)
+    ).
 
 
 %% @private
