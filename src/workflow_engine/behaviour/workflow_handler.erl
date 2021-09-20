@@ -21,9 +21,9 @@
 -type async_processing_result() :: async_processing_basic_result() | ?ERROR_MALFORMED_DATA | ?ERROR_TIMEOUT.
 -type handler_execution_result() :: ok | error.
 -type prepare_result() :: {ok, workflow_engine:lane_spec(), workflow_engine:execution_context()} | error.
-% engine does not distinguish reason of execution finish - finish_execution is returned
-% if processed lane is last lane as well as on error
--type lane_ended_callback_result() :: ?FINISH_EXECUTION | ?CONTINUE(workflow_engine:lane_id(), workflow_engine:lane_id()).
+-type lane_ended_callback_result() :: ?CONTINUE(workflow_engine:lane_id(), workflow_engine:lane_id()) |
+    ?FINISH_EXECUTION. % engine does not distinguish reason of execution finish - ?FINISH_EXECUTION is returned
+                       % if processed lane is last lane as well as on error
 % TODO VFS-7787 move following types to callback server:
 -type finished_callback_id() :: binary().
 -type heartbeat_callback_id() :: binary().

@@ -507,7 +507,7 @@ process_result(EngineId, ExecutionId, #execution_spec{
 prepare_lane(EngineId, ExecutionId, Handler, ExecutionContext, LaneId, PreparationMode) ->
     try
         Ans = call_handler(ExecutionId, ExecutionContext, Handler, prepare_lane, [LaneId]),
-        workflow_execution_state:report_lane_execution_prepared(ExecutionId, Handler, PreparationMode, Ans),
+        workflow_execution_state:report_lane_execution_prepared(ExecutionId, Handler, LaneId, PreparationMode, Ans),
         trigger_job_scheduling(EngineId, ?FOR_CURRENT_SLOT_FIRST)
     catch
         Error:Reason:Stacktrace  ->
