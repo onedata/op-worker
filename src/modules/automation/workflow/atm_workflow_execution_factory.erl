@@ -285,7 +285,9 @@ create_workflow_execution_doc(#atm_workflow_execution_create_ctx{
 
             store_registry = AtmWorkflowStoreRegistry,
             system_audit_log_id = AtmWorkflowAuditLogId,
+
             lanes = build_lane_executions(AtmLaneSchemas),
+            lanes_num = length(AtmLaneSchemas),
 
             curr_lane_index = 1,
             curr_run_no = 1,

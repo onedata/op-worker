@@ -22,7 +22,9 @@
     get_env/1,
     get_auth/1,
     get_logger/1,
-    get_workflow_store_id/2
+    get_workflow_store_id/2,
+
+    is_workflow_store/2
 ]).
 
 
@@ -75,3 +77,12 @@ get_workflow_store_id(AtmStoreSchemaId, #atm_workflow_execution_ctx{
     workflow_execution_env = AtmWorkflowExecutionEnv
 }) ->
     atm_workflow_execution_env:get_workflow_store_id(AtmStoreSchemaId, AtmWorkflowExecutionEnv).
+
+
+-spec is_workflow_store(atm_store:id(), record()) -> boolean().
+is_workflow_store(AtmStoreId, #atm_workflow_execution_ctx{
+    workflow_execution_env = AtmWorkflowExecutionEnv
+}) ->
+    lists:member(AtmStoreId, atm_workflow_execution_env:list_workflow_stores(
+        AtmWorkflowExecutionEnv
+    )).

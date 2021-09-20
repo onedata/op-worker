@@ -33,6 +33,8 @@
 
     get_space_id/1,
     get_workflow_execution_id/1,
+
+    list_workflow_stores/1,
     get_workflow_store_id/2
 ]).
 
@@ -150,6 +152,11 @@ get_workflow_execution_id(#atm_workflow_execution_env{
     workflow_execution_id = AtmWorkflowExecutionId
 }) ->
     AtmWorkflowExecutionId.
+
+
+-spec list_workflow_stores(record()) -> [atm_store:id()].
+list_workflow_stores(#atm_workflow_execution_env{workflow_store_registry = AtmStoreRegistry}) ->
+    maps:values(AtmStoreRegistry).
 
 
 -spec get_workflow_store_id(automation:id(), record()) -> atm_store:id() | no_return().

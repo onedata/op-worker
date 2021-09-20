@@ -17,7 +17,7 @@
 %% API
 -export([
     prepare/3,
-    handle_ended/2
+    handle_ended/3
 ]).
 
 
@@ -45,26 +45,26 @@ prepare(AtmLaneIndex, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
         {AtmLaneExecutionSpec, AtmWorkflowExecutionEnv}
     catch Type:Reason ->
         atm_lane_execution_status:handle_aborting(AtmLaneIndex, AtmWorkflowExecutionId, failure),
-        handle_ended(AtmLaneIndex, AtmWorkflowExecutionId),
+        handle_ended(AtmLaneIndex, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx),
         erlang:Type(Reason)
     end.
 
 
--spec handle_ended(pos_integer(), atm_workflow_execution:id()) ->
+-spec handle_ended(
+    pos_integer(),
+    atm_workflow_execution:id(),
+    atm_workflow_execution_ctx:record()
+) ->
     ok | no_return().
-handle_ended(AtmLaneIndex, AtmWorkflowExecutionId) ->
+handle_ended(AtmLaneIndex, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
     {ok, AtmWorkflowExecutionDoc} = atm_workflow_execution:get(AtmWorkflowExecutionId),
 
-    #atm_lane_execution{
-        runs = [#atm_lane_execution_run{
-            iterated_store_id = AtmIteratedStoreId,
-            exception_store_id = AtmExceptionStoreId,
-            parallel_boxes = AtmParallelBoxExecutions
-        } | _]
-    } = get_lane_execution(AtmLaneIndex, AtmWorkflowExecutionDoc),
+    AtmLaneExecution = #atm_lane_execution{runs = [#atm_lane_execution_run{
+        parallel_boxes = AtmParallelBoxExecutions
+    } | _]} = get_lane_execution(AtmLaneIndex, AtmWorkflowExecutionDoc),
 
-    atm_store_api:unfreeze(AtmIteratedStoreId),  %% TODO handle undefined
-    atm_store_api:freeze(AtmExceptionStoreId),  %% TODO handle undefined
+    unfreeze_iterated_store_in_case_of_workflow_store(AtmLaneExecution, AtmWorkflowExecutionCtx),
+    freeze_exception_store(AtmLaneExecution),
 
     atm_parallel_box_execution:ensure_all_ended(AtmParallelBoxExecutions),
     atm_parallel_box_execution:teardown_all(AtmParallelBoxExecutions),
@@ -114,6 +114,39 @@ setup_lane_insecure(AtmLaneIndex, AtmWorkflowExecutionDoc, AtmWorkflowExecutionC
         ),
         iterator => atm_store_api:acquire_iterator(AtmIteratedStoreId, AtmStoreIteratorSpec)
     }.
+
+
+%% @private
+-spec unfreeze_iterated_store_in_case_of_workflow_store(
+    atm_lane_execution:record(),
+    atm_workflow_execution_ctx:record()
+) ->
+    ok.
+unfreeze_iterated_store_in_case_of_workflow_store(
+    #atm_lane_execution{runs = [#atm_lane_execution_run{exception_store_id = undefined} | _]},
+    _AtmWorkflowExecutionCtx
+) ->
+    ok;
+unfreeze_iterated_store_in_case_of_workflow_store(
+    #atm_lane_execution{runs = [#atm_lane_execution_run{iterated_store_id = AtmIteratedStoreId} | _]},
+    AtmWorkflowExecutionCtx
+) ->
+    case atm_workflow_execution_ctx:is_workflow_store(AtmIteratedStoreId, AtmWorkflowExecutionCtx) of
+        true -> atm_store_api:unfreeze(AtmIteratedStoreId);
+        false -> ok
+    end.
+
+
+%% @private
+-spec freeze_exception_store(atm_lane_execution:record()) -> ok.
+freeze_exception_store(#atm_lane_execution{runs = [
+    #atm_lane_execution_run{exception_store_id = undefined} | _
+]}) ->
+    ok;
+freeze_exception_store(#atm_lane_execution{runs = [
+    #atm_lane_execution_run{exception_store_id = AtmExceptionStoreId} | _
+]}) ->
+    atm_store_api:freeze(AtmExceptionStoreId).
 
 
 %% @private
