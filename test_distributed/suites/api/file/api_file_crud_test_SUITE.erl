@@ -41,9 +41,8 @@
 ]).
 
 groups() -> [
-    {all_tests, [parallel], [
+    {parallel, [parallel], [
         get_file_instance_test,
-        get_shared_file_instance_test,
         get_file_instance_on_provider_not_supporting_space_test,
 
         update_file_instance_test,
@@ -51,11 +50,15 @@ groups() -> [
 
         delete_file_instance_test,
         delete_file_instance_on_provider_not_supporting_space_test
+    ]},
+    {sequential, [sequential], [
+        get_shared_file_instance_test
     ]}
 ].
 
 all() -> [
-    {group, all_tests}
+    {group, parallel},
+    {group, sequential}
 ].
 
 
