@@ -1105,7 +1105,7 @@ recreate_file_on_storage(Config0) ->
     {ok, _} = lfm_proxy:write(Worker2, Handle, 0, FileContent),
     ok = lfm_proxy:close(Worker2, Handle),
 
-    % Wait for file sync and read (file should be created on disk and read should succeed)
+    % Wait for metadata sync and replicate file (replication should succeed even though file on storage is missing)
     ?assertMatch({ok, #file_attr{size = FileSize}}, lfm_proxy:stat(Worker1, SessId(Worker1), {guid, Guid}), 60),
     ProviderId = rpc:call(Worker1, oneprovider, get_id_or_undefined, []),
     {ok, TransferID} = ?assertMatch({ok, _}, lfm_proxy:schedule_file_replication(Worker1, SessId(Worker1),

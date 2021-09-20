@@ -444,7 +444,7 @@ open_file_internal(UserCtx, FileCtx0, Flag, HandleId0, NewFile, CheckLocationExi
     SessId = user_ctx:get_session_id(UserCtx),
     HandleId = check_and_register_open(FileCtx2, SessId, HandleId0, NewFile),
     try
-        {FileLocation, FileCtx3} = create_location(FileCtx2, UserCtx, NewFile, CheckLocationExists),
+        {FileLocation, FileCtx3} = create_location(FileCtx2, UserCtx, CheckLocationExists),
         IsDirectIO = user_ctx:is_direct_io(UserCtx, SpaceID) andalso HandleId0 =:= undefined,
         maybe_open_on_storage(UserCtx, FileCtx3, SessId, Flag, IsDirectIO, HandleId),
         {HandleId, FileLocation, FileCtx3}
@@ -571,10 +571,9 @@ check_and_register_release(_FileCtx, _SessId, _HandleId) ->
 %% Creates location and storage file if extended directIO is set.
 %% @end
 %%--------------------------------------------------------------------
--spec create_location(file_ctx:ctx(), user_ctx:ctx(), boolean(), boolean()) ->
-    {file_location:record(), file_ctx:ctx()}.
-create_location(FileCtx, UserCtx, VerifyDeletionLink, CheckLocationExists) ->
-    case sd_utils:create_deferred(FileCtx, UserCtx, VerifyDeletionLink, CheckLocationExists) of
+-spec create_location(file_ctx:ctx(), user_ctx:ctx(), boolean()) -> {file_location:record(), file_ctx:ctx()}.
+create_location(FileCtx, UserCtx, CheckLocationExists) ->
+    case sd_utils:create_deferred(FileCtx, UserCtx, CheckLocationExists) of
         {#document{value = FL}, FileCtx2} ->
             {FL, FileCtx2};
         {error, Reason} ->
