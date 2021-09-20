@@ -52,6 +52,8 @@ groups() -> [
         delete_file_instance_on_provider_not_supporting_space_test
     ]},
     {sequential, [sequential], [
+        % Cannot be executed in parallel with get_file_instance_test as
+        % both tests check space dir shares and expect different results
         get_shared_file_instance_test
     ]}
 ].
