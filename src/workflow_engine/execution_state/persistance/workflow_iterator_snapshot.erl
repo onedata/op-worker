@@ -36,7 +36,6 @@
     workflow_engine:execution_id(),
     workflow_execution_state:index(),
     workflow_engine:lane_id(),
-    workflow_engine:lane_id() | undefined,
     workflow_execution_state:index(),
     iterator:iterator(),
     workflow_engine:lane_id() | undefined

@@ -1196,8 +1196,8 @@
     execution_status = ?NOT_PREPARED :: workflow_execution_state:execution_status(),
     current_lane :: workflow_execution_state:current_lane(),
 
-    lane_prepared_in_advance_status = ?NOT_PREPARED :: workflow_execution_state:execution_status(),
-    lane_prepared_in_advance :: workflow_execution_state:lane_prepared_in_advance() | undefined,
+    lane_prepared_in_advance_status = ?NOT_PREPARED :: workflow_execution_state:lane_prepared_in_advance_status(),
+    lane_prepared_in_advance :: workflow_execution_state:lane_prepared_in_advance(),
 
     lowest_failed_job_identifier :: workflow_jobs:job_identifier() | undefined,
     failed_jobs_count = 0 :: non_neg_integer(),
