@@ -9,11 +9,6 @@
 %%% This module handles creation of all documents associated with automation
 %%% lane execution (e.g. exception store, etc.). If creation of any element
 %%% fails then ones created before are deleted.
-%%%
-%%%                              !!! NOTE !!!
-%%% This module creates lane execution elements and saves them into latest
-%%% lane execution run which embryo (record with 'undefined' elements and
-%%% ?PREPARING_STATUS) must have been prepared beforehand.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_lane_execution_factory).
@@ -22,11 +17,11 @@
 -include("modules/automation/atm_execution.hrl").
 
 %% API
--export([create/3]).
+-export([create_run/3, delete_run/1]).
 
--type create_ctx() :: #atm_lane_execution_create_ctx{}.
+-type create_run_ctx() :: #atm_lane_execution_run_create_ctx{}.
 
--export_type([create_ctx/0]).
+-export_type([create_run_ctx/0]).
 
 
 %%%===================================================================
@@ -34,11 +29,11 @@
 %%%===================================================================
 
 
--spec create(pos_integer(), atm_workflow_execution:doc(), atm_workflow_execution_ctx:record()) ->
-    {atm_workflow_execution:doc(), atm_workflow_execution_env:record()} | no_return().
-create(AtmLaneIndex, AtmWorkflowExecutionDoc, AtmWorkflowExecutionCtx) ->
+-spec create_run(pos_integer(), atm_workflow_execution:doc(), atm_workflow_execution_ctx:record()) ->
+    atm_workflow_execution:doc() | no_return().
+create_run(AtmLaneIndex, AtmWorkflowExecutionDoc, AtmWorkflowExecutionCtx) ->
     try
-        create_internal(AtmLaneIndex, AtmWorkflowExecutionDoc, AtmWorkflowExecutionCtx)
+        create_run_internal(AtmLaneIndex, AtmWorkflowExecutionDoc, AtmWorkflowExecutionCtx)
     catch _:Reason ->
         #atm_lane_execution{schema_id = AtmLaneSchemaId} = lists:nth(
             AtmLaneIndex, AtmWorkflowExecutionDoc#document.value#atm_workflow_execution.lanes
@@ -47,24 +42,36 @@ create(AtmLaneIndex, AtmWorkflowExecutionDoc, AtmWorkflowExecutionCtx) ->
     end.
 
 
+-spec delete_run(atm_lane_execution:run()) -> ok.
+delete_run(#atm_lane_execution_run{
+    exception_store_id = ExceptionStoreId,
+    parallel_boxes = AtmParallelBoxExecutions
+}) ->
+    delete_execution_elements(#atm_lane_execution_run_elements{
+        exception_store_id = ExceptionStoreId,
+        parallel_boxes = AtmParallelBoxExecutions
+    }).
+
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
 
 %% @private
--spec create_internal(
+-spec create_run_internal(
     pos_integer(),
     atm_workflow_execution:doc(),
     atm_workflow_execution_ctx:record()
 ) ->
-    {atm_workflow_execution:doc(), atm_workflow_execution_env:record()} | no_return().
-create_internal(AtmLaneIndex, AtmWorkflowExecutionDoc, AtmWorkflowExecutionCtx) ->
-    AtmLaneExecutionCreateCtx = #atm_lane_execution_create_ctx{
-        workflow_execution_env = AtmWorkflowExecutionEnv,
+    atm_workflow_execution:doc() | no_return().
+create_run_internal(AtmLaneIndex, AtmWorkflowExecutionDoc, AtmWorkflowExecutionCtx) ->
+    #atm_lane_execution_run_create_ctx{
         iterated_store_id = IteratedStoreId,
-        exception_store_id = ExceptionStoreId,
-        parallel_boxes = AtmParallelBoxExecutions
+        elements = ExecutionElements = #atm_lane_execution_run_elements{
+            exception_store_id = ExceptionStoreId,
+            parallel_boxes = AtmParallelBoxExecutions
+        }
     } = create_execution_elements(build_lane_execution_create_ctx(
         AtmLaneIndex, AtmWorkflowExecutionDoc, AtmWorkflowExecutionCtx
     )),
@@ -97,9 +104,9 @@ create_internal(AtmLaneIndex, AtmWorkflowExecutionDoc, AtmWorkflowExecutionCtx) 
     end,
     case atm_workflow_execution:update(AtmWorkflowExecutionDoc#document.key, Diff) of
         {ok, NewAtmWorkflowExecutionDoc} ->
-            {NewAtmWorkflowExecutionDoc, AtmWorkflowExecutionEnv};
+            NewAtmWorkflowExecutionDoc;
         ?ERROR_ALREADY_EXISTS = Error ->
-            delete_execution_elements(AtmLaneExecutionCreateCtx),
+            delete_execution_elements(ExecutionElements),
             throw(Error)
     end.
 
@@ -110,7 +117,7 @@ create_internal(AtmLaneIndex, AtmWorkflowExecutionDoc, AtmWorkflowExecutionCtx) 
     atm_workflow_execution:doc(),
     atm_workflow_execution_ctx:record()
 ) ->
-    create_ctx().
+    create_run_ctx().
 build_lane_execution_create_ctx(AtmLaneIndex, AtmWorkflowExecutionDoc = #document{
     value = #atm_workflow_execution{
         schema_snapshot_id = AtmWorkflowSchemaSnapshotId,
@@ -130,9 +137,8 @@ build_lane_execution_create_ctx(AtmLaneIndex, AtmWorkflowExecutionDoc = #documen
         store_schema_id = AtmStoreSchemaId
     }} = lists:nth(AtmLaneIndex, AtmLaneSchemas),
 
-    #atm_lane_execution_create_ctx{
+    #atm_lane_execution_run_create_ctx{
         workflow_execution_ctx = AtmWorkflowExecutionCtx,
-        workflow_execution_env = atm_workflow_execution_ctx:get_env(AtmWorkflowExecutionCtx),
 
         workflow_schema_snapshot_doc = AtmWorkflowSchemaSnapshotDoc,
         workflow_execution_doc = AtmWorkflowExecutionDoc,
@@ -149,42 +155,43 @@ build_lane_execution_create_ctx(AtmLaneIndex, AtmWorkflowExecutionDoc = #documen
             _ ->
                 IteratedStoreId
         end,
-        exception_store_id = undefined,
 
-        parallel_boxes = undefined
+        elements = #atm_lane_execution_run_elements{
+            exception_store_id = undefined,
+            parallel_boxes = undefined
+        }
     }.
 
 
 %% @private
--spec create_execution_elements(create_ctx()) -> create_ctx() | no_return().
-create_execution_elements(AtmLaneExecutionCreateCtx) ->
-    lists:foldl(fun(CreateExecutionElementFun, NewAtmLaneExecutionCreateCtx) ->
+-spec create_execution_elements(create_run_ctx()) -> create_run_ctx() | no_return().
+create_execution_elements(AtmLaneExecutionRunCreateCtx) ->
+    lists:foldl(fun(CreateExecutionElementFun, NewAtmLaneExecutionRunCreateCtx) ->
         try
-            CreateExecutionElementFun(NewAtmLaneExecutionCreateCtx)
+            CreateExecutionElementFun(NewAtmLaneExecutionRunCreateCtx)
         catch Type:Reason ->
-            delete_execution_elements(NewAtmLaneExecutionCreateCtx),
+            delete_execution_elements(
+                NewAtmLaneExecutionRunCreateCtx#atm_lane_execution_run_create_ctx.elements
+            ),
             erlang:Type(Reason)
         end
-    end, AtmLaneExecutionCreateCtx, [
+    end, AtmLaneExecutionRunCreateCtx, [
         fun create_exception_store/1,
-        fun atm_parallel_box_execution:create_all/1
+        fun create_parallel_box_executions/1
     ]).
 
 
 %% @private
--spec create_exception_store(create_ctx()) -> create_ctx().
-create_exception_store(AtmLaneExecutionCreateCtx = #atm_lane_execution_create_ctx{
+-spec create_exception_store(create_run_ctx()) -> create_run_ctx().
+create_exception_store(AtmLaneExecutionRunCreateCtx = #atm_lane_execution_run_create_ctx{
     workflow_execution_ctx = AtmWorkflowExecutionCtx,
-    workflow_execution_env = AtmWorkflowExecutionEnv,
-    iterated_store_id = AtmIteratedStoreId
+    iterated_store_id = AtmIteratedStoreId,
+    elements = ExecutionElements
 }) ->
     AtmWorkflowExecutionAuth = atm_workflow_execution_ctx:get_auth(AtmWorkflowExecutionCtx),
     {ok, #atm_store{container = AtmStoreContainer}} = atm_store_api:get(AtmIteratedStoreId),
 
-    {ok, #document{
-        key = AtmLaneExceptionStoreId,
-        value = #atm_store{container = AtmLaneExceptionStoreContainer}
-    }} = atm_store_api:create(
+    {ok, #document{key = AtmLaneExceptionStoreId}} = atm_store_api:create(
         AtmWorkflowExecutionAuth, undefined, #atm_store_schema{
             id = ?CURRENT_LANE_EXCEPTION_STORE_SCHEMA_ID,
             name = ?CURRENT_LANE_EXCEPTION_STORE_SCHEMA_ID,
@@ -195,31 +202,42 @@ create_exception_store(AtmLaneExecutionCreateCtx = #atm_lane_execution_create_ct
         }
     ),
 
-    AtmLaneExecutionCreateCtx#atm_lane_execution_create_ctx{
-        workflow_execution_env = atm_workflow_execution_env:set_lane_exception_store_container(
-            AtmLaneExceptionStoreContainer, AtmWorkflowExecutionEnv
-        ),
-        exception_store_id = AtmLaneExceptionStoreId
+    AtmLaneExecutionRunCreateCtx#atm_lane_execution_run_create_ctx{
+        elements = ExecutionElements#atm_lane_execution_run_elements{
+            exception_store_id = AtmLaneExceptionStoreId
+        }
     }.
 
 
 %% @private
--spec delete_execution_elements(create_ctx()) -> ok.
-delete_execution_elements(AtmLaneExecutionCreateCtx = #atm_lane_execution_create_ctx{
+-spec create_parallel_box_executions(create_run_ctx()) -> create_run_ctx().
+create_parallel_box_executions(AtmLaneExecutionRunCreateCtx = #atm_lane_execution_run_create_ctx{
+    elements = ExecutionElements
+}) ->
+    AtmLaneExecutionRunCreateCtx#atm_lane_execution_run_create_ctx{
+        elements = ExecutionElements#atm_lane_execution_run_elements{
+            parallel_boxes = atm_parallel_box_execution:create_all(AtmLaneExecutionRunCreateCtx)
+        }
+    }.
+
+
+%% @private
+-spec delete_execution_elements(atm_lane_execution:run_elements()) -> ok.
+delete_execution_elements(ExecutionElements = #atm_lane_execution_run_elements{
     exception_store_id = AtmLaneExceptionStoreId
 }) when AtmLaneExceptionStoreId /= undefined ->
     catch atm_store_api:delete(AtmLaneExceptionStoreId),
 
-    delete_execution_elements(AtmLaneExecutionCreateCtx#atm_lane_execution_create_ctx{
+    delete_execution_elements(ExecutionElements#atm_lane_execution_run_elements{
         exception_store_id = undefined
     });
 
-delete_execution_elements(AtmLaneExecutionCreateCtx = #atm_lane_execution_create_ctx{
+delete_execution_elements(ExecutionElements = #atm_lane_execution_run_elements{
     parallel_boxes = AtmParallelBoxExecutions
 }) when AtmParallelBoxExecutions /= undefined ->
     catch atm_parallel_box_execution:delete_all(AtmParallelBoxExecutions),
 
-    delete_execution_elements(AtmLaneExecutionCreateCtx#atm_lane_execution_create_ctx{
+    delete_execution_elements(ExecutionElements#atm_lane_execution_run_elements{
         parallel_boxes = undefined
     });
 

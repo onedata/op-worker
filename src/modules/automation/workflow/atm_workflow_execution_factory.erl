@@ -34,15 +34,19 @@
 }).
 -type create_params() :: #atm_workflow_execution_create_params{}.
 
--record(atm_workflow_execution_create_ctx, {
-    env :: atm_workflow_execution_env:record(),
-    params :: create_params(),
-
-    % execution elements having their own documents 
+-record(atm_workflow_execution_elements, {
     schema_snapshot_id = undefined :: undefined | atm_workflow_schema_snapshot:id(),
     lambda_snapshot_registry = undefined :: undefined | atm_workflow_execution:lambda_snapshot_registry(),
     workflow_store_registry = undefined :: undefined | atm_workflow_execution:store_registry(),
-    workflow_audit_log_id = undefined :: undefined | atm_store:id()
+    workflow_audit_log_id = undefined :: undefined | atm_store:id(),
+    lanes = undefined :: undefined | [atm_lane_execution:record()]
+}).
+-type elements() :: #atm_workflow_execution_elements{}.
+
+-record(atm_workflow_execution_create_ctx, {
+    env :: atm_workflow_execution_env:record(),
+    params :: create_params(),
+    elements :: elements()
 }).
 -type create_ctx() :: #atm_workflow_execution_create_ctx{}.
 
@@ -68,7 +72,11 @@ create(UserCtx, SpaceId, AtmWorkflowSchemaId, StoreInitialValues, CallbackUrl) -
 
     AtmWorkflowExecutionId = datastore_key:new(),
 
-    AtmWorkflowExecutionCreateCtx = create_execution_elements(#atm_workflow_execution_create_ctx{
+
+    AtmWorkflowExecutionCreateCtx = #atm_workflow_execution_create_ctx{
+        env = AtmWorkflowExecutionEnv,
+        elements = Elements
+    } = create_execution_elements(#atm_workflow_execution_create_ctx{
         env = atm_workflow_execution_env:build(SpaceId, AtmWorkflowExecutionId),
         params = #atm_workflow_execution_create_params{
             workflow_execution_id = AtmWorkflowExecutionId,
@@ -79,14 +87,14 @@ create(UserCtx, SpaceId, AtmWorkflowSchemaId, StoreInitialValues, CallbackUrl) -
             lambda_docs = AtmLambdaDocs,
             store_initial_values = StoreInitialValues,
             callback_url = CallbackUrl
-        }
+        },
+        elements = #atm_workflow_execution_elements{}
     }),
-    AtmWorkflowExecutionEnv = AtmWorkflowExecutionCreateCtx#atm_workflow_execution_create_ctx.env,
 
     AtmWorkflowExecutionDoc = try
         create_workflow_execution_doc(AtmWorkflowExecutionCreateCtx)
     catch Type:Reason ->
-        delete_execution_elements(AtmWorkflowExecutionCreateCtx),
+        delete_execution_elements(Elements),
         erlang:Type(Reason)
     end,
     atm_waiting_workflow_executions:add(AtmWorkflowExecutionDoc),
@@ -130,14 +138,17 @@ create_execution_elements(AtmWorkflowExecutionCreateCtx) ->
         try
             CreateExecutionElementFun(NewAtmWorkflowExecutionCreateCtx)
         catch Type:Reason ->
-            delete_execution_elements(NewAtmWorkflowExecutionCreateCtx),
+            delete_execution_elements(
+                NewAtmWorkflowExecutionCreateCtx#atm_workflow_execution_create_ctx.elements
+            ),
             erlang:Type(Reason)
         end
     end, AtmWorkflowExecutionCreateCtx, [
         fun create_workflow_schema_snapshot/1,
         fun create_lambda_snapshots/1,
         fun create_workflow_stores/1,
-        fun create_workflow_audit_log/1
+        fun create_workflow_audit_log/1,
+        fun create_lane_executions/1
     ]).
 
 
@@ -147,14 +158,17 @@ create_workflow_schema_snapshot(AtmWorkflowExecutionCreateCtx = #atm_workflow_ex
     params = #atm_workflow_execution_create_params{
         workflow_execution_id = AtmWorkflowExecutionId,
         workflow_schema_doc = AtmWorkflowSchemaDoc
-    }
+    },
+    elements = Elements
 }) ->
     {ok, AtmWorkflowSchemaSnapshotId} = atm_workflow_schema_snapshot:create(
         AtmWorkflowExecutionId, AtmWorkflowSchemaDoc
     ),
 
     AtmWorkflowExecutionCreateCtx#atm_workflow_execution_create_ctx{
-        schema_snapshot_id = AtmWorkflowSchemaSnapshotId
+        elements = Elements#atm_workflow_execution_elements{
+            schema_snapshot_id = AtmWorkflowSchemaSnapshotId
+        }
     }.
 
 
@@ -164,7 +178,8 @@ create_lambda_snapshots(AtmWorkflowExecutionCreateCtx = #atm_workflow_execution_
     params = #atm_workflow_execution_create_params{
         workflow_execution_id = AtmWorkflowExecutionId,
         lambda_docs = AtmLambdaDocs
-    }
+    },
+    elements = Elements
 }) ->
     AtmLambdaSnapshotRegistry = lists:foldl(fun(#document{key = AtmLambdaId} = AtmLambdaDoc, Acc) ->
         try
@@ -179,7 +194,9 @@ create_lambda_snapshots(AtmWorkflowExecutionCreateCtx = #atm_workflow_execution_
     end, #{}, AtmLambdaDocs),
 
     AtmWorkflowExecutionCreateCtx#atm_workflow_execution_create_ctx{
-        lambda_snapshot_registry = AtmLambdaSnapshotRegistry
+        elements = Elements#atm_workflow_execution_elements{
+            lambda_snapshot_registry = AtmLambdaSnapshotRegistry
+        }
     }.
 
 
@@ -198,7 +215,9 @@ create_workflow_stores(AtmWorkflowExecutionCreateCtx = #atm_workflow_execution_c
         AtmStoreSchema = #atm_store_schema{id = AtmStoreSchemaId},
         NewAtmWorkflowExecutionCreateCtx = #atm_workflow_execution_create_ctx{
             env = AtmWorkflowExecutionEnv,
-            workflow_store_registry = AtmWorkflowStoreRegistry
+            elements = Elements = #atm_workflow_execution_elements{
+                workflow_store_registry = AtmWorkflowStoreRegistry
+            }
         }
     ) ->
         StoreInitialValue = utils:null_to_undefined(maps:get(
@@ -212,8 +231,10 @@ create_workflow_stores(AtmWorkflowExecutionCreateCtx = #atm_workflow_execution_c
                 env = atm_workflow_execution_env:add_workflow_store(
                     AtmStoreSchemaId, AtmStoreId, AtmWorkflowExecutionEnv
                 ),
-                workflow_store_registry = AtmWorkflowStoreRegistry#{
-                    AtmStoreSchemaId => AtmStoreId
+                elements = Elements#atm_workflow_execution_elements{
+                    workflow_store_registry = AtmWorkflowStoreRegistry#{
+                        AtmStoreSchemaId => AtmStoreId
+                    }
                 }
             }
         catch _:Reason ->
@@ -229,7 +250,8 @@ create_workflow_audit_log(AtmWorkflowExecutionCreateCtx = #atm_workflow_executio
     env = AtmWorkflowExecutionEnv,
     params = #atm_workflow_execution_create_params{
         workflow_execution_auth = AtmWorkflowExecutionAuth
-    }
+    },
+    elements = Elements
 }) ->
     {ok, #document{
         key = AtmWorkflowAuditLogId,
@@ -249,7 +271,37 @@ create_workflow_audit_log(AtmWorkflowExecutionCreateCtx = #atm_workflow_executio
         env = atm_workflow_execution_env:set_workflow_audit_log_store_container(
             AtmWorkflowAuditLogStoreContainer, AtmWorkflowExecutionEnv
         ),
-        workflow_audit_log_id = AtmWorkflowAuditLogId
+        elements = Elements#atm_workflow_execution_elements{
+            workflow_audit_log_id = AtmWorkflowAuditLogId
+        }
+    }.
+
+
+%% @private
+-spec create_lane_executions(create_ctx()) -> create_ctx().
+create_lane_executions(AtmWorkflowExecutionCreateCtx = #atm_workflow_execution_create_ctx{
+    params = #atm_workflow_execution_create_params{
+        workflow_schema_doc = #document{value = #od_atm_workflow_schema{
+            lanes = [FirstAtmLaneSchema | RestAtmLaneSchemas]
+        }}
+    },
+    elements = Elements
+}) ->
+    FirstAtmLaneExecution = #atm_lane_execution{
+        schema_id = FirstAtmLaneSchema#atm_lane_schema.id,
+        runs = [#atm_lane_execution_run{run_no = 1, status = ?SCHEDULED_STATUS}]
+    },
+    RestAtmLaneExecutions = lists:map(fun(AtmLaneSchema) ->
+        #atm_lane_execution{
+            schema_id = AtmLaneSchema#atm_lane_schema.id,
+            runs = []
+        }
+    end, RestAtmLaneSchemas),
+
+    AtmWorkflowExecutionCreateCtx#atm_workflow_execution_create_ctx{
+        elements = Elements#atm_workflow_execution_elements{
+            lanes = [FirstAtmLaneExecution | RestAtmLaneExecutions]
+        }
     }.
 
 
@@ -262,15 +314,17 @@ create_workflow_execution_doc(#atm_workflow_execution_create_ctx{
         workflow_execution_auth = AtmWorkflowExecutionAuth,
         workflow_schema_doc = #document{value = #od_atm_workflow_schema{
             name = AtmWorkflowSchemaName,
-            atm_inventory = AtmInventoryId,
-            lanes = AtmLaneSchemas
+            atm_inventory = AtmInventoryId
         }},
         callback_url = CallbackUrl
     },
-    schema_snapshot_id = AtmWorkflowSchemaSnapshotId,
-    lambda_snapshot_registry = AtmLambdaSnapshotRegistry,
-    workflow_store_registry = AtmWorkflowStoreRegistry,
-    workflow_audit_log_id = AtmWorkflowAuditLogId
+    elements = #atm_workflow_execution_elements{
+        schema_snapshot_id = AtmWorkflowSchemaSnapshotId,
+        lambda_snapshot_registry = AtmLambdaSnapshotRegistry,
+        workflow_store_registry = AtmWorkflowStoreRegistry,
+        workflow_audit_log_id = AtmWorkflowAuditLogId,
+        lanes = AtmLaneExecutions
+    }
 }) ->
     {ok, AtmWorkflowExecutionDoc} = atm_workflow_execution:create(#document{
         key = AtmWorkflowExecutionId,
@@ -286,8 +340,8 @@ create_workflow_execution_doc(#atm_workflow_execution_create_ctx{
             store_registry = AtmWorkflowStoreRegistry,
             system_audit_log_id = AtmWorkflowAuditLogId,
 
-            lanes = build_lane_executions(AtmLaneSchemas),
-            lanes_num = length(AtmLaneSchemas),
+            lanes = AtmLaneExecutions,
+            lanes_num = length(AtmLaneExecutions),
 
             curr_lane_index = 1,
             curr_run_no = 1,
@@ -306,59 +360,50 @@ create_workflow_execution_doc(#atm_workflow_execution_create_ctx{
 
 
 %% @private
--spec build_lane_executions([atm_lane_schema:record()]) ->
-    [atm_lane_execution:record()].
-build_lane_executions([FirstAtmLaneSchema | RestAtmLaneSchemas]) ->
-    FirstAtmLaneExecution = #atm_lane_execution{
-        schema_id = FirstAtmLaneSchema#atm_lane_schema.id,
-        runs = [#atm_lane_execution_run{run_no = 1, status = ?SCHEDULED_STATUS}]
-    },
-    RestAtmLaneExecutions = lists:map(fun(AtmLaneSchema) ->
-        #atm_lane_execution{
-            schema_id = AtmLaneSchema#atm_lane_schema.id,
-            runs = []
-        }
-    end, RestAtmLaneSchemas),
-
-    [FirstAtmLaneExecution | RestAtmLaneExecutions].
-
-
-%% @private
--spec delete_execution_elements(create_ctx()) -> ok.
-delete_execution_elements(AtmWorkflowExecutionCreateCtx = #atm_workflow_execution_create_ctx{
+-spec delete_execution_elements(elements()) -> ok.
+delete_execution_elements(Elements = #atm_workflow_execution_elements{
     schema_snapshot_id = AtmWorkflowSchemaSnapshotId
 }) when AtmWorkflowSchemaSnapshotId /= undefined ->
     catch atm_workflow_schema_snapshot:delete(AtmWorkflowSchemaSnapshotId),
 
-    delete_execution_elements(AtmWorkflowExecutionCreateCtx#atm_workflow_execution_create_ctx{
+    delete_execution_elements(Elements#atm_workflow_execution_elements{
         schema_snapshot_id = undefined
     });
 
-delete_execution_elements(AtmWorkflowExecutionCreateCtx = #atm_workflow_execution_create_ctx{
+delete_execution_elements(Elements = #atm_workflow_execution_elements{
     lambda_snapshot_registry = AtmLambdaSnapshotRegistry
 }) when AtmLambdaSnapshotRegistry /= undefined ->
     catch delete_lambda_snapshots(AtmLambdaSnapshotRegistry),
 
-    delete_execution_elements(AtmWorkflowExecutionCreateCtx#atm_workflow_execution_create_ctx{
+    delete_execution_elements(Elements#atm_workflow_execution_elements{
         lambda_snapshot_registry = undefined
     });
 
-delete_execution_elements(AtmWorkflowExecutionCreateCtx = #atm_workflow_execution_create_ctx{
+delete_execution_elements(Elements = #atm_workflow_execution_elements{
     workflow_store_registry = AtmWorkflowStoreRegistry
 }) when AtmWorkflowStoreRegistry /= undefined ->
     catch delete_workflow_stores(maps:values(AtmWorkflowStoreRegistry)),
 
-    delete_execution_elements(AtmWorkflowExecutionCreateCtx#atm_workflow_execution_create_ctx{
+    delete_execution_elements(Elements#atm_workflow_execution_elements{
         workflow_store_registry = undefined
     });
 
-delete_execution_elements(AtmWorkflowExecutionCreateCtx = #atm_workflow_execution_create_ctx{
+delete_execution_elements(Elements = #atm_workflow_execution_elements{
     workflow_audit_log_id = AtmWorkflowAuditLogId
 }) when AtmWorkflowAuditLogId /= undefined ->
     catch atm_store_api:delete(AtmWorkflowAuditLogId),
 
-    delete_execution_elements(AtmWorkflowExecutionCreateCtx#atm_workflow_execution_create_ctx{
+    delete_execution_elements(Elements#atm_workflow_execution_elements{
         workflow_audit_log_id = undefined
+    });
+
+delete_execution_elements(Elements = #atm_workflow_execution_elements{
+    lanes = AtmLaneExecutions
+}) when AtmLaneExecutions /= undefined ->
+    %% TODO implement
+
+    delete_execution_elements(Elements#atm_workflow_execution_elements{
+        lanes = undefined
     });
 
 delete_execution_elements(_) ->

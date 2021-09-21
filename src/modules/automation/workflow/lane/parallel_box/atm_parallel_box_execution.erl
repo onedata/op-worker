@@ -51,39 +51,37 @@
 %%%===================================================================
 
 
--spec create_all(atm_lane_execution_factory:create_ctx()) ->
-    atm_lane_execution_factory:create_ctx() | no_return().
-create_all(AtmLaneExecutionCreateCtx = #atm_lane_execution_create_ctx{lane_schema = #atm_lane_schema{
-    parallel_boxes = AtmParallelBoxSchemas
-}}) ->
-    lists:foldr(fun({AtmParallelBoxIndex, AtmParallelBoxSchema}, Acc) ->
+-spec create_all(atm_lane_execution_factory:create_run_ctx()) ->
+    [record()] | no_return().
+create_all(AtmLaneExecutionRunCreateCtx = #atm_lane_execution_run_create_ctx{
+    lane_schema = #atm_lane_schema{parallel_boxes = AtmParallelBoxSchemas}
+}) ->
+    lists:foldr(fun({AtmParallelBoxIndex, AtmParallelBoxSchema}, AtmParallelBoxExecutions) ->
         try
-            create(Acc, AtmParallelBoxIndex, AtmParallelBoxSchema)
+            AtmParallelBoxExecution = create(
+                AtmLaneExecutionRunCreateCtx, AtmParallelBoxIndex, AtmParallelBoxSchema
+            ),
+            [AtmParallelBoxExecution | AtmParallelBoxExecutions]
         catch _:Reason ->
-            catch delete_all(Acc#atm_lane_execution_create_ctx.parallel_boxes),
+            catch delete_all(AtmParallelBoxExecutions),
 
             AtmParallelBoxSchemaId = AtmParallelBoxSchema#atm_parallel_box_schema.id,
             throw(?ERROR_ATM_PARALLEL_BOX_EXECUTION_CREATION_FAILED(AtmParallelBoxSchemaId, Reason))
         end
-    end, AtmLaneExecutionCreateCtx, lists_utils:enumerate(AtmParallelBoxSchemas)).
+    end, [], lists_utils:enumerate(AtmParallelBoxSchemas)).
 
 
 -spec create(
-    atm_lane_execution_factory:create_ctx(),
+    atm_lane_execution_factory:create_run_ctx(),
     pos_integer(),
     atm_parallel_box_schema:record()
 ) ->
-    atm_lane_execution_factory:create_ctx().
-create(AtmLaneExecutionCreateCtx, AtmParallelBoxIndex, AtmParallelBoxSchema = #atm_parallel_box_schema{
+    record().
+create(AtmLaneExecutionRunCreateCtx, AtmParallelBoxIndex, #atm_parallel_box_schema{
     id = AtmParallelBoxSchemaId
-}) ->
-    #atm_parallel_box_execution_create_ctx{
-        tasks = AtmTaskExecutionDocs,
-        lane_execution_create_ctx = NewAtmLaneExecutionCtx = #atm_lane_execution_create_ctx{
-            parallel_boxes = AtmParallelBoxExecutions
-        }
-    } = atm_task_execution_factory:create_all(#atm_parallel_box_execution_create_ctx{
-        lane_execution_create_ctx = AtmLaneExecutionCreateCtx,
+} = AtmParallelBoxSchema) ->
+    AtmTaskExecutionDocs = atm_task_execution_factory:create_all(#atm_parallel_box_execution_create_ctx{
+        lane_execution_run_create_ctx = AtmLaneExecutionRunCreateCtx,
         parallel_box_index = AtmParallelBoxIndex,
         parallel_box_schema = AtmParallelBoxSchema,
         tasks = []
@@ -102,15 +100,11 @@ create(AtmLaneExecutionCreateCtx, AtmParallelBoxIndex, AtmParallelBoxSchema = #a
         }
     end, {#{}, #{}}, AtmTaskExecutionDocs),
 
-    AtmParallelBoxExecution = #atm_parallel_box_execution{
+    #atm_parallel_box_execution{
         schema_id = AtmParallelBoxSchemaId,
         status = infer_status_from_task_statuses(maps:values(AtmTaskExecutionStatuses)),
         task_registry = AtmTaskExecutionRegistry,
         task_statuses = AtmTaskExecutionStatuses
-    },
-
-    NewAtmLaneExecutionCtx#atm_lane_execution_create_ctx{
-        parallel_boxes = [AtmParallelBoxExecution | AtmParallelBoxExecutions]
     }.
 
 

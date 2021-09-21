@@ -34,18 +34,17 @@ prepare(AtmLaneIndex, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
     ),
 
     try
-        {NewAtmWorkflowExecutionDoc0, AtmWorkflowExecutionEnv} = atm_lane_execution_factory:create(
+        NewAtmWorkflowExecutionDoc0 = atm_lane_execution_factory:create_run(
             AtmLaneIndex, AtmWorkflowExecutionDoc, AtmWorkflowExecutionCtx
         ),
-        AtmLaneExecutionSpec = setup_lane(
-            AtmLaneIndex, NewAtmWorkflowExecutionDoc0,
-            AtmWorkflowExecutionEnv, AtmWorkflowExecutionCtx
+        AtmLaneExecutionSpec = setup_lane_run(
+            AtmLaneIndex, NewAtmWorkflowExecutionDoc0, AtmWorkflowExecutionCtx
         ),
 
         NewAtmWorkflowExecutionDoc1 = atm_lane_execution_status:handle_enqueued(
             AtmLaneIndex, AtmWorkflowExecutionId
         ),
-        freeze_lane_iterated_store_if_ready_to_execute(AtmLaneIndex, NewAtmWorkflowExecutionDoc1),
+        freeze_lane_run_iterated_store_if_ready_to_execute(AtmLaneIndex, NewAtmWorkflowExecutionDoc1),
 
         AtmLaneExecutionSpec
     catch Type:Reason ->
@@ -77,7 +76,9 @@ handle_ended(AtmLaneIndex, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
     NewAtmWorkflowExecutionDoc = atm_lane_execution_status:handle_ended(
         AtmLaneIndex, AtmWorkflowExecutionId
     ),
-    freeze_curr_lane_iterated_store_if_ready_to_execute(NewAtmWorkflowExecutionDoc),
+    freeze_curr_lane_run_iterated_store_if_ready_to_execute(NewAtmWorkflowExecutionDoc),
+
+    % TODO match with new format
     get_curr_lane_to_execute(NewAtmWorkflowExecutionDoc).
 
 
@@ -87,56 +88,37 @@ handle_ended(AtmLaneIndex, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
 
 
 %% @private
--spec setup_lane(
+-spec setup_lane_run(
     pos_integer(),
     atm_workflow_execution:doc(),
-    atm_workflow_execution_env:record(),
     atm_workflow_execution_ctx:record()
 ) ->
     workflow_engine:lane_spec() | no_return().
-setup_lane(AtmLaneIndex, AtmWorkflowExecutionDoc, AtmWorkflowExecutionEnv, AtmWorkflowExecutionCtx) ->
+setup_lane_run(AtmLaneIndex, AtmWorkflowExecutionDoc, AtmWorkflowExecutionCtx) ->
     try
-        setup_lane_insecure(
-            AtmLaneIndex, AtmWorkflowExecutionDoc, AtmWorkflowExecutionEnv, AtmWorkflowExecutionCtx
-        )
+        #atm_lane_schema{store_iterator_spec = AtmStoreIteratorSpec} = get_lane_schema(
+            AtmLaneIndex, AtmWorkflowExecutionDoc
+        ),
+        #atm_lane_execution{runs = [#atm_lane_execution_run{
+            iterated_store_id = AtmIteratedStoreId,
+            parallel_boxes = AtmParallelBoxExecutions
+        } | _]} = get_lane_execution(AtmLaneIndex, AtmWorkflowExecutionDoc),
+
+        % TODO build env with setup
+        % TODO add next lane index to spec? one or more?
+        #{
+%%        execution_context => AtmWorkflowExecutionEnv,
+            parallel_boxes => atm_parallel_box_execution:setup_all(
+                AtmWorkflowExecutionCtx, AtmParallelBoxExecutions
+            ),
+            iterator => atm_store_api:acquire_iterator(AtmIteratedStoreId, AtmStoreIteratorSpec)
+        }
     catch _:Reason ->
         #atm_lane_execution{schema_id = AtmLaneSchemaId} = get_lane_execution(
             AtmLaneIndex, AtmWorkflowExecutionDoc
         ),
         throw(?ERROR_ATM_LANE_EXECUTION_SETUP_FAILED(AtmLaneSchemaId, Reason))
     end.
-
-
-%% @private
--spec setup_lane_insecure(
-    pos_integer(),
-    atm_workflow_execution:doc(),
-    atm_workflow_execution_env:record(),
-    atm_workflow_execution_ctx:record()
-) ->
-    workflow_engine:lane_spec() | no_return().
-setup_lane_insecure(
-    AtmLaneIndex,
-    AtmWorkflowExecutionDoc,
-    AtmWorkflowExecutionEnv,
-    AtmWorkflowExecutionCtx
-) ->
-    #atm_lane_schema{store_iterator_spec = AtmStoreIteratorSpec} = get_lane_schema(
-        AtmLaneIndex, AtmWorkflowExecutionDoc
-    ),
-    #atm_lane_execution{runs = [#atm_lane_execution_run{
-        iterated_store_id = AtmIteratedStoreId,
-        parallel_boxes = AtmParallelBoxExecutions
-    } | _]} = get_lane_execution(AtmLaneIndex, AtmWorkflowExecutionDoc),
-
-    % TODO add next lane index to spec? one or more?
-    #{
-%%        execution_context => AtmWorkflowExecutionEnv,
-        parallel_boxes => atm_parallel_box_execution:setup_all(
-            AtmWorkflowExecutionCtx, AtmParallelBoxExecutions
-        ),
-        iterator => atm_store_api:acquire_iterator(AtmIteratedStoreId, AtmStoreIteratorSpec)
-    }.
 
 
 %% @private
@@ -173,21 +155,26 @@ freeze_exception_store(#atm_lane_execution{runs = [
 
 
 %% @private
--spec freeze_curr_lane_iterated_store_if_ready_to_execute(atm_workflow_execution:doc()) ->
+-spec freeze_curr_lane_run_iterated_store_if_ready_to_execute(atm_workflow_execution:doc()) ->
     ok.
-freeze_curr_lane_iterated_store_if_ready_to_execute(AtmWorkflowExecutionDoc = #document{
+freeze_curr_lane_run_iterated_store_if_ready_to_execute(AtmWorkflowExecutionDoc = #document{
     value = #atm_workflow_execution{curr_lane_index = CurrLaneIndex}
 }) ->
-    freeze_lane_iterated_store_if_ready_to_execute(CurrLaneIndex, AtmWorkflowExecutionDoc).
+    freeze_lane_run_iterated_store_if_ready_to_execute(CurrLaneIndex, AtmWorkflowExecutionDoc).
 
 
 %% @private
--spec freeze_lane_iterated_store_if_ready_to_execute(pos_integer(), atm_workflow_execution:doc()) ->
+-spec freeze_lane_run_iterated_store_if_ready_to_execute(
+    pos_integer(),
+    atm_workflow_execution:doc()
+) ->
     ok.
-freeze_lane_iterated_store_if_ready_to_execute(AtmLaneIndex, #document{value = #atm_workflow_execution{
-    curr_run_no = CurrRunNo,
-    lanes = AtmLaneExecutions
-}}) ->
+freeze_lane_run_iterated_store_if_ready_to_execute(AtmLaneIndex, #document{
+    value = #atm_workflow_execution{
+        curr_run_no = CurrRunNo,
+        lanes = AtmLaneExecutions
+    }
+}) ->
     #atm_lane_execution{runs = [Run |_]} = lists:nth(AtmLaneIndex, AtmLaneExecutions),
 
     case Run of

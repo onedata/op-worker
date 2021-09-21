@@ -39,9 +39,18 @@
     workflow_execution_auth :: atm_workflow_execution_auth:record()
 }).
 
--record(atm_lane_execution_create_ctx, {
+-record(atm_lane_execution, {
+    schema_id :: automation:id(),
+    runs :: [atm_lane_execution:run()]
+}).
+
+-record(atm_lane_execution_run_elements, {
+    exception_store_id = undefined :: undefined | atm_store:id(),
+    parallel_boxes = undefined :: undefined | [atm_parallel_box_execution:record()]
+}).
+
+-record(atm_lane_execution_run_create_ctx, {
     workflow_execution_ctx :: atm_workflow_execution_ctx:record(),
-    workflow_execution_env :: atm_workflow_execution_env:record(),
 
     workflow_schema_snapshot_doc :: atm_workflow_schema_snapshot:doc(),
     workflow_execution_doc :: atm_workflow_execution:doc(),
@@ -50,14 +59,7 @@
     lane_schema :: atm_lane_schema:record(),
     iterated_store_id :: atm_store:id(),
 
-    % execution elements having their own documents
-    exception_store_id = undefined :: undefined | atm_store:id(),
-    parallel_boxes = undefined :: undefined | [atm_parallel_box_execution:record()]
-}).
-
--record(atm_lane_execution, {
-    schema_id :: automation:id(),
-    runs :: [atm_lane_execution:run()]
+    elements :: atm_lane_execution:run_elements()
 }).
 
 -record(atm_lane_execution_run, {
@@ -73,7 +75,7 @@
 }).
 
 -record(atm_parallel_box_execution_create_ctx, {
-    lane_execution_create_ctx :: atm_lane_execution_factory:create_ctx(),
+    lane_execution_run_create_ctx :: atm_lane_execution_factory:create_run_ctx(),
 
     parallel_box_index :: pos_integer(),
     parallel_box_schema :: atm_parallel_box_schema:record(),
