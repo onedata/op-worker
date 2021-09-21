@@ -72,6 +72,7 @@
 -type lane_spec() :: #{
     parallel_boxes := [parallel_box_spec()],
     iterator := iterator:iterator(),
+    execution_context := execution_context(),
     failures_count_to_abort => non_neg_integer()
 }.
 %% @formatter:on

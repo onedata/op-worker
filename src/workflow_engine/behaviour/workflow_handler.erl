@@ -20,7 +20,7 @@
 -type async_processing_basic_result() :: term().
 -type async_processing_result() :: async_processing_basic_result() | ?ERROR_MALFORMED_DATA | ?ERROR_TIMEOUT.
 -type handler_execution_result() :: ok | error.
--type prepare_result() :: {ok, workflow_engine:lane_spec(), workflow_engine:execution_context()} | error.
+-type prepare_result() :: {ok, workflow_engine:lane_spec()} | error.
 -type lane_ended_callback_result() :: ?CONTINUE(workflow_engine:lane_id(), workflow_engine:lane_id()) |
     ?FINISH_EXECUTION. % engine does not distinguish reason of execution finish - ?FINISH_EXECUTION is returned
                        % if processed lane is last lane as well as on error
@@ -29,7 +29,7 @@
 -type heartbeat_callback_id() :: binary().
 
 -export_type([handler/0, async_processing_result/0, handler_execution_result/0, prepare_result/0,
-    finished_callback_id/0, heartbeat_callback_id/0]).
+    lane_ended_callback_result/0, finished_callback_id/0, heartbeat_callback_id/0]).
 
 %%%===================================================================
 %%% Callbacks descriptions
@@ -130,8 +130,10 @@
 -callback handle_lane_execution_ended(
     workflow_engine:execution_id(),
     workflow_engine:execution_context(),
-    workflow_execution_state:index()
+    workflow_engine:lane_id()
 ) ->
+    % TODO - moze zostac zwrocone ?CONTINUE(te same idki lini)
+    % wtedy dla pierwszego robimy prepare normalnie, a dla drugiego nie robimy nowego prepare jak byl przygotowany in advance
     lane_ended_callback_result().
 
 

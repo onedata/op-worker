@@ -154,9 +154,9 @@ get_record_struct(2) ->
     {record, [
         {iterator, {custom, json, {iterator, encode, decode}}},
         {lane_index, integer},
-        {lane_id, binary},
+        {lane_id, term},
         {item_index, integer},
-        {prepared_in_advance_lane_id, binary}
+        {prepared_in_advance_lane_id, term}
     ]}.
 
 -spec upgrade_record(datastore_model:record_version(), datastore_model:record()) ->

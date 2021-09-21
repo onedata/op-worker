@@ -42,7 +42,6 @@
 % current lane is successfully finished
 -record(lane_prepared_in_advance, {
     id :: workflow_engine:lane_id() | undefined,
-    execution_context :: workflow_engine:execution_context() | undefined,
     lane_spec :: workflow_engine:lane_spec() | undefined
 }).
 
@@ -157,7 +156,7 @@ init_using_snapshot(ExecutionId, Handler, Context, LaneIdToRestart, PreparedInAd
             try
                 % TODO VFS-7919 - maybe move restart callback on pool
                 case Handler:restart_lane(ExecutionId, Context, LaneId) of
-                    {ok, LaneSpec, LaneExecutionContext} ->
+                    {ok, LaneSpec} ->
                         Doc = #document{key = ExecutionId, value = #workflow_execution_state{
                             handler = Handler,
                             initial_context = Context,
@@ -165,8 +164,7 @@ init_using_snapshot(ExecutionId, Handler, Context, LaneIdToRestart, PreparedInAd
                             lane_prepared_in_advance = #lane_prepared_in_advance{id = PreparedInAdvanceLaneId}}
                         },
                         {ok, _} = datastore_model:save(?CTX, Doc),
-                        case finish_lane_preparation(
-                            ExecutionId, Handler, LaneSpec#{iterator => Iterator}, LaneExecutionContext) of
+                        case finish_lane_preparation(ExecutionId, Handler, LaneSpec#{iterator => Iterator}) of
                             {ok, _, _, _} ->
                                 ok;
                             ?WF_ERROR_LANE_ALREADY_PREPARED ->
@@ -295,16 +293,16 @@ report_execution_status_update(ExecutionId, JobIdentifier, UpdateType, Ans) ->
     workflow_engine:preparation_mode(),
     workflow_handler:prepare_result()
 ) -> ok.
-report_lane_execution_prepared(ExecutionId, Handler, _LaneId, ?PREPARE_SYNC, {ok, LaneSpec, LaneExecutionContext}) ->
-    case finish_lane_preparation(ExecutionId, Handler, LaneSpec, LaneExecutionContext) of
+report_lane_execution_prepared(ExecutionId, Handler, _LaneId, ?PREPARE_SYNC, {ok, LaneSpec}) ->
+    case finish_lane_preparation(ExecutionId, Handler, LaneSpec) of
         {ok, LaneId, IteratorToSave, LanePreparedInAdvancedId} ->
             workflow_iterator_snapshot:save(ExecutionId, 1, LaneId, 0, IteratorToSave, LanePreparedInAdvancedId);
         ?WF_ERROR_LANE_ALREADY_PREPARED -> ok;
         ?WF_ERROR_PREPARATION_FAILED -> ok
     end;
-report_lane_execution_prepared(ExecutionId, Handler, LaneId, ?PREPARE_IN_ADVANCE, {ok, LaneSpec, LaneExecutionContext}) ->
+report_lane_execution_prepared(ExecutionId, Handler, LaneId, ?PREPARE_IN_ADVANCE, {ok, LaneSpec} = Ans) ->
     case update(ExecutionId, fun(State) ->
-        finish_lane_prepare_in_advance(State, LaneId, LaneExecutionContext, LaneSpec)
+        finish_lane_prepare_in_advance(State, LaneId, LaneSpec)
     end) of
         {ok, _} ->
             ok;
@@ -312,7 +310,7 @@ report_lane_execution_prepared(ExecutionId, Handler, LaneId, ?PREPARE_IN_ADVANCE
             ok;
         ?WF_ERROR_CURRENT_LANE ->
             report_lane_execution_prepared(
-                ExecutionId, Handler, LaneId, ?PREPARE_SYNC, {ok, LaneSpec, LaneExecutionContext})
+                ExecutionId, Handler, LaneId, ?PREPARE_SYNC, Ans)
     end;
 report_lane_execution_prepared(ExecutionId, _Handler, LaneId, LaneType, error) ->
     case update(ExecutionId, fun(State) -> handle_lane_preparation_failure(State, LaneId, LaneType) end) of
@@ -361,16 +359,16 @@ get_result_processing_data(ExecutionId, JobIdentifier) ->
 -spec finish_lane_preparation(
     workflow_engine:execution_id(),
     workflow_handler:handler(),
-    workflow_engine:lane_spec(),
-    workflow_engine:execution_context()
+    workflow_engine:lane_spec()
 ) ->
     {ok, iterator:iterator(), current_lane(), workflow_engine:lane_id() | undefined} |
     ?WF_ERROR_PREPARATION_FAILED | ?WF_ERROR_LANE_ALREADY_PREPARED.
 finish_lane_preparation(ExecutionId, Handler,
     #{
         parallel_boxes := Boxes,
-        iterator := Iterator
-    } = LaneSpec, LaneExecutionContext
+        iterator := Iterator,
+        execution_context := LaneExecutionContext
+    } = LaneSpec
 ) ->
     case Boxes of
         [] ->
@@ -534,12 +532,11 @@ handle_state_update_after_job_preparation(ExecutionId, #workflow_execution_state
                     execution_status = ?PREPARED_IN_ADVANCE,
                     update_report = ?REPORT_LANE_PREPARED(#lane_prepared_in_advance{
                         id = LaneId,
-                        lane_spec = LaneSpec,
-                        execution_context = LaneExecutionContext
+                        lane_spec = LaneSpec
                     })
                 }}} ->
                     report_lane_execution_prepared(
-                        ExecutionId, Handler, LaneId, ?PREPARE_SYNC, {ok, LaneSpec, LaneExecutionContext}),
+                        ExecutionId, Handler, LaneId, ?PREPARE_SYNC, {ok, LaneSpec}),
                     prepare_next_job_for_current_lane(ExecutionId);
                 {ok, #document{value = #workflow_execution_state{
                     execution_status = ?PREPARING,
@@ -694,17 +691,15 @@ finish_lane_preparation_internal(_State, _BoxesMap, _LaneExecutionContext,
     _PrefetchedIterationStep, _FailuresCountToAbort) ->
     ?WF_ERROR_LANE_ALREADY_PREPARED.
 
--spec finish_lane_prepare_in_advance(state(), workflow_engine:lane_id(), workflow_engine:execution_context(),
-    workflow_engine:lane_spec()) -> {ok, state()} | ?WF_ERROR_CURRENT_LANE | ?WF_ERROR_UNKNOWN_LANE.
+-spec finish_lane_prepare_in_advance(state(), workflow_engine:lane_id(), workflow_engine:lane_spec()) ->
+    {ok, state()} | ?WF_ERROR_CURRENT_LANE | ?WF_ERROR_UNKNOWN_LANE.
 finish_lane_prepare_in_advance(
     #workflow_execution_state{lane_prepared_in_advance = #lane_prepared_in_advance{
         id = LaneId
-    } = Lane} = State,
-    LaneId, LaneExecutionContext, LaneSpec) ->
+    } = Lane} = State, LaneId, LaneSpec) ->
     {ok, State#workflow_execution_state{
         lane_prepared_in_advance_status = ?PREPARED_IN_ADVANCE,
         lane_prepared_in_advance = Lane#lane_prepared_in_advance{
-            execution_context = LaneExecutionContext,
             lane_spec = LaneSpec
         }
     }};
@@ -712,9 +707,9 @@ finish_lane_prepare_in_advance(
     #workflow_execution_state{current_lane = #current_lane{
         id = LaneId % Previous lane is finished and lane prepared in advanced is now current_lane
     }},
-    LaneId, _LaneExecutionContext, _LaneSpec) ->
+    LaneId, _LaneSpec) ->
     ?WF_ERROR_CURRENT_LANE;
-finish_lane_prepare_in_advance(_State, _LaneId, _LaneExecutionContext, _LaneSpec) ->
+finish_lane_prepare_in_advance(_State, _LaneId, _LaneSpec) ->
     ?WF_ERROR_UNKNOWN_LANE. % Previous lane is finished and other lane is set to be executed - ignore prepared lane
 
 -spec handle_next_iteration_step(
