@@ -34,15 +34,18 @@ prepare(AtmLaneIndex, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
     ),
 
     try
-        {NewAtmWorkflowExecutionDoc, AtmWorkflowExecutionEnv} = atm_lane_execution_factory:create(
+        {NewAtmWorkflowExecutionDoc0, AtmWorkflowExecutionEnv} = atm_lane_execution_factory:create(
             AtmLaneIndex, AtmWorkflowExecutionDoc, AtmWorkflowExecutionCtx
         ),
         AtmLaneExecutionSpec = setup_lane(
-            AtmLaneIndex, NewAtmWorkflowExecutionDoc,
+            AtmLaneIndex, NewAtmWorkflowExecutionDoc0,
             AtmWorkflowExecutionEnv, AtmWorkflowExecutionCtx
         ),
-        atm_lane_execution_status:handle_enqueued(AtmLaneIndex, AtmWorkflowExecutionId),
-        %% TODO freeze next lane iterated store ??
+
+        NewAtmWorkflowExecutionDoc1 = atm_lane_execution_status:handle_enqueued(
+            AtmLaneIndex, AtmWorkflowExecutionId
+        ),
+        freeze_lane_iterated_store_if_ready_to_execute(AtmLaneIndex, NewAtmWorkflowExecutionDoc1),
 
         AtmLaneExecutionSpec
     catch Type:Reason ->
@@ -57,7 +60,7 @@ prepare(AtmLaneIndex, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
     atm_workflow_execution:id(),
     atm_workflow_execution_ctx:record()
 ) ->
-    stop | {next_lane, pos_integer()} | no_return().
+    stop | {ok, pos_integer()} | no_return().
 handle_ended(AtmLaneIndex, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
     {ok, AtmWorkflowExecutionDoc} = atm_workflow_execution:get(AtmWorkflowExecutionId),
 
@@ -74,9 +77,8 @@ handle_ended(AtmLaneIndex, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
     NewAtmWorkflowExecutionDoc = atm_lane_execution_status:handle_ended(
         AtmLaneIndex, AtmWorkflowExecutionId
     ),
-    %% TODO freeze next lane iterated store ??
-
-    get_next_lane_to_execute(NewAtmWorkflowExecutionDoc).
+    freeze_curr_lane_iterated_store_if_ready_to_execute(NewAtmWorkflowExecutionDoc),
+    get_curr_lane_to_execute(NewAtmWorkflowExecutionDoc).
 
 
 %%%===================================================================
@@ -171,9 +173,37 @@ freeze_exception_store(#atm_lane_execution{runs = [
 
 
 %% @private
--spec get_next_lane_to_execute(atm_workflow_execution:doc()) ->
-    stop | {next_lane, pos_integer()}.
-get_next_lane_to_execute(#document{value = #atm_workflow_execution{
+-spec freeze_curr_lane_iterated_store_if_ready_to_execute(atm_workflow_execution:doc()) ->
+    ok.
+freeze_curr_lane_iterated_store_if_ready_to_execute(AtmWorkflowExecutionDoc = #document{
+    value = #atm_workflow_execution{curr_lane_index = CurrLaneIndex}
+}) ->
+    freeze_lane_iterated_store_if_ready_to_execute(CurrLaneIndex, AtmWorkflowExecutionDoc).
+
+
+%% @private
+-spec freeze_lane_iterated_store_if_ready_to_execute(pos_integer(), atm_workflow_execution:doc()) ->
+    ok.
+freeze_lane_iterated_store_if_ready_to_execute(AtmLaneIndex, #document{value = #atm_workflow_execution{
+    curr_run_no = CurrRunNo,
+    lanes = AtmLaneExecutions
+}}) ->
+    #atm_lane_execution{runs = [Run |_]} = lists:nth(AtmLaneIndex, AtmLaneExecutions),
+
+    case Run of
+        #atm_lane_execution_run{status = ?ENQUEUED_STATUS, run_no = CurrRunNo} ->
+            atm_store_api:freeze(Run#atm_lane_execution_run.iterated_store_id);
+        _ ->
+            % execution must have ended or lane run is still not ready
+            % (either not fully prepared or previous run is still ongoing)
+            ok
+    end.
+
+
+%% @private
+-spec get_curr_lane_to_execute(atm_workflow_execution:doc()) ->
+    stop | {ok, pos_integer()}.
+get_curr_lane_to_execute(#document{value = #atm_workflow_execution{
     curr_lane_index = CurrLaneIndex,
     lanes = AtmLaneExecutions
 }}) ->
@@ -183,7 +213,7 @@ get_next_lane_to_execute(#document{value = #atm_workflow_execution{
         ?ENDED_PHASE ->
             stop;
         _ ->
-            {next_lane, CurrLaneIndex}
+            {ok, CurrLaneIndex}
     end.
 
 
