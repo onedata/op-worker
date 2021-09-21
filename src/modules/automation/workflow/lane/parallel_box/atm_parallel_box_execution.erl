@@ -123,7 +123,7 @@ setup_all(AtmWorkflowExecutionCtx, AtmParallelBoxExecutions) ->
         try
             setup(AtmWorkflowExecutionCtx, AtmParallelBoxExecution)
         catch _:Reason ->
-            throw(?ERROR_ATM_PARALLEL_BOX_EXECUTION_PREPARATION_FAILED(AtmParallelBoxSchemaId, Reason))
+            throw(?ERROR_ATM_PARALLEL_BOX_EXECUTION_SETUP_FAILED(AtmParallelBoxSchemaId, Reason))
         end
     end, AtmParallelBoxExecutions).
 
@@ -143,7 +143,7 @@ setup(AtmWorkflowExecutionCtx, #atm_parallel_box_execution{
                 AtmWorkflowExecutionCtx, AtmTaskExecutionDoc
             )}
         catch _:Reason ->
-            throw(?ERROR_ATM_TASK_EXECUTION_PREPARATION_FAILED(AtmTaskSchemaId, Reason))  % TODO error prepare -> setup
+            throw(?ERROR_ATM_TASK_EXECUTION_SETUP_FAILED(AtmTaskSchemaId, Reason))
         end
     end, maps:values(AtmTaskExecutionRegistry)),
 

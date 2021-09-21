@@ -63,10 +63,10 @@ handle_lane_preparing(AtmLaneIndex, AtmWorkflowExecutionId, AtmLaneExecutionDiff
             AtmLaneExecutionDiff(Record);
 
         (#atm_workflow_execution{status = ?ABORTING_STATUS}) ->
-            ?ERROR_ATM_TASK_EXECUTION_ENDED;  %% TODO new error atm_workflow_execution_aborting
+            ?ERROR_ATM_WORKFLOW_EXECUTION_ABORTING;
 
         (#atm_workflow_execution{status = _EndedStatus}) ->
-            ?ERROR_ATM_TASK_EXECUTION_ENDED   %% TODO new error atm_workflow_execution_ended
+            ?ERROR_ATM_WORKFLOW_EXECUTION_ENDED
     end,
 
     case atm_workflow_execution:update(AtmWorkflowExecutionId, Diff) of
@@ -92,10 +92,10 @@ handle_lane_enqueued(AtmWorkflowExecutionId, AtmLaneExecutionDiff) ->
             AtmLaneExecutionDiff(Record);
 
         (#atm_workflow_execution{status = ?ABORTING_STATUS}) ->
-            ?ERROR_ATM_TASK_EXECUTION_ENDED;  %% TODO new error atm_workflow_execution_aborting
+            ?ERROR_ATM_WORKFLOW_EXECUTION_ABORTING;
 
         (#atm_workflow_execution{status = _EndedStatus}) ->
-            ?ERROR_ATM_TASK_EXECUTION_ENDED   %% TODO new error atm_workflow_execution_ended
+            ?ERROR_ATM_WORKFLOW_EXECUTION_ENDED
     end).
 
 
@@ -126,7 +126,7 @@ handle_lane_aborting(AtmLaneIndex, AtmWorkflowExecutionId, AtmLaneExecutionDiff)
             end;
 
         (#atm_workflow_execution{status = _EndedStatus}) ->
-            ?ERROR_ATM_TASK_EXECUTION_ENDED   %% TODO new error atm_workflow_execution_ended
+            ?ERROR_ATM_WORKFLOW_EXECUTION_ENDED
     end,
 
     case atm_workflow_execution:update(AtmWorkflowExecutionId, Diff) of
@@ -146,7 +146,7 @@ handle_lane_task_status_change(AtmWorkflowExecutionId, AtmLaneExecutionDiff) ->
     Diff = fun(Record) ->
         case infer_phase(Record) of
             ?ENDED_PHASE ->
-                ?ERROR_ATM_TASK_EXECUTION_ENDED;   %% TODO new error atm_workflow_execution_ended
+                ?ERROR_ATM_WORKFLOW_EXECUTION_ENDED;
             _ ->
                 AtmLaneExecutionDiff(Record)
         end

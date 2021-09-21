@@ -103,7 +103,7 @@ setup_lane(AtmLaneIndex, AtmWorkflowExecutionDoc, AtmWorkflowExecutionEnv, AtmWo
         #atm_lane_execution{schema_id = AtmLaneSchemaId} = get_lane_execution(
             AtmLaneIndex, AtmWorkflowExecutionDoc
         ),
-        throw(?ERROR_ATM_LANE_EXECUTION_PREPARATION_FAILED(AtmLaneSchemaId, Reason))  %% TODO preparation -> setup
+        throw(?ERROR_ATM_LANE_EXECUTION_SETUP_FAILED(AtmLaneSchemaId, Reason))
     end.
 
 
