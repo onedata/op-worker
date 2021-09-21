@@ -46,7 +46,7 @@ prepare_lane(ExecutionId, #{type := Type, async_call_pools := Pools} = Execution
     {ok, #{
         parallel_boxes => Boxes,
         iterator => workflow_test_iterator:get_first(),
-        execution_context => ExecutionContext#{lane_index => LaneIndex}
+        execution_context => ExecutionContext#{lane_index => LaneIndex, lane_id => LaneId}
     }}.
 
 

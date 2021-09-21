@@ -25,13 +25,13 @@
     report_execution_status_update/4, report_lane_execution_prepared/5, report_limit_reached_error/2,
     check_timeouts/1, reset_keepalive_timer/2, get_result_processing_data/2]).
 %% Test API
--export([is_finished_and_cleaned/2, get_item_id/2]).
+-export([is_finished_and_cleaned/2, get_item_id/2, get_current_lane_context/1]).
 
 % Helper record to group fields containing information about lane currently being executed
 -record(current_lane, {
     index :: index(), % TODO VFS-7919 - after introduction of id, index is used during test and by snapshot to verify
                       % necessity of callback execution - consider deletion of this field
-    id :: workflow_engine:lane_id(),
+    id :: workflow_engine:lane_id() | undefined,
     execution_context :: workflow_engine:execution_context() | undefined,
     parallel_boxes_count = 0 :: non_neg_integer() | undefined,
     parallel_boxes_spec :: boxes_map() | undefined,
@@ -134,7 +134,7 @@
 
 -spec init(workflow_engine:execution_id(), workflow_handler:handler(), workflow_engine:execution_context(),
     workflow_engine:lane_id() | undefined, workflow_engine:lane_id() | undefined) -> ok | ?WF_ERROR_PREPARATION_FAILED.
-init(_ExecutionId, _Handler, _Context, undefned, _PreparedInAdvanceLaneId) ->
+init(_ExecutionId, _Handler, _Context, undefined, _PreparedInAdvanceLaneId) ->
     ?WF_ERROR_PREPARATION_FAILED; % FirstLaneId does not have to be defined only when execution is started from snapshot
 init(ExecutionId, Handler, Context, FirstLaneId, PreparedInAdvanceLaneId) ->
     workflow_iterator_snapshot:cleanup(ExecutionId),
@@ -609,7 +609,7 @@ get_next_iterator(Context, Iterator, ExecutionId) ->
 
 -spec set_lane(state(), workflow_engine:lane_id(), workflow_engine:lane_id() | undefined) -> {ok, state()}.
 set_lane(#workflow_execution_state{
-    current_lane = #current_lane{index = PrevLaneIndex},
+    current_lane = CurrentLane,
     lane_prepared_in_advance = #lane_prepared_in_advance{id = LanePreparedInAdvanceId} = LanePreparedInAdvance,
     lane_prepared_in_advance_status = LanePreparedInAdvanceStatus
 } = State, NewLaneId, NewPrepareInAdvanceLaneId) ->
@@ -623,7 +623,7 @@ set_lane(#workflow_execution_state{
     end,
 
     {ok, State#workflow_execution_state{
-        current_lane = #current_lane{index = PrevLaneIndex + 1, id = NewLaneId},
+        current_lane = CurrentLane#current_lane{id = NewLaneId},
         execution_status = NewExecutionStatus,
         failed_jobs_count = 0,
         lane_prepared_in_advance_status = ?NOT_PREPARED,
@@ -1047,7 +1047,7 @@ report_job_finish(State = #workflow_execution_state{
 -spec handle_no_waiting_items_error(state(), ?WF_ERROR_NO_WAITING_ITEMS | ?ERROR_NOT_FOUND) -> no_items_error().
 handle_no_waiting_items_error(#workflow_execution_state{current_lane = #current_lane{id = undefined}}, _Error) ->
     ?WF_ERROR_NO_WAITING_ITEMS;
-handle_no_waiting_items_error(#workflow_execution_state{waiting_notifications = []}, _Error) ->
+handle_no_waiting_items_error(#workflow_execution_state{waiting_notifications = Waiting}, _Error) when Waiting =/= [] ->
     ?WF_ERROR_NO_WAITING_ITEMS;
 handle_no_waiting_items_error(_State, ?WF_ERROR_NO_WAITING_ITEMS) ->
     ?WF_ERROR_NO_WAITING_ITEMS;
@@ -1099,3 +1099,9 @@ get_item_id(ExecutionId, JobIdentifier) ->
     {ok, #document{value = #workflow_execution_state{iteration_state = IterationState}}} =
         datastore_model:get(?CTX, ExecutionId),
     workflow_jobs:get_item_id(JobIdentifier, IterationState).
+
+-spec get_current_lane_context(workflow_engine:execution_id()) -> workflow_engine:execution_context().
+get_current_lane_context(ExecutionId) ->
+    {ok, #document{value = #workflow_execution_state{current_lane = #current_lane{execution_context = Context}}}} =
+        datastore_model:get(?CTX, ExecutionId),
+    Context.
