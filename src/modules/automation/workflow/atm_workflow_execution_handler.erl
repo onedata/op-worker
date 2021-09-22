@@ -13,8 +13,7 @@
 -module(atm_workflow_execution_handler).
 -author("Bartosz Walkowicz").
 
-% TODO uncomment after integration with MW
-%%-behaviour(workflow_handler).
+-behaviour(workflow_handler).
 
 -include("modules/automation/atm_execution.hrl").
 -include("workflow_engine.hrl").
@@ -31,6 +30,7 @@
 % workflow_handler callbacks
 -export([
     prepare_lane/3,
+    restart_lane/3,
 
     process_item/6,
     process_result/5,
@@ -83,16 +83,25 @@ init_engine() ->
     workflow_engine:init(?ATM_WORKFLOW_EXECUTION_ENGINE, Options).
 
 
--spec start(user_ctx:ctx(), atm_workflow_execution:id(), atm_workflow_execution_env:record()) ->
+-spec start(user_ctx:ctx(), atm_workflow_execution_env:record(), atm_workflow_execution:doc()) ->
     ok.
-start(UserCtx, AtmWorkflowExecutionId, AtmWorkflowExecutionEnv) ->
+start(UserCtx, AtmWorkflowExecutionEnv, #document{
+    key = AtmWorkflowExecutionId,
+    value = #atm_workflow_execution{
+        lanes_num = LanesNum
+    }
+}) ->
     ok = atm_workflow_execution_session:init(AtmWorkflowExecutionId, UserCtx),
 
-    %% TODO specify first lane execution index
     workflow_engine:execute_workflow(?ATM_WORKFLOW_EXECUTION_ENGINE, #{
         id => AtmWorkflowExecutionId,
         workflow_handler => ?MODULE,
-        execution_context => AtmWorkflowExecutionEnv
+        execution_context => AtmWorkflowExecutionEnv,
+        first_lane_id => 1,
+        prepared_in_advance_lane_id => case LanesNum > 1 of
+            true -> 2;
+            false -> undefined
+        end
     }).
 
 
@@ -131,6 +140,16 @@ prepare_lane(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmLaneIndex) ->
         ]),
         error
     end.
+
+
+-spec restart_lane(
+    atm_workflow_execution:id(),
+    atm_workflow_execution_env:record(),
+    pos_integer()
+) ->
+    error.
+restart_lane(_, _, _) ->
+    error.
 
 
 -spec process_item(
@@ -194,7 +213,7 @@ handle_task_execution_ended(AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv, At
     atm_workflow_execution_env:record(),
     pos_integer()
 ) ->
-    stop | {ok, pos_integer()}.
+    finish_execution | {continue, pos_integer(), pos_integer()}.
 handle_lane_execution_ended(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmLaneIndex) ->
     AtmWorkflowExecutionCtx = atm_workflow_execution_ctx:acquire(undefined, AtmWorkflowExecutionEnv),
 

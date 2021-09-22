@@ -95,11 +95,9 @@ schedule(UserCtx, SpaceId, AtmWorkflowSchemaId, StoreInitialValues, CallbackUrl)
     {AtmWorkflowExecutionDoc, AtmWorkflowExecutionEnv} = atm_workflow_execution_factory:create(
         UserCtx, SpaceId, AtmWorkflowSchemaId, StoreInitialValues, CallbackUrl
     ),
-    AtmWorkflowExecutionId = AtmWorkflowExecutionDoc#document.key,
+    atm_workflow_execution_handler:start(UserCtx, AtmWorkflowExecutionEnv, AtmWorkflowExecutionDoc),
 
-    atm_workflow_execution_handler:start(UserCtx, AtmWorkflowExecutionId, AtmWorkflowExecutionEnv),
-
-    {AtmWorkflowExecutionId, AtmWorkflowExecutionDoc#document.value}.
+    {AtmWorkflowExecutionDoc#document.key, AtmWorkflowExecutionDoc#document.value}.
 
 
 -spec get(atm_workflow_execution:id()) ->
