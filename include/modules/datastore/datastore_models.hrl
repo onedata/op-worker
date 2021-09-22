@@ -17,6 +17,7 @@
 -include("modules/fslogic/fslogic_delete.hrl").
 -include("modules/storage/luma/luma.hrl").
 -include("modules/fslogic/file_attr.hrl").
+-include("workflow_engine.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_models.hrl").
 
 -type file_descriptors() :: #{session:id() => non_neg_integer()}.
@@ -1179,8 +1180,10 @@
 
 -record(workflow_iterator_snapshot, {
     iterator :: iterator:iterator(),
-    lane_index = 0 :: workflow_execution_state:index(),
-    item_index = 0 :: workflow_execution_state:index()
+    lane_index = workflow_execution_state:index(),
+    lane_id :: workflow_engine:lane_id(),
+    item_index = workflow_execution_state:index(),
+    prepared_in_advance_lane_id :: workflow_engine:lane_id() | undefined
 }).
 
 -record(workflow_engine_state, {
@@ -1191,15 +1194,22 @@
 
 -record(workflow_execution_state, {
     handler :: workflow_handler:handler(),
-    context :: workflow_engine:execution_context(),
+    initial_context :: workflow_engine:execution_context(),
 
-    execution_status = not_prepared :: workflow_execution_state:execution_status(),
-    current_lane :: workflow_execution_state:current_lane() | undefined,
+    execution_status = ?NOT_PREPARED :: workflow_execution_state:execution_status(),
+    current_lane :: workflow_execution_state:current_lane(),
+
+    lane_prepared_in_advance_status = ?NOT_PREPARED :: workflow_execution_state:lane_prepared_in_advance_status(),
+    lane_prepared_in_advance :: workflow_execution_state:lane_prepared_in_advance(),
+
     lowest_failed_job_identifier :: workflow_jobs:job_identifier() | undefined,
+    failed_jobs_count = 0 :: non_neg_integer(),
 
     iteration_state :: workflow_iteration_state:state() | undefined,
     prefetched_iteration_step :: workflow_execution_state:iteration_status(),
     jobs :: workflow_jobs:jobs() | undefined,
+
+    waiting_notifications = [] :: [workflow_jobs:job_identifier()],
 
     % Field used to return additional information about document update procedure
     % (datastore:update returns {ok, #document{}} or {error, term()}

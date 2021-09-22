@@ -58,6 +58,18 @@
 -define(ASYNC_RESULT_PROCESSING, async_result_processing).
 
 %%%===================================================================
+%%% Macros defining statuses of lane preparation
+%%%===================================================================
+
+-define(NOT_PREPARED, not_prepared).
+-define(PREPARING, preparing).
+-define(PREPARED_IN_ADVANCE, prepared_in_advance).
+-define(PREPARATION_FAILED, preparation_failed).
+-define(PREPARATION_CANCELLED, preparation_cancelled).
+-define(EXECUTING, executing).
+-define(EXECUTION_CANCELLED, execution_cancelled).
+
+%%%===================================================================
 %%% Macros used to describe processing of parallel box's jobs
 %%%===================================================================
 
@@ -65,17 +77,30 @@
 -define(AT_LEAST_ONE_JOB_LEFT_FOR_PARALLEL_BOX, at_least_one_job_left_for_parallel_box).
 
 %%%===================================================================
+%%% Macros describing possible results of
+%%% workflow_handler:handle_lane_execution_ended/3 callback
+%%%===================================================================
+
+-define(CONTINUE(NextLaneId, PrepareInAdvanceLaneId), {continue, NextLaneId, PrepareInAdvanceLaneId}).
+-define(FINISH_EXECUTION, finish_execution).
+
+%%%===================================================================
+%%% Macros describing lane preparation modes
+%%%===================================================================
+
+-define(PREPARE_SYNC, prepare_sync).
+-define(PREPARE_IN_ADVANCE, prepare_in_advance).
+
+%%%===================================================================
 %%% Macros used to describe actions and errors
 %%%===================================================================
 
 % Macros used to control workflow_engine actions
--define(END_EXECUTION(Handler, Context, LaneIndex, ErrorEncountered),
-    {end_execution, Handler, Context, LaneIndex, ErrorEncountered}).
--define(END_EXECUTION_AFTER_PREPARATION_ERROR(Handler, Context),
-    {end_execution_after_preparation_error, Handler, Context}).
+-define(END_EXECUTION(Handler, Context, KeepSnapshot),
+    {end_execution, Handler, Context, KeepSnapshot}).
 -define(DEFER_EXECUTION, defer_execution).
--define(PREPARE_EXECUTION(Handler, ExecutionContext),
-    {prepare_execution, Handler, ExecutionContext}).
+-define(PREPARE_LANE_EXECUTION(Handler, ExecutionContext, LaneId, PreparationMode),
+    {prepare_lane_execution, Handler, ExecutionContext, LaneId, PreparationMode}).
 
 % errors returned by workflow_engine_state to control workflow_engine
 -define(WF_ERROR_ALL_SLOTS_USED, {error, all_slots_used}).

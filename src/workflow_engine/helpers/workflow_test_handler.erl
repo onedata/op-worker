@@ -15,10 +15,11 @@
 
 -behaviour(workflow_handler).
 
+-include("workflow_engine.hrl").
 -include("http/gui_paths.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 
--export([prepare/2, get_lane_spec/3, process_item/6, process_result/5,
+-export([prepare_lane/3, restart_lane/3, process_item/6, process_result/5,
     handle_task_execution_ended/3, handle_lane_execution_ended/3, handle_workflow_execution_ended/2]).
 
 %%%===================================================================
@@ -26,34 +27,37 @@
 %%%===================================================================
 
 
--spec prepare(
-    workflow_engine:execution_id(),
-    workflow_engine:execution_context()
-) ->
-    ok.
-prepare(_, _) ->
-    ok.
-
--spec get_lane_spec(
+-spec prepare_lane(
     workflow_engine:execution_id(),
     workflow_engine:execution_context(),
-    workflow_execution_state:index()
+    workflow_engine:lane_id()
 ) ->
-    {ok, workflow_engine:lane_spec()}.
-get_lane_spec(ExecutionId, #{type := Type, async_call_pools := Pools} =_ExecutionContext, LaneIndex) ->
+    workflow_handler:prepare_result().
+prepare_lane(ExecutionId, #{type := Type, async_call_pools := Pools} = ExecutionContext, LaneId) ->
+    LaneIndex = binary_to_integer(LaneId),
     Boxes = lists:map(fun(BoxIndex) ->
         lists:foldl(fun(TaskIndex, TaskAcc) ->
             TaskAcc#{<<ExecutionId/binary, "_task", (integer_to_binary(LaneIndex))/binary, "_",
                 (integer_to_binary(BoxIndex))/binary, "_", (integer_to_binary(TaskIndex))/binary>> =>
-                    #{type => Type, async_call_pools => Pools, keepalive_timeout => 10}}
+            #{type => Type, async_call_pools => Pools, keepalive_timeout => 10}}
         end, #{}, lists:seq(1, BoxIndex))
     end, lists:seq(1, LaneIndex)),
 
     {ok, #{
         parallel_boxes => Boxes,
         iterator => workflow_test_iterator:get_first(),
-        is_last => LaneIndex =:= 5
+        execution_context => ExecutionContext#{lane_index => LaneIndex, lane_id => LaneId}
     }}.
+
+
+-spec restart_lane(
+    workflow_engine:execution_id(),
+    workflow_engine:execution_context(),
+    workflow_engine:lane_id()
+) ->
+    workflow_handler:prepare_result().
+restart_lane(ExecutionId, ExecutionContext, LaneId) ->
+    prepare_lane(ExecutionId, ExecutionContext, LaneId).
 
 
 -spec process_item(
@@ -95,6 +99,7 @@ process_result(_, _, _, _, {error, _}) ->
 process_result(_, _, _, _, #{<<"result">> := Result}) ->
     binary_to_atom(Result, utf8).
 
+
 -spec handle_task_execution_ended(
     workflow_engine:execution_id(),
     workflow_engine:execution_context(),
@@ -104,14 +109,22 @@ process_result(_, _, _, _, #{<<"result">> := Result}) ->
 handle_task_execution_ended(_, _, _) ->
     ok.
 
+
 -spec handle_lane_execution_ended(
     workflow_engine:execution_id(),
     workflow_engine:execution_context(),
-    workflow_execution_state:index()
+    workflow_engine:lane_id()
 ) ->
-    ok.
-handle_lane_execution_ended(_, _, _) ->
-    ok.
+    workflow_handler:lane_ended_callback_result().
+handle_lane_execution_ended(_ExecutionId, _ExecutionContext, LaneId) ->
+    case LaneId of
+        <<"5">> ->
+            ?FINISH_EXECUTION;
+        _ ->
+            LaneIndex = binary_to_integer(LaneId),
+            ?CONTINUE(integer_to_binary(LaneIndex + 1), undefined)
+    end.
+
 
 -spec handle_workflow_execution_ended(
     workflow_engine:execution_id(),
