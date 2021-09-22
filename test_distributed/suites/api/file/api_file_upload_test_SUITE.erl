@@ -28,6 +28,7 @@
 
 -export([
     rest_create_file_test/1,
+    rest_create_file_under_path_test/1,
     rest_update_file_content_test/1,
 
     gui_registering_upload_for_directory_should_fail/1,
@@ -41,6 +42,7 @@
 
 all() -> [
     rest_create_file_test,
+    rest_create_file_under_path_test,
     rest_update_file_content_test,
 
     gui_registering_upload_for_directory_should_fail,
@@ -284,6 +286,202 @@ build_rest_create_file_verify_fun(MemRef, DirGuid, Providers) ->
                     ?assertEqual(ExpFilesInDir, ls(TestNode, DirGuid))
             end
     end.
+
+
+rest_create_file_under_path_test(_Config) ->
+    Providers = lists:flatten([
+        oct_background:get_provider_nodes(krakow),
+        oct_background:get_provider_nodes(paris)
+    ]),
+    SpaceOwnerId = oct_background:get_user_id(user2),
+    User3Id = oct_background:get_user_id(user3),
+
+    #object{
+        guid = DirGuid,
+        shares = [DirShareId],
+        children = [#object{
+            guid = FileGuid,
+            name = UsedFileName
+        }]
+    } = onenv_file_test_utils:create_and_sync_file_tree(user3, space_krk_par, #dir_spec{
+        mode = 8#704,
+        shares = [#share_spec{}],
+        % create a child file with full perms instead of default ones so that call to
+        % create child of this file will fail on type check (?ENOTDIR) instead of perms
+        % check (which is performed first)
+        children = [#file_spec{mode = 8#777}]
+    }),
+
+    {ok, DirObjectId} = file_id:guid_to_objectid(DirGuid),
+    {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
+
+    WriteSize = 300,
+    Content = crypto:strong_rand_bytes(WriteSize),
+
+    MemRef = api_test_memory:init(),
+    api_test_memory:set(MemRef, files, [FileGuid]),
+
+    ?assert(onenv_api_test_runner:run_tests([
+        #scenario_spec{
+            name = <<"Upload file using rest endpoint">>,
+            type = rest,
+            target_nodes = Providers,
+            client_spec = #client_spec{
+                correct = case rand:uniform(2) of
+                    1 -> [user2];  % space owner
+                    2 -> [user3]   % files owner
+                end,
+                unauthorized = [nobody],
+                forbidden_not_in_space = [user1],
+                forbidden_in_space = [{user4, ?ERROR_POSIX(?EACCES)}]  % forbidden by file perms
+            },
+
+            prepare_args_fun = build_rest_create_file_under_path_prepare_args_fun(MemRef, DirObjectId),
+            validate_result_fun = build_rest_create_file_validate_call_fun(MemRef, SpaceOwnerId),
+            verify_fun = build_rest_create_file_under_path_verify_fun(MemRef, DirGuid, Providers),
+
+            data_spec = api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
+                DirGuid, DirShareId, #data_spec{
+                    optional = [<<"type">>, <<"mode">>, <<"offset">>, body],
+                    correct_values = #{
+                        <<"name">> => [name_placeholder],
+                        <<"path">> => [<<"dir1/">>, <<"dir1/dir2/">>],
+                        <<"type">> => [<<"REG">>],
+                        <<"mode">> => [<<"0544">>, <<"0707">>],
+                        <<"offset">> => [
+                            0,
+                            WriteSize,
+                            WriteSize * 1000000000 % > SUPPORT_SIZE
+                        ],
+                        body => [Content]
+                    },
+                    bad_values = [
+                        {bad_id, FileObjectId, {rest, {error_fun, fun(#api_test_ctx{
+                            client = ?USER(UserId),
+                            data = Data
+                        }) ->
+                            case {UserId, maps:get(<<"type">>, Data, <<"REG">>)} of
+                                {User3Id, <<"DIR">>} ->
+                                    % User3 gets ?EACCES because operation fails on permissions
+                                    % checks (file has 8#777 mode but this doesn't give anyone
+                                    % ?add_subcontainer perm) rather than file type check which
+                                    % is performed later
+                                    ?ERROR_POSIX(?EACCES);
+                                _ ->
+                                    ?ERROR_POSIX(?ENOTDIR)
+                            end
+                        end}}},
+
+                        {<<"type">>, <<"file">>, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"type">>, [
+                            <<"REG">>, <<"DIR">>, <<"LNK">>, <<"SYMLNK">>
+                        ])},
+
+                        {<<"mode">>, true, ?ERROR_BAD_VALUE_INTEGER(<<"mode">>)},
+                        {<<"mode">>, <<"integer">>, ?ERROR_BAD_VALUE_INTEGER(<<"mode">>)},
+                        {<<"mode">>, <<"0888">>, ?ERROR_BAD_VALUE_INTEGER(<<"mode">>)},
+                        {<<"mode">>, <<"888">>, ?ERROR_BAD_VALUE_INTEGER(<<"mode">>)},
+                        {<<"mode">>, <<"77777">>, ?ERROR_BAD_VALUE_NOT_IN_RANGE(<<"mode">>, 0, 8#1777)},
+
+                        {<<"offset">>, <<"unicorns">>, ?ERROR_BAD_VALUE_INTEGER(<<"offset">>)},
+                        {<<"offset">>, <<"-123">>, ?ERROR_BAD_VALUE_TOO_LOW(<<"offset">>, 0)}
+                    ]
+                }
+            )
+        }
+    ])).
+
+
+%% @private
+-spec build_rest_create_file_under_path_prepare_args_fun(api_test_memory:mem_ref(), file_id:objectid()) ->
+    onenv_api_test_runner:prepare_args_fun().
+build_rest_create_file_under_path_prepare_args_fun(MemRef, ParentDirObjectId) ->
+    fun(#api_test_ctx{data = Data0}) ->
+        {ParentId, Data1} = api_test_utils:maybe_substitute_bad_id(ParentDirObjectId, Data0),
+
+        RelativePath = maps:get(<<"path">>, Data1, undefined),
+
+        {Path, Data2} = case {maps:get(<<"name">>, Data1, undefined), RelativePath} of
+            {name_placeholder, DirPath} ->
+                Name = str_utils:rand_hex(10),
+                api_test_memory:set(MemRef, name, Name),
+                api_test_memory:set(MemRef, path, DirPath),
+                {<<DirPath/binary, Name/binary>>, maps:without([<<"name">>, <<"path">>], Data1)};
+            {undefined, _} ->
+                Name = str_utils:rand_hex(10),
+                api_test_memory:set(MemRef, name, Name),
+                api_test_memory:set(MemRef, path, undefined),
+                {Name, maps:without([<<"name">>, <<"path">>], Data1)};
+            {Name, DirPath} ->
+                api_test_memory:set(MemRef, name, Name),
+                api_test_memory:set(MemRef, path, DirPath),
+                Data7 = maps:without([<<"name">>, <<"path">>], Data1),
+                {str_utils:join_as_binaries([DirPath, Name], <<"/">>), Data7}
+        end,
+        {Body, Data3} = utils:ensure_defined(maps:take(body, Data2), error, {<<>>, Data2}),
+
+        #rest_args{
+            method = put,
+            path = http_utils:append_url_parameters(<<"data/", ParentId/binary, "/path/", Path/binary>>, Data3),
+            body = Body
+        }
+    end.
+
+
+%% @private
+-spec build_rest_create_file_under_path_verify_fun(api_test_memory:mem_ref(), file_id:file_guid(), [node()]) ->
+    boolean().
+build_rest_create_file_under_path_verify_fun(MemRef, DirGuid, Providers) ->
+    fun
+        (expected_failure, #api_test_ctx{node = TestNode}) ->
+            ExpFilesInDir = api_test_memory:get(MemRef, files),
+
+            ?assert(lists_utils:is_subset(ExpFilesInDir, ls(TestNode, DirGuid)), ?ATTEMPTS);
+        (expected_success, #api_test_ctx{node = TestNode, data = Data}) ->
+            case api_test_memory:get(MemRef, success) of
+                true ->
+                    FileGuid = api_test_memory:get(MemRef, file_guid),
+                    ParentGuid = get_parent_guid(TestNode, FileGuid),
+                    OtherFilesInDir = api_test_memory:get(MemRef, files),
+                    AllFilesInDir = lists:sort([FileGuid | OtherFilesInDir]),
+
+                    ?assert(lists_utils:is_subset([FileGuid], ls(TestNode, ParentGuid)), ?ATTEMPTS),
+                    api_test_memory:set(MemRef, files, AllFilesInDir),
+
+                    ExpName = api_test_memory:get(MemRef, name),
+                    {ExpType, DefaultMode} = {?REGULAR_FILE_TYPE, ?DEFAULT_FILE_PERMS},
+                    ExpMode = case maps:get(<<"mode">>, Data, undefined) of
+                        undefined -> DefaultMode;
+                        ModeBin -> binary_to_integer(ModeBin, 8)
+                    end,
+
+                    lists:foreach(fun(Provider) ->
+                        ?assertMatch(
+                            {ok, #file_attr{name = ExpName, type = ExpType, mode = ExpMode}},
+                            file_test_utils:get_attrs(Provider, FileGuid),
+                            ?ATTEMPTS
+                        )
+                    end, Providers),
+
+                    verify_rest_file_content_update(
+                                FileGuid, TestNode, TestNode, Providers, <<>>,
+                                maps:get(<<"offset">>, Data, undefined), maps:get(body, Data, <<>>)
+                        );
+                false ->
+                    ExpFilesInDir = api_test_memory:get(MemRef, files),
+                    ?assertEqual(ExpFilesInDir, ls(TestNode, DirGuid))
+            end
+    end.
+
+
+-spec get_parent_guid(node(), file_id:file_guid()) -> file_id:file_guid().
+get_parent_guid(TestNode, FileGuid) ->
+    ProviderId = opw_test_rpc:get_provider_id(TestNode),
+    SessionId = oct_background:get_user_session_id(user2, ProviderId),
+    {ok, Path} = ?assertMatch({ok, _}, rpc:call(TestNode, lfm, get_file_path, [SessionId, FileGuid]), ?ATTEMPTS),
+    Parts = filename:split(Path),
+    ParentPath = filename:join(lists:droplast(Parts)),
+    {ok, ParentGuid} = rpc:call(TestNode, lfm, get_file_guid, [SessionId, ParentPath]),
+    ParentGuid.
 
 
 %% @private
@@ -835,7 +1033,7 @@ end_per_suite(_Config) ->
 init_per_testcase(Case, Config) when
     Case =:= gui_not_registered_upload_should_fail;
     Case =:= gui_upload_test
-->
+    ->
     mock_cowboy_multipart(Config),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 
@@ -852,7 +1050,7 @@ init_per_testcase(_Case, Config) ->
 end_per_testcase(Case, Config) when
     Case =:= gui_not_registered_upload_should_fail;
     Case =:= gui_upload_test
-->
+    ->
     unmock_cowboy_multipart(Config),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 

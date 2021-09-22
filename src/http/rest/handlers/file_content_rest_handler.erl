@@ -138,7 +138,7 @@ sanitize_params(#op_req{
     auth = #auth{session_id = SessionId},
     gri = #gri{aspect = file_on_path, id = GriId}
 } = OpReq, Req) ->
-    Mode = undefined,
+    Mode = maps:get(<<"mode">>, RawParams, undefined),
     PathInfo = maps:get(path_info, Req),
     ParentGuid = create_dirs_on_path(SessionId, GriId, PathInfo, Mode),
 
