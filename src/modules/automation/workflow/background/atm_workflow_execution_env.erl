@@ -50,7 +50,9 @@
 }).
 -type record() :: #atm_workflow_execution_env{}.
 
--export_type([record/0]).
+-type diff() :: fun((atm_workflow_execution_env:record()) -> atm_workflow_execution_env:record()).
+
+-export_type([record/0, diff/0]).
 
 
 %%%===================================================================

@@ -36,13 +36,28 @@
     atm_workflow_execution_ctx:record(),
     atm_task_execution:id() | atm_task_execution:doc()
 ) ->
-    workflow_engine:task_spec() | no_return().
+    {workflow_engine:task_spec(), atm_workflow_execution_env:diff()} | no_return().
 setup(AtmWorkflowExecutionCtx, AtmTaskExecutionIdOrDoc) ->
-    #document{value = #atm_task_execution{
-        executor = AtmTaskExecutor
-    }} = ensure_atm_task_execution_doc(AtmTaskExecutionIdOrDoc),
+    #document{
+        key = AtmTaskExecutionId,
+        value = #atm_task_execution{
+            executor = AtmTaskExecutor,
+            system_audit_log_id = AtmSystemAuditLogId
+        }
+    } = ensure_atm_task_execution_doc(AtmTaskExecutionIdOrDoc),
 
-    atm_task_executor:setup(AtmWorkflowExecutionCtx, AtmTaskExecutor).
+    AtmTaskExecutionSpec = atm_task_executor:setup(AtmWorkflowExecutionCtx, AtmTaskExecutor),
+
+    {ok, #atm_store{container = AtmTaskAuditLogStoreContainer}} = atm_store_api:get(
+        AtmSystemAuditLogId
+    ),
+    AtmWorkflowExecutionEnvDiff = fun(AtmWorkflowExecutionEnv) ->
+        atm_workflow_execution_env:set_task_audit_log_store_container(
+            AtmTaskExecutionId, AtmTaskAuditLogStoreContainer, AtmWorkflowExecutionEnv
+        )
+    end,
+
+    {AtmTaskExecutionSpec, AtmWorkflowExecutionEnvDiff}.
 
 
 -spec teardown(atm_task_execution:id()) -> ok | no_return().
