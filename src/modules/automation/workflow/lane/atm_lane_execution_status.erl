@@ -271,7 +271,7 @@ handle_task_status_change_in_current_run(
                     {?ENQUEUED_STATUS, true} ->
                         % lane transition to ?ACTIVE_STATUS when first task has started
                         ?ACTIVE_STATUS;
-                    CurrentStatus ->
+                    {CurrentStatus, _} ->
                         CurrentStatus
                 end,
                 parallel_boxes = lists_utils:replace_at(

@@ -88,7 +88,9 @@ create(UserCtx, SpaceId, AtmWorkflowSchemaId, StoreInitialValues, CallbackUrl) -
             store_initial_values = StoreInitialValues,
             callback_url = CallbackUrl
         },
-        elements = #atm_workflow_execution_elements{}
+        elements = #atm_workflow_execution_elements{
+            workflow_store_registry = #{}
+        }
     }),
 
     AtmWorkflowExecutionDoc = try
