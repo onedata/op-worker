@@ -241,7 +241,7 @@ mark_current_run_as_aborting(
                 status = ?ABORTING_STATUS,
                 aborting_reason = AbortingReason
             },
-            [NewRun | RestRuns]
+            {ok, [NewRun | RestRuns]}
     end.
 
 

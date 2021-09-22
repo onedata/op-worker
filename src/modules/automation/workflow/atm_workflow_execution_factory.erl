@@ -72,7 +72,6 @@ create(UserCtx, SpaceId, AtmWorkflowSchemaId, StoreInitialValues, CallbackUrl) -
 
     AtmWorkflowExecutionId = datastore_key:new(),
 
-
     AtmWorkflowExecutionCreateCtx = #atm_workflow_execution_create_ctx{
         env = AtmWorkflowExecutionEnv,
         elements = Elements
