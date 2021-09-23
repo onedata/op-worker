@@ -186,19 +186,11 @@ sanitize_params(#op_req{
 sanitize_params(#op_req{
     operation = get,
     data = RawParams,
-    auth = #auth{session_id = SessionId},
-    gri = #gri{aspect = file_on_path, id = GriId}
-} = OpReq, Req) ->
-    PathInfo = maps:get(path_info, Req),
-    FileGuid = get_file_guid_from_path(SessionId, GriId, PathInfo),
-    RawParams2 = maps:put(<<"name">>, lists:last(PathInfo), RawParams),
-    OpReq#op_req{
-        data = middleware_sanitizer:sanitize_data(RawParams2, #{
-            optional => #{<<"follow_symlinks">> => {boolean, any}}
-        }#{<<"name">> => lists:last(PathInfo)}),
-        gri = #gri{aspect = content, id = FileGuid}
-    };
-
+    gri = #gri{aspect = file_on_path}
+} = OpReq, _Req) ->
+    OpReq#op_req{data = middleware_sanitizer:sanitize_data(RawParams, #{
+        optional => #{<<"follow_symlinks">> => {boolean, any}}
+    })};
 sanitize_params(#op_req{
     operation = delete,
     data = RawParams,
@@ -236,6 +228,31 @@ process_request(#op_req{
     data = Data
 }, Req) ->
     FollowSymlinks = maps:get(<<"follow_symlinks">>, Data, true),
+    case ?check(lfm:stat(SessionId, ?FILE_REF(FileGuid, FollowSymlinks))) of
+        {ok, #file_attr{type = ?REGULAR_FILE_TYPE} = FileAttrs} ->
+            file_download_utils:download_single_file(SessionId, FileAttrs, Req);
+        {ok, #file_attr{type = ?SYMLINK_TYPE} = FileAttrs} ->
+            file_download_utils:download_single_file(SessionId, FileAttrs, Req);
+        {ok, #file_attr{}} ->
+            case page_file_download:gen_file_download_url(SessionId, [FileGuid], FollowSymlinks) of
+                {ok, Url} ->
+                    cowboy_req:reply(?HTTP_302_FOUND, #{?HDR_LOCATION => Url}, Req);
+                {error, _} = Error ->
+                    http_req:send_error(Error, Req)
+            end
+    end;
+
+
+process_request(#op_req{
+    operation = get,
+    auth = #auth{session_id = SessionId},
+    gri = #gri{aspect = file_on_path, id = GriId},
+    data = Data
+}, Req) ->
+    PathInfo = maps:get(path_info, Req),
+    FileGuid = get_file_guid_from_path(SessionId, GriId, PathInfo),
+    Data2 = maps:put(<<"name">>, lists:last(PathInfo), Data),
+    FollowSymlinks = maps:get(<<"follow_symlinks">>, Data2, true),
     case ?check(lfm:stat(SessionId, ?FILE_REF(FileGuid, FollowSymlinks))) of
         {ok, #file_attr{type = ?REGULAR_FILE_TYPE} = FileAttrs} ->
             file_download_utils:download_single_file(SessionId, FileAttrs, Req);
@@ -436,8 +453,15 @@ get_file_guid_from_path(SessionId, ParentId, PathInfo) ->
         0 ->
             throw(?ERROR_BAD_DATA(<<"path">>));
         _ ->
-            {ok, ParentPath} = lfm_files:get_file_path(SessionId, ParentId),
-            FilePath = str_utils:join_as_binaries(lists:append([ParentPath], PathInfo), <<"/">>),
-            {ok, Guid} = lfm:get_file_guid(SessionId, FilePath),
-            Guid
+            case lfm_files:get_file_path(SessionId, ParentId) of
+                {ok, ParentPath} ->
+                    FilePath = str_utils:join_as_binaries(lists:append([ParentPath], PathInfo), <<"/">>),
+                    Guid = case lfm:get_file_guid(SessionId, FilePath) of
+                        {ok, FileGuid} -> FileGuid;
+                        {error, _} -> throw(?ERROR_NOT_SUPPORTED)
+                    end,
+                    Guid;
+                {error, Reason} ->
+                    throw(?ERROR_POSIX(Reason))
+            end
     end.

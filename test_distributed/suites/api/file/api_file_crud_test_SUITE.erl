@@ -37,6 +37,7 @@
     update_file_instance_on_provider_not_supporting_space_test/1,
 
     delete_file_instance_test/1,
+    delete_file_under_path_instance_test/1,
     delete_file_instance_on_provider_not_supporting_space_test/1
 ]).
 
@@ -50,6 +51,7 @@ groups() -> [
         update_file_instance_on_provider_not_supporting_space_test,
 
         delete_file_instance_test,
+        delete_file_under_path_instance_test,
         delete_file_instance_on_provider_not_supporting_space_test
     ]}
 ].
@@ -504,6 +506,72 @@ delete_file_instance_test(Config) ->
     ])).
 
 
+delete_file_under_path_instance_test(Config) ->
+    [P1] = oct_background:get_provider_nodes(krakow),
+    [P2] = oct_background:get_provider_nodes(paris),
+    Providers = [P1, P2],
+
+    UserSessIdP1 = oct_background:get_user_session_id(user3, krakow),
+    SpaceOwnerSessId = oct_background:get_user_session_id(user2, krakow),
+
+    TopDirPath = filename:join(["/", ?SPACE_KRK_PAR, ?RANDOM_FILE_NAME()]),
+    {ok, TopDirGuid} = lfm_proxy:mkdir(P1, UserSessIdP1, TopDirPath, 8#704),
+    TopDirShareId = api_test_utils:share_file_and_sync_file_attrs(P1, SpaceOwnerSessId, Providers, TopDirGuid),
+    TopDirShareGuid = file_id:guid_to_share_guid(TopDirGuid, TopDirShareId),
+
+    FileType = api_test_utils:randomly_choose_file_type_for_test(),
+
+    MemRef = api_test_memory:init(),
+
+    ?assert(onenv_api_test_runner:run_tests([
+        #suite_spec{
+            target_nodes = Providers,
+            client_spec = #client_spec{
+                correct = [
+                    user2,  % space owner - doesn't need any perms
+                    user3
+                ],
+                unauthorized = [nobody],
+                forbidden_not_in_space = [user1],
+                forbidden_in_space = [{user4, ?ERROR_POSIX(?EACCES)}]  % forbidden by file perms
+            },
+
+            setup_fun = build_delete_instance_setup_fun(MemRef, TopDirPath, FileType),
+            verify_fun = build_delete_instance_verify_fun(MemRef, Config),
+
+            scenario_templates = [
+                #scenario_template{
+                    name = str_utils:format("Delete ~s instance using rest api", [FileType]),
+                    type = rest,
+                    prepare_args_fun = build_delete_instance_under_path_test_prepare_rest_args_fun({mem_ref, MemRef}),
+                    validate_result_fun = fun(_, {ok, RespCode, _RespHeaders, _RespBody}) ->
+                        ?assertEqual(?HTTP_204_NO_CONTENT, RespCode)
+                    end
+                }
+            ],
+
+            data_spec = api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
+                TopDirGuid, TopDirShareId, undefined
+            )
+        },
+        #suite_spec{
+            target_nodes = Providers,
+            client_spec = ?CLIENT_SPEC_FOR_SHARES,
+            scenario_templates = [
+                #scenario_template{
+                    name = str_utils:format("Delete shared ~s instance using rest api", [FileType]),
+                    type = rest_not_supported,
+                    prepare_args_fun = build_delete_instance_under_path_test_prepare_rest_args_fun({guid, TopDirShareGuid}),
+                    validate_result_fun = fun(_TestCaseCtx, {ok, RespCode, _RespHeaders, RespBody}) ->
+                        ?assertEqual(errors:to_http_code(?ERROR_NOT_SUPPORTED), RespCode),
+                        ?assertEqual(?REST_ERROR(?ERROR_NOT_SUPPORTED), RespBody)
+                    end
+                }
+            ]
+        }
+    ])).
+
+
 delete_file_instance_on_provider_not_supporting_space_test(_Config) ->
     P2Id = oct_background:get_provider_id(paris),
     [P1Node] = oct_background:get_provider_nodes(krakow),
@@ -629,6 +697,24 @@ build_delete_instance_test_prepare_rest_args_fun(MemRefOrGuid) ->
         #rest_args{
             method = delete,
             path = <<"data/", Id/binary>>
+        }
+    end.
+
+
+%% @private
+-spec build_delete_instance_under_path_test_prepare_rest_args_fun(
+    {guid, file_id:file_guid()} | {mem_ref, api_test_memory:mem_ref()}
+) ->
+    onenv_api_test_runner:prepare_args_fun().
+build_delete_instance_under_path_test_prepare_rest_args_fun(MemRefOrGuid) ->
+    fun(#api_test_ctx{}) ->
+        BareGuid = ensure_guid(MemRefOrGuid),
+        ParentId = onenv_file_test_utils:get_parent_id(BareGuid, krakow),
+        FileName = onenv_file_test_utils:get_file_name(BareGuid, krakow),
+
+        #rest_args{
+            method = delete,
+            path = <<"data/", ParentId/binary, "/path/", FileName/binary>>
         }
     end.
 

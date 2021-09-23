@@ -29,6 +29,12 @@
 ]).
 -export([get_object_attributes/3]).
 
+-export([
+    get_parent_id/2,
+    get_parent_guid/2,
+    get_file_name/2
+]).
+
 -type share_spec() :: #share_spec{}.
 
 -type space_selector() :: oct_background:entity_selector().
@@ -572,3 +578,32 @@ rm_file(UserId, FileGuid, RmProvider) ->
     UserSessId = oct_background:get_user_session_id(UserId, RmProvider),
 
     ?assertMatch(ok, lfm_proxy:unlink(RmNode, UserSessId, ?FILE_REF(FileGuid))).
+
+-spec get_parent_id(file_id:file_guid(), oct_background:entity_selector()) -> binary().
+get_parent_id(FileGuid, ProviderSelector)->
+    ParentGuid = get_parent_guid(FileGuid, ProviderSelector),
+    {ok, ParentId} = file_id:guid_to_objectid(ParentGuid),
+    ParentId.
+
+
+-spec get_parent_guid(file_id:file_guid(), oct_background:entity_selector()) -> file_id:file_guid().
+get_parent_guid(FileGuid, ProviderSelector) ->
+    [TestNode] = oct_background:get_provider_nodes(ProviderSelector),
+    ProviderId = opw_test_rpc:get_provider_id(TestNode),
+    SessionId = oct_background:get_user_session_id(user2, ProviderId),
+    {ok, Path} = ?assertMatch({ok, _}, rpc:call(TestNode, lfm, get_file_path, [SessionId, FileGuid]), ?ATTEMPTS),
+    Parts = filename:split(Path),
+    ParentPath = filename:join(lists:droplast(Parts)),
+    {ok, ParentGuid} = rpc:call(TestNode, lfm, get_file_guid, [SessionId, ParentPath]),
+    ParentGuid.
+
+
+-spec get_file_name(file_id:file_guid(), oct_background:entity_selector()) -> binary().
+get_file_name(FileGuid, ProviderSelector) ->
+    [TestNode] = oct_background:get_provider_nodes(ProviderSelector),
+    ProviderId = opw_test_rpc:get_provider_id(TestNode),
+    SessionId = oct_background:get_user_session_id(user2, ProviderId),
+    {ok, Path} = ?assertMatch({ok, _}, rpc:call(TestNode, lfm, get_file_path, [SessionId, FileGuid]), ?ATTEMPTS),
+    {ok, Details} = ?assertMatch({ok, _}, rpc:call(TestNode, lfm, get_details, [SessionId, {path, Path}]), ?ATTEMPTS),
+    #file_details{file_attr = #file_attr{name = Name}} = Details,
+    Name.
