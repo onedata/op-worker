@@ -74,9 +74,6 @@ all() ->
         ]}
     ]).
 
-create_on_different_providers_test(Config) ->
-    multi_provider_file_ops_test_base:create_on_different_providers_test_base(Config).
-
 db_sync_basic_opts_test(Config) ->
     multi_provider_file_ops_test_base:basic_opts_test_base(Config, <<"user1">>, {4,0,0,2}, 60).
 
@@ -89,9 +86,6 @@ db_sync_create_after_del_test(Config) ->
 db_sync_create_after_deletion_links_test(Config) ->
     % The same test as db_sync_create_after_del_test but with mock (see init_per_testcase)
     multi_provider_file_ops_test_base:create_after_del_test_base(Config, <<"user1">>, {4,0,0,2}, 60).
-
-distributed_delete_test(Config) ->
-    multi_provider_file_ops_test_base:distributed_delete_test_base(Config, <<"user1">>, {4,0,0,2}, 60).
 
 db_sync_many_ops_test(Config) ->
     ?PERFORMANCE(Config, ?performance_description("Tests working on dirs and files with db_sync")).
