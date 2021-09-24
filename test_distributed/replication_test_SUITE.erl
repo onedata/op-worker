@@ -1276,8 +1276,8 @@ init_per_testcase(local_file_location_should_be_chowned_when_missing_user_appear
 
     test_utils:mock_new(W1, sd_utils, [passthrough]),
     test_utils:mock_expect(W1, sd_utils, create_deferred,
-        fun(FileCtx, UserCtx, VerifyLink, CheckLocationExists) ->
-            {Doc, FileCtx2} = meck:passthrough([FileCtx, UserCtx, VerifyLink, CheckLocationExists]),
+        fun(FileCtx, UserCtx, CheckLocationExists) ->
+            {Doc, FileCtx2} = meck:passthrough([FileCtx, UserCtx, CheckLocationExists]),
             {Doc, files_to_chown:chown_or_defer(FileCtx2)}
         end),
     init_per_testcase(default, Config);
