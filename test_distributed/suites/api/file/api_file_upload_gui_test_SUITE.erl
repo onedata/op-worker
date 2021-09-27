@@ -146,20 +146,20 @@ stale_upload_file_should_be_deleted_test(_Config) ->
     ?assertMatch({ok, _}, initialize_gui_upload(krakow, user1, FileGuid)),
     ?assertMatch(true, authorize_chunk_upload(krakow, user1, FileGuid)),
 
-    [StallProcess | RestStallProcesses] = spawn_stall_processes(krakow, user1, FileGuid),
+    [StallProcess | RestStallProcesses] = spawn_stalling_processes(krakow, user1, FileGuid),
 
     % upload should not be removed as long as there is at least one uploading process alive
     time_test_utils:simulate_seconds_passing(1000),
     force_stale_uploads_removal(krakow),
     ?assertMatch(true, authorize_chunk_upload(krakow, user1, FileGuid)),
 
-    lists:foreach(fun stop_stall_process/1, RestStallProcesses),
+    lists:foreach(fun stop_stalling_process/1, RestStallProcesses),
     time_test_utils:simulate_seconds_passing(1000),
     force_stale_uploads_removal(krakow),
     ?assertMatch(true, authorize_chunk_upload(krakow, user1, FileGuid)),
 
     % and will be removed if no such process exists for longer than 1 minute
-    stop_stall_process(StallProcess),
+    stop_stalling_process(StallProcess),
     time_test_utils:simulate_seconds_passing(59),
     force_stale_uploads_removal(krakow),
     ?assertMatch(true, authorize_chunk_upload(krakow, user1, FileGuid)),
@@ -324,13 +324,13 @@ authorize_chunk_upload(ProviderSelector, UserSelector, FileGuid) ->
 
 
 %% @private
--spec spawn_stall_processes(
+-spec spawn_stalling_processes(
     [node()] | oct_background:entity_selector(),
     oct_background:entity_selector(),
     file_id:file_guid()
 ) ->
     [pid()].
-spawn_stall_processes(Nodes, UserSelector, FileGuid) when is_list(Nodes) ->
+spawn_stalling_processes(Nodes, UserSelector, FileGuid) when is_list(Nodes) ->
     UserId = oct_background:get_user_id(UserSelector),
     TestProcessPid = self(),
 
@@ -343,14 +343,14 @@ spawn_stall_processes(Nodes, UserSelector, FileGuid) when is_list(Nodes) ->
 
     lists:map(fun(Node) -> spawn(Node, StallProcessDef) end, Nodes);
 
-spawn_stall_processes(ProviderSelector, UserSelector, FileGuid) ->
+spawn_stalling_processes(ProviderSelector, UserSelector, FileGuid) ->
     Nodes = oct_background:get_provider_nodes(ProviderSelector),
-    spawn_stall_processes(Nodes, UserSelector, FileGuid).
+    spawn_stalling_processes(Nodes, UserSelector, FileGuid).
 
 
 %% @private
--spec stop_stall_process(pid()) -> ok.
-stop_stall_process(Pid) ->
+-spec stop_stalling_process(pid()) -> ok.
+stop_stalling_process(Pid) ->
     Pid ! stop,
     receive ok -> ok end,
     % Await some time so that file_upload_manager has time to deregister dead process

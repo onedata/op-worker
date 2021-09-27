@@ -26,7 +26,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([start_service/0, start_internal/0]).
+-export([spec/0, whereis/0, start_link/0]).
 -export([register_upload/2, authorize_chunk_upload/2, deregister_upload/2]).
 
 %% gen_server callbacks
@@ -74,19 +74,25 @@
 %%%===================================================================
 
 
--spec start_service() -> ok | aborted.
-start_service() ->
-    internal_services_manager:start_service(?MODULE, <<?MODULE_STRING>>, #{
-        start_function => start_internal
-    }).
+-spec spec() -> supervisor:child_spec().
+spec() -> #{
+    id => ?MODULE,
+    start => {?MODULE, start_link, []},
+    restart => permanent,
+    shutdown => timer:seconds(10),
+    type => worker,
+    modules => [?MODULE]
+}.
 
 
--spec start_internal() -> ok | abort.
-start_internal() ->
-    case gen_server2:start(?SERVER, ?MODULE, [], []) of
-        {ok, _} -> ok;
-        _ -> abort
-    end.
+-spec whereis() -> pid() | undefined.
+whereis() ->
+    global:whereis_name(?MODULE).
+
+
+-spec start_link() -> {ok, pid()} | {error, term()}.
+start_link() ->
+    gen_server:start_link(?SERVER, ?MODULE, [], []).
 
 
 -spec register_upload(od_user:id(), file_id:file_guid()) -> ok | error().

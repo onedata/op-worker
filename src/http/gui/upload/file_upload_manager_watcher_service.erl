@@ -1,0 +1,102 @@
+%%%-------------------------------------------------------------------
+%%% @author Bartosz Walkowicz
+%%% @copyright (C) 2021 ACK CYFRONET AGH
+%%% This software is released under the MIT license
+%%% cited in 'LICENSE.txt'.
+%%% @end
+%%%-------------------------------------------------------------------
+%%% @doc
+%%% Internal (persistent) service that maintains an alive file_upload_manager
+%%% process. The internal service interface is used in a non-standard way -
+%%% this service does not depend on the start_function and stop_function but
+%%% manages file_upload_manager restarts by itself.
+%%% @end
+%%%-------------------------------------------------------------------
+-module(file_upload_manager_watcher_service).
+-author("Bartosz Walkowicz").
+
+-include("modules/fslogic/fslogic_common.hrl").
+-include_lib("ctool/include/logging.hrl").
+
+%% API
+-export([setup_internal_service/0]).
+
+%% Internal Service callbacks
+-export([start_service/0, stop_service/0, healthcheck/1]).
+
+
+-define(SERVICE_NAME, <<"GS-channel-service">>).
+
+-define(HEALTHCHECK_BASE_INTERVAL, timer:seconds(1)).
+-define(HEALTHCHECK_BACKOFF_RATE, 1.35).
+-define(HEALTHCHECK_MAX_BACKOFF, timer:seconds(20)).
+
+
+%%%===================================================================
+%%% API
+%%%===================================================================
+
+
+-spec setup_internal_service() -> ok.
+setup_internal_service() ->
+    ok = internal_services_manager:start_service(?MODULE, ?SERVICE_NAME, ?SERVICE_NAME, #{
+        start_function => start_service,
+        stop_function => stop_service,
+        healthcheck_fun => healthcheck,
+        healthcheck_interval => ?HEALTHCHECK_BASE_INTERVAL,
+        async_start => true
+    }).
+
+
+%%%===================================================================
+%%% Internal services API
+%%%===================================================================
+
+
+-spec start_service() -> ok.
+start_service() ->
+    % the file_upload_manager will be started upon the first healthcheck
+    ok.
+
+
+-spec stop_service() -> ok.
+stop_service() ->
+    ok.
+
+
+-spec healthcheck(time:millis()) -> {ok, time:millis()}.
+healthcheck(LastInterval) ->
+    case file_upload_manager:whereis() of
+        undefined ->
+            case start_file_upload_manager() of
+                ok -> {ok, ?HEALTHCHECK_BASE_INTERVAL};
+                error -> {ok, calculate_backoff(LastInterval)}
+            end;
+        _Pid ->
+            {ok, ?HEALTHCHECK_BASE_INTERVAL}
+    end.
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+
+%% @private
+-spec start_file_upload_manager() -> ok | error.
+start_file_upload_manager() ->
+    case supervisor:start_child(?FSLOGIC_WORKER_SUP, file_upload_manager:spec()) of
+        {ok, _} ->
+            ok;
+        {error, {already_started, _}} ->
+            ok;
+        {error, _} = Error->
+            ?debug("Failed to start file_upload_manager due to: ~p", [Error]),
+            error
+    end.
+
+
+%% @private
+-spec calculate_backoff(time:millis()) -> time:millis().
+calculate_backoff(LastInterval) ->
+    min(?HEALTHCHECK_MAX_BACKOFF, round(LastInterval * ?HEALTHCHECK_BACKOFF_RATE)).

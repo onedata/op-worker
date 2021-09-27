@@ -198,7 +198,7 @@ init_dataset_eff_caches(Space) ->
 init(_Args) ->
     init_effective_caches(),
     transfer:init(),
-    file_upload_manager:start_service(),
+    file_upload_manager_watcher_service:setup_internal_service(),
     atm_workflow_execution_api:init_engine(),
     replica_deletion_master:init_workers_pool(),
     file_registration:init_pool(),
