@@ -187,8 +187,10 @@ run(Pool, FileCtx, UserId, Opts) ->
         AdditionalData -> RunOpts3#{additional_data => AdditionalData}
     end,
 
+    {FileDoc, FileCtx3} = file_ctx:get_file_doc(FileCtx2),
+    {ok, ParentUuid} = file_meta:get_parent_uuid(FileDoc),
     Job = #tree_traverse{
-        file_ctx = FileCtx2,
+        file_ctx = FileCtx3,
         user_id = UserId,
         token = Token,
         child_dirs_job_generation_policy = ChildDirsJobGenerationPolicy,
@@ -201,7 +203,7 @@ run(Pool, FileCtx, UserId, Opts) ->
         encountered_files = add_to_set_if_symlinks_followed(
             file_ctx:get_logical_uuid_const(FileCtx2), #{}, FollowSymlinks)
     },
-    maybe_create_status_doc(Job, TaskId),
+    maybe_create_status_doc(Job, TaskId, ParentUuid),
     ok = traverse:run(Pool, TaskId, Job, RunOpts4),
     {ok, TaskId}.
 
@@ -440,9 +442,12 @@ generate_children_jobs(MasterJob, TaskId, Children, UserCtx) ->
 -spec generate_child_jobs(file_meta:type(), master_job(), id(), file_ctx:ctx(), file_meta:name(), user_ctx:ctx()) -> 
     {[slave_job()], [master_job()]}.
 generate_child_jobs(?DIRECTORY_TYPE, MasterJob, TaskId, ChildCtx, Filename, _) ->
-    #tree_traverse{ child_dirs_job_generation_policy = ChildDirsJobGenerationPolicy} = MasterJob,
+    #tree_traverse{
+        child_dirs_job_generation_policy = ChildDirsJobGenerationPolicy, 
+        file_ctx = ParentFileCtx
+    } = MasterJob,
     ChildMasterJob = get_child_master_job(MasterJob, ChildCtx, Filename),
-    maybe_create_status_doc(ChildMasterJob, TaskId),
+    maybe_create_status_doc(ChildMasterJob, TaskId, file_ctx:get_logical_uuid_const(ParentFileCtx)),
     case ChildDirsJobGenerationPolicy of
         generate_slave_and_master_jobs ->
             ChildSlaveJob = get_child_slave_job(MasterJob, ChildCtx, Filename),
@@ -467,13 +472,13 @@ generate_child_jobs(?SYMLINK_TYPE, #tree_traverse{follow_symlinks = true} = Mast
 
 -spec get_child_master_job(master_job(), file_ctx:ctx(), file_meta:name()) -> master_job().
 get_child_master_job(MasterJob = #tree_traverse{
-    relative_path = ParentRelativePath, 
+    relative_path = ParentRelativePath,
     follow_symlinks = FollowSymlinks,
     encountered_files = PrevEncounteredFilesSet
 }, ChildCtx, Filename) ->
     MasterJob2 = reset_list_options(MasterJob),
     MasterJob2#tree_traverse{
-        file_ctx = ChildCtx, 
+        file_ctx = ChildCtx,
         relative_path = filename:join(ParentRelativePath, Filename),
         encountered_files = add_to_set_if_symlinks_followed(
             file_ctx:get_logical_uuid_const(ChildCtx), PrevEncounteredFilesSet, FollowSymlinks)
@@ -483,6 +488,7 @@ get_child_master_job(MasterJob = #tree_traverse{
 -spec get_child_slave_job(master_job(), file_ctx:ctx(), file_meta:name()) -> slave_job().
 get_child_slave_job(#tree_traverse{
     user_id = UserId,
+    file_ctx = FileCtx,
     traverse_info = TraverseInfo,
     track_subtree_status = TrackSubtreeStatus,
     relative_path = ParentRelativePath
@@ -490,6 +496,7 @@ get_child_slave_job(#tree_traverse{
     #tree_traverse_slave{
         user_id = UserId,
         file_ctx = ChildCtx,
+        source_master_uuid = file_ctx:get_logical_uuid_const(FileCtx),
         traverse_info = TraverseInfo,
         track_subtree_status = TrackSubtreeStatus,
         relative_path = filename:join(ParentRelativePath, Filename)
@@ -514,14 +521,14 @@ resolve_symlink(#tree_traverse{encountered_files = EncounteredFilesSet}, Symlink
     end.
 
 
--spec maybe_create_status_doc(master_job(), id()) -> ok | {error, term()}.
+-spec maybe_create_status_doc(master_job(), id(), file_meta:uuid()) -> ok | {error, term()}.
 maybe_create_status_doc(#tree_traverse{
     file_ctx = FileCtx,
     track_subtree_status = true
-}, TaskId) ->
+}, TaskId, ParentUuid) ->
     Uuid = file_ctx:get_logical_uuid_const(FileCtx),
-    tree_traverse_progress:create(TaskId, Uuid);
-maybe_create_status_doc(_, _) ->
+    tree_traverse_progress:create(TaskId, Uuid, ParentUuid);
+maybe_create_status_doc(_, _, _) ->
     ok.
 
 

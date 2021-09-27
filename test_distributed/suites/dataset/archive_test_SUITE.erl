@@ -37,12 +37,22 @@
     archive_dataset_attached_to_dir_plain_layout/1,
     archive_dataset_attached_to_file_plain_layout/1,
     archive_dataset_attached_to_hardlink_plain_layout/1,
-    archive_dataset_attached_to_symlink_plain_layout/1,
+    archive_dataset_attached_to_symlink_to_reg_file_plain_layout_follow/1,
+    archive_dataset_containing_symlink_to_reg_file_plain_layout_follow/1,
+    archive_dataset_containing_symlink_to_directory_plain_layout_follow/1,
+    archive_dataset_attached_to_symlink_to_reg_file_plain_layout_not_follow/1,
+    archive_dataset_containing_symlink_to_reg_file_plain_layout_not_follow/1,
+    archive_dataset_containing_symlink_to_directory_plain_layout_not_follow/1,
     archive_nested_datasets_plain_layout/1,
     archive_dataset_attached_to_dir_bagit_layout/1,
     archive_dataset_attached_to_file_bagit_layout/1,
     archive_dataset_attached_to_hardlink_bagit_layout/1,
-    archive_dataset_attached_to_symlink_bagit_layout/1,
+    archive_dataset_attached_to_symlink_to_reg_file_bagit_layout_follow/1,
+    archive_dataset_containing_symlink_to_reg_file_bagit_layout_follow/1,
+    archive_dataset_containing_symlink_to_directory_bagit_layout_follow/1,
+    archive_dataset_attached_to_symlink_to_reg_file_bagit_layout_not_follow/1,
+    archive_dataset_containing_symlink_to_reg_file_bagit_layout_not_follow/1,
+    archive_dataset_containing_symlink_to_directory_bagit_layout_not_follow/1,
     archive_nested_datasets_bagit_layout/1,
     
     incremental_archive_plain_layout/1,
@@ -56,12 +66,22 @@
     dip_archive_dataset_attached_to_dir_plain_layout/1,
     dip_archive_dataset_attached_to_file_plain_layout/1,
     dip_archive_dataset_attached_to_hardlink_plain_layout/1,
-    dip_archive_dataset_attached_to_symlink_plain_layout/1,
+    dip_archive_dataset_attached_to_symlink_to_reg_file_plain_layout_follow/1,
+    dip_archive_dataset_containing_symlink_to_reg_file_plain_layout_follow/1,
+    dip_archive_dataset_containing_symlink_to_directory_plain_layout_follow/1,
+    dip_archive_dataset_attached_to_symlink_to_reg_file_plain_layout_not_follow/1,
+    dip_archive_dataset_containing_symlink_to_reg_file_plain_layout_not_follow/1,
+    dip_archive_dataset_containing_symlink_to_directory_plain_layout_not_follow/1,
     dip_archive_nested_datasets_plain_layout/1,
     dip_archive_dataset_attached_to_dir_bagit_layout/1,
     dip_archive_dataset_attached_to_file_bagit_layout/1,
     dip_archive_dataset_attached_to_hardlink_bagit_layout/1,
-    dip_archive_dataset_attached_to_symlink_bagit_layout/1,
+    dip_archive_dataset_attached_to_symlink_to_reg_file_bagit_layout_follow/1,
+    dip_archive_dataset_containing_symlink_to_reg_file_bagit_layout_follow/1,
+    dip_archive_dataset_containing_symlink_to_directory_bagit_layout_follow/1,
+    dip_archive_dataset_attached_to_symlink_to_reg_file_bagit_layout_not_follow/1,
+    dip_archive_dataset_containing_symlink_to_reg_file_bagit_layout_not_follow/1,
+    dip_archive_dataset_containing_symlink_to_directory_bagit_layout_not_follow/1,
     dip_archive_nested_datasets_bagit_layout/1
 ]).
 
@@ -71,12 +91,22 @@ groups() -> [
         archive_dataset_attached_to_dir_plain_layout,
         archive_dataset_attached_to_file_plain_layout,
         archive_dataset_attached_to_hardlink_plain_layout,
-        % archive_dataset_attached_to_symlink_plain_layout, TODO VFS-7664
+        archive_dataset_attached_to_symlink_to_reg_file_plain_layout_follow,
+        archive_dataset_containing_symlink_to_reg_file_plain_layout_follow,
+        archive_dataset_containing_symlink_to_directory_plain_layout_follow,
+        archive_dataset_attached_to_symlink_to_reg_file_plain_layout_not_follow,
+        archive_dataset_containing_symlink_to_reg_file_plain_layout_not_follow,
+        archive_dataset_containing_symlink_to_directory_plain_layout_not_follow,
         archive_nested_datasets_plain_layout,
         archive_dataset_attached_to_dir_bagit_layout,
         archive_dataset_attached_to_file_bagit_layout,
         archive_dataset_attached_to_hardlink_bagit_layout,
-        % archive_dataset_attached_to_symlink_bagit_layout TODO VFS-7664
+        archive_dataset_attached_to_symlink_to_reg_file_bagit_layout_follow,
+        archive_dataset_containing_symlink_to_reg_file_bagit_layout_follow,
+        archive_dataset_containing_symlink_to_directory_bagit_layout_follow,
+        archive_dataset_attached_to_symlink_to_reg_file_bagit_layout_not_follow,
+        archive_dataset_containing_symlink_to_reg_file_bagit_layout_not_follow,
+        archive_dataset_containing_symlink_to_directory_bagit_layout_not_follow,
         archive_nested_datasets_bagit_layout,
 
         incremental_archive_plain_layout,
@@ -90,12 +120,24 @@ groups() -> [
         dip_archive_dataset_attached_to_dir_plain_layout,
         dip_archive_dataset_attached_to_file_plain_layout,
         dip_archive_dataset_attached_to_hardlink_plain_layout,
-        % dip_archive_dataset_attached_to_symlink_plain_layout, TODO VFS-7664
+        dip_archive_dataset_attached_to_symlink_to_reg_file_plain_layout_follow,
+        dip_archive_dataset_containing_symlink_to_reg_file_plain_layout_follow,
+        dip_archive_dataset_containing_symlink_to_directory_plain_layout_follow,
+%%         @TODO VFS-7945 - uncomment after it is possible to create a hardlink to a symlink
+%%        dip_archive_dataset_attached_to_symlink_to_reg_file_plain_layout_not_follow,
+%%        dip_archive_dataset_containing_symlink_to_reg_file_plain_layout_not_follow,
+%%        dip_archive_dataset_containing_symlink_to_directory_plain_layout_not_follow,
         dip_archive_nested_datasets_plain_layout,
         dip_archive_dataset_attached_to_dir_bagit_layout,
         dip_archive_dataset_attached_to_file_bagit_layout,
         dip_archive_dataset_attached_to_hardlink_bagit_layout,
-        % dip_archive_dataset_attached_to_symlink_bagit_layout, TODO VFS-7664
+        dip_archive_dataset_attached_to_symlink_to_reg_file_bagit_layout_follow,
+        dip_archive_dataset_containing_symlink_to_reg_file_bagit_layout_follow,
+        dip_archive_dataset_containing_symlink_to_directory_bagit_layout_follow,
+%%         @TODO VFS-7945 - uncomment after it is possible to create a hardlink to a symlink
+%%        dip_archive_dataset_attached_to_symlink_to_reg_file_bagit_layout_not_follow,
+%%        dip_archive_dataset_containing_symlink_to_reg_file_bagit_layout_not_follow,
+%%        dip_archive_dataset_containing_symlink_to_directory_bagit_layout_not_follow,
         dip_archive_nested_datasets_bagit_layout
     ]}
 ].
@@ -180,8 +222,23 @@ archive_dataset_attached_to_file_plain_layout(_Config) ->
 archive_dataset_attached_to_hardlink_plain_layout(_Config) ->
     archive_dataset_attached_to_hardlink_test_base(?ARCHIVE_PLAIN_LAYOUT, false).
 
-archive_dataset_attached_to_symlink_plain_layout(_Config) ->
-    archive_dataset_attached_to_symlink_test_base(?ARCHIVE_PLAIN_LAYOUT, false).
+archive_dataset_attached_to_symlink_to_reg_file_plain_layout_follow(_Config) ->
+    archive_dataset_containing_symlink_to_reg_file_test_base(?ARCHIVE_PLAIN_LAYOUT, false, true, direct).
+
+archive_dataset_containing_symlink_to_reg_file_plain_layout_follow(_Config) ->
+    archive_dataset_containing_symlink_to_reg_file_test_base(?ARCHIVE_PLAIN_LAYOUT, false, true, nested).
+
+archive_dataset_containing_symlink_to_directory_plain_layout_follow(_Config) ->
+    archive_dataset_containing_symlink_to_directory_test_base(?ARCHIVE_PLAIN_LAYOUT, false, true, nested).
+
+archive_dataset_attached_to_symlink_to_reg_file_plain_layout_not_follow(_Config) ->
+    archive_dataset_containing_symlink_to_reg_file_test_base(?ARCHIVE_PLAIN_LAYOUT, false, false, direct).
+
+archive_dataset_containing_symlink_to_reg_file_plain_layout_not_follow(_Config) ->
+    archive_dataset_containing_symlink_to_reg_file_test_base(?ARCHIVE_PLAIN_LAYOUT, false, false, nested).
+
+archive_dataset_containing_symlink_to_directory_plain_layout_not_follow(_Config) ->
+    archive_dataset_containing_symlink_to_directory_test_base(?ARCHIVE_PLAIN_LAYOUT, false, false, nested).
 
 archive_nested_datasets_plain_layout(_Config) ->
     archive_nested_datasets_test_base(?ARCHIVE_PLAIN_LAYOUT, false).
@@ -195,8 +252,23 @@ archive_dataset_attached_to_file_bagit_layout(_Config) ->
 archive_dataset_attached_to_hardlink_bagit_layout(_Config) ->
     archive_dataset_attached_to_hardlink_test_base(?ARCHIVE_BAGIT_LAYOUT, false).
 
-archive_dataset_attached_to_symlink_bagit_layout(_Config) ->
-    archive_dataset_attached_to_symlink_test_base(?ARCHIVE_BAGIT_LAYOUT, false).
+archive_dataset_attached_to_symlink_to_reg_file_bagit_layout_follow(_Config) ->
+    archive_dataset_containing_symlink_to_reg_file_test_base(?ARCHIVE_BAGIT_LAYOUT, false, true, direct).
+
+archive_dataset_containing_symlink_to_reg_file_bagit_layout_follow(_Config) ->
+    archive_dataset_containing_symlink_to_reg_file_test_base(?ARCHIVE_BAGIT_LAYOUT, false, true, nested).
+
+archive_dataset_containing_symlink_to_directory_bagit_layout_follow(_Config) ->
+    archive_dataset_containing_symlink_to_directory_test_base(?ARCHIVE_BAGIT_LAYOUT, false, true, nested).
+
+archive_dataset_attached_to_symlink_to_reg_file_bagit_layout_not_follow(_Config) ->
+    archive_dataset_containing_symlink_to_reg_file_test_base(?ARCHIVE_BAGIT_LAYOUT, false, false, direct).
+
+archive_dataset_containing_symlink_to_reg_file_bagit_layout_not_follow(_Config) ->
+    archive_dataset_containing_symlink_to_reg_file_test_base(?ARCHIVE_BAGIT_LAYOUT, false, false, nested).
+
+archive_dataset_containing_symlink_to_directory_bagit_layout_not_follow(_Config) ->
+    archive_dataset_containing_symlink_to_directory_test_base(?ARCHIVE_BAGIT_LAYOUT, false, false, nested).
 
 archive_nested_datasets_bagit_layout(_Config) ->
     archive_nested_datasets_test_base(?ARCHIVE_BAGIT_LAYOUT, false).
@@ -211,8 +283,23 @@ dip_archive_dataset_attached_to_file_plain_layout(_Config) ->
 dip_archive_dataset_attached_to_hardlink_plain_layout(_Config) ->
     archive_dataset_attached_to_hardlink_test_base(?ARCHIVE_PLAIN_LAYOUT, true).
 
-dip_archive_dataset_attached_to_symlink_plain_layout(_Config) ->
-    archive_dataset_attached_to_symlink_test_base(?ARCHIVE_PLAIN_LAYOUT, true).
+dip_archive_dataset_attached_to_symlink_to_reg_file_plain_layout_follow(_Config) ->
+    archive_dataset_containing_symlink_to_reg_file_test_base(?ARCHIVE_PLAIN_LAYOUT, true, true, direct).
+
+dip_archive_dataset_containing_symlink_to_reg_file_plain_layout_follow(_Config) ->
+    archive_dataset_containing_symlink_to_reg_file_test_base(?ARCHIVE_PLAIN_LAYOUT, true, true, nested).
+
+dip_archive_dataset_containing_symlink_to_directory_plain_layout_follow(_Config) ->
+    archive_dataset_containing_symlink_to_directory_test_base(?ARCHIVE_PLAIN_LAYOUT, true, true, nested).
+
+dip_archive_dataset_attached_to_symlink_to_reg_file_plain_layout_not_follow(_Config) ->
+    archive_dataset_containing_symlink_to_reg_file_test_base(?ARCHIVE_PLAIN_LAYOUT, true, false, direct).
+
+dip_archive_dataset_containing_symlink_to_reg_file_plain_layout_not_follow(_Config) ->
+    archive_dataset_containing_symlink_to_reg_file_test_base(?ARCHIVE_PLAIN_LAYOUT, true, false, nested).
+
+dip_archive_dataset_containing_symlink_to_directory_plain_layout_not_follow(_Config) ->
+    archive_dataset_containing_symlink_to_directory_test_base(?ARCHIVE_PLAIN_LAYOUT, true, false, nested).
 
 dip_archive_nested_datasets_plain_layout(_Config) ->
     archive_nested_datasets_test_base(?ARCHIVE_PLAIN_LAYOUT, true).
@@ -226,8 +313,23 @@ dip_archive_dataset_attached_to_file_bagit_layout(_Config) ->
 dip_archive_dataset_attached_to_hardlink_bagit_layout(_Config) ->
     archive_dataset_attached_to_hardlink_test_base(?ARCHIVE_BAGIT_LAYOUT, true).
 
-dip_archive_dataset_attached_to_symlink_bagit_layout(_Config) ->
-    archive_dataset_attached_to_symlink_test_base(?ARCHIVE_BAGIT_LAYOUT, true).
+dip_archive_dataset_attached_to_symlink_to_reg_file_bagit_layout_follow(_Config) ->
+    archive_dataset_containing_symlink_to_reg_file_test_base(?ARCHIVE_BAGIT_LAYOUT, true, true, direct).
+
+dip_archive_dataset_containing_symlink_to_reg_file_bagit_layout_follow(_Config) ->
+    archive_dataset_containing_symlink_to_reg_file_test_base(?ARCHIVE_BAGIT_LAYOUT, true, true, nested).
+
+dip_archive_dataset_containing_symlink_to_directory_bagit_layout_follow(_Config) ->
+    archive_dataset_containing_symlink_to_directory_test_base(?ARCHIVE_BAGIT_LAYOUT, true, true, nested).
+
+dip_archive_dataset_attached_to_symlink_to_reg_file_bagit_layout_not_follow(_Config) ->
+    archive_dataset_containing_symlink_to_reg_file_test_base(?ARCHIVE_BAGIT_LAYOUT, true, false, direct).
+
+dip_archive_dataset_containing_symlink_to_reg_file_bagit_layout_not_follow(_Config) ->
+    archive_dataset_containing_symlink_to_reg_file_test_base(?ARCHIVE_BAGIT_LAYOUT, true, false, nested).
+
+dip_archive_dataset_containing_symlink_to_directory_bagit_layout_not_follow(_Config) ->
+    archive_dataset_containing_symlink_to_directory_test_base(?ARCHIVE_BAGIT_LAYOUT, true, false, nested).
 
 dip_archive_nested_datasets_bagit_layout(_Config) ->
     archive_nested_datasets_test_base(?ARCHIVE_BAGIT_LAYOUT, true).
@@ -268,7 +370,7 @@ archive_dataset_attached_to_dir_test_base(Layout, IncludeDip) ->
             dataset = #dataset_spec{archives = [#archive_spec{config = #archive_config{layout = Layout, include_dip = IncludeDip}}]},
             metadata = #metadata_spec{json = ?RAND_JSON_METADATA()}
     }),
-    archive_simple_dataset_test_base(DirGuid, DatasetId, ArchiveId).
+    archive_simple_dataset_test_base(DirGuid, DatasetId, ArchiveId, 0, 0).
 
 archive_dataset_attached_to_file_test_base(Layout, IncludeDip) ->
     Size = 20,
@@ -284,7 +386,7 @@ archive_dataset_attached_to_file_test_base(Layout, IncludeDip) ->
         metadata = #metadata_spec{json = ?RAND_JSON_METADATA()},
         content = ?RAND_CONTENT(Size)
     }),
-    archive_simple_dataset_test_base(FileGuid, DatasetId, ArchiveId).
+    archive_simple_dataset_test_base(FileGuid, DatasetId, ArchiveId, 1, Size).
 
 archive_dataset_attached_to_hardlink_test_base(Layout, IncludeDip) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
@@ -311,41 +413,64 @@ archive_dataset_attached_to_hardlink_test_base(Layout, IncludeDip) ->
         config = #archive_config{layout = Layout, include_dip = IncludeDip}
     }]}),
 
-    archive_simple_dataset_test_base(LinkGuid, DatasetId, ArchiveId).
+    archive_simple_dataset_test_base(LinkGuid, DatasetId, ArchiveId, 1, Size).
 
-archive_dataset_attached_to_symlink_test_base(Layout, IncludeDip) ->
-    #object{name = DirName} = onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, #dir_spec{}),
+archive_dataset_containing_symlink_to_reg_file_test_base(Layout, IncludeDip, FollowSymlinks, Strategy) ->
+    TargetSpec = #file_spec{
+        content = ?RAND_CONTENT(),
+        metadata = #metadata_spec{json = ?RAND_JSON_METADATA()},
+        mode = 8#770
+    },
+    archive_dataset_containing_symlink_test_base(Layout, IncludeDip, FollowSymlinks, TargetSpec, Strategy).
+
+
+archive_dataset_containing_symlink_to_directory_test_base(Layout, IncludeDip, FollowSymlinks, Strategy) ->
+    TargetSpec = #dir_spec{
+        metadata = #metadata_spec{json = ?RAND_JSON_METADATA()},
+        mode = 8#770
+    },
+    archive_dataset_containing_symlink_test_base(Layout, IncludeDip, FollowSymlinks, TargetSpec, Strategy).
+
+archive_dataset_containing_symlink_test_base(Layout, IncludeDip, FollowSymlinks, TargetSpec, Strategy) ->
+    #object{name = TargetName, content = Content} = onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, TargetSpec),
     SpaceIdPrefix = ?SYMLINK_SPACE_ID_ABS_PATH_PREFIX(oct_background:get_space_id(?SPACE)),
-    LinkTarget = filename:join([SpaceIdPrefix, DirName]),
+    LinkTarget = filename:join([SpaceIdPrefix, TargetName]),
+    DatasetSpec = #dataset_spec{archives = [#archive_spec{
+        config = #archive_config{layout = Layout, include_dip = IncludeDip, follow_symlinks = FollowSymlinks}
+    }]},
+    SymlinkSpec = #symlink_spec{
+        symlink_value = LinkTarget
+    },
+    Spec = case Strategy of
+        direct -> 
+            SymlinkSpec#symlink_spec{dataset = DatasetSpec};
+        nested ->
+            #dir_spec{
+                dataset = DatasetSpec,
+                children = [SymlinkSpec]
+            }
+    end,
     #object{
-        guid = LinkGuid,
+        guid = DirGuid,
         dataset = #dataset_object{
             id = DatasetId,
             archives = [#archive_object{id = ArchiveId}]
         }
-    } = onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE,
-        #symlink_spec{
-            symlink_value = LinkTarget,
-            dataset = #dataset_spec{archives = [#archive_spec{
-                config = #archive_config{layout = Layout, include_dip = IncludeDip}
-            }]}
-        }
-    ),
-    archive_simple_dataset_test_base(LinkGuid, DatasetId, ArchiveId).
+    } = onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, Spec),
+    {FileCount, ExpSize} = case {Content, FollowSymlinks} of
+        {_, false} -> {1, 0};
+        {undefined, _} -> {0, 0};
+        {_, true} -> {1, byte_size(Content)}
+    end,
+    archive_simple_dataset_test_base(DirGuid, DatasetId, ArchiveId, FileCount, ExpSize).
 
-archive_simple_dataset_test_base(Guid, DatasetId, ArchiveId) ->
+archive_simple_dataset_test_base(Guid, DatasetId, ArchiveId, FileCount, ExpSize) ->
     SpaceId = oct_background:get_space_id(?SPACE),
     lists:foreach(fun(Provider) ->
         Node = oct_background:get_random_provider_node(Provider),
         SessionId = oct_background:get_user_session_id(?USER1, Provider),
         UserId = oct_background:get_user_id(?USER1),
         archive_tests_utils:assert_archive_dir_structure_is_correct(Node, SessionId, SpaceId, DatasetId, ArchiveId, UserId),
-        {ok, #file_attr{type = Type, size = Size}} = lfm_proxy:stat(Node, SessionId, ?FILE_REF(Guid)),
-        {FileCount, ExpSize} = case Type of
-            ?DIRECTORY_TYPE -> {0, 0};
-            ?SYMLINK_TYPE -> {1, 0};
-            _ -> {1, Size}
-        end,
         archive_tests_utils:assert_archive_is_preserved(Node, SessionId, ArchiveId, DatasetId, Guid, FileCount, ExpSize)
     end, oct_background:get_space_supporting_providers(?SPACE)).
 

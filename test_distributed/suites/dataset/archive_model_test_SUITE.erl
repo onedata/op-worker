@@ -71,8 +71,8 @@ groups() -> [
         % mocking time does not interfere with other tests
         archive_dataset_attached_to_dir,
         archive_dataset_attached_to_file,
-        archive_dataset_attached_to_hardlink
-        % archive_dataset_attached_to_symlink, TODO VFS-7664
+        archive_dataset_attached_to_hardlink,
+        archive_dataset_attached_to_symlink
     ]},
     {parallel_tests, [parallel], [
         archivisation_of_detached_dataset_should_be_impossible,

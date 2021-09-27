@@ -159,7 +159,7 @@ do_slave_job(#tree_traverse_slave{
 %% @private
 -spec delete_dir_if_subtree_processed(tree_traverse_progress:status(), file_ctx:ctx(), od_user:id(),
     id(), info()) -> ok.
-delete_dir_if_subtree_processed(?SUBTREE_PROCESSED, FileCtx, UserId, TaskId, TraverseInfo) ->
+delete_dir_if_subtree_processed({?SUBTREE_PROCESSED, _}, FileCtx, UserId, TaskId, TraverseInfo) ->
     delete_dir(FileCtx, UserId, TaskId, TraverseInfo);
 delete_dir_if_subtree_processed(?SUBTREE_NOT_PROCESSED, _FileCtx, _UserId, _TaskId, _TraverseInfo) ->
     ok.

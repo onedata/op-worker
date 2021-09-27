@@ -71,7 +71,7 @@ assert_archive_is_preserved(Node, SessionId, ArchiveId, DatasetId, DatasetRootFi
         }
     }}, get_archive_info_without_config(Node, SessionId, ArchiveId), ?ATTEMPTS),
     
-    {ok, #archive_info{config = #archive_config{layout = ArchiveLayout}}} =
+    {ok, #archive_info{config = #archive_config{layout = ArchiveLayout, follow_symlinks = FollowSymlinks}}} =
         lfm_proxy:get_archive_info(Node, SessionId, ArchiveId),
     
     GetDatasetArchives = fun() ->
@@ -90,7 +90,7 @@ assert_archive_is_preserved(Node, SessionId, ArchiveId, DatasetId, DatasetRootFi
             ?assertEqual(?ARCHIVE_PLAIN_LAYOUT, ArchiveLayout)
     end,
     
-    assert_structure(Node, SessionId, ArchiveId, DatasetRootFileGuid, ArchiveLayout),
+    assert_structure(Node, SessionId, ArchiveId, DatasetRootFileGuid, ArchiveLayout, FollowSymlinks),
     assert_layout_custom_features(Node, SessionId, ArchiveId, ArchiveLayout),
     assert_archive_is_preserved(Node, SessionId, RelatedDip, DatasetId, DatasetRootFileGuid, FileCount, ExpSize).
 
@@ -153,13 +153,13 @@ assert_archive_dir_exists(Node, SessionId, SpaceId, DatasetId, ArchiveId, UserId
     }}, lfm_proxy:stat(Node, SessionId, ?FILE_REF(ArchiveDirGuid)), ?ATTEMPTS).
 
 
-assert_structure(Node, SessionId, ArchiveId, DatasetRootFileGuid, ?ARCHIVE_PLAIN_LAYOUT) ->
+assert_structure(Node, SessionId, ArchiveId, DatasetRootFileGuid, ?ARCHIVE_PLAIN_LAYOUT, FollowSymlinks) ->
     ArchiveRootDirUuid = ?ARCHIVE_DIR_UUID(ArchiveId),
     ArchiveRootDirGuid = file_id:pack_guid(ArchiveRootDirUuid, oct_background:get_space_id(?SPACE)),
     {ok, [{TargetGuid, _} | _]} = 
         ?assertMatch({ok, [_ | _]}, lfm_proxy:get_children(Node, SessionId, ?FILE_REF(ArchiveRootDirGuid), 0, ?LISTED_CHILDREN_LIMIT), ?ATTEMPTS),
-    assert_copied(Node, SessionId, DatasetRootFileGuid, TargetGuid);
-assert_structure(Node, SessionId, ArchiveId, DatasetRootFileGuid, ?ARCHIVE_BAGIT_LAYOUT) ->
+    assert_copied(Node, SessionId, DatasetRootFileGuid, TargetGuid, FollowSymlinks);
+assert_structure(Node, SessionId, ArchiveId, DatasetRootFileGuid, ?ARCHIVE_BAGIT_LAYOUT, FollowSymlinks) ->
     ArchiveRootDirUuid = ?ARCHIVE_DIR_UUID(ArchiveId),
     ArchiveRootDirGuid = file_id:pack_guid(ArchiveRootDirUuid, oct_background:get_space_id(?SPACE)),
     {ok, ArchiveRootDirPath} = lfm_proxy:get_file_path(Node, SessionId, ArchiveRootDirGuid),
@@ -167,22 +167,36 @@ assert_structure(Node, SessionId, ArchiveId, DatasetRootFileGuid, ?ARCHIVE_BAGIT
     {ok, #file_attr{guid = ArchiveDataDirGuid}} = lfm_proxy:stat(Node, SessionId, {path, ArchiveDataDirPath}),
     {ok, [{TargetGuid, _} | _]} = 
         ?assertMatch({ok, [_ | _]}, lfm_proxy:get_children(Node, SessionId, ?FILE_REF(ArchiveDataDirGuid), 0, ?LISTED_CHILDREN_LIMIT), ?ATTEMPTS),
-    assert_copied(Node, SessionId, DatasetRootFileGuid, TargetGuid).
+    assert_copied(Node, SessionId, DatasetRootFileGuid, TargetGuid, FollowSymlinks).
 
 
-assert_copied(Node, SessionId, SourceGuid, TargetGuid) ->
+assert_copied(Node, SessionId, SourceGuid, TargetGuid, FollowSymlinks) ->
     assert_attrs_copied(Node, SessionId, SourceGuid, TargetGuid),
     assert_metadata_copied(Node, SessionId, SourceGuid, TargetGuid),
     {ok, SourceAttr} = lfm_proxy:stat(Node, SessionId, ?FILE_REF(SourceGuid)),
     case SourceAttr#file_attr.type of
         ?DIRECTORY_TYPE ->
-            assert_children_copied(Node, SessionId, SourceGuid, TargetGuid),
+            assert_children_copied(Node, SessionId, SourceGuid, TargetGuid, FollowSymlinks),
             assert_json_metadata_copied(Node, SessionId, SourceGuid, TargetGuid);
         ?REGULAR_FILE_TYPE ->
             assert_content_copied(Node, SessionId, SourceGuid, TargetGuid),
             assert_json_metadata_copied(Node, SessionId, SourceGuid, TargetGuid);
         ?SYMLINK_TYPE ->
-            assert_symlink_values_copied(Node, SessionId, SourceGuid, TargetGuid)
+            case FollowSymlinks of
+                true ->
+                    {ok, LinkGuid} = lfm_proxy:resolve_symlink(Node, SessionId, ?FILE_REF(SourceAttr#file_attr.guid)),
+                    {ok, LinkTargetAttr} = lfm_proxy:stat(Node, SessionId, ?FILE_REF(LinkGuid)),
+                    case LinkTargetAttr#file_attr.type of
+                        ?REGULAR_FILE_TYPE ->
+                            assert_content_copied(Node, SessionId, LinkGuid, TargetGuid),
+                            assert_json_metadata_copied(Node, SessionId, LinkGuid, TargetGuid);
+                        ?DIRECTORY_TYPE ->
+                            assert_children_copied(Node, SessionId, LinkGuid, TargetGuid, FollowSymlinks),
+                            assert_json_metadata_copied(Node, SessionId, LinkGuid, TargetGuid)
+                    end;
+                false ->
+                    assert_symlink_values_copied(Node, SessionId, SourceGuid, TargetGuid)
+            end
     end.
 
 
@@ -194,13 +208,16 @@ assert_attrs_copied(Node, SessionId, SourceGuid, TargetGuid) ->
 
     ?assertEqual(true, try
         {ok, TargetAttr} = ?assertMatch({ok, #file_attr{}}, Stat(TargetGuid), ?ATTEMPTS),
-        case SourceAttr#file_attr.type /= ?SYMLINK_TYPE andalso TargetAttr#file_attr.type == ?SYMLINK_TYPE of
-            true ->
+        case {SourceAttr#file_attr.type, TargetAttr#file_attr.type} of
+            {?SYMLINK_TYPE, _} ->
+                ?assertEqual(SourceAttr#file_attr.name, TargetAttr#file_attr.name),
+                true;
+            {_, ?SYMLINK_TYPE} ->
                 ?assertEqual(SourceAttr#file_attr.name, TargetAttr#file_attr.name),
                 {ok, LinkTargetGuid} = lfm_proxy:resolve_symlink(Node, SessionId, ?FILE_REF(TargetAttr#file_attr.guid)),
                 assert_attrs_copied(Node, SessionId, SourceGuid, LinkTargetGuid),
                 true;
-            false ->
+            {_, _} ->
                 ?assertEqual(SourceAttr#file_attr.name, TargetAttr#file_attr.name),
                 ?assertEqual(SourceAttr#file_attr.mode, TargetAttr#file_attr.mode),
                 ?assertEqual(SourceAttr#file_attr.type, TargetAttr#file_attr.type),
@@ -220,19 +237,22 @@ assert_metadata_copied(Node, SessionId, SourceGuid, TargetGuid) ->
     ?assertEqual(GetXattrs(SourceGuid), GetXattrs(TargetGuid)).
 
 
-assert_children_copied(Node, SessionId, SourceGuid, TargetGuid) ->
-    assert_children_copied(Node, SessionId, SourceGuid, TargetGuid, #{offset => 0, size => ?LISTED_CHILDREN_LIMIT}).
+assert_children_copied(Node, SessionId, SourceGuid, TargetGuid, FollowSymlinks) ->
+    assert_children_copied(Node, SessionId, SourceGuid, TargetGuid, #{offset => 0, size => ?LISTED_CHILDREN_LIMIT}, FollowSymlinks).
 
-assert_children_copied(Node, SessionId, SourceGuid, TargetGuid, ListOpts = #{offset := Offset}) ->
+assert_children_copied(Node, SessionId, SourceGuid, TargetGuid, ListOpts = #{offset := Offset}, FollowSymlinks) ->
     {ok, SourceChildren, #{is_last := SourceIsLast}} =
         lfm_proxy:get_children(Node, SessionId, ?FILE_REF(SourceGuid), ListOpts),
-    {ok, TargetChildren, _} = ?assertMatch({ok, _, #{is_last := SourceIsLast}},
-        lfm_proxy:get_children(Node, SessionId, ?FILE_REF(TargetGuid), ListOpts), ?ATTEMPTS),
+    GetTargetChildrenFun = fun() ->
+        {ok, TargetChildren, _} = ?assertMatch({ok, _, #{is_last := SourceIsLast}},
+            lfm_proxy:get_children(Node, SessionId, ?FILE_REF(TargetGuid), ListOpts), ?ATTEMPTS),
+        TargetChildren
+    end,
     SourceNames = [N || {_, N} <- SourceChildren],
-    TargetNames = [N || {_, N} <- TargetChildren],
-    ?assertEqual(SourceNames, TargetNames),
+    ?assertEqual(SourceNames, [N || {_, N} <- GetTargetChildrenFun()], 10),
+    TargetChildren = GetTargetChildrenFun(),
     lists:foreach(fun({{SourceChildGuid, _}, {TargetChildGuid, _}}) ->
-        assert_copied(Node, SessionId, SourceChildGuid, TargetChildGuid)
+        assert_copied(Node, SessionId, SourceChildGuid, TargetChildGuid, FollowSymlinks)
     end, lists:zip(SourceChildren, TargetChildren)),
 
     case SourceIsLast of

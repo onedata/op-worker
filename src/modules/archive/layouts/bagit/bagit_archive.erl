@@ -134,7 +134,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([prepare/2, finalize/2, archive_file/5, archive_dir/4]).
+-export([prepare/2, finalize/2, archive_file/6, archive_dir/4]).
 
 
 %%%===================================================================
@@ -157,15 +157,15 @@ finalize(ArchiveDirCtx, UserCtx) ->
     create_tag_manifests(ArchiveDirCtx, UserCtx).
 
 
--spec archive_file(archive:doc(), file_ctx:ctx(), file_ctx:ctx(), archive:doc() | undefined, user_ctx:ctx()) ->
+-spec archive_file(archive:doc(), file_ctx:ctx(), file_ctx:ctx(), archive:doc() | undefined, file_meta:path(), user_ctx:ctx()) ->
     {ok, file_ctx:ctx()} | {error, term()}.
-archive_file(ArchiveDoc, FileCtx, TargetParentCtx, BaseArchiveDoc, UserCtx) ->
-    case plain_archive:archive_file(ArchiveDoc, FileCtx, TargetParentCtx, BaseArchiveDoc, UserCtx) of
+archive_file(ArchiveDoc, FileCtx, TargetParentCtx, BaseArchiveDoc, ResolvedFilePath, UserCtx) ->
+    case plain_archive:archive_file(ArchiveDoc, FileCtx, TargetParentCtx, BaseArchiveDoc, ResolvedFilePath, UserCtx) of
         {ok, ArchivedFileCtx} ->
             {FileDoc, ArchivedFileCtx2} = file_ctx:get_file_doc(ArchivedFileCtx),
             case file_meta:get_effective_type(FileDoc) =:= ?REGULAR_FILE_TYPE of
                 true ->
-                    save_checksums_and_archive_custom_metadata(ArchiveDoc, UserCtx, ArchivedFileCtx2, FileCtx);
+                    save_checksums_and_archive_custom_metadata(ArchiveDoc, UserCtx, ArchivedFileCtx2, ResolvedFilePath);
                 false ->
                     ok
             end,
@@ -175,10 +175,10 @@ archive_file(ArchiveDoc, FileCtx, TargetParentCtx, BaseArchiveDoc, UserCtx) ->
     end.
 
 
--spec archive_dir(archive:doc(), file_ctx:ctx(), file_ctx:ctx(), user_ctx:ctx()) -> ok.
-archive_dir(ArchiveDoc, FileCtx, ArchivedFileCtx, UserCtx) -> 
+-spec archive_dir(archive:doc(), file_meta:path(), file_ctx:ctx(), user_ctx:ctx()) -> ok.
+archive_dir(ArchiveDoc, SourceLogicalPath, ArchivedFileCtx, UserCtx) -> 
     {ok, ArchiveDirCtx} = archive:get_root_dir_ctx(ArchiveDoc),
-    RelativeFilePath = calculate_relative_path(ArchiveDoc, FileCtx, UserCtx),
+    RelativeFilePath = calculate_relative_path(ArchiveDoc, SourceLogicalPath, UserCtx),
     archive_metadata(ArchiveDirCtx, UserCtx, RelativeFilePath, ArchivedFileCtx).
 
 
@@ -212,15 +212,15 @@ create_bag_declaration(ParentCtx, UserCtx) ->
 
 
 %% @private
--spec save_checksums_and_archive_custom_metadata(archive:doc(), user_ctx:ctx(), file_ctx:ctx(), file_ctx:ctx()) -> ok.
-save_checksums_and_archive_custom_metadata(CurrentArchiveDoc, UserCtx, ArchivedFileCtx, SourceFileCtx) ->
+-spec save_checksums_and_archive_custom_metadata(archive:doc(), user_ctx:ctx(), file_ctx:ctx(), file_meta:path()) -> ok.
+save_checksums_and_archive_custom_metadata(CurrentArchiveDoc, UserCtx, ArchivedFileCtx, SourceLogicalPath) ->
     % TODO VFS-7819 allow to pass this algorithms in archivisation request as param
     ChecksumAlgorithms = ?SUPPORTED_CHECKSUM_ALGORITHMS,
     CalculatedChecksums = file_checksum:calculate(ArchivedFileCtx, UserCtx, ChecksumAlgorithms),
 
     {ok, AncestorArchives} = archive:get_all_ancestors(CurrentArchiveDoc),
     lists:foreach(fun(ArchiveDoc) ->
-        RelativeFilePath = calculate_relative_path(ArchiveDoc, SourceFileCtx, UserCtx),
+        RelativeFilePath = calculate_relative_path(ArchiveDoc, SourceLogicalPath, UserCtx),
         {ok, ArchiveDirCtx} = archive:get_root_dir_ctx(ArchiveDoc),
         bagit_checksums:add_entries_to_manifests(ArchiveDirCtx, UserCtx, RelativeFilePath, CalculatedChecksums,
             ChecksumAlgorithms),
@@ -243,9 +243,8 @@ archive_metadata(ArchiveDirCtx, UserCtx, RelativeFilePath, ArchivedFileCtx) ->
 
 
 %% @private
--spec calculate_relative_path(archive:doc(), file_ctx:ctx(), user_ctx:ctx()) -> file_meta:path().
-calculate_relative_path(ArchiveDoc, SourceFileCtx, UserCtx) ->
-    {SourceFilePath, _SourceFileCtx2} = file_ctx:get_logical_path(SourceFileCtx, UserCtx),
+-spec calculate_relative_path(archive:doc(), file_meta:path(), user_ctx:ctx()) -> file_meta:path().
+calculate_relative_path(ArchiveDoc, SourceFilePath, UserCtx) ->
     {ok, DatasetRootFileCtx} = archive:get_dataset_root_file_ctx(ArchiveDoc),
     {DatasetRootPath, _} = file_ctx:get_logical_path(DatasetRootFileCtx, UserCtx),
     {_, DatasetRootParentPath} = filepath_utils:basename_and_parent_dir(DatasetRootPath),

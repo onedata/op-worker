@@ -56,6 +56,8 @@
 % Record that defines slave job
 -record(tree_traverse_slave, {
     file_ctx :: file_ctx:ctx(),
+    % Uuid of file, that generated this slave job
+    source_master_uuid :: file_meta:uuid(),
     % User who scheduled the traverse
     user_id :: od_user:id(),
     traverse_info :: tree_traverse:traverse_info(),

@@ -176,6 +176,6 @@ file_processed(TaskId, FileCtx, RemoveStorageFiles) ->
 
 %% @private
 -spec maybe_cleanup_dir(tree_traverse_progress:status(), task_id(), file_ctx:ctx(), boolean()) -> ok.
-maybe_cleanup_dir(?SUBTREE_PROCESSED, TaskId, FileCtx, RemoveStorageFiles) ->
+maybe_cleanup_dir({?SUBTREE_PROCESSED, _}, TaskId, FileCtx, RemoveStorageFiles) ->
     cleanup_dir(TaskId, FileCtx, RemoveStorageFiles);
 maybe_cleanup_dir(?SUBTREE_NOT_PROCESSED, _TaskId, _FileCtx, _RemoveStorageFiles) -> ok.
