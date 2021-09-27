@@ -25,7 +25,7 @@
 -export([start_service/0, stop_service/0, healthcheck/1]).
 
 
--define(SERVICE_NAME, <<"GS-channel-service">>).
+-define(SERVICE_NAME, <<"file-upload-manager-watcher-service">>).
 
 -define(HEALTHCHECK_BASE_INTERVAL, timer:seconds(1)).
 -define(HEALTHCHECK_BACKOFF_RATE, 1.35).
@@ -55,7 +55,7 @@ setup_internal_service() ->
 
 -spec start_service() -> ok.
 start_service() ->
-    % the file_upload_manager will be started upon the first healthcheck
+    start_file_upload_manager(),
     ok.
 
 

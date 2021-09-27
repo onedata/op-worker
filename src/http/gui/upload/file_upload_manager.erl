@@ -145,8 +145,10 @@ handle_call(?REGISTER_UPLOAD_REQ(UserId, FileGuid), _, #state{uploads = Uploads}
             reply(ok, State#state{uploads = Uploads#{FileGuid => UploadCtx#upload_ctx{
                 latest_activity_timestamp = ?NOW()
             }}});
-        {ok, _} ->
-            % upload registered by other user
+        {ok, #upload_ctx{user_id = OtherUserId}} ->
+            ?debug("Failed to start upload by user ~p as it is already registered by user ~p", [
+                UserId, OtherUserId
+            ]),
             reply(?ERROR_FORBIDDEN, State);
         error ->
             UploadCtx = #upload_ctx{
