@@ -20,7 +20,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([create/5]).
+-export([create/5, delete_insecure/1]).
 
 
 -record(atm_workflow_execution_create_params, {
@@ -101,6 +101,45 @@ create(UserCtx, SpaceId, AtmWorkflowSchemaId, StoreInitialValues, CallbackUrl) -
     atm_waiting_workflow_executions:add(AtmWorkflowExecutionDoc),
 
     {AtmWorkflowExecutionDoc, AtmWorkflowExecutionEnv}.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Deletes atm workflow execution doc and all docs associated with it.
+%%
+%%                              !!! Caution !!!
+%% This operation simply deletes workflow execution and all it's elements
+%% regardless of atm workflow execution status and without blocking other
+%% operations. Such protections should be enforced (if necessary) by higher
+%% layers before calling this function.
+%% @end
+%%--------------------------------------------------------------------
+-spec delete_insecure(atm_workflow_execution:id()) -> ok.
+delete_insecure(AtmWorkflowExecutionId) ->
+    {ok, AtmWorkflowExecutionDoc = #document{
+        value = AtmWorkflowExecution = #atm_workflow_execution{
+            schema_snapshot_id = AtmWorkflowSchemaSnapshotId,
+            lambda_snapshot_registry = AtmLambdaSnapshotRegistry,
+            store_registry = AtmWorkflowStoreRegistry,
+            system_audit_log_id = AtmWorkflowAuditLogId,
+            lanes = AtmLaneExecutions
+        }
+    }} = atm_workflow_execution:get(AtmWorkflowExecutionId),
+
+    delete_execution_elements(#atm_workflow_execution_elements{
+        schema_snapshot_id = AtmWorkflowSchemaSnapshotId,
+        lambda_snapshot_registry = AtmLambdaSnapshotRegistry,
+        workflow_store_registry = AtmWorkflowStoreRegistry,
+        workflow_audit_log_id = AtmWorkflowAuditLogId,
+        lanes = AtmLaneExecutions
+    }),
+    atm_workflow_execution:delete(AtmWorkflowExecutionId),
+
+    case atm_workflow_execution_status:infer_phase(AtmWorkflowExecution) of
+        ?WAITING_PHASE -> atm_waiting_workflow_executions:delete(AtmWorkflowExecutionDoc);
+        ?ONGOING_PHASE -> atm_ongoing_workflow_executions:delete(AtmWorkflowExecutionDoc);
+        ?ENDED_PHASE -> atm_ended_workflow_executions:delete(AtmWorkflowExecutionDoc)
+    end.
 
 
 %%%===================================================================
@@ -401,7 +440,7 @@ delete_execution_elements(Elements = #atm_workflow_execution_elements{
 delete_execution_elements(Elements = #atm_workflow_execution_elements{
     lanes = AtmLaneExecutions
 }) when AtmLaneExecutions /= undefined ->
-    %% TODO implement
+    catch delete_lane_executions(AtmLaneExecutions),
 
     delete_execution_elements(Elements#atm_workflow_execution_elements{
         lanes = undefined
@@ -421,3 +460,11 @@ delete_lambda_snapshots(AtmLambdaSnapshotRegistry) ->
 -spec delete_workflow_stores([atm_store:id()]) -> ok.
 delete_workflow_stores(AtmStoreIds) ->
     lists:foreach(fun atm_store_api:delete/1, AtmStoreIds).
+
+
+%% @private
+-spec delete_lane_executions([atm_lane_execution:record()]) -> ok.
+delete_lane_executions(AtmLaneExecutions) ->
+    lists:foreach(fun(#atm_lane_execution{runs = Runs}) ->
+        lists:foreach(fun atm_lane_execution_factory:delete_run/1, Runs)
+    end, AtmLaneExecutions).
