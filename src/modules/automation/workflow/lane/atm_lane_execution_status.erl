@@ -6,7 +6,64 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% TODO WRITEME.
+%%% This module contains functions that handle atm lane execution run status
+%%% transitions according (generally) to following state machine:
+%%%
+%%%               +-------------+   cancel or failure
+%%%               |  SCHEDULED  |------------------------
+%%%  W            +-------------+                         \
+%%%  A                   |                                 \
+%%%  I                   v                                  |
+%%%  T            +-------------+    cancel or failure      |
+%%%  I            |  PREPARING  |-------------------------  |
+%%%  N            +-------------+                          \|
+%%%  G                   |                                  o
+%%%      ready to execute (all associated                   |
+%%%  P     documents created and setup)                     |
+%%%  H                   v                                  |
+%%%  A            +-------------+          cancel           |
+%%%  S            |   ENQUEUED  |---------------------------o
+%%%  E            +-------------+                           |
+%%%                      |    \_____________________________|__________________________
+%%%                      |                                  |                           \
+%%%        first task within atm lane run                   |                            |
+%%%                   started                               |                            |
+%%% =====================|==================================|============================|========
+%%%                      v                                  |                            |
+%%%  O             +-------------+         cancel           |                   workflow aborting when
+%%%  N             |    ACTIVE   |--------------------------o                    preparing in advance
+%%%  G             +-------------+                          |                            |
+%%%  O                      |                               v                            |
+%%%  I                      |                       +-------------+     failure when     |
+%%%  N                     ---                      |   ABORTING  |----- preparing ------o
+%%%  G                   /     \                    +-------------+      in advance      |
+%%%                     /       \                      |                                 |
+%%%  P                 /         \      aborting when currently executed                 |
+%%%  H                /           \                    |                                 |
+%%%  A               /             \              -----------                            |
+%%%  S   all tasks successfully    else         /             \                          |
+%%%  E           finished           |        failure        cancel                       |
+%%%                  |              |           |              |                         |
+%%% =================|==============|===========|==============|=========================|========
+%%%                  |              |           |              |                         |
+%%%  E               |              |           |              |                         |
+%%%  N               v              v           v              v                         |
+%%%  D    +-------------+          +-------------+          +-------------+              |
+%%%  E    |   FINISHED  |          |   FAILED    |          |  CANCELLED  |              |
+%%%  D    +-------------+          +-------------+          +-------------+              |
+%%%                                                                                      |
+%%%  P                                                                                   v
+%%%  H                                                                            +-------------+
+%%%  A                                                                            | INTERRUPTED |
+%%%  S                                                                            +-------------+
+%%%  E
+%%%
+%%% There are 2 exceptions to above diagram:
+%%% 1) provider restart - atm lane execution run is forcefully ended as failed disregarding
+%%%    status it had before restart.
+%%% 2) interrupted atm lane execution run when preparing in advance if previous lane run
+%%%    finished successfully - INTERRUPTED status is changed to FAILED as this run effectively
+%%%    becomes the point of workflow execution failure at which it can be rerun.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_lane_execution_status).

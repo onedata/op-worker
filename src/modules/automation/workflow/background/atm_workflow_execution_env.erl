@@ -25,7 +25,7 @@
     build/2, build/3,
     add_workflow_store/3,
     set_workflow_audit_log_store_container/2,
-    set_lane_run_exception_store_container/2,
+    set_lane_exception_store_container/2,
     set_task_audit_log_store_container/3,
 
     acquire_auth/1,
@@ -50,7 +50,7 @@
 }).
 -type record() :: #atm_workflow_execution_env{}.
 
--type diff() :: fun((atm_workflow_execution_env:record()) -> atm_workflow_execution_env:record()).
+-type diff() :: fun((record()) -> record()).
 
 -export_type([record/0, diff/0]).
 
@@ -95,11 +95,11 @@ set_workflow_audit_log_store_container(AtmWorkflowAuditLogStoreContainer, Record
     }.
 
 
--spec set_lane_run_exception_store_container(undefined | atm_store_container:record(), record()) ->
+-spec set_lane_exception_store_container(undefined | atm_store_container:record(), record()) ->
     record().
-set_lane_run_exception_store_container(AtmLaneRunExceptionStoreContainer, Record) ->
+set_lane_exception_store_container(AtmLaneExceptionStoreContainer, Record) ->
     Record#atm_workflow_execution_env{
-        lane_exception_store_container = AtmLaneRunExceptionStoreContainer
+        lane_exception_store_container = AtmLaneExceptionStoreContainer
     }.
 
 

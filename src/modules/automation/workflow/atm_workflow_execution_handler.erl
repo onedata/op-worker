@@ -237,6 +237,7 @@ handle_lane_execution_ended(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, Atm
 handle_workflow_execution_ended(AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv) ->
     try
         {ok, AtmWorkflowExecutionDoc} = atm_workflow_execution:get(AtmWorkflowExecutionId),
+        % TODO ensure all lanes ended
         freeze_workflow_stores(AtmWorkflowExecutionDoc),
 
         atm_workflow_execution_session:terminate(AtmWorkflowExecutionId),

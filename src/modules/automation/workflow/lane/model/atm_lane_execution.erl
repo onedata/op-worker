@@ -61,8 +61,8 @@ run_to_json(#atm_lane_execution_run{
     #{
 %%        <<"runNo">> => utils:undefined_to_null(RunNo),  %% TODO uncomment when gui allows null
         <<"runNo">> => utils:ensure_defined(RunNo, undefined, 100),
-        <<"iteratedStoreId">> => IteratedStoreId,
-        <<"exceptionStoreId">> => ExceptionStoreId,
+        <<"iteratedStoreId">> => utils:undefined_to_null(IteratedStoreId),
+        <<"exceptionStoreId">> => utils:undefined_to_null(ExceptionStoreId),
         <<"status">> => atom_to_binary(Status, utf8),
         <<"parallelBoxes">> => lists:map(
             fun atm_parallel_box_execution:to_json/1, AtmParallelBoxExecutions

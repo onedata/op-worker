@@ -6,7 +6,8 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module handles the lane execution process.
+%%% This module handles the lane execution process (for information about
+%%% state machine refer to 'atm_lane_execution_status.erl').
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_lane_execution_handler).
@@ -30,11 +31,10 @@
 -spec prepare(pos_integer(), atm_workflow_execution:id(), atm_workflow_execution_ctx:record()) ->
     workflow_engine:lane_spec() | no_return().
 prepare(AtmLaneIndex, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
-    AtmWorkflowExecutionDoc = atm_lane_execution_status:handle_preparing(
-        AtmLaneIndex, AtmWorkflowExecutionId
-    ),
-
     try
+        AtmWorkflowExecutionDoc = atm_lane_execution_status:handle_preparing(
+            AtmLaneIndex, AtmWorkflowExecutionId
+        ),
         NewAtmWorkflowExecutionDoc0 = atm_lane_execution_factory:create_run(
             AtmLaneIndex, AtmWorkflowExecutionDoc, AtmWorkflowExecutionCtx
         ),
@@ -111,7 +111,7 @@ setup_lane(AtmLaneIndex, AtmWorkflowExecutionDoc, AtmWorkflowExecutionCtx) ->
 
     try
         {ok, #atm_store{container = ExceptionStoreContainer}} = atm_store_api:get(ExceptionStoreId),
-        AtmWorkflowExecutionEnv1 = atm_workflow_execution_env:set_lane_run_exception_store_container(
+        AtmWorkflowExecutionEnv1 = atm_workflow_execution_env:set_lane_exception_store_container(
             ExceptionStoreContainer, AtmWorkflowExecutionEnv0
         ),
 
