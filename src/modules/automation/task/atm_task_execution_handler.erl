@@ -6,7 +6,33 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module handles the task execution process.
+%%% This module handles the task execution process according to following
+%%% state machine:
+%%%
+%%%                       <WAITING PHASE (setup)>
+%%%     +-----------+
+%%%     |  PENDING  |---------------------------------------
+%%%     +-----------+                                        \
+%%%           |                               no item ever scheduled to process
+%%%  first item scheduled to process                          |
+%%%           |                                               |
+%%% ----------|-----------------------------------------------|--------------
+%%%           v               <ONGOING PHASE>                 |
+%%%     +-----------+                                         |
+%%%     |   ACTIVE  |---------------                          |
+%%%     +-----------+                \                        |
+%%%           |                       |                       |
+%%%  all items successfully          else                     |
+%%%        processed                  |                       |
+%%%           |                       |                       |
+%%% ----------|-----------------------|-----------------------|--------------
+%%%           |           <ENDED PHASE (teardown)>            |
+%%%           |                       |                       |
+%%%           v                       v                       v
+%%%     +-----------+           +-----------+           +-----------+
+%%%     |  FINISHED |           |   FAILED  |           |  SKIPPED  |
+%%%     +-----------+           +-----------+           +-----------+
+%%%
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_task_execution_handler).
