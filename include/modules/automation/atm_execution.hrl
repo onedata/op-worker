@@ -104,6 +104,7 @@
 -define(FINISHED_STATUS, finished).
 -define(CANCELLED_STATUS, cancelled).
 -define(FAILED_STATUS, failed).
+-define(INTERRUPTED_STATUS, interrupted).
 -define(SKIPPED_STATUS, skipped).
 
 

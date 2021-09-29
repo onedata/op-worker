@@ -111,26 +111,16 @@ handle_task_status_change(
 -spec handle_ended(pos_integer(), atm_workflow_execution:id()) ->
     atm_workflow_execution:doc() | no_return().
 handle_ended(AtmLaneIndex, AtmWorkflowExecutionId) ->
-    Diff = fun(AtmWorkflowExecution = #atm_workflow_execution{
-        lanes = AtmLaneExecutions,
-        lanes_num = AtmLanesNum,
-        curr_lane_index = CurrLaneIndex,
-        curr_run_no = CurrRunNo
-    }) ->
-        {EndedStatus, NewAtmLaneExecutions} = end_lane_run(AtmLaneIndex, AtmLaneExecutions),
-        IsCurrentlyExecutedLane = CurrLaneIndex == AtmLaneIndex,
-        IsNotLastLane = AtmLaneIndex < AtmLanesNum,
-
-        case EndedStatus == ?FINISHED_STATUS andalso IsCurrentlyExecutedLane andalso IsNotLastLane of
+    Diff = fun(AtmWorkflowExecution = #atm_workflow_execution{curr_lane_index = CurrLaneIndex}) ->
+        case CurrLaneIndex == AtmLaneIndex of
             true ->
-                NextAtmLaneIndex = AtmLaneIndex + 1,
-
-                {ok, AtmWorkflowExecution#atm_workflow_execution{
-                    lanes = schedule_lane_run(NextAtmLaneIndex, CurrRunNo, NewAtmLaneExecutions),
-                    curr_lane_index = NextAtmLaneIndex
-                }};
+                end_currently_executed_lane_run(AtmWorkflowExecution);
             false ->
-                {ok, AtmWorkflowExecution#atm_workflow_execution{lanes = NewAtmLaneExecutions}}
+                update_runs_at_lane(
+                    AtmLaneIndex,
+                    fun mark_lane_run_prepared_in_advance_as_interrupted/1,
+                    AtmWorkflowExecution
+                )
         end
     end,
 
@@ -246,6 +236,16 @@ mark_current_run_as_aborting(
 
 
 %% @private
+-spec mark_lane_run_prepared_in_advance_as_interrupted([atm_lane_execution:run()]) ->
+    {ok, [atm_lane_execution:run()]}.
+mark_lane_run_prepared_in_advance_as_interrupted([
+    #atm_lane_execution_run{run_no = undefined} = CurrRun
+    | RestRuns
+]) ->
+    {ok, [CurrRun#atm_lane_execution_run{status = ?INTERRUPTED_STATUS} | RestRuns]}.
+
+
+%% @private
 -spec handle_task_status_change_in_current_run(
     pos_integer(),
     atm_task_execution:id(),
@@ -281,6 +281,38 @@ handle_task_status_change_in_current_run(
             {ok, [UpdatedRun | RestRuns]};
         {error, _} = Error ->
             Error
+    end.
+
+
+%% @private
+-spec end_currently_executed_lane_run(atm_workflow_execution:record()) ->
+    {ok, atm_workflow_execution:record()}.
+end_currently_executed_lane_run(AtmWorkflowExecution = #atm_workflow_execution{
+    lanes = AtmLaneExecutions,
+    lanes_num = AtmLanesNum,
+    curr_lane_index = CurrAtmLaneIndex,
+    curr_run_no = CurrRunNo
+}) ->
+    NextAtmLaneIndex = CurrAtmLaneIndex + 1,
+    IsNotLastLane = CurrAtmLaneIndex < AtmLanesNum,
+    {EndedStatus, NewAtmLaneExecutions} = end_lane_run(CurrAtmLaneIndex, AtmLaneExecutions),
+
+    case {EndedStatus, IsNotLastLane} of
+        {?FINISHED_STATUS, true} ->
+            {ok, AtmWorkflowExecution#atm_workflow_execution{
+                lanes = schedule_lane_run(NextAtmLaneIndex, CurrRunNo, NewAtmLaneExecutions),
+                curr_lane_index = NextAtmLaneIndex
+            }};
+        {_, true} ->
+            % current lane execution run hasn't ended successfully meaning entire workflow
+            % execution will abort - interrupt next lane run preparation if any
+            {ok, AtmWorkflowExecution#atm_workflow_execution{
+                lanes = interrupt_lane_run_prepared_in_advance(
+                    NextAtmLaneIndex, CurrRunNo, NewAtmLaneExecutions
+                )
+            }};
+        {_, false} ->
+            {ok, AtmWorkflowExecution#atm_workflow_execution{lanes = NewAtmLaneExecutions}}
     end.
 
 
@@ -329,6 +361,10 @@ schedule_lane_run(AtmLaneIndex, CurrRunNo, AtmLaneExecutions) ->
     AtmLaneExecution = lists:nth(AtmLaneIndex, AtmLaneExecutions),
 
     NewRuns = case AtmLaneExecution#atm_lane_execution.runs of
+        [#atm_lane_execution_run{run_no = undefined, status = ?INTERRUPTED_STATUS} = Run | RestRuns] ->
+            % interrupted lane preparing in advance - change to ?FAILED_STATUS as it will
+            % become the point of workflow execution failure at which it can be rerun
+            [Run#atm_lane_execution_run{run_no = CurrRunNo, status = ?FAILED_STATUS} | RestRuns];
         [#atm_lane_execution_run{run_no = undefined} = Run | RestRuns] ->
             % lane preparing in advance
             [Run#atm_lane_execution_run{run_no = CurrRunNo} | RestRuns];
@@ -338,3 +374,25 @@ schedule_lane_run(AtmLaneIndex, CurrRunNo, AtmLaneExecutions) ->
     NewAtmLaneExecution = AtmLaneExecution#atm_lane_execution{runs = NewRuns},
 
     lists_utils:replace_at(NewAtmLaneExecution, AtmLaneIndex, AtmLaneExecutions).
+
+
+%% @private
+-spec interrupt_lane_run_prepared_in_advance(
+    pos_integer(),
+    pos_integer(),
+    [atm_lane_execution:record()]
+) ->
+    [atm_lane_execution:record()].
+interrupt_lane_run_prepared_in_advance(AtmLaneIndex, CurrRunNo, AtmLaneExecutions) ->
+    AtmLaneExecution = lists:nth(AtmLaneIndex, AtmLaneExecutions),
+
+    case AtmLaneExecution#atm_lane_execution.runs of
+        [#atm_lane_execution_run{run_no = undefined} = Run | RestRuns] ->
+            NewAtmLaneExecution = AtmLaneExecution#atm_lane_execution{runs = [
+                Run#atm_lane_execution_run{run_no = CurrRunNo, status = ?INTERRUPTED_STATUS}
+                | RestRuns
+            ]},
+            lists_utils:replace_at(NewAtmLaneExecution, AtmLaneIndex, AtmLaneExecutions);
+        _ ->
+            AtmLaneExecutions
+    end.

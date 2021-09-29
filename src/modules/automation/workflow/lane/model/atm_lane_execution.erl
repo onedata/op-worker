@@ -26,7 +26,7 @@
 -type status() ::
     ?SCHEDULED_STATUS | ?PREPARING_STATUS | ?ENQUEUED_STATUS |
     ?ACTIVE_STATUS | ?ABORTING_STATUS |
-    ?FINISHED_STATUS | ?SKIPPED_STATUS | ?CANCELLED_STATUS | ?FAILED_STATUS.
+    ?FINISHED_STATUS | ?CANCELLED_STATUS | ?FAILED_STATUS | ?INTERRUPTED_STATUS.
 
 -type run_elements() :: #atm_lane_execution_run_elements{}.
 -type run() :: #atm_lane_execution_run{}.
@@ -96,6 +96,7 @@ upgrade_encoded_record(1, #{
 }) ->
     UpgradedStatusBin = case binary_to_atom(StatusBin, utf8) of
         ?PENDING_STATUS -> atom_to_binary(?SCHEDULED_STATUS, utf8);
+        ?SKIPPED_STATUS -> atom_to_binary(?FINISHED_STATUS, utf8);
         _ -> StatusBin
     end,
 
