@@ -213,7 +213,7 @@ handle_task_execution_ended(AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv, At
     atm_workflow_execution_env:record(),
     pos_integer()
 ) ->
-    finish_execution | {continue, pos_integer(), pos_integer()}.
+    workflow_handler:lane_ended_callback_result().
 handle_lane_execution_ended(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmLaneIndex) ->
     AtmWorkflowExecutionCtx = atm_workflow_execution_ctx:acquire(undefined, AtmWorkflowExecutionEnv),
 

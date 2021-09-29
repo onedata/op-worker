@@ -65,7 +65,7 @@
 -record(atm_lane_execution_run, {
     run_no :: undefined | pos_integer(),
     status :: atm_lane_execution:status(),
-    % Flag used to differentiate reasons why workflow is aborting
+    % Flag used to differentiate reasons why lane execution run is aborting
     aborting_reason = undefined :: undefined | cancel | failure,
 
     iterated_store_id = undefined :: undefined | atm_store:id(),

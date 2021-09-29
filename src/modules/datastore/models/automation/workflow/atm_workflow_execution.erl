@@ -190,7 +190,7 @@ get_record_struct(4) ->
         {system_audit_log_id, string},
 
         {lanes, [{custom, string, {persistent_record, encode, decode, atm_lane_execution}}]},
-        {lanes_num, integer},
+        {lanes_num, integer},        %% new field
 
         {curr_lane_index, integer},  %% new field
         {curr_run_no, integer},      %% new field
@@ -314,13 +314,6 @@ upgrade_record(3, {?MODULE,
     StartTime,
     FinishTime
 }) ->
-    CurrLaneIndex = lists_utils:foldl_while(fun(#atm_lane_execution{runs = [Run]}, PrevLaneIndex) ->
-        case atm_lane_execution_status:status_to_phase(Run#atm_lane_execution_run.status) of
-            ?ENDED_PHASE -> {cont, PrevLaneIndex + 1};
-            _ -> {halt, PrevLaneIndex + 1}
-        end
-    end, 0, Lanes),
-
     {4, #atm_workflow_execution{
         user_id = UserId,
         space_id = SpaceId,
@@ -336,7 +329,7 @@ upgrade_record(3, {?MODULE,
         lanes = Lanes,
         lanes_num = length(Lanes),
 
-        curr_lane_index = CurrLaneIndex,
+        curr_lane_index = 1,
         curr_run_no = 1,
 
         status = case lists:member(Status, [?PREPARING_STATUS, ?ENQUEUED_STATUS]) of

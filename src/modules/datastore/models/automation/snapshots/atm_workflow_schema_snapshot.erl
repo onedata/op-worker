@@ -39,18 +39,15 @@
 
 -spec create(atm_workflow_execution:id(), od_atm_workflow_schema:doc()) ->
     {ok, id()} | {error, term()}.
-create(AtmWorkflowExecutionId, #document{
-    key = AtmWorkflowSchemaId,
-    value = #od_atm_workflow_schema{
-        name = AtmWorkflowSchemaName,
-        description = AtmWorkflowSchemaDescription,
-        stores = AtmStoreSchemas,
-        lanes = AtmLaneSchemas,
-        state = AtmWorkflowSchemaState,
-        atm_inventory = AtmInventoryId,
-        atm_lambdas = AtmLambdaIds
-    }
-}) ->
+create(AtmWorkflowExecutionId, #document{key = AtmWorkflowSchemaId, value = #od_atm_workflow_schema{
+    name = AtmWorkflowSchemaName,
+    description = AtmWorkflowSchemaDescription,
+    stores = AtmStoreSchemas,
+    lanes = AtmLaneSchemas,
+    state = AtmWorkflowSchemaState,
+    atm_inventory = AtmInventoryId,
+    atm_lambdas = AtmLambdaIds
+}}) ->
     %% TODO VFS-7685 add ref count and gen snapshot id based on doc revision
     ?extract_key(datastore_model:create(?CTX, #document{
         key = AtmWorkflowExecutionId,

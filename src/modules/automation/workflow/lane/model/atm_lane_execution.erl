@@ -59,7 +59,7 @@ run_to_json(#atm_lane_execution_run{
     parallel_boxes = AtmParallelBoxExecutions
 }) ->
     #{
-%%        <<"runNo">> => utils:undefined_to_null(RunNo),  %% TODO uncomment
+%%        <<"runNo">> => utils:undefined_to_null(RunNo),  %% TODO uncomment when gui allows null
         <<"runNo">> => utils:ensure_defined(RunNo, undefined, 100),
         <<"iteratedStoreId">> => IteratedStoreId,
         <<"exceptionStoreId">> => ExceptionStoreId,

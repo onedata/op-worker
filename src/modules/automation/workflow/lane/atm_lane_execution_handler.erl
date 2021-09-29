@@ -13,6 +13,7 @@
 -author("Bartosz Walkowicz").
 
 -include("modules/automation/atm_execution.hrl").
+-include("workflow_engine.hrl").
 
 %% API
 -export([
@@ -59,7 +60,7 @@ prepare(AtmLaneIndex, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
     atm_workflow_execution:id(),
     atm_workflow_execution_ctx:record()
 ) ->
-    finish_execution | {continue, pos_integer(), pos_integer()} | no_return().
+    workflow_handler:lane_ended_callback_result() | no_return().
 handle_ended(AtmLaneIndex, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
     teardown_lane(AtmLaneIndex, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx),
 
@@ -74,13 +75,13 @@ handle_ended(AtmLaneIndex, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
     #atm_lane_execution{runs = [Run |_]} = lists:nth(NextLaneIndex, AtmLaneExecutions),
     case atm_lane_execution_status:status_to_phase(Run#atm_lane_execution_run.status) of
         ?ENDED_PHASE ->
-            finish_execution;
+            ?FINISH_EXECUTION;
         _ ->
             LaneToPrepareInAdvanceIndex = case NextLaneIndex < LanesNum of
                 true -> NextLaneIndex + 1;
                 false -> undefined
             end,
-            {continue, NextLaneIndex, LaneToPrepareInAdvanceIndex}
+            ?CONTINUE(NextLaneIndex, LaneToPrepareInAdvanceIndex)
     end.
 
 
