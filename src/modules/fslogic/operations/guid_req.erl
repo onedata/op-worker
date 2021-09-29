@@ -15,9 +15,11 @@
 -include("modules/fslogic/data_access_control.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
+-include_lib("ctool/include/errors.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
--export([resolve_guid/2, get_parent/2, get_file_path/2]).
+-export([resolve_guid/2, resolve_guid_by_relative_path/6, get_parent/2, get_file_path/2]).
 
 
 %%%===================================================================
@@ -36,6 +38,29 @@ resolve_guid(UserCtx, FileCtx0) ->
         UserCtx, FileCtx0, [?TRAVERSE_ANCESTORS], allow_ancestors
     ),
     resolve_guid_insecure(UserCtx, FileCtx1).
+
+
+resolve_guid_by_relative_path(UserCtx, _RelRootGuid, Path, CreateDirs, Mode, RelRootCtx0)->
+    PathTokens = binary:split(Path, <<"/">>, [global]),
+    LeafFileCtx = lists:foldl(fun(PathToken, ParentCtx) ->
+        try
+            {ParentPath, _} = file_ctx:get_canonical_path(ParentCtx),
+            ChildDirPath = <<ParentPath/binary, "/", PathToken/binary>>,
+            Res = file_ctx:new_by_canonical_path(UserCtx, ChildDirPath),
+            Res
+        catch
+            _Error ->
+                case CreateDirs of
+                    true ->
+                        #fuse_response{fuse_response = #dir{guid = CreatedDirGuid}
+                        } = dir_req:mkdir(UserCtx, ParentCtx, PathToken, Mode),
+                        CreatedDirCtx = file_ctx:new_by_guid(CreatedDirGuid),
+                        CreatedDirCtx;
+                    false -> throw(?ERROR_NOT_FOUND)
+                end
+        end
+    end, RelRootCtx0, PathTokens),
+    resolve_guid_insecure(UserCtx, LeafFileCtx).
 
 
 %%--------------------------------------------------------------------

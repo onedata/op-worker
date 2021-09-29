@@ -271,7 +271,7 @@ resolve_bindings(_SessionId, ?OBJECTID_BINDING(Key), Req) ->
     SpaceIdOrObjectId = kv_utils:get([bindings, Key], Req),
     try
         middleware_utils:decode_object_id(SpaceIdOrObjectId, Key)
-    catch throw:?ERROR_BAD_VALUE_IDENTIFIER(Key) = Error ->
+    catch throw:?ERROR_BAD_VALUE_IDENTIFIER(Key) ->
         {ok, SupportedSpaceIds} = provider_logic:get_spaces(),
         case lists:member(SpaceIdOrObjectId, SupportedSpaceIds) of
             true -> fslogic_uuid:spaceid_to_space_dir_guid(SpaceIdOrObjectId);

@@ -215,6 +215,13 @@
     path :: file_meta:path()
 }).
 
+-record(resolve_guid_by_relative_path, {
+    relative_root :: fslogic_worker:file_guid(),
+    path :: file_meta:path(),
+    create_dirs :: boolean(),
+    mode :: file_meta:mode()
+}).
+
 -record(get_helper_params, {
     storage_id :: storage:id(),
     space_id :: od_space:id(),
@@ -238,7 +245,7 @@
 }).
 
 -type fuse_request_type() ::
-    #resolve_guid{} | #resolve_guid_by_canonical_path{} |
+    #resolve_guid{} | #resolve_guid_by_canonical_path{} | #resolve_guid_by_relative_path{} |
     #get_helper_params{} | #create_storage_test_file{} |
     #verify_storage_test_file{} | #file_request{} | #get_fs_stats{}.
 

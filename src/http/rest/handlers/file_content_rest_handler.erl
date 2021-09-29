@@ -138,6 +138,7 @@ sanitize_params(#op_req{
     auth = #auth{session_id = SessionId},
     gri = #gri{aspect = file_on_path, id = GriId}
 } = OpReq, Req) ->
+    CreateDirs = maps:get(<<"create_dirs">>, RawParams, false),
     Mode = maps:get(<<"mode">>, RawParams, undefined),
     PathInfo = maps:get(path_info, Req),
     ParentGuid = create_dirs_on_path(SessionId, GriId, PathInfo, Mode),
@@ -183,28 +184,20 @@ sanitize_params(#op_req{
         gri = #gri{aspect = file_on_path, id = ParentGuid}
     };
 
+
 sanitize_params(#op_req{
-    operation = get,
-    data = RawParams,
-    gri = #gri{aspect = file_on_path}
-} = OpReq, _Req) ->
-    OpReq#op_req{data = middleware_sanitizer:sanitize_data(RawParams, #{
-        optional => #{<<"follow_symlinks">> => {boolean, any}}
-    })};
-sanitize_params(#op_req{
-    operation = delete,
+    operation = Operation,
     data = RawParams,
     auth = #auth{session_id = SessionId},
     gri = #gri{aspect = file_on_path, id = GriId}
-} = OpReq, Req) ->
-    PathInfo = maps:get(path_info, Req),
-    FileGuid = get_file_guid_from_path(SessionId, GriId, PathInfo),
-    RawParams2 = maps:put(<<"name">>, lists:last(PathInfo), RawParams),
-    OpReq#op_req{
-        data = middleware_sanitizer:sanitize_data(RawParams2, #{
-            optional => #{<<"follow_symlinks">> => {boolean, any}}
-        }#{<<"name">> => lists:last(PathInfo)}),
-        gri = #gri{aspect = content, id = FileGuid}
+} = OpReq, Req) when Operation == delete orelse Operation == get  ->
+    PathItems = maps:get(path_info, Req),
+    Path = str_utils:join_as_binaries(PathItems, <<"/">>),
+    {ok, FileGuid} = lfm:resolve_guid_by_relative_path(SessionId, GriId, Path, false, undefined),
+    OpReq#op_req{data = middleware_sanitizer:sanitize_data(RawParams, #{
+        optional => #{<<"follow_symlinks">> => {boolean, any}}
+    }),
+        gri = #gri{aspect = file_on_path, id = FileGuid}
     }.
 
 
@@ -224,9 +217,9 @@ ensure_has_access_to_file(#op_req{auth = Auth, gri = #gri{id = Guid}}) ->
 process_request(#op_req{
     operation = get,
     auth = #auth{session_id = SessionId},
-    gri = #gri{id = FileGuid, aspect = content},
+    gri = #gri{id = FileGuid, aspect = Aspect},
     data = Data
-}, Req) ->
+}, Req) when Aspect == content orelse Aspect == file_on_path->
     FollowSymlinks = maps:get(<<"follow_symlinks">>, Data, true),
     case ?check(lfm:stat(SessionId, ?FILE_REF(FileGuid, FollowSymlinks))) of
         {ok, #file_attr{type = ?REGULAR_FILE_TYPE} = FileAttrs} ->
@@ -244,36 +237,11 @@ process_request(#op_req{
 
 
 process_request(#op_req{
-    operation = get,
-    auth = #auth{session_id = SessionId},
-    gri = #gri{aspect = file_on_path, id = GriId},
-    data = Data
-}, Req) ->
-    PathInfo = maps:get(path_info, Req),
-    FileGuid = get_file_guid_from_path(SessionId, GriId, PathInfo),
-    Data2 = maps:put(<<"name">>, lists:last(PathInfo), Data),
-    FollowSymlinks = maps:get(<<"follow_symlinks">>, Data2, true),
-    case ?check(lfm:stat(SessionId, ?FILE_REF(FileGuid, FollowSymlinks))) of
-        {ok, #file_attr{type = ?REGULAR_FILE_TYPE} = FileAttrs} ->
-            file_download_utils:download_single_file(SessionId, FileAttrs, Req);
-        {ok, #file_attr{type = ?SYMLINK_TYPE} = FileAttrs} ->
-            file_download_utils:download_single_file(SessionId, FileAttrs, Req);
-        {ok, #file_attr{}} ->
-            case page_file_download:gen_file_download_url(SessionId, [FileGuid], FollowSymlinks) of
-                {ok, Url} ->
-                    cowboy_req:reply(?HTTP_302_FOUND, #{?HDR_LOCATION => Url}, Req);
-                {error, _} = Error ->
-                    http_req:send_error(Error, Req)
-            end
-    end;
-
-process_request(#op_req{
     operation = delete,
     auth = #auth{session_id = SessionId},
-    gri = #gri{id = FileGuid, aspect = content}
+    gri = #gri{id = FileGuid, aspect = file_on_path}
 }, _Req) ->
-    {ok, FilePath} = lfm:get_file_path(SessionId, FileGuid),
-    lfm:rm_recursive(SessionId, {path, FilePath});
+    lfm:rm_recursive(SessionId, ?FILE_REF(FileGuid));
 
 process_request(#op_req{
     operation = create,

@@ -23,7 +23,7 @@
 -export([
     unlink/3, rm_recursive/2,
     mv/4, cp/4,
-    get_parent/2, get_file_path/2, get_file_guid/2,
+    get_parent/2, get_file_path/2, get_file_guid/2, resolve_guid_by_relative_path/5,
     schedule_file_transfer/5, schedule_view_transfer/7,
     is_dir/2
 ]).
@@ -152,6 +152,21 @@ get_file_guid(SessId, FilePath) ->
     remote_utils:call_fslogic(
         SessId, fuse_request,
         #resolve_guid{path = FilePath},
+        fun(#guid{guid = Guid}) -> {ok, Guid} end
+    ).
+
+
+-spec resolve_guid_by_relative_path(session:id(), file_id:file_guid(), boolean(), file_meta:mode(), file_meta:path()) ->
+    {ok, file_id:file_guid()}.
+resolve_guid_by_relative_path(SessId, RelativeRootGuid, CreateDirs, Mode,  FilePath) ->
+    remote_utils:call_fslogic(
+        SessId, fuse_request,
+        #resolve_guid_by_relative_path{
+            relative_root = RelativeRootGuid,
+            path = FilePath,
+            create_dirs = CreateDirs,
+            mode = Mode
+        },
         fun(#guid{guid = Guid}) -> {ok, Guid} end
     ).
 
