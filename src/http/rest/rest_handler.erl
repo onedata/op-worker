@@ -267,16 +267,16 @@ resolve_gri_bindings(SessionId, #b_gri{type = Tp, id = Id, aspect = As, scope = 
     cowboy_req:req()) -> binary() | {atom(), binary()}.
 resolve_bindings(_SessionId, ?BINDING(Key), Req) ->
     cowboy_req:binding(Key, Req);
-resolve_bindings(SessionId, ?OBJECTID_BINDING(Key), Req) ->
-    {ok,SpaceIds} = provider_logic:get_spaces(),
-    Id = kv_utils:get([bindings, Key], Req),
-    case lists:member(Id, SpaceIds) of
-        true ->
-            {ok, SpaceName} = space_logic:get_name(SessionId, Id),
-            {ok, Guid} = lfm:get_file_guid(SessionId, <<"/", SpaceName/binary>>),
-            Guid;
-        false ->
-            middleware_utils:decode_object_id(cowboy_req:binding(Key, Req), Key)
+resolve_bindings(_SessionId, ?OBJECTID_BINDING(Key), Req) ->
+    SpaceIdOrObjectId = kv_utils:get([bindings, Key], Req),
+    try
+        middleware_utils:decode_object_id(SpaceIdOrObjectId, Key)
+    catch throw:?ERROR_BAD_VALUE_IDENTIFIER(Key) = Error ->
+        {ok, SupportedSpaceIds} = provider_logic:get_spaces(),
+        case lists:member(SpaceIdOrObjectId, SupportedSpaceIds) of
+            true -> fslogic_uuid:spaceid_to_space_dir_guid(SpaceIdOrObjectId);
+            false -> throw(?ERROR_SPACE_NOT_SUPPORTED(SpaceIdOrObjectId))
+        end
     end;
 resolve_bindings(SessionId, ?PATH_BINDING, Req) ->
     Path = filename:join([<<"/">> | cowboy_req:path_info(Req)]),
