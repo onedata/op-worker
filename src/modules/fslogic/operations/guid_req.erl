@@ -46,10 +46,9 @@ resolve_guid_by_relative_path(UserCtx, _RelRootGuid, Path, CreateDirs, Mode, Rel
         try
             {ParentPath, _} = file_ctx:get_canonical_path(ParentCtx),
             ChildDirPath = <<ParentPath/binary, "/", PathToken/binary>>,
-            Res = file_ctx:new_by_canonical_path(UserCtx, ChildDirPath),
-            Res
+            file_ctx:new_by_canonical_path(UserCtx, ChildDirPath)
         catch
-            _Error ->
+            _:_ ->
                 case CreateDirs of
                     true ->
                         #fuse_response{fuse_response = #dir{guid = CreatedDirGuid}

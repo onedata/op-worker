@@ -138,10 +138,12 @@ sanitize_params(#op_req{
     auth = #auth{session_id = SessionId},
     gri = #gri{aspect = file_on_path, id = GriId}
 } = OpReq, Req) ->
-    CreateDirs = maps:get(<<"create_dirs">>, RawParams, false),
-    Mode = maps:get(<<"mode">>, RawParams, undefined),
+    CreateDirs = maps:get(<<"create_dirs">>, RawParams, true),
+    FileMode = maps:get(<<"mode">>, RawParams, 100),
     PathInfo = maps:get(path_info, Req),
-    ParentGuid = create_dirs_on_path(SessionId, GriId, PathInfo, Mode),
+    Path = str_utils:join_as_binaries(lists:droplast(PathInfo), <<"/">>),
+
+    {ok, ParentGuid} = lfm:resolve_guid_by_relative_path(SessionId, GriId, Path, CreateDirs, FileMode),
 
     AlwaysRequiredParams = #{
         <<"name">> => {binary, non_empty}
