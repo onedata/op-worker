@@ -42,14 +42,10 @@
 
 
 -spec to_json(record()) -> json_utils:json_map().
-to_json(#atm_lane_execution{schema_id = AtmLaneSchemaId, runs = AllRuns}) ->
-    VisibleRuns = lists:dropwhile(fun(#atm_lane_execution_run{run_no = RunNo}) ->
-        RunNo == undefined
-    end, AllRuns),
-
+to_json(#atm_lane_execution{schema_id = AtmLaneSchemaId, runs = Runs}) ->
     #{
         <<"schemaId">> => AtmLaneSchemaId,
-        <<"runs">> => lists:map(fun run_to_json/1, VisibleRuns)
+        <<"runs">> => lists:map(fun run_to_json/1, Runs)
     }.
 
 
@@ -63,7 +59,8 @@ run_to_json(#atm_lane_execution_run{
     parallel_boxes = AtmParallelBoxExecutions
 }) ->
     #{
-        <<"runNo">> => RunNo,
+%%        <<"runNo">> => utils:undefined_to_null(RunNo),  %% TODO uncomment
+        <<"runNo">> => utils:ensure_defined(RunNo, undefined, 100),
         <<"iteratedStoreId">> => IteratedStoreId,
         <<"exceptionStoreId">> => ExceptionStoreId,
         <<"status">> => atom_to_binary(Status, utf8),
