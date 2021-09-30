@@ -105,7 +105,7 @@ all() -> [
     {group, parallel_tests}
 ].
 
--define(ATTEMPTS, 60).
+-define(ATTEMPTS, 180).
 
 -define(SPACE, space_krk_par_p).
 -define(USER1, user1).
