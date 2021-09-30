@@ -845,7 +845,7 @@ upload_file(Worker, ?USER(UserId) = Auth, PartsNumber, PartSize, ChunksNumber, F
     ),
     ?assertMatch(
         true,
-        rpc:call(Worker, file_upload_manager, is_upload_registered, [UserId, FileGuid])
+        rpc:call(Worker, file_upload_manager, authorize_chunk_upload, [UserId, FileGuid])
     ),
 
     do_multipart(Worker, Auth, PartsNumber, PartSize, ChunksNumber, FileGuid),
@@ -858,7 +858,7 @@ upload_file(Worker, ?USER(UserId) = Auth, PartsNumber, PartSize, ChunksNumber, F
     ),
     ?assertMatch(
         false,
-        rpc:call(Worker, file_upload_manager, is_upload_registered, [UserId, FileGuid]), ?ATTEMPTS
+        rpc:call(Worker, file_upload_manager, authorize_chunk_upload, [UserId, FileGuid]), ?ATTEMPTS
     ).
 
 do_multipart(Worker, ?USER(_UserId) = Auth, PartsNumber, PartSize, ChunksNumber, FileGuid) ->

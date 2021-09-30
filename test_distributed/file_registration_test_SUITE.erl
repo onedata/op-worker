@@ -103,13 +103,13 @@ all() -> ?ALL(?TEST_CASES).
 -define(ENCODED_RDF1, ?ENCODED_RDF(?RDF1)).
 -define(ENCODED_RDF2, ?ENCODED_RDF(?RDF2)).
 
--define(ATTEMPTS, 15).
+-define(ATTEMPTS, 30).
 
 -define(assertInLs(Worker, SessId, FilePath, Attempts), (
     fun(__Worker, __SessId, __FilePath, __Attempts) ->
         ?assertMatch(true, try
             __DirPath = filename:dirname(__FilePath),
-            {ok, __Children} = lfm_proxy:get_children(Worker, SessId, {path, __DirPath}, 0, 1000),
+            {ok, __Children} = lfm_proxy:get_children(Worker, SessId, {path, __DirPath}, 0, 10000),
             __ChildrenNames = [_N || {_G, _N} <- __Children],
             lists:member(filename:basename(__FilePath), __ChildrenNames)
         catch
@@ -603,14 +603,16 @@ register_many_files_test(Config) ->
         end),
         LogicalFilePath
     end, DestinationPaths),
-
+    
+    ?assertEqual({message_queue_len, LogicalFilesCount}, process_info(TestMaster, message_queue_len), ?ATTEMPTS),
+    
     verification_loop(LogicalFilePaths, fun(LogicalFilePath) ->
         % check whether file has been properly registered
-        ?assertFile(W1, SessId, LogicalFilePath, ?TEST_DATA, ?XATTRS, ?JSON1, ?RDF1, 60),
+        ?assertFile(W1, SessId, LogicalFilePath, ?TEST_DATA, ?XATTRS, ?JSON1, ?RDF1),
 
         % check whether file is visible on 2nd provider
         ?assertFile(W2, SessId2, LogicalFilePath, ?TEST_DATA, ?XATTRS, ?JSON1, ?RDF1, ?ATTEMPTS)
-    end, timer:minutes(5)).
+    end, timer:seconds(60)).
 
 register_many_nested_files_test(Config) ->
     [W1, W2 | _] = ?config(op_worker_nodes, Config),
@@ -659,13 +661,15 @@ register_many_nested_files_test(Config) ->
         LogicalFilePath
     end, DestinationPaths),
 
+    ?assertEqual({message_queue_len, LogicalFilesCount}, process_info(TestMaster, message_queue_len), ?ATTEMPTS),
+    
     verification_loop(LogicalFilePaths, fun(LogicalFilePath) ->
         % check whether file has been properly registered
         ?assertFile(W1, SessId, LogicalFilePath, ?TEST_DATA, ?XATTRS, ?JSON1, ?RDF1),
 
         % check whether file is visible on 2nd provider
         ?assertFile(W2, SessId2, LogicalFilePath, ?TEST_DATA, ?XATTRS, ?JSON1, ?RDF1, ?ATTEMPTS)
-    end, timer:minutes(5)).
+    end, timer:seconds(60)).
 
 
 %===================================================================
@@ -694,7 +698,7 @@ end_per_suite(Config) ->
     ssl:stop().
 
 init_per_testcase(_Case, Config) ->
-    ct:timetrap({minutes, 10}),
+    ct:timetrap({minutes, 5}),
     lfm_proxy:init(Config).
 
 end_per_testcase(_Case, Config) ->
