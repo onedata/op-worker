@@ -397,7 +397,6 @@ setup_storage([], Config) ->
     Config;
 setup_storage([Worker | Rest], Config) ->
     TmpDir = generator:gen_storage_dir(),
-    %% @todo: use shared storage
     "" = rpc:call(Worker, os, cmd, ["mkdir -p " ++ TmpDir ++ " -m 777"]),
     UserCtx = #{<<"uid">> => <<"0">>, <<"gid">> => <<"0">>},
     Args = #{
@@ -482,7 +481,7 @@ mock_test_file_context(Config, UuidPrefix) ->
     test_utils:mock_new(Workers, file_ctx),
     test_utils:mock_expect(Workers, file_ctx, is_root_dir_const,
         fun(FileCtx) ->
-            Uuid = file_ctx:get_uuid_const(FileCtx),
+            Uuid = file_ctx:get_logical_uuid_const(FileCtx),
             case str_utils:binary_starts_with(Uuid, UuidPrefix) of
                 true -> false;
                 false -> meck:passthrough([FileCtx])
@@ -490,7 +489,7 @@ mock_test_file_context(Config, UuidPrefix) ->
         end),
     test_utils:mock_expect(Workers, file_ctx, file_exists_const,
         fun(FileCtx) ->
-            Uuid = file_ctx:get_uuid_const(FileCtx),
+            Uuid = file_ctx:get_logical_uuid_const(FileCtx),
             case str_utils:binary_starts_with(Uuid, UuidPrefix) of
                 true -> true;
                 false -> meck:passthrough([FileCtx])
@@ -630,7 +629,7 @@ mock_provider_id(Workers, ProviderId, AccessToken, IdentityToken) ->
 
     % Mock cached auth and identity tokens with large TTL
     ExpirationTime = global_clock:timestamp_seconds() + 999999999,
-    {RpcAns, []} = rpc:multicall(Workers, datastore_model, save, [#{model => provider_auth}, #document{
+    {RpcAns, []} = utils:rpc_multicall(Workers, datastore_model, save, [#{model => provider_auth}, #document{
         key = <<"provider_auth">>,
         value = #provider_auth{
             provider_id = ProviderId,
@@ -651,7 +650,7 @@ mock_provider_id(Workers, ProviderId, AccessToken, IdentityToken) ->
 %%--------------------------------------------------------------------
 -spec unmock_provider_ids(proplists:proplist()) -> ok.
 unmock_provider_ids(Workers) ->
-    {RpcAns, []} = rpc:multicall(Workers, provider_auth, delete, []),
+    {RpcAns, []} = utils:rpc_multicall(Workers, provider_auth, delete, []),
     [] = lists:filter(fun
         (ok) -> false;
         (_) -> true
@@ -661,7 +660,7 @@ unmock_provider_ids(Workers) ->
 -spec testmaster_mock_space_user_privileges([node()], od_space:id(), od_user:id(),
     [privileges:space_privilege()]) -> ok.
 testmaster_mock_space_user_privileges(Workers, SpaceId, UserId, Privileges) ->
-    rpc:multicall(Workers, node_cache, put, [{privileges, {SpaceId, UserId}}, Privileges]),
+    utils:rpc_multicall(Workers, node_cache, put, [{privileges, {SpaceId, UserId}}, Privileges]),
     ok.
 
 -spec node_get_mocked_space_user_privileges(od_space:id(), od_user:id()) -> [privileges:space_privilege()].
@@ -746,9 +745,9 @@ create_test_users_and_spaces(AllWorkers, ConfigPath, Config, NoHistory) ->
     try
         set_default_onezone_domain(Config),
         create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config, NoHistory)
-    catch Type:Message ->
+    catch Type:Message:Stacktrace ->
         ct:print("initializer:create_test_users_and_spaces crashed: ~p:~p~n~p", [
-            Type, Message, erlang:get_stacktrace()
+            Type, Message, Stacktrace
         ]),
         throw(cannot_create_test_users_and_spaces)
     end.
@@ -900,7 +899,8 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config, NoHistory) -
     provider_logic_mock_setup(Config, AllWorkers, DomainMappings, SpacesSetup, SpacesSupports, CustomStorages, StoragesSetupMap),
 
     lists:foreach(fun(DomainWorker) ->
-        rpc:call(DomainWorker, fslogic_worker, init_paths_caches, [all])
+        rpc:call(DomainWorker, fslogic_worker, init_paths_caches, [all]),
+        rpc:call(DomainWorker, fslogic_worker, init_dataset_eff_caches, [all])
     end, get_different_domain_workers(Config)),
 
     cluster_logic_mock_setup(AllWorkers),
@@ -918,14 +918,16 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config, NoHistory) -
         Val ->
             Val
     end,
-    {_, []} = rpc:multicall(AllWorkers, application, set_env, [?APP_NAME, session_validity_check_interval_seconds, 24 * 60 * 60]),
-    {_, []} = rpc:multicall(AllWorkers, application, set_env, [?APP_NAME, fuse_session_grace_period_seconds, FuseSessionTTL]),
+    {_, []} = utils:rpc_multicall(AllWorkers, application, set_env, [?APP_NAME, session_validity_check_interval_seconds, 24 * 60 * 60]),
+    {_, []} = utils:rpc_multicall(AllWorkers, application, set_env, [?APP_NAME, fuse_session_grace_period_seconds, FuseSessionTTL]),
 
     lists:foreach(fun(Worker) ->
         test_utils:set_env(Worker, ?APP_NAME, dbsync_changes_broadcast_interval, timer:seconds(1)),
         test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, couchbase_changes_stream_update_interval, timer:seconds(1))
     end, AllWorkers),
-    rpc:multicall(AllWorkers, dbsync_worker, start_streams, []),
+    utils:rpc_multicall(AllWorkers, dbsync_worker, start_streams, []),
+    
+    utils:rpc_multicall(AllWorkers, qos_traverse, init_pool, []),
 
     lists:foreach(
         fun({_, #user_config{id = UserId, spaces = UserSpaces}}) ->
@@ -1258,6 +1260,11 @@ space_logic_mock_setup(Workers, Spaces, Users, SpacesToStorages, SpacesHarvester
         lists_utils:is_subset(Privileges, UserPrivileges)
     end),
 
+    test_utils:mock_expect(Workers, space_logic, get_eff_privileges, fun(SpaceId, UserId) ->
+        {ok, #document{value = #od_space{eff_users = EffUsers}}} = GetSpaceFun(none, SpaceId),
+        {ok, maps:get(UserId, EffUsers, [])}
+    end),
+
     test_utils:mock_expect(Workers, space_logic, is_supported, fun(?ROOT_SESS_ID, SpaceId, ProviderId) ->
         {ok, #document{value = #od_space{providers = Providers}}} = GetSpaceFun(?ROOT_SESS_ID, SpaceId),
         maps:is_key(ProviderId, Providers)
@@ -1519,6 +1526,8 @@ provider_logic_mock_setup(_Config, AllWorkers, DomainMappings, SpacesSetup,
 
     test_utils:mock_expect(AllWorkers, provider_logic, verify_provider_identity, fun(_) -> ok end),
 
+    test_utils:mock_expect(AllWorkers, provider_logic, get_service_configuration, fun(_) -> {ok, #{}} end),
+
     test_utils:mock_expect(AllWorkers, token_logic, verify_provider_identity_token, VerifyProviderIdentityFun).
 
 %%--------------------------------------------------------------------
@@ -1684,7 +1693,7 @@ set_luma_feed(StoragesSetupMap, Config) ->
                 Feed ->
                     Feed2 = binary_to_atom(Feed, utf8),
                     LumaConfig = luma_config:new(Feed2),
-                    {_, []} = rpc:multicall(Workers, storage_config, set_luma_config, [StorageId, LumaConfig])
+                    {_, []} = utils:rpc_multicall(Workers, storage_config, set_luma_config, [StorageId, LumaConfig])
             end
         end, undefined, ProviderStorageConfig)
     end, undefined, StoragesSetupMap).
@@ -1867,7 +1876,7 @@ index_of(Value, List) ->
 -spec init_qos_bounded_cache(list()) -> ok.
 init_qos_bounded_cache(Config) ->
     DifferentProvidersWorkers = get_different_domain_workers(Config),
-    {Results, BadNodes} = rpc:multicall(
+    {Results, BadNodes} = utils:rpc_multicall(
         DifferentProvidersWorkers, qos_bounded_cache, ensure_exists_for_all_spaces, []
     ),
     ?assertMatch([], BadNodes),

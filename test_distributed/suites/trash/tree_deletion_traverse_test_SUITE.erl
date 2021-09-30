@@ -13,6 +13,7 @@
 -author("Jakub Kudzia").
 
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include("modules/storage/traverse/storage_traverse.hrl").
 -include("modules/storage/helpers/helpers.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
@@ -83,11 +84,15 @@ backward_time_warp_test(Config) ->
     delete_files_structure_test_base(Config, [{10, 10}, {10, 10}, {10, 10}], TimeWarp, success).
 
 forward_time_warp_smaller_than_7_days_test(Config) ->
-    TimeWarp = 3600 * 24 * 6, % 6 days
+    [OZNode | _] = oct_background:get_zone_nodes(),
+    {ok, MaxTemporaryTokenTTl} = test_utils:get_env(OZNode, oz_worker, max_temporary_token_ttl),
+    TimeWarp = MaxTemporaryTokenTTl div 2,
     delete_files_structure_test_base(Config, [{10, 10}, {10, 10}, {10, 10}], TimeWarp, success).
 
 forward_time_warp_greater_than_7_days_test(Config) ->
-    TimeWarp = 3600 * 24 * 8, % 8 days
+    [OZNode | _] = oct_background:get_zone_nodes(),
+    {ok, MaxTemporaryTokenTTl} = test_utils:get_env(OZNode, oz_worker, max_temporary_token_ttl),
+    TimeWarp = MaxTemporaryTokenTTl + 1,
     delete_files_structure_test_base(Config, [{10, 10}, {10, 10}, {10, 10}], TimeWarp, failure).
 
 %%%===================================================================
@@ -120,15 +125,15 @@ delete_files_structure_test_base(Config, FilesStructure, TimeWarpSecs, ExpectedR
     case ExpectedResult of
         success ->
             % all files should have been deleted
-            ?assertMatch({ok, []}, lfm_proxy:get_children(P1Node, ?ROOT_SESS_ID, {guid, ?SPACE_GUID}, 0, 10000)),
+            ?assertMatch({ok, []}, lfm_proxy:get_children(P1Node, ?ROOT_SESS_ID, ?FILE_REF(?SPACE_GUID), 0, 10000)),
             lists:foreach(fun(Guid) ->
-                ?assertEqual({error, ?ENOENT}, lfm_proxy:stat(P1Node, ?ROOT_SESS_ID, {guid, Guid}))
+                ?assertEqual({error, ?ENOENT}, lfm_proxy:stat(P1Node, ?ROOT_SESS_ID, ?FILE_REF(Guid)))
             end, [RootGuid | DirGuids] ++ FileGuids);
         failure ->
             % failure was expected so there should be files which weren't deleted
             AllFilesNum = length([RootGuid | DirGuids] ++ FileGuids),
             DeletedFilesNum = lists:foldl(fun(Guid, Acc) ->
-                case lfm_proxy:stat(P1Node, ?ROOT_SESS_ID, {guid, Guid}) of
+                case lfm_proxy:stat(P1Node, ?ROOT_SESS_ID, ?FILE_REF(Guid)) of
                     {ok, _} -> Acc;
                     {error, ?ENOENT} -> Acc + 1
                 end
@@ -141,13 +146,10 @@ delete_files_structure_test_base(Config, FilesStructure, TimeWarpSecs, ExpectedR
 %===================================================================
 
 init_per_suite(Config) ->
-    ssl:start(),
-    hackney:start(),
     oct_background:init_per_suite(Config, #onenv_test_config{onenv_scenario = "2op-manual-import"}).
 
 end_per_suite(_Config) ->
-    hackney:stop(),
-    ssl:stop().
+    oct_background:end_per_suite().
 
 init_per_testcase(_Case, Config) ->
     % update background config to update sessions

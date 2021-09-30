@@ -12,13 +12,13 @@
 -module(file_req).
 -author("Tomasz Lichon").
 
--include("modules/auth/acl.hrl").
+-include("modules/fslogic/data_access_control.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([create_file/5, storage_file_created/2, make_file/4,
+-export([create_file/5, storage_file_created/2, make_file/4, make_link/4, make_symlink/4,
     get_file_location/2, open_file/3, open_file/4, open_file_insecure/4,
     open_file_with_extended_info/3, storage_file_created_insecure/2,
     fsync/4, release/3, flush_event_queue/2]).
@@ -53,7 +53,7 @@ create_file(UserCtx, ParentFileCtx0, Name, Mode, Flag) ->
     file_ctx:assert_not_trash_dir_const(ParentFileCtx0, Name),
     ParentFileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, ParentFileCtx0,
-        [traverse_ancestors, ?traverse_container, ?add_object]
+        [?TRAVERSE_ANCESTORS, ?OPERATIONS(?traverse_container_mask, ?add_object_mask)]
     ),
     create_file_insecure(UserCtx, ParentFileCtx1, Name, Mode, Flag).
 
@@ -67,7 +67,7 @@ create_file(UserCtx, ParentFileCtx0, Name, Mode, Flag) ->
 storage_file_created(UserCtx, FileCtx0) ->
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
-        [traverse_ancestors, ?traverse_container, ?add_object]
+        [?TRAVERSE_ANCESTORS, ?OPERATIONS(?traverse_container_mask, ?add_object_mask)]
     ),
     storage_file_created_insecure(UserCtx, FileCtx1).
 
@@ -83,9 +83,46 @@ make_file(UserCtx, ParentFileCtx0, Name, Mode) ->
     file_ctx:assert_not_trash_dir_const(ParentFileCtx0, Name),
     ParentFileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, ParentFileCtx0,
-        [traverse_ancestors, ?traverse_container, ?add_object]
+        [?TRAVERSE_ANCESTORS, ?OPERATIONS(?traverse_container_mask, ?add_object_mask)]
     ),
     make_file_insecure(UserCtx, ParentFileCtx1, Name, Mode).
+
+
+%%--------------------------------------------------------------------
+%% @equiv make_link_insecure/4 with permission checks
+%% @end
+%% TODO VFS-7459 Test permissions for hardlinks and symlinks in suites/permissions/permissions_test_base
+%%--------------------------------------------------------------------
+-spec make_link(user_ctx:ctx(), file_ctx:ctx(), file_ctx:ctx(), file_meta:name()) ->
+    fslogic_worker:fuse_response().
+make_link(UserCtx, TargetFileCtx0, TargetParentFileCtx0, Name) ->
+    % TODO VFS-7064 this assert won't be needed after adding link from space to trash directory
+    file_ctx:assert_not_trash_dir_const(TargetFileCtx0, Name),
+    % TODO VFS-7439 - Investigate eaccess error when creating hardlink to hardlink if next line is deletred
+    % Check permissions on original target
+    TargetFileCtx1 = file_ctx:ensure_based_on_referenced_guid(TargetFileCtx0),
+
+    TargetFileCtx2 = fslogic_authz:ensure_authorized(
+        UserCtx, TargetFileCtx1,
+        [?TRAVERSE_ANCESTORS]
+    ),
+    TargetParentFileCtx1 = fslogic_authz:ensure_authorized(
+        UserCtx, TargetParentFileCtx0,
+        [?TRAVERSE_ANCESTORS, ?OPERATIONS(?traverse_container_mask, ?add_object_mask)]
+    ),
+    make_link_insecure(UserCtx, TargetFileCtx2, TargetParentFileCtx1, Name).
+
+
+-spec make_symlink(user_ctx:ctx(), file_ctx:ctx(), file_meta:name(), file_meta_symlinks:symlink()) ->
+    fslogic_worker:fuse_response().
+make_symlink(UserCtx, ParentFileCtx0, Name, Link) ->
+    % TODO VFS-7064 this assert won't be needed after adding link from space to trash directory
+    file_ctx:assert_not_trash_dir_const(ParentFileCtx0, Name),
+    ParentFileCtx1 = fslogic_authz:ensure_authorized(
+        UserCtx, ParentFileCtx0,
+        [?TRAVERSE_ANCESTORS, ?OPERATIONS(?traverse_container_mask, ?add_object_mask)]
+    ),
+    make_symlink_insecure(UserCtx, ParentFileCtx1, Name, Link).
 
 
 %%--------------------------------------------------------------------
@@ -97,7 +134,7 @@ make_file(UserCtx, ParentFileCtx0, Name, Mode) ->
 get_file_location(UserCtx, FileCtx0) ->
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
-        [traverse_ancestors]
+        [?TRAVERSE_ANCESTORS]
     ),
     get_file_location_insecure(UserCtx, FileCtx1).
 
@@ -152,7 +189,7 @@ open_file_with_extended_info(UserCtx, FileCtx, rdwr) ->
 fsync(UserCtx, FileCtx0, DataOnly, HandleId) ->
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
-        [traverse_ancestors]
+        [?TRAVERSE_ANCESTORS]
     ),
     fsync_insecure(UserCtx, FileCtx1, DataOnly, HandleId).
 
@@ -233,11 +270,10 @@ create_file_insecure(UserCtx, ParentFileCtx, Name, Mode, _Flag) ->
             }
         }
     catch
-        Error:Reason ->
-            ?error_stacktrace("create_file_insecure error: ~p:~p",
-                [Error, Reason]),
+        Error:Reason:Stacktrace ->
+            ?error_stacktrace("create_file_insecure error: ~p:~p", [Error, Reason], Stacktrace),
             sd_utils:unlink(FileCtx, UserCtx),
-            FileUuid = file_ctx:get_uuid_const(FileCtx),
+            FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
             fslogic_location_cache:delete_local_location(FileUuid),
             file_meta:delete(FileUuid),
             times:delete(FileUuid),
@@ -264,7 +300,7 @@ storage_file_created_insecure(_UserCtx, FileCtx) ->
 
     case StorageFileCreated of
         false ->
-            FileUuid = file_ctx:get_uuid_const(FileCtx),
+            FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
             UpdateAns = fslogic_location_cache:update_location(FileUuid, FileLocationId, fun
                 (#file_location{storage_file_created = true}) ->
                     {error, already_created};
@@ -317,11 +353,92 @@ make_file_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
         Ans#fuse_response{fuse_response = FileAttr2}
     catch
         Error:Reason ->
-            FileUuid = file_ctx:get_uuid_const(FileCtx),
+            FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
             fslogic_location_cache:delete_local_location(FileUuid),
             file_meta:delete(FileUuid),
             times:delete(FileUuid),
             erlang:Error(Reason)
+    end.
+
+
+%% @private
+-spec make_link_insecure(user_ctx:ctx(), file_ctx:ctx(), file_ctx:ctx(), file_meta:name()) ->
+    fslogic_worker:fuse_response().
+make_link_insecure(UserCtx, TargetFileCtx, TargetParentFileCtx, Name) ->
+    % TODO VFS-7445 - handle race with file deletion (maybe check deletion flag in update_reference_counter
+    % and allow decrementation only if file is marked as deleted)
+    TargetParentFileCtx2 = file_ctx:assert_not_readonly_storage(TargetParentFileCtx),
+    case file_ctx:is_dir(TargetParentFileCtx2) of
+        {true, TargetParentFileCtx3} ->
+            case file_ctx:is_dir(TargetFileCtx) of
+                {true, _} -> throw(?EISDIR);
+                {false, _} -> ok
+            end,
+
+            FileUuid = file_ctx:get_logical_uuid_const(TargetFileCtx),
+            ParentUuid = file_ctx:get_logical_uuid_const(TargetParentFileCtx3),
+            SpaceId = file_ctx:get_space_id_const(TargetParentFileCtx3),
+            Doc = file_meta_hardlinks:new_doc(FileUuid, Name, ParentUuid, SpaceId),
+            {ok, #document{key = LinkUuid}} = file_meta:create({uuid, ParentUuid}, Doc),
+
+            try
+                {ok, _} = file_meta_hardlinks:register(FileUuid, LinkUuid), % TODO VFS-7445 - revert after error
+                FileCtx = file_ctx:new_by_uuid(LinkUuid, SpaceId),
+                fslogic_times:update_mtime_ctime(TargetParentFileCtx3),
+                #fuse_response{fuse_response = FileAttr} = Ans = attr_req:get_file_attr_insecure(UserCtx, FileCtx, #{
+                    allow_deleted_files => false,
+                    include_size => true,
+                    include_replication_status => true,
+                    name_conflicts_resolution_policy => allow_name_conflicts
+                }),
+                ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, FileAttr, [user_ctx:get_session_id(UserCtx)]),
+                ok = qos_hooks:invalidate_cache_and_reconcile(FileCtx),
+                Ans#fuse_response{fuse_response = FileAttr}
+            catch
+                Error:Reason ->
+                    % TODO VFS-7441 - test if ?EMLINK is returned to caller process
+                    file_meta:delete(LinkUuid),
+                    erlang:Error(Reason)
+            end;
+        {false, _} ->
+            throw(?ENOTDIR)
+    end.
+
+
+%% @private
+-spec make_symlink_insecure(user_ctx:ctx(), file_ctx:ctx(), file_meta:name(), file_meta_symlinks:symlink()) ->
+    fslogic_worker:fuse_response().
+make_symlink_insecure(UserCtx, ParentFileCtx, Name, Link) ->
+    % TODO VFS-7445 - handle race with file deletion
+    ParentFileCtx2 = file_ctx:assert_not_readonly_storage(ParentFileCtx),
+    case file_ctx:is_dir(ParentFileCtx2) of
+        {true, ParentFileCtx3} ->
+            ParentUuid = file_ctx:get_logical_uuid_const(ParentFileCtx3),
+            SpaceId = file_ctx:get_space_id_const(ParentFileCtx3),
+            Owner = user_ctx:get_user_id(UserCtx),
+            Doc = file_meta_symlinks:new_doc(Name, ParentUuid, SpaceId, Owner, Link),
+            {ok, #document{key = SymlinkUuid}} = file_meta:create({uuid, ParentUuid}, Doc),
+
+            try
+                ok = times:save_with_current_times(SymlinkUuid, SpaceId),
+                fslogic_times:update_mtime_ctime(ParentFileCtx3),
+
+                FileCtx = file_ctx:new_by_uuid(SymlinkUuid, SpaceId),
+                #fuse_response{fuse_response = FileAttr} = Ans = attr_req:get_file_attr_insecure(UserCtx, FileCtx, #{
+                    allow_deleted_files => false,
+                    include_size => true,
+                    include_replication_status => true,
+                    name_conflicts_resolution_policy => allow_name_conflicts
+                }),
+                ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, FileAttr, [user_ctx:get_session_id(UserCtx)]),
+                Ans#fuse_response{fuse_response = FileAttr}
+            catch
+                Error:Reason ->
+                    file_meta:delete(SymlinkUuid),
+                    erlang:Error(Reason)
+            end;
+        {false, _} ->
+            throw(?ENOTDIR)
     end.
 
 
@@ -341,7 +458,7 @@ get_file_location_insecure(UserCtx, FileCtx) ->
             blocks = Blocks,
             file_id = FileId
     }}, FileCtx4} = file_ctx:get_or_create_local_file_location_doc(FileCtx3),
-    FileUuid = file_ctx:get_uuid_const(FileCtx4),
+    FileUuid = file_ctx:get_logical_uuid_const(FileCtx4),
     SpaceId = file_ctx:get_space_id_const(FileCtx4),
 
     #fuse_response{
@@ -452,14 +569,14 @@ open_file_internal(UserCtx, FileCtx0, Flag, HandleId0, NewFile, CheckLocationExi
         throw:?EROFS ->
             % this error is thrown on attempt to open file for writing on a readonly storage
             throw(?EROFS);
-        throw:?ENOENT ->
+        throw:?ENOENT:Stacktrace ->
             % this error is thrown on race between opening the file and deleting it on storage
-            ?debug_stacktrace("Open file error: ENOENT for uuid ~p", [file_ctx:get_uuid_const(FileCtx2)]),
+            ?debug_stacktrace("Open file error: ENOENT for uuid ~p", [file_ctx:get_logical_uuid_const(FileCtx2)], Stacktrace),
             check_and_register_release(FileCtx2, SessId, HandleId0),
             throw(?ENOENT);
-        Error:Reason ->
+        Error:Reason:Stacktrace2 ->
             ?error_stacktrace("Open file error: ~p:~p for uuid ~p",
-                [Error, Reason, file_ctx:get_uuid_const(FileCtx2)]),
+                [Error, Reason, file_ctx:get_logical_uuid_const(FileCtx2)], Stacktrace2),
             check_and_register_release(FileCtx2, SessId, HandleId0),
             throw(Reason)
     end.
@@ -476,7 +593,7 @@ open_file_internal(UserCtx, FileCtx0, Flag, HandleId0, NewFile, CheckLocationExi
 maybe_open_on_storage(_UserCtx, _FileCtx, _SessId, _Flag, true, _) ->
     ok; % Files are not open on server-side when client uses directIO
 maybe_open_on_storage(UserCtx, FileCtx, SessId, Flag, _DirectIO, HandleId) ->
-    Node = read_write_req:get_proxyio_node(file_ctx:get_uuid_const(FileCtx)),
+    Node = read_write_req:get_proxyio_node(file_ctx:get_logical_uuid_const(FileCtx)),
     case rpc:call(Node, ?MODULE, open_on_storage, [UserCtx, FileCtx, SessId, Flag, HandleId]) of
         ok -> ok;
         {error, Reason} ->
@@ -593,16 +710,13 @@ create_file_doc(UserCtx, ParentFileCtx, Name, Mode)  ->
     case file_ctx:is_dir(ParentFileCtx) of
         {true, ParentFileCtx2} ->
             Owner = user_ctx:get_user_id(UserCtx),
-            ParentUuid = file_ctx:get_uuid_const(ParentFileCtx2),
+            ParentUuid = file_ctx:get_logical_uuid_const(ParentFileCtx2),
             SpaceId = file_ctx:get_space_id_const(ParentFileCtx2),
             File = file_meta:new_doc(Name, ?REGULAR_FILE_TYPE, Mode, Owner, ParentUuid, SpaceId),
-            {ok, #document{key = FileUuid}} = file_meta:create({uuid, ParentUuid}, File), %todo pass file_ctx
-            CTime = global_clock:timestamp_seconds(),
-            {ok, _} = times:save(#document{key = FileUuid, value = #times{
-                mtime = CTime, atime = CTime, ctime = CTime
-            }, scope = SpaceId}),
+            {ok, #document{key = FileUuid}} = file_meta:create({uuid, ParentUuid}, File),
+            ok = times:save_with_current_times(FileUuid, SpaceId),
 
-            {file_ctx:new_by_guid(file_id:pack_guid(FileUuid, SpaceId)), ParentFileCtx2};
+            {file_ctx:new_by_uuid(FileUuid, SpaceId), ParentFileCtx2};
         {false, _} ->
             throw(?ENOTDIR)
     end.
@@ -618,7 +732,7 @@ create_file_doc(UserCtx, ParentFileCtx, Name, Mode)  ->
 open_file_for_read(UserCtx, FileCtx0, HandleId) ->
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
-        [traverse_ancestors, ?read_object]
+        [?TRAVERSE_ANCESTORS, ?OPERATIONS(?read_object_mask)]
     ),
     open_file_insecure(UserCtx, FileCtx1, read, HandleId).
 
@@ -633,7 +747,7 @@ open_file_for_read(UserCtx, FileCtx0, HandleId) ->
 open_file_for_write(UserCtx, FileCtx0, HandleId) ->
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
-        [traverse_ancestors, ?write_object]
+        [?TRAVERSE_ANCESTORS, ?OPERATIONS(?write_object_mask)]
     ),
     open_file_insecure(UserCtx, FileCtx1, write, HandleId).
 
@@ -648,7 +762,7 @@ open_file_for_write(UserCtx, FileCtx0, HandleId) ->
 open_file_for_rdwr(UserCtx, FileCtx0, HandleId) ->
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
-        [traverse_ancestors, ?read_object, ?write_object]
+        [?TRAVERSE_ANCESTORS, ?OPERATIONS(?read_object_mask, ?write_object_mask)]
     ),
     open_file_insecure(UserCtx, FileCtx1, rdwr, HandleId).
 
@@ -663,7 +777,7 @@ open_file_for_rdwr(UserCtx, FileCtx0, HandleId) ->
 open_file_with_extended_info_for_read(UserCtx, FileCtx0) ->
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
-        [traverse_ancestors, ?read_object]
+        [?TRAVERSE_ANCESTORS, ?OPERATIONS(?read_object_mask)]
     ),
     open_file_with_extended_info_insecure(UserCtx, FileCtx1, read).
 
@@ -678,7 +792,7 @@ open_file_with_extended_info_for_read(UserCtx, FileCtx0) ->
 open_file_with_extended_info_for_write(UserCtx, FileCtx0) ->
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
-        [traverse_ancestors, ?write_object]
+        [?TRAVERSE_ANCESTORS, ?OPERATIONS(?write_object_mask)]
     ),
     open_file_with_extended_info_insecure(UserCtx, FileCtx1, write).
 
@@ -693,7 +807,7 @@ open_file_with_extended_info_for_write(UserCtx, FileCtx0) ->
 open_file_with_extended_info_for_rdwr(UserCtx, FileCtx0) ->
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
-        [traverse_ancestors, ?read_object, ?write_object]
+        [?TRAVERSE_ANCESTORS, ?OPERATIONS(?read_object_mask, ?write_object_mask)]
     ),
     open_file_with_extended_info_insecure(UserCtx, FileCtx1, rdwr).
 
@@ -708,7 +822,7 @@ open_file_with_extended_info_for_rdwr(UserCtx, FileCtx0) ->
     boolean(), binary()) -> #fuse_response{}.
 fsync_insecure(UserCtx, FileCtx, _DataOnly, undefined) ->
     Ans = flush_event_queue(UserCtx, FileCtx),
-    case fslogic_location_cache:force_flush(file_ctx:get_uuid_const(FileCtx)) of
+    case fslogic_location_cache:force_flush(file_ctx:get_logical_uuid_const(FileCtx)) of
         ok ->
             Ans;
         _ ->
@@ -731,7 +845,7 @@ fsync_insecure(UserCtx, FileCtx, DataOnly, HandleId) ->
     end,
 
     Ans = flush_event_queue(UserCtx, FileCtx),
-    case fslogic_location_cache:force_flush(file_ctx:get_uuid_const(FileCtx)) of
+    case fslogic_location_cache:force_flush(file_ctx:get_logical_uuid_const(FileCtx)) of
         ok ->
             Ans;
         _ ->
@@ -750,7 +864,7 @@ fsync_insecure(UserCtx, FileCtx, DataOnly, HandleId) ->
 -spec flush_event_queue(user_ctx:ctx(), file_ctx:ctx()) -> #fuse_response{}.
 flush_event_queue(UserCtx, FileCtx) ->
     SessId = user_ctx:get_session_id(UserCtx),
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
     case lfm_event_controller:flush_event_queue(SessId, oneprovider:get_id(),
         FileUuid) of
         ok ->

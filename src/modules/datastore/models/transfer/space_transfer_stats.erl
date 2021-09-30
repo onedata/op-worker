@@ -81,7 +81,7 @@ key(ProviderId, TransferType, SpaceId) ->
 %% Returns space transfers stats for specified transfer stats id.
 %% @end
 %%-------------------------------------------------------------------
--spec get(TransferStatsId :: binary()) -> doc() | {error, term()}.
+-spec get(TransferStatsId :: binary()) -> {ok, doc()} | {error, term()}.
 get(TransferStatsId) ->
     datastore_model:get(?CTX, TransferStatsId).
 
@@ -93,7 +93,7 @@ get(TransferStatsId) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec get(TransferType :: binary(), SpaceId :: od_space:id()) ->
-    doc() | {error, term()}.
+    {ok, doc()} | {error, term()}.
 get(TransferType, SpaceId) ->
     ?MODULE:get(key(TransferType, SpaceId)).
 
@@ -104,7 +104,7 @@ get(TransferType, SpaceId) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec get(od_provider:id(), TransferType :: binary(), od_space:id()) ->
-    doc() | {error, term()}.
+    {ok, doc()} | {error, term()}.
 get(ProviderId, TransferType, SpaceId) ->
     ?MODULE:get(key(ProviderId, TransferType, SpaceId)).
 

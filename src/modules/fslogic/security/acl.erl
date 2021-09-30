@@ -12,7 +12,7 @@
 -module(acl).
 -author("Bartosz Walkowicz").
 
--include("modules/auth/acl.hrl").
+-include("modules/fslogic/data_access_control.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/errors.hrl").
@@ -24,7 +24,7 @@
 
 %% API
 -export([
-    assert_permitted/4,
+    check_acl/5,
     add_names/1, strip_names/1,
 
     from_json/2, to_json/2,
@@ -37,25 +37,43 @@
 %%%===================================================================
 
 
--spec assert_permitted(acl(), od_user:doc(), ace:bitmask(), file_ctx:ctx()) ->
-    {ok, file_ctx:ctx()} | no_return().
-assert_permitted(_Acl, _User, ?no_flags_mask, FileCtx) ->
-    {ok, FileCtx};
-assert_permitted([], _User, _Operations, _FileCtx) ->
-    throw(?EACCES);
-assert_permitted([Ace | Rest], User, Operations, FileCtx) ->
+-spec check_acl(
+    acl(),
+    od_user:doc(),
+    file_ctx:ctx(),
+    data_access_control:bitmask(),
+    data_access_control:user_access_check_progress()
+) ->
+    {allowed | denied, file_ctx:ctx(), data_access_control:user_access_check_progress()}.
+check_acl(_Acl, _User, FileCtx, ?no_flags_mask, UserAccessCheckProgress) ->
+    {allowed, FileCtx, UserAccessCheckProgress};
+
+check_acl([], _User, FileCtx, _Operations, #user_access_check_progress{
+    finished_step = ?ACL_CHECK(AceNo),
+    allowed = AllowedOps
+} = UserAccessCheckProgress) ->
+    {denied, FileCtx, UserAccessCheckProgress#user_access_check_progress{
+        finished_step = ?ACL_CHECK(AceNo + 1),
+        % After reaching then end of ACL all not explicitly allowed ops are denied
+        denied = ?complement_flags(AllowedOps)
+    }};
+
+check_acl([Ace | Rest], User, FileCtx, Operations, #user_access_check_progress{
+    finished_step = ?ACL_CHECK(AceNo)
+} = UserAccessCheckProgress) ->
     case ace:is_applicable(User, FileCtx, Ace) of
         {true, FileCtx2} ->
-            case ace:check_against(Operations, Ace) of
-                allowed ->
-                    {ok, FileCtx2};
-                {inconclusive, LeftoverOperations} ->
-                    assert_permitted(Rest, User, LeftoverOperations, FileCtx2);
-                denied ->
-                    throw(?EACCES)
+            case ace:check_against(Operations, Ace, UserAccessCheckProgress) of
+                {{inconclusive, LeftoverOperations}, NewUserAccessCheckProgress} ->
+                    check_acl(Rest, User, FileCtx2, LeftoverOperations, NewUserAccessCheckProgress);
+                {AllowedOrDenied, NewUserAccessCheckProgress} ->
+                    {AllowedOrDenied, FileCtx2, NewUserAccessCheckProgress}
             end;
         {false, FileCtx2} ->
-            assert_permitted(Rest, User, Operations, FileCtx2)
+            NewUserAccessCheckProgress = UserAccessCheckProgress#user_access_check_progress{
+                finished_step = ?ACL_CHECK(AceNo + 1)
+            },
+            check_acl(Rest, User, FileCtx2, Operations, NewUserAccessCheckProgress)
     end.
 
 
@@ -69,7 +87,7 @@ assert_permitted([Ace | Rest], User, Operations, FileCtx) ->
 add_names(Acl) ->
     lists:map(
         fun(#access_control_entity{identifier = Id, aceflags = Flags} = Ace) ->
-            Name = case ?has_flag(Flags, ?identifier_group_mask) of
+            Name = case ?has_all_flags(Flags, ?identifier_group_mask) of
                 true -> group_id_to_ace_name(Id);
                 false -> user_id_to_ace_name(Id)
             end,
@@ -86,10 +104,10 @@ strip_names(Acl) ->
 from_json(JsonAcl, Format) ->
     try
         [ace:from_json(JsonAce, Format) || JsonAce <- JsonAcl]
-    catch Type:Reason ->
+    catch Type:Reason:Stacktrace ->
         ?debug_stacktrace("Failed to translate json(~p) to acl due to: ~p:~p", [
             Format, Type, Reason
-        ]),
+        ], Stacktrace),
         throw({error, ?EINVAL})
     end.
 
@@ -98,10 +116,10 @@ from_json(JsonAcl, Format) ->
 to_json(Acl, Format) ->
     try
         [ace:to_json(Ace, Format) || Ace <- Acl]
-    catch Type:Reason ->
+    catch Type:Reason:Stacktrace ->
         ?debug_stacktrace("Failed to convert acl to json(~p) due to: ~p:~p", [
             Format, Type, Reason
-        ]),
+        ], Stacktrace),
         throw({error, ?EINVAL})
     end.
 

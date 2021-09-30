@@ -142,8 +142,8 @@ create_storage_test_file(UserCtx, Guid, StorageId) ->
                     }
                 }
             catch
-                error:{badmatch, {error, Reason}} ->
-                    ?error_stacktrace("Detecting storage ~p failed due to ~p", [StorageId, Reason]),
+                error:{badmatch, {error, Reason}}:Stacktrace ->
+                    ?error_stacktrace("Detecting storage ~p failed due to ~p", [StorageId, Reason], Stacktrace),
                     #fuse_response{status = #status{code = Reason}}
             end;
         {error, Reason} ->

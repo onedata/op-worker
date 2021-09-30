@@ -146,13 +146,11 @@ is_authorized(Req, State) ->
             % The user presented some authentication, but he is not supported
             % by this Oneprovider. Still, if the request concerned a shared
             % file, the user should be treated as a guest and served.
-            try resolve_gri_bindings(?GUEST_SESS_ID, State#state.rest_req#rest_req.b_gri, Req) of
+            case (catch resolve_gri_bindings(?GUEST_SESS_ID, State#state.rest_req#rest_req.b_gri, Req)) of
                 #gri{scope = public} ->
                     {true, Req, State#state{auth = ?GUEST}};
                 _ ->
                     {stop, http_req:send_error(Error, Req), State}
-            catch _:_ ->
-                {stop, http_req:send_error(Error, Req), State}
             end;
         {error, _} = Error ->
             {stop, http_req:send_error(Error, Req), State}
@@ -224,10 +222,10 @@ process_request(Req, #state{auth = #auth{session_id = SessionId} = Auth, rest_re
     catch
         throw:Error ->
             {stop, http_req:send_error(Error, Req), State};
-        Type:Message ->
+        Type:Message:Stacktrace ->
             ?error_stacktrace("Unexpected error in ~p:~p - ~p:~p", [
                 ?MODULE, ?FUNCTION_NAME, Type, Message
-            ]),
+            ], Stacktrace),
             NewReq = cowboy_req:reply(?HTTP_500_INTERNAL_SERVER_ERROR, Req),
             {stop, NewReq, State}
     end.
@@ -251,7 +249,7 @@ resolve_gri_bindings(SessionId, #b_gri{type = Tp, id = Id, aspect = As, scope = 
         {Atom, Asp} -> {Atom, resolve_bindings(SessionId, Asp, Req)};
         Atom -> Atom
     end,
-    ScBinding = case middleware_utils:is_shared_file_request(Tp, AsBinding, IdBinding) of
+    ScBinding = case middleware_utils:is_shared_file_request(Tp, AsBinding, Sc, IdBinding) of
         true -> public;
         false -> Sc
     end,

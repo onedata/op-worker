@@ -21,7 +21,7 @@
 -export([
     resolve_file_path/2,
     switch_context_if_shared_file_request/1,
-    is_shared_file_request/3,
+    is_shared_file_request/4,
 
     is_eff_space_member/2,
     assert_space_supported_locally/1,
@@ -55,24 +55,27 @@ resolve_file_path(SessionId, Path) ->
 switch_context_if_shared_file_request(#op_req{gri = #gri{
     type = Type,
     id = Id,
-    aspect = Aspect
+    aspect = Aspect,
+    scope = Scope
 }} = OpReq) ->
-    case is_shared_file_request(Type, Aspect, Id) of
+    case is_shared_file_request(Type, Aspect, Scope, Id) of
         true -> OpReq#op_req{auth = ?GUEST};
         false -> OpReq
     end.
 
 
--spec is_shared_file_request(gri:entity_type(), gri:aspect(), gri:entity_id()) ->
+-spec is_shared_file_request(gri:entity_type(), gri:aspect(), gri:scope(), gri:entity_id()) ->
     boolean().
-is_shared_file_request(op_file, _, Id) when is_binary(Id) ->
+is_shared_file_request(op_file, download_url, Scope, _) ->
+    Scope == public;
+is_shared_file_request(op_file, _, _, Id) when is_binary(Id) ->
     file_id:is_share_guid(Id);
-is_shared_file_request(op_replica, As, Id) when
+is_shared_file_request(op_replica, As, _, Id) when
     As =:= instance;
     As =:= distribution
 ->
     file_id:is_share_guid(Id);
-is_shared_file_request(_, _, _) ->
+is_shared_file_request(_, _, _, _) ->
     false.
 
 
@@ -124,7 +127,7 @@ decode_object_id(ObjectId, Key) ->
 -spec assert_file_exists(aai:auth(), file_id:file_guid()) ->
     ok | no_return().
 assert_file_exists(#auth{session_id = SessionId}, FileGuid) ->
-    ?check(lfm:stat(SessionId, {guid, FileGuid})),
+    ?check(lfm:stat(SessionId, ?FILE_REF(FileGuid))),
     ok.
 
 

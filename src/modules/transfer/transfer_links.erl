@@ -40,7 +40,6 @@
 -define(CTX, (transfer:get_ctx())).
 
 -define(LINK_NAME_ID_PART_LENGTH, 6).
--define(EPOCH_INFINITY, 9999999999). % GMT: Saturday, 20 November 2286 17:46:39
 
 
 %%%===================================================================

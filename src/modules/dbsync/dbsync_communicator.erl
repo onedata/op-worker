@@ -206,7 +206,7 @@ get_next_broadcast_hops(SpaceId, Opts) ->
     ProviderIds = dbsync_utils:get_providers(SpaceId),
     ProviderIds2 = select_receiving_providers(ProviderIds, Opts),
 
-    MinSupport = application:get_env(?APP_NAME, multipath_broadcast_min_support, 8),
+    MinSupport = op_worker:get_env(multipath_broadcast_min_support, 8),
     Multipath = length(ProviderIds2) >= MinSupport,
 
     Pivot = case Multipath of

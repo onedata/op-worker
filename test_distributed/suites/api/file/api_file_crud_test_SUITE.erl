@@ -13,6 +13,7 @@
 -author("Bartosz Walkowicz").
 
 -include("api_file_test_utils.hrl").
+-include("modules/dataset/dataset.hrl").
 -include("modules/datastore/datastore_runner.hrl").
 -include("modules/fslogic/file_details.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
@@ -21,8 +22,9 @@
 -include_lib("ctool/include/http/codes.hrl").
 
 -export([
-    all/0,
+    groups/0, all/0,
     init_per_suite/1, end_per_suite/1,
+    init_per_group/2, end_per_group/2,
     init_per_testcase/2, end_per_testcase/2
 ]).
 
@@ -38,16 +40,27 @@
     delete_file_instance_on_provider_not_supporting_space_test/1
 ]).
 
+groups() -> [
+    {parallel, [parallel], [
+        get_file_instance_test,
+        get_file_instance_on_provider_not_supporting_space_test,
+
+        update_file_instance_test,
+        update_file_instance_on_provider_not_supporting_space_test,
+
+        delete_file_instance_test,
+        delete_file_instance_on_provider_not_supporting_space_test
+    ]},
+    {sequential, [sequential], [
+        % Cannot be executed in parallel with get_file_instance_test as
+        % both tests check space dir shares and expect different results
+        get_shared_file_instance_test
+    ]}
+].
+
 all() -> [
-    get_file_instance_test,
-    get_shared_file_instance_test,
-    get_file_instance_on_provider_not_supporting_space_test,
-
-    update_file_instance_test,
-    update_file_instance_on_provider_not_supporting_space_test,
-
-    delete_file_instance_test,
-    delete_file_instance_on_provider_not_supporting_space_test
+    {group, parallel},
+    {group, sequential}
 ].
 
 
@@ -279,9 +292,10 @@ get_space_dir_details(Node, SpaceDirGuid, SpaceName) ->
         file_attr = SpaceAttrs#file_attr{name = SpaceName},
         index_startid = file_id:guid_to_space_id(SpaceDirGuid),
         active_permissions_type = posix,
-        has_metadata = false,
-        has_direct_qos = false,
-        has_eff_qos = false
+        eff_protection_flags = ?no_flags_mask,
+        eff_qos_membership = ?NONE_QOS_MEMBERSHIP,
+        eff_dataset_membership = ?NONE_DATASET_MEMBERSHIP,
+        has_metadata = false
     }.
 
 
@@ -665,10 +679,18 @@ end_per_suite(_Config) ->
     oct_background:end_per_suite().
 
 
+init_per_group(_Group, Config) ->
+    lfm_proxy:init(Config, false).
+
+
+end_per_group(_Group, Config) ->
+    lfm_proxy:teardown(Config).
+
+
 init_per_testcase(_Case, Config) ->
     ct:timetrap({minutes, 10}),
-    lfm_proxy:init(Config).
+    Config.
 
 
-end_per_testcase(_Case, Config) ->
-    lfm_proxy:teardown(Config).
+end_per_testcase(_Case, _Config) ->
+    ok.

@@ -32,6 +32,8 @@
 -export([has_eff_space/2, has_eff_space/3]).
 -export([get_space_by_name/3]).
 -export([get_eff_handle_services/1]).
+-export([get_eff_atm_inventories/1, has_eff_atm_inventory/2, has_eff_atm_inventory/3]).
+-export([has_any_eff_atm_inventory/2, has_any_eff_atm_inventory/3]).
 
 %%%===================================================================
 %%% API
@@ -118,7 +120,7 @@ get_full_name(UserId) ->
 
 
 -spec get_full_name(gs_client_worker:client(), od_user:id(), gs_protocol:auth_hint()) ->
-    od_user:full_name() | errors:error().
+    {ok, od_user:full_name()} | errors:error().
 get_full_name(Client, UserId, AuthHint) ->
     case get_shared_data(Client, UserId, AuthHint) of
         {ok, #document{value = #od_user{full_name = FullName}}} ->
@@ -227,3 +229,43 @@ get_eff_handle_services(#od_user{eff_handle_services = HServices}) ->
     {ok, HServices};
 get_eff_handle_services(#document{value = User}) ->
     get_eff_handle_services(User).
+
+
+-spec get_eff_atm_inventories(od_user:doc() | od_user:record()) ->
+    {ok, [od_atm_inventory:id()]} | errors:error().
+get_eff_atm_inventories(#od_user{eff_atm_inventories = EffAtmInventories}) ->
+    {ok, EffAtmInventories};
+get_eff_atm_inventories(#document{value = User}) ->
+    get_eff_atm_inventories(User).
+
+
+-spec has_eff_atm_inventory(od_user:doc(), od_atm_inventory:id()) -> boolean().
+has_eff_atm_inventory(#document{value = #od_user{eff_atm_inventories = EffAtmInventories}}, AtmInventoryId) ->
+    lists:member(AtmInventoryId, EffAtmInventories).
+
+
+-spec has_eff_atm_inventory(gs_client_worker:client(), od_user:id(), od_atm_inventory:id()) ->
+    boolean().
+has_eff_atm_inventory(Client, UserId, AtmInventoryId) when is_binary(UserId) ->
+    case get(Client, UserId) of
+        {ok, UserDoc = #document{}} ->
+            has_eff_atm_inventory(UserDoc, AtmInventoryId);
+        {error, _} ->
+            false
+    end.
+
+
+-spec has_any_eff_atm_inventory(od_user:doc(), [od_atm_inventory:id()]) -> boolean().
+has_any_eff_atm_inventory(#document{value = #od_user{eff_atm_inventories = UserAtmInventories}}, TargetAtmInventories) ->
+    lists_utils:intersect(UserAtmInventories, TargetAtmInventories) /= [].
+
+
+-spec has_any_eff_atm_inventory(gs_client_worker:client(), od_user:id(), [od_atm_inventory:id()]) ->
+    boolean().
+has_any_eff_atm_inventory(Client, UserId, TargetAtmInventories) when is_binary(UserId) ->
+    case get(Client, UserId) of
+        {ok, UserDoc = #document{}} ->
+            has_any_eff_atm_inventory(UserDoc, TargetAtmInventories);
+        {error, _} ->
+            false
+    end.

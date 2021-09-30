@@ -16,12 +16,14 @@
 
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/storage/helpers/helpers.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include("transfers_test_mechanism.hrl").
 -include("rest_test_utils.hrl").
 -include("proto/common/credentials.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/privileges.hrl").
+-include_lib("ctool/include/http/headers.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 
@@ -103,25 +105,25 @@ run_test(Config, #transfer_test_spec{
         assert_expectations(Config3, Expected),
         Config3
     catch
-        throw:{test_timeout, Function} ->
+        throw:{test_timeout, Function}:Stacktrace ->
             ct:fail(
                 "Test timeout in function ~p:~p.~n~nStacktrace: ~s",
-                [?MODULE, Function, lager:pr_stacktrace(erlang:get_stacktrace())]
+                [?MODULE, Function, lager:pr_stacktrace(Stacktrace)]
             );
-        throw:{wrong_assertion_key, Key, List} ->
+        throw:{wrong_assertion_key, Key, List}:Stacktrace ->
             ct:fail(
                 "Assertion key: ~p not found in list of keys: ~p~n"
                 "Stacktrace: ~s",
-                [Key, List, lager:pr_stacktrace(erlang:get_stacktrace())]
+                [Key, List, lager:pr_stacktrace(Stacktrace)]
             );
         exit:Reason = {test_case_failed, _} ->
             erlang:exit(Reason);
-        Type:Message ->
+        Type:Message:Stacktrace ->
             ct:fail(
                 "Unexpected error in ~p:run_scenario - ~p:~p~nStacktrace: ~s",
                 [
                     ?MODULE, Type, Message,
-                    lager:pr_stacktrace(erlang:get_stacktrace())
+                    lager:pr_stacktrace(Stacktrace)
                 ]
             )
     end.
@@ -921,7 +923,7 @@ prereplicate_file(Node, SessionId, FileGuid, CounterRef, ExpectedSize, Attempts)
     execute_in_worker(fun() ->
         ?assertMatch(ExpectedSize, begin
             try
-                {ok, Handle} = lfm_proxy:open(Node, SessionId, {guid, FileGuid}, read),
+                {ok, Handle} = lfm_proxy:open(Node, SessionId, ?FILE_REF(FileGuid), read),
                 {ok, Data} = lfm_proxy:read(Node, Handle, 0, ExpectedSize),
                 lfm_proxy:close(Node, Handle),
                 byte_size(Data)
@@ -961,7 +963,7 @@ cast_file_distribution_assertion(Expected, Node, SessionId, FileGuid, CounterRef
 
 assert_file_visible(Node, SessId, FileGuid, CounterRef, Attempts) ->
     execute_in_worker(fun() ->
-        ?assertMatch({ok, _}, lfm_proxy:stat(Node, SessId, {guid, FileGuid}), Attempts),
+        ?assertMatch({ok, _}, lfm_proxy:stat(Node, SessId, ?FILE_REF(FileGuid)), Attempts),
         countdown_server:decrease(Node, CounterRef, FileGuid)
     end).
 
@@ -969,7 +971,7 @@ assert_file_distribution(Expected, Node, SessId, FileGuid, CounterRef, Attempts)
     Expected2 = lists:sort(Expected),
     execute_in_worker(fun() ->
         ?assertMatch(Expected2, begin
-            {ok, Distribution} = lfm_proxy:get_file_distribution(Node, SessId, {guid, FileGuid}),
+            {ok, Distribution} = lfm_proxy:get_file_distribution(Node, SessId, ?FILE_REF(FileGuid)),
             lists:sort(Distribution)
         end, Attempts),
         countdown_server:decrease(Node, CounterRef, FileGuid)
@@ -1040,10 +1042,10 @@ cast_file_creation(Node, SessionId, FilePath, Mode, Size, CounterRef, Truncate) 
 
 create_file(Node, SessionId, FilePath, Mode, Size, CounterRef, Truncate) ->
     {ok, Guid} = lfm_proxy:create(Node, SessionId, FilePath, Mode),
-    {ok, Handle} = lfm_proxy:open(Node, SessionId, {guid, Guid}, write),
+    {ok, Handle} = lfm_proxy:open(Node, SessionId, ?FILE_REF(Guid), write),
     case Truncate of
         true ->
-            ok = lfm_proxy:truncate(Node, SessionId, {guid, Guid}, Size);
+            ok = lfm_proxy:truncate(Node, SessionId, ?FILE_REF(Guid), Size);
         _ ->
             {ok, _} = lfm_proxy:write(Node, Handle, 0, crypto:strong_rand_bytes(Size))
     end,
@@ -1124,25 +1126,21 @@ schedule_file_replication(ScheduleNode, ProviderId, User, FileKey, Config, rest)
 schedule_file_replication_by_lfm(_ScheduleNode, _ProviderId, _User, _FileKey, _Config) ->
     erlang:error(not_implemented).
 
-schedule_file_replication_by_rest(Worker, ProviderId, User, {path, FilePath}, Config) ->
-    schedule_transfer_by_rest(
-        Worker,
-        ?config(?SPACE_ID_KEY, Config),
-        User,
-        [?SPACE_SCHEDULE_REPLICATION],
-        <<"replicas/", FilePath/binary, "?provider_id=", ProviderId/binary>>,
-        post,
-        Config
-    );
-schedule_file_replication_by_rest(Worker, ProviderId, User, {guid, FileGuid}, Config) ->
+schedule_file_replication_by_rest(Worker, ProviderId, User, ?FILE_REF(FileGuid), Config) ->
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
     schedule_transfer_by_rest(
         Worker,
         file_id:guid_to_space_id(FileGuid),
         User,
         [?SPACE_SCHEDULE_REPLICATION],
-        <<"replicas-id/", FileObjectId/binary, "?provider_id=", ProviderId/binary>>,
+        <<"transfers">>,
         post,
+        json_utils:encode(#{
+            <<"type">> => <<"replication">>,
+            <<"replicatingProviderId">> => ProviderId,
+            <<"dataSourceType">> => <<"file">>,
+            <<"fileId">> => FileObjectId
+        }),
         Config
     ).
 
@@ -1152,17 +1150,21 @@ schedule_replication_by_view(ScheduleNode, ProviderId, User, SpaceId, ViewName, 
     schedule_replication_by_view_via_rest(ScheduleNode, ProviderId, User, SpaceId, ViewName, QueryViewParams, Config).
 
 schedule_replication_by_view_via_rest(Worker, ProviderId, User, SpaceId, ViewName, QueryViewParams, Config) ->
-    QueryParamsBin = create_query_string(QueryViewParams),
     schedule_transfer_by_rest(
         Worker,
         SpaceId,
         User,
         [?SPACE_SCHEDULE_REPLICATION, ?SPACE_QUERY_VIEWS],
-        <<
-            "replicas-view/", ViewName/binary, "?provider_id=", ProviderId/binary,
-            "&space_id=", SpaceId/binary, QueryParamsBin/binary
-        >>,
+        <<"transfers">>,
         post,
+        json_utils:encode(#{
+            <<"type">> => <<"replication">>,
+            <<"replicatingProviderId">> => ProviderId,
+            <<"dataSourceType">> => <<"view">>,
+            <<"spaceId">> => SpaceId,
+            <<"viewName">> => ViewName,
+            <<"queryViewParams">> => query_view_params_to_map(QueryViewParams)
+        }),
         Config
     ).
 
@@ -1177,35 +1179,7 @@ schedule_replica_eviction(ScheduleNode, ProviderId, User, FileKey, Config, rest)
 schedule_replica_eviction_by_lfm(_ScheduleNode, _ProviderId, _User, _FileKey, _Config) ->
     erlang:error(not_implemented).
 
-schedule_replica_eviction_by_rest(Worker, ProviderId, User, {path, FilePath}, Config, MigrationProviderId) ->
-    case MigrationProviderId of
-        % eviction
-        undefined ->
-            schedule_transfer_by_rest(
-                Worker,
-                ?config(?SPACE_ID_KEY, Config),
-                User,
-                [?SPACE_SCHEDULE_EVICTION],
-                <<"replicas/", FilePath/binary, "?provider_id=", ProviderId/binary>>,
-                delete,
-                Config
-            );
-        % migration
-        _ ->
-            schedule_transfer_by_rest(
-                Worker,
-                ?config(?SPACE_ID_KEY, Config),
-                User,
-                [?SPACE_SCHEDULE_REPLICATION, ?SPACE_SCHEDULE_EVICTION],
-                <<
-                    "replicas/", FilePath/binary, "?provider_id=", ProviderId/binary,
-                    "&migration_provider_id=", MigrationProviderId/binary
-                >>,
-                delete,
-                Config
-            )
-    end;
-schedule_replica_eviction_by_rest(Worker, ProviderId, User, {guid, FileGuid}, Config, MigrationProviderId) ->
+schedule_replica_eviction_by_rest(Worker, ProviderId, User, ?FILE_REF(FileGuid), Config, MigrationProviderId) ->
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
     case MigrationProviderId of
         % eviction
@@ -1215,8 +1189,14 @@ schedule_replica_eviction_by_rest(Worker, ProviderId, User, {guid, FileGuid}, Co
                 file_id:guid_to_space_id(FileGuid),
                 User,
                 [?SPACE_SCHEDULE_EVICTION],
-                <<"replicas-id/", FileObjectId/binary, "?provider_id=", ProviderId/binary>>,
-                delete,
+                <<"transfers">>,
+                post,
+                json_utils:encode(#{
+                    <<"type">> => <<"eviction">>,
+                    <<"evictingProviderId">> => ProviderId,
+                    <<"dataSourceType">> => <<"file">>,
+                    <<"fileId">> => FileObjectId
+                }),
                 Config
             );
         % migration
@@ -1226,11 +1206,15 @@ schedule_replica_eviction_by_rest(Worker, ProviderId, User, {guid, FileGuid}, Co
                 file_id:guid_to_space_id(FileGuid),
                 User,
                 [?SPACE_SCHEDULE_REPLICATION, ?SPACE_SCHEDULE_EVICTION],
-                <<
-                    "replicas-id/", FileObjectId/binary, "?provider_id=", ProviderId/binary,
-                    "&migration_provider_id=", MigrationProviderId/binary
-                >>,
-                delete,
+                <<"transfers">>,
+                post,
+                json_utils:encode(#{
+                    <<"type">> => <<"migration">>,
+                    <<"replicatingProviderId">> => MigrationProviderId,
+                    <<"evictingProviderId">> => ProviderId,
+                    <<"dataSourceType">> => <<"file">>,
+                    <<"fileId">> => FileObjectId
+                }),
                 Config
             )
     end.
@@ -1244,17 +1228,21 @@ schedule_replica_eviction_by_view_via_lfm(_ScheduleNode, _ProviderId, _User, _Sp
     erlang:error(not_implemented).
 
 schedule_replica_eviction_by_view_via_rest(ScheduleNode, ProviderId, User, SpaceId, ViewName, QueryViewParams, Config) ->
-    QueryParamsBin = create_query_string(QueryViewParams),
     schedule_transfer_by_rest(
         ScheduleNode,
         SpaceId,
         User,
         [?SPACE_SCHEDULE_EVICTION, ?SPACE_QUERY_VIEWS],
-        <<
-            "replicas-view/", ViewName/binary, "?provider_id=", ProviderId/binary,
-            "&space_id=", SpaceId/binary, QueryParamsBin/binary
-        >>,
-        delete,
+        <<"transfers">>,
+        post,
+        json_utils:encode(#{
+            <<"type">> => <<"eviction">>,
+            <<"evictingProviderId">> => ProviderId,
+            <<"dataSourceType">> => <<"view">>,
+            <<"spaceId">> => SpaceId,
+            <<"viewName">> => ViewName,
+            <<"queryViewParams">> => query_view_params_to_map(QueryViewParams)
+        }),
         Config
     ).
 
@@ -1275,19 +1263,25 @@ schedule_replica_migration_by_view_via_lfm(_ScheduleNode, _ProviderId, _User, _S
     erlang:error(not_implemented).
 
 schedule_replica_migration_by_view_via_rest(ScheduleNode, ProviderId, User, SpaceId, ViewName, QueryViewParams, Config, MigrationProviderId) ->
-    QueryParamsBin = create_query_string(QueryViewParams),
     schedule_transfer_by_rest(
         ScheduleNode,
         SpaceId,
         User,
         [?SPACE_SCHEDULE_EVICTION, ?SPACE_QUERY_VIEWS],
-        <<
-            "replicas-view/", ViewName/binary, "?provider_id=", ProviderId/binary,
-            "&migration_provider_id=", MigrationProviderId/binary, "&space_id=", SpaceId/binary, QueryParamsBin/binary
-        >>,
-        delete,
+        <<"transfers">>,
+        post,
+        json_utils:encode(#{
+            <<"type">> => <<"migration">>,
+            <<"replicatingProviderId">> => MigrationProviderId,
+            <<"evictingProviderId">> => ProviderId,
+            <<"dataSourceType">> => <<"view">>,
+            <<"spaceId">> => SpaceId,
+            <<"viewName">> => ViewName,
+            <<"queryViewParams">> => query_view_params_to_map(QueryViewParams)
+        }),
         Config
     ).
+
 
 cancel_transfer(ScheduleNode, SchedulingUser, CancellingUser, TransferType, Tid, Config, lfm) ->
     cancel_transfer_by_lfm(ScheduleNode, SchedulingUser, CancellingUser, TransferType, Tid, Config);
@@ -1360,12 +1354,13 @@ rerun_transfer(Worker, User, TransferType, ViewTransfer, OldTid, Config) ->
         TransferPrivs ++ ViewPrivs,
         <<"transfers/", OldTid/binary, "/rerun">>,
         post,
+        <<>>,
         Config
     ).
 
-schedule_transfer_by_rest(Worker, SpaceId, UserId, RequiredPrivs, URL, Method, Config) ->
+schedule_transfer_by_rest(Worker, SpaceId, UserId, RequiredPrivs, URL, Method, Body, Config) ->
     AllWorkers = ?config(op_worker_nodes, Config),
-    Headers = [?USER_TOKEN_HEADER(Config, UserId)],
+    Headers = [?USER_TOKEN_HEADER(Config, UserId), {?HDR_CONTENT_TYPE, <<"application/json">>}],
     AllSpacePrivs = privileges:space_privileges(),
     SpacePrivs = AllSpacePrivs -- RequiredPrivs,
     UserSpacePrivs = rpc:call(Worker, initializer, node_get_mocked_space_user_privileges, [SpaceId, UserId]),
@@ -1381,24 +1376,24 @@ schedule_transfer_by_rest(Worker, SpaceId, UserId, RequiredPrivs, URL, Method, C
                         ok;
                     (PrivsToAdd) ->
                         initializer:testmaster_mock_space_user_privileges(AllWorkers, SpaceId, UserId, SpacePrivs ++ PrivsToAdd),
-                        {ok, Code, _, Resp} = rest_test_utils:request(Worker, URL, Method, Headers, []),
+                        {ok, Code, _, Resp} = rest_test_utils:request(Worker, URL, Method, Headers, Body),
                         ?assertMatch(ErrorForbidden, {Code, json_utils:decode(Resp)})
                 end, combinations(RequiredPrivs)),
 
                 initializer:testmaster_mock_space_user_privileges(AllWorkers, SpaceId, UserId, SpacePrivs ++ RequiredPrivs),
-                case rest_test_utils:request(Worker, URL, Method, Headers, []) of
-                    {ok, 201, _, Body} ->
-                        DecodedBody = json_utils:decode(Body),
+                case rest_test_utils:request(Worker, URL, Method, Headers, Body) of
+                    {ok, 201, _, RespBody} ->
+                        DecodedBody = json_utils:decode(RespBody),
                         #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody),
                         {ok, Tid};
-                    {ok, 400, _, Body} ->
-                        {error, Body}
+                    {ok, 400, _, RespBody} ->
+                        {error, RespBody}
                 end
             after
                 initializer:testmaster_mock_space_user_privileges(AllWorkers, SpaceId, UserId, UserSpacePrivs)
             end;
         false ->
-            {ok, Code, _, RespBody} = rest_test_utils:request(Worker, URL, Method, Headers, []),
+            {ok, Code, _, RespBody} = rest_test_utils:request(Worker, URL, Method, Headers, Body),
             ?assertMatch(400, Code),
             ?assertMatch(
                 ?ERROR_SPACE_NOT_SUPPORTED_BY(_),
@@ -1422,7 +1417,7 @@ modify_storage_timeout(Node, StorageId, NewValue) ->
 
 
 file_key(Guid, _Path, guid) ->
-    {guid, Guid};
+    ?FILE_REF(Guid);
 file_key(_Guid, Path, path) ->
     {path, Path}.
 
@@ -1467,28 +1462,12 @@ await_transfer_starts(Node, TransferId) ->
         end
     end, 60).
 
-create_query_string(QueryViewParams) ->
-    lists:foldl(fun(Option, TmpQuery) ->
-        OptionBin = case Option of
-            {Key, Val} ->
-                KeyBin = atom_to_binary(Key, utf8),
-                ValBin = binary_from_term(Val),
-                <<KeyBin/binary, "=", ValBin/binary>>;
-            _ ->
-                TmpOptionBin = atom_to_binary(Option, utf8),
-                <<TmpOptionBin/binary, "=true">>
-        end,
-        <<TmpQuery/binary, "&", OptionBin/binary>>
-    end, <<>>, QueryViewParams).
 
-binary_from_term(Val) when is_binary(Val) ->
-    <<"\"", Val/binary, "\"">>;
-binary_from_term(Val) when is_integer(Val) ->
-    integer_to_binary(Val);
-binary_from_term(Val) when is_float(Val) ->
-    float_to_binary(Val);
-binary_from_term(Val) when is_atom(Val) ->
-    atom_to_binary(Val, utf8).
+query_view_params_to_map(QueryViewParams) ->
+    lists:foldl(fun
+        ({Key, Value}, Acc) -> Acc#{Key => Value};
+        (Key, Acc) -> Acc#{Key => true}
+    end, #{}, QueryViewParams).
 
 
 combinations([]) ->

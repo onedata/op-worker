@@ -12,12 +12,13 @@
 -author("Jakub Kudzia").
 
 -include("global_definitions.hrl").
+-include("modules/fslogic/acl.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include("transfers_test_mechanism.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/errors.hrl").
--include("modules/auth/acl.hrl").
 
 -export([init_per_suite/1, init_per_testcase/2, end_per_testcase/2, end_per_suite/1]).
 
@@ -428,7 +429,7 @@ schedule_migration_by_view(Config, Type) ->
     XattrName = transfers_test_utils:random_job_name(?FUNCTION_NAME),
     XattrValue = 1,
     Xattr = #xattr{name = XattrName, value = XattrValue},
-    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, FileGuid}, Xattr),
+    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, ?FILE_REF(FileGuid), Xattr),
     ViewName = transfers_test_utils:random_view_name(?FUNCTION_NAME),
     MapFunction = transfers_test_utils:test_map_function(XattrName),
     transfers_test_utils:create_view(WorkerP2, SpaceId, ViewName, MapFunction, [], [ProviderId1, ProviderId2]),
@@ -516,24 +517,24 @@ schedule_migration_of_regular_file_by_view_with_reduce(Config, Type) ->
     Xattr22 = #xattr{name = XattrName2, value = XattrValue22},
 
     % File1: xattr1=1, xattr2=1, should be replicated
-    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, Guid1}, Xattr11),
-    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, Guid1}, Xattr21),
+    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, ?FILE_REF(Guid1), Xattr11),
+    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, ?FILE_REF(Guid1), Xattr21),
 
     % File2: xattr1=1, xattr2=2, should not be replicated
-    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, Guid2}, Xattr11),
-    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, Guid2}, Xattr22),
+    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, ?FILE_REF(Guid2), Xattr11),
+    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, ?FILE_REF(Guid2), Xattr22),
 
     % File3: xattr1=1, xattr2=null, should not be replicated
-    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, Guid3}, Xattr11),
+    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, ?FILE_REF(Guid3), Xattr11),
 
     % File4: xattr1=2, xattr2=null, should not be replicated
-    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, Guid4}, Xattr12),
+    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, ?FILE_REF(Guid4), Xattr12),
 
     % File5: xattr1=null, xattr2=null, should not be replicated
 
     % File6: xattr1=1, xattr2=1, should be replicated
-    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, Guid6}, Xattr11),
-    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, Guid6}, Xattr21),
+    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, ?FILE_REF(Guid6), Xattr11),
+    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, ?FILE_REF(Guid6), Xattr21),
 
     ViewName = transfers_test_utils:random_view_name(?FUNCTION_NAME),
     MapFunction = transfers_test_utils:test_map_function(XattrName1, XattrName2),
@@ -616,7 +617,7 @@ scheduling_migration_by_not_existing_view_should_fail(Config, Type) ->
     XattrName = transfers_test_utils:random_job_name(?FUNCTION_NAME),
     XattrValue = 1,
     Xattr = #xattr{name = XattrName, value = XattrValue},
-    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, FileGuid}, Xattr),
+    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, ?FILE_REF(FileGuid), Xattr),
     ViewName = transfers_test_utils:random_view_name(?FUNCTION_NAME),
 
     transfers_test_mechanism:run_test(
@@ -667,7 +668,7 @@ scheduling_replica_migration_by_view_with_function_returning_wrong_value_should_
     XattrName = transfers_test_utils:random_job_name(?FUNCTION_NAME),
     XattrValue = 1,
     Xattr = #xattr{name = XattrName, value = XattrValue},
-    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, FileGuid}, Xattr),
+    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, ?FILE_REF(FileGuid), Xattr),
     WrongValue = <<"random_value_instead_of_file_id">>,
     %functions does not emit file id in values
     MapFunction = <<
@@ -743,7 +744,7 @@ scheduling_replica_migration_by_view_returning_not_existing_file_should_not_fail
     XattrName = transfers_test_utils:random_job_name(?FUNCTION_NAME),
     XattrValue = 1,
     Xattr = #xattr{name = XattrName, value = XattrValue},
-    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, FileGuid}, Xattr),
+    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, ?FILE_REF(FileGuid), Xattr),
 
     NotExistingUuid = <<"not_existing_uuid">>,
     NotExistingGuid = file_id:pack_guid(NotExistingUuid, SpaceId),
@@ -870,7 +871,7 @@ scheduling_migration_by_not_existing_key_in_view_should_succeed(Config, Type) ->
     XattrValue = 1,
     XattrValue2 = 2,
     Xattr = #xattr{name = XattrName, value = XattrValue},
-    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, FileGuid}, Xattr),
+    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, ?FILE_REF(FileGuid), Xattr),
     ViewName = transfers_test_utils:random_view_name(?FUNCTION_NAME),
     MapFunction = transfers_test_utils:test_map_function(XattrName),
     transfers_test_utils:create_view(WorkerP2, SpaceId, ViewName, MapFunction, [], [ProviderId1, ProviderId2]),
@@ -943,7 +944,7 @@ schedule_migration_of_100_regular_files_by_view(Config, Type) ->
     Xattr = #xattr{name = XattrName, value = XattrValue},
 
     FileIds = lists:map(fun({FileGuid, _}) ->
-        ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, FileGuid}, Xattr),
+        ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, ?FILE_REF(FileGuid), Xattr),
         {ok, FileId} = file_id:guid_to_objectid(FileGuid),
         FileId
     end, FileGuidsAndPaths),
@@ -1026,8 +1027,8 @@ cancel_migration_on_target_nodes_by_scheduling_user(Config, Type) ->
                     files_to_process => fun(X) -> X =< 111 end,
                     files_processed => fun(X) -> X =< 111 end,
                     failed_files => 0,
-                    files_replicated => fun(X) -> X < 100 end,
-                    files_evicted => fun(X) -> X < 100 end
+                    files_replicated => fun(X) -> X =< 100 end,
+                    files_evicted => fun(X) -> X =< 100 end
                 },
                 attempts = 120,
                 distribution = undefined,
@@ -1074,8 +1075,8 @@ cancel_migration_on_target_nodes_by_other_user(Config, Type) ->
                     files_to_process => fun(X) -> X =< 111 end,
                     files_processed => fun(X) -> X =< 111 end,
                     failed_files => 0,
-                    files_replicated => fun(X) -> X < 100 end,
-                    files_evicted => fun(X) -> X < 100 end
+                    files_replicated => fun(X) -> X =< 100 end,
+                    files_evicted => fun(X) -> X =< 100 end
                 },
                 distribution = undefined,
                 assertion_nodes = [WorkerP1, WorkerP2]
@@ -1193,7 +1194,7 @@ rerun_view_migration(Config, Type) ->
     XattrName = transfers_test_utils:random_job_name(?FUNCTION_NAME),
     XattrValue = 1,
     Xattr = #xattr{name = XattrName, value = XattrValue},
-    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, {guid, FileGuid}, Xattr),
+    ok = lfm_proxy:set_xattr(WorkerP2, SessionId2, ?FILE_REF(FileGuid), Xattr),
     ViewName = transfers_test_utils:random_view_name(?FUNCTION_NAME),
     MapFunction = transfers_test_utils:test_map_function(XattrName),
     transfers_test_utils:create_view(WorkerP2, SpaceId, ViewName, MapFunction, [], [ProviderId1, ProviderId2]),
@@ -1279,17 +1280,16 @@ rerun_view_migration(Config, Type) ->
 
 init_per_suite(Config) ->
     Posthook = fun(NewConfig) ->
-        NewConfig1 = [{space_storage_mock, false} | NewConfig],
-        NewConfig2 = initializer:setup_storage(NewConfig1),
+        NewConfig1 = initializer:setup_storage(NewConfig),
         lists:foreach(fun(Worker) ->
             test_utils:set_env(Worker, ?APP_NAME, dbsync_changes_broadcast_interval, timer:seconds(1)),
             test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_delay_ms, timer:seconds(1)),
             test_utils:set_env(Worker, ?APP_NAME, rerun_transfers, false)
-        end, ?config(op_worker_nodes, NewConfig2)),
+        end, ?config(op_worker_nodes, NewConfig1)),
 
         application:start(ssl),
-        hackney:start(),
-        NewConfig3 = initializer:create_test_users_and_spaces(?TEST_FILE(NewConfig2, "env_desc.json"), NewConfig2),
+        application:ensure_all_started(hackney),
+        NewConfig3 = initializer:create_test_users_and_spaces(?TEST_FILE(NewConfig1, "env_desc.json"), NewConfig1),
         NewConfig3
     end,
     [
@@ -1363,6 +1363,6 @@ end_per_testcase(_Case, Config) ->
 end_per_suite(Config) ->
     %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
     initializer:clean_test_users_and_spaces_no_validate(Config),
-    hackney:stop(),
+    application:stop(hackney),
     application:stop(ssl),
     initializer:teardown_storage(Config).

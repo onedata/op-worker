@@ -26,14 +26,12 @@
 
 -define(STRESS_CASES, [
     file_meta_basic_operations_test
-    %% TODO add simmilar test without mocks within cluster
     %% sequencer_manager_multiple_streams_messages_ordering_test, connection_multi_ping_pong_test,
     %% event_stream_different_file_id_aggregation_test,
     %% event_manager_multiple_subscription_test, event_manager_multiple_clients_test
 ]).
 -define(STRESS_NO_CLEARING_CASES, [
     many_files_creation_test
-    %% TODO add no clearing option to other tests
 ]).
 
 all() ->
@@ -88,9 +86,6 @@ many_files_creation_test(Config) ->
         {description, "Performs multiple datastore operations using many threads. Level - database."}
     ]).
 many_files_creation_test_base(Config) ->
-    % Sleep because test does to many operations for Couchbase when running for a long time
-    % TODO - make mnesia slower when Couchbase working too slow
-%%    timer:sleep(timer:seconds(15)),
 
     LastFails = ?config(last_fails, Config),
     RepNum = ?config(rep_num, Config),
@@ -239,8 +234,8 @@ spawn_at_nodes([N | Nodes], Nodes2, Threads, DocsSetNum, DocNumInSet, Conflicted
             receive start -> ok end,
             Fun(integer_to_list(DocsSetNum) ++ FileBeg)
         catch
-            E1:E2 ->
-                Master ! {store_ans, AnswerDesc, {uncatched_error, E1, E2, erlang:get_stacktrace()}, 0}
+            E1:E2:Stacktrace ->
+                Master ! {store_ans, AnswerDesc, {uncatched_error, E1, E2, Stacktrace}, 0}
         end
     end),
     spawn_at_nodes(Nodes, [N | Nodes2], Threads - 1, DocsSetNum, DocNumInSet + 1, ConflictedThreads, Fun, [Pid | Pids]).

@@ -232,7 +232,7 @@ expected_custom_helper_args(?HTTP_HELPER_NAME) -> [
     <<"endpoint">>,
     {optional, <<"oauth2IdP">>}, {optional, <<"verifyServerCertificate">>},
     {optional, <<"authorizationHeader">>}, {optional, <<"connectionPoolSize">>},
-    {optional, <<"fileMode">>}];
+    {optional, <<"maxRequestsPerSession">>},{optional, <<"fileMode">>}];
 expected_custom_helper_args(?XROOTD_HELPER_NAME) -> [
     <<"url">>,
     {optional, <<"fileModeMask">>}, {optional, <<"dirModeMask">>}];
@@ -249,7 +249,8 @@ expected_custom_helper_args(?NULL_DEVICE_HELPER_NAME) -> [
 expected_generic_helper_args() -> [
     <<"storagePathType">>,
     {optional, <<"skipStorageDetection">>},
-    {optional, <<"timeout">>}
+    {optional, <<"timeout">>},
+    {optional, <<"archiveStorage">>}
 ].
 
 %%--------------------------------------------------------------------

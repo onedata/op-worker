@@ -16,6 +16,7 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/storage/import/storage_import.hrl").
 -include("modules/datastore/datastore_models.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 
@@ -68,6 +69,11 @@ replicate_stage_test(Config) ->
     StorageId = initializer:get_supporting_storage_id(Worker1, ?SPACE_ID),
     
     {{DirGuid, _}, {G1, _}, {G2, _}} = create_files_and_dirs(Worker1, SessId),
+    % TODO VFS-8198 - remove following foreach when QoS triggering is fixed
+    lists:foreach(fun(Guid) ->
+        ?assertMatch({ok, _}, lfm_proxy:stat(Worker2, SessId(Worker2), ?FILE_REF(Guid)), ?ATTEMPTS)
+    end, [G1, G2]),
+
     StageJob = #space_unsupport_job{
         stage = replicate,
         space_id = ?SPACE_ID,
@@ -77,7 +83,7 @@ replicate_stage_test(Config) ->
     Promise = rpc:async_call(Worker1, space_unsupport, do_slave_job, [StageJob, ?TASK_ID]),
     
     {ok, {EntriesMap, _}} = ?assertMatch({ok, {Map, _}} when map_size(Map) =/= 0, 
-        lfm_proxy:get_effective_file_qos(Worker1, SessId(Worker1), {guid, SpaceGuid}), 
+        lfm_proxy:get_effective_file_qos(Worker1, SessId(Worker1), ?FILE_REF(SpaceGuid)),
         ?ATTEMPTS),
     [QosEntryId] = maps:keys(EntriesMap),
     
@@ -92,10 +98,8 @@ replicate_stage_test(Config) ->
     Size = size(?TEST_DATA),
     check_distribution(Workers, SessId, [{Worker1, Size}, {Worker2, Size}], G1),
     check_distribution(Workers, SessId, [{Worker1, Size}, {Worker2, Size}], G2),
-    
-    ok = lfm_proxy:unlink(Worker1, SessId(Worker1), {guid, G1}),
-    ok = lfm_proxy:unlink(Worker1, SessId(Worker1), {guid, G2}),
-    ok = lfm_proxy:unlink(Worker1, SessId(Worker1), {guid, DirGuid}).
+
+    delete_files_and_wait_for_sync(Worker1, Workers, SessId, [G1, G2, DirGuid]).
 
 
 replicate_stage_persistence_test(Config) ->
@@ -152,10 +156,8 @@ cleanup_traverse_stage_test(Config) ->
     assert_storage_cleaned_up(Worker, storage_mount_point(Worker, StorageId)),
     check_distribution(Workers, SessId, [], G1),
     check_distribution(Workers, SessId, [], G2),
-    
-    ok = lfm_proxy:unlink(Worker, SessId(Worker), {guid, G1}),
-    ok = lfm_proxy:unlink(Worker, SessId(Worker), {guid, G2}),
-    ok = lfm_proxy:unlink(Worker, SessId(Worker), {guid, DirGuid}).
+
+    delete_files_and_wait_for_sync(Worker, Workers, SessId, [G1, G2, DirGuid]).
 
 
 cleanup_traverse_stage_with_import_test(Config) ->
@@ -185,9 +187,7 @@ cleanup_traverse_stage_with_import_test(Config) ->
     check_distribution(Workers, SessId, [], G1),
     check_distribution(Workers, SessId, [], G2),
 
-    ok = lfm_proxy:unlink(Worker, SessId(Worker), {guid, G1}),
-    ok = lfm_proxy:unlink(Worker, SessId(Worker), {guid, G2}),
-    ok = lfm_proxy:unlink(Worker, SessId(Worker), {guid, DirGuid}),
+    delete_files_and_wait_for_sync(Worker, Workers, SessId, [G1, G2, DirGuid]),
     
     % files on storage have to be deleted manually as only file location documents have 
     % been deleted during cleanup traverse on imported storage
@@ -253,10 +253,8 @@ delete_synced_documents_stage_test(Config) ->
     timer:sleep(timer:seconds(70)),
     
     assert_synced_documents_cleaned_up(Worker1, ?SPACE_ID),
-    
-    ok = lfm_proxy:unlink(Worker2, SessId(Worker2), {guid, G1}),
-    ok = lfm_proxy:unlink(Worker2, SessId(Worker2), {guid, G2}),
-    ok = lfm_proxy:unlink(Worker2, SessId(Worker2), {guid, DirGuid}).
+
+    delete_files_and_wait_for_sync(Worker2, Workers, SessId, [G1, G2, DirGuid]).
     
 
 delete_local_documents_stage_test(Config) ->
@@ -338,7 +336,7 @@ overall_test(Config) ->
 
 init_per_suite(Config) ->
     Posthook = fun(NewConfig) ->
-        hackney:start(),
+        application:ensure_all_started(hackney),
         application:start(ssl),
         initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), NewConfig)
     end,
@@ -346,7 +344,7 @@ init_per_suite(Config) ->
 
 
 end_per_suite(Config) ->
-    hackney:stop(),
+    application:stop(hackney),
     application:stop(ssl),
     initializer:clean_test_users_and_spaces_no_validate(Config).
 
@@ -379,7 +377,7 @@ init_per_testcase(_, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(?SPACE_ID),
     lists:foreach(fun(Worker) ->
-        ?assertEqual({ok, []}, lfm_proxy:get_children(Worker, <<"0">>, {guid, SpaceGuid}, 0, 10), ?ATTEMPTS),
+        ?assertEqual({ok, []}, lfm_proxy:get_children(Worker, <<"0">>, ?FILE_REF(SpaceGuid), 0, 10), ?ATTEMPTS),
         assert_space_on_storage_cleaned_up(Worker, initializer:get_supporting_storage_id(Worker, ?SPACE_ID), ?SPACE_ID)
     end, Workers),
     ct:timetrap({minutes, 30}),
@@ -403,18 +401,21 @@ end_per_testcase(_, Config) ->
 %%%===================================================================
 
 assert_storage_cleaned_up(Worker, Path) ->
+    assert_storage_cleaned_up(Worker, Path, 1).
+
+
+assert_storage_cleaned_up(Worker, Path, Attempts) ->
     case check_exists_on_storage(Worker, Path) of
         true ->
-            {ok, FileList} = rpc:call(Worker, file, list_dir_all, [Path]),
-            ?assertEqual([], FileList);
+            ?assertEqual({ok, []}, rpc:call(Worker, file, list_dir_all, [Path]), Attempts);
         false -> ok
     end.
 
 
 assert_space_on_storage_cleaned_up(Worker, StorageId, SpaceId) ->
     case rpc:call(Worker, storage, is_imported, [StorageId]) of
-        true -> assert_storage_cleaned_up(Worker, storage_mount_point(Worker, StorageId));
-        false -> assert_storage_cleaned_up(Worker, filename:join(get_space_mount_point(Worker, SpaceId), SpaceId))
+        true -> assert_storage_cleaned_up(Worker, storage_mount_point(Worker, StorageId), ?ATTEMPTS);
+        false -> assert_storage_cleaned_up(Worker, filename:join(get_space_mount_point(Worker, SpaceId), SpaceId), ?ATTEMPTS)
     end.
 
 
@@ -431,7 +432,8 @@ assert_local_documents_cleaned_up(Worker, SpaceId) ->
 assert_local_documents_cleaned_up(Worker) ->
     AllModels = datastore_config_plugin:get_models(),
     ModelsToCheck = AllModels
-        -- [storage_config, provider_auth, % Models not associated with space support
+        -- [storage_config, provider_auth, workflow_engine_state, workflow_async_call_pool, % Models not associated
+                                                                                            % with space support
             file_meta, times, %% These documents without scope are related to user root dir,
                               %% which is not cleaned up during unsupport
             dbsync_state,
@@ -466,7 +468,7 @@ assert_documents_cleaned_up(Worker, Scope, Models) ->
     ProviderId = ?GET_DOMAIN_BIN(Worker),
     ?assert(lists:foldl(fun(Model, AccOut) ->
         Keys = rpc:call(Worker, ?MODULE, get_keys, [Model]),
-        
+
         Ctx = datastore_model_default:set_defaults(datastore_model_default:get_ctx(Model)),
         #{disc_driver := DiscDriver} = Ctx,
         Result = case DiscDriver of
@@ -530,18 +532,18 @@ create_files_and_dirs(Worker, SessId) ->
     {{DirGuid, ?filename(Name, 0)}, {G1, filename:join([?filename(Name, 0), ?filename(Name, 1)])}, {G2, ?filename(Name, 2)}}.
 
 create_qos_entry(Worker, SessId, FileGuid, Expression) ->
-    lfm_proxy:add_qos_entry(Worker, SessId(Worker), {guid, FileGuid}, Expression, 1).
+    lfm_proxy:add_qos_entry(Worker, SessId(Worker), ?FILE_REF(FileGuid), Expression, 1).
 
 create_custom_metadata(Worker, SessId, FileGuid) ->
-    lfm_proxy:set_metadata(Worker, SessId(Worker), {guid, FileGuid}, json,
+    lfm_proxy:set_metadata(Worker, SessId(Worker), ?FILE_REF(FileGuid), json,
         #{<<"key">> => <<"value">>}, []).
 
 create_replication(Worker, SessId, FileGuid, TargetWorker) ->
-    lfm_proxy:schedule_file_replication(Worker, SessId(Worker), {guid, FileGuid},
+    lfm_proxy:schedule_file_replication(Worker, SessId(Worker), ?FILE_REF(FileGuid),
         ?GET_DOMAIN_BIN(TargetWorker)).
 
 create_eviction(Worker, SessId, FileGuid, TargetWorker) ->
-    lfm_proxy:schedule_file_replica_eviction(Worker, SessId(Worker), {guid, FileGuid},
+    lfm_proxy:schedule_file_replica_eviction(Worker, SessId(Worker), ?FILE_REF(FileGuid),
         ?GET_DOMAIN_BIN(TargetWorker), undefined).
 
 create_view(Worker, SpaceId, TargetWorker) ->
@@ -572,7 +574,7 @@ check_distribution(Workers, SessId, Desc, Guid) ->
     end, ExpectedDistribution),
     lists:foreach(fun(Worker) ->
     ?assertEqual({ok, ExpectedDistributionSorted}, 
-            lfm_proxy:get_file_distribution(Worker, SessId(Worker), {guid, Guid}), ?ATTEMPTS
+            lfm_proxy:get_file_distribution(Worker, SessId(Worker), ?FILE_REF(Guid)), ?ATTEMPTS
         )
     end, Workers).
 
@@ -619,3 +621,15 @@ select_provider_by_imported_storage_value(Workers, Expected) ->
         Expected == rpc:call(W, storage, is_imported, [StorageId])
     end, Workers),
     Worker.
+
+delete_files_and_wait_for_sync(DeletingWorker, AllWorkers, SessId, Guids) ->
+    lists:foreach(fun(Guid) ->
+        ?assertEqual(ok, lfm_proxy:unlink(DeletingWorker, SessId(DeletingWorker), ?FILE_REF(Guid)))
+    end, Guids),
+
+    SyncWorkers = AllWorkers -- [DeletingWorker],
+    lists:foreach(fun(SyncWorker) ->
+        lists:foreach(fun(Guid) ->
+            ?assertEqual({error, ?ENOENT}, lfm_proxy:stat(SyncWorker, SessId(SyncWorker), ?FILE_REF(Guid)), ?ATTEMPTS)
+        end, Guids)
+    end, SyncWorkers).

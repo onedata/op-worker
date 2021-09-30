@@ -9,6 +9,8 @@
 %%% Creates a process per FileGuid/SessionId that handles remote file
 %%% synchronization by *this user* (more specifically: this session),
 %%% for *this file*.
+%%% Note: this module operates on referenced uuids. Synchronizer is always
+%%% created for original file, event if hardlink ctx is provided in argument.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(replica_synchronizer).
@@ -24,9 +26,9 @@
 
 -behaviour(gen_server).
 
--define(MINIMAL_SYNC_REQUEST, application:get_env(?APP_NAME, minimal_sync_request, 32768)).
--define(TRIGGER_BYTE, application:get_env(?APP_NAME, trigger_byte, 52428800)).
--define(PREFETCH_SIZE, application:get_env(?APP_NAME, prefetch_size, 104857600)).
+-define(MINIMAL_SYNC_REQUEST, op_worker:get_env(minimal_sync_request, 32768)).
+-define(TRIGGER_BYTE, op_worker:get_env(trigger_byte, 52428800)).
+-define(PREFETCH_SIZE, op_worker:get_env(prefetch_size, 104857600)).
 
 %% The process is supposed to die after ?DIE_AFTER time of idling (no requests in flight)
 -define(DIE_AFTER, 60000).
@@ -48,11 +50,11 @@
 -define(REF_TO_TIDS_CLEARING_MSG(__Ref), {clear_ref_to_tids_association, __Ref}).
 
 -define(PREFETCH_PRIORITY,
-    application:get_env(?APP_NAME, default_prefetch_priority, 96)).
--define(MAX_RETRIES, application:get_env(?APP_NAME, synchronizer_max_retries, 0)).
--define(MIN_BACKOFF, application:get_env(?APP_NAME, synchronizer_min_backoff, timer:seconds(1))).
--define(BACKOFF_RATE, application:get_env(?APP_NAME, synchronizer_backoff_rate, 1.5)).
--define(MAX_BACKOFF, application:get_env(?APP_NAME, synchronizer_max_backoff, timer:minutes(5))).
+    op_worker:get_env(default_prefetch_priority, 96)).
+-define(MAX_RETRIES, op_worker:get_env(synchronizer_max_retries, 0)).
+-define(MIN_BACKOFF, op_worker:get_env(synchronizer_min_backoff, timer:seconds(1))).
+-define(BACKOFF_RATE, op_worker:get_env(synchronizer_backoff_rate, 1.5)).
+-define(MAX_BACKOFF, op_worker:get_env(synchronizer_max_backoff, timer:minutes(5))).
 
 -define(FLUSH_STATS, flush_stats).
 -define(FLUSH_BLOCKS, flush_blocks).
@@ -335,8 +337,9 @@ apply_or_run_locally(Uuid, InCacheFun, ApplyOnCacheFun, FallbackFun) ->
 -spec apply_if_alive_no_check(file_meta:uuid(), term()) ->
     term().
 apply_if_alive_no_check(Uuid, FunOrMsg) ->
-    Node = datastore_key:any_responsible_node(Uuid),
-    rpc:call(Node, ?MODULE, apply_if_alive_internal, [Uuid, FunOrMsg]).
+    ReferencedUuid = fslogic_uuid:ensure_referenced_uuid(Uuid),
+    Node = datastore_key:any_responsible_node(ReferencedUuid),
+    rpc:call(Node, ?MODULE, apply_if_alive_internal, [ReferencedUuid, FunOrMsg]).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -347,9 +350,9 @@ apply_if_alive_no_check(Uuid, FunOrMsg) ->
 -spec apply_no_check(file_ctx:ctx(), term()) ->
     term().
 apply_no_check(FileCtx, FunOrMsg) ->
-    Uuid = file_ctx:get_uuid_const(FileCtx),
-    Node = datastore_key:any_responsible_node(Uuid),
-    rpc:call(Node, ?MODULE, apply_internal, [FileCtx, FunOrMsg]).
+    ReferencedUuidBasedFileCtx = file_ctx:ensure_based_on_referenced_guid(FileCtx),
+    Node = datastore_key:any_responsible_node(file_ctx:get_logical_uuid_const(ReferencedUuidBasedFileCtx)),
+    rpc:call(Node, ?MODULE, apply_internal, [ReferencedUuidBasedFileCtx, FunOrMsg]).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -360,8 +363,9 @@ apply_no_check(FileCtx, FunOrMsg) ->
 -spec apply_or_run_locally_no_check(file_meta:uuid(), fun(() -> term()), fun(() -> term())) ->
     term().
 apply_or_run_locally_no_check(Uuid, Fun, FallbackFun) ->
-    Node = datastore_key:any_responsible_node(Uuid),
-    rpc:call(Node, ?MODULE, apply_or_run_locally_internal, [Uuid, Fun, FallbackFun]).
+    ReferencedUuid = fslogic_uuid:ensure_referenced_uuid(Uuid),
+    Node = datastore_key:any_responsible_node(ReferencedUuid),
+    rpc:call(Node, ?MODULE, apply_or_run_locally_internal, [ReferencedUuid, Fun, FallbackFun]).
 
 %%%===================================================================
 %%% Apply and start functions helpers
@@ -500,13 +504,13 @@ get_process(FileCtx) ->
 %%--------------------------------------------------------------------
 -spec init_or_return_existing(file_ctx:ctx()) -> no_return() | normal.
 init_or_return_existing(FileCtx) ->
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
-    {Pid, _} = gproc:reg_or_locate({n, l, FileUuid}),
+    ReferencedUuidBasedFileCtx = file_ctx:ensure_based_on_referenced_guid(FileCtx),
+    {Pid, _} = gproc:reg_or_locate({n, l, file_ctx:get_logical_uuid_const(ReferencedUuidBasedFileCtx)}),
     ok = proc_lib:init_ack({ok, Pid}),
     % TODO VFS-6389 - check race with node changing
     case self() of
         Pid ->
-            {ok, State, Timeout} = init(FileCtx),
+            {ok, State, Timeout} = init(ReferencedUuidBasedFileCtx),
             gen_server2:enter_loop(?MODULE, [], State, Timeout);
         _ ->
             normal
@@ -518,9 +522,10 @@ init_or_return_existing(FileCtx) ->
 
 -spec init(file_ctx:ctx()) -> {ok, #state{}, Timeout :: non_neg_integer()}.
 init(FileCtx) ->
-    fslogic_cache:init(file_ctx:get_uuid_const(FileCtx)),
+    ReferencedUuidBasedFileCtx = file_ctx:ensure_based_on_referenced_guid(FileCtx),
+    fslogic_cache:init(file_ctx:get_logical_uuid_const(ReferencedUuidBasedFileCtx)),
     {ok, #state{
-        file_ctx = FileCtx,
+        file_ctx = ReferencedUuidBasedFileCtx,
         in_progress = ordsets:new()
     }, ?DIE_AFTER}.
 
@@ -544,7 +549,7 @@ handle_call({synchronize, FileCtx, Block, Prefetch, TransferId, Session, Priorit
     try
         State = case FG of
             undefined ->
-                FileGuid = file_ctx:get_guid_const(FileCtx),
+                FileGuid = file_ctx:get_logical_guid_const(FileCtx),
                 SpaceId = file_ctx:get_space_id_const(FileCtx),
                 {_LocalDoc, FileCtx2} = file_ctx:get_or_create_local_file_location_doc(FileCtx),
                 {DestStorageId, FileCtx3} = file_ctx:get_storage_id(FileCtx2),
@@ -607,9 +612,9 @@ handle_call({synchronize, FileCtx, Block, Prefetch, TransferId, Session, Priorit
                 end
         end
     catch
-        E1:E2 ->
+        E1:E2:Stacktrace ->
             ?error_stacktrace("Unable to start transfer due to error ~p:~p",
-                [E1, E2]),
+                [E1, E2], Stacktrace),
             {reply, {error, E2}, State0, ?DIE_AFTER}
     end;
 
@@ -635,8 +640,8 @@ handle_cast({cancel, TransferId}, State) ->
         NewState = cancel_transfer_id(TransferId, State),
         {noreply, NewState, ?DIE_AFTER}
     catch
-        _:Reason ->
-            ?error_stacktrace("Unable to cancel ~p: ~p", [TransferId, Reason]),
+        _:Reason:Stacktrace ->
+            ?error_stacktrace("Unable to cancel ~p: ~p", [TransferId, Reason], Stacktrace),
             {noreply, State, ?DIE_AFTER}
     end;
 
@@ -693,11 +698,13 @@ handle_info(?FLUSH_BLOCKS, State) ->
 handle_info(?FLUSH_EVENTS, State) ->
     {noreply, flush_events(State), ?DIE_AFTER};
 
-handle_info({Ref, complete, {ok, _} = _Status}, #state{retries_number = Retries} = State) ->
+handle_info({Ref, complete, {ok, _} = _Status}, #state{retries_number = Retries, file_ctx = FileCtx} = State) ->
     {Block, _Priority, _AffectedFroms, FinishedFroms, State1} =
         disassociate_ref(Ref, State),
     {FinishedBlocks, ExcludeSessions, EndedTransfers, State2} =
         disassociate_froms(FinishedFroms, State1),
+
+    flush_archive_helper_buffer_if_applicable(FileCtx),
 
     {Ans, State3} = flush_blocks(State2, ExcludeSessions, FinishedBlocks,
         EndedTransfers =/= []),
@@ -754,9 +761,9 @@ handle_info({replace_failed_transfer, FailedRef}, #state{retries_number = Retrie
                 {noreply, State3#state{retries_number = NewRetriesMap}, ?DIE_AFTER}
         end
     catch
-        E1:E2 ->
+        E1:E2:Stacktrace ->
             ?error_stacktrace("Unable to restart transfer due to error ~p:~p",
-                [E1, E2]),
+                [E1, E2], Stacktrace),
             handle_info({FailedRef, complete, {error, restart_failed}}, State)
     end;
 
@@ -776,10 +783,10 @@ handle_info({Ref, complete, {error, {connection, <<"canceled">>}}}, #state{
             % replications should be also cancelled and registry/state cleared.
             try
                 cancel_froms(AffectedFroms, State)
-            catch _:Reason ->
+            catch _:Reason:Stacktrace ->
                 ?error_stacktrace("Unable to cancel transfers associated with ~p due to ~p", [
                     Ref, Reason
-                ]),
+                ], Stacktrace),
                 State
             end
     end,
@@ -787,7 +794,7 @@ handle_info({Ref, complete, {error, {connection, <<"canceled">>}}}, #state{
 
 handle_info({FailedRef, complete, {error, {connection, <<"No such file or directory">>}} = ErrorStatus},
     #state{file_ctx = FileCtx} = State) ->
-    ?info("restoring storage file ~p", [file_ctx:get_guid_const(FileCtx)]),
+    ?info("restoring storage file ~p", [file_ctx:get_logical_guid_const(FileCtx)]),
     sd_utils:restore_storage_file(FileCtx, user_ctx:new(?ROOT_SESS_ID)),
     NewState = handle_retry(FailedRef, ErrorStatus, State),
     {noreply, NewState, ?DIE_AFTER};
@@ -798,7 +805,7 @@ handle_info({Ref, complete, ErrorStatus}, State) ->
 handle_info(fslogic_cache_check_flush, State) ->
     fslogic_cache:check_flush(),
 
-    case application:get_env(?APP_NAME, synchronizer_gc, on_flush_location) of
+    case op_worker:get_env(synchronizer_gc, on_flush_location) of
         on_flush_location ->
             erlang:garbage_collect();
         _ ->
@@ -815,7 +822,7 @@ handle_info(terminate, State) ->
     {stop, normal, State};
 
 handle_info({check_and_terminate_slave, ReportTo}, #state{file_ctx = Ctx} = State) ->
-    Uuid = file_ctx:get_uuid_const(Ctx),
+    Uuid = file_ctx:get_logical_uuid_const(Ctx),
     LocalNode = node(),
     case datastore_key:any_responsible_node(Uuid) of
         LocalNode -> ok;
@@ -1010,10 +1017,10 @@ cancel_session(SessionId, State) ->
                 })
         end
     catch
-        _:Reason ->
+        _:Reason:Stacktrace ->
             ?error_stacktrace("Unable to cancel transfers of ~p: ~p", [
                 SessionId, Reason
-            ]),
+            ], Stacktrace),
             State
     end.
 
@@ -1304,7 +1311,7 @@ prefetch([], _TransferId, State) -> State;
 prefetch(_NewTransfers, _TransferId, #state{in_sequence_hits = 0} = State) ->
     State;
 prefetch(_, TransferId, #state{in_sequence_hits = Hits, last_transfer = Block} = State) ->
-    case application:get_env(?APP_NAME, synchronizer_prefetch, true) of
+    case op_worker:get_env(synchronizer_prefetch, true) of
         true ->
             #file_block{offset = O, size = S} = Block,
             Offset = O + S,
@@ -1400,7 +1407,7 @@ cache_stats_and_blocks(TransferIds, ProviderId, Block, State) ->
         StatsPerTransfer#{TransferId => NewTransferStats}
     end, State#state.cached_stats, TransferIds),
 
-    CachedBlocks = case application:get_env(?APP_NAME, synchronizer_in_progress_events, transfers_only) of
+    CachedBlocks = case op_worker:get_env(synchronizer_in_progress_events, transfers_only) of
         transfers_only ->
             case TransferIds of
                 [undefined] ->
@@ -1443,9 +1450,9 @@ flush_blocks(#state{cached_blocks = Blocks, file_ctx = FileCtx} = State, Exclude
 
     FlushFinalBlocks = case IsTransfer of
         true ->
-            application:get_env(?APP_NAME, synchronizer_transfer_finished_events, all);
+            op_worker:get_env(synchronizer_transfer_finished_events, all);
         _ ->
-            application:get_env(?APP_NAME, synchronizer_on_fly_finished_events, all)
+            op_worker:get_env(synchronizer_on_fly_finished_events, all)
     end,
 
     Ans = lists:foldl(fun({From, FinalBlock, Type}, Acc) ->
@@ -1459,7 +1466,7 @@ flush_blocks(#state{cached_blocks = Blocks, file_ctx = FileCtx} = State, Exclude
         end
     end, [], FinalBlocks),
 
-    case application:get_env(?APP_NAME, synchronizer_in_progress_events, transfers_only) of
+    case op_worker:get_env(synchronizer_in_progress_events, transfers_only) of
         off ->
             false;
         _ ->
@@ -1470,7 +1477,7 @@ flush_blocks(#state{cached_blocks = Blocks, file_ctx = FileCtx} = State, Exclude
             end, Blocks2)
     end,
 
-    case application:get_env(?APP_NAME, synchronizer_gc, on_flush_location) of
+    case op_worker:get_env(synchronizer_gc, on_flush_location) of
         on_flush_blocks ->
             erlang:garbage_collect();
         _ ->
@@ -1563,7 +1570,7 @@ flush_stats(#state{space_id = SpaceId} = State, CancelTimer) ->
             State#state{cached_stats = #{}}
     end,
 
-    case application:get_env(?APP_NAME, synchronizer_gc, on_flush_location) of
+    case op_worker:get_env(synchronizer_gc, on_flush_location) of
         on_flush_stats ->
             erlang:garbage_collect();
         _ ->
@@ -1582,7 +1589,7 @@ flush_stats(#state{space_id = SpaceId} = State, CancelTimer) ->
 -spec flush_events(#state{}) -> #state{}.
 flush_events(State) ->
     lists:foreach(fun({ExcludedSessions, LocationChanges}) ->
-        % TODO - catch error and repeat
+        % TODO VFS-7396 catch error and repeat
         ok = fslogic_event_emitter:emit_file_locations_changed(
             lists:reverse(LocationChanges), ExcludedSessions)
     end, lists:reverse(fslogic_cache:clear_location_changes())),
@@ -1704,7 +1711,7 @@ wait_for_slave_check(Pid) ->
 -spec delete_whole_file_replica_internal(version_vector:version_vector(), from(), #state{}) ->
     {helper_process_spawned, pid()} | {error, term()}.
 delete_whole_file_replica_internal(AllowedVV, RequestedBy, #state{file_ctx = FileCtx}) ->
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
     try
         LocalFileLocId = file_location:local_id(FileUuid),
         ProviderId = oneprovider:get_id(),
@@ -1723,9 +1730,9 @@ delete_whole_file_replica_internal(AllowedVV, RequestedBy, #state{file_ctx = Fil
                 {error, file_modified_locally}
         end
     catch
-        Error:Reason ->
+        Error:Reason:Stacktrace ->
             ?error_stacktrace("Deletion of replica of file ~p failed due to ~p",
-                [FileUuid, {Error, Reason}]),
+                [FileUuid, {Error, Reason}], Stacktrace),
             {error, Reason}
     end.
 
@@ -1742,9 +1749,9 @@ spawn_block_clearing(FileCtx, EmitEvents, RequestedBy) ->
             #fuse_response{status = #status{code = ?OK}} = truncate_req:truncate_insecure(UserCtx, FileCtx, 0, false),
             ok
         catch
-            E:R ->
-                FileUuid = file_ctx:get_uuid_const(FileCtx),
-                ?error_stacktrace("Unexpected error ~p:~p when truncating file ~p.", [E, R, FileUuid]),
+            E:R:Stacktrace ->
+                FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
+                ?error_stacktrace("Unexpected error ~p:~p when truncating file ~p.", [E, R, FileUuid], Stacktrace),
                 {error, {E, R}}
         end,
         Master ! {file_truncated, Ans, EmitEvents, RequestedBy}
@@ -1767,4 +1774,23 @@ assert_smaller_than_local_support_size(TotalSize, SpaceId) ->
     case TotalSize > LocalSupportSize of
         true -> throw(?ENOSPC);
         false -> ok
+    end.
+
+
+-spec flush_archive_helper_buffer_if_applicable(file_ctx:ctx()) -> ok.
+flush_archive_helper_buffer_if_applicable(FileCtx) ->
+    {Storage, FileCtx2} = file_ctx:get_storage(FileCtx),
+    case storage:is_archive(Storage) of
+        true ->
+            {CanonicalPath, FileCtx3} = file_ctx:get_canonical_path(FileCtx2),
+            case archivisation_tree:is_in_archive(CanonicalPath) of
+                true ->
+                    {SDHandle, FileCtx4} = storage_driver:new_handle(?ROOT_SESS_ID, FileCtx3),
+                    {FileSize, _} = file_ctx:get_local_storage_file_size(FileCtx4),
+                    ok = storage_driver:flushbuffer(SDHandle, FileSize);
+                false ->
+                    ok
+            end;
+        false ->
+            ok
     end.

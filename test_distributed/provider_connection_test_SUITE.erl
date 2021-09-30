@@ -14,12 +14,12 @@
 
 -include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/fslogic/file_attr.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/onedata.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
--include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("ctool/include/errors.hrl").
 
 %% API
@@ -246,12 +246,12 @@ broken_compatibility_file_causes_unknown_entries_in_configuration(Config) ->
     Nodes = ?config(op_worker_nodes, Config),
     CurrentRegistryPath = rpc:call(hd(Nodes), ctool, get_env, [current_compatibility_registry_file]),
 
-    rpc:multicall(Nodes, file, delete, [CurrentRegistryPath]),
-    rpc:multicall(Nodes, compatibility, clear_registry_cache, []),
+    utils:rpc_multicall(Nodes, file, delete, [CurrentRegistryPath]),
+    utils:rpc_multicall(Nodes, compatibility, clear_registry_cache, []),
     broken_compatibility_file_causes_unknown_entries_in_configuration_base(Nodes),
 
-    rpc:multicall(Nodes, file, write_file, [CurrentRegistryPath, <<"bad content">>]),
-    rpc:multicall(Nodes, compatibility, clear_registry_cache, []),
+    utils:rpc_multicall(Nodes, file, write_file, [CurrentRegistryPath, <<"bad content">>]),
+    utils:rpc_multicall(Nodes, compatibility, clear_registry_cache, []),
     broken_compatibility_file_causes_unknown_entries_in_configuration_base(Nodes).
 
 broken_compatibility_file_causes_unknown_entries_in_configuration_base(Nodes) ->
@@ -281,11 +281,11 @@ init_per_suite(Config) ->
         % Set op version to old one, that for sure is not compatible with current one
         test_utils:mock_expect(Nodes, op_worker, get_release_version, fun() -> <<"16.04-rc5">> end),
         % Make sure provider identity token is not regenerated between requests
-        rpc:multicall(Nodes, application, set_env, [?APP_NAME, provider_token_ttl_sec, 999999999]),
+        utils:rpc_multicall(Nodes, application, set_env, [?APP_NAME, provider_token_ttl_sec, 999999999]),
         % prevent replacing the current compatibility registry during the tests
         test_utils:set_env(Nodes, ctool, compatibility_registry_mirrors, []),
         test_utils:set_env(Nodes, ctool, default_compatibility_registry_file, "not-a-valid-file-path.xxx"),
-        rpc:multicall(Nodes, compatibility, clear_registry_cache, []),
+        utils:rpc_multicall(Nodes, compatibility, clear_registry_cache, []),
         NewConfig
     end,
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer]} | Config].
@@ -298,10 +298,10 @@ init_per_testcase(provider_logic_correctly_resolves_nodes_to_connect, Config) ->
     Nodes = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Nodes, inet, [unstick, passthrough]),
     ssl:start(),
-    hackney:start(),
+    application:ensure_all_started(hackney),
 
     % Disable caching of resolved nodes
-    rpc:multicall(Nodes, application, set_env, [?APP_NAME, provider_nodes_cache_ttl_seconds, -1]),
+    utils:rpc_multicall(Nodes, application, set_env, [?APP_NAME, provider_nodes_cache_ttl_seconds, -1]),
 
     init_per_testcase(default, Config),
     % get_nodes/1 is mocked in initializer - unmock
@@ -315,7 +315,7 @@ init_per_testcase(Case, Config) when
     Case == broken_compatibility_file_causes_unknown_entries_in_configuration;
     Case == deprecated_configuration_endpoint_is_served ->
     ssl:start(),
-    hackney:start(),
+    application:ensure_all_started(hackney),
     init_per_testcase(default, Config);
 
 init_per_testcase(_Case, Config) ->
@@ -331,7 +331,7 @@ end_per_testcase(Case, Config) when
     Case == configuration_endpoint_is_served;
     Case == broken_compatibility_file_causes_unknown_entries_in_configuration;
     Case == deprecated_configuration_endpoint_is_served ->
-    hackney:stop(),
+    application:stop(hackney),
     ssl:stop(),
     end_per_testcase(default, Config);
 
