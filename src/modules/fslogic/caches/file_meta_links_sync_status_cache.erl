@@ -19,8 +19,10 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([init_group/0, init/1]).
+-export([init_group/0, init/1, invalidate_on_all_nodes/1]).
 -export([get/2]).
+%% RPC API
+-export([invalidate/1]).
 
 -define(CACHE_GROUP, <<"file_meta_links_sync_status_cache_group">>).
 -define(CACHE_NAME(SpaceId),
@@ -81,11 +83,34 @@ init(SpaceId) ->
     end.
 
 
+-spec invalidate_on_all_nodes(od_space:id()) -> ok.
+invalidate_on_all_nodes(SpaceId) ->
+    Nodes = consistent_hashing:get_all_nodes(),
+    {Res, BadNodes} = utils:rpc_multicall(Nodes, ?MODULE, invalidate, [SpaceId]),
+    
+    case BadNodes of
+        [] ->
+            ok;
+        _ ->
+            ?error("Invalidation of file_meta links caches for space ~p failed on nodes: ~p (RPC error)", [SpaceId, BadNodes])
+    end,
+    
+    lists:foreach(fun
+        (ok) -> ok;
+        ({badrpc, _} = Error) ->
+            ?error(
+                "Invalidation of file_meta links caches for space ~p failed.~n"
+                "Reason: ~p", [SpaceId, Error]
+            )
+    end, Res).
+
+
 -spec get(od_space:id(), file_meta:uuid() | file_meta:doc()) ->
-    {ok, synced} | {error, {file_meta_missing, file_meta:uuid()}} | {error, {link_missing, file_meta:uuid()}} | {error, term()}.
+    {ok, synced} | {error, {file_meta_missing, file_meta:uuid()}} | 
+    {error, {link_missing, file_meta:uuid()}} | {error, term()}.
 get(SpaceId, Doc = #document{value = #file_meta{}}) ->
     CacheName = ?CACHE_NAME(SpaceId),
-    case effective_value:get_or_calculate(CacheName, Doc, calculate_links_sync_status()) of
+    case effective_value:get_or_calculate(CacheName, Doc, fun calculate_links_sync_status/1) of
         {ok, synced, _} ->
             {ok, synced};
         {error, _} = Error ->
@@ -94,24 +119,32 @@ get(SpaceId, Doc = #document{value = #file_meta{}}) ->
 get(SpaceId, Uuid) ->
     case file_meta:get_including_deleted(Uuid) of
         {ok, Doc} -> get(SpaceId, Doc);
+        ?ERROR_NOT_FOUND -> {error, {file_meta_missing, Uuid}};
         {error, _} = Error -> Error
     end.
+
+
+%%%===================================================================
+%%% RPC API functions
+%%%===================================================================
+
+-spec invalidate(od_space:id()) -> ok.
+invalidate(SpaceId) ->
+    ok = effective_value:invalidate(?CACHE_NAME(SpaceId)).
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
 
--spec calculate_links_sync_status() -> fun().
-calculate_links_sync_status() ->
-    fun([
-        #document{
-            value = #file_meta{name = Name, parent_uuid = ParentUuid}
-        },
-        _ParentValue, CalculationInfo
-    ]) ->
-        case file_meta_forest:get(ParentUuid, all, Name) of
-            {ok, _} -> {ok, synced, CalculationInfo};
-            {error, _} -> {error, {link_missing, ParentUuid}}
-        end
-    end.
+-spec calculate_links_sync_status(effective_value:args()) -> 
+    {ok, synced, effective_value:calculation_info()} | {error, {link_missing, file_meta:uuid()}} | 
+    {error, term()}.
+calculate_links_sync_status([#document{} = FileMetaDoc, _ParentValue, CalculationInfo]) ->
+    #document{value = #file_meta{name = Name, parent_uuid = ParentUuid}} = FileMetaDoc,
+    case file_meta_forest:get(ParentUuid, all, Name) of
+        {ok, _} -> {ok, synced, CalculationInfo};
+        {error, _} -> {error, {link_missing, ParentUuid}}
+    end;
+calculate_links_sync_status([_, {error, _} = Error, _CalculationInfo]) ->
+    Error.

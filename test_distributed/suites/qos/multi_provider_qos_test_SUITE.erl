@@ -633,7 +633,7 @@ reconcile_qos_using_file_meta_posthooks_test(Config) ->
 
     {_, _} = qos_tests_utils:fulfill_qos_test_base(Config, QosSpec),
 
-    mock_dbsync_changes(Worker2),
+    mock_dbsync_changes(Worker2, ?FUNCTION_NAME),
     mock_file_meta_posthooks(Config),
 
     Guid = qos_tests_utils:create_file(Worker1, SessId, FilePath, <<"test_data">>),
@@ -645,14 +645,14 @@ reconcile_qos_using_file_meta_posthooks_test(Config) ->
     )),
     
     Filters = [{file_meta, file_id:guid_to_uuid(Guid)}],
-    ensure_docs_received(Filters),
+    ensure_docs_received(?FUNCTION_NAME, Filters),
     unmock_dbsync_changes(Worker2),
-    save_not_matching_docs(Worker2, Filters),
+    save_not_matching_docs(Worker2, ?FUNCTION_NAME, Filters),
     receive
         post_hook_created ->
             unmock_file_meta_posthooks(Config)
     end,
-    save_matching_docs(Worker2, Filters),
+    save_matching_docs(Worker2, ?FUNCTION_NAME, Filters),
 
     DirStructureAfter = get_expected_structure_for_single_dir([?PROVIDER_ID(Worker1), ?PROVIDER_ID(Worker2)]),
     ?assert(qos_tests_utils:assert_distribution_in_dir_structure(Config, DirStructureAfter,  #{files => [{Guid, FilePath}], dirs => []})).
@@ -681,7 +681,7 @@ reconcile_with_links_race_test_base(Config, Depth, RecordsToBlock) ->
     % ensure that link in space is synchronized - in env_up tests space uuid is a legacy key and therefore file_meta posthooks are NOT executed for it
     ?assertMatch({ok, _}, rpc:call(Worker2, file_meta_forest, get, [file_id:guid_to_uuid(SpaceGuid), all, ?filename(Name, 0)]), ?ATTEMPTS),
     
-    mock_dbsync_changes(Worker2),
+    mock_dbsync_changes(Worker2, ?FUNCTION_NAME),
     {ok, QosEntryId} = lfm_proxy:add_qos_entry(Worker1, SessId(Worker1), ?FILE_REF(DirGuid), <<"providerId=", (?GET_DOMAIN_BIN(Worker2))/binary>>, 1),
     
     
@@ -693,7 +693,7 @@ reconcile_with_links_race_test_base(Config, Depth, RecordsToBlock) ->
     
     ?assertMatch({ok, {Map, _}} when map_size(Map) =/= 0,
         lfm_proxy:get_effective_file_qos(Worker1, SessId(Worker1), ?FILE_REF(DirGuid)),
-        3 * ?ATTEMPTS),
+        ?ATTEMPTS),
     
     Size = size(?TEST_DATA),
     ExpectedDistributionFun = fun(List) -> 
@@ -724,27 +724,28 @@ reconcile_with_links_race_test_base(Config, Depth, RecordsToBlock) ->
         (links_forest) -> {links, links_forest, LinksKey}
     end, RecordsToBlock),
     
-    ensure_docs_received(Filters),
+    ensure_docs_received(?FUNCTION_NAME, Filters),
     unmock_dbsync_changes(Worker2),
-    % mock fslogic_authz:ensure_authorized/3 to bypass its fail on non existing ancestor file meta document
+    % mock fslogic_authz:ensure_authorized/3 to bypass its fail on non existing 
+    % ancestor file meta document when checking file distribution
     mock_fslogic_authz_ensure_authorized(Worker2),
-    save_not_matching_docs(Worker2, Filters),
+    save_not_matching_docs(Worker2, ?FUNCTION_NAME, Filters),
     
     CheckDistributionFun([{Worker1, Size}]),
     
-    save_matching_docs(Worker2, [{qos_entry, QosEntryId}]),
+    save_matching_docs(Worker2, ?FUNCTION_NAME, [{qos_entry, QosEntryId}]),
     lists:foreach(fun(Worker) ->
         ?assertEqual({ok, ?FULFILLED_QOS_STATUS}, lfm_proxy:check_qos_status(Worker, SessId(Worker), QosEntryId), ?ATTEMPTS)
     end, Workers),
     CheckDistributionFun([{Worker1, Size}]),
     
-    save_matching_docs(Worker2, [{links, links_forest, LinksKey}]),
+    save_matching_docs(Worker2, ?FUNCTION_NAME, [{links, links_forest, LinksKey}]),
     case lists:member(file_meta, RecordsToBlock) of
         false ->
             CheckDistributionFun([{Worker1, Size}, {Worker2, Size}]);
         true ->
             CheckDistributionFun([{Worker1, Size}]),
-            save_matching_docs(Worker2, [{file_meta, file_id:guid_to_uuid(ParentGuid)}]),
+            save_matching_docs(Worker2, ?FUNCTION_NAME, [{file_meta, file_id:guid_to_uuid(ParentGuid)}]),
             CheckDistributionFun([{Worker1, Size}, {Worker2, Size}])
     end.
     
@@ -1292,14 +1293,14 @@ mock_fslogic_authz_ensure_authorized(Worker) ->
 %%% DBSync mocks
 %%%===================================================================
 
-mock_dbsync_changes(Worker) ->
+mock_dbsync_changes(Worker, MsgIdentifier) ->
     test_utils:mock_new(Worker, dbsync_changes, [passthrough]),
     TestPid = self(),
 
     ok = test_utils:mock_expect(Worker, dbsync_changes, apply,
         fun(#document{value = Value} = Doc) ->
             RecordType = element(1, Value),
-            TestPid ! {RecordType, Doc},
+            TestPid ! {MsgIdentifier, RecordType, Doc},
             ok
         end).
 
@@ -1308,32 +1309,32 @@ unmock_dbsync_changes(Worker) ->
     test_utils:mock_unload(Worker, dbsync_changes).
 
 
-save_matching_docs(Worker, Filters) ->
-    save_docs(Worker, Filters, matching).
+save_matching_docs(Worker, MsgIdentifier, Filters) ->
+    save_docs(Worker, MsgIdentifier, Filters, matching).
 
 
-save_not_matching_docs(Worker, Filters) ->
-    save_docs(Worker, Filters, not_matching).
+save_not_matching_docs(Worker, MsgIdentifier, Filters) ->
+    save_docs(Worker, MsgIdentifier, Filters, not_matching).
 
 
-save_docs(Worker, Filters, Strategy) ->
-    LeftOutDocs = save_docs(Worker, Filters, [], Strategy),
+save_docs(Worker, MsgIdentifier, Filters, Strategy) ->
+    LeftOutDocs = save_docs(Worker, MsgIdentifier, Filters, [], Strategy),
     lists:foreach(fun(#document{value = Value} = Doc) ->
         RecordType = element(1, Value),
-        self() ! {RecordType, Doc}
+        self() ! {MsgIdentifier, RecordType, Doc}
     end, LeftOutDocs).
 
 
-save_docs(Worker, Filters, LeftOutDocs, Strategy) ->
+save_docs(Worker, MsgIdentifier, Filters, LeftOutDocs, Strategy) ->
     ExpectedMatch = Strategy == matching,
     receive
-        {_, Doc} ->
+        {MsgIdentifier, _, Doc} ->
             case matches_doc(Doc, Filters) of
                 ExpectedMatch ->
                     ?assertMatch(ok, rpc:call(Worker, dbsync_changes, apply, [Doc])),
-                    save_docs(Worker, Filters, LeftOutDocs, Strategy);
+                    save_docs(Worker, MsgIdentifier, Filters, LeftOutDocs, Strategy);
                 _ ->
-                    save_docs(Worker, Filters, [Doc | LeftOutDocs], Strategy)
+                    save_docs(Worker, MsgIdentifier, Filters, [Doc | LeftOutDocs], Strategy)
             end
     after 0 ->
         LeftOutDocs
@@ -1360,16 +1361,16 @@ matches_link_doc(#links_mask{key = Key}, Key) -> true;
 matches_link_doc(_, _) -> false.
 
 
-ensure_docs_received([]) -> ok;
-ensure_docs_received([{RecordType, _} | Tail]) ->
-    wait_for_doc(RecordType),
-    ensure_docs_received(Tail);
-ensure_docs_received([{links, RecordType, _} | Tail]) ->
-    wait_for_doc(RecordType),
-    ensure_docs_received(Tail).
+ensure_docs_received(_MsgIdentifier, []) -> ok;
+ensure_docs_received(MsgIdentifier, [{RecordType, _} | Tail]) ->
+    wait_for_doc(MsgIdentifier, RecordType),
+    ensure_docs_received(MsgIdentifier, Tail);
+ensure_docs_received(MsgIdentifier, [{links, RecordType, _} | Tail]) ->
+    wait_for_doc(MsgIdentifier, RecordType),
+    ensure_docs_received(MsgIdentifier, Tail).
 
 
-wait_for_doc(RecordType) ->
-    receive {RecordType, _} = Msg ->
+wait_for_doc(MsgIdentifier, RecordType) ->
+    receive {MsgIdentifier, RecordType, _} = Msg ->
         self() ! Msg
     end.

@@ -84,9 +84,7 @@ reconcile_qos(FileCtx) ->
         {error, {file_meta_missing, MissingUuid}} ->
             add_reconcile_file_meta_posthook(FileCtx, MissingUuid, <<"qos_missing_file_meta">>);
         {error, {link_missing, MissingUuid}} ->
-            add_reconcile_file_meta_posthook(FileCtx, MissingUuid, <<"qos_missing_link">>);
-        ?ERROR_NOT_FOUND ->
-            add_reconcile_file_meta_posthook(FileCtx, InodeUuid, <<"qos_missing_file_meta">>)
+            add_reconcile_file_meta_posthook(FileCtx, MissingUuid, <<"qos_missing_link">>)
     end.
 
 %%--------------------------------------------------------------------
@@ -143,7 +141,6 @@ reconcile_qos_internal(FileCtx, Options) when is_list(Options) ->
                     end, QosEntries)
             end;
         undefined ->
-            ?error("ignoring reconciliation: ~p", [file_ctx:get_logical_uuid_const(FileCtx)]),
             ok
     end.
 
