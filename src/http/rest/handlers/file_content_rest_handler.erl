@@ -28,6 +28,8 @@
 % the value was decided upon experimentally
 -define(COWBOY_READ_BODY_PERIOD_SECONDS, 15).
 
+-define(DEFAULT_MODE, 100).
+
 
 %%%===================================================================
 %%% API
@@ -71,9 +73,9 @@ ensure_operation_supported(create, child, private) -> true;
 ensure_operation_supported(create, content, private) -> true;
 ensure_operation_supported(get, content, public) -> true;
 ensure_operation_supported(get, content, private) -> true;
-ensure_operation_supported(create, file_on_path, private) -> true;
-ensure_operation_supported(get, file_on_path, private) -> true;
-ensure_operation_supported(delete, file_on_path, private) -> true;
+ensure_operation_supported(create, file_at_path, private) -> true;
+ensure_operation_supported(get, file_at_path, private) -> true;
+ensure_operation_supported(delete, file_at_path, private) -> true;
 ensure_operation_supported(_, _, _) -> throw(?ERROR_NOT_SUPPORTED).
 
 
@@ -136,10 +138,10 @@ sanitize_params(#op_req{
     operation = create,
     data = RawParams,
     auth = #auth{session_id = SessionId},
-    gri = #gri{aspect = file_on_path, id = GriId}
+    gri = #gri{aspect = file_at_path, id = GriId}
 } = OpReq, Req) ->
-    CreateDirs = maps:get(<<"create_dirs">>, RawParams, true),
-    FileMode = maps:get(<<"mode">>, RawParams, 100),
+    CreateDirs = maps:get(<<"parent">>, RawParams, true),
+    FileMode = maps:get(<<"mode">>, RawParams, ?DEFAULT_MODE),
     PathInfo = maps:get(path_info, Req),
     Path = str_utils:join_as_binaries(lists:droplast(PathInfo), <<"/">>),
 
@@ -183,7 +185,7 @@ sanitize_params(#op_req{
             required => ParamsRequiredDependingOnType,
             optional => OptionalParams
         }#{<<"name">> => lists:last(PathInfo)}),
-        gri = #gri{aspect = file_on_path, id = ParentGuid}
+        gri = #gri{aspect = file_at_path, id = ParentGuid}
     };
 
 
@@ -191,7 +193,7 @@ sanitize_params(#op_req{
     operation = Operation,
     data = RawParams,
     auth = #auth{session_id = SessionId},
-    gri = #gri{aspect = file_on_path, id = GriId}
+    gri = #gri{aspect = file_at_path, id = GriId}
 } = OpReq, Req) when Operation == delete orelse Operation == get  ->
     PathItems = maps:get(path_info, Req),
     Path = str_utils:join_as_binaries(PathItems, <<"/">>),
@@ -199,7 +201,7 @@ sanitize_params(#op_req{
     OpReq#op_req{data = middleware_sanitizer:sanitize_data(RawParams, #{
         optional => #{<<"follow_symlinks">> => {boolean, any}}
     }),
-        gri = #gri{aspect = file_on_path, id = FileGuid}
+        gri = #gri{aspect = file_at_path, id = FileGuid}
     }.
 
 
@@ -221,7 +223,7 @@ process_request(#op_req{
     auth = #auth{session_id = SessionId},
     gri = #gri{id = FileGuid, aspect = Aspect},
     data = Data
-}, Req) when Aspect == content orelse Aspect == file_on_path->
+}, Req) when Aspect == content orelse Aspect == file_at_path->
     FollowSymlinks = maps:get(<<"follow_symlinks">>, Data, true),
     case ?check(lfm:stat(SessionId, ?FILE_REF(FileGuid, FollowSymlinks))) of
         {ok, #file_attr{type = ?REGULAR_FILE_TYPE} = FileAttrs} ->
@@ -241,7 +243,7 @@ process_request(#op_req{
 process_request(#op_req{
     operation = delete,
     auth = #auth{session_id = SessionId},
-    gri = #gri{id = FileGuid, aspect = file_on_path}
+    gri = #gri{id = FileGuid, aspect = file_at_path}
 }, _Req) ->
     lfm:rm_recursive(SessionId, ?FILE_REF(FileGuid));
 
@@ -319,7 +321,7 @@ process_request(#op_req{
 process_request(#op_req{
     operation = create,
     auth = #auth{session_id = SessionId},
-    gri = #gri{id = ParentGuid, aspect = file_on_path},
+    gri = #gri{id = ParentGuid, aspect = file_at_path},
     data = Params
 }, Req) ->
     Name = maps:get(<<"name">>, Params),
