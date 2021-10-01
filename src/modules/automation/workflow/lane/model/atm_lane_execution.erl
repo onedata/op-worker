@@ -17,7 +17,11 @@
 -include("modules/automation/atm_execution.hrl").
 
 %% API
--export([get_run/2]).
+-export([
+    get_schema_id/2,
+    get_schema/2,
+    get_run/2
+]).
 -export([update_curr_run/3, update_curr_run/4]).
 -export([to_json/1]).
 
@@ -43,6 +47,35 @@
 %%%===================================================================
 
 
+%% @private
+-spec get_schema_id(undefined | pos_integer(), atm_workflow_execution:record()) ->
+    automation:id().
+get_schema_id(GivenLaneIndex, #atm_workflow_execution{
+    lanes = AtmLaneExecutions,
+    curr_lane_index = CurrLaneIndex
+}) ->
+    LaneIndex = utils:ensure_defined(GivenLaneIndex, CurrLaneIndex),
+    #atm_lane_execution{schema_id = AtmLaneSchema} = lists:nth(LaneIndex, AtmLaneExecutions),
+    AtmLaneSchema.
+
+
+%% @private
+-spec get_schema(undefined | pos_integer(), atm_workflow_execution:record()) ->
+    atm_lane_schema:record().
+get_schema(GivenLaneIndex, #atm_workflow_execution{
+    schema_snapshot_id = AtmWorkflowSchemaSnapshotId,
+    curr_lane_index = CurrLaneIndex
+}) ->
+    LaneIndex = utils:ensure_defined(GivenLaneIndex, CurrLaneIndex),
+
+    {ok, #document{value = #atm_workflow_schema_snapshot{
+        lanes = AtmLaneSchemas
+    }}} = atm_workflow_schema_snapshot:get(AtmWorkflowSchemaSnapshotId),
+
+    lists:nth(LaneIndex, AtmLaneSchemas).
+
+
+%% TODO undefined/currrunno ?
 -spec get_run(undefined | pos_integer(), atm_workflow_execution:record()) ->
     {ok, run()} | errors:error().
 get_run(LaneIndex, #atm_workflow_execution{lanes = AtmLaneExecutions}) ->
