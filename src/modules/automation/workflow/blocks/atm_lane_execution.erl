@@ -50,10 +50,11 @@
 -spec create_all(atm_workflow_execution_factory:creation_ctx()) ->
     [{record(), atm_task_execution_factory:task_store_registry()}] | no_return().
 create_all(#atm_workflow_execution_creation_ctx{
-    workflow_schema_doc = #document{value = #od_atm_workflow_schema{
-        lanes = AtmLaneSchemas
-    }}
+    workflow_schema_doc = #document{value = AtmWorkflowSchema}
 } = AtmWorkflowExecutionCreationCtx) ->
+    #atm_workflow_schema_revision{
+        lanes = AtmLaneSchemas
+    } = od_atm_workflow_schema:get_latest_revision(AtmWorkflowSchema),
     lists:reverse(lists:foldl(fun({AtmLaneIndex, #atm_lane_schema{
         id = AtmLaneSchemaId
     } = AtmLaneSchema}, Acc) ->

@@ -18,6 +18,8 @@
 %% API
 -export([create/2, get/1, delete/1]).
 
+%%% field encoding/decoding procedures
+-export([legacy_state_to_json/1, legacy_state_from_json/1]).
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_version/0, get_record_struct/1]).
 
@@ -41,19 +43,22 @@
     {ok, id()} | {error, term()}.
 create(AtmWorkflowExecutionId, #document{key = AtmWorkflowSchemaId, value = #od_atm_workflow_schema{
     name = AtmWorkflowSchemaName,
-    description = AtmWorkflowSchemaDescription,
-    stores = AtmStoreSchemas,
-    lanes = AtmLaneSchemas,
-    state = AtmWorkflowSchemaState,
     atm_inventory = AtmInventoryId,
     atm_lambdas = AtmLambdaIds
-}}) ->
+} = AtmWorkflowSchema}) ->
+    #atm_workflow_schema_revision{
+        description = AtmWorkflowSchemaDescription,
+        stores = AtmStoreSchemas,
+        lanes = AtmLaneSchemas,
+        state = AtmWorkflowSchemaState
+    } = od_atm_workflow_schema:get_latest_revision(AtmWorkflowSchema),
     %% TODO VFS-7685 add ref count and gen snapshot id based on doc revision
     ?extract_key(datastore_model:create(?CTX, #document{
         key = AtmWorkflowExecutionId,
         value = #atm_workflow_schema_snapshot{
             schema_id = AtmWorkflowSchemaId,
             name = AtmWorkflowSchemaName,
+            % @TODO VFS-8349 include summary field from od_atm_workflow_schema
             description = AtmWorkflowSchemaDescription,
             stores = AtmStoreSchemas,
             lanes = AtmLaneSchemas,
@@ -72,6 +77,25 @@ get(AtmWorkflowSchemaSnapshotId) ->
 -spec delete(id()) -> ok | {error, term()}.
 delete(AtmWorkflowSchemaSnapshotId) ->
     datastore_model:delete(?CTX, AtmWorkflowSchemaSnapshotId).
+
+
+%%%===================================================================
+%%% field encoding/decoding procedures
+%%%===================================================================
+
+
+%% NOTE: used only in record version 1
+-spec legacy_state_to_json(atom()) -> json_utils:json_term().
+legacy_state_to_json(incomplete) -> <<"incomplete">>;
+legacy_state_to_json(ready) -> <<"ready">>;
+legacy_state_to_json(deprecated) -> <<"deprecated">>.
+
+
+%% NOTE: used only in record version 1
+-spec legacy_state_from_json(json_utils:json_term()) -> atom().
+legacy_state_from_json(<<"incomplete">>) -> incomplete;
+legacy_state_from_json(<<"ready">>) -> ready;
+legacy_state_from_json(<<"deprecated">>) -> deprecated.
 
 
 %%%===================================================================
@@ -114,7 +138,7 @@ get_record_struct(1) ->
         {stores, [{custom, string, {persistent_record, encode, decode, atm_store_schema}}]},
         {lanes, [{custom, string, {persistent_record, encode, decode, atm_lane_schema}}]},
 
-        {state, {custom, string, {automation, workflow_schema_state_to_json, workflow_schema_state_from_json}}},
+        {state, {custom, string, {?MODULE, legacy_state_to_json, legacy_state_from_json}}},
 
         {atm_inventory, string},
         {atm_lambdas, [string]}

@@ -247,12 +247,9 @@
 
 -record(od_atm_workflow_schema, {
     name :: automation:name(),
-    description :: automation:description(),
+    summary :: automation:description(),
 
-    stores = [] :: [atm_store_schema:record()],
-    lanes = [] :: [atm_lane_schema:record()],
-
-    state :: automation:workflow_schema_state(),
+    revision_registry :: atm_workflow_schema_revision_registry:record(),
 
     atm_inventory :: od_atm_inventory:id(),
     atm_lambdas :: [od_atm_lambda:id()],
@@ -1103,7 +1100,7 @@
     stores = [] :: [atm_store_schema:record()],
     lanes = [] :: [atm_lane_schema:record()],
 
-    state :: automation:workflow_schema_state(),
+    state :: automation:lifecycle_state(),
 
     atm_inventory :: od_atm_inventory:id(),
     atm_lambdas :: [od_atm_lambda:id()]

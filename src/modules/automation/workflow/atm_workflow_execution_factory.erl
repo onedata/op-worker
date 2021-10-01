@@ -22,7 +22,7 @@
 
 
 -type task_execution_registry() :: #{
-    AtmTaskSchemaId :: automation:id() => atm_task_execution:doc()
+AtmTaskSchemaId :: automation:id() => atm_task_execution:doc()
 }.
 
 -record(execution_elements, {
@@ -208,13 +208,15 @@ create_audit_log(#atm_workflow_execution_creation_ctx{
 -spec create_lane_executions(creation_ctx(), execution_elements()) ->
     execution_elements().
 create_lane_executions(#atm_workflow_execution_creation_ctx{
-    workflow_schema_doc = #document{value = #od_atm_workflow_schema{
-        lanes = []
-    }}
-}, _ExecutionElements) ->
-    throw(?ERROR_ATM_WORKFLOW_EMPTY);
+    workflow_schema_doc = #document{value = AtmWorkflowSchema}
+} = AtmWorkflowExecutionCreationCtx, ExecutionElements) ->
+    case od_atm_workflow_schema:get_latest_revision(AtmWorkflowSchema) of
+        #atm_workflow_schema_revision{lanes = []} ->
+            throw(?ERROR_ATM_WORKFLOW_EMPTY);
+        _ ->
+            ok
+    end,
 
-create_lane_executions(AtmWorkflowExecutionCreationCtx, ExecutionElements) ->
     AtmLaneExecutionsAndTaskStoreRegistries = atm_lane_execution:create_all(
         AtmWorkflowExecutionCreationCtx
     ),

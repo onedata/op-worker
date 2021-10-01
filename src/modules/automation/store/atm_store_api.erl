@@ -49,11 +49,12 @@
     [atm_store:doc()] | no_return().
 create_all(#atm_workflow_execution_creation_ctx{
     workflow_execution_auth = AtmWorkflowExecutionAuth,
-    workflow_schema_doc = #document{value = #od_atm_workflow_schema{
-        stores = AtmStoreSchemas
-    }},
+    workflow_schema_doc = #document{value = AtmWorkflowSchema},
     store_initial_values = StoreInitialValues
 }) ->
+    #atm_workflow_schema_revision{
+        stores = AtmStoreSchemas
+    } = AtmWorkflowSchema,
     lists:reverse(lists:foldl(fun(#atm_store_schema{id = AtmStoreSchemaId} = AtmStoreSchema, Acc) ->
         StoreInitialValue = utils:null_to_undefined(maps:get(
             AtmStoreSchemaId, StoreInitialValues, undefined

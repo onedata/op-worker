@@ -326,12 +326,11 @@ translate(#gri{type = od_atm_workflow_schema, id = Id, aspect = instance, scope 
         key = Id,
         value = #od_atm_workflow_schema{
             name = maps:get(<<"name">>, Result),
-            description = maps:get(<<"description">>, Result),
+            summary = maps:get(<<"summary">>, Result),
 
-            stores = jsonable_record:list_from_json(maps:get(<<"stores">>, Result), atm_store_schema),
-            lanes = jsonable_record:list_from_json(maps:get(<<"lanes">>, Result), atm_lane_schema),
-
-            state = automation:workflow_schema_state_from_json(maps:get(<<"state">>, Result)),
+            revision_registry = jsonable_record:from_json(
+                maps:get(<<"revisionRegistry">>, Result), atm_workflow_schema_revision_registry
+            ),
 
             atm_inventory = maps:get(<<"atmInventoryId">>, Result),
             atm_lambdas = maps:get(<<"atmLambdas">>, Result)

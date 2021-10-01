@@ -45,7 +45,7 @@ translate_resource(#gri{aspect = instance, scope = private}, #atm_workflow_schem
         <<"stores">> => jsonable_record:list_to_json(AtmStoreSchemas, atm_store_schema),
         <<"lanes">> => jsonable_record:list_to_json(AtmLaneSchemas, atm_lane_schema),
 
-        <<"state">> => automation:workflow_schema_state_to_json(AtmWorkflowSchemaState),
+        <<"state">> => atm_workflow_schema_snapshot:legacy_state_to_json(AtmWorkflowSchemaState),
 
         <<"atmInventory">> => gri:serialize(#gri{
             type = op_atm_inventory, id = AtmInventoryId,
