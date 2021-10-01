@@ -20,7 +20,7 @@
 -export([
     get_schema_id/2,
     get_schema/2,
-    get_run/2
+    get_curr_run/2
 ]).
 -export([update_curr_run/3, update_curr_run/4]).
 -export([to_json/1]).
@@ -75,13 +75,22 @@ get_schema(GivenLaneIndex, #atm_workflow_execution{
     lists:nth(LaneIndex, AtmLaneSchemas).
 
 
-%% TODO undefined/currrunno ?
--spec get_run(undefined | pos_integer(), atm_workflow_execution:record()) ->
+-spec get_curr_run(undefined | pos_integer(), atm_workflow_execution:record()) ->
     {ok, run()} | errors:error().
-get_run(LaneIndex, #atm_workflow_execution{lanes = AtmLaneExecutions}) ->
+get_curr_run(GivenLaneIndex, #atm_workflow_execution{
+    lanes = AtmLaneExecutions,
+    curr_lane_index = CurrLaneIndex,
+    curr_run_no = CurrRunNo
+}) ->
+    LaneIndex = utils:ensure_defined(GivenLaneIndex, CurrLaneIndex),
+
     case lists:nth(LaneIndex, AtmLaneExecutions) of
-        #atm_lane_execution{runs = [Run | _]} -> {ok, Run};
-        _ -> ?ERROR_NOT_FOUND
+        #atm_lane_execution{runs = [#atm_lane_execution_run{run_no = undefined} = Run | _]} ->
+            {ok, Run};
+        #atm_lane_execution{runs = [#atm_lane_execution_run{run_no = CurrRunNo} = Run | _]} ->
+            {ok, Run};
+        _ ->
+            ?ERROR_NOT_FOUND
     end.
 
 

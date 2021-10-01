@@ -259,7 +259,7 @@ handle_currently_executed_lane_run_ended(AtmWorkflowExecution = #atm_workflow_ex
         true ->
             {ok, NewAtmWorkflowExecution};
         false ->
-            case atm_lane_execution:get_run(CurrLaneIndex, NewAtmWorkflowExecution) of
+            case atm_lane_execution:get_curr_run(CurrLaneIndex, NewAtmWorkflowExecution) of
                 {ok, #atm_lane_execution_run{status = ?FINISHED_STATUS}} ->
                     schedule_next_lane_run(NewAtmWorkflowExecution);
                 _ ->

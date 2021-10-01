@@ -166,14 +166,10 @@ handle_lane_task_status_change(AtmWorkflowExecutionId, AtmLaneExecutionDiff) ->
 -spec handle_ended(atm_workflow_execution:id()) ->
     {ok, atm_workflow_execution:doc()} | no_return().
 handle_ended(AtmWorkflowExecutionId) ->
-    Diff = fun(AtmWorkflowExecution = #atm_workflow_execution{
-        curr_lane_index = CurrLaneIndex,
-        lanes = AtmLaneExecutions
-    }) ->
-        #atm_lane_execution{runs = [#atm_lane_execution_run{status = Status} | _]} = lists:nth(
-            CurrLaneIndex, AtmLaneExecutions
+    Diff = fun(AtmWorkflowExecution = #atm_workflow_execution{curr_lane_index = CurrLaneIndex}) ->
+        {ok, #atm_lane_execution_run{status = Status}} = atm_lane_execution:get_curr_run(
+            CurrLaneIndex, AtmWorkflowExecution
         ),
-
         {ok, set_times_on_phase_transition(AtmWorkflowExecution#atm_workflow_execution{
             status = Status
         })}

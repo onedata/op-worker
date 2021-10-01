@@ -74,7 +74,7 @@ handle_ended(LaneIndex, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
     } = atm_lane_execution_status:handle_ended(LaneIndex, AtmWorkflowExecutionId),
 
     freeze_curr_lane_run_iterated_store_if_ready_to_execute(NewAtmWorkflowExecution),
-    {ok, NextLaneRun} = atm_lane_execution:get_run(NextLaneIndex, NewAtmWorkflowExecution),
+    {ok, NextLaneRun} = atm_lane_execution:get_curr_run(NextLaneIndex, NewAtmWorkflowExecution),
 
     case atm_lane_execution_status:status_to_phase(NextLaneRun#atm_lane_execution_run.status) of
         ?ENDED_PHASE ->
@@ -109,7 +109,7 @@ setup_lane(LaneIndex, AtmWorkflowExecutionDoc, AtmWorkflowExecutionCtx) ->
             iterated_store_id = AtmIteratedStoreId,
             exception_store_id = ExceptionStoreId,
             parallel_boxes = AtmParallelBoxExecutions
-        }} = atm_lane_execution:get_run(LaneIndex, AtmWorkflowExecution),
+        }} = atm_lane_execution:get_curr_run(LaneIndex, AtmWorkflowExecution),
 
         {AtmParallelBoxExecutionSpecs, AtmWorkflowExecutionEnvDiff} = atm_parallel_box_execution:setup_all(
             AtmWorkflowExecutionCtx, AtmParallelBoxExecutions
@@ -144,7 +144,7 @@ teardown_lane(LaneIndex, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
     {ok, #document{value = AtmWorkflowExecution}} = atm_workflow_execution:get(
         AtmWorkflowExecutionId
     ),
-    {ok, AtmLaneExecutionRun} = atm_lane_execution:get_run(LaneIndex, AtmWorkflowExecution),
+    {ok, AtmLaneExecutionRun} = atm_lane_execution:get_curr_run(LaneIndex, AtmWorkflowExecution),
 
     unfreeze_iterated_store_in_case_of_workflow_store(AtmLaneExecutionRun, AtmWorkflowExecutionCtx),
     freeze_exception_store(AtmLaneExecutionRun),
@@ -190,7 +190,7 @@ freeze_curr_lane_run_iterated_store_if_ready_to_execute(AtmWorkflowExecution = #
     curr_lane_index = LaneIndex,
     curr_run_no = CurrRunNo
 }) ->
-    case atm_lane_execution:get_run(LaneIndex, AtmWorkflowExecution) of
+    case atm_lane_execution:get_curr_run(LaneIndex, AtmWorkflowExecution) of
         {ok, #atm_lane_execution_run{status = ?ENQUEUED_STATUS, run_no = CurrRunNo} = Run} ->
             atm_store_api:freeze(Run#atm_lane_execution_run.iterated_store_id);
         _ ->

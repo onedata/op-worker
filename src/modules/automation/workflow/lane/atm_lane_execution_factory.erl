@@ -35,9 +35,8 @@ create_run(AtmLaneIndex, AtmWorkflowExecutionDoc, AtmWorkflowExecutionCtx) ->
     try
         create_run_internal(AtmLaneIndex, AtmWorkflowExecutionDoc, AtmWorkflowExecutionCtx)
     catch _:Reason ->
-        #atm_lane_execution{schema_id = AtmLaneSchemaId} = lists:nth(
-            AtmLaneIndex, AtmWorkflowExecutionDoc#document.value#atm_workflow_execution.lanes
-        ),
+        AtmWorkflowExecution = AtmWorkflowExecutionDoc#document.value,
+        AtmLaneSchemaId = atm_lane_execution:get_schema_id(AtmLaneIndex, AtmWorkflowExecution),
         throw(?ERROR_ATM_LANE_EXECUTION_CREATION_FAILED(AtmLaneSchemaId, Reason))
     end.
 
@@ -76,36 +75,26 @@ create_run_internal(AtmLaneIndex, AtmWorkflowExecutionDoc, AtmWorkflowExecutionC
         AtmLaneIndex, AtmWorkflowExecutionDoc, AtmWorkflowExecutionCtx
     )),
 
-    Diff = fun(#atm_workflow_execution{lanes = AtmLaneExecutions} = AtmWorkflowExecution) ->
-        #atm_lane_execution{runs = [CurrRun | PrevRuns]} = AtmLaneExecution = lists:nth(
-            AtmLaneIndex, AtmLaneExecutions
-        ),
-        case CurrRun of
-            #atm_lane_execution_run{
+    Diff = fun(AtmWorkflowExecution) ->
+        atm_lane_execution:update_curr_run(AtmLaneIndex, fun
+            (Run = #atm_lane_execution_run{
                 status = ?PREPARING_STATUS,
                 exception_store_id = undefined,
                 parallel_boxes = []
-            } ->
-                UpdatedCurrRun = CurrRun#atm_lane_execution_run{
+            }) ->
+                Run#atm_lane_execution_run{
                     iterated_store_id = IteratedStoreId,
                     exception_store_id = ExceptionStoreId,
                     parallel_boxes = AtmParallelBoxExecutions
-                },
-                NewAtmLaneExecution = AtmLaneExecution#atm_lane_execution{
-                    runs = [UpdatedCurrRun | PrevRuns]
-                },
-                NewAtmLaneExecutions = lists_utils:replace_at(
-                    NewAtmLaneExecution, AtmLaneIndex, AtmLaneExecutions
-                ),
-                {ok, AtmWorkflowExecution#atm_workflow_execution{lanes = NewAtmLaneExecutions}};
-            _ ->
+                };
+            (_) ->
                 ?ERROR_ALREADY_EXISTS
-        end
+        end, AtmWorkflowExecution)
     end,
     case atm_workflow_execution:update(AtmWorkflowExecutionDoc#document.key, Diff) of
         {ok, NewAtmWorkflowExecutionDoc} ->
             NewAtmWorkflowExecutionDoc;
-        ?ERROR_ALREADY_EXISTS = Error ->
+        {error, _} = Error ->
             delete_execution_elements(ExecutionElements),
             throw(Error)
     end.
@@ -119,15 +108,13 @@ create_run_internal(AtmLaneIndex, AtmWorkflowExecutionDoc, AtmWorkflowExecutionC
 ) ->
     create_run_ctx().
 build_lane_execution_create_ctx(AtmLaneIndex, AtmWorkflowExecutionDoc = #document{
-    value = #atm_workflow_execution{
-        schema_snapshot_id = AtmWorkflowSchemaSnapshotId,
-        lanes = AtmLaneExecutions
+    value = AtmWorkflowExecution = #atm_workflow_execution{
+        schema_snapshot_id = AtmWorkflowSchemaSnapshotId
     }
 }, AtmWorkflowExecutionCtx) ->
-    #atm_lane_execution{runs = [
-        #atm_lane_execution_run{status = ?PREPARING_STATUS, iterated_store_id = IteratedStoreId}
-        | _
-    ]} = lists:nth(AtmLaneIndex, AtmLaneExecutions),
+    {ok, LaneRun = #atm_lane_execution_run{status = ?PREPARING_STATUS}} = atm_lane_execution:get_curr_run(
+        AtmLaneIndex, AtmWorkflowExecution
+    ),
 
     {ok, AtmWorkflowSchemaSnapshotDoc = #document{value = #atm_workflow_schema_snapshot{
         lanes = AtmLaneSchemas
@@ -146,13 +133,13 @@ build_lane_execution_create_ctx(AtmLaneIndex, AtmWorkflowExecutionDoc = #documen
         lane_index = AtmLaneIndex,
         lane_schema = AtmLaneSchema,
 
-        iterated_store_id = case IteratedStoreId of
+        iterated_store_id = case LaneRun#atm_lane_execution_run.iterated_store_id of
             undefined ->
                 % If not explicitly set then take designated by schema store
                 atm_workflow_execution_ctx:get_workflow_store_id(
                     AtmStoreSchemaId, AtmWorkflowExecutionCtx
                 );
-            _ ->
+            IteratedStoreId ->
                 IteratedStoreId
         end,
 
