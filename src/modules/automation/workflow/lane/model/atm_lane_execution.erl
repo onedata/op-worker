@@ -17,6 +17,8 @@
 -include("modules/automation/atm_execution.hrl").
 
 %% API
+-export([get_run/2]).
+-export([update_curr_run/3, update_curr_run/4]).
 -export([to_json/1]).
 
 %% persistent_record callbacks
@@ -39,6 +41,67 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+
+-spec get_run(undefined | pos_integer(), atm_workflow_execution:record()) ->
+    {ok, run()} | errors:error().
+get_run(LaneIndex, #atm_workflow_execution{lanes = AtmLaneExecutions}) ->
+    case lists:nth(LaneIndex, AtmLaneExecutions) of
+        #atm_lane_execution{runs = [Run | _]} -> {ok, Run};
+        _ -> ?ERROR_NOT_FOUND
+    end.
+
+
+%% @private
+-spec update_curr_run(
+    undefined | pos_integer(),
+    fun((atm_lane_execution:run()) -> {ok, atm_lane_execution:run()} | errors:error()),
+    atm_workflow_execution:record()
+) ->
+    {ok, atm_workflow_execution:record()} | errors:error().
+update_curr_run(GivenLaneIndex, UpdateFun, AtmWorkflowExecution) ->
+    update_curr_run(GivenLaneIndex, UpdateFun, undefined, AtmWorkflowExecution).
+
+
+-spec update_curr_run(
+    undefined | pos_integer(),
+    fun((atm_lane_execution:run()) -> {ok, atm_lane_execution:run()} | errors:error()),
+    undefined | atm_lane_execution:run(),
+    atm_workflow_execution:record()
+) ->
+    {ok, atm_workflow_execution:record()} | errors:error().
+update_curr_run(GivenLaneIndex, Diff, Default, AtmWorkflowExecution = #atm_workflow_execution{
+    lanes = AtmLaneExecutions,
+    curr_lane_index = CurrLaneIndex,
+    curr_run_no = CurrRunNo
+}) ->
+    LaneIndex = utils:ensure_defined(GivenLaneIndex, CurrLaneIndex),
+    AtmLaneExecution = #atm_lane_execution{runs = Runs} = lists:nth(LaneIndex, AtmLaneExecutions),
+
+    UpdateRunsResult = case Runs of
+        [#atm_lane_execution_run{run_no = RunNo} = CurrRun | RestRuns] when
+            RunNo == undefined;
+            RunNo == CurrRunNo
+        ->
+            case Diff(CurrRun) of
+                {ok, UpdatedCurrRun} -> {ok, [UpdatedCurrRun | RestRuns]};
+                {error, _} = Error1 -> Error1
+            end;
+        _ when Default /= undefined ->
+            {ok, [Default | Runs]};
+        _ ->
+            ?ERROR_NOT_FOUND
+    end,
+
+    case UpdateRunsResult of
+        {ok, NewRuns} ->
+            NewAtmLaneExecution = AtmLaneExecution#atm_lane_execution{runs = NewRuns},
+            {ok, AtmWorkflowExecution#atm_workflow_execution{lanes = lists_utils:replace_at(
+                NewAtmLaneExecution, LaneIndex, AtmLaneExecutions
+            )}};
+        {error, _} = Error2 ->
+            Error2
+    end.
 
 
 -spec to_json(record()) -> json_utils:json_map().
