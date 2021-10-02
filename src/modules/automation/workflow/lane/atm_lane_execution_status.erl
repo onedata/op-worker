@@ -263,7 +263,7 @@ handle_currently_executed_lane_run_ended(AtmWorkflowExecution = #atm_workflow_ex
                 {ok, #atm_lane_execution_run{status = ?FINISHED_STATUS}} ->
                     schedule_next_lane_run(NewAtmWorkflowExecution);
                 _ ->
-                    interrupt_next_lane_run_if_preparing_in_advance(NewAtmWorkflowExecution)
+                    {ok, NewAtmWorkflowExecution}
             end
     end.
 
@@ -330,23 +330,3 @@ schedule_next_lane_run(AtmWorkflowExecution = #atm_workflow_execution{
         NextLaneIndex, Diff, Default, AtmWorkflowExecution
     ),
     {ok, NewAtmWorkflowExecution#atm_workflow_execution{curr_lane_index = NextLaneIndex}}.
-
-
-%% TODO will it work???
-%% @private
--spec interrupt_next_lane_run_if_preparing_in_advance(atm_workflow_execution:record()) ->
-    {ok, atm_workflow_execution:record()}.
-interrupt_next_lane_run_if_preparing_in_advance(AtmWorkflowExecution = #atm_workflow_execution{
-    curr_lane_index = CurrLaneIndex,
-    curr_run_no = CurrRunNo
-}) ->
-    Diff = fun(#atm_lane_execution_run{run_no = undefined} = Run) ->
-        {ok, Run#atm_lane_execution_run{run_no = CurrRunNo, status = ?INTERRUPTED_STATUS}}
-    end,
-    case atm_lane_execution:update_curr_run(CurrLaneIndex + 1, Diff, AtmWorkflowExecution) of
-        {ok, _} = Result ->
-            Result;
-        ?ERROR_NOT_FOUND ->
-            % no next lane run preparing in advance
-            {ok, AtmWorkflowExecution}
-    end.
