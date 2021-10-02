@@ -6,8 +6,50 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module provides utility functions for management of automation
-%%% workflow execution status and phase.
+%%% This module contains functions that handle atm workflow execution status
+%%% transitions according to following state machine:
+%%%
+%%%  W
+%%%  A         +-----------+
+%%%  I         | SCHEDULED |------------------------------
+%%%  T         +-----------+                               \
+%%%  I               |                                      |
+%%%  N    first lane run transitions                        |
+%%%  G        to preparing status                           |
+%%%                  |                                      |
+%%% =================|======================================|=================
+%%%                  v                                      |
+%%%            +-----------+                                |
+%%%            |   ACTIVE  |--------------------------------o
+%%%            +-----------+                                |
+%%%                       \                    currently executed lane run
+%%%                        \                     failed or was cancelled
+%%%  O                      \                               |
+%%%  N                       \                              v
+%%%  G                        \                       +-----------+
+%%%  O                         \                      |  ABORTING |
+%%%  I                          \                     +-----------+
+%%%  N                           \                  /
+%%%  G                        last executed lane run
+%%%                          /          |           \
+%%%                         /           |            \
+%%%                        /            |             \
+%%%         successfully finished     failed      was cancelled
+%%%                      /              |                \
+%%% ====================/===============|=================\===================
+%%%                    /                |                  \
+%%%  E                v                 v                   v
+%%%  N     +-----------+           +-----------+           +-----------+
+%%%  D     |  FINISHED |           |   FAILED  |           | CANCELLED |
+%%%  E     +-----------+           +-----------+           +-----------+
+%%%  D
+%%%
+%%% Note: When transition to ended phase occurs the workflow execution status is
+%%% copied from last executed lane run which works because:
+%%% 1) if last lane run successfully finished than all previous lane runs must
+%%%    have also successfully finished.
+%%% 2) if last lane run aborted (due to cancel or failure) than entire workflow
+%%%    execution is aborted with the same reason.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_workflow_execution_status).
@@ -26,6 +68,13 @@
 -export([handle_ended/1]).
 
 
+% Function taking as argument entire atm_workflow_execution record, modifying lane run
+% and returning updated atm_workflow_execution record (or record)
+-type lane_run_diff() :: fun((atm_workflow_execution:record()) ->
+    atm_workflow_execution:record() | errors:error()
+).
+
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -36,16 +85,12 @@ infer_phase(#atm_workflow_execution{status = Status}) ->
     status_to_phase(Status).
 
 
--spec handle_lane_preparing(
-    pos_integer(),
-    atm_workflow_execution:id(),
-    fun((atm_workflow_execution:record()) -> atm_workflow_execution:record() | errors:error())
-) ->
+-spec handle_lane_preparing(pos_integer(), atm_workflow_execution:id(), lane_run_diff()) ->
     {ok, atm_workflow_execution:doc()} | errors:error().
-handle_lane_preparing(AtmLaneIndex, AtmWorkflowExecutionId, AtmLaneExecutionDiff) ->
+handle_lane_preparing(LaneIndex, AtmWorkflowExecutionId, AtmLaneExecutionDiff) ->
     Diff = fun
-        (Record = #atm_workflow_execution{status = ?SCHEDULED_STATUS, curr_lane_index = CurrIndex})
-            when CurrIndex =:= AtmLaneIndex
+        (Record = #atm_workflow_execution{status = ?SCHEDULED_STATUS, curr_lane_index = CurrLaneIndex}) when
+            CurrLaneIndex =:= LaneIndex
         ->
             case AtmLaneExecutionDiff(Record) of
                 {ok, NewRecord} ->
@@ -78,10 +123,7 @@ handle_lane_preparing(AtmLaneIndex, AtmWorkflowExecutionId, AtmLaneExecutionDiff
     end.
 
 
--spec handle_lane_enqueued(
-    atm_workflow_execution:id(),
-    fun((atm_workflow_execution:record()) -> atm_workflow_execution:record() | errors:error())
-) ->
+-spec handle_lane_enqueued(atm_workflow_execution:id(), lane_run_diff()) ->
     {ok, atm_workflow_execution:doc()} | errors:error().
 handle_lane_enqueued(AtmWorkflowExecutionId, AtmLaneExecutionDiff) ->
     atm_workflow_execution:update(AtmWorkflowExecutionId, fun
@@ -102,19 +144,19 @@ handle_lane_enqueued(AtmWorkflowExecutionId, AtmLaneExecutionDiff) ->
 -spec handle_lane_aborting(
     undefined | pos_integer(),
     atm_workflow_execution:id(),
-    fun((atm_workflow_execution:record()) -> atm_workflow_execution:record() | errors:error())
+    lane_run_diff()
 ) ->
     ok | errors:error().
-handle_lane_aborting(AtmLaneIndex, AtmWorkflowExecutionId, AtmLaneExecutionDiff) ->
+handle_lane_aborting(GivenLaneIndex, AtmWorkflowExecutionId, AtmLaneExecutionDiff) ->
     Diff = fun
-        (Record = #atm_workflow_execution{status = Status, curr_lane_index = CurrIndex}) when
+        (Record = #atm_workflow_execution{status = Status, curr_lane_index = CurrLaneIndex}) when
             Status == ?SCHEDULED_STATUS;
             Status == ?ACTIVE_STATUS;
             Status == ?ABORTING_STATUS
         ->
-            IsCurrentlyExecutedLane = AtmLaneIndex == undefined orelse AtmLaneIndex == CurrIndex,
+            LaneIndex = utils:ensure_defined(GivenLaneIndex, CurrLaneIndex),
 
-            case {IsCurrentlyExecutedLane, AtmLaneExecutionDiff(Record)} of
+            case {LaneIndex == CurrLaneIndex, AtmLaneExecutionDiff(Record)} of
                 {true, {ok, NewRecord}} ->
                     {ok, set_times_on_phase_transition(NewRecord#atm_workflow_execution{
                         status = ?ABORTING_STATUS
@@ -137,10 +179,7 @@ handle_lane_aborting(AtmLaneIndex, AtmWorkflowExecutionId, AtmLaneExecutionDiff)
     end.
 
 
--spec handle_lane_task_status_change(
-    atm_workflow_execution:id(),
-    fun((atm_workflow_execution:record()) -> atm_workflow_execution:record() | errors:error())
-) ->
+-spec handle_lane_task_status_change(atm_workflow_execution:id(), lane_run_diff()) ->
     ok | errors:error().
 handle_lane_task_status_change(AtmWorkflowExecutionId, AtmLaneExecutionDiff) ->
     Diff = fun(Record) ->
