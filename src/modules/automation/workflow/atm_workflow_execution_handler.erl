@@ -234,10 +234,12 @@ handle_lane_execution_ended(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, Atm
     atm_workflow_execution_env:record()
 ) ->
     ok.
-handle_workflow_execution_ended(AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv) ->
+handle_workflow_execution_ended(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv) ->
+    AtmWorkflowExecutionCtx = atm_workflow_execution_ctx:acquire(undefined, AtmWorkflowExecutionEnv),
+
     try
         {ok, AtmWorkflowExecutionDoc} = atm_workflow_execution:get(AtmWorkflowExecutionId),
-        % TODO ensure all lanes ended
+        ensure_all_lane_executions_ended(AtmWorkflowExecutionDoc, AtmWorkflowExecutionCtx),
         freeze_workflow_stores(AtmWorkflowExecutionDoc),
 
         atm_workflow_execution_session:terminate(AtmWorkflowExecutionId),
@@ -257,6 +259,43 @@ handle_workflow_execution_ended(AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+%% @private
+-spec ensure_all_lane_executions_ended(
+    atm_workflow_execution:doc(),
+    atm_workflow_execution_ctx:record()
+) ->
+    ok.
+ensure_all_lane_executions_ended(#document{
+    key = AtmWorkflowExecutionId,
+    value = AtmWorkflowExecution = #atm_workflow_execution{
+        lanes_num = LanesNum,
+        curr_lane_index = CurrLaneIndex
+    }
+}, AtmWorkflowExecutionCtx) ->
+    AtmLaneExecutionsToCheck = case CurrLaneIndex < LanesNum of
+        true ->
+            % next lane may have been preparing in advance
+            [CurrLaneIndex, CurrLaneIndex + 1];
+        false ->
+            [CurrLaneIndex]
+    end,
+    lists:foreach(fun(LaneIndex) ->
+        case atm_lane_execution:get_curr_run(LaneIndex, AtmWorkflowExecution) of
+            {ok, #atm_lane_execution_run{status = Status}} ->
+                case atm_lane_execution_status:status_to_phase(Status) of
+                    ?ENDED_PHASE ->
+                        ok;
+                    _ ->
+                        atm_lane_execution_handler:handle_ended(
+                            LaneIndex, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx
+                        )
+                end;
+            _ ->
+                ok
+        end
+    end, AtmLaneExecutionsToCheck).
 
 
 %% @private
