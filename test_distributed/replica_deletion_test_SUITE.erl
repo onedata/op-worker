@@ -279,7 +279,7 @@ init_per_testcase(throttling_test, Config) ->
     init_per_testcase(default, [{old_replica_deletion_max_parallel_requests, OldValue} | Config]);
 init_per_testcase(_Case, Config) ->
     Config2 = sort_workers(Config),
-    ct:timetrap(timer:minutes(20)),
+    ct:timetrap(timer:minutes(40)),
     lfm_proxy:init(Config2).
 
 end_per_testcase(throttling_test, Config) ->

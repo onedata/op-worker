@@ -85,7 +85,7 @@ truncate_insecure(UserCtx, FileCtx1, Size, UpdateTimes, CreateFileIfNotExist) ->
                 {error, ?ENOENT} ->
                     case CreateFileIfNotExist of
                         true ->
-                            case sd_utils:create_deferred(FileCtx3, user_ctx:new(?ROOT_SESS_ID), false, true) of
+                            case sd_utils:create_deferred(FileCtx3, user_ctx:new(?ROOT_SESS_ID), true) of
                                 {#document{}, FileCtx4} ->
                                     truncate_insecure(UserCtx, FileCtx4, Size, UpdateTimes, false);
                                 Error3 = {error, _} ->
