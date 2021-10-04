@@ -481,6 +481,7 @@ resolve_get_operation_handler(dataset_summary, private) -> ?MODULE;
 resolve_get_operation_handler(download_url, private) -> ?MODULE;         % gs only
 resolve_get_operation_handler(download_url, public) -> ?MODULE;          % gs only
 resolve_get_operation_handler(hardlinks, private) -> ?MODULE;
+resolve_get_operation_handler({hardlinks, _}, private) -> ?MODULE;
 resolve_get_operation_handler(symlink_value, public) -> ?MODULE;
 resolve_get_operation_handler(symlink_value, private) -> ?MODULE;
 resolve_get_operation_handler(symlink_target, public) -> ?MODULE;
@@ -566,6 +567,13 @@ data_spec_get(#gri{aspect = hardlinks}) ->
         optional => #{<<"limit">> => {integer, {not_lower_than, 1}}}
     };
 
+data_spec_get(#gri{aspect = {hardlinks, _}}) -> #{
+    required => #{
+        id => {binary, guid},
+        {aspect, <<"guid">>} => {binary, guid}
+    }
+};
+
 data_spec_get(#gri{aspect = transfers}) -> #{
     required => #{id => {binary, guid}},
     optional => #{<<"include_ended_ids">> => {boolean, any}}
@@ -617,6 +625,9 @@ authorize_get(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = As}}, _) when
 ->
     middleware_utils:has_access_to_file(Auth, Guid);
 
+authorize_get(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = {hardlinks, _}}}, _) ->
+    middleware_utils:has_access_to_file(Auth, Guid);
+
 authorize_get(#op_req{auth = ?USER(UserId), gri = #gri{id = Guid, aspect = transfers}}, _) ->
     SpaceId = file_id:guid_to_space_id(Guid),
     space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW_TRANSFERS);
@@ -658,6 +669,9 @@ validate_get(#op_req{gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= symlink_value;
     As =:= symlink_target
 ->
+    middleware_utils:assert_file_managed_locally(Guid);
+
+validate_get(#op_req{gri = #gri{id = Guid, aspect = {hardlinks, _}}}, _) ->
     middleware_utils:assert_file_managed_locally(Guid);
 
 validate_get(#op_req{gri = #gri{aspect = download_url}, data = Data}, _) ->
@@ -823,6 +837,16 @@ get(#op_req{auth = ?USER(_UserId, SessId), data = Data, gri = #gri{id = FileGuid
             Result;
         Limit ->
             {ok, lists:sublist(Hardlinks, Limit)}
+    end;
+
+get(#op_req{gri = #gri{id = SourceGuid, aspect = {hardlinks, TargetGuid}}}, _) ->
+    IsHardlink = 
+        fslogic_uuid:ensure_referenced_uuid(file_id:guid_to_uuid(SourceGuid)) 
+        == 
+        fslogic_uuid:ensure_referenced_uuid(file_id:guid_to_uuid(TargetGuid)),
+    case IsHardlink of
+        true -> {ok, #{}};
+        false -> ?ERROR_NOT_FOUND
     end;
 
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = symlink_value}}, _) ->

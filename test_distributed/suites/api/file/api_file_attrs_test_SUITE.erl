@@ -37,7 +37,9 @@
     set_mode_on_provider_not_supporting_space_test/1,
 
     get_file_distribution_test/1,
-    get_dir_distribution_test/1
+    get_dir_distribution_test/1,
+    
+    get_hardlink_relation_test/1
 ]).
 
 groups() -> [
@@ -52,7 +54,9 @@ groups() -> [
         set_mode_on_provider_not_supporting_space_test,
 
         get_file_distribution_test,
-        get_dir_distribution_test
+        get_dir_distribution_test,
+        
+        get_hardlink_relation_test
     ]}
 ].
 
@@ -231,6 +235,79 @@ get_attrs_on_provider_not_supporting_space_test(_Config) ->
     ])).
 
 
+get_hardlink_relation_test(_Config) ->
+    [ProviderNode] = oct_background:get_provider_nodes(krakow),
+    GenPathFun = fun() ->
+        filename:join(["/", ?SPACE_KRK_PAR, ?RANDOM_FILE_NAME()])
+    end,
+    UserSessIdP1 = oct_background:get_user_session_id(user3, krakow),
+    {ok, TargetGuid} = api_test_utils:create_file(<<"file">>, ProviderNode, UserSessIdP1, GenPathFun()),
+    {ok, NotAffiliatedGuid} = api_test_utils:create_file(<<"file">>, ProviderNode, UserSessIdP1, GenPathFun()),
+    {ok, #file_attr{guid = LinkGuid1}} = lfm_proxy:make_link(ProviderNode, UserSessIdP1, GenPathFun(), TargetGuid),
+    {ok, #file_attr{guid = LinkGuid2}} = lfm_proxy:make_link(ProviderNode, UserSessIdP1, GenPathFun(), TargetGuid),
+    
+    MemRef = api_test_memory:init(),
+    
+    ValidateResultFun = fun
+        (<<"invalid_guid">>, Result, _ExpectedOk, _ExpectedError, ExpectedBadValue) ->
+            ?assertEqual(ExpectedBadValue, Result);
+        (Guid, Result, ExpectedOk, ExpectedError, _ExpectedBadValue) ->
+            case lists:member(Guid, [TargetGuid, LinkGuid1, LinkGuid2]) of
+                true -> ?assertEqual(ExpectedOk, Result);
+                false -> ?assertEqual(ExpectedError, Result)
+            end
+    end,
+    
+    ValidateGsCallResultFun = fun
+        (_, Result) ->
+            MappedResult = case Result of
+                {ok, ResultMap} -> {ok, maps:without([<<"gri">>, <<"revision">>], ResultMap)};
+                _ -> Result
+            end, 
+            Guid = api_test_memory:get(MemRef, <<"guid">>),
+            ValidateResultFun(Guid, MappedResult, {ok, #{}}, ?ERROR_NOT_FOUND, ?ERROR_BAD_VALUE_IDENTIFIER(<<"guid">>))
+    end,
+    
+    ValidateRestCallResultFun = fun
+        (_, {ok, RespCode, _RespHeaders, _RespBody}) ->
+            Guid = api_test_memory:get(MemRef, <<"guid">>),
+            ValidateResultFun(Guid, RespCode, 204, 404, 400)
+    end,
+    
+    ?assert(onenv_api_test_runner:run_tests([
+        #suite_spec{
+            target_nodes = [ProviderNode],
+            client_spec = #client_spec{
+                correct = [
+                    user2,  % space owner - doesn't need any perms
+                    user3,  % files owner
+                    user4   % space member - should succeed as no perms are required
+                ]
+            },
+            scenario_templates = [
+                #scenario_template{
+                    name = <<"Get hardlink relation test using gs api">>,
+                    type = gs,
+                    prepare_args_fun = build_get_hardlink_relation_prepare_gs_args_fun(MemRef, TargetGuid),
+                    validate_result_fun = ValidateGsCallResultFun
+                },
+                #scenario_template{
+                    name = <<"Get hardlink relation test using rest api">>,
+                    type = rest,
+                    prepare_args_fun = build_get_hardlink_relation_prepare_rest_args_fun(MemRef, TargetGuid),
+                    validate_result_fun = ValidateRestCallResultFun
+                }
+            ],
+            data_spec = #data_spec{
+                optional = [<<"guid">>],
+                correct_values = #{
+                    <<"guid">> => [LinkGuid1, LinkGuid2, NotAffiliatedGuid, TargetGuid]
+                }
+            }
+        }
+    ])).
+
+
 %% @private
 -spec attrs_to_json(od_share:id(), #file_attr{}) -> map().
 attrs_to_json(ShareId, #file_attr{
@@ -351,6 +428,44 @@ build_get_attrs_prepare_gs_args_fun(FileGuid, Scope) ->
             operation = get,
             gri = #gri{type = op_file, id = GriId, aspect = attrs, scope = Scope},
             data = Data1
+        }
+    end.
+
+
+%% @private
+-spec build_get_hardlink_relation_prepare_gs_args_fun(api_test_memory:mem_ref(), file_id:file_guid()) ->
+    onenv_api_test_runner:prepare_args_fun().
+build_get_hardlink_relation_prepare_gs_args_fun(MemRef, FileGuid) ->
+    fun(#api_test_ctx{data = Data0}) ->
+        {GriId, Data1} = api_test_utils:maybe_substitute_bad_id(FileGuid, Data0),
+        Guid2 = maps:get(<<"guid">>, Data1, <<"invalid_guid">>),
+        api_test_memory:set(MemRef, <<"guid">>, Guid2),
+        
+        #gs_args{
+            operation = get,
+            gri = #gri{type = op_file, id = GriId, aspect = {hardlinks, Guid2}, scope = private},
+            data = undefined
+        }
+    end.
+
+
+%% @private
+-spec build_get_hardlink_relation_prepare_rest_args_fun(api_test_memory:mem_ref(), file_id:file_guid()) ->
+    onenv_api_test_runner:prepare_args_fun().
+build_get_hardlink_relation_prepare_rest_args_fun(MemRef, FileGuid) ->
+    fun(#api_test_ctx{data = Data0}) ->
+        Data1 = utils:ensure_defined(Data0, #{}),
+        {ok, ValidObjectId} = file_id:guid_to_objectid(FileGuid),
+        {Id, _Data2} = api_test_utils:maybe_substitute_bad_id(ValidObjectId, Data1),
+        Guid2 = maps:get(<<"guid">>, Data1, <<"invalid_guid">>),
+        {ok, ObjectId2} = file_id:guid_to_objectid(Guid2),
+        api_test_memory:set(MemRef, <<"guid">>, Guid2),
+        
+        RestPath = <<"data/", Id/binary, "/hardlinks/", ObjectId2/binary>>,
+        
+        #rest_args{
+            method = get,
+            path = RestPath
         }
     end.
 
