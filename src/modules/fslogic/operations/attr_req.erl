@@ -230,12 +230,18 @@ get_file_references(UserCtx, FileCtx0) ->
 -spec get_child_attr(user_ctx:ctx(), ParentFile :: file_ctx:ctx(),
     Name :: file_meta:name(), boolean(), boolean()) -> fslogic_worker:fuse_response().
 get_child_attr(UserCtx, ParentFileCtx0, Name, IncludeReplicationStatus, IncludeLinkCount) ->
-    ParentFileCtx1 = fslogic_authz:ensure_authorized(
+    {ChildrenWhitelist, ParentFileCtx1} = fslogic_authz:ensure_authorized_readdir(
         UserCtx, ParentFileCtx0,
-        [?TRAVERSE_ANCESTORS, ?OPERATIONS(?traverse_container_mask)],
-        allow_ancestors
+        [?TRAVERSE_ANCESTORS, ?OPERATIONS(?traverse_container_mask)]
     ),
-    get_child_attr_insecure(UserCtx, ParentFileCtx1, Name, IncludeReplicationStatus, IncludeLinkCount).
+    case ChildrenWhitelist == undefined orelse lists:member(Name, ChildrenWhitelist) of
+        true ->
+            get_child_attr_insecure(
+                UserCtx, ParentFileCtx1, Name, IncludeReplicationStatus, IncludeLinkCount
+            );
+        false ->
+            throw(?ENOENT)
+    end.
 
 
 %%--------------------------------------------------------------------
