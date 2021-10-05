@@ -8,10 +8,10 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc 
-%%% This module contains definitions of basic_file_operations REST methods.
+%%% This module contains definitions of id-based_file_operations REST methods.
 %%% @end
 %%%--------------------------------------------------------------------
--module(basic_file_operations_rest_routes).
+-module(id-based_file_operations_rest_routes).
 
 -include("http/rest.hrl").
 
@@ -25,7 +25,7 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Definitions of basic_file_operations REST paths.
+%% Definitions of id-based_file_operations REST paths.
 %% @end
 %%--------------------------------------------------------------------
 -spec routes() -> [{binary(), module(), #rest_req{}}].
@@ -53,7 +53,7 @@ routes() -> [
             scope = private
         }
     }},
-    %% Remove file by ID
+    %% Remove file
     {<<"/data/:id">>, rest_handler, #rest_req{
         method = 'DELETE',
         b_gri = #b_gri{
@@ -86,7 +86,7 @@ routes() -> [
             scope = private
         }
     }},
-    %% Download file content by ID
+    %% Download file content
     {<<"/data/:id/content">>, rest_handler, #rest_req{
         method = 'GET',
         produces = [<<"application/octet-stream">>],

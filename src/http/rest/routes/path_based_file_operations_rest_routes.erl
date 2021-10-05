@@ -8,10 +8,10 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc 
-%%% This module contains definitions of file_path_operations REST methods.
+%%% This module contains definitions of path-based_file_operations REST methods.
 %%% @end
 %%%--------------------------------------------------------------------
--module(file_path_operations_rest_routes).
+-module(path-based_file_operations_rest_routes).
 
 -include("http/rest.hrl").
 
@@ -25,7 +25,7 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Definitions of file_path_operations REST paths.
+%% Definitions of path-based_file_operations REST paths.
 %% @end
 %%--------------------------------------------------------------------
 -spec routes() -> [{binary(), module(), #rest_req{}}].
@@ -51,7 +51,7 @@ routes() -> [
             scope = private
         }
     }},
-    %% Download file content at path
+    %% Download file content by path
     {<<"/data/:id/path/[...]">>, rest_handler, #rest_req{
         method = 'GET',
         produces = [<<"application/octet-stream">>],
