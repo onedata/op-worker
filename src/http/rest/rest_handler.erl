@@ -268,7 +268,7 @@ resolve_gri_bindings(SessionId, #b_gri{type = Tp, id = Id, aspect = As, scope = 
 resolve_bindings(_SessionId, ?BINDING(Key), Req) ->
     cowboy_req:binding(Key, Req);
 resolve_bindings(_SessionId, ?OBJECTID_BINDING(Key), Req) ->
-    SpaceIdOrObjectId = kv_utils:get([bindings, Key], Req),
+    SpaceIdOrObjectId = cowboy_req:binding(Key, Req),
     try
         middleware_utils:decode_object_id(SpaceIdOrObjectId, Key)
     catch throw:?ERROR_BAD_VALUE_IDENTIFIER(Key) ->
