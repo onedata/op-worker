@@ -105,18 +105,23 @@ sanitize_params(#op_req{
             {RawParams, #{}};
         file_at_path ->
             {RawParams#{path => cowboy_req:path_info(Req)}, #{
-                path => {list_of_binaries, fun(PathTokens) ->
-                    JoinedPath = str_utils:join_as_binaries(PathTokens, <<"/">>),
-                    filepath_utils:sanitize(JoinedPath),
-                    {true, PathTokens}
-                end},
                 <<"create_parents">> => {boolean, any}
             }}
 
     end,
 
     RequiredParamsDependingOnAspect = case Aspect of
-        file_at_path -> #{};
+        file_at_path -> #{
+            path => {list_of_binaries, fun(PathTokens) ->
+                case PathTokens == [] of
+                    true -> throw(?ERROR_BAD_VALUE_EMPTY(<<"path">>));
+                    false -> ok
+                end,
+                JoinedPath = str_utils:join_as_binaries(PathTokens, <<"/">>),
+                filepath_utils:sanitize(JoinedPath),
+                {true, PathTokens}
+            end}
+        };
         _ -> #{<<"name">> => {binary, non_empty}}
     end,
     ParamsRequiredDependingOnType = case maps:get(<<"type">>, RawParams2, undefined) of
