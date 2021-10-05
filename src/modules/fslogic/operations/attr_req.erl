@@ -232,7 +232,8 @@ get_file_references(UserCtx, FileCtx0) ->
 get_child_attr(UserCtx, ParentFileCtx0, Name, IncludeReplicationStatus, IncludeLinkCount) ->
     ParentFileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, ParentFileCtx0,
-        [?TRAVERSE_ANCESTORS, ?OPERATIONS(?traverse_container_mask)]
+        [?TRAVERSE_ANCESTORS, ?OPERATIONS(?traverse_container_mask)],
+        allow_ancestors
     ),
     get_child_attr_insecure(UserCtx, ParentFileCtx1, Name, IncludeReplicationStatus, IncludeLinkCount).
 
