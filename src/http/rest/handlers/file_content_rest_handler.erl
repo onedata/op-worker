@@ -29,7 +29,7 @@
 % the value was decided upon experimentally
 -define(COWBOY_READ_BODY_PERIOD_SECONDS, 15).
 
--define(DEFAULT_CREATE_DIRS_FLAG, true).
+-define(DEFAULT_CREATE_PARENTS_FLAG, false).
 
 
 %%%===================================================================
@@ -100,36 +100,37 @@ sanitize_params(#op_req{
     gri = #gri{aspect = Aspect}
 } = OpReq, Req) when Aspect == child orelse Aspect == file_at_path
 ->
-    % When creating file at path, path parameter is accessible only in cowboy request as list of path tokens.
-    % Therefore, additional cowboy request sanitizing is needed.
-    OptionalCowboyReqParams = #{
-        path_info => {list_of_binaries, fun(PathTokens) ->
-            JoinedPath = str_utils:join_as_binaries(PathTokens, <<"/">>),
-            filepath_utils:sanitize(JoinedPath),
-            {true, PathTokens}
-        end
-        }
-    },
-    middleware_sanitizer:sanitize_data(Req, #{
-        optional => OptionalCowboyReqParams
-    }),
+    {RawParams2, OptionalParamsDependingOnAspect} = case Aspect of
+        child ->
+            {RawParams, #{}};
+        file_at_path ->
+            {RawParams#{path => cowboy_req:path_info(Req)}, #{
+                path => {list_of_binaries, fun(PathTokens) ->
+                    JoinedPath = str_utils:join_as_binaries(PathTokens, <<"/">>),
+                    filepath_utils:sanitize(JoinedPath),
+                    {true, PathTokens}
+                end},
+                <<"create_parents">> => {boolean, any}
+            }}
 
-    AlwaysRequiredParams = case Aspect of
+    end,
+
+    RequiredParamsDependingOnAspect = case Aspect of
         file_at_path -> #{};
         _ -> #{<<"name">> => {binary, non_empty}}
     end,
-    ParamsRequiredDependingOnType = case maps:get(<<"type">>, RawParams, undefined) of
+    ParamsRequiredDependingOnType = case maps:get(<<"type">>, RawParams2, undefined) of
         <<"LNK">> ->
-            AlwaysRequiredParams#{<<"target_file_id">> => {binary, fun(ObjectId) ->
+            RequiredParamsDependingOnAspect#{<<"target_file_id">> => {binary, fun(ObjectId) ->
                 {true, middleware_utils:decode_object_id(ObjectId, <<"target_file_id">>)}
             end}};
         <<"SYMLNK">> ->
-            AlwaysRequiredParams#{<<"target_file_path">> => {binary, non_empty}};
+            RequiredParamsDependingOnAspect#{<<"target_file_path">> => {binary, non_empty}};
         _ ->
             % Do not do anything - exception will be raised by middleware_sanitizer
-            AlwaysRequiredParams
+            RequiredParamsDependingOnAspect
     end,
-    OptionalParams = #{
+    OptionalParams = OptionalParamsDependingOnAspect#{
         <<"type">> => {atom, [
             ?REGULAR_FILE_TYPE, ?DIRECTORY_TYPE, ?LINK_TYPE, ?SYMLINK_TYPE
         ]},
@@ -147,7 +148,7 @@ sanitize_params(#op_req{
         end},
         <<"offset">> => {integer, {not_lower_than, 0}}
     },
-    OpReq#op_req{data = middleware_sanitizer:sanitize_data(RawParams, #{
+    OpReq#op_req{data = middleware_sanitizer:sanitize_data(RawParams2, #{
         required => ParamsRequiredDependingOnType,
         optional => OptionalParams
     })};
@@ -155,23 +156,21 @@ sanitize_params(#op_req{
     operation = Operation,
     data = RawParams,
     gri = #gri{aspect = file_at_path}
-} = OpReq, Req) when Operation == delete orelse Operation == get  ->
+} = OpReq, Req) when Operation == delete orelse Operation == get ->
 
-    % When operating on file at path, path parameter is accessible only in cowboy request as list of path tokens.
-    % Therefore, additional cowboy request sanitizing is needed.
-    OptionalCowboyReqParams = #{
-        path_info => {list_of_binaries, fun(PathTokens) ->
+    RawParams2 = RawParams#{path => cowboy_req:path_info(Req)},
+    OptionalParams = #{
+        path => {list_of_binaries, fun(PathTokens) ->
             JoinedPath = str_utils:join_as_binaries(PathTokens, <<"/">>),
             filepath_utils:sanitize(JoinedPath),
             {true, PathTokens}
         end
-        }
+        },
+        <<"follow_symlinks">> => {boolean, any}
     },
-    middleware_sanitizer:sanitize_data(Req, #{
-        optional => OptionalCowboyReqParams
-    }),
-    OpReq#op_req{data = middleware_sanitizer:sanitize_data(RawParams, #{
-        optional => #{<<"follow_symlinks">> => {boolean, any}}
+
+    OpReq#op_req{data = middleware_sanitizer:sanitize_data(RawParams2, #{
+        optional => OptionalParams
     })
     }.
 
@@ -196,7 +195,7 @@ process_request(#op_req{
     data = Data
 }, Req) when Aspect == content orelse Aspect == file_at_path ->
 
-    FileGuid2 = resolve_path(Aspect, get, SessionId, FileGuid, Data, Req),
+    FileGuid2 = resolve_path(Aspect, get, SessionId, FileGuid, Data),
 
     FollowSymlinks = maps:get(<<"follow_symlinks">>, Data, true),
     case ?check(lfm:stat(SessionId, ?FILE_REF(FileGuid2, FollowSymlinks))) of
@@ -217,8 +216,8 @@ process_request(#op_req{
     auth = #auth{session_id = SessionId},
     gri = #gri{id = FileGuid, aspect = file_at_path},
     data = Data
-}, Req) ->
-    ResolvedGuid = resolve_path(file_at_path, delete, SessionId, FileGuid, Data, Req),
+}, _Req) ->
+    ResolvedGuid = resolve_path(file_at_path, delete, SessionId, FileGuid, Data),
     lfm:rm_recursive(SessionId, ?FILE_REF(ResolvedGuid));
 process_request(#op_req{
     operation = create,
@@ -248,7 +247,7 @@ process_request(#op_req{
     data = Params
 }, Req) when Aspect == child orelse Aspect == file_at_path ->
 
-    ParentGuid2 = resolve_path(Aspect, create, SessionId, ParentGuid, Params, Req),
+    ParentGuid2 = resolve_path(Aspect, create, SessionId, ParentGuid, Params),
 
     Name = case Aspect of
         content -> maps:get(<<"name">>, Params);
@@ -323,13 +322,13 @@ write_req_body_to_file(SessionId, FileRef, Offset, Req) ->
 
 
 -spec resolve_path(
-    gri:aspect(), middleware:operation(), session:id(), fslogic_worker:file_guid(), middleware:data(), cowboy_req:req()
+    gri:aspect(), middleware:operation(), session:id(), fslogic_worker:file_guid(), middleware:data()
 ) -> fslogic_worker:file_guid().
-resolve_path(file_at_path, Operation, SessionId, RelativeRootGuid, RawParams, Req) ->
-    PathInfo = cowboy_req:path_info(Req),
+resolve_path(file_at_path, Operation, SessionId, RelativeRootGuid, RawParams) ->
+    PathInfo = maps:get(path, RawParams),
 
     CreateDirs = case Operation of
-        create -> maps:get(<<"parent">>, RawParams, ?DEFAULT_CREATE_DIRS_FLAG);
+        create -> maps:get(<<"create_parents">>, RawParams, ?DEFAULT_CREATE_PARENTS_FLAG);
         _ -> false
     end,
 
@@ -340,7 +339,10 @@ resolve_path(file_at_path, Operation, SessionId, RelativeRootGuid, RawParams, Re
 
     Mode = maps:get(<<"mode">>, RawParams, ?DEFAULT_DIR_MODE),
 
-    {ok, ResolvedGuid} = lfm:resolve_guid_by_relative_path(SessionId, RelativeRootGuid, FilePath, CreateDirs, Mode),
-    ResolvedGuid;
-resolve_path(_, ParentGuid, _, _, _, _) ->
+    case lfm:resolve_guid_by_relative_path(SessionId, RelativeRootGuid, FilePath, CreateDirs, Mode) of
+        {ok, ResolvedGuid} -> ResolvedGuid;
+        {error, ?ENOENT} -> throw(?ERROR_POSIX(?ENOENT))
+    end;
+
+resolve_path(_, ParentGuid, _, _, _) ->
     ParentGuid.

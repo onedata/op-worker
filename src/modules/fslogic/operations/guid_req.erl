@@ -44,9 +44,8 @@ resolve_guid_by_relative_path(UserCtx, _RelRootGuid, Path, CreateDirs, Mode, Rel
     PathTokens = binary:split(Path, <<"/">>, [global]),
     LeafFileCtx = lists:foldl(fun(PathToken, ParentCtx) ->
         try
-            {ParentPath, _} = file_ctx:get_canonical_path(ParentCtx),
-            ChildDirPath = <<ParentPath/binary, "/", PathToken/binary>>,
-            file_ctx:new_by_canonical_path(UserCtx, ChildDirPath)
+            {ChildCtx, _} = files_tree:get_child(ParentCtx, PathToken, UserCtx),
+            ChildCtx
         catch
             _:_ ->
                 case CreateDirs of
@@ -59,7 +58,7 @@ resolve_guid_by_relative_path(UserCtx, _RelRootGuid, Path, CreateDirs, Mode, Rel
                 end
         end
     end, RelRootCtx0, PathTokens),
-    resolve_guid_insecure(UserCtx, LeafFileCtx).
+    resolve_guid(UserCtx, LeafFileCtx).
 
 
 %%--------------------------------------------------------------------

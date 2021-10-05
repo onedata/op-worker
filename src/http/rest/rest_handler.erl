@@ -275,7 +275,7 @@ resolve_bindings(_SessionId, ?OBJECTID_BINDING(Key), Req) ->
         {ok, SupportedSpaceIds} = provider_logic:get_spaces(),
         case lists:member(SpaceIdOrObjectId, SupportedSpaceIds) of
             true -> fslogic_uuid:spaceid_to_space_dir_guid(SpaceIdOrObjectId);
-            false -> throw(?ERROR_SPACE_NOT_SUPPORTED(SpaceIdOrObjectId))
+            false -> throw(?ERROR_SPACE_NOT_SUPPORTED_LOCALLY(SpaceIdOrObjectId))
         end
     end;
 resolve_bindings(SessionId, ?PATH_BINDING, Req) ->
