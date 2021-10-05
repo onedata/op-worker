@@ -2260,6 +2260,14 @@ init_per_testcase(multi_provider_permission_cache_test, Config) ->
     ct:timetrap({minutes, 15}),
     init_per_testcase(default, Config);
 
+init_per_testcase(mv_dir_test, Config) ->
+    ct:timetrap({minutes, 5}),
+    init_per_testcase(default, Config);
+
+init_per_testcase(mv_file_test, Config) ->
+    ct:timetrap({minutes, 5}),
+    init_per_testcase(default, Config);
+
 init_per_testcase(_Case, Config) ->
     initializer:mock_share_logic(Config),
     lfm_proxy:init(Config).
