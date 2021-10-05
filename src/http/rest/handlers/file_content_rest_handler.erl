@@ -297,58 +297,7 @@ process_request(#op_req{
     http_req:send_response(
         ?CREATED_REPLY([<<"data">>, ObjectId], #{<<"fileId">> => ObjectId}),
         Req3
-    );
-process_request(#op_req{
-    operation = create,
-    auth = #auth{session_id = SessionId},
-    gri = #gri{id = ParentGuid, aspect = file_at_path},
-    data = Params
-}, Req) ->
-    Name = maps:get(<<"name">>, Params),
-    Mode = maps:get(<<"mode">>, Params, undefined),
-
-    {Guid, Req3} = case maps:get(<<"type">>, Params, ?REGULAR_FILE_TYPE) of
-        ?DIRECTORY_TYPE ->
-            {ok, DirGuid} = ?check(lfm:mkdir(SessionId, ParentGuid, Name, Mode)),
-            {DirGuid, Req};
-        ?REGULAR_FILE_TYPE ->
-            {ok, FileGuid} = ?check(lfm:create(SessionId, ParentGuid, Name, Mode)),
-            FileRef = ?FILE_REF(FileGuid),
-
-            case {maps:get(<<"offset">>, Params, 0), cowboy_req:has_body(Req)} of
-                {0, false} ->
-                    {FileGuid, Req};
-                {Offset, _} ->
-                    try
-                        Req2 = write_req_body_to_file(SessionId, FileRef, Offset, Req),
-                        {FileGuid, Req2}
-                    catch Type:Reason ->
-                        lfm:unlink(SessionId, FileRef, false),
-                        erlang:Type(Reason)
-                    end
-            end;
-        ?LINK_TYPE ->
-            TargetFileGuid = maps:get(<<"target_file_id">>, Params),
-
-            {ok, #file_attr{guid = LinkGuid}} = ?check(lfm:make_link(
-                SessionId, ?FILE_REF(TargetFileGuid), ?FILE_REF(ParentGuid), Name
-            )),
-            {LinkGuid, Req};
-        ?SYMLINK_TYPE ->
-            TargetFilePath = maps:get(<<"target_file_path">>, Params),
-
-            {ok, #file_attr{guid = SymlinkGuid}} = ?check(lfm:make_symlink(
-                SessionId, ?FILE_REF(ParentGuid), Name, TargetFilePath
-            )),
-            {SymlinkGuid, Req}
-    end,
-    {ok, ObjectId} = file_id:guid_to_objectid(Guid),
-
-    http_req:send_response(
-        ?CREATED_REPLY([<<"data">>, ObjectId], #{<<"fileId">> => ObjectId}),
-        Req3
     ).
-
 
 %% @private
 -spec write_req_body_to_file(
