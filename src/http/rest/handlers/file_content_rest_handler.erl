@@ -72,9 +72,9 @@ handle_request(OpReq0, Req) ->
     true | no_return().
 ensure_operation_supported(create, child, private) -> true;
 ensure_operation_supported(create, content, private) -> true;
+ensure_operation_supported(create, file_at_path, private) -> true;
 ensure_operation_supported(get, content, public) -> true;
 ensure_operation_supported(get, content, private) -> true;
-ensure_operation_supported(create, file_at_path, private) -> true;
 ensure_operation_supported(get, file_at_path, private) -> true;
 ensure_operation_supported(delete, file_at_path, private) -> true;
 ensure_operation_supported(_, _, _) -> throw(?ERROR_NOT_SUPPORTED).
@@ -82,10 +82,6 @@ ensure_operation_supported(_, _, _) -> throw(?ERROR_NOT_SUPPORTED).
 
 %% @private
 -spec sanitize_params(middleware:req(), cowboy_req:req()) -> middleware:req() | no_return().
-sanitize_params(#op_req{operation = get, data = RawParams, gri = #gri{aspect = content}} = OpReq, _Req) ->
-    OpReq#op_req{data = middleware_sanitizer:sanitize_data(RawParams, #{
-        optional => #{<<"follow_symlinks">> => {boolean, any}}
-    })};
 sanitize_params(#op_req{
     operation = create,
     data = RawParams,
@@ -99,32 +95,33 @@ sanitize_params(#op_req{
     data = RawParams,
     gri = #gri{aspect = Aspect}
 } = OpReq, Req) when Aspect == child orelse Aspect == file_at_path
-->
-    {RawParams2, OptionalParamsDependingOnAspect} = case Aspect of
+    ->
+    {AllRawParams, OptionalParamsDependingOnAspect, RequiredParamsDependingOnAspect} = case Aspect of
         child ->
-            {RawParams, #{}};
+            {RawParams, #{}, #{<<"name">> => {binary, non_empty}}};
         file_at_path ->
             {RawParams#{path => cowboy_req:path_info(Req)}, #{
                 <<"create_parents">> => {boolean, any}
+            }, #{
+                path => {list_of_binaries, fun(PathTokens) ->
+                    case PathTokens == [] of
+                        true ->
+                            throw(?ERROR_BAD_VALUE_EMPTY(<<"path">>));
+                        false -> ok
+                    end,
+                    JoinedPath = str_utils:join_as_binaries(PathTokens, <<"/">>),
+                    case filepath_utils:sanitize(JoinedPath) of
+                        {error, _} ->
+                            throw(?ERROR_BAD_VALUE_PATH);
+                        {ok, _} -> ok
+                    end,
+                    {true, PathTokens}
+                end}
             }}
 
     end,
 
-    RequiredParamsDependingOnAspect = case Aspect of
-        file_at_path -> #{
-            path => {list_of_binaries, fun(PathTokens) ->
-                case PathTokens == [] of
-                    true -> throw(?ERROR_BAD_VALUE_EMPTY(<<"path">>));
-                    false -> ok
-                end,
-                JoinedPath = str_utils:join_as_binaries(PathTokens, <<"/">>),
-                filepath_utils:sanitize(JoinedPath),
-                {true, PathTokens}
-            end}
-        };
-        _ -> #{<<"name">> => {binary, non_empty}}
-    end,
-    ParamsRequiredDependingOnType = case maps:get(<<"type">>, RawParams2, undefined) of
+    AllRequiredParams = case maps:get(<<"type">>, AllRawParams, undefined) of
         <<"LNK">> ->
             RequiredParamsDependingOnAspect#{<<"target_file_id">> => {binary, fun(ObjectId) ->
                 {true, middleware_utils:decode_object_id(ObjectId, <<"target_file_id">>)}
@@ -135,7 +132,7 @@ sanitize_params(#op_req{
             % Do not do anything - exception will be raised by middleware_sanitizer
             RequiredParamsDependingOnAspect
     end,
-    OptionalParams = OptionalParamsDependingOnAspect#{
+    AllOptionalParams = OptionalParamsDependingOnAspect#{
         <<"type">> => {atom, [
             ?REGULAR_FILE_TYPE, ?DIRECTORY_TYPE, ?LINK_TYPE, ?SYMLINK_TYPE
         ]},
@@ -153,9 +150,13 @@ sanitize_params(#op_req{
         end},
         <<"offset">> => {integer, {not_lower_than, 0}}
     },
-    OpReq#op_req{data = middleware_sanitizer:sanitize_data(RawParams2, #{
-        required => ParamsRequiredDependingOnType,
-        optional => OptionalParams
+    OpReq#op_req{data = middleware_sanitizer:sanitize_data(AllRawParams, #{
+        required => AllRequiredParams,
+        optional => AllOptionalParams
+    })};
+sanitize_params(#op_req{operation = get, data = RawParams, gri = #gri{aspect = content}} = OpReq, _Req) ->
+    OpReq#op_req{data = middleware_sanitizer:sanitize_data(RawParams, #{
+        optional => #{<<"follow_symlinks">> => {boolean, any}}
     })};
 sanitize_params(#op_req{
     operation = Operation,
@@ -163,21 +164,23 @@ sanitize_params(#op_req{
     gri = #gri{aspect = file_at_path}
 } = OpReq, Req) when Operation == delete orelse Operation == get ->
 
-    RawParams2 = RawParams#{path => cowboy_req:path_info(Req)},
-    OptionalParams = #{
+    AllRawParams = RawParams#{path => cowboy_req:path_info(Req)},
+    AllOptionalParams = #{
         path => {list_of_binaries, fun(PathTokens) ->
             JoinedPath = str_utils:join_as_binaries(PathTokens, <<"/">>),
-            filepath_utils:sanitize(JoinedPath),
+            case filepath_utils:sanitize(JoinedPath) of
+                {error, _} -> throw(?ERROR_BAD_VALUE_PATH);
+                {ok, _} -> ok
+            end,
             {true, PathTokens}
         end
         },
         <<"follow_symlinks">> => {boolean, any}
     },
 
-    OpReq#op_req{data = middleware_sanitizer:sanitize_data(RawParams2, #{
-        optional => OptionalParams
-    })
-    }.
+    OpReq#op_req{data = middleware_sanitizer:sanitize_data(AllRawParams, #{
+        optional => AllOptionalParams
+    })}.
 
 
 %% @private
@@ -193,37 +196,6 @@ ensure_has_access_to_file(#op_req{auth = Auth, gri = #gri{id = Guid}}) ->
 %% @private
 -spec process_request(middleware:req(), cowboy_req:req()) ->
     cowboy_req:req() | no_return().
-process_request(#op_req{
-    operation = get,
-    auth = #auth{session_id = SessionId},
-    gri = #gri{id = FileGuid, aspect = Aspect},
-    data = Data
-}, Req) when Aspect == content orelse Aspect == file_at_path ->
-
-    FileGuid2 = resolve_path(Aspect, get, SessionId, FileGuid, Data),
-
-    FollowSymlinks = maps:get(<<"follow_symlinks">>, Data, true),
-    case ?check(lfm:stat(SessionId, ?FILE_REF(FileGuid2, FollowSymlinks))) of
-        {ok, #file_attr{type = ?REGULAR_FILE_TYPE} = FileAttrs} ->
-            file_download_utils:download_single_file(SessionId, FileAttrs, Req);
-        {ok, #file_attr{type = ?SYMLINK_TYPE} = FileAttrs} ->
-            file_download_utils:download_single_file(SessionId, FileAttrs, Req);
-        {ok, #file_attr{}} ->
-            case page_file_download:gen_file_download_url(SessionId, [FileGuid2], FollowSymlinks) of
-                {ok, Url} ->
-                    cowboy_req:reply(?HTTP_302_FOUND, #{?HDR_LOCATION => Url}, Req);
-                {error, _} = Error ->
-                    http_req:send_error(Error, Req)
-            end
-    end;
-process_request(#op_req{
-    operation = delete,
-    auth = #auth{session_id = SessionId},
-    gri = #gri{id = FileGuid, aspect = file_at_path},
-    data = Data
-}, _Req) ->
-    ResolvedGuid = resolve_path(file_at_path, delete, SessionId, FileGuid, Data),
-    lfm:rm_recursive(SessionId, ?FILE_REF(ResolvedGuid));
 process_request(#op_req{
     operation = create,
     auth = #auth{session_id = SessionId},
@@ -244,15 +216,14 @@ process_request(#op_req{
 
     Req2 = write_req_body_to_file(SessionId, FileRef, Offset, Req),
     http_req:send_response(?NO_CONTENT_REPLY, Req2);
-
 process_request(#op_req{
     operation = create,
     auth = #auth{session_id = SessionId},
-    gri = #gri{id = ParentGuid, aspect = Aspect},
+    gri = #gri{aspect = Aspect},
     data = Params
-}, Req) when Aspect == child orelse Aspect == file_at_path ->
+} = OpReq, Req) when Aspect == child orelse Aspect == file_at_path ->
 
-    ParentGuid2 = resolve_path(Aspect, create, SessionId, ParentGuid, Params),
+    FileGuid = resolve_target_file(OpReq),
 
     Name = case Aspect of
         content -> maps:get(<<"name">>, Params);
@@ -263,19 +234,19 @@ process_request(#op_req{
 
     {Guid, Req3} = case maps:get(<<"type">>, Params, ?REGULAR_FILE_TYPE) of
         ?DIRECTORY_TYPE ->
-            {ok, DirGuid} = ?check(lfm:mkdir(SessionId, ParentGuid2, Name, Mode)),
-            {DirGuid, Req};
+            {ok, CreatedDirGuid} = ?check(lfm:mkdir(SessionId, FileGuid, Name, Mode)),
+            {CreatedDirGuid, Req};
         ?REGULAR_FILE_TYPE ->
-            {ok, FileGuid} = ?check(lfm:create(SessionId, ParentGuid2, Name, Mode)),
-            FileRef = ?FILE_REF(FileGuid),
+            {ok, CreatedFileGuid} = ?check(lfm:create(SessionId, FileGuid, Name, Mode)),
+            FileRef = ?FILE_REF(CreatedFileGuid),
 
             case {maps:get(<<"offset">>, Params, 0), cowboy_req:has_body(Req)} of
                 {0, false} ->
-                    {FileGuid, Req};
+                    {CreatedFileGuid, Req};
                 {Offset, _} ->
                     try
                         Req2 = write_req_body_to_file(SessionId, FileRef, Offset, Req),
-                        {FileGuid, Req2}
+                        {CreatedFileGuid, Req2}
                     catch Type:Reason ->
                         lfm:unlink(SessionId, FileRef, false),
                         erlang:Type(Reason)
@@ -285,14 +256,14 @@ process_request(#op_req{
             TargetFileGuid = maps:get(<<"target_file_id">>, Params),
 
             {ok, #file_attr{guid = LinkGuid}} = ?check(lfm:make_link(
-                SessionId, ?FILE_REF(TargetFileGuid), ?FILE_REF(ParentGuid2), Name
+                SessionId, ?FILE_REF(TargetFileGuid), ?FILE_REF(FileGuid), Name
             )),
             {LinkGuid, Req};
         ?SYMLINK_TYPE ->
             TargetFilePath = maps:get(<<"target_file_path">>, Params),
 
             {ok, #file_attr{guid = SymlinkGuid}} = ?check(lfm:make_symlink(
-                SessionId, ?FILE_REF(ParentGuid2), Name, TargetFilePath
+                SessionId, ?FILE_REF(FileGuid), Name, TargetFilePath
             )),
             {SymlinkGuid, Req}
     end,
@@ -301,7 +272,38 @@ process_request(#op_req{
     http_req:send_response(
         ?CREATED_REPLY([<<"data">>, ObjectId], #{<<"fileId">> => ObjectId}),
         Req3
-    ).
+    );
+process_request(#op_req{
+    operation = get,
+    auth = #auth{session_id = SessionId},
+    gri = #gri{aspect = Aspect},
+    data = Data
+} = OpReq, Req) when Aspect == content orelse Aspect == file_at_path ->
+
+    FileGuid = resolve_target_file(OpReq),
+
+    FollowSymlinks = maps:get(<<"follow_symlinks">>, Data, true),
+    case ?check(lfm:stat(SessionId, ?FILE_REF(FileGuid, FollowSymlinks))) of
+        {ok, #file_attr{type = ?REGULAR_FILE_TYPE} = FileAttrs} ->
+            file_download_utils:download_single_file(SessionId, FileAttrs, Req);
+        {ok, #file_attr{type = ?SYMLINK_TYPE} = FileAttrs} ->
+            file_download_utils:download_single_file(SessionId, FileAttrs, Req);
+        {ok, #file_attr{}} ->
+            case page_file_download:gen_file_download_url(SessionId, [FileGuid], FollowSymlinks) of
+                {ok, Url} ->
+                    cowboy_req:reply(?HTTP_302_FOUND, #{?HDR_LOCATION => Url}, Req);
+                {error, _} = Error ->
+                    http_req:send_error(Error, Req)
+            end
+    end;
+process_request(#op_req{
+    operation = delete,
+    auth = #auth{session_id = SessionId},
+    gri = #gri{aspect = file_at_path}
+} = OpReq, _Req) ->
+    FileGuid = resolve_target_file(OpReq),
+    lfm:rm_recursive(SessionId, ?FILE_REF(FileGuid)).
+
 
 %% @private
 -spec write_req_body_to_file(
@@ -326,14 +328,18 @@ write_req_body_to_file(SessionId, FileRef, Offset, Req) ->
     Req2.
 
 
--spec resolve_path(
-    gri:aspect(), middleware:operation(), session:id(), fslogic_worker:file_guid(), middleware:data()
-) -> fslogic_worker:file_guid().
-resolve_path(file_at_path, Operation, SessionId, RelativeRootGuid, RawParams) ->
-    PathInfo = maps:get(path, RawParams),
+%% @private
+-spec resolve_target_file(middleware:req()) -> fslogic_worker:file_guid().
+resolve_target_file(#op_req{
+    operation = Operation,
+    auth = #auth{session_id = SessionId},
+    gri = #gri{id = BaseDirGuid, aspect = file_at_path},
+    data = Data
+}) ->
+    PathInfo = maps:get(path, Data),
 
     CreateDirs = case Operation of
-        create -> maps:get(<<"create_parents">>, RawParams, ?DEFAULT_CREATE_PARENTS_FLAG);
+        create -> maps:get(<<"create_parents">>, Data, ?DEFAULT_CREATE_PARENTS_FLAG);
         _ -> false
     end,
 
@@ -342,12 +348,13 @@ resolve_path(file_at_path, Operation, SessionId, RelativeRootGuid, RawParams) ->
         _ -> str_utils:join_as_binaries(PathInfo, <<"/">>)
     end,
 
-    Mode = maps:get(<<"mode">>, RawParams, ?DEFAULT_DIR_MODE),
+    Mode = maps:get(<<"mode">>, Data, ?DEFAULT_DIR_MODE),
 
-    case lfm:resolve_guid_by_relative_path(SessionId, RelativeRootGuid, FilePath, CreateDirs, Mode) of
+    case lfm:resolve_guid_by_relative_path(SessionId, BaseDirGuid, FilePath, CreateDirs, Mode) of
         {ok, ResolvedGuid} -> ResolvedGuid;
-        {error, ?ENOENT} -> throw(?ERROR_POSIX(?ENOENT))
-    end;
+        {error, ?ENOENT} -> throw(?ERROR_POSIX(?ENOENT));
+        {error, ?ENOTDIR} -> throw(?ERROR_POSIX(?ENOTDIR))
 
-resolve_path(_, ParentGuid, _, _, _) ->
-    ParentGuid.
+    end;
+resolve_target_file(#op_req{gri = #gri{id = TargetFileGuid}}) ->
+    TargetFileGuid.

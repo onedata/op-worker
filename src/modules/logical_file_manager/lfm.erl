@@ -240,7 +240,7 @@ get_file_guid(SessId, FilePath) ->
 -spec resolve_guid_by_relative_path(session:id(), fslogic_worker:file_guid(), boolean(), file_meta:mode(), file_meta:path()) ->
     {ok, fslogic_worker:file_guid()}.
 resolve_guid_by_relative_path(SessId, RelativeRootGuid, FilePath, CreateDirs, Mode) ->
-    ?run(lfm_files:resolve_guid_by_relative_path(SessId, RelativeRootGuid,  CreateDirs, Mode,FilePath)).
+    ?run(lfm_files:resolve_guid_by_relative_path(SessId, RelativeRootGuid,  CreateDirs, Mode, FilePath)).
 
 
 -spec get_parent(session:id(), file_key()) ->

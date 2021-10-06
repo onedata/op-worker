@@ -19,7 +19,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([resolve_guid/2, resolve_guid_by_relative_path/6, get_parent/2, get_file_path/2]).
+-export([resolve_guid/2, resolve_guid_by_relative_path/5, get_parent/2, get_file_path/2]).
 
 
 %%%===================================================================
@@ -40,24 +40,30 @@ resolve_guid(UserCtx, FileCtx0) ->
     resolve_guid_insecure(UserCtx, FileCtx1).
 
 
-resolve_guid_by_relative_path(UserCtx, _RelRootGuid, Path, CreateDirs, Mode, RelRootCtx0)->
+-spec resolve_guid_by_relative_path(
+    user_ctx:ctx(), file_ctx:ctx(), file_meta:path(), boolean(), file_meta:mode()
+) -> fslogic_worker:provider_response().
+resolve_guid_by_relative_path(UserCtx, RelRootCtx, Path, CreateDirs, Mode) ->
     PathTokens = binary:split(Path, <<"/">>, [global]),
     LeafFileCtx = lists:foldl(fun(PathToken, ParentCtx) ->
         try
             {ChildCtx, _} = files_tree:get_child(ParentCtx, PathToken, UserCtx),
             ChildCtx
         catch
-            _:_ ->
+            throw:?ENOENT ->
                 case CreateDirs of
                     true ->
-                        #fuse_response{fuse_response = #dir{guid = CreatedDirGuid}
-                        } = dir_req:mkdir(UserCtx, ParentCtx, PathToken, Mode),
-                        CreatedDirCtx = file_ctx:new_by_guid(CreatedDirGuid),
-                        CreatedDirCtx;
-                    false -> throw(?ERROR_NOT_FOUND)
-                end
+                        #fuse_response{fuse_response = #dir{guid = CreatedDirGuid}} = dir_req:mkdir(
+                            UserCtx, ParentCtx, PathToken, Mode
+                        ),
+                        file_ctx:new_by_guid(CreatedDirGuid);
+                    false ->
+                        throw(?ENOENT)
+                end;
+            Type:Reason ->
+                erlang:Type(Reason)
         end
-    end, RelRootCtx0, PathTokens),
+    end, RelRootCtx, PathTokens),
     resolve_guid(UserCtx, LeafFileCtx).
 
 

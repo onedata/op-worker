@@ -11,7 +11,7 @@
 %%% This module contains definitions of id-based_file_operations REST methods.
 %%% @end
 %%%--------------------------------------------------------------------
--module(id-based_file_operations_rest_routes).
+-module(id_based_file_operations_rest_routes).
 
 -include("http/rest.hrl").
 

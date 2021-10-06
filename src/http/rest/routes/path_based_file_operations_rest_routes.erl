@@ -11,7 +11,7 @@
 %%% This module contains definitions of path-based_file_operations REST methods.
 %%% @end
 %%%--------------------------------------------------------------------
--module(path-based_file_operations_rest_routes).
+-module(path_based_file_operations_rest_routes).
 
 -include("http/rest.hrl").
 
