@@ -119,7 +119,7 @@ routes() -> [
             scope = private
         }
     }},
-    %% Check whether is a hard link to a file
+    %% Test for hard link between files
     {<<"/data/:id/hardlinks/:hid">>, rest_handler, #rest_req{
         method = 'GET',
         produces = [<<"application/json">>],

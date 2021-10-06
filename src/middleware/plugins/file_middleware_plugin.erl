@@ -625,8 +625,9 @@ authorize_get(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = As}}, _) when
 ->
     middleware_utils:has_access_to_file(Auth, Guid);
 
-authorize_get(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = {hardlinks, _}}}, _) ->
-    middleware_utils:has_access_to_file(Auth, Guid);
+authorize_get(#op_req{auth = Auth, gri = #gri{id = FirstGuid, aspect = {hardlinks, SecondGuid}}}, _) ->
+    middleware_utils:has_access_to_file(Auth, FirstGuid) andalso
+        middleware_utils:has_access_to_file(Auth, SecondGuid);
 
 authorize_get(#op_req{auth = ?USER(UserId), gri = #gri{id = Guid, aspect = transfers}}, _) ->
     SpaceId = file_id:guid_to_space_id(Guid),
@@ -671,8 +672,9 @@ validate_get(#op_req{gri = #gri{id = Guid, aspect = As}}, _) when
 ->
     middleware_utils:assert_file_managed_locally(Guid);
 
-validate_get(#op_req{gri = #gri{id = Guid, aspect = {hardlinks, _}}}, _) ->
-    middleware_utils:assert_file_managed_locally(Guid);
+validate_get(#op_req{gri = #gri{id = FirstGuid, aspect = {hardlinks, SecondGuid}}}, _) ->
+    middleware_utils:assert_file_managed_locally(FirstGuid),
+    middleware_utils:assert_file_managed_locally(SecondGuid);
 
 validate_get(#op_req{gri = #gri{aspect = download_url}, data = Data}, _) ->
     FileIds = maps:get(<<"file_ids">>, Data),
@@ -839,14 +841,12 @@ get(#op_req{auth = ?USER(_UserId, SessId), data = Data, gri = #gri{id = FileGuid
             {ok, lists:sublist(Hardlinks, Limit)}
     end;
 
-get(#op_req{gri = #gri{id = SourceGuid, aspect = {hardlinks, TargetGuid}}}, _) ->
-    IsHardlink = 
-        fslogic_uuid:ensure_referenced_uuid(file_id:guid_to_uuid(SourceGuid)) 
-        == 
-        fslogic_uuid:ensure_referenced_uuid(file_id:guid_to_uuid(TargetGuid)),
-    case IsHardlink of
-        true -> {ok, #{}};
-        false -> ?ERROR_NOT_FOUND
+get(#op_req{gri = #gri{id = FirstGuid, aspect = {hardlinks, SecondGuid}}}, _) ->
+    FirstReferencedUuid = fslogic_uuid:ensure_referenced_uuid(file_id:guid_to_uuid(FirstGuid)),
+    SecondReferencedUuid = fslogic_uuid:ensure_referenced_uuid(file_id:guid_to_uuid(SecondGuid)),
+    case SecondReferencedUuid of
+        FirstReferencedUuid -> {ok, #{}};
+        _ -> ?ERROR_NOT_FOUND
     end;
 
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = symlink_value}}, _) ->

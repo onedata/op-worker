@@ -39,7 +39,7 @@
     get_file_distribution_test/1,
     get_dir_distribution_test/1,
     
-    get_hardlink_relation_test/1
+    test_for_hardlink_between_files_test/1
 ]).
 
 groups() -> [
@@ -56,7 +56,7 @@ groups() -> [
         get_file_distribution_test,
         get_dir_distribution_test,
         
-        get_hardlink_relation_test
+        test_for_hardlink_between_files_test
     ]}
 ].
 
@@ -235,7 +235,7 @@ get_attrs_on_provider_not_supporting_space_test(_Config) ->
     ])).
 
 
-get_hardlink_relation_test(_Config) ->
+test_for_hardlink_between_files_test(_Config) ->
     [ProviderNode] = oct_background:get_provider_nodes(krakow),
     GenPathFun = fun() ->
         filename:join(["/", ?SPACE_KRK_PAR, ?RANDOM_FILE_NAME()])
@@ -286,13 +286,13 @@ get_hardlink_relation_test(_Config) ->
             },
             scenario_templates = [
                 #scenario_template{
-                    name = <<"Get hardlink relation test using gs api">>,
+                    name = <<"Test for hardlink between files using gs api">>,
                     type = gs,
                     prepare_args_fun = build_get_hardlink_relation_prepare_gs_args_fun(MemRef, TargetGuid),
                     validate_result_fun = ValidateGsCallResultFun
                 },
                 #scenario_template{
-                    name = <<"Get hardlink relation test using rest api">>,
+                    name = <<"Test for hardlink between files using rest api">>,
                     type = rest,
                     prepare_args_fun = build_get_hardlink_relation_prepare_rest_args_fun(MemRef, TargetGuid),
                     validate_result_fun = ValidateRestCallResultFun
