@@ -33,14 +33,14 @@
 routes() ->
     AllRoutes = lists:flatten([
         archive_rest_routes:routes(),
+        basic_file_operations_rest_routes:routes(),
         custom_file_metadata_rest_routes:routes(),
         dataset_rest_routes:routes(),
         file_distribution_rest_routes:routes(),
+        file_path_resolution_rest_routes:routes(),
         file_registration_rest_routes:routes(),
-        id_based_file_operations_rest_routes:routes(),
         monitoring_rest_routes:routes(),
         oneprovider_rest_routes:routes(),
-        path_based_file_operations_rest_routes:routes(),
         qos_rest_routes:routes(),
         share_rest_routes:routes(),
         space_rest_routes:routes(),

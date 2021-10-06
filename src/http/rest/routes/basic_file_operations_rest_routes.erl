@@ -8,10 +8,10 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc 
-%%% This module contains definitions of id-based_file_operations REST methods.
+%%% This module contains definitions of basic_file_operations REST methods.
 %%% @end
 %%%--------------------------------------------------------------------
--module(id_based_file_operations_rest_routes).
+-module(basic_file_operations_rest_routes).
 
 -include("http/rest.hrl").
 
@@ -25,7 +25,7 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Definitions of id-based_file_operations REST paths.
+%% Definitions of basic_file_operations REST paths.
 %% @end
 %%--------------------------------------------------------------------
 -spec routes() -> [{binary(), module(), #rest_req{}}].
@@ -41,7 +41,7 @@ routes() -> [
             scope = private
         }
     }},
-    %% Create file in directory
+    %% Create file in directory by ID
     {<<"/data/:id/children">>, rest_handler, #rest_req{
         method = 'POST',
         consumes = [<<"application/octet-stream">>],
@@ -53,7 +53,7 @@ routes() -> [
             scope = private
         }
     }},
-    %% Remove file
+    %% Remove file by ID
     {<<"/data/:id">>, rest_handler, #rest_req{
         method = 'DELETE',
         b_gri = #b_gri{
@@ -86,7 +86,7 @@ routes() -> [
             scope = private
         }
     }},
-    %% Download file content
+    %% Download file content by ID
     {<<"/data/:id/content">>, rest_handler, #rest_req{
         method = 'GET',
         produces = [<<"application/octet-stream">>],
@@ -105,6 +105,39 @@ routes() -> [
             type = op_file, 
             id = ?OBJECTID_BINDING(id), 
             aspect = content, 
+            scope = private
+        }
+    }},
+    %% Remove file at path
+    {<<"/data/:id/path/[...]">>, rest_handler, #rest_req{
+        method = 'DELETE',
+        b_gri = #b_gri{
+            type = op_file, 
+            id = ?OBJECTID_BINDING(id), 
+            aspect = file_at_path, 
+            scope = private
+        }
+    }},
+    %% Download file content by path
+    {<<"/data/:id/path/[...]">>, rest_handler, #rest_req{
+        method = 'GET',
+        produces = [<<"application/octet-stream">>],
+        b_gri = #b_gri{
+            type = op_file, 
+            id = ?OBJECTID_BINDING(id), 
+            aspect = file_at_path, 
+            scope = private
+        }
+    }},
+    %% Create file at path
+    {<<"/data/:id/path/[...]">>, rest_handler, #rest_req{
+        method = 'PUT',
+        consumes = [<<"application/octet-stream">>],
+        produces = [<<"application/json">>],
+        b_gri = #b_gri{
+            type = op_file, 
+            id = ?OBJECTID_BINDING(id), 
+            aspect = file_at_path, 
             scope = private
         }
     }},
