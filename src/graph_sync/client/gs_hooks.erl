@@ -110,10 +110,10 @@ handle_entity_deleted(GRI) ->
 %%% Callback implementations
 %%%===================================================================
 
+%% NOTE: these procedures are run on a single cluster node.
 %% @private
 -spec on_connect_to_oz() -> ok | no_return().
 on_connect_to_oz() ->
-    % NOTE: these procedures are run on a single cluster node
     ok = gs_client_worker:enable_cache(),
     ok = oneprovider:set_up_service_in_onezone(),
     ok = provider_logic:update_subdomain_delegation_ips(),
@@ -129,12 +129,14 @@ on_connect_to_oz() ->
     ok = qos_worker:init_traverse_pools().
 
 
+%% NOTE: these procedures are run on a single cluster node.
 %% @private
 -spec on_disconnect_from_oz() -> ok | no_return().
 on_disconnect_from_oz() ->
     ok = auth_cache:report_oz_connection_termination().
 
 
+%% NOTE: these procedures are run on a single cluster node.
 %% @private
 -spec on_deregister_from_oz() -> ok.
 on_deregister_from_oz() ->
@@ -145,6 +147,7 @@ on_deregister_from_oz() ->
     ok = gs_client_worker:force_terminate().
 
 
+%% NOTE: these procedures are run on a single cluster node.
 %% @private
 -spec on_entity_deleted(gri:gri()) -> ok | no_return().
 on_entity_deleted(#gri{type = od_provider, id = ProviderId, aspect = instance}) ->
