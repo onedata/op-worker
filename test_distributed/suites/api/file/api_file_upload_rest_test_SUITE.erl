@@ -31,9 +31,9 @@
 ]).
 
 all() -> [
-
-    rest_create_file_under_path_test
-
+    create_file_test,
+    rest_create_file_under_path_test,
+    update_file_content_test
 ].
 
 
@@ -456,7 +456,7 @@ build_rest_create_file_under_path_verify_fun(MemRef, DirGuid, Providers) ->
             case api_test_memory:get(MemRef, success) of
                 true ->
                     FileGuid = api_test_memory:get(MemRef, file_guid),
-                    ParentGuid = get_parent_guid(TestNode, FileGuid),
+                    ParentGuid = get_parent_guid(TestNode, FileGuid, user2),
                     OtherFilesInDir = api_test_memory:get(MemRef, files),
                     AllFilesInDir = lists:sort([FileGuid | OtherFilesInDir]),
 
@@ -488,14 +488,13 @@ build_rest_create_file_under_path_verify_fun(MemRef, DirGuid, Providers) ->
     end.
 
 
--spec get_parent_guid(node(), file_id:file_guid()) -> file_id:file_guid().
-get_parent_guid(TestNode, FileGuid) ->
+-spec get_parent_guid(node(), file_id:file_guid(), oct_background:entity_selector()) -> file_id:file_guid().
+get_parent_guid(TestNode, FileGuid, UserSelector) ->
     ProviderId = opw_test_rpc:get_provider_id(TestNode),
-    SessionId = oct_background:get_user_session_id(user2, ProviderId),
-    {ok, Path} = ?assertMatch({ok, _}, rpc:call(TestNode, lfm, get_file_path, [SessionId, FileGuid]), ?ATTEMPTS),
-    Parts = filename:split(Path),
-    ParentPath = filename:join(lists:droplast(Parts)),
-    {ok, ParentGuid} = rpc:call(TestNode, lfm, get_file_guid, [SessionId, ParentPath]),
+    SessionId = oct_background:get_user_session_id(UserSelector, ProviderId),
+    [ProviderNode] = oct_background:get_random_provider_node(ProviderId),
+    {ok, #file_attr{parent_guid = ParentGuid}} = ?assertMatch({ok, _},
+        lfm_proxy:stat(ProviderNode, SessionId, ?FILE_REF(FileGuid)), ?ATTEMPTS),
     ParentGuid.
 
 

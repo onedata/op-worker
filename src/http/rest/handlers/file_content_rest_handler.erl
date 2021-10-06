@@ -353,8 +353,8 @@ resolve_target_file(#op_req{
     case lfm:resolve_guid_by_relative_path(SessionId, BaseDirGuid, FilePath, CreateDirs, Mode) of
         {ok, ResolvedGuid} -> ResolvedGuid;
         {error, ?ENOENT} -> throw(?ERROR_POSIX(?ENOENT));
-        {error, ?ENOTDIR} -> throw(?ERROR_POSIX(?ENOTDIR))
-
+        {error, ?ENOTDIR} -> throw(?ERROR_POSIX(?ENOTDIR));
+        {error, ?EACCES} -> throw(?ERROR_POSIX(?EACCES))
     end;
 resolve_target_file(#op_req{gri = #gri{id = TargetFileGuid}}) ->
     TargetFileGuid.
