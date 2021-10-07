@@ -214,13 +214,14 @@ retry_failed_files(SpaceId) ->
     end).
 
 
-
 %% @private
 -spec add_reconcile_file_meta_posthook(file_ctx:ctx(), file_meta:uuid(), binary()) -> 
     ok | {error, term()}.
 add_reconcile_file_meta_posthook(FileCtx, MissingUuid, IdentifierPrefix) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     InodeUuid = file_ctx:get_referenced_uuid_const(FileCtx),
+    % save Prefix and InodeUuid in hook identifier for diagnostic purpose
+    HookIdentifier = <<IdentifierPrefix/binary, "_", InodeUuid/binary>>,
     file_meta_posthooks:add_hook(
-        MissingUuid, <<IdentifierPrefix/binary, "_", InodeUuid/binary, "_", (generator:gen_name())/binary>>,
+        MissingUuid, HookIdentifier,
         ?MODULE, reconcile_qos, [InodeUuid, SpaceId]).

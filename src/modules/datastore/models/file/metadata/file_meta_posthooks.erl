@@ -23,7 +23,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% functions operating on record using datastore model API
--export([execute_hooks/1, delete/1, add_hook/5]).
+-export([add_hook/5, execute_hooks/1, delete/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1, get_record_version/0]).
@@ -52,6 +52,7 @@
 -spec add_hook(file_meta:uuid(), hook_identifier(), module(), atom(), [term()]) ->
     ok | {error, term()}.
 add_hook(FileUuid, Identifier, Module, Function, Args) ->
+    UniqueIdentifier = generate_hook_id(Identifier),
     EncodedArgs = term_to_binary(Args),
     Hook = #hook{
         module = Module,
@@ -59,8 +60,8 @@ add_hook(FileUuid, Identifier, Module, Function, Args) ->
         args = EncodedArgs
     },
     ?extract_ok(datastore_model:update(?CTX, FileUuid, fun(#file_meta_posthooks{hooks = Hooks} = FileMetaPosthooks) ->
-        {ok, FileMetaPosthooks#file_meta_posthooks{hooks = Hooks#{Identifier => Hook}}}
-    end, #file_meta_posthooks{hooks = #{Identifier => Hook}})).
+        {ok, FileMetaPosthooks#file_meta_posthooks{hooks = Hooks#{UniqueIdentifier => Hook}}}
+    end, #file_meta_posthooks{hooks = #{UniqueIdentifier => Hook}})).
 
 
 -spec execute_hooks(file_meta:uuid()) -> ok | {error, term()}.
@@ -109,6 +110,20 @@ delete(Key) ->
         {error, not_found} -> ok;
         {error, _} = Error -> Error
     end.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Generated id MUST be unique, as during hook execution another hook can be created 
+%% with exactly the same parameters. Adding such hook will result in it being deleted, 
+%% and in result not executed after first hook finishes execution.
+%% Prefix is only for diagnostic purposes and is not required for correct working.
+%% @end
+%%--------------------------------------------------------------------
+-spec generate_hook_id(binary()) -> hook_identifier().
+generate_hook_id(Prefix) ->
+    <<Prefix/binary, "_", (datastore_key:new())/binary>>.
 
 %%%===================================================================
 %%% datastore_model callbacks
