@@ -249,30 +249,30 @@ handle_prepared_in_advance_lane_run_ended(AtmLaneIndex, AtmWorkflowExecution) ->
     {ok, atm_workflow_execution:record()}.
 handle_currently_executed_lane_run_ended(AtmWorkflowExecution = #atm_workflow_execution{
     lanes_num = AtmLanesNum,
-    curr_lane_index = CurrLaneIndex
+    curr_lane_index = CurrAtmLaneIndex
 }) ->
-    {ok, NewAtmWorkflowExecution} = end_currently_executed_lane_run(
-        CurrLaneIndex, AtmWorkflowExecution
-    ),
+    {ok, NewAtmWorkflowExecution} = end_currently_executed_lane_run(AtmWorkflowExecution),
+    {ok, EndedRun} = atm_lane_execution:get_curr_run(CurrAtmLaneIndex, NewAtmWorkflowExecution),
 
-    case CurrLaneIndex == AtmLanesNum of
-        true ->
-            {ok, NewAtmWorkflowExecution};
-        false ->
-            case atm_lane_execution:get_curr_run(CurrLaneIndex, NewAtmWorkflowExecution) of
-                {ok, #atm_lane_execution_run{status = ?FINISHED_STATUS}} ->
-                    schedule_next_lane_run(NewAtmWorkflowExecution);
-                _ ->
-                    {ok, NewAtmWorkflowExecution}
-            end
+    case EndedRun#atm_lane_execution_run.status of
+        ?FAILED_STATUS when EndedRun#atm_lane_execution_run.src_run_no == undefined ->
+            %% TODO proper retry with max_retries ?
+            ExceptionStoreId = EndedRun#atm_lane_execution_run.exception_store_id,
+            schedule_lane_run_retry(ExceptionStoreId, NewAtmWorkflowExecution);
+        ?FINISHED_STATUS when CurrAtmLaneIndex < AtmLanesNum ->
+            schedule_next_lane_run(NewAtmWorkflowExecution);
+        _ ->
+            {ok, NewAtmWorkflowExecution}
     end.
 
 
 %% @private
--spec end_currently_executed_lane_run(pos_integer(), atm_workflow_execution:record()) ->
+-spec end_currently_executed_lane_run(atm_workflow_execution:record()) ->
     {ok, atm_workflow_execution:record()} | errors:error().
-end_currently_executed_lane_run(AtmLaneIndex, AtmWorkflowExecution) ->
-    atm_lane_execution:update_curr_run(AtmLaneIndex, fun
+end_currently_executed_lane_run(AtmWorkflowExecution = #atm_workflow_execution{
+    curr_lane_index = CurrAtmLaneIndex
+}) ->
+    atm_lane_execution:update_curr_run(CurrAtmLaneIndex, fun
         (#atm_lane_execution_run{status = Status} = Run) when
             Status =:= ?SCHEDULED_STATUS;
             Status =:= ?PREPARING_STATUS;
@@ -302,6 +302,27 @@ end_currently_executed_lane_run(AtmLaneIndex, AtmWorkflowExecution) ->
         (#atm_lane_execution_run{status = EndedStatus}) ->
             EndedStatus
     end, AtmWorkflowExecution).
+
+
+%% @private
+-spec schedule_lane_run_retry(atm_store:id(), atm_workflow_execution:record()) ->
+    {ok, atm_workflow_execution:record()}.
+schedule_lane_run_retry(AtmExceptionStoreId, AtmWorkflowExecution = #atm_workflow_execution{
+    curr_lane_index = CurrLaneIndex,
+    curr_run_no = CurrRunNo
+}) ->
+    NextRunNo = CurrRunNo + 1,
+
+    Diff = fun(_Run) -> ?ERROR_ALREADY_EXISTS end,
+    Default = #atm_lane_execution_run{
+        run_no = NextRunNo,
+        src_run_no = CurrRunNo,
+        status = ?SCHEDULED_STATUS,
+        iterated_store_id = AtmExceptionStoreId
+    },
+    NewAtmWorkflowExecution = AtmWorkflowExecution#atm_workflow_execution{curr_run_no = NextRunNo},
+
+    atm_lane_execution:update_curr_run(CurrLaneIndex, Diff, Default, NewAtmWorkflowExecution).
 
 
 %% @private
