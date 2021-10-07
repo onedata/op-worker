@@ -64,6 +64,8 @@
 
 -record(atm_lane_execution_run, {
     run_no :: undefined | pos_integer(),
+    src_run_no = undefined :: undefined | pos_integer(),
+
     status :: atm_lane_execution:status(),
     % Flag used to differentiate reasons why lane execution run is aborting
     aborting_reason = undefined :: undefined | cancel | failure,
