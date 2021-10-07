@@ -123,10 +123,10 @@ all() -> ?ALL([
 ).
 
 -define(assertDetachedDataset(Node, SessionId, DatasetId, ExpectedRootFileGuid, ExpectedParentDatasetId,
-    ExpectedRootFilePath, ExpectedRootFileType, ExpectedProtectionFlags),
+    ExpectedRootFilePath, ExpectedRootFileType, ExpectedRootFileDeleted, ExpectedProtectionFlags),
 
     assert_detached_dataset(Node, SessionId, DatasetId, ExpectedRootFileGuid, ExpectedParentDatasetId,
-        ExpectedRootFilePath, ExpectedRootFileType, ExpectedProtectionFlags)
+        ExpectedRootFilePath, ExpectedRootFileType, ExpectedRootFileDeleted, ExpectedProtectionFlags)
 ).
 
 -define(assertDatasetMembership(Node, SessionId, Guid, ExpectedMembership, ExpectedProtectionFlags),
@@ -294,7 +294,7 @@ detach_and_reattach_dataset(_Config) ->
     detach(P1Node, UserSessIdP1, DatasetId),
 
     {ok, Path} = lfm_proxy:get_file_path(P1Node, UserSessIdP1, Guid),
-    ?assertDetachedDataset(P1Node, UserSessIdP1, DatasetId, Guid, undefined, Path, ?DIRECTORY_TYPE, ProtectionFlags),
+    ?assertDetachedDataset(P1Node, UserSessIdP1, DatasetId, Guid, undefined, Path, ?DIRECTORY_TYPE, false, ProtectionFlags),
     ?assertDatasetMembership(P1Node, UserSessIdP1, Guid, ?NONE_DATASET_MEMBERSHIP, ?no_flags_mask),
     ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, Guid, DatasetId, [], ?no_flags_mask),
 
@@ -368,7 +368,7 @@ remove_detached_dataset(_Config) ->
     ?assertFileEffDatasetSummary(P1Node, User2SessIdP1, Guid, DatasetId, [], ProtectionFlags),
 
     ok = detach(P1Node, User2SessIdP1, DatasetId),
-    ?assertDetachedDataset(P1Node, User2SessIdP1, DatasetId, Guid, undefined, Path, ?DIRECTORY_TYPE, ProtectionFlags),
+    ?assertDetachedDataset(P1Node, User2SessIdP1, DatasetId, Guid, undefined, Path, ?DIRECTORY_TYPE, false, ProtectionFlags),
     ?assertDatasetMembership(P1Node, User2SessIdP1, Guid, ?NONE_DATASET_MEMBERSHIP, ?no_flags_mask),
     ?assertFileEffDatasetSummary(P1Node, User2SessIdP1, Guid, DatasetId, [], ?no_flags_mask),
 
@@ -404,7 +404,7 @@ remove_file_should_detach_dataset(_Config) ->
 
     ok = lfm_proxy:unlink(P1Node, UserSessIdP1, ?FILE_REF(Guid)),
 
-    ?assertDetachedDataset(P1Node, UserSessIdP1, DatasetId, Guid, undefined, Path, ?DIRECTORY_TYPE, ProtectionFlags),
+    ?assertDetachedDataset(P1Node, UserSessIdP1, DatasetId, Guid, undefined, Path, ?DIRECTORY_TYPE, true, ProtectionFlags),
     ?assertMatch({error, ?ENOENT}, lfm_proxy:get_details(P1Node, UserSessIdP1, ?FILE_REF(Guid))),
     ?assertMatch({error, ?ENOENT}, lfm_proxy:get_file_eff_dataset_summary(P1Node, UserSessIdP1, ?FILE_REF(Guid))),
     ?assertNoTopDatasets(P1Node, UserSessIdP1, SpaceId, attached),
@@ -429,7 +429,7 @@ remove_hardlink_should_detach_dataset(_Config) ->
     ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, FileGuid, undefined, [], ProtectionFlags),
     % delete hardlink, dataset should be detached
     ok = lfm_proxy:unlink(P1Node, UserSessIdP1, ?FILE_REF(LinkGuid)),
-    ?assertDetachedDataset(P1Node, UserSessIdP1, DatasetId, LinkGuid, undefined, LinkPath, ?REGULAR_FILE_TYPE, ProtectionFlags),
+    ?assertDetachedDataset(P1Node, UserSessIdP1, DatasetId, LinkGuid, undefined, LinkPath, ?REGULAR_FILE_TYPE, true, ProtectionFlags),
     ?assertMatch({error, ?ENOENT}, lfm_proxy:get_details(P1Node, UserSessIdP1, ?FILE_REF(LinkGuid))),
     ?assertMatch({error, ?ENOENT}, lfm_proxy:get_file_eff_dataset_summary(P1Node, UserSessIdP1, ?FILE_REF(LinkGuid))),
     ?assertNoTopDatasets(P1Node, UserSessIdP1, SpaceId, attached),
@@ -456,7 +456,7 @@ remove_file_symlink_should_detach_dataset(_Config) ->
     ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, FileGuid, undefined, [], ?no_flags_mask),
     % delete symlink, dataset should be detached
     ok = lfm_proxy:unlink(P1Node, UserSessIdP1, ?FILE_REF(LinkGuid)),
-    ?assertDetachedDataset(P1Node, UserSessIdP1, DatasetId, LinkGuid, undefined, LinkPath, ?SYMLINK_TYPE, ProtectionFlags),
+    ?assertDetachedDataset(P1Node, UserSessIdP1, DatasetId, LinkGuid, undefined, LinkPath, ?SYMLINK_TYPE, true, ProtectionFlags),
     ?assertMatch({error, ?ENOENT}, lfm_proxy:get_details(P1Node, UserSessIdP1, ?FILE_REF(LinkGuid))),
     ?assertMatch({error, ?ENOENT}, lfm_proxy:get_file_eff_dataset_summary(P1Node, UserSessIdP1, ?FILE_REF(LinkGuid))),
     ?assertNoTopDatasets(P1Node, UserSessIdP1, SpaceId, attached),
@@ -483,7 +483,7 @@ remove_dir_symlink_should_detach_dataset(_Config) ->
     ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, DirGuid, undefined, [], ?no_flags_mask),
     % delete symlink, dataset should be detached
     ok = lfm_proxy:unlink(P1Node, UserSessIdP1, ?FILE_REF(LinkGuid)),
-    ?assertDetachedDataset(P1Node, UserSessIdP1, DatasetId, LinkGuid, undefined, LinkPath, ?SYMLINK_TYPE, ProtectionFlags),
+    ?assertDetachedDataset(P1Node, UserSessIdP1, DatasetId, LinkGuid, undefined, LinkPath, ?SYMLINK_TYPE, true, ProtectionFlags),
     ?assertMatch({error, ?ENOENT}, lfm_proxy:get_details(P1Node, UserSessIdP1, ?FILE_REF(LinkGuid))),
     ?assertMatch({error, ?ENOENT}, lfm_proxy:get_file_eff_dataset_summary(P1Node, UserSessIdP1, ?FILE_REF(LinkGuid))),
     ?assertNoTopDatasets(P1Node, UserSessIdP1, SpaceId, attached),
@@ -582,7 +582,7 @@ reattach_if_root_file_is_deleted_should_fail(_Config) ->
 
     ok = lfm_proxy:unlink(P1Node, UserSessIdP1, ?FILE_REF(Guid)),
 
-    ?assertDetachedDataset(P1Node, UserSessIdP1, DatasetId, Guid, undefined, Path, ?DIRECTORY_TYPE, ProtectionFlags),
+    ?assertDetachedDataset(P1Node, UserSessIdP1, DatasetId, Guid, undefined, Path, ?DIRECTORY_TYPE, true, ProtectionFlags),
     ?assertMatch({error, ?ENOENT}, lfm_proxy:get_details(P1Node, UserSessIdP1, ?FILE_REF(Guid))),
     ?assertMatch({error, ?ENOENT}, lfm_proxy:get_file_eff_dataset_summary(P1Node, UserSessIdP1, ?FILE_REF(Guid))),
     ?assertNoTopDatasets(P1Node, UserSessIdP1, SpaceId, attached),
@@ -611,7 +611,7 @@ reattach_if_hardlink_is_deleted_should_fail(_Config) ->
     % delete hardlink
     ok = lfm_proxy:unlink(P1Node, UserSessIdP1, ?FILE_REF(LinkGuid)),
 
-    ?assertDetachedDataset(P1Node, UserSessIdP1, DatasetId, LinkGuid, undefined, LinkPath, ?REGULAR_FILE_TYPE, ProtectionFlags),
+    ?assertDetachedDataset(P1Node, UserSessIdP1, DatasetId, LinkGuid, undefined, LinkPath, ?REGULAR_FILE_TYPE, true, ProtectionFlags),
     ?assertMatch({error, ?ENOENT}, lfm_proxy:get_details(P1Node, UserSessIdP1, ?FILE_REF(LinkGuid))),
     ?assertMatch({error, ?ENOENT}, lfm_proxy:get_file_eff_dataset_summary(P1Node, UserSessIdP1, ?FILE_REF(LinkGuid))),
     ?assertNoTopDatasets(P1Node, UserSessIdP1, SpaceId, attached),
@@ -641,7 +641,7 @@ reattach_if_file_symlink_is_deleted_should_fail(_Config) ->
     % delete hardlink
     ok = lfm_proxy:unlink(P1Node, UserSessIdP1, ?FILE_REF(LinkGuid)),
 
-    ?assertDetachedDataset(P1Node, UserSessIdP1, DatasetId, LinkGuid, undefined, LinkPath, ?SYMLINK_TYPE, ProtectionFlags),
+    ?assertDetachedDataset(P1Node, UserSessIdP1, DatasetId, LinkGuid, undefined, LinkPath, ?SYMLINK_TYPE, true, ProtectionFlags),
     ?assertMatch({error, ?ENOENT}, lfm_proxy:get_details(P1Node, UserSessIdP1, ?FILE_REF(LinkGuid))),
     ?assertMatch({error, ?ENOENT}, lfm_proxy:get_file_eff_dataset_summary(P1Node, UserSessIdP1, ?FILE_REF(LinkGuid))),
     ?assertNoTopDatasets(P1Node, UserSessIdP1, SpaceId, attached),
@@ -671,7 +671,7 @@ reattach_if_dir_symlink_is_deleted_should_fail(_Config) ->
 
     % delete hardlink
     ok = lfm_proxy:unlink(P1Node, UserSessIdP1, ?FILE_REF(LinkGuid)),
-    ?assertDetachedDataset(P1Node, UserSessIdP1, DatasetId, LinkGuid, undefined, LinkPath, ?SYMLINK_TYPE, ProtectionFlags),
+    ?assertDetachedDataset(P1Node, UserSessIdP1, DatasetId, LinkGuid, undefined, LinkPath, ?SYMLINK_TYPE, true, ProtectionFlags),
     ?assertMatch({error, ?ENOENT}, lfm_proxy:get_details(P1Node, UserSessIdP1, ?FILE_REF(LinkGuid))),
     ?assertMatch({error, ?ENOENT}, lfm_proxy:get_file_eff_dataset_summary(P1Node, UserSessIdP1, ?FILE_REF(LinkGuid))),
     ?assertNoTopDatasets(P1Node, UserSessIdP1, SpaceId, attached),
@@ -696,7 +696,7 @@ remove_detached_dataset_if_root_file_has_already_been_deleted(_Config) ->
 
     ok = lfm_proxy:unlink(P1Node, UserSessIdP1, ?FILE_REF(Guid)),
 
-    ?assertDetachedDataset(P1Node, UserSessIdP1, DatasetId, Guid, undefined, Path, ?DIRECTORY_TYPE, ProtectionFlags),
+    ?assertDetachedDataset(P1Node, UserSessIdP1, DatasetId, Guid, undefined, Path, ?DIRECTORY_TYPE, true, ProtectionFlags),
     ?assertMatch({error, ?ENOENT}, lfm_proxy:get_details(P1Node, UserSessIdP1, ?FILE_REF(Guid))),
     ?assertMatch({error, ?ENOENT}, lfm_proxy:get_file_eff_dataset_summary(P1Node, UserSessIdP1, ?FILE_REF(Guid))),
     ?assertNoTopDatasets(P1Node, UserSessIdP1, SpaceId, attached),
@@ -799,7 +799,7 @@ establish_nested_datasets_structure_end_detach_all(_Config) ->
 
     lists:foldl(fun({ChildGuid, _ChildName, ChildDatasetId}, {Guid, DatasetId, ExpParentDatasetId}) ->
         {ok, Path} = lfm_proxy:get_file_path(P1Node, UserSessIdP1, Guid),
-        ?assertDetachedDataset(P1Node, UserSessIdP1, DatasetId, Guid, ExpParentDatasetId, Path, ?DIRECTORY_TYPE, ProtectionFlags),
+        ?assertDetachedDataset(P1Node, UserSessIdP1, DatasetId, Guid, ExpParentDatasetId, Path, ?DIRECTORY_TYPE, false, ProtectionFlags),
         ?assertDatasetMembership(P1Node, UserSessIdP1, Guid, ?NONE_DATASET_MEMBERSHIP, ?no_flags_mask),
         ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, Guid, DatasetId, [], ?no_flags_mask),
         {ChildGuid, ChildDatasetId, DatasetId}
@@ -864,7 +864,7 @@ rename_file_should_not_rename_detached_dataset(_Config) ->
     ok = detach(P1Node, UserSessIdP1, DatasetId),
     {ok, _} = lfm_proxy:mv(P1Node, UserSessIdP1, ?FILE_REF(Guid), ?FILE_REF(SpaceGuid), NewDirName),
 
-    ?assertDetachedDataset(P1Node, UserSessIdP1, DatasetId, Guid, undefined, SourcePatch, ?DIRECTORY_TYPE, ProtectionFlags),
+    ?assertDetachedDataset(P1Node, UserSessIdP1, DatasetId, Guid, undefined, SourcePatch, ?DIRECTORY_TYPE, false, ProtectionFlags),
     ?assertDatasetMembership(P1Node, UserSessIdP1, Guid, ?NONE_DATASET_MEMBERSHIP, ?no_flags_mask),
     ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, Guid, DatasetId, [], ?no_flags_mask).
 
@@ -914,7 +914,7 @@ move_file_should_not_move_detached_dataset(_Config) ->
     ok = detach(P1Node, UserSessIdP1, DatasetId),
     {ok, _} = lfm_proxy:mv(P1Node, UserSessIdP1, ?FILE_REF(Guid), ?FILE_REF(TargetParentGuid), NewDirName),
 
-    ?assertDetachedDataset(P1Node, UserSessIdP1, DatasetId, Guid, undefined, SourcePatch, ?DIRECTORY_TYPE, ProtectionFlags),
+    ?assertDetachedDataset(P1Node, UserSessIdP1, DatasetId, Guid, undefined, SourcePatch, ?DIRECTORY_TYPE, false, ProtectionFlags),
     ?assertDatasetMembership(P1Node, UserSessIdP1, Guid, ?NONE_DATASET_MEMBERSHIP, ?no_flags_mask),
     ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, Guid, DatasetId, [], ?no_flags_mask).
 
@@ -940,7 +940,7 @@ reattach_to_moved_root_file(_Config) ->
     ok = detach(P1Node, UserSessIdP1, DatasetId),
     {ok, _} = lfm_proxy:mv(P1Node, UserSessIdP1, ?FILE_REF(Guid), ?FILE_REF(TargetParentGuid), NewDirName),
 
-    ?assertDetachedDataset(P1Node, UserSessIdP1, DatasetId, Guid, undefined, SourcePatch, ?DIRECTORY_TYPE, ProtectionFlags),
+    ?assertDetachedDataset(P1Node, UserSessIdP1, DatasetId, Guid, undefined, SourcePatch, ?DIRECTORY_TYPE, false, ProtectionFlags),
     ?assertDatasetMembership(P1Node, UserSessIdP1, Guid, ?NONE_DATASET_MEMBERSHIP, ?no_flags_mask),
     ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, Guid, DatasetId, [], ?no_flags_mask),
 
@@ -1150,18 +1150,18 @@ assert_attached_dataset(Node, SessionId, DatasetId, ExpectedRootFileGuid, Expect
     {ok, #file_attr{type = ExpectedRootFileType}} = lfm_proxy:stat(Node, SessionId, ?FILE_REF(ExpectedRootFileGuid)),
     {ok, ExpectedRootFilePath} = lfm_proxy:get_file_path(Node, SessionId, ExpectedRootFileGuid),
     assert_dataset(Node, SessionId, DatasetId, ExpectedRootFileGuid, ExpectedParentDatasetId, ExpectedRootFilePath,
-        ExpectedRootFileType, ?ATTACHED_DATASET, ExpectedProtectionFlags, ExpectedEffProtectionFlags).
+        ExpectedRootFileType, false, ?ATTACHED_DATASET, ExpectedProtectionFlags, ExpectedEffProtectionFlags).
 
 
 assert_detached_dataset(Node, SessionId, DatasetId, ExpectedRootFileGuid, ExpectedParentDatasetId,
-    ExpectedRootFilePath, ExpectedRootFileType, ExpectedProtectionFlags
+    ExpectedRootFilePath, ExpectedRootFileType, ExpectedRootFileDeleted, ExpectedProtectionFlags
 ) ->
     assert_dataset(Node, SessionId, DatasetId, ExpectedRootFileGuid, ExpectedParentDatasetId, ExpectedRootFilePath,
-        ExpectedRootFileType, ?DETACHED_DATASET, ExpectedProtectionFlags, ?no_flags_mask).
+        ExpectedRootFileType, ExpectedRootFileDeleted, ?DETACHED_DATASET, ExpectedProtectionFlags, ?no_flags_mask).
 
 
 assert_dataset(Node, SessionId, DatasetId, ExpectedRootFileGuid, ExpectedParentDatasetId, ExpectedRootFilePath,
-    ExpectedRootFileType, ExpectedState, ExpectedProtectionFlags, ExpectedEffProtectionFlags
+    ExpectedRootFileType, ExpectedRootFileDeleted, ExpectedState, ExpectedProtectionFlags, ExpectedEffProtectionFlags
 ) ->
     % check dataset info
     ?assertMatch({ok, #dataset_info{
@@ -1170,6 +1170,7 @@ assert_dataset(Node, SessionId, DatasetId, ExpectedRootFileGuid, ExpectedParentD
         root_file_guid = ExpectedRootFileGuid,
         root_file_path = ExpectedRootFilePath,
         root_file_type = ExpectedRootFileType,
+        root_file_deleted = ExpectedRootFileDeleted,
         parent = ExpectedParentDatasetId,
         protection_flags = ExpectedProtectionFlags,
         eff_protection_flags = ExpectedEffProtectionFlags
