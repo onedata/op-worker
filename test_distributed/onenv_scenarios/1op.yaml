@@ -36,9 +36,6 @@ oneproviderImage: "docker.onedata.org/oneprovider-dev:develop"
 # Determines if elastic search should start.
 elasticSearch: false
 
-# Determines if luma should start.
-luma: false
-
 # Determines if onedata rest client should start.
 onedataCli: false
 

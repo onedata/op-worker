@@ -137,7 +137,10 @@ force_terminate() ->
 %%--------------------------------------------------------------------
 -spec enable_cache() -> ok.
 enable_cache() ->
-    node_cache:put(gs_client_worker_cache_enabled, true).
+    {_, []} = utils:rpc_multicall(consistent_hashing:get_all_nodes(), node_cache, put, [
+        gs_client_worker_cache_enabled, true
+    ]),
+    ok.
 
 
 %% @private
