@@ -78,7 +78,7 @@ setup(AtmWorkflowExecutionCtx, AtmTaskExecutionIdOrDoc) ->
         AtmSystemAuditLogId
     ),
     AtmWorkflowExecutionEnvDiff = fun(AtmWorkflowExecutionEnv) ->
-        atm_workflow_execution_env:set_task_audit_log_store_container(
+        atm_workflow_execution_env:add_task_audit_log_store_container(
             AtmTaskExecutionId, AtmTaskAuditLogStoreContainer, AtmWorkflowExecutionEnv
         )
     end,
@@ -231,24 +231,49 @@ process_item_insecure(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, ReportR
 ) ->
     ok | error.
 handle_exception(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, #{<<"exception">> := Reason}) ->
-    EnrichedExceptionLog = #{
-        <<"severity">> => ?LOGGER_ERROR,
-        <<"item">> => Item,
-        <<"reason">> => Reason
-    },
-    AtmWorkflowExecutionLogger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
-
-    atm_workflow_execution_logger:task_append_logs(
-        EnrichedExceptionLog, #{}, AtmWorkflowExecutionLogger
-    ),
-
-    % TODO add item to exception store
+    log_exception(Item, Reason, AtmWorkflowExecutionCtx),
+    append_failed_item_to_lane_run_exception_store(Item, AtmWorkflowExecutionCtx),
     update_items_failed_and_processed(AtmTaskExecutionId);
 
 handle_exception(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, {error, _} = Error) ->
     handle_exception(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, #{
         <<"exception">> => errors:to_json(Error)
     }).
+
+
+%% @private
+-spec log_exception(automation:item(), json_utils:json_term(), atm_workflow_execution_ctx:record()) ->
+    ok.
+log_exception(Item, Reason, AtmWorkflowExecutionCtx) ->
+    Log = #{
+        <<"severity">> => ?LOGGER_ERROR,
+        <<"item">> => Item,
+        <<"reason">> => Reason
+    },
+    Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
+
+    atm_workflow_execution_logger:task_append_logs(Log, #{}, Logger).
+
+
+%% @private
+-spec append_failed_item_to_lane_run_exception_store(
+    automation:item(),
+    atm_workflow_execution_ctx:record()
+) ->
+    ok | no_return().
+append_failed_item_to_lane_run_exception_store(Item, AtmWorkflowExecutionCtx) ->
+    AtmLaneRunExceptionStoreContainer = atm_workflow_execution_env:get_lane_run_exception_store_container(
+        atm_workflow_execution_ctx:get_env(AtmWorkflowExecutionCtx)
+    ),
+    Operation = #atm_store_container_operation{
+        type = append,
+        options = #{<<"isBatch">> => is_list(Item)},
+        argument = Item,
+        workflow_execution_auth = atm_workflow_execution_ctx:get_auth(AtmWorkflowExecutionCtx)
+    },
+    atm_list_store_container:apply_operation(AtmLaneRunExceptionStoreContainer, Operation),
+
+    ok.
 
 
 %% @private

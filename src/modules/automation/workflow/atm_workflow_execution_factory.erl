@@ -268,7 +268,7 @@ create_workflow_stores(AtmWorkflowExecutionCreateCtx = #atm_workflow_execution_c
                 AtmWorkflowExecutionAuth, StoreInitialValue, AtmStoreSchema
             ),
             NewAtmWorkflowExecutionCreateCtx#atm_workflow_execution_create_ctx{
-                env = atm_workflow_execution_env:add_workflow_store(
+                env = atm_workflow_execution_env:add_workflow_store_mapping(
                     AtmStoreSchemaId, AtmStoreId, AtmWorkflowExecutionEnv
                 ),
                 elements = Elements#atm_workflow_execution_elements{

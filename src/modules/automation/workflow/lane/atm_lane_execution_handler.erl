@@ -114,9 +114,9 @@ setup_lane(LaneIndex, AtmWorkflowExecutionDoc, AtmWorkflowExecutionCtx) ->
         {AtmParallelBoxExecutionSpecs, AtmWorkflowExecutionEnvDiff} = atm_parallel_box_execution:setup_all(
             AtmWorkflowExecutionCtx, AtmParallelBoxExecutions
         ),
-        {ok, #atm_store{container = ExceptionStoreContainer}} = atm_store_api:get(ExceptionStoreId),
-        NewAtmWorkflowExecutionEnv = atm_workflow_execution_env:set_lane_exception_store_container(
-            ExceptionStoreContainer, AtmWorkflowExecutionEnv
+        {ok, #atm_store{container = AtmLaneRunExceptionStoreContainer}} = atm_store_api:get(ExceptionStoreId),
+        NewAtmWorkflowExecutionEnv = atm_workflow_execution_env:set_lane_run_exception_store_container(
+            AtmLaneRunExceptionStoreContainer, AtmWorkflowExecutionEnv
         ),
         #atm_lane_schema{store_iterator_spec = AtmStoreIteratorSpec} = atm_lane_execution:get_schema(
             LaneIndex, AtmWorkflowExecution
