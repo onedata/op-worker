@@ -22,7 +22,7 @@
 
 
 -type task_execution_registry() :: #{
-AtmTaskSchemaId :: automation:id() => atm_task_execution:doc()
+    AtmTaskSchemaId :: automation:id() => atm_task_execution:doc()
 }.
 
 -record(execution_elements, {
