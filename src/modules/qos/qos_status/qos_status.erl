@@ -196,7 +196,11 @@ report_entry_deleted(SpaceId, QosEntryId) ->
 %% @private
 -spec check_possible_entry_status(file_ctx:ctx(), qos_entry:doc(), qos_entry:id()) -> boolean().
 check_possible_entry_status(FileCtx, QosEntryDoc, QosEntryId) ->
-    {FileDoc, FileCtx1} = file_ctx:get_file_doc(FileCtx),
+    {FileDoc, FileCtx1} = file_ctx:get_file_doc_including_deleted(FileCtx),
+    case file_meta_hardlinks:inspect_references(FileDoc) of    
+        no_references_left -> throw(?ERROR_NOT_FOUND);
+        has_at_least_one_reference -> ok
+    end,
     (not file_qos:is_effective_qos_of_file(FileDoc, QosEntryId)) orelse
         qos_reconciliation_status:check(FileCtx1, QosEntryDoc) andalso
             qos_traverse_status:check(FileCtx1, QosEntryDoc).

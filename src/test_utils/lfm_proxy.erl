@@ -23,6 +23,7 @@
 -export([init/1, init/2, init/3, teardown/1]).
 -export([
     stat/3, stat/4, resolve_symlink/3, get_fs_stats/3, get_details/3,
+    get_file_references/3,
     resolve_guid/3, get_file_path/3,
     get_parent/3,
     check_perms/4,
@@ -189,6 +190,12 @@ get_fs_stats(Worker, SessId, FileKey) ->
     {ok, lfm_attrs:file_details()} | lfm:error_reply().
 get_details(Worker, SessId, FileKey) ->
     ?EXEC(Worker, lfm:get_details(SessId, uuid_to_file_ref(Worker, FileKey))).
+
+
+-spec get_file_references(node(), session:id(), lfm:file_key() | file_meta:uuid()) ->
+    {ok, [file_id:file_guid()]} | lfm:error_reply().
+get_file_references(Worker, SessId, FileKey) ->
+    ?EXEC(Worker, lfm:get_file_references(SessId, uuid_to_file_ref(Worker, FileKey))).
 
 
 -spec resolve_guid(node(), session:id(), file_meta:path()) ->
