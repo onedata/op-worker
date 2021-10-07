@@ -82,11 +82,11 @@ create_run_internal(AtmLaneIndex, AtmWorkflowExecutionDoc, AtmWorkflowExecutionC
                 exception_store_id = undefined,
                 parallel_boxes = []
             }) ->
-                Run#atm_lane_execution_run{
+                {ok, Run#atm_lane_execution_run{
                     iterated_store_id = IteratedStoreId,
                     exception_store_id = ExceptionStoreId,
                     parallel_boxes = AtmParallelBoxExecutions
-                };
+                }};
             (_) ->
                 ?ERROR_ALREADY_EXISTS
         end, AtmWorkflowExecution)
