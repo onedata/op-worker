@@ -24,7 +24,7 @@
     get_curr_run/2,
     update_curr_run/3, update_curr_run/4
 ]).
--export([get/2]).
+-export([get/2, update/3]).
 -export([to_json/1]).
 
 %% persistent_record callbacks
@@ -43,15 +43,14 @@
     ?FINISHED_STATUS | ?CANCELLED_STATUS | ?FAILED_STATUS | ?INTERRUPTED_STATUS.
 
 -type run_elements() :: #atm_lane_execution_run_elements{}.
--type run_diff() :: fun((atm_lane_execution:run()) ->
-    {ok, atm_lane_execution:run()} | errors:error()
-).
+-type run_diff() :: fun((run()) -> {ok, run()} | {error, term()}).
 -type run() :: #atm_lane_execution_run{}.
 
+-type diff() :: fun((record()) -> {ok, record()} | {error, term()}).
 -type record() :: #atm_lane_execution{}.
 
--export_type([run_elements/0, run_diff/0, run/0]).
--export_type([status/0, record/0]).
+-export_type([status/0, run_elements/0, run_diff/0, run/0]).
+-export_type([diff/0, record/0]).
 
 
 %%%===================================================================
@@ -146,6 +145,23 @@ update_curr_run(AtmLaneMarker, Diff, Default, AtmWorkflowExecution = #atm_workfl
 -spec get(marker(), atm_workflow_execution:record()) -> record().
 get(AtmLaneMarker, AtmWorkflowExecution = #atm_workflow_execution{lanes = AtmLaneExecutions}) ->
     lists:nth(resolve_index(AtmLaneMarker, AtmWorkflowExecution), AtmLaneExecutions).
+
+
+-spec update(marker(), diff(), atm_workflow_execution:record()) ->
+    {ok, atm_workflow_execution:record()} | errors:error().
+update(AtmLaneMarker, Diff, AtmWorkflowExecution = #atm_workflow_execution{
+    lanes = AtmLaneExecutions
+}) ->
+    AtmLaneIndex = resolve_index(AtmLaneMarker, AtmWorkflowExecution),
+
+    case Diff(lists:nth(AtmLaneIndex, AtmLaneExecutions)) of
+        {ok, NewAtmLaneExecution} ->
+            {ok, AtmWorkflowExecution#atm_workflow_execution{lanes = lists_utils:replace_at(
+                NewAtmLaneExecution, AtmLaneIndex, AtmLaneExecutions
+            )}};
+        {error, _} = Error2 ->
+            Error2
+    end.
 
 
 -spec to_json(record()) -> json_utils:json_map().

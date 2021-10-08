@@ -263,8 +263,12 @@ handle_currently_executed_lane_run_ended(AtmWorkflowExecution = #atm_workflow_ex
         ?FAILED_STATUS when AbortingReason == undefined ->
             % lane run can be automatically retried only if all items finished execution but
             % some of them failed (direct transition from ?ACTIVE_STATUS to ?FAILED_STATUS)
-            %% TODO proper retry with max_retries ?
-            schedule_lane_run_retry(AtmExceptionStoreId, NewAtmWorkflowExecution);
+            case acquire_retry_permission(NewAtmWorkflowExecution) of
+                {true, NewAtmWorkflowExecution2} ->
+                    schedule_lane_run_retry(AtmExceptionStoreId, NewAtmWorkflowExecution2);
+                false ->
+                    ok
+            end;
         ?FINISHED_STATUS when CurrAtmLaneIndex < AtmLanesNum ->
             schedule_next_lane_run(NewAtmWorkflowExecution);
         _ ->
@@ -308,6 +312,25 @@ end_currently_executed_lane_run(AtmWorkflowExecution = #atm_workflow_execution{
         (#atm_lane_execution_run{status = EndedStatus}) ->
             EndedStatus
     end, AtmWorkflowExecution).
+
+
+%% @private
+-spec acquire_retry_permission(atm_workflow_execution:record()) ->
+    {true, atm_workflow_execution:record()} | false.
+acquire_retry_permission(AtmWorkflowExecution = #atm_workflow_execution{
+    curr_lane_index = CurrLaneIndex
+}) ->
+    Diff = fun
+        (#atm_lane_execution{retries_left = 0}) ->
+            {error, no_retries_left};
+        (#atm_lane_execution{retries_left = RetriesLeft} = AtmLaneExecution) ->
+            {ok, AtmLaneExecution#atm_lane_execution{retries_left = RetriesLeft - 1}}
+    end,
+
+    case atm_lane_execution:update(CurrLaneIndex, Diff, AtmWorkflowExecution) of
+        {ok, NewAtmWorkflowExecution} -> {true, NewAtmWorkflowExecution};
+        {error, no_retries_left} -> false
+    end.
 
 
 %% @private
