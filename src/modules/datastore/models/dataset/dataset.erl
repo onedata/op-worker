@@ -46,7 +46,7 @@
 -type error() :: {error, term()}.
 -type detached_info() :: detached_dataset_info:info().
 -type membership() :: ?NONE_DATASET_MEMBERSHIP | ?DIRECT_DATASET_MEMBERSHIP | ?ANCESTOR_DATASET_MEMBERSHIP.
--type detachment_reason() :: ?DATASET_ROOT_FILE_DELETED | ?DATASET_USER_DEFINED_DETACHMENT.
+-type detachment_reason() :: ?DATASET_ROOT_FILE_DELETED | ?DATASET_USER_TRIGGERED_DETACHMENT.
 
 -export_type([id/0, doc/0, name/0, state/0, path/0, detached_info/0, membership/0, detachment_reason/0]).
 
@@ -241,6 +241,6 @@ upgrade_record(1, Dataset) ->
             RootFilePath, 
             RootFileType, 
             ProtectionFlags, 
-            ?DATASET_USER_DEFINED_DETACHMENT
+            ?DATASET_USER_TRIGGERED_DETACHMENT
         )
     }}.

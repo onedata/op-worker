@@ -95,7 +95,7 @@ update(DatasetDoc, NewState, FlagsToSet, FlagsToUnset) ->
                 FileCtx = file_ctx:new_by_uuid(Uuid, SpaceId),
                 {FilePath, _FileCtx2} = file_ctx:get_logical_path(FileCtx, user_ctx:new(?ROOT_SESS_ID)),
                 % it's forbidden to change flags while detaching dataset
-                detach_insecure(DatasetId, FilePath, ?DATASET_USER_DEFINED_DETACHMENT);
+                detach_insecure(DatasetId, FilePath, ?DATASET_USER_TRIGGERED_DETACHMENT);
             {?ATTACHED_DATASET, ?DETACHED_DATASET, _, _} ->
                 {error, ?EINVAL};
             {?ATTACHED_DATASET, undefined, _, _} ->
