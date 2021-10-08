@@ -63,6 +63,7 @@ prepare(LaneIndex, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
 ) ->
     workflow_handler:lane_ended_callback_result() | no_return().
 handle_ended(LaneIndex, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
+    % TODO do not teardown in case of retry?
     teardown_lane(LaneIndex, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx),
 
     #document{

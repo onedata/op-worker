@@ -252,13 +252,19 @@ handle_currently_executed_lane_run_ended(AtmWorkflowExecution = #atm_workflow_ex
     curr_lane_index = CurrAtmLaneIndex
 }) ->
     {ok, NewAtmWorkflowExecution} = end_currently_executed_lane_run(AtmWorkflowExecution),
-    {ok, EndedRun} = atm_lane_execution:get_curr_run(CurrAtmLaneIndex, NewAtmWorkflowExecution),
 
-    case EndedRun#atm_lane_execution_run.status of
-        ?FAILED_STATUS when EndedRun#atm_lane_execution_run.src_run_no == undefined ->
+    {ok, #atm_lane_execution_run{
+        exception_store_id = AtmExceptionStoreId,
+        aborting_reason = AbortingReason,
+        status = Status
+    }} = atm_lane_execution:get_curr_run(CurrAtmLaneIndex, NewAtmWorkflowExecution),
+
+    case Status of
+        ?FAILED_STATUS when AbortingReason == undefined ->
+            % lane run can be automatically retried only if all items finished execution but
+            % some of them failed (direct transition from ?ACTIVE_STATUS to ?FAILED_STATUS)
             %% TODO proper retry with max_retries ?
-            ExceptionStoreId = EndedRun#atm_lane_execution_run.exception_store_id,
-            schedule_lane_run_retry(ExceptionStoreId, NewAtmWorkflowExecution);
+            schedule_lane_run_retry(AtmExceptionStoreId, NewAtmWorkflowExecution);
         ?FINISHED_STATUS when CurrAtmLaneIndex < AtmLanesNum ->
             schedule_next_lane_run(NewAtmWorkflowExecution);
         _ ->
