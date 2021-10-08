@@ -40,9 +40,6 @@ oneproviderImage: "docker.onedata.org/oneprovider-dev:develop"
 # Determines if elastic search should start.
 elasticSearch: false
 
-# Determines if luma should start.
-luma: false
-
 # Determines if onedata rest client should start.
 onedataCli: false
 
@@ -59,9 +56,16 @@ forceImagePull: false
 # By default spaces supported by all providers are created. For custom
 # space configuration please refer to one of MyValues.yaml file in
 # scenario directory.
+storages:
+  - s3
+
+
 users:
   - &user1
     name: user1
+    password: password
+  - &user2
+    name: user2
     password: password
 
 
@@ -72,3 +76,11 @@ spaces:
       - provider: "oneprovider-1"
         storage_name: "IdealNullStorage"
         size: '1000000000'
+  - name: space_krk
+    user: *user1
+    users:
+      - user: *user2
+    supports:
+      - provider: "oneprovider-1"
+        storage_name: "s3"
+        size: '1073741824'

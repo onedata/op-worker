@@ -354,10 +354,12 @@ data_access_caveats_ancestors_test(Config) ->
     SpaceName = <<"space2">>,
     SpaceRootDirGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceName),
 
+    InaccessibleFileName = <<"inaccessible_file">>,
+
     Dirs0 = [{LastDirGuid, _} | _] = lists:foldl(fun(Num, [{DirGuid, _} | _] = Acc) ->
         SubDirName = <<"dir", (integer_to_binary(Num))/binary>>,
         {ok, SubDirGuid} = lfm_proxy:mkdir(W, UserSessId, DirGuid, SubDirName, 8#777),
-        {ok, _} = lfm_proxy:create(W, UserSessId, DirGuid, <<"file", ($0 + Num)>>, 8#777),
+        {ok, _} = lfm_proxy:create(W, UserSessId, DirGuid, InaccessibleFileName, 8#777),
         [{SubDirGuid, SubDirName} | Acc]
     end, [{SpaceRootDirGuid, SpaceName}], lists:seq(1, 20)),
     Dirs1 = lists:reverse(Dirs0),
@@ -411,6 +413,22 @@ data_access_caveats_ancestors_test(Config) ->
                 {ok, DirPath},
                 lfm_proxy:get_file_path(W, SessId, DirGuid)
             ),
+
+            % Get child attr should also succeed but only for children that are
+            % also allowed by caveats
+            case ParentGuid of
+                undefined ->
+                    ok;
+                _ ->
+                    ?assertMatch(
+                        {ok, #file_attr{name = DirName, type = ?DIRECTORY_TYPE}},
+                        lfm_proxy:get_child_attr(W, SessId, ParentGuid, DirName)
+                    ),
+                    ?assertMatch(
+                        {error, ?ENOENT},
+                        lfm_proxy:get_child_attr(W, SessId, ParentGuid, InaccessibleFileName)
+                    )
+            end,
 
             {DirPath, DirGuid}
         end,
@@ -2258,6 +2276,14 @@ end_per_suite(Config) ->
 
 init_per_testcase(multi_provider_permission_cache_test, Config) ->
     ct:timetrap({minutes, 15}),
+    init_per_testcase(default, Config);
+
+init_per_testcase(mv_dir_test, Config) ->
+    ct:timetrap({minutes, 5}),
+    init_per_testcase(default, Config);
+
+init_per_testcase(mv_file_test, Config) ->
+    ct:timetrap({minutes, 5}),
     init_per_testcase(default, Config);
 
 init_per_testcase(_Case, Config) ->

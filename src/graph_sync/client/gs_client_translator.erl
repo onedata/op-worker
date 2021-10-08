@@ -101,10 +101,11 @@ translate(#gri{type = od_space, id = Id, aspect = instance, scope = protected}, 
 
 translate(#gri{type = od_space, id = SpaceId, aspect = instance, scope = private}, Result) ->
     Storages = maps:get(<<"storages">>, Result),
+    Providers = maps:get(<<"providers">>, Result),
 
     % the space might be fetched with user's session, in such case it is not
     % guaranteed that the provider supports the space and can fetch storages
-    StoragesByProvider = case provider_logic:supports_space(SpaceId) of
+    StoragesByProvider = case maps:is_key(oneprovider:get_id(), Providers) of
         false ->
             #{};
         true ->

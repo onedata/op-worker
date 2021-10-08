@@ -58,7 +58,7 @@ handle(<<"POST">>, InitialReq) ->
                 Req2 = handle_multipart_req(Req, Auth, #{}),
                 cowboy_req:reply(?HTTP_200_OK, Req2)
             catch
-                throw:upload_not_registered ->
+                throw:upload_not_authorized ->
                     reply_with_error(?ERROR_FORBIDDEN, Req);
                 throw:Error ->
                     reply_with_error(Error, Req);
@@ -118,7 +118,7 @@ write_chunk(Req, ?USER(UserId, SessionId), Params) ->
     ChunkSize = maps:get(<<"resumableChunkSize">>, SanitizedParams),
     ChunkNumber = maps:get(<<"resumableChunkNumber">>, SanitizedParams),
 
-    assert_file_upload_registered(UserId, FileGuid),
+    authorize_chunk_upload(UserId, FileGuid),
 
     SpaceId = file_id:guid_to_space_id(FileGuid),
     Offset = ChunkSize * (ChunkNumber - 1),
@@ -135,12 +135,12 @@ write_chunk(Req, ?USER(UserId, SessionId), Params) ->
 
 
 %% @private
--spec assert_file_upload_registered(od_user:id(), file_id:file_guid()) ->
+-spec authorize_chunk_upload(od_user:id(), file_id:file_guid()) ->
     ok | no_return().
-assert_file_upload_registered(UserId, FileGuid) ->
-    case file_upload_manager:is_upload_registered(UserId, FileGuid) of
+authorize_chunk_upload(UserId, FileGuid) ->
+    case file_upload_manager:authorize_chunk_upload(UserId, FileGuid) of
         true -> ok;
-        false -> throw(upload_not_registered)
+        false -> throw(upload_not_authorized)
     end.
 
 

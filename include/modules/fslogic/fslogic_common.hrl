@@ -18,6 +18,8 @@
 -include("modules/storage/helpers/helpers.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
 
+-define(FSLOGIC_WORKER_SUP, fslogic_worker_sup).
+
 %% Hidden file prefix
 -define(HIDDEN_FILE_PREFIX, ".__onedata__").
 
