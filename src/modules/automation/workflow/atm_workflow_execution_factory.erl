@@ -329,11 +329,13 @@ create_lane_executions(AtmWorkflowExecutionCreateCtx = #atm_workflow_execution_c
 }) ->
     FirstAtmLaneExecution = #atm_lane_execution{
         schema_id = FirstAtmLaneSchema#atm_lane_schema.id,
+        retries_left = FirstAtmLaneSchema#atm_lane_schema.max_retries,
         runs = [#atm_lane_execution_run{run_no = 1, status = ?SCHEDULED_STATUS}]
     },
     RestAtmLaneExecutions = lists:map(fun(AtmLaneSchema) ->
         #atm_lane_execution{
             schema_id = AtmLaneSchema#atm_lane_schema.id,
+            retries_left = AtmLaneSchema#atm_lane_schema.max_retries,
             runs = []
         }
     end, RestAtmLaneSchemas),

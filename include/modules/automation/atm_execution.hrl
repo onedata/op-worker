@@ -41,6 +41,7 @@
 
 -record(atm_lane_execution, {
     schema_id :: automation:id(),
+    retries_left :: non_neg_integer(),
     runs :: [atm_lane_execution:run()]
 }).
 

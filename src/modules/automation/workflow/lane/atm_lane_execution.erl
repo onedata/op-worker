@@ -208,7 +208,7 @@ upgrade_encoded_record(1, #{
         _ -> StatusBin
     end,
 
-    {2, #{<<"schemaId">> => AtmLaneSchemaId, <<"runs">> => [#{
+    {2, #{<<"schemaId">> => AtmLaneSchemaId, <<"retriesLeft">> => 0, <<"runs">> => [#{
         <<"runNo">> => 1,
         <<"status">> => UpgradedStatusBin,
         <<"parallelBoxes">> => AtmParallelBoxExecutionsJson
@@ -217,9 +217,14 @@ upgrade_encoded_record(1, #{
 
 -spec db_encode(record(), persistent_record:nested_record_encoder()) ->
     json_utils:json_map().
-db_encode(#atm_lane_execution{schema_id = AtmLaneSchemaId, runs = Runs}, NestedRecordEncoder) ->
+db_encode(#atm_lane_execution{
+    schema_id = AtmLaneSchemaId,
+    retries_left = RetriesLeft,
+    runs = Runs
+}, NestedRecordEncoder) ->
     #{
         <<"schemaId">> => AtmLaneSchemaId,
+        <<"retriesLeft">> => RetriesLeft,
         <<"runs">> => lists:map(fun(Run) -> encode_run(NestedRecordEncoder, Run) end, Runs)
     }.
 
@@ -254,9 +259,14 @@ encode_run(NestedRecordEncoder, #atm_lane_execution_run{
 
 -spec db_decode(json_utils:json_map(), persistent_record:nested_record_decoder()) ->
     record().
-db_decode(#{<<"schemaId">> := AtmLaneSchemaId, <<"runs">> := RunsJson}, NestedRecordDecoder) ->
+db_decode(#{
+    <<"schemaId">> := AtmLaneSchemaId,
+    <<"retriesLeft">> := RetriesLeft,
+    <<"runs">> := RunsJson
+}, NestedRecordDecoder) ->
     #atm_lane_execution{
         schema_id = AtmLaneSchemaId,
+        retries_left = RetriesLeft,
         runs = lists:map(fun(RunJson) -> decode_run(NestedRecordDecoder, RunJson) end, RunsJson)
     }.
 
