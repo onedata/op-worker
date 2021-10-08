@@ -17,6 +17,7 @@
 -include("modules/fslogic/fslogic_delete.hrl").
 -include("modules/storage/luma/luma.hrl").
 -include("modules/fslogic/file_attr.hrl").
+-include("workflow_engine.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_models.hrl").
 
 -type file_descriptors() :: #{session:id() => non_neg_integer()}.
@@ -1178,7 +1179,8 @@
     iterator :: iterator:iterator(),
     lane_index = workflow_execution_state:index(),
     lane_id :: workflow_engine:lane_id(),
-    item_index = workflow_execution_state:index()
+    item_index = workflow_execution_state:index(),
+    next_lane_id :: workflow_engine:lane_id() | undefined
 }).
 
 -record(workflow_engine_state, {
@@ -1191,13 +1193,23 @@
     handler :: workflow_handler:handler(),
     initial_context :: workflow_engine:execution_context(),
 
-    execution_status = not_prepared :: workflow_execution_state:execution_status(),
+    execution_status = ?NOT_PREPARED :: workflow_execution_state:execution_status(),
     current_lane :: workflow_execution_state:current_lane(),
+
+    % engine can prepare next lane in advance but it is not being executed until current lane is finished
+    % and workflow_handler:handle_lane_execution_ended/3 (called for current lane) confirms that next lane
+    % execution should start
+    next_lane_preparation_status = ?NOT_PREPARED :: workflow_execution_state:next_lane_preparation_status(),
+    next_lane :: workflow_execution_state:next_lane(),
+
     lowest_failed_job_identifier :: workflow_jobs:job_identifier() | undefined,
+    failed_job_count = 0 :: non_neg_integer(),
 
     iteration_state :: workflow_iteration_state:state() | undefined,
     prefetched_iteration_step :: workflow_execution_state:iteration_status(),
     jobs :: workflow_jobs:jobs() | undefined,
+
+    waiting_notifications = [] :: [workflow_execution_state:waiting_label()],
 
     % Field used to return additional information about document update procedure
     % (datastore:update returns {ok, #document{}} or {error, term()}

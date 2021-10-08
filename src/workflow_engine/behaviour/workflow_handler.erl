@@ -20,16 +20,16 @@
 -type async_processing_basic_result() :: term().
 -type async_processing_result() :: async_processing_basic_result() | ?ERROR_MALFORMED_DATA | ?ERROR_TIMEOUT.
 -type handler_execution_result() :: ok | error.
--type prepare_result() :: {ok, workflow_engine:lane_spec(), workflow_engine:execution_context()} | error.
-% engine does not distinguish reason of execution finish - finish_execution is returned
-% if processed lane is last lane as well as on error
--type lane_ended_callback_result() :: {continue, NextLaneId :: workflow_engine:lane_id()} | finish_execution.
+-type prepare_result() :: {ok, workflow_engine:lane_spec()} | error.
+-type lane_ended_callback_result() :: ?CONTINUE(workflow_engine:lane_id(), workflow_engine:lane_id()) |
+    ?FINISH_EXECUTION. % engine does not distinguish reason of execution finish - ?FINISH_EXECUTION is returned
+                       % if processed lane is last lane as well as on error
 % TODO VFS-7787 move following types to callback server:
 -type finished_callback_id() :: binary().
 -type heartbeat_callback_id() :: binary().
 
 -export_type([handler/0, async_processing_result/0, handler_execution_result/0, prepare_result/0,
-    finished_callback_id/0, heartbeat_callback_id/0]).
+    lane_ended_callback_result/0, finished_callback_id/0, heartbeat_callback_id/0]).
 
 %%%===================================================================
 %%% Callbacks descriptions
@@ -103,13 +103,13 @@
 %%--------------------------------------------------------------------
 %% @doc
 %% Callback reporting that task has been executed for all items.
+%% This callback is executed once for each task. It is guaranteed that
+%% callback is called before call of handle_lane_execution_ended
+%% callback for task's lane.
 %% Warning: there is no guarantee that callbacks for tasks are called
 %% exactly the same order as the tasks were finished.
-%% Warning: This callback can be called after call of
-%% handle_lane_execution_ended callback for task's lane.
-%% It can be called multiple times if lane is empty.
-%% TODO VFS-VFS-7848 - pause further processing until notification
-%% callback is processed
+%% Warning: when execution is cancelled, handler can be executed
+%% twice for single task.
 %% @end
 %%--------------------------------------------------------------------
 -callback handle_task_execution_ended(
@@ -132,7 +132,7 @@
 -callback handle_lane_execution_ended(
     workflow_engine:execution_id(),
     workflow_engine:execution_context(),
-    workflow_execution_state:index()
+    workflow_engine:lane_id()
 ) ->
     lane_ended_callback_result().
 

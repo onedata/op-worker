@@ -58,6 +58,21 @@
 -define(ASYNC_RESULT_PROCESSING, async_result_processing).
 
 %%%===================================================================
+%%% Macros defining statuses of lane preparation and workflow execution
+%%%===================================================================
+
+-define(NOT_PREPARED, not_prepared).
+-define(PREPARING, preparing).
+-define(PREPARED_IN_ADVANCE, prepared_in_advance).
+-define(PREPARATION_FAILED, preparation_failed).
+-define(PREPARATION_CANCELLED, preparation_cancelled).
+
+-define(EXECUTING, executing).
+-define(EXECUTION_CANCELLED, execution_cancelled).
+-define(WORKFLOW_FINISHED, workflow_finished).
+-define(CANCEL_ON_NEXT_LANE_PREPARATION_FINISH, cancel_on_next_lane_preparation_finish).
+
+%%%===================================================================
 %%% Macros used to describe processing of parallel box's jobs
 %%%===================================================================
 
@@ -65,15 +80,35 @@
 -define(AT_LEAST_ONE_JOB_LEFT_FOR_PARALLEL_BOX, at_least_one_job_left_for_parallel_box).
 
 %%%===================================================================
-%%% Macros used to describe actions and errors
+%%% Macros describing possible results of
+%%% workflow_handler:handle_lane_execution_ended/3 callback
 %%%===================================================================
 
-% Macros used to control workflow_engine actions
--define(END_EXECUTION(Handler, Context, KeepSnapshot),
-    {end_execution, Handler, Context, KeepSnapshot}).
+-define(CONTINUE(NextLaneId, LaneIdToBePreparedInAdvance), {continue, NextLaneId, LaneIdToBePreparedInAdvance}).
+-define(FINISH_EXECUTION, finish_execution).
+
+%%%===================================================================
+%%% Macros describing lane preparation modes
+%%%===================================================================
+
+-define(PREPARE_SYNC, prepare_sync).
+-define(PREPARE_ASYNC, prepare_async).
+
+%%%===================================================================
+%%% Macros and records used to describe actions and errors
+%%%===================================================================
+
+% Macros and records used to control workflow_engine actions
+-record(execution_ended, {
+    handler :: workflow_handler:handler(),
+    context :: workflow_engine:execution_context(),
+    reason = ?WORKFLOW_FINISHED :: ?WORKFLOW_FINISHED | ?EXECUTION_CANCELLED,
+    callbacks_data :: {workflow_engine:lane_id(), workflow_engine:execution_context(), [workflow_engine:task_id()]} |
+        undefined
+}).
 -define(DEFER_EXECUTION, defer_execution).
--define(PREPARE_LANE_EXECUTION(Handler, ExecutionContext, LaneId),
-    {prepare_lane_execution, Handler, ExecutionContext, LaneId}).
+-define(PREPARE_LANE_EXECUTION(Handler, ExecutionContext, LaneId, PreparationMode),
+    {prepare_lane_execution, Handler, ExecutionContext, LaneId, PreparationMode}).
 
 % errors returned by workflow_engine_state to control workflow_engine
 -define(WF_ERROR_ALL_SLOTS_USED, {error, all_slots_used}).
