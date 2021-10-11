@@ -531,13 +531,12 @@ build_verify_modified_archive_description_fun(MemRef, Providers) ->
 %%%===================================================================
 
 get_dataset_archives(_Config) ->
-
     #object{dataset = #dataset_object{
         id = DatasetId,
         archives = ArchiveObjects
     }} = onenv_file_test_utils:create_and_sync_file_tree(user3, ?SPACE, #file_spec{dataset = #dataset_spec{
         % pick random count of archives
-        archives = rand:uniform(1000)
+        archives = rand:uniform(300)
     }}),
 
     Providers = [krakow, paris],

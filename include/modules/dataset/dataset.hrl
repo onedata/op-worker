@@ -30,4 +30,8 @@
 -define(BASIC_INFO, basic).
 -define(EXTENDED_INFO, extended).
 
+% Macros defining detachment reason
+-define(DATASET_ROOT_FILE_DELETED, dataset_root_file_deleted).
+-define(DATASET_USER_TRIGGERED_DETACHMENT, dataset_user_triggered_detachment).
+
 -endif.
