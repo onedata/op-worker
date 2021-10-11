@@ -42,26 +42,18 @@ resolve_guid(UserCtx, FileCtx0) ->
 
 -spec resolve_guid_by_relative_path(
     user_ctx:ctx(), file_ctx:ctx(), file_meta:path(), boolean(), file_meta:mode()
-) -> fslogic_worker:provider_response().
+) -> fslogic_worker:fuse_response().
 resolve_guid_by_relative_path(UserCtx, RelRootCtx, Path, CreateDirs, Mode) ->
     PathTokens = binary:split(Path, <<"/">>, [global]),
     LeafFileCtx = lists:foldl(fun(PathToken, ParentCtx) ->
         try
             {ChildCtx, _} = files_tree:get_child(ParentCtx, PathToken, UserCtx),
             ChildCtx
-        catch
-            throw:?ENOENT ->
-                case CreateDirs of
-                    true ->
-                        #fuse_response{fuse_response = #dir{guid = CreatedDirGuid}} = dir_req:mkdir(
-                            UserCtx, ParentCtx, PathToken, Mode
-                        ),
-                        file_ctx:new_by_guid(CreatedDirGuid);
-                    false ->
-                        throw(?ENOENT)
-                end;
-            Type:Reason ->
-                erlang:Type(Reason)
+        catch throw:?ENOENT when CreateDirs == true ->
+            #fuse_response{fuse_response = #dir{guid = CreatedDirGuid}} = dir_req:mkdir(
+                UserCtx, ParentCtx, PathToken, Mode
+            ),
+            file_ctx:new_by_guid(CreatedDirGuid)
         end
     end, RelRootCtx, PathTokens),
     resolve_guid(UserCtx, LeafFileCtx).

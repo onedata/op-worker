@@ -522,8 +522,8 @@ handle_fuse_request(UserCtx, #resolve_guid_by_relative_path{
     path = Path,
     create_dirs = CreateDirs,
     mode = Mode
-}, FileCtx) ->
-    guid_req:resolve_guid_by_relative_path(UserCtx, FileCtx, Path, CreateDirs, Mode);
+}, RelRootCtx) ->
+    guid_req:resolve_guid_by_relative_path(UserCtx, RelRootCtx, Path, CreateDirs, Mode);
 handle_fuse_request(UserCtx, #get_helper_params{
     storage_id = StorageId,
     space_id = SpaceId,
