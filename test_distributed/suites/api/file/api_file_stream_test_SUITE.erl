@@ -1291,7 +1291,7 @@ init_per_testcase(gui_download_file_test = Case, Config) ->
     utils:rpc_multicall(Providers, file_middleware_plugin, resolve_handler, [get, download_url, private]),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 init_per_testcase(_Case, Config) ->
-    ct:timetrap({minutes, 30}),
+    ct:timetrap({minutes, 40}),
     Config.
 
 end_per_testcase(_Case, _Config) ->

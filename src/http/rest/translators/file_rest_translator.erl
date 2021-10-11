@@ -92,4 +92,7 @@ get_response(#gri{aspect = hardlinks}, Hardlinks) ->
     ?OK_REPLY(lists:map(fun(FileGuid) ->
         {ok, ObjectId} = file_id:guid_to_objectid(FileGuid),
         ObjectId
-    end, Hardlinks)).
+    end, Hardlinks));
+
+get_response(#gri{aspect = {hardlinks, _}}, _Result) ->
+    ?NO_CONTENT_REPLY.

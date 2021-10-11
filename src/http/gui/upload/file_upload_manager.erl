@@ -27,7 +27,12 @@
 
 %% API
 -export([spec/0, whereis/0, start_link/0]).
--export([register_upload/2, authorize_chunk_upload/2, deregister_upload/2]).
+-export([
+    register_upload/2,
+    authorize_chunk_upload/2,
+    is_upload_registered/2,
+    deregister_upload/2
+]).
 
 %% gen_server callbacks
 -export([
@@ -62,6 +67,7 @@
 
 -define(REGISTER_UPLOAD_REQ(UserId, FileGuid), {register, UserId, FileGuid}).
 -define(AUTHORIZE_CHUNK_UPLOAD(UserId, FileGuid), {authorize_chunk, UserId, FileGuid}).
+-define(IS_UPLOAD_REGISTERED(UserId, FileGuid), {is_upload_registered, UserId, FileGuid}).
 -define(DEREGISTER_UPLOAD_REQ(UserId, FileGuid), {deregister, UserId, FileGuid}).
 
 -define(NOW(), global_clock:timestamp_seconds()).
@@ -106,6 +112,11 @@ authorize_chunk_upload(UserId, FileGuid) ->
         true -> true;
         _ -> false
     end.
+
+
+-spec is_upload_registered(od_user:id(), file_id:file_guid()) -> ok | error().
+is_upload_registered(UserId, FileGuid) ->
+    call_server(?IS_UPLOAD_REGISTERED(UserId, FileGuid)).
 
 
 -spec deregister_upload(od_user:id(), file_id:file_guid()) -> ok.
@@ -173,6 +184,14 @@ handle_call(?AUTHORIZE_CHUNK_UPLOAD(UserId, FileGuid), {ClientPid, _}, State = #
                 uploads = Uploads#{FileGuid => NewUploadCtx},
                 monitor_to_file_mapping = MonitorToFileMapping#{Monitor => FileGuid}
             });
+        _ ->
+            reply(false, State)
+    end;
+
+handle_call(?IS_UPLOAD_REGISTERED(UserId, FileGuid), _From, State = #state{uploads = Uploads}) ->
+    case maps:find(FileGuid, Uploads) of
+        {ok, #upload_ctx{user_id = UserId}} ->
+            reply(true, State);
         _ ->
             reply(false, State)
     end;
