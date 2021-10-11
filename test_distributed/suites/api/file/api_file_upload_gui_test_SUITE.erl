@@ -128,12 +128,12 @@ upload_test(_Config) ->
     ),
 
     ?assertMatch({ok, _}, initialize_gui_upload(krakow, user1, FileGuid)),
-    ?assertMatch(true, authorize_chunk_upload(krakow, user1, FileGuid)),
+    ?assertMatch(true, is_upload_registered(krakow, user1, FileGuid)),
 
     do_multipart(krakow, user1, FileGuid, 5, 10, 5),
 
     ?assertMatch({ok, _}, finalize_gui_upload(krakow, user1, FileGuid)),
-    ?assertMatch(false, authorize_chunk_upload(krakow, user1, FileGuid), ?ATTEMPTS),
+    ?assertMatch(false, is_upload_registered(krakow, user1, FileGuid), ?ATTEMPTS),
 
     assert_file_uploaded(krakow, user1, FileGuid, 250).
 
@@ -144,29 +144,29 @@ stale_upload_file_should_be_deleted_test(_Config) ->
     ),
 
     ?assertMatch({ok, _}, initialize_gui_upload(krakow, user1, FileGuid)),
-    ?assertMatch(true, authorize_chunk_upload(krakow, user1, FileGuid)),
+    ?assertMatch(true, is_upload_registered(krakow, user1, FileGuid)),
 
-    [StallProcess | RestStallProcesses] = spawn_stalling_processes(krakow, user1, FileGuid),
+    [StallingProcess | RestStallingProcesses] = spawn_stalling_processes(krakow, user1, FileGuid),
 
     % upload should not be removed as long as there is at least one uploading process alive
     time_test_utils:simulate_seconds_passing(1000),
     force_stale_uploads_removal(krakow),
-    ?assertMatch(true, authorize_chunk_upload(krakow, user1, FileGuid)),
+    ?assertMatch(true, is_upload_registered(krakow, user1, FileGuid)),
 
-    lists:foreach(fun stop_stalling_process/1, RestStallProcesses),
+    lists:foreach(fun stop_stalling_process/1, RestStallingProcesses),
     time_test_utils:simulate_seconds_passing(1000),
     force_stale_uploads_removal(krakow),
-    ?assertMatch(true, authorize_chunk_upload(krakow, user1, FileGuid)),
+    ?assertMatch(true, is_upload_registered(krakow, user1, FileGuid)),
 
     % and will be removed if no such process exists for longer than 1 minute
-    stop_stalling_process(StallProcess),
+    stop_stalling_process(StallingProcess),
     time_test_utils:simulate_seconds_passing(59),
     force_stale_uploads_removal(krakow),
-    ?assertMatch(true, authorize_chunk_upload(krakow, user1, FileGuid)),
+    ?assertMatch(true, is_upload_registered(krakow, user1, FileGuid)),
 
-    time_test_utils:simulate_seconds_passing(61),
+    time_test_utils:simulate_seconds_passing(2),
     force_stale_uploads_removal(krakow),
-    ?assertMatch(false, authorize_chunk_upload(krakow, user1, FileGuid)),
+    ?assertMatch(false, is_upload_registered(krakow, user1, FileGuid)),
     assert_file_does_not_exist(krakow, user1, FileGuid).
 
 
@@ -176,18 +176,18 @@ upload_with_backward_time_warps_test(_Config) ->
     ),
 
     ?assertMatch({ok, _}, initialize_gui_upload(krakow, user1, FileGuid)),
-    ?assertMatch(true, authorize_chunk_upload(krakow, user1, FileGuid)),
+    ?assertMatch(true, is_upload_registered(krakow, user1, FileGuid)),
 
     % upload should not be canceled if time warps backward (whether write occurred or not)
     time_test_utils:simulate_seconds_passing(-1000),
     force_stale_uploads_removal(krakow),
-    ?assertMatch(true, authorize_chunk_upload(krakow, user1, FileGuid)),
+    ?assertMatch(true, is_upload_registered(krakow, user1, FileGuid)),
 
     % but will de removed if time equal to inactivity period (currently 1 minute)
     % passes from this new point in time (if no new activity occurred)
     time_test_utils:simulate_seconds_passing(61),
     force_stale_uploads_removal(krakow),
-    ?assertMatch(false, authorize_chunk_upload(krakow, user1, FileGuid)),
+    ?assertMatch(false, is_upload_registered(krakow, user1, FileGuid)),
     assert_file_does_not_exist(krakow, user1, FileGuid).
 
 
@@ -196,19 +196,19 @@ upload_with_forward_time_warps_test(_Config) ->
         user1, space_krk, #file_spec{}
     ),
     ?assertMatch({ok, _}, initialize_gui_upload(krakow, user1, FileGuid)),
-    ?assertMatch(true, authorize_chunk_upload(krakow, user1, FileGuid)),
+    ?assertMatch(true, is_upload_registered(krakow, user1, FileGuid)),
 
     % upload should not be canceled in case of forward time warp if next chunk
     % was written before stale uploads checkup
     time_test_utils:simulate_seconds_passing(3000),
     do_multipart(krakow, user1, FileGuid, 5, 10, 1),
     force_stale_uploads_removal(krakow),
-    ?assertMatch(true, authorize_chunk_upload(krakow, user1, FileGuid)),
+    ?assertMatch(true, is_upload_registered(krakow, user1, FileGuid)),
 
     % otherwise it will be removed after inactivity period (currently 1 minute)
     time_test_utils:simulate_seconds_passing(61),
     force_stale_uploads_removal(krakow),
-    ?assertMatch(false, authorize_chunk_upload(krakow, user1, FileGuid)),
+    ?assertMatch(false, is_upload_registered(krakow, user1, FileGuid)),
     assert_file_does_not_exist(krakow, user1, FileGuid).
 
 
@@ -310,17 +310,17 @@ finalize_gui_upload(ProviderSelector, UserSelector, FileGuid) ->
 
 
 %% @private
--spec authorize_chunk_upload(
+-spec is_upload_registered(
     oct_background:entity_selector(),
     oct_background:entity_selector(),
     file_id:file_guid()
 ) ->
     boolean().
-authorize_chunk_upload(ProviderSelector, UserSelector, FileGuid) ->
+is_upload_registered(ProviderSelector, UserSelector, FileGuid) ->
     UserId = oct_background:get_user_id(UserSelector),
     Node = oct_background:get_random_provider_node(ProviderSelector),
 
-    rpc:call(Node, file_upload_manager, authorize_chunk_upload, [UserId, FileGuid]).
+    rpc:call(Node, file_upload_manager, is_upload_registered, [UserId, FileGuid]).
 
 
 %% @private

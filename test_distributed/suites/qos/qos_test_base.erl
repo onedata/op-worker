@@ -1166,11 +1166,17 @@ qos_status_during_traverse_with_file_deletion_test_base(Config, SpaceId, NumberO
     ok = qos_tests_utils:finish_all_transfers(ToFinish),
     
     Dir1 = qos_tests_utils:get_guid(resolve_path(SpaceId, Name, []), GuidsAndPaths),
-    ok = ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, ToFinish ++ [Dir1], QosList, ?FULFILLED_QOS_STATUS), ?ATTEMPTS),
+    {StillReferenced, NoLongerReferenced} = lists:foldl(fun(Guid, {StillReferencedAcc, NoLongerReferencedAcc}) ->
+        case lfm_proxy:get_file_references(Worker1, SessId(Worker1), ?FILE_REF(Guid)) of
+            {ok, []} -> {StillReferencedAcc, [Guid | NoLongerReferencedAcc]};
+            {ok, [_ | _]} -> {[Guid | StillReferencedAcc], NoLongerReferencedAcc}
+        end
+    end, {[], []}, ToDelete),
+    ok = ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, ToFinish ++ [Dir1] ++ StillReferenced, QosList, ?FULFILLED_QOS_STATUS), ?ATTEMPTS),
     % finish transfers to unlock waiting slave job processes
     ok = qos_tests_utils:finish_all_transfers(ToDelete),
     % These files where deleted so QoS is not fulfilled
-    ok = ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, ToDelete, QosList, {error, enoent}), ?ATTEMPTS).
+    ok = ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_workers(Config, NoLongerReferenced, QosList, {error, enoent}), ?ATTEMPTS).
 
 
 -spec qos_status_during_traverse_with_dir_deletion_test_base(test_config:config(), od_space:id(), pos_integer(), file_type()) -> ok.

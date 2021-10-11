@@ -265,7 +265,7 @@ qos_membership(FileUuidOrDoc) ->
 %%--------------------------------------------------------------------
 -spec has_any_qos_entry(file_meta:uuid() | file_meta:doc(), direct | effective) -> boolean().
 has_any_qos_entry(#document{key = Uuid}, direct) ->
-    has_any_qos_entry(Uuid, direct);
+    has_any_qos_entry(fslogic_uuid:ensure_referenced_uuid(Uuid), direct);
 has_any_qos_entry(Key, direct) ->
     has_any_qos_entry(get(Key));
 has_any_qos_entry(UuidOrDoc, effective) ->
