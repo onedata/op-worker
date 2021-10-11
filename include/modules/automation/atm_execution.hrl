@@ -77,6 +77,11 @@
     parallel_boxes = [] :: [atm_parallel_box_execution:record()]
 }).
 
+-record(atm_lane_execution_run_teardown_ctx, {
+    workflow_execution_ctx :: atm_workflow_execution_ctx:record(),
+    is_retried :: boolean()
+}).
+
 -record(atm_parallel_box_execution_create_ctx, {
     lane_execution_run_create_ctx :: atm_lane_execution_factory:create_run_ctx(),
 

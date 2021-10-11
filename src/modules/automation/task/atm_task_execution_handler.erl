@@ -44,7 +44,7 @@
 %% API
 -export([
     setup/2,
-    teardown/1,
+    teardown/2,
 
     process_item/5,
     process_results/4,
@@ -86,13 +86,14 @@ setup(AtmWorkflowExecutionCtx, AtmTaskExecutionIdOrDoc) ->
     {AtmTaskExecutionSpec, AtmWorkflowExecutionEnvDiff}.
 
 
--spec teardown(atm_task_execution:id()) -> ok | no_return().
-teardown(AtmTaskExecutionId) ->
+-spec teardown(atm_lane_execution_handler:teardown_ctx(), atm_task_execution:id()) ->
+    ok | no_return().
+teardown(AtmLaneExecutionRunTeardownCtx, AtmTaskExecutionId) ->
     #document{value = #atm_task_execution{
         executor = AtmTaskExecutor
     }} = ensure_atm_task_execution_doc(AtmTaskExecutionId),
 
-    atm_task_executor:teardown(AtmTaskExecutor).
+    atm_task_executor:teardown(AtmLaneExecutionRunTeardownCtx, AtmTaskExecutor).
 
 
 -spec process_item(
