@@ -107,6 +107,7 @@
     rename_removed_opened_file_races_test2/1,
     lfm_monitored_open/1,
     lfm_create_and_read_symlink/1,
+    lfm_create_hardlink_to_symlink/1,
     recreate_file_on_storage/1
 ]).
 
@@ -192,6 +193,7 @@
     rename_removed_opened_file_races_test2,
     lfm_monitored_open,
     lfm_create_and_read_symlink,
+    lfm_create_hardlink_to_symlink,
     recreate_file_on_storage
 ]).
 
@@ -849,6 +851,37 @@ lfm_create_and_read_symlink(Config) ->
     ?assertMatch({ok, [], _}, lfm_proxy:get_children_attrs(W, SessId, ?FILE_REF(DirGuid), #{offset => 0, size => 10})),
 
     % Delete test dir
+    ?assertMatch(ok, lfm_proxy:unlink(W, SessId, ?FILE_REF(DirGuid))),
+    ok.
+
+
+lfm_create_hardlink_to_symlink(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+
+    {SessId, _UserId} =
+        {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+
+    % Prepare test dir and link data
+    TestDir = <<"/space_name1/", (generator:gen_name())/binary>>,
+    {ok, DirGuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, TestDir)),
+    SymlinkPath = <<TestDir/binary, "/", (generator:gen_name())/binary>>,
+    HardlinkPath = <<TestDir/binary, "/", (generator:gen_name())/binary>>,
+    LinkTarget = <<"test_link">>,
+
+    % Create symlink and hardlink to this symlink
+    {ok, #file_attr{guid = SymlinkGuid}} = ?assertMatch({ok, #file_attr{type = ?SYMLINK_TYPE}},
+        lfm_proxy:make_symlink(W, SessId, SymlinkPath, LinkTarget)),
+    {ok, #file_attr{guid = HardlinkGuid}} = ?assertMatch({ok, #file_attr{type = ?SYMLINK_TYPE}},
+        lfm_proxy:make_link(W, SessId, HardlinkPath, SymlinkGuid)),
+
+    % Verify links
+    ?assertNotEqual(SymlinkGuid, HardlinkGuid),
+    ?assertEqual({ok, LinkTarget}, lfm_proxy:read_symlink(W, SessId, {path, SymlinkPath})),
+    ?assertEqual({ok, LinkTarget}, lfm_proxy:read_symlink(W, SessId, {path, HardlinkPath})),
+
+    % Clean
+    ?assertEqual(ok, lfm_proxy:unlink(W, SessId, {path, SymlinkPath})),
+    ?assertEqual(ok, lfm_proxy:unlink(W, SessId, {path, HardlinkPath})),
     ?assertMatch(ok, lfm_proxy:unlink(W, SessId, ?FILE_REF(DirGuid))),
     ok.
 
