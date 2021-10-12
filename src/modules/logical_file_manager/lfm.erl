@@ -237,8 +237,8 @@ get_file_guid(SessId, FilePath) ->
     ?run(lfm_files:get_file_guid(SessId, FilePath)).
 
 
--spec resolve_guid_by_relative_path(session:id(), fslogic_worker:file_guid(), boolean(), file_meta:mode(), file_meta:path()) ->
-    {ok, fslogic_worker:file_guid()}.
+-spec resolve_guid_by_relative_path(session:id(), fslogic_worker:file_guid(), file_meta:path(), boolean(), file_meta:mode()) ->
+    {ok, fslogic_worker:file_guid()} | error_reply().
 resolve_guid_by_relative_path(SessId, RelativeRootGuid, FilePath, CreateDirs, Mode) ->
     ?run(lfm_files:resolve_guid_by_relative_path(SessId, RelativeRootGuid,  CreateDirs, Mode, FilePath)).
 

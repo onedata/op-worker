@@ -327,14 +327,14 @@ write_req_body_to_file(SessionId, FileRef, Offset, Req) ->
 
 
 %% @private
--spec resolve_target_file(middleware:req()) -> fslogic_worker:file_guid().
+-spec resolve_target_file(middleware:req()) -> fslogic_worker:file_guid() | no_return().
 resolve_target_file(#op_req{
     operation = Operation,
     auth = #auth{session_id = SessionId},
     gri = #gri{id = BaseDirGuid, aspect = file_at_path},
     data = Data
 }) ->
-    PathInfo = maps:get(path, Data),
+    PathInfo = maps:get(path, Data, []),
 
     CreateDirs = case Operation of
         create -> maps:get(<<"create_parents">>, Data, ?DEFAULT_CREATE_PARENTS_FLAG);
