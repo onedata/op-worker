@@ -47,18 +47,18 @@
 
 groups() -> [
     {all_tests, [parallel], [
-        gui_download_file_test,
-        gui_download_dir_test,
-        gui_download_multiple_files_test,
-        gui_download_different_filetypes_test,
-        gui_large_dir_download_test,
-        gui_download_files_between_spaces_test,
-        gui_download_incorrect_uuid_test,
-        gui_download_tarball_with_hardlinks_test,
-        gui_download_tarball_with_symlink_loop_test,
-        rest_download_file_test,
-        rest_download_file_under_path_test,
-        rest_download_dir_test
+%%        gui_download_file_test,
+%%        gui_download_dir_test,
+%%        gui_download_multiple_files_test,
+%%        gui_download_different_filetypes_test,
+%%        gui_large_dir_download_test,
+%%        gui_download_files_between_spaces_test,
+%%        gui_download_incorrect_uuid_test,
+%%        gui_download_tarball_with_hardlinks_test,
+%%        gui_download_tarball_with_symlink_loop_test,
+%%        rest_download_file_test,
+        rest_download_file_under_path_test
+%%        rest_download_dir_test
     ]}
 ].
 
@@ -741,18 +741,26 @@ rest_download_file_test(Config) ->
 
 rest_download_file_under_path_test(Config) ->
     Providers = ?config(op_worker_nodes, Config),
+    FileSize = 4 * ?DEFAULT_READ_BLOCK_SIZE,
 
     SpaceId = oct_background:get_space_id(space_krk_par),
-    #object{guid = DirGuid, shares = [DirShareId]} =
+
+    #object{guid = DirGuid, shares = [DirShareId]} = TestDir =
         onenv_file_test_utils:create_and_sync_file_tree(
             user3, SpaceId, #dir_spec{shares = [#share_spec{}]}, krakow),
 
-    MemRef = api_test_memory:init(),
+    #object{guid = FileInDirGuid, shares = [FileInDirShareId]} = FileInDir =
+        onenv_file_test_utils:create_and_sync_file_tree(
+            user3, DirGuid, #file_spec{mode = 8#604, content = ?RAND_CONTENT(FileSize), shares = [#share_spec{}]}, krakow),
 
-    FileSize = 4 * ?DEFAULT_READ_BLOCK_SIZE,
-    SetupFun = build_download_file_setup_fun(MemRef, #file_spec{mode = 8#604, content = ?RAND_CONTENT(FileSize), shares = [#share_spec{}]}),
+    MemRef = api_test_memory:init(),
+    api_test_memory:set(MemRef, space_id, SpaceId),
+    api_test_memory:set(MemRef, test_dir, TestDir),
+    api_test_memory:set(MemRef, test_file, FileInDir),
+    api_test_memory:set(MemRef, file_tree_object, FileInDir),
+
     ValidateCallResultFun = build_rest_download_file_validate_call_fun(MemRef, Config),
-    VerifyFun = build_rest_download_file_verify_fun(MemRef, FileSize),
+    VerifyFun = build_rest_download_file_at_path_verify_fun(MemRef, FileSize),
 
     AllRangesToTest = [
         {<<"bytes=10-20">>, ?HTTP_206_PARTIAL_CONTENT, [{10, 11}]},
@@ -787,7 +795,6 @@ rest_download_file_under_path_test(Config) ->
     RangesToTestPart1 = lists_utils:random_sublist(
         AllRangesToTest, AllRangesToTestNum div 2, AllRangesToTestNum div 2
     ),
-    RangesToTestPart2 = AllRangesToTest -- RangesToTestPart1,
 
     ?assert(onenv_api_test_runner:run_tests([
         #scenario_spec{
@@ -796,37 +803,129 @@ rest_download_file_under_path_test(Config) ->
             target_nodes = Providers,
             client_spec = ?CLIENT_SPEC_FOR_SPACE_KRK_PAR,
 
-            setup_fun = SetupFun,
-            prepare_args_fun = build_rest_download_using_path_prepare_args_fun(MemRef, normal_mode),
+            prepare_args_fun = build_rest_download_using_path_prepare_args_fun(MemRef),
             validate_result_fun = ValidateCallResultFun,
             verify_fun = VerifyFun,
 
             data_spec = api_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
-                DirGuid, undefined, #data_spec{
-                    optional = [<<"range">>],
-                    correct_values = #{<<"range">> => RangesToTestPart1}
-                }
-            )
-        },
-        #scenario_spec{
-            name = <<"Download shared file using rest endpoint">>,
-            type = {rest_with_shared_guid, file_id:guid_to_space_id(DirGuid)},
-            target_nodes = Providers,
-            client_spec = ?CLIENT_SPEC_FOR_SHARES,
-
-            setup_fun = SetupFun,
-            prepare_args_fun = build_rest_download_prepare_args_fun(MemRef, share_mode),
-            validate_result_fun = ValidateCallResultFun,
-            verify_fun = VerifyFun,
-
-            data_spec = api_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
-                DirGuid, DirShareId, #data_spec{
-                    optional = [<<"range">>],
-                    correct_values = #{<<"range">> => RangesToTestPart2}
+                <<"file_or_space_id">>, DirGuid, undefined, #data_spec{
+                    optional = [<<"range">>, <<"path">>],
+                    correct_values = #{
+                        <<"range">> => RangesToTestPart1,
+                        <<"path">> => [empty_path, only_file, directory_and_file]
+                    }
                 }
             )
         }
     ])).
+
+%% @private
+-spec build_rest_download_using_path_prepare_args_fun(api_test_memory:mem_ref()) ->
+    onenv_api_test_runner:prepare_args_fun().
+build_rest_download_using_path_prepare_args_fun(MemRef) ->
+    fun(#api_test_ctx{data = Data0}) ->
+        api_test_memory:set(MemRef, follow_symlinks, maps:get(<<"follow_symlinks">>, Data0, true)),
+
+        SpaceId = api_test_memory:get(MemRef, space_id),
+        #object{name = DirName, guid = DirGuid} = api_test_memory:get(MemRef, test_dir),
+        #object{name = FileName, guid = FileGuid} = api_test_memory:get(MemRef, test_file),
+
+        {ParentId, Path, Data1} = case maps:get(<<"path">>, Data0, undefined) of
+            only_file ->
+                {ok, ParentDirId} = file_id:guid_to_objectid(DirGuid),
+                {ParentDirId, FileName, maps:remove(<<"path">>, Data0)};
+            directory_and_file ->
+                JoinedPath = <<DirName/binary, "/", FileName/binary>>,
+                {SpaceId, JoinedPath, maps:remove(<<"path">>, Data0)};
+            empty_path ->
+                {ok, FileId} = file_id:guid_to_objectid(FileGuid),
+                {FileId, <<"">>, maps:remove(<<"path">>, Data0)};
+            undefined ->
+                {SpaceId, <<"">>, maps:remove(<<"path">>, Data0)}
+        end,
+
+        {_Id, Data2} = api_test_utils:maybe_substitute_bad_file_or_space_id(ParentId, Data1),
+
+        RestPath = <<"data/", ParentId/binary, "/path/",Path/binary>>,
+        #rest_args{
+            method = get,
+            path = http_utils:append_url_parameters(
+                RestPath,
+                maps:with([<<"follow_symlinks">>], Data2)
+            ),
+            headers = case maps:get(?HDR_RANGE, Data2, undefined) of
+                undefined -> #{};
+                Range -> #{?HDR_RANGE => element(1, Range)}
+            end
+        }
+    end.
+
+%% @private
+-spec build_rest_download_file_at_path_verify_fun(
+    api_test_memory:mem_ref(),
+    file_meta:size()
+) ->
+    onenv_api_test_runner:verify_fun().
+build_rest_download_file_at_path_verify_fun(MemRef, FileSize) ->
+    [P1Node] = oct_background:get_provider_nodes(krakow),
+    [P2Node] = oct_background:get_provider_nodes(paris),
+    Providers = [P1Node, P2Node],
+
+    fun
+        (expected_failure, _) ->
+            #object{guid = FileGuid} = api_test_memory:get(MemRef, test_file),
+            #object{guid = DirGuid} = api_test_memory:get(MemRef, test_dir),
+            file_test_utils:await_distribution(Providers, [FileGuid, DirGuid], [{P1Node, FileSize}]);
+        (expected_success, #api_test_ctx{node = DownloadNode, data = Data}) ->
+            #object{guid = FileGuid} = api_test_memory:get(MemRef, test_file),
+            #object{guid = DirGuid} = api_test_memory:get(MemRef, test_dir),
+
+            case DownloadNode of
+                ?ONEZONE_TARGET_NODE ->
+                    % The request was made via Onezone's shared data redirector,
+                    % we do not have information where it was redirected here.
+                    % Still, the target node is randomized, and other cases
+                    % cover all possible resulting distributions.
+                    ok;
+                P1Node ->
+                    file_test_utils:await_distribution(Providers, FileGuid, [{P1Node, FileSize}]);
+                _Other ->
+                    case maps:get(<<"range">>, utils:ensure_defined(Data, #{}), undefined) of
+                        undefined ->
+                            file_test_utils:await_distribution(Providers, FileGuid, [
+                                {P1Node, FileSize}, {DownloadNode, FileSize}
+                            ]);
+
+                        {_, ?HTTP_206_PARTIAL_CONTENT, [{RangeStart, _RangeLen} = Range]} ->
+                            file_test_utils:await_distribution(Providers, FileGuid, [
+                                {P1Node, FileSize},
+                                {DownloadNode, [#file_block{
+                                    offset = RangeStart,
+                                    size = get_fetched_block_size(Range, FileSize)
+                                }]}
+                            ]);
+
+                        {_, ?HTTP_206_PARTIAL_CONTENT, Ranges} ->
+                            Blocks = fslogic_blocks:consolidate(lists:sort(lists:map(
+                                fun({RangeStart, _RangeLen} = Range) ->
+                                    #file_block{
+                                        offset = RangeStart,
+                                        size = get_fetched_block_size(Range, FileSize)
+                                    }
+                                end, Ranges
+                            ))),
+                            file_test_utils:await_distribution(Providers, FileGuid, [
+                                {P1Node, FileSize},
+                                {DownloadNode, Blocks}
+                            ]);
+
+                        {_, ?HTTP_416_RANGE_NOT_SATISFIABLE} ->
+                            file_test_utils:await_distribution(Providers, [FileGuid, DirGuid], [{P1Node, FileSize}])
+                    end
+            end
+    end.
+
+
 
 
 rest_download_dir_test(Config) ->
@@ -938,43 +1037,6 @@ build_rest_download_prepare_args_fun(MemRef, TestMode) ->
     end.
 
 
-%% @private
--spec build_rest_download_using_path_prepare_args_fun(api_test_memory:mem_ref(), test_mode()) ->
-    onenv_api_test_runner:prepare_args_fun().
-build_rest_download_using_path_prepare_args_fun(MemRef, TestMode) ->
-    fun(#api_test_ctx{data = Data0}) ->
-        api_test_memory:set(MemRef, test_mode, TestMode),
-        api_test_memory:set(MemRef, follow_symlinks, maps:get(<<"follow_symlinks">>, Data0, true)),
-        [#object{guid = Guid, shares = Shares}] = api_test_memory:get(MemRef, file_tree_object),
-        FileGuid = case TestMode of
-            normal_mode ->
-                api_test_memory:set(MemRef, scope, private),
-                Guid;
-            share_mode ->
-                api_test_memory:set(MemRef, scope, public),
-                case Shares of
-                    [ShareId | _] -> file_id:guid_to_share_guid(Guid, ShareId);
-                    _ -> Guid
-                end
-        end,
-        {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
-        {_Id, Data1} = api_test_utils:maybe_substitute_bad_id(FileObjectId, Data0),
-        ParentId = onenv_file_test_utils:get_parent_id(FileGuid, krakow),
-        FileName = onenv_file_test_utils:get_file_name(FileGuid, krakow),
-
-        RestPath = <<"data/", ParentId/binary, "/path/",FileName/binary>>,
-        #rest_args{
-            method = get,
-            path = http_utils:append_url_parameters(
-                RestPath,
-                maps:with([<<"follow_symlinks">>], Data1)
-            ),
-            headers = case maps:get(?HDR_RANGE, Data1, undefined) of
-                undefined -> #{};
-                Range -> #{?HDR_RANGE => element(1, Range)}
-            end
-        }
-    end.
 
 
 %% @private
@@ -985,7 +1047,7 @@ build_rest_download_using_path_prepare_args_fun(MemRef, TestMode) ->
     onenv_api_test_runner:validate_call_result_fun().
 build_rest_download_file_validate_call_fun(MemRef, _Config) ->
     fun(#api_test_ctx{data = Data}, {ok, RespCode, RespHeaders, RespBody}) ->
-        [#object{content = ExpContent}] = api_test_memory:get(MemRef, file_tree_object),
+        #object{content = ExpContent} = api_test_memory:get(MemRef, test_file),
         FileSize = size(ExpContent),
         FileSizeBin = integer_to_binary(FileSize),
         case maps:get(<<"range">>, Data, undefined) of
@@ -1099,6 +1161,9 @@ build_rest_download_file_verify_fun(MemRef, FileSize) ->
                     end
             end
     end.
+
+
+
 
 
 %% @private
