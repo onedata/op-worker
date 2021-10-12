@@ -131,6 +131,9 @@ translate_resource(#gri{aspect = hardlinks, scope = private}, References) ->
         end, References)
     };
 
+translate_resource(#gri{aspect = {hardlinks, _}, scope = private}, Result) ->
+    Result;
+
 translate_resource(#gri{aspect = symlink_target, scope = Scope}, FileDetails) ->
     translate_file_details(FileDetails, Scope);
 

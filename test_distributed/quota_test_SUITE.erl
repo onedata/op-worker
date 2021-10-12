@@ -497,7 +497,7 @@ replicate_file_bigger_than_quota_should_fail(Config) ->
 
     % pretend that quota size in space5 on P2 is equal 8GB
     {ok, _} =
-        rpc:call(P2, space_quota, update, [<<"space_id5">>, fun(SQ) -> {ok, SQ#space_quota{current_size = 8 * ?GB}} end]),
+        rpc:call(P2, space_quota, create_or_update, [<<"space_id5">>, fun(SQ) -> {ok, SQ#space_quota{current_size = 8 * ?GB}} end]),
 
     % Create large file on P1 and schedule replication to P2 with support size/quota
     % smaller than file size
@@ -518,7 +518,7 @@ replicate_file_bigger_than_quota_should_fail(Config) ->
     ?assertMatch({ok, []}, rpc:call(P1, transfer, list_ongoing_transfers, [<<"space_id5">>]), ?ATTEMPTS),
     ?assertEqual(true, lists:member(Tid, list_ended_transfers(P1, <<"space_id5">>)), ?ATTEMPTS),
     ?assertMatch(
-        {ok, #document{value = #transfer{replication_status = failed}}},
+        {ok, #document{value = #transfer{replication_status = completed}}},
         rpc:call(P1, transfer, get, [Tid]),
         ?ATTEMPTS
     ),

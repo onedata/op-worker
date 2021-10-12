@@ -96,21 +96,28 @@ make_file(UserCtx, ParentFileCtx0, Name, Mode) ->
 -spec make_link(user_ctx:ctx(), file_ctx:ctx(), file_ctx:ctx(), file_meta:name()) ->
     fslogic_worker:fuse_response().
 make_link(UserCtx, TargetFileCtx0, TargetParentFileCtx0, Name) ->
-    % TODO VFS-7064 this assert won't be needed after adding link from space to trash directory
-    file_ctx:assert_not_trash_dir_const(TargetFileCtx0, Name),
-    % TODO VFS-7439 - Investigate eaccess error when creating hardlink to hardlink if next line is deletred
-    % Check permissions on original target
-    TargetFileCtx1 = file_ctx:ensure_based_on_referenced_guid(TargetFileCtx0),
+    case file_ctx:is_symlink_const(TargetFileCtx0) of
+        true ->
+            {FileDoc, _} = file_ctx:get_file_doc_including_deleted(TargetFileCtx0),
+            {ok, SymLink} = file_meta_symlinks:readlink(FileDoc),
+            make_symlink(UserCtx, TargetParentFileCtx0, Name, SymLink);
+        false ->
+            % TODO VFS-7064 this assert won't be needed after adding link from space to trash directory
+            file_ctx:assert_not_trash_dir_const(TargetFileCtx0, Name),
+            % TODO VFS-7439 - Investigate eaccess error when creating hardlink to hardlink if next line is deletred
+            % Check permissions on original target
+            TargetFileCtx1 = file_ctx:ensure_based_on_referenced_guid(TargetFileCtx0),
 
-    TargetFileCtx2 = fslogic_authz:ensure_authorized(
-        UserCtx, TargetFileCtx1,
-        [?TRAVERSE_ANCESTORS]
-    ),
-    TargetParentFileCtx1 = fslogic_authz:ensure_authorized(
-        UserCtx, TargetParentFileCtx0,
-        [?TRAVERSE_ANCESTORS, ?OPERATIONS(?traverse_container_mask, ?add_object_mask)]
-    ),
-    make_link_insecure(UserCtx, TargetFileCtx2, TargetParentFileCtx1, Name).
+            TargetFileCtx2 = fslogic_authz:ensure_authorized(
+                UserCtx, TargetFileCtx1,
+                [?TRAVERSE_ANCESTORS]
+            ),
+            TargetParentFileCtx1 = fslogic_authz:ensure_authorized(
+                UserCtx, TargetParentFileCtx0,
+                [?TRAVERSE_ANCESTORS, ?OPERATIONS(?traverse_container_mask, ?add_object_mask)]
+            ),
+            make_link_insecure(UserCtx, TargetFileCtx2, TargetParentFileCtx1, Name)
+    end.
 
 
 -spec make_symlink(user_ctx:ctx(), file_ctx:ctx(), file_meta:name(), file_meta_symlinks:symlink()) ->
