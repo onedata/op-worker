@@ -247,32 +247,32 @@ handle_prepared_in_advance_lane_run_ended(AtmLaneIndex, AtmWorkflowExecution) ->
 %% @private
 -spec handle_currently_executed_lane_run_ended(atm_workflow_execution:record()) ->
     {ok, atm_workflow_execution:record()}.
-handle_currently_executed_lane_run_ended(AtmWorkflowExecution = #atm_workflow_execution{
+handle_currently_executed_lane_run_ended(AtmWorkflowExecution1 = #atm_workflow_execution{
     lanes_num = AtmLanesNum,
     curr_lane_index = CurrAtmLaneIndex
 }) ->
-    {ok, NewAtmWorkflowExecution} = end_currently_executed_lane_run(AtmWorkflowExecution),
+    {ok, AtmWorkflowExecution2} = end_currently_executed_lane_run(AtmWorkflowExecution1),
 
     {ok, #atm_lane_execution_run{
         exception_store_id = AtmExceptionStoreId,
         aborting_reason = AbortingReason,
         status = Status
-    }} = atm_lane_execution:get_curr_run(CurrAtmLaneIndex, NewAtmWorkflowExecution),
+    }} = atm_lane_execution:get_curr_run(CurrAtmLaneIndex, AtmWorkflowExecution2),
 
     case Status of
         ?FAILED_STATUS when AbortingReason == undefined ->
             % lane run can be automatically retried only if all items finished execution but
             % some of them failed (direct transition from ?ACTIVE_STATUS to ?FAILED_STATUS)
-            case acquire_retry_permission(NewAtmWorkflowExecution) of
-                {true, NewAtmWorkflowExecution2} ->
-                    schedule_lane_run_retry(AtmExceptionStoreId, NewAtmWorkflowExecution2);
+            case acquire_retry_permission(AtmWorkflowExecution2) of
+                {true, AtmWorkflowExecution3} ->
+                    schedule_lane_run_retry(AtmExceptionStoreId, AtmWorkflowExecution3);
                 false ->
-                    ok
+                    {ok, AtmWorkflowExecution2}
             end;
         ?FINISHED_STATUS when CurrAtmLaneIndex < AtmLanesNum ->
-            schedule_next_lane_run(NewAtmWorkflowExecution);
+            schedule_next_lane_run(AtmWorkflowExecution2);
         _ ->
-            {ok, NewAtmWorkflowExecution}
+            {ok, AtmWorkflowExecution2}
     end.
 
 

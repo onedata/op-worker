@@ -50,7 +50,7 @@
 -type record() :: #atm_lane_execution{}.
 
 -export_type([status/0, run_elements/0, run_diff/0, run/0]).
--export_type([diff/0, record/0]).
+-export_type([index/0, marker/0, diff/0, record/0]).
 
 
 %%%===================================================================
@@ -114,7 +114,7 @@ update_curr_run(AtmLaneMarker, Diff, Default, AtmWorkflowExecution = #atm_workfl
     curr_run_no = CurrRunNo
 }) ->
     AtmLaneIndex = resolve_index(AtmLaneMarker, AtmWorkflowExecution),
-    AtmLaneExecution = #atm_lane_execution{runs = Runs} = lists:nth(AtmLaneIndex, AtmLaneExecutions),
+    AtmLaneExecution = #atm_lane_execution{runs = Runs} = maps:get(AtmLaneIndex, AtmLaneExecutions),
 
     UpdateRunsResult = case Runs of
         [#atm_lane_execution_run{run_no = RunNo} = CurrRun | RestRuns] when
@@ -134,9 +134,9 @@ update_curr_run(AtmLaneMarker, Diff, Default, AtmWorkflowExecution = #atm_workfl
     case UpdateRunsResult of
         {ok, NewRuns} ->
             NewAtmLaneExecution = AtmLaneExecution#atm_lane_execution{runs = NewRuns},
-            {ok, AtmWorkflowExecution#atm_workflow_execution{lanes = lists_utils:replace_at(
-                NewAtmLaneExecution, AtmLaneIndex, AtmLaneExecutions
-            )}};
+            {ok, AtmWorkflowExecution#atm_workflow_execution{lanes = AtmLaneExecutions#{
+                AtmLaneIndex => NewAtmLaneExecution
+            }}};
         {error, _} = Error2 ->
             Error2
     end.
@@ -144,7 +144,7 @@ update_curr_run(AtmLaneMarker, Diff, Default, AtmWorkflowExecution = #atm_workfl
 
 -spec get(marker(), atm_workflow_execution:record()) -> record().
 get(AtmLaneMarker, AtmWorkflowExecution = #atm_workflow_execution{lanes = AtmLaneExecutions}) ->
-    lists:nth(resolve_index(AtmLaneMarker, AtmWorkflowExecution), AtmLaneExecutions).
+    maps:get(resolve_index(AtmLaneMarker, AtmWorkflowExecution), AtmLaneExecutions).
 
 
 -spec update(marker(), diff(), atm_workflow_execution:record()) ->
@@ -154,11 +154,11 @@ update(AtmLaneMarker, Diff, AtmWorkflowExecution = #atm_workflow_execution{
 }) ->
     AtmLaneIndex = resolve_index(AtmLaneMarker, AtmWorkflowExecution),
 
-    case Diff(lists:nth(AtmLaneIndex, AtmLaneExecutions)) of
+    case Diff(maps:get(AtmLaneIndex, AtmLaneExecutions)) of
         {ok, NewAtmLaneExecution} ->
-            {ok, AtmWorkflowExecution#atm_workflow_execution{lanes = lists_utils:replace_at(
-                NewAtmLaneExecution, AtmLaneIndex, AtmLaneExecutions
-            )}};
+            {ok, AtmWorkflowExecution#atm_workflow_execution{lanes = AtmLaneExecutions#{
+                AtmLaneIndex => NewAtmLaneExecution
+            }}};
         {error, _} = Error2 ->
             Error2
     end.

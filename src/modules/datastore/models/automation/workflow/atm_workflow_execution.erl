@@ -189,7 +189,8 @@ get_record_struct(4) ->
         {store_registry, #{string => string}},
         {system_audit_log_id, string},
 
-        {lanes, [{custom, string, {persistent_record, encode, decode, atm_lane_execution}}]},
+        % this field structure was changed from list to map
+        {lanes, #{integer => {custom, string, {persistent_record, encode, decode, atm_lane_execution}}}},
         {lanes_num, integer},        %% new field
 
         {curr_lane_index, integer},  %% new field
@@ -326,7 +327,7 @@ upgrade_record(3, {?MODULE,
         store_registry = StoreRegistry,
         system_audit_log_id = AtmSystemAuditLogId,
 
-        lanes = Lanes,
+        lanes = maps:from_list(lists_utils:enumerate(Lanes)),
         lanes_num = length(Lanes),
 
         curr_lane_index = 1,

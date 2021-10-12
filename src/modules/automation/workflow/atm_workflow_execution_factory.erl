@@ -39,7 +39,7 @@
     lambda_snapshot_registry = undefined :: undefined | atm_workflow_execution:lambda_snapshot_registry(),
     workflow_store_registry = undefined :: undefined | atm_workflow_execution:store_registry(),
     workflow_audit_log_id = undefined :: undefined | atm_store:id(),
-    lanes = undefined :: undefined | [atm_lane_execution:record()]
+    lanes = undefined :: undefined | #{atm_lane_execution:index() => atm_lane_execution:record()}
 }).
 -type elements() :: #atm_workflow_execution_elements{}.
 
@@ -122,7 +122,8 @@ delete_insecure(AtmWorkflowExecutionId) ->
             lambda_snapshot_registry = AtmLambdaSnapshotRegistry,
             store_registry = AtmWorkflowStoreRegistry,
             system_audit_log_id = AtmWorkflowAuditLogId,
-            lanes = AtmLaneExecutions
+            lanes = AtmLaneExecutions,
+            lanes_num = AtmLanesNum
         }
     }} = atm_workflow_execution:get(AtmWorkflowExecutionId),
 
@@ -320,30 +321,34 @@ create_workflow_audit_log(AtmWorkflowExecutionCreateCtx = #atm_workflow_executio
 %% @private
 -spec create_lane_executions(create_ctx()) -> create_ctx().
 create_lane_executions(AtmWorkflowExecutionCreateCtx = #atm_workflow_execution_create_ctx{
-    params = #atm_workflow_execution_create_params{
-        workflow_schema_doc = #document{value = #od_atm_workflow_schema{
-            lanes = [FirstAtmLaneSchema | RestAtmLaneSchemas]
-        }}
-    },
+    params = #atm_workflow_execution_create_params{workflow_schema_doc = #document{
+        value = #od_atm_workflow_schema{lanes = AtmLaneSchemas}
+    }},
     elements = Elements
 }) ->
-    FirstAtmLaneExecution = #atm_lane_execution{
-        schema_id = FirstAtmLaneSchema#atm_lane_schema.id,
-        retries_left = FirstAtmLaneSchema#atm_lane_schema.max_retries,
-        runs = [#atm_lane_execution_run{run_no = 1, status = ?SCHEDULED_STATUS}]
-    },
-    RestAtmLaneExecutions = lists:map(fun(AtmLaneSchema) ->
-        #atm_lane_execution{
-            schema_id = AtmLaneSchema#atm_lane_schema.id,
-            retries_left = AtmLaneSchema#atm_lane_schema.max_retries,
-            runs = []
-        }
-    end, RestAtmLaneSchemas),
-
     AtmWorkflowExecutionCreateCtx#atm_workflow_execution_create_ctx{
         elements = Elements#atm_workflow_execution_elements{
-            lanes = [FirstAtmLaneExecution | RestAtmLaneExecutions]
+            lanes = lists:foldl(fun({AtmLaneIndex, AtmLaneSchema}, Acc) ->
+                Acc#{AtmLaneIndex => create_lane_execution(AtmLaneIndex, AtmLaneSchema)}
+            end, #{}, lists_utils:enumerate(AtmLaneSchemas))
         }
+    }.
+
+
+%% @private
+-spec create_lane_execution(atm_lane_execution:index(), atm_lane_schema:record()) ->
+    atm_lane_execution:record().
+create_lane_execution(1, #atm_lane_schema{id = AtmLaneSchemaId, max_retries = MaxRetries}) ->
+    #atm_lane_execution{
+        schema_id = AtmLaneSchemaId,
+        retries_left = MaxRetries,
+        runs = [#atm_lane_execution_run{run_no = 1, status = ?SCHEDULED_STATUS}]
+    };
+create_lane_execution(_, #atm_lane_schema{id = AtmLaneSchemaId, max_retries = MaxRetries}) ->
+    #atm_lane_execution{
+        schema_id = AtmLaneSchemaId,
+        retries_left = MaxRetries,
+        runs = []
     }.
 
 
@@ -383,7 +388,7 @@ create_workflow_execution_doc(#atm_workflow_execution_create_ctx{
             system_audit_log_id = AtmWorkflowAuditLogId,
 
             lanes = AtmLaneExecutions,
-            lanes_num = length(AtmLaneExecutions),
+            lanes_num = map_size(AtmLaneExecutions),
 
             curr_lane_index = 1,
             curr_run_no = 1,
@@ -442,7 +447,7 @@ delete_execution_elements(Elements = #atm_workflow_execution_elements{
 delete_execution_elements(Elements = #atm_workflow_execution_elements{
     lanes = AtmLaneExecutions
 }) when AtmLaneExecutions /= undefined ->
-    catch delete_lane_executions(AtmLaneExecutions),
+    catch delete_lane_executions(maps:values(AtmLaneExecutions)),
 
     delete_execution_elements(Elements#atm_workflow_execution_elements{
         lanes = undefined

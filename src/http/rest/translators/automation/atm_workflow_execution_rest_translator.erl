@@ -60,7 +60,9 @@ get_response(#gri{id = AtmWorkflowExecutionId}, #atm_workflow_execution{
     lambda_snapshot_registry = AtmLambdaSnapshotRegistry,
     store_registry = AtmStoreRegistry,
     system_audit_log_id = AtmWorkflowAuditLogId,
-    lanes = AtmLaneExecutions
+
+    lanes = AtmLaneExecutions,
+    lanes_num = AtmLanesNum
 }) ->
     ?OK_REPLY(#{
         <<"atmWorkflowExecutionId">> => AtmWorkflowExecutionId,
@@ -79,5 +81,9 @@ get_response(#gri{id = AtmWorkflowExecutionId}, #atm_workflow_execution{
         <<"lambdaSnapshotRegistry">> => AtmLambdaSnapshotRegistry,
         <<"storeRegistry">> => AtmStoreRegistry,
         <<"systemAuditLogId">> => utils:undefined_to_null(AtmWorkflowAuditLogId),
-        <<"lanes">> => lists:map(fun atm_lane_execution:to_json/1, AtmLaneExecutions)
+
+        <<"lanes">> => lists:map(
+            fun(LaneIndex) -> atm_lane_execution:to_json(maps:get(LaneIndex, AtmLaneExecutions)) end,
+            lists:seq(1, AtmLanesNum)
+        )
     }).
