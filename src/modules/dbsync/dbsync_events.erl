@@ -115,9 +115,20 @@ change_replicated_internal(SpaceId, QosEntry = #document{
 }) ->
     ?debug("change_replicated_internal: qos_entry ~p", [QosEntryId]),
     qos_hooks:handle_qos_entry_change(SpaceId, QosEntry);
+change_replicated_internal(_SpaceId, #document{value = #links_forest{key = LinkKey, model = Model}}) ->
+    ?debug("change_replicated_internal: links_forest ~p", [LinkKey]),
+   link_replicated(Model, LinkKey);
+change_replicated_internal(_SpaceId, #document{value = #links_node{key = LinkKey, model = Model}}) ->
+    ?debug("change_replicated_internal: links_node ~p", [LinkKey]),
+   link_replicated(Model, LinkKey);
+change_replicated_internal(_SpaceId, #document{value = #links_mask{key = LinkKey, model = Model}}) ->
+    ?debug("change_replicated_internal: links_mask ~p", [LinkKey]),
+   link_replicated(Model, LinkKey);
 change_replicated_internal(_SpaceId, _Change) ->
     ok.
 
+
+%% @private
 -spec file_meta_change_replicated(od_space:id(), datastore:doc()) ->
     any() | no_return().
 file_meta_change_replicated(SpaceId, #document{
@@ -183,3 +194,18 @@ file_meta_change_replicated(SpaceId, #document{
     {ok, FileCtx2} = sd_utils:chmod(FileCtx, CurrentMode),
     ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx2, []),
     ok = file_meta_posthooks:execute_hooks(FileUuid).
+
+
+%% @private
+-spec link_replicated(module(), datastore:key()) ->
+    any() | no_return().
+link_replicated(file_meta, LinkKey) ->
+    case datastore_model:get_generic_key(file_meta, LinkKey) of
+        undefined -> 
+            % Legacy keys are not supported as it is impossible to retrieve GenericKey
+            ok;
+        GenericKey ->
+            file_meta_posthooks:execute_hooks(GenericKey)
+    end;
+link_replicated(_Model, _LinkKey) ->
+    ok.

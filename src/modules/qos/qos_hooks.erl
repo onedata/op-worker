@@ -76,8 +76,16 @@ handle_entry_delete(#document{key = QosEntryId, scope = SpaceId} = QosEntryDoc) 
 %%--------------------------------------------------------------------
 -spec reconcile_qos(file_ctx:ctx()) -> ok.
 reconcile_qos(FileCtx) ->
-    reconcile_qos_internal(FileCtx, []).
-
+    SpaceId = file_ctx:get_space_id_const(FileCtx),
+    InodeUuid = file_ctx:get_referenced_uuid_const(FileCtx),
+    case file_meta_links_sync_status_cache:get(SpaceId, InodeUuid) of
+        {ok, synced} ->
+            reconcile_qos_internal(FileCtx, []);
+        {error, {file_meta_missing, MissingUuid}} ->
+            add_reconcile_file_meta_posthook(FileCtx, MissingUuid, <<"qos_missing_file_meta">>);
+        {error, {link_missing, MissingUuid}} ->
+            add_reconcile_file_meta_posthook(FileCtx, MissingUuid, <<"qos_missing_link">>)
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -103,24 +111,21 @@ invalidate_cache_and_reconcile(FileCtx) ->
 %% @doc
 %% Schedules file replication if it is required by effective_file_qos.
 %% Uses QoS traverse pool.
-%% If `ignore_missing_files` is not provided in Options, file_meta_posthook 
-%% is registered for the missing file.
+%% If `ignore_missing_files` is provided in Options, file_meta_posthook 
+%% is NOT registered for the missing file.
 %% @end
 %%--------------------------------------------------------------------
 -spec reconcile_qos_internal(file_ctx:ctx(), [Option]) -> ok  
     when Option :: ignore_missing_files.
 reconcile_qos_internal(FileCtx, Options) when is_list(Options) ->
+    InodeUuid = file_ctx:get_referenced_uuid_const(FileCtx),
     {StorageId, FileCtx1} = file_ctx:get_storage_id(FileCtx),
-    InodeUuid = file_ctx:get_referenced_uuid_const(FileCtx1),
-    SpaceId = file_ctx:get_space_id_const(FileCtx1),
     case file_qos:get_effective(InodeUuid) of
         {error, {file_meta_missing, MissingUuid}} ->
             % new file_ctx will be generated when file_meta_posthook
             % will be executed (see function reconcile_qos/2).
-            lists:member(ignore_missing_files, Options) orelse 
-                file_meta_posthooks:add_hook(
-                    MissingUuid, <<"check_qos_", InodeUuid/binary>>,
-                    ?MODULE, reconcile_qos, [InodeUuid, SpaceId]),
+            lists:member(ignore_missing_files, Options) orelse
+                add_reconcile_file_meta_posthook(FileCtx, MissingUuid, <<"qos_missing_file_meta">>),
             ok;
         {ok, EffFileQos} ->
             case file_qos:is_in_trash(EffFileQos) of
@@ -207,4 +212,16 @@ retry_failed_files(SpaceId) ->
         ok = qos_entry:remove_from_failed_files_list(SpaceId, FileUuid),
         ok = reconcile_qos_internal(FileCtx, [ignore_missing_files])
     end).
-    
+
+
+%% @private
+-spec add_reconcile_file_meta_posthook(file_ctx:ctx(), file_meta:uuid(), binary()) -> 
+    ok | {error, term()}.
+add_reconcile_file_meta_posthook(FileCtx, MissingUuid, IdentifierPrefix) ->
+    SpaceId = file_ctx:get_space_id_const(FileCtx),
+    InodeUuid = file_ctx:get_referenced_uuid_const(FileCtx),
+    % save Prefix and InodeUuid in hook identifier for diagnostic purpose
+    HookIdentifier = <<IdentifierPrefix/binary, "_", InodeUuid/binary>>,
+    file_meta_posthooks:add_hook(
+        MissingUuid, HookIdentifier,
+        ?MODULE, reconcile_qos, [InodeUuid, SpaceId]).
