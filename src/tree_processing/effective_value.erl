@@ -77,6 +77,7 @@
                                                    % is deleted
 }.
 
+-export_type([args/0, calculation_info/0]).
 -export_type([cache/0, callback/0, get_or_calculate_options/0]).
 -define(CRITICAL_SECTION(Cache, Key), {effective_value_insert, Cache, Key}).
 

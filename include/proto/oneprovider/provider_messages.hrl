@@ -306,6 +306,7 @@
     root_file_guid :: fslogic_worker:file_guid(),
     root_file_path :: file_meta:path(),
     root_file_type :: file_meta:type(),
+    root_file_deleted = false :: boolean(),
     creation_time :: time:seconds(),
     protection_flags = ?no_flags_mask :: data_access_control:bitmask(),
     eff_protection_flags = ?no_flags_mask :: data_access_control:bitmask(),

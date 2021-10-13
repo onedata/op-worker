@@ -263,7 +263,7 @@ synchronize_file_for_entries(TaskId, UserCtx, FileCtx, QosEntries) ->
 %% @private
 -spec synchronize_file_for_entries_insecure(id(), user_ctx:ctx(), file_ctx:ctx(), [qos_entry:id()]) -> 
     ok.
-synchronize_file_for_entries_insecure(_TaskId, _UserCtx, _FileCtx, []) -> 
+synchronize_file_for_entries_insecure(_TaskId, _UserCtx, _FileCtx, []) ->
     ok;
 synchronize_file_for_entries_insecure(TaskId, UserCtx, FileCtx, QosEntries) ->
     {Size, FileCtx2} = file_ctx:get_file_size(FileCtx),
