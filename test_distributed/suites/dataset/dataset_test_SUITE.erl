@@ -761,12 +761,12 @@ establish_nested_datasets_structure(_Config) ->
     ?assertNoTopDatasets(P1Node, UserSessIdP1, SpaceId, detached),
 
     lists:foldl(fun({ChildGuid, _ChildName, ChildDatasetId}, {Guid, DatasetId, ExpParentDatasetIds}) ->
-        ExpParentDatasetId = case ExpParentDatasetIds =:= [] of
-            true -> undefined;
-            false -> hd(ExpParentDatasetIds)
+        {ExpParentDatasetId, ExpMembership} = case ExpParentDatasetIds =:= [] of
+            true -> {undefined, ?DIRECT_MEMBERSHIP};
+            false -> {hd(ExpParentDatasetIds), ?DIRECT_AND_ANCESTOR_MEMBERSHIP}
         end,
         ?assertAttachedDataset(P1Node, UserSessIdP1, DatasetId, Guid, ExpParentDatasetId, ProtectionFlags),
-        ?assertDatasetMembership(P1Node, UserSessIdP1, Guid, ?DIRECT_MEMBERSHIP, ProtectionFlags),
+        ?assertDatasetMembership(P1Node, UserSessIdP1, Guid, ExpMembership, ProtectionFlags),
         ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, Guid, DatasetId, ExpParentDatasetIds, ProtectionFlags),
         {ChildGuid, ChildDatasetId, [DatasetId | ExpParentDatasetIds]}
     end, {SpaceGuid, SpaceDatasetId, []}, tl(GuidsAndDatasets)).
@@ -1088,24 +1088,24 @@ establish_nested_datasets_filetree_structure_with_hardlinks(_Config) ->
 
     % verify file dataset ancestors and protection flags
     ?assertAttachedDataset(P1Node, UserSessIdP1, FileDatasetId, FileGuid, DirLvl4DatasetId, ?no_flags_mask, ?ALL_PROTECTION),
-    ?assertFileEffDatasetSummaryAndMembership(P1Node, UserSessIdP1, FileGuid, FileDatasetId, [DirLvl4DatasetId, DirLvl3DatasetId, DirLvl2DatasetId], ?DIRECT_MEMBERSHIP, ?ALL_PROTECTION),
+    ?assertFileEffDatasetSummaryAndMembership(P1Node, UserSessIdP1, FileGuid, FileDatasetId, [DirLvl4DatasetId, DirLvl3DatasetId, DirLvl2DatasetId], ?DIRECT_AND_ANCESTOR_MEMBERSHIP, ?ALL_PROTECTION),
 
     % verify dirs dataset ancestors and protection flags
     ?assertAttachedDataset(P1Node, UserSessIdP1, DirLvl4DatasetId, DirLvl4Guid, DirLvl3DatasetId, ?DATA_PROTECTION, ?ALL_PROTECTION),
-    ?assertFileEffDatasetSummaryAndMembership(P1Node, UserSessIdP1, DirLvl4Guid, DirLvl4DatasetId, [DirLvl3DatasetId, DirLvl2DatasetId], ?DIRECT_MEMBERSHIP, ?ALL_PROTECTION),
+    ?assertFileEffDatasetSummaryAndMembership(P1Node, UserSessIdP1, DirLvl4Guid, DirLvl4DatasetId, [DirLvl3DatasetId, DirLvl2DatasetId], ?DIRECT_AND_ANCESTOR_MEMBERSHIP, ?ALL_PROTECTION),
 
     ?assertAttachedDataset(P1Node, UserSessIdP1, DirLvl3DatasetId, DirLvl3Guid, DirLvl2DatasetId, ?METADATA_PROTECTION, ?METADATA_PROTECTION),
-    ?assertFileEffDatasetSummaryAndMembership(P1Node, UserSessIdP1, DirLvl3Guid, DirLvl3DatasetId, [DirLvl2DatasetId], ?DIRECT_MEMBERSHIP, ?METADATA_PROTECTION),
+    ?assertFileEffDatasetSummaryAndMembership(P1Node, UserSessIdP1, DirLvl3Guid, DirLvl3DatasetId, [DirLvl2DatasetId], ?DIRECT_AND_ANCESTOR_MEMBERSHIP, ?METADATA_PROTECTION),
 
     ?assertAttachedDataset(P1Node, UserSessIdP1, DirLvl2DatasetId, DirLvl2Guid, undefined, ?no_flags_mask, ?no_flags_mask),
     ?assertFileEffDatasetSummaryAndMembership(P1Node, UserSessIdP1, DirLvl2Guid, DirLvl2DatasetId, [], ?DIRECT_MEMBERSHIP, ?no_flags_mask),
 
     % verify links dataset ancestors and protection flags
     ?assertAttachedDataset(P1Node, UserSessIdP1, Link4DatasetId, Link4Guid, DirLvl4DatasetId, ?DATA_PROTECTION, ?ALL_PROTECTION),
-    ?assertFileEffDatasetSummaryAndMembership(P1Node, UserSessIdP1, Link4Guid, Link4DatasetId, [DirLvl4DatasetId, DirLvl3DatasetId, DirLvl2DatasetId], ?DIRECT_MEMBERSHIP, ?ALL_PROTECTION),
+    ?assertFileEffDatasetSummaryAndMembership(P1Node, UserSessIdP1, Link4Guid, Link4DatasetId, [DirLvl4DatasetId, DirLvl3DatasetId, DirLvl2DatasetId], ?DIRECT_AND_ANCESTOR_MEMBERSHIP, ?ALL_PROTECTION),
 
     ?assertAttachedDataset(P1Node, UserSessIdP1, Link3DatasetId, Link3Guid, DirLvl3DatasetId, ?METADATA_PROTECTION, ?METADATA_PROTECTION),
-    ?assertFileEffDatasetSummaryAndMembership(P1Node, UserSessIdP1, Link3Guid, Link3DatasetId, [DirLvl3DatasetId, DirLvl2DatasetId], ?DIRECT_MEMBERSHIP, ?ALL_PROTECTION),
+    ?assertFileEffDatasetSummaryAndMembership(P1Node, UserSessIdP1, Link3Guid, Link3DatasetId, [DirLvl3DatasetId, DirLvl2DatasetId], ?DIRECT_AND_ANCESTOR_MEMBERSHIP, ?ALL_PROTECTION),
 
     ?assertAttachedDataset(P1Node, UserSessIdP1, Link1DatasetId, Link1Guid, undefined, ?no_flags_mask, ?no_flags_mask),
     ?assertFileEffDatasetSummaryAndMembership(P1Node, UserSessIdP1, Link1Guid, Link1DatasetId, [], ?DIRECT_MEMBERSHIP, ?ALL_PROTECTION).

@@ -297,6 +297,7 @@ translate_file_details(#file_details{
     end.
 
 
+%% @private
 -spec translate_membership(file_qos:membership() | dataset:membership()) -> binary().
 translate_membership(?NONE_MEMBERSHIP) -> <<"none">>;
 translate_membership(?DIRECT_MEMBERSHIP) -> <<"direct">>;
