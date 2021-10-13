@@ -27,28 +27,28 @@
 %%%  E            +-------------+                           |
 %%%                      |    \_____________________________|__________________________
 %%%                      |                                  |                           \
-%%%        first task within atm lane run                   |                   workflow aborting when
-%%%                   started                               |                    preparing in advance
+%%%        first task within atm lane run                   |                            |
+%%%                   started                               |                            |
 %%% =====================|==================================|============================|========
 %%%                      v                                  |                            |
 %%%  O             +-------------+         cancel           |                            |
 %%%  N             |    ACTIVE   |--------------------------o                            |
 %%%  G             +-------------+              ____        |                            |
-%%%  O                   |             cancel /      \      v                            |
-%%%  I                   |          overrides \     +-------------+     failure when     |
-%%%  N                  ---           failure   --->|   ABORTING  |----- preparing ------o
-%%%  G                /     \                       +-------------+      in advance      |
-%%%                  /       \                         |                                 |
-%%%  P              /         \         aborting when currently executed                 |
-%%%  H             /           \                       |                                 |
-%%%  A            /             \                 -----------                            |
-%%%  S         else     any parallel box        /             \                          |
-%%%  E           |        finished with      failure        cancel                       |
-%%%              |           failure          /                |                         |
-%%% =============|==============|============/=================|=========================|========
-%%%              |              |           /                  |                         |
-%%%  E           |              |          /                   |                         |
-%%%  N           v              v         v                    v                         |
+%%%  O                |                cancel /      \      v                            |
+%%%  I                |            (overrides \     +-------------+                      |
+%%%  N     ending lane execution     failure)   --->|   ABORTING  |----------------------o
+%%%  G            run with                          +-------------+                      |
+%%%              /       \                            |                                  |
+%%%  P          /         \                           |                                  |
+%%%  H         /           \            ending lane execution run while                  |
+%%%  A        /             \                  aborting due to                           |
+%%%  S      else     any parallel box          /             \              ending lane execution run when
+%%%  E       |          ended with          failure        cancel                preparing in advance
+%%%          |            failure            /                |                          |
+%%% =========|=================|============/=================|==========================|========
+%%%          |                 |           /                  |                          |
+%%%  E       |                 |          /                   |                          |
+%%%  N       v                 v         v                    v                          |
 %%%  D    +-------------+     +-------------+          +-------------+                   |
 %%%  E    |   FINISHED  |     |   FAILED    |          |  CANCELLED  |                   |
 %%%  D    +-------------+     +-------------+          +-------------+                   |

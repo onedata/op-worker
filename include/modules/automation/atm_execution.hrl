@@ -59,6 +59,7 @@
     parallel_boxes = [] :: [atm_parallel_box_execution:record()]
 }).
 
+% Record used only during creation of atm lane execution run (it is not persisted anywhere)
 -record(atm_lane_execution_run_creation_args, {
     workflow_execution_ctx :: atm_workflow_execution_ctx:record(),
     workflow_execution_doc :: atm_workflow_execution:doc(),
@@ -68,11 +69,13 @@
     iterated_store_id :: atm_store:id()
 }).
 
+% Record used only during teardown of atm lane execution run (it is not persisted anywhere)
 -record(atm_lane_execution_run_teardown_ctx, {
     workflow_execution_ctx :: atm_workflow_execution_ctx:record(),
     is_retried_scheduled :: boolean()
 }).
 
+% Record used only during creation of atm parallel box execution (it is not persisted anywhere)
 -record(atm_parallel_box_execution_creation_args, {
     lane_execution_run_creation_args :: atm_lane_execution_factory:run_creation_args(),
 
