@@ -48,7 +48,7 @@
     get_effective/1, 
     add_qos_entry_id/3, add_qos_entry_id/4, remove_qos_entry_id/3,
     is_replica_required_on_storage/2, is_effective_qos_of_file/2,
-    qos_membership/1, has_any_qos_entry/2, 
+    qos_membership/1,
     cleanup_reference_related_documents/1, cleanup_reference_related_documents/2, 
     cleanup_on_no_reference/1,
     delete_associated_entries_on_no_references/1
@@ -248,27 +248,35 @@ is_effective_qos_of_file(FileUuidOrDoc, QosEntryId) ->
 
 
 -spec qos_membership(file_meta:uuid() | file_meta:doc()) -> membership().
-qos_membership(FileUuidOrDoc) ->
-    case {has_any_qos_entry(FileUuidOrDoc, direct), has_any_qos_entry(FileUuidOrDoc, effective)} of
-        {true, true} -> ?DIRECT_AND_ANCESTOR_MEMBERSHIP;
-        {true, false} -> ?DIRECT_MEMBERSHIP;
-        {false, true} -> ?ANCESTOR_MEMBERSHIP;
-        {false, false} -> ?NONE_MEMBERSHIP
+qos_membership(UuidOrDoc) ->
+    case {get_direct_qos_entries(UuidOrDoc), get_effective_qos_entries(UuidOrDoc)} of
+        {[], []} -> ?NONE_MEMBERSHIP;
+        {[], _} -> ?ANCESTOR_MEMBERSHIP;
+        {Direct, Effective} -> 
+            case lists_utils:subtract(Effective, Direct) of
+                [] -> ?DIRECT_MEMBERSHIP;
+                _ -> ?DIRECT_AND_ANCESTOR_MEMBERSHIP
+            end
     end.
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Checks whether given file has any QoS entry (effective or direct).
-%% @end
-%%--------------------------------------------------------------------
--spec has_any_qos_entry(file_meta:uuid() | file_meta:doc(), direct | effective) -> boolean().
-has_any_qos_entry(#document{key = Uuid}, direct) ->
-    has_any_qos_entry(fslogic_uuid:ensure_referenced_uuid(Uuid), direct);
-has_any_qos_entry(Key, direct) ->
-    has_any_qos_entry(get(Key));
-has_any_qos_entry(UuidOrDoc, effective) ->
-    has_any_qos_entry(get_effective(UuidOrDoc)).
+-spec get_direct_qos_entries(file_meta:uuid() | file_meta:doc()) -> [qos_entry:id()].
+get_direct_qos_entries(#document{key = Uuid}) ->
+    get_direct_qos_entries(Uuid);
+get_direct_qos_entries(Uuid) ->
+    case get(fslogic_uuid:ensure_referenced_uuid(Uuid)) of
+        {ok, #document{value = #file_qos{qos_entries = QosEntries}}} -> QosEntries;
+        _ -> []
+    end.
+
+
+-spec get_effective_qos_entries(file_meta:uuid() | file_meta:doc()) -> [qos_entry:id()].
+get_effective_qos_entries(UuidOrDoc) -> 
+    case get_effective(UuidOrDoc) of
+        {ok, #effective_file_qos{in_trash = true}} -> [];
+        {ok, #effective_file_qos{qos_entries = QosEntries}} -> QosEntries;
+        _ -> []
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -474,15 +482,6 @@ merge_assigned_entries(FirstAssignedEntries, SecondAssignedEntries) ->
             lists:usort(ParentStorageQosEntries ++ StorageQosEntries)
         end, StorageQosEntries, Acc)
     end, FirstAssignedEntries, SecondAssignedEntries).
-
-
-%% @private
--spec has_any_qos_entry({ok, doc()} | {ok, effective_file_qos()} | undefined | {error, term()}) ->
-    boolean().
-has_any_qos_entry({ok, #document{value = #file_qos{qos_entries = [_ | _]}}}) -> true;
-has_any_qos_entry({ok, #effective_file_qos{in_trash = true}}) -> false;
-has_any_qos_entry({ok, #effective_file_qos{qos_entries = [_|_]}}) -> true;
-has_any_qos_entry(_) -> false.
 
 
 %% @private
