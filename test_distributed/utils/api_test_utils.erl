@@ -64,7 +64,6 @@
     add_file_id_errors_for_operations_not_available_in_share_mode/4,
     add_cdmi_id_errors_for_operations_not_available_in_share_mode/4,
     add_cdmi_id_errors_for_operations_not_available_in_share_mode/5,
-    maybe_substitute_bad_file_or_space_id/2,
     maybe_substitute_bad_id/2
 ]).
 
@@ -617,46 +616,6 @@ add_file_id_errors_for_operations_not_available_in_share_mode(FileGuid, ShareId,
     undefined | onenv_api_test_runner:data_spec()
 ) ->
     onenv_api_test_runner:data_spec().
-add_file_id_errors_for_operations_not_available_in_share_mode(<<"file_or_space_id">> = FileKey, FileGuid, ShareId, DataSpec) ->
-
-    InvalidFileIdErrors = get_invalid_file_id_errors(FileKey),
-    NonExistentSpaceGuid = file_id:pack_guid(<<"InvalidUuid">>, ?NOT_SUPPORTED_SPACE_ID),
-    {ok, NonExistentSpaceObjectId} = file_id:guid_to_objectid(NonExistentSpaceGuid),
-
-    NonExistentSpaceErrors = add_share_file_id_errors_for_operations_not_available_in_share_mode(
-        NonExistentSpaceGuid, ShareId, [
-            % Errors in normal mode - thrown by middleware auth checks
-            % (checks whether authenticated user belongs to space)
-            {bad_file_or_space_id, NonExistentSpaceObjectId, {rest, ?ERROR_FORBIDDEN}},
-            {bad_file_or_space_id, NonExistentSpaceGuid, {gs, ?ERROR_FORBIDDEN}}
-        ]
-    , bad_file_or_space_id),
-
-    SpaceId = file_id:guid_to_space_id(FileGuid),
-    NonExistentFileGuid = file_id:pack_guid(<<"InvalidUuid">>, SpaceId),
-    {ok, NonExistentFileObjectId} = file_id:guid_to_objectid(NonExistentFileGuid),
-
-    NonExistentFileErrors = add_share_file_id_errors_for_operations_not_available_in_share_mode(
-        NonExistentFileGuid, ShareId, [
-            % Errors in normal mode - thrown by internal logic
-            % (all middleware checks were passed)
-            {bad_file_or_space_id, NonExistentFileObjectId, {rest, ?ERROR_POSIX(?ENOENT)}},
-            {bad_file_or_space_id, NonExistentFileGuid, {gs, ?ERROR_POSIX(?ENOENT)}}
-        ]
-        , bad_file_or_space_id),
-
-    ShareFileErrors = add_share_file_id_errors_for_operations_not_available_in_share_mode(
-        FileGuid, ShareId, []
-        , bad_file_or_space_id),
-
-    BadFileIdErrors = lists:flatten([
-        InvalidFileIdErrors,
-        NonExistentSpaceErrors,
-        NonExistentFileErrors,
-        ShareFileErrors
-    ]),
-
-    add_bad_values_to_data_spec(BadFileIdErrors, DataSpec);
 add_file_id_errors_for_operations_not_available_in_share_mode(IdKey, FileGuid, ShareId, DataSpec) ->
     InvalidFileIdErrors = get_invalid_file_id_errors(IdKey),
 
@@ -760,13 +719,6 @@ add_cdmi_id_errors_for_operations_not_available_in_share_mode(IdKey, FileGuid, S
 
     add_bad_values_to_data_spec(BadFileIdValues, DataSpec).
 
-maybe_substitute_bad_file_or_space_id(ValidId, undefined) ->
-    {ValidId, undefined};
-maybe_substitute_bad_file_or_space_id(ValidId, Data) ->
-    case maps:take(bad_file_or_space_id, Data) of
-        {BadId, LeftoverData} -> {BadId, LeftoverData};
-        error -> {ValidId, Data}
-    end.
 
 maybe_substitute_bad_id(ValidId, undefined) ->
     {ValidId, undefined};
@@ -790,33 +742,18 @@ add_bad_values_to_data_spec(BadValuesToAdd, #data_spec{bad_values = BadValues} =
 
 
 %% @private
-get_invalid_file_id_errors(<<"file_or_space_id">>) ->
-    InvalidGuid = <<"InvalidGuid">>,
-    {ok, InvalidObjectId} = file_id:guid_to_objectid(InvalidGuid),
-    InvalidIdExpError = ?ERROR_SPACE_NOT_SUPPORTED_LOCALLY(InvalidObjectId),
-
-    [
-        % Errors thrown by rest_handler, which failed to convert file path/cdmi_id to guid
-        {bad_file_or_space_id, <<"/NonExistentPath">>, {rest_with_file_path, ?ERROR_POSIX(?ENOENT)}},
-        {bad_file_or_space_id, <<"InvalidObjectId">>, {rest, ?ERROR_SPACE_NOT_SUPPORTED_LOCALLY(<<"InvalidObjectId">>)}},
-
-        % Errors thrown by middleware and internal logic
-        {bad_file_or_space_id, InvalidObjectId, {rest, InvalidIdExpError}},
-        {bad_file_or_space_id, InvalidGuid, {gs, InvalidIdExpError}}
-    ];
 get_invalid_file_id_errors(IdKey) ->
     InvalidGuid = <<"InvalidGuid">>,
     {ok, InvalidObjectId} = file_id:guid_to_objectid(InvalidGuid),
-    InvalidIdExpError = ?ERROR_BAD_VALUE_IDENTIFIER(IdKey),
 
     [
         % Errors thrown by rest_handler, which failed to convert file path/cdmi_id to guid
         {bad_id, <<"/NonExistentPath">>, {rest_with_file_path, ?ERROR_POSIX(?ENOENT)}},
-        {bad_id, <<"InvalidObjectId">>, {rest, ?ERROR_BAD_VALUE_IDENTIFIER(IdKey)}},
+        {bad_id, <<"InvalidObjectId">>, {rest, ?ERROR_SPACE_NOT_SUPPORTED_LOCALLY(<<"InvalidObjectId">>)}},
 
         % Errors thrown by middleware and internal logic
-        {bad_id, InvalidObjectId, {rest, InvalidIdExpError}},
-        {bad_id, InvalidGuid, {gs, InvalidIdExpError}}
+        {bad_id, InvalidObjectId, {rest, ?ERROR_SPACE_NOT_SUPPORTED_LOCALLY(InvalidObjectId)}},
+        {bad_id, InvalidGuid, {gs, ?ERROR_BAD_VALUE_IDENTIFIER(IdKey)}}
     ].
 
 

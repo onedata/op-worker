@@ -105,7 +105,7 @@ sanitize_params(#op_req{
                 #{<<"create_parents">> => {boolean, any}},
                 #{path => {list_of_binaries, fun(PathTokens) ->
                     case PathTokens == [] of
-                        true -> throw(?ERROR_BAD_VALUE_EMPTY(<<"path">>));
+                        true -> throw(?ERROR_MISSING_REQUIRED_VALUE(<<"path">>));
                         false -> ok
                     end,
                     JoinedPath = str_utils:join_as_binaries(PathTokens, <<"/">>),

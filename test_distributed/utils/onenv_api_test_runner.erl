@@ -1066,7 +1066,7 @@ make_rest_request(Node, Client, #rest_args{
         {ssl_options, [
             {cacerts, get_cert_chain_ders()}
         ]},
-        {recv_timeout, 15000},
+        {recv_timeout, 30000},
         {follow_redirect, true},
         {max_redirect, 5}
     ],
