@@ -42,14 +42,13 @@
     ?ACTIVE_STATUS | ?ABORTING_STATUS |
     ?FINISHED_STATUS | ?CANCELLED_STATUS | ?FAILED_STATUS | ?INTERRUPTED_STATUS.
 
--type run_elements() :: #atm_lane_execution_run_elements{}.
 -type run_diff() :: fun((run()) -> {ok, run()} | {error, term()}).
 -type run() :: #atm_lane_execution_run{}.
 
 -type diff() :: fun((record()) -> {ok, record()} | {error, term()}).
 -type record() :: #atm_lane_execution{}.
 
--export_type([status/0, run_elements/0, run_diff/0, run/0]).
+-export_type([status/0, run_diff/0, run/0]).
 -export_type([index/0, marker/0, diff/0, record/0]).
 
 

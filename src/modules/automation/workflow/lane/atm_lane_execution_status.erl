@@ -248,7 +248,7 @@ handle_prepared_in_advance_lane_run_ended(AtmLaneIndex, AtmWorkflowExecution) ->
 -spec handle_currently_executed_lane_run_ended(atm_workflow_execution:record()) ->
     {ok, atm_workflow_execution:record()}.
 handle_currently_executed_lane_run_ended(AtmWorkflowExecution1 = #atm_workflow_execution{
-    lanes_num = AtmLanesNum,
+    lanes_count = AtmLanesCount,
     curr_lane_index = CurrAtmLaneIndex
 }) ->
     {ok, AtmWorkflowExecution2} = end_currently_executed_lane_run(AtmWorkflowExecution1),
@@ -269,7 +269,7 @@ handle_currently_executed_lane_run_ended(AtmWorkflowExecution1 = #atm_workflow_e
                 false ->
                     {ok, AtmWorkflowExecution2}
             end;
-        ?FINISHED_STATUS when CurrAtmLaneIndex < AtmLanesNum ->
+        ?FINISHED_STATUS when CurrAtmLaneIndex < AtmLanesCount ->
             schedule_next_lane_run(AtmWorkflowExecution2);
         _ ->
             {ok, AtmWorkflowExecution2}

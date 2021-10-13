@@ -62,7 +62,7 @@ get_response(#gri{id = AtmWorkflowExecutionId}, #atm_workflow_execution{
     system_audit_log_id = AtmWorkflowAuditLogId,
 
     lanes = AtmLaneExecutions,
-    lanes_num = AtmLanesNum
+    lanes_count = AtmLanesCount
 }) ->
     ?OK_REPLY(#{
         <<"atmWorkflowExecutionId">> => AtmWorkflowExecutionId,
@@ -84,6 +84,6 @@ get_response(#gri{id = AtmWorkflowExecutionId}, #atm_workflow_execution{
 
         <<"lanes">> => lists:map(
             fun(LaneIndex) -> atm_lane_execution:to_json(maps:get(LaneIndex, AtmLaneExecutions)) end,
-            lists:seq(1, AtmLanesNum)
+            lists:seq(1, AtmLanesCount)
         )
     }).

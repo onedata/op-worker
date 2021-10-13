@@ -45,24 +45,6 @@
     runs :: [atm_lane_execution:run()]
 }).
 
--record(atm_lane_execution_run_elements, {
-    exception_store_id = undefined :: undefined | atm_store:id(),
-    parallel_boxes = undefined :: undefined | [atm_parallel_box_execution:record()]
-}).
-
--record(atm_lane_execution_run_create_ctx, {
-    workflow_execution_ctx :: atm_workflow_execution_ctx:record(),
-
-    workflow_schema_snapshot_doc :: atm_workflow_schema_snapshot:doc(),
-    workflow_execution_doc :: atm_workflow_execution:doc(),
-
-    lane_index :: pos_integer(),
-    lane_schema :: atm_lane_schema:record(),
-    iterated_store_id :: atm_store:id(),
-
-    elements :: atm_lane_execution:run_elements()
-}).
-
 -record(atm_lane_execution_run, {
     run_no :: undefined | pos_integer(),
     src_run_no = undefined :: undefined | pos_integer(),
@@ -77,18 +59,25 @@
     parallel_boxes = [] :: [atm_parallel_box_execution:record()]
 }).
 
+-record(atm_lane_execution_run_creation_args, {
+    workflow_execution_ctx :: atm_workflow_execution_ctx:record(),
+    workflow_execution_doc :: atm_workflow_execution:doc(),
+
+    lane_index :: pos_integer(),
+    lane_schema :: atm_lane_schema:record(),
+    iterated_store_id :: atm_store:id()
+}).
+
 -record(atm_lane_execution_run_teardown_ctx, {
     workflow_execution_ctx :: atm_workflow_execution_ctx:record(),
     is_retried :: boolean()
 }).
 
--record(atm_parallel_box_execution_create_ctx, {
-    lane_execution_run_create_ctx :: atm_lane_execution_factory:create_run_ctx(),
+-record(atm_parallel_box_execution_creation_args, {
+    lane_execution_run_creation_args :: atm_lane_execution_factory:run_creation_args(),
 
     parallel_box_index :: pos_integer(),
-    parallel_box_schema :: atm_parallel_box_schema:record(),
-
-    tasks :: [atm_task_execution:doc()]
+    parallel_box_schema :: atm_parallel_box_schema:record()
 }).
 
 

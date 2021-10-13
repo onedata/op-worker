@@ -70,7 +70,7 @@ prepare(LaneIndex, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
 handle_ended(LaneIndex, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
     NewAtmWorkflowExecution = #atm_workflow_execution{
         curr_lane_index = NextLaneIndex,
-        lanes_num = LanesNum
+        lanes_count = AtmLanesCount
     } = end_lane_run(LaneIndex, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx),
 
     freeze_curr_lane_run_iterated_store_if_ready_to_execute(NewAtmWorkflowExecution),
@@ -80,7 +80,7 @@ handle_ended(LaneIndex, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
         ?ENDED_PHASE ->
             ?FINISH_EXECUTION;
         _ ->
-            LaneToPrepareInAdvanceIndex = case NextLaneIndex < LanesNum of
+            LaneToPrepareInAdvanceIndex = case NextLaneIndex < AtmLanesCount of
                 true -> NextLaneIndex + 1;
                 false -> undefined
             end,

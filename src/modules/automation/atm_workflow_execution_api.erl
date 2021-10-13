@@ -35,9 +35,7 @@
 -type summary_entries() :: [{atm_workflow_executions_forest:index(), atm_workflow_execution:summary()}].
 -type entries() :: basic_entries() | summary_entries().
 
--type store_initial_values() :: #{
-    AtmStoreSchemaId :: automation:id() => atm_store_api:initial_value()
-}.
+-type store_initial_values() :: #{AtmStoreSchemaId :: automation:id() => json_utils:json_term()}.
 
 -export_type([listing_mode/0, basic_entries/0, summary_entries/0, entries/0]).
 -export_type([store_initial_values/0]).
