@@ -89,12 +89,12 @@ get_schema(AtmLaneSelector, AtmWorkflowExecution = #atm_workflow_execution{
 -spec get_curr_run(selector(), atm_workflow_execution:record()) ->
     {ok, run()} | errors:error().
 get_curr_run(AtmLaneSelector, AtmWorkflowExecution = #atm_workflow_execution{
-    curr_run_no = CurrRunNo
+    curr_run_num = CurrRunNum
 }) ->
     case get(AtmLaneSelector, AtmWorkflowExecution) of
-        #atm_lane_execution{runs = [#atm_lane_execution_run{run_no = undefined} = Run | _]} ->
+        #atm_lane_execution{runs = [#atm_lane_execution_run{run_num = undefined} = Run | _]} ->
             {ok, Run};
-        #atm_lane_execution{runs = [#atm_lane_execution_run{run_no = CurrRunNo} = Run | _]} ->
+        #atm_lane_execution{runs = [#atm_lane_execution_run{run_num = CurrRunNum} = Run | _]} ->
             {ok, Run};
         _ ->
             ?ERROR_NOT_FOUND
@@ -117,15 +117,15 @@ update_curr_run(AtmLaneSelector, UpdateFun, AtmWorkflowExecution) ->
     {ok, atm_workflow_execution:record()} | errors:error().
 update_curr_run(AtmLaneSelector, Diff, Default, AtmWorkflowExecution = #atm_workflow_execution{
     lanes = AtmLaneExecutions,
-    curr_run_no = CurrRunNo
+    curr_run_num = CurrRunNum
 }) ->
     AtmLaneIndex = resolve_selector(AtmLaneSelector, AtmWorkflowExecution),
     AtmLaneExecution = #atm_lane_execution{runs = Runs} = maps:get(AtmLaneIndex, AtmLaneExecutions),
 
     UpdateRunsResult = case Runs of
-        [#atm_lane_execution_run{run_no = RunNo} = CurrRun | RestRuns] when
-            RunNo == undefined;
-            RunNo == CurrRunNo
+        [#atm_lane_execution_run{run_num = RunNum} = CurrRun | RestRuns] when
+            RunNum == undefined;
+            RunNum == CurrRunNum
         ->
             case Diff(CurrRun) of
                 {ok, UpdatedCurrRun} -> {ok, [UpdatedCurrRun | RestRuns]};
@@ -181,17 +181,17 @@ to_json(#atm_lane_execution{schema_id = AtmLaneSchemaId, runs = Runs}) ->
 %% @private
 -spec run_to_json(run()) -> json_utils:json_map().
 run_to_json(#atm_lane_execution_run{
-    run_no = RunNo,
-    src_run_no = SrcRunNo,
+    run_num = RunNum,
+    origin_run_num = OriginRunNum,
     status = Status,
     iterated_store_id = IteratedStoreId,
     exception_store_id = ExceptionStoreId,
     parallel_boxes = AtmParallelBoxExecutions
 }) ->
     #{
-%%        <<"runNo">> => utils:undefined_to_null(RunNo),  %% TODO uncomment when gui allows null
-        <<"runNo">> => utils:ensure_defined(RunNo, 100),
-        <<"srcRunNo">> => utils:undefined_to_null(SrcRunNo),
+%%        <<"runNumber">> => utils:undefined_to_null(RunNum),  %% TODO uncomment when gui allows null
+        <<"runNumber">> => utils:ensure_defined(RunNum, 100),
+        <<"originRunNumber">> => utils:undefined_to_null(OriginRunNum),
         <<"status">> => atom_to_binary(Status, utf8),
         <<"iteratedStoreId">> => utils:undefined_to_null(IteratedStoreId),
         <<"exceptionStoreId">> => utils:undefined_to_null(ExceptionStoreId),
@@ -200,7 +200,7 @@ run_to_json(#atm_lane_execution_run{
         ),
 
         % TODO VFS-8226 add more types after implementing retries/reruns
-        <<"runType">> => case SrcRunNo of
+        <<"runType">> => case OriginRunNum of
             undefined -> <<"regular">>;
             _ -> <<"retry">>
         end
@@ -231,7 +231,7 @@ upgrade_encoded_record(1, #{
     end,
 
     {2, #{<<"schemaId">> => AtmLaneSchemaId, <<"retriesLeft">> => 0, <<"runs">> => [#{
-        <<"runNo">> => 1,
+        <<"runNum">> => 1,
         <<"status">> => UpgradedStatusBin,
         <<"parallelBoxes">> => AtmParallelBoxExecutionsJson
     }]}}.
@@ -255,8 +255,8 @@ db_encode(#atm_lane_execution{
 -spec encode_run(persistent_record:nested_record_encoder(), run()) ->
     json_utils:json_map().
 encode_run(NestedRecordEncoder, #atm_lane_execution_run{
-    run_no = RunNo,
-    src_run_no = SrcRunNo,
+    run_num = RunNum,
+    origin_run_num = OriginRunNum,
     status = Status,
     aborting_reason = AbortingReason,
     iterated_store_id = IteratedStoreId,
@@ -264,13 +264,13 @@ encode_run(NestedRecordEncoder, #atm_lane_execution_run{
     parallel_boxes = AtmParallelBoxExecutions
 }) ->
     EncodedRun1 = #{
-        <<"runNo">> => RunNo,
+        <<"runNum">> => RunNum,
         <<"status">> => atom_to_binary(Status, utf8),
         <<"parallelBoxes">> => lists:map(fun(AtmParallelBoxExecution) ->
             NestedRecordEncoder(AtmParallelBoxExecution, atm_parallel_box_execution)
         end, AtmParallelBoxExecutions)
     },
-    EncodedRun2 = maps_utils:put_if_defined(EncodedRun1, <<"srcRunNo">>, SrcRunNo),
+    EncodedRun2 = maps_utils:put_if_defined(EncodedRun1, <<"originRunNum">>, OriginRunNum),
     EncodedRun3 = case AbortingReason of
         undefined -> EncodedRun2;
         _ -> EncodedRun2#{<<"abortingReason">> => atom_to_binary(AbortingReason, utf8)}
@@ -297,13 +297,13 @@ db_decode(#{
 -spec decode_run(persistent_record:nested_record_decoder(), json_utils:json_map()) ->
     run().
 decode_run(NestedRecordDecoder, EncodedRun = #{
-    <<"runNo">> := RunNo,
+    <<"runNum">> := RunNum,
     <<"status">> := StatusBin,
     <<"parallelBoxes">> := AtmParallelBoxExecutionsJson
 }) ->
     #atm_lane_execution_run{
-        run_no = RunNo,
-        src_run_no = maps:get(<<"srcRunNo">>, EncodedRun, undefined),
+        run_num = RunNum,
+        origin_run_num = maps:get(<<"originRunNum">>, EncodedRun, undefined),
         status = binary_to_atom(StatusBin, utf8),
         aborting_reason = case maps:get(<<"abortingReason">>, EncodedRun, undefined) of
             undefined -> undefined;

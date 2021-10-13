@@ -333,7 +333,7 @@ create_lane_execution(1, #atm_lane_schema{id = AtmLaneSchemaId, max_retries = Ma
     #atm_lane_execution{
         schema_id = AtmLaneSchemaId,
         retries_left = MaxRetries,
-        runs = [#atm_lane_execution_run{run_no = 1, status = ?SCHEDULED_STATUS}]
+        runs = [#atm_lane_execution_run{run_num = 1, status = ?SCHEDULED_STATUS}]
     };
 create_lane_execution(_, #atm_lane_schema{id = AtmLaneSchemaId, max_retries = MaxRetries}) ->
     #atm_lane_execution{
@@ -382,7 +382,7 @@ create_workflow_execution_doc(#creation_ctx{
             lanes_count = map_size(AtmLaneExecutions),
 
             curr_lane_index = 1,
-            curr_run_no = 1,
+            curr_run_num = 1,
 
             status = ?SCHEDULED_STATUS,
             prev_status = ?SCHEDULED_STATUS,

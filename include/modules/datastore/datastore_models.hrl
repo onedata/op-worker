@@ -1140,7 +1140,7 @@
     lanes_count :: non_neg_integer(),
 
     curr_lane_index :: pos_integer(),
-    curr_run_no :: pos_integer(),
+    curr_run_num :: pos_integer(),
 
     status :: atm_workflow_execution:status(),
     % Flag used to tell if status was changed during doc update (set automatically

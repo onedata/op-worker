@@ -194,7 +194,7 @@ get_record_struct(4) ->
         {lanes_count, integer},      %% new field
 
         {curr_lane_index, integer},  %% new field
-        {curr_run_no, integer},      %% new field
+        {curr_run_num, integer},      %% new field
 
         % ?PREPARING_STATUS and ?ENQUEUED_STATUS were removed from possible workflow statuses
         {status, atom},
@@ -331,7 +331,7 @@ upgrade_record(3, {?MODULE,
         lanes_count = length(Lanes),
 
         curr_lane_index = 1,
-        curr_run_no = 1,
+        curr_run_num = 1,
 
         status = case lists:member(Status, [?PREPARING_STATUS, ?ENQUEUED_STATUS]) of
             true -> ?SCHEDULED_STATUS;

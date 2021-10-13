@@ -121,7 +121,7 @@ handle_preparing(AtmLaneIndex, AtmWorkflowExecutionId) ->
             ?ERROR_ATM_INVALID_STATUS_TRANSITION(Status, ?PREPARING_STATUS)
     end,
     % preparing in advance
-    Default = #atm_lane_execution_run{run_no = undefined, status = ?PREPARING_STATUS},
+    Default = #atm_lane_execution_run{run_num = undefined, status = ?PREPARING_STATUS},
 
     ?extract_doc(atm_workflow_execution_status:handle_lane_preparing(
         AtmLaneIndex, AtmWorkflowExecutionId, fun(AtmWorkflowExecution) ->
@@ -345,18 +345,18 @@ acquire_retry_permission(AtmWorkflowExecution = #atm_workflow_execution{
     {ok, atm_workflow_execution:record()}.
 schedule_lane_run_retry(AtmExceptionStoreId, AtmWorkflowExecution = #atm_workflow_execution{
     curr_lane_index = CurrLaneIndex,
-    curr_run_no = CurrRunNo
+    curr_run_num = CurrRunNum
 }) ->
-    NextRunNo = CurrRunNo + 1,
+    NextRunNum = CurrRunNum + 1,
 
     Diff = fun(_Run) -> ?ERROR_ALREADY_EXISTS end,
     Default = #atm_lane_execution_run{
-        run_no = NextRunNo,
-        src_run_no = CurrRunNo,
+        run_num = NextRunNum,
+        origin_run_num = CurrRunNum,
         status = ?SCHEDULED_STATUS,
         iterated_store_id = AtmExceptionStoreId
     },
-    NewAtmWorkflowExecution = AtmWorkflowExecution#atm_workflow_execution{curr_run_no = NextRunNo},
+    NewAtmWorkflowExecution = AtmWorkflowExecution#atm_workflow_execution{curr_run_num = NextRunNum},
 
     atm_lane_execution:update_curr_run(CurrLaneIndex, Diff, Default, NewAtmWorkflowExecution).
 
@@ -366,21 +366,21 @@ schedule_lane_run_retry(AtmExceptionStoreId, AtmWorkflowExecution = #atm_workflo
     {ok, atm_workflow_execution:record()}.
 schedule_next_lane_run(AtmWorkflowExecution = #atm_workflow_execution{
     curr_lane_index = CurrLaneIndex,
-    curr_run_no = CurrRunNo
+    curr_run_num = CurrRunNum
 }) ->
     % set run_no for lane run that is already preparing in advance
     Diff = fun
-        (#atm_lane_execution_run{run_no = undefined, status = ?INTERRUPTED_STATUS} = Run) ->
+        (#atm_lane_execution_run{run_num = undefined, status = ?INTERRUPTED_STATUS} = Run) ->
             % interrupted lane run previously preparing in advance - change to ?FAILED_STATUS
             % as it will become the point of workflow execution failure at which it can be rerun
-            {ok, Run#atm_lane_execution_run{run_no = CurrRunNo, status = ?FAILED_STATUS}};
+            {ok, Run#atm_lane_execution_run{run_num = CurrRunNum, status = ?FAILED_STATUS}};
 
-        (#atm_lane_execution_run{run_no = undefined} = Run) ->
+        (#atm_lane_execution_run{run_num = undefined} = Run) ->
             % lane run already preparing in advance
-            {ok, Run#atm_lane_execution_run{run_no = CurrRunNo}}
+            {ok, Run#atm_lane_execution_run{run_num = CurrRunNum}}
     end,
     % schedule new lane run
-    Default = #atm_lane_execution_run{run_no = CurrRunNo, status = ?SCHEDULED_STATUS},
+    Default = #atm_lane_execution_run{run_num = CurrRunNum, status = ?SCHEDULED_STATUS},
 
     NextLaneIndex = CurrLaneIndex + 1,
     {ok, NewAtmWorkflowExecution} = atm_lane_execution:update_curr_run(

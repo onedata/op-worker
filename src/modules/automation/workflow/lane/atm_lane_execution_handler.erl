@@ -147,7 +147,7 @@ setup_lane_run(AtmLaneIndex, AtmWorkflowExecutionDoc, AtmWorkflowExecutionCtx) -
 end_lane_run(AtmLaneIndex, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
     {ok, #document{value = AtmWorkflowExecution = #atm_workflow_execution{
         curr_lane_index = PrevAtmLaneIndex,
-        curr_run_no = PrevRunNo
+        curr_run_num = PrevRunNum
     }}} = atm_workflow_execution:get(AtmWorkflowExecutionId),
 
     {ok, PrevRun} = atm_lane_execution:get_curr_run(AtmLaneIndex, AtmWorkflowExecution),
@@ -160,14 +160,14 @@ end_lane_run(AtmLaneIndex, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
 
     #document{value = NewAtmWorkflowExecution = #atm_workflow_execution{
         curr_lane_index = NextAtmLaneIndex,
-        curr_run_no = NextRunNo
+        curr_run_num = NextRunNum
     }} = atm_lane_execution_status:handle_ended(AtmLaneIndex, AtmWorkflowExecutionId),
 
     AtmLaneExecutionRunTeardownCtx = #atm_lane_execution_run_teardown_ctx{
         workflow_execution_ctx = AtmWorkflowExecutionCtx,
-        is_retried = AtmLaneIndex == PrevAtmLaneIndex andalso
+        is_retried_scheduled = AtmLaneIndex == PrevAtmLaneIndex andalso
             NextAtmLaneIndex == PrevAtmLaneIndex andalso
-            NextRunNo == PrevRunNo + 1
+            NextRunNum == PrevRunNum + 1
     },
     atm_parallel_box_execution:teardown_all(AtmLaneExecutionRunTeardownCtx, AtmParallelBoxExecutions),
 
@@ -208,10 +208,10 @@ freeze_exception_store(#atm_lane_execution_run{exception_store_id = AtmException
     ok.
 freeze_curr_lane_run_iterated_store_if_ready_to_execute(AtmWorkflowExecution = #atm_workflow_execution{
     curr_lane_index = LaneIndex,
-    curr_run_no = CurrRunNo
+    curr_run_num = CurrRunNum
 }) ->
     case atm_lane_execution:get_curr_run(LaneIndex, AtmWorkflowExecution) of
-        {ok, #atm_lane_execution_run{status = ?ENQUEUED_STATUS, run_no = CurrRunNo} = Run} ->
+        {ok, #atm_lane_execution_run{status = ?ENQUEUED_STATUS, run_num = CurrRunNum} = Run} ->
             atm_store_api:freeze(Run#atm_lane_execution_run.iterated_store_id);
         _ ->
             % execution must have ended or lane run is still not ready

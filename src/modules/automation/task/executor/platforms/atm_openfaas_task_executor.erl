@@ -119,7 +119,7 @@ setup(AtmWorkflowExecutionCtx, AtmTaskExecutor) ->
 
 
 -spec teardown(atm_lane_execution_handler:teardown_ctx(), record()) -> ok | no_return().
-teardown(#atm_lane_execution_run_teardown_ctx{is_retried = true}, _AtmTaskExecutor) ->
+teardown(#atm_lane_execution_run_teardown_ctx{is_retried_scheduled = true}, _AtmTaskExecutor) ->
     % in case of lane run retry functions registered in OpenFaaS service are not removed
     % as they will be reused by retry
     ok;
