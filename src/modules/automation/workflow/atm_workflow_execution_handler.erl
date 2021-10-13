@@ -107,7 +107,7 @@ start(UserCtx, AtmWorkflowExecutionEnv, #document{
 
 -spec cancel(atm_workflow_execution:id()) -> ok | {error, already_ended}.
 cancel(AtmWorkflowExecutionId) ->
-    case atm_lane_execution_status:handle_aborting(undefined, AtmWorkflowExecutionId, cancel) of
+    case atm_lane_execution_status:handle_aborting(current, AtmWorkflowExecutionId, cancel) of
         ok ->
             workflow_engine:cancel_execution(AtmWorkflowExecutionId);
         {error, _} = Error ->
@@ -123,7 +123,7 @@ cancel(AtmWorkflowExecutionId) ->
 -spec prepare_lane(
     atm_workflow_execution:id(),
     atm_workflow_execution_env:record(),
-    pos_integer()
+    atm_lane_execution:index()
 ) ->
     {ok, workflow_engine:lane_spec()} | error.
 prepare_lane(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmLaneIndex) ->
@@ -145,7 +145,7 @@ prepare_lane(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmLaneIndex) ->
 -spec restart_lane(
     atm_workflow_execution:id(),
     atm_workflow_execution_env:record(),
-    pos_integer()
+    atm_lane_execution:index()
 ) ->
     error.
 restart_lane(_, _, _) ->
@@ -211,7 +211,7 @@ handle_task_execution_ended(AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv, At
 -spec handle_lane_execution_ended(
     atm_workflow_execution:id(),
     atm_workflow_execution_env:record(),
-    pos_integer()
+    atm_lane_execution:index()
 ) ->
     workflow_handler:lane_ended_callback_result().
 handle_lane_execution_ended(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmLaneIndex) ->

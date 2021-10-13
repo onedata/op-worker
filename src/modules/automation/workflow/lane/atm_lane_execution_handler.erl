@@ -33,58 +33,62 @@
 %%%===================================================================
 
 
--spec prepare(pos_integer(), atm_workflow_execution:id(), atm_workflow_execution_ctx:record()) ->
+-spec prepare(
+    atm_lane_execution:index(),
+    atm_workflow_execution:id(),
+    atm_workflow_execution_ctx:record()
+) ->
     workflow_engine:lane_spec() | no_return().
-prepare(LaneIndex, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
+prepare(AtmLaneIndex, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
     try
         AtmWorkflowExecutionDoc = atm_lane_execution_status:handle_preparing(
-            LaneIndex, AtmWorkflowExecutionId
+            AtmLaneIndex, AtmWorkflowExecutionId
         ),
 
         NewAtmWorkflowExecutionDoc = atm_lane_execution_factory:create_run(
-            LaneIndex, AtmWorkflowExecutionDoc, AtmWorkflowExecutionCtx
+            AtmLaneIndex, AtmWorkflowExecutionDoc, AtmWorkflowExecutionCtx
         ),
         AtmLaneExecutionSpec = setup_lane_run(
-            LaneIndex, NewAtmWorkflowExecutionDoc, AtmWorkflowExecutionCtx
+            AtmLaneIndex, NewAtmWorkflowExecutionDoc, AtmWorkflowExecutionCtx
         ),
 
         #document{value = AtmWorkflowExecution} = atm_lane_execution_status:handle_enqueued(
-            LaneIndex, AtmWorkflowExecutionId
+            AtmLaneIndex, AtmWorkflowExecutionId
         ),
         freeze_curr_lane_run_iterated_store_if_ready_to_execute(AtmWorkflowExecution),
 
         AtmLaneExecutionSpec
     catch Type:Reason ->
-        atm_lane_execution_status:handle_aborting(LaneIndex, AtmWorkflowExecutionId, failure),
-        handle_ended(LaneIndex, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx),
+        atm_lane_execution_status:handle_aborting(AtmLaneIndex, AtmWorkflowExecutionId, failure),
+        handle_ended(AtmLaneIndex, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx),
         erlang:Type(Reason)
     end.
 
 
 -spec handle_ended(
-    pos_integer(),
+    atm_lane_execution:index(),
     atm_workflow_execution:id(),
     atm_workflow_execution_ctx:record()
 ) ->
     workflow_handler:lane_ended_callback_result() | no_return().
-handle_ended(LaneIndex, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
+handle_ended(AtmLaneIndex, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
     NewAtmWorkflowExecution = #atm_workflow_execution{
-        curr_lane_index = NextLaneIndex,
+        curr_lane_index = NextAtmLaneIndex,
         lanes_count = AtmLanesCount
-    } = end_lane_run(LaneIndex, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx),
+    } = end_lane_run(AtmLaneIndex, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx),
 
     freeze_curr_lane_run_iterated_store_if_ready_to_execute(NewAtmWorkflowExecution),
-    {ok, NextLaneRun} = atm_lane_execution:get_curr_run(NextLaneIndex, NewAtmWorkflowExecution),
+    {ok, NextLaneRun} = atm_lane_execution:get_curr_run(NextAtmLaneIndex, NewAtmWorkflowExecution),
 
     case atm_lane_execution_status:status_to_phase(NextLaneRun#atm_lane_execution_run.status) of
         ?ENDED_PHASE ->
             ?FINISH_EXECUTION;
         _ ->
-            LaneToPrepareInAdvanceIndex = case NextLaneIndex < AtmLanesCount of
-                true -> NextLaneIndex + 1;
+            AtmLaneToPrepareInAdvanceIndex = case NextAtmLaneIndex < AtmLanesCount of
+                true -> NextAtmLaneIndex + 1;
                 false -> undefined
             end,
-            ?CONTINUE(NextLaneIndex, LaneToPrepareInAdvanceIndex)
+            ?CONTINUE(NextAtmLaneIndex, AtmLaneToPrepareInAdvanceIndex)
     end.
 
 
@@ -95,12 +99,12 @@ handle_ended(LaneIndex, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
 
 %% @private
 -spec setup_lane_run(
-    pos_integer(),
+    atm_lane_execution:index(),
     atm_workflow_execution:doc(),
     atm_workflow_execution_ctx:record()
 ) ->
     workflow_engine:lane_spec() | no_return().
-setup_lane_run(LaneIndex, AtmWorkflowExecutionDoc, AtmWorkflowExecutionCtx) ->
+setup_lane_run(AtmLaneIndex, AtmWorkflowExecutionDoc, AtmWorkflowExecutionCtx) ->
     AtmWorkflowExecution = AtmWorkflowExecutionDoc#document.value,
     AtmWorkflowExecutionEnv = atm_workflow_execution_ctx:get_env(AtmWorkflowExecutionCtx),
 
@@ -109,7 +113,7 @@ setup_lane_run(LaneIndex, AtmWorkflowExecutionDoc, AtmWorkflowExecutionCtx) ->
             iterated_store_id = AtmIteratedStoreId,
             exception_store_id = ExceptionStoreId,
             parallel_boxes = AtmParallelBoxExecutions
-        }} = atm_lane_execution:get_curr_run(LaneIndex, AtmWorkflowExecution),
+        }} = atm_lane_execution:get_curr_run(AtmLaneIndex, AtmWorkflowExecution),
 
         {AtmParallelBoxExecutionSpecs, AtmWorkflowExecutionEnvDiff} = atm_parallel_box_execution:setup_all(
             AtmWorkflowExecutionCtx, AtmParallelBoxExecutions
@@ -119,7 +123,7 @@ setup_lane_run(LaneIndex, AtmWorkflowExecutionDoc, AtmWorkflowExecutionCtx) ->
             AtmLaneRunExceptionStoreContainer, AtmWorkflowExecutionEnv
         ),
         #atm_lane_schema{store_iterator_spec = AtmStoreIteratorSpec} = atm_lane_execution:get_schema(
-            LaneIndex, AtmWorkflowExecution
+            AtmLaneIndex, AtmWorkflowExecution
         ),
 
         #{
@@ -128,25 +132,25 @@ setup_lane_run(LaneIndex, AtmWorkflowExecutionDoc, AtmWorkflowExecutionCtx) ->
             iterator => atm_store_api:acquire_iterator(AtmIteratedStoreId, AtmStoreIteratorSpec)
         }
     catch _:Reason ->
-        AtmLaneSchemaId = atm_lane_execution:get_schema_id(LaneIndex, AtmWorkflowExecution),
+        AtmLaneSchemaId = atm_lane_execution:get_schema_id(AtmLaneIndex, AtmWorkflowExecution),
         throw(?ERROR_ATM_LANE_EXECUTION_SETUP_FAILED(AtmLaneSchemaId, Reason))
     end.
 
 
 %% @private
 -spec end_lane_run(
-    pos_integer(),
+    atm_lane_execution:index(),
     atm_workflow_execution:id(),
     atm_workflow_execution_ctx:record()
 ) ->
     atm_workflow_execution:record().
-end_lane_run(LaneIndex, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
+end_lane_run(AtmLaneIndex, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
     {ok, #document{value = AtmWorkflowExecution = #atm_workflow_execution{
-        curr_lane_index = PrevLaneIndex,
+        curr_lane_index = PrevAtmLaneIndex,
         curr_run_no = PrevRunNo
     }}} = atm_workflow_execution:get(AtmWorkflowExecutionId),
 
-    {ok, PrevRun} = atm_lane_execution:get_curr_run(LaneIndex, AtmWorkflowExecution),
+    {ok, PrevRun} = atm_lane_execution:get_curr_run(AtmLaneIndex, AtmWorkflowExecution),
 
     unfreeze_iterated_store_in_case_of_workflow_store(PrevRun, AtmWorkflowExecutionCtx),
     freeze_exception_store(PrevRun),
@@ -155,14 +159,14 @@ end_lane_run(LaneIndex, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
     atm_parallel_box_execution:ensure_all_ended(AtmParallelBoxExecutions),
 
     #document{value = NewAtmWorkflowExecution = #atm_workflow_execution{
-        curr_lane_index = NextLaneIndex,
+        curr_lane_index = NextAtmLaneIndex,
         curr_run_no = NextRunNo
-    }} = atm_lane_execution_status:handle_ended(LaneIndex, AtmWorkflowExecutionId),
+    }} = atm_lane_execution_status:handle_ended(AtmLaneIndex, AtmWorkflowExecutionId),
 
     AtmLaneExecutionRunTeardownCtx = #atm_lane_execution_run_teardown_ctx{
         workflow_execution_ctx = AtmWorkflowExecutionCtx,
-        is_retried = LaneIndex == PrevLaneIndex andalso
-            NextLaneIndex == PrevLaneIndex andalso
+        is_retried = AtmLaneIndex == PrevAtmLaneIndex andalso
+            NextAtmLaneIndex == PrevAtmLaneIndex andalso
             NextRunNo == PrevRunNo + 1
     },
     atm_parallel_box_execution:teardown_all(AtmLaneExecutionRunTeardownCtx, AtmParallelBoxExecutions),

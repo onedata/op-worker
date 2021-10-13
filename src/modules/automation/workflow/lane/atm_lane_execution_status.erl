@@ -109,9 +109,9 @@ status_to_phase(?FAILED_STATUS) -> ?ENDED_PHASE;
 status_to_phase(?INTERRUPTED_STATUS) -> ?ENDED_PHASE.
 
 
--spec handle_preparing(pos_integer(), atm_workflow_execution:id()) ->
+-spec handle_preparing(atm_lane_execution:index(), atm_workflow_execution:id()) ->
     atm_workflow_execution:doc() | no_return().
-handle_preparing(LaneIndex, AtmWorkflowExecutionId) ->
+handle_preparing(AtmLaneIndex, AtmWorkflowExecutionId) ->
     % transition to ?PREPARING_STATUS from ?SCHEDULED_STATUS
     LaneRunDiff = fun
         (#atm_lane_execution_run{status = ?SCHEDULED_STATUS} = Run) ->
@@ -124,13 +124,13 @@ handle_preparing(LaneIndex, AtmWorkflowExecutionId) ->
     Default = #atm_lane_execution_run{run_no = undefined, status = ?PREPARING_STATUS},
 
     ?extract_doc(atm_workflow_execution_status:handle_lane_preparing(
-        LaneIndex, AtmWorkflowExecutionId, fun(AtmWorkflowExecution) ->
-            atm_lane_execution:update_curr_run(LaneIndex, LaneRunDiff, Default, AtmWorkflowExecution)
+        AtmLaneIndex, AtmWorkflowExecutionId, fun(AtmWorkflowExecution) ->
+            atm_lane_execution:update_curr_run(AtmLaneIndex, LaneRunDiff, Default, AtmWorkflowExecution)
         end
     )).
 
 
--spec handle_enqueued(pos_integer(), atm_workflow_execution:id()) ->
+-spec handle_enqueued(atm_lane_execution:index(), atm_workflow_execution:id()) ->
     atm_workflow_execution:doc() | no_return().
 handle_enqueued(AtmLaneIndex, AtmWorkflowExecutionId) ->
     Diff = fun(AtmWorkflowExecution) ->
@@ -144,11 +144,15 @@ handle_enqueued(AtmLaneIndex, AtmWorkflowExecutionId) ->
     ?extract_doc(atm_workflow_execution_status:handle_lane_enqueued(AtmWorkflowExecutionId, Diff)).
 
 
--spec handle_aborting(undefined | pos_integer(), atm_workflow_execution:id(), cancel | failure) ->
+-spec handle_aborting(
+    atm_lane_execution:selector(),
+    atm_workflow_execution:id(),
+    cancel | failure
+) ->
     ok | errors:error().
-handle_aborting(AtmLaneIndex, AtmWorkflowExecutionId, Reason) ->
+handle_aborting(AtmLaneSelector, AtmWorkflowExecutionId, Reason) ->
     Diff = fun(AtmWorkflowExecution) ->
-        atm_lane_execution:update_curr_run(AtmLaneIndex, fun
+        atm_lane_execution:update_curr_run(AtmLaneSelector, fun
             (#atm_lane_execution_run{status = Status} = Run) when
                 Status =:= ?SCHEDULED_STATUS;
                 Status =:= ?PREPARING_STATUS;
@@ -168,12 +172,12 @@ handle_aborting(AtmLaneIndex, AtmWorkflowExecutionId, Reason) ->
                 ?ERROR_ATM_INVALID_STATUS_TRANSITION(EndedStatus, ?ABORTING_STATUS)
         end, AtmWorkflowExecution)
     end,
-    atm_workflow_execution_status:handle_lane_aborting(AtmLaneIndex, AtmWorkflowExecutionId, Diff).
+    atm_workflow_execution_status:handle_lane_aborting(AtmLaneSelector, AtmWorkflowExecutionId, Diff).
 
 
 -spec handle_task_status_change(
     atm_workflow_execution:id(),
-    pos_integer(),
+    atm_lane_execution:index(),
     pos_integer(),
     atm_task_execution:id(),
     atm_task_execution:status()
@@ -216,7 +220,7 @@ handle_task_status_change(
     atm_workflow_execution_status:handle_lane_task_status_change(AtmWorkflowExecutionId, Diff).
 
 
--spec handle_ended(pos_integer(), atm_workflow_execution:id()) ->
+-spec handle_ended(atm_lane_execution:index(), atm_workflow_execution:id()) ->
     atm_workflow_execution:doc() | no_return().
 handle_ended(AtmLaneIndex, AtmWorkflowExecutionId) ->
     Diff = fun(AtmWorkflowExecution = #atm_workflow_execution{curr_lane_index = CurrLaneIndex}) ->
@@ -236,7 +240,10 @@ handle_ended(AtmLaneIndex, AtmWorkflowExecutionId) ->
 
 
 %% @private
--spec handle_prepared_in_advance_lane_run_ended(pos_integer(), atm_workflow_execution:record()) ->
+-spec handle_prepared_in_advance_lane_run_ended(
+    atm_lane_execution:index(),
+    atm_workflow_execution:record()
+) ->
     {ok, atm_workflow_execution:record()}.
 handle_prepared_in_advance_lane_run_ended(AtmLaneIndex, AtmWorkflowExecution) ->
     atm_lane_execution:update_curr_run(AtmLaneIndex, fun(Run) ->

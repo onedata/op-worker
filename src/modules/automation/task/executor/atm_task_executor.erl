@@ -44,7 +44,7 @@
 %%%===================================================================
 
 
--callback build(atm_workflow_execution:id(), pos_integer(), atm_lambda_snapshot:record()) ->
+-callback build(atm_workflow_execution:id(), atm_lane_execution:index(), atm_lambda_snapshot:record()) ->
     record() | no_return().
 
 -callback setup(atm_workflow_execution_ctx:record(), record()) ->
@@ -63,7 +63,7 @@
 %%%===================================================================
 
 
--spec build(atm_workflow_execution:id(), pos_integer(), atm_lambda_snapshot:record()) ->
+-spec build(atm_workflow_execution:id(), atm_lane_execution:index(), atm_lambda_snapshot:record()) ->
     record() | no_return().
 build(AtmWorkflowExecutionId, AtmLaneIndex, AtmLambdaSnapshot = #atm_lambda_snapshot{
     operation_spec = AtmLambadaOperationSpec
