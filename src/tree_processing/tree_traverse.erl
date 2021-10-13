@@ -496,7 +496,7 @@ get_child_slave_job(#tree_traverse{
     #tree_traverse_slave{
         user_id = UserId,
         file_ctx = ChildCtx,
-        source_master_uuid = file_ctx:get_logical_uuid_const(FileCtx),
+        master_job_uuid = file_ctx:get_logical_uuid_const(FileCtx),
         traverse_info = TraverseInfo,
         track_subtree_status = TrackSubtreeStatus,
         relative_path = filename:join(ParentRelativePath, Filename)

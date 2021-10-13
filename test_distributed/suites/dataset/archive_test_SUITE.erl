@@ -123,10 +123,9 @@ groups() -> [
         dip_archive_dataset_attached_to_symlink_to_reg_file_plain_layout_follow,
         dip_archive_dataset_containing_symlink_to_reg_file_plain_layout_follow,
         dip_archive_dataset_containing_symlink_to_directory_plain_layout_follow,
-%%         @TODO VFS-7945 - uncomment after it is possible to create a hardlink to a symlink
-%%        dip_archive_dataset_attached_to_symlink_to_reg_file_plain_layout_not_follow,
-%%        dip_archive_dataset_containing_symlink_to_reg_file_plain_layout_not_follow,
-%%        dip_archive_dataset_containing_symlink_to_directory_plain_layout_not_follow,
+        dip_archive_dataset_attached_to_symlink_to_reg_file_plain_layout_not_follow,
+        dip_archive_dataset_containing_symlink_to_reg_file_plain_layout_not_follow,
+        dip_archive_dataset_containing_symlink_to_directory_plain_layout_not_follow,
         dip_archive_nested_datasets_plain_layout,
         dip_archive_dataset_attached_to_dir_bagit_layout,
         dip_archive_dataset_attached_to_file_bagit_layout,
@@ -134,10 +133,9 @@ groups() -> [
         dip_archive_dataset_attached_to_symlink_to_reg_file_bagit_layout_follow,
         dip_archive_dataset_containing_symlink_to_reg_file_bagit_layout_follow,
         dip_archive_dataset_containing_symlink_to_directory_bagit_layout_follow,
-%%         @TODO VFS-7945 - uncomment after it is possible to create a hardlink to a symlink
-%%        dip_archive_dataset_attached_to_symlink_to_reg_file_bagit_layout_not_follow,
-%%        dip_archive_dataset_containing_symlink_to_reg_file_bagit_layout_not_follow,
-%%        dip_archive_dataset_containing_symlink_to_directory_bagit_layout_not_follow,
+        dip_archive_dataset_attached_to_symlink_to_reg_file_bagit_layout_not_follow,
+        dip_archive_dataset_containing_symlink_to_reg_file_bagit_layout_not_follow,
+        dip_archive_dataset_containing_symlink_to_directory_bagit_layout_not_follow,
         dip_archive_nested_datasets_bagit_layout
     ]}
 ].

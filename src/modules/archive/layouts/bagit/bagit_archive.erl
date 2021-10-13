@@ -157,15 +157,18 @@ finalize(ArchiveDirCtx, UserCtx) ->
     create_tag_manifests(ArchiveDirCtx, UserCtx).
 
 
--spec archive_file(archive:doc(), file_ctx:ctx(), file_ctx:ctx(), archive:doc() | undefined, file_meta:path(), user_ctx:ctx()) ->
-    {ok, file_ctx:ctx()} | {error, term()}.
+-spec archive_file(archive:doc(), file_ctx:ctx(), file_ctx:ctx(), archive:doc() | undefined, 
+    file_meta:path(), user_ctx:ctx()) -> {ok, file_ctx:ctx()} | {error, term()}.
 archive_file(ArchiveDoc, FileCtx, TargetParentCtx, BaseArchiveDoc, ResolvedFilePath, UserCtx) ->
-    case plain_archive:archive_file(ArchiveDoc, FileCtx, TargetParentCtx, BaseArchiveDoc, ResolvedFilePath, UserCtx) of
+    case plain_archive:archive_file(
+        ArchiveDoc, FileCtx, TargetParentCtx, BaseArchiveDoc, ResolvedFilePath, UserCtx
+    ) of
         {ok, ArchivedFileCtx} ->
             {FileDoc, ArchivedFileCtx2} = file_ctx:get_file_doc(ArchivedFileCtx),
             case file_meta:get_effective_type(FileDoc) =:= ?REGULAR_FILE_TYPE of
                 true ->
-                    save_checksums_and_archive_custom_metadata(ArchiveDoc, UserCtx, ArchivedFileCtx2, ResolvedFilePath);
+                    save_checksums_and_archive_custom_metadata(
+                        ArchiveDoc, UserCtx, ArchivedFileCtx2, ResolvedFilePath);
                 false ->
                     ok
             end,
@@ -200,7 +203,8 @@ create_data_dir(ArchiveDirCtx, UserCtx) ->
 create_bag_declaration(ParentCtx, UserCtx) ->
     SessionId = user_ctx:get_session_id(UserCtx),
     ParentGuid = file_ctx:get_logical_guid_const(ParentCtx),
-    {ok, {_Guid, Handle}} = lfm:create_and_open(SessionId, ParentGuid, ?BAG_DECLARATION_FILE_NAME, ?DEFAULT_FILE_MODE, write),
+    {ok, {_Guid, Handle}} = lfm:create_and_open(
+        SessionId, ParentGuid, ?BAG_DECLARATION_FILE_NAME, ?DEFAULT_FILE_MODE, write),
 
     Content = str_utils:format_bin(
         "BagIt-Version: ~s~n"
@@ -212,7 +216,8 @@ create_bag_declaration(ParentCtx, UserCtx) ->
 
 
 %% @private
--spec save_checksums_and_archive_custom_metadata(archive:doc(), user_ctx:ctx(), file_ctx:ctx(), file_meta:path()) -> ok.
+-spec save_checksums_and_archive_custom_metadata(archive:doc(), user_ctx:ctx(), file_ctx:ctx(), 
+    file_meta:path()) -> ok.
 save_checksums_and_archive_custom_metadata(CurrentArchiveDoc, UserCtx, ArchivedFileCtx, SourceLogicalPath) ->
     % TODO VFS-7819 allow to pass this algorithms in archivisation request as param
     ChecksumAlgorithms = ?SUPPORTED_CHECKSUM_ALGORITHMS,
@@ -222,8 +227,8 @@ save_checksums_and_archive_custom_metadata(CurrentArchiveDoc, UserCtx, ArchivedF
     lists:foreach(fun(ArchiveDoc) ->
         RelativeFilePath = calculate_relative_path(ArchiveDoc, SourceLogicalPath, UserCtx),
         {ok, ArchiveDirCtx} = archive:get_root_dir_ctx(ArchiveDoc),
-        bagit_checksums:add_entries_to_manifests(ArchiveDirCtx, UserCtx, RelativeFilePath, CalculatedChecksums,
-            ChecksumAlgorithms),
+        bagit_checksums:add_entries_to_manifests(
+            ArchiveDirCtx, UserCtx, RelativeFilePath, CalculatedChecksums, ChecksumAlgorithms),
         archive_metadata(ArchiveDirCtx, UserCtx, RelativeFilePath, ArchivedFileCtx)
     end, [CurrentArchiveDoc | AncestorArchives]).
 

@@ -208,5 +208,5 @@ upgrade_encoded_record(1, ArchiveConfig) ->
          <<"layout">> => Layout,
          <<"includeDip">> => IncludeDip,
          <<"createNestedArchives">> => CreateNestedArchives,
-         <<"followSymlinks">> => false
+         <<"followSymlinks">> => false % new field
      }}.

@@ -47,7 +47,7 @@
 -type record() :: #tree_traverse_progress{}.
 -type doc() :: datastore_doc:doc(record()).
 -type diff() :: datastore_doc:diff(record()).
--type status() :: {?SUBTREE_PROCESSED, file_meta:uuid()} | ?SUBTREE_NOT_PROCESSED.
+-type status() :: ?SUBTREE_PROCESSED(NextSubtreeRoot :: file_meta:uuid()) | ?SUBTREE_NOT_PROCESSED.
 
 -export_type([status/0]).
 
@@ -121,11 +121,11 @@ update_and_check(TaskId, Uuid, UpdateFun) ->
             case NextSubtreeRoot of
                 undefined ->
                     case file_meta:get_parent_uuid(Uuid) of
-                        {ok, ParentUuid} -> {?SUBTREE_PROCESSED, ParentUuid};
+                        {ok, ParentUuid} -> ?SUBTREE_PROCESSED(ParentUuid);
                         {error, _} = Error -> Error
                     end;
                 _ ->
-                    {?SUBTREE_PROCESSED, NextSubtreeRoot}
+                    ?SUBTREE_PROCESSED(NextSubtreeRoot)
             end;
         {ok, _} ->
             ?SUBTREE_NOT_PROCESSED;
