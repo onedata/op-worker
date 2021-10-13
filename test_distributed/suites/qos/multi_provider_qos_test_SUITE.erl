@@ -1014,7 +1014,7 @@ qos_traverse_cancellation_test(Config) ->
     end, Workers),
     
     % finish transfers to unlock waiting slave job processes
-    ok = qos_tests_utils:finish_all_transfers([F || {F, _} <- maps:get(files, GuidsAndPaths)] ++ [FileGuid]).
+    ok = qos_tests_utils:finish_transfers([F || {F, _} <- maps:get(files, GuidsAndPaths)] ++ [FileGuid]).
 
 
 %%%===================================================================
