@@ -291,10 +291,17 @@ translate_file_details(#file_details{
                 ),
                 <<"providerId">> => ProviderId,
                 <<"ownerId">> => OwnerId,
-                <<"effQosMembership">> => EffQosMembership,
-                <<"effDatasetMembership">> => EffDatasetMembership
+                <<"effQosMembership">> => translate_membership(EffQosMembership),
+                <<"effDatasetMembership">> => translate_membership(EffDatasetMembership)
             }
     end.
+
+
+-spec translate_membership(file_qos:membership() | dataset:membership()) -> binary().
+translate_membership(?NONE_MEMBERSHIP) -> <<"none">>;
+translate_membership(?DIRECT_MEMBERSHIP) -> <<"direct">>;
+translate_membership(?ANCESTOR_MEMBERSHIP) -> <<"ancestor">>;
+translate_membership(?DIRECT_AND_ANCESTOR_MEMBERSHIP) -> <<"directAndAncestor">>.
 
 
 %%--------------------------------------------------------------------

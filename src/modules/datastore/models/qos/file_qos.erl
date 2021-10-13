@@ -35,6 +35,7 @@
 -include("modules/datastore/qos.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/fslogic/metadata.hrl").
+-include("modules/fslogic/file_details.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/errors.hrl").
@@ -70,7 +71,8 @@
 -type pred() :: datastore_doc:pred(record()).
 -type effective_file_qos() :: #effective_file_qos{}.
 -type assigned_entries() :: #{storage:id() => [qos_entry:id()]}.
--type membership() :: ?NONE_QOS_MEMBERSHIP | ?DIRECT_QOS_MEMBERSHIP | ?ANCESTOR_QOS_MEMBERSHIP.
+-type membership() :: ?NONE_MEMBERSHIP | ?DIRECT_MEMBERSHIP 
+    | ?ANCESTOR_MEMBERSHIP | ?DIRECT_AND_ANCESTOR_MEMBERSHIP.
 
 -export_type([assigned_entries/0, membership/0]).
 
@@ -247,14 +249,11 @@ is_effective_qos_of_file(FileUuidOrDoc, QosEntryId) ->
 
 -spec qos_membership(file_meta:uuid() | file_meta:doc()) -> membership().
 qos_membership(FileUuidOrDoc) ->
-    case has_any_qos_entry(FileUuidOrDoc, direct) of
-        true ->
-            ?DIRECT_QOS_MEMBERSHIP;
-        false ->
-            case has_any_qos_entry(FileUuidOrDoc, effective) of
-                true -> ?ANCESTOR_QOS_MEMBERSHIP;
-                false -> ?NONE_QOS_MEMBERSHIP
-            end
+    case {has_any_qos_entry(FileUuidOrDoc, direct), has_any_qos_entry(FileUuidOrDoc, effective)} of
+        {true, true} -> ?DIRECT_AND_ANCESTOR_MEMBERSHIP;
+        {true, false} -> ?DIRECT_MEMBERSHIP;
+        {false, true} -> ?ANCESTOR_MEMBERSHIP;
+        {false, false} -> ?NONE_MEMBERSHIP
     end.
 
 
