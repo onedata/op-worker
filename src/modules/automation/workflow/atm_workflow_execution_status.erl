@@ -85,12 +85,16 @@ infer_phase(#atm_workflow_execution{status = Status}) ->
     status_to_phase(Status).
 
 
--spec handle_lane_preparing(pos_integer(), atm_workflow_execution:id(), lane_run_diff()) ->
+-spec handle_lane_preparing(
+    atm_lane_execution:index(),
+    atm_workflow_execution:id(),
+    lane_run_diff()
+) ->
     {ok, atm_workflow_execution:doc()} | errors:error().
-handle_lane_preparing(LaneIndex, AtmWorkflowExecutionId, AtmLaneExecutionDiff) ->
+handle_lane_preparing(AtmLaneIndex, AtmWorkflowExecutionId, AtmLaneExecutionDiff) ->
     Diff = fun
         (Record = #atm_workflow_execution{status = ?SCHEDULED_STATUS, curr_lane_index = CurrLaneIndex}) when
-            CurrLaneIndex =:= LaneIndex
+            CurrLaneIndex =:= AtmLaneIndex
         ->
             case AtmLaneExecutionDiff(Record) of
                 {ok, NewRecord} ->
@@ -142,21 +146,21 @@ handle_lane_enqueued(AtmWorkflowExecutionId, AtmLaneExecutionDiff) ->
 
 
 -spec handle_lane_aborting(
-    undefined | pos_integer(),
+    atm_lane_execution:selector(),
     atm_workflow_execution:id(),
     lane_run_diff()
 ) ->
     ok | errors:error().
-handle_lane_aborting(GivenLaneIndex, AtmWorkflowExecutionId, AtmLaneExecutionDiff) ->
+handle_lane_aborting(AtmLaneSelector, AtmWorkflowExecutionId, AtmLaneExecutionDiff) ->
     Diff = fun
         (Record = #atm_workflow_execution{status = Status, curr_lane_index = CurrLaneIndex}) when
             Status == ?SCHEDULED_STATUS;
             Status == ?ACTIVE_STATUS;
             Status == ?ABORTING_STATUS
         ->
-            LaneIndex = utils:ensure_defined(GivenLaneIndex, CurrLaneIndex),
+            AtmLaneIndex = atm_lane_execution:resolve_selector(AtmLaneSelector, Record),
 
-            case {LaneIndex == CurrLaneIndex, AtmLaneExecutionDiff(Record)} of
+            case {AtmLaneIndex == CurrLaneIndex, AtmLaneExecutionDiff(Record)} of
                 {true, {ok, NewRecord}} ->
                     {ok, set_times_on_phase_transition(NewRecord#atm_workflow_execution{
                         status = ?ABORTING_STATUS

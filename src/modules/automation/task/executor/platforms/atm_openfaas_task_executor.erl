@@ -27,7 +27,7 @@
 -export([is_openfaas_available/0, assert_openfaas_available/0]).
 
 %% atm_task_executor callbacks
--export([build/3, setup/2, teardown/1, in_readonly_mode/1, run/3]).
+-export([build/3, setup/2, teardown/2, in_readonly_mode/1, run/3]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
@@ -88,7 +88,7 @@ assert_openfaas_available() ->
 %%%===================================================================
 
 
--spec build(atm_workflow_execution:id(), pos_integer(), atm_lambda_snapshot:record()) ->
+-spec build(atm_workflow_execution:id(), atm_lane_execution:index(), atm_lambda_snapshot:record()) ->
     record() | no_return().
 build(AtmWorkflowExecutionId, AtmLaneIndex, AtmLambdaSnapshot = #atm_lambda_snapshot{
     operation_spec = AtmLambadaOperationSpec
@@ -118,8 +118,13 @@ setup(AtmWorkflowExecutionCtx, AtmTaskExecutor) ->
     #{type => async}.
 
 
--spec teardown(record()) -> ok | no_return().
-teardown(AtmTaskExecutor) ->
+-spec teardown(atm_lane_execution_handler:teardown_ctx(), record()) -> ok | no_return().
+teardown(#atm_lane_execution_run_teardown_ctx{is_retried_scheduled = true}, _AtmTaskExecutor) ->
+    % in case of lane run retry functions registered in OpenFaaS service are not removed
+    % as they will be reused by retry
+    ok;
+teardown(_AtmLaneExecutionRunTeardownCtx, AtmTaskExecutor) ->
+    % TODO VFS-8273 pass workflow_execution_ctx below and log in audit log function removal result
     remove_function(AtmTaskExecutor).
 
 
@@ -223,7 +228,7 @@ check_openfaas_availability() ->
 %%--------------------------------------------------------------------
 -spec build_function_name(
     atm_workflow_execution:id(),
-    pos_integer(),
+    atm_lane_execution:index(),
     atm_lambda_snapshot:record()
 ) ->
     binary().

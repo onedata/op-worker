@@ -42,7 +42,11 @@
 %%%===================================================================
 
 
--spec create_run(pos_integer(), atm_workflow_execution:doc(), atm_workflow_execution_ctx:record()) ->
+-spec create_run(
+    atm_lane_execution:index(),
+    atm_workflow_execution:doc(),
+    atm_workflow_execution_ctx:record()
+) ->
     atm_workflow_execution:doc() | no_return().
 create_run(AtmLaneIndex, AtmWorkflowExecutionDoc, AtmWorkflowExecutionCtx) ->
     try
@@ -72,7 +76,7 @@ delete_run(#atm_lane_execution_run{
 
 %% @private
 -spec create_run_internal(
-    pos_integer(),
+    atm_lane_execution:index(),
     atm_workflow_execution:doc(),
     atm_workflow_execution_ctx:record()
 ) ->
@@ -117,7 +121,7 @@ create_run_internal(AtmLaneIndex, AtmWorkflowExecutionDoc, AtmWorkflowExecutionC
 
 %% @private
 -spec build_run_creation_ctx(
-    pos_integer(),
+    atm_lane_execution:index(),
     atm_workflow_execution:doc(),
     atm_workflow_execution_ctx:record()
 ) ->

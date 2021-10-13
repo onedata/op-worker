@@ -41,11 +41,14 @@
 
 -record(atm_lane_execution, {
     schema_id :: automation:id(),
+    retries_left :: non_neg_integer(),
     runs :: [atm_lane_execution:run()]
 }).
 
 -record(atm_lane_execution_run, {
-    run_no :: undefined | pos_integer(),
+    run_num :: undefined | pos_integer(),
+    origin_run_num = undefined :: undefined | pos_integer(),
+
     status :: atm_lane_execution:status(),
     % Flag used to differentiate reasons why lane execution run is aborting
     aborting_reason = undefined :: undefined | cancel | failure,
@@ -63,6 +66,11 @@
     lane_index :: pos_integer(),
     lane_schema :: atm_lane_schema:record(),
     iterated_store_id :: atm_store:id()
+}).
+
+-record(atm_lane_execution_run_teardown_ctx, {
+    workflow_execution_ctx :: atm_workflow_execution_ctx:record(),
+    is_retried_scheduled :: boolean()
 }).
 
 -record(atm_parallel_box_execution_creation_args, {

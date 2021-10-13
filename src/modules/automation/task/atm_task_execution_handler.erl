@@ -44,7 +44,7 @@
 %% API
 -export([
     setup/2,
-    teardown/1,
+    teardown/2,
 
     process_item/5,
     process_results/4,
@@ -78,7 +78,7 @@ setup(AtmWorkflowExecutionCtx, AtmTaskExecutionIdOrDoc) ->
         AtmSystemAuditLogId
     ),
     AtmWorkflowExecutionEnvDiff = fun(AtmWorkflowExecutionEnv) ->
-        atm_workflow_execution_env:set_task_audit_log_store_container(
+        atm_workflow_execution_env:add_task_audit_log_store_container(
             AtmTaskExecutionId, AtmTaskAuditLogStoreContainer, AtmWorkflowExecutionEnv
         )
     end,
@@ -86,13 +86,14 @@ setup(AtmWorkflowExecutionCtx, AtmTaskExecutionIdOrDoc) ->
     {AtmTaskExecutionSpec, AtmWorkflowExecutionEnvDiff}.
 
 
--spec teardown(atm_task_execution:id()) -> ok | no_return().
-teardown(AtmTaskExecutionId) ->
+-spec teardown(atm_lane_execution_handler:teardown_ctx(), atm_task_execution:id()) ->
+    ok | no_return().
+teardown(AtmLaneExecutionRunTeardownCtx, AtmTaskExecutionId) ->
     #document{value = #atm_task_execution{
         executor = AtmTaskExecutor
     }} = ensure_atm_task_execution_doc(AtmTaskExecutionId),
 
-    atm_task_executor:teardown(AtmTaskExecutor).
+    atm_task_executor:teardown(AtmLaneExecutionRunTeardownCtx, AtmTaskExecutor).
 
 
 -spec process_item(
@@ -147,31 +148,19 @@ handle_ended(AtmTaskExecutionId) ->
     Diff = fun
         (#atm_task_execution{status = ?PENDING_STATUS} = AtmTaskExecution) ->
             {ok, AtmTaskExecution#atm_task_execution{status = ?SKIPPED_STATUS}};
+
         (#atm_task_execution{
             status = ?ACTIVE_STATUS,
             items_in_processing = ItemsInProcessing,
             items_processed = ItemsProcessed,
-            items_failed = ItemsFailed,
-            result_specs = AtmTaskExecutionResultSpecs
+            items_failed = ItemsFailed
         } = AtmTaskExecution) ->
-            % TODO VFS-8248 rm ended status hack when proper exception/retry solution is implemented
-            % For now if task has exception mapper defined then even if some items failed task
-            % should be considered as finished as maybe there is lane that retries failed items
-            HasExceptionMapper = lists:any(fun(AtmTaskExecutionResultSpec) ->
-                case atm_task_execution_result_spec:get_name(AtmTaskExecutionResultSpec) of
-                    <<"exception">> -> atm_task_execution_result_spec:is_dispatched(AtmTaskExecutionResultSpec);
-                    _ -> false
-                end
-            end, AtmTaskExecutionResultSpecs),
-
             % atm workflow execution may have been abruptly interrupted by e.g.
             % provider restart which resulted in stale `items_in_processing`
-            NewAtmTaskExecution = case {HasExceptionMapper, ItemsFailed + ItemsInProcessing} of
-                {true, _} ->
+            NewAtmTaskExecution = case ItemsFailed + ItemsInProcessing of
+                0 ->
                     AtmTaskExecution#atm_task_execution{status = ?FINISHED_STATUS};
-                {false, 0} ->
-                    AtmTaskExecution#atm_task_execution{status = ?FINISHED_STATUS};
-                {false, AllFailedItems} ->
+                AllFailedItems ->
                     AtmTaskExecution#atm_task_execution{
                         status = ?FAILED_STATUS,
                         items_in_processing = 0,
@@ -180,6 +169,7 @@ handle_ended(AtmTaskExecutionId) ->
                     }
             end,
             {ok, NewAtmTaskExecution};
+
         (_) ->
             {error, already_ended}
     end,
@@ -242,53 +232,49 @@ process_item_insecure(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, ReportR
 ) ->
     ok | error.
 handle_exception(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, #{<<"exception">> := Reason}) ->
-    EnrichedExceptionLog = #{
-        <<"severity">> => ?LOGGER_ERROR,
-        <<"item">> => Item,
-        <<"reason">> => Reason
-    },
-    AtmWorkflowExecutionLogger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
-
-    atm_workflow_execution_logger:task_append_logs(
-        EnrichedExceptionLog, #{}, AtmWorkflowExecutionLogger
-    ),
-
-    AtmTaskExecutionDoc = update_items_failed_and_processed(AtmTaskExecutionId),
-
-    % TODO VFS-8248 rm mapping hack when proper exception/retry solution is implemented
-    % For now "normal" result mapping machinery is used to save failed items when exception occurs
-    % so that retrying lane can be defined
-    #document{value = #atm_task_execution{
-        result_specs = AtmTaskExecutionResultSpecs
-    }} = AtmTaskExecutionDoc,
-
-    lists:foldl(fun
-        (AtmTaskExecutionResultSpec, error) ->
-            case atm_task_execution_result_spec:get_name(AtmTaskExecutionResultSpec) of
-                <<"exception">> ->
-                    case atm_task_execution_result_spec:is_dispatched(AtmTaskExecutionResultSpec) of
-                        true ->
-                            % TODO VFS-8248 rm hack when proper exception/retry solution is implemented
-                            % For now when exception mapper is defined exception should stop executing
-                            % rest of workflow
-                            catch atm_task_execution_result_spec:consume_result(
-                                AtmWorkflowExecutionCtx, AtmTaskExecutionResultSpec, Item
-                            ),
-                            ok;
-                        false ->
-                            error
-                    end;
-                _ ->
-                    error
-            end;
-        (_AtmTaskExecutionResultSpec, ok) ->
-            ok
-    end, error, AtmTaskExecutionResultSpecs);
+    log_exception(Item, Reason, AtmWorkflowExecutionCtx),
+    append_failed_item_to_lane_run_exception_store(Item, AtmWorkflowExecutionCtx),
+    update_items_failed_and_processed(AtmTaskExecutionId);
 
 handle_exception(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, {error, _} = Error) ->
     handle_exception(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, #{
         <<"exception">> => errors:to_json(Error)
     }).
+
+
+%% @private
+-spec log_exception(automation:item(), json_utils:json_term(), atm_workflow_execution_ctx:record()) ->
+    ok.
+log_exception(Item, Reason, AtmWorkflowExecutionCtx) ->
+    Log = #{
+        <<"severity">> => ?LOGGER_ERROR,
+        <<"item">> => Item,
+        <<"reason">> => Reason
+    },
+    Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
+
+    atm_workflow_execution_logger:task_append_logs(Log, #{}, Logger).
+
+
+%% @private
+-spec append_failed_item_to_lane_run_exception_store(
+    automation:item(),
+    atm_workflow_execution_ctx:record()
+) ->
+    ok | no_return().
+append_failed_item_to_lane_run_exception_store(Item, AtmWorkflowExecutionCtx) ->
+    AtmLaneRunExceptionStoreContainer = atm_workflow_execution_env:get_lane_run_exception_store_container(
+        atm_workflow_execution_ctx:get_env(AtmWorkflowExecutionCtx)
+    ),
+    Operation = #atm_store_container_operation{
+        type = append,
+        options = #{<<"isBatch">> => is_list(Item)},
+        argument = Item,
+        workflow_execution_auth = atm_workflow_execution_ctx:get_auth(AtmWorkflowExecutionCtx)
+    },
+    atm_list_store_container:apply_operation(AtmLaneRunExceptionStoreContainer, Operation),
+
+    ok.
 
 
 %% @private
@@ -330,9 +316,9 @@ update_items_processed(AtmTaskExecutionId) ->
 
 
 %% @private
--spec update_items_failed_and_processed(atm_task_execution:id()) -> atm_task_execution:doc().
+-spec update_items_failed_and_processed(atm_task_execution:id()) -> ok.
 update_items_failed_and_processed(AtmTaskExecutionId) ->
-    {ok, AtmTaskExecutionDoc} = atm_task_execution:update(AtmTaskExecutionId, fun(#atm_task_execution{
+    {ok, _} = atm_task_execution:update(AtmTaskExecutionId, fun(#atm_task_execution{
         items_in_processing = ItemsInProcessing,
         items_processed = ItemsProcessed,
         items_failed = ItemsFailed
@@ -343,7 +329,7 @@ update_items_failed_and_processed(AtmTaskExecutionId) ->
             items_failed = ItemsFailed + 1
         }}
     end),
-    AtmTaskExecutionDoc.
+    ok.
 
 
 %% @private

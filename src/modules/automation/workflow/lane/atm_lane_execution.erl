@@ -7,6 +7,7 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% Model storing information about automation lane execution.
+%%% TODO CAUTION - FUNCTIONS MAY BE USED DURING DOC UPDATE AND AS SUCH MUSTNT TOUCH DATASTORE
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_lane_execution).
@@ -18,27 +19,37 @@
 
 %% API
 -export([
+    resolve_selector/2,
+
     get_schema_id/2,
     get_schema/2,
-    get_curr_run/2
+
+    get_curr_run/2,
+    update_curr_run/3, update_curr_run/4
 ]).
--export([update_curr_run/3, update_curr_run/4]).
+-export([get/2, update/3]).
 -export([to_json/1]).
 
 %% persistent_record callbacks
 -export([version/0, upgrade_encoded_record/2, db_encode/2, db_decode/2]).
 
 
+-type index() :: pos_integer().
+-type selector() :: current | index().
+
 -type status() ::
     ?SCHEDULED_STATUS | ?PREPARING_STATUS | ?ENQUEUED_STATUS |
     ?ACTIVE_STATUS | ?ABORTING_STATUS |
     ?FINISHED_STATUS | ?CANCELLED_STATUS | ?FAILED_STATUS | ?INTERRUPTED_STATUS.
 
+-type run_diff() :: fun((run()) -> {ok, run()} | {error, term()}).
 -type run() :: #atm_lane_execution_run{}.
 
+-type diff() :: fun((record()) -> {ok, record()} | {error, term()}).
 -type record() :: #atm_lane_execution{}.
 
--export_type([status/0, run/0, record/0]).
+-export_type([status/0, run_diff/0, run/0]).
+-export_type([index/0, selector/0, diff/0, record/0]).
 
 
 %%%===================================================================
@@ -46,47 +57,44 @@
 %%%===================================================================
 
 
+-spec resolve_selector(selector(), atm_workflow_execution:record()) -> index().
+resolve_selector(current, #atm_workflow_execution{curr_lane_index = CurrAtmLaneIndex}) ->
+    CurrAtmLaneIndex;
+resolve_selector(AtmLaneIndex, _) ->
+    AtmLaneIndex.
+
+
 %% @private
--spec get_schema_id(undefined | pos_integer(), atm_workflow_execution:record()) ->
+-spec get_schema_id(selector(), atm_workflow_execution:record()) ->
     automation:id().
-get_schema_id(GivenLaneIndex, #atm_workflow_execution{
-    lanes = AtmLaneExecutions,
-    curr_lane_index = CurrLaneIndex
-}) ->
-    LaneIndex = utils:ensure_defined(GivenLaneIndex, CurrLaneIndex),
-    #atm_lane_execution{schema_id = AtmLaneSchema} = lists:nth(LaneIndex, AtmLaneExecutions),
-    AtmLaneSchema.
+get_schema_id(AtmLaneSelector, AtmWorkflowExecution) ->
+    AtmLaneExecution = get(AtmLaneSelector, AtmWorkflowExecution),
+    AtmLaneExecution#atm_lane_execution.schema_id.
 
 
 %% @private
--spec get_schema(undefined | pos_integer(), atm_workflow_execution:record()) ->
+-spec get_schema(selector(), atm_workflow_execution:record()) ->
     atm_lane_schema:record().
-get_schema(GivenLaneIndex, #atm_workflow_execution{
-    schema_snapshot_id = AtmWorkflowSchemaSnapshotId,
-    curr_lane_index = CurrLaneIndex
+get_schema(AtmLaneSelector, AtmWorkflowExecution = #atm_workflow_execution{
+    schema_snapshot_id = AtmWorkflowSchemaSnapshotId
 }) ->
-    LaneIndex = utils:ensure_defined(GivenLaneIndex, CurrLaneIndex),
+    AtmLaneIndex = resolve_selector(AtmLaneSelector, AtmWorkflowExecution),
 
-    {ok, #document{value = #atm_workflow_schema_snapshot{
-        lanes = AtmLaneSchemas
-    }}} = atm_workflow_schema_snapshot:get(AtmWorkflowSchemaSnapshotId),
+    {ok, #document{value = AtmWorkflowSchemaSnapshot}} = atm_workflow_schema_snapshot:get(
+        AtmWorkflowSchemaSnapshotId
+    ),
+    lists:nth(AtmLaneIndex, AtmWorkflowSchemaSnapshot#atm_workflow_schema_snapshot.lanes).
 
-    lists:nth(LaneIndex, AtmLaneSchemas).
 
-
--spec get_curr_run(undefined | pos_integer(), atm_workflow_execution:record()) ->
+-spec get_curr_run(selector(), atm_workflow_execution:record()) ->
     {ok, run()} | errors:error().
-get_curr_run(GivenLaneIndex, #atm_workflow_execution{
-    lanes = AtmLaneExecutions,
-    curr_lane_index = CurrLaneIndex,
-    curr_run_no = CurrRunNo
+get_curr_run(AtmLaneSelector, AtmWorkflowExecution = #atm_workflow_execution{
+    curr_run_num = CurrRunNum
 }) ->
-    LaneIndex = utils:ensure_defined(GivenLaneIndex, CurrLaneIndex),
-
-    case lists:nth(LaneIndex, AtmLaneExecutions) of
-        #atm_lane_execution{runs = [#atm_lane_execution_run{run_no = undefined} = Run | _]} ->
+    case get(AtmLaneSelector, AtmWorkflowExecution) of
+        #atm_lane_execution{runs = [#atm_lane_execution_run{run_num = undefined} = Run | _]} ->
             {ok, Run};
-        #atm_lane_execution{runs = [#atm_lane_execution_run{run_no = CurrRunNo} = Run | _]} ->
+        #atm_lane_execution{runs = [#atm_lane_execution_run{run_num = CurrRunNum} = Run | _]} ->
             {ok, Run};
         _ ->
             ?ERROR_NOT_FOUND
@@ -94,35 +102,30 @@ get_curr_run(GivenLaneIndex, #atm_workflow_execution{
 
 
 %% @private
--spec update_curr_run(
-    undefined | pos_integer(),
-    fun((atm_lane_execution:run()) -> {ok, atm_lane_execution:run()} | errors:error()),
-    atm_workflow_execution:record()
-) ->
+-spec update_curr_run(selector(), run_diff(), atm_workflow_execution:record()) ->
     {ok, atm_workflow_execution:record()} | errors:error().
-update_curr_run(GivenLaneIndex, UpdateFun, AtmWorkflowExecution) ->
-    update_curr_run(GivenLaneIndex, UpdateFun, undefined, AtmWorkflowExecution).
+update_curr_run(AtmLaneSelector, UpdateFun, AtmWorkflowExecution) ->
+    update_curr_run(AtmLaneSelector, UpdateFun, undefined, AtmWorkflowExecution).
 
 
 -spec update_curr_run(
-    undefined | pos_integer(),
-    fun((atm_lane_execution:run()) -> {ok, atm_lane_execution:run()} | errors:error()),
+    selector(),
+    run_diff(),
     undefined | atm_lane_execution:run(),
     atm_workflow_execution:record()
 ) ->
     {ok, atm_workflow_execution:record()} | errors:error().
-update_curr_run(GivenLaneIndex, Diff, Default, AtmWorkflowExecution = #atm_workflow_execution{
+update_curr_run(AtmLaneSelector, Diff, Default, AtmWorkflowExecution = #atm_workflow_execution{
     lanes = AtmLaneExecutions,
-    curr_lane_index = CurrLaneIndex,
-    curr_run_no = CurrRunNo
+    curr_run_num = CurrRunNum
 }) ->
-    LaneIndex = utils:ensure_defined(GivenLaneIndex, CurrLaneIndex),
-    AtmLaneExecution = #atm_lane_execution{runs = Runs} = lists:nth(LaneIndex, AtmLaneExecutions),
+    AtmLaneIndex = resolve_selector(AtmLaneSelector, AtmWorkflowExecution),
+    AtmLaneExecution = #atm_lane_execution{runs = Runs} = maps:get(AtmLaneIndex, AtmLaneExecutions),
 
     UpdateRunsResult = case Runs of
-        [#atm_lane_execution_run{run_no = RunNo} = CurrRun | RestRuns] when
-            RunNo == undefined;
-            RunNo == CurrRunNo
+        [#atm_lane_execution_run{run_num = RunNum} = CurrRun | RestRuns] when
+            RunNum == undefined;
+            RunNum == CurrRunNum
         ->
             case Diff(CurrRun) of
                 {ok, UpdatedCurrRun} -> {ok, [UpdatedCurrRun | RestRuns]};
@@ -137,9 +140,31 @@ update_curr_run(GivenLaneIndex, Diff, Default, AtmWorkflowExecution = #atm_workf
     case UpdateRunsResult of
         {ok, NewRuns} ->
             NewAtmLaneExecution = AtmLaneExecution#atm_lane_execution{runs = NewRuns},
-            {ok, AtmWorkflowExecution#atm_workflow_execution{lanes = lists_utils:replace_at(
-                NewAtmLaneExecution, LaneIndex, AtmLaneExecutions
-            )}};
+            {ok, AtmWorkflowExecution#atm_workflow_execution{lanes = AtmLaneExecutions#{
+                AtmLaneIndex => NewAtmLaneExecution
+            }}};
+        {error, _} = Error2 ->
+            Error2
+    end.
+
+
+-spec get(selector(), atm_workflow_execution:record()) -> record().
+get(AtmLaneSelector, AtmWorkflowExecution = #atm_workflow_execution{lanes = AtmLaneExecutions}) ->
+    maps:get(resolve_selector(AtmLaneSelector, AtmWorkflowExecution), AtmLaneExecutions).
+
+
+-spec update(selector(), diff(), atm_workflow_execution:record()) ->
+    {ok, atm_workflow_execution:record()} | errors:error().
+update(AtmLaneSelector, Diff, AtmWorkflowExecution = #atm_workflow_execution{
+    lanes = AtmLaneExecutions
+}) ->
+    AtmLaneIndex = resolve_selector(AtmLaneSelector, AtmWorkflowExecution),
+
+    case Diff(maps:get(AtmLaneIndex, AtmLaneExecutions)) of
+        {ok, NewAtmLaneExecution} ->
+            {ok, AtmWorkflowExecution#atm_workflow_execution{lanes = AtmLaneExecutions#{
+                AtmLaneIndex => NewAtmLaneExecution
+            }}};
         {error, _} = Error2 ->
             Error2
     end.
@@ -156,25 +181,29 @@ to_json(#atm_lane_execution{schema_id = AtmLaneSchemaId, runs = Runs}) ->
 %% @private
 -spec run_to_json(run()) -> json_utils:json_map().
 run_to_json(#atm_lane_execution_run{
-    run_no = RunNo,
+    run_num = RunNum,
+    origin_run_num = OriginRunNum,
     status = Status,
     iterated_store_id = IteratedStoreId,
     exception_store_id = ExceptionStoreId,
     parallel_boxes = AtmParallelBoxExecutions
 }) ->
     #{
-%%        <<"runNo">> => utils:undefined_to_null(RunNo),  %% TODO uncomment when gui allows null
-        <<"runNo">> => utils:ensure_defined(RunNo, undefined, 100),
+%%        <<"runNumber">> => utils:undefined_to_null(RunNum),  %% TODO uncomment when gui allows null
+        <<"runNumber">> => utils:ensure_defined(RunNum, 100),
+        <<"originRunNumber">> => utils:undefined_to_null(OriginRunNum),
+        <<"status">> => atom_to_binary(Status, utf8),
         <<"iteratedStoreId">> => utils:undefined_to_null(IteratedStoreId),
         <<"exceptionStoreId">> => utils:undefined_to_null(ExceptionStoreId),
-        <<"status">> => atom_to_binary(Status, utf8),
         <<"parallelBoxes">> => lists:map(
             fun atm_parallel_box_execution:to_json/1, AtmParallelBoxExecutions
         ),
 
         % TODO VFS-8226 add more types after implementing retries/reruns
-        <<"runType">> => <<"regular">>,
-        <<"srcRunNo">> => null
+        <<"runType">> => case OriginRunNum of
+            undefined -> <<"regular">>;
+            _ -> <<"retry">>
+        end
     }.
 
 
@@ -201,10 +230,8 @@ upgrade_encoded_record(1, #{
         _ -> StatusBin
     end,
 
-    {2, #{<<"schemaId">> => AtmLaneSchemaId, <<"runs">> => [#{
-        <<"runNo">> => 1,
-        <<"iteratedStoreId">> => null,
-        <<"exceptionStoreId">> => null,
+    {2, #{<<"schemaId">> => AtmLaneSchemaId, <<"retriesLeft">> => 0, <<"runs">> => [#{
+        <<"runNum">> => 1,
         <<"status">> => UpgradedStatusBin,
         <<"parallelBoxes">> => AtmParallelBoxExecutionsJson
     }]}}.
@@ -212,9 +239,14 @@ upgrade_encoded_record(1, #{
 
 -spec db_encode(record(), persistent_record:nested_record_encoder()) ->
     json_utils:json_map().
-db_encode(#atm_lane_execution{schema_id = AtmLaneSchemaId, runs = Runs}, NestedRecordEncoder) ->
+db_encode(#atm_lane_execution{
+    schema_id = AtmLaneSchemaId,
+    retries_left = RetriesLeft,
+    runs = Runs
+}, NestedRecordEncoder) ->
     #{
         <<"schemaId">> => AtmLaneSchemaId,
+        <<"retriesLeft">> => RetriesLeft,
         <<"runs">> => lists:map(fun(Run) -> encode_run(NestedRecordEncoder, Run) end, Runs)
     }.
 
@@ -223,28 +255,40 @@ db_encode(#atm_lane_execution{schema_id = AtmLaneSchemaId, runs = Runs}, NestedR
 -spec encode_run(persistent_record:nested_record_encoder(), run()) ->
     json_utils:json_map().
 encode_run(NestedRecordEncoder, #atm_lane_execution_run{
-    run_no = RunNo,
+    run_num = RunNum,
+    origin_run_num = OriginRunNum,
     status = Status,
+    aborting_reason = AbortingReason,
     iterated_store_id = IteratedStoreId,
     exception_store_id = ExceptionStoreId,
     parallel_boxes = AtmParallelBoxExecutions
 }) ->
-    #{
-        <<"runNo">> => RunNo,
-        <<"iteratedStoreId">> => utils:undefined_to_null(IteratedStoreId),
-        <<"exceptionStoreId">> => utils:undefined_to_null(ExceptionStoreId),
+    EncodedRun1 = #{
+        <<"runNum">> => RunNum,
         <<"status">> => atom_to_binary(Status, utf8),
         <<"parallelBoxes">> => lists:map(fun(AtmParallelBoxExecution) ->
             NestedRecordEncoder(AtmParallelBoxExecution, atm_parallel_box_execution)
         end, AtmParallelBoxExecutions)
-    }.
+    },
+    EncodedRun2 = maps_utils:put_if_defined(EncodedRun1, <<"originRunNum">>, OriginRunNum),
+    EncodedRun3 = case AbortingReason of
+        undefined -> EncodedRun2;
+        _ -> EncodedRun2#{<<"abortingReason">> => atom_to_binary(AbortingReason, utf8)}
+    end,
+    EncodedRun4 = maps_utils:put_if_defined(EncodedRun3, <<"iteratedStoreId">>, IteratedStoreId),
+    maps_utils:put_if_defined(EncodedRun4, <<"exceptionStoreId">>, ExceptionStoreId).
 
 
 -spec db_decode(json_utils:json_map(), persistent_record:nested_record_decoder()) ->
     record().
-db_decode(#{<<"schemaId">> := AtmLaneSchemaId, <<"runs">> := RunsJson}, NestedRecordDecoder) ->
+db_decode(#{
+    <<"schemaId">> := AtmLaneSchemaId,
+    <<"retriesLeft">> := RetriesLeft,
+    <<"runs">> := RunsJson
+}, NestedRecordDecoder) ->
     #atm_lane_execution{
         schema_id = AtmLaneSchemaId,
+        retries_left = RetriesLeft,
         runs = lists:map(fun(RunJson) -> decode_run(NestedRecordDecoder, RunJson) end, RunsJson)
     }.
 
@@ -252,18 +296,21 @@ db_decode(#{<<"schemaId">> := AtmLaneSchemaId, <<"runs">> := RunsJson}, NestedRe
 %% @private
 -spec decode_run(persistent_record:nested_record_decoder(), json_utils:json_map()) ->
     run().
-decode_run(NestedRecordDecoder, #{
-    <<"runNo">> := RunNo,
-    <<"iteratedStoreId">> := IteratedStoreId,
-    <<"exceptionStoreId">> := ExceptionStoreId,
+decode_run(NestedRecordDecoder, EncodedRun = #{
+    <<"runNum">> := RunNum,
     <<"status">> := StatusBin,
     <<"parallelBoxes">> := AtmParallelBoxExecutionsJson
 }) ->
     #atm_lane_execution_run{
-        run_no = RunNo,
+        run_num = RunNum,
+        origin_run_num = maps:get(<<"originRunNum">>, EncodedRun, undefined),
         status = binary_to_atom(StatusBin, utf8),
-        iterated_store_id = utils:null_to_undefined(IteratedStoreId),
-        exception_store_id = utils:null_to_undefined(ExceptionStoreId),
+        aborting_reason = case maps:get(<<"abortingReason">>, EncodedRun, undefined) of
+            undefined -> undefined;
+            EncodedAbortingReason -> binary_to_atom(EncodedAbortingReason, utf8)
+        end,
+        iterated_store_id = maps:get(<<"iteratedStoreId">>, EncodedRun, undefined),
+        exception_store_id = maps:get(<<"exceptionStoreId">>, EncodedRun, undefined),
         parallel_boxes = lists:map(fun(AtmParallelBoxExecutionJson) ->
             NestedRecordDecoder(AtmParallelBoxExecutionJson, atm_parallel_box_execution)
         end, AtmParallelBoxExecutionsJson)

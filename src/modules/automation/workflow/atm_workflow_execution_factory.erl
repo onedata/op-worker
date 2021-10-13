@@ -39,7 +39,7 @@
     lambda_snapshot_registry = undefined :: undefined | atm_workflow_execution:lambda_snapshot_registry(),
     workflow_store_registry = undefined :: undefined | atm_workflow_execution:store_registry(),
     workflow_audit_log_id = undefined :: undefined | atm_store:id(),
-    lanes = undefined :: undefined | [atm_lane_execution:record()]
+    lanes = undefined :: undefined | #{atm_lane_execution:index() => atm_lane_execution:record()}
 }).
 -type execution_components() :: #execution_components{}.
 
@@ -262,7 +262,7 @@ create_workflow_stores(CreationCtx = #creation_ctx{
                 AtmWorkflowExecutionAuth, StoreInitialValue, AtmStoreSchema
             ),
             NewCreationCtx#creation_ctx{
-                workflow_execution_env = atm_workflow_execution_env:add_workflow_store(
+                workflow_execution_env = atm_workflow_execution_env:add_workflow_store_mapping(
                     AtmStoreSchemaId, AtmStoreId, AtmWorkflowExecutionEnv
                 ),
                 execution_components = ExecutionComponents#execution_components{
@@ -314,27 +314,33 @@ create_workflow_audit_log(CreationCtx = #creation_ctx{
 %% @private
 -spec create_lane_executions(creation_ctx()) -> creation_ctx().
 create_lane_executions(CreationCtx = #creation_ctx{
-    creation_args = #creation_args{
-        workflow_schema_doc = #document{value = #od_atm_workflow_schema{
-            lanes = [FirstAtmLaneSchema | RestAtmLaneSchemas]
-        }}
-    },
+    creation_args = #creation_args{workflow_schema_doc = #document{
+        value = #od_atm_workflow_schema{lanes = AtmLaneSchemas}
+    }},
     execution_components = ExecutionComponents
 }) ->
-    FirstAtmLaneExecution = #atm_lane_execution{
-        schema_id = FirstAtmLaneSchema#atm_lane_schema.id,
-        runs = [#atm_lane_execution_run{run_no = 1, status = ?SCHEDULED_STATUS}]
-    },
-    RestAtmLaneExecutions = lists:map(fun(AtmLaneSchema) ->
-        #atm_lane_execution{
-            schema_id = AtmLaneSchema#atm_lane_schema.id,
-            runs = []
-        }
-    end, RestAtmLaneSchemas),
-
     CreationCtx#creation_ctx{execution_components = ExecutionComponents#execution_components{
-        lanes = [FirstAtmLaneExecution | RestAtmLaneExecutions]
+        lanes = lists:foldl(fun({AtmLaneIndex, AtmLaneSchema}, Acc) ->
+            Acc#{AtmLaneIndex => create_lane_execution(AtmLaneIndex, AtmLaneSchema)}
+        end, #{}, lists_utils:enumerate(AtmLaneSchemas))
     }}.
+
+
+%% @private
+-spec create_lane_execution(atm_lane_execution:index(), atm_lane_schema:record()) ->
+    atm_lane_execution:record().
+create_lane_execution(1, #atm_lane_schema{id = AtmLaneSchemaId, max_retries = MaxRetries}) ->
+    #atm_lane_execution{
+        schema_id = AtmLaneSchemaId,
+        retries_left = MaxRetries,
+        runs = [#atm_lane_execution_run{run_num = 1, status = ?SCHEDULED_STATUS}]
+    };
+create_lane_execution(_, #atm_lane_schema{id = AtmLaneSchemaId, max_retries = MaxRetries}) ->
+    #atm_lane_execution{
+        schema_id = AtmLaneSchemaId,
+        retries_left = MaxRetries,
+        runs = []
+    }.
 
 
 %% @private
@@ -373,10 +379,10 @@ create_workflow_execution_doc(#creation_ctx{
             system_audit_log_id = AtmWorkflowAuditLogId,
 
             lanes = AtmLaneExecutions,
-            lanes_count = length(AtmLaneExecutions),
+            lanes_count = map_size(AtmLaneExecutions),
 
             curr_lane_index = 1,
-            curr_run_no = 1,
+            curr_run_num = 1,
 
             status = ?SCHEDULED_STATUS,
             prev_status = ?SCHEDULED_STATUS,
@@ -432,7 +438,7 @@ delete_execution_components(ExecutionComponents = #execution_components{
 delete_execution_components(ExecutionComponents = #execution_components{
     lanes = AtmLaneExecutions
 }) when AtmLaneExecutions /= undefined ->
-    catch delete_lane_executions(AtmLaneExecutions),
+    catch delete_lane_executions(maps:values(AtmLaneExecutions)),
 
     delete_execution_components(ExecutionComponents#execution_components{
         lanes = undefined

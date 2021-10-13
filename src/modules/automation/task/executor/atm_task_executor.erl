@@ -27,7 +27,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([build/3, setup/2, teardown/1, in_readonly_mode/1, run/3]).
+-export([build/3, setup/2, teardown/2, in_readonly_mode/1, run/3]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
@@ -44,13 +44,13 @@
 %%%===================================================================
 
 
--callback build(atm_workflow_execution:id(), pos_integer(), atm_lambda_snapshot:record()) ->
+-callback build(atm_workflow_execution:id(), atm_lane_execution:index(), atm_lambda_snapshot:record()) ->
     record() | no_return().
 
 -callback setup(atm_workflow_execution_ctx:record(), record()) ->
     workflow_engine:task_spec() | no_return().
 
--callback teardown(record()) -> ok | no_return().
+-callback teardown(atm_lane_execution_handler:teardown_ctx(), record()) -> ok | no_return().
 
 -callback in_readonly_mode(record()) -> boolean().
 
@@ -63,7 +63,7 @@
 %%%===================================================================
 
 
--spec build(atm_workflow_execution:id(), pos_integer(), atm_lambda_snapshot:record()) ->
+-spec build(atm_workflow_execution:id(), atm_lane_execution:index(), atm_lambda_snapshot:record()) ->
     record() | no_return().
 build(AtmWorkflowExecutionId, AtmLaneIndex, AtmLambdaSnapshot = #atm_lambda_snapshot{
     operation_spec = AtmLambadaOperationSpec
@@ -80,10 +80,10 @@ setup(AtmWorkflowExecutionCtx, AtmTaskExecutor) ->
     Model:setup(AtmWorkflowExecutionCtx, AtmTaskExecutor).
 
 
--spec teardown(record()) -> ok | no_return().
-teardown(AtmTaskExecutor) ->
+-spec teardown(atm_lane_execution_handler:teardown_ctx(), record()) -> ok | no_return().
+teardown(AtmLaneExecutionRunTeardownCtx, AtmTaskExecutor) ->
     Model = utils:record_type(AtmTaskExecutor),
-    Model:teardown(AtmTaskExecutor).
+    Model:teardown(AtmLaneExecutionRunTeardownCtx, AtmTaskExecutor).
 
 
 -spec in_readonly_mode(record()) -> boolean().
