@@ -34,12 +34,11 @@
     ?ACTIVE_STATUS | ?ABORTING_STATUS |
     ?FINISHED_STATUS | ?CANCELLED_STATUS | ?FAILED_STATUS | ?INTERRUPTED_STATUS.
 
--type run_elements() :: #atm_lane_execution_run_elements{}.
 -type run() :: #atm_lane_execution_run{}.
 
 -type record() :: #atm_lane_execution{}.
 
--export_type([status/0, run_elements/0, run/0, record/0]).
+-export_type([status/0, run/0, record/0]).
 
 
 %%%===================================================================

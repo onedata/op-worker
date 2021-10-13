@@ -31,7 +31,7 @@
 -export([version/0, db_encode/2, db_decode/2]).
 
 
--type create_ctx() :: #atm_parallel_box_execution_create_ctx{}.
+-type creation_args() :: #atm_parallel_box_execution_creation_args{}.
 
 -type status() :: atm_task_execution:status().
 
@@ -43,7 +43,7 @@
 }).
 -type record() :: #atm_parallel_box_execution{}.
 
--export_type([create_ctx/0, status/0, record/0]).
+-export_type([creation_args/0, status/0, record/0]).
 
 
 %%%===================================================================
@@ -51,15 +51,15 @@
 %%%===================================================================
 
 
--spec create_all(atm_lane_execution_factory:create_run_ctx()) ->
+-spec create_all(atm_lane_execution_factory:run_creation_args()) ->
     [record()] | no_return().
-create_all(AtmLaneExecutionRunCreateCtx = #atm_lane_execution_run_create_ctx{
+create_all(AtmLaneExecutionRunCreationArgs = #atm_lane_execution_run_creation_args{
     lane_schema = #atm_lane_schema{parallel_boxes = AtmParallelBoxSchemas}
 }) ->
     lists:foldr(fun({AtmParallelBoxIndex, AtmParallelBoxSchema}, AtmParallelBoxExecutions) ->
         try
             AtmParallelBoxExecution = create(
-                AtmLaneExecutionRunCreateCtx, AtmParallelBoxIndex, AtmParallelBoxSchema
+                AtmLaneExecutionRunCreationArgs, AtmParallelBoxIndex, AtmParallelBoxSchema
             ),
             [AtmParallelBoxExecution | AtmParallelBoxExecutions]
         catch _:Reason ->
@@ -72,19 +72,18 @@ create_all(AtmLaneExecutionRunCreateCtx = #atm_lane_execution_run_create_ctx{
 
 
 -spec create(
-    atm_lane_execution_factory:create_run_ctx(),
+    atm_lane_execution_factory:run_creation_args(),
     pos_integer(),
     atm_parallel_box_schema:record()
 ) ->
     record().
-create(AtmLaneExecutionRunCreateCtx, AtmParallelBoxIndex, #atm_parallel_box_schema{
+create(AtmLaneExecutionRunCreationArgs, AtmParallelBoxIndex, #atm_parallel_box_schema{
     id = AtmParallelBoxSchemaId
 } = AtmParallelBoxSchema) ->
-    AtmTaskExecutionDocs = atm_task_execution_factory:create_all(#atm_parallel_box_execution_create_ctx{
-        lane_execution_run_create_ctx = AtmLaneExecutionRunCreateCtx,
+    AtmTaskExecutionDocs = atm_task_execution_factory:create_all(#atm_parallel_box_execution_creation_args{
+        lane_execution_run_creation_args = AtmLaneExecutionRunCreationArgs,
         parallel_box_index = AtmParallelBoxIndex,
-        parallel_box_schema = AtmParallelBoxSchema,
-        tasks = []
+        parallel_box_schema = AtmParallelBoxSchema
     }),
 
     {AtmTaskExecutionRegistry, AtmTaskExecutionStatuses} = lists:foldl(fun(

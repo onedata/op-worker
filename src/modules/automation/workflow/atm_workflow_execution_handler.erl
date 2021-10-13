@@ -88,7 +88,7 @@ init_engine() ->
 start(UserCtx, AtmWorkflowExecutionEnv, #document{
     key = AtmWorkflowExecutionId,
     value = #atm_workflow_execution{
-        lanes_num = LanesNum
+        lanes_count = AtmLanesCount
     }
 }) ->
     ok = atm_workflow_execution_session:init(AtmWorkflowExecutionId, UserCtx),
@@ -98,7 +98,7 @@ start(UserCtx, AtmWorkflowExecutionEnv, #document{
         workflow_handler => ?MODULE,
         execution_context => AtmWorkflowExecutionEnv,
         first_lane_id => 1,
-        prepared_in_advance_lane_id => case LanesNum > 1 of
+        prepared_in_advance_lane_id => case AtmLanesCount > 1 of
             true -> 2;
             false -> undefined
         end
@@ -270,11 +270,11 @@ handle_workflow_execution_ended(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv)
 ensure_all_lane_executions_ended(#document{
     key = AtmWorkflowExecutionId,
     value = AtmWorkflowExecution = #atm_workflow_execution{
-        lanes_num = LanesNum,
+        lanes_count = AtmLanesCount,
         curr_lane_index = CurrLaneIndex
     }
 }, AtmWorkflowExecutionCtx) ->
-    AtmLaneExecutionsToCheck = case CurrLaneIndex < LanesNum of
+    AtmLaneExecutionsToCheck = case CurrLaneIndex < AtmLanesCount of
         true ->
             % next lane may have been preparing in advance
             [CurrLaneIndex, CurrLaneIndex + 1];

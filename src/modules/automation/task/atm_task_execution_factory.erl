@@ -8,7 +8,7 @@
 %%% @doc
 %%% This module handles creation of all documents associated with automation
 %%% task execution (e.g. system audit log, task execution doc, etc.).
-%%% If creation of any element fails then ones created before are deleted.
+%%% If creation of any component fails then ones created before are deleted.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_task_execution_factory).
@@ -24,18 +24,23 @@
 ]).
 
 
--record(atm_task_execution_elements, {
+-record(creation_args, {
+    parallel_box_execution_creation_args :: atm_parallel_box_execution:creation_args(),
+    task_schema :: atm_task_schema:record(),
+    lambda_snapshot :: atm_lambda_snapshot:record()
+}).
+-type creation_args() ::  #creation_args{}.
+
+-record(execution_components, {
     audit_log_store_id = undefined :: undefined | atm_store:id()
 }).
--type elements() :: #atm_task_execution_elements{}.
+-type execution_components() :: #execution_components{}.
 
--record(atm_task_execution_create_ctx, {
-    parallel_box_execution_create_ctx :: atm_parallel_box_execution:create_ctx(),
-    task_schema :: atm_task_schema:record(),
-    lambda_snapshot :: atm_lambda_snapshot:record(),
-    elements :: elements()
+-record(creation_ctx, {
+    creation_args :: creation_args(),
+    execution_components :: execution_components()
 }).
--type create_ctx() :: #atm_task_execution_create_ctx{}.
+-type creation_ctx() :: #creation_ctx{}.
 
 
 %%%===================================================================
@@ -43,14 +48,14 @@
 %%%===================================================================
 
 
--spec create_all(atm_parallel_box_execution:create_ctx()) ->
+-spec create_all(atm_parallel_box_execution:creation_args()) ->
     [atm_task_execution:doc()] | no_return().
-create_all(AtmParallelBoxExecutionCreateCtx = #atm_parallel_box_execution_create_ctx{
+create_all(AtmParallelBoxExecutionCreationArgs = #atm_parallel_box_execution_creation_args{
     parallel_box_schema = #atm_parallel_box_schema{tasks = AtmTaskSchemas}
 }) ->
     lists:foldl(fun(#atm_task_schema{id = AtmTaskSchemaId} = AtmTaskSchema, AtmTaskExecutionDocs) ->
         try
-            [create(AtmParallelBoxExecutionCreateCtx, AtmTaskSchema) | AtmTaskExecutionDocs]
+            [create(AtmParallelBoxExecutionCreationArgs, AtmTaskSchema) | AtmTaskExecutionDocs]
         catch _:Reason ->
             catch delete_all([Doc#document.key || Doc <- AtmTaskExecutionDocs]),
             throw(?ERROR_ATM_TASK_EXECUTION_CREATION_FAILED(AtmTaskSchemaId, Reason))
@@ -58,22 +63,24 @@ create_all(AtmParallelBoxExecutionCreateCtx = #atm_parallel_box_execution_create
     end, [], AtmTaskSchemas).
 
 
--spec create(atm_parallel_box_execution:create_ctx(), atm_task_schema:record()) ->
+-spec create(atm_parallel_box_execution:creation_args(), atm_task_schema:record()) ->
     atm_task_execution:doc().
-create(AtmParallelBoxExecutionCreateCtx, AtmTaskSchema = #atm_task_schema{
+create(AtmParallelBoxExecutionCreationArgs, AtmTaskSchema = #atm_task_schema{
     lambda_id = AtmLambdaId
 }) ->
-    AtmTaskExecutionCreateCtx = create_execution_elements(#atm_task_execution_create_ctx{
-        parallel_box_execution_create_ctx = AtmParallelBoxExecutionCreateCtx,
-        task_schema = AtmTaskSchema,
-        lambda_snapshot = get_lambda_snapshot(AtmLambdaId, AtmParallelBoxExecutionCreateCtx),
-        elements = #atm_task_execution_elements{}
+    CreationCtx = create_execution_components(#creation_ctx{
+        creation_args = #creation_args{
+            parallel_box_execution_creation_args = AtmParallelBoxExecutionCreationArgs,
+            task_schema = AtmTaskSchema,
+            lambda_snapshot = get_lambda_snapshot(AtmLambdaId, AtmParallelBoxExecutionCreationArgs)
+        },
+        execution_components = #execution_components{}
     }),
 
     try
-        create_task_execution_doc(AtmTaskExecutionCreateCtx)
+        create_task_execution_doc(CreationCtx)
     catch Type:Reason ->
-        delete_execution_elements(AtmTaskExecutionCreateCtx#atm_task_execution_create_ctx.elements),
+        delete_execution_components(CreationCtx#creation_ctx.execution_components),
         erlang:Type(Reason)
     end.
 
@@ -87,7 +94,7 @@ delete_all(AtmTaskExecutionIds) ->
 delete(AtmTaskExecutionId) ->
     case atm_task_execution:get(AtmTaskExecutionId) of
         {ok, #document{value = #atm_task_execution{system_audit_log_id = AtmSystemAuditLogId}}} ->
-            delete_execution_elements(#atm_task_execution_elements{
+            delete_execution_components(#execution_components{
                 audit_log_store_id = AtmSystemAuditLogId
             }),
             atm_task_execution:delete(AtmTaskExecutionId);
@@ -102,10 +109,10 @@ delete(AtmTaskExecutionId) ->
 
 
 %% @private
--spec get_lambda_snapshot(automation:id(), atm_parallel_box_execution:create_ctx()) ->
+-spec get_lambda_snapshot(automation:id(), atm_parallel_box_execution:creation_args()) ->
     atm_lambda_snapshot:record().
-get_lambda_snapshot(AtmLambdaId, #atm_parallel_box_execution_create_ctx{
-    lane_execution_run_create_ctx = #atm_lane_execution_run_create_ctx{
+get_lambda_snapshot(AtmLambdaId, #atm_parallel_box_execution_creation_args{
+    lane_execution_run_creation_args = #atm_lane_execution_run_creation_args{
         workflow_execution_doc = #document{value = #atm_workflow_execution{
             lambda_snapshot_registry = AtmLambdaSnapshotRegistry
         }}
@@ -118,31 +125,31 @@ get_lambda_snapshot(AtmLambdaId, #atm_parallel_box_execution_create_ctx{
 
 
 %% @private
--spec create_execution_elements(create_ctx()) -> create_ctx() | no_return().
-create_execution_elements(AtmTaskExecutionCreateCtx) ->
-    lists:foldl(fun(CreateExecutionElementFun, NewAtmTaskExecutionCreateCtx) ->
+-spec create_execution_components(creation_ctx()) -> creation_ctx() | no_return().
+create_execution_components(CreationCtx) ->
+    lists:foldl(fun(CreateExecutionComponentFun, NewCreationCtx) ->
         try
-            CreateExecutionElementFun(NewAtmTaskExecutionCreateCtx)
+            CreateExecutionComponentFun(NewCreationCtx)
         catch Type:Reason ->
-            delete_execution_elements(
-                NewAtmTaskExecutionCreateCtx#atm_task_execution_create_ctx.elements
-            ),
+            delete_execution_components(NewCreationCtx#creation_ctx.execution_components),
             erlang:Type(Reason)
         end
-    end, AtmTaskExecutionCreateCtx, [
+    end, CreationCtx, [
         fun create_audit_log/1
     ]).
 
 
 %% @private
--spec create_audit_log(create_ctx()) -> create_ctx().
-create_audit_log(AtmTaskExecutionCreateCtx = #atm_task_execution_create_ctx{
-    parallel_box_execution_create_ctx = #atm_parallel_box_execution_create_ctx{
-        lane_execution_run_create_ctx = #atm_lane_execution_run_create_ctx{
-            workflow_execution_ctx = AtmWorkflowExecutionCtx
+-spec create_audit_log(creation_ctx()) -> creation_ctx().
+create_audit_log(CreationCtx = #creation_ctx{
+    creation_args = #creation_args{
+        parallel_box_execution_creation_args = #atm_parallel_box_execution_creation_args{
+            lane_execution_run_creation_args = #atm_lane_execution_run_creation_args{
+                workflow_execution_ctx = AtmWorkflowExecutionCtx
+            }
         }
     },
-    elements = ExecutionElements
+    execution_components = ExecutionComponents
 }) ->
     AtmWorkflowExecutionAuth = atm_workflow_execution_ctx:get_auth(AtmWorkflowExecutionCtx),
 
@@ -157,41 +164,41 @@ create_audit_log(AtmTaskExecutionCreateCtx = #atm_task_execution_create_ctx{
         }
     ),
 
-    AtmTaskExecutionCreateCtx#atm_task_execution_create_ctx{
-        elements = ExecutionElements#atm_task_execution_elements{
-            audit_log_store_id = AtmSystemAuditLogId
-        }
-    }.
+    CreationCtx#creation_ctx{execution_components = ExecutionComponents#execution_components{
+        audit_log_store_id = AtmSystemAuditLogId
+    }}.
 
 
 %% @private
--spec delete_execution_elements(elements()) -> ok.
-delete_execution_elements(ExecutionElements = #atm_task_execution_elements{
+-spec delete_execution_components(execution_components()) -> ok.
+delete_execution_components(ExecutionComponents = #execution_components{
     audit_log_store_id = AtmTaskAuditLogId
 }) when AtmTaskAuditLogId /= undefined ->
     catch atm_store_api:delete(AtmTaskAuditLogId),
 
-    delete_execution_elements(ExecutionElements#atm_task_execution_elements{
+    delete_execution_components(ExecutionComponents#execution_components{
         audit_log_store_id = undefined
     });
 
-delete_execution_elements(_) ->
+delete_execution_components(_) ->
     ok.
 
 
 %% @private
--spec create_task_execution_doc(create_ctx()) -> atm_task_execution:doc().
-create_task_execution_doc(#atm_task_execution_create_ctx{
-    parallel_box_execution_create_ctx = #atm_parallel_box_execution_create_ctx{
-        parallel_box_index = AtmParallelBoxIndex,
-        lane_execution_run_create_ctx = #atm_lane_execution_run_create_ctx{
-            workflow_execution_ctx = AtmWorkflowExecutionCtx,
-            lane_index = AtmLaneIndex
-        }
+-spec create_task_execution_doc(creation_ctx()) -> atm_task_execution:doc().
+create_task_execution_doc(#creation_ctx{
+    creation_args = #creation_args{
+        parallel_box_execution_creation_args = #atm_parallel_box_execution_creation_args{
+            parallel_box_index = AtmParallelBoxIndex,
+            lane_execution_run_creation_args = #atm_lane_execution_run_creation_args{
+                workflow_execution_ctx = AtmWorkflowExecutionCtx,
+                lane_index = AtmLaneIndex
+            }
+        },
+        lambda_snapshot = AtmLambdaSnapshot,
+        task_schema = #atm_task_schema{id = AtmTaskSchemaId} = AtmTaskSchema
     },
-    lambda_snapshot = AtmLambdaSnapshot,
-    task_schema = #atm_task_schema{id = AtmTaskSchemaId} = AtmTaskSchema,
-    elements = #atm_task_execution_elements{audit_log_store_id = AtmTaskAuditLogId}
+    execution_components = #execution_components{audit_log_store_id = AtmTaskAuditLogId}
 }) ->
     AtmWorkflowExecutionId = atm_workflow_execution_ctx:get_workflow_execution_id(
         AtmWorkflowExecutionCtx

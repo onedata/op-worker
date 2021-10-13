@@ -69,7 +69,7 @@ handle_ended(LaneIndex, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
         value = NewAtmWorkflowExecution = #atm_workflow_execution{
             % ending current lane run will move 'curr_lane_index' to the next lane run to execute
             curr_lane_index = NextLaneIndex,
-            lanes_num = LanesNum
+            lanes_count = AtmLanesCount
         }
     } = atm_lane_execution_status:handle_ended(LaneIndex, AtmWorkflowExecutionId),
 
@@ -80,7 +80,7 @@ handle_ended(LaneIndex, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
         ?ENDED_PHASE ->
             ?FINISH_EXECUTION;
         _ ->
-            LaneToPrepareInAdvanceIndex = case NextLaneIndex < LanesNum of
+            LaneToPrepareInAdvanceIndex = case NextLaneIndex < AtmLanesCount of
                 true -> NextLaneIndex + 1;
                 false -> undefined
             end,
