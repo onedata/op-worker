@@ -43,6 +43,8 @@ resolve_guid(UserCtx, FileCtx0) ->
 -spec resolve_guid_by_relative_path(
     user_ctx:ctx(), file_ctx:ctx(), file_meta:path(), boolean(), file_meta:mode()
 ) -> fslogic_worker:fuse_response().
+resolve_guid_by_relative_path(UserCtx, RelRootCtx, <<"">>, _CreateDirs, _Mode) ->
+    resolve_guid(UserCtx, RelRootCtx);
 resolve_guid_by_relative_path(UserCtx, RelRootCtx, Path, CreateDirs, Mode) ->
     PathTokens = binary:split(Path, <<"/">>, [global]),
     LeafFileCtx = lists:foldl(fun(PathToken, ParentCtx) ->
