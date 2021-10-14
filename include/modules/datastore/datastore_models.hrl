@@ -1136,6 +1136,9 @@
     store_registry :: atm_workflow_execution:store_registry(),
     system_audit_log_id :: undefined | atm_store:id(),
 
+    % lane execution records are kept as values in map where keys are indices
+    % (from 1 up to `lanes_count`) due to performance and convenience of use
+    % when accessing and modifying random element
     lanes :: #{atm_lane_execution:index() => atm_lane_execution:record()},
     lanes_count :: pos_integer(),
 

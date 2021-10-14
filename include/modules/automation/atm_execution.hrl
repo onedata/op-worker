@@ -43,10 +43,17 @@
 -record(atm_lane_execution, {
     schema_id :: automation:id(),
     retries_left :: non_neg_integer(),
+    % runs are kept in reverse order of their execution meaning that the head
+    % of the list is always the newest run. This simplifies runs management
+    % (only newest run is ever modified) and shows most relevant entries first.
     runs :: [atm_lane_execution:run()]
 }).
 
 -record(atm_lane_execution_run, {
+    % run_num is set right before execution of concrete lane run starts. Until
+    % then it is left 'undefined' (e.g lane runs being prepared in advance) as
+    % it is not possible to predict what it will be (due to possible automatic
+    % retries of previous lane runs)
     run_num :: undefined | pos_integer(),
     origin_run_num = undefined :: undefined | pos_integer(),
 
