@@ -48,7 +48,7 @@ prepare(AtmLaneIndex, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
         NewAtmWorkflowExecutionDoc = atm_lane_execution_factory:create_run(
             AtmLaneIndex, AtmWorkflowExecutionDoc, AtmWorkflowExecutionCtx
         ),
-        AtmLaneExecutionSpec = setup_lane_run(
+        AtmLaneExecutionSpec = initiate_lane_run(
             AtmLaneIndex, NewAtmWorkflowExecutionDoc, AtmWorkflowExecutionCtx
         ),
 
@@ -98,13 +98,13 @@ handle_ended(AtmLaneIndex, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
 
 
 %% @private
--spec setup_lane_run(
+-spec initiate_lane_run(
     atm_lane_execution:index(),
     atm_workflow_execution:doc(),
     atm_workflow_execution_ctx:record()
 ) ->
     workflow_engine:lane_spec() | no_return().
-setup_lane_run(AtmLaneIndex, AtmWorkflowExecutionDoc, AtmWorkflowExecutionCtx) ->
+initiate_lane_run(AtmLaneIndex, AtmWorkflowExecutionDoc, AtmWorkflowExecutionCtx) ->
     AtmWorkflowExecution = AtmWorkflowExecutionDoc#document.value,
     AtmWorkflowExecutionEnv = atm_workflow_execution_ctx:get_env(AtmWorkflowExecutionCtx),
 
@@ -115,7 +115,7 @@ setup_lane_run(AtmLaneIndex, AtmWorkflowExecutionDoc, AtmWorkflowExecutionCtx) -
             parallel_boxes = AtmParallelBoxExecutions
         }} = atm_lane_execution:get_current_run(AtmLaneIndex, AtmWorkflowExecution),
 
-        {AtmParallelBoxExecutionSpecs, AtmWorkflowExecutionEnvDiff} = atm_parallel_box_execution:setup_all(
+        {AtmParallelBoxExecutionSpecs, AtmWorkflowExecutionEnvDiff} = atm_parallel_box_execution:initiate_all(
             AtmWorkflowExecutionCtx, AtmParallelBoxExecutions
         ),
         {ok, #atm_store{container = AtmLaneRunExceptionStoreContainer}} = atm_store_api:get(ExceptionStoreId),
@@ -133,7 +133,7 @@ setup_lane_run(AtmLaneIndex, AtmWorkflowExecutionDoc, AtmWorkflowExecutionCtx) -
         }
     catch _:Reason ->
         AtmLaneSchemaId = atm_lane_execution:get_schema_id(AtmLaneIndex, AtmWorkflowExecution),
-        throw(?ERROR_ATM_LANE_EXECUTION_SETUP_FAILED(AtmLaneSchemaId, Reason))
+        throw(?ERROR_ATM_LANE_EXECUTION_INITIATION_FAILED(AtmLaneSchemaId, Reason))
     end.
 
 

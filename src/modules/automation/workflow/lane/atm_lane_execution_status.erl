@@ -20,7 +20,7 @@
 %%%  N            +-------------+                          \|
 %%%  G                   |                                  o
 %%%      ready to execute (all associated                   |
-%%%  P     documents created and setup)                     |
+%%%  P   documents created and initiated)                   |
 %%%  H                   v                                  |
 %%%  A            +-------------+          cancel           |
 %%%  S            |   ENQUEUED  |---------------------------o

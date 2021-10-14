@@ -19,7 +19,7 @@
 %% API
 -export([
     create_all/1, create/3,
-    setup_all/2, setup/2,
+    initiate_all/2, initiate/2,
     ensure_all_ended/1,
     teardown_all/2, teardown/2,
     delete_all/1, delete/1
@@ -107,16 +107,16 @@ create(AtmLaneExecutionRunCreationArgs, AtmParallelBoxIndex, #atm_parallel_box_s
     }.
 
 
--spec setup_all(atm_workflow_execution_ctx:record(), [record()]) ->
+-spec initiate_all(atm_workflow_execution_ctx:record(), [record()]) ->
     {[workflow_engine:parallel_box_spec()], atm_workflow_execution_env:diff()} | no_return().
-setup_all(AtmWorkflowExecutionCtx, AtmParallelBoxExecutions) ->
-    AtmParallelBoxesSetupResult = atm_parallel_runner:map(fun(#atm_parallel_box_execution{
+initiate_all(AtmWorkflowExecutionCtx, AtmParallelBoxExecutions) ->
+    AtmParallelBoxesInitiationResult = atm_parallel_runner:map(fun(#atm_parallel_box_execution{
         schema_id = AtmParallelBoxSchemaId
     } = AtmParallelBoxExecution) ->
         try
-            setup(AtmWorkflowExecutionCtx, AtmParallelBoxExecution)
+            initiate(AtmWorkflowExecutionCtx, AtmParallelBoxExecution)
         catch _:Reason ->
-            throw(?ERROR_ATM_PARALLEL_BOX_EXECUTION_SETUP_FAILED(AtmParallelBoxSchemaId, Reason))
+            throw(?ERROR_ATM_PARALLEL_BOX_EXECUTION_INITIATION_FAILED(AtmParallelBoxSchemaId, Reason))
         end
     end, AtmParallelBoxExecutions),
 
@@ -128,23 +128,23 @@ setup_all(AtmWorkflowExecutionCtx, AtmParallelBoxExecutions) ->
             [AtmParallelBoxExecutionSpec | AtmParallelBoxExecutionSpecsAcc],
             fun(Env) -> AtmWorkflowExecutionEnvDiff(AtmWorkflowExecutionEnvDiffAcc(Env)) end
         }
-    end, {[], fun(Env) -> Env end}, AtmParallelBoxesSetupResult).
+    end, {[], fun(Env) -> Env end}, AtmParallelBoxesInitiationResult).
 
 
--spec setup(atm_workflow_execution_ctx:record(), record()) ->
+-spec initiate(atm_workflow_execution_ctx:record(), record()) ->
     {workflow_engine:parallel_box_spec(), atm_workflow_execution_env:diff()} | no_return().
-setup(AtmWorkflowExecutionCtx, #atm_parallel_box_execution{
+initiate(AtmWorkflowExecutionCtx, #atm_parallel_box_execution{
     task_registry = AtmTaskExecutionRegistry
 }) ->
-    AtmTaskExecutionsSetupResult = atm_parallel_runner:map(fun(
+    AtmTaskExecutionsInitiationResult = atm_parallel_runner:map(fun(
         {AtmTaskSchemaId, AtmTaskExecutionId}
     ) ->
         try
-            {AtmTaskExecutionId, atm_task_execution_handler:setup(
+            {AtmTaskExecutionId, atm_task_execution_handler:initiate(
                 AtmWorkflowExecutionCtx, AtmTaskExecutionId
             )}
         catch _:Reason ->
-            throw(?ERROR_ATM_TASK_EXECUTION_SETUP_FAILED(AtmTaskSchemaId, Reason))
+            throw(?ERROR_ATM_TASK_EXECUTION_INITIATION_FAILED(AtmTaskSchemaId, Reason))
         end
     end, maps:to_list(AtmTaskExecutionRegistry)),
 
@@ -156,7 +156,7 @@ setup(AtmWorkflowExecutionCtx, #atm_parallel_box_execution{
             AtmParallelBoxExecutionSpec#{AtmTaskExecutionId => AtmTaskExecutionSpec},
             fun(Env) -> AtmWorkflowExecutionEnvDiff(AtmWorkflowExecutionEnvDiffAcc(Env)) end
         }
-    end, {#{}, fun(Env) -> Env end}, AtmTaskExecutionsSetupResult).
+    end, {#{}, fun(Env) -> Env end}, AtmTaskExecutionsInitiationResult).
 
 
 -spec ensure_all_ended([record()]) -> ok | no_return().

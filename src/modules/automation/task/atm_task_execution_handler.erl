@@ -9,7 +9,7 @@
 %%% This module handles the task execution process according to following
 %%% state machine:
 %%%
-%%%                       <WAITING PHASE (setup)>
+%%%                      <WAITING PHASE (initiation)>
 %%%     +-----------+
 %%%     |  PENDING  |---------------------------------------
 %%%     +-----------+                                        \
@@ -47,7 +47,7 @@
 
 %% API
 -export([
-    setup/2,
+    initiate/2,
     teardown/2,
 
     process_item/5,
@@ -62,12 +62,12 @@
 %%%===================================================================
 
 
--spec setup(
+-spec initiate(
     atm_workflow_execution_ctx:record(),
     atm_task_execution:id() | atm_task_execution:doc()
 ) ->
     {workflow_engine:task_spec(), atm_workflow_execution_env:diff()} | no_return().
-setup(AtmWorkflowExecutionCtx, AtmTaskExecutionIdOrDoc) ->
+initiate(AtmWorkflowExecutionCtx, AtmTaskExecutionIdOrDoc) ->
     #document{
         key = AtmTaskExecutionId,
         value = #atm_task_execution{
@@ -76,7 +76,7 @@ setup(AtmWorkflowExecutionCtx, AtmTaskExecutionIdOrDoc) ->
         }
     } = ensure_atm_task_execution_doc(AtmTaskExecutionIdOrDoc),
 
-    AtmTaskExecutionSpec = atm_task_executor:setup(AtmWorkflowExecutionCtx, AtmTaskExecutor),
+    AtmTaskExecutionSpec = atm_task_executor:initiate(AtmWorkflowExecutionCtx, AtmTaskExecutor),
 
     {ok, #atm_store{container = AtmTaskAuditLogStoreContainer}} = atm_store_api:get(
         AtmSystemAuditLogId
