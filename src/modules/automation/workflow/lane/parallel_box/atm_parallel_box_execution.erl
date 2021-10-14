@@ -62,11 +62,13 @@ create_all(AtmLaneExecutionRunCreationArgs = #atm_lane_execution_run_creation_ar
                 AtmLaneExecutionRunCreationArgs, AtmParallelBoxIndex, AtmParallelBoxSchema
             ),
             [AtmParallelBoxExecution | AtmParallelBoxExecutions]
-        catch _:Reason ->
+        catch Type:Reason:Stacktrace ->
             catch delete_all(AtmParallelBoxExecutions),
 
-            AtmParallelBoxSchemaId = AtmParallelBoxSchema#atm_parallel_box_schema.id,
-            throw(?ERROR_ATM_PARALLEL_BOX_EXECUTION_CREATION_FAILED(AtmParallelBoxSchemaId, Reason))
+            throw(?ERROR_ATM_PARALLEL_BOX_EXECUTION_CREATION_FAILED(
+                AtmParallelBoxSchema#atm_parallel_box_schema.id,
+                ?atm_examine_error(Type, Reason, Stacktrace)
+            ))
         end
     end, [], lists_utils:enumerate(AtmParallelBoxSchemas)).
 
@@ -115,8 +117,9 @@ initiate_all(AtmWorkflowExecutionCtx, AtmParallelBoxExecutions) ->
     } = AtmParallelBoxExecution) ->
         try
             initiate(AtmWorkflowExecutionCtx, AtmParallelBoxExecution)
-        catch _:Reason ->
-            throw(?ERROR_ATM_PARALLEL_BOX_EXECUTION_INITIATION_FAILED(AtmParallelBoxSchemaId, Reason))
+        catch Type:Reason:Stacktrace ->
+            Error = ?atm_examine_error(Type, Reason, Stacktrace),
+            throw(?ERROR_ATM_PARALLEL_BOX_EXECUTION_INITIATION_FAILED(AtmParallelBoxSchemaId, Error))
         end
     end, AtmParallelBoxExecutions),
 
@@ -143,8 +146,9 @@ initiate(AtmWorkflowExecutionCtx, #atm_parallel_box_execution{
             {AtmTaskExecutionId, atm_task_execution_handler:initiate(
                 AtmWorkflowExecutionCtx, AtmTaskExecutionId
             )}
-        catch _:Reason ->
-            throw(?ERROR_ATM_TASK_EXECUTION_INITIATION_FAILED(AtmTaskSchemaId, Reason))
+        catch Type:Reason:Stacktrace ->
+            Error = ?atm_examine_error(Type, Reason, Stacktrace),
+            throw(?ERROR_ATM_TASK_EXECUTION_INITIATION_FAILED(AtmTaskSchemaId, Error))
         end
     end, maps:to_list(AtmTaskExecutionRegistry)),
 

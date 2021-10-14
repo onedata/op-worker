@@ -17,6 +17,7 @@
 -include("global_definitions.hrl").
 -include_lib("ctool/include/automation/automation.hrl").
 -include_lib("ctool/include/errors.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 
 -record(atm_workflow_execution_summary, {
@@ -118,5 +119,23 @@
 -define(LOGGER_ERROR, <<"error">>).
 -define(LOGGER_CRITICAL, <<"critical">>).
 -define(LOGGER_EMERGENCY, <<"emergency">>).
+
+
+-define(atm_examine_error(__TYPE, __REASON, __STACKTRACE),
+    case __TYPE of
+        throw ->
+            __REASON;
+        _ ->
+            __ERROR_REF = str_utils:rand_hex(5),
+
+            ?error_stacktrace(
+                "[~p:~p] Unexpected error (ref. ~s): ~p:~p",
+                [?MODULE, ?FUNCTION_NAME, __ERROR_REF, __TYPE, __REASON],
+                __STACKTRACE
+            ),
+            ?ERROR_UNEXPECTED_ERROR(__ERROR_REF)
+    end
+).
+
 
 -endif.

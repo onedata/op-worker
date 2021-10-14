@@ -56,9 +56,11 @@ create_all(AtmParallelBoxExecutionCreationArgs = #atm_parallel_box_execution_cre
     lists:foldl(fun(#atm_task_schema{id = AtmTaskSchemaId} = AtmTaskSchema, AtmTaskExecutionDocs) ->
         try
             [create(AtmParallelBoxExecutionCreationArgs, AtmTaskSchema) | AtmTaskExecutionDocs]
-        catch _:Reason ->
+        catch Type:Reason:Stacktrace ->
             catch delete_all([Doc#document.key || Doc <- AtmTaskExecutionDocs]),
-            throw(?ERROR_ATM_TASK_EXECUTION_CREATION_FAILED(AtmTaskSchemaId, Reason))
+
+            Error = ?atm_examine_error(Type, Reason, Stacktrace),
+            throw(?ERROR_ATM_TASK_EXECUTION_CREATION_FAILED(AtmTaskSchemaId, Error))
         end
     end, [], AtmTaskSchemas).
 
@@ -79,9 +81,9 @@ create(AtmParallelBoxExecutionCreationArgs, AtmTaskSchema = #atm_task_schema{
 
     try
         create_task_execution_doc(CreationCtx)
-    catch Type:Reason ->
+    catch Type:Reason:Stacktrace ->
         delete_execution_components(CreationCtx#creation_ctx.execution_components),
-        erlang:Type(Reason)
+        throw(?atm_examine_error(Type, Reason, Stacktrace))
     end.
 
 
@@ -130,9 +132,9 @@ create_execution_components(CreationCtx) ->
     lists:foldl(fun(CreateExecutionComponentFun, NewCreationCtx) ->
         try
             CreateExecutionComponentFun(NewCreationCtx)
-        catch Type:Reason ->
+        catch Type:Reason:Stacktrace ->
             delete_execution_components(NewCreationCtx#creation_ctx.execution_components),
-            erlang:Type(Reason)
+            throw(?atm_examine_error(Type, Reason, Stacktrace))
         end
     end, CreationCtx, [
         fun create_audit_log/1

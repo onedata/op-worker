@@ -51,10 +51,11 @@
 create_run(AtmLaneIndex, AtmWorkflowExecutionDoc, AtmWorkflowExecutionCtx) ->
     try
         create_run_internal(AtmLaneIndex, AtmWorkflowExecutionDoc, AtmWorkflowExecutionCtx)
-    catch _:Reason ->
-        AtmWorkflowExecution = AtmWorkflowExecutionDoc#document.value,
-        AtmLaneSchemaId = atm_lane_execution:get_schema_id(AtmLaneIndex, AtmWorkflowExecution),
-        throw(?ERROR_ATM_LANE_EXECUTION_CREATION_FAILED(AtmLaneSchemaId, Reason))
+    catch Type:Reason:Stacktrace ->
+        throw(?ERROR_ATM_LANE_EXECUTION_CREATION_FAILED(
+            atm_lane_execution:get_schema_id(AtmLaneIndex, AtmWorkflowExecutionDoc#document.value),
+            ?atm_examine_error(Type, Reason, Stacktrace)
+        ))
     end.
 
 
@@ -173,9 +174,9 @@ create_run_execution_components(RunCreationCtx) ->
     lists:foldl(fun(CreateExecutionComponentFun, NewRunCreationCtx) ->
         try
             CreateExecutionComponentFun(NewRunCreationCtx)
-        catch Type:Reason ->
+        catch Type:Reason:Stacktrace ->
             delete_run_execution_components(NewRunCreationCtx#run_creation_ctx.execution_components),
-            erlang:Type(Reason)
+            throw(?atm_examine_error(Type, Reason, Stacktrace))
         end
     end, RunCreationCtx, [
         fun create_exception_store/1,

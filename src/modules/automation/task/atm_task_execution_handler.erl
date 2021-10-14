@@ -113,7 +113,8 @@ process_item(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, ReportResultUrl,
         process_item_insecure(
             AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, ReportResultUrl, HeartbeatUrl
         )
-    catch throw:{error, _} = Error ->
+    catch Type:Reason:Stacktrace ->
+        Error = ?atm_examine_error(Type, Reason, Stacktrace),
         process_results(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, Error)
     end.
 
@@ -139,7 +140,8 @@ process_results(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, Results) when
     try
         atm_task_execution_results:consume_results(AtmWorkflowExecutionCtx, AtmTaskExecutionResultSpecs, Results),
         update_items_processed(AtmTaskExecutionId)
-    catch throw:{error, _} = Error ->
+    catch Type:Reason:Stacktrace ->
+        Error = ?atm_examine_error(Type, Reason, Stacktrace),
         handle_exception(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, Error)
     end;
 

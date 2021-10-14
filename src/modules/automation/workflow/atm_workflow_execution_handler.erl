@@ -133,10 +133,10 @@ prepare_lane(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmLaneIndex) ->
         {ok, atm_lane_execution_handler:prepare(
             AtmLaneIndex, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx
         )}
-    catch _:Reason ->
+    catch Type:Reason:Stacktrace ->
         % TODO VFS-8273 use audit log
         ?error("[~p] FAILED TO PREPARE WORKFLOW DUE TO: ~p", [
-            AtmWorkflowExecutionId, Reason
+            AtmWorkflowExecutionId, ?atm_examine_error(Type, Reason, Stacktrace)
         ]),
         error
     end.
@@ -200,10 +200,11 @@ process_result(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmTaskExecution
 handle_task_execution_ended(AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv, AtmTaskExecutionId) ->
     try
         ok = atm_task_execution_handler:handle_ended(AtmTaskExecutionId)
-    catch _:Reason ->
+    catch Type:Reason:Stacktrace ->
         % TODO VFS-8273 use audit log
         ?error("[~p] FAILED TO MARK TASK EXECUTION ~p AS ENDED DUE TO: ~p", [
-            AtmWorkflowExecutionId, AtmTaskExecutionId, Reason
+            AtmWorkflowExecutionId, AtmTaskExecutionId,
+            ?atm_examine_error(Type, Reason, Stacktrace)
         ])
     end.
 
@@ -221,10 +222,10 @@ handle_lane_execution_ended(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, Atm
         atm_lane_execution_handler:handle_ended(
             AtmLaneIndex, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx
         )
-    catch _:Reason ->
+    catch Type:Reason:Stacktrace ->
         % TODO VFS-8273 use audit log
         ?error("[~p] FAILED TO MARK LANE EXECUTION ~p AS ENDED DUE TO: ~p", [
-            AtmWorkflowExecutionId, AtmLaneIndex, Reason
+            AtmWorkflowExecutionId, AtmLaneIndex, ?atm_examine_error(Type, Reason, Stacktrace)
         ])
     end.
 
@@ -248,10 +249,10 @@ handle_workflow_execution_ended(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv)
             AtmWorkflowExecutionId
         ),
         notify_ended(EndedAtmWorkflowExecutionDoc)
-    catch _:Reason ->
+    catch Type:Reason:Stacktrace ->
         % TODO VFS-8273 use audit log
         ?error("[~p] FAILED TO MARK WORKFLOW EXECUTION AS ENDED DUE TO: ~p", [
-            AtmWorkflowExecutionId, Reason
+            AtmWorkflowExecutionId, ?atm_examine_error(Type, Reason, Stacktrace)
         ])
     end.
 

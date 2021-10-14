@@ -58,10 +58,10 @@ prepare(AtmLaneIndex, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
         freeze_curr_lane_run_iterated_store_if_ready_to_execute(AtmWorkflowExecution),
 
         AtmLaneExecutionSpec
-    catch Type:Reason ->
+    catch Type:Reason:Stacktrace ->
         atm_lane_execution_status:handle_aborting(AtmLaneIndex, AtmWorkflowExecutionId, failure),
         handle_ended(AtmLaneIndex, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx),
-        erlang:Type(Reason)
+        throw(?atm_examine_error(Type, Reason, Stacktrace))
     end.
 
 
@@ -131,9 +131,11 @@ initiate_lane_run(AtmLaneIndex, AtmWorkflowExecutionDoc, AtmWorkflowExecutionCtx
             parallel_boxes => AtmParallelBoxExecutionSpecs,
             iterator => atm_store_api:acquire_iterator(AtmIteratedStoreId, AtmStoreIteratorSpec)
         }
-    catch _:Reason ->
-        AtmLaneSchemaId = atm_lane_execution:get_schema_id(AtmLaneIndex, AtmWorkflowExecution),
-        throw(?ERROR_ATM_LANE_EXECUTION_INITIATION_FAILED(AtmLaneSchemaId, Reason))
+    catch Type:Reason:Stacktrace ->
+        throw(?ERROR_ATM_LANE_EXECUTION_INITIATION_FAILED(
+            atm_lane_execution:get_schema_id(AtmLaneIndex, AtmWorkflowExecution),
+            ?atm_examine_error(Type, Reason, Stacktrace)
+        ))
     end.
 
 

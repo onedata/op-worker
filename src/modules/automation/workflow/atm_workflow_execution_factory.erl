@@ -92,9 +92,9 @@ create(UserCtx, SpaceId, AtmWorkflowSchemaId, StoreInitialValues, CallbackUrl) -
 
     AtmWorkflowExecutionDoc = try
         create_workflow_execution_doc(CreationCtx)
-    catch Type:Reason ->
+    catch Type:Reason:Stacktrace ->
         delete_execution_components(ExecutionComponents),
-        erlang:Type(Reason)
+        throw(?atm_examine_error(Type, Reason, Stacktrace))
     end,
     atm_waiting_workflow_executions:add(AtmWorkflowExecutionDoc),
 
@@ -175,11 +175,9 @@ create_execution_components(CreationCtx) ->
     lists:foldl(fun(CreateExecutionComponentFun, NewCreationCtx) ->
         try
             CreateExecutionComponentFun(NewCreationCtx)
-        catch Type:Reason ->
-            delete_execution_components(
-                NewCreationCtx#creation_ctx.execution_components
-            ),
-            erlang:Type(Reason)
+        catch Type:Reason:Stacktrace ->
+            delete_execution_components(NewCreationCtx#creation_ctx.execution_components),
+            throw(?atm_examine_error(Type, Reason, Stacktrace))
         end
     end, CreationCtx, [
         fun create_workflow_schema_snapshot/1,
@@ -223,9 +221,9 @@ create_lambda_snapshots(CreationCtx = #creation_ctx{
                 AtmWorkflowExecutionId, AtmLambdaDoc
             ),
             Acc#{AtmLambdaId => AtmLambdaSnapshotId}
-        catch Type:Reason ->
+        catch Type:Reason:Stacktrace ->
             catch delete_lambda_snapshots(Acc),
-            erlang:Type(Reason)
+            throw(?atm_examine_error(Type, Reason, Stacktrace))
         end
     end, #{}, AtmLambdaDocs),
 
@@ -271,9 +269,11 @@ create_workflow_stores(CreationCtx = #creation_ctx{
                     }
                 }
             }
-        catch _:Reason ->
+        catch Type:Reason:Stacktrace ->
             catch delete_stores(maps:values(AtmWorkflowStoreRegistry)),
-            throw(?ERROR_ATM_STORE_CREATION_FAILED(AtmStoreSchemaId, Reason))
+
+            Error = ?atm_examine_error(Type, Reason, Stacktrace),
+            throw(?ERROR_ATM_STORE_CREATION_FAILED(AtmStoreSchemaId, Error))
         end
     end, CreationCtx, AtmStoreSchemas).
 

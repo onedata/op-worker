@@ -16,6 +16,7 @@
 -behaviour(atm_store_container).
 -behaviour(persistent_record).
 
+-include("modules/automation/atm_execution.hrl").
 -include_lib("ctool/include/errors.hrl").
 
 %% atm_store_container callbacks
@@ -186,8 +187,9 @@ validate_range(AtmWorkflowExecutionAuth, AtmDataSpec, StartNum, EndNum, Step) ->
     lists:foreach(fun({ArgName, ArgValue}) ->
         try
             atm_value:validate(AtmWorkflowExecutionAuth, ArgValue, AtmDataSpec)
-        catch throw:Reason  ->
-            throw(?ERROR_BAD_DATA(ArgName, Reason))
+        catch Type:Reason:Stacktrace ->
+            Error = ?atm_examine_error(Type, Reason, Stacktrace),
+            throw(?ERROR_BAD_DATA(ArgName, Error))
         end
     end, [
         {<<"start">>, StartNum},

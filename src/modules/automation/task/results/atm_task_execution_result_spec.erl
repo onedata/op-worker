@@ -87,8 +87,9 @@ consume_result(AtmWorkflowExecutionCtx, AtmTaskExecutionResultSpec = #atm_task_e
     lists:foreach(fun(#dispatch_spec{store_schema_id = AtmStoreSchemaId} = DispatchSpec) ->
         try
             dispatch_result(AtmWorkflowExecutionCtx, Result, Options, DispatchSpec)
-        catch _:Reason ->
-            throw(?ERROR_ATM_TASK_RESULT_DISPATCH_FAILED(AtmStoreSchemaId, Reason))
+        catch Type:Reason:Stacktrace ->
+            Error = ?atm_examine_error(Type, Reason, Stacktrace),
+            throw(?ERROR_ATM_TASK_RESULT_DISPATCH_FAILED(AtmStoreSchemaId, Error))
         end
     end, DispatchSpecs).
 
