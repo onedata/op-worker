@@ -176,7 +176,7 @@ build_value(AtmJobCtx, #atm_task_argument_value_builder{
     type = single_value_store_content,
     recipe = AtmSingleValueStoreSchemaId
 }) ->
-    AtmSingleValueStoreId = atm_workflow_execution_ctx:get_workflow_store_id(
+    AtmSingleValueStoreId = atm_workflow_execution_ctx:get_global_store_id(
         AtmSingleValueStoreSchemaId,
         atm_job_ctx:get_workflow_execution_ctx(AtmJobCtx)
     ),

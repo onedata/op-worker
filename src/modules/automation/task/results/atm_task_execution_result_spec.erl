@@ -226,7 +226,7 @@ dispatch_result(AtmWorkflowExecutionCtx, Result, Options, #dispatch_spec{
     function = DispatchFun
 }) ->
     AtmWorkflowExecutionAuth = atm_workflow_execution_ctx:get_auth(AtmWorkflowExecutionCtx),
-    AtmStoreId = atm_workflow_execution_ctx:get_workflow_store_id(
+    AtmStoreId = atm_workflow_execution_ctx:get_global_store_id(
         AtmStoreSchemaId, AtmWorkflowExecutionCtx
     ),
     atm_store_api:apply_operation(

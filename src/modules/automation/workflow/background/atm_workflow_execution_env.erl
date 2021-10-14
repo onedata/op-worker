@@ -12,7 +12,8 @@
 %%% actual store id).
 %%% Main uses of automation workflow environment are:
 %%% 1) quick access to basic information about workflow (e.g. space id)
-%%% 2) quick access to all workflow stores and other stores in current scope
+%%% 2) quick access to all global stores (store defined in schema and accessible
+%%%    on all levels of execution) and other stores in current scope
 %%%    (e.g. currently executed lane run exception store).
 %%% 3) acquisition of automation workflow auth.
 %%% 4) acquisition of automation workflow logger.
@@ -26,7 +27,7 @@
 %% API
 -export([
     build/2, build/3,
-    add_workflow_store_mapping/3,
+    add_global_store_mapping/3,
     set_workflow_audit_log_store_container/2,
     set_lane_run_exception_store_container/2,
     add_task_audit_log_store_container/3
@@ -35,8 +36,8 @@
     get_space_id/1,
     get_workflow_execution_id/1,
 
-    list_workflow_stores/1,
-    get_workflow_store_id/2,
+    list_global_stores/1,
+    get_global_store_id/2,
 
     get_lane_run_exception_store_container/1,
 
@@ -48,7 +49,7 @@
 -record(atm_workflow_execution_env, {
     space_id :: od_space:id(),
     workflow_execution_id :: atm_workflow_execution:id(),
-    workflow_store_registry :: atm_workflow_execution:store_registry(),
+    global_store_registry :: atm_workflow_execution:store_registry(),
     workflow_audit_log_store_container :: undefined | atm_store_container:record(),
     lane_exception_store_container :: undefined | atm_store_container:record(),
     task_audit_logs_registry :: #{atm_task_execution:id() => atm_store_container:record()}
@@ -72,22 +73,22 @@ build(SpaceId, AtmWorkflowExecutionId) ->
 
 -spec build(od_space:id(), atm_workflow_execution:id(), atm_workflow_execution:store_registry()) ->
     record().
-build(SpaceId, AtmWorkflowExecutionId, AtmWorkflowStoreRegistry) ->
+build(SpaceId, AtmWorkflowExecutionId, AtmGlobalStoreRegistry) ->
     #atm_workflow_execution_env{
         space_id = SpaceId,
         workflow_execution_id = AtmWorkflowExecutionId,
-        workflow_store_registry = AtmWorkflowStoreRegistry,
+        global_store_registry = AtmGlobalStoreRegistry,
         workflow_audit_log_store_container = undefined,
         lane_exception_store_container = undefined,
         task_audit_logs_registry = #{}
     }.
 
 
--spec add_workflow_store_mapping(automation:id(), atm_store:id(), record()) -> record().
-add_workflow_store_mapping(AtmStoreSchemaId, AtmStoreId, Record = #atm_workflow_execution_env{
-    workflow_store_registry = AtmWorkflowStoreRegistry
+-spec add_global_store_mapping(automation:id(), atm_store:id(), record()) -> record().
+add_global_store_mapping(AtmStoreSchemaId, AtmStoreId, Record = #atm_workflow_execution_env{
+    global_store_registry = AtmGlobalStoreRegistry
 }) ->
-    Record#atm_workflow_execution_env{workflow_store_registry = AtmWorkflowStoreRegistry#{
+    Record#atm_workflow_execution_env{global_store_registry = AtmGlobalStoreRegistry#{
         AtmStoreSchemaId => AtmStoreId
     }}.
 
@@ -136,14 +137,14 @@ get_workflow_execution_id(#atm_workflow_execution_env{
     AtmWorkflowExecutionId.
 
 
--spec list_workflow_stores(record()) -> [atm_store:id()].
-list_workflow_stores(#atm_workflow_execution_env{workflow_store_registry = AtmStoreRegistry}) ->
+-spec list_global_stores(record()) -> [atm_store:id()].
+list_global_stores(#atm_workflow_execution_env{global_store_registry = AtmStoreRegistry}) ->
     maps:values(AtmStoreRegistry).
 
 
--spec get_workflow_store_id(automation:id(), record()) -> atm_store:id() | no_return().
-get_workflow_store_id(AtmStoreSchemaId, #atm_workflow_execution_env{
-    workflow_store_registry = AtmStoreRegistry
+-spec get_global_store_id(automation:id(), record()) -> atm_store:id() | no_return().
+get_global_store_id(AtmStoreSchemaId, #atm_workflow_execution_env{
+    global_store_registry = AtmStoreRegistry
 }) ->
     case maps:get(AtmStoreSchemaId, AtmStoreRegistry, undefined) of
         undefined ->

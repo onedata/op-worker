@@ -156,7 +156,7 @@ build_run_creation_ctx(AtmLaneIndex, AtmWorkflowExecutionDoc = #document{
             iterated_store_id = case IteratedStoreId of
                 undefined ->
                     % If not explicitly set then take designated by schema store
-                    atm_workflow_execution_ctx:get_workflow_store_id(
+                    atm_workflow_execution_ctx:get_global_store_id(
                         AtmStoreSchemaId, AtmWorkflowExecutionCtx
                     );
                 _ ->

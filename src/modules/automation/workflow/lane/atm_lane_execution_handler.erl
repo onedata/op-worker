@@ -154,7 +154,7 @@ end_lane_run(AtmLaneIndex, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
 
     {ok, PrevRun} = atm_lane_execution:get_current_run(AtmLaneIndex, AtmWorkflowExecution),
 
-    unfreeze_iterated_store_in_case_of_workflow_store(PrevRun, AtmWorkflowExecutionCtx),
+    unfreeze_iterated_store_in_case_of_global_store(PrevRun, AtmWorkflowExecutionCtx),
     freeze_exception_store(PrevRun),
 
     AtmParallelBoxExecutions = PrevRun#atm_lane_execution_run.parallel_boxes,
@@ -177,21 +177,21 @@ end_lane_run(AtmLaneIndex, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
 
 
 %% @private
--spec unfreeze_iterated_store_in_case_of_workflow_store(
+-spec unfreeze_iterated_store_in_case_of_global_store(
     atm_lane_execution:run(),
     atm_workflow_execution_ctx:record()
 ) ->
     ok.
-unfreeze_iterated_store_in_case_of_workflow_store(
+unfreeze_iterated_store_in_case_of_global_store(
     #atm_lane_execution_run{exception_store_id = undefined},
     _AtmWorkflowExecutionCtx
 ) ->
     ok;
-unfreeze_iterated_store_in_case_of_workflow_store(
+unfreeze_iterated_store_in_case_of_global_store(
     #atm_lane_execution_run{iterated_store_id = AtmIteratedStoreId},
     AtmWorkflowExecutionCtx
 ) ->
-    case atm_workflow_execution_ctx:is_workflow_store(AtmIteratedStoreId, AtmWorkflowExecutionCtx) of
+    case atm_workflow_execution_ctx:is_global_store(AtmIteratedStoreId, AtmWorkflowExecutionCtx) of
         true -> atm_store_api:unfreeze(AtmIteratedStoreId);
         false -> ok
     end.

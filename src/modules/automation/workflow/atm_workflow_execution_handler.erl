@@ -241,7 +241,7 @@ handle_workflow_execution_ended(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv)
     try
         {ok, AtmWorkflowExecutionDoc} = atm_workflow_execution:get(AtmWorkflowExecutionId),
         ensure_all_lane_executions_ended(AtmWorkflowExecutionDoc, AtmWorkflowExecutionCtx),
-        freeze_workflow_stores(AtmWorkflowExecutionDoc),
+        freeze_global_stores(AtmWorkflowExecutionDoc),
 
         atm_workflow_execution_session:terminate(AtmWorkflowExecutionId),
 
@@ -300,8 +300,8 @@ ensure_all_lane_executions_ended(#document{
 
 
 %% @private
--spec freeze_workflow_stores(atm_workflow_execution:doc()) -> ok.
-freeze_workflow_stores(#document{value = #atm_workflow_execution{
+-spec freeze_global_stores(atm_workflow_execution:doc()) -> ok.
+freeze_global_stores(#document{value = #atm_workflow_execution{
     store_registry = AtmStoreRegistry
 }}) ->
     lists:foreach(

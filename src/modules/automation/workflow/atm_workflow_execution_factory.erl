@@ -37,7 +37,7 @@
 -record(execution_components, {
     schema_snapshot_id = undefined :: undefined | atm_workflow_schema_snapshot:id(),
     lambda_snapshot_registry = undefined :: undefined | atm_workflow_execution:lambda_snapshot_registry(),
-    workflow_store_registry = undefined :: undefined | atm_workflow_execution:store_registry(),
+    global_store_registry = undefined :: undefined | atm_workflow_execution:store_registry(),
     workflow_audit_log_id = undefined :: undefined | atm_store:id(),
     lanes = undefined :: undefined | #{atm_lane_execution:index() => atm_lane_execution:record()}
 }).
@@ -87,7 +87,7 @@ create(UserCtx, SpaceId, AtmWorkflowSchemaId, StoreInitialValues, CallbackUrl) -
             store_initial_values = StoreInitialValues,
             callback_url = CallbackUrl
         },
-        execution_components = #execution_components{workflow_store_registry = #{}}
+        execution_components = #execution_components{global_store_registry = #{}}
     }),
 
     AtmWorkflowExecutionDoc = try
@@ -118,7 +118,7 @@ delete_insecure(AtmWorkflowExecutionId) ->
         value = AtmWorkflowExecution = #atm_workflow_execution{
             schema_snapshot_id = AtmWorkflowSchemaSnapshotId,
             lambda_snapshot_registry = AtmLambdaSnapshotRegistry,
-            store_registry = AtmWorkflowStoreRegistry,
+            store_registry = AtmGlobalStoreRegistry,
             system_audit_log_id = AtmWorkflowAuditLogId,
             lanes = AtmLaneExecutions
         }
@@ -127,7 +127,7 @@ delete_insecure(AtmWorkflowExecutionId) ->
     delete_execution_components(#execution_components{
         schema_snapshot_id = AtmWorkflowSchemaSnapshotId,
         lambda_snapshot_registry = AtmLambdaSnapshotRegistry,
-        workflow_store_registry = AtmWorkflowStoreRegistry,
+        global_store_registry = AtmGlobalStoreRegistry,
         workflow_audit_log_id = AtmWorkflowAuditLogId,
         lanes = AtmLaneExecutions
     }),
@@ -182,7 +182,7 @@ create_execution_components(CreationCtx) ->
     end, CreationCtx, [
         fun create_workflow_schema_snapshot/1,
         fun create_lambda_snapshots/1,
-        fun create_workflow_stores/1,
+        fun create_global_stores/1,
         fun create_workflow_audit_log/1,
         fun create_lane_executions/1
     ]).
@@ -233,8 +233,8 @@ create_lambda_snapshots(CreationCtx = #creation_ctx{
 
 
 %% @private
--spec create_workflow_stores(creation_ctx()) -> creation_ctx() | no_return().
-create_workflow_stores(CreationCtx = #creation_ctx{
+-spec create_global_stores(creation_ctx()) -> creation_ctx() | no_return().
+create_global_stores(CreationCtx = #creation_ctx{
     creation_args = #creation_args{
         workflow_execution_auth = AtmWorkflowExecutionAuth,
         workflow_schema_doc = #document{value = #od_atm_workflow_schema{
@@ -248,7 +248,7 @@ create_workflow_stores(CreationCtx = #creation_ctx{
         NewCreationCtx = #creation_ctx{
             workflow_execution_env = AtmWorkflowExecutionEnv,
             execution_components = ExecutionComponents = #execution_components{
-                workflow_store_registry = AtmWorkflowStoreRegistry
+                global_store_registry = AtmGlobalStoreRegistry
             }
         }
     ) ->
@@ -260,17 +260,17 @@ create_workflow_stores(CreationCtx = #creation_ctx{
                 AtmWorkflowExecutionAuth, StoreInitialValue, AtmStoreSchema
             ),
             NewCreationCtx#creation_ctx{
-                workflow_execution_env = atm_workflow_execution_env:add_workflow_store_mapping(
+                workflow_execution_env = atm_workflow_execution_env:add_global_store_mapping(
                     AtmStoreSchemaId, AtmStoreId, AtmWorkflowExecutionEnv
                 ),
                 execution_components = ExecutionComponents#execution_components{
-                    workflow_store_registry = AtmWorkflowStoreRegistry#{
+                    global_store_registry = AtmGlobalStoreRegistry#{
                         AtmStoreSchemaId => AtmStoreId
                     }
                 }
             }
         catch Type:Reason:Stacktrace ->
-            catch delete_stores(maps:values(AtmWorkflowStoreRegistry)),
+            catch delete_stores(maps:values(AtmGlobalStoreRegistry)),
 
             Error = ?atm_examine_error(Type, Reason, Stacktrace),
             throw(?ERROR_ATM_STORE_CREATION_FAILED(AtmStoreSchemaId, Error))
@@ -359,7 +359,7 @@ create_workflow_execution_doc(#creation_ctx{
     execution_components = #execution_components{
         schema_snapshot_id = AtmWorkflowSchemaSnapshotId,
         lambda_snapshot_registry = AtmLambdaSnapshotRegistry,
-        workflow_store_registry = AtmWorkflowStoreRegistry,
+        global_store_registry = AtmGlobalStoreRegistry,
         workflow_audit_log_id = AtmWorkflowAuditLogId,
         lanes = AtmLaneExecutions
     }
@@ -375,7 +375,7 @@ create_workflow_execution_doc(#creation_ctx{
             schema_snapshot_id = AtmWorkflowSchemaSnapshotId,
             lambda_snapshot_registry = AtmLambdaSnapshotRegistry,
 
-            store_registry = AtmWorkflowStoreRegistry,
+            store_registry = AtmGlobalStoreRegistry,
             system_audit_log_id = AtmWorkflowAuditLogId,
 
             lanes = AtmLaneExecutions,
@@ -418,12 +418,12 @@ delete_execution_components(ExecutionComponents = #execution_components{
     });
 
 delete_execution_components(ExecutionComponents = #execution_components{
-    workflow_store_registry = AtmWorkflowStoreRegistry
-}) when AtmWorkflowStoreRegistry /= undefined ->
-    catch delete_stores(maps:values(AtmWorkflowStoreRegistry)),
+    global_store_registry = AtmGlobalStoreRegistry
+}) when AtmGlobalStoreRegistry /= undefined ->
+    catch delete_stores(maps:values(AtmGlobalStoreRegistry)),
 
     delete_execution_components(ExecutionComponents#execution_components{
-        workflow_store_registry = undefined
+        global_store_registry = undefined
     });
 
 delete_execution_components(ExecutionComponents = #execution_components{
