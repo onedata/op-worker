@@ -259,7 +259,7 @@ assert_children_copied(Node, SessionId, SourceGuid, TargetGuid, ListOpts = #{off
         true ->
             ok;
         false ->
-            assert_children_copied(Node, SessionId, SourceGuid, TargetGuid, ListOpts#{offset => Offset + length(SourceChildren)})
+            assert_children_copied(Node, SessionId, SourceGuid, TargetGuid, ListOpts#{offset => Offset + length(SourceChildren)}, FollowSymlinks)
     end.
 
 

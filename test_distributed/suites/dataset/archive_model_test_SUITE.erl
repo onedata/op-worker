@@ -116,7 +116,8 @@ all() -> [
 -define(TEST_ARCHIVE_CONFIG, #archive_config{
     incremental = #{<<"enabled">> => false},
     include_dip = false,
-    layout = ?ARCHIVE_PLAIN_LAYOUT
+    layout = ?ARCHIVE_PLAIN_LAYOUT,
+    follow_symlinks = false
 }).
 
 -define(TEST_DESCRIPTION1, <<"TEST DESCRIPTION">>).
