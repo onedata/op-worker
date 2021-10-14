@@ -531,7 +531,8 @@ simple_archive_crud_test_base(DatasetId, RootFileType, ExpSize) ->
         config = #archive_config{
             incremental = #{<<"enabled">> => false},
             include_dip = false,
-            layout = ?ARCHIVE_PLAIN_LAYOUT
+            layout = ?ARCHIVE_PLAIN_LAYOUT,
+            follow_symlinks = false
         },
         preserved_callback = ?TEST_ARCHIVE_PRESERVED_CALLBACK1,
         purged_callback = ?TEST_ARCHIVE_PURGED_CALLBACK1,
