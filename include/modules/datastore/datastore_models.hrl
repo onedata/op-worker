@@ -1072,7 +1072,7 @@
 
 -record(atm_task_execution, {
     workflow_execution_id :: atm_workflow_execution:id(),
-    lane_index :: non_neg_integer(),
+    lane_index :: atm_lane_execution:index(),
     parallel_box_index :: non_neg_integer(),
 
     schema_id :: automation:id(),
@@ -1137,10 +1137,10 @@
     system_audit_log_id :: undefined | atm_store:id(),
 
     lanes :: #{atm_lane_execution:index() => atm_lane_execution:record()},
-    lanes_count :: non_neg_integer(),
+    lanes_count :: pos_integer(),
 
-    curr_lane_index :: pos_integer(),
-    curr_run_num :: pos_integer(),
+    current_lane_index :: atm_lane_execution:index(),
+    current_run_num :: pos_integer(),
 
     status :: atm_workflow_execution:status(),
     % Flag used to tell if status was changed during doc update (set automatically

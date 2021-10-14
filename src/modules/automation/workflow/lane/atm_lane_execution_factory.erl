@@ -95,7 +95,7 @@ create_run_internal(AtmLaneIndex, AtmWorkflowExecutionDoc, AtmWorkflowExecutionC
     )),
 
     Diff = fun(AtmWorkflowExecution) ->
-        atm_lane_execution:update_curr_run(AtmLaneIndex, fun
+        atm_lane_execution:update_current_run(AtmLaneIndex, fun
             (Run = #atm_lane_execution_run{
                 status = ?PREPARING_STATUS,
                 exception_store_id = undefined,
@@ -131,9 +131,10 @@ build_run_creation_ctx(AtmLaneIndex, AtmWorkflowExecutionDoc = #document{
         schema_snapshot_id = AtmWorkflowSchemaSnapshotId
     }
 }, AtmWorkflowExecutionCtx) ->
-    {ok, Run = #atm_lane_execution_run{status = ?PREPARING_STATUS}} = atm_lane_execution:get_curr_run(
-        AtmLaneIndex, AtmWorkflowExecution
-    ),
+    {ok, Run = #atm_lane_execution_run{
+        status = ?PREPARING_STATUS,
+        iterated_store_id = IteratedStoreId
+    }} = atm_lane_execution:get_current_run(AtmLaneIndex, AtmWorkflowExecution),
 
     {ok, #document{value = #atm_workflow_schema_snapshot{
         lanes = AtmLaneSchemas
@@ -151,13 +152,13 @@ build_run_creation_ctx(AtmLaneIndex, AtmWorkflowExecutionDoc = #document{
             lane_index = AtmLaneIndex,
             lane_schema = AtmLaneSchema,
 
-            iterated_store_id = case Run#atm_lane_execution_run.iterated_store_id of
+            iterated_store_id = case IteratedStoreId of
                 undefined ->
                     % If not explicitly set then take designated by schema store
                     atm_workflow_execution_ctx:get_workflow_store_id(
                         AtmStoreSchemaId, AtmWorkflowExecutionCtx
                     );
-                IteratedStoreId ->
+                _ ->
                     IteratedStoreId
             end
         },

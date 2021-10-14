@@ -381,8 +381,8 @@ create_workflow_execution_doc(#creation_ctx{
             lanes = AtmLaneExecutions,
             lanes_count = map_size(AtmLaneExecutions),
 
-            curr_lane_index = 1,
-            curr_run_num = 1,
+            current_lane_index = 1,
+            current_run_num = 1,
 
             status = ?SCHEDULED_STATUS,
             prev_status = ?SCHEDULED_STATUS,

@@ -271,18 +271,18 @@ ensure_all_lane_executions_ended(#document{
     key = AtmWorkflowExecutionId,
     value = AtmWorkflowExecution = #atm_workflow_execution{
         lanes_count = AtmLanesCount,
-        curr_lane_index = CurrLaneIndex
+        current_lane_index = CurrentAtmLaneIndex
     }
 }, AtmWorkflowExecutionCtx) ->
-    AtmLaneExecutionsToCheck = case CurrLaneIndex < AtmLanesCount of
+    AtmLaneExecutionsToCheck = case CurrentAtmLaneIndex < AtmLanesCount of
         true ->
             % next lane may have been preparing in advance
-            [CurrLaneIndex, CurrLaneIndex + 1];
+            [CurrentAtmLaneIndex, CurrentAtmLaneIndex + 1];
         false ->
-            [CurrLaneIndex]
+            [CurrentAtmLaneIndex]
     end,
     lists:foreach(fun(LaneIndex) ->
-        case atm_lane_execution:get_curr_run(LaneIndex, AtmWorkflowExecution) of
+        case atm_lane_execution:get_current_run(LaneIndex, AtmWorkflowExecution) of
             {ok, #atm_lane_execution_run{status = Status}} ->
                 case atm_lane_execution_status:status_to_phase(Status) of
                     ?ENDED_PHASE ->

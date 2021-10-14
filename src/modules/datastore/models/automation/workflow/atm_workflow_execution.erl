@@ -193,8 +193,8 @@ get_record_struct(4) ->
         {lanes, #{integer => {custom, string, {persistent_record, encode, decode, atm_lane_execution}}}},
         {lanes_count, integer},      %% new field
 
-        {curr_lane_index, integer},  %% new field
-        {curr_run_num, integer},      %% new field
+        {current_lane_index, integer},   %% new field
+        {current_run_num, integer},      %% new field
 
         % ?PREPARING_STATUS and ?ENQUEUED_STATUS were removed from possible workflow statuses
         {status, atom},
@@ -330,8 +330,8 @@ upgrade_record(3, {?MODULE,
         lanes = maps:from_list(lists_utils:enumerate(Lanes)),
         lanes_count = length(Lanes),
 
-        curr_lane_index = 1,
-        curr_run_num = 1,
+        current_lane_index = 1,
+        current_run_num = 1,
 
         status = case lists:member(Status, [?PREPARING_STATUS, ?ENQUEUED_STATUS]) of
             true -> ?SCHEDULED_STATUS;

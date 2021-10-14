@@ -24,8 +24,8 @@
     get_schema_id/2,
     get_schema/2,
 
-    get_curr_run/2,
-    update_curr_run/3, update_curr_run/4
+    get_current_run/2,
+    update_current_run/3, update_current_run/4
 ]).
 -export([get/2, update/3]).
 -export([to_json/1]).
@@ -58,8 +58,8 @@
 
 
 -spec resolve_selector(selector(), atm_workflow_execution:record()) -> index().
-resolve_selector(current, #atm_workflow_execution{curr_lane_index = CurrAtmLaneIndex}) ->
-    CurrAtmLaneIndex;
+resolve_selector(current, #atm_workflow_execution{current_lane_index = CurrentAtmLaneIndex}) ->
+    CurrentAtmLaneIndex;
 resolve_selector(AtmLaneIndex, _) ->
     AtmLaneIndex.
 
@@ -86,15 +86,15 @@ get_schema(AtmLaneSelector, AtmWorkflowExecution = #atm_workflow_execution{
     lists:nth(AtmLaneIndex, AtmWorkflowSchemaSnapshot#atm_workflow_schema_snapshot.lanes).
 
 
--spec get_curr_run(selector(), atm_workflow_execution:record()) ->
+-spec get_current_run(selector(), atm_workflow_execution:record()) ->
     {ok, run()} | errors:error().
-get_curr_run(AtmLaneSelector, AtmWorkflowExecution = #atm_workflow_execution{
-    curr_run_num = CurrRunNum
+get_current_run(AtmLaneSelector, AtmWorkflowExecution = #atm_workflow_execution{
+    current_run_num = CurrentRunNum
 }) ->
     case get(AtmLaneSelector, AtmWorkflowExecution) of
         #atm_lane_execution{runs = [#atm_lane_execution_run{run_num = undefined} = Run | _]} ->
             {ok, Run};
-        #atm_lane_execution{runs = [#atm_lane_execution_run{run_num = CurrRunNum} = Run | _]} ->
+        #atm_lane_execution{runs = [#atm_lane_execution_run{run_num = CurrentRunNum} = Run | _]} ->
             {ok, Run};
         _ ->
             ?ERROR_NOT_FOUND
@@ -102,33 +102,33 @@ get_curr_run(AtmLaneSelector, AtmWorkflowExecution = #atm_workflow_execution{
 
 
 %% @private
--spec update_curr_run(selector(), run_diff(), atm_workflow_execution:record()) ->
+-spec update_current_run(selector(), run_diff(), atm_workflow_execution:record()) ->
     {ok, atm_workflow_execution:record()} | errors:error().
-update_curr_run(AtmLaneSelector, UpdateFun, AtmWorkflowExecution) ->
-    update_curr_run(AtmLaneSelector, UpdateFun, undefined, AtmWorkflowExecution).
+update_current_run(AtmLaneSelector, UpdateFun, AtmWorkflowExecution) ->
+    update_current_run(AtmLaneSelector, UpdateFun, undefined, AtmWorkflowExecution).
 
 
--spec update_curr_run(
+-spec update_current_run(
     selector(),
     run_diff(),
     undefined | atm_lane_execution:run(),
     atm_workflow_execution:record()
 ) ->
     {ok, atm_workflow_execution:record()} | errors:error().
-update_curr_run(AtmLaneSelector, Diff, Default, AtmWorkflowExecution = #atm_workflow_execution{
+update_current_run(AtmLaneSelector, Diff, Default, AtmWorkflowExecution = #atm_workflow_execution{
     lanes = AtmLaneExecutions,
-    curr_run_num = CurrRunNum
+    current_run_num = CurrentRunNum
 }) ->
     AtmLaneIndex = resolve_selector(AtmLaneSelector, AtmWorkflowExecution),
     AtmLaneExecution = #atm_lane_execution{runs = Runs} = maps:get(AtmLaneIndex, AtmLaneExecutions),
 
     UpdateRunsResult = case Runs of
-        [#atm_lane_execution_run{run_num = RunNum} = CurrRun | RestRuns] when
+        [#atm_lane_execution_run{run_num = RunNum} = CurrentRun | RestRuns] when
             RunNum == undefined;
-            RunNum == CurrRunNum
+            RunNum == CurrentRunNum
         ->
-            case Diff(CurrRun) of
-                {ok, UpdatedCurrRun} -> {ok, [UpdatedCurrRun | RestRuns]};
+            case Diff(CurrentRun) of
+                {ok, UpdatedCurrentRun} -> {ok, [UpdatedCurrentRun | RestRuns]};
                 {error, _} = Error1 -> Error1
             end;
         _ when Default /= undefined ->
