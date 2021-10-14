@@ -225,7 +225,7 @@ build_establish_dataset_validate_gs_call_result_fun(MemRef, Config) ->
 
         ExpDatasetData = build_dataset_gs_instance(
             ?ATTACHED_DATASET, DatasetId, SpaceDirDatasetId, ProtectionFlags, CreationTime,
-            RootFileGuid, RootFileType, RootFilePath
+            RootFileGuid, RootFileType, RootFilePath, false
         ),
         ?assertEqual(ExpDatasetData, DatasetData)
     end.
@@ -294,7 +294,7 @@ get_dataset_test(Config) ->
 
             get_dataset_test_base(
                 DatasetId, OriginalParentId, State, ProtectionFlags,
-                FileGuid, FileType, OriginalFilePath
+                FileGuid, FileType, OriginalFilePath, false
             );
         false ->
             ct:pal(?FMT("Test get ~p dataset after moving root file", [State])),
@@ -309,7 +309,7 @@ get_dataset_test(Config) ->
 
             get_dataset_test_base(
                 DatasetId, OriginalParentId, State, ProtectionFlags,
-                FileGuid, FileType, DatasetRecordedFilePath
+                FileGuid, FileType, DatasetRecordedFilePath, false
             ),
 
             ct:pal(?FMT("Test get ~p dataset after removing root file", [State])),
@@ -318,7 +318,7 @@ get_dataset_test(Config) ->
 
             get_dataset_test_base(
                 DatasetId, undefined, detached, ProtectionFlags,
-                FileGuid, FileType, DatasetRecordedFilePath
+                FileGuid, FileType, DatasetRecordedFilePath, true
             )
     end.
 
@@ -326,12 +326,12 @@ get_dataset_test(Config) ->
 %% @private
 -spec get_dataset_test_base(
     dataset:id(), dataset:id(), dataset:state(), [binary()],
-    file_id:file_guid(), file_meta:type(), file_meta:path()
+    file_id:file_guid(), file_meta:type(), file_meta:path(), boolean()
 ) ->
     map().
 get_dataset_test_base(
     DatasetId, ParentId, State, ProtectionFlags,
-    RootFileGuid, RootFileType, RootFilePath
+    RootFileGuid, RootFileType, RootFilePath, RootFileDeleted
 ) ->
     StateBin = atom_to_binary(State, utf8),
     {ok, RootFileObjectId} = file_id:guid_to_objectid(RootFileGuid),
@@ -358,6 +358,7 @@ get_dataset_test_base(
                             <<"rootFileId">> => RootFileObjectId,
                             <<"rootFileType">> => RootFileTypeBin,
                             <<"rootFilePath">> => RootFilePath,
+                            <<"rootFileDeleted">> => RootFileDeleted,
                             <<"state">> => StateBin,
                             <<"protectionFlags">> => ProtectionFlags,
                             <<"effectiveProtectionFlags">> => EffProtectionFlags,
@@ -376,7 +377,7 @@ get_dataset_test_base(
 
                         ExpDatasetData = build_dataset_gs_instance(
                             State, DatasetId, ParentId, ProtectionFlags, CreationTime,
-                            RootFileGuid, RootFileType, RootFilePath
+                            RootFileGuid, RootFileType, RootFilePath, RootFileDeleted
                         ),
                         ?assertEqual(ExpDatasetData, Result)
                     end
@@ -781,12 +782,12 @@ build_test_file_tree_spec(DatasetSpecs) ->
 %% @private
 -spec build_dataset_gs_instance(
     dataset:state(), dataset:id(), dataset:id(), [binary()], time:seconds(),
-    file_id:file_guid(), file_meta:type(), file_meta:path()
+    file_id:file_guid(), file_meta:type(), file_meta:path(), boolean()
 ) ->
     map().
 build_dataset_gs_instance(
     State, DatasetId, ParentId, ProtectionFlagsJson, CreationTime,
-    RootFileGuid, RootFileType, RootFilePath
+    RootFileGuid, RootFileType, RootFilePath, RootFileDeleted
 ) ->
     EffProtectionFlagsJson = case State of
         ?ATTACHED_DATASET -> ProtectionFlagsJson;
@@ -798,6 +799,7 @@ build_dataset_gs_instance(
         root_file_guid = RootFileGuid,
         root_file_path = RootFilePath,
         root_file_type = RootFileType,
+        root_file_deleted = RootFileDeleted,
         creation_time = CreationTime,
         protection_flags = file_meta:protection_flags_from_json(ProtectionFlagsJson),
         eff_protection_flags = file_meta:protection_flags_from_json(EffProtectionFlagsJson),

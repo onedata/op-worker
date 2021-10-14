@@ -365,7 +365,7 @@
 % for given file. Hooks will be executed on future change of given
 % file's file_meta document.
 -record(file_meta_posthooks, {
-    hooks = #{} :: #{file_meta_posthooks:hook_identifier() => file_meta_posthooks:hook()}
+    hooks = #{} :: file_meta_posthooks:hooks()
 }).
 
 % This model holds information about QoS entries defined for given file.

@@ -519,7 +519,8 @@ rename_meta_and_storage_file(UserCtx, SourceFileCtx0, TargetParentCtx0, TargetNa
     case InvalidateCache of
         true ->
             paths_cache:invalidate_on_all_nodes(SpaceId),
-            dataset_eff_cache:invalidate_on_all_nodes(SpaceId);
+            dataset_eff_cache:invalidate_on_all_nodes(SpaceId),
+            file_meta_links_sync_status_cache:invalidate_on_all_nodes(SpaceId);
         _ ->
             ok
     end,

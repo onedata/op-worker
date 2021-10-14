@@ -12,6 +12,7 @@
 -author("Jakub Kudzia").
 
 -include("global_definitions.hrl").
+-include("modules/dataset/dataset.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/fslogic/fslogic_suffix.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
@@ -490,7 +491,7 @@ maybe_delete_parent_link(FileCtx, UserCtx, false) ->
 delete_file_meta(FileCtx) ->
     % use get_file_doc_including_deleted because doc can be marked as deleted
     % inside file_meta record and get_file_doc could fail
-    FileCtx2 = detach_dataset(FileCtx),
+    FileCtx2 = dataset_api:handle_file_deleted(FileCtx),
     {FileDoc, FileCtx3} = file_ctx:get_file_doc_including_deleted(FileCtx2),
     ok = file_meta:delete(FileDoc),
     FileCtx3.
@@ -498,24 +499,6 @@ delete_file_meta(FileCtx) ->
 -spec delete_referenced_file_meta(file_ctx:ctx()) -> file_ctx:ctx().
 delete_referenced_file_meta(FileCtx) ->
     delete_file_meta(file_ctx:ensure_based_on_referenced_guid(FileCtx)).
-
-
--spec detach_dataset(file_ctx:ctx()) -> file_ctx:ctx().
-detach_dataset(FileCtx) ->
-    {FileDoc, FileCtx2} = file_ctx:get_file_doc_including_deleted(FileCtx),
-    case file_meta_dataset:is_attached(FileDoc) of
-        true ->
-            {Path, FileCtx3} = file_ctx:get_logical_path(FileCtx2, user_ctx:new(?ROOT_SESS_ID)),
-            PathBeforeDeletion = case file_ctx:get_path_before_deletion(FileCtx3) of
-                undefined -> Path;
-                P -> P
-            end,
-            dataset_api:detach(
-                file_ctx:get_logical_uuid_const(FileCtx3), PathBeforeDeletion);
-        false ->
-            ok
-    end,
-    FileCtx2.
 
 
 -spec update_parent_timestamps(user_ctx:ctx(), file_ctx:ctx()) -> file_ctx:ctx().
