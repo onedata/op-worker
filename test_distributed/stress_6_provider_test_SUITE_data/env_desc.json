@@ -290,16 +290,20 @@
                 ],
                 "providers": {
                     "p1": {
-                        "storage": "/mnt/st"
+                        "storage": "/mnt/st",
+                        "supported_size": 10000000000
                     },
                     "p2": {
-                        "storage": "/mnt/st2"
+                        "storage": "/mnt/st2",
+                        "supported_size": 10000000000
                     },
                     "p3": {
-                        "storage": "/mnt/st3"
+                        "storage": "/mnt/st3",
+                        "supported_size": 10000000000
                     },
                     "p6": {
-                        "storage": "/mnt/st6"
+                        "storage": "/mnt/st6",
+                        "supported_size": 10000000000
                     }
                 }
             },
@@ -312,10 +316,12 @@
                 ],
                 "providers": {
                     "p4": {
-                        "storage": "/mnt/st4"
+                        "storage": "/mnt/st4",
+                        "supported_size": 10000000000
                     },
                     "p5": {
-                        "storage": "/mnt/st5"
+                        "storage": "/mnt/st5",
+                        "supported_size": 10000000000
                     }
                 }
             }
