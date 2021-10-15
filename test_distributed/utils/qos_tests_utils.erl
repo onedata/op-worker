@@ -45,7 +45,8 @@
     map_qos_names_to_ids/2,
     set_qos_parameters/2,
     mock_transfers/1,
-    finish_all_transfers/1, finish_all_transfers/2,
+    finish_transfers/1, finish_transfers/2,
+    finish_all_transfers/0,
     mock_replica_synchronizer/2
 ]).
 
@@ -343,22 +344,28 @@ mock_transfers(Workers) ->
             end
         end).
 
-finish_all_transfers(Files) ->
-    finish_all_transfers(Files, strict).
+% above mock (mock_transfers/1) required for this function to work
+finish_transfers(Files) ->
+    finish_transfers(Files, strict).
 
 % above mock (mock_transfers/1) required for this function to work
-finish_all_transfers([], _Mode) -> ok;
-finish_all_transfers(Files, Mode) ->
+finish_transfers(Files, Mode) ->
+    finish_transfers(Files, Mode, []).
+
+% above mock (mock_transfers/1) required for this function to work
+finish_transfers([], _Mode, IgnoredMsgs) -> 
+    resend_msgs(IgnoredMsgs);
+finish_transfers(Files, Mode, IgnoredMsgs) ->
     receive {qos_slave_job, Pid, FileGuid} = Msg ->
         case lists:member(FileGuid, Files) of
             true ->
                 Pid ! {completed, FileGuid},
-                finish_all_transfers(lists:delete(FileGuid, Files), Mode);
+                finish_transfers(lists:delete(FileGuid, Files), Mode, IgnoredMsgs);
             false ->
-                erlang:send_after(timer:seconds(2), self(), Msg),
-                finish_all_transfers(Files, Mode)
+                finish_transfers(Files, Mode, [Msg | IgnoredMsgs])
         end
     after timer:seconds(10) ->
+        resend_msgs(IgnoredMsgs),
         case Mode of
             strict ->
                 ct:print("Transfers not started: ~p", [Files]),
@@ -367,6 +374,20 @@ finish_all_transfers(Files, Mode) ->
                 ok
         end
     end.
+
+finish_all_transfers() ->
+    receive {qos_slave_job, Pid, FileGuid}->
+        Pid ! {completed, FileGuid},
+        finish_all_transfers()
+    after 0 ->
+        ok
+    end.
+
+resend_msgs([]) -> 
+    ok;
+resend_msgs([Msg | Tail]) -> 
+    self() ! Msg, 
+    resend_msgs(Tail).
 
 
 mock_replica_synchronizer(Workers, passthrough) ->

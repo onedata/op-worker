@@ -136,7 +136,7 @@ remote_driver_internal_call_test(Config0) ->
 
     {ok, DirGuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Dir)),
     ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Level2Dir)),
-    DirUniqueKey = datastore_model:get_unique_key(#{model => file_meta}, file_id:guid_to_uuid(DirGuid)),
+    DirUniqueKey = datastore_model:get_unique_key(file_meta, file_id:guid_to_uuid(DirGuid)),
 
     % Verify init and get link doc key
     Master = self(),
