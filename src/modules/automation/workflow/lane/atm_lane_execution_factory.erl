@@ -198,8 +198,8 @@ create_exception_store(RunCreationCtx = #run_creation_ctx{
 
     {ok, #document{key = AtmLaneExceptionStoreId}} = atm_store_api:create(
         AtmWorkflowExecutionAuth, undefined, #atm_store_schema{
-            id = ?CURRENT_LANE_EXCEPTION_STORE_SCHEMA_ID,
-            name = ?CURRENT_LANE_EXCEPTION_STORE_SCHEMA_ID,
+            id = ?CURRENT_LANE_RUN_EXCEPTION_STORE_SCHEMA_ID,
+            name = ?CURRENT_LANE_RUN_EXCEPTION_STORE_SCHEMA_ID,
             description = <<>>,
             type = list,
             data_spec = atm_store_container:get_data_spec(AtmStoreContainer),

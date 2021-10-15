@@ -46,6 +46,7 @@
 ]).
 
 
+% See module doc for more information.
 -record(atm_workflow_execution_env, {
     space_id :: od_space:id(),
     workflow_execution_id :: atm_workflow_execution:id(),

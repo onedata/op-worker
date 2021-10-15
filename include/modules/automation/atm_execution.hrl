@@ -55,6 +55,8 @@
     % it is not possible to predict what it will be (due to possible automatic
     % retries of previous lane runs)
     run_num :: undefined | pos_integer(),
+    % origin_run_num is set only if this lane run is a retry of a previous
+    % (origin) lane run
     origin_run_num = undefined :: undefined | pos_integer(),
 
     status :: atm_lane_execution:status(),
@@ -94,7 +96,7 @@
 
 %% Atm system stores related macros
 
--define(CURRENT_LANE_EXCEPTION_STORE_SCHEMA_ID, <<"CURRENT_LANE_EXCEPTION_STORE">>).
+-define(CURRENT_LANE_RUN_EXCEPTION_STORE_SCHEMA_ID, <<"CURRENT_LANE_RUN_EXCEPTION_STORE">>).
 
 
 %% Atm status and phase related macros

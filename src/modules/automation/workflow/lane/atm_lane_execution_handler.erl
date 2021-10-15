@@ -55,7 +55,7 @@ prepare(AtmLaneIndex, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
         #document{value = AtmWorkflowExecution} = atm_lane_execution_status:handle_enqueued(
             AtmLaneIndex, AtmWorkflowExecutionId
         ),
-        freeze_curr_lane_run_iterated_store_if_ready_to_execute(AtmWorkflowExecution),
+        freeze_current_lane_run_iterated_store_if_ready_to_execute(AtmWorkflowExecution),
 
         AtmLaneExecutionSpec
     catch Type:Reason:Stacktrace ->
@@ -77,7 +77,7 @@ handle_ended(AtmLaneIndex, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
         lanes_count = AtmLanesCount
     } = end_lane_run(AtmLaneIndex, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx),
 
-    freeze_curr_lane_run_iterated_store_if_ready_to_execute(NewAtmWorkflowExecution),
+    freeze_current_lane_run_iterated_store_if_ready_to_execute(NewAtmWorkflowExecution),
     {ok, NextLaneRun} = atm_lane_execution:get_current_run(NextAtmLaneIndex, NewAtmWorkflowExecution),
 
     case atm_lane_execution_status:status_to_phase(NextLaneRun#atm_lane_execution_run.status) of
@@ -206,12 +206,12 @@ freeze_exception_store(#atm_lane_execution_run{exception_store_id = AtmException
 
 
 %% @private
--spec freeze_curr_lane_run_iterated_store_if_ready_to_execute(atm_workflow_execution:record()) ->
+-spec freeze_current_lane_run_iterated_store_if_ready_to_execute(atm_workflow_execution:record()) ->
     ok.
-freeze_curr_lane_run_iterated_store_if_ready_to_execute(AtmWorkflowExecution = #atm_workflow_execution{
+freeze_current_lane_run_iterated_store_if_ready_to_execute(#atm_workflow_execution{
     current_lane_index = CurrentAtmLaneIndex,
     current_run_num = CurrentRunNum
-}) ->
+} = AtmWorkflowExecution) ->
     case atm_lane_execution:get_current_run(CurrentAtmLaneIndex, AtmWorkflowExecution) of
         {ok, #atm_lane_execution_run{status = ?ENQUEUED_STATUS, run_num = CurrentRunNum} = Run} ->
             atm_store_api:freeze(Run#atm_lane_execution_run.iterated_store_id);

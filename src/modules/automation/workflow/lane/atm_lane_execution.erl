@@ -91,10 +91,10 @@ get_schema(AtmLaneSelector, AtmWorkflowExecution = #atm_workflow_execution{
 get_current_run(AtmLaneSelector, AtmWorkflowExecution = #atm_workflow_execution{
     current_run_num = CurrentRunNum
 }) ->
-    case get(AtmLaneSelector, AtmWorkflowExecution) of
-        #atm_lane_execution{runs = [#atm_lane_execution_run{run_num = undefined} = Run | _]} ->
+    case get_latest_run(get(AtmLaneSelector, AtmWorkflowExecution)) of
+        #atm_lane_execution_run{run_num = undefined} = Run ->
             {ok, Run};
-        #atm_lane_execution{runs = [#atm_lane_execution_run{run_num = CurrentRunNum} = Run | _]} ->
+        #atm_lane_execution_run{run_num = CurrentRunNum} = Run ->
             {ok, Run};
         _ ->
             ?ERROR_NOT_FOUND
@@ -120,31 +120,26 @@ update_current_run(AtmLaneSelector, Diff, Default, AtmWorkflowExecution = #atm_w
     current_run_num = CurrentRunNum
 }) ->
     AtmLaneIndex = resolve_selector(AtmLaneSelector, AtmWorkflowExecution),
-    AtmLaneExecution = #atm_lane_execution{runs = Runs} = maps:get(AtmLaneIndex, AtmLaneExecutions),
+    AtmLaneExecution = maps:get(AtmLaneIndex, AtmLaneExecutions),
 
-    UpdateRunsResult = case Runs of
-        [#atm_lane_execution_run{run_num = RunNum} = CurrentRun | RestRuns] when
-            RunNum == undefined;
-            RunNum == CurrentRunNum
-        ->
-            case Diff(CurrentRun) of
-                {ok, UpdatedCurrentRun} -> {ok, [UpdatedCurrentRun | RestRuns]};
-                {error, _} = Error1 -> Error1
-            end;
+    UpdateRunsResult = case get_latest_run(AtmLaneExecution) of
+        #atm_lane_execution_run{run_num = undefined} ->
+            update_latest_run(Diff, AtmLaneExecution);
+        #atm_lane_execution_run{run_num = CurrentRunNum} ->
+            update_latest_run(Diff, AtmLaneExecution);
         _ when Default /= undefined ->
-            {ok, [Default | Runs]};
+            {ok, add_new_run(Default, AtmLaneExecution)};
         _ ->
             ?ERROR_NOT_FOUND
     end,
 
     case UpdateRunsResult of
-        {ok, NewRuns} ->
-            NewAtmLaneExecution = AtmLaneExecution#atm_lane_execution{runs = NewRuns},
+        {ok, NewAtmLaneExecution} ->
             {ok, AtmWorkflowExecution#atm_workflow_execution{lanes = AtmLaneExecutions#{
                 AtmLaneIndex => NewAtmLaneExecution
             }}};
-        {error, _} = Error2 ->
-            Error2
+        {error, _} = Error ->
+            Error
     end.
 
 
@@ -315,3 +310,33 @@ decode_run(NestedRecordDecoder, EncodedRun = #{
             NestedRecordDecoder(AtmParallelBoxExecutionJson, atm_parallel_box_execution)
         end, AtmParallelBoxExecutionsJson)
     }.
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+
+%% @private
+-spec add_new_run(run(), record()) -> record().
+add_new_run(Run, #atm_lane_execution{runs = Runs} = AtmLaneExecution) ->
+    AtmLaneExecution#atm_lane_execution{runs = [Run | Runs]}.
+
+
+%% @private
+-spec get_latest_run(record()) -> run() | ?ERROR_NOT_FOUND.
+get_latest_run(#atm_lane_execution{runs = [Run | _]}) -> Run;
+get_latest_run(_) -> ?ERROR_NOT_FOUND.
+
+
+%% @private
+-spec update_latest_run(run_diff(), record()) -> {ok, record()} | ?ERROR_NOT_FOUND.
+update_latest_run(Diff, #atm_lane_execution{runs = [Run | RestRuns]} = AtmLaneExecution) ->
+    case Diff(Run) of
+        {ok, UpdatedRun} ->
+            {ok, AtmLaneExecution#atm_lane_execution{runs = [UpdatedRun | RestRuns]}};
+        {error, _} = Error1 ->
+            Error1
+    end;
+update_latest_run(_, _) ->
+    ?ERROR_NOT_FOUND.
