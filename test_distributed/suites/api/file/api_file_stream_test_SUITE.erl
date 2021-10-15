@@ -42,7 +42,8 @@
     gui_download_tarball_with_symlink_loop_test/1,
     rest_download_file_test/1,
     rest_download_file_at_path_test/1,
-    rest_download_dir_test/1
+    rest_download_dir_test/1,
+    rest_download_dir_at_path_test/1
 ]).
 
 groups() -> [
@@ -57,8 +58,9 @@ groups() -> [
 %%        gui_download_tarball_with_hardlinks_test,
 %%        gui_download_tarball_with_symlink_loop_test,
 %%        rest_download_file_test
-        rest_download_file_at_path_test
-%%        rest_download_dir_test
+%%        rest_download_file_at_path_test
+%%        rest_download_dir_test,
+        rest_download_dir_at_path_test
     ]}
 ].
 
@@ -605,6 +607,20 @@ build_download_file_verify_fun(MemRef) ->
             [#object{type = ?REGULAR_FILE_TYPE, guid = FileGuid, content = Content}] ->
                 FileSize = size(Content),
                 check_single_file_download_distribution(MemRef, ExpTestResult, ApiTestCtx, FileGuid, FileSize, Providers, P1Node);
+            [#object{type = ?DIRECTORY_TYPE, children = [
+                #object{type = ?DIRECTORY_TYPE, children = [
+                    #object{type = ?SYMLINK_TYPE},
+                    #object{type = ?DIRECTORY_TYPE},
+                    #object{type = ?REGULAR_FILE_TYPE}
+                ]}]} = TestedTreeObject] ->
+                ExpTestResult1 = case {ExpTestResult, api_test_memory:get(MemRef, download_succeeded, undefined)} of
+                    {expected_failure, _} -> expected_failure;
+                    {_, false} -> expected_failure;
+                    {_, _} -> expected_success
+                end,
+                lists:foreach(fun(Object) ->
+                    check_tarball_download_distribution(MemRef, ExpTestResult1, ApiTestCtx, Object, Providers, P1Node)
+                end, utils:ensure_list(TestedTreeObject));
             _ ->
                 ExpTestResult1 = case {ExpTestResult, api_test_memory:get(MemRef, download_succeeded, undefined)} of
                     {expected_failure, _} -> expected_failure;
@@ -807,10 +823,8 @@ build_rest_download_file_at_path_prepare_args_fun(MemRef, TestMode) ->
         SpaceId = oct_background:get_space_id(space_krk_par),
 
         [#object{guid = DirGuid, name = DirName, children = [
-            #object{guid = FileGuid, name = FileName} = FileObject
+            #object{guid = FileGuid, name = FileName}
         ]}] = api_test_memory:get(MemRef, file_tree_object),
-
-        api_test_memory:set(MemRef, test_file, FileObject),
 
         {ParentGuidOrSpaceId, Path} = case maps:get(<<"path">>, Data0, undefined) of
             only_filename_path_placeholder ->
@@ -928,8 +942,6 @@ build_rest_download_file_at_path_verify_fun(MemRef, FileSize) ->
     end.
 
 
-
-
 rest_download_dir_test(Config) ->
     Providers = ?config(op_worker_nodes, Config),
 
@@ -994,6 +1006,69 @@ rest_download_dir_test(Config) ->
             data_spec = api_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
                 DirGuid, DirShareId, DataSpec
             )
+        }
+    ])).
+
+
+rest_download_dir_at_path_test(Config) ->
+    Providers = ?config(op_worker_nodes, Config),
+
+    SpaceId = oct_background:get_space_id(space_krk_par),
+    #object{guid = DirGuid} =
+        onenv_file_test_utils:create_and_sync_file_tree(
+            user3, SpaceId, #dir_spec{shares = [#share_spec{}]}, krakow),
+
+    MemRef = api_test_memory:init(),
+    DirSpec = #dir_spec{mode = 8#705, shares = [#share_spec{}], children = [
+        #symlink_spec{symlink_value = make_symlink_target()},
+        #dir_spec{},
+        #file_spec{content = ?RAND_CONTENT()}
+    ]},
+    DirTreeSpec = #dir_spec{mode = 8#705, shares = [#share_spec{}], children = [DirSpec]},
+    SetupFun = build_download_file_setup_fun(MemRef, DirTreeSpec),
+    ValidateCallResultFun = fun(#api_test_ctx{client = Client}, {ok, RespCode, _RespHeaders, RespBody}) ->
+        ?assertEqual(?HTTP_200_OK, RespCode),
+        [#object{children = [DirObject]}] = api_test_memory:get(MemRef, file_tree_object),
+        User4Id = oct_background:get_user_id(user4),
+        case {Client, api_test_memory:get(MemRef, test_mode)} of
+            {?USER(User4Id), normal_mode} -> check_tarball(MemRef, RespBody, DirObject, no_files);
+            _ -> check_tarball(MemRef, RespBody, DirObject)
+        end
+    end,
+
+    DataSpec = #data_spec{
+        optional = [<<"follow_symlinks">>, <<"path">>],
+        correct_values = #{
+            <<"follow_symlinks">> => [true, false],
+            <<"path">> => [
+                only_filename_path_placeholder,
+                directory_and_filename_path_placeholder,
+                space_id_with_directory_and_filename_path_placeholder
+            ]
+        }
+    },
+
+    ?assert(onenv_api_test_runner:run_tests([
+        #scenario_spec{
+            name = <<"Download dir at path using rest endpoint">>,
+            type = rest,
+            target_nodes = Providers,
+            client_spec = #client_spec{
+                correct = [
+                    user2,  % space owner - doesn't need any perms
+                    user3  % files owner
+                ],
+                unauthorized = [nobody],
+                forbidden_not_in_space = [user1]},
+
+            setup_fun = SetupFun,
+            prepare_args_fun = build_rest_download_file_at_path_prepare_args_fun(MemRef, normal_mode),
+            validate_result_fun = ValidateCallResultFun,
+            verify_fun = build_download_file_verify_fun(MemRef),
+
+            % correct data is set up in build_rest_download_prepare_args_fun/2
+            data_spec = api_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
+                DirGuid, undefined, DataSpec)
         }
     ])).
 
