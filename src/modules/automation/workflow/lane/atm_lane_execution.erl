@@ -7,7 +7,11 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% Model storing information about automation lane execution.
-%%% TODO CAUTION - FUNCTIONS MAY BE USED DURING DOC UPDATE AND AS SUCH MUSTNT TOUCH DATASTORE
+%%%
+%%%                             !!! Caution !!!
+%%% Functions in this module can be called inside tp process during
+%%% atm_workflow_execution doc update and as such shouldn't do any
+%%% operations on datastore themselves.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_lane_execution).
@@ -184,8 +188,7 @@ run_to_json(#atm_lane_execution_run{
     parallel_boxes = AtmParallelBoxExecutions
 }) ->
     #{
-%%        <<"runNumber">> => utils:undefined_to_null(RunNum),  %% TODO uncomment when gui allows null
-        <<"runNumber">> => utils:ensure_defined(RunNum, 100),
+        <<"runNumber">> => utils:undefined_to_null(RunNum),
         <<"originRunNumber">> => utils:undefined_to_null(OriginRunNum),
         <<"status">> => atom_to_binary(Status, utf8),
         <<"iteratedStoreId">> => utils:undefined_to_null(IteratedStoreId),
