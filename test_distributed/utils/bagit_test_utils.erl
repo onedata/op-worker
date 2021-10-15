@@ -95,13 +95,14 @@ traverse_and_validate(Node, SessionId, ParentGuid, ValidationFun, Path, Offset) 
     lists:foreach(fun({Guid, Name}) ->
         NewPath = filename:join(Path, Name),
         {ok, #file_attr{type = Type}} =
-            ?assertMatch({ok, _}, lfm_proxy:stat(Node, SessionId, ?FILE_REF(Guid, true)), ?ATTEMPTS),
+            ?assertMatch({ok, _}, lfm_proxy:stat(Node, SessionId, ?FILE_REF(Guid)), ?ATTEMPTS),
         case Type of
             ?DIRECTORY_TYPE ->
                 traverse_and_validate(Node, SessionId, Guid, ValidationFun, NewPath);
             ?REGULAR_FILE_TYPE ->
-                ValidationFun(Guid, NewPath)
-
+                ValidationFun(Guid, NewPath);
+            ?SYMLINK_TYPE ->
+                ok
         end
 
     end, Children),
