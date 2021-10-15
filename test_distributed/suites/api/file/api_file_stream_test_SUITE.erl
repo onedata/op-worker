@@ -48,18 +48,18 @@
 
 groups() -> [
     {all_tests, [parallel], [
-%%        gui_download_file_test,
-%%        gui_download_dir_test,
-%%        gui_download_multiple_files_test,
-%%        gui_download_different_filetypes_test,
-%%        gui_large_dir_download_test,
-%%        gui_download_files_between_spaces_test,
-%%        gui_download_incorrect_uuid_test,
-%%        gui_download_tarball_with_hardlinks_test,
-%%        gui_download_tarball_with_symlink_loop_test,
-%%        rest_download_file_test
-%%        rest_download_file_at_path_test
-%%        rest_download_dir_test,
+        gui_download_file_test,
+        gui_download_dir_test,
+        gui_download_multiple_files_test,
+        gui_download_different_filetypes_test,
+        gui_large_dir_download_test,
+        gui_download_files_between_spaces_test,
+        gui_download_incorrect_uuid_test,
+        gui_download_tarball_with_hardlinks_test,
+        gui_download_tarball_with_symlink_loop_test,
+        rest_download_file_test,
+        rest_download_file_at_path_test,
+        rest_download_dir_test,
         rest_download_dir_at_path_test
     ]}
 ].

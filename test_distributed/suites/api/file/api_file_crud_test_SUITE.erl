@@ -43,26 +43,26 @@
 
 groups() -> [
     {parallel, [parallel], [
-%%        get_file_instance_test,
-%%        get_file_instance_on_provider_not_supporting_space_test,
-%%
-%%        update_file_instance_test,
-%%        update_file_instance_on_provider_not_supporting_space_test,
-%%
-%%        delete_file_instance_test,
-        delete_file_under_path_instance_test
-%%        delete_file_instance_on_provider_not_supporting_space_test
+        get_file_instance_test,
+        get_file_instance_on_provider_not_supporting_space_test,
+
+        update_file_instance_test,
+        update_file_instance_on_provider_not_supporting_space_test,
+
+        delete_file_instance_test,
+        delete_file_under_path_instance_test,
+        delete_file_instance_on_provider_not_supporting_space_test
+    ]},
+    {sequential, [sequential], [
+        % Cannot be executed in parallel with get_file_instance_test as
+        % both tests check space dir shares and expect different results
+        get_shared_file_instance_test
     ]}
-%%    {sequential, [sequential], [
-%%        % Cannot be executed in parallel with get_file_instance_test as
-%%        % both tests check space dir shares and expect different results
-%%        get_shared_file_instance_test
-%%    ]}
 ].
 
 all() -> [
-    {group, parallel}
-%%    {group, sequential}
+    {group, parallel},
+    {group, sequential}
 ].
 
 
