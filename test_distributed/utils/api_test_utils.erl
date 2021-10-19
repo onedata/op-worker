@@ -701,10 +701,9 @@ add_cdmi_id_errors_for_operations_not_available_in_share_mode(IdKey, FileGuid, S
 
     ShareFileGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
     {ok, ShareFileObjectId} = file_id:guid_to_objectid(ShareFileGuid),
-
     BadFileIdValues = [
-        {IdKey, <<"InvalidObjectId">>, ?ERROR_SPACE_NOT_SUPPORTED_LOCALLY(DummyObjectId)},
-        {IdKey, DummyObjectId, ?ERROR_SPACE_NOT_SUPPORTED_LOCALLY(DummyObjectId)},
+        {IdKey, <<"InvalidObjectId">>, ?ERROR_BAD_VALUE_IDENTIFIER(IdKey)},
+        {IdKey, DummyObjectId, ?ERROR_BAD_VALUE_IDENTIFIER(IdKey)},
 
         % user has no privileges in non existent space and so he should receive ?ERROR_FORBIDDEN
         {IdKey, NonExistentSpaceObjectId, ?ERROR_FORBIDDEN},
