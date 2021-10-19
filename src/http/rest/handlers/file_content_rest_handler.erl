@@ -103,17 +103,12 @@ sanitize_params(#op_req{
             {
                 RawParams#{path => cowboy_req:path_info(Req)},
                 #{<<"create_parents">> => {boolean, any}},
-                #{path => {list_of_binaries, fun(PathTokens) ->
-                    case PathTokens == [] of
-                        true -> throw(?ERROR_MISSING_REQUIRED_VALUE(<<"path">>));
-                        false -> ok
-                    end,
-                    JoinedPath = str_utils:join_as_binaries(PathTokens, <<"/">>),
-                    case filepath_utils:sanitize(JoinedPath) of
-                        {error, _} -> throw(?ERROR_BAD_VALUE_FILE_PATH);
-                        {ok, _} -> ok
-                    end,
-                    {true, PathTokens}
+                #{path => {list_of_binaries, fun
+                    ([]) ->
+                        throw(?ERROR_MISSING_REQUIRED_VALUE(<<"path">>));
+                    (PathTokens) ->
+                        assert_valid_file_path(PathTokens),
+                        {true, PathTokens}
                 end
                 }}
             }
@@ -164,15 +159,7 @@ sanitize_params(#op_req{
 
     AllRawParams = RawParams#{path => cowboy_req:path_info(Req)},
     AllOptionalParams = #{
-        path => {list_of_binaries, fun(PathTokens) ->
-            JoinedPath = str_utils:join_as_binaries(PathTokens, <<"/">>),
-            case filepath_utils:sanitize(JoinedPath) of
-                {error, _} -> throw(?ERROR_BAD_VALUE_FILE_PATH);
-                {ok, _} -> ok
-            end,
-            {true, PathTokens}
-        end
-        },
+        path => {list_of_binaries, fun assert_valid_file_path/1},
         <<"follow_symlinks">> => {boolean, any}
     },
 
@@ -225,7 +212,7 @@ process_request(#op_req{
 
     Name = case Aspect of
         child -> maps:get(<<"name">>, Params);
-        file_at_path -> lists:last(cowboy_req:path_info(Req))
+        file_at_path -> lists:last(maps:get(path, OpReq))
     end,
 
     Mode = maps:get(<<"mode">>, Params, undefined),
@@ -327,6 +314,15 @@ write_req_body_to_file(SessionId, FileRef, Offset, Req) ->
 
 
 %% @private
+-spec assert_valid_file_path([binary()]) -> true | no_return().
+assert_valid_file_path(PathTokens) ->
+    case filepath_utils:sanitize(filename:join(PathTokens)) of
+        {error, _} -> throw(?ERROR_BAD_VALUE_FILE_PATH);
+        {ok, _} -> true
+    end.
+
+
+%% @private
 -spec resolve_target_file(middleware:req()) -> fslogic_worker:file_guid() | no_return().
 resolve_target_file(#op_req{
     operation = Operation,
@@ -334,23 +330,26 @@ resolve_target_file(#op_req{
     gri = #gri{id = BaseDirGuid, aspect = file_at_path},
     data = Data
 }) ->
-    PathInfo = maps:get(path, Data, []),
+    case maps:get(path, Data, []) of
+        [] ->
+            BaseDirGuid;
+        PathInfo ->
+            CreateDirs = case Operation of
+                create -> maps:get(<<"create_parents">>, Data, ?DEFAULT_CREATE_PARENTS_FLAG);
+                _ -> false
+            end,
 
-    CreateDirs = case Operation of
-        create -> maps:get(<<"create_parents">>, Data, ?DEFAULT_CREATE_PARENTS_FLAG);
-        _ -> false
-    end,
+            FilePath = case Operation of
+                create -> filename:join(lists:droplast(PathInfo));
+                _ -> filename:join(PathInfo)
+            end,
 
-    FilePath = case Operation of
-        create -> str_utils:join_as_binaries(lists:droplast(PathInfo), <<"/">>);
-        _ -> str_utils:join_as_binaries(PathInfo, <<"/">>)
-    end,
+            Mode = maps:get(<<"mode">>, Data, ?DEFAULT_DIR_MODE),
 
-    Mode = maps:get(<<"mode">>, Data, ?DEFAULT_DIR_MODE),
-
-    case lfm:resolve_guid_by_relative_path(SessionId, BaseDirGuid, FilePath, CreateDirs, Mode) of
-        {ok, ResolvedGuid} -> ResolvedGuid;
-        {error, Errno} -> throw(?ERROR_POSIX(Errno))
+            case lfm:resolve_guid_by_relative_path(SessionId, BaseDirGuid, FilePath, CreateDirs, Mode) of
+                {ok, ResolvedGuid} -> ResolvedGuid;
+                {error, Errno} -> throw(?ERROR_POSIX(Errno))
+            end
     end;
 resolve_target_file(#op_req{gri = #gri{id = TargetFileGuid}}) ->
     TargetFileGuid.
