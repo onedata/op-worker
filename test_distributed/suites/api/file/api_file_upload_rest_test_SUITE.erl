@@ -276,7 +276,6 @@ create_file_at_path_test(_Config) ->
     SpaceOwnerId = oct_background:get_user_id(user2),
 
     #object{
-        name = DirName,
         guid = DirGuid,
         shares = [DirShareId],
         children = [
@@ -307,11 +306,8 @@ create_file_at_path_test(_Config) ->
     }),
 
     {ok, ChildFileObjectId} = file_id:guid_to_objectid(ChildFileGuid),
-    {ok, DirObjectId} = file_id:guid_to_objectid(DirGuid),
 
     api_test_memory:set(MemRef, child_dir_name, ChildDirName),
-
-    BaseDirPath = filepath_utils:join([<<"space_krk_par">>, DirName]),
 
     Content = crypto:strong_rand_bytes(?WRITE_SIZE_BYTES),
 
@@ -330,9 +326,9 @@ create_file_at_path_test(_Config) ->
                 forbidden_in_space = [{user4, ?ERROR_POSIX(?EACCES)}]  % forbidden by file perms
             },
 
-            prepare_args_fun = build_rest_create_file_at_path_prepare_args_fun(MemRef, DirGuid, DirObjectId),
+            prepare_args_fun = build_rest_create_file_at_path_prepare_args_fun(MemRef, DirGuid),
             validate_result_fun = build_create_file_validate_call_fun(MemRef, SpaceOwnerId),
-            verify_fun = build_rest_create_file_under_path_verify_fun(MemRef, DirGuid, BaseDirPath, Providers),
+            verify_fun = build_rest_create_file_at_path_verify_fun(MemRef, Providers),
 
             data_spec = api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
                 DirGuid, DirShareId, #data_spec{
@@ -340,11 +336,11 @@ create_file_at_path_test(_Config) ->
                     optional = [<<"type">>, <<"mode">>, <<"offset">>, body],
                     correct_values = #{
                         <<"path">> => [
-                            only_name_without_flag_placeholder,
-                            only_name_with_flag_placeholder,
-                            existent_path_without_flag_placeholder,
-                            existent_path_with_flag_placeholder,
-                            inexistent_path_with_flag_placeholder
+                            only_name_without_create_parents_flag_placeholder,
+                            only_name_with_create_parents_flag_placeholder,
+                            existent_path_without_create_parents_flag_placeholder,
+                            existent_path_with_create_parents_flag_placeholder,
+                            inexistent_path_with_create_parents_flag_placeholder
                         ],
                         <<"type">> => [<<"REG">>, <<"DIR">>],
                         <<"mode">> => [<<"0544">>, <<"0707">>],
@@ -360,7 +356,7 @@ create_file_at_path_test(_Config) ->
                         {bad_id, ChildFileObjectId, ?ERROR_POSIX(?ENOTDIR)},
                         {<<"path">>, filepath_utils:join([ChildFileName, <<"dir1/file.txt">>]), ?ERROR_POSIX(?ENOTDIR)},
                         {<<"path">>, <<"/a/b/\0null\0/">>, ?ERROR_BAD_VALUE_FILE_PATH},
-                        {<<"path">>, inexistent_path_without_flag_placeholder, ?ERROR_POSIX(?ENOENT)},
+                        {<<"path">>, inexistent_path_without_create_parents_flag_placeholder, ?ERROR_POSIX(?ENOENT)},
 
                         {<<"type">>, <<"file">>, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"type">>, [
                             <<"REG">>, <<"DIR">>, <<"LNK">>, <<"SYMLNK">>
@@ -382,11 +378,12 @@ create_file_at_path_test(_Config) ->
 
 
 %% @private
--spec build_rest_create_file_at_path_prepare_args_fun(api_test_memory:mem_ref(), file_id:file_guid(), file_id:objectid()) ->
+-spec build_rest_create_file_at_path_prepare_args_fun(api_test_memory:mem_ref(), file_id:file_guid()) ->
     onenv_api_test_runner:prepare_args_fun().
-build_rest_create_file_at_path_prepare_args_fun(MemRef, DirGuid, ParentDirObjectId) ->
+build_rest_create_file_at_path_prepare_args_fun(MemRef, RelRootDirGuid) ->
     fun(#api_test_ctx{data = Data0, node = TestNode}) ->
-        {ParentId, Data1} = api_test_utils:maybe_substitute_bad_id(ParentDirObjectId, Data0),
+        {ok, RelRootDirObjectId} = file_id:guid_to_objectid(RelRootDirGuid),
+        {ParentId, Data1} = api_test_utils:maybe_substitute_bad_id(RelRootDirObjectId, Data0),
         ChildDirName = api_test_memory:get(MemRef, child_dir_name),
         Name = str_utils:rand_hex(10),
         api_test_memory:set(MemRef, name, Name),
@@ -394,20 +391,20 @@ build_rest_create_file_at_path_prepare_args_fun(MemRef, DirGuid, ParentDirObject
         DataWithoutPath = maps:remove(<<"path">>, Data1),
 
         {RelativePath, Data2} = case maps:get(<<"path">>, Data1, undefined) of
-            only_name_without_flag_placeholder ->
+            only_name_without_create_parents_flag_placeholder ->
                 {Name, DataWithoutPath};
-            only_name_with_flag_placeholder ->
+            only_name_with_create_parents_flag_placeholder ->
                 {Name, DataWithoutPath#{<<"create_parents">> => true}};
-            existent_path_without_flag_placeholder ->
+            existent_path_without_create_parents_flag_placeholder ->
                 Path = filepath_utils:join([ChildDirName, Name]),
                 {Path, DataWithoutPath};
-            existent_path_with_flag_placeholder ->
+            existent_path_with_create_parents_flag_placeholder ->
                 Path = filepath_utils:join([ChildDirName, Name]),
                 {Path, DataWithoutPath#{<<"create_parents">> => true}};
-            inexistent_path_without_flag_placeholder ->
+            inexistent_path_without_create_parents_flag_placeholder ->
                 Path = filepath_utils:join([ChildDirName, RandomDirPath, Name]),
                 {Path, DataWithoutPath};
-            inexistent_path_with_flag_placeholder ->
+            inexistent_path_with_create_parents_flag_placeholder ->
                 Path = filepath_utils:join([ChildDirName, RandomDirPath, Name]),
                 {Path, DataWithoutPath#{<<"create_parents">> => true}};
             undefined ->
@@ -418,9 +415,10 @@ build_rest_create_file_at_path_prepare_args_fun(MemRef, DirGuid, ParentDirObject
         end,
 
         {Body, Data3} = utils:ensure_defined(maps:take(body, Data2), error, {<<>>, Data2}),
-        RestPath = filepath_utils:join([<<"data">>, ParentId, <<"path">>, RelativePath]),
-        api_test_memory:set(MemRef, files_before_call, ls(TestNode, DirGuid)),
-        api_test_memory:set(MemRef, relative_path, RelativePath),
+        RestPath = str_utils:join_as_binaries([<<"data">>, ParentId, <<"path">>, RelativePath], <<"/">>),
+        {ok, RelRootPath} = lfm_proxy:get_file_path(TestNode, ?ROOT_SESS_ID, RelRootDirGuid),
+        CanonicalFilePath = filename:join([RelRootPath, RelativePath]),
+        api_test_memory:set(MemRef, file_path, CanonicalFilePath),
         #rest_args{
             method = put,
             path = http_utils:append_url_parameters(RestPath, Data3),
@@ -430,23 +428,22 @@ build_rest_create_file_at_path_prepare_args_fun(MemRef, DirGuid, ParentDirObject
 
 
 %% @private
--spec build_rest_create_file_under_path_verify_fun(api_test_memory:mem_ref(), file_id:file_guid(), file_meta:path(), [node()]) ->
+-spec build_rest_create_file_at_path_verify_fun(api_test_memory:mem_ref(), [node()]) ->
     boolean().
-build_rest_create_file_under_path_verify_fun(MemRef, DirGuid, BaseDirPAth, Providers) ->
+build_rest_create_file_at_path_verify_fun(MemRef, Providers) ->
     fun
         (expected_failure, #api_test_ctx{node = TestNode}) ->
-            FilesBeforeCall = api_test_memory:get(MemRef, files_before_call),
-            ?assertEqual(FilesBeforeCall, ls(TestNode, DirGuid), ?ATTEMPTS);
+            FilePath = api_test_memory:get(MemRef, file_path),
+            ?assertMatch({error, _}, lfm_proxy:stat(TestNode, ?ROOT_SESS_ID, {path, FilePath}));
         (expected_success, #api_test_ctx{node = TestNode, data = Data}) ->
             case api_test_memory:get(MemRef, success) of
                 true ->
                     FileGuid = api_test_memory:get(MemRef, file_guid),
-                    RelativePath = api_test_memory:get(MemRef, relative_path),
-                    ExpPath = filepath_utils:join([BaseDirPAth, RelativePath]),
+                    ExpPath = api_test_memory:get(MemRef, file_path),
                     {ok, FilePath} = ?assertMatch({ok, _}, lfm_proxy:get_file_path(
                         TestNode, ?ROOT_SESS_ID, FileGuid), ?ATTEMPTS),
 
-                    ?assertEqual(<<"/", ExpPath/binary>>, FilePath, ?ATTEMPTS),
+                    ?assertEqual(ExpPath, FilePath, ?ATTEMPTS),
 
                     ExpName = api_test_memory:get(MemRef, name),
                     {ExpType, DefaultMode} = case maps:get(<<"type">>, Data, <<"REG">>) of
@@ -477,8 +474,8 @@ build_rest_create_file_under_path_verify_fun(MemRef, DirGuid, BaseDirPAth, Provi
                     end;
 
                 false ->
-                    ExpFilesInDir = api_test_memory:get(MemRef, files_before_call),
-                    ?assertEqual(ExpFilesInDir, ls(TestNode, DirGuid))
+                    FilePath = api_test_memory:get(MemRef, file_path),
+                    ?assertMatch({error, _}, lfm_proxy:stat(TestNode, ?ROOT_SESS_ID, {path, FilePath}))
             end
     end.
 

@@ -37,7 +37,7 @@
     update_file_instance_on_provider_not_supporting_space_test/1,
 
     delete_file_instance_test/1,
-    delete_file_under_path_instance_test/1,
+    delete_file_at_path_instance_test/1,
     delete_file_instance_on_provider_not_supporting_space_test/1
 ]).
 
@@ -50,7 +50,7 @@ groups() -> [
         update_file_instance_on_provider_not_supporting_space_test,
 
         delete_file_instance_test,
-        delete_file_under_path_instance_test,
+        delete_file_at_path_instance_test,
         delete_file_instance_on_provider_not_supporting_space_test
     ]},
     {sequential, [sequential], [
@@ -511,7 +511,7 @@ delete_file_instance_test(Config) ->
     ])).
 
 
-delete_file_under_path_instance_test(Config) ->
+delete_file_at_path_instance_test(Config) ->
     [P1] = oct_background:get_provider_nodes(krakow),
     [P2] = oct_background:get_provider_nodes(paris),
     Providers = [P1, P2],
@@ -561,7 +561,7 @@ delete_file_under_path_instance_test(Config) ->
 
             scenario_templates = [
                 #scenario_template{
-                    name = str_utils:format("Delete ~s instance using rest api", [FileType]),
+                    name = str_utils:format("Delete ~s at path instance using rest api", [FileType]),
                     type = rest,
                     prepare_args_fun = build_delete_instance_at_path_test_prepare_rest_args_fun(MemRef, TopDirGuid, TopDirName),
                     validate_result_fun = fun(_, {ok, RespCode, _RespHeaders, _RespBody}) ->
@@ -614,7 +614,6 @@ build_delete_instance_at_path_test_prepare_rest_args_fun(MemRef, TopDirGuid, Top
         end,
 
         DataWithoutPath = maps:remove(<<"path">>, Data),
-
 
         {Id, _} = api_test_utils:maybe_substitute_bad_id(ParentId, DataWithoutPath),
         RestPath = filepath_utils:join([<<"data">>, Id, <<"path">>, Path]),

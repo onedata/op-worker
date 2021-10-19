@@ -774,20 +774,3 @@ add_share_file_id_errors_for_operations_not_available_in_share_mode(FileGuid, Sh
 
         | Errors
     ].
-
-add_share_file_id_errors_for_operations_not_available_in_share_mode(FileGuid, ShareId, Errors, Placeholder) ->
-    ShareFileGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
-    {ok, ShareFileObjectId} = file_id:guid_to_objectid(ShareFileGuid),
-
-    [
-        % Errors in share mode:
-        % - rest: thrown by middleware operation_supported check (rest_handler
-        %   changes scope to public when using share object id)
-        % - gs: scope is left intact (in contrast to rest) but client is changed
-        %   to ?GUEST. Then it fails middleware auth checks (whether user belongs
-        %   to space or has some space privileges)
-        {Placeholder, ShareFileObjectId, {rest, ?ERROR_NOT_SUPPORTED}},
-        {Placeholder, ShareFileGuid, {gs, ?ERROR_UNAUTHORIZED}}
-
-        | Errors
-    ].

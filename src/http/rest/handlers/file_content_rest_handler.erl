@@ -212,7 +212,7 @@ process_request(#op_req{
 
     Name = case Aspect of
         child -> maps:get(<<"name">>, Params);
-        file_at_path -> lists:last(maps:get(path, OpReq))
+        file_at_path -> lists:last(maps:get(path, Params))
     end,
 
     Mode = maps:get(<<"mode">>, Params, undefined),
@@ -316,7 +316,7 @@ write_req_body_to_file(SessionId, FileRef, Offset, Req) ->
 %% @private
 -spec assert_valid_file_path([binary()]) -> true | no_return().
 assert_valid_file_path(PathTokens) ->
-    case filepath_utils:sanitize(filename:join(PathTokens)) of
+    case filepath_utils:sanitize(filepath_utils:join(PathTokens)) of
         {error, _} -> throw(?ERROR_BAD_VALUE_FILE_PATH);
         {ok, _} -> true
     end.
@@ -330,26 +330,22 @@ resolve_target_file(#op_req{
     gri = #gri{id = BaseDirGuid, aspect = file_at_path},
     data = Data
 }) ->
-    case maps:get(path, Data, []) of
-        [] ->
-            BaseDirGuid;
-        PathInfo ->
-            CreateDirs = case Operation of
-                create -> maps:get(<<"create_parents">>, Data, ?DEFAULT_CREATE_PARENTS_FLAG);
-                _ -> false
-            end,
+    PathInfo = maps:get(path, Data, []),
+    CreateDirs = case Operation of
+        create -> maps:get(<<"create_parents">>, Data, ?DEFAULT_CREATE_PARENTS_FLAG);
+        _ -> false
+    end,
 
-            FilePath = case Operation of
-                create -> filename:join(lists:droplast(PathInfo));
-                _ -> filename:join(PathInfo)
-            end,
+    FilePath = case Operation of
+        create -> filepath_utils:join(lists:droplast(PathInfo));
+        _ -> filepath_utils:join(PathInfo)
+    end,
 
-            Mode = maps:get(<<"mode">>, Data, ?DEFAULT_DIR_MODE),
+    Mode = maps:get(<<"mode">>, Data, ?DEFAULT_DIR_MODE),
 
-            case lfm:resolve_guid_by_relative_path(SessionId, BaseDirGuid, FilePath, CreateDirs, Mode) of
-                {ok, ResolvedGuid} -> ResolvedGuid;
-                {error, Errno} -> throw(?ERROR_POSIX(Errno))
-            end
+    case lfm:resolve_guid_by_relative_path(SessionId, BaseDirGuid, FilePath, CreateDirs, Mode) of
+        {ok, ResolvedGuid} -> ResolvedGuid;
+        {error, Errno} -> throw(?ERROR_POSIX(Errno))
     end;
 resolve_target_file(#op_req{gri = #gri{id = TargetFileGuid}}) ->
     TargetFileGuid.
