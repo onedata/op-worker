@@ -1075,7 +1075,7 @@
 
 -record(atm_task_execution, {
     workflow_execution_id :: atm_workflow_execution:id(),
-    lane_index :: non_neg_integer(),
+    lane_index :: atm_lane_execution:index(),
     parallel_box_index :: non_neg_integer(),
 
     schema_id :: automation:id(),
@@ -1138,15 +1138,21 @@
 
     store_registry :: atm_workflow_execution:store_registry(),
     system_audit_log_id :: undefined | atm_store:id(),
-    lanes :: [atm_lane_execution:record()],
+
+    % lane execution records are kept as values in map where keys are indices
+    % (from 1 up to `lanes_count`) due to performance and convenience of use
+    % when accessing and modifying random element
+    lanes :: #{atm_lane_execution:index() => atm_lane_execution:record()},
+    lanes_count :: pos_integer(),
+
+    current_lane_index :: atm_lane_execution:index(),
+    current_run_num :: pos_integer(),
 
     status :: atm_workflow_execution:status(),
     % Flag used to tell if status was changed during doc update (set automatically
     % when updating doc). It is necessary due to limitation of datastore as
     % otherwise getting document before update would be needed (to compare 2 docs).
     prev_status :: atm_workflow_execution:status(),
-    % Flag used to differentiate reasons why workflow is aborting
-    aborting_reason = undefined :: undefined | cancel | failure,
 
     callback :: undefined | http_client:url(),
 

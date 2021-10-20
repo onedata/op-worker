@@ -6,8 +6,50 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module provides utility functions for management of automation
-%%% workflow execution status and phase.
+%%% This module contains functions that handle atm workflow execution status
+%%% transitions according to following state machine:
+%%%
+%%%  W
+%%%  A         +-----------+
+%%%  I         | SCHEDULED |------------------------------
+%%%  T         +-----------+                               \
+%%%  I               |                                      |
+%%%  N    first lane run transitions                        |
+%%%  G        to preparing status                           |
+%%%                  |                                      |
+%%% =================|======================================|=================
+%%%                  v                                      |
+%%%            +-----------+                                |
+%%%            |   ACTIVE  |--------------------------------o
+%%%            +-----------+                                |
+%%%                       \                    currently executed lane run
+%%%                        \                     failed or was cancelled
+%%%  O                      \                               |
+%%%  N                       \                              v
+%%%  G                        \                       +-----------+
+%%%  O                         \                      |  ABORTING |
+%%%  I                          \                     +-----------+
+%%%  N                           \                  /
+%%%  G                        last executed lane run
+%%%                          /          |           \
+%%%                         /           |            \
+%%%                        /            |             \
+%%%         successfully finished     failed      was cancelled
+%%%                      /              |                \
+%%% ====================/===============|=================\===================
+%%%                    /                |                  \
+%%%  E                v                 v                   v
+%%%  N     +-----------+           +-----------+           +-----------+
+%%%  D     |  FINISHED |           |   FAILED  |           | CANCELLED |
+%%%  E     +-----------+           +-----------+           +-----------+
+%%%  D
+%%%
+%%% Note: When transition to ended phase occurs the workflow execution status is
+%%% copied from last executed lane run which works because:
+%%% 1) if last lane run successfully finished than all previous lane runs must
+%%%    have also successfully finished.
+%%% 2) if last lane run aborted (due to cancel or failure) than entire workflow
+%%%    execution is aborted with the same reason.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_workflow_execution_status).
@@ -16,16 +58,21 @@
 -include("modules/automation/atm_execution.hrl").
 
 %% API
+-export([infer_phase/1]).
 -export([
-    handle_preparing/1,
-    handle_enqueued/1,
-    handle_aborting/2,
-    handle_ended/1
+    handle_lane_preparing/3,
+    handle_lane_enqueued/2,
+    handle_lane_aborting/3,
+    handle_lane_task_status_change/2
 ]).
--export([
-    infer_phase/1,
-    report_task_status_change/5
-]).
+-export([handle_ended/1]).
+
+
+% Function taking as argument entire atm_workflow_execution record, modifying lane run
+% and returning updated atm_workflow_execution record (or record)
+-type lane_run_diff() :: fun((atm_workflow_execution:record()) ->
+    atm_workflow_execution:record() | errors:error()
+).
 
 
 %%%===================================================================
@@ -33,37 +80,132 @@
 %%%===================================================================
 
 
--spec handle_preparing(atm_workflow_execution:id()) ->
-    {ok, atm_workflow_execution:doc()} | no_return().
-handle_preparing(AtmWorkflowExecutionId) ->
-    handle_transition_within_waiting_phase(AtmWorkflowExecutionId, ?PREPARING_STATUS).
+-spec infer_phase(atm_workflow_execution:record()) -> atm_workflow_execution:phase().
+infer_phase(#atm_workflow_execution{status = Status}) ->
+    status_to_phase(Status).
 
 
--spec handle_enqueued(atm_workflow_execution:id()) ->
-    {ok, atm_workflow_execution:doc()} | no_return().
-handle_enqueued(AtmWorkflowExecutionId) ->
-    handle_transition_within_waiting_phase(AtmWorkflowExecutionId, ?ENQUEUED_STATUS).
+-spec handle_lane_preparing(
+    atm_lane_execution:index(),
+    atm_workflow_execution:id(),
+    lane_run_diff()
+) ->
+    {ok, atm_workflow_execution:doc()} | errors:error().
+handle_lane_preparing(AtmLaneIndex, AtmWorkflowExecutionId, AtmLaneExecutionDiff) ->
+    Diff = fun
+        (Record = #atm_workflow_execution{
+            status = ?SCHEDULED_STATUS,
+            current_lane_index = CurrentAtmLaneIndex
+        }) when CurrentAtmLaneIndex =:= AtmLaneIndex ->
+            case AtmLaneExecutionDiff(Record) of
+                {ok, NewRecord} ->
+                    {ok, set_times_on_phase_transition(NewRecord#atm_workflow_execution{
+                        status = ?ACTIVE_STATUS
+                    })};
+                {error, _} = Error ->
+                    Error
+            end;
+
+        (Record = #atm_workflow_execution{status = Status}) when
+            Status == ?SCHEDULED_STATUS;
+            Status == ?ACTIVE_STATUS
+        ->
+            AtmLaneExecutionDiff(Record);
+
+        (#atm_workflow_execution{status = ?ABORTING_STATUS}) ->
+            ?ERROR_ATM_WORKFLOW_EXECUTION_ABORTING;
+
+        (#atm_workflow_execution{status = _EndedStatus}) ->
+            ?ERROR_ATM_WORKFLOW_EXECUTION_ENDED
+    end,
+
+    case atm_workflow_execution:update(AtmWorkflowExecutionId, Diff) of
+        {ok, AtmWorkflowExecutionDoc} = Result ->
+            ensure_in_proper_phase_tree(AtmWorkflowExecutionDoc),
+            Result;
+        {error, _} = Error ->
+            Error
+    end.
 
 
--spec handle_aborting(atm_workflow_execution:id(), cancel | failure) ->
-    ok | {error, already_ended}.
-handle_aborting(AtmWorkflowExecutionId, Reason) ->
-    Diff = fun(AtmWorkflowExecution) ->
-        case infer_phase(AtmWorkflowExecution) of
-            ?ENDED_PHASE ->
-                {error, already_ended};
-            _ ->
-                {ok, set_times_on_phase_transition(AtmWorkflowExecution#atm_workflow_execution{
-                    status = ?ABORTING_STATUS,
-                    aborting_reason = Reason
-                })}
-        end
+-spec handle_lane_enqueued(atm_workflow_execution:id(), lane_run_diff()) ->
+    {ok, atm_workflow_execution:doc()} | errors:error().
+handle_lane_enqueued(AtmWorkflowExecutionId, AtmLaneExecutionDiff) ->
+    atm_workflow_execution:update(AtmWorkflowExecutionId, fun
+        (Record = #atm_workflow_execution{status = Status}) when
+            Status == ?SCHEDULED_STATUS;
+            Status == ?ACTIVE_STATUS
+        ->
+            AtmLaneExecutionDiff(Record);
+
+        (#atm_workflow_execution{status = ?ABORTING_STATUS}) ->
+            ?ERROR_ATM_WORKFLOW_EXECUTION_ABORTING;
+
+        (#atm_workflow_execution{status = _EndedStatus}) ->
+            ?ERROR_ATM_WORKFLOW_EXECUTION_ENDED
+    end).
+
+
+-spec handle_lane_aborting(
+    atm_lane_execution:selector(),
+    atm_workflow_execution:id(),
+    lane_run_diff()
+) ->
+    ok | errors:error().
+handle_lane_aborting(AtmLaneSelector, AtmWorkflowExecutionId, AtmLaneExecutionDiff) ->
+    Diff = fun
+        (Record = #atm_workflow_execution{
+            status = Status,
+            current_lane_index = CurrentAtmLaneIndex
+        }) when
+            Status == ?SCHEDULED_STATUS;
+            Status == ?ACTIVE_STATUS;
+            Status == ?ABORTING_STATUS
+        ->
+            AtmLaneIndex = atm_lane_execution:resolve_selector(AtmLaneSelector, Record),
+
+            case {AtmLaneIndex == CurrentAtmLaneIndex, AtmLaneExecutionDiff(Record)} of
+                {true, {ok, NewRecord}} ->
+                    {ok, set_times_on_phase_transition(NewRecord#atm_workflow_execution{
+                        status = ?ABORTING_STATUS
+                    })};
+                {false, {ok, NewRecord}} ->
+                    {ok, NewRecord};
+                {_, {error, _} = Error} ->
+                    Error
+            end;
+
+        (#atm_workflow_execution{status = _EndedStatus}) ->
+            ?ERROR_ATM_WORKFLOW_EXECUTION_ENDED
     end,
 
     case atm_workflow_execution:update(AtmWorkflowExecutionId, Diff) of
         {ok, AtmWorkflowExecutionDoc} ->
             ensure_in_proper_phase_tree(AtmWorkflowExecutionDoc);
-        {error, already_ended} = Error ->
+        {error, _} = Error ->
+            Error
+    end.
+
+
+-spec handle_lane_task_status_change(atm_workflow_execution:id(), lane_run_diff()) ->
+    ok | errors:error().
+handle_lane_task_status_change(AtmWorkflowExecutionId, AtmLaneExecutionDiff) ->
+    Diff = fun(Record) ->
+        case infer_phase(Record) of
+            ?ENDED_PHASE ->
+                ?ERROR_ATM_WORKFLOW_EXECUTION_ENDED;
+            _ ->
+                AtmLaneExecutionDiff(Record)
+        end
+    end,
+
+    case atm_workflow_execution:update(AtmWorkflowExecutionId, Diff) of
+        {ok, _} ->
+            ok;
+        ?ERROR_ATM_INVALID_STATUS_TRANSITION(_, _) ->
+            % Race with other process which must have already updated task status
+            ok;
+        {error, _} = Error ->
             Error
     end.
 
@@ -71,37 +213,12 @@ handle_aborting(AtmWorkflowExecutionId, Reason) ->
 -spec handle_ended(atm_workflow_execution:id()) ->
     {ok, atm_workflow_execution:doc()} | no_return().
 handle_ended(AtmWorkflowExecutionId) ->
-    Diff = fun(#atm_workflow_execution{status = CurrStatus} = AtmWorkflowExecution) ->
-        EndedStatus = case status_to_phase(CurrStatus) of
-            ?WAITING_PHASE ->
-                % Workflow preparation must have failed or provider was restarted
-                % as otherwise it is not possible to transition from waiting phase
-                % to ended phase directly
-                ?FAILED_STATUS;
-            ?ONGOING_PHASE when CurrStatus == ?ACTIVE_STATUS ->
-                AtmLaneExecutionStatuses = lists:usort(atm_lane_execution:gather_statuses(
-                    AtmWorkflowExecution#atm_workflow_execution.lanes
-                )),
-                case lists:member(?FAILED_STATUS, AtmLaneExecutionStatuses) of
-                    true ->
-                        % Workflow may not have been aborted as maximum failed items threshold
-                        % has not been breached but still after execution end it is considered
-                        % as failed
-                        ?FAILED_STATUS;
-                    false ->
-                        ?FINISHED_STATUS
-                end;
-            ?ONGOING_PHASE when CurrStatus == ?ABORTING_STATUS ->
-                case AtmWorkflowExecution#atm_workflow_execution.aborting_reason of
-                    cancel -> ?CANCELLED_STATUS;
-                    failure -> ?FAILED_STATUS
-                end;
-            ?ENDED_PHASE ->
-                CurrStatus
-        end,
-
-        {ok, set_times_on_phase_transition(AtmWorkflowExecution#atm_workflow_execution{
-            status = EndedStatus
+    Diff = fun(Record = #atm_workflow_execution{current_lane_index = CurrentAtmLaneIndex}) ->
+        {ok, #atm_lane_execution_run{status = Status}} = atm_lane_execution:get_current_run(
+            CurrentAtmLaneIndex, Record
+        ),
+        {ok, set_times_on_phase_transition(Record#atm_workflow_execution{
+            status = Status
         })}
     end,
 
@@ -113,66 +230,6 @@ handle_ended(AtmWorkflowExecutionId) ->
     Result.
 
 
--spec infer_phase(atm_workflow_execution:record()) -> atm_workflow_execution:phase().
-infer_phase(#atm_workflow_execution{status = Status}) ->
-    status_to_phase(Status).
-
-
--spec report_task_status_change(
-    atm_workflow_execution:id(),
-    non_neg_integer(),
-    non_neg_integer(),
-    atm_task_execution:id(),
-    atm_task_execution:status()
-) ->
-    ok.
-report_task_status_change(
-    AtmWorkflowExecutionId,
-    AtmLaneExecutionIndex,
-    AtmParallelBoxExecutionIndex,
-    AtmTaskExecutionId,
-    NewAtmTaskExecutionStatus
-) ->
-    HasTaskStarted = lists:member(NewAtmTaskExecutionStatus, [?ACTIVE_STATUS, ?SKIPPED_STATUS]),
-
-    Diff = fun(AtmWorkflowExecution = #atm_workflow_execution{
-        status = CurrStatus,
-        lanes = AtmLaneExecutions
-    }) ->
-        AtmLanExecution = lists:nth(AtmLaneExecutionIndex, AtmLaneExecutions),
-
-        case atm_lane_execution:update_task_status(
-            AtmParallelBoxExecutionIndex, AtmTaskExecutionId,
-            NewAtmTaskExecutionStatus, AtmLanExecution
-        ) of
-            {ok, NewLaneExecution} ->
-                NewAtmLaneExecutions = lists_utils:replace_at(
-                    NewLaneExecution, AtmLaneExecutionIndex, AtmLaneExecutions
-                ),
-                NewAtmWorkflowExecution = AtmWorkflowExecution#atm_workflow_execution{
-                    status = case {CurrStatus, HasTaskStarted} of
-                        {?ENQUEUED_STATUS, true} ->
-                            % Workflow transition to ?ACTIVE_STATUS when first task has started
-                            ?ACTIVE_STATUS;
-                        _ ->
-                            CurrStatus
-                    end,
-                    lanes = NewAtmLaneExecutions
-                },
-                {ok, set_times_on_phase_transition(NewAtmWorkflowExecution)};
-            {error, _} = Error ->
-                Error
-        end
-    end,
-    case atm_workflow_execution:update(AtmWorkflowExecutionId, Diff) of
-        {ok, AtmWorkflowExecutionDoc} ->
-            ensure_in_proper_phase_tree(AtmWorkflowExecutionDoc);
-        {error, _} ->
-            % Race with other process which must have already updated task status
-            ok
-    end.
-
-
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -182,42 +239,11 @@ report_task_status_change(
 -spec status_to_phase(atm_workflow_execution:status()) ->
     atm_workflow_execution:phase().
 status_to_phase(?SCHEDULED_STATUS) -> ?WAITING_PHASE;
-status_to_phase(?PREPARING_STATUS) -> ?WAITING_PHASE;
-status_to_phase(?ENQUEUED_STATUS) -> ?WAITING_PHASE;
 status_to_phase(?ACTIVE_STATUS) -> ?ONGOING_PHASE;
 status_to_phase(?ABORTING_STATUS) -> ?ONGOING_PHASE;
 status_to_phase(?FINISHED_STATUS) -> ?ENDED_PHASE;
 status_to_phase(?CANCELLED_STATUS) -> ?ENDED_PHASE;
 status_to_phase(?FAILED_STATUS) -> ?ENDED_PHASE.
-
-
-%% @private
--spec handle_transition_within_waiting_phase(
-    atm_workflow_execution:id(),
-    ?PREPARING_STATUS | ?ENQUEUED_STATUS
-) ->
-    {ok, atm_workflow_execution:doc()} | no_return().
-handle_transition_within_waiting_phase(AtmWorkflowExecutionId, NextStatus) ->
-    Diff = fun(#atm_workflow_execution{status = Status} = AtmWorkflowExecution) ->
-        IsTransitionAllowed = case {Status, NextStatus} of
-            {?SCHEDULED_STATUS, ?PREPARING_STATUS} -> true;
-            {?PREPARING_STATUS, ?ENQUEUED_STATUS} -> true;
-            _ -> false
-        end,
-        case IsTransitionAllowed of
-            true ->
-                {ok, AtmWorkflowExecution#atm_workflow_execution{status = NextStatus}};
-            false ->
-                {error, Status}
-        end
-    end,
-
-    case atm_workflow_execution:update(AtmWorkflowExecutionId, Diff) of
-        {ok, _} = Result ->
-            Result;
-        {error, CurrStatus} ->
-            throw(?ERROR_ATM_INVALID_STATUS_TRANSITION(CurrStatus, NextStatus))
-    end.
 
 
 %% @private
@@ -266,10 +292,10 @@ ensure_in_proper_phase_tree(#document{value = AtmWorkflowExecution} = AtmWorkflo
 -spec has_phase_transition_occurred(atm_workflow_execution:record()) ->
     false | {true, atm_workflow_execution:phase(), atm_workflow_execution:phase()}.
 has_phase_transition_occurred(#atm_workflow_execution{
-    status = CurrStatus,
+    status = CurrentStatus,
     prev_status = PrevStatus
 }) ->
-    case {status_to_phase(PrevStatus), status_to_phase(CurrStatus)} of
+    case {status_to_phase(PrevStatus), status_to_phase(CurrentStatus)} of
         {SamePhase, SamePhase} -> false;
-        {PrevPhase, CurrPhase} -> {true, PrevPhase, CurrPhase}
+        {PrevPhase, CurrentPhase} -> {true, PrevPhase, CurrentPhase}
     end.

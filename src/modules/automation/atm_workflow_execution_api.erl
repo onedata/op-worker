@@ -15,6 +15,7 @@
 
 -include("modules/automation/atm_execution.hrl").
 -include_lib("ctool/include/errors.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([init_engine/0]).
@@ -23,7 +24,8 @@
     schedule/5,
     get/1, get_summary/2,
     cancel/1,
-    terminate_not_ended/1
+    terminate_not_ended/1,
+    purge_all/0
 ]).
 
 
@@ -33,9 +35,7 @@
 -type summary_entries() :: [{atm_workflow_executions_forest:index(), atm_workflow_execution:summary()}].
 -type entries() :: basic_entries() | summary_entries().
 
--type store_initial_values() :: #{
-    AtmStoreSchemaId :: automation:id() => atm_store_api:initial_value()
-}.
+-type store_initial_values() :: #{AtmStoreSchemaId :: automation:id() => json_utils:json_term()}.
 
 -export_type([listing_mode/0, basic_entries/0, summary_entries/0, entries/0]).
 -export_type([store_initial_values/0]).
@@ -95,11 +95,9 @@ schedule(UserCtx, SpaceId, AtmWorkflowSchemaId, StoreInitialValues, CallbackUrl)
     {AtmWorkflowExecutionDoc, AtmWorkflowExecutionEnv} = atm_workflow_execution_factory:create(
         UserCtx, SpaceId, AtmWorkflowSchemaId, StoreInitialValues, CallbackUrl
     ),
-    AtmWorkflowExecutionId = AtmWorkflowExecutionDoc#document.key,
+    atm_workflow_execution_handler:start(UserCtx, AtmWorkflowExecutionEnv, AtmWorkflowExecutionDoc),
 
-    atm_workflow_execution_handler:start(UserCtx, AtmWorkflowExecutionId, AtmWorkflowExecutionEnv),
-
-    {AtmWorkflowExecutionId, AtmWorkflowExecutionDoc#document.value}.
+    {AtmWorkflowExecutionDoc#document.key, AtmWorkflowExecutionDoc#document.value}.
 
 
 -spec get(atm_workflow_execution:id()) ->
@@ -148,21 +146,39 @@ cancel(AtmWorkflowExecutionId) ->
 %%--------------------------------------------------------------------
 terminate_not_ended(SpaceId) ->
     TerminateFun = fun(AtmWorkflowExecutionId) ->
-        {ok, #document{value = #atm_workflow_execution{
-            store_registry = AtmStoreRegistry
-        }}} = atm_workflow_execution:get(AtmWorkflowExecutionId),
-
+        atm_lane_execution_status:handle_aborting(current, AtmWorkflowExecutionId, failure),
         atm_workflow_execution_handler:handle_workflow_execution_ended(
             AtmWorkflowExecutionId,
-            atm_workflow_execution_env:build(
-                SpaceId, AtmWorkflowExecutionId, AtmStoreRegistry,
-                undefined, undefined
-            )
+            atm_workflow_execution_env:build(SpaceId, AtmWorkflowExecutionId)
         )
     end,
 
     foreach_atm_workflow_execution(TerminateFun, SpaceId, ?WAITING_PHASE),
     foreach_atm_workflow_execution(TerminateFun, SpaceId, ?ONGOING_PHASE).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Purges all workflow executions for all supported spaces.
+%%
+%%                              !!! Caution !!!
+%% This operation doesn't enforce any protection on deleted workflow executions
+%% and as such should never be called after successful Oneprovider start.
+%% @end
+%%--------------------------------------------------------------------
+purge_all() ->
+    ?info("Starting atm_workflow_execution purge procedure..."),
+
+    {ok, SpaceIds} = provider_logic:get_spaces(),
+    DeleteFun = fun atm_workflow_execution_factory:delete_insecure/1,
+
+    lists:foreach(fun(SpaceId) ->
+        foreach_atm_workflow_execution(DeleteFun, SpaceId, ?WAITING_PHASE),
+        foreach_atm_workflow_execution(DeleteFun, SpaceId, ?ONGOING_PHASE),
+        foreach_atm_workflow_execution(DeleteFun, SpaceId, ?ENDED_PHASE)
+    end, SpaceIds),
+
+    ?info("atm_workflow_execution purge procedure finished succesfully.").
 
 
 %%%===================================================================
