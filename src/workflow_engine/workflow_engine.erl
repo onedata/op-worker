@@ -36,14 +36,14 @@
 -type id() :: binary(). % Id of an engine
 -type execution_id() :: binary().
 -type execution_context() :: term().
--type lane_id() :: term().
+-type lane_id() :: term(). % lane_id is opaque term for workflow engine (ids are managed by modules that use workflow engine)
 -type task_id() :: binary().
 -type subject_id() :: workflow_cached_item:id() | workflow_cached_async_result:result_ref().
 -type execution_spec() :: #execution_spec{}.
--type processing_stage() :: ?SYNC_CALL | ?ASYNC_CALL_STARTED | ?ASYNC_CALL_FINISHED | ?ASYNC_RESULT_PROCESSED.
+-type processing_stage() :: ?SYNC_CALL | ?ASYNC_CALL_STARTED | ?ASYNC_CALL_ENDED | ?ASYNC_RESULT_PROCESSED.
 -type handler_execution_result() :: workflow_handler:handler_execution_result() | {ok, KeepaliveTimeout :: time:seconds()}.
 -type processing_result() :: handler_execution_result() | workflow_handler:async_processing_result().
--type preparation_mode() :: ?PREPARE_SYNC | ?PREPARE_ASYNC.
+-type preparation_mode() :: ?PREPARE_CURRENT | ?PREPARE_IN_ADVANCE.
 
 %% @formatter:off
 -type options() :: #{
@@ -57,7 +57,7 @@
     id := id(),
     workflow_handler := workflow_handler:handler(),
     execution_context => execution_context(),
-    first_lane_id => lane_id(), % does not have to be defined if execution is started from snapshot
+    first_lane_id => lane_id(), % does not have to be defined if execution is restarted from snapshot
     next_lane_id => lane_id(),
     force_clean_execution => boolean()
 }.
@@ -73,7 +73,7 @@
     parallel_boxes := [parallel_box_spec()],
     iterator := iterator:iterator(),
     execution_context := execution_context(),
-    failure_count_to_abort => non_neg_integer()
+    failure_count_to_cancel => non_neg_integer()
 }.
 -type execution_ended_info() :: #execution_ended{}.
 %% @formatter:on
@@ -160,7 +160,7 @@ report_execution_status_update(ExecutionId, EngineId, ReportType, JobIdentifier,
     TaskSpec = workflow_execution_state:report_execution_status_update(ExecutionId, JobIdentifier, ReportType, Ans),
 
     DecrementSlotsUsage = case {ReportType, Ans} of
-        {?ASYNC_CALL_FINISHED, _} -> true;
+        {?ASYNC_CALL_ENDED, _} -> true;
         {?ASYNC_CALL_STARTED, error} -> true;
         _ -> false
     end,
@@ -177,7 +177,7 @@ report_execution_status_update(ExecutionId, EngineId, ReportType, JobIdentifier,
     end,
 
     case ReportType of
-        ?ASYNC_CALL_FINISHED ->
+        ?ASYNC_CALL_ENDED ->
             % Asynchronous job finish - it has no slot acquired
             trigger_job_scheduling(EngineId, ?TAKE_UP_FREE_SLOTS);
         _ ->
@@ -229,7 +229,7 @@ call_handlers_for_cancelled_lane(ExecutionId, Handler, Context, LaneId, TaskIds)
     call_handle_task_execution_ended_for_all_tasks(ExecutionId, Handler, Context, TaskIds),
 
     case call_handler(ExecutionId, Context, Handler, handle_lane_execution_ended, [LaneId]) of
-        ?FINISH_EXECUTION ->
+        ?END_EXECUTION ->
             ok;
         Other ->
             ?error("Wrong return of handle_lane_execution_ended for cancelled lane ~p of execution ~p: ~p",
@@ -362,7 +362,7 @@ handle_execution_ended(EngineId, ExecutionId, #execution_ended{
 
             call_handler(ExecutionId, Context, Handler, handle_workflow_execution_ended, []),
             case Reason of
-                ?WORKFLOW_FINISHED -> workflow_iterator_snapshot:cleanup(ExecutionId);
+                ?EXECUTION_ENDED -> workflow_iterator_snapshot:cleanup(ExecutionId);
                 ?EXECUTION_CANCELLED -> ok
             end,
             workflow_execution_state:cleanup(ExecutionId);

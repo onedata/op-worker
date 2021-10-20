@@ -39,7 +39,7 @@
 
 -define(SYNC_CALL, sync_call).
 -define(ASYNC_CALL_STARTED, async_call_started).
--define(ASYNC_CALL_FINISHED, async_call_finished).
+-define(ASYNC_CALL_ENDED, async_call_ended).
 -define(ASYNC_RESULT_PROCESSED, async_result_processed).
 
 %%%===================================================================
@@ -69,8 +69,8 @@
 
 -define(EXECUTING, executing).
 -define(EXECUTION_CANCELLED, execution_cancelled).
--define(WORKFLOW_FINISHED, workflow_finished).
--define(CANCEL_ON_NEXT_LANE_PREPARATION_FINISH, cancel_on_next_lane_preparation_finish).
+-define(EXECUTION_ENDED, execution_ended).
+-define(WAITING_FOR_NEXT_LANE_PREPARATION_END, waiting_for_next_lane_preparation_end).
 
 %%%===================================================================
 %%% Macros used to describe processing of parallel box's jobs
@@ -85,14 +85,14 @@
 %%%===================================================================
 
 -define(CONTINUE(NextLaneId, LaneIdToBePreparedInAdvance), {continue, NextLaneId, LaneIdToBePreparedInAdvance}).
--define(FINISH_EXECUTION, finish_execution).
+-define(END_EXECUTION, end_execution).
 
 %%%===================================================================
 %%% Macros describing lane preparation modes
 %%%===================================================================
 
--define(PREPARE_SYNC, prepare_sync).
--define(PREPARE_ASYNC, prepare_async).
+-define(PREPARE_CURRENT, prepare_current).
+-define(PREPARE_IN_ADVANCE, prepare_in_advance).
 
 %%%===================================================================
 %%% Macros and records used to describe actions and errors
@@ -102,7 +102,7 @@
 -record(execution_ended, {
     handler :: workflow_handler:handler(),
     context :: workflow_engine:execution_context(),
-    reason = ?WORKFLOW_FINISHED :: ?WORKFLOW_FINISHED | ?EXECUTION_CANCELLED,
+    reason = ?EXECUTION_ENDED :: ?EXECUTION_ENDED | ?EXECUTION_CANCELLED,
     callbacks_data :: {workflow_engine:lane_id(), workflow_engine:execution_context(), [workflow_engine:task_id()]} |
         undefined
 }).
@@ -118,8 +118,8 @@
 -define(WF_ERROR_PREPARATION_FAILED, {error, preparation_failed}).
 -define(WF_ERROR_NO_WAITING_ITEMS, {error, no_waiting_items}).
 -define(WF_ERROR_RACE_CONDITION, {error, race_condition}).
--define(WF_ERROR_ITEM_PROCESSING_FINISHED(Item, SuccessOrFailure),
-    {error, {item_processing_finished, Item, SuccessOrFailure}}).
+-define(WF_ERROR_ITEM_PROCESSING_ENDED(Item, SuccessOrFailure),
+    {error, {item_processing_ended, Item, SuccessOrFailure}}).
 
 % errors returned by workflow_async_call_pool to control workflow_engine
 -define(WF_ERROR_LIMIT_REACHED, {error, limit_reached}).

@@ -148,8 +148,8 @@ get_record_struct(2) ->
         {iterator, {custom, json, {iterator, encode, decode}}},
         {lane_index, integer},
         {lane_id, term},
-        {item_index, integer},
-        {next_lane_id, term}
+        {next_lane_id, term},
+        {item_index, integer}
     ]}.
 
 -spec upgrade_record(datastore_model:record_version(), datastore_model:record()) ->
@@ -161,6 +161,6 @@ upgrade_record(1, {?MODULE, Iterator, LaneIndex, ItemIndex}
         Iterator,
         LaneIndex,
         undefined, % new field: lane_id
-        ItemIndex,
-        undefined % new field: next_lane_id
+        undefined, % new field: next_lane_id
+        ItemIndex
     }}.

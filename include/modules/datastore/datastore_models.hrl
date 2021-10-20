@@ -1179,8 +1179,8 @@
     iterator :: iterator:iterator(),
     lane_index = workflow_execution_state:index(),
     lane_id :: workflow_engine:lane_id(),
-    item_index = workflow_execution_state:index(),
-    next_lane_id :: workflow_engine:lane_id() | undefined
+    next_lane_id :: workflow_engine:lane_id() | undefined,
+    item_index = workflow_execution_state:index()
 }).
 
 -record(workflow_engine_state, {
@@ -1209,7 +1209,10 @@
     prefetched_iteration_step :: workflow_execution_state:iteration_status(),
     jobs :: workflow_jobs:jobs() | undefined,
 
-    waiting_notifications = [] :: [workflow_execution_state:waiting_label()],
+    % callbacks executed after update of record (have to be executed outside datastore tp process)
+    % TODO VFS-7919 - consider keeping callbacks list from beginning
+    % to guarantee that each callback is called exactly once
+    pending_callbacks = [] :: [workflow_execution_state:callback_selector()],
 
     % Field used to return additional information about document update procedure
     % (datastore:update returns {ok, #document{}} or {error, term()}

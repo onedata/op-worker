@@ -6,7 +6,8 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Test of multiple workflows parallel scheduling.
+%%% Test of multiple workflows parallel scheduling. Each test starts many executions of workflow in parallel.
+%%% The tests use different types of tasks (sync vs async) and differently prepare lanes.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(multiple_workflow_scheduling_test_SUITE).
@@ -20,43 +21,60 @@
 
 %% tests
 -export([
-    multiple_sync_workflow_execution_test/1,
-    multiple_async_workflow_execution_test/1,
-    prepare_in_advance_multiple_workflow_test/1
+    sync_task_execution_test/1,
+    async_task_execution_test/1,
+    sync_task_with_lanes_prepare_in_advance_execution_test/1
 ]).
 
 all() ->
     ?ALL([
-        multiple_sync_workflow_execution_test,
-        multiple_async_workflow_execution_test,
-        prepare_in_advance_multiple_workflow_test
+        sync_task_execution_test,
+        async_task_execution_test,
+        sync_task_with_lanes_prepare_in_advance_execution_test
     ]).
+
+
+-record(test_config, {
+    task_type = sync :: sync | async,
+    prepare_in_advance = false :: boolean(),
+    item_count :: non_neg_integer()
+}).
 
 
 %%%===================================================================
 %%% Test functions
 %%%===================================================================
 
-multiple_sync_workflow_execution_test(Config) ->
-    multiple_workflow_execution_test_base(Config, sync, false, 200).
+sync_task_execution_test(Config) ->
+    multiple_workflow_execution_test_base(Config, #test_config{item_count = 200}).
 
-multiple_async_workflow_execution_test(Config) ->
-    multiple_workflow_execution_test_base(Config, async, false, 1000).
+async_task_execution_test(Config) ->
+    multiple_workflow_execution_test_base(Config, #test_config{
+        task_type = async,
+        item_count = 1000
+    }).
 
-prepare_in_advance_multiple_workflow_test(Config) ->
-    multiple_workflow_execution_test_base(Config, sync, true, 100).
+sync_task_with_lanes_prepare_in_advance_execution_test(Config) ->
+    multiple_workflow_execution_test_base(Config, #test_config{
+        prepare_in_advance = true,
+        item_count = 100
+    }).
 
 
 %%%===================================================================
 %%% Test skeletons
 %%%===================================================================
 
-multiple_workflow_execution_test_base(Config, WorkflowType, PrepareInAdvance, ItemsCount) ->
-    InitialKeys = workflow_scheduling_test_utils:get_all_keys(Config),
+multiple_workflow_execution_test_base(Config, #test_config{
+    task_type = TaskType,
+    prepare_in_advance = PrepareInAdvance,
+    item_count = ItemsCount
+}) ->
+    InitialKeys = workflow_scheduling_test_common:get_all_workflow_related_datastore_keys(Config),
 
     WorkflowExecutionSpecs = lists:map(fun(_) ->
-        #{id := Id} = Spec = workflow_scheduling_test_utils:gen_workflow_execution_spec(
-            WorkflowType, PrepareInAdvance, #{items_count => ItemsCount}),
+        #{id := Id} = Spec = workflow_scheduling_test_common:gen_workflow_execution_spec(
+            TaskType, PrepareInAdvance, #{items_count => ItemsCount}),
         {Id, Spec}
     end, lists:seq(1, 5)),
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -64,26 +82,26 @@ multiple_workflow_execution_test_base(Config, WorkflowType, PrepareInAdvance, It
     lists:foreach(fun({_, WorkflowExecutionSpec}) ->
         spawn(fun() ->
             Master ! {start_ans, rpc:call(Worker, workflow_engine, execute_workflow,
-                [workflow_scheduling_test_utils:get_engine_id(), WorkflowExecutionSpec])}
+                [workflow_scheduling_test_common:get_engine_id(), WorkflowExecutionSpec])}
         end)
     end, WorkflowExecutionSpecs),
-    workflow_scheduling_test_utils:verify_executions_started(length(WorkflowExecutionSpecs)),
+    workflow_scheduling_test_common:verify_executions_started(length(WorkflowExecutionSpecs)),
 
     #{execution_history := ExecutionHistory} = ExtendedHistoryStats =
-        workflow_scheduling_test_utils:get_task_execution_history(Config),
-    workflow_scheduling_test_utils:verify_execution_history_stats(ExtendedHistoryStats, WorkflowType),
+        workflow_scheduling_test_common:get_task_execution_history(Config),
+    workflow_scheduling_test_common:verify_execution_history_stats(ExtendedHistoryStats, TaskType),
 
     ReversedHandlerCallsPerExecution =
-        workflow_scheduling_test_utils:group_handler_calls_by_execution_id(ExecutionHistory),
+        workflow_scheduling_test_common:group_handler_calls_by_execution_id(ExecutionHistory),
 
     lists:foreach(fun({ExecutionId, ReversedSingleExecutionHistory}) ->
-        workflow_scheduling_test_utils:verify_execution_history(
+        workflow_scheduling_test_common:verify_execution_history(
             proplists:get_value(ExecutionId, WorkflowExecutionSpecs),
             lists:reverse(ReversedSingleExecutionHistory)
         )
     end, maps:to_list(ReversedHandlerCallsPerExecution)),
 
-    workflow_scheduling_test_utils:verify_memory(Config, InitialKeys).
+    workflow_scheduling_test_common:verify_memory(Config, InitialKeys).
 
 
 %%%===================================================================
@@ -91,13 +109,13 @@ multiple_workflow_execution_test_base(Config, WorkflowType, PrepareInAdvance, It
 %%%===================================================================
 
 init_per_suite(Config) ->
-    workflow_scheduling_test_utils:init_per_suite(Config).
+    workflow_scheduling_test_common:init_per_suite(Config).
 
 end_per_suite(Config) ->
-    workflow_scheduling_test_utils:end_per_suite(Config).
+    workflow_scheduling_test_common:end_per_suite(Config).
 
 init_per_testcase(Case, Config) ->
-    workflow_scheduling_test_utils:init_per_testcase(Case, Config).
+    workflow_scheduling_test_common:init_per_testcase(Case, Config).
 
 end_per_testcase(Case, Config) ->
-    workflow_scheduling_test_utils:end_per_testcase(Case, Config).
+    workflow_scheduling_test_common:end_per_testcase(Case, Config).
