@@ -37,6 +37,7 @@
 -define(DEFAULT_BASE_ARCHIVE, null).
 -define(DEFAULT_ARCHIVE_DESCRIPTION, <<>>).
 -define(DEFAULT_CREATE_NESTED_ARCHIVES, false).
+-define(DEFAULT_ARCHIVE_FOLLOW_SYMLINKS, true).
 
 -record(archive_config, {
     incremental = ?DEFAULT_INCREMENTAL :: archive_config:incremental(),
@@ -46,7 +47,8 @@
     layout :: archive_config:layout(),
     % this flag determines whether archives of nested datasets should be created
     % during archivisation of a dataset
-    create_nested_archives = ?DEFAULT_CREATE_NESTED_ARCHIVES :: boolean()
+    create_nested_archives = ?DEFAULT_CREATE_NESTED_ARCHIVES :: boolean(),
+    follow_symlinks = ?DEFAULT_ARCHIVE_FOLLOW_SYMLINKS :: boolean()
 }).
 
 -record(archive_stats, {
