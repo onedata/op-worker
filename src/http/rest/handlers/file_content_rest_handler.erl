@@ -212,7 +212,7 @@ process_request(#op_req{
 
     Name = case Aspect of
         child -> maps:get(<<"name">>, Params);
-        file_at_path -> lists:last(maps:get(path, Params))
+        file_at_path -> lists:last(maps:get(path, Params, <<"">>))
     end,
 
     Mode = maps:get(<<"mode">>, Params, undefined),
