@@ -29,4 +29,10 @@
     eff_protection_flags :: data_access_control:bitmask() | undefined
 }).
 
+% Macros defining types of membership
+-define(NONE_MEMBERSHIP, none).
+-define(DIRECT_MEMBERSHIP, direct).
+-define(ANCESTOR_MEMBERSHIP, ancestor).
+-define(DIRECT_AND_ANCESTOR_MEMBERSHIP, direct_and_ancestor).
+
 -endif.
