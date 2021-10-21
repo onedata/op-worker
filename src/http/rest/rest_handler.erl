@@ -274,8 +274,11 @@ resolve_bindings(_SessionId, ?OBJECTID_BINDING(Key), Req) ->
     catch throw:?ERROR_BAD_VALUE_IDENTIFIER(Key) ->
         {ok, SupportedSpaceIds} = provider_logic:get_spaces(),
         case lists:member(SpaceIdOrObjectId, SupportedSpaceIds) of
-            true -> fslogic_uuid:spaceid_to_space_dir_guid(SpaceIdOrObjectId);
-            false -> throw(?ERROR_SPACE_NOT_SUPPORTED_LOCALLY(SpaceIdOrObjectId))
+            true ->
+                fslogic_uuid:spaceid_to_space_dir_guid(SpaceIdOrObjectId);
+            false ->
+                ProviderId = oneprovider:get_id(),
+                throw(?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceIdOrObjectId, ProviderId))
         end
     end;
 resolve_bindings(SessionId, ?PATH_BINDING, Req) ->

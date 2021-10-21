@@ -38,8 +38,9 @@
 
     get_file_path/2,
     get_file_guid/2,
-    resolve_guid_by_relative_path/5,
+    resolve_guid_by_relative_path/3,
     get_parent/2,
+    ensure_dir/4,
 
     is_dir/2,
 
@@ -237,10 +238,10 @@ get_file_guid(SessId, FilePath) ->
     ?run(lfm_files:get_file_guid(SessId, FilePath)).
 
 
--spec resolve_guid_by_relative_path(session:id(), fslogic_worker:file_guid(), file_meta:path(), boolean(), file_meta:mode()) ->
+-spec resolve_guid_by_relative_path(session:id(), fslogic_worker:file_guid(), file_meta:path()) ->
     {ok, fslogic_worker:file_guid()} | error_reply().
-resolve_guid_by_relative_path(SessId, RelativeRootGuid, FilePath, CreateDirs, Mode) ->
-    ?run(lfm_files:resolve_guid_by_relative_path(SessId, RelativeRootGuid,  CreateDirs, Mode, FilePath)).
+resolve_guid_by_relative_path(SessId, RelativeRootGuid, FilePath) ->
+    ?run(lfm_files:resolve_guid_by_relative_path(SessId, RelativeRootGuid, FilePath)).
 
 
 -spec get_parent(session:id(), file_key()) ->
@@ -248,6 +249,10 @@ resolve_guid_by_relative_path(SessId, RelativeRootGuid, FilePath, CreateDirs, Mo
 get_parent(SessId, FileKey) ->
     ?run(lfm_files:get_parent(SessId, FileKey)).
 
+-spec ensure_dir(session:id(), fslogic_worker:file_guid(), file_meta:path(), file_meta:mode()) ->
+    {ok, fslogic_worker:file_guid()} | error_reply().
+ensure_dir(SessId, RelativeRootGuid, FilePath, Mode) ->
+    ?run(lfm_files:ensure_dir(SessId, RelativeRootGuid, FilePath, Mode)).
 
 -spec is_dir(session:id(), file_key()) ->
     ok | error_reply().

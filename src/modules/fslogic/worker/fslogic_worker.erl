@@ -507,11 +507,14 @@ handle_fuse_request(UserCtx, #resolve_guid{}, FileCtx) ->
 handle_fuse_request(UserCtx, #resolve_guid_by_canonical_path{}, FileCtx) ->
     guid_req:resolve_guid(UserCtx, FileCtx);
 handle_fuse_request(UserCtx, #resolve_guid_by_relative_path{
+    path = Path
+}, RelRootCtx) ->
+    guid_req:resolve_guid_by_relative_path(UserCtx, RelRootCtx, Path);
+handle_fuse_request(UserCtx, #ensure_dir{
     path = Path,
-    create_dirs = CreateDirs,
     mode = Mode
 }, RelRootCtx) ->
-    guid_req:resolve_guid_by_relative_path(UserCtx, RelRootCtx, Path, CreateDirs, Mode);
+    guid_req:ensure_dir(UserCtx, RelRootCtx, Path, Mode);
 handle_fuse_request(UserCtx, #get_helper_params{
     storage_id = StorageId,
     space_id = SpaceId,

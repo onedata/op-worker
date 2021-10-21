@@ -336,11 +336,11 @@ create_file_at_path_test(_Config) ->
                     optional = [<<"type">>, <<"mode">>, <<"offset">>, body],
                     correct_values = #{
                         <<"path">> => [
-                            only_name_without_create_parents_flag_placeholder,
-                            only_name_with_create_parents_flag_placeholder,
+                            filename_only_without_create_parents_flag_placeholder,
+                            filename_only_with_create_parents_flag_placeholder,
                             existent_path_without_create_parents_flag_placeholder,
                             existent_path_with_create_parents_flag_placeholder,
-                            inexistent_path_with_create_parents_flag_placeholder
+                            nonexistent_path_with_create_parents_flag_placeholder
                         ],
                         <<"type">> => [<<"REG">>, <<"DIR">>],
                         <<"mode">> => [<<"0544">>, <<"0707">>],
@@ -356,7 +356,7 @@ create_file_at_path_test(_Config) ->
                         {bad_id, ChildFileObjectId, ?ERROR_POSIX(?ENOTDIR)},
                         {<<"path">>, filepath_utils:join([ChildFileName, <<"dir1/file.txt">>]), ?ERROR_POSIX(?ENOTDIR)},
                         {<<"path">>, <<"/a/b/\0null\0/">>, ?ERROR_BAD_VALUE_FILE_PATH},
-                        {<<"path">>, inexistent_path_without_create_parents_flag_placeholder, ?ERROR_POSIX(?ENOENT)},
+                        {<<"path">>, nonexistent_path_without_create_parents_flag_placeholder, ?ERROR_POSIX(?ENOENT)},
 
                         {<<"type">>, <<"file">>, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"type">>, [
                             <<"REG">>, <<"DIR">>, <<"LNK">>, <<"SYMLNK">>
@@ -391,9 +391,9 @@ build_rest_create_file_at_path_prepare_args_fun(MemRef, RelRootDirGuid) ->
         DataWithoutPath = maps:remove(<<"path">>, Data1),
 
         {RelativePath, Data2} = case maps:get(<<"path">>, Data1, undefined) of
-            only_name_without_create_parents_flag_placeholder ->
+            filename_only_without_create_parents_flag_placeholder ->
                 {Name, DataWithoutPath};
-            only_name_with_create_parents_flag_placeholder ->
+            filename_only_with_create_parents_flag_placeholder ->
                 {Name, DataWithoutPath#{<<"create_parents">> => true}};
             existent_path_without_create_parents_flag_placeholder ->
                 Path = filepath_utils:join([ChildDirName, Name]),
@@ -401,10 +401,10 @@ build_rest_create_file_at_path_prepare_args_fun(MemRef, RelRootDirGuid) ->
             existent_path_with_create_parents_flag_placeholder ->
                 Path = filepath_utils:join([ChildDirName, Name]),
                 {Path, DataWithoutPath#{<<"create_parents">> => true}};
-            inexistent_path_without_create_parents_flag_placeholder ->
+            nonexistent_path_without_create_parents_flag_placeholder ->
                 Path = filepath_utils:join([ChildDirName, RandomDirPath, Name]),
                 {Path, DataWithoutPath};
-            inexistent_path_with_create_parents_flag_placeholder ->
+            nonexistent_path_with_create_parents_flag_placeholder ->
                 Path = filepath_utils:join([ChildDirName, RandomDirPath, Name]),
                 {Path, DataWithoutPath#{<<"create_parents">> => true}};
             undefined ->

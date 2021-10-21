@@ -610,7 +610,7 @@ build_download_file_verify_fun(MemRef) ->
                 FileSize = size(Content),
                 check_single_file_download_distribution(MemRef, ExpTestResult, ApiTestCtx, FileGuid, FileSize, Providers, P1Node);
 
-            % tested file is in a two-level file tree
+            % tested file is a directory in a two-level file tree
             [#object{type = ?DIRECTORY_TYPE, children = [
                 #object{type = ?DIRECTORY_TYPE, children = [
                     #object{type = ?SYMLINK_TYPE},
@@ -625,6 +625,7 @@ build_download_file_verify_fun(MemRef) ->
                 lists:foreach(fun(Object) ->
                     check_tarball_download_distribution(MemRef, ExpTestResult1, ApiTestCtx, Object, Providers, P1Node)
                 end, utils:ensure_list(TestedTreeObject));
+            % tested file is a directory in a single level file-tree
             _ ->
                 ExpTestResult1 = case {ExpTestResult, api_test_memory:get(MemRef, download_succeeded, undefined)} of
                     {expected_failure, _} -> expected_failure;
@@ -812,9 +813,9 @@ rest_download_file_at_path_test(Config) ->
                     correct_values = #{
                         <<"range">> => RangesToTestPart1,
                         <<"path">> => [
-                            only_filename_path_placeholder,
-                            directory_and_filename_path_placeholder,
-                            space_id_with_directory_and_filename_path_placeholder
+                            filename_only_relative_to_parent_dir_placeholder,
+                            directory_and_filename_relative_to_space_root_dir_placeholder,
+                            directory_and_filename_relative_to_space_id_placeholder
                         ]
                     }
                 }
@@ -835,12 +836,12 @@ build_rest_download_file_at_path_prepare_args_fun(MemRef, TestMode) ->
         ]}] = api_test_memory:get(MemRef, file_tree_object),
 
         {ParentGuidOrSpaceId, Path} = case maps:get(<<"path">>, Data0, undefined) of
-            only_filename_path_placeholder ->
+            filename_only_relative_to_parent_dir_placeholder ->
                 {DirGuid, FileName};
-            directory_and_filename_path_placeholder ->
+            directory_and_filename_relative_to_space_root_dir_placeholder ->
                 SpaceRootDirGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
                 {SpaceRootDirGuid, filepath_utils:join([DirName, FileName])};
-            space_id_with_directory_and_filename_path_placeholder ->
+            directory_and_filename_relative_to_space_id_placeholder ->
                 {space_id, filepath_utils:join([DirName, FileName])};
             undefined ->
                 {FileGuid, <<"">>}
@@ -982,9 +983,9 @@ rest_download_dir_at_path_test(_Config) ->
         correct_values = #{
             <<"follow_symlinks">> => [true, false],
             <<"path">> => [
-                only_filename_path_placeholder,
-                directory_and_filename_path_placeholder,
-                space_id_with_directory_and_filename_path_placeholder
+                filename_only_relative_to_parent_dir_placeholder,
+                directory_and_filename_relative_to_space_root_dir_placeholder,
+                directory_and_filename_relative_to_space_id_placeholder
             ]
         }
     },
@@ -1512,5 +1513,3 @@ init_per_testcase(_Case, Config) ->
 
 end_per_testcase(_Case, _Config) ->
     ok.
-
-

@@ -41,7 +41,7 @@ routes() -> [
             scope = private
         }
     }},
-    %% Create file in directory by ID
+    %% Create file in directory
     {<<"/data/:id/children">>, rest_handler, #rest_req{
         method = 'POST',
         consumes = [<<"application/octet-stream">>],
@@ -53,7 +53,29 @@ routes() -> [
             scope = private
         }
     }},
-    %% Remove file by ID
+    %% Download file content
+    {<<"/data/:id/content">>, rest_handler, #rest_req{
+        method = 'GET',
+        produces = [<<"application/octet-stream">>],
+        b_gri = #b_gri{
+            type = op_file, 
+            id = ?OBJECTID_BINDING(id), 
+            aspect = content, 
+            scope = private
+        }
+    }},
+    %% Update file content
+    {<<"/data/:id/content">>, rest_handler, #rest_req{
+        method = 'PUT',
+        consumes = [<<"application/octet-stream">>],
+        b_gri = #b_gri{
+            type = op_file, 
+            id = ?OBJECTID_BINDING(id), 
+            aspect = content, 
+            scope = private
+        }
+    }},
+    %% Remove file
     {<<"/data/:id">>, rest_handler, #rest_req{
         method = 'DELETE',
         b_gri = #b_gri{
@@ -86,25 +108,25 @@ routes() -> [
             scope = private
         }
     }},
-    %% Download file content by ID
-    {<<"/data/:id/content">>, rest_handler, #rest_req{
+    %% Get file hard links
+    {<<"/data/:id/hardlinks">>, rest_handler, #rest_req{
         method = 'GET',
         produces = [<<"application/octet-stream">>],
         b_gri = #b_gri{
             type = op_file, 
             id = ?OBJECTID_BINDING(id), 
-            aspect = content, 
+            aspect = hardlinks, 
             scope = private
         }
     }},
-    %% Update file content
-    {<<"/data/:id/content">>, rest_handler, #rest_req{
-        method = 'PUT',
-        consumes = [<<"application/octet-stream">>],
+    %% Get symbolic link value
+    {<<"/data/:id/symlink_value">>, rest_handler, #rest_req{
+        method = 'GET',
+        produces = [<<"application/octet-stream">>],
         b_gri = #b_gri{
             type = op_file, 
             id = ?OBJECTID_BINDING(id), 
-            aspect = content, 
+            aspect = symlink_value, 
             scope = private
         }
     }},
@@ -138,39 +160,6 @@ routes() -> [
             type = op_file, 
             id = ?OBJECTID_BINDING(id), 
             aspect = file_at_path, 
-            scope = private
-        }
-    }},
-    %% Get file hard links
-    {<<"/data/:id/hardlinks">>, rest_handler, #rest_req{
-        method = 'GET',
-        produces = [<<"application/octet-stream">>],
-        b_gri = #b_gri{
-            type = op_file, 
-            id = ?OBJECTID_BINDING(id), 
-            aspect = hardlinks, 
-            scope = private
-        }
-    }},
-    %% Test for hard link between files
-    {<<"/data/:id/hardlinks/:hid">>, rest_handler, #rest_req{
-        method = 'GET',
-        produces = [<<"application/json">>],
-        b_gri = #b_gri{
-            type = op_file, 
-            id = ?OBJECTID_BINDING(id), 
-            aspect = {hardlinks, ?OBJECTID_BINDING(hid)}, 
-            scope = private
-        }
-    }},
-    %% Get symbolic link value
-    {<<"/data/:id/symlink_value">>, rest_handler, #rest_req{
-        method = 'GET',
-        produces = [<<"application/octet-stream">>],
-        b_gri = #b_gri{
-            type = op_file, 
-            id = ?OBJECTID_BINDING(id), 
-            aspect = symlink_value, 
             scope = private
         }
     }}

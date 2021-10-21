@@ -38,7 +38,9 @@ get_file_partial_ctx(UserCtx, #fuse_request{fuse_request = #resolve_guid{path = 
     file_partial_ctx:new_by_logical_path(UserCtx, Path);
 get_file_partial_ctx(UserCtx, #fuse_request{fuse_request = #resolve_guid_by_canonical_path{path = Path}}) ->
     file_partial_ctx:new_by_canonical_path(UserCtx, Path);
-get_file_partial_ctx(_UserCtx, #fuse_request{fuse_request = #resolve_guid_by_relative_path{relative_root = RelRootGuid}}) ->
+get_file_partial_ctx(_UserCtx, #fuse_request{fuse_request = #resolve_guid_by_relative_path{root_file = RelRootGuid}}) ->
+    file_partial_ctx:new_by_guid(RelRootGuid);
+get_file_partial_ctx(_UserCtx, #fuse_request{fuse_request = #ensure_dir{root_file = RelRootGuid}}) ->
     file_partial_ctx:new_by_guid(RelRootGuid);
 get_file_partial_ctx(_UserCtx, #fuse_request{fuse_request = #file_request{context_guid = FileGuid}}) ->
     file_partial_ctx:new_by_guid(FileGuid);

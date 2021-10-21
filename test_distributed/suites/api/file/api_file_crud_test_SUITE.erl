@@ -37,7 +37,7 @@
     update_file_instance_on_provider_not_supporting_space_test/1,
 
     delete_file_instance_test/1,
-    delete_file_at_path_instance_test/1,
+    delete_file_instance_at_path_test/1,
     delete_file_instance_on_provider_not_supporting_space_test/1
 ]).
 
@@ -50,7 +50,7 @@ groups() -> [
         update_file_instance_on_provider_not_supporting_space_test,
 
         delete_file_instance_test,
-        delete_file_at_path_instance_test,
+        delete_file_instance_at_path_test,
         delete_file_instance_on_provider_not_supporting_space_test
     ]},
     {sequential, [sequential], [
@@ -511,7 +511,7 @@ delete_file_instance_test(Config) ->
     ])).
 
 
-delete_file_at_path_instance_test(Config) ->
+delete_file_instance_at_path_test(Config) ->
     [P1] = oct_background:get_provider_nodes(krakow),
     [P2] = oct_background:get_provider_nodes(paris),
     Providers = [P1, P2],
@@ -530,14 +530,14 @@ delete_file_at_path_instance_test(Config) ->
         optional = [<<"path">>],
         correct_values = #{
             <<"path">> => [
-                only_filename_path_placeholder,
-                directory_and_filename_path_placeholder,
-                space_id_with_directory_and_filename_path_placeholder
+                filename_only_relative_to_parent_dir_placeholder,
+                directory_and_filename_relative_to_space_root_dir_placeholder,
+                directory_and_filename_relative_to_space_id_placeholder
             ]
         },
         bad_values = [
             {<<"path">>, <<"/a/b/\0null\0/">>, ?ERROR_BAD_VALUE_FILE_PATH},
-            {<<"path">>, inexistent_path, ?ERROR_POSIX(?ENOENT)}
+            {<<"path">>, nonexistent_path, ?ERROR_POSIX(?ENOENT)}
         ]
     },
 
@@ -590,14 +590,14 @@ build_delete_instance_at_path_test_prepare_rest_args_fun(MemRef, TopDirGuid, Top
         RootFileGuid = api_test_memory:get(MemRef, file_guid),
 
         {ParentGuidOrSpaceId, Path} = case maps:get(<<"path">>, Data, undefined) of
-            only_filename_path_placeholder ->
+            filename_only_relative_to_parent_dir_placeholder ->
                 {TopDirGuid, RootFileName};
-            directory_and_filename_path_placeholder ->
+            directory_and_filename_relative_to_space_root_dir_placeholder ->
                 SpaceRootDirGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
                 {SpaceRootDirGuid, filepath_utils:join([TopDirName, RootFileName])};
-            space_id_with_directory_and_filename_path_placeholder ->
+            directory_and_filename_relative_to_space_id_placeholder ->
                 {space_id, filepath_utils:join([TopDirName, RootFileName])};
-            inexistent_path ->
+            nonexistent_path ->
                 {space_id, ?RANDOM_FILE_NAME()};
             undefined ->
                 {RootFileGuid, <<"">>};

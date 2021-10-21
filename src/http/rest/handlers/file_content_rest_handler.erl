@@ -331,19 +331,22 @@ resolve_target_file(#op_req{
     data = Data
 }) ->
     PathInfo = maps:get(path, Data, []),
-    CreateDirs = case Operation of
-        create -> maps:get(<<"create_parents">>, Data, ?DEFAULT_CREATE_PARENTS_FLAG);
-        _ -> false
-    end,
+    Mode = maps:get(<<"mode">>, Data, ?DEFAULT_DIR_MODE),
+    CreateDirs = maps:get(<<"create_parents">>, Data, ?DEFAULT_CREATE_PARENTS_FLAG),
 
     FilePath = case Operation of
         create -> filepath_utils:join(lists:droplast(PathInfo));
         _ -> filepath_utils:join(PathInfo)
     end,
 
-    Mode = maps:get(<<"mode">>, Data, ?DEFAULT_DIR_MODE),
-
-    case lfm:resolve_guid_by_relative_path(SessionId, BaseDirGuid, FilePath, CreateDirs, Mode) of
+    Result = case {Operation, CreateDirs} of
+        {create, true} ->
+            lfm:ensure_dir(SessionId, BaseDirGuid, FilePath, Mode);
+        _ ->
+            lfm:resolve_guid_by_relative_path(SessionId, BaseDirGuid, FilePath)
+    end,
+    
+    case Result of
         {ok, ResolvedGuid} -> ResolvedGuid;
         {error, Errno} -> throw(?ERROR_POSIX(Errno))
     end;

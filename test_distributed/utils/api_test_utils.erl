@@ -748,10 +748,10 @@ get_invalid_file_id_errors(IdKey) ->
     [
         % Errors thrown by rest_handler, which failed to convert file path/cdmi_id to guid
         {bad_id, <<"/NonExistentPath">>, {rest_with_file_path, ?ERROR_POSIX(?ENOENT)}},
-        {bad_id, <<"InvalidObjectId">>, {rest, ?ERROR_SPACE_NOT_SUPPORTED_LOCALLY(<<"InvalidObjectId">>)}},
+        {bad_id, <<"InvalidObjectId">>, {rest, ?ERROR_SPACE_NOT_SUPPORTED_BY(<<"InvalidObjectId">>), provider_id_placeholder}},
 
         % Errors thrown by middleware and internal logic
-        {bad_id, InvalidObjectId, {rest, ?ERROR_SPACE_NOT_SUPPORTED_LOCALLY(InvalidObjectId)}},
+        {bad_id, InvalidObjectId, {rest, ?ERROR_SPACE_NOT_SUPPORTED_BY(InvalidObjectId, provider_id_placeholder)}},
         {bad_id, InvalidGuid, {gs, ?ERROR_BAD_VALUE_IDENTIFIER(IdKey)}}
     ].
 

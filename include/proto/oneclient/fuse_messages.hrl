@@ -216,9 +216,15 @@
 }).
 
 -record(resolve_guid_by_relative_path, {
-    relative_root :: fslogic_worker:file_guid(),
+    % file, relative to which the path remainder will be resolved
+    root_file :: fslogic_worker:file_guid(),
+    path :: file_meta:path()
+}).
+
+-record(ensure_dir, {
+    % file, relative to which the path remainder will be resolved
+    root_file :: fslogic_worker:file_guid(),
     path :: file_meta:path(),
-    create_dirs :: boolean(),
     mode :: file_meta:mode()
 }).
 
@@ -245,7 +251,7 @@
 }).
 
 -type fuse_request_type() ::
-    #resolve_guid{} | #resolve_guid_by_canonical_path{} | #resolve_guid_by_relative_path{} |
+    #resolve_guid{} | #resolve_guid_by_canonical_path{} | #resolve_guid_by_relative_path{} | #ensure_dir{} |
     #get_helper_params{} | #create_storage_test_file{} |
     #verify_storage_test_file{} | #file_request{} | #get_fs_stats{}.
 
