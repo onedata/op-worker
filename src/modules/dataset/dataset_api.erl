@@ -16,6 +16,7 @@
 -include("modules/dataset/dataset.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/fslogic/data_access_control.hrl").
+-include("modules/fslogic/file_details.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/errors.hrl").
@@ -184,9 +185,10 @@ get_effective_membership_and_protection_flags(FileCtx) ->
     {ok, EffProtectionFlags} = dataset_eff_cache:get_eff_file_protection_flags(EffCacheEntry),
     IsDirectAttached = file_meta_dataset:is_attached(FileDoc),
     EffMembership = case {IsDirectAttached, length(EffAncestorDatasets) =/= 0} of
-        {true, _} -> ?DIRECT_DATASET_MEMBERSHIP;
-        {false, true} -> ?ANCESTOR_DATASET_MEMBERSHIP;
-        {false, false} -> ?NONE_DATASET_MEMBERSHIP
+        {true, true} -> ?DIRECT_AND_ANCESTOR_MEMBERSHIP;
+        {true, false} -> ?DIRECT_MEMBERSHIP;
+        {false, true} -> ?ANCESTOR_MEMBERSHIP;
+        {false, false} -> ?NONE_MEMBERSHIP
     end,
     {ok, EffMembership, EffProtectionFlags, FileCtx2}.
 

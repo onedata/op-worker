@@ -18,6 +18,7 @@
 -include("modules/dataset/dataset.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
+-include("modules/fslogic/file_details.hrl").
 -include_lib("ctool/include/errors.hrl").
 
 
@@ -45,7 +46,8 @@
 -type name() :: file_meta:name().
 -type error() :: {error, term()}.
 -type detached_info() :: detached_dataset_info:info().
--type membership() :: ?NONE_DATASET_MEMBERSHIP | ?DIRECT_DATASET_MEMBERSHIP | ?ANCESTOR_DATASET_MEMBERSHIP.
+-type membership() :: ?NONE_MEMBERSHIP | ?DIRECT_MEMBERSHIP 
+    | ?ANCESTOR_MEMBERSHIP | ?DIRECT_AND_ANCESTOR_MEMBERSHIP.
 -type detachment_reason() :: ?DATASET_ROOT_FILE_DELETED | ?DATASET_USER_TRIGGERED_DETACHMENT.
 
 -export_type([id/0, doc/0, name/0, state/0, path/0, detached_info/0, membership/0, detachment_reason/0]).

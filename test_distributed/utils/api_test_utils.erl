@@ -201,11 +201,12 @@ create_file_in_space_krk_par_with_additional_metadata(ParentPath, HasParentQos, 
         end,
         eff_protection_flags = ?no_flags_mask,
         eff_qos_membership = case {HasDirectQos, HasParentQos} of
-            {true, _} -> ?DIRECT_QOS_MEMBERSHIP;
-            {_, true} -> ?ANCESTOR_QOS_MEMBERSHIP;
-            _ -> ?NONE_QOS_MEMBERSHIP
+            {true, true} -> ?DIRECT_AND_ANCESTOR_MEMBERSHIP;
+            {true, _} -> ?DIRECT_MEMBERSHIP;
+            {_, true} -> ?ANCESTOR_MEMBERSHIP;
+            _ -> ?NONE_MEMBERSHIP
         end,
-        eff_dataset_membership = ?NONE_DATASET_MEMBERSHIP,
+        eff_dataset_membership = ?NONE_MEMBERSHIP,
         has_metadata = HasMetadata
     },
 
