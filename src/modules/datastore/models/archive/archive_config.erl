@@ -23,8 +23,8 @@
 -export([from_json/1, to_json/1, sanitize/1]).
 %% Getters
 -export([
-    get_layout/1, should_include_dip/1, should_create_nested_archives/1, 
-    is_incremental/1, get_incremental_based_on/1
+    get_layout/1, is_incremental/1, get_incremental_based_on/1, 
+    should_include_dip/1, should_create_nested_archives/1, should_follow_symlinks/1
 ]).
 %% Setters
 -export([enforce_plain_layout/1]).
@@ -47,7 +47,7 @@
 -export_type([record/0, json/0, incremental/0, include_dip/0, layout/0]).
 
 %% persistent_record callbacks
--export([version/0, db_encode/2, db_decode/2]).
+-export([version/0, db_encode/2, db_decode/2, upgrade_encoded_record/2]).
 
 %%%===================================================================
 %%% API functions
@@ -59,7 +59,8 @@ from_json(ConfigJson) ->
         layout = utils:to_atom(maps:get(<<"layout">>, ConfigJson, ?DEFAULT_LAYOUT)),
         incremental = maps:get(<<"incremental">>, ConfigJson, ?DEFAULT_INCREMENTAL),
         include_dip = utils:to_boolean(maps:get(<<"includeDip">>, ConfigJson, ?DEFAULT_INCLUDE_DIP)),
-        create_nested_archives = utils:to_boolean(maps:get(<<"createNestedArchives">>, ConfigJson, ?DEFAULT_CREATE_NESTED_ARCHIVES))
+        create_nested_archives = utils:to_boolean(maps:get(<<"createNestedArchives">>, ConfigJson, ?DEFAULT_CREATE_NESTED_ARCHIVES)),
+        follow_symlinks = utils:to_boolean(maps:get(<<"followSymlinks">>, ConfigJson, ?DEFAULT_ARCHIVE_FOLLOW_SYMLINKS))
     }.
 
 -spec to_json(record()) -> json().
@@ -67,13 +68,15 @@ to_json(#archive_config{
     incremental = Incremental,
     layout = Layout,
     include_dip = IncludeDip,
-    create_nested_archives = CreateNestedArchives
+    create_nested_archives = CreateNestedArchives,
+    follow_symlinks = FollowSymlinks
 }) ->
     #{
         <<"incremental">> => Incremental,
         <<"layout">> => str_utils:to_binary(Layout),
         <<"includeDip">> => IncludeDip,
-        <<"createNestedArchives">> => CreateNestedArchives
+        <<"createNestedArchives">> => CreateNestedArchives,
+        <<"followSymlinks">> => FollowSymlinks
     }.
 
 
@@ -85,7 +88,8 @@ sanitize(RawConfig) ->
                 <<"layout">> => {atom, ?ARCHIVE_LAYOUTS},
                 <<"includeDip">> => {boolean, any},
                 <<"incremental">> => {json, non_empty},
-                <<"createNestedArchives">> => {boolean, any}
+                <<"createNestedArchives">> => {boolean, any},
+                <<"followSymlinks">> => {boolean, any}
             }
         }),
         case maps:get(<<"incremental">>, SanitizedData, ?DEFAULT_INCREMENTAL) of
@@ -147,6 +151,11 @@ should_include_dip(#archive_config{include_dip = IncludeDip}) ->
     IncludeDip.
 
 
+-spec should_follow_symlinks(record()) -> boolean().
+should_follow_symlinks(#archive_config{follow_symlinks = FollowSymlinks}) ->
+    FollowSymlinks.
+
+
 -spec is_valid_base_archive(null | archive:id()) -> false | {true, null | archive:id()}.
 is_valid_base_archive(null) ->
     {true, null};
@@ -170,7 +179,7 @@ enforce_plain_layout(ArchiveConfig) ->
 
 -spec version() -> persistent_record:record_version().
 version() ->
-    1.
+    2.
 
 
 -spec db_encode(record(), persistent_record:nested_record_encoder()) ->
@@ -183,3 +192,21 @@ db_encode(ArchiveConfig, _NestedRecordEncoder) ->
     record().
 db_decode(ArchiveConfigJson, _NestedRecordDecoder) ->
     from_json(ArchiveConfigJson).
+
+
+-spec upgrade_encoded_record(persistent_record:record_version(), json_utils:json_term()) ->
+    {persistent_record:record_version(), json_utils:json_term()}.
+upgrade_encoded_record(1, ArchiveConfig) ->
+     #{
+         <<"incremental">> := Incremental,
+         <<"layout">> := Layout,
+         <<"includeDip">> := IncludeDip,
+         <<"createNestedArchives">> := CreateNestedArchives
+     } = ArchiveConfig,
+     {2, #{
+         <<"incremental">> => Incremental,
+         <<"layout">> => Layout,
+         <<"includeDip">> => IncludeDip,
+         <<"createNestedArchives">> => CreateNestedArchives,
+         <<"followSymlinks">> => false % new field
+     }}.

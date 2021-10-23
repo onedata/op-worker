@@ -18,7 +18,12 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([init_qos_cache_for_space/1, init_retry_failed_files/0, init_traverse_pools/0]).
+-export([
+    init_qos_cache_for_space/1,
+    init_retry_failed_files/0,
+    init_traverse_pools/0,
+    init_traverse_pool/0
+]).
 
 %% worker_plugin_behaviour callbacks
 -export([init/1, handle/1, cleanup/0]).
@@ -122,6 +127,12 @@ init_retry_failed_files() ->
 
 -spec init_traverse_pools() -> ok.
 init_traverse_pools() ->
+    {_, []} = utils:rpc_multicall(consistent_hashing:get_all_nodes(), ?MODULE, init_traverse_pool, []),
+    ok.
+
+
+-spec init_traverse_pool() -> ok.
+init_traverse_pool() ->
     try
         qos_traverse:init_pool()
     catch

@@ -16,14 +16,16 @@
 -include("modules/dataset/dataset.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/fslogic/data_access_control.hrl").
+-include("modules/fslogic/file_details.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([establish/2, update/4, detach/2, remove/1, move_if_applicable/2]).
+-export([establish/2, update/4, remove/1, move_if_applicable/2]).
 -export([get_info/1, get_effective_membership_and_protection_flags/1, get_effective_summary/1]).
 -export([list_top_datasets/4, list_children_datasets/3]).
+-export([handle_file_deleted/1]).
 
 %% Utils
 -export([get_associated_file_ctx/1]).
@@ -94,18 +96,13 @@ update(DatasetDoc, NewState, FlagsToSet, FlagsToUnset) ->
                 FileCtx = file_ctx:new_by_uuid(Uuid, SpaceId),
                 {FilePath, _FileCtx2} = file_ctx:get_logical_path(FileCtx, user_ctx:new(?ROOT_SESS_ID)),
                 % it's forbidden to change flags while detaching dataset
-                detach(DatasetId, FilePath);
+                detach_insecure(DatasetId, FilePath, ?DATASET_USER_TRIGGERED_DETACHMENT);
             {?ATTACHED_DATASET, ?DETACHED_DATASET, _, _} ->
                 {error, ?EINVAL};
             {?ATTACHED_DATASET, undefined, _, _} ->
                 update_protection_flags(DatasetId, FlagsToSet, FlagsToUnset)
         end
     end).
-
-
--spec detach(dataset:id(), file_meta:path()) -> ok | error().
-detach(DatasetId, RootFilePath) ->
-    ?CRITICAL_SECTION(DatasetId, fun() -> detach_internal(DatasetId, RootFilePath) end).
 
 
 -spec remove(dataset:id() | dataset:doc()) -> ok | error().
@@ -152,6 +149,28 @@ move_if_applicable(SourceDoc, TargetDoc) ->
     end).
 
 
+-spec handle_file_deleted(file_ctx:ctx()) -> file_ctx:ctx().
+handle_file_deleted(FileCtx) ->
+    {FileDoc, FileCtx2} = file_ctx:get_file_doc_including_deleted(FileCtx),
+    DatasetId = file_ctx:get_logical_uuid_const(FileCtx),
+    ?CRITICAL_SECTION(DatasetId, fun() ->
+        case file_meta_dataset:get_state(FileDoc) of
+            ?ATTACHED_DATASET ->
+                {Path, FileCtx3} = file_ctx:get_logical_path(FileCtx2, user_ctx:new(?ROOT_SESS_ID)),
+                PathBeforeDeletion = case file_ctx:get_path_before_deletion(FileCtx3) of
+                    undefined -> Path;
+                    P -> P
+                end,
+                detach_insecure(DatasetId, PathBeforeDeletion, ?DATASET_ROOT_FILE_DELETED);
+            ?DETACHED_DATASET ->
+                dataset:mark_root_file_deleted(DatasetId);
+            undefined ->
+                ok
+        end,
+        FileCtx2
+    end).
+
+
 -spec get_info(dataset:id()) -> {ok, #dataset_info{}}.
 get_info(DatasetId) ->
     {ok, collect_state_dependant_info(DatasetId)}.
@@ -166,9 +185,10 @@ get_effective_membership_and_protection_flags(FileCtx) ->
     {ok, EffProtectionFlags} = dataset_eff_cache:get_eff_file_protection_flags(EffCacheEntry),
     IsDirectAttached = file_meta_dataset:is_attached(FileDoc),
     EffMembership = case {IsDirectAttached, length(EffAncestorDatasets) =/= 0} of
-        {true, _} -> ?DIRECT_DATASET_MEMBERSHIP;
-        {false, true} -> ?ANCESTOR_DATASET_MEMBERSHIP;
-        {false, false} -> ?NONE_DATASET_MEMBERSHIP
+        {true, true} -> ?DIRECT_AND_ANCESTOR_MEMBERSHIP;
+        {true, false} -> ?DIRECT_MEMBERSHIP;
+        {false, true} -> ?ANCESTOR_MEMBERSHIP;
+        {false, false} -> ?NONE_MEMBERSHIP
     end,
     {ok, EffMembership, EffProtectionFlags, FileCtx2}.
 
@@ -242,8 +262,8 @@ reattach(DatasetId, FlagsToSet, FlagsToUnset) ->
     end.
 
 
--spec detach_internal(dataset:id(), file_meta:path()) -> ok | error().
-detach_internal(DatasetId, RootFilePath) ->
+-spec detach_insecure(dataset:id(), file_meta:path(), dataset:detachment_reason()) -> ok | error().
+detach_insecure(DatasetId, RootFilePath, Reason) ->
     {ok, Doc} = dataset:get(DatasetId),
     {ok, FileDoc} = file_meta:get_including_deleted(DatasetId),
     {ok, SpaceId} = dataset:get_space_id(Doc),
@@ -251,7 +271,7 @@ detach_internal(DatasetId, RootFilePath) ->
     {ok, DatasetPath} = dataset_path:get(SpaceId, DatasetId),
     FileType = file_meta:get_effective_type(FileDoc),
     DatasetName = filename:basename(RootFilePath),
-    ok = dataset:mark_detached(DatasetId, DatasetPath, RootFilePath, FileType, CurrProtectionFlags),
+    ok = dataset:mark_detached(DatasetId, DatasetPath, RootFilePath, FileType, CurrProtectionFlags, Reason),
     detached_datasets:add(SpaceId, DatasetPath, DatasetName),
     attached_datasets:delete(SpaceId, DatasetPath),
     case file_meta_dataset:detach(DatasetId) of
@@ -345,6 +365,7 @@ collect_detached_info(DatasetDoc, IndexOrUndefined) ->
     RootFileType = detached_dataset_info:get_root_file_type(DetachedInfo),
     DetachedDatasetPath = detached_dataset_info:get_path(DetachedInfo),
     ProtectionFlags = detached_dataset_info:get_protection_flags(DetachedInfo),
+    DetachmentReason = detached_dataset_info:get_detachment_reason(DetachedInfo),
     FinalIndex = case IndexOrUndefined of
         undefined -> entry_index(DatasetId, RootFilePath);
         Index -> Index
@@ -356,6 +377,7 @@ collect_detached_info(DatasetDoc, IndexOrUndefined) ->
         state = ?DETACHED_DATASET,
         root_file_path = RootFilePath,
         root_file_type = RootFileType,
+        root_file_deleted = DetachmentReason =:= ?DATASET_ROOT_FILE_DELETED, 
         protection_flags = ProtectionFlags,
         eff_protection_flags = ?no_flags_mask,
         parent = detached_datasets:get_parent(SpaceId, DetachedDatasetPath),

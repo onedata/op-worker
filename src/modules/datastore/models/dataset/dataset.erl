@@ -18,6 +18,7 @@
 -include("modules/dataset/dataset.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
+-include("modules/fslogic/file_details.hrl").
 -include_lib("ctool/include/errors.hrl").
 
 
@@ -29,10 +30,10 @@
     get_detached_info/1, get_creation_time/1,
     get/1
 ]).
--export([mark_detached/5, mark_reattached/1]).
+-export([mark_detached/6, mark_reattached/1, mark_root_file_deleted/1]).
 
 %% datastore_model callbacks
--export([get_ctx/0, get_record_struct/1]).
+-export([get_ctx/0, get_record_version/0, get_record_struct/1, upgrade_record/2]).
 
 -compile([{no_auto_import, [get/1]}]).
 
@@ -45,9 +46,11 @@
 -type name() :: file_meta:name().
 -type error() :: {error, term()}.
 -type detached_info() :: detached_dataset_info:info().
--type membership() :: ?NONE_DATASET_MEMBERSHIP | ?DIRECT_DATASET_MEMBERSHIP | ?ANCESTOR_DATASET_MEMBERSHIP.
+-type membership() :: ?NONE_MEMBERSHIP | ?DIRECT_MEMBERSHIP 
+    | ?ANCESTOR_MEMBERSHIP | ?DIRECT_AND_ANCESTOR_MEMBERSHIP.
+-type detachment_reason() :: ?DATASET_ROOT_FILE_DELETED | ?DATASET_USER_TRIGGERED_DETACHMENT.
 
--export_type([id/0, doc/0, name/0, state/0, path/0, detached_info/0, membership/0]).
+-export_type([id/0, doc/0, name/0, state/0, path/0, detached_info/0, membership/0, detachment_reason/0]).
 
 
 % @formatter:on
@@ -133,16 +136,29 @@ get(DatasetId) ->
     datastore_model:get(?CTX, DatasetId).
 
 
--spec mark_detached(id(), path(), file_meta:path(), file_meta:type(), data_access_control:bitmask()) -> ok | error().
-mark_detached(DatasetId, DatasetPath, RootFilePath, RootFileType, ProtectionFlags) ->
+-spec mark_detached(id(), path(), file_meta:path(), file_meta:type(), data_access_control:bitmask(), 
+    detachment_reason()) -> ok | error().
+mark_detached(DatasetId, DatasetPath, RootFilePath, RootFileType, ProtectionFlags, Reason) ->
     update(DatasetId, fun
         (Dataset = #dataset{state = ?ATTACHED_DATASET}) ->
             {ok, Dataset#dataset{
                 state = ?DETACHED_DATASET,
-                detached_info = detached_dataset_info:create_info(DatasetPath, RootFilePath, RootFileType, ProtectionFlags)
+                detached_info = detached_dataset_info:create_info(
+                    DatasetPath, RootFilePath, RootFileType, ProtectionFlags, Reason)
             }};
         (#dataset{state = ?DETACHED_DATASET}) ->
             ?ERROR_ALREADY_EXISTS
+    end).
+
+
+-spec mark_root_file_deleted(id()) -> ok | error().
+mark_root_file_deleted(DatasetId) ->
+    update(DatasetId, fun
+        (Dataset = #dataset{detached_info = DetachedInfo}) ->
+            {ok, Dataset#dataset{
+                detached_info = detached_dataset_info:set_detachment_reason(
+                    DetachedInfo, ?DATASET_ROOT_FILE_DELETED)
+            }}
     end).
 
 
@@ -174,6 +190,11 @@ update(DatasetId, Diff) ->
 get_ctx() ->
     ?CTX.
 
+
+-spec get_record_version() -> datastore_model:record_version().
+get_record_version() ->
+    2.
+
 -spec get_record_struct(datastore_model:record_version()) -> datastore_model:record_struct().
 get_record_struct(1) ->
     {record, [
@@ -185,4 +206,43 @@ get_record_struct(1) ->
             {root_file_type, atom},
             {protection_flags, integer}
         ]}}
+    ]};
+get_record_struct(2) ->
+    {record, [
+        {creation_time, integer},
+        {state, atom},
+        {detached_info, {record, [
+            {dataset_path, string},
+            {root_file_path, string},
+            {root_file_type, atom},
+            {protection_flags, integer},
+            {detachment_reason, atom} % new field
+        ]}}
     ]}.
+
+
+-spec upgrade_record(datastore_model:record_version(), datastore_model:record()) ->
+    {datastore_model:record_version(), datastore_model:record()}.
+upgrade_record(1, Dataset) -> 
+    {dataset, 
+        CreationTime,
+        State,
+        {info,
+            DatasetPath,
+            RootFilePath,
+            RootFileType,
+            ProtectionFlags
+        }
+    } = Dataset,
+    
+    {2, #dataset{
+        creation_time = CreationTime,
+        state = State,
+        detached_info = detached_dataset_info:create_info(
+            DatasetPath, 
+            RootFilePath, 
+            RootFileType, 
+            ProtectionFlags, 
+            ?DATASET_USER_TRIGGERED_DETACHMENT
+        )
+    }}.
