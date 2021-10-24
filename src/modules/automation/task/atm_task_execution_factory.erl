@@ -72,9 +72,11 @@ create(AtmWorkflowExecutionCreationCtx, AtmLaneIndex, AtmParallelBoxIndex, AtmTa
     } = create_audit_log(AtmWorkflowExecutionCreationCtx),
 
     try
-        AtmLambdaDoc = #document{value = AtmLambda} = get_lambda_doc(
+        #document{key = AtmLambdaId, value = AtmLambda} = get_lambda_doc(
             AtmWorkflowExecutionCreationCtx, AtmTaskSchema
         ),
+        % @TODO VFS-8349 rework when Oneprovider understands workflow schema and lambda versioning
+        AtmLambdaRevision = od_atm_lambda:get_latest_revision(AtmLambda),
         {ok, AtmTaskExecutionDoc} = atm_task_execution:create(#atm_task_execution{
             workflow_execution_id = AtmWorkflowExecutionId,
             lane_index = AtmLaneIndex,
@@ -82,9 +84,9 @@ create(AtmWorkflowExecutionCreationCtx, AtmLaneIndex, AtmParallelBoxIndex, AtmTa
 
             schema_id = AtmTaskSchema#atm_task_schema.id,
 
-            executor = atm_task_executor:create(AtmWorkflowExecutionId, AtmLambdaDoc),
-            argument_specs = build_argument_specs(AtmLambda, AtmTaskSchema),
-            result_specs = build_result_specs(AtmLambda, AtmTaskSchema),
+            executor = atm_task_executor:create(AtmWorkflowExecutionId, AtmLambdaId, AtmLambdaRevision),
+            argument_specs = build_argument_specs(AtmLambdaRevision, AtmTaskSchema),
+            result_specs = build_result_specs(AtmLambdaRevision, AtmTaskSchema),
 
             system_audit_log_id = AtmTaskAuditLogId,
 
@@ -164,20 +166,20 @@ get_lambda_doc(
 
 
 %% @private
--spec build_argument_specs(od_atm_lambda:record(), atm_task_schema:record()) ->
+-spec build_argument_specs(atm_lambda_revision:record(), atm_task_schema:record()) ->
     [atm_task_execution_argument_spec:record()] | no_return().
 build_argument_specs(
-    #od_atm_lambda{argument_specs = AtmLambdaArgSpecs},
+    #atm_lambda_revision{argument_specs = AtmLambdaArgSpecs},
     #atm_task_schema{argument_mappings = AtmTaskSchemaArgMappers}
 ) ->
     atm_task_execution_arguments:build_specs(AtmLambdaArgSpecs, AtmTaskSchemaArgMappers).
 
 
 %% @private
--spec build_result_specs(od_atm_lambda:record(), atm_task_schema:record()) ->
+-spec build_result_specs(atm_lambda_revision:record(), atm_task_schema:record()) ->
     [atm_task_execution_result_spec:record()] | no_return().
 build_result_specs(
-    #od_atm_lambda{result_specs = AtmLambdaResultSpecs},
+    #atm_lambda_revision{result_specs = AtmLambdaResultSpecs},
     #atm_task_schema{result_mappings = AtmTaskSchemaResultMappers}
 ) ->
     atm_task_execution_results:build_specs(AtmLambdaResultSpecs, AtmTaskSchemaResultMappers).
