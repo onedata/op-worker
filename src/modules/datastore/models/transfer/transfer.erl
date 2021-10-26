@@ -23,6 +23,8 @@
 -include_lib("cluster_worker/include/modules/datastore/datastore_links.hrl").
 -include_lib("ctool/include/logging.hrl").
 
+-behaviour(synchronizer_callback_behaviour).
+
 %% API
 -export([
     init/0, cleanup/0,
@@ -43,7 +45,7 @@
     increment_files_to_process_counter/2, increment_files_processed_counter/1,
     increment_files_evicted_and_processed_counters/1,
     increment_files_failed_and_processed_counters/1,
-    increment_files_replicated_counter/1, mark_data_replication_finished/3,
+    increment_files_replicated_counter/1,
 
     rerun_not_ended_transfers/1
 ]).
@@ -56,6 +58,9 @@
 ]).
 
 -export([get_link_key/2, get_link_key_by_state/2]).
+
+%% synchronizer_callback behaviour
+-export([flush_stats/3]).
 
 %% datastore_model callbacks
 -export([
@@ -554,68 +559,6 @@ increment_files_replicated_counter(TransferId) ->
         }}
     end).
 
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Marks in transfer doc successful transfer of 'Bytes' bytes per provider.
-%% @end
-%%--------------------------------------------------------------------
--spec mark_data_replication_finished(TransferId :: undefined | id(), od_space:id(),
-    BytesPerProvider :: #{od_provider:id() => non_neg_integer()}
-) ->
-    {ok, undefined | doc()} | {error, term()}.
-mark_data_replication_finished(undefined, SpaceId, BytesPerProvider) ->
-    ok = space_transfer_stats:update_with_cache(
-        ?ON_THE_FLY_TRANSFERS_TYPE, SpaceId, BytesPerProvider
-    ),
-    {ok, undefined};
-mark_data_replication_finished(TransferId, SpaceId, BytesPerProvider) ->
-    case space_transfer_stats:update(?JOB_TRANSFERS_TYPE, SpaceId, BytesPerProvider) of
-        ok ->
-            ok;
-        {error, _} = Error ->
-            ?error("Failed to update collective trasfer stats in space ~s due to ~p", [SpaceId, Error])
-    end,
-
-    BytesTransferred = maps:fold(
-        fun(_, Bytes, Acc) -> Acc + Bytes end, 0, BytesPerProvider
-    ),
-    UpdateFun = fun(Transfer = #transfer{
-        bytes_replicated = OldBytes,
-        start_time = StartTime,
-        last_update = LastUpdates,
-        min_hist = MinHistograms,
-        hr_hist = HrHistograms,
-        dy_hist = DyHistograms,
-        mth_hist = MthHistograms
-    }) ->
-        CurrentMonotonicTime = transfer_histograms:get_current_monotonic_time(LastUpdates, StartTime),
-        ApproxCurrentTime = transfer_histograms:monotonic_timestamp_value(CurrentMonotonicTime),
-        NewTimestamps = maps:map(fun(_, _) -> ApproxCurrentTime end, BytesPerProvider),
-        {ok, Transfer#transfer{
-            bytes_replicated = OldBytes + BytesTransferred,
-            last_update = maps:merge(LastUpdates, NewTimestamps),
-            min_hist = transfer_histograms:update(
-                BytesPerProvider, MinHistograms, ?MINUTE_PERIOD,
-                LastUpdates, StartTime, CurrentMonotonicTime
-            ),
-            hr_hist = transfer_histograms:update(
-                BytesPerProvider, HrHistograms, ?HOUR_PERIOD,
-                LastUpdates, StartTime, CurrentMonotonicTime
-            ),
-            dy_hist = transfer_histograms:update(
-                BytesPerProvider, DyHistograms, ?DAY_PERIOD,
-                LastUpdates, StartTime, CurrentMonotonicTime
-            ),
-            mth_hist = transfer_histograms:update(
-                BytesPerProvider, MthHistograms, ?MONTH_PERIOD,
-                LastUpdates, StartTime, CurrentMonotonicTime
-            )
-        }}
-    end,
-
-    update(TransferId, UpdateFun).
-
 %%--------------------------------------------------------------------
 %% @doc
 %% @equiv list_scheduled_transfers(SpaceId, 0, all).
@@ -735,6 +678,72 @@ get_link_key_by_state(#document{key = TransferId, value = Transfer}, TransferSta
     {ok, transfer_links:link_key()} | {error, term()}.
 get_link_key(TransferId, Timestamp) ->
     {ok, transfer_links:link_key(TransferId, Timestamp)}.
+
+
+%%%===================================================================
+%%% synchronizer_callback_behaviour
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Marks in transfer doc successful transfer of 'Bytes' bytes per provider.
+%% @end
+%%--------------------------------------------------------------------
+-spec flush_stats(od_space:id(), TransferId :: undefined | id(),
+    BytesPerProvider :: #{od_provider:id() => non_neg_integer()}
+) ->
+    ok | {error, term()}.
+flush_stats(SpaceId, undefined, BytesPerProvider) ->
+    ok = space_transfer_stats:update_with_cache(
+        ?ON_THE_FLY_TRANSFERS_TYPE, SpaceId, BytesPerProvider
+    ),
+    ok;
+flush_stats(SpaceId, TransferId, BytesPerProvider) ->
+    case space_transfer_stats:update(?JOB_TRANSFERS_TYPE, SpaceId, BytesPerProvider) of
+        ok ->
+            ok;
+        {error, _} = Error ->
+            ?error("Failed to update collective trasfer stats in space ~s due to ~p", [SpaceId, Error])
+    end,
+    
+    BytesTransferred = maps:fold(
+        fun(_, Bytes, Acc) -> Acc + Bytes end, 0, BytesPerProvider
+    ),
+    UpdateFun = fun(Transfer = #transfer{
+        bytes_replicated = OldBytes,
+        start_time = StartTime,
+        last_update = LastUpdates,
+        min_hist = MinHistograms,
+        hr_hist = HrHistograms,
+        dy_hist = DyHistograms,
+        mth_hist = MthHistograms
+    }) ->
+        CurrentMonotonicTime = transfer_histograms:get_current_monotonic_time(LastUpdates, StartTime),
+        ApproxCurrentTime = transfer_histograms:monotonic_timestamp_value(CurrentMonotonicTime),
+        NewTimestamps = maps:map(fun(_, _) -> ApproxCurrentTime end, BytesPerProvider),
+        {ok, Transfer#transfer{
+            bytes_replicated = OldBytes + BytesTransferred,
+            last_update = maps:merge(LastUpdates, NewTimestamps),
+            min_hist = transfer_histograms:update(
+                BytesPerProvider, MinHistograms, ?MINUTE_PERIOD,
+                LastUpdates, StartTime, CurrentMonotonicTime
+            ),
+            hr_hist = transfer_histograms:update(
+                BytesPerProvider, HrHistograms, ?HOUR_PERIOD,
+                LastUpdates, StartTime, CurrentMonotonicTime
+            ),
+            dy_hist = transfer_histograms:update(
+                BytesPerProvider, DyHistograms, ?DAY_PERIOD,
+                LastUpdates, StartTime, CurrentMonotonicTime
+            ),
+            mth_hist = transfer_histograms:update(
+                BytesPerProvider, MthHistograms, ?MONTH_PERIOD,
+                LastUpdates, StartTime, CurrentMonotonicTime
+            )
+        }}
+    end,
+    
+    ?extract_ok(update(TransferId, UpdateFun)).
 
 %%%===================================================================
 %%% Internal functions

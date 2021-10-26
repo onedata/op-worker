@@ -1876,7 +1876,7 @@ unmock_sync_and_rtransfer_errors(Config) ->
 
 async_synchronize(SessionId, FileCtx, Block) ->
     UserCtx = user_ctx:new(SessionId),
-    replica_synchronizer:synchronize(UserCtx, FileCtx, Block, false, undefined, 96).
+    replica_synchronizer:synchronize(UserCtx, FileCtx, Block, false, undefined, 96, transfer).
 
 async_synchronize(Worker, User, SessId, FileCtx, Block) ->
     rpc:async_call(Worker, ?MODULE, async_synchronize, [
@@ -1886,7 +1886,7 @@ async_synchronize(Worker, User, SessId, FileCtx, Block) ->
 request_synchronization(SessionID, FileCtx, Block) ->
     UserCtx = user_ctx:new(SessionID),
     replica_synchronizer:request_synchronization(UserCtx, FileCtx, Block,
-        false, undefined, 96
+        false, undefined, 96, transfer
     ).
 
 request_synchronization(Worker, User, SessId, FileCtx, Block) ->
@@ -2354,7 +2354,7 @@ sync_blocks(SessionID, FileCtx, BlockSize, Blocks) ->
     FinalTime = lists:foldl(fun(BlockNum, Acc) ->
         Stopwatch = stopwatch:start(),
         SyncAns = replica_synchronizer:synchronize(UserCtx, FileCtx,
-            #file_block{offset = BlockNum, size = BlockSize}, false, undefined, 32),
+            #file_block{offset = BlockNum, size = BlockSize}, false, undefined, 32, transfer),
         Time = stopwatch:read_micros(Stopwatch),
         ?assertMatch({ok, _}, SyncAns),
         Acc + Time

@@ -10,7 +10,7 @@
 %%% synchronization by *this user* (more specifically: this session),
 %%% for *this file*.
 %%% Note: this module operates on referenced uuids. Synchronizer is always
-%%% created for original file, event if hardlink ctx is provided in argument.
+%%% created for original file, even if hardlink ctx is provided in argument.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(replica_synchronizer).
@@ -90,14 +90,15 @@
     caching_stats_timer :: undefined | reference(),
     caching_blocks_timer :: undefined | reference(),
     caching_events_timer :: undefined | reference(),
-    retries_number = #{} :: #{fetch_ref() => non_neg_integer()}
+    retries_number = #{} :: #{fetch_ref() => non_neg_integer()},
+    transfer_id_to_callback_module = #{} :: #{transfer:id() => module()}
 }).
 
 -define(BLOCK(__Offset, __Size), #file_block{offset = __Offset, size = __Size}).
 
 % API
 -export([
-    synchronize/6, request_synchronization/6, request_synchronization/7,
+    synchronize/7, request_synchronization/7, request_synchronization/8,
     update_replica/4, force_flush_events/1, delete_whole_file_replica/2,
     cancel/1, cancel_transfers_of_session/2,
     terminate_all/0, cancel_and_terminate_slaves/0
@@ -125,11 +126,11 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec synchronize(user_ctx:ctx(), file_ctx:ctx(), block(),
-    Prefetch :: boolean(), transfer:id() | undefined, non_neg_integer()) ->
+    Prefetch :: boolean(), transfer:id() | undefined, non_neg_integer(), module()) ->
     {ok, #file_location_changed{}} | {error, Reason :: any()}.
-synchronize(UserCtx, FileCtx, Block, Prefetch, TransferId, Priority) ->
+synchronize(UserCtx, FileCtx, Block, Prefetch, TransferId, Priority, CallbackModule) ->
     request_synchronization(UserCtx, FileCtx, Block, Prefetch, TransferId,
-        Priority, sync).
+        Priority, sync, CallbackModule).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -138,11 +139,11 @@ synchronize(UserCtx, FileCtx, Block, Prefetch, TransferId, Priority) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec request_synchronization(user_ctx:ctx(), file_ctx:ctx(), block(),
-    Prefetch :: boolean(), transfer:id() | undefined, non_neg_integer()) ->
+    Prefetch :: boolean(), transfer:id() | undefined, non_neg_integer(), module()) ->
     ok | {error, Reason :: any()}.
-request_synchronization(UserCtx, FileCtx, Block, Prefetch, TransferId, Priority) ->
+request_synchronization(UserCtx, FileCtx, Block, Prefetch, TransferId, Priority, CallbackModule) ->
     request_synchronization(UserCtx, FileCtx, Block, Prefetch, TransferId,
-        Priority, async).
+        Priority, async, CallbackModule).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -153,13 +154,13 @@ request_synchronization(UserCtx, FileCtx, Block, Prefetch, TransferId, Priority)
 %%--------------------------------------------------------------------
 -spec request_synchronization(user_ctx:ctx(), file_ctx:ctx(), block(),
     Prefetch :: boolean(), transfer:id() | undefined, non_neg_integer(),
-    request_type()) -> ok | {ok, #file_location_changed{}} | {error, Reason :: any()}.
+    request_type(), module()) -> ok | {ok, #file_location_changed{}} | {error, Reason :: any()}.
 request_synchronization(UserCtx, FileCtx, Block, Prefetch, TransferId,
-    Priority, SyncType) ->
+    Priority, SyncType, CallbackModule) ->
     EnlargedBlock = enlarge_block(Block, Prefetch),
     SessionId = user_ctx:get_session_id(UserCtx),
     apply_no_check(FileCtx, {synchronize, FileCtx, EnlargedBlock,
-        Prefetch, TransferId, SessionId, Priority, SyncType}).
+        Prefetch, TransferId, SessionId, Priority, SyncType, CallbackModule}).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -539,11 +540,12 @@ init(FileCtx) ->
 %% synchronized to the newest version.
 %% @end
 %%--------------------------------------------------------------------
-handle_call({synchronize, FileCtx, Block, Prefetch, TransferId, Session, Priority, Type}, From,
+handle_call({synchronize, FileCtx, Block, Prefetch, TransferId, Session, Priority, Type, CallbackModule}, From,
     #state{
         requested_blocks = RB,
         file_guid = FG,
-        from_requests_types = RequestTypesMap
+        from_requests_types = RequestTypesMap,
+        transfer_id_to_callback_module = TTC
     } = State0
 ) ->
     try
@@ -560,10 +562,13 @@ handle_call({synchronize, FileCtx, Block, Prefetch, TransferId, Session, Priorit
                     dest_storage_id = DestStorageId,
                     dest_file_id = DestFileId,
                     file_guid = FileGuid,
-                    space_id = SpaceId
+                    space_id = SpaceId,
+                    transfer_id_to_callback_module = TTC#{TransferId => CallbackModule}
                 };
             _ ->
-                State0
+                State0#state{
+                    transfer_id_to_callback_module = TTC#{TransferId => CallbackModule}
+                }
         end,
 
         TransferId =/= undefined andalso (catch gproc:add_local_counter(TransferId, 1)),
@@ -1543,18 +1548,23 @@ flush_blocks_list(AllBlocks, ExcludeSessions, Flush) ->
 -spec flush_stats(#state{}, boolean()) -> #state{}.
 flush_stats(#state{cached_stats = Stats} = State, _) when map_size(Stats) == 0 ->
     State;
-flush_stats(#state{space_id = SpaceId} = State, CancelTimer) ->
+flush_stats(#state{space_id = SpaceId, transfer_id_to_callback_module = TTC} = State, CancelTimer) ->
     lists:foreach(fun({TransferId, BytesPerProvider}) ->
-        case transfer:mark_data_replication_finished(TransferId, SpaceId, BytesPerProvider) of
-            {ok, _} -> ok;
-            % Tried to update document when transfer was not created by job (e.g. QoS), 
-            % so there is no document
-            ?ERROR_NOT_FOUND -> ok;
-            {error, Error} ->
-                ?error(
-                    "Failed to update transfer statistics for ~p transfer "
-                    "due to ~p", [TransferId, Error]
-                )
+        CallbackModule = maps:get(TransferId, TTC, transfer),
+        try
+            case CallbackModule:flush_stats(SpaceId, TransferId, BytesPerProvider) of
+                ok -> ok;
+                {error, Error} ->
+                    ?error(
+                        "Failed to update transfer statistics for ~p transfer "
+                        "due to ~p", [TransferId, Error]
+                    )
+            end
+        catch _:Reason:Stacktrace ->
+            ?error_stacktrace(
+                "Failed to update transfer statistics for ~p transfer "
+                "due to ~p", [TransferId, Reason], Stacktrace
+            )
         end
     end, maps:to_list(State#state.cached_stats)),
 

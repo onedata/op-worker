@@ -75,7 +75,9 @@
     qos_with_mixed_deletion_test/1,
     qos_on_symlink_test/1,
     effective_qos_with_symlink_test/1,
-    create_hardlink_in_dir_with_qos/1
+    create_hardlink_in_dir_with_qos/1,
+    
+    qos_transfer_stats_test/1
 ]).
 
 all() -> [
@@ -123,7 +125,9 @@ all() -> [
     qos_with_mixed_deletion_test,
     qos_on_symlink_test,
     effective_qos_with_symlink_test,
-    create_hardlink_in_dir_with_qos
+    create_hardlink_in_dir_with_qos,
+    
+    qos_transfer_stats_test
 ].
 
 
@@ -1044,7 +1048,49 @@ effective_qos_with_symlink_test(Config) ->
 
 create_hardlink_in_dir_with_qos(Config) ->
     qos_test_base:create_hardlink_in_dir_with_qos(Config, ?SPACE_ID).
+
+
+%%%===================================================================
+%%% QoS transfer stats tests
+%%%===================================================================
     
+qos_transfer_stats_test(Config) ->
+    [Worker1, Worker2 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
+    Name = generator:gen_name(),
+    SessId = fun(Worker) -> ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config) end,
+    Guid = create_file_with_content(Worker1, SessId(Worker1), fslogic_uuid:spaceid_to_space_dir_guid(?SPACE_ID), Name),
+    ProviderId2 = ?GET_DOMAIN_BIN(Worker2),
+    {ok, QosEntryId} = lfm_proxy:add_qos_entry(Worker1, SessId(Worker1), ?FILE_REF(Guid), <<"providerId=", ProviderId2/binary>>, 1),
+    % wait for qos entries to be dbsynced to other provider
+    ?assertMatch({ok, _}, lfm_proxy:get_qos_entry(Worker2, SessId(Worker2), QosEntryId), ?ATTEMPTS),
+    ?assertEqual({ok, ?FULFILLED_QOS_STATUS}, lfm_proxy:check_qos_status(Worker1, SessId(Worker1), QosEntryId), ?ATTEMPTS),
+    
+    CheckStatsFun = fun(Stats, ExpectedSeries, ExpectedValue) ->
+        lists:foreach(fun(Series) ->
+            lists:foreach(fun(Metric) ->
+                ?assert(maps:is_key({Series, Metric}, Stats)),
+                Value = maps:get({Series, Metric}, Stats),
+                case ExpectedValue of
+                    empty ->
+                        ?assertEqual([], Value);
+                    _ ->
+                        [{_Timestamp, Value1}] = Value,
+                        ?assertEqual(ExpectedValue, Value1)
+                end
+            end, [<<"minute">>, <<"hour">>, <<"day">>, <<"month">>])
+        end, ExpectedSeries)
+    end,
+    
+    {ok, StatsBytesW1} = rpc:call(Worker1, qos_transfer_stats, get, [QosEntryId, bytes]),
+    {ok, StatsBytesW2} = rpc:call(Worker2, qos_transfer_stats, get, [QosEntryId, bytes]),
+    {ok, StatsFilesW1} = rpc:call(Worker1, qos_transfer_stats, get, [QosEntryId, files]),
+    {ok, StatsFilesW2} = rpc:call(Worker2, qos_transfer_stats, get, [QosEntryId, files]),
+    
+    CheckStatsFun(StatsBytesW1, [<<"total">>], empty),
+    CheckStatsFun(StatsBytesW2, [<<"total">>, <<"mntst1">>], {1, byte_size(?TEST_DATA)}),
+    
+    CheckStatsFun(StatsFilesW1, [<<"total">>], empty),
+    CheckStatsFun(StatsFilesW2, [<<"total">>, <<"mntst2">>], {1, 1}).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
