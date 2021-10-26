@@ -31,10 +31,12 @@
 
 -export([
     gui_download_file_test/1,
+    gui_download_file_test_base/1,
     gui_download_dir_test/1,
+    gui_download_dir_test_base/1,
     gui_download_multiple_files_test/1,
+    gui_download_multiple_files_test_base/1,
     gui_download_different_filetypes_test/1,
-    gui_large_dir_download_test/1,
     gui_download_files_between_spaces_test/1,
     gui_download_incorrect_uuid_test/1,
     gui_download_tarball_with_hardlinks_test/1,
@@ -59,9 +61,17 @@ groups() -> [
     ]}
 ].
 
-all() -> [
+-define(STANDARD_CASES, [
     {group, all_tests}
-].
+]).
+
+-define(PERFORMANCE_CASES, [
+    gui_download_file_test,
+    gui_download_dir_test,
+    gui_download_multiple_files_test
+]).
+
+all() -> ?ALL(?STANDARD_CASES, ?PERFORMANCE_CASES).
 
 -define(DEFAULT_READ_BLOCK_SIZE, 1024).
 -define(GUI_DOWNLOAD_CODE_EXPIRATION_SECONDS, 20).
@@ -69,7 +79,7 @@ all() -> [
 -define(ATTEMPTS, 30).
 
 -define(FILESIZE, 4 * ?DEFAULT_READ_BLOCK_SIZE).
--define(RAND_CONTENT(), ?RAND_CONTENT(rand:uniform(10) * ?FILESIZE)).
+-define(RAND_CONTENT(), ?RAND_CONTENT(rand:uniform(3) * ?FILESIZE)).
 -define(RAND_CONTENT(FileSize), crypto:strong_rand_bytes(FileSize)).
 
 -define(TARBALL_DOWNLOAD_CLIENT_SPEC, 
@@ -95,6 +105,20 @@ all() -> [
 %%%===================================================================
 
 gui_download_file_test(Config) ->
+    ?PERFORMANCE(Config, [
+        {repeats, 1},
+        {success_rate, 100},
+        {parameters, [
+            [{name, test_type}, {value, standard}, {description, "Type of test"}]
+        ]},
+        {description, "Tests download of file via GUI"},
+        {config, [{name, performance},
+            {parameters, [
+                [{name, test_type}, {value, performance}]
+            ]}
+        ]}
+    ]).
+gui_download_file_test_base(Config) ->
     ClientSpec = #client_spec{
         correct = [
             user2,  % space owner - doesn't need any perms
@@ -104,21 +128,75 @@ gui_download_file_test(Config) ->
         forbidden_not_in_space = [user1],
         forbidden_in_space = [user4]
     },
-    FileSpec = #file_spec{mode = 8#604, content = ?RAND_CONTENT(), shares = [#share_spec{}]},
+    Content = case ?config(test_type, Config) of
+        standard -> ?RAND_CONTENT();
+        performance -> ?RAND_CONTENT(20 * ?FILESIZE)
+    end,
+    FileSpec = #file_spec{mode = 8#604, content = Content, shares = [#share_spec{}]},
     gui_download_test_base(Config, FileSpec, ClientSpec, <<"File">>, uninterrupted_download).
 
 gui_download_dir_test(Config) ->
-    ClientSpec = ?TARBALL_DOWNLOAD_CLIENT_SPEC,
-    DirSpec = #dir_spec{mode = 8#705, shares = [#share_spec{}], children = [#dir_spec{}, #file_spec{content = ?RAND_CONTENT()}]},
+    ?PERFORMANCE(Config, [
+        {repeats, 1},
+        {success_rate, 100},
+        {parameters, [
+            [{name, test_type}, {value, standard}, {description, "Type of test"}]
+        ]},
+        {description, "Tests download of directory via GUI"},
+        {config, [{name, performance},
+            {parameters, [
+                [{name, test_type}, {value, performance}]
+            ]}
+        ]}
+    ]).
+gui_download_dir_test_base(Config) ->
+    {ClientSpec, DirSpec} = case ?config(test_type, Config) of
+        standard ->
+            {?TARBALL_DOWNLOAD_CLIENT_SPEC, #dir_spec{mode = 8#705,
+                shares = [#share_spec{}], children = [#dir_spec{}, #file_spec{content = ?RAND_CONTENT()}]}};
+        performance ->
+            CS = #client_spec{
+                correct = [
+                    user2  % space owner - doesn't need any perms
+                ]
+            },
+            ChildrenSpecGen = fun
+                F(0) -> [];
+                F(Depth) ->
+                    Children = F(Depth - 1),
+                    [#dir_spec{children = Children},
+                        #dir_spec{children = Children}, #file_spec{content = ?RAND_CONTENT(100)}]
+            end,
+            DS = #dir_spec{mode = 8#705, shares = [#share_spec{}], children = ChildrenSpecGen(7)},
+            {CS, DS}
+    end,
     gui_download_test_base(Config, DirSpec, ClientSpec, <<"Dir">>).
 
 gui_download_multiple_files_test(Config) ->
+    ?PERFORMANCE(Config, [
+        {repeats, 1},
+        {success_rate, 100},
+        {parameters, [
+            [{name, test_type}, {value, standard}, {description, "Type of test"}]
+        ]},
+        {description, "Tests download of file via GUI"},
+        {config, [{name, performance},
+            {parameters, [
+                [{name, test_type}, {value, performance}]
+            ]}
+        ]}
+    ]).
+gui_download_multiple_files_test_base(Config) ->
+    GetContentFun = case ?config(test_type, Config) of
+        standard -> fun() -> ?RAND_CONTENT() end;
+        performance -> fun() -> ?RAND_CONTENT(20 * ?FILESIZE) end
+    end,
     ClientSpec = ?TARBALL_DOWNLOAD_CLIENT_SPEC,
     DirSpec = [
-        #file_spec{mode = 8#604, shares = [#share_spec{}], content = ?RAND_CONTENT()},
-        #file_spec{mode = 8#604, shares = [#share_spec{}], content = ?RAND_CONTENT()},
-        #file_spec{mode = 8#604, shares = [#share_spec{}], content = ?RAND_CONTENT()},
-        #file_spec{mode = 8#604, shares = [#share_spec{}], content = ?RAND_CONTENT()}
+        #file_spec{mode = 8#604, shares = [#share_spec{}], content = GetContentFun()},
+        #file_spec{mode = 8#604, shares = [#share_spec{}], content = GetContentFun()},
+        #file_spec{mode = 8#604, shares = [#share_spec{}], content = GetContentFun()},
+        #file_spec{mode = 8#604, shares = [#share_spec{}], content = GetContentFun()}
     ],
     gui_download_test_base(Config, DirSpec, ClientSpec, <<"Multiple files">>).
 
@@ -130,23 +208,6 @@ gui_download_different_filetypes_test(Config) ->
         #file_spec{mode = 8#604, shares = [#share_spec{}], content = ?RAND_CONTENT()}
     ],
     gui_download_test_base(Config, DirSpec, ClientSpec, <<"Different filetypes">>).
-
-
-gui_large_dir_download_test(Config) ->
-    ClientSpec = #client_spec{
-        correct = [
-            user2  % space owner - doesn't need any perms
-        ]
-    },
-    ChildrenSpecGen = fun
-        F(0) -> [];
-        F(Depth) -> 
-            Children = F(Depth - 1),
-            [#dir_spec{children = Children}, #dir_spec{children = Children}, #file_spec{content = ?RAND_CONTENT(100)}]
-    end,
-    DirSpec = #dir_spec{mode = 8#705, shares = [#share_spec{}], children = ChildrenSpecGen(7)},
-    gui_download_test_base(Config, DirSpec, ClientSpec, <<"Large dir">>).
-
 
 gui_download_files_between_spaces_test(_Config) ->
     ClientSpec = #client_spec{

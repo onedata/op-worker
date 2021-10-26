@@ -44,36 +44,6 @@
     remote_delete_file_reimport_race2_test/1,
     delete_opened_file_reimport_race_test/1,
 
-    % tests of update
-    update_syncs_files_after_import_failed_test/1,
-    update_syncs_files_after_previous_update_failed_test/1,
-    sync_should_not_reimport_deleted_but_still_opened_file/1,
-    sync_should_not_reimport_file_that_was_not_successfully_deleted_from_storage/1,
-    sync_should_not_import_recreated_file_with_suffix_on_storage/1,
-    sync_should_update_blocks_of_recreated_file_with_suffix_on_storage/1,
-    sync_should_not_import_replicated_file_with_suffix_on_storage/1,
-    sync_should_update_replicated_file_with_suffix_on_storage/1,
-    sync_should_not_process_file_if_hash_of_its_attrs_has_not_changed/1,
-    create_delete_import2_test/1,
-    create_subfiles_and_delete_before_import_is_finished_test/1,
-    create_file_in_dir_update_test/1,
-    changing_max_depth_test/1,
-    create_file_in_dir_exceed_batch_update_test/1,
-    force_start_test/1,
-    force_stop_test/1,
-    file_with_metadata_protection_should_not_be_updated_test/1,
-    file_with_data_protection_should_not_be_updated_test/1,
-    file_with_data_and_metadata_protection_should_not_be_updated_test/1,
-    file_with_metadata_protection_should_not_be_deleted_test/1,
-    file_with_data_protection_should_not_be_deleted_test/1,
-    file_with_data_and_metadata_protection_should_not_be_deleted_test/1,
-    dir_and_its_child_with_metadata_protection_should_not_be_updated_test/1,
-    dir_and_its_child_with_data_protection_should_not_be_updated_test/1,
-    dir_and_its_child_with_data_and_metadata_protection_should_not_be_updated_test/1,
-    dir_and_its_child_with_metadata_protection_should_not_be_deleted_test/1,
-    dir_and_its_child_with_data_protection_should_not_be_deleted_test/1,
-    dir_and_its_child_with_data_and_metadata_protection_should_not_be_deleted_test/1,
-
     delete_non_empty_directory_update_test/1,
     sync_works_properly_after_delete_test/1,
     delete_and_update_files_simultaneously_update_test/1,
@@ -129,36 +99,6 @@
     remote_delete_file_reimport_race_test,
     remote_delete_file_reimport_race2_test,
     delete_opened_file_reimport_race_test,
-
-    % tests of update
-    update_syncs_files_after_import_failed_test,
-    update_syncs_files_after_previous_update_failed_test,
-    sync_should_not_reimport_deleted_but_still_opened_file,
-    sync_should_not_reimport_file_that_was_not_successfully_deleted_from_storage,
-    sync_should_not_import_recreated_file_with_suffix_on_storage,
-    sync_should_update_blocks_of_recreated_file_with_suffix_on_storage,
-    sync_should_not_import_replicated_file_with_suffix_on_storage,
-    sync_should_update_replicated_file_with_suffix_on_storage,
-    sync_should_not_process_file_if_hash_of_its_attrs_has_not_changed,
-    create_delete_import2_test,
-    create_subfiles_and_delete_before_import_is_finished_test,
-    create_file_in_dir_update_test,
-    changing_max_depth_test,
-    create_file_in_dir_exceed_batch_update_test,
-    force_start_test,
-    force_stop_test,
-    file_with_metadata_protection_should_not_be_updated_test,
-    file_with_data_protection_should_not_be_updated_test,
-    file_with_data_and_metadata_protection_should_not_be_updated_test,
-    file_with_metadata_protection_should_not_be_deleted_test,
-    file_with_data_protection_should_not_be_deleted_test,
-    file_with_data_and_metadata_protection_should_not_be_deleted_test,
-    dir_and_its_child_with_metadata_protection_should_not_be_updated_test,
-    dir_and_its_child_with_data_protection_should_not_be_updated_test,
-    dir_and_its_child_with_data_and_metadata_protection_should_not_be_updated_test,
-    dir_and_its_child_with_metadata_protection_should_not_be_deleted_test,
-    dir_and_its_child_with_data_protection_should_not_be_deleted_test,
-    dir_and_its_child_with_data_and_metadata_protection_should_not_be_deleted_test,
 
     delete_non_empty_directory_update_test,
     sync_works_properly_after_delete_test,
@@ -249,90 +189,6 @@ remote_delete_file_reimport_race2_test(Config) ->
 delete_opened_file_reimport_race_test(Config) ->
     storage_import_test_base:delete_opened_file_reimport_race_test(Config, ?S3_HELPER_NAME).
 
-
-update_syncs_files_after_import_failed_test(Config) ->
-    storage_import_s3_test_base:update_syncs_files_after_import_failed_test(Config).
-
-update_syncs_files_after_previous_update_failed_test(Config) ->
-    storage_import_s3_test_base:update_syncs_files_after_previous_update_failed_test(Config).
-
-sync_should_not_reimport_deleted_but_still_opened_file(Config) ->
-    storage_import_s3_test_base:sync_should_not_reimport_deleted_but_still_opened_file(Config, ?S3_HELPER_NAME).
-
-sync_should_not_reimport_file_that_was_not_successfully_deleted_from_storage(Config) ->
-    storage_import_test_base:sync_should_not_reimport_file_that_was_not_successfully_deleted_from_storage(Config, ?S3_HELPER_NAME).
-
-sync_should_not_import_recreated_file_with_suffix_on_storage(Config) ->
-    storage_import_test_base:sync_should_not_import_recreated_file_with_suffix_on_storage(Config, ?S3_HELPER_NAME).
-
-sync_should_update_blocks_of_recreated_file_with_suffix_on_storage(Config) ->
-    storage_import_test_base:sync_should_update_blocks_of_recreated_file_with_suffix_on_storage(Config, ?S3_HELPER_NAME).
-
-sync_should_not_import_replicated_file_with_suffix_on_storage(Config) ->
-    storage_import_test_base:sync_should_not_import_replicated_file_with_suffix_on_storage(Config, ?S3_HELPER_NAME).
-
-sync_should_update_replicated_file_with_suffix_on_storage(Config) ->
-    storage_import_test_base:sync_should_update_replicated_file_with_suffix_on_storage(Config, ?S3_HELPER_NAME).
-
-sync_should_not_process_file_if_hash_of_its_attrs_has_not_changed(Config) ->
-    storage_import_s3_test_base:sync_should_not_process_file_if_hash_of_its_attrs_has_not_changed(Config).
-
-create_delete_import2_test(Config) ->
-    storage_import_test_base:create_delete_import2_test(Config).
-
-create_subfiles_and_delete_before_import_is_finished_test(Config) ->
-    storage_import_s3_test_base:create_subfiles_and_delete_before_import_is_finished_test(Config).
-
-create_file_in_dir_update_test(Config) ->
-    storage_import_s3_test_base:create_file_in_dir_update_test(Config).
-
-changing_max_depth_test(Config) ->
-    storage_import_s3_test_base:changing_max_depth_test(Config).
-
-create_file_in_dir_exceed_batch_update_test(Config) ->
-    storage_import_s3_test_base:create_file_in_dir_exceed_batch_update_test(Config).
-
-force_start_test(Config) ->
-    storage_import_test_base:force_start_test(Config).
-
-force_stop_test(Config) ->
-    storage_import_s3_test_base:force_stop_test(Config).
-
-file_with_metadata_protection_should_not_be_updated_test(Config) ->
-    storage_import_test_base:file_with_metadata_protection_should_not_be_updated_test(Config, ?S3_HELPER_NAME).
-
-file_with_data_protection_should_not_be_updated_test(Config) ->
-    storage_import_test_base:file_with_data_protection_should_not_be_updated_test(Config, ?S3_HELPER_NAME).
-
-file_with_data_and_metadata_protection_should_not_be_updated_test(Config) ->
-    storage_import_test_base:file_with_data_and_metadata_protection_should_not_be_updated_test(Config, ?S3_HELPER_NAME).
-
-file_with_metadata_protection_should_not_be_deleted_test(Config) ->
-    storage_import_test_base:file_with_metadata_protection_should_not_be_deleted_test(Config, ?S3_HELPER_NAME).
-
-file_with_data_protection_should_not_be_deleted_test(Config) ->
-    storage_import_test_base:file_with_data_protection_should_not_be_deleted_test(Config, ?S3_HELPER_NAME).
-
-file_with_data_and_metadata_protection_should_not_be_deleted_test(Config) ->
-    storage_import_test_base:file_with_data_and_metadata_protection_should_not_be_deleted_test(Config, ?S3_HELPER_NAME).
-
-dir_and_its_child_with_metadata_protection_should_not_be_updated_test(Config) ->
-    storage_import_test_base:dir_and_its_child_with_metadata_protection_should_not_be_updated_test(Config, ?S3_HELPER_NAME).
-
-dir_and_its_child_with_data_protection_should_not_be_updated_test(Config) ->
-    storage_import_test_base:dir_and_its_child_with_data_protection_should_not_be_updated_test(Config, ?S3_HELPER_NAME).
-
-dir_and_its_child_with_data_and_metadata_protection_should_not_be_updated_test(Config) ->
-    storage_import_test_base:dir_and_its_child_with_data_and_metadata_protection_should_not_be_updated_test(Config, ?S3_HELPER_NAME).
-
-dir_and_its_child_with_metadata_protection_should_not_be_deleted_test(Config) ->
-    storage_import_test_base:dir_and_its_child_with_metadata_protection_should_not_be_deleted_test(Config).
-
-dir_and_its_child_with_data_protection_should_not_be_deleted_test(Config) ->
-    storage_import_test_base:dir_and_its_child_with_data_protection_should_not_be_deleted_test(Config).
-
-dir_and_its_child_with_data_and_metadata_protection_should_not_be_deleted_test(Config) ->
-    storage_import_test_base:dir_and_its_child_with_data_and_metadata_protection_should_not_be_deleted_test(Config).
 
 delete_non_empty_directory_update_test(Config) ->
     storage_import_s3_test_base:delete_non_empty_directory_update_test(Config).
