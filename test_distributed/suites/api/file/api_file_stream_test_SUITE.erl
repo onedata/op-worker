@@ -396,7 +396,7 @@ gui_download_test_base(Config, FileTreeSpec, ClientSpec, ScenarioPrefix, Downloa
             {<<"file_ids">>, [file_id:pack_guid(<<"uuid">>, <<"incorrent_space_id">>)],
                 {error_fun,
                     fun(#api_test_ctx{node = Node}) ->
-                        ?ERROR_SPACE_NOT_SUPPORTED_BY(?GET_DOMAIN_BIN(Node))
+                        ?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceId, ?GET_DOMAIN_BIN(Node))
                     end}
             },
             {<<"file_ids">>, <<"not_a_list">>, ?ERROR_BAD_VALUE_LIST_OF_BINARIES(<<"file_ids">>)},

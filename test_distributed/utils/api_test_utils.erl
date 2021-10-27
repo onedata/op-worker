@@ -553,8 +553,8 @@ add_file_id_errors_for_operations_available_in_share_mode(FileGuid, ShareId, Dat
     onenv_api_test_runner:data_spec().
 add_file_id_errors_for_operations_available_in_share_mode(IdKey, FileGuid, ShareId, DataSpec) ->
     InvalidFileIdErrors = get_invalid_file_id_errors(IdKey),
-
     NonExistentSpaceGuid = file_id:pack_share_guid(<<"InvalidUuid">>, ?NOT_SUPPORTED_SPACE_ID, ShareId),
+    SpaceId = file_id:guid_to_space_id(FileGuid),
     {ok, NonExistentSpaceObjectId} = file_id:guid_to_objectid(NonExistentSpaceGuid),
     NonExistentSpaceExpError = case ShareId of
         undefined ->
@@ -566,11 +566,10 @@ add_file_id_errors_for_operations_available_in_share_mode(IdKey, FileGuid, Share
             % (checks if space is supported by provider)
             {error_fun, fun(#api_test_ctx{node = Node}) ->
                 ProvId = opw_test_rpc:get_provider_id(Node),
-                ?ERROR_SPACE_NOT_SUPPORTED_BY(ProvId)
+                ?ERROR_SPACE_NOT_SUPPORTED_BY(?NOT_SUPPORTED_SPACE_ID, ProvId)
             end}
     end,
 
-    SpaceId = file_id:guid_to_space_id(FileGuid),
     NonExistentFileGuid = file_id:pack_share_guid(<<"InvalidUuid">>, SpaceId, ShareId),
     {ok, NonExistentFileObjectId} = file_id:guid_to_objectid(NonExistentFileGuid),
 
@@ -749,7 +748,7 @@ get_invalid_file_id_errors(IdKey) ->
     [
         % Errors thrown by rest_handler, which failed to convert file path/cdmi_id to guid
         {bad_id, <<"/NonExistentPath">>, {rest_with_file_path, ?ERROR_POSIX(?ENOENT)}},
-        {bad_id, <<"InvalidObjectId">>, {rest, ?ERROR_SPACE_NOT_SUPPORTED_BY(<<"InvalidObjectId">>), provider_id_placeholder}},
+        {bad_id, <<"InvalidObjectId">>, {rest, ?ERROR_SPACE_NOT_SUPPORTED_BY(<<"InvalidObjectId">>, provider_id_placeholder)}},
 
         % Errors thrown by middleware and internal logic
         {bad_id, InvalidObjectId, {rest, ?ERROR_SPACE_NOT_SUPPORTED_BY(InvalidObjectId, provider_id_placeholder)}},

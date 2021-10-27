@@ -972,7 +972,7 @@ should_expect_lack_of_support_error({rest_with_shared_guid, _}, _Auth, ?ONEZONE_
 should_expect_lack_of_support_error({rest_with_shared_guid, SpaceId}, _Auth, Node) ->
     case opw_test_rpc:supports_space(Node, SpaceId) of
         true -> false;
-        false -> {true, ?ERROR_SPACE_NOT_SUPPORTED_BY(opw_test_rpc:get_provider_id(Node))}
+        false -> {true, ?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceId, opw_test_rpc:get_provider_id(Node))}
     end;
 should_expect_lack_of_support_error(_ScenarioType, ?NOBODY, _Node) ->
     false;

@@ -112,6 +112,7 @@ get_rdf_metadata_test_base(SetRdfPolicy, TestMode, _Config) ->
     FileType = api_test_utils:randomly_choose_file_type_for_test(),
     FilePath = filename:join(["/", ?SPACE_KRK_PAR, ?RANDOM_FILE_NAME()]),
     {ok, FileGuid} = api_test_utils:create_file(FileType, P1Node, UserSessIdP1, FilePath, 8#707),
+    SpaceId = oct_background:get_space_id(space_krk_par),
 
     GetExpCallResultFun = case SetRdfPolicy of
         set_rdf ->
@@ -138,8 +139,8 @@ get_rdf_metadata_test_base(SetRdfPolicy, TestMode, _Config) ->
 
     get_metadata_test_base(
         MetadataType, FileType, FileGuid, ShareId,
-        build_get_metadata_validate_rest_call_fun(GetExpCallResultFun),
-        build_get_metadata_validate_gs_call_fun(GetExpCallResultFun),
+        build_get_metadata_validate_rest_call_fun(GetExpCallResultFun, SpaceId),
+        build_get_metadata_validate_gs_call_fun(GetExpCallResultFun, SpaceId),
         Providers, ClientSpec, DataSpec, _QsParams = [],
         _RandomlySelectScenario = false
     ).
@@ -152,16 +153,17 @@ get_file_rdf_metadata_on_provider_not_supporting_space_test(_Config) ->
 
     SessIdP1 = oct_background:get_user_session_id(user3, krakow),
 
+    SpaceId = oct_background:get_space_id(space_krk),
     {FileType, _FilePath, FileGuid, _ShareId} = api_test_utils:create_shared_file_in_space_krk(),
     lfm_proxy:set_metadata(P1Node, SessIdP1, ?FILE_REF(FileGuid), rdf, ?RDF_METADATA_1, []),
 
-    GetExpCallResultFun = fun(_TestCtx) -> ?ERROR_SPACE_NOT_SUPPORTED_BY(P2Id) end,
+    GetExpCallResultFun = fun(_TestCtx) -> ?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceId, P2Id) end,
 
     get_metadata_test_base(
         <<"rdf">>,
         FileType, FileGuid, undefined,
-        build_get_metadata_validate_rest_call_fun(GetExpCallResultFun, P2Node),
-        build_get_metadata_validate_gs_call_fun(GetExpCallResultFun, P2Node),
+        build_get_metadata_validate_rest_call_fun(GetExpCallResultFun, P2Node, SpaceId),
+        build_get_metadata_validate_gs_call_fun(GetExpCallResultFun, P2Node, SpaceId),
         [P2Node], ?CLIENT_SPEC_FOR_SPACE_KRK, _DataSpec = undefined, _QsParams = [],
         _RandomlySelectScenario = false
     ).
@@ -194,6 +196,7 @@ get_json_metadata_test_base(SetDirectJsonPolicy, TestMode, Config) ->
     {_FileLayer5Path, FileLayer5Guid, ShareId} = create_get_json_metadata_tests_env(
         FileType, SetDirectJsonPolicy, TestMode
     ),
+    SpaceId = oct_background:get_space_id(space_krk_par),
 
     GetExpCallResultFun = create_get_json_call_exp_result_fun(
         ShareId, SetDirectJsonPolicy
@@ -245,8 +248,8 @@ get_json_metadata_test_base(SetDirectJsonPolicy, TestMode, Config) ->
     get_metadata_test_base(
         <<"json">>,
         FileType, FileLayer5Guid, ShareId,
-        build_get_metadata_validate_rest_call_fun(GetExpCallResultFun),
-        build_get_metadata_validate_gs_call_fun(GetExpCallResultFun),
+        build_get_metadata_validate_rest_call_fun(GetExpCallResultFun, SpaceId),
+        build_get_metadata_validate_gs_call_fun(GetExpCallResultFun, SpaceId),
         _Providers = ?config(op_worker_nodes, Config),
         ClientSpec, DataSpec, QsParams,
         _RandomlySelectScenario = true
@@ -405,16 +408,17 @@ get_file_json_metadata_on_provider_not_supporting_space_test(_Config) ->
 
     SessIdP1 = oct_background:get_user_session_id(user3, krakow),
 
+    SpaceId = oct_background:get_space_id(space_krk),
     {FileType, _FilePath, FileGuid, _ShareId} = api_test_utils:create_shared_file_in_space_krk(),
     lfm_proxy:set_metadata(P1Node, SessIdP1, ?FILE_REF(FileGuid), json, ?JSON_METADATA_2, []),
 
-    GetExpCallResultFun = fun(_TestCtx) -> ?ERROR_SPACE_NOT_SUPPORTED_BY(P2Id) end,
+    GetExpCallResultFun = fun(_TestCtx) -> ?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceId, P2Id) end,
 
     get_metadata_test_base(
         <<"json">>,
         FileType, FileGuid, undefined,
-        build_get_metadata_validate_rest_call_fun(GetExpCallResultFun, P2Node),
-        build_get_metadata_validate_gs_call_fun(GetExpCallResultFun, P2Node),
+        build_get_metadata_validate_rest_call_fun(GetExpCallResultFun, P2Node, SpaceId),
+        build_get_metadata_validate_gs_call_fun(GetExpCallResultFun, P2Node, SpaceId),
         [P2Node], ?CLIENT_SPEC_FOR_SPACE_KRK, _DataSpec = undefined, _QsParams = [],
         _RandomlySelectScenario = false
     ).
@@ -448,6 +452,7 @@ get_xattrs_test_base(SetDirectXattrsPolicy, TestMode, Config) ->
     {_FileLayer3Path, FileLayer3Guid, ShareId} = create_get_xattrs_tests_env(
         FileType, SetDirectXattrsPolicy, TestMode
     ),
+    SpaceId = oct_background:get_space_id(space_krk_par),
     NotSetXattrKey = <<"not_set_xattr">>,
     GetExpCallResultFun = create_get_xattrs_call_exp_result_fun(
         ShareId, SetDirectXattrsPolicy, NotSetXattrKey
@@ -498,8 +503,8 @@ get_xattrs_test_base(SetDirectXattrsPolicy, TestMode, Config) ->
     get_metadata_test_base(
         <<"xattrs">>,
         FileType, FileLayer3Guid, ShareId,
-        build_get_metadata_validate_rest_call_fun(GetExpCallResultFun),
-        build_get_metadata_validate_gs_call_fun(GetExpCallResultFun),
+        build_get_metadata_validate_rest_call_fun(GetExpCallResultFun, SpaceId),
+        build_get_metadata_validate_gs_call_fun(GetExpCallResultFun, SpaceId),
         _Providers = ?config(op_worker_nodes, Config),
         ClientSpec, DataSpec, QsParams,
         _RandomlySelectScenario = true
@@ -717,16 +722,17 @@ get_file_xattrs_on_provider_not_supporting_space_test(_Config) ->
 
     SessIdP1 = oct_background:get_user_session_id(user3, krakow),
 
+    SpaceId = oct_background:get_space_id(space_krk),
     {FileType, _FilePath, FileGuid, _ShareId} = api_test_utils:create_shared_file_in_space_krk(),
     ?assertMatch(ok, lfm_proxy:set_xattr(P1Node, SessIdP1, ?FILE_REF(FileGuid), ?XATTR_1)),
 
-    GetExpCallResultFun = fun(_TestCtx) -> ?ERROR_SPACE_NOT_SUPPORTED_BY(P2Id) end,
+    GetExpCallResultFun = fun(_TestCtx) -> ?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceId, P2Id) end,
 
     get_metadata_test_base(
         <<"xattrs">>,
         FileType, FileGuid, undefined,
-        build_get_metadata_validate_rest_call_fun(GetExpCallResultFun, P2Node),
-        build_get_metadata_validate_gs_call_fun(GetExpCallResultFun, P2Node),
+        build_get_metadata_validate_rest_call_fun(GetExpCallResultFun, P2Node, SpaceId),
+        build_get_metadata_validate_gs_call_fun(GetExpCallResultFun, P2Node, SpaceId),
         [P2Node], ?CLIENT_SPEC_FOR_SPACE_KRK, _DataSpec = undefined, _QsParams = [],
         _RandomlySelectScenario = false
     ).
@@ -738,16 +744,16 @@ get_file_xattrs_on_provider_not_supporting_space_test(_Config) ->
 
 
 %% @private
-build_get_metadata_validate_rest_call_fun(GetExpResultFun) ->
-    build_get_metadata_validate_rest_call_fun(GetExpResultFun, undefined).
+build_get_metadata_validate_rest_call_fun(GetExpResultFun, SpaceId) ->
+    build_get_metadata_validate_rest_call_fun(GetExpResultFun, undefined, SpaceId).
 
 
 %% @private
-build_get_metadata_validate_rest_call_fun(GetExpResultFun, ProvNotSuppSpace) ->
+build_get_metadata_validate_rest_call_fun(GetExpResultFun, ProvNotSuppSpace, SpaceId) ->
     fun
         (#api_test_ctx{node = TestNode}, {ok, RespCode, _, RespBody}) when TestNode == ProvNotSuppSpace ->
             ProvId = opw_test_rpc:get_provider_id(TestNode),
-            ExpError = ?REST_ERROR(?ERROR_SPACE_NOT_SUPPORTED_BY(ProvId)),
+            ExpError = ?REST_ERROR(?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceId, ProvId)),
             ?assertEqual({?HTTP_400_BAD_REQUEST, ExpError}, {RespCode, RespBody});
         (TestCtx, {ok, RespCode, _RespHeaders, RespBody}) ->
             case GetExpResultFun(TestCtx) of
@@ -761,16 +767,16 @@ build_get_metadata_validate_rest_call_fun(GetExpResultFun, ProvNotSuppSpace) ->
 
 
 %% @private
-build_get_metadata_validate_gs_call_fun(GetExpResultFun) ->
-    build_get_metadata_validate_gs_call_fun(GetExpResultFun, undefined).
+build_get_metadata_validate_gs_call_fun(GetExpResultFun, SpaceId) ->
+    build_get_metadata_validate_gs_call_fun(GetExpResultFun, undefined, SpaceId).
 
 
 %% @private
-build_get_metadata_validate_gs_call_fun(GetExpResultFun, ProvNotSuppSpace) ->
+build_get_metadata_validate_gs_call_fun(GetExpResultFun, ProvNotSuppSpace, SpaceId) ->
     fun
         (#api_test_ctx{node = TestNode}, Result) when TestNode == ProvNotSuppSpace ->
             ProvId = opw_test_rpc:get_provider_id(TestNode),
-            ?assertEqual(?ERROR_SPACE_NOT_SUPPORTED_BY(ProvId), Result);
+            ?assertEqual(?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceId, ProvId), Result);
         (TestCtx, Result) ->
             case GetExpResultFun(TestCtx) of
                 {ok, ExpMetadata} ->

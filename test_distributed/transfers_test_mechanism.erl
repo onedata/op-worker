@@ -1396,7 +1396,7 @@ schedule_transfer_by_rest(Worker, SpaceId, UserId, RequiredPrivs, URL, Method, B
             {ok, Code, _, RespBody} = rest_test_utils:request(Worker, URL, Method, Headers, Body),
             ?assertMatch(400, Code),
             ?assertMatch(
-                ?ERROR_SPACE_NOT_SUPPORTED_BY(_),
+                ?ERROR_SPACE_NOT_SUPPORTED_BY(_, _),
                 errors:from_json(maps:get(<<"error">>, json_utils:decode(RespBody)))
             )
     end.

@@ -219,10 +219,12 @@ get_shared_file_instance_test(_Config) ->
 get_file_instance_on_provider_not_supporting_space_test(_Config) ->
     P2Id = oct_background:get_provider_id(paris),
     [P2Node] = oct_background:get_provider_nodes(paris),
+
+    SpaceId = oct_background:get_space_id(space_krk),
     {FileType, _FilePath, FileGuid, _ShareId} = api_test_utils:create_shared_file_in_space_krk(),
 
     ValidateGsCallResultFun = fun(_, Result) ->
-        ?assertEqual(?ERROR_SPACE_NOT_SUPPORTED_BY(P2Id), Result)
+        ?assertEqual(?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceId, P2Id), Result)
     end,
 
     ?assert(onenv_api_test_runner:run_tests([
@@ -363,6 +365,7 @@ update_file_instance_on_provider_not_supporting_space_test(_Config) ->
     P2Id = oct_background:get_provider_id(paris),
     [P1Node] = oct_background:get_provider_nodes(krakow),
     [P2Node] = oct_background:get_provider_nodes(paris),
+    SpaceId = oct_background:get_space_id(space_krk),
     {FileType, _FilePath, FileGuid, _ShareId} = api_test_utils:create_shared_file_in_space_krk(),
 
     ?assert(onenv_api_test_runner:run_tests([
@@ -383,7 +386,7 @@ update_file_instance_on_provider_not_supporting_space_test(_Config) ->
             end,
             prepare_args_fun = build_update_file_instance_test_prepare_gs_args_fun(FileGuid, private),
             validate_result_fun = fun(_, Result) ->
-                ?assertEqual(?ERROR_SPACE_NOT_SUPPORTED_BY(P2Id), Result)
+                ?assertEqual(?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceId, P2Id), Result)
             end,
             data_spec = update_file_instance_test_data_spec()
         }
@@ -629,6 +632,8 @@ delete_file_instance_on_provider_not_supporting_space_test(_Config) ->
     P2Id = oct_background:get_provider_id(paris),
     [P1Node] = oct_background:get_provider_nodes(krakow),
     [P2Node] = oct_background:get_provider_nodes(paris),
+
+    SpaceId = oct_background:get_space_id(space_krk),
     {FileType, _FilePath, FileGuid, _ShareId} = api_test_utils:create_shared_file_in_space_krk(),
 
     ?assert(onenv_api_test_runner:run_tests([
@@ -642,7 +647,7 @@ delete_file_instance_on_provider_not_supporting_space_test(_Config) ->
 
             prepare_args_fun = build_delete_instance_test_prepare_gs_args_fun({guid, FileGuid}, private),
             validate_result_fun = fun(_, Result) ->
-                ?assertEqual(?ERROR_SPACE_NOT_SUPPORTED_BY(P2Id), Result)
+                ?assertEqual(?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceId, P2Id), Result)
             end,
             verify_fun = fun(_, _) ->
                 ?assertMatch({ok, _}, file_test_utils:get_attrs(P1Node, FileGuid), ?ATTEMPTS),
