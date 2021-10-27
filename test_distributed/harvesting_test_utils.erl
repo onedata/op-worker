@@ -200,7 +200,7 @@ init_per_suite(Config) ->
         application:ensure_all_started(hackney),
         initializer:setup_storage(NewConfig)
     end,
-    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer]} | Config].
+    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer, ?MODULE]} | Config].
 
 end_per_suite(Config) ->
     initializer:teardown_storage(Config),
