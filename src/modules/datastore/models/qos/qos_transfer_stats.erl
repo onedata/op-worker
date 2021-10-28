@@ -92,7 +92,7 @@ create_internal(CollectionId) ->
 list_time_series_internal(CollectionId) ->
     case datastore_time_series_collection:list_time_series_ids(?CTX, CollectionId) of
         {ok, TimeSeries} -> 
-            TimeSeries;
+            {ok, TimeSeries};
         {error, list_failed} ->
             % There is a chance that transfer started for legacy QoS entry for which time 
             % series collection was not initialized. Create it and try again.

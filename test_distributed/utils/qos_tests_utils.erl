@@ -334,12 +334,12 @@ mock_transfers(Workers) ->
     test_utils:mock_new(Workers, replica_synchronizer, [passthrough]),
     TestPid = self(),
     ok = test_utils:mock_expect(Workers, replica_synchronizer, synchronize,
-        fun(UserCtx, FileCtx, Block, Prefetch, TransferId, Priority) ->
+        fun(UserCtx, FileCtx, Block, Prefetch, TransferId, Priority, CallbackModule) ->
             FileGuid = file_ctx:get_logical_guid_const(FileCtx),
             TestPid ! {qos_slave_job, self(), FileGuid},
             receive
                 {completed, FileGuid} ->
-                    meck:passthrough([UserCtx, FileCtx, Block, Prefetch, TransferId, Priority]),
+                    meck:passthrough([UserCtx, FileCtx, Block, Prefetch, TransferId, Priority, CallbackModule]),
                     {ok, FileGuid}
             end
         end).
@@ -392,17 +392,17 @@ resend_msgs([Msg | Tail]) ->
 
 mock_replica_synchronizer(Workers, passthrough) ->
     ok = test_utils:mock_expect(Workers, replica_synchronizer, synchronize,
-        fun(UserCtx, FileCtx, Block, Prefetch, TransferId, Priority) ->
-            meck:passthrough([UserCtx, FileCtx, Block, Prefetch, TransferId, Priority])
+        fun(UserCtx, FileCtx, Block, Prefetch, TransferId, Priority, CallbackModule) ->
+            meck:passthrough([UserCtx, FileCtx, Block, Prefetch, TransferId, Priority, CallbackModule])
         end);
 mock_replica_synchronizer(Workers, {throw, Error}) ->
     ok = test_utils:mock_expect(Workers, replica_synchronizer, synchronize,
-        fun(_, _, _, _, _, _) ->
+        fun(_, _, _, _, _, _, _) ->
             throw(Error)
         end);
 mock_replica_synchronizer(Workers, Expected) ->
     ok = test_utils:mock_expect(Workers, replica_synchronizer, synchronize,
-        fun(_, _, _, _, _, _) ->
+        fun(_, _, _, _, _, _, _) ->
             Expected
         end).
 

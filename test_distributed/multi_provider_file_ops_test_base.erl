@@ -532,14 +532,14 @@ rtransfer_blocking_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWr
     Master = self(),
     test_utils:mock_new(Workers2, [replica_synchronizer, rtransfer_config], [passthrough]),
     test_utils:mock_expect(Workers2, replica_synchronizer, synchronize,
-        fun(UserCtx, FileCtx, Block, Prefetch, TransferId, Priority) ->
+        fun(UserCtx, FileCtx, Block, Prefetch, TransferId, Priority, CallbackModule) ->
             case TransferId of
                 undefined ->
                     ok;
                 _ ->
                     Master ! transfer_started
             end,
-            meck:passthrough([UserCtx, FileCtx, Block, Prefetch, TransferId, Priority])
+            meck:passthrough([UserCtx, FileCtx, Block, Prefetch, TransferId, Priority, CallbackModule])
         end),
 
     Dir = <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>,
