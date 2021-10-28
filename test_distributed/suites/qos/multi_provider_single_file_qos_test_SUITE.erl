@@ -11,9 +11,8 @@
 %%% multiple providers.
 %%% @end
 %%%--------------------------------------------------------------------
--module(multi_provider_singe_file_qos_test_SUITE).
+-module(multi_provider_single_file_qos_test_SUITE).
 -author("Michal Cwiertnia").
--author("Michal Stanisz").
 
 -include("global_definitions.hrl").
 -include("modules/datastore/datastore_models.hrl").

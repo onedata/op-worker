@@ -14,8 +14,6 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/test/performance.hrl").
 
-% TODO VFS-6161 divide to smaller test suites
-
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
     end_per_testcase/2]).
