@@ -101,7 +101,7 @@ list_time_series_internal(CollectionId) ->
     end.
 
 
--spec supported_metrics() -> time_series_collection:collection_config().
+-spec supported_metrics() -> #{ts_metric:id() => ts_metric:config()}.
 supported_metrics() -> #{
     <<"minute">> => #metric_config{
         resolution = timer:minutes(1),

@@ -16,5 +16,6 @@
 
 %% API
 
--callback flush_stats(od_space:id(), transfer:id(), #{od_provider:id() => integer()}) -> ok.
+-callback flush_stats(od_space:id(), transfer:id(), #{od_provider:id() => integer()}) -> 
+    ok | {error, term()}.
 

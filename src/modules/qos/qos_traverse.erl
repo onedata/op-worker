@@ -243,7 +243,7 @@ flush_stats(SpaceId, TransferId, BytesPerProvider) ->
 %%%===================================================================
 
 %% @private
--spec get_file_local_qos_entries(file_meta:uuid() | file_meta:doc(), od_space:id()) -> 
+-spec get_file_local_qos_entries(od_space:id(), file_meta:uuid() | file_meta:doc()) -> 
     [qos_entry:id()].
 get_file_local_qos_entries(SpaceId, FileUuidOrDoc) ->
     case file_qos:get_effective(FileUuidOrDoc) of
