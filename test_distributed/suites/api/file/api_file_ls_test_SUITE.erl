@@ -526,12 +526,12 @@ get_dir_children_on_provider_not_supporting_space_test(_Config) ->
 
     ValidateRestListedFilesOnProvidersNotSupportingSpaceFun = fun(_, {ok, RespCode, _, RespBody}) ->
         ?assertEqual(
-            {?HTTP_400_BAD_REQUEST, ?REST_ERROR(?ERROR_SPACE_NOT_SUPPORTED_BY(P2Id))},
+            {?HTTP_400_BAD_REQUEST, ?REST_ERROR(?ERROR_SPACE_NOT_SUPPORTED_BY(Space1Id, P2Id))},
             {RespCode, RespBody}
         )
     end,
     ValidateGsListedFilesOnProvidersNotSupportingSpaceFun = fun(_, Response) ->
-        ?assertEqual(?ERROR_SPACE_NOT_SUPPORTED_BY(P2Id), Response)
+        ?assertEqual(?ERROR_SPACE_NOT_SUPPORTED_BY(Space1Id, P2Id), Response)
     end,
 
     ?assert(onenv_api_test_runner:run_tests([
