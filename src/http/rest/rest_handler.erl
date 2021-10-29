@@ -268,7 +268,19 @@ resolve_gri_bindings(SessionId, #b_gri{type = Tp, id = Id, aspect = As, scope = 
 resolve_bindings(_SessionId, ?BINDING(Key), Req) ->
     cowboy_req:binding(Key, Req);
 resolve_bindings(_SessionId, ?OBJECTID_BINDING(Key), Req) ->
-    middleware_utils:decode_object_id(cowboy_req:binding(Key, Req), Key);
+    SpaceIdOrObjectId = cowboy_req:binding(Key, Req),
+    try
+        middleware_utils:decode_object_id(SpaceIdOrObjectId, Key)
+    catch throw:?ERROR_BAD_VALUE_IDENTIFIER(Key) ->
+        {ok, SupportedSpaceIds} = provider_logic:get_spaces(),
+        case lists:member(SpaceIdOrObjectId, SupportedSpaceIds) of
+            true ->
+                fslogic_uuid:spaceid_to_space_dir_guid(SpaceIdOrObjectId);
+            false ->
+                ProviderId = oneprovider:get_id(),
+                throw(?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceIdOrObjectId, ProviderId))
+        end
+    end;
 resolve_bindings(SessionId, ?PATH_BINDING, Req) ->
     Path = filename:join([<<"/">> | cowboy_req:path_info(Req)]),
     {ok, Guid} = middleware_utils:resolve_file_path(SessionId, Path),
@@ -337,7 +349,10 @@ route_to_proper_handler(#op_req{operation = Operation, gri = #gri{
 }} = OpReq, Req) when
     (Operation == create andalso As == child);
     (Operation == create andalso As == content);
-    (Operation == get andalso As == content)
+    (Operation == get andalso As == content);
+    (Operation == create andalso As == file_at_path);
+    (Operation == get andalso As == file_at_path);
+    (Operation == delete andalso As == file_at_path)
 ->
     file_content_rest_handler:handle_request(OpReq, Req);
 route_to_proper_handler(OpReq, Req) ->
