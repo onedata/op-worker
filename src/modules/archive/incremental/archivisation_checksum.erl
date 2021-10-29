@@ -6,9 +6,10 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Helper module for incremental_archive.
-%%% It is used to calculate and save (as xattr) archived file's
-%%% checksum so that it can be compared when creating next archive.
+%%% Module responsible for calculating and storing checksums of archived 
+%%% files. It is used to calculate and save (as xattr) archived file's
+%%% checksum so that it can be compared when creating incremental archive 
+%%% or validating newly created one.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(archivisation_checksum).
@@ -20,44 +21,101 @@
 -include("modules/logical_file_manager/lfm.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 
+-type checksum_type() :: content | metadata | children_count.
 
 %% API
--export([calculate/2, calculate_and_save/2, get/1, save/2]).
+-export([calculate_and_save/2, has_file_changed/3]).
+-export([save_children_count/2, get_children_count/1]).
 
 -define(ALGORITHM, ?MD5).
--define(ARCHIVISATION_METADATA_KEY,
+-define(ARCHIVISATION_CONTENT_CHECKSUM_KEY,
     str_utils:join_binary([?ONEDATA_PREFIX, <<"archivisation.checksum.md5">>])).
+-define(ARCHIVISATION_METADATA_CHECKSUM_KEY,
+    str_utils:join_binary([?ONEDATA_PREFIX, <<"archivisation.metadata.checksum.md5">>])).
+-define(ARCHIVISATION_CHILDREN_COUNT_KEY,
+    str_utils:join_binary([?ONEDATA_PREFIX, <<"archivisation.children.count">>])).
 
 %%%===================================================================
 %%% API functions
 %%%===================================================================
 
--spec calculate(file_ctx:ctx(), user_ctx:ctx()) -> file_checksum:checksum().
-calculate(FileCtx, UserCtx) ->
-    Checksums = file_checksum:calculate(FileCtx, UserCtx, ?ALGORITHM),
-    file_checksum:get(?ALGORITHM, Checksums).
-
-
 -spec calculate_and_save(file_ctx:ctx(), user_ctx:ctx()) -> ok.
 calculate_and_save(ArchivedFileCtx, UserCtx) ->
-    save(ArchivedFileCtx, calculate(ArchivedFileCtx, UserCtx)).
+    ok = save(ArchivedFileCtx, calculate(ArchivedFileCtx, UserCtx, content), content),
+    ok = save(ArchivedFileCtx, calculate(ArchivedFileCtx, UserCtx, metadata), metadata).
 
 
--spec save(file_ctx:ctx(), file_checksum:checksum()) -> ok.
-save(ArchivedFileCtx, Checksum) ->
+has_file_changed(ArchivedFileCtx, FileCtx, UserCtx) ->
+    has_checksum_changed(ArchivedFileCtx, FileCtx, UserCtx, metadata) orelse
+        has_checksum_changed(ArchivedFileCtx, FileCtx, UserCtx, content).
+
+
+-spec save_children_count(file_ctx:ctx(), non_neg_integer()) -> ok.
+save_children_count(DirCtx, ChildrenCount) ->
+    save(DirCtx, ChildrenCount, children_count).
+
+
+-spec get_children_count(file_ctx:ctx()) -> non_neg_integer().
+get_children_count(DirCtx) ->
+    get(DirCtx, children_count).
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+-spec save(file_ctx:ctx(), file_checksum:checksum() | non_neg_integer(), checksum_type()) -> ok.
+save(ArchivedFileCtx, Checksum, Type) ->
     RootUserCtx = user_ctx:new(?ROOT_SESS_ID),
     ?FUSE_OK_RESP = xattr_req:set_xattr(RootUserCtx, ArchivedFileCtx, #xattr{
-        name = ?ARCHIVISATION_METADATA_KEY,
+        name = type_to_checksum_key(Type),
         value = Checksum
     }, true, false),
     ok.
 
 
--spec get(file_ctx:ctx()) -> file_checksum:checksum().
-get(ArchivedFileCtx) ->
+-spec get(file_ctx:ctx(), checksum_type()) -> file_checksum:checksum() | non_neg_integer().
+get(ArchivedFileCtx, Type) ->
     RootUserCtx = user_ctx:new(?ROOT_SESS_ID),
-    #fuse_response{
-        status = #status{code = ?OK},
-        fuse_response = #xattr{value = Checksum}
-    } = xattr_req:get_xattr(RootUserCtx, ArchivedFileCtx, ?ARCHIVISATION_METADATA_KEY, false),
-    Checksum.
+    case xattr_req:get_xattr(RootUserCtx, ArchivedFileCtx, type_to_checksum_key(Type), false) of
+        #fuse_response{status = #status{code = ?OK}, fuse_response = #xattr{value = Checksum}} -> 
+            Checksum;
+        _ ->
+            <<>>
+    end.
+
+
+-spec calculate(file_ctx:ctx(), user_ctx:ctx(), checksum_type()) -> file_checksum:checksum().
+calculate(FileCtx, UserCtx, content) ->
+    Checksums = file_checksum:calculate(FileCtx, UserCtx, ?ALGORITHM),
+    file_checksum:get(?ALGORITHM, Checksums);
+calculate(FileCtx, UserCtx, metadata) ->
+    % currently only json metadata are archived
+    Metadata = get_json_metadata(FileCtx, UserCtx),
+    HashState = crypto:hash_init(?ALGORITHM),
+    FinalHashState = crypto:hash_update(HashState, json_utils:encode(Metadata)),
+    hex_utils:hex(crypto:hash_final(FinalHashState)).
+
+
+-spec has_checksum_changed(file_ctx:ctx(), file_ctx:ctx(), user_ctx:ctx(), checksum_type()) -> 
+    boolean().
+has_checksum_changed(ArchivedFileCtx, FileCtx, UserCtx, Type) ->
+    ArchivedFileChecksum = get(ArchivedFileCtx, Type),
+    FileChecksum = calculate(FileCtx, UserCtx, Type),
+    ArchivedFileChecksum =/= FileChecksum.
+
+
+-spec get_json_metadata(file_ctx:ctx(), user_ctx:ctx()) -> json_utils:json_term() | undefined.
+get_json_metadata(FileCtx, UserCtx) ->
+    SessionId = user_ctx:get_session_id(UserCtx),
+    FileGuid = file_ctx:get_logical_guid_const(FileCtx),
+    case lfm:get_metadata(SessionId, ?FILE_REF(FileGuid), json, [], false) of
+        {ok, JsonMetadata} -> JsonMetadata;
+        {error, ?ENODATA} -> undefined
+    end.
+
+
+-spec type_to_checksum_key(checksum_type()) -> binary().
+type_to_checksum_key(content) -> ?ARCHIVISATION_CONTENT_CHECKSUM_KEY;
+type_to_checksum_key(metadata) -> ?ARCHIVISATION_METADATA_CHECKSUM_KEY;
+type_to_checksum_key(children_count) -> ?ARCHIVISATION_CHILDREN_COUNT_KEY.

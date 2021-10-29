@@ -81,8 +81,7 @@ find_base_for_nested_archive(NestedArchiveDoc, ParentBaseArchiveDoc, UserCtx) ->
 -spec has_file_changed(file_ctx:ctx(), file_ctx:ctx(), user_ctx:ctx()) -> boolean().
 has_file_changed(BaseArchiveFileCtx, CurrentFileCtx, UserCtx) ->
     try
-        has_checksum_changed(BaseArchiveFileCtx, CurrentFileCtx, UserCtx) orelse
-        has_metadata_changed(BaseArchiveFileCtx, CurrentFileCtx, UserCtx)
+        archivisation_checksum:has_file_changed(BaseArchiveFileCtx, CurrentFileCtx, UserCtx)
     catch
         Class:Reason:Stacktrace ->
             CurrentFileGuid = file_ctx:get_logical_guid_const(CurrentFileCtx),
@@ -115,26 +114,4 @@ find_most_recent_preserved_archive(DatasetId, StartIndex) ->
         {undefined, true} -> undefined;
         {undefined, false} -> find_most_recent_preserved_archive(DatasetId, LastArchiveIndex);
         {BaseArchiveId, _} -> BaseArchiveId
-    end.
-
--spec has_checksum_changed(file_ctx:ctx(), file_ctx:ctx(), user_ctx:ctx()) -> boolean().
-has_checksum_changed(BaseFileCtx, CurrentFileCtx, UserCtx) ->
-    BaseFileChecksum = archivisation_checksum:get(BaseFileCtx),
-    CurrentFileChecksum = archivisation_checksum:calculate(CurrentFileCtx, UserCtx),
-    BaseFileChecksum =/= CurrentFileChecksum.
-
-
--spec has_metadata_changed(file_ctx:ctx(), file_ctx:ctx(), user_ctx:ctx()) -> boolean().
-has_metadata_changed(BaseFileCtx, CurrentFileCtx, UserCtx) ->
-    % currently only json metadata are archived
-    get_json_metadata(BaseFileCtx, UserCtx) =/= get_json_metadata(CurrentFileCtx, UserCtx).
-
-
--spec get_json_metadata(file_ctx:ctx(), user_ctx:ctx()) -> json_utils:json_term() | undefined.
-get_json_metadata(FileCtx, UserCtx) ->
-    SessionId = user_ctx:get_session_id(UserCtx),
-    FileGuid = file_ctx:get_logical_guid_const(FileCtx),
-    case lfm:get_metadata(SessionId, ?FILE_REF(FileGuid), json, [], false) of
-        {ok, JsonMetadata} -> JsonMetadata;
-        {error, ?ENODATA} -> undefined
     end.

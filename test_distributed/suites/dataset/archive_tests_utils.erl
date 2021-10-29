@@ -25,6 +25,7 @@
     assert_archive_dir_structure_is_correct/6, assert_archive_state/2, 
     assert_archive_is_preserved/7, assert_incremental_archive_links/3
 ]).
+-export([mock_archive_verification/0, wait_for_archive_verification_traverse/1, start_verification_traverse/2]).
 
 
 -define(ATTEMPTS, 1200).
@@ -102,6 +103,32 @@ assert_incremental_archive_links(BaseArchiveId, ArchiveId, ModifiedFiles) ->
         {ok, ArchiveDataDirGuid} = rpc:call(Node, archive, get_data_dir_guid, [ArchiveId]),
         assert_incremental_archive_links(Node, SessionId, BaseArchiveId, ArchiveDataDirGuid, ModifiedFiles)
     end, oct_background:get_space_supporting_providers(?SPACE)).
+
+
+mock_archive_verification() ->
+    Nodes = oct_background:get_all_providers_nodes(),
+    test_utils:mock_new(Nodes, archive_verification_traverse, [passthrough]),
+    Pid = self(),
+    test_utils:mock_expect(Nodes, archive_verification_traverse, block_archive_modification,
+        fun(ArchiveDoc) ->
+            {ok, ArchiveId} = archive:get_id(ArchiveDoc),
+            Pid ! {archive_verification_mock, ArchiveId, self()},
+            receive {continue, ArchiveId} ->
+                meck:passthrough([ArchiveDoc])
+            end
+        end).
+
+
+wait_for_archive_verification_traverse(ArchiveId) ->
+    receive {archive_verification_mock, ArchiveId, Pid} ->
+        {ok, Pid}
+    after timer:seconds(?ATTEMPTS) ->
+        {error, archive_creation_not_finished}
+    end.
+
+
+start_verification_traverse(Pid, ArchiveId) ->
+    Pid ! {continue, ArchiveId}.
 
 
 %===================================================================
