@@ -9,7 +9,7 @@
 %%% Sequential tests of archives mechanism.
 %%% @end
 %%%-------------------------------------------------------------------
--module(archive_sequential_test_SUITE).
+-module(archive_bagit_sequential_test_SUITE).
 -author("Jakub Kudzia").
 
 
@@ -31,40 +31,27 @@
 
 %% tests
 -export([
-    archive_dataset_attached_to_space_dir/1,
-    archive_big_tree_plain_layout/1,
-    archive_directory_with_number_of_files_exceeding_batch_size_plain_layout/1
+    archive_big_tree_bagit_layout/1,
+    archive_directory_with_number_of_files_exceeding_batch_size_bagit_layout/1
 ]).
 
 
 all() -> [
-    archive_dataset_attached_to_space_dir,
-    archive_big_tree_plain_layout,
-    archive_directory_with_number_of_files_exceeding_batch_size_plain_layout
+    archive_big_tree_bagit_layout,
+    archive_directory_with_number_of_files_exceeding_batch_size_bagit_layout
 ].
 
--define(SPACE, space_krk_par_p).
--define(USER1, user1).
 
 %===================================================================
 % Sequential tests - tests which must be performed one after another
 % to ensure that they do not interfere with each other
 %===================================================================
 
-archive_dataset_attached_to_space_dir(_Config) ->
-    SpaceId = oct_background:get_space_id(?SPACE),
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
-    #dataset_object{
-        id = DatasetId,
-        archives = [#archive_object{id = ArchiveId}]
-    } = onenv_dataset_test_utils:set_up_and_sync_dataset(?USER1, SpaceGuid, #dataset_spec{archives = 1}),
-    archive_sequential_test_base:archive_simple_dataset_test(SpaceGuid, DatasetId, ArchiveId).
+archive_big_tree_bagit_layout(_Config) ->
+    archive_sequential_test_base:archive_big_tree_test(?ARCHIVE_BAGIT_LAYOUT).
 
-archive_big_tree_plain_layout(_Config) ->
-    archive_sequential_test_base:archive_big_tree_test(?ARCHIVE_PLAIN_LAYOUT).
-
-archive_directory_with_number_of_files_exceeding_batch_size_plain_layout(_Config) ->
-    archive_sequential_test_base:archive_directory_with_number_of_files_exceeding_batch_size_test(?ARCHIVE_PLAIN_LAYOUT).
+archive_directory_with_number_of_files_exceeding_batch_size_bagit_layout(_Config) ->
+    archive_sequential_test_base:archive_directory_with_number_of_files_exceeding_batch_size_test(?ARCHIVE_BAGIT_LAYOUT).
 
 
 %===================================================================
