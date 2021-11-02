@@ -124,6 +124,7 @@ set_file_rdf_metadata_on_provider_not_supporting_space_test(_Config) ->
     P2Id = oct_background:get_provider_id(paris),
     [P1Node] = oct_background:get_provider_nodes(krakow),
     [P2Node] = oct_background:get_provider_nodes(paris),
+    SpaceId = oct_background:get_space_id(space_krk),
     {FileType, _FilePath, FileGuid, ShareId} = api_test_utils:create_shared_file_in_space_krk(),
 
     DataSpec = #data_spec{
@@ -131,7 +132,7 @@ set_file_rdf_metadata_on_provider_not_supporting_space_test(_Config) ->
         correct_values = #{<<"metadata">> => [?RDF_METADATA_1]}
     },
 
-    GetExpCallResultFun = fun(_TestCtx) -> ?ERROR_SPACE_NOT_SUPPORTED_BY(P2Id) end,
+    GetExpCallResultFun = fun(_TestCtx) -> ?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceId, P2Id) end,
 
     VerifyEnvFun = fun(_, _) ->
         ?assertMatch({error, ?ENODATA}, get_rdf(P1Node, FileGuid), ?ATTEMPTS),
@@ -372,7 +373,8 @@ set_file_json_metadata_on_provider_not_supporting_space_test(_Config) ->
         correct_values = #{<<"metadata">> => [?JSON_METADATA_4]}
     },
 
-    GetExpCallResultFun = fun(_TestCtx) -> ?ERROR_SPACE_NOT_SUPPORTED_BY(P2Id) end,
+    SpaceId = oct_background:get_space_id(space_krk),
+    GetExpCallResultFun = fun(_TestCtx) -> ?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceId, P2Id) end,
 
     VerifyEnvFun = fun(_, _) ->
         ?assertMatch({error, ?ENODATA}, get_json(P1Node, FileGuid), ?ATTEMPTS),
@@ -479,6 +481,7 @@ set_file_xattrs_on_provider_not_supporting_space_test(_Config) ->
     P2Id = oct_background:get_provider_id(paris),
     [P1Node] = oct_background:get_provider_nodes(krakow),
     [P2Node] = oct_background:get_provider_nodes(paris),
+    SpaceId = oct_background:get_space_id(space_krk),
     {FileType, _FilePath, FileGuid, ShareId} = api_test_utils:create_shared_file_in_space_krk(),
 
     DataSpec = #data_spec{
@@ -486,7 +489,7 @@ set_file_xattrs_on_provider_not_supporting_space_test(_Config) ->
         correct_values = #{<<"metadata">> => [#{?XATTR_1_KEY => ?XATTR_1_VALUE}]}
     },
 
-    GetExpCallResultFun = fun(_TestCtx) -> ?ERROR_SPACE_NOT_SUPPORTED_BY(P2Id) end,
+    GetExpCallResultFun = fun(_TestCtx) -> ?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceId, P2Id) end,
 
     VerifyEnvFun = fun(_, _) ->
         ?assertMatch({error, ?ENODATA}, get_xattr(P1Node, FileGuid, ?XATTR_1_KEY), ?ATTEMPTS),

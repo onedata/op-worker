@@ -202,15 +202,16 @@ get_shared_file_attrs_test(_Config) ->
 get_attrs_on_provider_not_supporting_space_test(_Config) ->
     P2Id = oct_background:get_provider_id(paris),
     [P2Node] = oct_background:get_provider_nodes(paris),
+    SpaceId = oct_background:get_space_id(space_krk),
     {FileType, _FilePath, FileGuid, _ShareId} = api_test_utils:create_shared_file_in_space_krk(),
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
 
     ValidateRestCallResultFun = fun(_, {ok, RespCode, _RespHeaders, RespBody}) ->
-        ExpError = ?REST_ERROR(?ERROR_SPACE_NOT_SUPPORTED_BY(P2Id)),
+        ExpError = ?REST_ERROR(?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceId, P2Id)),
         ?assertEqual({?HTTP_400_BAD_REQUEST, ExpError}, {RespCode, RespBody})
     end,
     ValidateGsCallResultFun = fun(_, Result) ->
-        ?assertEqual(?ERROR_SPACE_NOT_SUPPORTED_BY(P2Id), Result)
+        ?assertEqual(?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceId, P2Id), Result)
     end,
 
     ?assert(onenv_api_test_runner:run_tests([
@@ -697,6 +698,8 @@ set_mode_on_provider_not_supporting_space_test(_Config) ->
     P2Id = oct_background:get_provider_id(paris),
     [P1Node] = oct_background:get_provider_nodes(krakow),
     [P2Node] = oct_background:get_provider_nodes(paris),
+
+    SpaceId = oct_background:get_space_id(space_krk),
     {FileType, _FilePath, FileGuid, _ShareId} = api_test_utils:create_shared_file_in_space_krk(),
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
 
@@ -704,11 +707,11 @@ set_mode_on_provider_not_supporting_space_test(_Config) ->
     DataSpecWithoutBadValues = DataSpec#data_spec{bad_values = []},
 
     ValidateRestCallResultFun = fun(_, {ok, RespCode, _RespHeaders, RespBody}) ->
-        ExpError = ?REST_ERROR(?ERROR_SPACE_NOT_SUPPORTED_BY(P2Id)),
+        ExpError = ?REST_ERROR(?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceId, P2Id)),
         ?assertEqual({?HTTP_400_BAD_REQUEST, ExpError}, {RespCode, RespBody})
     end,
     ValidateGsCallResultFun = fun(_, Result) ->
-        ?assertEqual(?ERROR_SPACE_NOT_SUPPORTED_BY(P2Id), Result)
+        ?assertEqual(?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceId, P2Id), Result)
     end,
 
     VerifyFun = fun(_, _) ->

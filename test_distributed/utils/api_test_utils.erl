@@ -201,11 +201,12 @@ create_file_in_space_krk_par_with_additional_metadata(ParentPath, HasParentQos, 
         end,
         eff_protection_flags = ?no_flags_mask,
         eff_qos_membership = case {HasDirectQos, HasParentQos} of
-            {true, _} -> ?DIRECT_QOS_MEMBERSHIP;
-            {_, true} -> ?ANCESTOR_QOS_MEMBERSHIP;
-            _ -> ?NONE_QOS_MEMBERSHIP
+            {true, true} -> ?DIRECT_AND_ANCESTOR_MEMBERSHIP;
+            {true, _} -> ?DIRECT_MEMBERSHIP;
+            {_, true} -> ?ANCESTOR_MEMBERSHIP;
+            _ -> ?NONE_MEMBERSHIP
         end,
-        eff_dataset_membership = ?NONE_DATASET_MEMBERSHIP,
+        eff_dataset_membership = ?NONE_MEMBERSHIP,
         has_metadata = HasMetadata
     },
 
@@ -552,8 +553,8 @@ add_file_id_errors_for_operations_available_in_share_mode(FileGuid, ShareId, Dat
     onenv_api_test_runner:data_spec().
 add_file_id_errors_for_operations_available_in_share_mode(IdKey, FileGuid, ShareId, DataSpec) ->
     InvalidFileIdErrors = get_invalid_file_id_errors(IdKey),
-
     NonExistentSpaceGuid = file_id:pack_share_guid(<<"InvalidUuid">>, ?NOT_SUPPORTED_SPACE_ID, ShareId),
+    SpaceId = file_id:guid_to_space_id(FileGuid),
     {ok, NonExistentSpaceObjectId} = file_id:guid_to_objectid(NonExistentSpaceGuid),
     NonExistentSpaceExpError = case ShareId of
         undefined ->
@@ -565,11 +566,10 @@ add_file_id_errors_for_operations_available_in_share_mode(IdKey, FileGuid, Share
             % (checks if space is supported by provider)
             {error_fun, fun(#api_test_ctx{node = Node}) ->
                 ProvId = opw_test_rpc:get_provider_id(Node),
-                ?ERROR_SPACE_NOT_SUPPORTED_BY(ProvId)
+                ?ERROR_SPACE_NOT_SUPPORTED_BY(?NOT_SUPPORTED_SPACE_ID, ProvId)
             end}
     end,
 
-    SpaceId = file_id:guid_to_space_id(FileGuid),
     NonExistentFileGuid = file_id:pack_share_guid(<<"InvalidUuid">>, SpaceId, ShareId),
     {ok, NonExistentFileObjectId} = file_id:guid_to_objectid(NonExistentFileGuid),
 
@@ -701,7 +701,6 @@ add_cdmi_id_errors_for_operations_not_available_in_share_mode(IdKey, FileGuid, S
 
     ShareFileGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
     {ok, ShareFileObjectId} = file_id:guid_to_objectid(ShareFileGuid),
-
     BadFileIdValues = [
         {IdKey, <<"InvalidObjectId">>, ?ERROR_BAD_VALUE_IDENTIFIER(IdKey)},
         {IdKey, DummyObjectId, ?ERROR_BAD_VALUE_IDENTIFIER(IdKey)},
@@ -745,16 +744,15 @@ add_bad_values_to_data_spec(BadValuesToAdd, #data_spec{bad_values = BadValues} =
 get_invalid_file_id_errors(IdKey) ->
     InvalidGuid = <<"InvalidGuid">>,
     {ok, InvalidObjectId} = file_id:guid_to_objectid(InvalidGuid),
-    InvalidIdExpError = ?ERROR_BAD_VALUE_IDENTIFIER(IdKey),
 
     [
         % Errors thrown by rest_handler, which failed to convert file path/cdmi_id to guid
         {bad_id, <<"/NonExistentPath">>, {rest_with_file_path, ?ERROR_POSIX(?ENOENT)}},
-        {bad_id, <<"InvalidObjectId">>, {rest, ?ERROR_BAD_VALUE_IDENTIFIER(IdKey)}},
+        {bad_id, <<"InvalidObjectId">>, {rest, ?ERROR_SPACE_NOT_SUPPORTED_BY(<<"InvalidObjectId">>, provider_id_placeholder)}},
 
         % Errors thrown by middleware and internal logic
-        {bad_id, InvalidObjectId, {rest, InvalidIdExpError}},
-        {bad_id, InvalidGuid, {gs, InvalidIdExpError}}
+        {bad_id, InvalidObjectId, {rest, ?ERROR_SPACE_NOT_SUPPORTED_BY(InvalidObjectId, provider_id_placeholder)}},
+        {bad_id, InvalidGuid, {gs, ?ERROR_BAD_VALUE_IDENTIFIER(IdKey)}}
     ].
 
 

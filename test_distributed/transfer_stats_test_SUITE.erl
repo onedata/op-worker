@@ -50,7 +50,7 @@ all() ->
 rtransfer_stats_updates_test(Config) ->
     ?PERFORMANCE(Config, [
         {parameters, [
-            [{name, transfer_file_parts}, {value, 20000},
+            [{name, transfer_file_parts}, {value, 10000},
                 {description, "Numbers of parts of transfered file."}]
         ]},
         {description, "Check transfer stats updates and file location updates

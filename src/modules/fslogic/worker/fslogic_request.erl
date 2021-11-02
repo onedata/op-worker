@@ -38,6 +38,10 @@ get_file_partial_ctx(UserCtx, #fuse_request{fuse_request = #resolve_guid{path = 
     file_partial_ctx:new_by_logical_path(UserCtx, Path);
 get_file_partial_ctx(UserCtx, #fuse_request{fuse_request = #resolve_guid_by_canonical_path{path = Path}}) ->
     file_partial_ctx:new_by_canonical_path(UserCtx, Path);
+get_file_partial_ctx(_UserCtx, #fuse_request{fuse_request = #resolve_guid_by_relative_path{root_file = RelRootGuid}}) ->
+    file_partial_ctx:new_by_guid(RelRootGuid);
+get_file_partial_ctx(_UserCtx, #fuse_request{fuse_request = #ensure_dir{root_file = RelRootGuid}}) ->
+    file_partial_ctx:new_by_guid(RelRootGuid);
 get_file_partial_ctx(_UserCtx, #fuse_request{fuse_request = #file_request{context_guid = FileGuid}}) ->
     file_partial_ctx:new_by_guid(FileGuid);
 get_file_partial_ctx(_UserCtx, #fuse_request{fuse_request = #get_fs_stats{file_id = FileGuid}}) ->
@@ -63,6 +67,10 @@ get_target_providers(_UserCtx, undefined, _) ->
     [oneprovider:get_id()];
 get_target_providers(UserCtx, File, #fuse_request{
     fuse_request = #resolve_guid{}
+}) ->
+    get_target_providers_for_attr_req(UserCtx, File);
+get_target_providers(UserCtx, File, #fuse_request{
+    fuse_request = #resolve_guid_by_relative_path{}
 }) ->
     get_target_providers_for_attr_req(UserCtx, File);
 get_target_providers(UserCtx, File, #fuse_request{fuse_request = #file_request{

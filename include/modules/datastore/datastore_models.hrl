@@ -1050,7 +1050,10 @@
     % number of children jobs processed
     processed = 0 :: non_neg_integer(),
     % flag that informs whether all batches of children have been listed
-    all_batches_listed = false :: boolean()
+    all_batches_listed = false :: boolean(),
+    % Uuid of file that should be processed after current file's subtree is processed.
+    % If undefined then current file's parent will be used.
+    next_subtree_root = undefined :: undefined | file_meta:uuid()
 }).
 
 %%%===================================================================
