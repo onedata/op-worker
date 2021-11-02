@@ -539,14 +539,10 @@ handle_state_update_after_job_preparation(_ExecutionId, #workflow_execution_stat
 handle_state_update_after_job_preparation(ExecutionId, #workflow_execution_state{
     update_report = ?LANE_READY_TO_BE_FINISHED_REPORT(FinishedLaneId, LaneContext),
     handler = Handler,
-    initial_context = ExecutionContext
+    initial_context = ExecutionContext,
+    next_lane_preparation_status = NextLaneStatus
 }) ->
     case workflow_engine:call_handler(ExecutionId, LaneContext, Handler, handle_lane_execution_ended, [FinishedLaneId]) of
-        ?END_EXECUTION ->
-            ?WF_ERROR_EXECUTION_ENDED(#execution_ended{handler = Handler, context = ExecutionContext});
-        error ->
-            % Error is logged by workflow_engine:call_handler/5 function
-            ?WF_ERROR_EXECUTION_ENDED(#execution_ended{handler = Handler, context = ExecutionContext});
         ?CONTINUE(NextLaneId, LaneIdToBePreparedInAdvance) ->
             case update(ExecutionId, fun(State) -> set_current_lane(State, NextLaneId, LaneIdToBePreparedInAdvance) end) of
                 {ok, #document{value = #workflow_execution_state{
@@ -569,7 +565,17 @@ handle_state_update_after_job_preparation(ExecutionId, #workflow_execution_state
                     ?WF_ERROR_EXECUTION_ENDED(#execution_ended{handler = Handler, context = ExecutionContext});
                 {ok, _} ->
                     ?WF_ERROR_NO_WAITING_ITEMS
-            end
+            end;
+        % Other possible answers are ?END_EXECUTION or error - error is logged by workflow_engine:call_handler/5 function
+        _ when NextLaneStatus =:= ?PREPARING ->
+            case update(ExecutionId, fun maybe_wait_for_preparation_in_advace/1) of
+                ?WF_ERROR_LANE_ALREADY_PREPARED ->
+                    ?WF_ERROR_EXECUTION_ENDED(#execution_ended{handler = Handler, context = ExecutionContext});
+                {ok, _} ->
+                    ?WF_ERROR_NO_WAITING_ITEMS
+            end;
+        _ ->
+            ?WF_ERROR_EXECUTION_ENDED(#execution_ended{handler = Handler, context = ExecutionContext})
     end;
 handle_state_update_after_job_preparation(_ExecutionId, #workflow_execution_state{
     update_report = ?EXECUTION_CANCELLED_REPORT(ItemIdsToDelete),
@@ -584,6 +590,7 @@ handle_state_update_after_job_preparation(_ExecutionId, #workflow_execution_stat
         {PrefetchedItemId, _} -> workflow_cached_item:delete(PrefetchedItemId);
         _ -> ok
     end,
+    % TODO VFS-7787 - test cancel during lane_execution_finished callback execution
     case ExecutionStatus of
         ?WAITING_FOR_NEXT_LANE_PREPARATION_END ->
             ?WF_ERROR_LANE_EXECUTION_CANCELLED(Handler, LaneId, LaneContext, get_task_ids(BoxSpecs));
@@ -780,6 +787,14 @@ finish_lane_preparation_in_advance(
 finish_lane_preparation_in_advance(_State, _LaneId, _LaneSpec) ->
     ?WF_ERROR_UNKNOWN_LANE. % Previous lane is finished and other lane is set to be executed - ignore prepared lane
 
+-spec maybe_wait_for_preparation_in_advace(state()) -> {ok, state()} | ?WF_ERROR_LANE_ALREADY_PREPARED.
+maybe_wait_for_preparation_in_advace(#workflow_execution_state{
+    next_lane_preparation_status = ?PREPARING
+} = State) ->
+    {ok, State#workflow_execution_state{execution_status = ?WAITING_FOR_NEXT_LANE_PREPARATION_END}};
+maybe_wait_for_preparation_in_advace(_State) ->
+    ?WF_ERROR_LANE_ALREADY_PREPARED.
+
 -spec handle_next_iteration_step(
     state(),
     index(),
@@ -958,6 +973,14 @@ prepare_next_waiting_job(#workflow_execution_state{
     execution_status = ?WAITING_FOR_NEXT_LANE_PREPARATION_END
 }) ->
     ?WF_ERROR_NO_WAITING_ITEMS;
+prepare_next_waiting_job(#workflow_execution_state{
+    execution_status = ?EXECUTION_ENDED,
+    pending_callbacks = [],
+    current_lane = #current_lane{id = undefined},
+    handler = Handler,
+    initial_context = ExecutionContext
+}) ->
+    ?WF_ERROR_EXECUTION_ENDED(#execution_ended{handler = Handler, context = ExecutionContext});
 prepare_next_waiting_job(#workflow_execution_state{
     execution_status = ?EXECUTION_ENDED,
     pending_callbacks = [],
