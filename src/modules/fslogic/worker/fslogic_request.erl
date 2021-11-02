@@ -73,6 +73,10 @@ get_target_providers(UserCtx, File, #fuse_request{
     fuse_request = #resolve_guid_by_relative_path{}
 }) ->
     get_target_providers_for_attr_req(UserCtx, File);
+get_target_providers(UserCtx, File, #fuse_request{
+    fuse_request = #ensure_dir{}
+}) ->
+    get_target_providers_for_attr_req(UserCtx, File);
 get_target_providers(UserCtx, File, #fuse_request{fuse_request = #file_request{
     file_request = #get_file_attr{}
 }}) ->
