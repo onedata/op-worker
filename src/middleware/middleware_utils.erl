@@ -98,7 +98,7 @@ assert_space_supported_by(SpaceId, ProviderId) ->
         true ->
             ok;
         false ->
-            throw(?ERROR_SPACE_NOT_SUPPORTED_BY(ProviderId))
+            throw(?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceId, ProviderId))
     end.
 
 

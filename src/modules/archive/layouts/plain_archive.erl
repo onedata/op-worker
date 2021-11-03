@@ -71,17 +71,17 @@
 -include("modules/fslogic/file_attr.hrl").
 
 %% API
--export([archive_file/5]).
+-export([archive_file/6]).
 
 %%%===================================================================
 %%% API functions
 %%%===================================================================
 
--spec archive_file(archive:doc(), file_ctx:ctx(), file_ctx:ctx(), archive:doc() | undefined,
+-spec archive_file(archive:doc(), file_ctx:ctx(), file_ctx:ctx(), archive:doc() | undefined, file_meta:path(), 
     user_ctx:ctx()) -> {ok, file_ctx:ctx()} | {error, term()}.
-archive_file(ArchiveDoc, FileCtx, TargetParentCtx, BaseArchiveDoc, UserCtx) ->
+archive_file(ArchiveDoc, FileCtx, TargetParentCtx, BaseArchiveDoc, ResolvedFilePath, UserCtx) ->
     try
-        archive_file_insecure(ArchiveDoc, FileCtx, TargetParentCtx, BaseArchiveDoc, UserCtx)
+        archive_file_insecure(ArchiveDoc, FileCtx, TargetParentCtx, BaseArchiveDoc, ResolvedFilePath, UserCtx)
     catch
         Class:Reason:Stacktrace ->
             Guid = file_ctx:get_logical_guid_const(FileCtx),
@@ -97,37 +97,37 @@ archive_file(ArchiveDoc, FileCtx, TargetParentCtx, BaseArchiveDoc, UserCtx) ->
 %%% Internal functions
 %%%===================================================================
 
--spec archive_file_insecure(archive:doc(), file_ctx:ctx(), file_ctx:ctx(), archive:doc() | undefined, user_ctx:ctx()) ->
+-spec archive_file_insecure(archive:doc(), file_ctx:ctx(), file_ctx:ctx(), archive:doc() | undefined, file_meta:path(), user_ctx:ctx()) ->
     {ok, file_ctx:ctx()} | error.
-archive_file_insecure(_ArchiveDoc, FileCtx, TargetParentCtx, undefined, UserCtx) ->
-    copy_file_to_archive(FileCtx, TargetParentCtx, UserCtx);
-archive_file_insecure(ArchiveDoc, FileCtx, TargetParentCtx, BaseArchiveDoc, UserCtx) ->
+archive_file_insecure(_ArchiveDoc, FileCtx, TargetParentCtx, undefined, ResolvedFilePath, UserCtx) ->
+    copy_file_to_archive(FileCtx, TargetParentCtx, ResolvedFilePath, UserCtx);
+archive_file_insecure(ArchiveDoc, FileCtx, TargetParentCtx, BaseArchiveDoc, ResolvedFilePath, UserCtx) ->
     {ok, DatasetRootFileGuid} = archive:get_dataset_root_file_guid(ArchiveDoc),
     DatasetRootFileCtx = file_ctx:new_by_guid(DatasetRootFileGuid),
     {DatasetRootLogicalPath, _DatasetRootFileCtx2} = file_ctx:get_logical_path(DatasetRootFileCtx, UserCtx),
     {_, DatasetRootParentPath} = filepath_utils:basename_and_parent_dir(DatasetRootLogicalPath),
-    {FileLogicalPath, FileCtx2} = file_ctx:get_logical_path(FileCtx, UserCtx),
 
-    RelativeFilePath = filepath_utils:relative(DatasetRootParentPath, FileLogicalPath),
+    RelativeFilePath = filepath_utils:relative(DatasetRootParentPath, ResolvedFilePath),
 
     case archive:find_file(BaseArchiveDoc, RelativeFilePath, UserCtx) of
         {ok, BaseArchiveFileCtx} ->
-            case incremental_archive:has_file_changed(BaseArchiveFileCtx, FileCtx2, UserCtx) of
+            case incremental_archive:has_file_changed(BaseArchiveFileCtx, FileCtx, UserCtx) of
                 true ->
-                    copy_file_to_archive(FileCtx2, TargetParentCtx, UserCtx);
+                    copy_file_to_archive(FileCtx, TargetParentCtx, ResolvedFilePath, UserCtx);
                 false ->
-                    make_hardlink_to_file_in_base_archive(FileCtx2, TargetParentCtx, BaseArchiveFileCtx, UserCtx)
+                    make_hardlink_to_file_in_base_archive(FileCtx, TargetParentCtx, BaseArchiveFileCtx, UserCtx)
             end;
         ?ERROR_NOT_FOUND ->
-            copy_file_to_archive(FileCtx2, TargetParentCtx, UserCtx)
+            copy_file_to_archive(FileCtx, TargetParentCtx, ResolvedFilePath, UserCtx)
     end.
 
 
--spec copy_file_to_archive(file_ctx:ctx(), file_ctx:ctx(), user_ctx:ctx()) -> {ok, file_ctx:ctx()}.
-copy_file_to_archive(FileCtx, TargetParentCtx, UserCtx) ->
+-spec copy_file_to_archive(file_ctx:ctx(), file_ctx:ctx(), file_meta:path(), user_ctx:ctx()) -> 
+    {ok, file_ctx:ctx()}.
+copy_file_to_archive(FileCtx, TargetParentCtx, ResolvedFilePath, UserCtx) ->
     SessionId = user_ctx:get_session_id(UserCtx),
-    {FileName, FileCtx2} = file_ctx:get_aliased_name(FileCtx, UserCtx),
-    FileGuid = file_ctx:get_logical_guid_const(FileCtx2),
+    FileName = filename:basename(ResolvedFilePath),
+    FileGuid = file_ctx:get_logical_guid_const(FileCtx),
     TargetParentGuid = file_ctx:get_logical_guid_const(TargetParentCtx),
 
     {ok, CopyGuid, _} = file_copy:copy(SessionId, FileGuid, TargetParentGuid, FileName, false),

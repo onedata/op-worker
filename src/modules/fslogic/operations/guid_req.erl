@@ -15,9 +15,11 @@
 -include("modules/fslogic/data_access_control.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
+-include_lib("ctool/include/errors.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
--export([resolve_guid/2, get_parent/2, get_file_path/2]).
+-export([resolve_guid/2, resolve_guid_by_relative_path/3, ensure_dir/4, get_parent/2, get_file_path/2]).
 
 
 %%%===================================================================
@@ -36,6 +38,39 @@ resolve_guid(UserCtx, FileCtx0) ->
         UserCtx, FileCtx0, [?TRAVERSE_ANCESTORS], allow_ancestors
     ),
     resolve_guid_insecure(UserCtx, FileCtx1).
+
+
+-spec resolve_guid_by_relative_path(user_ctx:ctx(), file_ctx:ctx(), file_meta:path()) -> fslogic_worker:fuse_response().
+resolve_guid_by_relative_path(UserCtx, RootFileCtx, <<"">>) ->
+    resolve_guid(UserCtx, RootFileCtx);
+resolve_guid_by_relative_path(UserCtx, RootFileCtx, Path) ->
+    PathTokens = binary:split(Path, <<"/">>, [global]),
+    LeafFileCtx = lists:foldl(fun(PathToken, ParentCtx) ->
+        {ChildCtx, _} = files_tree:get_child(ParentCtx, PathToken, UserCtx),
+        ChildCtx
+    end, RootFileCtx, PathTokens),
+    resolve_guid(UserCtx, LeafFileCtx).
+
+
+-spec ensure_dir(
+    user_ctx:ctx(), file_ctx:ctx(), file_meta:path(), file_meta:mode()
+) -> fslogic_worker:fuse_response().
+ensure_dir(UserCtx, RootFileCtx, <<"">>, _Mode) ->
+    resolve_guid(UserCtx, RootFileCtx);
+ensure_dir(UserCtx, RootFileCtx, Path, Mode) ->
+    PathTokens = binary:split(Path, <<"/">>, [global]),
+    LeafFileCtx = lists:foldl(fun(PathToken, ParentCtx) ->
+        try
+            {ChildCtx, _} = files_tree:get_child(ParentCtx, PathToken, UserCtx),
+            ChildCtx
+        catch throw:?ENOENT ->
+            #fuse_response{fuse_response = #dir{guid = CreatedDirGuid}} = dir_req:mkdir(
+                UserCtx, ParentCtx, PathToken, Mode
+            ),
+            file_ctx:new_by_guid(CreatedDirGuid)
+        end
+    end, RootFileCtx, PathTokens),
+    resolve_guid(UserCtx, LeafFileCtx).
 
 
 %%--------------------------------------------------------------------

@@ -26,16 +26,19 @@
 
 -export([
     create_file_test/1,
+    create_file_at_path_test/1,
     update_file_content_test/1
 ]).
 
 all() -> [
     create_file_test,
+    create_file_at_path_test,
     update_file_content_test
 ].
 
 
 -define(ATTEMPTS, 30).
+-define(WRITE_SIZE_BYTES, 300).
 
 
 %%%===================================================================
@@ -70,8 +73,7 @@ create_file_test(_Config) ->
     {ok, DirObjectId} = file_id:guid_to_objectid(DirGuid),
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
 
-    WriteSize = 300,
-    Content = crypto:strong_rand_bytes(WriteSize),
+    Content = crypto:strong_rand_bytes(?WRITE_SIZE_BYTES),
 
     MemRef = api_test_memory:init(),
     api_test_memory:set(MemRef, files, [FileGuid]),
@@ -105,8 +107,8 @@ create_file_test(_Config) ->
                         <<"mode">> => [<<"0544">>, <<"0707">>],
                         <<"offset">> => [
                             0,
-                            WriteSize,
-                            WriteSize * 1000000000 % > SUPPORT_SIZE
+                            ?WRITE_SIZE_BYTES,
+                            ?WRITE_SIZE_BYTES * 1000000000 % > SUPPORT_SIZE
                         ],
                         body => [Content]
                     },
@@ -265,6 +267,219 @@ build_create_file_verify_fun(MemRef, DirGuid, Providers) ->
     end.
 
 
+create_file_at_path_test(_Config) ->
+    MemRef = api_test_memory:init(),
+    Providers = lists:flatten([
+        oct_background:get_provider_nodes(krakow),
+        oct_background:get_provider_nodes(paris)
+    ]),
+    SpaceOwnerId = oct_background:get_user_id(user2),
+
+    #object{
+        guid = DirGuid,
+        shares = [DirShareId],
+        children = [
+            #object{
+                guid = ChildFileGuid,
+                name = ChildFileName,
+                type = ?REGULAR_FILE_TYPE
+            },
+            #object{
+                name = ChildDirName,
+                type = ?DIRECTORY_TYPE
+            }]
+    } = onenv_file_test_utils:create_and_sync_file_tree(user3, space_krk_par, #dir_spec{
+        mode = 8#704,
+        shares = [#share_spec{}],
+        % create a child file with full perms instead of default ones so that call to
+        % create child of this file will fail on type check (?ENOTDIR) instead of perms
+        % check (which is performed first)
+        children = [
+            #file_spec{
+                mode = 8#777
+            },
+            #dir_spec{
+                mode = 8#704,
+                shares = [#share_spec{}]
+            }
+        ]
+    }),
+
+    {ok, ChildFileObjectId} = file_id:guid_to_objectid(ChildFileGuid),
+
+    api_test_memory:set(MemRef, child_dir_name, ChildDirName),
+
+    Content = crypto:strong_rand_bytes(?WRITE_SIZE_BYTES),
+
+    ?assert(onenv_api_test_runner:run_tests([
+        #scenario_spec{
+            name = <<"Upload file at path using rest endpoint">>,
+            type = rest,
+            target_nodes = Providers,
+            client_spec = #client_spec{
+                correct = case rand:uniform(2) of
+                    1 -> [user2];  % space owner
+                    2 -> [user3]   % files owner
+                end,
+                unauthorized = [nobody],
+                forbidden_not_in_space = [user1],
+                forbidden_in_space = [{user4, ?ERROR_POSIX(?EACCES)}]  % forbidden by file perms
+            },
+
+            prepare_args_fun = build_rest_create_file_at_path_prepare_args_fun(MemRef, DirGuid),
+            validate_result_fun = build_create_file_validate_call_fun(MemRef, SpaceOwnerId),
+            verify_fun = build_rest_create_file_at_path_verify_fun(MemRef, Providers),
+
+            data_spec = api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
+                DirGuid, DirShareId, #data_spec{
+                    required = [<<"path">>],
+                    optional = [<<"type">>, <<"mode">>, <<"offset">>, body],
+                    correct_values = #{
+                        <<"path">> => [
+                            filename_only_without_create_parents_flag_placeholder,
+                            filename_only_with_create_parents_flag_placeholder,
+                            existent_path_without_create_parents_flag_placeholder,
+                            existent_path_with_create_parents_flag_placeholder,
+                            nonexistent_path_with_create_parents_flag_placeholder
+                        ],
+                        <<"type">> => [<<"REG">>, <<"DIR">>],
+                        <<"mode">> => [<<"0544">>, <<"0707">>],
+                        <<"offset">> => [
+                            0,
+                            ?WRITE_SIZE_BYTES,
+                            ?WRITE_SIZE_BYTES * 1000000000 % > SUPPORT_SIZE
+                        ],
+                        body => [Content]
+                    },
+
+                    bad_values = [
+                        {bad_id, ChildFileObjectId, ?ERROR_POSIX(?ENOTDIR)},
+                        {<<"path">>, filepath_utils:join([ChildFileName, <<"dir1/file.txt">>]), ?ERROR_POSIX(?ENOTDIR)},
+                        {<<"path">>, <<"/a/b/\0null\0/">>, ?ERROR_BAD_VALUE_FILE_PATH},
+                        {<<"path">>, nonexistent_path_without_create_parents_flag_placeholder, ?ERROR_POSIX(?ENOENT)},
+
+                        {<<"type">>, <<"file">>, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"type">>, [
+                            <<"REG">>, <<"DIR">>, <<"LNK">>, <<"SYMLNK">>
+                        ])},
+
+                        {<<"mode">>, true, ?ERROR_BAD_VALUE_INTEGER(<<"mode">>)},
+                        {<<"mode">>, <<"integer">>, ?ERROR_BAD_VALUE_INTEGER(<<"mode">>)},
+                        {<<"mode">>, <<"0888">>, ?ERROR_BAD_VALUE_INTEGER(<<"mode">>)},
+                        {<<"mode">>, <<"888">>, ?ERROR_BAD_VALUE_INTEGER(<<"mode">>)},
+                        {<<"mode">>, <<"77777">>, ?ERROR_BAD_VALUE_NOT_IN_RANGE(<<"mode">>, 0, 8#1777)},
+
+                        {<<"offset">>, <<"unicorns">>, ?ERROR_BAD_VALUE_INTEGER(<<"offset">>)},
+                        {<<"offset">>, <<"-123">>, ?ERROR_BAD_VALUE_TOO_LOW(<<"offset">>, 0)}
+                    ]
+                }
+            )
+        }
+    ])).
+
+
+%% @private
+-spec build_rest_create_file_at_path_prepare_args_fun(api_test_memory:mem_ref(), file_id:file_guid()) ->
+    onenv_api_test_runner:prepare_args_fun().
+build_rest_create_file_at_path_prepare_args_fun(MemRef, RelRootDirGuid) ->
+    fun(#api_test_ctx{data = Data0, node = TestNode}) ->
+        {ok, RelRootDirObjectId} = file_id:guid_to_objectid(RelRootDirGuid),
+        {ParentId, Data1} = api_test_utils:maybe_substitute_bad_id(RelRootDirObjectId, Data0),
+        ChildDirName = api_test_memory:get(MemRef, child_dir_name),
+        Name = str_utils:rand_hex(10),
+        api_test_memory:set(MemRef, name, Name),
+        RandomDirPath = generate_random_dir_path(),
+        DataWithoutPath = maps:remove(<<"path">>, Data1),
+
+        {RelativePath, Data2} = case maps:get(<<"path">>, Data1, undefined) of
+            filename_only_without_create_parents_flag_placeholder ->
+                {Name, DataWithoutPath};
+            filename_only_with_create_parents_flag_placeholder ->
+                {Name, DataWithoutPath#{<<"create_parents">> => true}};
+            existent_path_without_create_parents_flag_placeholder ->
+                Path = filepath_utils:join([ChildDirName, Name]),
+                {Path, DataWithoutPath};
+            existent_path_with_create_parents_flag_placeholder ->
+                Path = filepath_utils:join([ChildDirName, Name]),
+                {Path, DataWithoutPath#{<<"create_parents">> => true}};
+            nonexistent_path_without_create_parents_flag_placeholder ->
+                Path = filepath_utils:join([ChildDirName, RandomDirPath, Name]),
+                {Path, DataWithoutPath};
+            nonexistent_path_with_create_parents_flag_placeholder ->
+                Path = filepath_utils:join([ChildDirName, RandomDirPath, Name]),
+                {Path, DataWithoutPath#{<<"create_parents">> => true}};
+            undefined ->
+                {<<"">>, DataWithoutPath};
+            CustomPath ->
+                Path = filepath_utils:join([CustomPath, Name]),
+                {Path, DataWithoutPath}
+        end,
+
+        {Body, Data3} = utils:ensure_defined(maps:take(body, Data2), error, {<<>>, Data2}),
+        RestPath = str_utils:join_as_binaries([<<"data">>, ParentId, <<"path">>, RelativePath], <<"/">>),
+        {ok, RelRootPath} = lfm_proxy:get_file_path(TestNode, ?ROOT_SESS_ID, RelRootDirGuid),
+        CanonicalFilePath = filename:join([RelRootPath, RelativePath]),
+        api_test_memory:set(MemRef, file_path, CanonicalFilePath),
+        #rest_args{
+            method = put,
+            path = http_utils:append_url_parameters(RestPath, Data3),
+            body = Body
+        }
+    end.
+
+
+%% @private
+-spec build_rest_create_file_at_path_verify_fun(api_test_memory:mem_ref(), [node()]) ->
+    boolean().
+build_rest_create_file_at_path_verify_fun(MemRef, Providers) ->
+    fun
+        (expected_failure, #api_test_ctx{node = TestNode}) ->
+            FilePath = api_test_memory:get(MemRef, file_path),
+            ?assertMatch({error, _}, lfm_proxy:stat(TestNode, ?ROOT_SESS_ID, {path, FilePath}));
+        (expected_success, #api_test_ctx{node = TestNode, data = Data}) ->
+            case api_test_memory:get(MemRef, success) of
+                true ->
+                    FileGuid = api_test_memory:get(MemRef, file_guid),
+                    ExpPath = api_test_memory:get(MemRef, file_path),
+                    {ok, FilePath} = ?assertMatch({ok, _}, lfm_proxy:get_file_path(
+                        TestNode, ?ROOT_SESS_ID, FileGuid), ?ATTEMPTS),
+
+                    ?assertEqual(ExpPath, FilePath, ?ATTEMPTS),
+
+                    ExpName = api_test_memory:get(MemRef, name),
+                    {ExpType, DefaultMode} = case maps:get(<<"type">>, Data, <<"REG">>) of
+                        <<"REG">> -> {?REGULAR_FILE_TYPE, ?DEFAULT_FILE_PERMS};
+                        <<"DIR">> -> {?DIRECTORY_TYPE, ?DEFAULT_DIR_PERMS}
+                    end,
+                    ExpMode = case maps:get(<<"mode">>, Data, undefined) of
+                        undefined -> DefaultMode;
+                        ModeBin -> binary_to_integer(ModeBin, 8)
+                    end,
+
+                    lists:foreach(fun(Provider) ->
+                        ?assertMatch(
+                            {ok, #file_attr{name = ExpName, type = ExpType, mode = ExpMode}},
+                            file_test_utils:get_attrs(Provider, FileGuid),
+                            ?ATTEMPTS
+                        )
+                    end, Providers),
+
+                    case ExpType of
+                        ?REGULAR_FILE_TYPE ->
+                            verify_file_content_update(
+                                FileGuid, TestNode, TestNode, Providers, <<>>,
+                                maps:get(<<"offset">>, Data, undefined), maps:get(body, Data, <<>>)
+                            );
+                        ?DIRECTORY_TYPE ->
+                            true
+                    end;
+
+                false ->
+                    FilePath = api_test_memory:get(MemRef, file_path),
+                    ?assertMatch({error, _}, lfm_proxy:stat(TestNode, ?ROOT_SESS_ID, {path, FilePath}))
+            end
+    end.
+
+
 %% @private
 -spec ls(node(), file_id:file_guid()) -> [file_id:file_guid()] | {error, term()}.
 ls(Node, DirGuid) ->
@@ -291,7 +506,7 @@ update_file_content_test(_Config) ->
     ),
     {ok, DirObjectId} = file_id:guid_to_objectid(DirGuid),
 
-    OriginalFileSize = 300,
+    OriginalFileSize = ?WRITE_SIZE_BYTES,
     OriginalFileContent = crypto:strong_rand_bytes(OriginalFileSize),
 
     UpdateSize = 100,
@@ -541,6 +756,17 @@ slice_binary(Bin, Offset, _Len) when Offset >= byte_size(Bin) ->
     <<>>;
 slice_binary(Bin, Offset, Len) ->
     binary:part(Bin, Offset, min(Len, byte_size(Bin) - Offset)).
+
+
+%% @private
+-spec generate_random_dir_path() -> file_meta:path().
+generate_random_dir_path() ->
+    PathLength = rand:uniform(10),
+    DirNameLength = 10,
+    Tokens = lists:map(fun(_Item) ->
+        str_utils:rand_hex(DirNameLength)
+    end, lists:seq(1, PathLength)),
+    filepath_utils:join(Tokens).
 
 
 %%%===================================================================
