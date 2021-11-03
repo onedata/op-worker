@@ -44,6 +44,7 @@
 
     get_provider_id/0,
     get_provider_domain/0,
+    get_provider_node_ip/0,
     get_provider_name/0,
     get_provider_eff_users/0,
 
@@ -177,6 +178,11 @@ get_provider_id() ->
 -spec get_provider_domain() -> binary() | no_return().
 get_provider_domain() ->
     oneprovider:get_domain().
+
+
+-spec get_provider_node_ip() -> inet:ip4_address().
+get_provider_node_ip() ->
+    oneprovider:get_node_ip().
 
 
 -spec get_provider_name() -> {ok, od_provider:name()} | errors:error().
