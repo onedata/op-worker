@@ -25,6 +25,7 @@
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
 -include_lib("cluster_worker/include/modules/datastore/ts_metric_config.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% functions operating on document using datastore model API
@@ -93,7 +94,7 @@ list_time_series_internal(CollectionId) ->
     case datastore_time_series_collection:list_time_series_ids(?CTX, CollectionId) of
         {ok, TimeSeries} -> 
             {ok, TimeSeries};
-        {error, list_failed} ->
+        ?ERROR_NOT_FOUND ->
             % There is a chance that transfer started for legacy QoS entry for which time 
             % series collection was not initialized. Create it and try again.
             ok = create_internal(CollectionId),
