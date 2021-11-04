@@ -371,6 +371,11 @@ get_expected_malformed_data_error({error, _} = Error, _, _) ->
     Error;
 get_expected_malformed_data_error({error_fun, ErrorFun}, _, TestCaseCtx) ->
     ErrorFun(TestCaseCtx);
+get_expected_malformed_data_error(
+    {_ScenarioType, ?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceId, provider_id_placeholder)}, _, #api_test_ctx{node = Node}
+) ->
+    ProviderId = opw_test_rpc:get_provider_id(Node),
+    ?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceId, ProviderId);
 get_expected_malformed_data_error({_ScenarioType, {error, _} = ScenarioSpecificError}, _, _) ->
     ScenarioSpecificError;
 get_expected_malformed_data_error({_ScenarioType, {error_fun, ErrorFun}}, _, TestCaseCtx) ->
@@ -967,7 +972,7 @@ should_expect_lack_of_support_error({rest_with_shared_guid, _}, _Auth, ?ONEZONE_
 should_expect_lack_of_support_error({rest_with_shared_guid, SpaceId}, _Auth, Node) ->
     case opw_test_rpc:supports_space(Node, SpaceId) of
         true -> false;
-        false -> {true, ?ERROR_SPACE_NOT_SUPPORTED_BY(opw_test_rpc:get_provider_id(Node))}
+        false -> {true, ?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceId, opw_test_rpc:get_provider_id(Node))}
     end;
 should_expect_lack_of_support_error(_ScenarioType, ?NOBODY, _Node) ->
     false;
@@ -1066,7 +1071,7 @@ make_rest_request(Node, Client, #rest_args{
         {ssl_options, [
             {cacerts, get_cert_chain_ders()}
         ]},
-        {recv_timeout, 15000},
+        {recv_timeout, 30000},
         {follow_redirect, true},
         {max_redirect, 5}
     ],

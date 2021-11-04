@@ -510,8 +510,8 @@ get_space_dir_details(Node, SpaceDirGuid, SpaceName) ->
         index_startid = file_id:guid_to_space_id(SpaceDirGuid),
         active_permissions_type = posix,
         eff_protection_flags = ?no_flags_mask,
-        eff_qos_membership = ?NONE_QOS_MEMBERSHIP,
-        eff_dataset_membership = ?NONE_DATASET_MEMBERSHIP,
+        eff_qos_membership = ?NONE_MEMBERSHIP,
+        eff_dataset_membership = ?NONE_MEMBERSHIP,
         has_metadata = false
     }.
 
@@ -526,12 +526,12 @@ get_dir_children_on_provider_not_supporting_space_test(_Config) ->
 
     ValidateRestListedFilesOnProvidersNotSupportingSpaceFun = fun(_, {ok, RespCode, _, RespBody}) ->
         ?assertEqual(
-            {?HTTP_400_BAD_REQUEST, ?REST_ERROR(?ERROR_SPACE_NOT_SUPPORTED_BY(P2Id))},
+            {?HTTP_400_BAD_REQUEST, ?REST_ERROR(?ERROR_SPACE_NOT_SUPPORTED_BY(Space1Id, P2Id))},
             {RespCode, RespBody}
         )
     end,
     ValidateGsListedFilesOnProvidersNotSupportingSpaceFun = fun(_, Response) ->
-        ?assertEqual(?ERROR_SPACE_NOT_SUPPORTED_BY(P2Id), Response)
+        ?assertEqual(?ERROR_SPACE_NOT_SUPPORTED_BY(Space1Id, P2Id), Response)
     end,
 
     ?assert(onenv_api_test_runner:run_tests([

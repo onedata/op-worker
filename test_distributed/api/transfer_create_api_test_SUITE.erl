@@ -77,7 +77,7 @@ all() ->
 
 -define(PROVIDER_ID_TRANSFER_ERRORS(__KEY), [
     {__KEY, 100, ?ERROR_BAD_VALUE_BINARY(__KEY)},
-    {__KEY, <<"NonExistingProvider">>, ?ERROR_SPACE_NOT_SUPPORTED_BY(<<"NonExistingProvider">>)}
+    {__KEY, <<"NonExistingProvider">>, ?ERROR_SPACE_NOT_SUPPORTED_BY(?SPACE_2, <<"NonExistingProvider">>)}
 ]).
 
 -define(CALLBACK_TRANSFER_ERRORS, [{<<"callback">>, 100, ?ERROR_BAD_VALUE_BINARY(<<"callback">>)}]).

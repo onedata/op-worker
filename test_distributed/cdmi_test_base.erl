@@ -1976,17 +1976,15 @@ make_request(Node, RestSubpath, Method, Headers, Body) ->
                 true ->
                     Result;
                 false ->
-                    % Returned error may not be necessarily ?ERROR_SPACE_NOT_SUPPORTED(_)
+                    % Returned error may not be necessarily ?ERROR_SPACE_NOT_SUPPORTED(_, _)
                     % as some errors may be thrown even before file path resolution attempt
                     % (and such errors are explicitly checked by some tests),
                     % but it should never be any successful response
                     ?assert(RespCode >= 300),
-
-                    SpaceNotSuppError = #{<<"error">> => errors:to_json(?ERROR_SPACE_NOT_SUPPORTED_BY(
-                        rpc:call(Node, oneprovider, get_id, [])
-                    ))},
                     case {RespCode, try_to_decode(RespBody)} of
-                        {?HTTP_400_BAD_REQUEST, SpaceNotSuppError} ->
+                        {?HTTP_400_BAD_REQUEST, #{<<"error">> :=  #{
+                            <<"id">> := <<"spaceNotSupportedBy">>
+                        }}}->
                             space_not_supported;
                         _ ->
                             Result
