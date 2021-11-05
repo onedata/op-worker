@@ -42,7 +42,7 @@
 -type items_finished_ahead() :: gb_trees:tree({
     To :: workflow_execution_state:index(),
     From :: workflow_execution_state:index()
-}, workflow_cached_item:id()).
+}, workflow_cached_item:id() | undefined).
 
 -export_type([state/0]).
 
@@ -203,7 +203,8 @@ handle_item_processed(
 
 -spec get_all_item_ids(state()) -> [workflow_cached_item:id()].
 get_all_item_ids(#iteration_state{pending_items = Pending, items_finished_ahead = FinishedAhead}) ->
-    maps:values(Pending) ++ gb_trees:values(FinishedAhead).
+    FinishedAheadItemIds = lists:filter(fun(Id) -> Id =/= undefined end, gb_trees:values(FinishedAhead)),
+    maps:values(Pending) ++ FinishedAheadItemIds.
 
 -spec get_item_id(state(), workflow_execution_state:index()) -> workflow_cached_item:id().
 get_item_id(#iteration_state{pending_items = Pending}, ItemIndex) ->

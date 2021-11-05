@@ -24,8 +24,8 @@
 
 %% API
 -export([init/1, init/2, execute_workflow/2, cancel_execution/1, cleanup_execution/1]).
--export([report_execution_status_update/5, get_async_call_pools/1,
-    trigger_job_scheduling/1, call_handler/5]).
+-export([report_execution_status_update/5, get_async_call_pools/1, trigger_job_scheduling/1,
+    call_handler/5, call_handle_task_execution_ended_for_all_tasks/4, call_handlers_for_cancelled_lane/5]).
 
 %% Functions exported for internal_services engine - do not call directly
 -export([init_service/2, takeover_service/3]).
@@ -36,14 +36,14 @@
 -type id() :: binary(). % Id of an engine
 -type execution_id() :: binary().
 -type execution_context() :: term().
--type lane_id() :: term().
+-type lane_id() :: term(). % lane_id is opaque term for workflow engine (ids are managed by modules that use workflow engine)
 -type task_id() :: binary().
 -type subject_id() :: workflow_cached_item:id() | workflow_cached_async_result:result_ref().
 -type execution_spec() :: #execution_spec{}.
--type processing_stage() :: ?SYNC_CALL | ?ASYNC_CALL_STARTED | ?ASYNC_CALL_FINISHED | ?ASYNC_RESULT_PROCESSED.
+-type processing_stage() :: ?SYNC_CALL | ?ASYNC_CALL_STARTED | ?ASYNC_CALL_ENDED | ?ASYNC_RESULT_PROCESSED.
 -type handler_execution_result() :: workflow_handler:handler_execution_result() | {ok, KeepaliveTimeout :: time:seconds()}.
 -type processing_result() :: handler_execution_result() | workflow_handler:async_processing_result().
--type preparation_mode() :: ?PREPARE_SYNC | ?PREPARE_IN_ADVANCE.
+-type preparation_mode() :: ?PREPARE_CURRENT | ?PREPARE_IN_ADVANCE.
 
 %% @formatter:off
 -type options() :: #{
@@ -57,8 +57,8 @@
     id := id(),
     workflow_handler := workflow_handler:handler(),
     execution_context => execution_context(),
-    first_lane_id => lane_id(), % does not have to be defined if execution is started from snapshot
-    prepared_in_advance_lane_id => lane_id(),
+    first_lane_id => lane_id(), % does not have to be defined if execution is restarted from snapshot
+    next_lane_id => lane_id(),
     force_clean_execution => boolean()
 }.
 
@@ -73,8 +73,9 @@
     parallel_boxes := [parallel_box_spec()],
     iterator := iterator:iterator(),
     execution_context := execution_context(),
-    failures_count_to_abort => non_neg_integer()
+    failure_count_to_cancel => non_neg_integer()
 }.
+-type execution_ended_info() :: #execution_ended{}.
 %% @formatter:on
 
 -export_type([id/0, execution_id/0, execution_context/0, lane_id/0, task_id/0, subject_id/0,
@@ -127,14 +128,13 @@ execute_workflow(EngineId, ExecutionSpec) ->
     Handler = maps:get(workflow_handler, ExecutionSpec),
     Context = maps:get(execution_context, ExecutionSpec, undefined),
     FirstLaneId = maps:get(first_lane_id, ExecutionSpec, undefined),
-    PreparedInAdvanceLaneId = maps:get(prepared_in_advance_lane_id, ExecutionSpec, undefined),
+    NextLaneId = maps:get(next_lane_id, ExecutionSpec, undefined),
 
     InitAns = case ExecutionSpec of
         #{force_clean_execution := true} -> 
-            workflow_execution_state:init(ExecutionId, Handler, Context, FirstLaneId, PreparedInAdvanceLaneId);
+            workflow_execution_state:init(ExecutionId, Handler, Context, FirstLaneId, NextLaneId);
         _ ->
-            workflow_execution_state:init_using_snapshot(
-                ExecutionId, Handler, Context, FirstLaneId, PreparedInAdvanceLaneId)
+            workflow_execution_state:restart_from_snapshot(ExecutionId, Handler, Context, FirstLaneId, NextLaneId)
     end,
 
     case InitAns of
@@ -159,17 +159,25 @@ cleanup_execution(ExecutionId) ->
 report_execution_status_update(ExecutionId, EngineId, ReportType, JobIdentifier, Ans) ->
     TaskSpec = workflow_execution_state:report_execution_status_update(ExecutionId, JobIdentifier, ReportType, Ans),
 
-    case {ReportType, TaskSpec} of
-        {?ASYNC_CALL_FINISHED, ?WF_ERROR_JOB_NOT_FOUND} ->
-            % Asynchronous job finish - it has no slot acquired
-            trigger_job_scheduling(EngineId, ?TAKE_UP_FREE_SLOTS);
-        {?ASYNC_CALL_FINISHED, _} ->
+    DecrementSlotsUsage = case {ReportType, Ans} of
+        {?ASYNC_CALL_ENDED, _} -> true;
+        {?ASYNC_CALL_STARTED, error} -> true;
+        _ -> false
+    end,
+
+    case DecrementSlotsUsage of
+        true when TaskSpec =/= ?WF_ERROR_JOB_NOT_FOUND ->
             % TODO VFS-7788 - support multiple pools
             case get_async_call_pools(TaskSpec) of
                 [CallPoolId] -> workflow_async_call_pool:decrement_slot_usage(CallPoolId);
                 _ -> ok
-            end,
+            end;
+        _ ->
+            ok
+    end,
 
+    case ReportType of
+        ?ASYNC_CALL_ENDED ->
             % Asynchronous job finish - it has no slot acquired
             trigger_job_scheduling(EngineId, ?TAKE_UP_FREE_SLOTS);
         _ ->
@@ -197,6 +205,35 @@ call_handler(ExecutionId, Context, Handler, Function, Args) ->
                 Stacktrace
             ),
             error
+    end.
+
+-spec call_handle_task_execution_ended_for_all_tasks(
+    execution_id(),
+    workflow_handler:handler(),
+    execution_context(),
+    [task_id()]
+) -> ok.
+call_handle_task_execution_ended_for_all_tasks(ExecutionId, Handler, Context, TaskIds) ->
+    lists:foreach(fun(TaskId) ->
+        workflow_engine:call_handler(ExecutionId, Context, Handler, handle_task_execution_ended, [TaskId])
+    end, TaskIds).
+
+-spec call_handlers_for_cancelled_lane(
+    execution_id(),
+    workflow_handler:handler(),
+    execution_context(),
+    lane_id(),
+    [task_id()]
+) -> ok.
+call_handlers_for_cancelled_lane(ExecutionId, Handler, Context, LaneId, TaskIds) ->
+    call_handle_task_execution_ended_for_all_tasks(ExecutionId, Handler, Context, TaskIds),
+
+    case call_handler(ExecutionId, Context, Handler, handle_lane_execution_ended, [LaneId]) of
+        ?END_EXECUTION ->
+            ok;
+        Other ->
+            ?error("Wrong return of handle_lane_execution_ended for cancelled lane ~p of execution ~p: ~p",
+                [LaneId, ExecutionId, Other])
     end.
 
 %%%===================================================================
@@ -290,18 +327,8 @@ schedule_next_job(EngineId, DeferredExecutions) ->
                         ?PREPARE_LANE_EXECUTION(Handler, ExecutionContext, LaneId, PreparationMode) ->
                             schedule_lane_prepare_on_pool(
                                 EngineId, ExecutionId, Handler, ExecutionContext, LaneId, PreparationMode);
-                        ?END_EXECUTION(Handler, Context, KeepSnapshot) ->
-                            case workflow_engine_state:remove_execution_id(EngineId, ExecutionId) of
-                                ok ->
-                                    call_handler(ExecutionId, Context, Handler, handle_workflow_execution_ended, []),
-                                    case KeepSnapshot of
-                                        true -> ok;
-                                        false -> workflow_iterator_snapshot:cleanup(ExecutionId)
-                                    end,
-                                    workflow_execution_state:cleanup(ExecutionId);
-                                ?WF_ERROR_ALREADY_REMOVED ->
-                                    ok
-                            end,
+                        #execution_ended{} = ExecutionEndedRecord ->
+                            handle_execution_ended(EngineId, ExecutionId, ExecutionEndedRecord),
                             schedule_next_job(EngineId, DeferredExecutions);
                         ?DEFER_EXECUTION ->
                             % no jobs can be currently scheduled for this execution but new jobs will appear in future
@@ -314,6 +341,33 @@ schedule_next_job(EngineId, DeferredExecutions) ->
             end;
         ?ERROR_NOT_FOUND ->
             ?WF_ERROR_NOTHING_TO_START
+    end.
+
+-spec handle_execution_ended(id(), execution_id(), execution_ended_info()) -> ok.
+handle_execution_ended(EngineId, ExecutionId, #execution_ended{
+    handler = Handler,
+    context = Context,
+    reason = Reason,
+    callbacks_data = CallbacksData
+}) ->
+    case workflow_engine_state:remove_execution_id(EngineId, ExecutionId) of
+        ok ->
+            case CallbacksData of
+                {CancelledLaneId, CancelledLaneContext, TaskIds} ->
+                    call_handlers_for_cancelled_lane(
+                        ExecutionId, Handler, CancelledLaneContext, CancelledLaneId, TaskIds);
+                undefined ->
+                    ok
+            end,
+
+            call_handler(ExecutionId, Context, Handler, handle_workflow_execution_ended, []),
+            case Reason of
+                ?EXECUTION_ENDED -> workflow_iterator_snapshot:cleanup(ExecutionId);
+                ?EXECUTION_CANCELLED -> ok
+            end,
+            workflow_execution_state:cleanup(ExecutionId);
+        ?WF_ERROR_ALREADY_REMOVED ->
+            ok
     end.
 
 -spec schedule_on_pool(
@@ -379,7 +433,6 @@ set_default_keepalive_timeout(Id, Timeout) ->
                 "Reason: ~p", [Id, Error]
             )
     end, Res).
-
 
 %%%===================================================================
 %%% Function executed on pool
@@ -485,8 +538,7 @@ process_result(EngineId, ExecutionId, #execution_spec{
                 ),
                 error
         end,
-        workflow_engine:report_execution_status_update(
-            ExecutionId, EngineId, ?ASYNC_RESULT_PROCESSED, JobIdentifier, ProcessedResult)
+        report_execution_status_update(ExecutionId, EngineId, ?ASYNC_RESULT_PROCESSED, JobIdentifier, ProcessedResult)
     catch
         Error2:Reason2:Stacktrace2  ->
             ?error_stacktrace(

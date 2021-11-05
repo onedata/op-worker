@@ -1188,8 +1188,8 @@
     iterator :: iterator:iterator(),
     lane_index = workflow_execution_state:index(),
     lane_id :: workflow_engine:lane_id(),
-    item_index = workflow_execution_state:index(),
-    prepared_in_advance_lane_id :: workflow_engine:lane_id() | undefined
+    next_lane_id :: workflow_engine:lane_id() | undefined,
+    item_index = workflow_execution_state:index()
 }).
 
 -record(workflow_engine_state, {
@@ -1205,17 +1205,23 @@
     execution_status = ?NOT_PREPARED :: workflow_execution_state:execution_status(),
     current_lane :: workflow_execution_state:current_lane(),
 
-    lane_prepared_in_advance_status = ?NOT_PREPARED :: workflow_execution_state:lane_prepared_in_advance_status(),
-    lane_prepared_in_advance :: workflow_execution_state:lane_prepared_in_advance(),
+    % engine can prepare next lane in advance but it is not being executed until current lane is finished
+    % and workflow_handler:handle_lane_execution_ended/3 (called for current lane) confirms that next lane
+    % execution should start
+    next_lane_preparation_status = ?NOT_PREPARED :: workflow_execution_state:next_lane_preparation_status(),
+    next_lane :: workflow_execution_state:next_lane(),
 
     lowest_failed_job_identifier :: workflow_jobs:job_identifier() | undefined,
-    failed_jobs_count = 0 :: non_neg_integer(),
+    failed_job_count = 0 :: non_neg_integer(),
 
     iteration_state :: workflow_iteration_state:state() | undefined,
     prefetched_iteration_step :: workflow_execution_state:iteration_status(),
     jobs :: workflow_jobs:jobs() | undefined,
 
-    waiting_notifications = [] :: [workflow_jobs:job_identifier()],
+    % callbacks executed after update of record (have to be executed outside datastore tp process)
+    % TODO VFS-7919 - consider keeping callbacks list from beginning
+    % to guarantee that each callback is called exactly once
+    pending_callbacks = [] :: [workflow_execution_state:callback_selector()],
 
     % Field used to return additional information about document update procedure
     % (datastore:update returns {ok, #document{}} or {error, term()}

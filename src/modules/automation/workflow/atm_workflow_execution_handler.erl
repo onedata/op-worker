@@ -98,7 +98,7 @@ start(UserCtx, AtmWorkflowExecutionEnv, #document{
         workflow_handler => ?MODULE,
         execution_context => AtmWorkflowExecutionEnv,
         first_lane_id => 1,
-        prepared_in_advance_lane_id => case AtmLanesCount > 1 of
+        next_lane_id => case AtmLanesCount > 1 of
             true -> 2;
             false -> undefined
         end

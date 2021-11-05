@@ -28,6 +28,8 @@
     model => ?MODULE
 }).
 
+-type record() :: #workflow_iterator_snapshot{}.
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -40,18 +42,20 @@
     iterator:iterator(),
     workflow_engine:lane_id() | undefined
 ) -> ok.
-save(ExecutionId, LaneIndex, LaneId, ItemIndex, Iterator, PreparedInAdvanceLaneId) ->
+save(ExecutionId, LaneIndex, LaneId, ItemIndex, Iterator, NextLaneId) ->
     {PrevLaneIndex, PrevIterator} = case ?MODULE:get(ExecutionId) of
-        {ok, ReturnedLineIndex, _, ReturnedIterator, _} -> {ReturnedLineIndex, ReturnedIterator};
-        ?ERROR_NOT_FOUND -> {undefined, undefined}
+        {ok, #workflow_iterator_snapshot{lane_index = ReturnedLineIndex, iterator = ReturnedIterator}} ->
+            {ReturnedLineIndex, ReturnedIterator};
+        ?ERROR_NOT_FOUND ->
+            {undefined, undefined}
     end,
     Record = #workflow_iterator_snapshot{lane_index = LaneIndex, lane_id = LaneId,
-        item_index = ItemIndex, iterator = Iterator, prepared_in_advance_lane_id = PreparedInAdvanceLaneId},
+        item_index = ItemIndex, iterator = Iterator, next_lane_id = NextLaneId},
     Diff = fun
         (ExistingRecord = #workflow_iterator_snapshot{lane_index = SavedLaneIndex, item_index = SavedItemIndex}) when
             SavedLaneIndex < LaneIndex orelse (SavedLaneIndex == LaneIndex andalso SavedItemIndex < ItemIndex) ->
             {ok, ExistingRecord#workflow_iterator_snapshot{lane_index = LaneIndex, lane_id = LaneId,
-                item_index = ItemIndex, iterator = Iterator, prepared_in_advance_lane_id = PreparedInAdvanceLaneId}};
+                item_index = ItemIndex, iterator = Iterator, next_lane_id = NextLaneId}};
         (_) ->
             % Multiple processes have been saving iterators in parallel
             {error, already_saved}
@@ -85,28 +89,17 @@ save(ExecutionId, LaneIndex, LaneId, ItemIndex, Iterator, PreparedInAdvanceLaneI
             ok
     end.
 
--spec get(workflow_engine:execution_id()) ->
-    {ok,
-        workflow_execution_state:index(),
-        workflow_engine:lane_id(),
-        iterator:iterator(),
-        workflow_engine:lane_id() | undefined
-    } | ?ERROR_NOT_FOUND.
+-spec get(workflow_engine:execution_id()) -> {ok, record()} | ?ERROR_NOT_FOUND.
 get(ExecutionId) ->
     case datastore_model:get(?CTX, ExecutionId) of
-        {ok, #document{
-            value = #workflow_iterator_snapshot{lane_index = LaneIndex, lane_id = LaneId,
-                iterator = Iterator, prepared_in_advance_lane_id = PreparedInAdvanceLaneId}
-        }} ->
-            {ok, LaneIndex, LaneId, Iterator, PreparedInAdvanceLaneId};
-        ?ERROR_NOT_FOUND ->
-            ?ERROR_NOT_FOUND
+        {ok, #document{value = Record}} -> {ok, Record};
+        ?ERROR_NOT_FOUND -> ?ERROR_NOT_FOUND
     end.
 
 -spec cleanup(workflow_engine:execution_id()) -> ok.
 cleanup(ExecutionId) ->
     case ?MODULE:get(ExecutionId) of
-        {ok, _LaneIndex, _LaneId, Iterator, _PreparedInAdvanceLaneId} ->
+        {ok, #workflow_iterator_snapshot{iterator = Iterator}} ->
             mark_exhausted(Iterator, ExecutionId),
             ok = datastore_model:delete(?CTX, ExecutionId);
         ?ERROR_NOT_FOUND ->
@@ -155,8 +148,8 @@ get_record_struct(2) ->
         {iterator, {custom, json, {iterator, encode, decode}}},
         {lane_index, integer},
         {lane_id, term},
-        {item_index, integer},
-        {prepared_in_advance_lane_id, term}
+        {next_lane_id, term},
+        {item_index, integer}
     ]}.
 
 -spec upgrade_record(datastore_model:record_version(), datastore_model:record()) ->
@@ -168,6 +161,6 @@ upgrade_record(1, {?MODULE, Iterator, LaneIndex, ItemIndex}
         Iterator,
         LaneIndex,
         undefined, % new field: lane_id
-        ItemIndex,
-        undefined % new field: prepared_in_advance_lane_id
+        undefined, % new field: next_lane_id
+        ItemIndex
     }}.

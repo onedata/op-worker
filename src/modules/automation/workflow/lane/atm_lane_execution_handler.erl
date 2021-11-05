@@ -82,7 +82,7 @@ handle_ended(AtmLaneIndex, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
 
     case atm_lane_execution_status:status_to_phase(NextLaneRun#atm_lane_execution_run.status) of
         ?ENDED_PHASE ->
-            ?FINISH_EXECUTION;
+            ?END_EXECUTION;
         _ ->
             AtmLaneToPrepareInAdvanceIndex = case NextAtmLaneIndex < AtmLanesCount of
                 true -> NextAtmLaneIndex + 1;

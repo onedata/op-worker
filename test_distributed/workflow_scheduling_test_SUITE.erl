@@ -12,10 +12,7 @@
 -module(workflow_scheduling_test_SUITE).
 -author("Michal Wrzeszcz").
 
--include("workflow_engine.hrl").
--include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
--include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
 
 %% export for ct
@@ -23,456 +20,390 @@
 
 %% tests
 -export([
-    single_sync_workflow_execution_test/1
+    empty_workflow_execution_test/1,
+    empty_async_workflow_with_prepare_in_advance_test/1,
+
+    single_sync_workflow_execution_test/1,
+    single_async_workflow_execution_test/1,
+    prepare_in_advance_test/1,
+    heartbeat_test/1,
+    long_prepare_in_advance_test/1,
+
+    fail_the_only_task_in_lane_test/1,
+    fail_the_only_task_in_box_test/1,
+    fail_one_of_many_async_tasks_in_box_test/1,
+    async_task_timeout_test/1,
+    fail_result_processing_test/1,
+    fail_task_before_prepare_in_advance_finish_test/1,
+    fail_task_before_prepare_in_advance_fail_test/1,
+
+    lane_preparation_failure_test/1,
+    lane_preparation_in_advance_failure_test/1,
+    fail_lane_preparation_before_prepare_in_advance_finish_test/1,
+    long_lasting_lane_preparation_of_two_lanes_test/1,
+    lane_execution_ended_handler_failure_test/1,
+    lane_execution_ended_handler_failure_before_prepare_in_advance_finish_test/1,
+    
+    execute_other_lane_than_the_one_prepared_in_advance_test/1,
+    reuse_already_prepared_lane_test/1,
+    retry_lane_test/1,
+    retry_and_execute_other_lane_than_the_one_prepared_in_advance_test/1,
+    execute_other_lane_than_the_one_prepared_in_advance_with_long_lasting_lane_preparation_test/1,
+    prepare_lane_too_early_with_long_callback_execution_test/1,
+    retry_lane_with_long_lasting_lane_preparation_test/1,
+    retry_and_execute_other_lane_than_the_one_prepared_in_advance_with_long_lasting_lane_preparation_test/1,
+    execute_other_lane_than_the_one_prepared_in_advance_with_preparation_error_test/1,
+    prepare_lane_too_early_with_preparation_error_test/1,
+    execute_other_lane_than_the_one_prepared_in_advance_with_long_lasting_failed_lane_preparation_test/1,
+    prepare_lane_too_early_with_long_failed_callback_execution_test/1
 ]).
 
 all() ->
     ?ALL([
-        single_sync_workflow_execution_test
+        empty_workflow_execution_test,
+        empty_async_workflow_with_prepare_in_advance_test,
+
+        single_sync_workflow_execution_test,
+        single_async_workflow_execution_test,
+        prepare_in_advance_test,
+        heartbeat_test,
+        long_prepare_in_advance_test,
+
+        fail_the_only_task_in_lane_test,
+        fail_the_only_task_in_box_test,
+        fail_one_of_many_async_tasks_in_box_test,
+        async_task_timeout_test,
+        fail_result_processing_test,
+        fail_task_before_prepare_in_advance_finish_test,
+        fail_task_before_prepare_in_advance_fail_test,
+
+        lane_preparation_failure_test,
+        lane_preparation_in_advance_failure_test,
+        fail_lane_preparation_before_prepare_in_advance_finish_test,
+        long_lasting_lane_preparation_of_two_lanes_test,
+        lane_execution_ended_handler_failure_test,
+        lane_execution_ended_handler_failure_before_prepare_in_advance_finish_test,
+
+        % TODO VFS-7784 - add test when lane is set to be prepared in advance twice
+        % (callback should be called only once - test successful and failed execution)
+        execute_other_lane_than_the_one_prepared_in_advance_test,
+        reuse_already_prepared_lane_test,
+        retry_lane_test,
+        retry_and_execute_other_lane_than_the_one_prepared_in_advance_test,
+        execute_other_lane_than_the_one_prepared_in_advance_with_long_lasting_lane_preparation_test,
+        prepare_lane_too_early_with_long_callback_execution_test,
+        retry_lane_with_long_lasting_lane_preparation_test,
+        retry_and_execute_other_lane_than_the_one_prepared_in_advance_with_long_lasting_lane_preparation_test,
+        execute_other_lane_than_the_one_prepared_in_advance_with_preparation_error_test,
+        prepare_lane_too_early_with_preparation_error_test,
+        execute_other_lane_than_the_one_prepared_in_advance_with_long_lasting_failed_lane_preparation_test,
+        prepare_lane_too_early_with_long_failed_callback_execution_test
     ]).
 
--define(ENGINE_ID, <<"test_engine">>).
--define(ASYNC_CALL_POOL_ID, <<"test_call_pool">>).
 
--record(handler_call, {
-    function :: atom(),
-    execution_id :: workflow_engine:execution_id(),
-    context :: workflow_engine:execution_context(),
-    lane_id :: workflow_engine:lane_id(),
-    task_id :: workflow_engine:task_id(),
-    item :: iterator:iterator()
+-record(test_config, {
+    task_type = sync :: sync | async,
+    prepare_in_advance = false :: boolean(),
+    test_manager_failure_key = undefined :: workflow_scheduling_test_common:test_manager_task_failure_key(),
+    test_execution_manager_options = [] :: {fail_lane_preparation, workflow_engine:lane_id()} |
+        {{delay_lane_preparation, workflow_engine:lane_id()}, boolean()} |
+        {delay_call, {workflow_engine:task_id(), iterator:item()}} | {sleep_on_preparation, non_neg_integer()},
+    generator_options = #{} :: workflow_test_handler:test_execution_context(),
+    verify_statistics_options = #{} :: #{is_empty => boolean()},
+    verify_history_options = #{} :: #{
+        delay_and_fail_lane_preparation_in_advance => workflow_engine:lane_id(),
+        workflow_scheduling_test_common:test_manager_task_failure_key() =>
+            {workflow_engine:lane_id(), workflow_engine:task_id(), iterator:item()},
+        workflow_scheduling_test_common:lane_history_check_key() => workflow_engine:lane_id()
+    }
 }).
+
 
 %%%===================================================================
 %%% Test functions
 %%%===================================================================
 
-single_sync_workflow_execution_test(Config) ->
-    single_workflow_execution_test_base(Config, sync).
+empty_workflow_execution_test(Config) ->
+    empty_workflow_execution_test_base(Config, #test_config{}).
 
-single_workflow_execution_test_base(Config, WorkflowType) ->
-    InitialKeys = get_all_keys(Config),
+empty_async_workflow_with_prepare_in_advance_test(Config) ->
+    empty_workflow_execution_test_base(Config, #test_config{
+        task_type = async,
+        prepare_in_advance = true,
+        test_execution_manager_options = [{sleep_on_preparation, 500}] % sleep to allow start preparation in advance
+    }).
+
+%%%===================================================================
+
+single_sync_workflow_execution_test(Config) ->
+    single_execution_test_base(Config, #test_config{}).
+
+single_async_workflow_execution_test(Config) ->
+    single_execution_test_base(Config, #test_config{task_type = async}).
+
+prepare_in_advance_test(Config) ->
+    single_execution_test_base(Config, #test_config{
+        task_type = async,
+        prepare_in_advance = true
+    }).
+
+heartbeat_test(Config) ->
+    single_execution_test_base(Config, #test_config{
+        task_type = async,
+        test_execution_manager_options = [{delay_call, {<<"3_2_2">>, <<"100">>}}]
+    }).
+
+long_prepare_in_advance_test(Config) ->
+    single_execution_test_base(Config, #test_config{
+        prepare_in_advance = true,
+        test_execution_manager_options = [{{delay_lane_preparation, <<"3">>}, true}]
+    }).
+
+%%%===================================================================
+
+fail_the_only_task_in_lane_test(Config) ->
+    failure_test_base(Config, #test_config{
+        prepare_in_advance = true,
+        test_manager_failure_key = fail_job
+    }, <<"1">>, <<"1_1_1">>).
+
+fail_the_only_task_in_box_test(Config) ->
+    failure_test_base(Config, #test_config{test_manager_failure_key = fail_job}, <<"3">>, <<"3_1_1">>).
+
+fail_one_of_many_async_tasks_in_box_test(Config) ->
+    failure_test_base(Config, #test_config{
+        task_type = async,
+        test_manager_failure_key = fail_job
+    }, <<"3">>, <<"3_3_2">>).
+
+async_task_timeout_test(Config) ->
+    failure_test_base(Config, #test_config{
+        task_type = async,
+        test_manager_failure_key = timeout
+    }, <<"3">>, <<"3_3_1">>).
+
+fail_result_processing_test(Config) ->
+    failure_test_base(Config, #test_config{
+        task_type = async,
+        test_manager_failure_key = fail_result_processing
+    }, <<"3">>, <<"3_2_1">>).
+
+fail_task_before_prepare_in_advance_finish_test(Config) ->
+    failure_test_base(Config, #test_config{
+        prepare_in_advance = true,
+        test_manager_failure_key = fail_job,
+        test_execution_manager_options = [{{delay_lane_preparation, <<"4">>}, true}]
+    }, <<"3">>, <<"3_1_1">>).
+
+fail_task_before_prepare_in_advance_fail_test(Config) ->
+    failure_test_base(Config, #test_config{
+        prepare_in_advance = true,
+        test_manager_failure_key = fail_job,
+        test_execution_manager_options = [{{delay_lane_preparation, <<"3">>}, true}, {fail_lane_preparation, <<"3">>}]
+    }, <<"2">>, <<"2_1_1">>).
+
+%%%===================================================================
+
+lane_preparation_failure_test(Config) ->
+    lane_failure_test_base(Config,
+        #test_config{test_manager_failure_key = fail_lane_preparation}, expect_empty_items_list).
+
+lane_preparation_in_advance_failure_test(Config) ->
+    lane_failure_test_base(Config, #test_config{
+        prepare_in_advance = true,
+        test_manager_failure_key = fail_lane_preparation
+    }, fail_lane_preparation_in_advance).
+
+fail_lane_preparation_before_prepare_in_advance_finish_test(Config) ->
+    lane_failure_test_base(Config, #test_config{
+        prepare_in_advance = true,
+        test_manager_failure_key = fail_lane_preparation,
+        test_execution_manager_options = [{{delay_lane_preparation, <<"3">>}, true}]
+    }, delay_and_fail_lane_preparation_in_advance).
+
+long_lasting_lane_preparation_of_two_lanes_test(Config) ->
+    % TODO VFS-7784 - change prepare of lane 3 to be sync (not in advanced) - otherwise prepare of lane 4 does not start
+    lane_failure_test_base(Config, #test_config{
+        prepare_in_advance = true,
+        test_manager_failure_key = fail_lane_preparation,
+        test_execution_manager_options = [
+            {{delay_lane_preparation, <<"3">>}, true},
+            {{delay_lane_preparation, <<"4">>}, true}
+        ]
+    }, delay_and_fail_lane_preparation_in_advance).
+
+lane_execution_ended_handler_failure_test(Config) ->
+    % TODO VFS-7784 - do not skip items check when execution_ended_handler fails
+    lane_failure_test_base(Config, #test_config{test_manager_failure_key = fail_execution_ended_handler}, stop_on_lane).
+
+lane_execution_ended_handler_failure_before_prepare_in_advance_finish_test(Config) ->
+    lane_failure_test_base(Config, #test_config{
+        prepare_in_advance = true,
+        test_manager_failure_key = fail_execution_ended_handler,
+        test_execution_manager_options = [{{delay_lane_preparation, <<"4">>}, true}]
+    }, stop_on_lane).
+
+%%%===================================================================
+
+execute_other_lane_than_the_one_prepared_in_advance_test(Config) ->
+    execute_other_lane_than_the_one_prepared_in_advance_test_base(Config, #test_config{
+        generator_options = #{prepare_ignored_lane_in_advance => true}
+    }).
+
+reuse_already_prepared_lane_test(Config) ->
+    % Test verifies if lane that was prepared in advance and than scheduled for
+    % preparation in advance second time executes prepare_lane callback only once
+    execute_other_lane_than_the_one_prepared_in_advance_test_base(Config, #test_config{
+        generator_options = #{prepare_in_advance_out_of_order => {<<"2">>, <<"4">>}}
+    }).
+
+retry_lane_test(Config) ->
+    execute_other_lane_than_the_one_prepared_in_advance_test_base(Config, #test_config{
+        generator_options = #{lane_to_retry => <<"2">>}
+    }).
+
+retry_and_execute_other_lane_than_the_one_prepared_in_advance_test(Config) ->
+    execute_other_lane_than_the_one_prepared_in_advance_test_base(Config, #test_config{
+        generator_options = #{lane_to_retry => <<"2">>, prepare_ignored_lane_in_advance => true}
+    }).
+
+execute_other_lane_than_the_one_prepared_in_advance_with_long_lasting_lane_preparation_test(Config) ->
+    IgnoredLaneId = workflow_test_handler:get_ignored_lane_id(),
+    execute_other_lane_than_the_one_prepared_in_advance_test_base(Config, #test_config{
+        test_execution_manager_options = [{{delay_lane_preparation, IgnoredLaneId}, true}],
+        generator_options = #{prepare_ignored_lane_in_advance => true}
+    }).
+
+prepare_lane_too_early_with_long_callback_execution_test(Config) ->
+    execute_other_lane_than_the_one_prepared_in_advance_test_base(Config, #test_config{
+        test_execution_manager_options = [{{delay_lane_preparation, <<"4">>}, true}],
+        generator_options = #{prepare_in_advance_out_of_order => {<<"2">>, <<"4">>}}
+    }).
+
+retry_lane_with_long_lasting_lane_preparation_test(Config) ->
+    execute_other_lane_than_the_one_prepared_in_advance_test_base(Config, #test_config{
+        test_execution_manager_options = [{{delay_lane_preparation, <<"3">>}, true}],
+        generator_options = #{lane_to_retry => <<"2">>}
+    }).
+
+retry_and_execute_other_lane_than_the_one_prepared_in_advance_with_long_lasting_lane_preparation_test(Config) ->
+    IgnoredLaneId = workflow_test_handler:get_ignored_lane_id(),
+    execute_other_lane_than_the_one_prepared_in_advance_test_base(Config, #test_config{
+        test_execution_manager_options = [
+            {{delay_lane_preparation, <<"3">>}, true},
+            {{delay_lane_preparation, IgnoredLaneId}, true}
+        ],
+        generator_options = #{lane_to_retry => <<"2">>, prepare_ignored_lane_in_advance => true}
+    }).
+
+execute_other_lane_than_the_one_prepared_in_advance_with_preparation_error_test(Config) ->
+    IgnoredLaneId = workflow_test_handler:get_ignored_lane_id(),
+    execute_other_lane_than_the_one_prepared_in_advance_test_base(Config, #test_config{
+        test_execution_manager_options = [{fail_lane_preparation, IgnoredLaneId}],
+        generator_options = #{prepare_ignored_lane_in_advance => true}
+    }).
+
+prepare_lane_too_early_with_preparation_error_test(Config) ->
+    execute_other_lane_than_the_one_prepared_in_advance_test_base(Config, #test_config{
+        test_execution_manager_options = [{fail_lane_preparation, <<"4">>}],
+        generator_options = #{prepare_in_advance_out_of_order => {<<"2">>, <<"4">>}},
+        verify_history_options = #{delay_and_fail_lane_preparation_in_advance => <<"4">>}
+    }).
+
+execute_other_lane_than_the_one_prepared_in_advance_with_long_lasting_failed_lane_preparation_test(Config) ->
+    IgnoredLaneId = workflow_test_handler:get_ignored_lane_id(),
+    execute_other_lane_than_the_one_prepared_in_advance_test_base(Config, #test_config{
+        test_execution_manager_options = [
+            {fail_lane_preparation, IgnoredLaneId},
+            {{delay_lane_preparation, IgnoredLaneId}, true}
+        ],
+        generator_options = #{prepare_ignored_lane_in_advance => true}
+    }).
+
+prepare_lane_too_early_with_long_failed_callback_execution_test(Config) ->
+    execute_other_lane_than_the_one_prepared_in_advance_test_base(Config, #test_config{
+        test_execution_manager_options = [
+            {fail_lane_preparation, <<"4">>},
+            {{delay_lane_preparation, <<"4">>}, true}
+        ],
+        generator_options = #{prepare_in_advance_out_of_order => {<<"2">>, <<"4">>}},
+        verify_history_options = #{delay_and_fail_lane_preparation_in_advance => <<"4">>}
+    }).
+
+
+%%%===================================================================
+%%% Test skeletons
+%%%===================================================================
+
+empty_workflow_execution_test_base(Config, BasicConfig) ->
+    single_execution_test_base(Config, BasicConfig#test_config{
+        generator_options = #{items_count => 0},
+        verify_statistics_options = #{is_empty => true}
+    }).
+
+failure_test_base(Config, #test_config{
+    test_manager_failure_key = ManagerKey,
+    test_execution_manager_options = ManagerOptions
+} = BasicConfig, LaneId, TaskId) ->
+    Item = <<"100">>,
+    single_execution_test_base(Config, BasicConfig#test_config{
+        test_execution_manager_options = [{ManagerKey, {TaskId, Item}} | ManagerOptions],
+        generator_options = #{finish_on_lane => LaneId},
+        verify_history_options = #{ManagerKey => {LaneId, TaskId, Item}}
+    }).
+
+lane_failure_test_base(Config, #test_config{
+    test_manager_failure_key = ManagerKey,
+    test_execution_manager_options = ManagerOptions
+} = BasicConfig, VerifyOptionKey) ->
+    LaneId = <<"3">>,
+    single_execution_test_base(Config, BasicConfig#test_config{
+        test_execution_manager_options = [{ManagerKey, LaneId} | ManagerOptions],
+        verify_history_options = #{VerifyOptionKey => LaneId}
+    }).
+
+execute_other_lane_than_the_one_prepared_in_advance_test_base(Config, BasicConfig) ->
+    single_execution_test_base(Config, BasicConfig#test_config{prepare_in_advance = true}).
+
+single_execution_test_base(Config, #test_config{
+    task_type = TaskType,
+    prepare_in_advance = PrepareInAdvance,
+    test_execution_manager_options = ManagerOptions,
+    generator_options = GeneratorOptions,
+    verify_statistics_options = VerifyStatsOptions,
+    verify_history_options = VerifyHistoryOptions
+}) ->
+    workflow_scheduling_test_common:set_test_execution_manager_options(Config, ManagerOptions),
+    InitialKeys = workflow_scheduling_test_common:get_all_workflow_related_datastore_keys(Config),
 
     [Worker | _] = ?config(op_worker_nodes, Config),
-    Workflow = #{
-        id => generator:gen_name(),
-        workflow_handler => workflow_test_handler,
-        execution_context => #{type => WorkflowType, async_call_pools => [?ASYNC_CALL_POOL_ID]},
-        first_lane_id => <<"1">>
-    },
-    ?assertEqual(ok, rpc:call(Worker, workflow_engine, execute_workflow, [?ENGINE_ID, Workflow])),
+    WorkflowExecutionSpec = workflow_scheduling_test_common:gen_workflow_execution_spec(
+        TaskType, PrepareInAdvance, GeneratorOptions),
+    ?assertEqual(ok, rpc:call(Worker, workflow_engine, execute_workflow, 
+        [workflow_scheduling_test_common:get_engine_id(), WorkflowExecutionSpec])),
 
-    Expected = get_expected_task_execution_order(Workflow),
-    #{execution_history := ExecutionHistory%, lane_finish_log := LaneFinishLog
-    } = ExtendedHistoryStats =
-        get_task_execution_history(Config),
-%%    verify_execution_history_stats(ExtendedHistoryStats, WorkflowType),
-    ?assertNotEqual(timeout, ExecutionHistory),
-    verify_execution_history(Expected, ExecutionHistory),
+    #{execution_history := ExecutionHistory} = ExtendedHistoryStats = 
+        workflow_scheduling_test_common:get_task_execution_history(Config),
+    workflow_scheduling_test_common:verify_execution_history_stats(
+        ExtendedHistoryStats, TaskType, VerifyStatsOptions),
+    workflow_scheduling_test_common:verify_execution_history(
+        WorkflowExecutionSpec, ExecutionHistory, VerifyHistoryOptions),
 
-    verify_memory(Config, InitialKeys),
-    ok.
+    workflow_scheduling_test_common:verify_memory(Config, InitialKeys).
+
 
 %%%===================================================================
 %%% Init/teardown functions
 %%%===================================================================
 
 init_per_suite(Config) ->
-    Posthook = fun(NewConfig) ->
-        [Worker | _] = Workers = ?config(op_worker_nodes, NewConfig),
-        test_utils:mock_new(Workers, [oneprovider]),
-        test_utils:mock_expect(Workers, oneprovider, get_domain, fun() ->
-            atom_to_binary(?GET_DOMAIN(node()), utf8)
-        end),
-        ok = rpc:call(Worker, workflow_engine, init, [?ENGINE_ID,
-            #{
-                workflow_async_call_pools_to_use => [{?ASYNC_CALL_POOL_ID, 60}],
-                init_workflow_timeout_server => {true, 2}
-            }
-        ]),
-        NewConfig
-    end,
-    [
-        % TODO VFS-7784 - uncomment when workflow_test_handler is moved to test directory
-        % {?LOAD_MODULES, [workflow_test_handler]},
-        {?ENV_UP_POSTHOOK, Posthook} | Config].
+    workflow_scheduling_test_common:init_per_suite(Config).
 
 end_per_suite(Config) ->
-    Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_unload(Workers, [oneprovider]).
+    workflow_scheduling_test_common:end_per_suite(Config).
 
-init_per_testcase(_, Config) ->
-    Workers = ?config(op_worker_nodes, Config),
-    Gatherer = spawn(fun start_task_execution_gatherer/0),
-    % TODO VFS-7784 - mock iterator and check if forget_before and mark_exhausted after iterators are not needed anymore
-    % TODO VFS-7784 - test iteration failure
-    mock_handlers(Workers, Gatherer),
-    [{task_execution_gatherer, Gatherer} | Config].
+init_per_testcase(Case, Config) ->
+    workflow_scheduling_test_common:init_per_testcase(Case, Config).
 
-end_per_testcase(_, Config) ->
-    ?config(task_execution_gatherer, Config) ! stop,
-    Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_unload(Workers, [workflow_test_handler, workflow_engine_callback_handler]).
-
-%%%===================================================================
-%%% Task execution gatherer helper functions
-%%%===================================================================
-
-start_task_execution_gatherer() ->
-    task_execution_gatherer_loop(#{execution_history => []}, undefined, #{}).
-
-task_execution_gatherer_loop(#{execution_history := History} = Acc, ProcWaitingForAns, Options) ->
-    receive
-        {handler_call, Sender, HandlerCallReport} ->
-            Acc2 = update_slots_usage_statistics(Acc, async_slots_used_stats, rpc:call(node(Sender),
-                workflow_async_call_pool, get_slot_usage, [?ASYNC_CALL_POOL_ID])),
-            Acc3 = update_slots_usage_statistics(Acc2, pool_slots_used_stats, rpc:call(node(Sender),
-                workflow_engine_state, get_slots_used, [?ENGINE_ID])),
-            Acc4 = Acc3#{execution_history => [HandlerCallReport | History]},
-            case ProcWaitingForAns of
-                undefined -> ok;
-                _ -> ProcWaitingForAns ! gathering_task_execution_history
-            end,
-            Sender ! history_saved,
-            task_execution_gatherer_loop(Acc4, ProcWaitingForAns, Options);
-        {get_task_execution_history, Sender} ->
-            task_execution_gatherer_loop(Acc, Sender, Options);
-        {set_option, Key, Value} ->
-            task_execution_gatherer_loop(Acc, ProcWaitingForAns, Options#{Key => Value});
-        {unset_option, Key} ->
-            task_execution_gatherer_loop(Acc, ProcWaitingForAns, maps:remove(Key, Options));
-        stop ->
-            ok
-    after
-        15000 ->
-            case ProcWaitingForAns of
-                undefined ->
-                    task_execution_gatherer_loop(Acc, ProcWaitingForAns, Options);
-                _ ->
-                    ProcWaitingForAns ! {task_execution_history, Acc#{execution_history => lists:reverse(History)}},
-                    task_execution_gatherer_loop(#{execution_history => []}, undefined, #{})
-            end
-    end.
-
-update_slots_usage_statistics(Acc, Key, NewValue) ->
-    case maps:get(Key, Acc, undefined) of
-        undefined -> Acc#{Key => {NewValue, NewValue}};
-        {Min, Max} -> Acc#{Key => {min(Min, NewValue), max(Max, NewValue)}}
-    end.
-
-get_task_execution_history(Config) ->
-    ?config(task_execution_gatherer, Config) ! {get_task_execution_history, self()},
-    receive
-        gathering_task_execution_history ->
-            get_task_execution_history(Config);
-        {task_execution_history, HistoryAcc} ->
-            [Worker | _] = ?config(op_worker_nodes, Config),
-            AsyncSlotsUsed = rpc:call(Worker, workflow_async_call_pool, get_slot_usage, [?ASYNC_CALL_POOL_ID]),
-            EngineSlotsUsed = rpc:call(Worker, workflow_engine_state, get_slots_used, [?ENGINE_ID]),
-            HistoryAcc#{final_async_slots_used => AsyncSlotsUsed, final_pool_slots_used => EngineSlotsUsed}
-    after
-        30000 -> timeout
-    end.
-
-set_task_execution_gatherer_option(Config, Key, Value) ->
-    ?config(task_execution_gatherer, Config) ! {set_option, Key, Value}.
-
-unset_task_execution_gatherer_option(Config, Key) ->
-    ?config(task_execution_gatherer, Config) ! {unset_option, Key}.
-
-
-mock_handlers(Workers, Gatherer) ->
-    test_utils:mock_new(Workers, [workflow_test_handler, workflow_engine_callback_handler]),
-
-    MockTemplate = fun(HandlerCallReport, PassthroughArgs) ->
-        Gatherer ! {handler_call, self(), HandlerCallReport},
-        receive
-            history_saved -> meck:passthrough(PassthroughArgs);
-            fail_call-> error
-        end
-    end,
-
-    test_utils:mock_expect(Workers, workflow_test_handler, prepare_lane, fun(ExecutionId, Context, LaneId) ->
-        MockTemplate(
-            #handler_call{
-                function = prepare_lane,
-                execution_id = ExecutionId,
-                context =  Context,
-                lane_id = LaneId
-            },
-            [ExecutionId, Context, LaneId]
-        )
-    end),
-
-    test_utils:mock_expect(Workers, workflow_test_handler, restart_lane, fun(ExecutionId, Context, LaneId) ->
-        MockTemplate(
-            #handler_call{
-                function = prepare_lane,
-                execution_id = ExecutionId,
-                context =  Context,
-                lane_id = LaneId
-            },
-            [ExecutionId, Context, LaneId]
-        )
-    end),
-
-    test_utils:mock_expect(Workers, workflow_test_handler, process_item,
-        fun(ExecutionId, #{lane_id := LaneId} = Context, TaskId, Item, FinishCallback, HeartbeatCallback) ->
-            MockTemplate(
-                #handler_call{
-                    function = process_item,
-                    execution_id = ExecutionId,
-                    context =  Context,
-                    lane_id = LaneId,
-                    task_id = TaskId,
-                    item = Item
-                },
-                [ExecutionId, Context, TaskId, Item, FinishCallback, HeartbeatCallback]
-            )
-        end),
-
-    test_utils:mock_expect(Workers, workflow_test_handler, process_result,
-        fun(ExecutionId, #{lane_id := LaneId} = Context, TaskId, Item, Result) ->
-            MockTemplate(
-                #handler_call{
-                    function = process_result,
-                    execution_id = ExecutionId,
-                    context =  Context,
-                    lane_id = LaneId,
-                    task_id = TaskId,
-                    item = Item
-                },
-                [ExecutionId, Context, TaskId, Item, Result]
-            )
-        end),
-
-    test_utils:mock_expect(Workers, workflow_test_handler, handle_task_execution_ended,
-        fun(ExecutionId, #{lane_id := LaneId} = Context, TaskId) ->
-            MockTemplate(
-                #handler_call{
-                    function = handle_task_execution_ended,
-                    execution_id = ExecutionId,
-                    context =  Context,
-                    lane_id = LaneId,
-                    task_id = TaskId
-                },
-                [ExecutionId, Context, TaskId]
-            )
-        end),
-
-    test_utils:mock_expect(Workers, workflow_test_handler, handle_lane_execution_ended,
-        fun(ExecutionId, Context, LaneId) ->
-            MockTemplate(
-                #handler_call{
-                    function = handle_lane_execution_ended,
-                    execution_id = ExecutionId,
-                    context =  Context,
-                    lane_id = LaneId
-                },
-                [ExecutionId, Context, LaneId]
-            )
-        end),
-
-    test_utils:mock_expect(Workers, workflow_test_handler, handle_workflow_execution_ended,
-        fun(ExecutionId, Context) ->
-            MockTemplate(
-                #handler_call{
-                    function = handle_workflow_execution_ended,
-                    execution_id = ExecutionId,
-                    context =  Context
-                },
-                [ExecutionId, Context]
-            )
-        end),
-
-    test_utils:mock_expect(Workers, workflow_engine_callback_handler, handle_callback, fun(CallbackId, Result) ->
-        {_CallbackType, ExecutionId, EngineId, JobIdentifier} =
-            workflow_engine_callback_handler:decode_callback_id(CallbackId),
-        {_, _, TaskId} = workflow_execution_state:get_result_processing_data(ExecutionId, JobIdentifier),
-        Item = workflow_cached_item:get_item(workflow_execution_state:get_item_id(ExecutionId, JobIdentifier)),
-        #{lane_id := LaneId} = workflow_execution_state:get_current_lane_context(ExecutionId),
-        Gatherer ! {handler_call, self(), #handler_call{
-            function = handle_callback,
-            execution_id = ExecutionId,
-            lane_id = LaneId,
-            task_id = TaskId,
-            item = Item
-        }},
-
-        receive
-            history_saved ->
-                % Warning: do not use meck:passthrough as it does not work when 2 mocks work within one process
-                apply(meck_util:original_name(workflow_engine_callback_handler), handle_callback, [CallbackId, Result]);
-            delay_call ->
-                spawn(fun() ->
-                    lists:foreach(fun(_) ->
-                        % Warning: do not use meck:passthrough as we are in spawned process
-                        HeartbeatCallbackId = apply(meck_util:original_name(workflow_engine_callback_handler),
-                            prepare_heartbeat_callback_id, [ExecutionId, EngineId, JobIdentifier]),
-                        apply(meck_util:original_name(workflow_engine_callback_handler),
-                            handle_callback, [HeartbeatCallbackId, undefined]),
-                        timer:sleep(timer:seconds(3))
-                    end, lists:seq(1,10))
-                end),
-                timer:sleep(timer:seconds(20)),
-                % Warning: do not use meck:passthrough as it does not work when 2 mocks work within one process
-                apply(meck_util:original_name(workflow_engine_callback_handler), handle_callback, [CallbackId, Result]);
-            fail_call ->
-                ok
-        end
-    end).
-
-
-%%%===================================================================
-%%% Helper functions verifying execution history
-%%%===================================================================
-
-get_expected_task_execution_order(#{id := ExecutionId, execution_context := InitialContext}) ->
-    get_expected_task_execution_order(<<"1">>, ExecutionId, InitialContext).
-
-get_expected_task_execution_order(LaneId, ExecutionId, InitialContext) ->
-    {ok, #{
-        parallel_boxes := Boxes,
-        iterator := Iterator,
-        execution_context := LaneExecutionContext
-    }} = workflow_test_handler:prepare_lane(ExecutionId, InitialContext, LaneId),
-    Items = get_items(InitialContext, Iterator),
-
-    TaskIds = lists:map(fun(TasksList) -> sets:from_list(maps:keys(TasksList)) end, Boxes),
-    ExpectedForLane = {TaskIds, Items, LaneExecutionContext},
-    case workflow_test_handler:handle_lane_execution_ended(ExecutionId, LaneExecutionContext, LaneId) of
-        ?FINISH_EXECUTION ->
-            [ExpectedForLane];
-        ?CONTINUE(NextLaneId, _) ->
-            [ExpectedForLane | get_expected_task_execution_order(NextLaneId, ExecutionId, InitialContext)]
-    end.
-
-get_items(Context, Iterator) ->
-    case iterator:get_next(Context, Iterator) of
-        {ok, NextItem, NextIterator} -> [NextItem | get_items(Context, NextIterator)];
-        stop -> []
-    end.
-
-% This function verifies if gathered execution history contains all expected elements
-verify_execution_history(Expected, [HandlerCall]) ->
-    ?assertEqual(handle_workflow_execution_ended, HandlerCall#handler_call.function),
-    ?assertEqual([], Expected);
-verify_execution_history([{TaskIds, ExpectedItems, LaneExecutionContext} | ExpectedTail], Gathered) ->
-    #{type := WorkflowType, lane_id := LaneId} = LaneExecutionContext,
-    TasksPerItemCount = lists:foldl(fun(TasksForBox, Acc) -> sets:size(TasksForBox) + Acc end, 0, TaskIds),
-    TasksCount = TasksPerItemCount * length(ExpectedItems),
-    NotificationsCount = TasksPerItemCount + 2, % Notification for each task + prepare_lane + handle_lane_execution_ended
-    LaneElementsCount = case WorkflowType of
-        sync-> TasksCount + NotificationsCount;
-        async -> 3 * TasksCount + NotificationsCount
-    end,
-
-    ct:print("Verify ~p history elements", [LaneElementsCount]),
-    [FirstForLane | GatheredForLane] = lists:sublist(Gathered, LaneElementsCount),
-    ?assertEqual(prepare_lane, FirstForLane#handler_call.function),
-    ?assertEqual(LaneId, FirstForLane#handler_call.lane_id),
-
-    [LastForLane | GatheredForLane2] = lists:reverse(GatheredForLane),
-    ?assertEqual(handle_lane_execution_ended, LastForLane#handler_call.function),
-    ?assertEqual(LaneId, LastForLane#handler_call.lane_id),
-
-    TaskIdsList = lists:foldl(fun(CallsForBox, Acc) -> sets:to_list(CallsForBox) ++ Acc end, [], TaskIds),
-    RemainingTaskIdsList = lists:foldl(fun
-        (#handler_call{function = handle_task_execution_ended, task_id = TaskId}, Acc) ->
-            ?assert(lists:member(TaskId, Acc)),
-            Acc -- [TaskId];
-        (#handler_call{task_id = TaskId}, Acc) ->
-            ?assertNot(lists:member(TaskId, Acc)),
-            Acc
-    end, TaskIdsList, GatheredForLane2),
-    ?assertEqual([], RemainingTaskIdsList),
-    GatheredForLane3 = lists:reverse(lists:filter(fun(#handler_call{function = Fun}) ->
-        Fun =/= handle_task_execution_ended
-    end, GatheredForLane2)),
-
-    Remaining = lists:foldl(fun(Item, Acc) ->
-        Filtered = lists:filtermap(fun(HandlerCall) -> HandlerCall#handler_call.item =:= Item end, Acc),
-        verify_item_execution_history(Item, TaskIds, Filtered, LaneExecutionContext),
-        Acc -- Filtered
-    end, GatheredForLane3, ExpectedItems),
-
-    ?assertEqual([], Remaining),
-    verify_execution_history(ExpectedTail,
-        lists:sublist(Gathered, LaneElementsCount + 1, length(Gathered) - LaneElementsCount)).
-
-% Helper function for verify_execution_history/3 that verifies history for single item
-verify_item_execution_history(_Item, ExpectedCalls, [], _LaneExecutionContext) ->
-    ?assertEqual([], ExpectedCalls);
-verify_item_execution_history(Item, [CallsForBox | ExpectedCalls], [HandlerCall | Gathered], LaneExecutionContext) ->
-    #{type := WorkflowType, lane_id := ExpectedLaneId} = LaneExecutionContext,
-    #handler_call{function = Function, lane_id = LaneId, task_id = TaskId, item = Item} = HandlerCall,
-    ?assertEqual(ExpectedLaneId, LaneId),
-    ?assertEqual(Item, Item),
-    SetElement = case Function of
-        process_item -> TaskId;
-        _ -> {Function, TaskId}
-    end,
-    ?assert(sets:is_element(SetElement, CallsForBox)),
-
-    NewCallsForBox = case {WorkflowType, Function} of
-        {async, process_item} -> sets:add_element({handle_callback, TaskId}, CallsForBox);
-        {async, handle_callback} -> sets:add_element({process_result, TaskId}, CallsForBox);
-        _ -> CallsForBox
-    end,
-    FinalCallsForBox = sets:del_element(SetElement, NewCallsForBox),
-
-    case sets:is_empty(FinalCallsForBox) of
-        true ->
-            verify_item_execution_history(Item, ExpectedCalls, Gathered, LaneExecutionContext);
-        false ->
-            verify_item_execution_history(Item, [FinalCallsForBox | ExpectedCalls], Gathered, LaneExecutionContext)
-    end.
-
-
-%%%===================================================================
-%%% Memory verification helper functions
-%%%===================================================================
-
-verify_memory(Config, InitialKeys) ->
-    verify_memory(Config, InitialKeys, false).
-
-verify_memory(Config, InitialKeys, RestartDocPresent) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-
-    ?assertEqual([], rpc:call(Worker, workflow_engine_state, get_execution_ids, [?ENGINE_ID])),
-    ?assertEqual(0, rpc:call(Worker, workflow_engine_state, get_slots_used, [?ENGINE_ID])),
-
-    lists:foreach(fun({Model, Keys}) ->
-        case RestartDocPresent andalso Model =:= workflow_iterator_snapshot of
-            true -> ?assertMatch([_], Keys -- proplists:get_value(Model, InitialKeys));
-            false -> ?assertEqual([], Keys -- proplists:get_value(Model, InitialKeys))
-        end
-    end, get_all_keys(Config)).
-
-get_all_keys(Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-
-    Models = [workflow_cached_item, workflow_cached_async_result, workflow_iterator_snapshot, workflow_execution_state],
-    lists:map(fun(Model) ->
-        Ctx = datastore_model_default:set_defaults(datastore_model_default:get_ctx(Model)),
-        #{memory_driver := MemoryDriver, memory_driver_ctx := MemoryDriverCtx} = Ctx,
-        {Model, get_keys(Worker, MemoryDriver, MemoryDriverCtx)}
-    end, Models).
-
-
-get_keys(Worker, ets_driver, MemoryDriverCtx) ->
-    lists:foldl(fun(#{table := Table}, AccOut) ->
-        AccOut ++ lists:filtermap(fun
-            ({_Key, #document{deleted = true}}) -> false;
-            ({Key, #document{deleted = false}}) -> {true, Key}
-        end, rpc:call(Worker, ets, tab2list, [Table]))
-    end, [], rpc:call(Worker, datastore_multiplier, get_names, [MemoryDriverCtx]));
-get_keys(Worker, mnesia_driver, MemoryDriverCtx) ->
-    lists:foldl(fun(#{table := Table}, AccOut) ->
-        AccOut ++ mnesia:async_dirty(fun() ->
-            rpc:call(Worker, mnesia, foldl, [fun
-                ({entry, _Key, #document{deleted = true}}, Acc) -> Acc;
-                ({entry, Key, #document{deleted = false}}, Acc) -> [Key | Acc]
-            end, [], Table])
-        end)
-    end, [], rpc:call(Worker, datastore_multiplier, get_names, [MemoryDriverCtx])).
+end_per_testcase(Case, Config) ->
+    workflow_scheduling_test_common:end_per_testcase(Case, Config).
