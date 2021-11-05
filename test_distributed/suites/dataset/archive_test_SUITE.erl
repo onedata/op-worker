@@ -104,7 +104,7 @@
 ]).
 
 groups() -> [
-    {parallel_tests, [parallel], [
+    {parallel_tests, [ % fixme parallel
         create_archivisation_tree,
         archive_dataset_attached_to_dir_plain_layout,
         archive_dataset_attached_to_file_plain_layout,
@@ -183,7 +183,7 @@ all() -> [
     {group, verification_tests}
 ].
 
--define(ATTEMPTS, 180).
+-define(ATTEMPTS, 18). % fixme
 
 -define(SPACE, space_krk_par_p).
 -define(USER1, user1).

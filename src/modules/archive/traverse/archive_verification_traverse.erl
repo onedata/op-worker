@@ -25,7 +25,7 @@
 %% API
 -export([init_pool/0, stop_pool/0, start/1
 ]).
--export([block_archive_modification/1]).
+-export([block_archive_modification/1, unblock_archive_modification/1]).
 
 %% Traverse behaviour callbacks
 -export([
@@ -83,7 +83,12 @@ start(ArchiveDoc) ->
 block_archive_modification(#document{value = #archive{root_dir_guid = RootDirGuid}}) -> 
     FlagsToSet = ?set_flags(?DATA_PROTECTION, ?METADATA_PROTECTION),
     % as protection flags work only with datasets, create a dummy dataset on archive root dir
-    ?extract_ok(dataset_api:establish(file_ctx:new_by_guid(RootDirGuid), FlagsToSet)).
+    ?extract_ok(dataset_api:establish(file_ctx:new_by_guid(RootDirGuid), FlagsToSet, internal)).
+
+
+-spec unblock_archive_modification(archive:doc()) -> ok.
+unblock_archive_modification(#document{value = #archive{root_dir_guid = RootDirGuid}}) -> 
+    ?extract_ok(dataset_api:remove(file_id:guid_to_uuid(RootDirGuid))).
 
 
 %%%===================================================================
@@ -135,7 +140,7 @@ do_master_job(#tree_traverse{file_ctx = FileCtx} = Job, MasterJobArgs = #{task_i
                     false ->
                         ok;
                     true ->
-                        TotalChildrenCount = archive_traverse_common:retrieve_children_count(
+                        TotalChildrenCount = archive_traverse_common:take_children_count(
                             ?POOL_NAME, TaskId, DirUuid),
                         case archivisation_checksum:get_children_count(FileCtx2) of
                             TotalChildrenCount -> ok;

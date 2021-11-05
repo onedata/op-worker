@@ -28,7 +28,7 @@
 -export([mock_archive_verification/0, wait_for_archive_verification_traverse/1, start_verification_traverse/2]).
 
 
--define(ATTEMPTS, 1200).
+-define(ATTEMPTS, 36). % fixme pass it from tests suite
 
 -define(SPACE, space_krk_par_p).
 -define(USER1, user1).

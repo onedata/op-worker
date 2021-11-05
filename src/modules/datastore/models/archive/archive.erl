@@ -417,7 +417,7 @@ mark_creation_finished(ArchiveDocOrId, NestedArchivesStats) ->
     end),
     case UpdateResult of
         {ok, #document{value = #archive{state = ?ARCHIVE_VERIFYING}} = Doc} ->
-            archive_verification_traverse:block_archive_modification(ArchiveDocOrId),
+            archive_verification_traverse:block_archive_modification(Doc),
             archive_verification_traverse:start(Doc);
         {ok, #document{value = #archive{state = ?ARCHIVE_FAILED}}} -> 
             ok

@@ -16,7 +16,7 @@
 -include("modules/datastore/datastore_runner.hrl").
 
 %% API
--export([update_children_count/4, retrieve_children_count/3]).
+-export([update_children_count/4, take_children_count/3]).
 
 %%%===================================================================
 %%% API functions
@@ -43,16 +43,16 @@ update_children_count(PoolName, TaskId, DirUuid, ChildrenCount) ->
     )).
 
 
--spec retrieve_children_count(tree_traverse:pool(), tree_traverse:id(), file_meta:uuid()) ->
+-spec take_children_count(tree_traverse:pool(), tree_traverse:id(), file_meta:uuid()) ->
     non_neg_integer().
-retrieve_children_count(PoolName, TaskId, DirUuid) ->
+take_children_count(PoolName, TaskId, DirUuid) ->
     {ok, AD} = traverse_task:get_additional_data(PoolName, TaskId),
     CountMap = get_count_map(AD),
     ChildrenCount = maps:get(DirUuid, CountMap),
     ok = ?extract_ok(traverse_task:update_additional_data(traverse_task:get_ctx(), PoolName, TaskId,
         fun(AD) ->
             CountMap = get_count_map(AD),
-            {ok, set_count_map(CountMap, maps:without([DirUuid], CountMap))}
+            {ok, set_count_map(AD, maps:without([DirUuid], CountMap))}
         end
     )),
     binary_to_integer(ChildrenCount).

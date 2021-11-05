@@ -241,7 +241,7 @@ do_master_job(Job = #tree_traverse{
                     false -> 
                         ok;
                     true ->
-                        TotalChildrenCount = archive_traverse_common:retrieve_children_count(
+                        TotalChildrenCount = archive_traverse_common:take_children_count(
                             ?POOL_NAME, TaskId, DirUuid),
                         AipCtx = maps:get(aip_ctx, TraverseInfo2),
                         DipCtx = maps:get(dip_ctx, TraverseInfo2),
