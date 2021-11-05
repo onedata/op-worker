@@ -15,57 +15,103 @@
 
 -behaviour(workflow_handler).
 
+-include("workflow_engine.hrl").
 -include("http/gui_paths.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 
--export([prepare/2, get_lane_spec/3, process_item/6, process_result/5,
+% Callbacks
+-export([prepare_lane/3, restart_lane/3, process_item/6, process_result/5,
     handle_task_execution_ended/3, handle_lane_execution_ended/3, handle_workflow_execution_ended/2]).
+% API
+-export([is_last_lane/1, get_ignored_lane_id/0, get_ignored_lane_predecessor_id/0]).
+
+-define(NEXT_LANE_ID(LaneId), integer_to_binary(binary_to_integer(LaneId) + 1)).
+-define(LAST_LANE_ID, <<"5">>).
+-define(PENULTIMATE_LANE_ID, <<"4">>).
+% Ignored lane is one that is expected to be ignored as a result of lane change by
+% handle_lane_execution_ended callback. It has no parallel boxes and iterator so execution of this lane
+% results in exception. It is only possible to execute this lane preparation (also in advance).
+-define(IGNORED_LANE_ID, 1234).
+-define(IGNORED_LANE_PREDECESSOR_ID, <<"2">>).
+
+%% @formatter:off
+-type test_execution_context() :: #{
+    task_type => sync | async,
+    async_call_pools => [workflow_async_call_pool:id()] | undefined,
+    lane_to_retry => workflow_engine:lane_id(),
+    prepare_in_advance => boolean(),
+    % while prepare_in_advance => true ensures that all lanes are prepared in advance, usage of following
+    % options allows setting custom setting of single lane preparation in advance
+    prepare_ignored_lane_in_advance => boolean(), % when ?IGNORED_LANE_PREDECESSOR_ID finishes,
+                                                  % set ?IGNORED_LANE_ID to be prepared in advance
+    prepare_in_advance_out_of_order => {LaneId :: workflow_engine:lane_id(),
+        LaneIdOutOfOrder :: workflow_engine:lane_id()} % when LaneId finishes, set LaneIdOutOfOrder
+                                                       % to be prepared in advance
+}.
+
+-export_type([test_execution_context/0]).
+%% @formatter:on
 
 %%%===================================================================
-%%% API
+%%% Callbacks
 %%%===================================================================
 
-
--spec prepare(
+-spec prepare_lane(
     workflow_engine:execution_id(),
-    workflow_engine:execution_context()
+    test_execution_context(),
+    workflow_engine:lane_id()
 ) ->
-    ok.
-prepare(_, _) ->
-    ok.
-
--spec get_lane_spec(
-    workflow_engine:execution_id(),
-    workflow_engine:execution_context(),
-    workflow_execution_state:index()
-) ->
-    {ok, workflow_engine:lane_spec()}.
-get_lane_spec(ExecutionId, #{type := Type, async_call_pools := Pools} =_ExecutionContext, LaneIndex) ->
+    workflow_handler:prepare_lane_result().
+prepare_lane(_ExecutionId, ExecutionContext, ?IGNORED_LANE_ID = LaneId) ->
+    {ok, #{
+        parallel_boxes => [],
+        iterator => undefined,
+        execution_context => ExecutionContext#{
+            lane_index => LaneId,
+            lane_id => LaneId
+        }
+    }};
+prepare_lane(_ExecutionId, #{task_type := Type, async_call_pools := Pools} = ExecutionContext, LaneId) ->
+    LaneIndex = binary_to_integer(LaneId),
     Boxes = lists:map(fun(BoxIndex) ->
         lists:foldl(fun(TaskIndex, TaskAcc) ->
-            TaskAcc#{<<ExecutionId/binary, "_task", (integer_to_binary(LaneIndex))/binary, "_",
+            TaskAcc#{<<(integer_to_binary(LaneIndex))/binary, "_",
                 (integer_to_binary(BoxIndex))/binary, "_", (integer_to_binary(TaskIndex))/binary>> =>
-                    #{type => Type, async_call_pools => Pools, keepalive_timeout => 10}}
+            #{type => Type, async_call_pools => Pools, keepalive_timeout => 5}}
         end, #{}, lists:seq(1, BoxIndex))
     end, lists:seq(1, LaneIndex)),
 
-    {ok, #{
+    LaneOptions = maps:get(lane_options, ExecutionContext, #{}),
+    {ok, LaneOptions#{
         parallel_boxes => Boxes,
-        iterator => workflow_test_iterator:get_first(),
-        is_last => LaneIndex =:= 5
+        iterator => workflow_test_iterator:get_first(maps:get(items_count, ExecutionContext, 200)),
+        execution_context => ExecutionContext#{
+            lane_index => LaneIndex,
+            lane_id => LaneId
+        }
     }}.
+
+
+-spec restart_lane(
+    workflow_engine:execution_id(),
+    test_execution_context(),
+    workflow_engine:lane_id()
+) ->
+    workflow_handler:prepare_lane_result().
+restart_lane(ExecutionId, ExecutionContext, LaneId) ->
+    prepare_lane(ExecutionId, ExecutionContext, LaneId).
 
 
 -spec process_item(
     workflow_engine:execution_id(),
-    workflow_engine:execution_context(),
+    test_execution_context(),
     workflow_engine:task_id(),
     iterator:item(),
     workflow_handler:finished_callback_id(),
     workflow_handler:heartbeat_callback_id()
 ) ->
     workflow_handler:handler_execution_result().
-process_item(_ExecutionId, _Context, <<"async", _/binary>> = _TaskId, Item, FinishCallback, _) ->
+process_item(_ExecutionId, #{task_type := async}, _TaskId, Item, FinishCallback, _) ->
     spawn(fun() ->
         timer:sleep(100), % TODO VFS-7784 - test with different sleep times
         Result = #{<<"result">> => <<"ok">>, <<"item">> => Item},
@@ -84,7 +130,7 @@ process_item(_ExecutionId, _Context, _TaskId, _Item, _FinishCallback, _) ->
 
 -spec process_result(
     workflow_engine:execution_id(),
-    workflow_engine:execution_context(),
+    test_execution_context(),
     workflow_engine:task_id(),
     iterator:item(),
     workflow_handler:async_processing_result()
@@ -95,28 +141,95 @@ process_result(_, _, _, _, {error, _}) ->
 process_result(_, _, _, _, #{<<"result">> := Result}) ->
     binary_to_atom(Result, utf8).
 
+
 -spec handle_task_execution_ended(
     workflow_engine:execution_id(),
-    workflow_engine:execution_context(),
+    test_execution_context(),
     workflow_engine:task_id()
 ) ->
     ok.
 handle_task_execution_ended(_, _, _) ->
     ok.
 
+
 -spec handle_lane_execution_ended(
     workflow_engine:execution_id(),
-    workflow_engine:execution_context(),
-    workflow_execution_state:index()
+    test_execution_context(),
+    workflow_engine:lane_id()
 ) ->
-    ok.
-handle_lane_execution_ended(_, _, _) ->
-    ok.
+    workflow_handler:lane_ended_callback_result().
+handle_lane_execution_ended(ExecutionId, #{
+    lane_to_retry := ?IGNORED_LANE_PREDECESSOR_ID,
+    prepare_ignored_lane_in_advance := true
+} = ExecutionContext, ?IGNORED_LANE_PREDECESSOR_ID) ->
+    case handle_lane_execution_ended(ExecutionId,
+        maps:remove(prepare_ignored_lane_in_advance, ExecutionContext), ?IGNORED_LANE_PREDECESSOR_ID) of
+        ?CONTINUE(?IGNORED_LANE_PREDECESSOR_ID, _) -> ?CONTINUE(?IGNORED_LANE_PREDECESSOR_ID, ?IGNORED_LANE_ID);
+        Other -> Other
+    end;
+handle_lane_execution_ended(_ExecutionId, #{prepare_ignored_lane_in_advance := true}, ?IGNORED_LANE_PREDECESSOR_ID) ->
+    ?CONTINUE(?NEXT_LANE_ID(?IGNORED_LANE_PREDECESSOR_ID), ?IGNORED_LANE_ID);
+handle_lane_execution_ended(_ExecutionId, #{prepare_in_advance_out_of_order := {LaneId, LaneIdOutOfOrder}}, LaneId) ->
+    ?CONTINUE(?NEXT_LANE_ID(LaneId), LaneIdOutOfOrder);
+handle_lane_execution_ended(ExecutionId, #{lane_to_retry := LaneId} = ExecutionContext, LaneId) ->
+    case node_cache:get({lane_retried, ExecutionId, LaneId}, undefined) of
+        true ->
+            handle_lane_execution_ended(ExecutionId, maps:remove(lane_to_retry, ExecutionContext), LaneId);
+        _ ->
+            node_cache:put({lane_retried, ExecutionId, LaneId}, true),
+            ?CONTINUE(LaneId, ?NEXT_LANE_ID(LaneId))
+    end;
+handle_lane_execution_ended(_ExecutionId, #{prepare_in_advance := true} = ExecutionContext, LaneId) ->
+    case {maybe_finish_execution(ExecutionContext, LaneId), LaneId} of
+        {?END_EXECUTION, _} ->
+            ?END_EXECUTION;
+        {continue, ?PENULTIMATE_LANE_ID} ->
+            ?CONTINUE(?LAST_LANE_ID, undefined);
+        _ ->
+            NextLaneId = ?NEXT_LANE_ID(LaneId),
+            ?CONTINUE(NextLaneId, ?NEXT_LANE_ID(NextLaneId))
+    end;
+handle_lane_execution_ended(_ExecutionId, ExecutionContext, LaneId) ->
+    case maybe_finish_execution(ExecutionContext, LaneId) of
+        ?END_EXECUTION ->
+            ?END_EXECUTION;
+        _ ->
+            ?CONTINUE(?NEXT_LANE_ID(LaneId), undefined)
+    end.
+
 
 -spec handle_workflow_execution_ended(
     workflow_engine:execution_id(),
-    workflow_engine:execution_context()
+    test_execution_context()
 ) ->
     ok.
 handle_workflow_execution_ended(_, _) ->
     ok.
+
+
+%%%===================================================================
+%%% API
+%%%===================================================================
+
+-spec is_last_lane(workflow_engine:lane_id()) -> boolean().
+is_last_lane(LaneId) ->
+    LaneId =:= ?LAST_LANE_ID.
+
+-spec get_ignored_lane_id() -> workflow_engine:lane_id().
+get_ignored_lane_id() ->
+    ?IGNORED_LANE_ID.
+
+-spec get_ignored_lane_predecessor_id() -> workflow_engine:lane_id().
+get_ignored_lane_predecessor_id() ->
+    ?IGNORED_LANE_PREDECESSOR_ID.
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+maybe_finish_execution(ExecutionContext, LaneId) ->
+    case {LaneId, ExecutionContext} of
+        {?LAST_LANE_ID, _} -> ?END_EXECUTION;
+        {_, #{finish_on_lane := LaneId}} -> ?END_EXECUTION;
+        _ -> continue
+    end.

@@ -137,7 +137,7 @@ iterate_test_base(AtmStoreIteratorStrategy, ValueToSet, ExpectedValue) ->
     AtmWorkflowExecutionEnv = atm_workflow_execution_env:build(
         atm_workflow_execution_auth:get_space_id(AtmWorkflowExecutionAuth),
         atm_workflow_execution_auth:get_workflow_execution_id(AtmWorkflowExecutionAuth),
-        #{AtmListStoreDummySchemaId => AtmStoreId}, undefined, undefined
+        #{AtmListStoreDummySchemaId => AtmStoreId}
     ),
     AtmStoreIteratorSpec = #atm_store_iterator_spec{
         store_schema_id = AtmListStoreDummySchemaId,
@@ -170,7 +170,7 @@ reuse_iterator_test(_Config) ->
     AtmWorkflowExecutionEnv = atm_workflow_execution_env:build(
         atm_workflow_execution_auth:get_space_id(AtmWorkflowExecutionAuth),
         atm_workflow_execution_auth:get_workflow_execution_id(AtmWorkflowExecutionAuth),
-        #{AtmListStoreDummySchemaId => AtmStoreId}, undefined, undefined
+        #{AtmListStoreDummySchemaId => AtmStoreId}
     ),
     AtmStoreIteratorSpec = #atm_store_iterator_spec{
         store_schema_id = AtmListStoreDummySchemaId,

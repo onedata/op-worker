@@ -65,9 +65,11 @@ translate_resource(#gri{aspect = instance, scope = private}, #atm_store{
         }),
         <<"schemaId">> => AtmStoreSchemaId,
 
-        <<"initialValue">> => InitialValue,
+        <<"initialValue">> => utils:undefined_to_null(InitialValue),
         <<"frozen">> => Frozen,
 
-        <<"type">> => atm_store_container:get_store_type(AtmsStoreContainer),
+        <<"type">> => automation:store_type_to_json(atm_store_container:get_store_type(
+            AtmsStoreContainer
+        )),
         <<"dataSpec">> => jsonable_record:to_json(AtmDataSpec, atm_data_spec)
     }.

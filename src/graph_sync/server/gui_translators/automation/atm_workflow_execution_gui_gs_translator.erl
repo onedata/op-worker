@@ -56,7 +56,9 @@ translate_atm_workflow_execution(#atm_workflow_execution{
 
     store_registry = AtmStoreRegistry,
     system_audit_log_id = AtmWorkflowAuditLogId,
+
     lanes = AtmLaneExecutions,
+    lanes_count = AtmLanesCount,
 
     status = Status,
 
@@ -83,7 +85,11 @@ translate_atm_workflow_execution(#atm_workflow_execution{
 
         <<"storeRegistry">> => AtmStoreRegistry,
         <<"systemAuditLogId">> => utils:undefined_to_null(AtmWorkflowAuditLogId),
-        <<"lanes">> => lists:map(fun atm_lane_execution:to_json/1, AtmLaneExecutions),
+
+        <<"lanes">> => lists:map(
+            fun(LaneIndex) -> atm_lane_execution:to_json(maps:get(LaneIndex, AtmLaneExecutions)) end,
+            lists:seq(1, AtmLanesCount)
+        ),
 
         <<"status">> => atom_to_binary(Status, utf8),
 

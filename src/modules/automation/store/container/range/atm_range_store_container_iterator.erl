@@ -29,7 +29,7 @@
 
 
 -record(atm_range_store_container_iterator, {
-    curr_num :: integer(),
+    current_num :: integer(),
     start_num :: integer(),
     end_num :: integer(),
     step :: integer()
@@ -47,7 +47,7 @@
 -spec build(integer(), integer(), integer()) -> record().
 build(Start, End, Step) ->
     #atm_range_store_container_iterator{
-        curr_num = Start,
+        current_num = Start,
         start_num = Start, end_num = End, step = Step
     }.
 
@@ -62,21 +62,21 @@ build(Start, End, Step) ->
 ) ->
     {ok, [integer()], record()} | stop.
 get_next_batch(AtmWorkflowExecutionAuth, BatchSize, #atm_range_store_container_iterator{
-    curr_num = CurrNum,
+    current_num = CurrentNum,
     end_num = End,
     step = Step
 } = Record, AtmDataSpec) ->
-    RequestedEndNum = CurrNum + (BatchSize - 1) * Step,
+    RequestedEndNum = CurrentNum + (BatchSize - 1) * Step,
     Threshold = case Step > 0 of
         true -> min(RequestedEndNum, End);
         false -> max(RequestedEndNum, End)
     end,
-    case lists:seq(CurrNum, Threshold, Step) of
+    case lists:seq(CurrentNum, Threshold, Step) of
         [] ->
             stop;
         CompressedItems ->
             Batch = atm_value:filterexpand_list(AtmWorkflowExecutionAuth, CompressedItems, AtmDataSpec),
-            {ok, Batch, Record#atm_range_store_container_iterator{curr_num = Threshold + Step}}
+            {ok, Batch, Record#atm_range_store_container_iterator{current_num = Threshold + Step}}
     end.
 
 
@@ -103,7 +103,7 @@ version() ->
 -spec db_encode(record(), persistent_record:nested_record_encoder()) ->
     json_utils:json_term().
 db_encode(#atm_range_store_container_iterator{
-    curr_num = Current,
+    current_num = Current,
     start_num = Start,
     end_num = End,
     step = Step
@@ -119,4 +119,9 @@ db_decode(#{
     <<"end">> := End,
     <<"step">> := Step
 }, _NestedRecordDecoder) ->
-    #atm_range_store_container_iterator{curr_num = Current, start_num = Start, end_num = End, step = Step}.
+    #atm_range_store_container_iterator{
+        current_num = Current,
+        start_num = Start,
+        end_num = End,
+        step = Step
+    }.
