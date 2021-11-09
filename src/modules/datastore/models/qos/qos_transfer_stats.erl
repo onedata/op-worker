@@ -42,6 +42,7 @@
 }).
 
 -define(COLLECTION_ID(QosEntryId, Type), <<QosEntryId/binary, (atom_to_binary(Type))/binary>>).
+-define(MAX_UPDATE_RETRIES, 3).
 
 %%%===================================================================
 %%% API
@@ -64,14 +65,14 @@ get(QosEntryId, Type) ->
     datastore_time_series_collection:list_windows(?CTX, ?COLLECTION_ID(QosEntryId, Type), #{}).
 
 
--spec update(qos_entry:id(), type(), #{od_storage:id() | binary() => non_neg_integer()}) -> 
+-spec update(qos_entry:id(), type(), #{od_storage:id() => non_neg_integer()}) -> 
     ok | {error, term()}.
 update(QosEntryId, Type, ValuesPerStorage) ->
-    {ok, ExistingTimeSeries} = list_time_series_internal(?COLLECTION_ID(QosEntryId, Type)),
-    MissingTimeSeries = lists_utils:subtract(maps:keys(ValuesPerStorage), ExistingTimeSeries),
-    ok = create_missing_time_series(?COLLECTION_ID(QosEntryId, Type), MissingTimeSeries),
-    datastore_time_series_collection:update(?CTX, ?COLLECTION_ID(QosEntryId, Type), 
-        global_clock:timestamp_millis(), maps:to_list(ValuesPerStorage)).
+    TotalValue = maps:fold(fun(_Key, Value, Acc) ->
+        Acc + Value
+    end, 0, ValuesPerStorage),
+    update_internal(?COLLECTION_ID(QosEntryId, Type), ValuesPerStorage#{<<"total">> => TotalValue}, 
+        ?MAX_UPDATE_RETRIES).
 
 
 %%%===================================================================
@@ -85,6 +86,27 @@ create_internal(CollectionId) ->
         ok -> ok;
         {error, collection_already_exists} -> ok;
         Error -> Error
+    end.
+
+
+-spec update_internal(time_series_collection:collection_id(), 
+    #{od_storage:id() | binary() => non_neg_integer()}, non_neg_integer()) -> ok.
+update_internal(CollectionId, _ValuesPerStorage, 0) ->
+    ?warning(
+        "Could not update QoS transfer statistics in collection ~p due to 
+        exceeded number of retries", [CollectionId]
+    );
+update_internal(CollectionId, ValuesPerStorage, Retries) ->
+    case datastore_time_series_collection:check_and_update(?CTX, CollectionId, 
+        global_clock:timestamp_millis(), maps:to_list(ValuesPerStorage)) 
+    of
+        ok -> 
+            ok;
+        {error, time_series_not_found} ->
+            {ok, ExistingTimeSeries} = list_time_series_internal(CollectionId),
+            MissingTimeSeries = lists_utils:subtract(maps:keys(ValuesPerStorage), ExistingTimeSeries),
+            ok = create_missing_time_series(CollectionId, MissingTimeSeries),
+            update_internal(CollectionId, ValuesPerStorage, Retries - 1)
     end.
 
 
@@ -137,6 +159,7 @@ create_missing_time_series(CollectionId, MissingTimeSeries) ->
     end, #{}, MissingTimeSeries),
     case datastore_time_series_collection:add_metrics(?CTX, CollectionId, Configs, #{}) of
         ok -> ok;
+        {error, time_series_already_exists} -> ok;
         {error, metric_already_exists} -> ok;
         Error -> Error
     end.

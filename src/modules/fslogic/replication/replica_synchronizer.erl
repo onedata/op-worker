@@ -545,7 +545,7 @@ handle_call({synchronize, FileCtx, Block, Prefetch, TransferId, Session, Priorit
         requested_blocks = RB,
         file_guid = FG,
         from_requests_types = RequestTypesMap,
-        transfer_id_to_callback_module = TTC
+        transfer_id_to_callback_module = TransferIdToCallback
     } = State0
 ) ->
     try
@@ -563,11 +563,13 @@ handle_call({synchronize, FileCtx, Block, Prefetch, TransferId, Session, Priorit
                     dest_file_id = DestFileId,
                     file_guid = FileGuid,
                     space_id = SpaceId,
-                    transfer_id_to_callback_module = TTC#{TransferId => CallbackModule}
+                    transfer_id_to_callback_module = 
+                        TransferIdToCallback#{TransferId => CallbackModule}
                 };
             _ ->
                 State0#state{
-                    transfer_id_to_callback_module = TTC#{TransferId => CallbackModule}
+                    transfer_id_to_callback_module = 
+                        TransferIdToCallback#{TransferId => CallbackModule}
                 }
         end,
 
@@ -1548,22 +1550,25 @@ flush_blocks_list(AllBlocks, ExcludeSessions, Flush) ->
 -spec flush_stats(#state{}, boolean()) -> #state{}.
 flush_stats(#state{cached_stats = Stats} = State, _) when map_size(Stats) == 0 ->
     State;
-flush_stats(#state{space_id = SpaceId, transfer_id_to_callback_module = TTC} = State, CancelTimer) ->
+flush_stats(#state{
+    space_id = SpaceId, 
+    transfer_id_to_callback_module = TransferIdToCallback
+} = State, CancelTimer) ->
     lists:foreach(fun({TransferId, BytesPerProvider}) ->
-        CallbackModule = maps:get(TransferId, TTC, transfer),
+        CallbackModule = maps:get(TransferId, TransferIdToCallback),
         try
             case CallbackModule:flush_stats(SpaceId, TransferId, BytesPerProvider) of
                 ok -> ok;
                 {error, Error} ->
                     ?error(
-                        "Failed to update transfer statistics for ~p transfer "
-                        "due to ~p", [TransferId, Error]
+                        "Failed to update transfer statistics using callback module ~p 
+                        for ~p transfer due to ~p", [CallbackModule, TransferId, Error]
                     )
             end
         catch _:Reason:Stacktrace ->
             ?error_stacktrace(
-                "Failed to update transfer statistics for ~p transfer "
-                "due to ~p", [TransferId, Reason], Stacktrace
+                "Failed to update transfer statistics using callback module ~p for ~p transfer "
+                "due to ~p", [CallbackModule, TransferId, Reason], Stacktrace
             )
         end
     end, maps:to_list(State#state.cached_stats)),

@@ -713,7 +713,7 @@ create_hardlink_in_dir_with_qos(Config) ->
 %%%===================================================================
     
 qos_transfer_stats_test(Config) ->
-    [Worker1, Worker2 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
+    [Worker1, Worker2, Worker3 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
     Name = generator:gen_name(),
     SessId = fun(Worker) -> ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config) end,
     Guid = create_file_with_content(Worker1, SessId(Worker1), fslogic_uuid:spaceid_to_space_dir_guid(?SPACE_ID), Name),
@@ -723,32 +723,28 @@ qos_transfer_stats_test(Config) ->
     ?assertMatch({ok, _}, lfm_proxy:get_qos_entry(Worker2, SessId(Worker2), QosEntryId), ?ATTEMPTS),
     ?assertEqual({ok, ?FULFILLED_QOS_STATUS}, lfm_proxy:check_qos_status(Worker1, SessId(Worker1), QosEntryId), ?ATTEMPTS),
     
-    CheckStatsFun = fun(Stats, ExpectedSeries, ExpectedValue) ->
-        lists:foreach(fun(Series) ->
-            lists:foreach(fun(Metric) ->
-                ?assert(maps:is_key({Series, Metric}, Stats)),
-                Value = maps:get({Series, Metric}, Stats),
-                case ExpectedValue of
-                    empty ->
-                        ?assertEqual([], Value);
-                    _ ->
-                        [{_Timestamp, Value1}] = Value,
-                        ?assertEqual(ExpectedValue, Value1)
-                end
-            end, [<<"minute">>, <<"hour">>, <<"day">>, <<"month">>])
-        end, ExpectedSeries)
-    end,
+    check_transfer_stats(Worker1, QosEntryId, bytes, [<<"total">>], empty),
+    check_transfer_stats(Worker2, QosEntryId, bytes, [<<"total">>, <<"mntst1">>], {1, byte_size(?TEST_DATA)}),
+    check_transfer_stats(Worker1, QosEntryId, files, [<<"total">>], empty),
+    check_transfer_stats(Worker2, QosEntryId, files, [<<"total">>, <<"mntst2">>], {1, 1}),
     
-    {ok, StatsBytesW1} = rpc:call(Worker1, qos_transfer_stats, get, [QosEntryId, bytes]),
-    {ok, StatsBytesW2} = rpc:call(Worker2, qos_transfer_stats, get, [QosEntryId, bytes]),
-    {ok, StatsFilesW1} = rpc:call(Worker1, qos_transfer_stats, get, [QosEntryId, files]),
-    {ok, StatsFilesW2} = rpc:call(Worker2, qos_transfer_stats, get, [QosEntryId, files]),
+    {ok, HW3} = lfm_proxy:open(Worker3, SessId(Worker3), #file_ref{guid = Guid}, write),
+    NewData = crypto:strong_rand_bytes(8),
+    {ok, _} = lfm_proxy:write(Worker3, HW3, 0, NewData),
+    ok = lfm_proxy:close(Worker3, HW3),
     
-    CheckStatsFun(StatsBytesW1, [<<"total">>], empty),
-    CheckStatsFun(StatsBytesW2, [<<"total">>, <<"mntst1">>], {1, byte_size(?TEST_DATA)}),
+    {ok, HW2} = lfm_proxy:open(Worker2, SessId(Worker2), #file_ref{guid = Guid}, read),
+    ?assertEqual({ok, NewData}, lfm_proxy:read(Worker2, HW2, 0, byte_size(NewData)), ?ATTEMPTS),
+    ok = lfm_proxy:close(Worker2, HW2),
+    ?assertEqual({ok, ?FULFILLED_QOS_STATUS}, lfm_proxy:check_qos_status(Worker2, SessId(Worker2), QosEntryId), ?ATTEMPTS),
     
-    CheckStatsFun(StatsFilesW1, [<<"total">>], empty),
-    CheckStatsFun(StatsFilesW2, [<<"total">>, <<"mntst2">>], {1, 1}).
+    check_transfer_stats(Worker1, QosEntryId, bytes, [<<"total">>], empty),
+    check_transfer_stats(Worker2, QosEntryId, bytes, [<<"mntst1">>], {1, byte_size(?TEST_DATA)}),
+    check_transfer_stats(Worker2, QosEntryId, bytes, [<<"mntst3">>], {1, byte_size(NewData)}),
+    check_transfer_stats(Worker2, QosEntryId, bytes, [<<"total">>], {2, byte_size(NewData) + byte_size(?TEST_DATA)}),
+    check_transfer_stats(Worker1, QosEntryId, files, [<<"total">>], empty),
+    check_transfer_stats(Worker2, QosEntryId, files, [<<"total">>, <<"mntst2">>], {2, 2}).
+
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -944,6 +940,23 @@ mock_fslogic_authz_ensure_authorized(Worker) ->
         fun(_, FileCtx, _) ->
             FileCtx
         end).
+
+
+check_transfer_stats(Worker, QosEntryId, Type, ExpectedSeries, ExpectedValue) ->
+    {ok, Stats} = rpc:call(Worker, qos_transfer_stats, get, [QosEntryId, Type]),
+    lists:foreach(fun(Series) ->
+        lists:foreach(fun(Metric) ->
+            ?assert(maps:is_key({Series, Metric}, Stats)),
+            Value = maps:get({Series, Metric}, Stats),
+            case ExpectedValue of
+                empty ->
+                    ?assertEqual([], Value);
+                _ ->
+                    [{_Timestamp, Value1}] = Value,
+                    ?assertEqual(ExpectedValue, Value1)
+            end
+        end, [<<"minute">>, <<"hour">>, <<"day">>, <<"month">>])
+    end, ExpectedSeries).
 
 %%%===================================================================
 %%% DBSync mocks

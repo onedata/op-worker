@@ -40,6 +40,7 @@
 -export([flush_stats/3]).
 
 -type id() :: qos_traverse_req:id().
+-type transfer_id() :: binary().
 
 -export_type([id/0]).
 
@@ -220,23 +221,24 @@ do_slave_job(#tree_traverse_slave{file_ctx = FileCtx}, TaskId) ->
 %%% synchronizer_callback_behaviour
 %%%===================================================================
 
--spec flush_stats(od_space:id(), id(), #{od_provider:id() => non_neg_integer()}) ->
+-spec flush_stats(od_space:id(), transfer_id(), #{od_provider:id() => non_neg_integer()}) ->
     ok | {error, term()}.
 flush_stats(SpaceId, TransferId, BytesPerProvider) ->
-    case binary:split(TransferId, ?SEPARATOR) of
-        [_TaskId, FileUuid] ->
+    case transfer_id_to_file_uuid(TransferId) of
+        {ok, FileUuid} ->       
             QosEntries = get_file_local_qos_entries(SpaceId, FileUuid),
-            {TotalBytes, BytesPerStorage} = maps:fold(fun(ProviderId, Value, {Sum, AccMap}) ->
+            BytesPerStorage = maps:fold(fun(ProviderId, Value, AccMap) ->
                 {ok, StoragesMap} = space_logic:get_storages_by_provider(SpaceId, ProviderId),
                 %% @TODO VFS-5497 No longer true after allowing to support one space with many storages on one provider
                 [StorageId | _] = maps:keys(StoragesMap),
-                {Sum + Value, AccMap#{StorageId => Value}}
-            end, {0, #{}}, BytesPerProvider),
-            report_transfer_stats(QosEntries, bytes, BytesPerStorage#{<<"total">> => TotalBytes});
-        _ ->
+                AccMap#{StorageId => Value}
+            end, #{}, BytesPerProvider),
+            report_transfer_stats(QosEntries, bytes, BytesPerStorage);
+        error ->
             % File UUID of legacy transfer cannot be retrieved, ignore such stats
             ok
     end.
+
 
 %%%===================================================================
 %%% Internal functions
@@ -354,7 +356,7 @@ report_file_synchronization_started_for_entries(QosEntries, FileCtx) ->
 -spec report_file_synchronized_for_entries([qos_entry:id()], file_ctx:ctx()) -> ok.
 report_file_synchronized_for_entries(QosEntries, FileCtx) ->
     {StorageId, FileCtx2} = file_ctx:get_storage_id(FileCtx),
-    report_transfer_stats(QosEntries, files, #{StorageId => 1, <<"total">> => 1}),
+    report_transfer_stats(QosEntries, files, #{StorageId => 1}),
     report_to_audit_log(
         QosEntries, FileCtx2, [], fun qos_entry_audit_log:report_file_synchronized/2).
 
@@ -380,8 +382,7 @@ report_to_audit_log(QosEntries, FileCtx, Args, ReportFun) ->
     #{od_storage:id() => non_neg_integer()}) -> ok.
 report_transfer_stats(QosEntries, Type, ValuesPerStorage) ->
     lists:foreach(fun(QosEntryId) ->
-        ok = qos_transfer_stats:update(
-            QosEntryId, Type, ValuesPerStorage)
+        ok = qos_transfer_stats:update(QosEntryId, Type, ValuesPerStorage)
     end, QosEntries).
 
 
@@ -396,3 +397,12 @@ cancel_local_traverses(QosEntryDoc) ->
             Error -> ?error("Error when cancelling traverse: ~p", [Error])
         end
     end, LocalTraverseIds).
+
+
+%% @private
+-spec transfer_id_to_file_uuid(transfer_id()) -> {ok, file_meta:uuid()} | error.
+transfer_id_to_file_uuid(TransferId) ->
+    case binary:split(TransferId, ?SEPARATOR) of
+        [_TaskId, FileUuid] -> {ok, FileUuid};
+        _ -> error
+    end.
