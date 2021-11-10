@@ -132,7 +132,7 @@ get_summary(AtmWorkflowExecutionId, #atm_workflow_execution{
     }.
 
 
--spec cancel(atm_workflow_execution:id()) -> ok | {error, already_ended}.
+-spec cancel(atm_workflow_execution:id()) -> ok | errors:error().
 cancel(AtmWorkflowExecutionId) ->
     atm_workflow_execution_handler:cancel(AtmWorkflowExecutionId).
 

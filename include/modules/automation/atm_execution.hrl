@@ -59,7 +59,7 @@
     % (origin) lane run
     origin_run_num = undefined :: undefined | pos_integer(),
 
-    status :: atm_lane_execution:status(),
+    status :: atm_lane_execution:run_status(),
     % Flag used to differentiate reasons why lane execution run is aborting
     aborting_reason = undefined :: undefined | cancel | failure,
 

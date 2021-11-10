@@ -24,12 +24,16 @@
 %% API
 -export([
     resolve_selector/2,
+    resolve_run_selector/2,
 
     get_schema_id/2,
     get_schema/2,
 
-    get_current_run/2,
-    update_current_run/3, update_current_run/4
+    get_current_run/2, %% TODO replace with get_run?
+    get_run/2,
+
+    update_current_run/3, update_current_run/4,  %% TODO replace with update_run?
+    update_run/3
 ]).
 -export([get/2, update/3]).
 -export([to_json/1]).
@@ -41,7 +45,14 @@
 -type index() :: pos_integer().
 -type selector() :: current | index().
 
--type status() ::
+-type record() :: #atm_lane_execution{}.
+-type diff() :: fun((record()) -> {ok, record()} | {error, term()}).
+
+-type run_num() :: pos_integer().
+-type run_selector() :: current | run_num().
+-type run_id() :: {selector(), run_selector()}.
+
+-type run_status() ::
     ?SCHEDULED_STATUS | ?PREPARING_STATUS | ?ENQUEUED_STATUS |
     ?ACTIVE_STATUS | ?ABORTING_STATUS |
     ?FINISHED_STATUS | ?CANCELLED_STATUS | ?FAILED_STATUS | ?INTERRUPTED_STATUS.
@@ -49,11 +60,8 @@
 -type run_diff() :: fun((run()) -> {ok, run()} | {error, term()}).
 -type run() :: #atm_lane_execution_run{}.
 
--type diff() :: fun((record()) -> {ok, record()} | {error, term()}).
--type record() :: #atm_lane_execution{}.
-
--export_type([status/0, run_diff/0, run/0]).
 -export_type([index/0, selector/0, diff/0, record/0]).
+-export_type([run_num/0, run_selector/0, run_status/0, run_diff/0, run/0]).
 
 
 %%%===================================================================
@@ -66,6 +74,13 @@ resolve_selector(current, #atm_workflow_execution{current_lane_index = CurrentAt
     CurrentAtmLaneIndex;
 resolve_selector(AtmLaneIndex, _) ->
     AtmLaneIndex.
+
+
+-spec resolve_run_selector(run_selector(), atm_workflow_execution:record()) -> run_num().
+resolve_run_selector(current, #atm_workflow_execution{current_run_num = CurrentRunNum}) ->
+    CurrentRunNum;
+resolve_run_selector(RunNum, _) ->
+    RunNum.
 
 
 %% @private
@@ -90,19 +105,45 @@ get_schema(AtmLaneSelector, AtmWorkflowExecution = #atm_workflow_execution{
     lists:nth(AtmLaneIndex, AtmWorkflowSchemaSnapshot#atm_workflow_schema_snapshot.lanes).
 
 
+-spec get_run(run_id(), atm_workflow_execution:record()) ->
+    {ok, run()} | errors:error().
+get_run({AtmLaneSelector, RunSelector}, AtmWorkflowExecution) ->
+    AtmLaneExecution = get(AtmLaneSelector, AtmWorkflowExecution),
+
+    case locate_run(RunSelector, AtmLaneExecution, AtmWorkflowExecution) of
+        {ok, _, Run} -> {ok, Run};
+        {error, _} = Error -> Error
+    end.
+
+
+-spec update_run(run_id(), run_diff(), atm_workflow_execution:record()) ->
+    {ok, atm_workflow_execution:record()} | errors:error().
+update_run({AtmLaneSelector, RunSelector}, Diff, AtmWorkflowExecution = #atm_workflow_execution{
+    lanes = AtmLaneExecutions
+}) ->
+    AtmLaneIndex = resolve_selector(AtmLaneSelector, AtmWorkflowExecution),
+    AtmLaneExecution = #atm_lane_execution{runs = Runs} = maps:get(AtmLaneIndex, AtmLaneExecutions),
+
+    case locate_run(RunSelector, AtmLaneExecution, AtmWorkflowExecution) of
+        {ok, RunIndex, Run} ->
+            case Diff(Run) of
+                {ok, UpdatedRun} ->
+                    NewAtmLaneExecution = AtmLaneExecution#atm_lane_execution{
+                        runs = lists_utils:replace_at(UpdatedRun, RunIndex, Runs)
+                    },
+                    {ok, replace(AtmLaneIndex, NewAtmLaneExecution, AtmWorkflowExecution)};
+                {error, _} = Error1 ->
+                    Error1
+            end;
+        {error, _} = Error2 ->
+            Error2
+    end.
+
+
 -spec get_current_run(selector(), atm_workflow_execution:record()) ->
     {ok, run()} | errors:error().
-get_current_run(AtmLaneSelector, AtmWorkflowExecution = #atm_workflow_execution{
-    current_run_num = CurrentRunNum
-}) ->
-    case get_latest_run(get(AtmLaneSelector, AtmWorkflowExecution)) of
-        {ok, #atm_lane_execution_run{run_num = undefined}} = Result ->
-            Result;
-        {ok, #atm_lane_execution_run{run_num = CurrentRunNum}} = Result ->
-            Result;
-        _ ->
-            ?ERROR_NOT_FOUND
-    end.
+get_current_run(AtmLaneSelector, AtmWorkflowExecution) ->
+    get_run({AtmLaneSelector, current}, AtmWorkflowExecution).
 
 
 %% @private
@@ -318,6 +359,40 @@ decode_run(NestedRecordDecoder, EncodedRun = #{
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+%% @private
+-spec replace(index(), record(), atm_workflow_execution:record()) ->
+    atm_workflow_execution:record().
+replace(AtmLaneIndex, AtmLaneExecution, AtmWorkflowExecution = #atm_workflow_execution{
+    lanes = AtmLaneExecutions
+}) ->
+    AtmWorkflowExecution#atm_workflow_execution{lanes = AtmLaneExecutions#{
+        AtmLaneIndex => AtmLaneExecution
+    }}.
+
+
+%% @private
+-spec locate_run(run_selector(), record(), atm_workflow_execution:record()) ->
+    {ok, RunIndex :: pos_integer(), run()} | ?ERROR_NOT_FOUND.
+locate_run(RunSelector, AtmLaneExecution, AtmWorkflowExecution) ->
+    TargetRunNum = resolve_run_selector(RunSelector, AtmWorkflowExecution),
+
+    Result = lists_utils:foldl_while(fun
+        (#atm_lane_execution_run{run_num = undefined} = Run, Acc) when RunSelector =:= current ->
+            {halt, {ok, Acc + 1, Run}};
+        (#atm_lane_execution_run{run_num = RunNum} = Run, Acc) when RunNum =:= TargetRunNum ->
+            {halt, {ok, Acc + 1, Run}};
+        (#atm_lane_execution_run{run_num = RunNum}, _) when RunNum < TargetRunNum ->
+            {halt, ?ERROR_NOT_FOUND};
+        (_, Acc) ->
+            {cont, Acc + 1}
+    end, 0, AtmLaneExecution#atm_lane_execution.runs),
+
+    case is_integer(Result) of
+        true -> ?ERROR_NOT_FOUND;
+        false -> Result
+    end.
 
 
 %% @private

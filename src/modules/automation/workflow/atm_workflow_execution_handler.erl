@@ -105,7 +105,7 @@ start(UserCtx, AtmWorkflowExecutionEnv, #document{
     }).
 
 
--spec cancel(atm_workflow_execution:id()) -> ok | {error, already_ended}.
+-spec cancel(atm_workflow_execution:id()) -> ok | errors:error().
 cancel(AtmWorkflowExecutionId) ->
     case atm_lane_execution_status:handle_aborting(current, AtmWorkflowExecutionId, cancel) of
         ok ->
