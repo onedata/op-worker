@@ -66,9 +66,8 @@ list() ->
 % @TODO VFS-8349 rework when Oneprovider understands workflow schema and lambda versioning
 -spec get_latest_revision(record()) -> atm_lambda_revision:record().
 get_latest_revision(#od_atm_lambda{revision_registry = RevisionRegistry}) ->
-    LatestRevisionNumber = atm_lambda_revision_registry:get_latest_revision_number(RevisionRegistry),
-    case LatestRevisionNumber of
-        undefined ->
+    case atm_lambda_revision_registry:get_all_revision_numbers(RevisionRegistry) of
+        [] ->
             % return a dummy revision
             #atm_lambda_revision{
                 name = <<"unknown">>,
@@ -88,8 +87,8 @@ get_latest_revision(#od_atm_lambda{revision_registry = RevisionRegistry}) ->
                 checksum = <<>>,
                 state = draft
             };
-        _ ->
-            atm_lambda_revision_registry:get_revision(LatestRevisionNumber, RevisionRegistry)
+        AllRevisionNumbers ->
+            atm_lambda_revision_registry:get_revision(lists:max(AllRevisionNumbers), RevisionRegistry)
     end.
 
 

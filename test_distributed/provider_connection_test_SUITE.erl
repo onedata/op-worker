@@ -41,6 +41,9 @@
 
 all() ->
     ?ALL([
+        % NOTE: unfortunately these tests depend on each other and some
+        % quirks of the initializer. Changing the order can result in failures.
+        % Ideally, this SUITE should be rewritten to use one-env.
         provider_logic_correctly_resolves_nodes_to_connect,
         incompatible_providers_should_not_connect,
         provider_should_reconnect_after_loss_of_connection,
