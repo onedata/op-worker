@@ -4,6 +4,8 @@ Release notes for project op-worker
 CHANGELOG
 ---------
 
+### 21.02.0-alpha22
+
 ### 21.02.0-alpha21
 
 ### 21.02.0-alpha20
@@ -172,6 +174,10 @@ CHANGELOG
 -   **VFS-6566** Improved UX and fixed minor issues in share views.
     Fixed inability to open share hosted by Oneprovider 19.02.x using
     Onezone 20.02.x.
+
+### 20.02.14
+
+-   **VFS-8482** Added dedicated page for privacy policy content.
 
 ### 20.02.13
 
