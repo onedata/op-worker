@@ -12,12 +12,14 @@
 -module(atm_lambda_logic).
 -author("Michal Stanisz").
 
--include("middleware/middleware.hrl").
 -include("graph_sync/provider_graph_sync.hrl").
+-include("middleware/middleware.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
+-include_lib("ctool/include/automation/automation.hrl").
 
 -export([get/2]).
+-export([assert_executable/1]).
 
 
 %%%===================================================================
@@ -32,3 +34,15 @@ get(SessionId, AtmLambdaId) ->
         gri = #gri{type = od_atm_lambda, id = AtmLambdaId, aspect = instance, scope = private},
         subscribe = true
     }).
+
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Checks whether given atm lambda revision can be executed (not all valid features may
+%% be supported by this provider - e.g. OpenFaaS service may not be configured).
+%% @end
+%%-------------------------------------------------------------------
+-spec assert_executable(atm_lambda_revision:record()) ->
+    ok | no_return().
+assert_executable(#atm_lambda_revision{operation_spec = #atm_openfaas_operation_spec{}}) ->
+    atm_openfaas_task_executor:assert_openfaas_available().

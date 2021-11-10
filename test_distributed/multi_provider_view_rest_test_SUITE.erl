@@ -313,8 +313,8 @@ creating_view_with_invalid_params_should_fail(Config) ->
         {#{spatial => -3}, ?ERROR_BAD_VALUE_BOOLEAN(<<"spatial">>)},
         {#{spatial => ok}, ?ERROR_BAD_VALUE_BOOLEAN(<<"spatial">>)},
 
-        {#{providers => [ok]}, ?ERROR_SPACE_NOT_SUPPORTED_BY(<<"ok">>)},
-        {#{providers => [<<"ASD">>]}, ?ERROR_SPACE_NOT_SUPPORTED_BY(<<"ASD">>)}
+        {#{providers => [ok]}, ?ERROR_SPACE_NOT_SUPPORTED_BY(?SPACE_ID, <<"ok">>)},
+        {#{providers => [<<"ASD">>]}, ?ERROR_SPACE_NOT_SUPPORTED_BY(?SPACE_ID, <<"ASD">>)}
     ]).
 
 
@@ -366,8 +366,8 @@ updating_view_with_invalid_params_should_fail(Config) ->
         {#{spatial => -3}, ?ERROR_BAD_VALUE_BOOLEAN(<<"spatial">>)},
         {#{spatial => ok}, ?ERROR_BAD_VALUE_BOOLEAN(<<"spatial">>)},
 
-        {#{providers => [ok]}, ?ERROR_SPACE_NOT_SUPPORTED_BY(<<"ok">>)},
-        {#{providers => [<<"ASD">>]}, ?ERROR_SPACE_NOT_SUPPORTED_BY(<<"ASD">>)}
+        {#{providers => [ok]}, ?ERROR_SPACE_NOT_SUPPORTED_BY(?SPACE_ID, <<"ok">>)},
+        {#{providers => [<<"ASD">>]}, ?ERROR_SPACE_NOT_SUPPORTED_BY(?SPACE_ID, <<"ASD">>)}
     ]).
 
 
@@ -571,7 +571,7 @@ getting_view_of_not_supported_space_should_fail(Config) ->
     }}, get_view_via_rest(Config, WorkerP2, SpaceId, ViewName), ?ATTEMPTS),
 
     ExpRestError = rest_test_utils:get_rest_error(
-        ?ERROR_SPACE_NOT_SUPPORTED_BY(?GET_DOMAIN_BIN(WorkerP1))
+        ?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceId, ?GET_DOMAIN_BIN(WorkerP1))
     ),
     ?assertMatch(ExpRestError, get_view_via_rest(
         Config, WorkerP1, SpaceId, ViewName

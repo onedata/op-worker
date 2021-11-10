@@ -372,7 +372,7 @@ get_expected_malformed_data_error({error, _} = Error, _, _) ->
 get_expected_malformed_data_error({error_fun, ErrorFun}, _, TestCaseCtx) ->
     ErrorFun(TestCaseCtx);
 get_expected_malformed_data_error(
-    {_ScenarioType, ?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceId, _)}, _, #api_test_ctx{node = Node}
+    {_ScenarioType, ?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceId, provider_id_placeholder)}, _, #api_test_ctx{node = Node}
 ) ->
     ProviderId = opw_test_rpc:get_provider_id(Node),
     ?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceId, ProviderId);

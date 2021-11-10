@@ -31,12 +31,6 @@
     qos_status_during_traverse_with_dir_deletion_test/1,
     qos_status_during_traverse_with_dir_deletion_with_hardlinks_test/1,
     qos_status_during_traverse_with_dir_deletion_with_random_children_test/1,
-    qos_status_during_reconciliation_test/1,
-    qos_status_during_reconciliation_prefix_file_test/1,
-    qos_status_during_reconciliation_with_file_deletion_test/1,
-    qos_status_during_reconciliation_with_hardlink_deletion_test/1,
-    qos_status_during_reconciliation_with_dir_containing_reg_file_deletion_test/1,
-    qos_status_during_reconciliation_with_dir_containing_hardlink_deletion_test/1,
     qos_status_during_traverse_file_without_qos_test/1,
     qos_status_after_failed_transfers/1,
     qos_status_after_failed_transfers_deleted_file/1,
@@ -52,19 +46,12 @@ all() -> [
     qos_status_during_traverse_with_dir_deletion_test,
     qos_status_during_traverse_with_dir_deletion_with_hardlinks_test,
     qos_status_during_traverse_with_dir_deletion_with_random_children_test,
-    qos_status_during_reconciliation_test,
-    qos_status_during_reconciliation_prefix_file_test,
-    qos_status_during_reconciliation_with_file_deletion_test,
-    qos_status_during_reconciliation_with_hardlink_deletion_test,
-    qos_status_during_reconciliation_with_dir_containing_reg_file_deletion_test,
-    qos_status_during_reconciliation_with_dir_containing_hardlink_deletion_test,
     qos_status_during_traverse_file_without_qos_test,
     qos_status_after_failed_transfers,
     qos_status_after_failed_transfers_deleted_file,
     qos_status_after_failed_transfers_deleted_entry
 ].
 
-%%-define(SPACE_ID, oct_background:get_space_id(space1)).
 -define(SPACE_ID, <<"space1">>).
 
 %%%===================================================================
@@ -94,37 +81,6 @@ qos_status_during_traverse_with_dir_deletion_with_hardlinks_test(Config) ->
 
 qos_status_during_traverse_with_dir_deletion_with_random_children_test(Config) ->
     qos_test_base:qos_status_during_traverse_with_dir_deletion_test_base(Config, ?SPACE_ID, 8, random).
-
-qos_status_during_reconciliation_test(Config) ->
-    [Worker1 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
-    Filename = generator:gen_name(),
-    DirStructure = ?nested_dir_structure(?SPACE_ID, Filename, [?GET_DOMAIN_BIN(Worker1)]),
-    qos_test_base:qos_status_during_reconciliation_test_base(Config, ?SPACE_ID, DirStructure, Filename).
-
-qos_status_during_reconciliation_prefix_file_test(Config) ->
-    [Worker1 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
-    Name = generator:gen_name(),
-    DirStructure =
-        {?SPACE_ID, [
-            {Name, [
-                {?filename(Name, 1), ?TEST_DATA, [?GET_DOMAIN_BIN(Worker1)]},
-                {?filename(Name, 11), ?TEST_DATA, [?GET_DOMAIN_BIN(Worker1)]}
-            ]}
-        ]},
-    
-    qos_test_base:qos_status_during_reconciliation_test_base(Config, ?SPACE_ID, DirStructure, Name).
-
-qos_status_during_reconciliation_with_file_deletion_test(Config) ->
-    qos_test_base:qos_status_during_reconciliation_with_file_deletion_test_base(Config, ?SPACE_ID, 8, reg_file).
-
-qos_status_during_reconciliation_with_hardlink_deletion_test(Config) ->
-    qos_test_base:qos_status_during_reconciliation_with_file_deletion_test_base(Config, ?SPACE_ID, 8, hardlink).
-
-qos_status_during_reconciliation_with_dir_containing_reg_file_deletion_test(Config) ->
-    qos_test_base:qos_status_during_reconciliation_with_dir_deletion_test_base(Config, ?SPACE_ID, 8, reg_file).
-
-qos_status_during_reconciliation_with_dir_containing_hardlink_deletion_test(Config) ->
-    qos_test_base:qos_status_during_reconciliation_with_dir_deletion_test_base(Config, ?SPACE_ID, 8, hardlink).
 
 qos_status_during_traverse_file_without_qos_test(Config) ->
     qos_test_base:qos_status_during_traverse_file_without_qos_test_base(Config, ?SPACE_ID).

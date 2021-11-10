@@ -17,6 +17,7 @@
 -include("modules/fslogic/fslogic_delete.hrl").
 -include("modules/storage/luma/luma.hrl").
 -include("modules/fslogic/file_attr.hrl").
+-include("workflow_engine.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_models.hrl").
 
 -type file_descriptors() :: #{session:id() => non_neg_integer()}.
@@ -1065,7 +1066,7 @@
 
 -record(atm_task_execution, {
     workflow_execution_id :: atm_workflow_execution:id(),
-    lane_index :: non_neg_integer(),
+    lane_index :: atm_lane_execution:index(),
     parallel_box_index :: non_neg_integer(),
 
     schema_id :: automation:id(),
@@ -1131,15 +1132,21 @@
 
     store_registry :: atm_workflow_execution:store_registry(),
     system_audit_log_id :: undefined | atm_store:id(),
-    lanes :: [atm_lane_execution:record()],
+
+    % lane execution records are kept as values in map where keys are indices
+    % (from 1 up to `lanes_count`) due to performance and convenience of use
+    % when accessing and modifying random element
+    lanes :: #{atm_lane_execution:index() => atm_lane_execution:record()},
+    lanes_count :: pos_integer(),
+
+    current_lane_index :: atm_lane_execution:index(),
+    current_run_num :: pos_integer(),
 
     status :: atm_workflow_execution:status(),
     % Flag used to tell if status was changed during doc update (set automatically
     % when updating doc). It is necessary due to limitation of datastore as
     % otherwise getting document before update would be needed (to compare 2 docs).
     prev_status :: atm_workflow_execution:status(),
-    % Flag used to differentiate reasons why workflow is aborting
-    aborting_reason = undefined :: undefined | cancel | failure,
 
     callback :: undefined | http_client:url(),
 
@@ -1173,8 +1180,10 @@
 
 -record(workflow_iterator_snapshot, {
     iterator :: iterator:iterator(),
-    lane_index = 0 :: workflow_execution_state:index(),
-    item_index = 0 :: workflow_execution_state:index()
+    lane_index = workflow_execution_state:index(),
+    lane_id :: workflow_engine:lane_id(),
+    next_lane_id :: workflow_engine:lane_id() | undefined,
+    item_index = workflow_execution_state:index()
 }).
 
 -record(workflow_engine_state, {
@@ -1185,15 +1194,28 @@
 
 -record(workflow_execution_state, {
     handler :: workflow_handler:handler(),
-    context :: workflow_engine:execution_context(),
+    initial_context :: workflow_engine:execution_context(),
 
-    execution_status = not_prepared :: workflow_execution_state:execution_status(),
-    current_lane :: workflow_execution_state:current_lane() | undefined,
+    execution_status = ?NOT_PREPARED :: workflow_execution_state:execution_status(),
+    current_lane :: workflow_execution_state:current_lane(),
+
+    % engine can prepare next lane in advance but it is not being executed until current lane is finished
+    % and workflow_handler:handle_lane_execution_ended/3 (called for current lane) confirms that next lane
+    % execution should start
+    next_lane_preparation_status = ?NOT_PREPARED :: workflow_execution_state:next_lane_preparation_status(),
+    next_lane :: workflow_execution_state:next_lane(),
+
     lowest_failed_job_identifier :: workflow_jobs:job_identifier() | undefined,
+    failed_job_count = 0 :: non_neg_integer(),
 
     iteration_state :: workflow_iteration_state:state() | undefined,
     prefetched_iteration_step :: workflow_execution_state:iteration_status(),
     jobs :: workflow_jobs:jobs() | undefined,
+
+    % callbacks executed after update of record (have to be executed outside datastore tp process)
+    % TODO VFS-7919 - consider keeping callbacks list from beginning
+    % to guarantee that each callback is called exactly once
+    pending_callbacks = [] :: [workflow_execution_state:callback_selector()],
 
     % Field used to return additional information about document update procedure
     % (datastore:update returns {ok, #document{}} or {error, term()}

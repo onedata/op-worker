@@ -229,7 +229,7 @@ register_async_job_finish(Jobs = #workflow_jobs{
     end.
 
 -spec prepare_next_parallel_box(jobs(), job_identifier(), workflow_execution_state:boxes_map(), non_neg_integer()) ->
-    {ok | ?WF_ERROR_ITEM_PROCESSING_FINISHED(workflow_execution_state:index(), item_processing_result()), jobs()}.
+    {ok | ?WF_ERROR_ITEM_PROCESSING_ENDED(workflow_execution_state:index(), item_processing_result()), jobs()}.
 prepare_next_parallel_box(
     Jobs = #workflow_jobs{
         failed_items = Failed,
@@ -243,10 +243,10 @@ prepare_next_parallel_box(
     BoxesSpec, BoxCount) ->
     case {has_item(ItemIndex, Failed), BoxIndex} of
         {true, _} ->
-            {?WF_ERROR_ITEM_PROCESSING_FINISHED(ItemIndex, ?FAILURE),
+            {?WF_ERROR_ITEM_PROCESSING_ENDED(ItemIndex, ?FAILURE),
                 Jobs#workflow_jobs{failed_items = sets:del_element(ItemIndex, Failed)}};
         {false, BoxCount} ->
-            {?WF_ERROR_ITEM_PROCESSING_FINISHED(ItemIndex, ?SUCCESS), Jobs};
+            {?WF_ERROR_ITEM_PROCESSING_ENDED(ItemIndex, ?SUCCESS), Jobs};
         {false, _} ->
             NewBoxIndex = BoxIndex + 1,
             Tasks = maps:get(NewBoxIndex, BoxesSpec),

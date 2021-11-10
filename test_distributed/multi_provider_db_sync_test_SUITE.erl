@@ -28,7 +28,9 @@
     db_sync_distributed_modification_test/1,
     db_sync_with_delays_test/1,
     db_sync_create_after_del_test/1,
+    db_sync_create_after_del_test_base/1,
     db_sync_create_after_deletion_links_test/1,
+    db_sync_create_after_deletion_links_test_base/1,
     db_sync_basic_opts_with_errors_test/1,
     sparse_files_should_be_created/1
 ]).
@@ -47,7 +49,9 @@
 
 -define(PERFORMANCE_TEST_CASES, [
     db_sync_many_ops_test,
-    db_sync_with_delays_test
+    db_sync_with_delays_test,
+    db_sync_create_after_del_test,
+    db_sync_create_after_deletion_links_test
 ]).
 
 all() ->
@@ -82,9 +86,37 @@ db_sync_basic_opts_with_errors_test(Config) ->
     multi_provider_file_ops_test_base:basic_opts_test_base(Config, <<"user1">>, {4,0,0,2}, 60, false).
 
 db_sync_create_after_del_test(Config) ->
+    ?PERFORMANCE(Config, [
+        {repeats, 1},
+        {success_rate, 100},
+        {parameters, [
+            [{name, test_type}, {value, standard}, {description, "Type of test"}]
+        ]},
+        {description, "Test of file createion/deletion in loop"},
+        {config, [{name, performance},
+            {parameters, [
+                [{name, test_type}, {value, performance}]
+            ]}
+        ]}
+    ]).
+db_sync_create_after_del_test_base(Config) ->
     multi_provider_file_ops_test_base:create_after_del_test_base(Config, <<"user1">>, {4,0,0,2}, 60).
 
 db_sync_create_after_deletion_links_test(Config) ->
+    ?PERFORMANCE(Config, [
+        {repeats, 1},
+        {success_rate, 100},
+        {parameters, [
+            [{name, test_type}, {value, standard}, {description, "Type of test"}]
+        ]},
+        {description, "Test of file createion/deletion in loop using deletion marker"},
+        {config, [{name, performance},
+            {parameters, [
+                [{name, test_type}, {value, performance}]
+            ]}
+        ]}
+    ]).
+db_sync_create_after_deletion_links_test_base(Config) ->
     % The same test as db_sync_create_after_del_test but with mock (see init_per_testcase)
     multi_provider_file_ops_test_base:create_after_del_test_base(Config, <<"user1">>, {4,0,0,2}, 60).
 

@@ -17,11 +17,11 @@
 
 %% API
 -export([
-    create_all/1, create/3,
+    create/3,
     get/1, browse_content/3, acquire_iterator/2,
     freeze/1, unfreeze/1,
     apply_operation/5,
-    delete_all/1, delete/1
+    delete/1
 ]).
 
 -compile({no_auto_import, [get/1]}).
@@ -43,30 +43,6 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
-
-
--spec create_all(atm_workflow_execution_factory:creation_ctx()) ->
-    [atm_store:doc()] | no_return().
-create_all(#atm_workflow_execution_creation_ctx{
-    workflow_execution_auth = AtmWorkflowExecutionAuth,
-    workflow_schema_doc = #document{value = AtmWorkflowSchema},
-    store_initial_values = StoreInitialValues
-}) ->
-    #atm_workflow_schema_revision{
-        stores = AtmStoreSchemas
-    } = od_atm_workflow_schema:get_latest_revision(AtmWorkflowSchema),
-    lists:reverse(lists:foldl(fun(#atm_store_schema{id = AtmStoreSchemaId} = AtmStoreSchema, Acc) ->
-        StoreInitialValue = utils:null_to_undefined(maps:get(
-            AtmStoreSchemaId, StoreInitialValues, undefined
-        )),
-        try
-            {ok, AtmStoreDoc} = create(AtmWorkflowExecutionAuth, StoreInitialValue, AtmStoreSchema),
-            [AtmStoreDoc | Acc]
-        catch _:Reason ->
-            catch delete_all([Doc#document.key || Doc <- Acc]),
-            throw(?ERROR_ATM_STORE_CREATION_FAILED(AtmStoreSchemaId, Reason))
-        end
-    end, [], AtmStoreSchemas)).
 
 
 -spec create(
@@ -197,11 +173,6 @@ apply_operation(AtmWorkflowExecutionAuth, Operation, Item, Options, AtmStoreId) 
         {error, _} = Error ->
             throw(Error)
     end.
-
-
--spec delete_all([atm_store:id()]) -> ok.
-delete_all(AtmStoreIds) ->
-    lists:foreach(fun delete/1, AtmStoreIds).
 
 
 -spec delete(atm_store:id()) -> ok | {error, term()}.

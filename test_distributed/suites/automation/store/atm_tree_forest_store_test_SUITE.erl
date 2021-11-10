@@ -472,7 +472,7 @@ create_iteration_test_env(ProviderSelector, AtmStoreIteratorStrategy, Depth, Typ
         strategy = AtmStoreIteratorStrategy
     },
     AtmWorkflowExecutionEnv = atm_workflow_execution_env:build(
-        SpaceId, WorkflowId, #{AtmStoreDummySchemaId => AtmStoreId}, undefined, undefined
+        SpaceId, WorkflowId, #{AtmStoreDummySchemaId => AtmStoreId}
     ),
     AtmStoreIterator0 = atm_store_test_utils:acquire_store_iterator(ProviderSelector, AtmStoreId, AtmStoreIteratorSpec),
     {AtmWorkflowExecutionEnv, AtmStoreIterator0, FilesMap, Expected}.

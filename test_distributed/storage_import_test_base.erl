@@ -22,7 +22,6 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("kernel/include/file.hrl").
 
-% TODO VFS-6161 divide to smaller test suites
 % TODO VFS-6162 move utility functions to storage_import_test_utils module
 
 % CT functions

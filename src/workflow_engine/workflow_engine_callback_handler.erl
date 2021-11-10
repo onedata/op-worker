@@ -85,7 +85,7 @@ handle_callback(CallbackId, Message) ->
     case CallbackType of
         ?FINISH_CALLBACK_TYPE ->
             workflow_engine:report_execution_status_update(
-                ExecutionId, EngineId, ?ASYNC_CALL_FINISHED, JobIdentifier, Message);
+                ExecutionId, EngineId, ?ASYNC_CALL_ENDED, JobIdentifier, Message);
         ?HEARTBEAT_CALLBACK_TYPE ->
             workflow_timeout_monitor:report_heartbeat(ExecutionId, JobIdentifier)
     end.

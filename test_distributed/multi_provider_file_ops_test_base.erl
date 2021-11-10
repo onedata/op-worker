@@ -750,16 +750,21 @@ create_after_del_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWrit
     delete_test_skeleton(Config, "Standard, write 1", true, false, false, false),
     delete_test_skeleton(Config, "Standard", false, false, false, false),
 
-    delete_test_skeleton(Config, "Open and sleep, write 1", true, true, {true, 10}, false),
-    delete_test_skeleton(Config, "Open and sleep", false, true, {true, 10}, false),
+    case ?config(test_type, Config) of
+        standard ->
+            ok;
+        performance ->
+            delete_test_skeleton(Config, "Open and sleep, write 1", true, true, {true, 10}, false),
+            delete_test_skeleton(Config, "Open and sleep", false, true, {true, 10}, false),
 
-    delete_test_skeleton(Config, "Open no sleep, write 1", true, true, false, false),
-    delete_test_skeleton(Config, "Open no sleep", false, true, false, false),
+            delete_test_skeleton(Config, "Open no sleep, write 1", true, true, false, false),
+            delete_test_skeleton(Config, "Open no sleep", false, true, false, false),
 
-    delete_test_skeleton(Config, "Close after del, write 1", true, true, {true, 1}, true),
-    delete_test_skeleton(Config, "Close after del", false, true, {true, 1}, true),
+            delete_test_skeleton(Config, "Close after del, write 1", true, true, {true, 1}, true),
+            delete_test_skeleton(Config, "Close after del", false, true, {true, 1}, true),
 
-    ok.
+            ok
+    end.
 
 delete_test_skeleton(Config, Desc, WriteOn1, OpenBeforeDel, SleepAfterVerify,
     CloseAfterVerify) ->
