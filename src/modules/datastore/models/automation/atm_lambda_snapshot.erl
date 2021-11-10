@@ -40,16 +40,22 @@
 -spec create(atm_workflow_execution:id(), od_atm_lambda:doc()) ->
     {ok, id()} | {error, term()}.
 create(AtmWorkflowExecutionId, #document{key = AtmLambdaId, value = #od_atm_lambda{
-    name = AtmLambdaName,
-    summary = AtmLambdaSummary,
-    description = AtmLambdaDescription,
-
-    operation_spec = AtmLambdaOperationSpec,
-    argument_specs = AtmLambdaArgumentSpecs,
-    result_specs = AtmLambdaResultSpecs,
-
     atm_inventories = AtmInventories
-}}) ->
+} = AtmLambda}) ->
+    % @TODO VFS-8349 rework when Oneprovider understands workflow schema and lambda versioning
+    #atm_lambda_revision{
+        name = AtmLambdaName,
+        summary = AtmLambdaSummary,
+        description = AtmLambdaDescription,
+
+        operation_spec = AtmLambdaOperationSpec,
+        argument_specs = AtmLambdaArgumentSpecs,
+        result_specs = AtmLambdaResultSpecs,
+        resource_spec = AtmResourceSpec,
+
+        state = State
+    } = od_atm_lambda:get_latest_revision(AtmLambda),
+
     %% TODO VFS-7685 add ref count and gen snapshot id based on doc revision
     ?extract_key(datastore_model:create(?CTX, #document{
         key = datastore_key:new_from_digest([AtmWorkflowExecutionId, AtmLambdaId]),
@@ -63,6 +69,9 @@ create(AtmWorkflowExecutionId, #document{key = AtmLambdaId, value = #od_atm_lamb
             operation_spec = AtmLambdaOperationSpec,
             argument_specs = AtmLambdaArgumentSpecs,
             result_specs = AtmLambdaResultSpecs,
+            resource_spec = AtmResourceSpec,
+
+            state = State,
 
             atm_inventories = AtmInventories
         }

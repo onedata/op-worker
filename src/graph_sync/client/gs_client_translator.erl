@@ -309,13 +309,9 @@ translate(#gri{type = od_atm_lambda, id = Id, aspect = instance, scope = private
     #document{
         key = Id,
         value = #od_atm_lambda{
-            name = maps:get(<<"name">>, Result),
-            summary = maps:get(<<"summary">>, Result),
-            description = maps:get(<<"description">>, Result),
-
-            operation_spec = jsonable_record:from_json(maps:get(<<"operationSpec">>, Result), atm_lambda_operation_spec),
-            argument_specs = jsonable_record:list_from_json(maps:get(<<"argumentSpecs">>, Result), atm_lambda_argument_spec),
-            result_specs = jsonable_record:list_from_json(maps:get(<<"resultSpecs">>, Result), atm_lambda_result_spec),
+            revision_registry = jsonable_record:from_json(
+                maps:get(<<"revisionRegistry">>, Result), atm_lambda_revision_registry
+            ),
 
             atm_inventories = maps:get(<<"atmInventories">>, Result)
         }

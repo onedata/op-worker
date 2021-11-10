@@ -207,11 +207,17 @@ end).
 -define(ATM_INVENTORY_NAME(__AtmInventory), __AtmInventory).
 
 % Mocked atm_lambda data
--define(ATM_LAMBDA_NAME(__AtmLambda), __AtmLambda).
--define(ATM_LAMBDA_SUMMARY(__AtmLambda), <<"example_summary">>).
--define(ATM_LAMBDA_DESCRIPTION(__AtmLambda), <<"example_description">>).
--define(ATM_LAMBDA_OPERATION_SPEC(__AtmLambda),
-    #atm_openfaas_operation_spec{
+-define(ATM_LAMBDA_DATA_SPEC,
+    #atm_data_spec{
+        type = atm_archive_type,
+        value_constraints = #{}
+    }
+).
+-define(ATM_LAMBDA_FIRST_REVISION(__AtmLambda), #atm_lambda_revision{
+    name = <<"example_name">>,
+    summary = <<"example_summary">>,
+    description = <<"example_description">>,
+    operation_spec = #atm_openfaas_operation_spec{
         docker_image = <<"example_docker_image">>,
         docker_execution_options = #atm_docker_execution_options{
             readonly = false,
@@ -219,30 +225,37 @@ end).
             oneclient_mount_point = <<"/a/b/c/d">>,
             oneclient_options = <<"--a --b">>
         }
-    }
-).
--define(ATM_LAMBDA_DATA_SPEC,
-    #atm_data_spec{
-        type = atm_archive_type,
-        value_constraints = #{}
-    }
-).
--define(ATM_LAMBDA_ARGUMENT_SPEC(__AtmLambda),
-    #atm_lambda_argument_spec{
-        name = ?ATM_LAMBDA_NAME(__AtmLambda),
+    },
+    argument_specs = [#atm_lambda_argument_spec{
+        name = <<"arg">>,
         data_spec = ?ATM_LAMBDA_DATA_SPEC,
         is_batch = false,
         is_optional = true,
         default_value = 8
-    }
-).
--define(ATM_LAMBDA_RESULT_SPEC(__AtmLambda),
-    #atm_lambda_result_spec{
-        name = <<"example_name">>,
+    }],
+    result_specs = [#atm_lambda_result_spec{
+        name = <<"res">>,
         data_spec = ?ATM_LAMBDA_DATA_SPEC,
         is_batch = true
+    }],
+    resource_spec = #atm_resource_spec{
+        cpu_requested = 2.0, cpu_limit = 4.0,
+        memory_requested = 1000000000, memory_limit = 5000000000,
+        ephemeral_storage_requested = 1000000000, ephemeral_storage_limit = 5000000000
+    },
+    checksum = <<"d9667c68cad353a675992bfa9330a190">>,
+    state = stable
+}).
+-define(ATM_LAMBDA_REVISION_REGISTRY_VALUE(__AtmLambda), #atm_lambda_revision_registry{
+    registry = #{
+        1 => ?ATM_LAMBDA_FIRST_REVISION(__AtmLambda)
     }
-).
+}).
+-define(ATM_LAMBDA_REVISION_REGISTRY_MATCHER(__AtmLambda), #atm_lambda_revision_registry{
+    registry = #{
+        1 := ?ATM_LAMBDA_FIRST_REVISION(__AtmLambda)
+    }
+}).
 -define(ATM_LAMBDA_INVENTORIES(__AtmLambda), [?ATM_INVENTORY_1]).
 
 % Mocked atm_workflow_schema data
@@ -592,12 +605,7 @@ end).
 
 -define(ATM_LAMBDA_PRIVATE_DATA_MATCHER(__AtmLambda),
     #document{key = __AtmLambda, value = #od_atm_lambda{
-        name = ?ATM_LAMBDA_NAME(__AtmLambda),
-        summary = ?ATM_LAMBDA_SUMMARY(__AtmLambdaId),
-        description = ?ATM_LAMBDA_DESCRIPTION(__AtmLambda),
-        operation_spec = ?ATM_LAMBDA_OPERATION_SPEC(__AtmLambda),
-        argument_specs = [?ATM_LAMBDA_ARGUMENT_SPEC(__AtmLambda)],
-        result_specs = [?ATM_LAMBDA_RESULT_SPEC(__AtmLambda)],
+        revision_registry = ?ATM_LAMBDA_REVISION_REGISTRY_MATCHER(__AtmLambda),
         atm_inventories = ?ATM_LAMBDA_INVENTORIES(__AtmLambda)
     }}).
 
@@ -816,12 +824,7 @@ end).
 -define(ATM_LAMBDA_PRIVATE_DATA_VALUE(__AtmLambdaId), #{
     <<"revision">> => 1,
     <<"gri">> => gri:serialize(#gri{type = od_atm_lambda, id = __AtmLambdaId, aspect = instance, scope = private}),
-    <<"name">> => ?ATM_LAMBDA_NAME(__AtmLambdaId),
-    <<"summary">> => ?ATM_LAMBDA_SUMMARY(__AtmLambdaId),
-    <<"description">> => ?ATM_LAMBDA_DESCRIPTION(__AtmLambdaId),
-    <<"operationSpec">> => jsonable_record:to_json(?ATM_LAMBDA_OPERATION_SPEC(__AtmLambdaId), atm_lambda_operation_spec),
-    <<"argumentSpecs">> => jsonable_record:list_to_json([?ATM_LAMBDA_ARGUMENT_SPEC(__AtmLambdaId)], atm_lambda_argument_spec),
-    <<"resultSpecs">> => jsonable_record:list_to_json([?ATM_LAMBDA_RESULT_SPEC(__AtmLambdaId)], atm_lambda_result_spec),
+    <<"revisionRegistry">> => jsonable_record:to_json(?ATM_LAMBDA_REVISION_REGISTRY_VALUE(__AtmLambdaId), atm_lambda_revision_registry),
     <<"atmInventories">> => ?ATM_LAMBDA_INVENTORIES(__AtmLambdaId)
 }).
 

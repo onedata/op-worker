@@ -25,9 +25,10 @@
 
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/errors.hrl").
+-include_lib("ctool/include/automation/automation.hrl").
 
 %% API
--export([create/2, prepare/2, clean/1, get_spec/1, in_readonly_mode/1, run/3]).
+-export([create/3, prepare/2, clean/1, get_spec/1, in_readonly_mode/1, run/3]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
@@ -44,7 +45,7 @@
 %%%===================================================================
 
 
--callback create(atm_workflow_execution:id(), od_atm_lambda:doc()) ->
+-callback create(atm_workflow_execution:id(), od_atm_lambda:id(), atm_lambda_revision:record()) ->
     record() | no_return().
 
 -callback prepare(atm_workflow_execution_ctx:record(), record()) -> ok | no_return().
@@ -64,14 +65,14 @@
 %%%===================================================================
 
 
--spec create(atm_workflow_execution:id(), od_atm_lambda:doc()) ->
+-spec create(atm_workflow_execution:id(), od_atm_lambda:id(), atm_lambda_revision:record()) ->
     record() | no_return().
-create(AtmWorkflowExecutionId, AtmLambdaDoc = #document{value = #od_atm_lambda{
+create(AtmWorkflowExecutionId, AtmLambdaId, #atm_lambda_revision{
     operation_spec = AtmLambadaOperationSpec
-}}) ->
+} = AtmLambdaRevision) ->
     Engine = atm_lambda_operation_spec:get_engine(AtmLambadaOperationSpec),
     Model = engine_to_executor_model(Engine),
-    Model:create(AtmWorkflowExecutionId, AtmLambdaDoc).
+    Model:create(AtmWorkflowExecutionId, AtmLambdaId, AtmLambdaRevision).
 
 
 -spec prepare(atm_workflow_execution_ctx:record(), record()) -> ok | no_return().
