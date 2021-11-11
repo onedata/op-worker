@@ -1093,15 +1093,12 @@
 -record(atm_workflow_schema_snapshot, {
     schema_id :: automation:id(),
     name :: automation:name(),
-    description :: automation:description(),
+    summary :: automation:summary(),
 
-    stores = [] :: [atm_store_schema:record()],
-    lanes = [] :: [atm_lane_schema:record()],
+    revision_number :: atm_workflow_schema_revision:revision_number(),
+    revision :: atm_workflow_schema_revision:record(),
 
-    state :: automation:lifecycle_state(),
-
-    atm_inventory :: od_atm_inventory:id(),
-    atm_lambdas :: [od_atm_lambda:id()]
+    atm_inventory :: od_atm_inventory:id()
 }).
 
 -record(atm_lambda_snapshot, {

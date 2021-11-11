@@ -27,6 +27,7 @@
     workflow_execution_id :: atm_workflow_execution:id(),
     workflow_execution_auth :: atm_workflow_execution_auth:record(),
 
+    workflow_schema_revision_number :: atm_workflow_schema_revision:revision_number(),
     workflow_schema_doc :: od_atm_workflow_schema:doc(),
     lambda_docs :: [od_atm_lambda:doc()],
     store_initial_values :: atm_workflow_execution_api:store_initial_values(),
@@ -82,6 +83,7 @@ create(UserCtx, SpaceId, AtmWorkflowSchemaId, StoreInitialValues, CallbackUrl) -
             workflow_execution_auth = atm_workflow_execution_auth:build(
                 SpaceId, AtmWorkflowExecutionId, UserCtx
             ),
+            workflow_schema_revision_number = 1, %% TODO add function arg
             workflow_schema_doc = AtmWorkflowSchemaDoc,
             lambda_docs = AtmLambdaDocs,
             store_initial_values = StoreInitialValues,
@@ -145,6 +147,7 @@ delete_insecure(AtmWorkflowExecutionId) ->
 %%%===================================================================
 
 
+%% TODO validate workflow schema/lambda docs - assert contain revisions
 %% @private
 -spec fetch_executable_workflow_schema(session:id(), od_atm_workflow_schema:id()) ->
     od_atm_workflow_schema:doc() | no_return().
@@ -197,12 +200,13 @@ create_execution_components(CreationCtx) ->
 create_workflow_schema_snapshot(CreationCtx = #creation_ctx{
     creation_args = #creation_args{
         workflow_execution_id = AtmWorkflowExecutionId,
+        workflow_schema_revision_number = AtmWorkflowSchemaRevisionNumber,
         workflow_schema_doc = AtmWorkflowSchemaDoc
     },
     execution_components = ExecutionComponents
 }) ->
     {ok, AtmWorkflowSchemaSnapshotId} = atm_workflow_schema_snapshot:create(
-        AtmWorkflowExecutionId, AtmWorkflowSchemaDoc
+        AtmWorkflowExecutionId, AtmWorkflowSchemaRevisionNumber, AtmWorkflowSchemaDoc
     ),
 
     CreationCtx#creation_ctx{execution_components = ExecutionComponents#execution_components{

@@ -14,14 +14,15 @@
 
 -include("modules/automation/atm_execution.hrl").
 -include("modules/datastore/datastore_runner.hrl").
+-include_lib("ctool/include/automation/automation.hrl").
 
 %% API
--export([create/2, get/1, delete/1]).
+-export([create/3, get/1, delete/1]).
 
 %%% field encoding/decoding procedures
 -export([legacy_state_to_json/1, legacy_state_from_json/1]).
 %% datastore_model callbacks
--export([get_ctx/0, get_record_version/0, get_record_struct/1]).
+-export([get_ctx/0, get_record_version/0, get_record_struct/1, upgrade_record/2]).
 
 
 -type id() :: binary().
@@ -39,32 +40,35 @@
 %%%===================================================================
 
 
--spec create(atm_workflow_execution:id(), od_atm_workflow_schema:doc()) ->
+-spec create(
+    atm_workflow_execution:id(),
+    atm_workflow_schema_revision:revision_number(),
+    od_atm_workflow_schema:doc()
+) ->
     {ok, id()} | {error, term()}.
-create(AtmWorkflowExecutionId, #document{key = AtmWorkflowSchemaId, value = #od_atm_workflow_schema{
-    name = AtmWorkflowSchemaName,
-    atm_inventory = AtmInventoryId,
-    atm_lambdas = AtmLambdaIds
-} = AtmWorkflowSchema}) ->
-    #atm_workflow_schema_revision{
-        description = AtmWorkflowSchemaDescription,
-        stores = AtmStoreSchemas,
-        lanes = AtmLaneSchemas,
-        state = AtmWorkflowSchemaState
-    } = od_atm_workflow_schema:get_latest_revision(AtmWorkflowSchema),
-    %% TODO VFS-7685 add ref count and gen snapshot id based on doc revision
+create(AtmWorkflowExecutionId, RevisionNumber, #document{
+    key = AtmWorkflowSchemaId,
+    value = #od_atm_workflow_schema{
+        name = AtmWorkflowSchemaName,
+        summary = AtmWorkflowSchemaSummary,
+        revision_registry = RevisionRegistry,
+        atm_inventory = AtmInventoryId
+    }
+}) ->
+    %% TODO VFS-7685 add ref count and gen snapshot id based on doc.revision and schema.revision_number
     ?extract_key(datastore_model:create(?CTX, #document{
         key = AtmWorkflowExecutionId,
         value = #atm_workflow_schema_snapshot{
             schema_id = AtmWorkflowSchemaId,
             name = AtmWorkflowSchemaName,
-            % @TODO VFS-8349 include summary field from od_atm_workflow_schema
-            description = AtmWorkflowSchemaDescription,
-            stores = AtmStoreSchemas,
-            lanes = AtmLaneSchemas,
-            state = AtmWorkflowSchemaState,
-            atm_inventory = AtmInventoryId,
-            atm_lambdas = AtmLambdaIds
+            summary = AtmWorkflowSchemaSummary,
+
+            revision_number = RevisionNumber,
+            revision = atm_workflow_schema_revision_registry:get_revision(
+                RevisionNumber, RevisionRegistry
+            ),
+
+            atm_inventory = AtmInventoryId
         }
     })).
 
@@ -84,6 +88,7 @@ delete(AtmWorkflowSchemaSnapshotId) ->
 %%%===================================================================
 
 
+%% TODO below translations are 1:1 so why not specify them as atom in record struct callback ?
 %% NOTE: used only in record version 1
 -spec legacy_state_to_json(atom()) -> json_utils:json_term().
 legacy_state_to_json(incomplete) -> <<"incomplete">>;
@@ -120,7 +125,7 @@ get_ctx() ->
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    1.
+    2.
 
 
 %%--------------------------------------------------------------------
@@ -142,4 +147,57 @@ get_record_struct(1) ->
 
         {atm_inventory, string},
         {atm_lambdas, [string]}
+    ]};
+get_record_struct(2) ->
+    % 'atm_lambdas' field was removed
+    {record, [
+        {schema_id, string},
+        {name, string},
+        {summary, string},  %% new field
+
+        %% new field
+        {revision_number, integer},
+        %% new field - description, stores, lane and state are now stored in it
+        {revision, {custom, string, {persistent_record, encode, decode, atm_workflow_schema_revision}}},
+
+        {atm_inventory, string}
     ]}.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Upgrades model's record from provided version to the next one.
+%% @end
+%%--------------------------------------------------------------------
+-spec upgrade_record(datastore_model:record_version(), datastore_model:record()) ->
+    {datastore_model:record_version(), datastore_model:record()}.
+upgrade_record(1, {
+    ?MODULE,
+    SchemaId,
+    Name,
+    Description,
+    Stores,
+    Lanes,
+    State,
+    InventoryId,
+    _LambdaIds
+}) ->
+    {2, {?MODULE,
+        SchemaId,
+        Name,
+        ?DEFAULT_SUMMARY,
+
+        1,
+        #atm_workflow_schema_revision{
+            description = Description,
+            stores = Stores,
+            lanes = Lanes,
+            state = case State of
+                incomplete -> draft;
+                ready -> stable;
+                deprecated -> deprecated
+            end
+        },
+
+        InventoryId
+    }}.

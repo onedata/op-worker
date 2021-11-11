@@ -138,7 +138,9 @@ build_run_creation_ctx(AtmLaneIndex, AtmWorkflowExecutionDoc = #document{
     }} = atm_lane_execution:get_current_run(AtmLaneIndex, AtmWorkflowExecution),
 
     {ok, #document{value = #atm_workflow_schema_snapshot{
-        lanes = AtmLaneSchemas
+        revision = #atm_workflow_schema_revision{
+            lanes = AtmLaneSchemas
+        }
     }}} = atm_workflow_schema_snapshot:get(AtmWorkflowSchemaSnapshotId),
 
     AtmLaneSchema = #atm_lane_schema{store_iterator_spec = #atm_store_iterator_spec{
