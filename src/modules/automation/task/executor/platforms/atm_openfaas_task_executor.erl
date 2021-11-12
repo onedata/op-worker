@@ -98,10 +98,13 @@ assert_openfaas_available() ->
 build(AtmWorkflowExecutionId, AtmLaneIndex, AtmTaskSchema, AtmLambdaRevision) ->
     assert_openfaas_available(),
 
+    ResourceSpec = select_resource_spec(AtmTaskSchema, AtmLambdaRevision),
+    FunctionName = build_function_name(
+        AtmWorkflowExecutionId, AtmLaneIndex, AtmTaskSchema, AtmLambdaRevision, ResourceSpec
+    ),
+
     #atm_openfaas_task_executor{
-        function_name = build_function_name(
-            AtmWorkflowExecutionId, AtmLaneIndex, AtmTaskSchema, AtmLambdaRevision
-        ),
+        function_name = FunctionName,
         operation_spec = AtmLambdaRevision#atm_lambda_revision.operation_spec
     }.
 
@@ -213,6 +216,15 @@ check_openfaas_availability() ->
     Result.
 
 
+%% @private
+-spec select_resource_spec(atm_task_schema:record(), atm_lambda_revision:record()) ->
+    atm_resource_spec:record().
+select_resource_spec(#atm_task_schema{resource_spec_override = undefined}, AtmLambdaRevision) ->
+    AtmLambdaRevision#atm_lambda_revision.resource_spec;
+select_resource_spec(#atm_task_schema{resource_spec_override = ResourceSpec}, _AtmLambdaRevision) ->
+    ResourceSpec.
+
+
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -227,17 +239,25 @@ check_openfaas_availability() ->
     atm_workflow_execution:id(),
     atm_lane_execution:index(),
     atm_task_schema:record(),
-    atm_lambda_revision:record()
+    atm_lambda_revision:record(),
+    atm_resource_spec:record()
 ) ->
     binary().
-build_function_name(AtmWorkflowExecutionId, AtmLaneIndex, AtmTaskSchema, AtmLambdaRevision) ->
+build_function_name(
+    AtmWorkflowExecutionId,
+    AtmLaneIndex,
+    AtmTaskSchema,
+    AtmLambdaRevision,
+    ResourceSpec
+) ->
     AtmLambdaRevisionName = AtmLambdaRevision#atm_lambda_revision.name,
 
     Signature = str_utils:md5_digest([
         AtmWorkflowExecutionId,
         AtmLaneIndex,
         AtmTaskSchema#atm_task_schema.lambda_id,
-        AtmTaskSchema#atm_task_schema.lambda_revision_number
+        AtmTaskSchema#atm_task_schema.lambda_revision_number,
+        ResourceSpec
     ]),
 
     Name = str_utils:format_bin("w~s-s~s-~s", [
