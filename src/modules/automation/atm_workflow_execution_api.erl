@@ -93,7 +93,7 @@ list(SpaceId, Phase, summary, ListingOpts) ->
     {atm_workflow_execution:id(), atm_workflow_execution:record()} | no_return().
 schedule(UserCtx, SpaceId, AtmWorkflowSchemaId, StoreInitialValues, CallbackUrl) ->
     {AtmWorkflowExecutionDoc, AtmWorkflowExecutionEnv} = atm_workflow_execution_factory:create(
-        UserCtx, SpaceId, AtmWorkflowSchemaId, StoreInitialValues, CallbackUrl
+        UserCtx, SpaceId, AtmWorkflowSchemaId, 1, StoreInitialValues, CallbackUrl
     ),
     atm_workflow_execution_handler:start(UserCtx, AtmWorkflowExecutionEnv, AtmWorkflowExecutionDoc),
 

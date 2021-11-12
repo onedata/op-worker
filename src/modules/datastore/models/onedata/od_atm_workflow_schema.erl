@@ -32,7 +32,6 @@
 
 %% API
 -export([update_cache/3, get_from_cache/1, invalidate_cache/1, list/0]).
--export([get_latest_revision/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0]).
@@ -61,18 +60,6 @@ invalidate_cache(Key) ->
 -spec list() -> {ok, [id()]} | {error, term()}.
 list() ->
     datastore_model:fold_keys(?CTX, fun(Doc, Acc) -> {ok, [Doc | Acc]} end, []).
-
-
-% @TODO VFS-8349 rework when Oneprovider understands workflow schema and lambda versioning
--spec get_latest_revision(record()) -> atm_workflow_schema_revision:record().
-get_latest_revision(#od_atm_workflow_schema{revision_registry = RevisionRegistry}) ->
-    case atm_workflow_schema_revision_registry:get_all_revision_numbers(RevisionRegistry) of
-        [] ->
-            % return dummy revision with empty stores and lanes
-            #atm_workflow_schema_revision{};
-        AllRevisionNumbers ->
-            atm_workflow_schema_revision_registry:get_revision(lists:max(AllRevisionNumbers), RevisionRegistry)
-    end.
 
 
 %%%===================================================================

@@ -20,15 +20,16 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([create/5, delete_insecure/1]).
+-export([create/6, delete_insecure/1]).
 
 
 -record(creation_args, {
     workflow_execution_id :: atm_workflow_execution:id(),
     workflow_execution_auth :: atm_workflow_execution_auth:record(),
 
-    workflow_schema_revision_number :: atm_workflow_schema_revision:revision_number(),
     workflow_schema_doc :: od_atm_workflow_schema:doc(),
+    workflow_schema_revision_num :: atm_workflow_schema_revision:revision_number(),
+    workflow_schema_revision :: atm_workflow_schema_revision:record(),
     lambda_docs :: [od_atm_lambda:doc()],
     store_initial_values :: atm_workflow_execution_api:store_initial_values(),
     callback_url :: undefined | http_client:url()
@@ -61,15 +62,30 @@
     user_ctx:ctx(),
     od_space:id(),
     od_atm_workflow_schema:id(),
+    atm_workflow_schema_revision:revision_number(),
     atm_workflow_execution_api:store_initial_values(),
     undefined | http_client:url()
 ) ->
     {atm_workflow_execution:doc(), atm_workflow_execution_env:record()} | no_return().
-create(UserCtx, SpaceId, AtmWorkflowSchemaId, StoreInitialValues, CallbackUrl) ->
+create(
+    UserCtx,
+    SpaceId,
+    AtmWorkflowSchemaId,
+    AtmWorkflowSchemaRevisionNum,
+    StoreInitialValues,
+    CallbackUrl
+) ->
     SessionId = user_ctx:get_session_id(UserCtx),
 
-    AtmWorkflowSchemaDoc = fetch_executable_workflow_schema(SessionId, AtmWorkflowSchemaId),
-    AtmLambdaDocs = fetch_executable_lambdas(SessionId, AtmWorkflowSchemaDoc),
+    {ok, AtmWorkflowSchemaDoc} = atm_workflow_schema_logic:get(SessionId, AtmWorkflowSchemaId),
+    {ok, AtmWorkflowSchemaRevision} = atm_workflow_schema_logic:get_revision(
+        AtmWorkflowSchemaRevisionNum, AtmWorkflowSchemaDoc
+    ),
+    atm_workflow_schema_logic:assert_executable_revision(AtmWorkflowSchemaRevision),
+
+    AtmLambdaDocs = fetch_executable_lambdas_with_unused_revisions_removed(
+        SessionId, AtmWorkflowSchemaRevision
+    ),
 
     AtmWorkflowExecutionId = datastore_key:new(),
 
@@ -83,8 +99,9 @@ create(UserCtx, SpaceId, AtmWorkflowSchemaId, StoreInitialValues, CallbackUrl) -
             workflow_execution_auth = atm_workflow_execution_auth:build(
                 SpaceId, AtmWorkflowExecutionId, UserCtx
             ),
-            workflow_schema_revision_number = 1, %% TODO add function arg
             workflow_schema_doc = AtmWorkflowSchemaDoc,
+            workflow_schema_revision_num = AtmWorkflowSchemaRevisionNum,
+            workflow_schema_revision = AtmWorkflowSchemaRevision,
             lambda_docs = AtmLambdaDocs,
             store_initial_values = StoreInitialValues,
             callback_url = CallbackUrl
@@ -147,33 +164,33 @@ delete_insecure(AtmWorkflowExecutionId) ->
 %%%===================================================================
 
 
-%% TODO validate workflow schema/lambda docs - assert contain revisions
 %% @private
--spec fetch_executable_workflow_schema(session:id(), od_atm_workflow_schema:id()) ->
-    od_atm_workflow_schema:doc() | no_return().
-fetch_executable_workflow_schema(SessionId, AtmWorkflowSchemaId) ->
-    % @TODO VFS-8349 rework when Oneprovider understands workflow schema and lambda versioning
-    {ok, #document{
-        value = AtmWorkflowSchema
-    } = AtmWorkflowSchemaDoc} = atm_workflow_schema_logic:get(SessionId, AtmWorkflowSchemaId),
-    atm_workflow_schema_logic:assert_executable(od_atm_workflow_schema:get_latest_revision(AtmWorkflowSchema)),
-
-    AtmWorkflowSchemaDoc.
-
-
-%% @private
--spec fetch_executable_lambdas(session:id(), od_atm_workflow_schema:doc()) ->
+-spec fetch_executable_lambdas_with_unused_revisions_removed(
+    session:id(),
+    atm_workflow_schema_revision:record()
+) ->
     [od_atm_lambda:doc()] | no_return().
-fetch_executable_lambdas(SessionId, #document{value = #od_atm_workflow_schema{
-    atm_lambdas = AtmLambdaIds
-}}) ->
-    lists:map(fun(AtmLambdaId) ->
-        % @TODO VFS-8349 rework when Oneprovider understands workflow schema and lambda versioning
-        {ok, #document{value = AtmLambda} = AtmLambdaDoc} = atm_lambda_logic:get(SessionId, AtmLambdaId),
-        atm_lambda_logic:assert_executable(od_atm_lambda:get_latest_revision(AtmLambda)),
+fetch_executable_lambdas_with_unused_revisions_removed(SessionId, AtmWorkflowSchemaRevision) ->
+    AtmLambdaReferences = atm_workflow_schema_revision:extract_atm_lambda_references(
+        AtmWorkflowSchemaRevision
+    ),
 
-        AtmLambdaDoc
-    end, AtmLambdaIds).
+    lists:map(fun({AtmLambdaId, AtmLambdaRevisionNums}) ->
+        {ok, AtmLambdaDoc = #document{
+            value = AtmLambda = #od_atm_lambda{
+                revision_registry = AtmLambdaRevisionRegistry
+            }
+        }} = atm_lambda_logic:get(SessionId, AtmLambdaId),
+
+        AtmLambdaWithUnusedRevisionsRemoved = AtmLambda#od_atm_lambda{
+            revision_registry = AtmLambdaRevisionRegistry  %% TODO :with(AtmLambdaRevisionNums, AtmLambdaRevisionRegistry)
+        },
+
+        atm_lambda_logic:assert_executable_revisions(
+            AtmLambdaRevisionNums, AtmLambdaWithUnusedRevisionsRemoved
+        ),
+        AtmLambdaDoc#document{value = AtmLambdaWithUnusedRevisionsRemoved}
+    end, maps:to_list(AtmLambdaReferences)).
 
 
 %% @private
@@ -200,13 +217,17 @@ create_execution_components(CreationCtx) ->
 create_workflow_schema_snapshot(CreationCtx = #creation_ctx{
     creation_args = #creation_args{
         workflow_execution_id = AtmWorkflowExecutionId,
-        workflow_schema_revision_number = AtmWorkflowSchemaRevisionNumber,
-        workflow_schema_doc = AtmWorkflowSchemaDoc
+        workflow_schema_doc = AtmWorkflowSchemaDoc,
+        workflow_schema_revision_num = AtmWorkflowSchemaRevisionNum,
+        workflow_schema_revision = AtmWorkflowSchemaRevision
     },
     execution_components = ExecutionComponents
 }) ->
     {ok, AtmWorkflowSchemaSnapshotId} = atm_workflow_schema_snapshot:create(
-        AtmWorkflowExecutionId, AtmWorkflowSchemaRevisionNumber, AtmWorkflowSchemaDoc
+        AtmWorkflowExecutionId,
+        AtmWorkflowSchemaRevisionNum,
+        AtmWorkflowSchemaRevision,
+        AtmWorkflowSchemaDoc
     ),
 
     CreationCtx#creation_ctx{execution_components = ExecutionComponents#execution_components{
@@ -245,15 +266,12 @@ create_lambda_snapshots(CreationCtx = #creation_ctx{
 create_global_stores(CreationCtx = #creation_ctx{
     creation_args = #creation_args{
         workflow_execution_auth = AtmWorkflowExecutionAuth,
-        workflow_schema_doc = #document{value = AtmWorkflowSchema},
+        workflow_schema_revision = #atm_workflow_schema_revision{
+            stores = AtmStoreSchemas
+        },
         store_initial_values = AtmStoreInitialValues
     }
 }) ->
-    % @TODO VFS-8349 rework when Oneprovider understands workflow schema and lambda versioning
-    #atm_workflow_schema_revision{
-        stores = AtmStoreSchemas
-    } = od_atm_workflow_schema:get_latest_revision(AtmWorkflowSchema),
-
     lists:foldl(fun(
         AtmStoreSchema = #atm_store_schema{id = AtmStoreSchemaId},
         NewCreationCtx = #creation_ctx{
@@ -325,14 +343,11 @@ create_workflow_audit_log(CreationCtx = #creation_ctx{
 %% @private
 -spec create_lane_executions(creation_ctx()) -> creation_ctx().
 create_lane_executions(CreationCtx = #creation_ctx{
-    creation_args = #creation_args{workflow_schema_doc = #document{value = AtmWorkflowSchema}},
+    creation_args = #creation_args{workflow_schema_revision = #atm_workflow_schema_revision{
+        lanes = AtmLaneSchemas
+    }},
     execution_components = ExecutionComponents
 }) ->
-    % @TODO VFS-8349 rework when Oneprovider understands workflow schema and lambda versioning
-    #atm_workflow_schema_revision{
-        lanes = AtmLaneSchemas
-    } = od_atm_workflow_schema:get_latest_revision(AtmWorkflowSchema),
-
     CreationCtx#creation_ctx{execution_components = ExecutionComponents#execution_components{
         lanes = lists:foldl(fun({AtmLaneIndex, AtmLaneSchema}, Acc) ->
             Acc#{AtmLaneIndex => create_lane_execution(AtmLaneIndex, AtmLaneSchema)}

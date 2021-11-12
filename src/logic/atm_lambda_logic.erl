@@ -17,9 +17,10 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/automation/automation.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 -export([get/2]).
--export([assert_executable/1]).
+-export([assert_executable_revisions/2]).
 
 
 %%%===================================================================
@@ -38,11 +39,39 @@ get(SessionId, AtmLambdaId) ->
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Checks whether given atm lambda revision can be executed (not all valid features may
-%% be supported by this provider - e.g. OpenFaaS service may not be configured).
+%% Checks whether given atm lambda revisions can be executed (not all valid
+%% features may be supported by this provider - e.g. OpenFaaS service may
+%% not be configured).
 %% @end
 %%-------------------------------------------------------------------
--spec assert_executable(atm_lambda_revision:record()) ->
+-spec assert_executable_revisions(
+    [atm_lambda_revision:revision_number()],
+    od_atm_lambda:record() | od_atm_lambda:doc()
+) ->
     ok | no_return().
-assert_executable(#atm_lambda_revision{operation_spec = #atm_openfaas_operation_spec{}}) ->
+assert_executable_revisions(RevisionNums, #od_atm_lambda{revision_registry = RevisionRegistry}) ->
+    lists:foreach(fun(RevisionNum) ->
+        case atm_lambda_revision_registry:has_revision(RevisionNum, RevisionRegistry) of
+            true ->
+                assert_executable_revision(atm_lambda_revision_registry:get_revision(
+                    RevisionNum, RevisionRegistry
+                ));
+            false ->
+                throw(?ERROR_NOT_FOUND)
+        end
+    end, RevisionNums);
+
+assert_executable_revisions(RevisionNums, #document{value = AtmLambda}) ->
+    assert_executable_revisions(RevisionNums, AtmLambda).
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+
+%% @private
+-spec assert_executable_revision(atm_lambda_revision:record()) ->
+    ok | no_return().
+assert_executable_revision(#atm_lambda_revision{operation_spec = #atm_openfaas_operation_spec{}}) ->
     atm_openfaas_task_executor:assert_openfaas_available().

@@ -27,7 +27,7 @@
 -record(creation_args, {
     parallel_box_execution_creation_args :: atm_parallel_box_execution:creation_args(),
     task_schema :: atm_task_schema:record(),
-    lambda_snapshot :: atm_lambda_snapshot:record()
+    lambda_revision :: atm_lambda_revision:record()
 }).
 -type creation_args() ::  #creation_args{}.
 
@@ -67,14 +67,12 @@ create_all(AtmParallelBoxExecutionCreationArgs = #atm_parallel_box_execution_cre
 
 -spec create(atm_parallel_box_execution:creation_args(), atm_task_schema:record()) ->
     atm_task_execution:doc().
-create(AtmParallelBoxExecutionCreationArgs, AtmTaskSchema = #atm_task_schema{
-    lambda_id = AtmLambdaId
-}) ->
+create(AtmParallelBoxExecutionCreationArgs, AtmTaskSchema) ->
     CreationCtx = create_execution_components(#creation_ctx{
         creation_args = #creation_args{
             parallel_box_execution_creation_args = AtmParallelBoxExecutionCreationArgs,
             task_schema = AtmTaskSchema,
-            lambda_snapshot = get_lambda_snapshot(AtmLambdaId, AtmParallelBoxExecutionCreationArgs)
+            lambda_revision = get_lambda_revision(AtmTaskSchema, AtmParallelBoxExecutionCreationArgs)
         },
         execution_components = #execution_components{}
     }),
@@ -111,19 +109,25 @@ delete(AtmTaskExecutionId) ->
 
 
 %% @private
--spec get_lambda_snapshot(automation:id(), atm_parallel_box_execution:creation_args()) ->
-    atm_lambda_snapshot:record().
-get_lambda_snapshot(AtmLambdaId, #atm_parallel_box_execution_creation_args{
-    lane_execution_run_creation_args = #atm_lane_execution_run_creation_args{
-        workflow_execution_doc = #document{value = #atm_workflow_execution{
-            lambda_snapshot_registry = AtmLambdaSnapshotRegistry
-        }}
+-spec get_lambda_revision(atm_task_schema:record(), atm_parallel_box_execution:creation_args()) ->
+    atm_lambda_revision:record().
+get_lambda_revision(
+    #atm_task_schema{
+        lambda_id = AtmLambdaId,
+        lambda_revision_number = AtmLambdaRevisionNum
+    },
+    #atm_parallel_box_execution_creation_args{
+        lane_execution_run_creation_args = #atm_lane_execution_run_creation_args{
+            workflow_execution_doc = #document{value = #atm_workflow_execution{
+                lambda_snapshot_registry = AtmLambdaSnapshotRegistry
+            }}
+        }
     }
-}) ->
+) ->
     {ok, #document{value = AtmLambdaSnapshot}} = atm_lambda_snapshot:get(
         maps:get(AtmLambdaId, AtmLambdaSnapshotRegistry)
     ),
-    AtmLambdaSnapshot.
+    atm_lambda_snapshot:get_revision(AtmLambdaRevisionNum, AtmLambdaSnapshot).
 
 
 %% @private
@@ -197,7 +201,7 @@ create_task_execution_doc(#creation_ctx{
                 lane_index = AtmLaneIndex
             }
         },
-        lambda_snapshot = AtmLambdaSnapshot,
+        lambda_revision = AtmLambdaRevision,
         task_schema = #atm_task_schema{id = AtmTaskSchemaId} = AtmTaskSchema
     },
     execution_components = #execution_components{audit_log_store_id = AtmTaskAuditLogId}
@@ -213,9 +217,11 @@ create_task_execution_doc(#creation_ctx{
 
         schema_id = AtmTaskSchemaId,
 
-        executor = atm_task_executor:build(AtmWorkflowExecutionId, AtmLaneIndex, AtmLambdaSnapshot),
-        argument_specs = build_argument_specs(AtmLambdaSnapshot, AtmTaskSchema),
-        result_specs = build_result_specs(AtmLambdaSnapshot, AtmTaskSchema),
+        executor = atm_task_executor:build(
+            AtmWorkflowExecutionId, AtmLaneIndex, AtmTaskSchema, AtmLambdaRevision
+        ),
+        argument_specs = build_argument_specs(AtmLambdaRevision, AtmTaskSchema),
+        result_specs = build_result_specs(AtmLambdaRevision, AtmTaskSchema),
 
         system_audit_log_id = AtmTaskAuditLogId,
 
@@ -229,20 +235,20 @@ create_task_execution_doc(#creation_ctx{
 
 
 %% @private
--spec build_argument_specs(atm_lambda_snapshot:record(), atm_task_schema:record()) ->
+-spec build_argument_specs(atm_lambda_revision:record(), atm_task_schema:record()) ->
     [atm_task_execution_argument_spec:record()] | no_return().
 build_argument_specs(
-    #atm_lambda_snapshot{argument_specs = AtmLambdaArgSpecs},
+    #atm_lambda_revision{argument_specs = AtmLambdaArgSpecs},
     #atm_task_schema{argument_mappings = AtmTaskSchemaArgMappers}
 ) ->
     atm_task_execution_arguments:build_specs(AtmLambdaArgSpecs, AtmTaskSchemaArgMappers).
 
 
 %% @private
--spec build_result_specs(atm_lambda_snapshot:record(), atm_task_schema:record()) ->
+-spec build_result_specs(atm_lambda_revision:record(), atm_task_schema:record()) ->
     [atm_task_execution_result_spec:record()] | no_return().
 build_result_specs(
-    #atm_lambda_snapshot{result_specs = AtmLambdaResultSpecs},
+    #atm_lambda_revision{result_specs = AtmLambdaResultSpecs},
     #atm_task_schema{result_mappings = AtmTaskSchemaResultMappers}
 ) ->
     atm_task_execution_results:build_specs(AtmLambdaResultSpecs, AtmTaskSchemaResultMappers).

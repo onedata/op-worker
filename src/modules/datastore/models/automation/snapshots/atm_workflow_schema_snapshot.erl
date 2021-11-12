@@ -17,7 +17,7 @@
 -include_lib("ctool/include/automation/automation.hrl").
 
 %% API
--export([create/3, get/1, delete/1]).
+-export([create/4, get/1, delete/1]).
 
 %%% field encoding/decoding procedures
 -export([legacy_state_to_json/1, legacy_state_from_json/1]).
@@ -43,15 +43,15 @@
 -spec create(
     atm_workflow_execution:id(),
     atm_workflow_schema_revision:revision_number(),
+    atm_workflow_schema_revision:record(),
     od_atm_workflow_schema:doc()
 ) ->
     {ok, id()} | {error, term()}.
-create(AtmWorkflowExecutionId, RevisionNumber, #document{
+create(AtmWorkflowExecutionId, RevisionNumber, Revision, #document{
     key = AtmWorkflowSchemaId,
     value = #od_atm_workflow_schema{
         name = AtmWorkflowSchemaName,
         summary = AtmWorkflowSchemaSummary,
-        revision_registry = RevisionRegistry,
         atm_inventory = AtmInventoryId
     }
 }) ->
@@ -64,9 +64,7 @@ create(AtmWorkflowExecutionId, RevisionNumber, #document{
             summary = AtmWorkflowSchemaSummary,
 
             revision_number = RevisionNumber,
-            revision = atm_workflow_schema_revision_registry:get_revision(
-                RevisionNumber, RevisionRegistry
-            ),
+            revision = Revision,
 
             atm_inventory = AtmInventoryId
         }
@@ -182,13 +180,13 @@ upgrade_record(1, {
     InventoryId,
     _LambdaIds
 }) ->
-    {2, {?MODULE,
-        SchemaId,
-        Name,
-        ?DEFAULT_SUMMARY,
+    {2, #atm_workflow_schema_snapshot{
+        schema_id = SchemaId,
+        name = Name,
+        summary = ?DEFAULT_SUMMARY,
 
-        1,
-        #atm_workflow_schema_revision{
+        revision_number = 1,
+        revision = #atm_workflow_schema_revision{
             description = Description,
             stores = Stores,
             lanes = Lanes,
@@ -199,5 +197,5 @@ upgrade_record(1, {
             end
         },
 
-        InventoryId
+        atm_inventory = InventoryId
     }}.

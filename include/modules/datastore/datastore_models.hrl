@@ -1103,18 +1103,7 @@
 
 -record(atm_lambda_snapshot, {
     lambda_id :: automation:id(),
-
-    name :: automation:name(),
-    summary :: automation:summary(),
-    description :: automation:description(),
-
-    operation_spec :: atm_lambda_operation_spec:record(),
-    argument_specs = [] :: [atm_lambda_argument_spec:record()],
-    result_specs = [] :: [atm_lambda_result_spec:record()],
-    resource_spec :: atm_resource_spec:record(),
-
-    state :: automation:lifecycle_state(),
-
+    revision_registry :: atm_lambda_revision_registry:record(),
     atm_inventories = [] :: [od_atm_inventory:id()]
 }).
 
