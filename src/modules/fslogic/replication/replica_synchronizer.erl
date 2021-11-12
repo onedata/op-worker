@@ -67,6 +67,9 @@
 -type from() :: {pid(), any()}. %% `From` argument to gen_server:call callback
 -type request_type() :: sync | async.
 
+% module implementing transfer_stats_callback_behaviour
+-type stats_callback_module() :: module().
+
 -record(state, {
     file_ctx :: file_ctx:ctx(),
     file_guid :: undefined | fslogic_worker:file_guid(),
@@ -91,7 +94,7 @@
     caching_blocks_timer :: undefined | reference(),
     caching_events_timer :: undefined | reference(),
     retries_number = #{} :: #{fetch_ref() => non_neg_integer()},
-    transfer_id_to_callback_module = #{} :: #{transfer:id() => module()}
+    transfer_id_to_stats_callback_module = #{} :: #{transfer:id() => stats_callback_module()}
 }).
 
 -define(BLOCK(__Offset, __Size), #file_block{offset = __Offset, size = __Size}).
@@ -126,11 +129,11 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec synchronize(user_ctx:ctx(), file_ctx:ctx(), block(),
-    Prefetch :: boolean(), transfer:id() | undefined, non_neg_integer(), module()) ->
+    Prefetch :: boolean(), transfer:id() | undefined, non_neg_integer(), stats_callback_module()) ->
     {ok, #file_location_changed{}} | {error, Reason :: any()}.
-synchronize(UserCtx, FileCtx, Block, Prefetch, TransferId, Priority, CallbackModule) ->
+synchronize(UserCtx, FileCtx, Block, Prefetch, TransferId, Priority, StatsCallbackModule) ->
     request_synchronization(UserCtx, FileCtx, Block, Prefetch, TransferId,
-        Priority, sync, CallbackModule).
+        Priority, sync, StatsCallbackModule).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -139,11 +142,11 @@ synchronize(UserCtx, FileCtx, Block, Prefetch, TransferId, Priority, CallbackMod
 %% @end
 %%--------------------------------------------------------------------
 -spec request_synchronization(user_ctx:ctx(), file_ctx:ctx(), block(),
-    Prefetch :: boolean(), transfer:id() | undefined, non_neg_integer(), module()) ->
+    Prefetch :: boolean(), transfer:id() | undefined, non_neg_integer(), stats_callback_module()) ->
     ok | {error, Reason :: any()}.
-request_synchronization(UserCtx, FileCtx, Block, Prefetch, TransferId, Priority, CallbackModule) ->
+request_synchronization(UserCtx, FileCtx, Block, Prefetch, TransferId, Priority, StatsCallbackModule) ->
     request_synchronization(UserCtx, FileCtx, Block, Prefetch, TransferId,
-        Priority, async, CallbackModule).
+        Priority, async, StatsCallbackModule).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -154,13 +157,13 @@ request_synchronization(UserCtx, FileCtx, Block, Prefetch, TransferId, Priority,
 %%--------------------------------------------------------------------
 -spec request_synchronization(user_ctx:ctx(), file_ctx:ctx(), block(),
     Prefetch :: boolean(), transfer:id() | undefined, non_neg_integer(),
-    request_type(), module()) -> ok | {ok, #file_location_changed{}} | {error, Reason :: any()}.
+    request_type(), stats_callback_module()) -> ok | {ok, #file_location_changed{}} | {error, Reason :: any()}.
 request_synchronization(UserCtx, FileCtx, Block, Prefetch, TransferId,
-    Priority, SyncType, CallbackModule) ->
+    Priority, SyncType, StatsCallbackModule) ->
     EnlargedBlock = enlarge_block(Block, Prefetch),
     SessionId = user_ctx:get_session_id(UserCtx),
     apply_no_check(FileCtx, {synchronize, FileCtx, EnlargedBlock,
-        Prefetch, TransferId, SessionId, Priority, SyncType, CallbackModule}).
+        Prefetch, TransferId, SessionId, Priority, SyncType, StatsCallbackModule}).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -540,12 +543,12 @@ init(FileCtx) ->
 %% synchronized to the newest version.
 %% @end
 %%--------------------------------------------------------------------
-handle_call({synchronize, FileCtx, Block, Prefetch, TransferId, Session, Priority, Type, CallbackModule}, From,
+handle_call({synchronize, FileCtx, Block, Prefetch, TransferId, Session, Priority, Type, StatsCallbackModule}, From,
     #state{
         requested_blocks = RB,
         file_guid = FG,
         from_requests_types = RequestTypesMap,
-        transfer_id_to_callback_module = TransferIdToCallback
+        transfer_id_to_stats_callback_module = TidToStatsCallback
     } = State0
 ) ->
     try
@@ -563,13 +566,13 @@ handle_call({synchronize, FileCtx, Block, Prefetch, TransferId, Session, Priorit
                     dest_file_id = DestFileId,
                     file_guid = FileGuid,
                     space_id = SpaceId,
-                    transfer_id_to_callback_module = 
-                        TransferIdToCallback#{TransferId => CallbackModule}
+                    transfer_id_to_stats_callback_module = 
+                        TidToStatsCallback#{TransferId => StatsCallbackModule}
                 };
             _ ->
                 State0#state{
-                    transfer_id_to_callback_module = 
-                        TransferIdToCallback#{TransferId => CallbackModule}
+                    transfer_id_to_stats_callback_module = 
+                        TidToStatsCallback#{TransferId => StatsCallbackModule}
                 }
         end,
 
@@ -1552,23 +1555,23 @@ flush_stats(#state{cached_stats = Stats} = State, _) when map_size(Stats) == 0 -
     State;
 flush_stats(#state{
     space_id = SpaceId, 
-    transfer_id_to_callback_module = TransferIdToCallback
+    transfer_id_to_stats_callback_module = TidToStatsCallback
 } = State, CancelTimer) ->
     lists:foreach(fun({TransferId, BytesPerProvider}) ->
-        CallbackModule = maps:get(TransferId, TransferIdToCallback),
+        StatsCallbackModule = maps:get(TransferId, TidToStatsCallback),
         try
-            case CallbackModule:flush_stats(SpaceId, TransferId, BytesPerProvider) of
+            case StatsCallbackModule:flush_stats(SpaceId, TransferId, BytesPerProvider) of
                 ok -> ok;
                 {error, Error} ->
                     ?error(
                         "Failed to update transfer statistics using callback module ~p 
-                        for ~p transfer due to ~p", [CallbackModule, TransferId, Error]
+                        for ~p transfer due to ~p", [StatsCallbackModule, TransferId, Error]
                     )
             end
         catch _:Reason:Stacktrace ->
             ?error_stacktrace(
                 "Failed to update transfer statistics using callback module ~p for ~p transfer "
-                "due to ~p", [CallbackModule, TransferId, Reason], Stacktrace
+                "due to ~p", [StatsCallbackModule, TransferId, Reason], Stacktrace
             )
         end
     end, maps:to_list(State#state.cached_stats)),

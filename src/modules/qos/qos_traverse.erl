@@ -17,7 +17,7 @@
 -author("Michal Cwiertnia").
 
 -behavior(traverse_behaviour).
--behaviour(synchronizer_callback_behaviour).
+-behaviour(transfer_stats_callback_behaviour).
 
 -include("global_definitions.hrl").
 -include("modules/datastore/datastore_runner.hrl").
@@ -36,7 +36,7 @@
 -export([do_master_job/2, do_slave_job/2, task_finished/2, task_canceled/2, 
     get_job/1, update_job_progress/5]).
 
-%% synchronizer_callback behaviour
+%% transfer_stats_callback_behaviour
 -export([flush_stats/3]).
 
 -type id() :: qos_traverse_req:id().
@@ -218,7 +218,7 @@ do_slave_job(#tree_traverse_slave{file_ctx = FileCtx}, TaskId) ->
 
 
 %%%===================================================================
-%%% synchronizer_callback_behaviour
+%%% transfer_stats_callback_behaviour
 %%%===================================================================
 
 -spec flush_stats(od_space:id(), transfer_id(), #{od_provider:id() => non_neg_integer()}) ->

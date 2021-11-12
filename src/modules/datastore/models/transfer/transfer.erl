@@ -23,7 +23,7 @@
 -include_lib("cluster_worker/include/modules/datastore/datastore_links.hrl").
 -include_lib("ctool/include/logging.hrl").
 
--behaviour(synchronizer_callback_behaviour).
+-behaviour(transfer_stats_callback_behaviour).
 
 %% API
 -export([
@@ -59,7 +59,7 @@
 
 -export([get_link_key/2, get_link_key_by_state/2]).
 
-%% synchronizer_callback behaviour
+%% transfer_stats_callback_behaviour
 -export([flush_stats/3]).
 
 %% datastore_model callbacks
@@ -681,7 +681,7 @@ get_link_key(TransferId, Timestamp) ->
 
 
 %%%===================================================================
-%%% synchronizer_callback_behaviour
+%%% transfer_stats_callback_behaviour
 %%%===================================================================
 
 %%--------------------------------------------------------------------

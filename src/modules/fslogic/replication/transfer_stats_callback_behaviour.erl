@@ -6,12 +6,12 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% It is the behaviour of synchronizer callback module.
-%%% It defines ways of handling files synchronization by replica_synchronizer 
-%%% depending on calling module.
+%%% It is the behaviour of replica_synchronizer stats callback module.
+%%% It defines ways of handling files synchronization transfer statistics 
+%%% by replica_synchronizer depending on calling module.
 %%% @end
 %%%--------------------------------------------------------------------
--module(synchronizer_callback_behaviour).
+-module(transfer_stats_callback_behaviour).
 -author("Michal Stanisz").
 
 %% API
