@@ -311,7 +311,8 @@ create_archive_data_dir(ArchiveDoc, UserCtx) ->
     ArchiveRootDirCtx = file_ctx:new_by_guid(ArchiveRootDirGuid),
     DataDirGuid = case is_bagit(ArchiveDoc) of
         true ->
-            {ok, DataDirCtx} = bagit_archive:prepare(ArchiveRootDirCtx, UserCtx),
+            {ok, DataDirCtx, CreatedFilesCount} = bagit_archive:prepare(ArchiveRootDirCtx, UserCtx),
+            save_dir_checksum_metadata(ArchiveRootDirCtx, UserCtx, CreatedFilesCount),
             save_dir_checksum_metadata(DataDirCtx, UserCtx, 1),
             file_ctx:get_logical_guid_const(DataDirCtx);
         false ->

@@ -63,7 +63,7 @@ stop_pool() ->
 start(ArchiveDoc) ->
     {ok, TaskId} = archive:get_id(ArchiveDoc),
     UserCtx = user_ctx:new(?ROOT_SESS_ID),
-    {ok, RootFileGuid} = archive:get_data_dir_guid(ArchiveDoc),
+    {ok, RootFileGuid} = archive:get_root_dir_guid(ArchiveDoc),
     case tree_traverse_session:setup_for_task(UserCtx, TaskId) of
         ok ->
             UserId = user_ctx:get_user_id(UserCtx),
@@ -127,39 +127,11 @@ update_job_progress(Id, Job, Pool, TaskId, Status) ->
 
 -spec do_master_job(tree_traverse:master_job(), traverse:master_job_extended_args()) ->
     {ok, traverse:master_job_map()}.
-do_master_job(#tree_traverse{
-    file_ctx = FileCtx, 
-    user_id = UserId
-} = Job, MasterJobArgs = #{task_id := TaskId}) ->
+do_master_job(#tree_traverse{file_ctx = FileCtx} = Job, MasterJobArgs) ->
     {IsDir, FileCtx2} = file_ctx:is_dir(FileCtx),
     case IsDir of
         true ->
-            NewJobsPreprocessor = fun(SlaveJobs, MasterJobs, #{is_last := IsLast}, _SubtreeProcessingStatus) ->
-                DirUuid = file_ctx:get_logical_uuid_const(FileCtx2),
-                ChildrenCount = length(SlaveJobs) + length(MasterJobs),
-                ok = archive_traverse_common:update_children_count(
-                    ?POOL_NAME, TaskId, DirUuid, ChildrenCount),
-                case IsLast of
-                    false ->
-                        ok;
-                    true ->
-                        TotalChildrenCount = archive_traverse_common:take_children_count(
-                            ?POOL_NAME, TaskId, DirUuid),
-                        {ok, UserCtx} = tree_traverse_session:acquire_for_task(UserId, ?POOL_NAME, TaskId),
-                        case archivisation_checksum:has_dir_changed(
-                            FileCtx2, FileCtx2, UserCtx, TotalChildrenCount) 
-                        of
-                            false -> 
-                                ok;
-                            true ->
-                                archive:mark_verification_failed(TaskId),
-                                tree_traverse:cancel(?POOL_NAME, TaskId),
-                                ?warning("Invalid checksum for dir ~p in archive ~p",
-                                    [file_ctx:get_logical_guid_const(FileCtx), TaskId])
-                        end
-                end
-            end,
-            tree_traverse:do_master_job(Job, MasterJobArgs, NewJobsPreprocessor);
+            do_dir_master_job(Job#tree_traverse{file_ctx = FileCtx2}, MasterJobArgs);
         false ->
             tree_traverse:do_master_job(Job, MasterJobArgs)
     end.
@@ -185,3 +157,39 @@ do_slave_job(#tree_traverse_slave{
                         [file_ctx:get_logical_guid_const(FileCtx), TaskId])
             end
     end.
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+-spec do_dir_master_job(tree_traverse:master_job(), traverse:master_job_extended_args()) -> 
+    {ok, traverse:master_job_map()}.
+do_dir_master_job(#tree_traverse{user_id = UserId, file_ctx = FileCtx} = Job, MasterJobArgs) ->
+    #{task_id := TaskId} = MasterJobArgs,
+    NewJobsPreprocessor = fun(SlaveJobs, MasterJobs, #{is_last := IsLast}, _SubtreeProcessingStatus) ->
+        DirUuid = file_ctx:get_logical_uuid_const(FileCtx),
+        ChildrenCount = length(SlaveJobs) + length(MasterJobs),
+        ok = archive_traverse_common:update_children_count(
+            ?POOL_NAME, TaskId, DirUuid, ChildrenCount),
+        case IsLast of
+            false ->
+                ok;
+            true ->
+                TotalChildrenCount = archive_traverse_common:take_children_count(
+                    ?POOL_NAME, TaskId, DirUuid),
+                {ok, UserCtx} = tree_traverse_session:acquire_for_task(UserId, ?POOL_NAME, TaskId),
+                case archivisation_checksum:has_dir_changed(
+                    FileCtx, FileCtx, UserCtx, TotalChildrenCount)
+                of
+                    false ->
+                        ok;
+                    true ->
+                        archive:mark_verification_failed(TaskId),
+                        tree_traverse:cancel(?POOL_NAME, TaskId),
+                        ?warning("Invalid checksum for dir ~p in archive ~p",
+                            [file_ctx:get_logical_guid_const(FileCtx), TaskId])
+                end
+        end
+    end,
+    tree_traverse:do_master_job(Job, MasterJobArgs, NewJobsPreprocessor).
