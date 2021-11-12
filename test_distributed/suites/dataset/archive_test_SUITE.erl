@@ -89,6 +89,7 @@
     
     verification_plain_modify_file/1,
     verification_plain_modify_file_metadata/1,
+    verification_plain_modify_dir_metadata/1,
     verification_plain_create_file/1,
     verification_plain_remove_file/1,
     verification_plain_recreate_file/1,
@@ -96,6 +97,7 @@
     nested_verification_plain/1,
     verification_bagit_modify_file/1,
     verification_bagit_modify_file_metadata/1,
+    verification_bagit_modify_dir_metadata/1,
     verification_bagit_create_file/1,
     verification_bagit_remove_file/1,
     verification_bagit_recreate_file/1,
@@ -162,6 +164,7 @@ groups() -> [
     {verification_tests, [
         verification_plain_modify_file, 
         verification_plain_modify_file_metadata,
+        verification_plain_modify_dir_metadata,
         verification_plain_create_file,
         verification_plain_remove_file,
         verification_plain_recreate_file,
@@ -169,6 +172,7 @@ groups() -> [
         nested_verification_plain,
         verification_bagit_modify_file,
         verification_bagit_modify_file_metadata,
+        verification_bagit_modify_dir_metadata,
         verification_bagit_create_file,
         verification_bagit_remove_file,
         verification_bagit_recreate_file,
@@ -404,6 +408,9 @@ verification_plain_modify_file(_Config) ->
 verification_plain_modify_file_metadata(_Config) ->
     verification_modify_file_metadata_base(?ARCHIVE_PLAIN_LAYOUT).
 
+verification_plain_modify_dir_metadata(_Config) ->
+    verification_modify_dir_metadata_base(?ARCHIVE_PLAIN_LAYOUT).
+
 verification_plain_create_file(_Config) ->
     verification_create_file_base(?ARCHIVE_PLAIN_LAYOUT).
 
@@ -424,6 +431,9 @@ verification_bagit_modify_file(_Config) ->
 
 verification_bagit_modify_file_metadata(_Config) ->
     verification_modify_file_metadata_base(?ARCHIVE_BAGIT_LAYOUT).
+
+verification_bagit_modify_dir_metadata(_Config) ->
+    verification_modify_dir_metadata_base(?ARCHIVE_BAGIT_LAYOUT).
 
 verification_bagit_create_file(_Config) ->
     verification_create_file_base(?ARCHIVE_BAGIT_LAYOUT).
@@ -821,6 +831,13 @@ verification_modify_file_metadata_base(Layout) ->
     simple_verification_test_base(Layout, ModificationFun).
 
 
+verification_modify_dir_metadata_base(Layout) ->
+    ModificationFun = fun(Node, DirGuid, _FileGuid, _FileName, _Content, _Metadata) ->
+        ok = lfm_proxy:set_metadata(Node, ?ROOT_SESS_ID, #file_ref{guid = DirGuid}, json, ?RAND_JSON_METADATA(), [])
+    end,
+    simple_verification_test_base(Layout, ModificationFun).
+
+
 verification_remove_file_base(Layout) ->
     ModificationFun = fun(Node, _DirGuid, FileGuid, _FileName, _Content, _Metadata) ->
         ok = lfm_proxy:unlink(Node, ?ROOT_SESS_ID, #file_ref{guid = FileGuid})
@@ -858,7 +875,8 @@ simple_verification_test_base(Layout, ModificationFun) ->
     } = onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, 
         #dir_spec{
             dataset = #dataset_spec{archives = [#archive_spec{config = #archive_config{layout = Layout}}]},
-            children = [#file_spec{content = OriginalContent, metadata = #metadata_spec{json = OriginalMetadata}}]
+            children = [#file_spec{content = OriginalContent, metadata = #metadata_spec{json = OriginalMetadata}}],
+            metadata = #metadata_spec{json = OriginalMetadata}
     }),
     {ok, Pid} = archive_tests_utils:wait_for_archive_verification_traverse(ArchiveId),
     

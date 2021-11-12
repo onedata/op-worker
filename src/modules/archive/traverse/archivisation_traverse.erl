@@ -243,16 +243,10 @@ do_master_job(Job = #tree_traverse{
                     true ->
                         TotalChildrenCount = archive_traverse_common:take_children_count(
                             ?POOL_NAME, TaskId, DirUuid),
-                        AipCtx = maps:get(aip_ctx, TraverseInfo2),
-                        DipCtx = maps:get(dip_ctx, TraverseInfo2),
-                        archivisation_checksum:save_children_count(
-                            get_file_ctx(AipCtx), TotalChildrenCount),
-                        case get_file_ctx(DipCtx) of
-                            undefined -> ok;
-                            DipTargetFileCtx ->
-                                archivisation_checksum:save_children_count(
-                                    DipTargetFileCtx, TotalChildrenCount)
-                        end
+                        save_dir_checksum_metadata(get_file_ctx(maps:get(aip_ctx, TraverseInfo2)), 
+                            UserCtx, TotalChildrenCount),
+                        save_dir_checksum_metadata(get_file_ctx(maps:get(dip_ctx, TraverseInfo2)), 
+                            UserCtx, TotalChildrenCount)
                 end,
                 case SubtreeProcessingStatus of
                     ?SUBTREE_PROCESSED(NextSubtreeRoot) -> 
@@ -318,10 +312,10 @@ create_archive_data_dir(ArchiveDoc, UserCtx) ->
     DataDirGuid = case is_bagit(ArchiveDoc) of
         true ->
             {ok, DataDirCtx} = bagit_archive:prepare(ArchiveRootDirCtx, UserCtx),
-            archivisation_checksum:save_children_count(DataDirCtx, 1),
+            save_dir_checksum_metadata(DataDirCtx, UserCtx, 1),
             file_ctx:get_logical_guid_const(DataDirCtx);
         false ->
-            archivisation_checksum:save_children_count(ArchiveRootDirCtx, 1),
+            save_dir_checksum_metadata(ArchiveRootDirCtx, UserCtx, 1),
             ArchiveRootDirGuid
     end,
     archive:set_data_dir_guid(ArchiveDoc, DataDirGuid).
@@ -771,3 +765,11 @@ resolve_symlink(FileCtx, UserCtx) ->
         _ ->
             file_ctx:get_logical_guid_const(FileCtx)
     end.
+
+
+-spec save_dir_checksum_metadata(file_ctx:ctx() | undefined, user_ctx:ctx(), non_neg_integer()) -> 
+    ok.
+save_dir_checksum_metadata(undefined, _, _) ->
+    ok;
+save_dir_checksum_metadata(FileCtx, UserCtx, TotalChildrenCount) ->
+    archivisation_checksum:dir_calculate_and_save(FileCtx, UserCtx, TotalChildrenCount).

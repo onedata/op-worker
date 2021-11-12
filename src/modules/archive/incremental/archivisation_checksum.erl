@@ -24,8 +24,8 @@
 -type checksum_type() :: content | metadata | children_count.
 
 %% API
--export([calculate_and_save/2, has_file_changed/3]).
--export([save_children_count/2, get_children_count/1]).
+-export([file_calculate_and_save/2, dir_calculate_and_save/3]).
+-export([has_file_changed/3, has_dir_changed/4]).
 
 -define(ALGORITHM, ?MD5).
 -define(ARCHIVISATION_CONTENT_CHECKSUM_KEY,
@@ -39,10 +39,16 @@
 %%% API functions
 %%%===================================================================
 
--spec calculate_and_save(file_ctx:ctx(), user_ctx:ctx()) -> ok.
-calculate_and_save(ArchivedFileCtx, UserCtx) ->
+-spec file_calculate_and_save(file_ctx:ctx(), user_ctx:ctx()) -> ok.
+file_calculate_and_save(ArchivedFileCtx, UserCtx) ->
     ok = save(ArchivedFileCtx, calculate(ArchivedFileCtx, UserCtx, content), content),
     ok = save(ArchivedFileCtx, calculate(ArchivedFileCtx, UserCtx, metadata), metadata).
+
+
+-spec dir_calculate_and_save(file_ctx:ctx(), user_ctx:ctx(), non_neg_integer()) -> ok.
+dir_calculate_and_save(ArchivedDirCtx, UserCtx, ChildrenCount) ->
+    ok = save(ArchivedDirCtx, calculate(ArchivedDirCtx, UserCtx, metadata), metadata),
+    ok = save(ArchivedDirCtx, ChildrenCount, children_count).
 
 
 has_file_changed(ArchivedFileCtx, FileCtx, UserCtx) ->
@@ -50,14 +56,9 @@ has_file_changed(ArchivedFileCtx, FileCtx, UserCtx) ->
         has_checksum_changed(ArchivedFileCtx, FileCtx, UserCtx, content).
 
 
--spec save_children_count(file_ctx:ctx(), non_neg_integer()) -> ok.
-save_children_count(DirCtx, ChildrenCount) ->
-    save(DirCtx, ChildrenCount, children_count).
-
-
--spec get_children_count(file_ctx:ctx()) -> non_neg_integer().
-get_children_count(DirCtx) ->
-    get(DirCtx, children_count).
+has_dir_changed(ArchivedDirCtx, DirCtx, UserCtx, CurrentChildrenCount) ->
+    has_checksum_changed(ArchivedDirCtx, DirCtx, UserCtx, metadata) orelse
+        get(ArchivedDirCtx, children_count) =/= CurrentChildrenCount.
 
 
 %%%===================================================================
