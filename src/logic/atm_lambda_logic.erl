@@ -12,14 +12,16 @@
 -module(atm_lambda_logic).
 -author("Michal Stanisz").
 
--include("middleware/middleware.hrl").
 -include("graph_sync/provider_graph_sync.hrl").
+-include("middleware/middleware.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
+-include_lib("ctool/include/automation/automation.hrl").
 
 -export([
     get/2, get_name/2, get_summary/2, get_description/2,
-    get_operation_spec/2, get_argument_specs/2, get_result_specs/2
+    get_operation_spec/2, get_argument_specs/2, get_result_specs/2,
+    assert_executable/1
 ]).
 
 
@@ -101,3 +103,18 @@ get_result_specs(SessionId, AtmLambdaId) ->
         {error, _} = Error ->
             Error
     end.
+
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Checks whether given atm lambda can be executed (not all valid features may
+%% be supported by this provider - e.g. OpenFaaS service may not be configured).
+%% @end
+%%-------------------------------------------------------------------
+-spec assert_executable(od_atm_lambda:record() | od_atm_lambda:doc()) ->
+    ok | no_return().
+assert_executable(#od_atm_lambda{operation_spec = #atm_openfaas_operation_spec{}}) ->
+    atm_openfaas_task_executor:assert_openfaas_available();
+
+assert_executable(#document{value = AtmLambdaRecord}) ->
+    assert_executable(AtmLambdaRecord).

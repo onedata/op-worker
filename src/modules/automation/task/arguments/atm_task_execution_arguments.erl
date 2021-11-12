@@ -45,8 +45,9 @@ construct_args(AtmJobCtx, AtmTaskExecutionArgSpecs) ->
             Args#{ArgName => atm_task_execution_argument_spec:construct_arg(
                 AtmJobCtx, AtmTaskExecutionArgSpec
             )}
-        catch _:Reason ->
-            throw(?ERROR_ATM_TASK_ARG_MAPPING_FAILED(ArgName, Reason))
+        catch Type:Reason:Stacktrace ->
+            Error = ?atm_examine_error(Type, Reason, Stacktrace),
+            throw(?ERROR_ATM_TASK_ARG_MAPPING_FAILED(ArgName, Error))
         end
     end, #{}, AtmTaskExecutionArgSpecs),
 

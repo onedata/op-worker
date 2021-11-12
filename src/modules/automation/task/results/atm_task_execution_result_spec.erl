@@ -20,7 +20,7 @@
 -include("modules/automation/atm_execution.hrl").
 
 %% API
--export([build/2, get_name/1, is_dispatched/1, consume_result/3]).
+-export([build/2, get_name/1, consume_result/3]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
@@ -71,13 +71,6 @@ get_name(#atm_task_execution_result_spec{name = Name}) ->
     Name.
 
 
--spec is_dispatched(record()) -> boolean().
-is_dispatched(#atm_task_execution_result_spec{dispatch_specs = []}) ->
-    false;
-is_dispatched(_) ->
-    true.
-
-
 -spec consume_result(
     atm_workflow_execution_ctx:record(),
     record(),
@@ -94,8 +87,9 @@ consume_result(AtmWorkflowExecutionCtx, AtmTaskExecutionResultSpec = #atm_task_e
     lists:foreach(fun(#dispatch_spec{store_schema_id = AtmStoreSchemaId} = DispatchSpec) ->
         try
             dispatch_result(AtmWorkflowExecutionCtx, Result, Options, DispatchSpec)
-        catch _:Reason ->
-            throw(?ERROR_ATM_TASK_RESULT_DISPATCH_FAILED(AtmStoreSchemaId, Reason))
+        catch Type:Reason:Stacktrace ->
+            Error = ?atm_examine_error(Type, Reason, Stacktrace),
+            throw(?ERROR_ATM_TASK_RESULT_DISPATCH_FAILED(AtmStoreSchemaId, Error))
         end
     end, DispatchSpecs).
 
@@ -232,7 +226,7 @@ dispatch_result(AtmWorkflowExecutionCtx, Result, Options, #dispatch_spec{
     function = DispatchFun
 }) ->
     AtmWorkflowExecutionAuth = atm_workflow_execution_ctx:get_auth(AtmWorkflowExecutionCtx),
-    AtmStoreId = atm_workflow_execution_ctx:get_workflow_store_id(
+    AtmStoreId = atm_workflow_execution_ctx:get_global_store_id(
         AtmStoreSchemaId, AtmWorkflowExecutionCtx
     ),
     atm_store_api:apply_operation(

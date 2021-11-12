@@ -30,10 +30,10 @@
 ]).
 
 -export([
+    provider_logic_correctly_resolves_nodes_to_connect/1,
     incompatible_providers_should_not_connect/1,
     provider_should_reconnect_after_loss_of_connection/1,
     after_connection_timeout_session_is_terminated/1,
-    provider_logic_correctly_resolves_nodes_to_connect/1,
     configuration_endpoint_is_served/1,
     deprecated_configuration_endpoint_is_served/1,
     broken_compatibility_file_causes_unknown_entries_in_configuration/1
@@ -41,10 +41,10 @@
 
 all() ->
     ?ALL([
+        provider_logic_correctly_resolves_nodes_to_connect,
         incompatible_providers_should_not_connect,
         provider_should_reconnect_after_loss_of_connection,
         after_connection_timeout_session_is_terminated,
-        provider_logic_correctly_resolves_nodes_to_connect,
         configuration_endpoint_is_served,
         deprecated_configuration_endpoint_is_served,
         broken_compatibility_file_causes_unknown_entries_in_configuration
@@ -55,6 +55,65 @@ all() ->
 %%%===================================================================
 %%% Test functions
 %%%===================================================================
+
+
+provider_logic_correctly_resolves_nodes_to_connect(Config) ->
+    % There are 2 providers and 3 nodes:
+    %   * P1 -> 1 node
+    %   * P2 -> 2 nodes
+    Nodes = ?config(op_worker_nodes, Config),
+    [Domain1Atom, Domain2Atom] = lists:usort([?GET_DOMAIN(N) || N <- Nodes]),
+    Domain1Bin = atom_to_binary(Domain1Atom, utf8),
+    Domain2Bin = atom_to_binary(Domain2Atom, utf8),
+    Nodes1 = [N || N <- Nodes, ?GET_DOMAIN(N) =:= Domain1Atom],
+    Nodes2 = [N || N <- Nodes, ?GET_DOMAIN(N) =:= Domain2Atom],
+    P1 = initializer:domain_to_provider_id(?GET_DOMAIN(hd(Nodes1))),
+    P2 = initializer:domain_to_provider_id(?GET_DOMAIN(hd(Nodes2))),
+    IPs1 = [node_ip(N) || N <- Nodes1],
+    IPs2 = [node_ip(N) || N <- Nodes2],
+    IPsBin1 = [element(2, {ok, _} = ip_utils:to_binary(IP)) || IP <- IPs1],
+    IPsBin2 = [element(2, {ok, _} = ip_utils:to_binary(IP)) || IP <- IPs2],
+
+    % I) provider is registered using an IP address
+    test_utils:mock_expect(Nodes, provider_logic, get_domain, fun(_, ProviderId) ->
+        case ProviderId of
+            P1 -> {ok, <<"172.17.0.10">>};
+            P2 -> {ok, <<"172.17.0.74">>}
+        end
+    end),
+    ?assertEqual({ok, [<<"172.17.0.10">>]}, rpc:call(hd(Nodes2), provider_logic, get_nodes, [P1])),
+    ?assertEqual({ok, [<<"172.17.0.74">>]}, rpc:call(hd(Nodes1), provider_logic, get_nodes, [P2])),
+
+    % II) provider is registered using a domain that resolves to IPs that host
+    % the same service
+    test_utils:mock_expect(Nodes, provider_logic, get_domain, fun(_, ProviderId) ->
+        case ProviderId of
+            P1 -> {ok, Domain1Bin};
+            P2 -> {ok, Domain2Bin}
+        end
+    end),
+    test_utils:mock_expect(Nodes, inet, getaddrs, fun(Domain, inet) ->
+        case list_to_atom(Domain) of
+            Domain1Atom -> {ok, IPs1};
+            Domain2Atom -> {ok, IPs2}
+        end
+    end),
+
+    ?assertEqual({ok, IPsBin1}, rpc:call(hd(Nodes2), provider_logic, get_nodes, [P1])),
+    ?assertEqual({ok, IPsBin2}, rpc:call(hd(Nodes1), provider_logic, get_nodes, [P2])),
+
+    % III) provider is registered using a domain, but the IPs that it resolves to
+    % do not point to the same service (e.g. when reverse proxy is used).
+    test_utils:mock_expect(Nodes, inet, getaddrs, fun(Domain, inet) ->
+        case list_to_atom(Domain) of
+            Domain1Atom -> {ok, [{192, 168, 200, 200}, {192, 168, 200, 201}]};
+            Domain2Atom -> {ok, [{192, 168, 200, 202}]}
+        end
+    end),
+
+    % in such case, provider should fall back to using domain for connections
+    ?assertEqual({ok, [Domain1Bin]}, rpc:call(hd(Nodes2), provider_logic, get_nodes, [P1])),
+    ?assertEqual({ok, [Domain2Bin]}, rpc:call(hd(Nodes1), provider_logic, get_nodes, [P2])).
 
 
 % Providers should not connect because in env_up_posthook op version
@@ -156,65 +215,6 @@ after_connection_timeout_session_is_terminated(Config) ->
     test_utils:mock_unload(Nodes, [session_connections]).
 
 
-provider_logic_correctly_resolves_nodes_to_connect(Config) ->
-    % There are 2 providers and 3 nodes:
-    %   * P1 -> 1 node
-    %   * P2 -> 2 nodes
-    Nodes = ?config(op_worker_nodes, Config),
-    [Domain1Atom, Domain2Atom] = lists:usort([?GET_DOMAIN(N) || N <- Nodes]),
-    Domain1Bin = atom_to_binary(Domain1Atom, utf8),
-    Domain2Bin = atom_to_binary(Domain2Atom, utf8),
-    Nodes1 = [N || N <- Nodes, ?GET_DOMAIN(N) =:= Domain1Atom],
-    Nodes2 = [N || N <- Nodes, ?GET_DOMAIN(N) =:= Domain2Atom],
-    P1 = initializer:domain_to_provider_id(?GET_DOMAIN(hd(Nodes1))),
-    P2 = initializer:domain_to_provider_id(?GET_DOMAIN(hd(Nodes2))),
-    IPs1 = [node_ip(N) || N <- Nodes1],
-    IPs2 = [node_ip(N) || N <- Nodes2],
-    IPsBin1 = [element(2, {ok, _} = ip_utils:to_binary(IP)) || IP <- IPs1],
-    IPsBin2 = [element(2, {ok, _} = ip_utils:to_binary(IP)) || IP <- IPs2],
-
-    % I) provider is registered using an IP address
-    test_utils:mock_expect(Nodes, provider_logic, get_domain, fun(_, ProviderId) ->
-        case ProviderId of
-            P1 -> {ok, <<"172.17.0.10">>};
-            P2 -> {ok, <<"172.17.0.74">>}
-        end
-    end),
-    ?assertEqual({ok, [<<"172.17.0.10">>]}, rpc:call(hd(Nodes2), provider_logic, get_nodes, [P1])),
-    ?assertEqual({ok, [<<"172.17.0.74">>]}, rpc:call(hd(Nodes1), provider_logic, get_nodes, [P2])),
-
-    % II) provider is registered using a domain that resolves to IPs that host
-    % the same service
-    test_utils:mock_expect(Nodes, provider_logic, get_domain, fun(_, ProviderId) ->
-        case ProviderId of
-            P1 -> {ok, Domain1Bin};
-            P2 -> {ok, Domain2Bin}
-        end
-    end),
-    test_utils:mock_expect(Nodes, inet, getaddrs, fun(Domain, inet) ->
-        case list_to_atom(Domain) of
-            Domain1Atom -> {ok, IPs1};
-            Domain2Atom -> {ok, IPs2}
-        end
-    end),
-
-    ?assertEqual({ok, IPsBin1}, rpc:call(hd(Nodes2), provider_logic, get_nodes, [P1])),
-    ?assertEqual({ok, IPsBin2}, rpc:call(hd(Nodes1), provider_logic, get_nodes, [P2])),
-
-    % III) provider is registered using a domain, but the IPs that it resolves to
-    % do not point to the same service (e.g. when reverse proxy is used).
-    test_utils:mock_expect(Nodes, inet, getaddrs, fun(Domain, inet) ->
-        case list_to_atom(Domain) of
-            Domain1Atom -> {ok, [{192, 168, 200, 200}, {192, 168, 200, 201}]};
-            Domain2Atom -> {ok, [{192, 168, 200, 202}]}
-        end
-    end),
-
-    % in such case, provider should fall back to using domain for connections
-    ?assertEqual({ok, [Domain1Bin]}, rpc:call(hd(Nodes2), provider_logic, get_nodes, [P1])),
-    ?assertEqual({ok, [Domain2Bin]}, rpc:call(hd(Nodes1), provider_logic, get_nodes, [P2])).
-
-
 configuration_endpoint_is_served(Config) ->
     Nodes = ?config(op_worker_nodes, Config),
     lists:foreach(fun(Node) ->
@@ -304,9 +304,17 @@ init_per_testcase(provider_logic_correctly_resolves_nodes_to_connect, Config) ->
     utils:rpc_multicall(Nodes, application, set_env, [?APP_NAME, provider_nodes_cache_ttl_seconds, -1]),
 
     init_per_testcase(default, Config),
-    % get_nodes/1 is mocked in initializer - unmock
+    % get_nodes/1 is mocked in initializer - re-mock, but only for calls made
+    % from within this module, otherwise mechanisms such as dbsync may attempt to
+    % start in-between tests
     test_utils:mock_expect(Nodes, provider_logic, get_nodes, fun(ProviderId) ->
-        meck:passthrough([ProviderId])
+        Stacktrace = try throw(dummy) catch _:_:STrace -> STrace end,
+        case lists:keyfind(?MODULE, 1, Stacktrace) of
+            false ->
+                {ok, []};
+            _ ->
+                meck:passthrough([ProviderId])
+        end
     end),
     Config;
 
