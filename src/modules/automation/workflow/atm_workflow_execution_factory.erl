@@ -183,9 +183,10 @@ fetch_executable_lambdas_with_unused_revisions_removed(SessionId, AtmWorkflowSch
         }} = atm_lambda_logic:get(SessionId, AtmLambdaId),
 
         AtmLambdaWithUnusedRevisionsRemoved = AtmLambda#od_atm_lambda{
-            revision_registry = AtmLambdaRevisionRegistry  %% TODO :with(AtmLambdaRevisionNums, AtmLambdaRevisionRegistry)
+            revision_registry = atm_lambda_revision_registry:with(
+                AtmLambdaRevisionNums, AtmLambdaRevisionRegistry
+            )
         },
-
         atm_lambda_logic:assert_executable_revisions(
             AtmLambdaRevisionNums, AtmLambdaWithUnusedRevisionsRemoved
         ),
