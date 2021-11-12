@@ -63,7 +63,7 @@ stop_pool() ->
 start(ArchiveDoc) ->
     {ok, TaskId} = archive:get_id(ArchiveDoc),
     UserCtx = user_ctx:new(?ROOT_SESS_ID),
-    {ok, RootFileGuid} = archive:get_root_dir_guid(ArchiveDoc),
+    {ok, DataFileGuid} = archive:get_data_dir_guid(ArchiveDoc),
     case tree_traverse_session:setup_for_task(UserCtx, TaskId) of
         ok ->
             UserId = user_ctx:get_user_id(UserCtx),
@@ -72,7 +72,7 @@ start(ArchiveDoc) ->
                 children_master_jobs_mode => async
             },
             {ok, TaskId} = tree_traverse:run(
-                ?POOL_NAME, file_ctx:new_by_guid(RootFileGuid), UserId, Options),
+                ?POOL_NAME, file_ctx:new_by_guid(DataFileGuid), UserId, Options),
             ok;
         {error, _} = Error ->
             Error

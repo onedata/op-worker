@@ -141,7 +141,7 @@
 %%% API functions
 %%%===================================================================
 
--spec prepare(file_ctx:ctx(), user_ctx:ctx()) -> {ok, file_ctx:ctx(), non_neg_integer()}.
+-spec prepare(file_ctx:ctx(), user_ctx:ctx()) -> {ok, file_ctx:ctx()}.
 prepare(ArchiveDirCtx, UserCtx) ->
     DataDirCtx = create_data_dir(ArchiveDirCtx, UserCtx),
     create_bag_declaration(ArchiveDirCtx, UserCtx),
@@ -149,7 +149,7 @@ prepare(ArchiveDirCtx, UserCtx) ->
     ChecksumAlgorithms = ?SUPPORTED_CHECKSUM_ALGORITHMS,
     bagit_checksums:create_manifests(ArchiveDirCtx, UserCtx, ChecksumAlgorithms),
     bagit_metadata:init(ArchiveDirCtx, UserCtx),
-    {ok, DataDirCtx, 3 + length(ChecksumAlgorithms)}.
+    {ok, DataDirCtx}.
 
 
 -spec finalize(file_ctx:ctx(), user_ctx:ctx()) -> ok.
