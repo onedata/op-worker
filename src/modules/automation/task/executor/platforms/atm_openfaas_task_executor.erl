@@ -27,7 +27,7 @@
 -export([is_openfaas_available/0, assert_openfaas_available/0]).
 
 %% atm_task_executor callbacks
--export([create/2, prepare/2, clean/1, get_spec/1, in_readonly_mode/1, run/3]).
+-export([build/3, initiate/2, teardown/2, in_readonly_mode/1, run/3]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
@@ -46,12 +46,12 @@
 }).
 -type openfaas_config() :: #openfaas_config{}.
 
--record(prepare_ctx, {
+-record(initiation_ctx, {
     workflow_execution_ctx :: atm_workflow_execution_ctx:record(),
     openfaas_config :: openfaas_config(),
     executor :: record()
 }).
--type prepare_ctx() :: #prepare_ctx{}.
+-type initiation_ctx() :: #initiation_ctx{}.
 
 -export_type([record/0]).
 
@@ -88,41 +88,44 @@ assert_openfaas_available() ->
 %%%===================================================================
 
 
--spec create(atm_workflow_execution:id(), od_atm_lambda:doc()) ->
+-spec build(atm_workflow_execution:id(), atm_lane_execution:index(), atm_lambda_snapshot:record()) ->
     record() | no_return().
-create(AtmWorkflowExecutionId, AtmLambdaDoc = #document{value = #od_atm_lambda{
+build(AtmWorkflowExecutionId, AtmLaneIndex, AtmLambdaSnapshot = #atm_lambda_snapshot{
     operation_spec = AtmLambadaOperationSpec
-}}) ->
+}) ->
     assert_openfaas_available(),
 
     #atm_openfaas_task_executor{
-        function_name = build_function_name(AtmWorkflowExecutionId, AtmLambdaDoc),
+        function_name = build_function_name(AtmWorkflowExecutionId, AtmLaneIndex, AtmLambdaSnapshot),
         operation_spec = AtmLambadaOperationSpec
     }.
 
 
--spec prepare(atm_workflow_execution_ctx:record(), record()) -> ok | no_return().
-prepare(AtmWorkflowExecutionCtx, AtmTaskExecutor) ->
-    PrepareCtx = #prepare_ctx{
+-spec initiate(atm_workflow_execution_ctx:record(), record()) ->
+    workflow_engine:task_spec() | no_return().
+initiate(AtmWorkflowExecutionCtx, AtmTaskExecutor) ->
+    InitiationCtx = #initiation_ctx{
         workflow_execution_ctx = AtmWorkflowExecutionCtx,
         openfaas_config = get_openfaas_config(),
         executor = AtmTaskExecutor
     },
-    case is_function_registered(PrepareCtx) of
+    case is_function_registered(InitiationCtx) of
         true -> ok;
-        false -> register_function(PrepareCtx)
+        false -> register_function(InitiationCtx)
     end,
-    await_function_readiness(PrepareCtx).
+    await_function_readiness(InitiationCtx),
 
-
--spec clean(record()) -> ok | no_return().
-clean(AtmTaskExecutor) ->
-    remove_function(AtmTaskExecutor).
-
-
--spec get_spec(record()) -> workflow_engine:task_spec().
-get_spec(_AtmTaskExecutor) ->
     #{type => async}.
+
+
+-spec teardown(atm_lane_execution_handler:teardown_ctx(), record()) -> ok | no_return().
+teardown(#atm_lane_execution_run_teardown_ctx{is_retried_scheduled = true}, _AtmTaskExecutor) ->
+    % in case of lane run retry functions registered in OpenFaaS service are not removed
+    % as they will be reused by retry
+    ok;
+teardown(_AtmLaneExecutionRunTeardownCtx, AtmTaskExecutor) ->
+    % TODO VFS-8273 pass workflow_execution_ctx below and log in audit log function removal result
+    remove_function(AtmTaskExecutor).
 
 
 -spec in_readonly_mode(record()) -> boolean().
@@ -197,16 +200,8 @@ check_openfaas_availability() ->
                 _ ->
                     ?ERROR_ATM_OPENFAAS_UNREACHABLE
             end
-        catch
-            throw:{error, _} = Error ->
-                Error;
-            Class:Reason:Stacktrace ->
-                ?error_stacktrace(
-                    "Unexpected error during OpenFaaS healthcheck - ~w:~p",
-                    [Class, Reason],
-                    Stacktrace
-                ),
-                ?ERROR_INTERNAL_SERVER_ERROR
+        catch Type:Reason:Stacktrace ->
+            ?atm_examine_error(Type, Reason, Stacktrace)
         end,
         {ok, HealthcheckResult, ?HEALTHCHECK_CACHE_TTL_SECONDS}
     end),
@@ -223,13 +218,17 @@ check_openfaas_availability() ->
 %% OpenFaaS service is '[a-z]([-a-z0-9]{0,61}[a-z0-9])?').
 %% @end
 %%--------------------------------------------------------------------
--spec build_function_name(atm_workflow_execution:id(), od_atm_lambda:doc()) ->
+-spec build_function_name(
+    atm_workflow_execution:id(),
+    atm_lane_execution:index(),
+    atm_lambda_snapshot:record()
+) ->
     binary().
-build_function_name(AtmWorkflowExecutionId, #document{
-    key = AtmLambdaId,
-    value = #od_atm_lambda{name = AtmLambdaName}
+build_function_name(AtmWorkflowExecutionId, AtmLaneIndex, #atm_lambda_snapshot{
+    lambda_id = AtmLambdaId,
+    name = AtmLambdaName
 }) ->
-    Signature = str_utils:md5_digest([AtmWorkflowExecutionId, AtmLambdaId]),
+    Signature = str_utils:md5_digest([AtmWorkflowExecutionId, AtmLaneIndex, AtmLambdaId]),
 
     Name = str_utils:format_bin("w~s-s~s-~s", [
         binary:part(AtmWorkflowExecutionId, 0, min(size(AtmWorkflowExecutionId), 10)),
@@ -256,8 +255,8 @@ sanitize_character(_) -> $-.
 
 
 %% @private
--spec is_function_registered(prepare_ctx()) -> boolean() | no_return().
-is_function_registered(#prepare_ctx{
+-spec is_function_registered(initiation_ctx()) -> boolean() | no_return().
+is_function_registered(#initiation_ctx{
     openfaas_config = OpenfaasConfig,
     executor = #atm_openfaas_task_executor{function_name = FunctionName}
 }) ->
@@ -279,23 +278,23 @@ is_function_registered(#prepare_ctx{
 
 
 %% @private
--spec register_function(prepare_ctx()) -> ok | no_return().
-register_function(#prepare_ctx{openfaas_config = OpenfaasConfig} = PrepareCtx) ->
-    log_function_registering(PrepareCtx),
+-spec register_function(initiation_ctx()) -> ok | no_return().
+register_function(#initiation_ctx{openfaas_config = OpenfaasConfig} = InitiationCtx) ->
+    log_function_registering(InitiationCtx),
 
     Endpoint = get_openfaas_endpoint(OpenfaasConfig, <<"/system/functions">>),
     AuthHeaders = get_basic_auth_header(OpenfaasConfig),
-    Payload = json_utils:encode(prepare_function_definition(PrepareCtx)),
+    Payload = json_utils:encode(prepare_function_definition(InitiationCtx)),
 
     case http_client:post(Endpoint, AuthHeaders, Payload) of
         {ok, ?HTTP_202_ACCEPTED, _RespHeaders, _RespBody} ->
-            log_function_registered(PrepareCtx);
+            log_function_registered(InitiationCtx);
         {ok, ?HTTP_400_BAD_REQUEST, _RespHeaders, ErrorReason} ->
             throw(?ERROR_ATM_OPENFAAS_QUERY_FAILED(ErrorReason));
         {ok, ?HTTP_500_INTERNAL_SERVER_ERROR, _RespHeaders, ErrorReason} ->
             % Possible race with other task registering function
             % (Openfaas returns 500 if function already exists)
-            case is_function_registered(PrepareCtx) of
+            case is_function_registered(InitiationCtx) of
                 true -> ok;
                 false -> throw(?ERROR_ATM_OPENFAAS_QUERY_FAILED(ErrorReason))
             end;
@@ -305,8 +304,8 @@ register_function(#prepare_ctx{openfaas_config = OpenfaasConfig} = PrepareCtx) -
 
 
 %% @private
--spec log_function_registering(prepare_ctx()) -> ok.
-log_function_registering(#prepare_ctx{
+-spec log_function_registering(initiation_ctx()) -> ok.
+log_function_registering(#initiation_ctx{
     workflow_execution_ctx = AtmWorkflowExecutionCtx,
     executor = #atm_openfaas_task_executor{
         function_name = FunctionName,
@@ -321,8 +320,8 @@ log_function_registering(#prepare_ctx{
 
 
 %% @private
--spec log_function_registered(prepare_ctx()) -> ok.
-log_function_registered(#prepare_ctx{
+-spec log_function_registered(initiation_ctx()) -> ok.
+log_function_registered(#initiation_ctx{
     workflow_execution_ctx = AtmWorkflowExecutionCtx,
     executor = #atm_openfaas_task_executor{function_name = FunctionName}
 }) ->
@@ -333,8 +332,8 @@ log_function_registered(#prepare_ctx{
 
 
 %% @private
--spec prepare_function_definition(prepare_ctx()) -> json_utils:json_map().
-prepare_function_definition(PrepareCtx = #prepare_ctx{
+-spec prepare_function_definition(initiation_ctx()) -> json_utils:json_map().
+prepare_function_definition(InitiationCtx = #initiation_ctx{
     openfaas_config = #openfaas_config{
         function_namespace = FunctionNamespace
     },
@@ -371,19 +370,19 @@ prepare_function_definition(PrepareCtx = #prepare_ctx{
         {<<"requests">>, openfaas_function_requests}
     ]),
 
-    add_mount_oneclient_function_annotations(AllProperties, PrepareCtx).
+    add_mount_oneclient_function_annotations(AllProperties, InitiationCtx).
 
 
 %% @private
--spec add_mount_oneclient_function_annotations(json_utils:json_map(), prepare_ctx()) ->
+-spec add_mount_oneclient_function_annotations(json_utils:json_map(), initiation_ctx()) ->
     json_utils:json_map().
-add_mount_oneclient_function_annotations(FunctionDefinition, #prepare_ctx{
+add_mount_oneclient_function_annotations(FunctionDefinition, #initiation_ctx{
     executor = #atm_openfaas_task_executor{operation_spec = #atm_openfaas_operation_spec{
         docker_execution_options = #atm_docker_execution_options{mount_oneclient = false}
     }}}
 ) ->
     FunctionDefinition;
-add_mount_oneclient_function_annotations(FunctionDefinition, #prepare_ctx{
+add_mount_oneclient_function_annotations(FunctionDefinition, #initiation_ctx{
     workflow_execution_ctx = AtmWorkflowExecutionCtx,
     executor = AtmTaskExecutor = #atm_openfaas_task_executor{
         operation_spec = #atm_openfaas_operation_spec{
@@ -440,20 +439,20 @@ get_oneclient_image() ->
 
 
 %% @private
--spec await_function_readiness(prepare_ctx()) -> ok | no_return().
-await_function_readiness(PrepareCtx) ->
-    await_function_readiness(PrepareCtx, ?AWAIT_READINESS_RETRIES).
+-spec await_function_readiness(initiation_ctx()) -> ok | no_return().
+await_function_readiness(InitiationCtx) ->
+    await_function_readiness(InitiationCtx, ?AWAIT_READINESS_RETRIES).
 
 
 %% @private
--spec await_function_readiness(prepare_ctx(), non_neg_integer()) -> ok | no_return().
-await_function_readiness(_PrepareCtx, 0) ->
+-spec await_function_readiness(initiation_ctx(), non_neg_integer()) -> ok | no_return().
+await_function_readiness(_InitiationCtx, 0) ->
     throw(?ERROR_ATM_OPENFAAS_FUNCTION_REGISTRATION_FAILED);
 
-await_function_readiness(#prepare_ctx{
+await_function_readiness(#initiation_ctx{
     openfaas_config = OpenfaasConfig,
     executor = #atm_openfaas_task_executor{function_name = FunctionName}
-} = PrepareCtx, RetriesLeft) ->
+} = InitiationCtx, RetriesLeft) ->
     Endpoint = get_openfaas_endpoint(
         OpenfaasConfig, <<"/system/function/", FunctionName/binary>>
     ),
@@ -473,16 +472,16 @@ await_function_readiness(#prepare_ctx{
 
     case Result of
         ready ->
-            log_function_ready(PrepareCtx);
+            log_function_ready(InitiationCtx);
         not_ready ->
             timer:sleep(timer:seconds(?AWAIT_READINESS_INTERVAL_SEC)),
-            await_function_readiness(PrepareCtx, RetriesLeft - 1)
+            await_function_readiness(InitiationCtx, RetriesLeft - 1)
     end.
 
 
 %% @private
--spec log_function_ready(prepare_ctx()) -> ok.
-log_function_ready(#prepare_ctx{
+-spec log_function_ready(initiation_ctx()) -> ok.
+log_function_ready(#initiation_ctx{
     workflow_execution_ctx = AtmWorkflowExecutionCtx,
     executor = #atm_openfaas_task_executor{function_name = FunctionName}
 }) ->

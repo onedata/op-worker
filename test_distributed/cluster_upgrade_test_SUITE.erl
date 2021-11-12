@@ -13,6 +13,7 @@
 -module(cluster_upgrade_test_SUITE).
 -author("Michal Stanisz").
 
+-include("modules/automation/atm_execution.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/storage/helpers/helpers.hrl").
 -include("modules/storage/import/storage_import.hrl").
@@ -29,8 +30,12 @@
 ]).
 -export([
     upgrade_from_20_02_1_space_strategies/1,
-    upgrade_from_20_02_1_storage_sync_monitoring/1
+    upgrade_from_20_02_1_storage_sync_monitoring/1,
+    upgrade_from_21_02_alpha21_atm/1
 ]).
+
+-define(SPACE1_ID, <<"space_id1">>).
+
 
 %%%===================================================================
 %%% API functions
@@ -38,7 +43,8 @@
 
 all() -> ?ALL([
     upgrade_from_20_02_1_space_strategies,
-    upgrade_from_20_02_1_storage_sync_monitoring
+    upgrade_from_20_02_1_storage_sync_monitoring,
+    upgrade_from_21_02_alpha21_atm
 ]).
 
 %%%===================================================================
@@ -360,6 +366,71 @@ upgrade_from_20_02_1_storage_sync_monitoring(Config) ->
     ?assertMatch({ok, SIMDoc3}, rpc:call(Worker, storage_import_monitoring, get, [SpaceId3])),
     ?assertMatch({ok, SIMDoc4}, rpc:call(Worker, storage_import_monitoring, get, [SpaceId4])),
     ?assertMatch({ok, SIMDoc5}, rpc:call(Worker, storage_import_monitoring, get, [SpaceId5])).
+
+
+upgrade_from_21_02_alpha21_atm(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+
+    AtmDocLoads = load_atm_doc_json_dumps(Worker, Config),
+    ?assertEqual({ok, 5}, rpc:call(Worker, node_manager_plugin, upgrade_cluster, [4])),
+    assert_all_atm_docs_deleted(Worker, AtmDocLoads),
+
+    ok.
+
+
+%% @private
+load_atm_doc_json_dumps(Worker, Config) ->
+    AtmDocJSONDumpDirPath = filename:join(test_utils:data_dir(Config), "atm_doc_json_dumps"),
+
+    lists:foldl(fun(AtmDocJSONDumpFileName, Acc) ->
+        AtmDocJSONDumpFilePath = filename:join(AtmDocJSONDumpDirPath, AtmDocJSONDumpFileName),
+        {ok, AtmDocJSONDumpBin} = file:read_file(AtmDocJSONDumpFilePath),
+        AtmDocJSONDump = jiffy:decode(AtmDocJSONDumpBin, []),
+
+        AtmDoc0 = #document{key = AtmDocId, value = AtmDocRecord} = rpc:call(
+            Worker, datastore_json, decode, [AtmDocJSONDump]
+        ),
+        Model = element(1, AtmDocRecord),
+
+        AtmDoc2 = case Model == atm_workflow_execution of
+            true ->
+                AtmDoc1 = AtmDoc0#document{value = AtmDocRecord#atm_workflow_execution{
+                    space_id = ?SPACE1_ID
+                }},
+                ForestModule = case atm_workflow_execution_status:infer_phase(AtmDocRecord) of
+                    ?WAITING_PHASE -> atm_waiting_workflow_executions;
+                    ?ONGOING_PHASE -> atm_ongoing_workflow_executions;
+                    ?ENDED_PHASE -> atm_ended_workflow_executions
+                end,
+
+                ?assertMatch(ok, rpc:call(Worker, ForestModule, add, [AtmDoc1])),
+                Entries = rpc:call(Worker, ForestModule, list, [?SPACE1_ID, #{limit => 100, offset => 0}]),
+                ?assert(lists:any(fun({_, Id}) -> Id == AtmDocId end, Entries)),
+
+                AtmDoc1;
+            false ->
+                AtmDoc0
+        end,
+
+        DatastoreCtx = rpc:call(Worker, Model, get_ctx, []),
+        ?assertMatch({ok, _}, rpc:call(Worker, datastore_model, save, [DatastoreCtx, AtmDoc2])),
+        ?assertMatch({ok, _}, rpc:call(Worker, datastore_model, get, [DatastoreCtx, AtmDocId])),
+
+        [{Model, AtmDocId} | Acc]
+    end, [], element(2, file:list_dir(AtmDocJSONDumpDirPath))).
+
+
+%% @private
+assert_all_atm_docs_deleted(Worker, AtmDocLoads) ->
+    ListingOpts = #{limit => 100, offset => 0},
+    ?assertMatch([], rpc:call(Worker, atm_waiting_workflow_executions, list, [?SPACE1_ID, ListingOpts])),
+    ?assertMatch([], rpc:call(Worker, atm_ongoing_workflow_executions, list, [?SPACE1_ID, ListingOpts])),
+    ?assertMatch([], rpc:call(Worker, atm_ended_workflow_executions, list, [?SPACE1_ID, ListingOpts])),
+
+    lists:foreach(fun({Model, Id}) ->
+        DatastoreCtx = rpc:call(Worker, Model, get_ctx, []),
+        ?assertMatch({error, not_found}, rpc:call(Worker, datastore_model, get, [DatastoreCtx, Id]))
+    end, AtmDocLoads).
 
 
 %%%===================================================================
