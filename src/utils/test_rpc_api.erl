@@ -50,7 +50,7 @@
     get_cert_chain_ders/0,
     gs_protocol_supported_versions/0,
 
-    schedule_atm_workflow_execution/4,
+    schedule_atm_workflow_execution/5,
     list_waiting_atm_workflow_executions/3,
     list_ongoing_atm_workflow_executions/3,
 
@@ -203,12 +203,24 @@ gs_protocol_supported_versions() ->
     session:id(),
     od_space:id(),
     od_atm_workflow_schema:id(),
+    atm_workflow_schema_revision:revision_number(),
     atm_workflow_execution_api:store_initial_values()
 ) ->
     {ok, atm_workflow_execution:id(), atm_workflow_execution:record()} | errors:error().
-schedule_atm_workflow_execution(SessId, SpaceId, AtmWorkflowSchemaId, AtmStoreInitialValues) ->
-    lfm:schedule_atm_workflow_execution(SessId, SpaceId, AtmWorkflowSchemaId, AtmStoreInitialValues).
-
+schedule_atm_workflow_execution(
+    SessId,
+    SpaceId,
+    AtmWorkflowSchemaId,
+    AtmWorkflowSchemaRevisionNum,
+    AtmStoreInitialValues
+) ->
+    lfm:schedule_atm_workflow_execution(
+        SessId,
+        SpaceId,
+        AtmWorkflowSchemaId,
+        AtmWorkflowSchemaRevisionNum,
+        AtmStoreInitialValues
+    ).
 
 
 -spec list_waiting_atm_workflow_executions(

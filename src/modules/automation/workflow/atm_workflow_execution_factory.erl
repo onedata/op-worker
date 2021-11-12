@@ -218,16 +218,12 @@ create_workflow_schema_snapshot(CreationCtx = #creation_ctx{
     creation_args = #creation_args{
         workflow_execution_id = AtmWorkflowExecutionId,
         workflow_schema_doc = AtmWorkflowSchemaDoc,
-        workflow_schema_revision_num = AtmWorkflowSchemaRevisionNum,
-        workflow_schema_revision = AtmWorkflowSchemaRevision
+        workflow_schema_revision_num = AtmWorkflowSchemaRevisionNum
     },
     execution_components = ExecutionComponents
 }) ->
     {ok, AtmWorkflowSchemaSnapshotId} = atm_workflow_schema_snapshot:create(
-        AtmWorkflowExecutionId,
-        AtmWorkflowSchemaRevisionNum,
-        AtmWorkflowSchemaRevision,
-        AtmWorkflowSchemaDoc
+        AtmWorkflowExecutionId, AtmWorkflowSchemaRevisionNum, AtmWorkflowSchemaDoc
     ),
 
     CreationCtx#creation_ctx{execution_components = ExecutionComponents#execution_components{

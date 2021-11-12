@@ -17,7 +17,7 @@
 -include_lib("ctool/include/automation/automation.hrl").
 
 %% API
--export([create/4, get/1, delete/1]).
+-export([create/3, get/1, delete/1]).
 
 %%% field encoding/decoding procedures
 -export([legacy_state_to_json/1, legacy_state_from_json/1]).
@@ -43,11 +43,10 @@
 -spec create(
     atm_workflow_execution:id(),
     atm_workflow_schema_revision:revision_number(),
-    atm_workflow_schema_revision:record(),
     od_atm_workflow_schema:doc()
 ) ->
     {ok, id()} | {error, term()}.
-create(AtmWorkflowExecutionId, RevisionNumber, Revision, #document{
+create(AtmWorkflowExecutionId, RevisionNum, AtmWorkflowSchemaDoc = #document{
     key = AtmWorkflowSchemaId,
     value = #od_atm_workflow_schema{
         name = AtmWorkflowSchemaName,
@@ -55,6 +54,8 @@ create(AtmWorkflowExecutionId, RevisionNumber, Revision, #document{
         atm_inventory = AtmInventoryId
     }
 }) ->
+    {ok, Revision} = atm_workflow_schema_logic:get_revision(RevisionNum, AtmWorkflowSchemaDoc),
+
     %% TODO VFS-7685 add ref count and gen snapshot id based on doc.revision and schema.revision_number
     ?extract_key(datastore_model:create(?CTX, #document{
         key = AtmWorkflowExecutionId,
@@ -63,7 +64,7 @@ create(AtmWorkflowExecutionId, RevisionNumber, Revision, #document{
             name = AtmWorkflowSchemaName,
             summary = AtmWorkflowSchemaSummary,
 
-            revision_number = RevisionNumber,
+            revision_number = RevisionNum,
             revision = Revision,
 
             atm_inventory = AtmInventoryId
