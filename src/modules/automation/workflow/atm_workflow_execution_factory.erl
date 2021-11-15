@@ -83,7 +83,7 @@ create(
     ),
     atm_workflow_schema_logic:assert_executable_revision(AtmWorkflowSchemaRevision),
 
-    AtmLambdaDocs = fetch_executable_lambdas_with_unused_revisions_removed(
+    AtmLambdaDocs = fetch_executable_lambdas_with_referenced_revisions(
         SessionId, AtmWorkflowSchemaRevision
     ),
 
@@ -165,12 +165,12 @@ delete_insecure(AtmWorkflowExecutionId) ->
 
 
 %% @private
--spec fetch_executable_lambdas_with_unused_revisions_removed(
+-spec fetch_executable_lambdas_with_referenced_revisions(
     session:id(),
     atm_workflow_schema_revision:record()
 ) ->
     [od_atm_lambda:doc()] | no_return().
-fetch_executable_lambdas_with_unused_revisions_removed(SessionId, AtmWorkflowSchemaRevision) ->
+fetch_executable_lambdas_with_referenced_revisions(SessionId, AtmWorkflowSchemaRevision) ->
     AtmLambdaReferences = atm_workflow_schema_revision:extract_atm_lambda_references(
         AtmWorkflowSchemaRevision
     ),
@@ -182,15 +182,15 @@ fetch_executable_lambdas_with_unused_revisions_removed(SessionId, AtmWorkflowSch
             }
         }} = atm_lambda_logic:get(SessionId, AtmLambdaId),
 
-        AtmLambdaWithUnusedRevisionsRemoved = AtmLambda#od_atm_lambda{
+        AtmLambdaWithReferencedRevisions = AtmLambda#od_atm_lambda{
             revision_registry = atm_lambda_revision_registry:with(
                 AtmLambdaRevisionNums, AtmLambdaRevisionRegistry
             )
         },
         atm_lambda_logic:assert_executable_revisions(
-            AtmLambdaRevisionNums, AtmLambdaWithUnusedRevisionsRemoved
+            AtmLambdaRevisionNums, AtmLambdaWithReferencedRevisions
         ),
-        AtmLambdaDoc#document{value = AtmLambdaWithUnusedRevisionsRemoved}
+        AtmLambdaDoc#document{value = AtmLambdaWithReferencedRevisions}
     end, maps:to_list(AtmLambdaReferences)).
 
 

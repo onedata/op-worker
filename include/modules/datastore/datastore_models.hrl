@@ -247,7 +247,6 @@
     revision_registry :: atm_workflow_schema_revision_registry:record(),
 
     atm_inventory :: od_atm_inventory:id(),
-    atm_lambdas :: [od_atm_lambda:id()],
 
     cache_state = #{} :: cache_state()
 }).

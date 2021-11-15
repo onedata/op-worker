@@ -614,8 +614,7 @@ end).
         name = ?ATM_WORKFLOW_SCHEMA_NAME(__AtmWorkflowSchema),
         summary = ?ATM_WORKFLOW_SCHEMA_SUMMARY(__AtmWorkflowSchema),
         revision_registry = ?ATM_WORKFLOW_SCHEMA_REVISION_REGISTRY_MATCHER(__AtmWorkflowSchema),
-        atm_inventory = ?ATM_WORKFLOW_SCHEMA_INVENTORY(__AtmWorkflowSchema),
-        atm_lambdas = [?ATM_LAMBDA_1]
+        atm_inventory = ?ATM_WORKFLOW_SCHEMA_INVENTORY(__AtmWorkflowSchema)
     }}).
 
 

@@ -328,8 +328,7 @@ translate(#gri{type = od_atm_workflow_schema, id = Id, aspect = instance, scope 
                 maps:get(<<"revisionRegistry">>, Result), atm_workflow_schema_revision_registry
             ),
 
-            atm_inventory = maps:get(<<"atmInventoryId">>, Result),
-            atm_lambdas = maps:get(<<"atmLambdas">>, Result)
+            atm_inventory = maps:get(<<"atmInventoryId">>, Result)
         }
     };
 

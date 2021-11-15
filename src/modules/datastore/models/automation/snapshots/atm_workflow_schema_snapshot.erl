@@ -87,7 +87,6 @@ delete(AtmWorkflowSchemaSnapshotId) ->
 %%%===================================================================
 
 
-%% TODO below translations are 1:1 so why not specify them as atom in record struct callback ?
 %% NOTE: used only in record version 1
 -spec legacy_state_to_json(atom()) -> json_utils:json_term().
 legacy_state_to_json(incomplete) -> <<"incomplete">>;
