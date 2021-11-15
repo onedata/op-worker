@@ -46,9 +46,8 @@ update_children_count(PoolName, TaskId, DirUuid, ChildrenCount) ->
 -spec take_children_count(tree_traverse:pool(), tree_traverse:id(), file_meta:uuid()) ->
     non_neg_integer().
 take_children_count(PoolName, TaskId, DirUuid) ->
-    {ok, AD} = traverse_task:get_additional_data(PoolName, TaskId),
-    CountMap = get_count_map(AD),
-    ChildrenCount = maps:get(DirUuid, CountMap),
+    {ok, AdditionalData} = traverse_task:get_additional_data(PoolName, TaskId),
+    ChildrenCount = maps:get(DirUuid, get_count_map(AdditionalData)),
     ok = ?extract_ok(traverse_task:update_additional_data(traverse_task:get_ctx(), PoolName, TaskId,
         fun(AD) ->
             CountMap = get_count_map(AD),

@@ -55,7 +55,13 @@ assert_granted(UserCtx, FileCtx, AccessRequirements) ->
     case user_ctx:is_root(UserCtx) of
         true ->
             % Root omits all access checks with exception to file protection flags
-            assert_access_permitted_by_protection_flags(FileCtx, AccessRequirements);
+            case file_ctx:is_space_dir_const(FileCtx) of
+                false ->
+                    assert_access_permitted_by_protection_flags(FileCtx, AccessRequirements);
+                true ->
+                    %% @TODO VFS-8589 - properly handle getting space dir metadata on proxy providers
+                    FileCtx
+            end;
         false ->
             SpaceId = file_ctx:get_space_id_const(FileCtx),
 
