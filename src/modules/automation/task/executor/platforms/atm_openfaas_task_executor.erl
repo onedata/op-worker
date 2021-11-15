@@ -27,7 +27,7 @@
 -export([is_openfaas_available/0, assert_openfaas_available/0]).
 
 %% atm_task_executor callbacks
--export([build/3, initiate/2, teardown/2, in_readonly_mode/1, run/3]).
+-export([build/4, initiate/2, teardown/2, in_readonly_mode/1, run/3]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
@@ -88,16 +88,24 @@ assert_openfaas_available() ->
 %%%===================================================================
 
 
--spec build(atm_workflow_execution:id(), atm_lane_execution:index(), atm_lambda_snapshot:record()) ->
+-spec build(
+    atm_workflow_execution:id(),
+    atm_lane_execution:index(),
+    atm_task_schema:record(),
+    atm_lambda_revision:record()
+) ->
     record() | no_return().
-build(AtmWorkflowExecutionId, AtmLaneIndex, AtmLambdaSnapshot = #atm_lambda_snapshot{
-    operation_spec = AtmLambadaOperationSpec
-}) ->
+build(AtmWorkflowExecutionId, AtmLaneIndex, AtmTaskSchema, AtmLambdaRevision) ->
     assert_openfaas_available(),
 
+    ResourceSpec = select_resource_spec(AtmTaskSchema, AtmLambdaRevision),
+    FunctionName = build_function_name(
+        AtmWorkflowExecutionId, AtmLaneIndex, AtmTaskSchema, AtmLambdaRevision, ResourceSpec
+    ),
+
     #atm_openfaas_task_executor{
-        function_name = build_function_name(AtmWorkflowExecutionId, AtmLaneIndex, AtmLambdaSnapshot),
-        operation_spec = AtmLambadaOperationSpec
+        function_name = FunctionName,
+        operation_spec = AtmLambdaRevision#atm_lambda_revision.operation_spec
     }.
 
 
@@ -208,6 +216,15 @@ check_openfaas_availability() ->
     Result.
 
 
+%% @private
+-spec select_resource_spec(atm_task_schema:record(), atm_lambda_revision:record()) ->
+    atm_resource_spec:record().
+select_resource_spec(#atm_task_schema{resource_spec_override = undefined}, AtmLambdaRevision) ->
+    AtmLambdaRevision#atm_lambda_revision.resource_spec;
+select_resource_spec(#atm_task_schema{resource_spec_override = ResourceSpec}, _AtmLambdaRevision) ->
+    ResourceSpec.
+
+
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -221,19 +238,32 @@ check_openfaas_availability() ->
 -spec build_function_name(
     atm_workflow_execution:id(),
     atm_lane_execution:index(),
-    atm_lambda_snapshot:record()
+    atm_task_schema:record(),
+    atm_lambda_revision:record(),
+    atm_resource_spec:record()
 ) ->
     binary().
-build_function_name(AtmWorkflowExecutionId, AtmLaneIndex, #atm_lambda_snapshot{
-    lambda_id = AtmLambdaId,
-    name = AtmLambdaName
-}) ->
-    Signature = str_utils:md5_digest([AtmWorkflowExecutionId, AtmLaneIndex, AtmLambdaId]),
+build_function_name(
+    AtmWorkflowExecutionId,
+    AtmLaneIndex,
+    AtmTaskSchema,
+    AtmLambdaRevision,
+    ResourceSpec
+) ->
+    AtmLambdaRevisionName = AtmLambdaRevision#atm_lambda_revision.name,
+
+    Signature = str_utils:md5_digest([
+        AtmWorkflowExecutionId,
+        AtmLaneIndex,
+        AtmTaskSchema#atm_task_schema.lambda_id,
+        AtmTaskSchema#atm_task_schema.lambda_revision_number,
+        ResourceSpec
+    ]),
 
     Name = str_utils:format_bin("w~s-s~s-~s", [
         binary:part(AtmWorkflowExecutionId, 0, min(size(AtmWorkflowExecutionId), 10)),
         binary:part(Signature, 0, min(size(Signature), 10)),
-        binary:part(AtmLambdaName, 0, min(size(AtmLambdaName), 39))
+        binary:part(AtmLambdaRevisionName, 0, min(size(AtmLambdaRevisionName), 39))
     ]),
     SanitizedName = << <<(sanitize_character(Char))/integer>> || <<Char>> <= Name>>,
 

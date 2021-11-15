@@ -138,7 +138,7 @@
 -export([archive_dataset/6, update_archive/3, get_archive_info/2, list_archives/4, init_archive_purge/3]).
 %% Automation related operations
 -export([
-    schedule_atm_workflow_execution/4, schedule_atm_workflow_execution/5,
+    schedule_atm_workflow_execution/5, schedule_atm_workflow_execution/6,
     cancel_atm_workflow_execution/2
 ]).
 
@@ -935,24 +935,51 @@ init_archive_purge(SessId, ArchiveId, CallbackUrl) ->
     session:id(),
     od_space:id(),
     od_atm_workflow_schema:id(),
+    atm_workflow_schema_revision:revision_number(),
     atm_workflow_execution_api:store_initial_values()
 ) ->
     {ok, atm_workflow_execution:id(), atm_workflow_execution:record()} | error_reply().
-schedule_atm_workflow_execution(SessId, SpaceId, AtmWorkflowSchemaId, AtmStoreInitialValues) ->
-    schedule_atm_workflow_execution(SessId, SpaceId, AtmWorkflowSchemaId, AtmStoreInitialValues, undefined).
+schedule_atm_workflow_execution(
+    SessId,
+    SpaceId,
+    AtmWorkflowSchemaId,
+    AtmWorkflowSchemaRevisionNum,
+    AtmStoreInitialValues
+) ->
+    schedule_atm_workflow_execution(
+        SessId,
+        SpaceId,
+        AtmWorkflowSchemaId,
+        AtmWorkflowSchemaRevisionNum,
+        AtmStoreInitialValues,
+        undefined
+    ).
 
 
 -spec schedule_atm_workflow_execution(
     session:id(),
     od_space:id(),
     od_atm_workflow_schema:id(),
+    atm_workflow_schema_revision:revision_number(),
     atm_workflow_execution_api:store_initial_values(),
     undefined | http_client:url()
 ) ->
     {ok, atm_workflow_execution:id(), atm_workflow_execution:record()} | error_reply().
-schedule_atm_workflow_execution(SessId, SpaceId, AtmWorkflowSchemaId, AtmStoreInitialValues, CallbackUrl) ->
+schedule_atm_workflow_execution(
+    SessId,
+    SpaceId,
+    AtmWorkflowSchemaId,
+    AtmWorkflowSchemaRevisionNum,
+    AtmStoreInitialValues,
+    CallbackUrl
+) ->
     ?run(lfm_atm:schedule_workflow_execution(
-        SessId, SpaceId, AtmWorkflowSchemaId, AtmStoreInitialValues, CallbackUrl
+        SessId,
+        SpaceId,
+        AtmWorkflowSchemaId,
+        AtmWorkflowSchemaRevisionNum,
+        AtmStoreInitialValues,
+        CallbackUrl
     )).
 
 

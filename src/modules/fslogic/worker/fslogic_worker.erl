@@ -807,11 +807,17 @@ handle_provider_request(UserCtx, #init_archive_purge{id = ArchiveId, callback = 
 
 handle_provider_request(UserCtx, #schedule_atm_workflow_execution{
     atm_workflow_schema_id = AtmWorkflowSchemaId,
+    atm_workflow_schema_revision_num = AtmWorkflowSchemaRevisionNum,
     store_initial_values = AtmStoreInitialValues,
     callback_url = CallbackUrl
 }, SpaceDirCtx) ->
     atm_req:schedule_workflow_execution(
-        UserCtx, SpaceDirCtx, AtmWorkflowSchemaId, AtmStoreInitialValues, CallbackUrl
+        UserCtx,
+        SpaceDirCtx,
+        AtmWorkflowSchemaId,
+        AtmWorkflowSchemaRevisionNum,
+        AtmStoreInitialValues,
+        CallbackUrl
     );
 handle_provider_request(_UserCtx, #cancel_atm_workflow_execution{
     atm_workflow_execution_id = AtmWorkflowExecutionId

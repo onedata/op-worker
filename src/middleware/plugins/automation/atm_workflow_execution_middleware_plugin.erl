@@ -69,7 +69,8 @@ data_spec(#op_req{operation = create, gri = #gri{aspect = instance}}) ->
     #{
         required => #{
             <<"spaceId">> => {binary, non_empty},
-            <<"atmWorkflowSchemaId">> => {binary, non_empty}
+            <<"atmWorkflowSchemaId">> => {binary, non_empty},
+            <<"atmWorkflowSchemaRevisionNumber">> => {integer, {not_lower_than, 1}}
         },
         optional => #{
             <<"storeInitialValues">> => {json, any},
@@ -173,6 +174,7 @@ create(#op_req{auth = ?USER(_UserId, SessionId), data = Data, gri = #gri{aspect 
         SessionId,
         maps:get(<<"spaceId">>, Data),
         maps:get(<<"atmWorkflowSchemaId">>, Data),
+        maps:get(<<"atmWorkflowSchemaRevisionNumber">>, Data),
         maps:get(<<"storeInitialValues">>, Data, #{}),
         maps:get(<<"callback">>, Data, undefined)
     ),

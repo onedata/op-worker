@@ -21,7 +21,7 @@
 -export([init_engine/0]).
 -export([
     list/4,
-    schedule/5,
+    schedule/6,
     get/1, get_summary/2,
     cancel/1,
     terminate_not_ended/1,
@@ -87,13 +87,26 @@ list(SpaceId, Phase, summary, ListingOpts) ->
     user_ctx:ctx(),
     od_space:id(),
     od_atm_workflow_schema:id(),
+    atm_workflow_schema_revision:revision_number(),
     store_initial_values(),
     undefined | http_client:url()
 ) ->
     {atm_workflow_execution:id(), atm_workflow_execution:record()} | no_return().
-schedule(UserCtx, SpaceId, AtmWorkflowSchemaId, StoreInitialValues, CallbackUrl) ->
+schedule(
+    UserCtx,
+    SpaceId,
+    AtmWorkflowSchemaId,
+    AtmWorkflowSchemaRevisionNum,
+    StoreInitialValues,
+    CallbackUrl
+) ->
     {AtmWorkflowExecutionDoc, AtmWorkflowExecutionEnv} = atm_workflow_execution_factory:create(
-        UserCtx, SpaceId, AtmWorkflowSchemaId, StoreInitialValues, CallbackUrl
+        UserCtx,
+        SpaceId,
+        AtmWorkflowSchemaId,
+        AtmWorkflowSchemaRevisionNum,
+        StoreInitialValues,
+        CallbackUrl
     ),
     atm_workflow_execution_handler:start(UserCtx, AtmWorkflowExecutionEnv, AtmWorkflowExecutionDoc),
 

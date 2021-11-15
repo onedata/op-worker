@@ -247,7 +247,6 @@
     revision_registry :: atm_workflow_schema_revision_registry:record(),
 
     atm_inventory :: od_atm_inventory:id(),
-    atm_lambdas :: [od_atm_lambda:id()],
 
     cache_state = #{} :: cache_state()
 }).
@@ -1093,31 +1092,17 @@
 -record(atm_workflow_schema_snapshot, {
     schema_id :: automation:id(),
     name :: automation:name(),
-    description :: automation:description(),
+    summary :: automation:summary(),
 
-    stores = [] :: [atm_store_schema:record()],
-    lanes = [] :: [atm_lane_schema:record()],
+    revision_number :: atm_workflow_schema_revision:revision_number(),
+    revision :: atm_workflow_schema_revision:record(),
 
-    state :: automation:lifecycle_state(),
-
-    atm_inventory :: od_atm_inventory:id(),
-    atm_lambdas :: [od_atm_lambda:id()]
+    atm_inventory :: od_atm_inventory:id()
 }).
 
 -record(atm_lambda_snapshot, {
     lambda_id :: automation:id(),
-
-    name :: automation:name(),
-    summary :: automation:summary(),
-    description :: automation:description(),
-
-    operation_spec :: atm_lambda_operation_spec:record(),
-    argument_specs = [] :: [atm_lambda_argument_spec:record()],
-    result_specs = [] :: [atm_lambda_result_spec:record()],
-    resource_spec :: atm_resource_spec:record(),
-
-    state :: automation:lifecycle_state(),
-
+    revision_registry :: atm_lambda_revision_registry:record(),
     atm_inventories = [] :: [od_atm_inventory:id()]
 }).
 

@@ -25,9 +25,10 @@
 
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/errors.hrl").
+-include_lib("ctool/include/automation/automation.hrl").
 
 %% API
--export([build/3, initiate/2, teardown/2, in_readonly_mode/1, run/3]).
+-export([build/4, initiate/2, teardown/2, in_readonly_mode/1, run/3]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
@@ -44,7 +45,12 @@
 %%%===================================================================
 
 
--callback build(atm_workflow_execution:id(), atm_lane_execution:index(), atm_lambda_snapshot:record()) ->
+-callback build(
+    atm_workflow_execution:id(),
+    atm_lane_execution:index(),
+    atm_task_schema:record(),
+    atm_lambda_revision:record()
+) ->
     record() | no_return().
 
 -callback initiate(atm_workflow_execution_ctx:record(), record()) ->
@@ -63,14 +69,19 @@
 %%%===================================================================
 
 
--spec build(atm_workflow_execution:id(), atm_lane_execution:index(), atm_lambda_snapshot:record()) ->
+-spec build(
+    atm_workflow_execution:id(),
+    atm_lane_execution:index(),
+    atm_task_schema:record(),
+    atm_lambda_revision:record()
+) ->
     record() | no_return().
-build(AtmWorkflowExecutionId, AtmLaneIndex, AtmLambdaSnapshot = #atm_lambda_snapshot{
+build(AtmWorkflowExecutionId, AtmLaneIndex, AtmTaskSchema, AtmLambdaRevision = #atm_lambda_revision{
     operation_spec = AtmLambadaOperationSpec
 }) ->
     Engine = atm_lambda_operation_spec:get_engine(AtmLambadaOperationSpec),
     Model = engine_to_executor_model(Engine),
-    Model:build(AtmWorkflowExecutionId, AtmLaneIndex, AtmLambdaSnapshot).
+    Model:build(AtmWorkflowExecutionId, AtmLaneIndex, AtmTaskSchema, AtmLambdaRevision).
 
 
 -spec initiate(atm_workflow_execution_ctx:record(), record()) ->
