@@ -27,7 +27,7 @@
 -export([is_openfaas_available/0, assert_openfaas_available/0]).
 
 %% atm_task_executor callbacks
--export([build/4, initiate/2, teardown/2, in_readonly_mode/1, run/3]).
+-export([build/4, initiate/4, teardown/2, in_readonly_mode/1, run/3]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
@@ -48,6 +48,7 @@
 
 -record(initiation_ctx, {
     workflow_execution_ctx :: atm_workflow_execution_ctx:record(),
+    resource_spec :: atm_resource_spec:record(),
     openfaas_config :: openfaas_config(),
     executor :: record()
 }).
@@ -109,11 +110,17 @@ build(AtmWorkflowExecutionId, AtmLaneIndex, AtmTaskSchema, AtmLambdaRevision) ->
     }.
 
 
--spec initiate(atm_workflow_execution_ctx:record(), record()) ->
+-spec initiate(
+    atm_workflow_execution_ctx:record(),
+    atm_task_schema:record(),
+    atm_lambda_revision:record(),
+    record()
+) ->
     workflow_engine:task_spec() | no_return().
-initiate(AtmWorkflowExecutionCtx, AtmTaskExecutor) ->
+initiate(AtmWorkflowExecutionCtx, AtmTaskSchema, AtmLambdaRevision, AtmTaskExecutor) ->
     InitiationCtx = #initiation_ctx{
         workflow_execution_ctx = AtmWorkflowExecutionCtx,
+        resource_spec = select_resource_spec(AtmTaskSchema, AtmLambdaRevision),
         openfaas_config = get_openfaas_config(),
         executor = AtmTaskExecutor
     },
@@ -372,13 +379,20 @@ prepare_function_definition(InitiationCtx = #initiation_ctx{
         operation_spec = #atm_openfaas_operation_spec{docker_image = DockerImage}
     }
 }) ->
-    RequiredProperties = #{
+    BaseDefinition = #{
         <<"service">> => FunctionName,
         <<"image">> => DockerImage,
         <<"namespace">> => FunctionNamespace
     },
+    FullDefinition1 = add_default_properties(BaseDefinition),
+    FullDefinition2 = add_resources_properties(FullDefinition1, InitiationCtx),
+    add_oneclient_annotations_if_necessary(FullDefinition2, InitiationCtx).
 
-    AllProperties = lists:foldl(fun({Property, EnvVar}, Acc) ->
+
+%% @private
+-spec add_default_properties(json_utils:json_map()) -> json_utils:json_map().
+add_default_properties(FunctionDefinition) ->
+    lists:foldl(fun({Property, EnvVar}, Acc) ->
         case get_env(EnvVar, undefined) of
             undefined ->
                 Acc;
@@ -391,28 +405,56 @@ prepare_function_definition(InitiationCtx = #initiation_ctx{
             Value ->
                 Acc#{Property => str_utils:to_binary(Value)}
         end
-    end, RequiredProperties, [
+    end, FunctionDefinition, [
         {<<"envVars">>, openfaas_function_env},
         {<<"constraints">>, openfaas_function_constraints},
         {<<"labels">>, openfaas_function_labels},
-        {<<"annotations">>, openfaas_function_annotations},
-        {<<"limits">>, openfaas_function_limits},
-        {<<"requests">>, openfaas_function_requests}
-    ]),
-
-    add_mount_oneclient_function_annotations(AllProperties, InitiationCtx).
+        {<<"annotations">>, openfaas_function_annotations}
+    ]).
 
 
 %% @private
--spec add_mount_oneclient_function_annotations(json_utils:json_map(), initiation_ctx()) ->
+-spec add_resources_properties(json_utils:json_map(), initiation_ctx()) ->
     json_utils:json_map().
-add_mount_oneclient_function_annotations(FunctionDefinition, #initiation_ctx{
+add_resources_properties(FunctionDefinition, #initiation_ctx{resource_spec = #atm_resource_spec{
+    cpu_requested = CpuRequested,
+    cpu_limit = CpuLimit,
+    memory_requested = MemoryRequested,
+    memory_limit = MemoryLimit,
+    ephemeral_storage_requested = EphemeralStorageRequested,
+    ephemeral_storage_limit = EphemeralStorageLimit
+}}) ->
+    Requests = #{
+        <<"cpu">> => CpuRequested,
+        <<"memory">> => MemoryRequested
+    },
+
+    Limits1 = maps_utils:put_if_defined(#{}, <<"cpu">>, CpuLimit),
+    Limits2 = maps_utils:put_if_defined(Limits1, <<"memory">>, MemoryLimit),
+
+    EphemeralStorageAnnotations = #{
+        <<"function.openfaas.onedata.org/ephemeral_storage_requested">> => EphemeralStorageRequested,
+        <<"function.openfaas.onedata.org/ephemeral_storage_limit">> => EphemeralStorageLimit
+    },
+
+    maps:update_with(
+        <<"annotations">>,
+        fun(Annotations) -> json_utils:merge([Annotations, EphemeralStorageAnnotations]) end,
+        EphemeralStorageAnnotations,
+        FunctionDefinition#{<<"requests">> => Requests, <<"limits">> => Limits2}
+    ).
+
+
+%% @private
+-spec add_oneclient_annotations_if_necessary(json_utils:json_map(), initiation_ctx()) ->
+    json_utils:json_map().
+add_oneclient_annotations_if_necessary(FunctionDefinition, #initiation_ctx{
     executor = #atm_openfaas_task_executor{operation_spec = #atm_openfaas_operation_spec{
         docker_execution_options = #atm_docker_execution_options{mount_oneclient = false}
     }}}
 ) ->
     FunctionDefinition;
-add_mount_oneclient_function_annotations(FunctionDefinition, #initiation_ctx{
+add_oneclient_annotations_if_necessary(FunctionDefinition, #initiation_ctx{
     workflow_execution_ctx = AtmWorkflowExecutionCtx,
     executor = AtmTaskExecutor = #atm_openfaas_task_executor{
         operation_spec = #atm_openfaas_operation_spec{
@@ -432,13 +474,15 @@ add_mount_oneclient_function_annotations(FunctionDefinition, #initiation_ctx{
     EnvSpecificOneclientOptions = str_utils:to_binary(get_env(
         openfaas_oneclient_options, <<"">>
     )),
+    OneclientImage = get_oneclient_image(),
 
     OneclientMountRelatedAnnotations = #{
         % TODO VFS-8141 rm deprecated oneclient.openfass.*
         <<"oneclient.openfass.onedata.org/inject">> => <<"enabled">>,
-        <<"oneclient.openfass.onedata.org/image">> => get_oneclient_image(),
+        <<"oneclient.openfass.onedata.org/image">> => OneclientImage,
+
         <<"oneclient.openfaas.onedata.org/inject">> => <<"enabled">>,
-        <<"oneclient.openfaas.onedata.org/image">> => get_oneclient_image(),
+        <<"oneclient.openfaas.onedata.org/image">> => OneclientImage,
         <<"oneclient.openfaas.onedata.org/space_id">> => SpaceId,
         <<"oneclient.openfaas.onedata.org/mount_point">> => MountPoint,
         <<"oneclient.openfaas.onedata.org/options">> => <<
