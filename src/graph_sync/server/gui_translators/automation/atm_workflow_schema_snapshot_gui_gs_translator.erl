@@ -33,6 +33,10 @@ translate_resource(#gri{aspect = instance, scope = private}, #atm_workflow_schem
     revision = Revision,
     atm_inventory = AtmInventoryId
 }) ->
+    EmptyRevisionRegistry = atm_workflow_schema_revision_registry:empty(),
+    RevisionRegistry = atm_workflow_schema_revision_registry:insert_revision(
+        RevisionNumber, Revision, EmptyRevisionRegistry
+    ),
     #{
         <<"atmWorkflowSchema">> => gri:serialize(#gri{
             type = op_atm_workflow_schema, id = AtmWorkflowSchemaId,
@@ -41,8 +45,9 @@ translate_resource(#gri{aspect = instance, scope = private}, #atm_workflow_schem
         <<"name">> => AtmWorkflowSchemaName,
         <<"summary">> => AtmWorkflowSchemaSummary,
 
-        <<"revisionNumber">> => RevisionNumber,
-        <<"revision">> => jsonable_record:to_json(Revision, atm_workflow_schema_revision),
+        <<"revisionRegistry">> => jsonable_record:to_json(
+            RevisionRegistry, atm_workflow_schema_revision_registry
+        ),
 
         <<"atmInventory">> => gri:serialize(#gri{
             type = op_atm_inventory, id = AtmInventoryId,
