@@ -101,7 +101,7 @@ handle(?REQ(SessionId, FileGuid, Operation)) ->
         UserCtx = user_ctx:new(SessionId),
         FileCtx = file_ctx:new_by_guid(FileGuid),
 
-        middleware_worker_request_handler:handle_request(UserCtx, FileCtx, Operation)
+        middleware_worker_request_router:route(UserCtx, FileCtx, Operation)
     catch Type:Reason:Stacktrace ->
         handle_error(Type, Reason, Stacktrace, SessionId, Operation)
     end;
@@ -135,37 +135,43 @@ cleanup() ->
 ) ->
     errors:error().
 handle_error(throw, Reason, _Stacktrace, _SessionId, _Request) ->
-    ensure_error(Reason);
+    infer_error(Reason);
 
-handle_error(Type, Reason, Stacktrace, SessionId, Request) ->
-    Error = ensure_error(Reason),
-    StacktracePrint = iolist_to_binary(lager:pr_stacktrace(Stacktrace, {Type, Error})),
+handle_error(_Type, Reason, Stacktrace, SessionId, Request) ->
+    Error = infer_error(Reason),
 
     {LogFormat, LogFormatArgs} = case ?SHOULD_LOG_REQUESTS_ON_ERROR of
         true ->
-            MF = "Cannot process request ~p for session ~p due to ~p~nStacktrace: ~s",
-            FA = [lager:pr(Request, ?MODULE), SessionId, Error, StacktracePrint],
+            MF = "Cannot process request ~p for session ~p due to: ~p caused by ~p",
+            FA = [lager:pr(Request, ?MODULE), SessionId, Error, Reason],
             {MF, FA};
         false ->
-            MF = "Cannot process request for session ~p due to: ~p~nStacktrace: ~s",
-            FA = [SessionId, Error, StacktracePrint],
+            MF = "Cannot process request for session ~p due to: ~p caused by ~p",
+            FA = [SessionId, Error, Reason],
             {MF, FA}
     end,
-    ?debug(LogFormat, LogFormatArgs),
+
+    case Error of
+        ?ERROR_UNEXPECTED_ERROR(_) ->
+            ?error_stacktrace(LogFormat, LogFormatArgs, Stacktrace);
+        _ ->
+            ?debug_stacktrace(LogFormat, LogFormatArgs, Stacktrace)
+    end,
 
     Error.
 
 
 %% @private
--spec ensure_error(term()) -> errors:error().
-ensure_error({error, Reason} = Error) ->
+-spec infer_error(term()) -> errors:error().
+infer_error({error, Reason} = Error) ->
     case ordsets:is_element(Reason, ?ERROR_CODES) of
         true -> ?ERROR_POSIX(Reason);
         false -> Error
     end;
 
-ensure_error({badmatch, Error}) ->
-    ensure_error(Error);
+infer_error({badmatch, Error}) ->
+    infer_error(Error);
 
-ensure_error(_Reason) ->
+infer_error(_Reason) ->
+    %% TODO VFS-8614 replace unexpected error with internal server error
     ?ERROR_UNEXPECTED_ERROR(str_utils:rand_hex(5)).

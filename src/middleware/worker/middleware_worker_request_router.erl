@@ -6,16 +6,16 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module handles middleware operations.
+%%% This module routes middleware operations to corresponding handler modules.
 %%% @end
 %%%-------------------------------------------------------------------
--module(middleware_worker_request_handler).
+-module(middleware_worker_request_router).
 -author("Bartosz Walkowicz").
 
 -include("middleware/middleware.hrl").
 
 %% API
--export([handle_request/3]).
+-export([route/3]).
 
 
 %%%===================================================================
@@ -23,9 +23,9 @@
 %%%===================================================================
 
 
--spec handle_request(user_ctx:ctx(), file_ctx:ctx(), middleware_worker:operation()) ->
+-spec route(user_ctx:ctx(), file_ctx:ctx(), middleware_worker:operation()) ->
     ok | {ok, term()} | no_return().
-handle_request(UserCtx, SpaceDirCtx, #schedule_atm_workflow_execution{
+route(UserCtx, SpaceDirCtx, #schedule_atm_workflow_execution{
     atm_workflow_schema_id = AtmWorkflowSchemaId,
     store_initial_values = AtmStoreInitialValues,
     callback_url = CallbackUrl
@@ -35,7 +35,7 @@ handle_request(UserCtx, SpaceDirCtx, #schedule_atm_workflow_execution{
         AtmWorkflowSchemaId, AtmStoreInitialValues, CallbackUrl
     )};
 
-handle_request(_UserCtx, _SpaceDirCtx, #cancel_atm_workflow_execution{
+route(_UserCtx, _SpaceDirCtx, #cancel_atm_workflow_execution{
     atm_workflow_execution_id = AtmWorkflowExecutionId
 }) ->
     ok = atm_workflow_execution_api:cancel(AtmWorkflowExecutionId).
