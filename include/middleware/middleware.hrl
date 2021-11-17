@@ -38,7 +38,10 @@
 end).
 
 
-%% Available operations in middleware_worker
+%%%===================================================================
+%%% Available operations in middleware_worker
+%%%===================================================================
+
 
 -record(schedule_atm_workflow_execution, {
     atm_workflow_schema_id :: od_atm_workflow_schema:id(),

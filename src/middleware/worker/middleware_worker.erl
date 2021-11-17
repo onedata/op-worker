@@ -36,7 +36,7 @@
 -export_type([operation/0]).
 
 
--define(LOG_REQUESTS_ON_ERROR(), application:get_env(
+-define(SHOULD_LOG_REQUESTS_ON_ERROR, application:get_env(
     ?CLUSTER_WORKER_APP_NAME, log_requests_on_error, false
 )).
 
@@ -101,7 +101,7 @@ handle(?REQ(SessionId, FileGuid, Operation)) ->
         UserCtx = user_ctx:new(SessionId),
         FileCtx = file_ctx:new_by_guid(FileGuid),
 
-        handle_request(UserCtx, FileCtx, Operation)
+        middleware_worker_request_handler:handle_request(UserCtx, FileCtx, Operation)
     catch Type:Reason:Stacktrace ->
         handle_error(Type, Reason, Stacktrace, SessionId, Operation)
     end;
@@ -126,25 +126,6 @@ cleanup() ->
 
 
 %% @private
--spec handle_request(user_ctx:ctx(), file_ctx:ctx(), operation()) ->
-    ok | {ok, term()} | no_return().
-handle_request(UserCtx, SpaceDirCtx, #schedule_atm_workflow_execution{
-    atm_workflow_schema_id = AtmWorkflowSchemaId,
-    store_initial_values = AtmStoreInitialValues,
-    callback_url = CallbackUrl
-}) ->
-    {ok, atm_workflow_execution_api:schedule(
-        UserCtx, file_ctx:get_space_id_const(SpaceDirCtx),
-        AtmWorkflowSchemaId, AtmStoreInitialValues, CallbackUrl
-    )};
-
-handle_request(_UserCtx, _SpaceDirCtx, #cancel_atm_workflow_execution{
-    atm_workflow_execution_id = AtmWorkflowExecutionId
-}) ->
-    ok = atm_workflow_execution_api:cancel(AtmWorkflowExecutionId).
-
-
-%% @private
 -spec handle_error(
     Type :: atom(),
     Reason :: term(),
@@ -160,7 +141,7 @@ handle_error(Type, Reason, Stacktrace, SessionId, Request) ->
     Error = ensure_error(Reason),
     StacktracePrint = iolist_to_binary(lager:pr_stacktrace(Stacktrace, {Type, Error})),
 
-    {LogFormat, LogFormatArgs} = case ?LOG_REQUESTS_ON_ERROR() of
+    {LogFormat, LogFormatArgs} = case ?SHOULD_LOG_REQUESTS_ON_ERROR of
         true ->
             MF = "Cannot process request ~p for session ~p due to ~p~nStacktrace: ~s",
             FA = [lager:pr(Request, ?MODULE), SessionId, Error, StacktracePrint],
