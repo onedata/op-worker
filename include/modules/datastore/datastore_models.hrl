@@ -1150,6 +1150,21 @@
     max_values_per_node :: pos_integer() | undefined
 }).
 
+
+%% @formatter:off
+-record(atm_openfaas_function_activity_registry, {
+    pod_statuses = #{} :: #{
+        atm_openfaas_function_activity_registry:pod_id() => {
+            atm_openfaas_function_activity_registry:pod_status(),
+            ObservedAt :: time:millis()
+        }
+    },
+    pod_event_logs = #{} :: #{
+        atm_openfaas_function_activity_registry:pod_id() => infinite_log:log_id()
+    }
+}).
+%% @formatter:on
+
 %%%===================================================================
 %%% Workflow engine connected models
 %%%===================================================================

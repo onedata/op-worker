@@ -28,7 +28,7 @@
 -include_lib("ctool/include/automation/automation.hrl").
 
 %% API
--export([build/4, initiate/4, teardown/2, in_readonly_mode/1, run/3]).
+-export([create/4, initiate/4, teardown/2, delete/1, in_readonly_mode/1, run/3]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
@@ -45,7 +45,7 @@
 %%%===================================================================
 
 
--callback build(
+-callback create(
     atm_workflow_execution:id(),
     atm_lane_execution:index(),
     atm_task_schema:record(),
@@ -63,6 +63,8 @@
 
 -callback teardown(atm_lane_execution_handler:teardown_ctx(), record()) -> ok | no_return().
 
+-callback delete(record()) -> ok | no_return().
+
 -callback in_readonly_mode(record()) -> boolean().
 
 -callback run(atm_job_ctx:record(), json_utils:json_map(), record()) ->
@@ -74,19 +76,19 @@
 %%%===================================================================
 
 
--spec build(
+-spec create(
     atm_workflow_execution:id(),
     atm_lane_execution:index(),
     atm_task_schema:record(),
     atm_lambda_revision:record()
 ) ->
     record() | no_return().
-build(AtmWorkflowExecutionId, AtmLaneIndex, AtmTaskSchema, AtmLambdaRevision = #atm_lambda_revision{
+create(AtmWorkflowExecutionId, AtmLaneIndex, AtmTaskSchema, AtmLambdaRevision = #atm_lambda_revision{
     operation_spec = AtmLambadaOperationSpec
 }) ->
     Engine = atm_lambda_operation_spec:get_engine(AtmLambadaOperationSpec),
     Model = engine_to_executor_model(Engine),
-    Model:build(AtmWorkflowExecutionId, AtmLaneIndex, AtmTaskSchema, AtmLambdaRevision).
+    Model:create(AtmWorkflowExecutionId, AtmLaneIndex, AtmTaskSchema, AtmLambdaRevision).
 
 
 -spec initiate(
@@ -105,6 +107,12 @@ initiate(AtmWorkflowExecutionCtx, AtmTaskSchema, AtmLambdaRevision, AtmTaskExecu
 teardown(AtmLaneExecutionRunTeardownCtx, AtmTaskExecutor) ->
     Model = utils:record_type(AtmTaskExecutor),
     Model:teardown(AtmLaneExecutionRunTeardownCtx, AtmTaskExecutor).
+
+
+-spec delete(record()) -> ok | no_return().
+delete(AtmTaskExecutor) ->
+    Model = utils:record_type(AtmTaskExecutor),
+    Model:delete(AtmTaskExecutor).
 
 
 -spec in_readonly_mode(record()) -> boolean().

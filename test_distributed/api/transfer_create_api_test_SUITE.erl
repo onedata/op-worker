@@ -396,9 +396,7 @@ build_create_transfer_validate_rest_call_result_fun(MemRef) ->
         ),
         TransferId = maps:get(<<"transferId">>, Body),
 
-        ExpLocation = rpc:call(Node, oneprovider, get_rest_endpoint, [
-            string:trim(filename:join([<<"/">>, <<"transfers">>, TransferId]), leading, [$/])
-        ]),
+        ExpLocation = rpc:call(Node, oneprovider, get_rest_endpoint, [[<<"transfers">>, TransferId]]),
         ?assertEqual(ExpLocation, maps:get(?HDR_LOCATION, Headers)),
 
         build_create_transfer_validate_call_result(MemRef, TransferId, TestCtx)

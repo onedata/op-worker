@@ -6,24 +6,28 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Module with the persistent list store backend implemented using infinite log.
+%%% Database interface for manipulating infinite logs with JSON entries.
 %%% @end
 %%%-------------------------------------------------------------------
--module(atm_infinite_log_backend).
+-module(json_based_infinite_log_backend).
 -author("Michal Stanisz").
 
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([create/1, append/2, destroy/1, list/2, extract_listed_entry/1]).
+-export([create/1, create/2]).
+-export([destroy/1]).
+-export([append/2]).
+-export([list/2]).
 
 %% datastore_model callbacks
 -export([get_ctx/0]).
 
 -type id() :: datastore_infinite_log:key().
+-type entry_value() :: json_utils:json_map().
 
--export_type([id/0]).
+-export_type([id/0, entry_value/0]).
 
 
 -define(CTX, #{model => ?MODULE}).
@@ -33,16 +37,20 @@
 %%% API
 %%%===================================================================
 
--spec create(infinite_log:log_opts()) -> {ok, id()}.
+-spec create(infinite_log:log_opts()) -> {ok, id()} | {error, term()}.
 create(Opts) ->
     Id = datastore_key:new(),
-    ok = datastore_infinite_log:create(?CTX, Id, Opts),
-    {ok, Id}.
+    case create(Id, Opts) of
+        ok ->
+            {ok, Id};
+        {error, _} = Error ->
+            Error
+    end.
 
 
--spec append(id(), atm_value:compressed()) -> ok.
-append(Id, Item) ->
-    datastore_infinite_log:append(?CTX, Id, json_utils:encode(Item)).
+-spec create(id(), infinite_log:log_opts()) -> ok | {error, term()}.
+create(Id, Opts) ->
+    datastore_infinite_log:create(?CTX, Id, Opts).
 
 
 -spec destroy(id()) -> ok | {error, term()}.
@@ -50,8 +58,13 @@ destroy(Id) ->
     datastore_infinite_log:destroy(?CTX, Id).
 
 
+-spec append(id(), entry_value()) -> ok | {error, term()}.
+append(Id, EntryValue) ->
+    datastore_infinite_log:append(?CTX, Id, json_utils:encode(EntryValue)).
+
+
 -spec list(id(), infinite_log_browser:listing_opts()) ->
-    {ok, {done | more, [{atm_store_api:index(), atm_value:compressed(), time:millis()}]}} | {error, term()}.
+    {ok, {done | more, [{infinite_log:entry_index(), infinite_log:timestamp(), entry_value()}]}} | {error, term()}.
 list(Id, Opts) ->
     case datastore_infinite_log:list(?CTX, Id, Opts) of
         {ok, {Marker, EntrySeries}} ->
@@ -59,7 +72,6 @@ list(Id, Opts) ->
         {error, _} = Error ->
             Error
     end.
-    
 
 %%%===================================================================
 %%% datastore_model callbacks
@@ -69,14 +81,13 @@ list(Id, Opts) ->
 get_ctx() ->
     ?CTX.
 
-
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
 %% @private
 -spec extract_listed_entry({infinite_log:entry_index(), infinite_log:entry()}) ->
-    {atm_store_api:index(), atm_value:compressed(), time:millis()}.
+    {infinite_log:entry_index(), infinite_log:timestamp(), entry_value()}.
 extract_listed_entry({EntryIndex, {Timestamp, Value}}) ->
-    CompressedValue = json_utils:decode(Value),
-    {integer_to_binary(EntryIndex), CompressedValue, Timestamp}.
+    DecodedValue = json_utils:decode(Value),
+    {EntryIndex, Timestamp, DecodedValue}.

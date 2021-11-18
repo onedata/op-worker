@@ -93,6 +93,22 @@
     parallel_box_schema :: atm_parallel_box_schema:record()
 }).
 
+% Record carrying an activity report of an OpenFaaS function
+-record(atm_openfaas_function_activity_report, {
+    type :: atm_openfaas_function_activity_report:type(),
+    batch :: atm_openfaas_function_activity_report:batch()
+}).
+
+% Record carrying a status report of a pod that executes given OpenFaaS function
+% (currently the only possible type of OpenFaaS function activity report)
+-record(atm_openfaas_function_pod_status_report, {
+    timestamp :: time:millis(),
+    function_name :: atm_openfaas_task_executor:function_name(),
+    pod_id :: atm_openfaas_function_activity_registry:pod_id(),
+    current_pod_status :: atm_openfaas_function_activity_registry:pod_status(),
+    pod_event :: atm_openfaas_function_activity_registry:pod_event()
+}).
+
 
 %% Atm system stores related macros
 

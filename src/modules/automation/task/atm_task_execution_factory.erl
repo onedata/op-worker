@@ -29,9 +29,10 @@
     task_schema :: atm_task_schema:record(),
     lambda_revision :: atm_lambda_revision:record()
 }).
--type creation_args() ::  #creation_args{}.
+-type creation_args() :: #creation_args{}.
 
 -record(execution_components, {
+    executor = undefined :: undefined | atm_task_executor:record(),
     audit_log_store_id = undefined :: undefined | atm_store:id()
 }).
 -type execution_components() :: #execution_components{}.
@@ -93,8 +94,12 @@ delete_all(AtmTaskExecutionIds) ->
 -spec delete(atm_task_execution:id()) -> ok.
 delete(AtmTaskExecutionId) ->
     case atm_task_execution:get(AtmTaskExecutionId) of
-        {ok, #document{value = #atm_task_execution{system_audit_log_id = AtmSystemAuditLogId}}} ->
+        {ok, #document{value = #atm_task_execution{
+            executor = Executor,
+            system_audit_log_id = AtmSystemAuditLogId
+        }}} ->
             delete_execution_components(#execution_components{
+                executor = Executor,
                 audit_log_store_id = AtmSystemAuditLogId
             }),
             atm_task_execution:delete(AtmTaskExecutionId);
@@ -141,8 +146,34 @@ create_execution_components(CreationCtx) ->
             throw(?atm_examine_error(Type, Reason, Stacktrace))
         end
     end, CreationCtx, [
+        fun create_executor/1,
         fun create_audit_log/1
     ]).
+
+
+%% @private
+-spec create_executor(creation_ctx()) -> creation_ctx().
+create_executor(CreationCtx = #creation_ctx{
+    creation_args = #creation_args{
+        parallel_box_execution_creation_args = #atm_parallel_box_execution_creation_args{
+            lane_execution_run_creation_args = #atm_lane_execution_run_creation_args{
+                workflow_execution_ctx = AtmWorkflowExecutionCtx,
+                lane_index = AtmLaneIndex
+            }
+        },
+        lambda_revision = AtmLambdaRevision,
+        task_schema = AtmTaskSchema
+    },
+    execution_components = ExecutionComponents
+}) ->
+    AtmWorkflowExecutionId = atm_workflow_execution_ctx:get_workflow_execution_id(
+        AtmWorkflowExecutionCtx
+    ),
+    CreationCtx#creation_ctx{execution_components = ExecutionComponents#execution_components{
+        executor = atm_task_executor:create(
+            AtmWorkflowExecutionId, AtmLaneIndex, AtmTaskSchema, AtmLambdaRevision
+        )
+    }}.
 
 
 %% @private
@@ -178,6 +209,15 @@ create_audit_log(CreationCtx = #creation_ctx{
 %% @private
 -spec delete_execution_components(execution_components()) -> ok.
 delete_execution_components(ExecutionComponents = #execution_components{
+    executor = Executor
+}) when Executor /= undefined ->
+    catch atm_task_executor:delete(Executor),
+
+    delete_execution_components(ExecutionComponents#execution_components{
+        executor = undefined
+    });
+
+delete_execution_components(ExecutionComponents = #execution_components{
     audit_log_store_id = AtmTaskAuditLogId
 }) when AtmTaskAuditLogId /= undefined ->
     catch atm_store_api:delete(AtmTaskAuditLogId),
@@ -204,7 +244,10 @@ create_task_execution_doc(#creation_ctx{
         lambda_revision = AtmLambdaRevision,
         task_schema = #atm_task_schema{id = AtmTaskSchemaId} = AtmTaskSchema
     },
-    execution_components = #execution_components{audit_log_store_id = AtmTaskAuditLogId}
+    execution_components = #execution_components{
+        executor = Executor,
+        audit_log_store_id = AtmTaskAuditLogId
+    }
 }) ->
     AtmWorkflowExecutionId = atm_workflow_execution_ctx:get_workflow_execution_id(
         AtmWorkflowExecutionCtx
@@ -217,9 +260,7 @@ create_task_execution_doc(#creation_ctx{
 
         schema_id = AtmTaskSchemaId,
 
-        executor = atm_task_executor:build(
-            AtmWorkflowExecutionId, AtmLaneIndex, AtmTaskSchema, AtmLambdaRevision
-        ),
+        executor = Executor,
         argument_specs = build_argument_specs(AtmLambdaRevision, AtmTaskSchema),
         result_specs = build_result_specs(AtmLambdaRevision, AtmTaskSchema),
 

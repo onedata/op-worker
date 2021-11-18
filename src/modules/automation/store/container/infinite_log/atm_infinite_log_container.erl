@@ -49,7 +49,7 @@
     offset => atm_store_api:offset()
 }.
 
-% id of underlying persistent record implemented by `atm_infinite_log_backend`
+% id of underlying persistent record implemented by `json_based_infinite_log_backend`
 -type backend_id() :: binary().
 
 -record(atm_infinite_log_container, {
@@ -82,11 +82,11 @@ get_data_spec(#atm_infinite_log_container{data_spec = AtmDataSpec}) ->
 
 
 -spec browse_content(browse_options(), record()) ->
-    {[{atm_store_api:index(), atm_value:compressed(), time:millis()}], boolean()} | no_return().
+    {[{atm_store_api:index(), infinite_log:timestamp(), atm_value:compressed()}], boolean()} | no_return().
 browse_content(BrowseOpts, #atm_infinite_log_container{
     backend_id = BackendId
 }) ->
-    {ok, {Marker, Entries}} = atm_infinite_log_backend:list(BackendId, #{
+    {ok, {Marker, Entries}} = json_based_infinite_log_backend:list(BackendId, #{
         start_from => infer_start_from(BrowseOpts),
         offset => maps:get(offset, BrowseOpts, 0),
         limit => maps:get(limit, BrowseOpts)
@@ -126,7 +126,7 @@ apply_operation(_Record, _Operation) ->
 
 -spec delete(record()) -> ok.
 delete(#atm_infinite_log_container{backend_id = BackendId}) ->
-    atm_infinite_log_backend:destroy(BackendId).
+    json_based_infinite_log_backend:destroy(BackendId).
 
 
 %%%===================================================================
@@ -168,7 +168,7 @@ db_decode(#{<<"dataSpec">> := AtmDataSpecJson, <<"backendId">> := BackendId}, Ne
 %% @private
 -spec create_container(atm_data_spec:record()) -> record().
 create_container(AtmDataSpec) ->
-    {ok, Id} = atm_infinite_log_backend:create(#{}),
+    {ok, Id} = json_based_infinite_log_backend:create(#{}),
     #atm_infinite_log_container{
         data_spec = AtmDataSpec,
         backend_id = Id
@@ -197,7 +197,7 @@ append_insecure(Batch, Record = #atm_infinite_log_container{
     backend_id = BackendId
 }) ->
     lists:foreach(fun(Item) ->
-        ok = atm_infinite_log_backend:append(
+        ok = json_based_infinite_log_backend:append(
             BackendId, atm_value:compress(Item, AtmDataSpec))
     end, Batch),
     Record.
