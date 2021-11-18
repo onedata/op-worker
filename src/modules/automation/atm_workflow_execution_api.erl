@@ -146,7 +146,8 @@ cancel(AtmWorkflowExecutionId) ->
 %%--------------------------------------------------------------------
 terminate_not_ended(SpaceId) ->
     TerminateFun = fun(AtmWorkflowExecutionId) ->
-        atm_lane_execution_status:handle_aborting(current, AtmWorkflowExecutionId, failure),
+        atm_lane_execution_status:handle_aborting({current, current}, AtmWorkflowExecutionId, failure),
+
         atm_workflow_execution_handler:handle_workflow_execution_ended(
             AtmWorkflowExecutionId,
             atm_workflow_execution_env:build(SpaceId, AtmWorkflowExecutionId)

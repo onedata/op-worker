@@ -97,9 +97,9 @@ start(UserCtx, AtmWorkflowExecutionEnv, #document{
         id => AtmWorkflowExecutionId,
         workflow_handler => ?MODULE,
         execution_context => AtmWorkflowExecutionEnv,
-        first_lane_id => 1,
+        first_lane_id => {1, 1},
         next_lane_id => case AtmLanesCount > 1 of
-            true -> 2;
+            true -> {2, current};
             false -> undefined
         end
     }).
@@ -107,7 +107,7 @@ start(UserCtx, AtmWorkflowExecutionEnv, #document{
 
 -spec cancel(atm_workflow_execution:id()) -> ok | errors:error().
 cancel(AtmWorkflowExecutionId) ->
-    case atm_lane_execution_status:handle_aborting(current, AtmWorkflowExecutionId, cancel) of
+    case atm_lane_execution_status:handle_aborting({current, current}, AtmWorkflowExecutionId, cancel) of
         ok ->
             workflow_engine:cancel_execution(AtmWorkflowExecutionId);
         {error, _} = Error ->
@@ -123,15 +123,15 @@ cancel(AtmWorkflowExecutionId) ->
 -spec prepare_lane(
     atm_workflow_execution:id(),
     atm_workflow_execution_env:record(),
-    atm_lane_execution:index()
+    atm_lane_execution:lane_run_selector()
 ) ->
     {ok, workflow_engine:lane_spec()} | error.
-prepare_lane(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmLaneIndex) ->
+prepare_lane(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmLaneRunSelector) ->
     AtmWorkflowExecutionCtx = atm_workflow_execution_ctx:acquire(undefined, AtmWorkflowExecutionEnv),
 
     try
         {ok, atm_lane_execution_handler:prepare(
-            AtmLaneIndex, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx
+            AtmLaneRunSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx
         )}
     catch Type:Reason:Stacktrace ->
         % TODO VFS-8273 use audit log
@@ -145,7 +145,7 @@ prepare_lane(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmLaneIndex) ->
 -spec restart_lane(
     atm_workflow_execution:id(),
     atm_workflow_execution_env:record(),
-    atm_lane_execution:index()
+    atm_lane_execution:lane_run_selector()
 ) ->
     error.
 restart_lane(_, _, _) ->
@@ -212,20 +212,20 @@ handle_task_execution_ended(AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv, At
 -spec handle_lane_execution_ended(
     atm_workflow_execution:id(),
     atm_workflow_execution_env:record(),
-    atm_lane_execution:index()
+    atm_lane_execution:lane_run_selector()
 ) ->
     workflow_handler:lane_ended_callback_result().
-handle_lane_execution_ended(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmLaneIndex) ->
+handle_lane_execution_ended(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmLaneRunSelector) ->
     AtmWorkflowExecutionCtx = atm_workflow_execution_ctx:acquire(undefined, AtmWorkflowExecutionEnv),
 
     try
         atm_lane_execution_handler:handle_ended(
-            AtmLaneIndex, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx
+            AtmLaneRunSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx
         )
     catch Type:Reason:Stacktrace ->
         % TODO VFS-8273 use audit log
-        ?error("[~p] FAILED TO MARK LANE EXECUTION ~p AS ENDED DUE TO: ~p", [
-            AtmWorkflowExecutionId, AtmLaneIndex, ?atm_examine_error(Type, Reason, Stacktrace)
+        ?error("[~p] FAILED TO MARK LANE RUN EXECUTION ~p AS ENDED DUE TO: ~p", [
+            AtmWorkflowExecutionId, AtmLaneRunSelector, ?atm_examine_error(Type, Reason, Stacktrace)
         ])
     end.
 
@@ -282,15 +282,17 @@ ensure_all_lane_executions_ended(#document{
         false ->
             [CurrentAtmLaneIndex]
     end,
-    lists:foreach(fun(LaneIndex) ->
-        case atm_lane_execution:get_current_run(LaneIndex, AtmWorkflowExecution) of
+    lists:foreach(fun(AtmLaneIndex) ->
+        AtmLaneRunSelector = {AtmLaneIndex, current},
+
+        case atm_lane_execution:get_run(AtmLaneRunSelector, AtmWorkflowExecution) of
             {ok, #atm_lane_execution_run{status = Status}} ->
                 case atm_lane_execution_status:status_to_phase(Status) of
                     ?ENDED_PHASE ->
                         ok;
                     _ ->
                         atm_lane_execution_handler:handle_ended(
-                            LaneIndex, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx
+                            AtmLaneRunSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx
                         )
                 end;
             _ ->

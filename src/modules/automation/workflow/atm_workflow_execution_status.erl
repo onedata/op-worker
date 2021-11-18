@@ -86,31 +86,27 @@ infer_phase(#atm_workflow_execution{status = Status}) ->
 
 
 -spec handle_lane_preparing(
-    atm_lane_execution:index(),
+    atm_lane_execution:lane_run_selector(),
     atm_workflow_execution:id(),
     lane_run_diff()
 ) ->
     {ok, atm_workflow_execution:doc()} | errors:error().
-handle_lane_preparing(AtmLaneIndex, AtmWorkflowExecutionId, AtmLaneExecutionDiff) ->
+handle_lane_preparing(AtmLaneRunSelector, AtmWorkflowExecutionId, AtmLaneRunDiff) ->
     Diff = fun
-        (Record = #atm_workflow_execution{
-            status = ?SCHEDULED_STATUS,
-            current_lane_index = CurrentAtmLaneIndex
-        }) when CurrentAtmLaneIndex =:= AtmLaneIndex ->
-            case AtmLaneExecutionDiff(Record) of
-                {ok, NewRecord} ->
+        (Record = #atm_workflow_execution{status = ?SCHEDULED_STATUS}) ->
+            UpdateResult = AtmLaneRunDiff(Record),
+
+            case {atm_lane_execution:is_current_lane_run(AtmLaneRunSelector, Record), UpdateResult} of
+                {true, {ok, NewRecord}} ->
                     {ok, set_times_on_phase_transition(NewRecord#atm_workflow_execution{
                         status = ?ACTIVE_STATUS
                     })};
-                {error, _} = Error ->
-                    Error
+                _ ->
+                    UpdateResult
             end;
 
-        (Record = #atm_workflow_execution{status = Status}) when
-            Status == ?SCHEDULED_STATUS;
-            Status == ?ACTIVE_STATUS
-        ->
-            AtmLaneExecutionDiff(Record);
+        (Record = #atm_workflow_execution{status = ?ACTIVE_STATUS}) ->
+            AtmLaneRunDiff(Record);
 
         (#atm_workflow_execution{status = ?ABORTING_STATUS}) ->
             ?ERROR_ATM_WORKFLOW_EXECUTION_ABORTING;
@@ -130,13 +126,13 @@ handle_lane_preparing(AtmLaneIndex, AtmWorkflowExecutionId, AtmLaneExecutionDiff
 
 -spec handle_lane_enqueued(atm_workflow_execution:id(), lane_run_diff()) ->
     {ok, atm_workflow_execution:doc()} | errors:error().
-handle_lane_enqueued(AtmWorkflowExecutionId, AtmLaneExecutionDiff) ->
+handle_lane_enqueued(AtmWorkflowExecutionId, AtmLaneRunDiff) ->
     atm_workflow_execution:update(AtmWorkflowExecutionId, fun
         (Record = #atm_workflow_execution{status = Status}) when
             Status == ?SCHEDULED_STATUS;
             Status == ?ACTIVE_STATUS
         ->
-            AtmLaneExecutionDiff(Record);
+            AtmLaneRunDiff(Record);
 
         (#atm_workflow_execution{status = ?ABORTING_STATUS}) ->
             ?ERROR_ATM_WORKFLOW_EXECUTION_ABORTING;
@@ -147,32 +143,27 @@ handle_lane_enqueued(AtmWorkflowExecutionId, AtmLaneExecutionDiff) ->
 
 
 -spec handle_lane_aborting(
-    atm_lane_execution:selector(),
+    atm_lane_execution:lane_run_selector(),
     atm_workflow_execution:id(),
     lane_run_diff()
 ) ->
     ok | errors:error().
-handle_lane_aborting(AtmLaneSelector, AtmWorkflowExecutionId, AtmLaneExecutionDiff) ->
+handle_lane_aborting(AtmLaneRunSelector, AtmWorkflowExecutionId, AtmLaneRunDiff) ->
     Diff = fun
-        (Record = #atm_workflow_execution{
-            status = Status,
-            current_lane_index = CurrentAtmLaneIndex
-        }) when
+        (Record = #atm_workflow_execution{status = Status}) when
             Status == ?SCHEDULED_STATUS;
             Status == ?ACTIVE_STATUS;
             Status == ?ABORTING_STATUS
         ->
-            AtmLaneIndex = atm_lane_execution:resolve_selector(AtmLaneSelector, Record),
+            UpdateResult = AtmLaneRunDiff(Record),
 
-            case {AtmLaneIndex == CurrentAtmLaneIndex, AtmLaneExecutionDiff(Record)} of
+            case {atm_lane_execution:is_current_lane_run(AtmLaneRunSelector, Record), UpdateResult} of
                 {true, {ok, NewRecord}} ->
                     {ok, set_times_on_phase_transition(NewRecord#atm_workflow_execution{
                         status = ?ABORTING_STATUS
                     })};
-                {false, {ok, NewRecord}} ->
-                    {ok, NewRecord};
-                {_, {error, _} = Error} ->
-                    Error
+                _ ->
+                    UpdateResult
             end;
 
         (#atm_workflow_execution{status = _EndedStatus}) ->
@@ -189,13 +180,13 @@ handle_lane_aborting(AtmLaneSelector, AtmWorkflowExecutionId, AtmLaneExecutionDi
 
 -spec handle_lane_task_status_change(atm_workflow_execution:id(), lane_run_diff()) ->
     ok | errors:error().
-handle_lane_task_status_change(AtmWorkflowExecutionId, AtmLaneExecutionDiff) ->
+handle_lane_task_status_change(AtmWorkflowExecutionId, AtmLaneRunDiff) ->
     Diff = fun(Record) ->
         case infer_phase(Record) of
             ?ENDED_PHASE ->
                 ?ERROR_ATM_WORKFLOW_EXECUTION_ENDED;
             _ ->
-                AtmLaneExecutionDiff(Record)
+                AtmLaneRunDiff(Record)
         end
     end,
 
@@ -213,13 +204,11 @@ handle_lane_task_status_change(AtmWorkflowExecutionId, AtmLaneExecutionDiff) ->
 -spec handle_ended(atm_workflow_execution:id()) ->
     {ok, atm_workflow_execution:doc()} | no_return().
 handle_ended(AtmWorkflowExecutionId) ->
-    Diff = fun(Record = #atm_workflow_execution{current_lane_index = CurrentAtmLaneIndex}) ->
-        {ok, #atm_lane_execution_run{status = Status}} = atm_lane_execution:get_current_run(
-            CurrentAtmLaneIndex, Record
+    Diff = fun(Record) ->
+        {ok, #atm_lane_execution_run{status = Status}} = atm_lane_execution:get_run(
+            {current, current}, Record
         ),
-        {ok, set_times_on_phase_transition(Record#atm_workflow_execution{
-            status = Status
-        })}
+        {ok, set_times_on_phase_transition(Record#atm_workflow_execution{status = Status})}
     end,
 
     Result = {ok, AtmWorkflowExecutionDoc} = atm_workflow_execution:update(
