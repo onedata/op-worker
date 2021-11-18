@@ -425,17 +425,20 @@ add_resources_properties(FunctionDefinition, #initiation_ctx{resource_spec = #at
     ephemeral_storage_limit = EphemeralStorageLimit
 }}) ->
     Requests = #{
-        <<"cpu">> => CpuRequested,
-        <<"memory">> => MemoryRequested
+        <<"cpu">> => str_utils:to_binary(CpuRequested),
+        <<"memory">> => str_utils:to_binary(MemoryRequested)
     },
 
-    Limits1 = maps_utils:put_if_defined(#{}, <<"cpu">>, CpuLimit),
-    Limits2 = maps_utils:put_if_defined(Limits1, <<"memory">>, MemoryLimit),
+    Limits1 = maps_utils:put_if_defined(#{}, <<"cpu">>, encode_if_defined(CpuLimit)),
+    Limits2 = maps_utils:put_if_defined(Limits1, <<"memory">>, encode_if_defined(MemoryLimit)),
 
-    EphemeralStorageAnnotations = #{
-        <<"function.openfaas.onedata.org/ephemeral_storage_requested">> => EphemeralStorageRequested,
-        <<"function.openfaas.onedata.org/ephemeral_storage_limit">> => EphemeralStorageLimit
-    },
+    EphemeralStorageAnnotations = maps_utils:put_if_defined(
+        #{<<"function.openfaas.onedata.org/ephemeral_storage_requested">> => str_utils:to_binary(
+            EphemeralStorageRequested
+        )},
+        <<"function.openfaas.onedata.org/ephemeral_storage_limit">>,
+        encode_if_defined(EphemeralStorageLimit)
+    ),
 
     maps:update_with(
         <<"annotations">>,
@@ -443,6 +446,14 @@ add_resources_properties(FunctionDefinition, #initiation_ctx{resource_spec = #at
         EphemeralStorageAnnotations,
         FunctionDefinition#{<<"requests">> => Requests, <<"limits">> => Limits2}
     ).
+
+
+%% @private
+-spec encode_if_defined
+    (undefined) -> undefined;
+    (term()) -> binary().
+encode_if_defined(undefined) -> undefined;
+encode_if_defined(Value) -> str_utils:to_binary(Value).
 
 
 %% @private
