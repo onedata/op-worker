@@ -184,7 +184,6 @@ create(#op_req{auth = ?USER(_UserId, SessionId), gri = #gri{
     id = AtmWorkflowExecutionId,
     aspect = cancel
 }}) ->
-    % TODO VFS-7800 should middleware_worker require guid or work without it?
     {ok, #atm_workflow_execution{space_id = SpaceId}} = atm_workflow_execution_api:get(
         AtmWorkflowExecutionId
     ),
