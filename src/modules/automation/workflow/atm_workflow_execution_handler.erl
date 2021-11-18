@@ -24,7 +24,8 @@
 -export([
     init_engine/0,
     start/3,
-    cancel/1
+    cancel/1,
+    retry/2
 ]).
 
 % workflow_handler callbacks
@@ -98,7 +99,7 @@ start(UserCtx, AtmWorkflowExecutionEnv, #document{
         workflow_handler => ?MODULE,
         execution_context => AtmWorkflowExecutionEnv,
         first_lane_id => {1, 1},
-        next_lane_id => case AtmLanesCount > 1 of
+        next_lane_id => case 1 < AtmLanesCount of
             true -> {2, current};
             false -> undefined
         end
@@ -113,6 +114,41 @@ cancel(AtmWorkflowExecutionId) ->
         {error, _} = Error ->
             Error
     end.
+
+
+-spec retry(atm_lane_execution:lane_run_selector(), atm_workflow_execution:id()) ->
+    ok | errors:error().
+retry(AtmLaneRunSelector, AtmWorkflowExecutionId) ->
+    case atm_lane_execution_status:handle_manual_retry(AtmLaneRunSelector, AtmWorkflowExecutionId) of
+        {ok, #document{value = #atm_workflow_execution{
+            lanes_count = AtmLanesCount,
+            current_lane_index = CurrentAtmLaneIndex,
+            current_run_num = CurrentRunNum
+        }}} ->
+            workflow_engine:execute_workflow(?ATM_WORKFLOW_EXECUTION_ENGINE, #{
+                id => AtmWorkflowExecutionId,
+                workflow_handler => ?MODULE,
+%%                execution_context => AtmWorkflowExecutionEnv,  %% TODO
+                first_lane_id => {CurrentAtmLaneIndex, CurrentRunNum},
+                next_lane_id => case CurrentAtmLaneIndex < AtmLanesCount of
+                    true -> {CurrentAtmLaneIndex + 1, current};
+                    false -> undefined
+                end
+            });
+        {error, _} = Error ->
+            Error
+    end.
+
+
+%%-spec rerun(atm_lane_execution:lane_run_selector(), atm_workflow_execution:id()) ->
+%%    ok | errors:error().
+%%rerun(AtmLaneRunSelector, AtmWorkflowExecutionId) ->
+%%    case atm_lane_execution_status:handle_manual_rerun(AtmLaneRunSelector, AtmWorkflowExecutionId) of
+%%        ok ->
+%%            workflow_engine:cancel_execution(AtmWorkflowExecutionId);
+%%        {error, _} = Error ->
+%%            Error
+%%    end.
 
 
 %%%===================================================================

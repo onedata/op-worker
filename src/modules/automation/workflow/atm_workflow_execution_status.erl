@@ -63,7 +63,8 @@
     handle_lane_preparing/3,
     handle_lane_enqueued/2,
     handle_lane_aborting/3,
-    handle_lane_task_status_change/2
+    handle_lane_task_status_change/2,
+    handle_manual_lane_repetition/2
 ]).
 -export([handle_ended/1]).
 
@@ -219,6 +220,30 @@ handle_ended(AtmWorkflowExecutionId) ->
     Result.
 
 
+-spec handle_manual_lane_repetition(atm_workflow_execution:id(), lane_run_diff()) ->
+    {ok, atm_workflow_execution:doc()} | errors:error().
+handle_manual_lane_repetition(AtmWorkflowExecutionId, AtmLaneRunDiff) ->
+    Diff = fun(Record) ->
+        case infer_phase(Record) of
+            ?ENDED_PHASE ->
+                AtmLaneRunDiff(Record#atm_workflow_execution{
+                    status = ?SCHEDULED_STATUS,
+                    schedule_time = global_clock:timestamp_seconds()
+                });
+            _ ->
+                ?ERROR_ATM_WORKFLOW_EXECUTION_ENDED  %% TODO NOT_ENDED ?
+        end
+    end,
+
+    case atm_workflow_execution:update(AtmWorkflowExecutionId, Diff) of
+        {ok, AtmWorkflowExecutionDoc} = Result ->
+            ensure_in_proper_phase_tree(AtmWorkflowExecutionDoc),
+            Result;
+        {error, _} = Error ->
+            Error
+    end.
+
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -273,6 +298,9 @@ ensure_in_proper_phase_tree(#document{value = AtmWorkflowExecution} = AtmWorkflo
         {true, ?ONGOING_PHASE, ?ENDED_PHASE} ->
             atm_ended_workflow_executions:add(AtmWorkflowExecutionDoc),
             atm_ongoing_workflow_executions:delete(AtmWorkflowExecutionDoc);
+        {true, ?ENDED_PHASE, ?WAITING_PHASE} ->
+            atm_waiting_workflow_executions:add(AtmWorkflowExecutionDoc),
+            atm_ended_workflow_executions:delete(AtmWorkflowExecutionDoc);
         false ->
             ok
     end.
