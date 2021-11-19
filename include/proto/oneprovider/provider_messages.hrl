@@ -219,17 +219,6 @@
     callback :: archive:callback()
 }).
 
--record(schedule_atm_workflow_execution, {
-    atm_workflow_schema_id :: od_atm_workflow_schema:id(),
-    atm_workflow_schema_revision_num :: atm_workflow_schema_revision:revision_number(),
-    store_initial_values :: atm_workflow_execution_api:store_initial_values(),
-    callback_url :: undefined | http_client:url()
-}).
-
--record(cancel_atm_workflow_execution, {
-    atm_workflow_execution_id :: atm_workflow_execution:id()
-}).
-
 -type provider_request_type() ::
     #get_parent{} | #get_acl{} | #set_acl{} | #remove_acl{} |
     #get_transfer_encoding{} | #set_transfer_encoding{} |
@@ -243,8 +232,7 @@
     #add_qos_entry{} | #get_effective_file_qos{} | #get_qos_entry{} | #remove_qos_entry{} | #check_qos_status{} |
     #establish_dataset{} | #update_dataset{} | #remove_dataset{} |
     #get_dataset_info{} | #get_file_eff_dataset_summary{} | #list_top_datasets{} | #list_children_datasets{} |
-    #archive_dataset{} | #update_archive{} | #get_archive_info{} | #list_archives{} | #init_archive_purge{} |
-    #schedule_atm_workflow_execution{} | #cancel_atm_workflow_execution{}.
+    #archive_dataset{} | #update_archive{} | #get_archive_info{} | #list_archives{} | #init_archive_purge{}.
 
 -record(transfer_encoding, {
     value :: binary()
@@ -353,18 +341,12 @@
     is_last :: boolean()
 }).
 
--record(atm_workflow_execution_scheduled, {
-    id :: atm_workflow_execution:id(),
-    record :: atm_workflow_execution:record()
-}).
-
 -type provider_response_type() ::
     #transfer_encoding{} | #cdmi_completion_status{} | #mimetype{} | #acl{} |
     #dir{} | #file_path{} | #file_distribution{} | #metadata{} | #share{} | #scheduled_transfer{} |
     #qos_entry_id{} | #qos_entry{} | #eff_qos_response{} | #qos_status_response{} |
     #dataset_established{} | #dataset_info{} | #file_eff_dataset_summary{} | #datasets{}|
     #dataset_archived{} | #archive_info{} | #archives{} |
-    #atm_workflow_execution_scheduled{} |
     undefined.
 
 -record(provider_request, {

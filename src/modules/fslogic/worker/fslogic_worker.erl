@@ -803,26 +803,7 @@ handle_provider_request(UserCtx, #get_archive_info{id = ArchiveId}, SpaceDirCtx)
 handle_provider_request(UserCtx, #list_archives{dataset_id = DatasetId, opts = Opts, mode = ListingMode}, SpaceDirCtx) ->
     dataset_req:list_archives(SpaceDirCtx, DatasetId, Opts, ListingMode, UserCtx);
 handle_provider_request(UserCtx, #init_archive_purge{id = ArchiveId, callback = CallbackUrl}, SpaceDirCtx) ->
-    dataset_req:init_archive_purge(SpaceDirCtx, ArchiveId, CallbackUrl, UserCtx);
-
-handle_provider_request(UserCtx, #schedule_atm_workflow_execution{
-    atm_workflow_schema_id = AtmWorkflowSchemaId,
-    atm_workflow_schema_revision_num = AtmWorkflowSchemaRevisionNum,
-    store_initial_values = AtmStoreInitialValues,
-    callback_url = CallbackUrl
-}, SpaceDirCtx) ->
-    atm_req:schedule_workflow_execution(
-        UserCtx,
-        SpaceDirCtx,
-        AtmWorkflowSchemaId,
-        AtmWorkflowSchemaRevisionNum,
-        AtmStoreInitialValues,
-        CallbackUrl
-    );
-handle_provider_request(_UserCtx, #cancel_atm_workflow_execution{
-    atm_workflow_execution_id = AtmWorkflowExecutionId
-}, _SpaceDirCtx) ->
-    atm_req:cancel_workflow_execution(AtmWorkflowExecutionId).
+    dataset_req:init_archive_purge(SpaceDirCtx, ArchiveId, CallbackUrl, UserCtx).
 
 
 %%--------------------------------------------------------------------
