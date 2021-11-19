@@ -136,11 +136,6 @@
 ]).
 %% Archives related operations
 -export([archive_dataset/6, update_archive/3, get_archive_info/2, list_archives/4, init_archive_purge/3]).
-%% Automation related operations
--export([
-    schedule_atm_workflow_execution/4, schedule_atm_workflow_execution/5,
-    cancel_atm_workflow_execution/2
-]).
 
 %% Utility functions
 -export([check_result/1]).
@@ -924,42 +919,6 @@ list_archives(SessId, DatasetId, Opts, ListingMode) ->
 -spec init_archive_purge(session:id(), archive:id(), archive:callback()) -> ok | error_reply().
 init_archive_purge(SessId, ArchiveId, CallbackUrl) ->
     ?run(lfm_datasets:init_archive_purge(SessId, ArchiveId, CallbackUrl)).
-
-
-%%%===================================================================
-%%% Automation related operations
-%%%===================================================================
-
-
--spec schedule_atm_workflow_execution(
-    session:id(),
-    od_space:id(),
-    od_atm_workflow_schema:id(),
-    atm_workflow_execution_api:store_initial_values()
-) ->
-    {ok, atm_workflow_execution:id(), atm_workflow_execution:record()} | error_reply().
-schedule_atm_workflow_execution(SessId, SpaceId, AtmWorkflowSchemaId, AtmStoreInitialValues) ->
-    schedule_atm_workflow_execution(SessId, SpaceId, AtmWorkflowSchemaId, AtmStoreInitialValues, undefined).
-
-
--spec schedule_atm_workflow_execution(
-    session:id(),
-    od_space:id(),
-    od_atm_workflow_schema:id(),
-    atm_workflow_execution_api:store_initial_values(),
-    undefined | http_client:url()
-) ->
-    {ok, atm_workflow_execution:id(), atm_workflow_execution:record()} | error_reply().
-schedule_atm_workflow_execution(SessId, SpaceId, AtmWorkflowSchemaId, AtmStoreInitialValues, CallbackUrl) ->
-    ?run(lfm_atm:schedule_workflow_execution(
-        SessId, SpaceId, AtmWorkflowSchemaId, AtmStoreInitialValues, CallbackUrl
-    )).
-
-
--spec cancel_atm_workflow_execution(session:id(), atm_workflow_execution:id()) ->
-    ok | error_reply().
-cancel_atm_workflow_execution(SessId, AtmWorkflowExecutionId) ->
-    ?run(lfm_atm:cancel_workflow_execution(SessId, AtmWorkflowExecutionId)).
 
 
 %%%===================================================================
