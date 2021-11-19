@@ -170,37 +170,30 @@ validate(#op_req{operation = get, gri = #gri{aspect = As}}, _) when
 %%--------------------------------------------------------------------
 -spec create(middleware:req()) -> middleware:create_result().
 create(#op_req{auth = ?USER(_UserId, SessionId), data = Data, gri = #gri{aspect = instance} = GRI}) ->
-    Result = lfm:schedule_atm_workflow_execution(
+    {ok, {AtmWorkflowExecutionId, AtmWorkflowExecution}} = middleware_worker:check_exec(
         SessionId,
-        maps:get(<<"spaceId">>, Data),
-        maps:get(<<"atmWorkflowSchemaId">>, Data),
-        maps:get(<<"atmWorkflowSchemaRevisionNumber">>, Data),
-        maps:get(<<"storeInitialValues">>, Data, #{}),
-        maps:get(<<"callback">>, Data, undefined)
+        fslogic_uuid:spaceid_to_space_dir_guid(maps:get(<<"spaceId">>, Data)),
+        #schedule_atm_workflow_execution{
+            atm_workflow_schema_id = maps:get(<<"atmWorkflowSchemaId">>, Data),
+            atm_workflow_schema_revision_num = maps:get(<<"atmWorkflowSchemaRevisionNumber">>, Data),
+            store_initial_values = maps:get(<<"storeInitialValues">>, Data, #{}),
+            callback_url = maps:get(<<"callback">>, Data, undefined)
+        }
     ),
-    case Result of
-        {ok, AtmWorkflowExecutionId, AtmWorkflowExecution} ->
-            {ok, resource, {GRI#gri{id = AtmWorkflowExecutionId}, AtmWorkflowExecution}};
-        ?ERROR_NOT_FOUND ->
-            ?ERROR_NOT_FOUND;
-        {error, ?ENOENT} ->
-            ?ERROR_NOT_FOUND;
-        {error, ?EACCES} ->
-            ?ERROR_FORBIDDEN;
-        {error, ?EPERM} ->
-            ?ERROR_FORBIDDEN;
-        {error, _} ->
-            ?ERROR_MALFORMED_DATA
-    end;
+    {ok, resource, {GRI#gri{id = AtmWorkflowExecutionId}, AtmWorkflowExecution}};
 
 create(#op_req{auth = ?USER(_UserId, SessionId), gri = #gri{
     id = AtmWorkflowExecutionId,
     aspect = cancel
 }}) ->
-    case lfm:cancel_atm_workflow_execution(SessionId, AtmWorkflowExecutionId) of
-        ok -> ok;
-        {error, _} -> ?ERROR_MALFORMED_DATA
-    end.
+    {ok, #atm_workflow_execution{space_id = SpaceId}} = atm_workflow_execution_api:get(
+        AtmWorkflowExecutionId
+    ),
+    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+
+    middleware_worker:check_exec(SessionId, SpaceGuid, #cancel_atm_workflow_execution{
+        atm_workflow_execution_id = AtmWorkflowExecutionId
+    }).
 
 
 %%--------------------------------------------------------------------

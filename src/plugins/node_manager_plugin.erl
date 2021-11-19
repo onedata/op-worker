@@ -188,7 +188,8 @@ custom_workers() -> filter_disabled_workers([
         {supervisor_flags, harvesting_worker:supervisor_flags()},
         {supervisor_children_spec, harvesting_worker:supervisor_children_spec()}
     ]},
-    {qos_worker, []}
+    {qos_worker, []},
+    {middleware_worker, []}
 ]).
 
 %%--------------------------------------------------------------------

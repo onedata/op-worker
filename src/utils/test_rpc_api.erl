@@ -12,6 +12,7 @@
 -module(test_rpc_api).
 -author("Piotr Duleba").
 
+-include("middleware/middleware.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
@@ -50,7 +51,6 @@
     get_cert_chain_ders/0,
     gs_protocol_supported_versions/0,
 
-    schedule_atm_workflow_execution/5,
     list_waiting_atm_workflow_executions/3,
     list_ongoing_atm_workflow_executions/3,
 
@@ -197,30 +197,6 @@ get_cert_chain_ders() ->
 -spec gs_protocol_supported_versions() -> [gs_protocol:protocol_version()].
 gs_protocol_supported_versions() ->
     gs_protocol:supported_versions().
-
-
--spec schedule_atm_workflow_execution(
-    session:id(),
-    od_space:id(),
-    od_atm_workflow_schema:id(),
-    atm_workflow_schema_revision:revision_number(),
-    atm_workflow_execution_api:store_initial_values()
-) ->
-    {ok, atm_workflow_execution:id(), atm_workflow_execution:record()} | errors:error().
-schedule_atm_workflow_execution(
-    SessId,
-    SpaceId,
-    AtmWorkflowSchemaId,
-    AtmWorkflowSchemaRevisionNum,
-    AtmStoreInitialValues
-) ->
-    lfm:schedule_atm_workflow_execution(
-        SessId,
-        SpaceId,
-        AtmWorkflowSchemaId,
-        AtmWorkflowSchemaRevisionNum,
-        AtmStoreInitialValues
-    ).
 
 
 -spec list_waiting_atm_workflow_executions(
