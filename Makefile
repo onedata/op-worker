@@ -165,4 +165,4 @@ pkgclean:
 	rm -rf package
 
 codetag-tracker:
-	./bamboos/scripts/codetag-tracker.sh --branch=${BRANCH} --excluded-dirs=node_package,gpb,helpers,gen_server_mock,rrdtool,rtransfer_link
+	./bamboos/scripts/codetag-tracker.sh --branch=${BRANCH} --excluded-dirs=node_package,gpb,helpers,gen_server_mock,rrdtool,rtransfer_link,locks
