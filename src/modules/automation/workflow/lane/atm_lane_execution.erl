@@ -200,7 +200,7 @@ run_to_json(#atm_lane_execution_run{
             fun atm_parallel_box_execution:to_json/1, AtmParallelBoxExecutions
         ),
 
-        % TODO VFS-8226 add more types after implementing retries/reruns
+        % TODO VFS-8406 add more types after implementing retries/reruns
         <<"runType">> => case OriginRunNum of
             undefined -> <<"regular">>;
             _ -> <<"retry">>
