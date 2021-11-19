@@ -17,7 +17,7 @@
 -include_lib("ctool/include/automation/automation.hrl").
 
 %% API
--export([create/3, get/1, delete/1]).
+-export([create/3, get/1, get_lane_schemas/1, delete/1]).
 
 %%% field encoding/decoding procedures
 -export([legacy_state_to_json/1, legacy_state_from_json/1]).
@@ -75,6 +75,15 @@ create(AtmWorkflowExecutionId, RevisionNum, AtmWorkflowSchemaDoc = #document{
 -spec get(id()) -> {ok, doc()} | {error, term()}.
 get(AtmWorkflowSchemaSnapshotId) ->
     datastore_model:get(?CTX, AtmWorkflowSchemaSnapshotId).
+
+
+-spec get_lane_schemas(record() | doc()) -> [atm_lane_schema:record()].
+get_lane_schemas(#atm_workflow_schema_snapshot{revision = #atm_workflow_schema_revision{
+    lanes = AtmLaneSchemas
+}}) ->
+    AtmLaneSchemas;
+get_lane_schemas(#document{value = AtmWorkflowSchemaSnapshot}) ->
+    get_lane_schemas(AtmWorkflowSchemaSnapshot).
 
 
 -spec delete(id()) -> ok | {error, term()}.

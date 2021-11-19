@@ -70,13 +70,20 @@
 initiate(AtmWorkflowExecutionCtx, AtmTaskExecutionIdOrDoc) ->
     #document{
         key = AtmTaskExecutionId,
-        value = #atm_task_execution{
+        value = AtmTaskExecution = #atm_task_execution{
+            workflow_execution_id = AtmWorkflowExecutionId,
             executor = AtmTaskExecutor,
             system_audit_log_id = AtmSystemAuditLogId
         }
     } = ensure_atm_task_execution_doc(AtmTaskExecutionIdOrDoc),
 
-    AtmTaskExecutionSpec = atm_task_executor:initiate(AtmWorkflowExecutionCtx, AtmTaskExecutor),
+    {ok, #document{value = AtmWorkflowExecution}} = atm_workflow_execution:get(AtmWorkflowExecutionId),
+    AtmTaskSchema = get_task_schema(AtmTaskExecution, AtmWorkflowExecution),
+    AtmLambdaRevision = get_lambda_revision(AtmTaskSchema, AtmWorkflowExecution),
+
+    AtmTaskExecutionSpec = atm_task_executor:initiate(
+        AtmWorkflowExecutionCtx, AtmTaskSchema, AtmLambdaRevision, AtmTaskExecutor
+    ),
 
     {ok, #atm_store{container = AtmTaskAuditLogStoreContainer}} = atm_store_api:get(
         AtmSystemAuditLogId
@@ -201,6 +208,43 @@ ensure_atm_task_execution_doc(#document{value = #atm_task_execution{}} = AtmTask
 ensure_atm_task_execution_doc(AtmTaskExecutionId) ->
     {ok, AtmTaskExecutionDoc = #document{}} = atm_task_execution:get(AtmTaskExecutionId),
     AtmTaskExecutionDoc.
+
+
+%% @private
+-spec get_task_schema(atm_task_execution:record(), atm_workflow_execution:record()) ->
+    atm_task_schema:record().
+get_task_schema(
+    #atm_task_execution{
+        lane_index = AtmLaneIndex,
+        parallel_box_index = AtmParallelBoxIndex,
+        schema_id = AtmTaskSchemaId
+    },
+    #atm_workflow_execution{schema_snapshot_id = AtmWorkflowSchemaSnapshotId}
+) ->
+    {ok, AtmWorkflowSchemaSnapshotDoc} = atm_workflow_schema_snapshot:get(AtmWorkflowSchemaSnapshotId),
+
+    AtmLaneSchemas = atm_workflow_schema_snapshot:get_lane_schemas(AtmWorkflowSchemaSnapshotDoc),
+    AtmLaneSchema = lists:nth(AtmLaneIndex, AtmLaneSchemas),
+    AtmParallelBoxSchema = lists:nth(AtmParallelBoxIndex, AtmLaneSchema#atm_lane_schema.parallel_boxes),
+
+    {value, AtmTaskSchema} = lists:search(
+        fun(#atm_task_schema{id = Id}) -> Id == AtmTaskSchemaId end,
+        AtmParallelBoxSchema#atm_parallel_box_schema.tasks
+    ),
+    AtmTaskSchema.
+
+
+%% @private
+-spec get_lambda_revision(atm_task_schema:record(), atm_workflow_execution:record()) ->
+    atm_lambda_revision:record().
+get_lambda_revision(
+    #atm_task_schema{lambda_id = AtmLambdaId, lambda_revision_number = AtmLambdaRevisionNum},
+    #atm_workflow_execution{lambda_snapshot_registry = AtmLambdaSnapshotRegistry}
+) ->
+    {ok, #document{value = AtmLambdaSnapshot}} = atm_lambda_snapshot:get(
+        maps:get(AtmLambdaId, AtmLambdaSnapshotRegistry)
+    ),
+    atm_lambda_snapshot:get_revision(AtmLambdaRevisionNum, AtmLambdaSnapshot).
 
 
 %% @private
