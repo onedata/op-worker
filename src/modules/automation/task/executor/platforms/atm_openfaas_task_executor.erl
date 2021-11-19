@@ -449,9 +449,7 @@ add_resources_properties(FunctionDefinition, #initiation_ctx{resource_spec = #at
 
 
 %% @private
--spec encode_if_defined
-    (undefined) -> undefined;
-    (term()) -> binary().
+-spec encode_if_defined(undefined | term()) -> undefined | binary().
 encode_if_defined(undefined) -> undefined;
 encode_if_defined(Value) -> str_utils:to_binary(Value).
 
