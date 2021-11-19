@@ -126,8 +126,8 @@ connect() ->
 -spec try_connect(undefined | binary()) -> {ok, test_websocket_client:client()} | {error, term()}.
 try_connect(SecretB64) ->
     Headers = case SecretB64 of
-        undefined -> #{};
-        _ -> #{?HDR_AUTHORIZATION => <<"Basic ", SecretB64/binary>>}
+        undefined -> [];
+        _ -> [{?HDR_AUTHORIZATION, <<"Basic ", SecretB64/binary>>}]
     end,
     test_websocket_client:start(krakow, ?OPENFAAS_ACTIVITY_FEED_WS_PATH, Headers).
 
