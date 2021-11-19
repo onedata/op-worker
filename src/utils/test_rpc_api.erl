@@ -12,6 +12,7 @@
 -module(test_rpc_api).
 -author("Piotr Duleba").
 
+-include("middleware/middleware.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
@@ -205,10 +206,17 @@ gs_protocol_supported_versions() ->
     od_atm_workflow_schema:id(),
     atm_workflow_execution_api:store_initial_values()
 ) ->
-    {ok, atm_workflow_execution:id(), atm_workflow_execution:record()} | errors:error().
+    {ok, {atm_workflow_execution:id(), atm_workflow_execution:record()}} | errors:error().
 schedule_atm_workflow_execution(SessId, SpaceId, AtmWorkflowSchemaId, AtmStoreInitialValues) ->
-    lfm:schedule_atm_workflow_execution(SessId, SpaceId, AtmWorkflowSchemaId, AtmStoreInitialValues).
-
+    middleware_worker:exec(
+        SessId,
+        fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+        #schedule_atm_workflow_execution{
+            atm_workflow_schema_id = AtmWorkflowSchemaId,
+            store_initial_values = AtmStoreInitialValues,
+            callback_url = undefined
+        }
+    ).
 
 
 -spec list_waiting_atm_workflow_executions(
