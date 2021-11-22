@@ -1076,6 +1076,7 @@
 -record(atm_task_execution, {
     workflow_execution_id :: atm_workflow_execution:id(),
     lane_index :: atm_lane_execution:index(),
+    run_selector :: atm_lane_execution:run_selector(),
     parallel_box_index :: non_neg_integer(),
 
     schema_id :: automation:id(),

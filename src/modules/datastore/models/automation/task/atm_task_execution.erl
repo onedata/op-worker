@@ -19,6 +19,7 @@
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1, get_record_version/0, upgrade_record/2]).
+-export([encode_run_selector/1, decode_run_selector/1]).
 
 
 -type id() :: binary().
@@ -85,7 +86,7 @@ get_ctx() ->
 
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    2.
+    3.
 
 
 -spec get_record_struct(datastore_model:record_version()) ->
@@ -138,6 +139,34 @@ get_record_struct(2) ->
         {items_in_processing, integer},
         {items_processed, integer},
         {items_failed, integer}
+    ]};
+get_record_struct(3) ->
+    {record, [
+        {workflow_execution_id, string},
+        {lane_index, integer},
+        %% new field
+        {run_selector, {custom, string, {?MODULE, encode_run_selector, decode_run_selector}}},
+        {parallel_box_index, integer},
+
+        {schema_id, string},
+
+        {executor, {custom, string, {persistent_record, encode, decode, atm_task_executor}}},
+        {argument_specs, [{custom, string, {
+            persistent_record, encode, decode, atm_task_execution_argument_spec
+        }}]},
+        {result_specs, [{custom, string, {
+            persistent_record, encode, decode, atm_task_execution_result_spec
+        }}]},
+
+        {system_audit_log_id, string},
+
+        {status, atom},
+        {status_changed, boolean},
+        {aborting_reason, atom},
+
+        {items_in_processing, integer},
+        {items_processed, integer},
+        {items_failed, integer}
     ]}.
 
 
@@ -163,10 +192,44 @@ upgrade_record(1, {
     ItemsProcessed,
     ItemsFailed
 }) ->
-    {2, #atm_task_execution{
+    {2, {?MODULE,
+        AtmWorkflowExecutionId,
+        LaneIndex,
+        ParallelBoxIndex,
+        SchemaId,
+        Executor,
+        ArgumentSpecs,
+        ResultSpecs,
+        undefined,
+        Status,
+        StatusChanged,
+        undefined,
+        ItemsInProcessing,
+        ItemsProcessed,
+        ItemsFailed
+    }};
+
+upgrade_record(2, {
+    AtmWorkflowExecutionId,
+    AtmLaneIndex,
+    AtmParallelBoxIndex,
+    SchemaId,
+    Executor,
+    ArgumentSpecs,
+    ResultSpecs,
+    AtmTaskAuditLogId,
+    Status,
+    StatusChanged,
+    AbortingReason,
+    ItemsInProcessing,
+    ItemsProcessed,
+    ItemsFailed
+}) ->
+    {3, #atm_task_execution{
         workflow_execution_id = AtmWorkflowExecutionId,
-        lane_index = LaneIndex,
-        parallel_box_index = ParallelBoxIndex,
+        lane_index = AtmLaneIndex,
+        run_selector = 1,
+        parallel_box_index = AtmParallelBoxIndex,
 
         schema_id = SchemaId,
 
@@ -174,13 +237,23 @@ upgrade_record(1, {
         argument_specs = ArgumentSpecs,
         result_specs = ResultSpecs,
 
-        system_audit_log_id = undefined,
+        system_audit_log_id = AtmTaskAuditLogId,
 
         status = Status,
         status_changed = StatusChanged,
-        aborting_reason = undefined,
+        aborting_reason = AbortingReason,
 
         items_in_processing = ItemsInProcessing,
         items_processed = ItemsProcessed,
         items_failed = ItemsFailed
     }}.
+
+
+-spec encode_run_selector(atm_lane_execution:run_selector()) -> binary().
+encode_run_selector(current) -> <<"current">>;
+encode_run_selector(Binary) when is_binary(Binary) -> Binary.
+
+
+-spec decode_run_selector(binary()) -> atm_lane_execution:run_selector().
+decode_run_selector(<<"current">>) -> current;
+decode_run_selector(Binary) when is_binary(Binary) -> Binary.

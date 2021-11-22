@@ -55,7 +55,7 @@ prepare(AtmLaneRunSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
         #document{value = AtmWorkflowExecution} = atm_lane_execution_status:handle_enqueued(
             AtmLaneRunSelector, AtmWorkflowExecutionId
         ),
-        freeze_current_lane_run_iterated_store_if_ready_to_execute(AtmWorkflowExecution),
+        call_current_lane_run_pre_execution_hooks(AtmWorkflowExecution),
 
         AtmLaneExecutionSpec
     catch Type:Reason:Stacktrace ->
@@ -72,14 +72,14 @@ prepare(AtmLaneRunSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
 ) ->
     workflow_handler:lane_ended_callback_result() | no_return().
 handle_ended(AtmLaneRunSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
-    {IsRetryScheduled, NewAtmWorkflowExecution = #atm_workflow_execution{
+    {IsRetryScheduled, NextAtmWorkflowExecution = #atm_workflow_execution{
         current_lane_index = NextAtmLaneIndex,
         current_run_num = NextRunNum,
         lanes_count = AtmLanesCount
     }} = end_lane_run(AtmLaneRunSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx),
 
-    freeze_current_lane_run_iterated_store_if_ready_to_execute(NewAtmWorkflowExecution),
-    {ok, NextLaneRun} = atm_lane_execution:get_run({current, current}, NewAtmWorkflowExecution),
+    call_current_lane_run_pre_execution_hooks(NextAtmWorkflowExecution),  %% for next lane run
+    {ok, NextLaneRun} = atm_lane_execution:get_run({current, current}, NextAtmWorkflowExecution),
 
     case atm_lane_execution_status:status_to_phase(NextLaneRun#atm_lane_execution_run.status) of
         ?ENDED_PHASE ->
@@ -219,15 +219,24 @@ freeze_exception_store(#atm_lane_execution_run{exception_store_id = AtmException
     atm_store_api:freeze(AtmExceptionStoreId).
 
 
+%%--------------------------------------------------------------------
 %% @private
--spec freeze_current_lane_run_iterated_store_if_ready_to_execute(atm_workflow_execution:record()) ->
+%% @doc
+%% Performs any operation that needs to be done right before current lane run
+%% execution (all previous preparations must have been ended and lane run ready
+%% to execute).
+%% @end
+%%--------------------------------------------------------------------
+-spec call_current_lane_run_pre_execution_hooks(atm_workflow_execution:record()) ->
     ok.
-freeze_current_lane_run_iterated_store_if_ready_to_execute(#atm_workflow_execution{
+call_current_lane_run_pre_execution_hooks(AtmWorkflowExecution = #atm_workflow_execution{
     current_run_num = CurrentRunNum
-} = AtmWorkflowExecution) ->
+}) ->
     case atm_lane_execution:get_run({current, current}, AtmWorkflowExecution) of
         {ok, #atm_lane_execution_run{status = ?ENQUEUED_STATUS, run_num = CurrentRunNum} = Run} ->
-            %% TODO - is this the place where task's lane_run_selectors could be updated?
+            atm_parallel_box_execution:update_tasks_run_selector(
+                CurrentRunNum, Run#atm_lane_execution_run.parallel_boxes
+            ),
             atm_store_api:freeze(Run#atm_lane_execution_run.iterated_store_id);
         _ ->
             % execution must have ended or lane run is still not ready

@@ -114,7 +114,7 @@ create_run_internal(AtmLaneRunSelector, AtmWorkflowExecutionDoc, AtmWorkflowExec
 ) ->
     run_creation_ctx().
 build_run_creation_ctx(AtmLaneRunSelector, AtmWorkflowExecutionDoc, AtmWorkflowExecutionCtx) ->
-    {AtmLaneSelector, _} = AtmLaneRunSelector,
+    {AtmLaneSelector, RunSelector} = AtmLaneRunSelector,
     AtmWorkflowExecution = AtmWorkflowExecutionDoc#document.value,
 
     {ok, Run = #atm_lane_execution_run{status = ?PREPARING_STATUS}} = atm_lane_execution:get_run(
@@ -133,6 +133,7 @@ build_run_creation_ctx(AtmLaneRunSelector, AtmWorkflowExecutionDoc, AtmWorkflowE
 
             lane_index = atm_lane_execution:resolve_selector(AtmLaneSelector, AtmWorkflowExecution),
             lane_schema = AtmLaneSchema,
+            run_selector = RunSelector,
 
             iterated_store_id = case Run#atm_lane_execution_run.iterated_store_id of
                 undefined ->

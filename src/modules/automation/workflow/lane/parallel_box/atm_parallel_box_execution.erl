@@ -24,7 +24,8 @@
     teardown_all/2, teardown/2,
     delete_all/1, delete/1
 ]).
--export([gather_statuses/1, update_task_status/3]).
+-export([update_tasks_run_selector/2, update_task_status/3]).
+-export([gather_statuses/1]).
 -export([to_json/1]).
 
 %% persistent_record callbacks
@@ -194,10 +195,18 @@ delete(#atm_parallel_box_execution{task_registry = AtmTaskExecutions}) ->
     atm_task_execution_factory:delete_all(maps:values(AtmTaskExecutions)).
 
 
--spec gather_statuses([record()]) -> [status()].
-gather_statuses(AtmParallelBoxExecutions) ->
-    lists:map(fun(#atm_parallel_box_execution{status = Status}) ->
-        Status
+-spec update_tasks_run_selector(atm_lane_execution:run_selector(), record() | [record()]) ->
+    ok.
+update_tasks_run_selector(NewRunSelector, #atm_parallel_box_execution{
+    task_registry = AtmTaskExecutionRegistry
+}) ->
+    atm_parallel_runner:foreach(fun(AtmTaskExecutionId) ->
+        atm_task_execution_handler:update_run_selector(NewRunSelector, AtmTaskExecutionId)
+    end, maps:values(AtmTaskExecutionRegistry));
+
+update_tasks_run_selector(NewRunSelector, AtmParallelBoxExecutions) ->
+    atm_parallel_runner:foreach(fun(AtmParallelBoxExecution) ->
+        update_tasks_run_selector(NewRunSelector, AtmParallelBoxExecution)
     end, AtmParallelBoxExecutions).
 
 
@@ -229,6 +238,13 @@ update_task_status(AtmTaskExecutionId, NewStatus, #atm_parallel_box_execution{
         false ->
             ?ERROR_ATM_INVALID_STATUS_TRANSITION(AtmTaskExecutionStatus, NewStatus)
     end.
+
+
+-spec gather_statuses([record()]) -> [status()].
+gather_statuses(AtmParallelBoxExecutions) ->
+    lists:map(fun(#atm_parallel_box_execution{status = Status}) ->
+        Status
+    end, AtmParallelBoxExecutions).
 
 
 -spec to_json(record()) -> json_utils:json_term().

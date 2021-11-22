@@ -194,7 +194,8 @@ create_task_execution_doc(#creation_ctx{
             parallel_box_index = AtmParallelBoxIndex,
             lane_execution_run_creation_args = #atm_lane_execution_run_creation_args{
                 workflow_execution_ctx = AtmWorkflowExecutionCtx,
-                lane_index = AtmLaneIndex
+                lane_index = AtmLaneIndex,
+                run_selector = RunSelector
             }
         },
         lambda_snapshot = AtmLambdaSnapshot,
@@ -209,6 +210,7 @@ create_task_execution_doc(#creation_ctx{
     {ok, AtmTaskExecutionDoc} = atm_task_execution:create(#atm_task_execution{
         workflow_execution_id = AtmWorkflowExecutionId,
         lane_index = AtmLaneIndex,
+        run_selector = RunSelector,
         parallel_box_index = AtmParallelBoxIndex,
 
         schema_id = AtmTaskSchemaId,

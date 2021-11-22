@@ -206,7 +206,7 @@ handle_aborting(AtmLaneRunSelector, AtmWorkflowExecutionId, Reason) ->
 
 -spec handle_task_status_change(
     atm_workflow_execution:id(),
-    atm_lane_execution:index(),
+    atm_lane_execution:lane_run_selector(),
     pos_integer(),
     atm_task_execution:id(),
     atm_task_execution:status()
@@ -214,7 +214,7 @@ handle_aborting(AtmLaneRunSelector, AtmWorkflowExecutionId, Reason) ->
     ok | errors:error().
 handle_task_status_change(
     AtmWorkflowExecutionId,
-    AtmLaneIndex,
+    AtmLaneRunSelector,
     AtmParallelBoxIndex,
     AtmTaskExecutionId,
     NewAtmTaskExecutionStatus
@@ -222,7 +222,7 @@ handle_task_status_change(
     HasTaskStarted = lists:member(NewAtmTaskExecutionStatus, [?ACTIVE_STATUS, ?SKIPPED_STATUS]),
 
     Diff = fun(AtmWorkflowExecution) ->
-        atm_lane_execution:update_run({AtmLaneIndex, current}, fun(Run) ->
+        atm_lane_execution:update_run(AtmLaneRunSelector, fun(Run) ->
             AtmParallelBoxExecutions = Run#atm_lane_execution_run.parallel_boxes,
             AtmParallelBoxExecution = lists:nth(AtmParallelBoxIndex, AtmParallelBoxExecutions),
 
