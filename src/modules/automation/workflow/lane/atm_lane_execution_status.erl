@@ -428,7 +428,7 @@ try_to_schedule_manual_lane_run_repeat(RepeatType, AtmLaneSelector, Run, AtmWork
             schedule_manual_lane_run_repeat(retry, AtmLaneSelector, Run, AtmWorkflowExecution);
         false ->
             %% TODO custom error ? What should it say?
-            ok
+            ?ERROR_ATM_WORKFLOW_EXECUTION_ENDED
     end.
 
 
