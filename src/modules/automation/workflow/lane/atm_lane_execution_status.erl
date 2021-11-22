@@ -469,8 +469,8 @@ schedule_lane_run_repeat(RepeatType, AtmLaneSelector, Run, AtmWorkflowExecution 
         origin_run_num = Run#atm_lane_execution_run.run_num,
         status = ?SCHEDULED_STATUS,
         iterated_store_id = case RepeatType of
-            rerun -> Run#atm_lane_execution_run.iterated_store_id;
-            retry -> Run#atm_lane_execution_run.exception_store_id
+            retry -> Run#atm_lane_execution_run.exception_store_id;
+            rerun -> Run#atm_lane_execution_run.iterated_store_id
         end
     },
     Diff = fun(_Run) -> ?ERROR_ALREADY_EXISTS end,

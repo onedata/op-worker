@@ -28,6 +28,7 @@
 -export([
     build/2, build/3,
     add_global_store_mapping/3,
+    set_workflow_incarnation/2,
     set_workflow_audit_log_store_container/2,
     set_lane_run_exception_store_container/2,
     add_task_audit_log_store_container/3
@@ -51,6 +52,7 @@
     space_id :: od_space:id(),
     workflow_execution_id :: atm_workflow_execution:id(),
     global_store_registry :: atm_workflow_execution:store_registry(),
+    workflow_execution_incarnation :: undefined | atm_workflow_execution:incarnation(),
     workflow_audit_log_store_container :: undefined | atm_store_container:record(),
     lane_exception_store_container :: undefined | atm_store_container:record(),
     task_audit_logs_registry :: #{atm_task_execution:id() => atm_store_container:record()}
@@ -79,6 +81,7 @@ build(SpaceId, AtmWorkflowExecutionId, AtmGlobalStoreRegistry) ->
         space_id = SpaceId,
         workflow_execution_id = AtmWorkflowExecutionId,
         global_store_registry = AtmGlobalStoreRegistry,
+        workflow_execution_incarnation = undefined,
         workflow_audit_log_store_container = undefined,
         lane_exception_store_container = undefined,
         task_audit_logs_registry = #{}
@@ -92,6 +95,13 @@ add_global_store_mapping(AtmStoreSchemaId, AtmStoreId, Record = #atm_workflow_ex
     Record#atm_workflow_execution_env{global_store_registry = AtmGlobalStoreRegistry#{
         AtmStoreSchemaId => AtmStoreId
     }}.
+
+
+-spec set_workflow_incarnation(atm_workflow_execution:incarnation(), record()) -> record().
+set_workflow_incarnation(AtmWorkflowExecutionIncarnation, Record) ->
+    Record#atm_workflow_execution_env{
+        workflow_execution_incarnation = AtmWorkflowExecutionIncarnation
+    }.
 
 
 -spec set_workflow_audit_log_store_container(undefined | atm_store_container:record(), record()) ->

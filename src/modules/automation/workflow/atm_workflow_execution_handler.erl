@@ -363,9 +363,13 @@ unfreeze_global_stores(#document{value = #atm_workflow_execution{
 -spec acquire_env(atm_workflow_execution:doc()) -> atm_workflow_execution_env:record().
 acquire_env(#document{key = AtmWorkflowExecutionId, value = #atm_workflow_execution{
     space_id = SpaceId,
+    incarnation = AtmWorkflowExecutionIncarnation,
     store_registry = AtmGlobalStoreRegistry,
     system_audit_log_id = AtmWorkflowAuditLogId
 }}) ->
+    Env0 = atm_workflow_execution_env:build(SpaceId, AtmWorkflowExecutionId, AtmGlobalStoreRegistry),
+    Env1 = atm_workflow_execution_env:set_workflow_incarnation(AtmWorkflowExecutionIncarnation, Env0),
+
     AtmWorkflowAuditLogStoreContainer = case atm_store_api:get(AtmWorkflowAuditLogId) of
         {ok, #atm_store{container = Container}} ->
             Container;
@@ -373,8 +377,7 @@ acquire_env(#document{key = AtmWorkflowExecutionId, value = #atm_workflow_execut
             undefined
     end,
     atm_workflow_execution_env:set_workflow_audit_log_store_container(
-        AtmWorkflowAuditLogStoreContainer,
-        atm_workflow_execution_env:build(SpaceId, AtmWorkflowExecutionId, AtmGlobalStoreRegistry)
+        AtmWorkflowAuditLogStoreContainer, Env1
     ).
 
 
