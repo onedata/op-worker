@@ -29,6 +29,8 @@
 -type store_registry() :: #{AtmStoreSchemaId :: automation:id() => atm_store:id()}.
 -type lambda_snapshot_registry() :: #{od_atm_lambda:id() => atm_lambda_snapshot:id()}.
 
+-type repeat_type() :: rerun | retry.
+
 -type phase() :: ?WAITING_PHASE | ?ONGOING_PHASE | ?ENDED_PHASE.
 
 -type status() ::
@@ -42,6 +44,7 @@
 
 -export_type([id/0, diff/0, record/0, doc/0]).
 -export_type([store_registry/0, lambda_snapshot_registry/0]).
+-export_type([repeat_type/0]).
 -export_type([phase/0, status/0, timestamp/0]).
 -export_type([summary/0]).
 

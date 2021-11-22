@@ -24,6 +24,7 @@
     schedule/5,
     get/1, get_summary/2,
     cancel/1,
+    repeat/4,
     terminate_not_ended/1,
     purge_all/0
 ]).
@@ -135,6 +136,19 @@ get_summary(AtmWorkflowExecutionId, #atm_workflow_execution{
 -spec cancel(atm_workflow_execution:id()) -> ok | errors:error().
 cancel(AtmWorkflowExecutionId) ->
     atm_workflow_execution_handler:cancel(AtmWorkflowExecutionId).
+
+
+-spec repeat(
+    user_ctx:ctx(),
+    atm_workflow_execution:repeat_type(),
+    atm_lane_execution:lane_run_selector(),
+    atm_workflow_execution:id()
+) ->
+    ok | errors:error().
+repeat(UserCtx, Type, AtmLaneRunSelector, AtmWorkflowExecutionId) ->
+    atm_workflow_execution_handler:repeat(
+        UserCtx, Type, AtmLaneRunSelector, AtmWorkflowExecutionId
+    ).
 
 
 %%--------------------------------------------------------------------

@@ -64,7 +64,7 @@
     handle_lane_enqueued/2,
     handle_lane_aborting/3,
     handle_lane_task_status_change/2,
-    handle_manual_lane_repetition/2
+    handle_manual_lane_repeat/2
 ]).
 -export([handle_ended/1]).
 
@@ -220,9 +220,9 @@ handle_ended(AtmWorkflowExecutionId) ->
     Result.
 
 
--spec handle_manual_lane_repetition(atm_workflow_execution:id(), lane_run_diff()) ->
+-spec handle_manual_lane_repeat(atm_workflow_execution:id(), lane_run_diff()) ->
     {ok, atm_workflow_execution:doc()} | errors:error().
-handle_manual_lane_repetition(AtmWorkflowExecutionId, AtmLaneRunDiff) ->
+handle_manual_lane_repeat(AtmWorkflowExecutionId, AtmLaneRunDiff) ->
     Diff = fun(Record) ->
         case infer_phase(Record) of
             ?ENDED_PHASE ->

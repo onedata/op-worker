@@ -25,7 +25,7 @@
     init_engine/0,
     start/3,
     cancel/1,
-    retry/2
+    repeat/4
 ]).
 
 % workflow_handler callbacks
@@ -116,19 +116,29 @@ cancel(AtmWorkflowExecutionId) ->
     end.
 
 
--spec retry(atm_lane_execution:lane_run_selector(), atm_workflow_execution:id()) ->
+-spec repeat(
+    user_ctx:ctx(),
+    atm_workflow_execution:repeat_type(),
+    atm_lane_execution:lane_run_selector(),
+    atm_workflow_execution:id()
+) ->
     ok | errors:error().
-retry(AtmLaneRunSelector, AtmWorkflowExecutionId) ->
-    case atm_lane_execution_status:handle_manual_retry(AtmLaneRunSelector, AtmWorkflowExecutionId) of
+repeat(UserCtx, Type, AtmLaneRunSelector, AtmWorkflowExecutionId) ->
+    case atm_lane_execution_status:handle_manual_repeat(
+        Type, AtmLaneRunSelector, AtmWorkflowExecutionId
+    ) of
+        %% TODO add incarnation num ??
         {ok, #document{value = #atm_workflow_execution{
             lanes_count = AtmLanesCount,
             current_lane_index = CurrentAtmLaneIndex,
             current_run_num = CurrentRunNum
         }}} ->
+            ok = atm_workflow_execution_session:init(AtmWorkflowExecutionId, UserCtx),
+
             workflow_engine:execute_workflow(?ATM_WORKFLOW_EXECUTION_ENGINE, #{
                 id => AtmWorkflowExecutionId,
                 workflow_handler => ?MODULE,
-%%                execution_context => AtmWorkflowExecutionEnv,  %% TODO
+%%                execution_context => AtmWorkflowExecutionEnv,  %% TODO acquire env
                 first_lane_id => {CurrentAtmLaneIndex, CurrentRunNum},
                 next_lane_id => case CurrentAtmLaneIndex < AtmLanesCount of
                     true -> {CurrentAtmLaneIndex + 1, current};
@@ -138,17 +148,6 @@ retry(AtmLaneRunSelector, AtmWorkflowExecutionId) ->
         {error, _} = Error ->
             Error
     end.
-
-
-%%-spec rerun(atm_lane_execution:lane_run_selector(), atm_workflow_execution:id()) ->
-%%    ok | errors:error().
-%%rerun(AtmLaneRunSelector, AtmWorkflowExecutionId) ->
-%%    case atm_lane_execution_status:handle_manual_rerun(AtmLaneRunSelector, AtmWorkflowExecutionId) of
-%%        ok ->
-%%            workflow_engine:cancel_execution(AtmWorkflowExecutionId);
-%%        {error, _} = Error ->
-%%            Error
-%%    end.
 
 
 %%%===================================================================
