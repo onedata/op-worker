@@ -73,7 +73,10 @@
 -include("modules/automation/atm_execution.hrl").
 
 %% API
--export([status_to_phase/1]).
+-export([
+    status_to_phase/1,
+    can_manual_lane_run_repeat_be_scheduled/2
+]).
 -export([
     handle_preparing/2,
     handle_enqueued/2,
@@ -109,6 +112,28 @@ status_to_phase(?FINISHED_STATUS) -> ?ENDED_PHASE;
 status_to_phase(?CANCELLED_STATUS) -> ?ENDED_PHASE;
 status_to_phase(?FAILED_STATUS) -> ?ENDED_PHASE;
 status_to_phase(?INTERRUPTED_STATUS) -> ?ENDED_PHASE.
+
+
+-spec can_manual_lane_run_repeat_be_scheduled(
+    atm_workflow_execution:repeat_type(),
+    atm_lane_execution:run()
+) ->
+    boolean().
+can_manual_lane_run_repeat_be_scheduled(retry, #atm_lane_execution_run{
+    status = ?FAILED_STATUS,
+    aborting_reason = undefined
+}) ->
+    % lane run can be retried only if all items finished execution but some
+    % of them failed (direct transition from ?ACTIVE_STATUS to ?FAILED_STATUS)
+    true;
+can_manual_lane_run_repeat_be_scheduled(rerun, #atm_lane_execution_run{status = Status}) when
+    Status =:= ?FINISHED_STATUS;
+    Status =:= ?CANCELLED_STATUS;
+    Status =:= ?FAILED_STATUS
+->
+    true;
+can_manual_lane_run_repeat_be_scheduled(_, _) ->
+    false.
 
 
 -spec handle_preparing(atm_lane_execution:lane_run_selector(), atm_workflow_execution:id()) ->
@@ -405,29 +430,6 @@ try_to_schedule_manual_lane_run_repeat(RepeatType, AtmLaneSelector, Run, AtmWork
             %% TODO custom error ? What should it say?
             ok
     end.
-
-
-%% @private
--spec can_manual_lane_run_repeat_be_scheduled(
-    atm_workflow_execution:repeat_type(),
-    atm_lane_execution:run()
-) ->
-    boolean().
-can_manual_lane_run_repeat_be_scheduled(retry, #atm_lane_execution_run{
-    status = ?FAILED_STATUS,
-    aborting_reason = undefined
-}) ->
-    % lane run can be retried only if all items finished execution but some
-    % of them failed (direct transition from ?ACTIVE_STATUS to ?FAILED_STATUS)
-    true;
-can_manual_lane_run_repeat_be_scheduled(rerun, #atm_lane_execution_run{status = Status}) when
-    Status =:= ?FINISHED_STATUS;
-    Status =:= ?CANCELLED_STATUS;
-    Status =:= ?FAILED_STATUS
-->
-    true;
-can_manual_lane_run_repeat_be_scheduled(_, _) ->
-    false.
 
 
 %% @private

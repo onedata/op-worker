@@ -190,22 +190,26 @@ update(AtmLaneSelector, Diff, AtmWorkflowExecution = #atm_workflow_execution{
 
 -spec to_json(record()) -> json_utils:json_map().
 to_json(#atm_lane_execution{schema_id = AtmLaneSchemaId, runs = Runs}) ->
+    {RunsJson, _} = lists:mapfoldr(fun(#atm_lane_execution_run{run_num = RunNum} = Run, RunsPerNum) ->
+        {run_to_json(Run, RunsPerNum), RunsPerNum#{RunNum => Run}}
+    end, #{}, Runs),
+
     #{
         <<"schemaId">> => AtmLaneSchemaId,
-        <<"runs">> => lists:map(fun run_to_json/1, Runs)
+        <<"runs">> => RunsJson
     }.
 
 
 %% @private
--spec run_to_json(run()) -> json_utils:json_map().
-run_to_json(#atm_lane_execution_run{
+-spec run_to_json(run(), #{run_num() => run()}) -> json_utils:json_map().
+run_to_json(Run = #atm_lane_execution_run{
     run_num = RunNum,
     origin_run_num = OriginRunNum,
     status = Status,
     iterated_store_id = IteratedStoreId,
     exception_store_id = ExceptionStoreId,
     parallel_boxes = AtmParallelBoxExecutions
-}) ->
+}, RunsPerNum) ->
     #{
         <<"runNumber">> => utils:undefined_to_null(RunNum),
         <<"originRunNumber">> => utils:undefined_to_null(OriginRunNum),
@@ -216,11 +220,23 @@ run_to_json(#atm_lane_execution_run{
             fun atm_parallel_box_execution:to_json/1, AtmParallelBoxExecutions
         ),
 
-        % TODO VFS-8226 add more types after implementing retries/reruns
         <<"runType">> => case OriginRunNum of
-            undefined -> <<"regular">>;
-            _ -> <<"retry">>
-        end
+            undefined ->
+                <<"regular">>;
+            _ ->
+                OriginRun = maps:get(OriginRunNum, RunsPerNum),
+
+                case IteratedStoreId == OriginRun#atm_lane_execution_run.exception_store_id of
+                    true -> <<"retry">>;
+                    false -> <<"rerun">>
+                end
+        end,
+        <<"isRetriable">> => atm_lane_execution_status:can_manual_lane_run_repeat_be_scheduled(
+            retry, Run
+        ),
+        <<"isRerunable">> => atm_lane_execution_status:can_manual_lane_run_repeat_be_scheduled(
+            rerun, Run
+        )
     }.
 
 
