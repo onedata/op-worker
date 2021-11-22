@@ -128,17 +128,18 @@ repeat(UserCtx, Type, AtmLaneRunSelector, AtmWorkflowExecutionId) ->
         Type, AtmLaneRunSelector, AtmWorkflowExecutionId
     ) of
         %% TODO add incarnation num ??
-        {ok, #document{value = #atm_workflow_execution{
+        {ok, AtmWorkflowExecutionDoc = #document{value = #atm_workflow_execution{
             lanes_count = AtmLanesCount,
             current_lane_index = CurrentAtmLaneIndex,
             current_run_num = CurrentRunNum
         }}} ->
+            unfreeze_global_stores(AtmWorkflowExecutionDoc),
             ok = atm_workflow_execution_session:init(AtmWorkflowExecutionId, UserCtx),
 
             workflow_engine:execute_workflow(?ATM_WORKFLOW_EXECUTION_ENGINE, #{
                 id => AtmWorkflowExecutionId,
                 workflow_handler => ?MODULE,
-%%                execution_context => AtmWorkflowExecutionEnv,  %% TODO acquire env
+                execution_context => acquire_env(AtmWorkflowExecutionDoc),
                 first_lane_id => {CurrentAtmLaneIndex, CurrentRunNum},
                 next_lane_id => case CurrentAtmLaneIndex < AtmLanesCount of
                     true -> {CurrentAtmLaneIndex + 1, current};
@@ -344,6 +345,36 @@ freeze_global_stores(#document{value = #atm_workflow_execution{
     lists:foreach(
         fun(AtmStoreId) -> catch atm_store_api:freeze(AtmStoreId) end,
         maps:values(AtmStoreRegistry)
+    ).
+
+
+%% @private
+-spec unfreeze_global_stores(atm_workflow_execution:doc()) -> ok.
+unfreeze_global_stores(#document{value = #atm_workflow_execution{
+    store_registry = AtmStoreRegistry
+}}) ->
+    lists:foreach(
+        fun(AtmStoreId) -> atm_store_api:unfreeze(AtmStoreId) end,
+        maps:values(AtmStoreRegistry)
+    ).
+
+
+%% @private
+-spec acquire_env(atm_workflow_execution:doc()) -> atm_workflow_execution_env:record().
+acquire_env(#document{key = AtmWorkflowExecutionId, value = #atm_workflow_execution{
+    space_id = SpaceId,
+    store_registry = AtmGlobalStoreRegistry,
+    system_audit_log_id = AtmWorkflowAuditLogId
+}}) ->
+    AtmWorkflowAuditLogStoreContainer = case atm_store_api:get(AtmWorkflowAuditLogId) of
+        {ok, #atm_store{container = Container}} ->
+            Container;
+        ?ERROR_NOT_FOUND ->
+            undefined
+    end,
+    atm_workflow_execution_env:set_workflow_audit_log_store_container(
+        AtmWorkflowAuditLogStoreContainer,
+        atm_workflow_execution_env:build(SpaceId, AtmWorkflowExecutionId, AtmGlobalStoreRegistry)
     ).
 
 
