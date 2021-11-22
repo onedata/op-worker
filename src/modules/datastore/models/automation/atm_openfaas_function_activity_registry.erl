@@ -53,20 +53,21 @@
 -export_type([id/0, diff/0, record/0, doc/0]).
 -export_type([pod_id/0, pod_status/0, pod_event/0]).
 
--type function_name() :: atm_openfaas_task_executor:function_name().
-
 -define(CTX, #{model => ?MODULE}).
 
 %%%===================================================================
 %%% API functions
 %%%===================================================================
 
--spec ensure_for_function(function_name()) -> {ok, id()} | {error, term()}.
+-spec ensure_for_function(atm_openfaas_task_executor:function_name()) ->
+    {ok, id()} | {error, term()}.
 ensure_for_function(FunctionName) ->
     RegistryId = gen_registry_id(FunctionName),
     Doc = #document{
         key = RegistryId,
-        value = #atm_openfaas_function_activity_registry{}
+        value = #atm_openfaas_function_activity_registry{
+            pod_status_registry = atm_openfaas_function_pod_status_registry:empty()
+        }
     },
     case datastore_model:create(?CTX, Doc) of
         {ok, _} ->
@@ -81,11 +82,15 @@ ensure_for_function(FunctionName) ->
 -spec delete(id()) -> ok | {error, term()}.
 delete(RegistryId) ->
     {ok, #document{value = #atm_openfaas_function_activity_registry{
-        pod_event_logs = PodEventLogs
+        pod_status_registry = PodStatusRegistry
     }}} = datastore_model:get(?CTX, RegistryId),
-    maps:foreach(fun(_PodId, LogId) ->
-        json_based_infinite_log_backend:destroy(LogId)
-    end, PodEventLogs),
+
+    atm_openfaas_function_pod_status_registry:foreach_summary(fun(_PodId, PodStatusSummary) ->
+        json_based_infinite_log_backend:destroy(
+            PodStatusSummary#atm_openfaas_function_pod_status_summary.event_log
+        )
+    end, PodStatusRegistry),
+
     datastore_model:delete(?CTX, RegistryId).
 
 
@@ -152,8 +157,7 @@ get_record_version() ->
 -spec get_record_struct(datastore_model:record_version()) -> datastore_model:record_struct().
 get_record_struct(1) ->
     {record, [
-        {pod_statuses, #{string => {integer, string}}},
-        {pod_event_logs, #{string => string}}
+        {registry, {custom, string, {persistent_record, encode, decode, atm_openfaas_function_pod_status_registry}}}
     ]}.
 
 %%%===================================================================
@@ -161,7 +165,7 @@ get_record_struct(1) ->
 %%%===================================================================
 
 %% @private
--spec gen_registry_id(function_name()) -> id().
+-spec gen_registry_id(atm_openfaas_task_executor:function_name()) -> id().
 gen_registry_id(FunctionName) ->
     datastore_key:new_from_digest([FunctionName]).
 
@@ -169,23 +173,6 @@ gen_registry_id(FunctionName) ->
 -spec gen_pod_event_log_id(id(), pod_id()) -> infinite_log:log_id().
 gen_pod_event_log_id(RegistryId, PodId) ->
     datastore_key:adjacent_from_digest([PodId], RegistryId).
-
-
-%% @private
--spec ensure_pod_event_log(id(), pod_id(), infinite_log:log_id()) -> ok.
-ensure_pod_event_log(RegistryId, PodId, LogId) ->
-    case json_based_infinite_log_backend:create(LogId, #{}) of
-        ok ->
-            ok = ?extract_ok(datastore_model:update(?CTX, RegistryId, fun(Registry) ->
-                {ok, Registry#atm_openfaas_function_activity_registry{
-                    pod_event_logs = maps:put(
-                        PodId, LogId, Registry#atm_openfaas_function_activity_registry.pod_event_logs
-                    )
-                }}
-            end));
-        {error, already_exists} ->
-            ok
-    end.
 
 
 %% @private
@@ -197,28 +184,53 @@ consume_pod_status_report(#atm_openfaas_function_pod_status_report{
     current_pod_status = CurrentPodStatus,
     pod_event = PodEvent
 }) ->
-    RegistryId = gen_registry_id(FunctionName),
-    LogId = gen_pod_event_log_id(RegistryId, PodId),
+    ActivityRegistryId = gen_registry_id(FunctionName),
+    PodEventLogId = gen_pod_event_log_id(ActivityRegistryId, PodId),
     LogValue = pack_pod_event(Timestamp, PodEvent),
-    case json_based_infinite_log_backend:append(LogId, LogValue) of
+
+    ok = ?extract_ok(datastore_model:update(?CTX, ActivityRegistryId, fun(ActivityRegistry) ->
+        {ok, ActivityRegistry#atm_openfaas_function_activity_registry{
+            pod_status_registry = atm_openfaas_function_pod_status_registry:update_summary(
+                PodId,
+                fun(#atm_openfaas_function_pod_status_summary{
+                    current_status_observation_timestamp = PreviousStatusObservationTimestamp
+                } = PreviousSummary) ->
+                    case Timestamp > PreviousStatusObservationTimestamp of
+                        true ->
+                            PreviousSummary#atm_openfaas_function_pod_status_summary{
+                                current_status = CurrentPodStatus,
+                                current_status_observation_timestamp = Timestamp
+                            };
+                        false ->
+                            PreviousSummary
+                    end
+                end,
+                #atm_openfaas_function_pod_status_summary{
+                    current_status = CurrentPodStatus,
+                    current_status_observation_timestamp = Timestamp,
+                    event_log = PodEventLogId
+                },
+                ActivityRegistry#atm_openfaas_function_activity_registry.pod_status_registry
+            )
+        }}
+    end)),
+
+    case json_based_infinite_log_backend:append(PodEventLogId, LogValue) of
         ok ->
             ok;
         {error, not_found} ->
-            ensure_pod_event_log(RegistryId, PodId, LogId),
-            ok = json_based_infinite_log_backend:append(LogId, LogValue)
-    end,
+            ensure_pod_event_log(PodEventLogId),
+            ok = json_based_infinite_log_backend:append(PodEventLogId, LogValue)
+    end.
 
-    ok = ?extract_ok(datastore_model:update(?CTX, RegistryId, fun(Registry) ->
-        PreviousPodStatuses = Registry#atm_openfaas_function_activity_registry.pod_statuses,
-        {ok, Registry#atm_openfaas_function_activity_registry{
-            pod_statuses = case maps:find(PodId, PreviousPodStatuses) of
-                {ok, {ObservedAt, _}} when ObservedAt >= Timestamp ->
-                    PreviousPodStatuses;
-                _ ->
-                    maps:put(PodId, {Timestamp, CurrentPodStatus}, PreviousPodStatuses)
-            end
-        }}
-    end)).
+
+%% @private
+-spec ensure_pod_event_log(infinite_log:log_id()) -> ok.
+ensure_pod_event_log(LogId) ->
+    case json_based_infinite_log_backend:create(LogId, #{}) of
+        ok -> ok;
+        {error, already_exists} -> ok
+    end.
 
 
 %% @private

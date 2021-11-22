@@ -100,13 +100,28 @@
 }).
 
 % Record carrying a status report of a pod that executes given OpenFaaS function
-% (currently the only possible type of OpenFaaS function activity report)
+% (currently the only possible type of OpenFaaS function activity report), used
+% to build atm_openfaas_function_pod_status_summary
 -record(atm_openfaas_function_pod_status_report, {
     timestamp :: time:millis(),
     function_name :: atm_openfaas_task_executor:function_name(),
     pod_id :: atm_openfaas_function_activity_registry:pod_id(),
     current_pod_status :: atm_openfaas_function_activity_registry:pod_status(),
     pod_event :: atm_openfaas_function_activity_registry:pod_event()
+}).
+
+% Record holding the registry of pod status changes for an OpenFaaS function
+% (part of function activity registry)
+-record(atm_openfaas_function_pod_status_registry, {
+    registry :: atm_openfaas_function_pod_status_registry:record()
+}).
+
+% Record holding the summary of status changes for a single pod of an OpenFaaS function
+% (single entry in the atm_openfaas_function_pod_status_registry)
+-record(atm_openfaas_function_pod_status_summary, {
+    current_status :: atm_openfaas_function_activity_registry:pod_status(),
+    current_status_observation_timestamp :: time:millis(),
+    event_log :: infinite_log:log_id()
 }).
 
 

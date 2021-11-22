@@ -31,9 +31,10 @@
 
 -type state() :: no_state.
 
--define(AUTHORIZATION_SECRET_ENV_NAME, openfaas_container_status_feed_secret).
+-define(AUTHORIZATION_SECRET_ENV_NAME, openfaas_activity_feed_secret).
 
--define(MAX_LOGGED_REQUEST_SIZE, 500).
+% NOTE: lager defaults to truncating messages at 4096 bytes
+-define(MAX_LOGGED_REQUEST_SIZE, 1024).
 
 %%%===================================================================
 %%% Cowboy WebSocket handler callbacks
@@ -42,30 +43,11 @@
 -spec init(Req :: cowboy_req:req(), Opts :: any()) ->
     {ok | cowboy_websocket, cowboy_req:req(), state()}.
 init(Req, []) ->
-    % @TODO VFS-8615 Support different secret per OpenFaaS instance when op-worker
-    % supports multiple OpenFaaS instances
-    IsAuthorized = case op_worker:get_env(?AUTHORIZATION_SECRET_ENV_NAME, undefined) of
-        undefined ->
-            ?alert("The ~p env variable is not set, the OpenFaaS activity feed will decline all requests", [
-                ?AUTHORIZATION_SECRET_ENV_NAME
-            ]),
-            false;
-        Secret ->
-            try
-                <<"Basic ", SecretB64/binary>> = cowboy_req:header(?HDR_AUTHORIZATION, Req, undefined),
-                Secret == base64:decode(SecretB64)
-            catch Class:Reason:Stacktrace ->
-                ?debug_stacktrace("Authorization for OpenFaaS activity feed failed due to ~w:~p", [
-                    Class, Reason
-                ], Stacktrace),
-                false
-            end
-    end,
-    case IsAuthorized of
-        false ->
-            {ok, cowboy_req:reply(?HTTP_401_UNAUTHORIZED, Req), no_state};
+    case is_authorized(Req) of
         true ->
-            {cowboy_websocket, Req, no_state}
+            {cowboy_websocket, Req, no_state};
+        false ->
+            {ok, cowboy_req:reply(?HTTP_401_UNAUTHORIZED, Req), no_state}
     end.
 
 
@@ -89,7 +71,9 @@ websocket_init(State) ->
     OutFrame :: cow_ws:frame().
 websocket_handle({text, Data}, State) ->
     try
-        ActivityReport = jsonable_record:from_json(json_utils:decode(Data), atm_openfaas_function_activity_report),
+        ActivityReport = jsonable_record:from_json(
+            json_utils:decode(Data), atm_openfaas_function_activity_report
+        ),
         atm_openfaas_function_activity_registry:consume_report(ActivityReport),
         {ok, State}
     catch Class:Reason:Stacktrace ->
@@ -155,3 +139,30 @@ websocket_info(Msg, SessionData) ->
     State :: state().
 terminate(_Reason, _Req, _State) ->
     ok.
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%% @private
+-spec is_authorized(cowboy_req:req()) -> boolean().
+is_authorized(Req) ->
+    % @TODO VFS-8615 Support different secret per OpenFaaS instance when op-worker
+    % supports multiple OpenFaaS instances
+    case op_worker:get_env(?AUTHORIZATION_SECRET_ENV_NAME, undefined) of
+        undefined ->
+            ?alert("The ~p env variable is not set, the OpenFaaS activity feed will decline all requests", [
+                ?AUTHORIZATION_SECRET_ENV_NAME
+            ]),
+            false;
+        Secret ->
+            try
+                <<"Basic ", SecretB64/binary>> = cowboy_req:header(?HDR_AUTHORIZATION, Req, undefined),
+                Secret == base64:decode(SecretB64)
+            catch Class:Reason:Stacktrace ->
+                ?debug_stacktrace("Authorization for OpenFaaS activity feed failed due to ~w:~p", [
+                    Class, Reason
+                ], Stacktrace),
+                false
+            end
+    end.

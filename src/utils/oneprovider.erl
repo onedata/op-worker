@@ -25,7 +25,7 @@
 
 %% API
 -export([get_domain/0, get_node_ip/0]).
--export([build_url/1, build_url/2, get_rest_endpoint/1]).
+-export([build_url/1, build_url/2, build_rest_url/1]).
 -export([get_id/0, get_id_or_undefined/0, is_self/1, is_registered/0]).
 -export([trusted_ca_certs/0]).
 -export([get_oz_domain/0, replicate_oz_domain_to_node/1]).
@@ -67,11 +67,11 @@ build_url(Scheme, AbsolutePath) ->
     str_utils:format_bin("~s://~s:~B~s", [Scheme, Host, Port, AbsolutePath]).
 
 
--spec get_rest_endpoint(binary() | [binary()]) -> binary().
-get_rest_endpoint(AbsolutePath) when is_binary(AbsolutePath) ->
+-spec build_rest_url(binary() | [binary()]) -> binary().
+build_rest_url(AbsolutePath) when is_binary(AbsolutePath) ->
     build_url(<<"/api/v3/oneprovider", AbsolutePath/binary>>);
-get_rest_endpoint(PathTokens) when is_list(PathTokens) ->
-    get_rest_endpoint(string:trim(filename:join([<<"/">> | PathTokens]), leading, [$/])).
+build_rest_url(PathTokens) when is_list(PathTokens) ->
+    build_rest_url(string:trim(filename:join([<<"/">> | PathTokens]), leading, [$/])).
 
 
 %%--------------------------------------------------------------------

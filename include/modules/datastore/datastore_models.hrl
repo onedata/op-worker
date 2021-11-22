@@ -1151,19 +1151,9 @@
 }).
 
 
-%% @formatter:off
 -record(atm_openfaas_function_activity_registry, {
-    pod_statuses = #{} :: #{
-        atm_openfaas_function_activity_registry:pod_id() => {
-            atm_openfaas_function_activity_registry:pod_status(),
-            ObservedAt :: time:millis()
-        }
-    },
-    pod_event_logs = #{} :: #{
-        atm_openfaas_function_activity_registry:pod_id() => infinite_log:log_id()
-    }
+    pod_status_registry :: atm_openfaas_function_pod_status_registry:record()
 }).
-%% @formatter:on
 
 %%%===================================================================
 %%% Workflow engine connected models

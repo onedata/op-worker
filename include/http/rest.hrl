@@ -53,7 +53,7 @@
 -define(NO_CONTENT_REPLY, #rest_resp{code = ?HTTP_204_NO_CONTENT}).
 -define(CREATED_REPLY(__PathTokens, __Body), #rest_resp{
     code = ?HTTP_201_CREATED,
-    headers = #{?HDR_LOCATION => oneprovider:get_rest_endpoint(__PathTokens)},
+    headers = #{?HDR_LOCATION => oneprovider:build_rest_url(__PathTokens)},
     body = __Body
 }).
 

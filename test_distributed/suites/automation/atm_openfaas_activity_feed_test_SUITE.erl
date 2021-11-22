@@ -37,6 +37,8 @@
 ]).
 
 all() -> [
+    % connectivity_test cannot be run in parallel with other tests as it
+    % causes the openfaas activity feed secret to change
     connectivity_test,
     lifecycle_test
 ].
@@ -45,7 +47,7 @@ all() -> [
 
 % reports are sent asynchronously, without confirmation from the server and hence they
 % may be consumed and visible in the activity registry after some delay
--define(ATTEMPTS, 15).
+-define(ATTEMPTS, 30).
 
 % @TODO VFS-8002 test if the activity registry is correctly created alongside a
 % workflow execution and clean up during its deletion.
@@ -57,13 +59,13 @@ all() -> [
 connectivity_test(_Config) ->
     InvalidSecret = str_utils:rand_hex(10),
 
-    opw_test_rpc:set_env(krakow, openfaas_container_status_feed_secret, undefined),
+    opw_test_rpc:set_env(krakow, openfaas_activity_feed_secret, undefined),
     ?assertMatch({error, unauthorized}, try_connect(undefined)),
     ?assertMatch({error, unauthorized}, try_connect(<<"not-a-base-64">>)),
     ?assertMatch({error, unauthorized}, try_connect(base64:encode(InvalidSecret))),
     ?assertMatch({error, unauthorized}, try_connect(base64:encode(?CORRECT_SECRET))),
 
-    opw_test_rpc:set_env(krakow, openfaas_container_status_feed_secret, ?CORRECT_SECRET),
+    opw_test_rpc:set_env(krakow, openfaas_activity_feed_secret, ?CORRECT_SECRET),
     ?assertMatch({error, unauthorized}, try_connect(undefined)),
     ?assertMatch({error, unauthorized}, try_connect(<<"not-a-base-64">>)),
     ?assertMatch({error, unauthorized}, try_connect(base64:encode(InvalidSecret))),
@@ -101,15 +103,17 @@ lifecycle_test(_Config) ->
 
     % delete the registry and verify if everything is cleaned up
     {ok, #atm_openfaas_function_activity_registry{
-        pod_event_logs = PodEventLogs
+        pod_status_registry = PodStatusRegistry
     }} = ?assertMatch({ok, _}, get_activity_registry(ActivityRegistryId)),
     ?assertEqual(ok, delete_activity_registry(ActivityRegistryId)),
     ?assertEqual({error, not_found}, get_activity_registry(ActivityRegistryId)),
-    maps:foreach(fun(_PodId, LogId) ->
+    atm_openfaas_function_pod_status_registry:foreach_summary(fun(_PodId, #atm_openfaas_function_pod_status_summary{
+        event_log = PodEventLogId
+    }) ->
         ?assertEqual({error, not_found}, opw_test_rpc:call(
-            krakow, atm_openfaas_function_activity_registry, list_pod_events, [LogId, #{}]
+            krakow, atm_openfaas_function_activity_registry, list_pod_events, [PodEventLogId, #{}]
         ))
-    end, PodEventLogs).
+    end, PodStatusRegistry).
 
 %%%===================================================================
 %%% Helper functions
@@ -178,29 +182,31 @@ submit_status_reports(Client, StatusChangeReports) ->
     [atm_openfaas_function_pod_status_report:record()]
 ) -> boolean().
 verify_recorded_activity(RegistryId, SubmittedReports) ->
-    ExpectedPodStatuses = lists:foldl(fun(#atm_openfaas_function_pod_status_report{
+    ExpectedPodStatusesByPod = lists:foldl(fun(#atm_openfaas_function_pod_status_report{
         timestamp = Timestamp,
         pod_id = PodId,
         current_pod_status = CurrentPodStatus
     }, Acc) ->
         case maps:find(PodId, Acc) of
-            {ok, {ObservedAt, _}} when ObservedAt >= Timestamp ->
+            {ok, {_, ObservedAt}} when ObservedAt >= Timestamp ->
                 Acc;
             _ ->
-                Acc#{PodId => {Timestamp, CurrentPodStatus}}
+                Acc#{PodId => {CurrentPodStatus, Timestamp}}
         end
     end, #{}, SubmittedReports),
-    ?assertMatch(
-        {ok, #atm_openfaas_function_activity_registry{pod_statuses = ExpectedPodStatuses}},
-        get_activity_registry(RegistryId),
-        ?ATTEMPTS
-    ),
 
-    {ok, #atm_openfaas_function_activity_registry{
-        pod_event_logs = PodEventLogs
-    }} = get_activity_registry(RegistryId),
+    maps:foreach(fun(PodId, {ExpectedStatus, ExpectedStatusObservationTimestamp}) ->
+        ?assertMatch(
+            #atm_openfaas_function_pod_status_summary{
+                current_status = ExpectedStatus,
+                current_status_observation_timestamp = ExpectedStatusObservationTimestamp
+            },
+            get_pod_status_summary(RegistryId, PodId),
+            ?ATTEMPTS
+        )
+    end, ExpectedPodStatusesByPod),
 
-    ExpectedReversedPodEventLogs = lists:foldl(fun(#atm_openfaas_function_pod_status_report{
+    ExpectedReversedPodEventLogsByPod = lists:foldl(fun(#atm_openfaas_function_pod_status_report{
         timestamp = Timestamp,
         pod_id = PodId,
         pod_event = PodEvent
@@ -210,14 +216,37 @@ verify_recorded_activity(RegistryId, SubmittedReports) ->
         end, [{0, Timestamp, PodEvent}], LogsByPodAcc)
     end, #{}, SubmittedReports),
 
-    maps:foreach(fun(PodId, LogId) ->
+    maps:foreach(fun(PodId, ExpectedReversedPodEventLogs) ->
+        #atm_openfaas_function_pod_status_summary{
+            event_log = PodEventLogId
+        } = get_pod_status_summary(RegistryId, PodId),
         ?assertEqual(
-            {ok, {done, lists:reverse(maps:get(PodId, ExpectedReversedPodEventLogs))}},
+            {ok, {done, lists:reverse(ExpectedReversedPodEventLogs)}},
             opw_test_rpc:call(krakow, atm_openfaas_function_activity_registry, list_pod_events, [
-                LogId, #{direction => ?FORWARD, limit => 1000}
-            ])
+                PodEventLogId, #{direction => ?FORWARD, limit => 1000}
+            ]),
+            ?ATTEMPTS
         )
-    end, PodEventLogs).
+    end, ExpectedReversedPodEventLogsByPod).
+
+
+%% @private
+-spec get_pod_status_summary(
+    atm_openfaas_function_activity_registry:id(),
+    atm_openfaas_function_activity_registry:pod_id()
+) ->
+    atm_openfaas_function_pod_status_summary:record() | undefined.
+get_pod_status_summary(RegistryId, PodId) ->
+    case get_activity_registry(RegistryId) of
+        {ok, #atm_openfaas_function_activity_registry{pod_status_registry = PodStatusRegistry}} ->
+            try
+                atm_openfaas_function_pod_status_registry:get_summary(PodId, PodStatusRegistry)
+            catch _:_ ->
+                undefined
+            end;
+        _ ->
+            undefined
+    end.
 
 
 %% @private
@@ -236,6 +265,9 @@ gen_status_report(FunctionName, PodId) ->
         <<"Completed">>
     ]),
     #atm_openfaas_function_pod_status_report{
+        % Simulate the fact that reports may not arrive in order.
+        % Still, the original timestamps from the reports should be returned
+        % during listing (which is checked in verify_recorded_activity/2).
         timestamp = global_clock:timestamp_millis() + 50000 - rand:uniform(100000),
         function_name = FunctionName,
         pod_id = PodId,
@@ -263,11 +295,11 @@ init_per_suite(Config) ->
 
 
 end_per_suite(_Config) ->
-    opw_test_rpc:set_env(krakow, openfaas_container_status_feed_secret, ?CORRECT_SECRET),
     oct_background:end_per_suite().
 
 
 init_per_testcase(_Case, Config) ->
+    opw_test_rpc:set_env(krakow, openfaas_activity_feed_secret, ?CORRECT_SECRET),
     Config.
 
 

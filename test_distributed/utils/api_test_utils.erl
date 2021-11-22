@@ -83,7 +83,7 @@
 
 -spec build_rest_url(node(), [binary()]) -> binary().
 build_rest_url(Node, PathTokens) ->
-    rpc:call(Node, oneprovider, get_rest_endpoint, [PathTokens]).
+    rpc:call(Node, oneprovider, build_rest_url, [PathTokens]).
 
 
 -spec create_shared_file_in_space_krk() ->

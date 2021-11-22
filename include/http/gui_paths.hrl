@@ -73,6 +73,6 @@
 -define(GUI_GRAPH_SYNC_WS_PATH, "/graph_sync/gui").
 
 % WebSocket endpoint for reporting OpenFaaS activity (e.g. pod status changes or live logs)
--define(OPENFAAS_ACTIVITY_FEED_WS_PATH, "/openfaas-activity-feed").
+-define(OPENFAAS_ACTIVITY_FEED_WS_PATH, "/automation/openfaas/activity-feed").
 
 -endif.
