@@ -442,7 +442,7 @@ try_to_schedule_manual_lane_run_repeat(RepeatType, AtmLaneSelector, Run, AtmWork
     {ok, atm_workflow_execution:record()} | errors:error().
 schedule_manual_lane_run_repeat(RepeatType, AtmLaneSelector, Run, AtmWorkflowExecution) ->
     % Manual lane run repetitions must not be automatically retried
-    Diff = fun(AtmLaneExecution) -> {ok, AtmLaneExecution#atm_lane_execution{retries_left = 0}} end,  %% TODO reset for every other lane ?
+    Diff = fun(AtmLaneExecution) -> {ok, AtmLaneExecution#atm_lane_execution{retries_left = 0}} end,
 
     {ok, NewAtmWorkflowExecution} = atm_lane_execution:update(
         AtmWorkflowExecution#atm_workflow_execution.current_lane_index, Diff, AtmWorkflowExecution

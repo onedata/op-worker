@@ -30,6 +30,7 @@
 
 -record(run_creation_ctx, {
     creation_args :: run_creation_args(),
+    must_reset_lane_retries_num :: boolean(),
     execution_components :: run_execution_components()
 }).
 -type run_creation_ctx() :: #run_creation_ctx{}.
@@ -85,39 +86,22 @@ delete_run(#atm_lane_execution_run{
 ) ->
     atm_workflow_execution:doc() | no_return().
 create_run_internal(AtmLaneRunSelector, AtmWorkflowExecutionDoc, AtmWorkflowExecutionCtx) ->
-    #run_creation_ctx{
-        creation_args = #atm_lane_execution_run_creation_args{
-            iterated_store_id = IteratedStoreId
-        },
-        execution_components = RunExecutionComponents = #run_execution_components{
-            exception_store_id = ExceptionStoreId,
-            parallel_boxes = AtmParallelBoxExecutions
-        }
-    } = create_run_execution_components(build_run_creation_ctx(
+    RunCreationCtx = create_run_execution_components(build_run_creation_ctx(
         AtmLaneRunSelector, AtmWorkflowExecutionDoc, AtmWorkflowExecutionCtx
     )),
-
     Diff = fun(AtmWorkflowExecution) ->
-        atm_lane_execution:update_run(AtmLaneRunSelector, fun
-            (Run = #atm_lane_execution_run{
-                status = ?PREPARING_STATUS,
-                exception_store_id = undefined,
-                parallel_boxes = []
-            }) ->
-                {ok, Run#atm_lane_execution_run{
-                    iterated_store_id = IteratedStoreId,
-                    exception_store_id = ExceptionStoreId,
-                    parallel_boxes = AtmParallelBoxExecutions
-                }};
-            (_) ->
-                ?ERROR_ALREADY_EXISTS
-        end, AtmWorkflowExecution)
+        case reset_lane_retries_num_if_needed(AtmWorkflowExecution, RunCreationCtx) of
+            {ok, NewAtmWorkflowExecution} ->
+                complement_run(AtmLaneRunSelector, NewAtmWorkflowExecution, RunCreationCtx);
+            {error, _} = Error ->
+                Error
+        end
     end,
     case atm_workflow_execution:update(AtmWorkflowExecutionDoc#document.key, Diff) of
         {ok, NewAtmWorkflowExecutionDoc} ->
             NewAtmWorkflowExecutionDoc;
         {error, _} = Error ->
-            delete_run_execution_components(RunExecutionComponents),
+            delete_run_execution_components(RunCreationCtx#run_creation_ctx.execution_components),
             throw(Error)
     end.
 
@@ -160,6 +144,10 @@ build_run_creation_ctx(AtmLaneRunSelector, AtmWorkflowExecutionDoc, AtmWorkflowE
                     IteratedStoreId
             end
         },
+        must_reset_lane_retries_num = case Run#atm_lane_execution_run.origin_run_num of
+            undefined -> true;
+            _ -> false
+        end,
         execution_components = #run_execution_components{}
     }.
 
@@ -246,3 +234,54 @@ delete_run_execution_components(RunExecutionComponents = #run_execution_componen
 
 delete_run_execution_components(_) ->
     ok.
+
+
+%% @private
+-spec reset_lane_retries_num_if_needed(atm_workflow_execution:record(), run_creation_ctx()) ->
+    {ok, atm_workflow_execution:record()} | errors:error().
+reset_lane_retries_num_if_needed(AtmWorkflowExecution, #run_creation_ctx{
+    creation_args = #atm_lane_execution_run_creation_args{
+        lane_index = AtmLaneIndex,
+        lane_schema = #atm_lane_schema{max_retries = MaxRetries}
+    },
+    must_reset_lane_retries_num = true
+}) ->
+    Diff = fun(AtmLaneExecution) ->
+        {ok, AtmLaneExecution#atm_lane_execution{retries_left = MaxRetries}}
+    end,
+    atm_lane_execution:update(AtmLaneIndex, Diff, AtmWorkflowExecution);
+
+reset_lane_retries_num_if_needed(AtmWorkflowExecution, _) ->
+    {ok, AtmWorkflowExecution}.
+
+
+%% @private
+-spec complement_run(
+    atm_lane_execution:lane_run_selector(),
+    atm_workflow_execution:record(),
+    run_creation_ctx()
+) ->
+    {ok, atm_workflow_execution:record()} | errors:error().
+complement_run(AtmLaneRunSelector, AtmWorkflowExecution, #run_creation_ctx{
+    creation_args = #atm_lane_execution_run_creation_args{
+        iterated_store_id = IteratedStoreId
+    },
+    execution_components = #run_execution_components{
+        exception_store_id = ExceptionStoreId,
+        parallel_boxes = AtmParallelBoxExecutions
+    }
+}) ->
+    atm_lane_execution:update_run(AtmLaneRunSelector, fun
+        (Run = #atm_lane_execution_run{
+            status = ?PREPARING_STATUS,
+            exception_store_id = undefined,
+            parallel_boxes = []
+        }) ->
+            {ok, Run#atm_lane_execution_run{
+                iterated_store_id = IteratedStoreId,
+                exception_store_id = ExceptionStoreId,
+                parallel_boxes = AtmParallelBoxExecutions
+            }};
+        (_) ->
+            ?ERROR_ALREADY_EXISTS
+    end, AtmWorkflowExecution).
