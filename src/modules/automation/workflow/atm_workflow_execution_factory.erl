@@ -381,6 +381,7 @@ create_workflow_execution_doc(#creation_ctx{
             lanes = AtmLaneExecutions,
             lanes_count = map_size(AtmLaneExecutions),
 
+            incarnation = 0,
             current_lane_index = 1,
             current_run_num = 1,
 

@@ -1145,6 +1145,7 @@
     lanes :: #{atm_lane_execution:index() => atm_lane_execution:record()},
     lanes_count :: pos_integer(),
 
+    incarnation :: atm_workflow_execution:incarnation(),
     current_lane_index :: atm_lane_execution:index(),
     current_run_num :: pos_integer(),
 

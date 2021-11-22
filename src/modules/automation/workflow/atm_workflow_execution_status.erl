@@ -228,6 +228,7 @@ handle_manual_lane_repeat(AtmWorkflowExecutionId, AtmLaneRunDiff) ->
             ?ENDED_PHASE ->
                 AtmLaneRunDiff(Record#atm_workflow_execution{
                     status = ?SCHEDULED_STATUS,
+                    incarnation = Record#atm_workflow_execution.incarnation + 1,
                     schedule_time = global_clock:timestamp_seconds()
                 });
             _ ->
