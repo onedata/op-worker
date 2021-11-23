@@ -425,7 +425,7 @@ handle_prepared_in_advance_lane_run_ended(AtmLaneRunSelector, AtmWorkflowExecuti
 try_to_schedule_manual_lane_run_repeat(RepeatType, AtmLaneSelector, Run, AtmWorkflowExecution) ->
     case can_manual_lane_run_repeat_be_scheduled(RepeatType, Run) of
         true ->
-            schedule_manual_lane_run_repeat(retry, AtmLaneSelector, Run, AtmWorkflowExecution);
+            schedule_manual_lane_run_repeat(RepeatType, AtmLaneSelector, Run, AtmWorkflowExecution);
         false when RepeatType == rerun ->
             ?ERROR_ATM_LANE_EXECUTION_RERUN_FAILED;
         false when RepeatType == retry ->
