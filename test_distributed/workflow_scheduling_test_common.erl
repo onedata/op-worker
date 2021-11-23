@@ -649,9 +649,9 @@ verify_task_handlers(GatheredForLane, TaskIds, AllowDoubleCalls) ->
     end, {TaskIdsList, DuplicatedCalls}, ReversedGatheredForLane),
     ?assertEqual([], RemainingTaskIdsList),
 
-    lists:reverse(lists:filter(fun(#handler_call{function = Fun}) ->
+    lists:filter(fun(#handler_call{function = Fun}) ->
         Fun =/= handle_task_execution_ended
-    end, ReversedGatheredForLane)).
+    end, GatheredForLane).
 
 % Helper function for verify_lanes_execution_history/3 that verifies history for single item
 verify_item_execution_history(_Item, ExpectedCalls, [], _LaneExecutionContext, _Options) ->
