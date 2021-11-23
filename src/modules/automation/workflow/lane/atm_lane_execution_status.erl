@@ -178,7 +178,7 @@ handle_enqueued(AtmLaneRunSelector, AtmWorkflowExecutionId) ->
     atm_workflow_execution:id(),
     cancel | failure
 ) ->
-    ok | errors:error().
+    {ok, atm_workflow_execution:doc()} | errors:error().
 handle_aborting(AtmLaneRunSelector, AtmWorkflowExecutionId, Reason) ->
     Diff = fun(AtmWorkflowExecution) ->
         atm_lane_execution:update_run(AtmLaneRunSelector, fun

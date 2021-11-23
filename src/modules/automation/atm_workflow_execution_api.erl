@@ -160,12 +160,22 @@ repeat(UserCtx, Type, AtmLaneRunSelector, AtmWorkflowExecutionId) ->
 %%--------------------------------------------------------------------
 terminate_not_ended(SpaceId) ->
     TerminateFun = fun(AtmWorkflowExecutionId) ->
-        atm_lane_execution_status:handle_aborting({current, current}, AtmWorkflowExecutionId, failure),
+        try
+            {ok, #document{
+                value = #atm_workflow_execution{
+                    incarnation = AtmWorkflowIncarnation
+                }
+            }} = atm_lane_execution_status:handle_aborting(
+                {current, current}, AtmWorkflowExecutionId, failure
+            ),
 
-        atm_workflow_execution_handler:handle_workflow_execution_ended(
-            AtmWorkflowExecutionId,
-            atm_workflow_execution_env:build(SpaceId, AtmWorkflowExecutionId, 0) %% TODO get proper incarnation?
-        )
+            atm_workflow_execution_handler:handle_workflow_execution_ended(
+                AtmWorkflowExecutionId,
+                atm_workflow_execution_env:build(SpaceId, AtmWorkflowExecutionId, AtmWorkflowIncarnation)
+            )
+        catch Type:Reason:Stacktrace ->
+            ?atm_examine_error(Type, Reason, Stacktrace)
+        end
     end,
 
     foreach_atm_workflow_execution(TerminateFun, SpaceId, ?WAITING_PHASE),

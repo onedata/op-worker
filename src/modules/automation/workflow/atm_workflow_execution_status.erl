@@ -148,7 +148,7 @@ handle_lane_enqueued(AtmWorkflowExecutionId, AtmLaneRunDiff) ->
     atm_workflow_execution:id(),
     lane_run_diff()
 ) ->
-    ok | errors:error().
+    {ok, atm_workflow_execution:doc()} | errors:error().
 handle_lane_aborting(AtmLaneRunSelector, AtmWorkflowExecutionId, AtmLaneRunDiff) ->
     Diff = fun
         (Record = #atm_workflow_execution{status = Status}) when
@@ -172,8 +172,9 @@ handle_lane_aborting(AtmLaneRunSelector, AtmWorkflowExecutionId, AtmLaneRunDiff)
     end,
 
     case atm_workflow_execution:update(AtmWorkflowExecutionId, Diff) of
-        {ok, AtmWorkflowExecutionDoc} ->
-            ensure_in_proper_phase_tree(AtmWorkflowExecutionDoc);
+        {ok, AtmWorkflowExecutionDoc} = Result ->
+            ensure_in_proper_phase_tree(AtmWorkflowExecutionDoc),
+            Result;
         {error, _} = Error ->
             Error
     end.
