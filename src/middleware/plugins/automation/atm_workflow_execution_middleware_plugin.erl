@@ -86,7 +86,7 @@ data_spec(#op_req{operation = create, gri = #gri{aspect = Aspect}}) when
 ->
     #{required => #{
         <<"laneSchemaId">> => {binary, non_empty},
-        <<"laneRunNumber">> => {binary, {not_lower_than, 1}}
+        <<"laneRunNumber">> => {integer, {not_lower_than, 1}}
     }};
 
 data_spec(#op_req{operation = get, gri = #gri{aspect = As}}) when

@@ -246,11 +246,12 @@ process_item_insecure(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, ReportR
     automation:item(),
     errors:error() | json_utils:json_map()
 ) ->
-    ok | error.
+    error.
 handle_exception(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, #{<<"exception">> := Reason}) ->
     log_exception(Item, Reason, AtmWorkflowExecutionCtx),
     append_failed_item_to_lane_run_exception_store(Item, AtmWorkflowExecutionCtx),
-    update_items_failed_and_processed(AtmTaskExecutionId);
+    update_items_failed_and_processed(AtmTaskExecutionId),
+    error;
 
 handle_exception(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, {error, _} = Error) ->
     handle_exception(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, #{
