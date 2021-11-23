@@ -88,15 +88,19 @@ assert_openfaas_available() ->
 %%%===================================================================
 
 
--spec build(atm_workflow_execution:id(), atm_lane_execution:index(), atm_lambda_snapshot:record()) ->
+-spec build(
+    atm_workflow_execution_ctx:record(),
+    atm_lane_execution:index(),
+    atm_lambda_snapshot:record()
+) ->
     record() | no_return().
-build(AtmWorkflowExecutionId, AtmLaneIndex, AtmLambdaSnapshot = #atm_lambda_snapshot{
+build(AtmWorkflowExecutionCtx, AtmLaneIndex, AtmLambdaSnapshot = #atm_lambda_snapshot{
     operation_spec = AtmLambadaOperationSpec
 }) ->
     assert_openfaas_available(),
 
     #atm_openfaas_task_executor{
-        function_name = build_function_name(AtmWorkflowExecutionId, AtmLaneIndex, AtmLambdaSnapshot),
+        function_name = build_function_name(AtmWorkflowExecutionCtx, AtmLaneIndex, AtmLambdaSnapshot),
         operation_spec = AtmLambadaOperationSpec
     }.
 
@@ -219,16 +223,25 @@ check_openfaas_availability() ->
 %% @end
 %%--------------------------------------------------------------------
 -spec build_function_name(
-    atm_workflow_execution:id(),
+    atm_workflow_execution_ctx:record(),
     atm_lane_execution:index(),
     atm_lambda_snapshot:record()
 ) ->
     binary().
-build_function_name(AtmWorkflowExecutionId, AtmLaneIndex, #atm_lambda_snapshot{
+build_function_name(AtmWorkflowExecutionCtx, AtmLaneIndex, #atm_lambda_snapshot{
     lambda_id = AtmLambdaId,
     name = AtmLambdaName
 }) ->
-    Signature = str_utils:md5_digest([AtmWorkflowExecutionId, AtmLaneIndex, AtmLambdaId]),
+    AtmWorkflowExecutionId = atm_workflow_execution_ctx:get_workflow_execution_id(
+        AtmWorkflowExecutionCtx
+    ),
+
+    Signature = str_utils:md5_digest([
+        AtmWorkflowExecutionId,
+        atm_workflow_execution_ctx:get_workflow_execution_incarnation(AtmWorkflowExecutionCtx),
+        AtmLaneIndex,
+        AtmLambdaId
+    ]),
 
     Name = str_utils:format_bin("w~s-s~s-~s", [
         binary:part(AtmWorkflowExecutionId, 0, min(size(AtmWorkflowExecutionId), 10)),

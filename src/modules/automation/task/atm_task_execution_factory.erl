@@ -215,7 +215,7 @@ create_task_execution_doc(#creation_ctx{
 
         schema_id = AtmTaskSchemaId,
 
-        executor = atm_task_executor:build(AtmWorkflowExecutionId, AtmLaneIndex, AtmLambdaSnapshot),
+        executor = atm_task_executor:build(AtmWorkflowExecutionCtx, AtmLaneIndex, AtmLambdaSnapshot),
         argument_specs = build_argument_specs(AtmLambdaSnapshot, AtmTaskSchema),
         result_specs = build_result_specs(AtmLambdaSnapshot, AtmTaskSchema),
 

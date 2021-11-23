@@ -30,7 +30,8 @@
 -type lambda_snapshot_registry() :: #{od_atm_lambda:id() => atm_lambda_snapshot:id()}.
 
 -type repeat_type() :: rerun | retry.
-%% TODO description
+%% Incarnation tells how many times given atm workflow execution was manually repeated
+%% (either retried or rerun)
 -type incarnation() :: non_neg_integer().
 
 -type phase() :: ?WAITING_PHASE | ?ONGOING_PHASE | ?ENDED_PHASE.

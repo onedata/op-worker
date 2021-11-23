@@ -127,7 +127,6 @@ repeat(UserCtx, Type, AtmLaneRunSelector, AtmWorkflowExecutionId) ->
     case atm_lane_execution_status:handle_manual_repeat(
         Type, AtmLaneRunSelector, AtmWorkflowExecutionId
     ) of
-        %% TODO add incarnation num ??
         {ok, AtmWorkflowExecutionDoc = #document{value = #atm_workflow_execution{
             lanes_count = AtmLanesCount,
             current_lane_index = CurrentAtmLaneIndex,
@@ -367,8 +366,9 @@ acquire_env(#document{key = AtmWorkflowExecutionId, value = #atm_workflow_execut
     store_registry = AtmGlobalStoreRegistry,
     system_audit_log_id = AtmWorkflowAuditLogId
 }}) ->
-    Env0 = atm_workflow_execution_env:build(SpaceId, AtmWorkflowExecutionId, AtmGlobalStoreRegistry),
-    Env1 = atm_workflow_execution_env:set_workflow_incarnation(AtmWorkflowExecutionIncarnation, Env0),
+    Env = atm_workflow_execution_env:build(
+        SpaceId, AtmWorkflowExecutionId, AtmWorkflowExecutionIncarnation, AtmGlobalStoreRegistry
+    ),
 
     AtmWorkflowAuditLogStoreContainer = case atm_store_api:get(AtmWorkflowAuditLogId) of
         {ok, #atm_store{container = Container}} ->
@@ -377,7 +377,7 @@ acquire_env(#document{key = AtmWorkflowExecutionId, value = #atm_workflow_execut
             undefined
     end,
     atm_workflow_execution_env:set_workflow_audit_log_store_container(
-        AtmWorkflowAuditLogStoreContainer, Env1
+        AtmWorkflowAuditLogStoreContainer, Env
     ).
 
 

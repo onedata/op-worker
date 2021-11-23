@@ -251,9 +251,9 @@ upgrade_record(2, {
 
 -spec encode_run_selector(atm_lane_execution:run_selector()) -> binary().
 encode_run_selector(current) -> <<"current">>;
-encode_run_selector(Binary) when is_binary(Binary) -> Binary.
+encode_run_selector(Int) when is_integer(Int) -> integer_to_binary(Int).
 
 
 -spec decode_run_selector(binary()) -> atm_lane_execution:run_selector().
 decode_run_selector(<<"current">>) -> current;
-decode_run_selector(Binary) when is_binary(Binary) -> Binary.
+decode_run_selector(Binary) when is_binary(Binary) -> binary_to_integer(Binary).

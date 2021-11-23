@@ -164,7 +164,7 @@ terminate_not_ended(SpaceId) ->
 
         atm_workflow_execution_handler:handle_workflow_execution_ended(
             AtmWorkflowExecutionId,
-            atm_workflow_execution_env:build(SpaceId, AtmWorkflowExecutionId)
+            atm_workflow_execution_env:build(SpaceId, AtmWorkflowExecutionId, 0) %% TODO get proper incarnation?
         )
     end,
 
