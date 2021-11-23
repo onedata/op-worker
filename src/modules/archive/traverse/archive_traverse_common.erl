@@ -50,8 +50,7 @@ take_children_count(PoolName, TaskId, DirUuid) ->
     ChildrenCount = maps:get(DirUuid, get_count_map(AdditionalData)),
     ok = ?extract_ok(traverse_task:update_additional_data(traverse_task:get_ctx(), PoolName, TaskId,
         fun(AD) ->
-            CountMap = get_count_map(AD),
-            {ok, set_count_map(AD, maps:without([DirUuid], CountMap))}
+            {ok, set_count_map(AD, maps:remove(DirUuid, get_count_map(AD)))}
         end
     )),
     binary_to_integer(ChildrenCount).

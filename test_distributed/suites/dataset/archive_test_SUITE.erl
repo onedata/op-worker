@@ -106,7 +106,8 @@
 ]).
 
 groups() -> [
-%%    @TODO VFS-8587 - run in parallel after helper hanging is fixed
+%%    @TODO VFS-8587 - run in parallel after helper hanging is fixed. 
+%%    When run in parallel this SUITE is short enough and there is no need to divide it.
     {parallel_tests, [
         create_archivisation_tree,
         archive_dataset_attached_to_dir_plain_layout,
