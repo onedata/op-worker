@@ -20,7 +20,7 @@
 -include_lib("ctool/include/test/test_utils.hrl").
 
 % Callbacks
--export([prepare_lane/3, restart_lane/3, process_item/6, process_result/5,
+-export([prepare_lane/3, restart_lane/3, process_item/6, process_result/5, report_item_error/3,
     handle_task_execution_ended/3, handle_lane_execution_ended/3, handle_workflow_execution_ended/2]).
 % API
 -export([is_last_lane/1, get_ignored_lane_id/0, get_ignored_lane_predecessor_id/0]).
@@ -140,6 +140,16 @@ process_result(_, _, _, _, {error, _}) ->
     error;
 process_result(_, _, _, _, #{<<"result">> := Result}) ->
     binary_to_atom(Result, utf8).
+
+
+-spec report_item_error(
+    workflow_engine:execution_id(),
+    workflow_engine:execution_context(),
+    iterator:item()
+) ->
+    ok.
+report_item_error(_, _, _) ->
+    ok.
 
 
 -spec handle_task_execution_ended(

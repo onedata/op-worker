@@ -34,6 +34,7 @@
 
     process_item/6,
     process_result/5,
+    report_item_error/3,
 
     handle_task_execution_ended/3,
     handle_lane_execution_ended/3,
@@ -189,6 +190,16 @@ process_result(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmTaskExecution
     ?run(AtmWorkflowExecutionId, atm_task_execution_handler:process_results(
         AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, Results
     )).
+
+
+-spec report_item_error(
+    workflow_engine:execution_id(),
+    workflow_engine:execution_context(),
+    iterator:item()
+) ->
+    ok.
+report_item_error(_, _, _) ->
+    ok.
 
 
 -spec handle_task_execution_ended(
