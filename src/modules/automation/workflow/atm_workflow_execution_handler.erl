@@ -310,13 +310,6 @@ ensure_all_lane_executions_ended(#document{
         current_lane_index = CurrentAtmLaneIndex
     }
 }, AtmWorkflowExecutionCtx) ->
-    AtmLaneExecutionsToCheck = case CurrentAtmLaneIndex < AtmLanesCount of
-        true ->
-            % next lane may have been preparing in advance
-            [CurrentAtmLaneIndex, CurrentAtmLaneIndex + 1];
-        false ->
-            [CurrentAtmLaneIndex]
-    end,
     lists:foreach(fun(AtmLaneIndex) ->
         AtmLaneRunSelector = {AtmLaneIndex, current},
 
@@ -330,10 +323,10 @@ ensure_all_lane_executions_ended(#document{
                             AtmLaneRunSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx
                         )
                 end;
-            _ ->
+            ?ERROR_NOT_FOUND ->
                 ok
         end
-    end, AtmLaneExecutionsToCheck).
+    end, lists:seq(CurrentAtmLaneIndex, AtmLanesCount)).
 
 
 %% @private
