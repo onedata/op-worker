@@ -6,8 +6,8 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Record expressing OpenFaaS function status report used in openfaas activity feed.
-%%% The record is not persistable, but is encoded to JSON on the activity feed channel.
+%%% Record expressing a summary of pod status and its changes
+%%% in the context of a single OpenFaaS function.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_openfaas_function_pod_status_summary).
