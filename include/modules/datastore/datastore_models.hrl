@@ -1150,6 +1150,11 @@
     max_values_per_node :: pos_integer() | undefined
 }).
 
+
+-record(atm_openfaas_function_activity_registry, {
+    pod_status_registry :: atm_openfaas_function_pod_status_registry:record()
+}).
+
 %%%===================================================================
 %%% Workflow engine connected models
 %%%===================================================================

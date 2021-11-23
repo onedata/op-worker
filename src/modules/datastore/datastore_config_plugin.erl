@@ -99,6 +99,7 @@ get_models() -> [
     workflow_cached_async_result,
     workflow_iterator_snapshot,
     workflow_async_call_pool,
+    json_based_infinite_log_backend,
     
     % automation related models
     atm_store,
@@ -106,8 +107,8 @@ get_models() -> [
     atm_workflow_schema_snapshot,
     atm_lambda_snapshot,
     atm_workflow_execution,
-    atm_infinite_log_backend,
     atm_tree_forest_iterator_queue,
+    atm_openfaas_function_activity_registry,
 
     %% @TODO VFS-6767 deprecated, included for upgrade procedure. Remove in next major release after 21.02.*.
     space_strategies,

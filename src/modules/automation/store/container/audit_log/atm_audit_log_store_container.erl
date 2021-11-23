@@ -57,7 +57,7 @@
 
 -record(atm_audit_log_store_container, {
     data_spec :: atm_data_spec:record(),
-    backend_id :: atm_infinite_log_backend:id()
+    backend_id :: json_based_infinite_log_backend:id()
 }).
 -type record() :: #atm_audit_log_store_container{}.
 
@@ -99,21 +99,22 @@ browse_content(AtmWorkflowExecutionAuth, BrowseOpts, #atm_audit_log_store_contai
     data_spec = AtmDataSpec
 }) ->
     SanitizedBrowseOpts = sanitize_browse_options(BrowseOpts),
-    {ok, {Marker, Entries}} = atm_infinite_log_backend:list(BackendId, #{
+    {ok, {Marker, Entries}} = json_based_infinite_log_backend:list(BackendId, #{
         start_from => infer_start_from(SanitizedBrowseOpts),
         offset => maps:get(offset, SanitizedBrowseOpts, 0),
         limit => maps:get(limit, SanitizedBrowseOpts)
     }),
-    MappedEntries = lists:map(fun({Index, Object, Timestamp}) ->
+    MappedEntries = lists:map(fun({Index, Timestamp, Object}) ->
+        IndexBin = integer_to_binary(Index),
         case atm_value:expand(AtmWorkflowExecutionAuth, maps:get(<<"entry">>, Object), AtmDataSpec) of
             {ok, ExpandedEntry} ->
-                {Index, {ok, Object#{
+                {IndexBin, {ok, Object#{
                     <<"timestamp">> => Timestamp, 
                     <<"entry">> => ExpandedEntry, 
                     <<"severity">> => maps:get(<<"severity">>, Object)}
                 }};
             {error, _} = Error ->
-                {Index, Error}
+                {IndexBin, Error}
         end
     end, Entries),
     {MappedEntries, Marker =:= done}.
@@ -152,7 +153,7 @@ apply_operation(_Record, _Operation) ->
 
 -spec delete(record()) -> ok.
 delete(#atm_audit_log_store_container{backend_id = BackendId}) ->
-    atm_infinite_log_backend:destroy(BackendId).
+    json_based_infinite_log_backend:destroy(BackendId).
 
 
 %%%===================================================================
@@ -193,7 +194,7 @@ db_decode(#{<<"dataSpec">> := AtmDataSpecJson, <<"backendId">> := BackendId}, Ne
 %% @private
 -spec create_container(atm_data_spec:record()) -> record().
 create_container(AtmDataSpec) ->
-    {ok, Id} = atm_infinite_log_backend:create(#{}),
+    {ok, Id} = json_based_infinite_log_backend:create(#{}),
     #atm_audit_log_store_container{
         data_spec = AtmDataSpec,
         backend_id = Id
@@ -224,7 +225,7 @@ append_sanitized_batch(Batch, Record = #atm_audit_log_store_container{
     backend_id = BackendId
 }) ->
     lists:foreach(fun(#{<<"entry">> := Item} = Object) ->
-        ok = atm_infinite_log_backend:append(BackendId, Object#{
+        ok = json_based_infinite_log_backend:append(BackendId, Object#{
             <<"entry">> => atm_value:compress(Item, AtmDataSpec)
         }) 
     end, Batch),

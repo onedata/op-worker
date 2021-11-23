@@ -58,11 +58,11 @@ build(BackendId) ->
     {ok, [atm_value:expanded()], record()} | stop.
 get_next_batch(AtmWorkflowExecutionAuth, BatchSize, #atm_audit_log_store_container_iterator{} = Record, AtmDataSpec) ->
     #atm_audit_log_store_container_iterator{backend_id = BackendId, index = StartIndex} = Record,
-    {ok, {Marker, EntrySeries}} = atm_infinite_log_backend:list(BackendId, #{
+    {ok, {Marker, EntrySeries}} = json_based_infinite_log_backend:list(BackendId, #{
         start_from => {index, StartIndex},
         limit => BatchSize
     }),
-    FilteredEntries = lists:filtermap(fun({_Index, Object, Timestamp}) ->
+    FilteredEntries = lists:filtermap(fun({_Index, Timestamp, Object}) ->
         case atm_value:expand(AtmWorkflowExecutionAuth, maps:get(<<"entry">>, Object), AtmDataSpec) of
             {ok, ExpandedItem} ->
                 {true, Object#{
@@ -80,7 +80,7 @@ get_next_batch(AtmWorkflowExecutionAuth, BatchSize, #atm_audit_log_store_contain
         _ ->
             {LastIndex, _, _} = lists:last(EntrySeries),
             {ok, FilteredEntries, Record#atm_audit_log_store_container_iterator{
-                index = binary_to_integer(LastIndex) + 1}
+                index = LastIndex + 1}
             }
     end.
 
