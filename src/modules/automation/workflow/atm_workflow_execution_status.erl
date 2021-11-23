@@ -232,7 +232,7 @@ handle_manual_lane_repeat(AtmWorkflowExecutionId, AtmLaneRunDiff) ->
                     schedule_time = global_clock:timestamp_seconds()
                 });
             _ ->
-                ?ERROR_ATM_WORKFLOW_EXECUTION_ENDED  %% TODO NOT_ENDED ?
+                ?ERROR_ATM_WORKFLOW_EXECUTION_NOT_ENDED
         end
     end,
 

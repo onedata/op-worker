@@ -426,9 +426,10 @@ try_to_schedule_manual_lane_run_repeat(RepeatType, AtmLaneSelector, Run, AtmWork
     case can_manual_lane_run_repeat_be_scheduled(RepeatType, Run) of
         true ->
             schedule_manual_lane_run_repeat(retry, AtmLaneSelector, Run, AtmWorkflowExecution);
-        false ->
-            %% TODO custom error ? What should it say?
-            ?ERROR_ATM_WORKFLOW_EXECUTION_ENDED
+        false when RepeatType == rerun ->
+            ?ERROR_ATM_LANE_EXECUTION_RERUN_FAILED;
+        false when RepeatType == retry ->
+            ?ERROR_ATM_LANE_EXECUTION_RETRY_FAILED
     end.
 
 
