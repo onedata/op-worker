@@ -47,6 +47,8 @@
     module() | no_return().
 resolve_handler(create, instance, private) -> ?MODULE;
 resolve_handler(create, cancel, private) -> ?MODULE;
+resolve_handler(create, retry, private) -> ?MODULE;
+resolve_handler(create, rerun, private) -> ?MODULE;
 
 resolve_handler(get, instance, private) -> ?MODULE;
 resolve_handler(get, summary, private) -> ?MODULE;
@@ -78,6 +80,14 @@ data_spec(#op_req{operation = create, gri = #gri{aspect = instance}}) ->
     };
 data_spec(#op_req{operation = create, gri = #gri{aspect = cancel}}) ->
     undefined;
+data_spec(#op_req{operation = create, gri = #gri{aspect = Aspect}}) when
+    Aspect =:= retry;
+    Aspect =:= rerun
+->
+    #{required => #{
+        <<"laneSchemaId">> => {binary, non_empty},
+        <<"laneRunNumber">> => {integer, {not_lower_than, 1}}
+    }};
 
 data_spec(#op_req{operation = get, gri = #gri{aspect = As}}) when
     As =:= instance;
@@ -131,6 +141,14 @@ authorize(#op_req{operation = create, auth = ?USER(UserId), gri = #gri{
         SpaceId, UserId, ?SPACE_CANCEL_ATM_WORKFLOW_EXECUTIONS
     );
 
+authorize(#op_req{operation = create, auth = ?USER(UserId), gri = #gri{
+    aspect = Aspect
+}}, #atm_workflow_execution{space_id = SpaceId}) when
+    Aspect =:= retry;
+    Aspect =:= rerun
+->
+    space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_SCHEDULE_ATM_WORKFLOW_EXECUTIONS);
+
 authorize(#op_req{operation = get, auth = Auth, gri = #gri{aspect = instance}}, AtmWorkflowExecution) ->
     has_access_to_workflow_execution_details(Auth, AtmWorkflowExecution);
 
@@ -150,7 +168,11 @@ validate(#op_req{operation = create, data = Data, gri = #gri{aspect = instance}}
     SpaceId = maps:get(<<"spaceId">>, Data),
     middleware_utils:assert_space_supported_locally(SpaceId);
 
-validate(#op_req{operation = create, gri = #gri{aspect = cancel}}, _) ->
+validate(#op_req{operation = create, gri = #gri{aspect = Aspect}}, _) when
+    Aspect =:= cancel;
+    Aspect =:= retry;
+    Aspect =:= rerun
+->
     % Doc was already fetched in 'fetch_entity' so space must be supported locally
     ok;
 
@@ -191,7 +213,30 @@ create(#op_req{auth = ?USER(_UserId, SessionId), gri = #gri{
 
     middleware_worker:check_exec(SessionId, SpaceGuid, #cancel_atm_workflow_execution{
         atm_workflow_execution_id = AtmWorkflowExecutionId
-    }).
+    });
+
+create(#op_req{auth = ?USER(_UserId, SessionId), data = Data, gri = #gri{
+    id = AtmWorkflowExecutionId,
+    aspect = Aspect
+}}) when
+    Aspect =:= retry;
+    Aspect =:= rerun
+->
+    {ok, Record = #atm_workflow_execution{space_id = SpaceId}} = atm_workflow_execution_api:get(
+        AtmWorkflowExecutionId
+    ),
+    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+
+    case infer_lane_selector(maps:get(<<"laneSchemaId">>, Data), Record) of
+        {ok, AtmLaneSelector} ->
+            middleware_worker:check_exec(SessionId, SpaceGuid, #repeat_atm_workflow_execution{
+                type = Aspect,
+                atm_workflow_execution_id = AtmWorkflowExecutionId,
+                atm_lane_run_selector = {AtmLaneSelector, maps:get(<<"laneRunNumber">>, Data)}
+            });
+        {error, _} = Error ->
+            Error
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -234,6 +279,20 @@ delete(_) ->
 %%%===================================================================
 %%% Utility functions
 %%%===================================================================
+
+
+%% @private
+-spec infer_lane_selector(automation:id(), atm_workflow_execution:record()) ->
+    {ok, atm_lane_execution:index()} | ?ERROR_NOT_FOUND.
+infer_lane_selector(AtmLaneSchemaId, #atm_workflow_execution{lanes = AtmLaneExecutions}) ->
+    Result = lists:search(
+        fun({_, #atm_lane_execution{schema_id = SchemaId}}) -> SchemaId == AtmLaneSchemaId end,
+        maps:to_list(AtmLaneExecutions)
+    ),
+    case Result of
+        {value, {Index, _}} -> {ok, Index};
+        false -> ?ERROR_NOT_FOUND
+    end.
 
 
 -spec has_access_to_workflow_execution_details(

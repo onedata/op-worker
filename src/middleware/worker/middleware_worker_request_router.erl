@@ -38,4 +38,13 @@ route(UserCtx, SpaceDirCtx, #schedule_atm_workflow_execution{
 route(_UserCtx, _SpaceDirCtx, #cancel_atm_workflow_execution{
     atm_workflow_execution_id = AtmWorkflowExecutionId
 }) ->
-    ok = atm_workflow_execution_api:cancel(AtmWorkflowExecutionId).
+    ok = atm_workflow_execution_api:cancel(AtmWorkflowExecutionId);
+
+route(UserCtx, _SpaceDirCtx, #repeat_atm_workflow_execution{
+    type = Type,
+    atm_workflow_execution_id = AtmWorkflowExecutionId,
+    atm_lane_run_selector = AtmLaneRunSelector
+}) ->
+    ok = atm_workflow_execution_api:repeat(
+        UserCtx, Type, AtmLaneRunSelector, AtmWorkflowExecutionId
+    ).
