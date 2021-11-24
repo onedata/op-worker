@@ -249,7 +249,6 @@ process_item_insecure(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, ReportR
     error.
 handle_exception(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, #{<<"exception">> := Reason}) ->
     log_exception(Item, Reason, AtmWorkflowExecutionCtx),
-    append_failed_item_to_lane_run_exception_store(Item, AtmWorkflowExecutionCtx),
     update_items_failed_and_processed(AtmTaskExecutionId),
     error;
 
@@ -271,27 +270,6 @@ log_exception(Item, Reason, AtmWorkflowExecutionCtx) ->
     Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
 
     atm_workflow_execution_logger:task_append_logs(Log, #{}, Logger).
-
-
-%% @private
--spec append_failed_item_to_lane_run_exception_store(
-    automation:item(),
-    atm_workflow_execution_ctx:record()
-) ->
-    ok | no_return().
-append_failed_item_to_lane_run_exception_store(Item, AtmWorkflowExecutionCtx) ->
-    AtmLaneRunExceptionStoreContainer = atm_workflow_execution_env:get_lane_run_exception_store_container(
-        atm_workflow_execution_ctx:get_env(AtmWorkflowExecutionCtx)
-    ),
-    Operation = #atm_store_container_operation{
-        type = append,
-        options = #{<<"isBatch">> => is_list(Item)},
-        argument = Item,
-        workflow_execution_auth = atm_workflow_execution_ctx:get_auth(AtmWorkflowExecutionCtx)
-    },
-    atm_list_store_container:apply_operation(AtmLaneRunExceptionStoreContainer, Operation),
-
-    ok.
 
 
 %% @private

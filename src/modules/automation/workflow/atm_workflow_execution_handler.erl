@@ -228,12 +228,23 @@ process_result(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmTaskExecution
 
 
 -spec report_item_error(
-    workflow_engine:execution_id(),
-    workflow_engine:execution_context(),
-    iterator:item()
+    atm_workflow_execution:id(),
+    atm_workflow_execution_env:record(),
+    automation:item()
 ) ->
     ok.
-report_item_error(_, _, _) ->
+report_item_error(_AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, Item) ->
+    AtmLaneRunExceptionStoreContainer = atm_workflow_execution_env:get_lane_run_exception_store_container(
+        AtmWorkflowExecutionEnv
+    ),
+    Operation = #atm_store_container_operation{
+        type = append,
+        options = #{<<"isBatch">> => is_list(Item)},
+        argument = Item,
+        workflow_execution_auth = atm_workflow_execution_env:acquire_auth(AtmWorkflowExecutionEnv)
+    },
+    atm_list_store_container:apply_operation(AtmLaneRunExceptionStoreContainer, Operation),
+
     ok.
 
 
