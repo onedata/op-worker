@@ -31,7 +31,8 @@
 -type operation() ::
     % atm related operations
     #schedule_atm_workflow_execution{} |
-    #cancel_atm_workflow_execution{}.
+    #cancel_atm_workflow_execution{} |
+    #repeat_atm_workflow_execution{}.
 
 -export_type([operation/0]).
 

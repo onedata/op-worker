@@ -49,6 +49,7 @@
 -export([
     initiate/2,
     teardown/2,
+    set_run_num/2,
 
     process_item/5,
     process_results/4,
@@ -105,6 +106,15 @@ teardown(AtmLaneExecutionRunTeardownCtx, AtmTaskExecutionId) ->
     }} = ensure_atm_task_execution_doc(AtmTaskExecutionId),
 
     atm_task_executor:teardown(AtmLaneExecutionRunTeardownCtx, AtmTaskExecutor).
+
+
+-spec set_run_num(atm_lane_execution:run_num(), atm_task_execution:id()) ->
+    ok.
+set_run_num(RunNum, AtmTaskExecutionId) ->
+    {ok, _} = atm_task_execution:update(AtmTaskExecutionId, fun(AtmTaskExecution) ->
+        {ok, AtmTaskExecution#atm_task_execution{run_num = RunNum}}
+    end),
+    ok.
 
 
 -spec process_item(
@@ -280,11 +290,11 @@ process_item_insecure(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, ReportR
     automation:item(),
     errors:error() | json_utils:json_map()
 ) ->
-    ok | error.
+    error.
 handle_exception(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, #{<<"exception">> := Reason}) ->
     log_exception(Item, Reason, AtmWorkflowExecutionCtx),
-    append_failed_item_to_lane_run_exception_store(Item, AtmWorkflowExecutionCtx),
-    update_items_failed_and_processed(AtmTaskExecutionId);
+    update_items_failed_and_processed(AtmTaskExecutionId),
+    error;
 
 handle_exception(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, {error, _} = Error) ->
     handle_exception(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, #{
@@ -304,27 +314,6 @@ log_exception(Item, Reason, AtmWorkflowExecutionCtx) ->
     Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
 
     atm_workflow_execution_logger:task_append_logs(Log, #{}, Logger).
-
-
-%% @private
--spec append_failed_item_to_lane_run_exception_store(
-    automation:item(),
-    atm_workflow_execution_ctx:record()
-) ->
-    ok | no_return().
-append_failed_item_to_lane_run_exception_store(Item, AtmWorkflowExecutionCtx) ->
-    AtmLaneRunExceptionStoreContainer = atm_workflow_execution_env:get_lane_run_exception_store_container(
-        atm_workflow_execution_ctx:get_env(AtmWorkflowExecutionCtx)
-    ),
-    Operation = #atm_store_container_operation{
-        type = append,
-        options = #{<<"isBatch">> => is_list(Item)},
-        argument = Item,
-        workflow_execution_auth = atm_workflow_execution_ctx:get_auth(AtmWorkflowExecutionCtx)
-    },
-    atm_list_store_container:apply_operation(AtmLaneRunExceptionStoreContainer, Operation),
-
-    ok.
 
 
 %% @private
@@ -391,12 +380,13 @@ handle_status_change(#document{
     value = #atm_task_execution{
         workflow_execution_id = AtmWorkflowExecutionId,
         lane_index = AtmLaneIndex,
+        run_num = RunNum,
         parallel_box_index = AtmParallelBoxIndex,
         status = NewStatus,
         status_changed = true
     }
 }) ->
     ok = atm_lane_execution_status:handle_task_status_change(
-        AtmWorkflowExecutionId, AtmLaneIndex, AtmParallelBoxIndex,
+        AtmWorkflowExecutionId, {AtmLaneIndex, RunNum}, AtmParallelBoxIndex,
         AtmTaskExecutionId, NewStatus
     ).

@@ -24,6 +24,7 @@
     schedule/6,
     get/1, get_summary/2,
     cancel/1,
+    repeat/4,
     terminate_not_ended/1,
     purge_all/0
 ]).
@@ -153,9 +154,22 @@ get_summary(AtmWorkflowExecutionId, #atm_workflow_execution{
     }.
 
 
--spec cancel(atm_workflow_execution:id()) -> ok | {error, already_ended}.
+-spec cancel(atm_workflow_execution:id()) -> ok | errors:error().
 cancel(AtmWorkflowExecutionId) ->
     atm_workflow_execution_handler:cancel(AtmWorkflowExecutionId).
+
+
+-spec repeat(
+    user_ctx:ctx(),
+    atm_workflow_execution:repeat_type(),
+    atm_lane_execution:lane_run_selector(),
+    atm_workflow_execution:id()
+) ->
+    ok | errors:error().
+repeat(UserCtx, Type, AtmLaneRunSelector, AtmWorkflowExecutionId) ->
+    atm_workflow_execution_handler:repeat(
+        UserCtx, Type, AtmLaneRunSelector, AtmWorkflowExecutionId
+    ).
 
 
 %%--------------------------------------------------------------------
@@ -167,11 +181,22 @@ cancel(AtmWorkflowExecutionId) ->
 %%--------------------------------------------------------------------
 terminate_not_ended(SpaceId) ->
     TerminateFun = fun(AtmWorkflowExecutionId) ->
-        atm_lane_execution_status:handle_aborting(current, AtmWorkflowExecutionId, failure),
-        atm_workflow_execution_handler:handle_workflow_execution_ended(
-            AtmWorkflowExecutionId,
-            atm_workflow_execution_env:build(SpaceId, AtmWorkflowExecutionId)
-        )
+        try
+            {ok, #document{
+                value = #atm_workflow_execution{
+                    incarnation = AtmWorkflowIncarnation
+                }
+            }} = atm_lane_execution_status:handle_aborting(
+                {current, current}, AtmWorkflowExecutionId, failure
+            ),
+
+            atm_workflow_execution_handler:handle_workflow_execution_ended(
+                AtmWorkflowExecutionId,
+                atm_workflow_execution_env:build(SpaceId, AtmWorkflowExecutionId, AtmWorkflowIncarnation)
+            )
+        catch Type:Reason:Stacktrace ->
+            ?atm_examine_error(Type, Reason, Stacktrace)
+        end
     end,
 
     foreach_atm_workflow_execution(TerminateFun, SpaceId, ?WAITING_PHASE),

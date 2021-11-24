@@ -46,7 +46,7 @@
 
 
 -callback create(
-    atm_workflow_execution:id(),
+    atm_workflow_execution_ctx:record(),
     atm_lane_execution:index(),
     atm_task_schema:record(),
     atm_lambda_revision:record()
@@ -77,18 +77,18 @@
 
 
 -spec create(
-    atm_workflow_execution:id(),
+    atm_workflow_execution_ctx:record(),
     atm_lane_execution:index(),
     atm_task_schema:record(),
     atm_lambda_revision:record()
 ) ->
     record() | no_return().
-create(AtmWorkflowExecutionId, AtmLaneIndex, AtmTaskSchema, AtmLambdaRevision = #atm_lambda_revision{
+create(AtmWorkflowExecutionCtx, AtmLaneIndex, AtmTaskSchema, AtmLambdaRevision = #atm_lambda_revision{
     operation_spec = AtmLambadaOperationSpec
 }) ->
     Engine = atm_lambda_operation_spec:get_engine(AtmLambadaOperationSpec),
     Model = engine_to_executor_model(Engine),
-    Model:create(AtmWorkflowExecutionId, AtmLaneIndex, AtmTaskSchema, AtmLambdaRevision).
+    Model:create(AtmWorkflowExecutionCtx, AtmLaneIndex, AtmTaskSchema, AtmLambdaRevision).
 
 
 -spec initiate(
@@ -100,7 +100,7 @@ create(AtmWorkflowExecutionId, AtmLaneIndex, AtmTaskSchema, AtmLambdaRevision = 
     workflow_engine:task_spec() | no_return().
 initiate(AtmWorkflowExecutionCtx, AtmTaskSchema, AtmLambdaRevision, AtmTaskExecutor) ->
     Model = utils:record_type(AtmTaskExecutor),
-    Model:initiate(AtmWorkflowExecutionCtx, AtmTaskSchema, AtmLambdaRevision, AtmTaskExecutor).
+    Model:initiate(AtmWorkflowExecutionCtx, AtmTaskExecutor).
 
 
 -spec teardown(atm_lane_execution_handler:teardown_ctx(), record()) -> ok | no_return().

@@ -166,12 +166,9 @@ create_executor(CreationCtx = #creation_ctx{
     },
     execution_components = ExecutionComponents
 }) ->
-    AtmWorkflowExecutionId = atm_workflow_execution_ctx:get_workflow_execution_id(
-        AtmWorkflowExecutionCtx
-    ),
     CreationCtx#creation_ctx{execution_components = ExecutionComponents#execution_components{
         executor = atm_task_executor:create(
-            AtmWorkflowExecutionId, AtmLaneIndex, AtmTaskSchema, AtmLambdaRevision
+            AtmWorkflowExecutionCtx, AtmLaneIndex, AtmTaskSchema, AtmLambdaRevision
         )
     }}.
 
@@ -256,6 +253,7 @@ create_task_execution_doc(#creation_ctx{
     {ok, AtmTaskExecutionDoc} = atm_task_execution:create(#atm_task_execution{
         workflow_execution_id = AtmWorkflowExecutionId,
         lane_index = AtmLaneIndex,
+        run_num = undefined,
         parallel_box_index = AtmParallelBoxIndex,
 
         schema_id = AtmTaskSchemaId,

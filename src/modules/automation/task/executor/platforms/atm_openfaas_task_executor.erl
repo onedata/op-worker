@@ -96,18 +96,18 @@ assert_openfaas_available() ->
 
 
 -spec create(
-    atm_workflow_execution:id(),
+    atm_workflow_execution_ctx:record(),
     atm_lane_execution:index(),
     atm_task_schema:record(),
     atm_lambda_revision:record()
 ) ->
     record() | no_return().
-create(AtmWorkflowExecutionId, AtmLaneIndex, AtmTaskSchema, AtmLambdaRevision) ->
+create(AtmWorkflowExecutionCtx, AtmLaneIndex, AtmTaskSchema, AtmLambdaRevision) ->
     assert_openfaas_available(),
 
     ResourceSpec = select_resource_spec(AtmTaskSchema, AtmLambdaRevision),
     FunctionName = build_function_name(
-        AtmWorkflowExecutionId, AtmLaneIndex, AtmTaskSchema, AtmLambdaRevision, ResourceSpec
+        AtmWorkflowExecutionCtx, AtmLaneIndex, AtmTaskSchema, AtmLambdaRevision, ResourceSpec
     ),
     {ok, ActivityRegistryId} = atm_openfaas_function_activity_registry:ensure_for_function(FunctionName),
 
@@ -142,7 +142,7 @@ initiate(AtmWorkflowExecutionCtx, AtmTaskSchema, AtmLambdaRevision, AtmTaskExecu
 
 
 -spec teardown(atm_lane_execution_handler:teardown_ctx(), record()) -> ok | no_return().
-teardown(#atm_lane_execution_run_teardown_ctx{is_retried_scheduled = true}, _AtmTaskExecutor) ->
+teardown(#atm_lane_execution_run_teardown_ctx{is_retry_scheduled = true}, _AtmTaskExecutor) ->
     % in case of lane run retry functions registered in OpenFaaS service are not removed
     % as they will be reused by retry
     ok;
@@ -261,7 +261,7 @@ select_resource_spec(#atm_task_schema{resource_spec_override = ResourceSpec}, _A
 %% @end
 %%--------------------------------------------------------------------
 -spec build_function_name(
-    atm_workflow_execution:id(),
+    atm_workflow_execution_ctx:record(),
     atm_lane_execution:index(),
     atm_task_schema:record(),
     atm_lambda_revision:record(),
@@ -269,16 +269,20 @@ select_resource_spec(#atm_task_schema{resource_spec_override = ResourceSpec}, _A
 ) ->
     binary().
 build_function_name(
-    AtmWorkflowExecutionId,
+    AtmWorkflowExecutionCtx,
     AtmLaneIndex,
     AtmTaskSchema,
     AtmLambdaRevision,
     ResourceSpec
 ) ->
     AtmLambdaRevisionName = AtmLambdaRevision#atm_lambda_revision.name,
+    AtmWorkflowExecutionId = atm_workflow_execution_ctx:get_workflow_execution_id(
+        AtmWorkflowExecutionCtx
+    ),
 
     Signature = str_utils:md5_digest([
         AtmWorkflowExecutionId,
+        atm_workflow_execution_ctx:get_workflow_execution_incarnation(AtmWorkflowExecutionCtx),
         AtmLaneIndex,
         AtmTaskSchema#atm_task_schema.lambda_id,
         AtmTaskSchema#atm_task_schema.lambda_revision_number,

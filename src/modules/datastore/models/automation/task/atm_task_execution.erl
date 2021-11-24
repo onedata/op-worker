@@ -85,7 +85,7 @@ get_ctx() ->
 
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    2.
+    3.
 
 
 -spec get_record_struct(datastore_model:record_version()) ->
@@ -138,6 +138,33 @@ get_record_struct(2) ->
         {items_in_processing, integer},
         {items_processed, integer},
         {items_failed, integer}
+    ]};
+get_record_struct(3) ->
+    {record, [
+        {workflow_execution_id, string},
+        {lane_index, integer},
+        {run_num, integer},  %% new field
+        {parallel_box_index, integer},
+
+        {schema_id, string},
+
+        {executor, {custom, string, {persistent_record, encode, decode, atm_task_executor}}},
+        {argument_specs, [{custom, string, {
+            persistent_record, encode, decode, atm_task_execution_argument_spec
+        }}]},
+        {result_specs, [{custom, string, {
+            persistent_record, encode, decode, atm_task_execution_result_spec
+        }}]},
+
+        {system_audit_log_id, string},
+
+        {status, atom},
+        {status_changed, boolean},
+        {aborting_reason, atom},
+
+        {items_in_processing, integer},
+        {items_processed, integer},
+        {items_failed, integer}
     ]}.
 
 
@@ -163,10 +190,44 @@ upgrade_record(1, {
     ItemsProcessed,
     ItemsFailed
 }) ->
-    {2, #atm_task_execution{
+    {2, {?MODULE,
+        AtmWorkflowExecutionId,
+        LaneIndex,
+        ParallelBoxIndex,
+        SchemaId,
+        Executor,
+        ArgumentSpecs,
+        ResultSpecs,
+        undefined,
+        Status,
+        StatusChanged,
+        undefined,
+        ItemsInProcessing,
+        ItemsProcessed,
+        ItemsFailed
+    }};
+upgrade_record(2, {
+    ?MODULE,
+    AtmWorkflowExecutionId,
+    AtmLaneIndex,
+    AtmParallelBoxIndex,
+    SchemaId,
+    Executor,
+    ArgumentSpecs,
+    ResultSpecs,
+    AtmTaskAuditLogId,
+    Status,
+    StatusChanged,
+    AbortingReason,
+    ItemsInProcessing,
+    ItemsProcessed,
+    ItemsFailed
+}) ->
+    {3, #atm_task_execution{
         workflow_execution_id = AtmWorkflowExecutionId,
-        lane_index = LaneIndex,
-        parallel_box_index = ParallelBoxIndex,
+        lane_index = AtmLaneIndex,
+        run_num = 1,
+        parallel_box_index = AtmParallelBoxIndex,
 
         schema_id = SchemaId,
 
@@ -174,11 +235,11 @@ upgrade_record(1, {
         argument_specs = ArgumentSpecs,
         result_specs = ResultSpecs,
 
-        system_audit_log_id = undefined,
+        system_audit_log_id = AtmTaskAuditLogId,
 
         status = Status,
         status_changed = StatusChanged,
-        aborting_reason = undefined,
+        aborting_reason = AbortingReason,
 
         items_in_processing = ItemsInProcessing,
         items_processed = ItemsProcessed,

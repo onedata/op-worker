@@ -315,6 +315,22 @@ mock_handlers(Workers, Manager) ->
             )
         end),
 
+
+    test_utils:mock_expect(Workers, workflow_test_handler, report_item_error,
+        fun(ExecutionId, #{lane_id := LaneId} = Context, Item) ->
+            MockTemplate(
+                #handler_call{
+                    function = report_item_error,
+                    execution_id = ExecutionId,
+                    context =  Context,
+                    lane_id = LaneId,
+                    item = Item
+                },
+                [ExecutionId, Context, Item]
+            )
+        end),
+
+
     test_utils:mock_expect(Workers, workflow_test_handler, handle_task_execution_ended,
         fun(ExecutionId, #{lane_id := LaneId} = Context, TaskId) ->
             MockTemplate(
@@ -502,21 +518,38 @@ verify_lanes_execution_history([{TaskIds, ExpectedItems, LaneExecutionContext} |
             ?assert(LastForLane#handler_call.result),
             ?assertEqual(LaneId, LastForLane#handler_call.lane_id),
 
-            GatheredForLane3 = verify_task_handlers(lists:reverse(GatheredForLane2), TaskIds, false),
+            {NewExpected, CheckItemFailedReport} = case Options of
+                #{fail_job := {LaneId, _, Item}} -> {[], {true, Item}};
+                #{timeout := {LaneId, _, Item}} -> {[], {true, Item}};
+                #{fail_result_processing := {LaneId, _, Item}} -> {[], {true, Item}};
+                _ -> {ExpectedTail, false}
+            end,
+
+            GatheredForLane3 = case CheckItemFailedReport of
+                {true, ExpectedItem} ->
+                    ItemFailedReport = lists:foldl(fun
+                        (#handler_call{function = report_item_error, lane_id = Id} = Call, Acc)
+                            when Id =:= LaneId ->
+                            ?assertEqual(undefined, Acc),
+                            Call;
+                        (_, Acc) ->
+                            Acc
+                    end, undefined, GatheredForLane2),
+                    ?assertNotEqual(undefined, ItemFailedReport),
+                    ?assertEqual(ExpectedItem, ItemFailedReport#handler_call.item),
+                    GatheredForLane2 -- [ItemFailedReport];
+                false ->
+                    GatheredForLane2
+            end,
+            GatheredForLane4 = verify_task_handlers(lists:reverse(GatheredForLane3), TaskIds, false),
 
             Remaining = lists:foldl(fun(Item, Acc) ->
                 Filtered = lists:filtermap(fun(HandlerCall) -> HandlerCall#handler_call.item =:= Item end, Acc),
                 verify_item_execution_history(Item, TaskIds, Filtered, LaneExecutionContext, Options),
                 Acc -- Filtered
-            end, GatheredForLane3, ExpectedItems),
+            end, GatheredForLane4, ExpectedItems),
             ?assertEqual([], Remaining),
 
-            NewExpected = case Options of
-                #{fail_job := {LaneId, _, _}} -> [];
-                #{timeout := {LaneId, _, _}} -> [];
-                #{fail_result_processing := {LaneId, _, _}} -> [];
-                _ -> ExpectedTail
-            end,
             verify_lanes_execution_history(NewExpected,
                 lists:sublist(Gathered, LaneElementsCount + 1, length(Gathered) - LaneElementsCount), Options);
         skip_items_verification ->
@@ -616,9 +649,9 @@ verify_task_handlers(GatheredForLane, TaskIds, AllowDoubleCalls) ->
     end, {TaskIdsList, DuplicatedCalls}, ReversedGatheredForLane),
     ?assertEqual([], RemainingTaskIdsList),
 
-    lists:reverse(lists:filter(fun(#handler_call{function = Fun}) ->
+    lists:filter(fun(#handler_call{function = Fun}) ->
         Fun =/= handle_task_execution_ended
-    end, ReversedGatheredForLane)).
+    end, GatheredForLane).
 
 % Helper function for verify_lanes_execution_history/3 that verifies history for single item
 verify_item_execution_history(_Item, ExpectedCalls, [], _LaneExecutionContext, _Options) ->
@@ -824,13 +857,13 @@ count_lane_elements(#{
 
     case {Options, WorkflowType} of
         {#{fail_job := {LaneId, FailedTask, _}}, sync} ->
-            BasicLaneElementsCount - count_not_executed_tasks(TaskIds, FailedTask);
+            BasicLaneElementsCount - count_not_executed_tasks(TaskIds, FailedTask) + 1;
         {#{fail_job := {LaneId, FailedTask, _}}, async} ->
-            BasicLaneElementsCount - 3 * count_not_executed_tasks(TaskIds, FailedTask) - 2;
+            BasicLaneElementsCount - 3 * count_not_executed_tasks(TaskIds, FailedTask) - 1;
         {#{timeout := {LaneId, FailedTask, _}}, async} ->
-            BasicLaneElementsCount - 3 * count_not_executed_tasks(TaskIds, FailedTask);
+            BasicLaneElementsCount - 3 * count_not_executed_tasks(TaskIds, FailedTask) + 1;
         {#{fail_result_processing := {LaneId, FailedTask, _}}, async} ->
-            BasicLaneElementsCount - 3 * count_not_executed_tasks(TaskIds, FailedTask);
+            BasicLaneElementsCount - 3 * count_not_executed_tasks(TaskIds, FailedTask) + 1;
         _ ->
             BasicLaneElementsCount
     end.

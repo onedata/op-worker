@@ -54,5 +54,11 @@ end).
     atm_workflow_execution_id :: atm_workflow_execution:id()
 }).
 
+-record(repeat_atm_workflow_execution, {
+    type :: atm_workflow_execution:repeat_type(),
+    atm_workflow_execution_id :: atm_workflow_execution:id(),
+    atm_lane_run_selector :: atm_lane_execution:lane_run_selector()
+}).
+
 
 -endif.

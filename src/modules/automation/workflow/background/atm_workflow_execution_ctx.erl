@@ -20,6 +20,7 @@
 -export([acquire/2]).
 -export([
     get_workflow_execution_id/1,
+    get_workflow_execution_incarnation/1,
     get_env/1,
     get_auth/1,
     get_logger/1,
@@ -63,6 +64,13 @@ get_workflow_execution_id(#atm_workflow_execution_ctx{
     workflow_execution_env = AtmWorkflowExecutionEnv
 }) ->
     atm_workflow_execution_env:get_workflow_execution_id(AtmWorkflowExecutionEnv).
+
+
+-spec get_workflow_execution_incarnation(record()) -> atm_workflow_execution:incarnation().
+get_workflow_execution_incarnation(#atm_workflow_execution_ctx{
+    workflow_execution_env = AtmWorkflowExecutionEnv
+}) ->
+    atm_workflow_execution_env:get_workflow_execution_incarnation(AtmWorkflowExecutionEnv).
 
 
 -spec get_env(record()) -> atm_workflow_execution_env:record().
