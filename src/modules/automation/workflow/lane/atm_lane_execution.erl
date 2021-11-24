@@ -56,6 +56,7 @@
 -type run_diff() :: fun((run()) -> {ok, run()} | {error, term()}).
 -type run() :: #atm_lane_execution_run{}.
 
+%% TODO VFS-8660 replace tuple with record
 -type lane_run_selector() :: {selector(), run_selector()}.
 
 -export_type([index/0, selector/0, diff/0, record/0]).

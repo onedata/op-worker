@@ -19,7 +19,6 @@
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1, get_record_version/0, upgrade_record/2]).
--export([encode_run_selector/1, decode_run_selector/1]).
 
 
 -type id() :: binary().
@@ -144,8 +143,7 @@ get_record_struct(3) ->
     {record, [
         {workflow_execution_id, string},
         {lane_index, integer},
-        %% new field
-        {run_selector, {custom, string, {?MODULE, encode_run_selector, decode_run_selector}}},
+        {run_num, integer},  %% new field
         {parallel_box_index, integer},
 
         {schema_id, string},
@@ -247,13 +245,3 @@ upgrade_record(2, {
         items_processed = ItemsProcessed,
         items_failed = ItemsFailed
     }}.
-
-
--spec encode_run_selector(atm_lane_execution:run_selector()) -> binary().
-encode_run_selector(undefined) -> <<"null">>;
-encode_run_selector(Int) when is_integer(Int) -> integer_to_binary(Int).
-
-
--spec decode_run_selector(binary()) -> atm_lane_execution:run_selector().
-decode_run_selector(<<"null">>) -> undefined;
-decode_run_selector(Binary) when is_binary(Binary) -> binary_to_integer(Binary).

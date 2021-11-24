@@ -139,6 +139,7 @@ repeat(UserCtx, Type, AtmLaneRunSelector, AtmWorkflowExecutionId) ->
             workflow_engine:execute_workflow(?ATM_WORKFLOW_EXECUTION_ENGINE, #{
                 id => AtmWorkflowExecutionId,
                 workflow_handler => ?MODULE,
+                force_clean_execution => true,
                 execution_context => acquire_env(AtmWorkflowExecutionDoc),
                 first_lane_id => {CurrentAtmLaneIndex, CurrentRunNum},
                 next_lane_id => case CurrentAtmLaneIndex < AtmLanesCount of

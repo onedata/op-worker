@@ -89,9 +89,11 @@ handle_ended(AtmLaneRunSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx
                 true ->
                     {NextAtmLaneIndex, NextRunNum};
                 false ->
-                    % Due to limitations of workflow engine (how it handles cache
-                    % of prepared in advance lanes) instead of specifying known
-                    % run number 'current' placeholder must be specified
+                    % Because this lane run was already introduced as `{NextAtmLaneIndex, current}`
+                    % to workflow engine (when specifying lane run to be prepared in advance before
+                    % previous lane run execution) the same id must be used also now (for now there
+                    % is no way to tell workflow engine that different ids points to the same lane
+                    % run).
                     {NextAtmLaneIndex, current}
             end,
             AtmLaneRunToPrepareInAdvanceSelector = case NextAtmLaneIndex < AtmLanesCount of
