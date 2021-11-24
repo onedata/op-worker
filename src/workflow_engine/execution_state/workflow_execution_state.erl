@@ -1079,7 +1079,7 @@ prepare_next_parallel_box(State = #workflow_execution_state{
     case workflow_jobs:prepare_next_parallel_box(Jobs, JobIdentifier, BoxSpecs, BoxCount) of
         {ok, NewJobs} ->
             NotifyTaskFinished = workflow_jobs:is_task_finished(NewJobs, JobIdentifier),
-            {ok, maybe_add_pending_callback(State#workflow_execution_state{
+            {ok, add_if_callback_is_pending(State#workflow_execution_state{
                 jobs = NewJobs,
                 update_report = ?TASK_PROCESSED_REPORT(NotifyTaskFinished)
             }, JobIdentifier, NotifyTaskFinished)};
@@ -1104,15 +1104,15 @@ prepare_next_parallel_box(State = #workflow_execution_state{
                     item_id_to_report_error = ItemIdToReportError, item_id_to_snapshot = FinalItemIdToSnapshot,
                     item_ids_to_delete = ItemIdsToDelete, notify_task_finished = NotifyTaskFinished}
             },
-            State3 = maybe_add_pending_callback(State2, ItemIdToReportError, ItemIdToReportError =/= undefined),
-            {ok, maybe_add_pending_callback(State3, JobIdentifier, NotifyTaskFinished)}
+            State3 = add_if_callback_is_pending(State2, ItemIdToReportError, ItemIdToReportError =/= undefined),
+            {ok, add_if_callback_is_pending(State3, JobIdentifier, NotifyTaskFinished)}
     end.
 
--spec maybe_add_pending_callback(state(), callback_selector(), boolean()) -> state().
-maybe_add_pending_callback(#workflow_execution_state{pending_callbacks = PendingCallbacks} = State,
-    CallbackSelector, true = _TaskFinished) ->
+-spec add_if_callback_is_pending(state(), callback_selector(), boolean()) -> state().
+add_if_callback_is_pending(#workflow_execution_state{pending_callbacks = PendingCallbacks} = State,
+    CallbackSelector, true = _IsCallbackPending) ->
     State#workflow_execution_state{pending_callbacks = [CallbackSelector | PendingCallbacks]};
-maybe_add_pending_callback(State, _CallbackSelector, false = _TaskFinished) ->
+add_if_callback_is_pending(State, _CallbackSelector, false = _IsCallbackPending) ->
     State.
 
 -spec remove_pending_callback(state(), callback_selector()) -> {ok, state()}.
