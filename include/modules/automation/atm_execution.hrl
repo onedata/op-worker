@@ -24,6 +24,7 @@
     atm_workflow_execution_id :: atm_workflow_execution:id(),
 
     name :: automation:name(),
+    atm_workflow_schema_revision_num :: atm_workflow_schema_revision:revision_number(),
     atm_inventory_id :: od_atm_inventory:id(),
 
     status :: atm_workflow_execution:status(),

@@ -128,15 +128,23 @@ get(AtmWorkflowExecutionId) ->
     atm_workflow_execution:summary().
 get_summary(AtmWorkflowExecutionId, #atm_workflow_execution{
     name = Name,
+    schema_snapshot_id = AtmWorkflowSchemaSnapshotId,
     atm_inventory_id = AtmInventoryId,
     status = AtmWorkflowExecutionStatus,
     schedule_time = ScheduleTime,
     start_time = StartTime,
     finish_time = FinishTime
 }) ->
+    {ok, #document{
+        value = #atm_workflow_schema_snapshot{
+            revision_number = RevisionNum
+        }
+    }} = atm_workflow_schema_snapshot:get(AtmWorkflowSchemaSnapshotId),
+
     #atm_workflow_execution_summary{
         atm_workflow_execution_id = AtmWorkflowExecutionId,
         name = Name,
+        atm_workflow_schema_revision_num = RevisionNum,
         atm_inventory_id = AtmInventoryId,
         status = AtmWorkflowExecutionStatus,
         schedule_time = ScheduleTime,
