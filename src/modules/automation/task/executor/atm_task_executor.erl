@@ -100,7 +100,7 @@ create(AtmWorkflowExecutionCtx, AtmLaneIndex, AtmTaskSchema, AtmLambdaRevision =
     workflow_engine:task_spec() | no_return().
 initiate(AtmWorkflowExecutionCtx, AtmTaskSchema, AtmLambdaRevision, AtmTaskExecutor) ->
     Model = utils:record_type(AtmTaskExecutor),
-    Model:initiate(AtmWorkflowExecutionCtx, AtmTaskExecutor).
+    Model:initiate(AtmWorkflowExecutionCtx, AtmTaskSchema, AtmLambdaRevision, AtmTaskExecutor).
 
 
 -spec teardown(atm_lane_execution_handler:teardown_ctx(), record()) -> ok | no_return().
