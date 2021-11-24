@@ -234,7 +234,7 @@ call_current_lane_run_pre_execution_hooks(AtmWorkflowExecution = #atm_workflow_e
 }) ->
     case atm_lane_execution:get_run({current, current}, AtmWorkflowExecution) of
         {ok, #atm_lane_execution_run{status = ?ENQUEUED_STATUS, run_num = CurrentRunNum} = Run} ->
-            atm_parallel_box_execution:update_tasks_run_selector(
+            atm_parallel_box_execution:set_tasks_run_num(
                 CurrentRunNum, Run#atm_lane_execution_run.parallel_boxes
             ),
             atm_store_api:freeze(Run#atm_lane_execution_run.iterated_store_id);

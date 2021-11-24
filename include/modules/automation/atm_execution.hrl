@@ -76,7 +76,6 @@
 
     lane_index :: pos_integer(),
     lane_schema :: atm_lane_schema:record(),
-    run_selector :: atm_lane_execution:run_selector(),
     iterated_store_id :: atm_store:id()
 }).
 

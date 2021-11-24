@@ -228,7 +228,7 @@ upgrade_record(2, {
     {3, #atm_task_execution{
         workflow_execution_id = AtmWorkflowExecutionId,
         lane_index = AtmLaneIndex,
-        run_selector = 1,
+        run_num = 1,
         parallel_box_index = AtmParallelBoxIndex,
 
         schema_id = SchemaId,
@@ -250,10 +250,10 @@ upgrade_record(2, {
 
 
 -spec encode_run_selector(atm_lane_execution:run_selector()) -> binary().
-encode_run_selector(current) -> <<"current">>;
+encode_run_selector(undefined) -> <<"null">>;
 encode_run_selector(Int) when is_integer(Int) -> integer_to_binary(Int).
 
 
 -spec decode_run_selector(binary()) -> atm_lane_execution:run_selector().
-decode_run_selector(<<"current">>) -> current;
+decode_run_selector(<<"null">>) -> undefined;
 decode_run_selector(Binary) when is_binary(Binary) -> binary_to_integer(Binary).

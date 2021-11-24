@@ -1076,7 +1076,10 @@
 -record(atm_task_execution, {
     workflow_execution_id :: atm_workflow_execution:id(),
     lane_index :: atm_lane_execution:index(),
-    run_selector :: atm_lane_execution:run_selector(),
+    % This field is set to 'undefined' during document creation as specific run_num
+    % may not be known yet (e.g. runs prepared in advance). Concrete run_num must
+    % be substituted right before lane run execution starts.
+    run_num :: undefined | atm_lane_execution:run_num(),
     parallel_box_index :: non_neg_integer(),
 
     schema_id :: automation:id(),

@@ -49,7 +49,7 @@
 -export([
     initiate/2,
     teardown/2,
-    update_run_selector/2,
+    set_run_num/2,
 
     process_item/5,
     process_results/4,
@@ -101,11 +101,11 @@ teardown(AtmLaneExecutionRunTeardownCtx, AtmTaskExecutionId) ->
     atm_task_executor:teardown(AtmLaneExecutionRunTeardownCtx, AtmTaskExecutor).
 
 
--spec update_run_selector(atm_lane_execution:run_selector(), atm_task_execution:id()) ->
+-spec set_run_num(atm_lane_execution:run_num(), atm_task_execution:id()) ->
     ok.
-update_run_selector(NewRunSelector, AtmTaskExecutionId) ->
+set_run_num(RunNum, AtmTaskExecutionId) ->
     {ok, _} = atm_task_execution:update(AtmTaskExecutionId, fun(AtmTaskExecution) ->
-        {ok, AtmTaskExecution#atm_task_execution{run_selector = NewRunSelector}}
+        {ok, AtmTaskExecution#atm_task_execution{run_num = RunNum}}
     end),
     ok.
 
@@ -358,13 +358,13 @@ handle_status_change(#document{
     value = #atm_task_execution{
         workflow_execution_id = AtmWorkflowExecutionId,
         lane_index = AtmLaneIndex,
-        run_selector = RunSelector,
+        run_num = RunNum,
         parallel_box_index = AtmParallelBoxIndex,
         status = NewStatus,
         status_changed = true
     }
 }) ->
     ok = atm_lane_execution_status:handle_task_status_change(
-        AtmWorkflowExecutionId, {AtmLaneIndex, RunSelector}, AtmParallelBoxIndex,
+        AtmWorkflowExecutionId, {AtmLaneIndex, RunNum}, AtmParallelBoxIndex,
         AtmTaskExecutionId, NewStatus
     ).

@@ -24,7 +24,7 @@
     teardown_all/2, teardown/2,
     delete_all/1, delete/1
 ]).
--export([update_tasks_run_selector/2, update_task_status/3]).
+-export([set_tasks_run_num/2, update_task_status/3]).
 -export([gather_statuses/1]).
 -export([to_json/1]).
 
@@ -195,18 +195,18 @@ delete(#atm_parallel_box_execution{task_registry = AtmTaskExecutions}) ->
     atm_task_execution_factory:delete_all(maps:values(AtmTaskExecutions)).
 
 
--spec update_tasks_run_selector(atm_lane_execution:run_selector(), record() | [record()]) ->
+-spec set_tasks_run_num(atm_lane_execution:run_num(), record() | [record()]) ->
     ok.
-update_tasks_run_selector(NewRunSelector, #atm_parallel_box_execution{
+set_tasks_run_num(RunNum, #atm_parallel_box_execution{
     task_registry = AtmTaskExecutionRegistry
 }) ->
     atm_parallel_runner:foreach(fun(AtmTaskExecutionId) ->
-        atm_task_execution_handler:update_run_selector(NewRunSelector, AtmTaskExecutionId)
+        atm_task_execution_handler:set_run_num(RunNum, AtmTaskExecutionId)
     end, maps:values(AtmTaskExecutionRegistry));
 
-update_tasks_run_selector(NewRunSelector, AtmParallelBoxExecutions) ->
+set_tasks_run_num(RunNum, AtmParallelBoxExecutions) ->
     atm_parallel_runner:foreach(fun(AtmParallelBoxExecution) ->
-        update_tasks_run_selector(NewRunSelector, AtmParallelBoxExecution)
+        set_tasks_run_num(RunNum, AtmParallelBoxExecution)
     end, AtmParallelBoxExecutions).
 
 
