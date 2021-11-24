@@ -129,6 +129,21 @@
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Callback reporting that at least one task for item has failed.
+%% NOTE: if any task for task fails, the task is executed exactly once
+%% after all tasks from parallel box are finished for the item.
+%% @end
+%%--------------------------------------------------------------------
+-callback report_item_error(
+    workflow_engine:execution_id(),
+    workflow_engine:execution_context(),
+    iterator:item()
+) ->
+    ok.
+
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Callback reporting that task has been executed for all items.
 %% This callback is usually executed once for each task. It is guaranteed
 %% that callback is called before call of handle_lane_execution_ended
