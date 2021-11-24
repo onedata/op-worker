@@ -183,7 +183,7 @@ end_lane_run(AtmLaneRunSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx
 
     AtmLaneExecutionRunTeardownCtx = #atm_lane_execution_run_teardown_ctx{
         workflow_execution_ctx = AtmWorkflowExecutionCtx,
-        is_retried_scheduled = IsRetryScheduled
+        is_retry_scheduled = IsRetryScheduled
     },
     atm_parallel_box_execution:teardown_all(AtmLaneExecutionRunTeardownCtx, AtmParallelBoxExecutions),
 

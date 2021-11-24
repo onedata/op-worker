@@ -208,8 +208,8 @@ upgrade_record(1, {
         ItemsProcessed,
         ItemsFailed
     }};
-
 upgrade_record(2, {
+    ?MODULE,
     AtmWorkflowExecutionId,
     AtmLaneIndex,
     AtmParallelBoxIndex,

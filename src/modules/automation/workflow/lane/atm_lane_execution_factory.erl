@@ -30,7 +30,7 @@
 
 -record(run_creation_ctx, {
     creation_args :: run_creation_args(),
-    must_reset_lane_retries_num :: boolean(),
+    reset_lane_retries_num :: boolean(),
     execution_components :: run_execution_components()
 }).
 -type run_creation_ctx() :: #run_creation_ctx{}.
@@ -145,7 +145,7 @@ build_run_creation_ctx(AtmLaneRunSelector, AtmWorkflowExecutionDoc, AtmWorkflowE
                     IteratedStoreId
             end
         },
-        must_reset_lane_retries_num = case Run#atm_lane_execution_run.origin_run_num of
+        reset_lane_retries_num = case Run#atm_lane_execution_run.origin_run_num of
             undefined -> true;
             _ -> false
         end,
@@ -245,7 +245,7 @@ reset_lane_retries_num_if_needed(AtmWorkflowExecution, #run_creation_ctx{
         lane_index = AtmLaneIndex,
         lane_schema = #atm_lane_schema{max_retries = MaxRetries}
     },
-    must_reset_lane_retries_num = true
+    reset_lane_retries_num = true
 }) ->
     Diff = fun(AtmLaneExecution) ->
         {ok, AtmLaneExecution#atm_lane_execution{retries_left = MaxRetries}}

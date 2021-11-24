@@ -30,8 +30,8 @@
 -type lambda_snapshot_registry() :: #{od_atm_lambda:id() => atm_lambda_snapshot:id()}.
 
 -type repeat_type() :: rerun | retry.
-%% Incarnation tells how many times given atm workflow execution was manually repeated
-%% (either retried or rerun)
+%% Incarnation tells how many times given atm workflow execution was run
+%% (origin run + manual repeats)
 -type incarnation() :: non_neg_integer().
 
 -type phase() :: ?WAITING_PHASE | ?ONGOING_PHASE | ?ENDED_PHASE.
@@ -337,7 +337,7 @@ upgrade_record(3, {?MODULE,
         lanes = maps:from_list(lists_utils:enumerate(Lanes)),
         lanes_count = length(Lanes),
 
-        incarnation = 0,
+        incarnation = 1,
         current_lane_index = 1,
         current_run_num = 1,
 
