@@ -130,8 +130,8 @@
 %%--------------------------------------------------------------------
 %% @doc
 %% Callback reporting that at least one task for item has failed.
-%% NOTE: if any task for task fails, the task is executed exactly once
-%% after all tasks from parallel box are finished for the item.
+%% NOTE: if any task for an item fails, this callback is executed exactly
+%% once after all tasks from parallel box are finished for the item.
 %% @end
 %%--------------------------------------------------------------------
 -callback report_item_error(
