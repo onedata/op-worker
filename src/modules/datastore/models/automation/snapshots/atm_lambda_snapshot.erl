@@ -19,7 +19,7 @@
 -export([create/2, get/1, get_revision/2, delete/1]).
 
 %% datastore_model callbacks
--export([get_ctx/0, get_record_version/0, get_record_struct/1, upgrade_record/2]).
+-export([get_ctx/0, get_record_version/0, get_record_struct/1]).
 
 
 -type id() :: binary().
@@ -93,7 +93,7 @@ get_ctx() ->
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    2.
+    1.
 
 
 %%--------------------------------------------------------------------
@@ -105,76 +105,6 @@ get_record_version() ->
 get_record_struct(1) ->
     {record, [
         {lambda_id, string},
-
-        {name, string},
-        {summary, string},
-        {description, string},
-
-        {operation_spec, {custom, string, {persistent_record, encode, decode, atm_lambda_operation_spec}}},
-        {argument_specs, [{custom, string, {persistent_record, encode, decode, atm_lambda_argument_spec}}]},
-        {result_specs, [{custom, string, {persistent_record, encode, decode, atm_lambda_result_spec}}]},
-
-        {atm_inventories, [string]}
-    ]};
-get_record_struct(2) ->
-    {record, [
-        {lambda_id, string},
-        % new field - name, summary, description, operation_spec, argument_specs, result_specs
-        % are now stored per revision in it
         {revision_registry, {custom, string, {persistent_record, encode, decode, atm_lambda_revision_registry}}},
         {atm_inventories, [string]}
     ]}.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Upgrades model's record from provided version to the next one.
-%% @end
-%%--------------------------------------------------------------------
--spec upgrade_record(datastore_model:record_version(), datastore_model:record()) ->
-    {datastore_model:record_version(), datastore_model:record()}.
-upgrade_record(1, {
-    ?MODULE,
-    LambdaId,
-    Name,
-    Summary,
-    Description,
-    OperationSpec,
-    ArgumentSpecs,
-    ResultSpecs,
-    InventoryIds
-}) ->
-    % Missing resource spec is constructed from some random values as they are irrelevant
-    % due cluster upgrade from 21.02-alpha21 procedure purging all atm related docs
-    % (record upgrade procedure is executed before cluster upgrade so some random
-    % junk must be, unfortunately, specified)
-    ResourceSpec = #atm_resource_spec{
-        cpu_requested = 0.1,
-        cpu_limit = undefined,
-        memory_requested = 104857600,
-        memory_limit = undefined,
-        ephemeral_storage_requested = 104857600,
-        ephemeral_storage_limit = undefined
-    },
-    Revision = #atm_lambda_revision{
-        name = Name,
-        summary = Summary,
-        description = Description,
-        operation_spec = OperationSpec,
-        argument_specs = ArgumentSpecs,
-        result_specs = ResultSpecs,
-        resource_spec = ResourceSpec,
-        checksum = <<>>,
-        state = stable
-    },
-    RevisionRegistry = atm_lambda_revision_registry:add_revision(
-        1,
-        Revision#atm_lambda_revision{checksum = atm_lambda_revision:calculate_checksum(Revision)},
-        atm_lambda_revision_registry:empty()
-    ),
-
-    {2, #atm_lambda_snapshot{
-        lambda_id = LambdaId,
-        revision_registry = RevisionRegistry,
-        atm_inventories = InventoryIds
-    }}.

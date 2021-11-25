@@ -20,24 +20,18 @@
 %% API
 -export([
     create/1,
-    report_synchronization_started/2, 
-    report_file_synchronized/2, 
+    report_synchronization_started/2,
+    report_file_synchronized/2,
     report_file_synchronization_skipped/3,
-    report_file_synchronization_failed/3, 
-    destroy/1, 
+    report_file_synchronization_failed/3,
+    destroy/1,
     list/2
 ]).
 
-%% datastore_model callbacks
--export([get_ctx/0]).
-
 -type id() :: qos_entry:id().
--type is_last() :: boolean().
+-type entry() :: json_utils:json_map().
 
--export_type([id/0, is_last/0]).
-
-
--define(CTX, #{model => ?MODULE}).
+-export_type([id/0]).
 
 -define(LOG_MAX_SIZE, op_worker:get_env(qos_entry_audit_log_max_size, 1000)).
 -define(LOG_EXPIRATION, op_worker:get_env(qos_entry_audit_log_expiration_seconds, 604800)).
@@ -48,7 +42,7 @@
 
 -spec create(id()) -> ok | {error, term()}.
 create(Id) ->
-    datastore_infinite_log:create(?CTX, Id, #{
+    json_infinite_log_model:create(Id, #{
         size_pruning_threshold => ?LOG_MAX_SIZE,
         age_pruning_threshold => ?LOG_EXPIRATION
     }).
@@ -56,86 +50,65 @@ create(Id) ->
 
 -spec report_synchronization_started(id(), file_id:file_guid()) -> ok | {error, term()}.
 report_synchronization_started(Id, FileGuid) ->
-    {ok, ObjectId} = file_id:guid_to_objectid(FileGuid),
-    Content = #{
+    json_infinite_log_model:append(Id, #{
         <<"status">> => <<"synchronization started">>,
         <<"severity">> => <<"info">>,
-        <<"fileId">> => ObjectId
-    },
-    datastore_infinite_log:append(?CTX, Id, json_utils:encode(Content)).
+        <<"fileId">> => file_guid_to_object_id(FileGuid)
+    }).
 
 
 -spec report_file_synchronized(id(), file_id:file_guid()) -> ok | {error, term()}.
 report_file_synchronized(Id, FileGuid) ->
-    {ok, ObjectId} = file_id:guid_to_objectid(FileGuid),
-    Content = #{
+    json_infinite_log_model:append(Id, #{
         <<"status">> => <<"synchronized">>,
         <<"severity">> => <<"info">>,
-        <<"fileId">> => ObjectId
-    },
-    datastore_infinite_log:append(?CTX, Id, json_utils:encode(Content)).
+        <<"fileId">> => file_guid_to_object_id(FileGuid)
+    }).
 
 
--spec report_file_synchronization_skipped(id(), file_id:file_guid(), Reason :: binary()) -> 
+-spec report_file_synchronization_skipped(id(), file_id:file_guid(), Reason :: binary()) ->
     ok | {error, term()}.
 report_file_synchronization_skipped(Id, FileGuid, Reason) ->
-    {ok, ObjectId} = file_id:guid_to_objectid(FileGuid),
-    Content = #{
+    json_infinite_log_model:append(Id, #{
         <<"status">> => <<"synchronization skipped">>,
         <<"reason">> => Reason,
         <<"severity">> => <<"info">>,
-        <<"fileId">> => ObjectId
-    },
-    datastore_infinite_log:append(?CTX, Id, json_utils:encode(Content)).
+        <<"fileId">> => file_guid_to_object_id(FileGuid)
+    }).
 
 
 -spec report_file_synchronization_failed(id(), file_id:file_guid(), {error, term()}) -> ok | {error, term()}.
 report_file_synchronization_failed(Id, FileGuid, Error) ->
-    {ok, ObjectId} = file_id:guid_to_objectid(FileGuid),
-    Content = #{
+    json_infinite_log_model:append(Id, #{
         <<"status">> => <<"synchronization failed">>,
         <<"severity">> => <<"error">>,
-        <<"fileId">> => ObjectId,
+        <<"fileId">> => file_guid_to_object_id(FileGuid),
         <<"reason">> => errors:to_json(Error)
-    },
-    datastore_infinite_log:append(?CTX, Id, json_utils:encode(Content)).
+    }).
 
 
 -spec destroy(id()) -> ok | {error, term()}.
 destroy(Id) ->
-    datastore_infinite_log:destroy(?CTX, Id).
+    json_infinite_log_model:destroy(Id).
 
 
--spec list(id(), infinite_log_browser:listing_opts()) -> 
-    {ok, [json_utils:json_map()], is_last()} | {error, term()}.
+-spec list(id(), json_infinite_log_model:listing_opts()) ->
+    {ok, {infinite_log_browser:progress_marker(), [entry()]}} | {error, term()}.
 list(Id, Opts) ->
-    case datastore_infinite_log:list(?CTX, Id, Opts#{direction => ?FORWARD}) of
-        {ok, {ProgressMarker, ListingResult}} -> 
-            {ok, map_listing_result(ListingResult), ProgressMarker == done};
-        {error, _} = Error -> 
-            Error
-    end.
-
-
-%%%===================================================================
-%%% datastore_model callbacks
-%%%===================================================================
-
--spec get_ctx() -> datastore:ctx().
-get_ctx() ->
-    ?CTX.
-
+    json_infinite_log_model:list_and_postprocess(
+        Id, Opts#{direction => ?FORWARD}, fun({_Index, {Timestamp, EntryContent}}) ->
+            EntryContent#{
+                <<"timestamp">> => Timestamp
+            }
+        end
+    ).
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
--spec map_listing_result([{infinite_log:entry_index(), infinite_log:entry()}]) -> 
-    [json_utils:json_map()].
-map_listing_result(ListingResult) ->
-    lists:map(fun({_Index, {Timestamp, EncodedContent}}) ->
-        DecodedContent = json_utils:decode(EncodedContent),
-        DecodedContent#{
-            <<"timestamp">> => Timestamp
-        }
-    end, ListingResult).
+%% @private
+-spec file_guid_to_object_id(file_id:file_guid()) -> file_id:objectid().
+file_guid_to_object_id(FileGuid) ->
+    {ok, ObjectId} = file_id:guid_to_objectid(FileGuid),
+    ObjectId.

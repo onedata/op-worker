@@ -113,9 +113,13 @@
 
 % Record holding the registry of pod status changes for an OpenFaaS function
 % (part of function activity registry)
+%% @formatter:off
 -record(atm_openfaas_function_pod_status_registry, {
-    registry :: atm_openfaas_function_pod_status_registry:record()
+    registry :: #{
+        atm_openfaas_function_activity_registry:pod_id() => atm_openfaas_function_pod_status_summary:record()
+    }
 }).
+%% @formatter:on
 
 % Record holding the summary of status changes for a single pod of an OpenFaaS function
 % (single entry in the atm_openfaas_function_pod_status_registry)
