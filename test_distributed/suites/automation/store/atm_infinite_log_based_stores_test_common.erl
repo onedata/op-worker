@@ -105,11 +105,16 @@ iterate_one_by_one_test_base(AtmStoreSchema, ResultMapper) ->
 
 
 iterate_in_chunks_test_base(AtmStoreSchema, ResultMapper) ->
+    try
     Length = 8,
     ChunkSize = rand:uniform(Length),
     AtmStoreIteratorStrategy = #atm_store_iterator_batch_strategy{size = ChunkSize},
     ExpectedResultsList = atm_store_test_utils:split_into_chunks(ChunkSize, [], lists:seq(1, Length)),
-    iterate_test_base_internal(AtmStoreSchema, AtmStoreIteratorStrategy, Length, ExpectedResultsList, ResultMapper).
+    iterate_test_base_internal(AtmStoreSchema, AtmStoreIteratorStrategy, Length, ExpectedResultsList, ResultMapper),
+        ok
+    catch T:M:S ->
+        ct:print("fixme ~p ~p ~p", [T, M, S])
+        end.
 
 
 %% @private

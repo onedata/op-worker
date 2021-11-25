@@ -48,16 +48,18 @@
 %% }
 -type operation_options() :: #{binary() => boolean()}.
 
+%@formatter:off
 -type browse_options() :: #{
     limit := atm_store_api:limit(),
     start_index => atm_store_api:index(),
     start_timestamp => time:millis(),
     offset => atm_store_api:offset()
 }.
+%@formatter:on
 
 -record(atm_audit_log_store_container, {
     data_spec :: atm_data_spec:record(),
-    backend_id :: json_based_infinite_log_backend:id()
+    backend_id :: json_based_infinite_log_model:id()
 }).
 -type record() :: #atm_audit_log_store_container{}.
 
@@ -68,8 +70,6 @@
     ?LOGGER_WARNING, ?LOGGER_ALERT,
     ?LOGGER_ERROR, ?LOGGER_CRITICAL, ?LOGGER_EMERGENCY
 ]).
-
-%% @TODO VFS-8068 Reuse duplicated code with atm_list_store_container and atm_infinite_log_container
 
 %%%===================================================================
 %%% atm_store_container callbacks
@@ -98,26 +98,10 @@ browse_content(AtmWorkflowExecutionAuth, BrowseOpts, #atm_audit_log_store_contai
     backend_id = BackendId,
     data_spec = AtmDataSpec
 }) ->
-    SanitizedBrowseOpts = sanitize_browse_options(BrowseOpts),
-    {ok, {Marker, Entries}} = json_based_infinite_log_backend:list(BackendId, #{
-        start_from => infer_start_from(SanitizedBrowseOpts),
-        offset => maps:get(offset, SanitizedBrowseOpts, 0),
-        limit => maps:get(limit, SanitizedBrowseOpts)
-    }),
-    MappedEntries = lists:map(fun({Index, Timestamp, Object}) ->
-        IndexBin = integer_to_binary(Index),
-        case atm_value:expand(AtmWorkflowExecutionAuth, maps:get(<<"entry">>, Object), AtmDataSpec) of
-            {ok, ExpandedEntry} ->
-                {IndexBin, {ok, Object#{
-                    <<"timestamp">> => Timestamp, 
-                    <<"entry">> => ExpandedEntry, 
-                    <<"severity">> => maps:get(<<"severity">>, Object)}
-                }};
-            {error, _} = Error ->
-                {IndexBin, Error}
-        end
-    end, Entries),
-    {MappedEntries, Marker =:= done}.
+    atm_infinite_log_based_stores_common:browse_content(
+        audit_log_store, BackendId, BrowseOpts,
+        atm_audit_log_store_container_iterator:gen_listing_postprocessor(AtmWorkflowExecutionAuth, AtmDataSpec)
+    ).
 
 
 -spec acquire_iterator(record()) -> atm_audit_log_store_container_iterator:record().
@@ -153,7 +137,7 @@ apply_operation(_Record, _Operation) ->
 
 -spec delete(record()) -> ok.
 delete(#atm_audit_log_store_container{backend_id = BackendId}) ->
-    json_based_infinite_log_backend:destroy(BackendId).
+    json_based_infinite_log_model:destroy(BackendId).
 
 
 %%%===================================================================
@@ -194,7 +178,7 @@ db_decode(#{<<"dataSpec">> := AtmDataSpecJson, <<"backendId">> := BackendId}, Ne
 %% @private
 -spec create_container(atm_data_spec:record()) -> record().
 create_container(AtmDataSpec) ->
-    {ok, Id} = json_based_infinite_log_backend:create(#{}),
+    {ok, Id} = json_based_infinite_log_model:create(#{}),
     #atm_audit_log_store_container{
         data_spec = AtmDataSpec,
         backend_id = Id
@@ -225,43 +209,11 @@ append_sanitized_batch(Batch, Record = #atm_audit_log_store_container{
     backend_id = BackendId
 }) ->
     lists:foreach(fun(#{<<"entry">> := Item} = Object) ->
-        ok = json_based_infinite_log_backend:append(BackendId, Object#{
+        ok = json_based_infinite_log_model:append(BackendId, Object#{
             <<"entry">> => atm_value:compress(Item, AtmDataSpec)
         }) 
     end, Batch),
     Record.
-
-
-%% @private
--spec infer_start_from(atm_store_api:browse_options()) ->
-    undefined | {index, infinite_log:entry_index()} | {timestamp, infinite_log:timestamp()}.
-infer_start_from(#{start_index := <<>>}) ->
-    undefined;
-infer_start_from(#{start_index := StartIndexBin}) ->
-    try
-        {index, binary_to_integer(StartIndexBin)}
-    catch _:_ ->
-        throw(?ERROR_BAD_DATA(<<"index">>, <<"not numerical">>))
-    end;
-infer_start_from(#{start_timestamp := StartTimestamp}) ->
-    {timestamp, StartTimestamp};
-infer_start_from(_) ->
-    undefined.
-
-
-%% @private
--spec sanitize_browse_options(browse_options()) -> browse_options().
-sanitize_browse_options(BrowseOpts) ->
-    middleware_sanitizer:sanitize_data(BrowseOpts, #{
-        required => #{
-            limit => {integer, {not_lower_than, 1}}
-        },
-        at_least_one => #{
-            offset => {integer, any},
-            start_index => {binary, any},
-            start_timestamp => {integer, {not_lower_than, 0}}
-        }
-    }).
 
 
 %% @private
