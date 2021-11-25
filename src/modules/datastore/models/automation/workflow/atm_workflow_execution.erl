@@ -40,7 +40,7 @@
 -type status() ::
     ?SCHEDULED_STATUS |
     ?ACTIVE_STATUS | ?ABORTING_STATUS |
-    ?FINISHED_STATUS | ?CANCELLED_STATUS | ?FAILED_STATUS
+    ?FINISHED_STATUS | ?CANCELLED_STATUS | ?FAILED_STATUS.
 %% @formatter:on
 
 -type timestamp() :: time:seconds().
