@@ -36,10 +36,12 @@
 
 -type phase() :: ?WAITING_PHASE | ?ONGOING_PHASE | ?ENDED_PHASE.
 
+%% @formatter:off
 -type status() ::
-?SCHEDULED_STATUS |
-?ACTIVE_STATUS | ?ABORTING_STATUS |
-?FINISHED_STATUS | ?CANCELLED_STATUS | ?FAILED_STATUS.
+    ?SCHEDULED_STATUS |
+    ?ACTIVE_STATUS | ?ABORTING_STATUS |
+    ?FINISHED_STATUS | ?CANCELLED_STATUS | ?FAILED_STATUS
+%% @formatter:on
 
 -type timestamp() :: time:seconds().
 
