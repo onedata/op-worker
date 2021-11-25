@@ -110,7 +110,8 @@ create_archive(_Config) ->
             target_nodes = Providers,
             client_spec = ?CLIENT_SPEC_FOR_SPACE_KRK_PAR(?EPERM),
             randomly_select_scenarios = true,
-            verify_fun = build_verify_archive_created_fun(MemRef, Providers),
+            verify_fun = build_verify_archive_created_fun(MemRef, Providers, 
+                get_datasets(attached), get_datasets(detached)),
             scenario_templates = [
                 #scenario_template{
                     name = <<"Archive dataset using REST API">>,
@@ -123,7 +124,7 @@ create_archive(_Config) ->
                     type = gs,
                     prepare_args_fun = fun create_archive_prepare_gs_args_fun/1,
                     validate_result_fun = build_create_archive_validate_gs_call_result_fun(MemRef)
-                }
+                } 
             ],
             data_spec = #data_spec{
                 required = [<<"datasetId">>],
@@ -260,10 +261,11 @@ build_create_archive_validate_gs_call_result_fun(MemRef) ->
 %% @private
 -spec build_verify_archive_created_fun(
     api_test_memory:mem_ref(),
-    [oct_background:entity_selector()]
+    [oct_background:entity_selector()],
+    [dataset:id()], [dataset:id()]
 ) ->
     onenv_api_test_runner:verify_fun().
-build_verify_archive_created_fun(MemRef, Providers) ->
+build_verify_archive_created_fun(MemRef, Providers, AttachedDatasets, DetachedDatasets) ->
     fun
         (expected_success, #api_test_ctx{
             client = ?USER(UserId),
@@ -281,13 +283,34 @@ build_verify_archive_created_fun(MemRef, Providers) ->
                 true -> await_archive_preserved_callback_called(ArchiveId, DatasetId);
                 false -> ok
             end,
+            assert_dataset_lists(AttachedDatasets, DetachedDatasets),
             verify_archive(
                 UserId, Providers, ArchiveId, DatasetId, CreationTime, ConfigJson,
                 PreservedCallback, PurgedCallback, Description
             );
         (expected_failure, _) ->
+            assert_dataset_lists(AttachedDatasets, DetachedDatasets),
             ok
     end.
+
+
+assert_dataset_lists(AttachedDatasets, DetachedDatasets) ->
+    assert_dataset_list(attached, AttachedDatasets),
+    assert_dataset_list(detached, DetachedDatasets).
+    
+
+assert_dataset_list(State, ExpectedDatasets) ->
+    ExistingDatasets = get_datasets(State),
+    ?assertEqual(lists:sort(ExpectedDatasets), lists:sort(ExistingDatasets)).
+
+
+get_datasets(State) ->
+    SessionId = oct_background:get_user_session_id(user3, krakow),
+    Node = oct_background:get_random_provider_node(krakow),
+    SpaceId = oct_background:get_space_id(?SPACE),
+    {ok, Entries, true} = lfm_proxy:list_top_datasets(Node, SessionId, SpaceId, State, #{limit => 10000}),
+    lists:map(fun({DatasetId, _, _}) -> DatasetId end, Entries).
+
 
 %% @private
 -spec await_archive_preserved_callback_called(archive:id(), dataset:id()) -> ok.
