@@ -26,7 +26,7 @@
 -export([get_next_batch/4, forget_before/1, mark_exhausted/1]).
 
 %% persistent_record callbacks
--export([version/0, db_encode/2, db_decode/2, upgrade_encoded_record/2]).
+-export([version/0, db_encode/2, db_decode/2]).
 
 
 -record(atm_list_store_container_iterator, {
@@ -100,7 +100,7 @@ mark_exhausted(_AtmStoreContainerIterator) ->
 
 -spec version() -> persistent_record:record_version().
 version() ->
-    2.
+    1.
 
 
 -spec db_encode(record(), persistent_record:nested_record_encoder()) ->
@@ -119,12 +119,3 @@ db_decode(#{<<"backendId">> := BackendId} = JsonRecord, _NestedRecordDecoder) ->
         backend_id = BackendId,
         last_listed_index = maps:get(<<"lastListedIndex">>, JsonRecord, <<"-1">>)
     }.
-
-
--spec upgrade_encoded_record(persistent_record:record_version(), json_utils:json_term()) ->
-    {persistent_record:record_version(), json_utils:json_term()}.
-upgrade_encoded_record(1, #{<<"backendId">> := BackendId, <<"index">> := Index}) ->
-    {2, #{
-        <<"backendId">> => BackendId,
-        <<"lastListedIndex">> => integer_to_binary(Index + 1)
-    }}.

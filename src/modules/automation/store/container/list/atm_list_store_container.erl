@@ -28,7 +28,7 @@
 ]).
 
 %% persistent_record callbacks
--export([version/0, db_encode/2, db_decode/2, upgrade_encoded_record/2]).
+-export([version/0, db_encode/2, db_decode/2]).
 
 
 -type initial_value() :: [automation:item()] | undefined.
@@ -131,7 +131,7 @@ delete(#atm_list_store_container{backend_id = BackendId}) ->
 
 -spec version() -> persistent_record:record_version().
 version() ->
-    2.
+    1.
 
 
 -spec db_encode(record(), persistent_record:nested_record_encoder()) ->
@@ -153,19 +153,6 @@ db_decode(#{<<"dataSpec">> := AtmDataSpecJson, <<"backendId">> := BackendId}, Ne
         data_spec = NestedRecordDecoder(AtmDataSpecJson, atm_data_spec),
         backend_id = BackendId
     }.
-
-
--spec upgrade_encoded_record(persistent_record:record_version(), json_utils:json_term()) ->
-    {persistent_record:record_version(), json_utils:json_term()}.
-upgrade_encoded_record(1, #{<<"atmInfiniteLogContainer">> := AtmInfiniteLogContainerIteratorJson}) ->
-    #{<<"_data">> := #{
-        <<"backendId">> := BackendId,
-        <<"dataSpec">> := AtmDataSpec
-    }} = AtmInfiniteLogContainerIteratorJson,
-    {2, #{
-        <<"backendId">> => BackendId,
-        <<"dataSpec">> => AtmDataSpec
-    }}.
 
 
 %%%===================================================================
