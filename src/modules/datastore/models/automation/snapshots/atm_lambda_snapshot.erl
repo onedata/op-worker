@@ -16,7 +16,7 @@
 -include("modules/datastore/datastore_runner.hrl").
 
 %% API
--export([create/2, get/1, delete/1]).
+-export([create/2, get/1, get_revision/2, delete/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_version/0, get_record_struct/1]).
@@ -40,30 +40,16 @@
 -spec create(atm_workflow_execution:id(), od_atm_lambda:doc()) ->
     {ok, id()} | {error, term()}.
 create(AtmWorkflowExecutionId, #document{key = AtmLambdaId, value = #od_atm_lambda{
-    name = AtmLambdaName,
-    summary = AtmLambdaSummary,
-    description = AtmLambdaDescription,
-
-    operation_spec = AtmLambdaOperationSpec,
-    argument_specs = AtmLambdaArgumentSpecs,
-    result_specs = AtmLambdaResultSpecs,
-
+    revision_registry = RevisionRegistry,
     atm_inventories = AtmInventories
 }}) ->
-    %% TODO VFS-7685 add ref count and gen snapshot id based on doc revision
+    %% TODO VFS-7685 add ref count and gen snapshot id based on doc revision and lambda revisions
+    %% (not used in given workflow execution lambda revisions are removed from revision registry)
     ?extract_key(datastore_model:create(?CTX, #document{
         key = datastore_key:new_from_digest([AtmWorkflowExecutionId, AtmLambdaId]),
         value = #atm_lambda_snapshot{
             lambda_id = AtmLambdaId,
-
-            name = AtmLambdaName,
-            summary = AtmLambdaSummary,
-            description = AtmLambdaDescription,
-
-            operation_spec = AtmLambdaOperationSpec,
-            argument_specs = AtmLambdaArgumentSpecs,
-            result_specs = AtmLambdaResultSpecs,
-
+            revision_registry = RevisionRegistry,
             atm_inventories = AtmInventories
         }
     })).
@@ -72,6 +58,12 @@ create(AtmWorkflowExecutionId, #document{key = AtmLambdaId, value = #od_atm_lamb
 -spec get(id()) -> {ok, doc()} | {error, term()}.
 get(AtmLambdaSnapshotId) ->
     datastore_model:get(?CTX, AtmLambdaSnapshotId).
+
+
+-spec get_revision(atm_lambda_revision:revision_number(), record()) ->
+    atm_lambda_revision:record().
+get_revision(RevisionNum, #atm_lambda_snapshot{revision_registry = RevisionRegistry}) ->
+    atm_lambda_revision_registry:get_revision(RevisionNum, RevisionRegistry).
 
 
 -spec delete(id()) -> ok | {error, term()}.
@@ -113,14 +105,6 @@ get_record_version() ->
 get_record_struct(1) ->
     {record, [
         {lambda_id, string},
-
-        {name, string},
-        {summary, string},
-        {description, string},
-
-        {operation_spec, {custom, string, {persistent_record, encode, decode, atm_lambda_operation_spec}}},
-        {argument_specs, [{custom, string, {persistent_record, encode, decode, atm_lambda_argument_spec}}]},
-        {result_specs, [{custom, string, {persistent_record, encode, decode, atm_lambda_result_spec}}]},
-
+        {revision_registry, {custom, string, {persistent_record, encode, decode, atm_lambda_revision_registry}}},
         {atm_inventories, [string]}
     ]}.

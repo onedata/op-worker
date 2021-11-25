@@ -106,10 +106,13 @@ get_schema(AtmLaneSelector, AtmWorkflowExecution = #atm_workflow_execution{
 }) ->
     AtmLaneIndex = resolve_selector(AtmLaneSelector, AtmWorkflowExecution),
 
-    {ok, #document{value = AtmWorkflowSchemaSnapshot}} = atm_workflow_schema_snapshot:get(
-        AtmWorkflowSchemaSnapshotId
-    ),
-    lists:nth(AtmLaneIndex, AtmWorkflowSchemaSnapshot#atm_workflow_schema_snapshot.lanes).
+    {ok, #document{value = #atm_workflow_schema_snapshot{
+        revision = #atm_workflow_schema_revision{
+            lanes = AtmLaneSchemas
+        }
+    }}} = atm_workflow_schema_snapshot:get(AtmWorkflowSchemaSnapshotId),
+
+    lists:nth(AtmLaneIndex, AtmLaneSchemas).
 
 
 -spec get_run(lane_run_selector(), atm_workflow_execution:record()) ->

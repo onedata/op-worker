@@ -71,7 +71,8 @@ data_spec(#op_req{operation = create, gri = #gri{aspect = instance}}) ->
     #{
         required => #{
             <<"spaceId">> => {binary, non_empty},
-            <<"atmWorkflowSchemaId">> => {binary, non_empty}
+            <<"atmWorkflowSchemaId">> => {binary, non_empty},
+            <<"atmWorkflowSchemaRevisionNumber">> => {integer, {not_lower_than, 1}}
         },
         optional => #{
             <<"storeInitialValues">> => {json, any},
@@ -196,6 +197,7 @@ create(#op_req{auth = ?USER(_UserId, SessionId), data = Data, gri = #gri{aspect 
         fslogic_uuid:spaceid_to_space_dir_guid(maps:get(<<"spaceId">>, Data)),
         #schedule_atm_workflow_execution{
             atm_workflow_schema_id = maps:get(<<"atmWorkflowSchemaId">>, Data),
+            atm_workflow_schema_revision_num = maps:get(<<"atmWorkflowSchemaRevisionNumber">>, Data),
             store_initial_values = maps:get(<<"storeInitialValues">>, Data, #{}),
             callback_url = maps:get(<<"callback">>, Data, undefined)
         }

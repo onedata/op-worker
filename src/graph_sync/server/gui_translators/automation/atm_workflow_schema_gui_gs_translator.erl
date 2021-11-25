@@ -14,6 +14,7 @@
 -author("Bartosz Walkowicz").
 
 -include("middleware/middleware.hrl").
+-include_lib("ctool/include/automation/automation.hrl").
 
 %% API
 -export([translate_resource/2]).
@@ -27,11 +28,13 @@
 -spec translate_resource(gri:gri(), Data :: term()) -> gs_protocol:data().
 translate_resource(#gri{aspect = instance, scope = private}, #od_atm_workflow_schema{
     name = AtmWorkflowSchemaName,
-    description = AtmWorkflowSchemaDescription,
-    stores = AtmStoreSchemas
+    summary = AtmWorkflowSchemaSummary,
+    revision_registry = RevisionRegistry
 }) ->
     #{
         <<"name">> => AtmWorkflowSchemaName,
-        <<"description">> => AtmWorkflowSchemaDescription,
-        <<"stores">> => jsonable_record:list_to_json(AtmStoreSchemas, atm_store_schema)
+        <<"summary">> => AtmWorkflowSchemaSummary,
+        <<"revisionRegistry">> => jsonable_record:to_json(
+            RevisionRegistry, atm_workflow_schema_revision_registry
+        )
     }.

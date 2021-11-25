@@ -83,10 +83,16 @@ subscribe_test(Config) ->
     ),
     ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, AtmLambdaGriMatcher)),
 
-    NewName = <<"new_name">>,
+    NewRevisionRegistry = #atm_lambda_revision_registry{
+        registry = #{
+            1 => ?ATM_LAMBDA_FIRST_REVISION(?ATM_LAMBDA_1),
+            2 => ?ATM_LAMBDA_FIRST_REVISION(?ATM_LAMBDA_1),
+            3 => ?ATM_LAMBDA_FIRST_REVISION(?ATM_LAMBDA_1)
+        }
+    },
     
     ChangedData1 = AtmLambda1PrivateData#{
-        <<"name">> => NewName,
+        <<"revisionRegistry">> => jsonable_record:to_json(NewRevisionRegistry, atm_lambda_revision_registry),
         <<"revision">> => 6
     },
     PushMessage1 = #gs_push_graph{gri = AtmLambda1PrivateGRI, data = ChangedData1, change_type = updated},
@@ -94,7 +100,7 @@ subscribe_test(Config) ->
 
     ?assertMatch(
         {ok, #document{key = ?ATM_LAMBDA_1, value = #od_atm_lambda{
-            name = NewName,
+            revision_registry = NewRevisionRegistry,
             cache_state = #{revision := 6}
         }}},
         rpc:call(Node, atm_lambda_logic, get, [User1Sess, ?ATM_LAMBDA_1])

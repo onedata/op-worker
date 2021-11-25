@@ -27,12 +27,14 @@
     ok | {ok, term()} | no_return().
 route(UserCtx, SpaceDirCtx, #schedule_atm_workflow_execution{
     atm_workflow_schema_id = AtmWorkflowSchemaId,
+    atm_workflow_schema_revision_num = AtmWorkflowSchemaRevisionNum,
     store_initial_values = AtmStoreInitialValues,
     callback_url = CallbackUrl
 }) ->
     {ok, atm_workflow_execution_api:schedule(
         UserCtx, file_ctx:get_space_id_const(SpaceDirCtx),
-        AtmWorkflowSchemaId, AtmStoreInitialValues, CallbackUrl
+        AtmWorkflowSchemaId, AtmWorkflowSchemaRevisionNum,
+        AtmStoreInitialValues, CallbackUrl
     )};
 
 route(_UserCtx, _SpaceDirCtx, #cancel_atm_workflow_execution{
