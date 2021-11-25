@@ -44,7 +44,11 @@
 %%%===================================================================
 
 
--callback build(atm_workflow_execution:id(), atm_lane_execution:index(), atm_lambda_snapshot:record()) ->
+-callback build(
+    atm_workflow_execution_ctx:record(),
+    atm_lane_execution:index(),
+    atm_lambda_snapshot:record()
+) ->
     record() | no_return().
 
 -callback initiate(atm_workflow_execution_ctx:record(), record()) ->
@@ -63,14 +67,18 @@
 %%%===================================================================
 
 
--spec build(atm_workflow_execution:id(), atm_lane_execution:index(), atm_lambda_snapshot:record()) ->
+-spec build(
+    atm_workflow_execution_ctx:record(),
+    atm_lane_execution:index(),
+    atm_lambda_snapshot:record()
+) ->
     record() | no_return().
-build(AtmWorkflowExecutionId, AtmLaneIndex, AtmLambdaSnapshot = #atm_lambda_snapshot{
+build(AtmWorkflowExecutionCtx, AtmLaneIndex, AtmLambdaSnapshot = #atm_lambda_snapshot{
     operation_spec = AtmLambadaOperationSpec
 }) ->
     Engine = atm_lambda_operation_spec:get_engine(AtmLambadaOperationSpec),
     Model = engine_to_executor_model(Engine),
-    Model:build(AtmWorkflowExecutionId, AtmLaneIndex, AtmLambdaSnapshot).
+    Model:build(AtmWorkflowExecutionCtx, AtmLaneIndex, AtmLambdaSnapshot).
 
 
 -spec initiate(atm_workflow_execution_ctx:record(), record()) ->

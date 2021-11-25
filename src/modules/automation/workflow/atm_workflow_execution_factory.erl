@@ -76,7 +76,9 @@ create(UserCtx, SpaceId, AtmWorkflowSchemaId, StoreInitialValues, CallbackUrl) -
         workflow_execution_env = AtmWorkflowExecutionEnv,
         execution_components = ExecutionComponents
     } = create_execution_components(#creation_ctx{
-        workflow_execution_env = atm_workflow_execution_env:build(SpaceId, AtmWorkflowExecutionId),
+        workflow_execution_env = atm_workflow_execution_env:build(
+            SpaceId, AtmWorkflowExecutionId, 0
+        ),
         creation_args = #creation_args{
             workflow_execution_id = AtmWorkflowExecutionId,
             workflow_execution_auth = atm_workflow_execution_auth:build(
@@ -381,6 +383,7 @@ create_workflow_execution_doc(#creation_ctx{
             lanes = AtmLaneExecutions,
             lanes_count = map_size(AtmLaneExecutions),
 
+            incarnation = 1,
             current_lane_index = 1,
             current_run_num = 1,
 

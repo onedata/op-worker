@@ -209,11 +209,12 @@ create_task_execution_doc(#creation_ctx{
     {ok, AtmTaskExecutionDoc} = atm_task_execution:create(#atm_task_execution{
         workflow_execution_id = AtmWorkflowExecutionId,
         lane_index = AtmLaneIndex,
+        run_num = undefined,
         parallel_box_index = AtmParallelBoxIndex,
 
         schema_id = AtmTaskSchemaId,
 
-        executor = atm_task_executor:build(AtmWorkflowExecutionId, AtmLaneIndex, AtmLambdaSnapshot),
+        executor = atm_task_executor:build(AtmWorkflowExecutionCtx, AtmLaneIndex, AtmLambdaSnapshot),
         argument_specs = build_argument_specs(AtmLambdaSnapshot, AtmTaskSchema),
         result_specs = build_result_specs(AtmLambdaSnapshot, AtmTaskSchema),
 

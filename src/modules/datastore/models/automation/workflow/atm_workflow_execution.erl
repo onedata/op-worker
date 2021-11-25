@@ -29,6 +29,11 @@
 -type store_registry() :: #{AtmStoreSchemaId :: automation:id() => atm_store:id()}.
 -type lambda_snapshot_registry() :: #{od_atm_lambda:id() => atm_lambda_snapshot:id()}.
 
+-type repeat_type() :: rerun | retry.
+%% Incarnation tells how many times given atm workflow execution was run
+%% (origin run + manual repeats)
+-type incarnation() :: non_neg_integer().
+
 -type phase() :: ?WAITING_PHASE | ?ONGOING_PHASE | ?ENDED_PHASE.
 
 -type status() ::
@@ -42,6 +47,7 @@
 
 -export_type([id/0, diff/0, record/0, doc/0]).
 -export_type([store_registry/0, lambda_snapshot_registry/0]).
+-export_type([repeat_type/0, incarnation/0]).
 -export_type([phase/0, status/0, timestamp/0]).
 -export_type([summary/0]).
 
@@ -193,6 +199,7 @@ get_record_struct(4) ->
         {lanes, #{integer => {custom, string, {persistent_record, encode, decode, atm_lane_execution}}}},
         {lanes_count, integer},      %% new field
 
+        {incarnation, integer},          %% new field
         {current_lane_index, integer},   %% new field
         {current_run_num, integer},      %% new field
 
@@ -330,6 +337,7 @@ upgrade_record(3, {?MODULE,
         lanes = maps:from_list(lists_utils:enumerate(Lanes)),
         lanes_count = length(Lanes),
 
+        incarnation = 1,
         current_lane_index = 1,
         current_run_num = 1,
 
