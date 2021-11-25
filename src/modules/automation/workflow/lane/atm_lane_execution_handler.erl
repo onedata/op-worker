@@ -134,14 +134,13 @@ initiate_lane_run(AtmLaneRunSelector, AtmWorkflowExecutionDoc, AtmWorkflowExecut
         NewAtmWorkflowExecutionEnv = atm_workflow_execution_env:set_lane_run_exception_store_container(
             AtmLaneRunExceptionStoreContainer, AtmWorkflowExecutionEnv
         ),
-        #atm_lane_schema{store_iterator_spec = AtmStoreIteratorSpec} = atm_lane_execution:get_schema(
-            AtmLaneRunSelector, AtmWorkflowExecution
-        ),
 
         #{
             execution_context => AtmWorkflowExecutionEnvDiff(NewAtmWorkflowExecutionEnv),
             parallel_boxes => AtmParallelBoxExecutionSpecs,
-            iterator => atm_store_api:acquire_iterator(AtmIteratedStoreId, AtmStoreIteratorSpec)
+            iterator => atm_store_api:acquire_iterator(
+                AtmIteratedStoreId, get_iterator_spec(AtmLaneRunSelector, AtmWorkflowExecution)
+            )
         }
     catch Type:Reason:Stacktrace ->
         throw(?ERROR_ATM_LANE_EXECUTION_INITIATION_FAILED(
@@ -149,6 +148,42 @@ initiate_lane_run(AtmLaneRunSelector, AtmWorkflowExecutionDoc, AtmWorkflowExecut
             ?atm_examine_error(Type, Reason, Stacktrace)
         ))
     end.
+
+
+%% @private
+-spec get_iterator_spec(
+    atm_lane_execution:lane_run_selector(),
+    atm_workflow_execution:record()
+) ->
+    atm_store_iterator_spec:record().
+get_iterator_spec(AtmLaneRunSelector, AtmWorkflowExecution = #atm_workflow_execution{
+    lambda_snapshot_registry = AtmLambdaSnapshotRegistry
+}) ->
+    #atm_lane_schema{
+        parallel_boxes = AtmParallelBoxSchemas,
+        store_iterator_spec = AtmStoreIteratorSpec = #atm_store_iterator_spec{
+            max_batch_size = MaxBatchSize
+        }
+    } = atm_lane_execution:get_schema(AtmLaneRunSelector, AtmWorkflowExecution),
+
+    AtmLambdas = lists:foldl(fun(#atm_parallel_box_schema{tasks = AtmTaskSchemas}, OuterAcc) ->
+        lists:foldl(fun(#atm_task_schema{
+            lambda_id = AtmLambdaId,
+            lambda_revision_number = AtmLambdaRevisionNum
+        }, InnerAcc) ->
+            [{AtmLambdaId, AtmLambdaRevisionNum} | InnerAcc]
+        end, OuterAcc, AtmTaskSchemas)
+    end, [], AtmParallelBoxSchemas),
+
+    NewMaxBatchSize = lists:foldl(fun({AtmLambdaId, RevisionNum}, MinBatchSize) ->
+        {ok, #document{value = AtmLambdaSnapshot}} = atm_lambda_snapshot:get(
+            maps:get(AtmLambdaId, AtmLambdaSnapshotRegistry)
+        ),
+        AtmLambdaRevision = atm_lambda_snapshot:get_revision(RevisionNum, AtmLambdaSnapshot),
+        min(MinBatchSize, AtmLambdaRevision#atm_lambda_revision.preferred_batch_size)
+    end, MaxBatchSize, lists:usort(AtmLambdas)),
+
+    AtmStoreIteratorSpec#atm_store_iterator_spec{max_batch_size = NewMaxBatchSize}.
 
 
 %% @private
