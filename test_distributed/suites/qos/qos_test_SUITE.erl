@@ -643,13 +643,13 @@ qos_audit_log_base_test(Config, ExpectedStatus, Type) ->
     end, FileIds)),
     GetAuditLogFun = fun() -> 
         case rpc:call(P1, qos_entry_audit_log, list, [QosEntryId, #{}]) of
-            {ok, Result, IsLast} ->
-                {ok, lists:sort(SortFun, Result), IsLast};
+            {ok, {ProgressMarker, EntrySeries}} ->
+                {ok, {ProgressMarker, lists:sort(SortFun, EntrySeries)}};
             {error, _} = Error ->
                 Error
         end
     end,
-    ?assertMatch({ok, Expected, true}, GetAuditLogFun(), 10).
+    ?assertMatch({ok, {done, Expected}}, GetAuditLogFun(), 10).
 
 
 prepare_audit_log_test_env(single_file, Worker, SessId, RootFilePath) ->

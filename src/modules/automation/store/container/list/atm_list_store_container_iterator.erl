@@ -20,17 +20,18 @@
 
 %% API
 -export([build/1]).
+-export([gen_listing_postprocessor/2]).
 
 % atm_store_container_iterator callbacks
 -export([get_next_batch/4, forget_before/1, mark_exhausted/1]).
 
 %% persistent_record callbacks
--export([version/0, db_encode/2, db_decode/2]).
+-export([version/0, db_encode/2, db_decode/2, upgrade_encoded_record/2]).
 
 
 -record(atm_list_store_container_iterator, {
-%%    @TODO VFS-8068 Do not use atm_infinite_log_container_iterator
-    atm_infinite_log_container_iterator :: atm_infinite_log_container_iterator:record()
+    backend_id :: json_infinite_log_model:id(),
+    last_listed_index = json_infinite_log_model:default_start_index(exclusive) :: json_infinite_log_model:entry_index()
 }).
 -type record() :: #atm_list_store_container_iterator{}.
 
@@ -42,11 +43,17 @@
 %%%===================================================================
 
 
--spec build(atm_infinite_log_container_iterator:record()) -> record().
-build(AtmInfiniteLogContainerIterator) ->
-    #atm_list_store_container_iterator{
-        atm_infinite_log_container_iterator = AtmInfiniteLogContainerIterator
-    }.
+-spec build(json_infinite_log_model:id()) -> record().
+build(BackendId) ->
+    #atm_list_store_container_iterator{backend_id = BackendId}.
+
+
+-spec gen_listing_postprocessor(atm_workflow_execution_auth:record(), atm_data_spec:record()) ->
+    atm_infinite_log_based_stores_common:listing_postprocessor().
+gen_listing_postprocessor(AtmWorkflowExecutionAuth, AtmDataSpec) ->
+    fun({Index, {_Timestamp, Compressed}}) ->
+        {Index, atm_value:expand(AtmWorkflowExecutionAuth, Compressed, AtmDataSpec)}
+    end.
 
 
 %%%===================================================================
@@ -58,39 +65,32 @@ build(AtmInfiniteLogContainerIterator) ->
     record(), atm_data_spec:record()
 ) ->
     {ok, [atm_value:expanded()], record()} | stop.
-get_next_batch(AtmWorkflowExecutionAuth, BatchSize, Iterator = #atm_list_store_container_iterator{
-    atm_infinite_log_container_iterator = AtmInfiniteLogContainerIterator
-}, AtmDataSpec) ->
-    ResultMapper = fun(_Timestamp, Compressed) -> 
-        case atm_value:expand(AtmWorkflowExecutionAuth, Compressed, AtmDataSpec) of
-            {ok, Item} -> {true, Item};
-            {error, _} -> false
-        end
-    end,
-    case atm_infinite_log_container_iterator:get_next_batch(
-        BatchSize, AtmInfiniteLogContainerIterator, ResultMapper
-    ) of
+get_next_batch(AtmWorkflowExecutionAuth, BatchSize, #atm_list_store_container_iterator{
+    backend_id = BackendId,
+    last_listed_index = LastListedIndex
+} = Record, AtmDataSpec) ->
+    Result = atm_infinite_log_based_stores_common:get_next_batch(
+        BatchSize, BackendId, LastListedIndex,
+        gen_listing_postprocessor(AtmWorkflowExecutionAuth, AtmDataSpec)
+    ),
+    case Result of
         stop ->
             stop;
-        {ok, Items, NewAtmInfiniteLogContainerIterator} ->
-            {ok, Items, Iterator#atm_list_store_container_iterator{
-                atm_infinite_log_container_iterator = NewAtmInfiniteLogContainerIterator
+        {ok, FilteredEntries, NewLastListedIndex} ->
+            {ok, FilteredEntries, Record#atm_list_store_container_iterator{
+                last_listed_index = NewLastListedIndex
             }}
     end.
 
 
 -spec forget_before(record()) -> ok.
-forget_before(#atm_list_store_container_iterator{
-    atm_infinite_log_container_iterator = AtmInfiniteLogContainerIterator
-}) ->
-    atm_infinite_log_container_iterator:forget_before(AtmInfiniteLogContainerIterator).
+forget_before(_AtmStoreContainerIterator) ->
+    ok.
 
 
 -spec mark_exhausted(record()) -> ok.
-mark_exhausted(#atm_list_store_container_iterator{
-    atm_infinite_log_container_iterator = AtmInfiniteLogContainerIterator
-}) ->
-    atm_infinite_log_container_iterator:mark_exhausted(AtmInfiniteLogContainerIterator).
+mark_exhausted(_AtmStoreContainerIterator) ->
+    ok.
 
 
 %%%===================================================================
@@ -100,26 +100,31 @@ mark_exhausted(#atm_list_store_container_iterator{
 
 -spec version() -> persistent_record:record_version().
 version() ->
-    1.
+    2.
 
 
 -spec db_encode(record(), persistent_record:nested_record_encoder()) ->
     json_utils:json_term().
 db_encode(#atm_list_store_container_iterator{
-    atm_infinite_log_container_iterator = AtmInfiniteLogContainerIterator
-}, NestedRecordEncoder) ->
-    #{
-        <<"atmInfiniteLogContainerIterator">> => NestedRecordEncoder(
-            AtmInfiniteLogContainerIterator, atm_infinite_log_container_iterator
-        )
-    }.
+    backend_id = BackendId,
+    last_listed_index = LastListedIndex
+}, _NestedRecordEncoder) ->
+    #{<<"backendId">> => BackendId, <<"lastListedIndex">> => LastListedIndex}.
 
 
 -spec db_decode(json_utils:json_term(), persistent_record:nested_record_decoder()) ->
     record().
-db_decode(#{<<"atmInfiniteLogContainer">> := AtmInfiniteLogContainerIteratorJson}, NestedRecordDecoder) ->
+db_decode(#{<<"backendId">> := BackendId} = JsonRecord, _NestedRecordDecoder) ->
     #atm_list_store_container_iterator{
-        atm_infinite_log_container_iterator = NestedRecordDecoder(
-            AtmInfiniteLogContainerIteratorJson, atm_infinite_log_container_iterator
-        )
+        backend_id = BackendId,
+        last_listed_index = maps:get(<<"lastListedIndex">>, JsonRecord, <<"-1">>)
     }.
+
+
+-spec upgrade_encoded_record(persistent_record:record_version(), json_utils:json_term()) ->
+    {persistent_record:record_version(), json_utils:json_term()}.
+upgrade_encoded_record(1, #{<<"backendId">> := BackendId, <<"index">> := Index}) ->
+    {2, #{
+        <<"backendId">> => BackendId,
+        <<"lastListedIndex">> => integer_to_binary(Index + 1)
+    }}.
