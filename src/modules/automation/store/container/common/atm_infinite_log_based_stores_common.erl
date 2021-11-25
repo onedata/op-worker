@@ -28,7 +28,7 @@
     offset => atm_store_api:offset()
 }.
 
--type listing_postprocessor() :: json_based_infinite_log_model:listing_postprocessor(
+-type listing_postprocessor() :: json_infinite_log_model:listing_postprocessor(
     {atm_store_api:index(), {ok, automation:item()} | errors:error()}
 ).
 %@formatter:on
@@ -41,14 +41,14 @@
 
 -spec browse_content(
     store_type(),
-    json_based_infinite_log_model:id(),
+    json_infinite_log_model:id(),
     browse_options(),
     listing_postprocessor()
 ) ->
     atm_store_api:browse_result() | no_return().
 browse_content(StoreType, BackendId, BrowseOpts, ListingPostprocessor) ->
     SanitizedBrowseOpts = sanitize_browse_options(StoreType, BrowseOpts),
-    {ok, {ProgressMarker, EntrySeries}} = json_based_infinite_log_model:list_and_postprocess(BackendId, #{
+    {ok, {ProgressMarker, EntrySeries}} = json_infinite_log_model:list_and_postprocess(BackendId, #{
         start_from => infer_start_from(StoreType, SanitizedBrowseOpts),
         offset => maps:get(offset, SanitizedBrowseOpts, 0),
         limit => maps:get(limit, SanitizedBrowseOpts)
@@ -58,13 +58,13 @@ browse_content(StoreType, BackendId, BrowseOpts, ListingPostprocessor) ->
 
 -spec get_next_batch(
     atm_store_container_iterator:batch_size(),
-    json_based_infinite_log_model:id(),
-    json_based_infinite_log_model:entry_index(),
+    json_infinite_log_model:id(),
+    json_infinite_log_model:entry_index(),
     listing_postprocessor()
 ) ->
-    {ok, [atm_value:expanded()], json_based_infinite_log_model:entry_index()} | stop.
+    {ok, [atm_value:expanded()], json_infinite_log_model:entry_index()} | stop.
 get_next_batch(BatchSize, BackendId, LastListedIndex, ListingPostprocessor) ->
-    {ok, {ProgressMarker, EntrySeries}} = json_based_infinite_log_model:list_and_postprocess(BackendId, #{
+    {ok, {ProgressMarker, EntrySeries}} = json_infinite_log_model:list_and_postprocess(BackendId, #{
         start_from => {index_exclusive, LastListedIndex},
         limit => BatchSize
     }, ListingPostprocessor),

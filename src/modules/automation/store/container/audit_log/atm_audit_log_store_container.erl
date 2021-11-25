@@ -59,7 +59,7 @@
 
 -record(atm_audit_log_store_container, {
     data_spec :: atm_data_spec:record(),
-    backend_id :: json_based_infinite_log_model:id()
+    backend_id :: json_infinite_log_model:id()
 }).
 -type record() :: #atm_audit_log_store_container{}.
 
@@ -137,7 +137,7 @@ apply_operation(_Record, _Operation) ->
 
 -spec delete(record()) -> ok.
 delete(#atm_audit_log_store_container{backend_id = BackendId}) ->
-    json_based_infinite_log_model:destroy(BackendId).
+    json_infinite_log_model:destroy(BackendId).
 
 
 %%%===================================================================
@@ -178,7 +178,7 @@ db_decode(#{<<"dataSpec">> := AtmDataSpecJson, <<"backendId">> := BackendId}, Ne
 %% @private
 -spec create_container(atm_data_spec:record()) -> record().
 create_container(AtmDataSpec) ->
-    {ok, Id} = json_based_infinite_log_model:create(#{}),
+    {ok, Id} = json_infinite_log_model:create(#{}),
     #atm_audit_log_store_container{
         data_spec = AtmDataSpec,
         backend_id = Id
@@ -209,7 +209,7 @@ append_sanitized_batch(Batch, Record = #atm_audit_log_store_container{
     backend_id = BackendId
 }) ->
     lists:foreach(fun(#{<<"entry">> := Item} = Object) ->
-        ok = json_based_infinite_log_model:append(BackendId, Object#{
+        ok = json_infinite_log_model:append(BackendId, Object#{
             <<"entry">> => atm_value:compress(Item, AtmDataSpec)
         }) 
     end, Batch),

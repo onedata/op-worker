@@ -99,8 +99,7 @@ get_models() -> [
     workflow_cached_async_result,
     workflow_iterator_snapshot,
     workflow_async_call_pool,
-    json_based_infinite_log_model,
-    
+
     % automation related models
     atm_store,
     atm_task_execution,

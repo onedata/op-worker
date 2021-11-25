@@ -28,7 +28,7 @@
 ]).
 
 %% persistent_record callbacks
--export([version/0, db_encode/2, db_decode/2]).
+-export([version/0, db_encode/2, db_decode/2, upgrade_encoded_record/2]).
 
 
 -type initial_value() :: [automation:item()] | undefined.
@@ -50,7 +50,7 @@
 
 -record(atm_list_store_container, {
     data_spec :: atm_data_spec:record(),
-    backend_id :: json_based_infinite_log_model:id()
+    backend_id :: json_infinite_log_model:id()
 }).
 -type record() :: #atm_list_store_container{}.
 
@@ -121,7 +121,7 @@ apply_operation(_Record, _Operation) ->
 
 -spec delete(record()) -> ok.
 delete(#atm_list_store_container{backend_id = BackendId}) ->
-    json_based_infinite_log_model:destroy(BackendId).
+    json_infinite_log_model:destroy(BackendId).
 
 
 %%%===================================================================
@@ -131,7 +131,7 @@ delete(#atm_list_store_container{backend_id = BackendId}) ->
 
 -spec version() -> persistent_record:record_version().
 version() ->
-    1.
+    2.
 
 
 -spec db_encode(record(), persistent_record:nested_record_encoder()) ->
@@ -155,6 +155,19 @@ db_decode(#{<<"dataSpec">> := AtmDataSpecJson, <<"backendId">> := BackendId}, Ne
     }.
 
 
+-spec upgrade_encoded_record(persistent_record:record_version(), json_utils:json_term()) ->
+    {persistent_record:record_version(), json_utils:json_term()}.
+upgrade_encoded_record(1, #{<<"atmInfiniteLogContainer">> := AtmInfiniteLogContainerIteratorJson}) ->
+    #{<<"_data">> := #{
+        <<"backendId">> := BackendId,
+        <<"dataSpec">> := AtmDataSpec
+    }} = AtmInfiniteLogContainerIteratorJson,
+    {2, #{
+        <<"backendId">> => BackendId,
+        <<"dataSpec">> => AtmDataSpec
+    }}.
+
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -163,7 +176,7 @@ db_decode(#{<<"dataSpec">> := AtmDataSpecJson, <<"backendId">> := BackendId}, Ne
 %% @private
 -spec create_container(atm_data_spec:record()) -> record().
 create_container(AtmDataSpec) ->
-    {ok, Id} = json_based_infinite_log_model:create(#{}),
+    {ok, Id} = json_infinite_log_model:create(#{}),
     #atm_list_store_container{
         data_spec = AtmDataSpec,
         backend_id = Id
@@ -192,7 +205,7 @@ append_insecure(Batch, Record = #atm_list_store_container{
     backend_id = BackendId
 }) ->
     lists:foreach(fun(Item) ->
-        ok = json_based_infinite_log_model:append(
+        ok = json_infinite_log_model:append(
             BackendId, atm_value:compress(Item, AtmDataSpec))
     end, Batch),
     Record.

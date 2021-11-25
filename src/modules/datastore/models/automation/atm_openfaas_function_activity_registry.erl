@@ -86,7 +86,7 @@ delete(RegistryId) ->
     }}} = datastore_model:get(?CTX, RegistryId),
 
     atm_openfaas_function_pod_status_registry:foreach_summary(fun(_PodId, PodStatusSummary) ->
-        json_based_infinite_log_model:destroy(
+        json_infinite_log_model:destroy(
             PodStatusSummary#atm_openfaas_function_pod_status_summary.event_log
         )
     end, PodStatusRegistry),
@@ -112,10 +112,10 @@ consume_report(#atm_openfaas_function_activity_report{
     lists:foreach(fun consume_pod_status_report/1, Batch).
 
 
--spec list_pod_events(infinite_log:log_id(), json_based_infinite_log_model:listing_opts()) ->
+-spec list_pod_events(infinite_log:log_id(), json_infinite_log_model:listing_opts()) ->
     {ok, {infinite_log_browser:progress_marker(), [{infinite_log:entry_index(), infinite_log:timestamp(), pod_event()}]}} | {error, term()}.
 list_pod_events(LogId, ListingOpts) ->
-    json_based_infinite_log_model:list_and_postprocess(
+    json_infinite_log_model:list_and_postprocess(
         LogId, ListingOpts, fun({EntryIndex, {_InfiniteLogTimestamp, EntryContent}}) ->
             {EventTimestamp, EventPayload} = unpack_pod_event(EntryContent),
             % @TODO VFS-8616 returned value to be reworked when GUI GS interface is implemented
@@ -214,19 +214,19 @@ consume_pod_status_report(#atm_openfaas_function_pod_status_report{
         }}
     end)),
 
-    case json_based_infinite_log_model:append(PodEventLogId, LogValue) of
+    case json_infinite_log_model:append(PodEventLogId, LogValue) of
         ok ->
             ok;
         {error, not_found} ->
             ensure_pod_event_log(PodEventLogId),
-            ok = json_based_infinite_log_model:append(PodEventLogId, LogValue)
+            ok = json_infinite_log_model:append(PodEventLogId, LogValue)
     end.
 
 
 %% @private
 -spec ensure_pod_event_log(infinite_log:log_id()) -> ok.
 ensure_pod_event_log(LogId) ->
-    case json_based_infinite_log_model:create(LogId, #{}) of
+    case json_infinite_log_model:create(LogId, #{}) of
         ok -> ok;
         {error, already_exists} -> ok
     end.

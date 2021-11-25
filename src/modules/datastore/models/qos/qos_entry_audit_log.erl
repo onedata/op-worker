@@ -42,7 +42,7 @@
 
 -spec create(id()) -> ok | {error, term()}.
 create(Id) ->
-    json_based_infinite_log_model:create(Id, #{
+    json_infinite_log_model:create(Id, #{
         size_pruning_threshold => ?LOG_MAX_SIZE,
         age_pruning_threshold => ?LOG_EXPIRATION
     }).
@@ -50,7 +50,7 @@ create(Id) ->
 
 -spec report_synchronization_started(id(), file_id:file_guid()) -> ok | {error, term()}.
 report_synchronization_started(Id, FileGuid) ->
-    json_based_infinite_log_model:append(Id, #{
+    json_infinite_log_model:append(Id, #{
         <<"status">> => <<"synchronization started">>,
         <<"severity">> => <<"info">>,
         <<"fileId">> => file_guid_to_object_id(FileGuid)
@@ -59,7 +59,7 @@ report_synchronization_started(Id, FileGuid) ->
 
 -spec report_file_synchronized(id(), file_id:file_guid()) -> ok | {error, term()}.
 report_file_synchronized(Id, FileGuid) ->
-    json_based_infinite_log_model:append(Id, #{
+    json_infinite_log_model:append(Id, #{
         <<"status">> => <<"synchronized">>,
         <<"severity">> => <<"info">>,
         <<"fileId">> => file_guid_to_object_id(FileGuid)
@@ -69,7 +69,7 @@ report_file_synchronized(Id, FileGuid) ->
 -spec report_file_synchronization_skipped(id(), file_id:file_guid(), Reason :: binary()) ->
     ok | {error, term()}.
 report_file_synchronization_skipped(Id, FileGuid, Reason) ->
-    json_based_infinite_log_model:append(Id, #{
+    json_infinite_log_model:append(Id, #{
         <<"status">> => <<"synchronization skipped">>,
         <<"reason">> => Reason,
         <<"severity">> => <<"info">>,
@@ -79,7 +79,7 @@ report_file_synchronization_skipped(Id, FileGuid, Reason) ->
 
 -spec report_file_synchronization_failed(id(), file_id:file_guid(), {error, term()}) -> ok | {error, term()}.
 report_file_synchronization_failed(Id, FileGuid, Error) ->
-    json_based_infinite_log_model:append(Id, #{
+    json_infinite_log_model:append(Id, #{
         <<"status">> => <<"synchronization failed">>,
         <<"severity">> => <<"error">>,
         <<"fileId">> => file_guid_to_object_id(FileGuid),
@@ -89,13 +89,13 @@ report_file_synchronization_failed(Id, FileGuid, Error) ->
 
 -spec destroy(id()) -> ok | {error, term()}.
 destroy(Id) ->
-    json_based_infinite_log_model:destroy(Id).
+    json_infinite_log_model:destroy(Id).
 
 
--spec list(id(), json_based_infinite_log_model:listing_opts()) ->
+-spec list(id(), json_infinite_log_model:listing_opts()) ->
     {ok, {infinite_log_browser:progress_marker(), [entry()]}} | {error, term()}.
 list(Id, Opts) ->
-    json_based_infinite_log_model:list_and_postprocess(
+    json_infinite_log_model:list_and_postprocess(
         Id, Opts#{direction => ?FORWARD}, fun({_Index, {Timestamp, EntryContent}}) ->
             EntryContent#{
                 <<"timestamp">> => Timestamp
