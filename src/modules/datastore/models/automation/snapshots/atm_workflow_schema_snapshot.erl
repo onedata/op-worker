@@ -22,7 +22,7 @@
 %%% field encoding/decoding procedures
 -export([legacy_state_to_json/1, legacy_state_from_json/1]).
 %% datastore_model callbacks
--export([get_ctx/0, get_record_version/0, get_record_struct/1, upgrade_record/2]).
+-export([get_ctx/0, get_record_version/0, get_record_struct/1]).
 
 
 -type id() :: binary().
@@ -132,7 +132,7 @@ get_ctx() ->
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    2.
+    1.
 
 
 %%--------------------------------------------------------------------
@@ -145,66 +145,10 @@ get_record_struct(1) ->
     {record, [
         {schema_id, string},
         {name, string},
-        {description, string},
+        {summary, string},
 
-        {stores, [{custom, string, {persistent_record, encode, decode, atm_store_schema}}]},
-        {lanes, [{custom, string, {persistent_record, encode, decode, atm_lane_schema}}]},
-
-        {state, {custom, string, {?MODULE, legacy_state_to_json, legacy_state_from_json}}},
-
-        {atm_inventory, string},
-        {atm_lambdas, [string]}
-    ]};
-get_record_struct(2) ->
-    % 'atm_lambdas' field was removed
-    {record, [
-        {schema_id, string},
-        {name, string},
-        {summary, string},  %% new field
-
-        %% new field
         {revision_number, integer},
-        %% new field - description, stores, lane and state are now stored in it
         {revision, {custom, string, {persistent_record, encode, decode, atm_workflow_schema_revision}}},
 
         {atm_inventory, string}
     ]}.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Upgrades model's record from provided version to the next one.
-%% @end
-%%--------------------------------------------------------------------
--spec upgrade_record(datastore_model:record_version(), datastore_model:record()) ->
-    {datastore_model:record_version(), datastore_model:record()}.
-upgrade_record(1, {
-    ?MODULE,
-    SchemaId,
-    Name,
-    Description,
-    Stores,
-    Lanes,
-    State,
-    InventoryId,
-    _LambdaIds
-}) ->
-    {2, #atm_workflow_schema_snapshot{
-        schema_id = SchemaId,
-        name = Name,
-        summary = ?DEFAULT_SUMMARY,
-
-        revision_number = 1,
-        revision = #atm_workflow_schema_revision{
-            description = Description,
-            stores = Stores,
-            lanes = Lanes,
-            state = case State of
-                incomplete -> draft;
-                ready -> stable;
-                deprecated -> deprecated
-            end
-        },
-
-        atm_inventory = InventoryId
-    }}.

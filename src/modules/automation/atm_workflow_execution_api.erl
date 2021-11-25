@@ -25,8 +25,7 @@
     get/1, get_summary/2,
     cancel/1,
     repeat/4,
-    terminate_not_ended/1,
-    purge_all/0
+    terminate_not_ended/1
 ]).
 
 
@@ -201,30 +200,6 @@ terminate_not_ended(SpaceId) ->
 
     foreach_atm_workflow_execution(TerminateFun, SpaceId, ?WAITING_PHASE),
     foreach_atm_workflow_execution(TerminateFun, SpaceId, ?ONGOING_PHASE).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Purges all workflow executions for all supported spaces.
-%%
-%%                              !!! Caution !!!
-%% This operation doesn't enforce any protection on deleted workflow executions
-%% and as such should never be called after successful Oneprovider start.
-%% @end
-%%--------------------------------------------------------------------
-purge_all() ->
-    ?info("Starting atm_workflow_execution purge procedure..."),
-
-    {ok, SpaceIds} = provider_logic:get_spaces(),
-    DeleteFun = fun atm_workflow_execution_factory:delete_insecure/1,
-
-    lists:foreach(fun(SpaceId) ->
-        foreach_atm_workflow_execution(DeleteFun, SpaceId, ?WAITING_PHASE),
-        foreach_atm_workflow_execution(DeleteFun, SpaceId, ?ONGOING_PHASE),
-        foreach_atm_workflow_execution(DeleteFun, SpaceId, ?ENDED_PHASE)
-    end, SpaceIds),
-
-    ?info("atm_workflow_execution purge procedure finished succesfully.").
 
 
 %%%===================================================================
