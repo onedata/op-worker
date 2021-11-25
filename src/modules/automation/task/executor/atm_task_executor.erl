@@ -37,6 +37,25 @@
 -type model() :: atm_openfaas_task_executor.
 -type record() :: atm_openfaas_task_executor:record().
 
+-type args() :: json_utils:json_map().
+-type results() :: errors:error() | json_utils:json_map().
+
+%% Below types format can't be expressed directly in type spec due to dialyzer
+%% limitations in specifying individual maps keys in case of binaries.
+%% Instead it is shown below their declaration.
+
+-type input() :: json_utils:json_map().
+%% #{
+%%      <<"argsBatch">> := [args()],
+%%      <<"ctx">> := #{heartbeatUrl := binary()}
+%% }
+-type outcome() :: errors:error() | json_utils:json_map().
+%% #{
+%%      <<"resultsBatch">> := [results()]
+%% }
+
+-export_type([args/0, results/0, input/0, outcome/0]).
+
 -export_type([model/0, record/0]).
 
 
@@ -67,7 +86,7 @@
 
 -callback in_readonly_mode(record()) -> boolean().
 
--callback run(atm_job_ctx:record(), json_utils:json_map(), record()) ->
+-callback run(atm_job_ctx:record(), input(), record()) ->
     ok | no_return().
 
 
@@ -121,7 +140,7 @@ in_readonly_mode(AtmTaskExecutor) ->
     Model:in_readonly_mode(AtmTaskExecutor).
 
 
--spec run(atm_job_ctx:record(), json_utils:json_map(), record()) ->
+-spec run(atm_job_ctx:record(), input(), record()) ->
     ok | no_return().
 run(AtmJobCtx, Arguments, AtmTaskExecutor) ->
     Model = utils:record_type(AtmTaskExecutor),

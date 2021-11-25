@@ -51,8 +51,8 @@
     teardown/2,
     set_run_num/2,
 
-    process_item/5,
-    process_results/4,
+    process_items_batch/5,
+    process_outcome/4,
 
     handle_ended/1
 ]).
@@ -117,53 +117,65 @@ set_run_num(RunNum, AtmTaskExecutionId) ->
     ok.
 
 
--spec process_item(
+-spec process_items_batch(
     atm_workflow_execution_ctx:record(),
     atm_task_execution:id(),
-    automation:item(),
+    [automation:item()],
     binary(),
     binary()
 ) ->
     ok | error | no_return().
-process_item(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, ReportResultUrl, HeartbeatUrl) ->
+process_items_batch(
+    AtmWorkflowExecutionCtx,
+    AtmTaskExecutionId,
+    ItemsBatch,
+    ReportResultUrl,
+    HeartbeatUrl
+) ->
+    #document{
+        value = #atm_task_execution{
+            executor = AtmTaskExecutor,
+            argument_specs = AtmTaskExecutionArgSpecs
+        }
+    } = update_items_in_processing(AtmTaskExecutionId, length(ItemsBatch)),
+
+    AtmJobCtx = atm_job_ctx:build(
+        AtmWorkflowExecutionCtx,
+        atm_task_executor:in_readonly_mode(AtmTaskExecutor),
+        ReportResultUrl
+    ),
+
     try
-        process_item_insecure(
-            AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, ReportResultUrl, HeartbeatUrl
-        )
+        Input = #{
+            <<"ctx">> => #{<<"heartbeatUrl">> => HeartbeatUrl},
+            %% TODO VFS-8668 optimize argsBatch creation
+            <<"argsBatch">> => atm_parallel_runner:map(fun(Item) ->
+                atm_task_execution_arguments:construct_args(Item, AtmJobCtx, AtmTaskExecutionArgSpecs)
+            end, ItemsBatch)
+        },
+        atm_task_executor:run(AtmJobCtx, Input, AtmTaskExecutor)
     catch Type:Reason:Stacktrace ->
         Error = ?atm_examine_error(Type, Reason, Stacktrace),
-        process_results(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, Error)
+        process_outcome(AtmWorkflowExecutionCtx, AtmTaskExecutionId, ItemsBatch, Error)
     end.
 
 
--spec process_results(
+-spec process_outcome(
     atm_workflow_execution_ctx:record(),
     atm_task_execution:id(),
-    automation:item(),
-    errors:error() | json_utils:json_map()
+    [automation:item()],
+    atm_task_executor:outcome()
 ) ->
     ok | error | no_return().
-process_results(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, {error, _} = Error) ->
-    handle_exception(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, Error);
+process_outcome(AtmWorkflowExecutionCtx, AtmTaskExecutionId, ItemsBatch, Outcome) ->
+    AnyExceptionOccurred = lists:member(error, atm_parallel_runner:map(fun({Item, Result}) ->
+        process_results(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, Result)
+    end, zip_items_with_results(ItemsBatch, Outcome))),
 
-process_results(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, #{<<"exception">> := _} = Exception) ->
-    handle_exception(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, Exception);
-
-process_results(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, Results) when is_map(Results) ->
-    {ok, #document{value = #atm_task_execution{
-        result_specs = AtmTaskExecutionResultSpecs
-    }}} = atm_task_execution:get(AtmTaskExecutionId),
-
-    try
-        atm_task_execution_results:consume_results(AtmWorkflowExecutionCtx, AtmTaskExecutionResultSpecs, Results),
-        update_items_processed(AtmTaskExecutionId)
-    catch Type:Reason:Stacktrace ->
-        Error = ?atm_examine_error(Type, Reason, Stacktrace),
-        handle_exception(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, Error)
-    end;
-
-process_results(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, _MalformedResults) ->
-    handle_exception(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, ?ERROR_MALFORMED_DATA).
+    case AnyExceptionOccurred of
+        true -> error;
+        false -> ok
+    end.
 
 
 -spec handle_ended(atm_task_execution:id()) -> ok.
@@ -258,29 +270,50 @@ get_lambda_revision(
 
 
 %% @private
--spec process_item_insecure(
+-spec zip_items_with_results([automation:item()], atm_task_executor:outcome()) ->
+    [{automation:item(), atm_task_executor:results()}].
+zip_items_with_results(ItemsBatch, #{<<"resultsBatch">> := ResultsBatch}) when
+    is_list(ResultsBatch),
+    length(ItemsBatch) == length(ResultsBatch)
+->
+    lists:zip(ItemsBatch, ResultsBatch);
+
+zip_items_with_results(ItemsBatch, {error, _} = Error) ->
+    % Entire batch processing failed (e.g. timeout or malformed response)
+    lists:zip(ItemsBatch, lists:duplicate(length(ItemsBatch), Error));
+
+zip_items_with_results(ItemsBatch, _MalformedResults) ->
+    lists:zip(ItemsBatch, lists:duplicate(length(ItemsBatch), ?ERROR_MALFORMED_DATA)).
+
+
+-spec process_results(
     atm_workflow_execution_ctx:record(),
     atm_task_execution:id(),
     automation:item(),
-    binary(),
-    binary()
+    atm_task_executor:results()
 ) ->
-    ok | no_return().
-process_item_insecure(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, ReportResultUrl, HeartbeatUrl) ->
-    #document{
-        value = #atm_task_execution{
-            executor = AtmTaskExecutor,
-            argument_specs = AtmTaskExecutionArgSpecs
-        }
-    } = update_items_in_processing(AtmTaskExecutionId),
+    ok | error | no_return().
+process_results(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, {error, _} = Error) ->
+    handle_exception(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, Error);
 
-    AtmJobCtx = atm_job_ctx:build(
-        AtmWorkflowExecutionCtx, atm_task_executor:in_readonly_mode(AtmTaskExecutor),
-        Item, ReportResultUrl, HeartbeatUrl
-    ),
-    Args = atm_task_execution_arguments:construct_args(AtmJobCtx, AtmTaskExecutionArgSpecs),
+process_results(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, #{<<"exception">> := _} = Exception) ->
+    handle_exception(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, Exception);
 
-    atm_task_executor:run(AtmJobCtx, Args, AtmTaskExecutor).
+process_results(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, Results) when is_map(Results) ->
+    {ok, #document{value = #atm_task_execution{
+        result_specs = AtmTaskExecutionResultSpecs
+    }}} = atm_task_execution:get(AtmTaskExecutionId),
+
+    try
+        atm_task_execution_results:consume_results(AtmWorkflowExecutionCtx, AtmTaskExecutionResultSpecs, Results),
+        update_items_processed(AtmTaskExecutionId)
+    catch Type:Reason:Stacktrace ->
+        Error = ?atm_examine_error(Type, Reason, Stacktrace),
+        handle_exception(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, Error)
+    end;
+
+process_results(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, _MalformedResults) ->
+    handle_exception(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, ?ERROR_MALFORMED_DATA).
 
 
 %% @private
@@ -317,16 +350,17 @@ log_exception(Item, Reason, AtmWorkflowExecutionCtx) ->
 
 
 %% @private
--spec update_items_in_processing(atm_task_execution:id()) -> atm_task_execution:doc().
-update_items_in_processing(AtmTaskExecutionId) ->
+-spec update_items_in_processing(atm_task_execution:id(), pos_integer()) ->
+    atm_task_execution:doc().
+update_items_in_processing(AtmTaskExecutionId, Num) ->
     Diff = fun
         (#atm_task_execution{status = ?PENDING_STATUS, items_in_processing = 0} = AtmTaskExecution) ->
             {ok, AtmTaskExecution#atm_task_execution{
                 status = ?ACTIVE_STATUS,
-                items_in_processing = 1
+                items_in_processing = Num
             }};
-        (#atm_task_execution{status = ?ACTIVE_STATUS, items_in_processing = Num} = AtmTaskExecution) ->
-            {ok, AtmTaskExecution#atm_task_execution{items_in_processing = Num + 1}};
+        (#atm_task_execution{status = ?ACTIVE_STATUS, items_in_processing = Current} = AtmTaskExecution) ->
+            {ok, AtmTaskExecution#atm_task_execution{items_in_processing = Current + Num}};
         (_) ->
             {error, already_ended}
     end,

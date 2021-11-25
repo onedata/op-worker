@@ -193,20 +193,20 @@ restart_lane(_, _, _) ->
     atm_workflow_execution:id(),
     atm_workflow_execution_env:record(),
     atm_task_execution:id(),
-    automation:item(),
+    [automation:item()],
     binary(),
     binary()
 ) ->
     ok | error.
 process_item(
     AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmTaskExecutionId,
-    Item, ReportResultUrl, HeartbeatUrl
+    ItemsBatch, ReportResultUrl, HeartbeatUrl
 ) ->
     AtmWorkflowExecutionCtx = atm_workflow_execution_ctx:acquire(
         AtmTaskExecutionId, AtmWorkflowExecutionEnv
     ),
-    ?run(AtmWorkflowExecutionId, atm_task_execution_handler:process_item(
-        AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item,
+    ?run(AtmWorkflowExecutionId, atm_task_execution_handler:process_items_batch(
+        AtmWorkflowExecutionCtx, AtmTaskExecutionId, ItemsBatch,
         ReportResultUrl, HeartbeatUrl
     )).
 
@@ -215,16 +215,19 @@ process_item(
     atm_workflow_execution:id(),
     atm_workflow_execution_env:record(),
     atm_task_execution:id(),
-    automation:item(),
-    {error, term()} | json_utils:json_map()
+    [automation:item()],
+    atm_task_executor:outcome()
 ) ->
     ok | error.
-process_result(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmTaskExecutionId, Item, Results) ->
+process_result(
+    AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmTaskExecutionId,
+    ItemsBatch, Outcome
+) ->
     AtmWorkflowExecutionCtx = atm_workflow_execution_ctx:acquire(
         AtmTaskExecutionId, AtmWorkflowExecutionEnv
     ),
-    ?run(AtmWorkflowExecutionId, atm_task_execution_handler:process_results(
-        AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, Results
+    ?run(AtmWorkflowExecutionId, atm_task_execution_handler:process_outcome(
+        AtmWorkflowExecutionCtx, AtmTaskExecutionId, ItemsBatch, Outcome
     )).
 
 

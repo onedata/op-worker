@@ -61,27 +61,8 @@ build(AtmStoreIteratorSpec, AtmStoreContainer) ->
 -spec get_next(atm_workflow_execution_env:record(), record()) -> 
     {ok, automation:item(), record()} | stop.
 get_next(AtmWorkflowExecutionEnv, AtmStoreIterator = #atm_store_iterator{
-    spec = #atm_store_iterator_spec{strategy = #atm_store_iterator_serial_strategy{}},
     data_spec = AtmDataSpec,
-    store_container_iterator = AtmStoreContainerIterator
-}) ->
-    AtmWorkflowExecutionCtx = atm_workflow_execution_ctx:acquire(undefined, AtmWorkflowExecutionEnv),
-    AtmWorkflowExecutionAuth = atm_workflow_execution_ctx:get_auth(AtmWorkflowExecutionCtx),
-
-    case get_next_internal(AtmWorkflowExecutionAuth, AtmStoreContainerIterator, 1, AtmDataSpec) of
-        stop ->
-            stop;
-        {ok, [Item], NewAtmStoreContainerIterator} ->
-            {ok, Item, AtmStoreIterator#atm_store_iterator{
-                store_container_iterator = NewAtmStoreContainerIterator
-            }}
-    end;
-
-get_next(AtmWorkflowExecutionEnv, AtmStoreIterator = #atm_store_iterator{
-    data_spec = AtmDataSpec,
-    spec = #atm_store_iterator_spec{strategy = #atm_store_iterator_batch_strategy{
-        size = Size
-    }},
+    spec = #atm_store_iterator_spec{max_batch_size = Size},
     store_container_iterator = AtmStoreContainerIterator
 }) ->
     AtmWorkflowExecutionCtx = atm_workflow_execution_ctx:acquire(undefined, AtmWorkflowExecutionEnv),

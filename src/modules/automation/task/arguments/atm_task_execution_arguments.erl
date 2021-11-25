@@ -15,7 +15,7 @@
 -include("modules/automation/atm_execution.hrl").
 
 %% API
--export([build_specs/2, construct_args/2]).
+-export([build_specs/2, construct_args/3]).
 
 
 %%%===================================================================
@@ -36,22 +36,24 @@ build_specs(AtmLambdaArgSpecs, AtmTaskSchemaArgMappers) ->
     ).
 
 
--spec construct_args(atm_job_ctx:record(), [atm_task_execution_argument_spec:record()]) ->
+-spec construct_args(
+    automation:item(),
+    atm_job_ctx:record(),
+    [atm_task_execution_argument_spec:record()]
+) ->
     json_utils:json_map() | no_return().
-construct_args(AtmJobCtx, AtmTaskExecutionArgSpecs) ->
-    BasicArgs = lists:foldl(fun(AtmTaskExecutionArgSpec, Args) ->
+construct_args(Item, AtmJobCtx, AtmTaskExecutionArgSpecs) ->
+    lists:foldl(fun(AtmTaskExecutionArgSpec, Args) ->
         ArgName = atm_task_execution_argument_spec:get_name(AtmTaskExecutionArgSpec),
         try
             Args#{ArgName => atm_task_execution_argument_spec:construct_arg(
-                AtmJobCtx, AtmTaskExecutionArgSpec
+                Item, AtmJobCtx, AtmTaskExecutionArgSpec
             )}
         catch Type:Reason:Stacktrace ->
             Error = ?atm_examine_error(Type, Reason, Stacktrace),
             throw(?ERROR_ATM_TASK_ARG_MAPPING_FAILED(ArgName, Error))
         end
-    end, #{}, AtmTaskExecutionArgSpecs),
-
-    BasicArgs#{<<"heartbeatUrl">> => atm_job_ctx:get_heartbeat_url(AtmJobCtx)}.
+    end, #{}, AtmTaskExecutionArgSpecs).
 
 
 %%%===================================================================
