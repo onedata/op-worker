@@ -11,7 +11,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_array_value).
--author("Michal Stanisz").
+-author("Bartosz Walkowicz").
 
 -behaviour(atm_data_validator).
 -behaviour(atm_data_compressor).
@@ -38,7 +38,7 @@ assert_meets_constraints(AtmWorkflowExecutionAuth, ItemsArray, #{
     item_data_spec := ItemDataSpec
 }) ->
     lists:foreach(fun(Item) ->
-        %% TODO catch errors and into ?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED for atm_array_type
+        %% TODO VFS-8685 catch errors and into ?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED for atm_array_type
         atm_value:validate(AtmWorkflowExecutionAuth, Item, ItemDataSpec)
     end, ItemsArray).
 
@@ -48,7 +48,7 @@ assert_meets_constraints(AtmWorkflowExecutionAuth, ItemsArray, #{
 %%%===================================================================
 
 
-%% TODO compress and expand array items
+%% TODO VFS-8686 compress and expand array items
 -spec compress(atm_value:expanded()) -> list().
 compress(Array) -> Array.
 

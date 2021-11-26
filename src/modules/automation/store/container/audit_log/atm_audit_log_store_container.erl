@@ -77,7 +77,7 @@ create(_AtmWorkflowExecutionAuth, AtmDataSpec, undefined) ->
 create(AtmWorkflowExecutionAuth, AtmDataSpec, InitialItemsBatch) ->
     % validate and sanitize given batch first, to simulate atomic operation
     SanitizedItemsBatch = sanitize_items_batch(AtmWorkflowExecutionAuth, AtmDataSpec, InitialItemsBatch),
-    extend_sanitized_items_batch(SanitizedItemsBatch, create_container(AtmDataSpec)).
+    extend_with_sanitized_items_batch(SanitizedItemsBatch, create_container(AtmDataSpec)).
 
 
 -spec get_data_spec(record()) -> atm_data_spec:record().
@@ -111,7 +111,7 @@ apply_operation(#atm_audit_log_store_container{data_spec = AtmDataSpec} = Record
 }) ->
     % validate and sanitize given batch first, to simulate atomic operation
     SanitizedItemsBatch = sanitize_items_batch(AtmWorkflowExecutionAuth, AtmDataSpec, ItemsBatch),
-    extend_sanitized_items_batch(SanitizedItemsBatch, Record);
+    extend_with_sanitized_items_batch(SanitizedItemsBatch, Record);
 
 apply_operation(#atm_audit_log_store_container{data_spec = AtmDataSpec} = Record, #atm_store_container_operation{
     type = append,
@@ -205,8 +205,8 @@ sanitize_item(AtmWorkflowExecutionAuth, AtmDataSpec, Item) ->
 
 
 %% @private
--spec extend_sanitized_items_batch([atm_value:expanded()], record()) -> record().
-extend_sanitized_items_batch(ItemsBatch, Record) ->
+-spec extend_with_sanitized_items_batch([atm_value:expanded()], record()) -> record().
+extend_with_sanitized_items_batch(ItemsBatch, Record) ->
     lists:foreach(fun(Item) -> append_sanitized_item(Item, Record) end, ItemsBatch),
     Record.
 
