@@ -165,7 +165,7 @@ in_readonly_mode(#atm_openfaas_task_executor{operation_spec = #atm_openfaas_oper
     Readonly.
 
 
--spec run(atm_job_ctx:record(), json_utils:json_map(), record()) ->
+-spec run(atm_job_ctx:record(), atm_task_executor:input(), record()) ->
     ok | no_return().
 run(AtmJobCtx, Data, AtmTaskExecutor) ->
     schedule_function_execution(AtmJobCtx, Data, AtmTaskExecutor).
@@ -611,7 +611,7 @@ log_function_ready(#initiation_ctx{
 
 
 %% @private
--spec schedule_function_execution(atm_job_ctx:record(), json_utils:json_map(), record()) ->
+-spec schedule_function_execution(atm_job_ctx:record(), atm_task_executor:input(), record()) ->
     ok | no_return().
 schedule_function_execution(AtmJobCtx, Data, #atm_openfaas_task_executor{
     function_name = FunctionName
