@@ -96,14 +96,13 @@ apply_operation(#atm_list_store_container{data_spec = AtmDataSpec} = Record, #at
     validate_items_batch(AtmWorkflowExecutionAuth, AtmDataSpec, ItemsBatch),
     extend_insecure(ItemsBatch, Record);
 
-apply_operation(#atm_list_store_container{} = Record, Operation = #atm_store_container_operation{
+apply_operation(#atm_list_store_container{data_spec = AtmDataSpec} = Record, #atm_store_container_operation{
     type = append,
-    argument = Item
+    argument = Item,
+    workflow_execution_auth = AtmWorkflowExecutionAuth
 }) ->
-    apply_operation(Record, Operation#atm_store_container_operation{
-        type = extend,
-        argument = [Item]
-    });
+    atm_value:validate(AtmWorkflowExecutionAuth, Item, AtmDataSpec),
+    append_insecure(Item, Record);
 
 apply_operation(_Record, _Operation) ->
     throw(?ERROR_NOT_SUPPORTED).
@@ -168,17 +167,24 @@ create_container(AtmDataSpec) ->
 ) ->
     ok | no_return().
 validate_items_batch(AtmWorkflowExecutionAuth, ItemAtmDataSpec, ItemsBatch) ->
-    %% TODO use array data spec
-    atm_value:validate(AtmWorkflowExecutionAuth, ItemsBatch, ItemAtmDataSpec).
+    atm_value:validate(AtmWorkflowExecutionAuth, ItemsBatch, #atm_data_spec{
+        type = atm_array_type,
+        value_constraints = #{item_data_spec => ItemAtmDataSpec}}
+    ).
 
 
 %% @private
 -spec extend_insecure([automation:item()], record()) -> record().
-extend_insecure(ItemsBatch, Record = #atm_list_store_container{
+extend_insecure(ItemsBatch, Record) ->
+    lists:foreach(fun(Item) -> append_insecure(Item, Record) end, ItemsBatch),
+    Record.
+
+
+%% @private
+-spec append_insecure(automation:item(), record()) -> record().
+append_insecure(Item, Record = #atm_list_store_container{
     data_spec = AtmDataSpec,
     backend_id = BackendId
 }) ->
-    lists:foreach(fun(Item) ->
-        ok = json_infinite_log_model:append(BackendId, atm_value:compress(Item, AtmDataSpec))
-    end, ItemsBatch),
+    ok = json_infinite_log_model:append(BackendId, atm_value:compress(Item, AtmDataSpec)),
     Record.

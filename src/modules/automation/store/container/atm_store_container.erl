@@ -58,7 +58,7 @@
     atm_single_value_store_container:record() |
     atm_tree_forest_store_container:record().
 
--type operation_type() :: append | set.
+-type operation_type() :: append | extend | set.
 
 -type operation_options() ::
     atm_audit_log_store_container:operation_options() | 

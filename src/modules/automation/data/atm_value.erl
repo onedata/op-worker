@@ -80,6 +80,7 @@ filterexpand_list(AtmWorkflowExecutionAuth, CompressedItems, AtmDataSpec) ->
 
 %% @private
 -spec get_callback_module(atm_data_type:type()) -> module().
+get_callback_module(atm_array_type) -> atm_array_value;
 get_callback_module(atm_dataset_type) -> atm_dataset_value;
 get_callback_module(atm_file_type) -> atm_file_value;
 get_callback_module(atm_integer_type) -> atm_integer_value;

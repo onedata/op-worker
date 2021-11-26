@@ -113,14 +113,14 @@ apply_operation(#atm_audit_log_store_container{data_spec = AtmDataSpec} = Record
     SanitizedItemsBatch = sanitize_items_batch(AtmWorkflowExecutionAuth, AtmDataSpec, ItemsBatch),
     extend_sanitized_items_batch(SanitizedItemsBatch, Record);
 
-apply_operation(#atm_audit_log_store_container{} = Record, Operation = #atm_store_container_operation{
+apply_operation(#atm_audit_log_store_container{data_spec = AtmDataSpec} = Record, #atm_store_container_operation{
     type = append,
-    argument = Item
+    argument = Item,
+    workflow_execution_auth = AtmWorkflowExecutionAuth
 }) ->
-    apply_operation(Record, Operation#atm_store_container_operation{
-        type = extend,
-        argument = [Item]
-    });
+    % validate and sanitize given batch first, to simulate atomic operation
+    SanitizedItem = sanitize_item(AtmWorkflowExecutionAuth, AtmDataSpec, Item),
+    append_sanitized_item(SanitizedItem, Record);
 
 apply_operation(_Record, _Operation) ->
     throw(?ERROR_NOT_SUPPORTED).
@@ -185,26 +185,41 @@ create_container(AtmDataSpec) ->
     [atm_value:expanded()] | no_return().
 sanitize_items_batch(AtmWorkflowExecutionAuth, AtmDataSpec, ItemsBatch) when is_list(ItemsBatch) ->
     lists:map(fun(Item) ->
-        #{<<"entry">> := Entry} = Object = prepare_audit_log_object(Item),
-        atm_value:validate(AtmWorkflowExecutionAuth, Entry, AtmDataSpec),
-        Object
+        sanitize_item(AtmWorkflowExecutionAuth, AtmDataSpec, Item)
     end, ItemsBatch);
-sanitize_items_batch(_AtmWorkflowExecutionAuth, AtmDataSpec, Item) ->
-    %% TODO use array data spec
-    throw(?ERROR_ATM_DATA_TYPE_UNVERIFIED(Item, AtmDataType)).
+sanitize_items_batch(_AtmWorkflowExecutionAuth, _AtmDataSpec, Value) ->
+    throw(?ERROR_ATM_DATA_TYPE_UNVERIFIED(Value, atm_array_type)).
+
+
+%% @private
+-spec sanitize_item(
+    atm_workflow_execution_auth:record(),
+    atm_data_spec:record(),
+    json_utils:json_term()
+) ->
+    atm_value:expanded() | no_return().
+sanitize_item(AtmWorkflowExecutionAuth, AtmDataSpec, Item) ->
+    #{<<"entry">> := Entry} = Object = prepare_audit_log_object(Item),
+    atm_value:validate(AtmWorkflowExecutionAuth, Entry, AtmDataSpec),
+    Object.
 
 
 %% @private
 -spec extend_sanitized_items_batch([atm_value:expanded()], record()) -> record().
-extend_sanitized_items_batch(ItemsBatch, Record = #atm_audit_log_store_container{
+extend_sanitized_items_batch(ItemsBatch, Record) ->
+    lists:foreach(fun(Item) -> append_sanitized_item(Item, Record) end, ItemsBatch),
+    Record.
+
+
+%% @private
+-spec append_sanitized_item(atm_value:expanded(), record()) -> record().
+append_sanitized_item(#{<<"entry">> := Item} = Object, Record = #atm_audit_log_store_container{
     data_spec = AtmDataSpec,
     backend_id = BackendId
 }) ->
-    lists:foreach(fun(#{<<"entry">> := Item} = Object) ->
-        ok = json_infinite_log_model:append(BackendId, Object#{
-            <<"entry">> => atm_value:compress(Item, AtmDataSpec)
-        }) 
-    end, ItemsBatch),
+    ok = json_infinite_log_model:append(BackendId, Object#{
+        <<"entry">> => atm_value:compress(Item, AtmDataSpec)
+    }),
     Record.
 
 
