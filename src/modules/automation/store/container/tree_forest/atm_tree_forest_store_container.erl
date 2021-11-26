@@ -29,7 +29,7 @@
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
 
--type operation_options() :: #{binary() => boolean()}.
+-type operation_options() :: json_utils:json_map().  %% for now no options are supported
 -type browse_options() :: atm_list_store_container:browse_options().
 -type initial_value() :: [automation:item()] | undefined.
 

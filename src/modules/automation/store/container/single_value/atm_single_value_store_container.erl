@@ -32,7 +32,7 @@
 
 
 -type initial_value() :: undefined | automation:item().
--type operation_options() :: #{binary() => boolean()}.
+-type operation_options() :: json_utils:json_map().  %% for now no options are supported
 -type browse_options() :: any().
 
 -record(atm_single_value_store_container, {

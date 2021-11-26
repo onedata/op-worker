@@ -39,14 +39,7 @@
 
 
 -type initial_value() :: [automation:item()] | undefined.
-%% Full 'operation_options' format can't be expressed directly in type spec due to
-%% dialyzer limitations in specifying individual binaries. Instead it is
-%% shown below:
-%%
-%% #{
-%%      <<"isBatch">> := boolean()
-%% }
--type operation_options() :: #{binary() => boolean()}.
+-type operation_options() :: json_utils:json_map().  %% for now no options are supported
 
 %@formatter:off
 -type browse_options() :: #{
@@ -81,10 +74,10 @@
 create(_AtmWorkflowExecutionAuth, AtmDataSpec, undefined) ->
     create_container(AtmDataSpec);
 
-create(AtmWorkflowExecutionAuth, AtmDataSpec, InitialValueBatch) ->
+create(AtmWorkflowExecutionAuth, AtmDataSpec, InitialItemsBatch) ->
     % validate and sanitize given batch first, to simulate atomic operation
-    SanitizedBatch = sanitize_data_batch(AtmWorkflowExecutionAuth, AtmDataSpec, InitialValueBatch),
-    append_sanitized_batch(SanitizedBatch, create_container(AtmDataSpec)).
+    SanitizedItemsBatch = sanitize_items_batch(AtmWorkflowExecutionAuth, AtmDataSpec, InitialItemsBatch),
+    extend_sanitized_items_batch(SanitizedItemsBatch, create_container(AtmDataSpec)).
 
 
 -spec get_data_spec(record()) -> atm_data_spec:record().
@@ -112,22 +105,20 @@ acquire_iterator(#atm_audit_log_store_container{backend_id = BackendId}) ->
 -spec apply_operation(record(), atm_store_container:operation()) ->
     record() | no_return().
 apply_operation(#atm_audit_log_store_container{data_spec = AtmDataSpec} = Record, #atm_store_container_operation{
-    type = append,
-    options = #{<<"isBatch">> := true},
-    argument = Batch,
+    type = extend,
+    argument = ItemsBatch,
     workflow_execution_auth = AtmWorkflowExecutionAuth
 }) ->
     % validate and sanitize given batch first, to simulate atomic operation
-    SanitizedBatch = sanitize_data_batch(AtmWorkflowExecutionAuth, AtmDataSpec, Batch),
-    append_sanitized_batch(SanitizedBatch, Record);
+    SanitizedItemsBatch = sanitize_items_batch(AtmWorkflowExecutionAuth, AtmDataSpec, ItemsBatch),
+    extend_sanitized_items_batch(SanitizedItemsBatch, Record);
 
 apply_operation(#atm_audit_log_store_container{} = Record, Operation = #atm_store_container_operation{
     type = append,
-    argument = Item,
-    options = Options
+    argument = Item
 }) ->
     apply_operation(Record, Operation#atm_store_container_operation{
-        options = Options#{<<"isBatch">> => true},
+        type = extend,
         argument = [Item]
     });
 
@@ -186,25 +177,26 @@ create_container(AtmDataSpec) ->
 
 
 %% @private
--spec sanitize_data_batch(
+-spec sanitize_items_batch(
     atm_workflow_execution_auth:record(),
     atm_data_spec:record(),
     [json_utils:json_term()]
 ) ->
     [atm_value:expanded()] | no_return().
-sanitize_data_batch(AtmWorkflowExecutionAuth, AtmDataSpec, Batch) when is_list(Batch) ->
+sanitize_items_batch(AtmWorkflowExecutionAuth, AtmDataSpec, ItemsBatch) when is_list(ItemsBatch) ->
     lists:map(fun(Item) ->
         #{<<"entry">> := Entry} = Object = prepare_audit_log_object(Item),
         atm_value:validate(AtmWorkflowExecutionAuth, Entry, AtmDataSpec),
         Object
-    end, Batch);
-sanitize_data_batch(_AtmWorkflowExecutionAuth, _AtmDataSpec, _Item) ->
-    throw(?ERROR_BAD_DATA(<<"value">>, <<"not a batch">>)).
+    end, ItemsBatch);
+sanitize_items_batch(_AtmWorkflowExecutionAuth, AtmDataSpec, Item) ->
+    %% TODO use array data spec
+    throw(?ERROR_ATM_DATA_TYPE_UNVERIFIED(Item, AtmDataType)).
 
 
 %% @private
--spec append_sanitized_batch([atm_value:expanded()], record()) -> record().
-append_sanitized_batch(Batch, Record = #atm_audit_log_store_container{
+-spec extend_sanitized_items_batch([atm_value:expanded()], record()) -> record().
+extend_sanitized_items_batch(ItemsBatch, Record = #atm_audit_log_store_container{
     data_spec = AtmDataSpec,
     backend_id = BackendId
 }) ->
@@ -212,7 +204,7 @@ append_sanitized_batch(Batch, Record = #atm_audit_log_store_container{
         ok = json_infinite_log_model:append(BackendId, Object#{
             <<"entry">> => atm_value:compress(Item, AtmDataSpec)
         }) 
-    end, Batch),
+    end, ItemsBatch),
     Record.
 
 
