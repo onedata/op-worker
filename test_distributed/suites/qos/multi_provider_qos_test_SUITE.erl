@@ -758,7 +758,10 @@ end_per_suite(Config) ->
     qos_test_base:end_per_suite(Config).
 
 
-init_per_testcase(qos_traverse_cancellation_test , Config) ->
+init_per_testcase(qos_transfer_stats_test, Config) ->
+    time_test_utils:freeze_time(Config),
+    init_per_testcase(default, Config);
+init_per_testcase(qos_traverse_cancellation_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     qos_tests_utils:mock_transfers(Workers),
     init_per_testcase(default, Config);
@@ -766,8 +769,12 @@ init_per_testcase(_, Config) ->
     qos_test_base:init_per_testcase(Config).
 
 
+end_per_testcase(qos_transfer_stats_test, Config) ->
+    time_test_utils:unfreeze_time(Config),
+    end_per_testcase(default, Config);
 end_per_testcase(_, Config) ->
     qos_test_base:end_per_testcase(Config).
+
 
 %%%===================================================================
 %%% Test bases

@@ -15,7 +15,7 @@
 %%% For each QoS entry there are 2 collections: 
 %%%     * bytes - stores sum of transferred bytes from given storage 
 %%%     * files - stores number of transferred files to given storage. 
-%%%               Files can not be unique, therefore 2 different transfers 
+%%%               Files do not have to be unique - 2 different transfers 
 %%%               of the same file result in 2 updates of statistic.
 %%% @end
 %%%-------------------------------------------------------------------
@@ -29,7 +29,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% functions operating on document using datastore model API
--export([create/1, delete/1, get/2, update/3]).
+-export([ensure_exists/1, delete/1, get/2, update/3]).
 
 %% datastore model callbacks
 -export([get_ctx/0]).
@@ -48,10 +48,10 @@
 %%% API
 %%%===================================================================
 
--spec create(qos_entry:id()) -> ok.
-create(QosEntryId) ->
-    ok = create_internal(?COLLECTION_ID(QosEntryId, bytes)),
-    ok = create_internal(?COLLECTION_ID(QosEntryId, files)).
+-spec ensure_exists(qos_entry:id()) -> ok.
+ensure_exists(QosEntryId) ->
+    ok = ensure_exists_internal(?COLLECTION_ID(QosEntryId, bytes)),
+    ok = ensure_exists_internal(?COLLECTION_ID(QosEntryId, files)).
 
 
 -spec delete(qos_entry:id()) -> ok.
@@ -79,8 +79,8 @@ update(QosEntryId, Type, ValuesPerStorage) ->
 %%% Internal functions
 %%%===================================================================
 
--spec create_internal(time_series_collection:collection_id()) -> ok | {error, term()}.
-create_internal(CollectionId) ->
+-spec ensure_exists_internal(time_series_collection:collection_id()) -> ok | {error, term()}.
+ensure_exists_internal(CollectionId) ->
     Config = #{<<"total">> => supported_metrics()},
     case datastore_time_series_collection:create(?CTX, CollectionId, Config) of
         ok -> ok;
@@ -102,25 +102,17 @@ update_internal(CollectionId, ValuesPerStorage, Retries) ->
     of
         ok -> 
             ok;
-        {error, time_series_not_found} ->
-            {ok, ExistingTimeSeries} = list_time_series_internal(CollectionId),
-            MissingTimeSeries = lists_utils:subtract(maps:keys(ValuesPerStorage), ExistingTimeSeries),
-            ok = create_missing_time_series(CollectionId, MissingTimeSeries),
-            update_internal(CollectionId, ValuesPerStorage, Retries - 1)
-    end.
-
-
--spec list_time_series_internal(time_series_collection:collection_id()) -> 
-    {ok, [time_series_collection:time_series_id()]} | {error, term()}.
-list_time_series_internal(CollectionId) ->
-    case datastore_time_series_collection:list_time_series_ids(?CTX, CollectionId) of
-        {ok, TimeSeries} -> 
-            {ok, TimeSeries};
         ?ERROR_NOT_FOUND ->
             % There is a chance that transfer started for legacy QoS entry for which time 
             % series collection was not initialized. Create it and try again.
-            ok = create_internal(CollectionId),
-            datastore_time_series_collection:list_time_series_ids(?CTX, CollectionId)
+            ok = ensure_exists_internal(CollectionId),
+            update_internal(CollectionId, ValuesPerStorage, Retries - 1);
+        {error, time_series_not_found} ->
+            {ok, ExistingTimeSeries} = datastore_time_series_collection:list_time_series_ids(
+                ?CTX, CollectionId),
+            MissingTimeSeries = lists_utils:subtract(maps:keys(ValuesPerStorage), ExistingTimeSeries),
+            ok = create_missing_time_series(CollectionId, MissingTimeSeries),
+            update_internal(CollectionId, ValuesPerStorage, Retries - 1)
     end.
 
 
