@@ -33,7 +33,8 @@
 
 % setters
 -export([mark_building/1, mark_purging/2,
-    mark_file_archived/2, mark_file_failed/1, mark_finished/2,
+    mark_file_archived/2, mark_file_failed/1, mark_creation_finished/2,
+    mark_preserved/1, mark_verification_failed/1,
     set_root_dir_guid/2, set_data_dir_guid/2, set_base_archive_id/2,
     set_related_dip/2, set_related_aip/2
 ]).
@@ -56,7 +57,8 @@
 
 -type creator() :: od_user:id().
 
--type state() :: ?ARCHIVE_PENDING | ?ARCHIVE_BUILDING | ?ARCHIVE_PRESERVED | ?ARCHIVE_PURGING | ?ARCHIVE_FAILED.
+-type state() :: ?ARCHIVE_PENDING | ?ARCHIVE_BUILDING | ?ARCHIVE_PRESERVED | ?ARCHIVE_PURGING 
+    | ?ARCHIVE_FAILED | ?ARCHIVE_VERIFYING | ?ARCHIVE_VERIFICATION_FAILED.
 -type timestamp() :: time:seconds().
 -type description() :: binary().
 -type callback() :: http_client:url() | undefined.
@@ -360,7 +362,8 @@ get_related_aip(ArchiveId) ->
 
 -spec is_finished(record() | doc()) -> boolean().
 is_finished(#archive{state = State}) ->
-    lists:member(State, [?ARCHIVE_PRESERVED, ?ARCHIVE_FAILED, ?ARCHIVE_PURGING]);
+    lists:member(State, [?ARCHIVE_PRESERVED, ?ARCHIVE_FAILED, ?ARCHIVE_PURGING, 
+        ?ARCHIVE_VERIFYING, ?ARCHIVE_VERIFICATION_FAILED]);
 is_finished(#document{value = Archive}) ->
     is_finished(Archive).
 
@@ -400,16 +403,42 @@ mark_building(ArchiveDocOrId) ->
     end)).
 
 
--spec mark_finished(id() | doc(), archive_stats:record()) -> ok.
-mark_finished(ArchiveDocOrId, NestedArchivesStats) ->
-    ?extract_ok(update(ArchiveDocOrId, fun(Archive = #archive{stats = CurrentStats}) ->
+-spec mark_creation_finished(id() | doc(), archive_stats:record()) -> ok.
+mark_creation_finished(ArchiveDocOrId, NestedArchivesStats) ->
+    UpdateResult = update(ArchiveDocOrId, fun(Archive = #archive{stats = CurrentStats}) ->
         AggregatedStats = archive_stats:sum(CurrentStats, NestedArchivesStats),
         {ok, Archive#archive{
             state = case AggregatedStats#archive_stats.files_failed =:= 0 of
-                true -> ?ARCHIVE_PRESERVED;
+                true -> ?ARCHIVE_VERIFYING;
                 false -> ?ARCHIVE_FAILED
             end,
             stats = AggregatedStats
+        }}
+    end),
+    case UpdateResult of
+        {ok, #document{value = #archive{state = ?ARCHIVE_VERIFYING}} = Doc} ->
+            archive_verification_traverse:block_archive_modification(Doc),
+            archive_verification_traverse:start(Doc);
+        {ok, #document{value = #archive{state = ?ARCHIVE_FAILED}}} -> 
+            ok
+    end.
+
+
+-spec mark_preserved(id() | doc()) -> ok | error().
+mark_preserved(ArchiveDocOrId) ->
+    ?extract_ok(update(ArchiveDocOrId, fun
+        (#archive{state = ?ARCHIVE_VERIFYING} = Archive) ->
+            {ok, Archive#archive{state = ?ARCHIVE_PRESERVED}};
+        (Archive) ->
+            {ok, Archive}
+    end)).
+
+
+-spec mark_verification_failed(id() | doc()) -> ok | error().
+mark_verification_failed(ArchiveDocOrId) ->
+    ?extract_ok(update(ArchiveDocOrId, fun(Archive) ->
+        {ok, Archive#archive{
+            state = ?ARCHIVE_VERIFICATION_FAILED
         }}
     end)).
 

@@ -54,7 +54,14 @@
 assert_granted(UserCtx, FileCtx, AccessRequirements) ->
     case user_ctx:is_root(UserCtx) of
         true ->
-            FileCtx;
+            % Root omits all access checks with exception to file protection flags
+            case file_ctx:is_space_dir_const(FileCtx) of
+                false ->
+                    assert_access_permitted_by_protection_flags(FileCtx, AccessRequirements);
+                true ->
+                    %% @TODO VFS-8589 - properly handle getting space dir metadata on proxy providers
+                    FileCtx
+            end;
         false ->
             SpaceId = file_ctx:get_space_id_const(FileCtx),
 
@@ -105,7 +112,7 @@ is_available_in_readonly_mode(?OR(AccessType1, AccessType2)) ->
 assert_access_granted_for_space_owner(UserCtx, FileCtx0, AccessRequirements) ->
     IsSpaceDir = file_ctx:is_space_dir_const(FileCtx0),
     IsInOpenHandleMode = user_ctx:is_in_open_handle_mode(UserCtx),
-
+    
     case IsSpaceDir orelse IsInOpenHandleMode of
         true ->
             % In case of space dir or 'open_handle' session mode space owner
@@ -114,23 +121,7 @@ assert_access_granted_for_space_owner(UserCtx, FileCtx0, AccessRequirements) ->
         false ->
             % For any other file or directory space owner omits all access checks
             % with exceptions to file protection flags
-            {ForbiddenOps, FileCtx1} = get_operations_blocked_by_file_protection_flags(FileCtx0),
-
-            IsRequirementMetBySpaceOwner = fun
-                F(?OPERATIONS(RequiredOps)) ->
-                    case ?common_flags(RequiredOps, ForbiddenOps) of
-                        ?no_flags_mask -> true;
-                        _ -> false
-                    end;
-                F(?OR(AccessRequirement1, AccessRequirement2)) ->
-                    F(AccessRequirement1) orelse F(AccessRequirement2);
-                F(_) ->
-                    true
-            end,
-            case lists:all(IsRequirementMetBySpaceOwner, AccessRequirements) of
-                true -> FileCtx1;
-                false -> throw(?EPERM)
-            end
+            assert_access_permitted_by_protection_flags(FileCtx0, AccessRequirements)
     end.
 
 
@@ -156,6 +147,29 @@ assert_access_granted_for_user(UserCtx, FileCtx0, AccessRequirements0) ->
     lists:foldl(fun(AccessRequirement, FileCtx1) ->
         assert_meets_access_requirement(UserCtx2, FileCtx1, AccessRequirement)
     end, FileCtx0, AccessRequirements1).
+
+
+%% @private
+-spec assert_access_permitted_by_protection_flags(file_ctx:ctx(), [requirement()]) ->
+    file_ctx:ctx() | no_return().
+assert_access_permitted_by_protection_flags(FileCtx, AccessRequirements) ->
+    {ForbiddenOps, FileCtx1} = get_operations_blocked_by_file_protection_flags(FileCtx),
+
+    IsRequirementMet = fun
+        F(?OPERATIONS(RequiredOps)) ->
+            case ?common_flags(RequiredOps, ForbiddenOps) of
+                ?no_flags_mask -> true;
+                _ -> false
+            end;
+        F(?OR(AccessRequirement1, AccessRequirement2)) ->
+            F(AccessRequirement1) orelse F(AccessRequirement2);
+        F(_) ->
+            true
+    end,
+    case lists:all(IsRequirementMet, AccessRequirements) of
+        true -> FileCtx1;
+        false -> throw(?EPERM)
+    end.
 
 
 %% @private

@@ -48,7 +48,7 @@
 
 %% API
 -export([start_archivisation/6, update_archive/2, get_archive_info/1,
-    list_archives/3, init_archive_purge/3, get_nested_archives_stats/1]).
+    list_archives/3, init_archive_purge/2, get_nested_archives_stats/1]).
 
 %% Exported for use in tests
 -export([remove_archive_recursive/1]).
@@ -195,8 +195,8 @@ list_archives(DatasetId, ListingOpts, ListingMode) ->
     end.
 
 
--spec init_archive_purge(archive:id(), archive:callback(), user_ctx:ctx()) -> ok | error().
-init_archive_purge(ArchiveId, CallbackUrl, _UserCtx) ->
+-spec init_archive_purge(archive:id(), archive:callback()) -> ok | error().
+init_archive_purge(ArchiveId, CallbackUrl) ->
     case archive:mark_purging(ArchiveId, CallbackUrl) of
         {ok, ArchiveDoc} ->
             {ok, DatasetId} = archive:get_dataset_id(ArchiveDoc),
@@ -288,6 +288,7 @@ remove_single_archive(undefined, _UserCtx) ->
     ok;
 remove_single_archive(ArchiveDoc = #document{}, UserCtx) ->
     {ok, ArchiveId} = archive:get_id(ArchiveDoc),
+    ok = archive_verification_traverse:unblock_archive_modification(ArchiveDoc),
     case archive:delete(ArchiveId) of
         ok ->
             {ok, SpaceId} = archive:get_space_id(ArchiveDoc),

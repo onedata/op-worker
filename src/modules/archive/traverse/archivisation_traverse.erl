@@ -21,6 +21,8 @@
 -include("global_definitions.hrl").
 -include("tree_traverse.hrl").
 -include("modules/dataset/archive.hrl").
+-include("modules/dataset/bagit.hrl").
+-include("modules/datastore/datastore_runner.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -72,14 +74,16 @@
 -spec init_pool() -> ok.
 init_pool() ->
     MasterJobsLimit = op_worker:get_env(archivisation_traverse_master_jobs_limit, 10),
-    SlaveJobsLimit = op_worker:get_env(archivisation_traverse_slave_jobs_limit, 100),
+    SlaveJobsLimit = op_worker:get_env(archivisation_traverse_slave_jobs_limit, 20),
     ParallelismLimit = op_worker:get_env(archivisation_traverse_parallelism_limit, 10),
-    tree_traverse:init(?POOL_NAME, MasterJobsLimit, SlaveJobsLimit, ParallelismLimit).
+    tree_traverse:init(?POOL_NAME, MasterJobsLimit, SlaveJobsLimit, ParallelismLimit),
+    archive_verification_traverse:init_pool().
 
 
 -spec stop_pool() -> ok.
 stop_pool() ->
-    tree_traverse:stop(?POOL_NAME).
+    tree_traverse:stop(?POOL_NAME),
+    archive_verification_traverse:stop_pool().
 
 
 -spec start(archive:doc(), dataset:doc(), user_ctx:ctx()) -> ok | {error, term()}.
@@ -228,7 +232,22 @@ do_master_job(Job = #tree_traverse{
                 false -> TraverseInfo
             end,
     
-            NewJobsPreprocessor = fun(_SlaveJobs, _MasterJobs, _ListExtendedInfo, SubtreeProcessingStatus) ->
+            NewJobsPreprocessor = fun(SlaveJobs, MasterJobs, #{is_last := IsLast}, SubtreeProcessingStatus) ->
+                DirUuid = file_ctx:get_logical_uuid_const(FileCtx2),
+                ChildrenCount = length(SlaveJobs) + length(MasterJobs),
+                ok = archive_traverse_common:update_children_count(
+                    ?POOL_NAME, TaskId, DirUuid, ChildrenCount),
+                case IsLast of
+                    false -> 
+                        ok;
+                    true ->
+                        TotalChildrenCount = archive_traverse_common:take_children_count(
+                            ?POOL_NAME, TaskId, DirUuid),
+                        save_dir_checksum_metadata(get_file_ctx(maps:get(aip_ctx, TraverseInfo2)), 
+                            UserCtx, TotalChildrenCount),
+                        save_dir_checksum_metadata(get_file_ctx(maps:get(dip_ctx, TraverseInfo2)), 
+                            UserCtx, TotalChildrenCount)
+                end,
                 case SubtreeProcessingStatus of
                     ?SUBTREE_PROCESSED(NextSubtreeRoot) -> 
                         mark_finished_and_propagate_up(
@@ -289,12 +308,14 @@ create_archive_root_dir(ArchiveDoc, DatasetId, UserCtx) ->
 -spec create_archive_data_dir(archive:doc(), user_ctx:ctx()) -> {ok, archive:doc()}.
 create_archive_data_dir(ArchiveDoc, UserCtx) ->
     {ok, ArchiveRootDirGuid} = archive:get_root_dir_guid(ArchiveDoc),
+    ArchiveRootDirCtx = file_ctx:new_by_guid(ArchiveRootDirGuid),
     DataDirGuid = case is_bagit(ArchiveDoc) of
         true ->
-            ArchiveRootDirCtx = file_ctx:new_by_guid(ArchiveRootDirGuid),
             {ok, DataDirCtx} = bagit_archive:prepare(ArchiveRootDirCtx, UserCtx),
+            save_dir_checksum_metadata(DataDirCtx, UserCtx, 1),
             file_ctx:get_logical_guid_const(DataDirCtx);
         false ->
+            save_dir_checksum_metadata(ArchiveRootDirCtx, UserCtx, 1),
             ArchiveRootDirGuid
     end,
     archive:set_data_dir_guid(ArchiveDoc, DataDirGuid).
@@ -561,7 +582,7 @@ mark_finished(ArchiveDoc, UserCtx, NestedArchiveStats) ->
         true -> bagit_archive:finalize(ArchiveRootDirCtx, UserCtx);
         false -> ok
     end,
-    ok = archive:mark_finished(ArchiveDoc, NestedArchiveStats).
+    ok = archive:mark_creation_finished(ArchiveDoc, NestedArchiveStats).
 
 
 -spec do_archive(file_ctx:ctx(), file_meta:path(), archive_ctx(), archive_ctx(), 
@@ -744,3 +765,11 @@ resolve_symlink(FileCtx, UserCtx) ->
         _ ->
             file_ctx:get_logical_guid_const(FileCtx)
     end.
+
+
+-spec save_dir_checksum_metadata(file_ctx:ctx() | undefined, user_ctx:ctx(), non_neg_integer()) -> 
+    ok.
+save_dir_checksum_metadata(undefined, _, _) ->
+    ok;
+save_dir_checksum_metadata(FileCtx, UserCtx, TotalChildrenCount) ->
+    archivisation_checksum:dir_calculate_and_save(FileCtx, UserCtx, TotalChildrenCount).

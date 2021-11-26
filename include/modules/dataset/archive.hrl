@@ -18,8 +18,10 @@
 % Macros defining possible states of an archive
 -define(ARCHIVE_PENDING, pending).
 -define(ARCHIVE_BUILDING, building).
+-define(ARCHIVE_VERIFYING, verifying).
 -define(ARCHIVE_PRESERVED, preserved).
 -define(ARCHIVE_FAILED, failed).
+-define(ARCHIVE_VERIFICATION_FAILED, verification_failed).
 -define(ARCHIVE_PURGING, purging).
 
 

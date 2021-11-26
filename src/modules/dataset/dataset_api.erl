@@ -22,7 +22,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([establish/2, update/4, remove/1, move_if_applicable/2]).
+-export([establish/2, establish/3, update/4, remove/1, move_if_applicable/2]).
 -export([get_info/1, get_effective_membership_and_protection_flags/1, get_effective_summary/1]).
 -export([list_top_datasets/4, list_children_datasets/3]).
 -export([handle_file_deleted/1]).
@@ -40,6 +40,7 @@
 -type listing_opts() :: datasets_structure:opts().
 -type listing_mode() :: ?BASIC_INFO | ?EXTENDED_INFO.
 -type index() :: datasets_structure:index().
+-type dataset_type() :: internal | user_defined.
 
 -export_type([entries/0, listing_opts/0, index/0, listing_mode/0]).
 
@@ -59,13 +60,20 @@
 
 -spec establish(file_ctx:ctx(), data_access_control:bitmask()) -> {ok, dataset:id()}.
 establish(FileCtx, ProtectionFlags) ->
+    establish(FileCtx, ProtectionFlags, user_defined).
+
+-spec establish(file_ctx:ctx(), data_access_control:bitmask(), dataset_type()) -> {ok, dataset:id()}.
+establish(FileCtx, ProtectionFlags, DatasetType) ->
     ?CRITICAL_SECTION(file_ctx:get_logical_uuid_const(FileCtx), fun() ->
         SpaceId = file_ctx:get_space_id_const(FileCtx),
         Uuid = file_ctx:get_logical_uuid_const(FileCtx),
         {ok, DatasetId} = dataset:create(Uuid, SpaceId),
         {DatasetName, _FileCtx2} = file_ctx:get_aliased_name(FileCtx, user_ctx:new(?ROOT_SESS_ID)),
         ok = file_meta_dataset:establish(Uuid, ProtectionFlags),
-        ok = attached_datasets:add(SpaceId, Uuid, DatasetName),
+        case DatasetType of
+            internal -> ok;
+            user_defined -> ok = attached_datasets:add(SpaceId, Uuid, DatasetName)
+        end,
         InvalidateDatasetsOnly = not ?has_any_flags(ProtectionFlags, ?DATA_PROTECTION bor ?METADATA_PROTECTION),
         dataset_eff_cache:invalidate_on_all_nodes(SpaceId, InvalidateDatasetsOnly),
         {ok, DatasetId}
