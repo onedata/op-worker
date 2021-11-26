@@ -83,6 +83,7 @@ register_new_item(_, _, _) ->
 -spec handle_item_processed(state(), workflow_execution_state:index(), workflow_jobs:item_processing_result()) ->
     {
         state(),
+        ItemIdToReportError :: workflow_cached_item:id() | undefined,
         ItemIdToSnapshot :: workflow_cached_item:id() | undefined,
         ItemIdsToDelete :: [workflow_cached_item:id()]
     }.
@@ -112,16 +113,16 @@ handle_item_processed(
                 end
         end,
 
-    FinalIdToSnapshot = case SuccessOrFailure of
-        ?SUCCESS -> IdToSnapshot;
-        ?FAILURE -> undefined
+    {ItemIdToReportError, FinalIdToSnapshot} = case SuccessOrFailure of
+        ?SUCCESS -> {undefined, IdToSnapshot};
+        ?FAILURE -> {FinishedItemId, undefined}
     end,
 
     {Progress#iteration_state{
         pending_items = maps:remove(ItemIndex, Pending),
         first_not_finished_item_index = FirstNotFinishedItemIndex,
         items_finished_ahead = FinalFinishedAhead
-    }, FinalIdToSnapshot, IdsToDelete};
+    }, ItemIdToReportError, FinalIdToSnapshot, IdsToDelete};
 handle_item_processed(
     Progress = #iteration_state{
         pending_items = Pending,
@@ -142,6 +143,9 @@ handle_item_processed(
             {{To, From} = Key, undefined, TreeIterator} when To =:= ItemIndex - 1 ->
                 UpdatedFinishedAhead = gb_trees:delete(Key, FinishedAhead),
                 case gb_trees:next(TreeIterator) of
+                    {{To2, From2} = Key2, undefined, _} when From2 =:= ItemIndex + 1 ->
+                        UpdatedFinishedAhead2 = gb_trees:delete(Key2, UpdatedFinishedAhead),
+                        {[FinishedItemId], gb_trees:insert({To2, From}, undefined, UpdatedFinishedAhead2)};
                     {{To2, From2} = Key2, ItemId2, _} when From2 =:= ItemIndex + 1 ->
                         UpdatedFinishedAhead2 = gb_trees:delete(Key2, UpdatedFinishedAhead),
                         {[FinishedItemId, ItemId2], gb_trees:insert({To2, From}, undefined, UpdatedFinishedAhead2)};
@@ -151,6 +155,9 @@ handle_item_processed(
             {{To, From} = Key, ItemId, TreeIterator} when To =:= ItemIndex - 1 ->
                 UpdatedFinishedAhead = gb_trees:delete(Key, FinishedAhead),
                 case gb_trees:next(TreeIterator) of
+                    {{To2, From2} = Key2, undefined, _} when From2 =:= ItemIndex + 1 ->
+                        UpdatedFinishedAhead2 = gb_trees:delete(Key2, UpdatedFinishedAhead),
+                        {[ItemId], gb_trees:insert({To2, From}, FinishedItemId, UpdatedFinishedAhead2)};
                     {{To2, From2} = Key2, ItemId2, _} when From2 =:= ItemIndex + 1 ->
                         UpdatedFinishedAhead2 = gb_trees:delete(Key2, UpdatedFinishedAhead),
                         {[ItemId, FinishedItemId], gb_trees:insert({To2, From}, ItemId2, UpdatedFinishedAhead2)};
@@ -163,7 +170,7 @@ handle_item_processed(
     {Progress#iteration_state{
         pending_items = maps:remove(ItemIndex, Pending),
         items_finished_ahead = FinalFinishedAhead
-    }, undefined, IdsToDelete};
+    }, undefined, undefined, IdsToDelete};
 handle_item_processed(
     Progress = #iteration_state{
         pending_items = Pending,
@@ -199,7 +206,7 @@ handle_item_processed(
     {Progress#iteration_state{
         pending_items = maps:remove(ItemIndex, Pending),
         items_finished_ahead = FinalFinishedAhead
-    }, undefined, IdsToDelete}.
+    }, FinishedItemId, undefined, IdsToDelete}.
 
 -spec get_all_item_ids(state()) -> [workflow_cached_item:id()].
 get_all_item_ids(#iteration_state{pending_items = Pending, items_finished_ahead = FinishedAhead}) ->

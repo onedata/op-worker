@@ -233,13 +233,7 @@
 }).
 
 -record(od_atm_lambda, {
-    name :: automation:name(),
-    summary :: automation:summary(),
-    description :: automation:description(),
-    
-    operation_spec :: atm_lambda_operation_spec:record(),
-    argument_specs = [] :: [atm_lambda_argument_spec:record()],
-    result_specs = [] :: [atm_lambda_result_spec:record()],
+    revision_registry :: atm_lambda_revision_registry:record(),
     
     atm_inventories = [] :: [od_atm_inventory:id()],
     
@@ -248,15 +242,11 @@
 
 -record(od_atm_workflow_schema, {
     name :: automation:name(),
-    description :: automation:description(),
+    summary :: automation:description(),
 
-    stores = [] :: [atm_store_schema:record()],
-    lanes = [] :: [atm_lane_schema:record()],
-
-    state :: automation:workflow_schema_state(),
+    revision_registry :: atm_workflow_schema_revision_registry:record(),
 
     atm_inventory :: od_atm_inventory:id(),
-    atm_lambdas :: [od_atm_lambda:id()],
 
     cache_state = #{} :: cache_state()
 }).
@@ -1076,6 +1066,10 @@
 -record(atm_task_execution, {
     workflow_execution_id :: atm_workflow_execution:id(),
     lane_index :: atm_lane_execution:index(),
+    % This field is set to 'undefined' during document creation as specific run_num
+    % may not be known yet (e.g. runs prepared in advance). Concrete run_num must
+    % be substituted right before lane run execution starts.
+    run_num :: undefined | atm_lane_execution:run_num(),
     parallel_box_index :: non_neg_integer(),
 
     schema_id :: automation:id(),
@@ -1102,28 +1096,17 @@
 -record(atm_workflow_schema_snapshot, {
     schema_id :: automation:id(),
     name :: automation:name(),
-    description :: automation:description(),
+    summary :: automation:summary(),
 
-    stores = [] :: [atm_store_schema:record()],
-    lanes = [] :: [atm_lane_schema:record()],
+    revision_number :: atm_workflow_schema_revision:revision_number(),
+    revision :: atm_workflow_schema_revision:record(),
 
-    state :: automation:workflow_schema_state(),
-
-    atm_inventory :: od_atm_inventory:id(),
-    atm_lambdas :: [od_atm_lambda:id()]
+    atm_inventory :: od_atm_inventory:id()
 }).
 
 -record(atm_lambda_snapshot, {
     lambda_id :: automation:id(),
-
-    name :: automation:name(),
-    summary :: automation:summary(),
-    description :: automation:description(),
-
-    operation_spec :: atm_lambda_operation_spec:record(),
-    argument_specs = [] :: [atm_lambda_argument_spec:record()],
-    result_specs = [] :: [atm_lambda_result_spec:record()],
-
+    revision_registry :: atm_lambda_revision_registry:record(),
     atm_inventories = [] :: [od_atm_inventory:id()]
 }).
 
@@ -1145,6 +1128,7 @@
     lanes :: #{atm_lane_execution:index() => atm_lane_execution:record()},
     lanes_count :: pos_integer(),
 
+    incarnation :: atm_workflow_execution:incarnation(),
     current_lane_index :: atm_lane_execution:index(),
     current_run_num :: pos_integer(),
 
@@ -1169,6 +1153,11 @@
     discriminator = {0, <<>>} :: atm_tree_forest_iterator_queue:discriminator(), 
     last_pruned_node_num = 0 :: atm_tree_forest_iterator_queue:node_num(),
     max_values_per_node :: pos_integer() | undefined
+}).
+
+
+-record(atm_openfaas_function_activity_registry, {
+    pod_status_registry :: atm_openfaas_function_pod_status_registry:record()
 }).
 
 %%%===================================================================

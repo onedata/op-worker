@@ -44,7 +44,7 @@
 -export([init/1, push/3, peek/2, report_new_tree/2, prune/2, destroy/1]).
 
 %% datastore_model callbacks
--export([get_ctx/0, get_record_version/0, get_record_struct/1, upgrade_record/2]).
+-export([get_ctx/0, get_record_version/0, get_record_struct/1]).
 
 -type id() :: datastore:key().
 -type index() :: non_neg_integer().
@@ -333,7 +333,7 @@ get_ctx() ->
 
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    2.
+    1.
 
 
 -spec get_record_struct(datastore_model:record_version()) ->
@@ -344,30 +344,6 @@ get_record_struct(1) ->
         {last_pushed_value_index , integer},
         {highest_peeked_value_index , integer},
         {discriminator, {integer, binary}},
-        {last_pruned_node_num , integer}
-    ]};
-get_record_struct(2) ->
-    {record, [
-        {values, #{integer => string}},
-        {last_pushed_value_index , integer},
-        {highest_peeked_value_index , integer},
-        {discriminator, {integer, binary}},
         {last_pruned_node_num , integer},
         {max_values_per_node, integer}
     ]}.
-
-
--spec upgrade_record(datastore_model:record_version(), datastore_model:record()) ->
-    {datastore_model:record_version(), datastore_model:record()}.
-upgrade_record(1, 
-    {?MODULE, Values, LastPushedValueIndex, HighestPeekedValueIndex, Discriminator, LastPrunedNodeNum}
-) ->
-    {2, {?MODULE, 
-        Values, 
-        LastPushedValueIndex, 
-        HighestPeekedValueIndex, 
-        Discriminator, 
-        LastPrunedNodeNum, 
-        10000 % default value in previous version
-    }}.
-

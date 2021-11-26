@@ -27,15 +27,16 @@
 -export([is_openfaas_available/0, assert_openfaas_available/0]).
 
 %% atm_task_executor callbacks
--export([build/3, initiate/2, teardown/2, in_readonly_mode/1, run/3]).
+-export([create/4, initiate/4, teardown/2, delete/1, in_readonly_mode/1, run/3]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
 
 
 -record(atm_openfaas_task_executor, {
-    function_name :: binary(),
-    operation_spec :: atm_openfaas_operation_spec:record()
+    function_name :: function_name(),
+    operation_spec :: atm_openfaas_operation_spec:record(),
+    activity_registry :: atm_openfaas_function_activity_registry:id()
 }).
 -type record() :: #atm_openfaas_task_executor{}.
 
@@ -48,12 +49,18 @@
 
 -record(initiation_ctx, {
     workflow_execution_ctx :: atm_workflow_execution_ctx:record(),
+    resource_spec :: atm_resource_spec:record(),
     openfaas_config :: openfaas_config(),
     executor :: record()
 }).
 -type initiation_ctx() :: #initiation_ctx{}.
 
 -export_type([record/0]).
+
+
+% function name submitted to OpenFaaS, used also as function's unique identifier
+-type function_name() :: binary().
+-export_type([function_name/0]).
 
 
 -define(HEALTHCHECK_CACHE_TTL_SECONDS, 15).
@@ -88,24 +95,40 @@ assert_openfaas_available() ->
 %%%===================================================================
 
 
--spec build(atm_workflow_execution:id(), atm_lane_execution:index(), atm_lambda_snapshot:record()) ->
+-spec create(
+    atm_workflow_execution_ctx:record(),
+    atm_lane_execution:index(),
+    atm_task_schema:record(),
+    atm_lambda_revision:record()
+) ->
     record() | no_return().
-build(AtmWorkflowExecutionId, AtmLaneIndex, AtmLambdaSnapshot = #atm_lambda_snapshot{
-    operation_spec = AtmLambadaOperationSpec
-}) ->
+create(AtmWorkflowExecutionCtx, AtmLaneIndex, AtmTaskSchema, AtmLambdaRevision) ->
     assert_openfaas_available(),
 
+    ResourceSpec = select_resource_spec(AtmTaskSchema, AtmLambdaRevision),
+    FunctionName = build_function_name(
+        AtmWorkflowExecutionCtx, AtmLaneIndex, AtmTaskSchema, AtmLambdaRevision, ResourceSpec
+    ),
+    {ok, ActivityRegistryId} = atm_openfaas_function_activity_registry:ensure_for_function(FunctionName),
+
     #atm_openfaas_task_executor{
-        function_name = build_function_name(AtmWorkflowExecutionId, AtmLaneIndex, AtmLambdaSnapshot),
-        operation_spec = AtmLambadaOperationSpec
+        function_name = FunctionName,
+        operation_spec = AtmLambdaRevision#atm_lambda_revision.operation_spec,
+        activity_registry = ActivityRegistryId
     }.
 
 
--spec initiate(atm_workflow_execution_ctx:record(), record()) ->
+-spec initiate(
+    atm_workflow_execution_ctx:record(),
+    atm_task_schema:record(),
+    atm_lambda_revision:record(),
+    record()
+) ->
     workflow_engine:task_spec() | no_return().
-initiate(AtmWorkflowExecutionCtx, AtmTaskExecutor) ->
+initiate(AtmWorkflowExecutionCtx, AtmTaskSchema, AtmLambdaRevision, AtmTaskExecutor) ->
     InitiationCtx = #initiation_ctx{
         workflow_execution_ctx = AtmWorkflowExecutionCtx,
+        resource_spec = select_resource_spec(AtmTaskSchema, AtmLambdaRevision),
         openfaas_config = get_openfaas_config(),
         executor = AtmTaskExecutor
     },
@@ -119,13 +142,20 @@ initiate(AtmWorkflowExecutionCtx, AtmTaskExecutor) ->
 
 
 -spec teardown(atm_lane_execution_handler:teardown_ctx(), record()) -> ok | no_return().
-teardown(#atm_lane_execution_run_teardown_ctx{is_retried_scheduled = true}, _AtmTaskExecutor) ->
+teardown(#atm_lane_execution_run_teardown_ctx{is_retry_scheduled = true}, _AtmTaskExecutor) ->
     % in case of lane run retry functions registered in OpenFaaS service are not removed
     % as they will be reused by retry
     ok;
 teardown(_AtmLaneExecutionRunTeardownCtx, AtmTaskExecutor) ->
     % TODO VFS-8273 pass workflow_execution_ctx below and log in audit log function removal result
     remove_function(AtmTaskExecutor).
+
+
+-spec delete(record()) -> ok | no_return().
+delete(#atm_openfaas_task_executor{
+    activity_registry = ActivityRegistryId
+}) ->
+    ok = atm_openfaas_function_activity_registry:delete(ActivityRegistryId).
 
 
 -spec in_readonly_mode(record()) -> boolean().
@@ -155,11 +185,13 @@ version() ->
     json_utils:json_term().
 db_encode(#atm_openfaas_task_executor{
     function_name = FunctionName,
-    operation_spec = OperationSpec
+    operation_spec = OperationSpec,
+    activity_registry = ActivityRegistryId
 }, NestedRecordEncoder) ->
     #{
         <<"functionName">> => FunctionName,
-        <<"operationSpec">> => NestedRecordEncoder(OperationSpec, atm_openfaas_operation_spec)
+        <<"operationSpec">> => NestedRecordEncoder(OperationSpec, atm_openfaas_operation_spec),
+        <<"activityRegistryId">> => ActivityRegistryId
     }.
 
 
@@ -168,10 +200,11 @@ db_encode(#atm_openfaas_task_executor{
 db_decode(#{
     <<"functionName">> := FunctionName,
     <<"operationSpec">> := OperationSpecJson
-}, NestedRecordDecoder) ->
+} = RecordJson, NestedRecordDecoder) ->
     #atm_openfaas_task_executor{
         function_name = FunctionName,
-        operation_spec = NestedRecordDecoder(OperationSpecJson, atm_openfaas_operation_spec)
+        operation_spec = NestedRecordDecoder(OperationSpecJson, atm_openfaas_operation_spec),
+        activity_registry = maps:get(<<"activityRegistryId">>, RecordJson, <<"unknown">>)
     }.
 
 
@@ -208,6 +241,15 @@ check_openfaas_availability() ->
     Result.
 
 
+%% @private
+-spec select_resource_spec(atm_task_schema:record(), atm_lambda_revision:record()) ->
+    atm_resource_spec:record().
+select_resource_spec(#atm_task_schema{resource_spec_override = undefined}, AtmLambdaRevision) ->
+    AtmLambdaRevision#atm_lambda_revision.resource_spec;
+select_resource_spec(#atm_task_schema{resource_spec_override = ResourceSpec}, _AtmLambdaRevision) ->
+    ResourceSpec.
+
+
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -219,21 +261,38 @@ check_openfaas_availability() ->
 %% @end
 %%--------------------------------------------------------------------
 -spec build_function_name(
-    atm_workflow_execution:id(),
+    atm_workflow_execution_ctx:record(),
     atm_lane_execution:index(),
-    atm_lambda_snapshot:record()
+    atm_task_schema:record(),
+    atm_lambda_revision:record(),
+    atm_resource_spec:record()
 ) ->
     binary().
-build_function_name(AtmWorkflowExecutionId, AtmLaneIndex, #atm_lambda_snapshot{
-    lambda_id = AtmLambdaId,
-    name = AtmLambdaName
-}) ->
-    Signature = str_utils:md5_digest([AtmWorkflowExecutionId, AtmLaneIndex, AtmLambdaId]),
+build_function_name(
+    AtmWorkflowExecutionCtx,
+    AtmLaneIndex,
+    AtmTaskSchema,
+    AtmLambdaRevision,
+    ResourceSpec
+) ->
+    AtmLambdaRevisionName = AtmLambdaRevision#atm_lambda_revision.name,
+    AtmWorkflowExecutionId = atm_workflow_execution_ctx:get_workflow_execution_id(
+        AtmWorkflowExecutionCtx
+    ),
+
+    Signature = str_utils:md5_digest([
+        AtmWorkflowExecutionId,
+        atm_workflow_execution_ctx:get_workflow_execution_incarnation(AtmWorkflowExecutionCtx),
+        AtmLaneIndex,
+        AtmTaskSchema#atm_task_schema.lambda_id,
+        AtmTaskSchema#atm_task_schema.lambda_revision_number,
+        ResourceSpec
+    ]),
 
     Name = str_utils:format_bin("w~s-s~s-~s", [
         binary:part(AtmWorkflowExecutionId, 0, min(size(AtmWorkflowExecutionId), 10)),
         binary:part(Signature, 0, min(size(Signature), 10)),
-        binary:part(AtmLambdaName, 0, min(size(AtmLambdaName), 39))
+        binary:part(AtmLambdaRevisionName, 0, min(size(AtmLambdaRevisionName), 39))
     ]),
     SanitizedName = << <<(sanitize_character(Char))/integer>> || <<Char>> <= Name>>,
 
@@ -342,13 +401,21 @@ prepare_function_definition(InitiationCtx = #initiation_ctx{
         operation_spec = #atm_openfaas_operation_spec{docker_image = DockerImage}
     }
 }) ->
-    RequiredProperties = #{
+    BaseDefinition = #{
         <<"service">> => FunctionName,
         <<"image">> => DockerImage,
         <<"namespace">> => FunctionNamespace
     },
+    FullDefinition1 = add_default_properties(BaseDefinition),
+    FullDefinition2 = add_resources_properties(FullDefinition1, InitiationCtx),
+    FullDefinition3 = add_function_name_annotation(FullDefinition2, FunctionName),
+    add_oneclient_annotations_if_necessary(FullDefinition3, InitiationCtx).
 
-    AllProperties = lists:foldl(fun({Property, EnvVar}, Acc) ->
+
+%% @private
+-spec add_default_properties(json_utils:json_map()) -> json_utils:json_map().
+add_default_properties(FunctionDefinition) ->
+    lists:foldl(fun({Property, EnvVar}, Acc) ->
         case get_env(EnvVar, undefined) of
             undefined ->
                 Acc;
@@ -361,28 +428,78 @@ prepare_function_definition(InitiationCtx = #initiation_ctx{
             Value ->
                 Acc#{Property => str_utils:to_binary(Value)}
         end
-    end, RequiredProperties, [
+    end, FunctionDefinition, [
         {<<"envVars">>, openfaas_function_env},
         {<<"constraints">>, openfaas_function_constraints},
         {<<"labels">>, openfaas_function_labels},
-        {<<"annotations">>, openfaas_function_annotations},
-        {<<"limits">>, openfaas_function_limits},
-        {<<"requests">>, openfaas_function_requests}
-    ]),
-
-    add_mount_oneclient_function_annotations(AllProperties, InitiationCtx).
+        {<<"annotations">>, openfaas_function_annotations}
+    ]).
 
 
 %% @private
--spec add_mount_oneclient_function_annotations(json_utils:json_map(), initiation_ctx()) ->
+-spec add_resources_properties(json_utils:json_map(), initiation_ctx()) ->
     json_utils:json_map().
-add_mount_oneclient_function_annotations(FunctionDefinition, #initiation_ctx{
+add_resources_properties(FunctionDefinition, #initiation_ctx{resource_spec = #atm_resource_spec{
+    cpu_requested = CpuRequested,
+    cpu_limit = CpuLimit,
+    memory_requested = MemoryRequested,
+    memory_limit = MemoryLimit,
+    ephemeral_storage_requested = EphemeralStorageRequested,
+    ephemeral_storage_limit = EphemeralStorageLimit
+}}) ->
+    Requests = #{
+        <<"cpu">> => str_utils:to_binary(CpuRequested),
+        <<"memory">> => str_utils:to_binary(MemoryRequested)
+    },
+
+    Limits1 = maps_utils:put_if_defined(#{}, <<"cpu">>, encode_if_defined(CpuLimit)),
+    Limits2 = maps_utils:put_if_defined(Limits1, <<"memory">>, encode_if_defined(MemoryLimit)),
+
+    EphemeralStorageAnnotations = maps_utils:put_if_defined(
+        #{<<"function.openfaas.onedata.org/ephemeral_storage_requested">> => str_utils:to_binary(
+            EphemeralStorageRequested
+        )},
+        <<"function.openfaas.onedata.org/ephemeral_storage_limit">>,
+        encode_if_defined(EphemeralStorageLimit)
+    ),
+
+    maps:update_with(
+        <<"annotations">>,
+        fun(Annotations) -> json_utils:merge([Annotations, EphemeralStorageAnnotations]) end,
+        EphemeralStorageAnnotations,
+        FunctionDefinition#{<<"requests">> => Requests, <<"limits">> => Limits2}
+    ).
+
+
+%% @private
+-spec add_function_name_annotation(json_utils:json_map(), function_name()) ->
+    json_utils:json_map().
+add_function_name_annotation(FunctionDefinition, FunctionName) ->
+    FunctionNameAnnotation = #{<<"function.openfaas.onedata.org/name">> => FunctionName},
+    maps:update_with(
+        <<"annotations">>,
+        fun(Annotations) -> maps:merge(Annotations, FunctionNameAnnotation) end,
+        FunctionNameAnnotation,
+        FunctionDefinition
+    ).
+
+
+%% @private
+-spec encode_if_defined(undefined | term()) -> undefined | binary().
+encode_if_defined(undefined) -> undefined;
+encode_if_defined(Value) -> str_utils:to_binary(Value).
+
+
+%% @private
+-spec add_oneclient_annotations_if_necessary(json_utils:json_map(), initiation_ctx()) ->
+    json_utils:json_map().
+add_oneclient_annotations_if_necessary(FunctionDefinition, #initiation_ctx{
     executor = #atm_openfaas_task_executor{operation_spec = #atm_openfaas_operation_spec{
         docker_execution_options = #atm_docker_execution_options{mount_oneclient = false}
     }}}
 ) ->
     FunctionDefinition;
-add_mount_oneclient_function_annotations(FunctionDefinition, #initiation_ctx{
+add_oneclient_annotations_if_necessary(FunctionDefinition, #initiation_ctx{
     workflow_execution_ctx = AtmWorkflowExecutionCtx,
     executor = AtmTaskExecutor = #atm_openfaas_task_executor{
         operation_spec = #atm_openfaas_operation_spec{
@@ -402,13 +519,15 @@ add_mount_oneclient_function_annotations(FunctionDefinition, #initiation_ctx{
     EnvSpecificOneclientOptions = str_utils:to_binary(get_env(
         openfaas_oneclient_options, <<"">>
     )),
+    OneclientImage = get_oneclient_image(),
 
     OneclientMountRelatedAnnotations = #{
         % TODO VFS-8141 rm deprecated oneclient.openfass.*
         <<"oneclient.openfass.onedata.org/inject">> => <<"enabled">>,
-        <<"oneclient.openfass.onedata.org/image">> => get_oneclient_image(),
+        <<"oneclient.openfass.onedata.org/image">> => OneclientImage,
+
         <<"oneclient.openfaas.onedata.org/inject">> => <<"enabled">>,
-        <<"oneclient.openfaas.onedata.org/image">> => get_oneclient_image(),
+        <<"oneclient.openfaas.onedata.org/image">> => OneclientImage,
         <<"oneclient.openfaas.onedata.org/space_id">> => SpaceId,
         <<"oneclient.openfaas.onedata.org/mount_point">> => MountPoint,
         <<"oneclient.openfaas.onedata.org/options">> => <<

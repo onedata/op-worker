@@ -24,6 +24,7 @@
     atm_workflow_execution_id :: atm_workflow_execution:id(),
 
     name :: automation:name(),
+    atm_workflow_schema_revision_num :: atm_workflow_schema_revision:revision_number(),
     atm_inventory_id :: od_atm_inventory:id(),
 
     status :: atm_workflow_execution:status(),
@@ -59,7 +60,7 @@
     % (origin) lane run
     origin_run_num = undefined :: undefined | pos_integer(),
 
-    status :: atm_lane_execution:status(),
+    status :: atm_lane_execution:run_status(),
     % Flag used to differentiate reasons why lane execution run is aborting
     aborting_reason = undefined :: undefined | cancel | failure,
 
@@ -82,7 +83,7 @@
 % Record used only during teardown of atm lane execution run (it is not persisted anywhere)
 -record(atm_lane_execution_run_teardown_ctx, {
     workflow_execution_ctx :: atm_workflow_execution_ctx:record(),
-    is_retried_scheduled :: boolean()
+    is_retry_scheduled :: boolean()
 }).
 
 % Record used only during creation of atm parallel box execution (it is not persisted anywhere)
@@ -91,6 +92,41 @@
 
     parallel_box_index :: pos_integer(),
     parallel_box_schema :: atm_parallel_box_schema:record()
+}).
+
+% Record carrying an activity report of an OpenFaaS function
+-record(atm_openfaas_function_activity_report, {
+    type :: atm_openfaas_function_activity_report:type(),
+    batch :: atm_openfaas_function_activity_report:batch()
+}).
+
+% Record carrying a status report of a pod that executes given OpenFaaS function
+% (currently the only possible type of OpenFaaS function activity report), used
+% to build atm_openfaas_function_pod_status_summary
+-record(atm_openfaas_function_pod_status_report, {
+    timestamp :: time:millis(),
+    function_name :: atm_openfaas_task_executor:function_name(),
+    pod_id :: atm_openfaas_function_activity_registry:pod_id(),
+    current_pod_status :: atm_openfaas_function_activity_registry:pod_status(),
+    pod_event :: atm_openfaas_function_activity_registry:pod_event()
+}).
+
+% Record holding the registry of pod status changes for an OpenFaaS function
+% (part of function activity registry)
+%% @formatter:off
+-record(atm_openfaas_function_pod_status_registry, {
+    registry :: #{
+        atm_openfaas_function_activity_registry:pod_id() => atm_openfaas_function_pod_status_summary:record()
+    }
+}).
+%% @formatter:on
+
+% Record holding the summary of status changes for a single pod of an OpenFaaS function
+% (single entry in the atm_openfaas_function_pod_status_registry)
+-record(atm_openfaas_function_pod_status_summary, {
+    current_status :: atm_openfaas_function_activity_registry:pod_status(),
+    current_status_observation_timestamp :: time:millis(),
+    event_log :: infinite_log:log_id()
 }).
 
 

@@ -49,6 +49,7 @@
 -export([
     initiate/2,
     teardown/2,
+    set_run_num/2,
 
     process_item/5,
     process_results/4,
@@ -70,13 +71,20 @@
 initiate(AtmWorkflowExecutionCtx, AtmTaskExecutionIdOrDoc) ->
     #document{
         key = AtmTaskExecutionId,
-        value = #atm_task_execution{
+        value = AtmTaskExecution = #atm_task_execution{
+            workflow_execution_id = AtmWorkflowExecutionId,
             executor = AtmTaskExecutor,
             system_audit_log_id = AtmSystemAuditLogId
         }
     } = ensure_atm_task_execution_doc(AtmTaskExecutionIdOrDoc),
 
-    AtmTaskExecutionSpec = atm_task_executor:initiate(AtmWorkflowExecutionCtx, AtmTaskExecutor),
+    {ok, #document{value = AtmWorkflowExecution}} = atm_workflow_execution:get(AtmWorkflowExecutionId),
+    AtmTaskSchema = get_task_schema(AtmTaskExecution, AtmWorkflowExecution),
+    AtmLambdaRevision = get_lambda_revision(AtmTaskSchema, AtmWorkflowExecution),
+
+    AtmTaskExecutionSpec = atm_task_executor:initiate(
+        AtmWorkflowExecutionCtx, AtmTaskSchema, AtmLambdaRevision, AtmTaskExecutor
+    ),
 
     {ok, #atm_store{container = AtmTaskAuditLogStoreContainer}} = atm_store_api:get(
         AtmSystemAuditLogId
@@ -98,6 +106,15 @@ teardown(AtmLaneExecutionRunTeardownCtx, AtmTaskExecutionId) ->
     }} = ensure_atm_task_execution_doc(AtmTaskExecutionId),
 
     atm_task_executor:teardown(AtmLaneExecutionRunTeardownCtx, AtmTaskExecutor).
+
+
+-spec set_run_num(atm_lane_execution:run_num(), atm_task_execution:id()) ->
+    ok.
+set_run_num(RunNum, AtmTaskExecutionId) ->
+    {ok, _} = atm_task_execution:update(AtmTaskExecutionId, fun(AtmTaskExecution) ->
+        {ok, AtmTaskExecution#atm_task_execution{run_num = RunNum}}
+    end),
+    ok.
 
 
 -spec process_item(
@@ -204,6 +221,43 @@ ensure_atm_task_execution_doc(AtmTaskExecutionId) ->
 
 
 %% @private
+-spec get_task_schema(atm_task_execution:record(), atm_workflow_execution:record()) ->
+    atm_task_schema:record().
+get_task_schema(
+    #atm_task_execution{
+        lane_index = AtmLaneIndex,
+        parallel_box_index = AtmParallelBoxIndex,
+        schema_id = AtmTaskSchemaId
+    },
+    #atm_workflow_execution{schema_snapshot_id = AtmWorkflowSchemaSnapshotId}
+) ->
+    {ok, AtmWorkflowSchemaSnapshotDoc} = atm_workflow_schema_snapshot:get(AtmWorkflowSchemaSnapshotId),
+
+    AtmLaneSchemas = atm_workflow_schema_snapshot:get_lane_schemas(AtmWorkflowSchemaSnapshotDoc),
+    AtmLaneSchema = lists:nth(AtmLaneIndex, AtmLaneSchemas),
+    AtmParallelBoxSchema = lists:nth(AtmParallelBoxIndex, AtmLaneSchema#atm_lane_schema.parallel_boxes),
+
+    {value, AtmTaskSchema} = lists:search(
+        fun(#atm_task_schema{id = Id}) -> Id == AtmTaskSchemaId end,
+        AtmParallelBoxSchema#atm_parallel_box_schema.tasks
+    ),
+    AtmTaskSchema.
+
+
+%% @private
+-spec get_lambda_revision(atm_task_schema:record(), atm_workflow_execution:record()) ->
+    atm_lambda_revision:record().
+get_lambda_revision(
+    #atm_task_schema{lambda_id = AtmLambdaId, lambda_revision_number = AtmLambdaRevisionNum},
+    #atm_workflow_execution{lambda_snapshot_registry = AtmLambdaSnapshotRegistry}
+) ->
+    {ok, #document{value = AtmLambdaSnapshot}} = atm_lambda_snapshot:get(
+        maps:get(AtmLambdaId, AtmLambdaSnapshotRegistry)
+    ),
+    atm_lambda_snapshot:get_revision(AtmLambdaRevisionNum, AtmLambdaSnapshot).
+
+
+%% @private
 -spec process_item_insecure(
     atm_workflow_execution_ctx:record(),
     atm_task_execution:id(),
@@ -236,11 +290,11 @@ process_item_insecure(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, ReportR
     automation:item(),
     errors:error() | json_utils:json_map()
 ) ->
-    ok | error.
+    error.
 handle_exception(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, #{<<"exception">> := Reason}) ->
     log_exception(Item, Reason, AtmWorkflowExecutionCtx),
-    append_failed_item_to_lane_run_exception_store(Item, AtmWorkflowExecutionCtx),
-    update_items_failed_and_processed(AtmTaskExecutionId);
+    update_items_failed_and_processed(AtmTaskExecutionId),
+    error;
 
 handle_exception(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, {error, _} = Error) ->
     handle_exception(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, #{
@@ -260,27 +314,6 @@ log_exception(Item, Reason, AtmWorkflowExecutionCtx) ->
     Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
 
     atm_workflow_execution_logger:task_append_logs(Log, #{}, Logger).
-
-
-%% @private
--spec append_failed_item_to_lane_run_exception_store(
-    automation:item(),
-    atm_workflow_execution_ctx:record()
-) ->
-    ok | no_return().
-append_failed_item_to_lane_run_exception_store(Item, AtmWorkflowExecutionCtx) ->
-    AtmLaneRunExceptionStoreContainer = atm_workflow_execution_env:get_lane_run_exception_store_container(
-        atm_workflow_execution_ctx:get_env(AtmWorkflowExecutionCtx)
-    ),
-    Operation = #atm_store_container_operation{
-        type = append,
-        options = #{<<"isBatch">> => is_list(Item)},
-        argument = Item,
-        workflow_execution_auth = atm_workflow_execution_ctx:get_auth(AtmWorkflowExecutionCtx)
-    },
-    atm_list_store_container:apply_operation(AtmLaneRunExceptionStoreContainer, Operation),
-
-    ok.
 
 
 %% @private
@@ -347,12 +380,13 @@ handle_status_change(#document{
     value = #atm_task_execution{
         workflow_execution_id = AtmWorkflowExecutionId,
         lane_index = AtmLaneIndex,
+        run_num = RunNum,
         parallel_box_index = AtmParallelBoxIndex,
         status = NewStatus,
         status_changed = true
     }
 }) ->
     ok = atm_lane_execution_status:handle_task_status_change(
-        AtmWorkflowExecutionId, AtmLaneIndex, AtmParallelBoxIndex,
+        AtmWorkflowExecutionId, {AtmLaneIndex, RunNum}, AtmParallelBoxIndex,
         AtmTaskExecutionId, NewStatus
     ).

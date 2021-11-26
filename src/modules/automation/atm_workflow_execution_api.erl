@@ -21,9 +21,10 @@
 -export([init_engine/0]).
 -export([
     list/4,
-    schedule/5,
+    schedule/6,
     get/1, get_summary/2,
     cancel/1,
+    repeat/4,
     terminate_not_ended/1,
     purge_all/0
 ]).
@@ -87,13 +88,26 @@ list(SpaceId, Phase, summary, ListingOpts) ->
     user_ctx:ctx(),
     od_space:id(),
     od_atm_workflow_schema:id(),
+    atm_workflow_schema_revision:revision_number(),
     store_initial_values(),
     undefined | http_client:url()
 ) ->
     {atm_workflow_execution:id(), atm_workflow_execution:record()} | no_return().
-schedule(UserCtx, SpaceId, AtmWorkflowSchemaId, StoreInitialValues, CallbackUrl) ->
+schedule(
+    UserCtx,
+    SpaceId,
+    AtmWorkflowSchemaId,
+    AtmWorkflowSchemaRevisionNum,
+    StoreInitialValues,
+    CallbackUrl
+) ->
     {AtmWorkflowExecutionDoc, AtmWorkflowExecutionEnv} = atm_workflow_execution_factory:create(
-        UserCtx, SpaceId, AtmWorkflowSchemaId, StoreInitialValues, CallbackUrl
+        UserCtx,
+        SpaceId,
+        AtmWorkflowSchemaId,
+        AtmWorkflowSchemaRevisionNum,
+        StoreInitialValues,
+        CallbackUrl
     ),
     atm_workflow_execution_handler:start(UserCtx, AtmWorkflowExecutionEnv, AtmWorkflowExecutionDoc),
 
@@ -115,15 +129,23 @@ get(AtmWorkflowExecutionId) ->
     atm_workflow_execution:summary().
 get_summary(AtmWorkflowExecutionId, #atm_workflow_execution{
     name = Name,
+    schema_snapshot_id = AtmWorkflowSchemaSnapshotId,
     atm_inventory_id = AtmInventoryId,
     status = AtmWorkflowExecutionStatus,
     schedule_time = ScheduleTime,
     start_time = StartTime,
     finish_time = FinishTime
 }) ->
+    {ok, #document{
+        value = #atm_workflow_schema_snapshot{
+            revision_number = RevisionNum
+        }
+    }} = atm_workflow_schema_snapshot:get(AtmWorkflowSchemaSnapshotId),
+
     #atm_workflow_execution_summary{
         atm_workflow_execution_id = AtmWorkflowExecutionId,
         name = Name,
+        atm_workflow_schema_revision_num = RevisionNum,
         atm_inventory_id = AtmInventoryId,
         status = AtmWorkflowExecutionStatus,
         schedule_time = ScheduleTime,
@@ -132,9 +154,22 @@ get_summary(AtmWorkflowExecutionId, #atm_workflow_execution{
     }.
 
 
--spec cancel(atm_workflow_execution:id()) -> ok | {error, already_ended}.
+-spec cancel(atm_workflow_execution:id()) -> ok | errors:error().
 cancel(AtmWorkflowExecutionId) ->
     atm_workflow_execution_handler:cancel(AtmWorkflowExecutionId).
+
+
+-spec repeat(
+    user_ctx:ctx(),
+    atm_workflow_execution:repeat_type(),
+    atm_lane_execution:lane_run_selector(),
+    atm_workflow_execution:id()
+) ->
+    ok | errors:error().
+repeat(UserCtx, Type, AtmLaneRunSelector, AtmWorkflowExecutionId) ->
+    atm_workflow_execution_handler:repeat(
+        UserCtx, Type, AtmLaneRunSelector, AtmWorkflowExecutionId
+    ).
 
 
 %%--------------------------------------------------------------------
@@ -146,11 +181,22 @@ cancel(AtmWorkflowExecutionId) ->
 %%--------------------------------------------------------------------
 terminate_not_ended(SpaceId) ->
     TerminateFun = fun(AtmWorkflowExecutionId) ->
-        atm_lane_execution_status:handle_aborting(current, AtmWorkflowExecutionId, failure),
-        atm_workflow_execution_handler:handle_workflow_execution_ended(
-            AtmWorkflowExecutionId,
-            atm_workflow_execution_env:build(SpaceId, AtmWorkflowExecutionId)
-        )
+        try
+            {ok, #document{
+                value = #atm_workflow_execution{
+                    incarnation = AtmWorkflowIncarnation
+                }
+            }} = atm_lane_execution_status:handle_aborting(
+                {current, current}, AtmWorkflowExecutionId, failure
+            ),
+
+            atm_workflow_execution_handler:handle_workflow_execution_ended(
+                AtmWorkflowExecutionId,
+                atm_workflow_execution_env:build(SpaceId, AtmWorkflowExecutionId, AtmWorkflowIncarnation)
+            )
+        catch Type:Reason:Stacktrace ->
+            ?atm_examine_error(Type, Reason, Stacktrace)
+        end
     end,
 
     foreach_atm_workflow_execution(TerminateFun, SpaceId, ?WAITING_PHASE),

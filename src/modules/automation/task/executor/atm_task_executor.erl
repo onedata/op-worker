@@ -25,9 +25,10 @@
 
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/errors.hrl").
+-include_lib("ctool/include/automation/automation.hrl").
 
 %% API
--export([build/3, initiate/2, teardown/2, in_readonly_mode/1, run/3]).
+-export([create/4, initiate/4, teardown/2, delete/1, in_readonly_mode/1, run/3]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
@@ -44,13 +45,25 @@
 %%%===================================================================
 
 
--callback build(atm_workflow_execution:id(), atm_lane_execution:index(), atm_lambda_snapshot:record()) ->
+-callback create(
+    atm_workflow_execution_ctx:record(),
+    atm_lane_execution:index(),
+    atm_task_schema:record(),
+    atm_lambda_revision:record()
+) ->
     record() | no_return().
 
--callback initiate(atm_workflow_execution_ctx:record(), record()) ->
+-callback initiate(
+    atm_workflow_execution_ctx:record(),
+    atm_task_schema:record(),
+    atm_lambda_revision:record(),
+    record()
+) ->
     workflow_engine:task_spec() | no_return().
 
 -callback teardown(atm_lane_execution_handler:teardown_ctx(), record()) -> ok | no_return().
+
+-callback delete(record()) -> ok | no_return().
 
 -callback in_readonly_mode(record()) -> boolean().
 
@@ -63,27 +76,43 @@
 %%%===================================================================
 
 
--spec build(atm_workflow_execution:id(), atm_lane_execution:index(), atm_lambda_snapshot:record()) ->
+-spec create(
+    atm_workflow_execution_ctx:record(),
+    atm_lane_execution:index(),
+    atm_task_schema:record(),
+    atm_lambda_revision:record()
+) ->
     record() | no_return().
-build(AtmWorkflowExecutionId, AtmLaneIndex, AtmLambdaSnapshot = #atm_lambda_snapshot{
+create(AtmWorkflowExecutionCtx, AtmLaneIndex, AtmTaskSchema, AtmLambdaRevision = #atm_lambda_revision{
     operation_spec = AtmLambadaOperationSpec
 }) ->
     Engine = atm_lambda_operation_spec:get_engine(AtmLambadaOperationSpec),
     Model = engine_to_executor_model(Engine),
-    Model:build(AtmWorkflowExecutionId, AtmLaneIndex, AtmLambdaSnapshot).
+    Model:create(AtmWorkflowExecutionCtx, AtmLaneIndex, AtmTaskSchema, AtmLambdaRevision).
 
 
--spec initiate(atm_workflow_execution_ctx:record(), record()) ->
+-spec initiate(
+    atm_workflow_execution_ctx:record(),
+    atm_task_schema:record(),
+    atm_lambda_revision:record(),
+    record()
+) ->
     workflow_engine:task_spec() | no_return().
-initiate(AtmWorkflowExecutionCtx, AtmTaskExecutor) ->
+initiate(AtmWorkflowExecutionCtx, AtmTaskSchema, AtmLambdaRevision, AtmTaskExecutor) ->
     Model = utils:record_type(AtmTaskExecutor),
-    Model:initiate(AtmWorkflowExecutionCtx, AtmTaskExecutor).
+    Model:initiate(AtmWorkflowExecutionCtx, AtmTaskSchema, AtmLambdaRevision, AtmTaskExecutor).
 
 
 -spec teardown(atm_lane_execution_handler:teardown_ctx(), record()) -> ok | no_return().
 teardown(AtmLaneExecutionRunTeardownCtx, AtmTaskExecutor) ->
     Model = utils:record_type(AtmTaskExecutor),
     Model:teardown(AtmLaneExecutionRunTeardownCtx, AtmTaskExecutor).
+
+
+-spec delete(record()) -> ok | no_return().
+delete(AtmTaskExecutor) ->
+    Model = utils:record_type(AtmTaskExecutor),
+    Model:delete(AtmTaskExecutor).
 
 
 -spec in_readonly_mode(record()) -> boolean().

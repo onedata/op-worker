@@ -26,24 +26,10 @@
 
 -spec translate_resource(gri:gri(), Data :: term()) -> gs_protocol:data().
 translate_resource(#gri{aspect = instance, scope = private}, #atm_lambda_snapshot{
-    name = AtmLambdaName,
-    summary = AtmLambdaSummary,
-    description = AtmLambdaDescription,
-
-    operation_spec = AtmLambdaOperationSpec,
-    argument_specs = AtmLambdaArgumentSpecs,
-    result_specs = AtmLambdaResultSpecs,
-
+    revision_registry = RevisionRegistry,
     atm_inventories = AtmInventories
 }) ->
     #{
-        <<"name">> => AtmLambdaName,
-        <<"summary">> => AtmLambdaSummary,
-        <<"description">> => AtmLambdaDescription,
-
-        <<"operationSpec">> => jsonable_record:to_json(AtmLambdaOperationSpec, atm_lambda_operation_spec),
-        <<"argumentSpecs">> => jsonable_record:list_to_json(AtmLambdaArgumentSpecs, atm_lambda_argument_spec),
-        <<"resultSpecs">> => jsonable_record:list_to_json(AtmLambdaResultSpecs, atm_lambda_result_spec),
-
+        <<"revisionRegistry">> => jsonable_record:to_json(RevisionRegistry, atm_lambda_revision_registry),
         <<"atmInventories">> => AtmInventories
     }.

@@ -218,10 +218,10 @@ get(#op_req{gri = #gri{id = QosEntryId, aspect = audit_log}, data = Data}, _QosE
         start_from => StartFrom
     },
     case qos_entry_audit_log:list(QosEntryId, Opts) of
-        {ok, Result, IsLast} ->
+        {ok, {ProgressMarker, EntrySeries}} ->
             {ok, #{
-                <<"isLast">> => IsLast,
-                <<"auditLog">> => Result
+                <<"isLast">> => ProgressMarker == done,
+                <<"auditLog">> => EntrySeries
             }};
         {error, _} = Error ->
             throw(Error)

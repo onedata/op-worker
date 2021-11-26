@@ -14,6 +14,7 @@
 -author("Michal Stanisz").
 
 -include("modules/datastore/datastore_models.hrl").
+-include_lib("ctool/include/automation/automation.hrl").
 
 -type id() :: binary().
 -type record() :: #od_atm_lambda{}.

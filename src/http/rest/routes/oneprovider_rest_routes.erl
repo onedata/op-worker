@@ -46,7 +46,7 @@ routes() -> [
         method = 'GET',
         produces = [<<"image/png">>],
         b_gri = #b_gri{
-            type = op_provider, 
+            type = op_provider,
             id = undefined, 
             aspect = test_image, 
             scope = public

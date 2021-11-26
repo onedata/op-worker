@@ -30,8 +30,7 @@
 ]).
 -export([
     upgrade_from_20_02_1_space_strategies/1,
-    upgrade_from_20_02_1_storage_sync_monitoring/1,
-    upgrade_from_21_02_alpha21_atm/1
+    upgrade_from_20_02_1_storage_sync_monitoring/1
 ]).
 
 -define(SPACE1_ID, <<"space_id1">>).
@@ -43,8 +42,7 @@
 
 all() -> ?ALL([
     upgrade_from_20_02_1_space_strategies,
-    upgrade_from_20_02_1_storage_sync_monitoring,
-    upgrade_from_21_02_alpha21_atm
+    upgrade_from_20_02_1_storage_sync_monitoring
 ]).
 
 %%%===================================================================
@@ -204,10 +202,10 @@ upgrade_from_20_02_1_storage_sync_monitoring(Config) ->
     DeletedSum = 3000,
     Timestamp = global_clock:timestamp_seconds(),
     HistLength = 12,
-    EmptyMinHist = time_slot_histogram:new(Timestamp, 60 div HistLength , HistLength),
+    EmptyMinHist = time_slot_histogram:new(Timestamp, 60 div HistLength, HistLength),
     EmptyHourHist = time_slot_histogram:new(Timestamp, 3600 div HistLength, HistLength),
     EmptyDayHist = time_slot_histogram:new(Timestamp, 86400 div HistLength, HistLength),
-    EmptyCumulativeMinHist = time_slot_histogram:new_cumulative(Timestamp, 60 div HistLength , HistLength),
+    EmptyCumulativeMinHist = time_slot_histogram:new_cumulative(Timestamp, 60 div HistLength, HistLength),
     EmptyCumulativeHourHist = time_slot_histogram:new_cumulative(Timestamp, 3600 div HistLength, HistLength),
     EmptyCumulativeDayHist = time_slot_histogram:new_cumulative(Timestamp, 86400 div HistLength, HistLength),
 
@@ -367,72 +365,6 @@ upgrade_from_20_02_1_storage_sync_monitoring(Config) ->
     ?assertMatch({ok, SIMDoc4}, rpc:call(Worker, storage_import_monitoring, get, [SpaceId4])),
     ?assertMatch({ok, SIMDoc5}, rpc:call(Worker, storage_import_monitoring, get, [SpaceId5])).
 
-
-upgrade_from_21_02_alpha21_atm(Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-
-    AtmDocLoads = load_atm_doc_json_dumps(Worker, Config),
-    ?assertEqual({ok, 5}, rpc:call(Worker, node_manager_plugin, upgrade_cluster, [4])),
-    assert_all_atm_docs_deleted(Worker, AtmDocLoads),
-
-    ok.
-
-
-%% @private
-load_atm_doc_json_dumps(Worker, Config) ->
-    AtmDocJSONDumpDirPath = filename:join(test_utils:data_dir(Config), "atm_doc_json_dumps"),
-
-    lists:foldl(fun(AtmDocJSONDumpFileName, Acc) ->
-        AtmDocJSONDumpFilePath = filename:join(AtmDocJSONDumpDirPath, AtmDocJSONDumpFileName),
-        {ok, AtmDocJSONDumpBin} = file:read_file(AtmDocJSONDumpFilePath),
-        AtmDocJSONDump = jiffy:decode(AtmDocJSONDumpBin, []),
-
-        AtmDoc0 = #document{key = AtmDocId, value = AtmDocRecord} = rpc:call(
-            Worker, datastore_json, decode, [AtmDocJSONDump]
-        ),
-        Model = element(1, AtmDocRecord),
-
-        AtmDoc2 = case Model == atm_workflow_execution of
-            true ->
-                AtmDoc1 = AtmDoc0#document{value = AtmDocRecord#atm_workflow_execution{
-                    space_id = ?SPACE1_ID
-                }},
-                ForestModule = case atm_workflow_execution_status:infer_phase(AtmDocRecord) of
-                    ?WAITING_PHASE -> atm_waiting_workflow_executions;
-                    ?ONGOING_PHASE -> atm_ongoing_workflow_executions;
-                    ?ENDED_PHASE -> atm_ended_workflow_executions
-                end,
-
-                ?assertMatch(ok, rpc:call(Worker, ForestModule, add, [AtmDoc1])),
-                Entries = rpc:call(Worker, ForestModule, list, [?SPACE1_ID, #{limit => 100, offset => 0}]),
-                ?assert(lists:any(fun({_, Id}) -> Id == AtmDocId end, Entries)),
-
-                AtmDoc1;
-            false ->
-                AtmDoc0
-        end,
-
-        DatastoreCtx = rpc:call(Worker, Model, get_ctx, []),
-        ?assertMatch({ok, _}, rpc:call(Worker, datastore_model, save, [DatastoreCtx, AtmDoc2])),
-        ?assertMatch({ok, _}, rpc:call(Worker, datastore_model, get, [DatastoreCtx, AtmDocId])),
-
-        [{Model, AtmDocId} | Acc]
-    end, [], element(2, file:list_dir(AtmDocJSONDumpDirPath))).
-
-
-%% @private
-assert_all_atm_docs_deleted(Worker, AtmDocLoads) ->
-    ListingOpts = #{limit => 100, offset => 0},
-    ?assertMatch([], rpc:call(Worker, atm_waiting_workflow_executions, list, [?SPACE1_ID, ListingOpts])),
-    ?assertMatch([], rpc:call(Worker, atm_ongoing_workflow_executions, list, [?SPACE1_ID, ListingOpts])),
-    ?assertMatch([], rpc:call(Worker, atm_ended_workflow_executions, list, [?SPACE1_ID, ListingOpts])),
-
-    lists:foreach(fun({Model, Id}) ->
-        DatastoreCtx = rpc:call(Worker, Model, get_ctx, []),
-        ?assertMatch({error, not_found}, rpc:call(Worker, datastore_model, get, [DatastoreCtx, Id]))
-    end, AtmDocLoads).
-
-
 %%%===================================================================
 %%% Setup/teardown functions
 %%%===================================================================
@@ -451,16 +383,16 @@ init_per_testcase(Case = upgrade_from_19_02_x_storages, Config) ->
     test_utils:mock_new(Worker, storage_logic, [passthrough]),
     test_utils:mock_expect(Worker, storage_logic, create_in_zone, fun(_, _, _, _, StorageId) -> {ok, StorageId} end),
     test_utils:mock_expect(Worker, storage_logic, delete_in_zone, fun(_) -> ok end),
-    test_utils:mock_expect(Worker, storage_logic, upgrade_legacy_support, fun(_,_) -> ok end),
-    test_utils:mock_expect(Worker, storage_logic, set_imported, fun(_,_) -> ok end),
+    test_utils:mock_expect(Worker, storage_logic, upgrade_legacy_support, fun(_, _) -> ok end),
+    test_utils:mock_expect(Worker, storage_logic, set_imported, fun(_, _) -> ok end),
     test_utils:mock_expect(Worker, storage_logic, is_imported, fun(_) -> {ok, <<"unknown">>} end),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 
 init_per_testcase(Case = upgrade_from_20_02_0_beta3_storages, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    
+
     test_utils:mock_new(Worker, storage_logic, [passthrough]),
-    test_utils:mock_expect(Worker, storage_logic, set_imported, fun(_,_) -> ok end),
+    test_utils:mock_expect(Worker, storage_logic, set_imported, fun(_, _) -> ok end),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 
 init_per_testcase(Case = upgrade_from_20_02_1_space_strategies, Config) ->

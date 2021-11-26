@@ -38,4 +38,27 @@
 end).
 
 
+%%%===================================================================
+%%% Available operations in middleware_worker
+%%%===================================================================
+
+
+-record(schedule_atm_workflow_execution, {
+    atm_workflow_schema_id :: od_atm_workflow_schema:id(),
+    atm_workflow_schema_revision_num :: atm_workflow_schema_revision:revision_number(),
+    store_initial_values :: atm_workflow_execution_api:store_initial_values(),
+    callback_url :: undefined | http_client:url()
+}).
+
+-record(cancel_atm_workflow_execution, {
+    atm_workflow_execution_id :: atm_workflow_execution:id()
+}).
+
+-record(repeat_atm_workflow_execution, {
+    type :: atm_workflow_execution:repeat_type(),
+    atm_workflow_execution_id :: atm_workflow_execution:id(),
+    atm_lane_run_selector :: atm_lane_execution:lane_run_selector()
+}).
+
+
 -endif.

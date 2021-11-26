@@ -249,9 +249,12 @@ cancel_and_restart_test_base(Config, #test_config{
         {cancel_execution, prepare_lane, LaneId} ->
             workflow_scheduling_test_common:verify_execution_history(
                 WorkflowExecutionSpec, ExecutionHistory, #{expect_lane_finish => LaneId});
-        _ ->
+        {cancel_execution, _, _} ->
             workflow_scheduling_test_common:verify_execution_history(
-                WorkflowExecutionSpec, ExecutionHistory, #{stop_on_lane => LaneId})
+                WorkflowExecutionSpec, ExecutionHistory, #{stop_on_lane => LaneId});
+        {FailureType, FailedTaskId} ->
+            workflow_scheduling_test_common:verify_execution_history(WorkflowExecutionSpec, ExecutionHistory,
+                #{stop_on_lane => LaneId, FailureType => {LaneId, FailedTaskId, <<"100">>}})
     end,
 
     workflow_scheduling_test_common:verify_memory(Config, InitialKeys, true),
