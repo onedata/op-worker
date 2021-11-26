@@ -166,6 +166,7 @@ get_iterator_spec(AtmLaneRunSelector, AtmWorkflowExecution = #atm_workflow_execu
         }
     } = atm_lane_execution:get_schema(AtmLaneRunSelector, AtmWorkflowExecution),
 
+    %% TODO VFS-8679 reuse atm_workflow_schema_revision:extract_atm_lambda_references
     AtmLambdas = lists:foldl(fun(#atm_parallel_box_schema{tasks = AtmTaskSchemas}, OuterAcc) ->
         lists:foldl(fun(#atm_task_schema{
             lambda_id = AtmLambdaId,
