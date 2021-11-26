@@ -51,7 +51,6 @@
     get_cert_chain_ders/0,
     gs_protocol_supported_versions/0,
 
-    schedule_atm_workflow_execution/4,
     list_waiting_atm_workflow_executions/3,
     list_ongoing_atm_workflow_executions/3,
 
@@ -198,25 +197,6 @@ get_cert_chain_ders() ->
 -spec gs_protocol_supported_versions() -> [gs_protocol:protocol_version()].
 gs_protocol_supported_versions() ->
     gs_protocol:supported_versions().
-
-
--spec schedule_atm_workflow_execution(
-    session:id(),
-    od_space:id(),
-    od_atm_workflow_schema:id(),
-    atm_workflow_execution_api:store_initial_values()
-) ->
-    {ok, {atm_workflow_execution:id(), atm_workflow_execution:record()}} | errors:error().
-schedule_atm_workflow_execution(SessId, SpaceId, AtmWorkflowSchemaId, AtmStoreInitialValues) ->
-    middleware_worker:exec(
-        SessId,
-        fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
-        #schedule_atm_workflow_execution{
-            atm_workflow_schema_id = AtmWorkflowSchemaId,
-            store_initial_values = AtmStoreInitialValues,
-            callback_url = undefined
-        }
-    ).
 
 
 -spec list_waiting_atm_workflow_executions(

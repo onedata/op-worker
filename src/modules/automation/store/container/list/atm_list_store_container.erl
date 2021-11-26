@@ -31,17 +31,26 @@
 -export([version/0, db_encode/2, db_decode/2]).
 
 
--type initial_value() :: atm_infinite_log_container:initial_value().
--type operation_options() :: atm_infinite_log_container:operation_options().
+-type initial_value() :: [automation:item()] | undefined.
+%% Full 'operation_options' format can't be expressed directly in type spec due to
+%% dialyzer limitations in specifying individual binaries. Instead it is
+%% shown below:
+%%
+%% #{
+%%      <<"isBatch">> := boolean()
+%% }
+%@formatter:off
+-type operation_options() :: #{binary() => boolean()}.
 -type browse_options() :: #{
     limit := atm_store_api:limit(),
     start_index => atm_store_api:index(),
     offset => atm_store_api:offset()
 }.
+%@formatter:on
 
 -record(atm_list_store_container, {
-%%    @TODO VFS-8068 Do not use atm_infinite_log_container
-    atm_infinite_log_container :: atm_infinite_log_container:record()
+    data_spec :: atm_data_spec:record(),
+    backend_id :: json_infinite_log_model:id()
 }).
 -type record() :: #atm_list_store_container{}.
 
@@ -55,55 +64,64 @@
 
 -spec create(atm_workflow_execution_auth:record(), atm_data_spec:record(), initial_value()) ->
     record() | no_return().
+create(_AtmWorkflowExecutionAuth, AtmDataSpec, undefined) ->
+    create_container(AtmDataSpec);
+
 create(AtmWorkflowExecutionAuth, AtmDataSpec, InitialValueBatch) ->
-    #atm_list_store_container{
-        atm_infinite_log_container = atm_infinite_log_container:create(
-            AtmWorkflowExecutionAuth, AtmDataSpec, InitialValueBatch
-        )
-    }.
+    validate_data_batch(AtmWorkflowExecutionAuth, AtmDataSpec, InitialValueBatch),
+    append_insecure(InitialValueBatch, create_container(AtmDataSpec)).
 
 
 -spec get_data_spec(record()) -> atm_data_spec:record().
-get_data_spec(#atm_list_store_container{atm_infinite_log_container = AtmInfiniteLogContainer}) ->
-    atm_infinite_log_container:get_data_spec(AtmInfiniteLogContainer).
+get_data_spec(#atm_list_store_container{data_spec = AtmDataSpec}) ->
+    AtmDataSpec.
 
 
 -spec browse_content(atm_workflow_execution_auth:record(), browse_options(), record()) ->
     atm_store_api:browse_result() | no_return().
 browse_content(AtmWorkflowExecutionAuth, BrowseOpts, #atm_list_store_container{
-    atm_infinite_log_container = AtmInfiniteLogContainer
+    backend_id = BackendId,
+    data_spec = AtmDataSpec
 }) ->
-    SanitizedBrowseOpts = sanitize_browse_options(BrowseOpts),
-    {Entries, IsLast} = atm_infinite_log_container:browse_content(
-        SanitizedBrowseOpts, AtmInfiniteLogContainer),
-    AtmDataSpec = atm_infinite_log_container:get_data_spec(AtmInfiniteLogContainer),
-    MappedEntries = lists:map(fun({Index, Compressed, _Timestamp}) ->
-        {Index, atm_value:expand(AtmWorkflowExecutionAuth, Compressed, AtmDataSpec)}
-    end, Entries),
-    {MappedEntries, IsLast}.
+    atm_infinite_log_based_stores_common:browse_content(
+        list_store, BackendId, BrowseOpts,
+        atm_list_store_container_iterator:gen_listing_postprocessor(AtmWorkflowExecutionAuth, AtmDataSpec)
+    ).
 
 
 -spec acquire_iterator(record()) -> atm_list_store_container_iterator:record().
-acquire_iterator(#atm_list_store_container{atm_infinite_log_container = AtmInfiniteLogContainer}) ->
-    AtmInfiniteLogContainerIterator = atm_infinite_log_container:acquire_iterator(AtmInfiniteLogContainer),
-    atm_list_store_container_iterator:build(AtmInfiniteLogContainerIterator).
+acquire_iterator(#atm_list_store_container{backend_id = BackendId}) ->
+    atm_list_store_container_iterator:build(BackendId).
 
 
 -spec apply_operation(record(), atm_store_container:operation()) ->
     record() | no_return().
-apply_operation(AtmListStoreContainer = #atm_list_store_container{
-    atm_infinite_log_container = AtmInfiniteLogContainer
-}, AtmStoreContainerOperation) ->
-    AtmListStoreContainer#atm_list_store_container{
-        atm_infinite_log_container = atm_infinite_log_container:apply_operation(
-            AtmInfiniteLogContainer, AtmStoreContainerOperation
-        )
-    }.
+apply_operation(#atm_list_store_container{data_spec = AtmDataSpec} = Record, #atm_store_container_operation{
+    type = append,
+    options = #{<<"isBatch">> := true},
+    argument = Batch,
+    workflow_execution_auth = AtmWorkflowExecutionAuth
+}) ->
+    validate_data_batch(AtmWorkflowExecutionAuth, AtmDataSpec, Batch),
+    append_insecure(Batch, Record);
+
+apply_operation(#atm_list_store_container{} = Record, Operation = #atm_store_container_operation{
+    type = append,
+    argument = Item,
+    options = Options
+}) ->
+    apply_operation(Record, Operation#atm_store_container_operation{
+        options = Options#{<<"isBatch">> => true},
+        argument = [Item]
+    });
+
+apply_operation(_Record, _Operation) ->
+    throw(?ERROR_NOT_SUPPORTED).
 
 
 -spec delete(record()) -> ok.
-delete(#atm_list_store_container{atm_infinite_log_container = AtmInfiniteLogContainer}) ->
-    atm_infinite_log_container:delete(AtmInfiniteLogContainer).
+delete(#atm_list_store_container{backend_id = BackendId}) ->
+    json_infinite_log_model:destroy(BackendId).
 
 
 %%%===================================================================
@@ -119,22 +137,21 @@ version() ->
 -spec db_encode(record(), persistent_record:nested_record_encoder()) ->
     json_utils:json_term().
 db_encode(#atm_list_store_container{
-    atm_infinite_log_container = AtmInfiniteLogContainer
+    data_spec = AtmDataSpec,
+    backend_id = BackendId
 }, NestedRecordEncoder) ->
-        #{
-            <<"atmInfiniteLogContainer">> => NestedRecordEncoder(
-                AtmInfiniteLogContainer, atm_infinite_log_container
-            )
-        }.
+    #{
+        <<"dataSpec">> => NestedRecordEncoder(AtmDataSpec, atm_data_spec),
+        <<"backendId">> => BackendId
+    }.
 
 
 -spec db_decode(json_utils:json_term(), persistent_record:nested_record_decoder()) ->
     record().
-db_decode(#{<<"atmInfiniteLogContainer">> := AtmInfiniteLogContainerJson}, NestedRecordDecoder) ->
+db_decode(#{<<"dataSpec">> := AtmDataSpecJson, <<"backendId">> := BackendId}, NestedRecordDecoder) ->
     #atm_list_store_container{
-        atm_infinite_log_container = NestedRecordDecoder(
-            AtmInfiniteLogContainerJson, atm_infinite_log_container
-        )
+        data_spec = NestedRecordDecoder(AtmDataSpecJson, atm_data_spec),
+        backend_id = BackendId
     }.
 
 
@@ -142,15 +159,40 @@ db_decode(#{<<"atmInfiniteLogContainer">> := AtmInfiniteLogContainerJson}, Neste
 %%% Internal functions
 %%%===================================================================
 
+
 %% @private
--spec sanitize_browse_options(browse_options()) -> browse_options().
-sanitize_browse_options(BrowseOpts) ->
-    maps:without([start_timestamp], middleware_sanitizer:sanitize_data(BrowseOpts, #{
-        required => #{
-            limit => {integer, {not_lower_than, 1}}
-        },
-        at_least_one => #{
-            offset => {integer, any},
-            start_index => {binary, any}
-        }
-    })).
+-spec create_container(atm_data_spec:record()) -> record().
+create_container(AtmDataSpec) ->
+    {ok, Id} = json_infinite_log_model:create(#{}),
+    #atm_list_store_container{
+        data_spec = AtmDataSpec,
+        backend_id = Id
+    }.
+
+
+%% @private
+-spec validate_data_batch(
+    atm_workflow_execution_auth:record(),
+    atm_data_spec:record(),
+    [json_utils:json_term()]
+) ->
+    ok | no_return().
+validate_data_batch(AtmWorkflowExecutionAuth, AtmDataSpec, Batch) when is_list(Batch) ->
+    lists:foreach(fun(Item) ->
+        atm_value:validate(AtmWorkflowExecutionAuth, Item, AtmDataSpec)
+    end, Batch);
+validate_data_batch(_AtmWorkflowExecutionAuth, _AtmDataSpec, _Item) ->
+    throw(?ERROR_BAD_DATA(<<"value">>, <<"not a batch">>)).
+
+
+%% @private
+-spec append_insecure([automation:item()], record()) -> record().
+append_insecure(Batch, Record = #atm_list_store_container{
+    data_spec = AtmDataSpec,
+    backend_id = BackendId
+}) ->
+    lists:foreach(fun(Item) ->
+        ok = json_infinite_log_model:append(
+            BackendId, atm_value:compress(Item, AtmDataSpec))
+    end, Batch),
+    Record.

@@ -18,7 +18,7 @@
 -export([create/1, get/1, update/2, delete/1]).
 
 %% datastore_model callbacks
--export([get_ctx/0, get_record_struct/1, get_record_version/0, upgrade_record/2]).
+-export([get_ctx/0, get_record_struct/1, get_record_version/0]).
 
 
 -type id() :: binary().
@@ -85,7 +85,7 @@ get_ctx() ->
 
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    3.
+    1.
 
 
 -spec get_record_struct(datastore_model:record_version()) ->
@@ -94,56 +94,7 @@ get_record_struct(1) ->
     {record, [
         {workflow_execution_id, string},
         {lane_index, integer},
-        {parallel_box_index, integer},
-
-        {schema_id, string},
-
-        {executor, {custom, string, {persistent_record, encode, decode, atm_task_executor}}},
-        {argument_specs, [{custom, string, {
-            persistent_record, encode, decode, atm_task_execution_argument_spec
-        }}]},
-        {result_specs, [{custom, string, {
-            persistent_record, encode, decode, atm_task_execution_result_spec
-        }}]},
-
-        {status, atom},
-        {status_changed, boolean},
-
-        {items_in_processing, integer},
-        {items_processed, integer},
-        {items_failed, integer}
-    ]};
-get_record_struct(2) ->
-    {record, [
-        {workflow_execution_id, string},
-        {lane_index, integer},
-        {parallel_box_index, integer},
-
-        {schema_id, string},
-
-        {executor, {custom, string, {persistent_record, encode, decode, atm_task_executor}}},
-        {argument_specs, [{custom, string, {
-            persistent_record, encode, decode, atm_task_execution_argument_spec
-        }}]},
-        {result_specs, [{custom, string, {
-            persistent_record, encode, decode, atm_task_execution_result_spec
-        }}]},
-
-        {system_audit_log_id, string},  %% new field
-
-        {status, atom},
-        {status_changed, boolean},
-        {aborting_reason, atom},  %% new field
-
-        {items_in_processing, integer},
-        {items_processed, integer},
-        {items_failed, integer}
-    ]};
-get_record_struct(3) ->
-    {record, [
-        {workflow_execution_id, string},
-        {lane_index, integer},
-        {run_num, integer},  %% new field
+        {run_num, integer},
         {parallel_box_index, integer},
 
         {schema_id, string},
@@ -166,82 +117,3 @@ get_record_struct(3) ->
         {items_processed, integer},
         {items_failed, integer}
     ]}.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Upgrades model's record from provided version to the next one.
-%% @end
-%%--------------------------------------------------------------------
--spec upgrade_record(datastore_model:record_version(), datastore_model:record()) ->
-    {datastore_model:record_version(), datastore_model:record()}.
-upgrade_record(1, {
-    ?MODULE,
-    AtmWorkflowExecutionId,
-    LaneIndex,
-    ParallelBoxIndex,
-    SchemaId,
-    Executor,
-    ArgumentSpecs,
-    ResultSpecs,
-    Status,
-    StatusChanged,
-    ItemsInProcessing,
-    ItemsProcessed,
-    ItemsFailed
-}) ->
-    {2, {?MODULE,
-        AtmWorkflowExecutionId,
-        LaneIndex,
-        ParallelBoxIndex,
-        SchemaId,
-        Executor,
-        ArgumentSpecs,
-        ResultSpecs,
-        undefined,
-        Status,
-        StatusChanged,
-        undefined,
-        ItemsInProcessing,
-        ItemsProcessed,
-        ItemsFailed
-    }};
-upgrade_record(2, {
-    ?MODULE,
-    AtmWorkflowExecutionId,
-    AtmLaneIndex,
-    AtmParallelBoxIndex,
-    SchemaId,
-    Executor,
-    ArgumentSpecs,
-    ResultSpecs,
-    AtmTaskAuditLogId,
-    Status,
-    StatusChanged,
-    AbortingReason,
-    ItemsInProcessing,
-    ItemsProcessed,
-    ItemsFailed
-}) ->
-    {3, #atm_task_execution{
-        workflow_execution_id = AtmWorkflowExecutionId,
-        lane_index = AtmLaneIndex,
-        run_num = 1,
-        parallel_box_index = AtmParallelBoxIndex,
-
-        schema_id = SchemaId,
-
-        executor = Executor,
-        argument_specs = ArgumentSpecs,
-        result_specs = ResultSpecs,
-
-        system_audit_log_id = AtmTaskAuditLogId,
-
-        status = Status,
-        status_changed = StatusChanged,
-        aborting_reason = AbortingReason,
-
-        items_in_processing = ItemsInProcessing,
-        items_processed = ItemsProcessed,
-        items_failed = ItemsFailed
-    }}.

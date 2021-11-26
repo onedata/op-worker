@@ -105,6 +105,7 @@ translate_atm_workflow_execution_summary(#atm_workflow_execution_summary{
     atm_workflow_execution_id = AtmWorkflowExecutionId,
 
     name = Name,
+    atm_workflow_schema_revision_num = AtmWorkflowSchemaRevisionNum,
     atm_inventory_id = AtmInventoryId,
 
     status = AtmWorkflowExecutionStatus,
@@ -125,6 +126,7 @@ translate_atm_workflow_execution_summary(#atm_workflow_execution_summary{
         }),
 
         <<"name">> => Name,
+        <<"atmWorkflowSchemaRevisionNumber">> => AtmWorkflowSchemaRevisionNum,
         <<"atmInventory">> => gri:serialize(#gri{
             type = op_atm_inventory, id = AtmInventoryId,
             aspect = instance, scope = private

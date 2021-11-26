@@ -21,7 +21,7 @@
 -export([init_engine/0]).
 -export([
     list/4,
-    schedule/5,
+    schedule/6,
     get/1, get_summary/2,
     cancel/1,
     repeat/4,
@@ -88,13 +88,26 @@ list(SpaceId, Phase, summary, ListingOpts) ->
     user_ctx:ctx(),
     od_space:id(),
     od_atm_workflow_schema:id(),
+    atm_workflow_schema_revision:revision_number(),
     store_initial_values(),
     undefined | http_client:url()
 ) ->
     {atm_workflow_execution:id(), atm_workflow_execution:record()} | no_return().
-schedule(UserCtx, SpaceId, AtmWorkflowSchemaId, StoreInitialValues, CallbackUrl) ->
+schedule(
+    UserCtx,
+    SpaceId,
+    AtmWorkflowSchemaId,
+    AtmWorkflowSchemaRevisionNum,
+    StoreInitialValues,
+    CallbackUrl
+) ->
     {AtmWorkflowExecutionDoc, AtmWorkflowExecutionEnv} = atm_workflow_execution_factory:create(
-        UserCtx, SpaceId, AtmWorkflowSchemaId, StoreInitialValues, CallbackUrl
+        UserCtx,
+        SpaceId,
+        AtmWorkflowSchemaId,
+        AtmWorkflowSchemaRevisionNum,
+        StoreInitialValues,
+        CallbackUrl
     ),
     atm_workflow_execution_handler:start(UserCtx, AtmWorkflowExecutionEnv, AtmWorkflowExecutionDoc),
 
@@ -116,15 +129,23 @@ get(AtmWorkflowExecutionId) ->
     atm_workflow_execution:summary().
 get_summary(AtmWorkflowExecutionId, #atm_workflow_execution{
     name = Name,
+    schema_snapshot_id = AtmWorkflowSchemaSnapshotId,
     atm_inventory_id = AtmInventoryId,
     status = AtmWorkflowExecutionStatus,
     schedule_time = ScheduleTime,
     start_time = StartTime,
     finish_time = FinishTime
 }) ->
+    {ok, #document{
+        value = #atm_workflow_schema_snapshot{
+            revision_number = RevisionNum
+        }
+    }} = atm_workflow_schema_snapshot:get(AtmWorkflowSchemaSnapshotId),
+
     #atm_workflow_execution_summary{
         atm_workflow_execution_id = AtmWorkflowExecutionId,
         name = Name,
+        atm_workflow_schema_revision_num = RevisionNum,
         atm_inventory_id = AtmInventoryId,
         status = AtmWorkflowExecutionStatus,
         schedule_time = ScheduleTime,

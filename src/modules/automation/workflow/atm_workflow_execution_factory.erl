@@ -20,7 +20,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([create/5, delete_insecure/1]).
+-export([create/6, delete_insecure/1]).
 
 
 -record(creation_args, {
@@ -28,6 +28,8 @@
     workflow_execution_auth :: atm_workflow_execution_auth:record(),
 
     workflow_schema_doc :: od_atm_workflow_schema:doc(),
+    workflow_schema_revision_num :: atm_workflow_schema_revision:revision_number(),
+    workflow_schema_revision :: atm_workflow_schema_revision:record(),
     lambda_docs :: [od_atm_lambda:doc()],
     store_initial_values :: atm_workflow_execution_api:store_initial_values(),
     callback_url :: undefined | http_client:url()
@@ -60,15 +62,30 @@
     user_ctx:ctx(),
     od_space:id(),
     od_atm_workflow_schema:id(),
+    atm_workflow_schema_revision:revision_number(),
     atm_workflow_execution_api:store_initial_values(),
     undefined | http_client:url()
 ) ->
     {atm_workflow_execution:doc(), atm_workflow_execution_env:record()} | no_return().
-create(UserCtx, SpaceId, AtmWorkflowSchemaId, StoreInitialValues, CallbackUrl) ->
+create(
+    UserCtx,
+    SpaceId,
+    AtmWorkflowSchemaId,
+    AtmWorkflowSchemaRevisionNum,
+    StoreInitialValues,
+    CallbackUrl
+) ->
     SessionId = user_ctx:get_session_id(UserCtx),
 
-    AtmWorkflowSchemaDoc = fetch_executable_workflow_schema(SessionId, AtmWorkflowSchemaId),
-    AtmLambdaDocs = fetch_executable_lambdas(SessionId, AtmWorkflowSchemaDoc),
+    {ok, AtmWorkflowSchemaDoc} = atm_workflow_schema_logic:get(SessionId, AtmWorkflowSchemaId),
+    {ok, AtmWorkflowSchemaRevision} = atm_workflow_schema_logic:get_revision(
+        AtmWorkflowSchemaRevisionNum, AtmWorkflowSchemaDoc
+    ),
+    atm_workflow_schema_logic:assert_executable_revision(AtmWorkflowSchemaRevision),
+
+    AtmLambdaDocs = fetch_executable_lambdas_with_referenced_revisions(
+        SessionId, AtmWorkflowSchemaRevision
+    ),
 
     AtmWorkflowExecutionId = datastore_key:new(),
 
@@ -85,6 +102,8 @@ create(UserCtx, SpaceId, AtmWorkflowSchemaId, StoreInitialValues, CallbackUrl) -
                 SpaceId, AtmWorkflowExecutionId, UserCtx
             ),
             workflow_schema_doc = AtmWorkflowSchemaDoc,
+            workflow_schema_revision_num = AtmWorkflowSchemaRevisionNum,
+            workflow_schema_revision = AtmWorkflowSchemaRevision,
             lambda_docs = AtmLambdaDocs,
             store_initial_values = StoreInitialValues,
             callback_url = CallbackUrl
@@ -148,27 +167,33 @@ delete_insecure(AtmWorkflowExecutionId) ->
 
 
 %% @private
--spec fetch_executable_workflow_schema(session:id(), od_atm_workflow_schema:id()) ->
-    od_atm_workflow_schema:doc() | no_return().
-fetch_executable_workflow_schema(SessionId, AtmWorkflowSchemaId) ->
-    {ok, AtmWorkflowSchemaDoc} = atm_workflow_schema_logic:get(SessionId, AtmWorkflowSchemaId),
-    atm_workflow_schema_logic:assert_executable(AtmWorkflowSchemaDoc),
-
-    AtmWorkflowSchemaDoc.
-
-
-%% @private
--spec fetch_executable_lambdas(session:id(), od_atm_workflow_schema:doc()) ->
+-spec fetch_executable_lambdas_with_referenced_revisions(
+    session:id(),
+    atm_workflow_schema_revision:record()
+) ->
     [od_atm_lambda:doc()] | no_return().
-fetch_executable_lambdas(SessionId, #document{value = #od_atm_workflow_schema{
-    atm_lambdas = AtmLambdaIds
-}}) ->
-    lists:map(fun(AtmLambdaId) ->
-        {ok, AtmLambdaDoc} = atm_lambda_logic:get(SessionId, AtmLambdaId),
-        atm_lambda_logic:assert_executable(AtmLambdaDoc),
+fetch_executable_lambdas_with_referenced_revisions(SessionId, AtmWorkflowSchemaRevision) ->
+    AtmLambdaReferences = atm_workflow_schema_revision:extract_atm_lambda_references(
+        AtmWorkflowSchemaRevision
+    ),
 
-        AtmLambdaDoc
-    end, AtmLambdaIds).
+    lists:map(fun({AtmLambdaId, AtmLambdaRevisionNums}) ->
+        {ok, AtmLambdaDoc = #document{
+            value = AtmLambda = #od_atm_lambda{
+                revision_registry = AtmLambdaRevisionRegistry
+            }
+        }} = atm_lambda_logic:get(SessionId, AtmLambdaId),
+
+        AtmLambdaWithReferencedRevisions = AtmLambda#od_atm_lambda{
+            revision_registry = atm_lambda_revision_registry:with(
+                AtmLambdaRevisionNums, AtmLambdaRevisionRegistry
+            )
+        },
+        atm_lambda_logic:assert_executable_revisions(
+            AtmLambdaRevisionNums, AtmLambdaWithReferencedRevisions
+        ),
+        AtmLambdaDoc#document{value = AtmLambdaWithReferencedRevisions}
+    end, maps:to_list(AtmLambdaReferences)).
 
 
 %% @private
@@ -195,12 +220,13 @@ create_execution_components(CreationCtx) ->
 create_workflow_schema_snapshot(CreationCtx = #creation_ctx{
     creation_args = #creation_args{
         workflow_execution_id = AtmWorkflowExecutionId,
-        workflow_schema_doc = AtmWorkflowSchemaDoc
+        workflow_schema_doc = AtmWorkflowSchemaDoc,
+        workflow_schema_revision_num = AtmWorkflowSchemaRevisionNum
     },
     execution_components = ExecutionComponents
 }) ->
     {ok, AtmWorkflowSchemaSnapshotId} = atm_workflow_schema_snapshot:create(
-        AtmWorkflowExecutionId, AtmWorkflowSchemaDoc
+        AtmWorkflowExecutionId, AtmWorkflowSchemaRevisionNum, AtmWorkflowSchemaDoc
     ),
 
     CreationCtx#creation_ctx{execution_components = ExecutionComponents#execution_components{
@@ -239,9 +265,9 @@ create_lambda_snapshots(CreationCtx = #creation_ctx{
 create_global_stores(CreationCtx = #creation_ctx{
     creation_args = #creation_args{
         workflow_execution_auth = AtmWorkflowExecutionAuth,
-        workflow_schema_doc = #document{value = #od_atm_workflow_schema{
+        workflow_schema_revision = #atm_workflow_schema_revision{
             stores = AtmStoreSchemas
-        }},
+        },
         store_initial_values = AtmStoreInitialValues
     }
 }) ->
@@ -316,8 +342,8 @@ create_workflow_audit_log(CreationCtx = #creation_ctx{
 %% @private
 -spec create_lane_executions(creation_ctx()) -> creation_ctx().
 create_lane_executions(CreationCtx = #creation_ctx{
-    creation_args = #creation_args{workflow_schema_doc = #document{
-        value = #od_atm_workflow_schema{lanes = AtmLaneSchemas}
+    creation_args = #creation_args{workflow_schema_revision = #atm_workflow_schema_revision{
+        lanes = AtmLaneSchemas
     }},
     execution_components = ExecutionComponents
 }) ->
