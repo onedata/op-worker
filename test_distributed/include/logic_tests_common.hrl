@@ -229,14 +229,12 @@ end).
     argument_specs = [#atm_lambda_argument_spec{
         name = <<"arg">>,
         data_spec = ?ATM_LAMBDA_DATA_SPEC,
-        is_batch = false,
         is_optional = true,
         default_value = 8
     }],
     result_specs = [#atm_lambda_result_spec{
         name = <<"res">>,
-        data_spec = ?ATM_LAMBDA_DATA_SPEC,
-        is_batch = true
+        data_spec = ?ATM_LAMBDA_DATA_SPEC
     }],
     resource_spec = #atm_resource_spec{
         cpu_requested = 2.0, cpu_limit = 4.0,
@@ -293,7 +291,7 @@ end).
             name = <<"lane1Name">>,
             store_iterator_spec = #atm_store_iterator_spec{
                 store_schema_id = <<"store1Id">>,
-                strategy = #atm_store_iterator_serial_strategy{}
+                max_batch_size = 1
             },
             parallel_boxes = [
                 #atm_parallel_box_schema{
@@ -356,7 +354,7 @@ end).
             name = <<"lane2Name">>,
             store_iterator_spec = #atm_store_iterator_spec{
                 store_schema_id = <<"store2Id">>,
-                strategy = #atm_store_iterator_batch_strategy{size = 1000}
+                max_batch_size = 1000
             },
             parallel_boxes = [
                 #atm_parallel_box_schema{
