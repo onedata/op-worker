@@ -35,8 +35,7 @@
     create_store_with_severity_details_test/1,
     apply_operation_test/1,
     apply_operation_with_severity_details_test/1,
-    iterate_one_by_one_test/1,
-    iterate_in_chunks_test/1,
+    iterate_test/1,
     reuse_iterator_test/1,
     browse_by_index_test/1,
     browse_by_offset_test/1,
@@ -49,8 +48,7 @@ groups() -> [
         create_store_with_severity_details_test,
         apply_operation_test,
         apply_operation_with_severity_details_test,
-        iterate_one_by_one_test,
-        iterate_in_chunks_test,
+        iterate_test,
         reuse_iterator_test,
         browse_by_index_test,
         browse_by_offset_test
@@ -121,12 +119,8 @@ apply_operation_with_severity_details_test(_Config) ->
     )).
 
 
-iterate_one_by_one_test(_Config) ->
-    atm_infinite_log_based_stores_test_common:iterate_one_by_one_test_base(?ATM_AUDIT_LOG_STORE_SCHEMA, ?ITERATION_RESULT_MAPPER).
-
-
-iterate_in_chunks_test(_Config) ->
-    atm_infinite_log_based_stores_test_common:iterate_in_chunks_test_base(?ATM_AUDIT_LOG_STORE_SCHEMA, ?ITERATION_RESULT_MAPPER).
+iterate_test(_Config) ->
+    atm_infinite_log_based_stores_test_common:iterate_test_base(?ATM_AUDIT_LOG_STORE_SCHEMA, ?ITERATION_RESULT_MAPPER).
 
 
 reuse_iterator_test(_Config) ->

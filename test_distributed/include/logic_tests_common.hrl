@@ -236,12 +236,13 @@ end).
         name = <<"res">>,
         data_spec = ?ATM_LAMBDA_DATA_SPEC
     }],
+    preferred_batch_size = 10,
     resource_spec = #atm_resource_spec{
         cpu_requested = 2.0, cpu_limit = 4.0,
         memory_requested = 1000000000, memory_limit = 5000000000,
         ephemeral_storage_requested = 1000000000, ephemeral_storage_limit = 5000000000
     },
-    checksum = <<"d9667c68cad353a675992bfa9330a190">>,
+    checksum = <<"48d206e512123dd08f61e1e11322bd0a">>,
     state = stable
 }).
 -define(ATM_LAMBDA_REVISION_REGISTRY_VALUE(__AtmLambda), #atm_lambda_revision_registry{
