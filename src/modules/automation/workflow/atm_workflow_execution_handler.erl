@@ -237,14 +237,14 @@ process_result(
     automation:item()
 ) ->
     ok.
-report_item_error(_AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, Item) ->
+report_item_error(_AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, ItemsBatch) ->
     AtmLaneRunExceptionStoreContainer = atm_workflow_execution_env:get_lane_run_exception_store_container(
         AtmWorkflowExecutionEnv
     ),
     Operation = #atm_store_container_operation{
-        type = append,
-        options = #{<<"isBatch">> => is_list(Item)},
-        argument = Item,
+        type = extend,
+        options = #{},
+        argument = ItemsBatch,
         workflow_execution_auth = atm_workflow_execution_env:acquire_auth(AtmWorkflowExecutionEnv)
     },
     atm_list_store_container:apply_operation(AtmLaneRunExceptionStoreContainer, Operation),

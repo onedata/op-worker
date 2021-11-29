@@ -115,7 +115,7 @@ apply_operation_with_severity_details_test(_Config) ->
         krakow, AtmWorkflowExecutionAuth, undefined, ?ATM_AUDIT_LOG_STORE_SCHEMA
     ),
     ?assertEqual(ok, atm_store_test_utils:apply_operation(
-        krakow, AtmWorkflowExecutionAuth, append, [8, #{<<"entry">> => 9, <<"severity">> => <<"notice">>}], #{<<"isBatch">> => true}, AtmStoreId
+        krakow, AtmWorkflowExecutionAuth, extend, [8, #{<<"entry">> => 9, <<"severity">> => <<"notice">>}], #{}, AtmStoreId
     )).
 
 

@@ -130,6 +130,14 @@
 }).
 
 
+%% Atm data types related macros
+
+-define(ATM_ARRAY_DATA_SPEC(__ITEM_DATA_TYPE_SPEC), #atm_data_spec{
+    type = atm_array_type,
+    value_constraints = #{item_data_spec => __ITEM_DATA_TYPE_SPEC}
+}).
+
+
 %% Atm system stores related macros
 
 -define(CURRENT_LANE_RUN_EXCEPTION_STORE_SCHEMA_ID, <<"CURRENT_LANE_RUN_EXCEPTION_STORE">>).

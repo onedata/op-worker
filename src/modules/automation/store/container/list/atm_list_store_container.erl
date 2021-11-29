@@ -32,15 +32,7 @@
 
 
 -type initial_value() :: [automation:item()] | undefined.
-%% Full 'operation_options' format can't be expressed directly in type spec due to
-%% dialyzer limitations in specifying individual binaries. Instead it is
-%% shown below:
-%%
-%% #{
-%%      <<"isBatch">> := boolean()
-%% }
-%@formatter:off
--type operation_options() :: #{binary() => boolean()}.
+-type operation_options() :: json_utils:json_map().  %% for now no options are supported
 -type browse_options() :: #{
     limit := atm_store_api:limit(),
     start_index => atm_store_api:index(),
@@ -67,9 +59,9 @@
 create(_AtmWorkflowExecutionAuth, AtmDataSpec, undefined) ->
     create_container(AtmDataSpec);
 
-create(AtmWorkflowExecutionAuth, AtmDataSpec, InitialValueBatch) ->
-    validate_data_batch(AtmWorkflowExecutionAuth, AtmDataSpec, InitialValueBatch),
-    append_insecure(InitialValueBatch, create_container(AtmDataSpec)).
+create(AtmWorkflowExecutionAuth, AtmDataSpec, InitialItemsArray) ->
+    atm_value:validate(AtmWorkflowExecutionAuth, InitialItemsArray, ?ATM_ARRAY_DATA_SPEC(AtmDataSpec)),
+    extend_insecure(InitialItemsArray, create_container(AtmDataSpec)).
 
 
 -spec get_data_spec(record()) -> atm_data_spec:record().
@@ -97,23 +89,20 @@ acquire_iterator(#atm_list_store_container{backend_id = BackendId}) ->
 -spec apply_operation(record(), atm_store_container:operation()) ->
     record() | no_return().
 apply_operation(#atm_list_store_container{data_spec = AtmDataSpec} = Record, #atm_store_container_operation{
-    type = append,
-    options = #{<<"isBatch">> := true},
-    argument = Batch,
+    type = extend,
+    argument = ItemsArray,
     workflow_execution_auth = AtmWorkflowExecutionAuth
 }) ->
-    validate_data_batch(AtmWorkflowExecutionAuth, AtmDataSpec, Batch),
-    append_insecure(Batch, Record);
+    atm_value:validate(AtmWorkflowExecutionAuth, ItemsArray, ?ATM_ARRAY_DATA_SPEC(AtmDataSpec)),
+    extend_insecure(ItemsArray, Record);
 
-apply_operation(#atm_list_store_container{} = Record, Operation = #atm_store_container_operation{
+apply_operation(#atm_list_store_container{data_spec = AtmDataSpec} = Record, #atm_store_container_operation{
     type = append,
     argument = Item,
-    options = Options
+    workflow_execution_auth = AtmWorkflowExecutionAuth
 }) ->
-    apply_operation(Record, Operation#atm_store_container_operation{
-        options = Options#{<<"isBatch">> => true},
-        argument = [Item]
-    });
+    atm_value:validate(AtmWorkflowExecutionAuth, Item, AtmDataSpec),
+    append_insecure(Item, Record);
 
 apply_operation(_Record, _Operation) ->
     throw(?ERROR_NOT_SUPPORTED).
@@ -171,28 +160,16 @@ create_container(AtmDataSpec) ->
 
 
 %% @private
--spec validate_data_batch(
-    atm_workflow_execution_auth:record(),
-    atm_data_spec:record(),
-    [json_utils:json_term()]
-) ->
-    ok | no_return().
-validate_data_batch(AtmWorkflowExecutionAuth, AtmDataSpec, Batch) when is_list(Batch) ->
-    lists:foreach(fun(Item) ->
-        atm_value:validate(AtmWorkflowExecutionAuth, Item, AtmDataSpec)
-    end, Batch);
-validate_data_batch(_AtmWorkflowExecutionAuth, _AtmDataSpec, _Item) ->
-    throw(?ERROR_BAD_DATA(<<"value">>, <<"not a batch">>)).
+-spec extend_insecure([automation:item()], record()) -> record().
+extend_insecure(ItemsArray, Record) ->
+    lists:foldl(fun append_insecure/2, Record, ItemsArray).
 
 
 %% @private
--spec append_insecure([automation:item()], record()) -> record().
-append_insecure(Batch, Record = #atm_list_store_container{
+-spec append_insecure(automation:item(), record()) -> record().
+append_insecure(Item, Record = #atm_list_store_container{
     data_spec = AtmDataSpec,
     backend_id = BackendId
 }) ->
-    lists:foreach(fun(Item) ->
-        ok = json_infinite_log_model:append(
-            BackendId, atm_value:compress(Item, AtmDataSpec))
-    end, Batch),
+    ok = json_infinite_log_model:append(BackendId, atm_value:compress(Item, AtmDataSpec)),
     Record.
