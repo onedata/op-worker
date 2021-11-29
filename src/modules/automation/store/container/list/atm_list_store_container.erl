@@ -176,8 +176,7 @@ validate_items_batch(AtmWorkflowExecutionAuth, ItemAtmDataSpec, ItemsBatch) ->
 %% @private
 -spec extend_insecure([automation:item()], record()) -> record().
 extend_insecure(ItemsBatch, Record) ->
-    lists:foreach(fun(Item) -> append_insecure(Item, Record) end, ItemsBatch),
-    Record.
+    lists:foldl(fun append_insecure/2, Record, ItemsBatch).
 
 
 %% @private

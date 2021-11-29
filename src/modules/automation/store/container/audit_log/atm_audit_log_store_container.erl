@@ -184,9 +184,14 @@ create_container(AtmDataSpec) ->
 ) ->
     [atm_value:expanded()] | no_return().
 sanitize_items_batch(AtmWorkflowExecutionAuth, AtmDataSpec, ItemsBatch) when is_list(ItemsBatch) ->
-    lists:map(fun(Item) ->
-        sanitize_item(AtmWorkflowExecutionAuth, AtmDataSpec, Item)
-    end, ItemsBatch);
+    AuditLogObjects = lists:map(fun prepare_audit_log_object/1, ItemsBatch),
+    AuditLogEntries = lists:map(fun(#{<<"entry">> := Entry}) -> Entry end, AuditLogObjects),
+
+    atm_value:validate(AtmWorkflowExecutionAuth, AuditLogEntries, #atm_data_spec{
+        type = atm_array_type,
+        value_constraints = #{item_data_spec => AtmDataSpec}}
+    ),
+    AuditLogObjects;
 sanitize_items_batch(_AtmWorkflowExecutionAuth, _AtmDataSpec, Value) ->
     throw(?ERROR_ATM_DATA_TYPE_UNVERIFIED(Value, atm_array_type)).
 
@@ -207,8 +212,7 @@ sanitize_item(AtmWorkflowExecutionAuth, AtmDataSpec, Item) ->
 %% @private
 -spec extend_with_sanitized_items_batch([atm_value:expanded()], record()) -> record().
 extend_with_sanitized_items_batch(ItemsBatch, Record) ->
-    lists:foreach(fun(Item) -> append_sanitized_item(Item, Record) end, ItemsBatch),
-    Record.
+    lists:foldl(fun append_sanitized_item/2, Record, ItemsBatch).
 
 
 %% @private
