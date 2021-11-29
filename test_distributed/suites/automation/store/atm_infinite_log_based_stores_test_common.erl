@@ -47,8 +47,10 @@ create_store_with_invalid_args_test_base(AtmStoreSchema) ->
     ?assertEqual(?ERROR_ATM_STORE_MISSING_REQUIRED_INITIAL_VALUE, atm_store_test_utils:create_store(
         krakow, AtmWorkflowExecutionAuth, undefined, AtmStoreSchema#atm_store_schema{requires_initial_value = true}
     )),
-    ?assertEqual(?ERROR_BAD_DATA(<<"value">>, <<"not a batch">>), atm_store_test_utils:create_store(
-        krakow, AtmWorkflowExecutionAuth, 8, AtmStoreSchema
+
+    IntValue = rand:uniform(1000),
+    ?assertEqual(?ERROR_ATM_DATA_TYPE_UNVERIFIED(IntValue, atm_array_type), atm_store_test_utils:create_store(
+        krakow, AtmWorkflowExecutionAuth, IntValue, AtmStoreSchema
     )),
 
     lists:foreach(fun(DataType) ->
@@ -89,10 +91,10 @@ apply_operation_test_base(AtmStoreSchema) ->
             krakow, AtmWorkflowExecutionAuth, append, ValidValue, #{}, AtmStoreId
         )),
         ?assertEqual(?ERROR_ATM_DATA_TYPE_UNVERIFIED(BadValue, DataType), atm_store_test_utils:apply_operation(
-            krakow, AtmWorkflowExecutionAuth, append, [ValidValue, BadValue, ValidValue], #{<<"isBatch">> => true}, AtmStoreId
+            krakow, AtmWorkflowExecutionAuth, extend, [ValidValue, BadValue, ValidValue], #{}, AtmStoreId
         )),
         ?assertEqual(ok, atm_store_test_utils:apply_operation(
-            krakow, AtmWorkflowExecutionAuth, append, lists:duplicate(8, ValidValue), #{<<"isBatch">> => true}, AtmStoreId
+            krakow, AtmWorkflowExecutionAuth, extend, lists:duplicate(8, ValidValue), #{}, AtmStoreId
         ))
     end, atm_store_test_utils:all_data_types()).
 

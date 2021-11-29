@@ -90,9 +90,10 @@ create_store_with_invalid_args_test(_Config) ->
             krakow, AtmWorkflowExecutionAuth, undefined,
             (?ATM_TREE_FOREST_STORE_SCHEMA)#atm_store_schema{requires_initial_value = true})
     ),
-    ?assertEqual(?ERROR_BAD_DATA(<<"value">>, <<"not a batch">>),
-        atm_store_test_utils:create_store(
-            krakow, AtmWorkflowExecutionAuth, 8, ?ATM_TREE_FOREST_STORE_SCHEMA)
+
+    IntValue = rand:uniform(1000),
+    ?assertEqual(?ERROR_ATM_DATA_TYPE_UNVERIFIED(IntValue, atm_array_type), atm_store_test_utils:create_store(
+        krakow, AtmWorkflowExecutionAuth, IntValue, ?ATM_TREE_FOREST_STORE_SCHEMA)
     ),
     lists:foreach(fun(DataType) ->
         BadValue = atm_store_test_utils:example_bad_data(DataType),
