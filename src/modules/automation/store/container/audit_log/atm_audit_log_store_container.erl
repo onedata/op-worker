@@ -74,10 +74,10 @@
 create(_AtmWorkflowExecutionAuth, AtmDataSpec, undefined) ->
     create_container(AtmDataSpec);
 
-create(AtmWorkflowExecutionAuth, AtmDataSpec, InitialItemsBatch) ->
-    % validate and sanitize given batch first, to simulate atomic operation
-    SanitizedItemsBatch = sanitize_items_batch(AtmWorkflowExecutionAuth, AtmDataSpec, InitialItemsBatch),
-    extend_with_sanitized_items_batch(SanitizedItemsBatch, create_container(AtmDataSpec)).
+create(AtmWorkflowExecutionAuth, AtmDataSpec, InitialItemsArray) ->
+    % validate and sanitize given array of values first, to simulate atomic operation
+    SanitizedItemsArray = sanitize_items_array(AtmWorkflowExecutionAuth, AtmDataSpec, InitialItemsArray),
+    extend_with_sanitized_items_array(SanitizedItemsArray, create_container(AtmDataSpec)).
 
 
 -spec get_data_spec(record()) -> atm_data_spec:record().
@@ -106,19 +106,19 @@ acquire_iterator(#atm_audit_log_store_container{backend_id = BackendId}) ->
     record() | no_return().
 apply_operation(#atm_audit_log_store_container{data_spec = AtmDataSpec} = Record, #atm_store_container_operation{
     type = extend,
-    argument = ItemsBatch,
+    argument = ItemsArray,
     workflow_execution_auth = AtmWorkflowExecutionAuth
 }) ->
-    % validate and sanitize given batch first, to simulate atomic operation
-    SanitizedItemsBatch = sanitize_items_batch(AtmWorkflowExecutionAuth, AtmDataSpec, ItemsBatch),
-    extend_with_sanitized_items_batch(SanitizedItemsBatch, Record);
+    % validate and sanitize given array of items first, to simulate atomic operation
+    SanitizedItemsArray = sanitize_items_array(AtmWorkflowExecutionAuth, AtmDataSpec, ItemsArray),
+    extend_with_sanitized_items_array(SanitizedItemsArray, Record);
 
 apply_operation(#atm_audit_log_store_container{data_spec = AtmDataSpec} = Record, #atm_store_container_operation{
     type = append,
     argument = Item,
     workflow_execution_auth = AtmWorkflowExecutionAuth
 }) ->
-    % validate and sanitize given batch first, to simulate atomic operation
+    % validate and sanitize given item, to simulate atomic operation
     SanitizedItem = sanitize_item(AtmWorkflowExecutionAuth, AtmDataSpec, Item),
     append_sanitized_item(SanitizedItem, Record);
 
@@ -177,22 +177,20 @@ create_container(AtmDataSpec) ->
 
 
 %% @private
--spec sanitize_items_batch(
+-spec sanitize_items_array(
     atm_workflow_execution_auth:record(),
     atm_data_spec:record(),
     [json_utils:json_term()]
 ) ->
     [atm_value:expanded()] | no_return().
-sanitize_items_batch(AtmWorkflowExecutionAuth, AtmDataSpec, ItemsBatch) when is_list(ItemsBatch) ->
-    AuditLogObjects = lists:map(fun prepare_audit_log_object/1, ItemsBatch),
-    AuditLogEntries = lists:map(fun(#{<<"entry">> := Entry}) -> Entry end, AuditLogObjects),
+sanitize_items_array(AtmWorkflowExecutionAuth, AtmDataSpec, ItemsArray) when is_list(ItemsArray) ->
+    AuditLogObjects = lists:map(fun prepare_audit_log_object/1, ItemsArray),
 
-    atm_value:validate(AtmWorkflowExecutionAuth, AuditLogEntries, #atm_data_spec{
-        type = atm_array_type,
-        value_constraints = #{item_data_spec => AtmDataSpec}}
-    ),
+    AuditLogEntries = lists:map(fun(#{<<"entry">> := Entry}) -> Entry end, AuditLogObjects),
+    atm_value:validate(AtmWorkflowExecutionAuth, AuditLogEntries, ?ATM_ARRAY_DATA_SPEC(AtmDataSpec)),
+
     AuditLogObjects;
-sanitize_items_batch(_AtmWorkflowExecutionAuth, _AtmDataSpec, Value) ->
+sanitize_items_array(_AtmWorkflowExecutionAuth, _AtmDataSpec, Value) ->
     throw(?ERROR_ATM_DATA_TYPE_UNVERIFIED(Value, atm_array_type)).
 
 
@@ -210,9 +208,9 @@ sanitize_item(AtmWorkflowExecutionAuth, AtmDataSpec, Item) ->
 
 
 %% @private
--spec extend_with_sanitized_items_batch([atm_value:expanded()], record()) -> record().
-extend_with_sanitized_items_batch(ItemsBatch, Record) ->
-    lists:foldl(fun append_sanitized_item/2, Record, ItemsBatch).
+-spec extend_with_sanitized_items_array([atm_value:expanded()], record()) -> record().
+extend_with_sanitized_items_array(ItemsArray, Record) ->
+    lists:foldl(fun append_sanitized_item/2, Record, ItemsArray).
 
 
 %% @private

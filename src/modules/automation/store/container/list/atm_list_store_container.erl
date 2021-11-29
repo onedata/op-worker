@@ -59,9 +59,9 @@
 create(_AtmWorkflowExecutionAuth, AtmDataSpec, undefined) ->
     create_container(AtmDataSpec);
 
-create(AtmWorkflowExecutionAuth, AtmDataSpec, InitialItemsBatch) ->
-    validate_items_batch(AtmWorkflowExecutionAuth, AtmDataSpec, InitialItemsBatch),
-    extend_insecure(InitialItemsBatch, create_container(AtmDataSpec)).
+create(AtmWorkflowExecutionAuth, AtmDataSpec, InitialItemsArray) ->
+    atm_value:validate(AtmWorkflowExecutionAuth, InitialItemsArray, ?ATM_ARRAY_DATA_SPEC(AtmDataSpec)),
+    extend_insecure(InitialItemsArray, create_container(AtmDataSpec)).
 
 
 -spec get_data_spec(record()) -> atm_data_spec:record().
@@ -90,11 +90,11 @@ acquire_iterator(#atm_list_store_container{backend_id = BackendId}) ->
     record() | no_return().
 apply_operation(#atm_list_store_container{data_spec = AtmDataSpec} = Record, #atm_store_container_operation{
     type = extend,
-    argument = ItemsBatch,
+    argument = ItemsArray,
     workflow_execution_auth = AtmWorkflowExecutionAuth
 }) ->
-    validate_items_batch(AtmWorkflowExecutionAuth, AtmDataSpec, ItemsBatch),
-    extend_insecure(ItemsBatch, Record);
+    atm_value:validate(AtmWorkflowExecutionAuth, ItemsArray, ?ATM_ARRAY_DATA_SPEC(AtmDataSpec)),
+    extend_insecure(ItemsArray, Record);
 
 apply_operation(#atm_list_store_container{data_spec = AtmDataSpec} = Record, #atm_store_container_operation{
     type = append,
@@ -160,23 +160,9 @@ create_container(AtmDataSpec) ->
 
 
 %% @private
--spec validate_items_batch(
-    atm_workflow_execution_auth:record(),
-    atm_data_spec:record(),
-    [json_utils:json_term()]
-) ->
-    ok | no_return().
-validate_items_batch(AtmWorkflowExecutionAuth, ItemAtmDataSpec, ItemsBatch) ->
-    atm_value:validate(AtmWorkflowExecutionAuth, ItemsBatch, #atm_data_spec{
-        type = atm_array_type,
-        value_constraints = #{item_data_spec => ItemAtmDataSpec}}
-    ).
-
-
-%% @private
 -spec extend_insecure([automation:item()], record()) -> record().
-extend_insecure(ItemsBatch, Record) ->
-    lists:foldl(fun append_insecure/2, Record, ItemsBatch).
+extend_insecure(ItemsArray, Record) ->
+    lists:foldl(fun append_insecure/2, Record, ItemsArray).
 
 
 %% @private
