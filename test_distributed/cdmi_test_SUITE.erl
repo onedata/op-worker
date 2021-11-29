@@ -216,7 +216,7 @@ create_cdmi_dir_without_cdmi_version_header_should_fail_test(Config) ->
 
 download_empty_file(Config) ->
     [_WorkerP1, WorkerP2] = ?config(op_worker_nodes, Config),
-    AuthHeaders = [rest_test_utils:user_token_header(Config, <<"user1">>)],
+    AuthHeaders = [rest_test_utils:user_token_header(?config({access_token, <<"user1">>}, Config))],
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, Config),
 
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
@@ -253,7 +253,7 @@ download_empty_file(Config) ->
 
 download_file_in_blocks(Config) ->
     [_WorkerP1, WorkerP2] = Workers = ?config(op_worker_nodes, Config),
-    AuthHeaders = [rest_test_utils:user_token_header(Config, <<"user1">>)],
+    AuthHeaders = [rest_test_utils:user_token_header(?config({access_token, <<"user1">>}, Config))],
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, Config),
 
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),

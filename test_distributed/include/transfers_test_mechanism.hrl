@@ -22,7 +22,15 @@
 ).
 
 -define(USER_SESSION(Node, User, Config),
-    ?config({session_id, {User, ?GET_DOMAIN(Node)}}, Config)
+begin
+    case ?config(use_initializer, Config, true) of
+        true ->
+            ?config({session_id, {User, ?GET_DOMAIN(Node)}}, Config);
+        false ->
+            ProviderId = rpc:call(Node, oneprovider, get_id, []),
+            oct_background:get_user_session_id(User, ProviderId)
+    end
+end
 ).
 
 -define(ATTEMPTS, 60).

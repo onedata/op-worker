@@ -22,7 +22,7 @@
 %% API
 -export([
     request/5, request/6,
-    user_token_header/2,
+    user_token_header/1,
     assert_request_error/2,
     get_rest_error/1
 ]).
@@ -52,8 +52,7 @@ request(Node, URL, Method, Headers, Body, Opts) ->
             Other
     end.
 
-user_token_header(Config, User) ->
-    AccessToken = ?config({access_token, User}, Config),
+user_token_header(AccessToken) ->
     case rand:uniform(3) of
         1 -> {?HDR_X_AUTH_TOKEN, AccessToken};
         2 -> {?HDR_AUTHORIZATION, <<"Bearer ", AccessToken/binary>>};

@@ -635,7 +635,7 @@ cdmi_xattr_should_not_be_harvested(Config) ->
 
     ObjectContentTypeHeader = {?HDR_CONTENT_TYPE, <<"application/cdmi-object">>},
     CDMIVersionHeader = {<<"X-CDMI-Specification-Version">>, <<"1.1.1">>},
-    UserTokenHeader = rest_test_utils:user_token_header(Config, ?USER_ID),
+    UserTokenHeader = rest_test_utils:user_token_header(?config({access_token, ?USER_ID}, Config)),
 
     RequestHeaders1 = [ObjectContentTypeHeader, CDMIVersionHeader, UserTokenHeader],
     RequestBody1 = #{<<"value">> => FileContent},
