@@ -29,10 +29,19 @@
 
 
 -type operation() ::
-    % atm related operations
+    % automation related
     #schedule_atm_workflow_execution{} |
     #cancel_atm_workflow_execution{} |
-    #repeat_atm_workflow_execution{}.
+    #repeat_atm_workflow_execution{} |
+
+    % datasets related
+    #list_top_datasets{} |
+    #list_children_datasets{} |
+    #establish_dataset{} |
+    #get_dataset_info{} |
+    #update_dataset{} |
+    #remove_dataset {} |
+    #get_file_eff_dataset_summary{}.
 
 -export_type([operation/0]).
 

@@ -731,7 +731,7 @@ build_verify_delete_dataset_fun(MemRef, Providers, SpaceId, Config) ->
                                 list_child_dataset_ids(Node, UserSessId, SpaceDirDatasetId, ListOpts)
                             end
                     end,
-                    GetDatasetInfo = fun() -> lfm_proxy:get_dataset_info(Node, UserSessId, DatasetId) end,
+                    GetDatasetInfo = fun() -> opt_datasets:get_info(Node, UserSessId, DatasetId) end,
 
                     case ExpResult of
                         expected_success ->
@@ -849,7 +849,7 @@ verify_dataset(
             parent = ParentId,
             index = datasets_structure:pack_entry_index(filename:basename(RootFilePath), DatasetId)
         },
-        ?assertEqual({ok, ExpDatasetInfo}, lfm_proxy:get_dataset_info(Node, UserSessId, DatasetId), ?ATTEMPTS)
+        ?assertEqual({ok, ExpDatasetInfo}, opt_datasets:get_info(Node, UserSessId, DatasetId), ?ATTEMPTS)
     end, Providers).
 
 
@@ -857,7 +857,7 @@ verify_dataset(
 -spec list_top_dataset_ids(node(), session:id(), od_space:id(), dataset:state(), dataset_api:listing_opts()) ->
     [dataset:id()].
 list_top_dataset_ids(Node, UserSessId, SpaceId, State, ListOpts) ->
-    {ok, Datasets, _} = lfm_proxy:list_top_datasets(
+    {ok, {Datasets, _}} = opt_datasets:list_top_datasets(
         Node, UserSessId, SpaceId, State, ListOpts
     ),
     lists:map(fun({DatasetId, _, _}) -> DatasetId end, Datasets).
@@ -867,7 +867,7 @@ list_top_dataset_ids(Node, UserSessId, SpaceId, State, ListOpts) ->
 -spec list_child_dataset_ids(node(), session:id(), dataset:id(), dataset_api:listing_opts()) ->
     [dataset:id()].
 list_child_dataset_ids(Node, UserSessId, ParentId, ListOpts) ->
-    {ok, Datasets, _} = lfm_proxy:list_children_datasets(Node, UserSessId, ParentId, ListOpts),
+    {ok, {Datasets, _}} = opt_datasets:list_children_datasets(Node, UserSessId, ParentId, ListOpts),
     lists:map(fun({DatasetId, _, _}) -> DatasetId end, Datasets).
 
 %%%===================================================================

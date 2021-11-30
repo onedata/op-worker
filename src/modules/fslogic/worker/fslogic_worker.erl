@@ -769,25 +769,6 @@ handle_provider_request(UserCtx, #remove_qos_entry{id = QosEntryId}, FileCtx) ->
     qos_req:remove_qos_entry(UserCtx, FileCtx, QosEntryId);
 handle_provider_request(UserCtx, #check_qos_status{qos_id = QosEntryId}, FileCtx) ->
     qos_req:check_status(UserCtx, FileCtx, QosEntryId);
-handle_provider_request(UserCtx, #establish_dataset{protection_flags = ProtectionFlags}, FileCtx) ->
-    dataset_req:establish(FileCtx, ProtectionFlags, UserCtx);
-handle_provider_request(UserCtx, #update_dataset{
-    id = DatasetId,
-    state = NewState,
-    flags_to_set = FlagsToSet,
-    flags_to_unset = FlagsToUnset
-}, SpaceDirCtx) ->
-    dataset_req:update(SpaceDirCtx, DatasetId, NewState, FlagsToSet, FlagsToUnset, UserCtx);
-handle_provider_request(UserCtx, #remove_dataset{id = DatasetId}, SpaceDirCtx) ->
-    dataset_req:remove(SpaceDirCtx, DatasetId, UserCtx);
-handle_provider_request(UserCtx, #get_dataset_info{id = DatasetId}, SpaceDirCtx) ->
-    dataset_req:get_info(SpaceDirCtx, DatasetId, UserCtx);
-handle_provider_request(UserCtx, #get_file_eff_dataset_summary{}, FileCtx) ->
-    dataset_req:get_file_eff_summary(FileCtx, UserCtx);
-handle_provider_request(UserCtx, #list_top_datasets{state = State, opts = Opts, mode = ListingMode}, SpaceDirCtx) ->
-    dataset_req:list_top_datasets(file_ctx:get_space_id_const(SpaceDirCtx), State, Opts, ListingMode, UserCtx);
-handle_provider_request(UserCtx, #list_children_datasets{id = DatasetId, opts = Opts, mode = ListingMode}, SpaceDirCtx) ->
-    dataset_req:list_children_datasets(SpaceDirCtx, DatasetId, Opts, ListingMode, UserCtx);
 handle_provider_request(UserCtx, #archive_dataset{
     id = DatasetId,
     config = Config,

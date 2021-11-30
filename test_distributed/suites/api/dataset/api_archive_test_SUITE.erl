@@ -308,7 +308,7 @@ get_datasets(State) ->
     SessionId = oct_background:get_user_session_id(user3, krakow),
     Node = oct_background:get_random_provider_node(krakow),
     SpaceId = oct_background:get_space_id(?SPACE),
-    {ok, Entries, true} = lfm_proxy:list_top_datasets(Node, SessionId, SpaceId, State, #{limit => 10000}),
+    {ok, {Entries, true}} = opt_datasets:list_top_datasets(Node, SessionId, SpaceId, State, #{limit => 10000}),
     lists:map(fun({DatasetId, _, _}) -> DatasetId end, Entries).
 
 
@@ -1071,11 +1071,11 @@ maybe_detach_dataset(Providers, DatasetId) ->
         1 ->
             ok;
         2 ->
-            ok = lfm_proxy:detach_dataset(Node, UserSessId, DatasetId),
+            ok = opt_datasets:detach_dataset(Node, UserSessId, DatasetId),
             lists_utils:pforeach(fun(P) ->
                 N = oct_background:get_random_provider_node(P),
                 S = oct_background:get_user_session_id(user3, P),
                 ?assertMatch({ok, #dataset_info{state = ?DETACHED_DATASET}},
-                    lfm_proxy:get_dataset_info(N, S, DatasetId), ?ATTEMPTS)
+                    opt_datasets:get_info(N, S, DatasetId), ?ATTEMPTS)
             end, OtherProviders)
     end.

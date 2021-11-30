@@ -199,7 +199,7 @@ archive_of_detached_dataset_should_be_accessible(_Config) ->
     ?assertEqual({ok, [{Index, ArchiveId}], true},
         lfm_proxy:list_archives(P1Node, UserSessIdP1, DatasetId, #{offset => 0, limit => 10})),
 
-    ok = lfm_proxy:detach_dataset(P1Node, UserSessIdP1, DatasetId),
+    ok = opt_datasets:detach_dataset(P1Node, UserSessIdP1, DatasetId),
 
     ?assertMatch({ok, #archive_info{}},
         lfm_proxy:get_archive_info(P1Node, UserSessIdP1, ArchiveId)),
@@ -239,8 +239,8 @@ archive_reattached_dataset(_Config) ->
     ?assertEqual({ok, [{Index, ArchiveId}], true},
         lfm_proxy:list_archives(P1Node, UserSessIdP1, DatasetId, #{offset => 0, limit => 10})),
 
-    ok = lfm_proxy:detach_dataset(P1Node, UserSessIdP1, DatasetId),
-    ok = lfm_proxy:reattach_dataset(P1Node, UserSessIdP1, DatasetId),
+    ok = opt_datasets:detach_dataset(P1Node, UserSessIdP1, DatasetId),
+    ok = opt_datasets:reattach_dataset(P1Node, UserSessIdP1, DatasetId),
 
     {ok, ArchiveId2} = ?assertMatch({ok, _},
         lfm_proxy:archive_dataset(P1Node, UserSessIdP1, DatasetId, ?TEST_ARCHIVE_CONFIG, ?TEST_DESCRIPTION1)),
@@ -265,13 +265,13 @@ removal_of_not_empty_dataset_should_fail(_Config) ->
         lfm_proxy:list_archives(P1Node, UserSessIdP1, DatasetId, #{offset => 0, limit => 10})),
 
     ?assertEqual({error, ?ENOTEMPTY},
-        lfm_proxy:remove_dataset(P1Node, UserSessIdP1, DatasetId)),
+        opt_datasets:remove(P1Node, UserSessIdP1, DatasetId)),
 
     ?assertEqual(ok, lfm_proxy:init_archive_purge(P1Node, UserSessIdP1, ArchiveId)),
     % wait till archive is purged
     ?assertMatch({ok, [], true},
         lfm_proxy:list_archives(P1Node, UserSessIdP1, DatasetId, #{offset => 0, limit => 10}), ?ATTEMPTS),
-    ?assertEqual(ok, lfm_proxy:remove_dataset(P1Node, UserSessIdP1, DatasetId)).
+    ?assertEqual(ok, opt_datasets:remove(P1Node, UserSessIdP1, DatasetId)).
 
 iterate_over_100_archives_using_offset_and_limit_1(_Config) ->
     iterate_over_archives_test_base(100, offset, 1).
@@ -341,9 +341,9 @@ archive_dataset_many_times(_Config) ->
     end, ExpArchiveIdsReversed),
 
     ?assertMatch({ok, #dataset_info{archive_count = Count}},
-        lfm_proxy:get_dataset_info(P1Node, UserSessIdP1, DatasetId)),
+        opt_datasets:get_info(P1Node, UserSessIdP1, DatasetId)),
     ?assertMatch({ok, #dataset_info{archive_count = Count}},
-        lfm_proxy:get_dataset_info(P2Node, UserSessIdP2, DatasetId), ?ATTEMPTS),
+        opt_datasets:get_info(P2Node, UserSessIdP2, DatasetId), ?ATTEMPTS),
 
     ExpArchiveIdsAndIndices = lists:reverse(ExpArchiveIdsAndIndicesReversed),
 

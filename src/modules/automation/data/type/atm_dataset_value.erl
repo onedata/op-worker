@@ -65,14 +65,14 @@ assert_meets_constraints(AtmWorkflowExecutionAuth, Value, _ValueConstraints) ->
     {[{dataset:id(), dataset:name()}], [], list_opts(), IsLast :: boolean()} | no_return().
 list_children(AtmWorkflowExecutionAuth, DatasetId, ListOpts, BatchSize) ->
     SessionId = atm_workflow_execution_auth:get_session_id(AtmWorkflowExecutionAuth),
-    case lfm:list_children_datasets(SessionId, DatasetId, ListOpts#{limit => BatchSize}) of
-        {ok, Entries, IsLast} when length(Entries) > 0 ->
+    case opl_datasets:list_children_datasets(SessionId, DatasetId, ListOpts#{limit => BatchSize}, undefined) of
+        {ok, {Entries, IsLast}} when length(Entries) > 0 ->
             {_LastId, _LastName, LastIndex} = lists:last(Entries),
             ResultEntries = lists:map(fun({Id, Name, _}) -> {Id, Name} end, Entries),
             % all datasets are traversable, so returned list of nontraversable items is always empty
             % set offset to 1 to ensure that listing is exclusive
             {ResultEntries, [], #{offset => 1, start_index => LastIndex}, IsLast};
-        {ok, [], IsLast} ->
+        {ok, {[], IsLast}} ->
             {[], [], #{}, IsLast};
         {error, Errno} ->
             case fslogic_errors:is_access_error(Errno) of
@@ -115,7 +115,7 @@ compress(#{<<"datasetId">> := DatasetId}) -> DatasetId.
     {ok, atm_value:expanded()} | {error, term()}.
 expand(AtmWorkflowExecutionAuth, DatasetId) ->
     SessionId = atm_workflow_execution_auth:get_session_id(AtmWorkflowExecutionAuth),
-    case lfm:get_dataset_info(SessionId, DatasetId) of
+    case opl_datasets:get_info(SessionId, DatasetId) of
         {ok, DatasetInfo} -> {ok, dataset_utils:dataset_info_to_json(DatasetInfo)};
         {error, Errno} -> ?ERROR_POSIX(Errno)
     end.
@@ -133,7 +133,7 @@ check_implicit_constraints(AtmWorkflowExecutionAuth, #{<<"datasetId">> := Datase
     SpaceId = atm_workflow_execution_auth:get_space_id(AtmWorkflowExecutionAuth),
     SessionId = atm_workflow_execution_auth:get_session_id(AtmWorkflowExecutionAuth),
 
-    case lfm:get_dataset_info(SessionId, DatasetId) of
+    case opl_datasets:get_info(SessionId, DatasetId) of
         {ok, #dataset_info{root_file_guid = RootFileGuid}} ->
             case file_id:guid_to_space_id(RootFileGuid) of
                 SpaceId ->

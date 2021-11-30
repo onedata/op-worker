@@ -39,20 +39,32 @@
     init_archive_purge/4
 ]).
 
+-type error() :: {error, term()}.
+
+
 %%%===================================================================
 %%% API functions
 %%%===================================================================
 
--spec establish(file_ctx:ctx(), data_access_control:bitmask(), user_ctx:ctx()) -> fslogic_worker:provider_response().
+
+-spec establish(file_ctx:ctx(), data_access_control:bitmask(), user_ctx:ctx()) ->
+    {ok, dataset:id()} | error().
 establish(FileCtx0, ProtectionFlags, UserCtx) ->
     assert_has_eff_privilege(FileCtx0, UserCtx, ?SPACE_MANAGE_DATASETS),
+
     FileCtx1 = fslogic_authz:ensure_authorized(UserCtx, FileCtx0, [?TRAVERSE_ANCESTORS]),
+    dataset_api:establish(FileCtx1, ProtectionFlags).
 
-    establish_insecure(FileCtx1, ProtectionFlags).
 
-
--spec update(file_ctx:ctx(), dataset:id(), dataset:state() | undefined, data_access_control:bitmask(),
-    data_access_control:bitmask(), user_ctx:ctx()) -> fslogic_worker:provider_response().
+-spec update(
+    file_ctx:ctx(),
+    dataset:id(),
+    dataset:state() | undefined,
+    data_access_control:bitmask(),
+    data_access_control:bitmask(),
+    user_ctx:ctx()
+) ->
+    ok | error().
 update(SpaceDirCtx, DatasetId, NewDatasetState, FlagsToSet, FlagsToUnset, UserCtx) ->
     assert_has_eff_privilege(SpaceDirCtx, UserCtx, ?SPACE_MANAGE_DATASETS),
 
@@ -60,11 +72,10 @@ update(SpaceDirCtx, DatasetId, NewDatasetState, FlagsToSet, FlagsToUnset, UserCt
     FileCtx0 = dataset_api:get_associated_file_ctx(DatasetDoc),
     fslogic_authz:ensure_authorized(UserCtx, FileCtx0, [?TRAVERSE_ANCESTORS]),
 
-    ok = dataset_api:update(DatasetDoc, NewDatasetState, FlagsToSet, FlagsToUnset),
-    ?PROVIDER_OK_RESP.
+    ok = dataset_api:update(DatasetDoc, NewDatasetState, FlagsToSet, FlagsToUnset).
 
 
--spec remove(file_ctx:ctx(), dataset:id(), user_ctx:ctx()) -> fslogic_worker:provider_response().
+-spec remove(file_ctx:ctx(), dataset:id(), user_ctx:ctx()) -> ok | error().
 remove(SpaceDirCtx, DatasetId, UserCtx) ->
     assert_has_eff_privilege(SpaceDirCtx, UserCtx, ?SPACE_MANAGE_DATASETS),
 
@@ -79,19 +90,19 @@ remove(SpaceDirCtx, DatasetId, UserCtx) ->
             ok
     end,
 
-    ok = dataset_api:remove(DatasetDoc),
-    ?PROVIDER_OK_RESP.
+    ok = dataset_api:remove(DatasetDoc).
 
 
--spec get_info(file_ctx:ctx(), dataset:id(), user_ctx:ctx()) -> fslogic_worker:provider_response().
+-spec get_info(file_ctx:ctx(), dataset:id(), user_ctx:ctx()) ->
+    {ok, opl_datasets:info()} | error().
 get_info(SpaceDirCtx, DatasetId, UserCtx) ->
     assert_has_eff_privilege(SpaceDirCtx, UserCtx, ?SPACE_VIEW),
 
-    {ok, Info} = dataset_api:get_info(DatasetId),
-    ?PROVIDER_OK_RESP(Info).
+    dataset_api:get_info(DatasetId).
 
 
--spec get_file_eff_summary(file_ctx:ctx(), user_ctx:ctx()) -> fslogic_worker:provider_response().
+-spec get_file_eff_summary(file_ctx:ctx(), user_ctx:ctx()) ->
+    {ok, opl_datasets:file_eff_summary()} | error().
 get_file_eff_summary(FileCtx0, UserCtx) ->
     assert_has_eff_privilege(FileCtx0, UserCtx, ?SPACE_VIEW),
     FileCtx1 = fslogic_authz:ensure_authorized(
@@ -99,31 +110,42 @@ get_file_eff_summary(FileCtx0, UserCtx) ->
         [?TRAVERSE_ANCESTORS]
     ),
 
-    {ok, Summary} = dataset_api:get_effective_summary(FileCtx1),
-    ?PROVIDER_OK_RESP(Summary).
+    dataset_api:get_effective_summary(FileCtx1).
 
 
--spec list_top_datasets(od_space:id(), dataset:state(), dataset_api:listing_opts(),
-    dataset_api:listing_mode(), user_ctx:ctx()) -> fslogic_worker:provider_response().
+-spec list_top_datasets(
+    od_space:id(),
+    dataset:state(),
+    dataset_api:listing_opts(),
+    dataset_api:listing_mode(),
+    user_ctx:ctx()
+) ->
+    {ok, {dataset_api:entries(), boolean()}} | error().
 list_top_datasets(SpaceId, State, Opts, ListingMode, UserCtx) ->
     UserId = user_ctx:get_user_id(UserCtx),
     space_logic:assert_has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW),
 
-    {ok, Datasets, IsLast} = dataset_api:list_top_datasets(SpaceId, State, Opts, ListingMode),
-    ?PROVIDER_OK_RESP(#datasets{datasets = Datasets, is_last = IsLast}).
+    dataset_api:list_top_datasets(SpaceId, State, Opts, ListingMode).
 
 
--spec list_children_datasets(file_ctx:ctx(), dataset:id(), dataset_api:listing_opts(),
-    dataset_api:listing_mode(), user_ctx:ctx()) -> fslogic_worker:provider_response().
+-spec list_children_datasets(
+    file_ctx:ctx(),
+    dataset:id(),
+    dataset_api:listing_opts(),
+    dataset_api:listing_mode(),
+    user_ctx:ctx()
+) ->
+    {ok, {dataset_api:entries(), boolean()}} | error().
 list_children_datasets(SpaceDirCtx, Dataset, Opts, ListingMode, UserCtx) ->
     assert_has_eff_privilege(SpaceDirCtx, UserCtx, ?SPACE_VIEW),
 
-    {ok, Datasets, IsLast} = dataset_api:list_children_datasets(Dataset, Opts, ListingMode),
-    ?PROVIDER_OK_RESP(#datasets{datasets = Datasets, is_last = IsLast}).
+    dataset_api:list_children_datasets(Dataset, Opts, ListingMode).
+
 
 %%%===================================================================
 %%% Archives API functions
 %%%===================================================================
+
 
 -spec create_archive(file_ctx:ctx(), dataset:id(), archive:config(), archive:callback(),
     archive:callback(), archive:description(), user_ctx:ctx()) ->
@@ -179,13 +201,8 @@ init_archive_purge(SpaceDirCtx, ArchiveId, CallbackUrl, UserCtx) ->
 %%% Internal functions
 %%%===================================================================
 
--spec establish_insecure(file_ctx:ctx(), data_access_control:bitmask()) ->
-    fslogic_worker:provider_response().
-establish_insecure(FileCtx, ProtectionFlags) ->
-    {ok, DatasetId} = dataset_api:establish(FileCtx, ProtectionFlags),
-    ?PROVIDER_OK_RESP(#dataset_established{id = DatasetId}).
 
-
+%% @private
 -spec assert_has_eff_privilege(file_ctx:ctx(), user_ctx:ctx(), privileges:space_privilege()) -> ok.
 assert_has_eff_privilege(FileCtx, UserCtx, Privilege) ->
     UserId = user_ctx:get_user_id(UserCtx),

@@ -156,40 +156,6 @@
     qos_id :: qos_entry:id()
 }).
 
--record(establish_dataset, {
-    protection_flags = ?no_flags_mask :: data_access_control:bitmask()
-}).
-
--record(update_dataset, {
-    id :: dataset:id(),
-    state :: undefined | dataset:state(),
-    flags_to_set = ?no_flags_mask :: data_access_control:bitmask(),
-    flags_to_unset = ?no_flags_mask :: data_access_control:bitmask()
-}).
-
--record(remove_dataset, {
-    id :: dataset:id()
-}).
-
--record(get_dataset_info, {
-    id :: dataset:id()
-}).
-
--record(get_file_eff_dataset_summary, {
-}).
-
--record(list_top_datasets, {
-    state :: dataset:state(),
-    opts :: dataset_api:listing_opts(),
-    mode = ?BASIC_INFO :: dataset_api:listing_mode()
-}).
-
--record(list_children_datasets, {
-    id :: dataset:id(),
-    opts :: dataset_api:listing_opts(),
-    mode = ?BASIC_INFO :: dataset_api:listing_mode()
-}).
-
 -record(archive_dataset, {
     id :: dataset:id(),
     config :: archive:config(),
@@ -230,8 +196,6 @@
     #get_metadata{} | #remove_metadata{} | #set_metadata{} | #check_perms{} |
     #create_share{} | #remove_share{} |
     #add_qos_entry{} | #get_effective_file_qos{} | #get_qos_entry{} | #remove_qos_entry{} | #check_qos_status{} |
-    #establish_dataset{} | #update_dataset{} | #remove_dataset{} |
-    #get_dataset_info{} | #get_file_eff_dataset_summary{} | #list_top_datasets{} | #list_children_datasets{} |
     #archive_dataset{} | #update_archive{} | #get_archive_info{} | #list_archives{} | #init_archive_purge{}.
 
 -record(transfer_encoding, {

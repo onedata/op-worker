@@ -21,7 +21,7 @@
 %%%===================================================================
 
 
--spec dataset_info_to_json(lfm_datasets:info()) -> json_utils:json_map().
+-spec dataset_info_to_json(opl_datasets:info()) -> json_utils:json_map().
 dataset_info_to_json(#dataset_info{
     id = DatasetId,
     state = State,

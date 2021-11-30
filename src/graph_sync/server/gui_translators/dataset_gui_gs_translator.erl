@@ -42,7 +42,7 @@ translate_resource(#gri{aspect = instance, scope = private}, DatasetInfo) ->
 %%% Util functions
 %%%===================================================================
 
--spec translate_dataset_info(lfm_datasets:info()) -> json_utils:json_map().
+-spec translate_dataset_info(opl_datasets:info()) -> json_utils:json_map().
 translate_dataset_info(#dataset_info{
     id = DatasetId,
     state = State,
@@ -88,7 +88,7 @@ translate_dataset_info(#dataset_info{
     }.
 
 
--spec translate_datasets_details_list([lfm_datasets:info()], boolean()) -> json_utils:json_map().
+-spec translate_datasets_details_list([opl_datasets:info()], boolean()) -> json_utils:json_map().
 translate_datasets_details_list(Datasets, IsLast) ->
     TranslatedDatasets = lists:map(fun translate_dataset_info/1, Datasets),
     #{

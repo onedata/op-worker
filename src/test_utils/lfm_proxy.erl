@@ -76,11 +76,6 @@
     add_qos_entry/5, get_qos_entry/3, remove_qos_entry/3,
     check_qos_status/3, check_qos_status/4,
 
-    establish_dataset/3, establish_dataset/4, remove_dataset/3,
-    reattach_dataset/3, detach_dataset/3, update_dataset/6,
-    get_dataset_info/3, get_file_eff_dataset_summary/3,
-    list_top_datasets/5, list_top_datasets/6, list_children_datasets/4,
-
     archive_dataset/5, archive_dataset/7,
     update_archive/4, get_archive_info/3,
     list_archives/4, list_archives/5,
@@ -859,71 +854,6 @@ check_qos_status(Worker, SessId, QosEntryId) ->
 check_qos_status(Worker, SessId, QosEntryId, FileKey) ->
     ?EXEC(Worker, lfm:check_qos_status(SessId, QosEntryId, FileKey)).
 
-
-%%%===================================================================
-%%% Datasets functions
-%%%===================================================================
-
-
--spec establish_dataset(node(), session:id(), lfm:file_key()) ->
-    {ok, dataset:id()} | lfm:error_reply().
-establish_dataset(Worker, SessId, FileKey) ->
-    establish_dataset(Worker, SessId, FileKey, 0).
-
-
--spec establish_dataset(node(), session:id(), lfm:file_key(), data_access_control:bitmask()) ->
-    {ok, dataset:id()} | lfm:error_reply().
-establish_dataset(Worker, SessId, FileKey, ProtectionFlags) ->
-    ?EXEC(Worker, lfm:establish_dataset(SessId, FileKey, ProtectionFlags)).
-
-
--spec remove_dataset(node(), session:id(), dataset:id()) -> ok | lfm:error_reply().
-remove_dataset(Worker, SessId, DatasetId) ->
-    ?EXEC(Worker, lfm:remove_dataset(SessId, DatasetId)).
-
-
--spec reattach_dataset(node(), session:id(), dataset:id()) -> ok | lfm:error_reply().
-reattach_dataset(Worker, SessId, DatasetId) ->
-    update_dataset(Worker, SessId, DatasetId, ?ATTACHED_DATASET, ?no_flags_mask, ?no_flags_mask).
-
-
--spec detach_dataset(node(), session:id(), dataset:id()) -> ok | lfm:error_reply().
-detach_dataset(Worker, SessId, DatasetId) ->
-    update_dataset(Worker, SessId, DatasetId, ?DETACHED_DATASET, ?no_flags_mask, ?no_flags_mask).
-
-
--spec update_dataset(node(), session:id(), dataset:id(), undefined | dataset:state(), data_access_control:bitmask(),
-    data_access_control:bitmask()) -> ok | lfm:error_reply().
-update_dataset(Worker, SessId, DatasetId, NewState, FlagsToSet, FlagsToUnset) ->
-    ?EXEC(Worker, lfm:update_dataset(SessId, DatasetId, NewState, FlagsToSet, FlagsToUnset)).
-
-
--spec get_dataset_info(node(), session:id(), dataset:id()) -> {ok, lfm_datasets:info()} | lfm:error_reply().
-get_dataset_info(Worker, SessId, DatasetId) ->
-    ?EXEC(Worker, lfm:get_dataset_info(SessId, DatasetId)).
-
-
--spec get_file_eff_dataset_summary(node(), session:id(), lfm:file_key()) -> {ok, lfm_datasets:file_eff_summary()} | lfm:error_reply().
-get_file_eff_dataset_summary(Worker, SessId, FileKey) ->
-    ?EXEC(Worker, lfm:get_file_eff_dataset_summary(SessId, FileKey)).
-
-
--spec list_top_datasets(node(), session:id(), od_space:id(), dataset:state(), dataset_api:listing_opts()) ->
-    {ok, dataset_api:entries(), boolean()} | lfm:error_reply().
-list_top_datasets(Worker, SessId, SpaceId, State, Opts) ->
-    list_top_datasets(Worker, SessId, SpaceId, State, Opts, undefined).
-
--spec list_top_datasets(node(), session:id(), od_space:id(), dataset:state(), dataset_api:listing_opts(),
-    dataset_api:listing_mode() | undefined) ->
-    {ok, dataset_api:entries(), boolean()} | lfm:error_reply().
-list_top_datasets(Worker, SessId, SpaceId, State, Opts, ListingMode) ->
-    ?EXEC(Worker, lfm:list_top_datasets(SessId, SpaceId, State, Opts, ListingMode)).
-
-
--spec list_children_datasets(node(), session:id(), dataset:id(), dataset_api:listing_opts()) ->
-    {ok, dataset_api:entries(), boolean()} | lfm:error_reply().
-list_children_datasets(Worker, SessId, DatasetId, Opts) ->
-    ?EXEC(Worker, lfm:list_children_datasets(SessId, DatasetId, Opts)).
 
 %%%===================================================================
 %%% Archives functions

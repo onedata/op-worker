@@ -817,7 +817,7 @@ get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = qos_summary}}, _) ->
     }};
 
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = dataset_summary}}, _) ->
-    ?check(lfm:get_file_eff_dataset_summary(Auth#auth.session_id, ?FILE_REF(FileGuid)));
+    opl_datasets:get_file_eff_summary(Auth#auth.session_id, ?FILE_REF(FileGuid));
 
 get(#op_req{auth = Auth, gri = #gri{aspect = download_url}, data = Data}, _) ->
     SessionId = Auth#auth.session_id,

@@ -215,26 +215,26 @@ get_effective_summary(FileCtx) ->
 
 
 -spec list_top_datasets(od_space:id(), dataset:state(), listing_opts(), listing_mode()) ->
-    {ok, entries(), boolean()}.
+    {ok, {entries(), boolean()}}.
 list_top_datasets(SpaceId, State, Opts, ListingMode) ->
     {ok, DatasetEntries, IsLast} = list_top_datasets_internal(SpaceId, State, Opts),
     case ListingMode of
         ?BASIC_INFO ->
-            {ok, DatasetEntries, IsLast};
+            {ok, {DatasetEntries, IsLast}};
         ?EXTENDED_INFO ->
-            {ok, extend_with_info(DatasetEntries), IsLast}
+            {ok, {extend_with_info(DatasetEntries), IsLast}}
     end.
 
 
 -spec list_children_datasets(dataset:id(), listing_opts(), listing_mode()) ->
-    {ok, entries(), boolean()}.
+    {ok, {entries(), boolean()}}.
 list_children_datasets(DatasetId, Opts, ListingMode) ->
     {ok, DatasetEntries, IsLast} = list_children_datasets_internal(DatasetId, Opts),
     case ListingMode of
         ?BASIC_INFO ->
-            {ok, DatasetEntries, IsLast};
+            {ok, {DatasetEntries, IsLast}};
         ?EXTENDED_INFO ->
-            {ok, extend_with_info(DatasetEntries), IsLast}
+            {ok, {extend_with_info(DatasetEntries), IsLast}}
     end.
 
 %%%===================================================================

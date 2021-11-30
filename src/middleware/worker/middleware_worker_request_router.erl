@@ -49,4 +49,35 @@ route(UserCtx, _SpaceDirCtx, #repeat_atm_workflow_execution{
 }) ->
     ok = atm_workflow_execution_api:repeat(
         UserCtx, Type, AtmLaneRunSelector, AtmWorkflowExecutionId
-    ).
+    );
+
+route(UserCtx, SpaceDirCtx, #list_top_datasets{state = State, opts = Opts, mode = ListingMode}) ->
+    SpaceId = file_ctx:get_space_id_const(SpaceDirCtx),
+    dataset_req:list_top_datasets(SpaceId, State, Opts, ListingMode, UserCtx);
+
+route(UserCtx, SpaceDirCtx, #list_children_datasets{
+    id = DatasetId,
+    opts = Opts,
+    mode = ListingMode
+}) ->
+    dataset_req:list_children_datasets(SpaceDirCtx, DatasetId, Opts, ListingMode, UserCtx);
+
+route(UserCtx, FileCtx, #establish_dataset{protection_flags = ProtectionFlags}) ->
+    dataset_req:establish(FileCtx, ProtectionFlags, UserCtx);
+
+route(UserCtx, SpaceDirCtx, #get_dataset_info{id = DatasetId}) ->
+    dataset_req:get_info(SpaceDirCtx, DatasetId, UserCtx);
+
+route(UserCtx, SpaceDirCtx, #update_dataset{
+    id = DatasetId,
+    state = NewState,
+    flags_to_set = FlagsToSet,
+    flags_to_unset = FlagsToUnset
+}) ->
+    dataset_req:update(SpaceDirCtx, DatasetId, NewState, FlagsToSet, FlagsToUnset, UserCtx);
+
+route(UserCtx, SpaceDirCtx, #remove_dataset{id = DatasetId}) ->
+    dataset_req:remove(SpaceDirCtx, DatasetId, UserCtx);
+
+route(UserCtx, FileCtx, #get_file_eff_dataset_summary{}) ->
+    dataset_req:get_file_eff_summary(FileCtx, UserCtx).

@@ -422,10 +422,10 @@ create_iteration_test_env(ProviderSelector, MaxBatchSize, Depth, Type, WorkflowU
                 case {lists:member(Guid, maps:keys(FilesMap)), rand:uniform(2)} of
                     {false, 1} -> Acc;
                     {false, _} ->
-                        {ok, DatasetId} = lfm_proxy:establish_dataset(Node, ?ROOT_SESS_ID, #file_ref{guid = Guid}),
+                        {ok, DatasetId} = opt_datasets:establish(Node, ?ROOT_SESS_ID, #file_ref{guid = Guid}),
                         {AccRoots, [DatasetId | AccExpected]};
                     {true, _} ->
-                        {ok, DatasetId} = lfm_proxy:establish_dataset(Node, ?ROOT_SESS_ID, #file_ref{guid = Guid}),
+                        {ok, DatasetId} = opt_datasets:establish(Node, ?ROOT_SESS_ID, #file_ref{guid = Guid}),
                         {[DatasetId | AccRoots], [DatasetId | AccExpected]}
                 end
             end, {[], []}, lists:flatten(lists:map(fun({_, V}) -> V end, maps:values(FilesMap))))
