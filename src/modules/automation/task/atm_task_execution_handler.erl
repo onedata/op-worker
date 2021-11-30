@@ -325,28 +325,18 @@ process_results(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, _MalformedRes
 ) ->
     error.
 handle_exception(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, #{<<"exception">> := Reason}) ->
-    log_exception(Item, Reason, AtmWorkflowExecutionCtx),
     update_items_failed_and_processed(AtmTaskExecutionId),
+
+    ErrorLog = #{<<"item">> => Item, <<"reason">> => Reason},
+    Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
+    atm_workflow_execution_logger:task_error(ErrorLog, Logger),
+
     error;
 
 handle_exception(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, {error, _} = Error) ->
     handle_exception(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, #{
         <<"exception">> => errors:to_json(Error)
     }).
-
-
-%% @private
--spec log_exception(automation:item(), json_utils:json_term(), atm_workflow_execution_ctx:record()) ->
-    ok.
-log_exception(Item, Reason, AtmWorkflowExecutionCtx) ->
-    Log = #{
-        <<"severity">> => ?LOGGER_ERROR,
-        <<"item">> => Item,
-        <<"reason">> => Reason
-    },
-    Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
-
-    atm_workflow_execution_logger:task_append_logs(Log, #{}, Logger).
 
 
 %% @private

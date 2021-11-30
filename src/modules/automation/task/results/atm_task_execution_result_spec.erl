@@ -176,16 +176,20 @@ dispatch_spec_from_json(#{
 ) ->
     ok | no_return().
 dispatch_result(AtmWorkflowExecutionCtx, Result, Options, #dispatch_spec{
-    store_schema_id = ?CURRENT_TASK_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID
+    store_schema_id = ?CURRENT_TASK_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID,
+    function = DispatchFun
 }) ->
-    AtmWorkflowExecutionLogger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
-    atm_workflow_execution_logger:task_append_logs(Result, Options, AtmWorkflowExecutionLogger);
+    atm_workflow_execution_logger:task_handle_logs(
+        DispatchFun, Result, Options, atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx)
+    );
 
 dispatch_result(AtmWorkflowExecutionCtx, Result, Options, #dispatch_spec{
-    store_schema_id = ?WORKFLOW_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID
+    store_schema_id = ?WORKFLOW_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID,
+    function = DispatchFun
 }) ->
-    AtmWorkflowExecutionLogger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
-    atm_workflow_execution_logger:workflow_append_logs(Result, Options, AtmWorkflowExecutionLogger);
+    atm_workflow_execution_logger:workflow_handle_logs(
+        DispatchFun, Result, Options, atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx)
+    );
 
 dispatch_result(AtmWorkflowExecutionCtx, Result, Options, #dispatch_spec{
     store_schema_id = AtmStoreSchemaId,
