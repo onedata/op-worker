@@ -41,8 +41,9 @@
 -type listing_mode() :: ?BASIC_INFO | ?EXTENDED_INFO.
 -type index() :: datasets_structure:index().
 -type dataset_type() :: internal | user_defined.
+-type file_eff_summary() :: #file_eff_dataset_summary{}.
 
--export_type([entries/0, listing_opts/0, index/0, listing_mode/0]).
+-export_type([info/0, entries/0, listing_opts/0, index/0, listing_mode/0, file_eff_summary/0]).
 
 % TODO VFS-7518 how should we handle race on creating dataset on the same file in 2 providers?
 % TODO VFS-7533 handle conflicts on remote modification of file-meta and dataset models
@@ -201,7 +202,7 @@ get_effective_membership_and_protection_flags(FileCtx) ->
     {ok, EffMembership, EffProtectionFlags, FileCtx2}.
 
 
--spec get_effective_summary(file_ctx:ctx()) -> {ok, #file_eff_dataset_summary{}}.
+-spec get_effective_summary(file_ctx:ctx()) -> {ok, file_eff_summary()}.
 get_effective_summary(FileCtx) ->
     {FileDoc, _FileCtx2} = file_ctx:get_file_doc(FileCtx),
     {ok, EffCacheEntry} = dataset_eff_cache:get(FileDoc),

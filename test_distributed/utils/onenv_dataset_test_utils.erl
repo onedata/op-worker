@@ -175,7 +175,7 @@ await_dataset_sync(CreationProvider, SyncProviders, UserId, #dataset_object{
     [binary()],
     onenv_file_test_utils:object()
 ) ->
-    [{file_meta:name(), dataset:id(), opl_datasets:info()}].
+    [{file_meta:name(), dataset:id(), dataset_api:info()}].
 get_exp_child_datasets(State, ParentDirPath, ParentDatasetId, ParentEffProtectionFlagsJson,
     #object{dataset = #dataset_object{
     id = ParentDatasetId
@@ -216,7 +216,7 @@ cleanup_all_datasets(ProviderSelectors, SpaceSelector) ->
     [binary()],
     onenv_file_test_utils:object()
 ) ->
-    [{file_meta:name(), dataset:id(), opl_datasets:info()}].
+    [{file_meta:name(), dataset:id(), dataset_api:info()}].
 get_exp_child_datasets_internal(State, ParentDirPath, ParentDatasetId, ParentEffProtectionFlagsJson, #object{
     type = ObjType,
     name = ObjName,
@@ -323,7 +323,7 @@ get_archive_count(Node, DatasetId) ->
 
 %% @private
 -spec get_dataset_info_without_archive_count(node(), session:id(), dataset:id()) ->
-    {ok, opl_datasets:info()} | {error, term()}.
+    {ok, dataset_api:info()} | {error, term()}.
 get_dataset_info_without_archive_count(Node, SessId, DatasetId) ->
     case opt_datasets:get_info(Node, SessId, DatasetId) of
         {ok, DI} -> {ok, DI#dataset_info{archive_count = 0}};

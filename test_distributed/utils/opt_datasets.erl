@@ -77,7 +77,7 @@ establish(NodeSelector, SessionId, FileKey, ProtectionFlags) ->
 
 
 -spec get_info(oct_background:node_selector(), session:id(), dataset:id()) ->
-    {ok, opl_datasets:info()} | errors:error().
+    {ok, dataset_api:info()} | errors:error().
 get_info(NodeSelector, SessionId, DatasetId) ->
     ?CALL(NodeSelector, [SessionId, DatasetId]).
 
@@ -114,6 +114,6 @@ remove(NodeSelector, SessionId, DatasetId) ->
 
 
 -spec get_file_eff_summary(oct_background:node_selector(), session:id(), lfm:file_key()) ->
-    {ok, opl_datasets:file_eff_summary()} | errors:error().
+    {ok, dataset_api:file_eff_summary()} | errors:error().
 get_file_eff_summary(NodeSelector, SessionId, FileKey) ->
     ?CALL(NodeSelector, [SessionId, FileKey]).

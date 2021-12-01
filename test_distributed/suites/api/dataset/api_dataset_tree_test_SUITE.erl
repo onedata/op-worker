@@ -169,7 +169,7 @@ get_top_datasets_test(Config) ->
 
 %% @private
 -spec get_top_datasets_test_base(od_space:id(), dataset:state(),
-    [{file_meta:name(), dataset:id(), opl_datasets:info()}]) ->
+    [{file_meta:name(), dataset:id(), dataset_api:info()}]) ->
     true | no_return().
 get_top_datasets_test_base(SpaceId, State, TopDatasets) ->
     % pick first and last index as token test values
@@ -322,7 +322,7 @@ get_child_datasets_test(Config) ->
 
 
 %% @private
--spec get_child_datasets_test_base(dataset:id(), [{file_meta:name(), dataset:id(), opl_datasets:info()}]) ->
+-spec get_child_datasets_test_base(dataset:id(), [{file_meta:name(), dataset:id(), dataset_api:info()}]) ->
     true | no_return().
 get_child_datasets_test_base(DatasetId, ChildDatasets) ->
     % pick first and last index as token test values
@@ -547,7 +547,7 @@ get_file_dataset_summary_test(Config) ->
 
 
 %% @private
--spec get_file_dataset_summary_test_base(file_id:file_guid(), opl_datasets:file_eff_summary()) ->
+-spec get_file_dataset_summary_test_base(file_id:file_guid(), dataset_api:file_eff_summary()) ->
     true | no_return().
 get_file_dataset_summary_test_base(FileGuid, ExpSummary) ->
     ExpRestSummary = build_rest_dataset_summary(ExpSummary),
@@ -583,7 +583,7 @@ get_file_dataset_summary_test_base(FileGuid, ExpSummary) ->
 
 
 %% @private
--spec build_rest_dataset_summary(opl_datasets:file_eff_summary()) -> map().
+-spec build_rest_dataset_summary(dataset_api:file_eff_summary()) -> map().
 build_rest_dataset_summary(#file_eff_dataset_summary{
     direct_dataset = DirectDatasetId,
     eff_ancestor_datasets = EffAncestorDatasets,
@@ -597,7 +597,7 @@ build_rest_dataset_summary(#file_eff_dataset_summary{
 
 
 %% @private
--spec build_gs_dataset_summary(file_id:file_guid(), opl_datasets:file_eff_summary()) -> map().
+-spec build_gs_dataset_summary(file_id:file_guid(), dataset_api:file_eff_summary()) -> map().
 build_gs_dataset_summary(FileGuid, DatasetSummary) ->
     BasicSummary = file_gui_gs_translator:translate_dataset_summary(DatasetSummary),
     BasicSummary#{

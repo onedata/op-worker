@@ -156,7 +156,7 @@ translate_resource(#gri{aspect = dataset_summary, scope = private}, DatasetSumma
     translate_dataset_summary(DatasetSummary).
 
 
--spec translate_dataset_summary(opl_datasets:file_eff_summary()) -> map().
+-spec translate_dataset_summary(dataset_api:file_eff_summary()) -> map().
 translate_dataset_summary(#file_eff_dataset_summary{
     direct_dataset = DatasetId,
     eff_ancestor_datasets = EffAncestorDatasets,

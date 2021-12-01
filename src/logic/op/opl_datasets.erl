@@ -13,7 +13,6 @@
 -author("Bartosz Walkowicz").
 
 -include("middleware/middleware.hrl").
--include("proto/oneprovider/provider_messages.hrl").  %% TODO remove
 
 %% API
 -export([
@@ -25,11 +24,6 @@
     remove/2,
     get_file_eff_summary/2
 ]).
-
--type info() :: #dataset_info{}.
--type file_eff_summary() :: #file_eff_dataset_summary{}.
-
--export_type([info/0, file_eff_summary/0]).
 
 
 %%%===================================================================
@@ -83,7 +77,7 @@ establish(SessionId, FileKey, ProtectionFlags) ->
 
 
 -spec get_info(session:id(), dataset:id()) ->
-    {ok, info()} | errors:error().
+    {ok, dataset_api:info()} | errors:error().
 get_info(SessionId, DatasetId) ->
     SpaceGuid = dataset_id_to_space_guid(DatasetId),
 
@@ -117,7 +111,7 @@ remove(SessionId, DatasetId) ->
 
 
 -spec get_file_eff_summary(session:id(), lfm:file_key()) ->
-    {ok, file_eff_summary()} | errors:error().
+    {ok, dataset_api:file_eff_summary()} | errors:error().
 get_file_eff_summary(SessionId, FileKey) ->
     FileGuid = lfm_file_key:resolve_file_key(SessionId, FileKey, do_not_resolve_symlink),
 

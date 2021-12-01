@@ -94,7 +94,7 @@ remove(SpaceDirCtx, DatasetId, UserCtx) ->
 
 
 -spec get_info(file_ctx:ctx(), dataset:id(), user_ctx:ctx()) ->
-    {ok, opl_datasets:info()} | error().
+    {ok, dataset_api:info()} | error().
 get_info(SpaceDirCtx, DatasetId, UserCtx) ->
     assert_has_eff_privilege(SpaceDirCtx, UserCtx, ?SPACE_VIEW),
 
@@ -102,7 +102,7 @@ get_info(SpaceDirCtx, DatasetId, UserCtx) ->
 
 
 -spec get_file_eff_summary(file_ctx:ctx(), user_ctx:ctx()) ->
-    {ok, opl_datasets:file_eff_summary()} | error().
+    {ok, dataset_api:file_eff_summary()} | error().
 get_file_eff_summary(FileCtx0, UserCtx) ->
     assert_has_eff_privilege(FileCtx0, UserCtx, ?SPACE_VIEW),
     FileCtx1 = fslogic_authz:ensure_authorized(
