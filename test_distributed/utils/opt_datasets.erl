@@ -22,6 +22,7 @@
     get_info/3,
     reattach_dataset/3,
     detach_dataset/3,
+    update/6,
     remove/3,
     get_file_eff_summary/3
 ]).
