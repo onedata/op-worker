@@ -147,54 +147,61 @@ list_children_datasets(SpaceDirCtx, Dataset, Opts, ListingMode, UserCtx) ->
 %%%===================================================================
 
 
--spec create_archive(file_ctx:ctx(), dataset:id(), archive:config(), archive:callback(),
-    archive:callback(), archive:description(), user_ctx:ctx()) ->
-    fslogic_worker:provider_response().
+-spec create_archive(
+    file_ctx:ctx(),
+    dataset:id(),
+    archive:config(),
+    archive:callback(),
+    archive:callback(),
+    archive:description(),
+    user_ctx:ctx()
+) ->
+    {ok, archive:id()} | error().
 create_archive(SpaceDirCtx, DatasetId, Config, PreservedCallback, PurgedCallback, Description, UserCtx) ->
     assert_has_eff_privilege(SpaceDirCtx, UserCtx, ?SPACE_MANAGE_DATASETS),
     assert_has_eff_privilege(SpaceDirCtx, UserCtx, ?SPACE_CREATE_ARCHIVES),
 
-    {ok, ArchiveId} = archive_api:start_archivisation(DatasetId, Config, PreservedCallback, PurgedCallback,
-        Description, UserCtx),
-    ?PROVIDER_OK_RESP(#dataset_archived{id = ArchiveId}).
+    archive_api:start_archivisation(
+        DatasetId, Config, PreservedCallback, PurgedCallback, Description, UserCtx
+    ).
 
 
 -spec update_archive(file_ctx:ctx(), archive:id(), archive:diff(), user_ctx:ctx()) ->
-    fslogic_worker:provider_response().
+    ok | error().
 update_archive(SpaceDirCtx, ArchiveId, Diff, UserCtx) ->
     assert_has_eff_privilege(SpaceDirCtx, UserCtx, ?SPACE_MANAGE_DATASETS),
     assert_has_eff_privilege(SpaceDirCtx, UserCtx, ?SPACE_CREATE_ARCHIVES),
 
-    ok = archive_api:update_archive(ArchiveId, Diff),
-    ?PROVIDER_OK_RESP.
+    archive_api:update_archive(ArchiveId, Diff).
 
 
 -spec get_archive_info(file_ctx:ctx(), archive:id(), user_ctx:ctx()) ->
-    fslogic_worker:provider_response().
+    {ok, archive_api:info()} | error().
 get_archive_info(SpaceDirCtx, ArchiveId, UserCtx) ->
     assert_has_eff_privilege(SpaceDirCtx, UserCtx, ?SPACE_VIEW_ARCHIVES),
-
-    {ok, ArchiveInfo} = archive_api:get_archive_info(ArchiveId),
-    ?PROVIDER_OK_RESP(ArchiveInfo).
+    archive_api:get_archive_info(ArchiveId).
 
 
--spec list_archives(file_ctx:ctx(), dataset:id(), archives_list:opts(), dataset_api:listing_mode(),
-    user_ctx:ctx()) -> fslogic_worker:provider_response().
+-spec list_archives(
+    file_ctx:ctx(),
+    dataset:id(),
+    archives_list:opts(),
+    dataset_api:listing_mode(),
+    user_ctx:ctx()
+) ->
+    {ok, {archive_api:entries(), boolean()}} | error().
 list_archives(SpaceDirCtx, DatasetId, Opts, ListingMode, UserCtx) ->
     assert_has_eff_privilege(SpaceDirCtx, UserCtx, ?SPACE_VIEW_ARCHIVES),
-
-    {ok, Archives, IsLast} = archive_api:list_archives(DatasetId, Opts, ListingMode),
-    ?PROVIDER_OK_RESP(#archives{archives = Archives, is_last = IsLast}).
+    archive_api:list_archives(DatasetId, Opts, ListingMode).
 
 
 -spec init_archive_purge(file_ctx:ctx(), archive:id(), archive:callback(), user_ctx:ctx()) ->
-    fslogic_worker:provider_response().
+    ok | error().
 init_archive_purge(SpaceDirCtx, ArchiveId, CallbackUrl, UserCtx) ->
     assert_has_eff_privilege(SpaceDirCtx, UserCtx, ?SPACE_MANAGE_DATASETS),
     assert_has_eff_privilege(SpaceDirCtx, UserCtx, ?SPACE_REMOVE_ARCHIVES),
 
-    ok = archive_api:init_archive_purge(ArchiveId, CallbackUrl),
-    ?PROVIDER_OK_RESP.
+    archive_api:init_archive_purge(ArchiveId, CallbackUrl).
 
 
 %%%===================================================================

@@ -256,10 +256,10 @@ get(#op_req{auth = Auth, gri = #gri{id = DatasetId, aspect = Aspect}, data = Dat
         archives -> ?BASIC_INFO;
         archives_details -> ?EXTENDED_INFO
     end,
-    {ok, Archives, IsLast} = ?check(lfm:list_archives(
+    {ok, Result} = ?throw_on_error(opl_archives:list(
         Auth#auth.session_id, DatasetId, gather_listing_opts(Data), ListingMode
     )),
-    {ok, value, {Archives, IsLast}}.
+    {ok, value, Result}.
 
 %%--------------------------------------------------------------------
 %% @doc

@@ -183,15 +183,15 @@ get_archive_info(ArchiveId, ArchiveIndex) ->
 
 
 -spec list_archives(dataset:id(), archives_list:opts(), listing_mode()) ->
-    {ok, entries(), IsLast :: boolean()}.
+    {ok, {entries(), IsLast :: boolean()}}.
 list_archives(DatasetId, ListingOpts, ListingMode) ->
     ArchiveEntries = archives_list:list(DatasetId, ListingOpts),
     IsLast = maps:get(limit, ListingOpts) > length(ArchiveEntries),
     case ListingMode of
         ?BASIC_INFO ->
-            {ok, ArchiveEntries, IsLast};
+            {ok, {ArchiveEntries, IsLast}};
         ?EXTENDED_INFO ->
-            {ok, extend_with_archive_info(ArchiveEntries), IsLast}
+            {ok, {extend_with_archive_info(ArchiveEntries), IsLast}}
     end.
 
 

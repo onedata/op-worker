@@ -768,23 +768,7 @@ handle_provider_request(UserCtx, #get_qos_entry{id = QosEntryId}, FileCtx) ->
 handle_provider_request(UserCtx, #remove_qos_entry{id = QosEntryId}, FileCtx) ->
     qos_req:remove_qos_entry(UserCtx, FileCtx, QosEntryId);
 handle_provider_request(UserCtx, #check_qos_status{qos_id = QosEntryId}, FileCtx) ->
-    qos_req:check_status(UserCtx, FileCtx, QosEntryId);
-handle_provider_request(UserCtx, #archive_dataset{
-    id = DatasetId,
-    config = Config,
-    preserved_callback = PreservedCallback,
-    purged_callback = PurgedCallback,
-    description = Description
-}, SpaceDirCtx) ->
-    dataset_req:create_archive(SpaceDirCtx, DatasetId, Config, PreservedCallback, PurgedCallback, Description, UserCtx);
-handle_provider_request(UserCtx, #update_archive{id = ArchiveId, diff = Diff}, SpaceDirCtx) ->
-    dataset_req:update_archive(SpaceDirCtx, ArchiveId, Diff, UserCtx);
-handle_provider_request(UserCtx, #get_archive_info{id = ArchiveId}, SpaceDirCtx) ->
-    dataset_req:get_archive_info(SpaceDirCtx, ArchiveId, UserCtx);
-handle_provider_request(UserCtx, #list_archives{dataset_id = DatasetId, opts = Opts, mode = ListingMode}, SpaceDirCtx) ->
-    dataset_req:list_archives(SpaceDirCtx, DatasetId, Opts, ListingMode, UserCtx);
-handle_provider_request(UserCtx, #init_archive_purge{id = ArchiveId, callback = CallbackUrl}, SpaceDirCtx) ->
-    dataset_req:init_archive_purge(SpaceDirCtx, ArchiveId, CallbackUrl, UserCtx).
+    qos_req:check_status(UserCtx, FileCtx, QosEntryId).
 
 
 %%--------------------------------------------------------------------

@@ -652,16 +652,16 @@ archive_nested_datasets_test_base(ArchiveLayout, IncludeDip) ->
     SessionId = oct_background:get_user_session_id(?USER1, krakow),
     ListOpts = #{offset => 0, limit => 10},
     {ok, [{_, ArchiveFile21Id}], _} = ?assertMatch({ok, [_], true},
-        lfm_proxy:list_archives(Node, SessionId, DatasetFile21Id, ListOpts), ?ATTEMPTS),
+        opt_archives:list(Node, SessionId, DatasetFile21Id, ListOpts), ?ATTEMPTS),
     {ok, [{_, ArchiveDir22Id}], _} = ?assertMatch({ok, [_], true},
-        lfm_proxy:list_archives(Node, SessionId, DatasetDir22Id, ListOpts), ?ATTEMPTS),
+        opt_archives:list(Node, SessionId, DatasetDir22Id, ListOpts), ?ATTEMPTS),
     {ok, [{_, ArchiveDir31Id}], _} = ?assertMatch({ok, [_], true},
-        lfm_proxy:list_archives(Node, SessionId, DatasetDir31Id, ListOpts), ?ATTEMPTS),
+        opt_archives:list(Node, SessionId, DatasetDir31Id, ListOpts), ?ATTEMPTS),
     {ok, [{_, ArchiveFile41Id}], _} = ?assertMatch({ok, [_], true},
-        lfm_proxy:list_archives(Node, SessionId, DatasetFile41Id, ListOpts), ?ATTEMPTS),
+        opt_archives:list(Node, SessionId, DatasetFile41Id, ListOpts), ?ATTEMPTS),
     % DatasetFile4 is detached, therefore archive for this dataset shouldn't have been created
     ?assertMatch({ok, [], true},
-        lfm_proxy:list_archives(Node, SessionId, DatasetFile42Id, ListOpts), ?ATTEMPTS),
+        opt_archives:list(Node, SessionId, DatasetFile42Id, ListOpts), ?ATTEMPTS),
 
     File21Size = byte_size(File21Content),
     File41Size = byte_size(File41Content),
@@ -712,7 +712,7 @@ simple_incremental_archive_test_base(Layout, Modifications) ->
             Name
     end, Modifications)),
         
-    {ok, ArchiveId} = lfm_proxy:archive_dataset(Node, SessionId, DatasetId, #archive_config{
+    {ok, ArchiveId} = opt_archives:archive_dataset(Node, SessionId, DatasetId, #archive_config{
         incremental = #{<<"enabled">> => true, <<"basedOn">> => BaseArchiveId},
         layout = Layout
     }, <<>>),
@@ -765,16 +765,16 @@ nested_incremental_archive_test_base(Layout) ->
     
     ListOpts = #{offset => 0, limit => 10},
     {ok, [{_, NestedBaseArchiveId}], _} = ?assertMatch({ok, [_], true},
-        lfm_proxy:list_archives(Node, SessionId, NestedDatasetId, ListOpts), ?ATTEMPTS),
+        opt_archives:list(Node, SessionId, NestedDatasetId, ListOpts), ?ATTEMPTS),
     
-    {ok, TopArchiveId} = lfm_proxy:archive_dataset(Node, SessionId, TopDatasetId, #archive_config{
+    {ok, TopArchiveId} = opt_archives:archive_dataset(Node, SessionId, TopDatasetId, #archive_config{
         create_nested_archives = true,
         incremental = #{<<"enabled">> => true, <<"basedOn">> => TopBaseArchiveId},
         layout = Layout
     }, <<>>),
     
     {ok, NestedArchives, _} = ?assertMatch({ok, [_, _], true},
-        lfm_proxy:list_archives(Node, SessionId, NestedDatasetId, ListOpts), ?ATTEMPTS),
+        opt_archives:list(Node, SessionId, NestedDatasetId, ListOpts), ?ATTEMPTS),
     NestedArchivesIds = lists:map(fun({_, ArchiveId}) ->
         ArchiveId
     end, NestedArchives),
@@ -944,8 +944,8 @@ nested_verification_test_base(Layout) ->
     [Provider | _] = oct_background:get_space_supporting_providers(?SPACE),
     Node = oct_background:get_random_provider_node(Provider),
     
-    {ok, [{_, NestedArchiveId1} | _], _} = lfm_proxy:list_archives(Node, ?ROOT_SESS_ID, NestedDatasetId1, #{offset => 0, limit => 1}),
-    {ok, [{_, NestedArchiveId2} | _], _} = lfm_proxy:list_archives(Node, ?ROOT_SESS_ID, NestedDatasetId2, #{offset => 0, limit => 1}),
+    {ok, [{_, NestedArchiveId1} | _], _} = opt_archives:list(Node, ?ROOT_SESS_ID, NestedDatasetId1, #{offset => 0, limit => 1}),
+    {ok, [{_, NestedArchiveId2} | _], _} = opt_archives:list(Node, ?ROOT_SESS_ID, NestedDatasetId2, #{offset => 0, limit => 1}),
     
     lists:foreach(fun(Id) ->
         {ok, Pid} = archive_tests_utils:wait_for_archive_verification_traverse(Id, ?ATTEMPTS),

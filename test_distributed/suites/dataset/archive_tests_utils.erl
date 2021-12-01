@@ -51,7 +51,7 @@ assert_archive_state(ArchiveId, ExpectedState, Attempts) ->
     lists:foreach(fun(Provider) ->
         Node = oct_background:get_random_provider_node(Provider),
         SessionId = oct_background:get_user_session_id(?USER1, Provider),
-        ?assertMatch({ok, #archive_info{state = ExpectedState}}, lfm_proxy:get_archive_info(Node, SessionId, ArchiveId), Attempts)
+        ?assertMatch({ok, #archive_info{state = ExpectedState}}, opt_archives:get_info(Node, SessionId, ArchiveId), Attempts)
     end, oct_background:get_space_supporting_providers(?SPACE)).
 
 
@@ -71,10 +71,10 @@ assert_archive_is_preserved(Node, SessionId, ArchiveId, DatasetId, DatasetRootFi
     }}, get_archive_info_without_config(Node, SessionId, ArchiveId), Attempts),
     
     {ok, #archive_info{config = #archive_config{layout = ArchiveLayout, follow_symlinks = FollowSymlinks}}} =
-        lfm_proxy:get_archive_info(Node, SessionId, ArchiveId),
+        opt_archives:get_info(Node, SessionId, ArchiveId),
     
     GetDatasetArchives = fun() ->
-        case lfm_proxy:list_archives(Node, SessionId, DatasetId, #{offset => 0, limit => 10000}) of
+        case opt_archives:list(Node, SessionId, DatasetId, #{offset => 0, limit => 10000}) of
             {ok, ArchiveIdsAndIndices, _} ->
                 [AID || {_, AID} <- ArchiveIdsAndIndices];
             _ ->
@@ -367,7 +367,7 @@ resolve_if_symlink(Node, SessionId, Guid) ->
 
 
 get_archive_info_without_config(Node, SessionId, ArchiveId) ->
-    case lfm_proxy:get_archive_info(Node, SessionId, ArchiveId) of
+    case opt_archives:get_info(Node, SessionId, ArchiveId) of
         {ok, ArchiveInfo} ->
             {ok, ArchiveInfo#archive_info{config = undefined}};
         Other ->

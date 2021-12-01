@@ -127,8 +127,6 @@
     remove_qos_entry/2,
     check_qos_status/2, check_qos_status/3
 ]).
-%% Archives related operations
--export([archive_dataset/6, update_archive/3, get_archive_info/2, list_archives/4, init_archive_purge/3]).
 
 %% Utility functions
 -export([check_result/1]).
@@ -813,40 +811,6 @@ check_qos_status(SessId, QosEntryId) ->
     {ok, qos_status:summary()} | error_reply().
 check_qos_status(SessId, QosEntryId, FileKey) ->
     ?run(lfm_qos:check_qos_status(SessId, QosEntryId, FileKey)).
-
-
-%%%===================================================================
-%%% Archive related operations
-%%%===================================================================
-
-
--spec archive_dataset(session:id(), dataset:id(), archive:config(), archive:callback(),
-    archive:callback(), archive:description()) ->
-    {ok, archive:id()} | error_reply().
-archive_dataset(SessId, DatasetId, Config, PreservedCallback, PurgedCallback, Description) ->
-    ?run(lfm_datasets:archive(SessId, DatasetId, Config, PreservedCallback, PurgedCallback, Description)).
-
-
--spec update_archive(session:id(), archive:id(), archive:diff()) -> ok | error_reply().
-update_archive(SessId, ArchiveId, Diff) ->
-    ?run(lfm_datasets:update_archive(SessId, ArchiveId, Diff)).
-
-
--spec get_archive_info(session:id(), archive:id()) ->
-    {ok, lfm_datasets:archive_info()} | error_reply().
-get_archive_info(SessId, ArchiveId) ->
-    ?run(lfm_datasets:get_archive_info(SessId, ArchiveId)).
-
-
--spec list_archives(session:id(), dataset:id(), dataset_api:listing_opts(), dataset_api:listing_mode()) ->
-    {ok, archive_api:entries(), boolean()} | error_reply().
-list_archives(SessId, DatasetId, Opts, ListingMode) ->
-    lfm_datasets:list_archives(SessId, DatasetId, Opts, ListingMode).
-
-
--spec init_archive_purge(session:id(), archive:id(), archive:callback()) -> ok | error_reply().
-init_archive_purge(SessId, ArchiveId, CallbackUrl) ->
-    ?run(lfm_datasets:init_archive_purge(SessId, ArchiveId, CallbackUrl)).
 
 
 %%%===================================================================

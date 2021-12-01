@@ -29,6 +29,13 @@
 
 
 -type operation() ::
+    % archives related
+    #list_archives{} |
+    #archive_dataset{} |
+    #get_archive_info{} |
+    #update_archive{} |
+    #init_archive_purge{} |
+
     % automation related
     #schedule_atm_workflow_execution{} |
     #cancel_atm_workflow_execution{} |

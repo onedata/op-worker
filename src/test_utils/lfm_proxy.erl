@@ -74,12 +74,7 @@
 
     get_effective_file_qos/3,
     add_qos_entry/5, get_qos_entry/3, remove_qos_entry/3,
-    check_qos_status/3, check_qos_status/4,
-
-    archive_dataset/5, archive_dataset/7,
-    update_archive/4, get_archive_info/3,
-    list_archives/4, list_archives/5,
-    init_archive_purge/3, init_archive_purge/4
+    check_qos_status/3, check_qos_status/4
 ]).
 
 -define(EXEC(Worker, Function),
@@ -854,57 +849,6 @@ check_qos_status(Worker, SessId, QosEntryId) ->
 check_qos_status(Worker, SessId, QosEntryId, FileKey) ->
     ?EXEC(Worker, lfm:check_qos_status(SessId, QosEntryId, FileKey)).
 
-
-%%%===================================================================
-%%% Archives functions
-%%% TODO - VFS-8382 investigate low performance of archives functions
-%%% (higher than default timeout is currently necessary)
-%%%===================================================================
-
--spec archive_dataset(node(), session:id(), dataset:id(), archive:config(),
-    archive:description()) -> {ok, archive:id()} | lfm:error_reply().
-archive_dataset(Worker, SessId, DatasetId, Config, Description) ->
-    archive_dataset(Worker, SessId, DatasetId, Config, undefined, undefined, Description).
-
--spec archive_dataset(node(), session:id(), dataset:id(), archive:config(), archive:callback(),
-    archive:callback(), archive:description()) -> {ok, archive:id()} | lfm:error_reply().
-archive_dataset(Worker, SessId, DatasetId, Config, PreservedCallback, PurgedCallback, Description) ->
-    ?EXEC_TIMEOUT(Worker,
-        lfm:archive_dataset(SessId, DatasetId, Config, PreservedCallback, PurgedCallback, Description), timer:minutes(3)).
-
-
--spec update_archive(node(), session:id(), archive:id(), archive:diff()) -> ok | lfm:error_reply().
-update_archive(Worker, SessId, ArchiveId, Diff) ->
-    ?EXEC_TIMEOUT(Worker, lfm:update_archive(SessId, ArchiveId, Diff), timer:minutes(3)).
-
-
--spec get_archive_info(node(), session:id(), archive:id()) ->
-    {ok, lfm_datasets:archive_info()} | lfm:error_reply().
-get_archive_info(Worker, SessId, ArchiveId) ->
-    ?EXEC_TIMEOUT(Worker, lfm:get_archive_info(SessId, ArchiveId), timer:minutes(3)).
-
-
--spec list_archives(node(), session:id(), dataset:id(), dataset_api:listing_opts()) ->
-    {ok, archive_api:entries(), boolean()} | lfm:error_reply().
-list_archives(Worker, SessId, DatasetId, Opts) ->
-    list_archives(Worker, SessId, DatasetId, Opts, undefined).
-
-
--spec list_archives(node(), session:id(), dataset:id(), dataset_api:listing_opts(),
-    dataset_api:listing_mode() | undefined) ->
-    {ok, archive_api:entries(), boolean()} | lfm:error_reply().
-list_archives(Worker, SessId, DatasetId, Opts, ListingMode) ->
-    ?EXEC_TIMEOUT(Worker, lfm:list_archives(SessId, DatasetId, Opts, ListingMode), timer:minutes(3)).
-
-
--spec init_archive_purge(node(), session:id(), archive:id()) -> ok | lfm:error_reply().
-init_archive_purge(Worker, SessId, ArchiveId) ->
-    init_archive_purge(Worker, SessId, ArchiveId, undefined).
-
--spec init_archive_purge(node(), session:id(), archive:id(), archive:callback()) ->
-    ok | lfm:error_reply().
-init_archive_purge(Worker, SessId, ArchiveId, Callback) ->
-    ?EXEC_TIMEOUT(Worker, lfm:init_archive_purge(SessId, ArchiveId, Callback), timer:minutes(3)).
 
 %%%===================================================================
 %%% Internal functions

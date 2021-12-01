@@ -25,6 +25,33 @@
 
 -spec route(user_ctx:ctx(), file_ctx:ctx(), middleware_worker:operation()) ->
     ok | {ok, term()} | no_return().
+route(UserCtx, SpaceDirCtx, #list_archives{
+    dataset_id = DatasetId,
+    opts = Opts,
+    mode = ListingMode
+}) ->
+    dataset_req:list_archives(SpaceDirCtx, DatasetId, Opts, ListingMode, UserCtx);
+
+route(UserCtx, SpaceDirCtx, #archive_dataset{
+    id = DatasetId,
+    config = Config,
+    preserved_callback = PreservedCallback,
+    purged_callback = PurgedCallback,
+    description = Description
+}) ->
+    dataset_req:create_archive(
+        SpaceDirCtx, DatasetId, Config, PreservedCallback, PurgedCallback, Description, UserCtx
+    );
+
+route(UserCtx, SpaceDirCtx, #get_archive_info{id = ArchiveId}) ->
+    dataset_req:get_archive_info(SpaceDirCtx, ArchiveId, UserCtx);
+
+route(UserCtx, SpaceDirCtx, #update_archive{id = ArchiveId, diff = Diff}) ->
+    dataset_req:update_archive(SpaceDirCtx, ArchiveId, Diff, UserCtx);
+
+route(UserCtx, SpaceDirCtx, #init_archive_purge{id = ArchiveId, callback = CallbackUrl}) ->
+    dataset_req:init_archive_purge(SpaceDirCtx, ArchiveId, CallbackUrl, UserCtx);
+
 route(UserCtx, SpaceDirCtx, #schedule_atm_workflow_execution{
     atm_workflow_schema_id = AtmWorkflowSchemaId,
     atm_workflow_schema_revision_num = AtmWorkflowSchemaRevisionNum,

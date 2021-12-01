@@ -34,7 +34,7 @@ translate_resource(#gri{aspect = instance, scope = private}, ArchiveInfo) ->
 %%% Util functions
 %%%===================================================================
 
--spec translate_archive_info(lfm_datasets:archive_info()) -> json_utils:json_map().
+-spec translate_archive_info(archive_api:info()) -> json_utils:json_map().
 translate_archive_info(#archive_info{
     id = ArchiveId,
     dataset_id = DatasetId,

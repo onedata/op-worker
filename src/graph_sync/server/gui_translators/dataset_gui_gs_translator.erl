@@ -97,7 +97,7 @@ translate_datasets_details_list(Datasets, IsLast) ->
     }.
 
 
--spec translate_archives_details_list([lfm_datasets:archive_info()], boolean()) -> json_utils:json_map().
+-spec translate_archives_details_list([archive_api:info()], boolean()) -> json_utils:json_map().
 translate_archives_details_list(Archives, IsLast) ->
     TranslatedArchives = lists:map(fun archive_gui_gs_translator:translate_archive_info/1, Archives),
     #{

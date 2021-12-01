@@ -44,6 +44,37 @@ end).
 %%% Available operations in middleware_worker
 %%%===================================================================
 
+%% archives related
+
+-record(list_archives, {
+    dataset_id :: dataset:id(),
+    opts :: archives_list:opts(),
+    mode = ?BASIC_INFO :: archive_api:listing_mode()
+}).
+
+-record(archive_dataset, {
+    id :: dataset:id(),
+    config :: archive:config(),
+    preserved_callback :: archive:callback(),
+    purged_callback :: archive:callback(),
+    description :: archive:description()
+}).
+
+-record(get_archive_info, {
+    id :: archive:id()
+}).
+
+-record(update_archive, {
+    id :: archive:id(),
+    description :: archive:description() | undefined,
+    diff :: archive:diff()
+}).
+
+-record(init_archive_purge, {
+    id :: archive:id(),
+    callback :: archive:callback()
+}).
+
 %% automation related
 
 -record(schedule_atm_workflow_execution, {
