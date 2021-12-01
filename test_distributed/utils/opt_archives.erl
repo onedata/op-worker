@@ -22,7 +22,7 @@
 ]).
 
 -define(CALL(NodeSelector, Args), test_rpc:call(
-    op_worker, NodeSelector, opl_archives, ?FUNCTION_NAME, Args  %% TODO add timeout?
+    op_worker, NodeSelector, opl_archives, ?FUNCTION_NAME, Args, timer:minutes(3)
 )).
 
 
