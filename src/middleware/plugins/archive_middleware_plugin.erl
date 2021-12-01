@@ -175,15 +175,11 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = instance} = GRI}) -
     Description = maps:get(<<"description">>, Data, ?DEFAULT_ARCHIVE_DESCRIPTION),
     PreservedCallback = maps:get(<<"preservedCallback">>, Data, undefined),
     PurgedCallback = maps:get(<<"purgedCallback">>, Data, undefined),
-    Result =  opl_archives:archive_dataset(SessionId, DatasetId, Config, PreservedCallback, PurgedCallback, Description),
-    case Result of
-        ?ERROR_POSIX(?EINVAL) ->  %% TODO return normal error ?
-            throw(?ERROR_BAD_DATA(<<"datasetId">>, <<"Detached dataset cannot be modified.">>));
-        _ ->
-            {ok, ArchiveId} = ?throw_on_error(Result),
-            {ok, ArchiveInfo} = ?throw_on_error(opl_archives:get_info(SessionId, ArchiveId)),
-            {ok, resource, {GRI#gri{id = ArchiveId}, ArchiveInfo}}
-    end;
+    {ok, ArchiveId} = ?throw_on_error(opl_archives:archive_dataset(
+        SessionId, DatasetId, Config, PreservedCallback, PurgedCallback, Description
+    )),
+    {ok, ArchiveInfo} = ?throw_on_error(opl_archives:get_info(SessionId, ArchiveId)),
+    {ok, resource, {GRI#gri{id = ArchiveId}, ArchiveInfo}};
 
 create(#op_req{auth = Auth, data = Data, gri = #gri{id = ArchiveId, aspect = purge}}) ->
     SessionId = Auth#auth.session_id,

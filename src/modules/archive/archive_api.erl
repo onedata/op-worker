@@ -122,9 +122,7 @@ start_archivisation(
                     Error
             end;
         ?DETACHED_DATASET ->
-            {error, ?EINVAL}
-        %% TODO VFS-7208 uncomment after introducing API errors to fslogic
-        % throw(?ERROR_BAD_DATA(<<"datasetId">>, <<"Detached dataset cannot be modified.">>));
+            throw(?ERROR_BAD_DATA(<<"datasetId">>, <<"Detached dataset cannot be modified.">>))
     end.
 
 
