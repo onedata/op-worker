@@ -532,14 +532,14 @@ rtransfer_blocking_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWr
     Master = self(),
     test_utils:mock_new(Workers2, [replica_synchronizer, rtransfer_config], [passthrough]),
     test_utils:mock_expect(Workers2, replica_synchronizer, synchronize,
-        fun(UserCtx, FileCtx, Block, Prefetch, TransferId, Priority) ->
+        fun(UserCtx, FileCtx, Block, Prefetch, TransferId, Priority, CallbackModule) ->
             case TransferId of
                 undefined ->
                     ok;
                 _ ->
                     Master ! transfer_started
             end,
-            meck:passthrough([UserCtx, FileCtx, Block, Prefetch, TransferId, Priority])
+            meck:passthrough([UserCtx, FileCtx, Block, Prefetch, TransferId, Priority, CallbackModule])
         end),
 
     Dir = <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>,
@@ -1881,7 +1881,7 @@ unmock_sync_and_rtransfer_errors(Config) ->
 
 async_synchronize(SessionId, FileCtx, Block) ->
     UserCtx = user_ctx:new(SessionId),
-    replica_synchronizer:synchronize(UserCtx, FileCtx, Block, false, undefined, 96).
+    replica_synchronizer:synchronize(UserCtx, FileCtx, Block, false, undefined, 96, transfer).
 
 async_synchronize(Worker, User, SessId, FileCtx, Block) ->
     rpc:async_call(Worker, ?MODULE, async_synchronize, [
@@ -1891,7 +1891,7 @@ async_synchronize(Worker, User, SessId, FileCtx, Block) ->
 request_synchronization(SessionID, FileCtx, Block) ->
     UserCtx = user_ctx:new(SessionID),
     replica_synchronizer:request_synchronization(UserCtx, FileCtx, Block,
-        false, undefined, 96
+        false, undefined, 96, transfer
     ).
 
 request_synchronization(Worker, User, SessId, FileCtx, Block) ->
@@ -2359,7 +2359,7 @@ sync_blocks(SessionID, FileCtx, BlockSize, Blocks) ->
     FinalTime = lists:foldl(fun(BlockNum, Acc) ->
         Stopwatch = stopwatch:start(),
         SyncAns = replica_synchronizer:synchronize(UserCtx, FileCtx,
-            #file_block{offset = BlockNum, size = BlockSize}, false, undefined, 32),
+            #file_block{offset = BlockNum, size = BlockSize}, false, undefined, 32, transfer),
         Time = stopwatch:read_micros(Stopwatch),
         ?assertMatch({ok, _}, SyncAns),
         Acc + Time

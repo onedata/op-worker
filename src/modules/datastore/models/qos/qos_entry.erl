@@ -146,6 +146,7 @@ create(SpaceId, FileUuid, Expression, ReplicasNum, EntryType, Possible, Traverse
     })) of
         {ok, QosEntryId} -> 
             ok = qos_entry_audit_log:create(QosEntryId),
+            ok = qos_transfer_stats:ensure_exists(QosEntryId),
             {ok, QosEntryId};
         {error, _} = Error -> 
             Error
@@ -165,7 +166,6 @@ update(Key, Diff) ->
 
 -spec delete(id()) -> ok | {error, term()}.
 delete(QosEntryId) ->
-    qos_entry_audit_log:destroy(QosEntryId),
     datastore_model:delete(?CTX, QosEntryId).
 
 
@@ -338,7 +338,7 @@ apply_to_all_transfers(QosEntryId, Fun) ->
 
 -spec add_to_failed_files_list(od_space:id(), file_meta:uuid()) -> ok | {error, term()}.
 add_to_failed_files_list(SpaceId, FileUuid) ->
-    ?extract_ok(add_local_links(?FAILED_FILES_KEY(SpaceId), oneprovider:get_id(), {FileUuid, FileUuid})).
+    ?ok_if_exists(?extract_ok(add_local_links(?FAILED_FILES_KEY(SpaceId), oneprovider:get_id(), {FileUuid, FileUuid}))).
 
 -spec remove_from_failed_files_list(od_space:id(), file_meta:uuid()) -> ok | {error, term()}.
 remove_from_failed_files_list(SpaceId, FileUuid)  ->

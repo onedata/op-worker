@@ -55,7 +55,9 @@
     qos_with_mixed_deletion_test/1,
     qos_on_symlink_test/1,
     effective_qos_with_symlink_test/1,
-    create_hardlink_in_dir_with_qos/1
+    create_hardlink_in_dir_with_qos/1,
+    
+    qos_transfer_stats_test/1
 ]).
 
 all() -> [
@@ -83,7 +85,9 @@ all() -> [
     qos_with_mixed_deletion_test,
     qos_on_symlink_test,
     effective_qos_with_symlink_test,
-    create_hardlink_in_dir_with_qos
+    create_hardlink_in_dir_with_qos,
+    
+    qos_transfer_stats_test
 ].
 
 
@@ -702,7 +706,45 @@ effective_qos_with_symlink_test(Config) ->
 
 create_hardlink_in_dir_with_qos(Config) ->
     qos_test_base:create_hardlink_in_dir_with_qos(Config, ?SPACE_ID).
+
+
+%%%===================================================================
+%%% QoS transfer stats tests
+%%%===================================================================
     
+qos_transfer_stats_test(Config) ->
+    [Worker1, Worker2, Worker3 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
+    Name = generator:gen_name(),
+    SessId = fun(Worker) -> ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config) end,
+    Guid = create_file_with_content(Worker1, SessId(Worker1), fslogic_uuid:spaceid_to_space_dir_guid(?SPACE_ID), Name),
+    ProviderId2 = ?GET_DOMAIN_BIN(Worker2),
+    {ok, QosEntryId} = lfm_proxy:add_qos_entry(Worker1, SessId(Worker1), ?FILE_REF(Guid), <<"providerId=", ProviderId2/binary>>, 1),
+    % wait for qos entries to be dbsynced to other provider
+    ?assertMatch({ok, _}, lfm_proxy:get_qos_entry(Worker2, SessId(Worker2), QosEntryId), ?ATTEMPTS),
+    ?assertEqual({ok, ?FULFILLED_QOS_STATUS}, lfm_proxy:check_qos_status(Worker1, SessId(Worker1), QosEntryId), ?ATTEMPTS),
+    
+    check_transfer_stats(Worker1, QosEntryId, bytes, [<<"total">>], empty),
+    check_transfer_stats(Worker2, QosEntryId, bytes, [<<"total">>, <<"mntst1">>], {1, byte_size(?TEST_DATA)}),
+    check_transfer_stats(Worker1, QosEntryId, files, [<<"total">>], empty),
+    check_transfer_stats(Worker2, QosEntryId, files, [<<"total">>, <<"mntst2">>], {1, 1}),
+    
+    {ok, HW3} = lfm_proxy:open(Worker3, SessId(Worker3), #file_ref{guid = Guid}, write),
+    NewData = crypto:strong_rand_bytes(8),
+    {ok, _} = lfm_proxy:write(Worker3, HW3, 0, NewData),
+    ok = lfm_proxy:close(Worker3, HW3),
+    
+    {ok, HW2} = lfm_proxy:open(Worker2, SessId(Worker2), #file_ref{guid = Guid}, read),
+    ?assertEqual({ok, NewData}, lfm_proxy:read(Worker2, HW2, 0, byte_size(NewData)), ?ATTEMPTS),
+    ok = lfm_proxy:close(Worker2, HW2),
+    ?assertEqual({ok, ?FULFILLED_QOS_STATUS}, lfm_proxy:check_qos_status(Worker2, SessId(Worker2), QosEntryId), ?ATTEMPTS),
+    
+    check_transfer_stats(Worker1, QosEntryId, bytes, [<<"total">>], empty),
+    check_transfer_stats(Worker2, QosEntryId, bytes, [<<"mntst1">>], {1, byte_size(?TEST_DATA)}),
+    check_transfer_stats(Worker2, QosEntryId, bytes, [<<"mntst3">>], {1, byte_size(NewData)}),
+    check_transfer_stats(Worker2, QosEntryId, bytes, [<<"total">>], {2, byte_size(NewData) + byte_size(?TEST_DATA)}),
+    check_transfer_stats(Worker1, QosEntryId, files, [<<"total">>], empty),
+    check_transfer_stats(Worker2, QosEntryId, files, [<<"total">>, <<"mntst2">>], {2, 2}).
+
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -716,7 +758,10 @@ end_per_suite(Config) ->
     qos_test_base:end_per_suite(Config).
 
 
-init_per_testcase(qos_traverse_cancellation_test , Config) ->
+init_per_testcase(qos_transfer_stats_test, Config) ->
+    time_test_utils:freeze_time(Config),
+    init_per_testcase(default, Config);
+init_per_testcase(qos_traverse_cancellation_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     qos_tests_utils:mock_transfers(Workers),
     init_per_testcase(default, Config);
@@ -724,8 +769,12 @@ init_per_testcase(_, Config) ->
     qos_test_base:init_per_testcase(Config).
 
 
+end_per_testcase(qos_transfer_stats_test, Config) ->
+    time_test_utils:unfreeze_time(Config),
+    end_per_testcase(default, Config);
 end_per_testcase(_, Config) ->
     qos_test_base:end_per_testcase(Config).
+
 
 %%%===================================================================
 %%% Test bases
@@ -898,6 +947,23 @@ mock_fslogic_authz_ensure_authorized(Worker) ->
         fun(_, FileCtx, _) ->
             FileCtx
         end).
+
+
+check_transfer_stats(Worker, QosEntryId, Type, ExpectedSeries, ExpectedValue) ->
+    {ok, Stats} = rpc:call(Worker, qos_transfer_stats, get, [QosEntryId, Type]),
+    lists:foreach(fun(Series) ->
+        lists:foreach(fun(Metric) ->
+            ?assert(maps:is_key({Series, Metric}, Stats)),
+            Value = maps:get({Series, Metric}, Stats),
+            case ExpectedValue of
+                empty ->
+                    ?assertEqual([], Value);
+                _ ->
+                    [{_Timestamp, Value1}] = Value,
+                    ?assertEqual(ExpectedValue, Value1)
+            end
+        end, [<<"minute">>, <<"hour">>, <<"day">>, <<"month">>])
+    end, ExpectedSeries).
 
 %%%===================================================================
 %%% DBSync mocks
