@@ -18,7 +18,7 @@
 -export([
     list_top_datasets/5,
     list_children_datasets/4,
-    establish/3,
+    establish/3, establish/4,
     get_info/3,
     reattach_dataset/3,
     detach_dataset/3,

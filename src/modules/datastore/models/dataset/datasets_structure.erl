@@ -400,7 +400,7 @@ sanitize_limit(Opts) ->
         Limit when is_integer(Limit) andalso Limit > 0 ->
             Limit;
         Limit when is_integer(Limit) ->
-            throw(?ERROR_BAD_VALUE_TOO_LOW(limit, 0));
+            throw(?ERROR_BAD_VALUE_TOO_LOW(limit, 1));
         _ ->
             throw(?ERROR_BAD_VALUE_INTEGER(limit))
     end.
