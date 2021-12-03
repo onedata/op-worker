@@ -36,10 +36,8 @@
     create_store_with_invalid_args_test/1,
     apply_operation_test/1,
     iterator_queue_test/1,
-    iterate_one_by_one_files_test/1,
-    iterate_in_chunks_files_test/1,
-    iterate_one_by_one_datasets_test/1,
-    iterate_in_chunks_datasets_test/1,
+    iterate_files_test/1,
+    iterate_datasets_test/1,
     restart_iteration_test/1,
     restart_partial_iteration_test/1,
     iteration_with_deleted_root/1,
@@ -53,10 +51,8 @@ groups() -> [
         create_store_with_invalid_args_test,
         apply_operation_test,
         iterator_queue_test,
-        iterate_one_by_one_files_test,
-        iterate_in_chunks_files_test,
-        iterate_one_by_one_datasets_test,
-        iterate_in_chunks_datasets_test,
+        iterate_files_test,
+        iterate_datasets_test,
         restart_iteration_test,
         restart_partial_iteration_test,
         iteration_with_deleted_root,
@@ -94,9 +90,10 @@ create_store_with_invalid_args_test(_Config) ->
             krakow, AtmWorkflowExecutionAuth, undefined,
             (?ATM_TREE_FOREST_STORE_SCHEMA)#atm_store_schema{requires_initial_value = true})
     ),
-    ?assertEqual(?ERROR_BAD_DATA(<<"value">>, <<"not a batch">>),
-        atm_store_test_utils:create_store(
-            krakow, AtmWorkflowExecutionAuth, 8, ?ATM_TREE_FOREST_STORE_SCHEMA)
+
+    IntValue = rand:uniform(1000),
+    ?assertEqual(?ERROR_ATM_DATA_TYPE_UNVERIFIED(IntValue, atm_array_type), atm_store_test_utils:create_store(
+        krakow, AtmWorkflowExecutionAuth, IntValue, ?ATM_TREE_FOREST_STORE_SCHEMA)
     ),
     lists:foreach(fun(DataType) ->
         BadValue = atm_store_test_utils:example_bad_data(DataType),
@@ -240,35 +237,18 @@ iterator_queue_test(_Config) ->
     ?assertMatch({error, not_found}, get_queue_node(TestQueueId, 2)).
     
 
-iterate_one_by_one_files_test(_Config) ->
+iterate_files_test(_Config) ->
     Depth = 6,
-    AtmStoreIteratorStrategy = #atm_store_iterator_serial_strategy{},
-    iterate_test_base(AtmStoreIteratorStrategy, Depth, atm_file_type).
+    iterate_test_base(rand:uniform(100), Depth, atm_file_type).
 
 
-iterate_in_chunks_files_test(_Config) ->
-    Depth = 6,
-    ChunkSize = rand:uniform(100),
-    AtmStoreIteratorStrategy = #atm_store_iterator_batch_strategy{size = ChunkSize},
-    iterate_test_base(AtmStoreIteratorStrategy, Depth, atm_file_type).
-
-
-iterate_one_by_one_datasets_test(_Config) ->
+iterate_datasets_test(_Config) ->
     Depth = 4,
-    AtmStoreIteratorStrategy = #atm_store_iterator_serial_strategy{},
-    iterate_test_base(AtmStoreIteratorStrategy, Depth, atm_dataset_type).
-
-
-iterate_in_chunks_datasets_test(_Config) ->
-    Depth = 4,
-    ChunkSize = rand:uniform(100),
-    AtmStoreIteratorStrategy = #atm_store_iterator_batch_strategy{size = ChunkSize},
-    iterate_test_base(AtmStoreIteratorStrategy, Depth, atm_dataset_type).
+    iterate_test_base(rand:uniform(100), Depth, atm_dataset_type).
 
 
 restart_iteration_test(_Config) ->
-    AtmStoreIteratorStrategy = #atm_store_iterator_batch_strategy{size = 3},
-    {AtmWorkflowExecutionEnv, AtmSerialIterator0, _FilesMap, Expected} = create_iteration_test_env(krakow, AtmStoreIteratorStrategy, 2, atm_file_type),
+    {AtmWorkflowExecutionEnv, AtmSerialIterator0, _FilesMap, Expected} = create_iteration_test_env(krakow, 3, 2, atm_file_type),
     
     IteratorsAndResults = check_iterator_listing(
         krakow, AtmWorkflowExecutionEnv, AtmSerialIterator0, Expected, return_iterators, atm_file_type
@@ -280,8 +260,7 @@ restart_iteration_test(_Config) ->
 
 
 restart_partial_iteration_test(_Config) ->
-    AtmStoreIteratorStrategy = #atm_store_iterator_batch_strategy{size = 50},
-    {AtmWorkflowExecutionEnv, AtmStoreIterator0, _FilesMap, FileList} = create_iteration_test_env(krakow, AtmStoreIteratorStrategy, 3, atm_file_type),
+    {AtmWorkflowExecutionEnv, AtmStoreIterator0, _FilesMap, FileList} = create_iteration_test_env(krakow, 50, 3, atm_file_type),
     {ok, Res0, AtmStoreIterator1} = ?assertMatch({ok, _, _}, atm_store_test_utils:iterator_get_next(krakow, AtmWorkflowExecutionEnv, AtmStoreIterator0)),
     {ok, _, _} = ?assertMatch({ok, _, _}, atm_store_test_utils:iterator_get_next(krakow, AtmWorkflowExecutionEnv, AtmStoreIterator1)),
     {ok, Res1, AtmStoreIterator2} = ?assertMatch({ok, _, _}, atm_store_test_utils:iterator_get_next(krakow, AtmWorkflowExecutionEnv, AtmStoreIterator1)),
@@ -294,8 +273,7 @@ restart_partial_iteration_test(_Config) ->
 iteration_with_deleted_root(_Config) ->
     Node = oct_background:get_random_provider_node(krakow),
     User1Session = oct_background:get_user_session_id(user1, krakow),
-    AtmStoreIteratorStrategy = #atm_store_iterator_batch_strategy{size = 50},
-    {AtmWorkflowExecutionEnv, AtmStoreIterator0, FilesMap, _Expected} = create_iteration_test_env(krakow, AtmStoreIteratorStrategy, 3, atm_file_type),
+    {AtmWorkflowExecutionEnv, AtmStoreIterator0, FilesMap, _Expected} = create_iteration_test_env(krakow, 50, 3, atm_file_type),
     
     [RootToDelete0 | _RootsTail] = maps:keys(FilesMap),
     ?assertEqual(ok, lfm_proxy:rm_recursive(Node, User1Session, ?FILE_REF(RootToDelete0))),
@@ -308,8 +286,7 @@ iteration_with_deleted_root(_Config) ->
 iteration_after_restart_with_deleted_root(_Config) ->
     Node = oct_background:get_random_provider_node(krakow),
     User1Session = oct_background:get_user_session_id(user1, krakow),
-    AtmStoreIteratorStrategy = #atm_store_iterator_batch_strategy{size = 50},
-    {AtmWorkflowExecutionEnv, AtmStoreIterator0, FilesMap, ExpectedBefore} = create_iteration_test_env(krakow, AtmStoreIteratorStrategy, 3, atm_file_type),
+    {AtmWorkflowExecutionEnv, AtmStoreIterator0, FilesMap, ExpectedBefore} = create_iteration_test_env(krakow, 50, 3, atm_file_type),
     
     check_iterator_listing(krakow, AtmWorkflowExecutionEnv, AtmStoreIterator0, ExpectedBefore, return_iterators, atm_file_type),
     [RootToDelete0 | _RootsTail] = maps:keys(FilesMap),
@@ -320,8 +297,7 @@ iteration_after_restart_with_deleted_root(_Config) ->
 
 
 iteration_after_restart_with_new_dirs_root(_Config) ->
-    AtmStoreIteratorStrategy = #atm_store_iterator_batch_strategy{size = 50},
-    {AtmWorkflowExecutionEnv, AtmStoreIterator0, FilesMap, ExpectedBefore} = create_iteration_test_env(krakow, AtmStoreIteratorStrategy, 3, atm_file_type),
+    {AtmWorkflowExecutionEnv, AtmStoreIterator0, FilesMap, ExpectedBefore} = create_iteration_test_env(krakow, 50, 3, atm_file_type),
     
     check_iterator_listing(krakow, AtmWorkflowExecutionEnv, AtmStoreIterator0, ExpectedBefore, return_iterators, atm_file_type),
     [Root1 | _] = maps:fold(
@@ -342,8 +318,7 @@ iteration_after_restart_with_new_dirs_root(_Config) ->
     
 
 iteration_without_permission(_Config) ->
-    AtmStoreIteratorStrategy = #atm_store_iterator_batch_strategy{size = 50},
-    {AtmWorkflowExecutionEnv, AtmStoreIterator0, FilesMap, _Expected} = create_iteration_test_env(krakow, AtmStoreIteratorStrategy, 1, atm_file_type, user2),
+    {AtmWorkflowExecutionEnv, AtmStoreIterator0, FilesMap, _Expected} = create_iteration_test_env(krakow, 50, 1, atm_file_type, user2),
     Roots = maps:keys(FilesMap),
     
     check_iterator_listing(krakow, AtmWorkflowExecutionEnv, AtmStoreIterator0, Roots, return_none, atm_file_type).
@@ -353,9 +328,9 @@ iteration_without_permission(_Config) ->
 %%% Helper functions
 %%%===================================================================
 
--spec iterate_test_base(atm_store_iterator_config:record(), non_neg_integer(), atm_data_type:type()) -> ok.
-iterate_test_base(AtmStoreIteratorStrategy, Depth, Type) ->
-    {AtmWorkflowExecutionEnv, AtmStoreIterator0, _FilesMap, Expected} = create_iteration_test_env(krakow, AtmStoreIteratorStrategy, Depth, Type),
+-spec iterate_test_base(pos_integer(), non_neg_integer(), atm_data_type:type()) -> ok.
+iterate_test_base(MaxBatchSize, Depth, Type) ->
+    {AtmWorkflowExecutionEnv, AtmStoreIterator0, _FilesMap, Expected} = create_iteration_test_env(krakow, MaxBatchSize, Depth, Type),
     check_iterator_listing(krakow, AtmWorkflowExecutionEnv, AtmStoreIterator0, Expected, return_none, Type).
 
 
@@ -406,14 +381,14 @@ retrieve_id(_, Value) ->
     Value.
 
 
--spec create_iteration_test_env(oct_background:entity_selector(), atm_store_iterator_spec:strategy(), non_neg_integer(), atm_data_type:type()) ->
+-spec create_iteration_test_env(oct_background:entity_selector(), pos_integer(), non_neg_integer(), atm_data_type:type()) ->
     {atm_store_iterator:record(), #{file_id:file_guid() => [file_id:file_guid()]}, [term()]}.
-create_iteration_test_env(ProviderSelector, AtmStoreIteratorStrategy, Depth, Type) ->
-    create_iteration_test_env(ProviderSelector, AtmStoreIteratorStrategy, Depth, Type, user1).
+create_iteration_test_env(ProviderSelector, MaxBatchSize, Depth, Type) ->
+    create_iteration_test_env(ProviderSelector, MaxBatchSize, Depth, Type, user1).
 
--spec create_iteration_test_env(oct_background:entity_selector(), atm_store_iterator_spec:strategy(), non_neg_integer(), atm_data_type:type(), atom()) ->
+-spec create_iteration_test_env(oct_background:entity_selector(), pos_integer(), non_neg_integer(), atm_data_type:type(), atom()) ->
     {atm_store_iterator:record(), #{file_id:file_guid() => [file_id:file_guid()]}, [term()]}.
-create_iteration_test_env(ProviderSelector, AtmStoreIteratorStrategy, Depth, Type, WorkflowUserPlaceholder) ->
+create_iteration_test_env(ProviderSelector, MaxBatchSize, Depth, Type, WorkflowUserPlaceholder) ->
     Node = oct_background:get_random_provider_node(ProviderSelector),
     SpaceId = oct_background:get_space_id(space_krk),
     WorkflowId = datastore_key:new(),
@@ -469,10 +444,10 @@ create_iteration_test_env(ProviderSelector, AtmStoreIteratorStrategy, Depth, Typ
     {ok, AtmStoreId} = atm_store_test_utils:create_store(ProviderSelector, AtmWorkflowExecutionAuth, RootsToAdd, ?ATM_TREE_FOREST_STORE_SCHEMA(Type)),
     AtmStoreIteratorSpec = #atm_store_iterator_spec{
         store_schema_id = AtmStoreDummySchemaId,
-        strategy = AtmStoreIteratorStrategy
+        max_batch_size = MaxBatchSize
     },
     AtmWorkflowExecutionEnv = atm_workflow_execution_env:build(
-        SpaceId, WorkflowId, #{AtmStoreDummySchemaId => AtmStoreId}, undefined, undefined
+        SpaceId, WorkflowId, 0, #{AtmStoreDummySchemaId => AtmStoreId}
     ),
     AtmStoreIterator0 = atm_store_test_utils:acquire_store_iterator(ProviderSelector, AtmStoreId, AtmStoreIteratorSpec),
     {AtmWorkflowExecutionEnv, AtmStoreIterator0, FilesMap, Expected}.

@@ -186,7 +186,7 @@ unmock_prolonged_replica_eviction(Worker) ->
 mock_replica_synchronizer_failure(Node) ->
     ok = test_utils:mock_new(Node, replica_synchronizer),
     ok = test_utils:mock_expect(Node, replica_synchronizer, synchronize,
-        fun(_, _, _, _, _, _) ->
+        fun(_, _, _, _, _, _, _) ->
             throw(test_error) end
     ).
 

@@ -17,6 +17,7 @@
 -include("modules/fslogic/fslogic_delete.hrl").
 -include("modules/storage/luma/luma.hrl").
 -include("modules/fslogic/file_attr.hrl").
+-include("workflow_engine.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_models.hrl").
 
 -type file_descriptors() :: #{session:id() => non_neg_integer()}.
@@ -232,13 +233,7 @@
 }).
 
 -record(od_atm_lambda, {
-    name :: automation:name(),
-    summary :: automation:summary(),
-    description :: automation:description(),
-    
-    operation_spec :: atm_lambda_operation_spec:record(),
-    argument_specs = [] :: [atm_lambda_argument_spec:record()],
-    result_specs = [] :: [atm_lambda_result_spec:record()],
+    revision_registry :: atm_lambda_revision_registry:record(),
     
     atm_inventories = [] :: [od_atm_inventory:id()],
     
@@ -247,15 +242,11 @@
 
 -record(od_atm_workflow_schema, {
     name :: automation:name(),
-    description :: automation:description(),
+    summary :: automation:description(),
 
-    stores = [] :: [atm_store_schema:record()],
-    lanes = [] :: [atm_lane_schema:record()],
-
-    state :: automation:workflow_schema_state(),
+    revision_registry :: atm_workflow_schema_revision_registry:record(),
 
     atm_inventory :: od_atm_inventory:id(),
-    atm_lambdas :: [od_atm_lambda:id()],
 
     cache_state = #{} :: cache_state()
 }).
@@ -1074,7 +1065,11 @@
 
 -record(atm_task_execution, {
     workflow_execution_id :: atm_workflow_execution:id(),
-    lane_index :: non_neg_integer(),
+    lane_index :: atm_lane_execution:index(),
+    % This field is set to 'undefined' during document creation as specific run_num
+    % may not be known yet (e.g. runs prepared in advance). Concrete run_num must
+    % be substituted right before lane run execution starts.
+    run_num :: undefined | atm_lane_execution:run_num(),
     parallel_box_index :: non_neg_integer(),
 
     schema_id :: automation:id(),
@@ -1101,28 +1096,17 @@
 -record(atm_workflow_schema_snapshot, {
     schema_id :: automation:id(),
     name :: automation:name(),
-    description :: automation:description(),
+    summary :: automation:summary(),
 
-    stores = [] :: [atm_store_schema:record()],
-    lanes = [] :: [atm_lane_schema:record()],
+    revision_number :: atm_workflow_schema_revision:revision_number(),
+    revision :: atm_workflow_schema_revision:record(),
 
-    state :: automation:workflow_schema_state(),
-
-    atm_inventory :: od_atm_inventory:id(),
-    atm_lambdas :: [od_atm_lambda:id()]
+    atm_inventory :: od_atm_inventory:id()
 }).
 
 -record(atm_lambda_snapshot, {
     lambda_id :: automation:id(),
-
-    name :: automation:name(),
-    summary :: automation:summary(),
-    description :: automation:description(),
-
-    operation_spec :: atm_lambda_operation_spec:record(),
-    argument_specs = [] :: [atm_lambda_argument_spec:record()],
-    result_specs = [] :: [atm_lambda_result_spec:record()],
-
+    revision_registry :: atm_lambda_revision_registry:record(),
     atm_inventories = [] :: [od_atm_inventory:id()]
 }).
 
@@ -1137,15 +1121,22 @@
 
     store_registry :: atm_workflow_execution:store_registry(),
     system_audit_log_id :: undefined | atm_store:id(),
-    lanes :: [atm_lane_execution:record()],
+
+    % lane execution records are kept as values in map where keys are indices
+    % (from 1 up to `lanes_count`) due to performance and convenience of use
+    % when accessing and modifying random element
+    lanes :: #{atm_lane_execution:index() => atm_lane_execution:record()},
+    lanes_count :: pos_integer(),
+
+    incarnation :: atm_workflow_execution:incarnation(),
+    current_lane_index :: atm_lane_execution:index(),
+    current_run_num :: pos_integer(),
 
     status :: atm_workflow_execution:status(),
     % Flag used to tell if status was changed during doc update (set automatically
     % when updating doc). It is necessary due to limitation of datastore as
     % otherwise getting document before update would be needed (to compare 2 docs).
     prev_status :: atm_workflow_execution:status(),
-    % Flag used to differentiate reasons why workflow is aborting
-    aborting_reason = undefined :: undefined | cancel | failure,
 
     callback :: undefined | http_client:url(),
 
@@ -1164,6 +1155,11 @@
     max_values_per_node :: pos_integer() | undefined
 }).
 
+
+-record(atm_openfaas_function_activity_registry, {
+    pod_status_registry :: atm_openfaas_function_pod_status_registry:record()
+}).
+
 %%%===================================================================
 %%% Workflow engine connected models
 %%%===================================================================
@@ -1179,8 +1175,10 @@
 
 -record(workflow_iterator_snapshot, {
     iterator :: iterator:iterator(),
-    lane_index = 0 :: workflow_execution_state:index(),
-    item_index = 0 :: workflow_execution_state:index()
+    lane_index = workflow_execution_state:index(),
+    lane_id :: workflow_engine:lane_id(),
+    next_lane_id :: workflow_engine:lane_id() | undefined,
+    item_index = workflow_execution_state:index()
 }).
 
 -record(workflow_engine_state, {
@@ -1191,15 +1189,28 @@
 
 -record(workflow_execution_state, {
     handler :: workflow_handler:handler(),
-    context :: workflow_engine:execution_context(),
+    initial_context :: workflow_engine:execution_context(),
 
-    execution_status = not_prepared :: workflow_execution_state:execution_status(),
-    current_lane :: workflow_execution_state:current_lane() | undefined,
+    execution_status = ?NOT_PREPARED :: workflow_execution_state:execution_status(),
+    current_lane :: workflow_execution_state:current_lane(),
+
+    % engine can prepare next lane in advance but it is not being executed until current lane is finished
+    % and workflow_handler:handle_lane_execution_ended/3 (called for current lane) confirms that next lane
+    % execution should start
+    next_lane_preparation_status = ?NOT_PREPARED :: workflow_execution_state:next_lane_preparation_status(),
+    next_lane :: workflow_execution_state:next_lane(),
+
     lowest_failed_job_identifier :: workflow_jobs:job_identifier() | undefined,
+    failed_job_count = 0 :: non_neg_integer(),
 
     iteration_state :: workflow_iteration_state:state() | undefined,
     prefetched_iteration_step :: workflow_execution_state:iteration_status(),
     jobs :: workflow_jobs:jobs() | undefined,
+
+    % callbacks executed after update of record (have to be executed outside datastore tp process)
+    % TODO VFS-7919 - consider keeping callbacks list from beginning
+    % to guarantee that each callback is called exactly once
+    pending_callbacks = [] :: [workflow_execution_state:callback_selector()],
 
     % Field used to return additional information about document update procedure
     % (datastore:update returns {ok, #document{}} or {error, term()}

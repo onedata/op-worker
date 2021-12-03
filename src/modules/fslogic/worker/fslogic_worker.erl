@@ -116,7 +116,7 @@
     remote_read,
     fsync,
     release,
-    
+
     read_symlink,
 
     get_file_attr,
@@ -506,6 +506,15 @@ handle_fuse_request(UserCtx, #resolve_guid{}, FileCtx) ->
     guid_req:resolve_guid(UserCtx, FileCtx);
 handle_fuse_request(UserCtx, #resolve_guid_by_canonical_path{}, FileCtx) ->
     guid_req:resolve_guid(UserCtx, FileCtx);
+handle_fuse_request(UserCtx, #resolve_guid_by_relative_path{
+    path = Path
+}, RelRootCtx) ->
+    guid_req:resolve_guid_by_relative_path(UserCtx, RelRootCtx, Path);
+handle_fuse_request(UserCtx, #ensure_dir{
+    path = Path,
+    mode = Mode
+}, RelRootCtx) ->
+    guid_req:ensure_dir(UserCtx, RelRootCtx, Path, Mode);
 handle_fuse_request(UserCtx, #get_helper_params{
     storage_id = StorageId,
     space_id = SpaceId,
@@ -794,20 +803,7 @@ handle_provider_request(UserCtx, #get_archive_info{id = ArchiveId}, SpaceDirCtx)
 handle_provider_request(UserCtx, #list_archives{dataset_id = DatasetId, opts = Opts, mode = ListingMode}, SpaceDirCtx) ->
     dataset_req:list_archives(SpaceDirCtx, DatasetId, Opts, ListingMode, UserCtx);
 handle_provider_request(UserCtx, #init_archive_purge{id = ArchiveId, callback = CallbackUrl}, SpaceDirCtx) ->
-    dataset_req:init_archive_purge(SpaceDirCtx, ArchiveId, CallbackUrl, UserCtx);
-
-handle_provider_request(UserCtx, #schedule_atm_workflow_execution{
-    atm_workflow_schema_id = AtmWorkflowSchemaId,
-    store_initial_values = AtmStoreInitialValues,
-    callback_url = CallbackUrl
-}, SpaceDirCtx) ->
-    atm_req:schedule_workflow_execution(
-        UserCtx, SpaceDirCtx, AtmWorkflowSchemaId, AtmStoreInitialValues, CallbackUrl
-    );
-handle_provider_request(_UserCtx, #cancel_atm_workflow_execution{
-    atm_workflow_execution_id = AtmWorkflowExecutionId
-}, _SpaceDirCtx) ->
-    atm_req:cancel_workflow_execution(AtmWorkflowExecutionId).
+    dataset_req:init_archive_purge(SpaceDirCtx, ArchiveId, CallbackUrl, UserCtx).
 
 
 %%--------------------------------------------------------------------

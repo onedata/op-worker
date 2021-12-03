@@ -39,25 +39,20 @@
 
 
 -type initial_value() :: [automation:item()] | undefined.
-%% Full 'operation_options' format can't be expressed directly in type spec due to
-%% dialyzer limitations in specifying individual binaries. Instead it is
-%% shown below:
-%%
-%% #{
-%%      <<"isBatch">> := boolean()
-%% }
--type operation_options() :: #{binary() => boolean()}.
+-type operation_options() :: json_utils:json_map().  %% for now no options are supported
 
+%@formatter:off
 -type browse_options() :: #{
     limit := atm_store_api:limit(),
     start_index => atm_store_api:index(),
     start_timestamp => time:millis(),
     offset => atm_store_api:offset()
 }.
+%@formatter:on
 
 -record(atm_audit_log_store_container, {
     data_spec :: atm_data_spec:record(),
-    backend_id :: atm_infinite_log_backend:id()
+    backend_id :: json_infinite_log_model:id()
 }).
 -type record() :: #atm_audit_log_store_container{}.
 
@@ -69,8 +64,6 @@
     ?LOGGER_ERROR, ?LOGGER_CRITICAL, ?LOGGER_EMERGENCY
 ]).
 
-%% @TODO VFS-8068 Reuse duplicated code with atm_list_store_container and atm_infinite_log_container
-
 %%%===================================================================
 %%% atm_store_container callbacks
 %%%===================================================================
@@ -81,10 +74,10 @@
 create(_AtmWorkflowExecutionAuth, AtmDataSpec, undefined) ->
     create_container(AtmDataSpec);
 
-create(AtmWorkflowExecutionAuth, AtmDataSpec, InitialValueBatch) ->
-    % validate and sanitize given batch first, to simulate atomic operation
-    SanitizedBatch = sanitize_data_batch(AtmWorkflowExecutionAuth, AtmDataSpec, InitialValueBatch),
-    append_sanitized_batch(SanitizedBatch, create_container(AtmDataSpec)).
+create(AtmWorkflowExecutionAuth, AtmDataSpec, InitialItemsArray) ->
+    % validate and sanitize given array of values first, to simulate atomic operation
+    SanitizedItemsArray = sanitize_items_array(AtmWorkflowExecutionAuth, AtmDataSpec, InitialItemsArray),
+    extend_with_sanitized_items_array(SanitizedItemsArray, create_container(AtmDataSpec)).
 
 
 -spec get_data_spec(record()) -> atm_data_spec:record().
@@ -98,25 +91,10 @@ browse_content(AtmWorkflowExecutionAuth, BrowseOpts, #atm_audit_log_store_contai
     backend_id = BackendId,
     data_spec = AtmDataSpec
 }) ->
-    SanitizedBrowseOpts = sanitize_browse_options(BrowseOpts),
-    {ok, {Marker, Entries}} = atm_infinite_log_backend:list(BackendId, #{
-        start_from => infer_start_from(SanitizedBrowseOpts),
-        offset => maps:get(offset, SanitizedBrowseOpts, 0),
-        limit => maps:get(limit, SanitizedBrowseOpts)
-    }),
-    MappedEntries = lists:map(fun({Index, Object, Timestamp}) ->
-        case atm_value:expand(AtmWorkflowExecutionAuth, maps:get(<<"entry">>, Object), AtmDataSpec) of
-            {ok, ExpandedEntry} ->
-                {Index, {ok, Object#{
-                    <<"timestamp">> => Timestamp, 
-                    <<"entry">> => ExpandedEntry, 
-                    <<"severity">> => maps:get(<<"severity">>, Object)}
-                }};
-            {error, _} = Error ->
-                {Index, Error}
-        end
-    end, Entries),
-    {MappedEntries, Marker =:= done}.
+    atm_infinite_log_based_stores_common:browse_content(
+        audit_log_store, BackendId, BrowseOpts,
+        atm_audit_log_store_container_iterator:gen_listing_postprocessor(AtmWorkflowExecutionAuth, AtmDataSpec)
+    ).
 
 
 -spec acquire_iterator(record()) -> atm_audit_log_store_container_iterator:record().
@@ -127,24 +105,22 @@ acquire_iterator(#atm_audit_log_store_container{backend_id = BackendId}) ->
 -spec apply_operation(record(), atm_store_container:operation()) ->
     record() | no_return().
 apply_operation(#atm_audit_log_store_container{data_spec = AtmDataSpec} = Record, #atm_store_container_operation{
-    type = append,
-    options = #{<<"isBatch">> := true},
-    argument = Batch,
+    type = extend,
+    argument = ItemsArray,
     workflow_execution_auth = AtmWorkflowExecutionAuth
 }) ->
-    % validate and sanitize given batch first, to simulate atomic operation
-    SanitizedBatch = sanitize_data_batch(AtmWorkflowExecutionAuth, AtmDataSpec, Batch),
-    append_sanitized_batch(SanitizedBatch, Record);
+    % validate and sanitize given array of items first, to simulate atomic operation
+    SanitizedItemsArray = sanitize_items_array(AtmWorkflowExecutionAuth, AtmDataSpec, ItemsArray),
+    extend_with_sanitized_items_array(SanitizedItemsArray, Record);
 
-apply_operation(#atm_audit_log_store_container{} = Record, Operation = #atm_store_container_operation{
+apply_operation(#atm_audit_log_store_container{data_spec = AtmDataSpec} = Record, #atm_store_container_operation{
     type = append,
     argument = Item,
-    options = Options
+    workflow_execution_auth = AtmWorkflowExecutionAuth
 }) ->
-    apply_operation(Record, Operation#atm_store_container_operation{
-        options = Options#{<<"isBatch">> => true},
-        argument = [Item]
-    });
+    % validate and sanitize given item, to simulate atomic operation
+    SanitizedItem = sanitize_item(AtmWorkflowExecutionAuth, AtmDataSpec, Item),
+    append_sanitized_item(SanitizedItem, Record);
 
 apply_operation(_Record, _Operation) ->
     throw(?ERROR_NOT_SUPPORTED).
@@ -152,7 +128,7 @@ apply_operation(_Record, _Operation) ->
 
 -spec delete(record()) -> ok.
 delete(#atm_audit_log_store_container{backend_id = BackendId}) ->
-    atm_infinite_log_backend:destroy(BackendId).
+    json_infinite_log_model:destroy(BackendId).
 
 
 %%%===================================================================
@@ -193,7 +169,7 @@ db_decode(#{<<"dataSpec">> := AtmDataSpecJson, <<"backendId">> := BackendId}, Ne
 %% @private
 -spec create_container(atm_data_spec:record()) -> record().
 create_container(AtmDataSpec) ->
-    {ok, Id} = atm_infinite_log_backend:create(#{}),
+    {ok, Id} = json_infinite_log_model:create(#{}),
     #atm_audit_log_store_container{
         data_spec = AtmDataSpec,
         backend_id = Id
@@ -201,66 +177,52 @@ create_container(AtmDataSpec) ->
 
 
 %% @private
--spec sanitize_data_batch(
+-spec sanitize_items_array(
     atm_workflow_execution_auth:record(),
     atm_data_spec:record(),
     [json_utils:json_term()]
 ) ->
     [atm_value:expanded()] | no_return().
-sanitize_data_batch(AtmWorkflowExecutionAuth, AtmDataSpec, Batch) when is_list(Batch) ->
-    lists:map(fun(Item) ->
-        #{<<"entry">> := Entry} = Object = prepare_audit_log_object(Item),
-        atm_value:validate(AtmWorkflowExecutionAuth, Entry, AtmDataSpec),
-        Object
-    end, Batch);
-sanitize_data_batch(_AtmWorkflowExecutionAuth, _AtmDataSpec, _Item) ->
-    throw(?ERROR_BAD_DATA(<<"value">>, <<"not a batch">>)).
+sanitize_items_array(AtmWorkflowExecutionAuth, AtmDataSpec, ItemsArray) when is_list(ItemsArray) ->
+    AuditLogObjects = lists:map(fun prepare_audit_log_object/1, ItemsArray),
+
+    AuditLogEntries = lists:map(fun(#{<<"entry">> := Entry}) -> Entry end, AuditLogObjects),
+    atm_value:validate(AtmWorkflowExecutionAuth, AuditLogEntries, ?ATM_ARRAY_DATA_SPEC(AtmDataSpec)),
+
+    AuditLogObjects;
+sanitize_items_array(_AtmWorkflowExecutionAuth, _AtmDataSpec, Value) ->
+    throw(?ERROR_ATM_DATA_TYPE_UNVERIFIED(Value, atm_array_type)).
 
 
 %% @private
--spec append_sanitized_batch([atm_value:expanded()], record()) -> record().
-append_sanitized_batch(Batch, Record = #atm_audit_log_store_container{
+-spec sanitize_item(
+    atm_workflow_execution_auth:record(),
+    atm_data_spec:record(),
+    json_utils:json_term()
+) ->
+    atm_value:expanded() | no_return().
+sanitize_item(AtmWorkflowExecutionAuth, AtmDataSpec, Item) ->
+    #{<<"entry">> := Entry} = Object = prepare_audit_log_object(Item),
+    atm_value:validate(AtmWorkflowExecutionAuth, Entry, AtmDataSpec),
+    Object.
+
+
+%% @private
+-spec extend_with_sanitized_items_array([atm_value:expanded()], record()) -> record().
+extend_with_sanitized_items_array(ItemsArray, Record) ->
+    lists:foldl(fun append_sanitized_item/2, Record, ItemsArray).
+
+
+%% @private
+-spec append_sanitized_item(atm_value:expanded(), record()) -> record().
+append_sanitized_item(#{<<"entry">> := Item} = Object, Record = #atm_audit_log_store_container{
     data_spec = AtmDataSpec,
     backend_id = BackendId
 }) ->
-    lists:foreach(fun(#{<<"entry">> := Item} = Object) ->
-        ok = atm_infinite_log_backend:append(BackendId, Object#{
-            <<"entry">> => atm_value:compress(Item, AtmDataSpec)
-        }) 
-    end, Batch),
+    ok = json_infinite_log_model:append(BackendId, Object#{
+        <<"entry">> => atm_value:compress(Item, AtmDataSpec)
+    }),
     Record.
-
-
-%% @private
--spec infer_start_from(atm_store_api:browse_options()) ->
-    undefined | {index, infinite_log:entry_index()} | {timestamp, infinite_log:timestamp()}.
-infer_start_from(#{start_index := <<>>}) ->
-    undefined;
-infer_start_from(#{start_index := StartIndexBin}) ->
-    try
-        {index, binary_to_integer(StartIndexBin)}
-    catch _:_ ->
-        throw(?ERROR_BAD_DATA(<<"index">>, <<"not numerical">>))
-    end;
-infer_start_from(#{start_timestamp := StartTimestamp}) ->
-    {timestamp, StartTimestamp};
-infer_start_from(_) ->
-    undefined.
-
-
-%% @private
--spec sanitize_browse_options(browse_options()) -> browse_options().
-sanitize_browse_options(BrowseOpts) ->
-    middleware_sanitizer:sanitize_data(BrowseOpts, #{
-        required => #{
-            limit => {integer, {not_lower_than, 1}}
-        },
-        at_least_one => #{
-            offset => {integer, any},
-            start_index => {binary, any},
-            start_timestamp => {integer, {not_lower_than, 0}}
-        }
-    }).
 
 
 %% @private

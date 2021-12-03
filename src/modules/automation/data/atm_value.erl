@@ -34,6 +34,7 @@
 %%%===================================================================
 
 
+%% TODO VFS-8689 pass 'Path' - useful in container types validation when nested item validation fails
 -spec validate(atm_workflow_execution_auth:record(), expanded(), atm_data_spec:record()) ->
     ok | no_return().
 validate(AtmWorkflowExecutionAuth, Value, AtmDataSpec) ->
@@ -80,6 +81,7 @@ filterexpand_list(AtmWorkflowExecutionAuth, CompressedItems, AtmDataSpec) ->
 
 %% @private
 -spec get_callback_module(atm_data_type:type()) -> module().
+get_callback_module(atm_array_type) -> atm_array_value;
 get_callback_module(atm_dataset_type) -> atm_dataset_value;
 get_callback_module(atm_file_type) -> atm_file_value;
 get_callback_module(atm_integer_type) -> atm_integer_value;

@@ -13,6 +13,7 @@
 -module(cluster_upgrade_test_SUITE).
 -author("Michal Stanisz").
 
+-include("modules/automation/atm_execution.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/storage/helpers/helpers.hrl").
 -include("modules/storage/import/storage_import.hrl").
@@ -31,6 +32,9 @@
     upgrade_from_20_02_1_space_strategies/1,
     upgrade_from_20_02_1_storage_sync_monitoring/1
 ]).
+
+-define(SPACE1_ID, <<"space_id1">>).
+
 
 %%%===================================================================
 %%% API functions
@@ -198,10 +202,10 @@ upgrade_from_20_02_1_storage_sync_monitoring(Config) ->
     DeletedSum = 3000,
     Timestamp = global_clock:timestamp_seconds(),
     HistLength = 12,
-    EmptyMinHist = time_slot_histogram:new(Timestamp, 60 div HistLength , HistLength),
+    EmptyMinHist = time_slot_histogram:new(Timestamp, 60 div HistLength, HistLength),
     EmptyHourHist = time_slot_histogram:new(Timestamp, 3600 div HistLength, HistLength),
     EmptyDayHist = time_slot_histogram:new(Timestamp, 86400 div HistLength, HistLength),
-    EmptyCumulativeMinHist = time_slot_histogram:new_cumulative(Timestamp, 60 div HistLength , HistLength),
+    EmptyCumulativeMinHist = time_slot_histogram:new_cumulative(Timestamp, 60 div HistLength, HistLength),
     EmptyCumulativeHourHist = time_slot_histogram:new_cumulative(Timestamp, 3600 div HistLength, HistLength),
     EmptyCumulativeDayHist = time_slot_histogram:new_cumulative(Timestamp, 86400 div HistLength, HistLength),
 
@@ -361,7 +365,6 @@ upgrade_from_20_02_1_storage_sync_monitoring(Config) ->
     ?assertMatch({ok, SIMDoc4}, rpc:call(Worker, storage_import_monitoring, get, [SpaceId4])),
     ?assertMatch({ok, SIMDoc5}, rpc:call(Worker, storage_import_monitoring, get, [SpaceId5])).
 
-
 %%%===================================================================
 %%% Setup/teardown functions
 %%%===================================================================
@@ -380,16 +383,16 @@ init_per_testcase(Case = upgrade_from_19_02_x_storages, Config) ->
     test_utils:mock_new(Worker, storage_logic, [passthrough]),
     test_utils:mock_expect(Worker, storage_logic, create_in_zone, fun(_, _, _, _, StorageId) -> {ok, StorageId} end),
     test_utils:mock_expect(Worker, storage_logic, delete_in_zone, fun(_) -> ok end),
-    test_utils:mock_expect(Worker, storage_logic, upgrade_legacy_support, fun(_,_) -> ok end),
-    test_utils:mock_expect(Worker, storage_logic, set_imported, fun(_,_) -> ok end),
+    test_utils:mock_expect(Worker, storage_logic, upgrade_legacy_support, fun(_, _) -> ok end),
+    test_utils:mock_expect(Worker, storage_logic, set_imported, fun(_, _) -> ok end),
     test_utils:mock_expect(Worker, storage_logic, is_imported, fun(_) -> {ok, <<"unknown">>} end),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 
 init_per_testcase(Case = upgrade_from_20_02_0_beta3_storages, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    
+
     test_utils:mock_new(Worker, storage_logic, [passthrough]),
-    test_utils:mock_expect(Worker, storage_logic, set_imported, fun(_,_) -> ok end),
+    test_utils:mock_expect(Worker, storage_logic, set_imported, fun(_, _) -> ok end),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 
 init_per_testcase(Case = upgrade_from_20_02_1_space_strategies, Config) ->

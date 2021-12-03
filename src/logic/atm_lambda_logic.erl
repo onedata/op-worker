@@ -12,15 +12,15 @@
 -module(atm_lambda_logic).
 -author("Michal Stanisz").
 
--include("middleware/middleware.hrl").
 -include("graph_sync/provider_graph_sync.hrl").
+-include("middleware/middleware.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
+-include_lib("ctool/include/automation/automation.hrl").
+-include_lib("ctool/include/errors.hrl").
 
--export([
-    get/2, get_name/2, get_summary/2, get_description/2,
-    get_operation_spec/2, get_argument_specs/2, get_result_specs/2
-]).
+-export([get/2]).
+-export([assert_executable_revisions/2]).
 
 
 %%%===================================================================
@@ -37,67 +37,41 @@ get(SessionId, AtmLambdaId) ->
     }).
 
 
--spec get_name(gs_client_worker:client(), od_atm_lambda:id()) ->
-    {ok, automation:name()} | errors:error().
-get_name(SessionId, AtmLambdaId) ->
-    case get(SessionId, AtmLambdaId) of
-        {ok, #document{value = #od_atm_lambda{name = Name}}} ->
-            {ok, Name};
-        {error, _} = Error ->
-            Error
-    end.
+%%-------------------------------------------------------------------
+%% @doc
+%% Checks whether given atm lambda revisions can be executed (not all valid
+%% features may be supported by this provider - e.g. OpenFaaS service may
+%% not be configured).
+%% @end
+%%-------------------------------------------------------------------
+-spec assert_executable_revisions(
+    [atm_lambda_revision:revision_number()],
+    od_atm_lambda:record() | od_atm_lambda:doc()
+) ->
+    ok | no_return().
+assert_executable_revisions(RevisionNums, #od_atm_lambda{revision_registry = RevisionRegistry}) ->
+    lists:foreach(fun(RevisionNum) ->
+        case atm_lambda_revision_registry:has_revision(RevisionNum, RevisionRegistry) of
+            true ->
+                assert_executable_revision(atm_lambda_revision_registry:get_revision(
+                    RevisionNum, RevisionRegistry
+                ));
+            false ->
+                throw(?ERROR_NOT_FOUND)
+        end
+    end, RevisionNums);
+
+assert_executable_revisions(RevisionNums, #document{value = AtmLambda}) ->
+    assert_executable_revisions(RevisionNums, AtmLambda).
 
 
--spec get_summary(gs_client_worker:client(), od_atm_lambda:id()) ->
-    {ok, automation:summary()} | errors:error().
-get_summary(SessionId, AtmLambdaId) ->
-    case get(SessionId, AtmLambdaId) of
-        {ok, #document{value = #od_atm_lambda{summary = Summary}}} ->
-            {ok, Summary};
-        {error, _} = Error ->
-            Error
-    end.
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
 
 
--spec get_description(gs_client_worker:client(), od_atm_lambda:id()) ->
-    {ok, automation:description()} | errors:error().
-get_description(SessionId, AtmLambdaId) ->
-    case get(SessionId, AtmLambdaId) of
-        {ok, #document{value = #od_atm_lambda{description = Description}}} ->
-            {ok, Description};
-        {error, _} = Error ->
-            Error
-    end.
-
-
--spec get_operation_spec(gs_client_worker:client(), od_atm_lambda:id()) ->
-    {ok, atm_lambda_operation_spec:record()} | errors:error().
-get_operation_spec(SessionId, AtmLambdaId) ->
-    case get(SessionId, AtmLambdaId) of
-        {ok, #document{value = #od_atm_lambda{operation_spec = OperationSpec}}} ->
-            {ok, OperationSpec};
-        {error, _} = Error ->
-            Error
-    end.
-
-
--spec get_argument_specs(gs_client_worker:client(), od_atm_lambda:id()) ->
-    {ok, [atm_lambda_argument_spec:record()]} | errors:error().
-get_argument_specs(SessionId, AtmLambdaId) ->
-    case get(SessionId, AtmLambdaId) of
-        {ok, #document{value = #od_atm_lambda{argument_specs = ArgumentSpecs}}} ->
-            {ok, ArgumentSpecs};
-        {error, _} = Error ->
-            Error
-    end.
-
-
--spec get_result_specs(gs_client_worker:client(), od_atm_lambda:id()) ->
-    {ok, [atm_lambda_result_spec:record()]} | errors:error().
-get_result_specs(SessionId, AtmLambdaId) ->
-    case get(SessionId, AtmLambdaId) of
-        {ok, #document{value = #od_atm_lambda{result_specs = ResultSpecs}}} ->
-            {ok, ResultSpecs};
-        {error, _} = Error ->
-            Error
-    end.
+%% @private
+-spec assert_executable_revision(atm_lambda_revision:record()) ->
+    ok | no_return().
+assert_executable_revision(#atm_lambda_revision{operation_spec = #atm_openfaas_operation_spec{}}) ->
+    atm_openfaas_task_executor:assert_openfaas_available().

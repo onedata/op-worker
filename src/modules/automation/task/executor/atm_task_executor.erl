@@ -25,9 +25,10 @@
 
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/errors.hrl").
+-include_lib("ctool/include/automation/automation.hrl").
 
 %% API
--export([create/2, prepare/2, clean/1, get_spec/1, in_readonly_mode/1, run/3]).
+-export([create/4, initiate/4, teardown/2, delete/1, in_readonly_mode/1, run/3]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
@@ -35,6 +36,25 @@
 
 -type model() :: atm_openfaas_task_executor.
 -type record() :: atm_openfaas_task_executor:record().
+
+-type args() :: json_utils:json_map().
+-type results() :: errors:error() | json_utils:json_map().
+
+%% Below types format can't be expressed directly in type spec due to dialyzer
+%% limitations in specifying individual maps keys in case of binaries.
+%% Instead it is shown below their declaration.
+
+-type input() :: json_utils:json_map().
+%% #{
+%%      <<"argsBatch">> := [args()],
+%%      <<"ctx">> := #{heartbeatUrl := binary()}
+%% }
+-type outcome() :: errors:error() | json_utils:json_map().
+%% #{
+%%      <<"resultsBatch">> := [results()]
+%% }
+
+-export_type([args/0, results/0, input/0, outcome/0]).
 
 -export_type([model/0, record/0]).
 
@@ -44,18 +64,29 @@
 %%%===================================================================
 
 
--callback create(atm_workflow_execution:id(), od_atm_lambda:doc()) ->
+-callback create(
+    atm_workflow_execution_ctx:record(),
+    atm_lane_execution:index(),
+    atm_task_schema:record(),
+    atm_lambda_revision:record()
+) ->
     record() | no_return().
 
--callback prepare(atm_workflow_execution_ctx:record(), record()) -> ok | no_return().
+-callback initiate(
+    atm_workflow_execution_ctx:record(),
+    atm_task_schema:record(),
+    atm_lambda_revision:record(),
+    record()
+) ->
+    workflow_engine:task_spec() | no_return().
 
--callback clean(record()) -> ok | no_return().
+-callback teardown(atm_lane_execution_handler:teardown_ctx(), record()) -> ok | no_return().
 
--callback get_spec(record()) -> workflow_engine:task_spec().
+-callback delete(record()) -> ok | no_return().
 
 -callback in_readonly_mode(record()) -> boolean().
 
--callback run(atm_job_ctx:record(), json_utils:json_map(), record()) ->
+-callback run(atm_job_ctx:record(), input(), record()) ->
     ok | no_return().
 
 
@@ -64,32 +95,43 @@
 %%%===================================================================
 
 
--spec create(atm_workflow_execution:id(), od_atm_lambda:doc()) ->
+-spec create(
+    atm_workflow_execution_ctx:record(),
+    atm_lane_execution:index(),
+    atm_task_schema:record(),
+    atm_lambda_revision:record()
+) ->
     record() | no_return().
-create(AtmWorkflowExecutionId, AtmLambdaDoc = #document{value = #od_atm_lambda{
+create(AtmWorkflowExecutionCtx, AtmLaneIndex, AtmTaskSchema, AtmLambdaRevision = #atm_lambda_revision{
     operation_spec = AtmLambadaOperationSpec
-}}) ->
+}) ->
     Engine = atm_lambda_operation_spec:get_engine(AtmLambadaOperationSpec),
     Model = engine_to_executor_model(Engine),
-    Model:create(AtmWorkflowExecutionId, AtmLambdaDoc).
+    Model:create(AtmWorkflowExecutionCtx, AtmLaneIndex, AtmTaskSchema, AtmLambdaRevision).
 
 
--spec prepare(atm_workflow_execution_ctx:record(), record()) -> ok | no_return().
-prepare(AtmWorkflowExecutionCtx, AtmTaskExecutor) ->
+-spec initiate(
+    atm_workflow_execution_ctx:record(),
+    atm_task_schema:record(),
+    atm_lambda_revision:record(),
+    record()
+) ->
+    workflow_engine:task_spec() | no_return().
+initiate(AtmWorkflowExecutionCtx, AtmTaskSchema, AtmLambdaRevision, AtmTaskExecutor) ->
     Model = utils:record_type(AtmTaskExecutor),
-    Model:prepare(AtmWorkflowExecutionCtx, AtmTaskExecutor).
+    Model:initiate(AtmWorkflowExecutionCtx, AtmTaskSchema, AtmLambdaRevision, AtmTaskExecutor).
 
 
--spec clean(record()) -> ok | no_return().
-clean(AtmTaskExecutor) ->
+-spec teardown(atm_lane_execution_handler:teardown_ctx(), record()) -> ok | no_return().
+teardown(AtmLaneExecutionRunTeardownCtx, AtmTaskExecutor) ->
     Model = utils:record_type(AtmTaskExecutor),
-    Model:clean(AtmTaskExecutor).
+    Model:teardown(AtmLaneExecutionRunTeardownCtx, AtmTaskExecutor).
 
 
--spec get_spec(record()) -> workflow_engine:task_spec().
-get_spec(AtmTaskExecutor) ->
+-spec delete(record()) -> ok | no_return().
+delete(AtmTaskExecutor) ->
     Model = utils:record_type(AtmTaskExecutor),
-    Model:get_spec(AtmTaskExecutor).
+    Model:delete(AtmTaskExecutor).
 
 
 -spec in_readonly_mode(record()) -> boolean().
@@ -98,7 +140,7 @@ in_readonly_mode(AtmTaskExecutor) ->
     Model:in_readonly_mode(AtmTaskExecutor).
 
 
--spec run(atm_job_ctx:record(), json_utils:json_map(), record()) ->
+-spec run(atm_job_ctx:record(), input(), record()) ->
     ok | no_return().
 run(AtmJobCtx, Arguments, AtmTaskExecutor) ->
     Model = utils:record_type(AtmTaskExecutor),

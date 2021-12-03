@@ -18,6 +18,7 @@
 -include("onenv_test_utils.hrl").
 -include("distribution_assert.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
+-include("modules/fslogic/file_details.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/errors.hrl").
 
@@ -28,7 +29,6 @@
     mv_and_sync_file/3, rm_and_sync_file/2, await_file_metadata_sync/3
 ]).
 -export([get_object_attributes/3]).
-
 -type share_spec() :: #share_spec{}.
 
 -type space_selector() :: oct_background:entity_selector().

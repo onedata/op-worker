@@ -14,6 +14,7 @@
 -include("global_definitions.hrl").
 -include("proto/oneclient/common_messages.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
+-include_lib("ctool/include/test/performance.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 -export([init_per_suite/1, init_per_testcase/2, end_per_testcase/2, end_per_suite/1, all/0]).
@@ -21,17 +22,28 @@
 %% tests
 -export([
     successful_replica_deletion_test/1,
+    successful_replica_deletion_test_base/1,
     failed_replica_deletion_test/1,
+    failed_replica_deletion_test_base/1,
     canceled_replica_deletion_test/1,
+    canceled_replica_deletion_test_base/1,
     throttling_test/1
 ]).
 
-all() -> [
+-define(STANDARD_CASES, [
     successful_replica_deletion_test,
     failed_replica_deletion_test,
     canceled_replica_deletion_test,
     throttling_test
-].
+]).
+
+-define(PERFORMANCE_CASES, [
+    successful_replica_deletion_test,
+    failed_replica_deletion_test,
+    canceled_replica_deletion_test
+]).
+
+all() -> ?ALL(?STANDARD_CASES, ?PERFORMANCE_CASES).
 
 -define(SPACE_ID, <<"space1">>).
 -define(DELETION_TYPE, test_deletion_type).
@@ -43,10 +55,14 @@ all() -> [
 -define(RUN_TEST(Config, TestFun, Setups),
     run_test(Config, TestFun, ?FUNCTION_NAME, Setups)).
 
--define(SETUPS, [
-    % Tests are run with 2 parameters: FilesNum and JobsNum.
-    % Number of total replica_deletion requests is equal to FilesNum * JobsNum.
-    % {FileNums, JobNums}
+% Tests are run with 2 parameters: FilesNum and JobsNum.
+% Number of total replica_deletion requests is equal to FilesNum * JobsNum.
+% {FileNums, JobNums}
+-define(STANDARD_SETUPS, [
+    {1, 1},
+    {100, 100}
+]).
+-define(PERFORMANCE_SETUPS, [
     {1, 1},
     {10, 1},
     {100, 1},
@@ -65,13 +81,55 @@ all() -> [
 %%%===================================================================
 
 successful_replica_deletion_test(Config) ->
-    ?RUN_TEST(Config, fun successful_replica_deletion_test_base/3, ?SETUPS).
+    ?PERFORMANCE(Config, [
+        {repeats, 1},
+        {success_rate, 100},
+        {parameters, [
+            [{name, test_type}, {value, standard}, {description, "Test of replica deletion ended with success"}]
+        ]},
+        {description, "Tests download of file via GUI"},
+        {config, [{name, performance},
+            {parameters, [
+                [{name, test_type}, {value, performance}]
+            ]}
+        ]}
+    ]).
+successful_replica_deletion_test_base(Config) ->
+    ?RUN_TEST(Config, fun successful_replica_deletion_test_base/3, get_setup(Config)).
 
 failed_replica_deletion_test(Config) ->
-    ?RUN_TEST(Config, fun failed_replica_deletion_test_base/3, ?SETUPS).
+    ?PERFORMANCE(Config, [
+        {repeats, 1},
+        {success_rate, 100},
+        {parameters, [
+            [{name, test_type}, {value, standard}, {description, "Test of replica deletion ended with failure"}]
+        ]},
+        {description, "Tests download of file via GUI"},
+        {config, [{name, performance},
+            {parameters, [
+                [{name, test_type}, {value, performance}]
+            ]}
+        ]}
+    ]).
+failed_replica_deletion_test_base(Config) ->
+    ?RUN_TEST(Config, fun failed_replica_deletion_test_base/3, get_setup(Config)).
 
 canceled_replica_deletion_test(Config) ->
-    ?RUN_TEST(Config, fun canceled_replica_deletion_test_base/3, ?SETUPS).
+    ?PERFORMANCE(Config, [
+        {repeats, 1},
+        {success_rate, 100},
+        {parameters, [
+            [{name, test_type}, {value, standard}, {description, "Test of canceled replica deletion"}]
+        ]},
+        {description, "Tests download of file via GUI"},
+        {config, [{name, performance},
+            {parameters, [
+                [{name, test_type}, {value, performance}]
+            ]}
+        ]}
+    ]).
+canceled_replica_deletion_test_base(Config) ->
+    ?RUN_TEST(Config, fun canceled_replica_deletion_test_base/3, get_setup(Config)).
 
 throttling_test(Config) ->
     % This test checks whether throttling works properly in replica_deletion_master process
@@ -390,6 +448,12 @@ run_test(Config, Testcase, TestcaseName, FilesAndJobsNums) ->
         end
     end, FilesAndJobsNums),
     ?assertEqual(true, lists:all(fun(E) -> E =:= ok end, Results)).
+
+get_setup(Config) ->
+    case ?config(test_type, Config) of
+        standard -> ?STANDARD_SETUPS;
+        performance -> ?PERFORMANCE_SETUPS
+    end.
 
 cleanup(Config) ->
     Workers = ?config(op_worker_nodes, Config),

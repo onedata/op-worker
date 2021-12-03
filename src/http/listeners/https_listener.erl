@@ -121,6 +121,7 @@ gui_config() ->
         {?CLIENT_PROTOCOL_PATH, connection, []},
         {?PANEL_REST_PROXY_PATH ++ "[...]", http_port_forwarder, [9443, ?ONEPANEL_CONNECT_OPTS]},
         {?GUI_GRAPH_SYNC_WS_PATH, gs_ws_handler, [gui_gs_translator]},
+        {?OPENFAAS_ACTIVITY_FEED_WS_PATH, atm_openfaas_activity_feed_ws_handler, []},
         {?CDMI_ID_PATH, cdmi_handler, by_id},
         {?CDMI_PATH, cdmi_handler, by_path},
         rest_routes:routes()

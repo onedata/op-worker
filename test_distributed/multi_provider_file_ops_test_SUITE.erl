@@ -1206,7 +1206,7 @@ async_replicate_blocks_end(Promises) ->
 replicate_block(SessionID, FileCtx, {Offset, Size, Priority}) ->
     UserCtx = user_ctx:new(SessionID),
     replica_synchronizer:synchronize(UserCtx, FileCtx,
-        #file_block{offset = Offset, size = Size}, false, undefined, Priority
+        #file_block{offset = Offset, size = Size}, false, undefined, Priority, transfer
     ).
 
 meck_get_num_calls(Nodes, Module, Fun, Args) ->

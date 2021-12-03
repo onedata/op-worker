@@ -19,9 +19,14 @@
 %% API
 -export([acquire/2]).
 -export([
+    get_workflow_execution_id/1,
+    get_workflow_execution_incarnation/1,
+    get_env/1,
     get_auth/1,
     get_logger/1,
-    get_workflow_store_id/2
+
+    is_global_store/2,
+    get_global_store_id/2
 ]).
 
 
@@ -54,6 +59,25 @@ acquire(AtmTaskExecutionId, AtmWorkflowExecutionEnv) ->
     }.
 
 
+-spec get_workflow_execution_id(record()) -> atm_workflow_execution:id().
+get_workflow_execution_id(#atm_workflow_execution_ctx{
+    workflow_execution_env = AtmWorkflowExecutionEnv
+}) ->
+    atm_workflow_execution_env:get_workflow_execution_id(AtmWorkflowExecutionEnv).
+
+
+-spec get_workflow_execution_incarnation(record()) -> atm_workflow_execution:incarnation().
+get_workflow_execution_incarnation(#atm_workflow_execution_ctx{
+    workflow_execution_env = AtmWorkflowExecutionEnv
+}) ->
+    atm_workflow_execution_env:get_workflow_execution_incarnation(AtmWorkflowExecutionEnv).
+
+
+-spec get_env(record()) -> atm_workflow_execution_env:record().
+get_env(#atm_workflow_execution_ctx{workflow_execution_env = AtmWorkflowExecutionEnv}) ->
+    AtmWorkflowExecutionEnv.
+
+
 -spec get_auth(record()) -> atm_workflow_execution_auth:record().
 get_auth(#atm_workflow_execution_ctx{workflow_execution_auth = AtmWorkflowExecutionAuth}) ->
     AtmWorkflowExecutionAuth.
@@ -64,8 +88,17 @@ get_logger(#atm_workflow_execution_ctx{workflow_execution_logger = AtmWorkflowEx
     AtmWorkflowExecutionLogger.
 
 
--spec get_workflow_store_id(automation:id(), record()) -> atm_store:id() | no_return().
-get_workflow_store_id(AtmStoreSchemaId, #atm_workflow_execution_ctx{
+-spec is_global_store(atm_store:id(), record()) -> boolean().
+is_global_store(AtmStoreId, #atm_workflow_execution_ctx{
     workflow_execution_env = AtmWorkflowExecutionEnv
 }) ->
-    atm_workflow_execution_env:get_workflow_store_id(AtmStoreSchemaId, AtmWorkflowExecutionEnv).
+    lists:member(AtmStoreId, atm_workflow_execution_env:list_global_stores(
+        AtmWorkflowExecutionEnv
+    )).
+
+
+-spec get_global_store_id(automation:id(), record()) -> atm_store:id() | no_return().
+get_global_store_id(AtmStoreSchemaId, #atm_workflow_execution_ctx{
+    workflow_execution_env = AtmWorkflowExecutionEnv
+}) ->
+    atm_workflow_execution_env:get_global_store_id(AtmStoreSchemaId, AtmWorkflowExecutionEnv).

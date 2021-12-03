@@ -8,8 +8,8 @@
 %%% @doc
 %%% This module provides utility functions for management of automation job
 %%% context which consists of information necessary to run or schedule task
-%%% execution for specific item (automation job is automation task execution
-%%% for specific item).
+%%% execution for specific batch of items (automation job is automation task
+%%% execution for specific batch of items).
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_job_ctx).
@@ -19,23 +19,19 @@
 -include_lib("ctool/include/aai/aai.hrl").
 
 %% API
--export([build/5]).
+-export([build/3]).
 -export([
     get_workflow_execution_ctx/1,
     get_workflow_execution_auth/1,
     get_access_token/1,
-    get_item/1,
-    get_report_result_url/1,
-    get_heartbeat_url/1
+    get_report_result_url/1
 ]).
 
 
 -record(atm_job_ctx, {
     workflow_execution_ctx :: atm_workflow_execution_ctx:record(),
     in_readonly_mode :: boolean(),
-    item :: json_utils:json_term(),
-    report_result_url :: undefined | binary(),
-    heartbeat_url :: undefined | binary()
+    report_result_url :: undefined | binary()
 }).
 -type record() :: #atm_job_ctx{}.
 
@@ -47,21 +43,13 @@
 %%%===================================================================
 
 
--spec build(
-    atm_workflow_execution_ctx:record(),
-    boolean(),
-    json_utils:json_term(),
-    undefined | binary(),
-    undefined | binary()
-) ->
+-spec build(atm_workflow_execution_ctx:record(), boolean(), undefined | binary()) ->
     record().
-build(AtmWorkflowExecutionCtx, InReadonlyMode, Item, ReportResultUrl, HeartbeatUrl) ->
+build(AtmWorkflowExecutionCtx, InReadonlyMode, ReportResultUrl) ->
     #atm_job_ctx{
         workflow_execution_ctx = AtmWorkflowExecutionCtx,
         in_readonly_mode = InReadonlyMode,
-        item = Item,
-        report_result_url = ReportResultUrl,
-        heartbeat_url = HeartbeatUrl
+        report_result_url = ReportResultUrl
     }.
 
 
@@ -89,16 +77,6 @@ get_access_token(#atm_job_ctx{
     end.
 
 
--spec get_item(record()) -> json_utils:json_term().
-get_item(#atm_job_ctx{item = Item}) ->
-    Item.
-
-
 -spec get_report_result_url(record()) -> undefined | binary().
 get_report_result_url(#atm_job_ctx{report_result_url = ReportResultUrl}) ->
     ReportResultUrl.
-
-
--spec get_heartbeat_url(record()) -> undefined | binary().
-get_heartbeat_url(#atm_job_ctx{heartbeat_url = HeartbeatUrl}) ->
-    HeartbeatUrl.

@@ -12,6 +12,7 @@
 -module(test_rpc_api).
 -author("Piotr Duleba").
 
+-include("middleware/middleware.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
@@ -44,13 +45,13 @@
 
     get_provider_id/0,
     get_provider_domain/0,
+    get_provider_node_ip/0,
     get_provider_name/0,
     get_provider_eff_users/0,
 
     get_cert_chain_ders/0,
     gs_protocol_supported_versions/0,
 
-    schedule_atm_workflow_execution/4,
     list_waiting_atm_workflow_executions/3,
     list_ongoing_atm_workflow_executions/3,
 
@@ -179,6 +180,11 @@ get_provider_domain() ->
     oneprovider:get_domain().
 
 
+-spec get_provider_node_ip() -> inet:ip4_address().
+get_provider_node_ip() ->
+    oneprovider:get_node_ip().
+
+
 -spec get_provider_name() -> {ok, od_provider:name()} | errors:error().
 get_provider_name() ->
     provider_logic:get_name().
@@ -197,18 +203,6 @@ get_cert_chain_ders() ->
 -spec gs_protocol_supported_versions() -> [gs_protocol:protocol_version()].
 gs_protocol_supported_versions() ->
     gs_protocol:supported_versions().
-
-
--spec schedule_atm_workflow_execution(
-    session:id(),
-    od_space:id(),
-    od_atm_workflow_schema:id(),
-    atm_workflow_execution_api:store_initial_values()
-) ->
-    {ok, atm_workflow_execution:id(), atm_workflow_execution:record()} | errors:error().
-schedule_atm_workflow_execution(SessId, SpaceId, AtmWorkflowSchemaId, AtmStoreInitialValues) ->
-    lfm:schedule_atm_workflow_execution(SessId, SpaceId, AtmWorkflowSchemaId, AtmStoreInitialValues).
-
 
 
 -spec list_waiting_atm_workflow_executions(

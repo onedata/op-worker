@@ -20,7 +20,7 @@
 -include("modules/automation/atm_execution.hrl").
 
 %% API
--export([build/2, get_name/1, is_dispatched/1, consume_result/3]).
+-export([build/2, get_name/1, consume_result/3]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
@@ -35,7 +35,6 @@
 -record(atm_task_execution_result_spec, {
     name :: automation:name(),
     data_spec :: atm_data_spec:record(),
-    is_batch :: boolean(),
     dispatch_specs :: [dispatch_spec()]
 }).
 -type record() :: #atm_task_execution_result_spec{}.
@@ -53,15 +52,10 @@
     [atm_task_schema_result_mapper:record()]
 ) ->
     record().
-build(#atm_lambda_result_spec{
-    name = Name,
-    data_spec = AtmDataSpec,
-    is_batch = IsBatch
-}, AtmTaskSchemaResultMappers) ->
+build(AtmLambdaResultSpec, AtmTaskSchemaResultMappers) ->
     #atm_task_execution_result_spec{
-        name = Name,
-        data_spec = AtmDataSpec,
-        is_batch = IsBatch,
+        name = AtmLambdaResultSpec#atm_lambda_result_spec.name,
+        data_spec = AtmLambdaResultSpec#atm_lambda_result_spec.data_spec,
         dispatch_specs = lists:map(fun build_dispatch_spec/1, AtmTaskSchemaResultMappers)
     }.
 
@@ -71,31 +65,25 @@ get_name(#atm_task_execution_result_spec{name = Name}) ->
     Name.
 
 
--spec is_dispatched(record()) -> boolean().
-is_dispatched(#atm_task_execution_result_spec{dispatch_specs = []}) ->
-    false;
-is_dispatched(_) ->
-    true.
-
-
 -spec consume_result(
     atm_workflow_execution_ctx:record(),
     record(),
     json_utils:json_term()
 ) ->
     ok | no_return().
-consume_result(AtmWorkflowExecutionCtx, AtmTaskExecutionResultSpec = #atm_task_execution_result_spec{
+consume_result(AtmWorkflowExecutionCtx, #atm_task_execution_result_spec{
     dispatch_specs = DispatchSpecs,
-    is_batch = IsBatch
+    data_spec = AtmDataSpec
 }, Result) ->
-    validate_result(AtmWorkflowExecutionCtx, AtmTaskExecutionResultSpec, Result),
+    AtmWorkflowExecutionAuth = atm_workflow_execution_ctx:get_auth(AtmWorkflowExecutionCtx),
+    atm_value:validate(AtmWorkflowExecutionAuth, Result, AtmDataSpec),
 
-    Options = #{<<"isBatch">> => IsBatch},
     lists:foreach(fun(#dispatch_spec{store_schema_id = AtmStoreSchemaId} = DispatchSpec) ->
         try
-            dispatch_result(AtmWorkflowExecutionCtx, Result, Options, DispatchSpec)
-        catch _:Reason ->
-            throw(?ERROR_ATM_TASK_RESULT_DISPATCH_FAILED(AtmStoreSchemaId, Reason))
+            dispatch_result(AtmWorkflowExecutionCtx, Result, #{}, DispatchSpec)
+        catch Type:Reason:Stacktrace ->
+            Error = ?atm_examine_error(Type, Reason, Stacktrace),
+            throw(?ERROR_ATM_TASK_RESULT_DISPATCH_FAILED(AtmStoreSchemaId, Error))
         end
     end, DispatchSpecs).
 
@@ -115,13 +103,11 @@ version() ->
 db_encode(#atm_task_execution_result_spec{
     name = Name,
     data_spec = AtmDataSpec,
-    is_batch = IsBatch,
     dispatch_specs = DispatchSpecs
 }, NestedRecordEncoder) ->
     #{
         <<"name">> => Name,
         <<"dataSpec">> => NestedRecordEncoder(AtmDataSpec, atm_data_spec),
-        <<"isBatch">> => IsBatch,
         <<"dispatchSpecs">> => lists:map(fun dispatch_spec_to_json/1, DispatchSpecs)
     }.
 
@@ -131,13 +117,11 @@ db_encode(#atm_task_execution_result_spec{
 db_decode(#{
     <<"name">> := Name,
     <<"dataSpec">> := AtmDataSpecJson,
-    <<"isBatch">> := IsBatch,
     <<"dispatchSpecs">> := DispatchSpecsJson
 }, NestedRecordDecoder) ->
     #atm_task_execution_result_spec{
         name = Name,
         data_spec = NestedRecordDecoder(AtmDataSpecJson, atm_data_spec),
-        is_batch = IsBatch,
         dispatch_specs = lists:map(fun dispatch_spec_from_json/1, DispatchSpecsJson)
     }.
 
@@ -184,30 +168,6 @@ dispatch_spec_from_json(#{
 
 
 %% @private
--spec validate_result(atm_workflow_execution_ctx:record(), record(), json_utils:json_term()) ->
-    ok | no_return().
-validate_result(AtmWorkflowExecutionCtx, #atm_task_execution_result_spec{
-    data_spec = AtmDataSpec,
-    is_batch = false
-}, Result) ->
-    AtmWorkflowExecutionAuth = atm_workflow_execution_ctx:get_auth(AtmWorkflowExecutionCtx),
-    atm_value:validate(AtmWorkflowExecutionAuth, Result, AtmDataSpec);
-
-validate_result(AtmWorkflowExecutionCtx, #atm_task_execution_result_spec{
-    data_spec = AtmDataSpec,
-    is_batch = true
-}, ResultsBatch) when is_list(ResultsBatch) ->
-    AtmWorkflowExecutionAuth = atm_workflow_execution_ctx:get_auth(AtmWorkflowExecutionCtx),
-
-    lists:foreach(fun(Result) ->
-        atm_value:validate(AtmWorkflowExecutionAuth, Result, AtmDataSpec)
-    end, ResultsBatch);
-
-validate_result(_AtmWorkflowExecutionAuth, _AtmTaskExecutionResultSpec, _Result) ->
-    throw(?ERROR_BAD_DATA(<<"result">>, <<"not a batch">>)).
-
-
-%% @private
 -spec dispatch_result(
     atm_workflow_execution_ctx:record(),
     json_utils:json_term(),
@@ -216,23 +176,27 @@ validate_result(_AtmWorkflowExecutionAuth, _AtmTaskExecutionResultSpec, _Result)
 ) ->
     ok | no_return().
 dispatch_result(AtmWorkflowExecutionCtx, Result, Options, #dispatch_spec{
-    store_schema_id = ?CURRENT_TASK_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID
+    store_schema_id = ?CURRENT_TASK_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID,
+    function = DispatchFun
 }) ->
-    AtmWorkflowExecutionLogger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
-    atm_workflow_execution_logger:task_append_logs(Result, Options, AtmWorkflowExecutionLogger);
+    atm_workflow_execution_logger:task_handle_logs(
+        DispatchFun, Result, Options, atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx)
+    );
 
 dispatch_result(AtmWorkflowExecutionCtx, Result, Options, #dispatch_spec{
-    store_schema_id = ?WORKFLOW_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID
+    store_schema_id = ?WORKFLOW_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID,
+    function = DispatchFun
 }) ->
-    AtmWorkflowExecutionLogger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
-    atm_workflow_execution_logger:workflow_append_logs(Result, Options, AtmWorkflowExecutionLogger);
+    atm_workflow_execution_logger:workflow_handle_logs(
+        DispatchFun, Result, Options, atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx)
+    );
 
 dispatch_result(AtmWorkflowExecutionCtx, Result, Options, #dispatch_spec{
     store_schema_id = AtmStoreSchemaId,
     function = DispatchFun
 }) ->
     AtmWorkflowExecutionAuth = atm_workflow_execution_ctx:get_auth(AtmWorkflowExecutionCtx),
-    AtmStoreId = atm_workflow_execution_ctx:get_workflow_store_id(
+    AtmStoreId = atm_workflow_execution_ctx:get_global_store_id(
         AtmStoreSchemaId, AtmWorkflowExecutionCtx
     ),
     atm_store_api:apply_operation(

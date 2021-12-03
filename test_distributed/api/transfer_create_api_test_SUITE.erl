@@ -77,7 +77,7 @@ all() ->
 
 -define(PROVIDER_ID_TRANSFER_ERRORS(__KEY), [
     {__KEY, 100, ?ERROR_BAD_VALUE_BINARY(__KEY)},
-    {__KEY, <<"NonExistingProvider">>, ?ERROR_SPACE_NOT_SUPPORTED_BY(<<"NonExistingProvider">>)}
+    {__KEY, <<"NonExistingProvider">>, ?ERROR_SPACE_NOT_SUPPORTED_BY(?SPACE_2, <<"NonExistingProvider">>)}
 ]).
 
 -define(CALLBACK_TRANSFER_ERRORS, [{<<"callback">>, 100, ?ERROR_BAD_VALUE_BINARY(<<"callback">>)}]).
@@ -396,9 +396,7 @@ build_create_transfer_validate_rest_call_result_fun(MemRef) ->
         ),
         TransferId = maps:get(<<"transferId">>, Body),
 
-        ExpLocation = rpc:call(Node, oneprovider, get_rest_endpoint, [
-            string:trim(filename:join([<<"/">>, <<"transfers">>, TransferId]), leading, [$/])
-        ]),
+        ExpLocation = api_test_utils:build_rest_url(Node, [<<"transfers">>, TransferId]),
         ?assertEqual(ExpLocation, maps:get(?HDR_LOCATION, Headers)),
 
         build_create_transfer_validate_call_result(MemRef, TransferId, TestCtx)

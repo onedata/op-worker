@@ -15,15 +15,18 @@
 
 -include("modules/automation/atm_execution.hrl").
 -include_lib("ctool/include/errors.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([init_engine/0]).
 -export([
     list/4,
-    schedule/5,
+    schedule/6,
     get/1, get_summary/2,
     cancel/1,
-    terminate_not_ended/1
+    repeat/4,
+    terminate_not_ended/1,
+    purge_all/0
 ]).
 
 
@@ -33,9 +36,7 @@
 -type summary_entries() :: [{atm_workflow_executions_forest:index(), atm_workflow_execution:summary()}].
 -type entries() :: basic_entries() | summary_entries().
 
--type store_initial_values() :: #{
-    AtmStoreSchemaId :: automation:id() => atm_store_api:initial_value()
-}.
+-type store_initial_values() :: #{AtmStoreSchemaId :: automation:id() => json_utils:json_term()}.
 
 -export_type([listing_mode/0, basic_entries/0, summary_entries/0, entries/0]).
 -export_type([store_initial_values/0]).
@@ -87,19 +88,30 @@ list(SpaceId, Phase, summary, ListingOpts) ->
     user_ctx:ctx(),
     od_space:id(),
     od_atm_workflow_schema:id(),
+    atm_workflow_schema_revision:revision_number(),
     store_initial_values(),
     undefined | http_client:url()
 ) ->
     {atm_workflow_execution:id(), atm_workflow_execution:record()} | no_return().
-schedule(UserCtx, SpaceId, AtmWorkflowSchemaId, StoreInitialValues, CallbackUrl) ->
+schedule(
+    UserCtx,
+    SpaceId,
+    AtmWorkflowSchemaId,
+    AtmWorkflowSchemaRevisionNum,
+    StoreInitialValues,
+    CallbackUrl
+) ->
     {AtmWorkflowExecutionDoc, AtmWorkflowExecutionEnv} = atm_workflow_execution_factory:create(
-        UserCtx, SpaceId, AtmWorkflowSchemaId, StoreInitialValues, CallbackUrl
+        UserCtx,
+        SpaceId,
+        AtmWorkflowSchemaId,
+        AtmWorkflowSchemaRevisionNum,
+        StoreInitialValues,
+        CallbackUrl
     ),
-    AtmWorkflowExecutionId = AtmWorkflowExecutionDoc#document.key,
+    atm_workflow_execution_handler:start(UserCtx, AtmWorkflowExecutionEnv, AtmWorkflowExecutionDoc),
 
-    atm_workflow_execution_handler:start(UserCtx, AtmWorkflowExecutionId, AtmWorkflowExecutionEnv),
-
-    {AtmWorkflowExecutionId, AtmWorkflowExecutionDoc#document.value}.
+    {AtmWorkflowExecutionDoc#document.key, AtmWorkflowExecutionDoc#document.value}.
 
 
 -spec get(atm_workflow_execution:id()) ->
@@ -117,15 +129,23 @@ get(AtmWorkflowExecutionId) ->
     atm_workflow_execution:summary().
 get_summary(AtmWorkflowExecutionId, #atm_workflow_execution{
     name = Name,
+    schema_snapshot_id = AtmWorkflowSchemaSnapshotId,
     atm_inventory_id = AtmInventoryId,
     status = AtmWorkflowExecutionStatus,
     schedule_time = ScheduleTime,
     start_time = StartTime,
     finish_time = FinishTime
 }) ->
+    {ok, #document{
+        value = #atm_workflow_schema_snapshot{
+            revision_number = RevisionNum
+        }
+    }} = atm_workflow_schema_snapshot:get(AtmWorkflowSchemaSnapshotId),
+
     #atm_workflow_execution_summary{
         atm_workflow_execution_id = AtmWorkflowExecutionId,
         name = Name,
+        atm_workflow_schema_revision_num = RevisionNum,
         atm_inventory_id = AtmInventoryId,
         status = AtmWorkflowExecutionStatus,
         schedule_time = ScheduleTime,
@@ -134,9 +154,22 @@ get_summary(AtmWorkflowExecutionId, #atm_workflow_execution{
     }.
 
 
--spec cancel(atm_workflow_execution:id()) -> ok | {error, already_ended}.
+-spec cancel(atm_workflow_execution:id()) -> ok | errors:error().
 cancel(AtmWorkflowExecutionId) ->
     atm_workflow_execution_handler:cancel(AtmWorkflowExecutionId).
+
+
+-spec repeat(
+    user_ctx:ctx(),
+    atm_workflow_execution:repeat_type(),
+    atm_lane_execution:lane_run_selector(),
+    atm_workflow_execution:id()
+) ->
+    ok | errors:error().
+repeat(UserCtx, Type, AtmLaneRunSelector, AtmWorkflowExecutionId) ->
+    atm_workflow_execution_handler:repeat(
+        UserCtx, Type, AtmLaneRunSelector, AtmWorkflowExecutionId
+    ).
 
 
 %%--------------------------------------------------------------------
@@ -148,21 +181,50 @@ cancel(AtmWorkflowExecutionId) ->
 %%--------------------------------------------------------------------
 terminate_not_ended(SpaceId) ->
     TerminateFun = fun(AtmWorkflowExecutionId) ->
-        {ok, #document{value = #atm_workflow_execution{
-            store_registry = AtmStoreRegistry
-        }}} = atm_workflow_execution:get(AtmWorkflowExecutionId),
+        try
+            {ok, #document{
+                value = #atm_workflow_execution{
+                    incarnation = AtmWorkflowIncarnation
+                }
+            }} = atm_lane_execution_status:handle_aborting(
+                {current, current}, AtmWorkflowExecutionId, failure
+            ),
 
-        atm_workflow_execution_handler:handle_workflow_execution_ended(
-            AtmWorkflowExecutionId,
-            atm_workflow_execution_env:build(
-                SpaceId, AtmWorkflowExecutionId, AtmStoreRegistry,
-                undefined, undefined
+            atm_workflow_execution_handler:handle_workflow_execution_ended(
+                AtmWorkflowExecutionId,
+                atm_workflow_execution_env:build(SpaceId, AtmWorkflowExecutionId, AtmWorkflowIncarnation)
             )
-        )
+        catch Type:Reason:Stacktrace ->
+            ?atm_examine_error(Type, Reason, Stacktrace)
+        end
     end,
 
     foreach_atm_workflow_execution(TerminateFun, SpaceId, ?WAITING_PHASE),
     foreach_atm_workflow_execution(TerminateFun, SpaceId, ?ONGOING_PHASE).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Purges all workflow executions for all supported spaces.
+%%
+%%                              !!! Caution !!!
+%% This operation doesn't enforce any protection on deleted workflow executions
+%% and as such should never be called after successful Oneprovider start.
+%% @end
+%%--------------------------------------------------------------------
+purge_all() ->
+    ?info("Starting atm_workflow_execution purge procedure..."),
+
+    {ok, SpaceIds} = provider_logic:get_spaces(),
+    DeleteFun = fun atm_workflow_execution_factory:delete_insecure/1,
+
+    lists:foreach(fun(SpaceId) ->
+        foreach_atm_workflow_execution(DeleteFun, SpaceId, ?WAITING_PHASE),
+        foreach_atm_workflow_execution(DeleteFun, SpaceId, ?ONGOING_PHASE),
+        foreach_atm_workflow_execution(DeleteFun, SpaceId, ?ENDED_PHASE)
+    end, SpaceIds),
+
+    ?info("atm_workflow_execution purge procedure finished succesfully.").
 
 
 %%%===================================================================

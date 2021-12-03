@@ -133,7 +133,7 @@ copy_file_to_archive(FileCtx, TargetParentCtx, ResolvedFilePath, UserCtx) ->
     {ok, CopyGuid, _} = file_copy:copy(SessionId, FileGuid, TargetParentGuid, FileName, false),
 
     CopyCtx = file_ctx:new_by_guid(CopyGuid),
-    ok = archivisation_checksum:calculate_and_save(CopyCtx, UserCtx),
+    ok = archivisation_checksum:file_calculate_and_save(CopyCtx, UserCtx),
 
     {FileSize, CopyCtx2} = file_ctx:get_local_storage_file_size(CopyCtx),
     {SDHandle, CopyCtx3} = storage_driver:new_handle(SessionId, CopyCtx2),
