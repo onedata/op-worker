@@ -4,6 +4,8 @@ Release notes for project op-worker
 CHANGELOG
 ---------
 
+### 20.02.15
+
 ### 20.02.14
 
 -   **VFS-8482** Added dedicated page for privacy policy content.
