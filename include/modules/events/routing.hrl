@@ -19,9 +19,12 @@
 %% additional_keys - if file has hardlink, it is necessary to find subscribers also for them
 %%                   they are identified by guid/uuid (uuid for #file_location_changed_event{}, guid for other events)
 -record(event_routing_keys, {
+    file_ctx :: file_ctx:ctx() | undefined,
     main_key :: subscription_manager:key(),
     filter :: undefined | od_space:id(),
-    additional_keys = [] :: [{file_id:file_guid() | file_meta:uuid(), subscription_manager:key()}]
+    additional_keys = [] :: [{file_id:file_guid() | file_meta:uuid(), subscription_manager:key()}],
+
+    auth_check_type = attrs :: event_type:auth_check_type()
 }).
 
 %% subscribers for particular event:
@@ -31,7 +34,7 @@
 %%                         (uuid for #file_location_changed_event{}, guid for other events)
 -record(event_subscribers, {
     subscribers = [] :: [session:id()],
-    subscribers_for_links = [] :: [{file_id:file_guid() | file_meta:uuid(), [session:id()]}]
+    subscribers_for_links = [] :: [{subscription_manager:link_subscription_context(), [session:id()]}]
 }).
 
 -endif.
