@@ -32,8 +32,9 @@
     % allows explicit setting of parent e.g. when file is moved and old parent should be used
     parent => fslogic_worker:file_guid()
 } | undefined. % if routing_ctx is undefined it is automatically created basing on event content
+-type auth_check_type() :: attrs | location | rename.
 
--export_type([aggregation_key/0, ctx/0, routing_ctx/0]).
+-export_type([aggregation_key/0, ctx/0, routing_ctx/0, auth_check_type/0]).
 
 %%%===================================================================
 %%% API
@@ -53,29 +54,34 @@ get_routing_key(#file_attr_changed_event{file_attr = FileAttr}, RoutingCtx) ->
     {ok, check_links_and_get_parent_connected_routing_key(<<"file_attr_changed.">>, FileAttr#file_attr.guid, RoutingCtx)};
 get_routing_key(#file_location_changed_event{file_location = FileLocation}, _RoutingCtx) ->
     FileUuid = FileLocation#file_location.uuid,
+    SpaceId = FileLocation#file_location.space_id,
     {ok, References} = file_meta_hardlinks:list_references(fslogic_uuid:ensure_referenced_uuid(FileUuid)),
     AdditionalKeys = lists:map(fun(Uuid) ->
-        {Uuid, <<"file_location_changed.", Uuid/binary>>}
+        {{uuid, Uuid, SpaceId}, <<"file_location_changed.", Uuid/binary>>}
     end, References -- [FileUuid]),
     {ok, #event_routing_keys{
+        file_ctx = file_ctx:new_by_uuid(FileUuid, SpaceId),
         main_key = <<"file_location_changed.", FileUuid/binary>>,
-        additional_keys = AdditionalKeys
+        additional_keys = AdditionalKeys,
+        auth_check_type = location
     }};
 get_routing_key(#file_perm_changed_event{file_guid = FileGuid}, _RoutingCtx) ->
     FileUuid = file_id:guid_to_uuid(FileGuid),
     SpaceId = file_id:guid_to_space_id(FileGuid),
     {ok, References} = file_meta_hardlinks:list_references(fslogic_uuid:ensure_referenced_uuid(FileUuid)),
     AdditionalKeys = lists:map(fun(Uuid) ->
-        {file_id:pack_guid(Uuid, SpaceId), <<"file_perm_changed.", Uuid/binary>>}
+        {{guid, file_id:pack_guid(Uuid, SpaceId)}, <<"file_perm_changed.", Uuid/binary>>}
     end, References -- [FileUuid]),
     {ok, #event_routing_keys{
+        file_ctx = file_ctx:new_by_guid(FileGuid),
         main_key = <<"file_perm_changed.", FileUuid/binary>>,
         additional_keys = AdditionalKeys
     }};
 get_routing_key(#file_removed_event{file_guid = FileGuid}, RoutingCtx) ->
     {ok, get_parent_connected_routing_key(<<"file_removed.">>, FileGuid, RoutingCtx)};
 get_routing_key(#file_renamed_event{top_entry = Entry}, RoutingCtx) ->
-    {ok, get_parent_connected_routing_key(<<"file_renamed.">>, Entry#file_renamed_entry.old_guid, RoutingCtx)};
+    Ans = get_parent_connected_routing_key(<<"file_renamed.">>, Entry#file_renamed_entry.old_guid, RoutingCtx),
+    {ok, Ans#event_routing_keys{auth_check_type = rename}};
 get_routing_key(#quota_exceeded_event{}, _RoutingCtx) ->
     {ok, #event_routing_keys{main_key = <<"quota_exceeded">>}};
 get_routing_key(#helper_params_changed_event{storage_id = StorageId}, _RoutingCtx) ->
@@ -293,7 +299,7 @@ check_links_and_get_parent_connected_routing_key(Prefix, FileGuid, #{file_ctx :=
         try
             Guid = file_id:pack_guid(Uuid, SpaceId),
             AnsForGuid = get_parent_connected_routing_key(Prefix, Guid, undefined),
-            [{Guid, AnsForGuid#event_routing_keys.main_key} | Acc]
+            [{{guid, Guid}, AnsForGuid#event_routing_keys.main_key} | Acc]
         catch
             Error:Reason ->
                 % It is possible that some documents for additional keys are not found
@@ -320,16 +326,17 @@ get_parent_connected_routing_key(Prefix, FileGuid, #{file_ctx := FileCtx, parent
     case {Parent, file_ctx:is_space_dir_const(FileCtx)} of
         {undefined, _} -> % for user's dir parent is undefined (it has no parent)
             Uuid = file_id:guid_to_uuid(FileGuid),
-            #event_routing_keys{main_key = <<Prefix/binary, Uuid/binary>>};
+            #event_routing_keys{file_ctx = FileCtx, main_key = <<Prefix/binary, Uuid/binary>>};
         {_, true} ->
             Uuid = file_id:guid_to_uuid(Parent),
             #event_routing_keys{
+                file_ctx = FileCtx,
                 main_key = <<Prefix/binary, Uuid/binary>>,
                 filter = file_ctx:get_space_id_const(FileCtx)
             };
         _ ->
             Uuid = file_id:guid_to_uuid(Parent),
-            #event_routing_keys{main_key = <<Prefix/binary, Uuid/binary>>}
+            #event_routing_keys{file_ctx = FileCtx, main_key = <<Prefix/binary, Uuid/binary>>}
     end;
 get_parent_connected_routing_key(Prefix, FileGuid, #{file_ctx := FileCtx}) ->
     {ParentGuid, _} = files_tree:get_parent_guid_if_not_root_dir(FileCtx, undefined),
