@@ -315,13 +315,17 @@ emit_file_renamed(FileCtx, OldParentGuid, NewParentGuid, NewName, OldName, Exclu
             NewName
     end,
 
+    RoutingInfo = case NewParentGuid of
+        OldParentGuid -> #{file_ctx => FileCtx2, parent => OldParentGuid};
+        _ -> [#{file_ctx => FileCtx2, parent => OldParentGuid}, #{file_ctx => FileCtx2, parent => NewParentGuid}]
+    end,
+
     event:emit_to_filtered_subscribers(#file_renamed_event{top_entry = #file_renamed_entry{
         old_guid = Guid,
         new_guid = Guid,
         new_parent_guid = NewParentGuid,
         new_name = FinalName
-    }}, [#{file_ctx => FileCtx2, parent => OldParentGuid},
-        #{file_ctx => FileCtx2, parent => NewParentGuid}], Exclude).
+    }}, RoutingInfo, Exclude).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -363,7 +367,7 @@ emit_suffixes(ConflictingFiles, {parent_guid, ParentGuid}) ->
                 new_guid = Guid,
                 new_parent_guid = ParentGuid,
                 new_name = TaggedName
-            }}, [#{file_ctx => FileCtx, parent => ParentGuid}], [])
+            }}, #{file_ctx => FileCtx, parent => ParentGuid}, [])
         catch
             _:_ -> ok % File not fully synchronized (file_meta is missing)
         end

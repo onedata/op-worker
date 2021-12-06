@@ -68,6 +68,7 @@
 
 -export([
     create_file/3, create_file/5, create_777_mode_file/3,
+    delete_file/2,
     create_directory/3, create_directory/4,
     open/2, open/3, open/4,
     close/3, close/4,
@@ -535,6 +536,9 @@ create_file(Sock, RootGuid, Filename, Mode, MsgId) ->
 
 create_777_mode_file(Sock, RootGuid, Filename) ->
     create_file(Sock, RootGuid, Filename, 8#777, ?MSG_ID).
+
+delete_file(Sock, FileGuid) ->
+    ssl:send(Sock, fuse_test_utils:generate_delete_file_message(FileGuid, ?MSG_ID)).
 
 create_directory(Sock, RootGuid, Dirname) ->
     create_directory(Sock, RootGuid, Dirname, ?MSG_ID).
