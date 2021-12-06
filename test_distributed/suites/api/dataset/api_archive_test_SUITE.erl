@@ -924,7 +924,7 @@ verify_archive(
 -spec list_archive_ids(node(), session:id(), dataset:id(), dataset_api:listing_opts()) ->
     [archive:id()].
 list_archive_ids(Node, UserSessId, DatasetId, ListOpts) ->
-    {ok, Datasets, _} = opt_archives:list(Node, UserSessId, DatasetId, ListOpts),
+    {ok, {Datasets, _}} = opt_archives:list(Node, UserSessId, DatasetId, ListOpts),
     lists:map(fun({_, ArchiveId}) -> ArchiveId end, Datasets).
 
 

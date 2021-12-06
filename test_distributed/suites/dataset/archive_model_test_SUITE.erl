@@ -183,8 +183,10 @@ archivisation_of_detached_dataset_should_be_impossible(_Config) ->
     #object{dataset = #dataset_object{id = DatasetId}} =
         onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE, #file_spec{dataset = #dataset_spec{state = ?DETACHED_DATASET}}),
 
-    ?assertMatch({error, ?EINVAL},
-        opt_archives:archive_dataset(P1Node, UserSessIdP1, DatasetId, ?TEST_ARCHIVE_CONFIG, ?TEST_DESCRIPTION1)).
+    ?assertMatch(
+        ?ERROR_BAD_DATA(<<"datasetId">>, <<"Detached dataset cannot be modified.">>),
+        opt_archives:archive_dataset(P1Node, UserSessIdP1, DatasetId, ?TEST_ARCHIVE_CONFIG, ?TEST_DESCRIPTION1)
+    ).
 
 archive_of_detached_dataset_should_be_accessible(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
@@ -196,14 +198,14 @@ archive_of_detached_dataset_should_be_accessible(_Config) ->
         opt_archives:archive_dataset(P1Node, UserSessIdP1, DatasetId, ?TEST_ARCHIVE_CONFIG, ?TEST_DESCRIPTION1)),
     {ok, #archive_info{index = Index}} = ?assertMatch({ok, #archive_info{state = ?ARCHIVE_PRESERVED}},
         opt_archives:get_info(P1Node, UserSessIdP1, ArchiveId), ?ATTEMPTS),
-    ?assertEqual({ok, [{Index, ArchiveId}], true},
+    ?assertEqual({ok, {[{Index, ArchiveId}], true}},
         opt_archives:list(P1Node, UserSessIdP1, DatasetId, #{offset => 0, limit => 10})),
 
     ok = opt_datasets:detach_dataset(P1Node, UserSessIdP1, DatasetId),
 
     ?assertMatch({ok, #archive_info{}},
         opt_archives:get_info(P1Node, UserSessIdP1, ArchiveId)),
-    ?assertEqual({ok, [{Index, ArchiveId}], true},
+    ?assertEqual({ok, {[{Index, ArchiveId}], true}},
         opt_archives:list(P1Node, UserSessIdP1, DatasetId, #{offset => 0, limit => 10})).
 
 archive_of_dataset_associated_with_deleted_file_should_be_accessible(_Config) ->
@@ -216,14 +218,14 @@ archive_of_dataset_associated_with_deleted_file_should_be_accessible(_Config) ->
         opt_archives:archive_dataset(P1Node, UserSessIdP1, DatasetId, ?TEST_ARCHIVE_CONFIG, ?TEST_DESCRIPTION1)),
     {ok, #archive_info{index = Index}} = ?assertMatch({ok, #archive_info{state = ?ARCHIVE_PRESERVED}},
         opt_archives:get_info(P1Node, UserSessIdP1, ArchiveId), ?ATTEMPTS),
-    ?assertEqual({ok, [{Index, ArchiveId}], true},
+    ?assertEqual({ok, {[{Index, ArchiveId}], true}},
         opt_archives:list(P1Node, UserSessIdP1, DatasetId, #{offset => 0, limit => 10})),
 
     ok = lfm_proxy:unlink(P1Node, UserSessIdP1, ?FILE_REF(Guid)),
 
     ?assertMatch({ok, #archive_info{}},
         opt_archives:get_info(P1Node, UserSessIdP1, ArchiveId)),
-    ?assertEqual({ok, [{Index, ArchiveId}], true},
+    ?assertEqual({ok, {[{Index, ArchiveId}], true}},
         opt_archives:list(P1Node, UserSessIdP1, DatasetId, #{offset => 0, limit => 10})).
 
 archive_reattached_dataset(_Config) ->
@@ -236,7 +238,7 @@ archive_reattached_dataset(_Config) ->
         opt_archives:archive_dataset(P1Node, UserSessIdP1, DatasetId, ?TEST_ARCHIVE_CONFIG, ?TEST_DESCRIPTION1)),
     {ok, #archive_info{index = Index}} = ?assertMatch({ok, #archive_info{state = ?ARCHIVE_PRESERVED}},
         opt_archives:get_info(P1Node, UserSessIdP1, ArchiveId), ?ATTEMPTS),
-    ?assertEqual({ok, [{Index, ArchiveId}], true},
+    ?assertEqual({ok, {[{Index, ArchiveId}], true}},
         opt_archives:list(P1Node, UserSessIdP1, DatasetId, #{offset => 0, limit => 10})),
 
     ok = opt_datasets:detach_dataset(P1Node, UserSessIdP1, DatasetId),
@@ -247,7 +249,7 @@ archive_reattached_dataset(_Config) ->
 
     ?assertMatch({ok, #archive_info{state = ?ARCHIVE_PRESERVED}},
         opt_archives:get_info(P1Node, UserSessIdP1, ArchiveId2), ?ATTEMPTS),
-    ?assertMatch({ok, [_, _], true},
+    ?assertMatch({ok, {[_, _], true}},
         opt_archives:list(P1Node, UserSessIdP1, DatasetId, #{offset => 0, limit => 10})).
 
 removal_of_not_empty_dataset_should_fail(_Config) ->
@@ -261,15 +263,14 @@ removal_of_not_empty_dataset_should_fail(_Config) ->
 
     {ok, #archive_info{index = Index}} = ?assertMatch({ok, #archive_info{state = ?ARCHIVE_PRESERVED}},
         opt_archives:get_info(P1Node, UserSessIdP1, ArchiveId), ?ATTEMPTS),
-    ?assertEqual({ok, [{Index, ArchiveId}], true},
+    ?assertEqual({ok, {[{Index, ArchiveId}], true}},
         opt_archives:list(P1Node, UserSessIdP1, DatasetId, #{offset => 0, limit => 10})),
 
-    ?assertEqual({error, ?ENOTEMPTY},
-        opt_datasets:remove(P1Node, UserSessIdP1, DatasetId)),
+    ?assertEqual(?ERROR_POSIX(?ENOTEMPTY), opt_datasets:remove(P1Node, UserSessIdP1, DatasetId)),
 
     ?assertEqual(ok, opt_archives:init_purge(P1Node, UserSessIdP1, ArchiveId)),
     % wait till archive is purged
-    ?assertMatch({ok, [], true},
+    ?assertMatch({ok, {[], true}},
         opt_archives:list(P1Node, UserSessIdP1, DatasetId, #{offset => 0, limit => 10}), ?ATTEMPTS),
     ?assertEqual(ok, opt_datasets:remove(P1Node, UserSessIdP1, DatasetId)).
 
@@ -347,9 +348,9 @@ archive_dataset_many_times(_Config) ->
 
     ExpArchiveIdsAndIndices = lists:reverse(ExpArchiveIdsAndIndicesReversed),
 
-    ?assertEqual({ok, ExpArchiveIdsAndIndices, false},
+    ?assertEqual({ok, {ExpArchiveIdsAndIndices, false}},
         opt_archives:list(P1Node, UserSessIdP1, DatasetId, #{offset => 0, limit => Count})),
-    ?assertEqual({ok, ExpArchiveIdsAndIndices, false},
+    ?assertEqual({ok, {ExpArchiveIdsAndIndices, false}},
         opt_archives:list(P2Node, UserSessIdP2, DatasetId, #{offset => 0, limit => Count}), ?ATTEMPTS).
 
 time_warp_test(_Config) ->
@@ -368,7 +369,7 @@ time_warp_test(_Config) ->
     {ok, ArchiveId2} = ?assertMatch({ok, _},
         opt_archives:archive_dataset(P1Node, UserSessIdP1, DatasetId, ?TEST_ARCHIVE_CONFIG, ?TEST_DESCRIPTION1)),
 
-    ?assertMatch({ok, [{_, ArchiveId}, {_, ArchiveId2}], true},
+    ?assertMatch({ok, {[{_, ArchiveId}, {_, ArchiveId2}], true}},
         opt_archives:list(P1Node, UserSessIdP1, DatasetId, #{offset => 0, limit => 10})).
 
 create_archive_privileges_test(_Config) ->
@@ -395,10 +396,10 @@ create_archive_privileges_test(_Config) ->
 
         ensure_privilege_revoked(P1Node, SpaceId, UserId2, Privilege, AllPrivileges),
         % user2 cannot create archive
-        ?assertEqual({error, ?EPERM},
+        ?assertEqual({error, ?EPERM},  %% TODO
             opt_archives:archive_dataset(P1Node, User2SessIdP1, DatasetId, ?TEST_ARCHIVE_CONFIG, ?TEST_DESCRIPTION1)),
         % user2 cannot modify an existing archive either
-        ?assertEqual({error, ?EPERM},
+        ?assertEqual({error, ?EPERM},   %% TODO
             opt_archives:update(P1Node, User2SessIdP1, ArchiveId, #{<<"description">> => ?TEST_DESCRIPTION2})),
 
         ensure_privilege_assigned(P1Node, SpaceId, UserId2, Privilege, AllPrivileges),
@@ -439,10 +440,10 @@ view_archive_privileges_test(_Config) ->
     ensure_privilege_revoked(P1Node, SpaceId, UserId2, ?SPACE_VIEW_ARCHIVES, AllPrivileges),
 
     % user2 cannot fetch archive info
-    ?assertEqual({error, ?EPERM},
+    ?assertEqual({error, ?EPERM},   %% TODO
         opt_archives:get_info(P1Node, User2SessIdP1, ArchiveId), ?ATTEMPTS),
     % neither can he list the archives
-    ?assertEqual({error, ?EPERM},
+    ?assertEqual({error, ?EPERM},   %% TODO
         opt_archives:list(P1Node, User2SessIdP1, DatasetId, #{offset => 0, limit => 10})),
 
     % assign user2 privilege to view archives
@@ -452,7 +453,7 @@ view_archive_privileges_test(_Config) ->
     ?assertMatch({ok, _},
         opt_archives:get_info(P1Node, User2SessIdP1, ArchiveId)),
     % as well as list the archives
-    ?assertMatch({ok, [{_, ArchiveId}], _},
+    ?assertMatch({ok, {[{_, ArchiveId}], _}},
         opt_archives:list(P1Node, User2SessIdP1, DatasetId, #{offset => 0, limit => 10})).
 
 remove_archive_privileges_test(_Config) ->
@@ -483,7 +484,7 @@ remove_archive_privileges_test(_Config) ->
 
         ensure_privilege_revoked(P1Node, SpaceId, UserId2, Privilege, AllPrivileges),
         % user2 cannot remove the archive
-        ?assertEqual({error, ?EPERM}, opt_archives:init_purge(P1Node, User2SessIdP1, ArchiveId)),
+        ?assertEqual({error, ?EPERM}, opt_archives:init_purge(P1Node, User2SessIdP1, ArchiveId)),   %% TODO
 
         ensure_privilege_assigned(P1Node, SpaceId, UserId2, Privilege, AllPrivileges),
         % user2 can now remove archive
@@ -543,17 +544,17 @@ simple_archive_crud_test_base(DatasetId, RootFileType, ExpSize) ->
     % verify whether Archive is visible in the local provider
     ?assertMatch({ok, ExpArchiveInfo},
         opt_archives:get_info(P1Node, UserSessIdP1, ArchiveId), ?ATTEMPTS),
-    ?assertEqual({ok, [{Index, ArchiveId}], true},
+    ?assertEqual({ok, {[{Index, ArchiveId}], true}},
         opt_archives:list(P1Node, UserSessIdP1, DatasetId, #{offset => 0, limit => 10}, ?BASIC_INFO), ?ATTEMPTS),
-    ?assertMatch({ok, [ExpArchiveInfo], true},
+    ?assertMatch({ok, {[ExpArchiveInfo], true}},
         opt_archives:list(P1Node, UserSessIdP1, DatasetId, #{offset => 0, limit => 10}, ?EXTENDED_INFO), ?ATTEMPTS),
 
     % verify whether Archive is visible in the remote provider
     ?assertMatch({ok, ExpArchiveInfo},
         opt_archives:get_info(P2Node, UserSessIdP2, ArchiveId), ?ATTEMPTS),
-    ?assertEqual({ok, [{Index, ArchiveId}], true},
+    ?assertEqual({ok, {[{Index, ArchiveId}], true}},
         opt_archives:list(P2Node, UserSessIdP2, DatasetId, #{offset => 0, limit => 10}, ?BASIC_INFO), ?ATTEMPTS),
-    ?assertMatch({ok, [ExpArchiveInfo], true},
+    ?assertMatch({ok, {[ExpArchiveInfo], true}},
         opt_archives:list(P2Node, UserSessIdP2, DatasetId, #{offset => 0, limit => 10}, ?EXTENDED_INFO), ?ATTEMPTS),
 
     % update archive
@@ -577,15 +578,15 @@ simple_archive_crud_test_base(DatasetId, RootFileType, ExpSize) ->
     ok = opt_archives:init_purge(P1Node, UserSessIdP1, ArchiveId, ?TEST_ARCHIVE_PURGED_CALLBACK3),
 
     % verify whether Archive has been removed in the local provider
-    ?assertEqual({error, ?ENOENT},
+    ?assertEqual(?ERROR_NOT_FOUND,
         opt_archives:get_info(P1Node, UserSessIdP1, ArchiveId), ?ATTEMPTS),
-    ?assertEqual({ok, [], true},
+    ?assertEqual({ok, {[], true}},
         opt_archives:list(P1Node, UserSessIdP1, DatasetId, #{offset => 0, limit => 10}), ?ATTEMPTS),
 
     % verify whether Archive has been removed in the remote provider
-    ?assertEqual({error, ?ENOENT},
+    ?assertEqual(?ERROR_NOT_FOUND,
         opt_archives:get_info(P2Node, UserSessIdP2, ArchiveId), ?ATTEMPTS),
-    ?assertEqual({ok, [], true},
+    ?assertEqual({ok, {[], true}},
         opt_archives:list(P2Node, UserSessIdP2, DatasetId, #{offset => 0, limit => 10}), ?ATTEMPTS).
 
 
@@ -669,7 +670,7 @@ global_clock_timestamp(Node) ->
 check_if_all_archives_listed([], _Node, _SessId, _DatasetId, _Opts) ->
     true;
 check_if_all_archives_listed(ExpArchiveIds, Node, SessId, DatasetId, Opts) ->
-    {ok, ListedArchives, IsLast} = opt_archives:list(Node, SessId, DatasetId, Opts),
+    {ok, {ListedArchives, IsLast}} = opt_archives:list(Node, SessId, DatasetId, Opts),
     Limit = maps:get(limit, Opts),
     ListedArchiveIds = [AId || {_, AId} <- ListedArchives],
     ?assertEqual(lists:sublist(ExpArchiveIds, 1, Limit), ListedArchiveIds),

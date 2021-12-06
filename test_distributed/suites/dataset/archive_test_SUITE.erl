@@ -651,16 +651,16 @@ archive_nested_datasets_test_base(ArchiveLayout, IncludeDip) ->
     Node = oct_background:get_random_provider_node(krakow),
     SessionId = oct_background:get_user_session_id(?USER1, krakow),
     ListOpts = #{offset => 0, limit => 10},
-    {ok, [{_, ArchiveFile21Id}], _} = ?assertMatch({ok, [_], true},
+    {ok, {[{_, ArchiveFile21Id}], _}} = ?assertMatch({ok, {[_], true}},
         opt_archives:list(Node, SessionId, DatasetFile21Id, ListOpts), ?ATTEMPTS),
-    {ok, [{_, ArchiveDir22Id}], _} = ?assertMatch({ok, [_], true},
+    {ok, {[{_, ArchiveDir22Id}], _}} = ?assertMatch({ok, {[_], true}},
         opt_archives:list(Node, SessionId, DatasetDir22Id, ListOpts), ?ATTEMPTS),
-    {ok, [{_, ArchiveDir31Id}], _} = ?assertMatch({ok, [_], true},
+    {ok, {[{_, ArchiveDir31Id}], _}} = ?assertMatch({ok, {[_], true}},
         opt_archives:list(Node, SessionId, DatasetDir31Id, ListOpts), ?ATTEMPTS),
-    {ok, [{_, ArchiveFile41Id}], _} = ?assertMatch({ok, [_], true},
+    {ok, {[{_, ArchiveFile41Id}], _}} = ?assertMatch({ok, {[_], true}},
         opt_archives:list(Node, SessionId, DatasetFile41Id, ListOpts), ?ATTEMPTS),
     % DatasetFile4 is detached, therefore archive for this dataset shouldn't have been created
-    ?assertMatch({ok, [], true},
+    ?assertMatch({ok, {[], true}},
         opt_archives:list(Node, SessionId, DatasetFile42Id, ListOpts), ?ATTEMPTS),
 
     File21Size = byte_size(File21Content),
@@ -764,7 +764,7 @@ nested_incremental_archive_test_base(Layout) ->
     SessionId = oct_background:get_user_session_id(?USER1, krakow),
     
     ListOpts = #{offset => 0, limit => 10},
-    {ok, [{_, NestedBaseArchiveId}], _} = ?assertMatch({ok, [_], true},
+    {ok, {[{_, NestedBaseArchiveId}], _}} = ?assertMatch({ok, {[_], true}},
         opt_archives:list(Node, SessionId, NestedDatasetId, ListOpts), ?ATTEMPTS),
     
     {ok, TopArchiveId} = opt_archives:archive_dataset(Node, SessionId, TopDatasetId, #archive_config{
@@ -773,7 +773,7 @@ nested_incremental_archive_test_base(Layout) ->
         layout = Layout
     }, <<>>),
     
-    {ok, NestedArchives, _} = ?assertMatch({ok, [_, _], true},
+    {ok, {NestedArchives, _}} = ?assertMatch({ok, {[_, _], true}},
         opt_archives:list(Node, SessionId, NestedDatasetId, ListOpts), ?ATTEMPTS),
     NestedArchivesIds = lists:map(fun({_, ArchiveId}) ->
         ArchiveId
@@ -944,8 +944,8 @@ nested_verification_test_base(Layout) ->
     [Provider | _] = oct_background:get_space_supporting_providers(?SPACE),
     Node = oct_background:get_random_provider_node(Provider),
     
-    {ok, [{_, NestedArchiveId1} | _], _} = opt_archives:list(Node, ?ROOT_SESS_ID, NestedDatasetId1, #{offset => 0, limit => 1}),
-    {ok, [{_, NestedArchiveId2} | _], _} = opt_archives:list(Node, ?ROOT_SESS_ID, NestedDatasetId2, #{offset => 0, limit => 1}),
+    {ok, {[{_, NestedArchiveId1} | _], _}} = opt_archives:list(Node, ?ROOT_SESS_ID, NestedDatasetId1, #{offset => 0, limit => 1}),
+    {ok, {[{_, NestedArchiveId2} | _], _}} = opt_archives:list(Node, ?ROOT_SESS_ID, NestedDatasetId2, #{offset => 0, limit => 1}),
     
     lists:foreach(fun(Id) ->
         {ok, Pid} = archive_tests_utils:wait_for_archive_verification_traverse(Id, ?ATTEMPTS),

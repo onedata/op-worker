@@ -75,7 +75,7 @@ assert_archive_is_preserved(Node, SessionId, ArchiveId, DatasetId, DatasetRootFi
     
     GetDatasetArchives = fun() ->
         case opt_archives:list(Node, SessionId, DatasetId, #{offset => 0, limit => 10000}) of
-            {ok, ArchiveIdsAndIndices, _} ->
+            {ok, {ArchiveIdsAndIndices, _}} ->
                 [AID || {_, AID} <- ArchiveIdsAndIndices];
             _ ->
                 error
