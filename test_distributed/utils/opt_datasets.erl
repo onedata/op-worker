@@ -27,9 +27,15 @@
     get_file_eff_summary/3
 ]).
 
--define(CALL(NodeSelector, Args), test_rpc:call(
-    op_worker, NodeSelector, opl_datasets, ?FUNCTION_NAME, Args
-)).
+-define(CALL(NodeSelector, Args),
+    try test_rpc:call(op_worker, NodeSelector, opl_datasets, ?FUNCTION_NAME, Args) of
+        ok -> ok;
+        __RESULT -> {ok, __RESULT}
+    catch throw:__ERROR ->
+        __ERROR
+    end
+).
+
 
 
 %%%===================================================================

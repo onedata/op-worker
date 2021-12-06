@@ -21,9 +21,14 @@
     init_purge/3, init_purge/4
 ]).
 
--define(CALL(NodeSelector, Args), test_rpc:call(
-    op_worker, NodeSelector, opl_archives, ?FUNCTION_NAME, Args, timer:minutes(3)
-)).
+-define(CALL(NodeSelector, Args),
+    try test_rpc:call(op_worker, NodeSelector, opl_archives, ?FUNCTION_NAME, Args, timer:minutes(3)) of
+        ok -> ok;
+        __RESULT -> {ok, __RESULT}
+    catch throw:__ERROR ->
+        __ERROR
+    end
+).
 
 
 %%%===================================================================

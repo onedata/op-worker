@@ -293,7 +293,7 @@ cleanup_dataset(Node, DatasetId) ->
 -spec cleanup_dataset_archives(node(), dataset:id(), non_neg_integer()) -> ok.
 cleanup_dataset_archives(Node, DatasetId, Offset) ->
     Limit = 1000,
-    {ok, Archives, IsLast} =
+    {ok, {Archives, IsLast}} =
         opt_archives:list(Node, ?ROOT_SESS_ID, DatasetId, #{offset => Offset, limit => Limit}),
     lists:foreach(fun({_Index, ArchiveId}) ->
         ?assertEqual(ok, rpc:call(Node, archive_api, remove_archive_recursive, [ArchiveId]))

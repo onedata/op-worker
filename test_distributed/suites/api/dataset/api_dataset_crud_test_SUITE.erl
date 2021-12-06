@@ -113,7 +113,7 @@ establish_dataset_test(Config) ->
                         <<"protectionFlags">> => ?PROTECTION_FLAGS_COMBINATIONS
                     },
                     bad_values = [
-                        {<<"rootFileId">>, FileObjectId, ?ERROR_POSIX(?EEXIST)},
+                        {<<"rootFileId">>, FileObjectId, ?ERROR_ALREADY_EXISTS},
                         {<<"protectionFlags">>, 100, ?ERROR_BAD_VALUE_LIST_OF_BINARIES(<<"protectionFlags">>)},
                         {<<"protectionFlags">>, [<<"dummyFlag">>], ?ERROR_BAD_VALUE_LIST_NOT_ALLOWED(
                             <<"protectionFlags">>, [?DATA_PROTECTION_BIN, ?METADATA_PROTECTION_BIN]
@@ -598,7 +598,7 @@ get_exp_update_result(MemRef, Data) ->
         {<<"attached">>, <<"detach">>, _, _} ->
             ?ERROR_POSIX(?EINVAL);
         {<<"detached">>, undefined, _, _} ->
-            ?ERROR_POSIX(?EINVAL);
+            ?ERROR_BAD_DATA(<<"state">>, <<"Detached dataset cannot be modified.">>);
         _ ->
             ok
     end.
@@ -735,7 +735,7 @@ build_verify_delete_dataset_fun(MemRef, Providers, SpaceId, Config) ->
 
                     case ExpResult of
                         expected_success ->
-                            ?assertEqual({error, ?ENOENT}, GetDatasetInfo(), ?ATTEMPTS),
+                            ?assertEqual(?ERROR_NOT_FOUND, GetDatasetInfo(), ?ATTEMPTS),
                             ?assertEqual(false, lists:member(DatasetId, ListDatasetsFun())),
                             api_test_memory:set(MemRef, datasets, lists:delete(
                                 DatasetId, api_test_memory:get(MemRef, datasets)

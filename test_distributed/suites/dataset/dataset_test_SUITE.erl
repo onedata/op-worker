@@ -734,7 +734,7 @@ establish_2nd_dataset_on_file_should_fail(_Config) ->
     ?assertAttachedDataset(P1Node, UserSessIdP1, DatasetId, Guid, undefined, ProtectionFlags),
     ?assertDatasetMembership(P1Node, UserSessIdP1, Guid, ?DIRECT_MEMBERSHIP, ProtectionFlags),
     ?assertFileEffDatasetSummary(P1Node, UserSessIdP1, Guid, DatasetId, [], ProtectionFlags),
-    ?assertMatch({error, ?EEXIST}, opt_datasets:establish(P1Node, UserSessIdP1, ?FILE_REF(Guid), ProtectionFlags)).
+    ?assertMatch(?ERROR_ALREADY_EXISTS, opt_datasets:establish(P1Node, UserSessIdP1, ?FILE_REF(Guid), ProtectionFlags)).
 
 establish_nested_datasets_structure(_Config) ->
     Depth = 10,
@@ -1181,13 +1181,13 @@ assert_dataset(Node, SessionId, DatasetId, ExpectedRootFileGuid, ExpectedParentD
     case ExpectedParentDatasetId =/= undefined of
         true ->
             % check whether dataset is visible on parent dataset's list
-            {ok, {DatasetsList, true}} = ?assertMatch({ok, _, true},
+            {ok, {DatasetsList, true}} = ?assertMatch({ok, {_, true}},
                 opt_datasets:list_children_datasets(Node, SessionId, ExpectedParentDatasetId, #{offset => 0, limit => 100}), ?ATTEMPTS);
 
         false ->
             % check whether dataset is visible on space top dataset list
             SpaceId = file_id:guid_to_space_id(ExpectedRootFileGuid),
-            {ok, {DatasetsList, true}} = ?assertMatch({ok, _, true},
+            {ok, {DatasetsList, true}} = ?assertMatch({ok, {_, true}},
                 opt_datasets:list_top_datasets(Node, SessionId, SpaceId, ExpectedState, #{offset => 0, limit => 100}), ?ATTEMPTS)
     end,
     ?assert(lists:any(fun(Dataset) ->

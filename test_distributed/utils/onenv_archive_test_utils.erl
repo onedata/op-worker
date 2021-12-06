@@ -126,7 +126,7 @@ await_archive_sync(CreationProvider, SyncProviders, UserId, #archive_object{id =
             ?ATTEMPTS
         ),
         ListArchivesFun = fun() ->
-            {ok, Archives, _} = opt_archives:list(SyncNode, SessId, DatasetId, #{offset => 0, limit => 10000}),
+            {ok, {Archives, _}} = opt_archives:list(SyncNode, SessId, DatasetId, #{offset => 0, limit => 10000}),
             [AId || {_, AId} <- Archives]
         end,
         ?assertEqual(true, lists:member(ArchiveId, ListArchivesFun()), ?ATTEMPTS)
