@@ -439,7 +439,7 @@ reevaluate_impossible_qos_race_test(_Config) ->
 reevaluate_impossible_qos_conflict_test(_Config) ->
     % this test checks conflict resolution, when multiple providers mark entry as possible
     
-    [Provider1, Provider2 | _] = Providers = oct_background:get_provider_ids(),
+    Providers = oct_background:get_provider_ids(),
     SpaceId = oct_background:get_space_id(?SPACE_PLACEHOLDER),
     
     RandomQosParam = str_utils:rand_hex(5),
@@ -451,7 +451,8 @@ reevaluate_impossible_qos_conflict_test(_Config) ->
         ok = qos_tests_utils:set_qos_parameters(Provider, StorageId, #{<<"param">> => RandomQosParam})
     end, Providers),
     
-    FinalProvider = min(Provider1, Provider2),
+    % final result should be calculated by provider with lowest id lexicographically
+    FinalProvider = lists:min(Providers),
 
     ExpectedQosEntriesAfter = [
         #expected_qos_entry{
@@ -463,10 +464,7 @@ reevaluate_impossible_qos_conflict_test(_Config) ->
             possibility_check = {possible, FinalProvider}
         }
     ],
-    qos_tests_utils:wait_for_qos_fulfillment_in_parallel(QosNameIdMapping, ExpectedQosEntriesAfter),
-    
-    FinalStorageId = qos_tests_utils:get_storage_id(FinalProvider, SpaceId),
-    qos_reevaluate_assert_file_qos(FinalStorageId, DirPath, QosNameIdMapping).
+    qos_tests_utils:wait_for_qos_fulfillment_in_parallel(QosNameIdMapping, ExpectedQosEntriesAfter).
 
 
 setup_reevaluate_test(QosParam, Status) ->
