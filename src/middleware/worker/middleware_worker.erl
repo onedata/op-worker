@@ -191,15 +191,20 @@ handle_error(_Type, Reason, Stacktrace, SessionId, Request) ->
 
 %% @private
 -spec infer_error(term()) -> errors:error().
+infer_error({badmatch, Error}) ->
+    infer_error(Error);
+
 infer_error({error, Reason} = Error) ->
     case ordsets:is_element(Reason, ?ERROR_CODES) of
         true -> ?ERROR_POSIX(Reason);
         false -> Error
     end;
 
-infer_error({badmatch, Error}) ->
-    infer_error(Error);
-
-infer_error(_Reason) ->
-    %% TODO VFS-8614 replace unexpected error with internal server error
-    ?ERROR_UNEXPECTED_ERROR(str_utils:rand_hex(5)).
+infer_error(Reason) ->
+    case ordsets:is_element(Reason, ?ERROR_CODES) of
+        true ->
+            ?ERROR_POSIX(Reason);
+        false ->
+            %% TODO VFS-8614 replace unexpected error with internal server error
+            ?ERROR_UNEXPECTED_ERROR(str_utils:rand_hex(5))
+    end.

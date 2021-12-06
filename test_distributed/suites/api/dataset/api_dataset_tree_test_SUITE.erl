@@ -575,8 +575,10 @@ get_file_dataset_summary_test_base(FileGuid, ExpSummary) ->
                     end
                 }
             ],
-            data_spec = api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
-                FileGuid, ?DUMMY_SHARE_ID, undefined
+            data_spec = api_test_utils:replace_enoent_with_not_found_error_in_bad_data_values(
+                api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
+                    FileGuid, ?DUMMY_SHARE_ID, undefined
+                )
             )
         }
     ])).

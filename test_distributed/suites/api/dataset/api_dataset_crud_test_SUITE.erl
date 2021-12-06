@@ -101,25 +101,27 @@ establish_dataset_test(Config) ->
                     validate_result_fun = build_establish_dataset_validate_gs_call_result_fun(MemRef, Config)
                 }
             ],
-            data_spec = api_test_utils:add_cdmi_id_errors_for_operations_not_available_in_share_mode(
-                % Operations should be rejected even before checking if share exists
-                % (in case of using share file id) so it is not necessary to use
-                % valid share id
-                <<"rootFileId">>, FileGuid, SpaceId, <<"NonExistentShareId">>, #data_spec{
-                    required = [<<"rootFileId">>],
-                    optional = [<<"protectionFlags">>],
-                    correct_values = #{
-                        <<"rootFileId">> => [file_id],
-                        <<"protectionFlags">> => ?PROTECTION_FLAGS_COMBINATIONS
-                    },
-                    bad_values = [
-                        {<<"rootFileId">>, FileObjectId, ?ERROR_ALREADY_EXISTS},
-                        {<<"protectionFlags">>, 100, ?ERROR_BAD_VALUE_LIST_OF_BINARIES(<<"protectionFlags">>)},
-                        {<<"protectionFlags">>, [<<"dummyFlag">>], ?ERROR_BAD_VALUE_LIST_NOT_ALLOWED(
-                            <<"protectionFlags">>, [?DATA_PROTECTION_BIN, ?METADATA_PROTECTION_BIN]
-                        )}
-                    ]
-                }
+            data_spec = api_test_utils:replace_enoent_with_not_found_error_in_bad_data_values(
+                api_test_utils:add_cdmi_id_errors_for_operations_not_available_in_share_mode(
+                    % Operations should be rejected even before checking if share exists
+                    % (in case of using share file id) so it is not necessary to use
+                    % valid share id
+                    <<"rootFileId">>, FileGuid, SpaceId, <<"NonExistentShareId">>, #data_spec{
+                        required = [<<"rootFileId">>],
+                        optional = [<<"protectionFlags">>],
+                        correct_values = #{
+                            <<"rootFileId">> => [file_id],
+                            <<"protectionFlags">> => ?PROTECTION_FLAGS_COMBINATIONS
+                        },
+                        bad_values = [
+                            {<<"rootFileId">>, FileObjectId, ?ERROR_ALREADY_EXISTS},
+                            {<<"protectionFlags">>, 100, ?ERROR_BAD_VALUE_LIST_OF_BINARIES(<<"protectionFlags">>)},
+                            {<<"protectionFlags">>, [<<"dummyFlag">>], ?ERROR_BAD_VALUE_LIST_NOT_ALLOWED(
+                                <<"protectionFlags">>, [?DATA_PROTECTION_BIN, ?METADATA_PROTECTION_BIN]
+                            )}
+                        ]
+                    }
+                )
             )
         }
     ])).

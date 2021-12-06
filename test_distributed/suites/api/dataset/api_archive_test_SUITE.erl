@@ -846,7 +846,7 @@ build_verify_archive_purged_fun(MemRef, Providers, DatasetId) ->
 
                     case ExpResult of
                         expected_success ->
-                            ?assertEqual({error, ?ENOENT}, GetArchiveInfo(), ?ATTEMPTS),
+                            ?assertEqual(?ERROR_NOT_FOUND, GetArchiveInfo(), ?ATTEMPTS),
                             ?assertEqual(false, lists:member(ArchiveId, ListArchiveFun()), ?ATTEMPTS);
                         expected_failure ->
                             ?assertMatch({ok, _}, GetArchiveInfo(), ?ATTEMPTS),

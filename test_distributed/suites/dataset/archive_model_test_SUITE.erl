@@ -396,10 +396,10 @@ create_archive_privileges_test(_Config) ->
 
         ensure_privilege_revoked(P1Node, SpaceId, UserId2, Privilege, AllPrivileges),
         % user2 cannot create archive
-        ?assertEqual({error, ?EPERM},  %% TODO
+        ?assertEqual(?ERROR_POSIX(?EPERM),
             opt_archives:archive_dataset(P1Node, User2SessIdP1, DatasetId, ?TEST_ARCHIVE_CONFIG, ?TEST_DESCRIPTION1)),
         % user2 cannot modify an existing archive either
-        ?assertEqual({error, ?EPERM},   %% TODO
+        ?assertEqual(?ERROR_POSIX(?EPERM),
             opt_archives:update(P1Node, User2SessIdP1, ArchiveId, #{<<"description">> => ?TEST_DESCRIPTION2})),
 
         ensure_privilege_assigned(P1Node, SpaceId, UserId2, Privilege, AllPrivileges),
@@ -440,10 +440,10 @@ view_archive_privileges_test(_Config) ->
     ensure_privilege_revoked(P1Node, SpaceId, UserId2, ?SPACE_VIEW_ARCHIVES, AllPrivileges),
 
     % user2 cannot fetch archive info
-    ?assertEqual({error, ?EPERM},   %% TODO
+    ?assertEqual(?ERROR_POSIX(?EPERM),
         opt_archives:get_info(P1Node, User2SessIdP1, ArchiveId), ?ATTEMPTS),
     % neither can he list the archives
-    ?assertEqual({error, ?EPERM},   %% TODO
+    ?assertEqual(?ERROR_POSIX(?EPERM),
         opt_archives:list(P1Node, User2SessIdP1, DatasetId, #{offset => 0, limit => 10})),
 
     % assign user2 privilege to view archives
@@ -484,7 +484,7 @@ remove_archive_privileges_test(_Config) ->
 
         ensure_privilege_revoked(P1Node, SpaceId, UserId2, Privilege, AllPrivileges),
         % user2 cannot remove the archive
-        ?assertEqual({error, ?EPERM}, opt_archives:init_purge(P1Node, User2SessIdP1, ArchiveId)),   %% TODO
+        ?assertEqual(?ERROR_POSIX(?EPERM), opt_archives:init_purge(P1Node, User2SessIdP1, ArchiveId)),
 
         ensure_privilege_assigned(P1Node, SpaceId, UserId2, Privilege, AllPrivileges),
         % user2 can now remove archive
