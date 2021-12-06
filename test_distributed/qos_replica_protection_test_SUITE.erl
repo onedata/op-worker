@@ -652,11 +652,12 @@ qos_eviction_protection_test_base(Config, TestSpec) ->
             end, ok, NewQosParamsPerProvider)
     end,
     
+    UserId = oct_background:get_user_id(?USER_PLACEHOLDER),
     SpaceId = oct_background:get_space_id(?SPACE_PLACEHOLDER),
     QosTransfers = transfers_test_utils:list_ended_transfers(oct_background:get_random_provider_node(Provider1), SpaceId),
     Config1 = Config ++ [
         {?OLD_TRANSFERS_KEY, [{<<"node">>, Tid, <<"guid">>, <<"path">>} || Tid <- QosTransfers]},
-        {{access_token, <<"user1">>}, oct_background:get_user_access_token(?USER_PLACEHOLDER)},
+        {{access_token, UserId}, oct_background:get_user_access_token(?USER_PLACEHOLDER)},
         {use_initializer, false},
         {?SPACE_ID_KEY, SpaceId}
     ],
@@ -672,7 +673,6 @@ qos_eviction_protection_test_base(Config, TestSpec) ->
         true -> Provider1;
         false -> Provider2
     end,
-    UserId = oct_background:get_user_id(?USER_PLACEHOLDER),
 
     transfers_test_mechanism:run_test(
         Config1, #transfer_test_spec{

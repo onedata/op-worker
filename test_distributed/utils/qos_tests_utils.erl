@@ -789,15 +789,11 @@ make_rest_request(Node, URL, Method, Headers, ReqBody, SpaceId, RequiredPrivs) -
     UserId = oct_background:get_user_id(?USER_PLACEHOLDER),
     {ok, UserPrivileges} = rpc:call(Node, space_logic, get_eff_privileges, [SpaceId, UserId]),
     try
-        ozw_test_rpc:space_set_user_privileges(SpaceId, UserId, AllSpacePrivs -- RequiredPrivs),
-        % wait for zone changes to propagate
-        ?assertEqual(false, rpc:call(Node, space_logic, has_eff_privileges, [SpaceId, UserId, RequiredPrivs]), ?ATTEMPTS),
+        ozt_spaces:set_privileges(SpaceId, UserId, AllSpacePrivs -- RequiredPrivs),
         {ok, Code, _, Resp} = rest_test_utils:request(Node, URL, Method, Headers, EncodedReqBody),
         ?assertMatch(ErrorForbidden, {Code, json_utils:decode(Resp)}),
 
-        ozw_test_rpc:space_set_user_privileges(SpaceId, oct_background:get_user_id(?USER_PLACEHOLDER), AllSpacePrivs),
-        % wait for zone changes to propagate
-        ?assertEqual(true, rpc:call(Node, space_logic, has_eff_privileges, [SpaceId, UserId, RequiredPrivs]), ?ATTEMPTS),
+        ozt_spaces:set_privileges(SpaceId, oct_background:get_user_id(?USER_PLACEHOLDER), AllSpacePrivs),
         case rest_test_utils:request(Node, URL, Method, Headers, EncodedReqBody) of
             {ok, 200, _, RespBody} ->
                 {ok, RespBody};
@@ -807,5 +803,5 @@ make_rest_request(Node, URL, Method, Headers, ReqBody, SpaceId, RequiredPrivs) -
                 {error, {Code1, RespBody}}
         end
     after
-        ozw_test_rpc:space_set_user_privileges(SpaceId, oct_background:get_user_id(?USER_PLACEHOLDER), UserPrivileges)
+        ozt_spaces:set_privileges(SpaceId, oct_background:get_user_id(?USER_PLACEHOLDER), UserPrivileges)
     end.

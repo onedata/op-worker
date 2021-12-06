@@ -646,9 +646,6 @@ end_per_suite(_Config) ->
     oct_background:end_per_suite().
 
 
-init_per_testcase(qos_transfer_stats_test, Config) ->
-    time_test_utils:freeze_time(Config),
-    init_per_testcase(default, Config);
 init_per_testcase(qos_traverse_cancellation_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     qos_tests_utils:mock_transfers(Workers),
@@ -659,9 +656,6 @@ init_per_testcase(_, Config) ->
     Config.
 
 
-end_per_testcase(qos_transfer_stats_test, Config) ->
-    time_test_utils:unfreeze_time(Config),
-    end_per_testcase(default, Config);
 end_per_testcase(_, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     qos_tests_utils:finish_all_transfers(),

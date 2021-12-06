@@ -80,8 +80,6 @@
     assert_file_visible/5, assert_file_distribution/6, prereplicate_file/6,
     cast_files_prereplication/5, update_config/4, schedule_replication_by_view/8]).
 
--define(DEFAULT_USER_TOKEN_HEADERS(Config),
-    [?USER_TOKEN_HEADER(Config, ?DEFAULT_USER)]).
 
 -define(UPDATE_TRANSFERS_KEY(__NodesTransferIdsAndFiles, __Config),
     update_config(?TRANSFERS_KEY, fun(__OldNodesTransferIdsAndFiles) ->
@@ -116,7 +114,7 @@ run_test(Config, #transfer_test_spec{
                 "Stacktrace: ~s",
                 [Key, List, lager:pr_stacktrace(Stacktrace)]
             );
-        exit:Reason = {test_case_failed, _} ->
+        exit:{test_case_failed, _} = Reason ->
             erlang:exit(Reason);
         Type:Message:Stacktrace ->
             ct:fail(
@@ -1410,20 +1408,12 @@ get_privileges(Config, Worker, SpaceId, UserId) ->
     end.
 
 set_privileges(Config, SpaceId, UserId, SpacePrivs) ->
-    AllWorkers = ?config(op_worker_nodes, Config),
     case ?config(use_initializer, Config, true) of
         true ->
+            AllWorkers = ?config(op_worker_nodes, Config),
             initializer:testmaster_mock_space_user_privileges(AllWorkers, SpaceId, UserId, SpacePrivs);
         false ->
-            ozw_test_rpc:space_set_user_privileges(SpaceId, UserId, SpacePrivs),
-            RevokedPrivileges = privileges:space_privileges() -- SpacePrivs,
-            % wait for zone changes to propagate
-            lists:foreach(fun(W) ->
-                SpacePrivs =/= [] andalso 
-                    ?assertEqual(true, rpc:call(W, space_logic, has_eff_privileges, [SpaceId, UserId, SpacePrivs]), ?ATTEMPTS),
-                RevokedPrivileges =/= [] andalso 
-                    ?assertEqual(false, rpc:call(W, space_logic, has_eff_privileges, [SpaceId, UserId, RevokedPrivileges]), ?ATTEMPTS)
-            end, AllWorkers)
+            ozt_spaces:set_privileges(SpaceId, UserId, SpacePrivs)
     end.
 
 %% Modifies storage timeout twice in order to

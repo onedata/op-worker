@@ -556,11 +556,17 @@ end_per_suite(_Config) ->
     oct_background:end_per_suite().
 
 
+init_per_testcase(qos_transfer_stats_test, Config) ->
+    time_test_utils:freeze_time(Config),
+    init_per_testcase(default, Config);
 init_per_testcase(_, Config) ->
     lfm_proxy:init(Config),
     Config.
 
 
+end_per_testcase(qos_transfer_stats_test, Config) ->
+    time_test_utils:unfreeze_time(Config),
+    end_per_testcase(default, Config);
 end_per_testcase(_, Config) ->
     Nodes = ?config(op_worker_nodes, Config),
     qos_tests_utils:finish_all_transfers(),
