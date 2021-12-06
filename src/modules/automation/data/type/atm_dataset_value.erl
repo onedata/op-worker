@@ -76,12 +76,10 @@ list_children(AtmWorkflowExecutionAuth, DatasetId, ListOpts, BatchSize) ->
             % all datasets are traversable, so returned list of nontraversable items is always empty
             % set offset to 1 to ensure that listing is exclusive
             {ResultEntries, [], #{offset => 1, start_index => LastIndex}, IsLast}
-    catch throw:?ERROR_POSIX(Errno) = Error ->
-        case fslogic_errors:is_access_error(Errno) of
-            true ->
-                {[], [], #{}, true};
-            false ->
-                throw(Error)
+    catch throw:Error ->
+        case middleware_utils:is_access_error(Error) of
+            true -> {[], [], #{}, true};
+            false -> throw(Error)
         end
     end.
 
@@ -147,8 +145,8 @@ check_implicit_constraints(AtmWorkflowExecutionAuth, #{<<"datasetId">> := Datase
             throw(?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(Value, atm_dataset_type, #{
                 <<"inSpace">> => SpaceId
             }))
-    catch throw:?ERROR_POSIX(Errno) = Error ->  %% TODO atm_examine_error?
-        case fslogic_errors:is_access_error(Errno) of  %% TODO check not only errno but api errors too?
+    catch throw:Error ->
+        case middleware_utils:is_access_error(Error) of
             true ->
                 throw(?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(Value, atm_dataset_type, #{
                     <<"hasAccess">> => true

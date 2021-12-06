@@ -7,7 +7,6 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% Utility functions for manipulating archives in CT tests.
-%%% TODO - VFS-8382 investigate low performance of archives functions
 %%% @end
 %%%-------------------------------------------------------------------
 -module(opt_archives).
