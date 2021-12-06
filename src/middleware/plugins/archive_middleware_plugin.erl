@@ -175,10 +175,10 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = instance} = GRI}) -
     Description = maps:get(<<"description">>, Data, ?DEFAULT_ARCHIVE_DESCRIPTION),
     PreservedCallback = maps:get(<<"preservedCallback">>, Data, undefined),
     PurgedCallback = maps:get(<<"purgedCallback">>, Data, undefined),
-    {ok, ArchiveId} = ?throw_on_error(opl_archives:archive_dataset(
+    ArchiveId = opl_archives:archive_dataset(
         SessionId, DatasetId, Config, PreservedCallback, PurgedCallback, Description
-    )),
-    {ok, ArchiveInfo} = ?throw_on_error(opl_archives:get_info(SessionId, ArchiveId)),
+    ),
+    ArchiveInfo = opl_archives:get_info(SessionId, ArchiveId),
     {ok, resource, {GRI#gri{id = ArchiveId}, ArchiveInfo}};
 
 create(#op_req{auth = Auth, data = Data, gri = #gri{id = ArchiveId, aspect = purge}}) ->
@@ -194,7 +194,7 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{id = ArchiveId, aspect = pur
 %%--------------------------------------------------------------------
 -spec get(middleware:req(), middleware:entity()) -> middleware:get_result().
 get(#op_req{auth = Auth, gri = #gri{id = ArchiveId, aspect = instance}}, _) ->
-    opl_archives:get_info(Auth#auth.session_id, ArchiveId).
+    {ok, opl_archives:get_info(Auth#auth.session_id, ArchiveId)}.
 
 
 %%--------------------------------------------------------------------

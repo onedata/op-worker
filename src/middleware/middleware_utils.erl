@@ -18,6 +18,7 @@
 -include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/errors.hrl").
 
+-export([throw_if_error/1]).
 -export([
     resolve_file_path/2,
     switch_context_if_shared_file_request/1,
@@ -38,6 +39,11 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+
+-spec throw_if_error(Value) -> Value | no_return() when Value :: term().
+throw_if_error({error, _} = Error) -> throw(Error);
+throw_if_error(Value) -> Value.
 
 
 -spec resolve_file_path(session:id(), file_meta:path()) ->

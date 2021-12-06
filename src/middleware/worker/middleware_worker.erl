@@ -68,11 +68,12 @@
 
 
 -spec check_exec(session:id(), file_id:file_guid(), operation()) ->
-    ok | {ok, term()} | no_return().
+    term() | no_return().
 check_exec(SessionId, FileGuid, Operation) ->
     case exec(SessionId, FileGuid, Operation) of
-        {error, _} = Error -> throw(Error);
-        Result -> Result
+        ok -> ok;
+        {ok, Result} -> Result;
+        {error, _} = Error -> throw(Error)
     end.
 
 
@@ -114,6 +115,7 @@ handle(healthcheck) ->
 handle(?REQ(SessionId, FileGuid, Operation)) ->
     try
         middleware_utils:assert_file_managed_locally(FileGuid),
+        assert_file_access_not_in_share_mode(FileGuid),
 
         UserCtx = user_ctx:new(SessionId),
         FileCtx = file_ctx:new_by_guid(FileGuid),
@@ -140,6 +142,15 @@ cleanup() ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+%% @private
+-spec assert_file_access_not_in_share_mode(file_id:file_guid()) -> ok | no_return().
+assert_file_access_not_in_share_mode(FileGuid) ->
+    case file_id:is_share_guid(FileGuid) of
+        true -> throw(?ERROR_POSIX(?EPERM));
+        false -> ok
+    end.
 
 
 %% @private

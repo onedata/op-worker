@@ -38,11 +38,11 @@
     dataset_api:listing_opts(),
     undefined | dataset_api:listing_mode()
 ) ->
-    {ok, {dataset_api:entries(), boolean()}} | errors:error().
+    {dataset_api:entries(), boolean()} | no_return().
 list_top_datasets(SessionId, SpaceId, State, Opts, ListingMode) ->
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
 
-    middleware_worker:exec(SessionId, SpaceGuid, #list_top_datasets{
+    middleware_worker:check_exec(SessionId, SpaceGuid, #list_top_datasets{
         state = State,
         opts = Opts,
         mode = utils:ensure_defined(ListingMode, ?BASIC_INFO)
@@ -55,11 +55,11 @@ list_top_datasets(SessionId, SpaceId, State, Opts, ListingMode) ->
     dataset_api:listing_opts(),
     undefined | dataset_api:listing_mode()
 ) ->
-    {ok, {dataset_api:entries(), boolean()}} | errors:error().
+    {dataset_api:entries(), boolean()} | no_return().
 list_children_datasets(SessionId, DatasetId, Opts, ListingMode) ->
     SpaceGuid = dataset_id_to_space_guid(DatasetId),
 
-    middleware_worker:exec(SessionId, SpaceGuid, #list_children_datasets{
+    middleware_worker:check_exec(SessionId, SpaceGuid, #list_children_datasets{
         id = DatasetId,
         opts = Opts,
         mode = utils:ensure_defined(ListingMode, ?BASIC_INFO)
@@ -67,21 +67,21 @@ list_children_datasets(SessionId, DatasetId, Opts, ListingMode) ->
 
 
 -spec establish(session:id(), lfm:file_key(), data_access_control:bitmask()) ->
-    {ok, dataset:id()} | errors:error().
+    dataset:id() | no_return().
 establish(SessionId, FileKey, ProtectionFlags) ->
     FileGuid = lfm_file_key:resolve_file_key(SessionId, FileKey, do_not_resolve_symlink),
 
-    middleware_worker:exec(SessionId, FileGuid, #establish_dataset{
+    middleware_worker:check_exec(SessionId, FileGuid, #establish_dataset{
         protection_flags = ProtectionFlags
     }).
 
 
 -spec get_info(session:id(), dataset:id()) ->
-    {ok, dataset_api:info()} | errors:error().
+    dataset_api:info() | no_return().
 get_info(SessionId, DatasetId) ->
     SpaceGuid = dataset_id_to_space_guid(DatasetId),
 
-    middleware_worker:exec(SessionId, SpaceGuid, #get_dataset_info{id = DatasetId}).
+    middleware_worker:check_exec(SessionId, SpaceGuid, #get_dataset_info{id = DatasetId}).
 
 
 -spec update(
@@ -91,11 +91,11 @@ get_info(SessionId, DatasetId) ->
     data_access_control:bitmask(),
     data_access_control:bitmask()
 ) ->
-    ok | errors:error().
+    ok | no_return().
 update(SessionId, DatasetId, NewState, FlagsToSet, FlagsToUnset) ->
     SpaceGuid = dataset_id_to_space_guid(DatasetId),
 
-    middleware_worker:exec(SessionId, SpaceGuid, #update_dataset{
+    middleware_worker:check_exec(SessionId, SpaceGuid, #update_dataset{
         id = DatasetId,
         state = NewState,
         flags_to_set = FlagsToSet,
@@ -103,19 +103,19 @@ update(SessionId, DatasetId, NewState, FlagsToSet, FlagsToUnset) ->
     }).
 
 
--spec remove(session:id(), dataset:id()) -> ok | errors:error().
+-spec remove(session:id(), dataset:id()) -> ok | no_return().
 remove(SessionId, DatasetId) ->
     SpaceGuid = dataset_id_to_space_guid(DatasetId),
 
-    middleware_worker:exec(SessionId, SpaceGuid, #remove_dataset{id = DatasetId}).
+    middleware_worker:check_exec(SessionId, SpaceGuid, #remove_dataset{id = DatasetId}).
 
 
 -spec get_file_eff_summary(session:id(), lfm:file_key()) ->
-    {ok, dataset_api:file_eff_summary()} | errors:error().
+    dataset_api:file_eff_summary() | no_return().
 get_file_eff_summary(SessionId, FileKey) ->
     FileGuid = lfm_file_key:resolve_file_key(SessionId, FileKey, do_not_resolve_symlink),
 
-    middleware_worker:exec(SessionId, FileGuid, #get_file_eff_dataset_summary{}).
+    middleware_worker:check_exec(SessionId, FileGuid, #get_file_eff_dataset_summary{}).
 
 
 %%%===================================================================
@@ -124,7 +124,9 @@ get_file_eff_summary(SessionId, FileKey) ->
 
 
 %% @private
--spec dataset_id_to_space_guid(dataset:id()) -> fslogic_worker:file_guid().
+-spec dataset_id_to_space_guid(dataset:id()) -> file_id:file_guid() | no_return().
 dataset_id_to_space_guid(DatasetId) ->
-    {ok, SpaceId} = dataset:get_space_id(DatasetId),
-    fslogic_uuid:spaceid_to_space_dir_guid(SpaceId).
+    case dataset:get_space_id(DatasetId) of
+        {ok, SpaceId} -> fslogic_uuid:spaceid_to_space_dir_guid(SpaceId);
+        {error, _} = Error -> throw(Error)
+    end.

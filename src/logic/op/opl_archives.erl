@@ -36,11 +36,11 @@
     dataset_api:listing_opts(),
     undefined | dataset_api:listing_mode()
 ) ->
-    {ok, {archive_api:entries(), boolean()}} | errors:error().
+    {archive_api:entries(), boolean()} | no_return().
 list(SessionId, DatasetId, Opts, ListingMode) ->
     SpaceGuid = dataset_id_to_space_guid(DatasetId),
 
-    middleware_worker:exec(SessionId, SpaceGuid, #list_archives{
+    middleware_worker:check_exec(SessionId, SpaceGuid, #list_archives{
         dataset_id = DatasetId,
         opts = Opts,
         mode = utils:ensure_defined(ListingMode, ?BASIC_INFO)
@@ -55,11 +55,11 @@ list(SessionId, DatasetId, Opts, ListingMode) ->
     archive:callback(),
     archive:description()
 ) ->
-    {ok, archive:id()} | errors:error().
+    archive:id() | no_return().
 archive_dataset(SessionId, DatasetId, Config, PreservedCallback, PurgedCallback, Description) ->
     SpaceGuid = dataset_id_to_space_guid(DatasetId),
 
-    middleware_worker:exec(SessionId, SpaceGuid, #archive_dataset{
+    middleware_worker:check_exec(SessionId, SpaceGuid, #archive_dataset{
         id = DatasetId,
         config = Config,
         description = Description,
@@ -69,30 +69,30 @@ archive_dataset(SessionId, DatasetId, Config, PreservedCallback, PurgedCallback,
 
 
 -spec get_info(session:id(), archive:id()) ->
-    {ok, archive_api:info()} | errors:error().
+    archive_api:info() | no_return().
 get_info(SessionId, ArchiveId) ->
     SpaceGuid = archive_id_to_space_guid(ArchiveId),
 
-    middleware_worker:exec(SessionId, SpaceGuid, #get_archive_info{id = ArchiveId}).
+    middleware_worker:check_exec(SessionId, SpaceGuid, #get_archive_info{id = ArchiveId}).
 
 
 -spec update(session:id(), archive:id(), archive:diff()) ->
-    ok | errors:error().
+    ok | no_return().
 update(SessionId, ArchiveId, Diff) ->
     SpaceGuid = archive_id_to_space_guid(ArchiveId),
 
-    middleware_worker:exec(SessionId, SpaceGuid, #update_archive{
+    middleware_worker:check_exec(SessionId, SpaceGuid, #update_archive{
         id = ArchiveId,
         diff = Diff
     }).
 
 
 -spec init_purge(session:id(), archive:id(), archive:callback()) ->
-    ok | errors:error().
+    ok | no_return().
 init_purge(SessionId, ArchiveId, CallbackUrl) ->
     SpaceGuid = archive_id_to_space_guid(ArchiveId),
 
-    middleware_worker:exec(SessionId, SpaceGuid, #init_archive_purge{
+    middleware_worker:check_exec(SessionId, SpaceGuid, #init_archive_purge{
         id = ArchiveId,
         callback = CallbackUrl
     }).
@@ -104,14 +104,18 @@ init_purge(SessionId, ArchiveId, CallbackUrl) ->
 
 
 %% @private
--spec dataset_id_to_space_guid(dataset:id()) -> fslogic_worker:file_guid().
+-spec dataset_id_to_space_guid(dataset:id()) -> file_id:file_guid() | no_return().
 dataset_id_to_space_guid(DatasetId) ->
-    {ok, SpaceId} = dataset:get_space_id(DatasetId),
-    fslogic_uuid:spaceid_to_space_dir_guid(SpaceId).
+    case dataset:get_space_id(DatasetId) of
+        {ok, SpaceId} -> fslogic_uuid:spaceid_to_space_dir_guid(SpaceId);
+        {error, _} = Error -> throw(Error)
+    end.
 
 
 %% @private
--spec archive_id_to_space_guid(archive:id()) -> fslogic_worker:file_guid().
+-spec archive_id_to_space_guid(archive:id()) -> fslogic_worker:file_guid() | no_return().
 archive_id_to_space_guid(ArchiveId) ->
-    {ok, SpaceId} = archive:get_space_id(ArchiveId),
-    fslogic_uuid:spaceid_to_space_dir_guid(SpaceId).
+    case archive:get_space_id(ArchiveId) of
+        {ok, SpaceId} -> fslogic_uuid:spaceid_to_space_dir_guid(SpaceId);
+        {error, _} = Error -> throw(Error)
+    end.

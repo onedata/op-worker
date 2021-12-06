@@ -221,8 +221,8 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = instance} = GRI}) -
     ProtectionFlags = file_meta:protection_flags_from_json(
         maps:get(<<"protectionFlags">>, Data, [])
     ),
-    {ok, DatasetId} = ?throw_on_error(opl_datasets:establish(SessionId, FileRef, ProtectionFlags)),
-    {ok, DatasetInfo} = ?throw_on_error(opl_datasets:get_info(SessionId, DatasetId)),
+    DatasetId = opl_datasets:establish(SessionId, FileRef, ProtectionFlags),
+    DatasetInfo = opl_datasets:get_info(SessionId, DatasetId),
     {ok, resource, {GRI#gri{id = DatasetId}, DatasetInfo}}.
 
 
@@ -233,7 +233,7 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = instance} = GRI}) -
 %%--------------------------------------------------------------------
 -spec get(middleware:req(), middleware:entity()) -> middleware:get_result().
 get(#op_req{auth = Auth, gri = #gri{id = DatasetId, aspect = instance}}, _) ->
-    opl_datasets:get_info(Auth#auth.session_id, DatasetId);
+    {ok, opl_datasets:get_info(Auth#auth.session_id, DatasetId)};
 
 get(#op_req{auth = Auth, gri = #gri{id = DatasetId, aspect = Aspect}, data = Data}, _)
     when Aspect =:= children
@@ -243,10 +243,9 @@ get(#op_req{auth = Auth, gri = #gri{id = DatasetId, aspect = Aspect}, data = Dat
         children -> ?BASIC_INFO;
         children_details -> ?EXTENDED_INFO
     end,
-    {ok, {Datasets, IsLast}} = ?throw_on_error(opl_datasets:list_children_datasets(
+    {ok, value, opl_datasets:list_children_datasets(
         Auth#auth.session_id, DatasetId, gather_listing_opts(Data), ListingMode
-    )),
-    {ok, value, {Datasets, IsLast}};
+    )};
 
 get(#op_req{auth = Auth, gri = #gri{id = DatasetId, aspect = Aspect}, data = Data}, _)
     when Aspect =:= archives
@@ -256,10 +255,9 @@ get(#op_req{auth = Auth, gri = #gri{id = DatasetId, aspect = Aspect}, data = Dat
         archives -> ?BASIC_INFO;
         archives_details -> ?EXTENDED_INFO
     end,
-    {ok, Result} = ?throw_on_error(opl_archives:list(
+    {ok, value, opl_archives:list(
         Auth#auth.session_id, DatasetId, gather_listing_opts(Data), ListingMode
-    )),
-    {ok, value, Result}.
+    )}.
 
 %%--------------------------------------------------------------------
 %% @doc

@@ -34,10 +34,7 @@
 }).
 
 
--define(throw_on_error(__RESULT), case __RESULT of
-    {error, _} -> throw(__RESULT);
-    _ -> __RESULT
-end).
+-define(throw_on_error(__EXPR), middleware_utils:throw_if_error(__EXPR)).
 
 
 %%%===================================================================
