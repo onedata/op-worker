@@ -353,21 +353,25 @@ end_per_suite(_Config) ->
 init_per_testcase(Case, Config) when
     Case =:= qos_audit_log_transfer_error;
     Case =:= effective_qos_audit_log_transfer_error ->
-    Nodes = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Nodes, replica_synchronizer, [passthrough]),
-    qos_tests_utils:mock_replica_synchronizer(Nodes, ?ERROR_POSIX(?ENOENT)),
+    audit_log_tests_init_per_testcase(Config, ?ERROR_POSIX(?ENOENT)),
     init_per_testcase(default, Config);
 init_per_testcase(Case, Config) when 
     Case =:= qos_audit_log_failure;
     Case =:= effective_qos_audit_log_failure ->
-    Nodes = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Nodes, replica_synchronizer, [passthrough]),
-    qos_tests_utils:mock_replica_synchronizer(Nodes, {throw, ?ERROR_POSIX(?ENOENT)}),
+    audit_log_tests_init_per_testcase(Config, {throw, ?ERROR_POSIX(?ENOENT)}),
     init_per_testcase(default, Config);
 init_per_testcase(_, Config) ->
     Nodes = ?config(op_worker_nodes, Config),
     ok = clock_freezer_mock:setup_for_ct(Nodes, [global_clock, ?MODULE]),
     lfm_proxy:init(Config).
+
+audit_log_tests_init_per_testcase(Config, ExpectedSynchronizer) ->
+    Nodes = ?config(op_worker_nodes, Config),
+    test_utils:mock_new(Nodes, replica_synchronizer, [passthrough]),
+    qos_tests_utils:mock_replica_synchronizer(Nodes, ExpectedSynchronizer),
+    % mock retry failed files, so there is only one failed entry in audit log
+    qos_tests_utils:mock_replica_synchronizer(Nodes, ?ERROR_POSIX(?ENOENT)),
+    test_utils:mock_expect(Nodes, qos_hooks, retry_failed_files, fun(_SpaceId) -> ok end).
 
 
 end_per_testcase(_, Config) ->
