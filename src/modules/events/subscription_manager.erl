@@ -152,7 +152,7 @@ get_attr_event_subscribers(Guid, RoutingCtx, SizeChanged) ->
 process_event_routing_keys(#event_routing_keys{
     file_ctx = FileCtx,
     main_key = MainKey,
-    filter = SpaceIDFilter,
+    space_id_filter = SpaceIDFilter,
     additional_keys = AdditionalKeys,
     auth_check_type = AuthCheckType
 } = Record) ->
@@ -222,7 +222,10 @@ ensure_authorized(SessId, location, FileCtx) ->
 ensure_authorized(SessId, rename, FileCtx) ->
     UserCtx = user_ctx:new(SessId),
     try
-        data_constraints:inspect(UserCtx, FileCtx, disallow_ancestors, [?TRAVERSE_ANCESTORS]),
+        % Reset file_ctx before usage as it can cache old parent or document
+        % (cached data cannot be used to check if file was visible to client before rename
+        % because there is no guarantee that this data is cached)
+        data_constraints:inspect(UserCtx, file_ctx:reset(FileCtx), disallow_ancestors, [?TRAVERSE_ANCESTORS]),
         true
     catch
         _:_ ->

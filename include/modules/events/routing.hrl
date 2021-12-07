@@ -15,13 +15,16 @@
 
 %% definition of keys used to find session subscribed for particular event:
 %% main_key - key associated with event
-%% filter - events for space dirs have to be additionally filtered checking if particular session has access to space
+%% space_id_filter - events for space dirs have to be additionally filtered checking
+%%                   if particular session has access to space
 %% additional_keys - if file has hardlink, it is necessary to find subscribers also for them
 %%                   they are identified by guid/uuid (uuid for #file_location_changed_event{}, guid for other events)
+%% auth_check_type - events are filtered to prevent sending events to clients that should not know about
+%%                   file existence ; filtering process differs for different event types
 -record(event_routing_keys, {
     file_ctx :: file_ctx:ctx() | undefined,
     main_key :: subscription_manager:key(),
-    filter :: undefined | od_space:id(),
+    space_id_filter :: undefined | od_space:id(),
     additional_keys = [] :: [{file_id:file_guid() | file_meta:uuid(), subscription_manager:key()}],
 
     auth_check_type = attrs :: event_type:auth_check_type()
