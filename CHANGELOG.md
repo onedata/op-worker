@@ -239,6 +239,8 @@ CHANGELOG
     Fixed inability to open share hosted by Oneprovider 19.02.x using
     Onezone 20.02.x.
 
+### 20.02.15
+
 ### 20.02.14
 
 -   **VFS-8482** Added dedicated page for privacy policy content.
