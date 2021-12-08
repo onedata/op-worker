@@ -260,7 +260,7 @@ delete_cdmi(Req, #cdmi_req{
     auth = ?USER(_UserId, SessionId),
     file_attrs = #file_attr{guid = Guid}
 } = CdmiReq) ->
-    ?check(lfm:unlink(SessionId, ?FILE_REF(Guid), false)),
+    ?lfm_check(lfm:unlink(SessionId, ?FILE_REF(Guid), false)),
     {true, Req, CdmiReq}.
 
 
@@ -275,7 +275,7 @@ delete_cdmi(Req, #cdmi_req{
 prepare_create_file_cdmi_response(Req1, #cdmi_req{
     auth = ?USER(_UserId, SessionId)
 } = CdmiReq, FileRef) ->
-    {ok, Attrs} = ?check(lfm:stat(SessionId, FileRef)),
+    {ok, Attrs} = ?lfm_check(lfm:stat(SessionId, FileRef)),
     CdmiReq2 = CdmiReq#cdmi_req{file_attrs = Attrs},
     Answer = get_file_info(?DEFAULT_PUT_FILE_OPTS, CdmiReq2),
     Req2 = cowboy_req:set_resp_body(json_utils:encode(Answer), Req1),
@@ -367,21 +367,21 @@ get_file_info(RequestedInfo, #cdmi_req{
     CdmiPartialFlag :: undefined | binary()) ->
     cowboy_req:req().
 write_req_body_to_file(Req, SessId, FileRef, Truncate, Offset, CdmiPartialFlag) ->
-    {ok, FileHandle} = ?check(lfm:monitored_open(SessId, FileRef, write)),
+    {ok, FileHandle} = ?lfm_check(lfm:monitored_open(SessId, FileRef, write)),
     cdmi_metadata:update_cdmi_completion_status(
         SessId,
         FileRef,
         <<"Processing">>
     ),
-    Truncate andalso ?check(lfm:truncate(SessId, FileRef, 0)),
+    Truncate andalso ?lfm_check(lfm:truncate(SessId, FileRef, 0)),
 
     {ok, Req2} = file_upload_utils:upload_file(
         FileHandle, Offset, Req,
         fun cowboy_req:read_body/2, #{}
     ),
 
-    ?check(lfm:fsync(FileHandle)),
-    ?check(lfm:monitored_release(FileHandle)),
+    ?lfm_check(lfm:fsync(FileHandle)),
+    ?lfm_check(lfm:monitored_release(FileHandle)),
     cdmi_metadata:set_cdmi_completion_status_according_to_partial_flag(
         SessId,
         FileRef,
@@ -397,17 +397,17 @@ write_req_body_to_file(Req, SessId, FileRef, Truncate, Offset, CdmiPartialFlag) 
     ok.
 write_binary_to_file(SessionId, FileRef, Truncate, Offset, Data, CdmiPartialFlag) ->
     DataSize = byte_size(Data),
-    {ok, FileHandle} = ?check(lfm:monitored_open(SessionId, FileRef, write)),
+    {ok, FileHandle} = ?lfm_check(lfm:monitored_open(SessionId, FileRef, write)),
     cdmi_metadata:update_cdmi_completion_status(
         SessionId,
         FileRef,
         <<"Processing">>
     ),
-    Truncate andalso ?check(lfm:truncate(SessionId, FileRef, 0)),
+    Truncate andalso ?lfm_check(lfm:truncate(SessionId, FileRef, 0)),
 
-    {ok, _, DataSize} = ?check(lfm:write(FileHandle, Offset, Data)),
-    ?check(lfm:fsync(FileHandle)),
-    ?check(lfm:monitored_release(FileHandle)),
+    {ok, _, DataSize} = ?lfm_check(lfm:write(FileHandle, Offset, Data)),
+    ?lfm_check(lfm:fsync(FileHandle)),
+    ?lfm_check(lfm:monitored_release(FileHandle)),
     cdmi_metadata:set_cdmi_completion_status_according_to_partial_flag(
         SessionId,
         FileRef,

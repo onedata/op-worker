@@ -20,6 +20,7 @@
 
 -export([
     throw_if_error/1,
+    check_result/1,
     is_access_error/1
 ]).
 -export([
@@ -49,6 +50,15 @@ throw_if_error({error, _} = Error) -> throw(Error);
 throw_if_error(Value) -> Value.
 
 
+-spec check_result
+    (ok) -> ok;
+    ({ok, Value}) -> Value;
+    (errors:error()) -> no_return().
+check_result(ok) -> ok;
+check_result({ok, Value}) -> Value;
+check_result({error, _} = Error) -> throw(Error).
+
+
 -spec is_access_error(errors:error()) -> boolean().
 is_access_error(?ERROR_POSIX(?EACCES)) -> true;
 is_access_error(?ERROR_POSIX(?EPERM)) -> true;
@@ -62,7 +72,7 @@ is_access_error(_) -> false.
 -spec resolve_file_path(session:id(), file_meta:path()) ->
     {ok, file_id:file_guid()} | no_return().
 resolve_file_path(SessionId, Path) ->
-    ?check(remote_utils:call_fslogic(
+    ?lfm_check(remote_utils:call_fslogic(
         SessionId,
         fuse_request,
         #resolve_guid_by_canonical_path{path = ensure_canonical_path(SessionId, Path)},
@@ -146,7 +156,7 @@ decode_object_id(ObjectId, Key) ->
 -spec assert_file_exists(aai:auth(), file_id:file_guid()) ->
     ok | no_return().
 assert_file_exists(#auth{session_id = SessionId}, FileGuid) ->
-    ?check(lfm:stat(SessionId, ?FILE_REF(FileGuid))),
+    ?lfm_check(lfm:stat(SessionId, ?FILE_REF(FileGuid))),
     ok.
 
 

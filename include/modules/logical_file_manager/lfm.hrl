@@ -14,7 +14,7 @@
 -ifndef(LFM_HRL).
 -define(LFM_HRL, 1).
 
--define(check(__FunctionCall), lfm:check_result(__FunctionCall)).
+-define(lfm_check(__FunctionCall), lfm:check_result(__FunctionCall)).
 
 -define(PRIVATE_BASIC_ATTRIBUTES, [
     <<"file_id">>, <<"parent_id">>, <<"name">>, <<"mode">>,

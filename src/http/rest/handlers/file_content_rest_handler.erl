@@ -192,7 +192,7 @@ process_request(#op_req{
     Offset = case maps:get(<<"offset">>, Params, undefined) of
         undefined ->
             % Overwrite file if no explicit offset was given
-            ?check(lfm:truncate(SessionId, FileRef, 0)),
+            ?lfm_check(lfm:truncate(SessionId, FileRef, 0)),
             0;
         Num ->
             % Otherwise leave previous content and start writing from specified offset
@@ -219,10 +219,10 @@ process_request(#op_req{
 
     {Guid, Req3} = case maps:get(<<"type">>, Params, ?REGULAR_FILE_TYPE) of
         ?DIRECTORY_TYPE ->
-            {ok, CreatedDirGuid} = ?check(lfm:mkdir(SessionId, ParentGuid, Name, Mode)),
+            {ok, CreatedDirGuid} = ?lfm_check(lfm:mkdir(SessionId, ParentGuid, Name, Mode)),
             {CreatedDirGuid, Req};
         ?REGULAR_FILE_TYPE ->
-            {ok, CreatedFileGuid} = ?check(lfm:create(SessionId, ParentGuid, Name, Mode)),
+            {ok, CreatedFileGuid} = ?lfm_check(lfm:create(SessionId, ParentGuid, Name, Mode)),
             FileRef = ?FILE_REF(CreatedFileGuid),
 
             case {maps:get(<<"offset">>, Params, 0), cowboy_req:has_body(Req)} of
@@ -240,14 +240,14 @@ process_request(#op_req{
         ?LINK_TYPE ->
             TargetFileGuid = maps:get(<<"target_file_id">>, Params),
 
-            {ok, #file_attr{guid = LinkGuid}} = ?check(lfm:make_link(
+            {ok, #file_attr{guid = LinkGuid}} = ?lfm_check(lfm:make_link(
                 SessionId, ?FILE_REF(TargetFileGuid), ?FILE_REF(ParentGuid), Name
             )),
             {LinkGuid, Req};
         ?SYMLINK_TYPE ->
             TargetFilePath = maps:get(<<"target_file_path">>, Params),
 
-            {ok, #file_attr{guid = SymlinkGuid}} = ?check(lfm:make_symlink(
+            {ok, #file_attr{guid = SymlinkGuid}} = ?lfm_check(lfm:make_symlink(
                 SessionId, ?FILE_REF(ParentGuid), Name, TargetFilePath
             )),
             {SymlinkGuid, Req}
@@ -268,7 +268,7 @@ process_request(#op_req{
     FileGuid = resolve_target_file(OpReq),
 
     FollowSymlinks = maps:get(<<"follow_symlinks">>, Data, true),
-    case ?check(lfm:stat(SessionId, ?FILE_REF(FileGuid, FollowSymlinks))) of
+    case ?lfm_check(lfm:stat(SessionId, ?FILE_REF(FileGuid, FollowSymlinks))) of
         {ok, #file_attr{type = ?REGULAR_FILE_TYPE} = FileAttrs} ->
             file_download_utils:download_single_file(SessionId, FileAttrs, Req);
         {ok, #file_attr{type = ?SYMLINK_TYPE} = FileAttrs} ->
@@ -299,7 +299,7 @@ process_request(#op_req{
 ) ->
     cowboy_req:req() | no_return().
 write_req_body_to_file(SessionId, FileRef, Offset, Req) ->
-    {ok, FileHandle} = ?check(lfm:monitored_open(SessionId, FileRef, write)),
+    {ok, FileHandle} = ?lfm_check(lfm:monitored_open(SessionId, FileRef, write)),
 
     {ok, Req2} = file_upload_utils:upload_file(
         FileHandle, Offset, Req,
@@ -307,8 +307,8 @@ write_req_body_to_file(SessionId, FileRef, Offset, Req) ->
         #{period => timer:seconds(?COWBOY_READ_BODY_PERIOD_SECONDS)}
     ),
 
-    ?check(lfm:fsync(FileHandle)),
-    ?check(lfm:monitored_release(FileHandle)),
+    ?lfm_check(lfm:fsync(FileHandle)),
+    ?lfm_check(lfm:monitored_release(FileHandle)),
 
     Req2.
 

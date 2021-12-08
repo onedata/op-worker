@@ -106,16 +106,10 @@ init_purge(SessionId, ArchiveId, CallbackUrl) ->
 %% @private
 -spec dataset_id_to_space_guid(dataset:id()) -> file_id:file_guid() | no_return().
 dataset_id_to_space_guid(DatasetId) ->
-    case dataset:get_space_id(DatasetId) of
-        {ok, SpaceId} -> fslogic_uuid:spaceid_to_space_dir_guid(SpaceId);
-        {error, _} = Error -> throw(Error)
-    end.
+    fslogic_uuid:spaceid_to_space_dir_guid(?check(dataset:get_space_id(DatasetId))).
 
 
 %% @private
 -spec archive_id_to_space_guid(archive:id()) -> fslogic_worker:file_guid() | no_return().
 archive_id_to_space_guid(ArchiveId) ->
-    case archive:get_space_id(ArchiveId) of
-        {ok, SpaceId} -> fslogic_uuid:spaceid_to_space_dir_guid(SpaceId);
-        {error, _} = Error -> throw(Error)
-    end.
+    fslogic_uuid:spaceid_to_space_dir_guid(?check(archive:get_space_id(ArchiveId))).

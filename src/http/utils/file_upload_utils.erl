@@ -119,7 +119,7 @@ write_req_body_to_file_in_stream(
     ReadReqBodyFun, ReadReqBodyOpts
 ) ->
     {Status, Data, Req1} = ReadReqBodyFun(Req0, ReadReqBodyOpts#{length => ?DEFAULT_WRITE_BLOCK_SIZE}),
-    {ok, NewHandle, Bytes} = ?check(lfm:write(FileHandle, Offset, Data)),
+    {ok, NewHandle, Bytes} = ?lfm_check(lfm:write(FileHandle, Offset, Data)),
     case Status of
         more ->
             write_req_body_to_file_in_stream(
@@ -150,7 +150,7 @@ write_req_body_to_file_in_blocks(
     PreferredChunkSize = BytesRemainingInCurrentBlock - byte_size(Buffer),
     case ReadReqBodyFun(Req0, ReadReqBodyOpts#{length => PreferredChunkSize}) of
         {ok, ReceivedChunk, Req1} ->
-            ?check(lfm:write(FileHandle, Offset, <<Buffer/binary, ReceivedChunk/binary>>)),
+            ?lfm_check(lfm:write(FileHandle, Offset, <<Buffer/binary, ReceivedChunk/binary>>)),
             {ok, Req1};
         {more, ReceivedChunk, Req1} ->
             ReceivedChunkSize = byte_size(ReceivedChunk),
@@ -163,7 +163,7 @@ write_req_body_to_file_in_blocks(
                 true ->
                     ExcessSize = ReceivedChunkSize - PreferredChunkSize,
                     <<ChunkToWrite:PreferredChunkSize/binary, ExcessBytes:ExcessSize/binary>> = ReceivedChunk,
-                    {ok, NewHandle, _} = ?check(lfm:write(
+                    {ok, NewHandle, _} = ?lfm_check(lfm:write(
                         FileHandle, Offset, <<Buffer/binary, ChunkToWrite/binary>>
                     )),
                     write_req_body_to_file_in_blocks(

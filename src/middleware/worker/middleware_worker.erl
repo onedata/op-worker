@@ -70,13 +70,10 @@
 -spec check_exec(session:id(), file_id:file_guid(), operation()) ->
     term() | no_return().
 check_exec(SessionId, FileGuid, Operation) ->
-    case exec(SessionId, FileGuid, Operation) of
-        ok -> ok;
-        {ok, Result} -> Result;
-        {error, _} = Error -> throw(Error)
-    end.
+    ?check(exec(SessionId, FileGuid, Operation)).
 
 
+%% TODO VFS-8753 handle selector (e.g. {file, <FileGuid>}, {space, <SpaceId>}, etc.) as 2nd argument
 -spec exec(session:id(), file_id:file_guid(), operation()) ->
     ok | {ok, term()} | errors:error().
 exec(SessionId, FileGuid, Operation) ->
@@ -120,7 +117,7 @@ handle(?REQ(SessionId, FileGuid, Operation)) ->
         UserCtx = user_ctx:new(SessionId),
         FileCtx = file_ctx:new_by_guid(FileGuid),
 
-        middleware_worker_request_router:route(UserCtx, FileCtx, Operation)
+        middleware_worker_handlers:execute(UserCtx, FileCtx, Operation)
     catch Type:Reason:Stacktrace ->
         handle_error(Type, Reason, Stacktrace, SessionId, Operation)
     end;

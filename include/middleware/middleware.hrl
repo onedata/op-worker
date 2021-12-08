@@ -35,6 +35,7 @@
 
 
 -define(throw_on_error(__EXPR), middleware_utils:throw_if_error(__EXPR)).
+-define(check(__EXPR), middleware_utils:check_result(__EXPR)).
 
 
 %%%===================================================================

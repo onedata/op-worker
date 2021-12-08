@@ -209,7 +209,7 @@ resource_exists(Req, #cdmi_req{
 } = CdmiReq) ->
     try
         {ok, FileGuid} = middleware_utils:resolve_file_path(SessionId, Path),
-        case ?check(lfm:stat(SessionId, ?FILE_REF(FileGuid))) of
+        case ?lfm_check(lfm:stat(SessionId, ?FILE_REF(FileGuid))) of
             {ok, #file_attr{type = ?DIRECTORY_TYPE} = Attr} when Type == container ->
                 {true, Req, CdmiReq#cdmi_req{file_attrs = Attr}};
             {ok, #file_attr{type = ?DIRECTORY_TYPE}} when Type == dataobject ->
@@ -466,7 +466,7 @@ resolve_resource_by_id(Req) ->
         undefined ->
             case http_auth:authenticate(Req, rest, allow_data_access_caveats) of
                 {ok, ?USER(_UserId, SessionId) = Auth0} ->
-                    {ok, FilePath} = ?check(lfm:get_file_path(SessionId, Guid)),
+                    {ok, FilePath} = ?lfm_check(lfm:get_file_path(SessionId, Guid)),
                     {Auth0, FilePath};
                 {ok, ?GUEST} ->
                     throw(?ERROR_UNAUTHORIZED);

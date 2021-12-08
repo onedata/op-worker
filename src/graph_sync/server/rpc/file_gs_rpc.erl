@@ -46,7 +46,7 @@ move(?USER(_UserId, SessionId) = Auth, Data) ->
     assert_space_membership_and_local_support(Auth, FileGuid),
     assert_space_membership_and_local_support(Auth, TargetParentGuid),
 
-    {ok, NewGuid} = ?check(lfm:mv(
+    {ok, NewGuid} = ?lfm_check(lfm:mv(
         SessionId, ?FILE_REF(FileGuid), ?FILE_REF(TargetParentGuid), TargetName
     )),
     {ok, #{<<"id">> => gri:serialize(#gri{
@@ -71,7 +71,7 @@ copy(?USER(_UserId, SessionId) = Auth, Data) ->
     assert_space_membership_and_local_support(Auth, FileGuid),
     assert_space_membership_and_local_support(Auth, TargetParentGuid),
 
-    {ok, NewGuid} = ?check(lfm:cp(
+    {ok, NewGuid} = ?lfm_check(lfm:cp(
         SessionId, ?FILE_REF(FileGuid), ?FILE_REF(TargetParentGuid), TargetName
     )),
     {ok, #{<<"id">> => gri:serialize(#gri{
@@ -88,7 +88,7 @@ register_file_upload(?USER(UserId, SessionId), Data) ->
     }),
     FileGuid = maps:get(<<"guid">>, SanitizedData),
 
-    case ?check(lfm:stat(SessionId, ?FILE_REF(FileGuid))) of
+    case ?lfm_check(lfm:stat(SessionId, ?FILE_REF(FileGuid))) of
         {ok, #file_attr{type = ?DIRECTORY_TYPE}} ->
             ?ERROR_BAD_DATA(<<"guid">>, <<"not a regular file">>);
         {ok, #file_attr{type = ?REGULAR_FILE_TYPE, size = 0, owner_id = UserId}} ->

@@ -304,13 +304,13 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = instance} = GRI}) -
 
     {ok, TransferId} = case maps:get(<<"dataSourceType">>, Data) of
         file ->
-            ?check(lfm:schedule_file_transfer(
+            ?lfm_check(lfm:schedule_file_transfer(
                 SessionId, ?FILE_REF(maps:get(<<"fileId">>, Data)),
                 ReplicatingProviderId, EvictingProviderId,
                 Callback
             ));
         view ->
-            ?check(lfm:schedule_view_transfer(
+            ?lfm_check(lfm:schedule_view_transfer(
                 SessionId,
                 maps:get(<<"spaceId">>, Data),
                 maps:get(<<"viewName">>, Data),
