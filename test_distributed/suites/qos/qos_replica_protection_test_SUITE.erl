@@ -117,11 +117,11 @@ all() -> [
 -define(Q1, <<"q1">>).
 
 -record(test_spec_eviction, {
-    evicting_provider :: node(),
+    evicting_provider :: od_provider:id(),
     % when remote_schedule is set to true, eviction is
     % scheduled on different worker than one creating qos
     remote_schedule = false :: boolean(),
-    replicating_provider = undefined :: node(),
+    replicating_provider = undefined :: od_provider:id(),
     bytes_replicated = 0 :: non_neg_integer(),
     files_replicated = 0 :: non_neg_integer(),
     files_evicted = 0 :: non_neg_integer(),
@@ -134,7 +134,7 @@ all() -> [
 }).
 
 -record(test_spec_autocleaning, {
-    run_provider :: node(),
+    run_provider :: od_provider:id(),
     dir_structure_type = simple :: simple | nested,
     released_bytes = 0 :: non_neg_integer(),
     bytes_to_release = 0 :: non_neg_integer(),
@@ -195,8 +195,7 @@ migration_of_replica_not_protected_by_qos_file(Config) ->
 migration_of_replica_protected_by_qos_on_equal_storage_file(Config) ->
     [Provider1, _Provider2, Provider3 | _] = oct_background:get_provider_ids(),
     SpaceId = oct_background:get_space_id(?SPACE_PLACEHOLDER),
-    {ok, P3StorageId} = rpc:call(oct_background:get_random_provider_node(Provider3), space_logic,
-        get_local_supporting_storage, [SpaceId]),
+    P3StorageId = opt_spaces:get_storage_id(Provider3, SpaceId),
 
     qos_eviction_protection_test_base(Config, #test_spec_eviction{
         evicting_provider = Provider1,
@@ -264,8 +263,7 @@ migration_of_replica_not_protected_by_qos_dir(Config) ->
 migration_of_replica_protected_by_qos_on_equal_storage_dir(Config) ->
     [Provider1, _Provider2, Provider3 | _] = oct_background:get_provider_ids(),
     SpaceId = oct_background:get_space_id(?SPACE_PLACEHOLDER),
-    {ok, P3StorageId} = rpc:call(oct_background:get_random_provider_node(Provider3), space_logic,
-        get_local_supporting_storage, [SpaceId]),
+    P3StorageId = opt_spaces:get_storage_id(Provider3, SpaceId),
 
     qos_eviction_protection_test_base(Config, #test_spec_eviction{
         evicting_provider = Provider1,
@@ -334,8 +332,7 @@ migration_of_replica_not_protected_by_qos_dir_each_file_separately(Config) ->
 migration_of_replica_protected_by_qos_on_equal_storage_dir_each_file_separately(Config) ->
     [Provider1, _Provider2, Provider3 | _] = oct_background:get_provider_ids(),
     SpaceId = oct_background:get_space_id(?SPACE_PLACEHOLDER),
-    {ok, P3StorageId} = rpc:call(oct_background:get_random_provider_node(Provider3), space_logic,
-        get_local_supporting_storage, [SpaceId]),
+    P3StorageId = opt_spaces:get_storage_id(Provider3, SpaceId),
 
     qos_eviction_protection_test_base(Config, #test_spec_eviction{
         evicting_provider = Provider1,
@@ -404,8 +401,7 @@ remote_migration_of_replica_not_protected_by_qos_file(Config) ->
 remote_migration_of_replica_protected_by_qos_on_equal_storage_file(Config) ->
     [Provider1, _Provider2, Provider3 | _] = oct_background:get_provider_ids(),
     SpaceId = oct_background:get_space_id(?SPACE_PLACEHOLDER),
-    {ok, P3StorageId} = rpc:call(oct_background:get_random_provider_node(Provider3), space_logic,
-        get_local_supporting_storage, [SpaceId]),
+    P3StorageId = opt_spaces:get_storage_id(Provider3, SpaceId),
 
     qos_eviction_protection_test_base(Config, #test_spec_eviction{
         evicting_provider = Provider1,
@@ -478,8 +474,7 @@ remote_migration_of_replica_not_protected_by_qos_dir(Config) ->
 remote_migration_of_replica_protected_by_qos_on_equal_storage_dir(Config) ->
     [Provider1, _Provider2, Provider3 | _] = oct_background:get_provider_ids(),
     SpaceId = oct_background:get_space_id(?SPACE_PLACEHOLDER),
-    {ok, P3StorageId} = rpc:call(oct_background:get_random_provider_node(Provider3), space_logic,
-        get_local_supporting_storage, [SpaceId]),
+    P3StorageId = opt_spaces:get_storage_id(Provider3, SpaceId),
 
     qos_eviction_protection_test_base(Config, #test_spec_eviction{
         evicting_provider = Provider1,
@@ -553,8 +548,7 @@ remote_migration_of_replica_not_protected_by_qos_dir_each_file_separately(Config
 remote_migration_of_replica_protected_by_qos_on_equal_storage_dir_each_file_separately(Config) ->
     [Provider1, _Provider2, Provider3 | _] = oct_background:get_provider_ids(),
     SpaceId = oct_background:get_space_id(?SPACE_PLACEHOLDER),
-    {ok, P3StorageId} = rpc:call(oct_background:get_random_provider_node(Provider3), space_logic,
-        get_local_supporting_storage, [SpaceId]),
+    P3StorageId = opt_spaces:get_storage_id(Provider3, SpaceId),
 
     qos_eviction_protection_test_base(Config, #test_spec_eviction{
         evicting_provider = Provider1,
@@ -647,7 +641,7 @@ qos_eviction_protection_test_base(Config, TestSpec) ->
         _ ->
             maps:fold(fun(Provider, NewQosParams) ->
                 maps:fold(fun(StorageId, Params, _) ->
-                    rpc:call(oct_background:get_random_provider_node(Provider), storage, set_qos_parameters, [StorageId, Params])
+                    qos_tests_utils:set_qos_parameters(Provider, StorageId, Params)
                 end, ok, NewQosParams)
             end, ok, NewQosParamsPerProvider)
     end,
@@ -708,7 +702,7 @@ qos_eviction_protection_test_base(Config, TestSpec) ->
         }
     ).
 
-qos_autocleaning_protection_test_base(Config, TestSpec) ->
+qos_autocleaning_protection_test_base(_Config, TestSpec) ->
     #test_spec_autocleaning{
         run_provider = RunProvider,
         dir_structure_type = DirStructureType,
@@ -731,7 +725,7 @@ qos_autocleaning_protection_test_base(Config, TestSpec) ->
         end, oct_background:get_provider_nodes(Provider))
     end, oct_background:get_provider_ids()),
 
-    ok = rpc:call(RunNode, file_popularity_api, enable, [SpaceId]),
+    ok = test_rpc:call(op_worker, RunNode, file_popularity_api, enable, [SpaceId]),
     QosSpec = create_basic_qos_test_spec(DirStructureType, Name),
     {_GuidsAndPaths, _} = qos_tests_utils:fulfill_qos_test_base(QosSpec),
 
@@ -740,11 +734,11 @@ qos_autocleaning_protection_test_base(Config, TestSpec) ->
         target => 0,
         threshold => 100
     },
-    ok = rpc:call(RunNode, autocleaning_api, configure, [SpaceId, Configuration]),
-    {ok, ARId} = rpc:call(RunNode, autocleaning_api, force_run, [SpaceId]),
+    ok = test_rpc:call(op_worker, RunNode, autocleaning_api, configure, [SpaceId, Configuration]),
+    {ok, ARId} = test_rpc:call(op_worker, RunNode, autocleaning_api, force_run, [SpaceId]),
 
     F = fun() ->
-        {ok, #{stopped_at := StoppedAt}} = rpc:call(RunNode, autocleaning_api, get_run_report, [ARId]),
+        {ok, #{stopped_at := StoppedAt}} = test_rpc:call(op_worker, RunNode, autocleaning_api, get_run_report, [ARId]),
         StoppedAt
     end,
     % wait for auto-cleaning run to finish
@@ -754,7 +748,7 @@ qos_autocleaning_protection_test_base(Config, TestSpec) ->
         released_bytes := ReleasedBytes,
         bytes_to_release := BytesToRelease,
         files_number := FilesNumber
-    }}, rpc:call(RunNode, autocleaning_api, get_run_report, [ARId])).
+    }}, test_rpc:call(op_worker, RunNode, autocleaning_api, get_run_report, [ARId])).
 
 
 %%%===================================================================
@@ -762,8 +756,7 @@ qos_autocleaning_protection_test_base(Config, TestSpec) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    ExtendedConfig = [{?LOAD_MODULES, [qos_tests_utils, transfers_test_utils, transfers_test_mechanism]} | Config],
-    oct_background:init_per_suite(ExtendedConfig, #onenv_test_config{
+    oct_background:init_per_suite(Config, #onenv_test_config{
         onenv_scenario = "3op",
         envs = [{op_worker, op_worker, [
             {fuse_session_grace_period_seconds, 24 * 60 * 60},
@@ -815,8 +808,7 @@ end_per_suite(_Config) ->
 create_basic_qos_test_spec(DirStructureType, QosFilename) ->
     [Provider1, Provider2, _Provider3 | _] = oct_background:get_provider_ids(),
     SpaceId = oct_background:get_space_id(?SPACE_PLACEHOLDER),
-    {ok, P1StorageId} = rpc:call(oct_background:get_random_provider_node(Provider1), space_logic,
-        get_local_supporting_storage, [SpaceId]),
+    P1StorageId = opt_spaces:get_storage_id(Provider1, SpaceId),
     {DirStructure, DirStructureAfter} = case DirStructureType of
         simple ->
             {?simple_dir_structure(QosFilename, [Provider2]),
@@ -833,7 +825,7 @@ create_basic_qos_test_spec(DirStructureType, QosFilename) ->
         },
         qos_to_add = [
             #qos_to_add{
-                provider = Provider1,
+                provider_selector = Provider1,
                 qos_name = ?QOS1,
                 path = ?FILE_PATH(QosFilename),
                 expression = <<"providerId=", Provider1/binary>>,

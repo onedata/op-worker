@@ -10,7 +10,7 @@
 %%% This module contains tests for QoS management on multiple providers.
 %%% @end
 %%%--------------------------------------------------------------------
--module(multi_provider_qos_test_SUITE).
+-module(qos_multi_provider_test_SUITE).
 -author("Michal Cwiertnia").
 -author("Michal Stanisz").
 
@@ -77,9 +77,7 @@ all() -> [
     qos_with_mixed_deletion_test,
     qos_on_symlink_test,
     effective_qos_with_symlink_test,
-    create_hardlink_in_dir_with_qos,
-    
-    qos_transfer_stats_test
+    create_hardlink_in_dir_with_qos
 ].
 
 
@@ -260,7 +258,7 @@ reconcile_qos_using_file_meta_posthooks_test(_Config) ->
         },
         qos_to_add = [
             #qos_to_add{
-                provider = Provider1,
+                provider_selector = Provider1,
                 qos_name = ?QOS1,
                 path = DirPath,
                 expression = <<"providerId=", Provider2/binary>>
@@ -319,7 +317,7 @@ reconcile_with_links_race_test_base(Depth, RecordsToBlock) ->
     
     {ok, DirGuid} = lfm_proxy:mkdir(P1Node, ?SESS_ID(Provider1), SpaceGuid, ?filename(Name, 0), ?DEFAULT_DIR_PERMS),
     % ensure that link in space is synchronized - in env_up tests space uuid is a legacy key and therefore file_meta posthooks are NOT executed for it
-    ?assertMatch({ok, _}, rpc:call(P2Node, file_meta_forest, get, [file_id:guid_to_uuid(SpaceGuid), all, ?filename(Name, 0)]), ?ATTEMPTS),
+    ?assertMatch({ok, _}, test_rpc:call(op_worker, Provider2, file_meta_forest, get, [file_id:guid_to_uuid(SpaceGuid), all, ?filename(Name, 0)]), ?ATTEMPTS),
     
     mock_dbsync_changes(oct_background:get_provider_nodes(Provider2), ?FUNCTION_NAME),
     {ok, QosEntryId} = lfm_proxy:add_qos_entry(P1Node, ?SESS_ID(Provider1), ?FILE_REF(DirGuid), <<"providerId=", Provider2/binary>>, 1),
@@ -399,7 +397,7 @@ reconcile_with_links_race_test_base(Depth, RecordsToBlock) ->
 reevaluate_impossible_qos_test(_Config) ->
     [_Provider1, Provider2 | _] = Providers = oct_background:get_provider_ids(),
     SpaceId = oct_background:get_space_id(?SPACE_PLACEHOLDER),
-    P2StorageId = qos_tests_utils:get_storage_id(Provider2, SpaceId),
+    P2StorageId = opt_spaces:get_storage_id(Provider2, SpaceId),
     
     RandomQosParam = str_utils:rand_hex(5),
     {QosNameIdMapping, DirPath} = setup_reevaluate_test(RandomQosParam, impossible),
@@ -426,7 +424,7 @@ reevaluate_impossible_qos_race_test(_Config) ->
     
     [_Provider1, Provider2 | _] = oct_background:get_provider_ids(),
     SpaceId = oct_background:get_space_id(?SPACE_PLACEHOLDER),
-    P2StorageId = qos_tests_utils:get_storage_id(Provider2, SpaceId),
+    P2StorageId = opt_spaces:get_storage_id(Provider2, SpaceId),
     
     RandomQosParam = str_utils:rand_hex(5),
     ok = qos_tests_utils:set_qos_parameters(Provider2, P2StorageId, #{<<"param">> => RandomQosParam}),
@@ -446,7 +444,7 @@ reevaluate_impossible_qos_conflict_test(_Config) ->
     {QosNameIdMapping, DirPath} = setup_reevaluate_test(RandomQosParam, impossible),
 
     lists_utils:pforeach(fun(Provider) ->
-        StorageId = qos_tests_utils:get_storage_id(Provider, SpaceId),
+        StorageId = opt_spaces:get_storage_id(Provider, SpaceId),
         % Impossible qos reevaluation is called after successful set_qos_parameters
         ok = qos_tests_utils:set_qos_parameters(Provider, StorageId, #{<<"param">> => RandomQosParam})
     end, Providers),
@@ -483,7 +481,7 @@ setup_reevaluate_test(QosParam, Status) ->
         },
         qos_to_add = [
             #qos_to_add{
-                provider = Provider1,
+                provider_selector = Provider1,
                 qos_name = ?QOS1,
                 path = DirPath,
                 expression = <<"param=", QosParam/binary>>,
@@ -548,7 +546,7 @@ qos_traverse_cancellation_test(_Config) ->
         },
         qos_to_add = [
             #qos_to_add{
-                provider = Provider1,
+                provider_selector = Provider1,
                 qos_name = ?QOS1,
                 path = QosRootFilePath,
                 expression = <<"providerId=", Provider1/binary>>
@@ -592,7 +590,7 @@ qos_traverse_cancellation_test(_Config) ->
     
     % check that qos_entry document is deleted
     lists:foreach(fun(Node) ->
-        ?assertEqual(?ERROR_NOT_FOUND, rpc:call(Node, qos_entry, get, [QosEntryId]), ?ATTEMPTS)
+        ?assertEqual(?ERROR_NOT_FOUND, test_rpc:call(op_worker, Node, qos_entry, get, [QosEntryId]), ?ATTEMPTS)
     end, oct_background:get_all_providers_nodes()),
     
     % finish transfers to unlock waiting slave job processes
@@ -775,7 +773,7 @@ save_docs(Node, MsgIdentifier, Filters, LeftOutDocs, Strategy) ->
         {MsgIdentifier, _, Doc} ->
             case matches_doc(Doc, Filters) of
                 ExpectedMatch ->
-                    ?assertMatch(ok, rpc:call(Node, dbsync_changes, apply, [Doc])),
+                    ?assertMatch(ok, test_rpc:call(op_worker, Node, dbsync_changes, apply, [Doc])),
                     save_docs(Node, MsgIdentifier, Filters, LeftOutDocs, Strategy);
                 _ ->
                     save_docs(Node, MsgIdentifier, Filters, [Doc | LeftOutDocs], Strategy)

@@ -1,7 +1,7 @@
 %%%--------------------------------------------------------------------
 %%% @author Michal Cwiertnia
 %%% @copyright (C) 2019 ACK CYFRONET AGH
-%%% This software is released under the MNonExistingProviderId license
+%%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%--------------------------------------------------------------------
@@ -98,7 +98,7 @@ simple_key_val_qos_spec(Path, ProviderAddingQos, AssertionProviders) ->
     #qos_spec{
         qos_to_add = [
             #qos_to_add{
-                provider = ProviderAddingQos,
+                provider_selector = ProviderAddingQos,
                 path = Path,
                 qos_name = ?QOS1,
                 expression = <<"providerId=", Provider1/binary>>,
@@ -120,7 +120,7 @@ simple_key_val_qos_spec(Path, ProviderAddingQos, AssertionProviders) ->
                 providers = AssertionProviders,
                 path = Path,
                 qos_entries = [?QOS1],
-                assigned_entries = #{qos_tests_utils:get_storage_id(Provider1, SpaceId) => [?QOS1]}
+                assigned_entries = #{opt_spaces:get_storage_id(Provider1, SpaceId) => [?QOS1]}
             }
         ]
     }.
@@ -132,7 +132,7 @@ qos_with_intersection_spec(Path, ProviderAddingQos, AssertionProviders) ->
     #qos_spec{
         qos_to_add = [
             #qos_to_add{
-                provider = ProviderAddingQos,
+                provider_selector = ProviderAddingQos,
                 path = Path,
                 qos_name = ?QOS1,
                 expression = <<"type=disk & tier=t2">>,
@@ -154,7 +154,7 @@ qos_with_intersection_spec(Path, ProviderAddingQos, AssertionProviders) ->
                 providers = AssertionProviders,
                 path = Path,
                 qos_entries = [?QOS1],
-                assigned_entries = #{qos_tests_utils:get_storage_id(Provider3, SpaceId) => [?QOS1]}
+                assigned_entries = #{opt_spaces:get_storage_id(Provider3, SpaceId) => [?QOS1]}
             }
         ]
     }.
@@ -166,7 +166,7 @@ qos_with_complement_spec(Path, ProviderAddingQos, AssertionProviders) ->
     #qos_spec{
         qos_to_add = [
             #qos_to_add{
-                provider = ProviderAddingQos,
+                provider_selector = ProviderAddingQos,
                 path = Path,
                 qos_name = ?QOS1,
                 expression = <<"type=disk\\providerId=", Provider3/binary>>,
@@ -188,7 +188,7 @@ qos_with_complement_spec(Path, ProviderAddingQos, AssertionProviders) ->
                 providers = AssertionProviders,
                 path = Path,
                 qos_entries = [?QOS1],
-                assigned_entries = #{qos_tests_utils:get_storage_id(Provider1, SpaceId) => [?QOS1]}
+                assigned_entries = #{opt_spaces:get_storage_id(Provider1, SpaceId) => [?QOS1]}
             }
         ]
     }.
@@ -200,7 +200,7 @@ qos_with_union_spec(Path, ProviderAddingQos, AssertionProviders) ->
     #qos_spec{
         qos_to_add = [
             #qos_to_add{
-                provider = ProviderAddingQos,
+                provider_selector = ProviderAddingQos,
                 path = Path,
                 qos_name = ?QOS1,
                 expression = <<"providerId=", Provider1/binary, "|tier=t3">>,
@@ -222,7 +222,7 @@ qos_with_union_spec(Path, ProviderAddingQos, AssertionProviders) ->
                 providers = AssertionProviders,
                 path = Path,
                 qos_entries = [?QOS1],
-                assigned_entries = #{qos_tests_utils:get_storage_id(Provider1, SpaceId) => [?QOS1]}
+                assigned_entries = #{opt_spaces:get_storage_id(Provider1, SpaceId) => [?QOS1]}
             }
         ]
     }.
@@ -234,7 +234,7 @@ qos_with_multiple_replicas_spec(Path, ProviderAddingQos, AssertionProviders) ->
     #qos_spec{
         qos_to_add = [
             #qos_to_add{
-                provider = ProviderAddingQos,
+                provider_selector = ProviderAddingQos,
                 path = Path,
                 qos_name = ?QOS1,
                 expression = <<"type=disk">>,
@@ -257,8 +257,8 @@ qos_with_multiple_replicas_spec(Path, ProviderAddingQos, AssertionProviders) ->
                 path = Path,
                 qos_entries = [?QOS1],
                 assigned_entries = #{
-                    qos_tests_utils:get_storage_id(Provider1, SpaceId) => [?QOS1],
-                    qos_tests_utils:get_storage_id(Provider3, SpaceId) => [?QOS1]
+                    opt_spaces:get_storage_id(Provider1, SpaceId) => [?QOS1],
+                    opt_spaces:get_storage_id(Provider3, SpaceId) => [?QOS1]
                 }
             }
         ]
@@ -271,7 +271,7 @@ qos_with_intersection_and_union_spec(Path, ProviderAddingQos, AssertionProviders
     #qos_spec{
         qos_to_add = [
             #qos_to_add{
-                provider = ProviderAddingQos,
+                provider_selector = ProviderAddingQos,
                 path = Path,
                 qos_name = ?QOS1,
                 expression = <<"type=disk&tier=t2|providerId=", Provider2/binary>>,
@@ -294,8 +294,8 @@ qos_with_intersection_and_union_spec(Path, ProviderAddingQos, AssertionProviders
                 path = Path,
                 qos_entries = [?QOS1],
                 assigned_entries = #{
-                    qos_tests_utils:get_storage_id(Provider2, SpaceId) => [?QOS1],
-                    qos_tests_utils:get_storage_id(Provider3, SpaceId) => [?QOS1]
+                    opt_spaces:get_storage_id(Provider2, SpaceId) => [?QOS1],
+                    opt_spaces:get_storage_id(Provider3, SpaceId) => [?QOS1]
                 }
             }
         ]
@@ -308,7 +308,7 @@ qos_with_union_and_complement_spec(Path, ProviderAddingQos, AssertionProviders) 
     #qos_spec{
         qos_to_add = [
             #qos_to_add{
-                provider = ProviderAddingQos,
+                provider_selector = ProviderAddingQos,
                 path = Path,
                 qos_name = ?QOS1,
                 expression = <<"providerId=", Provider1/binary, "|providerId=", Provider2/binary, "\\type=tape">>,
@@ -330,7 +330,7 @@ qos_with_union_and_complement_spec(Path, ProviderAddingQos, AssertionProviders) 
                 providers = AssertionProviders,
                 path = Path,
                 qos_entries = [?QOS1],
-                assigned_entries = #{qos_tests_utils:get_storage_id(Provider1, SpaceId) => [?QOS1]}
+                assigned_entries = #{opt_spaces:get_storage_id(Provider1, SpaceId) => [?QOS1]}
             }
         ]
     }.
@@ -342,7 +342,7 @@ qos_with_intersection_and_complement_spec(Path, ProviderAddingQos, AssertionProv
     #qos_spec{
         qos_to_add = [
             #qos_to_add{
-                provider = ProviderAddingQos,
+                provider_selector = ProviderAddingQos,
                 path = Path,
                 qos_name = ?QOS1,
                 expression = <<"type=disk & param1=val1 \\ providerId=", Provider1/binary>>,
@@ -364,7 +364,7 @@ qos_with_intersection_and_complement_spec(Path, ProviderAddingQos, AssertionProv
                 providers = AssertionProviders,
                 path = Path,
                 qos_entries = [?QOS1],
-                assigned_entries = #{qos_tests_utils:get_storage_id(Provider3, SpaceId) => [?QOS1]}
+                assigned_entries = #{opt_spaces:get_storage_id(Provider3, SpaceId) => [?QOS1]}
             }
         ]
     }.
@@ -376,7 +376,7 @@ qos_with_multiple_replicas_and_union_spec(Path, ProviderAddingQos, AssertionProv
     #qos_spec{
         qos_to_add = [
             #qos_to_add{
-                provider = ProviderAddingQos,
+                provider_selector = ProviderAddingQos,
                 path = Path,
                 qos_name = ?QOS1,
                 expression = <<"providerId=", Provider1/binary, "| providerId=", Provider2/binary, "| providerId=", Provider3/binary>>,
@@ -399,9 +399,9 @@ qos_with_multiple_replicas_and_union_spec(Path, ProviderAddingQos, AssertionProv
                 path = Path,
                 qos_entries = [?QOS1],
                 assigned_entries = #{
-                    qos_tests_utils:get_storage_id(Provider1, SpaceId) => [?QOS1],
-                    qos_tests_utils:get_storage_id(Provider2, SpaceId) => [?QOS1],
-                    qos_tests_utils:get_storage_id(Provider3, SpaceId) => [?QOS1]
+                    opt_spaces:get_storage_id(Provider1, SpaceId) => [?QOS1],
+                    opt_spaces:get_storage_id(Provider2, SpaceId) => [?QOS1],
+                    opt_spaces:get_storage_id(Provider3, SpaceId) => [?QOS1]
                 }
             }
         ]
@@ -412,7 +412,7 @@ key_val_qos_that_cannot_be_fulfilled_spec(Path, ProviderAddingQos, AssertionProv
     #qos_spec{
         qos_to_add = [
             #qos_to_add{
-                provider = ProviderAddingQos,
+                provider_selector = ProviderAddingQos,
                 path = Path,
                 qos_name = ?QOS1,
                 expression = <<"providerId=NonExistingProviderId">>,
@@ -445,7 +445,7 @@ qos_that_cannot_be_fulfilled_spec(Path, ProviderAddingQos, AssertionProviders) -
     #qos_spec{
         qos_to_add = [
             #qos_to_add{
-                provider = ProviderAddingQos,
+                provider_selector = ProviderAddingQos,
                 path = Path,
                 qos_name = ?QOS1,
                 expression = <<"providerId=", Provider1/binary, "|providerId=", Provider3/binary, "\\type=disk">>,
@@ -479,7 +479,7 @@ qos_with_parens_spec(Path, ProviderAddingQos, AssertionProviders) ->
     #qos_spec{
         qos_to_add = [
             #qos_to_add{
-                provider = ProviderAddingQos,
+                provider_selector = ProviderAddingQos,
                 path = Path,
                 qos_name = ?QOS1,
                 expression = <<"providerId=", Provider1/binary, "| (providerId=", Provider3/binary, "\\ type=disk)">>,
@@ -502,7 +502,7 @@ qos_with_parens_spec(Path, ProviderAddingQos, AssertionProviders) ->
                 providers = AssertionProviders,
                 path = Path,
                 qos_entries = [?QOS1],
-                assigned_entries = #{qos_tests_utils:get_storage_id(Provider1, SpaceId) => [?QOS1]}
+                assigned_entries = #{opt_spaces:get_storage_id(Provider1, SpaceId) => [?QOS1]}
             }
         ]
     }.
@@ -529,14 +529,14 @@ multi_qos_resulting_in_different_storages_spec(
     #qos_spec{
         qos_to_add = [
             #qos_to_add{
-                provider = ProviderAddingQos1,
+                provider_selector = ProviderAddingQos1,
                 path = Path,
                 qos_name = ?QOS1,
                 expression = <<"type=disk&tier=t2">>,
                 replicas_num = 1
             },
             #qos_to_add{
-                provider = ProviderAddingQos2,
+                provider_selector = ProviderAddingQos2,
                 path = Path,
                 qos_name = ?QOS2,
                 expression = <<"providerId=", Provider2/binary>>,
@@ -567,8 +567,8 @@ multi_qos_resulting_in_different_storages_spec(
                 path = Path,
                 qos_entries = [?QOS1, ?QOS2],
                 assigned_entries = #{
-                    qos_tests_utils:get_storage_id(Provider2, SpaceId) => [?QOS2],
-                    qos_tests_utils:get_storage_id(Provider3, SpaceId) => [?QOS1]
+                    opt_spaces:get_storage_id(Provider2, SpaceId) => [?QOS2],
+                    opt_spaces:get_storage_id(Provider3, SpaceId) => [?QOS1]
                 }
             }
         ]
@@ -590,14 +590,14 @@ multi_qos_resulting_in_the_same_storages_spec(
     #qos_spec{
         qos_to_add = [
             #qos_to_add{
-                provider = ProviderAddingQos1,
+                provider_selector = ProviderAddingQos1,
                 path = Path,
                 qos_name = ?QOS1,
                 expression = <<"type=tape">>,
                 replicas_num = 1
             },
             #qos_to_add{
-                provider = ProviderAddingQos2,
+                provider_selector = ProviderAddingQos2,
                 path = Path,
                 qos_name = ?QOS2,
                 expression = <<"providerId=", Provider2/binary>>,
@@ -628,7 +628,7 @@ multi_qos_resulting_in_the_same_storages_spec(
                 path = Path,
                 qos_entries = [?QOS1, ?QOS2],
                 assigned_entries = #{
-                    qos_tests_utils:get_storage_id(Provider2, SpaceId) => [?QOS1, ?QOS2]
+                    opt_spaces:get_storage_id(Provider2, SpaceId) => [?QOS1, ?QOS2]
                 }
             }
         ]
@@ -650,21 +650,21 @@ same_qos_multiple_times_spec(
     #qos_spec{
         qos_to_add = [
             #qos_to_add{
-                provider = ProviderAddingQos1,
+                provider_selector = ProviderAddingQos1,
                 path = Path,
                 qos_name = ?QOS1,
                 expression = <<"type=tape">>,
                 replicas_num = 1
             },
             #qos_to_add{
-                provider = ProviderAddingQos2,
+                provider_selector = ProviderAddingQos2,
                 path = Path,
                 qos_name = ?QOS2,
                 expression = <<"type=tape">>,
                 replicas_num = 1
             },
             #qos_to_add{
-                provider = ProviderAddingQos3,
+                provider_selector = ProviderAddingQos3,
                 path = Path,
                 qos_name = ?QOS3,
                 expression = <<"type=tape">>,
@@ -702,7 +702,7 @@ same_qos_multiple_times_spec(
                 providers = AssertionProviders,
                 path = Path,
                 qos_entries = [?QOS1, ?QOS2, ?QOS3],
-                assigned_entries = #{qos_tests_utils:get_storage_id(Provider2, SpaceId) => [?QOS1, ?QOS2, ?QOS3]}
+                assigned_entries = #{opt_spaces:get_storage_id(Provider2, SpaceId) => [?QOS1, ?QOS2, ?QOS3]}
             }
         ]
     }.
@@ -717,14 +717,14 @@ contrary_qos_spec(Path, [ProviderAddingQos1, ProviderAddingQos2], AssertionProvi
     #qos_spec{
         qos_to_add = [
             #qos_to_add{
-                provider = ProviderAddingQos1,
+                provider_selector = ProviderAddingQos1,
                 path = Path,
                 qos_name = ?QOS1,
                 expression = <<"providerId=", Provider1/binary>>,
                 replicas_num = 1
             },
             #qos_to_add{
-                provider = ProviderAddingQos2,
+                provider_selector = ProviderAddingQos2,
                 path = Path,
                 qos_name = ?QOS2,
                 expression = <<"type=tape \\ providerId=", Provider1/binary>>,
@@ -755,8 +755,8 @@ contrary_qos_spec(Path, [ProviderAddingQos1, ProviderAddingQos2], AssertionProvi
                 path = Path,
                 qos_entries = [?QOS1, ?QOS2],
                 assigned_entries = #{
-                    qos_tests_utils:get_storage_id(Provider1, SpaceId) => [?QOS1],
-                    qos_tests_utils:get_storage_id(Provider2, SpaceId) => [?QOS2]
+                    opt_spaces:get_storage_id(Provider1, SpaceId) => [?QOS1],
+                    opt_spaces:get_storage_id(Provider2, SpaceId) => [?QOS2]
                 }
             }
         ]
@@ -778,14 +778,14 @@ multi_qos_where_one_cannot_be_satisfied_spec(
     #qos_spec{
         qos_to_add = [
             #qos_to_add{
-                provider = ProviderAddingQos1,
+                provider_selector = ProviderAddingQos1,
                 path = Path,
                 qos_name = ?QOS1,
                 expression = <<"providerId=", Provider2/binary>>,
                 replicas_num = 1
             },
             #qos_to_add{
-                provider = ProviderAddingQos2,
+                provider_selector = ProviderAddingQos2,
                 path = Path,
                 qos_name = ?QOS2,
                 expression = <<"providerId=NonExistingProviderId">>,
@@ -815,7 +815,7 @@ multi_qos_where_one_cannot_be_satisfied_spec(
                 providers = AssertionProviders,
                 path = Path,
                 qos_entries = [?QOS1, ?QOS2],
-                assigned_entries = #{qos_tests_utils:get_storage_id(Provider2, SpaceId) => [?QOS1]}
+                assigned_entries = #{opt_spaces:get_storage_id(Provider2, SpaceId) => [?QOS1]}
             }
         ]
     }.
@@ -832,14 +832,14 @@ multi_qos_that_overlaps_spec(Path, [ProviderAddingQos1, ProviderAddingQos2], Ass
     #qos_spec{
         qos_to_add = [
             #qos_to_add{
-                provider = ProviderAddingQos1,
+                provider_selector = ProviderAddingQos1,
                 path = Path,
                 qos_name = ?QOS1,
                 expression = <<"type=disk">>,
                 replicas_num = 2
             },
             #qos_to_add{
-                provider = ProviderAddingQos2,
+                provider_selector = ProviderAddingQos2,
                 path = Path,
                 qos_name = ?QOS2,
                 expression = <<"tier=t2">>,
@@ -870,9 +870,9 @@ multi_qos_that_overlaps_spec(Path, [ProviderAddingQos1, ProviderAddingQos2], Ass
                 path = Path,
                 qos_entries = [?QOS1, ?QOS2],
                 assigned_entries = #{
-                    qos_tests_utils:get_storage_id(Provider1, SpaceId) => [?QOS1],
-                    qos_tests_utils:get_storage_id(Provider2, SpaceId) => [?QOS2],
-                    qos_tests_utils:get_storage_id(Provider3, SpaceId) => [?QOS1, ?QOS2]
+                    opt_spaces:get_storage_id(Provider1, SpaceId) => [?QOS1],
+                    opt_spaces:get_storage_id(Provider2, SpaceId) => [?QOS2],
+                    opt_spaces:get_storage_id(Provider3, SpaceId) => [?QOS1, ?QOS2]
                 }
             }
         ]
@@ -890,7 +890,7 @@ effective_qos_for_file_in_directory_spec(DirPath, FilePath, ProviderAddingQos, A
     #qos_spec{
         qos_to_add = [
             #qos_to_add{
-                provider = ProviderAddingQos,
+                provider_selector = ProviderAddingQos,
                 path = DirPath,
                 qos_name = ?QOS1,
                 expression = <<"providerId=", Provider1/binary>>,
@@ -912,7 +912,7 @@ effective_qos_for_file_in_directory_spec(DirPath, FilePath, ProviderAddingQos, A
                 providers = AssertionProviders,
                 path = FilePath,
                 qos_entries = [?QOS1],
-                assigned_entries = #{qos_tests_utils:get_storage_id(Provider1, SpaceId) => [?QOS1]}
+                assigned_entries = #{opt_spaces:get_storage_id(Provider1, SpaceId) => [?QOS1]}
             }
         ]
     }.
@@ -935,21 +935,21 @@ effective_qos_for_file_in_nested_directories_spec(
     #qos_spec{
         qos_to_add = [
             #qos_to_add{
-                provider = ProviderAddingQos1,
+                provider_selector = ProviderAddingQos1,
                 path = Dir1Path,
                 qos_name = ?QOS1,
                 expression = <<"providerId=", Provider1/binary>>,
                 replicas_num = 1
             },
             #qos_to_add{
-                provider = ProviderAddingQos2,
+                provider_selector = ProviderAddingQos2,
                 path = Dir2Path,
                 qos_name = ?QOS2,
                 expression = <<"providerId=", Provider1/binary>>,
                 replicas_num = 1
             },
             #qos_to_add{
-                provider = ProviderAddingQos3,
+                provider_selector = ProviderAddingQos3,
                 path = Dir3Path,
                 qos_name = ?QOS3,
                 expression = <<"providerId=", Provider2/binary>>,
@@ -987,15 +987,15 @@ effective_qos_for_file_in_nested_directories_spec(
                 path = FileInDir2Path,
                 qos_entries = [?QOS1, ?QOS2],
                 assigned_entries = #{
-                    qos_tests_utils:get_storage_id(Provider1, SpaceId) => [?QOS1, ?QOS2]
+                    opt_spaces:get_storage_id(Provider1, SpaceId) => [?QOS1, ?QOS2]
                 }
             },
             #expected_file_qos{
                 path = FileInDir3Path,
                 qos_entries = [?QOS1, ?QOS2, ?QOS3],
                 assigned_entries = #{
-                    qos_tests_utils:get_storage_id(Provider1, SpaceId) => [?QOS1, ?QOS2],
-                    qos_tests_utils:get_storage_id(Provider2, SpaceId) => [?QOS3]
+                    opt_spaces:get_storage_id(Provider1, SpaceId) => [?QOS1, ?QOS2],
+                    opt_spaces:get_storage_id(Provider2, SpaceId) => [?QOS3]
                 }
             }
         ]
@@ -1019,21 +1019,21 @@ effective_qos_for_files_in_different_directories_of_tree_structure_spec(
     #qos_spec{
         qos_to_add = [
             #qos_to_add{
-                provider = ProviderAddingQos1,
+                provider_selector = ProviderAddingQos1,
                 path = Dir1Path,
                 qos_name = ?QOS1,
                 expression = <<"providerId=", Provider1/binary>>,
                 replicas_num = 1
             },
             #qos_to_add{
-                provider = ProviderAddingQos2,
+                provider_selector = ProviderAddingQos2,
                 path = Dir2Path,
                 qos_name = ?QOS2,
                 expression = <<"providerId=", Provider1/binary>>,
                 replicas_num = 1
             },
             #qos_to_add{
-                provider = ProviderAddingQos3,
+                provider_selector = ProviderAddingQos3,
                 path = Dir3Path,
                 qos_name = ?QOS3,
                 expression = <<"providerId=", Provider2/binary>>,
@@ -1072,8 +1072,8 @@ effective_qos_for_files_in_different_directories_of_tree_structure_spec(
                 path = FileInDir3Path,
                 qos_entries = [?QOS1, ?QOS3],
                 assigned_entries = #{
-                    qos_tests_utils:get_storage_id(Provider1, SpaceId) => [?QOS1],
-                    qos_tests_utils:get_storage_id(Provider2, SpaceId) => [?QOS3]
+                    opt_spaces:get_storage_id(Provider1, SpaceId) => [?QOS1],
+                    opt_spaces:get_storage_id(Provider2, SpaceId) => [?QOS3]
                 }
             },
             #expected_file_qos{
@@ -1081,7 +1081,7 @@ effective_qos_for_files_in_different_directories_of_tree_structure_spec(
                 path = FileInDir2Path,
                 qos_entries = [?QOS1, ?QOS2],
                 assigned_entries = #{
-                    qos_tests_utils:get_storage_id(Provider1, SpaceId) => [?QOS1, ?QOS2]
+                    opt_spaces:get_storage_id(Provider1, SpaceId) => [?QOS1, ?QOS2]
                 }
             }
         ]
@@ -1146,7 +1146,7 @@ qos_status_during_traverse_with_hardlinks_test_base() ->
     SpaceId = oct_background:get_space_id(?SPACE_PLACEHOLDER),
     [Provider1, Provider2 | _] = oct_background:get_provider_ids(),
     P1Node = oct_background:get_random_provider_node(Provider1),
-    SpaceGuid = rpc:call(P1Node, fslogic_uuid, spaceid_to_space_dir_guid, [SpaceId]),
+    SpaceGuid = test_rpc:call(op_worker, Provider1, fslogic_uuid, spaceid_to_space_dir_guid, [SpaceId]),
     {ok, Dir1Guid} = lfm_proxy:mkdir(P1Node, ?SESS_ID(Provider1), SpaceGuid, generator:gen_name(), ?DEFAULT_DIR_PERMS),
     {ok, Dir2Guid} = lfm_proxy:mkdir(P1Node, ?SESS_ID(Provider1), SpaceGuid, generator:gen_name(), ?DEFAULT_DIR_PERMS),
     
@@ -1175,7 +1175,7 @@ qos_status_during_traverse_with_file_deletion_test_base(NumberOfFilesInDir, File
     [Provider1 | _] = oct_background:get_provider_ids(),
     P1Node = oct_background:get_random_provider_node(Provider1),
     Name = generator:gen_name(),
-    SpaceGuid = rpc:call(P1Node, fslogic_uuid, spaceid_to_space_dir_guid, [SpaceId]),
+    SpaceGuid = test_rpc:call(op_worker, Provider1, fslogic_uuid, spaceid_to_space_dir_guid, [SpaceId]),
     {ok, FileToLinkGuid} = lfm_proxy:create(P1Node, ?SESS_ID(Provider1), SpaceGuid, generator:gen_name(), ?DEFAULT_FILE_PERMS),
     DirStructure =
         {?SPACE_NAME, [
@@ -1223,7 +1223,7 @@ qos_status_during_traverse_with_dir_deletion_test_base(NumberOfFilesInDir, FileT
     [Provider1 | _] = oct_background:get_provider_ids(),
     P1Node = oct_background:get_random_provider_node(Provider1),
     Name = generator:gen_name(),
-    SpaceGuid = rpc:call(P1Node, fslogic_uuid, spaceid_to_space_dir_guid, [SpaceId]),
+    SpaceGuid = test_rpc:call(op_worker, Provider1, fslogic_uuid, spaceid_to_space_dir_guid, [SpaceId]),
     {ok, FileToLinkGuid} = lfm_proxy:create(P1Node, ?SESS_ID(Provider1), SpaceGuid, generator:gen_name(), ?DEFAULT_FILE_PERMS),
     DirStructure =
         {?SPACE_NAME, [
@@ -1517,7 +1517,7 @@ qos_with_hardlink_test_base(Mode) ->
     [Provider1, Provider2 | _] = oct_background:get_provider_ids(),
     P1Node = oct_background:get_random_provider_node(Provider1),
     SpaceId = oct_background:get_space_id(?SPACE_PLACEHOLDER),
-    SpaceGuid = rpc:call(P1Node, fslogic_uuid, spaceid_to_space_dir_guid, [SpaceId]),
+    SpaceGuid = test_rpc:call(op_worker, Provider1, fslogic_uuid, spaceid_to_space_dir_guid, [SpaceId]),
     {FileParent, LinkParent} = case Mode of
         direct -> {SpaceGuid, SpaceGuid};
         effective ->
@@ -1564,7 +1564,7 @@ qos_with_hardlink_deletion_test_base(ToDelete) ->
     [Provider1, Provider2 | _] = oct_background:get_provider_ids(),
     P1Node = oct_background:get_random_provider_node(Provider1),
     SpaceId = oct_background:get_space_id(?SPACE_PLACEHOLDER),
-    SpaceGuid = rpc:call(P1Node, fslogic_uuid, spaceid_to_space_dir_guid, [SpaceId]),
+    SpaceGuid = test_rpc:call(op_worker, Provider1, fslogic_uuid, spaceid_to_space_dir_guid, [SpaceId]),
     
     {ok, FileGuid} = lfm_proxy:create(P1Node, ?SESS_ID(Provider1), SpaceGuid, generator:gen_name(), ?DEFAULT_FILE_PERMS),
     {ok, #file_attr{guid = LinkGuid}} = lfm_proxy:make_link(P1Node, ?SESS_ID(Provider1), ?FILE_REF(FileGuid), ?FILE_REF(SpaceGuid), generator:gen_name()),
@@ -1590,7 +1590,7 @@ qos_on_symlink_test_base() ->
     [Provider1, Provider2 | _] = oct_background:get_provider_ids(),
     P1Node = oct_background:get_random_provider_node(Provider1),
     SpaceId = oct_background:get_space_id(?SPACE_PLACEHOLDER),
-    SpaceGuid = rpc:call(P1Node, fslogic_uuid, spaceid_to_space_dir_guid, [SpaceId]),
+    SpaceGuid = test_rpc:call(op_worker, Provider1, fslogic_uuid, spaceid_to_space_dir_guid, [SpaceId]),
     
     {ok, FileGuid} = lfm_proxy:create(P1Node, ?SESS_ID(Provider1), SpaceGuid, generator:gen_name(), ?DEFAULT_FILE_PERMS),
     {ok, FilePath} = lfm_proxy:get_file_path(P1Node, ?SESS_ID(Provider1), FileGuid),
@@ -1607,7 +1607,7 @@ effective_qos_with_symlink_test_base() ->
     [Provider1, Provider2 | _] = oct_background:get_provider_ids(),
     P1Node = oct_background:get_random_provider_node(Provider1),
     SpaceId = oct_background:get_space_id(?SPACE_PLACEHOLDER),
-    SpaceGuid = rpc:call(P1Node, fslogic_uuid, spaceid_to_space_dir_guid, [SpaceId]),
+    SpaceGuid = test_rpc:call(op_worker, Provider1, fslogic_uuid, spaceid_to_space_dir_guid, [SpaceId]),
     {ok, Dir1Guid} = lfm_proxy:mkdir(P1Node, ?SESS_ID(Provider1), SpaceGuid, generator:gen_name(), ?DEFAULT_DIR_PERMS),
     {ok, Dir2Guid} = lfm_proxy:mkdir(P1Node, ?SESS_ID(Provider1), SpaceGuid, generator:gen_name(), ?DEFAULT_DIR_PERMS),
     
@@ -1639,7 +1639,7 @@ create_hardlink_in_dir_with_qos() ->
     [Provider1, Provider2 | _] = Providers = oct_background:get_provider_ids(),
     P1Node = oct_background:get_random_provider_node(Provider1),
     SpaceId = oct_background:get_space_id(?SPACE_PLACEHOLDER),
-    SpaceGuid = rpc:call(P1Node, fslogic_uuid, spaceid_to_space_dir_guid, [SpaceId]),
+    SpaceGuid = test_rpc:call(op_worker, Provider1, fslogic_uuid, spaceid_to_space_dir_guid, [SpaceId]),
     {ok, Dir1Guid} = lfm_proxy:mkdir(P1Node, ?SESS_ID(Provider1), SpaceGuid, generator:gen_name(), ?DEFAULT_DIR_PERMS),
     {ok, FileGuid} = lfm_proxy:create(P1Node, ?SESS_ID(Provider1), SpaceGuid, generator:gen_name(), ?DEFAULT_FILE_PERMS),
     {ok, QosEntryId} = lfm_proxy:add_qos_entry(P1Node, ?SESS_ID(Provider1), ?FILE_REF(Dir1Guid), <<"providerId=", Provider2/binary>>, 1),
@@ -1694,7 +1694,7 @@ prepare_qos_status_test_env(DirStructure, SpaceName, Name) ->
         initial_dir_structure = TestDirStructure,
         qos_to_add = [
             #qos_to_add{
-                provider = Provider1,
+                provider_selector = Provider1,
                 qos_name = ?QOS1,
                 path = QosRootFilePath,
                 expression = <<"providerId=", Provider2/binary>>
@@ -1747,7 +1747,7 @@ is_file_in_failed_files_list(Provider, FileGuid) ->
 %% @private
 get_qos_failed_files_list(Provider, SpaceId) ->
     Node = oct_background:get_random_provider_node(Provider),
-    rpc:call(Node, datastore_model, fold_links, [
+    test_rpc:call(op_worker, Node, datastore_model, fold_links, [
         #{model => qos_entry}, 
         <<"failed_files_qos_key_", SpaceId/binary>>, 
         Provider,
@@ -1774,7 +1774,7 @@ prepare_type_spec(random, Nodes, Target) ->
 
 %% @private
 create_link_target(Node, SessId, SpaceId) ->
-    SpaceGuid = rpc:call(Node, fslogic_uuid, spaceid_to_space_dir_guid, [SpaceId]),
+    SpaceGuid = test_rpc:call(op_worker, Node, fslogic_uuid, spaceid_to_space_dir_guid, [SpaceId]),
     {ok, FileToLinkGuid} = lfm_proxy:create(Node, SessId, SpaceGuid, generator:gen_name(), ?DEFAULT_FILE_PERMS),
     FileToLinkGuid.
 

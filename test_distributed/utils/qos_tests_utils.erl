@@ -47,8 +47,7 @@
     mock_transfers/1,
     finish_transfers/1, finish_transfers/2,
     finish_all_transfers/0,
-    mock_replica_synchronizer/2,
-    get_storage_id/2
+    mock_replica_synchronizer/2
 ]).
 
 -define(USER_PLACEHOLDER, user2).
@@ -95,7 +94,7 @@ add_multiple_qos(QosToAddList) ->
 
 
 add_qos(#qos_to_add{
-    provider = ProviderOrUndef,
+    provider_selector = ProviderOrUndef,
     qos_name = QosName,
     path = FilePath,
     replicas_num = ReplicasNum,
@@ -313,16 +312,16 @@ map_qos_names_to_ids(QosNamesList, QosNameIdMapping) ->
 
 
 set_qos_parameters(Provider, StorageId, QosParameters) ->
-    ok = rpc:call(oct_background:get_random_provider_node(Provider), storage, set_qos_parameters,
+    ok = test_rpc:call(op_worker, Provider, storage, set_qos_parameters,
         [StorageId, QosParameters]).
 
 
 reset_qos_parameters() ->
     Providers = oct_background:get_provider_ids(),
     lists:foreach(fun(Provider) ->
-        {ok, Storages} = rpc:call(oct_background:get_random_provider_node(Provider), provider_logic, get_storages, []),
+        {ok, Storages} = test_rpc:call(op_worker, Provider, provider_logic, get_storages, []),
         lists:foreach(fun(StorageId) ->
-            ok = rpc:call(oct_background:get_random_provider_node(Provider), storage, set_qos_parameters, [StorageId, #{}])
+            ok = test_rpc:call(op_worker, Provider, storage, set_qos_parameters, [StorageId, #{}])
         end, Storages)
     end, Providers).
             
@@ -404,12 +403,6 @@ mock_replica_synchronizer(Nodes, Expected) ->
             Expected
         end).
 
-
-get_storage_id(Provider, SpaceId) ->
-    {ok, StorageId} = rpc:call(oct_background:get_random_provider_node(Provider), space_logic,
-        get_local_supporting_storage, [SpaceId]),
-    StorageId.
-
 %%%====================================================================
 %%% Assertions
 %%%====================================================================
@@ -454,8 +447,8 @@ assert_qos_entry_document(Node, QosEntryId, FileUuid, Expression, ReplicasNum, A
     },
     ExpectedQosEntry = upgrade_qos_entry_record(ExpectedQosEntryFirstVersion),
     GetQosEntryFun = fun() ->
-        ?assertMatch({ok, _Doc}, rpc:call(Node, qos_entry, get, [QosEntryId]), Attempts),
-        {ok, #document{value = QosEntry, scope = SpaceId}} = rpc:call(Node, qos_entry, get, [QosEntryId]),
+        ?assertMatch({ok, _Doc}, test_rpc:call(op_worker, Node, qos_entry, get, [QosEntryId]), Attempts),
+        {ok, #document{value = QosEntry, scope = SpaceId}} = test_rpc:call(op_worker, Node, qos_entry, get, [QosEntryId]),
         ?assertEqual({ReplicasNum, FileUuid}, get_qos_entry_by_rest(Node, QosEntryId, SpaceId)),
         % do not assert traverse reqs
         QosEntryWithoutTraverseReqs = QosEntry#qos_entry{traverse_reqs = #{}},
@@ -526,7 +519,7 @@ assert_file_qos_documents(ExpectedFileQos, QosNameIdMapping, FilterOther, Attemp
 assert_file_qos_document(
     Node, FileUuid, QosEntries, AssignedEntries, FilePath, FilterAssignedEntries, Attempts
 ) ->
-    {ok, StorageId} = rpc:call(Node, space_logic, get_local_supporting_storage, [oct_background:get_space_id(?SPACE)]),
+    {ok, StorageId} = test_rpc:call(op_worker, Node, space_logic, get_local_supporting_storage, [oct_background:get_space_id(?SPACE)]),
     ExpectedFileQos = #file_qos{
         qos_entries = QosEntries,
         assigned_entries = case FilterAssignedEntries of
@@ -541,7 +534,7 @@ assert_file_qos_document(
     GetSortedFileQosFun = fun() ->
         {ok, #document{value = FileQos}} = ?assertMatch(
             {ok, _Doc},
-            rpc:call(Node, datastore_model, get, [file_qos:get_ctx(), FileUuid])
+            test_rpc:call(op_worker, Node, datastore_model, get, [file_qos:get_ctx(), FileUuid])
         ),
         FileQosSorted = sort_file_qos(FileQos),
         ErrMsg = str_utils:format(
@@ -583,14 +576,14 @@ assert_effective_qos(ExpectedEffQosEntries, QosNameIdMapping, FilterAssignedEntr
 
             % check that for file document has not been created
             FileUuid = ?GET_FILE_UUID(Node, SessId, FilePath),
-            ?assertMatch({error, not_found}, rpc:call(Node, datastore_model, get, [file_qos:get_ctx(), FileUuid]))
+            ?assertMatch({error, not_found}, test_rpc:call(op_worker, Node, datastore_model, get, [file_qos:get_ctx(), FileUuid]))
 
         end, Providers)
     end, ExpectedEffQosEntries).
 
 assert_effective_qos(Provider, FilePath, QosEntries, AssignedEntries, FilterAssignedEntries, Attempts) ->
     Node = oct_background:get_random_provider_node(Provider),
-    {ok, StorageId} = rpc:call(Node, space_logic, get_local_supporting_storage, [oct_background:get_space_id(?SPACE)]),
+    StorageId = opt_spaces:get_storage_id(Provider, oct_background:get_space_id(?SPACE)),
     ExpectedEffectiveQos = #effective_file_qos{
         qos_entries = QosEntries,
         assigned_entries = case FilterAssignedEntries of
@@ -743,18 +736,15 @@ sort_effective_qos(EffectiveQos) ->
 
 
 %% @private
-ensure_providers(Undef) when Undef == undefined ->
-    Providers = oct_background:get_provider_ids(),
-    Providers;
-
+ensure_providers(undefined) ->
+    oct_background:get_provider_ids();
 ensure_providers(Providers) ->
     Providers.
 
 
 %% @private
-ensure_provider(Undef) when Undef == undefined ->
-    hd(ensure_providers(Undef));
-
+ensure_provider(undefined) ->
+    hd(ensure_providers(undefined));
 ensure_provider(Provider) ->
     Provider.
 
@@ -787,7 +777,7 @@ make_rest_request(Node, URL, Method, Headers, ReqBody, SpaceId, RequiredPrivs) -
     AllSpacePrivs = privileges:space_privileges(),
     EncodedReqBody = json_utils:encode(ReqBody),
     UserId = oct_background:get_user_id(?USER_PLACEHOLDER),
-    {ok, UserPrivileges} = rpc:call(Node, space_logic, get_eff_privileges, [SpaceId, UserId]),
+    UserPrivileges = opt_spaces:get_privileges(Node, SpaceId, UserId),
     try
         ozt_spaces:set_privileges(SpaceId, UserId, AllSpacePrivs -- RequiredPrivs),
         {ok, Code, _, Resp} = rest_test_utils:request(Node, URL, Method, Headers, EncodedReqBody),

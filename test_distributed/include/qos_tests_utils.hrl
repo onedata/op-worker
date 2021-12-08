@@ -19,10 +19,6 @@
 -define(QOS2, <<"Qos2">>).
 -define(QOS3, <<"Qos3">>).
 
--define(P1, <<"p1">>).
--define(P2, <<"p2">>).
--define(P3, <<"p3">>).
-
 
 -define(filename(Name, Num), <<Name/binary,(integer_to_binary(Num))/binary>>).
 
@@ -32,7 +28,7 @@
 
 % record that holds information about qos_entry that should be added in test
 -record(qos_to_add, {
-    provider :: od_provider:id(), % provider on which QoS will be added
+    provider_selector :: oct_background:entity_selector(), % provider on which QoS will be added
     qos_name :: qos_name(), % name of QoS - used only in tests to identify different QoS
     path :: file_meta:path(), % path to file / directory for which QoS should be added
     expression :: qos_expression:infix(), % QoS expression in infix notation

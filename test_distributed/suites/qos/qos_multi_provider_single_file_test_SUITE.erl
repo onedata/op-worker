@@ -10,7 +10,7 @@
 %%% multiple providers.
 %%% @end
 %%%--------------------------------------------------------------------
--module(multi_provider_single_file_qos_test_SUITE).
+-module(qos_multi_provider_single_file_test_SUITE).
 -author("Michal Cwiertnia").
 
 -include("modules/logical_file_manager/lfm.hrl").
@@ -449,7 +449,7 @@ create_basic_qos_test_spec(DirStructureType, QosFilename) ->
         },
         qos_to_add = [
             #qos_to_add{
-                provider = Provider1,
+                provider_selector = Provider1,
                 qos_name = ?QOS1,
                 path = ?PATH(QosFilename),
                 expression = <<"providerId=", Provider2/binary>>
@@ -469,7 +469,7 @@ create_basic_qos_test_spec(DirStructureType, QosFilename) ->
                 path = ?PATH(QosFilename),
                 qos_entries = [?QOS1],
                 assigned_entries = #{
-                    qos_tests_utils:get_storage_id(Provider2, SpaceId) => [?QOS1]
+                    opt_spaces:get_storage_id(Provider2, SpaceId) => [?QOS1]
                 }
             }
         ],
@@ -498,9 +498,9 @@ qos_transfer_stats_test(_Config) ->
     ?assertEqual({ok, ?FULFILLED_QOS_STATUS}, lfm_proxy:check_qos_status(P1Node, ?SESS_ID(Provider1), QosEntryId), ?ATTEMPTS),
     
     check_transfer_stats(P1Node, QosEntryId, bytes, [<<"total">>], empty),
-    check_transfer_stats(P2Node, QosEntryId, bytes, [<<"total">>, qos_tests_utils:get_storage_id(Provider1, SpaceId)], {1, byte_size(?TEST_DATA)}),
+    check_transfer_stats(P2Node, QosEntryId, bytes, [<<"total">>, opt_spaces:get_storage_id(Provider1, SpaceId)], {1, byte_size(?TEST_DATA)}),
     check_transfer_stats(P1Node, QosEntryId, files, [<<"total">>], empty),
-    check_transfer_stats(P2Node, QosEntryId, files, [<<"total">>, qos_tests_utils:get_storage_id(Provider2, SpaceId)], {1, 1}),
+    check_transfer_stats(P2Node, QosEntryId, files, [<<"total">>, opt_spaces:get_storage_id(Provider2, SpaceId)], {1, 1}),
     
     {ok, HW3} = lfm_proxy:open(P3Node, ?SESS_ID(Provider3), #file_ref{guid = Guid}, write),
     NewData = crypto:strong_rand_bytes(8),
@@ -513,11 +513,11 @@ qos_transfer_stats_test(_Config) ->
     ?assertEqual({ok, ?FULFILLED_QOS_STATUS}, lfm_proxy:check_qos_status(P2Node, ?SESS_ID(Provider2), QosEntryId), ?ATTEMPTS),
     
     check_transfer_stats(P1Node, QosEntryId, bytes, [<<"total">>], empty),
-    check_transfer_stats(P2Node, QosEntryId, bytes, [qos_tests_utils:get_storage_id(Provider1, SpaceId)], {1, byte_size(?TEST_DATA)}),
-    check_transfer_stats(P2Node, QosEntryId, bytes, [qos_tests_utils:get_storage_id(Provider3, SpaceId)], {1, byte_size(NewData)}),
+    check_transfer_stats(P2Node, QosEntryId, bytes, [opt_spaces:get_storage_id(Provider1, SpaceId)], {1, byte_size(?TEST_DATA)}),
+    check_transfer_stats(P2Node, QosEntryId, bytes, [opt_spaces:get_storage_id(Provider3, SpaceId)], {1, byte_size(NewData)}),
     check_transfer_stats(P2Node, QosEntryId, bytes, [<<"total">>], {2, byte_size(NewData) + byte_size(?TEST_DATA)}),
     check_transfer_stats(P1Node, QosEntryId, files, [<<"total">>], empty),
-    check_transfer_stats(P2Node, QosEntryId, files, [<<"total">>, qos_tests_utils:get_storage_id(Provider2, SpaceId)], {2, 2}).
+    check_transfer_stats(P2Node, QosEntryId, files, [<<"total">>, opt_spaces:get_storage_id(Provider2, SpaceId)], {2, 2}).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -533,16 +533,16 @@ init_per_suite(Config) ->
         posthook = fun(NewConfig) ->
             [Provider1, Provider2, Provider3 | _] = oct_background:get_provider_ids(),
             SpaceId = oct_background:get_space_id(?SPACE1_PLACEHOLDER),
-            qos_tests_utils:set_qos_parameters(Provider1, qos_tests_utils:get_storage_id(Provider1, SpaceId), #{
+            qos_tests_utils:set_qos_parameters(Provider1, opt_spaces:get_storage_id(Provider1, SpaceId), #{
                 <<"type">> => <<"disk">>,
                 <<"tier">> => <<"t3">>,
                 <<"param1">> => <<"val1">>
             }),
-            qos_tests_utils:set_qos_parameters(Provider2, qos_tests_utils:get_storage_id(Provider2, SpaceId), #{
+            qos_tests_utils:set_qos_parameters(Provider2, opt_spaces:get_storage_id(Provider2, SpaceId), #{
                 <<"type">> => <<"tape">>,
                 <<"tier">> => <<"t2">>
             }),
-            qos_tests_utils:set_qos_parameters(Provider3, qos_tests_utils:get_storage_id(Provider3, SpaceId), #{
+            qos_tests_utils:set_qos_parameters(Provider3, opt_spaces:get_storage_id(Provider3, SpaceId), #{
                 <<"type">> => <<"disk">>,
                 <<"tier">> => <<"t2">>,
                 <<"param1">> => <<"val1">>
@@ -640,22 +640,22 @@ storage_file_path(Node, SpaceId, FilePath) ->
 
 
 get_space_mount_point(Node, SpaceId) ->
-    {ok, StorageId} = rpc:call(Node, space_logic, get_local_supporting_storage, [SpaceId]),
+    {ok, StorageId} = test_rpc:call(op_worker, Node, space_logic, get_local_supporting_storage, [SpaceId]),
     storage_mount_point(Node, StorageId).
 
 
 storage_mount_point(Node, StorageId) ->
-    Helper = rpc:call(Node, storage, get_helper, [StorageId]),
+    Helper = test_rpc:call(op_worker, Node, storage, get_helper, [StorageId]),
     HelperArgs = helper:get_args(Helper),
     maps:get(<<"mountPoint">>, HelperArgs).
 
 
-read_file(Worker, FilePath) ->
-    rpc:call(Worker, file, read_file, [FilePath]).
+read_file(Node, FilePath) ->
+    test_rpc:call(op_worker, Node, file, read_file, [FilePath]).
 
 
 check_transfer_stats(Node, QosEntryId, Type, ExpectedSeries, ExpectedValue) ->
-    {ok, Stats} = rpc:call(Node, qos_transfer_stats, get, [QosEntryId, Type]),
+    {ok, Stats} = test_rpc:call(op_worker, Node, qos_transfer_stats, get, [QosEntryId, Type]),
     lists:foreach(fun(Series) ->
         lists:foreach(fun(Metric) ->
             ?assert(maps:is_key({Series, Metric}, Stats)),

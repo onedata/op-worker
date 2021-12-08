@@ -80,7 +80,7 @@ offline_session_should_work_as_any_other_session_test(_Config) ->
         {ok, [_ | _]},
         lfm_proxy:get_children(?NODE, SessionId, ?FILE_REF(UserRootDirGuid), 0, 100)
     ),
-    ListedSpacesGuids = lists:map(fun({Id, _}) -> Id end, ListedSpaces),
+    {ListedSpacesGuids, _} = lists:unzip(ListedSpaces),
     ?assert(lists:member(SpaceKrkGuid, ListedSpacesGuids)),
 
     % Check that even in case of various environment situations everything is resolved

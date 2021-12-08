@@ -65,6 +65,7 @@ spaces:
       - provider: "oneprovider-1"
         storage_name: "posix"
         size: '1073741824'
+    # TODO VFS-8726 reuse space_krk in qos tests and remove space1
   - name: space1
     user: *user1
     users:

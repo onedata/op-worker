@@ -6,23 +6,30 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Common functions related to spaces operations in Onezone to be used 
-%%% in CT tests.
+%%% Common functions to be used in CT tests.
 %%% @end
 %%%-------------------------------------------------------------------
--module(ozt_spaces).
+-module(opt).
 -author("Michal Stanisz").
 
 -include_lib("ctool/include/test/assertions.hrl").
 
--export([set_privileges/3]).
+-type entity() :: od_space.
+
+-export([force_fetch_entity/2]).
 
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
--spec set_privileges(od_space:id(), od_user:id(), privileges:privileges(privileges:space_privilege())) -> ok.
-set_privileges(SpaceId, UserId, SpacePrivs) ->
-    ozw_test_rpc:space_set_user_privileges(SpaceId, UserId, SpacePrivs),
-    opt:force_fetch_entity(od_space, SpaceId).
+-spec force_fetch_entity(entity(), binary()) -> ok.
+force_fetch_entity(Entity, Id) ->
+    Providers = oct_background:get_provider_ids(),
+    lists:foreach(fun(P) ->
+        ?assertMatch({ok, _}, test_rpc:call(op_worker, P, entity_to_logic_module(Entity), force_fetch, [Id]))
+    end, Providers).
+
+
+-spec entity_to_logic_module(entity()) -> module().
+entity_to_logic_module(od_space) -> space_logic.

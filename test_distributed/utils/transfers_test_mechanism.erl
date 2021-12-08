@@ -1403,8 +1403,7 @@ get_privileges(Config, Worker, SpaceId, UserId) ->
         true ->
             rpc:call(Worker, initializer, node_get_mocked_space_user_privileges, [SpaceId, UserId]);
         false ->
-            {ok, Privs} = rpc:call(Worker, space_logic, get_eff_privileges, [SpaceId, UserId]),
-            Privs
+            opt_spaces:get_privileges(Worker, SpaceId, UserId)
     end.
 
 set_privileges(Config, SpaceId, UserId, SpacePrivs) ->
