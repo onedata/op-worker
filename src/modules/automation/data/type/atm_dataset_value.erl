@@ -77,7 +77,7 @@ list_children(AtmWorkflowExecutionAuth, DatasetId, ListOpts, BatchSize) ->
             % set offset to 1 to ensure that listing is exclusive
             {ResultEntries, [], #{offset => 1, start_index => LastIndex}, IsLast}
     catch throw:Error ->
-        case middleware_utils:is_access_error(Error) of
+        case middleware_utils:is_file_access_error(Error) of
             true -> {[], [], #{}, true};
             false -> throw(Error)
         end
@@ -146,7 +146,7 @@ check_implicit_constraints(AtmWorkflowExecutionAuth, #{<<"datasetId">> := Datase
                 <<"inSpace">> => SpaceId
             }))
     catch throw:Error ->
-        case middleware_utils:is_access_error(Error) of
+        case middleware_utils:is_file_access_error(Error) of
             true ->
                 throw(?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(Value, atm_dataset_type, #{
                     <<"hasAccess">> => true

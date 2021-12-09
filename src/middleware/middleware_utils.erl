@@ -21,7 +21,7 @@
 -export([
     throw_if_error/1,
     check_result/1,
-    is_access_error/1
+    is_file_access_error/1
 ]).
 -export([
     resolve_file_path/2,
@@ -59,14 +59,14 @@ check_result({ok, Value}) -> Value;
 check_result({error, _} = Error) -> throw(Error).
 
 
--spec is_access_error(errors:error()) -> boolean().
-is_access_error(?ERROR_POSIX(?EACCES)) -> true;
-is_access_error(?ERROR_POSIX(?EPERM)) -> true;
-is_access_error(?ERROR_POSIX(?ENOENT)) -> true;
-is_access_error(?ERROR_UNAUTHORIZED) -> true;
-is_access_error(?ERROR_FORBIDDEN) -> true;
-is_access_error(?ERROR_NOT_FOUND) -> true;
-is_access_error(_) -> false.
+-spec is_file_access_error(errors:error()) -> boolean().
+is_file_access_error(?ERROR_POSIX(?EACCES)) -> true;
+is_file_access_error(?ERROR_POSIX(?EPERM)) -> true;
+is_file_access_error(?ERROR_POSIX(?ENOENT)) -> true;
+is_file_access_error(?ERROR_UNAUTHORIZED) -> true;
+is_file_access_error(?ERROR_FORBIDDEN) -> true;
+is_file_access_error(?ERROR_NOT_FOUND) -> true;
+is_file_access_error(_) -> false.
 
 
 -spec resolve_file_path(session:id(), file_meta:path()) ->
