@@ -101,7 +101,7 @@ has_file_changed(BaseArchiveFileCtx, CurrentFileCtx, UserCtx) ->
 -spec find_most_recent_preserved_archive(dataset:id(), archive_api:index()) -> archive:id() | undefined.
 find_most_recent_preserved_archive(DatasetId, StartIndex) ->
     ListingOpts = #{start_index => StartIndex, limit => 1000},
-    {ok, Archives, IsLast} = archive_api:list_archives(DatasetId, ListingOpts, ?EXTENDED_INFO),
+    {ok, {Archives, IsLast}} = archive_api:list_archives(DatasetId, ListingOpts, ?EXTENDED_INFO),
 
     {BaseArchiveOrUndefined, LastArchiveIndex} = lists_utils:foldl_while(fun
         (#archive_info{state = ?ARCHIVE_PRESERVED, id = Id, index = Index}, {undefined, _}) ->

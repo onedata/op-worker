@@ -257,7 +257,7 @@ get_dataset_root_file_guid(ArchiveId) when is_binary(ArchiveId) ->
     {ok, ArchiveDoc} = get(ArchiveId),
     get_dataset_root_file_guid(ArchiveDoc).
 
--spec get_space_id(id() | doc()) -> {ok, od_space:id()}.
+-spec get_space_id(id() | doc()) -> {ok, od_space:id()} | {error, term()}.
 get_space_id(#document{scope = SpaceId}) ->
     {ok, SpaceId};
 get_space_id(ArchiveId) ->

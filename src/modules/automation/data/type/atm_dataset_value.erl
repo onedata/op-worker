@@ -17,6 +17,7 @@
 -behaviour(atm_data_compressor).
 -behaviour(atm_tree_forest_store_container_iterator).
 
+-include("modules/automation/atm_execution.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include_lib("ctool/include/errors.hrl").
@@ -65,22 +66,21 @@ assert_meets_constraints(AtmWorkflowExecutionAuth, Value, _ValueConstraints) ->
     {[{dataset:id(), dataset:name()}], [], list_opts(), IsLast :: boolean()} | no_return().
 list_children(AtmWorkflowExecutionAuth, DatasetId, ListOpts, BatchSize) ->
     SessionId = atm_workflow_execution_auth:get_session_id(AtmWorkflowExecutionAuth),
-    case lfm:list_children_datasets(SessionId, DatasetId, ListOpts#{limit => BatchSize}) of
-        {ok, Entries, IsLast} when length(Entries) > 0 ->
+
+    try mi_datasets:list_children_datasets(SessionId, DatasetId, ListOpts#{limit => BatchSize}, undefined) of
+        {[], IsLast} ->
+            {[], [], #{}, IsLast};
+        {Entries, IsLast} ->
             {_LastId, _LastName, LastIndex} = lists:last(Entries),
             ResultEntries = lists:map(fun({Id, Name, _}) -> {Id, Name} end, Entries),
             % all datasets are traversable, so returned list of nontraversable items is always empty
             % set offset to 1 to ensure that listing is exclusive
-            {ResultEntries, [], #{offset => 1, start_index => LastIndex}, IsLast};
-        {ok, [], IsLast} ->
-            {[], [], #{}, IsLast};
-        {error, Errno} ->
-            case fslogic_errors:is_access_error(Errno) of
-                true ->
-                    {[], [], #{}, true};
-                false ->
-                    throw(?ERROR_POSIX(Errno))
-            end
+            {ResultEntries, [], #{offset => 1, start_index => LastIndex}, IsLast}
+    catch throw:Error ->
+        case middleware_utils:is_file_access_error(Error) of
+            true -> {[], [], #{}, true};
+            false -> throw(Error)
+        end
     end.
 
 
@@ -115,9 +115,11 @@ compress(#{<<"datasetId">> := DatasetId}) -> DatasetId.
     {ok, atm_value:expanded()} | {error, term()}.
 expand(AtmWorkflowExecutionAuth, DatasetId) ->
     SessionId = atm_workflow_execution_auth:get_session_id(AtmWorkflowExecutionAuth),
-    case lfm:get_dataset_info(SessionId, DatasetId) of
-        {ok, DatasetInfo} -> {ok, dataset_utils:dataset_info_to_json(DatasetInfo)};
-        {error, Errno} -> ?ERROR_POSIX(Errno)
+    try
+        DatasetInfo = mi_datasets:get_info(SessionId, DatasetId),
+        {ok, dataset_utils:dataset_info_to_json(DatasetInfo)}
+    catch throw:Error ->
+        Error
     end.
 
 
@@ -133,23 +135,23 @@ check_implicit_constraints(AtmWorkflowExecutionAuth, #{<<"datasetId">> := Datase
     SpaceId = atm_workflow_execution_auth:get_space_id(AtmWorkflowExecutionAuth),
     SessionId = atm_workflow_execution_auth:get_session_id(AtmWorkflowExecutionAuth),
 
-    case lfm:get_dataset_info(SessionId, DatasetId) of
-        {ok, #dataset_info{root_file_guid = RootFileGuid}} ->
-            case file_id:guid_to_space_id(RootFileGuid) of
-                SpaceId ->
-                    ok;
-                _ ->
-                    throw(?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(
-                        Value, atm_dataset_type, #{<<"inSpace">> => SpaceId}
-                    ))
-            end;
-        {error, Errno} ->
-            case fslogic_errors:is_access_error(Errno) of
-                true ->
-                    throw(?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(
-                        Value, atm_dataset_type, #{<<"hasAccess">> => true}
-                    ));
-                false ->
-                    throw(?ERROR_POSIX(Errno))
-            end
+    try
+        DatasetInfo = mi_datasets:get_info(SessionId, DatasetId),
+        file_id:guid_to_space_id(DatasetInfo#dataset_info.root_file_guid)
+    of
+        SpaceId ->
+            ok;
+        _ ->
+            throw(?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(Value, atm_dataset_type, #{
+                <<"inSpace">> => SpaceId
+            }))
+    catch throw:Error ->
+        case middleware_utils:is_file_access_error(Error) of
+            true ->
+                throw(?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(Value, atm_dataset_type, #{
+                    <<"hasAccess">> => true
+                }));
+            false ->
+                throw(Error)
+        end
     end.

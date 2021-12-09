@@ -103,7 +103,7 @@ get_root_file_uuid(DatasetId) ->
     {ok, DatasetId}.
 
 
--spec get_space_id(doc() | dataset:id()) -> {ok, od_space:id()}.
+-spec get_space_id(doc() | dataset:id()) -> {ok, od_space:id()} | {error, term()}.
 get_space_id(#document{scope = SpaceId}) ->
     {ok, SpaceId};
 get_space_id(DatasetId) ->

@@ -101,25 +101,27 @@ establish_dataset_test(Config) ->
                     validate_result_fun = build_establish_dataset_validate_gs_call_result_fun(MemRef, Config)
                 }
             ],
-            data_spec = api_test_utils:add_cdmi_id_errors_for_operations_not_available_in_share_mode(
-                % Operations should be rejected even before checking if share exists
-                % (in case of using share file id) so it is not necessary to use
-                % valid share id
-                <<"rootFileId">>, FileGuid, SpaceId, <<"NonExistentShareId">>, #data_spec{
-                    required = [<<"rootFileId">>],
-                    optional = [<<"protectionFlags">>],
-                    correct_values = #{
-                        <<"rootFileId">> => [file_id],
-                        <<"protectionFlags">> => ?PROTECTION_FLAGS_COMBINATIONS
-                    },
-                    bad_values = [
-                        {<<"rootFileId">>, FileObjectId, ?ERROR_POSIX(?EEXIST)},
-                        {<<"protectionFlags">>, 100, ?ERROR_BAD_VALUE_LIST_OF_BINARIES(<<"protectionFlags">>)},
-                        {<<"protectionFlags">>, [<<"dummyFlag">>], ?ERROR_BAD_VALUE_LIST_NOT_ALLOWED(
-                            <<"protectionFlags">>, [?DATA_PROTECTION_BIN, ?METADATA_PROTECTION_BIN]
-                        )}
-                    ]
-                }
+            data_spec = api_test_utils:replace_enoent_with_not_found_error_in_bad_data_values(
+                api_test_utils:add_cdmi_id_errors_for_operations_not_available_in_share_mode(
+                    % Operations should be rejected even before checking if share exists
+                    % (in case of using share file id) so it is not necessary to use
+                    % valid share id
+                    <<"rootFileId">>, FileGuid, SpaceId, <<"NonExistentShareId">>, #data_spec{
+                        required = [<<"rootFileId">>],
+                        optional = [<<"protectionFlags">>],
+                        correct_values = #{
+                            <<"rootFileId">> => [file_id],
+                            <<"protectionFlags">> => ?PROTECTION_FLAGS_COMBINATIONS
+                        },
+                        bad_values = [
+                            {<<"rootFileId">>, FileObjectId, ?ERROR_ALREADY_EXISTS},
+                            {<<"protectionFlags">>, 100, ?ERROR_BAD_VALUE_LIST_OF_BINARIES(<<"protectionFlags">>)},
+                            {<<"protectionFlags">>, [<<"dummyFlag">>], ?ERROR_BAD_VALUE_LIST_NOT_ALLOWED(
+                                <<"protectionFlags">>, [?DATA_PROTECTION_BIN, ?METADATA_PROTECTION_BIN]
+                            )}
+                        ]
+                    }
+                )
             )
         }
     ])).
@@ -598,7 +600,7 @@ get_exp_update_result(MemRef, Data) ->
         {<<"attached">>, <<"detach">>, _, _} ->
             ?ERROR_POSIX(?EINVAL);
         {<<"detached">>, undefined, _, _} ->
-            ?ERROR_POSIX(?EINVAL);
+            ?ERROR_BAD_DATA(<<"state">>, <<"Detached dataset cannot be modified.">>);
         _ ->
             ok
     end.
@@ -731,11 +733,11 @@ build_verify_delete_dataset_fun(MemRef, Providers, SpaceId, Config) ->
                                 list_child_dataset_ids(Node, UserSessId, SpaceDirDatasetId, ListOpts)
                             end
                     end,
-                    GetDatasetInfo = fun() -> lfm_proxy:get_dataset_info(Node, UserSessId, DatasetId) end,
+                    GetDatasetInfo = fun() -> opt_datasets:get_info(Node, UserSessId, DatasetId) end,
 
                     case ExpResult of
                         expected_success ->
-                            ?assertEqual({error, ?ENOENT}, GetDatasetInfo(), ?ATTEMPTS),
+                            ?assertEqual(?ERROR_NOT_FOUND, GetDatasetInfo(), ?ATTEMPTS),
                             ?assertEqual(false, lists:member(DatasetId, ListDatasetsFun())),
                             api_test_memory:set(MemRef, datasets, lists:delete(
                                 DatasetId, api_test_memory:get(MemRef, datasets)
@@ -849,7 +851,7 @@ verify_dataset(
             parent = ParentId,
             index = datasets_structure:pack_entry_index(filename:basename(RootFilePath), DatasetId)
         },
-        ?assertEqual({ok, ExpDatasetInfo}, lfm_proxy:get_dataset_info(Node, UserSessId, DatasetId), ?ATTEMPTS)
+        ?assertEqual({ok, ExpDatasetInfo}, opt_datasets:get_info(Node, UserSessId, DatasetId), ?ATTEMPTS)
     end, Providers).
 
 
@@ -857,7 +859,7 @@ verify_dataset(
 -spec list_top_dataset_ids(node(), session:id(), od_space:id(), dataset:state(), dataset_api:listing_opts()) ->
     [dataset:id()].
 list_top_dataset_ids(Node, UserSessId, SpaceId, State, ListOpts) ->
-    {ok, Datasets, _} = lfm_proxy:list_top_datasets(
+    {ok, {Datasets, _}} = opt_datasets:list_top_datasets(
         Node, UserSessId, SpaceId, State, ListOpts
     ),
     lists:map(fun({DatasetId, _, _}) -> DatasetId end, Datasets).
@@ -867,7 +869,7 @@ list_top_dataset_ids(Node, UserSessId, SpaceId, State, ListOpts) ->
 -spec list_child_dataset_ids(node(), session:id(), dataset:id(), dataset_api:listing_opts()) ->
     [dataset:id()].
 list_child_dataset_ids(Node, UserSessId, ParentId, ListOpts) ->
-    {ok, Datasets, _} = lfm_proxy:list_children_datasets(Node, UserSessId, ParentId, ListOpts),
+    {ok, {Datasets, _}} = opt_datasets:list_children_datasets(Node, UserSessId, ParentId, ListOpts),
     lists:map(fun({DatasetId, _, _}) -> DatasetId end, Datasets).
 
 %%%===================================================================

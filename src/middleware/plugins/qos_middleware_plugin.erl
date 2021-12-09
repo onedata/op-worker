@@ -133,14 +133,14 @@ authorize(#op_req{operation = get, auth = ?USER(UserId), gri = #gri{
     id = QosEntryId,
     aspect = Aspect
 }}, _QosEntry) when Aspect =:= instance orelse Aspect =:= audit_log ->
-    {ok, SpaceId} = ?check(qos_entry:get_space_id(QosEntryId)),
+    {ok, SpaceId} = ?lfm_check(qos_entry:get_space_id(QosEntryId)),
     space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW_QOS);
 
 authorize(#op_req{operation = delete, auth = ?USER(UserId), gri = #gri{
     id = QosEntryId,
     aspect = instance
 }}, _QosEntry) ->
-    {ok, SpaceId} = ?check(qos_entry:get_space_id(QosEntryId)),
+    {ok, SpaceId} = ?lfm_check(qos_entry:get_space_id(QosEntryId)),
     space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_MANAGE_QOS).
 
 
@@ -160,14 +160,14 @@ validate(#op_req{operation = get, gri = #gri{
     id = QosEntryId,
     aspect = Aspect
 }}, _QosEntry) when Aspect =:= instance orelse Aspect =:= audit_log ->
-    {ok, SpaceId} = ?check(qos_entry:get_space_id(QosEntryId)),
+    {ok, SpaceId} = ?lfm_check(qos_entry:get_space_id(QosEntryId)),
     middleware_utils:assert_space_supported_locally(SpaceId);
 
 validate(#op_req{operation = delete, gri = #gri{
     id = QosEntryId,
     aspect = instance
 }}, _QosEntry) ->
-    {ok, SpaceId} = ?check(qos_entry:get_space_id(QosEntryId)),
+    {ok, SpaceId} = ?lfm_check(qos_entry:get_space_id(QosEntryId)),
     middleware_utils:assert_space_supported_locally(SpaceId).
 
 
@@ -184,10 +184,10 @@ create(#op_req{auth = Auth, gri = #gri{aspect = instance} = GRI} = Req) ->
     FileGuid = maps:get(<<"fileId">>, Req#op_req.data),
     SpaceId = file_id:guid_to_space_id(FileGuid),
 
-    {ok, QosEntryId} = ?check(lfm:add_qos_entry(
+    {ok, QosEntryId} = ?lfm_check(lfm:add_qos_entry(
         SessionId, ?FILE_REF(FileGuid), Expression, ReplicasNum
     )),
-    {ok, QosEntry} = ?check(lfm:get_qos_entry(SessionId, QosEntryId)),
+    {ok, QosEntry} = ?lfm_check(lfm:get_qos_entry(SessionId, QosEntryId)),
 
     Status = case qos_entry:is_possible(QosEntry) of
         true -> ?PENDING_QOS_STATUS;
@@ -205,7 +205,7 @@ create(#op_req{auth = Auth, gri = #gri{aspect = instance} = GRI} = Req) ->
 get(#op_req{auth = Auth, gri = #gri{id = QosEntryId, aspect = instance}}, QosEntry) ->
     SessionId = Auth#auth.session_id,
     {ok, SpaceId} = qos_entry:get_space_id(QosEntryId),
-    {ok, Status} = ?check(lfm_qos:check_qos_status(SessionId, QosEntryId)),
+    {ok, Status} = ?lfm_check(lfm_qos:check_qos_status(SessionId, QosEntryId)),
     {ok, entry_to_details(QosEntry, Status, SpaceId)};
 
 get(#op_req{gri = #gri{id = QosEntryId, aspect = audit_log}, data = Data}, _QosEntry) ->
@@ -245,7 +245,7 @@ update(_) ->
 %%--------------------------------------------------------------------
 -spec delete(middleware:req()) -> middleware:delete_result().
 delete(#op_req{auth = Auth, gri = #gri{id = QosEntryId, aspect = instance}}) ->
-    ?check(lfm:remove_qos_entry(Auth#auth.session_id, QosEntryId)).
+    ?lfm_check(lfm:remove_qos_entry(Auth#auth.session_id, QosEntryId)).
 
 %%%===================================================================
 %%% Internal functions

@@ -125,10 +125,9 @@ get(#op_req{auth = Auth, gri = #gri{id = SpaceId, aspect = Aspect}, data = Data}
         datasets -> ?BASIC_INFO;
         datasets_details -> ?EXTENDED_INFO
     end,
-    {ok, Datasets, IsLast} = ?check(lfm:list_top_datasets(
+    {ok, value, mi_datasets:list_top_datasets(
         Auth#auth.session_id, SpaceId, State, ListingOpts, ListingMode
-    )),
-    {ok, value, {Datasets, IsLast}}.
+    )}.
 
 
 %%--------------------------------------------------------------------

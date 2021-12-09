@@ -82,12 +82,12 @@ set_up_archive(CreationProvider, UserId, DatasetId, #archive_spec{
 
     {ok, ArchiveId} = ?assertMatch(
         {ok, _},
-        lfm_proxy:archive_dataset(CreationNode, UserSessId, DatasetId, Config, Description)
+        opt_archives:archive_dataset(CreationNode, UserSessId, DatasetId, Config, Description)
     ),
 
     {ok, ArchiveInfo = #archive_info{
         config = FinalConfig
-    }} = lfm_proxy:get_archive_info(CreationNode, UserSessId, ArchiveId),
+    }} = opt_archives:get_info(CreationNode, UserSessId, ArchiveId),
     #archive_object{
         id = ArchiveId,
         config = FinalConfig,
@@ -113,7 +113,7 @@ await_archive_sync(CreationProvider, SyncProviders, UserId, #archive_object{id =
 
     ?assertMatch(
         {ok, #archive_info{id = ArchiveId}},
-        lfm_proxy:get_archive_info(CreationNode, CreationNodeSessId, ArchiveId)
+        opt_archives:get_info(CreationNode, CreationNodeSessId, ArchiveId)
     ),
 
     lists:foreach(fun(SyncProvider) ->
@@ -122,11 +122,11 @@ await_archive_sync(CreationProvider, SyncProviders, UserId, #archive_object{id =
 
         ?assertMatch(
             {ok, #archive_info{id = ArchiveId}},
-            lfm_proxy:get_archive_info(SyncNode, SessId, ArchiveId),
+            opt_archives:get_info(SyncNode, SessId, ArchiveId),
             ?ATTEMPTS
         ),
         ListArchivesFun = fun() ->
-            {ok, Archives, _} = lfm_proxy:list_archives(SyncNode, SessId, DatasetId, #{offset => 0, limit => 10000}),
+            {ok, {Archives, _}} = opt_archives:list(SyncNode, SessId, DatasetId, #{offset => 0, limit => 10000}),
             [AId || {_, AId} <- Archives]
         end,
         ?assertEqual(true, lists:member(ArchiveId, ListArchivesFun()), ?ATTEMPTS)

@@ -60,10 +60,14 @@
 -export([
     add_file_id_errors_for_operations_available_in_share_mode/3,
     add_file_id_errors_for_operations_available_in_share_mode/4,
+
     add_file_id_errors_for_operations_not_available_in_share_mode/3,
     add_file_id_errors_for_operations_not_available_in_share_mode/4,
+
     add_cdmi_id_errors_for_operations_not_available_in_share_mode/4,
     add_cdmi_id_errors_for_operations_not_available_in_share_mode/5,
+
+    replace_enoent_with_not_found_error_in_bad_data_values/1,
     maybe_substitute_bad_id/2
 ]).
 
@@ -715,6 +719,16 @@ add_cdmi_id_errors_for_operations_not_available_in_share_mode(IdKey, FileGuid, S
     ],
 
     add_bad_values_to_data_spec(BadFileIdValues, DataSpec).
+
+
+-spec replace_enoent_with_not_found_error_in_bad_data_values(onenv_api_test_runner:data_spec()) ->
+    onenv_api_test_runner:data_spec().
+replace_enoent_with_not_found_error_in_bad_data_values(DataSpec = #data_spec{bad_values = BadValues}) ->
+    DataSpec#data_spec{bad_values = lists:map(fun
+        ({Key, Value, ?ERROR_POSIX(?ENOENT)}) -> {Key, Value, ?ERROR_NOT_FOUND};
+        ({Key, Value, {Interface, ?ERROR_POSIX(?ENOENT)}}) -> {Key, Value, {Interface, ?ERROR_NOT_FOUND}};
+        (Spec) -> Spec
+    end, BadValues)}.
 
 
 maybe_substitute_bad_id(ValidId, undefined) ->

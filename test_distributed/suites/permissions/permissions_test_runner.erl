@@ -365,7 +365,7 @@ run_file_protection_scenarios(ScenariosRootDirPath, #perms_test_spec{
     ]),
 
     SpaceOwnerUserSessId = ?config({session_id, {SpaceOwner, ?GET_DOMAIN(Node)}}, Config),
-    {ok, DatasetId} = lfm_proxy:establish_dataset(Node, SpaceOwnerUserSessId, ScenarioRootDirKey),
+    {ok, DatasetId} = opt_datasets:establish(Node, SpaceOwnerUserSessId, ScenarioRootDirKey),
 
     case ProtectionFlagsToSet > 0 of
         true ->
@@ -377,13 +377,13 @@ run_file_protection_scenarios(ScenariosRootDirPath, #perms_test_spec{
             ExecutionerSessId = ?config({session_id, {Executioner, ?GET_DOMAIN(Node)}}, Config),
 
             % With file protection set operation should fail
-            ok = lfm_proxy:update_dataset(
+            ok = opt_datasets:update(
                 Node, SpaceOwnerUserSessId, DatasetId, undefined, ProtectionFlagsToSet, ?no_flags_mask),
             await_caches_clearing(Node, SpaceId, Executioner, ExtraData),
             ?assertMatch({error, ?EPERM}, Operation(ExecutionerSessId, ScenarioRootDirPath, ExtraData)),
 
             % And should succeed without it
-            ok = lfm_proxy:update_dataset(
+            ok = opt_datasets:update(
                 Node, SpaceOwnerUserSessId, DatasetId, undefined, ?no_flags_mask, ProtectionFlagsToSet
             ),
             await_caches_clearing(Node, SpaceId, Executioner, ExtraData),

@@ -199,17 +199,23 @@ list_with_invalid_listing_opts_test(_Config) ->
     KrkNode = oct_background:get_random_provider_node(krakow),
     Phase = lists_utils:random_element(?ATM_WORKFLOW_EXECUTIONS_PHASES),
 
-    lists:foreach(fun(InvalidListingOpts) ->
-        ?assertEqual(?EINVAL, list_links(KrkNode, SpaceId, Phase, all, InvalidListingOpts))
+    lists:foreach(fun({InvalidListingOpts, ExpError}) ->
+        ?assertEqual(ExpError, list_links(KrkNode, SpaceId, Phase, all, InvalidListingOpts))
     end, [
-        % Limit and either offset or start_index must be specified
-        #{}, #{offset => 0}, #{start_index => 0}, #{limit => 10},
-        % Limit lower than 1 is not allowed
-        #{offset => 0, limit => -10}, #{offset => 0, limit => 0}, #{offset => 0, limit => all},
-        % Offset must be proper integer
-        #{offset => <<>>, limit => 10}, #{offset => -2.5, limit => 10},
-        % Start index must be proper binary
-        #{start_index => 10, limit => 10}
+        {#{}, ?ERROR_MISSING_REQUIRED_VALUE(limit)},
+        {#{offset => 0}, ?ERROR_MISSING_REQUIRED_VALUE(limit)},
+        {#{start_index => 0}, ?ERROR_MISSING_REQUIRED_VALUE(limit)},
+
+        {#{limit => 10}, ?ERROR_MISSING_AT_LEAST_ONE_VALUE(lists:usort([offset, start_index]))},
+
+        {#{offset => 0, limit => -10}, ?ERROR_BAD_VALUE_TOO_LOW(limit, 1)},
+        {#{offset => 0, limit => 0}, ?ERROR_BAD_VALUE_TOO_LOW(limit, 1)},
+        {#{offset => 0, limit => all}, ?ERROR_BAD_VALUE_INTEGER(limit)},
+
+        {#{offset => <<>>, limit => 10}, ?ERROR_BAD_VALUE_INTEGER(offset)},
+        {#{offset => -2.5, limit => 10}, ?ERROR_BAD_VALUE_INTEGER(offset)},
+
+        {#{start_index => 10, limit => 10}, ?ERROR_BAD_VALUE_BINARY(start_index)}
     ]).
 
 

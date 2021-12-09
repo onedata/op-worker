@@ -221,8 +221,8 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = instance} = GRI}) -
     ProtectionFlags = file_meta:protection_flags_from_json(
         maps:get(<<"protectionFlags">>, Data, [])
     ),
-    {ok, DatasetId} = ?check(lfm:establish_dataset(SessionId, FileRef, ProtectionFlags)),
-    {ok, DatasetInfo} = ?check(lfm:get_dataset_info(SessionId, DatasetId)),
+    DatasetId = mi_datasets:establish(SessionId, FileRef, ProtectionFlags),
+    DatasetInfo = mi_datasets:get_info(SessionId, DatasetId),
     {ok, resource, {GRI#gri{id = DatasetId}, DatasetInfo}}.
 
 
@@ -233,7 +233,7 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = instance} = GRI}) -
 %%--------------------------------------------------------------------
 -spec get(middleware:req(), middleware:entity()) -> middleware:get_result().
 get(#op_req{auth = Auth, gri = #gri{id = DatasetId, aspect = instance}}, _) ->
-    ?check(lfm:get_dataset_info(Auth#auth.session_id, DatasetId));
+    {ok, mi_datasets:get_info(Auth#auth.session_id, DatasetId)};
 
 get(#op_req{auth = Auth, gri = #gri{id = DatasetId, aspect = Aspect}, data = Data}, _)
     when Aspect =:= children
@@ -243,10 +243,9 @@ get(#op_req{auth = Auth, gri = #gri{id = DatasetId, aspect = Aspect}, data = Dat
         children -> ?BASIC_INFO;
         children_details -> ?EXTENDED_INFO
     end,
-    {ok, Datasets, IsLast} = ?check(lfm:list_children_datasets(
+    {ok, value, mi_datasets:list_children_datasets(
         Auth#auth.session_id, DatasetId, gather_listing_opts(Data), ListingMode
-    )),
-    {ok, value, {Datasets, IsLast}};
+    )};
 
 get(#op_req{auth = Auth, gri = #gri{id = DatasetId, aspect = Aspect}, data = Data}, _)
     when Aspect =:= archives
@@ -256,10 +255,9 @@ get(#op_req{auth = Auth, gri = #gri{id = DatasetId, aspect = Aspect}, data = Dat
         archives -> ?BASIC_INFO;
         archives_details -> ?EXTENDED_INFO
     end,
-    {ok, Archives, IsLast} = ?check(lfm:list_archives(
+    {ok, value, mi_archives:list(
         Auth#auth.session_id, DatasetId, gather_listing_opts(Data), ListingMode
-    )),
-    {ok, value, {Archives, IsLast}}.
+    )}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -268,17 +266,12 @@ get(#op_req{auth = Auth, gri = #gri{id = DatasetId, aspect = Aspect}, data = Dat
 %%--------------------------------------------------------------------
 -spec update(middleware:req()) -> middleware:update_result().
 update(#op_req{auth = Auth, gri = #gri{id = DatasetId, aspect = instance}, data = Data}) ->
-    Result = lfm:update_dataset(
+    mi_datasets:update(
         Auth#auth.session_id, DatasetId,
         maps:get(<<"state">>, Data, undefined),
         file_meta:protection_flags_from_json(maps:get(<<"setProtectionFlags">>, Data, [])),
         file_meta:protection_flags_from_json(maps:get(<<"unsetProtectionFlags">>, Data, []))
-    ),
-    case Result of
-        {error, ?ENOENT} -> throw(?ERROR_NOT_FOUND);
-        {error, ?EEXIST} -> throw(?ERROR_ALREADY_EXISTS);
-        Other -> ?check(Other)
-    end.
+    ).
 
 
 %%--------------------------------------------------------------------
@@ -288,7 +281,7 @@ update(#op_req{auth = Auth, gri = #gri{id = DatasetId, aspect = instance}, data 
 %%--------------------------------------------------------------------
 -spec delete(middleware:req()) -> middleware:delete_result().
 delete(#op_req{auth = Auth, gri = #gri{id = DatasetId, aspect = instance}}) ->
-    ?check(lfm:remove_dataset(Auth#auth.session_id, DatasetId)).
+    mi_datasets:remove(Auth#auth.session_id, DatasetId).
 
 
 %%%===================================================================

@@ -248,7 +248,7 @@ read_file_data(FileHandle, From, ToRead, MinBytes) ->
         {error, ?ENOSPC} ->
             throw(?ERROR_QUOTA_EXCEEDED);
         Res ->
-            {ok, NewFileHandle, Data} = ?check(Res),
+            {ok, NewFileHandle, Data} = ?lfm_check(Res),
             FinalData = case byte_size(Data) < MinBytes of
                 true -> str_utils:pad_right(Data, min(MinBytes, ToRead), <<0>>);
                 false -> Data

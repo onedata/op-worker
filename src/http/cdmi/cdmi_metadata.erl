@@ -55,7 +55,7 @@
 %%--------------------------------------------------------------------
 -spec get_user_metadata(session:id(), lfm:file_ref()) -> map().
 get_user_metadata(SessionId, FileRef) ->
-    {ok, Names} = ?check(lfm:list_xattr(SessionId, FileRef, false, true)),
+    {ok, Names} = ?lfm_check(lfm:list_xattr(SessionId, FileRef, false, true)),
     filter_user_metadata_map(lists:foldl(fun
         (<<?USER_METADATA_FORBIDDEN_PREFIX_STRING, _/binary>>, Acc) ->
             Acc;
@@ -99,9 +99,9 @@ update_user_metadata(SessionId, FileRef, UserMetadata, AllURIMetadataNames) ->
     BodyMetadataNames = maps:keys(BodyMetadata),
     DeleteAttributeFunction = fun
         (?ACL_XATTR_NAME) ->
-            ?check(lfm:remove_acl(SessionId, FileRef));
+            ?lfm_check(lfm:remove_acl(SessionId, FileRef));
         (Name) ->
-            ?check(lfm:remove_xattr(SessionId, FileRef, Name))
+            ?lfm_check(lfm:remove_xattr(SessionId, FileRef, Name))
     end,
     ReplaceAttributeFunction = fun
         ({?ACL_XATTR_NAME, Value}) ->
@@ -111,9 +111,9 @@ update_user_metadata(SessionId, FileRef, UserMetadata, AllURIMetadataNames) ->
                 ?debug_stacktrace("Acl conversion error ~p", [Error], Stacktrace),
                 throw(?ERROR_BAD_DATA(<<"acl">>))
             end,
-            ?check(lfm:set_acl(SessionId, FileRef, ACL));
+            ?lfm_check(lfm:set_acl(SessionId, FileRef, ACL));
         ({Name, Value}) ->
-            ?check(lfm:set_xattr(
+            ?lfm_check(lfm:set_xattr(
                 SessionId, FileRef,
                 #xattr{name = Name, value = Value},
                 false, false
@@ -218,7 +218,7 @@ get_cdmi_completion_status(SessionId, FileRef) ->
 update_mimetype(_SessionId, _FileRef, undefined) ->
     ok;
 update_mimetype(SessionId, FileRef, Mimetype) ->
-    ?check(lfm:set_mimetype(SessionId, FileRef, Mimetype)).
+    ?lfm_check(lfm:set_mimetype(SessionId, FileRef, Mimetype)).
 
 
 %%--------------------------------------------------------------------
@@ -229,7 +229,7 @@ update_mimetype(SessionId, FileRef, Mimetype) ->
 update_encoding(_SessionId, _FileRef, undefined) ->
     ok;
 update_encoding(SessionId, FileRef, Encoding) ->
-    ?check(lfm:set_transfer_encoding(SessionId, FileRef, Encoding)).
+    ?lfm_check(lfm:set_transfer_encoding(SessionId, FileRef, Encoding)).
 
 
 %%--------------------------------------------------------------------
@@ -244,7 +244,7 @@ update_cdmi_completion_status(SessionId, FileRef, CompletionStatus) when
     CompletionStatus =:= <<"Processing">>;
     CompletionStatus =:= <<"Error">>
 ->
-    ?check(lfm:set_cdmi_completion_status(SessionId, FileRef, CompletionStatus)).
+    ?lfm_check(lfm:set_cdmi_completion_status(SessionId, FileRef, CompletionStatus)).
 
 
 %%--------------------------------------------------------------------

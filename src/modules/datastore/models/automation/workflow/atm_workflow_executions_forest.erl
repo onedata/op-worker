@@ -99,21 +99,15 @@ index(AtmWorkflowExecutionId, Timestamp) ->
 %% @private
 -spec sanitize_listing_opts(listing_opts()) -> datastore_model:fold_opts() | no_return().
 sanitize_listing_opts(Opts) ->
-    SanitizedOpts = try
-        middleware_sanitizer:sanitize_data(Opts, #{
-            required => #{
-                limit => {integer, {not_lower_than, 1}}
-            },
-            at_least_one => #{
-                offset => {integer, any},
-                start_index => {binary, any}
-            }
-        })
-    catch _:_ ->
-        %% TODO VFS-7208 do not catch errors after introducing API errors to fslogic
-        throw(?EINVAL)
-    end,
-
+    SanitizedOpts = middleware_sanitizer:sanitize_data(Opts, #{
+        required => #{
+            limit => {integer, {not_lower_than, 1}}
+        },
+        at_least_one => #{
+            offset => {integer, any},
+            start_index => {binary, any}
+        }
+    }),
     kv_utils:copy_found([
         {offset, offset},
         {limit, size},
