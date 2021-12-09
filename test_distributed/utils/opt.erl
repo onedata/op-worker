@@ -27,7 +27,7 @@
 force_fetch_entity(Entity, Id) ->
     Providers = oct_background:get_provider_ids(),
     lists:foreach(fun(P) ->
-        ?assertMatch({ok, _}, test_rpc:call(op_worker, P, entity_to_logic_module(Entity), force_fetch, [Id]))
+        ?assertMatch({ok, _}, opw_test_rpc:call(P, entity_to_logic_module(Entity), force_fetch, [Id]))
     end, Providers).
 
 

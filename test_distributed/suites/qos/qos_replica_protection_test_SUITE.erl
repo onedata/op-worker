@@ -725,7 +725,7 @@ qos_autocleaning_protection_test_base(_Config, TestSpec) ->
         end, oct_background:get_provider_nodes(Provider))
     end, oct_background:get_provider_ids()),
 
-    ok = test_rpc:call(op_worker, RunNode, file_popularity_api, enable, [SpaceId]),
+    ok = opw_test_rpc:call(RunNode, file_popularity_api, enable, [SpaceId]),
     QosSpec = create_basic_qos_test_spec(DirStructureType, Name),
     {_GuidsAndPaths, _} = qos_tests_utils:fulfill_qos_test_base(QosSpec),
 
@@ -734,11 +734,11 @@ qos_autocleaning_protection_test_base(_Config, TestSpec) ->
         target => 0,
         threshold => 100
     },
-    ok = test_rpc:call(op_worker, RunNode, autocleaning_api, configure, [SpaceId, Configuration]),
-    {ok, ARId} = test_rpc:call(op_worker, RunNode, autocleaning_api, force_run, [SpaceId]),
+    ok = opw_test_rpc:call(RunNode, autocleaning_api, configure, [SpaceId, Configuration]),
+    {ok, ARId} = opw_test_rpc:call(RunNode, autocleaning_api, force_run, [SpaceId]),
 
     F = fun() ->
-        {ok, #{stopped_at := StoppedAt}} = test_rpc:call(op_worker, RunNode, autocleaning_api, get_run_report, [ARId]),
+        {ok, #{stopped_at := StoppedAt}} = opw_test_rpc:call(RunNode, autocleaning_api, get_run_report, [ARId]),
         StoppedAt
     end,
     % wait for auto-cleaning run to finish
@@ -748,7 +748,7 @@ qos_autocleaning_protection_test_base(_Config, TestSpec) ->
         released_bytes := ReleasedBytes,
         bytes_to_release := BytesToRelease,
         files_number := FilesNumber
-    }}, test_rpc:call(op_worker, RunNode, autocleaning_api, get_run_report, [ARId])).
+    }}, opw_test_rpc:call(RunNode, autocleaning_api, get_run_report, [ARId])).
 
 
 %%%===================================================================

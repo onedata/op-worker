@@ -75,7 +75,7 @@ all() -> [
 
 
 -define(GET_CACHE_TABLE_SIZE(NODE, SPACE_ID),
-    element(2, lists:keyfind(size, 1, test_rpc:call(op_worker, op_worker, Node, ets, info, [?CACHE_TABLE_NAME(SPACE_ID)])))
+    element(2, lists:keyfind(size, 1, opw_test_rpc:call(Node, ets, info, [?CACHE_TABLE_NAME(SPACE_ID)])))
 ).
 
 -define(QOS_CACHE_TEST_OPTIONS(Size),
@@ -154,7 +154,7 @@ bounded_cache_cleanup_test_base(Type) ->
         unfilled -> {SizeBeforeCleaning, SizeBeforeCleaning}
     end,
     % send message that checks cache size and cleans it if necessary
-    ?assertMatch(ok, test_rpc:call(op_worker, Node, bounded_cache, check_cache_size, [?QOS_CACHE_TEST_OPTIONS(CleanThreshold)])),
+    ?assertMatch(ok, opw_test_rpc:call(Node, bounded_cache, check_cache_size, [?QOS_CACHE_TEST_OPTIONS(CleanThreshold)])),
     
     % check that cache has been cleaned
     SizeAfterCleaning = ?GET_CACHE_TABLE_SIZE(Node, SpaceId),
@@ -220,9 +220,9 @@ qos_cleanup_test(_Config) ->
     FileUuid = file_id:guid_to_uuid(FileGuid),
     QosEntryId = maps:get(?QOS1, QosNameIdMapping),
     
-    ?assertEqual({error, not_found}, test_rpc:call(op_worker, Node, datastore_model, get, [file_qos:get_ctx(), FileUuid])),
-    ?assertEqual({error, {file_meta_missing, FileUuid}}, test_rpc:call(op_worker, Node, file_qos, get_effective, [FileUuid])),
-    ?assertEqual({error, not_found}, test_rpc:call(op_worker, Node, qos_entry, get, [QosEntryId])).
+    ?assertEqual({error, not_found}, opw_test_rpc:call(Node, datastore_model, get, [file_qos:get_ctx(), FileUuid])),
+    ?assertEqual({error, {file_meta_missing, FileUuid}}, opw_test_rpc:call(Node, file_qos, get_effective, [FileUuid])),
+    ?assertEqual({error, not_found}, opw_test_rpc:call(Node, qos_entry, get, [QosEntryId])).
 
 
 %%%===================================================================
@@ -261,7 +261,7 @@ qos_audit_log_base_test(ExpectedStatus, Type) ->
     ok = clock_freezer_mock:set_current_time_millis(123),
     [ProviderId] = oct_background:get_provider_ids(),
     Node = oct_background:get_random_provider_node(ProviderId),
-    Timestamp = test_rpc:call(op_worker, Node, global_clock, timestamp_millis, []),
+    Timestamp = opw_test_rpc:call(Node, global_clock, timestamp_millis, []),
     FilePath = filename:join([?SPACE_PATH1, generator:gen_name()]),
     {RootGuid, FileIds} = prepare_audit_log_test_env(Type, Node, ?SESS_ID(ProviderId), FilePath),
     {ok, QosEntryId} = lfm_proxy:add_qos_entry(Node, ?SESS_ID(ProviderId), ?FILE_REF(RootGuid), <<"providerId=", ProviderId/binary>>, 1),
@@ -296,7 +296,7 @@ qos_audit_log_base_test(ExpectedStatus, Type) ->
         ]
     end, FileIds)),
     GetAuditLogFun = fun() -> 
-        case test_rpc:call(op_worker, Node, qos_entry_audit_log, list, [QosEntryId, #{}]) of
+        case opw_test_rpc:call(Node, qos_entry_audit_log, list, [QosEntryId, #{}]) of
             {ok, {ProgressMarker, EntrySeries}} ->
                 {ok, {ProgressMarker, lists:sort(SortFun, EntrySeries)}};
             {error, _} = Error ->

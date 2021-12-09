@@ -317,7 +317,7 @@ reconcile_with_links_race_test_base(Depth, RecordsToBlock) ->
     
     {ok, DirGuid} = lfm_proxy:mkdir(P1Node, ?SESS_ID(Provider1), SpaceGuid, ?filename(Name, 0), ?DEFAULT_DIR_PERMS),
     % ensure that link in space is synchronized - in env_up tests space uuid is a legacy key and therefore file_meta posthooks are NOT executed for it
-    ?assertMatch({ok, _}, test_rpc:call(op_worker, Provider2, file_meta_forest, get, [file_id:guid_to_uuid(SpaceGuid), all, ?filename(Name, 0)]), ?ATTEMPTS),
+    ?assertMatch({ok, _}, opw_test_rpc:call(Provider2, file_meta_forest, get, [file_id:guid_to_uuid(SpaceGuid), all, ?filename(Name, 0)]), ?ATTEMPTS),
     
     mock_dbsync_changes(oct_background:get_provider_nodes(Provider2), ?FUNCTION_NAME),
     {ok, QosEntryId} = lfm_proxy:add_qos_entry(P1Node, ?SESS_ID(Provider1), ?FILE_REF(DirGuid), <<"providerId=", Provider2/binary>>, 1),
@@ -590,7 +590,7 @@ qos_traverse_cancellation_test(_Config) ->
     
     % check that qos_entry document is deleted
     lists:foreach(fun(Node) ->
-        ?assertEqual(?ERROR_NOT_FOUND, test_rpc:call(op_worker, Node, qos_entry, get, [QosEntryId]), ?ATTEMPTS)
+        ?assertEqual(?ERROR_NOT_FOUND, opw_test_rpc:call(Node, qos_entry, get, [QosEntryId]), ?ATTEMPTS)
     end, oct_background:get_all_providers_nodes()),
     
     % finish transfers to unlock waiting slave job processes
@@ -773,7 +773,7 @@ save_docs(Node, MsgIdentifier, Filters, LeftOutDocs, Strategy) ->
         {MsgIdentifier, _, Doc} ->
             case matches_doc(Doc, Filters) of
                 ExpectedMatch ->
-                    ?assertMatch(ok, test_rpc:call(op_worker, Node, dbsync_changes, apply, [Doc])),
+                    ?assertMatch(ok, opw_test_rpc:call(Node, dbsync_changes, apply, [Doc])),
                     save_docs(Node, MsgIdentifier, Filters, LeftOutDocs, Strategy);
                 _ ->
                     save_docs(Node, MsgIdentifier, Filters, [Doc | LeftOutDocs], Strategy)

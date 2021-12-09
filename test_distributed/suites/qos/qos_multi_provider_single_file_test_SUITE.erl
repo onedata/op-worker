@@ -497,10 +497,10 @@ qos_transfer_stats_test(_Config) ->
     ?assertMatch({ok, _}, lfm_proxy:get_qos_entry(P2Node, ?SESS_ID(Provider2), QosEntryId), ?ATTEMPTS),
     ?assertEqual({ok, ?FULFILLED_QOS_STATUS}, lfm_proxy:check_qos_status(P1Node, ?SESS_ID(Provider1), QosEntryId), ?ATTEMPTS),
     
-    check_transfer_stats(P1Node, QosEntryId, bytes, [<<"total">>], empty),
-    check_transfer_stats(P2Node, QosEntryId, bytes, [<<"total">>, opt_spaces:get_storage_id(Provider1, SpaceId)], {1, byte_size(?TEST_DATA)}),
-    check_transfer_stats(P1Node, QosEntryId, files, [<<"total">>], empty),
-    check_transfer_stats(P2Node, QosEntryId, files, [<<"total">>, opt_spaces:get_storage_id(Provider2, SpaceId)], {1, 1}),
+    check_transfer_stats(Provider1, QosEntryId, bytes, [<<"total">>], empty),
+    check_transfer_stats(Provider2, QosEntryId, bytes, [<<"total">>, opt_spaces:get_storage_id(Provider1, SpaceId)], {1, byte_size(?TEST_DATA)}),
+    check_transfer_stats(Provider1, QosEntryId, files, [<<"total">>], empty),
+    check_transfer_stats(Provider2, QosEntryId, files, [<<"total">>, opt_spaces:get_storage_id(Provider2, SpaceId)], {1, 1}),
     
     {ok, HW3} = lfm_proxy:open(P3Node, ?SESS_ID(Provider3), #file_ref{guid = Guid}, write),
     NewData = crypto:strong_rand_bytes(8),
@@ -512,12 +512,12 @@ qos_transfer_stats_test(_Config) ->
     ok = lfm_proxy:close(P2Node, HW2),
     ?assertEqual({ok, ?FULFILLED_QOS_STATUS}, lfm_proxy:check_qos_status(P2Node, ?SESS_ID(Provider2), QosEntryId), ?ATTEMPTS),
     
-    check_transfer_stats(P1Node, QosEntryId, bytes, [<<"total">>], empty),
-    check_transfer_stats(P2Node, QosEntryId, bytes, [opt_spaces:get_storage_id(Provider1, SpaceId)], {1, byte_size(?TEST_DATA)}),
-    check_transfer_stats(P2Node, QosEntryId, bytes, [opt_spaces:get_storage_id(Provider3, SpaceId)], {1, byte_size(NewData)}),
-    check_transfer_stats(P2Node, QosEntryId, bytes, [<<"total">>], {2, byte_size(NewData) + byte_size(?TEST_DATA)}),
-    check_transfer_stats(P1Node, QosEntryId, files, [<<"total">>], empty),
-    check_transfer_stats(P2Node, QosEntryId, files, [<<"total">>, opt_spaces:get_storage_id(Provider2, SpaceId)], {2, 2}).
+    check_transfer_stats(Provider1, QosEntryId, bytes, [<<"total">>], empty),
+    check_transfer_stats(Provider2, QosEntryId, bytes, [opt_spaces:get_storage_id(Provider1, SpaceId)], {1, byte_size(?TEST_DATA)}),
+    check_transfer_stats(Provider2, QosEntryId, bytes, [opt_spaces:get_storage_id(Provider3, SpaceId)], {1, byte_size(NewData)}),
+    check_transfer_stats(Provider2, QosEntryId, bytes, [<<"total">>], {2, byte_size(NewData) + byte_size(?TEST_DATA)}),
+    check_transfer_stats(Provider1, QosEntryId, files, [<<"total">>], empty),
+    check_transfer_stats(Provider2, QosEntryId, files, [<<"total">>, opt_spaces:get_storage_id(Provider2, SpaceId)], {2, 2}).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -640,22 +640,22 @@ storage_file_path(Node, SpaceId, FilePath) ->
 
 
 get_space_mount_point(Node, SpaceId) ->
-    {ok, StorageId} = test_rpc:call(op_worker, Node, space_logic, get_local_supporting_storage, [SpaceId]),
+    {ok, StorageId} = opw_test_rpc:call(Node, space_logic, get_local_supporting_storage, [SpaceId]),
     storage_mount_point(Node, StorageId).
 
 
 storage_mount_point(Node, StorageId) ->
-    Helper = test_rpc:call(op_worker, Node, storage, get_helper, [StorageId]),
+    Helper = opw_test_rpc:call(Node, storage, get_helper, [StorageId]),
     HelperArgs = helper:get_args(Helper),
     maps:get(<<"mountPoint">>, HelperArgs).
 
 
 read_file(Node, FilePath) ->
-    test_rpc:call(op_worker, Node, file, read_file, [FilePath]).
+    opw_test_rpc:call(Node, file, read_file, [FilePath]).
 
 
-check_transfer_stats(Node, QosEntryId, Type, ExpectedSeries, ExpectedValue) ->
-    {ok, Stats} = test_rpc:call(op_worker, Node, qos_transfer_stats, get, [QosEntryId, Type]),
+check_transfer_stats(Provider, QosEntryId, Type, ExpectedSeries, ExpectedValue) ->
+    {ok, Stats} = opw_test_rpc:call(Provider, qos_transfer_stats, get, [QosEntryId, Type]),
     lists:foreach(fun(Series) ->
         lists:foreach(fun(Metric) ->
             ?assert(maps:is_key({Series, Metric}, Stats)),

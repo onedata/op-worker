@@ -312,16 +312,16 @@ map_qos_names_to_ids(QosNamesList, QosNameIdMapping) ->
 
 
 set_qos_parameters(Provider, StorageId, QosParameters) ->
-    ok = test_rpc:call(op_worker, Provider, storage, set_qos_parameters,
+    ok = opw_test_rpc:call(Provider, storage, set_qos_parameters,
         [StorageId, QosParameters]).
 
 
 reset_qos_parameters() ->
     Providers = oct_background:get_provider_ids(),
     lists:foreach(fun(Provider) ->
-        {ok, Storages} = test_rpc:call(op_worker, Provider, provider_logic, get_storages, []),
+        {ok, Storages} = opw_test_rpc:call(Provider, provider_logic, get_storages, []),
         lists:foreach(fun(StorageId) ->
-            ok = test_rpc:call(op_worker, Provider, storage, set_qos_parameters, [StorageId, #{}])
+            ok = opw_test_rpc:call(Provider, storage, set_qos_parameters, [StorageId, #{}])
         end, Storages)
     end, Providers).
             
@@ -447,8 +447,8 @@ assert_qos_entry_document(Node, QosEntryId, FileUuid, Expression, ReplicasNum, A
     },
     ExpectedQosEntry = upgrade_qos_entry_record(ExpectedQosEntryFirstVersion),
     GetQosEntryFun = fun() ->
-        ?assertMatch({ok, _Doc}, test_rpc:call(op_worker, Node, qos_entry, get, [QosEntryId]), Attempts),
-        {ok, #document{value = QosEntry, scope = SpaceId}} = test_rpc:call(op_worker, Node, qos_entry, get, [QosEntryId]),
+        ?assertMatch({ok, _Doc}, opw_test_rpc:call(Node, qos_entry, get, [QosEntryId]), Attempts),
+        {ok, #document{value = QosEntry, scope = SpaceId}} = opw_test_rpc:call(Node, qos_entry, get, [QosEntryId]),
         ?assertEqual({ReplicasNum, FileUuid}, get_qos_entry_by_rest(Node, QosEntryId, SpaceId)),
         % do not assert traverse reqs
         QosEntryWithoutTraverseReqs = QosEntry#qos_entry{traverse_reqs = #{}},
@@ -519,7 +519,7 @@ assert_file_qos_documents(ExpectedFileQos, QosNameIdMapping, FilterOther, Attemp
 assert_file_qos_document(
     Node, FileUuid, QosEntries, AssignedEntries, FilePath, FilterAssignedEntries, Attempts
 ) ->
-    {ok, StorageId} = test_rpc:call(op_worker, Node, space_logic, get_local_supporting_storage, [oct_background:get_space_id(?SPACE)]),
+    {ok, StorageId} = opw_test_rpc:call(Node, space_logic, get_local_supporting_storage, [oct_background:get_space_id(?SPACE)]),
     ExpectedFileQos = #file_qos{
         qos_entries = QosEntries,
         assigned_entries = case FilterAssignedEntries of
@@ -534,7 +534,7 @@ assert_file_qos_document(
     GetSortedFileQosFun = fun() ->
         {ok, #document{value = FileQos}} = ?assertMatch(
             {ok, _Doc},
-            test_rpc:call(op_worker, Node, datastore_model, get, [file_qos:get_ctx(), FileUuid])
+            opw_test_rpc:call(Node, datastore_model, get, [file_qos:get_ctx(), FileUuid])
         ),
         FileQosSorted = sort_file_qos(FileQos),
         ErrMsg = str_utils:format(
@@ -576,7 +576,7 @@ assert_effective_qos(ExpectedEffQosEntries, QosNameIdMapping, FilterAssignedEntr
 
             % check that for file document has not been created
             FileUuid = ?GET_FILE_UUID(Node, SessId, FilePath),
-            ?assertMatch({error, not_found}, test_rpc:call(op_worker, Node, datastore_model, get, [file_qos:get_ctx(), FileUuid]))
+            ?assertMatch({error, not_found}, opw_test_rpc:call(Node, datastore_model, get, [file_qos:get_ctx(), FileUuid]))
 
         end, Providers)
     end, ExpectedEffQosEntries).

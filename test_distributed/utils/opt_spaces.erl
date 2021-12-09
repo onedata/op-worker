@@ -34,6 +34,6 @@ get_privileges(ProviderSelector, SpaceId, UserId) ->
 
 -spec get_storage_id(oct_background:node_selector(), od_space:id()) -> od_storage:id().
 get_storage_id(ProviderSelector, SpaceId) ->
-    {ok, StorageId} = ?assertMatch({ok, _}, test_rpc:call(op_worker, ProviderSelector, space_logic,
+    {ok, StorageId} = ?assertMatch({ok, _}, opw_test_rpc:call(ProviderSelector, space_logic,
         get_local_supporting_storage, [SpaceId])),
     StorageId.
