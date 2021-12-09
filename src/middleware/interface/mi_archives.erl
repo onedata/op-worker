@@ -10,7 +10,7 @@
 %%% TODO - VFS-8382 investigate low performance of archives functions
 %%% @end
 %%%-------------------------------------------------------------------
--module(opl_archives).
+-module(mi_archives).
 -author("Bartosz Walkowicz").
 
 -include("middleware/middleware.hrl").

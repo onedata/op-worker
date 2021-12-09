@@ -221,8 +221,8 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = instance} = GRI}) -
     ProtectionFlags = file_meta:protection_flags_from_json(
         maps:get(<<"protectionFlags">>, Data, [])
     ),
-    DatasetId = opl_datasets:establish(SessionId, FileRef, ProtectionFlags),
-    DatasetInfo = opl_datasets:get_info(SessionId, DatasetId),
+    DatasetId = mi_datasets:establish(SessionId, FileRef, ProtectionFlags),
+    DatasetInfo = mi_datasets:get_info(SessionId, DatasetId),
     {ok, resource, {GRI#gri{id = DatasetId}, DatasetInfo}}.
 
 
@@ -233,7 +233,7 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = instance} = GRI}) -
 %%--------------------------------------------------------------------
 -spec get(middleware:req(), middleware:entity()) -> middleware:get_result().
 get(#op_req{auth = Auth, gri = #gri{id = DatasetId, aspect = instance}}, _) ->
-    {ok, opl_datasets:get_info(Auth#auth.session_id, DatasetId)};
+    {ok, mi_datasets:get_info(Auth#auth.session_id, DatasetId)};
 
 get(#op_req{auth = Auth, gri = #gri{id = DatasetId, aspect = Aspect}, data = Data}, _)
     when Aspect =:= children
@@ -243,7 +243,7 @@ get(#op_req{auth = Auth, gri = #gri{id = DatasetId, aspect = Aspect}, data = Dat
         children -> ?BASIC_INFO;
         children_details -> ?EXTENDED_INFO
     end,
-    {ok, value, opl_datasets:list_children_datasets(
+    {ok, value, mi_datasets:list_children_datasets(
         Auth#auth.session_id, DatasetId, gather_listing_opts(Data), ListingMode
     )};
 
@@ -255,7 +255,7 @@ get(#op_req{auth = Auth, gri = #gri{id = DatasetId, aspect = Aspect}, data = Dat
         archives -> ?BASIC_INFO;
         archives_details -> ?EXTENDED_INFO
     end,
-    {ok, value, opl_archives:list(
+    {ok, value, mi_archives:list(
         Auth#auth.session_id, DatasetId, gather_listing_opts(Data), ListingMode
     )}.
 
@@ -266,7 +266,7 @@ get(#op_req{auth = Auth, gri = #gri{id = DatasetId, aspect = Aspect}, data = Dat
 %%--------------------------------------------------------------------
 -spec update(middleware:req()) -> middleware:update_result().
 update(#op_req{auth = Auth, gri = #gri{id = DatasetId, aspect = instance}, data = Data}) ->
-    opl_datasets:update(
+    mi_datasets:update(
         Auth#auth.session_id, DatasetId,
         maps:get(<<"state">>, Data, undefined),
         file_meta:protection_flags_from_json(maps:get(<<"setProtectionFlags">>, Data, [])),
@@ -281,7 +281,7 @@ update(#op_req{auth = Auth, gri = #gri{id = DatasetId, aspect = instance}, data 
 %%--------------------------------------------------------------------
 -spec delete(middleware:req()) -> middleware:delete_result().
 delete(#op_req{auth = Auth, gri = #gri{id = DatasetId, aspect = instance}}) ->
-    opl_datasets:remove(Auth#auth.session_id, DatasetId).
+    mi_datasets:remove(Auth#auth.session_id, DatasetId).
 
 
 %%%===================================================================

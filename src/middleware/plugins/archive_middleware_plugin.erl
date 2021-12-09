@@ -175,16 +175,16 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = instance} = GRI}) -
     Description = maps:get(<<"description">>, Data, ?DEFAULT_ARCHIVE_DESCRIPTION),
     PreservedCallback = maps:get(<<"preservedCallback">>, Data, undefined),
     PurgedCallback = maps:get(<<"purgedCallback">>, Data, undefined),
-    ArchiveId = opl_archives:archive_dataset(
+    ArchiveId = mi_archives:archive_dataset(
         SessionId, DatasetId, Config, PreservedCallback, PurgedCallback, Description
     ),
-    ArchiveInfo = opl_archives:get_info(SessionId, ArchiveId),
+    ArchiveInfo = mi_archives:get_info(SessionId, ArchiveId),
     {ok, resource, {GRI#gri{id = ArchiveId}, ArchiveInfo}};
 
 create(#op_req{auth = Auth, data = Data, gri = #gri{id = ArchiveId, aspect = purge}}) ->
     SessionId = Auth#auth.session_id,
     Callback = maps:get(<<"purgedCallback">>, Data, undefined),
-    opl_archives:init_purge(SessionId, ArchiveId, Callback).
+    mi_archives:init_purge(SessionId, ArchiveId, Callback).
 
 
 %%--------------------------------------------------------------------
@@ -194,7 +194,7 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{id = ArchiveId, aspect = pur
 %%--------------------------------------------------------------------
 -spec get(middleware:req(), middleware:entity()) -> middleware:get_result().
 get(#op_req{auth = Auth, gri = #gri{id = ArchiveId, aspect = instance}}, _) ->
-    {ok, opl_archives:get_info(Auth#auth.session_id, ArchiveId)}.
+    {ok, mi_archives:get_info(Auth#auth.session_id, ArchiveId)}.
 
 
 %%--------------------------------------------------------------------
@@ -204,7 +204,7 @@ get(#op_req{auth = Auth, gri = #gri{id = ArchiveId, aspect = instance}}, _) ->
 %%--------------------------------------------------------------------
 -spec update(middleware:req()) -> middleware:update_result().
 update(#op_req{auth = Auth, gri = #gri{id = ArchiveId, aspect = instance}, data = Data}) ->
-    opl_archives:update(Auth#auth.session_id, ArchiveId, Data).
+    mi_archives:update(Auth#auth.session_id, ArchiveId, Data).
 
 
 %%--------------------------------------------------------------------

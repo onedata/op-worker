@@ -67,7 +67,7 @@ assert_meets_constraints(AtmWorkflowExecutionAuth, Value, _ValueConstraints) ->
 list_children(AtmWorkflowExecutionAuth, DatasetId, ListOpts, BatchSize) ->
     SessionId = atm_workflow_execution_auth:get_session_id(AtmWorkflowExecutionAuth),
 
-    try opl_datasets:list_children_datasets(SessionId, DatasetId, ListOpts#{limit => BatchSize}, undefined) of
+    try mi_datasets:list_children_datasets(SessionId, DatasetId, ListOpts#{limit => BatchSize}, undefined) of
         {[], IsLast} ->
             {[], [], #{}, IsLast};
         {Entries, IsLast} ->
@@ -116,7 +116,7 @@ compress(#{<<"datasetId">> := DatasetId}) -> DatasetId.
 expand(AtmWorkflowExecutionAuth, DatasetId) ->
     SessionId = atm_workflow_execution_auth:get_session_id(AtmWorkflowExecutionAuth),
     try
-        DatasetInfo = opl_datasets:get_info(SessionId, DatasetId),
+        DatasetInfo = mi_datasets:get_info(SessionId, DatasetId),
         {ok, dataset_utils:dataset_info_to_json(DatasetInfo)}
     catch throw:Error ->
         Error
@@ -136,7 +136,7 @@ check_implicit_constraints(AtmWorkflowExecutionAuth, #{<<"datasetId">> := Datase
     SessionId = atm_workflow_execution_auth:get_session_id(AtmWorkflowExecutionAuth),
 
     try
-        DatasetInfo = opl_datasets:get_info(SessionId, DatasetId),
+        DatasetInfo = mi_datasets:get_info(SessionId, DatasetId),
         file_id:guid_to_space_id(DatasetInfo#dataset_info.root_file_guid)
     of
         SpaceId ->

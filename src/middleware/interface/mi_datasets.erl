@@ -9,7 +9,7 @@
 %%% Interface for managing datasets (requests are delegated to middleware_worker).
 %%% @end
 %%%-------------------------------------------------------------------
--module(opl_datasets).
+-module(mi_datasets).
 -author("Bartosz Walkowicz").
 
 -include("middleware/middleware.hrl").
