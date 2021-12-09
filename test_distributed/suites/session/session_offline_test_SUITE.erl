@@ -76,10 +76,12 @@ offline_session_should_work_as_any_other_session_test(_Config) ->
     SpaceKrkGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceKrkId),
     UserRootDirGuid = fslogic_uuid:user_root_dir_guid(UserId),
 
-    ?assertMatch(
-        {ok, [{SpaceKrkGuid, _}]},
+    {ok, ListedSpaces} = ?assertMatch(
+        {ok, [_ | _]},
         lfm_proxy:get_children(?NODE, SessionId, ?FILE_REF(UserRootDirGuid), 0, 100)
     ),
+    {ListedSpacesGuids, _} = lists:unzip(ListedSpaces),
+    ?assert(lists:member(SpaceKrkGuid, ListedSpacesGuids)),
 
     % Check that even in case of various environment situations everything is resolved
     % internally and session works properly (possibly after some time though)

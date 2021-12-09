@@ -19,10 +19,6 @@
 -define(QOS2, <<"Qos2">>).
 -define(QOS3, <<"Qos3">>).
 
--define(P1, <<"p1">>).
--define(P2, <<"p2">>).
--define(P3, <<"p3">>).
-
 
 -define(filename(Name, Num), <<Name/binary,(integer_to_binary(Num))/binary>>).
 
@@ -32,7 +28,7 @@
 
 % record that holds information about qos_entry that should be added in test
 -record(qos_to_add, {
-    worker :: node(), % worker on which QoS will be added
+    provider_selector :: oct_background:entity_selector(), % provider on which QoS will be added
     qos_name :: qos_name(), % name of QoS - used only in tests to identify different QoS
     path :: file_meta:path(), % path to file / directory for which QoS should be added
     expression :: qos_expression:infix(), % QoS expression in infix notation
@@ -42,7 +38,7 @@
 
 % record that holds information about expected qos_entry
 -record(expected_qos_entry, {
-    workers :: [node()], % list of workers on which check QoS entry
+    providers :: [od_provider:id()], % list of providers on which check QoS entry
     qos_name :: qos_name(), % name of QoS - used only in tests to identify different QoS
 
     % below fields correspond to fields of QoS entry record
@@ -55,7 +51,7 @@
 
 % record that holds information about expected file_qos
 -record(expected_file_qos, {
-    workers :: [node()], % list of workers on which check file QoS
+    providers :: [od_provider:id()], % list of providers on which check file QoS
     path :: file_meta:path(), % path to file or directory for which check file QoS
 
     % below files correspond to fields in file QoS record
@@ -68,8 +64,8 @@
 % can be used either to define directory structure that should be created
 % or to define file distribution that should be checked
 -record(test_dir_structure, {
-    worker :: node(), % worker on which create / assert directory structure
-    assertion_workers :: [node()],
+    provider :: od_provider:id(), % provider on which create / assert directory structure
+    assertion_providers :: [od_provider:id()],
     % directory structure
     % example:
     %%  {?SPACE1, [
@@ -109,7 +105,7 @@
 -record(fulfill_qos_test_spec, {
     initial_dir_structure :: undefined | #test_dir_structure{},
     qos_to_add :: [#qos_to_add{}],
-    wait_for_qos_fulfillment :: [{qos_name(), [node()]}],
+    wait_for_qos_fulfillment = true :: boolean(),
     expected_qos_entries = [] :: [#expected_qos_entry{}],
     expected_file_qos = [] :: [#expected_file_qos{}],
     expected_dir_structure :: undefined | #test_dir_structure{}
@@ -122,7 +118,6 @@
 -record(effective_qos_test_spec, {
     initial_dir_structure :: undefined | #test_dir_structure{},
     qos_to_add :: [#qos_to_add{}],
-    wait_for_qos_fulfillment :: [{qos_name(), [node()]}],
     expected_qos_entries = [] :: [#expected_qos_entry{}],
     expected_effective_qos :: [#expected_file_qos{}],
     expected_dir_structure :: undefined | #test_dir_structure{}

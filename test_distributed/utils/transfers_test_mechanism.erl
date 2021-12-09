@@ -80,8 +80,6 @@
     assert_file_visible/5, assert_file_distribution/6, prereplicate_file/6,
     cast_files_prereplication/5, update_config/4, schedule_replication_by_view/8]).
 
--define(DEFAULT_USER_TOKEN_HEADERS(Config),
-    [?USER_TOKEN_HEADER(Config, ?DEFAULT_USER)]).
 
 -define(UPDATE_TRANSFERS_KEY(__NodesTransferIdsAndFiles, __Config),
     update_config(?TRANSFERS_KEY, fun(__OldNodesTransferIdsAndFiles) ->
@@ -116,7 +114,7 @@ run_test(Config, #transfer_test_spec{
                 "Stacktrace: ~s",
                 [Key, List, lager:pr_stacktrace(Stacktrace)]
             );
-        exit:Reason = {test_case_failed, _} ->
+        exit:{test_case_failed, _} = Reason ->
             erlang:exit(Reason);
         Type:Message:Stacktrace ->
             ct:fail(
@@ -1295,13 +1293,13 @@ cancel_transfer_by_rest(Worker, SchedulingUser, CancellingUser, TransferType, Ti
     HTTPPath = <<"transfers/", Tid/binary>>,
     Headers = [?USER_TOKEN_HEADER(Config, CancellingUser)],
     SpaceId = ?config(?SPACE_ID_KEY, Config),
-
-    UserSpacePrivs = rpc:call(Worker, initializer, node_get_mocked_space_user_privileges, [SpaceId, CancellingUser]),
+    
+    UserSpacePrivs = get_privileges(Config, Worker, SpaceId, CancellingUser),
     try
         case SchedulingUser =:= CancellingUser of
             true ->
                 % User should always be able to cancel his transfers
-                initializer:testmaster_mock_space_user_privileges([Worker], SpaceId, CancellingUser, []),
+                set_privileges(Config, SpaceId, CancellingUser, []),
                 ?assertMatch(
                     {ok, 204, _ , _},
                     rest_test_utils:request(Worker, HTTPPath, delete, Headers, [])
@@ -1321,19 +1319,19 @@ cancel_transfer_by_rest(Worker, SchedulingUser, CancellingUser, TransferType, Ti
                         % success will be checked later
                         ok;
                     (PrivsToAdd) ->
-                        initializer:testmaster_mock_space_user_privileges([Worker], SpaceId, CancellingUser, SpacePrivs ++ PrivsToAdd),
+                        set_privileges(Config, SpaceId, CancellingUser, SpacePrivs ++ PrivsToAdd),
                         {ok, Code, _, Resp} = rest_test_utils:request(Worker, HTTPPath, delete, Headers, []),
                         ?assertMatch(ErrorForbidden, {Code, json_utils:decode(Resp)})
                 end, combinations(RequiredPrivs)),
 
-                initializer:testmaster_mock_space_user_privileges([Worker], SpaceId, CancellingUser, SpacePrivs ++ RequiredPrivs),
+                set_privileges(Config, SpaceId, CancellingUser, SpacePrivs ++ RequiredPrivs),
                 ?assertMatch(
                     {ok, 204, _ , _},
                     rest_test_utils:request(Worker, HTTPPath, delete, Headers, [])
                 )
         end
     after
-        initializer:testmaster_mock_space_user_privileges([Worker], SpaceId, CancellingUser, UserSpacePrivs)
+        set_privileges(Config, SpaceId, CancellingUser, UserSpacePrivs)
     end.
 
 rerun_transfer(Worker, User, TransferType, ViewTransfer, OldTid, Config) ->
@@ -1359,11 +1357,10 @@ rerun_transfer(Worker, User, TransferType, ViewTransfer, OldTid, Config) ->
     ).
 
 schedule_transfer_by_rest(Worker, SpaceId, UserId, RequiredPrivs, URL, Method, Body, Config) ->
-    AllWorkers = ?config(op_worker_nodes, Config),
     Headers = [?USER_TOKEN_HEADER(Config, UserId), {?HDR_CONTENT_TYPE, <<"application/json">>}],
     AllSpacePrivs = privileges:space_privileges(),
     SpacePrivs = AllSpacePrivs -- RequiredPrivs,
-    UserSpacePrivs = rpc:call(Worker, initializer, node_get_mocked_space_user_privileges, [SpaceId, UserId]),
+    UserSpacePrivs = get_privileges(Config, Worker, SpaceId, UserId),
     SortedRequiredPrivs = lists:sort(RequiredPrivs),
     ErrorForbidden = rest_test_utils:get_rest_error(?ERROR_FORBIDDEN),
 
@@ -1375,12 +1372,12 @@ schedule_transfer_by_rest(Worker, SpaceId, UserId, RequiredPrivs, URL, Method, B
                         % success will be checked later
                         ok;
                     (PrivsToAdd) ->
-                        initializer:testmaster_mock_space_user_privileges(AllWorkers, SpaceId, UserId, SpacePrivs ++ PrivsToAdd),
+                        set_privileges(Config, SpaceId, UserId, SpacePrivs ++ PrivsToAdd),
                         {ok, Code, _, Resp} = rest_test_utils:request(Worker, URL, Method, Headers, Body),
                         ?assertMatch(ErrorForbidden, {Code, json_utils:decode(Resp)})
                 end, combinations(RequiredPrivs)),
 
-                initializer:testmaster_mock_space_user_privileges(AllWorkers, SpaceId, UserId, SpacePrivs ++ RequiredPrivs),
+                set_privileges(Config, SpaceId, UserId, SpacePrivs ++ RequiredPrivs),
                 case rest_test_utils:request(Worker, URL, Method, Headers, Body) of
                     {ok, 201, _, RespBody} ->
                         DecodedBody = json_utils:decode(RespBody),
@@ -1390,7 +1387,7 @@ schedule_transfer_by_rest(Worker, SpaceId, UserId, RequiredPrivs, URL, Method, B
                         {error, RespBody}
                 end
             after
-                initializer:testmaster_mock_space_user_privileges(AllWorkers, SpaceId, UserId, UserSpacePrivs)
+                set_privileges(Config, SpaceId, UserId, UserSpacePrivs)
             end;
         false ->
             {ok, Code, _, RespBody} = rest_test_utils:request(Worker, URL, Method, Headers, Body),
@@ -1399,6 +1396,23 @@ schedule_transfer_by_rest(Worker, SpaceId, UserId, RequiredPrivs, URL, Method, B
                 ?ERROR_SPACE_NOT_SUPPORTED_BY(_, _),
                 errors:from_json(maps:get(<<"error">>, json_utils:decode(RespBody)))
             )
+    end.
+
+get_privileges(Config, Worker, SpaceId, UserId) ->
+    case ?config(use_initializer, Config, true) of
+        true ->
+            rpc:call(Worker, initializer, node_get_mocked_space_user_privileges, [SpaceId, UserId]);
+        false ->
+            opt_spaces:get_privileges(Worker, SpaceId, UserId)
+    end.
+
+set_privileges(Config, SpaceId, UserId, SpacePrivs) ->
+    case ?config(use_initializer, Config, true) of
+        true ->
+            AllWorkers = ?config(op_worker_nodes, Config),
+            initializer:testmaster_mock_space_user_privileges(AllWorkers, SpaceId, UserId, SpacePrivs);
+        false ->
+            ozt_spaces:set_privileges(SpaceId, UserId, SpacePrivs)
     end.
 
 %% Modifies storage timeout twice in order to

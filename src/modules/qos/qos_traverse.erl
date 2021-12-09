@@ -373,7 +373,8 @@ report_file_failed_for_entries(QosEntries, FileCtx, Error) ->
 report_to_audit_log(QosEntries, FileCtx, Args, ReportFun) ->
     FileGuid = file_ctx:get_logical_guid_const(FileCtx),
     lists:foreach(fun(QosEntryId) ->
-        ok = erlang:apply(ReportFun, [QosEntryId, FileGuid | Args])
+        % ignore not found errors, as audit log could have been deleted along with QoS entry
+        ok = ?ok_if_not_found(erlang:apply(ReportFun, [QosEntryId, FileGuid | Args]))
     end, QosEntries).
 
 

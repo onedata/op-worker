@@ -60,7 +60,7 @@
 -define(TIMEOUT, timer:seconds(5)).
 
 user_1_token_header(Config) ->
-    rest_test_utils:user_token_header(Config, <<"user1">>).
+    rest_test_utils:user_token_header(?config({access_token, <<"user1">>}, Config)).
 
 -define(CDMI_VERSION_HEADER, {<<"X-CDMI-Specification-Version">>, <<"1.1.1">>}).
 -define(CONTAINER_CONTENT_TYPE_HEADER, {?HDR_CONTENT_TYPE, <<"application/cdmi-container">>}).
