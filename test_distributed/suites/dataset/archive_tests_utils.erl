@@ -23,7 +23,8 @@
 -export([create_archive_dir/5]).
 -export([
     assert_archive_dir_structure_is_correct/7, assert_archive_state/3, 
-    assert_archive_is_preserved/8, assert_incremental_archive_links/3
+    assert_archive_is_preserved/8, assert_incremental_archive_links/3,
+    assert_copied/6
 ]).
 -export([mock_archive_verification/0, wait_for_archive_verification_traverse/2, start_verification_traverse/2]).
 
@@ -129,6 +130,36 @@ start_verification_traverse(Pid, ArchiveId) ->
     Pid ! {continue, ArchiveId}.
 
 
+assert_copied(Node, SessionId, SourceGuid, TargetGuid, FollowSymlinks, Attempts) ->
+    assert_attrs_copied(Node, SessionId, SourceGuid, TargetGuid, Attempts),
+    assert_metadata_copied(Node, SessionId, SourceGuid, TargetGuid),
+    {ok, SourceAttr} = lfm_proxy:stat(Node, SessionId, ?FILE_REF(SourceGuid)),
+    case SourceAttr#file_attr.type of
+        ?DIRECTORY_TYPE ->
+            assert_children_copied(Node, SessionId, SourceGuid, TargetGuid, FollowSymlinks, Attempts),
+            assert_json_metadata_copied(Node, SessionId, SourceGuid, TargetGuid, Attempts);
+        ?REGULAR_FILE_TYPE ->
+            assert_content_copied(Node, SessionId, SourceGuid, TargetGuid, Attempts),
+            assert_json_metadata_copied(Node, SessionId, SourceGuid, TargetGuid, Attempts);
+        ?SYMLINK_TYPE ->
+            case FollowSymlinks of
+                true ->
+                    {ok, LinkGuid} = lfm_proxy:resolve_symlink(Node, SessionId, ?FILE_REF(SourceAttr#file_attr.guid)),
+                    {ok, LinkTargetAttr} = lfm_proxy:stat(Node, SessionId, ?FILE_REF(LinkGuid)),
+                    case LinkTargetAttr#file_attr.type of
+                        ?REGULAR_FILE_TYPE ->
+                            assert_content_copied(Node, SessionId, LinkGuid, TargetGuid, Attempts),
+                            assert_json_metadata_copied(Node, SessionId, LinkGuid, TargetGuid, Attempts);
+                        ?DIRECTORY_TYPE ->
+                            assert_children_copied(Node, SessionId, LinkGuid, TargetGuid, FollowSymlinks, Attempts),
+                            assert_json_metadata_copied(Node, SessionId, LinkGuid, TargetGuid, Attempts)
+                    end;
+                false ->
+                    assert_symlink_values_copied(Node, SessionId, SourceGuid, TargetGuid, Attempts)
+            end
+    end.
+
+
 %===================================================================
 % Internal functions
 %===================================================================
@@ -193,36 +224,6 @@ assert_structure(Node, SessionId, ArchiveId, DatasetRootFileGuid, ?ARCHIVE_BAGIT
     {ok, [{TargetGuid, _} | _]} = 
         ?assertMatch({ok, [_ | _]}, lfm_proxy:get_children(Node, SessionId, ?FILE_REF(ArchiveDataDirGuid), 0, ?LISTED_CHILDREN_LIMIT), Attempts),
     assert_copied(Node, SessionId, DatasetRootFileGuid, TargetGuid, FollowSymlinks, Attempts).
-
-
-assert_copied(Node, SessionId, SourceGuid, TargetGuid, FollowSymlinks, Attempts) ->
-    assert_attrs_copied(Node, SessionId, SourceGuid, TargetGuid, Attempts),
-    assert_metadata_copied(Node, SessionId, SourceGuid, TargetGuid),
-    {ok, SourceAttr} = lfm_proxy:stat(Node, SessionId, ?FILE_REF(SourceGuid)),
-    case SourceAttr#file_attr.type of
-        ?DIRECTORY_TYPE ->
-            assert_children_copied(Node, SessionId, SourceGuid, TargetGuid, FollowSymlinks, Attempts),
-            assert_json_metadata_copied(Node, SessionId, SourceGuid, TargetGuid, Attempts);
-        ?REGULAR_FILE_TYPE ->
-            assert_content_copied(Node, SessionId, SourceGuid, TargetGuid, Attempts),
-            assert_json_metadata_copied(Node, SessionId, SourceGuid, TargetGuid, Attempts);
-        ?SYMLINK_TYPE ->
-            case FollowSymlinks of
-                true ->
-                    {ok, LinkGuid} = lfm_proxy:resolve_symlink(Node, SessionId, ?FILE_REF(SourceAttr#file_attr.guid)),
-                    {ok, LinkTargetAttr} = lfm_proxy:stat(Node, SessionId, ?FILE_REF(LinkGuid)),
-                    case LinkTargetAttr#file_attr.type of
-                        ?REGULAR_FILE_TYPE ->
-                            assert_content_copied(Node, SessionId, LinkGuid, TargetGuid, Attempts),
-                            assert_json_metadata_copied(Node, SessionId, LinkGuid, TargetGuid, Attempts);
-                        ?DIRECTORY_TYPE ->
-                            assert_children_copied(Node, SessionId, LinkGuid, TargetGuid, FollowSymlinks, Attempts),
-                            assert_json_metadata_copied(Node, SessionId, LinkGuid, TargetGuid, Attempts)
-                    end;
-                false ->
-                    assert_symlink_values_copied(Node, SessionId, SourceGuid, TargetGuid, Attempts)
-            end
-    end.
 
 
 assert_attrs_copied(Node, SessionId, SourceGuid, TargetGuid, Attempts) ->

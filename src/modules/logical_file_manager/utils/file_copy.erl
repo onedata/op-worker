@@ -211,6 +211,12 @@ copy_metadata(SessId, SourceGuid, TargetGuid, Mode) ->
             ok;
         (?CDMI_COMPLETION_STATUS_KEY) ->
             ok;
+        (?ARCHIVISATION_METADATA_CHECKSUM_KEY) -> 
+            ok;
+        (?ARCHIVISATION_CONTENT_CHECKSUM_KEY) ->
+            ok;
+        (?ARCHIVISATION_CHILDREN_COUNT_KEY) ->
+            ok;
         (XattrName) ->
             {ok, Xattr} = lfm:get_xattr(
                 SessId, ?FILE_REF(SourceGuid), XattrName, false),

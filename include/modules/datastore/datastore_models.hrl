@@ -461,9 +461,15 @@
     % Relations between dissemination information package (DIP) 
     % and archival information package (AIP) archives.
     related_aip = undefined :: undefined | archive:id(),
-    related_dip = undefined :: undefined | archive:id()
+    related_dip = undefined :: undefined | archive:id(),
+    recalls = [] :: [archive_recall:id()]
 }).
 
+
+-record(archive_recall, {
+    target_guid :: file_id:file_guid(),
+    timestamp :: time:millis()
+}).
 
 % Model used for storing information associated with dataset.
 % One document is stored for one dataset.

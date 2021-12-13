@@ -94,6 +94,7 @@ get_models() -> [
     dataset,
     bulk_download_task,
     archive,
+    archive_recall,
     workflow_engine_state,
     workflow_execution_state,
     workflow_cached_item,

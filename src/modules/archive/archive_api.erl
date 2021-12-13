@@ -47,7 +47,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([start_archivisation/6, update_archive/2, get_archive_info/1,
+-export([start_archivisation/6, recall/3, update_archive/2, get_archive_info/1,
     list_archives/3, init_archive_purge/2, get_nested_archives_stats/1]).
 
 %% Exported for use in tests
@@ -67,7 +67,6 @@
 -export_type([info/0, basic_entries/0, entries/0, index/0, listing_mode/0, listing_opts/0]).
 
 
-% TODO VFS-7617 implement recall operation of archives
 % TODO VFS-7718 improve purging so that archive record is deleted when files are removed from storage
 % TODO VFS-7613 use datastore function for getting number of links in forest to acquire number of archives per dataset
 % TODO VFS-7616 refine archives' attributes
@@ -123,6 +122,15 @@ start_archivisation(
             end;
         ?DETACHED_DATASET ->
             throw(?ERROR_BAD_DATA(<<"datasetId">>, <<"Detached dataset cannot be modified.">>))
+    end.
+
+
+-spec recall(archive:id(), user_ctx:ctx(), file_id:file_guid()) -> ok | error().
+recall(ArchiveId, UserCtx, TargetGuid) ->
+    case archive:get(ArchiveId) of
+        {ok, ArchiveDoc} ->
+            archive_recall_traverse:start(ArchiveDoc, UserCtx, TargetGuid);
+        {error, _} = Error -> Error
     end.
 
 

@@ -21,7 +21,8 @@
     archive_dataset/6,
     get_info/2,
     update/3,
-    init_purge/3
+    init_purge/3,
+    recall/3
 ]).
 
 
@@ -97,6 +98,17 @@ init_purge(SessionId, ArchiveId, CallbackUrl) ->
         callback = CallbackUrl
     }).
 
+
+-spec recall(session:id(), archive:id(), file_id:file_guid()) ->
+    ok | no_return().
+recall(SessionId, ArchiveId, TargetGuid) ->
+    SpaceGuid = archive_id_to_space_guid(ArchiveId),
+    
+    middleware_worker:check_exec(SessionId, SpaceGuid, #recall_archive{
+        id = ArchiveId,
+        target_guid = TargetGuid
+    }).
+    
 
 %%%===================================================================
 %%% Internal functions

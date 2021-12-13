@@ -28,12 +28,6 @@
 -export([has_file_changed/3, has_dir_changed/4]).
 
 -define(ALGORITHM, ?MD5).
--define(ARCHIVISATION_CONTENT_CHECKSUM_KEY,
-    str_utils:join_binary([?ONEDATA_PREFIX, <<"archivisation.checksum.md5">>])).
--define(ARCHIVISATION_METADATA_CHECKSUM_KEY,
-    str_utils:join_binary([?ONEDATA_PREFIX, <<"archivisation.metadata.checksum.md5">>])).
--define(ARCHIVISATION_CHILDREN_COUNT_KEY,
-    str_utils:join_binary([?ONEDATA_PREFIX, <<"archivisation.children.count">>])).
 
 %%%===================================================================
 %%% API functions

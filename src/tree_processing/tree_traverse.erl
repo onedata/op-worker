@@ -50,6 +50,10 @@
 %% Tracking subtree progress status API
 -export([report_child_processed/2, delete_subtree_status_doc/2]).
 
+%% Helper functions
+-export([get_child_master_job/3, get_child_slave_job/3]).
+-export([resolve_symlink/3]).
+
 
 -type id() :: traverse:id().
 -type pool() :: traverse:pool().
@@ -102,7 +106,7 @@
         master_jobs(),
         file_meta:list_extended_info() | undefined,
         SubtreeProcessingStatus :: tree_traverse_progress:status() | {error, term()}
-    ) -> ok).
+    ) -> ok | {slave_jobs(), master_jobs()}).
 
 %formatter:on
 
@@ -112,7 +116,8 @@
 -type encountered_files_set() :: #{file_meta:uuid() => true}.
 
 -export_type([id/0, pool/0, job/0, master_job/0, slave_job/0, child_dirs_job_generation_policy/0,
-    children_master_jobs_mode/0, batch_size/0, traverse_info/0, encountered_files_set/0]).
+    children_master_jobs_mode/0, batch_size/0, traverse_info/0, encountered_files_set/0, 
+    new_jobs_preprocessor/0]).
 
 %%%===================================================================
 %%% Main API
@@ -348,23 +353,29 @@ do_master_job_internal(?DIRECTORY_TYPE, Job, TaskId, NewJobsPreprocessor, UserCt
             ChildrenCount = length(SlaveJobs) + length(MasterJobs),
             IsLast = maps:get(is_last, ListExtendedInfo),
             SubtreeProcessingStatus = maybe_report_children_jobs_to_process(Job, TaskId, ChildrenCount, IsLast),
-            NewJobsPreprocessor(SlaveJobs, MasterJobs, ListExtendedInfo, SubtreeProcessingStatus),
+            {UpdatedSlaveJobs, UpdatedMasterJobs} = case 
+                NewJobsPreprocessor(SlaveJobs, MasterJobs, ListExtendedInfo, SubtreeProcessingStatus) 
+            of
+                ok -> {SlaveJobs, MasterJobs};
+                {NewSlaveJobs, NewMasterJobs} -> 
+                    {NewSlaveJobs, NewMasterJobs}
+            end,
             FinalMasterJobs = case IsLast of
                 true ->
-                    MasterJobs;
+                    UpdatedMasterJobs;
                 false -> [Job#tree_traverse{
                     file_ctx = FileCtx3,
                     token = Token2,
                     last_name = LastName2,
                     last_tree = LastTree2
-                } | MasterJobs]
+                } | UpdatedMasterJobs]
             end,
             
             ChildrenMasterJobsKey = case ChildrenMasterJobsMode of
                 sync -> master_jobs;
                 async -> async_master_jobs
             end,
-            {ok, #{slave_jobs => SlaveJobs, ChildrenMasterJobsKey => FinalMasterJobs}}
+            {ok, #{slave_jobs => UpdatedSlaveJobs, ChildrenMasterJobsKey => FinalMasterJobs}}
     end;
 do_master_job_internal(?REGULAR_FILE_TYPE, Job = #tree_traverse{file_ctx = FileCtx}, _, _, _) ->
     % correct relative path to this file is already set in Job, so passing <<>> as Filename will not extend it
@@ -470,6 +481,51 @@ generate_child_jobs(?SYMLINK_TYPE, #tree_traverse{follow_symlinks = true} = Mast
     end.
 
 
+-spec maybe_create_status_doc(master_job(), id(), file_meta:uuid()) -> ok | {error, term()}.
+maybe_create_status_doc(#tree_traverse{
+    file_ctx = FileCtx,
+    track_subtree_status = true
+}, TaskId, ParentUuid) ->
+    Uuid = file_ctx:get_logical_uuid_const(FileCtx),
+    tree_traverse_progress:create(TaskId, Uuid, ParentUuid);
+maybe_create_status_doc(_, _, _) ->
+    ok.
+
+
+-spec maybe_report_children_jobs_to_process(master_job(), id(), non_neg_integer(), boolean()) ->
+    tree_traverse_progress:status() | undefined.
+maybe_report_children_jobs_to_process(#tree_traverse{
+    file_ctx = FileCtx,
+    track_subtree_status = true
+}, TaskId, ChildrenCount, AllBatchesListed) ->
+    Uuid = file_ctx:get_logical_uuid_const(FileCtx),
+    tree_traverse_progress:report_children_to_process(TaskId, Uuid, ChildrenCount, AllBatchesListed);
+maybe_report_children_jobs_to_process(_, _, _, _) ->
+    undefined.
+
+
+-spec reset_list_options(master_job()) -> master_job().
+reset_list_options(Job) ->
+    Job#tree_traverse{
+        token = ?INITIAL_LS_TOKEN,
+        last_name = <<>>,
+        last_tree = <<>>
+    }.
+
+
+-spec add_to_set_if_symlinks_followed(file_meta:uuid(), encountered_files_set(), FollowSymlinks :: boolean()) ->
+    encountered_files_set().
+add_to_set_if_symlinks_followed(Uuid, EncounteredFilesSet, true) ->
+    add_to_set(Uuid, EncounteredFilesSet);
+add_to_set_if_symlinks_followed(_Uuid, EncounteredFilesSet, false) ->
+    % there is no need to keeping track of encountered files when there is no symlinks following
+    EncounteredFilesSet.
+
+
+%%%===================================================================
+%%% Helper functions
+%%%===================================================================
+
 -spec get_child_master_job(master_job(), file_ctx:ctx(), file_meta:name()) -> master_job().
 get_child_master_job(MasterJob = #tree_traverse{
     relative_path = ParentRelativePath,
@@ -519,47 +575,6 @@ resolve_symlink(#tree_traverse{encountered_files = EncounteredFilesSet}, Symlink
         {error, ?EACCES} -> ignore;
         {error, ?ENOENT} -> ignore
     end.
-
-
--spec maybe_create_status_doc(master_job(), id(), file_meta:uuid()) -> ok | {error, term()}.
-maybe_create_status_doc(#tree_traverse{
-    file_ctx = FileCtx,
-    track_subtree_status = true
-}, TaskId, ParentUuid) ->
-    Uuid = file_ctx:get_logical_uuid_const(FileCtx),
-    tree_traverse_progress:create(TaskId, Uuid, ParentUuid);
-maybe_create_status_doc(_, _, _) ->
-    ok.
-
-
--spec maybe_report_children_jobs_to_process(master_job(), id(), non_neg_integer(), boolean()) ->
-    tree_traverse_progress:status() | undefined.
-maybe_report_children_jobs_to_process(#tree_traverse{
-    file_ctx = FileCtx,
-    track_subtree_status = true
-}, TaskId, ChildrenCount, AllBatchesListed) ->
-    Uuid = file_ctx:get_logical_uuid_const(FileCtx),
-    tree_traverse_progress:report_children_to_process(TaskId, Uuid, ChildrenCount, AllBatchesListed);
-maybe_report_children_jobs_to_process(_, _, _, _) ->
-    undefined.
-
-
--spec reset_list_options(master_job()) -> master_job().
-reset_list_options(Job) ->
-    Job#tree_traverse{
-        token = ?INITIAL_LS_TOKEN,
-        last_name = <<>>,
-        last_tree = <<>>
-    }.
-
-
--spec add_to_set_if_symlinks_followed(file_meta:uuid(), encountered_files_set(), FollowSymlinks :: boolean()) ->
-    encountered_files_set().
-add_to_set_if_symlinks_followed(Uuid, EncounteredFilesSet, true) ->
-    add_to_set(Uuid, EncounteredFilesSet);
-add_to_set_if_symlinks_followed(_Uuid, EncounteredFilesSet, false) ->
-    % there is no need to keeping track of encountered files when there is no symlinks following
-    EncounteredFilesSet.
 
 
 %%%===================================================================

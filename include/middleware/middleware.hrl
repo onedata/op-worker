@@ -73,6 +73,11 @@
     callback :: archive:callback()
 }).
 
+-record(recall_archive, {
+    id :: archive:id(),
+    target_guid :: file_id:file_guid()
+}).
+
 %% automation related
 
 -record(schedule_atm_workflow_execution, {

@@ -88,5 +88,17 @@ routes() -> [
             aspect = purge, 
             scope = private
         }
+    }},
+    %% Recall archive
+    {<<"/archives/:aid/recall">>, rest_handler, #rest_req{
+        method = 'POST',
+        parse_body = as_json_params,
+        consumes = [<<"application/json">>],
+        b_gri = #b_gri{
+            type = op_archive, 
+            id = ?BINDING(aid), 
+            aspect = recall, 
+            scope = private
+        }
     }}
 ].
