@@ -52,6 +52,7 @@ resolve_handler(create, rerun, private) -> ?MODULE;
 
 resolve_handler(get, instance, private) -> ?MODULE;
 resolve_handler(get, summary, private) -> ?MODULE;
+resolve_handler(get, summary, private) -> ?MODULE;
 
 resolve_handler(_, _, _) -> throw(?ERROR_NOT_SUPPORTED).
 
