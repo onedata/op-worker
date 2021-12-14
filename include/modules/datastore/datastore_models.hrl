@@ -1046,6 +1046,11 @@
     next_subtree_root = undefined :: undefined | file_meta:uuid()
 }).
 
+-record(files_counter, {
+    files_count = 0 :: non_neg_integer(),
+    size_sum = 0 :: non_neg_integer()
+}).
+
 %%%===================================================================
 %%% Automation related models
 %%%===================================================================

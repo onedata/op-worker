@@ -90,6 +90,7 @@ get_models() -> [
     process_handles,
     deletion_marker,
     tree_traverse_progress,
+    files_counter,
     dataset,
     bulk_download_task,
     archive,

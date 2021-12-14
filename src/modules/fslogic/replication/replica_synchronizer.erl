@@ -11,6 +11,7 @@
 %%% for *this file*.
 %%% Note: this module operates on referenced uuids. Synchronizer is always
 %%% created for original file, event if hardlink ctx is provided in argument.
+%%% TODO - udpate sizes of dirs here, files count when created/deleted, handle rename (add to new, change value of old parent)
 %%% @end
 %%%--------------------------------------------------------------------
 -module(replica_synchronizer).
