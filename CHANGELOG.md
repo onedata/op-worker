@@ -4,6 +4,12 @@ Release notes for project op-worker
 CHANGELOG
 ---------
 
+### 21.02.0-alpha24
+
+-   **VFS-7724** Web GUI: redesigned datasets and archives browser to
+    browse datasets tree and archives in single splitted view.
+
+
 ### 21.02.0-alpha23
 
 -   **VFS-8653** Web GUI: added \"follow symbolic links\" option in
