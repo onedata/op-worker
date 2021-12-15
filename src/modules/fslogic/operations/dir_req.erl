@@ -155,10 +155,10 @@ get_children_details(UserCtx, FileCtx0, ListOpts) ->
         true -> [?TRAVERSE_ANCESTORS, ?OPERATIONS(?traverse_container_mask, ?list_container_mask)];
         false -> [?TRAVERSE_ANCESTORS]
     end,
-    {ChildrenWhiteList, FileCtx2} = fslogic_authz:ensure_authorized_readdir(
+    {CanonicalChildrenWhiteList, FileCtx2} = fslogic_authz:ensure_authorized_readdir(
         UserCtx, FileCtx1, AccessRequirements
     ),
-    get_children_details_insecure(UserCtx, FileCtx2, ListOpts, ChildrenWhiteList).
+    get_children_details_insecure(UserCtx, FileCtx2, ListOpts, CanonicalChildrenWhiteList).
 
 
 %%%===================================================================
@@ -218,15 +218,17 @@ mkdir_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
 %% @doc
 %% Gets file basic attributes (see file_attr.hrl) for each directory children
 %% starting with Offset-th from specified Token entry and up to Limit of entries.
-%% and allowed by ChildrenWhiteList.
+%% and allowed by CanonicalChildrenWhiteList.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_children_attrs_insecure(user_ctx:ctx(), file_ctx:ctx(), file_meta:list_opts(),
     boolean(), boolean(), undefined | [file_meta:name()]
 ) ->
     fslogic_worker:fuse_response().
-get_children_attrs_insecure(UserCtx, FileCtx0, ListOpts, IncludeReplicationStatus, IncludeLinkCount, ChildrenWhiteList) ->
-    {Children, ExtendedInfo, FileCtx1} = list_children(UserCtx, FileCtx0, ListOpts, ChildrenWhiteList),
+get_children_attrs_insecure(
+    UserCtx, FileCtx0, ListOpts, IncludeReplicationStatus, IncludeLinkCount, CanonicalChildrenWhiteList
+) ->
+    {Children, ExtendedInfo, FileCtx1} = list_children(UserCtx, FileCtx0, ListOpts, CanonicalChildrenWhiteList),
     ChildrenAttrs = map_children(
         UserCtx,
         fun attr_req:get_file_attr_insecure/3,
@@ -251,14 +253,21 @@ get_children_attrs_insecure(UserCtx, FileCtx0, ListOpts, IncludeReplicationStatu
 %% @doc
 %% Gets file details (see file_details.hrl) for each directory children
 %% starting with Offset-th from specified StartId entry and up to Limit
-%% of entries and allowed by ChildrenWhiteList.
+%% of entries and allowed by CanonicalChildrenWhiteList.
 %% @end
 %%--------------------------------------------------------------------
--spec get_children_details_insecure(user_ctx:ctx(), file_ctx:ctx(), file_meta:list_opts(), undefined | [file_meta:name()]) ->
+-spec get_children_details_insecure(
+    user_ctx:ctx(),
+    file_ctx:ctx(),
+    file_meta:list_opts(),
+    undefined | [file_meta:name()]
+) ->
     fslogic_worker:fuse_response().
-get_children_details_insecure(UserCtx, FileCtx0, ListOpts, ChildrenWhiteList) ->
+get_children_details_insecure(UserCtx, FileCtx0, ListOpts, CanonicalChildrenWhiteList) ->
     file_ctx:is_user_root_dir_const(FileCtx0, UserCtx) andalso throw(?ENOTSUP),
-    {Children, ListExtendedInfo, FileCtx1} = list_children(UserCtx, FileCtx0, ListOpts, ChildrenWhiteList),
+    {Children, ListExtendedInfo, FileCtx1} = list_children(
+        UserCtx, FileCtx0, ListOpts, CanonicalChildrenWhiteList
+    ),
     ChildrenDetails = map_children(
         UserCtx,
         fun attr_req:get_file_details_insecure/3,
@@ -277,15 +286,15 @@ get_children_details_insecure(UserCtx, FileCtx0, ListOpts, ChildrenWhiteList) ->
 
 %% @private
 -spec list_children(user_ctx:ctx(), file_ctx:ctx(), file_meta:list_opts(),
-    ChildrenWhiteList :: undefined | [file_meta:name()]
+    CanonicalChildrenWhiteList :: undefined | [file_meta:name()]
 ) ->
     {
         Children :: [file_ctx:ctx()],
         ExtendedInfo :: file_meta:list_extended_info(),
         NewFileCtx :: file_ctx:ctx()
     }.
-list_children(UserCtx, FileCtx0, ListOpts, ChildrenWhiteList) ->
-    files_tree:get_children(FileCtx0, UserCtx, ListOpts, ChildrenWhiteList).
+list_children(UserCtx, FileCtx0, ListOpts, CanonicalChildrenWhiteList) ->
+    files_tree:get_children(FileCtx0, UserCtx, ListOpts, CanonicalChildrenWhiteList).
 
 
 %%--------------------------------------------------------------------

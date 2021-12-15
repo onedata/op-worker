@@ -80,6 +80,7 @@ get_models() -> [
     qos_entry,
     qos_entry_audit_log,
     qos_status,
+    qos_transfer_stats,
     file_meta_posthooks,
     storage_sync_links,
     storage_traverse_job,

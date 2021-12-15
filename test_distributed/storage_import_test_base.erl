@@ -2935,7 +2935,7 @@ file_with_protection_flag_should_not_be_updated_test_base(Config, ProtectionFlag
     assertInitialScanFinished(W1, ?SPACE_ID),
 
     % set protection flag
-    {ok, DatasetId} = lfm_proxy:establish_dataset(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}, ProtectionFlags),
+    {ok, DatasetId} = opt_datasets:establish(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}, ProtectionFlags),
 
     %% Append to file
     {ok, _} = sd_test_utils:write_file(W1, SDHandle, ?TEST_DATA_SIZE, ?TEST_DATA2),
@@ -2962,7 +2962,7 @@ file_with_protection_flag_should_not_be_updated_test_base(Config, ProtectionFlag
     lfm_proxy:close(W1, Handle3),
 
     % unset protection flag
-    ok = lfm_proxy:update_dataset(W1, SessId, DatasetId, undefined, ?no_flags_mask, ProtectionFlags),
+    ok = opt_datasets:update(W1, SessId, DatasetId, undefined, ?no_flags_mask, ProtectionFlags),
 
     % run consecutive scan
     enable_continuous_scans(Config, ?SPACE_ID),
@@ -3001,7 +3001,7 @@ file_with_protection_flag_should_not_be_deleted_test_base(Config, ProtectionFlag
     assertInitialScanFinished(W1, ?SPACE_ID),
 
     % set protection flag
-    {ok, DatasetId} = lfm_proxy:establish_dataset(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}, ProtectionFlags),
+    {ok, DatasetId} = opt_datasets:establish(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}, ProtectionFlags),
 
     %% Remove file from storage to file
     ok = sd_test_utils:unlink(W1, SDHandle, ?TEST_DATA_SIZE),
@@ -3028,7 +3028,7 @@ file_with_protection_flag_should_not_be_deleted_test_base(Config, ProtectionFlag
     end,
 
     % unset protection flag
-    ok = lfm_proxy:update_dataset(W1, SessId, DatasetId, undefined, ?no_flags_mask, ProtectionFlags),
+    ok = opt_datasets:update(W1, SessId, DatasetId, undefined, ?no_flags_mask, ProtectionFlags),
 
     % run consecutive scan
     enable_continuous_scans(Config, ?SPACE_ID),
@@ -3062,7 +3062,7 @@ empty_dir_with_protection_flag_should_not_be_updated_test_base(Config, Protectio
 
     % set protection flag
     {ok, #file_attr{guid = Guid}} = lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}),
-    {ok, DatasetId} = lfm_proxy:establish_dataset(W1, SessId, #file_ref{guid = Guid}, ProtectionFlags),
+    {ok, DatasetId} = opt_datasets:establish(W1, SessId, #file_ref{guid = Guid}, ProtectionFlags),
 
     % Change dir mode
     NewMode = 8#777,
@@ -3077,7 +3077,7 @@ empty_dir_with_protection_flag_should_not_be_updated_test_base(Config, Protectio
     ?assertMatch({ok, #file_attr{mode = ?DEFAULT_DIR_PERMS}}, lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH})),
 
     % unset protection flag
-    ok = lfm_proxy:update_dataset(W1, SessId, DatasetId, undefined, ?no_flags_mask, ProtectionFlags),
+    ok = opt_datasets:update(W1, SessId, DatasetId, undefined, ?no_flags_mask, ProtectionFlags),
 
     % run consecutive scan
     enable_continuous_scans(Config, ?SPACE_ID),
@@ -3109,7 +3109,7 @@ empty_dir_with_protection_flag_should_not_be_deleted_test_base(Config, Protectio
     assertInitialScanFinished(W1, ?SPACE_ID),
 
     % set protection flag
-    {ok, DatasetId} = lfm_proxy:establish_dataset(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}, ProtectionFlags),
+    {ok, DatasetId} = opt_datasets:establish(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}, ProtectionFlags),
 
     %% Remove empty_dir from storage to empty_dir
     ok = sd_test_utils:rmdir(W1, SDHandle),
@@ -3124,7 +3124,7 @@ empty_dir_with_protection_flag_should_not_be_deleted_test_base(Config, Protectio
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH})),
 
     % unset protection flag
-    ok = lfm_proxy:update_dataset(W1, SessId, DatasetId, undefined, ?no_flags_mask, ProtectionFlags),
+    ok = opt_datasets:update(W1, SessId, DatasetId, undefined, ?no_flags_mask, ProtectionFlags),
 
     % run consecutive scan
     enable_continuous_scans(Config, ?SPACE_ID),
@@ -3163,7 +3163,7 @@ dir_and_its_child_with_protection_flag_should_not_be_updated_test_base(Config, P
 
     % set protection flag
     {ok, #file_attr{guid = Guid}} = lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}),
-    {ok, DatasetId} = lfm_proxy:establish_dataset(W1, SessId, #file_ref{guid = Guid}, ProtectionFlags),
+    {ok, DatasetId} = opt_datasets:establish(W1, SessId, #file_ref{guid = Guid}, ProtectionFlags),
 
     %% Append to file
     {ok, _} = sd_test_utils:write_file(W1, SDFileHandle, ?TEST_DATA_SIZE, ?TEST_DATA2),
@@ -3195,7 +3195,7 @@ dir_and_its_child_with_protection_flag_should_not_be_updated_test_base(Config, P
     lfm_proxy:close(W1, Handle3),
 
     % unset protection flag
-    ok = lfm_proxy:update_dataset(W1, SessId, DatasetId, undefined, ?no_flags_mask, ProtectionFlags),
+    ok = opt_datasets:update(W1, SessId, DatasetId, undefined, ?no_flags_mask, ProtectionFlags),
 
     % run consecutive scan
     enable_continuous_scans(Config, ?SPACE_ID),
@@ -3243,7 +3243,7 @@ dir_and_its_child_with_protection_flag_should_not_be_deleted_test_base(Config, P
     assertInitialScanFinished(W1, ?SPACE_ID),
 
     % set protection flag
-    {ok, DatasetId} = lfm_proxy:establish_dataset(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}, ProtectionFlags),
+    {ok, DatasetId} = opt_datasets:establish(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}, ProtectionFlags),
 
     %% Remove empty_dir from storage to empty_dir
     ok = sd_test_utils:recursive_rm(W1, SDHandle),
@@ -3258,7 +3258,7 @@ dir_and_its_child_with_protection_flag_should_not_be_deleted_test_base(Config, P
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH})),
 
     % unset protection flag
-    ok = lfm_proxy:update_dataset(W1, SessId, DatasetId, undefined, ?no_flags_mask, ProtectionFlags),
+    ok = opt_datasets:update(W1, SessId, DatasetId, undefined, ?no_flags_mask, ProtectionFlags),
 
     % run consecutive scan
     enable_continuous_scans(Config, ?SPACE_ID),

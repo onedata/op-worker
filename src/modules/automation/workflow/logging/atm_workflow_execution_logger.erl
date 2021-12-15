@@ -21,7 +21,7 @@
 %% API
 -export([build/3]).
 -export([
-    task_append_logs/3,
+    task_handle_logs/4,
     task_debug/2, task_debug/3,
     task_info/2, task_info/3,
     task_notice/2, task_notice/3,
@@ -32,7 +32,7 @@
     task_emergency/2, task_emergency/3
 ]).
 -export([
-    workflow_append_logs/3,
+    workflow_handle_logs/4,
     workflow_debug/2, workflow_debug/3,
     workflow_info/2, workflow_info/3,
     workflow_notice/2, workflow_notice/3,
@@ -86,13 +86,21 @@ build(AtmWorkflowExecutionAuth, AtmTaskAuditLogStoreContainer, AtmWorkflowAuditL
     }.
 
 
--spec task_append_logs(log() | [log()], atm_store_container:operation_options(), record()) ->
+-spec task_handle_logs(
+    atm_store_container:operation_type(),
+    log() | [log()],
+    atm_store_container:operation_options(),
+    record()
+) ->
     ok.
-task_append_logs(AuditLogObject, Options, #atm_workflow_execution_logger{
+task_handle_logs(OperationType, AuditLogObject, Options, #atm_workflow_execution_logger{
     atm_workflow_execution_auth = AtmWorkflowExecutionAuth,
     task_audit_log_store_container = AtmTaskAuditLogStoreContainer
 }) ->
-    append_logs(AuditLogObject, Options, AtmWorkflowExecutionAuth, AtmTaskAuditLogStoreContainer).
+    handle_logs(
+        OperationType, AuditLogObject, Options,
+        AtmWorkflowExecutionAuth, AtmTaskAuditLogStoreContainer
+    ).
 
 
 -spec task_debug(entry(), record()) -> ok.
@@ -175,13 +183,21 @@ task_emergency(Format, Args, AtmWorkflowExecutionLogger) ->
     task_emergency(str_utils:format_bin(Format, Args), AtmWorkflowExecutionLogger).
 
 
--spec workflow_append_logs(log() | [log()], atm_store_container:operation_options(), record()) ->
+-spec workflow_handle_logs(
+    atm_store_container:operation_type(),
+    log() | [log()],
+    atm_store_container:operation_options(),
+    record()
+) ->
     ok.
-workflow_append_logs(AuditLogObject, Options, #atm_workflow_execution_logger{
+workflow_handle_logs(OperationType, AuditLogObject, Options, #atm_workflow_execution_logger{
     atm_workflow_execution_auth = AtmWorkflowExecutionAuth,
     workflow_audit_log_store_container = AtmWorkflowAuditLogStoreContainer
 }) ->
-    append_logs(AuditLogObject, Options, AtmWorkflowExecutionAuth, AtmWorkflowAuditLogStoreContainer).
+    handle_logs(
+        OperationType, AuditLogObject, Options,
+        AtmWorkflowExecutionAuth, AtmWorkflowAuditLogStoreContainer
+    ).
 
 
 -spec workflow_debug(entry(), record()) -> ok.
@@ -273,14 +289,14 @@ workflow_emergency(Format, Args, AtmWorkflowExecutionLogger) ->
 -spec task_append_system_log(entry(), severity(), record()) -> ok.
 task_append_system_log(Entry, Severity, AtmWorkflowExecutionLogger) ->
     SystemLog = ensure_system_audit_log_object(Entry, Severity),
-    task_append_logs(SystemLog, #{}, AtmWorkflowExecutionLogger).
+    task_handle_logs(append, SystemLog, #{}, AtmWorkflowExecutionLogger).
 
 
 %% @private
 -spec workflow_append_system_log(entry(), severity(), record()) -> ok.
 workflow_append_system_log(Entry, Severity, AtmWorkflowExecutionLogger) ->
     SystemLog = ensure_system_audit_log_object(Entry, Severity),
-    workflow_append_logs(SystemLog, #{}, AtmWorkflowExecutionLogger).
+    workflow_handle_logs(append, SystemLog, #{}, AtmWorkflowExecutionLogger).
 
 
 %% @private
@@ -292,21 +308,22 @@ ensure_system_audit_log_object(Entry, Severity) when is_binary(Entry) ->
 
 
 %% @private
--spec append_logs(
+-spec handle_logs(
+    atm_store_container:operation_type(),
     log() | [log()],
     atm_store_container:operation_options(),
     atm_workflow_execution_auth:record(),
     undefined | atm_store_container:record()
 ) ->
     ok.
-append_logs(_AuditLogObject, _Options, _AtmWorkflowExecutionAuth, undefined) ->
+handle_logs(_OperationType, _Logs, _Options, _AtmWorkflowExecutionAuth, undefined) ->
     ok;
-append_logs(AuditLogObject, Options, AtmWorkflowExecutionAuth, AtmAuditLogStoreContainer) ->
+handle_logs(OperationType, Logs, Options, AtmWorkflowExecutionAuth, AtmAuditLogStoreContainer) ->
     Operation = #atm_store_container_operation{
-        type = append,
+        type = OperationType,
         options = Options,
-        argument = AuditLogObject,
+        argument = Logs,
         workflow_execution_auth = AtmWorkflowExecutionAuth
     },
-    catch atm_audit_log_store_container:apply_operation(AtmAuditLogStoreContainer, Operation),
+    atm_audit_log_store_container:apply_operation(AtmAuditLogStoreContainer, Operation),
     ok.

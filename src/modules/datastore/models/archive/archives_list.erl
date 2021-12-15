@@ -137,18 +137,13 @@ delete_remote(Forest, SpaceId, LinkName, ProviderId) ->
 
 -spec sanitize_listing_opts(opts()) -> datastore_model:fold_opts().
 sanitize_listing_opts(Opts) ->
-    SanitizedOpts = try
-        middleware_sanitizer:sanitize_data(Opts, #{
-            at_least_one => #{
-                offset => {integer, any},
-                start_index => {binary, any}
-            },
-            optional => #{limit => {integer, {not_lower_than, 1}}}
-        })
-    catch _:_ ->
-        %% TODO VFS-7208 do not catch after introducing API errors to fslogic
-        throw(?EINVAL)
-    end,
+    SanitizedOpts = middleware_sanitizer:sanitize_data(Opts, #{
+        at_least_one => #{
+            offset => {integer, any},
+            start_index => {binary, any}
+        },
+        optional => #{limit => {integer, {not_lower_than, 1}}}
+    }),
 
     kv_utils:copy_found([
         {offset, offset},

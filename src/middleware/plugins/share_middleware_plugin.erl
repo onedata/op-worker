@@ -197,7 +197,7 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = instance} = GRI}) -
     Name = maps:get(<<"name">>, Data),
     Description = maps:get(<<"description">>, Data, <<"">>),
 
-    {ok, ShareId} = ?check(lfm:create_share(SessionId, FileRef, Name, Description)),
+    {ok, ShareId} = ?lfm_check(lfm:create_share(SessionId, FileRef, Name, Description)),
 
     case share_logic:get(SessionId, ShareId) of
         {ok, #document{value = ShareRec}} ->
@@ -235,7 +235,7 @@ update(#op_req{auth = Auth, gri = #gri{id = ShareId, aspect = instance}} = Req) 
 %%--------------------------------------------------------------------
 -spec delete(middleware:req()) -> middleware:delete_result().
 delete(#op_req{auth = Auth, gri = #gri{id = ShareId, aspect = instance}}) ->
-    ?check(lfm:remove_share(Auth#auth.session_id, ShareId)).
+    ?lfm_check(lfm:remove_share(Auth#auth.session_id, ShareId)).
 
 
 %%%===================================================================

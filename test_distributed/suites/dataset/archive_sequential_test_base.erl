@@ -62,7 +62,7 @@ archive_dataset_tree_test_base(FileStructure, ArchiveLayout) ->
     {_, FileGuids} = lfm_test_utils:create_files_tree(Node, SessId, FileStructure, RootGuid),
 
     {ok, ArchiveId} =
-        lfm_proxy:archive_dataset(Node, SessId, DatasetId, #archive_config{layout = ArchiveLayout}, <<>>),
+        opt_archives:archive_dataset(Node, SessId, DatasetId, #archive_config{layout = ArchiveLayout}, <<>>),
 
     % created files are empty therefore expected size is 0
     archive_tests_utils:assert_archive_is_preserved(Node, SessId, ArchiveId, DatasetId, RootGuid, length(FileGuids), 0, ?ATTEMPTS).

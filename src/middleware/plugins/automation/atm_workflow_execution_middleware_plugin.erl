@@ -192,7 +192,7 @@ validate(#op_req{operation = get, gri = #gri{aspect = As}}, _) when
 %%--------------------------------------------------------------------
 -spec create(middleware:req()) -> middleware:create_result().
 create(#op_req{auth = ?USER(_UserId, SessionId), data = Data, gri = #gri{aspect = instance} = GRI}) ->
-    {ok, {AtmWorkflowExecutionId, AtmWorkflowExecution}} = middleware_worker:check_exec(
+    {AtmWorkflowExecutionId, AtmWorkflowExecution} = middleware_worker:check_exec(
         SessionId,
         fslogic_uuid:spaceid_to_space_dir_guid(maps:get(<<"spaceId">>, Data)),
         #schedule_atm_workflow_execution{

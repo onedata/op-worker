@@ -72,7 +72,7 @@ synchronize_block(UserCtx, FileCtx, undefined, Prefetch, TransferId, Priority) -
     end;
 synchronize_block(UserCtx, FileCtx, Block, Prefetch, TransferId, Priority) ->
     case replica_synchronizer:synchronize(UserCtx, FileCtx, Block,
-        Prefetch, TransferId, Priority) of
+        Prefetch, TransferId, Priority, transfer) of
         {ok, #file_location_changed{file_location = FL} = Ans} ->
             LogicalUuid = file_ctx:get_logical_uuid_const(FileCtx),
             #fuse_response{status = #status{code = ?OK},
@@ -103,7 +103,7 @@ request_block_synchronization(UserCtx, FileCtx, undefined, Prefetch, TransferId,
     end;
 request_block_synchronization(UserCtx, FileCtx, Block, Prefetch, TransferId, Priority) ->
     case replica_synchronizer:request_synchronization(UserCtx, FileCtx, Block,
-        Prefetch, TransferId, Priority) of
+        Prefetch, TransferId, Priority, transfer) of
         ok ->
             #fuse_response{status = #status{code = ?OK}};
         {error, Reason} ->
@@ -126,7 +126,7 @@ synchronize_block_and_compute_checksum(UserCtx, FileCtx,
     FileGuid = file_ctx:get_logical_guid_const(FileCtx),
 
     {ok, #file_location_changed{file_location = FL} = Ans} =
-        replica_synchronizer:synchronize(UserCtx, FileCtx, Range, Prefetch, undefined, Priority),
+        replica_synchronizer:synchronize(UserCtx, FileCtx, Range, Prefetch, undefined, Priority, transfer),
 
     %TODO VFS-7393 do not use lfm, operate on fslogic directly
     {ok, Handle} = lfm:open(SessId, ?FILE_REF(FileGuid), read),

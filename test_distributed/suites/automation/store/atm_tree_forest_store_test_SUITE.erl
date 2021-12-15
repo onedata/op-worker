@@ -90,9 +90,10 @@ create_store_with_invalid_args_test(_Config) ->
             krakow, AtmWorkflowExecutionAuth, undefined,
             (?ATM_TREE_FOREST_STORE_SCHEMA)#atm_store_schema{requires_initial_value = true})
     ),
-    ?assertEqual(?ERROR_BAD_DATA(<<"value">>, <<"not a batch">>),
-        atm_store_test_utils:create_store(
-            krakow, AtmWorkflowExecutionAuth, 8, ?ATM_TREE_FOREST_STORE_SCHEMA)
+
+    IntValue = rand:uniform(1000),
+    ?assertEqual(?ERROR_ATM_DATA_TYPE_UNVERIFIED(IntValue, atm_array_type), atm_store_test_utils:create_store(
+        krakow, AtmWorkflowExecutionAuth, IntValue, ?ATM_TREE_FOREST_STORE_SCHEMA)
     ),
     lists:foreach(fun(DataType) ->
         BadValue = atm_store_test_utils:example_bad_data(DataType),
@@ -421,10 +422,10 @@ create_iteration_test_env(ProviderSelector, MaxBatchSize, Depth, Type, WorkflowU
                 case {lists:member(Guid, maps:keys(FilesMap)), rand:uniform(2)} of
                     {false, 1} -> Acc;
                     {false, _} ->
-                        {ok, DatasetId} = lfm_proxy:establish_dataset(Node, ?ROOT_SESS_ID, #file_ref{guid = Guid}),
+                        {ok, DatasetId} = opt_datasets:establish(Node, ?ROOT_SESS_ID, #file_ref{guid = Guid}),
                         {AccRoots, [DatasetId | AccExpected]};
                     {true, _} ->
-                        {ok, DatasetId} = lfm_proxy:establish_dataset(Node, ?ROOT_SESS_ID, #file_ref{guid = Guid}),
+                        {ok, DatasetId} = opt_datasets:establish(Node, ?ROOT_SESS_ID, #file_ref{guid = Guid}),
                         {[DatasetId | AccRoots], [DatasetId | AccExpected]}
                 end
             end, {[], []}, lists:flatten(lists:map(fun({_, V}) -> V end, maps:values(FilesMap))))

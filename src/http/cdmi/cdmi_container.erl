@@ -127,7 +127,7 @@ delete_cdmi(Req, #cdmi_req{
     auth = ?USER(_UserId, SessionId),
     file_attrs = #file_attr{guid = Guid}
 } = CdmiReq) ->
-    ?check(lfm:rm_recursive(SessionId, ?FILE_REF(Guid))),
+    ?lfm_check(lfm:rm_recursive(SessionId, ?FILE_REF(Guid))),
     {true, Req, CdmiReq}.
 
 
@@ -142,7 +142,7 @@ delete_cdmi(Req, #cdmi_req{
 prepare_create_dir_cdmi_response(Req1, #cdmi_req{
     auth = ?USER(_UserId, SessionId)
 } = CdmiReq, FileGuid) ->
-    {ok, Attrs} = ?check(lfm:stat(SessionId, ?FILE_REF(FileGuid))),
+    {ok, Attrs} = ?lfm_check(lfm:stat(SessionId, ?FILE_REF(FileGuid))),
     CdmiReq2 = CdmiReq#cdmi_req{file_attrs = Attrs},
     Answer = get_directory_info(?DEFAULT_GET_DIR_OPTS, CdmiReq2),
     Req2 = cowboy_req:set_resp_body(json_utils:encode(Answer), Req1),
@@ -197,7 +197,7 @@ get_directory_info(RequestedInfo, #cdmi_req{
                 SessionId, FileRef, Prefix, Attrs
             )};
         (<<"childrenrange">>, Acc) ->
-            {ok, ChildNum} = ?check(lfm:get_children_count(SessionId, FileRef)),
+            {ok, ChildNum} = ?lfm_check(lfm:get_children_count(SessionId, FileRef)),
             {From, To} = case lists:keyfind(<<"children">>, 1, RequestedInfo) of
                 {<<"children">>, Begin, End} ->
                     MaxChildren = ?MAX_CHILDREN_PER_REQUEST,
@@ -221,15 +221,15 @@ get_directory_info(RequestedInfo, #cdmi_req{
             Acc#{<<"childrenrange">> => BinaryRange};
         ({<<"children">>, From, To}, Acc) ->
             MaxChildren = ?MAX_CHILDREN_PER_REQUEST,
-            {ok, ChildNum} = ?check(lfm:get_children_count(SessionId, FileRef)),
+            {ok, ChildNum} = ?lfm_check(lfm:get_children_count(SessionId, FileRef)),
             {From1, To1} = normalize_childrenrange(From, To, ChildNum, MaxChildren),
-            {ok, List, _} = ?check(lfm:get_children(SessionId, FileRef, #{offset => From1, size => To1 - From1 + 1})),
+            {ok, List, _} = ?lfm_check(lfm:get_children(SessionId, FileRef, #{offset => From1, size => To1 - From1 + 1})),
             Acc#{<<"children">> => lists:map(fun({FileGuid, Name}) ->
                 distinguish_directories(SessionId, FileGuid, Name)
             end, List)};
         (<<"children">>, Acc) ->
             MaxChildren = ?MAX_CHILDREN_PER_REQUEST,
-            {ok, List, _} = ?check(lfm:get_children(SessionId, FileRef, #{offset => 0, size => MaxChildren + 1})),
+            {ok, List, _} = ?lfm_check(lfm:get_children(SessionId, FileRef, #{offset => 0, size => MaxChildren + 1})),
             case length(List) > MaxChildren of
                 true ->
                     throw(?ERROR_BAD_VALUE_TOO_HIGH(<<"childrenrange">>, MaxChildren));
@@ -277,7 +277,7 @@ normalize_childrenrange(From, To, _ChildNum, MaxChildren) ->
 -spec distinguish_directories(session:id(), file_id:file_guid(),
     Name :: binary()) -> binary() | no_return().
 distinguish_directories(SessionId, Guid, Name) ->
-    case ?check(lfm:stat(SessionId, ?FILE_REF(Guid))) of
+    case ?lfm_check(lfm:stat(SessionId, ?FILE_REF(Guid))) of
         {ok, #file_attr{type = ?DIRECTORY_TYPE}} ->
             filepath_utils:ensure_ends_with_slash(Name);
         {ok, _} ->

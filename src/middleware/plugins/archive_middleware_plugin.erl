@@ -175,20 +175,16 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = instance} = GRI}) -
     Description = maps:get(<<"description">>, Data, ?DEFAULT_ARCHIVE_DESCRIPTION),
     PreservedCallback = maps:get(<<"preservedCallback">>, Data, undefined),
     PurgedCallback = maps:get(<<"purgedCallback">>, Data, undefined),
-    Result =  lfm:archive_dataset(SessionId, DatasetId, Config, PreservedCallback, PurgedCallback, Description),
-    case Result of
-        {error, ?EINVAL} ->
-            throw(?ERROR_BAD_DATA(<<"datasetId">>, <<"Detached dataset cannot be modified.">>));
-        _ ->
-            {ok, ArchiveId} = ?check(Result),
-            {ok, ArchiveInfo} = ?check(lfm:get_archive_info(SessionId, ArchiveId)),
-            {ok, resource, {GRI#gri{id = ArchiveId}, ArchiveInfo}}
-    end;
+    ArchiveId = mi_archives:archive_dataset(
+        SessionId, DatasetId, Config, PreservedCallback, PurgedCallback, Description
+    ),
+    ArchiveInfo = mi_archives:get_info(SessionId, ArchiveId),
+    {ok, resource, {GRI#gri{id = ArchiveId}, ArchiveInfo}};
 
 create(#op_req{auth = Auth, data = Data, gri = #gri{id = ArchiveId, aspect = purge}}) ->
     SessionId = Auth#auth.session_id,
     Callback = maps:get(<<"purgedCallback">>, Data, undefined),
-    ?check(lfm:init_archive_purge(SessionId, ArchiveId, Callback)).
+    mi_archives:init_purge(SessionId, ArchiveId, Callback).
 
 
 %%--------------------------------------------------------------------
@@ -198,7 +194,8 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{id = ArchiveId, aspect = pur
 %%--------------------------------------------------------------------
 -spec get(middleware:req(), middleware:entity()) -> middleware:get_result().
 get(#op_req{auth = Auth, gri = #gri{id = ArchiveId, aspect = instance}}, _) ->
-    ?check(lfm:get_archive_info(Auth#auth.session_id, ArchiveId)).
+    {ok, mi_archives:get_info(Auth#auth.session_id, ArchiveId)}.
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -207,7 +204,7 @@ get(#op_req{auth = Auth, gri = #gri{id = ArchiveId, aspect = instance}}, _) ->
 %%--------------------------------------------------------------------
 -spec update(middleware:req()) -> middleware:update_result().
 update(#op_req{auth = Auth, gri = #gri{id = ArchiveId, aspect = instance}, data = Data}) ->
-    ?check(lfm:update_archive(Auth#auth.session_id, ArchiveId, Data)).
+    mi_archives:update(Auth#auth.session_id, ArchiveId, Data).
 
 
 %%--------------------------------------------------------------------

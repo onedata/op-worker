@@ -102,7 +102,7 @@ emit_file_attr_changed_with_replication_status(FileCtx, SizeChanged, ExcludedSes
                     emit_file_attr_changed_with_replication_status_internal(FileCtx2,
                         WithoutStatusSessIds -- ExcludedSessions, WithStatusSessIds -- ExcludedSessions),
                     WithStatusSessIdsMap = maps:from_list(WithStatusSessIdsProplist),
-                    lists:foreach(fun({Guid, SessIds}) ->
+                    lists:foreach(fun({{guid, Guid}, SessIds}) ->
                         try
                             emit_file_attr_changed_with_replication_status_internal(file_ctx:new_by_guid(Guid),
                                 SessIds, maps:get(Guid, WithStatusSessIdsMap, []))
@@ -113,7 +113,7 @@ emit_file_attr_changed_with_replication_status(FileCtx, SizeChanged, ExcludedSes
                                     [Class, Reason, Guid])
                         end
                     end, WithoutStatusSessIdsProplist),
-                    lists:foreach(fun({Guid, SessIds}) ->
+                    lists:foreach(fun({{guid, Guid}, SessIds}) ->
                         try
                             emit_file_attr_changed_with_replication_status_internal(file_ctx:new_by_guid(Guid),
                                 [], SessIds)
@@ -302,12 +302,12 @@ emit_helper_params_changed(StorageId) ->
 %% For #file_location_changed_event{} uuid should be used, guid for other events.
 %% @end
 %%--------------------------------------------------------------------
--spec clone_event(event:type(), file_id:file_guid() | file_meta:uuid()) -> event:type().
-clone_event(#file_perm_changed_event{} = Event, NewGuid) ->
+-spec clone_event(event:type(), subscription_manager:link_subscription_context()) -> event:type().
+clone_event(#file_perm_changed_event{} = Event, {guid, NewGuid}) ->
     Event#file_perm_changed_event{file_guid = NewGuid};
-clone_event(#file_location_changed_event{file_location = FileLocation} = Event, NewUuid) ->
+clone_event(#file_location_changed_event{file_location = FileLocation} = Event, {uuid, NewUuid, _SpaceId}) ->
     Event#file_location_changed_event{file_location = FileLocation#file_location{uuid = NewUuid}};
-clone_event(#file_attr_changed_event{file_attr = FileAttr} = Event, NewGuid) ->
+clone_event(#file_attr_changed_event{file_attr = FileAttr} = Event, {guid, NewGuid}) ->
     FileCtx = file_ctx:new_by_guid(NewGuid),
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     {#document{value = #file_meta{
@@ -324,8 +324,8 @@ clone_event(#file_attr_changed_event{file_attr = FileAttr} = Event, NewGuid) ->
         provider_id = ProviderId
     },
     Event#file_attr_changed_event{file_attr = UpdatedFileAttr};
-clone_event(Event, _) ->
-    ?error("Trying to clone event ~p of type that cannot be cloned", [Event]),
+clone_event(Event, Context) ->
+    ?error("Trying to clone event ~p of type that cannot be cloned. Context ~p.", [Event, Context]),
     throw(not_supported_event_cloning).
 
 
@@ -379,13 +379,17 @@ emit_file_renamed(FileCtx, OldParentGuid, NewParentGuid, NewName, OldName, Exclu
             NewName
     end,
 
+    RoutingInfo = case NewParentGuid of
+        OldParentGuid -> #{file_ctx => FileCtx2, parent => OldParentGuid};
+        _ -> [#{file_ctx => FileCtx2, parent => OldParentGuid}, #{file_ctx => FileCtx2, parent => NewParentGuid}]
+    end,
+
     event:emit_to_filtered_subscribers(#file_renamed_event{top_entry = #file_renamed_entry{
         old_guid = Guid,
         new_guid = Guid,
         new_parent_guid = NewParentGuid,
         new_name = FinalName
-    }}, [#{file_ctx => FileCtx2, parent => OldParentGuid},
-        #{file_ctx => FileCtx2, parent => NewParentGuid}], Exclude).
+    }}, RoutingInfo, Exclude).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -427,7 +431,7 @@ emit_suffixes(ConflictingFiles, {parent_guid, ParentGuid}) ->
                 new_guid = Guid,
                 new_parent_guid = ParentGuid,
                 new_name = TaggedName
-            }}, [#{file_ctx => FileCtx, parent => ParentGuid}], [])
+            }}, #{file_ctx => FileCtx, parent => ParentGuid}, [])
         catch
             _:_ -> ok % File not fully synchronized (file_meta is missing)
         end

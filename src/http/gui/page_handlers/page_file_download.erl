@@ -98,15 +98,15 @@ handle(<<"GET">>, Req) ->
 maybe_sync_first_file_block(SessionId, [FileGuid]) ->
     FileRef = ?FILE_REF(FileGuid),
 
-    case ?check(lfm:stat(SessionId, FileRef)) of
+    case ?lfm_check(lfm:stat(SessionId, FileRef)) of
         {ok, #file_attr{type = ?REGULAR_FILE_TYPE}} ->
-            {ok, FileHandle} = ?check(lfm:monitored_open(SessionId, FileRef, read)),
+            {ok, FileHandle} = ?lfm_check(lfm:monitored_open(SessionId, FileRef, read)),
             ReadBlockSize = http_streamer:get_read_block_size(FileHandle),
             case lfm:read(FileHandle, 0, ReadBlockSize) of
                 {error, ?ENOSPC} ->
                     throw(?ERROR_QUOTA_EXCEEDED);
                 Res ->
-                    ?check(Res)
+                    ?lfm_check(Res)
             end,
             lfm:monitored_release(FileHandle),
             ok;

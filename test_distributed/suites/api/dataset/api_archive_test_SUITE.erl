@@ -308,7 +308,7 @@ get_datasets(State) ->
     SessionId = oct_background:get_user_session_id(user3, krakow),
     Node = oct_background:get_random_provider_node(krakow),
     SpaceId = oct_background:get_space_id(?SPACE),
-    {ok, Entries, true} = lfm_proxy:list_top_datasets(Node, SessionId, SpaceId, State, #{limit => 10000}),
+    {ok, {Entries, true}} = opt_datasets:list_top_datasets(Node, SessionId, SpaceId, State, #{limit => 10000}),
     lists:map(fun({DatasetId, _, _}) -> DatasetId end, Entries).
 
 
@@ -542,7 +542,7 @@ build_verify_modified_archive_description_fun(MemRef, Providers) ->
                     Node = ?OCT_RAND_OP_NODE(Provider),
                     UserSessId = oct_background:get_user_session_id(user3, Provider),
                     ?assertMatch({ok, #archive_info{description = ExpCurrentDescription}},
-                        lfm_proxy:get_archive_info(Node, UserSessId, ArchiveId), ?ATTEMPTS)
+                        opt_archives:get_info(Node, UserSessId, ArchiveId), ?ATTEMPTS)
                 end, Providers)
 
         end
@@ -568,7 +568,7 @@ get_dataset_archives(_Config) ->
     UserSessId = oct_background:get_user_session_id(user3, RandomProvider),
 
     ArchiveInfos = lists:map(fun(#archive_object{id = ArchiveId}) ->
-        {ok, ArchiveInfo} = lfm_proxy:get_archive_info(RandomProviderNode, UserSessId, ArchiveId),
+        {ok, ArchiveInfo} = opt_archives:get_info(RandomProviderNode, UserSessId, ArchiveId),
         ArchiveInfo
     end, ArchiveObjects),
 
@@ -665,7 +665,7 @@ build_get_dataset_archives_prepare_gs_args_fun(DatasetId) ->
 -spec validate_listed_archives(
     ListingResult :: term(),
     Params :: map(),
-    AllArchives :: [lfm_datasets:archive_info()],
+    AllArchives :: [archive_api:info()],
     Format :: rest | graph_sync
 ) ->
     ok | no_return().
@@ -842,11 +842,11 @@ build_verify_archive_purged_fun(MemRef, Providers, DatasetId) ->
                     ListArchiveFun = fun() ->
                         list_archive_ids(Node, UserSessId, DatasetId, ListOpts)
                     end,
-                    GetArchiveInfo = fun() -> lfm_proxy:get_archive_info(Node, UserSessId, ArchiveId) end,
+                    GetArchiveInfo = fun() -> opt_archives:get_info(Node, UserSessId, ArchiveId) end,
 
                     case ExpResult of
                         expected_success ->
-                            ?assertEqual({error, ?ENOENT}, GetArchiveInfo(), ?ATTEMPTS),
+                            ?assertEqual(?ERROR_NOT_FOUND, GetArchiveInfo(), ?ATTEMPTS),
                             ?assertEqual(false, lists:member(ArchiveId, ListArchiveFun()), ?ATTEMPTS);
                         expected_failure ->
                             ?assertMatch({ok, _}, GetArchiveInfo(), ?ATTEMPTS),
@@ -903,7 +903,7 @@ verify_archive(
             stats = archive_stats:new(1, 0, 0)
         },
         GetArchiveInfoFun = fun() ->
-            case lfm_proxy:get_archive_info(Node, UserSessId, ArchiveId) of
+            case opt_archives:get_info(Node, UserSessId, ArchiveId) of
                 {ok, ActualArchiveInfo} ->
                     ?assertEqual(archive_config:should_include_dip(Config), ActualArchiveInfo#archive_info.related_dip =/= undefined),
                     ActualArchiveInfo#archive_info{
@@ -924,7 +924,7 @@ verify_archive(
 -spec list_archive_ids(node(), session:id(), dataset:id(), dataset_api:listing_opts()) ->
     [archive:id()].
 list_archive_ids(Node, UserSessId, DatasetId, ListOpts) ->
-    {ok, Datasets, _} = lfm_proxy:list_archives(Node, UserSessId, DatasetId, ListOpts),
+    {ok, {Datasets, _}} = opt_archives:list(Node, UserSessId, DatasetId, ListOpts),
     lists:map(fun({_, ArchiveId}) -> ArchiveId end, Datasets).
 
 
@@ -1071,11 +1071,11 @@ maybe_detach_dataset(Providers, DatasetId) ->
         1 ->
             ok;
         2 ->
-            ok = lfm_proxy:detach_dataset(Node, UserSessId, DatasetId),
+            ok = opt_datasets:detach_dataset(Node, UserSessId, DatasetId),
             lists_utils:pforeach(fun(P) ->
                 N = oct_background:get_random_provider_node(P),
                 S = oct_background:get_user_session_id(user3, P),
                 ?assertMatch({ok, #dataset_info{state = ?DETACHED_DATASET}},
-                    lfm_proxy:get_dataset_info(N, S, DatasetId), ?ATTEMPTS)
+                    opt_datasets:get_info(N, S, DatasetId), ?ATTEMPTS)
             end, OtherProviders)
     end.

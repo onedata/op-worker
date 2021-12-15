@@ -169,7 +169,7 @@ get_top_datasets_test(Config) ->
 
 %% @private
 -spec get_top_datasets_test_base(od_space:id(), dataset:state(),
-    [{file_meta:name(), dataset:id(), lfm_datasets:info()}]) ->
+    [{file_meta:name(), dataset:id(), dataset_api:info()}]) ->
     true | no_return().
 get_top_datasets_test_base(SpaceId, State, TopDatasets) ->
     % pick first and last index as token test values
@@ -322,7 +322,7 @@ get_child_datasets_test(Config) ->
 
 
 %% @private
--spec get_child_datasets_test_base(dataset:id(), [{file_meta:name(), dataset:id(), lfm_datasets:info()}]) ->
+-spec get_child_datasets_test_base(dataset:id(), [{file_meta:name(), dataset:id(), dataset_api:info()}]) ->
     true | no_return().
 get_child_datasets_test_base(DatasetId, ChildDatasets) ->
     % pick first and last index as token test values
@@ -547,7 +547,7 @@ get_file_dataset_summary_test(Config) ->
 
 
 %% @private
--spec get_file_dataset_summary_test_base(file_id:file_guid(), lfm_datasets:file_eff_summary()) ->
+-spec get_file_dataset_summary_test_base(file_id:file_guid(), dataset_api:file_eff_summary()) ->
     true | no_return().
 get_file_dataset_summary_test_base(FileGuid, ExpSummary) ->
     ExpRestSummary = build_rest_dataset_summary(ExpSummary),
@@ -575,15 +575,17 @@ get_file_dataset_summary_test_base(FileGuid, ExpSummary) ->
                     end
                 }
             ],
-            data_spec = api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
-                FileGuid, ?DUMMY_SHARE_ID, undefined
+            data_spec = api_test_utils:replace_enoent_with_not_found_error_in_bad_data_values(
+                api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
+                    FileGuid, ?DUMMY_SHARE_ID, undefined
+                )
             )
         }
     ])).
 
 
 %% @private
--spec build_rest_dataset_summary(lfm_datasets:file_eff_summary()) -> map().
+-spec build_rest_dataset_summary(dataset_api:file_eff_summary()) -> map().
 build_rest_dataset_summary(#file_eff_dataset_summary{
     direct_dataset = DirectDatasetId,
     eff_ancestor_datasets = EffAncestorDatasets,
@@ -597,7 +599,7 @@ build_rest_dataset_summary(#file_eff_dataset_summary{
 
 
 %% @private
--spec build_gs_dataset_summary(file_id:file_guid(), lfm_datasets:file_eff_summary()) -> map().
+-spec build_gs_dataset_summary(file_id:file_guid(), dataset_api:file_eff_summary()) -> map().
 build_gs_dataset_summary(FileGuid, DatasetSummary) ->
     BasicSummary = file_gui_gs_translator:translate_dataset_summary(DatasetSummary),
     BasicSummary#{

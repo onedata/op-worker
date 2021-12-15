@@ -29,10 +29,26 @@
 
 
 -type operation() ::
-    % atm related operations
+    % archives related
+    #list_archives{} |
+    #archive_dataset{} |
+    #get_archive_info{} |
+    #update_archive{} |
+    #init_archive_purge{} |
+
+    % automation related
     #schedule_atm_workflow_execution{} |
     #cancel_atm_workflow_execution{} |
-    #repeat_atm_workflow_execution{}.
+    #repeat_atm_workflow_execution{} |
+
+    % datasets related
+    #list_top_datasets{} |
+    #list_children_datasets{} |
+    #establish_dataset{} |
+    #get_dataset_info{} |
+    #update_dataset{} |
+    #remove_dataset {} |
+    #get_file_eff_dataset_summary{}.
 
 -export_type([operation/0]).
 
@@ -52,14 +68,12 @@
 
 
 -spec check_exec(session:id(), file_id:file_guid(), operation()) ->
-    ok | {ok, term()} | no_return().
+    term() | no_return().
 check_exec(SessionId, FileGuid, Operation) ->
-    case exec(SessionId, FileGuid, Operation) of
-        {error, _} = Error -> throw(Error);
-        Result -> Result
-    end.
+    ?check(exec(SessionId, FileGuid, Operation)).
 
 
+%% TODO VFS-8753 handle selector (e.g. {file, <FileGuid>}, {space, <SpaceId>}, etc.) as 2nd argument
 -spec exec(session:id(), file_id:file_guid(), operation()) ->
     ok | {ok, term()} | errors:error().
 exec(SessionId, FileGuid, Operation) ->
@@ -98,11 +112,12 @@ handle(healthcheck) ->
 handle(?REQ(SessionId, FileGuid, Operation)) ->
     try
         middleware_utils:assert_file_managed_locally(FileGuid),
+        assert_file_access_not_in_share_mode(FileGuid),
 
         UserCtx = user_ctx:new(SessionId),
         FileCtx = file_ctx:new_by_guid(FileGuid),
 
-        middleware_worker_request_router:route(UserCtx, FileCtx, Operation)
+        middleware_worker_handlers:execute(UserCtx, FileCtx, Operation)
     catch Type:Reason:Stacktrace ->
         handle_error(Type, Reason, Stacktrace, SessionId, Operation)
     end;
@@ -124,6 +139,15 @@ cleanup() ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+%% @private
+-spec assert_file_access_not_in_share_mode(file_id:file_guid()) -> ok | no_return().
+assert_file_access_not_in_share_mode(FileGuid) ->
+    case file_id:is_share_guid(FileGuid) of
+        true -> throw(?ERROR_POSIX(?EPERM));
+        false -> ok
+    end.
 
 
 %% @private
@@ -164,15 +188,20 @@ handle_error(_Type, Reason, Stacktrace, SessionId, Request) ->
 
 %% @private
 -spec infer_error(term()) -> errors:error().
+infer_error({badmatch, Error}) ->
+    infer_error(Error);
+
 infer_error({error, Reason} = Error) ->
     case ordsets:is_element(Reason, ?ERROR_CODES) of
         true -> ?ERROR_POSIX(Reason);
         false -> Error
     end;
 
-infer_error({badmatch, Error}) ->
-    infer_error(Error);
-
-infer_error(_Reason) ->
-    %% TODO VFS-8614 replace unexpected error with internal server error
-    ?ERROR_UNEXPECTED_ERROR(str_utils:rand_hex(5)).
+infer_error(Reason) ->
+    case ordsets:is_element(Reason, ?ERROR_CODES) of
+        true ->
+            ?ERROR_POSIX(Reason);
+        false ->
+            %% TODO VFS-8614 replace unexpected error with internal server error
+            ?ERROR_UNEXPECTED_ERROR(str_utils:rand_hex(5))
+    end.

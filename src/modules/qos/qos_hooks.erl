@@ -45,6 +45,7 @@ handle_qos_entry_change(SpaceId, #document{key = QosEntryId, value = QosEntry} =
     {ok, FileUuid} = qos_entry:get_file_uuid(QosEntry),
     ok = ?ok_if_exists(qos_entry_audit_log:create(QosEntryId)),
     ok = file_qos:add_qos_entry_id(SpaceId, FileUuid, QosEntryId),
+    ok = qos_transfer_stats:ensure_exists(QosEntryId),
     case qos_entry:is_possible(QosEntry) of
         true ->
             {ok, AllTraverseReqs} = qos_entry:get_traverse_reqs(QosEntry),
@@ -66,7 +67,8 @@ handle_entry_delete(#document{key = QosEntryId, scope = SpaceId} = QosEntryDoc) 
     ok = qos_entry:remove_from_impossible_list(SpaceId, QosEntryId),
     ok = qos_traverse:report_entry_deleted(QosEntryDoc),
     ok = qos_status:report_entry_deleted(SpaceId, QosEntryId),
-    ok = qos_entry_audit_log:destroy(QosEntryId).
+    ok = qos_entry_audit_log:destroy(QosEntryId),
+    ok = qos_transfer_stats:delete(QosEntryId).
 
 
 %%--------------------------------------------------------------------

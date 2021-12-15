@@ -41,8 +41,9 @@
 -type listing_mode() :: ?BASIC_INFO | ?EXTENDED_INFO.
 -type index() :: datasets_structure:index().
 -type dataset_type() :: internal | user_defined.
+-type file_eff_summary() :: #file_eff_dataset_summary{}.
 
--export_type([entries/0, listing_opts/0, index/0, listing_mode/0]).
+-export_type([info/0, entries/0, listing_opts/0, index/0, listing_mode/0, file_eff_summary/0]).
 
 % TODO VFS-7518 how should we handle race on creating dataset on the same file in 2 providers?
 % TODO VFS-7533 handle conflicts on remote modification of file-meta and dataset models
@@ -95,9 +96,7 @@ update(DatasetDoc, NewState, FlagsToSet, FlagsToUnset) ->
             {?DETACHED_DATASET, ?ATTACHED_DATASET, _, _} ->
                 reattach(DatasetId, FlagsToSet, FlagsToUnset);
             {?DETACHED_DATASET, undefined, _, _} ->
-                {error, ?EINVAL};
-            %% TODO VFS-7208 uncomment after introducing API errors to fslogic
-            % throw(?ERROR_BAD_DATA(state, <<"Detached dataset cannot be modified.">>));
+                throw(?ERROR_BAD_DATA(state, <<"Detached dataset cannot be modified.">>));
             {?ATTACHED_DATASET, ?DETACHED_DATASET, ?no_flags_mask, ?no_flags_mask} ->
                 {ok, SpaceId} = dataset:get_space_id(DatasetDoc),
                 {ok, Uuid} = dataset:get_root_file_uuid(DatasetDoc),
@@ -201,7 +200,7 @@ get_effective_membership_and_protection_flags(FileCtx) ->
     {ok, EffMembership, EffProtectionFlags, FileCtx2}.
 
 
--spec get_effective_summary(file_ctx:ctx()) -> {ok, #file_eff_dataset_summary{}}.
+-spec get_effective_summary(file_ctx:ctx()) -> {ok, file_eff_summary()}.
 get_effective_summary(FileCtx) ->
     {FileDoc, _FileCtx2} = file_ctx:get_file_doc(FileCtx),
     {ok, EffCacheEntry} = dataset_eff_cache:get(FileDoc),
@@ -215,26 +214,26 @@ get_effective_summary(FileCtx) ->
 
 
 -spec list_top_datasets(od_space:id(), dataset:state(), listing_opts(), listing_mode()) ->
-    {ok, entries(), boolean()}.
+    {ok, {entries(), boolean()}}.
 list_top_datasets(SpaceId, State, Opts, ListingMode) ->
     {ok, DatasetEntries, IsLast} = list_top_datasets_internal(SpaceId, State, Opts),
     case ListingMode of
         ?BASIC_INFO ->
-            {ok, DatasetEntries, IsLast};
+            {ok, {DatasetEntries, IsLast}};
         ?EXTENDED_INFO ->
-            {ok, extend_with_info(DatasetEntries), IsLast}
+            {ok, {extend_with_info(DatasetEntries), IsLast}}
     end.
 
 
 -spec list_children_datasets(dataset:id(), listing_opts(), listing_mode()) ->
-    {ok, entries(), boolean()}.
+    {ok, {entries(), boolean()}}.
 list_children_datasets(DatasetId, Opts, ListingMode) ->
     {ok, DatasetEntries, IsLast} = list_children_datasets_internal(DatasetId, Opts),
     case ListingMode of
         ?BASIC_INFO ->
-            {ok, DatasetEntries, IsLast};
+            {ok, {DatasetEntries, IsLast}};
         ?EXTENDED_INFO ->
-            {ok, extend_with_info(DatasetEntries), IsLast}
+            {ok, {extend_with_info(DatasetEntries), IsLast}}
     end.
 
 %%%===================================================================

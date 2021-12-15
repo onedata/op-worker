@@ -314,7 +314,7 @@ create_file_with_dataset(Config) ->
     FileName = ?FILE_NAME,
 
     {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1)),
-    {ok, DatasetId} = lfm_proxy:establish_dataset(Worker, SessId, ?FILE_REF(Guid)),
+    {ok, DatasetId} = opt_datasets:establish(Worker, SessId, ?FILE_REF(Guid)),
     {ok, FileId} = file_id:guid_to_objectid(Guid),
 
     Destination = #{?HARVESTER1 => [?INDEX11]},
@@ -342,7 +342,7 @@ create_file_with_dataset(Config) ->
         <<"datasetId">> => DatasetId
     }], ProviderId2),
 
-    ok = lfm_proxy:update_dataset(Worker, SessId, DatasetId, ?DETACHED_DATASET, ?no_flags_mask, ?no_flags_mask),
+    ok = opt_datasets:update(Worker, SessId, DatasetId, ?DETACHED_DATASET, ?no_flags_mask, ?no_flags_mask),
 
     ?assertNotReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
         <<"fileId">> => FileId,
@@ -365,7 +365,7 @@ create_file_with_dataset(Config) ->
     }], ProviderId),
 
     % reattach dataset
-    ok = lfm_proxy:update_dataset(Worker, SessId, DatasetId, ?ATTACHED_DATASET, ?no_flags_mask, ?no_flags_mask),
+    ok = opt_datasets:update(Worker, SessId, DatasetId, ?ATTACHED_DATASET, ?no_flags_mask, ?no_flags_mask),
 
     ?assertReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
         <<"fileId">> => FileId,
@@ -378,7 +378,7 @@ create_file_with_dataset(Config) ->
     }], ProviderId),
 
     % remove dataset
-    ok = lfm_proxy:remove_dataset(Worker, SessId, DatasetId),
+    ok = opt_datasets:remove(Worker, SessId, DatasetId),
 
     ?assertNotReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
         <<"fileId">> => FileId,

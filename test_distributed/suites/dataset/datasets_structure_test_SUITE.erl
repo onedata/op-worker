@@ -260,7 +260,7 @@ basic_sort(_Config) ->
         list_top_datasets(P1Node, SpaceId, #{offset => 10, limit => 1})),
 
     % request with limit lower than 1 should fail
-    ?assertMatch(?EINVAL,
+    ?assertMatch(?ERROR_BAD_VALUE_TOO_LOW(limit, 1),
         list_top_datasets(P1Node, SpaceId, #{offset => 1000, limit => 0})),
 
     ?assertMatch({ok, [], true},
@@ -306,7 +306,7 @@ list_with_start_index_and_negative_offset(_Config) ->
         list_top_datasets_and_skip_indices(P1Node, SpaceId, #{start_index => <<>>, offset => -10, limit => 100})),
 
     % request with negative offset, without start_index should fail
-    ?assertMatch(?EINVAL,
+    ?assertMatch(?ERROR_BAD_VALUE_TOO_LOW(offset, 0),
         list_top_datasets(P1Node, SpaceId, #{offset => -10, limit => 1})),
 
     {DatasetId1, _} = hd(SortedDatasetIdsAndNames),

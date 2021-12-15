@@ -183,8 +183,10 @@ archivisation_of_detached_dataset_should_be_impossible(_Config) ->
     #object{dataset = #dataset_object{id = DatasetId}} =
         onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE, #file_spec{dataset = #dataset_spec{state = ?DETACHED_DATASET}}),
 
-    ?assertMatch({error, ?EINVAL},
-        lfm_proxy:archive_dataset(P1Node, UserSessIdP1, DatasetId, ?TEST_ARCHIVE_CONFIG, ?TEST_DESCRIPTION1)).
+    ?assertMatch(
+        ?ERROR_BAD_DATA(<<"datasetId">>, <<"Detached dataset cannot be modified.">>),
+        opt_archives:archive_dataset(P1Node, UserSessIdP1, DatasetId, ?TEST_ARCHIVE_CONFIG, ?TEST_DESCRIPTION1)
+    ).
 
 archive_of_detached_dataset_should_be_accessible(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
@@ -193,18 +195,18 @@ archive_of_detached_dataset_should_be_accessible(_Config) ->
         onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE, #file_spec{dataset = #dataset_spec{}}),
 
     {ok, ArchiveId} = ?assertMatch({ok, _},
-        lfm_proxy:archive_dataset(P1Node, UserSessIdP1, DatasetId, ?TEST_ARCHIVE_CONFIG, ?TEST_DESCRIPTION1)),
+        opt_archives:archive_dataset(P1Node, UserSessIdP1, DatasetId, ?TEST_ARCHIVE_CONFIG, ?TEST_DESCRIPTION1)),
     {ok, #archive_info{index = Index}} = ?assertMatch({ok, #archive_info{state = ?ARCHIVE_PRESERVED}},
-        lfm_proxy:get_archive_info(P1Node, UserSessIdP1, ArchiveId), ?ATTEMPTS),
-    ?assertEqual({ok, [{Index, ArchiveId}], true},
-        lfm_proxy:list_archives(P1Node, UserSessIdP1, DatasetId, #{offset => 0, limit => 10})),
+        opt_archives:get_info(P1Node, UserSessIdP1, ArchiveId), ?ATTEMPTS),
+    ?assertEqual({ok, {[{Index, ArchiveId}], true}},
+        opt_archives:list(P1Node, UserSessIdP1, DatasetId, #{offset => 0, limit => 10})),
 
-    ok = lfm_proxy:detach_dataset(P1Node, UserSessIdP1, DatasetId),
+    ok = opt_datasets:detach_dataset(P1Node, UserSessIdP1, DatasetId),
 
     ?assertMatch({ok, #archive_info{}},
-        lfm_proxy:get_archive_info(P1Node, UserSessIdP1, ArchiveId)),
-    ?assertEqual({ok, [{Index, ArchiveId}], true},
-        lfm_proxy:list_archives(P1Node, UserSessIdP1, DatasetId, #{offset => 0, limit => 10})).
+        opt_archives:get_info(P1Node, UserSessIdP1, ArchiveId)),
+    ?assertEqual({ok, {[{Index, ArchiveId}], true}},
+        opt_archives:list(P1Node, UserSessIdP1, DatasetId, #{offset => 0, limit => 10})).
 
 archive_of_dataset_associated_with_deleted_file_should_be_accessible(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
@@ -213,18 +215,18 @@ archive_of_dataset_associated_with_deleted_file_should_be_accessible(_Config) ->
         onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE, #file_spec{dataset = #dataset_spec{}}),
 
     {ok, ArchiveId} = ?assertMatch({ok, _},
-        lfm_proxy:archive_dataset(P1Node, UserSessIdP1, DatasetId, ?TEST_ARCHIVE_CONFIG, ?TEST_DESCRIPTION1)),
+        opt_archives:archive_dataset(P1Node, UserSessIdP1, DatasetId, ?TEST_ARCHIVE_CONFIG, ?TEST_DESCRIPTION1)),
     {ok, #archive_info{index = Index}} = ?assertMatch({ok, #archive_info{state = ?ARCHIVE_PRESERVED}},
-        lfm_proxy:get_archive_info(P1Node, UserSessIdP1, ArchiveId), ?ATTEMPTS),
-    ?assertEqual({ok, [{Index, ArchiveId}], true},
-        lfm_proxy:list_archives(P1Node, UserSessIdP1, DatasetId, #{offset => 0, limit => 10})),
+        opt_archives:get_info(P1Node, UserSessIdP1, ArchiveId), ?ATTEMPTS),
+    ?assertEqual({ok, {[{Index, ArchiveId}], true}},
+        opt_archives:list(P1Node, UserSessIdP1, DatasetId, #{offset => 0, limit => 10})),
 
     ok = lfm_proxy:unlink(P1Node, UserSessIdP1, ?FILE_REF(Guid)),
 
     ?assertMatch({ok, #archive_info{}},
-        lfm_proxy:get_archive_info(P1Node, UserSessIdP1, ArchiveId)),
-    ?assertEqual({ok, [{Index, ArchiveId}], true},
-        lfm_proxy:list_archives(P1Node, UserSessIdP1, DatasetId, #{offset => 0, limit => 10})).
+        opt_archives:get_info(P1Node, UserSessIdP1, ArchiveId)),
+    ?assertEqual({ok, {[{Index, ArchiveId}], true}},
+        opt_archives:list(P1Node, UserSessIdP1, DatasetId, #{offset => 0, limit => 10})).
 
 archive_reattached_dataset(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
@@ -233,22 +235,22 @@ archive_reattached_dataset(_Config) ->
         onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE, #file_spec{dataset = #dataset_spec{}}),
 
     {ok, ArchiveId} = ?assertMatch({ok, _},
-        lfm_proxy:archive_dataset(P1Node, UserSessIdP1, DatasetId, ?TEST_ARCHIVE_CONFIG, ?TEST_DESCRIPTION1)),
+        opt_archives:archive_dataset(P1Node, UserSessIdP1, DatasetId, ?TEST_ARCHIVE_CONFIG, ?TEST_DESCRIPTION1)),
     {ok, #archive_info{index = Index}} = ?assertMatch({ok, #archive_info{state = ?ARCHIVE_PRESERVED}},
-        lfm_proxy:get_archive_info(P1Node, UserSessIdP1, ArchiveId), ?ATTEMPTS),
-    ?assertEqual({ok, [{Index, ArchiveId}], true},
-        lfm_proxy:list_archives(P1Node, UserSessIdP1, DatasetId, #{offset => 0, limit => 10})),
+        opt_archives:get_info(P1Node, UserSessIdP1, ArchiveId), ?ATTEMPTS),
+    ?assertEqual({ok, {[{Index, ArchiveId}], true}},
+        opt_archives:list(P1Node, UserSessIdP1, DatasetId, #{offset => 0, limit => 10})),
 
-    ok = lfm_proxy:detach_dataset(P1Node, UserSessIdP1, DatasetId),
-    ok = lfm_proxy:reattach_dataset(P1Node, UserSessIdP1, DatasetId),
+    ok = opt_datasets:detach_dataset(P1Node, UserSessIdP1, DatasetId),
+    ok = opt_datasets:reattach_dataset(P1Node, UserSessIdP1, DatasetId),
 
     {ok, ArchiveId2} = ?assertMatch({ok, _},
-        lfm_proxy:archive_dataset(P1Node, UserSessIdP1, DatasetId, ?TEST_ARCHIVE_CONFIG, ?TEST_DESCRIPTION1)),
+        opt_archives:archive_dataset(P1Node, UserSessIdP1, DatasetId, ?TEST_ARCHIVE_CONFIG, ?TEST_DESCRIPTION1)),
 
     ?assertMatch({ok, #archive_info{state = ?ARCHIVE_PRESERVED}},
-        lfm_proxy:get_archive_info(P1Node, UserSessIdP1, ArchiveId2), ?ATTEMPTS),
-    ?assertMatch({ok, [_, _], true},
-        lfm_proxy:list_archives(P1Node, UserSessIdP1, DatasetId, #{offset => 0, limit => 10})).
+        opt_archives:get_info(P1Node, UserSessIdP1, ArchiveId2), ?ATTEMPTS),
+    ?assertMatch({ok, {[_, _], true}},
+        opt_archives:list(P1Node, UserSessIdP1, DatasetId, #{offset => 0, limit => 10})).
 
 removal_of_not_empty_dataset_should_fail(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
@@ -257,21 +259,20 @@ removal_of_not_empty_dataset_should_fail(_Config) ->
         onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE, #file_spec{dataset = #dataset_spec{}}),
 
     {ok, ArchiveId} = ?assertMatch({ok, _},
-        lfm_proxy:archive_dataset(P1Node, UserSessIdP1, DatasetId, ?TEST_ARCHIVE_CONFIG, ?TEST_DESCRIPTION1)),
+        opt_archives:archive_dataset(P1Node, UserSessIdP1, DatasetId, ?TEST_ARCHIVE_CONFIG, ?TEST_DESCRIPTION1)),
 
     {ok, #archive_info{index = Index}} = ?assertMatch({ok, #archive_info{state = ?ARCHIVE_PRESERVED}},
-        lfm_proxy:get_archive_info(P1Node, UserSessIdP1, ArchiveId), ?ATTEMPTS),
-    ?assertEqual({ok, [{Index, ArchiveId}], true},
-        lfm_proxy:list_archives(P1Node, UserSessIdP1, DatasetId, #{offset => 0, limit => 10})),
+        opt_archives:get_info(P1Node, UserSessIdP1, ArchiveId), ?ATTEMPTS),
+    ?assertEqual({ok, {[{Index, ArchiveId}], true}},
+        opt_archives:list(P1Node, UserSessIdP1, DatasetId, #{offset => 0, limit => 10})),
 
-    ?assertEqual({error, ?ENOTEMPTY},
-        lfm_proxy:remove_dataset(P1Node, UserSessIdP1, DatasetId)),
+    ?assertEqual(?ERROR_POSIX(?ENOTEMPTY), opt_datasets:remove(P1Node, UserSessIdP1, DatasetId)),
 
-    ?assertEqual(ok, lfm_proxy:init_archive_purge(P1Node, UserSessIdP1, ArchiveId)),
+    ?assertEqual(ok, opt_archives:init_purge(P1Node, UserSessIdP1, ArchiveId)),
     % wait till archive is purged
-    ?assertMatch({ok, [], true},
-        lfm_proxy:list_archives(P1Node, UserSessIdP1, DatasetId, #{offset => 0, limit => 10}), ?ATTEMPTS),
-    ?assertEqual(ok, lfm_proxy:remove_dataset(P1Node, UserSessIdP1, DatasetId)).
+    ?assertMatch({ok, {[], true}},
+        opt_archives:list(P1Node, UserSessIdP1, DatasetId, #{offset => 0, limit => 10}), ?ATTEMPTS),
+    ?assertEqual(ok, opt_datasets:remove(P1Node, UserSessIdP1, DatasetId)).
 
 iterate_over_100_archives_using_offset_and_limit_1(_Config) ->
     iterate_over_archives_test_base(100, offset, 1).
@@ -328,7 +329,7 @@ archive_dataset_many_times(_Config) ->
 
     ExpArchiveIdsReversed = lists:map(fun(_) ->
         {ok, ArchiveId} = ?assertMatch({ok, _},
-            lfm_proxy:archive_dataset(P1Node, UserSessIdP1, DatasetId, ?TEST_ARCHIVE_CONFIG, ?TEST_DESCRIPTION1)),
+            opt_archives:archive_dataset(P1Node, UserSessIdP1, DatasetId, ?TEST_ARCHIVE_CONFIG, ?TEST_DESCRIPTION1)),
         % mock time lapse to ensure that archives will have different creation timestamps
         time_test_utils:simulate_seconds_passing(2),
         ArchiveId
@@ -336,21 +337,21 @@ archive_dataset_many_times(_Config) ->
 
     ExpArchiveIdsAndIndicesReversed = lists:map(fun(ArchiveId) ->
         {ok, #archive_info{index = Index}} = ?assertMatch({ok, #archive_info{state = ?ARCHIVE_PRESERVED}},
-            lfm_proxy:get_archive_info(P1Node, UserSessIdP1, ArchiveId), ?ATTEMPTS),
+            opt_archives:get_info(P1Node, UserSessIdP1, ArchiveId), ?ATTEMPTS),
         {Index, ArchiveId}
     end, ExpArchiveIdsReversed),
 
     ?assertMatch({ok, #dataset_info{archive_count = Count}},
-        lfm_proxy:get_dataset_info(P1Node, UserSessIdP1, DatasetId)),
+        opt_datasets:get_info(P1Node, UserSessIdP1, DatasetId)),
     ?assertMatch({ok, #dataset_info{archive_count = Count}},
-        lfm_proxy:get_dataset_info(P2Node, UserSessIdP2, DatasetId), ?ATTEMPTS),
+        opt_datasets:get_info(P2Node, UserSessIdP2, DatasetId), ?ATTEMPTS),
 
     ExpArchiveIdsAndIndices = lists:reverse(ExpArchiveIdsAndIndicesReversed),
 
-    ?assertEqual({ok, ExpArchiveIdsAndIndices, false},
-        lfm_proxy:list_archives(P1Node, UserSessIdP1, DatasetId, #{offset => 0, limit => Count})),
-    ?assertEqual({ok, ExpArchiveIdsAndIndices, false},
-        lfm_proxy:list_archives(P2Node, UserSessIdP2, DatasetId, #{offset => 0, limit => Count}), ?ATTEMPTS).
+    ?assertEqual({ok, {ExpArchiveIdsAndIndices, false}},
+        opt_archives:list(P1Node, UserSessIdP1, DatasetId, #{offset => 0, limit => Count})),
+    ?assertEqual({ok, {ExpArchiveIdsAndIndices, false}},
+        opt_archives:list(P2Node, UserSessIdP2, DatasetId, #{offset => 0, limit => Count}), ?ATTEMPTS).
 
 time_warp_test(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
@@ -366,10 +367,10 @@ time_warp_test(_Config) ->
     time_test_utils:simulate_seconds_passing(-1),
 
     {ok, ArchiveId2} = ?assertMatch({ok, _},
-        lfm_proxy:archive_dataset(P1Node, UserSessIdP1, DatasetId, ?TEST_ARCHIVE_CONFIG, ?TEST_DESCRIPTION1)),
+        opt_archives:archive_dataset(P1Node, UserSessIdP1, DatasetId, ?TEST_ARCHIVE_CONFIG, ?TEST_DESCRIPTION1)),
 
-    ?assertMatch({ok, [{_, ArchiveId}, {_, ArchiveId2}], true},
-        lfm_proxy:list_archives(P1Node, UserSessIdP1, DatasetId, #{offset => 0, limit => 10})).
+    ?assertMatch({ok, {[{_, ArchiveId}, {_, ArchiveId2}], true}},
+        opt_archives:list(P1Node, UserSessIdP1, DatasetId, #{offset => 0, limit => 10})).
 
 create_archive_privileges_test(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
@@ -389,30 +390,30 @@ create_archive_privileges_test(_Config) ->
     AllPrivileges = privileges:from_list(RequiredPrivileges ++ privileges:space_member()),
 
     ?assertMatch({ok, #archive_info{state = ?ARCHIVE_PRESERVED, config = ArchiveConfig}},
-        lfm_proxy:get_archive_info(P1Node, UserSessIdP1, ArchiveId), ?ATTEMPTS),
+        opt_archives:get_info(P1Node, UserSessIdP1, ArchiveId), ?ATTEMPTS),
 
     lists:foreach(fun(Privilege) ->
 
         ensure_privilege_revoked(P1Node, SpaceId, UserId2, Privilege, AllPrivileges),
         % user2 cannot create archive
-        ?assertEqual({error, ?EPERM},
-            lfm_proxy:archive_dataset(P1Node, User2SessIdP1, DatasetId, ?TEST_ARCHIVE_CONFIG, ?TEST_DESCRIPTION1)),
+        ?assertEqual(?ERROR_POSIX(?EPERM),
+            opt_archives:archive_dataset(P1Node, User2SessIdP1, DatasetId, ?TEST_ARCHIVE_CONFIG, ?TEST_DESCRIPTION1)),
         % user2 cannot modify an existing archive either
-        ?assertEqual({error, ?EPERM},
-            lfm_proxy:update_archive(P1Node, User2SessIdP1, ArchiveId, #{<<"description">> => ?TEST_DESCRIPTION2})),
+        ?assertEqual(?ERROR_POSIX(?EPERM),
+            opt_archives:update(P1Node, User2SessIdP1, ArchiveId, #{<<"description">> => ?TEST_DESCRIPTION2})),
 
         ensure_privilege_assigned(P1Node, SpaceId, UserId2, Privilege, AllPrivileges),
         % user2 can now create archive
 
         {ok, ArchiveId2} = ?assertMatch({ok, _},
-            lfm_proxy:archive_dataset(P1Node, User2SessIdP1, DatasetId, ?TEST_ARCHIVE_CONFIG, ?TEST_DESCRIPTION1)),
+            opt_archives:archive_dataset(P1Node, User2SessIdP1, DatasetId, ?TEST_ARCHIVE_CONFIG, ?TEST_DESCRIPTION1)),
 
         ?assertMatch({ok, #archive_info{state = ?ARCHIVE_PRESERVED}},
-            lfm_proxy:get_archive_info(P1Node, UserSessIdP1, ArchiveId2), ?ATTEMPTS),
+            opt_archives:get_info(P1Node, UserSessIdP1, ArchiveId2), ?ATTEMPTS),
 
         % as well as modify an existing one
         ?assertMatch(ok,
-            lfm_proxy:update_archive(P1Node, User2SessIdP1, ArchiveId, #{<<"description">> => ?TEST_DESCRIPTION2}))
+            opt_archives:update(P1Node, User2SessIdP1, ArchiveId, #{<<"description">> => ?TEST_DESCRIPTION2}))
     end, RequiredPrivileges).
 
 
@@ -431,7 +432,7 @@ view_archive_privileges_test(_Config) ->
     } = onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE, #file_spec{dataset = #dataset_spec{archives = 1}}),
 
     ?assertMatch({ok, #archive_info{state = ?ARCHIVE_PRESERVED, config = ArchiveConfig}},
-        lfm_proxy:get_archive_info(P1Node, UserSessIdP1, ArchiveId), ?ATTEMPTS),
+        opt_archives:get_info(P1Node, UserSessIdP1, ArchiveId), ?ATTEMPTS),
 
     AllPrivileges = privileges:from_list([?SPACE_VIEW_ARCHIVES | privileges:space_member()]),
 
@@ -439,21 +440,21 @@ view_archive_privileges_test(_Config) ->
     ensure_privilege_revoked(P1Node, SpaceId, UserId2, ?SPACE_VIEW_ARCHIVES, AllPrivileges),
 
     % user2 cannot fetch archive info
-    ?assertEqual({error, ?EPERM},
-        lfm_proxy:get_archive_info(P1Node, User2SessIdP1, ArchiveId), ?ATTEMPTS),
+    ?assertEqual(?ERROR_POSIX(?EPERM),
+        opt_archives:get_info(P1Node, User2SessIdP1, ArchiveId), ?ATTEMPTS),
     % neither can he list the archives
-    ?assertEqual({error, ?EPERM},
-        lfm_proxy:list_archives(P1Node, User2SessIdP1, DatasetId, #{offset => 0, limit => 10})),
+    ?assertEqual(?ERROR_POSIX(?EPERM),
+        opt_archives:list(P1Node, User2SessIdP1, DatasetId, #{offset => 0, limit => 10})),
 
     % assign user2 privilege to view archives
     ensure_privilege_assigned(P1Node, SpaceId, UserId2, ?SPACE_VIEW_ARCHIVES, AllPrivileges),
 
     % now user2 should be able to fetch archive info
     ?assertMatch({ok, _},
-        lfm_proxy:get_archive_info(P1Node, User2SessIdP1, ArchiveId)),
+        opt_archives:get_info(P1Node, User2SessIdP1, ArchiveId)),
     % as well as list the archives
-    ?assertMatch({ok, [{_, ArchiveId}], _},
-        lfm_proxy:list_archives(P1Node, User2SessIdP1, DatasetId, #{offset => 0, limit => 10})).
+    ?assertMatch({ok, {[{_, ArchiveId}], _}},
+        opt_archives:list(P1Node, User2SessIdP1, DatasetId, #{offset => 0, limit => 10})).
 
 remove_archive_privileges_test(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
@@ -472,9 +473,9 @@ remove_archive_privileges_test(_Config) ->
     } = onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE, #file_spec{dataset = #dataset_spec{archives = 2}}),
 
     ?assertMatch({ok, #archive_info{state = ?ARCHIVE_PRESERVED, config = ArchiveConfig1}},
-        lfm_proxy:get_archive_info(P1Node, UserSessIdP1, ArchiveId1), ?ATTEMPTS),
+        opt_archives:get_info(P1Node, UserSessIdP1, ArchiveId1), ?ATTEMPTS),
     ?assertMatch({ok, #archive_info{state = ?ARCHIVE_PRESERVED, config = ArchiveConfig2}},
-        lfm_proxy:get_archive_info(P1Node, UserSessIdP1, ArchiveId2), ?ATTEMPTS),
+        opt_archives:get_info(P1Node, UserSessIdP1, ArchiveId2), ?ATTEMPTS),
 
     RequiredPrivileges = privileges:from_list([?SPACE_MANAGE_DATASETS, ?SPACE_REMOVE_ARCHIVES]),
     AllPrivileges = privileges:from_list(RequiredPrivileges ++ privileges:space_member()),
@@ -483,11 +484,11 @@ remove_archive_privileges_test(_Config) ->
 
         ensure_privilege_revoked(P1Node, SpaceId, UserId2, Privilege, AllPrivileges),
         % user2 cannot remove the archive
-        ?assertEqual({error, ?EPERM}, lfm_proxy:init_archive_purge(P1Node, User2SessIdP1, ArchiveId)),
+        ?assertEqual(?ERROR_POSIX(?EPERM), opt_archives:init_purge(P1Node, User2SessIdP1, ArchiveId)),
 
         ensure_privilege_assigned(P1Node, SpaceId, UserId2, Privilege, AllPrivileges),
         % user2 can now remove archive
-        ?assertEqual(ok, lfm_proxy:init_archive_purge(P1Node, User2SessIdP1, ArchiveId))
+        ?assertEqual(ok, opt_archives:init_purge(P1Node, User2SessIdP1, ArchiveId))
 
     end, lists:zip(RequiredPrivileges, [ArchiveId1, ArchiveId2])).
 
@@ -507,7 +508,7 @@ simple_archive_crud_test_base(DatasetId, RootFileType, ExpSize) ->
     SpaceId = oct_background:get_space_id(?SPACE),
 
     % create archive
-    {ok, ArchiveId} = lfm_proxy:archive_dataset(P1Node, UserSessIdP1, DatasetId, ?TEST_ARCHIVE_CONFIG,
+    {ok, ArchiveId} = opt_archives:archive_dataset(P1Node, UserSessIdP1, DatasetId, ?TEST_ARCHIVE_CONFIG,
         ?TEST_ARCHIVE_PRESERVED_CALLBACK1, ?TEST_ARCHIVE_PURGED_CALLBACK1, ?TEST_DESCRIPTION1),
 
     ArchiveRootDirUuid = ?ARCHIVE_DIR_UUID(ArchiveId),
@@ -542,19 +543,19 @@ simple_archive_crud_test_base(DatasetId, RootFileType, ExpSize) ->
 
     % verify whether Archive is visible in the local provider
     ?assertMatch({ok, ExpArchiveInfo},
-        lfm_proxy:get_archive_info(P1Node, UserSessIdP1, ArchiveId), ?ATTEMPTS),
-    ?assertEqual({ok, [{Index, ArchiveId}], true},
-        lfm_proxy:list_archives(P1Node, UserSessIdP1, DatasetId, #{offset => 0, limit => 10}, ?BASIC_INFO), ?ATTEMPTS),
-    ?assertMatch({ok, [ExpArchiveInfo], true},
-        lfm_proxy:list_archives(P1Node, UserSessIdP1, DatasetId, #{offset => 0, limit => 10}, ?EXTENDED_INFO), ?ATTEMPTS),
+        opt_archives:get_info(P1Node, UserSessIdP1, ArchiveId), ?ATTEMPTS),
+    ?assertEqual({ok, {[{Index, ArchiveId}], true}},
+        opt_archives:list(P1Node, UserSessIdP1, DatasetId, #{offset => 0, limit => 10}, ?BASIC_INFO), ?ATTEMPTS),
+    ?assertMatch({ok, {[ExpArchiveInfo], true}},
+        opt_archives:list(P1Node, UserSessIdP1, DatasetId, #{offset => 0, limit => 10}, ?EXTENDED_INFO), ?ATTEMPTS),
 
     % verify whether Archive is visible in the remote provider
     ?assertMatch({ok, ExpArchiveInfo},
-        lfm_proxy:get_archive_info(P2Node, UserSessIdP2, ArchiveId), ?ATTEMPTS),
-    ?assertEqual({ok, [{Index, ArchiveId}], true},
-        lfm_proxy:list_archives(P2Node, UserSessIdP2, DatasetId, #{offset => 0, limit => 10}, ?BASIC_INFO), ?ATTEMPTS),
-    ?assertMatch({ok, [ExpArchiveInfo], true},
-        lfm_proxy:list_archives(P2Node, UserSessIdP2, DatasetId, #{offset => 0, limit => 10}, ?EXTENDED_INFO), ?ATTEMPTS),
+        opt_archives:get_info(P2Node, UserSessIdP2, ArchiveId), ?ATTEMPTS),
+    ?assertEqual({ok, {[{Index, ArchiveId}], true}},
+        opt_archives:list(P2Node, UserSessIdP2, DatasetId, #{offset => 0, limit => 10}, ?BASIC_INFO), ?ATTEMPTS),
+    ?assertMatch({ok, {[ExpArchiveInfo], true}},
+        opt_archives:list(P2Node, UserSessIdP2, DatasetId, #{offset => 0, limit => 10}, ?EXTENDED_INFO), ?ATTEMPTS),
 
     % update archive
     ExpArchiveInfo2 = ExpArchiveInfo#archive_info{
@@ -563,30 +564,30 @@ simple_archive_crud_test_base(DatasetId, RootFileType, ExpSize) ->
         description = ?TEST_DESCRIPTION2
     },
     ?assertEqual(ok,
-        lfm_proxy:update_archive(P2Node, UserSessIdP2, ArchiveId, #{
+        opt_archives:update(P2Node, UserSessIdP2, ArchiveId, #{
             <<"description">> => ?TEST_DESCRIPTION2,
             <<"preservedCallback">> => ?TEST_ARCHIVE_PRESERVED_CALLBACK2,
             <<"purgedCallback">> => ?TEST_ARCHIVE_PURGED_CALLBACK2
         })),
     ?assertMatch({ok, ExpArchiveInfo2},
-        lfm_proxy:get_archive_info(P2Node, UserSessIdP2, ArchiveId)),
+        opt_archives:get_info(P2Node, UserSessIdP2, ArchiveId)),
     ?assertMatch({ok, ExpArchiveInfo2},
-        lfm_proxy:get_archive_info(P1Node, UserSessIdP1, ArchiveId), ?ATTEMPTS),
+        opt_archives:get_info(P1Node, UserSessIdP1, ArchiveId), ?ATTEMPTS),
 
     % remove archive
-    ok = lfm_proxy:init_archive_purge(P1Node, UserSessIdP1, ArchiveId, ?TEST_ARCHIVE_PURGED_CALLBACK3),
+    ok = opt_archives:init_purge(P1Node, UserSessIdP1, ArchiveId, ?TEST_ARCHIVE_PURGED_CALLBACK3),
 
     % verify whether Archive has been removed in the local provider
-    ?assertEqual({error, ?ENOENT},
-        lfm_proxy:get_archive_info(P1Node, UserSessIdP1, ArchiveId), ?ATTEMPTS),
-    ?assertEqual({ok, [], true},
-        lfm_proxy:list_archives(P1Node, UserSessIdP1, DatasetId, #{offset => 0, limit => 10}), ?ATTEMPTS),
+    ?assertEqual(?ERROR_NOT_FOUND,
+        opt_archives:get_info(P1Node, UserSessIdP1, ArchiveId), ?ATTEMPTS),
+    ?assertEqual({ok, {[], true}},
+        opt_archives:list(P1Node, UserSessIdP1, DatasetId, #{offset => 0, limit => 10}), ?ATTEMPTS),
 
     % verify whether Archive has been removed in the remote provider
-    ?assertEqual({error, ?ENOENT},
-        lfm_proxy:get_archive_info(P2Node, UserSessIdP2, ArchiveId), ?ATTEMPTS),
-    ?assertEqual({ok, [], true},
-        lfm_proxy:list_archives(P2Node, UserSessIdP2, DatasetId, #{offset => 0, limit => 10}), ?ATTEMPTS).
+    ?assertEqual(?ERROR_NOT_FOUND,
+        opt_archives:get_info(P2Node, UserSessIdP2, ArchiveId), ?ATTEMPTS),
+    ?assertEqual({ok, {[], true}},
+        opt_archives:list(P2Node, UserSessIdP2, DatasetId, #{offset => 0, limit => 10}), ?ATTEMPTS).
 
 
 iterate_over_archives_test_base(ArchiveCount, ListingMethod, Limit) ->
@@ -603,7 +604,7 @@ iterate_over_archives_test_base(ArchiveCount, ListingMethod, Limit) ->
         ?assertMatch({ok, #archive_info{
             state = ?ARCHIVE_PRESERVED,
             config = Config
-        }}, lfm_proxy:get_archive_info(P1Node, UserSessIdP1, ArchiveId), ?ATTEMPTS)
+        }}, opt_archives:get_info(P1Node, UserSessIdP1, ArchiveId), ?ATTEMPTS)
     end, ArchiveObjects),
 
     % sort archives by their indices
@@ -669,7 +670,7 @@ global_clock_timestamp(Node) ->
 check_if_all_archives_listed([], _Node, _SessId, _DatasetId, _Opts) ->
     true;
 check_if_all_archives_listed(ExpArchiveIds, Node, SessId, DatasetId, Opts) ->
-    {ok, ListedArchives, IsLast} = lfm_proxy:list_archives(Node, SessId, DatasetId, Opts),
+    {ok, {ListedArchives, IsLast}} = opt_archives:list(Node, SessId, DatasetId, Opts),
     Limit = maps:get(limit, Opts),
     ListedArchiveIds = [AId || {_, AId} <- ListedArchives],
     ?assertEqual(lists:sublist(ExpArchiveIds, 1, Limit), ListedArchiveIds),
