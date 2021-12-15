@@ -18,10 +18,10 @@
 
 -include("middleware/middleware.hrl").
 -include("modules/automation/atm_execution.hrl").
+-include_lib("cluster_worker/include/modules/datastore/infinite_log.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/privileges.hrl").
--include_lib("cluster_worker/include/modules/datastore/infinite_log.hrl").
 
 %% middleware_router callbacks
 -export([resolve_handler/3]).
@@ -46,12 +46,9 @@
 %%--------------------------------------------------------------------
 -spec resolve_handler(middleware:operation(), gri:aspect(), middleware:scope()) ->
     module() | no_return().
-resolve_handler(get, Aspect, private)
-    when Aspect =:= instance
-    orelse Aspect =:= openfaas_function_activity_registry
-    orelse element(1, Aspect) =:= openfaas_function_pod_event_log
-->
-    ?MODULE;
+resolve_handler(get, instance, private) -> ?MODULE;
+resolve_handler(get, openfaas_function_activity_registry, private) -> ?MODULE;
+resolve_handler(get, {openfaas_function_pod_event_log, _}, private) -> ?MODULE;
 
 resolve_handler(_, _, _) -> throw(?ERROR_NOT_SUPPORTED).
 
