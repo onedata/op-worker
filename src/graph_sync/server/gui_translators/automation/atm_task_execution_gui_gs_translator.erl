@@ -24,7 +24,7 @@
 %%%===================================================================
 
 -spec translate_value(gri:gri(), Value :: term()) -> gs_protocol:data().
-translate_value(#gri{aspect = content}, BrowseResult) ->
+translate_value(#gri{aspect = {openfaas_function_pod_event_log, _}}, BrowseResult) ->
     BrowseResult.
 
 
