@@ -173,9 +173,10 @@ get(#op_req{data = Data, gri = #gri{aspect = {openfaas_function_pod_event_log, P
     Index = maps:get(<<"index">>, Data, undefined),
     BrowseOpts = maps_utils:put_if_defined(#{offset => Offset, limit => Limit}, start_index, Index),
 
-    {ok, value, atm_openfaas_function_activity_registry:browse_pod_event_log(
+    {ok, BrowseResult} = atm_openfaas_function_activity_registry:browse_pod_event_log(
         EventLogId, BrowseOpts#{direction => ?BACKWARD}
-    )}.
+    ),
+    {ok, value, BrowseResult}.
 
 
 %%--------------------------------------------------------------------
