@@ -28,7 +28,7 @@
 -include_lib("ctool/include/automation/automation.hrl").
 
 %% API
--export([create/4, initiate/4, teardown/2, delete/1, in_readonly_mode/1, run/3]).
+-export([create/4, initiate/4, teardown/2, delete/1, get_type/1, in_readonly_mode/1, run/3]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
@@ -132,6 +132,11 @@ teardown(AtmLaneExecutionRunTeardownCtx, AtmTaskExecutor) ->
 delete(AtmTaskExecutor) ->
     Model = utils:record_type(AtmTaskExecutor),
     Model:delete(AtmTaskExecutor).
+
+
+-spec get_type(record()) -> model().
+get_type(AtmTaskExecutor) ->
+    utils:record_type(AtmTaskExecutor).
 
 
 -spec in_readonly_mode(record()) -> boolean().

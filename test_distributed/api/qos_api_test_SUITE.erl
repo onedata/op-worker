@@ -60,7 +60,7 @@ create_qos_test(Config) ->
     SessIdP1 = ?USER_IN_BOTH_SPACES_SESS_ID(P1, Config),
     SessIdP2 = ?USER_IN_BOTH_SPACES_SESS_ID(P2, Config),
     FileType = api_test_utils:randomly_choose_file_type_for_test(),
-    
+
     {ok, FileToShareGuid} = api_test_utils:create_file(
         FileType, P1, SessIdP1, filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME()])),
     ?assertMatch({ok, _}, lfm_proxy:stat(P2, SessIdP2, ?FILE_REF(FileToShareGuid)), ?ATTEMPTS),
@@ -73,8 +73,8 @@ create_qos_test(Config) ->
         {ok, Guid} = api_test_utils:create_file(FileType, P1, SessIdP1, FilePath),
         ?assertMatch({ok, _}, lfm_proxy:stat(P2, SessIdP2, ?FILE_REF(Guid)), ?ATTEMPTS),
         api_test_memory:set(MemRef, guid, Guid)
-    end, 
-    
+    end,
+
     CreateDataSpec = #data_spec{
         required = [<<"expression">>, <<"fileId">>],
         optional = [<<"replicasNum">>],
@@ -93,7 +93,7 @@ create_qos_test(Config) ->
             {<<"replicasNum">>, 0, ?ERROR_BAD_VALUE_TOO_LOW(<<"replicasNum">>, 1)}
         ]
     },
-    
+
     ?assert(api_test_runner:run_tests(Config, [
         #suite_spec{
             target_nodes = [P1, P2],
@@ -114,10 +114,10 @@ create_qos_test(Config) ->
                     validate_result_fun = validate_result_fun_gs(MemRef, create)
                 }
             ],
-            data_spec = 
-                api_test_utils:add_cdmi_id_errors_for_operations_not_available_in_share_mode(
-                    FileToShareGuid, ?SPACE_2, ShareId, CreateDataSpec
-                )
+            data_spec =
+            api_test_utils:add_cdmi_id_errors_for_operations_not_available_in_share_mode(
+                FileToShareGuid, ?SPACE_2, ShareId, CreateDataSpec
+            )
         }
     ])),
     ok.
@@ -245,7 +245,7 @@ get_available_qos_parameters_test(Config) ->
     [P2, P1] = Workers = ?config(op_worker_nodes, Config),
     MemRef = api_test_memory:init(),
     api_test_memory:set(MemRef, providers, lists:usort(lists:map(fun(Worker) -> ?GET_DOMAIN_BIN(Worker) end, Workers))),
-    
+
     ?assert(api_test_runner:run_tests(Config, [
         #suite_spec{
             target_nodes = [P1, P2],
@@ -267,7 +267,7 @@ evaluate_qos_expression_test(Config) ->
     WorkerNodes = ?config(op_worker_nodes, Config),
     MemRef = api_test_memory:init(),
     api_test_memory:set(MemRef, space_id, ?SPACE_2),
-    
+
     ?assert(api_test_runner:run_tests(Config, [
         #suite_spec{
             target_nodes = WorkerNodes,
@@ -292,7 +292,7 @@ evaluate_qos_expression_test(Config) ->
                     <<"expression">> => [<<"some_number = 8">>]
                 },
                 bad_values = [
-                    {<<"expression">>, <<"invalid_qos_expression">>, 
+                    {<<"expression">>, <<"invalid_qos_expression">>,
                         ?ERROR_INVALID_QOS_EXPRESSION(<<"syntax error before: ">>)}
                 ]
             }
@@ -311,9 +311,9 @@ get_qos_entry_audit_log(Config) ->
     % wait for qos entries to be dbsynced to other provider
     ?assertMatch({ok, _}, lfm_proxy:get_qos_entry(P2, SessIdP2, QosEntryId), ?ATTEMPTS),
     ?assertEqual({ok, ?FULFILLED_QOS_STATUS}, lfm_proxy:check_qos_status(P1, SessIdP1, QosEntryId)),
-    
+
     MemRef = api_test_memory:init(),
-    
+
     ?assert(api_test_runner:run_tests(Config, [
         #suite_spec{
             target_nodes = [P1],
@@ -381,7 +381,7 @@ prepare_args_fun_rest(MemRef, create) ->
             path = <<"qos_requirements">>,
             body = json_utils:encode(maybe_inject_object_id(Data, Guid)),
             headers = #{?HDR_CONTENT_TYPE => <<"application/json">>}
-        } 
+        }
     end;
 
 prepare_args_fun_rest(MemRef, qos_summary) ->
@@ -393,7 +393,7 @@ prepare_args_fun_rest(MemRef, qos_summary) ->
         #rest_args{
             method = get,
             path = <<"data/", Id/binary, "/qos/summary">>
-        } 
+        }
     end;
 
 prepare_args_fun_rest(MemRef, evaluate_qos_expression) ->
@@ -410,7 +410,7 @@ prepare_args_fun_rest(MemRef, evaluate_qos_expression) ->
 prepare_args_fun_rest(MemRef, qos_audit_log) ->
     fun(#api_test_ctx{data = Data}) ->
         QosEntryId = api_test_memory:get(MemRef, qos_entry_id),
-        
+
         #rest_args{
             method = get,
             path = http_utils:append_url_parameters(
@@ -427,7 +427,7 @@ prepare_args_fun_rest(MemRef, Method) ->
         #rest_args{
             method = Method,
             path = <<"qos_requirements/", Id/binary>>
-        } 
+        }
     end.
 
 
@@ -439,7 +439,7 @@ prepare_args_fun_gs(MemRef, create) ->
             operation = create,
             gri = #gri{type = op_qos, aspect = instance, scope = private},
             data = maybe_inject_object_id(Data, Guid)
-        } 
+        }
     end;
 
 prepare_args_fun_gs(MemRef, qos_summary) ->
@@ -449,7 +449,7 @@ prepare_args_fun_gs(MemRef, qos_summary) ->
         #gs_args{
             operation = get,
             gri = #gri{type = op_file, id = Id, aspect = qos_summary, scope = private}
-        } 
+        }
     end;
 prepare_args_fun_gs(_MemRef, available_qos_parameters) ->
     fun(_) ->
@@ -458,7 +458,7 @@ prepare_args_fun_gs(_MemRef, available_qos_parameters) ->
             gri = #gri{type = op_space, id = ?SPACE_2, aspect = available_qos_parameters, scope = private}
         }
     end;
-prepare_args_fun_gs(_MemRef,  evaluate_qos_expression) ->
+prepare_args_fun_gs(_MemRef, evaluate_qos_expression) ->
     fun(#api_test_ctx{data = Data}) ->
         #gs_args{
             operation = create,
@@ -474,7 +474,7 @@ prepare_args_fun_gs(MemRef, Method) ->
         #gs_args{
             operation = Method,
             gri = #gri{type = op_qos, id = Id, aspect = instance, scope = private}
-        } 
+        }
     end.
 
 
@@ -516,7 +516,7 @@ validate_result_fun_rest(MemRef, qos_summary) ->
             <<"requirements">> := #{
                 QosEntryIdDirect := <<"impossible">>,
                 QosEntryIdInherited := <<"impossible">>
-            }, 
+            },
             <<"status">> := <<"impossible">>
         }, RespBody),
         ok
@@ -532,23 +532,30 @@ validate_result_fun_rest(MemRef, evaluate_qos_expression) ->
 
 validate_result_fun_rest(_MemRef, qos_audit_log) ->
     fun(_, {ok, RespCode, _RespHeaders, RespBody}) ->
-        
+
         ?assertEqual(?HTTP_200_OK, RespCode),
         ?assertMatch(#{
             <<"isLast">> := true,
-            <<"auditLog">> := [
-               #{
+            <<"logEntries">> := [
+                #{
+                    <<"index">> := _,
                     <<"timestamp">> := _,
-                    <<"status">> := <<"synchronization started">>,
-                    <<"severity">> := <<"info">>,
-                    <<"fileId">> := _
+                    <<"content">> := #{
+                        <<"status">> := <<"synchronization started">>,
+                        <<"severity">> := <<"info">>,
+                        <<"fileId">> := _
+                    }
                 },
                 #{
+                    <<"index">> := _,
                     <<"timestamp">> := _,
-                    <<"status">> := <<"synchronized">>,
-                    <<"severity">> := <<"info">>,
-                    <<"fileId">> := _
-            }]
+                    <<"content">> := #{
+                        <<"status">> := <<"synchronized">>,
+                        <<"severity">> := <<"info">>,
+                        <<"fileId">> := _
+                    }
+                }
+            ]
         }, RespBody),
         ok
     end.
@@ -566,7 +573,7 @@ validate_result_fun_gs(MemRef, get) ->
         QosEntryId = api_test_memory:get(MemRef, qos),
         ReplicasNum = api_test_memory:get(MemRef, replicas_num),
         Expression = api_test_memory:get(MemRef, expression),
-    
+
         ExpressionRpn = qos_expression:to_rpn(qos_expression:parse(Expression)),
         ?assertMatch(#gri{type = op_file, id = Guid}, gri:deserialize(maps:get(<<"file">>, Result))),
         ?assertEqual(ExpressionRpn, maps:get(<<"expressionRpn">>, Result)),

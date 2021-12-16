@@ -65,12 +65,14 @@ db_decode(RecordJson, NestedRecordDecoder) ->
     json_utils:json_term().
 encode_with(#atm_openfaas_function_pod_status_summary{
     current_status = CurrentStatus,
-    current_status_observation_timestamp = CurrentStatusObservationTimestamp,
+    current_containers_readiness = CurrentContainersReadiness,
+    last_status_change_timestamp = LastStatusChangeTimestamp,
     event_log = EventLogId
 }, _NestedRecordEncoder) ->
     #{
         <<"currentStatus">> => CurrentStatus,
-        <<"currentStatusObservationTimestamp">> => CurrentStatusObservationTimestamp,
+        <<"currentContainersReadiness">> => CurrentContainersReadiness,
+        <<"lastStatusChangeTimestamp">> => LastStatusChangeTimestamp,
         <<"eventLogId">> => EventLogId
     }.
 
@@ -80,6 +82,7 @@ encode_with(#atm_openfaas_function_pod_status_summary{
 decode_with(RegistryJson, _NestedRecordDecoder) ->
     #atm_openfaas_function_pod_status_summary{
         current_status = maps:get(<<"currentStatus">>, RegistryJson),
-        current_status_observation_timestamp = maps:get(<<"currentStatusObservationTimestamp">>, RegistryJson),
+        current_containers_readiness = maps:get(<<"currentContainersReadiness">>, RegistryJson),
+        last_status_change_timestamp = maps:get(<<"lastStatusChangeTimestamp">>, RegistryJson),
         event_log = maps:get(<<"eventLogId">>, RegistryJson)
     }.

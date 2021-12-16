@@ -158,7 +158,7 @@ is_authorized(Req) ->
         Secret ->
             try
                 <<"Basic ", SecretB64/binary>> = cowboy_req:header(?HDR_AUTHORIZATION, Req, undefined),
-                Secret == base64:decode(SecretB64)
+                str_utils:to_binary(Secret) == base64:decode(SecretB64)
             catch Class:Reason:Stacktrace ->
                 ?debug_stacktrace("Authorization for OpenFaaS activity feed failed due to ~w:~p", [
                     Class, Reason

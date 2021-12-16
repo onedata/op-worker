@@ -217,15 +217,7 @@ get(#op_req{gri = #gri{id = QosEntryId, aspect = audit_log}, data = Data}, _QosE
         offset => maps:get(<<"offset">>, Data, 0),
         start_from => StartFrom
     },
-    case qos_entry_audit_log:list(QosEntryId, Opts) of
-        {ok, {ProgressMarker, EntrySeries}} ->
-            {ok, #{
-                <<"isLast">> => ProgressMarker == done,
-                <<"auditLog">> => EntrySeries
-            }};
-        {error, _} = Error ->
-            throw(Error)
-    end.
+    qos_entry_audit_log:browse_content(QosEntryId, Opts).
 
 
 %%--------------------------------------------------------------------

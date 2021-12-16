@@ -25,11 +25,10 @@
     report_file_synchronization_skipped/3,
     report_file_synchronization_failed/3,
     destroy/1,
-    list/2
+    browse_content/2
 ]).
 
 -type id() :: qos_entry:id().
--type entry() :: json_utils:json_map().
 
 -export_type([id/0]).
 
@@ -92,16 +91,10 @@ destroy(Id) ->
     json_infinite_log_model:destroy(Id).
 
 
--spec list(id(), json_infinite_log_model:listing_opts()) ->
-    {ok, {infinite_log_browser:progress_marker(), [entry()]}} | {error, term()}.
-list(Id, Opts) ->
-    json_infinite_log_model:list_and_postprocess(
-        Id, Opts#{direction => ?FORWARD}, fun({_Index, {Timestamp, EntryContent}}) ->
-            EntryContent#{
-                <<"timestamp">> => Timestamp
-            }
-        end
-    ).
+-spec browse_content(id(), json_infinite_log_model:listing_opts()) ->
+    {ok, json_infinite_log_model:browse_result()} | {error, term()}.
+browse_content(Id, Opts) ->
+    json_infinite_log_model:browse_content(Id, Opts#{direction => ?FORWARD}).
 
 %%%===================================================================
 %%% Internal functions
