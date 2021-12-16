@@ -64,9 +64,9 @@ resolve_handler(_, _, _) -> throw(?ERROR_NOT_SUPPORTED).
 %% @end
 %%--------------------------------------------------------------------
 -spec data_spec(middleware:req()) -> undefined | middleware_sanitizer:data_spec().
-data_spec(#op_req{operation = get, gri = #gri{aspect = Aspect}})
-    when Aspect =:= instance
-    orelse Aspect =:= openfaas_function_activity_registry
+data_spec(#op_req{operation = get, gri = #gri{aspect = Aspect}}) when
+    Aspect =:= instance;
+    Aspect =:= openfaas_function_activity_registry
 ->
     undefined;
 data_spec(#op_req{operation = get, gri = #gri{aspect = {openfaas_function_pod_event_log, _}}}) -> #{
@@ -110,10 +110,10 @@ authorize(#op_req{auth = ?GUEST}, _) ->
 
 authorize(#op_req{operation = get, auth = Auth, gri = #gri{aspect = Aspect}}, #atm_task_execution{
     workflow_execution_id = AtmWorkflowExecutionId
-})
-    when Aspect =:= instance
-    orelse Aspect =:= openfaas_function_activity_registry
-    orelse element(1, Aspect) =:= openfaas_function_pod_event_log
+}) when
+    Aspect =:= instance;
+    Aspect =:= openfaas_function_activity_registry;
+    element(1, Aspect) =:= openfaas_function_pod_event_log
 ->
     atm_workflow_execution_middleware_plugin:has_access_to_workflow_execution_details(
         Auth, AtmWorkflowExecutionId
@@ -126,10 +126,10 @@ authorize(#op_req{operation = get, auth = Auth, gri = #gri{aspect = Aspect}}, #a
 %% @end
 %%--------------------------------------------------------------------
 -spec validate(middleware:req(), middleware:entity()) -> ok | no_return().
-validate(#op_req{operation = get, gri = #gri{aspect = Aspect}}, _)
-    when Aspect =:= instance
-    orelse Aspect =:= openfaas_function_activity_registry
-    orelse element(1, Aspect) =:= openfaas_function_pod_event_log
+validate(#op_req{operation = get, gri = #gri{aspect = Aspect}}, _) when
+    Aspect =:= instance;
+    Aspect =:= openfaas_function_activity_registry;
+    element(1, Aspect) =:= openfaas_function_pod_event_log
 ->
     % Doc was already fetched in 'fetch_entity' so space must be supported locally
     ok.
