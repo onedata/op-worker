@@ -168,10 +168,15 @@ get(#op_req{data = Data, gri = #gri{aspect = {openfaas_function_pod_event_log, P
         event_log = EventLogId
     } = atm_openfaas_function_pod_status_registry:get_summary(PodId, PodStatusRegistry),
 
-    Offset = maps:get(<<"offset">>, Data, 0),
-    Limit = maps:get(<<"limit">>, Data, ?DEFAULT_POD_EVENT_LOG_LIST_LIMIT),
-    Index = maps:get(<<"index">>, Data, undefined),
-    BrowseOpts = maps_utils:put_if_defined(#{offset => Offset, limit => Limit}, start_index, Index),
+    BrowseOpts = #{
+        start_from => case Data of
+            #{<<"index">> := Index} -> {index, Index};
+            #{<<"timestamp">> := Timestamp} -> {timestamp, Timestamp};
+            _ -> undefined
+        end,
+        offset => maps:get(<<"offset">>, Data, 0),
+        limit => maps:get(<<"limit">>, Data, ?DEFAULT_POD_EVENT_LOG_LIST_LIMIT)
+    },
 
     {ok, BrowseResult} = atm_openfaas_function_activity_registry:browse_pod_event_log(
         EventLogId, BrowseOpts#{direction => ?BACKWARD}
