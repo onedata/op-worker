@@ -19,6 +19,7 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 % QoS specification for tests
 -export([
@@ -1158,7 +1159,7 @@ qos_status_during_traverse_with_hardlinks_test_base() ->
     await_files_sync_between_nodes(AllNodes, [FileGuid1, FileGuid2, LinkGuid]),
     qos_tests_utils:mock_transfers(AllNodes),
     
-    {ok, QosEntryId} = lfm_proxy:add_qos_entry(P1Node, ?SESS_ID(Provider1), ?FILE_REF(Dir1Guid), <<"providerId=", Provider2/binary>>, 1),
+    {ok, QosEntryId} = opt_qos:add_qos_entry(P1Node, ?SESS_ID(Provider1), ?FILE_REF(Dir1Guid), <<"providerId=", Provider2/binary>>, 1),
     assert_effective_entry(P1Node, ?SESS_ID(Provider1), QosEntryId, [FileGuid1, FileGuid2, LinkGuid], []),
     
     ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_nodes([FileGuid1, FileGuid2, LinkGuid], [QosEntryId], ?PENDING_QOS_STATUS), ?ATTEMPTS),
@@ -1214,7 +1215,7 @@ qos_status_during_traverse_with_file_deletion_test_base(NumberOfFilesInDir, File
     % finish transfers to unlock waiting slave job processes
     ok = qos_tests_utils:finish_transfers(ToDelete),
     % These files where deleted so QoS is not fulfilled
-    ok = ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_nodes(NoLongerReferenced, QosList, {error, enoent}), ?ATTEMPTS).
+    ok = ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_nodes(NoLongerReferenced, QosList, ?ERROR_NOT_FOUND), ?ATTEMPTS).
 
 
 -spec qos_status_during_traverse_with_dir_deletion_test_base(pos_integer(), file_type()) -> ok.
@@ -1490,9 +1491,9 @@ qos_status_after_failed_transfer_deleted_entry(TargetProvider) ->
     
     % delete one QoS entry on random provider
     DeletingProvider = lists_utils:random_element(Providers),
-    ok = lfm_proxy:remove_qos_entry(oct_background:get_random_provider_node(DeletingProvider), ?SESS_ID(DeletingProvider), QosEntryId),
+    ok = opt_qos:remove_qos_entry(oct_background:get_random_provider_node(DeletingProvider), ?SESS_ID(DeletingProvider), QosEntryId),
     lists:foreach(fun(N) ->
-        ?assertEqual({error, not_found}, lfm_proxy:get_qos_entry(N, ?ROOT_SESS_ID, QosEntryId), ?ATTEMPTS)
+        ?assertEqual({error, not_found}, opt_qos:get_qos_entry(N, ?ROOT_SESS_ID, QosEntryId), ?ATTEMPTS)
     end, Nodes),
     
     % check that after a successful transfer QoS entry is eventually fulfilled
@@ -1536,7 +1537,7 @@ qos_with_hardlink_test_base(Mode) ->
     end,
     
     QosList = lists:map(fun(GuidToAddQos) ->
-        {ok, QosEntryId} = lfm_proxy:add_qos_entry(P1Node, ?SESS_ID(Provider1), ?FILE_REF(GuidToAddQos), <<"providerId=", Provider2/binary>>, 1),
+        {ok, QosEntryId} = opt_qos:add_qos_entry(P1Node, ?SESS_ID(Provider1), ?FILE_REF(GuidToAddQos), <<"providerId=", Provider2/binary>>, 1),
         assert_effective_entry(P1Node, ?SESS_ID(Provider1), QosEntryId, [FileGuid, LinkGuid], []),
         QosEntryId
     end, QosTargets),
@@ -1580,7 +1581,7 @@ qos_with_hardlink_deletion_test_base(ToDelete) ->
                 2 -> {LinkGuid, FileGuid}
             end
     end,
-    {ok, QosEntryId} = lfm_proxy:add_qos_entry(P1Node, ?SESS_ID(Provider1), ?FILE_REF(ToAddQosGuid), <<"providerId=", Provider2/binary>>, 1),
+    {ok, QosEntryId} = opt_qos:add_qos_entry(P1Node, ?SESS_ID(Provider1), ?FILE_REF(ToAddQosGuid), <<"providerId=", Provider2/binary>>, 1),
     assert_effective_entry(P1Node, ?SESS_ID(Provider1), QosEntryId, Guids, []),
     ok = lfm_proxy:unlink(P1Node, ?SESS_ID(Provider1), ?FILE_REF(ToDeleteGuid)),
     assert_effective_entry(P1Node, ?SESS_ID(Provider1), QosEntryId, Guids -- [ToDeleteGuid], []).
@@ -1597,7 +1598,7 @@ qos_on_symlink_test_base() ->
     {ok, #file_attr{guid = LinkGuid}} = lfm_proxy:make_symlink(P1Node, ?SESS_ID(Provider1), ?FILE_REF(SpaceGuid), generator:gen_name(), FilePath),
     await_files_sync_between_nodes(oct_background:get_all_providers_nodes(), [FileGuid, LinkGuid]),
     
-    {ok, QosEntryId} = lfm_proxy:add_qos_entry(P1Node, ?SESS_ID(Provider1), ?FILE_REF(LinkGuid), <<"providerId=", Provider2/binary>>, 1),
+    {ok, QosEntryId} = opt_qos:add_qos_entry(P1Node, ?SESS_ID(Provider1), ?FILE_REF(LinkGuid), <<"providerId=", Provider2/binary>>, 1),
     assert_effective_entry(P1Node, ?SESS_ID(Provider1), QosEntryId, [LinkGuid], [FileGuid]),
     
     ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_nodes([FileGuid, LinkGuid], QosEntryId, ?FULFILLED_QOS_STATUS), ?ATTEMPTS).
@@ -1616,9 +1617,9 @@ effective_qos_with_symlink_test_base() ->
     {ok, #file_attr{guid = LinkGuid}} = lfm_proxy:make_symlink(P1Node, ?SESS_ID(Provider1), ?FILE_REF(Dir2Guid), generator:gen_name(), FilePath),
     await_files_sync_between_nodes(oct_background:get_all_providers_nodes(), [FileGuid, LinkGuid]),
     
-    {ok, QosEntryId1} = lfm_proxy:add_qos_entry(P1Node, ?SESS_ID(Provider1), ?FILE_REF(Dir1Guid), <<"providerId=", Provider2/binary>>, 1),
+    {ok, QosEntryId1} = opt_qos:add_qos_entry(P1Node, ?SESS_ID(Provider1), ?FILE_REF(Dir1Guid), <<"providerId=", Provider2/binary>>, 1),
     assert_effective_entry(P1Node, ?SESS_ID(Provider1), QosEntryId1, [FileGuid], [LinkGuid]),
-    {ok, QosEntryId2} = lfm_proxy:add_qos_entry(P1Node, ?SESS_ID(Provider1), ?FILE_REF(Dir2Guid), <<"providerId=", Provider2/binary>>, 1),
+    {ok, QosEntryId2} = opt_qos:add_qos_entry(P1Node, ?SESS_ID(Provider1), ?FILE_REF(Dir2Guid), <<"providerId=", Provider2/binary>>, 1),
     assert_effective_entry(P1Node, ?SESS_ID(Provider1), QosEntryId2, [LinkGuid], [FileGuid]),
     
     QosList = [QosEntryId1, QosEntryId2],
@@ -1642,7 +1643,7 @@ create_hardlink_in_dir_with_qos() ->
     SpaceGuid = opw_test_rpc:call(Provider1, fslogic_uuid, spaceid_to_space_dir_guid, [SpaceId]),
     {ok, Dir1Guid} = lfm_proxy:mkdir(P1Node, ?SESS_ID(Provider1), SpaceGuid, generator:gen_name(), ?DEFAULT_DIR_PERMS),
     {ok, FileGuid} = lfm_proxy:create(P1Node, ?SESS_ID(Provider1), SpaceGuid, generator:gen_name(), ?DEFAULT_FILE_PERMS),
-    {ok, QosEntryId} = lfm_proxy:add_qos_entry(P1Node, ?SESS_ID(Provider1), ?FILE_REF(Dir1Guid), <<"providerId=", Provider2/binary>>, 1),
+    {ok, QosEntryId} = opt_qos:add_qos_entry(P1Node, ?SESS_ID(Provider1), ?FILE_REF(Dir1Guid), <<"providerId=", Provider2/binary>>, 1),
     
     ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_nodes([FileGuid, Dir1Guid], [QosEntryId], ?FULFILLED_QOS_STATUS), ?ATTEMPTS),
     
@@ -1801,8 +1802,8 @@ create_files_and_write(Node, SessId, ParentGuid, TypeSpec, NumOfFiles) ->
 %% @private
 assert_effective_entry(Node, SessId, QosEntryId, FilesToAssertTrue, FilesToAssertFalse) ->
     lists:foreach(fun(Guid) ->
-        ?assertMatch({ok, {#{QosEntryId := _}, _}}, lfm_proxy:get_effective_file_qos(Node, SessId, ?FILE_REF(Guid)))
+        ?assertMatch({ok, {#{QosEntryId := _}, _}}, opt_qos:get_effective_file_qos(Node, SessId, ?FILE_REF(Guid)))
     end, FilesToAssertTrue),
     lists:foreach(fun(Guid) ->
-        ?assertNotMatch({ok, {#{QosEntryId := _}, _}}, lfm_proxy:get_effective_file_qos(Node, SessId, ?FILE_REF(Guid)))
+        ?assertNotMatch({ok, {#{QosEntryId := _}, _}}, opt_qos:get_effective_file_qos(Node, SessId, ?FILE_REF(Guid)))
     end, FilesToAssertFalse).

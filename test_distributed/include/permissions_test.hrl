@@ -174,6 +174,8 @@
         {error, term()}
     ),
 
+    returns_api_errors = false :: boolean(),
+
     % Tells whether successfully executed operation should change ownership on underlying storage
     final_ownership_check = fun(_) -> skip end :: fun((TestCaseRootDirPath :: file_meta:path()) ->
         skip |

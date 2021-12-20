@@ -6009,7 +6009,7 @@ should_not_sync_file_during_replication(Config) ->
         R
     end),
 
-    {ok, TransferId} = lfm_proxy:schedule_file_replication(W1, SessId, ?FILE_REF(FileGuid), provider_id(W1)),
+    {ok, TransferId} = opt_transfers:schedule_file_replication(W1, SessId, ?FILE_REF(FileGuid), provider_id(W1)),
     ?assertMatch({ok, #document{value = #transfer{replication_status = completed}}},
         rpc:call(W1, transfer, get, [TransferId]), 600),
 

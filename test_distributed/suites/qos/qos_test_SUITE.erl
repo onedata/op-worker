@@ -264,7 +264,7 @@ qos_audit_log_base_test(ExpectedStatus, Type) ->
     Timestamp = opw_test_rpc:call(Node, global_clock, timestamp_millis, []),
     FilePath = filename:join([?SPACE_PATH1, generator:gen_name()]),
     {RootGuid, FileIds} = prepare_audit_log_test_env(Type, Node, ?SESS_ID(ProviderId), FilePath),
-    {ok, QosEntryId} = lfm_proxy:add_qos_entry(Node, ?SESS_ID(ProviderId), ?FILE_REF(RootGuid), <<"providerId=", ProviderId/binary>>, 1),
+    {ok, QosEntryId} = opt_qos:add_qos_entry(Node, ?SESS_ID(ProviderId), ?FILE_REF(RootGuid), <<"providerId=", ProviderId/binary>>, 1),
     BaseExpected = case ExpectedStatus of
         <<"synchronized">> ->
             #{<<"severity">> => <<"info">>};

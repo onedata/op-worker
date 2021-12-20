@@ -107,4 +107,48 @@ execute(UserCtx, SpaceDirCtx, #remove_dataset{id = DatasetId}) ->
     dataset_req:remove(SpaceDirCtx, DatasetId, UserCtx);
 
 execute(UserCtx, FileCtx, #get_file_eff_dataset_summary{}) ->
-    dataset_req:get_file_eff_summary(FileCtx, UserCtx).
+    dataset_req:get_file_eff_summary(FileCtx, UserCtx);
+
+execute(UserCtx, FileCtx, #add_qos_entry{
+    expression = Expression,
+    replicas_num = ReplicasNum,
+    entry_type = EntryType
+}) ->
+    qos_req:add_qos_entry(UserCtx, FileCtx, Expression, ReplicasNum, EntryType);
+
+execute(UserCtx, FileCtx, #get_effective_file_qos{}) ->
+    qos_req:get_effective_file_qos(UserCtx, FileCtx);
+
+execute(UserCtx, FileCtx, #get_qos_entry{id = QosEntryId}) ->
+    qos_req:get_qos_entry(UserCtx, FileCtx, QosEntryId);
+
+execute(UserCtx, FileCtx, #remove_qos_entry{id = QosEntryId}) ->
+    qos_req:remove_qos_entry(UserCtx, FileCtx, QosEntryId);
+
+execute(UserCtx, FileCtx, #check_qos_status{qos_id = QosEntryId}) ->
+    qos_req:check_status(UserCtx, FileCtx, QosEntryId);
+
+execute(UserCtx, FileCtx, #schedule_file_transfer{
+    replicating_provider_id = ReplicatingProviderId,
+    evicting_provider_id = EvictingProviderId,
+    callback = Callback
+}) ->
+    transfer_req:schedule_file_transfer(
+        UserCtx, FileCtx,
+        ReplicatingProviderId, EvictingProviderId,
+        Callback
+    );
+
+execute(UserCtx, FileCtx, #schedule_view_transfer{
+    replicating_provider_id = ReplicatingProviderId,
+    evicting_provider_id = EvictingProviderId,
+    view_name = ViewName,
+    query_view_params = QueryViewParams,
+    callback = Callback
+}) ->
+    transfer_req:schedule_view_transfer(
+        UserCtx, FileCtx,
+        ReplicatingProviderId, EvictingProviderId,
+        ViewName, QueryViewParams,
+        Callback
+    ).

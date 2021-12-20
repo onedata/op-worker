@@ -592,7 +592,7 @@ replication_job_should_fail(Config) ->
         <<"providerId">> := ProviderId2,
         <<"totalBlocksSize">> := TestDataSize
     }]}, lfm_proxy:get_file_distribution(W1, SessId, ?FILE_REF(Guid)), ?ATTEMPTS),
-    ?assertEqual({error, ?EROFS}, lfm_proxy:schedule_file_replication(W1, SessId, ?FILE_REF(Guid), ProviderId1)).
+    ?assertEqual(?ERROR_POSIX(?EROFS), opt_transfers:schedule_file_replication(W1, SessId, ?FILE_REF(Guid), ProviderId1)).
 
 
 eviction_job_should_succeed(Config) ->
@@ -610,7 +610,7 @@ eviction_job_should_succeed(Config) ->
     lfm_proxy:close(W2, H),
 
     ?assertDistribution(W1, SessId, ?DISTS([ProviderId1, ProviderId2], [TestDataSize, TestDataSize]), Guid, ?ATTEMPTS),
-    ?assertMatch({ok, _}, lfm_proxy:schedule_file_replica_eviction(W1, SessId, ?FILE_REF(Guid), ProviderId1, undefined)),
+    ?assertMatch({ok, _}, opt_transfers:schedule_file_replica_eviction(W1, SessId, ?FILE_REF(Guid), ProviderId1, undefined)),
 
     % whole file on W1 should be invalidated
     ?assertDistribution(W1, SessId, ?DISTS([ProviderId1, ProviderId2], [0, TestDataSize]), Guid, ?ATTEMPTS),
@@ -637,7 +637,7 @@ migration_job_should_fail(Config) ->
         <<"providerId">> := ProviderId2,
         <<"totalBlocksSize">> := TestDataSize
     }]}, lfm_proxy:get_file_distribution(W1, SessId, ?FILE_REF(Guid)), ?ATTEMPTS),
-    ?assertEqual({error, ?EROFS}, lfm_proxy:schedule_file_replica_eviction(W1, SessId, ?FILE_REF(Guid), ProviderId2, ProviderId1)).
+    ?assertEqual(?ERROR_POSIX(?EROFS), opt_transfers:schedule_file_replica_eviction(W1, SessId, ?FILE_REF(Guid), ProviderId2, ProviderId1)).
 
 %%%===================================================================
 %%% SetUp and TearDown functions

@@ -48,7 +48,18 @@
     #get_dataset_info{} |
     #update_dataset{} |
     #remove_dataset {} |
-    #get_file_eff_dataset_summary{}.
+    #get_file_eff_dataset_summary{} |
+
+    % QoS related
+    #add_qos_entry{} |
+    #get_qos_entry{} |
+    #remove_qos_entry{} |
+    #get_effective_file_qos{} |
+    #check_qos_status{} |
+
+    % transfers related
+    #schedule_file_transfer{} |
+    #schedule_view_transfer{}.
 
 -export_type([operation/0]).
 
@@ -111,10 +122,11 @@ handle(healthcheck) ->
 
 handle(?REQ(SessionId, FileGuid, Operation)) ->
     try
+        UserCtx = user_ctx:new(SessionId),
+        assert_user_not_in_open_handle_mode(UserCtx),
+
         middleware_utils:assert_file_managed_locally(FileGuid),
         assert_file_access_not_in_share_mode(FileGuid),
-
-        UserCtx = user_ctx:new(SessionId),
         FileCtx = file_ctx:new_by_guid(FileGuid),
 
         middleware_worker_handlers:execute(UserCtx, FileCtx, Operation)
@@ -139,6 +151,15 @@ cleanup() ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+%% @private
+-spec assert_user_not_in_open_handle_mode(user_ctx:ctx()) -> ok | no_return().
+assert_user_not_in_open_handle_mode(UserCtx) ->
+    case user_ctx:is_in_open_handle_mode(UserCtx) of
+        true -> throw(?ERROR_POSIX(?EPERM));
+        false -> ok
+    end.
 
 
 %% @private

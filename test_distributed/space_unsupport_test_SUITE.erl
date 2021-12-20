@@ -78,18 +78,18 @@ replicate_stage_test(Config) ->
     
     Promise = rpc:async_call(Worker1, space_unsupport, do_slave_job, [StageJob, ?TASK_ID]),
     
-    {ok, {EntriesMap, _}} = ?assertMatch({ok, {Map, _}} when map_size(Map) =/= 0, 
-        lfm_proxy:get_effective_file_qos(Worker1, SessId(Worker1), ?FILE_REF(SpaceGuid)),
+    {ok, {EntriesMap, _}} = ?assertMatch({ok, {Map, _}} when map_size(Map) =/= 0,
+        opt_qos:get_effective_file_qos(Worker1, SessId(Worker1), ?FILE_REF(SpaceGuid)),
         ?ATTEMPTS),
     [QosEntryId] = maps:keys(EntriesMap),
     
     % check that space unsupport QoS entry cannot be deleted
-    ?assertEqual({error, ?EACCES}, lfm_proxy:remove_qos_entry(Worker1, SessId(Worker1), QosEntryId)),
-    ?assertMatch({ok, _}, lfm_proxy:get_qos_entry(Worker1, SessId(Worker1), QosEntryId)),
+    ?assertEqual(?ERROR_FORBIDDEN, opt_qos:remove_qos_entry(Worker1, SessId(Worker1), QosEntryId)),
+    ?assertMatch({ok, _}, opt_qos:get_qos_entry(Worker1, SessId(Worker1), QosEntryId)),
     
     ok = rpc:yield(Promise),
     
-    ?assertMatch(?ERROR_NOT_FOUND, lfm_proxy:get_qos_entry(Worker1, SessId(Worker1), QosEntryId)),
+    ?assertMatch(?ERROR_NOT_FOUND, opt_qos:get_qos_entry(Worker1, SessId(Worker1), QosEntryId)),
     
     Size = size(?TEST_DATA),
     check_distribution(Workers, SessId, [{Worker1, Size}, {Worker2, Size}], G1),
@@ -124,7 +124,7 @@ replicate_stage_persistence_test(Config) ->
     test_utils:mock_assert_num_calls(Worker1, qos_entry, create, 7, 0, 1),
     test_utils:mock_unload(Worker1, [qos_entry]),
     
-    ?assertMatch(?ERROR_NOT_FOUND, lfm_proxy:get_qos_entry(Worker1, SessId(Worker1), QosEntryId)).
+    ?assertMatch(?ERROR_NOT_FOUND, opt_qos:get_qos_entry(Worker1, SessId(Worker1), QosEntryId)).
 
 
 cleanup_traverse_stage_test(Config) ->
@@ -528,18 +528,18 @@ create_files_and_dirs(Worker, SessId) ->
     {{DirGuid, ?filename(Name, 0)}, {G1, filename:join([?filename(Name, 0), ?filename(Name, 1)])}, {G2, ?filename(Name, 2)}}.
 
 create_qos_entry(Worker, SessId, FileGuid, Expression) ->
-    lfm_proxy:add_qos_entry(Worker, SessId(Worker), ?FILE_REF(FileGuid), Expression, 1).
+    opt_qos:add_qos_entry(Worker, SessId(Worker), ?FILE_REF(FileGuid), Expression, 1).
 
 create_custom_metadata(Worker, SessId, FileGuid) ->
     lfm_proxy:set_metadata(Worker, SessId(Worker), ?FILE_REF(FileGuid), json,
         #{<<"key">> => <<"value">>}, []).
 
 create_replication(Worker, SessId, FileGuid, TargetWorker) ->
-    lfm_proxy:schedule_file_replication(Worker, SessId(Worker), ?FILE_REF(FileGuid),
+    opt_transfers:schedule_file_replication(Worker, SessId(Worker), ?FILE_REF(FileGuid),
         ?GET_DOMAIN_BIN(TargetWorker)).
 
 create_eviction(Worker, SessId, FileGuid, TargetWorker) ->
-    lfm_proxy:schedule_file_replica_eviction(Worker, SessId(Worker), ?FILE_REF(FileGuid),
+    opt_transfers:schedule_file_replica_eviction(Worker, SessId(Worker), ?FILE_REF(FileGuid),
         ?GET_DOMAIN_BIN(TargetWorker), undefined).
 
 create_view(Worker, SpaceId, TargetWorker) ->

@@ -126,7 +126,7 @@ restart_test_base(Config, RestartFun, RestartType) ->
                 rpc:call(WorkerP2, sync_req, request_block_synchronization,
                     [UserCtxP2, FileCtx, #file_block{offset = Offset, size = 1}, false, undefined, Priority]))
         end, lists:seq(0, 9)),
-        lfm_proxy:schedule_file_replication(WorkerP2, SessIdP2, ?FILE_REF(File), P2)
+        opt_transfers:schedule_file_replication(WorkerP2, SessIdP2, ?FILE_REF(File), P2)
     end, Files2),
 
     % Verify transfers scheduling

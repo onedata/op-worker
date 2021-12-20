@@ -320,7 +320,7 @@ reconcile_with_links_race_test_base(Depth, RecordsToBlock) ->
     ?assertMatch({ok, _}, opw_test_rpc:call(Provider2, file_meta_forest, get, [file_id:guid_to_uuid(SpaceGuid), all, ?filename(Name, 0)]), ?ATTEMPTS),
     
     mock_dbsync_changes(oct_background:get_provider_nodes(Provider2), ?FUNCTION_NAME),
-    {ok, QosEntryId} = lfm_proxy:add_qos_entry(P1Node, ?SESS_ID(Provider1), ?FILE_REF(DirGuid), <<"providerId=", Provider2/binary>>, 1),
+    {ok, QosEntryId} = opt_qos:add_qos_entry(P1Node, ?SESS_ID(Provider1), ?FILE_REF(DirGuid), <<"providerId=", Provider2/binary>>, 1),
     
     
     ParentGuid = lists:foldl(fun(_, TmpParentGuid) ->
@@ -330,7 +330,7 @@ reconcile_with_links_race_test_base(Depth, RecordsToBlock) ->
     Guid = create_file_with_content(P1Node, ?SESS_ID(Provider1), ParentGuid, ?filename(Name, 0)),
     
     ?assertMatch({ok, {Map, _}} when map_size(Map) =/= 0,
-        lfm_proxy:get_effective_file_qos(P1Node, ?SESS_ID(Provider1), ?FILE_REF(DirGuid)),
+        opt_qos:get_effective_file_qos(P1Node, ?SESS_ID(Provider1), ?FILE_REF(DirGuid)),
         ?ATTEMPTS),
     
     Size = size(?TEST_DATA),
@@ -374,7 +374,7 @@ reconcile_with_links_race_test_base(Depth, RecordsToBlock) ->
     
     save_matching_docs(P2Node, ?FUNCTION_NAME, [{qos_entry, QosEntryId}]),
     lists:foreach(fun(Provider) ->
-        ?assertEqual({ok, ?FULFILLED_QOS_STATUS}, lfm_proxy:check_qos_status(
+        ?assertEqual({ok, ?FULFILLED_QOS_STATUS}, opt_qos:check_qos_status(
             oct_background:get_random_provider_node(Provider), ?SESS_ID(Provider), QosEntryId), ?ATTEMPTS)
     end, Providers),
     CheckDistributionFun([{Provider1, Size}]),
@@ -583,7 +583,7 @@ qos_traverse_cancellation_test(_Config) ->
     end,
     
     % remove entry to trigger transfer cancellation
-    lfm_proxy:remove_qos_entry(P1Node, ?SESS_ID(Provider1), QosEntryId),
+    opt_qos:remove_qos_entry(P1Node, ?SESS_ID(Provider1), QosEntryId),
     
     % check that 5 transfers were cancelled (4 from traverse and 1 reconciliation)
     test_utils:mock_assert_num_calls(P1Node, replica_synchronizer, cancel, 1, 5, ?ATTEMPTS),

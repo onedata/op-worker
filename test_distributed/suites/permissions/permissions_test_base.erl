@@ -1968,8 +1968,9 @@ add_qos_entry_test(Config) ->
         operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            extract_ok(lfm_proxy:add_qos_entry(W, SessId, FileKey, <<"country=FR">>, 1))
+            extract_ok(opt_qos:add_qos_entry(W, SessId, FileKey, <<"country=FR">>, 1))
         end,
+        returns_api_errors = true,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
         end
@@ -1985,7 +1986,7 @@ get_qos_entry_test(Config) ->
         files = [#file{
             name = <<"file1">>,
             on_create = fun(FileOwnerSessId, Guid) ->
-                {ok, QosEntryId} = lfm_proxy:add_qos_entry(
+                {ok, QosEntryId} = opt_qos:add_qos_entry(
                     W, FileOwnerSessId, ?FILE_REF(Guid), <<"country=FR">>, 1
                 ),
                 QosEntryId
@@ -1996,8 +1997,9 @@ get_qos_entry_test(Config) ->
         operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             QosEntryId = maps:get(FilePath, ExtraData),
-            extract_ok(lfm_proxy:get_qos_entry(W, SessId, QosEntryId))
+            extract_ok(opt_qos:get_qos_entry(W, SessId, QosEntryId))
         end,
+        returns_api_errors = true,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
         end
@@ -2013,7 +2015,7 @@ remove_qos_entry_test(Config) ->
         files = [#file{
             name = <<"file1">>,
             on_create = fun(FileOwnerSessId, Guid) ->
-                {ok, QosEntryId} = lfm_proxy:add_qos_entry(
+                {ok, QosEntryId} = opt_qos:add_qos_entry(
                     W, FileOwnerSessId, ?FILE_REF(Guid), <<"country=FR">>, 1
                 ),
                 QosEntryId
@@ -2024,8 +2026,9 @@ remove_qos_entry_test(Config) ->
         operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             QosEntryId = maps:get(FilePath, ExtraData),
-            extract_ok(lfm_proxy:remove_qos_entry(W, SessId, QosEntryId))
+            extract_ok(opt_qos:remove_qos_entry(W, SessId, QosEntryId))
         end,
+        returns_api_errors = true,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
         end
@@ -2041,7 +2044,7 @@ get_effective_file_qos_test(Config) ->
         files = [#file{
             name = <<"file1">>,
             on_create = fun(FileOwnerSessId, Guid) ->
-                {ok, _QosEntryId} = lfm_proxy:add_qos_entry(
+                {ok, _QosEntryId} = opt_qos:add_qos_entry(
                     W, FileOwnerSessId, ?FILE_REF(Guid), <<"country=FR">>, 1
                 ),
                 ?FILE_REF(Guid)
@@ -2052,8 +2055,9 @@ get_effective_file_qos_test(Config) ->
         operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            extract_ok(lfm_proxy:get_effective_file_qos(W, SessId, FileKey))
+            extract_ok(opt_qos:get_effective_file_qos(W, SessId, FileKey))
         end,
+        returns_api_errors = true,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
         end
@@ -2069,7 +2073,7 @@ check_qos_fulfillment_test(Config) ->
         files = [#file{
             name = <<"file1">>,
             on_create = fun(FileOwnerSessId, Guid) ->
-                {ok, QosEntryId} = lfm_proxy:add_qos_entry(
+                {ok, QosEntryId} = opt_qos:add_qos_entry(
                     W, FileOwnerSessId, ?FILE_REF(Guid), <<"country=FR">>, 1
                 ),
                 QosEntryId
@@ -2080,8 +2084,9 @@ check_qos_fulfillment_test(Config) ->
         operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             QosEntryId = maps:get(FilePath, ExtraData),
-            extract_ok(lfm_proxy:check_qos_status(W, SessId, QosEntryId))
+            extract_ok(opt_qos:check_qos_status(W, SessId, QosEntryId))
         end,
+        returns_api_errors = true,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
         end

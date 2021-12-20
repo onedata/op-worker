@@ -302,22 +302,22 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = instance} = GRI}) -
     EvictingProviderId = maps:get(<<"evictingProviderId">>, Data, undefined),
     Callback = maps:get(<<"callback">>, Data, undefined),
 
-    {ok, TransferId} = case maps:get(<<"dataSourceType">>, Data) of
+    TransferId = case maps:get(<<"dataSourceType">>, Data) of
         file ->
-            ?lfm_check(lfm:schedule_file_transfer(
+            mi_transfers:schedule_file_transfer(
                 SessionId, ?FILE_REF(maps:get(<<"fileId">>, Data)),
                 ReplicatingProviderId, EvictingProviderId,
                 Callback
-            ));
+            );
         view ->
-            ?lfm_check(lfm:schedule_view_transfer(
+            mi_transfers:schedule_view_transfer(
                 SessionId,
                 maps:get(<<"spaceId">>, Data),
                 maps:get(<<"viewName">>, Data),
                 maps:get(<<"queryViewParams">>, Data, []),
                 ReplicatingProviderId, EvictingProviderId,
                 Callback
-            ))
+            )
     end,
     {ok, #document{value = Transfer}} = transfer:get(TransferId),
     {ok, resource, {GRI#gri{id = TransferId}, Transfer}};
