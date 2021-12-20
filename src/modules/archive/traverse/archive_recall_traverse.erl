@@ -25,13 +25,13 @@
 
 
 %% API
--export([init_pool/0, stop_pool/0, start/3
-]).
+-export([init_pool/0, stop_pool/0, start/3, cancel/1]).
 
 %% Traverse behaviour callbacks
 -export([
     task_started/2,
     task_finished/2,
+    task_canceled/2,
     get_sync_info/1,
     get_job/1,
     update_job_progress/5,
@@ -100,6 +100,10 @@ start(ArchiveDoc, UserCtx, TargetGuid) ->
     end.
 
 
+-spec cancel(id()) -> ok | {error, term()}.
+cancel(TaskId) ->
+    tree_traverse:cancel(?POOL_NAME, TaskId).
+
 %%%===================================================================
 %%% Traverse behaviour callbacks
 %%%===================================================================
@@ -124,6 +128,14 @@ task_finished(TaskId, Pool) ->
     archive_recall:delete(TaskId),
     
     ?debug("Archive recall traverse ~p finished", [TaskId]).
+
+
+-spec task_canceled(id(), tree_traverse:pool()) -> ok.
+task_canceled(TaskId, _Pool) ->
+    tree_traverse_session:close_for_task(TaskId),
+    archive_recall:delete(TaskId),
+    
+    ?debug("Archive recall traverse ~p cancelled", [TaskId]).
 
 
 -spec get_sync_info(tree_traverse:master_job()) -> {ok, traverse:sync_info()}.

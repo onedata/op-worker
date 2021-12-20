@@ -38,6 +38,7 @@
 -author("Jakub Kudzia").
 
 -include("global_definitions.hrl").
+-include("modules/dataset/archive.hrl").
 -include("modules/dataset/dataset.hrl").
 -include("modules/dataset/archivisation_tree.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
@@ -128,9 +129,12 @@ start_archivisation(
 -spec recall(archive:id(), user_ctx:ctx(), file_id:file_guid()) -> ok | error().
 recall(ArchiveId, UserCtx, TargetGuid) ->
     case archive:get(ArchiveId) of
+        {ok, #archive{state = ?ARCHIVE_PURGING}} ->
+            ?ERROR_NOT_FOUND;
         {ok, ArchiveDoc} ->
             archive_recall_traverse:start(ArchiveDoc, UserCtx, TargetGuid);
-        {error, _} = Error -> Error
+        {error, _} = Error -> 
+            Error
     end.
 
 
@@ -204,7 +208,8 @@ list_archives(DatasetId, ListingOpts, ListingMode) ->
 -spec init_archive_purge(archive:id(), archive:callback()) -> ok | error().
 init_archive_purge(ArchiveId, CallbackUrl) ->
     case archive:mark_purging(ArchiveId, CallbackUrl) of
-        {ok, ArchiveDoc} ->
+        {ok, #archive{recalls = Recalls} = ArchiveDoc} ->
+            lists:foreach(fun archive_recall_traverse:cancel/1, Recalls),
             {ok, DatasetId} = archive:get_dataset_id(ArchiveDoc),
             % TODO VFS-7718 removal of archive doc and callback should be executed when deleting from trash is finished
             % (now it's done before archive files are deleted from storage)
