@@ -256,7 +256,7 @@ run_space_privs_scenarios(ScenariosRootDirPath, #perms_test_spec{
 %% @private
 -spec space_privs_test(scenario_ctx()) -> ok | no_return().
 space_privs_test(ScenarioCtx = #scenario_ctx{
-    meta_spec = #perms_test_spec{
+    meta_spec = TestSpec = #perms_test_spec{
         test_node = Node,
         space_id = SpaceId,
         owner_user = FileOwnerId,
@@ -270,17 +270,19 @@ space_privs_test(ScenarioCtx = #scenario_ctx{
     extra_data = ExtraData
 }) ->
     mock_space_user_privileges([Node], SpaceId, UserId, privileges:space_admin()),
-    ?assertMatch({error, ?EACCES}, Operation(UserSessId, ScenarioRootDirPath, ExtraData)),
+    ExpError1 = get_exp_error(?EACCES, TestSpec),
+    ?assertMatch(ExpError1, Operation(UserSessId, ScenarioRootDirPath, ExtraData)),
 
     mock_space_user_privileges([Node], SpaceId, FileOwnerId, []),
-    ?assertMatch({error, ?EPERM}, Operation(FileOwnerSessId, ScenarioRootDirPath, ExtraData)),
+    ExpError2 = get_exp_error(?EPERM, TestSpec),
+    ?assertMatch(ExpError2, Operation(FileOwnerSessId, ScenarioRootDirPath, ExtraData)),
 
     mock_space_user_privileges([Node], SpaceId, FileOwnerId, RequiredSpacePrivs),
     ?assertMatch(ok, Operation(FileOwnerSessId, ScenarioRootDirPath, ExtraData)),
     run_final_ownership_check(ScenarioCtx#scenario_ctx{executioner_session_id = FileOwnerSessId});
 
 space_privs_test(ScenarioCtx = #scenario_ctx{
-    meta_spec = #perms_test_spec{
+    meta_spec = TestSpec = #perms_test_spec{
         test_node = Node,
         space_id = SpaceId,
         space_user = UserId,
@@ -296,7 +298,8 @@ space_privs_test(ScenarioCtx = #scenario_ctx{
     % Operation should fail if user doesn't have all of the required space privileges
     lists:foreach(fun(SomeOfRequiredPrivs) ->
         mock_space_user_privileges([Node], SpaceId, UserId, AllSpacePrivs -- SomeOfRequiredPrivs),
-        ?assertMatch({error, ?EPERM}, Operation(ExecutionerSessId, ScenarioRootDirPath, ExtraData))
+        ExpError = get_exp_error(?EPERM, TestSpec),
+        ?assertMatch(ExpError, Operation(ExecutionerSessId, ScenarioRootDirPath, ExtraData))
     end, combinations(RequiredPrivs) -- [[]]),
 
     % And should succeed if he has only required ones
@@ -380,7 +383,8 @@ run_file_protection_scenarios(ScenariosRootDirPath, #perms_test_spec{
             ok = opt_datasets:update(
                 Node, SpaceOwnerUserSessId, DatasetId, undefined, ProtectionFlagsToSet, ?no_flags_mask),
             await_caches_clearing(Node, SpaceId, Executioner, ExtraData),
-            ?assertMatch({error, ?EPERM}, Operation(ExecutionerSessId, ScenarioRootDirPath, ExtraData)),
+            ExpError = get_exp_error(?EPERM, TestSpec),
+            ?assertMatch(ExpError, Operation(ExecutionerSessId, ScenarioRootDirPath, ExtraData)),
 
             % And should succeed without it
             ok = opt_datasets:update(
@@ -495,7 +499,7 @@ run_data_access_caveats_scenarios(ScenariosRootDirPath, #perms_test_spec{
 -spec run_caveats_scenario(scenario_ctx(), tokens:serialized()) ->
     ok | no_return().
 run_caveats_scenario(ScenarioCtx = #scenario_ctx{
-    meta_spec = #perms_test_spec{
+    meta_spec = TestSpec = #perms_test_spec{
         test_node = Node,
         space_user = UserId,
         operation = Operation
@@ -506,7 +510,8 @@ run_caveats_scenario(ScenarioCtx = #scenario_ctx{
 }, MainToken) ->
     Token1 = tokens:confine(MainToken, #cv_data_path{whitelist = [<<"i_am_nowhere">>]}),
     SessId1 = permissions_test_utils:create_session(Node, UserId, Token1),
-    ?assertMatch({error, ?EACCES}, Operation(SessId1, ScenarioRootDirPath, ExtraData)),
+    ExpError = get_exp_error(?EACCES, TestSpec),
+    ?assertMatch(ExpError, Operation(SessId1, ScenarioRootDirPath, ExtraData)),
 
     Token2 = tokens:confine(MainToken, #cv_data_path{whitelist = [ScenarioRootDirPath]}),
     SessId2 = permissions_test_utils:create_session(Node, UserId, Token2),
@@ -515,7 +520,7 @@ run_caveats_scenario(ScenarioCtx = #scenario_ctx{
     run_final_ownership_check(ScenarioCtx#scenario_ctx{executioner_session_id = SessId2});
 
 run_caveats_scenario(ScenarioCtx = #scenario_ctx{
-    meta_spec = #perms_test_spec{
+    meta_spec = TestSpec = #perms_test_spec{
         test_node = Node,
         space_user = UserId,
         operation = Operation
@@ -532,7 +537,8 @@ run_caveats_scenario(ScenarioCtx = #scenario_ctx{
 
     Token1 = tokens:confine(MainToken, #cv_data_objectid{whitelist = [DummyObjectId]}),
     SessId1 = permissions_test_utils:create_session(Node, UserId, Token1),
-    ?assertMatch({error, ?EACCES}, Operation(SessId1, ScenarioRootDirPath, ExtraData)),
+    ExpError = get_exp_error(?EACCES, TestSpec),
+    ?assertMatch(ExpError, Operation(SessId1, ScenarioRootDirPath, ExtraData)),
 
     Token2 = tokens:confine(MainToken, #cv_data_objectid{whitelist = [ScenarioRootDirObjectId]}),
     SessId2 = permissions_test_utils:create_session(Node, UserId, Token2),
@@ -541,7 +547,7 @@ run_caveats_scenario(ScenarioCtx = #scenario_ctx{
     run_final_ownership_check(ScenarioCtx#scenario_ctx{executioner_session_id = SessId2});
 
 run_caveats_scenario(ScenarioCtx = #scenario_ctx{
-    meta_spec = #perms_test_spec{
+    meta_spec = TestSpec = #perms_test_spec{
         test_node = Node,
         space_user = UserId,
         available_in_readonly_mode = AvailableInReadonlyMode,
@@ -559,7 +565,8 @@ run_caveats_scenario(ScenarioCtx = #scenario_ctx{
             ?assertMatch(ok, Operation(SessId, ScenarioRootDirPath, ExtraData)),
             run_final_ownership_check(ScenarioCtx#scenario_ctx{executioner_session_id = SessId});
         false ->
-            ?assertMatch({error, ?EACCES}, Operation(SessId, ScenarioRootDirPath, ExtraData))
+            ExpError = get_exp_error(?EACCES, TestSpec),
+            ?assertMatch(ExpError, Operation(SessId, ScenarioRootDirPath, ExtraData))
     end.
 
 
@@ -647,7 +654,7 @@ run_share_test_scenarios(ScenariosRootDirPath, #perms_test_spec{
 -spec run_share_test_scenario(scenario_ctx(), posix | {acl, allow | deny}) ->
     ok | no_return().
 run_share_test_scenario(#scenario_ctx{
-    meta_spec = #perms_test_spec{
+    meta_spec = TestSpec = #perms_test_spec{
         test_node = Node,
         available_in_share_mode = false,
         operation = Operation
@@ -668,8 +675,9 @@ run_share_test_scenario(#scenario_ctx{
     set_full_perms(PermsType1, Node, maps:keys(PermsPerFile)),
 
     % Even with all perms set operation should fail
+    ExpError = get_exp_error(?EPERM, TestSpec),
     ?assertMatchWithPerms(
-        {error, ?EPERM},
+        ExpError,
         Operation(ExecutionerSessId, ScenarioRootDirPath, ExtraData),
         ScenarioName, Node, FilesOwnerSessId,
         maps:map(fun(_, _) -> <<"all">> end, PermsPerFile)
@@ -749,7 +757,8 @@ run_open_handle_mode_scenarios(ScenariosRootDirPath, #perms_test_spec{
             % Operation is available in share/public mode but access is still controlled
             % (even for space owner) by posix mode (other bits) or acl
             deny_full_perms(PermsType, Node, AllFiles),
-            ?assertMatch({error, ?EACCES}, Operation(ExecutionerSessId, ScenarioRootDirPath, ExtraData)),
+            ExpError1 = get_exp_error(?EACCES, TestSpec),
+            ?assertMatch(ExpError1, Operation(ExecutionerSessId, ScenarioRootDirPath, ExtraData)),
 
             case PermsType of
                 posix ->
@@ -776,7 +785,8 @@ run_open_handle_mode_scenarios(ScenariosRootDirPath, #perms_test_spec{
             % If operation is not available in share/public mode then operation
             % should be rejected even if all permissions are granted
             set_full_perms(PermsType, Node, AllFiles),
-            ?assertMatch({error, ?EPERM}, Operation(ExecutionerSessId, ScenarioRootDirPath, ExtraData))
+            ExpError2 = get_exp_error(?EPERM, TestSpec),
+            ?assertMatch(ExpError2, Operation(ExecutionerSessId, ScenarioRootDirPath, ExtraData))
     end.
 
 
@@ -914,7 +924,7 @@ run_posix_tests(ScenarioCtx = #scenario_ctx{
     end;
 
 run_posix_tests(ScenarioCtx = #scenario_ctx{
-    meta_spec = #perms_test_spec{
+    meta_spec = TestSpec = #perms_test_spec{
         test_node = Node,
         operation = Operation
     },
@@ -933,7 +943,8 @@ run_posix_tests(ScenarioCtx = #scenario_ctx{
             permissions_test_utils:set_modes(
                 Node, maps:map(fun(_, _) -> 8#777 end, ComplementaryPosixPermsPerFile)
             ),
-            ?assertMatch({error, ?EACCES}, Operation(ExecutionerSessId, ScenarioRootDirPath, ExtraData));
+            ExpError = get_exp_error(?EACCES, TestSpec),
+            ?assertMatch(ExpError, Operation(ExecutionerSessId, ScenarioRootDirPath, ExtraData));
         false ->
             RequiredNormalPosixPerms = lists:filter(fun({_, Perm}) ->
                 Perm == read orelse Perm == write orelse Perm == exec
@@ -946,7 +957,7 @@ run_posix_tests(ScenarioCtx = #scenario_ctx{
 
 % Users not belonging to space or unauthorized should not be able to conduct any operation
 run_posix_tests(#scenario_ctx{
-    meta_spec = #perms_test_spec{
+    meta_spec = TestSpec = #perms_test_spec{
         test_node = Node,
         operation = Operation
     },
@@ -955,7 +966,8 @@ run_posix_tests(#scenario_ctx{
     extra_data = ExtraData
 }, ComplementaryPosixPermsPerFile, _AllRequiredPosixPerms, other) ->
     permissions_test_utils:set_modes(Node, maps:map(fun(_, _) -> 8#777 end, ComplementaryPosixPermsPerFile)),
-    ?assertMatch({error, ?ENOENT}, Operation(ExecutionerSessId, ScenarioRootDirPath, ExtraData)),
+    ExpError = get_exp_error(?ENOENT, TestSpec),
+    ?assertMatch(ExpError, Operation(ExecutionerSessId, ScenarioRootDirPath, ExtraData)),
 
     % Some operations cannot be performed with special session (either root or guest)
     % and result in eagain error instead of enoent
@@ -971,7 +983,7 @@ run_posix_tests(#scenario_ctx{
 ) ->
     ok | no_return().
 run_standard_posix_tests(ScenarioCtx = #scenario_ctx{
-    meta_spec = #perms_test_spec{
+    meta_spec = TestSpec = #perms_test_spec{
         test_node = Node,
         operation = Operation
     },
@@ -1001,8 +1013,9 @@ run_standard_posix_tests(ScenarioCtx = #scenario_ctx{
 
         permissions_test_utils:set_modes(Node, EaccesModesPerFile),
 
+        ExpError = get_exp_error(?EACCES, TestSpec),
         ?assertMatchWithPerms(
-            {error, ?EACCES},
+            ExpError,
             Operation(ExecutionerSessId, ScenarioRootDirPath, ExtraData),
             ScenarioName, Node, FileOwnerSessId,
             EaccesModesPerFile
@@ -1120,7 +1133,7 @@ run_acl_perms_scenarios(ScenariosRootDirPath, #perms_test_spec{
 ) ->
     ok | no_return().
 run_acl_perms_scenario(ScenarioCtx = #scenario_ctx{
-    meta_spec = #perms_test_spec{
+    meta_spec = TestSpec = #perms_test_spec{
         test_node = Node,
         operation = Operation
     },
@@ -1134,7 +1147,7 @@ run_acl_perms_scenario(ScenarioCtx = #scenario_ctx{
     {ComplementaryPermsPerFile, AllRequiredPerms} = get_complementary_perms(Node, PermsPerFile),
     [AllRequiredPermsComb | EaccesPermsCombs] = combinations(AllRequiredPerms),
 
-    % Granting all perms without required ones should result in {error, ?EACCES}
+    % Granting all perms without required ones should result in ?EACCES
     lists:foreach(fun(EaccesPermComb) ->
         EaccesPermsPerFile = lists:foldl(fun({Guid, Perm}, Acc) ->
             Acc#{Guid => [Perm | maps:get(Guid, Acc)]}
@@ -1143,8 +1156,10 @@ run_acl_perms_scenario(ScenarioCtx = #scenario_ctx{
         permissions_test_utils:set_acls(
             Node, EaccesPermsPerFile, #{}, AceWho, AceFlags
         ),
+
+        ExpError = get_exp_error(?EACCES, TestSpec),
         ?assertMatchWithPerms(
-            {error, ?EACCES},
+            ExpError,
             Operation(ExecutionerSessId, ScenarioRootDirPath, ExtraData),
             ScenarioName, Node, FileOwnerSessId,
             EaccesPermsPerFile
@@ -1168,7 +1183,7 @@ run_acl_perms_scenario(ScenarioCtx = #scenario_ctx{
     run_final_ownership_check(ScenarioCtx);
 
 run_acl_perms_scenario(ScenarioCtx = #scenario_ctx{
-    meta_spec = #perms_test_spec{
+    meta_spec = TestSpec = #perms_test_spec{
         test_node = Node,
         operation = Operation
     },
@@ -1192,8 +1207,10 @@ run_acl_perms_scenario(ScenarioCtx = #scenario_ctx{
         permissions_test_utils:set_acls(
             Node, AllPermsPerFile, EaccesPermsPerFile, AceWho, AceFlags
         ),
+
+        ExpError = get_exp_error(?EACCES, TestSpec),
         ?assertMatchWithPerms(
-            {error, ?EACCES},
+            ExpError,
             Operation(ExecutionerSessId, ScenarioRootDirPath, ExtraData),
             ScenarioName, Node, FileOwnerSessId,
             EaccesPermsPerFile
@@ -1211,6 +1228,14 @@ run_acl_perms_scenario(ScenarioCtx = #scenario_ctx{
         ComplementaryPermsPerFile
     ),
     run_final_ownership_check(ScenarioCtx).
+
+
+%% @private
+-spec get_exp_error(atom(), perms_test_spec()) -> {error, term()}.
+get_exp_error(Errno, #perms_test_spec{returned_errors = api_errors}) ->
+    ?ERROR_POSIX(Errno);
+get_exp_error(Errno, #perms_test_spec{returned_errors = errno_errors}) ->
+    {error, Errno}.
 
 
 %% @private

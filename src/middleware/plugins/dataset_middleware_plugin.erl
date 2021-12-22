@@ -91,9 +91,9 @@ data_spec(#op_req{operation = create, gri = #gri{aspect = instance}}) -> #{
 data_spec(#op_req{operation = get, gri = #gri{aspect = instance}}) ->
     undefined;
 
-data_spec(#op_req{operation = get, gri = #gri{aspect = Aspect}})
-    when Aspect =:= children
-    orelse Aspect =:= children_details
+data_spec(#op_req{operation = get, gri = #gri{aspect = Aspect}}) when
+    Aspect =:= children;
+    Aspect =:= children_details
 -> #{
     optional => #{
         <<"offset">> => {integer, any},
@@ -103,9 +103,9 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = Aspect}})
     }
 };
 
-data_spec(#op_req{operation = get, gri = #gri{aspect = Aspect}})
-    when Aspect =:= archives
-    orelse Aspect =:= archives_details
+data_spec(#op_req{operation = get, gri = #gri{aspect = Aspect}}) when
+    Aspect =:= archives;
+    Aspect =:= archives_details
 -> #{
     optional => #{
         <<"offset">> => {integer, any},
@@ -235,9 +235,9 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = instance} = GRI}) -
 get(#op_req{auth = Auth, gri = #gri{id = DatasetId, aspect = instance}}, _) ->
     {ok, mi_datasets:get_info(Auth#auth.session_id, DatasetId)};
 
-get(#op_req{auth = Auth, gri = #gri{id = DatasetId, aspect = Aspect}, data = Data}, _)
-    when Aspect =:= children
-    orelse Aspect =:= children_details
+get(#op_req{auth = Auth, gri = #gri{id = DatasetId, aspect = Aspect}, data = Data}, _) when
+    Aspect =:= children;
+    Aspect =:= children_details
 ->
     ListingMode = case Aspect of
         children -> ?BASIC_INFO;
@@ -247,9 +247,9 @@ get(#op_req{auth = Auth, gri = #gri{id = DatasetId, aspect = Aspect}, data = Dat
         Auth#auth.session_id, DatasetId, gather_listing_opts(Data), ListingMode
     )};
 
-get(#op_req{auth = Auth, gri = #gri{id = DatasetId, aspect = Aspect}, data = Data}, _)
-    when Aspect =:= archives
-    orelse Aspect =:= archives_details
+get(#op_req{auth = Auth, gri = #gri{id = DatasetId, aspect = Aspect}, data = Data}, _) when
+    Aspect =:= archives;
+    Aspect =:= archives_details
 ->
     ListingMode = case Aspect of
         archives -> ?BASIC_INFO;

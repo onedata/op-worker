@@ -114,9 +114,10 @@ create_qos_test(Config) ->
                     validate_result_fun = validate_result_fun_gs(MemRef, create)
                 }
             ],
-            data_spec =
-            api_test_utils:add_cdmi_id_errors_for_operations_not_available_in_share_mode(
-                FileToShareGuid, ?SPACE_2, ShareId, CreateDataSpec
+            data_spec = api_test_utils:replace_enoent_with_not_found_error_in_bad_data_values(
+                api_test_utils:add_cdmi_id_errors_for_operations_not_available_in_share_mode(
+                    FileToShareGuid, ?SPACE_2, ShareId, CreateDataSpec
+                )
             )
         }
     ])),
@@ -204,11 +205,11 @@ get_qos_summary_test(Config) ->
     FilePath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME()]),
     {ok, DirGuid} = api_test_utils:create_file(<<"dir">>, P1, SessIdP1, FilePath),
     {ok, Guid} = api_test_utils:create_file(FileType, P1, SessIdP1, filename:join(FilePath, ?RANDOM_FILE_NAME())),
-    {ok, QosEntryIdInherited} = lfm_proxy:add_qos_entry(P1, SessIdP1, ?FILE_REF(DirGuid), <<"key=value">>, 8),
-    {ok, QosEntryIdDirect} = lfm_proxy:add_qos_entry(P1, SessIdP1, ?FILE_REF(Guid), <<"key=value">>, 3),
+    {ok, QosEntryIdInherited} = opt_qos:add_qos_entry(P1, SessIdP1, ?FILE_REF(DirGuid), <<"key=value">>, 8),
+    {ok, QosEntryIdDirect} = opt_qos:add_qos_entry(P1, SessIdP1, ?FILE_REF(Guid), <<"key=value">>, 3),
     % wait for qos entries to be dbsynced to other provider
-    ?assertMatch({ok, _}, lfm_proxy:get_qos_entry(P2, SessIdP2, QosEntryIdInherited), ?ATTEMPTS),
-    ?assertMatch({ok, _}, lfm_proxy:get_qos_entry(P2, SessIdP2, QosEntryIdDirect), ?ATTEMPTS),
+    ?assertMatch({ok, _}, opt_qos:get_qos_entry(P2, SessIdP2, QosEntryIdInherited), ?ATTEMPTS),
+    ?assertMatch({ok, _}, opt_qos:get_qos_entry(P2, SessIdP2, QosEntryIdDirect), ?ATTEMPTS),
     {ok, ShareId} = lfm_proxy:create_share(P1, SessIdP1, ?FILE_REF(Guid), <<"share">>),
 
     MemRef = api_test_memory:init(),
@@ -235,7 +236,9 @@ get_qos_summary_test(Config) ->
                     validate_result_fun = validate_result_fun_gs(MemRef, qos_summary)
                 }
             ],
-            data_spec = api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(Guid, ShareId, undefined)
+            data_spec = api_test_utils:replace_enoent_with_not_found_error_in_bad_data_values(
+                api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(Guid, ShareId, undefined)
+            )
         }
     ])),
     ok.
@@ -307,10 +310,10 @@ get_qos_entry_audit_log(Config) ->
     FilePath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME()]),
     {ok, Guid} = api_test_utils:create_file(<<"file">>, P1, SessIdP1, FilePath),
     ProviderId1 = ?GET_DOMAIN_BIN(P1),
-    {ok, QosEntryId} = lfm_proxy:add_qos_entry(P1, SessIdP1, ?FILE_REF(Guid), <<"providerId=", ProviderId1/binary>>, 1),
+    {ok, QosEntryId} = opt_qos:add_qos_entry(P1, SessIdP1, ?FILE_REF(Guid), <<"providerId=", ProviderId1/binary>>, 1),
     % wait for qos entries to be dbsynced to other provider
-    ?assertMatch({ok, _}, lfm_proxy:get_qos_entry(P2, SessIdP2, QosEntryId), ?ATTEMPTS),
-    ?assertEqual({ok, ?FULFILLED_QOS_STATUS}, lfm_proxy:check_qos_status(P1, SessIdP1, QosEntryId)),
+    ?assertMatch({ok, _}, opt_qos:get_qos_entry(P2, SessIdP2, QosEntryId), ?ATTEMPTS),
+    ?assertEqual({ok, ?FULFILLED_QOS_STATUS}, opt_qos:check_qos_status(P1, SessIdP1, QosEntryId)),
 
     MemRef = api_test_memory:init(),
 
@@ -357,9 +360,9 @@ setup_fun(MemRef, Config, Guid) ->
         SessIdP2 = ?USER_IN_BOTH_SPACES_SESS_ID(P2, Config),
         ReplicasNum = rand:uniform(10),
         Expression = <<"key=value & a=b">>,
-        {ok, QosEntryId} = lfm_proxy:add_qos_entry(P1, SessIdP1, ?FILE_REF(Guid), Expression, ReplicasNum),
+        {ok, QosEntryId} = opt_qos:add_qos_entry(P1, SessIdP1, ?FILE_REF(Guid), Expression, ReplicasNum),
         % wait for qos entry to be dbsynced to other provider
-        ?assertMatch({ok, _}, lfm_proxy:get_qos_entry(P2, SessIdP2, QosEntryId), ?ATTEMPTS),
+        ?assertMatch({ok, _}, opt_qos:get_qos_entry(P2, SessIdP2, QosEntryId), ?ATTEMPTS),
 
         api_test_memory:set(MemRef, guid, Guid),
         api_test_memory:set(MemRef, qos, QosEntryId),
@@ -650,15 +653,15 @@ verify_fun(MemRef, Config, create) ->
             ReplicasNum = maps:get(<<"replicasNum">>, Data, 1),
             InfixExpression = maps:get(<<"expression">>, Data),
             Expression = qos_expression:parse(InfixExpression),
-            {ok, EntryP2} = ?assertMatch({ok, _}, lfm_proxy:get_qos_entry(P2, SessIdP2, QosEntryId), ?ATTEMPTS),
-            {ok, EntryP1} = ?assertMatch({ok, _}, lfm_proxy:get_qos_entry(P1, SessIdP1, QosEntryId), ?ATTEMPTS),
+            {ok, EntryP2} = ?assertMatch({ok, _}, opt_qos:get_qos_entry(P2, SessIdP2, QosEntryId), ?ATTEMPTS),
+            {ok, EntryP1} = ?assertMatch({ok, _}, opt_qos:get_qos_entry(P1, SessIdP1, QosEntryId), ?ATTEMPTS),
             ?assertEqual(EntryP1#qos_entry{traverse_reqs = #{}}, EntryP2#qos_entry{traverse_reqs = #{}}),
             ?assertMatch(#qos_entry{file_uuid = Uuid, expression = Expression, replicas_num = ReplicasNum}, EntryP1),
             true;
         (expected_failure, _) ->
             Guid = api_test_memory:get(MemRef, guid),
-            ?assertEqual({ok, {#{}, #{}}}, lfm_proxy:get_effective_file_qos(P1, SessIdP1, ?FILE_REF(Guid))),
-            ?assertEqual({ok, {#{}, #{}}}, lfm_proxy:get_effective_file_qos(P2, SessIdP2, ?FILE_REF(Guid))),
+            ?assertEqual({ok, {#{}, #{}}}, opt_qos:get_effective_file_qos(P1, SessIdP1, ?FILE_REF(Guid))),
+            ?assertEqual({ok, {#{}, #{}}}, opt_qos:get_effective_file_qos(P2, SessIdP2, ?FILE_REF(Guid))),
             true
     end;
 
@@ -669,13 +672,13 @@ verify_fun(MemRef, Config, delete) ->
     fun
         (expected_success, _) ->
             QosEntryId = api_test_memory:get(MemRef, qos),
-            ?assertEqual({error, not_found}, lfm_proxy:get_qos_entry(P2, SessIdP2, QosEntryId), ?ATTEMPTS),
-            ?assertEqual({error, not_found}, lfm_proxy:get_qos_entry(P1, SessIdP1, QosEntryId), ?ATTEMPTS),
+            ?assertEqual({error, not_found}, opt_qos:get_qos_entry(P2, SessIdP2, QosEntryId), ?ATTEMPTS),
+            ?assertEqual({error, not_found}, opt_qos:get_qos_entry(P1, SessIdP1, QosEntryId), ?ATTEMPTS),
             true;
         (expected_failure, _) ->
             QosEntryId = api_test_memory:get(MemRef, qos),
-            ?assertMatch({ok, _}, lfm_proxy:get_qos_entry(P2, SessIdP2, QosEntryId), ?ATTEMPTS),
-            ?assertMatch({ok, _}, lfm_proxy:get_qos_entry(P1, SessIdP1, QosEntryId), ?ATTEMPTS),
+            ?assertMatch({ok, _}, opt_qos:get_qos_entry(P2, SessIdP2, QosEntryId), ?ATTEMPTS),
+            ?assertMatch({ok, _}, opt_qos:get_qos_entry(P1, SessIdP1, QosEntryId), ?ATTEMPTS),
             true
     end.
 

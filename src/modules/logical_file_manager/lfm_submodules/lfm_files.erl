@@ -24,7 +24,6 @@
     unlink/3, rm_recursive/2,
     mv/4, cp/4,
     get_parent/2, get_file_path/2, get_file_guid/2, resolve_guid_by_relative_path/3, ensure_dir/4,
-    schedule_file_transfer/5, schedule_view_transfer/7,
     is_dir/2
 ]).
 %% Functions operating on files
@@ -191,55 +190,6 @@ is_dir(SessId, FileKey) ->
         {ok, _} -> false;
         Error -> Error
     end.
-
-
--spec schedule_file_transfer(
-    session:id(),
-    lfm:file_key(),
-    ReplicatingProviderId :: undefined | od_provider:id(),
-    EvictingProviderId :: undefined | od_provider:id(),
-    transfer:callback()
-) ->
-    {ok, transfer:id()} | lfm:error_reply().
-schedule_file_transfer(SessId, FileKey, ReplicatingProviderId, EvictingProviderId, Callback) ->
-    FileGuid = lfm_file_key:resolve_file_key(SessId, FileKey, do_not_resolve_symlink),
-
-    remote_utils:call_fslogic(SessId, provider_request, FileGuid,
-        #schedule_file_transfer{
-            replicating_provider_id = ReplicatingProviderId,
-            evicting_provider_id = EvictingProviderId,
-            callback = Callback
-        },
-        fun(#scheduled_transfer{transfer_id = TransferId}) ->
-            {ok, TransferId}
-        end).
-
-
--spec schedule_view_transfer(
-    session:id(),
-    od_space:id(),
-    transfer:view_name(), transfer:query_view_params(),
-    ReplicatingProviderId :: undefined | od_provider:id(),
-    EvictingProviderId :: undefined | od_provider:id(),
-    transfer:callback()
-) ->
-    {ok, transfer:id()} | lfm:error_reply().
-schedule_view_transfer(
-    SessId, SpaceId, ViewName, QueryViewParams,
-    ReplicatingProviderId, EvictingProviderId, Callback
-) ->
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
-    remote_utils:call_fslogic(SessId, provider_request, SpaceGuid,
-        #schedule_view_transfer{
-            replicating_provider_id = ReplicatingProviderId,
-            evicting_provider_id = EvictingProviderId,
-            view_name = ViewName,
-            query_view_params = QueryViewParams,
-            callback = Callback
-        },
-        fun(#scheduled_transfer{transfer_id = TransferId}) ->
-            {ok, TransferId}
-        end).
 
 
 -spec create(session:id(), file_meta:path()) ->

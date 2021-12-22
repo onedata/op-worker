@@ -808,9 +808,9 @@ get(#op_req{data = Data, gri = #gri{id = FileGuid, aspect = transfers}}, _) ->
     end;
 
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = qos_summary}}, _) ->
-    {ok, {QosEntriesWithStatus, _AssignedEntries}} = ?lfm_check(lfm:get_effective_file_qos(
+    {QosEntriesWithStatus, _AssignedEntries} = mi_qos:get_effective_file_qos(
         Auth#auth.session_id, ?FILE_REF(FileGuid)
-    )),
+    ),
     {ok, #{
         <<"requirements">> => QosEntriesWithStatus,
         <<"status">> => qos_status:aggregate(maps:values(QosEntriesWithStatus))

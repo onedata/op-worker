@@ -127,5 +127,46 @@
 
 -record(get_file_eff_dataset_summary, {}).
 
+% QoS related
+
+-record(add_qos_entry, {
+    expression :: qos_expression:expression(),
+    replicas_num :: qos_entry:replicas_num(),
+    entry_type = user_defined :: qos_entry:type()
+}).
+
+-record(get_qos_entry, {
+    id :: qos_entry:id()
+}).
+
+-record(remove_qos_entry, {
+    id :: qos_entry:id()
+}).
+
+-record(get_effective_file_qos, {}).
+
+-record(check_qos_status, {
+    qos_id :: qos_entry:id()
+}).
+
+% transfers related
+
+-record(schedule_file_transfer, {
+    % meaning of fields in this record is explained in datastore_models.hrl
+    % in definition of transfer record
+    replicating_provider_id :: undefined | oneprovider:id(),
+    evicting_provider_id :: undefined | oneprovider:id(),
+    callback :: transfer:callback()
+}).
+
+-record(schedule_view_transfer, {
+    % meaning of fields in this record is explained in datastore_models.hrl
+    % in definition of transfer record
+    replicating_provider_id :: undefined | oneprovider:id(),
+    evicting_provider_id :: undefined | oneprovider:id(),
+    view_name :: transfer:view_name(),
+    query_view_params :: transfer:query_view_params(),
+    callback :: transfer:callback()
+}).
 
 -endif.

@@ -465,7 +465,7 @@ replicate_file_smaller_than_quota_should_not_fail(Config) ->
     ?assertMatch({ok, [#{<<"totalBlocksSize">> := 20}]},
         lfm_proxy:get_file_distribution(P2, SessId(P2), ?FILE_REF(Guid)), ?ATTEMPTS),
 
-    {ok, Tid} = lfm_proxy:schedule_file_replication(P1, SessId(P1), ?FILE_REF(Guid), ?GET_DOMAIN_BIN(P2)),
+    {ok, Tid} = opt_transfers:schedule_file_replication(P1, SessId(P1), ?FILE_REF(Guid), ?GET_DOMAIN_BIN(P2)),
 
     % wait for replication to finish
     ?assertMatch({ok, []}, rpc:call(P1, transfer, list_waiting_transfers, [<<"space_id3">>]), ?ATTEMPTS),
@@ -511,7 +511,7 @@ replicate_file_bigger_than_quota_should_fail(Config) ->
         lfm_proxy:get_file_distribution(P2, SessId(P2), ?FILE_REF(Guid)),
         ?ATTEMPTS
     ),
-    {ok, Tid} = lfm_proxy:schedule_file_replication(P1, SessId(P1), ?FILE_REF(Guid), ?GET_DOMAIN_BIN(P2)),
+    {ok, Tid} = opt_transfers:schedule_file_replication(P1, SessId(P1), ?FILE_REF(Guid), ?GET_DOMAIN_BIN(P2)),
 
     % Wait for replication to finish with failure
     ?assertMatch({ok, []}, rpc:call(P1, transfer, list_waiting_transfers, [<<"space_id5">>]), ?ATTEMPTS),
@@ -541,8 +541,8 @@ replication_of_file_bigger_than_support_should_fail(Config) ->
     ?assertMatch({ok, [#{<<"totalBlocksSize">> := FileSize}]},
         lfm_proxy:get_file_distribution(P1, SessId(P1), ?FILE_REF(Guid)), ?ATTEMPTS),
 
-    ?assertMatch({error, ?ENOSPC}, lfm_proxy:schedule_file_replication(P1, SessId(P1), ?FILE_REF(Guid), ?GET_DOMAIN_BIN(P1))),
-    ?assertMatch({error, ?ENOSPC}, lfm_proxy:schedule_file_replication(P2, SessId(P2), ?FILE_REF(Guid), ?GET_DOMAIN_BIN(P1))).
+    ?assertMatch(?ERROR_POSIX(?ENOSPC), opt_transfers:schedule_file_replication(P1, SessId(P1), ?FILE_REF(Guid), ?GET_DOMAIN_BIN(P1))),
+    ?assertMatch(?ERROR_POSIX(?ENOSPC), opt_transfers:schedule_file_replication(P2, SessId(P2), ?FILE_REF(Guid), ?GET_DOMAIN_BIN(P1))).
 
 migration_of_file_bigger_than_support_should_fail(Config) ->
     #env{p1 = P1, p2 = P2, file1 = File1} = gen_test_env(Config),
@@ -555,10 +555,10 @@ migration_of_file_bigger_than_support_should_fail(Config) ->
     ?assertMatch({ok, [#{<<"totalBlocksSize">> := FileSize}]},
         lfm_proxy:get_file_distribution(P1, SessId(P1), ?FILE_REF(Guid)), ?ATTEMPTS),
 
-    ?assertMatch({error, ?ENOSPC}, lfm_proxy:schedule_file_replica_eviction(P1, SessId(P1), ?FILE_REF(Guid), ?GET_DOMAIN_BIN(P2),
+    ?assertMatch(?ERROR_POSIX(?ENOSPC), opt_transfers:schedule_file_replica_eviction(P1, SessId(P1), ?FILE_REF(Guid), ?GET_DOMAIN_BIN(P2),
         ?GET_DOMAIN_BIN(P1)
     )),
-    ?assertMatch({error, ?ENOSPC}, lfm_proxy:schedule_file_replica_eviction(P2, SessId(P2), ?FILE_REF(Guid), ?GET_DOMAIN_BIN(P2),
+    ?assertMatch(?ERROR_POSIX(?ENOSPC), opt_transfers:schedule_file_replica_eviction(P2, SessId(P2), ?FILE_REF(Guid), ?GET_DOMAIN_BIN(P2),
         ?GET_DOMAIN_BIN(P1)
     )).
 
