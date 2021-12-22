@@ -174,7 +174,10 @@
         {error, term()}
     ),
 
-    returns_api_errors = false :: boolean(),
+    % Tells whether failed operation returns:
+    % - old 'errno_errors' in format {error, Errno} (e.g. {error, enoent}) - see errno.hrl
+    % - new 'api_errors' defined in errors.hrl
+    returned_errors = errno_errors :: errno_errors | api_errors,
 
     % Tells whether successfully executed operation should change ownership on underlying storage
     final_ownership_check = fun(_) -> skip end :: fun((TestCaseRootDirPath :: file_meta:path()) ->

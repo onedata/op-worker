@@ -28,6 +28,10 @@
     check_status/3
 ]).
 
+-type eff_file_qos() :: {#{qos_entry:id() => qos_status:summary()}, file_qos:assigned_entries()}.
+
+-export_type([eff_file_qos/0]).
+
 
 %%%===================================================================
 %%% API
@@ -54,7 +58,7 @@ add_qos_entry(UserCtx, FileCtx, Expression, ReplicasNum, EntryType) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_effective_file_qos(user_ctx:ctx(), file_ctx:ctx()) ->
-    {ok, mi_qos:eff_file_qos()} | errors:error().
+    {ok, eff_file_qos()} | errors:error().
 get_effective_file_qos(UserCtx, FileCtx0) ->
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0, [?TRAVERSE_ANCESTORS]
@@ -141,7 +145,7 @@ add_qos_entry_insecure(FileCtx, Expression, ReplicasNum, EntryType) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_effective_file_qos_insecure(file_ctx:ctx()) ->
-    {ok, mi_qos:eff_file_qos()} | errors:error().
+    {ok, eff_file_qos()} | errors:error().
 get_effective_file_qos_insecure(FileCtx) ->
     FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
     case file_qos:get_effective(FileUuid) of

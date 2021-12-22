@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Interface for managing qos (requests are delegated to middleware_worker).
+%%% Interface for managing QoS (requests are delegated to middleware_worker).
 %%% @end
 %%%-------------------------------------------------------------------
 -module(mi_qos).
@@ -23,10 +23,6 @@
     remove_qos_entry/2,
     check_qos_status/2, check_qos_status/3
 ]).
-
--type eff_file_qos() :: {#{qos_entry:id() => qos_status:summary()}, file_qos:assigned_entries()}.
-
--export_type([eff_file_qos/0]).
 
 
 %%%===================================================================
@@ -67,7 +63,7 @@ add_qos_entry(SessionId, FileKey, RawExpression, ReplicasNum, EntryType) ->
     }).
 
 
--spec get_effective_file_qos(session:id(), lfm:file_key()) -> eff_file_qos() | no_return().
+-spec get_effective_file_qos(session:id(), lfm:file_key()) -> qos_req:eff_file_qos() | no_return().
 get_effective_file_qos(SessionId, FileKey) ->
     FileGuid = lfm_file_key:resolve_file_key(SessionId, FileKey, do_not_resolve_symlink),
 

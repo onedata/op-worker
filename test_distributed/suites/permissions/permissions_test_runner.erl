@@ -1232,9 +1232,9 @@ run_acl_perms_scenario(ScenarioCtx = #scenario_ctx{
 
 %% @private
 -spec get_exp_error(atom(), perms_test_spec()) -> {error, term()}.
-get_exp_error(Errno, #perms_test_spec{returns_api_errors = true}) ->
+get_exp_error(Errno, #perms_test_spec{returned_errors = api_errors}) ->
     ?ERROR_POSIX(Errno);
-get_exp_error(Errno, #perms_test_spec{returns_api_errors = false}) ->
+get_exp_error(Errno, #perms_test_spec{returned_errors = errno_errors}) ->
     {error, Errno}.
 
 

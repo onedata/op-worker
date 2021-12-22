@@ -49,7 +49,7 @@ add_qos_entry(NodeSelector, SessionId, FileKey, Expression, ReplicasNum) ->
 
 
 -spec get_effective_file_qos(oct_background:node_selector(), session:id(), lfm:file_key()) ->
-    {ok, mi_qos:eff_file_qos()} | errors:error().
+    {ok, qos_req:eff_file_qos()} | errors:error().
 get_effective_file_qos(NodeSelector, SessionId, FileKey) ->
     ?CALL(NodeSelector, [SessionId, FileKey]).
 

@@ -27,41 +27,50 @@
 %% worker_plugin_behaviour callbacks
 -export([init/1, handle/1, cleanup/0]).
 
-
--type operation() ::
-    % archives related
+-type archive_operation() ::
     #list_archives{} |
     #archive_dataset{} |
     #get_archive_info{} |
     #update_archive{} |
-    #init_archive_purge{} |
+    #init_archive_purge{}.
 
-    % automation related
+-type atm_operation() ::
     #schedule_atm_workflow_execution{} |
     #cancel_atm_workflow_execution{} |
-    #repeat_atm_workflow_execution{} |
+    #repeat_atm_workflow_execution{}.
 
-    % datasets related
+-type dataset_operation() ::
     #list_top_datasets{} |
     #list_children_datasets{} |
     #establish_dataset{} |
     #get_dataset_info{} |
     #update_dataset{} |
     #remove_dataset {} |
-    #get_file_eff_dataset_summary{} |
+    #get_file_eff_dataset_summary{}.
 
-    % QoS related
+-type qos_operation() ::
     #add_qos_entry{} |
     #get_qos_entry{} |
     #remove_qos_entry{} |
     #get_effective_file_qos{} |
-    #check_qos_status{} |
+    #check_qos_status{}.
 
-    % transfers related
+-type transfer_operation() ::
     #schedule_file_transfer{} |
     #schedule_view_transfer{}.
 
--export_type([operation/0]).
+-type operation() ::
+    archive_operation() |
+    atm_operation() |
+    dataset_operation() |
+    qos_operation() |
+    transfer_operation().
+
+-export_type([
+    archive_operation/0, atm_operation/0, dataset_operation/0,
+    qos_operation/0, transfer_operation/0,
+    operation/0
+]).
 
 
 -define(SHOULD_LOG_REQUESTS_ON_ERROR, application:get_env(

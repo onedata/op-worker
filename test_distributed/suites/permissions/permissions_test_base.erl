@@ -1970,7 +1970,7 @@ add_qos_entry_test(Config) ->
             FileKey = maps:get(FilePath, ExtraData),
             extract_ok(opt_qos:add_qos_entry(W, SessId, FileKey, <<"country=FR">>, 1))
         end,
-        returns_api_errors = true,
+        returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
         end
@@ -1999,7 +1999,7 @@ get_qos_entry_test(Config) ->
             QosEntryId = maps:get(FilePath, ExtraData),
             extract_ok(opt_qos:get_qos_entry(W, SessId, QosEntryId))
         end,
-        returns_api_errors = true,
+        returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
         end
@@ -2028,7 +2028,7 @@ remove_qos_entry_test(Config) ->
             QosEntryId = maps:get(FilePath, ExtraData),
             extract_ok(opt_qos:remove_qos_entry(W, SessId, QosEntryId))
         end,
-        returns_api_errors = true,
+        returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
         end
@@ -2057,7 +2057,7 @@ get_effective_file_qos_test(Config) ->
             FileKey = maps:get(FilePath, ExtraData),
             extract_ok(opt_qos:get_effective_file_qos(W, SessId, FileKey))
         end,
-        returns_api_errors = true,
+        returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
         end
@@ -2086,7 +2086,7 @@ check_qos_fulfillment_test(Config) ->
             QosEntryId = maps:get(FilePath, ExtraData),
             extract_ok(opt_qos:check_qos_status(W, SessId, QosEntryId))
         end,
-        returns_api_errors = true,
+        returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
         end
