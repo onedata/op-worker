@@ -279,6 +279,7 @@ prepare_args() ->
         glusterfs_helper_threads_number,
         webdav_helper_threads_number,
         xrootd_helper_threads_number,
+        nfs_helper_threads_number,
         nulldevice_helper_threads_number,
         buffer_helpers,
         buffer_scheduler_threads_number,
