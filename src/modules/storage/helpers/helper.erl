@@ -237,6 +237,7 @@ should_skip_storage_detection(#helper{args = Args}) ->
 -spec is_posix_compatible(helpers:helper() | name()) -> boolean().
 is_posix_compatible(?POSIX_HELPER_NAME) -> true;
 is_posix_compatible(?GLUSTERFS_HELPER_NAME) -> true;
+is_posix_compatible(?NFS_HELPER_NAME) -> true;
 is_posix_compatible(?NULL_DEVICE_HELPER_NAME) -> true;
 is_posix_compatible(#helper{name = HelperName}) -> is_posix_compatible(HelperName);
 is_posix_compatible(_) -> false.
@@ -254,6 +255,7 @@ is_auto_import_supported(Helper = #helper{name = HelperName})
     orelse HelperName =:= ?NULL_DEVICE_HELPER_NAME
     orelse HelperName =:= ?WEBDAV_HELPER_NAME
     orelse HelperName =:= ?XROOTD_HELPER_NAME
+    orelse HelperName =:= ?NFS_HELPER_NAME
 ->
     is_canonical_helper(Helper);
 is_auto_import_supported(Helper = #helper{name = ?S3_HELPER_NAME}) ->
@@ -268,6 +270,7 @@ is_file_registration_supported(Helper = #helper{name = HelperName})
     orelse HelperName =:= ?NULL_DEVICE_HELPER_NAME
     orelse HelperName =:= ?WEBDAV_HELPER_NAME
     orelse HelperName =:= ?XROOTD_HELPER_NAME
+    orelse HelperName =:= ?NFS_HELPER_NAME
     orelse HelperName =:= ?HTTP_HELPER_NAME
 ->
     is_canonical_helper(Helper);
@@ -294,6 +297,7 @@ is_rename_supported(?GLUSTERFS_HELPER_NAME) -> true;
 is_rename_supported(?NULL_DEVICE_HELPER_NAME) -> true;
 is_rename_supported(?WEBDAV_HELPER_NAME) -> true;
 is_rename_supported(?XROOTD_HELPER_NAME) -> true;
+is_rename_supported(?NFS_HELPER_NAME) -> true;
 is_rename_supported(#helper{name = HelperName}) -> is_rename_supported(HelperName);
 is_rename_supported(_) -> false.
 
@@ -349,6 +353,7 @@ translate_name(<<"Swift">>) -> ?SWIFT_HELPER_NAME;
 translate_name(<<"GlusterFS">>) -> ?GLUSTERFS_HELPER_NAME;
 translate_name(<<"WebDAV">>) -> ?WEBDAV_HELPER_NAME;
 translate_name(<<"XRootD">>) -> ?XROOTD_HELPER_NAME;
+translate_name(<<"NFS">>) -> ?NFS_HELPER_NAME;
 translate_name(<<"HTTP">>) -> ?HTTP_HELPER_NAME;
 translate_name(<<"NullDevice">>) -> ?NULL_DEVICE_HELPER_NAME;
 translate_name(Name) -> Name.

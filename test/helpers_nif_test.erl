@@ -120,6 +120,7 @@ prepare_environment() ->
     op_worker:set_env(glusterfs_helper_threads_number, 1),
     op_worker:set_env(webdav_helper_threads_number, 25),
     op_worker:set_env(xrootd_helper_threads_number, 25),
+    op_worker:set_env(nfs_helper_threads_number, 25),
     op_worker:set_env(buffer_helpers, false),
     op_worker:set_env(buffer_scheduler_threads_number, 1),
     op_worker:set_env(read_buffer_min_size, 1024),

@@ -181,6 +181,7 @@ validate_user_ctx(StorageType, UserCtx) ->
 default_admin_ctx(HelperName) when
     HelperName == ?POSIX_HELPER_NAME;
     HelperName == ?NULL_DEVICE_HELPER_NAME;
+    HelperName == ?NFS_HELPER_NAME;
     HelperName == ?GLUSTERFS_HELPER_NAME ->
     #{<<"uid">> => <<"0">>, <<"gid">> => <<"0">>};
 
@@ -221,6 +222,11 @@ expected_custom_helper_args(?GLUSTERFS_HELPER_NAME) -> [
     {optional, <<"port">>}, {optional, <<"mountPoint">>},
     {optional, <<"transport">>}, {optional, <<"xlatorOptions">>},
     {optional, <<"blockSize">>}];
+expected_custom_helper_args(?NFS_HELPER_NAME) -> [
+    <<"version">>, <<"host">>, <<"volume">>,
+    {optional, <<"readAhead">>}, {optional, <<"tcpSyncnt">>},
+    {optional, <<"dirCache">>}, {optional, <<"autoReconnect">>},
+    {optional, <<"connectionPoolSize">>}];
 expected_custom_helper_args(?WEBDAV_HELPER_NAME) -> [
     <<"endpoint">>,
     {optional, <<"oauth2IdP">>},
@@ -271,6 +277,8 @@ expected_user_ctx_params(?S3_HELPER_NAME) ->
 expected_user_ctx_params(?SWIFT_HELPER_NAME) ->
     [<<"username">>, <<"password">>];
 expected_user_ctx_params(?GLUSTERFS_HELPER_NAME) ->
+    [<<"uid">>, {optional, <<"gid">>}];
+expected_user_ctx_params(?NFS_HELPER_NAME) ->
     [<<"uid">>, {optional, <<"gid">>}];
 expected_user_ctx_params(?WEBDAV_HELPER_NAME) ->
     [<<"credentialsType">>,
