@@ -224,8 +224,9 @@ expected_custom_helper_args(?GLUSTERFS_HELPER_NAME) -> [
     {optional, <<"blockSize">>}];
 expected_custom_helper_args(?NFS_HELPER_NAME) -> [
     <<"version">>, <<"host">>, <<"volume">>,
-    {optional, <<"readahead">>}, {optional, <<"tcpSyncnt">>},
-    {optional, <<"dircache">>}, {optional, <<"autoreconnect">>}];
+    {optional, <<"readAhead">>}, {optional, <<"tcpSyncnt">>},
+    {optional, <<"dirCache">>}, {optional, <<"autoReconnect">>},
+    {optional, <<"connectionPoolSize">>}];
 expected_custom_helper_args(?WEBDAV_HELPER_NAME) -> [
     <<"endpoint">>,
     {optional, <<"oauth2IdP">>},
