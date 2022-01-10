@@ -75,7 +75,8 @@
 
 -record(recall_archive, {
     id :: archive:id(),
-    target_guid :: file_id:file_guid()
+    target_parent_guid :: file_id:file_guid(),
+    target_filename = default :: file_meta:name() | default
 }).
 
 %% automation related

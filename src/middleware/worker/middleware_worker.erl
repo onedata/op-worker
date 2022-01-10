@@ -32,7 +32,8 @@
     #archive_dataset{} |
     #get_archive_info{} |
     #update_archive{} |
-    #init_archive_purge{}.
+    #init_archive_purge{} |
+    #recall_archive{}.
 
 -type atm_operation() ::
     #schedule_atm_workflow_execution{} |

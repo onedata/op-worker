@@ -48,8 +48,8 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([start_archivisation/6, recall/3, update_archive/2, get_archive_info/1,
-    list_archives/3, init_archive_purge/2, get_nested_archives_stats/1]).
+-export([start_archivisation/6, recall/4, update_archive/2, get_archive_info/1,
+    list_archives/3, init_archive_purge/2, get_nested_archives_stats/1, get_aggregated_stats/1]).
 
 %% Exported for use in tests
 -export([remove_archive_recursive/1]).
@@ -126,13 +126,14 @@ start_archivisation(
     end.
 
 
--spec recall(archive:id(), user_ctx:ctx(), file_id:file_guid()) -> ok | error().
-recall(ArchiveId, UserCtx, TargetGuid) ->
+-spec recall(archive:id(), user_ctx:ctx(), file_id:file_guid(), file_meta:name() | default) -> 
+    {ok, file_id:file_guid()} | error().
+recall(ArchiveId, UserCtx, TargetParentGuid, TargetRootName) ->
     case archive:get(ArchiveId) of
-        {ok, #archive{state = ?ARCHIVE_PURGING}} ->
-            ?ERROR_NOT_FOUND;
-        {ok, ArchiveDoc} ->
-            archive_recall_traverse:start(ArchiveDoc, UserCtx, TargetGuid);
+        {ok, #document{value = #archive{state = ?ARCHIVE_PRESERVED}} = ArchiveDoc} ->
+            archive_recall_traverse:start(ArchiveDoc, UserCtx, TargetParentGuid, TargetRootName);
+        {ok, _} ->
+            ?ERROR_NOT_SUPPORTED; % fixme make custom error
         {error, _} = Error -> 
             Error
     end.
@@ -345,7 +346,7 @@ get_state(ArchiveDoc = #document{}) ->
     archive:get_state(ArchiveDoc).
 
 
-%% @private
+% fixme move 
 -spec get_aggregated_stats(archive:doc() | archive:id()) -> archive_stats:record().
 get_aggregated_stats(ArchiveDoc = #document{}) ->
     {ok, ArchiveStats} = archive:get_stats(ArchiveDoc),

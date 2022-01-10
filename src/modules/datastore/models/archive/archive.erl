@@ -37,7 +37,7 @@
     mark_preserved/1, mark_verification_failed/1,
     set_root_dir_guid/2, set_data_dir_guid/2, set_base_archive_id/2,
     set_related_dip/2, set_related_aip/2, 
-    report_recall_started/2, report_recall_finished/2
+    report_recall_scheduled/2, report_recall_finished/2
 ]).
 
 %% datastore_model callbacks
@@ -497,11 +497,11 @@ set_related_aip(ArchiveDocOrId, AipArchiveId) ->
     end).
 
 
--spec report_recall_started(id() | doc(), archive_recall:id()) -> {ok, doc()} | error().
-report_recall_started(ArchiveDocOrId, RecallId) ->
-    update(ArchiveDocOrId, fun(#archive{recalls = PrevRecalls} = Archive) ->
+-spec report_recall_scheduled(id() | doc(), archive_recall:id()) -> {ok, doc()} | error().
+report_recall_scheduled(ArchiveDocOrId, RecallId) ->
+    ?extract_ok(update(ArchiveDocOrId, fun(#archive{recalls = PrevRecalls} = Archive) ->
         {ok, Archive#archive{recalls = lists:sublist([RecallId | PrevRecalls], ?MAX_STORED_ARCHIVE_RECALLS)}}
-    end).
+    end)).
 
 
 -spec report_recall_finished(id() | doc(), archive_recall:id()) -> {ok, doc()} | error().

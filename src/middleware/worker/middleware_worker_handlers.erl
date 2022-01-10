@@ -52,8 +52,10 @@ execute(UserCtx, SpaceDirCtx, #update_archive{id = ArchiveId, diff = Diff}) ->
 execute(UserCtx, SpaceDirCtx, #init_archive_purge{id = ArchiveId, callback = CallbackUrl}) ->
     dataset_req:init_archive_purge(SpaceDirCtx, ArchiveId, CallbackUrl, UserCtx);
 
-execute(UserCtx, SpaceDirCtx, #recall_archive{id = ArchiveId, target_guid = TargetGuid}) ->
-    dataset_req:recall_archive(SpaceDirCtx, ArchiveId, TargetGuid, UserCtx);
+execute(UserCtx, SpaceDirCtx, #recall_archive{
+    id = ArchiveId, target_parent_guid = TargetParentGuid, target_filename = TargetName}
+) ->
+    dataset_req:recall_archive(SpaceDirCtx, ArchiveId, TargetParentGuid, TargetName, UserCtx);
 
 execute(UserCtx, SpaceDirCtx, #schedule_atm_workflow_execution{
     atm_workflow_schema_id = AtmWorkflowSchemaId,

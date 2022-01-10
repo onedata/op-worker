@@ -22,7 +22,7 @@
     get_info/2,
     update/3,
     init_purge/3,
-    recall/3
+    recall/4
 ]).
 
 
@@ -99,14 +99,15 @@ init_purge(SessionId, ArchiveId, CallbackUrl) ->
     }).
 
 
--spec recall(session:id(), archive:id(), file_id:file_guid()) ->
-    ok | no_return().
-recall(SessionId, ArchiveId, TargetGuid) ->
+-spec recall(session:id(), archive:id(), file_id:file_guid(), file_meta:name() | default) ->
+    file_id:file_guid() | no_return().
+recall(SessionId, ArchiveId, TargetParentGuid, TargetFilename) ->
     SpaceGuid = archive_id_to_space_guid(ArchiveId),
     
     middleware_worker:check_exec(SessionId, SpaceGuid, #recall_archive{
         id = ArchiveId,
-        target_guid = TargetGuid
+        target_parent_guid = TargetParentGuid,
+        target_filename = TargetFilename
     }).
     
 

@@ -129,6 +129,11 @@ start(ArchiveDoc, DatasetDoc, UserCtx) ->
                 true -> resolve_symlink(DatasetRootCtx2, UserCtx);
                 false -> file_ctx:get_logical_guid_const(DatasetRootCtx2)
             end,
+            
+            FollowSymlinksPolicy = case FollowSymlinks of
+                true -> external;
+                false -> none
+            end,
 
             Options = #{
                 task_id => TaskId,
@@ -147,7 +152,7 @@ start(ArchiveDoc, DatasetDoc, UserCtx) ->
                         target_parent = DipArchiveDataDirGuid
                     })
                 },
-                follow_symlinks => FollowSymlinks,
+                follow_symlinks => FollowSymlinksPolicy,
                 initial_relative_path => FileLogicalPath,
                 additional_data => AdditionalData2
             },
@@ -641,7 +646,7 @@ archive_dir_insecure(ArchiveDoc, FileCtx, TargetParentCtx, ResolvedFilePath, Use
     TargetParentGuid = file_ctx:get_logical_guid_const(TargetParentCtx),
     % only directory is copied therefore recursive=false is passed to copy function
     {ok, CopyGuid, _} = file_copy:copy(user_ctx:get_session_id(UserCtx), DirGuid, TargetParentGuid, 
-        DirName, false),
+        DirName, #{recursive => false}),
     ArchivedFileCtx = file_ctx:new_by_guid(CopyGuid),
     case is_bagit(ArchiveDoc) of
         false ->
@@ -677,9 +682,43 @@ archive_file_and_mark_finished(
     end.
 
 
--spec archive_file(file_ctx:ctx(), file_ctx:ctx(), archive:doc(), archive:doc() | undefined, 
+% fixme specs
+archive_file(FileCtx, TargetParentCtx, CurrentArchiveDoc, BaseArchiveDoc, ResolvedFilePath, UserCtx) ->
+    case file_ctx:is_symlink_const(FileCtx) of
+        true -> 
+            archive_symlink(FileCtx, TargetParentCtx, CurrentArchiveDoc, UserCtx);
+        false ->
+            archive_regular_file(FileCtx, TargetParentCtx, CurrentArchiveDoc, BaseArchiveDoc, ResolvedFilePath, UserCtx)
+    end.
+
+
+archive_symlink(FileCtx, TargetParentCtx, ArchiveDoc, UserCtx) ->
+    {ok, DatasetId} = archive:get_dataset_id(ArchiveDoc),
+    {ok, SpaceId} = archive:get_space_id(ArchiveDoc),
+    {ok, ArchiveDataGuid} = archive:get_data_dir_guid(ArchiveDoc),
+    {ok, SymlinkPath} = lfm:read_symlink(user_ctx:get_session_id(UserCtx), ?FILE_REF(file_ctx:get_logical_guid_const(FileCtx))),
+    {DatasetCanonicalPath, _DatasetFileCtx} = file_ctx:get_canonical_path(file_ctx:new_by_uuid(DatasetId, SpaceId)),
+    {ArchiveDataCanonicalPath, _ArchiveFileCtx} = file_ctx:get_canonical_path(file_ctx:new_by_guid(ArchiveDataGuid)),
+    [_Sep, _SpaceId, _DatasetName | DatasetPathTokens] = filename:split(DatasetCanonicalPath),
+    [_Sep, _SpaceId | ArchivePathTokens] = filename:split(ArchiveDataCanonicalPath),
+    [SpaceIdPrefix | SymlinkPathTokens] = filename:split(SymlinkPath),
+    FinalSymlinkPath = case lists:prefix(DatasetPathTokens, SymlinkPathTokens) of
+        true -> 
+            RelativePathTokens = SymlinkPathTokens -- DatasetPathTokens,
+            filename:join([SpaceIdPrefix] ++ ArchivePathTokens ++ RelativePathTokens);
+        _ ->
+            SymlinkPath
+    end,
+    {TargetName, _} = file_ctx:get_aliased_name(FileCtx, undefined),
+    % fixme bagit
+    plain_archive:archive_symlink(TargetParentCtx, TargetName, UserCtx, FinalSymlinkPath).
+    
+    
+
+
+-spec archive_regular_file(file_ctx:ctx(), file_ctx:ctx(), archive:doc(), archive:doc() | undefined, 
     file_meta:path(), user_ctx:ctx()) -> {ok, file_ctx:ctx()} | {error, term()}.
-archive_file(
+archive_regular_file(
     FileCtx, TargetParentCtx, CurrentArchiveDoc, BaseArchiveDoc, ResolvedFilePath, UserCtx
 ) ->
     case is_bagit(CurrentArchiveDoc) of
@@ -699,6 +738,7 @@ dip_archive_file(_FileCtx, undefined, _UserCtx) ->
     {ok, undefined};
 dip_archive_file(FileCtx, DipTargetParentCtx, UserCtx) ->
     {FileName, _} = file_ctx:get_aliased_name(FileCtx, UserCtx),
+    % fixme modify symlink target
     {ok, #file_attr{guid = LinkGuid}} = lfm:make_link(
         user_ctx:get_session_id(UserCtx),
         #file_ref{guid = file_ctx:get_logical_guid_const(FileCtx)},

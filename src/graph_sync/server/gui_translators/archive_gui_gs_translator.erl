@@ -17,13 +17,17 @@
 -include("proto/oneprovider/provider_messages.hrl").
 
 %% API
--export([translate_resource/2]).
+-export([translate_value/2, translate_resource/2]).
 % Util functions
 -export([translate_archive_info/1]).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+-spec translate_value(gri:gri(), Value :: term()) -> gs_protocol:data().
+translate_value(#gri{aspect = recall}, RootId) ->
+    #{<<"rootId">> => RootId}.
 
 -spec translate_resource(gri:gri(), Data :: term()) ->
     gs_protocol:data() | fun((aai:auth()) -> gs_protocol:data()).

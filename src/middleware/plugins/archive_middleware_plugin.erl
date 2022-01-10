@@ -81,8 +81,11 @@ data_spec(#op_req{operation = create, gri = #gri{aspect = purge}}) -> #{
 };
 data_spec(#op_req{operation = create, gri = #gri{aspect = recall}}) -> #{
     required => #{
-        <<"targetFileId">> => {binary,
+        <<"targetParentId">> => {binary,
             fun(ObjectId) -> {true, middleware_utils:decode_object_id(ObjectId, <<"fileId">>)} end}
+    },
+    optional => #{
+        <<"targetRootName">> => {binary, non_empty}
     }
 };
 
@@ -114,6 +117,7 @@ fetch_entity(#op_req{operation = Op, auth = ?USER(_UserId), gri = #gri{
     scope = private
 }}) when
     (Op =:= create andalso As =:= purge);
+    (Op =:= create andalso As =:= recall);
     (Op =:= get andalso As =:= instance);
     (Op =:= update andalso As =:= instance)
 ->
@@ -197,8 +201,9 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{id = ArchiveId, aspect = pur
 
 create(#op_req{auth = Auth, data = Data, gri = #gri{id = ArchiveId, aspect = recall}}) ->
     SessionId = Auth#auth.session_id,
-    TargetGuid = maps:get(<<"targetFileId">>, Data),
-    mi_archives:recall(SessionId, ArchiveId, TargetGuid).
+    TargetParentGuid = maps:get(<<"targetParentId">>, Data),
+    TargetRootName = maps:get(<<"targetRootName">>, Data, default),
+    {ok, value, mi_archives:recall(SessionId, ArchiveId, TargetParentGuid, TargetRootName)}.
 
 
 %%--------------------------------------------------------------------
