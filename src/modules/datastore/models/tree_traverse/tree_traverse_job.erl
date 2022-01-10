@@ -62,6 +62,7 @@ save_master_job(Key, Job = #tree_traverse{
     track_subtree_status = TrackSubtreeStatus,
     batch_size = BatchSize,
     traverse_info = TraverseInfo,
+    root_path = RootPath,
     follow_symlinks = FollowSymlinks,
     relative_path = RelativePath,
     encountered_files = EncounteredFilesMap
@@ -82,6 +83,7 @@ save_master_job(Key, Job = #tree_traverse{
         track_subtree_status = TrackSubtreeStatus,
         batch_size = BatchSize,
         traverse_info = term_to_binary(TraverseInfo),
+        root_path = RootPath,
         follow_symlinks = FollowSymlinks,
         relative_path = RelativePath,
         encountered_files = EncounteredFilesMap
@@ -116,6 +118,7 @@ get_master_job(#document{value = #tree_traverse_job{
     track_subtree_status = TrackSubtreeStatus,
     batch_size = BatchSize,
     traverse_info = TraverseInfo,
+    root_path = RootPath,
     follow_symlinks = FollowSymlinks,
     relative_path = RelativePath,
     encountered_files = EncounteredFilesMap
@@ -137,6 +140,7 @@ get_master_job(#document{value = #tree_traverse_job{
                 track_subtree_status = TrackSubtreeStatus,
                 batch_size = BatchSize,
                 traverse_info = binary_to_term(TraverseInfo),
+                root_path = RootPath,
                 follow_symlinks = FollowSymlinks,
                 relative_path = RelativePath,
                 encountered_files = EncounteredFilesMap
@@ -174,7 +178,7 @@ get_ctx() ->
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    4.
+    5.
 
 
 -spec get_record_struct(datastore_model:record_version()) ->
@@ -245,6 +249,27 @@ get_record_struct(4) ->
         {traverse_info, binary},
         % new fields - follow_symlinks, relative_path and encountered_files
         {follow_symlinks, boolean},
+        {relative_path, binary},
+        {encountered_files, #{string => boolean}}
+    ]};
+get_record_struct(5) ->
+    {record, [
+        {pool, string},
+        {callback_module, atom},
+        {task_id, string},
+        {doc_id, string},
+        {user_id, string},
+        {use_listing_token, boolean},
+        {last_name, string},
+        {last_tree, string},
+        {child_dirs_job_generation_policy, atom},
+        {children_master_jobs_mode, atom},
+        {track_subtree_status, boolean},
+        {batch_size, integer},
+        {traverse_info, binary},
+        {root_path, binary},
+        % new fields - follow_symlinks, relative_path and encountered_files
+        {follow_symlinks, atom}, % fixme upgrejder
         {relative_path, binary},
         {encountered_files, #{string => boolean}}
     ]}.

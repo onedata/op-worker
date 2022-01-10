@@ -41,7 +41,7 @@
     connection_pid :: pid(),
     tar_stream :: tar_utils:stream(),
     send_retry_delay = 100 :: time:millis(),
-    follow_symlinks = true :: boolean()
+    follow_symlinks_policy = external :: tree_traverse:symlink_resolution_policy()
 }).
 
 -type state() :: #state{}.
@@ -115,11 +115,15 @@ is_offset_allowed(MainPid, Offset) ->
 main(BulkDownloadId, FileAttrsList, SessionId, InitialConn, FollowSymlinks) ->
     bulk_download_task:save_main_pid(BulkDownloadId, self()),
     TarStream = tar_utils:open_archive_stream(#{gzip => false}),
+    FollowSymlinksPolicy = case FollowSymlinks of
+        true -> external;
+        false -> none
+    end,
     State = #state{
         id = BulkDownloadId, 
         connection_pid = InitialConn, 
         tar_stream = TarStream, 
-        follow_symlinks = FollowSymlinks
+        follow_symlinks_policy = FollowSymlinksPolicy
     },
     {ok, UserId} = session:get_user_id(SessionId),
     {ok, UserCtx} = tree_traverse_session:acquire_for_task(UserId, ?TARBALL_DOWNLOAD_TRAVERSE_POOL_NAME, BulkDownloadId),
@@ -144,7 +148,7 @@ handle_multiple_files(
     % add starting dir to the tarball here as traverse does not execute slave job on it
     {Bytes, UpdatedState} = new_tar_file_entry(State, FileAttrs, Name),
     UpdatedState1 = send_data(Bytes, UpdatedState),
-    bulk_download_traverse:start(BulkDownloadId, UserCtx, Guid, State#state.follow_symlinks, Name),
+    bulk_download_traverse:start(BulkDownloadId, UserCtx, Guid, State#state.follow_symlinks_policy, Name),
     FinalState = wait_for_traverse(UpdatedState1, user_ctx:get_session_id(UserCtx)),
     handle_multiple_files(Tail, BulkDownloadId, UserCtx, FinalState);
 handle_multiple_files(
@@ -155,7 +159,7 @@ handle_multiple_files(
     handle_multiple_files(Tail, BulkDownloadId, UserCtx, UpdatedState);
 handle_multiple_files(
     [#file_attr{type = ?SYMLINK_TYPE, name = Name, guid = Guid} | Tail],
-    BulkDownloadId, UserCtx, #state{follow_symlinks = true} = State
+    BulkDownloadId, UserCtx, #state{follow_symlinks_policy = external} = State % fixme check this clause
 ) ->
     case check_result(lfm:stat(user_ctx:get_session_id(UserCtx), #file_ref{guid = Guid, follow_symlink = true})) of
         {ok, ResolvedFileAttrs} ->
@@ -165,7 +169,7 @@ handle_multiple_files(
     end;
 handle_multiple_files(
     [#file_attr{type = ?SYMLINK_TYPE, name = Name} = FileAttrs | Tail],
-    BulkDownloadId, UserCtx, #state{follow_symlinks = false} = State
+    BulkDownloadId, UserCtx, #state{follow_symlinks_policy = none} = State
 ) ->
     UpdatedState = stream_symlink(State, user_ctx:get_session_id(UserCtx), FileAttrs, Name),
     handle_multiple_files(Tail, BulkDownloadId, UserCtx, UpdatedState).

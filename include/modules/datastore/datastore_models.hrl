@@ -467,8 +467,14 @@
 
 
 -record(archive_recall, {
+    % fixme original archive
+    % fixme finish timestamp
+    % fixme errors??
     target_guid :: file_id:file_guid(),
-    timestamp :: time:millis()
+    name :: file_meta:name(),
+    start_timestamp = undefined :: undefined | time:millis(),
+    total_files :: non_neg_integer(),
+    total_bytes :: non_neg_integer()
 }).
 
 % Model used for storing information associated with dataset.
@@ -1030,7 +1036,8 @@
     track_subtree_status :: boolean(),
     batch_size :: tree_traverse:batch_size(),
     traverse_info :: binary(),
-    follow_symlinks = false :: boolean(),
+    root_path :: file_meta:uuid_based_path(),
+    follow_symlinks = none :: tree_traverse:symlink_resolution_policy(),
     % relative path of the processed file to the traverse root
     relative_path = <<>> :: file_meta:path(),
     % Set of encountered files on the path from the traverse root to the currently processed one. 

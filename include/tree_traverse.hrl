@@ -45,7 +45,8 @@
     % info passed to every slave job
     traverse_info :: tree_traverse:traverse_info(),
     
-    follow_symlinks = false :: boolean(),
+    root_path :: file_meta:uuid_based_path(), % fixme uuid in name
+    follow_symlinks = none :: tree_traverse:symlink_resolution_policy(), % fixme upgrader
     % relative path of the processed file to the traverse root
     relative_path = <<>> :: file_meta:path(),
     % Set of encountered files on the path from the traverse root to the currently processed one. 
