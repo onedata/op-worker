@@ -240,8 +240,8 @@ create_share_from_trash_dir_is_forbidden(_Config) ->
 add_qos_entry_for_trash_dir_is_forbidden(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
-    ?assertMatch({error, ?EPERM},
-        lfm_proxy:add_qos_entry(P1Node, UserSessIdP1, ?FILE_REF(?TRASH_DIR_GUID(?SPACE_ID1)), <<"key=value">>, 1)).
+    ?assertMatch(?ERROR_POSIX(?EPERM),
+        opt_qos:add_qos_entry(P1Node, UserSessIdP1, ?FILE_REF(?TRASH_DIR_GUID(?SPACE_ID1)), <<"key=value">>, 1)).
 
 remove_metadata_on_trash_dir_is_forbidden(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
@@ -253,15 +253,15 @@ schedule_replication_transfer_on_trash_dir_is_forbidden(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
     P2Id = oct_background:get_provider_id(paris),
-    ?assertMatch({error, ?EPERM},
-        lfm_proxy:schedule_file_replication(P1Node, UserSessIdP1, ?FILE_REF(?TRASH_DIR_GUID(?SPACE_ID1)), P2Id)).
+    ?assertMatch(?ERROR_POSIX(?EPERM),
+        opt_transfers:schedule_file_replication(P1Node, UserSessIdP1, ?FILE_REF(?TRASH_DIR_GUID(?SPACE_ID1)), P2Id)).
 
 schedule_eviction_transfer_on_trash_dir_is_allowed(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
     P1Id = oct_background:get_provider_id(krakow),
     {ok, TransferId} = ?assertMatch({ok, _},
-        lfm_proxy:schedule_file_replica_eviction(P1Node, UserSessIdP1, ?FILE_REF(?TRASH_DIR_GUID(?SPACE_ID1)), P1Id, undefined)),
+        opt_transfers:schedule_file_replica_eviction(P1Node, UserSessIdP1, ?FILE_REF(?TRASH_DIR_GUID(?SPACE_ID1)), P1Id, undefined)),
     ?assertMatch({ok, #document{value = #transfer{eviction_status = completed}}},
         rpc:call(P1Node, transfer, get, [TransferId]), ?ATTEMPTS).
 
@@ -270,8 +270,8 @@ schedule_migration_transfer_on_trash_dir_is_forbidden(_Config) ->
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
     P1Id = oct_background:get_provider_id(krakow),
     P2Id = oct_background:get_provider_id(paris),
-    ?assertMatch({error, ?EPERM},
-        lfm_proxy:schedule_file_replica_eviction(P1Node, UserSessIdP1, ?FILE_REF(?TRASH_DIR_GUID(?SPACE_ID1)), P1Id, P2Id)).
+    ?assertMatch(?ERROR_POSIX(?EPERM),
+        opt_transfers:schedule_file_replica_eviction(P1Node, UserSessIdP1, ?FILE_REF(?TRASH_DIR_GUID(?SPACE_ID1)), P1Id, P2Id)).
 
 schedule_replication_transfer_on_space_does_not_replicate_trash(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
@@ -291,7 +291,7 @@ schedule_replication_transfer_on_space_does_not_replicate_trash(_Config) ->
 
     P2Id = oct_background:get_provider_id(paris),
     {ok, TransferId} = ?assertMatch({ok, _},
-        lfm_proxy:schedule_file_replication(P1Node, UserSessIdP1, ?FILE_REF(?SPACE_GUID), P2Id)),
+        opt_transfers:schedule_file_replication(P1Node, UserSessIdP1, ?FILE_REF(?SPACE_GUID), P2Id)),
 
     ?assertMatch({ok, #document{value = #transfer{
         replication_status = completed,
@@ -335,7 +335,7 @@ schedule_eviction_transfer_on_space_evicts_trash(_Config) ->
 
     % evict whole space
     {ok, TransferId} = ?assertMatch({ok, _},
-        lfm_proxy:schedule_file_replica_eviction(P1Node, UserSessIdP1, ?FILE_REF(?SPACE_GUID), P1Id, undefined)),
+        opt_transfers:schedule_file_replica_eviction(P1Node, UserSessIdP1, ?FILE_REF(?SPACE_GUID), P1Id, undefined)),
 
     ?assertMatch({ok, #document{value = #transfer{
         eviction_status = completed,
@@ -367,7 +367,7 @@ schedule_migration_transfer_on_space_does_not_replicate_trash(_Config) ->
     P1Id = oct_background:get_provider_id(krakow),
     P2Id = oct_background:get_provider_id(paris),
     {ok, TransferId} = ?assertMatch({ok, _},
-        lfm_proxy:schedule_file_replica_eviction(P1Node, UserSessIdP1, ?FILE_REF(?SPACE_GUID), P1Id, P2Id)),
+        opt_transfers:schedule_file_replica_eviction(P1Node, UserSessIdP1, ?FILE_REF(?SPACE_GUID), P1Id, P2Id)),
 
     ?assertMatch({ok, #document{value = #transfer{
         replication_status = completed,
@@ -575,13 +575,13 @@ qos_does_not_affect_files_in_trash_test_base(_Config, SetQosOn) ->
 
     {ok, QosEntryId} = ?assertMatch(
         {ok, _},
-        lfm_proxy:add_qos_entry(P1Node, UserSessIdP1, ?FILE_REF(GuidWithQos), <<"key=value">>, 1),
+        opt_qos:add_qos_entry(P1Node, UserSessIdP1, ?FILE_REF(GuidWithQos), <<"key=value">>, 1),
         ?ATTEMPTS
     ),
 
     % check whether QoS synchronized the file
     ?assertMatch({ok, {#{QosEntryId := fulfilled}, _}},
-        lfm_proxy:get_effective_file_qos(P1Node, UserSessIdP1, ?FILE_REF(GuidWithQos)), ?ATTEMPTS),
+        opt_qos:get_effective_file_qos(P1Node, UserSessIdP1, ?FILE_REF(GuidWithQos)), ?ATTEMPTS),
 
     ?assertDistribution(P1Node, UserSessIdP1, ?DISTS([P1Id, P2Id], [Size1, Size1]), FileGuid, ?ATTEMPTS),
 

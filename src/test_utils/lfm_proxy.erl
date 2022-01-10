@@ -68,13 +68,7 @@
 
     create_share/4, create_share/5, remove_share/3,
 
-    schedule_file_replication/4, schedule_replication_by_view/6,
-    schedule_file_replica_eviction/5, schedule_replica_eviction_by_view/7,
-    get_file_distribution/3,
-
-    get_effective_file_qos/3,
-    add_qos_entry/5, get_qos_entry/3, remove_qos_entry/3,
-    check_qos_status/3, check_qos_status/4
+    get_file_distribution/3
 ]).
 
 -define(EXEC(Worker, Function),
@@ -745,109 +739,10 @@ remove_share(Worker, SessId, FileKey) ->
 %%%===================================================================
 
 
--spec schedule_file_replication(node(), session:id(), lfm:file_key(),
-    ProviderId :: oneprovider:id()) -> {ok, transfer:id()} | {error, term()}.
-schedule_file_replication(Worker, SessId, FileKey, ProviderId) ->
-    ?EXEC(Worker, lfm:schedule_file_transfer(
-        SessId, FileKey, ProviderId, undefined, undefined
-    )).
-
-
--spec schedule_replication_by_view(
-    node(),
-    session:id(),
-    ProviderId :: oneprovider:id(),
-    SpaceId :: od_space:id(),
-    ViewName :: transfer:view_name(),
-    transfer:query_view_params()
-) ->
-    {ok, transfer:id()} | {error, term()}.
-schedule_replication_by_view(Worker, SessId, ProviderId, SpaceId, ViewName, QueryViewParams) ->
-    ?EXEC(Worker, lfm:schedule_view_transfer(
-        SessId, SpaceId, ViewName, QueryViewParams,
-        ProviderId, undefined, undefined
-    )).
-
-
--spec schedule_file_replica_eviction(
-    node(),
-    session:id(),
-    lfm:file_key(),
-    ProviderId :: oneprovider:id(),
-    MigrationProviderId :: undefined | oneprovider:id()
-) ->
-    {ok, transfer:id()} | {error, term()}.
-schedule_file_replica_eviction(Worker, SessId, FileKey, ProviderId, MigrationProviderId) ->
-    ?EXEC(Worker, lfm:schedule_file_transfer(
-        SessId, FileKey, MigrationProviderId, ProviderId, undefined
-    )).
-
-
--spec schedule_replica_eviction_by_view(
-    node(),
-    session:id(),
-    ProviderId :: oneprovider:id(),
-    MigrationProviderId :: undefined | oneprovider:id(),
-    od_space:id(),
-    transfer:view_name(),
-    transfer:query_view_params()
-) ->
-    {ok, transfer:id()} | {error, term()}.
-schedule_replica_eviction_by_view(
-    Worker, SessId, ProviderId, MigrationProviderId,
-    SpaceId, ViewName, QueryViewParams
-) ->
-    ?EXEC(Worker, lfm:schedule_view_transfer(
-        SessId, SpaceId, ViewName, QueryViewParams,
-        MigrationProviderId, ProviderId, undefined
-    )).
-
-
 -spec get_file_distribution(node(), session:id(), lfm:file_key()) ->
     {ok, list()}.
 get_file_distribution(Worker, SessId, FileKey) ->
     ?EXEC(Worker, lfm:get_file_distribution(SessId, FileKey)).
-
-
-%%%===================================================================
-%%% QoS related operations
-%%%===================================================================
-
-
--spec get_effective_file_qos(node(), session:id(), lfm:file_key()) ->
-    {ok, {#{qos_entry:id() => qos_status:summary()}, file_qos:assigned_entries()}} | lfm:error_reply().
-get_effective_file_qos(Worker, SessId, FileKey) ->
-    ?EXEC(Worker, lfm:get_effective_file_qos(SessId, FileKey)).
-
-
--spec add_qos_entry(node(), session:id(), lfm:file_key(), qos_expression:infix() | qos_expression:expression(),
-    qos_entry:replicas_num()) -> {ok, qos_entry:id()} | lfm:error_reply().
-add_qos_entry(Worker, SessId, FileKey, Expression, ReplicasNum) ->
-    ?EXEC(Worker, lfm:add_qos_entry(SessId, FileKey, Expression, ReplicasNum)).
-
-
--spec get_qos_entry(node(), session:id(), qos_entry:id()) ->
-    {ok, qos_entry:record()} | lfm:error_reply().
-get_qos_entry(Worker, SessId, QosEntryId) ->
-    ?EXEC(Worker, lfm:get_qos_entry(SessId, QosEntryId)).
-
-
--spec remove_qos_entry(node(), session:id(), qos_entry:id()) ->
-    ok | lfm:error_reply().
-remove_qos_entry(Worker, SessId, QosEntryId) ->
-    ?EXEC(Worker, lfm:remove_qos_entry(SessId, QosEntryId)).
-
-
--spec check_qos_status(node(), session:id(), qos_entry:id()) ->
-    {ok, qos_status:summary()} | lfm:error_reply().
-check_qos_status(Worker, SessId, QosEntryId) ->
-    ?EXEC(Worker, lfm:check_qos_status(SessId, QosEntryId)).
-
-
--spec check_qos_status(node(), session:id(), qos_entry:id(), lfm:file_key()) ->
-    {ok, qos_status:summary()} | lfm:error_reply().
-check_qos_status(Worker, SessId, QosEntryId, FileKey) ->
-    ?EXEC(Worker, lfm:check_qos_status(SessId, QosEntryId, FileKey)).
 
 
 %%%===================================================================

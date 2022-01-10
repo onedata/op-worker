@@ -27,21 +27,19 @@
 %% worker_plugin_behaviour callbacks
 -export([init/1, handle/1, cleanup/0]).
 
-
--type operation() ::
-    % archives related
+-type archive_operation() ::
     #list_archives{} |
     #archive_dataset{} |
     #get_archive_info{} |
     #update_archive{} |
-    #init_archive_purge{} |
+    #init_archive_purge{}.
 
-    % automation related
+-type atm_operation() ::
     #schedule_atm_workflow_execution{} |
     #cancel_atm_workflow_execution{} |
-    #repeat_atm_workflow_execution{} |
+    #repeat_atm_workflow_execution{}.
 
-    % datasets related
+-type dataset_operation() ::
     #list_top_datasets{} |
     #list_children_datasets{} |
     #establish_dataset{} |
@@ -50,7 +48,29 @@
     #remove_dataset {} |
     #get_file_eff_dataset_summary{}.
 
--export_type([operation/0]).
+-type qos_operation() ::
+    #add_qos_entry{} |
+    #get_qos_entry{} |
+    #remove_qos_entry{} |
+    #get_effective_file_qos{} |
+    #check_qos_status{}.
+
+-type transfer_operation() ::
+    #schedule_file_transfer{} |
+    #schedule_view_transfer{}.
+
+-type operation() ::
+    archive_operation() |
+    atm_operation() |
+    dataset_operation() |
+    qos_operation() |
+    transfer_operation().
+
+-export_type([
+    archive_operation/0, atm_operation/0, dataset_operation/0,
+    qos_operation/0, transfer_operation/0,
+    operation/0
+]).
 
 
 -define(SHOULD_LOG_REQUESTS_ON_ERROR, application:get_env(
@@ -111,10 +131,11 @@ handle(healthcheck) ->
 
 handle(?REQ(SessionId, FileGuid, Operation)) ->
     try
+        UserCtx = user_ctx:new(SessionId),
+        assert_user_not_in_open_handle_mode(UserCtx),
+
         middleware_utils:assert_file_managed_locally(FileGuid),
         assert_file_access_not_in_share_mode(FileGuid),
-
-        UserCtx = user_ctx:new(SessionId),
         FileCtx = file_ctx:new_by_guid(FileGuid),
 
         middleware_worker_handlers:execute(UserCtx, FileCtx, Operation)
@@ -139,6 +160,15 @@ cleanup() ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+%% @private
+-spec assert_user_not_in_open_handle_mode(user_ctx:ctx()) -> ok | no_return().
+assert_user_not_in_open_handle_mode(UserCtx) ->
+    case user_ctx:is_in_open_handle_mode(UserCtx) of
+        true -> throw(?ERROR_POSIX(?EPERM));
+        false -> ok
+    end.
 
 
 %% @private

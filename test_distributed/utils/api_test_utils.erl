@@ -356,11 +356,11 @@ randomly_add_qos(Nodes, FileGuid, Expression, ReplicasNum) ->
     case rand:uniform(2) of
         1 ->
             RandNode = lists_utils:random_element(Nodes),
-            {ok, QosEntryId} = ?assertMatch({ok, _}, lfm_proxy:add_qos_entry(
+            {ok, QosEntryId} = ?assertMatch({ok, _}, opt_qos:add_qos_entry(
                 RandNode, ?ROOT_SESS_ID, ?FILE_REF(FileGuid), Expression, ReplicasNum
             ), ?ATTEMPTS),
             lists:foreach(fun(Node) ->
-                ?assertMatch({ok, _}, lfm_proxy:get_qos_entry(Node, ?ROOT_SESS_ID, QosEntryId), ?ATTEMPTS)
+                ?assertMatch({ok, _}, opt_qos:get_qos_entry(Node, ?ROOT_SESS_ID, QosEntryId), ?ATTEMPTS)
             end, Nodes),
             true;
         2 ->

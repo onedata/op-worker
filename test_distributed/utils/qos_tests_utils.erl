@@ -272,7 +272,7 @@ wait_for_qos_fulfillment_in_parallel(QosNameIdMapping, ExpectedQosEntries) ->
 
 wait_for_qos_fulfilment(Node, QosEntryId, QosName, ExpectedFulfillmentStatus) ->
     Fun = fun() ->
-        ErrMsg = case lfm_proxy:get_qos_entry(Node, ?ROOT_SESS_ID, QosEntryId) of
+        ErrMsg = case opt_qos:get_qos_entry(Node, ?ROOT_SESS_ID, QosEntryId) of
             {ok, #qos_entry{
                 possibility_check = PossibilityCheck,
                 traverse_reqs = TraverseReqs
@@ -302,7 +302,7 @@ wait_for_qos_fulfilment(Node, QosEntryId, QosName, ExpectedFulfillmentStatus) ->
                     "Error: ~p~n", [Node, QosName, Error]
                 )
         end,
-        {lfm_proxy:check_qos_status(Node, ?ROOT_SESS_ID, QosEntryId), ErrMsg}
+        {opt_qos:check_qos_status(Node, ?ROOT_SESS_ID, QosEntryId), ErrMsg}
     end,
     assert_match_with_err_msg(Fun, {ok, ExpectedFulfillmentStatus}, ?ATTEMPTS, 1000).
 
@@ -610,8 +610,8 @@ assert_effective_qos(Provider, FilePath, QosEntries, AssignedEntries, FilterAssi
 
 
 get_effective_qos_by_lfm(Node, SessionId, FileGuid) ->
-    {ok, {QosEntriesWithStatus, AssignedEntries}} = 
-        lfm_proxy:get_effective_file_qos(Node, SessionId, ?FILE_REF(FileGuid)),
+    {ok, {QosEntriesWithStatus, AssignedEntries}} =
+        opt_qos:get_effective_file_qos(Node, SessionId, ?FILE_REF(FileGuid)),
     {ok, #effective_file_qos{
         assigned_entries = AssignedEntries,
         qos_entries = maps:keys(QosEntriesWithStatus)
@@ -705,7 +705,7 @@ gather_not_matching_statuses_on_all_nodes(Guids, QosList, ExpectedStatus) ->
     end, 
     lists:flatmap(fun(Node) ->
         lists:filtermap(fun(Guid) ->
-            case lfm_proxy:check_qos_status(Node, ?ROOT_SESS_ID, QosList, ?FILE_REF(Guid)) of
+            case opt_qos:check_qos_status(Node, ?ROOT_SESS_ID, QosList, ?FILE_REF(Guid)) of
                 ExpectedStatusMatcher -> false;
                 NotExpectedStatus -> {true, {Node, Guid, NotExpectedStatus}}
             end

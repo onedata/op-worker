@@ -12,7 +12,7 @@ LDFLAGS += -shared -Wl,-rpath -Wl,\$$ORIGIN/helpers/lib -L $(HELPERS_DIR)/priv/l
 	-Wl,--no-whole-archive -lz -lglog -lnss3 -lnspr4 -lboost_system -lboost_filesystem -lboost_log -lboost_thread \
 	-lboost_context -liberty -levent -ldouble-conversion -lboost_iostreams -lboost_regex \
 	-lacl -lgfapi -lglusterfs -lgfrpc -lgfxdr -lXrdCl -lXrdPosixPreload -lXrdXml \
-	-lXrdUtils -lXrdPosix -lspdlog -lfmt
+	-lXrdUtils -lXrdPosix -lspdlog -lfmt -lnfs
 
 
 # Add ceph-common library, if X_SCLS is defined, the library is installed
@@ -25,7 +25,8 @@ endif
 
 CXXFLAGS += -fPIC -std=c++14 -O3 -Wall -D_FILE_OFFSET_BITS=64 -DASIO_STANDALONE \
     -DWITH_CEPH=1 -DWITH_S3=1 -DWITH_SWIFT=1 -DWITH_GLUSTERFS=1 -DWITH_WEBDAV=1 \
-    -DWITH_XROOTD=1 -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL -DFUSE_USE_VERSION=34 \
+    -DWITH_XROOTD=1 -DWITH_NFS=1 \
+    -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL -DFUSE_USE_VERSION=34 \
     $(shell pkg-config --cflags botan-1.10 tbb fuse3) \
     -isystem $(HELPERS_DIR)/priv/include -isystem $(HELPERS_DIR)/deps/cppmetrics \
     -isystem $(HELPERS_DIR)/deps/spdlog -isystem $(ERTS_INCLUDE_DIR)

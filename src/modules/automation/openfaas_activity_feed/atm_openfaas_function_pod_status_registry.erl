@@ -19,6 +19,7 @@
 
 %% API
 -export([empty/0]).
+-export([has_summary/2]).
 -export([get_summary/2]).
 -export([update_summary/4]).
 -export([foreach_summary/2]).
@@ -39,6 +40,12 @@
 -spec empty() -> record().
 empty() ->
     #atm_openfaas_function_pod_status_registry{registry = #{}}.
+
+
+-spec has_summary(atm_openfaas_function_activity_registry:pod_id(), record()) ->
+    boolean().
+has_summary(PodId, #atm_openfaas_function_pod_status_registry{registry = Registry}) ->
+    maps:is_key(PodId, Registry).
 
 
 -spec get_summary(atm_openfaas_function_activity_registry:pod_id(), record()) ->

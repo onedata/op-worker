@@ -295,7 +295,7 @@ prepare_replication_transfer(InitialData, TestData) ->
     ?assertDistribution(FailingNode, SessIdFailingProvider, ?DISTS([HealthyProvider], [FileSize]), FileGuid, ?ATTEMPTS),
 
     block_replication_transfer(FailingNode),
-    {ok, TransferId} = lfm_proxy:schedule_file_replication(FailingNode, SessIdFailingProvider, ?FILE_REF(FileGuid), FailingProvider),
+    {ok, TransferId} = opt_transfers:schedule_file_replication(FailingNode, SessIdFailingProvider, ?FILE_REF(FileGuid), FailingProvider),
     TestData#{
         replication => #{
             transfer_id => TransferId,
@@ -328,7 +328,7 @@ prepare_eviction_transfer(InitialData, TestData) ->
 
     block_eviction_transfer(FailingNode),
     {ok, TransferId} =
-        lfm_proxy:schedule_file_replica_eviction(FailingNode, SessIdFailingProvider, ?FILE_REF(FileGuid), FailingProvider, undefined),
+        opt_transfers:schedule_file_replica_eviction(FailingNode, SessIdFailingProvider, ?FILE_REF(FileGuid), FailingProvider, undefined),
     TestData#{
         eviction => #{
             transfer_id => TransferId,
@@ -352,7 +352,7 @@ prepare_outgoing_migration_transfer(InitialData, TestData) ->
     ?assertDistribution(HealthyNode, SessIdHealthyProvider, ?DISTS([FailingProvider], [FileSize]), FileGuid, ?ATTEMPTS),
 
     block_eviction_transfer(FailingNode),
-    {ok, TransferId} = lfm_proxy:schedule_file_replica_eviction(FailingNode, SessIdFailingProvider, ?FILE_REF(FileGuid), FailingProvider,
+    {ok, TransferId} = opt_transfers:schedule_file_replica_eviction(FailingNode, SessIdFailingProvider, ?FILE_REF(FileGuid), FailingProvider,
         HealthyProvider),
 
     ?assertMatch({ok, #document{value = #transfer{
@@ -382,7 +382,7 @@ prepare_incoming_migration_transfer(InitialData, TestData) ->
     ?assertDistribution(FailingNode, SessIdFailingProvider, ?DISTS([HealthyProvider], [FileSize]), FileGuid, ?ATTEMPTS),
 
     block_replication_transfer(FailingNode),
-    {ok, TransferId} = lfm_proxy:schedule_file_replica_eviction(FailingNode, SessIdFailingProvider, ?FILE_REF(FileGuid), HealthyProvider,
+    {ok, TransferId} = opt_transfers:schedule_file_replica_eviction(FailingNode, SessIdFailingProvider, ?FILE_REF(FileGuid), HealthyProvider,
         FailingProvider),
 
     ?assertMatch({ok, #document{value = #transfer{
