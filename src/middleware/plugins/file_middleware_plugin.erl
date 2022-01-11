@@ -486,6 +486,8 @@ resolve_get_operation_handler(symlink_value, public) -> ?MODULE;
 resolve_get_operation_handler(symlink_value, private) -> ?MODULE;
 resolve_get_operation_handler(symlink_target, public) -> ?MODULE;
 resolve_get_operation_handler(symlink_target, private) -> ?MODULE;
+resolve_get_operation_handler(archive_recall_details, private) -> ?MODULE;
+resolve_get_operation_handler(archive_recall_progress, private) -> ?MODULE;
 resolve_get_operation_handler(_, _) -> throw(?ERROR_NOT_SUPPORTED).
 
 
@@ -557,7 +559,9 @@ data_spec_get(#gri{aspect = As}) when
     As =:= acl;
     As =:= shares;
     As =:= symlink_value;
-    As =:= symlink_target
+    As =:= symlink_target;
+    As =:= archive_recall_details;
+    As =:= archive_recall_progress
 ->
     #{required => #{id => {binary, guid}}};
 
@@ -621,7 +625,9 @@ authorize_get(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= dataset_summary;
     As =:= hardlinks;
     As =:= symlink_value;
-    As =:= symlink_target
+    As =:= symlink_target;
+    As =:= archive_recall_details;
+    As =:= archive_recall_progress
 ->
     middleware_utils:has_access_to_file(Auth, Guid);
 
@@ -668,7 +674,9 @@ validate_get(#op_req{gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= dataset_summary;
     As =:= hardlinks;
     As =:= symlink_value;
-    As =:= symlink_target
+    As =:= symlink_target;
+    As =:= archive_recall_details;
+    As =:= archive_recall_progress
 ->
     middleware_utils:assert_file_managed_locally(Guid);
 
@@ -862,7 +870,15 @@ get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = symlink_target, scop
         type = op_file, id = TargetFileGuid,
         aspect = instance, scope = Scope
     },
-    {ok, TargetFileGri, TargetFileDetails}.
+    {ok, TargetFileGri, TargetFileDetails};
+
+
+get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = archive_recall_details}}, _) ->
+    {ok, mi_archives:get_recall_details(Auth, FileGuid)};
+
+
+get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = archive_recall_progress}}, _) ->
+    {ok, mi_archives:get_recall_progress(Auth, FileGuid)}.
 
 
 %%%===================================================================

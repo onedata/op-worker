@@ -79,6 +79,14 @@
     target_filename = default :: file_meta:name() | default
 }).
 
+-record(get_recall_details, {
+    id :: archive_recall:id()
+}).
+
+-record(get_recall_progress, {
+    id :: archive_recall:id()
+}).
+
 %% automation related
 
 -record(schedule_atm_workflow_execution, {

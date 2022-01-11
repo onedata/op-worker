@@ -173,12 +173,9 @@ get_file_details_insecure(UserCtx, FileCtx, Opts) ->
                 _ -> false
             end
     end,
-    {EffQoSMembership, EffDatasetMembership, EffProtectionFlags, FileCtx4} = case ShouldCalculateEffectiveValues of
+    {EffectiveValues, FileCtx3} = case ShouldCalculateEffectiveValues of
         true ->
-            EffectiveQoSMembership = file_qos:qos_membership(FileDoc),
-            {ok, EffectiveDatasetMembership, EffectiveProtectionFlags, FileCtx3} =
-                dataset_api:get_effective_membership_and_protection_flags(FileCtx2),
-            {EffectiveQoSMembership, EffectiveDatasetMembership, EffectiveProtectionFlags, FileCtx3};
+            calculate_effective_values(FileCtx2);
         false ->
             {undefined, undefined, undefined, FileCtx2}
     end,
@@ -196,12 +193,29 @@ get_file_details_insecure(UserCtx, FileCtx, Opts) ->
             end,
             index_startid = file_meta:get_name(FileDoc),
             active_permissions_type = ActivePermissionsType,
-            has_metadata = has_metadata(FileCtx4),
-            eff_qos_membership = EffQoSMembership,
-            eff_dataset_membership = EffDatasetMembership,
-            eff_protection_flags = EffProtectionFlags
+            has_metadata = has_metadata(FileCtx3),
+            eff_qos_membership = maps:get(effective_qos_membership, EffectiveValues),
+            eff_dataset_membership = maps:get(effective_dataset_membership, EffectiveValues),
+            eff_protection_flags = maps:get(effective_protection_flags, EffectiveValues),
+            recall_root_id = maps:get(effective_recall, EffectiveValues)
         }
     }.
+
+
+% fixme specs
+calculate_effective_values(FileCtx) ->
+    {FileDoc, FileCtx2} = file_ctx:get_file_doc(FileCtx),
+    EffectiveQoSMembership = file_qos:qos_membership(FileDoc),
+    {ok, EffectiveDatasetMembership, EffectiveProtectionFlags, FileCtx3} =
+        dataset_api:get_effective_membership_and_protection_flags(FileCtx2),
+    {ok, EffectiveRecall} = archive_recall:get_effective_recall(FileDoc),
+    {#{
+        effective_qos_membership => EffectiveQoSMembership,
+        effective_dataset_membership => EffectiveDatasetMembership,
+        effective_protection_flags => EffectiveProtectionFlags,
+        effective_recall => EffectiveRecall
+    }, FileCtx3}.
+    
 
 
 -spec get_file_references(user_ctx:ctx(), file_ctx:ctx()) ->

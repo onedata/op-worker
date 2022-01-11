@@ -13,6 +13,7 @@
 %%%     * files - stores number of copied files
 %%% Recall statistics are only kept locally on provider that is 
 %%% performing recall.
+% fixme 
 %%% @end
 %%%-------------------------------------------------------------------
 -module(archive_recall).
@@ -20,13 +21,15 @@
 
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
+-include("modules/fslogic/file_details.hrl/").
 -include_lib("cluster_worker/include/modules/datastore/ts_metric_config.hrl").
 
 
 %% API
--export([create/4, delete/1]).
--export([report_started/1, report_bytes_copied/2, report_file_finished/1]).
--export([get_details/1, get_stats/1]).
+-export([create/2, delete/1]).
+-export([report_started/2, report_finished/2, report_bytes_copied/2, report_file_finished/1]).
+-export([get_details/1, get_stats/1, get_progress/1]).
+-export([get_effective_recall/1]).
 %% Datastore callbacks
 -export([get_ctx/0, get_record_version/0, get_record_struct/1]).
 
@@ -47,19 +50,24 @@
     local_links_tree_id => oneprovider:get_id_or_undefined()
 }).
 
--define(BYTES_TS, <<"bytes">>).
--define(FILES_TS, <<"files">>).
+-define(BYTES_TS, <<"currentBytes">>).
+-define(FILES_TS, <<"currentFiles">>).
 -define(TSC_ID(Id), <<Id/binary, "tsc">>).
+
+-define(TOTAL_METRIC, <<"total">>).
+-define(MINUTE_METRIC, <<"minute">>).
+-define(HOUR_METRIC, <<"hour">>).
+-define(DAY_METRIC, <<"day">>).
 
 %%%===================================================================
 %%% API functions
 %%%===================================================================
 
--spec create(id(), file_id:file_guid(), file_meta:name(), archive_stats:record()) -> 
-    ok | {error, term()}.
-create(Id, TargetParentGuid, Name, Stats) ->
+-spec create(id(), archive:doc()) -> ok | {error, term()}.
+create(Id, ArchiveDoc) ->
+%%    fixme create infinite_log
     case create_tsc(Id) of
-        ok -> case create_doc(Id, TargetParentGuid, Name, Stats) of
+        ok -> case create_doc(Id, ArchiveDoc) of
             ok -> ok;
             Error ->
                 delete(Id),
@@ -70,11 +78,13 @@ create(Id, TargetParentGuid, Name, Stats) ->
 
 -spec delete(id()) -> ok | {error, term()}.
 delete(Id) ->
+    % fixme remove from archive record
     datastore_time_series_collection:delete(?SYNC_CTX, ?TSC_ID(Id)),
     datastore_model:delete(?SYNC_CTX, Id).
 
 
-report_started(Id) ->
+report_started(Id, SpaceId) ->
+    ok = archive_recall_cache:invalidate_on_all_nodes(SpaceId),
     ?extract_ok(datastore_model:update(?SYNC_CTX, Id, fun(ArchiveRecall) ->
         {ok, ArchiveRecall#archive_recall{start_timestamp = global_clock:timestamp_millis()}}
     end)).
@@ -85,6 +95,14 @@ report_file_finished(Id) ->
     datastore_time_series_collection:update(?CTX, ?TSC_ID(Id), global_clock:timestamp_millis(), [
         {?FILES_TS, 1}
     ]).
+
+
+report_finished(Id, SpaceId) ->
+    ok = archive_recall_cache:invalidate_on_all_nodes(SpaceId),
+    ?extract_ok(datastore_model:update(?SYNC_CTX, Id, fun(ArchiveRecall) ->
+        {ok, ArchiveRecall#archive_recall{finish_timestamp = global_clock:timestamp_millis()}}
+    end)).
+
 
 
 -spec report_bytes_copied(id(), non_neg_integer()) -> ok | {error, term()}.
@@ -108,6 +126,31 @@ get_details(Id) ->
 get_stats(Id) ->
     datastore_time_series_collection:list_windows(?CTX, ?TSC_ID(Id), #{}).
 
+
+get_progress(Id) ->
+    RequestRange = lists:map(fun(Parameter) -> {Parameter, ?TOTAL_METRIC} end, [?BYTES_TS, ?FILES_TS]),
+    
+    case datastore_time_series_collection:list_windows(?CTX, ?TSC_ID(Id), RequestRange, #{limit => 1}) of
+        {ok, WindowsMap} ->
+            WindowToValue = fun
+                ({{Parameter, ?TOTAL_METRIC}, [{_Timestamp, {_Measurements, Value}}]}) -> {Parameter, Value};
+                ({{Parameter, ?TOTAL_METRIC}, []}) -> {Parameter, 0}
+            end,
+            {ok, maps:from_list(lists:map(WindowToValue, maps:to_list(WindowsMap)))};
+        Error ->
+            Error
+    end.
+
+
+% fixme spec
+get_effective_recall(#document{scope = SpaceId, key = Id} = Doc) ->
+    case archive_recall_cache:get(SpaceId, Doc) of
+        {ok, {finished, Id}} -> {ok, Id};
+        {ok, {finished, _}} -> {ok, undefined};
+        {ok, {ongoing, AncestorId}} -> {ok, AncestorId};
+        Other -> Other
+    end.
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -115,6 +158,7 @@ get_stats(Id) ->
 -spec create_tsc(id()) -> ok | {error, term()}.
 create_tsc(Id) ->
     Config = #{
+        % fixme failed files
         ?BYTES_TS => supported_metrics(),
         ?FILES_TS => supported_metrics()
     },
@@ -125,31 +169,46 @@ create_tsc(Id) ->
     end.
 
 % fixme specs
-create_doc(Id, TargetParentGuid, Name, Stats) ->
+create_doc(Id, ArchiveDoc) ->
+    {ok, SpaceId} = archive:get_space_id(ArchiveDoc),
+    {ok, ArchiveId} = archive:get_id(ArchiveDoc),
+    {ok, DatasetId} = archive:get_dataset_id(ArchiveDoc),
+    {ok, Stats} = archive_api:get_aggregated_stats(ArchiveDoc),
     ?extract_ok(datastore_model:create(?SYNC_CTX, #document{
         key = Id,
-        scope = file_id:guid_to_space_id(TargetParentGuid),
+        scope = SpaceId,
         value = #archive_recall{
-            target_guid = TargetParentGuid,
-            name = Name,
-            total_bytes = archive_stats:get_archived_bytes(Stats),
-            total_files = archive_stats:get_archived_files(Stats)
+            source_archive = ArchiveId,
+            source_dataset = DatasetId,
+            target_bytes = archive_stats:get_archived_bytes(Stats),
+            target_files = archive_stats:get_archived_files(Stats)
         }}
     )).
 
 -spec supported_metrics() -> #{ts_metric:id() => ts_metric:config()}.
 supported_metrics() -> #{
-    <<"minute">> => #metric_config{
+    ?TOTAL_METRIC => #metric_config{
+        resolution = 0,
+        retention = 1,
+        aggregator = sum
+    },
+    ?MINUTE_METRIC => #metric_config{
         resolution = timer:minutes(1),
         retention = 120,
         aggregator = sum
     },
-    <<"hour">> => #metric_config{
+    ?HOUR_METRIC => #metric_config{
         resolution = timer:hours(1),
         retention = 48,
         aggregator = sum
+    },
+    ?DAY_METRIC => #metric_config{
+        resolution = timer:hours(24),
+        retention = 60,
+        aggregator = sum
     }
 }.
+
 
 
 %%%===================================================================
@@ -168,9 +227,11 @@ get_record_version() ->
 -spec get_record_struct(datastore_model:record_version()) -> datastore_model:record_struct().
 get_record_struct(1) ->
     {record, [
-        {target_guid, string},
-        {name, binary},
-        {timestamp, integer},
-        {total_files, integer},
-        {total_bytes, integer}
+        {source_archive, string},
+        {source_dataset, string},
+        {start_timestamp, integer},
+        {finish_timestamp, integer},
+        {failed_files, integer}, % fixme keep in tsc
+        {target_files, integer},
+        {target_bytes, integer}
     ]}.

@@ -22,6 +22,7 @@
 %%% API
 %%%===================================================================
 
+%% Archives
 
 -spec execute(user_ctx:ctx(), file_ctx:ctx(), middleware_worker:operation()) ->
     ok | {ok, term()} | no_return().
@@ -57,6 +58,15 @@ execute(UserCtx, SpaceDirCtx, #recall_archive{
 ) ->
     dataset_req:recall_archive(SpaceDirCtx, ArchiveId, TargetParentGuid, TargetName, UserCtx);
 
+execute(_UserCtx, _FileCtx, #get_recall_details{id = FileGuid}) ->
+    archive_recall:get_details(file_id:guid_to_uuid(FileGuid));
+
+execute(_UserCtx, _FileCtx, #get_recall_progress{id = FileGuid}) ->
+    archive_recall:get_progress(file_id:guid_to_uuid(FileGuid));
+
+
+%% Automation
+
 execute(UserCtx, SpaceDirCtx, #schedule_atm_workflow_execution{
     atm_workflow_schema_id = AtmWorkflowSchemaId,
     atm_workflow_schema_revision_num = AtmWorkflowSchemaRevisionNum,
@@ -82,6 +92,9 @@ execute(UserCtx, _SpaceDirCtx, #repeat_atm_workflow_execution{
     ok = atm_workflow_execution_api:repeat(
         UserCtx, Type, AtmLaneRunSelector, AtmWorkflowExecutionId
     );
+
+
+%% Datasets
 
 execute(UserCtx, SpaceDirCtx, #list_top_datasets{state = State, opts = Opts, mode = ListingMode}) ->
     SpaceId = file_ctx:get_space_id_const(SpaceDirCtx),
@@ -114,6 +127,9 @@ execute(UserCtx, SpaceDirCtx, #remove_dataset{id = DatasetId}) ->
 execute(UserCtx, FileCtx, #get_file_eff_dataset_summary{}) ->
     dataset_req:get_file_eff_summary(FileCtx, UserCtx);
 
+
+%% QoS
+
 execute(UserCtx, FileCtx, #add_qos_entry{
     expression = Expression,
     replicas_num = ReplicasNum,
@@ -132,6 +148,9 @@ execute(UserCtx, FileCtx, #remove_qos_entry{id = QosEntryId}) ->
 
 execute(UserCtx, FileCtx, #check_qos_status{qos_id = QosEntryId}) ->
     qos_req:check_status(UserCtx, FileCtx, QosEntryId);
+
+
+%% Transfers
 
 execute(UserCtx, FileCtx, #schedule_file_transfer{
     replicating_provider_id = ReplicatingProviderId,

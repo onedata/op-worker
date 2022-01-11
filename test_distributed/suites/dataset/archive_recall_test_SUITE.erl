@@ -61,21 +61,21 @@
 % fixme
 groups() -> [
     {parallel_tests, [parallel], [
-        recall_plain_simple_archive_test,
-        recall_plain_simple_archive_dip_test,
-        recall_bagit_simple_archive_test,
-        recall_bagit_simple_archive_dip_test,
-        recall_plain_empty_dir_archive_test,
-        recall_plain_empty_dir_archive_dip_test,
-        recall_bagit_empty_dir_archive_test,
-        recall_bagit_empty_dir_archive_dip_test,
-        recall_plain_single_file_archive_test,
-        recall_plain_single_file_archive_dip_test,
-        recall_bagit_single_file_archive_test,
-        recall_bagit_single_file_archive_dip_test,
-        recall_plain_nested_archive_test,
-        recall_plain_nested_archive_dip_test,
-        recall_bagit_nested_archive_test,
+%%        recall_plain_simple_archive_test,
+%%        recall_plain_simple_archive_dip_test,
+%%        recall_bagit_simple_archive_test,
+%%        recall_bagit_simple_archive_dip_test,
+%%        recall_plain_empty_dir_archive_test,
+%%        recall_plain_empty_dir_archive_dip_test,
+%%        recall_bagit_empty_dir_archive_test,
+%%        recall_bagit_empty_dir_archive_dip_test,
+%%        recall_plain_single_file_archive_test,
+%%        recall_plain_single_file_archive_dip_test,
+%%        recall_bagit_single_file_archive_test,
+%%        recall_bagit_single_file_archive_dip_test,
+%%        recall_plain_nested_archive_test,
+%%        recall_plain_nested_archive_dip_test,
+%%        recall_bagit_nested_archive_test,
         recall_bagit_nested_archive_dip_test
         % fixme test external, internal symlinks
         % fixme what about archive with not resolved symlinks and recall
@@ -92,10 +92,10 @@ groups() -> [
 
 all() -> [
     {group, parallel_tests},
-    {group, sequential_tests}
+    {group, sequential_tests} % fixme
 ].
 
--define(ATTEMPTS, 60).
+-define(ATTEMPTS, 15). % fixme 60
 
 -define(SPACE, space_krk_par_p).
 -define(USER1, user1).
@@ -188,8 +188,8 @@ recall_bagit_containing_symlink_archive_dip_test(_Config) ->
 
 recall_stats_test(_Config) ->
     FileSize1 = rand:uniform(20),
-    FileSize2 = rand:uniform(200) + 100 * 1024 * 1024,
-    {ArchiveId, TargetGuid} = recall_test_setup(#dir_spec{
+    FileSize2 = rand:uniform(200) + 100 * 1024 * 1024, % fixme explain size over copy buffer
+    {ArchiveId, _TargetParentGuid} = recall_test_setup(#dir_spec{
         dataset = #dataset_spec{archives = [#archive_spec{config = #archive_config{layout = ?ARCHIVE_PLAIN_LAYOUT}}]},
         children = [
             #file_spec{content = ?RAND_CONTENT(FileSize1)},
@@ -214,32 +214,34 @@ recall_stats_test(_Config) ->
     TotalBytes = FileSize1 + FileSize2,
     lists:foreach(fun(Provider) ->
         ?assertMatch({ok, #archive_recall{
-            target_guid = TargetGuid, 
+            source_archive = ArchiveId,
             start_timestamp = Timestamp,
-            total_files = 2,
-            total_bytes = TotalBytes
+            finish_timestamp = undefined,
+            target_files = 2,
+            target_bytes = TotalBytes
         }},
             opw_test_rpc:call(Provider, archive_recall, get_details, [RecallId]), ?ATTEMPTS)
     end, Providers),
     
-    % check recall stats (stats are only stored on provider doing recall)
+    % check recall stats (stats are only stored on provider performing recall)
     ?assertMatch({ok, #{
-        {<<"bytes">>,<<"hour">>} := [{_,{_, TotalBytes}}],
-          {<<"bytes">>,<<"minute">>} := [{_,{_, TotalBytes}}],
-          {<<"files">>,<<"hour">>} := [{_,{2,2}}],
-          {<<"files">>,<<"minute">>} := [{_,{2,2}}]
+          {<<"currentBytes">>,<<"hour">>} := [{_,{_, TotalBytes}}],
+          {<<"currentBytes">>,<<"minute">>} := [{_,{_, TotalBytes}}],
+          {<<"currentFiles">>,<<"hour">>} := [{_,{2,2}}],
+          {<<"currentFiles">>,<<"minute">>} := [{_,{2,2}}]
     }}, opw_test_rpc:call(krakow, archive_recall, get_stats, [RecallId]), ?ATTEMPTS),
     ?assertEqual(?ERROR_NOT_FOUND, opw_test_rpc:call(paris, archive_recall, get_stats, [RecallId])),
     
     % run archive_recall_traverse:task_finished
     Pid ! continue,
     
-    % check that recall have benn cleaned up
-    lists:foreach(fun(Provider) ->
-        ?assertMatch({ok, #document{value = #archive{recalls = []}}}, opw_test_rpc:call(Provider, archive, get, [ArchiveId]), ?ATTEMPTS),
-        ?assertEqual(?ERROR_NOT_FOUND, opw_test_rpc:call(Provider, archive_recall, get_details, [RecallId]), ?ATTEMPTS),
-        ?assertEqual(?ERROR_NOT_FOUND, opw_test_rpc:call(Provider, archive_recall, get_stats, [RecallId]), ?ATTEMPTS)
-    end, Providers),
+    % fixme check finish timestamp etc
+%%    % check that recall have been cleaned up
+%%    lists:foreach(fun(Provider) ->
+%%        ?assertMatch({ok, #document{value = #archive{recalls = []}}}, opw_test_rpc:call(Provider, archive, get, [ArchiveId]), ?ATTEMPTS),
+%%        ?assertEqual(?ERROR_NOT_FOUND, opw_test_rpc:call(Provider, archive_recall, get_details, [RecallId]), ?ATTEMPTS),
+%%        ?assertEqual(?ERROR_NOT_FOUND, opw_test_rpc:call(Provider, archive_recall, get_stats, [RecallId]), ?ATTEMPTS)
+%%    end, Providers),
     ok.
 
 %===================================================================
@@ -292,12 +294,12 @@ recall_test_base(StructureSpec) ->
 
 recall_test_base(StructureSpec, SymlinkMode) ->
     SessionId = oct_background:get_user_session_id(?USER1, krakow),
-    {ArchiveId, TargetGuid} = recall_test_setup(StructureSpec),
+    {ArchiveId, TargetParentGuid} = recall_test_setup(StructureSpec),
     {ok, ArchiveDataDirGuid} = opw_test_rpc:call(krakow, archive, get_data_dir_guid, [ArchiveId]),
     archive_tests_utils:assert_copied(oct_background:get_random_provider_node(krakow), SessionId, 
-        get_direct_child(ArchiveDataDirGuid), get_direct_child(TargetGuid), SymlinkMode == follow_symlinks, ?ATTEMPTS),
+        get_direct_child(ArchiveDataDirGuid), get_direct_child(TargetParentGuid), SymlinkMode == follow_symlinks, ?ATTEMPTS),
     ?assertThrow(?ERROR_ALREADY_EXISTS, opw_test_rpc:call(krakow, mi_archives, recall, %fixme opt_archives
-        [oct_background:get_user_session_id(?USER1, krakow), ArchiveId, TargetGuid, default])).
+        [oct_background:get_user_session_id(?USER1, krakow), ArchiveId, TargetParentGuid, default])).
 
 
 recall_test_setup(StructureSpec) ->
@@ -305,9 +307,9 @@ recall_test_setup(StructureSpec) ->
     #object{
         dataset = #dataset_object{archives = [#archive_object{id = ArchiveId}]
         }} = onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, StructureSpec),
-    #object{guid = TargetGuid} = onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, #dir_spec{}),
-    ?assertMatch(_, opw_test_rpc:call(krakow, mi_archives, recall, [SessionId, ArchiveId, TargetGuid, default])),
-    {ArchiveId, TargetGuid}.
+    #object{guid = TargetParentGuid} = onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, #dir_spec{}),
+    opw_test_rpc:call(krakow, mi_archives, recall, [SessionId, ArchiveId, TargetParentGuid, default]), % fixme opt_archives,
+    {ArchiveId, TargetParentGuid}.
 
 
 %===================================================================

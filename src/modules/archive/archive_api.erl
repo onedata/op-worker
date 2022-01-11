@@ -165,6 +165,7 @@ get_archive_info(ArchiveDoc = #document{}, ArchiveIndex) ->
     {ok, BaseArchiveId} = archive:get_base_archive_id(ArchiveDoc),
     {ok, RelatedAip} = archive:get_related_aip(ArchiveDoc),
     {ok, RelatedDip} = archive:get_related_dip(ArchiveDoc),
+    {ok, Stats} = get_aggregated_stats(ArchiveDoc),
     {ok, #archive_info{
         id = ArchiveId,
         dataset_id = DatasetId,
@@ -179,7 +180,7 @@ get_archive_info(ArchiveDoc = #document{}, ArchiveIndex) ->
             true -> archives_list:index(ArchiveId, Timestamp);
             false -> ArchiveIndex
         end,
-        stats = get_aggregated_stats(ArchiveDoc),
+        stats = Stats,
         base_archive_id = BaseArchiveId,
         related_aip = RelatedAip,
         related_dip = RelatedDip
@@ -209,7 +210,7 @@ list_archives(DatasetId, ListingOpts, ListingMode) ->
 -spec init_archive_purge(archive:id(), archive:callback()) -> ok | error().
 init_archive_purge(ArchiveId, CallbackUrl) ->
     case archive:mark_purging(ArchiveId, CallbackUrl) of
-        {ok, #archive{recalls = Recalls} = ArchiveDoc} ->
+        {ok, #document{value = #archive{recalls = Recalls}} = ArchiveDoc} ->
             lists:foreach(fun archive_recall_traverse:cancel/1, Recalls),
             {ok, DatasetId} = archive:get_dataset_id(ArchiveDoc),
             % TODO VFS-7718 removal of archive doc and callback should be executed when deleting from trash is finished
@@ -237,7 +238,7 @@ get_nested_archives_stats(#document{key = ArchiveId}, Token, NestedArchiveStatsA
 get_nested_archives_stats(ArchiveId, Token, NestedArchiveStatsAccIn) when is_binary(ArchiveId) ->
     {ok, NestedArchives, Token2} = archives_forest:list(ArchiveId, Token, ?BATCH_SIZE),
     NestedArchiveStatsAcc = lists:foldl(fun(NestedArchiveId, Acc) ->
-        NestedArchiveStats = get_aggregated_stats(NestedArchiveId),
+        {ok, NestedArchiveStats} = get_aggregated_stats(NestedArchiveId),
         archive_stats:sum(Acc, NestedArchiveStats)
     end, NestedArchiveStatsAccIn, NestedArchives),
     case Token2#link_token.is_last of
@@ -347,16 +348,16 @@ get_state(ArchiveDoc = #document{}) ->
 
 
 % fixme move 
--spec get_aggregated_stats(archive:doc() | archive:id()) -> archive_stats:record().
+-spec get_aggregated_stats(archive:doc() | archive:id()) -> {ok, archive_stats:record()}.
 get_aggregated_stats(ArchiveDoc = #document{}) ->
     {ok, ArchiveStats} = archive:get_stats(ArchiveDoc),
     case archive:is_finished(ArchiveDoc) of
         true ->
-            ArchiveStats;
+            {ok, ArchiveStats};
         false ->
             {ok, ArchiveId} = archive:get_id(ArchiveDoc),
             NestedArchivesStats = get_nested_archives_stats(ArchiveId),
-            archive_stats:sum(ArchiveStats, NestedArchivesStats)
+            {ok, archive_stats:sum(ArchiveStats, NestedArchivesStats)}
     end;
 get_aggregated_stats(ArchiveId) ->
     {ok, ArchiveDoc} = archive:get(ArchiveId),

@@ -647,6 +647,7 @@ remove_synced_associated_documents(FileCtx) ->
     ok = custom_metadata:delete(FileUuid),
     ok = times:delete(FileUuid),
     ok = transferred_file:clean_up(FileGuid),
+    ok = archive_recall:delete(FileUuid),
     ok = file_qos:delete_associated_entries_on_no_references(FileCtx).
 
 

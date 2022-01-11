@@ -22,7 +22,9 @@
     get_info/2,
     update/3,
     init_purge/3,
-    recall/4
+    recall/4,
+    get_recall_details/2,
+    get_recall_progress/2
 ]).
 
 
@@ -108,6 +110,22 @@ recall(SessionId, ArchiveId, TargetParentGuid, TargetFilename) ->
         id = ArchiveId,
         target_parent_guid = TargetParentGuid,
         target_filename = TargetFilename
+    }).
+
+
+-spec get_recall_details(session:id(), file_id:file_guid()) -> 
+    archive_recall:record() | no_return().
+get_recall_details(SessionId, FileGuid) ->
+    middleware_worker:check_exec(SessionId, FileGuid, #get_recall_details{
+        id = FileGuid
+    }).
+
+
+-spec get_recall_progress(session:id(), file_id:file_guid()) ->
+    archive_recall:record() | no_return().
+get_recall_progress(SessionId, FileGuid) ->
+    middleware_worker:check_exec(SessionId, FileGuid, #get_recall_progress{
+        id = FileGuid
     }).
     
 

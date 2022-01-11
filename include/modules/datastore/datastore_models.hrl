@@ -462,19 +462,18 @@
     % and archival information package (AIP) archives.
     related_aip = undefined :: undefined | archive:id(),
     related_dip = undefined :: undefined | archive:id(),
-    recalls = [] :: [archive_recall:id()]
+    recalls = [] :: [archive_recall:id()] % fixme is it needed
 }).
 
 
 -record(archive_recall, {
-    % fixme original archive
-    % fixme finish timestamp
-    % fixme errors??
-    target_guid :: file_id:file_guid(),
-    name :: file_meta:name(),
+    source_archive :: archive:id(),
+    source_dataset :: dataset:id(),
     start_timestamp = undefined :: undefined | time:millis(),
-    total_files :: non_neg_integer(),
-    total_bytes :: non_neg_integer()
+    finish_timestamp = undefined :: undefined | time:millis(),
+    failed_files = 0 :: non_neg_integer(),
+    target_files :: non_neg_integer(),
+    target_bytes :: non_neg_integer()
 }).
 
 % Model used for storing information associated with dataset.

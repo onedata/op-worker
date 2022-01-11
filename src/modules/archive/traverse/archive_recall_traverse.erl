@@ -80,7 +80,9 @@ start(ArchiveDoc, UserCtx, TargetParentGuid, TargetRootName) ->
         _ ->
             {TargetRootName, StartFileCtx}
     end,
+    % fixme jeśli w targecie idzie już jakiś recall to error
     % create root file before traverse starts to have its uuid so progress can be shown
+    {ok, SpaceId} = archive:get_space_id(ArchiveDoc),
     case create_root_file(user_ctx:get_session_id(UserCtx), StartFileCtx, TargetParentGuid, FinalName) of
         {ok, Guid} ->
             TaskId = file_id:guid_to_uuid(Guid),
@@ -88,7 +90,7 @@ start(ArchiveDoc, UserCtx, TargetParentGuid, TargetRootName) ->
                 ok ->
                     {ok, ArchiveId} = archive:get_id(ArchiveDoc),
                     AdditionalData = #{
-                        <<"archiveId">> => ArchiveId
+                        <<"spaceId">> => SpaceId
                     },
                     UserId = user_ctx:get_user_id(UserCtx),
                     Options = #{
@@ -101,10 +103,8 @@ start(ArchiveDoc, UserCtx, TargetParentGuid, TargetRootName) ->
                         },
                         additional_data => AdditionalData
                     },
-                    ok = archive_recall:create(TaskId, TargetParentGuid, FinalName,
-                        archive_api:get_aggregated_stats(ArchiveDoc)),
-                    {ok, TaskId} = tree_traverse:run(
-                        ?POOL_NAME, StartFileCtx1, UserId, Options),
+                    ok = archive_recall:create(TaskId, ArchiveDoc),
+                    {ok, TaskId} = tree_traverse:run(?POOL_NAME, StartFileCtx1, UserId, Options),
                     ok = archive:report_recall_scheduled(ArchiveId, TaskId),
                     {ok, Guid};
                 {error, _} = Error ->
@@ -126,8 +126,11 @@ cancel(TaskId) ->
 %%%===================================================================
 
 -spec task_started(id(), tree_traverse:pool()) -> ok.
-task_started(TaskId, _Pool) ->
-    archive_recall:report_started(TaskId),
+task_started(TaskId, Pool) ->
+    {ok, TaskDoc} = traverse_task:get(Pool, TaskId),
+    {ok, AdditionalData} = traverse_task:get_additional_data(TaskDoc),
+    SpaceId = maps:get(<<"spaceId">>, AdditionalData),
+    archive_recall:report_started(TaskId, SpaceId),
     
     ?debug("Archive recall traverse ~p started", [TaskId]).
 
@@ -137,9 +140,8 @@ task_finished(TaskId, Pool) ->
     tree_traverse_session:close_for_task(TaskId),
     {ok, TaskDoc} = traverse_task:get(Pool, TaskId),
     {ok, AdditionalData} = traverse_task:get_additional_data(TaskDoc),
-    ArchiveId = maps:get(<<"archiveId">>, AdditionalData),
-    archive:report_recall_finished(ArchiveId, TaskId),
-    archive_recall:delete(TaskId),
+    SpaceId = maps:get(<<"spaceId">>, AdditionalData),
+    archive_recall:report_finished(TaskId, SpaceId),
     
     ?debug("Archive recall traverse ~p finished", [TaskId]).
 
@@ -147,7 +149,6 @@ task_finished(TaskId, Pool) ->
 -spec task_canceled(id(), tree_traverse:pool()) -> ok.
 task_canceled(TaskId, _Pool) ->
     tree_traverse_session:close_for_task(TaskId),
-    archive_recall:delete(TaskId),
     
     ?debug("Archive recall traverse ~p cancelled", [TaskId]).
 
