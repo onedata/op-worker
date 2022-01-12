@@ -187,15 +187,15 @@ submit_status_reports(Client, StatusChangeReports) ->
 verify_recorded_activity(RegistryId, SubmittedReports) ->
     ExpectedPodStatusesByPod = lists:foldl(fun(#atm_openfaas_function_pod_status_report{
         pod_id = PodId,
+        pod_status = PodStatus,
         containers_readiness = ContainersReadiness,
-        event_timestamp = Timestamp,
-        event_reason = Reason
+        event_timestamp = Timestamp
     }, Acc) ->
         case maps:find(PodId, Acc) of
-            {ok, {_, _, ObservedAt}} when ObservedAt >= Timestamp ->
+            {ok, {_, _, ObservedAt}} when Timestamp < ObservedAt ->
                 Acc;
             _ ->
-                Acc#{PodId => {Reason, ContainersReadiness, Timestamp}}
+                Acc#{PodId => {PodStatus, ContainersReadiness, Timestamp}}
         end
     end, #{}, SubmittedReports),
 
@@ -287,12 +287,18 @@ gen_status_report(FunctionName, PodId) ->
         function_name = FunctionName,
         pod_id = PodId,
 
+        pod_status = lists_utils:random_element([
+            <<"FailedKillPod">>,
+            <<"Scheduled">>,
+            <<"SuccessfulCreate">>, <<"FailedCreate">>, <<"Created">>,
+            <<"ScalingReplicaSet">>, <<"Completed">>
+        ]),
         containers_readiness = str_utils:format_bin("~B/~B", [RandReadyContainersCount, RandContainersCount]),
 
         event_timestamp = global_clock:timestamp_millis() + 50000 - rand:uniform(100000),
         event_type = lists_utils:random_element([<<"Normal">>, <<"Error">>]),
         event_reason = lists_utils:random_element([
-            <<"Killing">>, <<"FailedKillPod">>,
+            <<"Killing">>,
             <<"Scheduled">>,
             <<"Pulled">>,
             <<"SuccessfulCreate">>, <<"FailedCreate">>, <<"Created">>,
