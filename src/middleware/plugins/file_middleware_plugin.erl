@@ -874,11 +874,11 @@ get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = symlink_target, scop
 
 
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = archive_recall_details}}, _) ->
-    {ok, mi_archives:get_recall_details(Auth, FileGuid)};
+    {ok, mi_archives:get_recall_details(Auth#auth.session_id, FileGuid)};
 
 
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = archive_recall_progress}}, _) ->
-    {ok, mi_archives:get_recall_progress(Auth, FileGuid)}.
+    {ok, mi_archives:get_recall_progress(Auth#auth.session_id, FileGuid)}.
 
 
 %%%===================================================================

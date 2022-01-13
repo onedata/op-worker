@@ -690,11 +690,15 @@ archive_file_and_mark_finished(
 
 % fixme specs
 archive_file(FileCtx, TargetParentCtx, CurrentArchiveDoc, BaseArchiveDoc, StartingArchiveDoc, ResolvedFilePath, UserCtx) ->
-    case file_ctx:is_symlink_const(FileCtx) of
-        true -> 
+    case {file_ctx:is_symlink_const(FileCtx), is_bagit(CurrentArchiveDoc)} of
+        {true, _} ->
             archive_symlink(FileCtx, TargetParentCtx, StartingArchiveDoc, UserCtx);
-        false ->
-            archive_regular_file(FileCtx, TargetParentCtx, CurrentArchiveDoc, BaseArchiveDoc, ResolvedFilePath, UserCtx)
+        {false, false} ->
+            plain_archive:archive_regular_file(CurrentArchiveDoc, FileCtx, TargetParentCtx, BaseArchiveDoc,
+                ResolvedFilePath, UserCtx);
+        {false, true} ->
+            bagit_archive:archive_file(CurrentArchiveDoc, FileCtx, TargetParentCtx, BaseArchiveDoc,
+                ResolvedFilePath, UserCtx)
     end.
 
 
@@ -709,7 +713,6 @@ archive_symlink(FileCtx, TargetParentCtx, ArchiveDoc, UserCtx) ->
     [_Sep, _SpaceId | DatasetPathTokens] = filename:split(DatasetCanonicalPath),
     [_Sep, _SpaceId | ArchivePathTokens] = filename:split(ArchiveDataCanonicalPath),
     [SpaceIdPrefix | SymlinkPathTokens] = filename:split(SymlinkPath),
-    ?notice("bleble: ~n~p~n~p", [DatasetPathTokens, SymlinkPathTokens]), % fixme
     FinalSymlinkPath = case lists:prefix(DatasetPathTokens, SymlinkPathTokens) of
         true -> 
             RelativePathTokens = SymlinkPathTokens -- DatasetPathTokens,
@@ -719,23 +722,7 @@ archive_symlink(FileCtx, TargetParentCtx, ArchiveDoc, UserCtx) ->
             SymlinkPath
     end,
     {TargetName, _} = file_ctx:get_aliased_name(FileCtx, undefined),
-    % bagit does not store additional details for symlinks so simply call plain_archive % fixme
     plain_archive:archive_symlink(TargetParentCtx, TargetName, UserCtx, FinalSymlinkPath).
-
-
--spec archive_regular_file(file_ctx:ctx(), file_ctx:ctx(), archive:doc(), archive:doc() | undefined, 
-    file_meta:path(), user_ctx:ctx()) -> {ok, file_ctx:ctx()} | {error, term()}.
-archive_regular_file(
-    FileCtx, TargetParentCtx, CurrentArchiveDoc, BaseArchiveDoc, ResolvedFilePath, UserCtx
-) ->
-    case is_bagit(CurrentArchiveDoc) of
-        false ->
-            plain_archive:archive_regular_file(CurrentArchiveDoc, FileCtx, TargetParentCtx, BaseArchiveDoc, 
-                ResolvedFilePath, UserCtx);
-        true ->
-            bagit_archive:archive_file(CurrentArchiveDoc, FileCtx, TargetParentCtx, BaseArchiveDoc, 
-                ResolvedFilePath, UserCtx)
-    end.
 
 
 -spec dip_archive_file(file_ctx:ctx(), file_ctx:ctx(), archive_ctx(), archive:doc(), user_ctx:ctx()) -> 
@@ -746,24 +733,18 @@ dip_archive_file(OriginalFileCtx, ArchivedFileCtx, DipArchiveCtx, StartingArchiv
             {ok, undefined};
         {DipTargetParentCtx, true} ->
             {ok, StartingDipId} = archive:get_related_dip(StartingArchiveDoc),
-            {ok, StartingDipDoc} = archive:get(StartingDipId),
+            {ok, StartingDipDoc} = archive:get(StartingDipId), % fixme przepchać doca
             archive_symlink(OriginalFileCtx, DipTargetParentCtx, StartingDipDoc, UserCtx);
         {DipTargetParentCtx, false} ->
-            dip_archive_regular_file(ArchivedFileCtx, DipTargetParentCtx, UserCtx)
+            {FileName, _} = file_ctx:get_aliased_name(ArchivedFileCtx, UserCtx),
+            {ok, #file_attr{guid = LinkGuid}} = lfm:make_link(
+                user_ctx:get_session_id(UserCtx),
+                #file_ref{guid = file_ctx:get_logical_guid_const(ArchivedFileCtx)},
+                #file_ref{guid = file_ctx:get_logical_guid_const(DipTargetParentCtx)},
+                FileName
+            ),
+            {ok, file_ctx:new_by_guid(LinkGuid)}
     end.
-
-
--spec dip_archive_regular_file(file_ctx:ctx(), file_id:file_guid(), user_ctx:ctx()) -> 
-    {ok, file_ctx:ctx()}.
-dip_archive_regular_file(FileCtx, DipTargetParentCtx, UserCtx) ->
-    {FileName, _} = file_ctx:get_aliased_name(FileCtx, UserCtx),
-    {ok, #file_attr{guid = LinkGuid}} = lfm:make_link(
-        user_ctx:get_session_id(UserCtx),
-        #file_ref{guid = file_ctx:get_logical_guid_const(FileCtx)},
-        #file_ref{guid = file_ctx:get_logical_guid_const(DipTargetParentCtx)},
-        FileName
-    ),
-    {ok, file_ctx:new_by_guid(LinkGuid)}.
 
 
 -spec make_symlink(file_ctx:ctx(), file_ctx:ctx() | undefined, user_ctx:ctx()) -> ok.
