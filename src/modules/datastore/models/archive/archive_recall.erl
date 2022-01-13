@@ -22,12 +22,14 @@
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
 -include("modules/fslogic/file_details.hrl/").
+-include_lib("cluster_worker/include/modules/datastore/infinite_log.hrl").
 -include_lib("cluster_worker/include/modules/datastore/ts_metric_config.hrl").
 
 
 %% API
 -export([create/2, delete/1]).
--export([report_started/2, report_finished/2, report_bytes_copied/2, report_file_finished/1]).
+-export([report_started/1, report_finished/2, 
+    report_bytes_copied/2, report_file_finished/1, report_file_failed/3]).
 -export([get_details/1, get_stats/1, get_progress/1]).
 -export([get_effective_recall/1]).
 %% Datastore callbacks
@@ -52,7 +54,10 @@
 
 -define(BYTES_TS, <<"currentBytes">>).
 -define(FILES_TS, <<"currentFiles">>).
+-define(FAILED_FILES_TS, <<"failedFiles">>).
 -define(TSC_ID(Id), <<Id/binary, "tsc">>).
+
+-define(ERROR_LOG_ID(Id), <<Id/binary, "el">>).
 
 -define(TOTAL_METRIC, <<"total">>).
 -define(MINUTE_METRIC, <<"minute">>).
@@ -65,28 +70,37 @@
 
 -spec create(id(), archive:doc()) -> ok | {error, term()}.
 create(Id, ArchiveDoc) ->
-%%    fixme create infinite_log
-    case create_tsc(Id) of
-        ok -> case create_doc(Id, ArchiveDoc) of
-            ok -> ok;
-            Error ->
-                delete(Id),
-                Error
-        end
+    try
+        ok = create_tsc(Id),
+        {ok, _} = json_infinite_log_model:create(#{id => ?ERROR_LOG_ID(Id)}),
+        ok = create_doc(Id, ArchiveDoc),
+        {ok, SpaceId} = archive:get_space_id(ArchiveDoc),
+        ok = archive_recall_cache:invalidate_on_all_nodes(SpaceId)
+    catch _:{badmatch, Error} ->
+        delete(Id),
+        Error
     end.
 
 
 -spec delete(id()) -> ok | {error, term()}.
 delete(Id) ->
     % fixme remove from archive record
-    datastore_time_series_collection:delete(?SYNC_CTX, ?TSC_ID(Id)),
+    datastore_time_series_collection:delete(?CTX, ?TSC_ID(Id)),
+    json_infinite_log_model:destroy(?ERROR_LOG_ID(Id)),
     datastore_model:delete(?SYNC_CTX, Id).
 
 
-report_started(Id, SpaceId) ->
-    ok = archive_recall_cache:invalidate_on_all_nodes(SpaceId),
+% fixme specs
+report_started(Id) ->
     ?extract_ok(datastore_model:update(?SYNC_CTX, Id, fun(ArchiveRecall) ->
         {ok, ArchiveRecall#archive_recall{start_timestamp = global_clock:timestamp_millis()}}
+    end)).
+
+
+report_finished(Id, SpaceId) ->
+    ok = archive_recall_cache:invalidate_on_all_nodes(SpaceId),
+    ?extract_ok(datastore_model:update(?SYNC_CTX, Id, fun(ArchiveRecall) ->
+        {ok, ArchiveRecall#archive_recall{finish_timestamp = global_clock:timestamp_millis()}}
     end)).
 
 
@@ -97,11 +111,16 @@ report_file_finished(Id) ->
     ]).
 
 
-report_finished(Id, SpaceId) ->
-    ok = archive_recall_cache:invalidate_on_all_nodes(SpaceId),
-    ?extract_ok(datastore_model:update(?SYNC_CTX, Id, fun(ArchiveRecall) ->
-        {ok, ArchiveRecall#archive_recall{finish_timestamp = global_clock:timestamp_millis()}}
-    end)).
+-spec report_file_failed(id(), file_id:file_guid(), {error, term()}) -> ok | {error, term()}.
+report_file_failed(Id, FileGuid, Error) ->
+    {ok, ObjectId} = file_id:guid_to_objectid(FileGuid),
+    json_infinite_log_model:append(?ERROR_LOG_ID(Id), #{
+        <<"fileId">> => ObjectId,
+        <<"reason">> => errors:to_json(Error)
+    }),
+    datastore_time_series_collection:update(?CTX, ?TSC_ID(Id), global_clock:timestamp_millis(), [
+        {?FAILED_FILES_TS, 1}
+    ]).
 
 
 
@@ -127,8 +146,8 @@ get_stats(Id) ->
     datastore_time_series_collection:list_windows(?CTX, ?TSC_ID(Id), #{}).
 
 
-get_progress(Id) ->
-    RequestRange = lists:map(fun(Parameter) -> {Parameter, ?TOTAL_METRIC} end, [?BYTES_TS, ?FILES_TS]),
+get_counters_current_value(Id) ->
+    RequestRange = lists:map(fun(Parameter) -> {Parameter, ?TOTAL_METRIC} end, [?BYTES_TS, ?FILES_TS, ?FAILED_FILES_TS]),
     
     case datastore_time_series_collection:list_windows(?CTX, ?TSC_ID(Id), RequestRange, #{limit => 1}) of
         {ok, WindowsMap} ->
@@ -142,7 +161,24 @@ get_progress(Id) ->
     end.
 
 
-% fixme spec
+get_progress(Id) ->
+    {ok, CountersCurrentValue} = get_counters_current_value(Id),
+    case CountersCurrentValue of
+        #{?FAILED_FILES_TS := 0} -> 
+            {ok, CountersCurrentValue#{<<"lastError">> => undefined}};
+        _ ->
+            % fixme todo with ticket
+            {ok, #{
+                <<"logEntries">> := [#{
+                    <<"content">> := LastEntryContent
+                }]
+            }} = json_infinite_log_model:browse_content(?ERROR_LOG_ID(Id), 
+                #{limit => 1, direction => ?BACKWARD}),
+            {ok, CountersCurrentValue#{<<"lastError">> => LastEntryContent}}
+    end.
+
+
+% fixme specs
 get_effective_recall(#document{scope = SpaceId, key = Id} = Doc) ->
     case archive_recall_cache:get(SpaceId, Doc) of
         {ok, {finished, Id}} -> {ok, Id};
@@ -157,10 +193,17 @@ get_effective_recall(#document{scope = SpaceId, key = Id} = Doc) ->
 
 -spec create_tsc(id()) -> ok | {error, term()}.
 create_tsc(Id) ->
+    TotalMetric = #{
+        ?TOTAL_METRIC => #metric_config{
+            resolution = 0,
+            retention = 1,
+            aggregator = sum
+        }
+    },
     Config = #{
-        % fixme failed files
-        ?BYTES_TS => supported_metrics(),
-        ?FILES_TS => supported_metrics()
+        ?BYTES_TS => maps:merge(TotalMetric, supported_metrics()),
+        ?FILES_TS => maps:merge(TotalMetric, supported_metrics()),
+        ?FAILED_FILES_TS => TotalMetric
     },
     case datastore_time_series_collection:create(?CTX, ?TSC_ID(Id), Config) of
         ok -> ok;
@@ -187,11 +230,6 @@ create_doc(Id, ArchiveDoc) ->
 
 -spec supported_metrics() -> #{ts_metric:id() => ts_metric:config()}.
 supported_metrics() -> #{
-    ?TOTAL_METRIC => #metric_config{
-        resolution = 0,
-        retention = 1,
-        aggregator = sum
-    },
     ?MINUTE_METRIC => #metric_config{
         resolution = timer:minutes(1),
         retention = 120,
@@ -231,7 +269,6 @@ get_record_struct(1) ->
         {source_dataset, string},
         {start_timestamp, integer},
         {finish_timestamp, integer},
-        {failed_files, integer}, % fixme keep in tsc
         {target_files, integer},
         {target_bytes, integer}
     ]}.

@@ -471,7 +471,6 @@
     source_dataset :: dataset:id(),
     start_timestamp = undefined :: undefined | time:millis(),
     finish_timestamp = undefined :: undefined | time:millis(),
-    failed_files = 0 :: non_neg_integer(),
     target_files :: non_neg_integer(),
     target_bytes :: non_neg_integer()
 }).

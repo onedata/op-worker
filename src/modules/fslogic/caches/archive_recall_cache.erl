@@ -105,7 +105,7 @@ invalidate_on_all_nodes(SpaceId) ->
 
 
 -spec get(od_space:id(), file_meta:uuid() | file_meta:doc()) ->
-    {ok, [archive_recall:id()]} | {error, {file_meta_missing, file_meta:uuid()}} | {error, term()}.
+    {ok, [archive_recall:id()]} | {error, {file_meta_missing, file_meta:uuid()}} | {error, term()}. % fixme spec
 get(SpaceId, Doc = #document{value = #file_meta{}}) ->
     CacheName = ?CACHE_NAME(SpaceId),
     case effective_value:get_or_calculate(CacheName, Doc, fun calculate_archive_recalls/1) of

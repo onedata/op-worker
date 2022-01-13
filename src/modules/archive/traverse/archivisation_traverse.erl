@@ -335,7 +335,7 @@ handle_nested_dataset_and_do_archive(FileCtx, ResolvedFilePath, UserCtx, Travers
     dip_ctx := DipArchiveCtx,
     base_archive_doc := BaseArchiveDoc,
     scheduled_dataset_base_archive_doc := ScheduledDatasetBaseArchiveDoc,
-    starting_archive_doc := StartingArchiveDoc
+    starting_archive_doc := StartingArchiveDoc % fixme secure for previous version
 }) ->
     {ok, Config} = archive:get_config(get_archive_doc(AipArchiveCtx)),
     CreateNestedArchives = archive_config:should_create_nested_archives(Config),

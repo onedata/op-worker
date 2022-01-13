@@ -101,6 +101,7 @@ init_purge(SessionId, ArchiveId, CallbackUrl) ->
     }).
 
 
+% fixme init_recall
 -spec recall(session:id(), archive:id(), file_id:file_guid(), file_meta:name() | default) ->
     file_id:file_guid() | no_return().
 recall(SessionId, ArchiveId, TargetParentGuid, TargetFilename) ->

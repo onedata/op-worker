@@ -61,21 +61,21 @@
 % fixme
 groups() -> [
     {parallel_tests, [parallel], [
-%%        recall_plain_simple_archive_test,
-%%        recall_plain_simple_archive_dip_test,
-%%        recall_bagit_simple_archive_test,
-%%        recall_bagit_simple_archive_dip_test,
-%%        recall_plain_empty_dir_archive_test,
-%%        recall_plain_empty_dir_archive_dip_test,
-%%        recall_bagit_empty_dir_archive_test,
-%%        recall_bagit_empty_dir_archive_dip_test,
-%%        recall_plain_single_file_archive_test,
-%%        recall_plain_single_file_archive_dip_test,
-%%        recall_bagit_single_file_archive_test,
-%%        recall_bagit_single_file_archive_dip_test,
-%%        recall_plain_nested_archive_test,
-%%        recall_plain_nested_archive_dip_test,
-%%        recall_bagit_nested_archive_test,
+        recall_plain_simple_archive_test,
+        recall_plain_simple_archive_dip_test,
+        recall_bagit_simple_archive_test,
+        recall_bagit_simple_archive_dip_test,
+        recall_plain_empty_dir_archive_test,
+        recall_plain_empty_dir_archive_dip_test,
+        recall_bagit_empty_dir_archive_test,
+        recall_bagit_empty_dir_archive_dip_test,
+        recall_plain_single_file_archive_test,
+        recall_plain_single_file_archive_dip_test,
+        recall_bagit_single_file_archive_test,
+        recall_bagit_single_file_archive_dip_test,
+        recall_plain_nested_archive_test,
+        recall_plain_nested_archive_dip_test,
+        recall_bagit_nested_archive_test,
         recall_bagit_nested_archive_dip_test
         % fixme test external, internal symlinks
         % fixme what about archive with not resolved symlinks and recall

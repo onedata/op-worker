@@ -159,9 +159,9 @@ translate_resource(#gri{aspect = archive_recall_details, scope = private}, Archi
     translate_archive_recall_details(ArchiveRecallDetails);
 
 translate_resource(#gri{aspect = archive_recall_progress, scope = private}, ArchiveRecallProgress) ->
+    #{<<"lastError">> := LastError} = ArchiveRecallProgress,
     ArchiveRecallProgress#{
-        <<"failedFiles">> => 0, % fixme
-        <<"lastError">> => null
+        <<"lastError">> => utils:undefined_to_null(LastError)
     }.
 
 

@@ -131,11 +131,8 @@ cancel(TaskId) ->
 %%%===================================================================
 
 -spec task_started(id(), tree_traverse:pool()) -> ok.
-task_started(TaskId, Pool) ->
-    {ok, TaskDoc} = traverse_task:get(Pool, TaskId),
-    {ok, AdditionalData} = traverse_task:get_additional_data(TaskDoc),
-    SpaceId = maps:get(<<"spaceId">>, AdditionalData),
-    archive_recall:report_started(TaskId, SpaceId),
+task_started(TaskId, _Pool) ->
+    archive_recall:report_started(TaskId),
     
     ?debug("Archive recall traverse ~p started", [TaskId]).
 
@@ -199,23 +196,67 @@ do_slave_job(#tree_traverse_slave{
     } = TraverseInfo,
     relative_path = ResolvedFilePath
 }, TaskId) ->
-    {ok, UserCtx} = tree_traverse_session:acquire_for_task(UserId, ?POOL_NAME, TaskId),
-    SessionId = user_ctx:get_session_id(UserCtx),
-    
-    FileGuid = file_ctx:get_logical_guid_const(FileCtx),
-    FileName = case maps:get(root_file_name, TraverseInfo, undefined) of
-        undefined -> filename:basename(ResolvedFilePath);
-        Name -> Name
-    end,
-    case file_ctx:is_symlink_const(FileCtx) of
-        true -> 
-            recall_symlink(FileCtx, TargetParentGuid, RootPathTokens, FileName, ArchiveDoc, UserCtx);
-        false ->
-            {ok, _, _} = file_copy:copy(SessionId, FileGuid, TargetParentGuid, FileName, ?COPY_OPTIONS(TaskId))
-    end,
-    ok = archive_recall:report_file_finished(TaskId).
+    try
+        {ok, UserCtx} = tree_traverse_session:acquire_for_task(UserId, ?POOL_NAME, TaskId),
+        SessionId = user_ctx:get_session_id(UserCtx),
+        
+        FileGuid = file_ctx:get_logical_guid_const(FileCtx),
+        FileName = case maps:get(root_file_name, TraverseInfo, undefined) of
+            undefined -> filename:basename(ResolvedFilePath);
+            Name -> Name
+        end,
+        case file_ctx:is_symlink_const(FileCtx) of
+            true -> 
+                recall_symlink(FileCtx, TargetParentGuid, RootPathTokens, FileName, ArchiveDoc, UserCtx);
+            false ->
+                {ok, _, _} = file_copy:copy(SessionId, FileGuid, TargetParentGuid, FileName, ?COPY_OPTIONS(TaskId))
+        end,
+        ok = archive_recall:report_file_finished(TaskId)
+    catch
+        _Class:{badmatch, {error, Reason}}:Stacktrace ->
+            report_error(TaskId, file_ctx:get_logical_guid_const(FileCtx), ArchiveDoc, ?ERROR_POSIX(Reason), Stacktrace);
+        _Class:Reason:Stacktrace ->
+            report_error(TaskId, file_ctx:get_logical_guid_const(FileCtx), ArchiveDoc, Reason, Stacktrace)
+    end.
 
 
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+-spec do_dir_master_job(tree_traverse:master_job(), traverse:master_job_extended_args()) -> 
+    {ok, traverse:master_job_map()}.
+do_dir_master_job(#tree_traverse{
+    user_id = UserId, 
+    file_ctx = SourceDirCtx,
+    traverse_info = #{
+        archive_doc := ArchiveDoc,
+        current_parent := TargetParentGuid
+    } = TraverseInfo,
+    relative_path = ResolvedFilePath
+} = Job, #{task_id := TaskId} = MasterJobArgs) ->
+    try
+        DirName = case maps:get(root_file_name, TraverseInfo, undefined) of
+            undefined -> filename:basename(ResolvedFilePath);
+            Name -> Name
+        end,
+        {ok, UserCtx} = tree_traverse_session:acquire_for_task(UserId, ?POOL_NAME, TaskId),
+        SessionId = user_ctx:get_session_id(UserCtx),
+        SourceDirGuid = file_ctx:get_logical_guid_const(SourceDirCtx),
+        {ok, CopyGuid, _} = file_copy:copy(SessionId, SourceDirGuid, TargetParentGuid, DirName, ?COPY_OPTIONS(TaskId)),
+        NewTraverseInfo = maps:remove(root_file_name, TraverseInfo#{current_parent => CopyGuid}),
+        UpdatedJob = Job#tree_traverse{traverse_info = NewTraverseInfo},
+        
+        tree_traverse:do_master_job(UpdatedJob, MasterJobArgs)
+    catch
+        _Class:{badmatch, {error, Reason}}:Stacktrace ->
+            report_error(TaskId, file_ctx:get_logical_guid_const(SourceDirCtx), ArchiveDoc, ?ERROR_POSIX(Reason), Stacktrace);
+        _Class:Reason:Stacktrace ->
+            report_error(TaskId, file_ctx:get_logical_guid_const(SourceDirCtx), ArchiveDoc, Reason, Stacktrace)
+    end.
+
+
+% fixme spec
 recall_symlink(FileCtx, TargetParentGuid, RootPathTokens, FileName, ArchiveDoc, UserCtx) ->
     {ok, ArchiveDataGuid} = archive:get_data_dir_guid(ArchiveDoc),
     {ok, SymlinkPath} = lfm:read_symlink(user_ctx:get_session_id(UserCtx), ?FILE_REF(file_ctx:get_logical_guid_const(FileCtx))),
@@ -234,31 +275,11 @@ recall_symlink(FileCtx, TargetParentGuid, RootPathTokens, FileName, ArchiveDoc, 
     {ok, file_ctx:new_by_guid(Guid)}.
 
 
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
--spec do_dir_master_job(tree_traverse:master_job(), traverse:master_job_extended_args()) -> 
-    {ok, traverse:master_job_map()}.
-do_dir_master_job(#tree_traverse{
-    user_id = UserId, 
-    file_ctx = SourceDirCtx,
-    traverse_info = #{current_parent := TargetParentGuid} = TraverseInfo,
-    relative_path = ResolvedFilePath
-} = Job, MasterJobArgs) ->
-    DirName = case maps:get(root_file_name, TraverseInfo, undefined) of
-        undefined -> filename:basename(ResolvedFilePath);
-        Name -> Name
-    end,
-    #{task_id := TaskId} = MasterJobArgs,
-    {ok, UserCtx} = tree_traverse_session:acquire_for_task(UserId, ?POOL_NAME, TaskId),
-    SessionId = user_ctx:get_session_id(UserCtx),
-    SourceDirGuid = file_ctx:get_logical_guid_const(SourceDirCtx),
-    {ok, CopyGuid, _} = file_copy:copy(SessionId, SourceDirGuid, TargetParentGuid, DirName, ?COPY_OPTIONS(TaskId)),
-    NewTraverseInfo = maps:remove(root_file_name, TraverseInfo#{current_parent => CopyGuid}),
-    UpdatedJob = Job#tree_traverse{traverse_info = NewTraverseInfo},
-    
-    tree_traverse:do_master_job(UpdatedJob, MasterJobArgs).
+report_error(TaskId, FileGuid, ArchiveDoc, Reason, Stacktrace) ->
+    {ok, ArchiveId} = archive:get_id(ArchiveDoc),
+    ?error_stacktrace("Unexpected error during recall of file ~p in archive ~p: ~p.", 
+        [FileGuid, ArchiveId, Reason], Stacktrace),
+    archive_recall:report_file_failed(TaskId, FileGuid, Reason).
 
 
 % fixme spec etc
