@@ -385,7 +385,8 @@ mark_purging(ArchiveId, Callback) ->
         of
             true ->
                 % TODO VFS-7718 return better error for nested dataset?
-                {error, ?EBUSY};
+                % fixme custom error??
+                ?ERROR_POSIX(?EBUSY);
             false ->
                 {ok, Archive#archive{
                     state = ?ARCHIVE_PURGING,

@@ -143,6 +143,7 @@ start(ArchiveDoc, DatasetDoc, UserCtx) ->
                     base_archive_doc => BaseArchiveDoc,
                     scheduled_dataset_base_archive_doc => BaseArchiveDoc,
                     scheduled_dataset_root_guid => StartFileGuid,
+                    starting_archive_doc => ArchiveDoc2,
                     aip_ctx => ensure_guid_in_ctx(#archive_ctx{
                         current_archive_doc = ArchiveDoc2,
                         target_parent = ArchiveDataDirGuid
@@ -333,7 +334,8 @@ handle_nested_dataset_and_do_archive(FileCtx, ResolvedFilePath, UserCtx, Travers
     aip_ctx := AipArchiveCtx,
     dip_ctx := DipArchiveCtx,
     base_archive_doc := BaseArchiveDoc,
-    scheduled_dataset_base_archive_doc := ScheduledDatasetBaseArchiveDoc
+    scheduled_dataset_base_archive_doc := ScheduledDatasetBaseArchiveDoc,
+    starting_archive_doc := StartingArchiveDoc
 }) ->
     {ok, Config} = archive:get_config(get_archive_doc(AipArchiveCtx)),
     CreateNestedArchives = archive_config:should_create_nested_archives(Config),
@@ -376,7 +378,7 @@ handle_nested_dataset_and_do_archive(FileCtx, ResolvedFilePath, UserCtx, Travers
             
             {UpdatedAipArchiveCtx, UpdatedDipArchiveCtx} = 
                 do_archive(FileCtx, ResolvedFilePath, AipNestedArchiveCtx2, DipNestedArchiveCtx2,
-                    NestedBaseArchiveDoc, UserCtx),
+                    NestedBaseArchiveDoc, StartingArchiveDoc, UserCtx),
             make_symlink(get_file_ctx(UpdatedAipArchiveCtx), get_file_ctx(AipArchiveCtx), UserCtx),
             make_symlink(get_file_ctx(UpdatedDipArchiveCtx), get_file_ctx(DipArchiveCtx), UserCtx),
     
@@ -385,7 +387,7 @@ handle_nested_dataset_and_do_archive(FileCtx, ResolvedFilePath, UserCtx, Travers
             {FinalAipArchiveCtx, FinalDipArchiveCtx, NestedBaseArchiveDoc};
         false ->
             {FinalAipArchiveCtx, FinalDipArchiveCtx} = do_archive(
-                FileCtx, ResolvedFilePath, AipArchiveCtx, DipArchiveCtx, BaseArchiveDoc, UserCtx),
+                FileCtx, ResolvedFilePath, AipArchiveCtx, DipArchiveCtx, BaseArchiveDoc, StartingArchiveDoc, UserCtx),
             {FinalAipArchiveCtx, FinalDipArchiveCtx, BaseArchiveDoc}
     end,
     TraverseInfo#{
@@ -592,8 +594,8 @@ mark_finished(ArchiveDoc, UserCtx, NestedArchiveStats) ->
 
 
 -spec do_archive(file_ctx:ctx(), file_meta:path(), archive_ctx(), archive_ctx(), 
-    archive:doc() | undefined,user_ctx:ctx()) -> {archive_ctx(), archive_ctx()}.
-do_archive(FileCtx, ResolvedFilePath, AipArchiveCtx, DipArchiveCtx, BaseArchiveDoc, UserCtx) ->
+    archive:doc() | undefined, archive:doc(), user_ctx:ctx()) -> {archive_ctx(), archive_ctx()}.
+do_archive(FileCtx, ResolvedFilePath, AipArchiveCtx, DipArchiveCtx, BaseArchiveDoc, StartingArchiveDoc, UserCtx) ->
     {IsDir, FileCtx2} = file_ctx:is_dir(FileCtx),
     case IsDir of
         true ->
@@ -608,7 +610,7 @@ do_archive(FileCtx, ResolvedFilePath, AipArchiveCtx, DipArchiveCtx, BaseArchiveD
         false ->
             {ok, AipArchiveFileCtx, DipArchiveFileCtx} = 
                 archive_file_and_mark_finished(FileCtx2, AipArchiveCtx, DipArchiveCtx, 
-                    BaseArchiveDoc, ResolvedFilePath, UserCtx),
+                    BaseArchiveDoc, StartingArchiveDoc, ResolvedFilePath, UserCtx),
             {
                 AipArchiveCtx#archive_ctx{target_parent = AipArchiveFileCtx},
                 DipArchiveCtx#archive_ctx{target_parent = DipArchiveFileCtx}
@@ -658,17 +660,17 @@ archive_dir_insecure(ArchiveDoc, FileCtx, TargetParentCtx, ResolvedFilePath, Use
 
 
 -spec archive_file_and_mark_finished(file_ctx:ctx(), archive_ctx(), archive_ctx(), 
-    archive:doc() | undefined, file_meta:path(), user_ctx:ctx()) ->
+    archive:doc() | undefined, archive:doc(), file_meta:path(), user_ctx:ctx()) ->
     {ok, file_ctx:ctx(), file_ctx:ctx() | undefined} | {error, term()}.
 archive_file_and_mark_finished(
-    FileCtx, AipArchiveCtx, DipArchiveCtx, BaseArchiveDoc, ResolvedFilePath, UserCtx
+    FileCtx, AipArchiveCtx, DipArchiveCtx, BaseArchiveDoc, StartingArchiveDoc, ResolvedFilePath, UserCtx
 ) ->
     case archive_file(FileCtx, get_file_ctx(AipArchiveCtx), get_archive_doc(AipArchiveCtx), 
-        BaseArchiveDoc, ResolvedFilePath, UserCtx
+        BaseArchiveDoc, StartingArchiveDoc, ResolvedFilePath, UserCtx
     ) of
         {ok, ArchiveFileCtx} ->
             {ok, DipArchiveFileCtx} = dip_archive_file(
-                ArchiveFileCtx, get_file_ctx(DipArchiveCtx), UserCtx),
+                FileCtx, ArchiveFileCtx, DipArchiveCtx, StartingArchiveDoc, UserCtx),
             {FileSize, _} = file_ctx:get_file_size(ArchiveFileCtx),
             ok = archive:mark_file_archived(get_archive_doc(AipArchiveCtx), FileSize),
             case get_archive_doc(DipArchiveCtx) of
@@ -678,42 +680,47 @@ archive_file_and_mark_finished(
             {ok, ArchiveFileCtx, DipArchiveFileCtx};
         {error, _} = Error ->
             archive:mark_file_failed(get_archive_doc(AipArchiveCtx)),
+            case get_archive_doc(DipArchiveCtx) of
+                undefined -> ok; % fixme unify??
+                DipArchiveDoc -> archive:mark_file_failed(DipArchiveDoc)
+            end,
             Error
     end.
 
 
 % fixme specs
-archive_file(FileCtx, TargetParentCtx, CurrentArchiveDoc, BaseArchiveDoc, ResolvedFilePath, UserCtx) ->
+archive_file(FileCtx, TargetParentCtx, CurrentArchiveDoc, BaseArchiveDoc, StartingArchiveDoc, ResolvedFilePath, UserCtx) ->
     case file_ctx:is_symlink_const(FileCtx) of
         true -> 
-            archive_symlink(FileCtx, TargetParentCtx, CurrentArchiveDoc, UserCtx);
+            archive_symlink(FileCtx, TargetParentCtx, StartingArchiveDoc, UserCtx);
         false ->
             archive_regular_file(FileCtx, TargetParentCtx, CurrentArchiveDoc, BaseArchiveDoc, ResolvedFilePath, UserCtx)
     end.
 
 
 archive_symlink(FileCtx, TargetParentCtx, ArchiveDoc, UserCtx) ->
+    % fixme move to plain archive??
     {ok, DatasetId} = archive:get_dataset_id(ArchiveDoc),
     {ok, SpaceId} = archive:get_space_id(ArchiveDoc),
     {ok, ArchiveDataGuid} = archive:get_data_dir_guid(ArchiveDoc),
     {ok, SymlinkPath} = lfm:read_symlink(user_ctx:get_session_id(UserCtx), ?FILE_REF(file_ctx:get_logical_guid_const(FileCtx))),
     {DatasetCanonicalPath, _DatasetFileCtx} = file_ctx:get_canonical_path(file_ctx:new_by_uuid(DatasetId, SpaceId)),
     {ArchiveDataCanonicalPath, _ArchiveFileCtx} = file_ctx:get_canonical_path(file_ctx:new_by_guid(ArchiveDataGuid)),
-    [_Sep, _SpaceId, _DatasetName | DatasetPathTokens] = filename:split(DatasetCanonicalPath),
+    [_Sep, _SpaceId | DatasetPathTokens] = filename:split(DatasetCanonicalPath),
     [_Sep, _SpaceId | ArchivePathTokens] = filename:split(ArchiveDataCanonicalPath),
     [SpaceIdPrefix | SymlinkPathTokens] = filename:split(SymlinkPath),
+    ?notice("bleble: ~n~p~n~p", [DatasetPathTokens, SymlinkPathTokens]), % fixme
     FinalSymlinkPath = case lists:prefix(DatasetPathTokens, SymlinkPathTokens) of
         true -> 
             RelativePathTokens = SymlinkPathTokens -- DatasetPathTokens,
-            filename:join([SpaceIdPrefix] ++ ArchivePathTokens ++ RelativePathTokens);
+            DatasetName = lists:last(DatasetPathTokens),
+            filename:join([SpaceIdPrefix] ++ ArchivePathTokens ++ [DatasetName] ++ RelativePathTokens);
         _ ->
             SymlinkPath
     end,
     {TargetName, _} = file_ctx:get_aliased_name(FileCtx, undefined),
-    % fixme bagit
+    % bagit does not store additional details for symlinks so simply call plain_archive % fixme
     plain_archive:archive_symlink(TargetParentCtx, TargetName, UserCtx, FinalSymlinkPath).
-    
-    
 
 
 -spec archive_regular_file(file_ctx:ctx(), file_ctx:ctx(), archive:doc(), archive:doc() | undefined, 
@@ -723,7 +730,7 @@ archive_regular_file(
 ) ->
     case is_bagit(CurrentArchiveDoc) of
         false ->
-            plain_archive:archive_file(CurrentArchiveDoc, FileCtx, TargetParentCtx, BaseArchiveDoc, 
+            plain_archive:archive_regular_file(CurrentArchiveDoc, FileCtx, TargetParentCtx, BaseArchiveDoc, 
                 ResolvedFilePath, UserCtx);
         true ->
             bagit_archive:archive_file(CurrentArchiveDoc, FileCtx, TargetParentCtx, BaseArchiveDoc, 
@@ -731,14 +738,25 @@ archive_regular_file(
     end.
 
 
--spec dip_archive_file
-    (file_ctx:ctx(), file_id:file_guid(), user_ctx:ctx()) -> {ok, file_ctx:ctx()};
-    (file_ctx:ctx(), undefined, user_ctx:ctx()) -> {ok, undefined}.
-dip_archive_file(_FileCtx, undefined, _UserCtx) ->
-    {ok, undefined};
-dip_archive_file(FileCtx, DipTargetParentCtx, UserCtx) ->
+-spec dip_archive_file(file_ctx:ctx(), file_ctx:ctx(), archive_ctx(), archive:doc(), user_ctx:ctx()) -> 
+    {ok, file_ctx:ctx() | undefined}.
+dip_archive_file(OriginalFileCtx, ArchivedFileCtx, DipArchiveCtx, StartingArchiveDoc, UserCtx) ->
+    case {get_file_ctx(DipArchiveCtx), file_ctx:is_symlink_const(OriginalFileCtx)} of
+        {undefined, _} -> 
+            {ok, undefined};
+        {DipTargetParentCtx, true} ->
+            {ok, StartingDipId} = archive:get_related_dip(StartingArchiveDoc),
+            {ok, StartingDipDoc} = archive:get(StartingDipId),
+            archive_symlink(OriginalFileCtx, DipTargetParentCtx, StartingDipDoc, UserCtx);
+        {DipTargetParentCtx, false} ->
+            dip_archive_regular_file(ArchivedFileCtx, DipTargetParentCtx, UserCtx)
+    end.
+
+
+-spec dip_archive_regular_file(file_ctx:ctx(), file_id:file_guid(), user_ctx:ctx()) -> 
+    {ok, file_ctx:ctx()}.
+dip_archive_regular_file(FileCtx, DipTargetParentCtx, UserCtx) ->
     {FileName, _} = file_ctx:get_aliased_name(FileCtx, UserCtx),
-    % fixme modify symlink target
     {ok, #file_attr{guid = LinkGuid}} = lfm:make_link(
         user_ctx:get_session_id(UserCtx),
         #file_ref{guid = file_ctx:get_logical_guid_const(FileCtx)},

@@ -160,7 +160,7 @@ finalize(ArchiveDirCtx, UserCtx) ->
 -spec archive_file(archive:doc(), file_ctx:ctx(), file_ctx:ctx(), archive:doc() | undefined, 
     file_meta:path(), user_ctx:ctx()) -> {ok, file_ctx:ctx()} | {error, term()}.
 archive_file(ArchiveDoc, FileCtx, TargetParentCtx, BaseArchiveDoc, ResolvedFilePath, UserCtx) ->
-    case plain_archive:archive_file(
+    case plain_archive:archive_regular_file(
         ArchiveDoc, FileCtx, TargetParentCtx, BaseArchiveDoc, ResolvedFilePath, UserCtx
     ) of
         {ok, ArchivedFileCtx} ->
