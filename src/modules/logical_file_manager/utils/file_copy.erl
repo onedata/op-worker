@@ -122,7 +122,6 @@ copy_dir(SessId, #file_attr{guid = SourceGuid, mode = Mode}, TargetParentGuid, T
         {error, eexist} = Error ->
             case maps:get(overwrite, Options, ?DEFAULT_OVERWRITE_OPT) of
                 true ->
-                    % fixme metadata?
                     lfm:resolve_guid_by_relative_path(SessId, TargetParentGuid, TargetName);
                 false -> Error
             end;
@@ -155,7 +154,6 @@ copy_file(SessId, #file_attr{guid = SourceGuid, mode = Mode}, TargetParentGuid, 
                 true -> 
                     {ok, Guid} = lfm:resolve_guid_by_relative_path(SessId, TargetParentGuid, TargetName),
                     ok = lfm:truncate(SessId, #file_ref{guid = Guid}, 0),
-                    % fixme metadata?
                     {ok, H} = lfm:open(SessId, ?FILE_REF(Guid), write),
                     {ok, {Guid, H}};
                 false -> Error

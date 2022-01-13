@@ -20,6 +20,7 @@
 -include("tree_traverse.hrl").
 -include("modules/datastore/datastore_runner.hrl").
 -include("modules/fslogic/data_access_control.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/errors.hrl").
 
@@ -86,6 +87,8 @@ start(ArchiveDoc, UserCtx, TargetParentGuid, TargetRootName) ->
     case create_root_file(user_ctx:get_session_id(UserCtx), StartFileCtx, TargetParentGuid, FinalName) of
         {ok, Guid} ->
             TaskId = file_id:guid_to_uuid(Guid),
+            {RootPath, _} = file_ctx:get_canonical_path(file_ctx:new_by_guid(Guid)),
+            [_Sep, _SpaceId | RootPathTokens] = filename:split(RootPath),
             case tree_traverse_session:setup_for_task(UserCtx, TaskId) of
                 ok ->
                     {ok, ArchiveId} = archive:get_id(ArchiveDoc),
@@ -98,8 +101,10 @@ start(ArchiveDoc, UserCtx, TargetParentGuid, TargetRootName) ->
                         children_master_jobs_mode => async,
                         follow_symlinks => external,
                         traverse_info => #{
+                            archive_doc => ArchiveDoc,
                             current_parent => TargetParentGuid,
-                            root_file_name => FinalName
+                            root_path_tokens => RootPathTokens,
+                            root_file_name => FinalName % fixme explain it is removed after metadata are copied
                         },
                         additional_data => AdditionalData
                     },
@@ -187,7 +192,11 @@ do_master_job(#tree_traverse{file_ctx = FileCtx} = Job, MasterJobArgs) ->
 do_slave_job(#tree_traverse_slave{
     file_ctx = FileCtx,
     user_id = UserId,
-    traverse_info = #{current_parent := TargetParentGuid} = TraverseInfo,
+    traverse_info = #{
+        current_parent := TargetParentGuid, 
+        archive_doc := ArchiveDoc,
+        root_path_tokens := RootPathTokens
+    } = TraverseInfo,
     relative_path = ResolvedFilePath
 }, TaskId) ->
     {ok, UserCtx} = tree_traverse_session:acquire_for_task(UserId, ?POOL_NAME, TaskId),
@@ -198,8 +207,31 @@ do_slave_job(#tree_traverse_slave{
         undefined -> filename:basename(ResolvedFilePath);
         Name -> Name
     end,
-    {ok, _, _} = file_copy:copy(SessionId, FileGuid, TargetParentGuid, FileName, ?COPY_OPTIONS(TaskId)),
+    case file_ctx:is_symlink_const(FileCtx) of
+        true -> 
+            recall_symlink(FileCtx, TargetParentGuid, RootPathTokens, FileName, ArchiveDoc, UserCtx);
+        false ->
+            {ok, _, _} = file_copy:copy(SessionId, FileGuid, TargetParentGuid, FileName, ?COPY_OPTIONS(TaskId))
+    end,
     ok = archive_recall:report_file_finished(TaskId).
+
+
+recall_symlink(FileCtx, TargetParentGuid, RootPathTokens, FileName, ArchiveDoc, UserCtx) ->
+    {ok, ArchiveDataGuid} = archive:get_data_dir_guid(ArchiveDoc),
+    {ok, SymlinkPath} = lfm:read_symlink(user_ctx:get_session_id(UserCtx), ?FILE_REF(file_ctx:get_logical_guid_const(FileCtx))),
+    {ArchiveDataCanonicalPath, _ArchiveFileCtx} = file_ctx:get_canonical_path(file_ctx:new_by_guid(ArchiveDataGuid)),
+    [_Sep, _SpaceId | ArchivePathTokens] = filename:split(ArchiveDataCanonicalPath),
+    [SpaceIdPrefix | SymlinkPathTokens] = filename:split(SymlinkPath),
+    FinalSymlinkPath = case lists:prefix(ArchivePathTokens, SymlinkPathTokens) of
+        true ->
+            [_DatasetName | RelativePathTokens] = SymlinkPathTokens -- ArchivePathTokens,
+            filename:join([SpaceIdPrefix] ++ RootPathTokens ++ RelativePathTokens);
+        _ ->
+            SymlinkPath
+    end,
+    {ok, #file_attr{guid = Guid}} = lfm:make_symlink(
+        user_ctx:get_session_id(UserCtx), ?FILE_REF(TargetParentGuid), FileName, FinalSymlinkPath),
+    {ok, file_ctx:new_by_guid(Guid)}.
 
 
 %%%===================================================================
