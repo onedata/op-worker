@@ -341,11 +341,11 @@ autocleaning_should_evict_file_replica_replicated_by_qos(Config) ->
         threshold => Size - 1
     }),
     ?assertDistribution(W1, SessId, ?DISTS([DomainP2], [Size]), Guid),
-    {ok, QosEntryId} = lfm_proxy:add_qos_entry(W1, SessId, ?FILE_REF(Guid), <<"providerId=", ProviderId1/binary>>, 1),
-    ?assertMatch({ok, {#{QosEntryId := _}, _}}, lfm_proxy:get_effective_file_qos(W1, SessId, ?FILE_REF(Guid))),
+    {ok, QosEntryId} = opt_qos:add_qos_entry(W1, SessId, ?FILE_REF(Guid), <<"providerId=", ProviderId1/binary>>, 1),
+    ?assertMatch({ok, {#{QosEntryId := _}, _}}, opt_qos:get_effective_file_qos(W1, SessId, ?FILE_REF(Guid))),
     ?assertDistribution(W1, SessId, ?DISTS([DomainP1, DomainP2], [Size, Size]), Guid),
     ?assertEqual(Size, current_size(W1, ?SPACE_ID), ?ATTEMPTS),
-    ok = lfm_proxy:remove_qos_entry(W1, SessId, QosEntryId),
+    ok = opt_qos:remove_qos_entry(W1, SessId, QosEntryId),
     ?assertDistribution(W1, SessId, ?DISTS([DomainP1, DomainP2], [0, Size]), Guid),
     ?assertOneOfReports({ok, #{
         released_bytes := Size,
@@ -989,7 +989,7 @@ read_file(Worker, SessId, Guid, Size) ->
 
 schedule_file_replication(Worker, SessId, Guid, ProviderId) ->
     ?assertMatch({ok, _}, lfm_proxy:stat(Worker, SessId, ?FILE_REF(Guid)), ?ATTEMPTS),
-    {ok, _} = lfm_proxy:schedule_file_replication(Worker, SessId, ?FILE_REF(Guid), ProviderId).
+    {ok, _} = opt_transfers:schedule_file_replication(Worker, SessId, ?FILE_REF(Guid), ProviderId).
 
 enable_file_popularity(Worker, SpaceId) ->
     rpc:call(Worker, file_popularity_api, enable, [SpaceId]).

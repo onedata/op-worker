@@ -24,7 +24,7 @@
 
 
 %% API
--export([is_openfaas_available/0, assert_openfaas_available/0]).
+-export([is_openfaas_available/0, assert_openfaas_available/0, get_activity_registry_id/1]).
 
 %% atm_task_executor callbacks
 -export([create/4, initiate/4, teardown/2, delete/1, in_readonly_mode/1, run/3]).
@@ -88,6 +88,11 @@ assert_openfaas_available() ->
         ok -> ok;
         {error, _} = Error -> throw(Error)
     end.
+
+
+-spec get_activity_registry_id(record()) -> atm_openfaas_function_activity_registry:id().
+get_activity_registry_id(#atm_openfaas_task_executor{activity_registry = ActivityRegistryId}) ->
+    ActivityRegistryId.
 
 
 %%%===================================================================

@@ -1109,7 +1109,7 @@ replica_invalidate_should_migrate_unique_data(Config) ->
         fun(_SessId, _FileKey, _ProviderId) -> ok end),
 
     % when
-    ok = lfm_proxy:schedule_file_replica_eviction(W1, SessionId, ?FILE_REF(FileGuid), LocalProviderId, ExternalProviderId),
+    {ok, _} = opt_transfers:schedule_file_replica_eviction(W1, SessionId, ?FILE_REF(FileGuid), LocalProviderId, ExternalProviderId),
     {ok, Handle2} = lfm_proxy:open(W1, SessionId, ?FILE_REF(FileGuid), write),
     {ok, 10} = lfm_proxy:write(W1, Handle2, 0, <<"0123456789">>),
     ok = lfm_proxy:close(W1, Handle2),
@@ -1118,7 +1118,7 @@ replica_invalidate_should_migrate_unique_data(Config) ->
     test_utils:mock_assert_num_calls(W1, lfm, schedule_file_replication, [SessionId, ?FILE_REF(FileGuid), ExternalProviderId], 1),
 
     % when
-    ok = lfm_proxy:schedule_file_replica_eviction(W1, SessionId, ?FILE_REF(FileGuid), LocalProviderId, undefined),
+    {ok, _} = opt_transfers:schedule_file_replica_eviction(W1, SessionId, ?FILE_REF(FileGuid), LocalProviderId, undefined),
 
     % then
     test_utils:mock_assert_num_calls(W1, lfm, schedule_file_replication, [SessionId, ?FILE_REF(FileGuid), ExternalProviderId], 1),
@@ -1171,7 +1171,7 @@ replica_invalidate_should_truncate_storage_file_to_zero_size(Config) ->
 
     % when
     ?assertMatch({ok, #statbuf{st_size = 10}}, rpc:call(W1, storage_driver, stat, [SDHandle])),
-    ok = lfm_proxy:schedule_file_replica_eviction(W1, SessionId, ?FILE_REF(FileGuid), LocalProviderId, ExternalProviderId),
+    {ok, _} = opt_transfers:schedule_file_replica_eviction(W1, SessionId, ?FILE_REF(FileGuid), LocalProviderId, ExternalProviderId),
 
     % then
     ?assertMatch({undefined, _}, rpc:call(W1, file_ctx, get_local_file_location_doc, [FileCtx])),
@@ -1254,7 +1254,7 @@ dir_replica_invalidate_should_invalidate_all_children(Config) ->
     % when
     ?assertMatch({ok, #statbuf{st_size = 10}}, rpc:call(W1, storage_driver, stat, [SDHandle1])),
     ?assertMatch({ok, #statbuf{st_size = 10}}, rpc:call(W1, storage_driver, stat, [SDHandle2])),
-    ok = lfm_proxy:schedule_file_replica_eviction(W1, SessionId, ?FILE_REF(DirGuid), LocalProviderId, ExternalProviderId),
+    {ok, _} = opt_transfers:schedule_file_replica_eviction(W1, SessionId, ?FILE_REF(DirGuid), LocalProviderId, ExternalProviderId),
 
     % then
     ?assertMatch({ok, #statbuf{st_size = 0}}, rpc:call(W1, storage_driver, stat, [SDHandle1])),

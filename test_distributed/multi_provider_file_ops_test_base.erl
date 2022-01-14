@@ -1695,7 +1695,7 @@ transfer_files_to_source_provider(Config0) ->
 
     StopwatchTransfers = stopwatch:start(),
     TidsAndGuids = lists_utils:pmap(fun(Guid) ->
-        {ok, Tid} = lfm_proxy:schedule_file_replication(Worker, SessionId(Worker), ?FILE_REF(Guid), ?GET_DOMAIN_BIN(Worker)),
+        {ok, Tid} = opt_transfers:schedule_file_replication(Worker, SessionId(Worker), ?FILE_REF(Guid), ?GET_DOMAIN_BIN(Worker)),
         {Tid, Guid}
     end, Guids),
 
@@ -2187,7 +2187,7 @@ read_big_file(Config, _FileSize, File, Worker, Attempts, true) ->
     ProviderId = rpc:call(Worker, oneprovider, get_id_or_undefined, []),
     Stopwatch = stopwatch:start(),
     {ok, TransferID} = ?assertMatch({ok, _},
-        lfm_proxy:schedule_file_replication(Worker1, SessId(Worker1),
+        opt_transfers:schedule_file_replication(Worker1, SessId(Worker1),
             {path, File}, ProviderId)),
     await_replication_end(Worker1 ,TransferID, Attempts),
     stopwatch:read_micros(Stopwatch);

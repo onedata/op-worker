@@ -148,9 +148,11 @@ create_file_transfer(Config, Type) ->
                     validate_result_fun = build_create_transfer_validate_gs_call_result_fun(MemRef)
                 }
             ],
-            data_spec = api_test_utils:add_cdmi_id_errors_for_operations_not_available_in_share_mode(
-                FileGuid, ?SPACE_2, ShareId,
-                build_op_transfer_spec(Type, <<"file">>, P1, P2)
+            data_spec = api_test_utils:replace_enoent_with_not_found_error_in_bad_data_values(
+                api_test_utils:add_cdmi_id_errors_for_operations_not_available_in_share_mode(
+                    FileGuid, ?SPACE_2, ShareId,
+                    build_op_transfer_spec(Type, <<"file">>, P1, P2)
+                )
             )
         }
     ])).

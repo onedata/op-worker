@@ -33,10 +33,10 @@
 
     simple_key_val_qos/1,
     effective_qos_for_file_in_directory/1,
-    
+
     % QoS clean up tests
     qos_cleanup_test/1,
-    
+
     % QoS entry audit log
     qos_audit_log_successful_synchronization/1,
     qos_audit_log_transfer_error/1,
@@ -121,7 +121,7 @@ bounded_cache_cleanup_test_base(Type) ->
     Dir1Path = filename:join([?SPACE_PATH1, Dirname]),
     FilePath = filename:join([?SPACE_PATH1, Dirname, <<"dir2">>, <<"dir3">>, <<"dir4">>, <<"file41">>]),
     SpaceId = oct_background:get_space_id(?SPACE_PLACEHOLDER),
-    
+
     EffQosTestSpec = #effective_qos_test_spec{
         initial_dir_structure = #test_dir_structure{
             dir_structure = ?NESTED_DIR_STRUCTURE(Dirname)
@@ -141,21 +141,21 @@ bounded_cache_cleanup_test_base(Type) ->
             }
         ]
     },
-    
+
     % add QoS and calculate effective QoS to fill in cache
     add_qos_for_dir_and_check_effective_qos(EffQosTestSpec),
-    
+
     % check that QoS cache is overfilled
     SizeBeforeCleaning = ?GET_CACHE_TABLE_SIZE(Node, SpaceId),
     ?assertEqual(6, SizeBeforeCleaning),
-    
+
     {CleanThreshold, ExpectedSizeAfter} = case Type of
         overfilled -> {1, 0};
         unfilled -> {SizeBeforeCleaning, SizeBeforeCleaning}
     end,
     % send message that checks cache size and cleans it if necessary
     ?assertMatch(ok, opw_test_rpc:call(Node, bounded_cache, check_cache_size, [?QOS_CACHE_TEST_OPTIONS(CleanThreshold)])),
-    
+
     % check that cache has been cleaned
     SizeAfterCleaning = ?GET_CACHE_TABLE_SIZE(Node, SpaceId),
     ?assertEqual(ExpectedSizeAfter, SizeAfterCleaning).
@@ -211,15 +211,15 @@ qos_cleanup_test(_Config) ->
             }
         ]
     },
-    
+
     {GuidsAndPaths, QosNameIdMapping} = qos_tests_utils:fulfill_qos_test_base(QosSpec),
-    
+
     #{files := [{FileGuid, _FilePath} | _]} = GuidsAndPaths,
-    
+
     ok = lfm_proxy:unlink(Node, ?SESS_ID(ProviderId), ?FILE_REF(FileGuid)),
     FileUuid = file_id:guid_to_uuid(FileGuid),
     QosEntryId = maps:get(?QOS1, QosNameIdMapping),
-    
+
     ?assertEqual({error, not_found}, opw_test_rpc:call(Node, datastore_model, get, [file_qos:get_ctx(), FileUuid])),
     ?assertEqual({error, {file_meta_missing, FileUuid}}, opw_test_rpc:call(Node, file_qos, get_effective, [FileUuid])),
     ?assertEqual({error, not_found}, opw_test_rpc:call(Node, qos_entry, get, [QosEntryId])).
@@ -264,11 +264,11 @@ qos_audit_log_base_test(ExpectedStatus, Type) ->
     Timestamp = opw_test_rpc:call(Node, global_clock, timestamp_millis, []),
     FilePath = filename:join([?SPACE_PATH1, generator:gen_name()]),
     {RootGuid, FileIds} = prepare_audit_log_test_env(Type, Node, ?SESS_ID(ProviderId), FilePath),
-    {ok, QosEntryId} = lfm_proxy:add_qos_entry(Node, ?SESS_ID(ProviderId), ?FILE_REF(RootGuid), <<"providerId=", ProviderId/binary>>, 1),
+    {ok, QosEntryId} = opt_qos:add_qos_entry(Node, ?SESS_ID(ProviderId), ?FILE_REF(RootGuid), <<"providerId=", ProviderId/binary>>, 1),
     BaseExpected = case ExpectedStatus of
-        <<"synchronized">> -> 
+        <<"synchronized">> ->
             #{<<"severity">> => <<"info">>};
-        <<"synchronization failed">> -> 
+        <<"synchronization failed">> ->
             #{
                 <<"severity">> => <<"error">>,
                 % error mocked in init_per_testcase
@@ -279,31 +279,40 @@ qos_audit_log_base_test(ExpectedStatus, Type) ->
                 }
             }
     end,
-    SortFun = fun(#{<<"fileId">> := FileIdA}, #{<<"fileId">> := FileIdB}) -> FileIdA =< FileIdB end,
+    SortFun = fun(#{<<"content">> := #{<<"fileId">> := FileIdA}}, #{<<"content">> := #{<<"fileId">> := FileIdB}}) ->
+        FileIdA =< FileIdB
+    end,
     Expected = lists:sort(SortFun, lists:flatmap(fun(ObjectId) ->
         [
             #{
-                <<"severity">> => <<"info">>,
-                <<"status">> => <<"synchronization started">>,
-                <<"fileId">> => ObjectId,
-                <<"timestamp">> => Timestamp
+                <<"timestamp">> => Timestamp,
+                <<"content">> => #{
+                    <<"severity">> => <<"info">>,
+                    <<"status">> => <<"synchronization started">>,
+                    <<"fileId">> => ObjectId
+                }
             },
-            BaseExpected#{
-                <<"fileId">> => ObjectId,
-                <<"status">> => ExpectedStatus,
-                <<"timestamp">> => Timestamp
+            #{
+                <<"timestamp">> => Timestamp,
+                <<"content">> => BaseExpected#{
+                    <<"fileId">> => ObjectId,
+                    <<"status">> => ExpectedStatus
+                }
             }
         ]
     end, FileIds)),
-    GetAuditLogFun = fun() -> 
-        case opw_test_rpc:call(Node, qos_entry_audit_log, list, [QosEntryId, #{}]) of
-            {ok, {ProgressMarker, EntrySeries}} ->
-                {ok, {ProgressMarker, lists:sort(SortFun, EntrySeries)}};
+    GetAuditLogFun = fun() ->
+        case opw_test_rpc:call(Node, qos_entry_audit_log, browse_content, [QosEntryId, #{}]) of
+            {ok, #{<<"isLast">> := IsLast, <<"logEntries">> := LogEntries}} ->
+                LogEntriesWithoutIndices = lists:map(fun(Entry) ->
+                    maps:remove(<<"index">>, Entry)
+                end, LogEntries),
+                {ok, {IsLast, lists:sort(SortFun, LogEntriesWithoutIndices)}};
             {error, _} = Error ->
                 Error
         end
     end,
-    ?assertMatch({ok, {done, Expected}}, GetAuditLogFun(), 10).
+    ?assertMatch({ok, {true, Expected}}, GetAuditLogFun(), 10).
 
 
 prepare_audit_log_test_env(single_file, Node, SessId, RootFilePath) ->
@@ -345,7 +354,7 @@ init_per_testcase(Case, Config) when
     Case =:= effective_qos_audit_log_transfer_error ->
     audit_log_tests_init_per_testcase(Config, ?ERROR_POSIX(?ENOENT)),
     init_per_testcase(default, Config);
-init_per_testcase(Case, Config) when 
+init_per_testcase(Case, Config) when
     Case =:= qos_audit_log_failure;
     Case =:= effective_qos_audit_log_failure ->
     audit_log_tests_init_per_testcase(Config, {throw, ?ERROR_POSIX(?ENOENT)}),
@@ -391,7 +400,7 @@ add_qos_and_check_qos_docs(#qos_spec{
     qos_to_add = QosToAddList,
     expected_qos_entries = ExpectedQosEntries,
     expected_file_qos = ExpectedFileQos
-} ) ->
+}) ->
     % add QoS for file and wait for appropriate QoS status
     QosNameIdMapping = qos_tests_utils:add_multiple_qos(QosToAddList),
     qos_tests_utils:wait_for_qos_fulfillment_in_parallel(QosNameIdMapping, ExpectedQosEntries),
@@ -406,7 +415,7 @@ add_qos_for_dir_and_check_effective_qos(#effective_qos_test_spec{
     qos_to_add = QosToAddList,
     expected_qos_entries = ExpectedQosEntries,
     expected_effective_qos = ExpectedEffectiveQos
-} ) ->
+}) ->
     % create initial dir structure
     qos_tests_utils:create_dir_structure(InitialDirStructure),
 

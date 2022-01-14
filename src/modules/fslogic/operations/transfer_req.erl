@@ -32,7 +32,7 @@
     EvictingProviderId :: undefined | od_provider:id(),
     transfer:callback()
 ) ->
-    sync_req:provider_response().
+    {ok, transfer:id()} | {error, term()}.
 schedule_file_transfer(
     UserCtx, FileCtx0,
     ReplicatingProviderId, EvictingProviderId,
@@ -59,7 +59,7 @@ schedule_file_transfer(
     transfer:view_name(), transfer:query_view_params(),
     transfer:callback()
 ) ->
-    fslogic_worker:provider_response().
+    {ok, transfer:id()} | {error, term()}.
 schedule_view_transfer(
     UserCtx, SpaceDirCtx0,
     ReplicatingProviderId, EvictingProviderId,
@@ -93,7 +93,7 @@ schedule_view_transfer(
     transfer:view_name(), transfer:query_view_params(),
     transfer:callback()
 ) ->
-    fslogic_worker:provider_response().
+    {ok, transfer:id()} | {error, term()}.
 schedule_transfer_insecure(
     UserCtx, SpaceDirCtx,
     ReplicatingProviderId, EvictingProviderId,
@@ -104,12 +104,11 @@ schedule_transfer_insecure(
     FileGuid = file_ctx:get_logical_guid_const(SpaceDirCtx), % TODO VFS-7443 - effective or not? - test for hardlinks
     {FilePath, _} = file_ctx:get_logical_path(SpaceDirCtx, UserCtx),
 
-    {ok, TransferId} = transfer:start(
+    transfer:start(
         SessionId, FileGuid, FilePath,
         EvictingProviderId, ReplicatingProviderId, Callback,
         ViewName, QueryViewParams
-    ),
-    ?PROVIDER_OK_RESP(#scheduled_transfer{transfer_id = TransferId}).
+    ).
 
 
 %% @private

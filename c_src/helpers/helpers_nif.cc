@@ -61,6 +61,8 @@ struct HelpersNIF {
                          {"webdav_helper_threads_number", "webdav_t"}},
                      {XROOTD_HELPER_NAME,
                          {"xrootd_helper_threads_number", "xrootd_t"}},
+                     {NFS_HELPER_NAME,
+                         {"nfs_helper_threads_number", "nfs_t"}},
                      {NULL_DEVICE_HELPER_NAME,
                          {"nulldevice_helper_threads_number", "nulldev_t"}}})) {
             auto threadNumber =
@@ -76,7 +78,7 @@ struct HelpersNIF {
             executors[POSIX_HELPER_NAME], executors[S3_HELPER_NAME],
             executors[SWIFT_HELPER_NAME], executors[GLUSTERFS_HELPER_NAME],
             executors[WEBDAV_HELPER_NAME], executors[XROOTD_HELPER_NAME],
-            executors[NULL_DEVICE_HELPER_NAME],
+            executors[NFS_HELPER_NAME], executors[NULL_DEVICE_HELPER_NAME],
             std::stoul(args["buffer_scheduler_threads_number"].toStdString()),
             buffering::BufferLimits {
                 std::stoul(args["read_buffer_min_size"].toStdString()),
@@ -498,6 +500,14 @@ static void configurePerformanceMonitoring(
                 "comp.oneprovider.mod.options.nulldevice_helper_thread_count",
                 std::stoul(
                     args["nulldevice_helper_threads_number"].toStdString()));
+            ONE_METRIC_COUNTER_SET(
+                "comp.oneprovider.mod.options.xrootd_helper_thread_count",
+                std::stoul(
+                    args["xrootd_helper_threads_number"].toStdString()));
+            ONE_METRIC_COUNTER_SET(
+                "comp.oneprovider.mod.options.nfs_helper_thread_count",
+                std::stoul(
+                    args["nfs_helper_threads_number"].toStdString()));
             ONE_METRIC_COUNTER_SET("comp.oneprovider.mod.options.buffer_"
                                    "scheduler_helper_thread_count",
                 std::stoul(

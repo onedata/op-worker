@@ -492,10 +492,10 @@ qos_transfer_stats_test(_Config) ->
     
     Name = generator:gen_name(),
     Guid = qos_tests_utils:create_file(Provider1, ?SESS_ID(Provider1), ?PATH(Name), ?TEST_DATA),
-    {ok, QosEntryId} = lfm_proxy:add_qos_entry(P1Node, ?SESS_ID(Provider1), ?FILE_REF(Guid), <<"providerId=", Provider2/binary>>, 1),
+    {ok, QosEntryId} = opt_qos:add_qos_entry(P1Node, ?SESS_ID(Provider1), ?FILE_REF(Guid), <<"providerId=", Provider2/binary>>, 1),
     % wait for qos entries to be dbsynced to other provider
-    ?assertMatch({ok, _}, lfm_proxy:get_qos_entry(P2Node, ?SESS_ID(Provider2), QosEntryId), ?ATTEMPTS),
-    ?assertEqual({ok, ?FULFILLED_QOS_STATUS}, lfm_proxy:check_qos_status(P1Node, ?SESS_ID(Provider1), QosEntryId), ?ATTEMPTS),
+    ?assertMatch({ok, _}, opt_qos:get_qos_entry(P2Node, ?SESS_ID(Provider2), QosEntryId), ?ATTEMPTS),
+    ?assertEqual({ok, ?FULFILLED_QOS_STATUS}, opt_qos:check_qos_status(P1Node, ?SESS_ID(Provider1), QosEntryId), ?ATTEMPTS),
     
     check_transfer_stats(Provider1, QosEntryId, bytes, [<<"total">>], empty),
     check_transfer_stats(Provider2, QosEntryId, bytes, [<<"total">>, opt_spaces:get_storage_id(Provider1, SpaceId)], {1, byte_size(?TEST_DATA)}),
@@ -510,7 +510,7 @@ qos_transfer_stats_test(_Config) ->
     {ok, HW2} = lfm_proxy:open(P2Node, ?SESS_ID(Provider2), #file_ref{guid = Guid}, read),
     ?assertEqual({ok, NewData}, lfm_proxy:read(P2Node, HW2, 0, byte_size(NewData)), ?ATTEMPTS),
     ok = lfm_proxy:close(P2Node, HW2),
-    ?assertEqual({ok, ?FULFILLED_QOS_STATUS}, lfm_proxy:check_qos_status(P2Node, ?SESS_ID(Provider2), QosEntryId), ?ATTEMPTS),
+    ?assertEqual({ok, ?FULFILLED_QOS_STATUS}, opt_qos:check_qos_status(P2Node, ?SESS_ID(Provider2), QosEntryId), ?ATTEMPTS),
     
     check_transfer_stats(Provider1, QosEntryId, bytes, [<<"total">>], empty),
     check_transfer_stats(Provider2, QosEntryId, bytes, [opt_spaces:get_storage_id(Provider1, SpaceId)], {1, byte_size(?TEST_DATA)}),

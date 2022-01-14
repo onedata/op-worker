@@ -1111,7 +1111,7 @@ recreate_file_on_storage(Config0) ->
     % Wait for metadata sync and replicate file (replication should succeed even though file on storage is missing)
     ?assertMatch({ok, #file_attr{size = FileSize}}, lfm_proxy:stat(Worker1, SessId(Worker1), ?FILE_REF(Guid)), 60),
     ProviderId = rpc:call(Worker1, oneprovider, get_id_or_undefined, []),
-    {ok, TransferID} = ?assertMatch({ok, _}, lfm_proxy:schedule_file_replication(Worker1, SessId(Worker1),
+    {ok, TransferID} = ?assertMatch({ok, _}, opt_transfers:schedule_file_replication(Worker1, SessId(Worker1),
         ?FILE_REF(Guid), ProviderId)),
     multi_provider_file_ops_test_base:await_replication_end(Worker1 ,TransferID, 60).
 

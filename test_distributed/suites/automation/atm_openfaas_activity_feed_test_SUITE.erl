@@ -69,6 +69,9 @@ connectivity_test(_Config) ->
     ?assertMatch({error, unauthorized}, try_connect(undefined)),
     ?assertMatch({error, unauthorized}, try_connect(<<"not-a-base-64">>)),
     ?assertMatch({error, unauthorized}, try_connect(base64:encode(InvalidSecret))),
+    ?assertMatch({ok, _}, try_connect(base64:encode(?CORRECT_SECRET))),
+
+    opw_test_rpc:set_env(krakow, openfaas_activity_feed_secret, binary_to_list(?CORRECT_SECRET)),
     ?assertMatch({ok, _}, try_connect(base64:encode(?CORRECT_SECRET))).
 
 
@@ -111,7 +114,7 @@ lifecycle_test(_Config) ->
         event_log = PodEventLogId
     }) ->
         ?assertEqual({error, not_found}, opw_test_rpc:call(
-            krakow, atm_openfaas_function_activity_registry, list_pod_events, [PodEventLogId, #{}]
+            krakow, atm_openfaas_function_activity_registry, browse_pod_event_log, [PodEventLogId, #{}]
         ))
     end, PodStatusRegistry).
 
@@ -183,23 +186,25 @@ submit_status_reports(Client, StatusChangeReports) ->
 ) -> boolean().
 verify_recorded_activity(RegistryId, SubmittedReports) ->
     ExpectedPodStatusesByPod = lists:foldl(fun(#atm_openfaas_function_pod_status_report{
-        timestamp = Timestamp,
         pod_id = PodId,
-        current_pod_status = CurrentPodStatus
+        pod_status = PodStatus,
+        containers_readiness = ContainersReadiness,
+        event_timestamp = Timestamp
     }, Acc) ->
         case maps:find(PodId, Acc) of
-            {ok, {_, ObservedAt}} when ObservedAt >= Timestamp ->
+            {ok, {_, _, ObservedAt}} when Timestamp < ObservedAt ->
                 Acc;
             _ ->
-                Acc#{PodId => {CurrentPodStatus, Timestamp}}
+                Acc#{PodId => {PodStatus, ContainersReadiness, Timestamp}}
         end
     end, #{}, SubmittedReports),
 
-    maps:foreach(fun(PodId, {ExpectedStatus, ExpectedStatusObservationTimestamp}) ->
+    maps:foreach(fun(PodId, {ExpStatus, ExpContainersReadiness, ExpStatusChangeTimestamp}) ->
         ?assertMatch(
             #atm_openfaas_function_pod_status_summary{
-                current_status = ExpectedStatus,
-                current_status_observation_timestamp = ExpectedStatusObservationTimestamp
+                current_status = ExpStatus,
+                current_containers_readiness = ExpContainersReadiness,
+                last_status_change_timestamp = ExpStatusChangeTimestamp
             },
             get_pod_status_summary(RegistryId, PodId),
             ?ATTEMPTS
@@ -207,13 +212,26 @@ verify_recorded_activity(RegistryId, SubmittedReports) ->
     end, ExpectedPodStatusesByPod),
 
     ExpectedReversedPodEventLogsByPod = lists:foldl(fun(#atm_openfaas_function_pod_status_report{
-        timestamp = Timestamp,
         pod_id = PodId,
-        pod_event = PodEvent
+
+        event_timestamp = EventTimestamp,
+        event_type = EventType,
+        event_reason = EventReason,
+        event_message = EventMessage
     }, LogsByPodAcc) ->
-        maps:update_with(PodId, fun([{PreviousIndex, _, _} | _] = AccumulatedLogs) ->
-            [{PreviousIndex + 1, Timestamp, PodEvent} | AccumulatedLogs]
-        end, [{0, Timestamp, PodEvent}], LogsByPodAcc)
+        EventData = #{
+            <<"timestamp">> => EventTimestamp,
+            <<"content">> => #{
+                <<"type">> => EventType,
+                <<"reason">> => EventReason,
+                <<"message">> => EventMessage
+            }
+        },
+        maps:update_with(PodId, fun([#{<<"index">> := PreviousIndexBin} | _] = AccumulatedLogs) ->
+            [EventData#{
+                <<"index">> => integer_to_binary(binary_to_integer(PreviousIndexBin) + 1)
+            } | AccumulatedLogs]
+        end, [EventData#{<<"index">> => <<"0">>}], LogsByPodAcc)
     end, #{}, SubmittedReports),
 
     maps:foreach(fun(PodId, ExpectedReversedPodEventLogs) ->
@@ -221,8 +239,11 @@ verify_recorded_activity(RegistryId, SubmittedReports) ->
             event_log = PodEventLogId
         } = get_pod_status_summary(RegistryId, PodId),
         ?assertEqual(
-            {ok, {done, lists:reverse(ExpectedReversedPodEventLogs)}},
-            opw_test_rpc:call(krakow, atm_openfaas_function_activity_registry, list_pod_events, [
+            {ok, #{
+                <<"logEntries">> => lists:reverse(ExpectedReversedPodEventLogs),
+                <<"isLast">> => true
+            }},
+            opw_test_rpc:call(krakow, atm_openfaas_function_activity_registry, browse_pod_event_log, [
                 PodEventLogId, #{direction => ?FORWARD, limit => 1000}
             ]),
             ?ATTEMPTS
@@ -256,31 +277,34 @@ get_pod_status_summary(RegistryId, PodId) ->
 ) ->
     atm_openfaas_function_pod_status_report:record().
 gen_status_report(FunctionName, PodId) ->
-    Status = lists_utils:random_element([
-        <<"Killing">>, <<"FailedKillPod">>,
-        <<"Scheduled">>,
-        <<"Pulled">>,
-        <<"SuccessfulCreate">>, <<"FailedCreate">>, <<"Created">>,
-        <<"ScalingReplicaSet">>,
-        <<"Completed">>
-    ]),
+    RandContainersCount = rand:uniform(10),
+    RandReadyContainersCount = rand:uniform(RandContainersCount),
+
     #atm_openfaas_function_pod_status_report{
         % Simulate the fact that reports may not arrive in order.
         % Still, the original timestamps from the reports should be returned
         % during listing (which is checked in verify_recorded_activity/2).
-        timestamp = global_clock:timestamp_millis() + 50000 - rand:uniform(100000),
         function_name = FunctionName,
         pod_id = PodId,
-        current_pod_status = Status,
-        pod_event = #{
-            <<"type">> => <<"Normal">>,
-            <<"reason">> => Status,
-            <<"source">> => #{
-                <<"component">> => <<"kubelet">>,
-                <<"host">> => <<"node.example.com">>
-            },
-            <<"message">> => str_utils:rand_hex(10)
-        }
+
+        pod_status = lists_utils:random_element([
+            <<"FailedKillPod">>,
+            <<"Scheduled">>,
+            <<"SuccessfulCreate">>, <<"FailedCreate">>, <<"Created">>,
+            <<"ScalingReplicaSet">>, <<"Completed">>
+        ]),
+        containers_readiness = str_utils:format_bin("~B/~B", [RandReadyContainersCount, RandContainersCount]),
+
+        event_timestamp = global_clock:timestamp_millis() + 50000 - rand:uniform(100000),
+        event_type = lists_utils:random_element([<<"Normal">>, <<"Error">>]),
+        event_reason = lists_utils:random_element([
+            <<"Killing">>,
+            <<"Scheduled">>,
+            <<"Pulled">>,
+            <<"SuccessfulCreate">>, <<"FailedCreate">>, <<"Created">>,
+            <<"ScalingReplicaSet">>, <<"Completed">>
+        ]),
+        event_message = str_utils:rand_hex(10)
     }.
 
 %===================================================================
