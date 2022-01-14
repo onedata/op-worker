@@ -48,7 +48,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([start_archivisation/6, recall/4, update_archive/2, get_archive_info/1,
+-export([start_archivisation/6, init_recall/4, update_archive/2, get_archive_info/1,
     list_archives/3, init_archive_purge/2, get_nested_archives_stats/1, get_aggregated_stats/1]).
 
 %% Exported for use in tests
@@ -126,14 +126,15 @@ start_archivisation(
     end.
 
 
--spec recall(archive:id(), user_ctx:ctx(), file_id:file_guid(), file_meta:name() | default) -> 
+-spec init_recall(archive:id(), user_ctx:ctx(), file_id:file_guid(), file_meta:name() | default) -> 
     {ok, file_id:file_guid()} | error().
-recall(ArchiveId, UserCtx, TargetParentGuid, TargetRootName) ->
+init_recall(ArchiveId, UserCtx, TargetParentGuid, TargetRootName) ->
     case archive:get(ArchiveId) of
         {ok, #document{value = #archive{state = ?ARCHIVE_PRESERVED}} = ArchiveDoc} ->
             archive_recall_traverse:start(ArchiveDoc, UserCtx, TargetParentGuid, TargetRootName);
         {ok, _} ->
-            ?ERROR_NOT_SUPPORTED; % fixme make custom error
+            %% @TODO VFS-8840 - create more descriptive error
+            ?ERROR_NOT_SUPPORTED;
         {error, _} = Error -> 
             Error
     end.
@@ -246,6 +247,22 @@ get_nested_archives_stats(ArchiveId, Token, NestedArchiveStatsAccIn) when is_bin
         false -> get_nested_archives_stats(ArchiveId, Token2, NestedArchiveStatsAcc)
     end.
 
+
+-spec get_aggregated_stats(archive:doc() | archive:id()) -> {ok, archive_stats:record()}.
+get_aggregated_stats(ArchiveDoc = #document{}) ->
+    {ok, ArchiveStats} = archive:get_stats(ArchiveDoc),
+    case archive:is_finished(ArchiveDoc) of
+        true ->
+            {ok, ArchiveStats};
+        false ->
+            {ok, ArchiveId} = archive:get_id(ArchiveDoc),
+            NestedArchivesStats = get_nested_archives_stats(ArchiveId),
+            {ok, archive_stats:sum(ArchiveStats, NestedArchivesStats)}
+    end;
+get_aggregated_stats(ArchiveId) ->
+    {ok, ArchiveDoc} = archive:get(ArchiveId),
+    get_aggregated_stats(ArchiveDoc).
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -345,23 +362,6 @@ extend_with_archive_info(ArchiveEntries) ->
 -spec get_state(archive:doc()) -> {ok, archive:state()}.
 get_state(ArchiveDoc = #document{}) ->
     archive:get_state(ArchiveDoc).
-
-
-% fixme move 
--spec get_aggregated_stats(archive:doc() | archive:id()) -> {ok, archive_stats:record()}.
-get_aggregated_stats(ArchiveDoc = #document{}) ->
-    {ok, ArchiveStats} = archive:get_stats(ArchiveDoc),
-    case archive:is_finished(ArchiveDoc) of
-        true ->
-            {ok, ArchiveStats};
-        false ->
-            {ok, ArchiveId} = archive:get_id(ArchiveDoc),
-            NestedArchivesStats = get_nested_archives_stats(ArchiveId),
-            {ok, archive_stats:sum(ArchiveStats, NestedArchivesStats)}
-    end;
-get_aggregated_stats(ArchiveId) ->
-    {ok, ArchiveDoc} = archive:get(ArchiveId),
-    get_aggregated_stats(ArchiveDoc).
 
 
 %% @private

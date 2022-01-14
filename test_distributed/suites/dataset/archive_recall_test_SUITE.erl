@@ -30,7 +30,14 @@
     init_per_testcase/2, end_per_testcase/2
 ]).
 
-%% @TODO VFS-8663 Test more complex symlink examples - symlinks loops, symlinks in archive and nested archives
+%% @TODO VFS-7617 Test more complex symlink examples - symlinks loops, symlinks in archive and nested archives
+%% @TODO VFS-7617 Test external and internal symlinks
+%% @TODO VFS-7617 Test archive without follow symlinks and recall
+%% @TODO VFS-7617 Test recall options (name)
+%% @TODO VFS-7617 Test rest api
+%% @TODO VFS-7617 Test already recalling block
+%% @TODO VFS-7617 Test stats with nested archives
+
 
 %% tests
 -export([
@@ -55,10 +62,9 @@
     recall_bagit_containing_symlink_archive_test/1,
     recall_bagit_containing_symlink_archive_dip_test/1,
     
-    recall_stats_test/1
+    recall_details_test/1
 ]).
 
-% fixme
 groups() -> [
     {parallel_tests, [parallel], [
         recall_plain_simple_archive_test,
@@ -77,25 +83,24 @@ groups() -> [
         recall_plain_nested_archive_dip_test,
         recall_bagit_nested_archive_test,
         recall_bagit_nested_archive_dip_test
-        % fixme test external, internal symlinks
-        % fixme what about archive with not resolved symlinks and recall
+%%      @TODO VFS-8851 Uncomment after archives with not resolved symlinks are properly recalled
 %%        recall_plain_containing_symlink_archive_test,
 %%        recall_plain_containing_symlink_archive_dip_test,
 %%        recall_bagit_containing_symlink_archive_test,
 %%        recall_bagit_containing_symlink_archive_dip_test
     ]},
     {sequential_tests, [
-        recall_stats_test
+        recall_details_test
     ]}
 ].
 
 
 all() -> [
     {group, parallel_tests},
-    {group, sequential_tests} % fixme
+    {group, sequential_tests}
 ].
 
--define(ATTEMPTS, 15). % fixme 60
+-define(ATTEMPTS, 60).
 
 -define(SPACE, space_krk_par_p).
 -define(USER1, user1).
@@ -177,18 +182,16 @@ recall_plain_containing_symlink_archive_dip_test(_Config) ->
 recall_bagit_containing_symlink_archive_dip_test(_Config) ->
     recall_containing_symlink_archive_base(?ARCHIVE_BAGIT_LAYOUT, true).
 
-% fixme test with different name
-% fixme test rest api (in archive_api_test_SUITE)
-
 
 %===================================================================
 % Sequential tests - tests which must be run sequentially because 
 % of used mocks.
 %===================================================================
 
-recall_stats_test(_Config) ->
+recall_details_test(_Config) ->
     FileSize1 = rand:uniform(20),
-    FileSize2 = rand:uniform(200) + 100 * 1024 * 1024, % fixme explain size over copy buffer
+    % file with size extending copy buffer so progress is reported multiple times
+    FileSize2 = rand:uniform(200) + 100 * 1024 * 1024, 
     {ArchiveId, _TargetParentGuid} = recall_test_setup(#dir_spec{
         dataset = #dataset_spec{archives = [#archive_spec{config = #archive_config{layout = ?ARCHIVE_PLAIN_LAYOUT}}]},
         children = [
@@ -234,14 +237,8 @@ recall_stats_test(_Config) ->
     
     % run archive_recall_traverse:task_finished
     Pid ! continue,
-    
-    % fixme check finish timestamp etc
-%%    % check that recall have been cleaned up
-%%    lists:foreach(fun(Provider) ->
-%%        ?assertMatch({ok, #document{value = #archive{recalls = []}}}, opw_test_rpc:call(Provider, archive, get, [ArchiveId]), ?ATTEMPTS),
-%%        ?assertEqual(?ERROR_NOT_FOUND, opw_test_rpc:call(Provider, archive_recall, get_details, [RecallId]), ?ATTEMPTS),
-%%        ?assertEqual(?ERROR_NOT_FOUND, opw_test_rpc:call(Provider, archive_recall, get_stats, [RecallId]), ?ATTEMPTS)
-%%    end, Providers),
+
+    %% @TODO VFS-7617 check finish timestamp etc
     ok.
 
 %===================================================================
@@ -298,7 +295,7 @@ recall_test_base(StructureSpec, SymlinkMode) ->
     {ok, ArchiveDataDirGuid} = opw_test_rpc:call(krakow, archive, get_data_dir_guid, [ArchiveId]),
     archive_tests_utils:assert_copied(oct_background:get_random_provider_node(krakow), SessionId, 
         get_direct_child(ArchiveDataDirGuid), get_direct_child(TargetParentGuid), SymlinkMode == follow_symlinks, ?ATTEMPTS),
-    ?assertThrow(?ERROR_ALREADY_EXISTS, opw_test_rpc:call(krakow, mi_archives, recall, %fixme opt_archives
+    ?assertThrow(?ERROR_ALREADY_EXISTS, opw_test_rpc:call(krakow, mi_archives, init_recall, %fixme opt_archives
         [oct_background:get_user_session_id(?USER1, krakow), ArchiveId, TargetParentGuid, default])).
 
 
@@ -308,7 +305,7 @@ recall_test_setup(StructureSpec) ->
         dataset = #dataset_object{archives = [#archive_object{id = ArchiveId}]
         }} = onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, StructureSpec),
     #object{guid = TargetParentGuid} = onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, #dir_spec{}),
-    opw_test_rpc:call(krakow, mi_archives, recall, [SessionId, ArchiveId, TargetParentGuid, default]), % fixme opt_archives,
+    opw_test_rpc:call(krakow, mi_archives, init_recall, [SessionId, ArchiveId, TargetParentGuid, default]), % fixme opt_archives,
     {ArchiveId, TargetParentGuid}.
 
 
@@ -345,7 +342,7 @@ init_per_group(_Group, Config) ->
 end_per_group(_Group, Config) ->
     lfm_proxy:teardown(Config).
 
-init_per_testcase(recall_stats_test, Config) ->
+init_per_testcase(recall_details_test, Config) ->
     Nodes = oct_background:get_all_providers_nodes(),
     test_utils:mock_new(Nodes, archive_recall_traverse),
     Self = self(),
@@ -360,7 +357,7 @@ init_per_testcase(recall_stats_test, Config) ->
 init_per_testcase(_Case, Config) ->
     Config.
 
-end_per_testcase(recall_stats_test, Config) ->
+end_per_testcase(recall_details_test, Config) ->
     time_test_utils:unfreeze_time(Config),
     test_utils:mock_unload(oct_background:get_all_providers_nodes()),
     ok;

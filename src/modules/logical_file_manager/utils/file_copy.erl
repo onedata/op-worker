@@ -37,14 +37,17 @@
 -type callback() :: fun((non_neg_integer()) -> ok).
 
 -type options() :: #{
-    recursive => boolean(), % fixme explain all
+    % when enabled whole subtree will be copied
+    recursive => boolean(),
+    % when enabled existing target files will be overwritten instead of returning an error
     overwrite => boolean(),
-    on_write_callback => callback() % fixme name
+    % callback called after each successful write operation
+    on_write_callback => callback()
 }.
 
 -define(DEFAULT_RECURSIVE_OPT, true).
 -define(DEFAULT_OVERWRITE_OPT, false).
--define(DEFAULT_CALLBACK_OPT, fun(_) -> ok end). % fixme name
+-define(DEFAULT_WRITE_CALLBACK_OPT, fun(_) -> ok end).
 
 %%%===================================================================
 %%% API
@@ -167,7 +170,7 @@ copy_file(SessId, #file_attr{guid = SourceGuid, mode = Mode}, TargetParentGuid, 
             BufferSize = get_buffer_size(TargetGuid),
             {ok, _NewSourceHandle, _NewTargetHandle} = copy_file_content(
                 SourceHandle, TargetHandle, 0, BufferSize, 
-                maps:get(on_write_callback, Options, ?DEFAULT_CALLBACK_OPT)
+                maps:get(on_write_callback, Options, ?DEFAULT_WRITE_CALLBACK_OPT)
             ),
             ok = copy_metadata(SessId, SourceGuid, TargetGuid, Mode),
             ok = lfm:fsync(TargetHandle)

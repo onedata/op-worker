@@ -73,7 +73,7 @@
     callback :: archive:callback()
 }).
 
--record(recall_archive, {
+-record(init_archive_recall, {
     id :: archive:id(),
     target_parent_guid :: file_id:file_guid(),
     target_filename = default :: file_meta:name() | default

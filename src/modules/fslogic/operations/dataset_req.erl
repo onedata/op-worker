@@ -37,7 +37,7 @@
     get_archive_info/3,
     list_archives/5,
     init_archive_purge/4,
-    recall_archive/5
+    init_archive_recall/5
 ]).
 
 -type error() :: {error, term()}.
@@ -205,12 +205,12 @@ init_archive_purge(SpaceDirCtx, ArchiveId, CallbackUrl, UserCtx) ->
     archive_api:init_archive_purge(ArchiveId, CallbackUrl).
 
 
--spec recall_archive(file_ctx:ctx(), archive:id(), file_id:file_guid(), file_meta:name() | undefined, 
+-spec init_archive_recall(file_ctx:ctx(), archive:id(), file_id:file_guid(), file_meta:name() | undefined, 
     user_ctx:ctx()) -> {ok, file_id:file_guid()} | error().
-recall_archive(SpaceDirCtx, ArchiveId, TargetParentGuid, TargetName, UserCtx) ->
+init_archive_recall(SpaceDirCtx, ArchiveId, TargetParentGuid, TargetName, UserCtx) ->
     assert_has_eff_privilege(SpaceDirCtx, UserCtx, ?SPACE_RECALL_ARCHIVES),
     
-    archive_api:recall(ArchiveId, UserCtx, TargetParentGuid, TargetName).
+    archive_api:init_recall(ArchiveId, UserCtx, TargetParentGuid, TargetName).
 
 
 %%%===================================================================

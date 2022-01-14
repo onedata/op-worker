@@ -308,7 +308,8 @@ translate_file_details(#file_details{
     end.
 
 
-% fixme spec
+%% @private
+-spec translate_archive_recall_details(archive_recall:record()) -> map().
 translate_archive_recall_details(#archive_recall{
     source_archive = ArchiveId,
     source_dataset = DatasetId,

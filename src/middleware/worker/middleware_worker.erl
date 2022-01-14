@@ -33,7 +33,7 @@
     #get_archive_info{} |
     #update_archive{} |
     #init_archive_purge{} |
-    #recall_archive{}.
+    #init_archive_recall{}.
 
 -type atm_operation() ::
     #schedule_atm_workflow_execution{} |

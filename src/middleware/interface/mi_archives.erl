@@ -22,7 +22,7 @@
     get_info/2,
     update/3,
     init_purge/3,
-    recall/4,
+    init_recall/4,
     get_recall_details/2,
     get_recall_progress/2
 ]).
@@ -101,13 +101,12 @@ init_purge(SessionId, ArchiveId, CallbackUrl) ->
     }).
 
 
-% fixme init_recall
--spec recall(session:id(), archive:id(), file_id:file_guid(), file_meta:name() | default) ->
+-spec init_recall(session:id(), archive:id(), file_id:file_guid(), file_meta:name() | default) ->
     file_id:file_guid() | no_return().
-recall(SessionId, ArchiveId, TargetParentGuid, TargetFilename) ->
+init_recall(SessionId, ArchiveId, TargetParentGuid, TargetFilename) ->
     SpaceGuid = archive_id_to_space_guid(ArchiveId),
     
-    middleware_worker:check_exec(SessionId, SpaceGuid, #recall_archive{
+    middleware_worker:check_exec(SessionId, SpaceGuid, #init_archive_recall{
         id = ArchiveId,
         target_parent_guid = TargetParentGuid,
         target_filename = TargetFilename

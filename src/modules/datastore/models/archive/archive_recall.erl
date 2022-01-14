@@ -8,12 +8,12 @@
 %%% @doc
 %%% Model for storing information about archive recalls.
 %%% It uses time_series_collection structure for storing statistics.
-%%% For each recall there are 2 time series:
-%%%     * bytes - stores sum of copied bytes
-%%%     * files - stores number of copied files
+%%% For each recall there are 3 time series:
+%%%     * currentBytes - stores sum of copied bytes
+%%%     * currentFiles - stores number of copied files 
+%%%     * failedFiles - stores number of unsuccessfully recalled files
 %%% Recall statistics are only kept locally on provider that is 
 %%% performing recall.
-% fixme 
 %%% @end
 %%%-------------------------------------------------------------------
 -module(archive_recall).
@@ -35,7 +35,7 @@
 %% Datastore callbacks
 -export([get_ctx/0, get_record_version/0, get_record_struct/1]).
 
--type id() :: datastore_key:key().
+-type id() :: file_meta:uuid().
 -type record() :: #archive_recall{}.
 -export_type([id/0, record/0]).
 
@@ -84,19 +84,28 @@ create(Id, ArchiveDoc) ->
 
 -spec delete(id()) -> ok | {error, term()}.
 delete(Id) ->
-    % fixme remove from archive record
+    % no need to invalidate cache, as whole subtree has been already deleted
     datastore_time_series_collection:delete(?CTX, ?TSC_ID(Id)),
     json_infinite_log_model:destroy(?ERROR_LOG_ID(Id)),
-    datastore_model:delete(?SYNC_CTX, Id).
+    case get_details(Id) of
+        {ok, #archive_recall{source_archive = ArchiveId}} ->
+            archive:report_recall_removed(ArchiveId, Id),
+            datastore_model:delete(?SYNC_CTX, Id);
+        {error, not_found} -> 
+            ok;
+        Error -> 
+            Error
+    end.
 
 
-% fixme specs
+-spec report_started(id()) -> ok | {error, term()}.
 report_started(Id) ->
     ?extract_ok(datastore_model:update(?SYNC_CTX, Id, fun(ArchiveRecall) ->
         {ok, ArchiveRecall#archive_recall{start_timestamp = global_clock:timestamp_millis()}}
     end)).
 
 
+-spec report_finished(id(), od_space:id()) -> ok | {error, term()}.
 report_finished(Id, SpaceId) ->
     ok = archive_recall_cache:invalidate_on_all_nodes(SpaceId),
     ?extract_ok(datastore_model:update(?SYNC_CTX, Id, fun(ArchiveRecall) ->
@@ -146,28 +155,13 @@ get_stats(Id) ->
     datastore_time_series_collection:list_windows(?CTX, ?TSC_ID(Id), #{}).
 
 
-get_counters_current_value(Id) ->
-    RequestRange = lists:map(fun(Parameter) -> {Parameter, ?TOTAL_METRIC} end, [?BYTES_TS, ?FILES_TS, ?FAILED_FILES_TS]),
-    
-    case datastore_time_series_collection:list_windows(?CTX, ?TSC_ID(Id), RequestRange, #{limit => 1}) of
-        {ok, WindowsMap} ->
-            WindowToValue = fun
-                ({{Parameter, ?TOTAL_METRIC}, [{_Timestamp, {_Measurements, Value}}]}) -> {Parameter, Value};
-                ({{Parameter, ?TOTAL_METRIC}, []}) -> {Parameter, 0}
-            end,
-            {ok, maps:from_list(lists:map(WindowToValue, maps:to_list(WindowsMap)))};
-        Error ->
-            Error
-    end.
-
-
 get_progress(Id) ->
     {ok, CountersCurrentValue} = get_counters_current_value(Id),
     case CountersCurrentValue of
         #{?FAILED_FILES_TS := 0} -> 
             {ok, CountersCurrentValue#{<<"lastError">> => undefined}};
         _ ->
-            % fixme todo with ticket
+            %% @TODO VFS-8839 - browse error log when gui supports it
             {ok, #{
                 <<"logEntries">> := [#{
                     <<"content">> := LastEntryContent
@@ -178,9 +172,9 @@ get_progress(Id) ->
     end.
 
 
-% fixme specs
-get_effective_recall(#document{scope = SpaceId, key = Id} = Doc) ->
-    case archive_recall_cache:get(SpaceId, Doc) of
+-spec get_effective_recall(file_meta:doc()) -> {ok, id() | undefined} | {error, term()}.
+get_effective_recall(#document{scope = SpaceId, key = Id} = FileMetaDoc) ->
+    case archive_recall_cache:get(SpaceId, FileMetaDoc) of
         {ok, {finished, Id}} -> {ok, Id};
         {ok, {finished, _}} -> {ok, undefined};
         {ok, {ongoing, AncestorId}} -> {ok, AncestorId};
@@ -191,6 +185,7 @@ get_effective_recall(#document{scope = SpaceId, key = Id} = Doc) ->
 %%% Internal functions
 %%%===================================================================
 
+%% @private
 -spec create_tsc(id()) -> ok | {error, term()}.
 create_tsc(Id) ->
     TotalMetric = #{
@@ -211,7 +206,9 @@ create_tsc(Id) ->
         Error -> Error
     end.
 
-% fixme specs
+
+%% @private
+-spec create_doc(id(), archive:doc()) -> ok | {error, term()}.
 create_doc(Id, ArchiveDoc) ->
     {ok, SpaceId} = archive:get_space_id(ArchiveDoc),
     {ok, ArchiveId} = archive:get_id(ArchiveDoc),
@@ -228,6 +225,8 @@ create_doc(Id, ArchiveDoc) ->
         }}
     )).
 
+
+%% @private
 -spec supported_metrics() -> #{ts_metric:id() => ts_metric:config()}.
 supported_metrics() -> #{
     ?MINUTE_METRIC => #metric_config{
@@ -247,6 +246,22 @@ supported_metrics() -> #{
     }
 }.
 
+
+%% @private
+-spec get_counters_current_value(id()) -> {ok, map()}.
+get_counters_current_value(Id) ->
+    RequestRange = lists:map(fun(Parameter) -> {Parameter, ?TOTAL_METRIC} end, [?BYTES_TS, ?FILES_TS, ?FAILED_FILES_TS]),
+    
+    case datastore_time_series_collection:list_windows(?CTX, ?TSC_ID(Id), RequestRange, #{limit => 1}) of
+        {ok, WindowsMap} ->
+            WindowToValue = fun
+                ({{Parameter, ?TOTAL_METRIC}, [{_Timestamp, {_Measurements, Value}}]}) -> {Parameter, Value};
+                ({{Parameter, ?TOTAL_METRIC}, []}) -> {Parameter, 0}
+            end,
+            {ok, maps:from_list(lists:map(WindowToValue, maps:to_list(WindowsMap)))};
+        Error ->
+            Error
+    end.
 
 
 %%%===================================================================

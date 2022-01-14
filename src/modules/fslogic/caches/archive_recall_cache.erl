@@ -6,8 +6,9 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module is responsible for effective checking synchronization status of file_meta links. 
-%%% Uses `effective_cache` under the hood. % fixme
+%%% This module is responsible for effective checking recall status in 
+%%% file ancestors. 
+%%% Uses `effective_cache` under the hood.
 %%% TODO VFS-7412 refactor this module (duplicated code in other effective_ caches modules)
 %%% @end
 %%%-------------------------------------------------------------------
@@ -105,7 +106,8 @@ invalidate_on_all_nodes(SpaceId) ->
 
 
 -spec get(od_space:id(), file_meta:uuid() | file_meta:doc()) ->
-    {ok, [archive_recall:id()]} | {error, {file_meta_missing, file_meta:uuid()}} | {error, term()}. % fixme spec
+    {ok, undefined | {ongoing | finished, file_meta:uuid()}} 
+    | {error, {file_meta_missing, file_meta:uuid()}} | {error, term()}.
 get(SpaceId, Doc = #document{value = #file_meta{}}) ->
     CacheName = ?CACHE_NAME(SpaceId),
     case effective_value:get_or_calculate(CacheName, Doc, fun calculate_archive_recalls/1) of
@@ -154,4 +156,3 @@ calculate_archive_recalls([#document{} = FileMetaDoc, ParentValue, CalculationIn
         {error, _} = Error -> 
             Error
     end.
-% fixme explain that there is no need to invalidate on create, delete?? (on create probably should)

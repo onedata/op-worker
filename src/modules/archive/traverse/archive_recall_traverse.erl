@@ -9,7 +9,9 @@
 %%% This module implements traverse_behaviour. 
 %%% It is responsible for copying archive content to the specified location.
 %%% All archive content is copied exactly except for symlinks to nested archives 
-%%% which are resolved and nested archives are also copied.
+%%% which are resolved and their content is then recursively copied. 
+%%% Recall root file is created before traverse start to check user privileges 
+%%% and then its uuid is used as recall identifier.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(archive_recall_traverse).
@@ -49,7 +51,7 @@
     end
 }). 
 
--type id() :: traverse:id().
+-type id() :: file_meta:uuid().
 
 %%%===================================================================
 %%% API functions
@@ -81,10 +83,11 @@ start(ArchiveDoc, UserCtx, TargetParentGuid, TargetRootName) ->
         _ ->
             {TargetRootName, StartFileCtx}
     end,
-    % fixme jeśli w targecie idzie już jakiś recall to error
-    % create root file before traverse starts to have its uuid so progress can be shown
+    % fixme fail if there is a recall in ancestors
     {ok, SpaceId} = archive:get_space_id(ArchiveDoc),
-    case create_root_file(user_ctx:get_session_id(UserCtx), StartFileCtx, TargetParentGuid, FinalName) of
+    {IsDir, StartFileCtx2} = file_ctx:is_dir(StartFileCtx1),
+    
+    case create_root_file(IsDir, user_ctx:get_session_id(UserCtx), TargetParentGuid, FinalName) of
         {ok, Guid} ->
             TaskId = file_id:guid_to_uuid(Guid),
             {RootPath, _} = file_ctx:get_canonical_path(file_ctx:new_by_guid(Guid)),
@@ -104,12 +107,12 @@ start(ArchiveDoc, UserCtx, TargetParentGuid, TargetRootName) ->
                             archive_doc => ArchiveDoc,
                             current_parent => TargetParentGuid,
                             root_path_tokens => RootPathTokens,
-                            root_file_name => FinalName % fixme explain it is removed after metadata are copied
+                            root_file_name => FinalName
                         },
                         additional_data => AdditionalData
                     },
                     ok = archive_recall:create(TaskId, ArchiveDoc),
-                    {ok, TaskId} = tree_traverse:run(?POOL_NAME, StartFileCtx1, UserId, Options),
+                    {ok, TaskId} = tree_traverse:run(?POOL_NAME, StartFileCtx2, UserId, Options),
                     ok = archive:report_recall_scheduled(ArchiveId, TaskId),
                     {ok, Guid};
                 {error, _} = Error ->
@@ -181,7 +184,7 @@ do_master_job(#tree_traverse{file_ctx = FileCtx} = Job, MasterJobArgs) ->
         true ->
             do_dir_master_job(Job#tree_traverse{file_ctx = FileCtx2}, MasterJobArgs);
         false ->
-            tree_traverse:do_master_job(Job, MasterJobArgs)
+            tree_traverse:do_master_job(Job#tree_traverse{file_ctx = FileCtx2}, MasterJobArgs)
     end.
 
 
@@ -207,16 +210,20 @@ do_slave_job(#tree_traverse_slave{
         end,
         case file_ctx:is_symlink_const(FileCtx) of
             true -> 
-                recall_symlink(FileCtx, TargetParentGuid, RootPathTokens, FileName, ArchiveDoc, UserCtx);
+                recall_symlink(
+                    FileCtx, TargetParentGuid, RootPathTokens, FileName, ArchiveDoc, UserCtx);
             false ->
-                {ok, _, _} = file_copy:copy(SessionId, FileGuid, TargetParentGuid, FileName, ?COPY_OPTIONS(TaskId))
+                {ok, _, _} = file_copy:copy(SessionId, FileGuid, TargetParentGuid, FileName, 
+                    ?COPY_OPTIONS(TaskId))
         end,
         ok = archive_recall:report_file_finished(TaskId)
     catch
         _Class:{badmatch, {error, Reason}}:Stacktrace ->
-            report_error(TaskId, file_ctx:get_logical_guid_const(FileCtx), ArchiveDoc, ?ERROR_POSIX(Reason), Stacktrace);
+            report_error(TaskId, file_ctx:get_logical_guid_const(FileCtx), ArchiveDoc, 
+                ?ERROR_POSIX(Reason), Stacktrace);
         _Class:Reason:Stacktrace ->
-            report_error(TaskId, file_ctx:get_logical_guid_const(FileCtx), ArchiveDoc, Reason, Stacktrace)
+            report_error(TaskId, file_ctx:get_logical_guid_const(FileCtx), ArchiveDoc, 
+                Reason, Stacktrace)
     end.
 
 
@@ -243,24 +250,30 @@ do_dir_master_job(#tree_traverse{
         {ok, UserCtx} = tree_traverse_session:acquire_for_task(UserId, ?POOL_NAME, TaskId),
         SessionId = user_ctx:get_session_id(UserCtx),
         SourceDirGuid = file_ctx:get_logical_guid_const(SourceDirCtx),
-        {ok, CopyGuid, _} = file_copy:copy(SessionId, SourceDirGuid, TargetParentGuid, DirName, ?COPY_OPTIONS(TaskId)),
+        {ok, CopyGuid, _} = file_copy:copy(SessionId, SourceDirGuid, TargetParentGuid, DirName, 
+            ?COPY_OPTIONS(TaskId)),
         NewTraverseInfo = maps:remove(root_file_name, TraverseInfo#{current_parent => CopyGuid}),
         UpdatedJob = Job#tree_traverse{traverse_info = NewTraverseInfo},
         
         tree_traverse:do_master_job(UpdatedJob, MasterJobArgs)
     catch
         _Class:{badmatch, {error, Reason}}:Stacktrace ->
-            report_error(TaskId, file_ctx:get_logical_guid_const(SourceDirCtx), ArchiveDoc, ?ERROR_POSIX(Reason), Stacktrace);
+            report_error(TaskId, file_ctx:get_logical_guid_const(SourceDirCtx), ArchiveDoc, 
+                ?ERROR_POSIX(Reason), Stacktrace);
         _Class:Reason:Stacktrace ->
-            report_error(TaskId, file_ctx:get_logical_guid_const(SourceDirCtx), ArchiveDoc, Reason, Stacktrace)
+            report_error(TaskId, file_ctx:get_logical_guid_const(SourceDirCtx), ArchiveDoc, 
+                Reason, Stacktrace)
     end.
 
 
-% fixme spec
+-spec recall_symlink(file_ctx:ctx(), file_id:file_guid(), [file_meta:name()], file_meta:name(), 
+    archive:doc(), user_ctx:ctx()) -> {ok, file_ctx:ctx()}.
 recall_symlink(FileCtx, TargetParentGuid, RootPathTokens, FileName, ArchiveDoc, UserCtx) ->
     {ok, ArchiveDataGuid} = archive:get_data_dir_guid(ArchiveDoc),
-    {ok, SymlinkPath} = lfm:read_symlink(user_ctx:get_session_id(UserCtx), ?FILE_REF(file_ctx:get_logical_guid_const(FileCtx))),
-    {ArchiveDataCanonicalPath, _ArchiveFileCtx} = file_ctx:get_canonical_path(file_ctx:new_by_guid(ArchiveDataGuid)),
+    {ok, SymlinkPath} = lfm:read_symlink(user_ctx:get_session_id(UserCtx), 
+        ?FILE_REF(file_ctx:get_logical_guid_const(FileCtx))),
+    {ArchiveDataCanonicalPath, _ArchiveFileCtx} = file_ctx:get_canonical_path(
+        file_ctx:new_by_guid(ArchiveDataGuid)),
     [_Sep, _SpaceId | ArchivePathTokens] = filename:split(ArchiveDataCanonicalPath),
     [SpaceIdPrefix | SymlinkPathTokens] = filename:split(SymlinkPath),
     FinalSymlinkPath = case lists:prefix(ArchivePathTokens, SymlinkPathTokens) of
@@ -275,6 +288,7 @@ recall_symlink(FileCtx, TargetParentGuid, RootPathTokens, FileName, ArchiveDoc, 
     {ok, file_ctx:new_by_guid(Guid)}.
 
 
+-spec report_error(id(), file_id:file_guid(), archive:doc(), term(), list()) -> ok.
 report_error(TaskId, FileGuid, ArchiveDoc, Reason, Stacktrace) ->
     {ok, ArchiveId} = archive:get_id(ArchiveDoc),
     ?error_stacktrace("Unexpected error during recall of file ~p in archive ~p: ~p.", 
@@ -282,11 +296,9 @@ report_error(TaskId, FileGuid, ArchiveDoc, Reason, Stacktrace) ->
     archive_recall:report_file_failed(TaskId, FileGuid, Reason).
 
 
-% fixme spec etc
-create_root_file(SessId, FileCtx, TargetParentGuid, TargetRootName) -> %fixme return file_ctx
-    case file_ctx:is_dir(FileCtx) of
-        {true, _} ->
-            lfm:mkdir(SessId, TargetParentGuid, TargetRootName, ?DEFAULT_DIR_MODE);
-        {false, _} ->
-            lfm:create(SessId, TargetParentGuid, TargetRootName, ?DEFAULT_FILE_MODE)
-    end.
+-spec create_root_file(IsDir :: boolean(), session:id(), file_id:file_guid(), file_meta:name()) -> 
+    {ok, file_id:file_guid()}.
+create_root_file(true, SessId, TargetParentGuid, TargetRootName) ->
+    lfm:mkdir(SessId, TargetParentGuid, TargetRootName, ?DEFAULT_DIR_MODE);
+create_root_file(false, SessId, TargetParentGuid, TargetRootName) -> 
+    lfm:create(SessId, TargetParentGuid, TargetRootName, ?DEFAULT_FILE_MODE).

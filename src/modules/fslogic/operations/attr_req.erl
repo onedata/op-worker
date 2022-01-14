@@ -202,25 +202,6 @@ get_file_details_insecure(UserCtx, FileCtx, Opts) ->
     }.
 
 
-% fixme specs
-calculate_effective_values(FileCtx) ->
-    {FileDoc, FileCtx2} = file_ctx:get_file_doc(FileCtx),
-    EffectiveQoSMembership = file_qos:qos_membership(FileDoc),
-    {ok, EffectiveDatasetMembership, EffectiveProtectionFlags, FileCtx3} =
-        dataset_api:get_effective_membership_and_protection_flags(FileCtx2),
-    EffectiveRecallRootGuid = case archive_recall:get_effective_recall(FileDoc) of
-        {ok, undefined} -> undefined;
-        {ok, Uuid} -> file_id:pack_guid(Uuid, file_ctx:get_space_id_const(FileCtx))
-    end,
-    {#{
-        effective_qos_membership => EffectiveQoSMembership,
-        effective_dataset_membership => EffectiveDatasetMembership,
-        effective_protection_flags => EffectiveProtectionFlags,
-        effective_recall => EffectiveRecallRootGuid
-    }, FileCtx3}.
-    
-
-
 -spec get_file_references(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:fuse_response().
 get_file_references(UserCtx, FileCtx0) ->
@@ -638,3 +619,22 @@ get_fs_stats_insecure(_UserCtx, FileCtx) ->
             }]
         }
     }.
+
+
+%% @private
+-spec calculate_effective_values(file_ctx:ctx()) -> {file_ctx:ctx(), map()}.
+calculate_effective_values(FileCtx) ->
+    {FileDoc, FileCtx2} = file_ctx:get_file_doc(FileCtx),
+    EffectiveQoSMembership = file_qos:qos_membership(FileDoc),
+    {ok, EffectiveDatasetMembership, EffectiveProtectionFlags, FileCtx3} =
+        dataset_api:get_effective_membership_and_protection_flags(FileCtx2),
+    EffectiveRecallRootGuid = case archive_recall:get_effective_recall(FileDoc) of
+        {ok, undefined} -> undefined;
+        {ok, Uuid} -> file_id:pack_guid(Uuid, file_ctx:get_space_id_const(FileCtx))
+    end,
+    {#{
+        effective_qos_membership => EffectiveQoSMembership,
+        effective_dataset_membership => EffectiveDatasetMembership,
+        effective_protection_flags => EffectiveProtectionFlags,
+        effective_recall => EffectiveRecallRootGuid
+    }, FileCtx3}.

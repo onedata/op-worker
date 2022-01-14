@@ -22,6 +22,7 @@
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
 
+%% @TODO VFS-7617 Test symlinks targets
 
 %% exported for CT
 -export([

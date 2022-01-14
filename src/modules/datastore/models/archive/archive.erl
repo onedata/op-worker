@@ -37,7 +37,7 @@
     mark_preserved/1, mark_verification_failed/1,
     set_root_dir_guid/2, set_data_dir_guid/2, set_base_archive_id/2,
     set_related_dip/2, set_related_aip/2, 
-    report_recall_scheduled/2, report_recall_finished/2
+    report_recall_scheduled/2, report_recall_removed/2
 ]).
 
 %% datastore_model callbacks
@@ -384,8 +384,7 @@ mark_purging(ArchiveId, Callback) ->
             orelse Parent =/= undefined % nested archive cannot be removed as it would destroy parent archive
         of
             true ->
-                % TODO VFS-7718 return better error for nested dataset?
-                % fixme custom error??
+                %% @TODO VFS-8840 - create more descriptive error (also for nested archives)
                 ?ERROR_POSIX(?EBUSY);
             false ->
                 {ok, Archive#archive{
@@ -505,8 +504,8 @@ report_recall_scheduled(ArchiveDocOrId, RecallId) ->
     end)).
 
 
--spec report_recall_finished(id() | doc(), archive_recall:id()) -> {ok, doc()} | error().
-report_recall_finished(ArchiveDocOrId, RecallId) ->
+-spec report_recall_removed(id() | doc(), archive_recall:id()) -> {ok, doc()} | error().
+report_recall_removed(ArchiveDocOrId, RecallId) ->
     update(ArchiveDocOrId, fun(#archive{recalls = PrevRecalls} = Archive) ->
         {ok, Archive#archive{recalls = lists:delete(RecallId, PrevRecalls)}}
     end).

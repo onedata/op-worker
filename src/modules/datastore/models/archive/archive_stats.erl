@@ -99,10 +99,12 @@ mark_file_failed(Stats) ->
     }.
 
 
-% fixme
+-spec get_archived_bytes(record()) -> non_neg_integer().
 get_archived_bytes(#archive_stats{bytes_archived = Bytes}) ->
     Bytes.
 
+
+-spec get_archived_files(record()) -> non_neg_integer().
 get_archived_files(#archive_stats{files_archived = FilesArchived}) ->
     FilesArchived.
 

@@ -203,7 +203,7 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{id = ArchiveId, aspect = rec
     SessionId = Auth#auth.session_id,
     TargetParentGuid = maps:get(<<"targetParentId">>, Data),
     TargetRootName = maps:get(<<"targetRootName">>, Data, default),
-    {ok, value, mi_archives:recall(SessionId, ArchiveId, TargetParentGuid, TargetRootName)}.
+    {ok, value, mi_archives:init_recall(SessionId, ArchiveId, TargetParentGuid, TargetRootName)}.
 
 
 %%--------------------------------------------------------------------
