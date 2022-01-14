@@ -108,7 +108,8 @@
     lfm_monitored_open/1,
     lfm_create_and_read_symlink/1,
     lfm_create_hardlink_to_symlink/1,
-    recreate_file_on_storage/1
+    recreate_file_on_storage/1,
+    files_counting_test/1
 ]).
 
 
@@ -194,7 +195,8 @@
     lfm_monitored_open,
     lfm_create_and_read_symlink,
     lfm_create_hardlink_to_symlink,
-    recreate_file_on_storage
+    recreate_file_on_storage,
+    files_counting_test
 ]).
 
 
@@ -909,6 +911,10 @@ recreate_file_on_storage(Config) ->
     {ok, Handle2} = ?assertMatch({ok, _}, lfm_proxy:open(Worker, SessId, ?FILE_REF(Guid), read)),
     ?assertEqual({ok, <<>>}, lfm_proxy:read(Worker, Handle2, 0, 10)),
     ?assertEqual(ok, lfm_proxy:close(Worker, Handle2)).
+
+
+files_counting_test(Config) ->
+    files_counting_test_base:files_counting_test(Config).
 
 
 %%%===================================================================

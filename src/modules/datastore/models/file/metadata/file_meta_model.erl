@@ -17,7 +17,7 @@
 %% datastore_model callbacks
 -export([
     get_record_version/0, get_record_struct/1,
-    upgrade_record/2, resolve_conflict/3
+    upgrade_record/2, resolve_conflict/3, new_remote_doc/2
 ]).
 
 -define(FILE_META_MODEL, file_meta).
@@ -376,8 +376,13 @@ upgrade_record(11, {?FILE_META_MODEL, Name, Type, Mode, ProtectionFlags, ACL, Ow
 %%--------------------------------------------------------------------
 -spec resolve_conflict(datastore_model:ctx(), file_meta:doc(), file_meta:doc()) -> default.
 resolve_conflict(_Ctx,
-    NewDoc = #document{key = Uuid, value = #file_meta{name = NewName, parent_uuid = NewParentUuid}, scope = SpaceId},
-    PrevDoc = #document{value = #file_meta{name = PrevName, parent_uuid = PrevParentUuid}}
+    NewDoc = #document{
+        key = Uuid,
+        value = #file_meta{name = NewName, parent_uuid = NewParentUuid, type = Type},
+        scope = SpaceId
+    }, PrevDoc = #document{
+        value = #file_meta{name = PrevName, parent_uuid = PrevParentUuid}
+    }
 ) ->
     invalidate_effective_caches_if_moved(NewDoc, PrevDoc),
     invalidate_dataset_eff_cache_if_needed(NewDoc, PrevDoc),
@@ -397,6 +402,18 @@ resolve_conflict(_Ctx,
             ok
     end,
 
+    case file_meta:is_deleted(NewDoc) andalso not file_meta:is_deleted(PrevDoc) of
+        true ->
+            spawn(fun() ->
+                case Type of
+                    ?DIRECTORY_TYPE -> files_counter:decrement_dir_count(file_id:pack_guid(NewParentUuid, SpaceId));
+                    _ -> files_counter:decrement_file_count(file_id:pack_guid(NewParentUuid, SpaceId))
+                end
+            end);
+        false ->
+            ok
+    end,
+
     case file_meta_hardlinks:merge_references(NewDoc, PrevDoc) of
         not_mutated ->
             default;
@@ -409,6 +426,22 @@ resolve_conflict(_Ctx,
             end,
             {true, DocBase#document{value = RecordBase#file_meta{references = MergedReferences}}}
     end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Function called when new record appears from remote provider.
+%% @end
+%%--------------------------------------------------------------------
+-spec new_remote_doc(datastore_model:ctx(), file_meta:doc()) -> ok.
+new_remote_doc(_Ctx, #document{value = #file_meta{deleted = true}}) ->
+    ok;
+new_remote_doc(_Ctx, #document{deleted = true}) ->
+    ok;
+new_remote_doc(_Ctx, #document{value = #file_meta{type = ?DIRECTORY_TYPE, parent_uuid = ParentUuid}, scope = SpaceId}) ->
+    files_counter:increment_dir_count(file_id:pack_guid(ParentUuid, SpaceId));
+new_remote_doc(_Ctx, #document{value = #file_meta{parent_uuid = ParentUuid}, scope = SpaceId}) ->
+    files_counter:increment_file_count(file_id:pack_guid(ParentUuid, SpaceId)).
 
 
 %%%===================================================================

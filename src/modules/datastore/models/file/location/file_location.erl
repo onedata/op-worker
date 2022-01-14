@@ -90,6 +90,7 @@ create_and_update_quota(Doc = #document{value = #file_location{
 }}, GeneratedKey) ->
     NewSize = count_bytes(Doc),
     space_quota:apply_size_change_and_maybe_emit(SpaceId, NewSize),
+    update_dir_size(FileUuid, SpaceId, NewSize),
     case get_owner_id(FileUuid) of
         {ok, UserId} ->
             monitoring_event_emitter:emit_storage_used_updated(
@@ -126,27 +127,31 @@ save_and_update_quota(Doc = #document{
     save_and_update_quota(Doc, UserId);
 save_and_update_quota(Doc = #document{
     key = Key,
-    value = #file_location{space_id = SpaceId}
+    value = #file_location{uuid = FileUuid, space_id = SpaceId}
 }, UserId) ->
     NewSize = count_bytes(Doc),
     case datastore_model:get(?CTX, Key) of
         {ok, #document{value = #file_location{space_id = SpaceId}} = OldDoc} ->
             OldSize = count_bytes(OldDoc),
             space_quota:apply_size_change_and_maybe_emit(SpaceId, NewSize - OldSize),
+            update_dir_size(FileUuid, SpaceId, NewSize - OldSize),
             monitoring_event_emitter:emit_storage_used_updated(
                 SpaceId, UserId, NewSize - OldSize);
 
         {ok, #document{value = #file_location{space_id = OldSpaceId}} = OldDoc} ->
             OldSize = count_bytes(OldDoc),
             space_quota:apply_size_change_and_maybe_emit(OldSpaceId, -1 * OldSize),
+            update_dir_size(FileUuid, SpaceId, -1 * OldSize),
             monitoring_event_emitter:emit_storage_used_updated(
                 OldSpaceId, UserId, -1 * OldSize),
 
             space_quota:apply_size_change_and_maybe_emit(SpaceId, NewSize),
+            update_dir_size(FileUuid, SpaceId, NewSize),
             monitoring_event_emitter:emit_storage_used_updated(
                 SpaceId, UserId, NewSize);
         _ ->
             space_quota:apply_size_change_and_maybe_emit(SpaceId, NewSize),
+            update_dir_size(FileUuid, SpaceId, NewSize),
             monitoring_event_emitter:emit_storage_used_updated(
                 SpaceId, UserId, NewSize)
     end,
@@ -197,6 +202,7 @@ delete_and_update_quota(Key) ->
         }}} ->
             Size = count_bytes(Doc),
             space_quota:apply_size_change_and_maybe_emit(SpaceId, -1 * Size),
+            update_dir_size(FileUuid, SpaceId, -1 * Size),
             {ok, UserId} = get_owner_id(FileUuid),
             monitoring_event_emitter:emit_storage_used_updated(
                 SpaceId, UserId, -1 * Size);
@@ -204,6 +210,15 @@ delete_and_update_quota(Key) ->
             ok
     end,
     datastore_model:delete(?CTX, Key).
+
+
+%% @private
+-spec update_dir_size(file_meta:uuid(), od_space:id(), integer()) -> ok.
+update_dir_size(FileUuid, SpaceId, SizeChange) ->
+    % TODO VFS-8835 - cache parent when rename works properly
+    FileCtx = file_ctx:new_by_uuid(FileUuid, SpaceId),
+    {ParentFileCtx, _} = files_tree:get_parent(FileCtx, undefined),
+    files_counter:update_size(file_ctx:get_logical_guid_const(ParentFileCtx), SizeChange).
 
 
 -spec is_storage_file_created(doc() | record()) -> boolean().

@@ -6,12 +6,12 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Protocol used by tree gatherer.
+%%% Protocol used by files tree gatherer.
 %%% @end
 %%%-------------------------------------------------------------------
 
--ifndef(TREE_GATHERER_HRL).
--define(TREE_GATHERER_HRL, 1).
+-ifndef(FILES_TREE_GATHERER_HRL).
+-define(FILES_TREE_GATHERER_HRL, 1).
 
 
 %%%===================================================================
@@ -19,17 +19,17 @@
 %%%===================================================================
 
 
--record(tree_gatherer_update_request, {
+-record(ftg_update_request, {
     guid :: file_id:file_guid(),
-    handler_module :: tree_gatherer_pes_callback:handler_module(),
-    diff_map :: tree_gatherer_pes_callback:diff_map()
+    handler_module :: files_tree_gatherer_pes_executor:handler_module(),
+    diff_map :: files_tree_gatherer_pes_executor:diff_map()
 }).
 
 
--record(tree_gatherer_get_request, {
+-record(ftg_get_request, {
     guid :: file_id:file_guid(),
-    handler_module :: tree_gatherer_pes_callback:handler_module(),
-    parameters :: [tree_gatherer_pes_callback:parameter()]
+    handler_module :: files_tree_gatherer_pes_executor:handler_module(),
+    parameters :: [files_tree_gatherer_pes_executor:parameter()]
 }).
 
 

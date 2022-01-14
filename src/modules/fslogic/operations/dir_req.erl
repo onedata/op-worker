@@ -201,6 +201,7 @@ mkdir_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
             }),
         FileAttr2 = FileAttr#file_attr{size = 0},
         ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, FileAttr2, [user_ctx:get_session_id(UserCtx)]),
+        files_counter:increment_dir_count(file_ctx:get_logical_guid_const(ParentFileCtx)),
         #fuse_response{status = #status{code = ?OK},
             fuse_response = #dir{guid = file_id:pack_guid(DirUuid, SpaceId)}
         }

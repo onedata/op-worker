@@ -46,7 +46,7 @@
 
 %% datastore_model callbacks
 -export([get_ctx/0]).
--export([get_record_version/0, get_record_struct/1, upgrade_record/2, resolve_conflict/3]).
+-export([get_record_version/0, get_record_struct/1, upgrade_record/2, resolve_conflict/3, new_remote_doc/2]).
 
 -type doc() :: datastore_doc:doc(file_meta()).
 -type diff() :: datastore_doc:diff(file_meta()).
@@ -495,6 +495,16 @@ rename(SourceDoc, SourceParentUuid, TargetParentUuid, TargetName) ->
     end),
     ok = file_meta_forest:add(TargetParentUuid, Scope, TargetName, FileUuid),
     ok = file_meta_forest:delete(SourceParentUuid, Scope, FileName, FileUuid),
+
+    {ok, Counters} = files_counter:get_values_map(
+        file_id:pack_guid(FileUuid, Scope), [<<"file_count">>, <<"dir_count">>]),
+    SourceParentGuid = file_id:pack_guid(SourceParentUuid, Scope),
+    TargetParentGuid = file_id:pack_guid(TargetParentUuid, Scope),
+    lists:foreach(fun({Parameter, Value}) ->
+        files_counter:update_parameter(SourceParentGuid, Parameter, -1 * Value),
+        files_counter:update_parameter(TargetParentGuid, Parameter, Value)
+    end, maps:to_list(Counters)),
+
     dataset_api:move_if_applicable(SourceDoc, TargetDoc).
 
 %%--------------------------------------------------------------------
@@ -1127,3 +1137,13 @@ upgrade_record(Version, Record) ->
 -spec resolve_conflict(datastore_model:ctx(), doc(), doc()) -> default.
 resolve_conflict(Ctx, Doc1, Doc2) ->
     file_meta_model:resolve_conflict(Ctx, Doc1, Doc2).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Function called when new record appears from remote provider.
+%% @end
+%%--------------------------------------------------------------------
+-spec new_remote_doc(datastore_model:ctx(), doc()) -> ok.
+new_remote_doc(Ctx, Doc) ->
+    file_meta_model:new_remote_doc(Ctx, Doc).

@@ -59,16 +59,44 @@ add_hook(FileUuid, Identifier, Module, Function, Args) ->
         function = Function,
         args = EncodedArgs
     },
-    ?extract_ok(datastore_model:update(?CTX, FileUuid, fun(#file_meta_posthooks{hooks = Hooks} = FileMetaPosthooks) ->
+
+    AddAns = datastore_model:update(?CTX, FileUuid, fun(#file_meta_posthooks{hooks = Hooks} = FileMetaPosthooks) ->
         {ok, FileMetaPosthooks#file_meta_posthooks{hooks = Hooks#{UniqueIdentifier => Hook}}}
-    end, #file_meta_posthooks{hooks = #{UniqueIdentifier => Hook}})).
+    end, #file_meta_posthooks{hooks = #{UniqueIdentifier => Hook}}),
+
+    case AddAns of
+        {ok, _} ->
+            % Check race with dbsync
+            case file_meta:exists(FileUuid) of
+                true ->
+                    % Spawn to prevent deadlocks when hook is added from the inside of already existing hook
+                    spawn(fun() -> execute_hooks(FileUuid) end),
+                    ok;
+                _ -> ok
+            end;
+        Error ->
+            Error
+    end.
 
 
 -spec execute_hooks(file_meta:uuid()) -> ok | {error, term()}.
 execute_hooks(FileUuid) ->
+    % Double check to prevent entering critical section for empty hooks list
     case datastore_model:get(?CTX, FileUuid) of
-        {ok, #document{value = #file_meta_posthooks{hooks = Hooks}}} -> 
-            execute_hooks(FileUuid, Hooks);
+        {ok, #document{value = #file_meta_posthooks{hooks = Hooks}}} ->
+            case maps:size(Hooks) of
+                0 ->
+                    ok;
+                _ ->
+                    critical_section:run(FileUuid, fun() ->
+                        case datastore_model:get(?CTX, FileUuid) of
+                            {ok, #document{value = #file_meta_posthooks{hooks = Hooks}}} ->
+                                execute_hooks(FileUuid, Hooks);
+                            _ ->
+                                ok
+                        end
+                    end)
+            end;
         _ ->
             ok
     end.
@@ -90,16 +118,22 @@ execute_hooks(FileUuid, HooksToExecute) ->
             Acc
         end
     end, [], HooksToExecute),
-    UpdateFun = fun(#file_meta_posthooks{hooks = PreviousHooks} = FileMetaPosthooks) ->
-        {ok, FileMetaPosthooks#file_meta_posthooks{hooks = maps:without(SuccessfulHooks, PreviousHooks)}}
-    end,
-    case datastore_model:update(?CTX, FileUuid, UpdateFun) of
-        {ok, #document{value = #file_meta_posthooks{hooks = Hooks}}} when map_size(Hooks) == 0 ->
-            datastore_model:delete(?CTX, FileUuid, fun(#file_meta_posthooks{hooks = H}) -> map_size(H) == 0 end);
-        {ok, _} -> 
+
+    case SuccessfulHooks of
+        [] ->
             ok;
-        {error, _} = Error ->
-            Error
+        _ ->
+            UpdateFun = fun(#file_meta_posthooks{hooks = PreviousHooks} = FileMetaPosthooks) ->
+                {ok, FileMetaPosthooks#file_meta_posthooks{hooks = maps:without(SuccessfulHooks, PreviousHooks)}}
+            end,
+            case datastore_model:update(?CTX, FileUuid, UpdateFun) of
+                {ok, #document{value = #file_meta_posthooks{hooks = Hooks}}} when map_size(Hooks) == 0 ->
+                    datastore_model:delete(?CTX, FileUuid, fun(#file_meta_posthooks{hooks = H}) -> map_size(H) == 0 end);
+                {ok, _} ->
+                    ok;
+                {error, _} = Error ->
+                    Error
+            end
     end.
 
 

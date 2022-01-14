@@ -32,7 +32,7 @@
     mark_changed_blocks/1, mark_changed_blocks/5, set_local_change/1,
     get_public_blocks/1]).
 % Size API
--export([get_local_size/1, update_size/2]).
+-export([get_local_size/1, update_size/3]).
 
 %%%===================================================================
 %%% Macros
@@ -652,13 +652,12 @@ get_local_size(Key) ->
 %% Updates size of location.
 %% @end
 %%-------------------------------------------------------------------
--spec update_size(file_location:id(), non_neg_integer()) -> ok.
+-spec update_size(file_location:id(), od_space:id(), non_neg_integer()) -> ok.
 % TODO VFS-4743 - do we use size of any other replica than local
-update_size(Key, Change) ->
+update_size(Key, SpaceId, Change) ->
     Size2 = get_local_size(Key) + Change,
     put({?SIZES, Key}, Size2),
 
-    SpaceId = get({?SPACE_IDS, Key}),
     Changes = case get({?SIZE_CHANGES, Key}) of
         undefined -> [];
         Value -> Value
@@ -902,6 +901,7 @@ apply_size_change(Key, FileUuid) ->
             try
                 {ok, UserId} = file_location:get_owner_id(FileUuid),
                 lists:foreach(fun({SpaceId, ChangeSize}) ->
+                    update_dir_size(FileUuid, SpaceId, ChangeSize),
                     space_quota:apply_size_change_and_maybe_emit(SpaceId, ChangeSize),
                     monitoring_event_emitter:emit_storage_used_updated(
                         SpaceId, UserId, ChangeSize)
@@ -910,8 +910,9 @@ apply_size_change(Key, FileUuid) ->
                 put({?SIZE_CHANGES, Key}, []),
                 ok
             catch
-                E1:E2 ->
-                    {apply_quota_error, E1, E2}
+                Error:Reason:Stacktrace ->
+                    ?error_stacktrace("Apply quota error ~p:~p", [Error, Reason], Stacktrace),
+                    {error, Reason}
             end
     end.
 
@@ -1043,3 +1044,11 @@ delete_local_blocks(Key) ->
         link -> file_local_blocks:delete_local_blocks(Key, all);
         none -> ok
     end.
+
+
+-spec update_dir_size(file_meta:uuid(), od_space:id(), integer()) -> ok.
+update_dir_size(FileUuid, SpaceId, SizeChange) ->
+    % TODO VFS-8835 - cache parent when rename works properly
+    FileCtx = file_ctx:new_by_uuid(FileUuid, SpaceId),
+    {ParentFileCtx, _} = files_tree:get_parent(FileCtx, undefined),
+    files_counter:update_size(file_ctx:get_logical_guid_const(ParentFileCtx), SizeChange).

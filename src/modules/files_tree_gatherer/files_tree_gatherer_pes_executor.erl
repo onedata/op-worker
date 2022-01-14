@@ -6,27 +6,28 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% TODO - doc
-%%% % TODO - traverse inicjalizujacy wartosci - nie mozna robic wtedy update'ow
-%%% % TODO - podlinkowac ticket z polaczeniem tego z synchronizerem w przyszlosci
+%%% Executor of PES framework that gathers statistics about directories.
+%%% Executor for each directory gathers statistics and sends them to
+%%% parent. Thus, each directory possess statistics about all nested
+%%% directories and files.
 %%% @end
 %%%-------------------------------------------------------------------
--module(tree_gatherer_pes_callback).
+-module(files_tree_gatherer_pes_executor).
 -author("Michal Wrzeszcz").
 
 
--behavior(pes_callback).
+-behavior(pes_executor_behaviour).
 
 
--include("modules/tree_gatherer/tree_gatherer.hrl").
+-include("modules/tree_gatherer/files_tree_gatherer.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 
 %% API
--export([call/1]).
+-export([call/1, handle_missing_doc_appearance/3, flush/1]).
 %% pes_callback behaviour callbacks
--export([init/0, terminate/2, get_supervisor_name/1,
-    handle_call/2, handle_info/2, get_mode/0]).
+-export([init/0, terminate/2, get_root_supervisor/0,
+    handle_call/2, handle_cast/2, get_mode/0]).
 
 
 
@@ -42,30 +43,36 @@
     values = #{} :: values_map(),
     diff_to_flush = #{} :: diff_map(),
     last_flush_succeeded = true :: boolean(),
-    last_used = 0 :: non_neg_integer(), % number of flush is used to determine when entry was used
-                                        % (entry was used between `last_used - 1` and `last_used` flush
+    last_used = 0 :: non_neg_integer(), % number of flush from @state{} record is used to determine when entry
+                                        % was used (entry was used between `last_used - 1` and `last_used` flush
     parent :: file_id:file_guid() | root_dir | undefined % undefined before first usage
                                                          % (when it is needed, it is checked and cached here)
 }).
 
 
 -type state() :: #state{}.
--type request() :: #tree_gatherer_update_request{} | #tree_gatherer_get_request{}.
+-type request() :: #ftg_update_request{} | #ftg_get_request{}.
 -type handler_module() :: module().
+
 -type parameter() :: term().
 -type parameter_value() :: term().
 -type parameter_diff() :: term().
 -type values_map() :: #{parameter() => parameter_value()}.
 -type diff_map() :: #{parameter() => parameter_diff()}.
+
 -type cache_entry_key() :: {file_id:file_guid(), handler_module()}.
 -type cache_entry() :: #cache_entry{}.
 -type cached_entries() :: #{cache_entry_key() => cache_entry()}.
 
 -export_type([handler_module/0, parameter/0, parameter_value/0, values_map/0, diff_map/0]).
 
--define(NOT_USED_PERIODS_TO_FORGET, 3).
--define(SUPERVISOR_NAME, tree_gatherer_supervisor).
--define(FLUSH_MESSAGE, flush).
+
+-define(FLUSH_PERIOD, 5000).
+-define(NOT_USED_PERIODS_TO_FORGET, 3). % value is deleted from state's cached_entries map when it is not used for
+                                        % ?NOT_USED_PERIODS_TO_FORGET periods
+-define(SUPERVISOR_NAME, files_tree_gatherer_worker_sup).
+-define(SUBMIT_FLUSH, submit_flush).
+-define(FLUSH_INTERNAL_MESSAGE, flush_internal).
 
 
 %%%===================================================================
@@ -73,14 +80,40 @@
 %%%===================================================================
 
 -spec call(request()) -> ok | {ok, values_map()} | {error, Reason :: term()}.
-call(#tree_gatherer_update_request{guid = Guid} = Request) ->
-    pes:async_call_and_ignore_promise(?MODULE, Guid, Request);
-call(#tree_gatherer_get_request{guid = Guid} = Request) ->
-    pes:async_call_and_wait(?MODULE, Guid, Request).
+call(#ftg_update_request{guid = Guid} = Request) ->
+    Node = consistent_hashing:get_assigned_node(Guid),
+    rpc:call(Node, pes, check_cast, [?MODULE, Guid, Request]);
+call(#ftg_get_request{guid = Guid} = Request) ->
+    Node = consistent_hashing:get_assigned_node(Guid),
+    rpc:call(Node, pes, submit_and_await, [?MODULE, Guid, Request]).
+
+
+-spec handle_missing_doc_appearance(file_id:file_guid(), handler_module(), diff_map()) -> ok.
+handle_missing_doc_appearance(Guid, HandlerModule, DiffToFlush) ->
+    Parent = get_parent(Guid),
+    case Parent of
+        root_dir ->
+            ok;
+        _ ->
+            call(#ftg_update_request{
+                guid = Parent,
+                handler_module = HandlerModule,
+                diff_map = DiffToFlush
+            })
+    end.
+
+
+-spec flush(file_id:file_guid()) -> ok.
+flush(Guid) ->
+    Node = consistent_hashing:get_assigned_node(Guid),
+    case rpc:call(Node, pes, submit_and_await, [?MODULE, Guid, ?SUBMIT_FLUSH, #{expect_alive => true}]) of
+        ok -> ok;
+        {error, not_alive} -> ok
+    end.
 
 
 %%%===================================================================
-%%% Callbacks for server initialization and termination.
+%%% Callbacks for initialization and termination.
 %%%===================================================================
 
 -spec init() -> state().
@@ -88,27 +121,39 @@ init() ->
     #state{}.
 
 
--spec terminate(pes:termination_reason(), state()) -> ok | {abort, state()}.
-terminate(_, #state{last_flush_succeeded = true, updates_from_last_flush = false}) ->
-    ok;
+-spec terminate(pes:termination_reason(), state()) -> {ok | abort, state()}.
+terminate(_, #state{last_flush_succeeded = true, updates_from_last_flush = false} = State) ->
+    {ok, State};
 terminate(termination_request, State) ->
-    UpdatedState = flush(State),
+    UpdatedState = flush_internal(State),
     case UpdatedState#state.last_flush_succeeded of
-        true -> ok;
+        true -> {ok, UpdatedState};
         false -> {abort, UpdatedState}
     end;
 terminate(Reason, State) ->
-%%    save_restart_data(State), % TODO
-    ?error("Tree gatherer terminate of not flushed process, reason: ~p", [Reason]),
-    ok.
+    ?error("Files tree gatherer terminate of not flushed process, reason: ~p", [Reason]),
+    UpdatedState = flush_internal(State),
+    case UpdatedState#state.last_flush_succeeded of
+        true ->
+            {ok, UpdatedState};
+        false ->
+            NotFlushed = lists:foldl(fun
+                ({_Key, #cache_entry{last_flush_succeeded = true}}, Acc) ->
+                    Acc;
+                ({Key, #cache_entry{last_flush_succeeded = false}}, Acc) ->
+                    [Key | Acc]
+            end, [], maps:to_list(UpdatedState#state.cached_entries)),
+            ?critical("Files tree gatherer terminate of not flushed process, lost data for: ~p", [NotFlushed]),
+            {ok, UpdatedState}
+    end.
 
 
 %%%===================================================================
-%%% Callback providing name of supervisor for pes_servers.
+%%% Callback providing name of root supervisor.
 %%%===================================================================
 
--spec get_supervisor_name(pes:key_hash()) -> pes_supervisor:name().
-get_supervisor_name(_KeyHash) ->
+-spec get_root_supervisor() -> pes_supervisor:name().
+get_root_supervisor() ->
     ?SUPERVISOR_NAME.
 
 
@@ -116,8 +161,30 @@ get_supervisor_name(_KeyHash) ->
 %%% Callbacks handling requests inside pes_server_slave.
 %%%===================================================================
 
--spec handle_call(request(), state()) -> {{ok, values_map()} | noreply, state()}.
-handle_call(#tree_gatherer_update_request{
+-spec handle_call(#ftg_get_request{} | ?SUBMIT_FLUSH, state()) -> {{ok, values_map()} | noreply, state()}.
+handle_call(#ftg_get_request{
+    guid = Guid,
+    handler_module = HandlerModule,
+    parameters = Parameters
+}, #state{
+    cached_entries = CachedEntries,
+    next_flush_num = NextFlushNum
+} = State) ->
+    CacheEntryKey = {Guid, HandlerModule},
+    #cache_entry{values = Values} = CachedEntry = case maps:find(CacheEntryKey, CachedEntries) of
+        {ok, Entry} -> Entry;
+        error -> new_entry(Guid, HandlerModule)
+    end,
+
+    UpdatedCachedEntries = CachedEntries#{CacheEntryKey => CachedEntry#cache_entry{last_used = NextFlushNum}},
+    {{ok,  maps:with(Parameters, Values)}, State#state{cached_entries = UpdatedCachedEntries}};
+
+handle_call(?SUBMIT_FLUSH, State) ->
+    {ok, flush_internal(State#state{flush_timer_ref = undefined})}.
+
+
+-spec handle_cast(#ftg_update_request{} | ?FLUSH_INTERNAL_MESSAGE, state()) -> state().
+handle_cast(#ftg_update_request{
     guid = Guid,
     handler_module = HandlerModule,
     diff_map = DiffMap
@@ -134,7 +201,7 @@ handle_call(#tree_gatherer_update_request{
 
     UpdatedValues = apply_diff_map(HandlerModule, Values, DiffMap),
     UpdatedDiffToFlush = apply_diff_map(HandlerModule, DiffToFlush, DiffMap),
-    {noreply, schedule_flush(State#state{
+    schedule_flush(State#state{
         updates_from_last_flush = true,
         cached_entries = CachedEntries#{
             CacheEntryKey => CacheEntry#cache_entry{
@@ -143,30 +210,12 @@ handle_call(#tree_gatherer_update_request{
                 last_used = NextFlushNum
             }
         }
-    })};
+    });
 
-handle_call(#tree_gatherer_get_request{
-    guid = Guid,
-    handler_module = HandlerModule,
-    parameters = Parameters
-}, #state{
-    cached_entries = CachedEntries,
-    next_flush_num = NextFlushNum
-} = State) ->
-    CacheEntryKey = {Guid, HandlerModule},
-    #cache_entry{values = Values} = CachedEntry = case maps:find(CacheEntryKey, CachedEntries) of
-        {ok, Entry} -> Entry;
-        error -> new_entry(Guid, HandlerModule)
-    end,
+handle_cast(?FLUSH_INTERNAL_MESSAGE, State) ->
+    flush_internal(State#state{flush_timer_ref = undefined});
 
-    UpdatedCachedEntries = CachedEntries#{CacheEntryKey => CachedEntry#cache_entry{last_used = NextFlushNum}},
-    {{ok,  maps:with(Parameters, Values)}, State#state{cached_entries = UpdatedCachedEntries}}.
-
-
--spec handle_info(?FLUSH_MESSAGE, state()) -> state().
-handle_info(?FLUSH_MESSAGE, State) ->
-    flush(State#state{flush_timer_ref = undefined});
-handle_info(Info, State) ->
+handle_cast(Info, State) ->
     % This message should not appear - log it
     ?log_bad_request(Info),
     State.
@@ -185,8 +234,8 @@ get_mode() ->
 %%% Internal functions
 %%%===================================================================
 
--spec flush(state()) -> state().
-flush(#state{
+-spec flush_internal(state()) -> state().
+flush_internal(#state{
     cached_entries = CachedEntries,
     next_flush_num = FlushNum
 } = State) ->
@@ -210,7 +259,7 @@ flush(#state{
                         {EntriesAcc#{CacheEntryKey => UpdatedCacheEntry#cache_entry{last_used = FlushNum}},
                             HasSucceeded and HasSucceededAcc};
                     {error, Error} ->
-                        ?error("Tree gatherer save error for handler: ~p and guid ~p: ~p",
+                        ?error("Files tree gatherer save error for handler: ~p and guid ~p: ~p",
                             [HandlerModule, Guid, Error]),
                         {EntriesAcc#{CacheEntryKey => CacheEntry#cache_entry{
                             last_flush_succeeded = false,
@@ -230,7 +279,7 @@ flush(#state{
 
 -spec schedule_flush(state()) -> state().
 schedule_flush(State = #state{flush_timer_ref = undefined}) ->
-    State#state{flush_timer_ref = erlang:send_after(1000, self(), ?FLUSH_MESSAGE)};
+    State#state{flush_timer_ref = erlang:send_after(?FLUSH_PERIOD, self(), ?FLUSH_INTERNAL_MESSAGE)};
 schedule_flush(State) ->
     State.
 
@@ -261,13 +310,13 @@ flush_diff_to_parent(Guid, HandlerModule, #cache_entry{
 } = CacheEntry) ->
     {Parent, UpdatedCacheEntry} = case CachedParent of
         undefined ->
-            {ParentFileCtx, _} = files_tree:get_parent(file_ctx:new_by_guid(Guid), undefined),
-            CalculatedParentGuid = file_ctx:get_logical_guid_const(ParentFileCtx),
-            ParentGuidToCache = case file_ctx:is_root_dir_const(file_ctx:new_by_guid(CalculatedParentGuid)) of
-                true -> root_dir;
-                _ -> CalculatedParentGuid
-            end,
-            {ParentGuidToCache, CacheEntry#cache_entry{parent = ParentGuidToCache}};
+            try
+                ParentGuidToCache = get_parent(Guid),
+                {ParentGuidToCache, CacheEntry#cache_entry{parent = ParentGuidToCache}}
+            catch
+                _:{badmatch, {error, not_found}} ->
+                    {not_found, CacheEntry}
+            end;
         _ ->
             {CachedParent, CacheEntry}
     end,
@@ -275,8 +324,10 @@ flush_diff_to_parent(Guid, HandlerModule, #cache_entry{
     FlushResult = case Parent of
         root_dir ->
             ok;
+        not_found ->
+            add_hook_for_missing_doc(Guid, HandlerModule, DiffToFlush);
         _ ->
-            call(#tree_gatherer_update_request{
+            call(#ftg_update_request{
                 guid = Parent,
                 handler_module = HandlerModule,
                 diff_map = DiffToFlush
@@ -285,9 +336,26 @@ flush_diff_to_parent(Guid, HandlerModule, #cache_entry{
 
     case FlushResult of
         ok ->
-            UpdatedCacheEntry#cache_entry{last_flush_succeeded = true};
+            UpdatedCacheEntry#cache_entry{last_flush_succeeded = true, diff_to_flush = #{}};
         {error, Error} ->
-            ?error("Tree gatherer diff flush error for handler: ~p and guid ~p: ~p",
+            ?error("Files tree gatherer diff flush error for handler: ~p and guid ~p: ~p",
                 [HandlerModule, Guid, Error]),
             UpdatedCacheEntry#cache_entry{last_flush_succeeded = false}
     end.
+
+
+-spec get_parent(file_id:file_guid()) -> file_id:file_guid() | root_dir.
+get_parent(Guid) ->
+    {ParentFileCtx, _} = files_tree:get_parent(file_ctx:new_by_guid(Guid), undefined),
+    CalculatedParentGuid = file_ctx:get_logical_guid_const(ParentFileCtx),
+    case file_ctx:is_root_dir_const(file_ctx:new_by_guid(CalculatedParentGuid)) of
+        true -> root_dir;
+        _ -> CalculatedParentGuid
+    end.
+
+
+-spec add_hook_for_missing_doc(file_id:file_guid(), handler_module(), diff_map()) -> ok | {error, term()}.
+add_hook_for_missing_doc(Guid, HandlerModule, DiffToFlush) ->
+    {Uuid, _SpaceId} = file_id:unpack_guid(Guid),
+    file_meta_posthooks:add_hook(Uuid, generator:gen_name(), 
+        ?MODULE, handle_missing_doc_appearance, [Guid, HandlerModule, DiffToFlush]).

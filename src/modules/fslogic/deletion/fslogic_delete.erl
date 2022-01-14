@@ -71,6 +71,7 @@
 
 -spec delete_file_locally(user_ctx:ctx(), file_ctx:ctx(), od_provider:id(), boolean()) -> ok.
 delete_file_locally(UserCtx, FileCtx, Creator, Silent) ->
+    update_files_count(FileCtx),
     file_qos:cleanup_reference_related_documents(FileCtx),
     % TODO VFS-7448 - test events production
     case {file_ctx:is_link_const(FileCtx), oneprovider:is_self(Creator)} of
@@ -657,7 +658,8 @@ remove_local_associated_documents(FileCtx, StorageFileDeleted, StorageFileId) ->
     StorageFileDeleted andalso maybe_delete_storage_sync_info(FileCtx, StorageFileId),
     ok = file_meta_posthooks:delete(FileUuid),
     ok = file_qos:cleanup_on_no_reference(FileCtx),
-    ok = file_popularity:delete(FileUuid).
+    ok = file_popularity:delete(FileUuid),
+    ok = files_counter:delete_histogram(file_ctx:get_logical_guid_const(FileCtx)).
 
 
 %%--------------------------------------------------------------------
@@ -709,4 +711,13 @@ log_storage_file_deletion_error(FileCtx, Error, IncludeStacktrace) ->
     case IncludeStacktrace of
         {true, Stacktrace} -> ?error_stacktrace(Format, Args, Stacktrace);
         false -> ?error(Format, Args)
+    end.
+
+
+-spec update_files_count(file_ctx:ctx()) -> ok.
+update_files_count(FileCtx) ->
+    {ParentFileCtx, _} = files_tree:get_parent(FileCtx, undefined),
+    case file_ctx:is_dir(FileCtx) of
+        {true, _} -> files_counter:decrement_dir_count(file_ctx:get_logical_guid_const(ParentFileCtx));
+        {false, _} -> files_counter:decrement_file_count(file_ctx:get_logical_guid_const(ParentFileCtx))
     end.

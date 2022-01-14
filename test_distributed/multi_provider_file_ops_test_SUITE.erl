@@ -53,7 +53,8 @@
     guest_user_opens_remotely_created_file_test/1,
     guest_user_opens_remotely_created_share_test/1,
     truncate_on_storage_does_not_block_synchronizer/1,
-    recreate_file_on_storage/1
+    recreate_file_on_storage/1,
+    files_counting_test/1
 ]).
 
 -define(TEST_CASES, [
@@ -81,7 +82,8 @@
     guest_user_opens_remotely_created_file_test,
     guest_user_opens_remotely_created_share_test,
     truncate_on_storage_does_not_block_synchronizer,
-    recreate_file_on_storage
+    recreate_file_on_storage,
+    files_counting_test
 ]).
 
 -define(PERFORMANCE_TEST_CASES, [
@@ -1114,6 +1116,12 @@ recreate_file_on_storage(Config0) ->
     multi_provider_file_ops_test_base:await_replication_end(Worker1 ,TransferID, 60).
 
 
+files_counting_test(Config0) ->
+    UserId = <<"user1">>,
+    Config = multi_provider_file_ops_test_base:extend_config(Config0, UserId, {4,0,0,2}, 60),
+    files_counting_test_base:multiprovider_files_counting_test(Config).
+
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -1213,6 +1221,7 @@ meck_get_num_calls(Nodes, Module, Fun, Args) ->
     lists:map(fun(Node) ->
         rpc:call(Node, meck, num_calls, [Module, Fun, Args], timer:seconds(60))
     end, Nodes).
+
 
 %%%===================================================================
 %%% SetUp and TearDown functions
