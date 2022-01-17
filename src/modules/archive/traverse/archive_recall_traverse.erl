@@ -88,7 +88,8 @@ start(ArchiveDoc, UserCtx, TargetParentGuid, TargetRootName) ->
     {ok, SpaceId} = archive:get_space_id(ArchiveDoc),
     {IsDir, StartFileCtx3} = file_ctx:is_dir(StartFileCtx2),
     case archive_recall_cache:get(SpaceId, StartFileDoc) of
-        {ok, {ongoing, _}} -> 
+        {ok, {ongoing, _}} ->
+            %% @TODO VFS-8840 - create more descriptive error
             ?ERROR_POSIX(?EBUSY);
         _ ->
             case create_root_file(IsDir, user_ctx:get_session_id(UserCtx), TargetParentGuid, FinalName) of

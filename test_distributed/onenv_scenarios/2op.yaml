@@ -10,29 +10,28 @@ sourcesRoot: ".."
 # NOTE: Cluster manager in Onezone and Oneprovider will be started from the same sources 
 # (by default cluster_manager provided as op_worker dependency will be used).
 sources:
-#  onezone:fixme
-#    node-1:
-#      - oz-panel
-#      - oz-worker
-#      - cluster-manager
+  onezone:
+    node-1:
+      - oz-panel
+      - oz-worker
+      - cluster-manager
   oneprovider-1:
     node-1:
-#      - op-panel
+      - op-panel
       - op-worker
-#      - cluster-manager
+      - cluster-manager
   oneprovider-2:
     node-1:
-#      - op-panel
+      - op-panel
       - op-worker
-#      - cluster-manager
+      - cluster-manager
 
 
 # Onezone image to use. Note that if 'sources' option is enabled, it must
 # be based off onedata/worker image (it contains all the machinery to run the
 # application from sources - images based off onedata-worker are images with
 # -dev suffix).
-#onezoneImage: "docker.onedata.org/onezone-dev:develop"fixme
-onezoneImage: "docker.onedata.org/onezone-dev:21.02.0-alpha24" 
+onezoneImage: "docker.onedata.org/onezone-dev:develop"
 
 # Oneprovider image to use. Note that if 'sources' option is enabled, it must
 # be based off onedata/worker image (images based off onedata-worker are

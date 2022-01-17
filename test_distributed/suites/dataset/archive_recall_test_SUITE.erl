@@ -34,6 +34,7 @@
 %% @TODO VFS-7617 Test external and internal symlinks
 %% @TODO VFS-7617 Test archive without follow symlinks and recall
 %% @TODO VFS-7617 Test recall options (name)
+%% @TODO VFS-7617 Test recall block in already recalling dir
 %% @TODO VFS-7617 Test rest api
 %% @TODO VFS-7617 Test already recalling block
 %% @TODO VFS-7617 Test stats with nested archives
@@ -295,7 +296,7 @@ recall_test_base(StructureSpec, SymlinkMode) ->
     {ok, ArchiveDataDirGuid} = opw_test_rpc:call(krakow, archive, get_data_dir_guid, [ArchiveId]),
     archive_tests_utils:assert_copied(oct_background:get_random_provider_node(krakow), SessionId, 
         get_direct_child(ArchiveDataDirGuid), get_direct_child(TargetParentGuid), SymlinkMode == follow_symlinks, ?ATTEMPTS),
-    ?assertThrow(?ERROR_ALREADY_EXISTS, opw_test_rpc:call(krakow, mi_archives, init_recall, %fixme opt_archives
+    ?assertThrow(?ERROR_ALREADY_EXISTS, opw_test_rpc:call(krakow, mi_archives, init_recall, % @TODO VFS-7617 opt_archives
         [oct_background:get_user_session_id(?USER1, krakow), ArchiveId, TargetParentGuid, default])).
 
 
@@ -305,7 +306,7 @@ recall_test_setup(StructureSpec) ->
         dataset = #dataset_object{archives = [#archive_object{id = ArchiveId}]
         }} = onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, StructureSpec),
     #object{guid = TargetParentGuid} = onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, #dir_spec{}),
-    opw_test_rpc:call(krakow, mi_archives, init_recall, [SessionId, ArchiveId, TargetParentGuid, default]), % fixme opt_archives,
+    opw_test_rpc:call(krakow, mi_archives, init_recall, [SessionId, ArchiveId, TargetParentGuid, default]), % @TODO VFS-7617 opt_archives
     {ArchiveId, TargetParentGuid}.
 
 
