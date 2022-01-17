@@ -10,8 +10,9 @@
 %%% It is responsible for copying archive content to the specified location.
 %%% All archive content is copied exactly except for symlinks to nested archives 
 %%% which are resolved and their content is then recursively copied. 
-%%% Recall root file is created before traverse start to check user privileges 
-%%% and then its uuid is used as recall identifier.
+%%% Recall root file is created before traverse starts to check user privileges 
+%%% and whether such file does not already exist. Uuid of this file is then used 
+%%% as the recall identifier.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(archive_recall_traverse).
@@ -83,45 +84,32 @@ start(ArchiveDoc, UserCtx, TargetParentGuid, TargetRootName) ->
         _ ->
             {TargetRootName, StartFileCtx}
     end,
-    % fixme fail if there is a recall in ancestors
+    {StartFileDoc, StartFileCtx2} = file_ctx:get_file_doc(StartFileCtx1),
     {ok, SpaceId} = archive:get_space_id(ArchiveDoc),
-    {IsDir, StartFileCtx2} = file_ctx:is_dir(StartFileCtx1),
+    {IsDir, StartFileCtx3} = file_ctx:is_dir(StartFileCtx2),
+    case archive_recall_cache:get(SpaceId, StartFileDoc) of
+        {ok, {ongoing, _}} -> 
+            ?ERROR_POSIX(?EBUSY);
+        _ ->
+            case create_root_file(IsDir, user_ctx:get_session_id(UserCtx), TargetParentGuid, FinalName) of
+                {ok, RootFileGuid} ->
+                    {RootPath, _} = file_ctx:get_canonical_path(file_ctx:new_by_guid(RootFileGuid)),
+                    [_Sep, _SpaceId | RootPathTokens] = filename:split(RootPath),
+                    TraverseInfo = #{
+                        archive_doc => ArchiveDoc,
+                        current_parent => TargetParentGuid,
+                        root_path_tokens => RootPathTokens,
+                        root_file_name => FinalName
+                    },
+                    setup_recall_traverse(
+                        SpaceId, ArchiveDoc, RootFileGuid, TraverseInfo, StartFileCtx3, UserCtx),
+                    {ok, RootFileGuid};
+                {error, eexist} ->
+                    ?ERROR_ALREADY_EXISTS;
+                {error, Reason} ->
+                    ?ERROR_POSIX(Reason)
+            end
     
-    case create_root_file(IsDir, user_ctx:get_session_id(UserCtx), TargetParentGuid, FinalName) of
-        {ok, Guid} ->
-            TaskId = file_id:guid_to_uuid(Guid),
-            {RootPath, _} = file_ctx:get_canonical_path(file_ctx:new_by_guid(Guid)),
-            [_Sep, _SpaceId | RootPathTokens] = filename:split(RootPath),
-            case tree_traverse_session:setup_for_task(UserCtx, TaskId) of
-                ok ->
-                    {ok, ArchiveId} = archive:get_id(ArchiveDoc),
-                    AdditionalData = #{
-                        <<"spaceId">> => SpaceId
-                    },
-                    UserId = user_ctx:get_user_id(UserCtx),
-                    Options = #{
-                        task_id => TaskId,
-                        children_master_jobs_mode => async,
-                        follow_symlinks => external,
-                        traverse_info => #{
-                            archive_doc => ArchiveDoc,
-                            current_parent => TargetParentGuid,
-                            root_path_tokens => RootPathTokens,
-                            root_file_name => FinalName
-                        },
-                        additional_data => AdditionalData
-                    },
-                    ok = archive_recall:create(TaskId, ArchiveDoc),
-                    {ok, TaskId} = tree_traverse:run(?POOL_NAME, StartFileCtx2, UserId, Options),
-                    ok = archive:report_recall_scheduled(ArchiveId, TaskId),
-                    {ok, Guid};
-                {error, _} = Error ->
-                    Error
-            end;
-        {error, eexist} ->
-            ?ERROR_ALREADY_EXISTS;
-        Error ->
-            Error
     end.
 
 
@@ -231,6 +219,36 @@ do_slave_job(#tree_traverse_slave{
 %%% Internal functions
 %%%===================================================================
 
+%% @private
+-spec setup_recall_traverse(od_space:id(), archive:doc(), file_id:file_guid(),
+    tree_traverse:traverse_info(), file_ctx:ctx(), user_ctx:ctx()) -> ok | {error, term()}.
+setup_recall_traverse(SpaceId, ArchiveDoc, RootFileGuid, TraverseInfo, StartFileCtx, UserCtx) ->
+    RecallId = file_id:guid_to_uuid(RootFileGuid),
+    case tree_traverse_session:setup_for_task(UserCtx, RecallId) of
+        ok ->
+            {ok, ArchiveId} = archive:get_id(ArchiveDoc),
+            AdditionalData = #{
+                <<"spaceId">> => SpaceId
+            },
+            UserId = user_ctx:get_user_id(UserCtx),
+            Options = #{
+                task_id => RecallId,
+                children_master_jobs_mode => async,
+                %% @TODO VFS-8851 do not resolve external symlinks (that are not nested archive) 
+                %% when archive was created without following symlinks
+                follow_symlinks => external,
+                traverse_info => TraverseInfo,
+                additional_data => AdditionalData
+            },
+            ok = archive_recall:create(RecallId, ArchiveDoc),
+            {ok, RecallId} = tree_traverse:run(?POOL_NAME, StartFileCtx, UserId, Options),
+            ok = archive:report_recall_scheduled(ArchiveId, RecallId);
+        {error, _} = Error ->
+            Error
+    end.
+
+
+%% @private
 -spec do_dir_master_job(tree_traverse:master_job(), traverse:master_job_extended_args()) -> 
     {ok, traverse:master_job_map()}.
 do_dir_master_job(#tree_traverse{
@@ -266,6 +284,7 @@ do_dir_master_job(#tree_traverse{
     end.
 
 
+%% @private
 -spec recall_symlink(file_ctx:ctx(), file_id:file_guid(), [file_meta:name()], file_meta:name(), 
     archive:doc(), user_ctx:ctx()) -> {ok, file_ctx:ctx()}.
 recall_symlink(FileCtx, TargetParentGuid, RootPathTokens, FileName, ArchiveDoc, UserCtx) ->
@@ -288,6 +307,7 @@ recall_symlink(FileCtx, TargetParentGuid, RootPathTokens, FileName, ArchiveDoc, 
     {ok, file_ctx:new_by_guid(Guid)}.
 
 
+%% @private
 -spec report_error(id(), file_id:file_guid(), archive:doc(), term(), list()) -> ok.
 report_error(TaskId, FileGuid, ArchiveDoc, Reason, Stacktrace) ->
     {ok, ArchiveId} = archive:get_id(ArchiveDoc),
@@ -296,6 +316,7 @@ report_error(TaskId, FileGuid, ArchiveDoc, Reason, Stacktrace) ->
     archive_recall:report_file_failed(TaskId, FileGuid, Reason).
 
 
+%% @private
 -spec create_root_file(IsDir :: boolean(), session:id(), file_id:file_guid(), file_meta:name()) -> 
     {ok, file_id:file_guid()}.
 create_root_file(true, SessId, TargetParentGuid, TargetRootName) ->
