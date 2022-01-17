@@ -14,7 +14,7 @@
 
 
 -export([
-    schedule_workflow_execution/7,
+    schedule_workflow_execution/5, schedule_workflow_execution/7,
     cancel_workflow_execution/3,
     repeat_workflow_execution/5
 ]).
@@ -32,6 +32,27 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+
+-spec schedule_workflow_execution(
+    oct_background:node_selector(),
+    session:id(),
+    od_space:id(),
+    od_atm_workflow_schema:id(),
+    atm_workflow_schema_revision:revision_number()
+) ->
+    {atm_workflow_execution:id(), atm_workflow_execution:record()} | no_return().
+schedule_workflow_execution(
+    NodeSelector,
+    SessionId,
+    SpaceId,
+    AtmWorkflowSchemaId,
+    AtmWorkflowSchemaRevisionNum
+) ->
+    schedule_workflow_execution(
+        NodeSelector, SessionId, SpaceId, AtmWorkflowSchemaId, AtmWorkflowSchemaRevisionNum,
+        #{}, <<>>
+    ).
 
 
 -spec schedule_workflow_execution(
