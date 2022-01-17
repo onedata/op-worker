@@ -194,7 +194,7 @@ run(Pool, FileCtx, UserId, Opts) ->
     end,
 
     {FileDoc, FileCtx3} = file_ctx:get_file_doc(FileCtx2),
-    {RootPath, FileCtx4} = file_ctx:get_uuid_based_path(FileCtx3),
+    {RootUuidPath, FileCtx4} = file_ctx:get_uuid_based_path(FileCtx3),
     {ok, ParentUuid} = file_meta:get_parent_uuid(FileDoc),
     Job = #tree_traverse{
         file_ctx = FileCtx4,
@@ -205,8 +205,8 @@ run(Pool, FileCtx, UserId, Opts) ->
         track_subtree_status = TrackSubtreeStatus,
         batch_size = BatchSize,
         traverse_info = TraverseInfo2,
-        root_path = RootPath,
-        follow_symlinks = FollowSymlinks,
+        follow_symlinks_policy = FollowSymlinks,
+        uuid_root_paths = [RootUuidPath],
         relative_path = InitialRelativePath,
         encountered_files = add_to_set_if_symlinks_followed(
             file_ctx:get_logical_uuid_const(FileCtx4), #{}, FollowSymlinks)
@@ -383,13 +383,12 @@ do_master_job_internal(?DIRECTORY_TYPE, Job, TaskId, NewJobsPreprocessor, UserCt
 do_master_job_internal(?REGULAR_FILE_TYPE, Job = #tree_traverse{file_ctx = FileCtx}, _, _, _) ->
     % correct relative path to this file is already set in Job, so passing <<>> as Filename will not extend it
     {ok, #{slave_jobs => [get_child_slave_job(Job, FileCtx, <<>>)]}};
-do_master_job_internal(?SYMLINK_TYPE, Job = #tree_traverse{follow_symlinks = none, file_ctx = FileCtx}, _, _, _) ->
+do_master_job_internal(?SYMLINK_TYPE, Job = #tree_traverse{follow_symlinks_policy = none, file_ctx = FileCtx}, _, _, _) ->
     % correct relative path to this file is already set in Job, so passing <<>> as Filename will not extend it
     {ok, #{slave_jobs => [get_child_slave_job(Job, FileCtx, <<>>)]}};
-do_master_job_internal(?SYMLINK_TYPE, Job = #tree_traverse{follow_symlinks = all, file_ctx = FileCtx}, TaskId, NewJobsPreprocessor, UserCtx) ->
+do_master_job_internal(?SYMLINK_TYPE, Job = #tree_traverse{follow_symlinks_policy = all, file_ctx = FileCtx}, TaskId, NewJobsPreprocessor, UserCtx) ->
     case resolve_symlink(Job, FileCtx, UserCtx) of
         {ok, ResolvedCtx} ->
-            % fixme extract to external functions - here and below
             {FileDoc, ResolvedCtx2} = file_ctx:get_file_doc(ResolvedCtx),
             Job2 = Job#tree_traverse{file_ctx = ResolvedCtx2},
             FileType = file_meta:get_effective_type(FileDoc),
@@ -397,7 +396,7 @@ do_master_job_internal(?SYMLINK_TYPE, Job = #tree_traverse{follow_symlinks = all
         ignore ->
             {ok, #{}}
     end;
-do_master_job_internal(?SYMLINK_TYPE, Job = #tree_traverse{follow_symlinks = external, file_ctx = FileCtx}, TaskId, NewJobsPreprocessor, UserCtx) ->
+do_master_job_internal(?SYMLINK_TYPE, Job = #tree_traverse{follow_symlinks_policy = external, file_ctx = FileCtx}, TaskId, NewJobsPreprocessor, UserCtx) ->
     case resolve_symlink(Job, FileCtx, UserCtx) of
         {ok, ResolvedCtx} ->
             {Path, ResolvedCtx2} = file_ctx:get_uuid_based_path(ResolvedCtx),
@@ -406,7 +405,7 @@ do_master_job_internal(?SYMLINK_TYPE, Job = #tree_traverse{follow_symlinks = ext
                     {ok, #{slave_jobs => [get_child_slave_job(Job, FileCtx, <<>>)]}};
                 false ->
                     {FileDoc, ResolvedCtx3} = file_ctx:get_file_doc(ResolvedCtx2),
-                    Job2 = Job#tree_traverse{file_ctx = ResolvedCtx3, root_path = Path},
+                    Job2 = append_root_path(Job#tree_traverse{file_ctx = ResolvedCtx3}, Path),
                     FileType = file_meta:get_effective_type(FileDoc),
                     do_master_job_internal(FileType, Job2, TaskId, NewJobsPreprocessor, UserCtx)
             end;
@@ -488,9 +487,9 @@ generate_child_jobs(?DIRECTORY_TYPE, MasterJob, TaskId, ChildCtx, Filename, _) -
     end;
 generate_child_jobs(?REGULAR_FILE_TYPE, MasterJob, _TaskId, ChildCtx, Filename, _) ->
     {[get_child_slave_job(MasterJob, ChildCtx, Filename)], []};
-generate_child_jobs(?SYMLINK_TYPE, #tree_traverse{follow_symlinks = none} = MasterJob, _TaskId, ChildCtx, Filename, _) ->
+generate_child_jobs(?SYMLINK_TYPE, #tree_traverse{follow_symlinks_policy = none} = MasterJob, _TaskId, ChildCtx, Filename, _) ->
     {[get_child_slave_job(MasterJob, ChildCtx, Filename)], []};
-generate_child_jobs(?SYMLINK_TYPE, #tree_traverse{follow_symlinks = all} = MasterJob, TaskId, ChildCtx, Filename, UserCtx) ->
+generate_child_jobs(?SYMLINK_TYPE, #tree_traverse{follow_symlinks_policy = all} = MasterJob, TaskId, ChildCtx, Filename, UserCtx) ->
     case resolve_symlink(MasterJob, ChildCtx, UserCtx) of
         {ok, ResolvedCtx} ->
             {FileDoc, ResolvedCtx2} = file_ctx:get_file_doc(ResolvedCtx),
@@ -499,7 +498,7 @@ generate_child_jobs(?SYMLINK_TYPE, #tree_traverse{follow_symlinks = all} = Maste
         ignore -> 
             {[], []}
     end;
-generate_child_jobs(?SYMLINK_TYPE, #tree_traverse{follow_symlinks = external} = MasterJob, TaskId, ChildCtx, Filename, UserCtx) ->
+generate_child_jobs(?SYMLINK_TYPE, #tree_traverse{follow_symlinks_policy = external} = MasterJob, TaskId, ChildCtx, Filename, UserCtx) ->
     case resolve_symlink(MasterJob, ChildCtx, UserCtx) of
         {ok, ResolvedCtx} ->
             {Path, ResolvedCtx2} = file_ctx:get_uuid_based_path(ResolvedCtx),
@@ -509,7 +508,7 @@ generate_child_jobs(?SYMLINK_TYPE, #tree_traverse{follow_symlinks = external} = 
                 false ->
                     {FileDoc, ResolvedCtx3} = file_ctx:get_file_doc(ResolvedCtx2),
                     FileType = file_meta:get_effective_type(FileDoc),
-                    MasterJob2 = MasterJob#tree_traverse{root_path = Path},
+                    MasterJob2 = append_root_path(MasterJob, Path),
                     generate_child_jobs(FileType, MasterJob2, TaskId, ResolvedCtx3, Filename, UserCtx)
             end;
         ignore ->
@@ -565,7 +564,7 @@ add_to_set_if_symlinks_followed(Uuid, EncounteredFilesSet, _) ->
 -spec get_child_master_job(master_job(), file_ctx:ctx(), file_meta:name()) -> master_job().
 get_child_master_job(MasterJob = #tree_traverse{
     relative_path = ParentRelativePath,
-    follow_symlinks = FollowSymlinks,
+    follow_symlinks_policy = FollowSymlinks,
     encountered_files = PrevEncounteredFilesSet
 }, ChildCtx, Filename) ->
     MasterJob2 = reset_list_options(MasterJob),
@@ -613,11 +612,16 @@ resolve_symlink(#tree_traverse{encountered_files = EncounteredFilesSet}, Symlink
     end.
 
 
-% fixme spec
-is_in_subtree(#tree_traverse{root_path = RootPath}, Path) ->
-    % fixme keep list of roots
-    str_utils:binary_starts_with(Path, RootPath).
+-spec is_in_subtree(master_job(), file_meta:uuid_based_path()) -> boolean().
+is_in_subtree(#tree_traverse{uuid_root_paths = UuidRootPaths}, Path) ->
+    lists:any(fun(RootPath) ->
+        str_utils:binary_starts_with(Path, RootPath)
+    end, UuidRootPaths).
 
+
+-spec append_root_path(master_job(), file_meta:uuid_based_path()) -> master_job().
+append_root_path(#tree_traverse{uuid_root_paths = UuidRootPaths} = Job, Path) ->
+    Job#tree_traverse{uuid_root_paths = lists_utils:union(UuidRootPaths, [Path])}.
 
 %%%===================================================================
 %% Files set API

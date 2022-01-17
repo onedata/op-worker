@@ -159,8 +159,9 @@ handle_multiple_files(
     handle_multiple_files(Tail, BulkDownloadId, UserCtx, UpdatedState);
 handle_multiple_files(
     [#file_attr{type = ?SYMLINK_TYPE, name = Name, guid = Guid} | Tail],
-    BulkDownloadId, UserCtx, #state{follow_symlinks_policy = external} = State % fixme check this clause
+    BulkDownloadId, UserCtx, #state{follow_symlinks_policy = external} = State
 ) ->
+    % when starting download from symlink it should be considered external and therefore resolved
     case check_result(lfm:stat(user_ctx:get_session_id(UserCtx), #file_ref{guid = Guid, follow_symlink = true})) of
         {ok, ResolvedFileAttrs} ->
             handle_multiple_files([ResolvedFileAttrs#file_attr{name = Name} | Tail], BulkDownloadId, UserCtx, State);

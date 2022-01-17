@@ -462,7 +462,7 @@
     % and archival information package (AIP) archives.
     related_aip = undefined :: undefined | archive:id(),
     related_dip = undefined :: undefined | archive:id(),
-    recalls = [] :: [archive_recall:id()] % fixme is it needed
+    recalls = [] :: [archive_recall:id()]
 }).
 
 
@@ -1034,8 +1034,9 @@
     track_subtree_status :: boolean(),
     batch_size :: tree_traverse:batch_size(),
     traverse_info :: binary(),
-    root_path :: file_meta:uuid_based_path(),
     follow_symlinks = none :: tree_traverse:symlink_resolution_policy(),
+    % uuid based paths to the traverse root file and subtree roots after each symlink resolution
+    uuid_root_paths :: [file_meta:uuid_based_path()],
     % relative path of the processed file to the traverse root
     relative_path = <<>> :: file_meta:path(),
     % Set of encountered files on the path from the traverse root to the currently processed one. 

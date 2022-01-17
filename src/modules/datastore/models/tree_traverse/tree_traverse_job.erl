@@ -62,8 +62,8 @@ save_master_job(Key, Job = #tree_traverse{
     track_subtree_status = TrackSubtreeStatus,
     batch_size = BatchSize,
     traverse_info = TraverseInfo,
-    root_path = RootPath,
-    follow_symlinks = FollowSymlinks,
+    uuid_root_paths = UuidRootPaths,
+    follow_symlinks_policy = FollowSymlinks,
     relative_path = RelativePath,
     encountered_files = EncounteredFilesMap
 }, Pool, TaskId, CallbackModule) ->
@@ -83,8 +83,8 @@ save_master_job(Key, Job = #tree_traverse{
         track_subtree_status = TrackSubtreeStatus,
         batch_size = BatchSize,
         traverse_info = term_to_binary(TraverseInfo),
-        root_path = RootPath,
         follow_symlinks = FollowSymlinks,
+        uuid_root_paths = UuidRootPaths,
         relative_path = RelativePath,
         encountered_files = EncounteredFilesMap
     },
@@ -118,8 +118,8 @@ get_master_job(#document{value = #tree_traverse_job{
     track_subtree_status = TrackSubtreeStatus,
     batch_size = BatchSize,
     traverse_info = TraverseInfo,
-    root_path = RootPath,
     follow_symlinks = FollowSymlinks,
+    uuid_root_paths = UuidRootPaths,
     relative_path = RelativePath,
     encountered_files = EncounteredFilesMap
 }}) ->
@@ -140,8 +140,8 @@ get_master_job(#document{value = #tree_traverse_job{
                 track_subtree_status = TrackSubtreeStatus,
                 batch_size = BatchSize,
                 traverse_info = binary_to_term(TraverseInfo),
-                root_path = RootPath,
-                follow_symlinks = FollowSymlinks,
+                follow_symlinks_policy = FollowSymlinks,
+                uuid_root_paths = UuidRootPaths,
                 relative_path = RelativePath,
                 encountered_files = EncounteredFilesMap
             },
@@ -267,9 +267,8 @@ get_record_struct(5) ->
         {track_subtree_status, boolean},
         {batch_size, integer},
         {traverse_info, binary},
-        {root_path, binary},
-        % new fields - follow_symlinks, relative_path and encountered_files
-        {follow_symlinks, atom}, % fixme upgrejder
+        {follow_symlinks_policy, atom}, % modified field
+        {uuid_root_paths, [binary]}, % new field
         {relative_path, binary},
         {encountered_files, #{string => boolean}}
     ]}.
@@ -378,6 +377,51 @@ upgrade_record(3, Record) ->
         false,
         <<>>,
         #{}
+    }};
+upgrade_record(4, Record) ->
+    {
+        ?MODULE,
+        Pool,
+        CallbackModule,
+        TaskId,
+        DocId,
+        UserId,
+        UseListingToken,
+        LastName,
+        LastTree,
+        ChildDirsJobGenerationPolicy,
+        ChildrenMasterJobsMode,
+        TrackSubtreeStatus,
+        BatchSize,
+        TraverseInfo,
+        FollowSymlinks,
+        RelativePath,
+        EncounteredFiles
+    } = Record,
+    
+    FollowSymlinksPolicy = case FollowSymlinks of
+        true -> external;
+        false -> none
+    end,
+    
+    {5, {?MODULE,
+        Pool,
+        CallbackModule,
+        TaskId,
+        DocId,
+        UserId,
+        UseListingToken,
+        LastName,
+        LastTree,
+        ChildDirsJobGenerationPolicy,
+        ChildrenMasterJobsMode,
+        TrackSubtreeStatus,
+        BatchSize,
+        TraverseInfo,
+        FollowSymlinksPolicy, % modified field
+        [], % new field
+        RelativePath,
+        EncounteredFiles
     }}.
 
 %%%===================================================================
