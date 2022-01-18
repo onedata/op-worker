@@ -319,7 +319,7 @@ report_error(TaskId, FileGuid, ArchiveDoc, Reason, Stacktrace) ->
 
 %% @private
 -spec create_root_file(IsDir :: boolean(), session:id(), file_id:file_guid(), file_meta:name()) -> 
-    {ok, file_id:file_guid()}.
+    {ok, file_id:file_guid()} | {error, term()}.
 create_root_file(true, SessId, TargetParentGuid, TargetRootName) ->
     lfm:mkdir(SessId, TargetParentGuid, TargetRootName, ?DEFAULT_DIR_MODE);
 create_root_file(false, SessId, TargetParentGuid, TargetRootName) -> 

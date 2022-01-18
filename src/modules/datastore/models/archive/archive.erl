@@ -497,18 +497,18 @@ set_related_aip(ArchiveDocOrId, AipArchiveId) ->
     end).
 
 
--spec report_recall_scheduled(id() | doc(), archive_recall:id()) -> {ok, doc()} | error().
+-spec report_recall_scheduled(id() | doc(), archive_recall:id()) -> ok | error().
 report_recall_scheduled(ArchiveDocOrId, RecallId) ->
     ?extract_ok(update(ArchiveDocOrId, fun(#archive{recalls = PrevRecalls} = Archive) ->
         {ok, Archive#archive{recalls = lists:sublist([RecallId | PrevRecalls], ?MAX_STORED_ARCHIVE_RECALLS)}}
     end)).
 
 
--spec report_recall_removed(id() | doc(), archive_recall:id()) -> {ok, doc()} | error().
+-spec report_recall_removed(id() | doc(), archive_recall:id()) -> ok | error().
 report_recall_removed(ArchiveDocOrId, RecallId) ->
-    update(ArchiveDocOrId, fun(#archive{recalls = PrevRecalls} = Archive) ->
+    ?extract_ok(update(ArchiveDocOrId, fun(#archive{recalls = PrevRecalls} = Archive) ->
         {ok, Archive#archive{recalls = lists:delete(RecallId, PrevRecalls)}}
-    end).
+    end)).
         
 
 %%%===================================================================

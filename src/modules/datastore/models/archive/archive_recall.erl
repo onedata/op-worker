@@ -250,13 +250,16 @@ supported_metrics() -> #{
 %% @private
 -spec get_counters_current_value(id()) -> {ok, map()}.
 get_counters_current_value(Id) ->
-    RequestRange = lists:map(fun(Parameter) -> {Parameter, ?TOTAL_METRIC} end, [?BYTES_TS, ?FILES_TS, ?FAILED_FILES_TS]),
+    RequestRange = lists:map(fun(Parameter) -> {Parameter, ?TOTAL_METRIC} end, 
+        [?BYTES_TS, ?FILES_TS, ?FAILED_FILES_TS]),
     
     case datastore_time_series_collection:list_windows(?CTX, ?TSC_ID(Id), RequestRange, #{limit => 1}) of
         {ok, WindowsMap} ->
             WindowToValue = fun
-                ({{Parameter, ?TOTAL_METRIC}, [{_Timestamp, {_Measurements, Value}}]}) -> {Parameter, Value};
-                ({{Parameter, ?TOTAL_METRIC}, []}) -> {Parameter, 0}
+                ({{Parameter, ?TOTAL_METRIC}, [{_Timestamp, {_Measurements, Value}}]}) -> 
+                    {Parameter, Value};
+                ({{Parameter, ?TOTAL_METRIC}, []}) -> 
+                    {Parameter, 0}
             end,
             {ok, maps:from_list(lists:map(WindowToValue, maps:to_list(WindowsMap)))};
         Error ->

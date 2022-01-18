@@ -66,7 +66,7 @@
     % base for top archive, the one created from dataset on which archivisation was scheduled
     scheduled_dataset_base_archive_doc := archive:doc(),
     scheduled_dataset_root_guid := file_id:file_guid(),
-    initial_archive_doc := docs_map(),
+    initial_archive_docs := docs_map(),
     aip_ctx := archive_ctx(),
     dip_ctx := archive_ctx()
 }.
@@ -701,7 +701,7 @@ archive_file_and_mark_finished(FileCtx, AipArchiveCtx, DipArchiveCtx, BaseArchiv
 
 
 -spec archive_file(file_ctx:ctx(), file_ctx:ctx(), archive:doc(), archive:doc(), archive:doc(), 
-    file_meta:path(), user_ctx:ctx()) -> {ok, file_ctx:ctx()}.
+    file_meta:path(), user_ctx:ctx()) -> {ok, file_ctx:ctx()} | {error, term()}.
 archive_file(FileCtx, TargetParentCtx, CurrentArchiveDoc, BaseArchiveDoc, InitialAipDoc, 
     ResolvedFilePath, UserCtx
 ) ->

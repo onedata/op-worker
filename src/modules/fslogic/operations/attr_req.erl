@@ -177,7 +177,7 @@ get_file_details_insecure(UserCtx, FileCtx, Opts) ->
         true ->
             calculate_effective_values(FileCtx2);
         false ->
-            {undefined, undefined, undefined, FileCtx2}
+            {#{}, FileCtx2}
     end,
 
     #fuse_response{
@@ -194,10 +194,10 @@ get_file_details_insecure(UserCtx, FileCtx, Opts) ->
             index_startid = file_meta:get_name(FileDoc),
             active_permissions_type = ActivePermissionsType,
             has_metadata = has_metadata(FileCtx3),
-            eff_qos_membership = maps:get(effective_qos_membership, EffectiveValues),
-            eff_dataset_membership = maps:get(effective_dataset_membership, EffectiveValues),
-            eff_protection_flags = maps:get(effective_protection_flags, EffectiveValues),
-            recall_root_id = maps:get(effective_recall, EffectiveValues)
+            eff_qos_membership = maps:get(effective_qos_membership, EffectiveValues, undefined),
+            eff_dataset_membership = maps:get(effective_dataset_membership, EffectiveValues, undefined),
+            eff_protection_flags = maps:get(effective_protection_flags, EffectiveValues, undefined),
+            recall_root_id = maps:get(effective_recall, EffectiveValues, undefined)
         }
     }.
 
@@ -622,7 +622,7 @@ get_fs_stats_insecure(_UserCtx, FileCtx) ->
 
 
 %% @private
--spec calculate_effective_values(file_ctx:ctx()) -> {file_ctx:ctx(), map()}.
+-spec calculate_effective_values(file_ctx:ctx()) -> {map(), file_ctx:ctx()}.
 calculate_effective_values(FileCtx) ->
     {FileDoc, FileCtx2} = file_ctx:get_file_doc(FileCtx),
     EffectiveQoSMembership = file_qos:qos_membership(FileDoc),

@@ -172,7 +172,7 @@ run(Pool, FileCtx, UserId, Opts) ->
         true -> ?INITIAL_LS_TOKEN;
         false -> undefined
     end,
-    FollowSymlinks = maps:get(follow_symlinks, Opts, none),
+    FollowSymlinksPolicy = maps:get(follow_symlinks, Opts, none),
     {Filename, FileCtx2} = file_ctx:get_aliased_name(FileCtx, undefined),
     InitialRelativePath = maps:get(initial_relative_path, Opts, Filename),
 
@@ -205,11 +205,11 @@ run(Pool, FileCtx, UserId, Opts) ->
         track_subtree_status = TrackSubtreeStatus,
         batch_size = BatchSize,
         traverse_info = TraverseInfo2,
-        follow_symlinks_policy = FollowSymlinks,
+        follow_symlinks_policy = FollowSymlinksPolicy,
         uuid_root_paths = [RootUuidPath],
         relative_path = InitialRelativePath,
         encountered_files = add_to_set_if_symlinks_followed(
-            file_ctx:get_logical_uuid_const(FileCtx4), #{}, FollowSymlinks)
+            file_ctx:get_logical_uuid_const(FileCtx4), #{}, FollowSymlinksPolicy)
     },
     maybe_create_status_doc(Job, TaskId, ParentUuid),
     ok = traverse:run(Pool, TaskId, Job, RunOpts4),
@@ -548,8 +548,8 @@ reset_list_options(Job) ->
     }.
 
 
--spec add_to_set_if_symlinks_followed(file_meta:uuid(), encountered_files_set(), FollowSymlinks :: boolean()) ->
-    encountered_files_set().
+-spec add_to_set_if_symlinks_followed(file_meta:uuid(), encountered_files_set(), 
+    symlink_resolution_policy()) -> encountered_files_set().
 add_to_set_if_symlinks_followed(_Uuid, EncounteredFilesSet, none) ->
     % there is no need to keeping track of encountered files when there is no symlinks following
     EncounteredFilesSet;

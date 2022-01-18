@@ -33,7 +33,9 @@
     #get_archive_info{} |
     #update_archive{} |
     #init_archive_purge{} |
-    #init_archive_recall{}.
+    #init_archive_recall{} |
+    #get_recall_details{} |
+    #get_recall_progress{}.
 
 -type atm_operation() ::
     #schedule_atm_workflow_execution{} |
