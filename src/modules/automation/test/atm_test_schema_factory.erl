@@ -15,7 +15,6 @@
 -include("modules/automation/atm_schema_test_utils.hrl").
 
 -export([create_from_draft/1]).
--export([to_json/1]).
 
 
 -type atm_openfaas_operation_spec_draft() :: #atm_openfaas_operation_spec_draft{}.
@@ -31,7 +30,6 @@
 -type atm_workflow_schema_revision_draft() :: #atm_workflow_schema_revision_draft{}.
 
 -type atm_workflow_schema_dump_draft() :: #atm_workflow_schema_dump_draft{}.
--type atm_workflow_schema_dump() :: #atm_workflow_schema_dump{}.
 
 -export_type([
     atm_openfaas_operation_spec_draft/0,
@@ -46,8 +44,7 @@
 
     atm_workflow_schema_revision_draft/0,
 
-    atm_workflow_schema_dump_draft/0,
-    atm_workflow_schema_dump/0
+    atm_workflow_schema_dump_draft/0
 ]).
 
 
@@ -59,33 +56,8 @@
 %%%===================================================================
 
 
--spec to_json(atm_workflow_schema_dump()) -> json_utils:json_map().
-to_json(#atm_workflow_schema_dump{
-    name = Name,
-    summary = Summary,
-    revision_num = AtmWorkflowSchemaRevisionNum,
-    revision = AtmWorkflowSchemaRevision,
-    supplementary_lambdas = SupplementaryLambdas
-}) ->
-    #{
-        <<"name">> => Name,
-        <<"summary">> => Summary,
-
-        <<"revision">> => #{
-            <<"originalRevisionNumber">> => AtmWorkflowSchemaRevisionNum,
-            <<"atmWorkflowSchemaRevision">> => jsonable_record:to_json(
-                AtmWorkflowSchemaRevision, atm_workflow_schema_revision
-            ),
-            <<"supplementaryAtmLambdas">> => maps:map(fun(_AtmLambdaId, AtmLambdaRevisionRegistry) ->
-                jsonable_record:to_json(AtmLambdaRevisionRegistry, atm_lambda_revision_registry)
-            end, SupplementaryLambdas)
-        }
-    }.
-
-
-%% @private
 -spec create_from_draft
-    (atm_workflow_schema_dump_draft()) -> atm_workflow_schema_dump();
+    (atm_workflow_schema_dump_draft()) -> atm_test_inventory:atm_workflow_schema_dump();
     (atm_lambda_revision_draft()) -> atm_lambda_revision:record();
     (atm_openfaas_operation_spec_draft()) -> atm_openfaas_operation_spec:record();
     (atm_workflow_schema_revision_draft()) -> atm_workflow_schema_revision:record();

@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Tests of automation workflow execution.
+%%% Tests of automation workflow execution machinery.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_workflow_execution_test_SUITE).
@@ -36,7 +36,8 @@ all() -> [
 ].
 
 
--define(EMPTY_LANE_ATM_WORKFLOW, #atm_workflow_schema_dump_draft{
+-define(EMPTY_LANE_ATM_WORKFLOW_ALIAS, <<"empty_lane_workflow">>).
+-define(EMPTY_LANE_ATM_WORKFLOW_SCHEMA_DRAFT, #atm_workflow_schema_dump_draft{
     name = <<"empty_lane">>,
     revision_num = 1,
     revision = #atm_workflow_schema_revision_draft{
@@ -60,6 +61,8 @@ all() -> [
     }
 }).
 
+-define(JSON_PATH(__QUERY_BIN), binary:split(__QUERY_BIN, <<".">>, [global])).
+
 
 %%%===================================================================
 %%% Test cases
@@ -69,10 +72,15 @@ all() -> [
 atm_workflow_with_empty_lane_scheduling_should_fail_test(_Config) ->
     SessionId = oct_background:get_user_session_id(user2, krakow),
     SpaceId = oct_background:get_space_id(space_krk),
-    AtmWorkflowSchemaId = get_workflow_schema_id(<<"empty_lane">>),
+
+    AtmWorkflowSchemaId = atm_test_inventory:get_workflow_schema_id(?EMPTY_LANE_ATM_WORKFLOW_ALIAS),
+    {ok, EmptyAtmLaneSchemaId} = json_utils:query(
+        atm_test_inventory:get_workflow_schema_json(?EMPTY_LANE_ATM_WORKFLOW_ALIAS),
+        ?JSON_PATH(<<"revisionRegistry.1.lanes.[0].id">>)
+    ),
 
     ?assertMatch(
-        ?ERROR_ATM_LANE_EMPTY(<<"1a916f36a6fdd628531beca8299f64bd238da5">>),
+        ?ERROR_ATM_LANE_EMPTY(EmptyAtmLaneSchemaId),
         opt_atm:schedule_workflow_execution(krakow, SessionId, SpaceId, AtmWorkflowSchemaId, 1)
     ).
 
@@ -80,12 +88,6 @@ atm_workflow_with_empty_lane_scheduling_should_fail_test(_Config) ->
 %===================================================================
 % Internal functions
 %===================================================================
-
-
-%% @private
--spec get_workflow_schema_id(string()) -> od_atm_workflow_schema:id().
-get_workflow_schema_id(AtmWorkflowSchemaDumpName) ->
-    maps:get(AtmWorkflowSchemaDumpName, node_cache:get(atm_workflow_schema_dump_name_to_id)).
 
 
 %===================================================================
@@ -100,13 +102,9 @@ init_per_suite(Config) ->
         posthook = fun(NewConfig) ->
             atm_test_inventory:ensure_exists(),
             atm_test_inventory:add_user(user2),
-
-%%            atm_test_inventory:add_workflow(atm_test_schema_factory:create_from_draft(?EMPTY_LANE_ATM_WORKFLOW)),
-
-            node_cache:put(atm_workflow_schema_dump_name_to_id, #{
-                <<"empty_lane">> => atm_test_inventory:add_workflow(atm_test_schema_factory:create_from_draft(?EMPTY_LANE_ATM_WORKFLOW))
-            }),  %% TODO
-
+            atm_test_inventory:add_workflow_schema(
+                ?EMPTY_LANE_ATM_WORKFLOW_ALIAS, ?EMPTY_LANE_ATM_WORKFLOW_SCHEMA_DRAFT
+            ),
             NewConfig
         end
     }).

@@ -20,7 +20,8 @@
     create_inventory/1,
     add_user_to_inventory/2,
 
-    create_workflow_schema/1
+    create_workflow_schema/1,
+    get_workflow_schema/1
 ]).
 
 
@@ -51,3 +52,11 @@ create_workflow_schema(Data) ->
         ?ROOT, Data
     ])),
     AtmWorkflowSchemaId.
+
+
+-spec get_workflow_schema(od_atm_workflow_schema:id()) -> od_atm_workflow_schema:record().
+get_workflow_schema(AtmWorkflowSchemaId) ->
+    {ok, AtmWorkflowSchema} = ?assertMatch({ok, _}, ozw_test_rpc:call(atm_workflow_schema_logic, get, [
+        ?ROOT, AtmWorkflowSchemaId
+    ])),
+    AtmWorkflowSchema.
