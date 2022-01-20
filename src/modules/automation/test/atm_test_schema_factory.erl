@@ -131,8 +131,10 @@ create_from_draft(#atm_openfaas_operation_spec_draft{
     #atm_openfaas_operation_spec{
         docker_image = ensure_specified(PlaceholderOrDockerImage, str_utils:rand_hex(10)),
         docker_execution_options = case PlaceholderOrDockerExecutionOptions of
-            ?ATM_PLACEHOLDER -> atm_test_utils:example_docker_execution_options();
-            DockerExecutionOptions -> DockerExecutionOptions
+            ?ATM_PLACEHOLDER ->
+                lists_utils:random_element(atm_test_utils:example_docker_execution_options());
+            DockerExecutionOptions ->
+                DockerExecutionOptions
         end
     };
 

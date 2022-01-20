@@ -12,6 +12,7 @@
 -module(atm_workflow_execution_test_SUITE).
 -author("Bartosz Walkowicz").
 
+-include("modules/automation/atm_execution.hrl").
 -include("modules/automation/atm_schema_test_utils.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/errors.hrl").
@@ -28,11 +29,13 @@
 
 %% tests
 -export([
-    atm_workflow_with_empty_lane_scheduling_should_fail_test/1
+    atm_workflow_with_empty_lane_scheduling_should_fail_test/1,
+    success_test/1
 ]).
 
 all() -> [
-    atm_workflow_with_empty_lane_scheduling_should_fail_test
+    atm_workflow_with_empty_lane_scheduling_should_fail_test,
+    success_test
 ].
 
 
@@ -61,6 +64,58 @@ all() -> [
     }
 }).
 
+-define(ECHO_ATM_WORKFLOW_ALIAS, <<"echo_workflow">>).
+-define(ECHO_ATM_WORKFLOW_SCHEMA_DRAFT, #atm_workflow_schema_dump_draft{
+    name = <<"echo">>,
+    revision_num = 1,
+    revision = #atm_workflow_schema_revision_draft{
+        stores = [#atm_store_schema_draft{
+            id = <<"st1">>,
+            type = list,
+            data_spec = #atm_data_spec{type = atm_integer_type},
+            requires_initial_value = false,
+            default_initial_value = [1, 2, 3]
+        }],
+        lanes = [#atm_lane_schema_draft{
+            parallel_boxes = [#atm_parallel_box_schema_draft{
+                tasks = [#atm_task_schema_draft{
+                    lambda_id = <<"echo">>,
+                    lambda_revision_number = 1,
+                    argument_mappings = [#atm_task_schema_argument_mapper{
+                        argument_name = <<"val">>,
+                        value_builder = #atm_task_argument_value_builder{
+                            type = iterated_item,
+                            recipe = undefined
+                        }
+                    }],
+                    result_mappings = [#atm_task_schema_result_mapper{
+                        result_name = <<"val">>,
+                        store_schema_id = ?CURRENT_TASK_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID,
+                        dispatch_function = append
+                    }]
+                }]
+            }],
+            store_iterator_spec = #atm_store_iterator_spec_draft{
+                store_schema_id = <<"st1">>
+            }
+        }]
+    },
+    supplementary_lambdas = #{<<"echo">> => #{1 => #atm_lambda_revision_draft{
+        operation_spec = #atm_openfaas_operation_spec_draft{
+            docker_image = <<"test/echo">>
+        },
+        argument_specs = [#atm_lambda_argument_spec{
+            name = <<"val">>,
+            data_spec = #atm_data_spec{type = atm_integer_type},
+            is_optional = false
+        }],
+        result_specs = [#atm_lambda_result_spec{
+            name = <<"val">>,
+            data_spec = #atm_data_spec{type = atm_integer_type}
+        }]
+    }}}
+}).
+
 -define(JSON_PATH(__QUERY_BIN), binary:split(__QUERY_BIN, <<".">>, [global])).
 
 
@@ -85,6 +140,25 @@ atm_workflow_with_empty_lane_scheduling_should_fail_test(_Config) ->
     ).
 
 
+success_test(_Config) ->
+    SessionId = oct_background:get_user_session_id(user2, krakow),
+    SpaceId = oct_background:get_space_id(space_krk),
+
+    openfaas_mock:start(#{health => ready, docker_mocks_module => atm_test_docker_registry}),
+
+    opw_test_rpc:set_env(krakow, openfaas_host, openfaas_mock:get_ip()),
+    opw_test_rpc:set_env(krakow, openfaas_port, openfaas_mock:get_port()),
+    opw_test_rpc:set_env(krakow, openfaas_admin_username, openfaas_mock:get_admin_user()),
+    opw_test_rpc:set_env(krakow, openfaas_admin_password, openfaas_mock:get_admin_password()),
+    opw_test_rpc:set_env(krakow, openfaas_function_namespace, openfaas_mock:get_function_namespace()),
+
+    AtmWorkflowSchemaId = atm_test_inventory:get_workflow_schema_id(?ECHO_ATM_WORKFLOW_ALIAS),
+    Res = opt_atm:schedule_workflow_execution(krakow, SessionId, SpaceId, AtmWorkflowSchemaId, 1),
+    ct:pal("~n~n~p~n~n", [Res]),
+
+    timer:sleep(timer:seconds(300)).
+
+
 %===================================================================
 % Internal functions
 %===================================================================
@@ -101,10 +175,16 @@ init_per_suite(Config) ->
         envs = [{op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}],
         posthook = fun(NewConfig) ->
             atm_test_inventory:ensure_exists(),
+            atm_test_inventory:add_user(user1),
             atm_test_inventory:add_user(user2),
-            atm_test_inventory:add_workflow_schema(
-                ?EMPTY_LANE_ATM_WORKFLOW_ALIAS, ?EMPTY_LANE_ATM_WORKFLOW_SCHEMA_DRAFT
-            ),
+
+            lists:foreach(fun({AtmWorkflowAlias, AtmWorkflowSchemaDraft}) ->
+                atm_test_inventory:add_workflow_schema(AtmWorkflowAlias, AtmWorkflowSchemaDraft)
+            end, [
+                {?EMPTY_LANE_ATM_WORKFLOW_ALIAS, ?EMPTY_LANE_ATM_WORKFLOW_SCHEMA_DRAFT},
+                {?ECHO_ATM_WORKFLOW_ALIAS, ?ECHO_ATM_WORKFLOW_SCHEMA_DRAFT}
+            ]),
+
             NewConfig
         end
     }).

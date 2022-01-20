@@ -112,6 +112,7 @@ atm_workflow_schema_dump_to_json(#atm_workflow_schema_dump{
     supplementary_lambdas = SupplementaryLambdas
 }) ->
     #{
+        <<"schemaFormatVersion">> => 2,
         <<"name">> => Name,
         <<"summary">> => Summary,
 
@@ -120,8 +121,18 @@ atm_workflow_schema_dump_to_json(#atm_workflow_schema_dump{
             <<"atmWorkflowSchemaRevision">> => jsonable_record:to_json(
                 AtmWorkflowSchemaRevision, atm_workflow_schema_revision
             ),
-            <<"supplementaryAtmLambdas">> => maps:map(fun(_AtmLambdaId, AtmLambdaRevisionRegistry) ->
-                jsonable_record:to_json(AtmLambdaRevisionRegistry, atm_lambda_revision_registry)
+            <<"supplementaryAtmLambdas">> => maps:map(fun(AtmLambdaId, AtmLambdaRevisionRegistry) ->
+                maps:map(fun(AtmLambdaRevisionNumBin, AtmLambdaRevision) ->
+                    #{
+                        <<"schemaFormatVersion">> => 2,
+                        <<"originalAtmLambdaId">> => AtmLambdaId,
+                        <<"revision">> => #{
+                            <<"schemaFormatVersion">> => 2,
+                            <<"originalRevisionNumber">> => binary_to_integer(AtmLambdaRevisionNumBin),
+                            <<"atmLambdaRevision">> => AtmLambdaRevision
+                        }
+                    }
+                end, jsonable_record:to_json(AtmLambdaRevisionRegistry, atm_lambda_revision_registry))
             end, SupplementaryLambdas)
         }
     }.
