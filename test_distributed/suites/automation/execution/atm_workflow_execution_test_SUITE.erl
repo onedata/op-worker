@@ -88,11 +88,7 @@ all() -> [
                             recipe = undefined
                         }
                     }],
-                    result_mappings = [#atm_task_schema_result_mapper{
-                        result_name = <<"val">>,
-                        store_schema_id = ?CURRENT_TASK_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID,
-                        dispatch_function = append
-                    }]
+                    result_mappings = []
                 }]
             }],
             store_iterator_spec = #atm_store_iterator_spec_draft{
@@ -144,19 +140,13 @@ success_test(_Config) ->
     SessionId = oct_background:get_user_session_id(user2, krakow),
     SpaceId = oct_background:get_space_id(space_krk),
 
-    openfaas_mock:start(#{health => ready, docker_mocks_module => atm_test_docker_registry}),
-
-    opw_test_rpc:set_env(krakow, openfaas_host, openfaas_mock:get_ip()),
-    opw_test_rpc:set_env(krakow, openfaas_port, openfaas_mock:get_port()),
-    opw_test_rpc:set_env(krakow, openfaas_admin_username, openfaas_mock:get_admin_user()),
-    opw_test_rpc:set_env(krakow, openfaas_admin_password, openfaas_mock:get_admin_password()),
-    opw_test_rpc:set_env(krakow, openfaas_function_namespace, openfaas_mock:get_function_namespace()),
+    atm_openfaas_task_executor_mock:init(krakow, atm_test_docker_registry),
 
     AtmWorkflowSchemaId = atm_test_inventory:get_workflow_schema_id(?ECHO_ATM_WORKFLOW_ALIAS),
     Res = opt_atm:schedule_workflow_execution(krakow, SessionId, SpaceId, AtmWorkflowSchemaId, 1),
     ct:pal("~n~n~p~n~n", [Res]),
 
-    timer:sleep(timer:seconds(300)).
+    timer:sleep(timer:seconds(15)).
 
 
 %===================================================================
@@ -170,7 +160,12 @@ success_test(_Config) ->
 
 
 init_per_suite(Config) ->
-    oct_background:init_per_suite([{?LOAD_MODULES, [?MODULE]} | Config], #onenv_test_config{
+    ModulesToLoad = [
+        ?MODULE,
+        atm_openfaas_task_executor_mock,
+        atm_test_docker_registry
+    ],
+    oct_background:init_per_suite([{?LOAD_MODULES, ModulesToLoad} | Config], #onenv_test_config{
         onenv_scenario = "1op",
         envs = [{op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}],
         posthook = fun(NewConfig) ->

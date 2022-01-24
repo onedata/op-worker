@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% TODO WRITEME
+%%% Test implementation of docker images used in automation CT tests.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_test_docker_registry).
@@ -21,11 +21,7 @@
 %%%===================================================================
 
 
+-spec exec(DockerImage :: binary(), atm_task_executor:input()) ->
+    atm_task_executor:outcome().
 exec(<<"test/echo">>, #{<<"argsBatch">> := ArgsBatch}) ->
     #{<<"resultsBatch">> => ArgsBatch}.
-
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-

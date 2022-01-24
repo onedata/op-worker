@@ -90,7 +90,7 @@ repeat_workflow_execution(SessionId, RepeatType, AtmWorkflowExecutionId, AtmLane
 -spec atm_workflow_execution_id_to_space_guid(atm_workflow_execution:id()) ->
     file_id:file_guid() | no_return().
 atm_workflow_execution_id_to_space_guid(AtmWorkflowExecutionId) ->
-    {ok, #atm_workflow_execution{space_id = SpaceId}} = ?check(atm_workflow_execution_api:get(
+    #atm_workflow_execution{space_id = SpaceId} = ?check(atm_workflow_execution_api:get(
         AtmWorkflowExecutionId
     )),
     fslogic_uuid:spaceid_to_space_dir_guid(SpaceId).
