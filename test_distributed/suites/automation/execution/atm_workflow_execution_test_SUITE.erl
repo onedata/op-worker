@@ -12,9 +12,7 @@
 -module(atm_workflow_execution_test_SUITE).
 -author("Bartosz Walkowicz").
 
--include("modules/automation/atm_execution.hrl").
 -include("modules/automation/atm_schema_test_utils.hrl").
--include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
@@ -30,12 +28,12 @@
 %% tests
 -export([
     atm_workflow_with_empty_lane_scheduling_should_fail_test/1,
-    success_test/1
+    atm_workflow_successfully_executed_test/1
 ]).
 
 all() -> [
     atm_workflow_with_empty_lane_scheduling_should_fail_test,
-    success_test
+    atm_workflow_successfully_executed_test
 ].
 
 
@@ -136,22 +134,9 @@ atm_workflow_with_empty_lane_scheduling_should_fail_test(_Config) ->
     ).
 
 
-success_test(_Config) ->
-    SessionId = oct_background:get_user_session_id(user2, krakow),
-    SpaceId = oct_background:get_space_id(space_krk),
-
-    atm_openfaas_task_executor_mock:init(krakow, atm_test_docker_registry),
-
+atm_workflow_successfully_executed_test(_Config) ->
     AtmWorkflowSchemaId = atm_test_inventory:get_workflow_schema_id(?ECHO_ATM_WORKFLOW_ALIAS),
-    Res = opt_atm:schedule_workflow_execution(krakow, SessionId, SpaceId, AtmWorkflowSchemaId, 1),
-    ct:pal("~n~n~p~n~n", [Res]),
-
-    timer:sleep(timer:seconds(15)).
-
-
-%===================================================================
-% Internal functions
-%===================================================================
+    atm_execution_test_runner:run(krakow, user2, space_krk, AtmWorkflowSchemaId, 1, #{}, undefined).
 
 
 %===================================================================
@@ -162,6 +147,7 @@ success_test(_Config) ->
 init_per_suite(Config) ->
     ModulesToLoad = [
         ?MODULE,
+        atm_execution_test_runner,
         atm_openfaas_task_executor_mock,
         atm_test_docker_registry
     ],
@@ -189,9 +175,18 @@ end_per_suite(_Config) ->
     oct_background:end_per_suite().
 
 
+init_per_testcase(atm_workflow_successfully_executed_test, Config) ->
+    atm_openfaas_task_executor_mock:init(krakow, atm_test_docker_registry),
+    atm_execution_test_runner:init(krakow),
+    Config;
+
 init_per_testcase(_Case, Config) ->
     Config.
 
+
+end_per_testcase(atm_workflow_successfully_executed_test, _Config) ->
+    atm_execution_test_runner:teardown(krakow),
+    atm_openfaas_task_executor_mock:teardown(krakow);
 
 end_per_testcase(_Case, _Config) ->
     ok.

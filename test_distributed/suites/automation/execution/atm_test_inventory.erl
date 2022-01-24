@@ -35,6 +35,10 @@
 ]).
 
 
+-define(ATM_INVENTORY_ID_KEY, atm_test_inventory_id).
+-define(ATM_WORKFLOW_SCHEMA_ID_KEY(__ALIAS), {atm_workflow_schema_id, __ALIAS}).
+
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -42,10 +46,10 @@
 
 -spec ensure_exists() -> ok.
 ensure_exists() ->
-    case node_cache:get(atm_test_inventory_id, undefined) of
+    case node_cache:get(?ATM_INVENTORY_ID_KEY, undefined) of
         undefined ->
             AtmInventoryId = ozt_atm:create_inventory(str_utils:rand_hex(10)),
-            node_cache:put(atm_test_inventory_id, AtmInventoryId);
+            node_cache:put(?ATM_INVENTORY_ID_KEY, AtmInventoryId);
         _AtmInventoryId ->
             ok
     end.
@@ -53,7 +57,7 @@ ensure_exists() ->
 
 -spec get_id() -> od_atm_inventory:id().
 get_id() ->
-    node_cache:get(atm_test_inventory_id).
+    node_cache:get(?ATM_INVENTORY_ID_KEY).
 
 
 -spec add_user(oct_background:entity_selector()) -> ok.
@@ -72,7 +76,7 @@ add_workflow_schema(AtmWorkflowSchemaAlias, #atm_workflow_schema_dump{} = AtmWor
     AtmWorkflowSchemaId = ozt_atm:create_workflow_schema(AtmWorkflowSchemaDumpJson#{
         <<"atmInventoryId">> => get_id()
     }),
-    node_cache:put({atm_workflow_schema_id, AtmWorkflowSchemaAlias}, AtmWorkflowSchemaId);
+    node_cache:put(?ATM_WORKFLOW_SCHEMA_ID_KEY(AtmWorkflowSchemaAlias), AtmWorkflowSchemaId);
 
 add_workflow_schema(AtmWorkflowSchemaAlias, AtmWorkflowSchemaDumpDraft) ->
     add_workflow_schema(
@@ -83,7 +87,7 @@ add_workflow_schema(AtmWorkflowSchemaAlias, AtmWorkflowSchemaDumpDraft) ->
 
 -spec get_workflow_schema_id(atm_workflow_schema_alias()) -> od_atm_workflow_schema:id().
 get_workflow_schema_id(AtmWorkflowSchemaAlias) ->
-    node_cache:get({atm_workflow_schema_id, AtmWorkflowSchemaAlias}).
+    node_cache:get(?ATM_WORKFLOW_SCHEMA_ID_KEY(AtmWorkflowSchemaAlias)).
 
 
 -spec get_workflow_schema_json(atm_workflow_schema_alias()) -> json_utils:json_map().

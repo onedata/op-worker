@@ -18,11 +18,12 @@
 
 %% API
 -export([init/2, teardown/1]).
+-export([set_exp_lane_initiation_result/3]).
 
 
 -record(atm_openfaas_task_executor, {
     workflow_execution_id :: atm_workflow_execution:id(),
-    task_schema_id :: automation:id(),
+    lane_index :: atm_lane_execution:index(),
     operation_spec :: atm_openfaas_operation_spec:record()
 }).
 -type record() :: #atm_openfaas_task_executor{}.
@@ -31,6 +32,10 @@
 
 
 -define(MOCKED_MODULE, atm_openfaas_task_executor).
+
+-define(EXP_LANE_INITIATION_RESULT_KEY(__ATM_WORKFLOW_EXECUTION_ID, __ATM_LANE_INDEX),
+    {exp_lane_initiation_result_key, __ATM_WORKFLOW_EXECUTION_ID, __ATM_LANE_INDEX}
+).
 
 
 %%%===================================================================
@@ -69,6 +74,19 @@ teardown(ProviderSelectors) ->
     test_utils:mock_unload(Workers, ?MOCKED_MODULE).
 
 
+-spec set_exp_lane_initiation_result(
+    atm_workflow_execution:id(),
+    atm_lane_execution:index(),
+    success | failure
+) ->
+    ok.
+set_exp_lane_initiation_result(AtmWorkflowExecutionId, AtmLaneIndex, ExpResult) ->
+    node_cache:put(
+        ?EXP_LANE_INITIATION_RESULT_KEY(AtmWorkflowExecutionId, AtmLaneIndex),
+        ExpResult
+    ).
+
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -92,16 +110,15 @@ mock_assert_openfaas_available(Workers) ->
 %% @private
 -spec mock_create([node()]) -> ok.
 mock_create(Workers) ->
-    MockFun = fun(AtmWorkflowExecutionCtx, _AtmLaneIndex, AtmTaskSchema, AtmLambdaRevision) ->
+    MockFun = fun(AtmWorkflowExecutionCtx, AtmLaneIndex, _AtmTaskSchema, AtmLambdaRevision) ->
         AtmWorkflowExecutionId = atm_workflow_execution_ctx:get_workflow_execution_id(
             AtmWorkflowExecutionCtx
         ),
-        #atm_lambda_revision{operation_spec = OperationSpec} = AtmLambdaRevision,
 
         #atm_openfaas_task_executor{
             workflow_execution_id = AtmWorkflowExecutionId,
-            task_schema_id = AtmTaskSchema#atm_task_schema.id,
-            operation_spec = OperationSpec
+            lane_index = AtmLaneIndex,
+            operation_spec = AtmLambdaRevision#atm_lambda_revision.operation_spec
         }
     end,
     test_utils:mock_expect(Workers, ?MOCKED_MODULE, create, MockFun).
@@ -110,8 +127,21 @@ mock_create(Workers) ->
 %% @private
 -spec mock_initiate([node()]) -> ok.
 mock_initiate(Workers) ->
-    MockFun = fun(_AtmWorkflowExecutionCtx, _AtmTaskSchema, _AtmLambdaRevision, _AtmTaskExecutor) ->
-        #{type => async}
+    MockFun = fun(AtmWorkflowExecutionCtx, _AtmTaskSchema, _AtmLambdaRevision, AtmTaskExecutor) ->
+        AtmWorkflowExecutionId = atm_workflow_execution_ctx:get_workflow_execution_id(
+            AtmWorkflowExecutionCtx
+        ),
+        AtmLaneIndex = AtmTaskExecutor#atm_openfaas_task_executor.lane_index,
+
+        case node_cache:get(
+            ?EXP_LANE_INITIATION_RESULT_KEY(AtmWorkflowExecutionId, AtmLaneIndex),
+            success
+        ) of
+            success ->
+                #{type => async};
+            failure ->
+                throw(?ERROR_ATM_OPENFAAS_FUNCTION_REGISTRATION_FAILED)
+        end
     end,
     test_utils:mock_expect(Workers, ?MOCKED_MODULE, initiate, MockFun).
 
@@ -182,12 +212,12 @@ mock_version(Workers) ->
 mock_db_encode(Workers) ->
     MockFun = fun(#atm_openfaas_task_executor{
         workflow_execution_id = AtmWorkflowExecutionId,
-        task_schema_id = AtmTaskSchemaId,
+        lane_index = AtmLaneIndex,
         operation_spec = OperationSpec
     }, NestedRecordEncoder) ->
         #{
             <<"atmWorkflowExecutionId">> => AtmWorkflowExecutionId,
-            <<"atmTaskSchemaId">> => AtmTaskSchemaId,
+            <<"atmLaneIndex">> => AtmLaneIndex,
             <<"operationSpec">> => NestedRecordEncoder(OperationSpec, atm_openfaas_operation_spec)
         }
     end,
@@ -199,12 +229,12 @@ mock_db_encode(Workers) ->
 mock_db_decode(Workers) ->
     MockFun = fun(#{
         <<"atmWorkflowExecutionId">> := AtmWorkflowExecutionId,
-        <<"atmTaskSchemaId">> := AtmTaskSchemaId,
+        <<"atmLaneIndex">> := AtmLaneIndex,
         <<"operationSpec">> := OperationSpecJson
     }, NestedRecordDecoder) ->
         #atm_openfaas_task_executor{
             workflow_execution_id = AtmWorkflowExecutionId,
-            task_schema_id = AtmTaskSchemaId,
+            lane_index = AtmLaneIndex,
             operation_spec = NestedRecordDecoder(OperationSpecJson, atm_openfaas_operation_spec)
         }
     end,
