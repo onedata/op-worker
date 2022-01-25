@@ -22,7 +22,6 @@
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
 
-%% @TODO VFS-7617 Test symlinks targets
 
 %% exported for CT
 -export([
@@ -160,7 +159,7 @@ groups() -> [
         dip_archive_dataset_containing_symlink_to_reg_file_bagit_layout_not_follow,
         dip_archive_dataset_containing_symlink_to_directory_bagit_layout_not_follow,
         dip_archive_nested_datasets_bagit_layout,
-    
+
         modify_preserved_plain_archive_test,
         modify_preserved_bagit_archive_test
     ]},
@@ -189,6 +188,7 @@ all() -> [
     {group, parallel_tests},
     {group, verification_tests}
 ].
+
 
 -define(ATTEMPTS, 60).
 

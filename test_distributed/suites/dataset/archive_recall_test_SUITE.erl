@@ -30,15 +30,7 @@
     init_per_testcase/2, end_per_testcase/2
 ]).
 
-%% @TODO VFS-7617 Test more complex symlink examples - symlinks loops, symlinks in archive and nested archives
-%% @TODO VFS-7617 Test external and internal symlinks
-%% @TODO VFS-7617 Test archive without follow symlinks and recall
-%% @TODO VFS-7617 Test recall options (name)
-%% @TODO VFS-7617 Test recall block in already recalling dir
-%% @TODO VFS-7617 Test rest api
-%% @TODO VFS-7617 Test already recalling block
-%% @TODO VFS-7617 Test stats with nested archives
-
+%% @TODO VFS-8851 Test symlinks loops
 
 %% tests
 -export([
@@ -62,8 +54,38 @@
     recall_plain_containing_symlink_archive_dip_test/1,
     recall_bagit_containing_symlink_archive_test/1,
     recall_bagit_containing_symlink_archive_dip_test/1,
+    recall_plain_archive_containing_internal_symlink_test/1,
+    recall_bagit_archive_containing_internal_symlink_test/1,
+    recall_plain_archive_containing_internal_symlink_dip_test/1,
+    recall_bagit_archive_containing_internal_symlink_dip_test/1,
+    recall_plain_archive_containing_external_symlink_test/1,
+    recall_bagit_archive_containing_external_symlink_test/1,
+    recall_plain_archive_containing_external_symlink_dip_test/1,
+    recall_bagit_archive_containing_external_symlink_dip_test/1,
+    recall_plain_archive_containing_nested_internal_symlink_test/1,
+    recall_bagit_archive_containing_nested_internal_symlink_test/1,
+    recall_plain_archive_containing_nested_internal_symlink_dip_test/1,
+    recall_bagit_archive_containing_nested_internal_symlink_dip_test/1,
+    recall_plain_archive_containing_nested_external_symlink_test/1,
+    recall_bagit_archive_containing_nested_external_symlink_test/1,
+    recall_plain_archive_containing_nested_external_symlink_dip_test/1,
+    recall_bagit_archive_containing_nested_external_symlink_dip_test/1,
+    recall_plain_archive_containing_nested_parent_symlink_test/1,
+    recall_bagit_archive_containing_nested_parent_symlink_test/1,
+    recall_plain_archive_containing_nested_parent_symlink_dip_test/1,
+    recall_bagit_archive_containing_nested_parent_symlink_dip_test/1,
+    recall_plain_archive_containing_nested_child_symlink_test/1,
+    recall_bagit_archive_containing_nested_child_symlink_test/1,
+    recall_plain_archive_containing_nested_child_symlink_dip_test/1,
+    recall_bagit_archive_containing_nested_child_symlink_dip_test/1,
     
-    recall_details_test/1
+    recall_custom_name_test/1,
+    
+    recall_details_test/1,
+    recall_details_nested_test/1,
+    recall_to_recalling_dir_test/1,
+    recall_dir_error_test/1,
+    recall_file_error_test/1
 ]).
 
 groups() -> [
@@ -83,15 +105,46 @@ groups() -> [
         recall_plain_nested_archive_test,
         recall_plain_nested_archive_dip_test,
         recall_bagit_nested_archive_test,
-        recall_bagit_nested_archive_dip_test
+        recall_bagit_nested_archive_dip_test,
 %%      @TODO VFS-8851 Uncomment after archives with not resolved symlinks are properly recalled
-%%        recall_plain_containing_symlink_archive_test,
-%%        recall_plain_containing_symlink_archive_dip_test,
-%%        recall_bagit_containing_symlink_archive_test,
-%%        recall_bagit_containing_symlink_archive_dip_test
+%%        recall_plain_containing_invalid_symlink_archive_test,
+%%        recall_plain_containing_invalid_symlink_archive_dip_test,
+%%        recall_bagit_containing_invalid_symlink_archive_test,
+%%        recall_bagit_containing_invalid_symlink_archive_dip_test,
+        
+        recall_plain_archive_containing_internal_symlink_test,
+        recall_bagit_archive_containing_internal_symlink_test,
+        recall_plain_archive_containing_internal_symlink_dip_test,
+        recall_bagit_archive_containing_internal_symlink_dip_test,
+        recall_plain_archive_containing_external_symlink_test,
+        recall_bagit_archive_containing_external_symlink_test,
+        recall_plain_archive_containing_external_symlink_dip_test,
+        recall_bagit_archive_containing_external_symlink_dip_test,
+        recall_plain_archive_containing_nested_internal_symlink_test,
+        recall_bagit_archive_containing_nested_internal_symlink_test,
+        recall_plain_archive_containing_nested_internal_symlink_dip_test,
+        recall_bagit_archive_containing_nested_internal_symlink_dip_test,
+        recall_plain_archive_containing_nested_external_symlink_test,
+        recall_bagit_archive_containing_nested_external_symlink_test,
+        recall_plain_archive_containing_nested_external_symlink_dip_test,
+        recall_bagit_archive_containing_nested_external_symlink_dip_test,
+        recall_plain_archive_containing_nested_parent_symlink_test,
+        recall_bagit_archive_containing_nested_parent_symlink_test,
+        recall_plain_archive_containing_nested_parent_symlink_dip_test,
+        recall_bagit_archive_containing_nested_parent_symlink_dip_test,
+        recall_plain_archive_containing_nested_child_symlink_test,
+        recall_bagit_archive_containing_nested_child_symlink_test,
+        recall_plain_archive_containing_nested_child_symlink_dip_test,
+        recall_bagit_archive_containing_nested_child_symlink_dip_test,
+        
+        recall_custom_name_test
     ]},
     {sequential_tests, [
-        recall_details_test
+        recall_details_test,
+        recall_details_nested_test,
+        recall_to_recalling_dir_test,
+        recall_dir_error_test,
+        recall_file_error_test
     ]}
 ].
 
@@ -172,16 +225,88 @@ recall_bagit_nested_archive_dip_test(_Config) ->
     recall_nested_archive_base(?ARCHIVE_BAGIT_LAYOUT, true).
 
 recall_plain_containing_symlink_archive_test(_Config) ->
-    recall_containing_symlink_archive_base(?ARCHIVE_PLAIN_LAYOUT, false).
+    recall_containing_invalid_symlink_archive_base(?ARCHIVE_PLAIN_LAYOUT, false).
 
 recall_bagit_containing_symlink_archive_test(_Config) ->
-    recall_containing_symlink_archive_base(?ARCHIVE_BAGIT_LAYOUT, false).
+    recall_containing_invalid_symlink_archive_base(?ARCHIVE_BAGIT_LAYOUT, false).
 
 recall_plain_containing_symlink_archive_dip_test(_Config) ->
-    recall_containing_symlink_archive_base(?ARCHIVE_PLAIN_LAYOUT, true).
+    recall_containing_invalid_symlink_archive_base(?ARCHIVE_PLAIN_LAYOUT, true).
 
 recall_bagit_containing_symlink_archive_dip_test(_Config) ->
-    recall_containing_symlink_archive_base(?ARCHIVE_BAGIT_LAYOUT, true).
+    recall_containing_invalid_symlink_archive_base(?ARCHIVE_BAGIT_LAYOUT, true).
+
+recall_plain_archive_containing_internal_symlink_test(_Config) ->
+    recall_containing_internal_symlink_archive_base(?ARCHIVE_PLAIN_LAYOUT, false).
+
+recall_bagit_archive_containing_internal_symlink_test(_Config) ->
+    recall_containing_internal_symlink_archive_base(?ARCHIVE_BAGIT_LAYOUT, false).
+
+recall_plain_archive_containing_internal_symlink_dip_test(_Config) ->
+    recall_containing_internal_symlink_archive_base(?ARCHIVE_PLAIN_LAYOUT, true).
+
+recall_bagit_archive_containing_internal_symlink_dip_test(_Config) ->
+    recall_containing_internal_symlink_archive_base(?ARCHIVE_BAGIT_LAYOUT, true).
+
+recall_plain_archive_containing_external_symlink_test(_Config) ->
+    recall_containing_external_symlink_archive_base(?ARCHIVE_PLAIN_LAYOUT, false).
+
+recall_bagit_archive_containing_external_symlink_test(_Config) ->
+    recall_containing_external_symlink_archive_base(?ARCHIVE_BAGIT_LAYOUT, false).
+
+recall_plain_archive_containing_external_symlink_dip_test(_Config) ->
+    recall_containing_external_symlink_archive_base(?ARCHIVE_PLAIN_LAYOUT, true).
+
+recall_bagit_archive_containing_external_symlink_dip_test(_Config) ->
+    recall_containing_external_symlink_archive_base(?ARCHIVE_BAGIT_LAYOUT, true).
+
+recall_plain_archive_containing_nested_internal_symlink_test(_Config) ->
+    recall_containing_nested_internal_symlink_archive_base(?ARCHIVE_PLAIN_LAYOUT, false).
+
+recall_bagit_archive_containing_nested_internal_symlink_test(_Config) ->
+    recall_containing_nested_internal_symlink_archive_base(?ARCHIVE_BAGIT_LAYOUT, false).
+
+recall_plain_archive_containing_nested_internal_symlink_dip_test(_Config) ->
+    recall_containing_nested_internal_symlink_archive_base(?ARCHIVE_PLAIN_LAYOUT, true).
+
+recall_bagit_archive_containing_nested_internal_symlink_dip_test(_Config) ->
+    recall_containing_nested_internal_symlink_archive_base(?ARCHIVE_BAGIT_LAYOUT, true).
+
+recall_plain_archive_containing_nested_external_symlink_test(_Config) ->
+    recall_containing_nested_external_symlink_archive_base(?ARCHIVE_PLAIN_LAYOUT, false).
+
+recall_bagit_archive_containing_nested_external_symlink_test(_Config) ->
+    recall_containing_nested_external_symlink_archive_base(?ARCHIVE_BAGIT_LAYOUT, false).
+
+recall_plain_archive_containing_nested_external_symlink_dip_test(_Config) ->
+    recall_containing_nested_external_symlink_archive_base(?ARCHIVE_PLAIN_LAYOUT, true).
+
+recall_bagit_archive_containing_nested_external_symlink_dip_test(_Config) ->
+    recall_containing_nested_external_symlink_archive_base(?ARCHIVE_BAGIT_LAYOUT, true).
+
+recall_plain_archive_containing_nested_parent_symlink_test(_Config) ->
+    recall_containing_nested_parent_symlink_archive_base(?ARCHIVE_PLAIN_LAYOUT, false).
+
+recall_bagit_archive_containing_nested_parent_symlink_test(_Config) ->
+    recall_containing_nested_parent_symlink_archive_base(?ARCHIVE_BAGIT_LAYOUT, false).
+
+recall_plain_archive_containing_nested_parent_symlink_dip_test(_Config) ->
+    recall_containing_nested_parent_symlink_archive_base(?ARCHIVE_PLAIN_LAYOUT, true).
+
+recall_bagit_archive_containing_nested_parent_symlink_dip_test(_Config) ->
+    recall_containing_nested_parent_symlink_archive_base(?ARCHIVE_BAGIT_LAYOUT, true).
+
+recall_plain_archive_containing_nested_child_symlink_test(_Config) ->
+    recall_containing_nested_child_symlink_archive_base(?ARCHIVE_PLAIN_LAYOUT, false).
+
+recall_bagit_archive_containing_nested_child_symlink_test(_Config) ->
+    recall_containing_nested_child_symlink_archive_base(?ARCHIVE_BAGIT_LAYOUT, false).
+
+recall_plain_archive_containing_nested_child_symlink_dip_test(_Config) ->
+    recall_containing_nested_child_symlink_archive_base(?ARCHIVE_PLAIN_LAYOUT, true).
+
+recall_bagit_archive_containing_nested_child_symlink_dip_test(_Config) ->
+    recall_containing_nested_child_symlink_archive_base(?ARCHIVE_BAGIT_LAYOUT, true).
 
 
 %===================================================================
@@ -193,54 +318,83 @@ recall_details_test(_Config) ->
     FileSize1 = rand:uniform(20),
     % file with size extending copy buffer so progress is reported multiple times
     FileSize2 = rand:uniform(200) + 100 * 1024 * 1024, 
-    {ArchiveId, _TargetParentGuid} = recall_test_setup(#dir_spec{
+    Spec = #dir_spec{
         dataset = #dataset_spec{archives = [#archive_spec{config = #archive_config{layout = ?ARCHIVE_PLAIN_LAYOUT}}]},
         children = [
             #file_spec{content = ?RAND_CONTENT(FileSize1)},
             #file_spec{content = ?RAND_CONTENT(FileSize2)}
-            
+        ]
+    },
+    recall_details_test_base(Spec, 2, FileSize1 + FileSize2).
+
+recall_details_nested_test(_Config) ->
+    FileSize = rand:uniform(2000),
+    Spec = #dir_spec{
+        dataset = #dataset_spec{archives = [#archive_spec{config = #archive_config{layout = ?ARCHIVE_PLAIN_LAYOUT, create_nested_archives = true}}]},
+        children = [
+            #dir_spec{
+                dataset = #dataset_spec{},
+                children = [
+                    #file_spec{content = ?RAND_CONTENT(FileSize)},
+                    #file_spec{content = ?RAND_CONTENT(FileSize)},
+                    #file_spec{content = ?RAND_CONTENT(FileSize)}
+                ]
+            },
+            #file_spec{content = ?RAND_CONTENT(FileSize)},
+            #file_spec{content = ?RAND_CONTENT(FileSize)}
+        ]
+    },
+    recall_details_test_base(Spec, 5, 5 * FileSize).
+
+
+recall_custom_name_test(_Config) ->
+    Filename = str_utils:rand_hex(20),
+    {_ArchiveId, _TargetParentGuid, RootFileGuid} = recall_test_setup(#dir_spec{
+        dataset = #dataset_spec{archives = [#archive_spec{config = #archive_config{layout = ?ARCHIVE_PLAIN_LAYOUT}}]},
+        children = [
+            #file_spec{metadata = #metadata_spec{json = ?RAND_JSON_METADATA()}}
+        ]
+    }, Filename),
+    Node = oct_background:get_random_provider_node(krakow),
+    SessionId = oct_background:get_user_session_id(?USER1, krakow),
+    ?assertMatch({ok, #file_attr{name = Filename}}, lfm_proxy:stat(Node, SessionId, #file_ref{guid = RootFileGuid})).
+
+
+recall_to_recalling_dir_test(_Config) ->
+    {ArchiveId, _TargetParentGuid, RecallRootFileGuid} = recall_test_setup(#dir_spec{
+        dataset = #dataset_spec{archives = [#archive_spec{config = #archive_config{layout = ?ARCHIVE_PLAIN_LAYOUT}}]},
+        children = [
+            #file_spec{metadata = #metadata_spec{json = ?RAND_JSON_METADATA()}}
         ]
     }),
-    {ok, #document{value = #archive{recalls = [RecallId]}}} =
-        ?assertMatch({ok, #document{value = #archive{recalls = [_]}}},
-            opw_test_rpc:call(krakow, archive, get, [ArchiveId]), ?ATTEMPTS),
     
     % wait for archive recall traverse to finish (mocked in init_per_testcase)
     Pid = receive
         {recall_traverse_finished, P} -> P
     after timer:seconds(?ATTEMPTS) ->
-        throw({error, recall_traverse_did_not_finish})
+            throw({error, recall_traverse_did_not_finish})
     end,
+    SessId = oct_background:get_user_session_id(?USER1, krakow),
     
-    % check archive_recall document
-    Providers = oct_background:get_space_supporting_providers(?SPACE),
-    Timestamp = time_test_utils:get_frozen_time_millis(),
-    TotalBytes = FileSize1 + FileSize2,
-    lists:foreach(fun(Provider) ->
-        ?assertMatch({ok, #archive_recall{
-            source_archive = ArchiveId,
-            start_timestamp = Timestamp,
-            finish_timestamp = undefined,
-            target_files = 2,
-            target_bytes = TotalBytes
-        }},
-            opw_test_rpc:call(Provider, archive_recall, get_details, [RecallId]), ?ATTEMPTS)
-    end, Providers),
-    
-    % check recall stats (stats are only stored on provider performing recall)
-    ?assertMatch({ok, #{
-          {<<"currentBytes">>,<<"hour">>} := [{_,{_, TotalBytes}}],
-          {<<"currentBytes">>,<<"minute">>} := [{_,{_, TotalBytes}}],
-          {<<"currentFiles">>,<<"hour">>} := [{_,{2,2}}],
-          {<<"currentFiles">>,<<"minute">>} := [{_,{2,2}}]
-    }}, opw_test_rpc:call(krakow, archive_recall, get_stats, [RecallId]), ?ATTEMPTS),
-    ?assertEqual(?ERROR_NOT_FOUND, opw_test_rpc:call(paris, archive_recall, get_stats, [RecallId])),
-    
-    % run archive_recall_traverse:task_finished
-    Pid ! continue,
+    ?assertEqual(?ERROR_POSIX(?EBUSY), opt_archives:init_recall(krakow, SessId, ArchiveId, RecallRootFileGuid, default)),
 
-    %% @TODO VFS-7617 check finish timestamp etc
-    ok.
+    % run archive_recall_traverse:task_finished (mocked in init_per_testcase)
+    Pid ! continue,
+    
+    ?assertMatch({ok, #archive_recall_details{finish_timestamp = T}} when is_integer(T),
+        opt_archives:get_recall_details(krakow, SessId, RecallRootFileGuid), ?ATTEMPTS),
+    
+    ?assertMatch({ok, _}, opt_archives:init_recall(krakow, SessId, ArchiveId, RecallRootFileGuid, default)).
+
+
+recall_dir_error_test(_Config) ->
+    Spec = #dir_spec{ dataset = #dataset_spec{archives = 1}},
+    recall_error_test(Spec, do_dir_master_job_unsafe).
+
+recall_file_error_test(_Config) ->
+    Spec = #file_spec{ dataset = #dataset_spec{archives = 1}},
+    recall_error_test(Spec, do_slave_job_unsafe).
+
 
 %===================================================================
 % Test bases
@@ -274,40 +428,219 @@ recall_nested_archive_base(Layout, IncludeDip) ->
         dataset = #dataset_spec{archives = [#archive_spec{config = #archive_config{layout = Layout, include_dip = IncludeDip, create_nested_archives = true}}]},
         metadata = #metadata_spec{json = ?RAND_JSON_METADATA()},
         children = [#dir_spec{
-            dataset = #dataset_spec{archives = [#archive_spec{config = #archive_config{layout = Layout, include_dip = IncludeDip}}]},
+            dataset = #dataset_spec{},
             metadata = #metadata_spec{json = ?RAND_JSON_METADATA()}
         }]
     }).
 
-recall_containing_symlink_archive_base(Layout, IncludeDip) ->
+recall_containing_invalid_symlink_archive_base(Layout, IncludeDip) ->
     recall_test_base(#dir_spec{
         dataset = #dataset_spec{archives = [#archive_spec{config = #archive_config{layout = Layout, include_dip = IncludeDip, follow_symlinks = false}}]},
         metadata = #metadata_spec{json = ?RAND_JSON_METADATA()},
         children = [#symlink_spec{symlink_value = <<"some/dummy/value">>}]
-    }).
+    }, false).
+
+recall_containing_internal_symlink_archive_base(Layout, IncludeDip) ->
+    recall_test_base(#dir_spec{
+        dataset = #dataset_spec{archives = [#archive_spec{config = #archive_config{layout = Layout, include_dip = IncludeDip}}]},
+        metadata = #metadata_spec{json = ?RAND_JSON_METADATA()},
+        children = [
+            #file_spec{custom_identifier = <<"target">>}, 
+            #symlink_spec{symlink_value = {custom_id, <<"target">>}}
+        ]
+    }, false).
+
+recall_containing_nested_internal_symlink_archive_base(Layout, IncludeDip) ->
+    recall_test_base(#dir_spec{
+        dataset = #dataset_spec{archives = [#archive_spec{config = #archive_config{layout = Layout, include_dip = IncludeDip, create_nested_archives = true}}]},
+        metadata = #metadata_spec{json = ?RAND_JSON_METADATA()},
+        children = [#dir_spec{
+            dataset = #dataset_spec{},
+            children = [
+                #file_spec{custom_identifier = <<"target">>},
+                #symlink_spec{symlink_value = {custom_id, <<"target">>}}
+            ]}
+        ]
+    }, nested_archive_only ).
+
+recall_containing_external_symlink_archive_base(Layout, IncludeDip) ->
+    recall_test_base([
+        #file_spec{custom_identifier = <<"target">>},
+        #dir_spec{
+            dataset = #dataset_spec{archives = [#archive_spec{config = #archive_config{layout = Layout, include_dip = IncludeDip}}]},
+            metadata = #metadata_spec{json = ?RAND_JSON_METADATA()},
+            children = [#dir_spec{
+                metadata = #metadata_spec{json = ?RAND_JSON_METADATA()},
+                children = [
+                    #symlink_spec{symlink_value = {custom_id, <<"target">>}}
+                ]
+            }]
+        }
+    ]).
+
+recall_containing_nested_external_symlink_archive_base(Layout, IncludeDip) ->
+    recall_test_base([
+        #file_spec{custom_identifier = <<"target">>},
+        #dir_spec{
+            dataset = #dataset_spec{archives = [#archive_spec{config = #archive_config{layout = Layout, include_dip = IncludeDip, create_nested_archives = true}}]},
+            metadata = #metadata_spec{json = ?RAND_JSON_METADATA()},
+            children = [#dir_spec{
+                dataset = #dataset_spec{},
+                metadata = #metadata_spec{json = ?RAND_JSON_METADATA()},
+                children = [
+                    #symlink_spec{symlink_value = {custom_id, <<"target">>}}
+                ]
+            }]
+        }
+    ]).
+
+recall_containing_nested_parent_symlink_archive_base(Layout, IncludeDip) ->
+    recall_test_base([
+        #dir_spec{
+            dataset = #dataset_spec{archives = [#archive_spec{config = #archive_config{layout = Layout, include_dip = IncludeDip, create_nested_archives = true}}]},
+            metadata = #metadata_spec{json = ?RAND_JSON_METADATA()},
+            children = [
+                #file_spec{custom_identifier = <<"target">>},
+                #dir_spec{
+                    dataset = #dataset_spec{},
+                    metadata = #metadata_spec{json = ?RAND_JSON_METADATA()},
+                    children = [
+                        #symlink_spec{symlink_value = {custom_id, <<"target">>}}
+                    ]
+                }
+            ]
+        }
+    ], nested_archive_only ).
+
+recall_containing_nested_child_symlink_archive_base(Layout, IncludeDip) ->
+    recall_test_base([
+        #dir_spec{
+            dataset = #dataset_spec{archives = [#archive_spec{config = #archive_config{layout = Layout, include_dip = IncludeDip, create_nested_archives = true}}]},
+            metadata = #metadata_spec{json = ?RAND_JSON_METADATA()},
+            children = [
+                #dir_spec{
+                    dataset = #dataset_spec{},
+                    metadata = #metadata_spec{json = ?RAND_JSON_METADATA()},
+                    children = [
+                        #file_spec{custom_identifier = <<"target">>}
+                    ]
+                },
+                #symlink_spec{symlink_value = {custom_id, <<"target">>}}
+            ]
+        }
+    ]).
 
 
 recall_test_base(StructureSpec) ->
-    recall_test_base(StructureSpec, follow_symlinks).
+    recall_test_base(StructureSpec, true).
 
-recall_test_base(StructureSpec, SymlinkMode) ->
-    SessionId = oct_background:get_user_session_id(?USER1, krakow),
-    {ArchiveId, TargetParentGuid} = recall_test_setup(StructureSpec),
+recall_test_base(StructureSpec, SymlinkResolutionMode) ->
+    SessId = oct_background:get_user_session_id(?USER1, krakow),
+    {ArchiveId, TargetParentGuid, _RootFileGuid} = recall_test_setup(StructureSpec),
     {ok, ArchiveDataDirGuid} = opw_test_rpc:call(krakow, archive, get_data_dir_guid, [ArchiveId]),
-    archive_tests_utils:assert_copied(oct_background:get_random_provider_node(krakow), SessionId, 
-        get_direct_child(ArchiveDataDirGuid), get_direct_child(TargetParentGuid), SymlinkMode == follow_symlinks, ?ATTEMPTS),
-    ?assertThrow(?ERROR_ALREADY_EXISTS, opw_test_rpc:call(krakow, mi_archives, init_recall, % @TODO VFS-7617 opt_archives
-        [oct_background:get_user_session_id(?USER1, krakow), ArchiveId, TargetParentGuid, default])).
-
+    archive_tests_utils:assert_copied(oct_background:get_random_provider_node(krakow), SessId, 
+        get_direct_child(ArchiveDataDirGuid), get_direct_child(TargetParentGuid), SymlinkResolutionMode, ?ATTEMPTS),
+    ?assertEqual(?ERROR_ALREADY_EXISTS, opt_archives:init_recall(krakow, SessId, ArchiveId, TargetParentGuid, default)).
 
 recall_test_setup(StructureSpec) ->
-    SessionId = oct_background:get_user_session_id(?USER1, krakow),
-    #object{
-        dataset = #dataset_object{archives = [#archive_object{id = ArchiveId}]
-        }} = onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, StructureSpec),
+    recall_test_setup(StructureSpec, default).
+
+recall_test_setup(StructureSpec, RootFileName) ->
+    SessId = oct_background:get_user_session_id(?USER1, krakow),
+    CreatedTreeObject = onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, StructureSpec, krakow, sequential),
+    ArchiveId = lists:foldl(fun
+        (#object{dataset = #dataset_object{archives = [#archive_object{id = Id}]}}, undefined) ->
+            Id;
+        (_, Acc) -> 
+            Acc
+    end, undefined, utils:ensure_list(CreatedTreeObject)),
     #object{guid = TargetParentGuid} = onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, #dir_spec{}),
-    opw_test_rpc:call(krakow, mi_archives, init_recall, [SessionId, ArchiveId, TargetParentGuid, default]), % @TODO VFS-7617 opt_archives
-    {ArchiveId, TargetParentGuid}.
+    {ok, RecallRootFileGuid} = opt_archives:init_recall(krakow, SessId, ArchiveId, TargetParentGuid, RootFileName),
+    FinalArchiveId = case opw_test_rpc:call(krakow, archive, get_related_dip, [ArchiveId]) of
+        {ok, undefined} -> ArchiveId;
+        {ok, DipArchiveId} -> DipArchiveId
+    end,
+    {FinalArchiveId, TargetParentGuid, RecallRootFileGuid}.
+
+
+recall_details_test_base(Spec, TotalFiles, TotalBytes) ->
+    {ArchiveId, _TargetParentGuid, RecallRootFileGuid} = recall_test_setup(Spec),
+    
+    SessId = fun(P) -> oct_background:get_user_session_id(?USER1, P) end,
+    % wait for archive recall traverse to finish (mocked in init_per_testcase)
+    Pid = receive
+        {recall_traverse_finished, P} -> P
+    after timer:seconds(?ATTEMPTS) ->
+            throw({error, recall_traverse_did_not_finish})
+    end,
+    
+    % check archive_recall document
+    Providers = oct_background:get_space_supporting_providers(?SPACE),
+    Timestamp = time_test_utils:get_frozen_time_millis(),
+    lists:foreach(fun(Provider) ->
+        ?assertMatch({ok, #archive_recall_details{
+            source_archive = ArchiveId,
+            start_timestamp = Timestamp,
+            finish_timestamp = undefined,
+            target_files = TotalFiles,
+            target_bytes = TotalBytes
+        }}, opt_archives:get_recall_details(Provider, SessId(Provider), RecallRootFileGuid), ?ATTEMPTS)
+    end, Providers),
+    
+    % check recall stats (stats are only stored on provider performing recall)
+    ?assertMatch({ok, #{
+        {<<"currentBytes">>,<<"hour">>} := [{_,{_, TotalBytes}}],
+        {<<"currentBytes">>,<<"minute">>} := [{_,{_, TotalBytes}}],
+        {<<"currentBytes">>,<<"day">>} := [{_,{_, TotalBytes}}],
+        {<<"currentBytes">>,<<"total">>} := [{_,{_, TotalBytes}}],
+        {<<"currentFiles">>,<<"hour">>} := [{_,{TotalFiles, TotalFiles}}],
+        {<<"currentFiles">>,<<"minute">>} := [{_,{TotalFiles, TotalFiles}}],
+        {<<"currentFiles">>,<<"day">>} := [{_,{TotalFiles, TotalFiles}}],
+        {<<"currentFiles">>,<<"total">>} := [{_,{TotalFiles, TotalFiles}}],
+        {<<"failedFiles">>,<<"total">>} := []
+        %% @TODO VFS-8839 - use op_archives after implementing histogram API
+    }}, opw_test_rpc:call(krakow, archive_recall_api, get_stats, [file_id:guid_to_uuid(RecallRootFileGuid)]), ?ATTEMPTS),
+    
+    %% @TODO VFS-8839 - check progress until gui starts to support histograms and error log browsing
+    ?assertMatch({ok, #{
+        <<"currentBytes">>  := TotalBytes,
+        <<"currentFiles">> := TotalFiles,
+        <<"failedFiles">> := 0,
+        <<"lastError">> := undefined
+    }}, opt_archives:get_recall_progress(krakow, SessId(krakow), RecallRootFileGuid), ?ATTEMPTS),
+    ?assertEqual(?ERROR_NOT_FOUND, opt_archives:get_recall_progress(paris, SessId(paris), RecallRootFileGuid)),
+    
+    time_test_utils:simulate_millis_passing(8),
+    FinishTimestamp = Timestamp + 8,
+    
+    % run archive_recall_traverse:task_finished (mocked in init_per_testcase)
+    Pid ! continue,
+    
+    lists:foreach(fun(Provider) ->
+        ?assertMatch({ok, #archive_recall_details{
+            finish_timestamp = FinishTimestamp
+        }},
+            opt_archives:get_recall_details(Provider, SessId(Provider), RecallRootFileGuid), ?ATTEMPTS)
+    end, Providers),
+    ok.
+
+
+recall_error_test(Spec, FunName) ->
+    SessId = fun(P) -> oct_background:get_user_session_id(?USER1, P) end,
+    Errors = [
+        {?ERROR_NOT_FOUND, errors:to_json(?ERROR_NOT_FOUND)},
+        {{badmatch, {error, ?EPERM}}, errors:to_json(?ERROR_POSIX(?EPERM))}
+    ],
+    lists:foreach(fun({Error, ExpectedReason}) ->
+        mock_traverse_error(FunName, Error),
+        {_ArchiveId, _TargetParentGuid, RecallRootFileGuid} = recall_test_setup(Spec),
+        ?assertMatch({ok, #{
+            <<"currentBytes">>  := 0,
+            <<"currentFiles">> := 0,
+            <<"failedFiles">> := 1,
+            <<"lastError">> := #{<<"reason">> := ExpectedReason}
+        }}, opt_archives:get_recall_progress(krakow, SessId(krakow), RecallRootFileGuid), ?ATTEMPTS)
+    end, Errors).
 
 
 %===================================================================
@@ -319,6 +652,14 @@ get_direct_child(Guid) ->
     {ok, [{ChildGuid, _}], _} = ?assertMatch({ok, [_], #{is_last := true}}, lfm_proxy:get_children(
         oct_background:get_random_provider_node(krakow), SessionId, #file_ref{guid = Guid}, #{offset => 0}), ?ATTEMPTS),
     ChildGuid.
+
+
+mock_traverse_error(FunName, Error) ->
+    Nodes = oct_background:get_all_providers_nodes(),
+    test_utils:mock_new(Nodes, archive_recall_traverse),
+    test_utils:mock_expect(Nodes, archive_recall_traverse, FunName, fun(_, _) ->
+        error(Error)
+    end).
 
 %===================================================================
 % SetUp and TearDown functions
@@ -343,7 +684,11 @@ init_per_group(_Group, Config) ->
 end_per_group(_Group, Config) ->
     lfm_proxy:teardown(Config).
 
-init_per_testcase(recall_details_test, Config) ->
+init_per_testcase(Case, Config) when 
+    Case =:= recall_details_test;
+    Case =:= recall_details_nested_test;
+    Case =:= recall_to_recalling_dir_test 
+->
     Nodes = oct_background:get_all_providers_nodes(),
     test_utils:mock_new(Nodes, archive_recall_traverse),
     Self = self(),
@@ -358,7 +703,11 @@ init_per_testcase(recall_details_test, Config) ->
 init_per_testcase(_Case, Config) ->
     Config.
 
-end_per_testcase(recall_details_test, Config) ->
+end_per_testcase(Case, Config) when
+    Case =:= recall_details_test;
+    Case =:= recall_details_nested_test;
+    Case =:= recall_to_recalling_dir_test 
+->
     time_test_utils:unfreeze_time(Config),
     test_utils:mock_unload(oct_background:get_all_providers_nodes()),
     ok;

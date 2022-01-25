@@ -38,7 +38,10 @@
     get_archive_info/1,
     modify_archive_description/1,
     get_dataset_archives/1,
-    init_archive_purge_test/1
+    init_archive_purge_test/1,
+    init_archive_recall_test/1,
+    get_archive_recall_details_test/1,
+    get_archive_recall_progress_test/1
 ]).
 
 %% httpd callback
@@ -46,28 +49,27 @@
 
 
 groups() -> [
-    {all_tests, [parallel], [
-        create_archive,
+    % TODO VFS-8199 - Execute in parallel after fixing problems with timeouts
+    {all_tests, [
+        create_archive, 
         get_archive_info,
         modify_archive_description,
         get_dataset_archives,
-        init_archive_purge_test
+        init_archive_purge_test,
+        init_archive_recall_test,
+        get_archive_recall_details_test,
+        get_archive_recall_progress_test
     ]}
 ].
 
 all() -> [
-    create_archive,
-    get_archive_info,
-    modify_archive_description,
-    get_dataset_archives,
-    init_archive_purge_test
-    % TODO VFS-8199 - Execute in parallel after fixing problems with timeouts
-%%    {group, all_tests}
+    {group, all_tests}
 ].
 
 -define(ATTEMPTS, 120).
 -define(NON_EXISTENT_ARCHIVE_ID, <<"NonExistentArchive">>).
 -define(NON_EXISTENT_DATASET_ID, <<"NonExistentDataset">>).
+-define(NON_EXISTENT_FILE_ID, <<"NonExistentFile">>).
 
 
 -define(HTTP_SERVER_PORT, 8080).
@@ -866,6 +868,273 @@ await_archive_purged_callback_called(ArchiveId, DatasetId) ->
         Timeout ->
             ct:fail("Archive ~p not purged", [ArchiveId])
     end.
+
+
+%%%===================================================================
+%%% Init recall of archive test
+%%%===================================================================
+
+init_archive_recall_test(_Config) ->
+    Providers = [krakow, paris],
+    
+    #object{dataset = #dataset_object{
+        id = DatasetId,
+        archives = [ArchiveObject]
+    }} = onenv_file_test_utils:create_and_sync_file_tree(user3, ?SPACE, #file_spec{dataset = #dataset_spec{
+        archives = 1
+    }}),
+    
+    MemRef = api_test_memory:init(),
+    api_test_memory:set(MemRef, archive_object, ArchiveObject),
+    
+    maybe_detach_dataset(Providers, DatasetId),
+    
+    ?assert(onenv_api_test_runner:run_tests([
+        #suite_spec{
+            target_nodes = Providers,
+            client_spec = ?CLIENT_SPEC_FOR_SPACE_KRK_PAR(?EPERM),
+            scenario_templates = [
+                #scenario_template{
+                    name = <<"Init archive recall using REST API">>,
+                    type = rest,
+                    prepare_args_fun = build_init_recall_archive_prepare_rest_args_fun(MemRef),
+                    validate_result_fun = fun(_, {ok, RespCode, _, RespBody}) ->
+                        {_, #{<<"rootId">> := RootFileId}} = 
+                            ?assertMatch({?HTTP_201_CREATED, #{<<"rootId">> := _}}, {RespCode, RespBody}),
+                        {ok, RootFileGuid} = file_id:objectid_to_guid(RootFileId),
+                        validate_recall_result(Providers, RootFileGuid)
+                    end
+                },
+                #scenario_template{
+                    name = <<"Init archive recall using GS API">>,
+                    type = gs,
+                    prepare_args_fun = build_init_recall_archive_prepare_gs_args_fun(MemRef),
+                    validate_result_fun = fun(_, Result) -> 
+                        {ok, #{<<"rootId">> := RootFileGuid}} = ?assertMatch({ok, #{<<"rootId">> := _}}, Result),
+                        validate_recall_result(Providers, RootFileGuid)
+                    end
+                }
+            ],
+            data_spec = #data_spec{
+                required = [<<"targetParentId">>],
+                optional = [<<"targetRootName">>],
+                correct_values = #{
+                    <<"targetParentId">> => [create],
+                    <<"targetRootName">> => [?RANDOM_FILE_NAME()]
+                },
+                bad_values = [
+                    {bad_id, ?NON_EXISTENT_ARCHIVE_ID, ?ERROR_NOT_FOUND},
+                    {<<"targetParentId">>, ?NON_EXISTENT_FILE_ID, ?ERROR_BAD_VALUE_IDENTIFIER(<<"targetParentId">>)},
+                    {<<"targetRootName">>, 8, ?ERROR_BAD_VALUE_BINARY(<<"targetRootName">>)},
+                    {<<"targetRootName">>, <<>>, ?ERROR_BAD_VALUE_EMPTY(<<"targetRootName">>)}
+                ]
+            }
+        }
+    ])).
+
+
+%% @private
+-spec validate_recall_result([oct_background:entity_selector()], file_id:file_guid()) -> ok.
+validate_recall_result(Providers, RootFileGuid) ->
+    lists:foreach(fun(Provider) ->
+        Node = ?OCT_RAND_OP_NODE(Provider),
+        UserSessId = oct_background:get_user_session_id(user2, Provider),
+        ?assertMatch({ok, _}, lfm_proxy:stat(Node, UserSessId, #file_ref{guid = RootFileGuid}), ?ATTEMPTS)
+    end, Providers).
+
+
+%% @private
+-spec build_init_recall_archive_prepare_rest_args_fun(api_test_memory:mem_ref()) ->
+    onenv_api_test_runner:prepare_args_fun().
+build_init_recall_archive_prepare_rest_args_fun(MemRef) ->
+    fun(#api_test_ctx{data = Data0}) ->
+        #archive_object{id = ArchiveId} = api_test_memory:get(MemRef, archive_object),
+        {Id, Data} = api_test_utils:maybe_substitute_bad_id(ArchiveId, Data0),
+        
+        #rest_args{
+            method = post,
+            headers = #{?HDR_CONTENT_TYPE => <<"application/json">>},
+            path = <<"archives/", Id/binary, "/init_recall">>,
+            body = json_utils:encode(maybe_create_recall_target_parent(Data))
+        }
+    end.
+
+
+%% @private
+-spec build_init_recall_archive_prepare_gs_args_fun(api_test_memory:mem_ref()) ->
+    onenv_api_test_runner:prepare_args_fun().
+build_init_recall_archive_prepare_gs_args_fun(MemRef) ->
+    fun(#api_test_ctx{data = Data0}) ->
+        #archive_object{id = ArchiveId} = api_test_memory:get(MemRef, archive_object),
+        {Id, Data} = api_test_utils:maybe_substitute_bad_id(ArchiveId, Data0),
+        
+        #gs_args{
+            operation = create,
+            gri = #gri{type = op_archive, id = Id, aspect = recall, scope = private},
+            data = maybe_create_recall_target_parent(Data)
+        }
+    end.
+
+
+%% @private
+-spec maybe_create_recall_target_parent(map()) -> map().
+maybe_create_recall_target_parent(#{<<"targetParentId">> := create} = Data) ->
+    Data#{<<"targetParentId">> => create_recall_parent()};
+maybe_create_recall_target_parent(Data) ->
+    Data.
+
+
+%% @private
+-spec create_recall_parent() -> file_id:objectid().
+create_recall_parent() ->
+    #object{guid = Guid} = onenv_file_test_utils:create_and_sync_file_tree(user3, ?SPACE, #dir_spec{}),
+    {ok, ObjectId} = file_id:guid_to_objectid(Guid),
+    ObjectId.
+
+
+%%%===================================================================
+%%% Archive recall get tests
+%%%===================================================================
+
+get_archive_recall_details_test(_Config) ->
+    get_archive_recall_test_base([krakow, paris], details).
+
+get_archive_recall_progress_test(_Config) ->
+    get_archive_recall_test_base([krakow], progress).
+
+
+%% @private
+-spec get_archive_recall_test_base([oct_background:entity_selector()], details | progress) -> ok.
+get_archive_recall_test_base(Providers, Aspect) ->
+    #object{dataset = #dataset_object{
+        id = DatasetId,
+        archives = [#archive_object{id = ArchiveId}]
+    }} = onenv_file_test_utils:create_and_sync_file_tree(user3, ?SPACE, #file_spec{
+        content = crypto:strong_rand_bytes(20),
+        dataset = #dataset_spec{archives = 1}
+    }),
+    
+    UserSessId = oct_background:get_user_session_id(user2, krakow),
+    SpaceDirGuid = fslogic_uuid:spaceid_to_space_dir_guid(oct_background:get_space_id(?SPACE)),
+    {ok, RootFileGuid} = opt_archives:init_recall(krakow, UserSessId, ArchiveId, SpaceDirGuid, str_utils:rand_hex(16)),
+    ?assertMatch({ok, _}, opt_archives:get_recall_details(paris, UserSessId, file_id:guid_to_uuid(RootFileGuid)), ?ATTEMPTS),
+    {ok, RootFileObjectId} = file_id:guid_to_objectid(RootFileGuid),
+    
+    maybe_detach_dataset(Providers, DatasetId),
+    
+    ?assert(onenv_api_test_runner:run_tests([
+        #suite_spec{
+            target_nodes = Providers,
+            client_spec = #client_spec{
+                correct = [
+                    user2,  % space owner - doesn't need any perms
+                    user3,  % files owner
+                    user4   % space member - should succeed as getting recall doesn't require any perms
+                ],
+                unauthorized = [nobody],
+                forbidden_not_in_space = [user1]
+            },
+            scenario_templates = [
+                #scenario_template{
+                    name = <<"Get archive recall ", (atom_to_binary(Aspect))/binary, " using REST API">>,
+                    type = rest,
+                    prepare_args_fun = build_get_recall_archive_details_prepare_rest_args_fun(RootFileObjectId, Aspect),
+                    validate_result_fun = fun(_, {ok, RespCode, _, RespBody}) ->
+                        ?assertMatch(?HTTP_200_OK, RespCode),
+                        get_recall_validate_result(Aspect, rest, ArchiveId, DatasetId, RespBody)
+                    end
+                },
+                #scenario_template{
+                    name = <<"Get archive recall ", (atom_to_binary(Aspect))/binary, " using GS API">>,
+                    type = gs,
+                    prepare_args_fun = build_get_recall_archive_details_prepare_gs_args_fun(RootFileGuid, Aspect),
+                    validate_result_fun = fun(_, Result) ->
+                        get_recall_validate_result(Aspect, gs, ArchiveId, DatasetId, Result)
+                    end
+                }
+            ]
+        }
+    ])).
+
+
+%% @private
+-spec get_recall_validate_result(details | progress, gs | rest, archive:id(), dataset:id(), Res) -> 
+    Res.
+get_recall_validate_result(details, gs, ArchiveId, DatasetId, Result) ->
+    SourceArchiveGri = gri:serialize(#gri{
+        type = op_archive, id = ArchiveId, aspect = instance, scope = private}),
+    SourceDatasetGri = gri:serialize(#gri{
+        type = op_dataset, id = DatasetId, aspect = instance, scope = private}),
+    ?assertMatch({ok, #{
+        <<"sourceArchive">> := SourceArchiveGri,
+        <<"sourceDataset">> := SourceDatasetGri,
+        <<"targetFiles">> := 1,
+        <<"targetBytes">> := 20
+    }}, Result);
+get_recall_validate_result(details, rest, ArchiveId, DatasetId, RespBody) ->
+    ?assertMatch(#{
+        <<"sourceArchive">> := ArchiveId,
+        <<"sourceDataset">> := DatasetId,
+        <<"targetFiles">> := 1,
+        <<"targetBytes">> := 20
+    }, RespBody);
+get_recall_validate_result(progress, gs, _ArchiveId, _DatasetId, Result) ->
+    ?assertMatch({ok, #{
+        <<"currentBytes">> := 20,
+        <<"currentFiles">> := 1,
+        <<"failedFiles">> := 0,
+        <<"lastError">> := null
+    }}, Result);
+get_recall_validate_result(progress, rest, _ArchiveId, _DatasetId, RespBody) ->
+    ?assertMatch(#{
+        <<"currentBytes">> := 20,
+        <<"currentFiles">> := 1,
+        <<"failedFiles">> := 0,
+        <<"lastError">> := null
+    }, RespBody).
+
+
+%% @private
+-spec build_get_recall_archive_details_prepare_rest_args_fun(file_id:objectid(), details | progress) ->
+    onenv_api_test_runner:prepare_args_fun().
+build_get_recall_archive_details_prepare_rest_args_fun(RootFileObjectId, Aspect) ->
+    fun(#api_test_ctx{data = Data0}) ->
+        {Id, Data} = api_test_utils:maybe_substitute_bad_id(RootFileObjectId, Data0),
+        
+        #rest_args{
+            method = get,
+            headers = #{?HDR_CONTENT_TYPE => <<"application/json">>},
+            path = <<"data/", Id/binary, (rest_recall_get_path_suffix(Aspect))/binary>>,
+            body = json_utils:encode(Data)
+        }
+    end.
+
+
+%% @private
+-spec build_get_recall_archive_details_prepare_gs_args_fun(file_id:objectid(), details | progress) ->
+    onenv_api_test_runner:prepare_args_fun().
+build_get_recall_archive_details_prepare_gs_args_fun(RootFileObjectId, Aspect) ->
+    fun(#api_test_ctx{data = Data0}) ->
+        {Id, Data} = api_test_utils:maybe_substitute_bad_id(RootFileObjectId, Data0),
+        
+        #gs_args{
+            operation = get,
+            gri = #gri{type = op_file, id = Id, aspect = gs_recall_get_aspect(Aspect), scope = private},
+            data = Data
+        }
+    end.
+
+
+%% @private
+-spec gs_recall_get_aspect(details | progress) -> gri:aspect().
+gs_recall_get_aspect(details) -> archive_recall_details;
+gs_recall_get_aspect(progress) -> archive_recall_progress.
+
+
+%% @private
+-spec rest_recall_get_path_suffix(details | progress) -> binary().
+rest_recall_get_path_suffix(details) -> <<"/recall/details">>;
+rest_recall_get_path_suffix(progress) -> <<"/recall/progress">>.
 
 %%%===================================================================
 %%% Common archive test utils

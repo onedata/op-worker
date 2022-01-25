@@ -17,6 +17,7 @@
 -include("modules/logical_file_manager/lfm.hrl").
 -include("modules/dataset/archive.hrl").
 -include("modules/dataset/archivisation_tree.hrl").
+-include("modules/dataset/bagit.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 
@@ -142,17 +143,34 @@ assert_copied(Node, SessionId, SourceGuid, TargetGuid, FollowSymlinks, Attempts)
             assert_content_copied(Node, SessionId, SourceGuid, TargetGuid, Attempts),
             assert_json_metadata_copied(Node, SessionId, SourceGuid, TargetGuid, Attempts);
         ?SYMLINK_TYPE ->
-            case FollowSymlinks of
+            ShouldFollowSymlink = case FollowSymlinks of
+                true -> true;
+                false -> false;
+                nested_archive_only ->
+                    {ok, G} = lfm_proxy:resolve_symlink(Node, SessionId, ?FILE_REF(SourceAttr#file_attr.guid)),
+                    {ok, Path} = lfm_proxy:get_file_path(Node, SessionId, G),
+                    case archivisation_tree:extract_archive_id(Path) of
+                        {ok, ArchiveId} ->
+                            {ok, ParentGuid} = lfm_proxy:get_parent(Node, SessionId, #file_ref{guid = G}),
+                            case opw_test_rpc:call(Node, archive, get_data_dir_guid, [ArchiveId]) of
+                                {ok, ParentGuid} -> true;
+                                _ -> false
+                            end;
+                        _ ->
+                            false
+                    end
+            end,
+            case ShouldFollowSymlink of
                 true ->
-                    {ok, LinkGuid} = lfm_proxy:resolve_symlink(Node, SessionId, ?FILE_REF(SourceAttr#file_attr.guid)),
-                    {ok, LinkTargetAttr} = lfm_proxy:stat(Node, SessionId, ?FILE_REF(LinkGuid)),
+                    {ok, LinkTargetGuid} = lfm_proxy:resolve_symlink(Node, SessionId, ?FILE_REF(SourceAttr#file_attr.guid)),
+                    {ok, LinkTargetAttr} = lfm_proxy:stat(Node, SessionId, ?FILE_REF(LinkTargetGuid)),
                     case LinkTargetAttr#file_attr.type of
                         ?REGULAR_FILE_TYPE ->
-                            assert_content_copied(Node, SessionId, LinkGuid, TargetGuid, Attempts),
-                            assert_json_metadata_copied(Node, SessionId, LinkGuid, TargetGuid, Attempts);
+                            assert_content_copied(Node, SessionId, LinkTargetGuid, TargetGuid, Attempts),
+                            assert_json_metadata_copied(Node, SessionId, LinkTargetGuid, TargetGuid, Attempts);
                         ?DIRECTORY_TYPE ->
-                            assert_children_copied(Node, SessionId, LinkGuid, TargetGuid, FollowSymlinks, Attempts),
-                            assert_json_metadata_copied(Node, SessionId, LinkGuid, TargetGuid, Attempts)
+                            assert_children_copied(Node, SessionId, LinkTargetGuid, TargetGuid, FollowSymlinks, Attempts),
+                            assert_json_metadata_copied(Node, SessionId, LinkTargetGuid, TargetGuid, Attempts)
                     end;
                 false ->
                     assert_symlink_values_copied(Node, SessionId, SourceGuid, TargetGuid, Attempts)
@@ -336,9 +354,41 @@ assert_file_is_flushed_from_buffer(Node, SessionId, SourceGuid, TargetGuid, Atte
 
 assert_symlink_values_copied(Node, SessionId, SourceGuid, TargetGuid, Attempts) ->
     ReadSymlink = fun(Guid) ->
-        lfm_proxy:read_symlink(Node, SessionId, ?FILE_REF(Guid))
+        {ok, Path} = ?assertMatch({ok, _}, lfm_proxy:read_symlink(Node, SessionId, ?FILE_REF(Guid))), Attempts,
+        Path
     end,
-    ?assertEqual(ReadSymlink(SourceGuid), ReadSymlink(TargetGuid), Attempts).
+    SpaceId = file_id:guid_to_space_id(SourceGuid),
+    NormalizePath = fun(SymlinkPath) ->
+        [_ | Rest] = filename:split(SymlinkPath),
+        filename:join([<<"/">>, SpaceId | Rest])
+    end,
+    SourcePath = NormalizePath(ReadSymlink(SourceGuid)),
+    TargetPath = NormalizePath(ReadSymlink(TargetGuid)),
+    
+    case {archivisation_tree:is_in_archive(SourcePath), archivisation_tree:is_in_archive(TargetPath)} of
+        {false, false} ->
+            ?assertEqual(SourcePath, TargetPath);
+        {true, false} ->
+            assert_internal_symlinks_target_paths(SourcePath, TargetPath),
+            assert_internal_symlinks_validity(Node, SessionId, SourceGuid, TargetGuid);
+        {false, true} ->
+            assert_internal_symlinks_target_paths(TargetPath, SourcePath),
+            assert_internal_symlinks_validity(Node, SessionId, SourceGuid, TargetGuid)
+    end.
+
+
+assert_internal_symlinks_target_paths(PathInArchive, OtherPath) ->
+    [_Sep, _SpaceId, _ArchiveRoot, _DatasetDir, _ArchiveDir | PathTokens] = filename:split(PathInArchive),
+    FinalArchivePathTokens = case PathTokens of
+        [?BAGIT_DATA_DIR_NAME | Rest] -> Rest;
+        _ -> PathTokens
+    end,
+    ?assertEqual(true, lists:suffix(FinalArchivePathTokens, filename:split(OtherPath))).
+
+
+assert_internal_symlinks_validity(Node, SessionId, SourceSymGuid, TargetSymGuid) ->
+    ?assertMatch({ok, _}, lfm_proxy:resolve_symlink(Node, SessionId, #file_ref{guid = SourceSymGuid})),
+    ?assertMatch({ok, _}, lfm_proxy:resolve_symlink(Node, SessionId, #file_ref{guid = TargetSymGuid})).
 
 
 assert_layout_custom_features(_Node, _SessionId, _ArchiveId, ?ARCHIVE_PLAIN_LAYOUT) ->

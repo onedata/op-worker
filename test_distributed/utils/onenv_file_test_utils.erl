@@ -25,7 +25,7 @@
 
 -export([
     resolve_file/1,
-    create_and_sync_file_tree/3, create_and_sync_file_tree/4,
+    create_and_sync_file_tree/3, create_and_sync_file_tree/4, create_and_sync_file_tree/5,
     mv_and_sync_file/3, rm_and_sync_file/2, await_file_metadata_sync/3
 ]).
 -export([get_object_attributes/3]).
@@ -39,8 +39,11 @@
 -type metadata_object() :: #metadata_object{}.
 -type metadata_spec() :: #metadata_spec{}.
 
+-type custom_ids_map() :: #{any() => file_id:file_guid()}.
+-type custom_identifier() :: any().
+
 -export_type([share_spec/0, space_selector/0, object_selector/0, object_spec/0, object/0,
-    metadata_spec/0, metadata_object/0
+    metadata_spec/0, metadata_object/0, custom_identifier/0
 ]).
 
 -define(LS_SIZE, 1000).
@@ -84,23 +87,34 @@ create_and_sync_file_tree(UserSelector, ParentSelector, FileDesc) ->
     oct_background:entity_selector()
 ) ->
     object() | [object()].
-create_and_sync_file_tree(UserSelector, ParentSelector, FilesDesc, CreationProviderSelector) when is_list(FilesDesc) ->
+create_and_sync_file_tree(UserSelector, ParentSelector, FilesDesc, CreationProviderSelector) ->
+    create_and_sync_file_tree(UserSelector, ParentSelector, FilesDesc, CreationProviderSelector, parallel).
+
+
+-spec create_and_sync_file_tree(
+    oct_background:entity_selector(),
+    object_selector(),
+    object_spec() | [object_spec()],
+    oct_background:entity_selector(),
+    parallel | sequential
+) ->
+    object() | [object()].
+create_and_sync_file_tree(UserSelector, ParentSelector, FilesDesc, CreationProviderSelector, parallel) when is_list(FilesDesc) ->
     lists_utils:pmap(fun(FileDesc) ->
-        create_and_sync_file_tree(UserSelector, ParentSelector, FileDesc, CreationProviderSelector)
+        {Res, _} = create_and_sync_file_tree(UserSelector, ParentSelector, FileDesc, CreationProviderSelector, parallel, #{}),
+        Res
     end, FilesDesc);
 
-create_and_sync_file_tree(UserSelector, ParentSelector, FileDesc, CreationProviderSelector) ->
-    UserId = oct_background:get_user_id(UserSelector),
-    {ParentGuid, SpaceId} = resolve_file(ParentSelector),
-    SupportingProviders = oct_background:get_space_supporting_providers(SpaceId),
-    CreationProvider = oct_background:get_provider_id(CreationProviderSelector),
-    SyncProviders = SupportingProviders -- [CreationProvider],
+create_and_sync_file_tree(UserSelector, ParentSelector, FilesDesc, CreationProviderSelector, sequential) when is_list(FilesDesc) ->
+    {Res, _} = lists:foldl(fun(FileDesc, {Acc, TmpCustomIdsMap}) ->
+        {Object, NewIdsMap} = create_and_sync_file_tree(UserSelector, ParentSelector, FileDesc, CreationProviderSelector, sequential, TmpCustomIdsMap),
+        {[Object | Acc], NewIdsMap}
+    end, {[], #{}}, FilesDesc),
+    Res;
 
-    FileTree = create_file_tree(UserId, ParentGuid, CreationProvider, FileDesc),
-    await_sync(CreationProvider, SyncProviders, UserId, FileTree),
-    await_parent_links_sync(SyncProviders, UserId, ParentGuid, FileTree),
-
-    FileTree.
+create_and_sync_file_tree(UserSelector, ParentSelector, FilesDesc, CreationProviderSelector, Mode) ->
+    {Res, _} = create_and_sync_file_tree(UserSelector, ParentSelector, FilesDesc, CreationProviderSelector, Mode, #{}),
+    Res.
 
 
 -spec mv_and_sync_file(oct_background:entity_selector(), object_selector(), file_meta:path()) ->
@@ -158,23 +172,49 @@ get_object_attributes(Node, SessId, Guid) ->
 %%% Internal functions
 %%%===================================================================
 
+%% @private
+-spec create_and_sync_file_tree(
+    oct_background:entity_selector(),
+    object_selector(),
+    object_spec() | [object_spec()],
+    oct_background:entity_selector(),
+    parallel | sequential,
+    custom_ids_map()
+) ->
+    {object() | [object()], custom_ids_map()}.
+create_and_sync_file_tree(UserSelector, ParentSelector, FileDesc, CreationProviderSelector, Mode, CustomIdsMap) ->
+    UserId = oct_background:get_user_id(UserSelector),
+    {ParentGuid, SpaceId} = resolve_file(ParentSelector),
+    SupportingProviders = oct_background:get_space_supporting_providers(SpaceId),
+    CreationProvider = oct_background:get_provider_id(CreationProviderSelector),
+    SyncProviders = SupportingProviders -- [CreationProvider],
+    
+    {FileTree, FinalCustomIdsMaps} = create_file_tree(UserId, ParentGuid, CreationProvider, FileDesc, Mode, CustomIdsMap),
+    await_sync(CreationProvider, SyncProviders, UserId, FileTree),
+    await_parent_links_sync(SyncProviders, UserId, ParentGuid, FileTree),
+    
+    {FileTree, FinalCustomIdsMaps}.
+
 
 %% @private
 -spec create_file_tree(
     od_user:id(),
     file_id:file_guid(),
     oct_background:entity_selector(),
-    object_spec()
+    object_spec(),
+    parallel | sequential,
+    custom_ids_map()
 ) ->
-    object().
+    {object(), custom_ids_map()}.
 create_file_tree(UserId, ParentGuid, CreationProvider, #file_spec{
     name = NameOrUndefined,
     mode = FileMode,
     shares = ShareSpecs,
     dataset = DatasetSpec,
     content = Content,
-    metadata = MetadataSpec
-}) ->
+    metadata = MetadataSpec,
+    custom_identifier = CustomId
+}, _Mode, CustomIdsMap) ->
     FileName = utils:ensure_defined(NameOrUndefined, str_utils:rand_hex(20)),
     UserSessId = oct_background:get_user_session_id(UserId, CreationProvider),
     CreationNode = ?OCT_RAND_OP_NODE(CreationProvider),
@@ -187,7 +227,7 @@ create_file_tree(UserId, ParentGuid, CreationProvider, #file_spec{
         CreationProvider, UserId, FileGuid, DatasetSpec
     ),
 
-    #object{
+    {#object{
         guid = FileGuid,
         name = FileName,
         type = ?REGULAR_FILE_TYPE,
@@ -197,25 +237,32 @@ create_file_tree(UserId, ParentGuid, CreationProvider, #file_spec{
         content = Content,
         children = undefined,
         metadata = MetadataObj
-    };
+    }, insert_custom_identifier(CustomId, FileGuid, CustomIdsMap)};
 
 create_file_tree(UserId, ParentGuid, CreationProvider, #symlink_spec{
     name = NameOrUndefined,
     shares = ShareSpecs,
     symlink_value = SymlinkValue,
-    dataset = DatasetSpec
-}) ->
+    dataset = DatasetSpec,
+    custom_identifier = CustomId
+}, _Mode, CustomIdsMap) ->
     FileName = utils:ensure_defined(NameOrUndefined, str_utils:rand_hex(20)),
     UserSessId = oct_background:get_user_session_id(UserId, CreationProvider),
     CreationNode = lists_utils:random_element(oct_background:get_provider_nodes(CreationProvider)),
 
-    {ok, #file_attr{guid = SymlinkGuid}} = create_symlink(CreationNode, UserSessId, ParentGuid, FileName, SymlinkValue),
+    FinalSymlinkValue = case SymlinkValue of
+        {custom_id, TargetCustomId} ->
+            prepare_symlink_value(CreationNode, UserSessId, maps:get(TargetCustomId, CustomIdsMap));
+        _ ->
+            SymlinkValue
+    end,
+    {ok, #file_attr{guid = SymlinkGuid}} = create_symlink(CreationNode, UserSessId, ParentGuid, FileName, FinalSymlinkValue),
 
     DatasetObj = onenv_dataset_test_utils:set_up_dataset(
         CreationProvider, UserId, SymlinkGuid, DatasetSpec
     ),
 
-    #object{
+    {#object{
         guid = SymlinkGuid,
         name = FileName,
         type = ?SYMLINK_TYPE,
@@ -225,7 +272,7 @@ create_file_tree(UserId, ParentGuid, CreationProvider, #symlink_spec{
         dataset = DatasetObj,
         mode = ?DEFAULT_SYMLINK_PERMS,
         symlink_value = SymlinkValue
-    };
+    }, insert_custom_identifier(CustomId, SymlinkGuid, CustomIdsMap)};
 
 create_file_tree(UserId, ParentGuid, CreationProvider, #dir_spec{
     name = NameOrUndefined,
@@ -233,24 +280,34 @@ create_file_tree(UserId, ParentGuid, CreationProvider, #dir_spec{
     shares = ShareSpecs,
     dataset = DatasetSpec,
     children = ChildrenSpec,
-    metadata = MetadataSpec
-}) ->
+    metadata = MetadataSpec,
+    custom_identifier = CustomId
+}, Mode, CustomIdsMap) ->
     DirName = utils:ensure_defined(NameOrUndefined, str_utils:rand_hex(20)),
     UserSessId = oct_background:get_user_session_id(UserId, CreationProvider),
     CreationNode = ?OCT_RAND_OP_NODE(CreationProvider),
 
     {ok, DirGuid} = create_dir(CreationNode, UserSessId, ParentGuid, DirName, DirMode),
 
-    Children = lists_utils:pmap(fun(File) ->
-        create_file_tree(UserId, DirGuid, CreationProvider, File)
-    end, ChildrenSpec),
+    {Children, UpdatedCustomIdsMap} = case Mode of
+        parallel ->
+            {lists_utils:pmap(fun(File) ->
+                {Res, _} = create_file_tree(UserId, DirGuid, CreationProvider, File, Mode, CustomIdsMap),
+                Res
+            end, ChildrenSpec), CustomIdsMap};
+        sequential ->
+            lists:foldl(fun(File, {Acc, TmpCustomIdsMap}) ->
+                {Object, NewIdsMap} = create_file_tree(UserId, DirGuid, CreationProvider, File, Mode, TmpCustomIdsMap),
+                {[Object | Acc], NewIdsMap}
+            end, {[], CustomIdsMap}, ChildrenSpec)
+    end,
     MetadataObj = create_metadata(CreationNode, UserSessId, DirGuid, MetadataSpec),
     
     DatasetObj = onenv_dataset_test_utils:set_up_dataset(
         CreationProvider, UserId, DirGuid, DatasetSpec
     ),
     
-    #object{
+    {#object{
         guid = DirGuid,
         name = DirName,
         type = ?DIRECTORY_TYPE,
@@ -259,7 +316,28 @@ create_file_tree(UserId, ParentGuid, CreationProvider, #dir_spec{
         dataset = DatasetObj,
         children = Children,
         metadata = MetadataObj
-    }.
+    }, insert_custom_identifier(CustomId, DirGuid, UpdatedCustomIdsMap)}.
+
+
+
+%% @private
+-spec insert_custom_identifier(custom_identifier(), file_id:file_guid(), custom_ids_map()) -> 
+    custom_ids_map().
+insert_custom_identifier(undefined, _, CustomIdsMap) ->
+    CustomIdsMap;
+insert_custom_identifier(CustomId, Guid, CustomIdsMap) ->
+    CustomIdsMap#{CustomId => Guid}.
+
+
+%% @private
+-spec prepare_symlink_value(oct_background:node_selector(), session:id(), file_id:file_guid()) -> 
+    binary().
+prepare_symlink_value(Node, SessId, FileGuid) ->
+    SpaceId = file_id:guid_to_space_id(FileGuid),
+    {ok, CanonicalPath} = lfm_proxy:get_file_path(Node, SessId, FileGuid),
+    SpaceIdPrefix = ?SYMLINK_SPACE_ID_ABS_PATH_PREFIX(SpaceId),
+    [_Sep, _SpaceId | Rest] = filename:split(CanonicalPath),
+    filename:join([SpaceIdPrefix | Rest]).
 
 
 %% @private

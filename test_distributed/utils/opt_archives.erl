@@ -17,7 +17,9 @@
     archive_dataset/5, archive_dataset/7,
     get_info/3,
     update/4,
-    init_purge/3, init_purge/4
+    init_purge/3, init_purge/4,
+    init_recall/5, 
+    get_recall_details/3, get_recall_progress/3
 ]).
 
 -define(CALL(NodeSelector, Args),
@@ -110,3 +112,21 @@ init_purge(NodeSelector, SessionId, ArchiveId) ->
     ok | errors:error().
 init_purge(NodeSelector, SessionId, ArchiveId, CallbackUrl) ->
     ?CALL(NodeSelector, [SessionId, ArchiveId, CallbackUrl]).
+
+
+-spec init_recall(oct_background:node_selector(), session:id(), archive:id(), file_id:file_guid(), 
+    file_meta:name() | default) -> {ok, file_id:file_guid()} | errors:error().
+init_recall(NodeSelector, SessionId, ArchiveId, TargetParentGuid, RootFileName) ->
+    ?CALL(NodeSelector, [SessionId, ArchiveId, TargetParentGuid, RootFileName]).
+
+
+-spec get_recall_details(oct_background:node_selector(), session:id(), file_id:file_guid()) ->
+    {ok, archive_recall_api:record()} | {error, term()}.
+get_recall_details(NodeSelector, SessionId, FileGuid) ->
+    ?CALL(NodeSelector, [SessionId, FileGuid]).
+
+
+-spec get_recall_progress(oct_background:node_selector(), session:id(), file_id:file_guid()) ->
+    {archive_recall_api:recall_progress_map()} | {error, term()}.
+get_recall_progress(NodeSelector, SessionId, FileGuid) ->
+    ?CALL(NodeSelector, [SessionId, FileGuid]).

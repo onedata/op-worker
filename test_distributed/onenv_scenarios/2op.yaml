@@ -84,7 +84,7 @@ spaces:
     supports:
       - provider: "oneprovider-1"
         storage_name: "posix"
-        size: '1000000000'
+        size: '10000000000'
       - provider: "oneprovider-2"
         storage_name: "posix"
-        size: '1000000000'
+        size: '10000000000'
