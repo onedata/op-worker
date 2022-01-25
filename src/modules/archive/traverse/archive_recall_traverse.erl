@@ -80,7 +80,7 @@ stop_pool() ->
     {ok, file_id:file_guid()} | {error, term()}.
 start(ArchiveDoc, UserCtx, TargetParentGuid, TargetRootName) ->
     {ok, DataFileGuid} = archive:get_data_dir_guid(ArchiveDoc),
-    % archive data dir contains only one file which is a copy of dataset file
+    % archive data dir contains only one file which is a copy of a dataset file
     {[StartFileCtx], _, _} = dir_req:get_children_ctxs(UserCtx, file_ctx:new_by_guid(DataFileGuid), 
         #{size => 1, offset => 0}),
     {FinalName, StartFileCtx1} = case TargetRootName of
@@ -91,11 +91,8 @@ start(ArchiveDoc, UserCtx, TargetParentGuid, TargetRootName) ->
     end,
     {ok, SpaceId} = archive:get_space_id(ArchiveDoc),
     {IsDir, StartFileCtx2} = file_ctx:is_dir(StartFileCtx1),
-    case archive_recall_cache:get(SpaceId, file_id:guid_to_uuid(TargetParentGuid)) of
-        {ok, {ongoing, _}} ->
-            %% @TODO VFS-8840 - create more descriptive error
-            ?ERROR_POSIX(?EBUSY);
-        _ ->
+    case ensure_recall_allowed(SpaceId, UserCtx, TargetParentGuid) of
+        ok ->
             case create_root_file(IsDir, user_ctx:get_session_id(UserCtx), TargetParentGuid, FinalName) of
                 {ok, RootFileGuid} ->
                     {RootPath, _} = file_ctx:get_canonical_path(file_ctx:new_by_guid(RootFileGuid)),
@@ -113,7 +110,9 @@ start(ArchiveDoc, UserCtx, TargetParentGuid, TargetRootName) ->
                     ?ERROR_ALREADY_EXISTS;
                 {error, Reason} ->
                     ?ERROR_POSIX(Reason)
-            end
+            end;
+        Error ->
+            Error
     end.
 
 %%%===================================================================
@@ -183,6 +182,38 @@ do_slave_job(#tree_traverse_slave{
 %%%===================================================================
 
 %% @private
+-spec ensure_recall_allowed(od_space:id(), user_ctx:ctx(), file_id:file_guid()) -> 
+    ok | {error, term()}.
+ensure_recall_allowed(SpaceId, UserCtx, TargetParentGuid) ->
+    SessId = user_ctx:get_session_id(UserCtx),
+    case lfm:stat(SessId, ?FILE_REF(TargetParentGuid)) of
+        {ok, #file_attr{type = ?SYMLINK_TYPE}} ->
+            case lfm:resolve_symlink(SessId, ?FILE_REF(TargetParentGuid)) of
+                {ok, TargetGuid} ->
+                    check_ongoing_recalls(SpaceId, TargetGuid);
+                Error ->
+                    Error
+            end;
+        {ok, _} ->
+            check_ongoing_recalls(SpaceId, TargetParentGuid);
+        {error, _} = Error ->
+            Error
+    end.
+
+
+%% @private
+-spec check_ongoing_recalls(od_space:id(), file_id:file_guid()) -> ok | {error, term()}.
+check_ongoing_recalls(SpaceId, Guid) ->
+    case archive_recall_cache:get(SpaceId, file_id:guid_to_uuid(Guid)) of
+        {ok, {ongoing, _}} ->
+            %% @TODO VFS-8840 - create more descriptive error
+            ?ERROR_POSIX(?EBUSY);
+        _ ->
+            ok
+    end.
+
+
+%% @private
 -spec setup_recall_traverse(od_space:id(), archive:doc(), file_id:file_guid(),
     tree_traverse:traverse_info(), file_ctx:ctx(), user_ctx:ctx()) -> ok | {error, term()}.
 setup_recall_traverse(SpaceId, ArchiveDoc, RootFileGuid, TraverseInfo, StartFileCtx, UserCtx) ->
@@ -227,6 +258,8 @@ do_dir_master_job(#tree_traverse{
 
 
 %% @private
+-spec do_dir_master_job_unsafe(tree_traverse:master_job(), traverse:master_job_extended_args()) ->
+    {ok, traverse:master_job_map()}.
 do_dir_master_job_unsafe(#tree_traverse{
     user_id = UserId, 
     file_ctx = SourceDirCtx,
@@ -251,6 +284,7 @@ do_dir_master_job_unsafe(#tree_traverse{
 
 
 %% @private
+-spec do_slave_job_unsafe(tree_traverse:slave_job(), id()) -> ok.
 do_slave_job_unsafe(#tree_traverse_slave{
     file_ctx = FileCtx,
     user_id = UserId,
@@ -281,6 +315,7 @@ do_slave_job_unsafe(#tree_traverse_slave{
 
 
 %% @private
+-spec execute_unsafe_job(atom, [term()], file_ctx:ctx(), id(), archive:doc()) -> ok | any().
 execute_unsafe_job(JobFunctionName, Options, FileCtx, TaskId, ArchiveDoc) ->
     try
         % call using ?MODULE for mocking in tests

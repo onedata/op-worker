@@ -84,6 +84,7 @@
     recall_details_test/1,
     recall_details_nested_test/1,
     recall_to_recalling_dir_test/1,
+    recall_to_recalling_dir_by_symlink_test/1,
     recall_dir_error_test/1,
     recall_file_error_test/1
 ]).
@@ -140,17 +141,18 @@ groups() -> [
         recall_custom_name_test
     ]},
     {sequential_tests, [
-        recall_details_test,
-        recall_details_nested_test,
+%%        recall_details_test,
+%%        recall_details_nested_test,
         recall_to_recalling_dir_test,
-        recall_dir_error_test,
-        recall_file_error_test
+        recall_to_recalling_dir_by_symlink_test
+%%        recall_dir_error_test,
+%%        recall_file_error_test
     ]}
 ].
 
 
 all() -> [
-    {group, parallel_tests},
+%%    {group, parallel_tests},
     {group, sequential_tests}
 ].
 
@@ -361,39 +363,21 @@ recall_custom_name_test(_Config) ->
 
 
 recall_to_recalling_dir_test(_Config) ->
-    {ArchiveId, _TargetParentGuid, RecallRootFileGuid} = recall_test_setup(#dir_spec{
-        dataset = #dataset_spec{archives = [#archive_spec{config = #archive_config{layout = ?ARCHIVE_PLAIN_LAYOUT}}]},
-        children = [
-            #file_spec{metadata = #metadata_spec{json = ?RAND_JSON_METADATA()}}
-        ]
-    }),
-    
-    % wait for archive recall traverse to finish (mocked in init_per_testcase)
-    Pid = receive
-        {recall_traverse_finished, P} -> P
-    after timer:seconds(?ATTEMPTS) ->
-            throw({error, recall_traverse_did_not_finish})
-    end,
-    SessId = oct_background:get_user_session_id(?USER1, krakow),
-    
-    ?assertEqual(?ERROR_POSIX(?EBUSY), opt_archives:init_recall(krakow, SessId, ArchiveId, RecallRootFileGuid, default)),
+    recall_to_recalling_dir_test_base(standard).
 
-    % run archive_recall_traverse:task_finished (mocked in init_per_testcase)
-    Pid ! continue,
-    
-    ?assertMatch({ok, #archive_recall_details{finish_timestamp = T}} when is_integer(T),
-        opt_archives:get_recall_details(krakow, SessId, RecallRootFileGuid), ?ATTEMPTS),
-    
-    ?assertMatch({ok, _}, opt_archives:init_recall(krakow, SessId, ArchiveId, RecallRootFileGuid, default)).
+
+recall_to_recalling_dir_by_symlink_test(_Config) ->
+    recall_to_recalling_dir_test_base(symlink).
 
 
 recall_dir_error_test(_Config) ->
     Spec = #dir_spec{ dataset = #dataset_spec{archives = 1}},
-    recall_error_test(Spec, do_dir_master_job_unsafe).
+    recall_error_test_base(Spec, do_dir_master_job_unsafe).
+
 
 recall_file_error_test(_Config) ->
     Spec = #file_spec{ dataset = #dataset_spec{archives = 1}},
-    recall_error_test(Spec, do_slave_job_unsafe).
+    recall_error_test_base(Spec, do_slave_job_unsafe).
 
 
 %===================================================================
@@ -625,7 +609,44 @@ recall_details_test_base(Spec, TotalFiles, TotalBytes) ->
     ok.
 
 
-recall_error_test(Spec, FunName) ->
+recall_to_recalling_dir_test_base(Method) ->
+    {ArchiveId, TargetParentGuid, RecallRootFileGuid} = recall_test_setup(#dir_spec{
+        dataset = #dataset_spec{archives = [#archive_spec{config = #archive_config{layout = ?ARCHIVE_PLAIN_LAYOUT}}]},
+        children = [
+            #file_spec{metadata = #metadata_spec{json = ?RAND_JSON_METADATA()}}
+        ]
+    }),
+    
+    % wait for archive recall traverse to finish (mocked in init_per_testcase)
+    Pid = receive
+        {recall_traverse_finished, P} -> P
+    after timer:seconds(?ATTEMPTS) ->
+            throw({error, recall_traverse_did_not_finish})
+    end,
+    SessId = oct_background:get_user_session_id(?USER1, krakow),
+    
+    NewTargetParentGuid = case Method of
+        standard ->
+            RecallRootFileGuid;
+        symlink ->
+            Node = oct_background:get_random_provider_node(krakow),
+            SymlinkValue = onenv_file_test_utils:prepare_symlink_value(Node, SessId, RecallRootFileGuid),
+            {ok, #file_attr{guid = G}} = lfm_proxy:make_symlink(Node, SessId, #file_ref{guid = TargetParentGuid}, ?RAND_NAME(), SymlinkValue),
+            G
+    end,
+    
+    ?assertEqual(?ERROR_POSIX(?EBUSY), opt_archives:init_recall(krakow, SessId, ArchiveId, NewTargetParentGuid, default)),
+    
+    % run archive_recall_traverse:task_finished (mocked in init_per_testcase)
+    Pid ! continue,
+    
+    ?assertMatch({ok, #archive_recall_details{finish_timestamp = T}} when is_integer(T),
+        opt_archives:get_recall_details(krakow, SessId, RecallRootFileGuid), ?ATTEMPTS),
+    
+    ?assertMatch({ok, _}, opt_archives:init_recall(krakow, SessId, ArchiveId, NewTargetParentGuid, default)).
+
+
+recall_error_test_base(Spec, FunName) ->
     SessId = fun(P) -> oct_background:get_user_session_id(?USER1, P) end,
     Errors = [
         {?ERROR_NOT_FOUND, errors:to_json(?ERROR_NOT_FOUND)},
@@ -687,7 +708,8 @@ end_per_group(_Group, Config) ->
 init_per_testcase(Case, Config) when 
     Case =:= recall_details_test;
     Case =:= recall_details_nested_test;
-    Case =:= recall_to_recalling_dir_test 
+    Case =:= recall_to_recalling_dir_test;
+    Case =:= recall_to_recalling_dir_by_symlink_test
 ->
     Nodes = oct_background:get_all_providers_nodes(),
     test_utils:mock_new(Nodes, archive_recall_traverse),
@@ -706,7 +728,8 @@ init_per_testcase(_Case, Config) ->
 end_per_testcase(Case, Config) when
     Case =:= recall_details_test;
     Case =:= recall_details_nested_test;
-    Case =:= recall_to_recalling_dir_test 
+    Case =:= recall_to_recalling_dir_test;
+    Case =:= recall_to_recalling_dir_by_symlink_test
 ->
     time_test_utils:unfreeze_time(Config),
     test_utils:mock_unload(oct_background:get_all_providers_nodes()),

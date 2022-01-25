@@ -26,7 +26,7 @@
 -export([
     resolve_file/1,
     create_and_sync_file_tree/3, create_and_sync_file_tree/4, create_and_sync_file_tree/5,
-    mv_and_sync_file/3, rm_and_sync_file/2, await_file_metadata_sync/3
+    mv_and_sync_file/3, rm_and_sync_file/2, await_file_metadata_sync/3, prepare_symlink_value/3
 ]).
 -export([get_object_attributes/3]).
 -type share_spec() :: #share_spec{}.
@@ -166,6 +166,16 @@ get_object_attributes(Node, SessId, Guid) ->
         {error, _} = Error ->
             Error
     end.
+
+
+-spec prepare_symlink_value(node(), session:id(), file_id:file_guid()) ->
+    binary().
+prepare_symlink_value(Node, SessId, FileGuid) ->
+    SpaceId = file_id:guid_to_space_id(FileGuid),
+    {ok, CanonicalPath} = lfm_proxy:get_file_path(Node, SessId, FileGuid),
+    SpaceIdPrefix = ?SYMLINK_SPACE_ID_ABS_PATH_PREFIX(SpaceId),
+    [_Sep, _SpaceId | Rest] = filename:split(CanonicalPath),
+    filename:join([SpaceIdPrefix | Rest]).
 
 
 %%%===================================================================
@@ -327,17 +337,6 @@ insert_custom_identifier(undefined, _, CustomIdsMap) ->
     CustomIdsMap;
 insert_custom_identifier(CustomId, Guid, CustomIdsMap) ->
     CustomIdsMap#{CustomId => Guid}.
-
-
-%% @private
--spec prepare_symlink_value(oct_background:node_selector(), session:id(), file_id:file_guid()) -> 
-    binary().
-prepare_symlink_value(Node, SessId, FileGuid) ->
-    SpaceId = file_id:guid_to_space_id(FileGuid),
-    {ok, CanonicalPath} = lfm_proxy:get_file_path(Node, SessId, FileGuid),
-    SpaceIdPrefix = ?SYMLINK_SPACE_ID_ABS_PATH_PREFIX(SpaceId),
-    [_Sep, _SpaceId | Rest] = filename:split(CanonicalPath),
-    filename:join([SpaceIdPrefix | Rest]).
 
 
 %% @private
