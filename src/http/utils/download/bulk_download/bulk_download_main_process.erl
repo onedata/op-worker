@@ -115,6 +115,7 @@ is_offset_allowed(MainPid, Offset) ->
 main(BulkDownloadId, FileAttrsList, SessionId, InitialConn, FollowSymlinks) ->
     bulk_download_task:save_main_pid(BulkDownloadId, self()),
     TarStream = tar_utils:open_archive_stream(#{gzip => false}),
+    %% @TODO VFS-8882 - use none/external in API
     FollowSymlinksPolicy = case FollowSymlinks of
         true -> external;
         false -> none

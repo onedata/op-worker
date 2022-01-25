@@ -90,7 +90,7 @@ routes() -> [
         }
     }},
     %% Recall archive
-    {<<"/archives/:aid/recall">>, rest_handler, #rest_req{
+    {<<"/archives/:aid/init_recall">>, rest_handler, #rest_req{
         method = 'POST',
         parse_body = as_json_params,
         consumes = [<<"application/json">>],
@@ -98,6 +98,28 @@ routes() -> [
             type = op_archive, 
             id = ?BINDING(aid), 
             aspect = recall, 
+            scope = private
+        }
+    }},
+    %% Get file hard links
+    {<<"/data/:id/recall/details">>, rest_handler, #rest_req{
+        method = 'GET',
+        produces = [<<"application/json">>],
+        b_gri = #b_gri{
+            type = op_file, 
+            id = ?OBJECTID_BINDING(id), 
+            aspect = archive_recall_details, 
+            scope = private
+        }
+    }},
+    %% Get file hard links
+    {<<"/data/:id/recall/progress">>, rest_handler, #rest_req{
+        method = 'GET',
+        produces = [<<"application/json">>],
+        b_gri = #b_gri{
+            type = op_file, 
+            id = ?OBJECTID_BINDING(id), 
+            aspect = archive_recall_progress, 
             scope = private
         }
     }}

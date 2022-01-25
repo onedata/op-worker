@@ -82,7 +82,7 @@ data_spec(#op_req{operation = create, gri = #gri{aspect = purge}}) -> #{
 data_spec(#op_req{operation = create, gri = #gri{aspect = recall}}) -> #{
     required => #{
         <<"targetParentId">> => {binary,
-            fun(ObjectId) -> {true, middleware_utils:decode_object_id(ObjectId, <<"fileId">>)} end}
+            fun(ObjectId) -> {true, middleware_utils:decode_object_id(ObjectId, <<"targetParentId">>)} end}
     },
     optional => #{
         <<"targetRootName">> => {binary, non_empty}

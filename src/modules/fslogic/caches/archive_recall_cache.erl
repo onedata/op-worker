@@ -146,10 +146,10 @@ calculate_archive_recalls([_, {ongoing, _} = ParentValue, CalculationInfo]) ->
     {ok, ParentValue, CalculationInfo};
 calculate_archive_recalls([#document{} = FileMetaDoc, ParentValue, CalculationInfo]) ->
     #document{key = FileUuid} = FileMetaDoc,
-    case archive_recall:get_details(FileUuid) of
-        {ok, #archive_recall{finish_timestamp = undefined}} -> 
+    case archive_recall_api:get_details(FileUuid) of
+        {ok, #archive_recall_details{finish_timestamp = undefined}} -> 
             {ok, {ongoing, FileUuid}, CalculationInfo};
-        {ok, #archive_recall{}} -> 
+        {ok, #archive_recall_details{}} -> 
             {ok, {finished, FileUuid}, CalculationInfo};
         {error, not_found} -> 
             {ok, ParentValue, CalculationInfo};

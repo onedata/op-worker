@@ -41,8 +41,6 @@
 -define(DEFAULT_CREATE_NESTED_ARCHIVES, false).
 -define(DEFAULT_ARCHIVE_FOLLOW_SYMLINKS, true).
 
--define(MAX_STORED_ARCHIVE_RECALLS, 50).
-
 -record(archive_config, {
     incremental = ?DEFAULT_INCREMENTAL :: archive_config:incremental(),
     % This flag determines whether dissemination information package (DIP) is created alongside with

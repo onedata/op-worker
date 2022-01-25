@@ -211,8 +211,7 @@ list_archives(DatasetId, ListingOpts, ListingMode) ->
 -spec init_archive_purge(archive:id(), archive:callback()) -> ok | error().
 init_archive_purge(ArchiveId, CallbackUrl) ->
     case archive:mark_purging(ArchiveId, CallbackUrl) of
-        {ok, #document{value = #archive{recalls = Recalls}} = ArchiveDoc} ->
-            lists:foreach(fun archive_recall_traverse:cancel/1, Recalls),
+        {ok, ArchiveDoc} ->
             {ok, DatasetId} = archive:get_dataset_id(ArchiveDoc),
             % TODO VFS-7718 removal of archive doc and callback should be executed when deleting from trash is finished
             % (now it's done before archive files are deleted from storage)

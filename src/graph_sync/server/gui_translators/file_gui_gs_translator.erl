@@ -309,8 +309,8 @@ translate_file_details(#file_details{
 
 
 %% @private
--spec translate_archive_recall_details(archive_recall:record()) -> map().
-translate_archive_recall_details(#archive_recall{
+-spec translate_archive_recall_details(archive_recall_api:record()) -> map().
+translate_archive_recall_details(#archive_recall_details{
     source_archive = ArchiveId,
     source_dataset = DatasetId,
     start_timestamp = StartTimestamp,

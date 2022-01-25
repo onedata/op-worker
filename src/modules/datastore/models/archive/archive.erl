@@ -36,12 +36,11 @@
     mark_file_archived/2, mark_file_failed/1, mark_creation_finished/2,
     mark_preserved/1, mark_verification_failed/1,
     set_root_dir_guid/2, set_data_dir_guid/2, set_base_archive_id/2,
-    set_related_dip/2, set_related_aip/2, 
-    report_recall_scheduled/2, report_recall_removed/2
+    set_related_dip/2, set_related_aip/2
 ]).
 
 %% datastore_model callbacks
--export([get_ctx/0, get_record_version/0, get_record_struct/1, upgrade_record/2]).
+-export([get_ctx/0, get_record_version/0, get_record_struct/1]).
 
 -compile([{no_auto_import, [get/1]}]).
 
@@ -495,20 +494,6 @@ set_related_aip(ArchiveDocOrId, AipArchiveId) ->
     update(ArchiveDocOrId, fun(Archive) ->
         {ok, Archive#archive{related_aip = AipArchiveId}}
     end).
-
-
--spec report_recall_scheduled(id() | doc(), archive_recall:id()) -> ok | error().
-report_recall_scheduled(ArchiveDocOrId, RecallId) ->
-    ?extract_ok(update(ArchiveDocOrId, fun(#archive{recalls = PrevRecalls} = Archive) ->
-        {ok, Archive#archive{recalls = lists:sublist([RecallId | PrevRecalls], ?MAX_STORED_ARCHIVE_RECALLS)}}
-    end)).
-
-
--spec report_recall_removed(id() | doc(), archive_recall:id()) -> ok | error().
-report_recall_removed(ArchiveDocOrId, RecallId) ->
-    ?extract_ok(update(ArchiveDocOrId, fun(#archive{recalls = PrevRecalls} = Archive) ->
-        {ok, Archive#archive{recalls = lists:delete(RecallId, PrevRecalls)}}
-    end)).
         
 
 %%%===================================================================
@@ -542,7 +527,7 @@ get_ctx() ->
 
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    2.
+    1.
 
 -spec get_record_struct(datastore_model:record_version()) -> datastore_model:record_struct().
 get_record_struct(1) ->
@@ -562,64 +547,4 @@ get_record_struct(1) ->
         {base_archive_id, string},
         {related_dip, string},
         {related_aip, string}
-    ]};
-get_record_struct(2) ->
-    {record, [
-        {dataset_id, string},
-        {creation_time, integer},
-        {creator, string},
-        {state, atom},
-        {config, {custom, string, {persistent_record, encode, decode, archive_config}}},
-        {preserved_callback, string},
-        {purged_callback, string},
-        {description, string},
-        {root_dir_guid, string},
-        {data_dir_guid, string},
-        {stats, {custom, string, {persistent_record, encode, decode, archive_stats}}},
-        {parent, string},
-        {base_archive_id, string},
-        {related_dip, string},
-        {related_aip, string},
-        {recalls, [string]} % new field
     ]}.
-
-
--spec upgrade_record(datastore_model:record_version(), datastore_model:record()) ->
-    {datastore_model:record_version(), datastore_model:record()}.
-upgrade_record(1, Archive) ->
-    {archive,
-        DatasetId,
-        CreationTime,
-        Creator,
-        State,
-        Config,
-        PreservedCallback,
-        PurgedCallback,
-        Description,
-        RootDirGuid, 
-        DataDirGuid,
-        Stats,
-        Parent,
-        BaseArchiveId,
-        RelatedDip, 
-        RelatedAip
-    } = Archive,
-    
-    {2, #archive{
-        dataset_id = DatasetId,
-        creation_time = CreationTime,
-        creator = Creator,
-        state = State,
-        config = Config,
-        preserved_callback = PreservedCallback,
-        purged_callback = PurgedCallback,
-        description = Description,
-        root_dir_guid = RootDirGuid,
-        data_dir_guid = DataDirGuid,
-        stats = Stats,
-        parent = Parent,
-        base_archive_id = BaseArchiveId,
-        related_dip = RelatedDip,
-        related_aip = RelatedAip,
-        recalls = [] % new field
-    }}.

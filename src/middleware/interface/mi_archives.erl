@@ -114,18 +114,18 @@ init_recall(SessionId, ArchiveId, TargetParentGuid, TargetFilename) ->
 
 
 -spec get_recall_details(session:id(), file_id:file_guid()) -> 
-    archive_recall:record() | no_return().
+    archive_recall_api:record() | no_return().
 get_recall_details(SessionId, FileGuid) ->
     middleware_worker:check_exec(SessionId, FileGuid, #get_recall_details{
-        id = FileGuid
+        id = file_id:guid_to_uuid(FileGuid)
     }).
 
 
 -spec get_recall_progress(session:id(), file_id:file_guid()) ->
-    archive_recall:record() | no_return().
+    archive_recall_api:recall_progress_map() | no_return().
 get_recall_progress(SessionId, FileGuid) ->
     middleware_worker:check_exec(SessionId, FileGuid, #get_recall_progress{
-        id = FileGuid
+        id = file_id:guid_to_uuid(FileGuid)
     }).
     
 

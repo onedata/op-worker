@@ -194,7 +194,7 @@ archive_dir(ArchiveDoc, SourceLogicalPath, ArchivedFileCtx, UserCtx) ->
 create_data_dir(ArchiveDirCtx, UserCtx) ->
     SessionId = user_ctx:get_session_id(UserCtx),
     ArchiveDirGuid = file_ctx:get_logical_guid_const(ArchiveDirCtx),
-    {ok, DataDirGuid} = lfm:mkdir(SessionId, ArchiveDirGuid, ?DATA_DIR_NAME, ?DEFAULT_DIR_MODE),
+    {ok, DataDirGuid} = lfm:mkdir(SessionId, ArchiveDirGuid, ?BAGIT_DATA_DIR_NAME, ?DEFAULT_DIR_MODE),
     file_ctx:new_by_guid(DataDirGuid).
 
 
@@ -254,7 +254,7 @@ calculate_relative_path(ArchiveDoc, SourceFilePath, UserCtx) ->
     {DatasetRootPath, _} = file_ctx:get_logical_path(DatasetRootFileCtx, UserCtx),
     {_, DatasetRootParentPath} = filepath_utils:basename_and_parent_dir(DatasetRootPath),
 
-    filename:join([?DATA_DIR_NAME, filepath_utils:relative(DatasetRootParentPath, SourceFilePath)]).
+    filename:join([?BAGIT_DATA_DIR_NAME, filepath_utils:relative(DatasetRootParentPath, SourceFilePath)]).
 
 
 %% @private

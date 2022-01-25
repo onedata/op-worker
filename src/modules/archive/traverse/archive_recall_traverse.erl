@@ -29,13 +29,12 @@
 
 
 %% API
--export([init_pool/0, stop_pool/0, start/4, cancel/1]).
+-export([init_pool/0, stop_pool/0, start/4]).
 
 %% Traverse behaviour callbacks
 -export([
     task_started/2,
     task_finished/2,
-    task_canceled/2,
     get_sync_info/1,
     get_job/1,
     update_job_progress/5,
@@ -43,12 +42,18 @@
     do_slave_job/2
 ]).
 
+% exported for mocking in tests
+-export([
+    do_dir_master_job_unsafe/2,
+    do_slave_job_unsafe/2
+]).
+
 -define(POOL_NAME, atom_to_binary(?MODULE, utf8)).
 -define(COPY_OPTIONS(TaskId), #{
     recursive => false, 
     overwrite => true,
     on_write_callback => fun(BytesCopied) -> 
-        archive_recall:report_bytes_copied(TaskId, BytesCopied) 
+        archive_recall_api:report_bytes_copied(TaskId, BytesCopied) 
     end
 }). 
 
@@ -84,10 +89,9 @@ start(ArchiveDoc, UserCtx, TargetParentGuid, TargetRootName) ->
         _ ->
             {TargetRootName, StartFileCtx}
     end,
-    {StartFileDoc, StartFileCtx2} = file_ctx:get_file_doc(StartFileCtx1),
     {ok, SpaceId} = archive:get_space_id(ArchiveDoc),
-    {IsDir, StartFileCtx3} = file_ctx:is_dir(StartFileCtx2),
-    case archive_recall_cache:get(SpaceId, StartFileDoc) of
+    {IsDir, StartFileCtx2} = file_ctx:is_dir(StartFileCtx1),
+    case archive_recall_cache:get(SpaceId, file_id:guid_to_uuid(TargetParentGuid)) of
         {ok, {ongoing, _}} ->
             %% @TODO VFS-8840 - create more descriptive error
             ?ERROR_POSIX(?EBUSY);
@@ -103,20 +107,14 @@ start(ArchiveDoc, UserCtx, TargetParentGuid, TargetRootName) ->
                         root_file_name => FinalName
                     },
                     setup_recall_traverse(
-                        SpaceId, ArchiveDoc, RootFileGuid, TraverseInfo, StartFileCtx3, UserCtx),
+                        SpaceId, ArchiveDoc, RootFileGuid, TraverseInfo, StartFileCtx2, UserCtx),
                     {ok, RootFileGuid};
                 {error, eexist} ->
                     ?ERROR_ALREADY_EXISTS;
                 {error, Reason} ->
                     ?ERROR_POSIX(Reason)
             end
-    
     end.
-
-
--spec cancel(id()) -> ok | {error, term()}.
-cancel(TaskId) ->
-    tree_traverse:cancel(?POOL_NAME, TaskId).
 
 %%%===================================================================
 %%% Traverse behaviour callbacks
@@ -124,7 +122,7 @@ cancel(TaskId) ->
 
 -spec task_started(id(), tree_traverse:pool()) -> ok.
 task_started(TaskId, _Pool) ->
-    archive_recall:report_started(TaskId),
+    archive_recall_api:report_started(TaskId),
     
     ?debug("Archive recall traverse ~p started", [TaskId]).
 
@@ -135,16 +133,9 @@ task_finished(TaskId, Pool) ->
     {ok, TaskDoc} = traverse_task:get(Pool, TaskId),
     {ok, AdditionalData} = traverse_task:get_additional_data(TaskDoc),
     SpaceId = maps:get(<<"spaceId">>, AdditionalData),
-    archive_recall:report_finished(TaskId, SpaceId),
+    archive_recall_api:report_finished(TaskId, SpaceId),
     
     ?debug("Archive recall traverse ~p finished", [TaskId]).
-
-
--spec task_canceled(id(), tree_traverse:pool()) -> ok.
-task_canceled(TaskId, _Pool) ->
-    tree_traverse_session:close_for_task(TaskId),
-    
-    ?debug("Archive recall traverse ~p cancelled", [TaskId]).
 
 
 -spec get_sync_info(tree_traverse:master_job()) -> {ok, traverse:sync_info()}.
@@ -180,41 +171,12 @@ do_master_job(#tree_traverse{file_ctx = FileCtx} = Job, MasterJobArgs) ->
 -spec do_slave_job(tree_traverse:slave_job(), id()) -> ok.
 do_slave_job(#tree_traverse_slave{
     file_ctx = FileCtx,
-    user_id = UserId,
     traverse_info = #{
-        current_parent := TargetParentGuid, 
-        archive_doc := ArchiveDoc,
-        root_path_tokens := RootPathTokens
-    } = TraverseInfo,
-    relative_path = ResolvedFilePath
-}, TaskId) ->
-    try
-        {ok, UserCtx} = tree_traverse_session:acquire_for_task(UserId, ?POOL_NAME, TaskId),
-        SessionId = user_ctx:get_session_id(UserCtx),
-        
-        FileGuid = file_ctx:get_logical_guid_const(FileCtx),
-        FileName = case maps:get(root_file_name, TraverseInfo, undefined) of
-            undefined -> filename:basename(ResolvedFilePath);
-            Name -> Name
-        end,
-        case file_ctx:is_symlink_const(FileCtx) of
-            true -> 
-                recall_symlink(
-                    FileCtx, TargetParentGuid, RootPathTokens, FileName, ArchiveDoc, UserCtx);
-            false ->
-                {ok, _, _} = file_copy:copy(SessionId, FileGuid, TargetParentGuid, FileName, 
-                    ?COPY_OPTIONS(TaskId))
-        end,
-        ok = archive_recall:report_file_finished(TaskId)
-    catch
-        _Class:{badmatch, {error, Reason}}:Stacktrace ->
-            report_error(TaskId, file_ctx:get_logical_guid_const(FileCtx), ArchiveDoc, 
-                ?ERROR_POSIX(Reason), Stacktrace);
-        _Class:Reason:Stacktrace ->
-            report_error(TaskId, file_ctx:get_logical_guid_const(FileCtx), ArchiveDoc, 
-                Reason, Stacktrace)
-    end.
-
+        archive_doc := ArchiveDoc
+    }} = Job, TaskId
+) ->
+    execute_unsafe_job(do_slave_job_unsafe, [Job, TaskId], 
+        FileCtx, TaskId, ArchiveDoc).
 
 %%%===================================================================
 %%% Internal functions
@@ -227,7 +189,6 @@ setup_recall_traverse(SpaceId, ArchiveDoc, RootFileGuid, TraverseInfo, StartFile
     RecallId = file_id:guid_to_uuid(RootFileGuid),
     case tree_traverse_session:setup_for_task(UserCtx, RecallId) of
         ok ->
-            {ok, ArchiveId} = archive:get_id(ArchiveDoc),
             AdditionalData = #{
                 <<"spaceId">> => SpaceId
             },
@@ -241,9 +202,8 @@ setup_recall_traverse(SpaceId, ArchiveDoc, RootFileGuid, TraverseInfo, StartFile
                 traverse_info => TraverseInfo,
                 additional_data => AdditionalData
             },
-            ok = archive_recall:create(RecallId, ArchiveDoc),
-            {ok, RecallId} = tree_traverse:run(?POOL_NAME, StartFileCtx, UserId, Options),
-            ok = archive:report_recall_scheduled(ArchiveId, RecallId);
+            ok = archive_recall_api:create(RecallId, ArchiveDoc),
+            {ok, RecallId} = tree_traverse:run(?POOL_NAME, StartFileCtx, UserId, Options);
         {error, _} = Error ->
             Error
     end.
@@ -253,34 +213,84 @@ setup_recall_traverse(SpaceId, ArchiveDoc, RootFileGuid, TraverseInfo, StartFile
 -spec do_dir_master_job(tree_traverse:master_job(), traverse:master_job_extended_args()) -> 
     {ok, traverse:master_job_map()}.
 do_dir_master_job(#tree_traverse{
+    file_ctx = SourceDirCtx,
+    traverse_info = #{
+        archive_doc := ArchiveDoc
+    }} = Job, #{task_id := TaskId} = MasterJobArgs
+) ->
+    case execute_unsafe_job(do_dir_master_job_unsafe, [Job, MasterJobArgs], 
+        SourceDirCtx, TaskId, ArchiveDoc) 
+    of
+        ok -> {ok, #{}}; % unexpected error occurred
+        Res -> Res
+    end.
+
+
+%% @private
+do_dir_master_job_unsafe(#tree_traverse{
     user_id = UserId, 
     file_ctx = SourceDirCtx,
     traverse_info = #{
-        archive_doc := ArchiveDoc,
         current_parent := TargetParentGuid
     } = TraverseInfo,
-    relative_path = ResolvedFilePath
-} = Job, #{task_id := TaskId} = MasterJobArgs) ->
+    relative_path = ResolvedFilePath} = Job, #{task_id := TaskId} = MasterJobArgs
+) ->
+    {ok, UserCtx} = tree_traverse_session:acquire_for_task(UserId, ?POOL_NAME, TaskId),
+    DirName = case maps:get(root_file_name, TraverseInfo, undefined) of
+        undefined -> filename:basename(ResolvedFilePath);
+        Name -> Name
+    end,
+    SessionId = user_ctx:get_session_id(UserCtx),
+    SourceDirGuid = file_ctx:get_logical_guid_const(SourceDirCtx),
+    {ok, CopyGuid, _} = file_copy:copy(SessionId, SourceDirGuid, TargetParentGuid, DirName,
+        ?COPY_OPTIONS(TaskId)),
+    NewTraverseInfo = maps:remove(root_file_name, TraverseInfo#{current_parent => CopyGuid}),
+    UpdatedJob = Job#tree_traverse{traverse_info = NewTraverseInfo},
+    
+    tree_traverse:do_master_job(UpdatedJob, MasterJobArgs).
+
+
+%% @private
+do_slave_job_unsafe(#tree_traverse_slave{
+    file_ctx = FileCtx,
+    user_id = UserId,
+    traverse_info = #{
+        current_parent := TargetParentGuid, 
+        archive_doc := ArchiveDoc,
+        root_path_tokens := RootPathTokens
+    } = TraverseInfo,
+    relative_path = ResolvedFilePath}, TaskId
+) ->
+    {ok, UserCtx} = tree_traverse_session:acquire_for_task(UserId, ?POOL_NAME, TaskId),
+    SessionId = user_ctx:get_session_id(UserCtx),
+    
+    FileGuid = file_ctx:get_logical_guid_const(FileCtx),
+    FileName = case maps:get(root_file_name, TraverseInfo, undefined) of
+        undefined -> filename:basename(ResolvedFilePath);
+        Name -> Name
+    end,
+    case file_ctx:is_symlink_const(FileCtx) of
+        true ->
+            recall_symlink(
+                FileCtx, TargetParentGuid, RootPathTokens, FileName, ArchiveDoc, UserCtx);
+        false ->
+            {ok, _, _} = file_copy:copy(SessionId, FileGuid, TargetParentGuid, FileName,
+                ?COPY_OPTIONS(TaskId))
+    end,
+    ok = archive_recall_api:report_file_finished(TaskId).
+
+
+%% @private
+execute_unsafe_job(JobFunctionName, Options, FileCtx, TaskId, ArchiveDoc) ->
     try
-        DirName = case maps:get(root_file_name, TraverseInfo, undefined) of
-            undefined -> filename:basename(ResolvedFilePath);
-            Name -> Name
-        end,
-        {ok, UserCtx} = tree_traverse_session:acquire_for_task(UserId, ?POOL_NAME, TaskId),
-        SessionId = user_ctx:get_session_id(UserCtx),
-        SourceDirGuid = file_ctx:get_logical_guid_const(SourceDirCtx),
-        {ok, CopyGuid, _} = file_copy:copy(SessionId, SourceDirGuid, TargetParentGuid, DirName, 
-            ?COPY_OPTIONS(TaskId)),
-        NewTraverseInfo = maps:remove(root_file_name, TraverseInfo#{current_parent => CopyGuid}),
-        UpdatedJob = Job#tree_traverse{traverse_info = NewTraverseInfo},
-        
-        tree_traverse:do_master_job(UpdatedJob, MasterJobArgs)
+        % call using ?MODULE for mocking in tests
+        erlang:apply(?MODULE, JobFunctionName, Options)
     catch
         _Class:{badmatch, {error, Reason}}:Stacktrace ->
-            report_error(TaskId, file_ctx:get_logical_guid_const(SourceDirCtx), ArchiveDoc, 
+            report_error(TaskId, file_ctx:get_logical_guid_const(FileCtx), ArchiveDoc,
                 ?ERROR_POSIX(Reason), Stacktrace);
         _Class:Reason:Stacktrace ->
-            report_error(TaskId, file_ctx:get_logical_guid_const(SourceDirCtx), ArchiveDoc, 
+            report_error(TaskId, file_ctx:get_logical_guid_const(FileCtx), ArchiveDoc,
                 Reason, Stacktrace)
     end.
 
@@ -314,7 +324,7 @@ report_error(TaskId, FileGuid, ArchiveDoc, Reason, Stacktrace) ->
     {ok, ArchiveId} = archive:get_id(ArchiveDoc),
     ?error_stacktrace("Unexpected error during recall of file ~p in archive ~p: ~p.", 
         [FileGuid, ArchiveId, Reason], Stacktrace),
-    archive_recall:report_file_failed(TaskId, FileGuid, Reason).
+    archive_recall_api:report_file_failed(TaskId, FileGuid, Reason).
 
 
 %% @private

@@ -91,7 +91,8 @@ init_pool() ->
 -spec stop_pool() -> ok.
 stop_pool() ->
     tree_traverse:stop(?POOL_NAME),
-    archive_verification_traverse:stop_pool().
+    archive_verification_traverse:stop_pool(),
+    archive_recall_traverse:stop_pool().
 
 
 -spec start(archive:doc(), dataset:doc(), user_ctx:ctx()) -> ok | {error, term()}.
@@ -136,7 +137,8 @@ start(ArchiveDoc, DatasetDoc, UserCtx) ->
                 true -> resolve_symlink(DatasetRootCtx2, UserCtx);
                 false -> file_ctx:get_logical_guid_const(DatasetRootCtx2)
             end,
-            
+    
+            %% @TODO VFS-8882 - use none/external in API
             FollowSymlinksPolicy = case FollowSymlinks of
                 true -> external;
                 false -> none

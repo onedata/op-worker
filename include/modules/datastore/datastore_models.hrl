@@ -461,12 +461,11 @@
     % Relations between dissemination information package (DIP) 
     % and archival information package (AIP) archives.
     related_aip = undefined :: undefined | archive:id(),
-    related_dip = undefined :: undefined | archive:id(),
-    recalls = [] :: [archive_recall:id()]
+    related_dip = undefined :: undefined | archive:id()
 }).
 
 
--record(archive_recall, {
+-record(archive_recall_details, {
     source_archive :: archive:id(),
     source_dataset :: dataset:id(),
     start_timestamp = undefined :: undefined | time:millis(),
@@ -1036,7 +1035,7 @@
     traverse_info :: binary(),
     follow_symlinks = none :: tree_traverse:symlink_resolution_policy(),
     % uuid based paths to the traverse root file and subtree roots after each symlink resolution
-    uuid_root_paths :: [file_meta:uuid_based_path()],
+    resolved_roots_uuids :: [file_meta:uuid_based_path()],
     % relative path of the processed file to the traverse root
     relative_path = <<>> :: file_meta:path(),
     % Set of encountered files on the path from the traverse root to the currently processed one. 

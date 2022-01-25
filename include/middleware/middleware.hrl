@@ -80,11 +80,11 @@
 }).
 
 -record(get_recall_details, {
-    id :: archive_recall:id()
+    id :: archive_recall_api:id()
 }).
 
 -record(get_recall_progress, {
-    id :: archive_recall:id()
+    id :: archive_recall_api:id()
 }).
 
 %% automation related

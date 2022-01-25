@@ -34,6 +34,8 @@
     NewName :: file_meta:name()
 }.
 
+% Callback called after each successful write operation; 
+% the number in the function argument is the number of successfully written bytes.
 -type callback() :: fun((non_neg_integer()) -> ok).
 
 -type options() :: #{
@@ -119,7 +121,8 @@ copy_internal(SessId, SourceGuid, TargetParentGuid, TargetName, Options) ->
 copy_dir(SessId, #file_attr{guid = SourceGuid, mode = Mode}, TargetParentGuid, TargetName, Options) ->
     % copy dir with default perms as it should be possible to copy its children even without the write permission
     {ok, TargetGuid} = case 
-        lfm:mkdir(SessId, TargetParentGuid, TargetName, ?DEFAULT_DIR_MODE) of
+        lfm:mkdir(SessId, TargetParentGuid, TargetName, ?DEFAULT_DIR_MODE) 
+    of
         {ok, TG} -> 
             {ok, TG};
         {error, eexist} = Error ->

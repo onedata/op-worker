@@ -62,7 +62,7 @@ save_master_job(Key, Job = #tree_traverse{
     track_subtree_status = TrackSubtreeStatus,
     batch_size = BatchSize,
     traverse_info = TraverseInfo,
-    uuid_root_paths = UuidRootPaths,
+    resolved_roots_uuids = ResolvedRootsUuids,
     follow_symlinks_policy = FollowSymlinks,
     relative_path = RelativePath,
     encountered_files = EncounteredFilesMap
@@ -84,7 +84,7 @@ save_master_job(Key, Job = #tree_traverse{
         batch_size = BatchSize,
         traverse_info = term_to_binary(TraverseInfo),
         follow_symlinks = FollowSymlinks,
-        uuid_root_paths = UuidRootPaths,
+        resolved_roots_uuids = ResolvedRootsUuids,
         relative_path = RelativePath,
         encountered_files = EncounteredFilesMap
     },
@@ -119,7 +119,7 @@ get_master_job(#document{value = #tree_traverse_job{
     batch_size = BatchSize,
     traverse_info = TraverseInfo,
     follow_symlinks = FollowSymlinks,
-    uuid_root_paths = UuidRootPaths,
+    resolved_roots_uuids = ResolvedRootsUuids,
     relative_path = RelativePath,
     encountered_files = EncounteredFilesMap
 }}) ->
@@ -141,7 +141,7 @@ get_master_job(#document{value = #tree_traverse_job{
                 batch_size = BatchSize,
                 traverse_info = binary_to_term(TraverseInfo),
                 follow_symlinks_policy = FollowSymlinks,
-                uuid_root_paths = UuidRootPaths,
+                resolved_roots_uuids = ResolvedRootsUuids,
                 relative_path = RelativePath,
                 encountered_files = EncounteredFilesMap
             },
@@ -268,7 +268,7 @@ get_record_struct(5) ->
         {batch_size, integer},
         {traverse_info, binary},
         {follow_symlinks_policy, atom}, % modified field
-        {uuid_root_paths, [binary]}, % new field
+        {resolved_roots_uuids, [string]}, % new field
         {relative_path, binary},
         {encountered_files, #{string => boolean}}
     ]}.

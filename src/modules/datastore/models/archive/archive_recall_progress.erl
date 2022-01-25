@@ -6,50 +6,48 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Model for storing information about archive recalls.
-%%% It uses time_series_collection structure for storing statistics.
+%%% Model for storing information about archive recalls progress.
+%%% It uses `time_series_collection` structure for storing statistics.
 %%% For each recall there are 3 time series:
 %%%     * currentBytes - stores sum of copied bytes
 %%%     * currentFiles - stores number of copied files 
 %%%     * failedFiles - stores number of unsuccessfully recalled files
 %%% Recall statistics are only kept locally on provider that is 
-%%% performing recall.
+%%% performing recall. 
+%%% `json_infinite_log_model` structure is used for storing information about encountered errors.
 %%% @end
 %%%-------------------------------------------------------------------
--module(archive_recall).
+-module(archive_recall_progress).
 -author("Michal Stanisz").
 
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
--include("modules/fslogic/file_details.hrl/").
 -include_lib("cluster_worker/include/modules/datastore/infinite_log.hrl").
 -include_lib("cluster_worker/include/modules/datastore/ts_metric_config.hrl").
 
 
 %% API
--export([create/2, delete/1]).
--export([report_started/1, report_finished/2, 
-    report_bytes_copied/2, report_file_finished/1, report_file_failed/3]).
--export([get_details/1, get_stats/1, get_progress/1]).
--export([get_effective_recall/1]).
+-export([create/1, delete/1]).
+-export([get_stats/1, get/1]).
+-export([report_bytes_copied/2, report_file_finished/1, report_file_failed/3]).
 %% Datastore callbacks
--export([get_ctx/0, get_record_version/0, get_record_struct/1]).
+-export([get_ctx/0]).
 
--type id() :: file_meta:uuid().
--type record() :: #archive_recall{}.
--export_type([id/0, record/0]).
+-type id() :: archive_recall_api:id().
 
+% Map in following format: 
+%  #{
+%       <<"currentFiles" := non_neg_integer(),
+%       <<"currentBytes" := non_neg_integer(),
+%       <<"failedFiles" := non_neg_integer(),
+%       <<"lastError" := undefined | binary()
+%   }
+-type recall_progress_map() :: #{binary() => non_neg_integer() | binary() | undefined}.
+-export_type([recall_progress_map/0]).
 
 
 -define(CTX, #{
     model => ?MODULE
-}).
-
--define(SYNC_CTX, ?CTX#{
-    sync_enabled => true,
-    remote_driver => datastore_remote_driver,
-    mutator => oneprovider:get_id_or_undefined(),
-    local_links_tree_id => oneprovider:get_id_or_undefined()
 }).
 
 -define(BYTES_TS, <<"currentBytes">>).
@@ -68,14 +66,11 @@
 %%% API functions
 %%%===================================================================
 
--spec create(id(), archive:doc()) -> ok | {error, term()}.
-create(Id, ArchiveDoc) ->
+-spec create(id()) -> ok | {error, term()}.
+create(Id) ->
     try
-        ok = create_tsc(Id),
         {ok, _} = json_infinite_log_model:create(#{id => ?ERROR_LOG_ID(Id)}),
-        ok = create_doc(Id, ArchiveDoc),
-        {ok, SpaceId} = archive:get_space_id(ArchiveDoc),
-        ok = archive_recall_cache:invalidate_on_all_nodes(SpaceId)
+        ok = create_tsc(Id)
     catch _:{badmatch, Error} ->
         delete(Id),
         Error
@@ -84,33 +79,31 @@ create(Id, ArchiveDoc) ->
 
 -spec delete(id()) -> ok | {error, term()}.
 delete(Id) ->
-    % no need to invalidate cache, as whole subtree has been already deleted
     datastore_time_series_collection:delete(?CTX, ?TSC_ID(Id)),
-    json_infinite_log_model:destroy(?ERROR_LOG_ID(Id)),
-    case get_details(Id) of
-        {ok, #archive_recall{source_archive = ArchiveId}} ->
-            archive:report_recall_removed(ArchiveId, Id),
-            datastore_model:delete(?SYNC_CTX, Id);
-        {error, not_found} -> 
-            ok;
-        Error -> 
-            Error
+    json_infinite_log_model:destroy(?ERROR_LOG_ID(Id)).
+
+
+-spec get_stats(id()) -> time_series_collection:windows_map() | {error, term()}.
+get_stats(Id) ->
+    datastore_time_series_collection:list_windows(?CTX, ?TSC_ID(Id), #{}).
+
+
+-spec get(id()) -> {ok, recall_progress_map()}.
+get(Id) ->
+    {ok, CountersCurrentValue} = get_counters_current_value(Id),
+    case CountersCurrentValue of
+        #{?FAILED_FILES_TS := 0} -> 
+            {ok, CountersCurrentValue#{<<"lastError">> => undefined}};
+        _ ->
+            %% @TODO VFS-8839 - browse error log when gui supports it
+            {ok, #{
+                <<"logEntries">> := [#{
+                    <<"content">> := LastEntryContent
+                }]
+            }} = json_infinite_log_model:browse_content(?ERROR_LOG_ID(Id), 
+                #{limit => 1, direction => ?BACKWARD}),
+            {ok, CountersCurrentValue#{<<"lastError">> => LastEntryContent}}
     end.
-
-
--spec report_started(id()) -> ok | {error, term()}.
-report_started(Id) ->
-    ?extract_ok(datastore_model:update(?SYNC_CTX, Id, fun(ArchiveRecall) ->
-        {ok, ArchiveRecall#archive_recall{start_timestamp = global_clock:timestamp_millis()}}
-    end)).
-
-
--spec report_finished(id(), od_space:id()) -> ok | {error, term()}.
-report_finished(Id, SpaceId) ->
-    ok = archive_recall_cache:invalidate_on_all_nodes(SpaceId),
-    ?extract_ok(datastore_model:update(?SYNC_CTX, Id, fun(ArchiveRecall) ->
-        {ok, ArchiveRecall#archive_recall{finish_timestamp = global_clock:timestamp_millis()}}
-    end)).
 
 
 -spec report_file_finished(id()) -> ok | {error, term()}.
@@ -132,54 +125,12 @@ report_file_failed(Id, FileGuid, Error) ->
     ]).
 
 
-
 -spec report_bytes_copied(id(), non_neg_integer()) -> ok | {error, term()}.
 report_bytes_copied(Id, Bytes) ->
     datastore_time_series_collection:update(?CTX, ?TSC_ID(Id), global_clock:timestamp_millis(), [
         {?BYTES_TS, Bytes}
     ]).
 
-
--spec get_details(id()) -> {ok, record()} | {error, term()}.
-get_details(Id) ->
-    case datastore_model:get(?SYNC_CTX, Id) of
-        {ok, #document{value = Record}} ->
-            {ok, Record};
-        Error ->
-            Error
-    end.
-
-
--spec get_stats(id()) -> time_series_collection:windows_map() | {error, term()}.
-get_stats(Id) ->
-    datastore_time_series_collection:list_windows(?CTX, ?TSC_ID(Id), #{}).
-
-
-get_progress(Id) ->
-    {ok, CountersCurrentValue} = get_counters_current_value(Id),
-    case CountersCurrentValue of
-        #{?FAILED_FILES_TS := 0} -> 
-            {ok, CountersCurrentValue#{<<"lastError">> => undefined}};
-        _ ->
-            %% @TODO VFS-8839 - browse error log when gui supports it
-            {ok, #{
-                <<"logEntries">> := [#{
-                    <<"content">> := LastEntryContent
-                }]
-            }} = json_infinite_log_model:browse_content(?ERROR_LOG_ID(Id), 
-                #{limit => 1, direction => ?BACKWARD}),
-            {ok, CountersCurrentValue#{<<"lastError">> => LastEntryContent}}
-    end.
-
-
--spec get_effective_recall(file_meta:doc()) -> {ok, id() | undefined} | {error, term()}.
-get_effective_recall(#document{scope = SpaceId, key = Id} = FileMetaDoc) ->
-    case archive_recall_cache:get(SpaceId, FileMetaDoc) of
-        {ok, {finished, Id}} -> {ok, Id};
-        {ok, {finished, _}} -> {ok, undefined};
-        {ok, {ongoing, AncestorId}} -> {ok, AncestorId};
-        Other -> Other
-    end.
 
 %%%===================================================================
 %%% Internal functions
@@ -205,25 +156,6 @@ create_tsc(Id) ->
         {error, collection_already_exists} -> ok;
         Error -> Error
     end.
-
-
-%% @private
--spec create_doc(id(), archive:doc()) -> ok | {error, term()}.
-create_doc(Id, ArchiveDoc) ->
-    {ok, SpaceId} = archive:get_space_id(ArchiveDoc),
-    {ok, ArchiveId} = archive:get_id(ArchiveDoc),
-    {ok, DatasetId} = archive:get_dataset_id(ArchiveDoc),
-    {ok, Stats} = archive_api:get_aggregated_stats(ArchiveDoc),
-    ?extract_ok(datastore_model:create(?SYNC_CTX, #document{
-        key = Id,
-        scope = SpaceId,
-        value = #archive_recall{
-            source_archive = ArchiveId,
-            source_dataset = DatasetId,
-            target_bytes = archive_stats:get_archived_bytes(Stats),
-            target_files = archive_stats:get_archived_files(Stats)
-        }}
-    )).
 
 
 %% @private
@@ -273,20 +205,4 @@ get_counters_current_value(Id) ->
 
 -spec get_ctx() -> datastore:ctx().
 get_ctx() ->
-    ?SYNC_CTX.
-
-
--spec get_record_version() -> datastore_model:record_version().
-get_record_version() ->
-    1.
-
--spec get_record_struct(datastore_model:record_version()) -> datastore_model:record_struct().
-get_record_struct(1) ->
-    {record, [
-        {source_archive, string},
-        {source_dataset, string},
-        {start_timestamp, integer},
-        {finish_timestamp, integer},
-        {target_files, integer},
-        {target_bytes, integer}
-    ]}.
+    ?CTX.
