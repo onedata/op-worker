@@ -202,15 +202,15 @@ init_archive_purge(SpaceDirCtx, ArchiveId, CallbackUrl, UserCtx) ->
     assert_has_eff_privilege(SpaceDirCtx, UserCtx, ?SPACE_MANAGE_DATASETS),
     assert_has_eff_privilege(SpaceDirCtx, UserCtx, ?SPACE_REMOVE_ARCHIVES),
 
-    archive_api:init_archive_purge(ArchiveId, CallbackUrl).
+    archive_api:purge(ArchiveId, CallbackUrl).
 
 
 -spec init_archive_recall(file_ctx:ctx(), archive:id(), file_id:file_guid(), file_meta:name() | undefined, 
     user_ctx:ctx()) -> {ok, file_id:file_guid()} | error().
-init_archive_recall(SpaceDirCtx, ArchiveId, TargetParentGuid, TargetName, UserCtx) ->
+init_archive_recall(SpaceDirCtx, ArchiveId, ParentDirectoryGuid, TargetName, UserCtx) ->
     assert_has_eff_privilege(SpaceDirCtx, UserCtx, ?SPACE_RECALL_ARCHIVES),
     
-    archive_api:init_recall(ArchiveId, UserCtx, TargetParentGuid, TargetName).
+    archive_api:recall(ArchiveId, UserCtx, ParentDirectoryGuid, TargetName).
 
 
 %%%===================================================================

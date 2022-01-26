@@ -68,14 +68,14 @@
     diff :: archive:diff()
 }).
 
--record(init_archive_purge, {
+-record(purge_archive, {
     id :: archive:id(),
     callback :: archive:callback()
 }).
 
--record(init_archive_recall, {
+-record(recall_archive, {
     id :: archive:id(),
-    target_parent_guid :: file_id:file_guid(),
+    parent_directory_guid :: file_id:file_guid(),
     target_filename = default :: file_meta:name() | default
 }).
 

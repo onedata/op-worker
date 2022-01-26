@@ -50,13 +50,13 @@ execute(UserCtx, SpaceDirCtx, #get_archive_info{id = ArchiveId}) ->
 execute(UserCtx, SpaceDirCtx, #update_archive{id = ArchiveId, diff = Diff}) ->
     dataset_req:update_archive(SpaceDirCtx, ArchiveId, Diff, UserCtx);
 
-execute(UserCtx, SpaceDirCtx, #init_archive_purge{id = ArchiveId, callback = CallbackUrl}) ->
+execute(UserCtx, SpaceDirCtx, #purge_archive{id = ArchiveId, callback = CallbackUrl}) ->
     dataset_req:init_archive_purge(SpaceDirCtx, ArchiveId, CallbackUrl, UserCtx);
 
-execute(UserCtx, SpaceDirCtx, #init_archive_recall{
-    id = ArchiveId, target_parent_guid = TargetParentGuid, target_filename = TargetName}
+execute(UserCtx, SpaceDirCtx, #recall_archive{
+    id = ArchiveId, parent_directory_guid = ParentDirectoryGuid, target_filename = TargetName}
 ) ->
-    dataset_req:init_archive_recall(SpaceDirCtx, ArchiveId, TargetParentGuid, TargetName, UserCtx);
+    dataset_req:init_archive_recall(SpaceDirCtx, ArchiveId, ParentDirectoryGuid, TargetName, UserCtx);
 
 execute(_UserCtx, _FileCtx, #get_recall_details{id = Id}) ->
     archive_recall_api:get_details(Id);

@@ -51,10 +51,10 @@ create(Id, ArchiveDoc) ->
         key = Id,
         scope = SpaceId,
         value = #archive_recall_details{
-            source_archive = ArchiveId,
-            source_dataset = DatasetId,
-            target_bytes = archive_stats:get_archived_bytes(Stats),
-            target_files = archive_stats:get_archived_files(Stats)
+            archive_id = ArchiveId,
+            dataset_id = DatasetId,
+            total_bytes = archive_stats:get_archived_bytes(Stats),
+            total_files = archive_stats:get_archived_files(Stats)
         }}
     )).
 
@@ -77,7 +77,7 @@ get(Id) ->
 -spec report_started(id()) -> ok | {error, term()}.
 report_started(Id) ->
     ?extract_ok(datastore_model:update(?CTX, Id, fun(ArchiveRecall) ->
-        {ok, ArchiveRecall#archive_recall_details{start_timestamp = global_clock:timestamp_millis()}}
+        {ok, ArchiveRecall#archive_recall_details{start_timestamo = global_clock:timestamp_millis()}}
     end)).
 
 
@@ -105,10 +105,10 @@ get_record_version() ->
 -spec get_record_struct(datastore_model:record_version()) -> datastore_model:record_struct().
 get_record_struct(1) ->
     {record, [
-        {source_archive, string},
-        {source_dataset, string},
+        {archive_id, string},
+        {dataset_id, string},
         {start_timestamp, integer},
         {finish_timestamp, integer},
-        {target_files, integer},
-        {target_bytes, integer}
+        {total_files, integer},
+        {total_bytes, integer}
     ]}.

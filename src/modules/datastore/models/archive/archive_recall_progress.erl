@@ -37,12 +37,15 @@
 
 % Map in following format: 
 %  #{
-%       <<"currentFiles" := non_neg_integer(),
-%       <<"currentBytes" := non_neg_integer(),
-%       <<"failedFiles" := non_neg_integer(),
-%       <<"lastError" := undefined | binary()
+%       <<"filesCopied" := non_neg_integer(),
+%       <<"bytesCopied" := non_neg_integer(),
+%       <<"filesFailed" := non_neg_integer(),
+%       <<"lastError" := undefined | #{
+%           <<"fileId">> := file_id:objectid(), 
+%           <<"reason">> := errors:as_json()
+%       }
 %   }
--type recall_progress_map() :: #{binary() => non_neg_integer() | binary() | undefined}.
+-type recall_progress_map() :: #{binary() => non_neg_integer() | map() | undefined}.
 -export_type([recall_progress_map/0]).
 
 
@@ -50,9 +53,9 @@
     model => ?MODULE
 }).
 
--define(BYTES_TS, <<"currentBytes">>).
--define(FILES_TS, <<"currentFiles">>).
--define(FAILED_FILES_TS, <<"failedFiles">>).
+-define(BYTES_TS, <<"bytesCopied">>).
+-define(FILES_TS, <<"filesCopied">>).
+-define(FAILED_FILES_TS, <<"filesFailed">>).
 -define(TSC_ID(Id), <<Id/binary, "tsc">>).
 
 -define(ERROR_LOG_ID(Id), <<Id/binary, "el">>).
@@ -69,7 +72,7 @@
 -spec create(id()) -> ok | {error, term()}.
 create(Id) ->
     try
-        {ok, _} = json_infinite_log_model:create(#{id => ?ERROR_LOG_ID(Id)}),
+        ok = json_infinite_log_model:create(?ERROR_LOG_ID(Id), #{}),
         ok = create_tsc(Id)
     catch _:{badmatch, Error} ->
         delete(Id),

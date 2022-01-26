@@ -466,12 +466,12 @@
 
 
 -record(archive_recall_details, {
-    source_archive :: archive:id(),
-    source_dataset :: dataset:id(),
-    start_timestamp = undefined :: undefined | time:millis(),
+    archive_id :: archive:id(),
+    dataset_id :: dataset:id(),
+    start_timestamo = undefined :: undefined | time:millis(),
     finish_timestamp = undefined :: undefined | time:millis(),
-    target_files :: non_neg_integer(),
-    target_bytes :: non_neg_integer()
+    total_files :: non_neg_integer(),
+    total_bytes :: non_neg_integer()
 }).
 
 % Model used for storing information associated with dataset.

@@ -78,7 +78,7 @@ routes() -> [
         }
     }},
     %% Purge archive
-    {<<"/archives/:aid/init_purge">>, rest_handler, #rest_req{
+    {<<"/archives/:aid/purge">>, rest_handler, #rest_req{
         method = 'POST',
         parse_body = as_json_params,
         consumes = [<<"application/json">>],
@@ -90,7 +90,7 @@ routes() -> [
         }
     }},
     %% Recall archive
-    {<<"/archives/:aid/init_recall">>, rest_handler, #rest_req{
+    {<<"/archives/:aid/recall">>, rest_handler, #rest_req{
         method = 'POST',
         parse_body = as_json_params,
         consumes = [<<"application/json">>],
@@ -101,7 +101,7 @@ routes() -> [
             scope = private
         }
     }},
-    %% Get file hard links
+    %% Get details of an archive recall
     {<<"/data/:id/recall/details">>, rest_handler, #rest_req{
         method = 'GET',
         produces = [<<"application/json">>],
@@ -112,7 +112,7 @@ routes() -> [
             scope = private
         }
     }},
-    %% Get file hard links
+    %% Get progress of an archive recall
     {<<"/data/:id/recall/progress">>, rest_handler, #rest_req{
         method = 'GET',
         produces = [<<"application/json">>],

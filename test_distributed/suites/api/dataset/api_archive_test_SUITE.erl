@@ -788,7 +788,7 @@ build_init_purge_archive_prepare_rest_args_fun(MemRef) ->
         #rest_args{
             method = post,
             headers = #{?HDR_CONTENT_TYPE => <<"application/json">>},
-            path = <<"archives/", Id/binary, "/init_purge">>,
+            path = <<"archives/", Id/binary, "/purge">>,
             body = json_utils:encode(Data0)
         }
     end.
@@ -916,17 +916,17 @@ init_archive_recall_test(_Config) ->
                 }
             ],
             data_spec = #data_spec{
-                required = [<<"targetParentId">>],
-                optional = [<<"targetRootName">>],
+                required = [<<"parentDirectoryId">>],
+                optional = [<<"targetFileName">>],
                 correct_values = #{
-                    <<"targetParentId">> => [create],
-                    <<"targetRootName">> => [?RANDOM_FILE_NAME()]
+                    <<"parentDirectoryId">> => [create],
+                    <<"targetFileName">> => [?RANDOM_FILE_NAME()]
                 },
                 bad_values = [
                     {bad_id, ?NON_EXISTENT_ARCHIVE_ID, ?ERROR_NOT_FOUND},
-                    {<<"targetParentId">>, ?NON_EXISTENT_FILE_ID, ?ERROR_BAD_VALUE_IDENTIFIER(<<"targetParentId">>)},
-                    {<<"targetRootName">>, 8, ?ERROR_BAD_VALUE_BINARY(<<"targetRootName">>)},
-                    {<<"targetRootName">>, <<>>, ?ERROR_BAD_VALUE_EMPTY(<<"targetRootName">>)}
+                    {<<"parentDirectoryId">>, ?NON_EXISTENT_FILE_ID, ?ERROR_BAD_VALUE_IDENTIFIER(<<"parentDirectoryId">>)},
+                    {<<"targetFileName">>, 8, ?ERROR_BAD_VALUE_BINARY(<<"targetFileName">>)},
+                    {<<"targetFileName">>, <<>>, ?ERROR_BAD_VALUE_EMPTY(<<"targetFileName">>)}
                 ]
             }
         }
@@ -954,7 +954,7 @@ build_init_recall_archive_prepare_rest_args_fun(MemRef) ->
         #rest_args{
             method = post,
             headers = #{?HDR_CONTENT_TYPE => <<"application/json">>},
-            path = <<"archives/", Id/binary, "/init_recall">>,
+            path = <<"archives/", Id/binary, "/recall">>,
             body = json_utils:encode(maybe_create_recall_target_parent(Data))
         }
     end.
@@ -978,8 +978,8 @@ build_init_recall_archive_prepare_gs_args_fun(MemRef) ->
 
 %% @private
 -spec maybe_create_recall_target_parent(map()) -> map().
-maybe_create_recall_target_parent(#{<<"targetParentId">> := create} = Data) ->
-    Data#{<<"targetParentId">> => create_recall_parent()};
+maybe_create_recall_target_parent(#{<<"parentDirectoryId">> := create} = Data) ->
+    Data#{<<"parentDirectoryId">> => create_recall_parent()};
 maybe_create_recall_target_parent(Data) ->
     Data.
 
@@ -1014,10 +1014,10 @@ get_archive_recall_test_base(Providers, Aspect) ->
         dataset = #dataset_spec{archives = 1}
     }),
     
-    UserSessId = oct_background:get_user_session_id(user2, krakow),
+    SessId = fun(P) -> oct_background:get_user_session_id(user2, P) end,
     SpaceDirGuid = fslogic_uuid:spaceid_to_space_dir_guid(oct_background:get_space_id(?SPACE)),
-    {ok, RootFileGuid} = opt_archives:init_recall(krakow, UserSessId, ArchiveId, SpaceDirGuid, str_utils:rand_hex(16)),
-    ?assertMatch({ok, _}, opt_archives:get_recall_details(paris, UserSessId, file_id:guid_to_uuid(RootFileGuid)), ?ATTEMPTS),
+    {ok, RootFileGuid} = opt_archives:init_recall(krakow, SessId(krakow), ArchiveId, SpaceDirGuid, str_utils:rand_hex(16)),
+    ?assertMatch({ok, _}, opt_archives:get_recall_details(paris, SessId(paris), RootFileGuid), ?ATTEMPTS),
     {ok, RootFileObjectId} = file_id:guid_to_objectid(RootFileGuid),
     
     maybe_detach_dataset(Providers, DatasetId),
@@ -1066,30 +1066,30 @@ get_recall_validate_result(details, gs, ArchiveId, DatasetId, Result) ->
     SourceDatasetGri = gri:serialize(#gri{
         type = op_dataset, id = DatasetId, aspect = instance, scope = private}),
     ?assertMatch({ok, #{
-        <<"sourceArchive">> := SourceArchiveGri,
-        <<"sourceDataset">> := SourceDatasetGri,
-        <<"targetFiles">> := 1,
-        <<"targetBytes">> := 20
+        <<"archive">> := SourceArchiveGri,
+        <<"dataset">> := SourceDatasetGri,
+        <<"totalFiles">> := 1,
+        <<"totalBytes">> := 20
     }}, Result);
 get_recall_validate_result(details, rest, ArchiveId, DatasetId, RespBody) ->
     ?assertMatch(#{
-        <<"sourceArchive">> := ArchiveId,
-        <<"sourceDataset">> := DatasetId,
-        <<"targetFiles">> := 1,
-        <<"targetBytes">> := 20
+        <<"archiveId">> := ArchiveId,
+        <<"datasetId">> := DatasetId,
+        <<"totalFiles">> := 1,
+        <<"totalBytes">> := 20
     }, RespBody);
 get_recall_validate_result(progress, gs, _ArchiveId, _DatasetId, Result) ->
     ?assertMatch({ok, #{
-        <<"currentBytes">> := 20,
-        <<"currentFiles">> := 1,
-        <<"failedFiles">> := 0,
+        <<"bytesCopied">> := 20,
+        <<"filesCopied">> := 1,
+        <<"filesFailed">> := 0,
         <<"lastError">> := null
     }}, Result);
 get_recall_validate_result(progress, rest, _ArchiveId, _DatasetId, RespBody) ->
     ?assertMatch(#{
-        <<"currentBytes">> := 20,
-        <<"currentFiles">> := 1,
-        <<"failedFiles">> := 0,
+        <<"bytesCopied">> := 20,
+        <<"filesCopied">> := 1,
+        <<"filesFailed">> := 0,
         <<"lastError">> := null
     }, RespBody).
 

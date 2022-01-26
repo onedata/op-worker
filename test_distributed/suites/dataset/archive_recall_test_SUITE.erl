@@ -141,18 +141,18 @@ groups() -> [
         recall_custom_name_test
     ]},
     {sequential_tests, [
-%%        recall_details_test,
-%%        recall_details_nested_test,
+        recall_details_test,
+        recall_details_nested_test,
         recall_to_recalling_dir_test,
-        recall_to_recalling_dir_by_symlink_test
-%%        recall_dir_error_test,
-%%        recall_file_error_test
+        recall_to_recalling_dir_by_symlink_test,
+        recall_dir_error_test,
+        recall_file_error_test
     ]}
 ].
 
 
 all() -> [
-%%    {group, parallel_tests},
+    {group, parallel_tests},
     {group, sequential_tests}
 ].
 
@@ -494,7 +494,7 @@ recall_containing_nested_parent_symlink_archive_base(Layout, IncludeDip) ->
                 }
             ]
         }
-    ], nested_archive_only ).
+    ], nested_archive_only).
 
 recall_containing_nested_child_symlink_archive_base(Layout, IncludeDip) ->
     recall_test_base([
@@ -563,33 +563,33 @@ recall_details_test_base(Spec, TotalFiles, TotalBytes) ->
     Timestamp = time_test_utils:get_frozen_time_millis(),
     lists:foreach(fun(Provider) ->
         ?assertMatch({ok, #archive_recall_details{
-            source_archive = ArchiveId,
-            start_timestamp = Timestamp,
+            archive_id = ArchiveId,
+            start_timestamo = Timestamp,
             finish_timestamp = undefined,
-            target_files = TotalFiles,
-            target_bytes = TotalBytes
+            total_files = TotalFiles,
+            total_bytes = TotalBytes
         }}, opt_archives:get_recall_details(Provider, SessId(Provider), RecallRootFileGuid), ?ATTEMPTS)
     end, Providers),
     
     % check recall stats (stats are only stored on provider performing recall)
     ?assertMatch({ok, #{
-        {<<"currentBytes">>,<<"hour">>} := [{_,{_, TotalBytes}}],
-        {<<"currentBytes">>,<<"minute">>} := [{_,{_, TotalBytes}}],
-        {<<"currentBytes">>,<<"day">>} := [{_,{_, TotalBytes}}],
-        {<<"currentBytes">>,<<"total">>} := [{_,{_, TotalBytes}}],
-        {<<"currentFiles">>,<<"hour">>} := [{_,{TotalFiles, TotalFiles}}],
-        {<<"currentFiles">>,<<"minute">>} := [{_,{TotalFiles, TotalFiles}}],
-        {<<"currentFiles">>,<<"day">>} := [{_,{TotalFiles, TotalFiles}}],
-        {<<"currentFiles">>,<<"total">>} := [{_,{TotalFiles, TotalFiles}}],
-        {<<"failedFiles">>,<<"total">>} := []
+        {<<"bytesCopied">>,<<"hour">>} := [{_,{_, TotalBytes}}],
+        {<<"bytesCopied">>,<<"minute">>} := [{_,{_, TotalBytes}}],
+        {<<"bytesCopied">>,<<"day">>} := [{_,{_, TotalBytes}}],
+        {<<"bytesCopied">>,<<"total">>} := [{_,{_, TotalBytes}}],
+        {<<"filesCopied">>,<<"hour">>} := [{_,{TotalFiles, TotalFiles}}],
+        {<<"filesCopied">>,<<"minute">>} := [{_,{TotalFiles, TotalFiles}}],
+        {<<"filesCopied">>,<<"day">>} := [{_,{TotalFiles, TotalFiles}}],
+        {<<"filesCopied">>,<<"total">>} := [{_,{TotalFiles, TotalFiles}}],
+        {<<"filesFailed">>,<<"total">>} := []
         %% @TODO VFS-8839 - use op_archives after implementing histogram API
     }}, opw_test_rpc:call(krakow, archive_recall_api, get_stats, [file_id:guid_to_uuid(RecallRootFileGuid)]), ?ATTEMPTS),
     
     %% @TODO VFS-8839 - check progress until gui starts to support histograms and error log browsing
     ?assertMatch({ok, #{
-        <<"currentBytes">>  := TotalBytes,
-        <<"currentFiles">> := TotalFiles,
-        <<"failedFiles">> := 0,
+        <<"bytesCopied">>  := TotalBytes,
+        <<"filesCopied">> := TotalFiles,
+        <<"filesFailed">> := 0,
         <<"lastError">> := undefined
     }}, opt_archives:get_recall_progress(krakow, SessId(krakow), RecallRootFileGuid), ?ATTEMPTS),
     ?assertEqual(?ERROR_NOT_FOUND, opt_archives:get_recall_progress(paris, SessId(paris), RecallRootFileGuid)),
@@ -655,10 +655,11 @@ recall_error_test_base(Spec, FunName) ->
     lists:foreach(fun({Error, ExpectedReason}) ->
         mock_traverse_error(FunName, Error),
         {_ArchiveId, _TargetParentGuid, RecallRootFileGuid} = recall_test_setup(Spec),
+        ct:print("~p", [file_id:guid_to_uuid(RecallRootFileGuid)]),
         ?assertMatch({ok, #{
-            <<"currentBytes">>  := 0,
-            <<"currentFiles">> := 0,
-            <<"failedFiles">> := 1,
+            <<"bytesCopied">>  := 0,
+            <<"filesCopied">> := 0,
+            <<"filesFailed">> := 1,
             <<"lastError">> := #{<<"reason">> := ExpectedReason}
         }}, opt_archives:get_recall_progress(krakow, SessId(krakow), RecallRootFileGuid), ?ATTEMPTS)
     end, Errors).

@@ -95,7 +95,7 @@ update(SessionId, ArchiveId, Diff) ->
 init_purge(SessionId, ArchiveId, CallbackUrl) ->
     SpaceGuid = archive_id_to_space_guid(ArchiveId),
 
-    middleware_worker:check_exec(SessionId, SpaceGuid, #init_archive_purge{
+    middleware_worker:check_exec(SessionId, SpaceGuid, #purge_archive{
         id = ArchiveId,
         callback = CallbackUrl
     }).
@@ -103,12 +103,12 @@ init_purge(SessionId, ArchiveId, CallbackUrl) ->
 
 -spec init_recall(session:id(), archive:id(), file_id:file_guid(), file_meta:name() | default) ->
     file_id:file_guid() | no_return().
-init_recall(SessionId, ArchiveId, TargetParentGuid, TargetFilename) ->
+init_recall(SessionId, ArchiveId, ParentDirectoryGuid, TargetFilename) ->
     SpaceGuid = archive_id_to_space_guid(ArchiveId),
     
-    middleware_worker:check_exec(SessionId, SpaceGuid, #init_archive_recall{
+    middleware_worker:check_exec(SessionId, SpaceGuid, #recall_archive{
         id = ArchiveId,
-        target_parent_guid = TargetParentGuid,
+        parent_directory_guid = ParentDirectoryGuid,
         target_filename = TargetFilename
     }).
 

@@ -81,11 +81,11 @@ data_spec(#op_req{operation = create, gri = #gri{aspect = purge}}) -> #{
 };
 data_spec(#op_req{operation = create, gri = #gri{aspect = recall}}) -> #{
     required => #{
-        <<"targetParentId">> => {binary,
-            fun(ObjectId) -> {true, middleware_utils:decode_object_id(ObjectId, <<"targetParentId">>)} end}
+        <<"parentDirectoryId">> => {binary,
+            fun(ObjectId) -> {true, middleware_utils:decode_object_id(ObjectId, <<"parentDirectoryId">>)} end}
     },
     optional => #{
-        <<"targetRootName">> => {binary, non_empty}
+        <<"targetFileName">> => {binary, non_empty}
     }
 };
 
@@ -201,9 +201,9 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{id = ArchiveId, aspect = pur
 
 create(#op_req{auth = Auth, data = Data, gri = #gri{id = ArchiveId, aspect = recall}}) ->
     SessionId = Auth#auth.session_id,
-    TargetParentGuid = maps:get(<<"targetParentId">>, Data),
-    TargetRootName = maps:get(<<"targetRootName">>, Data, default),
-    {ok, value, mi_archives:init_recall(SessionId, ArchiveId, TargetParentGuid, TargetRootName)}.
+    ParentDirectoryGuid = maps:get(<<"parentDirectoryId">>, Data),
+    TargetFileName = maps:get(<<"targetFileName">>, Data, default),
+    {ok, value, mi_archives:init_recall(SessionId, ArchiveId, ParentDirectoryGuid, TargetFileName)}.
 
 
 %%--------------------------------------------------------------------

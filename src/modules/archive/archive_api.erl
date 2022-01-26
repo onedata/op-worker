@@ -48,8 +48,8 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([start_archivisation/6, init_recall/4, update_archive/2, get_archive_info/1,
-    list_archives/3, init_archive_purge/2, get_nested_archives_stats/1, get_aggregated_stats/1]).
+-export([start_archivisation/6, recall/4, update_archive/2, get_archive_info/1,
+    list_archives/3, purge/2, get_nested_archives_stats/1, get_aggregated_stats/1]).
 
 %% Exported for use in tests
 -export([remove_archive_recursive/1]).
@@ -126,12 +126,12 @@ start_archivisation(
     end.
 
 
--spec init_recall(archive:id(), user_ctx:ctx(), file_id:file_guid(), file_meta:name() | default) -> 
+-spec recall(archive:id(), user_ctx:ctx(), file_id:file_guid(), file_meta:name() | default) -> 
     {ok, file_id:file_guid()} | error().
-init_recall(ArchiveId, UserCtx, TargetParentGuid, TargetRootName) ->
+recall(ArchiveId, UserCtx, ParentGuid, TargetRootName) ->
     case archive:get(ArchiveId) of
         {ok, #document{value = #archive{state = ?ARCHIVE_PRESERVED}} = ArchiveDoc} ->
-            archive_recall_traverse:start(ArchiveDoc, UserCtx, TargetParentGuid, TargetRootName);
+            archive_recall_traverse:start(ArchiveDoc, UserCtx, ParentGuid, TargetRootName);
         {ok, _} ->
             %% @TODO VFS-8840 - create more descriptive error
             ?ERROR_NOT_SUPPORTED;
@@ -208,8 +208,8 @@ list_archives(DatasetId, ListingOpts, ListingMode) ->
     end.
 
 
--spec init_archive_purge(archive:id(), archive:callback()) -> ok | error().
-init_archive_purge(ArchiveId, CallbackUrl) ->
+-spec purge(archive:id(), archive:callback()) -> ok | error().
+purge(ArchiveId, CallbackUrl) ->
     case archive:mark_purging(ArchiveId, CallbackUrl) of
         {ok, ArchiveDoc} ->
             {ok, DatasetId} = archive:get_dataset_id(ArchiveDoc),

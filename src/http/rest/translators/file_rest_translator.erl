@@ -112,18 +112,18 @@ get_response(#gri{aspect = archive_recall_progress}, #{<<"lastError">> := LastEr
 %% @private
 -spec translate_archive_recall_details(archive_recall_api:record()) -> map().
 translate_archive_recall_details(#archive_recall_details{
-    source_archive = ArchiveId,
-    source_dataset = DatasetId,
-    start_timestamp = StartTimestamp,
+    archive_id = ArchiveId,
+    dataset_id = DatasetId,
+    start_timestamo = StartTimestamp,
     finish_timestamp = FinishTimestamp,
-    target_files = TargetFiles,
-    target_bytes = TargetBytes
+    total_files = TotalFiles,
+    total_bytes = TotalBytes
 }) ->
     #{
-        <<"sourceArchive">> => ArchiveId,
-        <<"sourceDataset">> => DatasetId,
-        <<"startTimestamp">> => utils:undefined_to_null(StartTimestamp),
-        <<"finishTimestamp">> => utils:undefined_to_null(FinishTimestamp),
-        <<"targetFiles">> => TargetFiles,
-        <<"targetBytes">> => TargetBytes
+        <<"archiveId">> => ArchiveId,
+        <<"datasetId">> => DatasetId,
+        <<"startTime">> => utils:undefined_to_null(StartTimestamp),
+        <<"finishTime">> => utils:undefined_to_null(FinishTimestamp),
+        <<"totalFiles">> => TotalFiles,
+        <<"totalBytes">> => TotalBytes
     }.

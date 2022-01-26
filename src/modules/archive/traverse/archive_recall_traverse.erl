@@ -78,28 +78,28 @@ stop_pool() ->
 
 -spec start(archive:doc(), user_ctx:ctx(), file_id:file_guid(), file_meta:name()) -> 
     {ok, file_id:file_guid()} | {error, term()}.
-start(ArchiveDoc, UserCtx, TargetParentGuid, TargetRootName) ->
+start(ArchiveDoc, UserCtx, ParentGuid, TargetFilename) ->
     {ok, DataFileGuid} = archive:get_data_dir_guid(ArchiveDoc),
     % archive data dir contains only one file which is a copy of a dataset file
     {[StartFileCtx], _, _} = dir_req:get_children_ctxs(UserCtx, file_ctx:new_by_guid(DataFileGuid), 
         #{size => 1, offset => 0}),
-    {FinalName, StartFileCtx1} = case TargetRootName of
+    {FinalName, StartFileCtx1} = case TargetFilename of
         default ->
             file_ctx:get_aliased_name(StartFileCtx, UserCtx);
         _ ->
-            {TargetRootName, StartFileCtx}
+            {TargetFilename, StartFileCtx}
     end,
     {ok, SpaceId} = archive:get_space_id(ArchiveDoc),
     {IsDir, StartFileCtx2} = file_ctx:is_dir(StartFileCtx1),
-    case ensure_recall_allowed(SpaceId, UserCtx, TargetParentGuid) of
+    case ensure_recall_allowed(SpaceId, UserCtx, ParentGuid) of
         ok ->
-            case create_root_file(IsDir, user_ctx:get_session_id(UserCtx), TargetParentGuid, FinalName) of
+            case create_root_file(IsDir, user_ctx:get_session_id(UserCtx), ParentGuid, FinalName) of
                 {ok, RootFileGuid} ->
                     {RootPath, _} = file_ctx:get_canonical_path(file_ctx:new_by_guid(RootFileGuid)),
                     [_Sep, _SpaceId | RootPathTokens] = filename:split(RootPath),
                     TraverseInfo = #{
                         archive_doc => ArchiveDoc,
-                        current_parent => TargetParentGuid,
+                        current_parent => ParentGuid,
                         root_path_tokens => RootPathTokens,
                         root_file_name => FinalName
                     },
@@ -315,7 +315,7 @@ do_slave_job_unsafe(#tree_traverse_slave{
 
 
 %% @private
--spec execute_unsafe_job(atom, [term()], file_ctx:ctx(), id(), archive:doc()) -> ok | any().
+-spec execute_unsafe_job(atom(), [term()], file_ctx:ctx(), id(), archive:doc()) -> ok | any().
 execute_unsafe_job(JobFunctionName, Options, FileCtx, TaskId, ArchiveDoc) ->
     try
         % call using ?MODULE for mocking in tests

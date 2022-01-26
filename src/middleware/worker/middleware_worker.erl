@@ -32,8 +32,8 @@
     #archive_dataset{} |
     #get_archive_info{} |
     #update_archive{} |
-    #init_archive_purge{} |
-    #init_archive_recall{} |
+    #purge_archive{} |
+    #recall_archive{} |
     #get_recall_details{} |
     #get_recall_progress{}.
 
