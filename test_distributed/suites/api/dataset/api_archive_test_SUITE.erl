@@ -1016,7 +1016,7 @@ get_archive_recall_test_base(Providers, Aspect) ->
     
     SessId = fun(P) -> oct_background:get_user_session_id(user2, P) end,
     SpaceDirGuid = fslogic_uuid:spaceid_to_space_dir_guid(oct_background:get_space_id(?SPACE)),
-    {ok, RootFileGuid} = opt_archives:init_recall(krakow, SessId(krakow), ArchiveId, SpaceDirGuid, str_utils:rand_hex(16)),
+    {ok, RootFileGuid} = opt_archives:recall(krakow, SessId(krakow), ArchiveId, SpaceDirGuid, str_utils:rand_hex(16)),
     ?assertMatch({ok, _}, opt_archives:get_recall_details(paris, SessId(paris), RootFileGuid), ?ATTEMPTS),
     {ok, RootFileObjectId} = file_id:guid_to_objectid(RootFileGuid),
     

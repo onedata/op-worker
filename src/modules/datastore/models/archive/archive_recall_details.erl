@@ -22,7 +22,7 @@
 -export([get/1]).
 -export([report_started/1, report_finished/1]).
 %% Datastore callbacks
--export([get_ctx/0, get_record_version/0, get_record_struct/1]).
+-export([get_ctx/0, get_record_version/0, get_record_struct/1, on_remote_doc_created/2]).
 
 -type id() :: archive_recall_api:id().
 -type record() :: #archive_recall_details{}.
@@ -87,7 +87,6 @@ report_finished(Id) ->
         {ok, ArchiveRecall#archive_recall_details{finish_timestamp = global_clock:timestamp_millis()}}
     end)).
 
-%% @TODO VFS-7617 invalidate cache on_remote_doc_created
 
 %%%===================================================================
 %%% Datastore callbacks
@@ -102,6 +101,7 @@ get_ctx() ->
 get_record_version() ->
     1.
 
+
 -spec get_record_struct(datastore_model:record_version()) -> datastore_model:record_struct().
 get_record_struct(1) ->
     {record, [
@@ -112,3 +112,8 @@ get_record_struct(1) ->
         {total_files, integer},
         {total_bytes, integer}
     ]}.
+
+
+-spec on_remote_doc_created(datastore_model:ctx(), datastore_model:doc()) -> ok.
+on_remote_doc_created(_Ctx, #document{scope = SpaceId}) ->
+    archive_recall_cache:invalidate_on_all_nodes(SpaceId).

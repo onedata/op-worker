@@ -17,8 +17,8 @@
     archive_dataset/5, archive_dataset/7,
     get_info/3,
     update/4,
-    init_purge/3, init_purge/4,
-    init_recall/5, 
+    purge/3, purge/4,
+    recall/5, 
     get_recall_details/3, get_recall_progress/3
 ]).
 
@@ -102,21 +102,21 @@ update(NodeSelector, SessionId, ArchiveId, Diff) ->
     ?CALL(NodeSelector, [SessionId, ArchiveId, Diff]).
 
 
--spec init_purge(oct_background:node_selector(), session:id(), archive:id()) ->
+-spec purge(oct_background:node_selector(), session:id(), archive:id()) ->
     ok | errors:error().
-init_purge(NodeSelector, SessionId, ArchiveId) ->
-    init_purge(NodeSelector, SessionId, ArchiveId, undefined).
+purge(NodeSelector, SessionId, ArchiveId) ->
+    purge(NodeSelector, SessionId, ArchiveId, undefined).
 
 
--spec init_purge(oct_background:node_selector(), session:id(), archive:id(), archive:callback()) ->
+-spec purge(oct_background:node_selector(), session:id(), archive:id(), archive:callback()) ->
     ok | errors:error().
-init_purge(NodeSelector, SessionId, ArchiveId, CallbackUrl) ->
+purge(NodeSelector, SessionId, ArchiveId, CallbackUrl) ->
     ?CALL(NodeSelector, [SessionId, ArchiveId, CallbackUrl]).
 
 
--spec init_recall(oct_background:node_selector(), session:id(), archive:id(), file_id:file_guid(), 
+-spec recall(oct_background:node_selector(), session:id(), archive:id(), file_id:file_guid(), 
     file_meta:name() | default) -> {ok, file_id:file_guid()} | errors:error().
-init_recall(NodeSelector, SessionId, ArchiveId, TargetParentGuid, RootFileName) ->
+recall(NodeSelector, SessionId, ArchiveId, TargetParentGuid, RootFileName) ->
     ?CALL(NodeSelector, [SessionId, ArchiveId, TargetParentGuid, RootFileName]).
 
 

@@ -197,13 +197,13 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = instance} = GRI}) -
 create(#op_req{auth = Auth, data = Data, gri = #gri{id = ArchiveId, aspect = purge}}) ->
     SessionId = Auth#auth.session_id,
     Callback = maps:get(<<"purgedCallback">>, Data, undefined),
-    mi_archives:init_purge(SessionId, ArchiveId, Callback);
+    mi_archives:purge(SessionId, ArchiveId, Callback);
 
 create(#op_req{auth = Auth, data = Data, gri = #gri{id = ArchiveId, aspect = recall}}) ->
     SessionId = Auth#auth.session_id,
     ParentDirectoryGuid = maps:get(<<"parentDirectoryId">>, Data),
     TargetFileName = maps:get(<<"targetFileName">>, Data, default),
-    {ok, value, mi_archives:init_recall(SessionId, ArchiveId, ParentDirectoryGuid, TargetFileName)}.
+    {ok, value, mi_archives:recall(SessionId, ArchiveId, ParentDirectoryGuid, TargetFileName)}.
 
 
 %%--------------------------------------------------------------------

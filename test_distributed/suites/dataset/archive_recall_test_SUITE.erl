@@ -86,7 +86,8 @@
     recall_to_recalling_dir_test/1,
     recall_to_recalling_dir_by_symlink_test/1,
     recall_dir_error_test/1,
-    recall_file_error_test/1
+    recall_file_error_test/1,
+    recall_effective_cache_test/1
 ]).
 
 groups() -> [
@@ -146,7 +147,8 @@ groups() -> [
         recall_to_recalling_dir_test,
         recall_to_recalling_dir_by_symlink_test,
         recall_dir_error_test,
-        recall_file_error_test
+        recall_file_error_test,
+        recall_effective_cache_test
     ]}
 ].
 
@@ -380,6 +382,20 @@ recall_file_error_test(_Config) ->
     recall_error_test_base(Spec, do_slave_job_unsafe).
 
 
+recall_effective_cache_test(_Config) ->
+    {ArchiveId, _TargetParentGuid, RecallRootFileGuid1} = recall_test_setup(#dir_spec{
+        dataset = #dataset_spec{archives = [#archive_spec{config = #archive_config{layout = ?ARCHIVE_PLAIN_LAYOUT}}]},
+        children = [
+            #file_spec{metadata = #metadata_spec{json = ?RAND_JSON_METADATA()}}
+        ]
+    }),
+    SessId = oct_background:get_user_session_id(?USER1, krakow),
+    
+    check_effective_cache_values(RecallRootFileGuid1),
+    {ok, RecallRootFileGuid2} = ?assertMatch({ok, _}, opt_archives:recall(krakow, SessId, ArchiveId, RecallRootFileGuid1, default)),
+    check_effective_cache_values(RecallRootFileGuid2).
+
+
 %===================================================================
 % Test bases
 %===================================================================
@@ -524,7 +540,7 @@ recall_test_base(StructureSpec, SymlinkResolutionMode) ->
     {ok, ArchiveDataDirGuid} = opw_test_rpc:call(krakow, archive, get_data_dir_guid, [ArchiveId]),
     archive_tests_utils:assert_copied(oct_background:get_random_provider_node(krakow), SessId, 
         get_direct_child(ArchiveDataDirGuid), get_direct_child(TargetParentGuid), SymlinkResolutionMode, ?ATTEMPTS),
-    ?assertEqual(?ERROR_ALREADY_EXISTS, opt_archives:init_recall(krakow, SessId, ArchiveId, TargetParentGuid, default)).
+    ?assertEqual(?ERROR_ALREADY_EXISTS, opt_archives:recall(krakow, SessId, ArchiveId, TargetParentGuid, default)).
 
 recall_test_setup(StructureSpec) ->
     recall_test_setup(StructureSpec, default).
@@ -539,7 +555,7 @@ recall_test_setup(StructureSpec, RootFileName) ->
             Acc
     end, undefined, utils:ensure_list(CreatedTreeObject)),
     #object{guid = TargetParentGuid} = onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, #dir_spec{}),
-    {ok, RecallRootFileGuid} = opt_archives:init_recall(krakow, SessId, ArchiveId, TargetParentGuid, RootFileName),
+    {ok, RecallRootFileGuid} = opt_archives:recall(krakow, SessId, ArchiveId, TargetParentGuid, RootFileName),
     FinalArchiveId = case opw_test_rpc:call(krakow, archive, get_related_dip, [ArchiveId]) of
         {ok, undefined} -> ArchiveId;
         {ok, DipArchiveId} -> DipArchiveId
@@ -552,11 +568,7 @@ recall_details_test_base(Spec, TotalFiles, TotalBytes) ->
     
     SessId = fun(P) -> oct_background:get_user_session_id(?USER1, P) end,
     % wait for archive recall traverse to finish (mocked in init_per_testcase)
-    Pid = receive
-        {recall_traverse_finished, P} -> P
-    after timer:seconds(?ATTEMPTS) ->
-            throw({error, recall_traverse_did_not_finish})
-    end,
+    Pid = wait_for_recall_traverse_finish(),
     
     % check archive_recall document
     Providers = oct_background:get_space_supporting_providers(?SPACE),
@@ -597,8 +609,7 @@ recall_details_test_base(Spec, TotalFiles, TotalBytes) ->
     time_test_utils:simulate_millis_passing(8),
     FinishTimestamp = Timestamp + 8,
     
-    % run archive_recall_traverse:task_finished (mocked in init_per_testcase)
-    Pid ! continue,
+    finish_recall(Pid),
     
     lists:foreach(fun(Provider) ->
         ?assertMatch({ok, #archive_recall_details{
@@ -617,12 +628,7 @@ recall_to_recalling_dir_test_base(Method) ->
         ]
     }),
     
-    % wait for archive recall traverse to finish (mocked in init_per_testcase)
-    Pid = receive
-        {recall_traverse_finished, P} -> P
-    after timer:seconds(?ATTEMPTS) ->
-            throw({error, recall_traverse_did_not_finish})
-    end,
+    Pid = wait_for_recall_traverse_finish(),
     SessId = oct_background:get_user_session_id(?USER1, krakow),
     
     NewTargetParentGuid = case Method of
@@ -635,15 +641,14 @@ recall_to_recalling_dir_test_base(Method) ->
             G
     end,
     
-    ?assertEqual(?ERROR_POSIX(?EBUSY), opt_archives:init_recall(krakow, SessId, ArchiveId, NewTargetParentGuid, default)),
+    ?assertEqual(?ERROR_POSIX(?EBUSY), opt_archives:recall(krakow, SessId, ArchiveId, NewTargetParentGuid, default)),
     
-    % run archive_recall_traverse:task_finished (mocked in init_per_testcase)
-    Pid ! continue,
+    finish_recall(Pid),
     
     ?assertMatch({ok, #archive_recall_details{finish_timestamp = T}} when is_integer(T),
         opt_archives:get_recall_details(krakow, SessId, RecallRootFileGuid), ?ATTEMPTS),
     
-    ?assertMatch({ok, _}, opt_archives:init_recall(krakow, SessId, ArchiveId, NewTargetParentGuid, default)).
+    ?assertMatch({ok, _}, opt_archives:recall(krakow, SessId, ArchiveId, NewTargetParentGuid, default)).
 
 
 recall_error_test_base(Spec, FunName) ->
@@ -683,6 +688,52 @@ mock_traverse_error(FunName, Error) ->
         error(Error)
     end).
 
+
+check_effective_cache_values(RecallRootFileGuid) ->
+    SessId = oct_background:get_user_session_id(?USER1, krakow),
+    Node = oct_background:get_random_provider_node(krakow),
+    Pid = wait_for_recall_traverse_finish(),
+    {ok, [{ChildGuid, _}], _} = ?assertMatch({ok, [_], _}, lfm_proxy:get_children(Node, SessId, #file_ref{guid = RecallRootFileGuid}, #{offset => 0})),
+    SpaceId = file_id:guid_to_space_id(RecallRootFileGuid),
+    Uuid = file_id:guid_to_uuid(RecallRootFileGuid),
+    lists:foreach(fun(N) ->
+        ?assertEqual({ok, {ongoing, Uuid}}, opw_test_rpc:call(N, archive_recall_cache, get, [SpaceId, Uuid]), ?ATTEMPTS),
+        ?assertEqual({ok, {ongoing, Uuid}}, opw_test_rpc:call(N, archive_recall_cache, get, [SpaceId, file_id:guid_to_uuid(ChildGuid)]), ?ATTEMPTS)
+    end, oct_background:get_all_providers_nodes()),
+    
+    finish_recall(Pid),
+    
+    lists:foreach(fun(N) ->
+        ?assertEqual({ok, {finished, Uuid}}, opw_test_rpc:call(N, archive_recall_cache, get, [SpaceId, Uuid]), ?ATTEMPTS),
+        ?assertEqual({ok, {finished, Uuid}}, opw_test_rpc:call(N, archive_recall_cache, get, [SpaceId, file_id:guid_to_uuid(ChildGuid)]), ?ATTEMPTS)
+    end, oct_background:get_all_providers_nodes()).
+
+
+mock_recall_traverse() ->
+    Nodes = oct_background:get_all_providers_nodes(),
+    test_utils:mock_new(Nodes, archive_recall_traverse),
+    Self = self(),
+    test_utils:mock_expect(Nodes, archive_recall_traverse, task_finished, fun(TaskId, Pool) ->
+        Self ! {recall_traverse_finished, self()},
+        receive continue ->
+            meck:passthrough([TaskId, Pool])
+        end
+    end).
+
+
+%% below functions require calling mock_recall_traverse/0 function beforehand.
+wait_for_recall_traverse_finish() ->
+    receive
+        {recall_traverse_finished, P} -> P
+    after timer:seconds(?ATTEMPTS) ->
+        throw({error, recall_traverse_did_not_finish})
+    end.
+
+
+finish_recall(Pid) ->
+    Pid ! continue.
+
+
 %===================================================================
 % SetUp and TearDown functions
 %===================================================================
@@ -710,17 +761,10 @@ init_per_testcase(Case, Config) when
     Case =:= recall_details_test;
     Case =:= recall_details_nested_test;
     Case =:= recall_to_recalling_dir_test;
-    Case =:= recall_to_recalling_dir_by_symlink_test
+    Case =:= recall_to_recalling_dir_by_symlink_test;
+    Case =:= recall_effective_cache_test
 ->
-    Nodes = oct_background:get_all_providers_nodes(),
-    test_utils:mock_new(Nodes, archive_recall_traverse),
-    Self = self(),
-    test_utils:mock_expect(Nodes, archive_recall_traverse, task_finished, fun(TaskId, Pool) ->
-        Self ! {recall_traverse_finished, self()},
-        receive continue ->
-            meck:passthrough([TaskId, Pool])
-        end
-    end),
+    mock_recall_traverse(),
     time_test_utils:freeze_time(Config),
     Config;
 init_per_testcase(_Case, Config) ->
@@ -730,7 +774,8 @@ end_per_testcase(Case, Config) when
     Case =:= recall_details_test;
     Case =:= recall_details_nested_test;
     Case =:= recall_to_recalling_dir_test;
-    Case =:= recall_to_recalling_dir_by_symlink_test
+    Case =:= recall_to_recalling_dir_by_symlink_test;
+    Case =:= recall_effective_cache_test
 ->
     time_test_utils:unfreeze_time(Config),
     test_utils:mock_unload(oct_background:get_all_providers_nodes()),
