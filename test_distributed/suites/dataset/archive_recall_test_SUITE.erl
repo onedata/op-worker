@@ -179,136 +179,136 @@ end).
 %===================================================================
 
 recall_plain_simple_archive_test(_Config) ->
-    recall_simple_archive_base(?ARCHIVE_PLAIN_LAYOUT, false).
+    recall_simple_archive_base(#{layout => ?ARCHIVE_PLAIN_LAYOUT, include_dip => false}).
 
 recall_bagit_simple_archive_test(_Config) ->
-    recall_simple_archive_base(?ARCHIVE_BAGIT_LAYOUT, false).
+    recall_simple_archive_base(#{layout => ?ARCHIVE_BAGIT_LAYOUT, include_dip => false}).
 
 recall_plain_simple_archive_dip_test(_Config) ->
-    recall_simple_archive_base(?ARCHIVE_PLAIN_LAYOUT, true).
+    recall_simple_archive_base(#{layout => ?ARCHIVE_PLAIN_LAYOUT, include_dip => true}).
 
 recall_bagit_simple_archive_dip_test(_Config) ->
-    recall_simple_archive_base(?ARCHIVE_BAGIT_LAYOUT, true).
+    recall_simple_archive_base(#{layout => ?ARCHIVE_BAGIT_LAYOUT, include_dip => true}).
 
 recall_plain_empty_dir_archive_test(_Config) ->
-    recall_empty_dir_archive_base(?ARCHIVE_PLAIN_LAYOUT, false).
+    recall_empty_dir_archive_base(#{layout => ?ARCHIVE_PLAIN_LAYOUT, include_dip => false}).
 
 recall_bagit_empty_dir_archive_test(_Config) ->
-    recall_empty_dir_archive_base(?ARCHIVE_BAGIT_LAYOUT, false).
+    recall_empty_dir_archive_base(#{layout => ?ARCHIVE_BAGIT_LAYOUT, include_dip => false}).
 
 recall_plain_empty_dir_archive_dip_test(_Config) ->
-    recall_empty_dir_archive_base(?ARCHIVE_PLAIN_LAYOUT, true).
+    recall_empty_dir_archive_base(#{layout => ?ARCHIVE_PLAIN_LAYOUT, include_dip => true}).
 
 recall_bagit_empty_dir_archive_dip_test(_Config) ->
-    recall_empty_dir_archive_base(?ARCHIVE_BAGIT_LAYOUT, true).
+    recall_empty_dir_archive_base(#{layout => ?ARCHIVE_BAGIT_LAYOUT, include_dip => true}).
 
 recall_plain_single_file_archive_test(_Config) ->
-    recall_single_file_archive_base(?ARCHIVE_PLAIN_LAYOUT, false).
+    recall_single_file_archive_base(#{layout => ?ARCHIVE_PLAIN_LAYOUT, include_dip => false}).
 
 recall_bagit_single_file_archive_test(_Config) ->
-    recall_single_file_archive_base(?ARCHIVE_BAGIT_LAYOUT, false).
+    recall_single_file_archive_base(#{layout => ?ARCHIVE_BAGIT_LAYOUT, include_dip => false}).
 
 recall_plain_single_file_archive_dip_test(_Config) ->
-    recall_single_file_archive_base(?ARCHIVE_PLAIN_LAYOUT, true).
+    recall_single_file_archive_base(#{layout => ?ARCHIVE_PLAIN_LAYOUT, include_dip => true}).
 
 recall_bagit_single_file_archive_dip_test(_Config) ->
-    recall_single_file_archive_base(?ARCHIVE_BAGIT_LAYOUT, true).
+    recall_single_file_archive_base(#{layout => ?ARCHIVE_BAGIT_LAYOUT, include_dip => true}).
 
 recall_plain_nested_archive_test(_Config) ->
-    recall_nested_archive_base(?ARCHIVE_PLAIN_LAYOUT, false).
+    recall_nested_archive_base(#{layout => ?ARCHIVE_PLAIN_LAYOUT, include_dip => false}).
 
 recall_bagit_nested_archive_test(_Config) ->
-    recall_nested_archive_base(?ARCHIVE_BAGIT_LAYOUT, false).
+    recall_nested_archive_base(#{layout => ?ARCHIVE_BAGIT_LAYOUT, include_dip => false}).
 
 recall_plain_nested_archive_dip_test(_Config) ->
-    recall_nested_archive_base(?ARCHIVE_PLAIN_LAYOUT, true).
+    recall_nested_archive_base(#{layout => ?ARCHIVE_PLAIN_LAYOUT, include_dip => true}).
 
 recall_bagit_nested_archive_dip_test(_Config) ->
-    recall_nested_archive_base(?ARCHIVE_BAGIT_LAYOUT, true).
+    recall_nested_archive_base(#{layout => ?ARCHIVE_BAGIT_LAYOUT, include_dip => true}).
 
 recall_plain_containing_symlink_archive_test(_Config) ->
-    recall_containing_invalid_symlink_archive_base(?ARCHIVE_PLAIN_LAYOUT, false).
+    recall_containing_invalid_symlink_archive_base(#{layout => ?ARCHIVE_PLAIN_LAYOUT, include_dip => false}).
 
 recall_bagit_containing_symlink_archive_test(_Config) ->
-    recall_containing_invalid_symlink_archive_base(?ARCHIVE_BAGIT_LAYOUT, false).
+    recall_containing_invalid_symlink_archive_base(#{layout => ?ARCHIVE_BAGIT_LAYOUT, include_dip => false}).
 
 recall_plain_containing_symlink_archive_dip_test(_Config) ->
-    recall_containing_invalid_symlink_archive_base(?ARCHIVE_PLAIN_LAYOUT, true).
+    recall_containing_invalid_symlink_archive_base(#{layout => ?ARCHIVE_PLAIN_LAYOUT, include_dip => true}).
 
 recall_bagit_containing_symlink_archive_dip_test(_Config) ->
-    recall_containing_invalid_symlink_archive_base(?ARCHIVE_BAGIT_LAYOUT, true).
+    recall_containing_invalid_symlink_archive_base(#{layout => ?ARCHIVE_BAGIT_LAYOUT, include_dip => true}).
 
 recall_plain_archive_containing_internal_symlink_test(_Config) ->
-    recall_containing_internal_symlink_archive_base(?ARCHIVE_PLAIN_LAYOUT, false).
+    recall_containing_internal_symlink_archive_base(#{layout => ?ARCHIVE_PLAIN_LAYOUT, include_dip => false}).
 
 recall_bagit_archive_containing_internal_symlink_test(_Config) ->
-    recall_containing_internal_symlink_archive_base(?ARCHIVE_BAGIT_LAYOUT, false).
+    recall_containing_internal_symlink_archive_base(#{layout => ?ARCHIVE_BAGIT_LAYOUT, include_dip => false}).
 
 recall_plain_archive_containing_internal_symlink_dip_test(_Config) ->
-    recall_containing_internal_symlink_archive_base(?ARCHIVE_PLAIN_LAYOUT, true).
+    recall_containing_internal_symlink_archive_base(#{layout => ?ARCHIVE_PLAIN_LAYOUT, include_dip => true}).
 
 recall_bagit_archive_containing_internal_symlink_dip_test(_Config) ->
-    recall_containing_internal_symlink_archive_base(?ARCHIVE_BAGIT_LAYOUT, true).
+    recall_containing_internal_symlink_archive_base(#{layout => ?ARCHIVE_BAGIT_LAYOUT, include_dip => true}).
 
 recall_plain_archive_containing_external_symlink_test(_Config) ->
-    recall_containing_external_symlink_archive_base(?ARCHIVE_PLAIN_LAYOUT, false).
+    recall_containing_external_symlink_archive_base(#{layout => ?ARCHIVE_PLAIN_LAYOUT, include_dip => false}).
 
 recall_bagit_archive_containing_external_symlink_test(_Config) ->
-    recall_containing_external_symlink_archive_base(?ARCHIVE_BAGIT_LAYOUT, false).
+    recall_containing_external_symlink_archive_base(#{layout => ?ARCHIVE_BAGIT_LAYOUT, include_dip => false}).
 
 recall_plain_archive_containing_external_symlink_dip_test(_Config) ->
-    recall_containing_external_symlink_archive_base(?ARCHIVE_PLAIN_LAYOUT, true).
+    recall_containing_external_symlink_archive_base(#{layout => ?ARCHIVE_PLAIN_LAYOUT, include_dip => true}).
 
 recall_bagit_archive_containing_external_symlink_dip_test(_Config) ->
-    recall_containing_external_symlink_archive_base(?ARCHIVE_BAGIT_LAYOUT, true).
+    recall_containing_external_symlink_archive_base(#{layout => ?ARCHIVE_BAGIT_LAYOUT, include_dip => true}).
 
 recall_plain_archive_containing_nested_internal_symlink_test(_Config) ->
-    recall_containing_nested_internal_symlink_archive_base(?ARCHIVE_PLAIN_LAYOUT, false).
+    recall_containing_nested_internal_symlink_archive_base(#{layout => ?ARCHIVE_PLAIN_LAYOUT, include_dip => false}).
 
 recall_bagit_archive_containing_nested_internal_symlink_test(_Config) ->
-    recall_containing_nested_internal_symlink_archive_base(?ARCHIVE_BAGIT_LAYOUT, false).
+    recall_containing_nested_internal_symlink_archive_base(#{layout => ?ARCHIVE_BAGIT_LAYOUT, include_dip => false}).
 
 recall_plain_archive_containing_nested_internal_symlink_dip_test(_Config) ->
-    recall_containing_nested_internal_symlink_archive_base(?ARCHIVE_PLAIN_LAYOUT, true).
+    recall_containing_nested_internal_symlink_archive_base(#{layout => ?ARCHIVE_PLAIN_LAYOUT, include_dip => true}).
 
 recall_bagit_archive_containing_nested_internal_symlink_dip_test(_Config) ->
-    recall_containing_nested_internal_symlink_archive_base(?ARCHIVE_BAGIT_LAYOUT, true).
+    recall_containing_nested_internal_symlink_archive_base(#{layout => ?ARCHIVE_BAGIT_LAYOUT, include_dip => true}).
 
 recall_plain_archive_containing_nested_external_symlink_test(_Config) ->
-    recall_containing_nested_external_symlink_archive_base(?ARCHIVE_PLAIN_LAYOUT, false).
+    recall_containing_nested_external_symlink_archive_base(#{layout => ?ARCHIVE_PLAIN_LAYOUT, include_dip => false}).
 
 recall_bagit_archive_containing_nested_external_symlink_test(_Config) ->
-    recall_containing_nested_external_symlink_archive_base(?ARCHIVE_BAGIT_LAYOUT, false).
+    recall_containing_nested_external_symlink_archive_base(#{layout => ?ARCHIVE_BAGIT_LAYOUT, include_dip => false}).
 
 recall_plain_archive_containing_nested_external_symlink_dip_test(_Config) ->
-    recall_containing_nested_external_symlink_archive_base(?ARCHIVE_PLAIN_LAYOUT, true).
+    recall_containing_nested_external_symlink_archive_base(#{layout => ?ARCHIVE_PLAIN_LAYOUT, include_dip => true}).
 
 recall_bagit_archive_containing_nested_external_symlink_dip_test(_Config) ->
-    recall_containing_nested_external_symlink_archive_base(?ARCHIVE_BAGIT_LAYOUT, true).
+    recall_containing_nested_external_symlink_archive_base(#{layout => ?ARCHIVE_BAGIT_LAYOUT, include_dip => true}).
 
 recall_plain_archive_containing_nested_parent_symlink_test(_Config) ->
-    recall_containing_nested_parent_symlink_archive_base(?ARCHIVE_PLAIN_LAYOUT, false).
+    recall_containing_nested_parent_symlink_archive_base(#{layout => ?ARCHIVE_PLAIN_LAYOUT, include_dip => false}).
 
 recall_bagit_archive_containing_nested_parent_symlink_test(_Config) ->
-    recall_containing_nested_parent_symlink_archive_base(?ARCHIVE_BAGIT_LAYOUT, false).
+    recall_containing_nested_parent_symlink_archive_base(#{layout => ?ARCHIVE_BAGIT_LAYOUT, include_dip => false}).
 
 recall_plain_archive_containing_nested_parent_symlink_dip_test(_Config) ->
-    recall_containing_nested_parent_symlink_archive_base(?ARCHIVE_PLAIN_LAYOUT, true).
+    recall_containing_nested_parent_symlink_archive_base(#{layout => ?ARCHIVE_PLAIN_LAYOUT, include_dip => true}).
 
 recall_bagit_archive_containing_nested_parent_symlink_dip_test(_Config) ->
-    recall_containing_nested_parent_symlink_archive_base(?ARCHIVE_BAGIT_LAYOUT, true).
+    recall_containing_nested_parent_symlink_archive_base(#{layout => ?ARCHIVE_BAGIT_LAYOUT, include_dip => true}).
 
 recall_plain_archive_containing_nested_child_symlink_test(_Config) ->
-    recall_containing_nested_child_symlink_archive_base(?ARCHIVE_PLAIN_LAYOUT, false).
+    recall_containing_nested_child_symlink_archive_base(#{layout => ?ARCHIVE_PLAIN_LAYOUT, include_dip => false}).
 
 recall_bagit_archive_containing_nested_child_symlink_test(_Config) ->
-    recall_containing_nested_child_symlink_archive_base(?ARCHIVE_BAGIT_LAYOUT, false).
+    recall_containing_nested_child_symlink_archive_base(#{layout => ?ARCHIVE_BAGIT_LAYOUT, include_dip => false}).
 
 recall_plain_archive_containing_nested_child_symlink_dip_test(_Config) ->
-    recall_containing_nested_child_symlink_archive_base(?ARCHIVE_PLAIN_LAYOUT, true).
+    recall_containing_nested_child_symlink_archive_base(#{layout => ?ARCHIVE_PLAIN_LAYOUT, include_dip => true}).
 
 recall_bagit_archive_containing_nested_child_symlink_dip_test(_Config) ->
-    recall_containing_nested_child_symlink_archive_base(?ARCHIVE_BAGIT_LAYOUT, true).
+    recall_containing_nested_child_symlink_archive_base(#{layout => ?ARCHIVE_BAGIT_LAYOUT, include_dip => true}).
 
 
 %===================================================================
@@ -384,7 +384,7 @@ recall_file_error_test(_Config) ->
 % Test bases
 %===================================================================
 
-recall_simple_archive_base(Layout, IncludeDip) ->
+recall_simple_archive_base(#{layout := Layout, include_dip := IncludeDip}) ->
     recall_test_base(#dir_spec{
         dataset = #dataset_spec{archives = [#archive_spec{config = #archive_config{layout = Layout, include_dip = IncludeDip}}]},
         metadata = #metadata_spec{json = ?RAND_JSON_METADATA()},
@@ -395,19 +395,19 @@ recall_simple_archive_base(Layout, IncludeDip) ->
         ]
     }).
 
-recall_empty_dir_archive_base(Layout, IncludeDip) ->
+recall_empty_dir_archive_base(#{layout := Layout, include_dip := IncludeDip}) ->
     recall_test_base(#dir_spec{
         dataset = #dataset_spec{archives = [#archive_spec{config = #archive_config{layout = Layout, include_dip = IncludeDip}}]},
         metadata = #metadata_spec{json = ?RAND_JSON_METADATA()}
     }).
 
-recall_single_file_archive_base(Layout, IncludeDip) ->
+recall_single_file_archive_base(#{layout := Layout, include_dip := IncludeDip}) ->
     recall_test_base(#file_spec{
         dataset = #dataset_spec{archives = [#archive_spec{config = #archive_config{layout = Layout, include_dip = IncludeDip}}]},
         metadata = #metadata_spec{json = ?RAND_JSON_METADATA()}
     }).
 
-recall_nested_archive_base(Layout, IncludeDip) ->
+recall_nested_archive_base(#{layout := Layout, include_dip := IncludeDip}) ->
     recall_test_base(#dir_spec{
         dataset = #dataset_spec{archives = [#archive_spec{config = #archive_config{layout = Layout, include_dip = IncludeDip, create_nested_archives = true}}]},
         metadata = #metadata_spec{json = ?RAND_JSON_METADATA()},
@@ -417,14 +417,14 @@ recall_nested_archive_base(Layout, IncludeDip) ->
         }]
     }).
 
-recall_containing_invalid_symlink_archive_base(Layout, IncludeDip) ->
+recall_containing_invalid_symlink_archive_base(#{layout := Layout, include_dip := IncludeDip}) ->
     recall_test_base(#dir_spec{
         dataset = #dataset_spec{archives = [#archive_spec{config = #archive_config{layout = Layout, include_dip = IncludeDip, follow_symlinks = false}}]},
         metadata = #metadata_spec{json = ?RAND_JSON_METADATA()},
         children = [#symlink_spec{symlink_value = <<"some/dummy/value">>}]
     }, false).
 
-recall_containing_internal_symlink_archive_base(Layout, IncludeDip) ->
+recall_containing_internal_symlink_archive_base(#{layout := Layout, include_dip := IncludeDip}) ->
     recall_test_base(#dir_spec{
         dataset = #dataset_spec{archives = [#archive_spec{config = #archive_config{layout = Layout, include_dip = IncludeDip}}]},
         metadata = #metadata_spec{json = ?RAND_JSON_METADATA()},
@@ -434,7 +434,7 @@ recall_containing_internal_symlink_archive_base(Layout, IncludeDip) ->
         ]
     }, false).
 
-recall_containing_nested_internal_symlink_archive_base(Layout, IncludeDip) ->
+recall_containing_nested_internal_symlink_archive_base(#{layout := Layout, include_dip := IncludeDip}) ->
     recall_test_base(#dir_spec{
         dataset = #dataset_spec{archives = [#archive_spec{config = #archive_config{layout = Layout, include_dip = IncludeDip, create_nested_archives = true}}]},
         metadata = #metadata_spec{json = ?RAND_JSON_METADATA()},
@@ -447,7 +447,7 @@ recall_containing_nested_internal_symlink_archive_base(Layout, IncludeDip) ->
         ]
     }, nested_archive_only ).
 
-recall_containing_external_symlink_archive_base(Layout, IncludeDip) ->
+recall_containing_external_symlink_archive_base(#{layout := Layout, include_dip := IncludeDip}) ->
     recall_test_base([
         #file_spec{custom_identifier = <<"target">>},
         #dir_spec{
@@ -462,7 +462,7 @@ recall_containing_external_symlink_archive_base(Layout, IncludeDip) ->
         }
     ]).
 
-recall_containing_nested_external_symlink_archive_base(Layout, IncludeDip) ->
+recall_containing_nested_external_symlink_archive_base(#{layout := Layout, include_dip := IncludeDip}) ->
     recall_test_base([
         #file_spec{custom_identifier = <<"target">>},
         #dir_spec{
@@ -478,7 +478,7 @@ recall_containing_nested_external_symlink_archive_base(Layout, IncludeDip) ->
         }
     ]).
 
-recall_containing_nested_parent_symlink_archive_base(Layout, IncludeDip) ->
+recall_containing_nested_parent_symlink_archive_base(#{layout := Layout, include_dip := IncludeDip}) ->
     recall_test_base([
         #dir_spec{
             dataset = #dataset_spec{archives = [#archive_spec{config = #archive_config{layout = Layout, include_dip = IncludeDip, create_nested_archives = true}}]},
@@ -496,7 +496,7 @@ recall_containing_nested_parent_symlink_archive_base(Layout, IncludeDip) ->
         }
     ], nested_archive_only).
 
-recall_containing_nested_child_symlink_archive_base(Layout, IncludeDip) ->
+recall_containing_nested_child_symlink_archive_base(#{layout := Layout, include_dip := IncludeDip}) ->
     recall_test_base([
         #dir_spec{
             dataset = #dataset_spec{archives = [#archive_spec{config = #archive_config{layout = Layout, include_dip = IncludeDip, create_nested_archives = true}}]},
