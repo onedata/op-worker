@@ -12,7 +12,8 @@
 -module(atm_workflow_execution_test_SUITE).
 -author("Bartosz Walkowicz").
 
--include("modules/automation/atm_schema_test_utils.hrl").
+-include("atm_workflow_exeuction_test_runner.hrl").
+-include("atm_test_schema.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
@@ -28,12 +29,12 @@
 %% tests
 -export([
     atm_workflow_with_empty_lane_scheduling_should_fail_test/1,
-    atm_workflow_successfully_executed_test/1
+    prepare_first_lane_run_failure_test/1
 ]).
 
 all() -> [
     atm_workflow_with_empty_lane_scheduling_should_fail_test,
-    atm_workflow_successfully_executed_test
+    prepare_first_lane_run_failure_test
 ].
 
 
@@ -110,8 +111,6 @@ all() -> [
     }}}
 }).
 
--define(JSON_PATH(__QUERY_BIN), binary:split(__QUERY_BIN, <<".">>, [global])).
-
 
 %%%===================================================================
 %%% Test cases
@@ -134,9 +133,25 @@ atm_workflow_with_empty_lane_scheduling_should_fail_test(_Config) ->
     ).
 
 
-atm_workflow_successfully_executed_test(_Config) ->
-    AtmWorkflowSchemaId = atm_test_inventory:get_workflow_schema_id(?ECHO_ATM_WORKFLOW_ALIAS),
-    atm_execution_test_runner:run(krakow, user2, space_krk, AtmWorkflowSchemaId, 1, #{}, undefined).
+prepare_first_lane_run_failure_test(_Config) ->
+    atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
+        provider = krakow,
+        user = user2,
+        space = space_krk,
+        workflow_schema_alias = ?ECHO_ATM_WORKFLOW_ALIAS,
+        workflow_schema_revision_num = 1,
+        incarnations = [#atm_workflow_execution_incarnation_test_spec{
+            lane_runs = [#atm_lane_run_execution_test_spec{
+                selector = {1, 1},
+                pre_prepare_lane_hook = fun(#atm_hook_call_ctx{workflow_execution_id = AtmWorkflowExecutionId}) ->
+                    atm_openfaas_task_executor_mock:set_exp_lane_initiation_result(
+                        krakow, AtmWorkflowExecutionId, 1, failure
+                    ),
+                    ok
+                end
+            }]
+        }]
+    }).
 
 
 %===================================================================
@@ -147,7 +162,7 @@ atm_workflow_successfully_executed_test(_Config) ->
 init_per_suite(Config) ->
     ModulesToLoad = [
         ?MODULE,
-        atm_execution_test_runner,
+        atm_workflow_execution_test_runner,
         atm_openfaas_task_executor_mock,
         atm_test_docker_registry
     ],
@@ -175,17 +190,17 @@ end_per_suite(_Config) ->
     oct_background:end_per_suite().
 
 
-init_per_testcase(atm_workflow_successfully_executed_test, Config) ->
+init_per_testcase(prepare_first_lane_run_failure_test, Config) ->
     atm_openfaas_task_executor_mock:init(krakow, atm_test_docker_registry),
-    atm_execution_test_runner:init(krakow),
+    atm_workflow_execution_test_runner:init(krakow),
     Config;
 
 init_per_testcase(_Case, Config) ->
     Config.
 
 
-end_per_testcase(atm_workflow_successfully_executed_test, _Config) ->
-    atm_execution_test_runner:teardown(krakow),
+end_per_testcase(prepare_first_lane_run_failure_test, _Config) ->
+    atm_workflow_execution_test_runner:teardown(krakow),
     atm_openfaas_task_executor_mock:teardown(krakow);
 
 end_per_testcase(_Case, _Config) ->

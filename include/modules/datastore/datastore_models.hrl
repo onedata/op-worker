@@ -1078,7 +1078,7 @@
     argument_specs :: [atm_task_execution_argument_spec:record()],
     result_specs :: [atm_task_execution_result_spec:record()],
 
-    system_audit_log_id :: undefined | atm_store:id(),
+    system_audit_log_id :: atm_store:id(),
 
     status :: atm_task_execution:status(),
     % Flag used to tell if status was changed during doc update (set automatically
@@ -1120,7 +1120,7 @@
     lambda_snapshot_registry :: atm_workflow_execution:lambda_snapshot_registry(),
 
     store_registry :: atm_workflow_execution:store_registry(),
-    system_audit_log_id :: undefined | atm_store:id(),
+    system_audit_log_id :: atm_store:id(),
 
     % lane execution records are kept as values in map where keys are indices
     % (from 1 up to `lanes_count`) due to performance and convenience of use

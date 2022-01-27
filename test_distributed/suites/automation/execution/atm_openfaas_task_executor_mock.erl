@@ -18,7 +18,7 @@
 
 %% API
 -export([init/2, teardown/1]).
--export([set_exp_lane_initiation_result/3]).
+-export([set_exp_lane_initiation_result/4]).
 
 
 -record(atm_openfaas_task_executor, {
@@ -75,16 +75,17 @@ teardown(ProviderSelectors) ->
 
 
 -spec set_exp_lane_initiation_result(
+    oct_background:entity_selector(),
     atm_workflow_execution:id(),
     atm_lane_execution:index(),
     success | failure
 ) ->
     ok.
-set_exp_lane_initiation_result(AtmWorkflowExecutionId, AtmLaneIndex, ExpResult) ->
-    node_cache:put(
+set_exp_lane_initiation_result(ProviderSelector, AtmWorkflowExecutionId, AtmLaneIndex, ExpResult) ->
+    opw_test_rpc:call(ProviderSelector, node_cache, put, [
         ?EXP_LANE_INITIATION_RESULT_KEY(AtmWorkflowExecutionId, AtmLaneIndex),
         ExpResult
-    ).
+    ]).
 
 
 %%%===================================================================

@@ -12,7 +12,7 @@
 -module(atm_test_schema_factory).
 -author("Bartosz Walkowicz").
 
--include("modules/automation/atm_schema_test_utils.hrl").
+-include("atm_test_schema.hrl").
 
 -export([create_from_draft/1]).
 

@@ -5,12 +5,13 @@
 %%% cited in 'LICENSE.txt'.
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% This file contains definitions of macros used in automation CT test utils.
+%%% This file contains definitions of automation schema related records used in
+%%% CT tests.
 %%% @end
 %%%-------------------------------------------------------------------
 
--ifndef(ATM_WORKFLOW_SCHEMA_DUMP_DRAFT_HRL).
--define(ATM_WORKFLOW_SCHEMA_DUMP_DRAFT_HRL, 1).
+-ifndef(ATM_TEST_SCHEMA_HRL).
+-define(ATM_TEST_SCHEMA_HRL, 1).
 
 
 -include_lib("ctool/include/automation/automation.hrl").

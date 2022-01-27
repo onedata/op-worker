@@ -12,8 +12,8 @@
 -module(atm_test_inventory).
 -author("Bartosz Walkowicz").
 
+-include("atm_test_schema.hrl").
 -include("graph_sync/provider_graph_sync.hrl").
--include("modules/automation/atm_schema_test_utils.hrl").
 -include("modules/datastore/datastore_models.hrl").
 
 -export([
