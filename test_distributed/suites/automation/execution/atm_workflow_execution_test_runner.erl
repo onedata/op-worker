@@ -6,7 +6,16 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% TODO WRITEME
+%%% Runs atm workflow execution test scenarios. It works in following manner:
+%%% 1. appropriate atm workflow execution modules/functions are mocked so
+%%%    that it will be possible to execute hooks before/after them.
+%%% 2. atm workflow execution is started.
+%%% 3. hooks are executed possibly changing atm workflow execution test view
+%%%    (see atm_workflow_execution_test_view.erl)
+%%% 4. each change to test view is checked with model stored in Op - in case of
+%%%    any difference test fails.
+%%% 5. test successfully ends after are hooks have executed and no mismatch
+%%%    between test view and model in Op was found.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_workflow_execution_test_runner).
@@ -27,7 +36,7 @@
 -type hook_call_ctx() :: #atm_hook_call_ctx{}.
 -type hook() :: fun((hook_call_ctx()) -> {
     proceed | {return_error, errors:error()},
-    no_change | atm_test_workflow_execution_model:model()
+    no_change | atm_workflow_execution_test_view:view()
 }).
 
 -type lane_run_test_spec() :: #atm_lane_run_execution_test_spec{}.
@@ -42,7 +51,7 @@
     workflow_execution_id :: atm_workflow_execution:id(),
     current_lane_index :: atm_lane_execution:index(),
     current_run_num :: atm_lane_execution:run_num(),
-    workflow_execution_model,
+    workflow_execution_test_view :: atm_workflow_execution_test_view:view(),
     ongoing_incarnations :: [incarnation_test_spec()]
 }).
 -type state() :: #state{}.
@@ -57,7 +66,6 @@
     {atm_workflow_execution_id, __ATM_WORKFLOW_EXECUTION_ID}
 ).
 
-%% TODO -replace with default implementations for each hook
 -define(TMP_HOOK(__MSG), fun(_) ->
     ct:pal("~n~n~p~n~n", [Msg]),
     {proceed, no_change}
@@ -114,11 +122,11 @@ run(TestSpec = #atm_workflow_execution_test_spec{
     ),
     AtmLaneSchemas = jsonable_record:list_from_json(AtmLaneSchemasJson, atm_lane_schema),
 
-    AtmWorkflowExecutionModel = atm_test_workflow_execution_model:build(
+    AtmWorkflowExecutionTestView = atm_workflow_execution_test_view:build(
         SpaceId, global_clock:timestamp_seconds(), AtmLaneSchemas
     ),
-    atm_test_workflow_execution_model:assert_match_with_backend(
-        ProviderSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionModel
+    atm_workflow_execution_test_view:assert_match_with_backend(
+        ProviderSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionTestView
     ),
 
     monitor_workflow_execution(#state{
@@ -126,7 +134,7 @@ run(TestSpec = #atm_workflow_execution_test_spec{
         workflow_execution_id = AtmWorkflowExecutionId,
         current_lane_index = 1,
         current_run_num = 1,
-        workflow_execution_model = AtmWorkflowExecutionModel,
+        workflow_execution_test_view = AtmWorkflowExecutionTestView,
         ongoing_incarnations = Incarnations
     }).
 
@@ -141,10 +149,10 @@ run(TestSpec = #atm_workflow_execution_test_spec{
 monitor_workflow_execution(State) ->
     receive {ReplyTo, HookMsg} ->
         Hook = get_hook(HookMsg, State),
-        {HookResponse, NewModel} = Hook(build_hook_call_ctx(HookMsg, State)),
+        {HookResponse, NewTestView} = Hook(build_hook_call_ctx(HookMsg, State)),
 
         NewState1 = ensure_proper_current_lane_run(HookMsg, State),
-        NewState2 = ensure_actual_workflow_execution_model(NewModel, NewState1),
+        NewState2 = ensure_actual_workflow_execution_test_view(NewTestView, NewState1),
 
         reply_to_execution_process(ReplyTo, HookResponse),
 
@@ -155,8 +163,8 @@ monitor_workflow_execution(State) ->
                 monitor_workflow_execution(NewState2)
         end
     after timer:seconds(30) ->
-        %% TODO fail??
-        ok
+        ct:pal("ERROR: Atm workflow execution hunged"),
+        ?assertMatch(success, failure)
     end.
 
 
@@ -328,10 +336,12 @@ get_lane_run_test_spec(TargetAtmLaneIndex, #state{ongoing_incarnations = [
 build_hook_call_ctx({_, _, CallArgs}, #state{
     workflow_execution_id = AtmWorkflowExecutionId,
     current_lane_index = CurrentAtmLaneIndex,
-    current_run_num = CurrentRunNum
+    current_run_num = CurrentRunNum,
+    workflow_execution_test_view = AtmWorkflowExecutionTestView
 }) ->
     #atm_hook_call_ctx{
         workflow_execution_id = AtmWorkflowExecutionId,
+        workflow_execution_test_view = AtmWorkflowExecutionTestView,
         current_lane_index = CurrentAtmLaneIndex,
         current_run_num = CurrentRunNum,
         call_args = CallArgs
@@ -391,24 +401,24 @@ ensure_proper_current_lane_run(_, State) ->
 
 
 %% @private
--spec ensure_actual_workflow_execution_model(
-    no_change | atm_test_workflow_execution_model:model(),
+-spec ensure_actual_workflow_execution_test_view(
+    no_change | atm_workflow_execution_test_view:view(),
     state()
 ) ->
     state().
-ensure_actual_workflow_execution_model(no_change, State) ->
+ensure_actual_workflow_execution_test_view(no_change, State) ->
     State;
 
-ensure_actual_workflow_execution_model(NewAtmWorkflowExecutionModel, State = #state{
+ensure_actual_workflow_execution_test_view(NewAtmWorkflowExecutionTestView, State = #state{
     test_spec = #atm_workflow_execution_test_spec{
         provider = ProviderSelector
     },
     workflow_execution_id = AtmWorkflowExecutionId
 }) ->
-    atm_test_workflow_execution_model:assert_match_with_backend(
-        ProviderSelector, AtmWorkflowExecutionId, NewAtmWorkflowExecutionModel
+    atm_workflow_execution_test_view:assert_match_with_backend(
+        ProviderSelector, AtmWorkflowExecutionId, NewAtmWorkflowExecutionTestView
     ),
-    State#state{workflow_execution_model = NewAtmWorkflowExecutionModel}.
+    State#state{workflow_execution_test_view = NewAtmWorkflowExecutionTestView}.
 
 
 %% @private

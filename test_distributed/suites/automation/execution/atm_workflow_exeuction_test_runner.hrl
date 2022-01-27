@@ -19,6 +19,7 @@
 
 -record(atm_hook_call_ctx, {
     workflow_execution_id :: atm_workflow_execution:id(),
+    workflow_execution_test_view :: atm_workflow_execution_test_view:view(),
     current_lane_index :: atm_lane_execution:index(),
     current_run_num :: atm_lane_execution:run_num(),
     call_args :: [term()]
@@ -28,10 +29,9 @@
     selector :: atm_lane_execution:lane_run_selector(),
 
     pre_prepare_lane_hook = default :: default | atm_workflow_execution_test_runner:hook(),
-    post_prepare_lane_hook = default :: default | atm_workflow_execution_test_runner:hook(),
-
     pre_create_run_hook = default :: default | atm_workflow_execution_test_runner:hook(),
     post_create_run_hook = default :: default | atm_workflow_execution_test_runner:hook(),
+    post_prepare_lane_hook = default :: default | atm_workflow_execution_test_runner:hook(),
 
     pre_process_item_hook = default :: default | atm_workflow_execution_test_runner:hook(),
     post_process_item_hook = default :: default | atm_workflow_execution_test_runner:hook(),

@@ -143,16 +143,24 @@ prepare_first_lane_run_failure_test(_Config) ->
         incarnations = [#atm_workflow_execution_incarnation_test_spec{
             lane_runs = [#atm_lane_run_execution_test_spec{
                 selector = {1, 1},
-                pre_create_run_hook = fun(_) ->
-                    {{return_error, ?ERROR_INTERNAL_SERVER_ERROR}, no_change}
+                pre_create_run_hook = fun(#atm_hook_call_ctx{workflow_execution_test_view = TestView0}) ->
+                    TestView1 = atm_workflow_execution_test_view:report_lane_run_begin_preparing(
+                        {1, 1}, TestView0
+                    ),
+                    {{return_error, ?ERROR_INTERNAL_SERVER_ERROR}, TestView1}
+                end,
+                post_prepare_lane_hook = fun(#atm_hook_call_ctx{workflow_execution_test_view = TestView0}) ->
+                    TestView1 = atm_workflow_execution_test_view:report_lane_run_failed({1, 1}, TestView0),
+                    TestView2 = atm_workflow_execution_test_view:report_workflow_execution_aborting(TestView1),
+                    {proceed, TestView2}
                 end
-%%                pre_prepare_lane_hook = fun(#atm_hook_call_ctx{workflow_execution_id = AtmWorkflowExecutionId}) ->
-%%                    atm_openfaas_task_executor_mock:set_exp_lane_initiation_result(
-%%                        krakow, AtmWorkflowExecutionId, 1, failure
-%%                    ),
-%%                    ok
-%%                end
-            }]
+            }],
+            post_handle_workflow_execution_ended_hook = fun(#atm_hook_call_ctx{
+                workflow_execution_test_view = TestView0
+            }) ->
+                TestView1 = atm_workflow_execution_test_view:report_workflow_execution_failed(TestView0),
+                {proceed, TestView1}
+            end
         }]
     }).
 
