@@ -30,6 +30,9 @@
     pre_prepare_lane_hook = default :: default | atm_workflow_execution_test_runner:hook(),
     post_prepare_lane_hook = default :: default | atm_workflow_execution_test_runner:hook(),
 
+    pre_create_run_hook = default :: default | atm_workflow_execution_test_runner:hook(),
+    post_create_run_hook = default :: default | atm_workflow_execution_test_runner:hook(),
+
     pre_process_item_hook = default :: default | atm_workflow_execution_test_runner:hook(),
     post_process_item_hook = default :: default | atm_workflow_execution_test_runner:hook(),
 

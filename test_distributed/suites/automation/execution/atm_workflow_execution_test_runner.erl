@@ -25,7 +25,10 @@
 
 -type hook_msg() :: {pre | post, Function :: atom(), CallArgs :: [term()]}.
 -type hook_call_ctx() :: #atm_hook_call_ctx{}.
--type hook() :: fun((hook_call_ctx()) -> ok).
+-type hook() :: fun((hook_call_ctx()) -> {
+    proceed | {return_error, errors:error()},
+    no_change | atm_test_workflow_execution_model:model()
+}).
 
 -type lane_run_test_spec() :: #atm_lane_run_execution_test_spec{}.
 -type incarnation_test_spec() :: #atm_workflow_execution_incarnation_test_spec{}.
@@ -54,6 +57,12 @@
     {atm_workflow_execution_id, __ATM_WORKFLOW_EXECUTION_ID}
 ).
 
+%% TODO -replace with default implementations for each hook
+-define(TMP_HOOK(__MSG), fun(_) ->
+    ct:pal("~n~n~p~n~n", [Msg]),
+    {proceed, no_change}
+end).
+
 
 %%%===================================================================
 %%% API
@@ -65,7 +74,8 @@
 init(ProviderSelectors) ->
     Workers = get_nodes(utils:ensure_list(ProviderSelectors)),
     mock_workflow_execution_factory(Workers),
-    mock_workflow_execution_handler(Workers).
+    mock_workflow_execution_handler(Workers),
+    mock_lane_execution_factory(Workers).
 
 
 -spec teardown(oct_background:entity_selector() | [oct_background:entity_selector()]) ->
@@ -73,7 +83,8 @@ init(ProviderSelectors) ->
 teardown(ProviderSelectors) ->
     Workers = get_nodes(utils:ensure_list(ProviderSelectors)),
     unmock_workflow_execution_factory(Workers),
-    unmock_workflow_execution_handler(Workers).
+    unmock_workflow_execution_handler(Workers),
+    unmock_lane_execution_factory(Workers).
 
 
 -spec run(test_spec()) -> ok | no_return().
@@ -103,19 +114,21 @@ run(TestSpec = #atm_workflow_execution_test_spec{
     ),
     AtmLaneSchemas = jsonable_record:list_from_json(AtmLaneSchemasJson, atm_lane_schema),
 
-    State = #state{
+    AtmWorkflowExecutionModel = atm_test_workflow_execution_model:build(
+        SpaceId, global_clock:timestamp_seconds(), AtmLaneSchemas
+    ),
+    atm_test_workflow_execution_model:assert_match_with_backend(
+        ProviderSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionModel
+    ),
+
+    monitor_workflow_execution(#state{
         test_spec = TestSpec,
         workflow_execution_id = AtmWorkflowExecutionId,
         current_lane_index = 1,
         current_run_num = 1,
-        workflow_execution_model = atm_test_workflow_execution_model:build(
-            SpaceId, global_clock:timestamp_seconds(), AtmLaneSchemas
-        ),
+        workflow_execution_model = AtmWorkflowExecutionModel,
         ongoing_incarnations = Incarnations
-    },
-    ct:pal("~n~n~p~n~n", [State]),
-
-    loop(State).
+    }).
 
 
 %%%===================================================================
@@ -124,20 +137,25 @@ run(TestSpec = #atm_workflow_execution_test_spec{
 
 
 %% @private
--spec loop(state()) -> ok | no_return().
-loop(State) ->
+-spec monitor_workflow_execution(state()) -> ok | no_return().
+monitor_workflow_execution(State) ->
     receive {ReplyTo, HookMsg} ->
         Hook = get_hook(HookMsg, State),
-        Hook(build_hook_call_ctx(HookMsg, State)),
-        Result = update_state_after_hook_execution(HookMsg, State),
+        {HookResponse, NewModel} = Hook(build_hook_call_ctx(HookMsg, State)),
 
-        reply_to_execution_process(ReplyTo, proceed),
+        NewState1 = ensure_proper_current_lane_run(HookMsg, State),
+        NewState2 = ensure_actual_workflow_execution_model(NewModel, NewState1),
 
-        case Result of
-            {continue, NewState} -> loop(NewState);
-            stop -> ok
+        reply_to_execution_process(ReplyTo, HookResponse),
+
+        case NewState2#state.ongoing_incarnations of
+            [] ->
+                ok;
+            [_ | _] ->
+                monitor_workflow_execution(NewState2)
         end
     after timer:seconds(30) ->
+        %% TODO fail??
         ok
     end.
 
@@ -147,15 +165,31 @@ loop(State) ->
 get_hook(Msg = {pre, prepare_lane, [_, _, {AtmLaneIndex, _}]}, State) ->
     case get_lane_run_test_spec(AtmLaneIndex, State) of
         #atm_lane_run_execution_test_spec{pre_prepare_lane_hook = default} ->
-            fun(_) -> ct:pal("~n~n~p~n~n", [Msg]) end;
+            ?TMP_HOOK(Msg);
         #atm_lane_run_execution_test_spec{pre_prepare_lane_hook = Fun} ->
+            Fun
+    end;
+
+get_hook(Msg = {pre, create_run, [{AtmLaneIndex, _}, _, _]}, State) ->
+    case get_lane_run_test_spec(AtmLaneIndex, State) of
+        #atm_lane_run_execution_test_spec{pre_create_run_hook = default} ->
+            ?TMP_HOOK(Msg);
+        #atm_lane_run_execution_test_spec{pre_create_run_hook = Fun} ->
+            Fun
+    end;
+
+get_hook(Msg = {post, create_run, [{AtmLaneIndex, _}, _, _]}, State) ->
+    case get_lane_run_test_spec(AtmLaneIndex, State) of
+        #atm_lane_run_execution_test_spec{post_create_run_hook = default} ->
+            ?TMP_HOOK(Msg);
+        #atm_lane_run_execution_test_spec{post_create_run_hook = Fun} ->
             Fun
     end;
 
 get_hook(Msg = {post, prepare_lane, [_, _, {AtmLaneIndex, _}]}, State) ->
     case get_lane_run_test_spec(AtmLaneIndex, State) of
         #atm_lane_run_execution_test_spec{post_prepare_lane_hook = default} ->
-            fun(_) -> ct:pal("~n~n~p~n~n", [Msg]) end;
+            ?TMP_HOOK(Msg);
         #atm_lane_run_execution_test_spec{post_prepare_lane_hook = Fun} ->
             Fun
     end;
@@ -163,7 +197,7 @@ get_hook(Msg = {post, prepare_lane, [_, _, {AtmLaneIndex, _}]}, State) ->
 get_hook(Msg = {pre, process_item, _}, State) ->
     case get_current_lane_run_test_spec(State) of
         #atm_lane_run_execution_test_spec{pre_process_item_hook = default} ->
-            fun(_) -> ct:pal("~n~n~p~n~n", [Msg]) end;
+            ?TMP_HOOK(Msg);
         #atm_lane_run_execution_test_spec{pre_process_item_hook = Fun} ->
             Fun
     end;
@@ -171,7 +205,7 @@ get_hook(Msg = {pre, process_item, _}, State) ->
 get_hook(Msg = {post, process_item, _}, State) ->
     case get_current_lane_run_test_spec(State) of
         #atm_lane_run_execution_test_spec{post_process_item_hook = default} ->
-            fun(_) -> ct:pal("~n~n~p~n~n", [Msg]) end;
+            ?TMP_HOOK(Msg);
         #atm_lane_run_execution_test_spec{post_process_item_hook = Fun} ->
             Fun
     end;
@@ -179,7 +213,7 @@ get_hook(Msg = {post, process_item, _}, State) ->
 get_hook(Msg = {pre, process_result, _}, State) ->
     case get_current_lane_run_test_spec(State) of
         #atm_lane_run_execution_test_spec{pre_process_result_hook = default} ->
-            fun(_) -> ct:pal("~n~n~p~n~n", [Msg]) end;
+            ?TMP_HOOK(Msg);
         #atm_lane_run_execution_test_spec{pre_process_result_hook = Fun} ->
             Fun
     end;
@@ -187,7 +221,7 @@ get_hook(Msg = {pre, process_result, _}, State) ->
 get_hook(Msg = {post, process_result, _}, State) ->
     case get_current_lane_run_test_spec(State) of
         #atm_lane_run_execution_test_spec{post_process_result_hook = default} ->
-            fun(_) -> ct:pal("~n~n~p~n~n", [Msg]) end;
+            ?TMP_HOOK(Msg);
         #atm_lane_run_execution_test_spec{post_process_result_hook = Fun} ->
             Fun
     end;
@@ -195,7 +229,7 @@ get_hook(Msg = {post, process_result, _}, State) ->
 get_hook(Msg = {pre, report_item_error, _}, State) ->
     case get_current_lane_run_test_spec(State) of
         #atm_lane_run_execution_test_spec{pre_report_item_error_hook = default} ->
-            fun(_) -> ct:pal("~n~n~p~n~n", [Msg]) end;
+            ?TMP_HOOK(Msg);
         #atm_lane_run_execution_test_spec{pre_report_item_error_hook = Fun} ->
             Fun
     end;
@@ -203,7 +237,7 @@ get_hook(Msg = {pre, report_item_error, _}, State) ->
 get_hook(Msg = {post, report_item_error, _}, State) ->
     case get_current_lane_run_test_spec(State) of
         #atm_lane_run_execution_test_spec{post_report_item_error_hook = default} ->
-            fun(_) -> ct:pal("~n~n~p~n~n", [Msg]) end;
+            ?TMP_HOOK(Msg);
         #atm_lane_run_execution_test_spec{post_report_item_error_hook = Fun} ->
             Fun
     end;
@@ -211,7 +245,7 @@ get_hook(Msg = {post, report_item_error, _}, State) ->
 get_hook(Msg = {pre, handle_task_execution_ended, _}, State) ->
     case get_current_lane_run_test_spec(State) of
         #atm_lane_run_execution_test_spec{pre_handle_task_execution_ended_hook = default} ->
-            fun(_) -> ct:pal("~n~n~p~n~n", [Msg]) end;
+            ?TMP_HOOK(Msg);
         #atm_lane_run_execution_test_spec{pre_handle_task_execution_ended_hook = Fun} ->
             Fun
     end;
@@ -219,7 +253,7 @@ get_hook(Msg = {pre, handle_task_execution_ended, _}, State) ->
 get_hook(Msg = {post, handle_task_execution_ended, _}, State) ->
     case get_current_lane_run_test_spec(State) of
         #atm_lane_run_execution_test_spec{post_handle_task_execution_ended_hook = default} ->
-            fun(_) -> ct:pal("~n~n~p~n~n", [Msg]) end;
+            ?TMP_HOOK(Msg);
         #atm_lane_run_execution_test_spec{post_handle_task_execution_ended_hook = Fun} ->
             Fun
     end;
@@ -227,7 +261,7 @@ get_hook(Msg = {post, handle_task_execution_ended, _}, State) ->
 get_hook(Msg = {pre, handle_lane_execution_ended, _}, State) ->
     case get_current_lane_run_test_spec(State) of
         #atm_lane_run_execution_test_spec{pre_handle_lane_execution_ended_hook = default} ->
-            fun(_) -> ct:pal("~n~n~p~n~n", [Msg]) end;
+            ?TMP_HOOK(Msg);
         #atm_lane_run_execution_test_spec{pre_handle_lane_execution_ended_hook = Hook} ->
             Hook
     end;
@@ -235,7 +269,7 @@ get_hook(Msg = {pre, handle_lane_execution_ended, _}, State) ->
 get_hook(Msg = {post, handle_lane_execution_ended, _}, State) ->
     case get_current_lane_run_test_spec(State) of
         #atm_lane_run_execution_test_spec{post_handle_lane_execution_ended_hook = default} ->
-            fun(_) -> ct:pal("~n~n~p~n~n", [Msg]) end;
+            ?TMP_HOOK(Msg);
         #atm_lane_run_execution_test_spec{post_handle_lane_execution_ended_hook = Hook} ->
             Hook
     end;
@@ -245,7 +279,7 @@ get_hook(Msg = {pre, handle_workflow_execution_ended, _}, #state{ongoing_incarna
         pre_handle_workflow_execution_ended_hook = default
     } | _
 ]}) ->
-    fun(_) -> ct:pal("~n~n~p~n~n", [Msg]) end;
+    ?TMP_HOOK(Msg);
 
 get_hook({pre, handle_workflow_execution_ended, _}, #state{ongoing_incarnations = [
     #atm_workflow_execution_incarnation_test_spec{
@@ -259,7 +293,7 @@ get_hook(Msg = {post, handle_workflow_execution_ended, _}, #state{ongoing_incarn
         post_handle_workflow_execution_ended_hook = default
     } | _
 ]}) ->
-    fun(_) -> ct:pal("~n~n~p~n~n", [Msg]) end;
+    ?TMP_HOOK(Msg);
 
 get_hook({post, handle_workflow_execution_ended, _}, #state{ongoing_incarnations = [
     #atm_workflow_execution_incarnation_test_spec{
@@ -305,14 +339,14 @@ build_hook_call_ctx({_, _, CallArgs}, #state{
 
 
 %% @private
--spec update_state_after_hook_execution(hook_msg(), state()) -> stop | {continue, state()}.
-update_state_after_hook_execution(
+-spec ensure_proper_current_lane_run(hook_msg(), state()) -> state().
+ensure_proper_current_lane_run(
     {post, handle_workflow_execution_ended, _Args},
-    #state{ongoing_incarnations = [_]}  %% last incarnation ended
+    State = #state{ongoing_incarnations = [_]}  %% last incarnation ended
 ) ->
-    stop;
+    State#state{ongoing_incarnations = []};
 
-update_state_after_hook_execution(
+ensure_proper_current_lane_run(
     {post, handle_workflow_execution_ended, _Args},
     State = #state{ongoing_incarnations = [_ | LeftoverIncarnations]}
 ) ->
@@ -322,18 +356,17 @@ update_state_after_hook_execution(
         } | _]
     } = hd(LeftoverIncarnations),
 
-    {continue, State#state{
+    State#state{
         current_lane_index = AtmLaneIndex,
         current_run_num = AtmRunNum,
         ongoing_incarnations = LeftoverIncarnations
-    }};
+    };
 
-update_state_after_hook_execution(
+ensure_proper_current_lane_run(
     {post, handle_lane_execution_ended, _Args},
     State = #state{ongoing_incarnations = [OngoingIncarnation | LeftoverIncarnations]}
 ) ->
-    #atm_workflow_execution_incarnation_test_spec{lane_runs = OngoingLaneRuns} = OngoingIncarnation,
-    NewState = case OngoingLaneRuns of
+    case OngoingIncarnation#atm_workflow_execution_incarnation_test_spec.lane_runs of
         [_] ->
             NewOngoingIncarnation = OngoingIncarnation#atm_workflow_execution_incarnation_test_spec{
                 lane_runs = []
@@ -351,11 +384,31 @@ update_state_after_hook_execution(
                 current_run_num = AtmRunNum,
                 ongoing_incarnations = [NewOngoingIncarnation | LeftoverIncarnations]
             }
-    end,
-    {continue, NewState};
+    end;
 
-update_state_after_hook_execution(_, State) ->
-    {continue, State}.
+ensure_proper_current_lane_run(_, State) ->
+    State.
+
+
+%% @private
+-spec ensure_actual_workflow_execution_model(
+    no_change | atm_test_workflow_execution_model:model(),
+    state()
+) ->
+    state().
+ensure_actual_workflow_execution_model(no_change, State) ->
+    State;
+
+ensure_actual_workflow_execution_model(NewAtmWorkflowExecutionModel, State = #state{
+    test_spec = #atm_workflow_execution_test_spec{
+        provider = ProviderSelector
+    },
+    workflow_execution_id = AtmWorkflowExecutionId
+}) ->
+    atm_test_workflow_execution_model:assert_match_with_backend(
+        ProviderSelector, AtmWorkflowExecutionId, NewAtmWorkflowExecutionModel
+    ),
+    State#state{workflow_execution_model = NewAtmWorkflowExecutionModel}.
 
 
 %% @private
@@ -465,28 +518,61 @@ build_workflow_execution_handler_callback_function_mock(6, Label) ->
 
 
 %% @private
+-spec mock_lane_execution_factory([node()]) -> ok.
+mock_lane_execution_factory(Workers) ->
+    test_utils:mock_new(Workers, atm_lane_execution_factory, [passthrough, no_history]),
+
+    test_utils:mock_expect(Workers, atm_lane_execution_factory, create_run, fun(
+        AtmLaneRunSelector,
+        AtmWorkflowExecutionDoc,
+        AtmWorkflowExecutionCtx
+    ) ->
+        exec_origin_fun_with_hooks(
+            AtmWorkflowExecutionDoc#document.key,
+            create_run,
+            [AtmLaneRunSelector, AtmWorkflowExecutionDoc, AtmWorkflowExecutionCtx]
+        )
+    end).
+
+
+%% @private
+-spec unmock_lane_execution_factory([node()]) -> ok.
+unmock_lane_execution_factory(Workers) ->
+    test_utils:mock_unload(Workers, atm_lane_execution_factory).
+
+
+%% @private
 -spec exec_origin_fun_with_hooks(atm_workflow_execution:id(), atom(), [term()]) -> term().
 exec_origin_fun_with_hooks(AtmWorkflowExecutionId, Label, Args) ->
     case node_cache:get(?TEST_PROC_PID_KEY(AtmWorkflowExecutionId), undefined) of
         undefined ->
             meck:passthrough(Args);
         TestProcPid ->
-            {ok, proceed} = call_test_process(TestProcPid, {pre, Label, Args}),
-            Result = meck:passthrough(Args),
-            {ok, proceed} = call_test_process(TestProcPid, {post, Label, Args}),
-            Result
+            case call_test_process(TestProcPid, {pre, Label, Args}) of
+                proceed ->
+                    Result = meck:passthrough(Args),
+
+                    case call_test_process(TestProcPid, {post, Label, Args}) of
+                        proceed ->
+                            Result;
+                        {return_error, PostError} ->
+                            PostError
+                    end;
+                {return_error, PreError} ->
+                    PreError
+            end
     end.
 
 
 %% @private
--spec call_test_process(pid(), term()) -> {ok, term()} | no_return().
+-spec call_test_process(pid(), term()) -> term() | no_return().
 call_test_process(TestProcPid, Msg) ->
     MRef = erlang:monitor(process, TestProcPid),
     TestProcPid ! {{self(), MRef}, Msg},
     receive
         {MRef, Reply} ->
             erlang:demonitor(MRef, [flush]),
-            {ok, Reply};
+            Reply;
         {'DOWN', MRef, _, _, Reason} ->
             exit(Reason)
     end.
