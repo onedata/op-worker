@@ -41,7 +41,8 @@
     connection_pid :: pid(),
     tar_stream :: tar_utils:stream(),
     send_retry_delay = 100 :: time:millis(),
-    follow_symlinks_policy = external :: tree_traverse:symlink_resolution_policy()
+    follow_symlinks_policy = external :: tree_traverse:symlink_resolution_policy(),
+    root_dir_path :: file_meta:path() | undefined
 }).
 
 -type state() :: #state{}.
@@ -146,12 +147,14 @@ handle_multiple_files(
     [#file_attr{guid = Guid, type = ?DIRECTORY_TYPE, name = Name} = FileAttrs | Tail],
     BulkDownloadId, UserCtx, State
 ) ->
+    {ok, RootDirPath} = lfm:get_file_path(user_ctx:get_session_id(UserCtx), Guid),
+    State1 = State#state{root_dir_path = RootDirPath},
     % add starting dir to the tarball here as traverse does not execute slave job on it
-    {Bytes, UpdatedState} = new_tar_file_entry(State, FileAttrs, Name),
+    {Bytes, UpdatedState} = new_tar_file_entry(State1, FileAttrs, Name),
     UpdatedState1 = send_data(Bytes, UpdatedState),
     bulk_download_traverse:start(BulkDownloadId, UserCtx, Guid, State#state.follow_symlinks_policy, Name),
     FinalState = wait_for_traverse(UpdatedState1, user_ctx:get_session_id(UserCtx)),
-    handle_multiple_files(Tail, BulkDownloadId, UserCtx, FinalState);
+    handle_multiple_files(Tail, BulkDownloadId, UserCtx, FinalState#state{root_dir_path = undefined});
 handle_multiple_files(
     [#file_attr{type = ?REGULAR_FILE_TYPE, name = Name} = FileAttrs | Tail], 
     BulkDownloadId, UserCtx, State
@@ -280,7 +283,7 @@ new_tar_file_entry(TarStream, FileAttrs, FileRelativePath) ->
 %% @private
 -spec new_tar_file_entry(state(), lfm_attrs:file_attributes(), file_meta:path(), 
     file_meta_symlinks:symlink() | undefined) -> {binary(), state()}.
-new_tar_file_entry(#state{tar_stream = TarStream} = State, FileAttrs, FileRelativePath, SymlinkPath) ->
+new_tar_file_entry(#state{tar_stream = TarStream, root_dir_path = RootDirPath} = State, FileAttrs, FileRelativePath, SymlinkPath) ->
     #file_attr{mode = Mode, mtime = MTime, type = Type, size = FileSize, guid = Guid} = FileAttrs,
     FinalMode = case {file_id:is_share_guid(Guid), Type} of
         {true, ?REGULAR_FILE_TYPE} -> ?DEFAULT_FILE_PERMS;
@@ -290,7 +293,7 @@ new_tar_file_entry(#state{tar_stream = TarStream} = State, FileAttrs, FileRelati
     TypeSpec = case Type of
         ?DIRECTORY_TYPE -> ?DIRECTORY_TYPE;
         ?REGULAR_FILE_TYPE -> ?REGULAR_FILE_TYPE;
-        ?SYMLINK_TYPE -> {?SYMLINK_TYPE, SymlinkPath}
+        ?SYMLINK_TYPE -> {?SYMLINK_TYPE, create_symlink_path(RootDirPath, SymlinkPath, FileRelativePath)}
     end,
     UpdatedTarStream = tar_utils:new_file_entry(TarStream, FileRelativePath, FileSize, FinalMode, MTime, TypeSpec),
     {Bytes, FinalTarStream} = tar_utils:flush_buffer(UpdatedTarStream),
@@ -388,3 +391,21 @@ check_result({error, ?ENOENT}) -> ignored;
 check_result({error, ?EPERM}) -> ignored;
 check_result({error, ?EACCES}) -> ignored;
 check_result({error, _} = Error) -> Error.
+
+
+%% @private
+-spec create_symlink_path(file_meta:path() | undefined, file_meta_symlinks:symlink(), file_meta:path()) -> 
+    file_meta_symlinks:symlink().
+create_symlink_path(undefined, LinkPath, _FileRelativePath) ->
+    LinkPath;
+create_symlink_path(RootDirPath, LinkPath, FileRelativePath) ->
+    [_Sep, _SpaceName | RootDirPathTokens] = filename:split(RootDirPath),
+    [_SpacePrefix, RootDirName | LinkPathTokens] = filename:split(LinkPath),
+    case lists:prefix(RootDirPathTokens, [RootDirName, LinkPathTokens]) of
+        true ->
+            Depth = length(filename:split(FileRelativePath)),
+            filename:join(lists:duplicate(Depth - 2, <<"..">>) ++ LinkPathTokens);
+        false -> 
+            LinkPath
+    end.
+    
