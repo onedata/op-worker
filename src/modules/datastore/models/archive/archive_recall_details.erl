@@ -115,5 +115,7 @@ get_record_struct(1) ->
 
 
 -spec on_remote_doc_created(datastore_model:ctx(), datastore_model:doc()) -> ok.
+on_remote_doc_created(_Ctx, #document{deleted = true}) ->
+    ok;
 on_remote_doc_created(_Ctx, #document{scope = SpaceId}) ->
     archive_recall_cache:invalidate_on_all_nodes(SpaceId).
