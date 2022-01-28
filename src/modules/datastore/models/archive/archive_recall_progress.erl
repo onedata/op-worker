@@ -33,7 +33,7 @@
 %% Datastore callbacks
 -export([get_ctx/0]).
 
--type id() :: archive_recall_api:id().
+-type id() :: archive_recall:id().
 
 % Map in following format: 
 %  #{
@@ -149,9 +149,10 @@ create_tsc(Id) ->
             aggregator = sum
         }
     },
+    Metrics = maps:merge(TotalMetric, supported_metrics()),
     Config = #{
-        ?BYTES_TS => maps:merge(TotalMetric, supported_metrics()),
-        ?FILES_TS => maps:merge(TotalMetric, supported_metrics()),
+        ?BYTES_TS => Metrics,
+        ?FILES_TS => Metrics,
         ?FAILED_FILES_TS => TotalMetric
     },
     case datastore_time_series_collection:create(?CTX, ?TSC_ID(Id), Config) of
@@ -185,16 +186,16 @@ supported_metrics() -> #{
 %% @private
 -spec get_counters_current_value(id()) -> {ok, map()}.
 get_counters_current_value(Id) ->
-    RequestRange = lists:map(fun(Parameter) -> {Parameter, ?TOTAL_METRIC} end, 
+    RequestRange = lists:map(fun(Stat) -> {Stat, ?TOTAL_METRIC} end, 
         [?BYTES_TS, ?FILES_TS, ?FAILED_FILES_TS]),
     
     case datastore_time_series_collection:list_windows(?CTX, ?TSC_ID(Id), RequestRange, #{limit => 1}) of
         {ok, WindowsMap} ->
             WindowToValue = fun
-                ({{Parameter, ?TOTAL_METRIC}, [{_Timestamp, {_Measurements, Value}}]}) -> 
-                    {Parameter, Value};
-                ({{Parameter, ?TOTAL_METRIC}, []}) -> 
-                    {Parameter, 0}
+                ({{Stat, ?TOTAL_METRIC}, [{_Timestamp, {_Measurements, Value}}]}) -> 
+                    {Stat, Value};
+                ({{Stat, ?TOTAL_METRIC}, []}) -> 
+                    {Stat, 0}
             end,
             {ok, maps:from_list(lists:map(WindowToValue, maps:to_list(WindowsMap)))};
         Error ->

@@ -13,7 +13,7 @@
 %%% models. Copying is performed using traverse (`archive_recall_traverse`).
 %%% @end
 %%%-------------------------------------------------------------------
--module(archive_recall_api).
+-module(archive_recall).
 -author("Michal Stanisz").
 
 -include("modules/datastore/datastore_models.hrl").
@@ -24,7 +24,7 @@
 
 
 %% API
--export([create/2, delete_synced_docs/1, delete_local_docs/1]).
+-export([create_docs/2, delete_synced_docs/1, delete_local_docs/1]).
 -export([report_started/1, report_finished/2, 
     report_bytes_copied/2, report_file_finished/1, report_file_failed/3]).
 -export([get_details/1, get_stats/1, get_progress/1]).
@@ -40,8 +40,8 @@
 %%% API functions
 %%%===================================================================
 
--spec create(id(), archive:doc()) -> ok | {error, term()}.
-create(Id, ArchiveDoc) ->
+-spec create_docs(id(), archive:doc()) -> ok | {error, term()}.
+create_docs(Id, ArchiveDoc) ->
     try
         ok = archive_recall_details:create(Id, ArchiveDoc),
         ok = archive_recall_progress:create(Id),

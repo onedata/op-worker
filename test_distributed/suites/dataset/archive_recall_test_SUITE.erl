@@ -563,7 +563,7 @@ recall_test_setup(StructureSpec, RootFileName) ->
     {FinalArchiveId, TargetParentGuid, RecallRootFileGuid}.
 
 
-recall_details_test_base(Spec, TotalFiles, TotalBytes) ->
+recall_details_test_base(Spec, TotalFileCount, TotalByteSize) ->
     {ArchiveId, _TargetParentGuid, RecallRootFileGuid} = recall_test_setup(Spec),
     
     SessId = fun(P) -> oct_background:get_user_session_id(?USER1, P) end,
@@ -576,31 +576,31 @@ recall_details_test_base(Spec, TotalFiles, TotalBytes) ->
     lists:foreach(fun(Provider) ->
         ?assertMatch({ok, #archive_recall_details{
             archive_id = ArchiveId,
-            start_timestamo = Timestamp,
+            start_timestamp = Timestamp,
             finish_timestamp = undefined,
-            total_files = TotalFiles,
-            total_bytes = TotalBytes
+            total_file_count = TotalFileCount,
+            total_byte_size = TotalByteSize
         }}, opt_archives:get_recall_details(Provider, SessId(Provider), RecallRootFileGuid), ?ATTEMPTS)
     end, Providers),
     
     % check recall stats (stats are only stored on provider performing recall)
     ?assertMatch({ok, #{
-        {<<"bytesCopied">>,<<"hour">>} := [{_,{_, TotalBytes}}],
-        {<<"bytesCopied">>,<<"minute">>} := [{_,{_, TotalBytes}}],
-        {<<"bytesCopied">>,<<"day">>} := [{_,{_, TotalBytes}}],
-        {<<"bytesCopied">>,<<"total">>} := [{_,{_, TotalBytes}}],
-        {<<"filesCopied">>,<<"hour">>} := [{_,{TotalFiles, TotalFiles}}],
-        {<<"filesCopied">>,<<"minute">>} := [{_,{TotalFiles, TotalFiles}}],
-        {<<"filesCopied">>,<<"day">>} := [{_,{TotalFiles, TotalFiles}}],
-        {<<"filesCopied">>,<<"total">>} := [{_,{TotalFiles, TotalFiles}}],
+        {<<"bytesCopied">>,<<"hour">>} := [{_,{_, TotalByteSize}}],
+        {<<"bytesCopied">>,<<"minute">>} := [{_,{_, TotalByteSize}}],
+        {<<"bytesCopied">>,<<"day">>} := [{_,{_, TotalByteSize}}],
+        {<<"bytesCopied">>,<<"total">>} := [{_,{_, TotalByteSize}}],
+        {<<"filesCopied">>,<<"hour">>} := [{_,{TotalFileCount, TotalFileCount}}],
+        {<<"filesCopied">>,<<"minute">>} := [{_,{TotalFileCount, TotalFileCount}}],
+        {<<"filesCopied">>,<<"day">>} := [{_,{TotalFileCount, TotalFileCount}}],
+        {<<"filesCopied">>,<<"total">>} := [{_,{TotalFileCount, TotalFileCount}}],
         {<<"filesFailed">>,<<"total">>} := []
         %% @TODO VFS-8839 - use op_archives after implementing histogram API
-    }}, opw_test_rpc:call(krakow, archive_recall_api, get_stats, [file_id:guid_to_uuid(RecallRootFileGuid)]), ?ATTEMPTS),
+    }}, opw_test_rpc:call(krakow, archive_recall, get_stats, [file_id:guid_to_uuid(RecallRootFileGuid)]), ?ATTEMPTS),
     
     %% @TODO VFS-8839 - check progress until gui starts to support histograms and error log browsing
     ?assertMatch({ok, #{
-        <<"bytesCopied">>  := TotalBytes,
-        <<"filesCopied">> := TotalFiles,
+        <<"bytesCopied">>  := TotalByteSize,
+        <<"filesCopied">> := TotalFileCount,
         <<"filesFailed">> := 0,
         <<"lastError">> := undefined
     }}, opt_archives:get_recall_progress(krakow, SessId(krakow), RecallRootFileGuid), ?ATTEMPTS),

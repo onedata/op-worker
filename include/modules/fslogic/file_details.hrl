@@ -27,7 +27,7 @@
     eff_qos_membership :: file_qos:membership() | undefined,
     eff_dataset_membership :: dataset:membership() | undefined,
     eff_protection_flags :: data_access_control:bitmask() | undefined,
-    recall_root_id :: file_id:file_guid()
+    recall_root_id :: file_id:file_guid() | undefined
 }).
 
 % Macros defining types of membership

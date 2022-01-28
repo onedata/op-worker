@@ -107,14 +107,14 @@ recall(SessionId, ArchiveId, ParentDirectoryGuid, TargetFilename) ->
     SpaceGuid = archive_id_to_space_guid(ArchiveId),
     
     middleware_worker:check_exec(SessionId, SpaceGuid, #recall_archive{
-        id = ArchiveId,
+        archive_id = ArchiveId,
         parent_directory_guid = ParentDirectoryGuid,
         target_filename = TargetFilename
     }).
 
 
 -spec get_recall_details(session:id(), file_id:file_guid()) -> 
-    archive_recall_api:record() | no_return().
+    archive_recall:record() | no_return().
 get_recall_details(SessionId, FileGuid) ->
     middleware_worker:check_exec(SessionId, FileGuid, #get_recall_details{
         id = file_id:guid_to_uuid(FileGuid)
@@ -122,7 +122,7 @@ get_recall_details(SessionId, FileGuid) ->
 
 
 -spec get_recall_progress(session:id(), file_id:file_guid()) ->
-    archive_recall_api:recall_progress_map() | no_return().
+    archive_recall:recall_progress_map() | no_return().
 get_recall_progress(SessionId, FileGuid) ->
     middleware_worker:check_exec(SessionId, FileGuid, #get_recall_progress{
         id = file_id:guid_to_uuid(FileGuid)

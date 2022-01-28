@@ -468,10 +468,10 @@
 -record(archive_recall_details, {
     archive_id :: archive:id(),
     dataset_id :: dataset:id(),
-    start_timestamo = undefined :: undefined | time:millis(),
+    start_timestamp = undefined :: undefined | time:millis(),
     finish_timestamp = undefined :: undefined | time:millis(),
-    total_files :: non_neg_integer(),
-    total_bytes :: non_neg_integer()
+    total_file_count :: non_neg_integer(),
+    total_byte_size :: non_neg_integer()
 }).
 
 % Model used for storing information associated with dataset.
@@ -1035,7 +1035,7 @@
     traverse_info :: binary(),
     follow_symlinks = none :: tree_traverse:symlink_resolution_policy(),
     % uuid based paths to the traverse root file and subtree roots after each symlink resolution
-    resolved_roots_uuids :: [file_meta:uuid_based_path()],
+    resolved_root_uuids :: [file_meta:uuid()],
     % relative path of the processed file to the traverse root
     relative_path = <<>> :: file_meta:path(),
     % Set of encountered files on the path from the traverse root to the currently processed one. 

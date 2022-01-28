@@ -24,7 +24,8 @@
 %% Datastore callbacks
 -export([get_ctx/0, get_record_version/0, get_record_struct/1, on_remote_doc_created/2]).
 
--type id() :: archive_recall_api:id().
+-type id() :: archive_recall:id().
+-type doc() :: datastore_doc:doc(record()).
 -type record() :: #archive_recall_details{}.
 
 -export_type([record/0]).
@@ -53,8 +54,8 @@ create(Id, ArchiveDoc) ->
         value = #archive_recall_details{
             archive_id = ArchiveId,
             dataset_id = DatasetId,
-            total_bytes = archive_stats:get_archived_bytes(Stats),
-            total_files = archive_stats:get_archived_files(Stats)
+            total_byte_size = archive_stats:get_archived_bytes(Stats),
+            total_file_count = archive_stats:get_archived_files(Stats)
         }}
     )).
 
@@ -77,7 +78,7 @@ get(Id) ->
 -spec report_started(id()) -> ok | {error, term()}.
 report_started(Id) ->
     ?extract_ok(datastore_model:update(?CTX, Id, fun(ArchiveRecall) ->
-        {ok, ArchiveRecall#archive_recall_details{start_timestamo = global_clock:timestamp_millis()}}
+        {ok, ArchiveRecall#archive_recall_details{start_timestamp = global_clock:timestamp_millis()}}
     end)).
 
 
@@ -114,7 +115,7 @@ get_record_struct(1) ->
     ]}.
 
 
--spec on_remote_doc_created(datastore_model:ctx(), datastore_model:doc()) -> ok.
+-spec on_remote_doc_created(datastore_model:ctx(), doc()) -> ok.
 on_remote_doc_created(_Ctx, #document{deleted = true}) ->
     ok;
 on_remote_doc_created(_Ctx, #document{scope = SpaceId}) ->

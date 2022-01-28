@@ -211,7 +211,7 @@ run(Pool, FileCtx, UserId, Opts) ->
         batch_size = BatchSize,
         traverse_info = TraverseInfo2,
         follow_symlinks_policy = FollowSymlinksPolicy,
-        resolved_roots_uuids = [file_ctx:get_logical_uuid_const(FileCtx3)],
+        resolved_root_uuids = [file_ctx:get_logical_uuid_const(FileCtx3)],
         relative_path = InitialRelativePath,
         encountered_files = add_to_set_if_symlinks_followed(
             file_ctx:get_logical_uuid_const(FileCtx3), #{}, FollowSymlinksPolicy)
@@ -618,17 +618,17 @@ resolve_symlink(#tree_traverse{encountered_files = EncounteredFilesSet}, Symlink
 
 
 -spec is_in_subtree(master_job(), file_meta:uuid_based_path()) -> boolean().
-is_in_subtree(#tree_traverse{resolved_roots_uuids = ResolvedRootsUuids, file_ctx = Ctx}, Path) ->
+is_in_subtree(#tree_traverse{resolved_root_uuids = ResolvedRootUuids, file_ctx = Ctx}, Path) ->
     lists:any(fun(Uuid) ->
         SpaceId = file_ctx:get_space_id_const(Ctx),
         {RootPath, _} = file_ctx:get_uuid_based_path(file_ctx:new_by_uuid(Uuid, SpaceId)),
         str_utils:binary_starts_with(Path, RootPath)
-    end, ResolvedRootsUuids).
+    end, ResolvedRootUuids).
 
 
 -spec append_root_uuid(master_job(), file_meta:uuid()) -> master_job().
-append_root_uuid(#tree_traverse{resolved_roots_uuids = ResolvedRootsUuids} = Job, Uuid) ->
-    Job#tree_traverse{resolved_roots_uuids = lists_utils:union(ResolvedRootsUuids, [Uuid])}.
+append_root_uuid(#tree_traverse{resolved_root_uuids = ResolvedRootUuids} = Job, Uuid) ->
+    Job#tree_traverse{resolved_root_uuids = lists_utils:union(ResolvedRootUuids, [Uuid])}.
 
 %%%===================================================================
 %% Files set API

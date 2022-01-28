@@ -1068,15 +1068,15 @@ get_recall_validate_result(details, gs, ArchiveId, DatasetId, Result) ->
     ?assertMatch({ok, #{
         <<"archive">> := SourceArchiveGri,
         <<"dataset">> := SourceDatasetGri,
-        <<"totalFiles">> := 1,
-        <<"totalBytes">> := 20
+        <<"totalFileCount">> := 1,
+        <<"totalByteSize">> := 20
     }}, Result);
 get_recall_validate_result(details, rest, ArchiveId, DatasetId, RespBody) ->
     ?assertMatch(#{
         <<"archiveId">> := ArchiveId,
         <<"datasetId">> := DatasetId,
-        <<"totalFiles">> := 1,
-        <<"totalBytes">> := 20
+        <<"totalFileCount">> := 1,
+        <<"totalByteSize">> := 20
     }, RespBody);
 get_recall_validate_result(progress, gs, _ArchiveId, _DatasetId, Result) ->
     ?assertMatch({ok, #{
@@ -1256,10 +1256,10 @@ init_per_suite(Config) ->
         end
     }).
 
-
 end_per_suite(_Config) ->
     stop_http_server(),
     oct_background:end_per_suite().
+
 
 init_per_group(_Group, Config) ->
     time_test_utils:freeze_time(Config),
@@ -1270,15 +1270,13 @@ end_per_group(_Group, Config) ->
     lfm_proxy:teardown(Config),
     time_test_utils:unfreeze_time(Config).
 
+
 init_per_testcase(_Case, Config) ->
     ct:timetrap({minutes, 20}),
-    % TODO VFS-8199 - Execute in parallel after fixing problems with timeouts
-    init_per_group(default, Config).
+    Config.
 
-
-end_per_testcase(_Case, Config) ->
-    % TODO VFS-8199 - Execute in parallel after fixing problems with timeouts
-    end_per_group(default, Config).
+end_per_testcase(_Case, _Config) ->
+    ok.
 
 %%%===================================================================
 %%% HTTP server used for checking HTTP callbacks

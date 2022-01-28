@@ -309,14 +309,14 @@ translate_file_details(#file_details{
 
 
 %% @private
--spec translate_archive_recall_details(archive_recall_api:record()) -> map().
+-spec translate_archive_recall_details(archive_recall:record()) -> map().
 translate_archive_recall_details(#archive_recall_details{
     archive_id = ArchiveId,
     dataset_id = DatasetId,
-    start_timestamo = StartTimestamp,
+    start_timestamp = StartTimestamp,
     finish_timestamp = FinishTimestamp,
-    total_files = TargetFiles,
-    total_bytes = TargetBytes
+    total_file_count = TargetFileCount,
+    total_byte_size = TargetByteSize
 }) ->
     #{
         <<"archive">> => gri:serialize(#gri{
@@ -325,8 +325,8 @@ translate_archive_recall_details(#archive_recall_details{
             type = op_dataset, id = DatasetId, aspect = instance, scope = private}),
         <<"startTime">> => utils:undefined_to_null(StartTimestamp),
         <<"finishTime">> => utils:undefined_to_null(FinishTimestamp),
-        <<"totalFiles">> => TargetFiles,
-        <<"totalBytes">> => TargetBytes
+        <<"totalFileCount">> => TargetFileCount,
+        <<"totalByteSize">> => TargetByteSize
     }.
 
 

@@ -62,7 +62,7 @@ save_master_job(Key, Job = #tree_traverse{
     track_subtree_status = TrackSubtreeStatus,
     batch_size = BatchSize,
     traverse_info = TraverseInfo,
-    resolved_roots_uuids = ResolvedRootsUuids,
+    resolved_root_uuids = ResolvedRootUuids,
     follow_symlinks_policy = FollowSymlinks,
     relative_path = RelativePath,
     encountered_files = EncounteredFilesMap
@@ -84,7 +84,7 @@ save_master_job(Key, Job = #tree_traverse{
         batch_size = BatchSize,
         traverse_info = term_to_binary(TraverseInfo),
         follow_symlinks = FollowSymlinks,
-        resolved_roots_uuids = ResolvedRootsUuids,
+        resolved_root_uuids = ResolvedRootUuids,
         relative_path = RelativePath,
         encountered_files = EncounteredFilesMap
     },
@@ -119,7 +119,7 @@ get_master_job(#document{value = #tree_traverse_job{
     batch_size = BatchSize,
     traverse_info = TraverseInfo,
     follow_symlinks = FollowSymlinks,
-    resolved_roots_uuids = ResolvedRootsUuids,
+    resolved_root_uuids = ResolvedRootUuids,
     relative_path = RelativePath,
     encountered_files = EncounteredFilesMap
 }}) ->
@@ -141,7 +141,7 @@ get_master_job(#document{value = #tree_traverse_job{
                 batch_size = BatchSize,
                 traverse_info = binary_to_term(TraverseInfo),
                 follow_symlinks_policy = FollowSymlinks,
-                resolved_roots_uuids = ResolvedRootsUuids,
+                resolved_root_uuids = ResolvedRootUuids,
                 relative_path = RelativePath,
                 encountered_files = EncounteredFilesMap
             },

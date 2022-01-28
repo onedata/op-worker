@@ -53,7 +53,7 @@
     recursive => false, 
     overwrite => true,
     on_write_callback => fun(BytesCopied) -> 
-        archive_recall_api:report_bytes_copied(TaskId, BytesCopied) 
+        archive_recall:report_bytes_copied(TaskId, BytesCopied) 
     end
 }). 
 
@@ -121,8 +121,7 @@ start(ArchiveDoc, UserCtx, ParentGuid, TargetFilename) ->
 
 -spec task_started(id(), tree_traverse:pool()) -> ok.
 task_started(TaskId, _Pool) ->
-    archive_recall_api:report_started(TaskId),
-    
+    archive_recall:report_started(TaskId),
     ?debug("Archive recall traverse ~p started", [TaskId]).
 
 
@@ -132,8 +131,7 @@ task_finished(TaskId, Pool) ->
     {ok, TaskDoc} = traverse_task:get(Pool, TaskId),
     {ok, AdditionalData} = traverse_task:get_additional_data(TaskDoc),
     SpaceId = maps:get(<<"spaceId">>, AdditionalData),
-    archive_recall_api:report_finished(TaskId, SpaceId),
-    
+    archive_recall:report_finished(TaskId, SpaceId),
     ?debug("Archive recall traverse ~p finished", [TaskId]).
 
 
@@ -233,7 +231,7 @@ setup_recall_traverse(SpaceId, ArchiveDoc, RootFileGuid, TraverseInfo, StartFile
                 traverse_info => TraverseInfo,
                 additional_data => AdditionalData
             },
-            ok = archive_recall_api:create(RecallId, ArchiveDoc),
+            ok = archive_recall:create_docs(RecallId, ArchiveDoc),
             {ok, RecallId} = tree_traverse:run(?POOL_NAME, StartFileCtx, UserId, Options);
         {error, _} = Error ->
             Error
@@ -252,7 +250,7 @@ do_dir_master_job(#tree_traverse{
     case execute_unsafe_job(do_dir_master_job_unsafe, [Job, MasterJobArgs], 
         SourceDirCtx, TaskId, ArchiveDoc) 
     of
-        ok -> {ok, #{}}; % unexpected error occurred
+        error -> {ok, #{}}; % unexpected error occurred
         Res -> Res
     end.
 
@@ -311,11 +309,11 @@ do_slave_job_unsafe(#tree_traverse_slave{
             {ok, _, _} = file_copy:copy(SessionId, FileGuid, TargetParentGuid, FileName,
                 ?COPY_OPTIONS(TaskId))
     end,
-    ok = archive_recall_api:report_file_finished(TaskId).
+    ok = archive_recall:report_file_finished(TaskId).
 
 
 %% @private
--spec execute_unsafe_job(atom(), [term()], file_ctx:ctx(), id(), archive:doc()) -> ok | any().
+-spec execute_unsafe_job(atom(), [term()], file_ctx:ctx(), id(), archive:doc()) -> any() | error.
 execute_unsafe_job(JobFunctionName, Options, FileCtx, TaskId, ArchiveDoc) ->
     try
         % call using ?MODULE for mocking in tests
@@ -323,10 +321,12 @@ execute_unsafe_job(JobFunctionName, Options, FileCtx, TaskId, ArchiveDoc) ->
     catch
         _Class:{badmatch, {error, Reason}}:Stacktrace ->
             report_error(TaskId, file_ctx:get_logical_guid_const(FileCtx), ArchiveDoc,
-                ?ERROR_POSIX(Reason), Stacktrace);
+                ?ERROR_POSIX(Reason), Stacktrace),
+            error;
         _Class:Reason:Stacktrace ->
             report_error(TaskId, file_ctx:get_logical_guid_const(FileCtx), ArchiveDoc,
-                Reason, Stacktrace)
+                Reason, Stacktrace),
+            error
     end.
 
 
@@ -359,7 +359,7 @@ report_error(TaskId, FileGuid, ArchiveDoc, Reason, Stacktrace) ->
     {ok, ArchiveId} = archive:get_id(ArchiveDoc),
     ?error_stacktrace("Unexpected error during recall of file ~p in archive ~p: ~p.", 
         [FileGuid, ArchiveId, Reason], Stacktrace),
-    archive_recall_api:report_file_failed(TaskId, FileGuid, Reason).
+    archive_recall:report_file_failed(TaskId, FileGuid, Reason).
 
 
 %% @private

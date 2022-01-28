@@ -54,15 +54,15 @@ execute(UserCtx, SpaceDirCtx, #purge_archive{id = ArchiveId, callback = Callback
     dataset_req:init_archive_purge(SpaceDirCtx, ArchiveId, CallbackUrl, UserCtx);
 
 execute(UserCtx, SpaceDirCtx, #recall_archive{
-    id = ArchiveId, parent_directory_guid = ParentDirectoryGuid, target_filename = TargetName}
+    archive_id = ArchiveId, parent_directory_guid = ParentDirectoryGuid, target_filename = TargetName}
 ) ->
     dataset_req:init_archive_recall(SpaceDirCtx, ArchiveId, ParentDirectoryGuid, TargetName, UserCtx);
 
 execute(_UserCtx, _FileCtx, #get_recall_details{id = Id}) ->
-    archive_recall_api:get_details(Id);
+    archive_recall:get_details(Id);
 
 execute(_UserCtx, _FileCtx, #get_recall_progress{id = Id}) ->
-    archive_recall_api:get_progress(Id);
+    archive_recall:get_progress(Id);
 
 
 %% Automation

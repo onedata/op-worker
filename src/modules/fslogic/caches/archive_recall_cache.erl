@@ -110,7 +110,7 @@ invalidate_on_all_nodes(SpaceId) ->
     | {error, {file_meta_missing, file_meta:uuid()}} | {error, term()}.
 get(SpaceId, Doc = #document{value = #file_meta{}}) ->
     CacheName = ?CACHE_NAME(SpaceId),
-    case effective_value:get_or_calculate(CacheName, Doc, fun calculate_archive_recalls/1) of
+    case effective_value:get_or_calculate(CacheName, Doc, fun calculate_archive_recall_status/1) of
         {ok, Res, _} ->
             {ok, Res};
         {error, _} = Error ->
@@ -137,16 +137,25 @@ invalidate(SpaceId) ->
 %%%===================================================================
 
 
--spec calculate_archive_recalls(effective_value:args()) -> 
+%%-------------------------------------------------------------------
+%% @doc
+%% Calculates recall status along with uuid of root file of closest recall. 
+%% When parent status is ongoing there is no need of further calculation, 
+%% as it is impossible to create a recall in already recalling directory. 
+%% When parent status is finished calculates further down, as there could 
+%% be another recall (which will be closer).
+%% @end
+%%-------------------------------------------------------------------
+-spec calculate_archive_recall_status(effective_value:args()) -> 
     {ok, undefined | {ongoing | finished, file_meta:uuid()}, effective_value:calculation_info()} 
     | {error, term()}.
-calculate_archive_recalls([_, {error, _} = Error, _CalculationInfo]) ->
+calculate_archive_recall_status([_, {error, _} = Error, _CalculationInfo]) ->
     Error;
-calculate_archive_recalls([_, {ongoing, _} = ParentValue, CalculationInfo]) ->
+calculate_archive_recall_status([_, {ongoing, _} = ParentValue, CalculationInfo]) ->
     {ok, ParentValue, CalculationInfo};
-calculate_archive_recalls([#document{} = FileMetaDoc, ParentValue, CalculationInfo]) ->
+calculate_archive_recall_status([#document{} = FileMetaDoc, ParentValue, CalculationInfo]) ->
     #document{key = FileUuid} = FileMetaDoc,
-    case archive_recall_api:get_details(FileUuid) of
+    case archive_recall:get_details(FileUuid) of
         {ok, #archive_recall_details{finish_timestamp = undefined}} -> 
             {ok, {ongoing, FileUuid}, CalculationInfo};
         {ok, #archive_recall_details{}} -> 

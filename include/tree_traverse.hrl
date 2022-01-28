@@ -47,7 +47,7 @@
     
     follow_symlinks_policy = none :: tree_traverse:symlink_resolution_policy(),
     % uuids of the traverse root file and subtree roots after each symlink resolution
-    resolved_roots_uuids = [] :: [file_meta:uuid()],
+    resolved_root_uuids = [] :: [file_meta:uuid()],
     % relative path of the processed file to the traverse root
     relative_path = <<>> :: file_meta:path(),
     % Set of encountered files on the path from the traverse root to the currently processed one. 

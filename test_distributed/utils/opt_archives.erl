@@ -121,12 +121,12 @@ recall(NodeSelector, SessionId, ArchiveId, TargetParentGuid, RootFileName) ->
 
 
 -spec get_recall_details(oct_background:node_selector(), session:id(), file_id:file_guid()) ->
-    {ok, archive_recall_api:record()} | {error, term()}.
+    {ok, archive_recall:record()} | {error, term()}.
 get_recall_details(NodeSelector, SessionId, FileGuid) ->
     ?CALL(NodeSelector, [SessionId, FileGuid]).
 
 
 -spec get_recall_progress(oct_background:node_selector(), session:id(), file_id:file_guid()) ->
-    {archive_recall_api:recall_progress_map()} | {error, term()}.
+    {archive_recall:recall_progress_map()} | {error, term()}.
 get_recall_progress(NodeSelector, SessionId, FileGuid) ->
     ?CALL(NodeSelector, [SessionId, FileGuid]).
