@@ -12,6 +12,7 @@
 -module(datasets_structure_test_SUITE).
 -author("Jakub Kudzia").
 
+-include("onenv_test_utils.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/onedata.hrl").
 -include_lib("ctool/include/errors.hrl").
@@ -82,7 +83,8 @@
     iterate_over_100_children_non_empty_datasets_using_start_index_and_limit_1/1,
     iterate_over_100_children_non_empty_datasets_using_start_index_and_limit_10/1,
     iterate_over_100_children_non_empty_datasets_using_start_index_and_limit_100/1,
-    iterate_over_100_children_non_empty_datasets_using_start_index_and_limit_1000/1
+    iterate_over_100_children_non_empty_datasets_using_start_index_and_limit_1000/1,
+    list_children_with_prefix_names_using_start_index/1
 ]).
 
 all() -> ?ALL([
@@ -143,7 +145,8 @@ all() -> ?ALL([
     iterate_over_100_children_non_empty_datasets_using_start_index_and_limit_1,
     iterate_over_100_children_non_empty_datasets_using_start_index_and_limit_10,
     iterate_over_100_children_non_empty_datasets_using_start_index_and_limit_100,
-    iterate_over_100_children_non_empty_datasets_using_start_index_and_limit_1000    
+    iterate_over_100_children_non_empty_datasets_using_start_index_and_limit_1000,
+    list_children_with_prefix_names_using_start_index
 ]).
 
 
@@ -902,6 +905,31 @@ iterate_over_datasets_test_base(ChildrenCount, Depth, Limit, ListingType, Starti
         children_datasets ->
             check_if_all_datasets_listed(P1Node, SpaceId, SpaceDatasetPath, SortedExpectedDatasets, Limit, StartingPoint)
     end.
+
+
+list_children_with_prefix_names_using_start_index(_Config) ->
+    [P1Node] = oct_background:get_provider_nodes(krakow),
+    UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
+    #object{dataset = #dataset_object{id = DatasetId}} = onenv_file_test_utils:create_and_sync_file_tree(user1, space1, #dir_spec{
+        dataset = #dataset_spec{},
+        children = [
+            #file_spec{name = <<"a">>, dataset = #dataset_spec{}},
+            #file_spec{name = <<"a1">>, dataset = #dataset_spec{}},
+            #file_spec{name = <<"a11">>, dataset = #dataset_spec{}},
+            #file_spec{name = <<"aaa1">>, dataset = #dataset_spec{}}
+        ]
+    }),
+    
+    {ok, {[{_, _, Index1}], _}} = ?assertMatch({ok, {[{_, <<"a">>, _}], false}},
+        opt_datasets:list_children_datasets(P1Node, UserSessIdP1, DatasetId, #{offset => 0, limit => 1})),
+    {ok, {[{_, _, Index2}], _}} = ?assertMatch({ok, {[{_, <<"a1">>, _}], false}},
+        opt_datasets:list_children_datasets(P1Node, UserSessIdP1, DatasetId, #{offset => 1, limit => 1, start_index => Index1})),
+    {ok, {[{_, _, Index3}], _}} = ?assertMatch({ok, {[{_, <<"a11">>, _}], false}},
+        opt_datasets:list_children_datasets(P1Node, UserSessIdP1, DatasetId, #{offset => 1, limit => 1, start_index => Index2})),
+    {ok, {[{_, _, Index4}], _}} = ?assertMatch({ok, {[{_, <<"aaa1">>, _}], true}},
+        opt_datasets:list_children_datasets(P1Node, UserSessIdP1, DatasetId, #{offset => 1, limit => 1, start_index => Index3})),
+    ?assertMatch({ok, {[], true}},
+        opt_datasets:list_children_datasets(P1Node, UserSessIdP1, DatasetId, #{offset => 1, limit => 1, start_index => Index4})).
 
 
 %===================================================================
