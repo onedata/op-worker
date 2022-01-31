@@ -97,7 +97,8 @@ update_credentials(SessionId, AccessToken, ConsumerToken) ->
 report_session_close(SessionId) ->
     case session:get(SessionId) of
         {ok, #document{value = #session{watcher = SessionWatcher}}} ->
-            SessionWatcher ! ?REMOVE_SESSION;
+            SessionWatcher ! ?REMOVE_SESSION,
+            ok;
         _ ->
             ok
     end.

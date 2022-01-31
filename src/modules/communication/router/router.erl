@@ -190,7 +190,7 @@ route_and_ignore_answer(#client_message{
         AccessToken, ConsumerToken
     ),
     ok;
-route_and_ignore_answer(#client_message{message_body = #close_session{} = Msg}) ->
+route_and_ignore_answer(#client_message{message_body = #close_session{}} = Msg) ->
     incoming_session_watcher:report_session_close(effective_session_id(Msg)),
     ok;
 route_and_ignore_answer(ClientMsg) ->
