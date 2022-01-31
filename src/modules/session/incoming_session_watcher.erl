@@ -21,7 +21,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([start_link/2, update_credentials/3]).
+-export([start_link/2, update_credentials/3, report_session_close/1]).
 
 %% gen_server callbacks
 -export([
@@ -88,6 +88,16 @@ update_credentials(SessionId, AccessToken, ConsumerToken) ->
     case session:get(SessionId) of
         {ok, #document{value = #session{watcher = SessionWatcher}}} ->
             update_credentials(SessionWatcher, AccessToken, ConsumerToken);
+        _ ->
+            ok
+    end.
+
+
+-spec report_session_close(session:id()) -> ok.
+report_session_close(SessionId) ->
+    case session:get(SessionId) of
+        {ok, #document{value = #session{watcher = SessionWatcher}}} ->
+            SessionWatcher ! ?REMOVE_SESSION;
         _ ->
             ok
     end.

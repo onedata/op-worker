@@ -15,6 +15,7 @@
 
 -include("global_definitions.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
+-include("proto/oneclient/client_messages.hrl").
 -include("proto/oneclient/common_messages.hrl").
 -include("proto/oneclient/stream_messages.hrl").
 -include("proto/common/handshake_messages.hrl").
@@ -1110,6 +1111,11 @@ translate_from_protobuf(#'RTransferNodesIPs'{nodes = Nodes}) ->
     };
 
 
+%% SESSION
+translate_from_protobuf(#'CloseSession'{}) ->
+    #close_session{};
+
+
 translate_from_protobuf(undefined) ->
     undefined.
 
@@ -2128,6 +2134,11 @@ translate_to_protobuf(#rtransfer_nodes_ips{nodes = Nodes}) ->
     {rtransfer_nodes_ips, #'RTransferNodesIPs'{
         nodes = [translate_to_protobuf(N) || N <- Nodes]
     }};
+
+
+%% SESSION
+translate_to_protobuf(#close_session{}) ->
+    {close_session, #'CloseSession'{}};
 
 
 translate_to_protobuf(undefined) ->
