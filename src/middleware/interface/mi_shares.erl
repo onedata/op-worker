@@ -53,7 +53,7 @@ remove(SessionId, ShareId) ->
 -spec get_share_root_file_guid(session:id(), od_share:id()) ->
     file_id:file_guid() | no_return().
 get_share_root_file_guid(SessionId, ShareId) ->
-    {ok, #document{value = #od_share{root_file = ShareGuid}}} = ?check(share_logic:get(
+    #document{value = #od_share{root_file = ShareGuid}} = ?check(share_logic:get(
         SessionId, ShareId
     )),
     file_id:share_guid_to_guid(ShareGuid).

@@ -1445,6 +1445,7 @@ create_share_test(Config) ->
             DirKey = maps:get(DirPath, ExtraData),
             extract_ok(opt_shares:create(W, SessId, DirKey, <<"create_share">>))
         end,
+        returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/dir1">>}
         end
@@ -1475,6 +1476,7 @@ remove_share_test(Config) ->
             ShareId = maps:get(DirPath, ExtraData),
             opt_shares:remove(W, SessId, ShareId)
         end,
+        returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/dir1">>}
         end
