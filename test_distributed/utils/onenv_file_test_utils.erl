@@ -270,7 +270,7 @@ create_shares(CreationProvider, SessId, FileGuid, ShareSpecs) ->
     lists:sort(lists:map(fun(#share_spec{name = Name, description = Description}) ->
         {ok, ShareId} = ?assertMatch(
             {ok, _},
-            lfm_proxy:create_share(CreationNode, SessId, ?FILE_REF(FileGuid), Name, Description),
+            opt_shares:create(CreationNode, SessId, ?FILE_REF(FileGuid), Name, Description),
             ?ATTEMPTS
         ),
         ShareId

@@ -132,7 +132,7 @@ data_access_caveats_test(Config) ->
     {ok, DirGuid} = lfm_proxy:mkdir(W, FileOwnerUserSessId, DirPath),
     {ok, DirObjectId} = file_id:guid_to_objectid(DirGuid),
 
-    {ok, ShareId} = lfm_proxy:create_share(W, FileOwnerUserSessId, ?FILE_REF(DirGuid), <<"share">>),
+    {ok, ShareId} = opt_shares:create(W, FileOwnerUserSessId, ?FILE_REF(DirGuid), <<"share">>),
     ShareDirGuid = file_id:guid_to_share_guid(DirGuid, ShareId),
 
     DirName2 = <<ScenarioName/binary, "2">>,
@@ -1225,7 +1225,7 @@ set_perms_test(Config) ->
         {ok, _},
         lfm_proxy:create(W, FileOwnerUserSessId, FilePath, 8#777)
     ),
-    {ok, ShareId} = ?assertMatch({ok, _}, lfm_proxy:create_share(W, FileOwnerUserSessId, ?FILE_REF(FileGuid), <<"share">>)),
+    {ok, ShareId} = ?assertMatch({ok, _}, opt_shares:create(W, FileOwnerUserSessId, ?FILE_REF(FileGuid), <<"share">>)),
     ShareFileGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
 
     % Open file to ensure it's creation on storage
@@ -1443,7 +1443,7 @@ create_share_test(Config) ->
         operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             DirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
             DirKey = maps:get(DirPath, ExtraData),
-            extract_ok(lfm_proxy:create_share(W, SessId, DirKey, <<"create_share">>))
+            extract_ok(opt_shares:create(W, SessId, DirKey, <<"create_share">>))
         end,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/dir1">>}
@@ -1460,7 +1460,7 @@ remove_share_test(Config) ->
         files = [#dir{
             name = <<"dir1">>,
             on_create = fun(FileOwnerSessId, Guid) ->
-                {ok, ShareId} = ?assertMatch({ok, _}, lfm_proxy:create_share(
+                {ok, ShareId} = ?assertMatch({ok, _}, opt_shares:create(
                     W, FileOwnerSessId, ?FILE_REF(Guid), <<"share_to_remove">>
                 )),
                 ShareId
@@ -1473,7 +1473,7 @@ remove_share_test(Config) ->
         operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             DirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
             ShareId = maps:get(DirPath, ExtraData),
-            extract_ok(lfm_proxy:remove_share(W, SessId, ShareId))
+            opt_shares:remove(W, SessId, ShareId)
         end,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/dir1">>}
@@ -1501,7 +1501,7 @@ share_perms_test(Config) ->
     FilePath = <<BottomDirPath/binary, "/file1">>,
     {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, FileOwnerUserSessId, FilePath, 8#777)),
 
-    {ok, ShareId} = ?assertMatch({ok, _}, lfm_proxy:create_share(W, FileOwnerUserSessId, ?FILE_REF(MiddleDirGuid), <<"share">>)),
+    {ok, ShareId} = ?assertMatch({ok, _}, opt_shares:create(W, FileOwnerUserSessId, ?FILE_REF(MiddleDirGuid), <<"share">>)),
     ShareFileGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
 
     % Accessing file in normal mode by space user should result in eacces (dir1 perms -> 8#700)

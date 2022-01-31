@@ -101,7 +101,7 @@ create_shared_file_in_space_krk() ->
     FileType = randomly_choose_file_type_for_test(),
     FilePath = filename:join(["/", ?SPACE_KRK, ?RANDOM_FILE_NAME()]),
     {ok, FileGuid} = create_file(FileType, P1Node, UserSessId, FilePath),
-    {ok, ShareId} = lfm_proxy:create_share(P1Node, SpaceOwnerSessId, ?FILE_REF(FileGuid), <<"share">>),
+    {ok, ShareId} = opt_shares:create(P1Node, SpaceOwnerSessId, ?FILE_REF(FileGuid), <<"share">>),
 
     {FileType, FilePath, FileGuid, ShareId}.
 
@@ -133,7 +133,7 @@ create_and_sync_shared_file_in_space_krk_par(FileType, FileName, Mode) ->
 
     FilePath = filename:join(["/", ?SPACE_KRK_PAR, FileName]),
     {ok, FileGuid} = create_file(FileType, P1Node, UserSessIdP1, FilePath, Mode),
-    {ok, ShareId} = lfm_proxy:create_share(P1Node, SpaceOwnerSessIdP1, ?FILE_REF(FileGuid), <<"share">>),
+    {ok, ShareId} = opt_shares:create(P1Node, SpaceOwnerSessIdP1, ?FILE_REF(FileGuid), <<"share">>),
 
     file_test_utils:await_sync(P2Node, FileGuid),
 
@@ -278,7 +278,7 @@ read_file(Node, SessId, FileGuid, Size) ->
 share_file_and_sync_file_attrs(CreationNode, SessionId, SyncNodes, FileGuid) ->
     {ok, ShareId} = ?assertMatch(
         {ok, _},
-        lfm_proxy:create_share(CreationNode, SessionId, ?FILE_REF(FileGuid), <<"share">>),
+        opt_shares:create(CreationNode, SessionId, ?FILE_REF(FileGuid), <<"share">>),
         ?ATTEMPTS
     ),
     lists:foreach(fun(Node) ->
@@ -413,7 +413,7 @@ randomly_set_acl(Nodes, FileGuid) ->
 randomly_create_share(Node, SessionId, FileGuid) ->
     case rand:uniform(2) of
         1 ->
-            {ok, ShId} = ?assertMatch({ok, _}, lfm_proxy:create_share(
+            {ok, ShId} = ?assertMatch({ok, _}, opt_shares:create(
                 Node, SessionId, ?FILE_REF(FileGuid), <<"share">>
             )),
             ShId;

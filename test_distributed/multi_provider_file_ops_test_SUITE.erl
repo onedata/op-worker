@@ -1006,7 +1006,7 @@ user_opens_file_test_base(Config0, IsRegisteredUser, UseShareGuid, TestCase) ->
     FilePath = filepath_utils:join([DirPath, <<"file">>]),
     {ok, _} = ?assertMatch({ok, _} , lfm_proxy:mkdir(Worker1, SessionId(Worker1), DirPath)),
     {ok, FileGuid} = ?assertMatch({ok, _} , lfm_proxy:create(Worker1, SessionId(Worker1), FilePath)),
-    {ok, ShareId} = lfm_proxy:create_share(Worker1, SessionId(Worker1), ?FILE_REF(FileGuid), <<"share">>),
+    {ok, ShareId} = opt_shares:create(Worker1, SessionId(Worker1), ?FILE_REF(FileGuid), <<"share">>),
     ShareFileGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
 
     % verify share on 2nd provider

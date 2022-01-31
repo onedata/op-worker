@@ -149,6 +149,17 @@
     qos_id :: qos_entry:id()
 }).
 
+% shares related
+
+-record(create_share, {
+    name :: od_share:name(),
+    description :: od_share:description()
+}).
+
+-record(remove_share, {
+    share_id :: od_share:id()
+}).
+
 % transfers related
 
 -record(schedule_file_transfer, {

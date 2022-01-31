@@ -64,7 +64,7 @@ create_qos_test(Config) ->
     {ok, FileToShareGuid} = api_test_utils:create_file(
         FileType, P1, SessIdP1, filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME()])),
     ?assertMatch({ok, _}, lfm_proxy:stat(P2, SessIdP2, ?FILE_REF(FileToShareGuid)), ?ATTEMPTS),
-    {ok, ShareId} = lfm_proxy:create_share(P1, SessIdP1, ?FILE_REF(FileToShareGuid), <<"share">>),
+    {ok, ShareId} = opt_shares:create(P1, SessIdP1, ?FILE_REF(FileToShareGuid), <<"share">>),
 
     MemRef = api_test_memory:init(),
 
@@ -210,7 +210,7 @@ get_qos_summary_test(Config) ->
     % wait for qos entries to be dbsynced to other provider
     ?assertMatch({ok, _}, opt_qos:get_qos_entry(P2, SessIdP2, QosEntryIdInherited), ?ATTEMPTS),
     ?assertMatch({ok, _}, opt_qos:get_qos_entry(P2, SessIdP2, QosEntryIdDirect), ?ATTEMPTS),
-    {ok, ShareId} = lfm_proxy:create_share(P1, SessIdP1, ?FILE_REF(Guid), <<"share">>),
+    {ok, ShareId} = opt_shares:create(P1, SessIdP1, ?FILE_REF(Guid), <<"share">>),
 
     MemRef = api_test_memory:init(),
 
