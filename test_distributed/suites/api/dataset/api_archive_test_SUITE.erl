@@ -1029,7 +1029,7 @@ get_archive_recall_test_base(Providers, Aspect) ->
                 correct = [
                     user2,  % space owner - doesn't need any perms
                     user3,  % files owner
-                    user4   % space member - should succeed as getting recall doesn't require any perms
+                    user4   % space member - should succeed as getting recall doesn't require any space perms
                 ],
                 unauthorized = [nobody],
                 forbidden_not_in_space = [user1]

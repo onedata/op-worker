@@ -58,11 +58,11 @@ execute(UserCtx, SpaceDirCtx, #recall_archive{
 ) ->
     dataset_req:init_archive_recall(SpaceDirCtx, ArchiveId, ParentDirectoryGuid, TargetName, UserCtx);
 
-execute(_UserCtx, _FileCtx, #get_recall_details{id = Id}) ->
-    archive_recall:get_details(Id);
+execute(UserCtx, FileCtx, #get_recall_details{id = Id}) ->
+    dataset_req:get_archive_recall_details(FileCtx, Id, UserCtx);
 
-execute(_UserCtx, _FileCtx, #get_recall_progress{id = Id}) ->
-    archive_recall:get_progress(Id);
+execute(UserCtx, FileCtx, #get_recall_progress{id = Id}) ->
+    dataset_req:get_archive_recall_progress(FileCtx, Id, UserCtx);
 
 
 %% Automation

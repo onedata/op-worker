@@ -630,12 +630,12 @@ recall_to_recalling_dir_test_base(Method) ->
     
     Pid = wait_for_recall_traverse_finish(),
     SessId = oct_background:get_user_session_id(?USER1, krakow),
+    Node = oct_background:get_random_provider_node(krakow),
     
     NewTargetParentGuid = case Method of
         standard ->
             RecallRootFileGuid;
         symlink ->
-            Node = oct_background:get_random_provider_node(krakow),
             SymlinkValue = onenv_file_test_utils:prepare_symlink_value(Node, SessId, RecallRootFileGuid),
             {ok, #file_attr{guid = G}} = lfm_proxy:make_symlink(Node, SessId, #file_ref{guid = TargetParentGuid}, ?RAND_NAME(), SymlinkValue),
             G
@@ -648,7 +648,8 @@ recall_to_recalling_dir_test_base(Method) ->
     ?assertMatch({ok, #archive_recall_details{finish_timestamp = T}} when is_integer(T),
         opt_archives:get_recall_details(krakow, SessId, RecallRootFileGuid), ?ATTEMPTS),
     
-    ?assertMatch({ok, _}, opt_archives:recall(krakow, SessId, ArchiveId, NewTargetParentGuid, default)).
+    {ok, NestedRecallRootFileGuid} = ?assertMatch({ok, _}, opt_archives:recall(krakow, SessId, ArchiveId, NewTargetParentGuid, default)),
+    ?assertEqual({ok, RecallRootFileGuid}, lfm_proxy:get_parent(Node, SessId, #file_ref{guid = NestedRecallRootFileGuid})).
 
 
 recall_error_test_base(Spec, FunName) ->

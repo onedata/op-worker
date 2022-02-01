@@ -321,7 +321,7 @@ authorize_create(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = As}}, _) wh
     As =:= json_metadata;
     As =:= rdf_metadata
 ->
-    middleware_utils:has_access_to_file(Auth, Guid);
+    middleware_utils:has_access_to_file_space(Auth, Guid);
 
 authorize_create(#op_req{gri = #gri{aspect = object_id}}, _) ->
     % File path must have been resolved to guid by rest_handler already (to
@@ -629,11 +629,11 @@ authorize_get(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= archive_recall_details;
     As =:= archive_recall_progress
 ->
-    middleware_utils:has_access_to_file(Auth, Guid);
+    middleware_utils:has_access_to_file_space(Auth, Guid);
 
 authorize_get(#op_req{auth = Auth, gri = #gri{id = FirstGuid, aspect = {hardlinks, SecondGuid}}}, _) ->
-    middleware_utils:has_access_to_file(Auth, FirstGuid) andalso
-        middleware_utils:has_access_to_file(Auth, SecondGuid);
+    middleware_utils:has_access_to_file_space(Auth, FirstGuid) andalso
+        middleware_utils:has_access_to_file_space(Auth, SecondGuid);
 
 authorize_get(#op_req{auth = ?USER(UserId), gri = #gri{id = Guid, aspect = transfers}}, _) ->
     SpaceId = file_id:guid_to_space_id(Guid),
@@ -648,7 +648,7 @@ authorize_get(#op_req{auth = Auth, gri = #gri{aspect = download_url, scope = Sco
         private -> 
             fun(Guid) -> 
                 not file_id:is_share_guid(Guid) 
-                    andalso middleware_utils:has_access_to_file(Auth, Guid) 
+                    andalso middleware_utils:has_access_to_file_space(Auth, Guid) 
             end;
         public -> 
             fun file_id:is_share_guid/1
@@ -933,7 +933,7 @@ authorize_update(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = As}}, _) wh
     As =:= instance;
     As =:= acl
 ->
-    middleware_utils:has_access_to_file(Auth, Guid).
+    middleware_utils:has_access_to_file_space(Auth, Guid).
 
 
 %% @private
@@ -1014,7 +1014,7 @@ authorize_delete(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = As}}, _) wh
     As =:= json_metadata;
     As =:= rdf_metadata
 ->
-    middleware_utils:has_access_to_file(Auth, Guid).
+    middleware_utils:has_access_to_file_space(Auth, Guid).
 
 
 %% @private

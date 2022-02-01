@@ -123,7 +123,7 @@ main(BulkDownloadId, FileAttrsList, SessionId, InitialConn, FollowSymlinks) ->
     end,
     State = #state{
         id = BulkDownloadId, 
-        connection_pid = InitialConn, 
+        connection_pid = InitialConn,
         tar_stream = TarStream, 
         follow_symlinks_policy = FollowSymlinksPolicy
     },
@@ -147,7 +147,9 @@ handle_multiple_files(
     [#file_attr{guid = Guid, type = ?DIRECTORY_TYPE, name = Name} = FileAttrs | Tail],
     BulkDownloadId, UserCtx, State
 ) ->
-    {ok, RootDirPath} = lfm:get_file_path(user_ctx:get_session_id(UserCtx), Guid),
+    % Retrieve file path using root session as download can be performed in shared scope.
+    % This value is used only for internal calculations and is never returned.
+    {ok, RootDirPath} = lfm:get_file_path(?ROOT_SESS_ID, strip_share_guid(Guid)),
     UpdatedState = State#state{root_dir_path = RootDirPath},
     % add starting dir to the tarball here as traverse does not execute slave job on it
     {Bytes, UpdatedState2} = new_tar_file_entry(UpdatedState, FileAttrs, Name),
@@ -396,16 +398,22 @@ check_result({error, _} = Error) -> Error.
 %% @private
 -spec generate_internal_symlink_rel_path(file_meta:path() | undefined, file_meta_symlinks:symlink(), 
     file_meta:path()) -> file_meta_symlinks:symlink().
-generate_internal_symlink_rel_path(undefined, LinkAbsPath, _FileRelativePath) ->
+generate_internal_symlink_rel_path(undefined, LinkAbsPath, _SymlinkRelPathFromRootDir) ->
     LinkAbsPath;
-generate_internal_symlink_rel_path(RootDirPath, LinkAbsPath, FileRelativePath) ->
+generate_internal_symlink_rel_path(RootDirPath, SymlinkAbsPath, SymlinkRelPathFromRootDir) ->
     [_Sep, _SpaceName | RootDirPathTokens] = filename:split(RootDirPath),
-    [_SpacePrefix, RootDirName | LinkPathTokens] = filename:split(LinkAbsPath),
-    case lists:prefix(RootDirPathTokens, [RootDirName, LinkPathTokens]) of
+    [_SpacePrefix, RootDirName | LinkPathTokens] = filename:split(SymlinkAbsPath),
+    case lists:prefix(RootDirPathTokens, [RootDirName | LinkPathTokens]) of
         true ->
-            Depth = length(filename:split(FileRelativePath)),
+            Depth = length(filename:split(SymlinkRelPathFromRootDir)),
             filename:join(lists:duplicate(Depth - 2, <<"..">>) ++ LinkPathTokens);
         false ->
-            LinkAbsPath
+            SymlinkAbsPath
     end.
-    
+
+
+%% @private
+-spec strip_share_guid(file_id:file_guid()) -> file_id:file_guid().
+strip_share_guid(Guid) ->
+    {FileUuid, SpaceId, _} = file_id:unpack_share_guid(Guid),
+    file_id:pack_guid(FileUuid, SpaceId).
