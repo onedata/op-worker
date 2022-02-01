@@ -101,7 +101,8 @@
     lfm_open_failure_multiple_users/1,
     lfm_open_and_create_open_failure/1,
     lfm_mv_failure_multiple_users/1,
-    sparse_files_should_be_created/2
+    sparse_files_should_be_created/2,
+    lfm_close_deleted_open_files/1
 ]).
 
 -define(TIMEOUT, timer:seconds(10)).
@@ -2138,6 +2139,25 @@ sparse_files_should_be_created(Config, ReadFun) ->
     ?assertEqual(ok, lfm_proxy:truncate(W, SessId1, ?FILE_REF(FileGuid7), 10)),
     ?assertEqual(ok, lfm_proxy:fsync(W, SessId1, ?FILE_REF(FileGuid7), ProviderId)),
     verify_sparse_file(ReadFun, W, SessId1, FileGuid7, 10, []).
+
+lfm_close_deleted_open_files(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
+    
+    {ok, DirGuid1} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId1,
+        <<"/space_name1/", (generator:gen_name())/binary>>)),
+    {ok, DirGuid2} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId1, DirGuid1, generator:gen_name(), ?DEFAULT_DIR_MODE)),
+    {ok, {FileGuid1, Handle1}} = ?assertMatch({ok, _}, lfm_proxy:create_and_open(W, SessId1, DirGuid2, generator:gen_name(), ?DEFAULT_FILE_MODE)),
+    {ok, {_FileGuid2, Handle2}} = ?assertMatch({ok, _}, lfm_proxy:create_and_open(W, SessId1, DirGuid2, generator:gen_name(), ?DEFAULT_FILE_MODE)),
+    {ok, _} = lfm_proxy:write(W, Handle1, 0, <<"some_text">>),
+    {ok, _} = lfm_proxy:write(W, Handle2, 0, <<"another_text">>),
+    
+    ok = ?assertEqual(ok, lfm_proxy:unlink(W, SessId1, ?FILE_REF(FileGuid1))),
+    ok = ?assertEqual(ok, lfm_proxy:rm_recursive(W, SessId1, ?FILE_REF(DirGuid1))),
+    
+    ok = ?assertEqual(ok, lfm_proxy:close(W, Handle1)),
+    ok = ?assertEqual(ok, lfm_proxy:close(W, Handle2)).
+    
 
 %%%===================================================================
 %%% Internal functions
