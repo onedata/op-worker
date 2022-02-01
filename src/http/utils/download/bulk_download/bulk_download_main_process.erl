@@ -285,7 +285,7 @@ new_tar_file_entry(TarStream, FileAttrs, FileRelativePath) ->
 %% @private
 -spec new_tar_file_entry(state(), lfm_attrs:file_attributes(), file_meta:path(), 
     file_meta_symlinks:symlink() | undefined) -> {binary(), state()}.
-new_tar_file_entry(#state{tar_stream = TarStream, root_dir_path = RootDirPath} = State, FileAttrs, FileRelativePath, SymlinkAbsPath) ->
+new_tar_file_entry(#state{tar_stream = TarStream, root_dir_path = RootDirPath} = State, FileAttrs, FileRelativePath, SymlinkValue) ->
     #file_attr{mode = Mode, mtime = MTime, type = Type, size = FileSize, guid = Guid} = FileAttrs,
     FinalMode = case {file_id:is_share_guid(Guid), Type} of
         {true, ?REGULAR_FILE_TYPE} -> ?DEFAULT_FILE_PERMS;
@@ -295,7 +295,9 @@ new_tar_file_entry(#state{tar_stream = TarStream, root_dir_path = RootDirPath} =
     TypeSpec = case Type of
         ?DIRECTORY_TYPE -> ?DIRECTORY_TYPE;
         ?REGULAR_FILE_TYPE -> ?REGULAR_FILE_TYPE;
-        ?SYMLINK_TYPE -> {?SYMLINK_TYPE, generate_internal_symlink_rel_path(RootDirPath, SymlinkAbsPath, FileRelativePath)}
+        ?SYMLINK_TYPE -> 
+            Depth = length(filename:split(FileRelativePath)),
+            {?SYMLINK_TYPE, generate_internal_symlink_rel_path(RootDirPath, SymlinkValue, Depth)}
     end,
     UpdatedTarStream = tar_utils:new_file_entry(TarStream, FileRelativePath, FileSize, FinalMode, MTime, TypeSpec),
     {Bytes, FinalTarStream} = tar_utils:flush_buffer(UpdatedTarStream),
@@ -397,18 +399,22 @@ check_result({error, _} = Error) -> Error.
 
 %% @private
 -spec generate_internal_symlink_rel_path(file_meta:path() | undefined, file_meta_symlinks:symlink(), 
-    file_meta:path()) -> file_meta_symlinks:symlink().
-generate_internal_symlink_rel_path(undefined, LinkAbsPath, _SymlinkRelPathFromRootDir) ->
-    LinkAbsPath;
-generate_internal_symlink_rel_path(RootDirPath, SymlinkAbsPath, SymlinkRelPathFromRootDir) ->
+    non_neg_integer()) -> file_meta_symlinks:symlink().
+generate_internal_symlink_rel_path(undefined, SymlinkValue, _Depth) ->
+    % downloading symlink with option follow_symlinks = false
+    SymlinkValue;
+generate_internal_symlink_rel_path(RootDirPath, SymlinkValue, Depth) ->
     [_Sep, _SpaceName | RootDirPathTokens] = filename:split(RootDirPath),
-    [_SpacePrefix, RootDirName | LinkPathTokens] = filename:split(SymlinkAbsPath),
-    case lists:prefix(RootDirPathTokens, [RootDirName | LinkPathTokens]) of
+    %% @TODO VFS-8938 - handle symlink relative value
+    [_SpacePrefix | SymlinkValueTokens] = filename:split(SymlinkValue),
+    case lists:prefix(RootDirPathTokens, SymlinkValueTokens) of
         true ->
-            Depth = length(filename:split(SymlinkRelPathFromRootDir)),
-            filename:join(lists:duplicate(Depth - 2, <<"..">>) ++ LinkPathTokens);
+            RelativePathTokens =
+                lists:sublist(SymlinkValueTokens, length(RootDirPathTokens) + 1, length(SymlinkValueTokens)),
+            % subtract 2 from Depth for RootDirName and SymlinkFileName
+            filename:join(lists:duplicate(Depth - 2, <<"..">>) ++ RelativePathTokens);
         false ->
-            SymlinkAbsPath
+            SymlinkValue
     end.
 
 

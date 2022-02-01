@@ -335,18 +335,19 @@ execute_unsafe_job(JobFunctionName, Options, FileCtx, TaskId, ArchiveDoc) ->
     archive:doc(), user_ctx:ctx()) -> {ok, file_ctx:ctx()}.
 recall_symlink(FileCtx, TargetParentGuid, RootPathTokens, FileName, ArchiveDoc, UserCtx) ->
     {ok, ArchiveDataGuid} = archive:get_data_dir_guid(ArchiveDoc),
-    {ok, SymlinkPath} = lfm:read_symlink(user_ctx:get_session_id(UserCtx), 
+    %% @TODO VFS-8938 - handle symlink relative value
+    {ok, SymlinkValue} = lfm:read_symlink(user_ctx:get_session_id(UserCtx), 
         ?FILE_REF(file_ctx:get_logical_guid_const(FileCtx))),
     {ArchiveDataCanonicalPath, _ArchiveFileCtx} = file_ctx:get_canonical_path(
         file_ctx:new_by_guid(ArchiveDataGuid)),
     [_Sep, _SpaceId | ArchivePathTokens] = filename:split(ArchiveDataCanonicalPath),
-    [SpaceIdPrefix | SymlinkPathTokens] = filename:split(SymlinkPath),
-    FinalSymlinkPath = case lists:prefix(ArchivePathTokens, SymlinkPathTokens) of
+    [SpaceIdPrefix | SymlinkValueTokens] = filename:split(SymlinkValue),
+    FinalSymlinkPath = case lists:prefix(ArchivePathTokens, SymlinkValueTokens) of
         true ->
-            [_DatasetName | RelativePathTokens] = SymlinkPathTokens -- ArchivePathTokens,
+            [_DatasetName | RelativePathTokens] = SymlinkValueTokens -- ArchivePathTokens,
             filename:join([SpaceIdPrefix] ++ RootPathTokens ++ RelativePathTokens);
         _ ->
-            SymlinkPath
+            SymlinkValue
     end,
     {ok, #file_attr{guid = Guid}} = lfm:make_symlink(
         user_ctx:get_session_id(UserCtx), ?FILE_REF(TargetParentGuid), FileName, FinalSymlinkPath),
