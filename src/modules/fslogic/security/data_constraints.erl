@@ -153,7 +153,7 @@ assert_not_readonly_mode(UserCtx) ->
     AncestorPolicy :: ancestor_policy(),
     AccessRequirements :: [data_access_rights:requirement()]
 ) ->
-    {ChildrenWhiteList :: undefined | [file_meta:name()], file_ctx:ctx()}.
+    {CanonicalChildrenWhiteList :: undefined | [file_meta:name()], file_ctx:ctx()}.
 inspect(UserCtx, FileCtx0, AncestorPolicy, AccessRequirements) ->
     DataConstraints = user_ctx:get_data_constraints(UserCtx),
 
@@ -175,11 +175,11 @@ inspect(UserCtx, FileCtx0, AncestorPolicy, AccessRequirements) ->
             case CheckResult of
                 {equal_or_descendant, FileCtx1} ->
                     {undefined, FileCtx1};
-                {{ancestor, ChildrenWhiteList}, FileCtx1} ->
-                    ChildrenWhiteList2 = lists:filter(fun(ChildName) ->
+                {{ancestor, CanonicalChildrenWhiteList}, FileCtx1} ->
+                    CanonicalChildrenWhiteList2 = lists:filter(fun(ChildName) ->
                         not file_meta:is_hidden(ChildName)
-                    end, ChildrenWhiteList),
-                    {ChildrenWhiteList2, FileCtx1}
+                    end, CanonicalChildrenWhiteList),
+                    {CanonicalChildrenWhiteList2, FileCtx1}
             end
     end.
 

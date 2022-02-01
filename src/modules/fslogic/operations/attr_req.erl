@@ -172,10 +172,7 @@ get_file_details_insecure(UserCtx, FileCtx, Opts) ->
 -spec get_child_attr(user_ctx:ctx(), ParentFile :: file_ctx:ctx(),
     Name :: file_meta:name(), boolean()) -> fslogic_worker:fuse_response().
 get_child_attr(UserCtx, ParentFileCtx0, Name, IncludeReplicationStatus) ->
-    ParentFileCtx1 = fslogic_authz:ensure_authorized(
-        UserCtx, ParentFileCtx0,
-        [traverse_ancestors, ?traverse_container]
-    ),
+    ParentFileCtx1 = ensure_access_to_child(UserCtx, ParentFileCtx0, Name),
     get_child_attr_insecure(UserCtx, ParentFileCtx1, Name, IncludeReplicationStatus).
 
 
@@ -226,6 +223,34 @@ get_fs_stats(UserCtx, FileCtx0) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+%% @private
+-spec ensure_access_to_child(user_ctx:ctx(), file_ctx:ctx(), file_meta:name()) ->
+    file_ctx:ctx().
+ensure_access_to_child(UserCtx, ParentFileCtx0, ChildName) ->
+    case fslogic_authz:ensure_authorized_readdir(
+        UserCtx, ParentFileCtx0,
+        [traverse_ancestors, ?traverse_container]
+    ) of
+        {undefined, ParentFileCtx1} ->
+            ParentFileCtx1;
+        {CanonicalChildrenWhitelist, ParentFileCtx1} ->
+            CanonicalChildName = case file_ctx:is_user_root_dir_const(ParentFileCtx1, UserCtx) of
+                true ->
+                    SessionId = user_ctx:get_session_id(UserCtx),
+                    UserDoc = user_ctx:get_user(UserCtx),
+
+                    case user_logic:get_space_by_name(SessionId, UserDoc, ChildName) of
+                        {true, SpaceId} -> SpaceId;
+                        false -> throw(?ENOENT)
+                    end;
+                false ->
+                    ChildName
+            end,
+            lists:member(CanonicalChildName, CanonicalChildrenWhitelist) orelse throw(?ENOENT),
+            ParentFileCtx1
+    end.
 
 
 %%--------------------------------------------------------------------
