@@ -29,12 +29,13 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% functions operating on document using datastore model API
--export([ensure_exists/1, delete/1, get/2, update/3]).
+-export([ensure_exists/1, delete/1, update/3]).
+-export([list_time_series_ids/2, list_windows/2, list_windows/4]).
 
 %% datastore model callbacks
 -export([get_ctx/0]).
 
--type type() :: bytes | files.
+-type type() :: ?BYTES_STATS | ?FILES_STATS.
 -export_type([type/0]).
 
 -define(CTX, #{
@@ -50,19 +51,32 @@
 
 -spec ensure_exists(qos_entry:id()) -> ok.
 ensure_exists(QosEntryId) ->
-    ok = ensure_exists_internal(?COLLECTION_ID(QosEntryId, bytes)),
-    ok = ensure_exists_internal(?COLLECTION_ID(QosEntryId, files)).
+    ok = ensure_exists_internal(?COLLECTION_ID(QosEntryId, ?BYTES_STATS)),
+    ok = ensure_exists_internal(?COLLECTION_ID(QosEntryId, ?FILES_STATS)).
 
 
 -spec delete(qos_entry:id()) -> ok.
 delete(QosEntryId) ->
-    ok = datastore_time_series_collection:delete(?CTX, ?COLLECTION_ID(QosEntryId, bytes)),
-    ok = datastore_time_series_collection:delete(?CTX, ?COLLECTION_ID(QosEntryId, files)).
+    ok = datastore_time_series_collection:delete(?CTX, ?COLLECTION_ID(QosEntryId, ?BYTES_STATS)),
+    ok = datastore_time_series_collection:delete(?CTX, ?COLLECTION_ID(QosEntryId, ?FILES_STATS)).
 
 
--spec get(qos_entry:id(), type()) -> time_series_collection:windows_map() | {error, term()}.
-get(QosEntryId, Type) ->
+-spec list_time_series_ids(qos_entry:id(), type()) ->
+    {ok, [time_series_collection:time_series_id()]} | {error, term()}.
+list_time_series_ids(QosEntryId, Type) ->
+    datastore_time_series_collection:list_time_series_ids(?CTX, ?COLLECTION_ID(QosEntryId, Type)).
+
+
+-spec list_windows(qos_entry:id(), type()) ->
+    {ok, time_series_collection:windows_map()} | {error, term()}.
+list_windows(QosEntryId, Type) ->
     datastore_time_series_collection:list_windows(?CTX, ?COLLECTION_ID(QosEntryId, Type), #{}).
+
+
+-spec list_windows(qos_entry:id(), type(), time_series_collection:request_range(), ts_windows:list_options()) ->
+    {ok, time_series_collection:windows_map()} | {error, term()}.
+list_windows(QosEntryId, Type, RequestRange, Options) ->
+    datastore_time_series_collection:list_windows(?CTX, ?COLLECTION_ID(QosEntryId, Type), RequestRange, Options).
 
 
 -spec update(qos_entry:id(), type(), #{od_storage:id() => non_neg_integer()}) -> 
@@ -71,7 +85,7 @@ update(QosEntryId, Type, ValuesPerStorage) ->
     TotalValue = maps:fold(fun(_Key, Value, Acc) ->
         Acc + Value
     end, 0, ValuesPerStorage),
-    update_internal(?COLLECTION_ID(QosEntryId, Type), ValuesPerStorage#{<<"total">> => TotalValue}, 
+    update_internal(?COLLECTION_ID(QosEntryId, Type), ValuesPerStorage#{?TOTAL_TIME_SERIES_ID => TotalValue},
         ?MAX_UPDATE_RETRIES).
 
 
@@ -81,7 +95,7 @@ update(QosEntryId, Type, ValuesPerStorage) ->
 
 -spec ensure_exists_internal(time_series_collection:collection_id()) -> ok | {error, term()}.
 ensure_exists_internal(CollectionId) ->
-    Config = #{<<"total">> => supported_metrics()},
+    Config = #{?TOTAL_TIME_SERIES_ID => supported_metrics()},
     case datastore_time_series_collection:create(?CTX, CollectionId, Config) of
         ok -> ok;
         {error, collection_already_exists} -> ok;
@@ -118,22 +132,22 @@ update_internal(CollectionId, ValuesPerStorage, Retries) ->
 
 -spec supported_metrics() -> #{ts_metric:id() => ts_metric:config()}.
 supported_metrics() -> #{
-    <<"minute">> => #metric_config{
+    ?MINUTE_METRIC_ID => #metric_config{
         resolution = timer:minutes(1),
         retention = 120,
         aggregator = sum
     },
-    <<"hour">> => #metric_config{
+    ?HOUR_METRIC_ID => #metric_config{
         resolution = timer:hours(1),
         retention = 48,
         aggregator = sum
     },
-    <<"day">> => #metric_config{
+    ?DAY_METRIC_ID => #metric_config{
         resolution = timer:hours(24),
         retention = 60,
         aggregator = sum
     },
-    <<"month">> => #metric_config{
+    ?MONTH_METRIC_ID => #metric_config{
         resolution = timer:hours(24 * 30),
         retention = 12,
         aggregator = sum

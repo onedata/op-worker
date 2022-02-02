@@ -61,6 +61,13 @@ handshake_attributes(_Client) ->
         <<"transfersHistoryLimitPerFile">> => transferred_file:get_history_limit(),
         <<"openfaasAvailable">> => atm_openfaas_task_executor:is_openfaas_available(),
         <<"bagitUploaderWorkflowSchemaId">> => utils:undefined_to_null(BagitUploaderWorkflowSchemaId),
+        <<"qosTransferStatsConfig">> => #{
+            <<"totalTimeSeriesId">> => ?TOTAL_TIME_SERIES_ID,
+            <<"minuteMetricId">> => ?MINUTE_METRIC_ID,
+            <<"hourMetricId">> => ?HOUR_METRIC_ID,
+            <<"dayMetricId">> => ?DAY_METRIC_ID,
+            <<"monthMetricId">> => ?MONTH_METRIC_ID
+        },
         <<"apiTemplates">> => XRootDApiTemplates#{
             <<"rest">> => #{
                 <<"listSharedDirectoryChildren">> => ?ZONE_SHARED_DATA_CURL_COMMAND_TEMPLATE("/children"),

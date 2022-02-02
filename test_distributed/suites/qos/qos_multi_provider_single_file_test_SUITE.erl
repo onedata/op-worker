@@ -655,7 +655,7 @@ read_file(Node, FilePath) ->
 
 
 check_transfer_stats(Provider, QosEntryId, Type, ExpectedSeries, ExpectedValue) ->
-    {ok, Stats} = opw_test_rpc:call(Provider, qos_transfer_stats, get, [QosEntryId, Type]),
+    {ok, Stats} = opw_test_rpc:call(Provider, qos_transfer_stats, list_windows, [QosEntryId, Type]),
     lists:foreach(fun(Series) ->
         lists:foreach(fun(Metric) ->
             ?assert(maps:is_key({Series, Metric}, Stats)),

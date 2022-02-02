@@ -20,6 +20,7 @@
 
 %% API
 -export([
+    translate_value/2,
     translate_resource/2
 ]).
 
@@ -27,6 +28,15 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+
+-spec translate_value(gri:gri(), Value :: term()) -> gs_protocol:data().
+translate_value(#gri{aspect = audit_log}, ListingResult) ->
+    ListingResult;
+translate_value(#gri{aspect = time_series_collections}, Collections) ->
+    Collections;
+translate_value(#gri{aspect = {time_series_collection, _}}, ListingResult) ->
+    ListingResult.
 
 
 -spec translate_resource(gri:gri(), Data :: term()) ->

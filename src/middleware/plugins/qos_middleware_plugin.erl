@@ -8,6 +8,10 @@
 %%% @doc
 %%% This module handles middleware operations (create, get, delete)
 %%% corresponding to QoS management.
+%%%
+%%% NOTE: the API allows browsing QoS transfer stats, but the GUI application
+%%% recognizes time series Ids as provider Ids, rather than storage Ids as it
+%%% is stored in the database. This module does all the required translations.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(qos_middleware_plugin).
@@ -46,6 +50,9 @@ resolve_handler(create, instance, private) -> ?MODULE;
 
 resolve_handler(get, instance, private) -> ?MODULE;
 resolve_handler(get, audit_log, private) -> ?MODULE;
+resolve_handler(get, time_series_collections, private) -> ?MODULE;
+resolve_handler(get, {time_series_collection, ?BYTES_STATS}, private) -> ?MODULE;
+resolve_handler(get, {time_series_collection, ?FILES_STATS}, private) -> ?MODULE;
 
 resolve_handler(delete, instance, private) -> ?MODULE;
 
@@ -82,6 +89,24 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = audit_log}}) -> #{
         <<"limit">> => {integer, {not_lower_than, 1}}
     }
 };
+data_spec(#op_req{operation = get, gri = #gri{aspect = {time_series_collection, _}}}) -> #{
+    required => #{
+        <<"metrics">> => {json, fun(RequestedMetrics) ->
+            try
+                maps:foreach(fun(TimeSeriesId, MetricIds) ->
+                    true = is_binary(TimeSeriesId) andalso is_list(MetricIds) andalso is_binary(hd(MetricIds))
+                end, RequestedMetrics),
+                true
+            catch _:_ ->
+                false
+            end
+        end}
+    },
+    optional => #{
+        <<"startTimestamp">> => {integer, {not_lower_than, 0}},
+        <<"limit">> => {integer, {not_lower_than, 1}}
+    }
+};
 
 data_spec(#op_req{operation = delete, gri = #gri{aspect = instance}}) ->
     undefined.
@@ -103,6 +128,10 @@ fetch_entity(#op_req{operation = get, auth = Auth, gri = #gri{
 }}) ->
     fetch_qos_entry(Auth, QosEntryId);
 fetch_entity(#op_req{operation = get, gri = #gri{aspect = audit_log}}) ->
+    {ok, {undefined, 1}};
+fetch_entity(#op_req{operation = get, gri = #gri{aspect = time_series_collections}}) ->
+    {ok, {undefined, 1}};
+fetch_entity(#op_req{operation = get, gri = #gri{aspect = {time_series_collection, _}}}) ->
     {ok, {undefined, 1}};
 
 fetch_entity(#op_req{operation = delete, auth = Auth, gri = #gri{
@@ -134,8 +163,10 @@ authorize(#op_req{operation = get, auth = ?USER(UserId), gri = #gri{
     aspect = Aspect
 }}, _QosEntry) when
     Aspect =:= instance;
-    Aspect =:= audit_log
-->
+    Aspect =:= audit_log;
+    Aspect =:= time_series_collections;
+    element(1, Aspect) =:= time_series_collection
+    ->
     {ok, SpaceId} = ?lfm_check(qos_entry:get_space_id(QosEntryId)),
     space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW_QOS);
 
@@ -161,8 +192,10 @@ validate(#op_req{operation = create, gri = #gri{aspect = instance}, data = #{
 
 validate(#op_req{operation = get, gri = #gri{id = QosEntryId, aspect = Aspect}}, _QosEntry) when
     Aspect =:= instance;
-    Aspect =:= audit_log
-->
+    Aspect =:= audit_log;
+    Aspect =:= time_series_collections;
+    element(1, Aspect) =:= time_series_collection
+    ->
     {ok, SpaceId} = ?lfm_check(qos_entry:get_space_id(QosEntryId)),
     middleware_utils:assert_space_supported_locally(SpaceId);
 
@@ -218,7 +251,53 @@ get(#op_req{gri = #gri{id = QosEntryId, aspect = audit_log}, data = Data}, _QosE
         offset => maps:get(<<"offset">>, Data, 0),
         start_from => StartFrom
     },
-    qos_entry_audit_log:browse_content(QosEntryId, Opts).
+    {ok, BrowseResult} = qos_entry_audit_log:browse_content(QosEntryId, Opts),
+    {ok, value, BrowseResult};
+
+get(#op_req{gri = #gri{id = QosEntryId, aspect = time_series_collections}}, _QosEntry) ->
+    {ok, SpaceId} = qos_entry:get_space_id(QosEntryId),
+    {ok, FilesTSIds} = qos_transfer_stats:list_time_series_ids(QosEntryId, ?FILES_STATS),
+    {ok, BytesTSIds} = qos_transfer_stats:list_time_series_ids(QosEntryId, ?BYTES_STATS),
+    {ok, value, #{
+        ?FILES_STATS => ts_ids_from_storages_to_providers(FilesTSIds, SpaceId),
+        ?BYTES_STATS => ts_ids_from_storages_to_providers(BytesTSIds, SpaceId)
+    }};
+
+get(#op_req{gri = #gri{id = QosEntryId, aspect = {time_series_collection, Type}}, data = Data}, _QosEntry) ->
+    {ok, SpaceId} = qos_entry:get_space_id(QosEntryId),
+    RequestedMetrics = maps:get(<<"metrics">>, Data),
+    RequestRange = maps:fold(fun(TimeSeriesId, MetricIds, Acc) ->
+        Acc ++ [{TimeSeriesId, provider_id_to_storage_id(MId, SpaceId)} || MId <- MetricIds]
+    end, [], RequestedMetrics),
+    PossiblyUndefOpts = #{
+        start => maps:get(<<"startTimestamp">>, Data, undefined),
+        limit => maps:get(<<"limit">>, Data, undefined)
+    },
+    Opts = maps_utils:remove_undefined(PossiblyUndefOpts),
+    case qos_transfer_stats:list_windows(QosEntryId, Type, RequestRange, Opts) of
+        {error, not_found} ->
+            ?ERROR_NOT_FOUND;
+        {error, time_series_not_found} ->
+            ?ERROR_NOT_FOUND;
+        {error, metric_not_found} ->
+            ?ERROR_NOT_FOUND;
+        {ok, WindowsPerFullMetricId} ->
+            {ok, value, #{
+                <<"windows">> => maps:fold(fun({TimeSeriesId, MetricId}, Windows, Acc) ->
+                    MetricsForCurrentTimeSeries = maps:get(TimeSeriesId, Acc, #{}),
+                    Acc#{
+                        TimeSeriesId => MetricsForCurrentTimeSeries#{
+                            storage_id_to_provider_id(MetricId, SpaceId) => lists:map(fun({Timestamp, Value}) ->
+                                #{
+                                    <<"timestamp">> => Timestamp,
+                                    <<"value">> => Value
+                                }
+                            end, Windows)
+                        }
+                    }
+                end, #{}, WindowsPerFullMetricId)
+            }}
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -267,3 +346,28 @@ entry_to_details(QosEntry, Status, SpaceId) ->
         <<"fileId">> => QosRootFileObjectId,
         <<"status">> => Status
     }.
+
+
+%% @private
+-spec ts_ids_from_storages_to_providers([time_series_collection:time_series_id()], od_space:id()) ->
+    [time_series_collection:time_series_id()].
+ts_ids_from_storages_to_providers(TimeSeriesIds, SpaceId) ->
+    lists:map(fun
+        (?TOTAL_TIME_SERIES_ID) -> ?TOTAL_TIME_SERIES_ID;
+        (StorageId) -> storage_id_to_provider_id(StorageId, SpaceId)
+    end, TimeSeriesIds).
+
+
+%% @private
+-spec storage_id_to_provider_id(od_storage:id(), od_space:id()) -> od_provider:id().
+storage_id_to_provider_id(StorageId, SpaceId) ->
+    storage:fetch_provider_id_of_remote_storage(StorageId, SpaceId).
+
+
+%% @private
+-spec provider_id_to_storage_id(od_provider:id(), od_space:id()) -> od_storage:id().
+provider_id_to_storage_id(ProviderId, SpaceId) ->
+    {ok, StoragesToAccessType} = space_logic:get_storages_by_provider(SpaceId, ProviderId),
+    %% @TODO VFS-5497 Rework when multisupport is implemented
+    hd(maps:keys(StoragesToAccessType)).
+
