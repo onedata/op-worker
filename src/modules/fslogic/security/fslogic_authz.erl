@@ -74,12 +74,12 @@ ensure_authorized(UserCtx, FileCtx0, AccessRequirements, AncestorPolicy) ->
 -spec ensure_authorized_readdir(user_ctx:ctx(), file_ctx:ctx(),
     AccessRequirements :: [data_access_rights:requirement()]
 ) ->
-    {ChildrenWhiteList :: undefined | [file_meta:name()], file_ctx:ctx()}.
+    {CanonicalChildrenWhiteList :: undefined | [file_meta:name()], file_ctx:ctx()}.
 ensure_authorized_readdir(UserCtx, FileCtx0, AccessRequirements) ->
-    {ChildrenWhitelist, FileCtx1} = data_constraints:inspect(
+    {CanonicalChildrenWhiteList, FileCtx1} = data_constraints:inspect(
         UserCtx, FileCtx0, allow_ancestors, AccessRequirements
     ),
     FileCtx2 = data_access_rights:assert_granted(
         UserCtx, FileCtx1, AccessRequirements
     ),
-    {ChildrenWhitelist, FileCtx2}.
+    {CanonicalChildrenWhiteList, FileCtx2}.
