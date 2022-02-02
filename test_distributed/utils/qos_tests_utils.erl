@@ -17,42 +17,44 @@
 -include("rest_test_utils.hrl").
 -include("modules/datastore/qos.hrl").
 -include("modules/datastore/datastore_models.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
--include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/privileges.hrl").
+-include_lib("ctool/include/http/headers.hrl").
+-include_lib("ctool/include/test/test_utils.hrl").
 
 
 % assertions
 -export([
-    assert_distribution_in_dir_structure/3,
-    assert_effective_qos/4, assert_effective_qos/5,
-    assert_file_qos_documents/4, assert_file_qos_documents/5,
-    assert_qos_entry_documents/3, assert_qos_entry_documents/4,
-    gather_not_matching_statuses_on_all_workers/4
+    assert_distribution_in_dir_structure/2,
+    assert_effective_qos/3, assert_effective_qos/4,
+    assert_file_qos_documents/3, assert_file_qos_documents/4,
+    assert_qos_entry_documents/2, assert_qos_entry_documents/3,
+    gather_not_matching_statuses_on_all_nodes/3
 ]).
 
 % util functions
 -export([
-    fulfill_qos_test_base/2,
-    get_op_nodes_sorted/1, get_guid/2, get_guid/3,
-    create_dir_structure/2, create_dir_structure/4,
-    create_file/4, create_directory/3,
-    wait_for_qos_fulfillment_in_parallel/4,
-    add_qos/2, add_multiple_qos/2,
+    fulfill_qos_test_base/1,
+    get_guid/2, get_guid/3,
+    create_dir_structure/1, create_dir_structure/4,
+    create_file/4, create_file/5, create_directory/3,
+    create_and_open/4,
+    wait_for_qos_fulfillment_in_parallel/2,
+    add_qos/1, add_multiple_qos/1,
     map_qos_names_to_ids/2,
-    set_qos_parameters/2,
+    set_qos_parameters/3, reset_qos_parameters/0,
     mock_transfers/1,
-    finish_all_transfers/1,
+    finish_transfers/1, finish_transfers/2,
+    finish_all_transfers/0,
     mock_replica_synchronizer/2
 ]).
 
--define(USER_ID, <<"user1">>).
--define(SESS_ID(Config, Worker), ?config({session_id, {?USER_ID, ?GET_DOMAIN(Worker)}}, Config)).
--define(GET_FILE_UUID(Worker, SessId, FilePath),
-    file_id:guid_to_uuid(qos_tests_utils:get_guid(Worker, SessId, FilePath))
-).
--define(GET_SPACE_ID(Worker, SessId, FilePath),
-    file_id:guid_to_space_id(qos_tests_utils:get_guid(Worker, SessId, FilePath))
+-define(USER_PLACEHOLDER, user2).
+-define(SPACE, space1).
+-define(SESS_ID(ProviderPlaceholder), oct_background:get_user_session_id(?USER_PLACEHOLDER, ProviderPlaceholder)).
+-define(GET_FILE_UUID(Node, SessId, FilePath),
+    file_id:guid_to_uuid(qos_tests_utils:get_guid(Node, SessId, FilePath))
 ).
 
 -define(ATTEMPTS, 60).
@@ -61,7 +63,7 @@
 %%% Util functions
 %%%====================================================================
 
-fulfill_qos_test_base(Config, #fulfill_qos_test_spec{
+fulfill_qos_test_base(#fulfill_qos_test_spec{
     initial_dir_structure = InitialDirStructure,
     qos_to_add = QosToAddList,
     wait_for_qos_fulfillment = WaitForQos,
@@ -70,54 +72,43 @@ fulfill_qos_test_base(Config, #fulfill_qos_test_spec{
     expected_dir_structure = ExpectedDirStructure
 }) ->
     % create initial dir structure
-    GuidsAndPaths = create_dir_structure(Config, InitialDirStructure),
-    ?assertMatch(true, assert_distribution_in_dir_structure(Config, InitialDirStructure, GuidsAndPaths)),
+    GuidsAndPaths = create_dir_structure(InitialDirStructure),
+    ?assertMatch(true, assert_distribution_in_dir_structure(InitialDirStructure, GuidsAndPaths)),
 
     % add QoS and w8 for fulfillment
-    QosNameIdMapping = add_multiple_qos(Config, QosToAddList),
-    wait_for_qos_fulfillment_in_parallel(Config, WaitForQos, QosNameIdMapping, ExpectedQosEntries),
+    QosNameIdMapping = add_multiple_qos(QosToAddList),
+    WaitForQos andalso wait_for_qos_fulfillment_in_parallel(QosNameIdMapping, ExpectedQosEntries),
 
     % check file distribution and qos documents
-    ?assertMatch(ok, assert_qos_entry_documents(Config, ExpectedQosEntries, QosNameIdMapping, ?ATTEMPTS)),
-    ?assertMatch(ok, assert_file_qos_documents(Config, ExpectedFileQos, QosNameIdMapping, true, ?ATTEMPTS)),
-    ?assertMatch(true, assert_distribution_in_dir_structure(Config, ExpectedDirStructure, GuidsAndPaths)),
+    ?assertMatch(ok, assert_qos_entry_documents(ExpectedQosEntries, QosNameIdMapping, ?ATTEMPTS)),
+    ?assertMatch(ok, assert_file_qos_documents(ExpectedFileQos, QosNameIdMapping, true, ?ATTEMPTS)),
+    ?assertMatch(true, assert_distribution_in_dir_structure(ExpectedDirStructure, GuidsAndPaths)),
     {GuidsAndPaths, QosNameIdMapping}.
 
 
-get_op_nodes_sorted(Config) ->
-    Workers = ?config(op_worker_nodes, Config),
-
-    % return list of workers sorted using provider ID
-    SortingFun = fun(Worker1, Worker2) ->
-        ProviderId1 = ?GET_DOMAIN_BIN(Worker1),
-        ProviderId2 = ?GET_DOMAIN_BIN(Worker2),
-        ProviderId1 =< ProviderId2
-    end,
-    lists:sort(SortingFun, Workers).
-
-
-add_multiple_qos(Config, QosToAddList) ->
+add_multiple_qos(QosToAddList) ->
     lists:foldl(fun(QosToAdd, Acc) ->
-        {ok, {QosName, QosEntryId}} = add_qos(Config, QosToAdd),
+        {ok, {QosName, QosEntryId}} = add_qos(QosToAdd),
         Acc#{QosName => QosEntryId}
     end, #{}, QosToAddList).
 
 
-add_qos(Config, #qos_to_add{
-    worker = WorkerOrUndef,
+add_qos(#qos_to_add{
+    provider_selector = ProviderOrUndef,
     qos_name = QosName,
     path = FilePath,
     replicas_num = ReplicasNum,
     expression = QosExpression
 }) ->
-    % use first worker from sorted worker list if worker is not specified
-    Worker = ensure_worker(Config, WorkerOrUndef),
-    SessId = ?SESS_ID(Config, Worker),
+    % use first provider from list if provider is not specified
+    Provider = ensure_provider(ProviderOrUndef),
+    SessId = ?SESS_ID(Provider),
+    Node = oct_background:get_random_provider_node(Provider),
 
     % ensure file exists
-    ?assertMatch({ok, _}, lfm_proxy:stat(Worker, SessId, {path, FilePath}), ?ATTEMPTS),
+    ?assertMatch({ok, _}, lfm_proxy:stat(Node, SessId, {path, FilePath}), ?ATTEMPTS),
 
-    case add_qos_by_rest(Config, Worker, FilePath, QosExpression, ReplicasNum) of
+    case add_qos_by_rest(Provider, FilePath, QosExpression, ReplicasNum) of
         {ok, RespBody} ->
             DecodedBody = json_utils:decode(RespBody),
             #{<<"qosRequirementId">> := QosEntryId} = ?assertMatch(#{<<"qosRequirementId">> := _}, DecodedBody),
@@ -126,69 +117,89 @@ add_qos(Config, #qos_to_add{
     end.
 
 
-add_qos_by_rest(Config, Worker, FilePath, QosExpression, ReplicasNum) ->
-    FileGuid = qos_tests_utils:get_guid(Worker, ?SESS_ID(Config, Worker), FilePath),
+add_qos_by_rest(Provider, FilePath, QosExpression, ReplicasNum) ->
+    Node = oct_background:get_random_provider_node(Provider),
+    FileGuid = get_guid(Node, ?SESS_ID(Provider), FilePath),
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
     URL = <<"qos_requirements">>,
-    Headers = [?USER_TOKEN_HEADER(Config, ?USER_ID), {<<"Content-type">>, <<"application/json">>}],
+    Headers = [rest_test_utils:user_token_header(oct_background:get_user_access_token(?USER_PLACEHOLDER)), 
+        {?HDR_CONTENT_TYPE, <<"application/json">>}],
     ReqBody = #{
         <<"expression">> => QosExpression,
         <<"replicasNum">> => ReplicasNum,
         <<"fileId">> => FileObjectId
     },
-    SpaceId = ?GET_SPACE_ID(Worker, ?SESS_ID(Config, Worker), FilePath),
-    make_rest_request(Config, Worker, URL, post, Headers, ReqBody, SpaceId, [?SPACE_MANAGE_QOS]).
+    SpaceId = oct_background:get_space_id(?SPACE),
+    make_rest_request(Node, URL, post, Headers, ReqBody, SpaceId, [?SPACE_MANAGE_QOS]).
 
 
-create_dir_structure(_Config, undefined) ->
+create_dir_structure(undefined) ->
     #{};
     
-create_dir_structure(Config, #test_dir_structure{
-    worker = WorkerOrUndef,
+create_dir_structure(#test_dir_structure{
+    provider = ProviderOrUndef,
     dir_structure = DirStructureToCreate
 }) ->
-    % use first worker from sorted worker list if worker is not specified
-    Worker = ensure_worker(Config, WorkerOrUndef),
-    SessionId = ?SESS_ID(Config, Worker),
-    create_dir_structure(Worker, SessionId, DirStructureToCreate, <<"/">>).
+    % use first provider from list if provider is not specified
+    Provider = ensure_provider(ProviderOrUndef),
+    SessionId = ?SESS_ID(Provider),
+    create_dir_structure(Provider, SessionId, DirStructureToCreate, <<"/">>).
 
-create_dir_structure(Worker, SessionId, {DirName, DirContent}, CurrPath) when is_list(DirContent) ->
+create_dir_structure(Provider, SessionId, {DirName, DirContent}, CurrPath) when is_list(DirContent) ->
     DirPath = filename:join(CurrPath, DirName),
     Map = case CurrPath == <<"/">> of
         true ->
             % skip creating space directory
             #{files => [], dirs => []};
         false ->
-            DirGuid = create_directory(Worker, SessionId, DirPath),
+            DirGuid = create_directory(Provider, SessionId, DirPath),
             #{dirs => [{DirGuid, DirPath}]}
     end,
     lists:foldl(fun(Child, #{files := Files, dirs := Dirs}) ->
-        #{files := NewFiles, dirs := NewDirs} = create_dir_structure(Worker, SessionId, Child, DirPath),
+        #{files := NewFiles, dirs := NewDirs} = create_dir_structure(Provider, SessionId, Child, DirPath),
         #{files => Files ++ NewFiles, dirs => Dirs ++ NewDirs}
     end, maps:merge(#{files => [], dirs => []}, Map), DirContent);
 
-create_dir_structure(Worker, SessionId, {FileName, FileContent}, CurrPath) ->
-    create_dir_structure(Worker, SessionId, {FileName, FileContent, undefined}, CurrPath);
+create_dir_structure(Provider, SessionId, {FileName, FileContent}, CurrPath) ->
+    create_dir_structure(Provider, SessionId, {FileName, FileContent, undefined}, CurrPath);
 
-create_dir_structure(Worker, SessionId, {FileName, FileContent, _FileDistribution}, CurrPath) ->
+create_dir_structure(Provider, SessionId, {FileName, FileContent, FileDistribution}, CurrPath) ->
+    create_dir_structure(Provider, SessionId, {FileName, FileContent, FileDistribution, reg_file}, CurrPath);
+
+create_dir_structure(Provider, SessionId, {FileName, FileContent, _FileDistribution, TypeSpec}, CurrPath) ->
     FilePath = filename:join(CurrPath, FileName),
-    FileGuid = create_file(Worker, SessionId, FilePath, FileContent),
+    FileGuid = create_file(Provider, SessionId, FilePath, FileContent, TypeSpec),
     #{files => [{FileGuid, FilePath}], dirs => []}.
 
 
-create_directory(Worker, SessionId, DirPath) ->
-    {ok, DirGuid} = ?assertMatch({ok, _DirGuid}, lfm_proxy:mkdir(Worker, SessionId, DirPath)),
+create_directory(Provider, SessionId, DirPath) ->
+    {ok, DirGuid} = ?assertMatch({ok, _DirGuid}, lfm_proxy:mkdir(
+        oct_background:get_random_provider_node(Provider), SessionId, DirPath)),
     DirGuid.
 
 
-create_file(Worker, SessionId, FilePath, FileContent) ->
-    {ok, FileGuid} = ?assertMatch({ok, _FileGuid}, lfm_proxy:create(Worker, SessionId, FilePath)),
-    {ok, Handle} = ?assertMatch({ok, _Handle}, lfm_proxy:open(Worker, SessionId, {guid, FileGuid}, write)),
+create_file(Provider, SessionId, Path, FileContent) ->
+    create_file(Provider, SessionId, Path, FileContent, reg_file).
+
+create_file(Provider, SessionId, Path, FileContent, TypeSpec) ->
+    Node = oct_background:get_random_provider_node(Provider),
+    {ok, ParentGuid} = lfm_proxy:resolve_guid(Node, SessionId, filename:dirname(Path)),
+    {ok, {FileGuid, Handle}} = ?assertMatch({ok, {_, _}}, create_and_open(Node, SessionId, ParentGuid, filename:basename(Path), TypeSpec)),
     Size = size(FileContent),
-    ?assertMatch({ok, Size}, lfm_proxy:write(Worker, Handle, 0, FileContent)),
-    ?assertMatch(ok, lfm_proxy:fsync(Worker, Handle)),
-    ?assertMatch(ok, lfm_proxy:close(Worker, Handle)),
+    ?assertMatch({ok, Size}, lfm_proxy:write(Node, Handle, 0, FileContent)),
+    ?assertMatch(ok, lfm_proxy:fsync(Node, Handle)),
+    ?assertMatch(ok, lfm_proxy:close(Node, Handle)),
     FileGuid.
+
+create_and_open(Node, SessId, ParentGuid, TypeSpec) ->
+    create_and_open(Node, SessId, ParentGuid, generator:gen_name(), TypeSpec).
+
+create_and_open(Node, SessId, ParentGuid, Filename, reg_file) ->
+    lfm_proxy:create_and_open(Node, SessId, ParentGuid, Filename, ?DEFAULT_FILE_PERMS);
+create_and_open(Node, SessId, ParentGuid, Filename, {hardlink, FileToLinkGuid}) ->
+    {ok, #file_attr{guid = LinkGuid}} = lfm_proxy:make_link(Node, SessId, ?FILE_REF(FileToLinkGuid), ?FILE_REF(ParentGuid), Filename),
+    {ok, Handle} = lfm_proxy:open(Node, SessId, ?FILE_REF(LinkGuid), rdwr),
+    {ok, {LinkGuid, Handle}}.
 
 
 fill_in_expected_distribution(ExpectedDistribution, FileContent) ->
@@ -221,22 +232,18 @@ get_guid(Path, #{files := FilesGuidsAndPaths, dirs := DirsGuidsAndPaths}) ->
                    ({_, _}, Acc) -> Acc
     end, undefined, FilesGuidsAndPaths ++ DirsGuidsAndPaths).
 
-get_guid(Worker, SessId, Path) ->
-    {ok, Guid} = ?assertMatch({ok, _}, lfm_proxy:resolve_guid(Worker, SessId, Path)),
+get_guid(Node, SessId, Path) ->
+    {ok, Guid} = ?assertMatch({ok, _}, lfm_proxy:resolve_guid(Node, SessId, Path)),
     Guid.
 
 
-wait_for_qos_fulfillment_in_parallel(Config, undefined, QosNameIdMapping, ExpectedQosEntries) ->
-    % if test spec does not specify for which QoS fulfillment wait, wait for all QoS
-    % on all workers
-    Workers = qos_tests_utils:get_op_nodes_sorted(Config),
-    QosNamesWithWorkerList = lists:foldl(fun(QosName, Acc) ->
-        [{QosName, Workers} | Acc]
+wait_for_qos_fulfillment_in_parallel(QosNameIdMapping, ExpectedQosEntries) ->
+    Nodes = oct_background:get_all_providers_nodes(),
+    QosToWaitForList = lists:foldl(fun(QosName, Acc) ->
+        [{QosName, Nodes} | Acc]
     end, [], maps:keys(QosNameIdMapping)),
-    wait_for_qos_fulfillment_in_parallel(Config, QosNamesWithWorkerList, QosNameIdMapping, ExpectedQosEntries);
-
-wait_for_qos_fulfillment_in_parallel(Config, QosToWaitForList, QosNameIdMapping, ExpectedQosEntries) ->
-    Results = lists_utils:pmap(fun({QosName, WorkerList}) ->
+    
+    Results = lists_utils:pmap(fun({QosName, Nodes}) ->
         QosEntryId = maps:get(QosName, QosNameIdMapping),
 
         % try to find expected QoS entry associated with QoS name and get
@@ -248,105 +255,151 @@ wait_for_qos_fulfillment_in_parallel(Config, QosToWaitForList, QosNameIdMapping,
         ExpectedFulfillmentStatus = case LookupExpectedQosEntry of
             [ExpectedQosEntry] ->
                 case ExpectedQosEntry#expected_qos_entry.possibility_check of
-                    {possible, _} -> ?FULFILLED;
-                    {impossible, _} -> ?IMPOSSIBLE
+                    {possible, _} -> ?FULFILLED_QOS_STATUS;
+                    {impossible, _} -> ?IMPOSSIBLE_QOS_STATUS
                 end;
             [] ->
-                ?FULFILLED
+                ?FULFILLED_QOS_STATUS
         end,
 
-        % wait for QoS fulfillment on different worker nodes
-        lists_utils:pmap(fun(Worker) ->
-            wait_for_qos_fulfilment_in_parallel(Config, Worker, QosEntryId, QosName, ExpectedFulfillmentStatus)
-        end, WorkerList)
+        % wait for QoS fulfillment on different nodes
+        lists_utils:pmap(fun(Node) ->
+            wait_for_qos_fulfilment(Node, QosEntryId, QosName, ExpectedFulfillmentStatus)
+        end, Nodes)
     end, QosToWaitForList),
 
     ?assert(lists:all(fun(Result) -> Result =:= ok end, lists:flatten(Results))).
 
-wait_for_qos_fulfilment_in_parallel(Config, Worker, QosEntryId, QosName, ExpectedFulfillmentStatus) ->
-    SessId = ?SESS_ID(Config, Worker),
+wait_for_qos_fulfilment(Node, QosEntryId, QosName, ExpectedFulfillmentStatus) ->
     Fun = fun() ->
-        ErrMsg = case rpc:call(Worker, lfm_qos, get_qos_entry, [SessId, QosEntryId]) of
+        ErrMsg = case opt_qos:get_qos_entry(Node, ?ROOT_SESS_ID, QosEntryId) of
             {ok, #qos_entry{
                 possibility_check = PossibilityCheck,
-                traverse_reqs = TraversReqs
+                traverse_reqs = TraverseReqs
             }} ->
                 case ExpectedFulfillmentStatus of
-                    ?FULFILLED ->
+                    ?FULFILLED_QOS_STATUS ->
                         str_utils:format(
                             "QoS is not fulfilled while it should be. ~n"
-                            "Worker: ~p ~n"
+                            "Node: ~p ~n"
                             "QosName: ~p ~n"
                             "ProviderId: ~p ~n"
                             "TraverseReqs: ~p ~n",
-                            [Worker, QosName, PossibilityCheck, TraversReqs]
+                            [Node, QosName, PossibilityCheck, TraverseReqs]
                         );
-                    ?IMPOSSIBLE ->
+                    ?IMPOSSIBLE_QOS_STATUS ->
                         str_utils:format(
                             "QoS is fulfilled while it shouldn't be. ~n"
-                            "Worker: ~p ~n"
-                            "QosName: ~p ~n", [Worker, QosName]
+                            "Node: ~p ~n"
+                            "QosName: ~p ~n", [Node, QosName]
                         )
                 end;
             {error, _} = Error ->
                 str_utils:format(
                     "Error when checking QoS status. ~n"
-                    "Worker: ~p~n"
+                    "Node: ~p~n"
                     "QosName: ~p~n"
-                    "Error: ~p~n", [Worker, QosName, Error]
+                    "Error: ~p~n", [Node, QosName, Error]
                 )
         end,
-        {lfm_proxy:check_qos_status(Worker, SessId, QosEntryId), ErrMsg}
+        {opt_qos:check_qos_status(Node, ?ROOT_SESS_ID, QosEntryId), ErrMsg}
     end,
-    assert_match_with_err_msg(Fun, {ok, ExpectedFulfillmentStatus}, 3 * ?ATTEMPTS, 1000).
+    assert_match_with_err_msg(Fun, {ok, ExpectedFulfillmentStatus}, ?ATTEMPTS, 1000).
 
 
 map_qos_names_to_ids(QosNamesList, QosNameIdMapping) ->
     [maps:get(QosName, QosNameIdMapping) || QosName <- QosNamesList].
 
 
-set_qos_parameters(Worker, QosParameters) ->
-    ok = rpc:call(Worker, storage, set_qos_parameters,
-        [initializer:get_storage_id(Worker), QosParameters]).
+set_qos_parameters(Provider, StorageId, QosParameters) ->
+    ok = opw_test_rpc:call(Provider, storage, set_qos_parameters,
+        [StorageId, QosParameters]).
 
 
-mock_transfers(Workers) ->
-    test_utils:mock_new(Workers, replica_synchronizer, [passthrough]),
+reset_qos_parameters() ->
+    Providers = oct_background:get_provider_ids(),
+    lists:foreach(fun(Provider) ->
+        {ok, Storages} = opw_test_rpc:call(Provider, provider_logic, get_storages, []),
+        lists:foreach(fun(StorageId) ->
+            ok = opw_test_rpc:call(Provider, storage, set_qos_parameters, [StorageId, #{}])
+        end, Storages)
+    end, Providers).
+            
+
+
+mock_transfers(Nodes) ->
+    test_utils:mock_new(Nodes, replica_synchronizer, [passthrough]),
     TestPid = self(),
-    ok = test_utils:mock_expect(Workers, replica_synchronizer, synchronize,
-        fun(_, FileCtx, _, _, _, _) ->
-            FileGuid = file_ctx:get_guid_const(FileCtx),
+    ok = test_utils:mock_expect(Nodes, replica_synchronizer, synchronize,
+        fun(UserCtx, FileCtx, Block, Prefetch, TransferId, Priority, CallbackModule) ->
+            FileGuid = file_ctx:get_logical_guid_const(FileCtx),
             TestPid ! {qos_slave_job, self(), FileGuid},
-            receive {completed, FileGuid} -> {ok, FileGuid} end
+            receive
+                {completed, FileGuid} ->
+                    meck:passthrough([UserCtx, FileCtx, Block, Prefetch, TransferId, Priority, CallbackModule]),
+                    {ok, FileGuid}
+            end
         end).
 
+% above mock (mock_transfers/1) required for this function to work
+finish_transfers(Files) ->
+    finish_transfers(Files, strict).
 
 % above mock (mock_transfers/1) required for this function to work
-finish_all_transfers([]) -> ok;
-finish_all_transfers(Files) ->
+finish_transfers(Files, Mode) ->
+    finish_transfers(Files, Mode, []).
+
+% above mock (mock_transfers/1) required for this function to work
+finish_transfers([], _Mode, IgnoredMsgs) -> 
+    resend_msgs(IgnoredMsgs);
+finish_transfers(Files, Mode, IgnoredMsgs) ->
     receive {qos_slave_job, Pid, FileGuid} = Msg ->
         case lists:member(FileGuid, Files) of
             true ->
                 Pid ! {completed, FileGuid},
-                finish_all_transfers(lists:delete(FileGuid, Files));
+                finish_transfers(lists:delete(FileGuid, Files), Mode, IgnoredMsgs);
             false ->
-                erlang:send_after(timer:seconds(2), self(), Msg),
-                finish_all_transfers(Files)
+                finish_transfers(Files, Mode, [Msg | IgnoredMsgs])
         end
     after timer:seconds(10) ->
-        ct:print("Transfers not started: ~p", [Files]),
-        {error, transfers_not_started}
+        resend_msgs(IgnoredMsgs),
+        case Mode of
+            strict ->
+                ct:print("Transfers not started: ~p", [Files]),
+                {error, transfers_not_started};
+            non_strict ->
+                ok
+        end
     end.
 
+finish_all_transfers() ->
+    receive {qos_slave_job, Pid, FileGuid}->
+        Pid ! {completed, FileGuid},
+        finish_all_transfers()
+    after 0 ->
+        ok
+    end.
 
-mock_replica_synchronizer(Workers, passthrough) ->
-    ok = test_utils:mock_expect(Workers, replica_synchronizer, synchronize,
-        fun(UserCtx, FileCtx, Block, Prefetch, TransferId, Priority) ->
-            meck:passthrough([UserCtx, FileCtx, Block, Prefetch, TransferId, Priority])
+resend_msgs([]) -> 
+    ok;
+resend_msgs([Msg | Tail]) -> 
+    self() ! Msg, 
+    resend_msgs(Tail).
+
+
+mock_replica_synchronizer(Nodes, passthrough) ->
+    ok = test_utils:mock_expect(Nodes, replica_synchronizer, synchronize,
+        fun(UserCtx, FileCtx, Block, Prefetch, TransferId, Priority, CallbackModule) ->
+            meck:passthrough([UserCtx, FileCtx, Block, Prefetch, TransferId, Priority, CallbackModule])
         end);
-mock_replica_synchronizer(Workers, Expected) ->
-    ok = test_utils:mock_expect(Workers, replica_synchronizer, synchronize,
-        fun(_, _, _, _, _, _) ->
+mock_replica_synchronizer(Nodes, {throw, Error}) ->
+    ok = test_utils:mock_expect(Nodes, replica_synchronizer, synchronize,
+        fun(_, _, _, _, _, _, _) ->
+            throw(Error)
+        end);
+mock_replica_synchronizer(Nodes, Expected) ->
+    ok = test_utils:mock_expect(Nodes, replica_synchronizer, synchronize,
+        fun(_, _, _, _, _, _, _) ->
             Expected
         end).
 
@@ -354,12 +407,12 @@ mock_replica_synchronizer(Workers, Expected) ->
 %%% Assertions
 %%%====================================================================
 
-assert_qos_entry_documents(Config, ExpectedQosEntries, QosNameIdMapping) ->
-    assert_qos_entry_documents(Config, ExpectedQosEntries, QosNameIdMapping, 1).
+assert_qos_entry_documents(ExpectedQosEntries, QosNameIdMapping) ->
+    assert_qos_entry_documents(ExpectedQosEntries, QosNameIdMapping, 1).
 
-assert_qos_entry_documents(Config, ExpectedQosEntries, QosNameIdMapping, Attempts) ->
+assert_qos_entry_documents(ExpectedQosEntries, QosNameIdMapping, Attempts) ->
     lists:foreach(fun(#expected_qos_entry{
-        workers = WorkersOrUndef,
+        providers = ProvidersOrUndef,
         qos_expression = QosExpressionRPN,
         replicas_num = ReplicasNum,
         file_key = FileKey,
@@ -368,22 +421,24 @@ assert_qos_entry_documents(Config, ExpectedQosEntries, QosNameIdMapping, Attempt
     }) ->
         QosEntryId = QosEntryId = maps:get(QosName, QosNameIdMapping),
         % if not specified in tests spec, check document on all nodes
-        Workers = ensure_workers(Config, WorkersOrUndef),
+        Providers = ensure_providers(ProvidersOrUndef),
 
-        lists:foreach(fun(Worker) ->
-            FileUuid = case FileKey of
-                {path, Path} ->
-                    ?GET_FILE_UUID(Worker, ?SESS_ID(Config, Worker), Path);
-                {uuid, Uuid} ->
-                    Uuid
-            end,
-            assert_qos_entry_document(
-                Config, Worker, QosEntryId, FileUuid, QosExpressionRPN, ReplicasNum, Attempts, PossibilityCheck
-            )
-        end, Workers)
+        lists:foreach(fun(Provider) ->
+            lists:foreach(fun(Node) ->
+                FileUuid = case FileKey of
+                    {path, Path} ->
+                        ?GET_FILE_UUID(Node, ?SESS_ID(Provider), Path);
+                    {uuid, Uuid} ->
+                        Uuid
+                end,
+                assert_qos_entry_document(
+                    Node, QosEntryId, FileUuid, QosExpressionRPN, ReplicasNum, Attempts, PossibilityCheck
+                )
+            end, oct_background:get_provider_nodes(Provider))
+        end, Providers)
     end, ExpectedQosEntries).
 
-assert_qos_entry_document(Config, Worker, QosEntryId, FileUuid, Expression, ReplicasNum, Attempts, PossibilityCheck) ->
+assert_qos_entry_document(Node, QosEntryId, FileUuid, Expression, ReplicasNum, Attempts, PossibilityCheck) ->
     ExpectedQosEntryFirstVersion = #qos_entry{
         file_uuid = FileUuid,
         expression = Expression,
@@ -392,15 +447,15 @@ assert_qos_entry_document(Config, Worker, QosEntryId, FileUuid, Expression, Repl
     },
     ExpectedQosEntry = upgrade_qos_entry_record(ExpectedQosEntryFirstVersion),
     GetQosEntryFun = fun() ->
-        ?assertMatch({ok, _Doc}, rpc:call(Worker, qos_entry, get, [QosEntryId]), Attempts),
-        {ok, #document{value = QosEntry, scope = SpaceId}} = rpc:call(Worker, qos_entry, get, [QosEntryId]),
-        ?assertEqual({ReplicasNum, FileUuid}, get_qos_entry_by_rest(Config, Worker, QosEntryId, SpaceId)),
+        ?assertMatch({ok, _Doc}, opw_test_rpc:call(Node, qos_entry, get, [QosEntryId]), Attempts),
+        {ok, #document{value = QosEntry, scope = SpaceId}} = opw_test_rpc:call(Node, qos_entry, get, [QosEntryId]),
+        ?assertEqual({ReplicasNum, FileUuid}, get_qos_entry_by_rest(Node, QosEntryId, SpaceId)),
         % do not assert traverse reqs
         QosEntryWithoutTraverseReqs = QosEntry#qos_entry{traverse_reqs = #{}},
         ErrMsg = str_utils:format(
-            "Worker: ~p ~n"
+            "Node: ~p ~n"
             "Expected qos_entry: ~p ~n"
-            "Got: ~p", [Worker, ExpectedQosEntry, QosEntryWithoutTraverseReqs]
+            "Got: ~p", [Node, ExpectedQosEntry, QosEntryWithoutTraverseReqs]
         ),
         {QosEntryWithoutTraverseReqs, ErrMsg}
     end,
@@ -416,10 +471,10 @@ upgrade_qos_entry_record(QosEntryRecordInFirstVersion) ->
     end, QosEntryRecordInFirstVersion, lists:seq(1, MaxVersion - 1)).
 
 
-get_qos_entry_by_rest(Config, Worker, QosEntryId, SpaceId) ->
+get_qos_entry_by_rest(Node, QosEntryId, SpaceId) ->
     URL = <<"qos_requirements/", QosEntryId/binary>>,
-    Headers = [?USER_TOKEN_HEADER(Config, ?USER_ID)],
-    case make_rest_request(Config, Worker, URL, get, Headers, #{}, SpaceId, [?SPACE_VIEW_QOS]) of
+    Headers = [rest_test_utils:user_token_header(oct_background:get_user_access_token(?USER_PLACEHOLDER))],
+    case make_rest_request(Node, URL, get, Headers, #{}, SpaceId, [?SPACE_VIEW_QOS]) of
         {ok, RespBody} ->
             DecodedBody = json_utils:decode(RespBody),
             #{
@@ -433,42 +488,43 @@ get_qos_entry_by_rest(Config, Worker, QosEntryId, SpaceId) ->
     end.
 
 
-assert_file_qos_documents(Config, ExpectedFileQos, QosNameIdMapping, FilterOther) ->
-    assert_file_qos_documents(Config, ExpectedFileQos, QosNameIdMapping, FilterOther, 1).
+assert_file_qos_documents(ExpectedFileQos, QosNameIdMapping, FilterOther) ->
+    assert_file_qos_documents(ExpectedFileQos, QosNameIdMapping, FilterOther, 1).
 
-assert_file_qos_documents(Config, ExpectedFileQos, QosNameIdMapping, FilterOther, Attempts) ->
+assert_file_qos_documents(ExpectedFileQos, QosNameIdMapping, FilterOther, Attempts) ->
     lists:foreach(fun(#expected_file_qos{
-        workers = WorkersOrUndef,
+        providers = ProvidersOrUndef,
         path = FilePath,
         qos_entries = ExpectedQosEntriesNames,
         assigned_entries = ExpectedAssignedEntries
     }) ->
         % if not specified in tests spec, check document on all nodes
-        Workers = ensure_workers(Config, WorkersOrUndef),
+        Providers = ensure_providers(ProvidersOrUndef),
         ExpectedQosEntriesId = map_qos_names_to_ids(ExpectedQosEntriesNames, QosNameIdMapping),
         ExpectedAssignedEntriesId = maps:map(fun(_, QosNamesList) ->
             map_qos_names_to_ids(QosNamesList, QosNameIdMapping)
         end, ExpectedAssignedEntries),
 
-        lists:foreach(fun(W) ->
-            SessId = ?config({session_id, {?USER_ID, ?GET_DOMAIN(W)}}, Config),
-            FileUuid = ?GET_FILE_UUID(W, SessId, FilePath),
+        lists:foreach(fun(Provider) ->
+            Node = oct_background:get_random_provider_node(Provider),
+            FileUuid = ?GET_FILE_UUID(Node, ?SESS_ID(Provider), FilePath),
             assert_file_qos_document(
-                W, FileUuid, ExpectedQosEntriesId, ExpectedAssignedEntriesId,
+                Node, FileUuid, ExpectedQosEntriesId, ExpectedAssignedEntriesId,
                 FilePath, FilterOther, Attempts
             )
-        end, Workers)
+        end, Providers)
     end, ExpectedFileQos).
 
 
 assert_file_qos_document(
-    Worker, FileUuid, QosEntries, AssignedEntries, FilePath, FilterAssignedEntries, Attempts
+    Node, FileUuid, QosEntries, AssignedEntries, FilePath, FilterAssignedEntries, Attempts
 ) ->
+    {ok, StorageId} = opw_test_rpc:call(Node, space_logic, get_local_supporting_storage, [oct_background:get_space_id(?SPACE)]),
     ExpectedFileQos = #file_qos{
         qos_entries = QosEntries,
         assigned_entries = case FilterAssignedEntries of
             true ->
-                maps:filter(fun(Key, _Val) -> Key == initializer:get_storage_id(Worker) end, AssignedEntries);
+                maps:filter(fun(Key, _Val) -> Key == StorageId end, AssignedEntries);
             false ->
                 AssignedEntries
         end
@@ -478,120 +534,122 @@ assert_file_qos_document(
     GetSortedFileQosFun = fun() ->
         {ok, #document{value = FileQos}} = ?assertMatch(
             {ok, _Doc},
-            rpc:call(Worker, datastore_model, get, [file_qos:get_ctx(), FileUuid])
+            opw_test_rpc:call(Node, datastore_model, get, [file_qos:get_ctx(), FileUuid])
         ),
         FileQosSorted = sort_file_qos(FileQos),
         ErrMsg = str_utils:format(
-            "Worker: ~p~n"
+            "Node: ~p~n"
             "File: ~p~n"
             "Sorted file_qos: ~p~n"
             "Expected file_qos: ~p~n",
-            [Worker, FilePath, FileQosSorted, ExpectedFileQos]
+            [Node, FilePath, FileQosSorted, ExpectedFileQos]
         ),
         {FileQosSorted, ErrMsg}
     end,
     assert_match_with_err_msg(GetSortedFileQosFun, ExpectedFileQosSorted, Attempts, 500).
 
 
-assert_effective_qos(Config, ExpectedEffQosEntries, QosNameIdMapping, FilterAssignedEntries) ->
-    assert_effective_qos(Config, ExpectedEffQosEntries, QosNameIdMapping, FilterAssignedEntries, 1).
+assert_effective_qos(ExpectedEffQosEntries, QosNameIdMapping, FilterAssignedEntries) ->
+    assert_effective_qos(ExpectedEffQosEntries, QosNameIdMapping, FilterAssignedEntries, 1).
 
-assert_effective_qos(Config, ExpectedEffQosEntries, QosNameIdMapping, FilterAssignedEntries, Attempts) ->
+assert_effective_qos(ExpectedEffQosEntries, QosNameIdMapping, FilterAssignedEntries, Attempts) ->
     lists:foreach(fun(#expected_file_qos{
-        workers = WorkersOrUndef,
+        providers = ProviderOrUndef,
         path = FilePath,
         qos_entries = ExpectedQosEntriesWithNames,
         assigned_entries = ExpectedAssignedEntries
     }) ->
         % if not specified in tests spec, check document on all nodes
-        Workers = ensure_workers(Config, WorkersOrUndef),
+        Providers = ensure_providers(ProviderOrUndef),
         ExpectedQosEntriesId = qos_tests_utils:map_qos_names_to_ids(ExpectedQosEntriesWithNames, QosNameIdMapping),
         ExpectedAssignedEntriesId = maps:map(fun(_, QosNamesList) ->
             qos_tests_utils:map_qos_names_to_ids(QosNamesList, QosNameIdMapping)
         end, ExpectedAssignedEntries),
 
-        lists:foreach(fun(Worker) ->
-            SessId = ?SESS_ID(Config, Worker),
-            FileUuid = ?GET_FILE_UUID(Worker, SessId, FilePath),
+        lists:foreach(fun(Provider) ->
+            Node = oct_background:get_random_provider_node(Provider),
+            SessId = ?SESS_ID(Provider),
             assert_effective_qos(
-                Config, Worker, FilePath, ExpectedQosEntriesId, ExpectedAssignedEntriesId,
+                Provider, FilePath, ExpectedQosEntriesId, ExpectedAssignedEntriesId,
                 FilterAssignedEntries, Attempts
             ),
 
             % check that for file document has not been created
-            ?assertMatch({error, not_found}, rpc:call(Worker, datastore_model, get, [file_qos:get_ctx(), FileUuid]))
+            FileUuid = ?GET_FILE_UUID(Node, SessId, FilePath),
+            ?assertMatch({error, not_found}, opw_test_rpc:call(Node, datastore_model, get, [file_qos:get_ctx(), FileUuid]))
 
-        end, Workers)
+        end, Providers)
     end, ExpectedEffQosEntries).
 
-assert_effective_qos(Config, Worker,  FilePath, QosEntries, AssignedEntries, FilterAssignedEntries, Attempts) ->
+assert_effective_qos(Provider, FilePath, QosEntries, AssignedEntries, FilterAssignedEntries, Attempts) ->
+    Node = oct_background:get_random_provider_node(Provider),
+    StorageId = opt_spaces:get_storage_id(Provider, oct_background:get_space_id(?SPACE)),
     ExpectedEffectiveQos = #effective_file_qos{
         qos_entries = QosEntries,
         assigned_entries = case FilterAssignedEntries of
-            true -> maps:filter(fun(Key, _Val) -> Key == initializer:get_storage_id(Worker) end, AssignedEntries);
+            true -> maps:filter(fun(Key, _Val) -> Key == StorageId end, AssignedEntries);
             false -> AssignedEntries
         end
     },
     ExpectedEffectiveQosSorted = sort_effective_qos(ExpectedEffectiveQos),
 
     GetSortedEffectiveQos = fun() ->
-        FileGuid = qos_tests_utils:get_guid(Worker, ?SESS_ID(Config, Worker), FilePath),
-        {ok, EffQos} = get_effective_qos_by_lfm(Config, Worker, FileGuid),
+        FileGuid = qos_tests_utils:get_guid(Node, ?SESS_ID(Provider), FilePath),
+        {ok, EffQos} = get_effective_qos_by_lfm(Node, ?SESS_ID(Provider), FileGuid),
         EffQosSorted = sort_effective_qos(EffQos),
         ErrMsg = str_utils:format(
-            "Worker: ~p~n"
+            "Node: ~p~n"
             "File: ~p~n"
             "Sorted effective QoS: ~p~n"
             "Expected effective QoS: ~p~n",
-            [Worker, FilePath, EffQosSorted, ExpectedEffectiveQos]
+            [Node, FilePath, EffQosSorted, ExpectedEffectiveQos]
         ),
         {EffQosSorted, ErrMsg}
     end,
     assert_match_with_err_msg(GetSortedEffectiveQos, ExpectedEffectiveQosSorted, Attempts, 500).
 
 
-get_effective_qos_by_lfm(Config, Worker, FileGuid) ->
-    {ok, {QosEntriesWithStatus, AssignedEntries}} = 
-        lfm_proxy:get_effective_file_qos(Worker, ?SESS_ID(Config, Worker), {guid, FileGuid}),
+get_effective_qos_by_lfm(Node, SessionId, FileGuid) ->
+    {ok, {QosEntriesWithStatus, AssignedEntries}} =
+        opt_qos:get_effective_file_qos(Node, SessionId, ?FILE_REF(FileGuid)),
     {ok, #effective_file_qos{
         assigned_entries = AssignedEntries,
         qos_entries = maps:keys(QosEntriesWithStatus)
     }}.
 
 
-assert_distribution_in_dir_structure(_, undefined, _) ->
+assert_distribution_in_dir_structure(undefined, _) ->
     true;
 
-assert_distribution_in_dir_structure(Config, #test_dir_structure{
-    assertion_workers = WorkersOrUndef,
+assert_distribution_in_dir_structure( #test_dir_structure{
+    assertion_providers = ProvidersOrUndef,
     dir_structure = ExpectedDirStructure
 }, GuidsAndPaths) ->
     % if not specified in tests spec, check document on all nodes
-    Workers = ensure_workers(Config, WorkersOrUndef),
+    Providers = ensure_providers(ProvidersOrUndef),
 
-    assert_distribution_in_dir_structure(Config, Workers, ExpectedDirStructure, <<"/">>, GuidsAndPaths, ?ATTEMPTS);
+    assert_distribution_in_dir_structure(Providers, ExpectedDirStructure, <<"/">>, GuidsAndPaths, ?ATTEMPTS);
 
-assert_distribution_in_dir_structure(Config, ExpectedDirStructure, GuidsAndPaths) ->
-    assert_distribution_in_dir_structure(Config, #test_dir_structure{dir_structure = ExpectedDirStructure}, GuidsAndPaths).
+assert_distribution_in_dir_structure(ExpectedDirStructure, GuidsAndPaths) ->
+    assert_distribution_in_dir_structure(#test_dir_structure{dir_structure = ExpectedDirStructure}, GuidsAndPaths).
 
-assert_distribution_in_dir_structure(_Config, _Workers, _DirStructure, _Path, _GuidsAndPaths, 0) ->
+assert_distribution_in_dir_structure(_Providers, _DirStructure, _Path, _GuidsAndPaths, 0) ->
     false;
 
-assert_distribution_in_dir_structure(Config, Workers, DirStructure, Path, GuidsAndPaths, Attempts) ->
+assert_distribution_in_dir_structure(Providers, DirStructure, Path, GuidsAndPaths, Attempts) ->
     PrintError = Attempts == 1,
-    case assert_file_distribution(Config, Workers, DirStructure, Path, PrintError, GuidsAndPaths) of
+    case assert_file_distribution(Providers, DirStructure, Path, PrintError, GuidsAndPaths) of
         true ->
             true;
         false ->
             timer:sleep(timer:seconds(1)),
-            assert_distribution_in_dir_structure(Config, Workers, DirStructure, Path, GuidsAndPaths, Attempts - 1)
+            assert_distribution_in_dir_structure(Providers, DirStructure, Path, GuidsAndPaths, Attempts - 1)
     end.
 
-
-assert_file_distribution(Config, Workers, {DirName, DirContent}, Path, PrintError, GuidsAndPaths) ->
+assert_file_distribution(Providers, {DirName, DirContent}, Path, PrintError, GuidsAndPaths) ->
     lists:foldl(fun(Child, Matched) ->
         DirPath = filename:join(Path, DirName),
-        case assert_file_distribution(Config, Workers, Child, DirPath, PrintError, GuidsAndPaths) of
+        case assert_file_distribution(Providers, Child, DirPath, PrintError, GuidsAndPaths) of
             true ->
                 Matched;
             false ->
@@ -599,19 +657,25 @@ assert_file_distribution(Config, Workers, {DirName, DirContent}, Path, PrintErro
         end
     end, true, DirContent);
 
-assert_file_distribution(Config, Workers, {FileName, FileContent, ExpectedFileDistribution},
+assert_file_distribution(Providers, {FileName, FileContent, ExpectedFileDistribution}, 
+    Path, PrintError, GuidsAndPaths
+) ->
+    assert_file_distribution(Providers, {FileName, FileContent, ExpectedFileDistribution, reg_file}, 
+        Path, PrintError, GuidsAndPaths);
+assert_file_distribution(Providers, {FileName, FileContent, ExpectedFileDistribution, _},
     Path, PrintError, GuidsAndPaths
 ) ->
     FilePath = filename:join(Path, FileName),
     FileGuid = get_guid(FilePath, GuidsAndPaths),
 
-    lists:foldl(fun(Worker, Res) ->
-        SessId = ?SESS_ID(Config, Worker),
+    lists:foldl(fun(Provider, Res) ->
+        SessId = ?SESS_ID(Provider),
         ExpectedDistributionSorted = lists:sort(
             fill_in_expected_distribution(ExpectedFileDistribution, FileContent)
         ),
+        Node = oct_background:get_random_provider_node(Provider),
 
-        FileLocationsSorted = case lfm_proxy:get_file_distribution(Worker, SessId, {guid, FileGuid}) of
+        FileLocationsSorted = case lfm_proxy:get_file_distribution(Node, SessId, ?FILE_REF(FileGuid)) of
             {ok, FileLocations} ->
                 lists:sort(FileLocations);
             Error ->
@@ -623,37 +687,36 @@ assert_file_distribution(Config, Workers, {FileName, FileContent, ExpectedFileDi
                 false;
             {false, true} ->
                 ct:pal(
-                    "Wrong file distribution for ~p on worker ~p. ~n"
+                    "Wrong file distribution for ~p on node ~p. ~n"
                     "Expected: ~p~n"
                     "Got: ~p~n",
-                    [FilePath, Worker, ExpectedDistributionSorted, FileLocationsSorted]),
+                    [FilePath, Node, ExpectedDistributionSorted, FileLocationsSorted]),
                     false;
             {true, _} ->
                 Res
         end
-    end, true, Workers).
+    end, true, Providers).
 
 
-gather_not_matching_statuses_on_all_workers(Config, Guids, QosList, ExpectedStatus) ->
-    Workers = qos_tests_utils:get_op_nodes_sorted(Config),
-    SessId = fun(Worker) -> ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config) end,
+gather_not_matching_statuses_on_all_nodes(Guids, QosList, ExpectedStatus) ->
     ExpectedStatusMatcher = case ExpectedStatus of
         {error, _} -> ExpectedStatus;
         _ -> {ok, ExpectedStatus}
     end, 
-    lists:flatmap(fun(Worker) ->
+    lists:flatmap(fun(Node) ->
         lists:filtermap(fun(Guid) ->
-            case lfm_proxy:check_qos_status(Worker, SessId(Worker), QosList, {guid, Guid}) of
+            case opt_qos:check_qos_status(Node, ?ROOT_SESS_ID, QosList, ?FILE_REF(Guid)) of
                 ExpectedStatusMatcher -> false;
-                NotExpectedStatus -> {true, {Worker, Guid, NotExpectedStatus}}
+                NotExpectedStatus -> {true, {Node, Guid, NotExpectedStatus}}
             end
         end, Guids)
-    end, Workers).
+    end, oct_background:get_all_providers_nodes()).
 
 %%%====================================================================
 %%% Internal functions
 %%%====================================================================
 
+%% @private
 sort_file_qos(FileQos) ->
     FileQos#file_qos{
         qos_entries = lists:sort(FileQos#file_qos.qos_entries),
@@ -662,6 +725,7 @@ sort_file_qos(FileQos) ->
         end, FileQos#file_qos.assigned_entries)
     }.
 
+%% @private
 sort_effective_qos(EffectiveQos) ->
     EffectiveQos#effective_file_qos{
         qos_entries = lists:sort(EffectiveQos#effective_file_qos.qos_entries),
@@ -671,67 +735,56 @@ sort_effective_qos(EffectiveQos) ->
     }.
 
 
-ensure_workers(Config, Undef) when Undef == undefined ->
-    Workers = get_op_nodes_sorted(Config),
-    Workers;
-
-ensure_workers(_Config, Workers) ->
-    Workers.
-
-
-ensure_worker(Config, Undef) when Undef == undefined ->
-    Workers = get_op_nodes_sorted(Config),
-    hd(Workers);
-
-ensure_worker(_Config, Worker) ->
-    Worker.
+%% @private
+ensure_providers(undefined) ->
+    oct_background:get_provider_ids();
+ensure_providers(Providers) ->
+    Providers.
 
 
-assert_match_with_err_msg(GetActualValAndErrMsgFun, Expected, Attempts, _Sleep) when Attempts =< 1 ->
+%% @private
+ensure_provider(undefined) ->
+    hd(ensure_providers(undefined));
+ensure_provider(Provider) ->
+    Provider.
+
+
+%% @private
+assert_match_with_err_msg(GetActualValAndErrMsgFun, Expected, Attempts, _Sleep) when Attempts < 1 ->
+    {ActualVal, ErrMsg} = GetActualValAndErrMsgFun(),
     try
-        {ActualVal, ErrMsg} = GetActualValAndErrMsgFun(),
-        try
-            ?assertMatch(Expected, ActualVal),
-            ok
-        catch
-            error:{assertMatch_failed, _} = Error ->
-                ct:pal(ErrMsg),
-                error(Error)
-        end
+        ?assertMatch(Expected, ActualVal),
+        ok
     catch
-        Error2:Type->
-            ct:pal("~p:~p", [Error2, Type])
+        error:{assertMatch_failed, _} = Error ->
+            ct:pal(ErrMsg),
+            error(Error)
     end;
 
 assert_match_with_err_msg(GetActualValAndErrMsgFun, Expected , Attempts, Sleep) ->
-    try
-        {ActualVal, _ErrMsg} = GetActualValAndErrMsgFun(),
-        case ActualVal of
-            Expected -> ok;
-            _ ->
-                timer:sleep(Sleep),
-                assert_match_with_err_msg(GetActualValAndErrMsgFun, Expected, Attempts - 1, Sleep)
-        end
-    catch
-        _:_ ->
+    {ActualVal, _ErrMsg} = GetActualValAndErrMsgFun(),
+    case ActualVal of
+        Expected -> ok;
+        _ ->
             timer:sleep(Sleep),
             assert_match_with_err_msg(GetActualValAndErrMsgFun, Expected, Attempts - 1, Sleep)
     end.
 
 
-make_rest_request(Config, Worker, URL, Method, Headers, ReqBody, SpaceId, RequiredPrivs) ->
-    UserSpacePrivs = rpc:call(Worker, initializer, node_get_mocked_space_user_privileges, [SpaceId, ?USER_ID]),
-    AllWorkers = ?config(op_worker_nodes, Config),
+%% @private
+make_rest_request(Node, URL, Method, Headers, ReqBody, SpaceId, RequiredPrivs) ->
     ErrorForbidden = rest_test_utils:get_rest_error(?ERROR_FORBIDDEN),
     AllSpacePrivs = privileges:space_privileges(),
     EncodedReqBody = json_utils:encode(ReqBody),
+    UserId = oct_background:get_user_id(?USER_PLACEHOLDER),
+    UserPrivileges = opt_spaces:get_privileges(Node, SpaceId, UserId),
     try
-        initializer:testmaster_mock_space_user_privileges(AllWorkers, SpaceId, ?USER_ID, AllSpacePrivs -- RequiredPrivs),
-        {ok, Code, _, Resp} = rest_test_utils:request(Worker, URL, Method, Headers, EncodedReqBody),
+        ozt_spaces:set_privileges(SpaceId, UserId, AllSpacePrivs -- RequiredPrivs),
+        {ok, Code, _, Resp} = rest_test_utils:request(Node, URL, Method, Headers, EncodedReqBody),
         ?assertMatch(ErrorForbidden, {Code, json_utils:decode(Resp)}),
 
-        initializer:testmaster_mock_space_user_privileges(AllWorkers, SpaceId, ?USER_ID, AllSpacePrivs),
-        case rest_test_utils:request(Worker, URL, Method, Headers, EncodedReqBody) of
+        ozt_spaces:set_privileges(SpaceId, oct_background:get_user_id(?USER_PLACEHOLDER), AllSpacePrivs),
+        case rest_test_utils:request(Node, URL, Method, Headers, EncodedReqBody) of
             {ok, 200, _, RespBody} ->
                 {ok, RespBody};
             {ok, 201, _, RespBody} ->
@@ -740,5 +793,5 @@ make_rest_request(Config, Worker, URL, Method, Headers, ReqBody, SpaceId, Requir
                 {error, {Code1, RespBody}}
         end
     after
-        initializer:testmaster_mock_space_user_privileges(AllWorkers, SpaceId, ?USER_ID, UserSpacePrivs)
+        ozt_spaces:set_privileges(SpaceId, oct_background:get_user_id(?USER_PLACEHOLDER), UserPrivileges)
     end.

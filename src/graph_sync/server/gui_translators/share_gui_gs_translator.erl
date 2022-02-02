@@ -27,11 +27,12 @@
 -spec translate_resource(gri:gri(), Data :: term()) ->
     gs_protocol:data() | fun((aai:auth()) -> gs_protocol:data()).
 translate_resource(#gri{aspect = instance, scope = Scope}, #{
+    <<"spaceId">> := SpaceId,
     <<"name">> := ShareName,
     <<"description">> := Description,
     <<"publicUrl">> := PublicUrl,
     <<"publicRestUrl">> := PublicRestUrl,
-    <<"fileType">> := FileType,
+    <<"rootFileType">> := FileType,
     <<"rootFileId">> := RootFileShareGuid,
     <<"handleId">> := HandleId
 }) when
@@ -74,11 +75,12 @@ translate_resource(#gri{aspect = instance, scope = Scope}, #{
         end,
 
         ShareInfo#{
+            <<"spaceId">> => SpaceId,
             <<"name">> => ShareName,
             <<"description">> => Description,
             <<"publicUrl">> => PublicUrl,
             <<"publicRestUrl">> => PublicRestUrl,
-            <<"fileType">> => FileType,
+            <<"rootFileType">> => FileType,
             <<"rootFile">> => gri:serialize(#gri{
                 type = op_file,
                 id = RootFileShareGuid,

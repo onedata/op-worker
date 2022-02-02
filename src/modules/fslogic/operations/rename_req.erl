@@ -16,14 +16,16 @@
 -author("Tomasz Lichon").
 
 -include("global_definitions.hrl").
--include("modules/auth/acl.hrl").
+-include("modules/fslogic/data_access_control.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include("modules/storage/helpers/helpers.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 
 %% API
 -export([rename/4]).
 
--define(DEFAULT_LS_BATCH_SIZE, application:get_env(?APP_NAME, ls_batch_size, 5000)).
+-define(DEFAULT_LS_BATCH_SIZE, op_worker:get_env(ls_batch_size, 5000)).
 
 %%%===================================================================
 %%% API functions
@@ -70,7 +72,7 @@ rename(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) ->
     no_return() | #fuse_response{}.
 rename_between_spaces(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) ->
     SessId = user_ctx:get_session_id(UserCtx),
-    TargetParentGuid = file_ctx:get_guid_const(TargetParentFileCtx),
+    TargetParentGuid = file_ctx:get_logical_guid_const(TargetParentFileCtx), % TODO VFS-7446 - rename vs hardlinks
     {SourceFileType, SourceFileCtx2} = get_type(SourceFileCtx),
     {TargetFileType, TargetGuid} =
         remotely_get_child_type(SessId, TargetParentGuid, TargetName),
@@ -78,7 +80,7 @@ rename_between_spaces(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) -
         {_, undefined} ->
             copy_and_remove(UserCtx, SourceFileCtx2, TargetParentFileCtx, TargetName);
         {TheSameType, TheSameType} ->
-            ok = lfm:unlink(SessId, {guid, TargetGuid}, false),
+            ok = lfm:unlink(SessId, ?FILE_REF(TargetGuid), false),
             copy_and_remove(UserCtx, SourceFileCtx2, TargetParentFileCtx, TargetName);
         {?REGULAR_FILE_TYPE, ?DIRECTORY_TYPE} ->
             throw(?EISDIR);
@@ -98,11 +100,11 @@ rename_between_spaces(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) -
     no_return() | #fuse_response{}.
 copy_and_remove(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) ->
     SessId = user_ctx:get_session_id(UserCtx),
-    SourceGuid = file_ctx:get_guid_const(SourceFileCtx),
-    TargetParentGuid = file_ctx:get_guid_const(TargetParentFileCtx),
+    SourceGuid = file_ctx:get_logical_guid_const(SourceFileCtx),
+    TargetParentGuid = file_ctx:get_logical_guid_const(TargetParentFileCtx),
     case file_copy:copy(SessId, SourceGuid, TargetParentGuid, TargetName) of
         {ok, NewCopiedGuid, ChildEntries} ->
-            case lfm:rm_recursive(SessId, {guid, SourceGuid}) of
+            case lfm:rm_recursive(SessId, ?FILE_REF(SourceGuid)) of
                 ok ->
                     RenameChildEntries = lists:map(
                         fun({OldGuid, NewGuid, NewParentGuid, NewName}) ->
@@ -154,7 +156,7 @@ rename_within_space(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) ->
 
     case {SourceEqualsTarget, MoveIntoItself} of
         {true, _} ->
-            rename_into_itself(file_ctx:get_guid_const(SourceFileCtx3));
+            rename_into_itself(file_ctx:get_logical_guid_const(SourceFileCtx3));
         {false, true} ->
             #fuse_response{
                 status = #status{code = ?EINVAL}
@@ -274,25 +276,25 @@ rename_into_different_place_within_posix_space(_, _, _, _,
 ) ->
     #fuse_response{}.
 rename_file_on_flat_storage(UserCtx, SourceFileCtx0, FileType, TargetParentFileCtx0, TargetName, TargetGuid) ->
-    {SourceParentDeletePerm, TargetParentAddPerm} = case FileType of
-        ?REGULAR_FILE_TYPE -> {?delete_object, ?add_object};
-        ?DIRECTORY_TYPE -> {?delete_subcontainer, ?add_subcontainer}
+    TargetParentAddPerm = case FileType of
+        ?REGULAR_FILE_TYPE -> ?add_object_mask;
+        ?DIRECTORY_TYPE -> ?add_subcontainer_mask
     end,
 
-    {SourceFileParentCtx, SourceFileCtx1} = file_ctx:get_parent(
+    {SourceFileParentCtx, SourceFileCtx1} = files_tree:get_parent(
         SourceFileCtx0, UserCtx
     ),
     SourceFileCtx2 = fslogic_authz:ensure_authorized(
         UserCtx, SourceFileCtx1,
-        [traverse_ancestors, ?delete]
+        [?TRAVERSE_ANCESTORS, ?OPERATIONS(?delete_mask)]
     ),
     fslogic_authz:ensure_authorized(
         UserCtx, SourceFileParentCtx,
-        [traverse_ancestors, SourceParentDeletePerm]
+        [?TRAVERSE_ANCESTORS, ?OPERATIONS(?delete_child_mask)]
     ),
     TargetParentFileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, TargetParentFileCtx0,
-        [traverse_ancestors, ?traverse_container, TargetParentAddPerm]
+        [?TRAVERSE_ANCESTORS, ?OPERATIONS(?traverse_container_mask, TargetParentAddPerm)]
     ),
     rename_file_on_flat_storage_insecure(
         UserCtx, SourceFileCtx2,
@@ -313,17 +315,17 @@ rename_file_on_flat_storage(UserCtx, SourceFileCtx0, FileType, TargetParentFileC
     TargetParentFileCtx :: file_ctx:ctx(), TargetName :: file_meta:name(),
     TargetGuid :: undefined | fslogic_worker:file_guid()) -> #fuse_response{}.
 rename_file_on_flat_storage_insecure(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName, TargetGuid) ->
-    SourceGuid = file_ctx:get_guid_const(SourceFileCtx),
+    SourceGuid = file_ctx:get_logical_guid_const(SourceFileCtx),
     {ParentDoc, TargetParentFileCtx2} = file_ctx:get_file_doc(TargetParentFileCtx),
     {SourceDoc, SourceFileCtx2} = file_ctx:get_file_doc(SourceFileCtx),
-    {SourceParentFileCtx, SourceFileCtx3} = file_ctx:get_parent(SourceFileCtx2, UserCtx),
+    {SourceParentFileCtx, SourceFileCtx3} = files_tree:get_parent(SourceFileCtx2, UserCtx),
     {SourceParentDoc, SourceParentFileCtx2} = file_ctx:get_file_doc(SourceParentFileCtx),
     ok = case TargetGuid of
         undefined ->
             ok;
         _ ->
             SessId = user_ctx:get_session_id(UserCtx),
-            ok = lfm:unlink(SessId, {guid, TargetGuid}, false)
+            ok = lfm:unlink(SessId, ?FILE_REF(TargetGuid), false)
     end,
     ok = file_meta:rename(SourceDoc, SourceParentDoc, ParentDoc, TargetName),
     on_successful_rename(UserCtx, SourceFileCtx3, SourceParentFileCtx2, TargetParentFileCtx2, TargetName),
@@ -365,7 +367,7 @@ rename_into_different_place_within_non_posix_space(UserCtx, SourceFileCtx,
 rename_into_different_place_within_non_posix_space(UserCtx, SourceFileCtx,
     TargetParentFileCtx, TargetName, TheSameType, TheSameType, TargetFileCtx
 ) ->
-    TargetGuid = file_ctx:get_guid_const(TargetFileCtx),
+    TargetGuid = file_ctx:get_logical_guid_const(TargetFileCtx),
     SessId = user_ctx:get_session_id(UserCtx),
 
     {Storage, SourceFileCtx1} = file_ctx:get_storage(SourceFileCtx),
@@ -378,7 +380,7 @@ rename_into_different_place_within_non_posix_space(UserCtx, SourceFileCtx,
                 TargetParentFileCtx, TargetName, TargetGuid
             );
         _ ->
-            ok = lfm:unlink(SessId, {guid, TargetGuid}, false),
+            ok = lfm:unlink(SessId, ?FILE_REF(TargetGuid), false),
             copy_and_remove(UserCtx, SourceFileCtx1, TargetParentFileCtx, TargetName)
     end;
 rename_into_different_place_within_non_posix_space(_, _, _, _,
@@ -400,20 +402,20 @@ rename_into_different_place_within_non_posix_space(_, _, _, _,
     TargetParentFileCtx :: file_ctx:ctx(), TargetName :: file_meta:name()) ->
     no_return() | #fuse_response{}.
 rename_file(UserCtx, SourceFileCtx0, TargetParentFileCtx0, TargetName) ->
-    {SourceFileParentCtx, SourceFileCtx1} = file_ctx:get_parent(
+    {SourceFileParentCtx, SourceFileCtx1} = files_tree:get_parent(
         SourceFileCtx0, UserCtx
     ),
     SourceFileCtx2 = fslogic_authz:ensure_authorized(
         UserCtx, SourceFileCtx1,
-        [traverse_ancestors, ?delete]
+        [?TRAVERSE_ANCESTORS, ?OPERATIONS(?delete_mask)]
     ),
     fslogic_authz:ensure_authorized(
         UserCtx, SourceFileParentCtx,
-        [traverse_ancestors, ?delete_object]
+        [?TRAVERSE_ANCESTORS, ?OPERATIONS(?delete_child_mask)]
     ),
     TargetParentFileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, TargetParentFileCtx0,
-        [traverse_ancestors, ?traverse_container, ?add_object]
+        [?TRAVERSE_ANCESTORS, ?OPERATIONS(?traverse_container_mask, ?add_object_mask)]
     ),
     rename_file_insecure(
         UserCtx, SourceFileCtx2, TargetParentFileCtx1, TargetName
@@ -430,20 +432,20 @@ rename_file(UserCtx, SourceFileCtx0, TargetParentFileCtx0, TargetName) ->
     TargetParentFileCtx :: file_ctx:ctx(), TargetName :: file_meta:name()) ->
     no_return() | #fuse_response{}.
 rename_dir(UserCtx, SourceFileCtx0, TargetParentFileCtx0, TargetName) ->
-    {SourceFileParentCtx, SourceFileCtx1} = file_ctx:get_parent(
+    {SourceFileParentCtx, SourceFileCtx1} = files_tree:get_parent(
         SourceFileCtx0, UserCtx
     ),
     SourceFileCtx2 = fslogic_authz:ensure_authorized(
         UserCtx, SourceFileCtx1,
-        [traverse_ancestors, ?delete]
+        [?TRAVERSE_ANCESTORS, ?OPERATIONS(?delete_mask)]
     ),
     fslogic_authz:ensure_authorized(
         UserCtx, SourceFileParentCtx,
-        [traverse_ancestors, ?delete_subcontainer]
+        [?TRAVERSE_ANCESTORS, ?OPERATIONS(?delete_child_mask)]
     ),
     TargetParentFileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, TargetParentFileCtx0,
-        [traverse_ancestors, ?traverse_container, ?add_subcontainer]
+        [?TRAVERSE_ANCESTORS, ?OPERATIONS(?traverse_container_mask, ?add_subcontainer_mask)]
     ),
     rename_dir_insecure(
         UserCtx, SourceFileCtx2, TargetParentFileCtx1, TargetName
@@ -462,7 +464,7 @@ rename_file_insecure(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) ->
     {SourceFileCtx3, TargetFileId} =
         rename_meta_and_storage_file(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName, false),
     replica_updater:rename(SourceFileCtx, TargetFileId),
-    FileGuid = file_ctx:get_guid_const(SourceFileCtx3),
+    FileGuid = file_ctx:get_logical_guid_const(SourceFileCtx3),
     #fuse_response{
         status = #status{code = ?OK},
         fuse_response = #file_renamed{
@@ -483,7 +485,7 @@ rename_dir_insecure(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) ->
     {SourceFileCtx3, TargetFileId} =
         rename_meta_and_storage_file(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName, true),
     ChildEntries = rename_child_locations(UserCtx, SourceFileCtx3, TargetFileId),
-    FileGuid = file_ctx:get_guid_const(SourceFileCtx3),
+    FileGuid = file_ctx:get_logical_guid_const(SourceFileCtx3),
     #fuse_response{
         status = #status{code = ?OK},
         fuse_response = #file_renamed{
@@ -506,17 +508,21 @@ rename_meta_and_storage_file(UserCtx, SourceFileCtx0, TargetParentCtx0, TargetNa
     {TargetParentFileId, TargetParentCtx} = file_ctx:get_storage_file_id(TargetParentCtx0),
     TargetFileId = filename:join(TargetParentFileId, TargetName),
 
-    FileUuid = file_ctx:get_uuid_const(SourceFileCtx),
+    FileUuid = file_ctx:get_logical_uuid_const(SourceFileCtx),
     {ParentDoc, TargetParentCtx2} = file_ctx:get_file_doc(TargetParentCtx),
     {SourceDoc, SourceFileCtx2} = file_ctx:get_file_doc(SourceFileCtx),
-    {SourceParentFileCtx, SourceFileCtx3} = file_ctx:get_parent(SourceFileCtx2, UserCtx),
+    {SourceParentFileCtx, SourceFileCtx3} = files_tree:get_parent(SourceFileCtx2, UserCtx),
     {SourceParentDoc, SourceParentFileCtx2} = file_ctx:get_file_doc(SourceParentFileCtx),
     file_meta:rename(SourceDoc, SourceParentDoc, ParentDoc, TargetName),
 
     SpaceId = file_ctx:get_space_id_const(SourceFileCtx3),
     case InvalidateCache of
-        true -> paths_cache:invalidate_caches_on_all_nodes(SpaceId);
-        _ -> ok
+        true ->
+            paths_cache:invalidate_on_all_nodes(SpaceId),
+            dataset_eff_cache:invalidate_on_all_nodes(SpaceId),
+            file_meta_links_sync_status_cache:invalidate_on_all_nodes(SpaceId);
+        _ ->
+            ok
     end,
 
     {Storage, SourceFileCtx4} = file_ctx:get_storage(SourceFileCtx3),
@@ -552,8 +558,8 @@ rename_child_locations(UserCtx, ParentFileCtx, ParentStorageFileId) ->
     ParentStorageFileId :: helpers:file_id(), file_meta:list_opts(), [#file_renamed_entry{}]) ->
     [#file_renamed_entry{}].
 rename_child_locations(UserCtx, ParentFileCtx, ParentStorageFileId, ListOpts, ChildEntries) ->
-    ParentGuid = file_ctx:get_guid_const(ParentFileCtx),
-    {Children, ListExtendedInfo, ParentFileCtx2} = file_ctx:get_file_children(ParentFileCtx, UserCtx, ListOpts),
+    ParentGuid = file_ctx:get_logical_guid_const(ParentFileCtx),
+    {Children, ListExtendedInfo, ParentFileCtx2} = files_tree:get_children(ParentFileCtx, UserCtx, ListOpts),
     NewChildEntries = lists:flatten(lists:map(fun(ChildCtx) ->
         {ChildName, ChildCtx2} = file_ctx:get_aliased_name(ChildCtx, UserCtx),
         ChildStorageFileId = filename:join(ParentStorageFileId, ChildName),
@@ -562,7 +568,7 @@ rename_child_locations(UserCtx, ParentFileCtx, ParentStorageFileId, ListOpts, Ch
                 rename_child_locations(UserCtx, ChildCtx3, ChildStorageFileId);
             {false, ChildCtx3} ->
                 ok = replica_updater:rename(ChildCtx3, ChildStorageFileId),
-                ChildGuid = file_ctx:get_guid_const(ChildCtx3),
+                ChildGuid = file_ctx:get_logical_guid_const(ChildCtx3),
                 #file_renamed_entry{
                     new_name = ChildName,
                     new_parent_guid = ParentGuid,
@@ -606,7 +612,7 @@ get_type(FileCtx) ->
     {file_meta:type(), ChildFileCtx :: file_ctx:ctx(), ParentFileCtx :: file_ctx:ctx()} |
     {undefined, undefined, ParentFileCtx :: file_ctx:ctx()}.
 get_child_type(ParentFileCtx, ChildName, UserCtx) ->
-    try file_ctx:get_child(ParentFileCtx, ChildName, UserCtx) of
+    try files_tree:get_child(ParentFileCtx, ChildName, UserCtx) of
         {ChildCtx, ParentFileCtx2} ->
             {ChildType, ChildCtx2} = get_type(ChildCtx),
             {ChildType, ChildCtx2, ParentFileCtx2}
@@ -641,7 +647,7 @@ remotely_get_child_type(SessId, ParentGuid, ChildName) ->
     file_meta:name()) -> ok | no_return().
 on_successful_rename(UserCtx, SourceFileCtx, SourceParentFileCtx, TargetParentFileCtx, TargetName) ->
     {PrevName, SourceFileCtx2} = file_ctx:get_aliased_name(SourceFileCtx, UserCtx),
-    ParentGuid = file_ctx:get_guid_const(TargetParentFileCtx),
+    ParentGuid = file_ctx:get_logical_guid_const(TargetParentFileCtx),
     CurrentTime = global_clock:timestamp_seconds(),
     ok = fslogic_times:update_mtime_ctime(SourceParentFileCtx, CurrentTime),
     ok = fslogic_times:update_mtime_ctime(TargetParentFileCtx, CurrentTime),

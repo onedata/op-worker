@@ -14,6 +14,7 @@
 -include("global_definitions.hrl").
 -include("proto/oneclient/common_messages.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
+-include_lib("ctool/include/test/performance.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 -export([init_per_suite/1, init_per_testcase/2, end_per_testcase/2, end_per_suite/1, all/0]).
@@ -21,17 +22,28 @@
 %% tests
 -export([
     successful_replica_deletion_test/1,
+    successful_replica_deletion_test_base/1,
     failed_replica_deletion_test/1,
+    failed_replica_deletion_test_base/1,
     canceled_replica_deletion_test/1,
+    canceled_replica_deletion_test_base/1,
     throttling_test/1
 ]).
 
-all() -> [
+-define(STANDARD_CASES, [
     successful_replica_deletion_test,
     failed_replica_deletion_test,
     canceled_replica_deletion_test,
     throttling_test
-].
+]).
+
+-define(PERFORMANCE_CASES, [
+    successful_replica_deletion_test,
+    failed_replica_deletion_test,
+    canceled_replica_deletion_test
+]).
+
+all() -> ?ALL(?STANDARD_CASES, ?PERFORMANCE_CASES).
 
 -define(SPACE_ID, <<"space1">>).
 -define(DELETION_TYPE, test_deletion_type).
@@ -43,10 +55,14 @@ all() -> [
 -define(RUN_TEST(Config, TestFun, Setups),
     run_test(Config, TestFun, ?FUNCTION_NAME, Setups)).
 
--define(SETUPS, [
-    % Tests are run with 2 parameters: FilesNum and JobsNum.
-    % Number of total replica_deletion requests is equal to FilesNum * JobsNum.
-    % {FileNums, JobNums}
+% Tests are run with 2 parameters: FilesNum and JobsNum.
+% Number of total replica_deletion requests is equal to FilesNum * JobsNum.
+% {FileNums, JobNums}
+-define(STANDARD_SETUPS, [
+    {1, 1},
+    {100, 100}
+]).
+-define(PERFORMANCE_SETUPS, [
     {1, 1},
     {10, 1},
     {100, 1},
@@ -65,13 +81,55 @@ all() -> [
 %%%===================================================================
 
 successful_replica_deletion_test(Config) ->
-    ?RUN_TEST(Config, fun successful_replica_deletion_test_base/3, ?SETUPS).
+    ?PERFORMANCE(Config, [
+        {repeats, 1},
+        {success_rate, 100},
+        {parameters, [
+            [{name, test_type}, {value, standard}, {description, "Test of replica deletion ended with success"}]
+        ]},
+        {description, "Tests download of file via GUI"},
+        {config, [{name, performance},
+            {parameters, [
+                [{name, test_type}, {value, performance}]
+            ]}
+        ]}
+    ]).
+successful_replica_deletion_test_base(Config) ->
+    ?RUN_TEST(Config, fun successful_replica_deletion_test_base/3, get_setup(Config)).
 
 failed_replica_deletion_test(Config) ->
-    ?RUN_TEST(Config, fun failed_replica_deletion_test_base/3, ?SETUPS).
+    ?PERFORMANCE(Config, [
+        {repeats, 1},
+        {success_rate, 100},
+        {parameters, [
+            [{name, test_type}, {value, standard}, {description, "Test of replica deletion ended with failure"}]
+        ]},
+        {description, "Tests download of file via GUI"},
+        {config, [{name, performance},
+            {parameters, [
+                [{name, test_type}, {value, performance}]
+            ]}
+        ]}
+    ]).
+failed_replica_deletion_test_base(Config) ->
+    ?RUN_TEST(Config, fun failed_replica_deletion_test_base/3, get_setup(Config)).
 
 canceled_replica_deletion_test(Config) ->
-    ?RUN_TEST(Config, fun canceled_replica_deletion_test_base/3, ?SETUPS).
+    ?PERFORMANCE(Config, [
+        {repeats, 1},
+        {success_rate, 100},
+        {parameters, [
+            [{name, test_type}, {value, standard}, {description, "Test of canceled replica deletion"}]
+        ]},
+        {description, "Tests download of file via GUI"},
+        {config, [{name, performance},
+            {parameters, [
+                [{name, test_type}, {value, performance}]
+            ]}
+        ]}
+    ]).
+canceled_replica_deletion_test_base(Config) ->
+    ?RUN_TEST(Config, fun canceled_replica_deletion_test_base/3, get_setup(Config)).
 
 throttling_test(Config) ->
     % This test checks whether throttling works properly in replica_deletion_master process
@@ -253,19 +311,18 @@ throttle_test_loop(Worker, ScheduledCounters, MaxParallelRequests) ->
 
 init_per_suite(Config) ->
     Posthook = fun(NewConfig) ->
-        NewConfig1 = [{space_storage_mock, false} | NewConfig],
-        NewConfig2 = initializer:setup_storage(NewConfig1),
+        NewConfig1 = initializer:setup_storage(NewConfig),
         lists:foreach(fun(Worker) ->
             test_utils:set_env(Worker, ?APP_NAME, dbsync_changes_broadcast_interval, timer:seconds(1)),
             test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_delay_ms, timer:seconds(1)),
             test_utils:set_env(Worker, ?APP_NAME, rerun_transfers, false),
             test_utils:set_env(Worker, op_worker, max_file_replication_retries_per_file, 5),
             test_utils:set_env(Worker, op_worker, max_eviction_retries_per_file_replica, 5)
-        end, ?config(op_worker_nodes, NewConfig2)),
+        end, ?config(op_worker_nodes, NewConfig1)),
 
         application:start(ssl),
-        hackney:start(),
-        initializer:create_test_users_and_spaces(?TEST_FILE(NewConfig2, "env_desc.json"), NewConfig2)
+        application:ensure_all_started(hackney),
+        initializer:create_test_users_and_spaces(?TEST_FILE(NewConfig1, "env_desc.json"), NewConfig1)
     end,
     [
         {?ENV_UP_POSTHOOK, Posthook},
@@ -280,7 +337,7 @@ init_per_testcase(throttling_test, Config) ->
     init_per_testcase(default, [{old_replica_deletion_max_parallel_requests, OldValue} | Config]);
 init_per_testcase(_Case, Config) ->
     Config2 = sort_workers(Config),
-    ct:timetrap(timer:minutes(20)),
+    ct:timetrap(timer:minutes(40)),
     lfm_proxy:init(Config2).
 
 end_per_testcase(throttling_test, Config) ->
@@ -294,7 +351,7 @@ end_per_testcase(_Case, Config) ->
 end_per_suite(Config) ->
     %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
     initializer:clean_test_users_and_spaces_no_validate(Config),
-    hackney:stop(),
+    application:stop(hackney),
     application:stop(ssl),
     initializer:teardown_storage(Config).
 
@@ -382,15 +439,21 @@ run_test(Config, Testcase, TestcaseName, FilesAndJobsNums) ->
             Testcase(Config, FilesNum, JobsNum),
             ok
         catch
-            E:R ->
+            E:R:Stacktrace ->
                 ct:print("Testcase ~p failed due to ~p for FilesNum = ~p, JobsNum = ~p.~nStacktrace: ~n~p",
-                    [TestcaseName, {E, R}, FilesNum, JobsNum, erlang:get_stacktrace()]),
+                    [TestcaseName, {E, R}, FilesNum, JobsNum, Stacktrace]),
                 error
         after
             cleanup(Config)
         end
     end, FilesAndJobsNums),
     ?assertEqual(true, lists:all(fun(E) -> E =:= ok end, Results)).
+
+get_setup(Config) ->
+    case ?config(test_type, Config) of
+        standard -> ?STANDARD_SETUPS;
+        performance -> ?PERFORMANCE_SETUPS
+    end.
 
 cleanup(Config) ->
     Workers = ?config(op_worker_nodes, Config),

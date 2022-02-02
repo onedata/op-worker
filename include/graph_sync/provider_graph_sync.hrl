@@ -22,20 +22,20 @@
 % Graph Sync config
 -define(GS_CHANNEL_SERVICE_NAME, <<"GS-channel-service">>).
 
--define(GS_CHANNEL_PORT, application:get_env(?APP_NAME,
+-define(GS_CHANNEL_PORT, op_worker:get_env(
     graph_sync_port, 443)).
 
--define(GS_CHANNEL_PATH, application:get_env(?APP_NAME,
+-define(GS_CHANNEL_PATH, op_worker:get_env(
     graph_sync_path, "/graph_sync/provider")).
 
--define(GS_REQUEST_TIMEOUT, application:get_env(?APP_NAME,
+-define(GS_REQUEST_TIMEOUT, op_worker:get_env(
     graph_sync_request_timeout, timer:seconds(30))).
 
--define(GS_RECONNECT_BASE_INTERVAL, application:get_env(?APP_NAME,
+-define(GS_RECONNECT_BASE_INTERVAL, op_worker:get_env(
     graph_sync_reconnect_base_interval, timer:seconds(3))).
--define(GS_RECONNECT_BACKOFF_RATE, application:get_env(?APP_NAME,
+-define(GS_RECONNECT_BACKOFF_RATE, op_worker:get_env(
     graph_sync_reconnect_backoff_rate, 1.35)).
--define(GS_RECONNECT_MAX_BACKOFF, application:get_env(?APP_NAME,
+-define(GS_RECONNECT_MAX_BACKOFF, op_worker:get_env(
     graph_sync_reconnect_max_backoff, timer:seconds(20))).
 
 % how often logs appear when waiting for Onezone connection

@@ -33,6 +33,11 @@
     sessions = gb_sets:new() :: gb_sets:set()
 }).
 
+%% model counting subscriptions of particular type
+-record(file_subscription_counter, {
+    subscriptions_count :: non_neg_integer()
+}).
+
 %% definition of a subscription for read operations in the file system
 %% counter_threshold - maximal number of aggregated events before emission
 %% time_threshold    - maximal delay in milliseconds between successive events

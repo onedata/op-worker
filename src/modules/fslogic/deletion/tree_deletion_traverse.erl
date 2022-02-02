@@ -55,9 +55,9 @@
 
 -spec init_pool() -> ok.
 init_pool() ->
-    MasterJobsLimit = application:get_env(?APP_NAME, tree_deletion_traverse_master_jobs_limit, 10),
-    SlaveJobsLimit = application:get_env(?APP_NAME, tree_deletion_traverse_slave_jobs_limit, 10),
-    ParallelismLimit = application:get_env(?APP_NAME, tree_deletion_traverse_parallelism_limit, 10),
+    MasterJobsLimit = op_worker:get_env(tree_deletion_traverse_master_jobs_limit, 10),
+    SlaveJobsLimit = op_worker:get_env(tree_deletion_traverse_slave_jobs_limit, 10),
+    ParallelismLimit = op_worker:get_env(tree_deletion_traverse_parallelism_limit, 10),
     tree_traverse:init(?POOL_NAME, MasterJobsLimit, SlaveJobsLimit, ParallelismLimit).
 
 
@@ -69,13 +69,19 @@ stop_pool() ->
 -spec start(file_ctx:ctx(), user_ctx:ctx(), boolean(), file_meta:uuid()) -> {ok, id()} | {error, term()}.
 start(RootDirCtx, UserCtx, EmitEvents, RootOriginalParentUuid) ->
     TaskId = datastore_key:new(),
+    SpaceId = file_ctx:get_space_id_const(RootDirCtx),
+    ParentFileCtx = file_ctx:new_by_uuid(RootOriginalParentUuid, SpaceId),
+    {ParentPath, _FileCtx2} = file_ctx:get_logical_path(ParentFileCtx, user_ctx:new(?ROOT_SESS_ID)),
+    {RootDirName, RootDirCtx2} = file_ctx:get_aliased_name(RootDirCtx, undefined),
     Options = #{
         task_id => TaskId,
         track_subtree_status => true,
         children_master_jobs_mode => async,
         use_listing_token => false,
+        % NOTE: do not use RootDir path, as file is already moved to trash
+        initial_relative_path => filename:join(ParentPath, RootDirName),
         traverse_info => #{
-            root_guid => file_ctx:get_guid_const(RootDirCtx),
+            root_guid => file_ctx:get_logical_guid_const(RootDirCtx),
             emit_events => EmitEvents,
             % TODO VFS-7133 after extending file_meta with field for storing source parent
             % there will be no need to store below 2 values
@@ -84,7 +90,7 @@ start(RootDirCtx, UserCtx, EmitEvents, RootOriginalParentUuid) ->
     },
     case tree_traverse_session:setup_for_task(UserCtx, TaskId) of
         ok ->
-            tree_traverse:run(?POOL_NAME, RootDirCtx, user_ctx:get_user_id(UserCtx), Options);
+            tree_traverse:run(?POOL_NAME, RootDirCtx2, user_ctx:get_user_id(UserCtx), Options);
         {error, _} = Error ->
             Error
     end.
@@ -98,7 +104,7 @@ start(RootDirCtx, UserCtx, EmitEvents, RootOriginalParentUuid) ->
 task_started(TaskId, _Pool) ->
     ?debug("dir deletion job ~p started", [TaskId]).
 
--spec task_canceled(traverse:id(), traverse:pool()) -> ok.
+-spec task_canceled(id(), tree_traverse:pool()) -> ok.
 task_canceled(TaskId, _PoolName) ->
     tree_traverse_session:close_for_task(TaskId),
     ?debug("dir deletion job ~p cancelled", [TaskId]).
@@ -109,12 +115,12 @@ task_finished(TaskId, _Pool) ->
     ?debug("dir deletion job ~p finished", [TaskId]).
 
 -spec get_job(traverse:job_id() | tree_traverse_job:doc()) ->
-    {ok, tree_traverse:master_job(), traverse:pool(), id()}  | {error, term()}.
-get_job(DocOrID) ->
-    tree_traverse:get_job(DocOrID).
+    {ok, tree_traverse:master_job(), tree_traverse:pool(), id()}  | {error, term()}.
+get_job(DocOrId) ->
+    tree_traverse:get_job(DocOrId).
 
 -spec update_job_progress(undefined | main_job | traverse:job_id(),
-    tree_traverse:master_job(), traverse:pool(), id(),
+    tree_traverse:master_job(), tree_traverse:pool(), id(),
     traverse:job_status()) -> {ok, traverse:job_id()}  | {error, term()}.
 update_job_progress(Id, Job, Pool, TaskId, Status) ->
     tree_traverse:update_job_progress(Id, Job, Pool, TaskId, Status, ?MODULE).
@@ -125,12 +131,14 @@ update_job_progress(Id, Job, Pool, TaskId, Status) ->
 do_master_job(Job = #tree_traverse{
     file_ctx = FileCtx,
     user_id = UserId,
-    traverse_info = TraverseInfo
+    traverse_info = TraverseInfo,
+    relative_path = RelPath
 },
     MasterJobArgs = #{task_id := TaskId}
 ) ->
+    FileCtx1 = file_ctx:set_path_before_deletion(FileCtx, RelPath),
     BatchProcessingPrehook = fun(_SlaveJobs, _MasterJobs, _ListExtendedInfo, SubtreeProcessingStatus) ->
-        delete_dir_if_subtree_processed(SubtreeProcessingStatus, FileCtx, UserId, TaskId, TraverseInfo)
+        delete_dir_if_subtree_processed(SubtreeProcessingStatus, FileCtx1, UserId, TaskId, TraverseInfo)
     end,
     tree_traverse:do_master_job(Job, MasterJobArgs, BatchProcessingPrehook).
 
@@ -139,9 +147,10 @@ do_master_job(Job = #tree_traverse{
 do_slave_job(#tree_traverse_slave{
     file_ctx = FileCtx,
     user_id = UserId,
-    traverse_info = TraverseInfo
+    traverse_info = TraverseInfo,
+    relative_path = RelPath
 }, TaskId) ->
-   delete_file(FileCtx, UserId, TaskId, TraverseInfo).
+    delete_file(file_ctx:set_path_before_deletion(FileCtx, RelPath), UserId, TaskId, TraverseInfo).
 
 %%%===================================================================
 %%% Internal functions
@@ -150,7 +159,7 @@ do_slave_job(#tree_traverse_slave{
 %% @private
 -spec delete_dir_if_subtree_processed(tree_traverse_progress:status(), file_ctx:ctx(), od_user:id(),
     id(), info()) -> ok.
-delete_dir_if_subtree_processed(?SUBTREE_PROCESSED, FileCtx, UserId, TaskId, TraverseInfo) ->
+delete_dir_if_subtree_processed(?SUBTREE_PROCESSED(_), FileCtx, UserId, TaskId, TraverseInfo) ->
     delete_dir(FileCtx, UserId, TaskId, TraverseInfo);
 delete_dir_if_subtree_processed(?SUBTREE_NOT_PROCESSED, _FileCtx, _UserId, _TaskId, _TraverseInfo) ->
     ok.
@@ -163,7 +172,7 @@ delete_dir(FileCtx, UserId, TaskId, TraverseInfo = #{
     emit_events := EmitEvents,
     root_original_parent_uuid := RootOriginalParentUuid
 }) ->
-    case tree_traverse_session:acquire_for_task(UserId, TraverseInfo, TaskId) of
+    case tree_traverse_session:acquire_for_task(UserId, ?POOL_NAME, TaskId) of
         {ok, UserCtx} ->
             try
                 % TODO VFS-7133 after extending file_meta with field for storing source parent
@@ -172,8 +181,8 @@ delete_dir(FileCtx, UserId, TaskId, TraverseInfo = #{
                 % get StorageFileId before location is deleted as it's stored in dir_location doc
                 {StorageFileId, FileCtx3} = file_ctx:get_storage_file_id(FileCtx2),
                 delete_req:delete(UserCtx, FileCtx3, not EmitEvents),
-                tree_traverse:delete_subtree_status_doc(TaskId, file_ctx:get_uuid_const(FileCtx3)),
-                case file_ctx:get_guid_const(FileCtx3) =:= RootGuid of
+                tree_traverse:delete_subtree_status_doc(TaskId, file_ctx:get_logical_uuid_const(FileCtx3)),
+                case file_ctx:get_logical_guid_const(FileCtx3) =:= RootGuid of
                     true ->
                         case IsStorageFileCreated of
                             true -> deletion_marker:remove_by_name(RootOriginalParentUuid, filename:basename(StorageFileId));
@@ -193,7 +202,7 @@ delete_dir(FileCtx, UserId, TaskId, TraverseInfo = #{
 
 -spec delete_file(file_ctx:ctx(), od_user:id(), id(), info()) -> ok.
 delete_file(FileCtx, UserId, TaskId, TraverseInfo = #{emit_events := EmitEvents}) ->
-    case tree_traverse_session:acquire_for_task(UserId, TraverseInfo, TaskId) of
+    case tree_traverse_session:acquire_for_task(UserId, ?POOL_NAME, TaskId) of
         {ok, UserCtx} ->
             try
                 delete_req:delete(UserCtx, FileCtx, not EmitEvents),
@@ -210,17 +219,25 @@ delete_file(FileCtx, UserId, TaskId, TraverseInfo = #{emit_events := EmitEvents}
 %% @private
 -spec file_processed(file_ctx:ctx(), user_ctx:ctx(), id(), info()) -> ok.
 file_processed(FileCtx, UserCtx, TaskId, TraverseInfo = #{root_original_parent_uuid := RootOriginalParentUuid}) ->
-    {ParentFileCtx, FileCtx1} = file_ctx:get_parent(FileCtx, UserCtx),
+    {ParentFileCtx, FileCtx1} = files_tree:get_parent(FileCtx, UserCtx),
     case file_qos:get_effective(RootOriginalParentUuid) of
         {ok, #effective_file_qos{qos_entries = EffectiveQosEntries}} ->
             SpaceId = file_ctx:get_space_id_const(FileCtx1),
-            OriginalRootParentCtx = file_ctx:new_by_guid(file_id:pack_guid(RootOriginalParentUuid, SpaceId)),
+            OriginalRootParentCtx = file_ctx:new_by_uuid(RootOriginalParentUuid, SpaceId),
             lists:foreach(fun(EffectiveQosEntryId) ->
                 qos_status:report_file_deleted(FileCtx1, EffectiveQosEntryId, OriginalRootParentCtx)
             end, EffectiveQosEntries);
         _ ->
             ok
     end,
-    ParentUuid = file_ctx:get_uuid_const(ParentFileCtx),
+    RootFilePath = file_ctx:get_path_before_deletion(FileCtx),
+    ParentUuid = file_ctx:get_logical_uuid_const(ParentFileCtx),
     ParentStatus = tree_traverse:report_child_processed(TaskId, ParentUuid),
-    delete_dir_if_subtree_processed(ParentStatus, ParentFileCtx, user_ctx:get_user_id(UserCtx), TaskId, TraverseInfo).
+    ParentPath = filename:dirname(RootFilePath),
+    delete_dir_if_subtree_processed(
+        ParentStatus, 
+        file_ctx:set_path_before_deletion(ParentFileCtx, ParentPath), 
+        user_ctx:get_user_id(UserCtx), 
+        TaskId, 
+        TraverseInfo
+    ).

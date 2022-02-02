@@ -640,9 +640,9 @@ init_per_testcase(_Case, Config) ->
     mock_token_logic(Config),
     Nodes = ?config(op_worker_nodes, Config),
     % required to trigger auth cache events that are based on run_after procedures
-    rpc:multicall(Nodes, gs_client_worker, enable_cache, []),
-    rpc:multicall(Nodes, od_user, invalidate_cache, [?USER_ID_1]),
-    rpc:multicall(Nodes, od_user, invalidate_cache, [?USER_ID_2]),
+    utils:rpc_multicall(Nodes, gs_client_worker, enable_cache, []),
+    utils:rpc_multicall(Nodes, od_user, invalidate_cache, [?USER_ID_1]),
+    utils:rpc_multicall(Nodes, od_user, invalidate_cache, [?USER_ID_2]),
     Config.
 
 
@@ -879,7 +879,8 @@ simulate_user_update_with_blocked_value(Nodes, UserId, Blocked, Revision) ->
             <<"effectiveGroups">> => [],
             <<"effectiveSpaces">> => [],
             <<"effectiveHandleServices">> => [],
-            <<"effectiveHandles">> => []
+            <<"effectiveHandles">> => [],
+            <<"effectiveAtmInventories">> => []
         }}
     ]),
     % the push message processing is async - wait for the process to finish

@@ -16,9 +16,9 @@
 
 % Heartbeat messages are sent to peer periodically to inform him that
 % his requests are still carried on.
--define(WORKERS_STATUS_CHECK_INTERVAL, application:get_env(
-    ?APP_NAME, router_processes_check_interval, timer:seconds(10)
-)).
+-define(WORKERS_STATUS_CHECK_INTERVAL,
+    op_worker:get_env(router_processes_check_interval, timer:seconds(10))
+).
 
 % Keepalive messages are sent to peer periodically to keep connection alive.
 -define(KEEPALIVE_TIMEOUT, timer:seconds(60)).

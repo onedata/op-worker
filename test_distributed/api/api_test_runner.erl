@@ -64,9 +64,9 @@ run_suite(Config, SuiteSpec) ->
     catch
         throw:fail ->
             false;
-        Type:Reason ->
+        Type:Reason:Stacktrace ->
             ct:pal("Unexpected error while running test suite ~p:~p ~p", [
-                Type, Reason, erlang:get_stacktrace()
+                Type, Reason, Stacktrace
             ]),
             false
     end.
@@ -224,6 +224,11 @@ get_expected_malformed_data_error({error, _} = Error, _, _) ->
     Error;
 get_expected_malformed_data_error({error_fun, ErrorFun}, _, TestCaseCtx) ->
     ErrorFun(TestCaseCtx);
+get_expected_malformed_data_error(
+    {_ScenarioType, ?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceId, provider_id_placeholder)}, _, #api_test_ctx{node = Node}
+) ->
+    ProviderId = opw_test_rpc:get_provider_id(Node),
+    ?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceId, ProviderId);
 get_expected_malformed_data_error({_ScenarioType, {error, _} = ScenarioSpecificError}, _, _) ->
     ScenarioSpecificError;
 get_expected_malformed_data_error({_ScenarioType, {error_fun, ErrorFun}}, _, TestCaseCtx) ->
@@ -431,8 +436,8 @@ run_exp_error_testcase(
                 validate_error_result(ScenarioType, ExpError, RequestResult),
                 VerifyFun(expected_failure, TestCaseCtx),
                 true
-            catch T:R ->
-                log_failure(ScenarioName, TestCaseCtx, Args, ExpError, RequestResult, T, R),
+            catch T:R:Stacktrace->
+                log_failure(ScenarioName, TestCaseCtx, Args, ExpError, RequestResult, T, R, Stacktrace),
                 false
             end
     end.
@@ -463,8 +468,8 @@ run_exp_success_testcase(TargetNode, Client, DataSet, VerifyFun, SupportedClient
                         VerifyFun(expected_failure, TestCaseCtx)
                 end,
                 true
-            catch T:R ->
-                log_failure(ScenarioName, TestCaseCtx, Args, success, Result, T, R),
+            catch T:R:Stacktrace ->
+                log_failure(ScenarioName, TestCaseCtx, Args, success, Result, T, R, Stacktrace),
                 false
             end
     end.
@@ -512,7 +517,7 @@ validate_error_result(Type, ExpError, Result) when
 
 
 %% @private
-log_failure(ScenarioName, #api_test_ctx{node = TargetNode, client = Client}, Args, Expected, Got, ErrType, ErrReason) ->
+log_failure(ScenarioName, #api_test_ctx{node = TargetNode, client = Client}, Args, Expected, Got, ErrType, ErrReason, Stacktrace) ->
     ct:pal("~s test case failed:~n"
     "Node: ~p~n"
     "Client: ~p~n"
@@ -528,7 +533,7 @@ log_failure(ScenarioName, #api_test_ctx{node = TargetNode, client = Client}, Arg
         Expected,
         Got,
         ErrType, ErrReason,
-        erlang:get_stacktrace()
+        Stacktrace
     ]).
 
 
@@ -807,7 +812,7 @@ make_rest_request(_Config, Node, Client, #rest_args{
 
     case http_client:request(Method, URL, HeadersWithAuth, Body, Opts) of
         {ok, RespCode, RespHeaders, RespBody} ->
-            case maps:get(<<"content-type">>, RespHeaders, undefined) of
+            case maps:get(?HDR_CONTENT_TYPE, RespHeaders, undefined) of
                 <<"application/json">> ->
                     {ok, RespCode, RespHeaders, json_utils:decode(RespBody)};
                 _ ->

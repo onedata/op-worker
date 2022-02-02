@@ -21,7 +21,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 
--define(MOCK, application:get_env(?APP_NAME, rtransfer_mock, false)).
+-define(MOCK, op_worker:get_env(rtransfer_mock, false)).
 
 %% API
 -export([start_rtransfer/0, restart_link/0, fetch/6]).
@@ -54,18 +54,34 @@ start_rtransfer() ->
 %% @doc
 %% Restarts only `link` native application, forcing a reload of
 %% certificates and state. Ongoing tasks will be briefly interrupted
-%% but then resumed.
+%% but then resumed. Waits until 'rtransfer_link_port' and 'rtransfer_link'
+%% gen servers are up and running.
 %% @end
 %%--------------------------------------------------------------------
 -spec restart_link() -> ok | {error, not_running}.
 restart_link() ->
     case whereis(rtransfer_link_port) of
-        undefined -> {error, not_running};
-        Pid ->
+        undefined ->
+            {error, not_running};
+        CurrentPortPid ->
             prepare_ssl_opts(),
             prepare_graphite_opts(),
-            erlang:exit(Pid, restarting),
-            ok
+            erlang:exit(CurrentPortPid, restarting),
+            utils:wait_until(fun() ->
+                case whereis(rtransfer_link_port) of
+                    undefined ->
+                        false;
+                    CurrentPortPid ->
+                        false;
+                    OtherPid when is_pid(OtherPid) ->
+                        case whereis(rtransfer_link) of
+                            LinkPid when is_pid(LinkPid) ->
+                                true;
+                            _ ->
+                                false
+                        end
+                end
+            end, 100)
     end.
 
 %%--------------------------------------------------------------------
@@ -111,7 +127,7 @@ get_nodes(ProviderId) ->
 -spec open(FileUUID :: binary(), read | write) ->
     {ok, Handle :: term()} | {error, Reason :: any()}.
 open(FileGuid, _OpenFlag) ->
-    % TODO vfs-4412 - delete second arg and change name
+    % TODO VFS-4412 - delete second arg and change name
     sd_utils:create_deferred(file_ctx:new_by_guid(FileGuid)),
     {ok, undefined}.
 
@@ -122,7 +138,7 @@ open(FileGuid, _OpenFlag) ->
 %%--------------------------------------------------------------------
 -spec fsync(Handle :: term()) -> any().
 fsync(_Handle) ->
-    % TODO vfs-4412 - delete callback
+    % TODO VFS-4412 - delete callback
     ok.
 
 %%--------------------------------------------------------------------
@@ -132,7 +148,7 @@ fsync(_Handle) ->
 %%--------------------------------------------------------------------
 -spec close(Handle :: term()) -> any().
 close(_Handle) ->
-    % TODO vfs-4412 - delete callback
+    % TODO VFS-4412 - delete callback
     ok.
 
 %%--------------------------------------------------------------------
@@ -178,8 +194,8 @@ auth_request(TransferData, ProviderId) ->
 
         {StorageId, FileId, FileGuid}
     catch
-        _:Err ->
-            ?error_stacktrace("Auth providerid=~p failed due to ~p", [ProviderId, Err]),
+        _:Err:Stacktrace ->
+            ?error_stacktrace("Auth providerid=~p failed due to ~p", [ProviderId, Err], Stacktrace),
             false
     end.
 
@@ -212,7 +228,7 @@ add_storage(StorageId) ->
     AdminCtx = helper:get_admin_ctx(Helper),
     {ok, HelperArgs} = helper:get_args_with_user_ctx(Helper, AdminCtx),
     HelperName = helper:get_name(Helper),
-    {NodesAns, BadNodes} = rpc:multicall(consistent_hashing:get_all_nodes(),
+    {NodesAns, BadNodes} = utils:rpc_multicall(consistent_hashing:get_all_nodes(),
                                   rtransfer_link, add_storage,
                                   [StorageId, HelperName, maps:to_list(HelperArgs)]),
 
@@ -245,12 +261,18 @@ add_storages() ->
 -spec generate_secret(ProviderId :: binary(), PeerSecret :: binary()) -> binary().
 generate_secret(ProviderId, PeerSecret) ->
     MySecret = do_generate_secret(),
-    {_, BadNodes} = rpc:multicall(consistent_hashing:get_all_nodes(),
+    {NodesAns, BadNodes} = utils:rpc_multicall(consistent_hashing:get_all_nodes(),
                                   rtransfer_link, allow_connection,
                                   [ProviderId, MySecret, PeerSecret, 60000]),
     BadNodes =/= [] andalso
         ?error("Failed to allow rtransfer connection from ~p on nodes ~p",
                [ProviderId, BadNodes]),
+    FilteredNodesAns = lists:filter(fun
+        (#{<<"done">> := true}) -> false;
+        (_) -> true
+    end, NodesAns),
+    FilteredNodesAns =/= [] andalso
+        ?error("Failed to allow rtransfer connection from ~p, rpc answer: ~p", [ProviderId, NodesAns]),
     MySecret.
 
 %%--------------------------------------------------------------------
@@ -293,7 +315,7 @@ prepare_ssl_opts() ->
     OriginalSSLOpts = application:get_env(rtransfer_link, ssl, []),
     case proplists:get_value(use_ssl, OriginalSSLOpts, true) of
         true ->
-            {ok, KeyFile} = application:get_env(?APP_NAME, web_key_file),
+            KeyFile = op_worker:get_env(web_key_file),
             CABundle = make_ca_bundle(),
             CertBundle = make_cert_bundle(),
             Opts = [{use_ssl, true}, {cert_path, CertBundle}, {key_path, KeyFile} |
@@ -323,8 +345,8 @@ make_ca_bundle() ->
 %%--------------------------------------------------------------------
 -spec make_cert_bundle() -> file:filename().
 make_cert_bundle() ->
-    {ok, CertFile} = application:get_env(?APP_NAME, web_cert_file),
-    {ok, ChainFile} = application:get_env(?APP_NAME, web_cert_chain_file),
+    CertFile = op_worker:get_env(web_cert_file),
+    ChainFile = op_worker:get_env(web_cert_chain_file),
     {ok, Cert} = file:read_file(CertFile),
     Contents =
         case file:read_file(ChainFile) of
@@ -349,7 +371,7 @@ write_certs_to_temp(Contents) ->
     case lists:flatmap(fun public_key:pem_decode/1, Contents) of
         [] -> false;
         Ders ->
-            TempPath = lib:nonl(os:cmd("mktemp")),
+            TempPath = string:trim(os:cmd("mktemp")),
             OutData = public_key:pem_encode(Ders),
             ok = file:write_file(TempPath, OutData),
             TempPath
@@ -364,16 +386,16 @@ write_certs_to_temp(Contents) ->
 %%--------------------------------------------------------------------
 -spec prepare_graphite_opts() -> any().
 prepare_graphite_opts() ->
-    case application:get_env(?APP_NAME, integrate_with_graphite, false) of
+    case op_worker:get_env(integrate_with_graphite, false) of
         false -> ok;
         true ->
-            case application:get_env(?APP_NAME, graphite_api_key) of
-                {ok, Bin} when byte_size(Bin) > 0 ->
+            case op_worker:get_env(graphite_api_key, undefined) of
+                {ok, Bin} when is_binary(Bin) andalso byte_size(Bin) > 0 ->
                     ?error("rtransfer_link doesn't support graphite access with API key", []);
                 _ ->
-                    {ok, Host} = application:get_env(?APP_NAME, graphite_host),
-                    {ok, Port} = application:get_env(?APP_NAME, graphite_port),
-                    {ok, Prefix} = application:get_env(?APP_NAME, graphite_prefix),
+                    Host = op_worker:get_env(graphite_host),
+                    Port = op_worker:get_env(graphite_port),
+                    Prefix = op_worker:get_env(graphite_prefix),
                     NewPrefix = unicode:characters_to_list(Prefix) ++ "-rtransfer.link",
                     Url = "http://" ++ unicode:characters_to_list(Host) ++ ":" ++
                         integer_to_list(Port),

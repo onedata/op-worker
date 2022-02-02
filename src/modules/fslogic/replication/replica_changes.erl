@@ -5,7 +5,6 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%--------------------------------------------------------------------
-%%% @todo simplify rename logic
 %%% @doc
 %%% Functions responsible for adding and removing changes from file_location
 %%% documents.
@@ -128,7 +127,7 @@ set_last_rename(Doc = #document{value = Loc = #file_location{uuid = FileUuid}},
 
 
 %%--------------------------------------------------------------------
-%% @doc %todo get file system logic out of here, keep only replica changes
+%% @doc %TODO VFS-7394 get file system logic out of here, keep only replica changes
 %% Renames file on storage and updates local location if target space
 %% is supported in current provider, otherwise deletes local location and file.
 %% Document is unchanged if there was no rename or given rename
@@ -155,7 +154,7 @@ rename_or_delete(FileCtx,
 ) ->
     case provider_logic:supports_space(TargetSpaceId) of
         true ->
-            NewFileCtx = file_ctx:new_by_guid(file_id:pack_guid(FileUuid, TargetSpaceId)),
+            NewFileCtx = file_ctx:new_by_uuid(FileUuid, TargetSpaceId),
             case file_ctx:is_readonly_storage(NewFileCtx) of
                 {true, NewFileCtx2} ->
                     {skipped, NewFileCtx2};

@@ -14,15 +14,15 @@
 -author("Tomasz Lichon").
 -author("Bartosz Walkowicz").
 
--include("middleware/middleware.hrl").
+-include("global_definitions.hrl").
 -include("http/rest.hrl").
 -include("http/cdmi.hrl").
--include("global_definitions.hrl").
+-include("middleware/middleware.hrl").
+-include("modules/fslogic/file_attr.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/http/headers.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/posix/file_attr.hrl").
 
 
 %% API
@@ -69,9 +69,9 @@ get_binary(Req, #cdmi_req{
     file_attrs = FileAttrs = #file_attr{guid = FileGuid}
 } = CdmiReq) ->
     % prepare response
-    MimeType = cdmi_metadata:get_mimetype(SessionId, {guid, FileGuid}),
+    MimeType = cdmi_metadata:get_mimetype(SessionId, ?FILE_REF(FileGuid)),
     Req1 = cowboy_req:set_resp_header(?HDR_CONTENT_TYPE, MimeType, Req),
-    Req2 = http_download_utils:stream_file(SessionId, FileAttrs, Req1),
+    Req2 = file_download_utils:download_single_file(SessionId, FileAttrs, Req1),
     {stop, Req2, CdmiReq}.
 
 
@@ -92,7 +92,7 @@ get_cdmi(Req, #cdmi_req{
 
     case maps:take(<<"value">>, FileInfo) of
         {{range, Range}, FileInfo2} ->
-            Encoding = cdmi_metadata:get_encoding(SessionId, {guid, FileGuid}),
+            Encoding = cdmi_metadata:get_encoding(SessionId, ?FILE_REF(FileGuid)),
             DataPrefix = case map_size(FileInfo2) of
                 0 ->
                     <<"{\"value\":\"">>;
@@ -137,7 +137,7 @@ put_binary(Req, #cdmi_req{
     {MimeType, Encoding} = cdmi_parser:parse_content_type_header(Req),
     {FileGuid, Truncate, Offset} = case Attrs of
         undefined ->
-            {ok, DefaultMode} = application:get_env(?APP_NAME, default_file_mode),
+            DefaultMode = op_worker:get_env(default_file_mode),
             {ok, Guid} = cdmi_lfm:create_file(SessionId, Path, DefaultMode),
             {Guid, false, 0};
         #file_attr{guid = Guid, size = Size} ->
@@ -152,11 +152,11 @@ put_binary(Req, #cdmi_req{
             end
     end,
 
-    FileKey = {guid, FileGuid},
-    cdmi_metadata:update_mimetype(SessionId, FileKey, MimeType),
-    cdmi_metadata:update_encoding(SessionId, FileKey, Encoding),
+    FileRef = ?FILE_REF(FileGuid),
+    cdmi_metadata:update_mimetype(SessionId, FileRef, MimeType),
+    cdmi_metadata:update_encoding(SessionId, FileRef, Encoding),
     Req2 = write_req_body_to_file(
-        Req, SessionId, FileKey,
+        Req, SessionId, FileRef,
         Truncate, Offset, CdmiPartialFlag
     ),
     {true, Req2, CdmiReq}.
@@ -197,10 +197,10 @@ put_cdmi(Req, #cdmi_req{
     % create object using create/cp/mv
     {ok, OperationPerformed, Guid} = case {Attrs, CopyURI, MoveURI} of
         {undefined, undefined, undefined} ->
-            {ok, DefaultMode} = application:get_env(?APP_NAME, default_file_mode),
+            DefaultMode = op_worker:get_env(default_file_mode),
             {ok, NewGuid} = cdmi_lfm:create_file(SessionId, Path, DefaultMode),
             write_binary_to_file(
-                SessionId, {guid, NewGuid},
+                SessionId, ?FILE_REF(NewGuid),
                 false, 0, RawValue,
                 CdmiPartialFlag
             ),
@@ -216,30 +216,30 @@ put_cdmi(Req, #cdmi_req{
     end,
 
     % update value and metadata depending on creation type
-    FileKey = {guid, Guid},
+    FileRef = ?FILE_REF(Guid),
     case OperationPerformed of
         created ->
-            cdmi_metadata:update_encoding(SessionId, FileKey, utils:ensure_defined(
+            cdmi_metadata:update_encoding(SessionId, FileRef, utils:ensure_defined(
                 Encoding, undefined, <<"utf-8">>
             )),
-            cdmi_metadata:update_mimetype(SessionId, FileKey, MimeType),
-            cdmi_metadata:update_user_metadata(SessionId, FileKey, UserMetadata),
-            prepare_create_file_cdmi_response(Req, CdmiReq, FileKey);
+            cdmi_metadata:update_mimetype(SessionId, FileRef, MimeType),
+            cdmi_metadata:update_user_metadata(SessionId, FileRef, UserMetadata),
+            prepare_create_file_cdmi_response(Req, CdmiReq, FileRef);
         CopiedOrMoved when CopiedOrMoved =:= copied orelse CopiedOrMoved =:= moved ->
-            cdmi_metadata:update_encoding(SessionId, FileKey, Encoding),
-            cdmi_metadata:update_mimetype(SessionId, FileKey, MimeType),
-            cdmi_metadata:update_user_metadata(SessionId, FileKey, UserMetadata, URIMetadataNames),
-            prepare_create_file_cdmi_response(Req, CdmiReq, FileKey);
+            cdmi_metadata:update_encoding(SessionId, FileRef, Encoding),
+            cdmi_metadata:update_mimetype(SessionId, FileRef, MimeType),
+            cdmi_metadata:update_user_metadata(SessionId, FileRef, UserMetadata, URIMetadataNames),
+            prepare_create_file_cdmi_response(Req, CdmiReq, FileRef);
         none ->
-            cdmi_metadata:update_encoding(SessionId, FileKey, Encoding),
-            cdmi_metadata:update_mimetype(SessionId, FileKey, MimeType),
-            cdmi_metadata:update_user_metadata(SessionId, FileKey, UserMetadata, URIMetadataNames),
+            cdmi_metadata:update_encoding(SessionId, FileRef, Encoding),
+            cdmi_metadata:update_mimetype(SessionId, FileRef, MimeType),
+            cdmi_metadata:update_user_metadata(SessionId, FileRef, UserMetadata, URIMetadataNames),
             case Range of
                 {From, To} when is_binary(Value) andalso To - From + 1 == byte_size(RawValue) ->
-                    write_binary_to_file(SessionId, FileKey, false, From, RawValue, CdmiPartialFlag),
+                    write_binary_to_file(SessionId, FileRef, false, From, RawValue, CdmiPartialFlag),
                     {true, Req0, CdmiReq};
                 undefined when is_binary(Value) ->
-                    write_binary_to_file(SessionId, FileKey, true, 0, RawValue, CdmiPartialFlag),
+                    write_binary_to_file(SessionId, FileRef, true, 0, RawValue, CdmiPartialFlag),
                     {true, Req0, CdmiReq};
                 undefined ->
                     {true, Req0, CdmiReq};
@@ -260,7 +260,7 @@ delete_cdmi(Req, #cdmi_req{
     auth = ?USER(_UserId, SessionId),
     file_attrs = #file_attr{guid = Guid}
 } = CdmiReq) ->
-    ?check(lfm:unlink(SessionId, {guid, Guid}, false)),
+    ?lfm_check(lfm:unlink(SessionId, ?FILE_REF(Guid), false)),
     {true, Req, CdmiReq}.
 
 
@@ -271,11 +271,11 @@ delete_cdmi(Req, #cdmi_req{
 
 %% @private
 -spec prepare_create_file_cdmi_response(cowboy_req:req(), cdmi_handler:cdmi_req(),
-    lfm:file_key()) -> {true, cowboy_req:req(), cdmi_handler:cdmi_req()}.
+    lfm:file_ref()) -> {true, cowboy_req:req(), cdmi_handler:cdmi_req()}.
 prepare_create_file_cdmi_response(Req1, #cdmi_req{
     auth = ?USER(_UserId, SessionId)
-} = CdmiReq, FileKey) ->
-    {ok, Attrs} = ?check(lfm:stat(SessionId, FileKey)),
+} = CdmiReq, FileRef) ->
+    {ok, Attrs} = ?lfm_check(lfm:stat(SessionId, FileRef)),
     CdmiReq2 = CdmiReq#cdmi_req{file_attrs = Attrs},
     Answer = get_file_info(?DEFAULT_PUT_FILE_OPTS, CdmiReq2),
     Req2 = cowboy_req:set_resp_body(json_utils:encode(Answer), Req1),
@@ -294,6 +294,8 @@ get_file_info(RequestedInfo, #cdmi_req{
         size = FileSize
     } = Attrs
 }) ->
+    FileRef = ?FILE_REF(Guid),
+
     lists:foldl(fun
         (<<"objectType">>, Acc) ->
             Acc#{<<"objectType">> => <<"application/cdmi-object">>};
@@ -320,24 +322,24 @@ get_file_info(RequestedInfo, #cdmi_req{
             Acc#{<<"capabilitiesURI">> => <<?DATAOBJECT_CAPABILITY_PATH>>};
         (<<"completionStatus">>, Acc) ->
             CompletionStatus = cdmi_metadata:get_cdmi_completion_status(
-                SessionId, {guid, Guid}
+                SessionId, FileRef
             ),
             Acc#{<<"completionStatus">> => CompletionStatus};
         (<<"mimetype">>, Acc) ->
-            MimeType = cdmi_metadata:get_mimetype(SessionId, {guid, Guid}),
+            MimeType = cdmi_metadata:get_mimetype(SessionId, FileRef),
             Acc#{<<"mimetype">> => MimeType};
         (<<"metadata">>, Acc) ->
             Metadata = cdmi_metadata:prepare_metadata(
-                SessionId, {guid, Guid}, <<>>, Attrs
+                SessionId, FileRef, <<>>, Attrs
             ),
             Acc#{<<"metadata">> => Metadata};
         ({<<"metadata">>, Prefix}, Acc) ->
             Metadata = cdmi_metadata:prepare_metadata(
-                SessionId, {guid, Guid}, Prefix, Attrs
+                SessionId, FileRef, Prefix, Attrs
             ),
             Acc#{<<"metadata">> => Metadata};
         (<<"valuetransferencoding">>, Acc) ->
-            Encoding = cdmi_metadata:get_encoding(SessionId, {guid, Guid}),
+            Encoding = cdmi_metadata:get_encoding(SessionId, FileRef),
             Acc#{<<"valuetransferencoding">> => Encoding};
         (<<"value">>, Acc) ->
             Acc#{<<"value">> => {range, default}};
@@ -352,7 +354,7 @@ get_file_info(RequestedInfo, #cdmi_req{
                 _ ->
                     Acc#{<<"valuerange">> => iolist_to_binary(
                         [<<"0-">>, integer_to_binary(FileSize - 1)]
-                    )} %todo fix 0--1 when file is empty
+                    )} %TODO VFS-7289 fix 0--1 when file is empty
             end;
         (_, Acc) ->
             Acc
@@ -360,54 +362,54 @@ get_file_info(RequestedInfo, #cdmi_req{
 
 
 %% @private
--spec write_req_body_to_file(cowboy_req:req(), session:id(), lfm:file_key(),
+-spec write_req_body_to_file(cowboy_req:req(), session:id(), lfm:file_ref(),
     Truncate :: boolean(), Offset :: non_neg_integer(),
     CdmiPartialFlag :: undefined | binary()) ->
     cowboy_req:req().
-write_req_body_to_file(Req, SessId, FileKey, Truncate, Offset, CdmiPartialFlag) ->
-    {ok, FileHandle} = ?check(lfm:monitored_open(SessId, FileKey, write)),
+write_req_body_to_file(Req, SessId, FileRef, Truncate, Offset, CdmiPartialFlag) ->
+    {ok, FileHandle} = ?lfm_check(lfm:monitored_open(SessId, FileRef, write)),
     cdmi_metadata:update_cdmi_completion_status(
         SessId,
-        FileKey,
+        FileRef,
         <<"Processing">>
     ),
-    Truncate andalso ?check(lfm:truncate(SessId, FileKey, 0)),
+    Truncate andalso ?lfm_check(lfm:truncate(SessId, FileRef, 0)),
 
     {ok, Req2} = file_upload_utils:upload_file(
         FileHandle, Offset, Req,
         fun cowboy_req:read_body/2, #{}
     ),
 
-    ?check(lfm:fsync(FileHandle)),
-    ?check(lfm:monitored_release(FileHandle)),
+    ?lfm_check(lfm:fsync(FileHandle)),
+    ?lfm_check(lfm:monitored_release(FileHandle)),
     cdmi_metadata:set_cdmi_completion_status_according_to_partial_flag(
         SessId,
-        FileKey,
+        FileRef,
         CdmiPartialFlag
     ),
     Req2.
 
 
 %% @private
--spec write_binary_to_file(session:id(), lfm:file_key(), Truncate :: boolean(),
+-spec write_binary_to_file(session:id(), lfm:file_ref(), Truncate :: boolean(),
     Offset :: non_neg_integer(), Data :: binary(),
     CdmiPartialFlag :: undefined | binary()) ->
     ok.
-write_binary_to_file(SessionId, FileKey, Truncate, Offset, Data, CdmiPartialFlag) ->
+write_binary_to_file(SessionId, FileRef, Truncate, Offset, Data, CdmiPartialFlag) ->
     DataSize = byte_size(Data),
-    {ok, FileHandle} = ?check(lfm:monitored_open(SessionId, FileKey, write)),
+    {ok, FileHandle} = ?lfm_check(lfm:monitored_open(SessionId, FileRef, write)),
     cdmi_metadata:update_cdmi_completion_status(
         SessionId,
-        FileKey,
+        FileRef,
         <<"Processing">>
     ),
-    Truncate andalso ?check(lfm:truncate(SessionId, FileKey, 0)),
+    Truncate andalso ?lfm_check(lfm:truncate(SessionId, FileRef, 0)),
 
-    {ok, _, DataSize} = ?check(lfm:write(FileHandle, Offset, Data)),
-    ?check(lfm:fsync(FileHandle)),
-    ?check(lfm:monitored_release(FileHandle)),
+    {ok, _, DataSize} = ?lfm_check(lfm:write(FileHandle, Offset, Data)),
+    ?lfm_check(lfm:fsync(FileHandle)),
+    ?lfm_check(lfm:monitored_release(FileHandle)),
     cdmi_metadata:set_cdmi_completion_status_according_to_partial_flag(
         SessionId,
-        FileKey,
+        FileRef,
         CdmiPartialFlag
     ).

@@ -26,18 +26,15 @@ sources:
 # be based off onedata/worker image (it contains all the machinery to run the
 # application from sources - images based off onedata-worker are images with
 # -dev suffix).
-onezoneImage: "docker.onedata.org/onezone-dev:20.02.12"
+onezoneImage: "docker.onedata.org/onezone-dev:develop"
 
 # Oneprovider image to use. Note that if 'sources' option is enabled, it must
 # be based off onedata/worker image (images based off onedata-worker are
 # images with -dev suffix).
-oneproviderImage: "docker.onedata.org/oneprovider-dev:20.02.12"
+oneproviderImage: "docker.onedata.org/oneprovider-dev:develop"
 
 # Determines if elastic search should start.
 elasticSearch: false
-
-# Determines if luma should start.
-luma: false
 
 # Determines if onedata rest client should start.
 onedataCli: false
@@ -54,11 +51,25 @@ users:
   - &user1
     name: user1
     password: password
+  - &user2
+    name: user2
+    password: password
 
 
 spaces:
   - name: space_krk
     user: *user1
+    users:
+      - user: *user2
+    supports:
+      - provider: "oneprovider-1"
+        storage_name: "posix"
+        size: '1073741824'
+    # TODO VFS-8726 reuse space_krk in qos tests and remove space1
+  - name: space1
+    user: *user1
+    users:
+      - user: *user2
     supports:
       - provider: "oneprovider-1"
         storage_name: "posix"

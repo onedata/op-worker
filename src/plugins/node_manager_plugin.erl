@@ -47,7 +47,7 @@
     {3, ?LINE_20_02(<<"1">>)},
     {4, op_worker:get_release_version()}
 ]).
--define(OLDEST_UPGRADABLE_CLUSTER_GENERATION, 1).
+-define(OLDEST_UPGRADABLE_CLUSTER_GENERATION, 3).
 
 
 %%%===================================================================
@@ -124,9 +124,8 @@ before_init() ->
         op_worker_sup:start_link(),
         ok = helpers_nif:init()
     catch
-        _:Error ->
-            ?error_stacktrace("Error in node_manager_plugin:before_init: ~p",
-                [Error]),
+        _:Error:Stacktrace   ->
+            ?error_stacktrace("Error in node_manager_plugin:before_init: ~p", [Error], Stacktrace),
             {error, cannot_start_node_manager_plugin}
     end.
 
@@ -148,12 +147,6 @@ before_cluster_upgrade() ->
 %%--------------------------------------------------------------------
 -spec upgrade_cluster(node_manager:cluster_generation()) ->
     {ok, node_manager:cluster_generation()}.
-upgrade_cluster(1) ->
-    await_zone_connection_and_run(fun storage:migrate_to_zone/0),
-    {ok, 2};
-upgrade_cluster(2) ->
-    await_zone_connection_and_run(fun storage:migrate_imported_storages_to_zone/0),
-    {ok, 3};
 upgrade_cluster(3) ->
     await_zone_connection_and_run(fun storage_import:migrate_space_strategies/0),
     await_zone_connection_and_run(fun storage_import:migrate_storage_sync_monitoring/0),
@@ -164,7 +157,8 @@ upgrade_cluster(3) ->
 %% Overrides {@link node_manager_plugin_default:custom_workers/0}.
 %% @end
 %%--------------------------------------------------------------------
--spec custom_workers() -> [{module(), [any()]}].
+-spec custom_workers() ->
+    [{atom(), [any()]} | {singleton, atom(), [any()]} | {atom(), [any()], list()}].
 custom_workers() -> filter_disabled_workers([
     {session_manager_worker, [
         {supervisor_flags, session_manager_worker:supervisor_flags()},
@@ -190,7 +184,8 @@ custom_workers() -> filter_disabled_workers([
         {supervisor_flags, harvesting_worker:supervisor_flags()},
         {supervisor_children_spec, harvesting_worker:supervisor_children_spec()}
     ]},
-    {qos_worker, []}
+    {qos_worker, []},
+    {middleware_worker, []}
 ]).
 
 %%--------------------------------------------------------------------
@@ -239,8 +234,8 @@ exometer_reporters() -> [].
 %% @end
 %%-------------------------------------------------------------------
 -spec filter_disabled_workers(
-    [{atom(), [any()]} |{singleton, atom(), [any()]}] | {atom(), [any()], list()}) ->
-    [{atom(), [any()]} |{singleton, atom(), [any()]}] | {atom(), [any()], list()}.
+    [{atom(), [any()]} | {singleton, atom(), [any()]} | {atom(), [any()], list()}]) ->
+    [{atom(), [any()]} | {singleton, atom(), [any()]} | {atom(), [any()], list()}].
 filter_disabled_workers(WorkersSpecs) ->
     DisabledWorkers = application:get_env(?APP_NAME, disabled_workers, []),
     DisabledWorkersSet = sets:from_list(DisabledWorkers),

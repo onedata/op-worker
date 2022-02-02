@@ -28,7 +28,7 @@
 create_file(SessionId, Path, Mode) ->
     {Name, ParentPath} = filepath_utils:basename_and_parent_dir(Path),
     {ok, ParentGuid} = middleware_utils:resolve_file_path(SessionId, ParentPath),
-    ?check(lfm:create(SessionId, ParentGuid, Name, Mode)).
+    ?lfm_check(lfm:create(SessionId, ParentGuid, Name, Mode)).
 
 
 -spec create_dir(session:id(), file_meta:path()) ->
@@ -36,7 +36,7 @@ create_file(SessionId, Path, Mode) ->
 create_dir(SessionId, Path) ->
     {Name, ParentPath} = filepath_utils:basename_and_parent_dir(Path),
     {ok, ParentGuid} = middleware_utils:resolve_file_path(SessionId, ParentPath),
-    ?check(lfm:mkdir(SessionId, ParentGuid, Name, undefined)).
+    ?lfm_check(lfm:mkdir(SessionId, ParentGuid, Name, undefined)).
 
 
 -spec cp(session:id(), file_meta:path(), file_meta:path()) ->
@@ -48,7 +48,7 @@ cp(SessionId, SrcURI, DstURI) ->
     {DstName, DstParentPath} = filepath_utils:basename_and_parent_dir(DstURI),
     {ok, DstParentGuid} = middleware_utils:resolve_file_path(SessionId, DstParentPath),
 
-    ?check(lfm:cp(SessionId, {guid, SrcGuid}, {guid, DstParentGuid}, DstName)).
+    ?lfm_check(lfm:cp(SessionId, ?FILE_REF(SrcGuid), ?FILE_REF(DstParentGuid), DstName)).
 
 
 -spec mv(session:id(), file_meta:path(), file_meta:path()) ->
@@ -60,4 +60,4 @@ mv(SessionId, SrcURI, DstURI) ->
     {DstName, DstParentPath} = filepath_utils:basename_and_parent_dir(DstURI),
     {ok, DstParentGuid} = middleware_utils:resolve_file_path(SessionId, DstParentPath),
 
-    ?check(lfm:mv(SessionId, {guid, SrcGuid}, {guid, DstParentGuid}, DstName)).
+    ?lfm_check(lfm:mv(SessionId, ?FILE_REF(SrcGuid), ?FILE_REF(DstParentGuid), DstName)).

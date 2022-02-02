@@ -18,7 +18,7 @@
 
 -define(NEW_JOBS_DEFAULT_PREPROCESSOR, fun(_, _, _, _) -> ok end).
 -define(DEFAULT_BATCH_SIZE, 1000).
--define(DEFAULT_EXEC_SLAVE_ON_DIR, false).
+-define(DEFAULT_CHILD_DIRS_JOB_GENERATION_POLICY, generate_master_jobs).
 -define(DEFAULT_CHILDREN_MASTER_JOBS_MODE, sync).
 -define(DEFAULT_TRACK_SUBTREE_STATUS, false).
 
@@ -37,26 +37,36 @@
 
     % Traverse config
     % generate slave jobs also for directories
-    execute_slave_on_dir :: tree_traverse:execute_slave_on_dir(),
+    child_dirs_job_generation_policy :: tree_traverse:child_dirs_job_generation_policy(),
     % flag determining whether children master jobs are scheduled before slave jobs are processed
     children_master_jobs_mode = ?DEFAULT_CHILDREN_MASTER_JOBS_MODE :: tree_traverse:children_master_jobs_mode(),
     track_subtree_status = ?DEFAULT_TRACK_SUBTREE_STATUS :: boolean(),
 
     % info passed to every slave job
-    traverse_info :: tree_traverse:traverse_info()
+    traverse_info :: tree_traverse:traverse_info(),
+    
+    follow_symlinks = false :: boolean(),
+    % relative path of the processed file to the traverse root
+    relative_path = <<>> :: file_meta:path(),
+    % Set of encountered files on the path from the traverse root to the currently processed one. 
+    % It is required to efficiently prevent loops when resolving symlinks
+    encountered_files :: tree_traverse:encountered_files_set()
 }).
 
 % Record that defines slave job
 -record(tree_traverse_slave, {
     file_ctx :: file_ctx:ctx(),
+    % Uuid of file, that generated this slave job
+    master_job_uuid :: file_meta:uuid(),
     % User who scheduled the traverse
     user_id :: od_user:id(),
     traverse_info :: tree_traverse:traverse_info(),
-    track_subtree_status = ?DEFAULT_TRACK_SUBTREE_STATUS :: boolean()
+    track_subtree_status = ?DEFAULT_TRACK_SUBTREE_STATUS :: boolean(),
+    relative_path :: file_meta:path()
 }).
 
 
--define(SUBTREE_PROCESSED, subtree_processed).
+-define(SUBTREE_PROCESSED(NextSubtreeRoot), {subtree_processed, NextSubtreeRoot}).
 -define(SUBTREE_NOT_PROCESSED, subtree_not_processed).
 
 -endif.

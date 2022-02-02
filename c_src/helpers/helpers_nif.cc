@@ -36,119 +36,49 @@ using reqid_t = std::tuple<int, int, int>;
 using helper_args_t = std::unordered_map<folly::fbstring, folly::fbstring>;
 
 /**
- * Set CPU affinity for a given thread to all available CPU cores.
- */
-void setCPUAffinity(std::thread &t)
-{
-    cpu_set_t cpuset;
-    CPU_ZERO(&cpuset);
-    for (unsigned int cpuid = 0; cpuid < std::thread::hardware_concurrency();
-         cpuid++) {
-        CPU_SET(cpuid, &cpuset);
-    }
-
-    pthread_setaffinity_np(t.native_handle(), sizeof(cpu_set_t), &cpuset);
-};
-
-/**
- * Initializer for storage helper workers based on folly ThreadPool.
- */
-class StorageWorkerFactory : public folly::ThreadFactory {
-public:
-    explicit StorageWorkerFactory(folly::fbstring name)
-        : m_name {std::move(name)}
-        , m_id {0}
-    {
-    }
-
-    std::thread newThread(folly::Func &&func) override
-    {
-        auto t = std::thread(
-            [f = std::move(func),
-                n = fmt::format("{}-{}", m_name, m_id++)]() mutable {
-                folly::setThreadName(n);
-                f();
-            });
-
-        setCPUAffinity(t);
-
-        return t;
-    }
-
-private:
-    folly::fbstring m_name;
-    std::atomic<uint64_t> m_id;
-};
-
-/**
  * Static resource holder.
  */
 struct HelpersNIF {
-    struct HelperIOService {
-        asio::io_service service;
-        asio::executor_work_guard<asio::io_service::executor_type> work =
-            asio::make_work_guard(service);
-        folly::fbvector<std::thread> workers;
-    };
-
     HelpersNIF(std::unordered_map<folly::fbstring, folly::fbstring> args)
     {
         using namespace one::helpers;
 
         bufferingEnabled = (args["buffer_helpers"] == "true");
 
-        for (const auto &entry :
-            std::unordered_map<folly::fbstring,
-                std::pair<folly::fbstring, folly::fbstring>>(
-                {{CEPH_HELPER_NAME,
-                     {"ceph_helper_threads_number", "ceph_t"}},
-                    {CEPHRADOS_HELPER_NAME,
-                        {"cephrados_helper_threads_number",
-                            "crados_t"}},
-                    {POSIX_HELPER_NAME,
-                        {"posix_helper_threads_number", "posix_t"}},
-                    {S3_HELPER_NAME, {"s3_helper_threads_number", "s3_t"}},
-                    {SWIFT_HELPER_NAME,
-                        {"swift_helper_threads_number", "swift_t"}},
-                    {GLUSTERFS_HELPER_NAME,
-                        {"glusterfs_helper_threads_number",
-                            "gluster_t"}},
-                    {NULL_DEVICE_HELPER_NAME,
-                        {"nulldevice_helper_threads_number",
-                            "nulldev_t"}}})) {
-            auto threads = std::stoul(args[entry.second.first].toStdString());
-            services.emplace(entry.first, std::make_unique<HelperIOService>());
-            auto &service = services[entry.first]->service;
-            auto &workers = services[entry.first]->workers;
-            for (std::size_t i = 0; i < threads; ++i) {
-                auto t = std::thread([&, i]() {
-                    folly::setThreadName(
-                        fmt::format("{}-{}", entry.second.second, i));
-                    service.run();
-                });
-
-                setCPUAffinity(t);
-
-                workers.push_back(std::move(t));
-            }
+        for (const auto &entry : std::unordered_map<folly::fbstring,
+                 std::pair<folly::fbstring, folly::fbstring>>(
+                 {{CEPH_HELPER_NAME, {"ceph_helper_threads_number", "ceph_t"}},
+                     {CEPHRADOS_HELPER_NAME,
+                         {"cephrados_helper_threads_number", "crados_t"}},
+                     {POSIX_HELPER_NAME,
+                         {"posix_helper_threads_number", "posix_t"}},
+                     {S3_HELPER_NAME, {"s3_helper_threads_number", "s3_t"}},
+                     {SWIFT_HELPER_NAME,
+                         {"swift_helper_threads_number", "swift_t"}},
+                     {GLUSTERFS_HELPER_NAME,
+                         {"glusterfs_helper_threads_number", "gluster_t"}},
+                     {WEBDAV_HELPER_NAME,
+                         {"webdav_helper_threads_number", "webdav_t"}},
+                     {XROOTD_HELPER_NAME,
+                         {"xrootd_helper_threads_number", "xrootd_t"}},
+                     {NFS_HELPER_NAME,
+                         {"nfs_helper_threads_number", "nfs_t"}},
+                     {NULL_DEVICE_HELPER_NAME,
+                         {"nulldevice_helper_threads_number", "nulldev_t"}}})) {
+            auto threadNumber =
+                std::stoul(args[entry.second.first].toStdString());
+            executors.emplace(entry.first,
+                std::make_shared<folly::IOThreadPoolExecutor>(threadNumber,
+                    std::make_shared<StorageWorkerFactory>(
+                        entry.second.second)));
         }
 
-        webDAVExecutor = std::make_shared<folly::IOThreadPoolExecutor>(
-            std::stoul(args["webdav_helper_threads_number"].toStdString()),
-            std::make_shared<StorageWorkerFactory>("webdav_t"));
-
-        xrootdExecutor = std::make_shared<folly::IOThreadPoolExecutor>(
-            std::stoul(args["xrootd_helper_threads_number"].toStdString()),
-            std::make_shared<StorageWorkerFactory>("xrootd_t"));
-
         SHCreator = std::make_unique<one::helpers::StorageHelperCreator>(
-            services[CEPH_HELPER_NAME]->service,
-            services[CEPHRADOS_HELPER_NAME]->service,
-            services[POSIX_HELPER_NAME]->service,
-            services[S3_HELPER_NAME]->service,
-            services[SWIFT_HELPER_NAME]->service,
-            services[GLUSTERFS_HELPER_NAME]->service, webDAVExecutor,
-            xrootdExecutor, services[NULL_DEVICE_HELPER_NAME]->service,
+            executors[CEPH_HELPER_NAME], executors[CEPHRADOS_HELPER_NAME],
+            executors[POSIX_HELPER_NAME], executors[S3_HELPER_NAME],
+            executors[SWIFT_HELPER_NAME], executors[GLUSTERFS_HELPER_NAME],
+            executors[WEBDAV_HELPER_NAME], executors[XROOTD_HELPER_NAME],
+            executors[NFS_HELPER_NAME], executors[NULL_DEVICE_HELPER_NAME],
             std::stoul(args["buffer_scheduler_threads_number"].toStdString()),
             buffering::BufferLimits {
                 std::stoul(args["read_buffer_min_size"].toStdString()),
@@ -165,21 +95,15 @@ struct HelpersNIF {
 
     ~HelpersNIF()
     {
-        for (auto &service : services) {
-            service.second->service.stop();
-            for (auto &worker : service.second->workers) {
-                worker.join();
-            }
+        for (auto &executor : executors) {
+            executor.second->stop();
         }
-        webDAVExecutor->stop();
-        xrootdExecutor->stop();
     }
 
     bool bufferingEnabled = false;
-    std::unordered_map<folly::fbstring, std::unique_ptr<HelperIOService>>
-        services;
-    std::shared_ptr<folly::IOThreadPoolExecutor> webDAVExecutor;
-    std::shared_ptr<folly::IOThreadPoolExecutor> xrootdExecutor;
+    std::unordered_map<folly::fbstring,
+        std::shared_ptr<folly::IOThreadPoolExecutor>>
+        executors;
     std::unique_ptr<one::helpers::StorageHelperCreator> SHCreator;
 };
 
@@ -479,16 +403,44 @@ void handle_value(const NifCTX &ctx, folly::Unit) { ctx.send(ok); }
  */
 template <class T> void handle_result(NifCTX ctx, folly::Future<T> future)
 {
-    future.then([ctx](T &&value) { handle_value(ctx, std::move(value)); })
-        .onError([ctx](const std::system_error &e) {
-            auto it = error_to_atom.find(e.code());
-            nifpp::str_atom reason {e.code().message()};
-            if (it != error_to_atom.end())
-                reason = it->second;
+    std::move(future)
+        .thenValue(
+            [ctx](T &&value) { handle_value(ctx, std::forward<T>(value)); })
+        .thenError(folly::tag_t<std::system_error> {},
+            [ctx](auto &&e) {
+                auto it = error_to_atom.find(e.code());
+                nifpp::str_atom reason {e.code().message()};
+                if (it != error_to_atom.end())
+                    reason = it->second;
 
+                ctx.send(std::make_tuple(error, reason));
+            })
+        .thenError(folly::tag_t<std::exception> {}, [ctx](auto &&e) {
+            nifpp::str_atom reason {e.what()};
             ctx.send(std::make_tuple(error, reason));
+        });
+}
+
+/**
+ * Handles open file handle callback result.
+ */
+template <class T>
+void handle_result(NifCTX ctx, file_handle_ptr handle, folly::Future<T> future)
+{
+    std::move(future)
+        .thenValue([ctx, handle = std::move(handle)](T &&value) {
+            handle_value(ctx, std::forward<T>(value));
         })
-        .onError([ctx](const std::exception &e) {
+        .thenError(folly::tag_t<std::system_error> {},
+            [ctx](auto &&e) {
+                auto it = error_to_atom.find(e.code());
+                nifpp::str_atom reason {e.code().message()};
+                if (it != error_to_atom.end())
+                    reason = it->second;
+
+                ctx.send(std::make_tuple(error, reason));
+            })
+        .thenError(folly::tag_t<std::exception> {}, [ctx](auto &&e) {
             nifpp::str_atom reason {e.what()};
             ctx.send(std::make_tuple(error, reason));
         });
@@ -548,6 +500,14 @@ static void configurePerformanceMonitoring(
                 "comp.oneprovider.mod.options.nulldevice_helper_thread_count",
                 std::stoul(
                     args["nulldevice_helper_threads_number"].toStdString()));
+            ONE_METRIC_COUNTER_SET(
+                "comp.oneprovider.mod.options.xrootd_helper_thread_count",
+                std::stoul(
+                    args["xrootd_helper_threads_number"].toStdString()));
+            ONE_METRIC_COUNTER_SET(
+                "comp.oneprovider.mod.options.nfs_helper_thread_count",
+                std::stoul(
+                    args["nfs_helper_threads_number"].toStdString()));
             ONE_METRIC_COUNTER_SET("comp.oneprovider.mod.options.buffer_"
                                    "scheduler_helper_thread_count",
                 std::stoul(
@@ -732,6 +692,20 @@ ERL_NIF_TERM listxattr(NifCTX ctx, helper_ptr helper, folly::fbstring file)
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
 
+ERL_NIF_TERM flushbuffer(
+    NifCTX ctx, helper_ptr helper, folly::fbstring file, size_t size)
+{
+    handle_result(ctx, helper->flushBuffer(file, size));
+    return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
+}
+
+ERL_NIF_TERM blocksize_for_path(
+    NifCTX ctx, helper_ptr helper, folly::fbstring file)
+{
+    handle_result(ctx, helper->blockSizeForPath(file));
+    return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
+}
+
 ERL_NIF_TERM open(NifCTX ctx, helper_ptr helper, folly::fbstring file,
     folly::fbvector<nifpp::str_atom> flags)
 {
@@ -742,32 +716,40 @@ ERL_NIF_TERM open(NifCTX ctx, helper_ptr helper, folly::fbstring file,
 
 ERL_NIF_TERM read(NifCTX ctx, file_handle_ptr handle, off_t offset, size_t size)
 {
-    handle_result(ctx, handle->read(offset, size));
+    handle_result(ctx, handle, handle->read(offset, size));
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
 
 ERL_NIF_TERM write(NifCTX ctx, file_handle_ptr handle, const off_t offset,
-    folly::IOBufQueue buf)
+    std::pair<const uint8_t *, size_t> data)
 {
-    handle_result(ctx, handle->write(offset, std::move(buf), {}));
+    folly::IOBufQueue buf {folly::IOBufQueue::cacheChainLength()};
+
+    auto helperBlockSize = handle->helper()->blockSize();
+    auto bufferBlockSize =
+        (helperBlockSize != 0) ? helperBlockSize : (1U << 31);
+
+    buf.wrapBuffer(data.first, data.second, bufferBlockSize);
+
+    handle_result(ctx, handle, handle->write(offset, std::move(buf), {}));
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
 
 ERL_NIF_TERM release(NifCTX ctx, file_handle_ptr handle)
 {
-    handle_result(ctx, handle->release());
+    handle_result(ctx, handle, handle->release());
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
 
 ERL_NIF_TERM flush(NifCTX ctx, file_handle_ptr handle)
 {
-    handle_result(ctx, handle->flush());
+    handle_result(ctx, handle, handle->flush());
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
 
 ERL_NIF_TERM fsync(NifCTX ctx, file_handle_ptr handle, const int isdatasync)
 {
-    handle_result(ctx, handle->fsync(isdatasync));
+    handle_result(ctx, handle, handle->fsync(isdatasync));
     return nifpp::make(ctx.env, std::make_tuple(ok, ctx.reqId));
 }
 
@@ -928,6 +910,18 @@ static ERL_NIF_TERM sh_listxattr(
     return wrap(listxattr, env, argv);
 }
 
+static ERL_NIF_TERM sh_flushbuffer(
+    ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+{
+    return wrap(flushbuffer, env, argv);
+}
+
+static ERL_NIF_TERM sh_blocksize_for_path(
+    ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+{
+    return wrap(blocksize_for_path, env, argv);
+}
+
 static ERL_NIF_TERM sh_open(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
     return wrap(open, env, argv);
@@ -968,22 +962,40 @@ static ERL_NIF_TERM sh_fsync(
     return wrap(fsync, env, argv);
 }
 
-static ErlNifFunc nif_funcs[] = {{"get_handle", 2, get_handle},
-    {"start_monitoring", 0, start_monitoring},
-    {"stop_monitoring", 0, stop_monitoring},
-    {"refresh_params", 2, sh_refresh_params},
-    {"refresh_helper_params", 2, sh_refresh_helper_params},
-    {"getattr", 2, sh_getattr}, {"access", 3, sh_access},
-    {"readdir", 4, sh_readdir}, {"listobjects", 5, sh_listobjects},
-    {"mknod", 5, sh_mknod}, {"mkdir", 3, sh_mkdir},
-    {"unlink", 3, sh_unlink}, {"rmdir", 2, sh_rmdir},
-    {"symlink", 3, sh_symlink}, {"rename", 3, sh_rename}, {"link", 3, sh_link},
-    {"chmod", 3, sh_chmod}, {"chown", 4, sh_chown},
-    {"truncate", 4, sh_truncate}, {"setxattr", 6, sh_setxattr},
-    {"getxattr", 3, sh_getxattr}, {"removexattr", 3, sh_removexattr},
-    {"listxattr", 2, sh_listxattr}, {"open", 3, sh_open}, {"read", 3, sh_read},
-    {"write", 3, sh_write}, {"release", 1, sh_release}, {"flush", 1, sh_flush},
-    {"fsync", 2, sh_fsync}};
+static ErlNifFunc nif_funcs[] = {
+    {"get_handle", 2, get_handle, ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"start_monitoring", 0, start_monitoring, ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"stop_monitoring", 0, stop_monitoring, ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"refresh_params", 2, sh_refresh_params, ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"refresh_helper_params", 2, sh_refresh_helper_params,
+        ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"getattr", 2, sh_getattr, ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"access", 3, sh_access, ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"readdir", 4, sh_readdir, ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"listobjects", 5, sh_listobjects, ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"mknod", 5, sh_mknod, ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"mkdir", 3, sh_mkdir, ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"unlink", 3, sh_unlink, ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"rmdir", 2, sh_rmdir, ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"symlink", 3, sh_symlink, ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"rename", 3, sh_rename, ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"link", 3, sh_link, ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"chmod", 3, sh_chmod, ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"chown", 4, sh_chown, ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"truncate", 4, sh_truncate, ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"setxattr", 6, sh_setxattr, ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"getxattr", 3, sh_getxattr, ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"removexattr", 3, sh_removexattr, ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"listxattr", 2, sh_listxattr, ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"open", 3, sh_open, ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"read", 3, sh_read, ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"write", 3, sh_write, ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"release", 1, sh_release, ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"flush", 1, sh_flush, ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"fsync", 2, sh_fsync, ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"flushbuffer", 3, sh_flushbuffer, ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"blocksize_for_path", 2, sh_blocksize_for_path,
+        ERL_NIF_DIRTY_JOB_IO_BOUND}};
 
 ERL_NIF_INIT(helpers_nif, nif_funcs, load, NULL, NULL, NULL);
 

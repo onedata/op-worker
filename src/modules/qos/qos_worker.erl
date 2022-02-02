@@ -18,7 +18,12 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([init_qos_cache_for_space/1, init_retry_failed_files/0]).
+-export([
+    init_qos_cache_for_space/1,
+    init_retry_failed_files/0,
+    init_traverse_pools/0,
+    init_traverse_pool/0
+]).
 
 %% worker_plugin_behaviour callbacks
 -export([init/1, handle/1, cleanup/0]).
@@ -29,7 +34,7 @@
 -define(RETRY_FAILED_FILES, retry_failed_files).
 
 -define(RETRY_FAILED_FILES_INTERVAL_SECONDS,
-    application:get_env(?APP_NAME, qos_retry_failed_files_interval_seconds, 300)). % 5 minutes
+    op_worker:get_env(qos_retry_failed_files_interval_seconds, 300)). % 5 minutes
 
 %%%===================================================================
 %%% worker_plugin_behaviour callbacks
@@ -43,13 +48,9 @@
 -spec init(Args :: term()) -> Result when
     Result :: {ok, State :: worker_host:plugin_state()} | {error, Reason :: term()}.
 init(_Args) ->
-    try
-        qos_traverse:init_pool()
-    catch
-        throw:{error, already_exists} -> ok
-    end,
     qos_bounded_cache:init_group(),
     qos_bounded_cache:init_qos_cache_for_all_spaces(),
+    % QoS traverse pools are initialized after successful zone connection
     {ok, #{}}.
 
 
@@ -122,3 +123,18 @@ init_retry_failed_files() ->
     erlang:send_after(timer:seconds(?RETRY_FAILED_FILES_INTERVAL_SECONDS),
         ?MODULE, {sync_timer, ?RETRY_FAILED_FILES}),
     ok.
+
+
+-spec init_traverse_pools() -> ok.
+init_traverse_pools() ->
+    {_, []} = utils:rpc_multicall(consistent_hashing:get_all_nodes(), ?MODULE, init_traverse_pool, []),
+    ok.
+
+
+-spec init_traverse_pool() -> ok.
+init_traverse_pool() ->
+    try
+        qos_traverse:init_pool()
+    catch
+        throw:{error, already_exists} -> ok
+    end.

@@ -23,12 +23,14 @@
 -include_lib("ctool/include/errors.hrl").
 
 -export([supervisor_flags/0, supervisor_children_spec/0]).
--export([init_paths_caches/1]).
+-export([init_effective_caches/1]).
 -export([init/1, handle/1, cleanup/0]).
 -export([init_counters/0, init_report/0]).
 
 % exported for RPC
--export([schedule_init_paths_caches/1]).
+-export([
+    schedule_init_effective_caches/1
+]).
 
 %%%===================================================================
 %%% Types
@@ -45,34 +47,37 @@
 -type response() :: fuse_response() | provider_response() | proxyio_response().
 
 -type file() :: file_meta:entry(). %% Type alias for better code organization
--type ext_file() :: file_meta:entry() | {guid, file_guid()}.
 -type open_flag() :: helpers:open_flag().
 -type posix_permissions() :: file_meta:posix_permissions().
 -type file_guid() :: file_id:file_guid().
--type file_guid_or_path() :: {guid, file_guid()} | {path, file_meta:path()}.
 
--export_type([request/0, response/0, file/0, ext_file/0, open_flag/0, posix_permissions/0,
-    file_guid/0, file_guid_or_path/0, fuse_response/0, provider_response/0, proxyio_response/0, fuse_response_type/0]).
+-export_type([
+    request/0, response/0, file/0, open_flag/0, posix_permissions/0,
+    file_guid/0, fuse_response/0, provider_response/0, proxyio_response/0, fuse_response_type/0
+]).
 
 % requests
 -define(INVALIDATE_PERMISSIONS_CACHE, invalidate_permissions_cache).
 -define(PERIODICAL_SPACES_AUTOCLEANING_CHECK, periodical_spaces_autocleaning_check).
+-define(TERMINATE_STALE_ATM_WORKFLOW_EXECUTIONS, terminate_stale_atm_workflow_executions).
 -define(RERUN_TRANSFERS, rerun_transfers).
 -define(RESTART_AUTOCLEANING_RUNS, restart_autocleaning_runs).
--define(INIT_PATHS_CACHES(Space), {init_paths_caches, Space}).
+-define(INIT_EFFECTIVE_CACHES(Space), {init_effective_caches, Space}).
 
 -define(SHOULD_PERFORM_PERIODICAL_SPACES_AUTOCLEANING_CHECK,
-    application:get_env(?APP_NAME, autocleaning_periodical_spaces_check_enabled, true)).
+    op_worker:get_env(autocleaning_periodical_spaces_check_enabled, true)).
 
 % delays and intervals
 -define(INVALIDATE_PERMISSIONS_CACHE_INTERVAL,
-    application:get_env(?APP_NAME, invalidate_permissions_cache_interval, timer:seconds(30))).
+    op_worker:get_env(invalidate_permissions_cache_interval, timer:seconds(30))).
 -define(AUTOCLEANING_PERIODICAL_SPACES_CHECK_INTERVAL,
-    application:get_env(?APP_NAME, autocleaning_periodical_spaces_check_interval, timer:minutes(1))).
+    op_worker:get_env(autocleaning_periodical_spaces_check_interval, timer:minutes(1))).
+-define(TERMINATE_STALE_ATM_WORKFLOW_EXECUTIONS_DELAY,
+    op_worker:get_env(terminate_stale_atm_workflow_executions_delay, 10000)).
 -define(RERUN_TRANSFERS_DELAY,
-    application:get_env(?APP_NAME, rerun_transfers_delay, 10000)).
+    op_worker:get_env(rerun_transfers_delay, 10000)).
 -define(RESTART_AUTOCLEANING_RUNS_DELAY,
-    application:get_env(?APP_NAME, restart_autocleaning_runs_delay, 10000)).
+    op_worker:get_env(restart_autocleaning_runs_delay, 10000)).
 
 % exometer macros
 -define(EXOMETER_NAME(Param), ?exometer_name(?MODULE, count, Param)).
@@ -87,21 +92,24 @@
 -define(EXOMETER_DEFAULT_DATA_POINTS_NUMBER, 10000).
 
 % This macro is used to disable automatic rerun of transfers in tests
--define(SHOULD_RERUN_TRANSFERS, application:get_env(?APP_NAME, rerun_transfers, true)).
+-define(SHOULD_RERUN_TRANSFERS, op_worker:get_env(rerun_transfers, true)).
 
 % This macro is used to disable automatic restart of autocleaning runs in tests
--define(SHOULD_RESTART_AUTOCLEANING_RUNS, application:get_env(?APP_NAME, autocleaning_restart_runs, true)).
+-define(SHOULD_RESTART_AUTOCLEANING_RUNS, op_worker:get_env(autocleaning_restart_runs, true)).
 
--define(AVAILABLE_SHARE_OPERATIONS, [
+-define(OPERATIONS_AVAILABLE_IN_SHARE_MODE, [
+    % Checking perms for operations other than 'read' should result in immediate ?EACCES
     check_perms,
     get_parent,
     % TODO VFS-6057 resolve share path up to share not user root dir
     %%    get_file_path,
+    resolve_symlink,
 
     list_xattr,
     get_xattr,
     get_metadata,
 
+    % Opening file is available but only in 'read' mode
     open_file,
     open_file_with_extended_info,
     synchronize_block,
@@ -109,12 +117,22 @@
     fsync,
     release,
 
+    read_symlink,
+
     get_file_attr,
     get_file_details,
     get_file_children,
     get_child_attr,
     get_file_children_attrs,
     get_file_children_details
+]).
+-define(AVAILABLE_OPERATIONS_IN_OPEN_HANDLE_SHARE_MODE, [
+    % Necessary operations for direct-io to work (contains private information
+    % like storage id, etc.)
+    get_file_location,
+    get_helper_params
+
+    | ?OPERATIONS_AVAILABLE_IN_SHARE_MODE
 ]).
 
 %%%===================================================================
@@ -140,20 +158,19 @@ supervisor_children_spec() ->
     [
         auth_cache:spec(),
         lfm_handles_monitor:spec(),
-        file_upload_manager:spec(),
         transfer_onf_stats_aggregator:spec()
     ].
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Initializes paths caches on all nodes.
+%% Initializes effective caches on all nodes.
 %% @end
 %%--------------------------------------------------------------------
--spec init_paths_caches(od_space:id() | all) -> ok.
-init_paths_caches(Space) ->
-    lists:foreach(fun(Node) ->
-        rpc:call(Node, ?MODULE, schedule_init_paths_caches, [Space])
-    end, consistent_hashing:get_all_nodes()).
+-spec init_effective_caches(od_space:id() | all) -> ok.
+init_effective_caches(Space) ->
+    Nodes = consistent_hashing:get_all_nodes(),
+    utils:rpc_multicall(Nodes, ?MODULE, schedule_init_effective_caches, [Space]),
+    ok.
 
 %%%===================================================================
 %%% worker_plugin_behaviour callbacks
@@ -167,18 +184,21 @@ init_paths_caches(Space) ->
 -spec init(Args :: term()) -> Result when
     Result :: {ok, State :: worker_host:plugin_state()} | {error, Reason :: term()}.
 init(_Args) ->
-    paths_cache:init_group(),
-    schedule_init_paths_caches(all),
-
+    init_effective_caches(),
     transfer:init(),
+    file_upload_manager_watcher_service:setup_internal_service(),
+    atm_workflow_execution_api:init_engine(),
     replica_deletion_master:init_workers_pool(),
     file_registration:init_pool(),
     autocleaning_view_traverse:init_pool(),
     tree_deletion_traverse:init_pool(),
+    bulk_download_traverse:init_pool(),
     clproto_serializer:load_msg_defs(),
+    archivisation_traverse:init_pool(),
 
     schedule_invalidate_permissions_cache(),
     schedule_rerun_transfers(),
+    schedule_stale_atm_workflow_executions_termination(),
     schedule_restart_autocleaning_runs(),
     schedule_periodical_spaces_autocleaning_check(),
 
@@ -220,6 +240,10 @@ handle(?INVALIDATE_PERMISSIONS_CACHE) ->
     ?debug("Invalidating permissions cache"),
     invalidate_permissions_cache(),
     schedule_invalidate_permissions_cache();
+handle(?TERMINATE_STALE_ATM_WORKFLOW_EXECUTIONS) ->
+    ?debug("Terminating stale atm workflow executions"),
+    terminate_stale_atm_workflow_executions(),
+    ok;
 handle(?RERUN_TRANSFERS) ->
     ?debug("Rerunning unfinished transfers"),
     rerun_transfers(),
@@ -253,8 +277,10 @@ handle({proxyio_request, SessId, ProxyIORequest}) ->
     {ok, Response};
 handle({bounded_cache_timer, Msg}) ->
     bounded_cache:check_cache_size(Msg);
-handle(?INIT_PATHS_CACHES(Space)) ->
-    paths_cache:init_caches(Space);
+handle(?INIT_EFFECTIVE_CACHES(Space)) ->
+    paths_cache:init(Space),
+    dataset_eff_cache:init(Space),
+    file_meta_links_sync_status_cache:init(Space);
 handle(_Request) ->
     ?log_bad_request(_Request),
     {error, wrong_request}.
@@ -273,7 +299,9 @@ cleanup() ->
     file_registration:stop_pool(),
     replica_deletion_master:stop_workers_pool(),
     tree_deletion_traverse:stop_pool(),
+    bulk_download_traverse:stop_pool(),
     replica_synchronizer:terminate_all(),
+    archivisation_traverse:stop_pool(),
     ok.
 
 %%%===================================================================
@@ -316,6 +344,15 @@ init_report() ->
 %%% Internal functions
 %%%===================================================================
 
+-spec init_effective_caches() -> ok.
+init_effective_caches() ->
+    % TODO VFS-7412 refactor effective_value cache
+    paths_cache:init_group(),
+    dataset_eff_cache:init_group(),
+    file_meta_links_sync_status_cache:init_group(),
+    schedule_init_effective_caches(all).
+
+
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -337,8 +374,8 @@ handle_request_and_process_response(SessId, Request) ->
                 handle_request_remotely(UserCtx, Request, Providers)
         end
     catch
-        Type2:Error2 ->
-            fslogic_errors:handle_error(Request, Type2, Error2)
+        Type2:Error2:Stacktrace ->
+            fslogic_errors:handle_error(Request, Type2, Error2, Stacktrace)
     end.
 
 %%--------------------------------------------------------------------
@@ -359,28 +396,55 @@ handle_request_and_process_response_locally(UserCtx0, Request, FilePartialCtx) -
     end,
     ok = fslogic_log:report_file_access_operation(Request, user_ctx:get_user_id(UserCtx0), FileCtx1),
     try
-        UserCtx1 = case ShareId of
-            undefined ->
+        UserCtx1 = case {user_ctx:is_in_open_handle_mode(UserCtx0), ShareId} of
+            {false, undefined} ->
                 UserCtx0;
-            _ ->
-                Operation = get_operation(Request),
-                case lists:member(Operation, ?AVAILABLE_SHARE_OPERATIONS) of
+            {IsInOpenHandleMode, _} ->
+                case is_operation_available_in_share_mode(Request, IsInOpenHandleMode) of
                     true -> ok;
-                    false -> throw(?EACCES)
+                    false -> throw(?EPERM)
                 end,
-                % Operations concerning shares must be carried with GUEST auth
-                case user_ctx:is_guest(UserCtx0) of
-                    true -> UserCtx0;
-                    false -> user_ctx:new(?GUEST_SESS_ID)
+                case IsInOpenHandleMode of
+                    true ->
+                        UserCtx0;
+                    false ->
+                        % Operations concerning shares must be carried with GUEST auth
+                        case user_ctx:is_guest(UserCtx0) of
+                            true -> UserCtx0;
+                            false -> user_ctx:new(?GUEST_SESS_ID)
+                        end
                 end
         end,
         handle_request_locally(UserCtx1, Request, FileCtx1)
     catch
-        Type:Error ->
-            fslogic_errors:handle_error(Request, Type, Error)
+        Type:Error:Stacktrace ->
+            fslogic_errors:handle_error(Request, Type, Error, Stacktrace)
     end.
 
+
 %% @private
+-spec is_operation_available_in_share_mode(request(), IsInOpenHandleMode :: boolean()) ->
+    boolean().
+is_operation_available_in_share_mode(#fuse_request{fuse_request = #file_request{
+    file_request = #open_file{flag = Flag}
+}}, _) ->
+    Flag == read;
+is_operation_available_in_share_mode(#fuse_request{fuse_request = #file_request{
+    file_request = #open_file_with_extended_info{flag = Flag}
+}}, _) ->
+    Flag == read;
+is_operation_available_in_share_mode(#provider_request{
+    provider_request = #check_perms{flag = Flag}
+}, _) ->
+    Flag == read;
+is_operation_available_in_share_mode(Request, true) ->
+    lists:member(get_operation(Request), ?AVAILABLE_OPERATIONS_IN_OPEN_HANDLE_SHARE_MODE);
+is_operation_available_in_share_mode(Request, false) ->
+    lists:member(get_operation(Request), ?OPERATIONS_AVAILABLE_IN_SHARE_MODE).
+
+
+%% @private
+-spec get_operation(request()) -> atom().
 get_operation(#fuse_request{fuse_request = #file_request{file_request = Req}}) ->
     element(1, Req);
 get_operation(#fuse_request{fuse_request = Req}) ->
@@ -389,6 +453,7 @@ get_operation(#provider_request{provider_request = Req}) ->
     element(1, Req);
 get_operation(#proxyio_request{proxyio_request = Req}) ->
     element(1, Req).
+
 
 %%--------------------------------------------------------------------
 %% @private
@@ -441,6 +506,15 @@ handle_fuse_request(UserCtx, #resolve_guid{}, FileCtx) ->
     guid_req:resolve_guid(UserCtx, FileCtx);
 handle_fuse_request(UserCtx, #resolve_guid_by_canonical_path{}, FileCtx) ->
     guid_req:resolve_guid(UserCtx, FileCtx);
+handle_fuse_request(UserCtx, #resolve_guid_by_relative_path{
+    path = Path
+}, RelRootCtx) ->
+    guid_req:resolve_guid_by_relative_path(UserCtx, RelRootCtx, Path);
+handle_fuse_request(UserCtx, #ensure_dir{
+    path = Path,
+    mode = Mode
+}, RelRootCtx) ->
+    guid_req:ensure_dir(UserCtx, RelRootCtx, Path, Mode);
 handle_fuse_request(UserCtx, #get_helper_params{
     storage_id = StorageId,
     space_id = SpaceId,
@@ -479,13 +553,16 @@ handle_fuse_request(UserCtx, #get_fs_stats{}, FileCtx) ->
 %%--------------------------------------------------------------------
 -spec handle_file_request(user_ctx:ctx(), file_request_type(), file_ctx:ctx()) ->
     fuse_response().
-handle_file_request(UserCtx, #get_file_attr{include_replication_status = IncludeReplicationStatus}, FileCtx) ->
-    attr_req:get_file_attr(UserCtx, FileCtx, IncludeReplicationStatus);
+handle_file_request(UserCtx, #get_file_attr{include_replication_status = IncludeReplicationStatus,
+    include_link_count = IncludeLinkCount}, FileCtx) ->
+    attr_req:get_file_attr(UserCtx, FileCtx, IncludeReplicationStatus, IncludeLinkCount);
+handle_file_request(UserCtx, #get_file_references{}, FileCtx) ->
+    attr_req:get_file_references(UserCtx, FileCtx);
 handle_file_request(UserCtx, #get_file_details{}, FileCtx) ->
     attr_req:get_file_details(UserCtx, FileCtx);
 handle_file_request(UserCtx, #get_child_attr{name = Name,
-    include_replication_status = IncludeReplicationStatus}, ParentFileCtx) ->
-    attr_req:get_child_attr(UserCtx, ParentFileCtx, Name, IncludeReplicationStatus);
+    include_replication_status = IncludeReplicationStatus, include_link_count = IncludeLinkCount}, ParentFileCtx) ->
+    attr_req:get_child_attr(UserCtx, ParentFileCtx, Name, IncludeReplicationStatus, IncludeLinkCount);
 handle_file_request(UserCtx, #change_mode{mode = Mode}, FileCtx) ->
     attr_req:chmod(UserCtx, FileCtx, Mode);
 handle_file_request(UserCtx, #update_times{atime = ATime, mtime = MTime, ctime = CTime}, FileCtx) ->
@@ -509,14 +586,14 @@ handle_file_request(UserCtx, #get_file_children{
         last_name => StartId
     },
     dir_req:get_children(UserCtx, FileCtx, ListOpts);
-handle_file_request(UserCtx, #get_file_children_attrs{offset = Offset,
-    size = Size, index_token = Token, include_replication_status = IncludeReplicationStatus}, FileCtx) ->
+handle_file_request(UserCtx, #get_file_children_attrs{offset = Offset, size = Size, index_token = Token,
+    include_replication_status = IncludeReplicationStatus, include_link_count = IncludeLinkCount}, FileCtx) ->
     ListOpts = #{
         offset => Offset,
         size => Size,
         token => Token
     },
-    dir_req:get_children_attrs(UserCtx, FileCtx, ListOpts, IncludeReplicationStatus);
+    dir_req:get_children_attrs(UserCtx, FileCtx, ListOpts, IncludeReplicationStatus, IncludeLinkCount);
 handle_file_request(UserCtx, #get_file_children_details{
     offset = Offset,
     size = Size,
@@ -540,6 +617,11 @@ handle_file_request(UserCtx, #storage_file_created{}, FileCtx) ->
     file_req:storage_file_created(UserCtx, FileCtx);
 handle_file_request(UserCtx, #make_file{name = Name, mode = Mode}, ParentFileCtx) ->
     file_req:make_file(UserCtx, ParentFileCtx, Name, Mode);
+handle_file_request(UserCtx, #make_link{target_parent_guid = TargetParentGuid, target_name = Name}, TargetFileCtx) ->
+    TargetParentFileCtx = file_ctx:new_by_guid(TargetParentGuid),
+    file_req:make_link(UserCtx, TargetFileCtx, TargetParentFileCtx, Name);
+handle_file_request(UserCtx, #make_symlink{target_name = Name, link = Link}, ParentFileCtx) ->
+    file_req:make_symlink(UserCtx, ParentFileCtx, Name, Link);
 handle_file_request(UserCtx, #open_file{flag = Flag}, FileCtx) ->
     file_req:open_file(UserCtx, FileCtx, Flag);
 handle_file_request(UserCtx, #open_file_with_extended_info{flag = Flag}, FileCtx) ->
@@ -548,6 +630,10 @@ handle_file_request(UserCtx, #release{handle_id = HandleId}, FileCtx) ->
     file_req:release(UserCtx, FileCtx, HandleId);
 handle_file_request(UserCtx, #get_file_location{}, FileCtx) ->
     file_req:get_file_location(UserCtx, FileCtx);
+handle_file_request(UserCtx, #read_symlink{}, FileCtx) ->
+    symlink_req:read(UserCtx, FileCtx);
+handle_file_request(UserCtx, #resolve_symlink{}, FileCtx) ->
+    symlink_req:resolve(UserCtx, FileCtx);
 handle_file_request(UserCtx, #truncate{size = Size}, FileCtx) ->
     truncate_req:truncate(UserCtx, FileCtx, Size);
 handle_file_request(UserCtx, #synchronize_block{block = Block, prefetch = Prefetch,
@@ -593,29 +679,6 @@ handle_file_request(UserCtx, #fsync{
     provider_response().
 handle_provider_request(UserCtx, #get_file_distribution{}, FileCtx) ->
     sync_req:get_file_distribution(UserCtx, FileCtx);
-handle_provider_request(UserCtx, #schedule_file_transfer{
-    replicating_provider_id = ReplicatingProviderId,
-    evicting_provider_id = EvictingProviderId,
-    callback = Callback
-}, FileCtx) ->
-    transfer_req:schedule_file_transfer(
-        UserCtx, FileCtx,
-        ReplicatingProviderId, EvictingProviderId,
-        Callback
-    );
-handle_provider_request(UserCtx, #schedule_view_transfer{
-    replicating_provider_id = ReplicatingProviderId,
-    evicting_provider_id = EvictingProviderId,
-    view_name = ViewName,
-    query_view_params = QueryViewParams,
-    callback = Callback
-}, FileCtx) ->
-    transfer_req:schedule_view_transfer(
-        UserCtx, FileCtx,
-        ReplicatingProviderId, EvictingProviderId,
-        ViewName, QueryViewParams,
-        Callback
-    );
 handle_provider_request(UserCtx, #schedule_file_replication{
     block = _Block, target_provider_id = TargetProviderId, callback = Callback,
     view_name = ViewName, query_view_params = QueryViewParams
@@ -670,19 +733,8 @@ handle_provider_request(UserCtx, #check_perms{flag = Flag}, FileCtx) ->
 handle_provider_request(UserCtx, #create_share{name = Name, description = Description}, FileCtx) ->
     share_req:create_share(UserCtx, FileCtx, Name, Description);
 handle_provider_request(UserCtx, #remove_share{share_id = ShareId}, FileCtx) ->
-    share_req:remove_share(UserCtx, FileCtx, ShareId);
-handle_provider_request(UserCtx, #add_qos_entry{
-    expression = Expression, replicas_num = ReplicasNum, entry_type = EntryType
-}, FileCtx) ->
-    qos_req:add_qos_entry(UserCtx, FileCtx, Expression, ReplicasNum, EntryType);
-handle_provider_request(UserCtx, #get_effective_file_qos{}, FileCtx) ->
-    qos_req:get_effective_file_qos(UserCtx, FileCtx);
-handle_provider_request(UserCtx, #get_qos_entry{id = QosEntryId}, FileCtx) ->
-    qos_req:get_qos_entry(UserCtx, FileCtx, QosEntryId);
-handle_provider_request(UserCtx, #remove_qos_entry{id = QosEntryId}, FileCtx) ->
-    qos_req:remove_qos_entry(UserCtx, FileCtx, QosEntryId);
-handle_provider_request(UserCtx, #check_qos_status{qos_id = QosEntryId}, FileCtx) ->
-    qos_req:check_status(UserCtx, FileCtx, QosEntryId).
+    share_req:remove_share(UserCtx, FileCtx, ShareId).
+
 
 %%--------------------------------------------------------------------
 %% @private
@@ -704,6 +756,10 @@ handle_proxyio_request(UserCtx, #remote_read{offset = Offset, size = Size}, File
 schedule_invalidate_permissions_cache() ->
     schedule(?INVALIDATE_PERMISSIONS_CACHE, ?INVALIDATE_PERMISSIONS_CACHE_INTERVAL).
 
+-spec schedule_stale_atm_workflow_executions_termination() -> ok.
+schedule_stale_atm_workflow_executions_termination() ->
+    schedule(?TERMINATE_STALE_ATM_WORKFLOW_EXECUTIONS, ?TERMINATE_STALE_ATM_WORKFLOW_EXECUTIONS_DELAY).
+
 -spec schedule_rerun_transfers() -> ok.
 schedule_rerun_transfers() ->
     schedule(?RERUN_TRANSFERS, ?RERUN_TRANSFERS_DELAY).
@@ -716,8 +772,8 @@ schedule_restart_autocleaning_runs() ->
 schedule_periodical_spaces_autocleaning_check() ->
     schedule(?PERIODICAL_SPACES_AUTOCLEANING_CHECK, ?AUTOCLEANING_PERIODICAL_SPACES_CHECK_INTERVAL).
 
-schedule_init_paths_caches(Space) ->
-    schedule(?INIT_PATHS_CACHES(Space), 0).
+schedule_init_effective_caches(Space) ->
+    schedule(?INIT_EFFECTIVE_CACHES(Space), 0).
 
 -spec schedule(term(), non_neg_integer()) -> ok.
 schedule(Request, Timeout) ->
@@ -729,8 +785,8 @@ invalidate_permissions_cache() ->
     try
         permissions_cache:invalidate_on_node()
     catch
-        _:Reason ->
-            ?error_stacktrace("Failed to invalidate permissions cache due to: ~p", [Reason])
+        _:Reason:Stacktrace ->
+            ?error_stacktrace("Failed to invalidate permissions cache due to: ~p", [Reason], Stacktrace)
     end.
 
 -spec periodical_spaces_autocleaning_check() -> ok.
@@ -751,8 +807,27 @@ periodical_spaces_autocleaning_check() ->
         Error = {error, _} ->
             ?error("Unable to trigger spaces auto-cleaning check due to: ~p", [Error])
     catch
-        Error2:Reason ->
-            ?error_stacktrace("Unable to trigger spaces auto-cleaning check due to: ~p", [{Error2, Reason}])
+        Error2:Reason:Stacktrace ->
+            ?error_stacktrace("Unable to trigger spaces auto-cleaning check due to: ~p", [{Error2, Reason}], Stacktrace)
+    end.
+
+-spec terminate_stale_atm_workflow_executions() -> ok.
+terminate_stale_atm_workflow_executions() ->
+    try provider_logic:get_spaces() of
+        {ok, SpaceIds} ->
+            lists:foreach(fun atm_workflow_execution_api:terminate_not_ended/1, SpaceIds);
+        ?ERROR_UNREGISTERED_ONEPROVIDER ->
+            schedule_stale_atm_workflow_executions_termination();
+        ?ERROR_NO_CONNECTION_TO_ONEZONE ->
+            schedule_stale_atm_workflow_executions_termination();
+        Error = {error, _} ->
+            ?error("Unable to terminate stale atm workflow executions due to: ~p", [Error])
+    catch Class:Reason:Stacktrace ->
+        ?error_stacktrace(
+            "Unable to terminate stale atm workflow executions due to: ~p",
+            [{Class, Reason}],
+            Stacktrace
+        )
     end.
 
 -spec rerun_transfers() -> ok.
@@ -772,8 +847,8 @@ rerun_transfers() ->
                 Error = {error, _} ->
                     ?error("Unable to rerun transfers due to: ~p", [Error])
             catch
-                Error2:Reason ->
-                    ?error_stacktrace("Unable to rerun transfers due to: ~p", [{Error2, Reason}])
+                Error2:Reason:Stacktrace ->
+                    ?error_stacktrace("Unable to rerun transfers due to: ~p", [{Error2, Reason}], Stacktrace)
             end;
         false ->
             ok
@@ -795,8 +870,8 @@ restart_autocleaning_runs() ->
                 Error = {error, _} ->
                     ?error("Unable to restart auto-cleaning runs due to: ~p", [Error])
             catch
-                Error2:Reason ->
-                    ?error_stacktrace("Unable to restart autocleaning-runs due to: ~p", [{Error2, Reason}])
+                Error2:Reason:Stacktrace ->
+                    ?error_stacktrace("Unable to restart autocleaning-runs due to: ~p", [{Error2, Reason}], Stacktrace)
             end;
         false ->
             ok

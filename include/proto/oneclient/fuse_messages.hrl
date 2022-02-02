@@ -15,9 +15,9 @@
 
 -include("common_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/fslogic/file_attr.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/fslogic/file_details.hrl").
--include_lib("ctool/include/posix/file_attr.hrl").
 
 -define(AUTO_HELPER_MODE, 'AUTO').
 -define(FORCE_PROXY_HELPER_MODE, 'FORCE_PROXY').
@@ -29,7 +29,11 @@
 }).
 
 -record(get_file_attr, {
-    include_replication_status :: undefined | boolean()
+    include_replication_status :: undefined | boolean(),
+    include_link_count :: undefined | boolean()
+}).
+
+-record(get_file_references, {
 }).
 
 -record(get_file_details, {
@@ -37,7 +41,8 @@
 
 -record(get_child_attr, {
     name :: file_meta:name(),
-    include_replication_status :: undefined | boolean()
+    include_replication_status :: undefined | boolean(),
+    include_link_count :: undefined | boolean()
 }).
 
 -record(get_file_children, {
@@ -51,7 +56,8 @@
     offset :: file_meta:list_offset(),
     size :: file_meta:size(),
     index_token :: undefined | binary(),
-    include_replication_status :: undefined | boolean()
+    include_replication_status :: undefined | boolean(),
+    include_link_count :: undefined | boolean()
 }).
 
 -record(get_file_children_details, {
@@ -99,6 +105,16 @@
     mode = ?DEFAULT_FILE_PERMS :: file_meta:posix_permissions()
 }).
 
+-record(make_link, {
+    target_parent_guid :: fslogic_worker:file_guid(),
+    target_name :: file_meta:name()
+}).
+
+-record(make_symlink, {
+    target_name :: file_meta:name(),
+    link :: file_meta_symlinks:symlink()
+}).
+
 -record(open_file, {
     flag :: fslogic_worker:open_flag()
 }).
@@ -109,6 +125,13 @@
 
 -record(get_file_location, {
 }).
+
+% Operation that returns symlink value as it is
+-record(read_symlink, {
+}).
+
+% Operation that returns target file (file pointed by path stored in symlink) guid
+-record(resolve_symlink, {}).
 
 -record(release, {
     handle_id :: binary()
@@ -165,13 +188,16 @@
 }).
 
 -type file_request_type() ::
-    #get_file_attr{} | #get_file_children{} | #get_file_children_attrs{} |
+    #get_file_attr{} | #get_file_references{} |
+    #get_file_children{} | #get_file_children_attrs{} |
     #get_file_details{} | #get_file_children_details{} |
     #create_dir{} | #delete_file{} | #move_to_trash{} |
-    #update_times{} | #change_mode{} | #rename{} | #create_file{} | #make_file{} |
-    #open_file{} | #get_file_location{} | #release{} | #truncate{} |
-    #synchronize_block{} | #synchronize_block_and_compute_checksum{} |
-    #block_synchronization_request{} |
+    #update_times{} | #change_mode{} |
+    #rename{} | #create_file{} | #make_file{} |
+    #make_link{} | #make_symlink{} | #open_file{} | #get_file_location{} |
+    #read_symlink{} | #resolve_symlink{} |
+    #release{} | #truncate{} | #synchronize_block{} |
+    #synchronize_block_and_compute_checksum{} | #block_synchronization_request{} |
     #get_child_attr{} | #get_xattr{} | #set_xattr{} | #remove_xattr{} |
     #list_xattr{} | #fsync{} |
     #storage_file_created{} | #open_file_with_extended_info{}.
@@ -187,6 +213,19 @@
 
 -record(resolve_guid_by_canonical_path, {
     path :: file_meta:path()
+}).
+
+-record(resolve_guid_by_relative_path, {
+    % file, relative to which the path remainder will be resolved
+    root_file :: fslogic_worker:file_guid(),
+    path :: file_meta:path()
+}).
+
+-record(ensure_dir, {
+    % file, relative to which the path remainder will be resolved
+    root_file :: fslogic_worker:file_guid(),
+    path :: file_meta:path(),
+    mode :: file_meta:mode()
 }).
 
 -record(get_helper_params, {
@@ -212,7 +251,7 @@
 }).
 
 -type fuse_request_type() ::
-    #resolve_guid{} | #resolve_guid_by_canonical_path{} |
+    #resolve_guid{} | #resolve_guid_by_canonical_path{} | #resolve_guid_by_relative_path{} | #ensure_dir{} |
     #get_helper_params{} | #create_storage_test_file{} |
     #verify_storage_test_file{} | #file_request{} | #get_fs_stats{}.
 
@@ -275,6 +314,10 @@
     handle_id :: binary()
 }).
 
+-record(symlink, {
+    link :: file_meta_symlinks:symlink()
+}).
+
 -record(file_opened_extended, {
     handle_id :: binary(),
     provider_id,
@@ -306,12 +349,16 @@
     storage_stats :: [#storage_stats{}]
 }).
 
+-record(file_references, {
+    references :: [file_id:file_guid()]
+}).
+
 -type fuse_response_type() ::
-    #file_attr{} | #file_children{} | #file_location{} | #helper_params{} |
+    #file_attr{} | #file_references{} | #file_children{} | #file_location{} | #helper_params{} |
     #storage_test_file{} | #dir{} | #sync_response{} | #file_created{} |
     #file_opened{} | #file_renamed{} | #guid{} | #xattr_list{} | #xattr{} |
     #file_children_attrs{} | #file_location_changed{} | #file_opened_extended{} |
-    #file_details{} | #file_children_details{} | #fs_stats{} |
+    #file_details{} | #file_children_details{} | #fs_stats{} | #symlink{} |
     undefined.
 
 -record(fuse_response, {

@@ -147,15 +147,14 @@ handle_refusal(#document{
 %% Checks whether local replica of file is sufficient to support deletion.
 %% @end
 %%-------------------------------------------------------------------
--spec can_support_deletion(replica_deletion:record()) -> boolean().
+-spec can_support_deletion(replica_deletion:record()) -> {true, fslogic_blocks:blocks()} | false.
 can_support_deletion(#replica_deletion{
     file_uuid = FileUuid,
     space_id = SpaceId,
     version_vector = VV,
     requested_blocks = RequestedBlocks
 }) ->
-    FileGuid = file_id:pack_guid(FileUuid, SpaceId),
-    FileCtx = file_ctx:new_by_guid(FileGuid),
+    FileCtx = file_ctx:new_by_uuid(FileUuid, SpaceId),
     {LocalLocationDoc, _FileCtx2} = file_ctx:get_or_create_local_file_location_doc(FileCtx),
     LocalBlocks = replica_finder:get_all_blocks([LocalLocationDoc]),
     case fslogic_blocks:invalidate(RequestedBlocks, LocalBlocks) of

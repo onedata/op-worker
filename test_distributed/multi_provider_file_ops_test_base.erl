@@ -12,17 +12,18 @@
 -module(multi_provider_file_ops_test_base).
 -author("Jakub Kudzia").
 
--include("middleware/middleware.hrl").
 -include("global_definitions.hrl").
+-include("middleware/middleware.hrl").
 -include("modules/datastore/transfer.hrl").
+-include("modules/fslogic/acl.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include("proto/common/credentials.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
--include("modules/fslogic/fslogic_common.hrl").
+-include_lib("cluster_worker/include/modules/datastore/datastore_links.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
--include_lib("ctool/include/errors.hrl").
--include("modules/auth/acl.hrl").
--include_lib("cluster_worker/include/modules/datastore/datastore_links.hrl").
 
 %% API
 %% export for tests
@@ -531,14 +532,14 @@ rtransfer_blocking_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWr
     Master = self(),
     test_utils:mock_new(Workers2, [replica_synchronizer, rtransfer_config], [passthrough]),
     test_utils:mock_expect(Workers2, replica_synchronizer, synchronize,
-        fun(UserCtx, FileCtx, Block, Prefetch, TransferId, Priority) ->
+        fun(UserCtx, FileCtx, Block, Prefetch, TransferId, Priority, CallbackModule) ->
             case TransferId of
                 undefined ->
                     ok;
                 _ ->
                     Master ! transfer_started
             end,
-            meck:passthrough([UserCtx, FileCtx, Block, Prefetch, TransferId, Priority])
+            meck:passthrough([UserCtx, FileCtx, Block, Prefetch, TransferId, Priority, CallbackModule])
         end),
 
     Dir = <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>,
@@ -635,7 +636,6 @@ rtransfer_blocking_test_cleanup(Config) ->
 basic_opts_test_base(Config, User, NodesDescroption, Attempts) ->
     basic_opts_test_base(Config, User, NodesDescroption, Attempts, true).
 
-% TODO - add reading with chunks to test prefetching
 basic_opts_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten}, Attempts, CheckSequences) ->
     basic_opts_test_base(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten, 1}, Attempts, CheckSequences);
 basic_opts_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts, CheckSequences) ->
@@ -750,16 +750,21 @@ create_after_del_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWrit
     delete_test_skeleton(Config, "Standard, write 1", true, false, false, false),
     delete_test_skeleton(Config, "Standard", false, false, false, false),
 
-    delete_test_skeleton(Config, "Open and sleep, write 1", true, true, {true, 10}, false),
-    delete_test_skeleton(Config, "Open and sleep", false, true, {true, 10}, false),
+    case ?config(test_type, Config) of
+        standard ->
+            ok;
+        performance ->
+            delete_test_skeleton(Config, "Open and sleep, write 1", true, true, {true, 10}, false),
+            delete_test_skeleton(Config, "Open and sleep", false, true, {true, 10}, false),
 
-    delete_test_skeleton(Config, "Open no sleep, write 1", true, true, false, false),
-    delete_test_skeleton(Config, "Open no sleep", false, true, false, false),
+            delete_test_skeleton(Config, "Open no sleep, write 1", true, true, false, false),
+            delete_test_skeleton(Config, "Open no sleep", false, true, false, false),
 
-    delete_test_skeleton(Config, "Close after del, write 1", true, true, {true, 1}, true),
-    delete_test_skeleton(Config, "Close after del", false, true, {true, 1}, true),
+            delete_test_skeleton(Config, "Close after del, write 1", true, true, {true, 1}, true),
+            delete_test_skeleton(Config, "Close after del", false, true, {true, 1}, true),
 
-    ok.
+            ok
+    end.
 
 delete_test_skeleton(Config, Desc, WriteOn1, OpenBeforeDel, SleepAfterVerify,
     CloseAfterVerify) ->
@@ -1145,7 +1150,7 @@ distributed_delete_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWr
     ok.
 
 file_consistency_test_skeleton(Config, Worker1, Worker2, Worker3, ConfigsNum) ->
-    timer:sleep(10000), % TODO - connection must appear after mock setup
+    timer:sleep(10000), % NOTE - connection must appear after mock setup
     Attempts = 60,
     User = <<"user1">>,
 
@@ -1484,7 +1489,7 @@ mkdir_and_rmdir_loop_test_base(Config0, IterationsNum, User) ->
         MkdirAns = lfm_proxy:mkdir(Worker1, SessId(Worker1), DirPath),
         ?assertMatch({ok, _}, MkdirAns),
         {ok, Handle} = MkdirAns,
-        ?assertMatch(ok, lfm_proxy:unlink(Worker1, SessId(Worker1), {guid, Handle}))
+        ?assertMatch(ok, lfm_proxy:unlink(Worker1, SessId(Worker1), ?FILE_REF(Handle)))
     end, lists:seq(1, IterationsNum)),
     ok.
 
@@ -1680,7 +1685,7 @@ transfer_files_to_source_provider(Config0) ->
     Guids = lists_utils:pmap(fun(Num) ->
         FilePath = <<"/", SpaceName/binary, "/file_",  (integer_to_binary(Num))/binary>>,
         {ok, Guid} = lfm_proxy:create(Worker, SessionId(Worker), FilePath),
-        {ok, Handle} = lfm_proxy:open(Worker, SessionId(Worker), {guid, Guid}, write),
+        {ok, Handle} = lfm_proxy:open(Worker, SessionId(Worker), ?FILE_REF(Guid), write),
         {ok, _} = lfm_proxy:write(Worker, Handle, 0, crypto:strong_rand_bytes(Size)),
         ok = lfm_proxy:close(Worker, Handle),
         Guid
@@ -1690,7 +1695,7 @@ transfer_files_to_source_provider(Config0) ->
 
     StopwatchTransfers = stopwatch:start(),
     TidsAndGuids = lists_utils:pmap(fun(Guid) ->
-        {ok, Tid} = lfm_proxy:schedule_file_replication(Worker, SessionId(Worker), {guid, Guid}, ?GET_DOMAIN_BIN(Worker)),
+        {ok, Tid} = opt_transfers:schedule_file_replication(Worker, SessionId(Worker), ?FILE_REF(Guid), ?GET_DOMAIN_BIN(Worker)),
         {Tid, Guid}
     end, Guids),
 
@@ -1720,7 +1725,7 @@ transfer_files_to_source_provider(Config0) ->
             <<"limit">> => 100
         },
         {ok, value, #{<<"transfers">> := List}} = ?assertMatch({ok, value, #{}}, rpc:call(
-            Worker, space_middleware, get, [
+            Worker, space_transfers_middleware_handler, get, [
                 #op_req{data = Data, gri = #gri{id = SpaceName, aspect = transfers}}, anything
             ]
         )),
@@ -1773,7 +1778,7 @@ proxy_session_token_update_test_base(Config0, {SyncNodes, ProxyNodes, ProxyNodes
 
     % But any future proxy request will update those credentials (credentials are send with every
     % proxy request)
-    ?assertMatch({ok, _}, lfm_proxy:stat(P2, SessionId, {guid, DirGuid}), Attempts),
+    ?assertMatch({ok, _}, lfm_proxy:stat(P2, SessionId, ?FILE_REF(DirGuid)), Attempts),
     ?assertEqual({ok, NewClientTokens}, get_session_client_tokens(P1, SessionId), Attempts),
     ?assertEqual({ok, NewClientTokens}, get_session_client_tokens(P2, SessionId), Attempts),
 
@@ -1789,11 +1794,11 @@ init_env(Config) ->
         test_utils:set_env(Worker, ?APP_NAME, dbsync_changes_broadcast_interval, timer:seconds(1)),
         test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, datastore_links_tree_order, 100),
         test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_delay_ms, timer:seconds(1)),
-        test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_force_delay_ms, timer:seconds(1)) % TODO - change to 2 seconds
+        test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_force_delay_ms, timer:seconds(2))
     end, ?config(op_worker_nodes, Config)),
 
     ssl:start(),
-    hackney:start(),
+    application:ensure_all_started(hackney),
     initializer:disable_quota_limit(Config),
     NewConfig = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
 
@@ -1806,11 +1811,10 @@ teardown_env(Config) ->
     %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
     initializer:clean_test_users_and_spaces_no_validate(Config),
     initializer:unload_quota_mocks(Config),
-    hackney:stop(),
+    application:stop(hackney),
     ssl:stop().
 
 mock_sync_and_rtransfer_errors(Config) ->
-    % TODO - consider creation of separate tests mocking sync and rtransfer errors
     % limit test with rtransfer errors to single file check
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
 
@@ -1877,7 +1881,7 @@ unmock_sync_and_rtransfer_errors(Config) ->
 
 async_synchronize(SessionId, FileCtx, Block) ->
     UserCtx = user_ctx:new(SessionId),
-    replica_synchronizer:synchronize(UserCtx, FileCtx, Block, false, undefined, 96).
+    replica_synchronizer:synchronize(UserCtx, FileCtx, Block, false, undefined, 96, transfer).
 
 async_synchronize(Worker, User, SessId, FileCtx, Block) ->
     rpc:async_call(Worker, ?MODULE, async_synchronize, [
@@ -1887,7 +1891,7 @@ async_synchronize(Worker, User, SessId, FileCtx, Block) ->
 request_synchronization(SessionID, FileCtx, Block) ->
     UserCtx = user_ctx:new(SessionID),
     replica_synchronizer:request_synchronization(UserCtx, FileCtx, Block,
-        false, undefined, 96
+        false, undefined, 96, transfer
     ).
 
 request_synchronization(Worker, User, SessId, FileCtx, Block) ->
@@ -1896,13 +1900,13 @@ request_synchronization(Worker, User, SessId, FileCtx, Block) ->
     ]).
 
 cancel_transfers_for_session_and_file(Node, SessionId, FileCtx) ->
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
     rpc:call(Node, replica_synchronizer, cancel_transfers_of_session, [
         FileUuid, SessionId
     ]).
 
 cancel_transfers_for_session_and_file_sync(Node, SessionId, FileCtx) ->
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
     rpc:call(Node, replica_synchronizer, cancel_transfers_of_session_sync, [
         FileUuid, SessionId
     ]).
@@ -1924,8 +1928,8 @@ get_links(FileUuid) ->
         {ok, Links} = datastore_model:fold_links(Ctx, FileUuid, all, Fun, #{}, #{}),
         Links
     catch
-        _:Reason ->
-            ct:print("Get links failed: ~p~n~p", [Reason, erlang:get_stacktrace()]),
+        _:Reason:Stacktrace ->
+            ct:print("Get links failed: ~p~n~p", [Reason, Stacktrace]),
             #{}
     end.
 
@@ -1944,7 +1948,7 @@ verify_locations(W, FileUuid, SpaceId) ->
     end, 0, IDs).
 
 get_locations(W, FileUuid, SpaceId) ->
-    FileCtx = file_ctx:new_by_guid(file_id:pack_guid(FileUuid, SpaceId)),
+    FileCtx = file_ctx:new_by_uuid(FileUuid, SpaceId),
     {LocationIds, _} = rpc:call(W, file_ctx, get_file_location_ids, [FileCtx]),
     LocationIds.
 
@@ -2183,7 +2187,7 @@ read_big_file(Config, _FileSize, File, Worker, Attempts, true) ->
     ProviderId = rpc:call(Worker, oneprovider, get_id_or_undefined, []),
     Stopwatch = stopwatch:start(),
     {ok, TransferID} = ?assertMatch({ok, _},
-        lfm_proxy:schedule_file_replication(Worker1, SessId(Worker1),
+        opt_transfers:schedule_file_replication(Worker1, SessId(Worker1),
             {path, File}, ProviderId)),
     await_replication_end(Worker1 ,TransferID, Attempts),
     stopwatch:read_micros(Stopwatch);
@@ -2294,18 +2298,8 @@ verify_del(Config, {F, FileUuid, _Locations}) ->
     Attempts = ?config(attempts, Config),
 
     verify(Config, fun(W) ->
-%%            ct:print("Del ~p", [{W, F,  FileUuid, Locations}]),
-%%            ?match({error, ?ENOENT}, lfm_proxy:stat(W, SessId(W), {path, F}), Attempts)
-        % TODO - match to chosen error (check perms may also result in ENOENT)
         ?match({error, _}, lfm_proxy:stat(W, SessId(W), {path, F}), Attempts),
-
         ?match({error, not_found}, rpc:call(W, file_meta, get, [FileUuid]), Attempts)
-%%        ?match(0, count_links(W, FileUuid), Attempts),
-%%
-%%        lists:foreach(fun(Location) ->
-%%            ?match({error, not_found},
-%%                rpc:call(W, file_meta, get, [Location]), Attempts)
-%%        end, proplists:get_value(W, Locations, []))
     end).
 
 verify_dir_size(Config, DirToCheck, DSize) ->
@@ -2365,7 +2359,7 @@ sync_blocks(SessionID, FileCtx, BlockSize, Blocks) ->
     FinalTime = lists:foldl(fun(BlockNum, Acc) ->
         Stopwatch = stopwatch:start(),
         SyncAns = replica_synchronizer:synchronize(UserCtx, FileCtx,
-            #file_block{offset = BlockNum, size = BlockSize}, false, undefined, 32),
+            #file_block{offset = BlockNum, size = BlockSize}, false, undefined, 32, transfer),
         Time = stopwatch:read_micros(Stopwatch),
         ?assertMatch({ok, _}, SyncAns),
         Acc + Time

@@ -19,7 +19,7 @@
 -define(DEFAULT_ASYNC_CHILDREN_MASTER_JOBS, false).
 -define(DEFAULT_ASYNC_NEXT_BATCH_JOB, false).
 -define(DEFAULT_OFFSET, 0).
--define(DEFAULT_BATCH_SIZE, application:get_env(?APP_NAME, storage_traverse_batch_size, 100)).
+-define(DEFAULT_BATCH_SIZE, op_worker:get_env(storage_traverse_batch_size, 100)).
 -define(DEFAULT_MAX_DEPTH, 65535).
 -define(DEFAULT_NEXT_BATCH_JOB_PREHOOK, fun(_StorageTraverse) -> ok end).
 -define(DEFAULT_CHILDREN_BATCH_JOB_PREHOOK, fun(_StorageTraverse) -> ok end).

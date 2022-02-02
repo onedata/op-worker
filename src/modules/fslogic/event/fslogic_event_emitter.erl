@@ -11,6 +11,7 @@
 -module(fslogic_event_emitter).
 -author("Krzysztof Trzepla").
 
+-include("modules/events/routing.hrl").
 -include("modules/events/definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/server_messages.hrl").
@@ -25,6 +26,7 @@
     emit_file_perm_changed/1, emit_file_removed/2,
     emit_file_renamed_no_exclude/5, emit_file_renamed_to_client/5, emit_quota_exceeded/0,
     emit_helper_params_changed/1]).
+-export([clone_event/2]).
 
 %%%===================================================================
 %%% API
@@ -86,16 +88,45 @@ emit_file_attr_changed_with_replication_status(FileCtx, SizeChanged, ExcludedSes
             ok;
         {#document{}, FileCtx2} ->
             case subscription_manager:get_attr_event_subscribers(
-                file_ctx:get_guid_const(FileCtx2), #{file_ctx => FileCtx2}, SizeChanged) of
-                [{ok, WithoutStatusSessIds}, {ok, WithStatusSessIds}] ->
+                file_ctx:get_logical_guid_const(FileCtx2), #{file_ctx => FileCtx2}, SizeChanged) of
+                {
+                    #event_subscribers{
+                        subscribers = WithoutStatusSessIds,
+                        subscribers_for_links = WithoutStatusSessIdsProplist
+                    },
+                    #event_subscribers{
+                        subscribers = WithStatusSessIds,
+                        subscribers_for_links = WithStatusSessIdsProplist
+                    }
+                } ->
                     emit_file_attr_changed_with_replication_status_internal(FileCtx2,
-                        WithoutStatusSessIds -- ExcludedSessions, WithStatusSessIds -- ExcludedSessions);
-                [{ok, WithStatusSessIds}] ->
-                    emit_file_attr_changed_with_replication_status_internal(FileCtx2, [],
-                        WithStatusSessIds -- ExcludedSessions);
-                [{error, Reason}, _] ->
+                        WithoutStatusSessIds -- ExcludedSessions, WithStatusSessIds -- ExcludedSessions),
+                    WithStatusSessIdsMap = maps:from_list(WithStatusSessIdsProplist),
+                    lists:foreach(fun({{guid, Guid}, SessIds}) ->
+                        try
+                            emit_file_attr_changed_with_replication_status_internal(file_ctx:new_by_guid(Guid),
+                                SessIds, maps:get(Guid, WithStatusSessIdsMap, []))
+                        catch
+                            Class:Reason ->
+                                % Race with file/link deletion can result in error logged here
+                                ?warning("Error emitting file_attr_changed event for additional guid - ~w:~p~nguid: ~s",
+                                    [Class, Reason, Guid])
+                        end
+                    end, WithoutStatusSessIdsProplist),
+                    lists:foreach(fun({{guid, Guid}, SessIds}) ->
+                        try
+                            emit_file_attr_changed_with_replication_status_internal(file_ctx:new_by_guid(Guid),
+                                [], SessIds)
+                        catch
+                            Class:Reason ->
+                                % Race with file/link deletion can result in error logged here
+                                ?warning("Error emitting file_attr_changed event for additional guid - ~w:~p~nguid: ~s",
+                                    [Class, Reason, Guid])
+                        end
+                    end, WithStatusSessIdsProplist -- WithoutStatusSessIdsProplist);
+                {{error, Reason}, _} ->
                     {error, Reason};
-                [_, {error, Reason2}] ->
+                {_, {error, Reason2}} ->
                     {error, Reason2}
             end;
         Other ->
@@ -193,7 +224,7 @@ emit_file_locations_changed(LocationChangesDescription, ExcludedSessions) ->
 -spec emit_file_perm_changed(file_ctx:ctx()) -> ok | {error, Reason :: term()}.
 emit_file_perm_changed(FileCtx) ->
     event:emit(#file_perm_changed_event{
-        file_guid = file_ctx:get_guid_const(FileCtx)
+        file_guid = file_ctx:get_logical_guid_const(FileCtx)
     }).
 
 %%--------------------------------------------------------------------
@@ -204,7 +235,7 @@ emit_file_perm_changed(FileCtx) ->
 -spec emit_file_removed(file_ctx:ctx(), ExcludedSessions :: [session:id()]) ->
     ok | {error, Reason :: term()}.
 emit_file_removed(FileCtx, ExcludedSessions) ->
-    Ans = event:emit_to_filtered_subscribers(#file_removed_event{file_guid = file_ctx:get_guid_const(FileCtx)},
+    Ans = event:emit_to_filtered_subscribers(#file_removed_event{file_guid = file_ctx:get_logical_guid_const(FileCtx)},
         #{file_ctx => FileCtx}, ExcludedSessions),
     {Doc, FileCtx2} = file_ctx:get_file_doc_including_deleted(FileCtx),
     case file_meta:check_name_and_get_conflicting_files(Doc) of
@@ -225,7 +256,7 @@ emit_file_removed(FileCtx, ExcludedSessions) ->
     file_meta:name(), user_ctx:ctx()) -> ok | {error, Reason :: term()}.
 emit_file_renamed_to_client(FileCtx, NewParentGuid, NewName, PrevName, UserCtx) ->
     SessionId = user_ctx:get_session_id(UserCtx),
-    {OldParentGuid, _FileCtx2} = file_ctx:get_parent_guid(FileCtx, UserCtx),
+    {OldParentGuid, _FileCtx2} = files_tree:get_parent_guid_if_not_root_dir(FileCtx, UserCtx),
     emit_file_renamed(FileCtx, OldParentGuid, NewParentGuid, NewName, PrevName, [SessionId]).
 
 %%--------------------------------------------------------------------
@@ -265,6 +296,39 @@ emit_helper_params_changed(StorageId) ->
         storage_id = StorageId
     }).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates new event on the basis of existing one and new guid/uuid that is base for cloning.
+%% For #file_location_changed_event{} uuid should be used, guid for other events.
+%% @end
+%%--------------------------------------------------------------------
+-spec clone_event(event:type(), subscription_manager:link_subscription_context()) -> event:type().
+clone_event(#file_perm_changed_event{} = Event, {guid, NewGuid}) ->
+    Event#file_perm_changed_event{file_guid = NewGuid};
+clone_event(#file_location_changed_event{file_location = FileLocation} = Event, {uuid, NewUuid, _SpaceId}) ->
+    Event#file_location_changed_event{file_location = FileLocation#file_location{uuid = NewUuid}};
+clone_event(#file_attr_changed_event{file_attr = FileAttr} = Event, {guid, NewGuid}) ->
+    FileCtx = file_ctx:new_by_guid(NewGuid),
+    SpaceId = file_ctx:get_space_id_const(FileCtx),
+    {#document{value = #file_meta{
+        name = Name,
+        parent_uuid = ParentUuid,
+        type = Type,
+        provider_id = ProviderId
+    }}, _FileCtx2} = file_ctx:get_file_doc_including_deleted(FileCtx),
+    UpdatedFileAttr = FileAttr#file_attr{
+        guid = NewGuid,
+        name = Name,
+        parent_guid = file_id:pack_guid(ParentUuid, SpaceId),
+        type = Type,
+        provider_id = ProviderId
+    },
+    Event#file_attr_changed_event{file_attr = UpdatedFileAttr};
+clone_event(Event, Context) ->
+    ?error("Trying to clone event ~p of type that cannot be cloned. Context ~p.", [Event, Context]),
+    throw(not_supported_event_cloning).
+
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -300,7 +364,7 @@ emit_file_attr_changed_with_replication_status_internal(FileCtx, WithoutStatusSe
 -spec emit_file_renamed(file_ctx:ctx(), fslogic_worker:file_guid(), fslogic_worker:file_guid(),
     file_meta:name(), file_meta:name(), [session:id()]) -> ok | {error, Reason :: term()}.
 emit_file_renamed(FileCtx, OldParentGuid, NewParentGuid, NewName, OldName, Exclude) ->
-    Guid = file_ctx:get_guid_const(FileCtx),
+    Guid = file_ctx:get_logical_guid_const(FileCtx),
     {Doc, FileCtx2} = file_ctx:get_file_doc_including_deleted(FileCtx),
     ProviderId = file_meta:get_provider_id(Doc),
     {ok, FileUuid} = file_meta:get_uuid(Doc),
@@ -359,8 +423,8 @@ emit_suffixes(ConflictingFiles, {parent_guid, ParentGuid}) ->
     lists:foreach(fun({TaggedName, Uuid}) ->
         try
             {_, SpaceId} = file_id:unpack_guid(ParentGuid),
-            Guid = file_id:pack_guid(Uuid, SpaceId),
-            FileCtx = file_ctx:new_by_guid(Guid),
+            FileCtx = file_ctx:new_by_uuid(Uuid, SpaceId),
+            Guid = file_ctx:get_logical_guid_const(FileCtx),
 
             event:emit_to_filtered_subscribers(#file_renamed_event{top_entry = #file_renamed_entry{
                 old_guid = Guid,
@@ -374,8 +438,8 @@ emit_suffixes(ConflictingFiles, {parent_guid, ParentGuid}) ->
     end, ConflictingFiles);
 emit_suffixes(Files, {ctx, FileCtx}) ->
     try
-        {ParentCtx, _} = file_ctx:get_parent(FileCtx, user_ctx:new(?ROOT_USER_ID)),
-        emit_suffixes(Files, {parent_guid, file_ctx:get_guid_const(ParentCtx)})
+        {ParentCtx, _} = files_tree:get_parent(FileCtx, user_ctx:new(?ROOT_USER_ID)),
+        emit_suffixes(Files, {parent_guid, file_ctx:get_logical_guid_const(ParentCtx)})
     catch
         _:_ -> ok % Parent not fully synchronized
     end.

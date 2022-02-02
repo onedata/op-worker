@@ -2,7 +2,7 @@
 %%% This file has been automatically generated from Swagger
 %%% specification - DO NOT EDIT!
 %%%
-%%% @copyright (C) 2019-2020 ACK CYFRONET AGH
+%%% @copyright (C) 2019-2021 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -41,15 +41,37 @@ routes() -> [
             scope = private
         }
     }},
-    %% Create file
+    %% Create file in directory
     {<<"/data/:id/children">>, rest_handler, #rest_req{
         method = 'POST',
         consumes = [<<"application/octet-stream">>],
         produces = [<<"application/json">>],
         b_gri = #b_gri{
-            type = op_file,
-            id = ?OBJECTID_BINDING(id),
+            type = op_file, 
+            id = ?OBJECTID_BINDING(id), 
             aspect = child, 
+            scope = private
+        }
+    }},
+    %% Download file content
+    {<<"/data/:id/content">>, rest_handler, #rest_req{
+        method = 'GET',
+        produces = [<<"application/octet-stream">>],
+        b_gri = #b_gri{
+            type = op_file, 
+            id = ?OBJECTID_BINDING(id), 
+            aspect = content, 
+            scope = private
+        }
+    }},
+    %% Update file content
+    {<<"/data/:id/content">>, rest_handler, #rest_req{
+        method = 'PUT',
+        consumes = [<<"application/octet-stream">>],
+        b_gri = #b_gri{
+            type = op_file, 
+            id = ?OBJECTID_BINDING(id), 
+            aspect = content, 
             scope = private
         }
     }},
@@ -86,25 +108,69 @@ routes() -> [
             scope = private
         }
     }},
-    %% Download file content
-    {<<"/data/:id/content">>, rest_handler, #rest_req{
+    %% Get file hard links
+    {<<"/data/:id/hardlinks">>, rest_handler, #rest_req{
         method = 'GET',
         produces = [<<"application/octet-stream">>],
         b_gri = #b_gri{
             type = op_file, 
             id = ?OBJECTID_BINDING(id), 
-            aspect = content, 
+            aspect = hardlinks, 
             scope = private
         }
     }},
-    %% Update file content
-    {<<"/data/:id/content">>, rest_handler, #rest_req{
-        method = 'PUT',
-        consumes = [<<"application/octet-stream">>],
+    %% Test for hard link between files
+    {<<"/data/:id/hardlinks/:hid">>, rest_handler, #rest_req{
+        method = 'GET',
+        produces = [<<"application/json">>],
         b_gri = #b_gri{
             type = op_file, 
             id = ?OBJECTID_BINDING(id), 
-            aspect = content, 
+            aspect = {hardlinks, ?OBJECTID_BINDING(hid)}, 
+            scope = private
+        }
+    }},
+    %% Get symbolic link value
+    {<<"/data/:id/symlink_value">>, rest_handler, #rest_req{
+        method = 'GET',
+        produces = [<<"application/octet-stream">>],
+        b_gri = #b_gri{
+            type = op_file, 
+            id = ?OBJECTID_BINDING(id), 
+            aspect = symlink_value, 
+            scope = private
+        }
+    }},
+    %% Remove file at path
+    {<<"/data/:id/path/[...]">>, rest_handler, #rest_req{
+        method = 'DELETE',
+        b_gri = #b_gri{
+            type = op_file, 
+            id = ?OBJECTID_BINDING(id), 
+            aspect = file_at_path, 
+            scope = private
+        }
+    }},
+    %% Download file content by path
+    {<<"/data/:id/path/[...]">>, rest_handler, #rest_req{
+        method = 'GET',
+        produces = [<<"application/octet-stream">>],
+        b_gri = #b_gri{
+            type = op_file, 
+            id = ?OBJECTID_BINDING(id), 
+            aspect = file_at_path, 
+            scope = private
+        }
+    }},
+    %% Create file at path
+    {<<"/data/:id/path/[...]">>, rest_handler, #rest_req{
+        method = 'PUT',
+        consumes = [<<"application/octet-stream">>],
+        produces = [<<"application/json">>],
+        b_gri = #b_gri{
+            type = op_file, 
+            id = ?OBJECTID_BINDING(id), 
+            aspect = file_at_path, 
             scope = private
         }
     }}

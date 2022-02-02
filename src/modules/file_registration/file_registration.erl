@@ -57,8 +57,8 @@
 -export_type([spec/0]).
 
 -define(FILE_REGISTRATION_POOL, file_registration_pool).
--define(FILE_REGISTRATION_POOL_SIZE, application:get_env(?APP_NAME, file_registration_pool_size, 20)).
--define(FILE_REGISTRATION_TIMEOUT, application:get_env(?APP_NAME, file_registration_timeout, 30000)).
+-define(FILE_REGISTRATION_POOL_SIZE, op_worker:get_env(file_registration_pool_size, 20)).
+-define(FILE_REGISTRATION_TIMEOUT, op_worker:get_env(file_registration_timeout, 30000)).
 
 %%%===================================================================
 %%% API functions
@@ -83,7 +83,7 @@ register(SessId, SpaceId, DestinationPath, StorageId, StorageFileId, Spec) ->
 -spec create_missing_directory(file_ctx:ctx(), file_meta:name(), od_user:id()) -> {ok, file_ctx:ctx()}.
 create_missing_directory(ParentCtx, DirName, UserId) ->
     SpaceId = file_ctx:get_space_id_const(ParentCtx),
-    ParentUuid = file_ctx:get_uuid_const(ParentCtx),
+    ParentUuid = file_ctx:get_logical_uuid_const(ParentCtx),
     FileUuid = datastore_key:new(),
     {ParentStorageFileId, _} = file_ctx:get_storage_file_id(ParentCtx),
     ok = dir_location:mark_dir_synced_from_storage(FileUuid, filepath_utils:join([ParentStorageFileId, DirName]), undefined),
@@ -138,7 +138,7 @@ register_internal(SessId, SpaceId, DestinationPath, StorageId, StorageFileId, Sp
                 maybe_set_xattrs(UserCtx, FileCtx, maps:get(<<"xattrs">>, Spec, #{})),
                 maybe_set_json_metadata(UserCtx, FileCtx, maps:get(<<"json">>, Spec, #{})),
                 maybe_set_rdf_metadata(UserCtx, FileCtx, maps:get(<<"rdf">>, Spec, <<>>)),
-                {ok, file_ctx:get_guid_const(FileCtx)};
+                {ok, file_ctx:get_logical_guid_const(FileCtx)};
             false ->
                 % TODO VFS-6508 find better error
                 % this can happen if sync mechanisms decide not to synchronize file
@@ -147,22 +147,26 @@ register_internal(SessId, SpaceId, DestinationPath, StorageId, StorageFileId, Sp
                 ?ERROR_POSIX(?EINPROGRESS)
         end
     catch
-        throw:?ENOTSUP ->
+        throw:?ENOTSUP:Stacktrace ->
             ?error_stacktrace(
                 "Failed registration of file ~s located on storage ~s in space ~s under path ~s.~n"
                 "stat (or equivalent) operation is not supported by the storage.",
-                [StorageFileId, StorageId, SpaceId, DestinationPath]),
+                [StorageFileId, StorageId, SpaceId, DestinationPath],
+                Stacktrace
+            ),
             ?ERROR_STAT_OPERATION_NOT_SUPPORTED(StorageId);
         throw:{error, _} = Error ->
             Error;
         throw:PosixError ->
             % posix errors are thrown as single atoms
             ?ERROR_POSIX(PosixError);
-        Error:Reason ->
+        Error:Reason:Stacktrace2 ->
             ?error_stacktrace(
                 "Failed registration of file ~s located on storage ~s in space ~s under path ~s.~n"
                 "Operation failed due to ~p:~p",
-                [StorageFileId, StorageId, SpaceId, DestinationPath, Error, Reason]),
+                [StorageFileId, StorageId, SpaceId, DestinationPath, Error, Reason],
+                Stacktrace2
+            ),
             {error, Reason}
     end.
 
@@ -238,9 +242,12 @@ create_missing_directories(ParentCtx, [DirectChildPartialCtx | Rest], UserId) ->
         {ok, DirectChildCtx} = create_missing_directory_secure(ParentCtx, DirectChildName, UserId),
         create_missing_directories(DirectChildCtx, Rest, UserId)
     catch
-        Error:Reason ->
-            ?error_stacktrace("Creating missing directories for file being registered has failed with ~p:~p",
-                [Error, Reason]),
+        Error:Reason:Stacktrace ->
+            ?error_stacktrace(
+                "Creating missing directories for file being registered has failed with ~p:~p",
+                [Error, Reason],
+                Stacktrace
+            ),
             throw(?ERROR_POSIX(?ENOENT))
     end.
 
@@ -255,10 +262,10 @@ create_missing_directories(ParentCtx, [DirectChildPartialCtx | Rest], UserId) ->
 %%--------------------------------------------------------------------
 -spec create_missing_directory_secure(file_ctx:ctx(), file_meta:name(), od_user:id()) -> {ok, file_ctx:ctx()}.
 create_missing_directory_secure(ParentCtx, DirName, UserId) ->
-    critical_section:run({create_missing_directory, file_ctx:get_uuid_const(ParentCtx), DirName, UserId}, fun() ->
+    critical_section:run({create_missing_directory, file_ctx:get_logical_uuid_const(ParentCtx), DirName, UserId}, fun() ->
         try
             % ensure whether directory is still missing as it might have been created by other registering process
-            {DirCtx, _} = file_ctx:get_child(ParentCtx, DirName, user_ctx:new(?ROOT_SESS_ID)),
+            {DirCtx, _} = files_tree:get_child(ParentCtx, DirName, user_ctx:new(?ROOT_SESS_ID)),
             {ok, DirCtx}
         catch
             error:{badmatch,{error,not_found}} ->

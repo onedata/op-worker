@@ -298,6 +298,18 @@ inline TERM make(ErlNifEnv *env, const folly::fbvector<T> &var)
     return detail::makeVector(env, var);
 }
 
+inline int get(ErlNifEnv *env, ERL_NIF_TERM term, std::pair<const uint8_t*, size_t> &var)
+{
+    ErlNifBinary bin;
+    if (!enif_inspect_binary(env, term, &bin))
+        return 0;
+
+    var.first = bin.data;
+    var.second = bin.size;
+
+    return 1;
+}
+
 // folly::IOBufQueue
 inline int get(ErlNifEnv *env, ERL_NIF_TERM term, folly::IOBufQueue &var)
 {
@@ -307,7 +319,7 @@ inline int get(ErlNifEnv *env, ERL_NIF_TERM term, folly::IOBufQueue &var)
     if (!enif_inspect_binary(env, term, &bin))
         return 0;
 
-    var.append(bin.data, bin.size);
+    var.wrapBuffer(bin.data, bin.size);
     return 1;
 }
 inline TERM make(ErlNifEnv *env, const folly::IOBufQueue &var)
