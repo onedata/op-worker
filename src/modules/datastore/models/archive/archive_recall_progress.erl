@@ -28,8 +28,10 @@
 
 %% API
 -export([create/1, delete/1]).
--export([get_stats/1, get/1]).
+-export([get/1]).
 -export([report_bytes_copied/2, report_file_finished/1, report_file_failed/3]).
+%% Test API
+-export([get_stats/1]).
 %% Datastore callbacks
 -export([get_ctx/0]).
 
@@ -86,11 +88,6 @@ delete(Id) ->
     json_infinite_log_model:destroy(?ERROR_LOG_ID(Id)).
 
 
--spec get_stats(id()) -> time_series_collection:windows_map() | {error, term()}.
-get_stats(Id) ->
-    datastore_time_series_collection:list_windows(?CTX, ?TSC_ID(Id), #{}).
-
-
 -spec get(id()) -> {ok, recall_progress_map()}.
 get(Id) ->
     {ok, CountersCurrentValue} = get_counters_current_value(Id),
@@ -133,6 +130,14 @@ report_bytes_copied(Id, Bytes) ->
     datastore_time_series_collection:update(?CTX, ?TSC_ID(Id), global_clock:timestamp_millis(), [
         {?BYTES_TS, Bytes}
     ]).
+
+%%%===================================================================
+%%% Test API 
+%%%===================================================================
+
+-spec get_stats(id()) -> time_series_collection:windows_map() | {error, term()}.
+get_stats(Id) ->
+    datastore_time_series_collection:list_windows(?CTX, ?TSC_ID(Id), #{}).
 
 
 %%%===================================================================

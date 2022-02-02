@@ -9,7 +9,12 @@
 %%% This module is responsible for effective checking recall status in 
 %%% file ancestors. 
 %%% Uses `effective_cache` under the hood.
-%%% TODO VFS-7412 refactor this module (duplicated code in other effective_ caches modules)
+%%% TODO VFS-7412 refactor this module (duplicated code in other effective_ caches modules) 
+%%%
+%%% This cache should be invalidated on each archive_recall document creation 
+%%% and when recall status changes to finished. There is no need to invalidate cache when 
+%%% document was deleted, as this means that whole subtree was deleted and therefore fetching 
+%%% cached values there makes no sense.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(archive_recall_cache).
@@ -110,7 +115,7 @@ invalidate_on_all_nodes(SpaceId) ->
     | {error, {file_meta_missing, file_meta:uuid()}} | {error, term()}.
 get(SpaceId, Doc = #document{value = #file_meta{}}) ->
     CacheName = ?CACHE_NAME(SpaceId),
-    case effective_value:get_or_calculate(CacheName, Doc, fun calculate_archive_recall_status/1) of
+    case effective_value:get_or_calculate(CacheName, Doc, fun find_closes_recall/1) of
         {ok, Res, _} ->
             {ok, Res};
         {error, _} = Error ->
@@ -139,21 +144,21 @@ invalidate(SpaceId) ->
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Calculates recall status along with uuid of root file of closest recall. 
+%% effective_value callback that calculates closest recall. 
 %% When parent status is ongoing there is no need of further calculation, 
 %% as it is impossible to create a recall in already recalling directory. 
 %% When parent status is finished calculates further down, as there could 
 %% be another recall (which will be closer).
 %% @end
 %%-------------------------------------------------------------------
--spec calculate_archive_recall_status(effective_value:args()) -> 
+-spec find_closes_recall(effective_value:args()) -> 
     {ok, undefined | {ongoing | finished, file_meta:uuid()}, effective_value:calculation_info()} 
     | {error, term()}.
-calculate_archive_recall_status([_, {error, _} = Error, _CalculationInfo]) ->
+find_closes_recall([_, {error, _} = Error, _CalculationInfo]) ->
     Error;
-calculate_archive_recall_status([_, {ongoing, _} = ParentValue, CalculationInfo]) ->
+find_closes_recall([_, {ongoing, _} = ParentValue, CalculationInfo]) ->
     {ok, ParentValue, CalculationInfo};
-calculate_archive_recall_status([#document{} = FileMetaDoc, ParentValue, CalculationInfo]) ->
+find_closes_recall([#document{} = FileMetaDoc, ParentValue, CalculationInfo]) ->
     #document{key = FileUuid} = FileMetaDoc,
     case archive_recall:get_details(FileUuid) of
         {ok, #archive_recall_details{finish_timestamp = undefined}} -> 

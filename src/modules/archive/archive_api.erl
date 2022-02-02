@@ -134,7 +134,7 @@ recall(ArchiveId, UserCtx, ParentGuid, TargetRootName) ->
             archive_recall_traverse:start(ArchiveDoc, UserCtx, ParentGuid, TargetRootName);
         {ok, _} ->
             %% @TODO VFS-8840 - create more descriptive error
-            ?ERROR_NOT_SUPPORTED;
+            ?ERROR_FORBIDDEN;
         {error, _} = Error -> 
             Error
     end.

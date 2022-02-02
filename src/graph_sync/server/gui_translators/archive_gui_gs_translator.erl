@@ -27,7 +27,7 @@
 
 -spec translate_value(gri:gri(), Value :: term()) -> gs_protocol:data().
 translate_value(#gri{aspect = recall}, RootId) ->
-    #{<<"rootId">> => RootId}.
+    #{<<"rootFileId">> => RootId}.
 
 
 -spec translate_resource(gri:gri(), Data :: term()) ->

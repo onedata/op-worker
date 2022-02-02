@@ -39,7 +39,7 @@ create_response(#gri{aspect = instance}, _, resource, {#gri{id = ArchiveId}, _})
 
 create_response(#gri{aspect = recall}, _, value, RootFileGuid) ->
     {ok, ObjectId} = file_id:guid_to_objectid(RootFileGuid),
-    ?CREATED_REPLY([<<"/data">>, ObjectId],  #{<<"rootId">> => ObjectId}).
+    ?CREATED_REPLY([<<"/data">>, ObjectId],  #{<<"rootFileId">> => ObjectId}).
 
 
 %%--------------------------------------------------------------------
