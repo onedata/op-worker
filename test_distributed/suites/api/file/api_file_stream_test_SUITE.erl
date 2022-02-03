@@ -239,14 +239,14 @@ gui_download_different_filetypes_test(Config) ->
         #symlink_spec{shares = [#share_spec{}], symlink_value = make_symlink_target()},
         #dir_spec{mode = 8#705, shares = [#share_spec{}], children = [
             #dir_spec{}, 
-            #file_spec{content = Name, name = Name, custom_identifier = Name},
+            #file_spec{content = Name, name = Name, custom_label = Name},
             #dir_spec{
-                children = [#symlink_spec{symlink_value = {custom_id, Name}}]
+                children = [#symlink_spec{symlink_value = {custom_label, Name}}]
             }
         ]},
         #file_spec{mode = 8#604, shares = [#share_spec{}], content = ?RAND_CONTENT()}
     ],
-    gui_download_test_base(Config, DirSpec, ClientSpec, <<"Different filetypes">>, #{create_files_mode => sequential}).
+    gui_download_test_base(Config, DirSpec, ClientSpec, <<"Different filetypes">>).
 
 gui_download_files_between_spaces_test(_Config) ->
     ClientSpec = #client_spec{
@@ -434,8 +434,7 @@ gui_download_test_base(Config, FileTreeSpec, ClientSpec, ScenarioPrefix) ->
     onenv_api_test_runner:client_spec(),
     binary(), 
     #{
-        download_type => simulate_failures | uninterrupted_download,
-        create_files_mode => parallel | sequential
+        download_type => simulate_failures | uninterrupted_download
     }
 ) ->
     ok.
@@ -450,7 +449,7 @@ gui_download_test_base(Config, FileTreeSpec, ClientSpec, ScenarioPrefix, Opts) -
     MemRef = api_test_memory:init(),
     api_test_memory:set(MemRef, download_type, maps:get(download_type, Opts, simulate_failures)),
 
-    SetupFun = build_download_file_setup_fun(MemRef, FileTreeSpec, maps:get(create_files_mode, Opts, parallel)),
+    SetupFun = build_download_file_setup_fun(MemRef, FileTreeSpec),
     ValidateCallResultFun = build_get_download_url_validate_gs_call_fun(MemRef),
     VerifyFun = build_download_file_verify_fun(MemRef),
 
@@ -1282,21 +1281,11 @@ get_fetched_block_size({RangeStart, RangeLen}, FileSize) ->
 ) ->
     onenv_api_test_runner:setup_fun().
 build_download_file_setup_fun(MemRef, Spec) ->
-    build_download_file_setup_fun(MemRef, Spec, parallel).
-
-%% @private
--spec build_download_file_setup_fun(
-    api_test_memory:mem_ref(),
-    onenv_file_test_utils:object_spec() | [onenv_file_test_utils:file_spec()],
-    parallel | sequential
-) ->
-    onenv_api_test_runner:setup_fun().
-build_download_file_setup_fun(MemRef, Spec, CreateFilesMode) ->
     SpaceId = oct_background:get_space_id(space_krk_par),
 
     fun() ->
         Object = onenv_file_test_utils:create_and_sync_file_tree(
-            user3, SpaceId, utils:ensure_list(Spec), krakow, CreateFilesMode
+            user3, SpaceId, utils:ensure_list(Spec), krakow
         ),
         api_test_memory:set(MemRef, file_tree_object, Object)
     end.
@@ -1435,14 +1424,14 @@ check_extracted_tarball_structure(_MemRef, #object{name = Filename}, no_files, C
 -spec check_symlink(api_test_memory:mem_ref(), file_meta:path(), onenv_file_test_utils:object_spec(), public | private) -> ok.
 check_symlink(MemRef, CurrentPath, Object, private) ->
     #object{name = Filename, symlink_value = LinkValue} = Object,
-    % NOTE: custom_id in LinkValue is used only for internal symlinks
+    % NOTE: custom_label in LinkValue is used only for internal symlinks
     case {api_test_memory:get(MemRef, follow_symlinks), LinkValue} of
-        {true, {custom_id, Content}} ->
+        {true, {custom_label, Content}} ->
             ?assertEqual({ok, Content}, file:read_file(filename:join(CurrentPath, Filename)));
         {true, _} ->
             % link target files has its name as content
             ?assertEqual({ok, filename:basename(LinkValue)}, file:read_file(filename:join(CurrentPath, Filename)));
-        {false, {custom_id, Content}} ->
+        {false, {custom_label, Content}} ->
             % internal symlinks are modified to target files in tarball even with follow_symlinks = false
             ?assertEqual({ok, Content}, file:read_file(filename:join(CurrentPath, Filename)));
         {false, _} ->

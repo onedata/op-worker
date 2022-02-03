@@ -45,8 +45,9 @@
     % info passed to every slave job
     traverse_info :: tree_traverse:traverse_info(),
     
-    follow_symlinks_policy = none :: tree_traverse:symlink_resolution_policy(),
-    % uuids of the traverse root file and subtree roots after each symlink resolution
+    symlink_resolution_policy = preserve :: tree_traverse:symlink_resolution_policy(),
+    % uuids of the traverse root file and subtree roots after each symlink resolution;
+    % required for checking if symlink targets outside of traversed subtree, when using follow_external policy.
     resolved_root_uuids = [] :: [file_meta:uuid()],
     % relative path of the processed file to the traverse root
     relative_path = <<>> :: file_meta:path(),

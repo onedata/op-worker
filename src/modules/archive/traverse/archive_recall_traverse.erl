@@ -161,6 +161,7 @@ do_master_job(#tree_traverse{file_ctx = FileCtx} = Job, MasterJobArgs) ->
         true ->
             do_dir_master_job(Job#tree_traverse{file_ctx = FileCtx2}, MasterJobArgs);
         false ->
+            % recalling archive can be created from a dataset established on a file/symlink.
             tree_traverse:do_master_job(Job#tree_traverse{file_ctx = FileCtx2}, MasterJobArgs)
     end.
 
@@ -188,20 +189,20 @@ ensure_recall_allowed(SpaceId, UserCtx, TargetParentGuid) ->
         {ok, #file_attr{type = ?SYMLINK_TYPE}} ->
             case lfm:resolve_symlink(SessId, ?FILE_REF(TargetParentGuid)) of
                 {ok, TargetGuid} ->
-                    check_ongoing_recalls(SpaceId, TargetGuid);
+                    can_start_recall(SpaceId, TargetGuid);
                 Error ->
                     Error
             end;
         {ok, _} ->
-            check_ongoing_recalls(SpaceId, TargetParentGuid);
+            can_start_recall(SpaceId, TargetParentGuid);
         {error, _} = Error ->
             Error
     end.
 
 
 %% @private
--spec check_ongoing_recalls(od_space:id(), file_id:file_guid()) -> ok | {error, term()}.
-check_ongoing_recalls(SpaceId, Guid) ->
+-spec can_start_recall(od_space:id(), file_id:file_guid()) -> ok | {error, term()}.
+can_start_recall(SpaceId, Guid) ->
     case archive_recall_cache:get(SpaceId, file_id:guid_to_uuid(Guid)) of
         {ok, {ongoing, _}} ->
             %% @TODO VFS-8840 - create more descriptive error
@@ -227,7 +228,7 @@ setup_recall_traverse(SpaceId, ArchiveDoc, RootFileGuid, TraverseInfo, StartFile
                 children_master_jobs_mode => async,
                 %% @TODO VFS-8851 do not resolve external symlinks (that are not nested archive) 
                 %% when archive was created without following symlinks
-                follow_symlinks => external,
+                symlink_resolution_policy => follow_external,
                 traverse_info => TraverseInfo,
                 additional_data => AdditionalData
             },
@@ -250,7 +251,7 @@ do_dir_master_job(#tree_traverse{
     case execute_unsafe_job(do_dir_master_job_unsafe, [Job, MasterJobArgs], 
         SourceDirCtx, TaskId, ArchiveDoc) 
     of
-        error -> {ok, #{}}; % unexpected error occurred
+        error -> {ok, #{}}; % unexpected error logged by execute_unsafe_job - no jobs can be created
         Res -> Res
     end.
 

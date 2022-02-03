@@ -445,8 +445,8 @@ recall_containing_internal_symlink_archive_base(#{layout := Layout, include_dip 
         dataset = #dataset_spec{archives = [#archive_spec{config = #archive_config{layout = Layout, include_dip = IncludeDip}}]},
         metadata = #metadata_spec{json = ?RAND_JSON_METADATA()},
         children = [
-            #file_spec{custom_identifier = <<"target">>}, 
-            #symlink_spec{symlink_value = {custom_id, <<"target">>}}
+            #file_spec{custom_label = <<"target">>}, 
+            #symlink_spec{symlink_value = {custom_label, <<"target">>}}
         ]
     }, false).
 
@@ -457,22 +457,22 @@ recall_containing_nested_internal_symlink_archive_base(#{layout := Layout, inclu
         children = [#dir_spec{
             dataset = #dataset_spec{},
             children = [
-                #file_spec{custom_identifier = <<"target">>},
-                #symlink_spec{symlink_value = {custom_id, <<"target">>}}
+                #file_spec{custom_label = <<"target">>},
+                #symlink_spec{symlink_value = {custom_label, <<"target">>}}
             ]}
         ]
     }, nested_archive_only ).
 
 recall_containing_external_symlink_archive_base(#{layout := Layout, include_dip := IncludeDip}) ->
     recall_test_base([
-        #file_spec{custom_identifier = <<"target">>},
+        #file_spec{custom_label = <<"target">>},
         #dir_spec{
             dataset = #dataset_spec{archives = [#archive_spec{config = #archive_config{layout = Layout, include_dip = IncludeDip}}]},
             metadata = #metadata_spec{json = ?RAND_JSON_METADATA()},
             children = [#dir_spec{
                 metadata = #metadata_spec{json = ?RAND_JSON_METADATA()},
                 children = [
-                    #symlink_spec{symlink_value = {custom_id, <<"target">>}}
+                    #symlink_spec{symlink_value = {custom_label, <<"target">>}}
                 ]
             }]
         }
@@ -480,7 +480,7 @@ recall_containing_external_symlink_archive_base(#{layout := Layout, include_dip 
 
 recall_containing_nested_external_symlink_archive_base(#{layout := Layout, include_dip := IncludeDip}) ->
     recall_test_base([
-        #file_spec{custom_identifier = <<"target">>},
+        #file_spec{custom_label = <<"target">>},
         #dir_spec{
             dataset = #dataset_spec{archives = [#archive_spec{config = #archive_config{layout = Layout, include_dip = IncludeDip, create_nested_archives = true}}]},
             metadata = #metadata_spec{json = ?RAND_JSON_METADATA()},
@@ -488,7 +488,7 @@ recall_containing_nested_external_symlink_archive_base(#{layout := Layout, inclu
                 dataset = #dataset_spec{},
                 metadata = #metadata_spec{json = ?RAND_JSON_METADATA()},
                 children = [
-                    #symlink_spec{symlink_value = {custom_id, <<"target">>}}
+                    #symlink_spec{symlink_value = {custom_label, <<"target">>}}
                 ]
             }]
         }
@@ -500,12 +500,12 @@ recall_containing_nested_parent_symlink_archive_base(#{layout := Layout, include
             dataset = #dataset_spec{archives = [#archive_spec{config = #archive_config{layout = Layout, include_dip = IncludeDip, create_nested_archives = true}}]},
             metadata = #metadata_spec{json = ?RAND_JSON_METADATA()},
             children = [
-                #file_spec{custom_identifier = <<"target">>},
+                #file_spec{custom_label = <<"target">>},
                 #dir_spec{
                     dataset = #dataset_spec{},
                     metadata = #metadata_spec{json = ?RAND_JSON_METADATA()},
                     children = [
-                        #symlink_spec{symlink_value = {custom_id, <<"target">>}}
+                        #symlink_spec{symlink_value = {custom_label, <<"target">>}}
                     ]
                 }
             ]
@@ -522,10 +522,10 @@ recall_containing_nested_child_symlink_archive_base(#{layout := Layout, include_
                     dataset = #dataset_spec{},
                     metadata = #metadata_spec{json = ?RAND_JSON_METADATA()},
                     children = [
-                        #file_spec{custom_identifier = <<"target">>}
+                        #file_spec{custom_label = <<"target">>}
                     ]
                 },
-                #symlink_spec{symlink_value = {custom_id, <<"target">>}}
+                #symlink_spec{symlink_value = {custom_label, <<"target">>}}
             ]
         }
     ]).
@@ -547,7 +547,7 @@ recall_test_setup(StructureSpec) ->
 
 recall_test_setup(StructureSpec, RootFileName) ->
     SessId = oct_background:get_user_session_id(?USER1, krakow),
-    CreatedTreeObject = onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, StructureSpec, krakow, sequential),
+    CreatedTreeObject = onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, StructureSpec, krakow),
     ArchiveId = lists:foldl(fun
         (#object{dataset = #dataset_object{archives = [#archive_object{id = Id}]}}, undefined) ->
             Id;
@@ -661,7 +661,6 @@ recall_error_test_base(Spec, FunName) ->
     lists:foreach(fun({Error, ExpectedReason}) ->
         mock_traverse_error(FunName, Error),
         {_ArchiveId, _TargetParentGuid, RecallRootFileGuid} = recall_test_setup(Spec),
-        ct:print("~p", [file_id:guid_to_uuid(RecallRootFileGuid)]),
         ?assertMatch({ok, #{
             <<"bytesCopied">>  := 0,
             <<"filesCopied">> := 0,

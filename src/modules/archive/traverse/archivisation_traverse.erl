@@ -138,10 +138,10 @@ start(ArchiveDoc, DatasetDoc, UserCtx) ->
                 false -> file_ctx:get_logical_guid_const(DatasetRootCtx2)
             end,
     
-            %% @TODO VFS-8882 - use none/external in API
-            FollowSymlinksPolicy = case FollowSymlinks of
-                true -> external;
-                false -> none
+            %% @TODO VFS-8882 - use preserve/follow_external in API
+            SymlinksResolutionPolicy = case FollowSymlinks of
+                true -> follow_external;
+                false -> preserve
             end,
 
             Options = #{
@@ -165,7 +165,7 @@ start(ArchiveDoc, DatasetDoc, UserCtx) ->
                         target_parent = DipArchiveDataDirGuid
                     })
                 },
-                follow_symlinks => FollowSymlinksPolicy,
+                symlink_resolution_policy => SymlinksResolutionPolicy,
                 initial_relative_path => FileLogicalPath,
                 additional_data => AdditionalData2
             },

@@ -42,7 +42,7 @@
 -spec start(bulk_download:id(), user_ctx:ctx(), fslogic_worker:file_guid(), 
     tree_traverse:symlink_resolution_policy(), file_meta:path()) -> 
     {ok, bulk_download:id()}.
-start(BulkDownloadId, UserCtx, Guid, FollowSymlinksPolicy, InitialPath) ->
+start(BulkDownloadId, UserCtx, Guid, SymlinksResolutionPolicy, InitialPath) ->
     %% @TODO VFS-6212 start traverse with cleanup option
     traverse_task:delete_ended(?POOL_NAME, BulkDownloadId),
     Options = #{
@@ -52,7 +52,7 @@ start(BulkDownloadId, UserCtx, Guid, FollowSymlinksPolicy, InitialPath) ->
         child_dirs_job_generation_policy => generate_slave_and_master_jobs,
         additional_data => #{<<"main_pid">> => utils:encode_pid(self())},
         master_job_mode => single,
-        follow_symlinks => FollowSymlinksPolicy,
+        symlink_resolution_policy => SymlinksResolutionPolicy,
         initial_relative_path => InitialPath
     },
     {ok, _} = tree_traverse:run(

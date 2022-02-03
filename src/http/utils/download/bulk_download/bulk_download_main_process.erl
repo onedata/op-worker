@@ -29,6 +29,10 @@
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
+-ifdef(TEST).
+-compile(export_all).
+-endif.
+
 %% API
 -export([start/5, resume/2, abort/1]).
 -export([report_next_file/3, report_data_sent/2, report_traverse_done/1]).
@@ -41,7 +45,7 @@
     connection_pid :: pid(),
     tar_stream :: tar_utils:stream(),
     send_retry_delay = 100 :: time:millis(),
-    follow_symlinks_policy = external :: tree_traverse:symlink_resolution_policy(),
+    follow_symlinks_policy = follow_external :: tree_traverse:symlink_resolution_policy(),
     root_dir_path :: file_meta:path() | undefined
 }).
 
@@ -116,10 +120,10 @@ is_offset_allowed(MainPid, Offset) ->
 main(BulkDownloadId, FileAttrsList, SessionId, InitialConn, FollowSymlinks) ->
     bulk_download_task:save_main_pid(BulkDownloadId, self()),
     TarStream = tar_utils:open_archive_stream(#{gzip => false}),
-    %% @TODO VFS-8882 - use none/external in API
+    %% @TODO VFS-8882 - use preserve/follow_external in API
     FollowSymlinksPolicy = case FollowSymlinks of
-        true -> external;
-        false -> none
+        true -> follow_external;
+        false -> preserve
     end,
     State = #state{
         id = BulkDownloadId, 
@@ -165,7 +169,7 @@ handle_multiple_files(
     handle_multiple_files(Tail, BulkDownloadId, UserCtx, UpdatedState);
 handle_multiple_files(
     [#file_attr{type = ?SYMLINK_TYPE, name = Name, guid = Guid} | Tail],
-    BulkDownloadId, UserCtx, #state{follow_symlinks_policy = external} = State
+    BulkDownloadId, UserCtx, #state{follow_symlinks_policy = follow_external} = State
 ) ->
     % when starting download from symlink it should be considered external and therefore resolved
     case check_result(lfm:stat(user_ctx:get_session_id(UserCtx), #file_ref{guid = Guid, follow_symlink = true})) of
@@ -176,7 +180,7 @@ handle_multiple_files(
     end;
 handle_multiple_files(
     [#file_attr{type = ?SYMLINK_TYPE, name = Name} = FileAttrs | Tail],
-    BulkDownloadId, UserCtx, #state{follow_symlinks_policy = none} = State
+    BulkDownloadId, UserCtx, #state{follow_symlinks_policy = preserve} = State
 ) ->
     UpdatedState = stream_symlink(State, user_ctx:get_session_id(UserCtx), FileAttrs, Name),
     handle_multiple_files(Tail, BulkDownloadId, UserCtx, UpdatedState).
@@ -297,7 +301,7 @@ new_tar_file_entry(#state{tar_stream = TarStream, root_dir_path = RootDirPath} =
         ?REGULAR_FILE_TYPE -> ?REGULAR_FILE_TYPE;
         ?SYMLINK_TYPE -> 
             Depth = length(filename:split(FileRelativePath)),
-            {?SYMLINK_TYPE, generate_internal_symlink_rel_path(RootDirPath, SymlinkValue, Depth)}
+            {?SYMLINK_TYPE, build_internal_symlink_value(RootDirPath, SymlinkValue, Depth)}
     end,
     UpdatedTarStream = tar_utils:new_file_entry(TarStream, FileRelativePath, FileSize, FinalMode, MTime, TypeSpec),
     {Bytes, FinalTarStream} = tar_utils:flush_buffer(UpdatedTarStream),
@@ -398,21 +402,19 @@ check_result({error, _} = Error) -> Error.
 
 
 %% @private
--spec generate_internal_symlink_rel_path(file_meta:path() | undefined, file_meta_symlinks:symlink(), 
-    non_neg_integer()) -> file_meta_symlinks:symlink().
-generate_internal_symlink_rel_path(undefined, SymlinkValue, _Depth) ->
+-spec build_internal_symlink_value(file_meta:path() | undefined, file_meta_symlinks:symlink(), 
+    pos_neg_integer()) -> file_meta_symlinks:symlink().
+build_internal_symlink_value(undefined, SymlinkValue, _SymlinkFileDepth) ->
     % downloading symlink with option follow_symlinks = false
     SymlinkValue;
-generate_internal_symlink_rel_path(RootDirPath, SymlinkValue, Depth) ->
-    [_Sep, _SpaceName | RootDirPathTokens] = filename:split(RootDirPath),
-    %% @TODO VFS-8938 - handle symlink relative value
+build_internal_symlink_value(RootDirAbsPath, SymlinkValue, SymlinkFileDepth) ->
+    [_Sep, _SpaceName | RootDirPathTokens] = filename:split(RootDirAbsPath),
+    %% @TODO VFS-8938 - properly handle symlink relative value
     [_SpacePrefix | SymlinkValueTokens] = filename:split(SymlinkValue),
-    case lists:prefix(RootDirPathTokens, SymlinkValueTokens) of
-        true ->
-            RelativePathTokens =
-                lists:sublist(SymlinkValueTokens, length(RootDirPathTokens) + 1, length(SymlinkValueTokens)),
+    case filepath_utils:is_descendant(filename:join(SymlinkValueTokens), filename:join(RootDirPathTokens)) of
+        {true, RelPath} ->
             % subtract 2 from Depth for RootDirName and SymlinkFileName
-            filename:join(lists:duplicate(Depth - 2, <<"..">>) ++ RelativePathTokens);
+            filename:join(lists:duplicate(SymlinkFileDepth - 2, <<"../">>) ++ [RelPath]);
         false ->
             SymlinkValue
     end.

@@ -63,7 +63,7 @@ save_master_job(Key, Job = #tree_traverse{
     batch_size = BatchSize,
     traverse_info = TraverseInfo,
     resolved_root_uuids = ResolvedRootUuids,
-    follow_symlinks_policy = FollowSymlinks,
+    symlink_resolution_policy = SymlinkResolutionPolicy,
     relative_path = RelativePath,
     encountered_files = EncounteredFilesMap
 }, Pool, TaskId, CallbackModule) ->
@@ -83,7 +83,7 @@ save_master_job(Key, Job = #tree_traverse{
         track_subtree_status = TrackSubtreeStatus,
         batch_size = BatchSize,
         traverse_info = term_to_binary(TraverseInfo),
-        follow_symlinks = FollowSymlinks,
+        symlink_resolution_policy = SymlinkResolutionPolicy,
         resolved_root_uuids = ResolvedRootUuids,
         relative_path = RelativePath,
         encountered_files = EncounteredFilesMap
@@ -118,7 +118,7 @@ get_master_job(#document{value = #tree_traverse_job{
     track_subtree_status = TrackSubtreeStatus,
     batch_size = BatchSize,
     traverse_info = TraverseInfo,
-    follow_symlinks = FollowSymlinks,
+    symlink_resolution_policy = SymlinkResolutionPolicy,
     resolved_root_uuids = ResolvedRootUuids,
     relative_path = RelativePath,
     encountered_files = EncounteredFilesMap
@@ -140,7 +140,7 @@ get_master_job(#document{value = #tree_traverse_job{
                 track_subtree_status = TrackSubtreeStatus,
                 batch_size = BatchSize,
                 traverse_info = binary_to_term(TraverseInfo),
-                follow_symlinks_policy = FollowSymlinks,
+                symlink_resolution_policy = SymlinkResolutionPolicy,
                 resolved_root_uuids = ResolvedRootUuids,
                 relative_path = RelativePath,
                 encountered_files = EncounteredFilesMap
@@ -267,8 +267,8 @@ get_record_struct(5) ->
         {track_subtree_status, boolean},
         {batch_size, integer},
         {traverse_info, binary},
-        {follow_symlinks_policy, atom}, % modified field
-        {resolved_roots_uuids, [string]}, % new field
+        {symlink_resolution_policy, atom}, % modified field
+        {resolved_root_uuids, [string]}, % new field
         {relative_path, binary},
         {encountered_files, #{string => boolean}}
     ]}.
@@ -399,9 +399,9 @@ upgrade_record(4, Record) ->
         EncounteredFiles
     } = Record,
     
-    FollowSymlinksPolicy = case FollowSymlinks of
-        true -> external;
-        false -> none
+    SymlinkResolutionPolicy = case FollowSymlinks of
+        true -> follow_external;
+        false -> preserve
     end,
     
     {5, {?MODULE,
@@ -418,8 +418,8 @@ upgrade_record(4, Record) ->
         TrackSubtreeStatus,
         BatchSize,
         TraverseInfo,
-        FollowSymlinksPolicy, % modified field
-        [], % new field
+        SymlinkResolutionPolicy, % modified field
+        [], % new field resolved_root_uuids
         RelativePath,
         EncounteredFiles
     }}.
