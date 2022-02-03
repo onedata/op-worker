@@ -48,14 +48,14 @@
 -record(get_file_children, {
     offset :: undefined | file_meta:list_offset(),
     size :: file_meta:size(),
-    index_token = undefined :: undefined | binary(),
+    index_token = undefined :: undefined | dir_req:list_token(),
     index_startid = undefined :: undefined | binary()
 }).
 
 -record(get_file_children_attrs, {
     offset :: file_meta:list_offset(),
     size :: file_meta:size(),
-    index_token :: undefined | binary(),
+    index_token :: undefined | dir_req:list_token(),
     include_replication_status :: undefined | boolean(),
     include_link_count :: undefined | boolean()
 }).

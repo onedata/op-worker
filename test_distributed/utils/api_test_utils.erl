@@ -55,7 +55,8 @@
     randomly_create_share/3,
 
     guids_to_object_ids/1,
-    file_details_to_gs_json/2
+    file_details_to_gs_json/2,
+    file_attrs_to_json/2
 ]).
 -export([
     add_file_id_errors_for_operations_available_in_share_mode/3,
@@ -478,8 +479,8 @@ file_details_to_gs_json(undefined, #file_details{
         <<"activePermissionsType">> => atom_to_binary(ActivePermissionsType, utf8),
         <<"providerId">> => ProviderId,
         <<"ownerId">> => OwnerId,
-        <<"effQosMembership">> => atom_to_binary(EffQosMembership, utf8),
-        <<"effDatasetMembership">> => atom_to_binary(EffDatasetMembership, utf8),
+        <<"effQosMembership">> => translate_membership(EffQosMembership),
+        <<"effDatasetMembership">> => translate_membership(EffDatasetMembership),
         <<"hardlinksCount">> => utils:undefined_to_null(LinksCount),
         <<"recallRootId">> => utils:undefined_to_null(RecallRootId)
     };
@@ -524,6 +525,91 @@ file_details_to_gs_json(ShareId, #file_details{
         <<"activePermissionsType">> => atom_to_binary(ActivePermissionsType, utf8)
     }.
 
+
+-spec file_attrs_to_json(undefined | od_share:id(), #file_attr{}) -> map().
+file_attrs_to_json(undefined, #file_attr{
+    guid = Guid,
+    name = Name,
+    mode = Mode,
+    parent_guid = ParentGuid,
+    uid = Uid,
+    gid = Gid,
+    atime = Atime,
+    mtime = Mtime,
+    ctime = Ctime,
+    type = Type,
+    size = Size,
+    shares = Shares,
+    provider_id = ProviderId,
+    owner_id = OwnerId,
+    nlink = HardlinksCount
+}) ->
+    {ok, ObjectId} = file_id:guid_to_objectid(Guid),
+    
+    #{
+        <<"file_id">> => ObjectId,
+        <<"name">> => Name,
+        <<"mode">> => list_to_binary(string:right(integer_to_list(Mode, 8), 3, $0)),
+        <<"parent_id">> => case ParentGuid of
+            undefined ->
+                null;
+            _ ->
+                {ok, ParentObjectId} = file_id:guid_to_objectid(ParentGuid),
+                ParentObjectId
+        end,
+        <<"storage_user_id">> => Uid,
+        <<"storage_group_id">> => Gid,
+        <<"atime">> => Atime,
+        <<"mtime">> => Mtime,
+        <<"ctime">> => Ctime,
+        <<"type">> => str_utils:to_binary(Type),
+        <<"size">> => case Type of
+            ?DIRECTORY_TYPE -> null;
+            _ -> utils:undefined_to_null(Size)
+        end,
+        <<"shares">> => Shares,
+        <<"provider_id">> => ProviderId,
+        <<"owner_id">> => OwnerId,
+        <<"hardlinks_count">> => utils:undefined_to_null(HardlinksCount)
+    };
+file_attrs_to_json(ShareId, #file_attr{
+    guid = FileGuid,
+    parent_guid = ParentGuid,
+    name = Name,
+    type = Type,
+    mode = Mode,
+    size = Size,
+    mtime = Mtime,
+    atime = Atime,
+    ctime = Ctime,
+    shares = Shares
+}) ->
+    {ok, ObjectId} = file_id:guid_to_objectid(file_id:guid_to_share_guid(FileGuid, ShareId)),
+    IsShareRoot = lists:member(ShareId, Shares),
+    
+    #{
+        <<"file_id">> => ObjectId,
+        <<"name">> => Name,
+        <<"mode">> => list_to_binary(string:right(integer_to_list(Mode band 2#111, 8), 3, $0)),
+        <<"parent_id">> => case IsShareRoot of
+            true -> null;
+            false ->
+                {ok, ParentObjectId} = file_id:guid_to_objectid(file_id:guid_to_share_guid(ParentGuid, ShareId)),
+                ParentObjectId
+        end,
+        <<"atime">> => Atime,
+        <<"mtime">> => Mtime,
+        <<"ctime">> => Ctime,
+        <<"type">> => str_utils:to_binary(Type),
+        <<"size">> => case Type of
+            ?DIRECTORY_TYPE -> null;
+            _ -> utils:undefined_to_null(Size)
+        end,
+        <<"shares">> => case IsShareRoot of
+            true -> [ShareId];
+            false -> []
+        end
+    }.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -787,3 +873,10 @@ add_share_file_id_errors_for_operations_not_available_in_share_mode(FileGuid, Sh
 
         | Errors
     ].
+
+
+%% @private
+translate_membership(?NONE_MEMBERSHIP) -> <<"none">>;
+translate_membership(?DIRECT_MEMBERSHIP) -> <<"direct">>;
+translate_membership(?ANCESTOR_MEMBERSHIP) -> <<"ancestor">>;
+translate_membership(?DIRECT_AND_ANCESTOR_MEMBERSHIP) -> <<"directAndAncestor">>.

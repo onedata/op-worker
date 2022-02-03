@@ -303,6 +303,9 @@ cleanup_reference_related_documents(FileCtx, OriginalParentCtx) ->
             lists:foreach(fun(EffectiveQosEntryId) ->
                 qos_status:report_file_deleted(FileCtx1, EffectiveQosEntryId, OriginalParentCtx)
             end, EffectiveQosEntries);
+        {error, {file_meta_missing, _}} ->
+            % original parent is already deleted or not yet synchronized; nothing to clean up
+            ok;
         {error, _} = Error ->
             ?warning("Error during QoS clean up procedure:~p", [Error]),
             ok

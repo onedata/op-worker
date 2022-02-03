@@ -484,7 +484,7 @@ encode_token(#link_token{} = Token) ->
 
 
 -spec decode_token(undefined | token()) -> token_internal().
-decode_token(?INITIAL_LS_TOKEN) ->
+decode_token(?INITIAL_DATASTORE_LS_TOKEN) ->
     #link_token{};
 decode_token(TokenBin) ->
     try

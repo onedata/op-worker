@@ -7,6 +7,13 @@
 %%%--------------------------------------------------------------------
 %%% @doc
 %%% This module is responsible for handing requests operating on directories.
+%%% This module operates on two types of tokens used for continuous listing of directory content: 
+%%%     * datastore_token - token used internally by datastore. Can expire. After its expiration 
+%%%                         options provided alongside token are used to determine listing staritng 
+%%%                         point;
+%%%     * api_token - contains all information required for listing continuation even after 
+%%%                   datastore_token (which is included in api_token) expiration. Therefore 
+%%%                   this token does not expire.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(dir_req).
@@ -17,6 +24,19 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_links.hrl").
+
+
+-type api_list_token() :: binary().
+-type list_token() :: file_meta:list_token() | api_list_token().
+-type token_type() :: api_token | datastore_token.
+
+-type list_opts() :: #{
+    token => api_list_token(),
+    size => file_meta:list_size()
+} | file_meta:list_opts().
+
+
+-export_type([list_token/0, list_opts/0]).
 
 %% API
 -export([
@@ -30,6 +50,7 @@
 -define(MAX_MAP_CHILDREN_PROCESSES, application:get_env(
     ?APP_NAME, max_read_dir_plus_procs, 20
 )).
+-define(API_TOKEN_HEADER, "api_token").
 
 %%%===================================================================
 %%% API
@@ -54,7 +75,7 @@ mkdir(UserCtx, ParentFileCtx0, Name, Mode) ->
 
 
 
--spec get_children(user_ctx:ctx(), file_ctx:ctx(), file_meta:list_opts()) ->
+-spec get_children(user_ctx:ctx(), file_ctx:ctx(), list_opts()) ->
     fslogic_worker:fuse_response().
 get_children(UserCtx, FileCtx0, ListOpts) ->
     ParentGuid = file_ctx:get_logical_guid_const(FileCtx0),
@@ -104,7 +125,7 @@ get_children(UserCtx, FileCtx0, ListOpts) ->
 %% TODO VFS-7149 untangle permissions_check and fslogic_worker
 %% @end
 %%--------------------------------------------------------------------
--spec get_children_ctxs(user_ctx:ctx(), file_ctx:ctx(), file_meta:list_opts()
+-spec get_children_ctxs(user_ctx:ctx(), file_ctx:ctx(), list_opts()
 ) ->
     {
         ChildrenCtxs :: [file_ctx:ctx()],
@@ -127,7 +148,7 @@ get_children_ctxs(UserCtx, FileCtx0, ListOpts) ->
 %% @equiv get_children_attrs_insecure/7 with permission checks
 %% @end
 %%--------------------------------------------------------------------
--spec get_children_attrs(user_ctx:ctx(), file_ctx:ctx(), file_meta:list_opts(), boolean(), boolean()) ->
+-spec get_children_attrs(user_ctx:ctx(), file_ctx:ctx(), list_opts(), boolean(), boolean()) ->
     fslogic_worker:fuse_response().
 get_children_attrs(UserCtx, FileCtx0, ListOpts, IncludeReplicationStatus, IncludeLinkCount) ->
     {IsDir, FileCtx1} = file_ctx:is_dir(FileCtx0),
@@ -147,7 +168,7 @@ get_children_attrs(UserCtx, FileCtx0, ListOpts, IncludeReplicationStatus, Includ
 %% @equiv get_children_details_insecure/6 with permission checks
 %% @end
 %%--------------------------------------------------------------------
--spec get_children_details(user_ctx:ctx(), file_ctx:ctx(), file_meta:list_opts()) ->
+-spec get_children_details(user_ctx:ctx(), file_ctx:ctx(), list_opts()) ->
     fslogic_worker:fuse_response().
 get_children_details(UserCtx, FileCtx0, ListOpts) ->
     {IsDir, FileCtx1} = file_ctx:is_dir(FileCtx0),
@@ -223,14 +244,15 @@ mkdir_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
 %% and allowed by CanonicalChildrenWhiteList.
 %% @end
 %%--------------------------------------------------------------------
--spec get_children_attrs_insecure(user_ctx:ctx(), file_ctx:ctx(), file_meta:list_opts(),
+-spec get_children_attrs_insecure(user_ctx:ctx(), file_ctx:ctx(), list_opts(),
     boolean(), boolean(), undefined | [file_meta:name()]
 ) ->
     fslogic_worker:fuse_response().
 get_children_attrs_insecure(
     UserCtx, FileCtx0, ListOpts, IncludeReplicationStatus, IncludeLinkCount, CanonicalChildrenWhiteList
 ) ->
-    {Children, ExtendedInfo, FileCtx1} = list_children(UserCtx, FileCtx0, ListOpts, CanonicalChildrenWhiteList),
+    {Children, ExtendedInfo, FileCtx1} = list_children(
+        UserCtx, FileCtx0, ListOpts, CanonicalChildrenWhiteList),
     ChildrenAttrs = map_children(
         UserCtx,
         fun attr_req:get_file_attr_insecure/3,
@@ -261,7 +283,7 @@ get_children_attrs_insecure(
 -spec get_children_details_insecure(
     user_ctx:ctx(),
     file_ctx:ctx(),
-    file_meta:list_opts(),
+    list_opts(),
     undefined | [file_meta:name()]
 ) ->
     fslogic_worker:fuse_response().
@@ -287,7 +309,7 @@ get_children_details_insecure(UserCtx, FileCtx0, ListOpts, CanonicalChildrenWhit
 
 
 %% @private
--spec list_children(user_ctx:ctx(), file_ctx:ctx(), file_meta:list_opts(),
+-spec list_children(user_ctx:ctx(), file_ctx:ctx(), list_opts(),
     CanonicalChildrenWhiteList :: undefined | [file_meta:name()]
 ) ->
     {
@@ -296,7 +318,19 @@ get_children_details_insecure(UserCtx, FileCtx0, ListOpts, CanonicalChildrenWhit
         NewFileCtx :: file_ctx:ctx()
     }.
 list_children(UserCtx, FileCtx0, ListOpts, CanonicalChildrenWhiteList) ->
-    files_tree:get_children(FileCtx0, UserCtx, ListOpts, CanonicalChildrenWhiteList).
+    {TokenType, FinalListOpts} = resolve_list_opts(ListOpts),
+    {Children, ExtendedInfo, NewFileCtx} = files_tree:get_children(
+        FileCtx0, UserCtx, FinalListOpts, CanonicalChildrenWhiteList),
+    FinalExtendedInfo = case TokenType of
+        api_token -> 
+            #{
+                is_last => maps:get(is_last, ExtendedInfo),
+                token => pack_api_token(ExtendedInfo)
+            };
+        _ ->
+            ExtendedInfo
+    end,
+    {Children, FinalExtendedInfo, NewFileCtx}.
 
 
 %%--------------------------------------------------------------------
@@ -352,3 +386,41 @@ map_children(UserCtx, MapFunInsecure, Children, IncludeReplicationStatus, Includ
         end
     end,
     lists_utils:pfiltermap(FilterMapFun, EnumeratedChildren, ?MAX_MAP_CHILDREN_PROCESSES).
+
+
+%% @private
+-spec resolve_list_opts(list_opts()) -> {token_type() | none, file_meta:list_opts()}.
+resolve_list_opts(#{token := undefined} = ListOpts) ->
+    {none, ListOpts};
+resolve_list_opts(#{token := ?INITIAL_API_LS_TOKEN} = ListOpts) ->
+    {api_token, #{
+        token => ?INITIAL_DATASTORE_LS_TOKEN,
+        last_tree => <<>>,
+        last_name => <<>>,
+        size => maps:get(size, ListOpts)
+    }};
+resolve_list_opts(#{token := Token} = ListOpts) ->
+    try
+        <<?API_TOKEN_HEADER, _/binary>> = DecodedToken = mochiweb_base64url:decode(Token),
+        [_Header, DecodedDatastoreToken, LastTree | LastNameTokens] =
+            binary:split(DecodedToken, <<"#">>, [global]),
+        {api_token, #{
+            token => DecodedDatastoreToken,
+            last_tree => LastTree,
+            last_name => str_utils:join_binary(LastNameTokens, <<"#">>),
+            size => maps:get(size, ListOpts)
+        }}
+    catch _:_ ->
+        {datastore_token, ListOpts}
+    end;
+resolve_list_opts(ListOpts) ->
+    {none, ListOpts}.
+
+
+%% @private
+-spec pack_api_token(file_meta:list_extended_info()) -> binary().
+pack_api_token(#{token := DatastoreToken, last_tree := LastTree, last_name := LastName}) ->
+    mochiweb_base64url:encode(str_utils:join_binary(
+        [<<?API_TOKEN_HEADER>>, DatastoreToken, LastTree, LastName], <<"#">>));
+pack_api_token(_) ->
+    undefined.

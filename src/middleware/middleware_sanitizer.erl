@@ -47,7 +47,8 @@
 }.
 
 -export_type([
-    type_constraint/0, value_constraint/0,
+    type_constraint/0, value_constraint/0,  
+    custom_value_constraint/0,
     param_spec/0, params_spec/0,
     data/0, data_spec/0
 ]).

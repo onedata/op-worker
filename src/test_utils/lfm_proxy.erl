@@ -553,7 +553,7 @@ get_children(Worker, SessId, FileKey, Offset, Limit) ->
 
 
 -spec get_children_attrs(node(), session:id(), lfm:file_key() | file_meta:uuid_or_path(),
-    file_meta:list_opts()) -> {ok, [#file_attr{}]} | lfm:error_reply().
+    dir_req:list_opts()) -> {ok, [#file_attr{}]} | lfm:error_reply().
 get_children_attrs(Worker, SessId, FileKey, ListOpts) ->
     ?EXEC(Worker, lfm:get_children_attrs(SessId, uuid_to_file_ref(Worker, FileKey), ListOpts)).
 
