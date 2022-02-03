@@ -403,7 +403,7 @@ check_result({error, _} = Error) -> Error.
 
 %% @private
 -spec build_internal_symlink_value(file_meta:path() | undefined, file_meta_symlinks:symlink(), 
-    pos_neg_integer()) -> file_meta_symlinks:symlink().
+    pos_integer()) -> file_meta_symlinks:symlink().
 build_internal_symlink_value(undefined, SymlinkValue, _SymlinkFileDepth) ->
     % downloading symlink with option follow_symlinks = false
     SymlinkValue;
