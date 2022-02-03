@@ -407,6 +407,8 @@ delete_file_metadata(FileCtx, UserCtx, ?SPEC(?TWO_STEP_DEL_FIN, DocsDeletionScop
 
 
 -spec maybe_try_to_delete_parent(file_ctx:ctx(), user_ctx:ctx(), docs_deletion_scope(), helpers:file_id()) -> ok.
+maybe_try_to_delete_parent(_FileCtx, _UserCtx, _DocsDeletionScope, ?DELETED_OPENED_FILES_DIR) ->
+    ok;
 maybe_try_to_delete_parent(FileCtx, UserCtx, DocsDeletionScope, StorageFileId) ->
     {ParentCtx, _FileCtx2} = files_tree:get_parent(FileCtx, UserCtx),
     try

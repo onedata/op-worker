@@ -491,6 +491,11 @@ prepare_next_job_using_iterator(ExecutionId, ItemIndex, CurrentIterationStep, La
         {ok, #document{value = State}} ->
             handle_state_update_after_job_preparation(ExecutionId, State);
         ?WF_ERROR_LANE_CHANGED ->
+            case NextIterationStep of
+                undefined -> ok;
+                ?WF_ERROR_ITERATION_FAILED -> ok;
+                {ItemId, _} -> workflow_cached_item:delete(ItemId)
+            end,
             prepare_next_job_for_current_lane(ExecutionId);
         ?WF_ERROR_RACE_CONDITION ->
             case NextIterationStep of

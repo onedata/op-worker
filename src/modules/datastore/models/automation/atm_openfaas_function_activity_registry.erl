@@ -189,6 +189,7 @@ consume_pod_status_report(#atm_openfaas_function_pod_status_report{
     function_name = FunctionName,
     pod_id = PodId,
 
+    pod_status = PodStatus,
     containers_readiness = ContainersReadiness,
 
     event_timestamp = EventTimestamp,
@@ -207,10 +208,10 @@ consume_pod_status_report(#atm_openfaas_function_pod_status_report{
                 fun(#atm_openfaas_function_pod_status_summary{
                     last_status_change_timestamp = PreviousStatusChangeTimestamp
                 } = PreviousSummary) ->
-                    case EventTimestamp > PreviousStatusChangeTimestamp of
+                    case EventTimestamp >= PreviousStatusChangeTimestamp of
                         true ->
                             PreviousSummary#atm_openfaas_function_pod_status_summary{
-                                current_status = EventReason,
+                                current_status = PodStatus,
                                 current_containers_readiness = ContainersReadiness,
                                 last_status_change_timestamp = EventTimestamp
                             };
@@ -219,7 +220,7 @@ consume_pod_status_report(#atm_openfaas_function_pod_status_report{
                     end
                 end,
                 #atm_openfaas_function_pod_status_summary{
-                    current_status = EventReason,
+                    current_status = PodStatus,
                     current_containers_readiness = ContainersReadiness,
                     last_status_change_timestamp = EventTimestamp,
                     event_log = PodEventLogId

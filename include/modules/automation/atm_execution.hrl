@@ -107,6 +107,7 @@
     function_name :: atm_openfaas_task_executor:function_name(),
     pod_id :: atm_openfaas_function_activity_registry:pod_id(),
 
+    pod_status :: atm_openfaas_function_pod_status_report:pod_status(),
     containers_readiness :: atm_openfaas_function_pod_status_report:containers_readiness(),
 
     event_timestamp :: atm_openfaas_function_pod_status_report:event_timestamp(),
@@ -128,8 +129,7 @@
 % Record holding the summary of status changes for a single pod of an OpenFaaS function
 % (single entry in the atm_openfaas_function_pod_status_registry)
 -record(atm_openfaas_function_pod_status_summary, {
-    % NOTE: the reason of the last observed event is also the current status of a pod
-    current_status :: atm_openfaas_function_pod_status_report:event_reason(),
+    current_status :: atm_openfaas_function_pod_status_report:pod_status(),
     current_containers_readiness :: atm_openfaas_function_pod_status_report:containers_readiness(),
     last_status_change_timestamp :: atm_openfaas_function_pod_status_report:event_timestamp(),
     event_log :: infinite_log:log_id()
