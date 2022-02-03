@@ -115,7 +115,7 @@ invalidate_on_all_nodes(SpaceId) ->
     | {error, {file_meta_missing, file_meta:uuid()}} | {error, term()}.
 get(SpaceId, Doc = #document{value = #file_meta{}}) ->
     CacheName = ?CACHE_NAME(SpaceId),
-    case effective_value:get_or_calculate(CacheName, Doc, fun find_closes_recall/1) of
+    case effective_value:get_or_calculate(CacheName, Doc, fun find_closest_recall/1) of
         {ok, Res, _} ->
             {ok, Res};
         {error, _} = Error ->
@@ -151,14 +151,14 @@ invalidate(SpaceId) ->
 %% be another recall (which will be closer).
 %% @end
 %%-------------------------------------------------------------------
--spec find_closes_recall(effective_value:args()) -> 
+-spec find_closest_recall(effective_value:args()) -> 
     {ok, undefined | {ongoing | finished, file_meta:uuid()}, effective_value:calculation_info()} 
     | {error, term()}.
-find_closes_recall([_, {error, _} = Error, _CalculationInfo]) ->
+find_closest_recall([_, {error, _} = Error, _CalculationInfo]) ->
     Error;
-find_closes_recall([_, {ongoing, _} = ParentValue, CalculationInfo]) ->
+find_closest_recall([_, {ongoing, _} = ParentValue, CalculationInfo]) ->
     {ok, ParentValue, CalculationInfo};
-find_closes_recall([#document{} = FileMetaDoc, ParentValue, CalculationInfo]) ->
+find_closest_recall([#document{} = FileMetaDoc, ParentValue, CalculationInfo]) ->
     #document{key = FileUuid} = FileMetaDoc,
     case archive_recall:get_details(FileUuid) of
         {ok, #archive_recall_details{finish_timestamp = undefined}} -> 
