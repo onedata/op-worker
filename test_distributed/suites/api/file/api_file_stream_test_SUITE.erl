@@ -1423,19 +1423,22 @@ check_extracted_tarball_structure(_MemRef, #object{name = Filename}, no_files, C
 %% @private
 -spec check_symlink(api_test_memory:mem_ref(), file_meta:path(), onenv_file_test_utils:object_spec(), public | private) -> ok.
 check_symlink(MemRef, CurrentPath, Object, private) ->
-    #object{name = Filename, symlink_value = LinkValue} = Object,
-    % NOTE: custom_label in LinkValue is used only for internal symlinks
-    case {api_test_memory:get(MemRef, follow_symlinks), LinkValue} of
+    #object{name = Filename, symlink_value = SymlinkValue} = Object,
+    % NOTE: custom_label in SymlinkValue is used only for internal symlinks
+    case {api_test_memory:get(MemRef, follow_symlinks), SymlinkValue} of
         {true, {custom_label, Content}} ->
             ?assertEqual({ok, Content}, file:read_file(filename:join(CurrentPath, Filename)));
         {true, _} ->
-            % link target files has its name as content
-            ?assertEqual({ok, filename:basename(LinkValue)}, file:read_file(filename:join(CurrentPath, Filename)));
+            % symlink target file has its name as content
+            ?assertEqual({ok, filename:basename(SymlinkValue)}, file:read_file(filename:join(CurrentPath, Filename)));
         {false, {custom_label, Content}} ->
             % internal symlinks are modified to target files in tarball even with follow_symlinks = false
+            % check that symlink was not resolved
+            ?assertMatch({ok, _}, file:read_link(filename:join(CurrentPath, Filename))),
+            % symlink targets file that is also in the downloaded tarball, so it should be resolved when reading
             ?assertEqual({ok, Content}, file:read_file(filename:join(CurrentPath, Filename)));
         {false, _} ->
-            ?assertEqual({ok, binary_to_list(LinkValue)}, file:read_link(filename:join(CurrentPath, Filename)))
+            ?assertEqual({ok, binary_to_list(SymlinkValue)}, file:read_link(filename:join(CurrentPath, Filename)))
     end;
 check_symlink(_MemRef, CurrentPath, Object, public) ->
     #object{name = Filename} = Object,
