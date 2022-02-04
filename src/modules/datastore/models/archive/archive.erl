@@ -40,7 +40,7 @@
 ]).
 
 %% datastore_model callbacks
--export([get_ctx/0, get_record_struct/1]).
+-export([get_ctx/0, get_record_version/0, get_record_struct/1]).
 
 -compile([{no_auto_import, [get/1]}]).
 
@@ -383,8 +383,8 @@ mark_purging(ArchiveId, Callback) ->
             orelse Parent =/= undefined % nested archive cannot be removed as it would destroy parent archive
         of
             true ->
-                % TODO VFS-7718 return better error for nested dataset?
-                {error, ?EBUSY};
+                %% @TODO VFS-8840 - create more descriptive error (also for nested archives)
+                ?ERROR_POSIX(?EBUSY);
             false ->
                 {ok, Archive#archive{
                     state = ?ARCHIVE_PURGING,
@@ -494,6 +494,7 @@ set_related_aip(ArchiveDocOrId, AipArchiveId) ->
     update(ArchiveDocOrId, fun(Archive) ->
         {ok, Archive#archive{related_aip = AipArchiveId}}
     end).
+        
 
 %%%===================================================================
 %%% Internal functions
@@ -519,20 +520,15 @@ get_all_ancestors(ArchiveId, AncestorArchives) ->
 %%% Datastore callbacks
 %%%===================================================================
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns model's context.
-%% @end
-%%--------------------------------------------------------------------
 -spec get_ctx() -> datastore:ctx().
 get_ctx() ->
     ?CTX.
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns model's record structure in provided version.
-%% @end
-%%--------------------------------------------------------------------
+
+-spec get_record_version() -> datastore_model:record_version().
+get_record_version() ->
+    1.
+
 -spec get_record_struct(datastore_model:record_version()) -> datastore_model:record_struct().
 get_record_struct(1) ->
     {record, [

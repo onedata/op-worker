@@ -36,7 +36,10 @@
     update_archive/4,
     get_archive_info/3,
     list_archives/5,
-    init_archive_purge/4
+    init_archive_purge/4,
+    init_archive_recall/5,
+    get_archive_recall_details/3,
+    get_archive_recall_progress/3
 ]).
 
 -type error() :: {error, term()}.
@@ -201,7 +204,31 @@ init_archive_purge(SpaceDirCtx, ArchiveId, CallbackUrl, UserCtx) ->
     assert_has_eff_privilege(SpaceDirCtx, UserCtx, ?SPACE_MANAGE_DATASETS),
     assert_has_eff_privilege(SpaceDirCtx, UserCtx, ?SPACE_REMOVE_ARCHIVES),
 
-    archive_api:init_archive_purge(ArchiveId, CallbackUrl).
+    archive_api:purge(ArchiveId, CallbackUrl).
+
+
+-spec init_archive_recall(file_ctx:ctx(), archive:id(), file_id:file_guid(), file_meta:name() | undefined, 
+    user_ctx:ctx()) -> {ok, file_id:file_guid()} | error().
+init_archive_recall(SpaceDirCtx, ArchiveId, ParentDirectoryGuid, TargetName, UserCtx) ->
+    assert_has_eff_privilege(SpaceDirCtx, UserCtx, ?SPACE_RECALL_ARCHIVES),
+    
+    archive_api:recall(ArchiveId, UserCtx, ParentDirectoryGuid, TargetName).
+
+
+-spec get_archive_recall_details(file_ctx:ctx(), archive_recall:id(), user_ctx:ctx()) -> 
+    {ok, archive_recall:record()} | error().
+get_archive_recall_details(FileCtx, RecallId, UserCtx) ->
+    fslogic_authz:ensure_authorized(UserCtx, FileCtx, [?TRAVERSE_ANCESTORS]),
+    
+    archive_recall:get_details(RecallId).
+
+
+-spec get_archive_recall_progress(file_ctx:ctx(), archive_recall:id(), user_ctx:ctx()) ->
+    {ok, archive_recall:recall_progress_map()} | error().
+get_archive_recall_progress(FileCtx, RecallId, UserCtx) ->
+    fslogic_authz:ensure_authorized(UserCtx, FileCtx, [?TRAVERSE_ANCESTORS]),
+    
+    archive_recall:get_progress(RecallId).
 
 
 %%%===================================================================

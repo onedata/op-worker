@@ -29,6 +29,10 @@
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
+-ifdef(TEST).
+-compile(export_all).
+-endif.
+
 %% API
 -export([start/5, resume/2, abort/1]).
 -export([report_next_file/3, report_data_sent/2, report_traverse_done/1]).
@@ -41,7 +45,8 @@
     connection_pid :: pid(),
     tar_stream :: tar_utils:stream(),
     send_retry_delay = 100 :: time:millis(),
-    follow_symlinks = true :: boolean()
+    symlink_resolution_policy = follow_external :: tree_traverse:symlink_resolution_policy(),
+    root_dir_path :: file_meta:path() | undefined
 }).
 
 -type state() :: #state{}.
@@ -115,11 +120,16 @@ is_offset_allowed(MainPid, Offset) ->
 main(BulkDownloadId, FileAttrsList, SessionId, InitialConn, FollowSymlinks) ->
     bulk_download_task:save_main_pid(BulkDownloadId, self()),
     TarStream = tar_utils:open_archive_stream(#{gzip => false}),
+    %% @TODO VFS-8882 - use preserve/follow_external in API
+    SymlinkResolutionPolicy = case FollowSymlinks of
+        true -> follow_external;
+        false -> preserve
+    end,
     State = #state{
         id = BulkDownloadId, 
-        connection_pid = InitialConn, 
+        connection_pid = InitialConn,
         tar_stream = TarStream, 
-        follow_symlinks = FollowSymlinks
+        symlink_resolution_policy = SymlinkResolutionPolicy
     },
     {ok, UserId} = session:get_user_id(SessionId),
     {ok, UserCtx} = tree_traverse_session:acquire_for_task(UserId, ?TARBALL_DOWNLOAD_TRAVERSE_POOL_NAME, BulkDownloadId),
@@ -141,12 +151,16 @@ handle_multiple_files(
     [#file_attr{guid = Guid, type = ?DIRECTORY_TYPE, name = Name} = FileAttrs | Tail],
     BulkDownloadId, UserCtx, State
 ) ->
+    % Retrieve file path using root session as download can be performed in shared scope.
+    % This value is used only for internal calculations and is never returned.
+    {ok, RootDirPath} = lfm:get_file_path(?ROOT_SESS_ID, strip_share_guid(Guid)),
+    UpdatedState = State#state{root_dir_path = RootDirPath},
     % add starting dir to the tarball here as traverse does not execute slave job on it
-    {Bytes, UpdatedState} = new_tar_file_entry(State, FileAttrs, Name),
-    UpdatedState1 = send_data(Bytes, UpdatedState),
-    bulk_download_traverse:start(BulkDownloadId, UserCtx, Guid, State#state.follow_symlinks, Name),
-    FinalState = wait_for_traverse(UpdatedState1, user_ctx:get_session_id(UserCtx)),
-    handle_multiple_files(Tail, BulkDownloadId, UserCtx, FinalState);
+    {Bytes, UpdatedState2} = new_tar_file_entry(UpdatedState, FileAttrs, Name),
+    UpdatedState3 = send_data(Bytes, UpdatedState2),
+    bulk_download_traverse:start(BulkDownloadId, UserCtx, Guid, State#state.symlink_resolution_policy, Name),
+    FinalState = wait_for_traverse(UpdatedState3, user_ctx:get_session_id(UserCtx)),
+    handle_multiple_files(Tail, BulkDownloadId, UserCtx, FinalState#state{root_dir_path = undefined});
 handle_multiple_files(
     [#file_attr{type = ?REGULAR_FILE_TYPE, name = Name} = FileAttrs | Tail], 
     BulkDownloadId, UserCtx, State
@@ -155,8 +169,9 @@ handle_multiple_files(
     handle_multiple_files(Tail, BulkDownloadId, UserCtx, UpdatedState);
 handle_multiple_files(
     [#file_attr{type = ?SYMLINK_TYPE, name = Name, guid = Guid} | Tail],
-    BulkDownloadId, UserCtx, #state{follow_symlinks = true} = State
+    BulkDownloadId, UserCtx, #state{symlink_resolution_policy = follow_external} = State
 ) ->
+    % when starting download from symlink it should be considered external and therefore resolved
     case check_result(lfm:stat(user_ctx:get_session_id(UserCtx), #file_ref{guid = Guid, follow_symlink = true})) of
         {ok, ResolvedFileAttrs} ->
             handle_multiple_files([ResolvedFileAttrs#file_attr{name = Name} | Tail], BulkDownloadId, UserCtx, State);
@@ -165,7 +180,7 @@ handle_multiple_files(
     end;
 handle_multiple_files(
     [#file_attr{type = ?SYMLINK_TYPE, name = Name} = FileAttrs | Tail],
-    BulkDownloadId, UserCtx, #state{follow_symlinks = false} = State
+    BulkDownloadId, UserCtx, #state{symlink_resolution_policy = preserve} = State
 ) ->
     UpdatedState = stream_symlink(State, user_ctx:get_session_id(UserCtx), FileAttrs, Name),
     handle_multiple_files(Tail, BulkDownloadId, UserCtx, UpdatedState).
@@ -274,7 +289,7 @@ new_tar_file_entry(TarStream, FileAttrs, FileRelativePath) ->
 %% @private
 -spec new_tar_file_entry(state(), lfm_attrs:file_attributes(), file_meta:path(), 
     file_meta_symlinks:symlink() | undefined) -> {binary(), state()}.
-new_tar_file_entry(#state{tar_stream = TarStream} = State, FileAttrs, FileRelativePath, SymlinkPath) ->
+new_tar_file_entry(#state{tar_stream = TarStream, root_dir_path = RootDirPath} = State, FileAttrs, FileRelativePath, SymlinkValue) ->
     #file_attr{mode = Mode, mtime = MTime, type = Type, size = FileSize, guid = Guid} = FileAttrs,
     FinalMode = case {file_id:is_share_guid(Guid), Type} of
         {true, ?REGULAR_FILE_TYPE} -> ?DEFAULT_FILE_PERMS;
@@ -284,7 +299,9 @@ new_tar_file_entry(#state{tar_stream = TarStream} = State, FileAttrs, FileRelati
     TypeSpec = case Type of
         ?DIRECTORY_TYPE -> ?DIRECTORY_TYPE;
         ?REGULAR_FILE_TYPE -> ?REGULAR_FILE_TYPE;
-        ?SYMLINK_TYPE -> {?SYMLINK_TYPE, SymlinkPath}
+        ?SYMLINK_TYPE -> 
+            Depth = length(filename:split(FileRelativePath)),
+            {?SYMLINK_TYPE, build_internal_symlink_value(RootDirPath, SymlinkValue, Depth)}
     end,
     UpdatedTarStream = tar_utils:new_file_entry(TarStream, FileRelativePath, FileSize, FinalMode, MTime, TypeSpec),
     {Bytes, FinalTarStream} = tar_utils:flush_buffer(UpdatedTarStream),
@@ -382,3 +399,29 @@ check_result({error, ?ENOENT}) -> ignored;
 check_result({error, ?EPERM}) -> ignored;
 check_result({error, ?EACCES}) -> ignored;
 check_result({error, _} = Error) -> Error.
+
+
+%% @private
+-spec build_internal_symlink_value(file_meta:path() | undefined, file_meta_symlinks:symlink(), 
+    pos_integer()) -> file_meta_symlinks:symlink().
+build_internal_symlink_value(undefined, SymlinkValue, _SymlinkFileDepth) ->
+    % downloading symlink with option follow_symlinks = false
+    SymlinkValue;
+build_internal_symlink_value(RootDirAbsPath, SymlinkValue, SymlinkFileDepth) ->
+    [_Sep, _SpaceName | RootDirPathTokens] = filename:split(RootDirAbsPath),
+    %% @TODO VFS-8938 - properly handle symlink relative value
+    [_SpacePrefix | SymlinkValueTokens] = filename:split(SymlinkValue),
+    case filepath_utils:is_descendant(filename:join(SymlinkValueTokens), filename:join(RootDirPathTokens)) of
+        {true, RelPath} ->
+            % subtract 2 from Depth for RootDirName and SymlinkFileName
+            filename:join(lists:duplicate(SymlinkFileDepth - 2, <<"../">>) ++ [RelPath]);
+        false ->
+            SymlinkValue
+    end.
+
+
+%% @private
+-spec strip_share_guid(file_id:file_guid()) -> file_id:file_guid().
+strip_share_guid(Guid) ->
+    {FileUuid, SpaceId, _} = file_id:unpack_share_guid(Guid),
+    file_id:pack_guid(FileUuid, SpaceId).

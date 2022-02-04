@@ -173,14 +173,11 @@ get_file_details_insecure(UserCtx, FileCtx, Opts) ->
                 _ -> false
             end
     end,
-    {EffQoSMembership, EffDatasetMembership, EffProtectionFlags, FileCtx4} = case ShouldCalculateEffectiveValues of
+    {EffectiveValues, FileCtx3} = case ShouldCalculateEffectiveValues of
         true ->
-            EffectiveQoSMembership = file_qos:qos_membership(FileDoc),
-            {ok, EffectiveDatasetMembership, EffectiveProtectionFlags, FileCtx3} =
-                dataset_api:get_effective_membership_and_protection_flags(FileCtx2),
-            {EffectiveQoSMembership, EffectiveDatasetMembership, EffectiveProtectionFlags, FileCtx3};
+            calculate_effective_values(FileCtx2);
         false ->
-            {undefined, undefined, undefined, FileCtx2}
+            {#{}, FileCtx2}
     end,
 
     #fuse_response{
@@ -196,10 +193,11 @@ get_file_details_insecure(UserCtx, FileCtx, Opts) ->
             end,
             index_startid = file_meta:get_name(FileDoc),
             active_permissions_type = ActivePermissionsType,
-            has_metadata = has_metadata(FileCtx4),
-            eff_qos_membership = EffQoSMembership,
-            eff_dataset_membership = EffDatasetMembership,
-            eff_protection_flags = EffProtectionFlags
+            has_metadata = has_metadata(FileCtx3),
+            eff_qos_membership = maps:get(effective_qos_membership, EffectiveValues, undefined),
+            eff_dataset_membership = maps:get(effective_dataset_membership, EffectiveValues, undefined),
+            eff_protection_flags = maps:get(effective_protection_flags, EffectiveValues, undefined),
+            recall_root_id = maps:get(effective_recall, EffectiveValues, undefined)
         }
     }.
 
@@ -621,3 +619,22 @@ get_fs_stats_insecure(_UserCtx, FileCtx) ->
             }]
         }
     }.
+
+
+%% @private
+-spec calculate_effective_values(file_ctx:ctx()) -> {map(), file_ctx:ctx()}.
+calculate_effective_values(FileCtx) ->
+    {FileDoc, FileCtx2} = file_ctx:get_file_doc(FileCtx),
+    EffectiveQoSMembership = file_qos:qos_membership(FileDoc),
+    {ok, EffectiveDatasetMembership, EffectiveProtectionFlags, FileCtx3} =
+        dataset_api:get_effective_membership_and_protection_flags(FileCtx2),
+    EffectiveRecallRootGuid = case archive_recall:get_effective_recall(FileDoc) of
+        {ok, undefined} -> undefined;
+        {ok, Uuid} -> file_id:pack_guid(Uuid, file_ctx:get_space_id_const(FileCtx))
+    end,
+    {#{
+        effective_qos_membership => EffectiveQoSMembership,
+        effective_dataset_membership => EffectiveDatasetMembership,
+        effective_protection_flags => EffectiveProtectionFlags,
+        effective_recall => EffectiveRecallRootGuid
+    }, FileCtx3}.

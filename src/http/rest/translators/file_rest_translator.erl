@@ -95,4 +95,35 @@ get_response(#gri{aspect = hardlinks}, Hardlinks) ->
     end, Hardlinks));
 
 get_response(#gri{aspect = {hardlinks, _}}, _Result) ->
-    ?NO_CONTENT_REPLY.
+    ?NO_CONTENT_REPLY;
+
+get_response(#gri{aspect = archive_recall_details}, Result) ->
+    ?OK_REPLY(translate_archive_recall_details(Result));
+
+get_response(#gri{aspect = archive_recall_progress}, #{<<"lastError">> := LastError} = Result) ->
+    ?OK_REPLY(Result#{<<"lastError">> => utils:undefined_to_null(LastError)}).
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+
+%% @private
+-spec translate_archive_recall_details(archive_recall:record()) -> map().
+translate_archive_recall_details(#archive_recall_details{
+    archive_id = ArchiveId,
+    dataset_id = DatasetId,
+    start_timestamp = StartTimestamp,
+    finish_timestamp = FinishTimestamp,
+    total_file_count = TotalFileCount,
+    total_byte_size = TotalByteSize
+}) ->
+    #{
+        <<"archiveId">> => ArchiveId,
+        <<"datasetId">> => DatasetId,
+        <<"startTime">> => utils:undefined_to_null(StartTimestamp),
+        <<"finishTime">> => utils:undefined_to_null(FinishTimestamp),
+        <<"totalFileCount">> => TotalFileCount,
+        <<"totalByteSize">> => TotalByteSize
+    }.

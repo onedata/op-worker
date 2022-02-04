@@ -21,7 +21,8 @@
 
 %% API
 -export([empty/0, new/3, to_json/1, sum/2,
-    mark_file_archived/2, mark_file_failed/1
+    mark_file_archived/2, mark_file_failed/1,
+    get_archived_bytes/1, get_archived_files/1
 ]).
 
 %% persistent_record callbacks
@@ -96,6 +97,16 @@ mark_file_failed(Stats) ->
     Stats#archive_stats{
         files_failed = Stats#archive_stats.files_failed + 1
     }.
+
+
+-spec get_archived_bytes(record()) -> non_neg_integer().
+get_archived_bytes(#archive_stats{bytes_archived = Bytes}) ->
+    Bytes.
+
+
+-spec get_archived_files(record()) -> non_neg_integer().
+get_archived_files(#archive_stats{files_archived = FilesArchived}) ->
+    FilesArchived.
 
 %%%===================================================================
 %%% persistent_record callbacks

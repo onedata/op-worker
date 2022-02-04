@@ -71,17 +71,20 @@
 -include("modules/fslogic/file_attr.hrl").
 
 %% API
--export([archive_file/6]).
+-export([archive_regular_file/6, archive_symlink/4]).
 
 %%%===================================================================
 %%% API functions
 %%%===================================================================
 
--spec archive_file(archive:doc(), file_ctx:ctx(), file_ctx:ctx(), archive:doc() | undefined, file_meta:path(), 
-    user_ctx:ctx()) -> {ok, file_ctx:ctx()} | {error, term()}.
-archive_file(ArchiveDoc, FileCtx, TargetParentCtx, BaseArchiveDoc, ResolvedFilePath, UserCtx) ->
+-spec archive_regular_file(archive:doc(), file_ctx:ctx(), file_ctx:ctx(), archive:doc() | undefined, 
+    file_meta:path(), user_ctx:ctx()) -> {ok, file_ctx:ctx()} | {error, term()}.
+archive_regular_file(
+    ArchiveDoc, FileCtx, TargetParentCtx, BaseArchiveDoc, ResolvedFilePath, UserCtx
+) ->
     try
-        archive_file_insecure(ArchiveDoc, FileCtx, TargetParentCtx, BaseArchiveDoc, ResolvedFilePath, UserCtx)
+        archive_regular_file_insecure(
+            ArchiveDoc, FileCtx, TargetParentCtx, BaseArchiveDoc, ResolvedFilePath, UserCtx)
     catch
         Class:Reason:Stacktrace ->
             Guid = file_ctx:get_logical_guid_const(FileCtx),
@@ -93,18 +96,41 @@ archive_file(ArchiveDoc, FileCtx, TargetParentCtx, BaseArchiveDoc, ResolvedFileP
             {error, Reason}
     end.
 
+
+-spec archive_symlink(file_ctx:ctx(), file_ctx:ctx(), archive:doc(), user_ctx:ctx()) ->
+    {ok, file_ctx:ctx()}.
+archive_symlink(FileCtx, TargetParentCtx, ArchiveDoc, UserCtx) ->
+    try
+        archive_symlink_insecure(FileCtx, TargetParentCtx, ArchiveDoc, UserCtx)
+    catch
+        Class:Reason:Stacktrace ->
+            Guid = file_ctx:get_logical_guid_const(FileCtx),
+            ?error_stacktrace(
+                "Unexpected error ~p:~p occured during archivisation of symbolic link ~s.",
+                [Class, Reason, Guid],
+                Stacktrace
+            ),
+            {error, Reason}
+    end.
+    
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
--spec archive_file_insecure(archive:doc(), file_ctx:ctx(), file_ctx:ctx(), archive:doc() | undefined, file_meta:path(), user_ctx:ctx()) ->
-    {ok, file_ctx:ctx()} | error.
-archive_file_insecure(_ArchiveDoc, FileCtx, TargetParentCtx, undefined, ResolvedFilePath, UserCtx) ->
+-spec archive_regular_file_insecure(archive:doc(), file_ctx:ctx(), file_ctx:ctx(), 
+    archive:doc() | undefined, file_meta:path(), user_ctx:ctx()) -> {ok, file_ctx:ctx()} | error.
+archive_regular_file_insecure(
+    _ArchiveDoc, FileCtx, TargetParentCtx, undefined, ResolvedFilePath, UserCtx
+) ->
     copy_file_to_archive(FileCtx, TargetParentCtx, ResolvedFilePath, UserCtx);
-archive_file_insecure(ArchiveDoc, FileCtx, TargetParentCtx, BaseArchiveDoc, ResolvedFilePath, UserCtx) ->
+archive_regular_file_insecure(
+    ArchiveDoc, FileCtx, TargetParentCtx, BaseArchiveDoc, ResolvedFilePath, UserCtx
+) ->
     {ok, DatasetRootFileGuid} = archive:get_dataset_root_file_guid(ArchiveDoc),
     DatasetRootFileCtx = file_ctx:new_by_guid(DatasetRootFileGuid),
-    {DatasetRootLogicalPath, _DatasetRootFileCtx2} = file_ctx:get_logical_path(DatasetRootFileCtx, UserCtx),
+    {DatasetRootLogicalPath, _DatasetRootFileCtx2} = file_ctx:get_logical_path(
+        DatasetRootFileCtx, UserCtx),
     {_, DatasetRootParentPath} = filepath_utils:basename_and_parent_dir(DatasetRootLogicalPath),
 
     RelativeFilePath = filepath_utils:relative(DatasetRootParentPath, ResolvedFilePath),
@@ -115,7 +141,8 @@ archive_file_insecure(ArchiveDoc, FileCtx, TargetParentCtx, BaseArchiveDoc, Reso
                 true ->
                     copy_file_to_archive(FileCtx, TargetParentCtx, ResolvedFilePath, UserCtx);
                 false ->
-                    make_hardlink_to_file_in_base_archive(FileCtx, TargetParentCtx, BaseArchiveFileCtx, UserCtx)
+                    make_hardlink_to_file_in_base_archive(
+                        FileCtx, TargetParentCtx, BaseArchiveFileCtx, UserCtx)
             end;
         ?ERROR_NOT_FOUND ->
             copy_file_to_archive(FileCtx, TargetParentCtx, ResolvedFilePath, UserCtx)
@@ -130,7 +157,8 @@ copy_file_to_archive(FileCtx, TargetParentCtx, ResolvedFilePath, UserCtx) ->
     FileGuid = file_ctx:get_logical_guid_const(FileCtx),
     TargetParentGuid = file_ctx:get_logical_guid_const(TargetParentCtx),
 
-    {ok, CopyGuid, _} = file_copy:copy(SessionId, FileGuid, TargetParentGuid, FileName, false),
+    {ok, CopyGuid, _} = file_copy:copy(SessionId, FileGuid, TargetParentGuid, FileName, 
+        #{recursive => false}),
 
     CopyCtx = file_ctx:new_by_guid(CopyGuid),
     ok = archivisation_checksum:file_calculate_and_save(CopyCtx, UserCtx),
@@ -141,8 +169,8 @@ copy_file_to_archive(FileCtx, TargetParentCtx, ResolvedFilePath, UserCtx) ->
     {ok, CopyCtx3}.
 
 
--spec make_hardlink_to_file_in_base_archive(file_ctx:ctx(), file_ctx:ctx(), file_ctx:ctx(), user_ctx:ctx()) ->
-    {ok, file_ctx:ctx()}.
+-spec make_hardlink_to_file_in_base_archive(file_ctx:ctx(), file_ctx:ctx(), file_ctx:ctx(), 
+    user_ctx:ctx()) -> {ok, file_ctx:ctx()}.
 make_hardlink_to_file_in_base_archive(FileCtx, TargetParentCtx, BaseArchiveFileCtx, UserCtx) ->
     SessionId = user_ctx:get_session_id(UserCtx),
 
@@ -154,3 +182,33 @@ make_hardlink_to_file_in_base_archive(FileCtx, TargetParentCtx, BaseArchiveFileC
         lfm:make_link(SessionId, ?FILE_REF(TargetGuid), ?FILE_REF(TargetParentGuid), Name),
 
     {ok, file_ctx:new_by_guid(LinkGuid)}.
+
+
+-spec archive_symlink_insecure(file_ctx:ctx(), file_ctx:ctx(), archive:doc(), user_ctx:ctx()) ->
+    {ok, file_ctx:ctx()}.
+archive_symlink_insecure(FileCtx, TargetParentCtx, ArchiveDoc, UserCtx) ->
+    {ok, DatasetId} = archive:get_dataset_id(ArchiveDoc),
+    {ok, SpaceId} = archive:get_space_id(ArchiveDoc),
+    {ok, ArchiveDataGuid} = archive:get_data_dir_guid(ArchiveDoc),
+    {ok, SymlinkPath} = lfm:read_symlink(user_ctx:get_session_id(UserCtx),
+        ?FILE_REF(file_ctx:get_logical_guid_const(FileCtx))),
+    {DatasetCanonicalPath, _DatasetFileCtx} = file_ctx:get_canonical_path(
+        file_ctx:new_by_uuid(DatasetId, SpaceId)),
+    {ArchiveDataCanonicalPath, _ArchiveFileCtx} = file_ctx:get_canonical_path(
+        file_ctx:new_by_guid(ArchiveDataGuid)),
+    [_Sep, _SpaceId | DatasetPathTokens] = filename:split(DatasetCanonicalPath),
+    [_Sep, _SpaceId | ArchivePathTokens] = filename:split(ArchiveDataCanonicalPath),
+    [SpaceIdPrefix | SymlinkPathTokens] = filename:split(SymlinkPath),
+    FinalSymlinkValue = case lists:prefix(DatasetPathTokens, SymlinkPathTokens) of
+        true ->
+            RelativePathTokens = SymlinkPathTokens -- DatasetPathTokens,
+            DatasetName = lists:last(DatasetPathTokens),
+            filename:join([SpaceIdPrefix] ++ ArchivePathTokens ++ [DatasetName] ++ RelativePathTokens);
+        _ ->
+            SymlinkPath
+    end,
+    {TargetName, _} = file_ctx:get_aliased_name(FileCtx, undefined),
+    {ok, #file_attr{guid = Guid}} = lfm:make_symlink(
+        user_ctx:get_session_id(UserCtx), ?FILE_REF(file_ctx:get_logical_guid_const(TargetParentCtx)),
+        TargetName, FinalSymlinkValue),
+    {ok, file_ctx:new_by_guid(Guid)}.

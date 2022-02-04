@@ -35,7 +35,11 @@
     {gri:gri(), middleware:auth_hint(), term()}) -> #rest_resp{}.
 create_response(#gri{aspect = instance}, _, resource, {#gri{id = ArchiveId}, _}) ->
     PathTokens = [<<"archives">>, ArchiveId],
-    ?CREATED_REPLY(PathTokens, #{<<"archiveId">> => ArchiveId}).
+    ?CREATED_REPLY(PathTokens, #{<<"archiveId">> => ArchiveId});
+
+create_response(#gri{aspect = recall}, _, value, RootFileGuid) ->
+    {ok, ObjectId} = file_id:guid_to_objectid(RootFileGuid),
+    ?CREATED_REPLY([<<"/data">>, ObjectId],  #{<<"rootFileId">> => ObjectId}).
 
 
 %%--------------------------------------------------------------------

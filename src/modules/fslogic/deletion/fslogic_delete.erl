@@ -649,6 +649,7 @@ remove_synced_associated_documents(FileCtx) ->
     ok = custom_metadata:delete(FileUuid),
     ok = times:delete(FileUuid),
     ok = transferred_file:clean_up(FileGuid),
+    ok = archive_recall:delete_synced_docs(FileUuid),
     ok = file_qos:delete_associated_entries_on_no_references(FileCtx).
 
 
@@ -659,6 +660,7 @@ remove_local_associated_documents(FileCtx, StorageFileDeleted, StorageFileId) ->
     StorageFileDeleted andalso maybe_delete_storage_sync_info(FileCtx, StorageFileId),
     ok = file_meta_posthooks:delete(FileUuid),
     ok = file_qos:cleanup_on_no_reference(FileCtx),
+    ok = archive_recall:delete_local_docs(FileUuid),
     ok = file_popularity:delete(FileUuid).
 
 

@@ -165,7 +165,7 @@ gui_download_file_test_base(Config) ->
         performance -> ?RAND_CONTENT(20 * ?FILESIZE)
     end,
     FileSpec = #file_spec{mode = 8#604, content = Content, shares = [#share_spec{}]},
-    gui_download_test_base(Config, FileSpec, ClientSpec, <<"File">>, uninterrupted_download).
+    gui_download_test_base(Config, FileSpec, ClientSpec, <<"File">>, #{download_type => uninterrupted_download}).
 
 gui_download_dir_test(Config) ->
     ?PERFORMANCE(Config, [
@@ -234,9 +234,16 @@ gui_download_multiple_files_test_base(Config) ->
 
 gui_download_different_filetypes_test(Config) ->
     ClientSpec = ?TARBALL_DOWNLOAD_CLIENT_SPEC,
+    Name = ?RANDOM_FILE_NAME(),
     DirSpec = [
         #symlink_spec{shares = [#share_spec{}], symlink_value = make_symlink_target()},
-        #dir_spec{mode = 8#705, shares = [#share_spec{}], children = [#dir_spec{}, #file_spec{content = ?RAND_CONTENT()}]},
+        #dir_spec{mode = 8#705, shares = [#share_spec{}], children = [
+            #dir_spec{}, 
+            #file_spec{content = Name, name = Name, custom_label = Name},
+            #dir_spec{
+                children = [#symlink_spec{symlink_value = {custom_label, Name}}]
+            }
+        ]},
         #file_spec{mode = 8#604, shares = [#share_spec{}], content = ?RAND_CONTENT()}
     ],
     gui_download_test_base(Config, DirSpec, ClientSpec, <<"Different filetypes">>).
@@ -418,18 +425,20 @@ gui_download_tarball_with_hardlinks_test(Config) ->
 ) ->
     ok.
 gui_download_test_base(Config, FileTreeSpec, ClientSpec, ScenarioPrefix) ->
-    gui_download_test_base(Config, FileTreeSpec, ClientSpec, ScenarioPrefix, simulate_failures).
+    gui_download_test_base(Config, FileTreeSpec, ClientSpec, ScenarioPrefix, #{}).
 
 %% @private
 -spec gui_download_test_base(
     test_config:config(),
     onenv_file_test_utils:object_spec() | [onenv_file_test_utils:file_spec()],
     onenv_api_test_runner:client_spec(),
-    binary(),
-    simulate_failures | uninterrupted_download
+    binary(), 
+    #{
+        download_type => simulate_failures | uninterrupted_download
+    }
 ) ->
     ok.
-gui_download_test_base(Config, FileTreeSpec, ClientSpec, ScenarioPrefix, DownloadType) ->
+gui_download_test_base(Config, FileTreeSpec, ClientSpec, ScenarioPrefix, Opts) ->
     Providers = ?config(op_worker_nodes, Config),
 
     SpaceId = oct_background:get_space_id(space_krk_par),
@@ -438,7 +447,7 @@ gui_download_test_base(Config, FileTreeSpec, ClientSpec, ScenarioPrefix, Downloa
             user3, SpaceId, #dir_spec{shares = [#share_spec{}]}, krakow),
 
     MemRef = api_test_memory:init(),
-    api_test_memory:set(MemRef, download_type, DownloadType),
+    api_test_memory:set(MemRef, download_type, maps:get(download_type, Opts, simulate_failures)),
 
     SetupFun = build_download_file_setup_fun(MemRef, FileTreeSpec),
     ValidateCallResultFun = build_get_download_url_validate_gs_call_fun(MemRef),
@@ -1408,32 +1417,53 @@ check_extracted_tarball_structure(MemRef, #object{type = ?SYMLINK_TYPE} = Object
 check_extracted_tarball_structure(MemRef, #object{type = ?SYMLINK_TYPE} = Object, _, CurrentPath, root_dir) ->
     check_symlink(MemRef, CurrentPath, Object, api_test_memory:get(MemRef, scope, private));
 check_extracted_tarball_structure(_MemRef, #object{name = Filename}, no_files, CurrentPath, _ParentDirType) ->
-    {ok, TmpDirContentAfter} = file:list_dir(CurrentPath),
-    ?assertEqual(false, lists:member(binary_to_list(Filename), TmpDirContentAfter)).
+    ?assertEqual({error, enoent}, file:list_dir(filename:join(CurrentPath, Filename))).
 
 
 %% @private
 -spec check_symlink(api_test_memory:mem_ref(), file_meta:path(), onenv_file_test_utils:object_spec(), public | private) -> ok.
 check_symlink(MemRef, CurrentPath, Object, private) ->
-    #object{name = Filename, symlink_value = LinkPath} = Object,
-    case api_test_memory:get(MemRef, follow_symlinks) of
-        true ->
-            % link target files has its name as content
-            ?assertEqual({ok, filename:basename(LinkPath)}, file:read_file(filename:join(CurrentPath, Filename)));
-        false ->
-            ?assertEqual({ok, binary_to_list(LinkPath)}, file:read_link(filename:join(CurrentPath, Filename)))
+    #object{name = Filename, symlink_value = SymlinkValue} = Object,
+    % NOTE: custom_label in SymlinkValue is used only for internal symlinks
+    case {api_test_memory:get(MemRef, follow_symlinks), SymlinkValue} of
+        {true, {custom_label, Content}} ->
+            ?assertEqual({ok, Content}, file:read_file(filename:join(CurrentPath, Filename)));
+        {true, _} ->
+            % symlink target file has its name as content
+            ?assertEqual({ok, filename:basename(SymlinkValue)}, file:read_file(filename:join(CurrentPath, Filename)));
+        {false, {custom_label, Content}} ->
+            % internal symlinks are modified to target files in tarball even with follow_symlinks = false
+            % check that symlink was not resolved
+            ?assertMatch({ok, _}, file:read_link(filename:join(CurrentPath, Filename))),
+            % symlink targets file that is also in the downloaded tarball, so it should be resolved when reading
+            ?assertEqual({ok, Content}, file:read_file(filename:join(CurrentPath, Filename)));
+        {false, _} ->
+            ?assertEqual({ok, binary_to_list(SymlinkValue)}, file:read_link(filename:join(CurrentPath, Filename)))
     end;
-check_symlink(_MemRef, CurrentPath, Object, public) ->
-    #object{name = Filename} = Object,
-    % link targets outside share scope - it should not be downloaded
-    ?assertEqual({error, enoent}, file:read_file(filename:join(CurrentPath, Filename))).
+check_symlink(_MemRef, CurrentPath, #object{name = Filename, symlink_value = SymlinkValue}, public) ->
+    case SymlinkValue of
+        {custom_label, Content} ->
+            % check that symlink was not resolved
+            ?assertMatch({ok, _}, file:read_link(filename:join(CurrentPath, Filename))),
+            % symlink targets file that is also in the downloaded tarball, so it should be resolved when reading
+            ?assertEqual({ok, Content}, file:read_file(filename:join(CurrentPath, Filename)));
+        _ ->
+            % link targets outside share scope - it should not be downloaded
+            ?assertEqual({error, enoent}, file:read_file(filename:join(CurrentPath, Filename)))
+    end.
 
 
 %% @private
 -spec unpack_tarball(binary()) -> binary().
 unpack_tarball(Bytes) ->
+    % use os:cmd instead of erl_tar:extract, as the later does not allow for relative symlinks in tarball
     TmpDir = mochitemp:mkdtemp(),
-    ok = erl_tar:extract({binary, Bytes}, [{cwd, TmpDir}]),
+    Name = ?RANDOM_FILE_NAME(),
+    Path = <<(list_to_binary(TmpDir))/binary, "/", Name/binary>>,
+    ok = file:write_file(Path, Bytes),
+    Cmd = "cd " ++ TmpDir ++ " && tar -xvf " ++ binary_to_list(Name),
+    Res = os:cmd(Cmd),
+    ct:print("~s", [Res]),
     TmpDir.
 
 
@@ -1469,14 +1499,14 @@ make_symlink_target() ->
 %% @private
 -spec make_symlink_target(od_space:id(), onenv_file_test_utils:object_spec()) ->
     file_meta_symlinks:symlink().
-make_symlink_target(SpaceId, Object) ->
-    make_symlink_target(SpaceId, <<"">>, Object).
+make_symlink_target(SpaceId, #object{name = Name}) ->
+    make_symlink_target(SpaceId, <<"">>, Name).
 
 
 %% @private
--spec make_symlink_target(od_space:id(), file_meta:path(), onenv_file_test_utils:object_spec()) ->
+-spec make_symlink_target(od_space:id(), file_meta:path(), file_meta:name()) ->
     file_meta_symlinks:symlink().
-make_symlink_target(SpaceId, ParentPath, #object{name = Name}) ->
+make_symlink_target(SpaceId, ParentPath, Name) ->
     SpaceIdSymlinkPrefix = ?SYMLINK_SPACE_ID_ABS_PATH_PREFIX(SpaceId),
     filename:join([SpaceIdSymlinkPrefix, ParentPath, Name]).
 
