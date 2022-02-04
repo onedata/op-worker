@@ -45,6 +45,8 @@
 -define(COLLECTION_ID(QosEntryId, Type), <<QosEntryId/binary, (atom_to_binary(Type))/binary>>).
 -define(MAX_UPDATE_RETRIES, 3).
 
+-define(NOW(), global_clock:timestamp_seconds()).
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -111,9 +113,7 @@ update_internal(CollectionId, _ValuesPerStorage, 0) ->
         exceeded number of retries", [CollectionId]
     );
 update_internal(CollectionId, ValuesPerStorage, Retries) ->
-    case datastore_time_series_collection:check_and_update(?CTX, CollectionId, 
-        global_clock:timestamp_millis(), maps:to_list(ValuesPerStorage)) 
-    of
+    case datastore_time_series_collection:check_and_update(?CTX, CollectionId, ?NOW(), maps:to_list(ValuesPerStorage)) of
         ok -> 
             ok;
         ?ERROR_NOT_FOUND ->
