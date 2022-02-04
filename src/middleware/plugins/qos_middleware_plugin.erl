@@ -298,10 +298,10 @@ get(#op_req{gri = #gri{id = QosEntryId, aspect = {time_series_collection, TypeBi
                     MetricsForCurrentTimeSeries = maps:get(TimeSeriesId, Acc, #{}),
                     Acc#{
                         ts_id_to_provider_id(TimeSeriesId, SpaceId) => MetricsForCurrentTimeSeries#{
-                            MetricId => lists:map(fun({Timestamp, Value}) ->
+                            MetricId => lists:map(fun({Timestamp, {_ValuesCount, ValuesSum}}) ->
                                 #{
                                     <<"timestamp">> => Timestamp,
-                                    <<"value">> => Value
+                                    <<"value">> => ValuesSum
                                 }
                             end, Windows)
                         }
