@@ -899,8 +899,8 @@ init_archive_recall_test(_Config) ->
                     type = rest,
                     prepare_args_fun = build_init_recall_archive_prepare_rest_args_fun(MemRef),
                     validate_result_fun = fun(_, {ok, RespCode, _, RespBody}) ->
-                        {_, #{<<"rootId">> := RootFileId}} = 
-                            ?assertMatch({?HTTP_201_CREATED, #{<<"rootId">> := _}}, {RespCode, RespBody}),
+                        {_, #{<<"rootFileId">> := RootFileId}} = 
+                            ?assertMatch({?HTTP_201_CREATED, #{<<"rootFileId">> := _}}, {RespCode, RespBody}),
                         {ok, RootFileGuid} = file_id:objectid_to_guid(RootFileId),
                         validate_recall_result(Providers, RootFileGuid)
                     end
@@ -910,7 +910,7 @@ init_archive_recall_test(_Config) ->
                     type = gs,
                     prepare_args_fun = build_init_recall_archive_prepare_gs_args_fun(MemRef),
                     validate_result_fun = fun(_, Result) -> 
-                        {ok, #{<<"rootId">> := RootFileGuid}} = ?assertMatch({ok, #{<<"rootId">> := _}}, Result),
+                        {ok, #{<<"rootFileId">> := RootFileGuid}} = ?assertMatch({ok, #{<<"rootFileId">> := _}}, Result),
                         validate_recall_result(Providers, RootFileGuid)
                     end
                 }

@@ -165,7 +165,7 @@ gui_download_file_test_base(Config) ->
         performance -> ?RAND_CONTENT(20 * ?FILESIZE)
     end,
     FileSpec = #file_spec{mode = 8#604, content = Content, shares = [#share_spec{}]},
-    gui_download_test_base(Config, FileSpec, ClientSpec, <<"File">>, #{download_mode => uninterrupted_download}).
+    gui_download_test_base(Config, FileSpec, ClientSpec, <<"File">>, #{download_type => uninterrupted_download}).
 
 gui_download_dir_test(Config) ->
     ?PERFORMANCE(Config, [
@@ -1440,10 +1440,17 @@ check_symlink(MemRef, CurrentPath, Object, private) ->
         {false, _} ->
             ?assertEqual({ok, binary_to_list(SymlinkValue)}, file:read_link(filename:join(CurrentPath, Filename)))
     end;
-check_symlink(_MemRef, CurrentPath, Object, public) ->
-    #object{name = Filename} = Object,
-    % link targets outside share scope - it should not be downloaded
-    ?assertEqual({error, enoent}, file:read_file(filename:join(CurrentPath, Filename))).
+check_symlink(_MemRef, CurrentPath, #object{name = Filename, symlink_value = SymlinkValue}, public) ->
+    case SymlinkValue of
+        {custom_label, Content} ->
+            % check that symlink was not resolved
+            ?assertMatch({ok, _}, file:read_link(filename:join(CurrentPath, Filename))),
+            % symlink targets file that is also in the downloaded tarball, so it should be resolved when reading
+            ?assertEqual({ok, Content}, file:read_file(filename:join(CurrentPath, Filename)));
+        _ ->
+            % link targets outside share scope - it should not be downloaded
+            ?assertEqual({error, enoent}, file:read_file(filename:join(CurrentPath, Filename)))
+    end.
 
 
 %% @private
