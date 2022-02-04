@@ -102,6 +102,8 @@ translate_value(_, #gri{type = op_space} = GRI, Value) ->
     space_gui_gs_translator:translate_value(GRI, Value);
 translate_value(_, #gri{type = op_transfer} = GRI, Value) ->
     transfer_gui_gs_translator:translate_value(GRI, Value);
+translate_value(_, #gri{type = op_qos} = GRI, Value) ->
+    qos_gui_gs_translator:translate_value(GRI, Value);
 translate_value(_, #gri{type = op_atm_task_execution} = GRI, Value) ->
     atm_task_execution_gui_gs_translator:translate_value(GRI, Value);
 translate_value(ProtocolVersion, GRI, Data) ->

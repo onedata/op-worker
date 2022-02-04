@@ -11,7 +11,12 @@
 %%%
 %%% NOTE: the API allows browsing QoS transfer stats, but the GUI application
 %%% recognizes time series Ids as provider Ids, rather than storage Ids as it
-%%% is stored in the database. This module does all the required translations.
+%%% is stored in the database. This module does all the required translations,
+%%% considering the existence of an additional ?TOTAL_TIME_SERIES_ID that
+%%% presents a sum for all storages and is retained during translation.
+%%%
+%%% @TODO VFS-8955 these translation should not be needed when space lifecycle
+%%% is implemented and the GUI understands storages.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(qos_middleware_plugin).
@@ -51,8 +56,11 @@ resolve_handler(create, instance, private) -> ?MODULE;
 resolve_handler(get, instance, private) -> ?MODULE;
 resolve_handler(get, audit_log, private) -> ?MODULE;
 resolve_handler(get, time_series_collections, private) -> ?MODULE;
-resolve_handler(get, {time_series_collection, ?BYTES_STATS}, private) -> ?MODULE;
-resolve_handler(get, {time_series_collection, ?FILES_STATS}, private) -> ?MODULE;
+resolve_handler(get, {time_series_collection, TypeBin}, private) ->
+    case binary_to_atom(TypeBin, utf8) of
+        ?BYTES_STATS -> ?MODULE;
+        ?FILES_STATS -> ?MODULE
+    end;
 
 resolve_handler(delete, instance, private) -> ?MODULE;
 
@@ -89,6 +97,8 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = audit_log}}) -> #{
         <<"limit">> => {integer, {not_lower_than, 1}}
     }
 };
+data_spec(#op_req{operation = get, gri = #gri{aspect = time_series_collections}}) ->
+    undefined;
 data_spec(#op_req{operation = get, gri = #gri{aspect = {time_series_collection, _}}}) -> #{
     required => #{
         <<"metrics">> => {json, fun(RequestedMetrics) ->
@@ -259,15 +269,16 @@ get(#op_req{gri = #gri{id = QosEntryId, aspect = time_series_collections}}, _Qos
     {ok, FilesTSIds} = qos_transfer_stats:list_time_series_ids(QosEntryId, ?FILES_STATS),
     {ok, BytesTSIds} = qos_transfer_stats:list_time_series_ids(QosEntryId, ?BYTES_STATS),
     {ok, value, #{
-        ?FILES_STATS => ts_ids_from_storages_to_providers(FilesTSIds, SpaceId),
-        ?BYTES_STATS => ts_ids_from_storages_to_providers(BytesTSIds, SpaceId)
+        ?FILES_STATS => [ts_id_to_provider_id(TSId, SpaceId) || TSId <- FilesTSIds],
+        ?BYTES_STATS => [ts_id_to_provider_id(TSId, SpaceId) || TSId <- BytesTSIds]
     }};
 
-get(#op_req{gri = #gri{id = QosEntryId, aspect = {time_series_collection, Type}}, data = Data}, _QosEntry) ->
+get(#op_req{gri = #gri{id = QosEntryId, aspect = {time_series_collection, TypeBin}}, data = Data}, _QosEntry) ->
+    Type = binary_to_atom(TypeBin, utf8),
     {ok, SpaceId} = qos_entry:get_space_id(QosEntryId),
     RequestedMetrics = maps:get(<<"metrics">>, Data),
     RequestRange = maps:fold(fun(TimeSeriesId, MetricIds, Acc) ->
-        Acc ++ [{TimeSeriesId, provider_id_to_storage_id(MId, SpaceId)} || MId <- MetricIds]
+        Acc ++ [{provider_id_to_ts_id(TimeSeriesId, SpaceId), MId} || MId <- MetricIds]
     end, [], RequestedMetrics),
     PossiblyUndefOpts = #{
         start => maps:get(<<"startTimestamp">>, Data, undefined),
@@ -286,8 +297,8 @@ get(#op_req{gri = #gri{id = QosEntryId, aspect = {time_series_collection, Type}}
                 <<"windows">> => maps:fold(fun({TimeSeriesId, MetricId}, Windows, Acc) ->
                     MetricsForCurrentTimeSeries = maps:get(TimeSeriesId, Acc, #{}),
                     Acc#{
-                        TimeSeriesId => MetricsForCurrentTimeSeries#{
-                            storage_id_to_provider_id(MetricId, SpaceId) => lists:map(fun({Timestamp, Value}) ->
+                        ts_id_to_provider_id(TimeSeriesId, SpaceId) => MetricsForCurrentTimeSeries#{
+                            MetricId => lists:map(fun({Timestamp, Value}) ->
                                 #{
                                     <<"timestamp">> => Timestamp,
                                     <<"value">> => Value
@@ -349,25 +360,18 @@ entry_to_details(QosEntry, Status, SpaceId) ->
 
 
 %% @private
--spec ts_ids_from_storages_to_providers([time_series_collection:time_series_id()], od_space:id()) ->
-    [time_series_collection:time_series_id()].
-ts_ids_from_storages_to_providers(TimeSeriesIds, SpaceId) ->
-    lists:map(fun
-        (?TOTAL_TIME_SERIES_ID) -> ?TOTAL_TIME_SERIES_ID;
-        (StorageId) -> storage_id_to_provider_id(StorageId, SpaceId)
-    end, TimeSeriesIds).
-
-
-%% @private
--spec storage_id_to_provider_id(od_storage:id(), od_space:id()) -> od_provider:id().
-storage_id_to_provider_id(StorageId, SpaceId) ->
+-spec ts_id_to_provider_id(od_storage:id(), od_space:id()) -> od_provider:id().
+ts_id_to_provider_id(?TOTAL_TIME_SERIES_ID, _SpaceId) ->
+    ?TOTAL_TIME_SERIES_ID;
+ts_id_to_provider_id(StorageId, SpaceId) ->
     storage:fetch_provider_id_of_remote_storage(StorageId, SpaceId).
 
 
 %% @private
--spec provider_id_to_storage_id(od_provider:id(), od_space:id()) -> od_storage:id().
-provider_id_to_storage_id(ProviderId, SpaceId) ->
+-spec provider_id_to_ts_id(od_provider:id(), od_space:id()) -> od_storage:id().
+provider_id_to_ts_id(?TOTAL_TIME_SERIES_ID, _SpaceId) ->
+    ?TOTAL_TIME_SERIES_ID;
+provider_id_to_ts_id(ProviderId, SpaceId) ->
     {ok, StoragesToAccessType} = space_logic:get_storages_by_provider(SpaceId, ProviderId),
     %% @TODO VFS-5497 Rework when multisupport is implemented
     hd(maps:keys(StoragesToAccessType)).
-
