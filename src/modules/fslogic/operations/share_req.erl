@@ -20,8 +20,6 @@
 %% API
 -export([create_share/4, remove_share/3]).
 
--define(ERROR(Error), throw({error, Error})).
-
 
 %%%===================================================================
 %%% API
@@ -89,12 +87,12 @@ create_share_internal(UserCtx, FileCtx0, Name, Description) ->
             case file_meta:add_share(FileCtx1, ShareId) of
                 {error, _} ->
                     ok = share_logic:delete(SessionId, ShareId),
-                    ?ERROR(?EAGAIN);
+                    throw({error, ?EAGAIN});
                 ok ->
                     {ok, ShareId}
             end;
         _ ->
-            ?ERROR(?EAGAIN)
+            throw({error, ?EAGAIN})
     end.
 
 
@@ -110,7 +108,7 @@ remove_share_internal(UserCtx, FileCtx, ShareId) ->
 
     case file_meta:remove_share(FileCtx, ShareId) of
         {error, not_found} ->
-            {error, ?ENOENT};
+            throw({error, ?ENOENT});
         ok ->
             ok = share_logic:delete(SessionId, ShareId),
             ok = permissions_cache:invalidate()

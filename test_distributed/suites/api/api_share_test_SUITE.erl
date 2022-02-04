@@ -92,7 +92,7 @@ create_share_test(_Config) ->
                 }
             ],
             randomly_select_scenarios = true,
-            data_spec = api_test_utils:replace_enoent_with_not_found_error_in_bad_data_values(
+            data_spec = api_test_utils:replace_enoent_with_error_not_found_in_error_expectations(
                 api_test_utils:add_cdmi_id_errors_for_operations_not_available_in_share_mode(
                     % Operations should be rejected even before checking if share exists
                     % (in case of using share file id) so it is not necessary to use

@@ -7,6 +7,7 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This file contains incoming_session_watcher tests.
+%%% NOTE: fuse connection for each session is made in init_per_testcase
 %%% @end
 %%%-------------------------------------------------------------------
 -module(session_watcher_test_SUITE).
