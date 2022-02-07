@@ -465,6 +465,15 @@
 }).
 
 
+-record(archive_recall_details, {
+    archive_id :: archive:id(),
+    dataset_id :: dataset:id(),
+    start_timestamp = undefined :: undefined | time:millis(),
+    finish_timestamp = undefined :: undefined | time:millis(),
+    total_file_count :: non_neg_integer(),
+    total_byte_size :: non_neg_integer()
+}).
+
 % Model used for storing information associated with dataset.
 % One document is stored for one dataset.
 % Key of the document is file_meta:uuid().
@@ -1024,7 +1033,10 @@
     track_subtree_status :: boolean(),
     batch_size :: tree_traverse:batch_size(),
     traverse_info :: binary(),
-    follow_symlinks = false :: boolean(),
+    symlink_resolution_policy = preserve :: tree_traverse:symlink_resolution_policy(),
+    % uuids of the traverse root file and subtree roots after each symlink resolution;
+    % required for checking if symlink targets outside of traversed subtree, when using follow_external policy.
+    resolved_root_uuids :: [file_meta:uuid()],
     % relative path of the processed file to the traverse root
     relative_path = <<>> :: file_meta:path(),
     % Set of encountered files on the path from the traverse root to the currently processed one. 

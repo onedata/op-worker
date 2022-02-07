@@ -164,7 +164,7 @@ move(SpaceId, ForestType, SourceDatasetPath, TargetDatasetPath, TargetName) ->
 
 -spec pack_entry_index(dataset:name(), dataset:id()) -> index().
 pack_entry_index(DatasetName, DatasetId) ->
-    str_utils:join_binary([DatasetName, DatasetId], <<>>).
+    str_utils:join_binary([DatasetName, DatasetId], <<"#">>).
 
 %%%===================================================================
 %%% Test functions

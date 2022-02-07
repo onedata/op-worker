@@ -117,10 +117,10 @@ get_children_ctxs(UserCtx, FileCtx0, ListOpts) ->
         true -> [?TRAVERSE_ANCESTORS, ?OPERATIONS(?list_container_mask)];
         false -> [?TRAVERSE_ANCESTORS]
     end,
-    {ChildrenWhiteList, FileCtx2} = fslogic_authz:ensure_authorized_readdir(
+    {CanonicalChildrenWhiteList, FileCtx2} = fslogic_authz:ensure_authorized_readdir(
         UserCtx, FileCtx1, AccessRequirements
     ),
-    list_children(UserCtx, FileCtx2, ListOpts, ChildrenWhiteList).
+    list_children(UserCtx, FileCtx2, ListOpts, CanonicalChildrenWhiteList).
 
 
 %%--------------------------------------------------------------------
@@ -135,11 +135,11 @@ get_children_attrs(UserCtx, FileCtx0, ListOpts, IncludeReplicationStatus, Includ
         true -> [?TRAVERSE_ANCESTORS, ?OPERATIONS(?traverse_container_mask, ?list_container_mask)];
         false -> [?TRAVERSE_ANCESTORS]
     end,
-    {ChildrenWhiteList, FileCtx2} = fslogic_authz:ensure_authorized_readdir(
+    {CanonicalChildrenWhiteList, FileCtx2} = fslogic_authz:ensure_authorized_readdir(
         UserCtx, FileCtx1, AccessRequirements
     ),
     get_children_attrs_insecure(
-        UserCtx, FileCtx2, ListOpts, IncludeReplicationStatus, IncludeLinkCount, ChildrenWhiteList
+        UserCtx, FileCtx2, ListOpts, IncludeReplicationStatus, IncludeLinkCount, CanonicalChildrenWhiteList
     ).
 
 

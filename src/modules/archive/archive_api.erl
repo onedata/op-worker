@@ -38,6 +38,7 @@
 -author("Jakub Kudzia").
 
 -include("global_definitions.hrl").
+-include("modules/dataset/archive.hrl").
 -include("modules/dataset/dataset.hrl").
 -include("modules/dataset/archivisation_tree.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
@@ -47,8 +48,8 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([start_archivisation/6, update_archive/2, get_archive_info/1,
-    list_archives/3, init_archive_purge/2, get_nested_archives_stats/1]).
+-export([start_archivisation/6, recall/4, update_archive/2, get_archive_info/1,
+    list_archives/3, purge/2, get_nested_archives_stats/1, get_aggregated_stats/1]).
 
 %% Exported for use in tests
 -export([remove_archive_recursive/1]).
@@ -67,7 +68,6 @@
 -export_type([info/0, basic_entries/0, entries/0, index/0, listing_mode/0, listing_opts/0]).
 
 
-% TODO VFS-7617 implement recall operation of archives
 % TODO VFS-7718 improve purging so that archive record is deleted when files are removed from storage
 % TODO VFS-7613 use datastore function for getting number of links in forest to acquire number of archives per dataset
 % TODO VFS-7616 refine archives' attributes
@@ -126,6 +126,20 @@ start_archivisation(
     end.
 
 
+-spec recall(archive:id(), user_ctx:ctx(), file_id:file_guid(), file_meta:name() | default) -> 
+    {ok, file_id:file_guid()} | error().
+recall(ArchiveId, UserCtx, ParentGuid, TargetRootName) ->
+    case archive:get(ArchiveId) of
+        {ok, #document{value = #archive{state = ?ARCHIVE_PRESERVED}} = ArchiveDoc} ->
+            archive_recall_traverse:start(ArchiveDoc, UserCtx, ParentGuid, TargetRootName);
+        {ok, _} ->
+            %% @TODO VFS-8840 - create more descriptive error
+            ?ERROR_FORBIDDEN;
+        {error, _} = Error -> 
+            Error
+    end.
+
+
 -spec update_archive(archive:id(), archive:diff()) -> ok | error().
 update_archive(ArchiveId, Diff) ->
     archive:modify_attrs(ArchiveId, Diff).
@@ -152,6 +166,7 @@ get_archive_info(ArchiveDoc = #document{}, ArchiveIndex) ->
     {ok, BaseArchiveId} = archive:get_base_archive_id(ArchiveDoc),
     {ok, RelatedAip} = archive:get_related_aip(ArchiveDoc),
     {ok, RelatedDip} = archive:get_related_dip(ArchiveDoc),
+    {ok, Stats} = get_aggregated_stats(ArchiveDoc),
     {ok, #archive_info{
         id = ArchiveId,
         dataset_id = DatasetId,
@@ -166,7 +181,7 @@ get_archive_info(ArchiveDoc = #document{}, ArchiveIndex) ->
             true -> archives_list:index(ArchiveId, Timestamp);
             false -> ArchiveIndex
         end,
-        stats = get_aggregated_stats(ArchiveDoc),
+        stats = Stats,
         base_archive_id = BaseArchiveId,
         related_aip = RelatedAip,
         related_dip = RelatedDip
@@ -193,8 +208,8 @@ list_archives(DatasetId, ListingOpts, ListingMode) ->
     end.
 
 
--spec init_archive_purge(archive:id(), archive:callback()) -> ok | error().
-init_archive_purge(ArchiveId, CallbackUrl) ->
+-spec purge(archive:id(), archive:callback()) -> ok | error().
+purge(ArchiveId, CallbackUrl) ->
     case archive:mark_purging(ArchiveId, CallbackUrl) of
         {ok, ArchiveDoc} ->
             {ok, DatasetId} = archive:get_dataset_id(ArchiveDoc),
@@ -223,13 +238,29 @@ get_nested_archives_stats(#document{key = ArchiveId}, Token, NestedArchiveStatsA
 get_nested_archives_stats(ArchiveId, Token, NestedArchiveStatsAccIn) when is_binary(ArchiveId) ->
     {ok, NestedArchives, Token2} = archives_forest:list(ArchiveId, Token, ?BATCH_SIZE),
     NestedArchiveStatsAcc = lists:foldl(fun(NestedArchiveId, Acc) ->
-        NestedArchiveStats = get_aggregated_stats(NestedArchiveId),
+        {ok, NestedArchiveStats} = get_aggregated_stats(NestedArchiveId),
         archive_stats:sum(Acc, NestedArchiveStats)
     end, NestedArchiveStatsAccIn, NestedArchives),
     case Token2#link_token.is_last of
         true -> NestedArchiveStatsAcc;
         false -> get_nested_archives_stats(ArchiveId, Token2, NestedArchiveStatsAcc)
     end.
+
+
+-spec get_aggregated_stats(archive:doc() | archive:id()) -> {ok, archive_stats:record()}.
+get_aggregated_stats(ArchiveDoc = #document{}) ->
+    {ok, ArchiveStats} = archive:get_stats(ArchiveDoc),
+    case archive:is_finished(ArchiveDoc) of
+        true ->
+            {ok, ArchiveStats};
+        false ->
+            {ok, ArchiveId} = archive:get_id(ArchiveDoc),
+            NestedArchivesStats = get_nested_archives_stats(ArchiveId),
+            {ok, archive_stats:sum(ArchiveStats, NestedArchivesStats)}
+    end;
+get_aggregated_stats(ArchiveId) ->
+    {ok, ArchiveDoc} = archive:get(ArchiveId),
+    get_aggregated_stats(ArchiveDoc).
 
 %%%===================================================================
 %%% Internal functions
@@ -330,23 +361,6 @@ extend_with_archive_info(ArchiveEntries) ->
 -spec get_state(archive:doc()) -> {ok, archive:state()}.
 get_state(ArchiveDoc = #document{}) ->
     archive:get_state(ArchiveDoc).
-
-
-%% @private
--spec get_aggregated_stats(archive:doc() | archive:id()) -> archive_stats:record().
-get_aggregated_stats(ArchiveDoc = #document{}) ->
-    {ok, ArchiveStats} = archive:get_stats(ArchiveDoc),
-    case archive:is_finished(ArchiveDoc) of
-        true ->
-            ArchiveStats;
-        false ->
-            {ok, ArchiveId} = archive:get_id(ArchiveDoc),
-            NestedArchivesStats = get_nested_archives_stats(ArchiveId),
-            archive_stats:sum(ArchiveStats, NestedArchivesStats)
-    end;
-get_aggregated_stats(ArchiveId) ->
-    {ok, ArchiveDoc} = archive:get(ArchiveId),
-    get_aggregated_stats(ArchiveDoc).
 
 
 %% @private

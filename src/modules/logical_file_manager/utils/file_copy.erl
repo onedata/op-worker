@@ -34,6 +34,23 @@
     NewName :: file_meta:name()
 }.
 
+% Callback called after each successful write operation; 
+% the number in the function argument is the number of successfully written bytes.
+-type callback() :: fun((non_neg_integer()) -> ok).
+
+-type options() :: #{
+    % when enabled whole subtree will be copied
+    recursive => boolean(),
+    % when enabled existing target files will be overwritten instead of returning an error
+    overwrite => boolean(),
+    % callback called after each successful write operation
+    on_write_callback => callback()
+}.
+
+-define(DEFAULT_RECURSIVE_OPT, true).
+-define(DEFAULT_OVERWRITE_OPT, false).
+-define(DEFAULT_WRITE_CALLBACK_OPT, fun(_) -> ok end).
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -44,14 +61,19 @@
     {ok, NewFileGuid :: fslogic_worker:file_guid(),
         [child_entry()]} | {error, term()}.
 copy(SessId, SourceGuid, TargetParentGuid, TargetName) ->
-    copy(SessId, SourceGuid, TargetParentGuid, TargetName, true).
+    copy(SessId, SourceGuid, TargetParentGuid, TargetName, #{}).
 
-copy(_SessId, SourceGuid, SourceGuid, _TargetName, _Recursive) ->
+
+-spec copy(session:id(), fslogic_worker:file_guid(), fslogic_worker:file_guid(), 
+    file_meta:name(), options()) ->
+    {ok, fslogic_worker:file_guid(), [child_entry()]} | {error, term()}.
+copy(_SessId, SourceGuid, SourceGuid, _TargetName, _Options) ->
     % attempt to copy file to itself
     {error, ?EINVAL};
-copy(SessId, SourceGuid, TargetParentGuid, TargetName, Recursive) ->
+copy(SessId, SourceGuid, TargetParentGuid, TargetName, Options) ->
     {ok, SourcePath} = lfm:get_file_path(SessId, SourceGuid),
     {ok, TargetParentPath} = lfm:get_file_path(SessId, TargetParentGuid),
+    Recursive = maps:get(recursive, Options, ?DEFAULT_RECURSIVE_OPT),
     SourcePathTokens = filepath_utils:split(SourcePath),
     TargetParentPathTokens = filepath_utils:split(TargetParentPath),
     case SourcePathTokens -- TargetParentPathTokens of
@@ -59,7 +81,7 @@ copy(SessId, SourceGuid, TargetParentGuid, TargetName, Recursive) ->
             % attempt to copy file to itself
             {error, ?EINVAL};
         _ ->
-            copy_internal(SessId, SourceGuid, TargetParentGuid, TargetName, Recursive)
+            copy_internal(SessId, SourceGuid, TargetParentGuid, TargetName, Options)
     end.
 
 
@@ -69,18 +91,17 @@ copy(SessId, SourceGuid, TargetParentGuid, TargetName, Recursive) ->
 
 -spec copy_internal(session:id(), SourceGuid :: fslogic_worker:file_guid(),
     TargetParentGuid :: fslogic_worker:file_guid(),
-    TargetName :: file_meta:name(),
-    Recursive :: boolean()
+    TargetName :: file_meta:name(), options()
 ) ->
     {ok, NewFileGuid :: fslogic_worker:file_guid(),
         [child_entry()]} | {error, term()}.
-copy_internal(SessId, SourceGuid, TargetParentGuid, TargetName, Recursive) ->
+copy_internal(SessId, SourceGuid, TargetParentGuid, TargetName, Options) ->
     try
         case lfm:stat(SessId, ?FILE_REF(SourceGuid)) of
             {ok, #file_attr{type = ?DIRECTORY_TYPE} = Attr} ->
-                copy_dir(SessId, Attr, TargetParentGuid, TargetName, Recursive);
+                copy_dir(SessId, Attr, TargetParentGuid, TargetName, Options);
             {ok, #file_attr{type = ?REGULAR_FILE_TYPE} = Attr} ->
-                copy_file(SessId, Attr, TargetParentGuid, TargetName);
+                copy_file(SessId, Attr, TargetParentGuid, TargetName, Options);
             {ok, #file_attr{type = ?SYMLINK_TYPE} = Attr} ->
                 copy_symlink(SessId, Attr, TargetParentGuid, TargetName);
             {error, _} = Error ->
@@ -94,16 +115,28 @@ copy_internal(SessId, SourceGuid, TargetParentGuid, TargetName, Recursive) ->
 
 -spec copy_dir(session:id(), #file_attr{},
     TargetParentGuid :: fslogic_worker:file_guid(),
-    TargetName :: file_meta:name(),
-    Recursive :: boolean()
+    TargetName :: file_meta:name(), options()
 ) ->
     {ok, NewFileGuid :: fslogic_worker:file_guid(), [child_entry()]}.
-copy_dir(SessId, #file_attr{guid = SourceGuid, mode = Mode}, TargetParentGuid, TargetName, Recursive) ->
+copy_dir(SessId, #file_attr{guid = SourceGuid, mode = Mode}, TargetParentGuid, TargetName, Options) ->
     % copy dir with default perms as it should be possible to copy its children even without the write permission
-    {ok, TargetGuid} = lfm:mkdir(SessId, TargetParentGuid, TargetName, ?DEFAULT_DIR_MODE),
-    ChildEntries2 = case Recursive of
+    {ok, TargetGuid} = case 
+        lfm:mkdir(SessId, TargetParentGuid, TargetName, ?DEFAULT_DIR_MODE) 
+    of
+        {ok, TG} -> 
+            {ok, TG};
+        {error, eexist} = Error ->
+            case maps:get(overwrite, Options, ?DEFAULT_OVERWRITE_OPT) of
+                true ->
+                    lfm:resolve_guid_by_relative_path(SessId, TargetParentGuid, TargetName);
+                false -> Error
+            end;
+        Error ->
+            Error
+    end,
+    ChildEntries2 = case maps:get(recursive, Options, ?DEFAULT_RECURSIVE_OPT) of
         true ->
-            {ok, ChildEntries} = copy_children(SessId, SourceGuid, TargetGuid),
+            {ok, ChildEntries} = copy_children(SessId, SourceGuid, TargetGuid, Options),
             ChildEntries;
         false ->
             []
@@ -114,17 +147,33 @@ copy_dir(SessId, #file_attr{guid = SourceGuid, mode = Mode}, TargetParentGuid, T
 
 -spec copy_file(session:id(), #file_attr{},
     TargetParentGuid :: fslogic_worker:file_guid(),
-    TargetName :: file_meta:name()) ->
+    TargetName :: file_meta:name(), options()) ->
     {ok, NewFileGuid :: fslogic_worker:file_guid(), [child_entry()]}.
-copy_file(SessId, #file_attr{guid = SourceGuid, mode = Mode}, TargetParentGuid, TargetName) ->
-    {ok, {TargetGuid, TargetHandle}} = lfm:create_and_open(
-        SessId, TargetParentGuid, TargetName, Mode, write),
+copy_file(SessId, #file_attr{guid = SourceGuid, mode = Mode}, TargetParentGuid, TargetName, Options) ->
+    {ok, {TargetGuid, TargetHandle}} = case 
+        lfm:create_and_open(SessId, TargetParentGuid, TargetName, Mode, write) 
+    of
+        {ok, {TG, TH}} -> 
+            {ok, {TG, TH}};
+        {error, eexist} = Error ->
+            case maps:get(overwrite, Options, ?DEFAULT_OVERWRITE_OPT) of
+                true -> 
+                    {ok, Guid} = lfm:resolve_guid_by_relative_path(SessId, TargetParentGuid, TargetName),
+                    ok = lfm:truncate(SessId, #file_ref{guid = Guid}, 0),
+                    {ok, H} = lfm:open(SessId, ?FILE_REF(Guid), write),
+                    {ok, {Guid, H}};
+                false -> Error
+            end;
+        Error -> 
+            Error
+    end,
     try
         {ok, SourceHandle} = lfm:open(SessId, ?FILE_REF(SourceGuid), read),
         try
             BufferSize = get_buffer_size(TargetGuid),
             {ok, _NewSourceHandle, _NewTargetHandle} = copy_file_content(
-                SourceHandle, TargetHandle, 0, BufferSize
+                SourceHandle, TargetHandle, 0, BufferSize, 
+                maps:get(on_write_callback, Options, ?DEFAULT_WRITE_CALLBACK_OPT)
             ),
             ok = copy_metadata(SessId, SourceGuid, TargetGuid, Mode),
             ok = lfm:fsync(TargetHandle)
@@ -149,16 +198,17 @@ copy_symlink(SessId, #file_attr{guid = SourceGuid}, TargetParentGuid, TargetName
 
 
 
--spec copy_file_content(lfm:handle(), lfm:handle(), non_neg_integer(), non_neg_integer()) ->
+-spec copy_file_content(lfm:handle(), lfm:handle(), non_neg_integer(), non_neg_integer(), callback()) ->
     {ok, lfm:handle(), lfm:handle()} | {error, term()}.
-copy_file_content(SourceHandle, TargetHandle, Offset, BufferSize) ->
+copy_file_content(SourceHandle, TargetHandle, Offset, BufferSize, Callback) ->
     case lfm:check_size_and_read(SourceHandle, Offset, ?COPY_BUFFER_SIZE) of
         {ok, NewSourceHandle, <<>>} ->
             {ok, NewSourceHandle, TargetHandle};
         {ok, NewSourceHandle, Data} ->
             case lfm:write(TargetHandle, Offset, Data) of
                 {ok, NewTargetHandle, N} ->
-                    copy_file_content(NewSourceHandle, NewTargetHandle, Offset + N, BufferSize);
+                    ok = Callback(byte_size(Data)),
+                    copy_file_content(NewSourceHandle, NewTargetHandle, Offset + N, BufferSize, Callback);
                 Error ->
                     Error
             end;
@@ -167,22 +217,22 @@ copy_file_content(SourceHandle, TargetHandle, Offset, BufferSize) ->
     end.
 
 
--spec copy_children(session:id(), file_id:file_guid(), file_id:file_guid()) ->
+-spec copy_children(session:id(), file_id:file_guid(), file_id:file_guid(), options()) ->
     {ok, [child_entry()]} | {error, term()}.
-copy_children(SessId, ParentGuid, TargetParentGuid) ->
-    copy_children(SessId, ParentGuid, TargetParentGuid, ?INITIAL_LS_TOKEN, []).
+copy_children(SessId, ParentGuid, TargetParentGuid, Options) ->
+    copy_children(SessId, ParentGuid, TargetParentGuid, ?INITIAL_LS_TOKEN, [], Options).
 
 
--spec copy_children(session:id(), file_id:file_guid(), file_id:file_guid(), file_meta:list_token(), [child_entry()]) ->
-    {ok, [child_entry()]} | {error, term()}.
-copy_children(SessId, ParentGuid, TargetParentGuid, Token, ChildEntriesAcc) ->
+-spec copy_children(session:id(), file_id:file_guid(), file_id:file_guid(), file_meta:list_token(), 
+    [child_entry()], options()) -> {ok, [child_entry()]} | {error, term()}.
+copy_children(SessId, ParentGuid, TargetParentGuid, Token, ChildEntriesAcc, Options) ->
     case lfm:get_children(SessId, ?FILE_REF(ParentGuid), #{token => Token, size => ?COPY_LS_SIZE}) of
         {ok, Children, ListExtendedInfo} ->
             % TODO VFS-6265 fix usage of file names from lfm:get_children as they contain
             % collision suffix which normally shouldn't be there
             ChildEntries = lists:foldl(fun({ChildGuid, ChildName}, ChildrenEntries) ->
                 {ok, NewChildGuid, NewChildrenEntries} =
-                    copy_internal(SessId, ChildGuid, TargetParentGuid, ChildName, true),
+                    copy_internal(SessId, ChildGuid, TargetParentGuid, ChildName, Options),
                 [
                     {ChildGuid, NewChildGuid, TargetParentGuid, ChildName} |
                         NewChildrenEntries ++ ChildrenEntries
@@ -194,7 +244,7 @@ copy_children(SessId, ParentGuid, TargetParentGuid, Token, ChildEntriesAcc) ->
                     {ok, AllChildEntries};
                 false ->
                     NewToken = maps:get(token, ListExtendedInfo),
-                    copy_children(SessId, ParentGuid, TargetParentGuid, NewToken, AllChildEntries)
+                    copy_children(SessId, ParentGuid, TargetParentGuid, NewToken, AllChildEntries, Options)
             end;
         Error ->
             Error
@@ -210,6 +260,12 @@ copy_metadata(SessId, SourceGuid, TargetGuid, Mode) ->
         (?ACL_KEY) ->
             ok;
         (?CDMI_COMPLETION_STATUS_KEY) ->
+            ok;
+        (?ARCHIVISATION_METADATA_CHECKSUM_KEY) -> 
+            ok;
+        (?ARCHIVISATION_CONTENT_CHECKSUM_KEY) ->
+            ok;
+        (?ARCHIVISATION_CHILDREN_COUNT_KEY) ->
             ok;
         (XattrName) ->
             {ok, Xattr} = lfm:get_xattr(
