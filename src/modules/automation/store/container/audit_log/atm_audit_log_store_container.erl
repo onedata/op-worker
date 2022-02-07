@@ -29,7 +29,8 @@
 %% atm_store_container callbacks
 -export([
     create/3,
-    get_data_spec/1, browse_content/3, acquire_iterator/1,
+    get_config/1, get_iterated_item_data_spec/1,
+    browse_content/3, acquire_iterator/1,
     apply_operation/2,
     delete/1
 ]).
@@ -38,8 +39,8 @@
 -export([version/0, db_encode/2, db_decode/2]).
 
 
--type initial_value() :: [automation:item()] | undefined.
--type operation_options() :: json_utils:json_map().  %% for now no options are supported
+-type initial_content() :: [atm_value:expanded()] | undefined.
+-type operation_options() :: #{}.  %% for now no options are supported
 
 %@formatter:off
 -type browse_options() :: #{
@@ -51,76 +52,95 @@
 %@formatter:on
 
 -record(atm_audit_log_store_container, {
-    data_spec :: atm_data_spec:record(),
+    config :: atm_audit_log_store_config:record(),
     backend_id :: json_infinite_log_model:id()
 }).
 -type record() :: #atm_audit_log_store_container{}.
 
--export_type([initial_value/0, operation_options/0, browse_options/0, record/0]).
+-export_type([initial_content/0, operation_options/0, browse_options/0, record/0]).
 
--define(ALLOWED_SEVERITY, [
+
+-define(ALLOWED_SEVERITIES, [
     ?LOGGER_DEBUG, ?LOGGER_INFO, ?LOGGER_NOTICE,
     ?LOGGER_WARNING, ?LOGGER_ALERT,
     ?LOGGER_ERROR, ?LOGGER_CRITICAL, ?LOGGER_EMERGENCY
 ]).
+
 
 %%%===================================================================
 %%% atm_store_container callbacks
 %%%===================================================================
 
 
--spec create(atm_workflow_execution_auth:record(), atm_data_spec:record(), initial_value()) ->
+-spec create(
+    atm_workflow_execution_auth:record(),
+    atm_audit_log_store_config:record(),
+    initial_content()
+) ->
     record() | no_return().
-create(_AtmWorkflowExecutionAuth, AtmDataSpec, undefined) ->
-    create_container(AtmDataSpec);
+create(_AtmWorkflowExecutionAuth, AtmStoreConfig, undefined) ->
+    create_container(AtmStoreConfig);
 
-create(AtmWorkflowExecutionAuth, AtmDataSpec, InitialItemsArray) ->
-    % validate and sanitize given array of values first, to simulate atomic operation
-    SanitizedItemsArray = sanitize_items_array(AtmWorkflowExecutionAuth, AtmDataSpec, InitialItemsArray),
-    extend_with_sanitized_items_array(SanitizedItemsArray, create_container(AtmDataSpec)).
+create(AtmWorkflowExecutionAuth, AtmStoreConfig, InitialItemsArray) ->
+    % validate and sanitize given array of items first, to simulate atomic operation
+    LogContentDataSpec = AtmStoreConfig#atm_audit_log_store_config.log_content_data_spec,
+    Logs = sanitize_items_array(AtmWorkflowExecutionAuth, LogContentDataSpec, InitialItemsArray),
+
+    extend_with_sanitized_items_array(Logs, create_container(AtmStoreConfig)).
 
 
--spec get_data_spec(record()) -> atm_data_spec:record().
-get_data_spec(#atm_audit_log_store_container{data_spec = AtmDataSpec}) ->
-    AtmDataSpec.
+-spec get_config(record()) -> atm_audit_log_store_config:record().
+get_config(#atm_audit_log_store_container{config = AtmStoreConfig}) ->
+    AtmStoreConfig.
+
+
+-spec get_iterated_item_data_spec(record()) -> atm_data_spec:record().
+get_iterated_item_data_spec(_) ->
+    #atm_data_spec{type = atm_object_type}.
 
 
 -spec browse_content(atm_workflow_execution_auth:record(), browse_options(), record()) ->
     atm_store_api:browse_result() | no_return().
 browse_content(AtmWorkflowExecutionAuth, BrowseOpts, #atm_audit_log_store_container{
-    backend_id = BackendId,
-    data_spec = AtmDataSpec
+    config = #atm_audit_log_store_config{log_content_data_spec = LogContentDataSpec},
+    backend_id = BackendId
 }) ->
     atm_infinite_log_based_stores_common:browse_content(
         audit_log_store, BackendId, BrowseOpts,
-        atm_audit_log_store_container_iterator:gen_listing_postprocessor(AtmWorkflowExecutionAuth, AtmDataSpec)
+        atm_audit_log_store_container_iterator:gen_listing_postprocessor(
+            AtmWorkflowExecutionAuth, LogContentDataSpec
+        )
     ).
 
 
 -spec acquire_iterator(record()) -> atm_audit_log_store_container_iterator:record().
-acquire_iterator(#atm_audit_log_store_container{backend_id = BackendId}) ->
-    atm_audit_log_store_container_iterator:build(BackendId).
+acquire_iterator(#atm_audit_log_store_container{
+    config = #atm_audit_log_store_config{log_content_data_spec = LogContentDataSpec},
+    backend_id = BackendId
+}) ->
+    atm_audit_log_store_container_iterator:build(LogContentDataSpec, BackendId).
 
 
 -spec apply_operation(record(), atm_store_container:operation()) ->
     record() | no_return().
-apply_operation(#atm_audit_log_store_container{data_spec = AtmDataSpec} = Record, #atm_store_container_operation{
+apply_operation(Record, #atm_store_container_operation{
     type = extend,
     argument = ItemsArray,
     workflow_execution_auth = AtmWorkflowExecutionAuth
 }) ->
     % validate and sanitize given array of items first, to simulate atomic operation
-    SanitizedItemsArray = sanitize_items_array(AtmWorkflowExecutionAuth, AtmDataSpec, ItemsArray),
-    extend_with_sanitized_items_array(SanitizedItemsArray, Record);
+    LogContentDataSpec = get_log_content_data_spec(Record),
+    Logs = sanitize_items_array(AtmWorkflowExecutionAuth, LogContentDataSpec, ItemsArray),
+    extend_with_sanitized_items_array(Logs, Record);
 
-apply_operation(#atm_audit_log_store_container{data_spec = AtmDataSpec} = Record, #atm_store_container_operation{
+apply_operation(Record, #atm_store_container_operation{
     type = append,
     argument = Item,
     workflow_execution_auth = AtmWorkflowExecutionAuth
 }) ->
     % validate and sanitize given item, to simulate atomic operation
-    SanitizedItem = sanitize_item(AtmWorkflowExecutionAuth, AtmDataSpec, Item),
-    append_sanitized_item(SanitizedItem, Record);
+    Log = sanitize_item(AtmWorkflowExecutionAuth, get_log_content_data_spec(Record), Item),
+    append_sanitized_item(Log, Record);
 
 apply_operation(_Record, _Operation) ->
     throw(?ERROR_NOT_SUPPORTED).
@@ -144,20 +164,23 @@ version() ->
 -spec db_encode(record(), persistent_record:nested_record_encoder()) ->
     json_utils:json_term().
 db_encode(#atm_audit_log_store_container{
-    data_spec = AtmDataSpec,
+    config = AtmStoreConfig,
     backend_id = BackendId
 }, NestedRecordEncoder) ->
     #{
-        <<"dataSpec">> => NestedRecordEncoder(AtmDataSpec, atm_data_spec),
+        <<"config">> => NestedRecordEncoder(AtmStoreConfig, atm_audit_log_store_config),
         <<"backendId">> => BackendId
     }.
 
 
 -spec db_decode(json_utils:json_term(), persistent_record:nested_record_decoder()) ->
     record().
-db_decode(#{<<"dataSpec">> := AtmDataSpecJson, <<"backendId">> := BackendId}, NestedRecordDecoder) ->
+db_decode(
+    #{<<"config">> := AtmStoreConfigJson, <<"backendId">> := BackendId},
+    NestedRecordDecoder
+) ->
     #atm_audit_log_store_container{
-        data_spec = NestedRecordDecoder(AtmDataSpecJson, atm_data_spec),
+        config = NestedRecordDecoder(AtmStoreConfigJson, atm_audit_log_store_config),
         backend_id = BackendId
     }.
 
@@ -166,14 +189,23 @@ db_decode(#{<<"dataSpec">> := AtmDataSpecJson, <<"backendId">> := BackendId}, Ne
 %%% Internal functions
 %%%===================================================================
 
+
 %% @private
--spec create_container(atm_data_spec:record()) -> record().
-create_container(AtmDataSpec) ->
+-spec create_container(atm_audit_log_store_config:record()) -> record().
+create_container(AtmStoreConfig) ->
     {ok, Id} = json_infinite_log_model:create(#{}),
     #atm_audit_log_store_container{
-        data_spec = AtmDataSpec,
+        config = AtmStoreConfig,
         backend_id = Id
     }.
+
+
+%% @private
+-spec get_log_content_data_spec(record()) -> atm_data_spec:record().
+get_log_content_data_spec(#atm_audit_log_store_container{
+    config = #atm_audit_log_store_config{log_content_data_spec = LogContentDataSpec}
+}) ->
+    LogContentDataSpec.
 
 
 %% @private
@@ -183,15 +215,15 @@ create_container(AtmDataSpec) ->
     [json_utils:json_term()]
 ) ->
     [atm_value:expanded()] | no_return().
-sanitize_items_array(AtmWorkflowExecutionAuth, AtmDataSpec, ItemsArray) when is_list(ItemsArray) ->
-    AuditLogObjects = lists:map(fun prepare_audit_log_object/1, ItemsArray),
+sanitize_items_array(AtmWorkflowExecutionAuth, LogContentDataSpec, ItemsArray) when is_list(ItemsArray) ->
+    Logs = lists:map(fun prepare_audit_log_object/1, ItemsArray),
 
-    AuditLogEntries = lists:map(fun(#{<<"entry">> := Entry}) -> Entry end, AuditLogObjects),
-    atm_value:validate(AtmWorkflowExecutionAuth, AuditLogEntries, ?ATM_ARRAY_DATA_SPEC(AtmDataSpec)),
+    LogContents = lists:map(fun(#{<<"content">> := LogContent}) -> LogContent end, Logs),
+    atm_value:validate(AtmWorkflowExecutionAuth, LogContents, ?ATM_ARRAY_DATA_SPEC(LogContentDataSpec)),
 
-    AuditLogObjects;
-sanitize_items_array(_AtmWorkflowExecutionAuth, _AtmDataSpec, Value) ->
-    throw(?ERROR_ATM_DATA_TYPE_UNVERIFIED(Value, atm_array_type)).
+    Logs;
+sanitize_items_array(_AtmWorkflowExecutionAuth, _LogContentDataSpec, Item) ->
+    throw(?ERROR_ATM_DATA_TYPE_UNVERIFIED(Item, atm_array_type)).
 
 
 %% @private
@@ -201,58 +233,59 @@ sanitize_items_array(_AtmWorkflowExecutionAuth, _AtmDataSpec, Value) ->
     json_utils:json_term()
 ) ->
     atm_value:expanded() | no_return().
-sanitize_item(AtmWorkflowExecutionAuth, AtmDataSpec, Item) ->
-    #{<<"entry">> := Entry} = Object = prepare_audit_log_object(Item),
-    atm_value:validate(AtmWorkflowExecutionAuth, Entry, AtmDataSpec),
-    Object.
+sanitize_item(AtmWorkflowExecutionAuth, LogContentDataSpec, Item) ->
+    Log = #{<<"content">> := LogContent} = prepare_audit_log_object(Item),
+    atm_value:validate(AtmWorkflowExecutionAuth, LogContent, LogContentDataSpec),
+    Log.
 
 
 %% @private
 -spec extend_with_sanitized_items_array([atm_value:expanded()], record()) -> record().
-extend_with_sanitized_items_array(ItemsArray, Record) ->
-    lists:foldl(fun append_sanitized_item/2, Record, ItemsArray).
+extend_with_sanitized_items_array(LogsArray, Record) ->
+    lists:foldl(fun append_sanitized_item/2, Record, LogsArray).
 
 
 %% @private
 -spec append_sanitized_item(atm_value:expanded(), record()) -> record().
-append_sanitized_item(#{<<"entry">> := Item} = Object, Record = #atm_audit_log_store_container{
-    data_spec = AtmDataSpec,
+append_sanitized_item(Log, Record = #atm_audit_log_store_container{
+    config = #atm_audit_log_store_config{log_content_data_spec = LogContentDataSpec},
     backend_id = BackendId
 }) ->
-    ok = json_infinite_log_model:append(BackendId, Object#{
-        <<"entry">> => atm_value:compress(Item, AtmDataSpec)
+    {LogContent, LogWithoutContent} = maps:take(<<"content">>, Log),
+    ok = json_infinite_log_model:append(BackendId, LogWithoutContent#{
+        <<"compressedContent">> => atm_value:compress(LogContent, LogContentDataSpec)
     }),
     Record.
 
 
 %% @private
--spec prepare_audit_log_object(automation:item()) -> json_utils:json_map().
-prepare_audit_log_object(#{<<"entry">> := Entry, <<"severity">> := Severity}) ->
+-spec prepare_audit_log_object(atm_value:expanded()) -> json_utils:json_map().
+prepare_audit_log_object(#{<<"content">> := LogContent, <<"severity">> := Severity}) ->
     #{
-        <<"entry">> => Entry, 
+        <<"content">> => LogContent,
         <<"severity">> => normalize_severity(Severity)
     };
-prepare_audit_log_object(#{<<"entry">> := Entry}) ->
+prepare_audit_log_object(#{<<"content">> := LogContent}) ->
     #{
-        <<"entry">> => Entry, 
-        <<"severity">> => <<"info">>
+        <<"content">> => LogContent,
+        <<"severity">> => ?LOGGER_INFO
     };
 prepare_audit_log_object(#{<<"severity">> := Severity} = Object) ->
     #{
-        <<"entry">> => maps:without([<<"severity">>], Object), 
+        <<"content">> => maps:without([<<"severity">>], Object),
         <<"severity">> => normalize_severity(Severity)
     };
-prepare_audit_log_object(Entry) ->
+prepare_audit_log_object(LogContent) ->
     #{
-        <<"entry">> => Entry, 
-        <<"severity">> => <<"info">>
+        <<"content">> => LogContent,
+        <<"severity">> => ?LOGGER_INFO
     }.
 
 
 %% @private
 -spec normalize_severity(any()) -> binary().
 normalize_severity(ProvidedSeverity) ->
-    case lists:member(ProvidedSeverity, ?ALLOWED_SEVERITY) of
+    case lists:member(ProvidedSeverity, ?ALLOWED_SEVERITIES) of
         true -> ProvidedSeverity;
-        false -> <<"info">>
+        false -> ?LOGGER_INFO
     end.
