@@ -61,7 +61,7 @@ create_workflow_execution_auth(ProviderSelector, UserSelector, SpaceSelector) ->
 -spec create_store(
     oct_background:entity_selector(),
     atm_workflow_execution_auth:record(),
-    atm_store_api:initial_value(),
+    atm_store_api:initial_content(),
     atm_store_schema:record()
 ) ->
     {ok, atm_store:id()} | {error, term()}.

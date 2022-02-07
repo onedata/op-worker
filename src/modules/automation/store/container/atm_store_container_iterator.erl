@@ -13,8 +13,8 @@
 %%% 1) This behaviour must be implemented by modules with records of the same name.
 %%% 2) Modules implementing this behaviour must also implement `persistent_record`
 %%%    behaviour.
-%%% 3) The container iterator behaviour in case of changes to values kept in container
-%%%    is not defined and implementation dependent (it may e.g. return old values).
+%%% 3) The container iterator behaviour in case of changes to items kept in container
+%%%    is not defined and implementation dependent (it may e.g. return old items).
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_store_container_iterator).

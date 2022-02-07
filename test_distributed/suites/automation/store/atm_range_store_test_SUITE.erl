@@ -154,7 +154,7 @@ iterate_in_chunks_3_with_start_10_end_10_step_2_test(_Config) ->
 
 
 %% @private
--spec iterate_test_base(pos_integer(), atm_store_api:initial_value()) ->
+-spec iterate_test_base(pos_integer(), atm_store_api:initial_content()) ->
     ok | no_return().
 iterate_test_base(ChunkSize, AtmRangeStoreInitialValue) ->
     AtmWorkflowExecutionAuth = atm_store_test_utils:create_workflow_execution_auth(
