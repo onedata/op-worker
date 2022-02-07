@@ -76,7 +76,7 @@ list_windows(QosEntryId, Type) ->
 
 
 -spec list_windows(qos_entry:id(), type(), time_series_collection:request_range(), ts_windows:list_options()) ->
-    {ok, time_series_collection:windows_map()} | {error, term()}.
+    {ok, ts_windows:descending_windows_list() | time_series_collection:windows_map()} | {error, term()}.
 list_windows(QosEntryId, Type, RequestRange, Options) ->
     datastore_time_series_collection:list_windows(?CTX, ?COLLECTION_ID(QosEntryId, Type), RequestRange, Options).
 
