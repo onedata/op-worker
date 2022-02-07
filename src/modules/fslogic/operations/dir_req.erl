@@ -190,7 +190,8 @@ mkdir_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
     FileCtx = file_ctx:new_by_uuid(DirUuid, SpaceId),
 
     try
-        ok = times:save_with_current_times(DirUuid, SpaceId),
+        {ok, Time} = times:save_with_current_times(DirUuid, SpaceId),
+        dir_update_time_stats:report_update_of_dir(file_ctx:get_logical_guid_const(FileCtx), Time),
         fslogic_times:update_mtime_ctime(ParentFileCtx3),
 
         #fuse_response{fuse_response = FileAttr} =
@@ -201,6 +202,7 @@ mkdir_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
             }),
         FileAttr2 = FileAttr#file_attr{size = 0},
         ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, FileAttr2, [user_ctx:get_session_id(UserCtx)]),
+        dir_size_stats:report_file_created(?DIRECTORY_TYPE, file_ctx:get_logical_guid_const(ParentFileCtx)),
         #fuse_response{status = #status{code = ?OK},
             fuse_response = #dir{guid = file_id:pack_guid(DirUuid, SpaceId)}
         }

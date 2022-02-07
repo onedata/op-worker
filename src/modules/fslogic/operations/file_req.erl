@@ -268,6 +268,7 @@ create_file_insecure(UserCtx, ParentFileCtx, Name, Mode, _Flag) ->
         }),
         FileAttr2 = FileAttr#file_attr{size = 0, fully_replicated = true},
         ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx2, FileAttr2, [user_ctx:get_session_id(UserCtx)]),
+        dir_size_stats:report_file_created(?REGULAR_FILE_TYPE, file_ctx:get_logical_guid_const(ParentFileCtx)),
         #fuse_response{
         status = #status{code = ?OK},
             fuse_response = #file_created{
@@ -357,6 +358,7 @@ make_file_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
         }),
         FileAttr2 = FileAttr#file_attr{size = 0, fully_replicated = true},
         ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx2, FileAttr2, [user_ctx:get_session_id(UserCtx)]),
+        dir_size_stats:report_file_created(?REGULAR_FILE_TYPE, file_ctx:get_logical_guid_const(ParentFileCtx)),
         Ans#fuse_response{fuse_response = FileAttr2}
     catch
         Error:Reason ->
@@ -400,6 +402,7 @@ make_link_insecure(UserCtx, TargetFileCtx, TargetParentFileCtx, Name) ->
                 }),
                 ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, FileAttr, [user_ctx:get_session_id(UserCtx)]),
                 ok = qos_hooks:invalidate_cache_and_reconcile(FileCtx),
+                dir_size_stats:report_file_created(?LINK_TYPE, file_ctx:get_logical_guid_const(TargetParentFileCtx3)),
                 Ans#fuse_response{fuse_response = FileAttr}
             catch
                 Error:Reason ->
@@ -427,7 +430,7 @@ make_symlink_insecure(UserCtx, ParentFileCtx, Name, Link) ->
             {ok, #document{key = SymlinkUuid}} = file_meta:create({uuid, ParentUuid}, Doc),
 
             try
-                ok = times:save_with_current_times(SymlinkUuid, SpaceId),
+                {ok, _} = times:save_with_current_times(SymlinkUuid, SpaceId),
                 fslogic_times:update_mtime_ctime(ParentFileCtx3),
 
                 FileCtx = file_ctx:new_by_uuid(SymlinkUuid, SpaceId),
@@ -438,6 +441,7 @@ make_symlink_insecure(UserCtx, ParentFileCtx, Name, Link) ->
                     name_conflicts_resolution_policy => allow_name_conflicts
                 }),
                 ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, FileAttr, [user_ctx:get_session_id(UserCtx)]),
+                dir_size_stats:report_file_created(?SYMLINK_TYPE, file_ctx:get_logical_guid_const(ParentFileCtx)),
                 Ans#fuse_response{fuse_response = FileAttr}
             catch
                 Error:Reason ->
@@ -721,7 +725,7 @@ create_file_doc(UserCtx, ParentFileCtx, Name, Mode)  ->
             SpaceId = file_ctx:get_space_id_const(ParentFileCtx2),
             File = file_meta:new_doc(Name, ?REGULAR_FILE_TYPE, Mode, Owner, ParentUuid, SpaceId),
             {ok, #document{key = FileUuid}} = file_meta:create({uuid, ParentUuid}, File),
-            ok = times:save_with_current_times(FileUuid, SpaceId),
+            {ok, _} = times:save_with_current_times(FileUuid, SpaceId),
 
             {file_ctx:new_by_uuid(FileUuid, SpaceId), ParentFileCtx2};
         {false, _} ->

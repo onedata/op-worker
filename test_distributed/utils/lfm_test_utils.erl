@@ -16,12 +16,46 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("modules/dataset/archivisation_tree.hrl").
+-include_lib("ctool/include/test/test_utils.hrl").
 
 %% API
+-export([get_user1_session_id/2, get_user1_first_space_id/1, get_user1_first_space_guid/1, get_user1_first_space_name/1,
+    get_user1_first_storage_id/2]).
 -export([clean_space/3, clean_space/4, assert_space_and_trash_are_empty/3, assert_space_dir_empty/3]).
--export([create_files_tree/4]).
+-export([create_files_tree/4, write_file/4, write_file/5, read_file/4]).
 
 % TODO VFS-7215 - merge this module with file_ops_test_utils
+
+
+%%%===================================================================
+%%% API operating on Config map
+%%% NOTE: <<"user1">> is considered default user
+%%%===================================================================
+
+get_user1_session_id(Config, Worker) ->
+    ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config).
+
+
+get_user1_first_space_id(Config) ->
+    [{SpaceId, _SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
+    SpaceId.
+
+
+get_user1_first_space_guid(Config) ->
+    fslogic_uuid:spaceid_to_space_dir_guid(get_user1_first_space_id(Config)).
+
+
+get_user1_first_space_name(Config) ->
+    [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
+    SpaceName.
+
+
+get_user1_first_storage_id(Config, NodesSelector) ->
+    [{SpaceId, _SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
+    [Worker | _] = ?config(NodesSelector, Config),
+    {ok, StorageId} = rpc:call(Worker, space_logic, get_local_supporting_storage, [SpaceId]),
+    StorageId.
+
 
 %%%===================================================================
 %%% API functions
@@ -29,6 +63,21 @@
 
 create_files_tree(Worker, SessId, Structure, RootGuid) ->
     create_files_tree(Worker, SessId, Structure, RootGuid, <<"dir">>, <<"file">>, [], []).
+
+write_file(Worker, SessId, FileGuid, BytesCount) ->
+    write_file(Worker, SessId, FileGuid, 0, BytesCount).
+
+write_file(Worker, SessId, FileGuid, Offset, BytesCount) ->
+    {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(Worker, SessId, ?FILE_REF(FileGuid), write)),
+    ?assertMatch({ok, _}, lfm_proxy:write(Worker, Handle, Offset, crypto:strong_rand_bytes(BytesCount))),
+    ?assertEqual(ok, lfm_proxy:close(Worker, Handle)).
+
+read_file(Worker, SessId, FileGuid, BytesCount) ->
+    {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(Worker, SessId, ?FILE_REF(FileGuid), read)),
+    {ok, Bytes} = ?assertMatch({ok, _}, lfm_proxy:read(Worker, Handle, 0, BytesCount)),
+    ?assertEqual(ok, lfm_proxy:close(Worker, Handle)),
+    Bytes.
+
 
 clean_space(Workers, SpaceId, Attempts) ->
     Workers2 = utils:ensure_list(Workers),
