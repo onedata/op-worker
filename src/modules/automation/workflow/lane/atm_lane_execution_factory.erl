@@ -187,8 +187,10 @@ create_exception_store(RunCreationCtx = #run_creation_ctx{
             name = ?CURRENT_LANE_RUN_EXCEPTION_STORE_SCHEMA_ID,
             description = <<>>,
             type = list,
-            data_spec = atm_store_container:get_data_spec(AtmStoreContainer),
-            requires_initial_value = false
+            config = #atm_list_store_config{
+                item_data_spec = atm_store_container:get_iterated_item_data_spec(AtmStoreContainer)
+            },
+            requires_initial_content = false
         }
     ),
 
