@@ -50,7 +50,7 @@
     get_local_location/1, get_local_location/2]).
 %% Blocks getters/setters
 -export([get_blocks/1, get_blocks/2, get_overlapping_blocks_sequence/2,
-    set_blocks/2, set_final_blocks/2, update_blocks/2, clear_blocks/3]).
+    set_blocks/2, set_final_blocks/2, update_blocks/2, clear_blocks/2]).
 %% Blocks API
 -export([get_location_size/2, get_blocks_range/1, get_blocks_range/2]).
 
@@ -204,7 +204,7 @@ create_location(Doc) ->
 %%-------------------------------------------------------------------
 -spec create_location(file_location:doc(), boolean()) ->
     {ok, file_location:id()} | {error, term()}.
-create_location(#document{key = Key, value = #file_location{uuid = Uuid, space_id = SpaceId}} = Doc,
+create_location(#document{key = Key, value = #file_location{uuid = Uuid}} = Doc,
     GeneratedKey) ->
     replica_synchronizer:apply_or_run_locally(Uuid, fun() ->
         case fslogic_cache:get_doc(Key) of
@@ -214,7 +214,7 @@ create_location(#document{key = Key, value = #file_location{uuid = Uuid, space_i
                 case file_location:create(Doc, GeneratedKey) of
                     {ok, #document{key = Key, value = #file_location{blocks = Blocks}} = FileLocation} ->
                         fslogic_cache:cache_blocks(Key, Blocks),
-                        fslogic_cache:update_size(Key, SpaceId, fslogic_blocks:size(Blocks)),
+                        fslogic_cache:update_size(Doc, fslogic_blocks:size(Blocks)),
                         fslogic_cache:cache_doc(FileLocation);
                     Other ->
                         Other
@@ -350,7 +350,7 @@ get_overlapping_blocks_sequence(Key, [#file_block{offset = Offset} | _] = Blocks
 %% @end
 %%-------------------------------------------------------------------
 -spec set_blocks(location(), blocks()) -> location().
-set_blocks(#document{key = Key, value = #file_location{space_id = SpaceId} = FileLocation} = Doc, Blocks) ->
+set_blocks(#document{key = Key, value = FileLocation} = Doc, Blocks) ->
     case fslogic_cache:is_current_proc_cache() of
         false ->
             Doc#document{value = FileLocation#file_location{blocks = Blocks}};
@@ -358,7 +358,7 @@ set_blocks(#document{key = Key, value = #file_location{space_id = SpaceId} = Fil
             CurrentBlocks = fslogic_cache:get_blocks(Key),
             SizeChange = fslogic_blocks:size(Blocks) - fslogic_blocks:size(CurrentBlocks),
             fslogic_cache:save_blocks(Key, Blocks),
-            fslogic_cache:update_size(Key, SpaceId, SizeChange),
+            fslogic_cache:update_size(Doc, SizeChange),
             fslogic_cache:mark_changed_blocks(Key),
             Doc
     end.
@@ -369,12 +369,12 @@ set_blocks(#document{key = Key, value = #file_location{space_id = SpaceId} = Fil
 %% Clear blocks in location document.
 %% @end
 %%-------------------------------------------------------------------
--spec clear_blocks(file_ctx:ctx(), od_space:id(), id()) -> location().
-clear_blocks(FileCtx, SpaceId, Key) ->
+-spec clear_blocks(file_ctx:ctx(), location()) -> ok.
+clear_blocks(FileCtx, #document{key = Key} = LocationDoc) ->
     replica_synchronizer:apply(FileCtx, fun() ->
         Blocks = fslogic_cache:get_blocks(Key),
         SizeChange = -1 * fslogic_blocks:size(Blocks),
-        fslogic_cache:update_size(Key, SpaceId, SizeChange),
+        fslogic_cache:update_size(LocationDoc, SizeChange),
         fslogic_cache:save_blocks(Key, []),
         fslogic_cache:mark_changed_blocks(Key),
         ok = fslogic_cache:flush(Key, true)
@@ -386,7 +386,7 @@ clear_blocks(FileCtx, SpaceId, Key) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec update_blocks(location(), blocks()) -> location().
-update_blocks(#document{key = LocID, value = #file_location{space_id = SpaceId} = FileLocation} = Doc, NewBlocks) ->
+update_blocks(#document{key = LocID, value = FileLocation} = Doc, NewBlocks) ->
     case fslogic_cache:is_current_proc_cache() of
         false ->
             Doc#document{value = FileLocation#file_location{blocks = NewBlocks}};
@@ -422,7 +422,7 @@ update_blocks(#document{key = LocID, value = #file_location{space_id = SpaceId} 
                 {gb_sets:add(B2, Acc), TmpSize + S, sets:add_element(B, TmpBlocksToSave)}
             end, {Blocks2, SizeChange, BlocksToSave2}, FilteredBlocks),
 
-            fslogic_cache:update_size(LocID, SpaceId, SizeChange2),
+            fslogic_cache:update_size(Doc, SizeChange2),
             fslogic_cache:save_blocks(LocID, Blocks3),
             fslogic_cache:mark_changed_blocks(LocID, BlocksToSave3, BlocksToDel2,
                 FilteredBlocks, OldBlocks -- Exclude),

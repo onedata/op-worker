@@ -1732,8 +1732,7 @@ delete_whole_file_replica_internal(AllowedVV, RequestedBy, #state{file_ctx = Fil
     try
         LocalFileLocId = file_location:local_id(FileUuid),
         ProviderId = oneprovider:get_id(),
-        {ok, #document{value = #file_location{space_id = SpaceId}} = LocationDoc} =
-            fslogic_location_cache:get_location(LocalFileLocId, FileUuid),
+        {ok, LocationDoc} = fslogic_location_cache:get_location(LocalFileLocId, FileUuid),
         CurrentVV = file_location:get_version_vector(LocationDoc),
         AllowedLocalV = version_vector:get_version(LocalFileLocId, ProviderId, AllowedVV),
         CurrentLocalV = version_vector:get_version(LocalFileLocId, ProviderId, CurrentVV),
@@ -1742,7 +1741,7 @@ delete_whole_file_replica_internal(AllowedVV, RequestedBy, #state{file_ctx = Fil
                 % Emmit events only when list of blocks is not empty
                 % (nothing changes from clients perspective if blocks list is empty)
                 EmitEvents = fslogic_location_cache:get_blocks(LocationDoc) =/= [],
-                fslogic_location_cache:clear_blocks(FileCtx, SpaceId, LocalFileLocId),
+                fslogic_location_cache:clear_blocks(FileCtx, LocationDoc),
                 spawn_block_clearing(FileCtx, EmitEvents, RequestedBy);
             _ ->
                 {error, file_modified_locally}

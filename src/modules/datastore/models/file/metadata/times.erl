@@ -39,7 +39,7 @@
 -type m_time() :: time().
 -type times() :: {a_time(), c_time(), m_time()}.
 
--export_type([time/0, a_time/0, c_time/0, m_time/0, times/0, diff/0]).
+-export_type([record/0, time/0, a_time/0, c_time/0, m_time/0, times/0, diff/0]).
 
 -define(CTX, #{
     model => ?MODULE,
@@ -93,10 +93,13 @@ save(#document{key = Key} = Doc) ->
     datastore_model:save(?CTX#{generated_key => true},
         Doc#document{key = fslogic_uuid:ensure_referenced_uuid(Key)}).
 
--spec save_with_current_times(file_meta:uuid(), od_space:id()) -> ok | {error, term()}.
+-spec save_with_current_times(file_meta:uuid(), od_space:id()) -> {ok, time()} | {error, term()}.
 save_with_current_times(FileUuid, SpaceId) ->
     Time = global_clock:timestamp_seconds(),
-    save(FileUuid, SpaceId, Time, Time, Time).
+    case save(FileUuid, SpaceId, Time, Time, Time) of
+        ok -> {ok, Time};
+        Error -> Error
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -105,9 +108,9 @@ save_with_current_times(FileUuid, SpaceId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec create_or_update(doc(), diff()) ->
-    {ok, key()} | {error, term()}.
+    {ok, doc()} | {error, term()}.
 create_or_update(#document{key = Key, value = Default}, Diff) ->
-    ?extract_key(datastore_model:update(?CTX, fslogic_uuid:ensure_referenced_uuid(Key), Diff, Default)).
+    datastore_model:update(?CTX, fslogic_uuid:ensure_referenced_uuid(Key), Diff, Default).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -126,6 +129,7 @@ get(Uuid) ->
 -spec delete(key()) -> ok | {error, term()}.
 delete(FileUuid) ->
     datastore_model:delete(?CTX, fslogic_uuid:ensure_referenced_uuid(FileUuid)).
+
 
 %%%===================================================================
 %%% datastore_model callbacks

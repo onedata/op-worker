@@ -7,10 +7,11 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% Worker responsible for initialization and termination of
-%%% files_tree_gatherer_pes_executor.
+%%% dir_stats_collector.
+%%% TODO VFS-8936 - consider usage of internal services.
 %%% @end
 %%%-------------------------------------------------------------------
--module(files_tree_gatherer_worker).
+-module(dir_stats_collector_worker).
 -author("Michal Wrzeszcz").
 
 
@@ -36,7 +37,7 @@
 %%--------------------------------------------------------------------
 -spec init(Args :: term()) -> {ok, worker_host:plugin_state()} | {error, Reason :: term()}.
 init(_Args) ->
-    pes:start_link(files_tree_gatherer_pes_executor),
+    pes:start_link(dir_stats_collector),
     {ok, #{}}.
 
 
@@ -61,5 +62,5 @@ handle(Request) ->
 %%--------------------------------------------------------------------
 -spec cleanup() -> ok | {error, timeout | term()}.
 cleanup() ->
-    pes:stop(files_tree_gatherer_pes_executor),
+    pes:stop(dir_stats_collector),
     ok.

@@ -21,6 +21,7 @@
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% functions operating on record using datastore model API
 -export([add_hook/5, execute_hooks/1, delete/1]).
@@ -49,8 +50,7 @@
 %%% Functions operating on record using datastore_model API
 %%%===================================================================
 
--spec add_hook(file_meta:uuid(), hook_identifier(), module(), atom(), [term()]) ->
-    ok | {error, term()}.
+-spec add_hook(file_meta:uuid(), hook_identifier(), module(), atom(), [term()]) -> ok | ?ERROR_INTERNAL_SERVER_ERROR.
 add_hook(FileUuid, Identifier, Module, Function, Args) ->
     UniqueIdentifier = generate_hook_id(Identifier),
     EncodedArgs = term_to_binary(Args),
@@ -66,7 +66,12 @@ add_hook(FileUuid, Identifier, Module, Function, Args) ->
 
     case AddAns of
         {ok, _} ->
-            % Check race with dbsync
+            % Check race with file_meta document synchronization. Hook is added when something fails because of
+            % missing file_meta document. If missing file_meta document appears before hook adding to datastore,
+            % execution of hook is not triggered by dbsync. Thus, check if file_meta exists and trigger hook
+            % execution if it exists.
+            % NOTE: this check does not addresses races with link documents synchronization. If any hook depends
+            % on links, this race must be handled here.
             case file_meta:exists(FileUuid) of
                 true ->
                     % Spawn to prevent deadlocks when hook is added from the inside of already existing hook
@@ -75,13 +80,14 @@ add_hook(FileUuid, Identifier, Module, Function, Args) ->
                 _ -> ok
             end;
         Error ->
-            Error
+            ?error("~p:~p error for file ~p (identifier ~p, hook module ~p, hook fun ~p, hook args ~p): ~p",
+                [?MODULE, ?FUNCTION_NAME, FileUuid, Identifier, Module, Function, Args, Error]),
+            ?ERROR_INTERNAL_SERVER_ERROR
     end.
 
 
 -spec execute_hooks(file_meta:uuid()) -> ok | {error, term()}.
 execute_hooks(FileUuid) ->
-    % Double check to prevent entering critical section for empty hooks list
     case datastore_model:get(?CTX, FileUuid) of
         {ok, #document{value = #file_meta_posthooks{hooks = Hooks}}} ->
             case maps:size(Hooks) of
@@ -89,6 +95,7 @@ execute_hooks(FileUuid) ->
                     ok;
                 _ ->
                     critical_section:run(FileUuid, fun() ->
+                        % Get document once more as hooks might have changed before entering to critical section
                         case datastore_model:get(?CTX, FileUuid) of
                             {ok, #document{value = #file_meta_posthooks{hooks = Hooks}}} ->
                                 execute_hooks(FileUuid, Hooks);

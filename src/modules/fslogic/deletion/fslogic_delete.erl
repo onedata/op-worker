@@ -71,7 +71,7 @@
 
 -spec delete_file_locally(user_ctx:ctx(), file_ctx:ctx(), od_provider:id(), boolean()) -> ok.
 delete_file_locally(UserCtx, FileCtx, Creator, Silent) ->
-    update_files_count(FileCtx),
+    report_file_deleted(FileCtx),
     file_qos:cleanup_reference_related_documents(FileCtx),
     % TODO VFS-7448 - test events production
     case {file_ctx:is_link_const(FileCtx), oneprovider:is_self(Creator)} of
@@ -439,7 +439,7 @@ maybe_add_deletion_marker(FileCtx, UserCtx) ->
             case file_ctx:is_imported_storage(FileCtx) of
                 {true, FileCtx2} ->
                     {ParentGuid, FileCtx3} = files_tree:get_parent_guid_if_not_root_dir(FileCtx2, UserCtx),
-                    {ParentUuid, _} = file_id:unpack_guid(ParentGuid),
+                    ParentUuid = file_id:guid_to_uuid(ParentGuid),
                     deletion_marker:add(ParentUuid, FileCtx3);
                 {false, FileCtx2} ->
                     FileCtx2
@@ -655,12 +655,13 @@ remove_synced_associated_documents(FileCtx) ->
 remove_local_associated_documents(FileCtx, StorageFileDeleted, StorageFileId) ->
     % TODO VFS-7377 use file_location:get_deleted instead of passing StorageFileId
     FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
+    FileGuid = file_ctx:get_logical_guid_const(FileCtx),
     StorageFileDeleted andalso maybe_delete_storage_sync_info(FileCtx, StorageFileId),
     ok = file_meta_posthooks:delete(FileUuid),
     ok = file_qos:cleanup_on_no_reference(FileCtx),
     ok = file_popularity:delete(FileUuid),
-    ok = files_counter:delete_histogram(file_ctx:get_logical_guid_const(FileCtx)).
-
+    ok = dir_size_stats:delete_stats(FileGuid),
+    ok = dir_update_time_stats:delete_stats(FileGuid).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -714,10 +715,10 @@ log_storage_file_deletion_error(FileCtx, Error, IncludeStacktrace) ->
     end.
 
 
--spec update_files_count(file_ctx:ctx()) -> ok.
-update_files_count(FileCtx) ->
+-spec report_file_deleted(file_ctx:ctx()) -> ok.
+report_file_deleted(FileCtx) ->
+    % NOTE: file count is decremented as a result of local delete so there is no need to protect this code
+    % for races on dbsync
     {ParentFileCtx, _} = files_tree:get_parent(FileCtx, undefined),
-    case file_ctx:is_dir(FileCtx) of
-        {true, _} -> files_counter:decrement_dir_count(file_ctx:get_logical_guid_const(ParentFileCtx));
-        {false, _} -> files_counter:decrement_file_count(file_ctx:get_logical_guid_const(ParentFileCtx))
-    end.
+    {Type, _} = file_ctx:get_type(FileCtx),
+    dir_size_stats:report_file_deleted(Type, file_ctx:get_logical_guid_const(ParentFileCtx)).

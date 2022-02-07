@@ -46,7 +46,7 @@
 
 %% datastore_model callbacks
 -export([get_ctx/0]).
--export([get_record_version/0, get_record_struct/1, upgrade_record/2, resolve_conflict/3, new_remote_doc/2]).
+-export([get_record_version/0, get_record_struct/1, upgrade_record/2, resolve_conflict/3, on_remote_doc_created/2]).
 
 -type doc() :: datastore_doc:doc(file_meta()).
 -type diff() :: datastore_doc:diff(file_meta()).
@@ -484,7 +484,7 @@ rename(SourceDoc, #document{key = SourceParentUuid}, #document{key = TargetParen
 rename(SourceDoc, SourceParentUuid, TargetParentUuid, TargetName) ->
     #document{
         key = FileUuid,
-        value = #file_meta{name = FileName},
+        value = #file_meta{name = FileName, type = Type},
         scope = Scope
     } = SourceDoc,
     {ok, TargetDoc} = file_meta:update(FileUuid, fun(FileMeta = #file_meta{}) ->
@@ -496,14 +496,9 @@ rename(SourceDoc, SourceParentUuid, TargetParentUuid, TargetName) ->
     ok = file_meta_forest:add(TargetParentUuid, Scope, TargetName, FileUuid),
     ok = file_meta_forest:delete(SourceParentUuid, Scope, FileName, FileUuid),
 
-    {ok, Counters} = files_counter:get_values_map(
-        file_id:pack_guid(FileUuid, Scope), [<<"file_count">>, <<"dir_count">>]),
-    SourceParentGuid = file_id:pack_guid(SourceParentUuid, Scope),
-    TargetParentGuid = file_id:pack_guid(TargetParentUuid, Scope),
-    lists:foreach(fun({Parameter, Value}) ->
-        files_counter:update_parameter(SourceParentGuid, Parameter, -1 * Value),
-        files_counter:update_parameter(TargetParentGuid, Parameter, Value)
-    end, maps:to_list(Counters)),
+    % TODO VFS-8835 - test if other mechanisms handle size change
+    dir_size_stats:report_file_moved(Type, file_id:pack_guid(FileUuid, Scope),
+        file_id:pack_guid(SourceParentUuid, Scope), file_id:pack_guid(TargetParentUuid, Scope)),
 
     dataset_api:move_if_applicable(SourceDoc, TargetDoc).
 
@@ -721,7 +716,7 @@ make_space_exist(SpaceId) ->
     case file_meta:create({uuid, ?GLOBAL_ROOT_DIR_UUID}, FileDoc) of
         {ok, _} ->
             case times:save_with_current_times(SpaceDirUuid, SpaceId) of
-                ok -> ok;
+                {ok, _} -> ok;
                 {error, already_exists} -> ok
             end,
             trash:create(SpaceId),
@@ -1144,6 +1139,6 @@ resolve_conflict(Ctx, Doc1, Doc2) ->
 %% Function called when new record appears from remote provider.
 %% @end
 %%--------------------------------------------------------------------
--spec new_remote_doc(datastore_model:ctx(), doc()) -> ok.
-new_remote_doc(Ctx, Doc) ->
-    file_meta_model:new_remote_doc(Ctx, Doc).
+-spec on_remote_doc_created(datastore_model:ctx(), doc()) -> ok.
+on_remote_doc_created(Ctx, Doc) ->
+    file_meta_model:on_remote_doc_created(Ctx, Doc).

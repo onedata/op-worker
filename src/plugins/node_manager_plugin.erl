@@ -160,9 +160,9 @@ upgrade_cluster(3) ->
 -spec custom_workers() ->
     [{atom(), [any()]} | {singleton, atom(), [any()]} | {atom(), [any()], list()}].
 custom_workers() -> filter_disabled_workers([
-    {files_tree_gatherer_worker, [
-        {supervisor_flags, pes_supervisor:spec()},
-        {supervisor_children_spec, pes_supervisor:children_spec()}
+    {dir_stats_collector_worker, [
+        {supervisor_flags, pes:get_root_supervisor_flags(dir_stats_collector)},
+        {supervisor_children_spec, pes:get_root_supervisor_child_specs(dir_stats_collector)}
     ]},
     {session_manager_worker, [
         {supervisor_flags, session_manager_worker:supervisor_flags()},

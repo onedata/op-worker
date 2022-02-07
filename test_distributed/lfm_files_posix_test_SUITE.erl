@@ -27,6 +27,7 @@
 
 %% tests
 -export([
+    dir_stats_collector_test/1,
     fslogic_new_file_test/1,
     lfm_create_and_unlink_test/1,
     lfm_create_and_access_test/1,
@@ -108,12 +109,12 @@
     lfm_monitored_open/1,
     lfm_create_and_read_symlink/1,
     lfm_create_hardlink_to_symlink/1,
-    recreate_file_on_storage/1,
-    files_counting_test/1
+    recreate_file_on_storage/1
 ]).
 
 
 -define(TEST_CASES, [
+    dir_stats_collector_test,
     fslogic_new_file_test,
     lfm_create_and_unlink_test,
     lfm_create_and_access_test,
@@ -195,8 +196,7 @@
     lfm_monitored_open,
     lfm_create_and_read_symlink,
     lfm_create_hardlink_to_symlink,
-    recreate_file_on_storage,
-    files_counting_test
+    recreate_file_on_storage
 ]).
 
 
@@ -913,8 +913,8 @@ recreate_file_on_storage(Config) ->
     ?assertEqual(ok, lfm_proxy:close(Worker, Handle2)).
 
 
-files_counting_test(Config) ->
-    files_counting_test_base:files_counting_test(Config).
+dir_stats_collector_test(Config) ->
+    dir_stats_collector_test_base:single_provider_test(Config).
 
 
 %%%===================================================================
@@ -939,6 +939,9 @@ init_per_testcase(lfm_create_and_read_symlink = Case, Config) ->
     time_test_utils:freeze_time(Config),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 
+init_per_testcase(dir_stats_collector_test = Case, Config) ->
+    dir_stats_collector_test_base:init(init_per_testcase(?DEFAULT_CASE(Case), Config));
+
 init_per_testcase(Case, Config) ->
     lfm_files_test_base:init_per_testcase(Case, Config).
 
@@ -953,6 +956,10 @@ end_per_testcase(Case, Config) when
 
 end_per_testcase(lfm_create_and_read_symlink = Case, Config) ->
     time_test_utils:unfreeze_time(Config),
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
+
+end_per_testcase(dir_stats_collector_test = Case, Config) ->
+    dir_stats_collector_test_base:teardown(Config),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 
 end_per_testcase(Case, Config) ->

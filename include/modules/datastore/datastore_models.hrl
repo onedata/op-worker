@@ -1046,6 +1046,16 @@
     next_subtree_root = undefined :: undefined | file_meta:uuid()
 }).
 
+-record(dir_update_time_stats, {
+    time = 0 :: times:time()
+}).
+
+
+-record(dir_stats_collector_config, {
+    enabled = true :: boolean()
+}).
+
+
 %%%===================================================================
 %%% Automation related models
 %%%===================================================================
