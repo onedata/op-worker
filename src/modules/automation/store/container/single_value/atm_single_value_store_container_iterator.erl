@@ -10,9 +10,9 @@
 %%% `atm_single_value_store_container`.
 %%%
 %%%                             !!! Caution !!!
-%%% This iterator snapshots store container's value at creation time so that
-%%% even if value kept in container changes the iterator will still return
-%%% the same old value.
+%%% This iterator snapshots store container's item at creation time so that
+%%% even if item kept in container changes the iterator will still return
+%%% the same old item.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_single_value_store_container_iterator).
@@ -24,17 +24,18 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([build/1]).
+-export([build/2]).
 
 % atm_store_container_iterator callbacks
--export([get_next_batch/4, forget_before/1, mark_exhausted/1]).
+-export([get_next_batch/3, forget_before/1, mark_exhausted/1]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
 
 
 -record(atm_single_value_store_container_iterator, {
-    value :: undefined | automation:item(),
+    item_data_spec :: atm_data_spec:record(),
+    compressed_item :: undefined | atm_value:compressed(),
     exhausted = false :: boolean()
 }).
 -type record() :: #atm_single_value_store_container_iterator{}.
@@ -47,9 +48,14 @@
 %%%===================================================================
 
 
--spec build(undefined | automation:item()) -> record().
-build(Value) ->
-    #atm_single_value_store_container_iterator{value = Value, exhausted = false}.
+-spec build(atm_data_spec:record(), undefined | atm_value:compressed()) ->
+    record().
+build(CompressedItem, ItemDataSpec) ->
+    #atm_single_value_store_container_iterator{
+        compressed_item = CompressedItem,
+        item_data_spec = ItemDataSpec,
+        exhausted = false
+    }.
 
 
 %%%===================================================================
@@ -57,28 +63,33 @@ build(Value) ->
 %%%===================================================================
 
 
--spec get_next_batch(atm_workflow_execution_auth:record(), atm_store_container_iterator:batch_size(),
-    record(), atm_data_spec:record()
+-spec get_next_batch(
+    atm_workflow_execution_auth:record(),
+    atm_store_container_iterator:batch_size(),
+    record()
 ) ->
     {ok, [atm_value:expanded()], record()} | stop.
-get_next_batch(_, _, #atm_single_value_store_container_iterator{value = undefined}, _) ->
+get_next_batch(_, _, #atm_single_value_store_container_iterator{compressed_item = undefined}) ->
     stop;
-get_next_batch(_, _, #atm_single_value_store_container_iterator{exhausted = true}, _) ->
+
+get_next_batch(_, _, #atm_single_value_store_container_iterator{exhausted = true}) ->
     stop;
-get_next_batch(AtmWorkflowExecutionAuth, _, Iterator = #atm_single_value_store_container_iterator{
-    value = CompressedItem
-}, AtmDataSpec) ->
-    Batch = atm_value:filterexpand_list(AtmWorkflowExecutionAuth, CompressedItem, AtmDataSpec),
-    {ok, Batch, Iterator#atm_single_value_store_container_iterator{exhausted = true}}.
+
+get_next_batch(AtmWorkflowExecutionAuth, _, Record = #atm_single_value_store_container_iterator{
+    item_data_spec = ItemDataSpec,
+    compressed_item = CompressedItem
+}) ->
+    Batch = atm_value:filterexpand_list(AtmWorkflowExecutionAuth, [CompressedItem], ItemDataSpec),
+    {ok, Batch, Record#atm_single_value_store_container_iterator{exhausted = true}}.
 
 
 -spec forget_before(record()) -> ok.
-forget_before(_AtmStoreContainerIterator) ->
+forget_before(_Record) ->
     ok.
 
 
 -spec mark_exhausted(record()) -> ok.
-mark_exhausted(_AtmStoreContainerIterator) ->
+mark_exhausted(_Record) ->
     ok.
 
 
@@ -95,16 +106,24 @@ version() ->
 -spec db_encode(record(), persistent_record:nested_record_encoder()) ->
     json_utils:json_term().
 db_encode(#atm_single_value_store_container_iterator{
-    value = Value,
+    compressed_item = Item,
+    item_data_spec = ItemDataSpec,
     exhausted = Exhausted
-}, _NestedRecordEncoder) ->
-    maps_utils:put_if_defined(#{<<"exhausted">> => Exhausted}, <<"value">>, Value).
+}, NestedRecordEncoder) ->
+    maps_utils:put_if_defined(#{
+        <<"itemDataSpec">> => NestedRecordEncoder(ItemDataSpec, atm_data_spec),
+        <<"exhausted">> => Exhausted
+    }, <<"compressedItem">>, Item).
 
 
 -spec db_decode(json_utils:json_term(), persistent_record:nested_record_decoder()) ->
     record().
-db_decode(#{<<"exhausted">> := Exhausted} = AtmStoreContainerIteratorJson, _NestedRecordDecoder) ->
+db_decode(#{
+    <<"itemDataSpec">> := ItemDataSpecJson,
+    <<"exhausted">> := Exhausted
+} = RecordJson, NestedRecordDecoder) ->
     #atm_single_value_store_container_iterator{
-        value = maps:get(<<"value">>, AtmStoreContainerIteratorJson, undefined),
+        compressed_item = maps:get(<<"compressedItem">>, RecordJson, undefined),
+        item_data_spec = NestedRecordDecoder(ItemDataSpecJson, atm_data_spec),
         exhausted = Exhausted
     }.
