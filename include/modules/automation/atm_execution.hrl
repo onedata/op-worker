@@ -146,6 +146,17 @@
 
 %% Atm system stores related macros
 
+-define(ATM_SYSTEM_AUDIT_LOG_SCHEMA(__ID), #atm_store_schema{
+    id = __ID,
+    name = __ID,
+    description = <<>>,
+    type = audit_log,
+    config = #atm_audit_log_store_config{
+        log_content_data_spec = #atm_data_spec{type = atm_object_type}
+    },
+    requires_initial_content = false
+}).
+
 -define(CURRENT_LANE_RUN_EXCEPTION_STORE_SCHEMA_ID, <<"CURRENT_LANE_RUN_EXCEPTION_STORE">>).
 
 

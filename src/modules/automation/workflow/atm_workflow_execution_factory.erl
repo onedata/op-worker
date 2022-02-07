@@ -317,16 +317,13 @@ create_workflow_audit_log(CreationCtx = #creation_ctx{
 }) ->
     {ok, #document{
         key = AtmWorkflowAuditLogId,
-        value = #atm_store{container = AtmWorkflowAuditLogStoreContainer}
-    }} = atm_store_api:create(
-        AtmWorkflowExecutionAuth, undefined, #atm_store_schema{
-            id = ?WORKFLOW_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID,
-            name = ?WORKFLOW_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID,
-            description = <<>>,
-            type = audit_log,
-            data_spec = #atm_data_spec{type = atm_object_type},
-            requires_initial_value = false
+        value = #atm_store{
+            container = AtmWorkflowAuditLogStoreContainer
         }
+    }} = atm_store_api:create(
+        AtmWorkflowExecutionAuth,
+        undefined,
+        ?ATM_SYSTEM_AUDIT_LOG_SCHEMA(?WORKFLOW_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID)
     ),
 
     CreationCtx#creation_ctx{

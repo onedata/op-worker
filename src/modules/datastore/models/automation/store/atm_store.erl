@@ -20,7 +20,7 @@
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1, get_record_version/0]).
--export([encode_initial_value/1, decode_initial_value/1]).
+-export([encode_initial_content/1, decode_initial_content/1]).
 
 
 -type id() :: binary().
@@ -80,17 +80,17 @@ get_record_struct(1) ->
     {record, [
         {workflow_execution_id, string},
         {schema_id, string},
-        {initial_value, {custom, string, {?MODULE, encode_initial_value, decode_initial_value}}},
+        {initial_content, {custom, string, {?MODULE, encode_initial_content, decode_initial_content}}},
         {frozen, boolean},
         {container, {custom, string, {persistent_record, encode, decode, atm_store_container}}}
     ]}.
 
 
--spec encode_initial_value(undefined | json_utils:json_term()) -> binary().
-encode_initial_value(Value) ->
+-spec encode_initial_content(undefined | json_utils:json_term()) -> binary().
+encode_initial_content(Value) ->
     json_utils:encode(utils:undefined_to_null(Value)).
 
 
--spec decode_initial_value(binary()) -> undefined | json_utils:json_term().
-decode_initial_value(Value) ->
+-spec decode_initial_content(binary()) -> undefined | json_utils:json_term().
+decode_initial_content(Value) ->
     utils:null_to_undefined(json_utils:decode(Value)).

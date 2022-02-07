@@ -52,28 +52,28 @@
 ) ->
     {ok, atm_store:doc()} | no_return().
 create(_AtmWorkflowExecutionAuth, undefined, #atm_store_schema{
-    requires_initial_value = true,
-    default_initial_value = undefined
+    requires_initial_content = true,
+    default_initial_content = undefined
 }) ->
-    throw(?ERROR_ATM_STORE_MISSING_REQUIRED_INITIAL_VALUE);
+    throw(?ERROR_ATM_STORE_MISSING_REQUIRED_INITIAL_CONTENT);
 
-create(AtmWorkflowExecutionAuth, InitialValue, #atm_store_schema{
+create(AtmWorkflowExecutionAuth, InitialContent, #atm_store_schema{
     id = AtmStoreSchemaId,
-    default_initial_value = DefaultInitialValue,
+    default_initial_content = DefaultInitialContent,
     type = StoreType,
-    data_spec = AtmDataSpec
+    config = AtmStoreConfig
 }) ->
-    ActualInitialValue = utils:ensure_defined(InitialValue, DefaultInitialValue),
+    ActualInitialContent = utils:ensure_defined(InitialContent, DefaultInitialContent),
 
     {ok, _} = atm_store:create(#atm_store{
         workflow_execution_id = atm_workflow_execution_auth:get_workflow_execution_id(
             AtmWorkflowExecutionAuth
         ),
         schema_id = AtmStoreSchemaId,
-        initial_value = ActualInitialValue,
+        initial_content = ActualInitialContent,
         frozen = false,
         container = atm_store_container:create(
-            StoreType, AtmWorkflowExecutionAuth, AtmDataSpec, ActualInitialValue
+            StoreType, AtmWorkflowExecutionAuth, AtmStoreConfig, ActualInitialContent
         )
     }).
 
