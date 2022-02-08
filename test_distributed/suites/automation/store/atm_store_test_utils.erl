@@ -12,11 +12,18 @@
 -module(atm_store_test_utils).
 -author("Michal Stanisz").
 
+-include("modules/automation/atm_execution.hrl").
 -include("modules/datastore/datastore_runner.hrl").
+-include("test_rpc.hrl").
 -include_lib("ctool/include/errors.hrl").
 
 %% API
 -export([create_workflow_execution_auth/3]).
+-export([
+    ensure_fully_expanded_data/4,
+    gen_valid_data/3,
+    gen_invalid_data/3
+]).
 -export([
     create_store/4,
     apply_operation/6,
@@ -33,6 +40,10 @@
 -export([example_data/1, example_bad_data/1, all_data_types/0]).
 
 -type item() :: json_utils:json_term().
+
+-define(RAND_STR(Bytes), str_utils:rand_hex(Bytes)).
+-define(RAND_INT(From, To), From + rand:uniform(To - From + 1) - 1).
+
 
 %%%===================================================================
 %%% API
@@ -56,6 +67,127 @@ create_workflow_execution_auth(ProviderSelector, UserSelector, SpaceSelector) ->
 
     SpaceId = oct_background:get_space_id(SpaceSelector),
     rpc:call(Node, atm_workflow_execution_auth, build, [SpaceId, AtmWorkflowExecutionId, UserCtx]).
+
+
+-spec ensure_fully_expanded_data(
+    oct_background:node_selector(),
+    atm_workflow_execution_auth:record(),
+    atm_value:expanded(),
+    atm_store:id()
+) ->
+    atm_value:expanded().
+ensure_fully_expanded_data(ProviderSelector, AtmWorkflowExecutionAuth, Data, AtmDataSpec) ->
+    {ok, ExpandedData} = ?rpc(ProviderSelector, atm_value:expand(
+        AtmWorkflowExecutionAuth,
+        atm_value:compress(Data, AtmDataSpec),
+        AtmDataSpec
+    )),
+    ExpandedData.
+
+
+-spec gen_valid_data(
+    oct_background:node_selector(),
+    atm_workflow_execution_auth:record(),
+    atm_data_spec:record()
+) ->
+    atm_value:expanded().
+gen_valid_data(ProviderSelector, AtmWorkflowExecutionAuth, #atm_data_spec{
+    type = atm_array_type,
+    value_constraints = #{item_data_spec := ItemDataSpec}
+}) ->
+    lists:map(
+        fun(_) -> gen_valid_data(ProviderSelector, AtmWorkflowExecutionAuth, ItemDataSpec) end,
+        lists:seq(1, ?RAND_INT(5, 10))
+    );
+
+gen_valid_data(_ProviderSelector, _AtmWorkflowExecutionAuth, #atm_data_spec{
+    type = atm_dataset_type
+}) ->
+    ?RAND_STR(32);  %% TODO
+
+gen_valid_data(ProviderSelector, AtmWorkflowExecutionAuth, #atm_data_spec{
+    type = atm_file_type
+}) ->
+    SessionId = atm_workflow_execution_auth:get_session_id(AtmWorkflowExecutionAuth),
+    SpaceId = atm_workflow_execution_auth:get_space_id(AtmWorkflowExecutionAuth),
+    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    {ok, FileGuid} = ?rpc(ProviderSelector, lfm:create(   %% TODO random file type?
+        SessionId, SpaceGuid, str_utils:rand_hex(32), undefined
+    )),
+    {ok, ObjectId} = file_id:guid_to_objectid(FileGuid),
+    #{<<"file_id">> => ObjectId};
+
+gen_valid_data(_ProviderSelector, _AtmWorkflowExecutionAuth, #atm_data_spec{
+    type = atm_integer_type
+}) ->
+    rand:uniform(1000000);
+
+gen_valid_data(_ProviderSelector, _AtmWorkflowExecutionAuth, #atm_data_spec{
+    type = atm_object_type
+}) ->
+    lists:foldl(fun(_, Acc) ->
+        Acc#{?RAND_STR(32) => lists_utils:random_element([?RAND_STR(32), rand:uniform(1000000)])}
+    end, #{}, lists:seq(1, ?RAND_INT(3, 5)));
+
+gen_valid_data(ProviderSelector, AtmWorkflowExecutionAuth, #atm_data_spec{
+    type = atm_onedatafs_credentials_type
+}) ->
+    #{
+        <<"host">> => ?rpc(ProviderSelector, oneprovider:get_domain()),
+        <<"accessToken">> => atm_workflow_execution_auth:get_access_token(AtmWorkflowExecutionAuth)
+    };
+
+gen_valid_data(_ProviderSelector, _AtmWorkflowExecutionAuth, #atm_data_spec{
+    type = atm_string_type
+}) ->
+    ?RAND_STR(32).
+
+%%example_valid_data(_AtmWorkflowExecutionAuth, #atm_data_spec{type = atm_time_series_measurements_type}) ->
+%%    str_utils:rand_hex(32).
+
+
+-spec gen_invalid_data(
+    oct_background:node_selector(),
+    atm_workflow_execution_auth:record(),
+    atm_data_spec:record()
+) ->
+    atm_value:expanded().
+gen_invalid_data(ProviderSelector, AtmWorkflowExecutionAuth, #atm_data_spec{
+    type = atm_array_type,
+    value_constraints = #{item_data_spec := #atm_data_spec{type = ItemDataType}}
+}) ->
+    InvalidItemDataSpec = lists_utils:random_element(all_basic_data_types() -- [ItemDataType]),
+
+    lists:map(
+        fun(_) -> gen_valid_data(ProviderSelector, AtmWorkflowExecutionAuth, InvalidItemDataSpec) end,
+        lists:seq(1, ?RAND_INT(5, 10))
+    );
+
+gen_invalid_data(ProviderSelector, AtmWorkflowExecutionAuth, #atm_data_spec{
+    type = atm_object_type
+}) ->
+    gen_valid_data(ProviderSelector, AtmWorkflowExecutionAuth, #atm_data_spec{
+        type = lists_utils:random_element([atm_integer_type, atm_string_type])
+    });
+
+gen_invalid_data(ProviderSelector, AtmWorkflowExecutionAuth, #atm_data_spec{
+    type = AtmDataType
+}) ->
+    gen_valid_data(ProviderSelector, AtmWorkflowExecutionAuth, #atm_data_spec{
+        type = lists_utils:random_element(all_basic_data_types() -- [AtmDataType])
+    }).
+
+
+%% @private
+-spec all_basic_data_types() -> [atm_data_type:type()].
+all_basic_data_types() -> [
+%%    atm_dataset_type,
+    atm_file_type,
+    atm_integer_type,
+    atm_object_type,
+    atm_onedatafs_credentials_type,
+    atm_string_type
+].
 
 
 -spec create_store(

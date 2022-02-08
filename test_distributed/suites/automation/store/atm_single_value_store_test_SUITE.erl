@@ -14,35 +14,33 @@
 
 -include("modules/automation/atm_execution.hrl").
 -include("modules/datastore/datastore_runner.hrl").
+-include("test_rpc.hrl").
 
--include_lib("ctool/include/automation/automation.hrl").
--include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
+-include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
-
 
 %% exported for CT
 -export([
     groups/0, all/0,
     init_per_suite/1, end_per_suite/1,
+    init_per_group/2, end_per_group/2,
     init_per_testcase/2, end_per_testcase/2
 ]).
 
 %% tests
 -export([
-    create_store_with_invalid_args_test/1,
+    create_test/1,
     apply_operation_test/1,
-    iterate_test/1,
-    reuse_iterator_test/1,
+    iterator_test/1,
     browse_test/1
 ]).
 
 groups() -> [
     {all_tests, [parallel], [
-        create_store_with_invalid_args_test,
+        create_test,
         apply_operation_test,
-        iterate_test,
-        reuse_iterator_test,
+        iterator_test,
         browse_test
     ]}
 ].
@@ -52,146 +50,257 @@ all() -> [
 ].
 
 
--define(ATM_SINGLE_VALUE_STORE_SCHEMA, ?ATM_SINGLE_VALUE_STORE_SCHEMA(atm_integer_type)).
--define(ATM_SINGLE_VALUE_STORE_SCHEMA(__DataType), #atm_store_schema{
-    id = <<"dummyId">>,
+-define(PROVIDER_SELECTOR, krakow).
+-define(STORE_SCHEMA_ID, <<"dummy_single_value_store">>).
+
+-define(STORE_SCHEMA(__REQUIRES_INITIAL_VALUE, __CONFIG), #atm_store_schema{
+    id = ?STORE_SCHEMA_ID,
     name = <<"single_value_store">>,
     description = <<"description">>,
-    requires_initial_value = false,
     type = single_value,
-    data_spec = #atm_data_spec{type = __DataType}
+    requires_initial_content = __REQUIRES_INITIAL_VALUE,
+    config = __CONFIG
 }).
+-define(STORE_SCHEMA(__CONFIG), ?STORE_SCHEMA(false, __CONFIG)).
 
--define(ATTEMPTS, 30).
+-define(rpc(Expr), ?rpc(?PROVIDER_SELECTOR, Expr)).
 
 
 %%%===================================================================
-%%% API functions
+%%% Test functions
 %%%===================================================================
 
-create_store_with_invalid_args_test(_Config) ->
-    AtmWorkflowExecutionAuth = atm_store_test_utils:create_workflow_execution_auth(
-        krakow, user1, space_krk
+
+create_test(_Config) ->
+    AtmWorkflowExecutionAuth = create_workflow_execution_auth(),
+
+    ExampleConfigs = example_configs(),
+    ExampleConfig = lists_utils:random_element(ExampleConfigs),
+
+    ?assertEqual(
+        ?ERROR_ATM_STORE_MISSING_REQUIRED_INITIAL_CONTENT,
+        ?rpc(catch atm_store_api:create(AtmWorkflowExecutionAuth, undefined, ?STORE_SCHEMA(true, ExampleConfig)))
+    ),
+    ?assertMatch(
+        {ok, #document{value = #atm_store{initial_content = undefined, frozen = false}}},
+        ?rpc(atm_store_api:create(AtmWorkflowExecutionAuth, undefined, ?STORE_SCHEMA(false, ExampleConfig)))
     ),
 
-    lists:foreach(fun(DataType) ->
-        BadValue = atm_store_test_utils:example_bad_data(DataType),
+    lists:foreach(fun(Config = #atm_single_value_store_config{item_data_spec = ItemDataSpec}) ->
+        InvalidItem = gen_invalid_data(AtmWorkflowExecutionAuth, ItemDataSpec),
         ?assertEqual(
-            ?ERROR_ATM_DATA_TYPE_UNVERIFIED(BadValue, DataType),
-            atm_store_test_utils:create_store(
-                krakow, AtmWorkflowExecutionAuth, BadValue, ?ATM_SINGLE_VALUE_STORE_SCHEMA(DataType)
-            )
+            ?ERROR_ATM_DATA_TYPE_UNVERIFIED(InvalidItem, ItemDataSpec#atm_data_spec.type),
+            ?rpc(catch atm_store_api:create(AtmWorkflowExecutionAuth, InvalidItem, ?STORE_SCHEMA(Config)))
+        ),
+
+        ValidItem = gen_valid_data(AtmWorkflowExecutionAuth, ItemDataSpec),
+        ?assertMatch(
+            {ok, #document{value = #atm_store{initial_content = ValidItem, frozen = false}}},
+            ?rpc(atm_store_api:create(AtmWorkflowExecutionAuth, ValidItem, ?STORE_SCHEMA(Config)))
         )
-    end, atm_store_test_utils:all_data_types()).
+    end, ExampleConfigs).
 
 
 apply_operation_test(_Config) ->
-    AtmWorkflowExecutionAuth = atm_store_test_utils:create_workflow_execution_auth(
-        krakow, user1, space_krk
-    ),
-    {ok, AtmStoreId0} = atm_store_test_utils:create_store(
-        krakow, AtmWorkflowExecutionAuth, undefined, ?ATM_SINGLE_VALUE_STORE_SCHEMA
-    ),
-    ?assertEqual(?ERROR_NOT_SUPPORTED, atm_store_test_utils:apply_operation(
-        krakow, AtmWorkflowExecutionAuth, append, <<"NaN">>, #{}, AtmStoreId0
-    )),
-    
-    lists:foreach(fun(DataType) ->
-        {ok, AtmStoreId} = atm_store_test_utils:create_store(
-            krakow, AtmWorkflowExecutionAuth, undefined, ?ATM_SINGLE_VALUE_STORE_SCHEMA(DataType)
-        ),
-        BadValue = atm_store_test_utils:example_bad_data(DataType),
+    AtmWorkflowExecutionAuth = create_workflow_execution_auth(),
+
+    lists:foreach(fun(Config = #atm_single_value_store_config{item_data_spec = ItemDataSpec}) ->
+        InitialItem = case rand:uniform(2) of
+            1 -> undefined;
+            2 -> gen_valid_data(AtmWorkflowExecutionAuth, ItemDataSpec)
+        end,
+        FullyExpandedInitialItem = case InitialItem of
+            undefined -> undefined;
+            _ -> ensure_fully_expanded_data(AtmWorkflowExecutionAuth, InitialItem, ItemDataSpec)
+        end,
+        NewItem = gen_valid_data(AtmWorkflowExecutionAuth, ItemDataSpec),
+        FullyExpandedNewItem = ensure_fully_expanded_data(AtmWorkflowExecutionAuth, NewItem, ItemDataSpec),
+
+        {ok, AtmStoreId} = ?extract_key(?rpc(atm_store_api:create(
+            AtmWorkflowExecutionAuth, InitialItem, ?STORE_SCHEMA(Config)
+        ))),
+
+        % Assert all operations but 'set' are unsupported
+        lists:foreach(fun(Operation) ->
+            ?assertEqual(?ERROR_NOT_SUPPORTED, ?rpc(catch atm_store_api:apply_operation(
+                AtmWorkflowExecutionAuth, Operation, NewItem, #{}, AtmStoreId
+            ))),
+            ?assertMatch(FullyExpandedInitialItem, get_content(AtmWorkflowExecutionAuth, AtmStoreId))
+        end, atm_task_schema_result_mapper:all_dispatch_functions() -- [set]),
+
+        % Assert set with invalid item should fail
+        InvalidItem = gen_invalid_data(AtmWorkflowExecutionAuth, ItemDataSpec),
         ?assertEqual(
-            ?ERROR_ATM_DATA_TYPE_UNVERIFIED(BadValue, DataType),
-            atm_store_test_utils:apply_operation(krakow, AtmWorkflowExecutionAuth, set, BadValue, #{}, AtmStoreId)
+            ?ERROR_ATM_DATA_TYPE_UNVERIFIED(InvalidItem, ItemDataSpec#atm_data_spec.type),
+            ?rpc(catch atm_store_api:apply_operation(
+                AtmWorkflowExecutionAuth, set, InvalidItem, #{}, AtmStoreId
+            ))
         ),
-        ValidValue = atm_store_test_utils:example_data(DataType),
-        ?assertEqual(ok, atm_store_test_utils:apply_operation(
-            krakow, AtmWorkflowExecutionAuth, set, ValidValue, #{}, AtmStoreId
-        ))
-    end, atm_store_test_utils:all_data_types()).
+        ?assertMatch(FullyExpandedInitialItem, get_content(AtmWorkflowExecutionAuth, AtmStoreId)),
+
+        % Assert it is not possible to perform operation on store when it is frozen
+        ?rpc(atm_store_api:freeze(AtmStoreId)),
+        ?assertEqual(
+            ?ERROR_ATM_STORE_FROZEN(?STORE_SCHEMA_ID),
+            ?rpc(catch atm_store_api:apply_operation(
+                AtmWorkflowExecutionAuth, set, NewItem, #{}, AtmStoreId
+            ))
+        ),
+        ?assertMatch(FullyExpandedInitialItem, get_content(AtmWorkflowExecutionAuth, AtmStoreId)),
+
+        % Otherwise operation should succeed
+        ?rpc(atm_store_api:unfreeze(AtmStoreId)),
+        ?assertEqual(
+            ok,
+            ?rpc(atm_store_api:apply_operation(AtmWorkflowExecutionAuth, set, NewItem, #{}, AtmStoreId))
+        ),
+        ?assertMatch(FullyExpandedNewItem, get_content(AtmWorkflowExecutionAuth, AtmStoreId))
+
+    end, example_configs()).
 
 
-iterate_test(_Config) ->
-    Value = random:uniform(1000),
-    AtmWorkflowExecutionAuth = atm_store_test_utils:create_workflow_execution_auth(
-        krakow, user1, space_krk
-    ),
+iterator_test(_Config) ->
+    AtmWorkflowExecutionAuth = create_workflow_execution_auth(),
 
-    {ok, AtmStoreId} = atm_store_test_utils:create_store(
-        krakow, AtmWorkflowExecutionAuth, undefined, ?ATM_SINGLE_VALUE_STORE_SCHEMA
-    ),
-    
-    AtmListStoreDummySchemaId = <<"dummyId">>,
+    lists:foreach(fun(Config = #atm_single_value_store_config{item_data_spec = ItemDataSpec}) ->
+        {ok, AtmStoreId} = ?extract_key(?rpc(atm_store_api:create(
+            AtmWorkflowExecutionAuth, undefined, ?STORE_SCHEMA(Config)
+        ))),
+        AtmStoreIteratorSpec = #atm_store_iterator_spec{
+            store_schema_id = ?STORE_SCHEMA_ID,
+            max_batch_size = rand:uniform(8)
+        },
+        AtmWorkflowExecutionEnv = atm_workflow_execution_env:build(
+            atm_workflow_execution_auth:get_space_id(AtmWorkflowExecutionAuth),
+            atm_workflow_execution_auth:get_workflow_execution_id(AtmWorkflowExecutionAuth),
+            0,
+            #{?STORE_SCHEMA_ID => AtmStoreId}
+        ),
 
-    AtmWorkflowExecutionEnv = atm_workflow_execution_env:build(
-        atm_workflow_execution_auth:get_space_id(AtmWorkflowExecutionAuth),
-        atm_workflow_execution_auth:get_workflow_execution_id(AtmWorkflowExecutionAuth),
-        0,
-        #{AtmListStoreDummySchemaId => AtmStoreId}
-    ),
-    AtmStoreIteratorSpec = #atm_store_iterator_spec{
-        store_schema_id = AtmListStoreDummySchemaId,
-        max_batch_size = 10
-    },
-    AtmStoreIterator = atm_store_test_utils:acquire_store_iterator(
-        krakow, AtmStoreId, AtmStoreIteratorSpec
-    ),
-    
-    ?assertEqual(stop, atm_store_test_utils:iterator_get_next(krakow, AtmWorkflowExecutionEnv, AtmStoreIterator)),
-    ?assertEqual(ok, atm_store_test_utils:apply_operation(
-        krakow, AtmWorkflowExecutionAuth, set, Value, #{}, AtmStoreId)
-    ),
-    AtmStoreIterator1 = atm_store_test_utils:acquire_store_iterator(krakow, AtmStoreId, AtmStoreIteratorSpec),
-    {ok, _, AtmIterator2} = ?assertMatch({ok, [Value], _}, atm_store_test_utils:iterator_get_next(krakow, AtmWorkflowExecutionEnv, AtmStoreIterator1)),
-    ?assertEqual(stop, atm_store_test_utils:iterator_get_next(krakow, AtmWorkflowExecutionEnv, AtmIterator2)).
+        AtmStoreIterator0 = ?rpc(atm_store_api:acquire_iterator(AtmStoreId, AtmStoreIteratorSpec)),
+        ?assertEqual(stop, ?rpc(iterator:get_next(AtmWorkflowExecutionEnv, AtmStoreIterator0))),
 
+        Item = gen_valid_data(AtmWorkflowExecutionAuth, ItemDataSpec),
+        FullyExpandedItem = ensure_fully_expanded_data(AtmWorkflowExecutionAuth, Item, ItemDataSpec),
+        set_item(AtmWorkflowExecutionAuth, Item, AtmStoreId),
 
-reuse_iterator_test(_Config) ->
-    AtmWorkflowExecutionAuth = atm_store_test_utils:create_workflow_execution_auth(
-        krakow, user1, space_krk
-    ),
+        AtmStoreIterator1 = ?rpc(atm_store_api:acquire_iterator(AtmStoreId, AtmStoreIteratorSpec)),
+        {ok, _, AtmStoreIterator2} = ?assertMatch(
+            {ok, [FullyExpandedItem], _},
+            ?rpc(iterator:get_next(AtmWorkflowExecutionEnv, AtmStoreIterator1))
+        ),
+        ?assertEqual(stop, ?rpc(iterator:get_next(AtmWorkflowExecutionEnv, AtmStoreIterator2))),
 
-    {ok, AtmStoreId} = atm_store_test_utils:create_store(
-        krakow, AtmWorkflowExecutionAuth, 8, ?ATM_SINGLE_VALUE_STORE_SCHEMA
-    ),
+        %% Assert previous iterators can be reused
+        ?assertMatch(
+            {ok, [FullyExpandedItem], _},
+            ?rpc(iterator:get_next(AtmWorkflowExecutionEnv, AtmStoreIterator1))
+        )
 
-    AtmListStoreDummySchemaId = <<"dummyId">>,
-
-    AtmWorkflowExecutionEnv = atm_workflow_execution_env:build(
-        atm_workflow_execution_auth:get_space_id(AtmWorkflowExecutionAuth),
-        atm_workflow_execution_auth:get_workflow_execution_id(AtmWorkflowExecutionAuth),
-        0,
-        #{AtmListStoreDummySchemaId => AtmStoreId}
-    ),
-    AtmStoreIteratorSpec = #atm_store_iterator_spec{
-        store_schema_id = AtmListStoreDummySchemaId,
-        max_batch_size = 1
-    },
-    AtmSerialIterator0 = atm_store_test_utils:acquire_store_iterator(
-        krakow, AtmStoreId, AtmStoreIteratorSpec
-    ),
-
-    {ok, _, AtmSerialIterator1} = ?assertMatch({ok, [8], _}, atm_store_test_utils:iterator_get_next(krakow, AtmWorkflowExecutionEnv, AtmSerialIterator0)),
-    ?assertMatch(stop, atm_store_test_utils:iterator_get_next(krakow, AtmWorkflowExecutionEnv, AtmSerialIterator1)),
-    ?assertMatch({ok, [8], _}, atm_store_test_utils:iterator_get_next(krakow, AtmWorkflowExecutionEnv, AtmSerialIterator0)),
-
-    ?assertMatch(stop, atm_store_test_utils:iterator_get_next(krakow, AtmWorkflowExecutionEnv, AtmSerialIterator1)).
+    end, example_configs()).
 
 
 browse_test(_Config) ->
-    AtmWorkflowExecutionAuth = atm_store_test_utils:create_workflow_execution_auth(
-        krakow, user1, space_krk
-    ),
-    {ok, AtmStoreId} = atm_store_test_utils:create_store(
-        krakow, AtmWorkflowExecutionAuth, undefined, ?ATM_SINGLE_VALUE_STORE_SCHEMA
-    ),
-    ?assertEqual(ok, atm_store_test_utils:apply_operation(
-        krakow, AtmWorkflowExecutionAuth, set, 8, #{}, AtmStoreId
-    )),
-    {ok, AtmStore} = atm_store_test_utils:get(krakow, AtmStoreId),
-    ?assertEqual({[{<<>>, {ok, 8}}], true},
-        atm_store_test_utils:browse_content(krakow, AtmWorkflowExecutionAuth, #{}, AtmStore)).
+    AtmWorkflowExecutionAuth = create_workflow_execution_auth(),
+
+    lists:foreach(fun(Config = #atm_single_value_store_config{item_data_spec = ItemDataSpec}) ->
+        {ok, AtmStoreId} = ?extract_key(?rpc(atm_store_api:create(
+            AtmWorkflowExecutionAuth, undefined, ?STORE_SCHEMA(Config)
+        ))),
+        ?assertEqual(
+            {[], true},
+            ?rpc(atm_store_api:browse_content(AtmWorkflowExecutionAuth, #{}, AtmStoreId))
+        ),
+
+        Item = gen_valid_data(AtmWorkflowExecutionAuth, ItemDataSpec),
+        set_item(AtmWorkflowExecutionAuth, Item, AtmStoreId),
+        ExpandedItem = ensure_fully_expanded_data(AtmWorkflowExecutionAuth, Item, ItemDataSpec),
+
+        ?assertEqual(
+            {[{<<>>, {ok, ExpandedItem}}], true},
+            ?rpc(atm_store_api:browse_content(AtmWorkflowExecutionAuth, #{}, AtmStoreId))
+        )
+
+    end, example_configs()).
+
+
+%===================================================================
+% Helper functions
+%===================================================================
+
+
+%% @private
+-spec create_workflow_execution_auth() -> atm_workflow_execution_auth:record().
+create_workflow_execution_auth() ->
+    atm_store_test_utils:create_workflow_execution_auth(
+        ?PROVIDER_SELECTOR, user1, space_krk
+    ).
+
+
+%% @private
+-spec example_configs() -> [atm_single_value_store_config:record()].
+example_configs() ->
+    lists:map(fun(ItemDataSpec) ->
+        #atm_single_value_store_config{item_data_spec = ItemDataSpec}
+    end, [
+%%        #atm_data_spec{type = atm_array_type},   %% TODO VFS-8686 enable after implementing compress/expand
+%%        #atm_data_spec{type = atm_dataset_type},  %% TODO implement
+        #atm_data_spec{type = atm_file_type},
+        #atm_data_spec{type = atm_integer_type},
+        #atm_data_spec{type = atm_object_type},
+        #atm_data_spec{type = atm_string_type}
+%%        #atm_data_spec{type = atm_time_series_measurements_type}  %% TODO implement
+    ]).
+
+
+%% @private
+-spec ensure_fully_expanded_data(
+    atm_workflow_execution_auth:record(),
+    atm_value:expanded(),
+    atm_store:id()
+) ->
+    atm_value:expanded().
+ensure_fully_expanded_data(AtmWorkflowExecutionAuth, Item, ItemDataSpec) ->
+    atm_store_test_utils:ensure_fully_expanded_data(
+        ?PROVIDER_SELECTOR, AtmWorkflowExecutionAuth, Item, ItemDataSpec
+    ).
+
+
+%% @private
+-spec gen_valid_data(atm_workflow_execution_auth:record(), atm_data_spec:record()) ->
+    atm_value:expanded().
+gen_valid_data(AtmWorkflowExecutionAuth, ItemDataSpec) ->
+    atm_store_test_utils:gen_valid_data(
+        ?PROVIDER_SELECTOR, AtmWorkflowExecutionAuth, ItemDataSpec
+    ).
+
+
+%% @private
+-spec gen_invalid_data(atm_workflow_execution_auth:record(), atm_data_spec:record()) ->
+    atm_value:expanded().
+gen_invalid_data(AtmWorkflowExecutionAuth, ItemDataSpec) ->
+    atm_store_test_utils:gen_invalid_data(
+        ?PROVIDER_SELECTOR, AtmWorkflowExecutionAuth, ItemDataSpec
+    ).
+
+
+%% @private
+-spec set_item(atm_workflow_execution_auth:record(), atm_value:expanded(), atm_store:id()) ->
+    ok.
+set_item(AtmWorkflowExecutionAuth, Item, AtmStoreId) ->
+    ?rpc(atm_store_api:apply_operation(AtmWorkflowExecutionAuth, set, Item, #{}, AtmStoreId)).
+
+
+%% @private
+-spec get_content(atm_workflow_execution_auth:record(), atm_store:id()) ->
+    undefined | atm_value:expanded().
+get_content(AtmWorkflowExecutionAuth, AtmStoreId) ->
+    case ?rpc(atm_store_api:browse_content(AtmWorkflowExecutionAuth, #{}, AtmStoreId)) of
+        {[], true} ->
+            undefined;
+        {[{_, {ok, Item}}], true} ->
+            Item
+    end.
 
 
 %===================================================================
@@ -200,7 +309,8 @@ browse_test(_Config) ->
 
 
 init_per_suite(Config) ->
-    oct_background:init_per_suite(Config, #onenv_test_config{
+    ModulesToLoad = [?MODULE, atm_store_test_utils],
+    oct_background:init_per_suite([{?LOAD_MODULES, ModulesToLoad} | Config], #onenv_test_config{
         onenv_scenario = "1op",
         envs = [{op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}]
     }).
@@ -210,8 +320,17 @@ end_per_suite(_Config) ->
     oct_background:end_per_suite().
 
 
+init_per_group(_Group, Config) ->
+    time_test_utils:freeze_time(Config),
+    Config.
+
+
+end_per_group(_Group, Config) ->
+    time_test_utils:unfreeze_time(Config).
+
+
 init_per_testcase(_Case, Config) ->
-    ct:timetrap({minutes, 5}),
+    ct:timetrap({minutes, 3}),
     Config.
 
 
