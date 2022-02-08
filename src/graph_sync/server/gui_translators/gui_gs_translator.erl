@@ -55,6 +55,7 @@ handshake_attributes(_Client) ->
     BagitUploaderWorkflowSchemaId = maps:get(<<"bagitUploaderWorkflowSchemaId">>, OnezoneConfiguration, null),
 
     #{
+        <<"globalTimeSeconds">> => global_clock:timestamp_seconds(),
         <<"providerName">> => ProviderName,
         <<"serviceVersion">> => op_worker:get_release_version(),
         <<"onezoneUrl">> => oneprovider:get_oz_url(),
