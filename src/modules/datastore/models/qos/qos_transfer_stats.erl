@@ -24,7 +24,7 @@
 
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
--include_lib("cluster_worker/include/modules/datastore/ts_metric_config.hrl").
+-include_lib("ctool/include/time_series/common.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -133,22 +133,22 @@ update_internal(CollectionId, ValuesPerStorage, Retries) ->
 -spec supported_metrics() -> #{ts_metric:id() => ts_metric:config()}.
 supported_metrics() -> #{
     ?MINUTE_METRIC_ID => #metric_config{
-        resolution = timer:minutes(1),
+        resolution = ?MINUTE_RESOLUTION,
         retention = 120,
         aggregator = sum
     },
     ?HOUR_METRIC_ID => #metric_config{
-        resolution = timer:hours(1),
+        resolution = ?HOUR_RESOLUTION,
         retention = 48,
         aggregator = sum
     },
     ?DAY_METRIC_ID => #metric_config{
-        resolution = timer:hours(24),
+        resolution = ?DAY_RESOLUTION,
         retention = 60,
         aggregator = sum
     },
     ?MONTH_METRIC_ID => #metric_config{
-        resolution = timer:hours(24 * 30),
+        resolution = ?MONTH_RESOLUTION,
         retention = 12,
         aggregator = sum
     }

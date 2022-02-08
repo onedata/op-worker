@@ -23,7 +23,7 @@
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
 -include_lib("cluster_worker/include/modules/datastore/infinite_log.hrl").
--include_lib("cluster_worker/include/modules/datastore/ts_metric_config.hrl").
+-include_lib("ctool/include/time_series/common.hrl").
 
 
 %% API
@@ -149,7 +149,7 @@ get_stats(Id) ->
 create_tsc(Id) ->
     TotalMetric = #{
         ?TOTAL_METRIC => #metric_config{
-            resolution = 0,
+            resolution = ?INFINITY_RESOLUTION,
             retention = 1,
             aggregator = sum
         }
@@ -171,17 +171,17 @@ create_tsc(Id) ->
 -spec supported_metrics() -> #{ts_metric:id() => ts_metric:config()}.
 supported_metrics() -> #{
     ?MINUTE_METRIC => #metric_config{
-        resolution = timer:minutes(1),
+        resolution = ?MINUTE_RESOLUTION,
         retention = 120,
         aggregator = sum
     },
     ?HOUR_METRIC => #metric_config{
-        resolution = timer:hours(1),
+        resolution = ?HOUR_RESOLUTION,
         retention = 48,
         aggregator = sum
     },
     ?DAY_METRIC => #metric_config{
-        resolution = timer:hours(24),
+        resolution = ?DAY_RESOLUTION,
         retention = 60,
         aggregator = sum
     }
