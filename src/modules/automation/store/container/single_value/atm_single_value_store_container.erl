@@ -106,7 +106,7 @@ acquire_iterator(#atm_single_value_store_container{
     config = #atm_single_value_store_config{item_data_spec = ItemDataSpec},
     compressed_item = CompressedItem
 }) ->
-    atm_single_value_store_container_iterator:build(ItemDataSpec, CompressedItem).
+    atm_single_value_store_container_iterator:build(CompressedItem, ItemDataSpec).
 
 
 -spec apply_operation(record(), atm_store_container:operation()) ->

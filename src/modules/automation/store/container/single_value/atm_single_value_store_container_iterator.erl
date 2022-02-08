@@ -48,7 +48,7 @@
 %%%===================================================================
 
 
--spec build(atm_data_spec:record(), undefined | atm_value:compressed()) ->
+-spec build(undefined | atm_value:compressed(), atm_data_spec:record()) ->
     record().
 build(CompressedItem, ItemDataSpec) ->
     #atm_single_value_store_container_iterator{
