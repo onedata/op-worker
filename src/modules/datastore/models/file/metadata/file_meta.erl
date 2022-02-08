@@ -380,22 +380,20 @@ get_child(ParentUuid, Name) ->
 get_child_uuid_and_tree_id(ParentUuid, Name) ->
     Tokens = binary:split(Name, ?CONFLICTING_LOGICAL_FILE_SUFFIX_SEPARATOR, [global]),
     case lists:reverse(Tokens) of
-        [Name] ->
-            case get_child_uuid_and_tree_id(ParentUuid, oneprovider:get_id(), Name) of
-                {ok, Uuid, TreeId} -> {ok, Uuid, TreeId};
-                {error, not_found} -> get_child_uuid_and_tree_id(ParentUuid, all, Name);
-                {error, Reason} -> {error, Reason}
-            end;
-        [TreeIdPrefix | Tokens2] ->
+        [TreeIdPrefix | Tokens2]  when TreeIdPrefix =/= <<>> ->
             Name2 = list_to_binary(lists:reverse(Tokens2)),
             PrefixSize = erlang:size(TreeIdPrefix),
-            {ok, TreeIds} = file_meta_links:get_trees(ParentUuid),
-            TreeIds2 = lists:filter(fun(TreeId) ->
-                case TreeId of
-                    <<TreeIdPrefix:PrefixSize/binary, _/binary>> -> true;
-                    _ -> false
-                end
-            end, TreeIds),
+            TreeIds2 = case file_meta_links:get_trees(ParentUuid) of
+                {ok, TreeIds} ->
+                    lists:filter(fun(TreeId) ->
+                        case TreeId of
+                            <<TreeIdPrefix:PrefixSize/binary, _/binary>> -> true;
+                            _ -> false
+                        end
+                    end, TreeIds);
+                ?ERROR_NOT_FOUND ->
+                    []
+            end,
             case TreeIds2 of
                 [TreeId] ->
                     case get_child_uuid_and_tree_id(ParentUuid, TreeId, Name2) of
@@ -406,6 +404,12 @@ get_child_uuid_and_tree_id(ParentUuid, Name) ->
                     end;
                 [] ->
                     get_child_uuid_and_tree_id(ParentUuid, all, Name)
+            end;
+        _ ->
+            case get_child_uuid_and_tree_id(ParentUuid, oneprovider:get_id(), Name) of
+                {ok, Uuid, TreeId} -> {ok, Uuid, TreeId};
+                {error, not_found} -> get_child_uuid_and_tree_id(ParentUuid, all, Name);
+                {error, Reason} -> {error, Reason}
             end
     end.
 
