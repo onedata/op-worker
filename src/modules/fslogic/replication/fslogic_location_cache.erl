@@ -214,7 +214,7 @@ create_location(#document{key = Key, value = #file_location{uuid = Uuid}} = Doc,
                 case file_location:create(Doc, GeneratedKey) of
                     {ok, #document{key = Key, value = #file_location{blocks = Blocks}} = FileLocation} ->
                         fslogic_cache:cache_blocks(Key, Blocks),
-                        fslogic_cache:update_size(Key, fslogic_blocks:size(Blocks)),
+                        fslogic_cache:update_size(Doc, fslogic_blocks:size(Blocks)),
                         fslogic_cache:cache_doc(FileLocation);
                     Other ->
                         Other
@@ -358,7 +358,7 @@ set_blocks(#document{key = Key, value = FileLocation} = Doc, Blocks) ->
             CurrentBlocks = fslogic_cache:get_blocks(Key),
             SizeChange = fslogic_blocks:size(Blocks) - fslogic_blocks:size(CurrentBlocks),
             fslogic_cache:save_blocks(Key, Blocks),
-            fslogic_cache:update_size(Key, SizeChange),
+            fslogic_cache:update_size(Doc, SizeChange),
             fslogic_cache:mark_changed_blocks(Key),
             Doc
     end.
@@ -369,12 +369,12 @@ set_blocks(#document{key = Key, value = FileLocation} = Doc, Blocks) ->
 %% Clear blocks in location document.
 %% @end
 %%-------------------------------------------------------------------
--spec clear_blocks(file_ctx:ctx(), id()) -> location().
-clear_blocks(FileCtx, Key) ->
+-spec clear_blocks(file_ctx:ctx(), location()) -> ok.
+clear_blocks(FileCtx, #document{key = Key} = LocationDoc) ->
     replica_synchronizer:apply(FileCtx, fun() ->
         Blocks = fslogic_cache:get_blocks(Key),
         SizeChange = -1 * fslogic_blocks:size(Blocks),
-        fslogic_cache:update_size(Key, SizeChange),
+        fslogic_cache:update_size(LocationDoc, SizeChange),
         fslogic_cache:save_blocks(Key, []),
         fslogic_cache:mark_changed_blocks(Key),
         ok = fslogic_cache:flush(Key, true)
@@ -422,7 +422,7 @@ update_blocks(#document{key = LocID, value = FileLocation} = Doc, NewBlocks) ->
                 {gb_sets:add(B2, Acc), TmpSize + S, sets:add_element(B, TmpBlocksToSave)}
             end, {Blocks2, SizeChange, BlocksToSave2}, FilteredBlocks),
 
-            fslogic_cache:update_size(LocID, SizeChange2),
+            fslogic_cache:update_size(Doc, SizeChange2),
             fslogic_cache:save_blocks(LocID, Blocks3),
             fslogic_cache:mark_changed_blocks(LocID, BlocksToSave3, BlocksToDel2,
                 FilteredBlocks, OldBlocks -- Exclude),

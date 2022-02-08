@@ -358,15 +358,9 @@ delete_doc(Key) ->
     Ans = file_location:delete(Key),
 
     case get_doc(Key) of
-        #document{value = #file_location{uuid = FileUuid, space_id = SpaceId}} ->
-            Changes = case get({?SIZE_CHANGES, Key}) of
-                undefined -> [];
-                Value -> Value
-            end,
-            SpaceChange = proplists:get_value(SpaceId, Changes, 0),
+        #document{value = #file_location{uuid = FileUuid, space_id = SpaceId, storage_id = StorageId}} ->
             Size = get_local_size(Key),
-            put({?SIZE_CHANGES, Key}, [{SpaceId, SpaceChange - Size} |
-                proplists:delete(SpaceId, Changes)]),
+            cache_size_change(Key, SpaceId, StorageId, -Size),
             apply_size_change(Key, FileUuid);
         _ ->
             ok
@@ -652,21 +646,12 @@ get_local_size(Key) ->
 %% Updates size of location.
 %% @end
 %%-------------------------------------------------------------------
--spec update_size(file_location:id(), non_neg_integer()) -> ok.
+-spec update_size(file_location:doc(), non_neg_integer()) -> ok.
 % TODO VFS-4743 - do we use size of any other replica than local
-update_size(Key, Change) ->
+update_size(#document{key = Key, value = #file_location{space_id = SpaceId, storage_id = StorageId}}, Change) ->
     Size2 = get_local_size(Key) + Change,
     put({?SIZES, Key}, Size2),
-
-    SpaceId = get({?SPACE_IDS, Key}),
-    Changes = case get({?SIZE_CHANGES, Key}) of
-        undefined -> [];
-        Value -> Value
-    end,
-    SpaceChange = proplists:get_value(SpaceId, Changes, 0),
-    put({?SIZE_CHANGES, Key}, [{SpaceId, SpaceChange + Change} |
-        proplists:delete(SpaceId, Changes)]),
-    ok.
+    cache_size_change(Key, SpaceId, StorageId, Change).
 
 %%%===================================================================
 %%% Internal functions
@@ -901,7 +886,10 @@ apply_size_change(Key, FileUuid) ->
         Changes ->
             try
                 {ok, UserId} = file_location:get_owner_id(FileUuid),
-                lists:foreach(fun({SpaceId, ChangeSize}) ->
+                lists:foreach(fun({{SpaceId, StorageId}, ChangeSize}) ->
+                    % TODO VFS-8835 - cache parent when rename works properly
+                    dir_size_stats:report_reg_file_size_changed(
+                        file_id:pack_guid(FileUuid, SpaceId), {on_storage, StorageId}, ChangeSize),
                     space_quota:apply_size_change_and_maybe_emit(SpaceId, ChangeSize),
                     monitoring_event_emitter:emit_storage_used_updated(
                         SpaceId, UserId, ChangeSize)
@@ -910,8 +898,9 @@ apply_size_change(Key, FileUuid) ->
                 put({?SIZE_CHANGES, Key}, []),
                 ok
             catch
-                E1:E2 ->
-                    {apply_quota_error, E1, E2}
+                Error:Reason:Stacktrace ->
+                    ?error_stacktrace("Apply quota error ~p:~p", [Error, Reason], Stacktrace),
+                    {error, Reason}
             end
     end.
 
@@ -1005,7 +994,7 @@ merge_local_blocks(#document{key = Key,
 %% @end
 %%-------------------------------------------------------------------
 -spec store_doc(file_location:doc()) -> {ok, file_location:id()}.
-store_doc(#document{key = Key, value = #file_location{space_id = SpaceId} =
+store_doc(#document{key = Key, value = #file_location{space_id = SpaceId, storage_id = StorageId} =
     Location} = LocationDoc) ->
     LocationDoc2 = LocationDoc#document{value =
     Location#file_location{blocks = []}},
@@ -1020,22 +1009,47 @@ store_doc(#document{key = Key, value = #file_location{space_id = SpaceId} =
         SpaceId ->
             ok;
         OldSpaceId ->
-            Changes = case get({?SIZE_CHANGES, Key}) of
-                undefined -> [];
-                Value -> Value
-            end,
-            SpaceChange = proplists:get_value(SpaceId, Changes, 0),
-            OldSpaceChange = proplists:get_value(OldSpaceId, Changes, 0),
-            Size = get_local_size(Key),
-
-            put({?SIZE_CHANGES, Key}, [{OldSpaceId, -1 * Size + OldSpaceChange},
-                {SpaceId, Size + OldSpaceChange + SpaceChange} |
-                proplists:delete(OldSpaceId, proplists:delete(SpaceId, Changes))])
+            cache_size_on_space_change(Key, SpaceId, OldSpaceId, StorageId)
     end,
     put({?SPACE_IDS, Key}, SpaceId),
 
     {ok, Key}.
 
+%% @private
+-spec cache_size_change(file_location:id(), od_space:id(), storage:id(), integer()) -> ok.
+cache_size_change(LocationKey, SpaceId, StorageId, SizeChange) ->
+    Changes = case get({?SIZE_CHANGES, LocationKey}) of
+        undefined -> [];
+        Value -> Value
+    end,
+    ProplistKey = {SpaceId, StorageId},
+    SpaceChange = proplists:get_value(ProplistKey, Changes, 0),
+    put({?SIZE_CHANGES, LocationKey}, [{ProplistKey, SpaceChange + SizeChange} |
+        proplists:delete(ProplistKey, Changes)]),
+    ok.
+
+%% @private
+-spec cache_size_on_space_change(file_location:id(), od_space:id(), od_space:id(), storage:id()) -> ok.
+cache_size_on_space_change(LocationKey, SpaceId, OldSpaceId, StorageId) ->
+    Size = get_local_size(LocationKey),
+    Changes = case get({?SIZE_CHANGES, LocationKey}) of
+        undefined -> [];
+        Value -> Value
+    end,
+    ProplistKey = {SpaceId, StorageId},
+    SpaceChange = proplists:get_value(ProplistKey, Changes, 0),
+    case lists:filter(fun({{SId, _}, _}) -> SId =:= OldSpaceId end, Changes) of
+        [] ->
+            put({?SIZE_CHANGES, LocationKey}, [{ProplistKey, Size + SpaceChange} |
+                proplists:delete(ProplistKey, Changes)]);
+        [{OldSpaceProplistKey, OldSpaceChange} | _] ->
+            put({?SIZE_CHANGES, LocationKey}, [{OldSpaceProplistKey, -Size + OldSpaceChange},
+                {ProplistKey, Size + OldSpaceChange + SpaceChange} |
+                proplists:delete(OldSpaceProplistKey, proplists:delete(ProplistKey, Changes))])
+    end,
+    ok.
+
+%% @private
 -spec delete_local_blocks(file_location:id()) -> ok.
 delete_local_blocks(Key) ->
     case ?LOCAL_BLOCKS_STORE of

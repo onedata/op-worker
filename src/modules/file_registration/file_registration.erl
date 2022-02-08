@@ -91,6 +91,8 @@ create_missing_directory(ParentCtx, DirName, UserId) ->
         FileUuid, DirName, ?DEFAULT_DIR_PERMS, UserId, ParentUuid, SpaceId),
     CurrentTime = global_clock:timestamp_seconds(),
     times:save(FileUuid, SpaceId, CurrentTime, CurrentTime, CurrentTime),
+    % TODO VFS-8891 - Test dir_stats_collector with sync
+    dir_update_time_stats:report_update_of_dir(file_ctx:get_logical_guid_const(DirCtx), CurrentTime),
     {ok, DirCtx}.
 
 
