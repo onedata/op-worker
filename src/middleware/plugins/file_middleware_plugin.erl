@@ -42,7 +42,7 @@
 -define(DEFAULT_LIST_OFFSET, 0).
 -define(DEFAULT_LIST_ENTRIES, 1000).
 
--define(DEFAULT_BASIC_ATTRIBUTES, [<<"file_id">>, <<"name">>]).
+-define(DEFAULT_ATTRIBUTES, [<<"file_id">>, <<"name">>]).
 
 
 %%%===================================================================
@@ -724,25 +724,20 @@ get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = instance}}, _) ->
 
 get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = children, scope = Sc}}, _) ->
     SessionId = Auth#auth.session_id,
-    RequestedAttributes = maps:get(<<"attribute">>, Data, ?DEFAULT_BASIC_ATTRIBUTES),
+    RequestedAttributes = utils:ensure_list(maps:get(<<"attribute">>, Data, ?DEFAULT_ATTRIBUTES)),
     
     ListingOpts = #{
-            size => maps:get(<<"limit">>, Data, ?DEFAULT_LIST_ENTRIES),
-            token => maps:get(<<"token">>, Data, ?INITIAL_API_LS_TOKEN)
+        size => maps:get(<<"limit">>, Data, ?DEFAULT_LIST_ENTRIES),
+        token => maps:get(<<"token">>, Data, ?INITIAL_API_LS_TOKEN)
     },
     
-    TrimmedRequestedAttributes = case Sc of
-        private -> utils:ensure_list(RequestedAttributes);
-        public -> lists_utils:intersect(utils:ensure_list(RequestedAttributes), ?PUBLIC_BASIC_ATTRIBUTES)
-    end,
-    
     ShouldListWithAttrs = lists:any(fun(Attr) ->
-        not lists:member(Attr, ?DEFAULT_BASIC_ATTRIBUTES)
-    end, TrimmedRequestedAttributes),
+        not lists:member(Attr, ?DEFAULT_ATTRIBUTES)
+    end, RequestedAttributes),
     
-    AttributeSelector = fun(Fun) -> 
+    AttributeSelector = fun(JsonMapper) -> 
         fun(Res) ->
-            maps:with(TrimmedRequestedAttributes, Fun(Res))
+            maps:with(RequestedAttributes, JsonMapper(Res))
         end
     end,
     
@@ -750,16 +745,14 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = childre
         false ->
             {ok, Children, ReturnedInfo} = ?lfm_check(lfm:get_children(
                 SessionId, ?FILE_REF(FileGuid), ListingOpts)),
-        ResToJson = fun({Guid, Name}) ->
-            {ok, ObjectId} = file_id:guid_to_objectid(Guid),
-            #{
-                <<"file_id">> => ObjectId,
-                <<"name">> => Name
-            }
-        end,
-        {lists:map(AttributeSelector(ResToJson), Children), ReturnedInfo};
+            JsonMapper = fun
+                ({Guid, Name}) ->
+                    {ok, ObjectId} = file_id:guid_to_objectid(Guid),
+                    #{<<"file_id">> => ObjectId, <<"name">> => Name}
+                end,
+            {lists:map(AttributeSelector(JsonMapper), Children), ReturnedInfo};
         true ->
-            IncludeHardlinksCount = lists:member(<<"hardlinks_count">>, TrimmedRequestedAttributes),
+            IncludeHardlinksCount = lists:member(<<"hardlinks_count">>, RequestedAttributes),
             {ok, Children, ReturnedInfo} = ?lfm_check(lfm:get_children_attrs(
                 SessionId, ?FILE_REF(FileGuid), ListingOpts, false, IncludeHardlinksCount)),
             {lists:map(AttributeSelector(fun file_attrs_to_json/1), Children), ReturnedInfo}

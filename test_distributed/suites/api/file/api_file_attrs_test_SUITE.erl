@@ -45,18 +45,18 @@
 groups() -> [
     {all_tests, [parallel], [
         get_file_attrs_test,
-        get_shared_file_attrs_test
-%%        get_attrs_on_provider_not_supporting_space_test,
-%%
-%%        get_file_shares_test,
-%%
-%%        set_file_mode_test,
-%%        set_mode_on_provider_not_supporting_space_test,
-%%
-%%        get_file_distribution_test,
-%%        get_dir_distribution_test,
-%%        
-%%        test_for_hardlink_between_files_test
+        get_shared_file_attrs_test,
+        get_attrs_on_provider_not_supporting_space_test,
+
+        get_file_shares_test,
+
+        set_file_mode_test,
+        set_mode_on_provider_not_supporting_space_test,
+
+        get_file_distribution_test,
+        get_dir_distribution_test,
+
+        test_for_hardlink_between_files_test
     ]}
 ].
 

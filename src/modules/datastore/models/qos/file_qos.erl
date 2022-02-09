@@ -370,7 +370,7 @@ get_assigned_entries_for_storage(EffectiveFileQos, StorageId) ->
 
 %% @private
 -spec get_effective(file_meta:doc(), undefined | file_meta:doc()) ->
-    {ok, effective_file_qos()} | {error, {file_meta_missing, binary()}} | undefined.
+    {ok, effective_file_qos()} | undefined | {error, term()}.
 get_effective(#document{} = FileDoc, OriginalParentDoc) ->
     Callback = fun
         ([_, {error, _} = Error, _CalculationInfo]) ->

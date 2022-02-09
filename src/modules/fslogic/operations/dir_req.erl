@@ -8,12 +8,12 @@
 %%% @doc
 %%% This module is responsible for handing requests operating on directories.
 %%% This module operates on two types of tokens used for continuous listing of directory content: 
-%%%     * datastore_token - token used internally by datastore. Can expire. After its expiration 
-%%%                         options provided alongside token are used to determine listing staritng 
-%%%                         point;
-%%%     * api_token - contains all information required for listing continuation even after 
-%%%                   datastore_token (which is included in api_token) expiration. Therefore 
-%%%                   this token does not expire.
+%%%     * datastore_list_token - token used internally by datastore. Can expire. After its expiration 
+%%%                              options provided alongside token are used to determine listing staritng 
+%%%                              point;
+%%%     * api_list_token - contains all information required for listing continuation even after 
+%%%                        datastore_list_token (which is included in api_list_token) expiration. Therefore 
+%%%                        this token does not expire.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(dir_req).
@@ -28,11 +28,11 @@
 
 -type api_list_token() :: binary().
 -type list_token() :: file_meta:list_token() | api_list_token().
--type token_type() :: api_token | datastore_token.
+-type token_type() :: api_list_token | datastore_list_token.
 
 -type list_opts() :: #{
-    token => api_list_token(),
-    size => file_meta:list_size()
+    token := api_list_token(),
+    size := file_meta:list_size()
 } | file_meta:list_opts().
 
 
@@ -50,7 +50,7 @@
 -define(MAX_MAP_CHILDREN_PROCESSES, application:get_env(
     ?APP_NAME, max_read_dir_plus_procs, 20
 )).
--define(API_TOKEN_HEADER, "api_token").
+-define(api_list_token_PREFIX, "api_list_token").
 
 %%%===================================================================
 %%% API
@@ -322,10 +322,10 @@ list_children(UserCtx, FileCtx0, ListOpts, CanonicalChildrenWhiteList) ->
     {Children, ExtendedInfo, NewFileCtx} = files_tree:get_children(
         FileCtx0, UserCtx, FinalListOpts, CanonicalChildrenWhiteList),
     FinalExtendedInfo = case TokenType of
-        api_token -> 
+        api_list_token -> 
             #{
                 is_last => maps:get(is_last, ExtendedInfo),
-                token => pack_api_token(ExtendedInfo)
+                token => pack_api_list_token(ExtendedInfo)
             };
         _ ->
             ExtendedInfo
@@ -393,7 +393,7 @@ map_children(UserCtx, MapFunInsecure, Children, IncludeReplicationStatus, Includ
 resolve_list_opts(#{token := undefined} = ListOpts) ->
     {none, ListOpts};
 resolve_list_opts(#{token := ?INITIAL_API_LS_TOKEN} = ListOpts) ->
-    {api_token, #{
+    {api_list_token, #{
         token => ?INITIAL_DATASTORE_LS_TOKEN,
         last_tree => <<>>,
         last_name => <<>>,
@@ -401,26 +401,33 @@ resolve_list_opts(#{token := ?INITIAL_API_LS_TOKEN} = ListOpts) ->
     }};
 resolve_list_opts(#{token := Token} = ListOpts) ->
     try
-        <<?API_TOKEN_HEADER, _/binary>> = DecodedToken = mochiweb_base64url:decode(Token),
-        [_Header, DecodedDatastoreToken, LastTree | LastNameTokens] =
-            binary:split(DecodedToken, <<"#">>, [global]),
-        {api_token, #{
-            token => DecodedDatastoreToken,
-            last_tree => LastTree,
-            last_name => str_utils:join_binary(LastNameTokens, <<"#">>),
+        {api_list_token, maps:merge(unpack_api_list_token(Token), #{
             size => maps:get(size, ListOpts)
-        }}
+        })}
     catch _:_ ->
-        {datastore_token, ListOpts}
+        {datastore_list_token, ListOpts}
     end;
 resolve_list_opts(ListOpts) ->
     {none, ListOpts}.
 
 
 %% @private
--spec pack_api_token(file_meta:list_extended_info()) -> binary().
-pack_api_token(#{token := DatastoreToken, last_tree := LastTree, last_name := LastName}) ->
+-spec pack_api_list_token(file_meta:list_extended_info()) -> binary().
+pack_api_list_token(#{token := DatastoreToken, last_tree := LastTree, last_name := LastName}) ->
     mochiweb_base64url:encode(str_utils:join_binary(
-        [<<?API_TOKEN_HEADER>>, DatastoreToken, LastTree, LastName], <<"#">>));
-pack_api_token(_) ->
+        [<<?api_list_token_PREFIX>>, DatastoreToken, LastTree, LastName], <<"#">>));
+pack_api_list_token(_) ->
     undefined.
+
+
+%% @private
+-spec unpack_api_list_token(api_list_token()) -> map().
+unpack_api_list_token(Token) ->
+    <<?api_list_token_PREFIX, _/binary>> = DecodedToken = mochiweb_base64url:decode(Token),
+    [_Header, DecodedDatastoreToken, LastTree | LastNameTokens] =
+        binary:split(DecodedToken, <<"#">>, [global]),
+    #{
+        token => DecodedDatastoreToken,
+        last_tree => LastTree,
+        last_name => str_utils:join_binary(LastNameTokens, <<"#">>)
+    }.
