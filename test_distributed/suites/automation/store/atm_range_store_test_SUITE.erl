@@ -119,7 +119,7 @@ create_test(_Config) ->
     ]),
 
     lists:foreach(fun(ValidInitialContent) ->
-        ?assertEqual(
+        ?assertMatch(
             {ok, #document{value = #atm_store{initial_content = ValidInitialContent, frozen = false}}},
             ?rpc(atm_store_api:create(AtmWorkflowExecutionAuth, ValidInitialContent, ?STORE_SCHEMA))
         )
@@ -145,7 +145,7 @@ apply_operation_test(_Config) ->
         ?assertEqual(?ERROR_NOT_SUPPORTED, ?rpc(catch atm_store_api:apply_operation(
             AtmWorkflowExecutionAuth, Operation, NewContent, #{}, AtmStoreId
         ))),
-        ?assertEqual(NewContent, get_content(AtmWorkflowExecutionAuth, AtmStoreId))
+        ?assertEqual(InitialContent, get_content(AtmWorkflowExecutionAuth, AtmStoreId))
     end, atm_task_schema_result_mapper:all_dispatch_functions()).
 
 

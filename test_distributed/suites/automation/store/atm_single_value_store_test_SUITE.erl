@@ -244,12 +244,12 @@ example_configs() ->
         #atm_single_value_store_config{item_data_spec = ItemDataSpec}
     end, [
 %%        #atm_data_spec{type = atm_array_type},   %% TODO VFS-8686 enable after implementing compress/expand
-%%        #atm_data_spec{type = atm_dataset_type},  %% TODO implement
+        #atm_data_spec{type = atm_dataset_type},
         #atm_data_spec{type = atm_file_type},
         #atm_data_spec{type = atm_integer_type},
         #atm_data_spec{type = atm_object_type},
         #atm_data_spec{type = atm_string_type}
-%%        #atm_data_spec{type = atm_time_series_measurements_type}  %% TODO implement
+        #atm_data_spec{type = atm_time_series_measurements_type}
     ]).
 
 

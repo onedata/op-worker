@@ -16,6 +16,7 @@
 -include("modules/datastore/datastore_runner.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("onenv_test_utils.hrl").
+-include("test_rpc.hrl").
 
 -include_lib("ctool/include/automation/automation.hrl").
 -include_lib("ctool/include/errors.hrl").
@@ -67,46 +68,53 @@ all() -> [
 ].
 
 
--define(ATM_TREE_FOREST_STORE_SCHEMA, ?ATM_TREE_FOREST_STORE_SCHEMA(atm_file_type)).
--define(ATM_TREE_FOREST_STORE_SCHEMA(DataType), #atm_store_schema{
-    id = <<"dummyId">>,
+-define(PROVIDER_SELECTOR, krakow).
+-define(STORE_SCHEMA_ID, <<"dummy_tree_forest_store_id">>).
+
+-define(STORE_SCHEMA, ?STORE_SCHEMA(atm_file_type)).
+-define(STORE_SCHEMA(DataType), #atm_store_schema{
+    id = ?STORE_SCHEMA_ID,
     name = <<"tree_forest_store">>,
     description = <<"description">>,
-    requires_initial_value = false,
+    requires_initial_content = false,
     type = tree_forest,
-    data_spec = #atm_data_spec{type = DataType}
+    config = #atm_tree_forest_store_config{item_data_spec = #atm_data_spec{type = DataType}}
 }).
 
+-define(rpc(Expr), ?rpc(?PROVIDER_SELECTOR, Expr)).
+
 -define(ATTEMPTS, 30).
+
 
 %%%===================================================================
 %%% API functions
 %%%===================================================================
 
+
 create_store_with_invalid_args_test(_Config) ->
     AtmWorkflowExecutionAuth = atm_store_test_utils:create_workflow_execution_auth(krakow, user1, space_krk),
-    ?assertEqual(?ERROR_ATM_STORE_MISSING_REQUIRED_INITIAL_VALUE,
+    ?assertEqual(?ERROR_ATM_STORE_MISSING_REQUIRED_INITIAL_CONTENT,
         atm_store_test_utils:create_store(
             krakow, AtmWorkflowExecutionAuth, undefined,
-            (?ATM_TREE_FOREST_STORE_SCHEMA)#atm_store_schema{requires_initial_value = true})
+            (?STORE_SCHEMA)#atm_store_schema{requires_initial_value = true})
     ),
 
     IntValue = rand:uniform(1000),
     ?assertEqual(?ERROR_ATM_DATA_TYPE_UNVERIFIED(IntValue, atm_array_type), atm_store_test_utils:create_store(
-        krakow, AtmWorkflowExecutionAuth, IntValue, ?ATM_TREE_FOREST_STORE_SCHEMA)
+        krakow, AtmWorkflowExecutionAuth, IntValue, ?STORE_SCHEMA)
     ),
     lists:foreach(fun(DataType) ->
         BadValue = atm_store_test_utils:example_bad_data(DataType),
         ValidValue = atm_store_test_utils:example_data(DataType),
         ?assertEqual(?ERROR_ATM_DATA_TYPE_UNVERIFIED(BadValue, DataType), atm_store_test_utils:create_store(
-            krakow, AtmWorkflowExecutionAuth, [ValidValue, BadValue, ValidValue], ?ATM_TREE_FOREST_STORE_SCHEMA(DataType)
+            krakow, AtmWorkflowExecutionAuth, [ValidValue, BadValue, ValidValue], ?STORE_SCHEMA(DataType)
         ))
     end, atm_store_test_utils:all_data_types()).
 
 
 apply_operation_test(_Config) ->
     AtmWorkflowExecutionAuth = atm_store_test_utils:create_workflow_execution_auth(krakow, user1, space_krk),
-    {ok, AtmStoreId} = atm_store_test_utils:create_store(krakow, AtmWorkflowExecutionAuth, undefined, ?ATM_TREE_FOREST_STORE_SCHEMA),
+    {ok, AtmStoreId} = atm_store_test_utils:create_store(krakow, AtmWorkflowExecutionAuth, undefined, ?STORE_SCHEMA),
     
     SpaceId = oct_background:get_space_id(space_krk),
 
@@ -328,6 +336,7 @@ iteration_without_permission(_Config) ->
 %%% Helper functions
 %%%===================================================================
 
+
 -spec iterate_test_base(pos_integer(), non_neg_integer(), atm_data_type:type()) -> ok.
 iterate_test_base(MaxBatchSize, Depth, Type) ->
     {AtmWorkflowExecutionEnv, AtmStoreIterator0, _FilesMap, Expected} = create_iteration_test_env(krakow, MaxBatchSize, Depth, Type),
@@ -441,7 +450,7 @@ create_iteration_test_env(ProviderSelector, MaxBatchSize, Depth, Type, WorkflowU
             atm_dataset_type -> #{<<"datasetId">> => Root}
         end
     end, Roots),
-    {ok, AtmStoreId} = atm_store_test_utils:create_store(ProviderSelector, AtmWorkflowExecutionAuth, RootsToAdd, ?ATM_TREE_FOREST_STORE_SCHEMA(Type)),
+    {ok, AtmStoreId} = atm_store_test_utils:create_store(ProviderSelector, AtmWorkflowExecutionAuth, RootsToAdd, ?STORE_SCHEMA(Type)),
     AtmStoreIteratorSpec = #atm_store_iterator_spec{
         store_schema_id = AtmStoreDummySchemaId,
         max_batch_size = MaxBatchSize
