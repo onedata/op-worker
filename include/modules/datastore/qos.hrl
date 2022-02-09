@@ -66,8 +66,8 @@
     in_trash = false :: boolean()
 }).
 
--define(BYTES_STATS, bytes).
--define(FILES_STATS, files).
+-define(BYTES_STATS, <<"bytes">>).
+-define(FILES_STATS, <<"files">>).
 
 -define(TOTAL_TIME_SERIES_ID, <<"total">>).
 -define(MINUTE_METRIC_ID, <<"minute">>).

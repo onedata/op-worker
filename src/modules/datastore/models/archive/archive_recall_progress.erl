@@ -67,6 +67,8 @@
 -define(HOUR_METRIC, <<"hour">>).
 -define(DAY_METRIC, <<"day">>).
 
+-define(NOW(), global_clock:timestamp_seconds()).
+
 %%%===================================================================
 %%% API functions
 %%%===================================================================
@@ -92,7 +94,7 @@ delete(Id) ->
 get(Id) ->
     {ok, CountersCurrentValue} = get_counters_current_value(Id),
     case CountersCurrentValue of
-        #{?FAILED_FILES_TS := 0} -> 
+        #{?FAILED_FILES_TS := 0} ->
             {ok, CountersCurrentValue#{<<"lastError">> => undefined}};
         _ ->
             %% @TODO VFS-8839 - browse error log when gui supports it
@@ -100,7 +102,7 @@ get(Id) ->
                 <<"logEntries">> := [#{
                     <<"content">> := LastEntryContent
                 }]
-            }} = json_infinite_log_model:browse_content(?ERROR_LOG_ID(Id), 
+            }} = json_infinite_log_model:browse_content(?ERROR_LOG_ID(Id),
                 #{limit => 1, direction => ?BACKWARD}),
             {ok, CountersCurrentValue#{<<"lastError">> => LastEntryContent}}
     end.
@@ -108,9 +110,7 @@ get(Id) ->
 
 -spec report_file_finished(id()) -> ok | {error, term()}.
 report_file_finished(Id) ->
-    datastore_time_series_collection:update(?CTX, ?TSC_ID(Id), global_clock:timestamp_millis(), [
-        {?FILES_TS, 1}
-    ]).
+    datastore_time_series_collection:update(?CTX, ?TSC_ID(Id), ?NOW(), [{?FILES_TS, 1}]).
 
 
 -spec report_file_failed(id(), file_id:file_guid(), {error, term()}) -> ok | {error, term()}.
@@ -120,16 +120,12 @@ report_file_failed(Id, FileGuid, Error) ->
         <<"fileId">> => ObjectId,
         <<"reason">> => errors:to_json(Error)
     }),
-    datastore_time_series_collection:update(?CTX, ?TSC_ID(Id), global_clock:timestamp_millis(), [
-        {?FAILED_FILES_TS, 1}
-    ]).
+    datastore_time_series_collection:update(?CTX, ?TSC_ID(Id), ?NOW(), [{?FAILED_FILES_TS, 1}]).
 
 
 -spec report_bytes_copied(id(), non_neg_integer()) -> ok | {error, term()}.
 report_bytes_copied(Id, Bytes) ->
-    datastore_time_series_collection:update(?CTX, ?TSC_ID(Id), global_clock:timestamp_millis(), [
-        {?BYTES_TS, Bytes}
-    ]).
+    datastore_time_series_collection:update(?CTX, ?TSC_ID(Id), ?NOW(), [{?BYTES_TS, Bytes}]).
 
 %%%===================================================================
 %%% Test API 
@@ -191,15 +187,15 @@ supported_metrics() -> #{
 %% @private
 -spec get_counters_current_value(id()) -> {ok, map()}.
 get_counters_current_value(Id) ->
-    RequestRange = lists:map(fun(Stat) -> {Stat, ?TOTAL_METRIC} end, 
+    RequestRange = lists:map(fun(Stat) -> {Stat, ?TOTAL_METRIC} end,
         [?BYTES_TS, ?FILES_TS, ?FAILED_FILES_TS]),
-    
+
     case datastore_time_series_collection:list_windows(?CTX, ?TSC_ID(Id), RequestRange, #{limit => 1}) of
         {ok, WindowsMap} ->
             WindowToValue = fun
-                ({{Stat, ?TOTAL_METRIC}, [{_Timestamp, {_Measurements, Value}}]}) -> 
+                ({{Stat, ?TOTAL_METRIC}, [{_Timestamp, {_Measurements, Value}}]}) ->
                     {Stat, Value};
-                ({{Stat, ?TOTAL_METRIC}, []}) -> 
+                ({{Stat, ?TOTAL_METRIC}, []}) ->
                     {Stat, 0}
             end,
             {ok, maps:from_list(lists:map(WindowToValue, maps:to_list(WindowsMap)))};

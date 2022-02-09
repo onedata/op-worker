@@ -42,7 +42,7 @@
     model => ?MODULE
 }).
 
--define(COLLECTION_ID(QosEntryId, Type), <<QosEntryId/binary, (atom_to_binary(Type))/binary>>).
+-define(COLLECTION_ID(QosEntryId, Type), <<QosEntryId/binary, Type/binary>>).
 -define(MAX_UPDATE_RETRIES, 3).
 
 -define(NOW(), global_clock:timestamp_seconds()).

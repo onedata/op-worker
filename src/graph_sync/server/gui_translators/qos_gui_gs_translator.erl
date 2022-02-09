@@ -31,12 +31,12 @@
 
 
 -spec translate_value(gri:gri(), Value :: term()) -> gs_protocol:data().
-translate_value(#gri{aspect = audit_log}, ListingResult) ->
-    ListingResult;
+translate_value(#gri{aspect = audit_log}, ListedEntries) ->
+    ListedEntries;
 translate_value(#gri{aspect = time_series_collections}, Collections) ->
     Collections;
-translate_value(#gri{aspect = {time_series_collection, _}}, ListingResult) ->
-    ListingResult.
+translate_value(#gri{aspect = {time_series_collection, _}}, ListedWindows) ->
+    ListedWindows.
 
 
 -spec translate_resource(gri:gri(), Data :: term()) ->

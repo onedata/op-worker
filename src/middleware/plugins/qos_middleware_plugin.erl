@@ -8,15 +8,6 @@
 %%% @doc
 %%% This module handles middleware operations (create, get, delete)
 %%% corresponding to QoS management.
-%%%
-%%% NOTE: the API allows browsing QoS transfer stats, but the GUI application
-%%% recognizes time series Ids as provider Ids, rather than storage Ids as it
-%%% is stored in the database. This module does all the required translations,
-%%% considering the existence of an additional ?TOTAL_TIME_SERIES_ID that
-%%% presents a sum for all storages and is retained during translation.
-%%%
-%%% @TODO VFS-8955 these translation should not be needed when space lifecycle
-%%% is implemented and the GUI understands storages.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(qos_middleware_plugin).
@@ -38,6 +29,7 @@
 -export([data_spec/1, fetch_entity/1, authorize/2, validate/2]).
 -export([create/1, get/2, update/1, delete/1]).
 
+-define(MAX_LIST_LIMIT, 1000).
 
 %%%===================================================================
 %%% middleware_router callbacks
@@ -56,11 +48,8 @@ resolve_handler(create, instance, private) -> ?MODULE;
 resolve_handler(get, instance, private) -> ?MODULE;
 resolve_handler(get, audit_log, private) -> ?MODULE;
 resolve_handler(get, time_series_collections, private) -> ?MODULE;
-resolve_handler(get, {time_series_collection, TypeBin}, private) ->
-    case binary_to_atom(TypeBin, utf8) of
-        ?BYTES_STATS -> ?MODULE;
-        ?FILES_STATS -> ?MODULE
-    end;
+resolve_handler(get, {time_series_collection, ?BYTES_STATS}, private) -> ?MODULE;
+resolve_handler(get, {time_series_collection, ?FILES_STATS}, private) -> ?MODULE;
 
 resolve_handler(delete, instance, private) -> ?MODULE;
 
@@ -94,7 +83,7 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = audit_log}}) -> #{
     optional => #{
         <<"offset">> => {integer, any},
         <<"timestamp">> => {integer, {not_lower_than, 0}},
-        <<"limit">> => {integer, {not_lower_than, 1}}
+        <<"limit">> => {integer, {between, 1, ?MAX_LIST_LIMIT}}
     }
 };
 data_spec(#op_req{operation = get, gri = #gri{aspect = time_series_collections}}) ->
@@ -104,7 +93,9 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = {time_series_collection, 
         <<"metrics">> => {json, fun(RequestedMetrics) ->
             try
                 maps:foreach(fun(TimeSeriesId, MetricIds) ->
-                    true = is_binary(TimeSeriesId) andalso is_list(MetricIds) andalso is_binary(hd(MetricIds))
+                    true = is_binary(TimeSeriesId) andalso
+                        is_list(MetricIds) andalso
+                        lists:all(fun is_binary/1, MetricIds)
                 end, RequestedMetrics),
                 true
             catch _:_ ->
@@ -114,7 +105,7 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = {time_series_collection, 
     },
     optional => #{
         <<"startTimestamp">> => {integer, {not_lower_than, 0}},
-        <<"limit">> => {integer, {not_lower_than, 1}}
+        <<"limit">> => {integer, {between, 1, ?MAX_LIST_LIMIT}}
     }
 };
 
@@ -176,7 +167,7 @@ authorize(#op_req{operation = get, auth = ?USER(UserId), gri = #gri{
     Aspect =:= audit_log;
     Aspect =:= time_series_collections;
     element(1, Aspect) =:= time_series_collection
-    ->
+->
     {ok, SpaceId} = ?lfm_check(qos_entry:get_space_id(QosEntryId)),
     space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW_QOS);
 
@@ -205,7 +196,7 @@ validate(#op_req{operation = get, gri = #gri{id = QosEntryId, aspect = Aspect}},
     Aspect =:= audit_log;
     Aspect =:= time_series_collections;
     element(1, Aspect) =:= time_series_collection
-    ->
+->
     {ok, SpaceId} = ?lfm_check(qos_entry:get_space_id(QosEntryId)),
     middleware_utils:assert_space_supported_locally(SpaceId);
 
@@ -273,8 +264,7 @@ get(#op_req{gri = #gri{id = QosEntryId, aspect = time_series_collections}}, _Qos
         ?BYTES_STATS => [ts_id_to_provider_id(TSId, SpaceId) || TSId <- BytesTSIds]
     }};
 
-get(#op_req{gri = #gri{id = QosEntryId, aspect = {time_series_collection, TypeBin}}, data = Data}, _QosEntry) ->
-    Type = binary_to_atom(TypeBin, utf8),
+get(#op_req{gri = #gri{id = QosEntryId, aspect = {time_series_collection, Type}}, data = Data}, _QosEntry) ->
     {ok, SpaceId} = qos_entry:get_space_id(QosEntryId),
     RequestedMetrics = maps:get(<<"metrics">>, Data),
     RequestRange = maps:fold(fun(TimeSeriesId, MetricIds, Acc) ->
