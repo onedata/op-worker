@@ -51,7 +51,7 @@ all() -> [
 
 
 -define(PROVIDER_SELECTOR, krakow).
--define(STORE_SCHEMA_ID, <<"dummy_single_value_store">>).
+-define(STORE_SCHEMA_ID, <<"dummy_single_value_store_id">>).
 
 -define(STORE_SCHEMA(__REQUIRES_INITIAL_VALUE, __CONFIG), #atm_store_schema{
     id = ?STORE_SCHEMA_ID,
