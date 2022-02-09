@@ -268,7 +268,7 @@ end).
             name = <<"store1Name">>,
             description = <<"store1Desc">>,
             type = list,
-            config = #atm_list_store_config{item_data_spec = data_spec = #atm_data_spec{
+            config = #atm_list_store_config{item_data_spec = #atm_data_spec{
                 type = atm_file_type,
                 value_constraints = #{}
             }},

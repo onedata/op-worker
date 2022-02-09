@@ -13,6 +13,7 @@
 -author("Bartosz Walkowicz").
 
 -include("modules/datastore/datastore_models.hrl").
+-include("modules/datastore/datastore_runner.hrl").
 -include("test_rpc.hrl").
 
 -include_lib("ctool/include/automation/automation.hrl").
@@ -65,7 +66,7 @@ all() -> [
 
 
 -define(PROVIDER_SELECTOR, krakow).
--define(STORE_SCHEMA_ID, <<"dummy_range_id">>).
+-define(STORE_SCHEMA_ID, <<"dummy_range_store_id">>).
 
 -define(STORE_SCHEMA, #atm_store_schema{
     id = ?STORE_SCHEMA_ID,
@@ -134,9 +135,9 @@ apply_operation_test(_Config) ->
     AtmWorkflowExecutionAuth = create_workflow_execution_auth(),
 
     InitialContent = #{<<"start">> => 5, <<"end">> => 10, <<"step">> => 2},
-    {ok, AtmStoreId} = ?rpc(atm_store_api:create(
+    {ok, AtmStoreId} = ?extract_key(?rpc(atm_store_api:create(
         AtmWorkflowExecutionAuth, InitialContent, ?STORE_SCHEMA
-    )),
+    ))),
 
     % Assert none operation is supported
     NewContent = #{<<"end">> => 100},
@@ -174,9 +175,9 @@ iterate_in_chunks_3_with_start_10_end_10_step_2_test(_Config) ->
 iterate_test_base(ChunkSize, AtmRangeStoreInitialValue) ->
     AtmWorkflowExecutionAuth = create_workflow_execution_auth(),
 
-    {ok, AtmStoreId} = ?rpc(atm_store_api:create(
+    {ok, AtmStoreId} = ?extract_key(?rpc(atm_store_api:create(
         AtmWorkflowExecutionAuth, AtmRangeStoreInitialValue, ?STORE_SCHEMA
-    )),
+    ))),
     AtmWorkflowExecutionEnv = build_workflow_execution_env(AtmWorkflowExecutionAuth, AtmStoreId),
 
     Iterator = ?rpc(atm_store_api:acquire_iterator(AtmStoreId, #atm_store_iterator_spec{
@@ -195,11 +196,11 @@ iterate_test_base(ChunkSize, AtmRangeStoreInitialValue) ->
 reuse_iterator_test(_Config) ->
     AtmWorkflowExecutionAuth = create_workflow_execution_auth(),
 
-    {ok, AtmStoreId} = ?rpc(atm_store_api:create(
+    {ok, AtmStoreId} = ?extract_key(?rpc(atm_store_api:create(
         AtmWorkflowExecutionAuth,
         #{<<"start">> => 2, <<"end">> => 16, <<"step">> => 3},
         ?STORE_SCHEMA
-    )),
+    ))),
     AtmWorkflowExecutionEnv = build_workflow_execution_env(AtmWorkflowExecutionAuth, AtmStoreId),
 
     Iterator0 = ?rpc(atm_store_api:acquire_iterator(AtmStoreId, #atm_store_iterator_spec{
@@ -227,7 +228,9 @@ browse_test(_Config) ->
     AtmWorkflowExecutionAuth = create_workflow_execution_auth(),
 
     Content = #{<<"start">> => 2, <<"end">> => 16, <<"step">> => 3},
-    {ok, AtmStoreId} = ?rpc(atm_store_api:create(AtmWorkflowExecutionAuth, Content, ?STORE_SCHEMA)),
+    {ok, AtmStoreId} = ?extract_key(?rpc(atm_store_api:create(
+        AtmWorkflowExecutionAuth, Content, ?STORE_SCHEMA
+    ))),
 
     ?assertEqual(
         {[{<<>>, {ok, Content}}], true},
