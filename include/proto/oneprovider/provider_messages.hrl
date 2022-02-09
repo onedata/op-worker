@@ -180,7 +180,7 @@
 }).
 
 -record(file_eff_dataset_summary, {
-    direct_dataset :: dataset:id(),
+    direct_dataset :: dataset:id() | undefined,
     eff_ancestor_datasets :: [dataset:id()],
     eff_protection_flags = ?no_flags_mask :: data_access_control:bitmask()
 }).
