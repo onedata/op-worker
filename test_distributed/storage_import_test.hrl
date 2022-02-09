@@ -37,10 +37,10 @@
 -define(TEST_DIR, <<"test_dir">>).
 -define(TEST_DIR2, <<"test_dir2">>).
 -define(TEST_FILE(N), <<"test_file", (integer_to_binary(N))/binary>>).
--define(TEST_FILE1, <<"test_file1@x">>).
+-define(TEST_FILE1, <<"test_file1@xyz">>).
 -define(TEST_FILE2, <<"test_file2@">>).
 -define(TEST_FILE3, <<"test_file3">>).
--define(TEST_FILE4, <<"test_file4">>).
+-define(TEST_FILE4, <<"test_file4%%%%zzzz">>).
 -define(SPACE_TEST_DIR_PATH(DirName), filename:join(["/", ?SPACE_NAME, DirName])).
 -define(SPACE_TEST_FILE_IN_DIR_PATH(DirName, FileName), filename:join(["/", ?SPACE_NAME, DirName, FileName])).
 -define(SPACE_TEST_DIR_PATH, filename:join(["/", ?SPACE_NAME, ?TEST_DIR])).

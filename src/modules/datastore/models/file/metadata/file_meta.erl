@@ -34,7 +34,7 @@
 -export([add_share/2, remove_share/2, get_shares/1]).
 -export([get_parent/1, get_parent_uuid/1, get_provider_id/1]).
 -export([
-    get_uuid/1, get_child/2, get_child_uuid_and_tree_id/2,
+    get_uuid/1, get_child/2, get_child_uuid_and_tree_id/2, get_child_uuid_and_tree_id/3,
     list_children/2, list_children_whitelisted/3
 ]).
 -export([get_name/1, set_name/2]).
@@ -380,9 +380,9 @@ get_child(ParentUuid, Name) ->
 get_child_uuid_and_tree_id(ParentUuid, Name) ->
     Tokens = binary:split(Name, ?CONFLICTING_LOGICAL_FILE_SUFFIX_SEPARATOR, [global]),
     case lists:reverse(Tokens) of
-        [TreeIdPrefix | Tokens2]  when TreeIdPrefix =/= <<>> ->
-            Name2 = list_to_binary(lists:reverse(Tokens2)),
-            PrefixSize = erlang:size(TreeIdPrefix),
+        [TreeIdPrefix | Tokens2]  when TreeIdPrefix =/= <<>>, Tokens2 =/= [], Tokens2 =/= [<<>>] ->
+            PrefixSize = size(TreeIdPrefix),
+            Name2 = binary:part(Name, 0, size(Name) - PrefixSize - size(?CONFLICTING_LOGICAL_FILE_SUFFIX_SEPARATOR)),
             TreeIds2 = case file_meta_links:get_trees(ParentUuid) of
                 {ok, TreeIds} ->
                     lists:filter(fun(TreeId) ->
@@ -399,18 +399,36 @@ get_child_uuid_and_tree_id(ParentUuid, Name) ->
                     case get_child_uuid_and_tree_id(ParentUuid, TreeId, Name2) of
                         {ok, Uuid, TreeId} ->
                             {ok, Uuid, TreeId};
+                        {error, {?EINVAL, _}} ->
+                            {error, ?EINVAL};
                         {error, Reason} ->
                             {error, Reason}
                     end;
                 [] ->
-                    get_child_uuid_and_tree_id(ParentUuid, all, Name)
+                    get_child_uuid_and_tree_id_for_name_without_suffix(ParentUuid, Name)
             end;
         _ ->
-            case get_child_uuid_and_tree_id(ParentUuid, oneprovider:get_id(), Name) of
-                {ok, Uuid, TreeId} -> {ok, Uuid, TreeId};
-                {error, not_found} -> get_child_uuid_and_tree_id(ParentUuid, all, Name);
-                {error, Reason} -> {error, Reason}
-            end
+            get_child_uuid_and_tree_id_for_name_without_suffix(ParentUuid, Name)
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns parent child's UUID by name within given links tree set
+%% alongside with TreeId in which it was found.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_child_uuid_and_tree_id(uuid(), datastore_links:tree_ids(), name()) ->
+    {ok, uuid(), datastore_links:tree_id()} | {error, term()}.
+get_child_uuid_and_tree_id(ParentUuid, TreeIds, Name) ->
+    case file_meta_links:get(ParentUuid, TreeIds, Name) of
+        {ok, [#link{target = FileUuid, tree_id = TreeId}]} ->
+            {ok, FileUuid, TreeId};
+        {ok, [#link{} | _] = Links} ->
+            MappedLinks = lists:map(fun(#link{target = FileUuid}) -> FileUuid end, Links),
+            {error, {?EINVAL, MappedLinks}};
+        {error, Reason} ->
+            {error, Reason}
     end.
 
 
@@ -951,20 +969,19 @@ is_valid_filename(FileName) when is_binary(FileName) ->
     end.
 
 
-%%--------------------------------------------------------------------
 %% @private
-%% @doc
-%% Returns parent child's UUID by name within given links tree set
-%% alongside with TreeId in which it was found.
-%% @end
-%%--------------------------------------------------------------------
--spec get_child_uuid_and_tree_id(uuid(), datastore_links:tree_ids(), name()) ->
+-spec get_child_uuid_and_tree_id_for_name_without_suffix(uuid(), name()) ->
     {ok, uuid(), datastore_links:tree_id()} | {error, term()}.
-get_child_uuid_and_tree_id(ParentUuid, TreeIds, Name) ->
-    case file_meta_links:get(ParentUuid, TreeIds, Name) of
-        {ok, [#link{target = FileUuid, tree_id = TreeId}]} ->
-            {ok, FileUuid, TreeId};
-        {ok, [#link{} | _]} ->
+get_child_uuid_and_tree_id_for_name_without_suffix(ParentUuid, Name) ->
+    case get_child_uuid_and_tree_id(ParentUuid, oneprovider:get_id(), Name) of
+        {ok, Uuid, TreeId} ->
+            {ok, Uuid, TreeId};
+        {error, not_found} ->
+            case get_child_uuid_and_tree_id(ParentUuid, all, Name) of
+                {error, {?EINVAL, _}} -> {error, ?EINVAL};
+                Other -> Other
+            end;
+        {error, {?EINVAL, _}} ->
             {error, ?EINVAL};
         {error, Reason} ->
             {error, Reason}
