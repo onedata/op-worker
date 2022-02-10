@@ -23,6 +23,8 @@
 %% API
 -export([create_workflow_execution_auth/3]).
 -export([
+    build_store_schema/1, build_store_schema/2, build_store_schema/3,
+    build_workflow_execution_env/3,
     ensure_fully_expanded_data/4,
     gen_valid_data/3,
     gen_invalid_data/3
@@ -70,6 +72,46 @@ create_workflow_execution_auth(ProviderSelector, UserSelector, SpaceSelector) ->
 
     SpaceId = oct_background:get_space_id(SpaceSelector),
     rpc:call(Node, atm_workflow_execution_auth, build, [SpaceId, AtmWorkflowExecutionId, UserCtx]).
+
+
+-spec build_store_schema(atm_store_config:record()) -> atm_store_schema:record().
+build_store_schema(Config) ->
+    build_store_schema(Config, false).
+
+
+-spec build_store_schema(atm_store_config:record(), boolean()) ->
+    atm_store_schema:record().
+build_store_schema(Config, RequiresInitialContent) ->
+    build_store_schema(Config, RequiresInitialContent, undefined).
+
+
+-spec build_store_schema(atm_store_config:record(), boolean(), undefined | automation:item()) ->
+    atm_store_schema:record().
+build_store_schema(Config, RequiresInitialContent, DefaultInitialContent) ->
+    #atm_store_schema{
+        id = ?RAND_STR(16),
+        name = ?RAND_STR(16),
+        description = ?RAND_STR(16),
+        type = infer_store_type(Config),
+        config = Config,
+        requires_initial_content = RequiresInitialContent,
+        default_initial_content = DefaultInitialContent
+    }.
+
+
+-spec build_workflow_execution_env(
+    atm_workflow_execution_auth:record(),
+    atm_store_schema:record(),
+    atm_store:id()
+) ->
+    atm_workflow_execution_env:record().
+build_workflow_execution_env(AtmWorkflowExecutionAuth, AtmStoreSchema, AtmStoreId) ->
+    atm_workflow_execution_env:build(
+        atm_workflow_execution_auth:get_space_id(AtmWorkflowExecutionAuth),
+        atm_workflow_execution_auth:get_workflow_execution_id(AtmWorkflowExecutionAuth),
+        0,
+        #{AtmStoreSchema#atm_store_schema.id => AtmStoreId}
+    ).
 
 
 -spec ensure_fully_expanded_data(
@@ -377,3 +419,17 @@ all_data_types() -> [
     atm_string_type,
     atm_object_type
 ].
+
+
+%%%===================================================================
+%%% Helper functions
+%%%===================================================================
+
+
+%% @private
+-spec infer_store_type(atm_store_config:record()) -> automation:store_type().
+infer_store_type(#atm_audit_log_store_config{}) -> audit_log;
+infer_store_type(#atm_list_store_config{}) -> list;
+infer_store_type(#atm_range_store_config{}) -> range;
+infer_store_type(#atm_single_value_store_config{}) -> single_value;
+infer_store_type(#atm_tree_forest_store_config{}) -> tree_forest.

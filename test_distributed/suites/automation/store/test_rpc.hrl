@@ -13,27 +13,20 @@
 -define(TEST_RPC_HRL, 1).
 
 
--define(erpc(__NODE_SELECTOR, __EXPRESSION),
-    erpc:call(
-        case lists:member(__NODE_SELECTOR, nodes(known)) of
-            true -> __NODE_SELECTOR;
-            false -> lists_utils:random_element(oct_background:get_provider_nodes(__NODE_SELECTOR))
-        end,
-        fun() -> __EXPRESSION end
-    )
-).
-
--define(rpc(__NODE_SELECTOR, __EXPRESSION),
+-define(rpc(__PROVIDER_SELECTOR, __EXPRESSION),
     (fun() ->
         try
-            ?erpc(__NODE_SELECTOR, __EXPRESSION)
+            erpc:call(
+                lists_utils:random_element(oct_background:get_provider_nodes(__PROVIDER_SELECTOR)),
+                fun() -> __EXPRESSION end
+            )
         catch __TYPE:__REASON:__STACKTRACE ->
             ct:pal(
                 "Test RPC on node ~p failed!~n"
                 "Stacktrace: ~s~n",
-                [__NODE_SELECTOR, iolist_to_binary(lager:pr_stacktrace(__STACKTRACE, {__TYPE, __REASON}))]
+                [__PROVIDER_SELECTOR, iolist_to_binary(lager:pr_stacktrace(__STACKTRACE, {__TYPE, __REASON}))]
             ),
-            error({test_rpc_failed, __NODE_SELECTOR, __REASON})
+            error({test_rpc_failed, __PROVIDER_SELECTOR, __REASON})
         end
     end)()
 ).
