@@ -268,7 +268,7 @@ removal_of_not_empty_dataset_should_fail(_Config) ->
 
     ?assertEqual(?ERROR_POSIX(?ENOTEMPTY), opt_datasets:remove(P1Node, UserSessIdP1, DatasetId)),
 
-    ?assertEqual(ok, opt_archives:init_purge(P1Node, UserSessIdP1, ArchiveId)),
+    ?assertEqual(ok, opt_archives:purge(P1Node, UserSessIdP1, ArchiveId)),
     % wait till archive is purged
     ?assertMatch({ok, {[], true}},
         opt_archives:list(P1Node, UserSessIdP1, DatasetId, #{offset => 0, limit => 10}), ?ATTEMPTS),
@@ -484,11 +484,11 @@ remove_archive_privileges_test(_Config) ->
 
         ensure_privilege_revoked(P1Node, SpaceId, UserId2, Privilege, AllPrivileges),
         % user2 cannot remove the archive
-        ?assertEqual(?ERROR_POSIX(?EPERM), opt_archives:init_purge(P1Node, User2SessIdP1, ArchiveId)),
+        ?assertEqual(?ERROR_POSIX(?EPERM), opt_archives:purge(P1Node, User2SessIdP1, ArchiveId)),
 
         ensure_privilege_assigned(P1Node, SpaceId, UserId2, Privilege, AllPrivileges),
         % user2 can now remove archive
-        ?assertEqual(ok, opt_archives:init_purge(P1Node, User2SessIdP1, ArchiveId))
+        ?assertEqual(ok, opt_archives:purge(P1Node, User2SessIdP1, ArchiveId))
 
     end, lists:zip(RequiredPrivileges, [ArchiveId1, ArchiveId2])).
 
@@ -575,7 +575,7 @@ simple_archive_crud_test_base(DatasetId, RootFileType, ExpSize) ->
         opt_archives:get_info(P1Node, UserSessIdP1, ArchiveId), ?ATTEMPTS),
 
     % remove archive
-    ok = opt_archives:init_purge(P1Node, UserSessIdP1, ArchiveId, ?TEST_ARCHIVE_PURGED_CALLBACK3),
+    ok = opt_archives:purge(P1Node, UserSessIdP1, ArchiveId, ?TEST_ARCHIVE_PURGED_CALLBACK3),
 
     % verify whether Archive has been removed in the local provider
     ?assertEqual(?ERROR_NOT_FOUND,

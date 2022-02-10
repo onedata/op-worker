@@ -140,11 +140,11 @@ invalidate(SpaceId) ->
 -spec calculate_links_sync_status(effective_value:args()) -> 
     {ok, synced, effective_value:calculation_info()} | {error, {link_missing, file_meta:uuid()}} | 
     {error, term()}.
+calculate_links_sync_status([_, {error, _} = Error, _CalculationInfo]) ->
+    Error;
 calculate_links_sync_status([#document{} = FileMetaDoc, _ParentValue, CalculationInfo]) ->
     #document{value = #file_meta{name = Name, parent_uuid = ParentUuid}} = FileMetaDoc,
     case file_meta_forest:get(ParentUuid, all, Name) of
         {ok, _} -> {ok, synced, CalculationInfo};
         {error, _} -> {error, {link_missing, ParentUuid}}
-    end;
-calculate_links_sync_status([_, {error, _} = Error, _CalculationInfo]) ->
-    Error.
+    end.

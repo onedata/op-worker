@@ -450,7 +450,8 @@ file_details_to_gs_json(undefined, #file_details{
     eff_protection_flags = EffFileProtectionFlags,
     eff_qos_membership = EffQosMembership,
     eff_dataset_membership = EffDatasetMembership,
-    has_metadata = HasMetadata
+    has_metadata = HasMetadata,
+    recall_root_id = RecallRootId
 }) ->
     DisplayedSize = case Type of
         ?DIRECTORY_TYPE -> null;
@@ -479,7 +480,8 @@ file_details_to_gs_json(undefined, #file_details{
         <<"ownerId">> => OwnerId,
         <<"effQosMembership">> => atom_to_binary(EffQosMembership, utf8),
         <<"effDatasetMembership">> => atom_to_binary(EffDatasetMembership, utf8),
-        <<"hardlinksCount">> => utils:undefined_to_null(LinksCount)
+        <<"hardlinksCount">> => utils:undefined_to_null(LinksCount),
+        <<"recallRootId">> => utils:undefined_to_null(RecallRootId)
     };
 file_details_to_gs_json(ShareId, #file_details{
     file_attr = #file_attr{

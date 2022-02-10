@@ -43,6 +43,7 @@
     module() | no_return().
 resolve_handler(create, instance, private) -> ?MODULE;
 resolve_handler(create, purge, private) -> ?MODULE;
+resolve_handler(create, recall, private) -> ?MODULE;
 
 resolve_handler(get, instance, private) -> ?MODULE;
 
@@ -78,6 +79,15 @@ data_spec(#op_req{operation = create, gri = #gri{aspect = purge}}) -> #{
         <<"purgedCallback">> => {binary, fun(Callback) -> url_utils:is_valid(Callback) end}
     }
 };
+data_spec(#op_req{operation = create, gri = #gri{aspect = recall}}) -> #{
+    required => #{
+        <<"parentDirectoryId">> => {binary,
+            fun(ObjectId) -> {true, middleware_utils:decode_object_id(ObjectId, <<"parentDirectoryId">>)} end}
+    },
+    optional => #{
+        <<"targetFileName">> => {binary, non_empty}
+    }
+};
 
 data_spec(#op_req{operation = get, gri = #gri{aspect = instance}}) ->
     undefined;
@@ -107,6 +117,7 @@ fetch_entity(#op_req{operation = Op, auth = ?USER(_UserId), gri = #gri{
     scope = private
 }}) when
     (Op =:= create andalso As =:= purge);
+    (Op =:= create andalso As =:= recall);
     (Op =:= get andalso As =:= instance);
     (Op =:= update andalso As =:= instance)
 ->
@@ -134,6 +145,7 @@ authorize(#op_req{operation = create, auth = Auth, gri = #gri{aspect = instance}
 
 authorize(#op_req{operation = Op, auth = Auth, gri = #gri{aspect = As}}, ArchiveDoc) when
     (Op =:= create andalso As =:= purge);
+    (Op =:= create andalso As =:= recall);
     (Op =:= get andalso As =:= instance);
     (Op =:= update andalso As =:= instance)
 ->
@@ -154,6 +166,7 @@ validate(#op_req{operation = create, gri = #gri{aspect = instance}, data = Data}
 
 validate(#op_req{operation = Op, gri = #gri{aspect = As}}, ArchiveDoc) when
     (Op =:= create andalso As =:= purge);
+    (Op =:= create andalso As =:= recall);
     (Op =:= get andalso As =:= instance);
     (Op =:= update andalso As =:= instance)
 ->
@@ -184,7 +197,13 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = instance} = GRI}) -
 create(#op_req{auth = Auth, data = Data, gri = #gri{id = ArchiveId, aspect = purge}}) ->
     SessionId = Auth#auth.session_id,
     Callback = maps:get(<<"purgedCallback">>, Data, undefined),
-    mi_archives:init_purge(SessionId, ArchiveId, Callback).
+    mi_archives:purge(SessionId, ArchiveId, Callback);
+
+create(#op_req{auth = Auth, data = Data, gri = #gri{id = ArchiveId, aspect = recall}}) ->
+    SessionId = Auth#auth.session_id,
+    ParentDirectoryGuid = maps:get(<<"parentDirectoryId">>, Data),
+    TargetFileName = maps:get(<<"targetFileName">>, Data, default),
+    {ok, value, mi_archives:recall(SessionId, ArchiveId, ParentDirectoryGuid, TargetFileName)}.
 
 
 %%--------------------------------------------------------------------

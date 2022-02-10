@@ -21,6 +21,7 @@
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% functions operating on record using datastore model API
 -export([add_hook/5, execute_hooks/1, delete/1]).
@@ -49,8 +50,7 @@
 %%% Functions operating on record using datastore_model API
 %%%===================================================================
 
--spec add_hook(file_meta:uuid(), hook_identifier(), module(), atom(), [term()]) ->
-    ok | {error, term()}.
+-spec add_hook(file_meta:uuid(), hook_identifier(), module(), atom(), [term()]) -> ok | ?ERROR_INTERNAL_SERVER_ERROR.
 add_hook(FileUuid, Identifier, Module, Function, Args) ->
     UniqueIdentifier = generate_hook_id(Identifier),
     EncodedArgs = term_to_binary(Args),
@@ -59,16 +59,51 @@ add_hook(FileUuid, Identifier, Module, Function, Args) ->
         function = Function,
         args = EncodedArgs
     },
-    ?extract_ok(datastore_model:update(?CTX, FileUuid, fun(#file_meta_posthooks{hooks = Hooks} = FileMetaPosthooks) ->
+
+    AddAns = datastore_model:update(?CTX, FileUuid, fun(#file_meta_posthooks{hooks = Hooks} = FileMetaPosthooks) ->
         {ok, FileMetaPosthooks#file_meta_posthooks{hooks = Hooks#{UniqueIdentifier => Hook}}}
-    end, #file_meta_posthooks{hooks = #{UniqueIdentifier => Hook}})).
+    end, #file_meta_posthooks{hooks = #{UniqueIdentifier => Hook}}),
+
+    case AddAns of
+        {ok, _} ->
+            % Check race with file_meta document synchronization. Hook is added when something fails because of
+            % missing file_meta document. If missing file_meta document appears before hook adding to datastore,
+            % execution of hook is not triggered by dbsync. Thus, check if file_meta exists and trigger hook
+            % execution if it exists.
+            % NOTE: this check does not addresses races with link documents synchronization. If any hook depends
+            % on links, this race must be handled here.
+            case file_meta:exists(FileUuid) of
+                true ->
+                    % Spawn to prevent deadlocks when hook is added from the inside of already existing hook
+                    spawn(fun() -> execute_hooks(FileUuid) end),
+                    ok;
+                _ -> ok
+            end;
+        Error ->
+            ?error("~p:~p error for file ~p (identifier ~p, hook module ~p, hook fun ~p, hook args ~p): ~p",
+                [?MODULE, ?FUNCTION_NAME, FileUuid, Identifier, Module, Function, Args, Error]),
+            ?ERROR_INTERNAL_SERVER_ERROR
+    end.
 
 
 -spec execute_hooks(file_meta:uuid()) -> ok | {error, term()}.
 execute_hooks(FileUuid) ->
     case datastore_model:get(?CTX, FileUuid) of
-        {ok, #document{value = #file_meta_posthooks{hooks = Hooks}}} -> 
-            execute_hooks(FileUuid, Hooks);
+        {ok, #document{value = #file_meta_posthooks{hooks = Hooks}}} ->
+            case maps:size(Hooks) of
+                0 ->
+                    ok;
+                _ ->
+                    critical_section:run(FileUuid, fun() ->
+                        % Get document once more as hooks might have changed before entering to critical section
+                        case datastore_model:get(?CTX, FileUuid) of
+                            {ok, #document{value = #file_meta_posthooks{hooks = Hooks}}} ->
+                                execute_hooks(FileUuid, Hooks);
+                            _ ->
+                                ok
+                        end
+                    end)
+            end;
         _ ->
             ok
     end.
@@ -90,16 +125,22 @@ execute_hooks(FileUuid, HooksToExecute) ->
             Acc
         end
     end, [], HooksToExecute),
-    UpdateFun = fun(#file_meta_posthooks{hooks = PreviousHooks} = FileMetaPosthooks) ->
-        {ok, FileMetaPosthooks#file_meta_posthooks{hooks = maps:without(SuccessfulHooks, PreviousHooks)}}
-    end,
-    case datastore_model:update(?CTX, FileUuid, UpdateFun) of
-        {ok, #document{value = #file_meta_posthooks{hooks = Hooks}}} when map_size(Hooks) == 0 ->
-            datastore_model:delete(?CTX, FileUuid, fun(#file_meta_posthooks{hooks = H}) -> map_size(H) == 0 end);
-        {ok, _} -> 
+
+    case SuccessfulHooks of
+        [] ->
             ok;
-        {error, _} = Error ->
-            Error
+        _ ->
+            UpdateFun = fun(#file_meta_posthooks{hooks = PreviousHooks} = FileMetaPosthooks) ->
+                {ok, FileMetaPosthooks#file_meta_posthooks{hooks = maps:without(SuccessfulHooks, PreviousHooks)}}
+            end,
+            case datastore_model:update(?CTX, FileUuid, UpdateFun) of
+                {ok, #document{value = #file_meta_posthooks{hooks = Hooks}}} when map_size(Hooks) == 0 ->
+                    datastore_model:delete(?CTX, FileUuid, fun(#file_meta_posthooks{hooks = H}) -> map_size(H) == 0 end);
+                {ok, _} ->
+                    ok;
+                {error, _} = Error ->
+                    Error
+            end
     end.
 
 

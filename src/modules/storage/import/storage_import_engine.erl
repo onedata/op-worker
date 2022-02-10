@@ -616,10 +616,11 @@ import_file_unsafe(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
     FileUuid = datastore_key:new(),
     {ok, StorageFileCtx3} = create_location(FileUuid, StorageFileCtx2, OwnerId),
     FileName = storage_file_ctx:get_file_name_const(StorageFileCtx3),
-    {#statbuf{st_mode = Mode}, StorageFileCtx4} = storage_file_ctx:stat(StorageFileCtx3),
+    {#statbuf{st_mode = Mode} = StatBuf, StorageFileCtx4} = storage_file_ctx:stat(StorageFileCtx3),
     {ok, FileCtx} = create_file_meta_and_handle_conflicts(FileUuid, FileName, Mode, OwnerId,
         ParentUuid, SpaceId, Info),
     {ok, StorageFileCtx5} = create_times_from_stat_timestamps(FileUuid, StorageFileCtx4),
+    dir_update_time_stats:report_update_of_dir(file_ctx:get_logical_guid_const(ParentCtx), StatBuf),
     {ok, StorageFileCtx6} = maybe_import_nfs4_acl(FileCtx, StorageFileCtx5, Info),
     {CanonicalPath, FileCtx2} = file_ctx:get_canonical_path(FileCtx),
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
@@ -641,7 +642,7 @@ create_missing_parent_unsafe(StorageFileCtx, #{parent_ctx := ParentCtx}) ->
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
     {ok, FileCtx} = file_registration:create_missing_directory(ParentCtx, ParentName, ?SPACE_OWNER_ID(SpaceId)),
     FileUuid = datastore_key:new(),
-    create_times_from_current_time(FileUuid, SpaceId),
+    set_times_for_dir_using_current_time(FileUuid, SpaceId),
     {CanonicalPath, FileCtx2} = file_ctx:get_canonical_path(FileCtx),
     StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
     storage_import_logger:log_creation(StorageFileId, CanonicalPath, FileUuid, SpaceId),
@@ -825,10 +826,11 @@ create_times_from_stat_timestamps(FileUuid, StorageFileCtx) ->
     {ok, StorageFileCtx2}.
 
 
--spec create_times_from_current_time(file_meta:uuid(), od_space:id()) -> ok.
-create_times_from_current_time(FileUuid, SpaceId) ->
+-spec set_times_for_dir_using_current_time(file_meta:uuid(), od_space:id()) -> ok.
+set_times_for_dir_using_current_time(FileUuid, SpaceId) ->
     CurrentTime = global_clock:timestamp_seconds(),
-    times:save(FileUuid, SpaceId, CurrentTime, CurrentTime, CurrentTime).
+    times:save(FileUuid, SpaceId, CurrentTime, CurrentTime, CurrentTime),
+    dir_update_time_stats:report_update_of_dir(file_id:pack_guid(FileUuid, SpaceId), CurrentTime).
 
 %%-------------------------------------------------------------------
 %% @private

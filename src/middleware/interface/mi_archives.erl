@@ -21,7 +21,10 @@
     archive_dataset/6,
     get_info/2,
     update/3,
-    init_purge/3
+    purge/3,
+    recall/4,
+    get_recall_details/2,
+    get_recall_progress/2
 ]).
 
 
@@ -87,16 +90,44 @@ update(SessionId, ArchiveId, Diff) ->
     }).
 
 
--spec init_purge(session:id(), archive:id(), archive:callback()) ->
+-spec purge(session:id(), archive:id(), archive:callback()) ->
     ok | no_return().
-init_purge(SessionId, ArchiveId, CallbackUrl) ->
+purge(SessionId, ArchiveId, CallbackUrl) ->
     SpaceGuid = archive_id_to_space_guid(ArchiveId),
 
-    middleware_worker:check_exec(SessionId, SpaceGuid, #init_archive_purge{
+    middleware_worker:check_exec(SessionId, SpaceGuid, #purge_archive{
         id = ArchiveId,
         callback = CallbackUrl
     }).
 
+
+-spec recall(session:id(), archive:id(), file_id:file_guid(), file_meta:name() | default) ->
+    file_id:file_guid() | no_return().
+recall(SessionId, ArchiveId, ParentDirectoryGuid, TargetFilename) ->
+    SpaceGuid = archive_id_to_space_guid(ArchiveId),
+    
+    middleware_worker:check_exec(SessionId, SpaceGuid, #recall_archive{
+        archive_id = ArchiveId,
+        parent_directory_guid = ParentDirectoryGuid,
+        target_filename = TargetFilename
+    }).
+
+
+-spec get_recall_details(session:id(), file_id:file_guid()) -> 
+    archive_recall:record() | no_return().
+get_recall_details(SessionId, FileGuid) ->
+    middleware_worker:check_exec(SessionId, FileGuid, #get_recall_details{
+        id = file_id:guid_to_uuid(FileGuid)
+    }).
+
+
+-spec get_recall_progress(session:id(), file_id:file_guid()) ->
+    archive_recall:recall_progress_map() | no_return().
+get_recall_progress(SessionId, FileGuid) ->
+    middleware_worker:check_exec(SessionId, FileGuid, #get_recall_progress{
+        id = file_id:guid_to_uuid(FileGuid)
+    }).
+    
 
 %%%===================================================================
 %%% Internal functions

@@ -42,7 +42,10 @@
     shares = [] :: [onenv_file_test_utils:share_spec()],
     dataset = undefined :: undefined | onenv_dataset_test_utils:dataset_spec(),
     content = <<"">> :: binary(),
-    metadata = #metadata_spec{} :: onenv_file_test_utils:object_spec()
+    metadata = #metadata_spec{} :: onenv_file_test_utils:object_spec(),
+    % Custom label that can be provided in symlink spec as target.
+    % NOTE: symlink must be specified after this file (i.e. further on the list) in file spec.
+    custom_label = undefined :: undefined | any() 
 }).
 
 -record(dir_spec, {
@@ -51,14 +54,20 @@
     shares = [] :: [onenv_file_test_utils:share_spec()],
     dataset = undefined :: undefined | onenv_dataset_test_utils:dataset_spec(),
     children = [] :: [#dir_spec{} | #file_spec{}],
-    metadata = #metadata_spec{} :: onenv_file_test_utils:object_spec()
+    metadata = #metadata_spec{} :: onenv_file_test_utils:object_spec(),
+    % Custom label that can be provided in symlink spec as target.
+    % NOTE: symlink must be specified after this dir (i.e. further on the list) in file spec.
+    custom_label = undefined :: undefined | onenv_file_test_utils:custom_label()
 }).
 
 -record(symlink_spec, {
     name = undefined :: undefined | binary(),
     shares = [] :: [onenv_file_test_utils:share_spec()],
     dataset = undefined :: undefined | onenv_dataset_test_utils:dataset_spec(),
-    symlink_value :: binary()
+    symlink_value :: binary() | {custom_label, onenv_file_test_utils:custom_label()},
+    % Custom label that can be provided in symlink spec as target.
+    % NOTE: symlink must be specified after this symlink (i.e. further on the list) in file spec.
+    custom_label = undefined :: undefined | onenv_file_test_utils:custom_label()
 }).
 
 -record(share_spec, {

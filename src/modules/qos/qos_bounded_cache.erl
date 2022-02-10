@@ -25,7 +25,8 @@
     ensure_exists_for_all_spaces/0,
     ensure_exists_on_all_nodes/1,
     ensure_exists/1, invalidate_on_all_nodes/1,
-    init_qos_cache_for_space/1, init_qos_cache_for_all_spaces/0
+    init_qos_cache_for_space/1, init_qos_cache_for_all_spaces/0,
+    is_cache_initialized/1
 ]).
 
 
@@ -106,13 +107,11 @@ ensure_exists_on_all_nodes(SpaceId) ->
 %%--------------------------------------------------------------------
 -spec ensure_exists(od_space:id()) -> ok.
 ensure_exists(SpaceId) ->
-    CacheTableName = ?CACHE_TABLE_NAME(SpaceId),
-    CacheTableInfo = ets:info(CacheTableName),
-    case CacheTableInfo of
-        undefined ->
+    case is_cache_initialized(SpaceId) of
+        false ->
             % call to worker as process that will hold ets is needed
             qos_worker:init_qos_cache_for_space(SpaceId);
-        _ ->
+        true ->
             ok
     end.
 
@@ -180,6 +179,11 @@ invalidate_on_all_nodes(SpaceId) ->
                 "Reason: ~p", [SpaceId, Error]
             )
     end, Res).
+
+
+-spec is_cache_initialized(od_space:id()) -> boolean().
+is_cache_initialized(SpaceId) ->
+    bounded_cache:cache_exists(?CACHE_TABLE_NAME(SpaceId)).
 
 
 %%%===================================================================

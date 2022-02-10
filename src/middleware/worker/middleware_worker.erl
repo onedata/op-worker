@@ -32,7 +32,10 @@
     #archive_dataset{} |
     #get_archive_info{} |
     #update_archive{} |
-    #init_archive_purge{}.
+    #purge_archive{} |
+    #recall_archive{} |
+    #get_recall_details{} |
+    #get_recall_progress{}.
 
 -type atm_operation() ::
     #schedule_atm_workflow_execution{} |

@@ -109,8 +109,11 @@ update_times_and_emit(FileCtx, TimesDiff) ->
             Times = prepare_times(TimesDiff),
             case times:create_or_update(#document{key = FileUuid,
                 value = Times, scope = file_ctx:get_space_id_const(FileCtx)}, TimesDiff) of
-                {ok, _} ->
+                {ok, #document{value = FinalTimes}} ->
                     spawn(fun() ->
+                        % TODO VFS-8830 - set file_ctx:is_dir in functions that update times and know file type
+                        % to optimize type check
+                        dir_update_time_stats:report_update_of_nearest_dir(file_ctx:get_logical_guid_const(FileCtx), FinalTimes),
                         fslogic_event_emitter:emit_sizeless_file_attrs_changed(FileCtx)
                     end),
                     ok;

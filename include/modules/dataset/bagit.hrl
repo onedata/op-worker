@@ -25,7 +25,7 @@
 -define(TAG_MANIFEST_FILE_NAME(Algorithm),
     str_utils:format_bin(?TAG_MANIFEST_FILE_NAME_FORMAT, [Algorithm])).
 
--define(DATA_DIR_NAME, <<"data">>).
+-define(BAGIT_DATA_DIR_NAME, <<"data">>).
 
 -define(BAG_DECLARATION_FILE_NAME, <<"bagit.txt">>).
 -define(VERSION, "1.0").

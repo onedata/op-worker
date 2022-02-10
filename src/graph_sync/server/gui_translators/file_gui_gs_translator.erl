@@ -153,7 +153,16 @@ translate_resource(#gri{aspect = qos_summary, scope = private}, QosSummaryRespon
     maps:without([<<"status">>], QosSummaryResponse);
 
 translate_resource(#gri{aspect = dataset_summary, scope = private}, DatasetSummary) ->
-    translate_dataset_summary(DatasetSummary).
+    translate_dataset_summary(DatasetSummary);
+
+translate_resource(#gri{aspect = archive_recall_details, scope = private}, ArchiveRecallDetails) ->
+    translate_archive_recall_details(ArchiveRecallDetails);
+
+translate_resource(#gri{aspect = archive_recall_progress, scope = private}, ArchiveRecallProgress) ->
+    #{<<"lastError">> := LastError} = ArchiveRecallProgress,
+    ArchiveRecallProgress#{
+        <<"lastError">> => utils:undefined_to_null(LastError)
+    }.
 
 
 -spec translate_dataset_summary(dataset_api:file_eff_summary()) -> map().
@@ -221,6 +230,7 @@ translate_file_details(#file_details{
     index_startid = StartId,
     eff_dataset_membership = EffDatasetMembership,
     eff_protection_flags = EffFileProtectionFlags,
+    recall_root_id = RecallRootId,
     symlink_value = SymlinkValue,
     file_attr = #file_attr{
         guid = FileGuid,
@@ -292,9 +302,32 @@ translate_file_details(#file_details{
                 <<"providerId">> => ProviderId,
                 <<"ownerId">> => OwnerId,
                 <<"effQosMembership">> => translate_membership(EffQosMembership),
-                <<"effDatasetMembership">> => translate_membership(EffDatasetMembership)
+                <<"effDatasetMembership">> => translate_membership(EffDatasetMembership),
+                <<"recallRootId">> => utils:undefined_to_null(RecallRootId)
             }
     end.
+
+
+%% @private
+-spec translate_archive_recall_details(archive_recall:record()) -> map().
+translate_archive_recall_details(#archive_recall_details{
+    archive_id = ArchiveId,
+    dataset_id = DatasetId,
+    start_timestamp = StartTimestamp,
+    finish_timestamp = FinishTimestamp,
+    total_file_count = TargetFileCount,
+    total_byte_size = TargetByteSize
+}) ->
+    #{
+        <<"archive">> => gri:serialize(#gri{
+            type = op_archive, id = ArchiveId, aspect = instance, scope = private}),
+        <<"dataset">> => gri:serialize(#gri{
+            type = op_dataset, id = DatasetId, aspect = instance, scope = private}),
+        <<"startTime">> => utils:undefined_to_null(StartTimestamp),
+        <<"finishTime">> => utils:undefined_to_null(FinishTimestamp),
+        <<"totalFileCount">> => TargetFileCount,
+        <<"totalByteSize">> => TargetByteSize
+    }.
 
 
 %% @private

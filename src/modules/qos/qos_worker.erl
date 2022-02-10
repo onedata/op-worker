@@ -73,8 +73,13 @@ handle({?CHECK_QOS_CACHE, Msg}) ->
     ?debug("Cleaning QoS bounded cache if needed"),
     bounded_cache:check_cache_size(Msg);
 handle({?INIT_QOS_CACHE_FOR_SPACE, SpaceId}) ->
-    ?debug("Initializing qos bounded cache for space: ~p", [SpaceId]),
-    qos_bounded_cache:init_qos_cache_for_space(SpaceId);
+    case qos_bounded_cache:is_cache_initialized(SpaceId) of
+        true -> 
+            ok;
+        false ->
+            ?debug("Initializing qos bounded cache for space: ~p", [SpaceId]),
+            qos_bounded_cache:init_qos_cache_for_space(SpaceId)
+    end;
 handle(?RETRY_FAILED_FILES) ->
     case provider_logic:get_spaces() of
         {ok, Spaces} ->

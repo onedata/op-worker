@@ -17,7 +17,7 @@
 %% datastore_model callbacks
 -export([
     get_record_version/0, get_record_struct/1,
-    upgrade_record/2, resolve_conflict/3
+    upgrade_record/2, resolve_conflict/3, on_remote_doc_created/2
 ]).
 
 -define(FILE_META_MODEL, file_meta).
@@ -376,26 +376,37 @@ upgrade_record(11, {?FILE_META_MODEL, Name, Type, Mode, ProtectionFlags, ACL, Ow
 %%--------------------------------------------------------------------
 -spec resolve_conflict(datastore_model:ctx(), file_meta:doc(), file_meta:doc()) -> default.
 resolve_conflict(_Ctx,
-    NewDoc = #document{key = Uuid, value = #file_meta{name = NewName, parent_uuid = NewParentUuid}, scope = SpaceId},
-    PrevDoc = #document{value = #file_meta{name = PrevName, parent_uuid = PrevParentUuid}}
+    NewDoc = #document{
+        key = Uuid,
+        value = #file_meta{name = NewName, parent_uuid = NewParentUuid, type = Type},
+        scope = SpaceId
+    }, PrevDoc = #document{
+        value = #file_meta{name = PrevName, parent_uuid = PrevParentUuid}
+    }
 ) ->
     invalidate_effective_caches_if_moved(NewDoc, PrevDoc),
     invalidate_dataset_eff_cache_if_needed(NewDoc, PrevDoc),
     spawn(fun() ->
-        invalidate_qos_bounded_cache_if_moved_to_trash(NewDoc, PrevDoc)
-    end),
-    case (NewName =/= PrevName) orelse (NewParentUuid =/= PrevParentUuid) of
-        true ->
-            spawn(fun() ->
+        invalidate_qos_bounded_cache_if_moved_to_trash(NewDoc, PrevDoc),
+
+        case (NewName =/= PrevName) orelse (NewParentUuid =/= PrevParentUuid) of
+            true ->
                 FileCtx = file_ctx:new_by_uuid(Uuid, SpaceId),
                 OldParentGuid = file_id:pack_guid(PrevParentUuid, SpaceId),
                 NewParentGuid = file_id:pack_guid(NewParentUuid, SpaceId),
                 fslogic_event_emitter:emit_file_renamed_no_exclude(
-                    FileCtx, OldParentGuid, NewParentGuid, NewName, PrevName)
-            end);
-        _ ->
-            ok
-    end,
+                    FileCtx, OldParentGuid, NewParentGuid, NewName, PrevName);
+            _ ->
+                ok
+        end,
+
+        case file_meta:is_deleted(NewDoc) andalso not file_meta:is_deleted(PrevDoc) of
+            true ->
+                dir_size_stats:report_file_deleted(Type, file_id:pack_guid(NewParentUuid, SpaceId));
+            false ->
+                ok
+        end
+    end),
 
     case file_meta_hardlinks:merge_references(NewDoc, PrevDoc) of
         not_mutated ->
@@ -409,6 +420,22 @@ resolve_conflict(_Ctx,
             end,
             {true, DocBase#document{value = RecordBase#file_meta{references = MergedReferences}}}
     end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Function called when new record appears from remote provider.
+%% @end
+%%--------------------------------------------------------------------
+-spec on_remote_doc_created(datastore_model:ctx(), file_meta:doc()) -> ok.
+on_remote_doc_created(_Ctx, #document{value = #file_meta{deleted = true}}) ->
+    ok;
+on_remote_doc_created(_Ctx, #document{deleted = true}) ->
+    ok;
+on_remote_doc_created(_Ctx, #document{value = #file_meta{type = Type, parent_uuid = ParentUuid}, scope = SpaceId}) ->
+    spawn(fun() ->
+        dir_size_stats:report_file_created(Type, file_id:pack_guid(ParentUuid, SpaceId))
+    end).
 
 
 %%%===================================================================
@@ -472,6 +499,7 @@ invalidate_effective_caches_if_moved(
         true ->
             spawn(fun() -> 
                 paths_cache:invalidate_on_all_nodes(SpaceId),
+                archive_recall_cache:invalidate_on_all_nodes(SpaceId),
                 file_meta_links_sync_status_cache:invalidate_on_all_nodes(SpaceId)
             end),
             ok;
