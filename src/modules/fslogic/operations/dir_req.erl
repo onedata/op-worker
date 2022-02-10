@@ -6,14 +6,19 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% This module is responsible for handing requests operating on directories.
 %%% This module operates on two types of tokens used for continuous listing of directory content: 
-%%%     * datastore_list_token - token used internally by datastore. Can expire. After its expiration 
-%%%                              options provided alongside token are used to determine listing staritng 
-%%%                              point;
-%%%     * api_list_token - contains all information required for listing continuation even after 
-%%%                        datastore_list_token (which is included in api_list_token) expiration. Therefore 
-%%%                        this token does not expire.
+%%%     * api_list_token - used by higher-level modules and passed to the external clients as an 
+%%%                        opaque string so that they can resume listing just after previously 
+%%%                        listed batch (results paging). It encodes a datastore_token and additional
+%%%                        information about last position in the file tree, in case the datastore
+%%%                        token expires. Hence, this token does not expire and always guarantees
+%%%                        correct listing resumption.
+%%%                    
+%%%     * datastore_list_token - token used internally by datastore, has limited TTL. After its expiration, 
+%%%                              information about last position in the file tree can be used to determine
+%%%                              the starting point for listing. This token offers the best performance 
+%%%                              when resuming listing from a certain point.
+%%% @TODO VFS-8980 currently it is possible to pass datastore_token from outside
 %%% @end
 %%%--------------------------------------------------------------------
 -module(dir_req).
@@ -30,6 +35,8 @@
 -type list_token() :: file_meta:list_token() | api_list_token().
 -type token_type() :: api_list_token | datastore_list_token.
 
+%% @TODO VFS-8980 Create opaque structure for list opts
+% When api_list_token is provided, other starting point options (offset, last_tree, last_name) are ignored
 -type list_opts() :: #{
     token := api_list_token(),
     size := file_meta:list_size()

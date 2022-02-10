@@ -42,7 +42,7 @@
 -define(DEFAULT_LIST_OFFSET, 0).
 -define(DEFAULT_LIST_ENTRIES, 1000).
 
--define(DEFAULT_ATTRIBUTES, [<<"file_id">>, <<"name">>]).
+-define(DEFAULT_BASIC_ATTRIBUTES, [<<"file_id">>, <<"name">>]).
 
 
 %%%===================================================================
@@ -526,29 +526,38 @@ data_spec_get(#gri{aspect = As}) when
 
 data_spec_get(#gri{aspect = As, scope = Sc}) when
     As =:= children
--> #{
-    required => #{id => {binary, guid}},
-    optional => #{
-        <<"limit">> => {integer, {between, 1, 1000}},
-        <<"token">> => {binary, fun
-            (null) ->
-                {true, undefined};
-            (undefined) ->
-                true;
-            (<<>>) ->
-                throw(?ERROR_BAD_VALUE_EMPTY(<<"token">>));
-            (IndexBin) when is_binary(IndexBin) ->
-                true;
-            (_) ->
-                false
-        end},
-        <<"attribute">> => {any, build_get_attributes_data_spec_value_constraint(Sc)}
-    }
-};
+-> 
+    AllowedAttributes = case Sc of
+        public -> ?PUBLIC_BASIC_ATTRIBUTES;
+        private -> ?PRIVATE_BASIC_ATTRIBUTES
+    end,
+    #{
+        required => #{id => {binary, guid}},
+        optional => #{
+            <<"limit">> => {integer, {between, 1, 1000}},
+            <<"token">> => {binary, fun
+                (null) ->
+                    {true, undefined};
+                (undefined) ->
+                    true;
+                (<<>>) ->
+                    throw(?ERROR_BAD_VALUE_EMPTY(<<"token">>));
+                (IndexBin) when is_binary(IndexBin) ->
+                    true;
+                (_) ->
+                    false
+            end},
+            <<"attribute">> => {any, AllowedAttributes}
+        }
+    };
 
-data_spec_get(#gri{aspect = attrs, scope = Sc}) -> #{
+data_spec_get(#gri{aspect = attrs, scope = private}) -> #{
     required => #{id => {binary, guid}},
-    optional => #{<<"attribute">> => {any, build_get_attributes_data_spec_value_constraint(Sc)}}
+    optional => #{<<"attribute">> => {any, ?PRIVATE_BASIC_ATTRIBUTES}}
+};
+data_spec_get(#gri{aspect = attrs, scope = public}) -> #{
+    required => #{id => {binary, guid}},
+    optional => #{<<"attribute">> => {any, ?PUBLIC_BASIC_ATTRIBUTES}}
 };
 
 data_spec_get(#gri{aspect = xattrs}) -> #{
@@ -722,44 +731,41 @@ validate_get(#op_req{gri = #gri{aspect = download_url}, data = Data}, _) ->
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = instance}}, _) ->
     ?lfm_check(lfm:get_details(Auth#auth.session_id, ?FILE_REF(FileGuid)));
 
-get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = children, scope = Sc}}, _) ->
+get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = children}}, _) ->
     SessionId = Auth#auth.session_id,
-    RequestedAttributes = utils:ensure_list(maps:get(<<"attribute">>, Data, ?DEFAULT_ATTRIBUTES)),
+    RequestedAttributes = utils:ensure_list(maps:get(<<"attribute">>, Data, ?DEFAULT_BASIC_ATTRIBUTES)),
     
     ListingOpts = #{
         size => maps:get(<<"limit">>, Data, ?DEFAULT_LIST_ENTRIES),
         token => maps:get(<<"token">>, Data, ?INITIAL_API_LS_TOKEN)
     },
     
-    ShouldListWithAttrs = lists:any(fun(Attr) ->
-        not lists:member(Attr, ?DEFAULT_ATTRIBUTES)
-    end, RequestedAttributes),
-    
-    AttributeSelector = fun(JsonMapper) -> 
+    ToJsonWithRequestedAttributes = fun(ItemToJson) -> 
         fun(Res) ->
-            maps:with(RequestedAttributes, JsonMapper(Res))
+            maps:with(RequestedAttributes, ItemToJson(Res))
         end
     end,
     
-    {FinalChildren, Info} = case ShouldListWithAttrs of
-        false ->
+    {ResultJson, Info} = case lists:sort(lists_utils:union(RequestedAttributes, ?DEFAULT_BASIC_ATTRIBUTES)) of
+        ?DEFAULT_BASIC_ATTRIBUTES ->
             {ok, Children, ReturnedInfo} = ?lfm_check(lfm:get_children(
                 SessionId, ?FILE_REF(FileGuid), ListingOpts)),
-            JsonMapper = fun
+            ItemToJson = fun
                 ({Guid, Name}) ->
                     {ok, ObjectId} = file_id:guid_to_objectid(Guid),
                     #{<<"file_id">> => ObjectId, <<"name">> => Name}
                 end,
-            {lists:map(AttributeSelector(JsonMapper), Children), ReturnedInfo};
-        true ->
+            {lists:map(ToJsonWithRequestedAttributes(ItemToJson), Children), ReturnedInfo};
+        _ ->
             IncludeHardlinksCount = lists:member(<<"hardlinks_count">>, RequestedAttributes),
             {ok, Children, ReturnedInfo} = ?lfm_check(lfm:get_children_attrs(
                 SessionId, ?FILE_REF(FileGuid), ListingOpts, false, IncludeHardlinksCount)),
-            {lists:map(AttributeSelector(fun file_attrs_to_json/1), Children), ReturnedInfo}
+            {lists:map(ToJsonWithRequestedAttributes(fun file_attrs_to_json/1), Children), ReturnedInfo}
     end,
     
     #{is_last := IsLast} = Info,
-    {ok, value, {FinalChildren, IsLast, maps:get(token, Info, undefined)}};
+    %% @TODO VFS-8980 Do not use default after list options are refined and token is always returned
+    {ok, value, {ResultJson, IsLast, maps:get(token, Info, undefined)}};
 
 get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = children_details}}, _) ->
     SessionId = Auth#auth.session_id,
@@ -1113,25 +1119,6 @@ delete(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = rdf_
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-%% @private
--spec build_get_attributes_data_spec_value_constraint(gri:scope()) -> 
-    middleware_sanitizer:custom_value_constraint().
-build_get_attributes_data_spec_value_constraint(Scope) ->
-    AllowedBasicAttributes = case Scope of
-        private -> ?PRIVATE_BASIC_ATTRIBUTES;
-        public -> ?PUBLIC_BASIC_ATTRIBUTES
-    end,
-    fun
-        (List) when is_list(List) ->
-            lists:all(fun(Attr) ->
-                lists:member(Attr, AllowedBasicAttributes) orelse
-                    throw(?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attribute">>, AllowedBasicAttributes))
-            end, List);
-        (Attr) ->
-            lists:member(Attr, AllowedBasicAttributes) orelse
-                throw(?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attribute">>, AllowedBasicAttributes))
-    end.
 
 
 %% @private
