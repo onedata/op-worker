@@ -24,10 +24,11 @@
 %% API
 -export([handle_request/2]).
 
--type create_fun() :: fun((session:id(), file_id:file_guid() | lfm:file_ref(), file_meta:name(), 
-    file_meta:mode() | file_id:file_guid() | file_meta:path()
-) -> 
+-type create_fun() :: fun((session:id(), file_id:file_guid() , file_meta:name(), file_meta:mode()) -> 
     {ok, file_id:file_guid()} | {error, term()}).
+
+-type create_link_fun() :: fun((session:id(), lfm:file_ref(), file_meta:name(), 
+    file_id:file_guid() | file_meta:path()) -> {ok, file_id:file_guid()} | {error, term()}).
 
 % timeout after which cowboy returns the data read from socket, regardless of its size
 % the value was decided upon experimentally
@@ -381,7 +382,7 @@ create(CreateFun, SessionId, ParentGuid, Name, Mode, true) ->
 
 
 %% @private
--spec create_link(create_fun(), session:id(), file_id:file_guid(), file_meta:name(), file_meta:mode(),
+-spec create_link(create_link_fun(), session:id(), file_id:file_guid(), file_meta:name(), file_meta:mode(),
     UpdateExisting :: boolean()) -> file_id:file_guid() | no_return().
 create_link(CreateFun, SessionId, ParentGuid, Name, TargetFilePath, false) ->
     {ok, #file_attr{guid = SymlinkGuid}} =

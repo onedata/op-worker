@@ -524,32 +524,28 @@ data_spec_get(#gri{aspect = As}) when
     }
 };
 
-data_spec_get(#gri{aspect = As, scope = Sc}) when
-    As =:= children
--> 
-    AllowedAttributes = case Sc of
-        public -> ?PUBLIC_BASIC_ATTRIBUTES;
-        private -> ?PRIVATE_BASIC_ATTRIBUTES
-    end,
-    #{
-        required => #{id => {binary, guid}},
-        optional => #{
-            <<"limit">> => {integer, {between, 1, 1000}},
-            <<"token">> => {binary, fun
-                (null) ->
-                    {true, undefined};
-                (undefined) ->
-                    true;
-                (<<>>) ->
-                    throw(?ERROR_BAD_VALUE_EMPTY(<<"token">>));
-                (IndexBin) when is_binary(IndexBin) ->
-                    true;
-                (_) ->
-                    false
-            end},
-            <<"attribute">> => {any, AllowedAttributes}
-        }
-    };
+data_spec_get(#gri{aspect = children, scope = Sc}) -> #{
+    required => #{id => {binary, guid}},
+    optional => #{
+        <<"limit">> => {integer, {between, 1, 1000}},
+        <<"token">> => {binary, fun
+            (null) ->
+                {true, undefined};
+            (undefined) ->
+                true;
+            (<<>>) ->
+                throw(?ERROR_BAD_VALUE_EMPTY(<<"token">>));
+            (IndexBin) when is_binary(IndexBin) ->
+                true;
+            (_) ->
+                false
+        end},
+        <<"attribute">> => {any, case Sc of
+            public -> ?PUBLIC_BASIC_ATTRIBUTES;
+            private -> ?PRIVATE_BASIC_ATTRIBUTES
+        end}
+    }
+};
 
 data_spec_get(#gri{aspect = attrs, scope = private}) -> #{
     required => #{id => {binary, guid}},
