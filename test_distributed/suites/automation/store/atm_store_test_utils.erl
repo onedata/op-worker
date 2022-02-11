@@ -25,9 +25,10 @@
 -export([
     build_store_schema/1, build_store_schema/2, build_store_schema/3,
     build_workflow_execution_env/3,
-    ensure_fully_expanded_data/4,
     gen_valid_data/3,
-    gen_invalid_data/3
+    gen_invalid_data/3,
+    ensure_fully_expanded_data/4,
+    randomly_remove_item/4
 ]).
 -export([
     create_store/4,
@@ -112,22 +113,6 @@ build_workflow_execution_env(AtmWorkflowExecutionAuth, AtmStoreSchema, AtmStoreI
         0,
         #{AtmStoreSchema#atm_store_schema.id => AtmStoreId}
     ).
-
-
--spec ensure_fully_expanded_data(
-    oct_background:node_selector(),
-    atm_workflow_execution_auth:record(),
-    atm_value:expanded(),
-    atm_store:id()
-) ->
-    atm_value:expanded().
-ensure_fully_expanded_data(ProviderSelector, AtmWorkflowExecutionAuth, Data, AtmDataSpec) ->
-    {ok, ExpandedData} = ?rpc(ProviderSelector, atm_value:expand(
-        AtmWorkflowExecutionAuth,
-        atm_value:compress(Data, AtmDataSpec),
-        AtmDataSpec
-    )),
-    ExpandedData.
 
 
 -spec gen_valid_data(
@@ -245,57 +230,57 @@ gen_invalid_data(ProviderSelector, AtmWorkflowExecutionAuth, #atm_data_spec{
     }).
 
 
-%% @private
--spec all_basic_data_types() -> [atm_data_type:type()].
-all_basic_data_types() -> [
-    atm_dataset_type,
-    atm_file_type,
-    atm_integer_type,
-    atm_object_type,
-    atm_onedatafs_credentials_type,
-    atm_string_type,
-    atm_time_series_measurements_type
-].
-
-
-%% @private
--spec create_random_file_in_space_root_dir(
+-spec ensure_fully_expanded_data(
     oct_background:node_selector(),
-    atm_workflow_execution_auth:record()
+    atm_workflow_execution_auth:record(),
+    atm_value:expanded(),
+    atm_store:id()
 ) ->
-    ok.
-create_random_file_in_space_root_dir(ProviderSelector, AtmWorkflowExecutionAuth) ->
-    SessionId = atm_workflow_execution_auth:get_session_id(AtmWorkflowExecutionAuth),
-    SpaceId = atm_workflow_execution_auth:get_space_id(AtmWorkflowExecutionAuth),
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    atm_value:expanded().
+ensure_fully_expanded_data(ProviderSelector, AtmWorkflowExecutionAuth, Data, AtmDataSpec) ->
+    {ok, ExpandedData} = ?rpc(ProviderSelector, atm_value:expand(
+        AtmWorkflowExecutionAuth,
+        atm_value:compress(Data, AtmDataSpec),
+        AtmDataSpec
+    )),
+    ExpandedData.
 
-    case lists_utils:random_element([?REGULAR_FILE_TYPE, ?DIRECTORY_TYPE, ?SYMLINK_TYPE, ?LINK_TYPE]) of
-        ?REGULAR_FILE_TYPE ->
-            {ok, RegFileGuid} = ?rpc(ProviderSelector, lfm:create(
-                SessionId, SpaceGuid, ?RAND_STR(24), undefined
-            )),
-            {ok, RegFileAttrs} = ?rpc(ProviderSelector, lfm:stat(SessionId, ?FILE_REF(RegFileGuid))),
-            RegFileAttrs;
-        ?DIRECTORY_TYPE ->
-            {ok, DirGuid} = ?rpc(ProviderSelector, lfm:mkdir(
-                SessionId, SpaceGuid, ?RAND_STR(24), undefined
-            )),
-            {ok, DirAttrs} = ?rpc(ProviderSelector, lfm:stat(SessionId, ?FILE_REF(DirGuid))),
-            DirAttrs;
-        ?SYMLINK_TYPE ->
-            {ok, SymlinkAttrs} = ?rpc(ProviderSelector, lfm:make_symlink(
-                SessionId, ?FILE_REF(SpaceGuid), ?RAND_STR(24), ?RAND_STR(24)
-            )),
-            SymlinkAttrs;
-        ?LINK_TYPE ->
-            {ok, RegFileGuid} = ?rpc(ProviderSelector, lfm:create(
-                SessionId, SpaceGuid, ?RAND_STR(24), undefined
-            )),
-            {ok, HardlinkAttrs} = ?lfm_check(?rpc(ProviderSelector, lfm:make_link(
-                SessionId, ?FILE_REF(RegFileGuid), ?FILE_REF(SpaceGuid), ?RAND_STR(24)
-            ))),
-            HardlinkAttrs
-    end.
+
+%% @private
+-spec randomly_remove_item(
+    oct_background:node_selector(),
+    atm_workflow_execution_auth:record(),
+    atm_value:expanded(),
+    atm_data_spec:record()
+) ->
+    false | {true, errors:error()}.
+randomly_remove_item(ProviderSelector, AtmWorkflowExecutionAuth, Item, #atm_data_spec{
+    type = atm_file_type
+}) ->
+    case rand:uniform(5) of
+        1 ->
+            SessionId = atm_workflow_execution_auth:get_session_id(AtmWorkflowExecutionAuth),
+            {ok, FileGuid} = file_id:objectid_to_guid(maps:get(<<"file_id">>, Item)),
+            ?rpc(ProviderSelector, lfm:rm_recursive(SessionId, ?FILE_REF(FileGuid))),
+            {true, ?ERROR_POSIX(?ENOENT)};
+        _ ->
+            false
+    end;
+
+randomly_remove_item(ProviderSelector, AtmWorkflowExecutionAuth, Item, #atm_data_spec{
+    type = atm_dataset_type
+}) ->
+    case rand:uniform(5) of
+        1 ->
+            SessionId = atm_workflow_execution_auth:get_session_id(AtmWorkflowExecutionAuth),
+            ?rpc(ProviderSelector, mi_datasets:remove(SessionId, maps:get(<<"datasetId">>, Item))),
+            {true, ?ERROR_NOT_FOUND};
+        _ ->
+            false
+    end;
+
+randomly_remove_item(_ProviderSelector, _AtmWorkflowExecutionAuth, _Item, _AtmDataSpec) ->
+    false.
 
 
 -spec create_store(
@@ -433,3 +418,56 @@ infer_store_type(#atm_list_store_config{}) -> list;
 infer_store_type(#atm_range_store_config{}) -> range;
 infer_store_type(#atm_single_value_store_config{}) -> single_value;
 infer_store_type(#atm_tree_forest_store_config{}) -> tree_forest.
+
+
+%% @private
+-spec all_basic_data_types() -> [atm_data_type:type()].
+all_basic_data_types() -> [
+    atm_dataset_type,
+    atm_file_type,
+    atm_integer_type,
+    atm_object_type,
+    atm_onedatafs_credentials_type,
+    atm_string_type,
+    atm_time_series_measurements_type
+].
+
+
+%% @private
+-spec create_random_file_in_space_root_dir(
+    oct_background:node_selector(),
+    atm_workflow_execution_auth:record()
+) ->
+    ok.
+create_random_file_in_space_root_dir(ProviderSelector, AtmWorkflowExecutionAuth) ->
+    SessionId = atm_workflow_execution_auth:get_session_id(AtmWorkflowExecutionAuth),
+    SpaceId = atm_workflow_execution_auth:get_space_id(AtmWorkflowExecutionAuth),
+    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+
+    case lists_utils:random_element([?REGULAR_FILE_TYPE, ?DIRECTORY_TYPE, ?SYMLINK_TYPE, ?LINK_TYPE]) of
+        ?REGULAR_FILE_TYPE ->
+            {ok, RegFileGuid} = ?rpc(ProviderSelector, lfm:create(
+                SessionId, SpaceGuid, ?RAND_STR(24), undefined
+            )),
+            {ok, RegFileAttrs} = ?rpc(ProviderSelector, lfm:stat(SessionId, ?FILE_REF(RegFileGuid))),
+            RegFileAttrs;
+        ?DIRECTORY_TYPE ->
+            {ok, DirGuid} = ?rpc(ProviderSelector, lfm:mkdir(
+                SessionId, SpaceGuid, ?RAND_STR(24), undefined
+            )),
+            {ok, DirAttrs} = ?rpc(ProviderSelector, lfm:stat(SessionId, ?FILE_REF(DirGuid))),
+            DirAttrs;
+        ?SYMLINK_TYPE ->
+            {ok, SymlinkAttrs} = ?rpc(ProviderSelector, lfm:make_symlink(
+                SessionId, ?FILE_REF(SpaceGuid), ?RAND_STR(24), ?RAND_STR(24)
+            )),
+            SymlinkAttrs;
+        ?LINK_TYPE ->
+            {ok, RegFileGuid} = ?rpc(ProviderSelector, lfm:create(
+                SessionId, SpaceGuid, ?RAND_STR(24), undefined
+            )),
+            {ok, HardlinkAttrs} = ?lfm_check(?rpc(ProviderSelector, lfm:make_link(
+                SessionId, ?FILE_REF(RegFileGuid), ?FILE_REF(SpaceGuid), ?RAND_STR(24)
+            ))),
+            HardlinkAttrs
+    end.

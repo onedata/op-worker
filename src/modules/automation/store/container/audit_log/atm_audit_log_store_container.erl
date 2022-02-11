@@ -60,13 +60,6 @@
 -export_type([initial_content/0, operation_options/0, browse_options/0, record/0]).
 
 
--define(ALLOWED_SEVERITIES, [
-    ?LOGGER_DEBUG, ?LOGGER_INFO, ?LOGGER_NOTICE,
-    ?LOGGER_WARNING, ?LOGGER_ALERT,
-    ?LOGGER_ERROR, ?LOGGER_CRITICAL, ?LOGGER_EMERGENCY
-]).
-
-
 %%%===================================================================
 %%% atm_store_container callbacks
 %%%===================================================================
@@ -285,7 +278,7 @@ prepare_audit_log_object(LogContent) ->
 %% @private
 -spec normalize_severity(any()) -> binary().
 normalize_severity(ProvidedSeverity) ->
-    case lists:member(ProvidedSeverity, ?ALLOWED_SEVERITIES) of
+    case lists:member(ProvidedSeverity, ?LOGGER_SEVERITIES) of
         true -> ProvidedSeverity;
         false -> ?LOGGER_INFO
     end.

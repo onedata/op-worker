@@ -22,7 +22,12 @@
 -include_lib("onenv_ct/include/oct_background.hrl").
 
 
-%% exported for CT
+%% API
+-export([
+    modules_to_load/0,
+    init_per_group/1,
+    end_per_group/1
+]).
 -export([
     create_test_base/1,
     apply_operation_test_base/1,
@@ -63,6 +68,19 @@
 %%%===================================================================
 %%% API functions
 %%%===================================================================
+
+
+modules_to_load() ->
+    [?MODULE, atm_store_test_utils].
+
+
+init_per_group(Config) ->
+    time_test_utils:freeze_time(Config),
+    Config.
+
+
+end_per_group(Config) ->
+    time_test_utils:unfreeze_time(Config).
 
 
 -spec create_test_base(#{
@@ -108,13 +126,6 @@ create_test_base(#{
         DefaultItemInitializer = PrepareItemInitializerFun(gen_valid_data(
             AtmWorkflowExecutionAuth, ItemInitializerDataSpec
         )),
-        InvalidItemInitializer = PrepareItemInitializerFun(gen_invalid_data(
-            AtmWorkflowExecutionAuth, ItemInitializerDataSpec
-        )),
-        ValidItemInitializer = PrepareItemInitializerFun(gen_valid_data(
-            AtmWorkflowExecutionAuth, ItemInitializerDataSpec
-        )),
-
         CreateStoreFun = fun(ContentInitializer) ->
             case rand:uniform(3) of
                 1 ->
@@ -134,6 +145,11 @@ create_test_base(#{
                     atm_store_api:create(AtmWorkflowExecutionAuth, ContentInitializer, StoreSchema)
             end
         end,
+        ValidItemInitializer = PrepareItemInitializerFun(gen_valid_data(
+            AtmWorkflowExecutionAuth, ItemInitializerDataSpec
+        )),
+        InvalidData = gen_invalid_data(AtmWorkflowExecutionAuth, ItemInitializerDataSpec),
+        InvalidItemInitializer = PrepareItemInitializerFun(InvalidData),
 
         % Assert creating store with non array initializer fails
         ?assertEqual(
@@ -144,7 +160,7 @@ create_test_base(#{
         % Assert creating store with array initializer containing some invalid items
         % fails
         ?assertEqual(
-            ?ERROR_ATM_DATA_TYPE_UNVERIFIED(InvalidItemInitializer, ItemInitializerDataType),
+            ?ERROR_ATM_DATA_TYPE_UNVERIFIED(InvalidData, ItemInitializerDataType),
             ?rpc(catch CreateStoreFun([ValidItemInitializer, InvalidItemInitializer]))
         ),
 
@@ -176,9 +192,6 @@ apply_operation_test_base(#{
     GenValidItemInitializerFun = fun(AtmDataSpec) ->
         PrepareItemInitializerFun(gen_valid_data(AtmWorkflowExecutionAuth, AtmDataSpec))
     end,
-    GenInvalidItemInitializerFun = fun(AtmDataSpec) ->
-        PrepareItemInitializerFun(gen_invalid_data(AtmWorkflowExecutionAuth, AtmDataSpec))
-    end,
     PrepareExpItemFun = fun(ItemInitializer, AtmDataSpec) ->
         PrepareItemFun(AtmWorkflowExecutionAuth, ItemInitializer, AtmDataSpec)
     end,
@@ -208,21 +221,22 @@ apply_operation_test_base(#{
             ?assertEqual(?ERROR_NOT_SUPPORTED, ?rpc(catch atm_store_api:apply_operation(
                 AtmWorkflowExecutionAuth, Operation, NewItemInitializer1, #{}, AtmStoreId
             ))),
-            ?assertMatch(InitialContent, get_content(AtmWorkflowExecutionAuth, AtmStoreId))
+            ?assertEqual(InitialContent, get_content(AtmWorkflowExecutionAuth, AtmStoreId))
         end, atm_task_schema_result_mapper:all_dispatch_functions() -- [append, extend]),
 
         % Assert append/extend with invalid arg(s) should fail
-        InvalidItemInitializer = GenInvalidItemInitializerFun(ItemInitializerDataSpec),
+        InvalidData = gen_invalid_data(AtmWorkflowExecutionAuth, ItemInitializerDataSpec),
+        InvalidItemInitializer = PrepareItemInitializerFun(InvalidData),
         lists:foreach(fun({Op, Args, ExpError}) ->
             ?assertEqual(ExpError, ?rpc(catch atm_store_api:apply_operation(
                 AtmWorkflowExecutionAuth, Op, Args, #{}, AtmStoreId
             ))),
-            ?assertMatch(InitialContent, get_content(AtmWorkflowExecutionAuth, AtmStoreId))
+            ?assertEqual(InitialContent, get_content(AtmWorkflowExecutionAuth, AtmStoreId))
         end, [
             {append, InvalidItemInitializer,
-                ?ERROR_ATM_DATA_TYPE_UNVERIFIED(InvalidItemInitializer, ItemInitializerDataType)},
+                ?ERROR_ATM_DATA_TYPE_UNVERIFIED(InvalidData, ItemInitializerDataType)},
             {extend, [NewItemInitializer1, InvalidItemInitializer],
-                ?ERROR_ATM_DATA_TYPE_UNVERIFIED(InvalidItemInitializer, ItemInitializerDataType)}
+                ?ERROR_ATM_DATA_TYPE_UNVERIFIED(InvalidData, ItemInitializerDataType)}
             %% TODO VFS-8686 refactor atm data types errors to properly handle list types
 %%            {extend, NewItemInitializer1,
 %%                ?ERROR_ATM_DATA_TYPE_UNVERIFIED(NewItemInitializer1, atm_array_type)}
@@ -237,7 +251,7 @@ apply_operation_test_base(#{
                 AtmWorkflowExecutionAuth, RandomOp, NewItemInitializer1, #{}, AtmStoreId
             ))
         ),
-        ?assertMatch(InitialContent, get_content(AtmWorkflowExecutionAuth, AtmStoreId)),
+        ?assertEqual(InitialContent, get_content(AtmWorkflowExecutionAuth, AtmStoreId)),
 
         % Otherwise operation should succeed
         ?rpc(atm_store_api:unfreeze(AtmStoreId)),
@@ -245,10 +259,7 @@ apply_operation_test_base(#{
             AtmWorkflowExecutionAuth, append, NewItemInitializer1, #{}, AtmStoreId
         ))),
         ExpContent1 = InitialContent ++ [NewItem1],
-        ?assertMatch(ExpContent1, get_content(AtmWorkflowExecutionAuth, AtmStoreId)),
-
-        % simulate time passage as operations of some stores (audit log) may depend on it
-        time_test_utils:simulate_seconds_passing(10),
+        ?assertEqual(ExpContent1, get_content(AtmWorkflowExecutionAuth, AtmStoreId)),
 
         NewItemInitializer2 = GenValidItemInitializerFun(ItemInitializerDataSpec),
         NewItemInitializer3 = GenValidItemInitializerFun(ItemInitializerDataSpec),
@@ -259,7 +270,7 @@ apply_operation_test_base(#{
         NewItem2 = PrepareExpItemFun(NewItemInitializer2, ItemInitializerDataSpec),
         NewItem3 = PrepareExpItemFun(NewItemInitializer3, ItemInitializerDataSpec),
         ExpContent2 = ExpContent1 ++ [NewItem2, NewItem3],
-        ?assertMatch(ExpContent2, get_content(AtmWorkflowExecutionAuth, AtmStoreId))
+        ?assertEqual(ExpContent2, get_content(AtmWorkflowExecutionAuth, AtmStoreId))
 
     end, AtmStoreConfigs).
 
@@ -329,7 +340,10 @@ iterator_test_base(#{
 
         %% Assert non accessible items (e.g. removed) are omitted from iterated items
         AccessibleItems = lists:filter(fun(ExpItem) ->
-            not RandomlyRemoveItemFun(AtmWorkflowExecutionAuth, ExpItem, AtmDataSpec)
+            case RandomlyRemoveItemFun(AtmWorkflowExecutionAuth, ExpItem, AtmDataSpec) of
+                {true, _} -> false;
+                false -> true
+            end
         end, ExpContent),
         AtmStoreIterator1 = ?rpc(atm_store_api:acquire_iterator(AtmStoreId, #atm_store_iterator_spec{
             store_schema_id = AtmStoreSchema#atm_store_schema.id,
@@ -368,15 +382,17 @@ browse_content_test_base(BrowsingMethod, #{
         ContentInitializer = lists:map(fun(_) ->
             PrepareItemInitializerFun(gen_valid_data(AtmWorkflowExecutionAuth, AtmDataSpec))
         end, lists:seq(1, Length)),
-        Content = lists:map(fun(ItemInitializer) ->
-            PrepareItemFun(AtmWorkflowExecutionAuth, ItemInitializer, AtmDataSpec)
-        end, ContentInitializer),
-
         {ok, AtmStoreId} = ?extract_key(?rpc(atm_store_api:create(
             AtmWorkflowExecutionAuth, ContentInitializer, AtmStoreSchema
         ))),
 
-        %% TODO rm some items? - browsing should contain errors
+        Content = lists:map(fun(ItemInitializer) ->
+            Item = PrepareItemFun(AtmWorkflowExecutionAuth, ItemInitializer, AtmDataSpec),
+            case RandomlyRemoveItemFun(AtmWorkflowExecutionAuth, Item, AtmDataSpec) of
+                {true, ExpError} -> ExpError;
+                false -> {ok, Item}
+            end
+        end, ContentInitializer),
 
         lists:foreach(fun(_) ->
             StartIndex = rand:uniform(Length),
@@ -388,7 +404,7 @@ browse_content_test_base(BrowsingMethod, #{
             BrowseOpts1 = BrowseOpts0#{limit => Limit},
 
             Expected = lists:map(fun(Index) ->
-                {integer_to_binary(Index), {ok, lists:nth(Index + 1, Content)}}
+                {integer_to_binary(Index), lists:nth(Index + 1, Content)}
             end, lists:seq(StartIndex, min(StartIndex + Limit - 1, Length - 1))),
 
             ?assertEqual(

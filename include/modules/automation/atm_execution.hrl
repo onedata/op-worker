@@ -190,6 +190,12 @@
 -define(LOGGER_CRITICAL, <<"critical">>).
 -define(LOGGER_EMERGENCY, <<"emergency">>).
 
+-define(LOGGER_SEVERITIES, [
+    ?LOGGER_DEBUG, ?LOGGER_INFO, ?LOGGER_NOTICE,
+    ?LOGGER_WARNING, ?LOGGER_ALERT,
+    ?LOGGER_ERROR, ?LOGGER_CRITICAL, ?LOGGER_EMERGENCY
+]).
+
 
 -define(atm_examine_error(__TYPE, __REASON, __STACKTRACE),
     case __TYPE of

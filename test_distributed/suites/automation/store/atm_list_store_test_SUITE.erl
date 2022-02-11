@@ -13,9 +13,6 @@
 -author("Michal Stanisz").
 
 -include("modules/automation/atm_execution.hrl").
--include("modules/logical_file_manager/lfm.hrl").
--include("test_rpc.hrl").
-
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
 
@@ -38,7 +35,7 @@
 ]).
 
 groups() -> [
-    {all_tests, [parallel], [
+    {infinite_log_based_stores_common_tests, [parallel], [
         create_test,
         apply_operation_test,
         iterator_test,
@@ -48,12 +45,11 @@ groups() -> [
 ].
 
 all() -> [
-    {group, all_tests}
+    {group, infinite_log_based_stores_common_tests}
 ].
 
 
 -define(PROVIDER_SELECTOR, krakow).
--define(rpc(Expr), ?rpc(?PROVIDER_SELECTOR, Expr)).
 
 
 %%%===================================================================
@@ -74,7 +70,7 @@ apply_operation_test(_Config) ->
         store_configs => example_configs(),
         get_item_initializer_data_spec_fun => fun get_item_initializer_data_spec/1,
         prepare_item_initializer_fun => fun prepare_item_initializer/1,
-        prepare_item_fun => fun ensure_fully_expanded_data/3
+        prepare_item_fun => fun prepare_item/3
     }).
 
 
@@ -83,7 +79,7 @@ iterator_test(_Config) ->
         store_configs => example_configs(),
         get_item_initializer_data_spec_fun => fun get_item_initializer_data_spec/1,
         prepare_item_initializer_fun => fun prepare_item_initializer/1,
-        prepare_item_fun => fun ensure_fully_expanded_data/3,
+        prepare_item_fun => fun prepare_item/3,
         randomly_remove_item_fun => fun randomly_remove_item/3
     }).
 
@@ -93,7 +89,7 @@ browse_by_index_test(_Config) ->
         store_configs => example_configs(),
         get_item_initializer_data_spec_fun => fun get_item_initializer_data_spec/1,
         prepare_item_initializer_fun => fun prepare_item_initializer/1,
-        prepare_item_fun => fun ensure_fully_expanded_data/3,
+        prepare_item_fun => fun prepare_item/3,
         randomly_remove_item_fun => fun randomly_remove_item/3
     }).
 
@@ -103,7 +99,7 @@ browse_by_offset_test(_Config) ->
         store_configs => example_configs(),
         get_item_initializer_data_spec_fun => fun get_item_initializer_data_spec/1,
         prepare_item_initializer_fun => fun prepare_item_initializer/1,
-        prepare_item_fun => fun ensure_fully_expanded_data/3,
+        prepare_item_fun => fun prepare_item/3,
         randomly_remove_item_fun => fun randomly_remove_item/3
     }).
 
@@ -143,15 +139,15 @@ prepare_item_initializer(Item) -> Item.
 
 
 %% @private
--spec ensure_fully_expanded_data(
+-spec prepare_item(
     atm_workflow_execution_auth:record(),
     atm_value:expanded(),
     atm_store:id()
 ) ->
     atm_value:expanded().
-ensure_fully_expanded_data(AtmWorkflowExecutionAuth, Item, ItemDataSpec) ->
+prepare_item(AtmWorkflowExecutionAuth, ItemInitializer, ItemDataSpec) ->
     atm_store_test_utils:ensure_fully_expanded_data(
-        ?PROVIDER_SELECTOR, AtmWorkflowExecutionAuth, Item, ItemDataSpec
+        ?PROVIDER_SELECTOR, AtmWorkflowExecutionAuth, ItemInitializer, ItemDataSpec
     ).
 
 
@@ -161,34 +157,11 @@ ensure_fully_expanded_data(AtmWorkflowExecutionAuth, Item, ItemDataSpec) ->
     atm_value:expanded(),
     atm_data_spec:record()
 ) ->
-    boolean().
-randomly_remove_item(AtmWorkflowExecutionAuth, #{<<"file_id">> := ObjectId}, #atm_data_spec{
-    type = atm_file_type
-}) ->
-    case rand:uniform(5) of
-        1 ->
-            SessionId = atm_workflow_execution_auth:get_session_id(AtmWorkflowExecutionAuth),
-            {ok, FileGuid} = file_id:objectid_to_guid(ObjectId),
-            ?rpc(lfm:rm_recursive(SessionId, ?FILE_REF(FileGuid))),
-            true;
-        _ ->
-            false
-    end;
-
-randomly_remove_item(AtmWorkflowExecutionAuth, #{<<"datasetId">> := DatasetId}, #atm_data_spec{
-    type = atm_dataset_type
-}) ->
-    case rand:uniform(5) of
-        1 ->
-            SessionId = atm_workflow_execution_auth:get_session_id(AtmWorkflowExecutionAuth),
-            ?rpc(mi_datasets:remove(SessionId, DatasetId)),
-            true;
-        _ ->
-            false
-    end;
-
-randomly_remove_item(_AtmWorkflowExecutionAuth, _Item, _AtmDataSpec) ->
-    false.
+    false | {true, errors:error()}.
+randomly_remove_item(AtmWorkflowExecutionAuth, Item, ItemDataSpec) ->
+    atm_store_test_utils:randomly_remove_item(
+        ?PROVIDER_SELECTOR, AtmWorkflowExecutionAuth, Item, ItemDataSpec
+    ).
 
 
 %===================================================================
@@ -197,7 +170,7 @@ randomly_remove_item(_AtmWorkflowExecutionAuth, _Item, _AtmDataSpec) ->
 
 
 init_per_suite(Config) ->
-    ModulesToLoad = [?MODULE, atm_store_test_utils, atm_infinite_log_based_stores_test_base],
+    ModulesToLoad = [?MODULE | atm_infinite_log_based_stores_test_base:modules_to_load()],
     oct_background:init_per_suite([{?LOAD_MODULES, ModulesToLoad} | Config], #onenv_test_config{
         onenv_scenario = "1op",
         envs = [{op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}]
@@ -208,17 +181,16 @@ end_per_suite(_Config) ->
     oct_background:end_per_suite().
 
 
-init_per_group(_Group, Config) ->
-    time_test_utils:freeze_time(Config),
-    Config.
+init_per_group(infinite_log_based_stores_common_tests, Config) ->
+    atm_infinite_log_based_stores_test_base:init_per_group(Config).
 
 
-end_per_group(_Group, Config) ->
-    time_test_utils:unfreeze_time(Config).
+end_per_group(infinite_log_based_stores_common_tests, Config) ->
+    atm_infinite_log_based_stores_test_base:end_per_group(Config).
 
 
 init_per_testcase(_Case, Config) ->
-    ct:timetrap({minutes, 5}),
+    ct:timetrap({minutes, 3}),
     Config.
 
 
