@@ -324,14 +324,11 @@ get_job(DocOrId) ->
 %% Provides information needed for task document synchronization basing on file_meta scope.
 %% @end
 %%--------------------------------------------------------------------
--spec get_sync_info(master_job() | undefined) -> {ok, traverse:sync_info()}.
+-spec get_sync_info(master_job()) -> {ok, traverse:sync_info()}.
 get_sync_info(#tree_traverse{file_ctx = FileCtx}) ->
     Scope = file_ctx:get_space_id_const(FileCtx),
     Info = get_sync_info(),
-    {ok, Info#{scope => Scope}};
-get_sync_info(undefined) ->
-    ?warning("Getting sync info for undefined job. Changes may not be propagated between providers."),
-    {ok, #{}}.
+    {ok, Info#{scope => Scope}}.
 
 
 %%--------------------------------------------------------------------

@@ -108,7 +108,7 @@ sync_file(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
                 false -> {false, undefined, FileName}
             end,
 
-            case find_synced_file_uuid(ParentUuid, FileName, FileBaseName, FileUuid) of
+            case map_to_existing_file_uuid(ParentUuid, FileName, FileBaseName, FileUuid) of
                 {error, not_found} ->
                     % Link from Parent to FileBaseName is missing.
                     % We must check deletion marker to ensure that file may be synced.
@@ -179,20 +179,14 @@ sync_file(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
     end.
 
 
--spec find_synced_file_uuid(file_meta:uuid(), file_meta:name(), file_meta:name(), file_meta:uuid() | undefined) ->
+-spec map_to_existing_file_uuid(file_meta:uuid(), file_meta:name(), file_meta:name(), file_meta:uuid() | undefined) ->
     {ok, file_meta:uuid()} | {error, not_found}.
-find_synced_file_uuid(ParentUuid, FileName, FileBaseName, ExpectedFileUuid) ->
-    case file_meta:get_child_uuid_and_tree_id(ParentUuid, all, FileBaseName) of
-        {ok, ExpectedFileUuid, _} ->
-            {ok, ExpectedFileUuid};
-        {ok, ResolvedUuid, _} when ExpectedFileUuid =:= undefined ->
+map_to_existing_file_uuid(ParentUuid, FileName, FileBaseName, undefined) ->
+    case file_meta:get_matching_child_uuids_with_tree_ids(ParentUuid, all, FileBaseName) of
+        {ok, [{ResolvedUuid, _}]} ->
             {ok, ResolvedUuid};
-        {ok, _ResolvedUuid, _} ->
-            {error, not_found};
-        {error, not_found} ->
-            {error, not_found};
-        {error, {?EINVAL, Links}} when ExpectedFileUuid =:= undefined ->
-            Filtered = lists:filter(fun(FileUuid) ->
+        {ok, UuidsWithTreeIds} ->
+            Filtered = lists:filter(fun({FileUuid, _}) ->
                 case file_location:get_local(FileUuid) of
                     {ok, #document{value = #file_location{
                         storage_file_created = true,
@@ -202,16 +196,23 @@ find_synced_file_uuid(ParentUuid, FileName, FileBaseName, ExpectedFileUuid) ->
                     (_) ->
                         false
                 end
-            end, Links),
+            end, UuidsWithTreeIds),
             case Filtered of
-                [FileUuid] -> {ok, FileUuid};
+                [{FileUuid, _}] -> {ok, FileUuid};
                 _ -> {error, not_found}
             end;
-        {error, {?EINVAL, Links}} ->
-            case lists:member(ExpectedFileUuid, Links) of
+        {error, not_found} ->
+            {error, not_found}
+    end;
+map_to_existing_file_uuid(ParentUuid, _FileName, FileBaseName, ExpectedFileUuid) ->
+    case file_meta:get_matching_child_uuids_with_tree_ids(ParentUuid, all, FileBaseName) of
+        {ok, UuidsWithTreeIds} ->
+            case lists:any(fun({FileUuid, _}) -> FileUuid =:= ExpectedFileUuid end, UuidsWithTreeIds) of
                 true -> {ok, ExpectedFileUuid};
                 false -> {error, not_found}
-            end
+            end;
+        {error, not_found} ->
+            {error, not_found}
     end.
 
 
@@ -1281,9 +1282,9 @@ is_suffixed(FileName) ->
             % Check if FileUuid is existing uuid - not part of a file_name
             case file_meta:get_including_deleted(FileUuid) of
                 {ok, _} ->
-                    FileName2 = binary:part(
+                    FileNameWithoutSuffix = binary:part(
                         FileName, 0, size(FileName) - size(FileUuid) - size(?CONFLICTING_STORAGE_FILE_SUFFIX_SEPARATOR)),
-                    {true, FileUuid, FileName2};
+                    {true, FileUuid, FileNameWithoutSuffix};
                 {error, not_found} ->
                     false
             end;

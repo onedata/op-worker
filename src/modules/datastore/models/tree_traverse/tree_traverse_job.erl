@@ -96,7 +96,7 @@ delete_master_job(<<?MAIN_JOB_PREFIX, _/binary>> = Key, Job, Scope, CallbackModu
         true -> Ctx#{scope => Scope};
         false -> Ctx
     end,
-    Ctx3 = couchbase_driver:set_expiry(Ctx2, ?MAIN_JOB_EXPIRY),
+    Ctx3 = datastore_model:set_expiry(Ctx2, ?MAIN_JOB_EXPIRY),
     datastore_model:delete(Ctx3, Key);
 delete_master_job(Key, _Job, _, _CallbackModule) ->
     datastore_model:delete(?CTX, Key).
