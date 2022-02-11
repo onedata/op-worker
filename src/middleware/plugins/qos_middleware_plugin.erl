@@ -88,6 +88,7 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = audit_log}}) -> #{
 };
 data_spec(#op_req{operation = get, gri = #gri{aspect = time_series_collections}}) ->
     undefined;
+% @TODO VFS-8958 Adjust when time series store browsing API is defined
 data_spec(#op_req{operation = get, gri = #gri{aspect = {time_series_collection, _}}}) -> #{
     required => #{
         <<"metrics">> => {json, fun(RequestedMetrics) ->
@@ -256,19 +257,17 @@ get(#op_req{gri = #gri{id = QosEntryId, aspect = audit_log}, data = Data}, _QosE
     {ok, value, BrowseResult};
 
 get(#op_req{gri = #gri{id = QosEntryId, aspect = time_series_collections}}, _QosEntry) ->
-    {ok, SpaceId} = qos_entry:get_space_id(QosEntryId),
     {ok, FilesTSIds} = qos_transfer_stats:list_time_series_ids(QosEntryId, ?FILES_STATS),
     {ok, BytesTSIds} = qos_transfer_stats:list_time_series_ids(QosEntryId, ?BYTES_STATS),
     {ok, value, #{
-        ?FILES_STATS => [ts_id_to_provider_id(TSId, SpaceId) || TSId <- FilesTSIds],
-        ?BYTES_STATS => [ts_id_to_provider_id(TSId, SpaceId) || TSId <- BytesTSIds]
+        ?FILES_STATS => FilesTSIds,
+        ?BYTES_STATS => BytesTSIds
     }};
 
 get(#op_req{gri = #gri{id = QosEntryId, aspect = {time_series_collection, Type}}, data = Data}, _QosEntry) ->
-    {ok, SpaceId} = qos_entry:get_space_id(QosEntryId),
     RequestedMetrics = maps:get(<<"metrics">>, Data),
     RequestRange = maps:fold(fun(TimeSeriesId, MetricIds, Acc) ->
-        Acc ++ [{provider_id_to_ts_id(TimeSeriesId, SpaceId), MId} || MId <- MetricIds]
+        Acc ++ [{TimeSeriesId, MId} || MId <- MetricIds]
     end, [], RequestedMetrics),
     PossiblyUndefOpts = #{
         start => maps:get(<<"startTimestamp">>, Data, undefined),
@@ -287,7 +286,7 @@ get(#op_req{gri = #gri{id = QosEntryId, aspect = {time_series_collection, Type}}
                 <<"windows">> => maps:fold(fun({TimeSeriesId, MetricId}, Windows, Acc) ->
                     MetricsForCurrentTimeSeries = maps:get(TimeSeriesId, Acc, #{}),
                     Acc#{
-                        ts_id_to_provider_id(TimeSeriesId, SpaceId) => MetricsForCurrentTimeSeries#{
+                        TimeSeriesId => MetricsForCurrentTimeSeries#{
                             MetricId => lists:map(fun({Timestamp, {_ValuesCount, ValuesSum}}) ->
                                 #{
                                     <<"timestamp">> => Timestamp,
@@ -347,21 +346,3 @@ entry_to_details(QosEntry, Status, SpaceId) ->
         <<"fileId">> => QosRootFileObjectId,
         <<"status">> => Status
     }.
-
-
-%% @private
--spec ts_id_to_provider_id(od_storage:id(), od_space:id()) -> od_provider:id().
-ts_id_to_provider_id(?TOTAL_TIME_SERIES_ID, _SpaceId) ->
-    ?TOTAL_TIME_SERIES_ID;
-ts_id_to_provider_id(StorageId, SpaceId) ->
-    storage:fetch_provider_id_of_remote_storage(StorageId, SpaceId).
-
-
-%% @private
--spec provider_id_to_ts_id(od_provider:id(), od_space:id()) -> od_storage:id().
-provider_id_to_ts_id(?TOTAL_TIME_SERIES_ID, _SpaceId) ->
-    ?TOTAL_TIME_SERIES_ID;
-provider_id_to_ts_id(ProviderId, SpaceId) ->
-    {ok, StoragesToAccessType} = space_logic:get_storages_by_provider(SpaceId, ProviderId),
-    %% @TODO VFS-5497 Rework when multisupport is implemented
-    hd(maps:keys(StoragesToAccessType)).

@@ -39,8 +39,12 @@
     get_id/1, get_block_size/1, get_helper/1, get_helper_name/1,
     get_luma_feed/1, get_luma_config/1
 ]).
--export([fetch_name/1, fetch_name_of_remote_storage/2, fetch_provider_id_of_remote_storage/2, 
-    fetch_qos_parameters_of_local_storage/1, fetch_qos_parameters_of_remote_storage/2]).
+-export([
+    fetch_shared_data/2,
+    fetch_name_of_local_storage/1, fetch_name_of_remote_storage/2,
+    fetch_provider_id_of_remote_storage/2,
+    fetch_qos_parameters_of_local_storage/1, fetch_qos_parameters_of_remote_storage/2
+]).
 -export([should_skip_storage_detection/1, is_imported/1, is_posix_compatible/1, is_local_storage_readonly/1, is_storage_readonly/2, is_archive/1]).
 -export([has_non_auto_luma_feed/1]).
 -export([is_local/1]).
@@ -149,7 +153,7 @@ describe(StorageData) ->
     BaseWithLuma = maps:merge(Base, LumaConfigDescription),
     {ok, BaseWithLuma#{
         <<"id">> => StorageId,
-        <<"name">> => fetch_name(StorageId),
+        <<"name">> => fetch_name_of_local_storage(StorageId),
         <<"type">> => helper:get_name(Helper),
         <<"importedStorage">> => is_imported(StorageId),
         <<"readonly">> => is_local_storage_readonly(StorageId),
@@ -266,8 +270,14 @@ get_luma_config(StorageData) ->
     storage_config:get_luma_config(StorageData).
 
 
--spec fetch_name(id()) -> name().
-fetch_name(StorageId) when is_binary(StorageId) ->
+-spec fetch_shared_data(id(), od_space:id()) -> middleware:data().
+fetch_shared_data(StorageId, SpaceId) when is_binary(StorageId) ->
+    {ok, Data} = ?throw_on_error(storage_logic:get_shared_data(StorageId, SpaceId)),
+    Data.
+
+
+-spec fetch_name_of_local_storage(id()) -> name().
+fetch_name_of_local_storage(StorageId) when is_binary(StorageId) ->
     {ok, Name} = ?throw_on_error(storage_logic:get_name_of_local_storage(StorageId)),
     Name.
 

@@ -160,6 +160,8 @@ translate_resource(_, #gri{type = op_share} = GRI, Data) ->
     share_gui_gs_translator:translate_resource(GRI, Data);
 translate_resource(_, #gri{type = op_space} = GRI, Data) ->
     space_gui_gs_translator:translate_resource(GRI, Data);
+translate_resource(_, #gri{type = op_storage} = GRI, Value) ->
+    storage_gui_gs_translator:translate_resource(GRI, Value);
 translate_resource(_, #gri{type = op_transfer} = GRI, Data) ->
     transfer_gui_gs_translator:translate_resource(GRI, Data);
 translate_resource(_, #gri{type = op_user} = GRI, Data) ->
