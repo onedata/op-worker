@@ -16,10 +16,7 @@
 -include("modules/datastore/datastore_runner.hrl").
 -include("test_rpc.hrl").
 
--include_lib("ctool/include/automation/automation.hrl").
--include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
--include_lib("onenv_ct/include/oct_background.hrl").
 
 
 %% API
@@ -126,25 +123,9 @@ create_test_base(#{
         DefaultItemInitializer = PrepareItemInitializerFun(gen_valid_data(
             AtmWorkflowExecutionAuth, ItemInitializerDataSpec
         )),
-        CreateStoreFun = fun(ContentInitializer) ->
-            case rand:uniform(3) of
-                1 ->
-                    StoreSchema = atm_store_test_utils:build_store_schema(AtmStoreConfig, false),
-                    atm_store_api:create(AtmWorkflowExecutionAuth, ContentInitializer, StoreSchema);
-                2 ->
-                    StoreSchema = atm_store_test_utils:build_store_schema(
-                        AtmStoreConfig, false, ContentInitializer
-                    ),
-                    atm_store_api:create(AtmWorkflowExecutionAuth, undefined, StoreSchema);
-                3 ->
-                    % Default content initializer (from schema) should be overridden
-                    % by one specified in args when creating store
-                    StoreSchema = atm_store_test_utils:build_store_schema(
-                        AtmStoreConfig, false, [DefaultItemInitializer]
-                    ),
-                    atm_store_api:create(AtmWorkflowExecutionAuth, ContentInitializer, StoreSchema)
-            end
-        end,
+        CreateStoreFun = atm_store_test_utils:build_create_store_with_initial_content_fun(
+            AtmWorkflowExecutionAuth, AtmStoreConfig, [DefaultItemInitializer]
+        ),
         ValidItemInitializer = PrepareItemInitializerFun(gen_valid_data(
             AtmWorkflowExecutionAuth, ItemInitializerDataSpec
         )),

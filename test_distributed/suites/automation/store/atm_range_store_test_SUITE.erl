@@ -18,7 +18,7 @@
 
 -include_lib("ctool/include/automation/automation.hrl").
 -include_lib("ctool/include/errors.hrl").
--include_lib("ctool/include/test/assertions.hrl").
+-include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
 
 
@@ -66,16 +66,7 @@ all() -> [
 
 
 -define(PROVIDER_SELECTOR, krakow).
--define(STORE_SCHEMA_ID, <<"dummy_range_store_id">>).
-
--define(STORE_SCHEMA, #atm_store_schema{
-    id = ?STORE_SCHEMA_ID,
-    name = <<"range_store">>,
-    description = <<"description">>,
-    requires_initial_content = true,
-    type = range,
-    config = #atm_range_store_config{}
-}).
+-define(ATM_STORE_CONFIG, #atm_range_store_config{}).
 
 -define(rpc(Expr), ?rpc(?PROVIDER_SELECTOR, Expr)).
 
@@ -88,9 +79,20 @@ all() -> [
 create_test(_Config) ->
     AtmWorkflowExecutionAuth = create_workflow_execution_auth(),
 
+    % Assert it is not possible to create range store with no initial content
+    ?assertEqual(
+        ?ERROR_MISSING_REQUIRED_VALUE(<<"end">>),
+        ?rpc(catch atm_store_api:create(
+            AtmWorkflowExecutionAuth,
+            undefined,
+            atm_store_test_utils:build_store_schema(?ATM_STORE_CONFIG, false)
+        ))
+    ),
+
     lists:foreach(fun({InvalidInitialContent, ExpError}) ->
+        AtmStoreSchema = atm_store_test_utils:build_store_schema(?ATM_STORE_CONFIG, true),
         ?assertEqual(ExpError, ?rpc(catch atm_store_api:create(
-            AtmWorkflowExecutionAuth, InvalidInitialContent, ?STORE_SCHEMA
+            AtmWorkflowExecutionAuth, InvalidInitialContent, AtmStoreSchema
         )))
     end, [
         {undefined, ?ERROR_ATM_STORE_MISSING_REQUIRED_INITIAL_CONTENT},
@@ -118,10 +120,13 @@ create_test(_Config) ->
         }
     ]),
 
+    CreateStoreFun = atm_store_test_utils:build_create_store_with_initial_content_fun(
+        AtmWorkflowExecutionAuth, ?ATM_STORE_CONFIG, #{<<"end">> => 989}
+    ),
     lists:foreach(fun(ValidInitialContent) ->
         ?assertMatch(
             {ok, #document{value = #atm_store{initial_content = ValidInitialContent, frozen = false}}},
-            ?rpc(atm_store_api:create(AtmWorkflowExecutionAuth, ValidInitialContent, ?STORE_SCHEMA))
+            ?rpc(CreateStoreFun(ValidInitialContent))
         )
     end, [
         #{<<"end">> => 10},
@@ -133,10 +138,11 @@ create_test(_Config) ->
 
 apply_operation_test(_Config) ->
     AtmWorkflowExecutionAuth = create_workflow_execution_auth(),
+    AtmStoreSchema = atm_store_test_utils:build_store_schema(?ATM_STORE_CONFIG),
 
     InitialContent = #{<<"start">> => 5, <<"end">> => 10, <<"step">> => 2},
     {ok, AtmStoreId} = ?extract_key(?rpc(atm_store_api:create(
-        AtmWorkflowExecutionAuth, InitialContent, ?STORE_SCHEMA
+        AtmWorkflowExecutionAuth, InitialContent, AtmStoreSchema
     ))),
 
     % Assert none operation is supported
@@ -174,14 +180,18 @@ iterate_in_chunks_3_with_start_10_end_10_step_2_test(_Config) ->
     ok | no_return().
 iterate_test_base(ChunkSize, AtmRangeStoreInitialValue) ->
     AtmWorkflowExecutionAuth = create_workflow_execution_auth(),
+    AtmStoreSchema = atm_store_test_utils:build_store_schema(?ATM_STORE_CONFIG),
+    AtmStoreSchemaId = AtmStoreSchema#atm_store_schema.id,
 
     {ok, AtmStoreId} = ?extract_key(?rpc(atm_store_api:create(
-        AtmWorkflowExecutionAuth, AtmRangeStoreInitialValue, ?STORE_SCHEMA
+        AtmWorkflowExecutionAuth, AtmRangeStoreInitialValue, AtmStoreSchema
     ))),
-    AtmWorkflowExecutionEnv = build_workflow_execution_env(AtmWorkflowExecutionAuth, AtmStoreId),
+    AtmWorkflowExecutionEnv = build_workflow_execution_env(
+        AtmWorkflowExecutionAuth, AtmStoreSchemaId, AtmStoreId
+    ),
 
     Iterator = ?rpc(atm_store_api:acquire_iterator(AtmStoreId, #atm_store_iterator_spec{
-        store_schema_id = ?STORE_SCHEMA_ID,
+        store_schema_id = AtmStoreSchemaId,
         max_batch_size = ChunkSize
     })),
     ExpBatches = atm_store_test_utils:split_into_chunks(ChunkSize, [], lists:seq(
@@ -195,16 +205,19 @@ iterate_test_base(ChunkSize, AtmRangeStoreInitialValue) ->
 
 reuse_iterator_test(_Config) ->
     AtmWorkflowExecutionAuth = create_workflow_execution_auth(),
+    AtmStoreSchema = atm_store_test_utils:build_store_schema(?ATM_STORE_CONFIG),
+    AtmStoreSchemaId = AtmStoreSchema#atm_store_schema.id,
 
     {ok, AtmStoreId} = ?extract_key(?rpc(atm_store_api:create(
         AtmWorkflowExecutionAuth,
         #{<<"start">> => 2, <<"end">> => 16, <<"step">> => 3},
-        ?STORE_SCHEMA
+        AtmStoreSchema
     ))),
-    AtmWorkflowExecutionEnv = build_workflow_execution_env(AtmWorkflowExecutionAuth, AtmStoreId),
-
+    AtmWorkflowExecutionEnv = build_workflow_execution_env(
+        AtmWorkflowExecutionAuth, AtmStoreSchemaId, AtmStoreId
+    ),
     Iterator0 = ?rpc(atm_store_api:acquire_iterator(AtmStoreId, #atm_store_iterator_spec{
-        store_schema_id = ?STORE_SCHEMA_ID,
+        store_schema_id = AtmStoreSchemaId,
         max_batch_size = 1
     })),
 
@@ -226,10 +239,11 @@ reuse_iterator_test(_Config) ->
 
 browse_test(_Config) ->
     AtmWorkflowExecutionAuth = create_workflow_execution_auth(),
+    AtmStoreSchema = atm_store_test_utils:build_store_schema(?ATM_STORE_CONFIG),
 
     Content = #{<<"start">> => 2, <<"end">> => 16, <<"step">> => 3},
     {ok, AtmStoreId} = ?extract_key(?rpc(atm_store_api:create(
-        AtmWorkflowExecutionAuth, Content, ?STORE_SCHEMA
+        AtmWorkflowExecutionAuth, Content, AtmStoreSchema
     ))),
 
     ?assertEqual(
@@ -252,14 +266,15 @@ create_workflow_execution_auth() ->
 
 
 %% @private
--spec build_workflow_execution_env(atm_workflow_execution_auth:record(), atm_store:id()) ->
+-spec build_workflow_execution_env(
+    atm_workflow_execution_auth:record(), automation:id(), atm_store:id()) ->
     atm_workflow_execution_env:record().
-build_workflow_execution_env(AtmWorkflowExecutionAuth, AtmStoreId) ->
+build_workflow_execution_env(AtmWorkflowExecutionAuth, AtmStoreSchemaId, AtmStoreId) ->
     atm_workflow_execution_env:build(
         atm_workflow_execution_auth:get_space_id(AtmWorkflowExecutionAuth),
         atm_workflow_execution_auth:get_workflow_execution_id(AtmWorkflowExecutionAuth),
         0,
-        #{?STORE_SCHEMA_ID => AtmStoreId}
+        #{AtmStoreSchemaId => AtmStoreId}
     ).
 
 
@@ -299,7 +314,8 @@ assert_all_items_listed(AtmWorkflowExecutionEnv, Iterator0, [ExpBatch | RestBatc
 
 
 init_per_suite(Config) ->
-    oct_background:init_per_suite(Config, #onenv_test_config{
+    ModulesToLoad = [?MODULE, atm_store_test_utils],
+    oct_background:init_per_suite([{?LOAD_MODULES, ModulesToLoad} | Config], #onenv_test_config{
         onenv_scenario = "1op",
         envs = [{op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}]
     }).

@@ -78,18 +78,6 @@ all() -> [
 
 
 -define(PROVIDER_SELECTOR, krakow).
--define(STORE_SCHEMA_ID, <<"dummy_tree_forest_store_id">>).
-
--define(STORE_SCHEMA, ?STORE_SCHEMA(atm_file_type)).
--define(STORE_SCHEMA(DataType), #atm_store_schema{
-    id = ?STORE_SCHEMA_ID,
-    name = <<"tree_forest_store">>,
-    description = <<"description">>,
-    requires_initial_content = false,
-    type = tree_forest,
-    config = #atm_tree_forest_store_config{item_data_spec = #atm_data_spec{type = DataType}}
-}).
-
 -define(rpc(Expr), ?rpc(?PROVIDER_SELECTOR, Expr)).
 
 -define(ATTEMPTS, 30).
@@ -494,8 +482,11 @@ create_iteration_test_env(ProviderSelector, MaxBatchSize, Depth, Type, WorkflowU
             atm_dataset_type -> #{<<"datasetId">> => Root}
         end
     end, Roots),
+    AtmStoreSchema = atm_store_test_utils:build_store_schema(#atm_tree_forest_store_config{
+        item_data_spec = #atm_data_spec{type = Type}
+    }),
     {ok, AtmStoreId} = ?extract_key(?rpc(ProviderSelector, atm_store_api:create(
-        AtmWorkflowExecutionAuth, RootsToAdd, ?STORE_SCHEMA(Type)
+        AtmWorkflowExecutionAuth, RootsToAdd, AtmStoreSchema
     ))),
     AtmStoreIteratorSpec = #atm_store_iterator_spec{
         store_schema_id = AtmStoreDummySchemaId,

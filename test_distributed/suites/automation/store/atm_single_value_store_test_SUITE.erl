@@ -16,7 +16,6 @@
 -include("modules/datastore/datastore_runner.hrl").
 -include("test_rpc.hrl").
 
--include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
 
@@ -51,18 +50,6 @@ all() -> [
 
 
 -define(PROVIDER_SELECTOR, krakow).
--define(STORE_SCHEMA_ID, <<"dummy_single_value_store_id">>).
-
--define(STORE_SCHEMA(__REQUIRES_INITIAL_VALUE, __CONFIG), #atm_store_schema{
-    id = ?STORE_SCHEMA_ID,
-    name = <<"single_value_store">>,
-    description = <<"description">>,
-    type = single_value,
-    requires_initial_content = __REQUIRES_INITIAL_VALUE,
-    config = __CONFIG
-}).
--define(STORE_SCHEMA(__CONFIG), ?STORE_SCHEMA(false, __CONFIG)).
-
 -define(rpc(Expr), ?rpc(?PROVIDER_SELECTOR, Expr)).
 
 
@@ -74,31 +61,44 @@ all() -> [
 create_test(_Config) ->
     AtmWorkflowExecutionAuth = create_workflow_execution_auth(),
 
-    ExampleConfigs = example_configs(),
-    ExampleConfig = lists_utils:random_element(ExampleConfigs),
+    ExampleAtmStoreConfigs = example_configs(),
+    ExampleAtmStoreConfig = lists_utils:random_element(ExampleAtmStoreConfigs),
 
     ?assertEqual(
         ?ERROR_ATM_STORE_MISSING_REQUIRED_INITIAL_CONTENT,
-        ?rpc(catch atm_store_api:create(AtmWorkflowExecutionAuth, undefined, ?STORE_SCHEMA(true, ExampleConfig)))
+        ?rpc(catch atm_store_api:create(
+            AtmWorkflowExecutionAuth,
+            undefined,
+            atm_store_test_utils:build_store_schema(ExampleAtmStoreConfig, true)
+        ))
     ),
     ?assertMatch(
         {ok, #document{value = #atm_store{initial_content = undefined, frozen = false}}},
-        ?rpc(atm_store_api:create(AtmWorkflowExecutionAuth, undefined, ?STORE_SCHEMA(false, ExampleConfig)))
+        ?rpc(atm_store_api:create(
+            AtmWorkflowExecutionAuth,
+            undefined,
+            atm_store_test_utils:build_store_schema(ExampleAtmStoreConfig, false)
+        ))
     ),
 
-    lists:foreach(fun(Config = #atm_single_value_store_config{item_data_spec = ItemDataSpec}) ->
+    lists:foreach(fun(AtmStoreConfig = #atm_single_value_store_config{item_data_spec = ItemDataSpec}) ->
+        DefaultItem = gen_valid_data(AtmWorkflowExecutionAuth, ItemDataSpec),
+        CreateStoreFun = atm_store_test_utils:build_create_store_with_initial_content_fun(
+            AtmWorkflowExecutionAuth, AtmStoreConfig, DefaultItem
+        ),
+
         InvalidItem = gen_invalid_data(AtmWorkflowExecutionAuth, ItemDataSpec),
         ?assertEqual(
             ?ERROR_ATM_DATA_TYPE_UNVERIFIED(InvalidItem, ItemDataSpec#atm_data_spec.type),
-            ?rpc(catch atm_store_api:create(AtmWorkflowExecutionAuth, InvalidItem, ?STORE_SCHEMA(Config)))
+            ?rpc(catch CreateStoreFun(InvalidItem))
         ),
 
         ValidItem = gen_valid_data(AtmWorkflowExecutionAuth, ItemDataSpec),
         ?assertMatch(
             {ok, #document{value = #atm_store{initial_content = ValidItem, frozen = false}}},
-            ?rpc(atm_store_api:create(AtmWorkflowExecutionAuth, ValidItem, ?STORE_SCHEMA(Config)))
+            ?rpc(CreateStoreFun(ValidItem))
         )
-    end, ExampleConfigs).
+    end, ExampleAtmStoreConfigs).
 
 
 apply_operation_test(_Config) ->
@@ -116,8 +116,9 @@ apply_operation_test(_Config) ->
         NewItem = gen_valid_data(AtmWorkflowExecutionAuth, ItemDataSpec),
         FullyExpandedNewItem = ensure_fully_expanded_data(AtmWorkflowExecutionAuth, NewItem, ItemDataSpec),
 
+        AtmStoreSchema = atm_store_test_utils:build_store_schema(Config),
         {ok, AtmStoreId} = ?extract_key(?rpc(atm_store_api:create(
-            AtmWorkflowExecutionAuth, InitialItem, ?STORE_SCHEMA(Config)
+            AtmWorkflowExecutionAuth, InitialItem, AtmStoreSchema
         ))),
 
         % Assert all operations but 'set' are unsupported
@@ -141,7 +142,7 @@ apply_operation_test(_Config) ->
         % Assert it is not possible to perform operation on store when it is frozen
         ?rpc(atm_store_api:freeze(AtmStoreId)),
         ?assertEqual(
-            ?ERROR_ATM_STORE_FROZEN(?STORE_SCHEMA_ID),
+            ?ERROR_ATM_STORE_FROZEN(AtmStoreSchema#atm_store_schema.id),
             ?rpc(catch atm_store_api:apply_operation(
                 AtmWorkflowExecutionAuth, set, NewItem, #{}, AtmStoreId
             ))
@@ -163,18 +164,19 @@ iterator_test(_Config) ->
     AtmWorkflowExecutionAuth = create_workflow_execution_auth(),
 
     lists:foreach(fun(Config = #atm_single_value_store_config{item_data_spec = ItemDataSpec}) ->
+        AtmStoreSchema = atm_store_test_utils:build_store_schema(Config),
         {ok, AtmStoreId} = ?extract_key(?rpc(atm_store_api:create(
-            AtmWorkflowExecutionAuth, undefined, ?STORE_SCHEMA(Config)
+            AtmWorkflowExecutionAuth, undefined, AtmStoreSchema
         ))),
         AtmStoreIteratorSpec = #atm_store_iterator_spec{
-            store_schema_id = ?STORE_SCHEMA_ID,
+            store_schema_id = AtmStoreSchema#atm_store_schema.id,
             max_batch_size = rand:uniform(8)
         },
         AtmWorkflowExecutionEnv = atm_workflow_execution_env:build(
             atm_workflow_execution_auth:get_space_id(AtmWorkflowExecutionAuth),
             atm_workflow_execution_auth:get_workflow_execution_id(AtmWorkflowExecutionAuth),
             0,
-            #{?STORE_SCHEMA_ID => AtmStoreId}
+            #{AtmStoreSchema#atm_store_schema.id => AtmStoreId}
         ),
 
         AtmStoreIterator0 = ?rpc(atm_store_api:acquire_iterator(AtmStoreId, AtmStoreIteratorSpec)),
@@ -204,8 +206,9 @@ browse_test(_Config) ->
     AtmWorkflowExecutionAuth = create_workflow_execution_auth(),
 
     lists:foreach(fun(Config = #atm_single_value_store_config{item_data_spec = ItemDataSpec}) ->
+        AtmStoreSchema = atm_store_test_utils:build_store_schema(Config),
         {ok, AtmStoreId} = ?extract_key(?rpc(atm_store_api:create(
-            AtmWorkflowExecutionAuth, undefined, ?STORE_SCHEMA(Config)
+            AtmWorkflowExecutionAuth, undefined, AtmStoreSchema
         ))),
         ?assertEqual(
             {[], true},

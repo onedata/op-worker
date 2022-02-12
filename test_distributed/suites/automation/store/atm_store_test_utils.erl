@@ -19,11 +19,13 @@
 -include("test_rpc.hrl").
 
 -include_lib("ctool/include/errors.hrl").
+-include_lib("ctool/include/test/test_utils.hrl").
 
 %% API
 -export([create_workflow_execution_auth/3]).
 -export([
     build_store_schema/1, build_store_schema/2, build_store_schema/3,
+    build_create_store_with_initial_content_fun/3,
     build_workflow_execution_env/3,
     gen_valid_data/3,
     gen_invalid_data/3,
@@ -35,6 +37,8 @@
 
 -define(RAND_STR(Bytes), str_utils:rand_hex(Bytes)).
 -define(RAND_INT(From, To), From + rand:uniform(To - From + 1) - 1).
+
+-define(ATTEMPTS, 60).
 
 
 %%%===================================================================
@@ -84,6 +88,38 @@ build_store_schema(Config, RequiresInitialContent, DefaultInitialContent) ->
         requires_initial_content = RequiresInitialContent,
         default_initial_content = DefaultInitialContent
     }.
+
+
+-spec build_create_store_with_initial_content_fun(
+    atm_workflow_execution_auth:record(),
+    atm_store_config:record(),
+    atm_value:expanded()
+) ->
+    fun((atm_value:expanded()) -> {ok, atm_store:doc()} | no_return()).
+build_create_store_with_initial_content_fun(
+    AtmWorkflowExecutionAuth,
+    AtmStoreConfig,
+    DefaultContentInitializer
+) ->
+    fun(ContentInitializer) ->
+        case rand:uniform(3) of
+            1 ->
+                StoreSchema = atm_store_test_utils:build_store_schema(AtmStoreConfig, false),
+                atm_store_api:create(AtmWorkflowExecutionAuth, ContentInitializer, StoreSchema);
+            2 ->
+                StoreSchema = atm_store_test_utils:build_store_schema(
+                    AtmStoreConfig, false, ContentInitializer
+                ),
+                atm_store_api:create(AtmWorkflowExecutionAuth, undefined, StoreSchema);
+            3 ->
+                % Default content initializer (from schema) should be overridden
+                % by one specified in args when creating store
+                StoreSchema = atm_store_test_utils:build_store_schema(
+                    AtmStoreConfig, false, DefaultContentInitializer
+                ),
+                atm_store_api:create(AtmWorkflowExecutionAuth, ContentInitializer, StoreSchema)
+        end
+    end.
 
 
 -spec build_workflow_execution_env(
@@ -232,7 +268,6 @@ ensure_fully_expanded_data(ProviderSelector, AtmWorkflowExecutionAuth, Data, Atm
     ExpandedData.
 
 
-%% @private
 -spec randomly_remove_item(
     oct_background:node_selector(),
     atm_workflow_execution_auth:record(),
@@ -247,7 +282,11 @@ randomly_remove_item(ProviderSelector, AtmWorkflowExecutionAuth, Item, #atm_data
         1 ->
             SessionId = atm_workflow_execution_auth:get_session_id(AtmWorkflowExecutionAuth),
             {ok, FileGuid} = file_id:objectid_to_guid(maps:get(<<"file_id">>, Item)),
-            ?rpc(ProviderSelector, lfm:rm_recursive(SessionId, ?FILE_REF(FileGuid))),
+            FileRef = ?FILE_REF(FileGuid),
+
+            ?rpc(ProviderSelector, lfm:rm_recursive(SessionId, FileRef)),
+            ?assertEqual({error, ?ENOENT}, ?rpc(ProviderSelector, lfm:stat(SessionId, FileRef)), ?ATTEMPTS),
+
             {true, ?ERROR_POSIX(?ENOENT)};
         _ ->
             false
