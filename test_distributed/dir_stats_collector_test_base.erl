@@ -294,28 +294,17 @@ check_space_dir_values_map_and_time_series_collection(Config, NodesSelector, Spa
     {ok, {CurrentValues, WindowsMap}} = ?assertMatch({ok, {_, _}},
         rpc:call(Worker, dir_size_stats, get_stats_and_time_series_collections, [SpaceGuid])),
 
-    FilteredExpectedMap =  maps:remove(?TOTAL_SIZE, ExpectedMap),
-    ?assertEqual(FilteredExpectedMap, CurrentValues),
+    ?assertEqual(ExpectedMap, CurrentValues),
 
     case IsCollectionEmpty of
-        true -> ?assertEqual(lists:duplicate(12, []), maps:values(WindowsMap));
-        false -> ?assertEqual(12, maps:size(WindowsMap))
+        true -> ?assertEqual(lists:duplicate(16, []), maps:values(WindowsMap));
+        false -> ?assertEqual(16, maps:size(WindowsMap))
     end.
-    % TODO VFS-8962 - fix getting file distribution in tests to allow dir total size counting
-%%    ?assertEqual(ExpectedMap, CurrentValues),
-%%
-%%    case IsCollectionEmpty of
-%%        true -> ?assertEqual(lists:duplicate(16, []), maps:values(WindowsMap));
-%%        false -> ?assertEqual(16, maps:size(WindowsMap))
-%%    end.
 
 
 check_dir_stats(Config, NodesSelector, Guid, ExpectedMap) when is_binary(Guid) ->
     [Worker | _] = ?config(NodesSelector, Config),
-    FilteredExpectedMap =  maps:remove(?TOTAL_SIZE, ExpectedMap),
-    ?assertEqual({ok, FilteredExpectedMap}, rpc:call(Worker, dir_size_stats, get_stats, [Guid]), ?ATTEMPTS);
-    % TODO VFS-8962 - fix getting file distribution in tests to allow dir total size counting
-%%    ?assertEqual({ok, ExpectedMap}, rpc:call(Worker, dir_size_stats, get_stats, [Guid]), ?ATTEMPTS);
+    ?assertEqual({ok, ExpectedMap}, rpc:call(Worker, dir_size_stats, get_stats, [Guid]), ?ATTEMPTS);
 
 check_dir_stats(Config, NodesSelector, DirConstructor, ExpectedMap) ->
     Guid = resolve_guid(Config, NodesSelector, DirConstructor, []),
