@@ -14,10 +14,10 @@
 
 -include("modules/automation/atm_execution.hrl").
 -include("modules/datastore/datastore_runner.hrl").
--include("test_rpc.hrl").
 
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
+-include_lib("onenv_ct/include/test_rpc.hrl").
 
 %% exported for CT
 -export([
@@ -50,7 +50,7 @@ all() -> [
 
 
 -define(PROVIDER_SELECTOR, krakow).
--define(rpc(Expr), ?rpc(?PROVIDER_SELECTOR, Expr)).
+-define(rpc(Expr), ?opw_test_rpc(?PROVIDER_SELECTOR, Expr)).
 
 
 %%%===================================================================
