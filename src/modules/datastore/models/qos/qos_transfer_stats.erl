@@ -35,7 +35,7 @@
 %% datastore model callbacks
 -export([get_ctx/0]).
 
--type type() :: ?BYTES_STATS | ?FILES_STATS.
+-type type() :: binary().  % ?BYTES_STATS | ?FILES_STATS
 -export_type([type/0]).
 
 -define(CTX, #{
