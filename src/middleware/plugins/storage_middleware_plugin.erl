@@ -80,12 +80,7 @@ fetch_entity(#op_req{auth = ?USER(UserId, SessionId), auth_hint = ?THROUGH_SPACE
         false ->
             ?ERROR_FORBIDDEN;
         true ->
-            case storage:fetch_shared_data(StorageId, SpaceId) of
-                {ok, StorageData} ->
-                    {ok, {StorageData, 1}};
-                {error, _} = Error ->
-                    Error
-            end
+            {ok, {storage:fetch_shared_data(StorageId, SpaceId), 1}}
     end;
 
 fetch_entity(_) ->

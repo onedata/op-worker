@@ -233,7 +233,7 @@ flush_stats(SpaceId, TransferId, BytesPerProvider) ->
                 [StorageId | _] = maps:keys(StoragesMap),
                 AccMap#{StorageId => Value}
             end, #{}, BytesPerProvider),
-            report_transfer_stats(QosEntries, bytes, BytesPerStorage);
+            report_transfer_stats(QosEntries, ?BYTES_STATS, BytesPerStorage);
         error ->
             % File UUID of legacy transfer cannot be retrieved, ignore such stats
             ok
@@ -356,7 +356,7 @@ report_file_synchronization_started_for_entries(QosEntries, FileCtx) ->
 -spec report_file_synchronized_for_entries([qos_entry:id()], file_ctx:ctx()) -> ok.
 report_file_synchronized_for_entries(QosEntries, FileCtx) ->
     {StorageId, FileCtx2} = file_ctx:get_storage_id(FileCtx),
-    report_transfer_stats(QosEntries, files, #{StorageId => 1}),
+    report_transfer_stats(QosEntries, ?FILES_STATS, #{StorageId => 1}),
     report_to_audit_log(
         QosEntries, FileCtx2, [], fun qos_entry_audit_log:report_file_synchronized/2).
 
