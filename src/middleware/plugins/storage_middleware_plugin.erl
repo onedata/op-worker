@@ -74,7 +74,7 @@ fetch_entity(#op_req{auth = ?NOBODY}) ->
 fetch_entity(#op_req{auth = ?USER(UserId, SessionId), auth_hint = ?THROUGH_SPACE(SpaceId), gri = #gri{
     id = StorageId,
     aspect = instance,
-    scope = protected
+    scope = shared
 }}) ->
     case space_logic:has_eff_user(SessionId, SpaceId, UserId) of
         false ->
