@@ -380,15 +380,16 @@ get_child(ParentUuid, Name) ->
 get_child_uuid_and_tree_id(ParentUuid, Name) ->
     Tokens = binary:split(Name, ?CONFLICTING_LOGICAL_FILE_SUFFIX_SEPARATOR, [global]),
     case lists:reverse(Tokens) of
-        [TreeIdPrefix | Tokens2]  when TreeIdPrefix =/= <<>>, Tokens2 =/= [], Tokens2 =/= [<<>>] ->
-            PrefixSize = size(TreeIdPrefix),
+        % TODO VFS-9001 - consider change of behaviour when filename is equal to name with suffix (?EINVAL)
+        [TreeIdSuffix | Tokens2]  when TreeIdSuffix =/= <<>>, Tokens2 =/= [], Tokens2 =/= [<<>>] ->
+            SuffixSize = size(TreeIdSuffix),
             NameWithoutTreeSuffix = binary:part(
-                Name, 0, size(Name) - PrefixSize - size(?CONFLICTING_LOGICAL_FILE_SUFFIX_SEPARATOR)),
+                Name, 0, size(Name) - SuffixSize - size(?CONFLICTING_LOGICAL_FILE_SUFFIX_SEPARATOR)),
             MatchingTreeIds = case file_meta_links:get_trees(ParentUuid) of
                 {ok, TreeIds} ->
                     lists:filter(fun(TreeId) ->
                         case TreeId of
-                            <<TreeIdPrefix:PrefixSize/binary, _/binary>> -> true;
+                            <<TreeIdSuffix:SuffixSize/binary, _/binary>> -> true;
                             _ -> false
                         end
                     end, TreeIds);
@@ -404,7 +405,9 @@ get_child_uuid_and_tree_id(ParentUuid, Name) ->
                         {error, Reason} -> {error, Reason}
                     end;
                 [] ->
-                    get_child_uuid_and_tree_id_for_name_without_suffix(ParentUuid, Name)
+                    get_child_uuid_and_tree_id_for_name_without_suffix(ParentUuid, Name);
+                _ ->
+                    {error, ?EINVAL}
             end;
         _ ->
             get_child_uuid_and_tree_id_for_name_without_suffix(ParentUuid, Name)
@@ -424,7 +427,6 @@ get_matching_child_uuids_with_tree_ids(ParentUuid, TreeIds, Name) ->
         {ok, [#link{} | _] = Links} ->
             UuidsWithTreeIds = lists:map(fun(#link{target = FileUuid, tree_id = TreeId}) -> {FileUuid, TreeId} end, Links),
             {ok, UuidsWithTreeIds};
-%%            {error, {?EINVAL, MappedLinks}};
         {error, Reason} ->
             {error, Reason}
     end.
