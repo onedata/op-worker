@@ -34,7 +34,7 @@
 -export([add_share/2, remove_share/2, get_shares/1]).
 -export([get_parent/1, get_parent_uuid/1, get_provider_id/1]).
 -export([
-    get_uuid/1, get_child/2, get_child_uuid_and_tree_id/2,
+    get_uuid/1, get_child/2, get_child_uuid_and_tree_id/2, get_matching_child_uuids_with_tree_ids/3,
     list_children/2, list_children_whitelisted/3
 ]).
 -export([get_name/1, set_name/2]).
@@ -376,37 +376,59 @@ get_child(ParentUuid, Name) ->
 %% the link was found.
 %% @end
 %%--------------------------------------------------------------------
--spec get_child_uuid_and_tree_id(uuid(), name()) -> {ok, uuid(), datastore_links:tree_id()} | {error, term()}.
+-spec get_child_uuid_and_tree_id(uuid(), name()) -> {ok, uuid(), file_meta_links:tree_ids()} | {error, term()}.
 get_child_uuid_and_tree_id(ParentUuid, Name) ->
     Tokens = binary:split(Name, ?CONFLICTING_LOGICAL_FILE_SUFFIX_SEPARATOR, [global]),
     case lists:reverse(Tokens) of
-        [Name] ->
-            case get_child_uuid_and_tree_id(ParentUuid, oneprovider:get_id(), Name) of
-                {ok, Uuid, TreeId} -> {ok, Uuid, TreeId};
-                {error, not_found} -> get_child_uuid_and_tree_id(ParentUuid, all, Name);
-                {error, Reason} -> {error, Reason}
-            end;
-        [TreeIdPrefix | Tokens2] ->
-            Name2 = list_to_binary(lists:reverse(Tokens2)),
-            PrefixSize = erlang:size(TreeIdPrefix),
-            {ok, TreeIds} = file_meta_links:get_trees(ParentUuid),
-            TreeIds2 = lists:filter(fun(TreeId) ->
-                case TreeId of
-                    <<TreeIdPrefix:PrefixSize/binary, _/binary>> -> true;
-                    _ -> false
-                end
-            end, TreeIds),
-            case TreeIds2 of
+        % TODO VFS-9001 - consider change of behaviour when filename is equal to name with suffix (?EINVAL)
+        [TreeIdSuffix | Tokens2]  when TreeIdSuffix =/= <<>>, Tokens2 =/= [], Tokens2 =/= [<<>>] ->
+            SuffixSize = size(TreeIdSuffix),
+            NameWithoutTreeSuffix = binary:part(
+                Name, 0, size(Name) - SuffixSize - size(?CONFLICTING_LOGICAL_FILE_SUFFIX_SEPARATOR)),
+            MatchingTreeIds = case file_meta_links:get_trees(ParentUuid) of
+                {ok, TreeIds} ->
+                    lists:filter(fun(TreeId) ->
+                        case TreeId of
+                            <<TreeIdSuffix:SuffixSize/binary, _/binary>> -> true;
+                            _ -> false
+                        end
+                    end, TreeIds);
+                ?ERROR_NOT_FOUND ->
+                    []
+            end,
+            case MatchingTreeIds of
                 [TreeId] ->
-                    case get_child_uuid_and_tree_id(ParentUuid, TreeId, Name2) of
-                        {ok, Uuid, TreeId} ->
-                            {ok, Uuid, TreeId};
-                        {error, Reason} ->
-                            {error, Reason}
+                    case get_matching_child_uuids_with_tree_ids(ParentUuid, TreeId, NameWithoutTreeSuffix) of
+                        {ok, [{Uuid, TreeId}]} -> {ok, Uuid, TreeId};
+                        {ok, _} -> {error, ?EINVAL};
+                        {error, not_found} -> get_child_uuid_and_tree_id_for_name_without_suffix(ParentUuid, Name);
+                        {error, Reason} -> {error, Reason}
                     end;
                 [] ->
-                    get_child_uuid_and_tree_id(ParentUuid, all, Name)
-            end
+                    get_child_uuid_and_tree_id_for_name_without_suffix(ParentUuid, Name);
+                _ ->
+                    {error, ?EINVAL}
+            end;
+        _ ->
+            get_child_uuid_and_tree_id_for_name_without_suffix(ParentUuid, Name)
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns child's UUIDs matching to name within given links tree set
+%% alongside with TreeIds in which they were found.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_matching_child_uuids_with_tree_ids(uuid(), datastore_links:tree_ids(), name()) ->
+    {ok, [{uuid(), file_meta_links:tree_ids()}]} | {error, term()}.
+get_matching_child_uuids_with_tree_ids(ParentUuid, TreeIds, Name) ->
+    case file_meta_links:get(ParentUuid, TreeIds, Name) of
+        {ok, [#link{} | _] = Links} ->
+            UuidsWithTreeIds = lists:map(fun(#link{target = FileUuid, tree_id = TreeId}) -> {FileUuid, TreeId} end, Links),
+            {ok, UuidsWithTreeIds};
+        {error, Reason} ->
+            {error, Reason}
     end.
 
 
@@ -947,21 +969,21 @@ is_valid_filename(FileName) when is_binary(FileName) ->
     end.
 
 
-%%--------------------------------------------------------------------
 %% @private
-%% @doc
-%% Returns parent child's UUID by name within given links tree set
-%% alongside with TreeId in which it was found.
-%% @end
-%%--------------------------------------------------------------------
--spec get_child_uuid_and_tree_id(uuid(), datastore_links:tree_ids(), name()) ->
-    {ok, uuid(), datastore_links:tree_id()} | {error, term()}.
-get_child_uuid_and_tree_id(ParentUuid, TreeIds, Name) ->
-    case file_meta_links:get(ParentUuid, TreeIds, Name) of
-        {ok, [#link{target = FileUuid, tree_id = TreeId}]} ->
-            {ok, FileUuid, TreeId};
-        {ok, [#link{} | _]} ->
+-spec get_child_uuid_and_tree_id_for_name_without_suffix(uuid(), name()) ->
+    {ok, uuid(), file_meta_links:tree_ids()} | {error, term()}.
+get_child_uuid_and_tree_id_for_name_without_suffix(ParentUuid, Name) ->
+    case get_matching_child_uuids_with_tree_ids(ParentUuid, oneprovider:get_id(), Name) of
+        {ok, [{Uuid, TreeId}]} ->
+            {ok, Uuid, TreeId};
+        {ok, _} ->
             {error, ?EINVAL};
+        {error, not_found} ->
+            case get_matching_child_uuids_with_tree_ids(ParentUuid, all, Name) of
+                {ok, [{Uuid, TreeId}]} -> {ok, Uuid, TreeId};
+                {ok, _} -> {error, ?EINVAL};
+                {error, Reason} -> {error, Reason}
+            end;
         {error, Reason} ->
             {error, Reason}
     end.

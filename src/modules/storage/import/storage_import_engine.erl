@@ -108,7 +108,7 @@ sync_file(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
                 false -> {false, undefined, FileName}
             end,
 
-            case canonical_path:to_uuid(ParentUuid, FileBaseName) of
+            case map_to_existing_file_uuid(ParentUuid, FileName, FileBaseName, FileUuid) of
                 {error, not_found} ->
                     % Link from Parent to FileBaseName is missing.
                     % We must check deletion marker to ensure that file may be synced.
@@ -167,10 +167,9 @@ sync_file(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
                             {?FILE_UNMODIFIED, undefined, StorageFileCtx}
                     end;
                 {ok, ResolvedUuid} ->
-                    FileUuid2 = utils:ensure_defined(FileUuid, ResolvedUuid),
                     case deletion_marker:check(ParentUuid, FileName) of
                         {error, not_found} ->
-                            FileGuid = file_id:pack_guid(FileUuid2, SpaceId),
+                            FileGuid = file_id:pack_guid(ResolvedUuid, SpaceId),
                             FileCtx = file_ctx:new_by_guid(FileGuid),
                             storage_import_engine:check_location_and_maybe_sync(StorageFileCtx, FileCtx, Info);
                         {ok, _} ->
@@ -178,6 +177,44 @@ sync_file(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
                     end
             end
     end.
+
+
+-spec map_to_existing_file_uuid(file_meta:uuid(), file_meta:name(), file_meta:name(), file_meta:uuid() | undefined) ->
+    {ok, file_meta:uuid()} | {error, not_found}.
+map_to_existing_file_uuid(ParentUuid, FileName, FileBaseName, undefined) ->
+    case file_meta:get_matching_child_uuids_with_tree_ids(ParentUuid, all, FileBaseName) of
+        {ok, [{ResolvedUuid, _}]} ->
+            {ok, ResolvedUuid};
+        {ok, UuidsWithTreeIds} ->
+            Filtered = lists:filter(fun({FileUuid, _}) ->
+                case file_location:get_local(FileUuid) of
+                    {ok, #document{value = #file_location{
+                        storage_file_created = true,
+                        file_id = FileId
+                    }}} ->
+                        binary:longest_common_suffix([FileId, FileName]) =:= size(FileName);
+                    (_) ->
+                        false
+                end
+            end, UuidsWithTreeIds),
+            case Filtered of
+                [{FileUuid, _}] -> {ok, FileUuid};
+                _ -> {error, not_found}
+            end;
+        {error, not_found} ->
+            {error, not_found}
+    end;
+map_to_existing_file_uuid(ParentUuid, _FileName, FileBaseName, ExpectedFileUuid) ->
+    case file_meta:get_matching_child_uuids_with_tree_ids(ParentUuid, all, FileBaseName) of
+        {ok, UuidsWithTreeIds} ->
+            case lists:any(fun({FileUuid, _}) -> FileUuid =:= ExpectedFileUuid end, UuidsWithTreeIds) of
+                true -> {ok, ExpectedFileUuid};
+                false -> {error, not_found}
+            end;
+        {error, not_found} ->
+            {error, not_found}
+    end.
+
 
 -spec create_file_meta_and_handle_conflicts(file_meta:uuid(), file_meta:name(), file_meta:mode(), od_user:id(), file_meta:uuid(),
     od_space:id()) -> {ok, file_ctx:ctx()} | {error, term()}.
@@ -1241,9 +1278,16 @@ sanitize_acl(Acl, FileCtx) ->
 is_suffixed(FileName) ->
     Tokens = binary:split(FileName, ?CONFLICTING_STORAGE_FILE_SUFFIX_SEPARATOR, [global]),
     case lists:reverse(Tokens) of
-        [FileName] ->
-            false;
-        [FileUuid | Tokens2] ->
-            FileName2 = list_to_binary(lists:reverse(Tokens2)),
-            {true, FileUuid, FileName2}
+        [FileUuid | Tokens2] when FileUuid =/= <<>>, Tokens2 =/= [], Tokens2 =/= [<<>>] ->
+            % Check if FileUuid is existing uuid - not part of a file_name
+            case file_meta:get_including_deleted(FileUuid) of
+                {ok, _} ->
+                    FileNameWithoutSuffix = binary:part(
+                        FileName, 0, size(FileName) - size(FileUuid) - size(?CONFLICTING_STORAGE_FILE_SUFFIX_SEPARATOR)),
+                    {true, FileUuid, FileNameWithoutSuffix};
+                {error, not_found} ->
+                    false
+            end;
+        _ ->
+            false
     end.
