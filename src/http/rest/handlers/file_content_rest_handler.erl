@@ -36,6 +36,8 @@
 
 -define(DEFAULT_CREATE_PARENTS_FLAG, false).
 
+%% @TODO VFS-8986 - remove update_existing in create endpoint and allow for creation of non existing files in update endpoint
+%% @TODO VFS-8986 - make update endpoint to work by path
 
 %%%===================================================================
 %%% API
