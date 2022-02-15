@@ -7,6 +7,13 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% Helper functions for creation of automation schemas used in CT tests.
+%%% Schemas are created from schema drafts which are records in most cases
+%%% identical to them with the only difference being the optional fields.
+%%% If field is not explicitly set in draft the created schema will have
+%%% automatically generated correct value for it (it is not possible to use
+%%% target schema records for this as their unset fields will have 'undefined'
+%%% value which in turn can be correct value for them - it is not possible to
+%%% tell if field was set or not in such case).
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_test_schema_factory).
@@ -106,7 +113,7 @@ create_from_draft(#atm_lambda_revision_draft{
         description = ensure_description(PlaceholderOrDescription),
 
         operation_spec = case PlaceholderOrOperationSpec of
-            ?ATM_PLACEHOLDER -> atm_test_utils:example_operation_spec();
+            ?ATM_AUTOGENERATE -> atm_test_utils:example_operation_spec();
             _ -> create_from_draft(PlaceholderOrOperationSpec)
         end,
         argument_specs = ArgSpecs,
@@ -131,7 +138,7 @@ create_from_draft(#atm_openfaas_operation_spec_draft{
     #atm_openfaas_operation_spec{
         docker_image = ensure_specified(PlaceholderOrDockerImage, str_utils:rand_hex(10)),
         docker_execution_options = case PlaceholderOrDockerExecutionOptions of
-            ?ATM_PLACEHOLDER ->
+            ?ATM_AUTOGENERATE ->
                 lists_utils:random_element(atm_test_utils:example_docker_execution_options());
             DockerExecutionOptions ->
                 DockerExecutionOptions
@@ -221,7 +228,7 @@ create_from_draft(#atm_task_schema_draft{
         result_mappings = ResultMappings,
 
         resource_spec_override = case PlaceholderOrResourceSpecOverride of
-            ?ATM_PLACEHOLDER ->
+            ?ATM_AUTOGENERATE ->
                 lists_utils:random_element([undefined | atm_test_utils:example_resource_specs()]);
             ResourceSpecOverride ->
                 ResourceSpecOverride
@@ -245,38 +252,38 @@ create_from_draft(#atm_store_iterator_spec_draft{
 
 %% @private
 -spec ensure_specified(Value, DefaultValue) -> Value | DefaultValue.
-ensure_specified(?ATM_PLACEHOLDER, Default) -> Default;
+ensure_specified(?ATM_AUTOGENERATE, Default) -> Default;
 ensure_specified(Value, _Default) -> Value.
 
 
 %% @private
--spec ensure_id(?ATM_PLACEHOLDER | automation:id()) -> automation:id().
-ensure_id(?ATM_PLACEHOLDER) -> atm_test_utils:example_id();
+-spec ensure_id(?ATM_AUTOGENERATE | automation:id()) -> automation:id().
+ensure_id(?ATM_AUTOGENERATE) -> atm_test_utils:example_id();
 ensure_id(Id) -> Id.
 
 
 %% @private
--spec ensure_name(?ATM_PLACEHOLDER | automation:name()) -> automation:name().
-ensure_name(?ATM_PLACEHOLDER) -> atm_test_utils:example_name();
+-spec ensure_name(?ATM_AUTOGENERATE | automation:name()) -> automation:name().
+ensure_name(?ATM_AUTOGENERATE) -> atm_test_utils:example_name();
 ensure_name(Name) -> Name.
 
 
 %% @private
--spec ensure_summary(?ATM_PLACEHOLDER | automation:summary()) ->
+-spec ensure_summary(?ATM_AUTOGENERATE | automation:summary()) ->
     automation:summary().
-ensure_summary(?ATM_PLACEHOLDER) -> atm_test_utils:example_summary();
+ensure_summary(?ATM_AUTOGENERATE) -> atm_test_utils:example_summary();
 ensure_summary(Description) -> Description.
 
 
 %% @private
--spec ensure_description(?ATM_PLACEHOLDER | automation:description()) ->
+-spec ensure_description(?ATM_AUTOGENERATE | automation:description()) ->
     automation:description().
-ensure_description(?ATM_PLACEHOLDER) -> atm_test_utils:example_description();
+ensure_description(?ATM_AUTOGENERATE) -> atm_test_utils:example_description();
 ensure_description(Description) -> Description.
 
 
 %% @private
--spec ensure_lifecycle_state(?ATM_PLACEHOLDER | json_utils:json_term()) ->
+-spec ensure_lifecycle_state(?ATM_AUTOGENERATE | json_utils:json_term()) ->
     json_utils:json_term().
-ensure_lifecycle_state(?ATM_PLACEHOLDER) -> atm_test_utils:example_lifecycle_state();
+ensure_lifecycle_state(?ATM_AUTOGENERATE) -> atm_test_utils:example_lifecycle_state();
 ensure_lifecycle_state(State) -> State.

@@ -5,8 +5,8 @@
 %%% cited in 'LICENSE.txt'.
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% This file contains definitions of automation schema related records used in
-%%% CT tests.
+%%% This file contains definitions of automation schema related records
+%%% used in CT tests.
 %%% @end
 %%%-------------------------------------------------------------------
 
@@ -17,7 +17,10 @@
 -include_lib("ctool/include/automation/automation.hrl").
 
 
--define(ATM_PLACEHOLDER, placeholder).
+% sentinel value indicating that marked field should be filled with automatically
+% generated value ('undefined' atom can not be used as it is valid value for some
+% fields)
+-define(ATM_AUTOGENERATE, atm_autogenerate).
 
 
 -record(atm_workflow_schema_dump, {
@@ -29,8 +32,8 @@
 }).
 
 -record(atm_workflow_schema_dump_draft, {
-    name = ?ATM_PLACEHOLDER :: ?ATM_PLACEHOLDER | automation:name(),
-    summary = ?ATM_PLACEHOLDER :: ?ATM_PLACEHOLDER | automation:summary(),
+    name = ?ATM_AUTOGENERATE :: ?ATM_AUTOGENERATE | automation:name(),
+    summary = ?ATM_AUTOGENERATE :: ?ATM_AUTOGENERATE | automation:summary(),
     revision_num :: atm_workflow_schema_revision:revision_number(),
     revision :: atm_test_schema_factory:atm_workflow_schema_revision_draft(),
     supplementary_lambdas = #{} :: #{automation:id() => #{
@@ -39,36 +42,36 @@
 }).
 
 -record(atm_lambda_revision_draft, {
-    name = ?ATM_PLACEHOLDER :: ?ATM_PLACEHOLDER | automation:name(),
-    summary = ?ATM_PLACEHOLDER :: ?ATM_PLACEHOLDER | automation:summary(),
-    description = ?ATM_PLACEHOLDER :: ?ATM_PLACEHOLDER | automation:description(),
+    name = ?ATM_AUTOGENERATE :: ?ATM_AUTOGENERATE | automation:name(),
+    summary = ?ATM_AUTOGENERATE :: ?ATM_AUTOGENERATE | automation:summary(),
+    description = ?ATM_AUTOGENERATE :: ?ATM_AUTOGENERATE | automation:description(),
 
-    operation_spec = ?ATM_PLACEHOLDER ::
-        ?ATM_PLACEHOLDER | atm_test_schema_factory:atm_openfaas_operation_spec_draft(),
+    operation_spec = ?ATM_AUTOGENERATE ::
+        ?ATM_AUTOGENERATE | atm_test_schema_factory:atm_openfaas_operation_spec_draft(),
     argument_specs :: [atm_lambda_argument_spec:record()],
     result_specs :: [atm_lambda_result_spec:record()],
 
-    preferred_batch_size = ?ATM_PLACEHOLDER :: ?ATM_PLACEHOLDER | pos_integer(),
-    resource_spec = ?ATM_PLACEHOLDER :: ?ATM_PLACEHOLDER | atm_resource_spec:record(),
-    state = ?ATM_PLACEHOLDER :: ?ATM_PLACEHOLDER | automation:lifecycle_state()
+    preferred_batch_size = ?ATM_AUTOGENERATE :: ?ATM_AUTOGENERATE | pos_integer(),
+    resource_spec = ?ATM_AUTOGENERATE :: ?ATM_AUTOGENERATE | atm_resource_spec:record(),
+    state = ?ATM_AUTOGENERATE :: ?ATM_AUTOGENERATE | automation:lifecycle_state()
 }).
 
 -record(atm_openfaas_operation_spec_draft, {
-    docker_image = ?ATM_PLACEHOLDER :: ?ATM_PLACEHOLDER | binary(),
-    docker_execution_options = ?ATM_PLACEHOLDER :: ?ATM_PLACEHOLDER | #atm_docker_execution_options{}
+    docker_image = ?ATM_AUTOGENERATE :: ?ATM_AUTOGENERATE | binary(),
+    docker_execution_options = ?ATM_AUTOGENERATE :: ?ATM_AUTOGENERATE | #atm_docker_execution_options{}
 }).
 
 -record(atm_workflow_schema_revision_draft, {
-    description = ?ATM_PLACEHOLDER :: ?ATM_PLACEHOLDER | automation:description(),
+    description = ?ATM_AUTOGENERATE :: ?ATM_AUTOGENERATE | automation:description(),
     stores :: [atm_test_schema_factory:atm_store_schema_draft()],
     lanes :: [atm_test_schema_factory:atm_lane_schema_draft()],
-    state = ?ATM_PLACEHOLDER :: ?ATM_PLACEHOLDER | automation:lifecycle_state()
+    state = ?ATM_AUTOGENERATE :: ?ATM_AUTOGENERATE | automation:lifecycle_state()
 }).
 
 -record(atm_store_schema_draft, {
     id :: automation:name(),
-    name = ?ATM_PLACEHOLDER :: ?ATM_PLACEHOLDER | automation:name(),
-    description = ?ATM_PLACEHOLDER :: ?ATM_PLACEHOLDER | automation:description(),
+    name = ?ATM_AUTOGENERATE :: ?ATM_AUTOGENERATE | automation:name(),
+    description = ?ATM_AUTOGENERATE :: ?ATM_AUTOGENERATE | automation:description(),
     type :: automation:store_type(),
     data_spec :: atm_data_spec:record(),
     requires_initial_value :: boolean(),
@@ -76,36 +79,36 @@
 }).
 
 -record(atm_lane_schema_draft, {
-    id = ?ATM_PLACEHOLDER :: ?ATM_PLACEHOLDER | automation:id(),
-    name = ?ATM_PLACEHOLDER :: ?ATM_PLACEHOLDER | automation:name(),
+    id = ?ATM_AUTOGENERATE :: ?ATM_AUTOGENERATE | automation:id(),
+    name = ?ATM_AUTOGENERATE :: ?ATM_AUTOGENERATE | automation:name(),
 
     parallel_boxes :: [atm_test_schema_factory:atm_parallel_box_schema_draft()],
 
     store_iterator_spec :: atm_test_schema_factory:atm_store_iterator_spec_draft(),
-    max_retries = ?ATM_PLACEHOLDER :: ?ATM_PLACEHOLDER | non_neg_integer()
+    max_retries = ?ATM_AUTOGENERATE :: ?ATM_AUTOGENERATE | non_neg_integer()
 }).
 
 -record(atm_parallel_box_schema_draft, {
-    id = ?ATM_PLACEHOLDER :: ?ATM_PLACEHOLDER | automation:id(),
-    name = ?ATM_PLACEHOLDER :: ?ATM_PLACEHOLDER | automation:name(),
+    id = ?ATM_AUTOGENERATE :: ?ATM_AUTOGENERATE | automation:id(),
+    name = ?ATM_AUTOGENERATE :: ?ATM_AUTOGENERATE | automation:name(),
     tasks :: [atm_test_schema_factory:atm_task_schema_draft()]
 }).
 
 -record(atm_task_schema_draft, {
-    id = ?ATM_PLACEHOLDER :: ?ATM_PLACEHOLDER | automation:id(),
-    name = ?ATM_PLACEHOLDER :: ?ATM_PLACEHOLDER | automation:name(),
+    id = ?ATM_AUTOGENERATE :: ?ATM_AUTOGENERATE | automation:id(),
+    name = ?ATM_AUTOGENERATE :: ?ATM_AUTOGENERATE | automation:name(),
     lambda_id :: automation:id(),
     lambda_revision_number :: atm_lambda_revision:revision_number(),
 
     argument_mappings :: [atm_task_schema_argument_mapper:record()],
     result_mappings :: [atm_task_schema_result_mapper:record()],
 
-    resource_spec_override = ?ATM_PLACEHOLDER :: ?ATM_PLACEHOLDER | undefined | atm_resource_spec:record()
+    resource_spec_override = ?ATM_AUTOGENERATE :: ?ATM_AUTOGENERATE | undefined | atm_resource_spec:record()
 }).
 
 -record(atm_store_iterator_spec_draft, {
     store_schema_id :: automation:id(),
-    max_batch_size = ?ATM_PLACEHOLDER :: ?ATM_PLACEHOLDER | pos_integer()
+    max_batch_size = ?ATM_AUTOGENERATE :: ?ATM_AUTOGENERATE | pos_integer()
 }).
 
 
