@@ -107,10 +107,8 @@ get_stats_and_time_series_collections(Guid) ->
 -spec report_reg_file_size_changed(file_id:file_guid(), total | {on_storage, storage:id()}, integer()) -> ok.
 report_reg_file_size_changed(_Guid, _Scope, 0) ->
     ok;
-report_reg_file_size_changed(_Guid, total, _SizeDiff) ->
-    % TODO VFS-8962 - fix getting file distribution in tests to allow dir total size counting
-%%    ok = dir_stats_collector:update_stats_of_parent(Guid, ?MODULE, #{?TOTAL_SIZE => SizeDiff}).
-    ok;
+report_reg_file_size_changed(Guid, total, SizeDiff) ->
+    ok = dir_stats_collector:update_stats_of_parent(Guid, ?MODULE, #{?TOTAL_SIZE => SizeDiff});
 report_reg_file_size_changed(Guid, {on_storage, StorageId}, SizeDiff) ->
     ok = dir_stats_collector:update_stats_of_parent(Guid, ?MODULE, #{?SIZE_ON_STORAGE(StorageId) => SizeDiff}).
 
@@ -217,9 +215,7 @@ update_stats(Guid, CollectionUpdate) ->
 -spec stat_names(file_id:file_guid()) -> [dir_stats_collection:stat_name()].
 stat_names(Guid) ->
     {ok, StorageId} = space_logic:get_local_supporting_storage(file_id:guid_to_space_id(Guid)),
-    [?REG_FILE_AND_LINK_COUNT, ?DIR_COUNT, ?SIZE_ON_STORAGE(StorageId)].
-    % TODO VFS-8962 - fix getting file distribution in tests to allow dir total size counting
-%%    [?REG_FILE_AND_LINK_COUNT, ?DIR_COUNT, ?TOTAL_SIZE, ?SIZE_ON_STORAGE(StorageId)].
+    [?REG_FILE_AND_LINK_COUNT, ?DIR_COUNT, ?TOTAL_SIZE, ?SIZE_ON_STORAGE(StorageId)].
 
 
 %% @private

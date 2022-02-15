@@ -39,10 +39,6 @@
     get_file_distribution/2
 ]).
 
--export([
-    schedule_file_replication/6
-]).
-
 
 %%%===================================================================
 %%% API
@@ -160,38 +156,6 @@ get_file_distribution(UserCtx, FileCtx0) ->
     get_file_distribution_insecure(UserCtx, FileCtx2).
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Schedules file or dir replication, returns the id of created transfer doc
-%% wrapped in 'scheduled_transfer' provider response.
-%% Resolves file path based on file guid.
-%% TODO VFS-6365 remove deprecated replicas endpoints
-%% @end
-%%--------------------------------------------------------------------
--spec schedule_file_replication(user_ctx:ctx(), file_ctx:ctx(),
-    od_provider:id(), transfer:callback(), transfer:view_name(),
-    query_view_params()) -> provider_response().
-schedule_file_replication(
-    UserCtx, FileCtx0, TargetProviderId, Callback,
-    ViewName, QueryViewParams
-) ->
-    file_ctx:assert_not_trash_dir_const(FileCtx0),
-    data_constraints:assert_not_readonly_mode(UserCtx),
-    file_ctx:assert_not_readonly_target_storage_const(FileCtx0, TargetProviderId),
-    FileCtx1 = file_ctx:assert_smaller_than_provider_support_size(FileCtx0, TargetProviderId),
-
-    FileCtx2 = fslogic_authz:ensure_authorized(
-        UserCtx, FileCtx1,
-        [?TRAVERSE_ANCESTORS]
-    ),
-
-    {FilePath, FileCtx3} = file_ctx:get_logical_path(FileCtx2, UserCtx),
-    schedule_file_replication_insecure(
-        UserCtx, FileCtx3, FilePath, TargetProviderId,
-        Callback, ViewName, QueryViewParams
-    ).
-
-
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -219,31 +183,5 @@ get_file_distribution_insecure(_UserCtx, FileCtx) ->
         status = #status{code = ?OK},
         provider_response = #file_distribution{
             provider_file_distributions = ProviderDistributions
-        }
-    }.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Schedules file or dir replication, returns the id of created transfer doc
-%% wrapped in 'scheduled_transfer' provider response.
-%% @end
-%%--------------------------------------------------------------------
--spec schedule_file_replication_insecure(user_ctx:ctx(), file_ctx:ctx(),
-    file_meta:path(), od_provider:id(), transfer:callback(),
-    transfer:view_name(), query_view_params()) -> provider_response().
-schedule_file_replication_insecure(
-    UserCtx, FileCtx, FilePath, TargetProviderId,
-    Callback, ViewName, QueryViewParams
-) ->
-    SessionId = user_ctx:get_session_id(UserCtx),
-    FileGuid = file_ctx:get_logical_guid_const(FileCtx), % TODO VFS-7443 - effective or not? - test for hardlinks
-    {ok, TransferId} = transfer:start(SessionId, FileGuid, FilePath, undefined,
-        TargetProviderId, Callback, ViewName, QueryViewParams),
-    #provider_response{
-        status = #status{code = ?OK},
-        provider_response = #scheduled_transfer{
-            transfer_id = TransferId
         }
     }.

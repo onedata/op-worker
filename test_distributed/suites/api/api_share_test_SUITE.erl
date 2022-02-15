@@ -92,25 +92,27 @@ create_share_test(_Config) ->
                 }
             ],
             randomly_select_scenarios = true,
-            data_spec = api_test_utils:add_cdmi_id_errors_for_operations_not_available_in_share_mode(
-                % Operations should be rejected even before checking if share exists
-                % (in case of using share file id) so it is not necessary to use
-                % valid share id
-                <<"rootFileId">>, FileGuid, SpaceId, <<"NonExistentShare">>, #data_spec{
-                    required = [<<"name">>],
-                    at_least_one = [<<"fileId">>, <<"rootFileId">>],
-                    optional = [<<"description">>],
-                    correct_values = #{
-                        <<"name">> => [<<"share1">>, <<"share2">>],
-                        <<"description">> => [<<"">>, <<"# Some description">>],
-                        <<"fileId">> => [FileObjectId],
-                        <<"rootFileId">> => [FileObjectId]
-                    },
-                    bad_values = [
-                        {<<"name">>, 100, ?ERROR_BAD_VALUE_BINARY(<<"name">>)},
-                        {<<"description">>, 14, ?ERROR_BAD_VALUE_BINARY(<<"description">>)}
-                    ]
-                }
+            data_spec = api_test_utils:replace_enoent_with_error_not_found_in_error_expectations(
+                api_test_utils:add_cdmi_id_errors_for_operations_not_available_in_share_mode(
+                    % Operations should be rejected even before checking if share exists
+                    % (in case of using share file id) so it is not necessary to use
+                    % valid share id
+                    <<"rootFileId">>, FileGuid, SpaceId, <<"NonExistentShare">>, #data_spec{
+                        required = [<<"name">>],
+                        at_least_one = [<<"fileId">>, <<"rootFileId">>],
+                        optional = [<<"description">>],
+                        correct_values = #{
+                            <<"name">> => [<<"share1">>, <<"share2">>],
+                            <<"description">> => [<<"">>, <<"# Some description">>],
+                            <<"fileId">> => [FileObjectId],
+                            <<"rootFileId">> => [FileObjectId]
+                        },
+                        bad_values = [
+                            {<<"name">>, 100, ?ERROR_BAD_VALUE_BINARY(<<"name">>)},
+                            {<<"description">>, 14, ?ERROR_BAD_VALUE_BINARY(<<"description">>)}
+                        ]
+                    }
+                )
             )
         }
     ])).
@@ -739,10 +741,11 @@ build_share_public_rest_url(ShareId) ->
 
 
 init_per_suite(Config) ->
-    oct_background:init_per_suite(Config, #onenv_test_config{
+    oct_background:init_per_suite([{?LOAD_MODULES, [dir_stats_test_utils]} | Config], #onenv_test_config{
         onenv_scenario = "api_tests",
         envs = [{op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}],
         posthook = fun(NewConfig) ->
+            dir_stats_test_utils:disable_stats_counting(NewConfig),
             User3Id = oct_background:get_user_id(user3),
             SpaceId = oct_background:get_space_id(space_krk_par),
             ozw_test_rpc:space_set_user_privileges(SpaceId, User3Id, [
@@ -753,8 +756,9 @@ init_per_suite(Config) ->
     }).
 
 
-end_per_suite(_Config) ->
-    oct_background:end_per_suite().
+end_per_suite(Config) ->
+    oct_background:end_per_suite(),
+    dir_stats_test_utils:enable_stats_counting(Config).
 
 
 init_per_group(_Group, Config) ->

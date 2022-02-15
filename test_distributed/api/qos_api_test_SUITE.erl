@@ -64,7 +64,7 @@ create_qos_test(Config) ->
     {ok, FileToShareGuid} = api_test_utils:create_file(
         FileType, P1, SessIdP1, filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME()])),
     ?assertMatch({ok, _}, lfm_proxy:stat(P2, SessIdP2, ?FILE_REF(FileToShareGuid)), ?ATTEMPTS),
-    {ok, ShareId} = lfm_proxy:create_share(P1, SessIdP1, ?FILE_REF(FileToShareGuid), <<"share">>),
+    {ok, ShareId} = opt_shares:create(P1, SessIdP1, ?FILE_REF(FileToShareGuid), <<"share">>),
 
     MemRef = api_test_memory:init(),
 
@@ -114,7 +114,7 @@ create_qos_test(Config) ->
                     validate_result_fun = validate_result_fun_gs(MemRef, create)
                 }
             ],
-            data_spec = api_test_utils:replace_enoent_with_not_found_error_in_bad_data_values(
+            data_spec = api_test_utils:replace_enoent_with_error_not_found_in_error_expectations(
                 api_test_utils:add_cdmi_id_errors_for_operations_not_available_in_share_mode(
                     FileToShareGuid, ?SPACE_2, ShareId, CreateDataSpec
                 )
@@ -210,7 +210,7 @@ get_qos_summary_test(Config) ->
     % wait for qos entries to be dbsynced to other provider
     ?assertMatch({ok, _}, opt_qos:get_qos_entry(P2, SessIdP2, QosEntryIdInherited), ?ATTEMPTS),
     ?assertMatch({ok, _}, opt_qos:get_qos_entry(P2, SessIdP2, QosEntryIdDirect), ?ATTEMPTS),
-    {ok, ShareId} = lfm_proxy:create_share(P1, SessIdP1, ?FILE_REF(Guid), <<"share">>),
+    {ok, ShareId} = opt_shares:create(P1, SessIdP1, ?FILE_REF(Guid), <<"share">>),
 
     MemRef = api_test_memory:init(),
 
@@ -236,7 +236,7 @@ get_qos_summary_test(Config) ->
                     validate_result_fun = validate_result_fun_gs(MemRef, qos_summary)
                 }
             ],
-            data_spec = api_test_utils:replace_enoent_with_not_found_error_in_bad_data_values(
+            data_spec = api_test_utils:replace_enoent_with_error_not_found_in_error_expectations(
                 api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(Guid, ShareId, undefined)
             )
         }

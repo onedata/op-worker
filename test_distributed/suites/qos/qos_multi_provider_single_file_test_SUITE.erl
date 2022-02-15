@@ -524,36 +524,39 @@ qos_transfer_stats_test(_Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    oct_background:init_per_suite([{?LOAD_MODULES, [?MODULE, qos_tests_utils]} | Config], #onenv_test_config{
-        onenv_scenario = "3op",
-        envs = [{op_worker, op_worker, [
-            {fuse_session_grace_period_seconds, 24 * 60 * 60},
-            {provider_token_ttl_sec, 24 * 60 * 60}
-        ]}],
-        posthook = fun(NewConfig) ->
-            [Provider1, Provider2, Provider3 | _] = oct_background:get_provider_ids(),
-            SpaceId = oct_background:get_space_id(?SPACE1_PLACEHOLDER),
-            qos_tests_utils:set_qos_parameters(Provider1, opt_spaces:get_storage_id(Provider1, SpaceId), #{
-                <<"type">> => <<"disk">>,
-                <<"tier">> => <<"t3">>,
-                <<"param1">> => <<"val1">>
-            }),
-            qos_tests_utils:set_qos_parameters(Provider2, opt_spaces:get_storage_id(Provider2, SpaceId), #{
-                <<"type">> => <<"tape">>,
-                <<"tier">> => <<"t2">>
-            }),
-            qos_tests_utils:set_qos_parameters(Provider3, opt_spaces:get_storage_id(Provider3, SpaceId), #{
-                <<"type">> => <<"disk">>,
-                <<"tier">> => <<"t2">>,
-                <<"param1">> => <<"val1">>
-            }),
-            NewConfig
-        end
-    }).
+    oct_background:init_per_suite([{?LOAD_MODULES, [?MODULE, qos_tests_utils, dir_stats_test_utils]} | Config],
+        #onenv_test_config{
+            onenv_scenario = "3op",
+            envs = [{op_worker, op_worker, [
+                {fuse_session_grace_period_seconds, 24 * 60 * 60},
+                {provider_token_ttl_sec, 24 * 60 * 60}
+            ]}],
+            posthook = fun(NewConfig) ->
+                dir_stats_test_utils:disable_stats_counting(NewConfig),
+                [Provider1, Provider2, Provider3 | _] = oct_background:get_provider_ids(),
+                SpaceId = oct_background:get_space_id(?SPACE1_PLACEHOLDER),
+                qos_tests_utils:set_qos_parameters(Provider1, opt_spaces:get_storage_id(Provider1, SpaceId), #{
+                    <<"type">> => <<"disk">>,
+                    <<"tier">> => <<"t3">>,
+                    <<"param1">> => <<"val1">>
+                }),
+                qos_tests_utils:set_qos_parameters(Provider2, opt_spaces:get_storage_id(Provider2, SpaceId), #{
+                    <<"type">> => <<"tape">>,
+                    <<"tier">> => <<"t2">>
+                }),
+                qos_tests_utils:set_qos_parameters(Provider3, opt_spaces:get_storage_id(Provider3, SpaceId), #{
+                    <<"type">> => <<"disk">>,
+                    <<"tier">> => <<"t2">>,
+                    <<"param1">> => <<"val1">>
+                }),
+                NewConfig
+            end
+        }).
 
 
-end_per_suite(_Config) ->
-    oct_background:end_per_suite().
+end_per_suite(Config) ->
+    oct_background:end_per_suite(),
+    dir_stats_test_utils:enable_stats_counting(Config).
 
 
 init_per_testcase(qos_transfer_stats_test, Config) ->
@@ -568,9 +571,7 @@ end_per_testcase(qos_transfer_stats_test, Config) ->
     time_test_utils:unfreeze_time(Config),
     end_per_testcase(default, Config);
 end_per_testcase(_, Config) ->
-    Nodes = ?config(op_worker_nodes, Config),
     qos_tests_utils:finish_all_transfers(),
-    test_utils:mock_unload(Nodes),
     lfm_proxy:teardown(Config).
 
 

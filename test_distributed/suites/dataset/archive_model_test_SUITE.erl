@@ -23,6 +23,7 @@
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
+-include_lib("ctool/include/test/test_utils.hrl").
 
 
 %% exported for CT
@@ -626,16 +627,18 @@ iterate_over_archives_test_base(ArchiveCount, ListingMethod, Limit) ->
 %===================================================================
 
 init_per_suite(Config) ->
-    oct_background:init_per_suite(Config, #onenv_test_config{
+    oct_background:init_per_suite([{?LOAD_MODULES, [dir_stats_test_utils]} | Config], #onenv_test_config{
         onenv_scenario = "2op",
         envs = [{op_worker, op_worker, [
             {fuse_session_grace_period_seconds, 24 * 60 * 60},
             {provider_token_ttl_sec, 24 * 60 * 60}
-        ]}]
+        ]}],
+        posthook = fun dir_stats_test_utils:disable_stats_counting_ct_posthook/1
     }).
 
-end_per_suite(_Config) ->
-    oct_background:end_per_suite().
+end_per_suite(Config) ->
+    oct_background:end_per_suite(),
+    dir_stats_test_utils:enable_stats_counting(Config).
 
 init_per_group(parallel_tests, Config) ->
     Config2 = oct_background:update_background_config(Config),

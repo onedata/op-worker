@@ -21,6 +21,7 @@
 -include_lib("ctool/include/http/codes.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
+-include_lib("ctool/include/test/test_utils.hrl").
 
 
 
@@ -234,8 +235,8 @@ set_cdmi_metadata_on_trash_dir_is_forbidden(_Config) ->
 create_share_from_trash_dir_is_forbidden(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
-    ?assertMatch({error, ?EPERM},
-        lfm_proxy:create_share(P1Node, UserSessIdP1, ?FILE_REF(?TRASH_DIR_GUID(?SPACE_ID1)), <<"MY SHARE">>)).
+    ?assertMatch(?ERROR_POSIX(?EPERM),
+        opt_shares:create(P1Node, UserSessIdP1, ?FILE_REF(?TRASH_DIR_GUID(?SPACE_ID1)), <<"MY SHARE">>)).
 
 add_qos_entry_for_trash_dir_is_forbidden(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
@@ -652,10 +653,15 @@ long_lasting_deletion_test_base(_Config, TimeWarpsCount,
 %===================================================================
 
 init_per_suite(Config) ->
-    oct_background:init_per_suite(Config, #onenv_test_config{onenv_scenario = "2op-manual-import"}).
+    oct_background:init_per_suite([{?LOAD_MODULES, [dir_stats_test_utils]} | Config],
+        #onenv_test_config{
+            onenv_scenario = "2op-manual-import",
+            posthook = fun dir_stats_test_utils:disable_stats_counting_ct_posthook/1
+        }).
 
-end_per_suite(_Config) ->
-    oct_background:end_per_suite().
+end_per_suite(Config) ->
+    oct_background:end_per_suite(),
+    dir_stats_test_utils:enable_stats_counting(Config).
 
 init_per_testcase(Case, Config) when
     Case =:= deletion_lasting_for_4_days_should_succeed orelse

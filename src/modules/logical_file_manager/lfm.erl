@@ -109,11 +109,6 @@
     get_mimetype/2,
     set_mimetype/3
 ]).
-%% Share related operations
--export([
-    create_share/4,
-    remove_share/2
-]).
 
 %% Utility functions
 -export([check_result/1]).
@@ -687,22 +682,6 @@ get_mimetype(SessId, FileKey) ->
     ok | error_reply().
 set_mimetype(SessId, FileKey, Mimetype) ->
     ?run(lfm_attrs:set_mimetype(SessId, FileKey, Mimetype)).
-
-
-%%%===================================================================
-%%% Shares related operations
-%%%===================================================================
-
-
--spec create_share(session:id(), file_key(), od_share:name(), od_share:description()) ->
-    {ok, od_share:id()} | error_reply().
-create_share(SessId, FileKey, Name, Description) ->
-    ?run(lfm_shares:create_share(SessId, FileKey, Name, Description)).
-
-
--spec remove_share(session:id(), od_share:id()) -> ok | error_reply().
-remove_share(SessId, ShareID) ->
-    ?run(lfm_shares:remove_share(SessId, ShareID)).
 
 
 %%%===================================================================

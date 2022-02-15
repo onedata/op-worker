@@ -614,7 +614,7 @@ run_share_test_scenarios(ScenariosRootDirPath, #perms_test_spec{
         ),
 
         TestCaseRootDirKey = maps:get(ScenarioRootDirPath, ExtraData0),
-        {ok, ShareId} = lfm_proxy:create_share(
+        {ok, ShareId} = opt_shares:create(
             Node, FileOwnerUserSessId, TestCaseRootDirKey, ScenarioName
         ),
         ExtraData1 = maps:map(fun
