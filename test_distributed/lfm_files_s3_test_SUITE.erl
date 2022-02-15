@@ -84,6 +84,7 @@
     get_children_details_should_work_with_non_zero_offset/1,
     get_children_details_should_work_with_size_greater_than_dir_size/1,
     get_children_details_should_work_with_startid/1,
+    list_recursive_test/1,
     lfm_recreate_handle_test/1,
     lfm_write_after_create_no_perms_test/1,
     lfm_recreate_handle_after_delete_test/1,
@@ -100,6 +101,7 @@
 ]).
 
 -define(TEST_CASES, [
+    list_recursive_test, % this test must be run first as it requires empty space
     fslogic_new_file_test,
     lfm_create_and_unlink_test,
     lfm_create_and_access_test,
@@ -270,6 +272,9 @@ get_children_details_should_work_with_size_greater_than_dir_size(Config) ->
 
 get_children_details_should_work_with_startid(Config) ->
     lfm_files_test_base:get_children_details_should_work_with_startid(Config).
+
+list_recursive_test(Config) ->
+    lfm_files_test_base:list_recursive(Config).
 
 echo_loop_test(Config) ->
     lfm_files_test_base:echo_loop(Config).

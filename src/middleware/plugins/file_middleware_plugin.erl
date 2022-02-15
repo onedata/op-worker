@@ -464,6 +464,7 @@ resolve_get_operation_handler(children, private) -> ?MODULE;             % REST/
 resolve_get_operation_handler(children, public) -> ?MODULE;              % REST/gs
 resolve_get_operation_handler(children_details, private) -> ?MODULE;     % gs only
 resolve_get_operation_handler(children_details, public) -> ?MODULE;      % gs only
+resolve_get_operation_handler(list_recursive, private) -> ?MODULE;       % REST only
 resolve_get_operation_handler(attrs, private) -> ?MODULE;                % REST/gs
 resolve_get_operation_handler(attrs, public) -> ?MODULE;                 % REST/gs
 resolve_get_operation_handler(xattrs, private) -> ?MODULE;               % REST/gs
@@ -517,6 +518,14 @@ data_spec_get(#gri{aspect = As}) when
                 false
         end},
         <<"offset">> => {integer, any}
+    }
+};
+
+data_spec_get(#gri{aspect = list_recursive}) -> #{
+    required => #{id => {binary, guid}},
+    optional => #{
+        <<"limit">> => {integer, {between, 1, 1000}},
+        <<"token">> => {binary, any}
     }
 };
 
@@ -615,6 +624,7 @@ authorize_get(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= instance;
     As =:= children;
     As =:= children_details;
+    As =:= list_recursive;
     As =:= attrs;
     As =:= xattrs;
     As =:= json_metadata;
@@ -662,6 +672,7 @@ validate_get(#op_req{gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= instance;
     As =:= children;
     As =:= children_details;
+    As =:= list_recursive;
     As =:= attrs;
     As =:= xattrs;
     As =:= json_metadata;
@@ -722,6 +733,23 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = childre
         }
     )),
     {ok, value, {ChildrenDetails, IsLast}};
+
+get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = list_recursive}}, _) ->
+    SessionId = Auth#auth.session_id,
+    
+    {ok, Result, IsLast} = ?lfm_check(lfm:list_recursive(SessionId, ?FILE_REF(FileGuid), 
+        maps:get(<<"token">>, Data, <<>>), maps:get(<<"limit">>, Data, ?DEFAULT_LIST_ENTRIES))),
+    NextPageToken = case IsLast of
+        true -> null;
+        false ->
+            {T, _} = lists:last(Result),
+            T
+    end,
+    JsonResult = lists:map(fun({Path, Attrs}) ->
+        JsonAttrs = file_attrs_to_json(Attrs),
+        JsonAttrs#{<<"path">> => Path}
+    end, Result),
+    {ok, value, {JsonResult, NextPageToken, IsLast}};
 
 get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = attrs, scope = Sc}}, _) ->
     RequestedAttributes = case maps:get(<<"attribute">>, Data, undefined) of

@@ -130,6 +130,17 @@ routes() -> [
             scope = private
         }
     }},
+    %% List regular files in subtree recursively
+    {<<"/data/:id/list_recursive">>, rest_handler, #rest_req{
+        method = 'GET',
+        produces = [<<"application/json">>],
+        b_gri = #b_gri{
+            type = op_file,
+            id = ?OBJECTID_BINDING(id),
+            aspect = list_recursive,
+            scope = private
+        }
+    }},
     %% Get symbolic link value
     {<<"/data/:id/symlink_value">>, rest_handler, #rest_req{
         method = 'GET',
