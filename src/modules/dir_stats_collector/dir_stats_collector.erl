@@ -120,8 +120,6 @@ get_stats(Guid, CollectionType, StatNames) ->
                 collection_type = CollectionType,
                 stat_names = StatNames
             },
-            % NOTE: only possible error of submit_and_await with default parameters is ?ERROR_INTERNAL_SERVER_ERROR
-            % (timeout is infinity by default)
             call_designated_node(Guid, submit_and_await, [?MODULE, Guid, Request]);
         false ->
             ?ERROR_DIR_STATS_DISABLED_FOR_SPACE
@@ -289,6 +287,7 @@ handle_call(#dsc_get_request{
 }, State) ->
     {#cached_dir_stats{current_stats = CurrentStats}, UpdatedState} = reset_last_used_timer(State, Guid, CollectionType),
     {{ok, dir_stats_collection:with(StatNames, CurrentStats)}, UpdatedState};
+
 handle_call(?FORCED_FLUSH, State) ->
     {ok, flush_internal(State)};
 
