@@ -80,7 +80,8 @@ fetch_entity(#op_req{auth = ?USER(UserId, SessionId), auth_hint = ?THROUGH_SPACE
         false ->
             ?ERROR_FORBIDDEN;
         true ->
-            {ok, {storage:fetch_shared_data(StorageId, SpaceId), 1}}
+            #document{value = Storage} = storage:fetch_shared_data(StorageId, SpaceId),
+            {ok, {Storage, 1}}
     end;
 
 fetch_entity(_) ->
@@ -125,8 +126,14 @@ create(_) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get(middleware:req(), middleware:entity()) -> middleware:get_result().
-get(#op_req{gri = #gri{aspect = instance, scope = shared}}, StorageData) ->
-    {ok, StorageData}.
+get(#op_req{gri = #gri{aspect = instance, scope = shared}}, #od_storage{
+    name = Name,
+    provider = ProviderId
+}) ->
+    {ok, #{
+        <<"name">> => Name,
+        <<"provider">> => ProviderId
+    }}.
 
 
 %%--------------------------------------------------------------------
