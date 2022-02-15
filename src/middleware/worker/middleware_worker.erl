@@ -32,7 +32,10 @@
     #archive_dataset{} |
     #get_archive_info{} |
     #update_archive{} |
-    #init_archive_purge{}.
+    #purge_archive{} |
+    #recall_archive{} |
+    #get_recall_details{} |
+    #get_recall_progress{}.
 
 -type atm_operation() ::
     #schedule_atm_workflow_execution{} |
@@ -55,6 +58,10 @@
     #get_effective_file_qos{} |
     #check_qos_status{}.
 
+-type share_operation() ::
+    #create_share{} |
+    #remove_share{}.
+
 -type transfer_operation() ::
     #schedule_file_transfer{} |
     #schedule_view_transfer{}.
@@ -64,6 +71,7 @@
     atm_operation() |
     dataset_operation() |
     qos_operation() |
+    share_operation() |
     transfer_operation().
 
 -export_type([

@@ -67,7 +67,7 @@
     add_cdmi_id_errors_for_operations_not_available_in_share_mode/4,
     add_cdmi_id_errors_for_operations_not_available_in_share_mode/5,
 
-    replace_enoent_with_not_found_error_in_bad_data_values/1,
+    replace_enoent_with_error_not_found_in_error_expectations/1,
     maybe_substitute_bad_id/2
 ]).
 
@@ -101,7 +101,7 @@ create_shared_file_in_space_krk() ->
     FileType = randomly_choose_file_type_for_test(),
     FilePath = filename:join(["/", ?SPACE_KRK, ?RANDOM_FILE_NAME()]),
     {ok, FileGuid} = create_file(FileType, P1Node, UserSessId, FilePath),
-    {ok, ShareId} = lfm_proxy:create_share(P1Node, SpaceOwnerSessId, ?FILE_REF(FileGuid), <<"share">>),
+    {ok, ShareId} = opt_shares:create(P1Node, SpaceOwnerSessId, ?FILE_REF(FileGuid), <<"share">>),
 
     {FileType, FilePath, FileGuid, ShareId}.
 
@@ -133,7 +133,7 @@ create_and_sync_shared_file_in_space_krk_par(FileType, FileName, Mode) ->
 
     FilePath = filename:join(["/", ?SPACE_KRK_PAR, FileName]),
     {ok, FileGuid} = create_file(FileType, P1Node, UserSessIdP1, FilePath, Mode),
-    {ok, ShareId} = lfm_proxy:create_share(P1Node, SpaceOwnerSessIdP1, ?FILE_REF(FileGuid), <<"share">>),
+    {ok, ShareId} = opt_shares:create(P1Node, SpaceOwnerSessIdP1, ?FILE_REF(FileGuid), <<"share">>),
 
     file_test_utils:await_sync(P2Node, FileGuid),
 
@@ -278,7 +278,7 @@ read_file(Node, SessId, FileGuid, Size) ->
 share_file_and_sync_file_attrs(CreationNode, SessionId, SyncNodes, FileGuid) ->
     {ok, ShareId} = ?assertMatch(
         {ok, _},
-        lfm_proxy:create_share(CreationNode, SessionId, ?FILE_REF(FileGuid), <<"share">>),
+        opt_shares:create(CreationNode, SessionId, ?FILE_REF(FileGuid), <<"share">>),
         ?ATTEMPTS
     ),
     lists:foreach(fun(Node) ->
@@ -413,7 +413,7 @@ randomly_set_acl(Nodes, FileGuid) ->
 randomly_create_share(Node, SessionId, FileGuid) ->
     case rand:uniform(2) of
         1 ->
-            {ok, ShId} = ?assertMatch({ok, _}, lfm_proxy:create_share(
+            {ok, ShId} = ?assertMatch({ok, _}, opt_shares:create(
                 Node, SessionId, ?FILE_REF(FileGuid), <<"share">>
             )),
             ShId;
@@ -450,7 +450,8 @@ file_details_to_gs_json(undefined, #file_details{
     eff_protection_flags = EffFileProtectionFlags,
     eff_qos_membership = EffQosMembership,
     eff_dataset_membership = EffDatasetMembership,
-    has_metadata = HasMetadata
+    has_metadata = HasMetadata,
+    recall_root_id = RecallRootId
 }) ->
     DisplayedSize = case Type of
         ?DIRECTORY_TYPE -> null;
@@ -479,7 +480,8 @@ file_details_to_gs_json(undefined, #file_details{
         <<"ownerId">> => OwnerId,
         <<"effQosMembership">> => atom_to_binary(EffQosMembership, utf8),
         <<"effDatasetMembership">> => atom_to_binary(EffDatasetMembership, utf8),
-        <<"hardlinksCount">> => utils:undefined_to_null(LinksCount)
+        <<"hardlinksCount">> => utils:undefined_to_null(LinksCount),
+        <<"recallRootId">> => utils:undefined_to_null(RecallRootId)
     };
 file_details_to_gs_json(ShareId, #file_details{
     file_attr = #file_attr{
@@ -721,9 +723,9 @@ add_cdmi_id_errors_for_operations_not_available_in_share_mode(IdKey, FileGuid, S
     add_bad_values_to_data_spec(BadFileIdValues, DataSpec).
 
 
--spec replace_enoent_with_not_found_error_in_bad_data_values(onenv_api_test_runner:data_spec()) ->
+-spec replace_enoent_with_error_not_found_in_error_expectations(onenv_api_test_runner:data_spec()) ->
     onenv_api_test_runner:data_spec().
-replace_enoent_with_not_found_error_in_bad_data_values(DataSpec = #data_spec{bad_values = BadValues}) ->
+replace_enoent_with_error_not_found_in_error_expectations(DataSpec = #data_spec{bad_values = BadValues}) ->
     DataSpec#data_spec{bad_values = lists:map(fun
         ({Key, Value, ?ERROR_POSIX(?ENOENT)}) -> {Key, Value, ?ERROR_NOT_FOUND};
         ({Key, Value, {Interface, ?ERROR_POSIX(?ENOENT)}}) -> {Key, Value, {Interface, ?ERROR_NOT_FOUND}};

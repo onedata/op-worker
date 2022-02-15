@@ -49,6 +49,7 @@
 -export([get_storage_id/1, get_supporting_storage_id/2, setup_luma_local_feed/3]).
 -export([local_ip_v4/0]).
 -export([normalize_storage_name/1]).
+-export([get_different_domain_workers/1]).
 
 
 -record(user_config, {
@@ -729,6 +730,18 @@ get_supporting_storage_id(Worker, SpaceId) ->
 normalize_storage_name(Suggestion) -> 
     re:replace(Suggestion, <<"[^\\w_]">>, <<"">>, [{return, binary}, global]).
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Get one worker from each provider domain.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_different_domain_workers(Config :: list()) -> [node()].
+get_different_domain_workers(Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    lists:usort(fun(W1, W2) -> ?GET_DOMAIN(W1) =< ?GET_DOMAIN(W2) end, Workers).
+
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -936,17 +949,6 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config, NoHistory) -
     proplists:compact(
         lists:flatten([{spaces, Spaces}] ++ [initializer:setup_session(W, Users, Config) || W <- MasterWorkers])
     ).
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Get one worker from each provider domain.
-%% @end
-%%--------------------------------------------------------------------
--spec get_different_domain_workers(Config :: list()) -> [node()].
-get_different_domain_workers(Config) ->
-    Workers = ?config(op_worker_nodes, Config),
-    lists:usort(fun(W1, W2) -> ?GET_DOMAIN(W1) =< ?GET_DOMAIN(W2) end, Workers).
 
 
 %%--------------------------------------------------------------------

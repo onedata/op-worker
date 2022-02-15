@@ -101,7 +101,8 @@
     lfm_open_failure_multiple_users/1,
     lfm_open_and_create_open_failure/1,
     lfm_mv_failure_multiple_users/1,
-    sparse_files_should_be_created/2
+    sparse_files_should_be_created/2,
+    lfm_close_deleted_open_files/1
 ]).
 
 -define(TIMEOUT, timer:seconds(10)).
@@ -1634,7 +1635,7 @@ create_share_dir(Config) ->
     initializer:testmaster_mock_space_user_privileges(
         Workers, SpaceId, UserId, privileges:space_admin() -- [?SPACE_MANAGE_SHARES]
     ),
-    ?assertMatch({error, ?EPERM}, lfm_proxy:create_share(W, SessId, ?FILE_REF(Guid), <<"share_name">>)),
+    ?assertMatch(?ERROR_POSIX(?EPERM), opt_shares:create(W, SessId, ?FILE_REF(Guid), <<"share_name">>)),
 
     initializer:testmaster_mock_space_user_privileges(
         Workers, SpaceId, UserId, privileges:space_admin()
@@ -1642,23 +1643,23 @@ create_share_dir(Config) ->
 
     % User root dir can not be shared
     ?assertMatch(
-        {error, ?EPERM},
-        lfm_proxy:create_share(W, SessId, ?FILE_REF(fslogic_uuid:user_root_dir_guid(UserId)), <<"share_name">>)
+        ?ERROR_POSIX(?EPERM),
+        opt_shares:create(W, SessId, ?FILE_REF(fslogic_uuid:user_root_dir_guid(UserId)), <<"share_name">>)
     ),
     % But space dir can
     ?assertMatch(
         {ok, <<_/binary>>},
-        lfm_proxy:create_share(W, SessId, ?FILE_REF(fslogic_uuid:spaceid_to_space_dir_guid(SpaceId)), <<"share_name">>)
+        opt_shares:create(W, SessId, ?FILE_REF(fslogic_uuid:spaceid_to_space_dir_guid(SpaceId)), <<"share_name">>)
     ),
     % As well as normal directory
     {ok, ShareId1} = ?assertMatch(
         {ok, <<_/binary>>},
-        lfm_proxy:create_share(W, SessId, ?FILE_REF(Guid), <<"share_name">>)
+        opt_shares:create(W, SessId, ?FILE_REF(Guid), <<"share_name">>)
     ),
     % Multiple times at that
     {ok, ShareId2} = ?assertMatch(
         {ok, <<_/binary>>},
-        lfm_proxy:create_share(W, SessId, ?FILE_REF(Guid), <<"share_name">>)
+        opt_shares:create(W, SessId, ?FILE_REF(Guid), <<"share_name">>)
     ),
     ?assertNotEqual(ShareId1, ShareId2).
 
@@ -1674,19 +1675,19 @@ create_share_file(Config) ->
     initializer:testmaster_mock_space_user_privileges(
         Workers, SpaceId, UserId, privileges:space_admin() -- [?SPACE_MANAGE_SHARES]
     ),
-    ?assertMatch({error, ?EPERM}, lfm_proxy:create_share(W, SessId, ?FILE_REF(Guid), <<"share_name">>)),
+    ?assertMatch(?ERROR_POSIX(?EPERM), opt_shares:create(W, SessId, ?FILE_REF(Guid), <<"share_name">>)),
 
     initializer:testmaster_mock_space_user_privileges(
         Workers, SpaceId, UserId, privileges:space_admin()
     ),
     {ok, ShareId1} = ?assertMatch(
         {ok, <<_/binary>>},
-        lfm_proxy:create_share(W, SessId, ?FILE_REF(Guid), <<"share_name">>)
+        opt_shares:create(W, SessId, ?FILE_REF(Guid), <<"share_name">>)
     ),
     % File can be shared multiple times
     {ok, ShareId2} = ?assertMatch(
         {ok, <<_/binary>>},
-        lfm_proxy:create_share(W, SessId, ?FILE_REF(Guid), <<"share_name">>)
+        opt_shares:create(W, SessId, ?FILE_REF(Guid), <<"share_name">>)
     ),
     ?assertNotEqual(ShareId1, ShareId2).
 
@@ -1697,22 +1698,22 @@ remove_share(Config) ->
     DirPath = <<"/space_name1/share_dir">>,
     {ok, Guid} = lfm_proxy:mkdir(W, SessId, DirPath, 8#704),
     SpaceId = file_id:guid_to_space_id(Guid),
-    {ok, ShareId1} = lfm_proxy:create_share(W, SessId, ?FILE_REF(Guid), <<"share_name">>),
+    {ok, ShareId1} = opt_shares:create(W, SessId, ?FILE_REF(Guid), <<"share_name">>),
 
     % Make sure SPACE_MANAGE_SHARES priv is accounted
     initializer:testmaster_mock_space_user_privileges(
         Workers, SpaceId, UserId, privileges:space_admin() -- [?SPACE_MANAGE_SHARES]
     ),
-    ?assertMatch({error, ?EPERM}, lfm_proxy:remove_share(W, SessId, ShareId1)),
+    ?assertMatch(?ERROR_POSIX(?EPERM), opt_shares:remove(W, SessId, ShareId1)),
 
     initializer:testmaster_mock_space_user_privileges(
         Workers, SpaceId, UserId, privileges:space_admin()
     ),
 
     % Remove share by share Id
-    ?assertMatch(ok, lfm_proxy:remove_share(W, SessId, ShareId1)),
+    ?assertMatch(ok, opt_shares:remove(W, SessId, ShareId1)),
     % ShareId no longer exists -> {error, not_found}
-    ?assertMatch({error, not_found}, lfm_proxy:remove_share(W, SessId, ShareId1)).
+    ?assertMatch(?ERROR_NOT_FOUND, opt_shares:remove(W, SessId, ShareId1)).
 
 share_getattr(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
@@ -1723,8 +1724,8 @@ share_getattr(Config) ->
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
     DirPath = <<SpaceName/binary, "/share_dir2">>,
     {ok, DirGuid} = lfm_proxy:mkdir(W, OwnerSessId, DirPath, 8#704),
-    {ok, ShareId1} = lfm_proxy:create_share(W, OwnerSessId, ?FILE_REF(DirGuid), <<"share_name">>),
-    {ok, ShareId2} = lfm_proxy:create_share(W, OwnerSessId, ?FILE_REF(DirGuid), <<"share_name">>),
+    {ok, ShareId1} = opt_shares:create(W, OwnerSessId, ?FILE_REF(DirGuid), <<"share_name">>),
+    {ok, ShareId2} = opt_shares:create(W, OwnerSessId, ?FILE_REF(DirGuid), <<"share_name">>),
     ?assertNotEqual(ShareId1, ShareId2),
 
     ShareGuid = file_id:guid_to_share_guid(DirGuid, ShareId1),
@@ -1773,7 +1774,7 @@ share_get_parent(Config) ->
     {ok, DirGuid} = lfm_proxy:mkdir(W, SessId, DirPath, 8#707),
     {ok, FileGuid} = lfm_proxy:create(W, SessId, <<DirPath/binary, "/file">>, 8#700),
 
-    {ok, ShareId} = lfm_proxy:create_share(W, SessId, ?FILE_REF(DirGuid), <<"share_name">>),
+    {ok, ShareId} = opt_shares:create(W, SessId, ?FILE_REF(DirGuid), <<"share_name">>),
     ShareDirGuid = file_id:guid_to_share_guid(DirGuid, ShareId),
     ShareFileGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
 
@@ -1793,7 +1794,7 @@ share_list(Config) ->
     SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
     DirPath = <<"/space_name1/share_dir3">>,
     {ok, DirGuid} = lfm_proxy:mkdir(W, SessId, DirPath, 8#707),
-    {ok, ShareId} = lfm_proxy:create_share(W, SessId, ?FILE_REF(DirGuid), <<"share_name">>),
+    {ok, ShareId} = opt_shares:create(W, SessId, ?FILE_REF(DirGuid), <<"share_name">>),
     ShareDirGuid = file_id:guid_to_share_guid(DirGuid, ShareId),
 
     {ok, Guid1} = lfm_proxy:mkdir(W, SessId, <<"/space_name1/share_dir3/1">>, 8#700),
@@ -1816,7 +1817,7 @@ share_read(Config) ->
     {ok, Handle} = lfm_proxy:open(W, SessId, ?FILE_REF(FileGuid), write),
     {ok, 4} = lfm_proxy:write(W, Handle, 0, <<"data">>),
     ok = lfm_proxy:close(W, Handle),
-    {ok, ShareId} = lfm_proxy:create_share(W, SessId, ?FILE_REF(DirGuid), <<"share_name">>),
+    {ok, ShareId} = opt_shares:create(W, SessId, ?FILE_REF(DirGuid), <<"share_name">>),
     ShareGuid = file_id:guid_to_share_guid(DirGuid, ShareId),
 
     {ok, [{ShareChildGuid, <<"share_file">>}]} = lfm_proxy:get_children(W, ?GUEST_SESS_ID, ?FILE_REF(ShareGuid), 0, 10),
@@ -1832,7 +1833,7 @@ share_child_getattr(Config) ->
     DirPath = <<"/space_name1/share_dir5">>,
     {ok, Guid} = lfm_proxy:mkdir(W, SessId, DirPath, 8#707),
     {ok, _} = lfm_proxy:create(W, SessId, <<"/space_name1/share_dir5/file">>, 8#700),
-    {ok, ShareId} = lfm_proxy:create_share(W, SessId, ?FILE_REF(Guid), <<"share_name">>),
+    {ok, ShareId} = opt_shares:create(W, SessId, ?FILE_REF(Guid), <<"share_name">>),
     ShareDirGuid = file_id:guid_to_share_guid(Guid, ShareId),
 
     {ok, [{ShareChildGuid, _}]} = lfm_proxy:get_children(W, ?GUEST_SESS_ID, ?FILE_REF(ShareDirGuid), 0, 1),
@@ -1854,7 +1855,7 @@ share_child_list(Config) ->
     SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
     DirPath = <<"/space_name1/share_dir6">>,
     {ok, DirGuid} = lfm_proxy:mkdir(W, SessId, DirPath, 8#707),
-    {ok, ShareId} = lfm_proxy:create_share(W, SessId, ?FILE_REF(DirGuid), <<"share_name">>),
+    {ok, ShareId} = opt_shares:create(W, SessId, ?FILE_REF(DirGuid), <<"share_name">>),
     ShareDirGuid = file_id:guid_to_share_guid(DirGuid, ShareId),
 
     {ok, Guid1} = lfm_proxy:mkdir(W, SessId, <<"/space_name1/share_dir6/1">>, 8#707),
@@ -1878,7 +1879,7 @@ share_child_read(Config) ->
     SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
     DirPath = <<"/space_name1/share_dir7">>,
     {ok, Guid} = lfm_proxy:mkdir(W, SessId, DirPath, 8#707),
-    {ok, ShareId} = lfm_proxy:create_share(W, SessId, ?FILE_REF(Guid), <<"share_name">>),
+    {ok, ShareId} = opt_shares:create(W, SessId, ?FILE_REF(Guid), <<"share_name">>),
     ShareGuid = file_id:guid_to_share_guid(Guid, ShareId),
 
     Path = <<"/space_name1/share_dir7/file">>,
@@ -2138,6 +2139,25 @@ sparse_files_should_be_created(Config, ReadFun) ->
     ?assertEqual(ok, lfm_proxy:truncate(W, SessId1, ?FILE_REF(FileGuid7), 10)),
     ?assertEqual(ok, lfm_proxy:fsync(W, SessId1, ?FILE_REF(FileGuid7), ProviderId)),
     verify_sparse_file(ReadFun, W, SessId1, FileGuid7, 10, []).
+
+lfm_close_deleted_open_files(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
+    
+    {ok, DirGuid1} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId1,
+        <<"/space_name1/", (generator:gen_name())/binary>>)),
+    {ok, DirGuid2} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId1, DirGuid1, generator:gen_name(), ?DEFAULT_DIR_MODE)),
+    {ok, {FileGuid1, Handle1}} = ?assertMatch({ok, _}, lfm_proxy:create_and_open(W, SessId1, DirGuid2, generator:gen_name(), ?DEFAULT_FILE_MODE)),
+    {ok, {_FileGuid2, Handle2}} = ?assertMatch({ok, _}, lfm_proxy:create_and_open(W, SessId1, DirGuid2, generator:gen_name(), ?DEFAULT_FILE_MODE)),
+    {ok, _} = lfm_proxy:write(W, Handle1, 0, <<"some_text">>),
+    {ok, _} = lfm_proxy:write(W, Handle2, 0, <<"another_text">>),
+    
+    ok = ?assertEqual(ok, lfm_proxy:unlink(W, SessId1, ?FILE_REF(FileGuid1))),
+    ok = ?assertEqual(ok, lfm_proxy:rm_recursive(W, SessId1, ?FILE_REF(DirGuid1))),
+    
+    ok = ?assertEqual(ok, lfm_proxy:close(W, Handle1)),
+    ok = ?assertEqual(ok, lfm_proxy:close(W, Handle2)).
+    
 
 %%%===================================================================
 %%% Internal functions

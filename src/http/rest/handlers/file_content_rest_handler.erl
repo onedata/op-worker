@@ -175,7 +175,7 @@ ensure_has_access_to_file(#op_req{operation = get, auth = ?GUEST, gri = #gri{id 
 ensure_has_access_to_file(#op_req{auth = ?GUEST}) ->
     throw(?ERROR_UNAUTHORIZED);
 ensure_has_access_to_file(#op_req{auth = Auth, gri = #gri{id = Guid}}) ->
-    middleware_utils:has_access_to_file(Auth, Guid) orelse throw(?ERROR_FORBIDDEN).
+    middleware_utils:has_access_to_file_space(Auth, Guid) orelse throw(?ERROR_FORBIDDEN).
 
 
 %% @private

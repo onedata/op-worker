@@ -108,7 +108,7 @@ sync_file(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
                 false -> {false, undefined, FileName}
             end,
 
-            case canonical_path:to_uuid(ParentUuid, FileBaseName) of
+            case map_to_existing_file_uuid(ParentUuid, FileName, FileBaseName, FileUuid) of
                 {error, not_found} ->
                     % Link from Parent to FileBaseName is missing.
                     % We must check deletion marker to ensure that file may be synced.
@@ -167,10 +167,9 @@ sync_file(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
                             {?FILE_UNMODIFIED, undefined, StorageFileCtx}
                     end;
                 {ok, ResolvedUuid} ->
-                    FileUuid2 = utils:ensure_defined(FileUuid, ResolvedUuid),
                     case deletion_marker:check(ParentUuid, FileName) of
                         {error, not_found} ->
-                            FileCtx = file_ctx:new_by_uuid(FileUuid2, SpaceId),
+                            FileCtx = file_ctx:new_by_uuid(ResolvedUuid, SpaceId),
                             % call by module to mock in tests
                             storage_import_engine:check_location_and_maybe_sync(StorageFileCtx, FileCtx, Info);
                         {ok, _} ->
@@ -178,6 +177,44 @@ sync_file(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
                     end
             end
     end.
+
+
+-spec map_to_existing_file_uuid(file_meta:uuid(), file_meta:name(), file_meta:name(), file_meta:uuid() | undefined) ->
+    {ok, file_meta:uuid()} | {error, not_found}.
+map_to_existing_file_uuid(ParentUuid, FileName, FileBaseName, undefined) ->
+    case file_meta:get_matching_child_uuids_with_tree_ids(ParentUuid, all, FileBaseName) of
+        {ok, [{ResolvedUuid, _}]} ->
+            {ok, ResolvedUuid};
+        {ok, UuidsWithTreeIds} ->
+            Filtered = lists:filter(fun({FileUuid, _}) ->
+                case file_location:get_local(FileUuid) of
+                    {ok, #document{value = #file_location{
+                        storage_file_created = true,
+                        file_id = FileId
+                    }}} ->
+                        binary:longest_common_suffix([FileId, FileName]) =:= size(FileName);
+                    (_) ->
+                        false
+                end
+            end, UuidsWithTreeIds),
+            case Filtered of
+                [{FileUuid, _}] -> {ok, FileUuid};
+                _ -> {error, not_found}
+            end;
+        {error, not_found} ->
+            {error, not_found}
+    end;
+map_to_existing_file_uuid(ParentUuid, _FileName, FileBaseName, ExpectedFileUuid) ->
+    case file_meta:get_matching_child_uuids_with_tree_ids(ParentUuid, all, FileBaseName) of
+        {ok, UuidsWithTreeIds} ->
+            case lists:any(fun({FileUuid, _}) -> FileUuid =:= ExpectedFileUuid end, UuidsWithTreeIds) of
+                true -> {ok, ExpectedFileUuid};
+                false -> {error, not_found}
+            end;
+        {error, not_found} ->
+            {error, not_found}
+    end.
+
 
 -spec create_file_meta_and_handle_conflicts(file_meta:uuid(), file_meta:name(), file_meta:mode(), od_user:id(), file_meta:uuid(),
     od_space:id()) -> {ok, file_ctx:ctx()} | {error, term()}.
@@ -616,10 +653,11 @@ import_file_unsafe(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
     FileUuid = datastore_key:new(),
     {ok, StorageFileCtx3} = create_location(FileUuid, StorageFileCtx2, OwnerId),
     FileName = storage_file_ctx:get_file_name_const(StorageFileCtx3),
-    {#statbuf{st_mode = Mode}, StorageFileCtx4} = storage_file_ctx:stat(StorageFileCtx3),
+    {#statbuf{st_mode = Mode} = StatBuf, StorageFileCtx4} = storage_file_ctx:stat(StorageFileCtx3),
     {ok, FileCtx} = create_file_meta_and_handle_conflicts(FileUuid, FileName, Mode, OwnerId,
         ParentUuid, SpaceId, Info),
     {ok, StorageFileCtx5} = create_times_from_stat_timestamps(FileUuid, StorageFileCtx4),
+    dir_update_time_stats:report_update_of_dir(file_ctx:get_logical_guid_const(ParentCtx), StatBuf),
     {ok, StorageFileCtx6} = maybe_import_nfs4_acl(FileCtx, StorageFileCtx5, Info),
     {CanonicalPath, FileCtx2} = file_ctx:get_canonical_path(FileCtx),
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
@@ -641,7 +679,7 @@ create_missing_parent_unsafe(StorageFileCtx, #{parent_ctx := ParentCtx}) ->
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
     {ok, FileCtx} = file_registration:create_missing_directory(ParentCtx, ParentName, ?SPACE_OWNER_ID(SpaceId)),
     FileUuid = datastore_key:new(),
-    create_times_from_current_time(FileUuid, SpaceId),
+    set_times_for_dir_using_current_time(FileUuid, SpaceId),
     {CanonicalPath, FileCtx2} = file_ctx:get_canonical_path(FileCtx),
     StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
     storage_import_logger:log_creation(StorageFileId, CanonicalPath, FileUuid, SpaceId),
@@ -825,10 +863,11 @@ create_times_from_stat_timestamps(FileUuid, StorageFileCtx) ->
     {ok, StorageFileCtx2}.
 
 
--spec create_times_from_current_time(file_meta:uuid(), od_space:id()) -> ok.
-create_times_from_current_time(FileUuid, SpaceId) ->
+-spec set_times_for_dir_using_current_time(file_meta:uuid(), od_space:id()) -> ok.
+set_times_for_dir_using_current_time(FileUuid, SpaceId) ->
     CurrentTime = global_clock:timestamp_seconds(),
-    times:save(FileUuid, SpaceId, CurrentTime, CurrentTime, CurrentTime).
+    times:save(FileUuid, SpaceId, CurrentTime, CurrentTime, CurrentTime),
+    dir_update_time_stats:report_update_of_dir(file_id:pack_guid(FileUuid, SpaceId), CurrentTime).
 
 %%-------------------------------------------------------------------
 %% @private
@@ -1265,9 +1304,16 @@ sanitize_acl(Acl, FileCtx) ->
 is_suffixed(FileName) ->
     Tokens = binary:split(FileName, ?CONFLICTING_STORAGE_FILE_SUFFIX_SEPARATOR, [global]),
     case lists:reverse(Tokens) of
-        [FileName] ->
-            false;
-        [FileUuid | Tokens2] ->
-            FileName2 = list_to_binary(lists:reverse(Tokens2)),
-            {true, FileUuid, FileName2}
+        [FileUuid | Tokens2] when FileUuid =/= <<>>, Tokens2 =/= [], Tokens2 =/= [<<>>] ->
+            % Check if FileUuid is existing uuid - not part of a file_name
+            case file_meta:get_including_deleted(FileUuid) of
+                {ok, _} ->
+                    FileNameWithoutSuffix = binary:part(
+                        FileName, 0, size(FileName) - size(FileUuid) - size(?CONFLICTING_STORAGE_FILE_SUFFIX_SEPARATOR)),
+                    {true, FileUuid, FileNameWithoutSuffix};
+                {error, not_found} ->
+                    false
+            end;
+        _ ->
+            false
     end.

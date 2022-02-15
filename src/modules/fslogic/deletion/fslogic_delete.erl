@@ -71,6 +71,7 @@
 
 -spec delete_file_locally(user_ctx:ctx(), file_ctx:ctx(), od_provider:id(), boolean()) -> ok.
 delete_file_locally(UserCtx, FileCtx, Creator, Silent) ->
+    report_file_deleted(FileCtx),
     file_qos:cleanup_reference_related_documents(FileCtx),
     % TODO VFS-7448 - test events production
     case {file_ctx:is_link_const(FileCtx), oneprovider:is_self(Creator)} of
@@ -407,6 +408,8 @@ delete_file_metadata(FileCtx, UserCtx, ?SPEC(?TWO_STEP_DEL_FIN, DocsDeletionScop
 
 
 -spec maybe_try_to_delete_parent(file_ctx:ctx(), user_ctx:ctx(), docs_deletion_scope(), helpers:file_id()) -> ok.
+maybe_try_to_delete_parent(_FileCtx, _UserCtx, _DocsDeletionScope, ?DELETED_OPENED_FILES_DIR) ->
+    ok;
 maybe_try_to_delete_parent(FileCtx, UserCtx, DocsDeletionScope, StorageFileId) ->
     {ParentCtx, _FileCtx2} = files_tree:get_parent(FileCtx, UserCtx),
     try
@@ -438,7 +441,7 @@ maybe_add_deletion_marker(FileCtx, UserCtx) ->
             case file_ctx:is_imported_storage(FileCtx) of
                 {true, FileCtx2} ->
                     {ParentGuid, FileCtx3} = files_tree:get_parent_guid_if_not_root_dir(FileCtx2, UserCtx),
-                    {ParentUuid, _} = file_id:unpack_guid(ParentGuid),
+                    ParentUuid = file_id:guid_to_uuid(ParentGuid),
                     deletion_marker:add(ParentUuid, FileCtx3);
                 {false, FileCtx2} ->
                     FileCtx2
@@ -647,6 +650,7 @@ remove_synced_associated_documents(FileCtx) ->
     ok = custom_metadata:delete(FileUuid),
     ok = times:delete(FileUuid),
     ok = transferred_file:clean_up(FileGuid),
+    ok = archive_recall:delete_synced_docs(FileUuid),
     ok = file_qos:delete_associated_entries_on_no_references(FileCtx).
 
 
@@ -654,10 +658,14 @@ remove_synced_associated_documents(FileCtx) ->
 remove_local_associated_documents(FileCtx, StorageFileDeleted, StorageFileId) ->
     % TODO VFS-7377 use file_location:get_deleted instead of passing StorageFileId
     FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
+    FileGuid = file_ctx:get_logical_guid_const(FileCtx),
     StorageFileDeleted andalso maybe_delete_storage_sync_info(FileCtx, StorageFileId),
     ok = file_meta_posthooks:delete(FileUuid),
     ok = file_qos:cleanup_on_no_reference(FileCtx),
-    ok = file_popularity:delete(FileUuid).
+    ok = archive_recall:delete_local_docs(FileUuid),
+    ok = file_popularity:delete(FileUuid),
+    ok = dir_size_stats:delete_stats(FileGuid),
+    ok = dir_update_time_stats:delete_stats(FileGuid).
 
 
 %%--------------------------------------------------------------------
@@ -710,3 +718,12 @@ log_storage_file_deletion_error(FileCtx, Error, IncludeStacktrace) ->
         {true, Stacktrace} -> ?error_stacktrace(Format, Args, Stacktrace);
         false -> ?error(Format, Args)
     end.
+
+
+-spec report_file_deleted(file_ctx:ctx()) -> ok.
+report_file_deleted(FileCtx) ->
+    % NOTE: file count is decremented as a result of local delete so there is no need to protect this code
+    % for races on dbsync
+    {ParentFileCtx, _} = files_tree:get_parent(FileCtx, undefined),
+    {Type, _} = file_ctx:get_type(FileCtx),
+    dir_size_stats:report_file_deleted(Type, file_ctx:get_logical_guid_const(ParentFileCtx)).

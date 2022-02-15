@@ -159,7 +159,7 @@ groups() -> [
         dip_archive_dataset_containing_symlink_to_reg_file_bagit_layout_not_follow,
         dip_archive_dataset_containing_symlink_to_directory_bagit_layout_not_follow,
         dip_archive_nested_datasets_bagit_layout,
-    
+
         modify_preserved_plain_archive_test,
         modify_preserved_bagit_archive_test
     ]},
@@ -188,6 +188,7 @@ all() -> [
     {group, parallel_tests},
     {group, verification_tests}
 ].
+
 
 -define(ATTEMPTS, 60).
 
@@ -959,16 +960,19 @@ nested_verification_test_base(Layout) ->
 %===================================================================
 
 init_per_suite(Config) ->
-    oct_background:init_per_suite([{?LOAD_MODULES, [?MODULE, archive_tests_utils]} | Config], #onenv_test_config{
-        onenv_scenario = "2op-archive",
-        envs = [{op_worker, op_worker, [
-            {fuse_session_grace_period_seconds, 24 * 60 * 60},
-            {provider_token_ttl_sec, 24 * 60 * 60}
-        ]}]
-    }).
+    oct_background:init_per_suite([{?LOAD_MODULES, [?MODULE, archive_tests_utils, dir_stats_test_utils]} | Config],
+        #onenv_test_config{
+            onenv_scenario = "2op-archive",
+            envs = [{op_worker, op_worker, [
+                {fuse_session_grace_period_seconds, 24 * 60 * 60},
+                {provider_token_ttl_sec, 24 * 60 * 60}
+            ]}],
+            posthook = fun dir_stats_test_utils:disable_stats_counting_ct_posthook/1
+        }).
 
-end_per_suite(_Config) ->
-    oct_background:end_per_suite().
+end_per_suite(Config) ->
+    oct_background:end_per_suite(),
+    dir_stats_test_utils:enable_stats_counting(Config).
 
 init_per_group(_Group, Config) ->
     Config2 = oct_background:update_background_config(Config),
@@ -981,6 +985,4 @@ init_per_testcase(_Case, Config) ->
     Config.
 
 end_per_testcase(_Case, _Config) ->
-    Nodes = oct_background:get_all_providers_nodes(),
-    test_utils:mock_unload(Nodes),
     ok.

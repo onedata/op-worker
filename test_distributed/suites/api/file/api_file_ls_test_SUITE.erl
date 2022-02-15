@@ -218,7 +218,7 @@ create_get_children_tests_env(TestMode) ->
         normal_mode ->
             undefined;
         share_mode ->
-            {ok, ShId} = lfm_proxy:create_share(
+            {ok, ShId} = opt_shares:create(
                 P1Node, SpaceOwnerSessIdP1, ?FILE_REF(DirGuid), <<"share">>
             ),
             ShId

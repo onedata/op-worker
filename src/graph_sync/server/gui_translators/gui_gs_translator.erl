@@ -81,6 +81,8 @@ handshake_attributes(_Client) ->
 %%--------------------------------------------------------------------
 -spec translate_value(gs_protocol:protocol_version(), gri:gri(),
     Value :: term()) -> no_return().
+translate_value(_, #gri{type = op_archive} = GRI, Value) ->
+    archive_gui_gs_translator:translate_value(GRI, Value);
 translate_value(_, #gri{type = op_atm_store} = GRI, Data) ->
     atm_store_gui_gs_translator:translate_value(GRI, Data);
 translate_value(_, #gri{type = op_dataset} = GRI, Value) ->

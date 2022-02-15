@@ -321,7 +321,7 @@ authorize_create(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = As}}, _) wh
     As =:= json_metadata;
     As =:= rdf_metadata
 ->
-    middleware_utils:has_access_to_file(Auth, Guid);
+    middleware_utils:has_access_to_file_space(Auth, Guid);
 
 authorize_create(#op_req{gri = #gri{aspect = object_id}}, _) ->
     % File path must have been resolved to guid by rest_handler already (to
@@ -486,6 +486,8 @@ resolve_get_operation_handler(symlink_value, public) -> ?MODULE;
 resolve_get_operation_handler(symlink_value, private) -> ?MODULE;
 resolve_get_operation_handler(symlink_target, public) -> ?MODULE;
 resolve_get_operation_handler(symlink_target, private) -> ?MODULE;
+resolve_get_operation_handler(archive_recall_details, private) -> ?MODULE;
+resolve_get_operation_handler(archive_recall_progress, private) -> ?MODULE;
 resolve_get_operation_handler(_, _) -> throw(?ERROR_NOT_SUPPORTED).
 
 
@@ -557,7 +559,9 @@ data_spec_get(#gri{aspect = As}) when
     As =:= acl;
     As =:= shares;
     As =:= symlink_value;
-    As =:= symlink_target
+    As =:= symlink_target;
+    As =:= archive_recall_details;
+    As =:= archive_recall_progress
 ->
     #{required => #{id => {binary, guid}}};
 
@@ -621,13 +625,15 @@ authorize_get(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= dataset_summary;
     As =:= hardlinks;
     As =:= symlink_value;
-    As =:= symlink_target
+    As =:= symlink_target;
+    As =:= archive_recall_details;
+    As =:= archive_recall_progress
 ->
-    middleware_utils:has_access_to_file(Auth, Guid);
+    middleware_utils:has_access_to_file_space(Auth, Guid);
 
 authorize_get(#op_req{auth = Auth, gri = #gri{id = FirstGuid, aspect = {hardlinks, SecondGuid}}}, _) ->
-    middleware_utils:has_access_to_file(Auth, FirstGuid) andalso
-        middleware_utils:has_access_to_file(Auth, SecondGuid);
+    middleware_utils:has_access_to_file_space(Auth, FirstGuid) andalso
+        middleware_utils:has_access_to_file_space(Auth, SecondGuid);
 
 authorize_get(#op_req{auth = ?USER(UserId), gri = #gri{id = Guid, aspect = transfers}}, _) ->
     SpaceId = file_id:guid_to_space_id(Guid),
@@ -642,7 +648,7 @@ authorize_get(#op_req{auth = Auth, gri = #gri{aspect = download_url, scope = Sco
         private -> 
             fun(Guid) -> 
                 not file_id:is_share_guid(Guid) 
-                    andalso middleware_utils:has_access_to_file(Auth, Guid) 
+                    andalso middleware_utils:has_access_to_file_space(Auth, Guid) 
             end;
         public -> 
             fun file_id:is_share_guid/1
@@ -668,7 +674,9 @@ validate_get(#op_req{gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= dataset_summary;
     As =:= hardlinks;
     As =:= symlink_value;
-    As =:= symlink_target
+    As =:= symlink_target;
+    As =:= archive_recall_details;
+    As =:= archive_recall_progress
 ->
     middleware_utils:assert_file_managed_locally(Guid);
 
@@ -862,7 +870,15 @@ get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = symlink_target, scop
         type = op_file, id = TargetFileGuid,
         aspect = instance, scope = Scope
     },
-    {ok, TargetFileGri, TargetFileDetails}.
+    {ok, TargetFileGri, TargetFileDetails};
+
+
+get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = archive_recall_details}}, _) ->
+    {ok, mi_archives:get_recall_details(Auth#auth.session_id, FileGuid)};
+
+
+get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = archive_recall_progress}}, _) ->
+    {ok, mi_archives:get_recall_progress(Auth#auth.session_id, FileGuid)}.
 
 
 %%%===================================================================
@@ -917,7 +933,7 @@ authorize_update(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = As}}, _) wh
     As =:= instance;
     As =:= acl
 ->
-    middleware_utils:has_access_to_file(Auth, Guid).
+    middleware_utils:has_access_to_file_space(Auth, Guid).
 
 
 %% @private
@@ -998,7 +1014,7 @@ authorize_delete(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = As}}, _) wh
     As =:= json_metadata;
     As =:= rdf_metadata
 ->
-    middleware_utils:has_access_to_file(Auth, Guid).
+    middleware_utils:has_access_to_file_space(Auth, Guid).
 
 
 %% @private

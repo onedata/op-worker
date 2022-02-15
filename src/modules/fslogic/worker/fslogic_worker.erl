@@ -280,6 +280,7 @@ handle({bounded_cache_timer, Msg}) ->
 handle(?INIT_EFFECTIVE_CACHES(Space)) ->
     paths_cache:init(Space),
     dataset_eff_cache:init(Space),
+    archive_recall_cache:init(Space),
     file_meta_links_sync_status_cache:init(Space);
 handle(_Request) ->
     ?log_bad_request(_Request),
@@ -350,6 +351,7 @@ init_effective_caches() ->
     paths_cache:init_group(),
     dataset_eff_cache:init_group(),
     file_meta_links_sync_status_cache:init_group(),
+    archive_recall_cache:init_group(),
     schedule_init_effective_caches(all).
 
 
@@ -679,20 +681,6 @@ handle_file_request(UserCtx, #fsync{
     provider_response().
 handle_provider_request(UserCtx, #get_file_distribution{}, FileCtx) ->
     sync_req:get_file_distribution(UserCtx, FileCtx);
-handle_provider_request(UserCtx, #schedule_file_replication{
-    block = _Block, target_provider_id = TargetProviderId, callback = Callback,
-    view_name = ViewName, query_view_params = QueryViewParams
-}, FileCtx) ->
-    sync_req:schedule_file_replication(UserCtx, FileCtx, TargetProviderId,
-        Callback, ViewName, QueryViewParams
-    );
-handle_provider_request(UserCtx, #schedule_replica_invalidation{
-    source_provider_id = SourceProviderId, target_provider_id = TargetProviderId,
-    view_name = ViewName, query_view_params = QueryViewParams
-}, FileCtx) ->
-    replica_eviction_req:schedule_replica_eviction(UserCtx, FileCtx,
-        SourceProviderId, TargetProviderId, ViewName, QueryViewParams
-    );
 handle_provider_request(UserCtx, #get_parent{}, FileCtx) ->
     guid_req:get_parent(UserCtx, FileCtx);
 handle_provider_request(UserCtx, #get_file_path{}, FileCtx) ->
@@ -729,11 +717,7 @@ handle_provider_request(UserCtx, #set_metadata{
 handle_provider_request(UserCtx, #remove_metadata{type = Type}, FileCtx) ->
     metadata_req:remove_metadata(UserCtx, FileCtx, Type);
 handle_provider_request(UserCtx, #check_perms{flag = Flag}, FileCtx) ->
-    permission_req:check_perms(UserCtx, FileCtx, Flag);
-handle_provider_request(UserCtx, #create_share{name = Name, description = Description}, FileCtx) ->
-    share_req:create_share(UserCtx, FileCtx, Name, Description);
-handle_provider_request(UserCtx, #remove_share{share_id = ShareId}, FileCtx) ->
-    share_req:remove_share(UserCtx, FileCtx, ShareId).
+    permission_req:check_perms(UserCtx, FileCtx, Flag).
 
 
 %%--------------------------------------------------------------------

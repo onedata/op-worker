@@ -35,7 +35,7 @@
 
     decode_object_id/2,
     assert_file_exists/2,
-    has_access_to_file/2,
+    has_access_to_file_space/2,
     assert_file_managed_locally/1
 ]).
 
@@ -166,10 +166,10 @@ assert_file_exists(#auth{session_id = SessionId}, FileGuid) ->
 %% in case of user root dir since it doesn't belong to any space.
 %% @end
 %%--------------------------------------------------------------------
--spec has_access_to_file(aai:auth(), file_id:file_guid()) -> boolean().
-has_access_to_file(?GUEST, _Guid) ->
+-spec has_access_to_file_space(aai:auth(), file_id:file_guid()) -> boolean().
+has_access_to_file_space(?GUEST, _Guid) ->
     false;
-has_access_to_file(?USER(UserId) = Auth, Guid) ->
+has_access_to_file_space(?USER(UserId) = Auth, Guid) ->
     case fslogic_uuid:user_root_dir_guid(UserId) of
         Guid ->
             true;

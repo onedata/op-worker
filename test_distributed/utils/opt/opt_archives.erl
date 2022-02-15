@@ -17,7 +17,9 @@
     archive_dataset/5, archive_dataset/7,
     get_info/3,
     update/4,
-    init_purge/3, init_purge/4
+    purge/3, purge/4,
+    recall/5, 
+    get_recall_details/3, get_recall_progress/3
 ]).
 
 -define(CALL(NodeSelector, Args),
@@ -100,13 +102,31 @@ update(NodeSelector, SessionId, ArchiveId, Diff) ->
     ?CALL(NodeSelector, [SessionId, ArchiveId, Diff]).
 
 
--spec init_purge(oct_background:node_selector(), session:id(), archive:id()) ->
+-spec purge(oct_background:node_selector(), session:id(), archive:id()) ->
     ok | errors:error().
-init_purge(NodeSelector, SessionId, ArchiveId) ->
-    init_purge(NodeSelector, SessionId, ArchiveId, undefined).
+purge(NodeSelector, SessionId, ArchiveId) ->
+    purge(NodeSelector, SessionId, ArchiveId, undefined).
 
 
--spec init_purge(oct_background:node_selector(), session:id(), archive:id(), archive:callback()) ->
+-spec purge(oct_background:node_selector(), session:id(), archive:id(), archive:callback()) ->
     ok | errors:error().
-init_purge(NodeSelector, SessionId, ArchiveId, CallbackUrl) ->
+purge(NodeSelector, SessionId, ArchiveId, CallbackUrl) ->
     ?CALL(NodeSelector, [SessionId, ArchiveId, CallbackUrl]).
+
+
+-spec recall(oct_background:node_selector(), session:id(), archive:id(), file_id:file_guid(), 
+    file_meta:name() | default) -> {ok, file_id:file_guid()} | errors:error().
+recall(NodeSelector, SessionId, ArchiveId, TargetParentGuid, RootFileName) ->
+    ?CALL(NodeSelector, [SessionId, ArchiveId, TargetParentGuid, RootFileName]).
+
+
+-spec get_recall_details(oct_background:node_selector(), session:id(), file_id:file_guid()) ->
+    {ok, archive_recall:record()} | {error, term()}.
+get_recall_details(NodeSelector, SessionId, FileGuid) ->
+    ?CALL(NodeSelector, [SessionId, FileGuid]).
+
+
+-spec get_recall_progress(oct_background:node_selector(), session:id(), file_id:file_guid()) ->
+    {archive_recall:recall_progress_map()} | {error, term()}.
+get_recall_progress(NodeSelector, SessionId, FileGuid) ->
+    ?CALL(NodeSelector, [SessionId, FileGuid]).

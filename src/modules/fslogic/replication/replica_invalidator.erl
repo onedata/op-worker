@@ -32,11 +32,12 @@
 -spec invalidate_changes(file_ctx:ctx(), file_location:doc(), Changes :: list(),
     Size :: non_neg_integer(), [fslogic_blocks:block()]) ->
     {file_location:doc() | deleted, file_ctx:ctx(), [fslogic_blocks:block()]}.
-invalidate_changes(FileCtx, Doc = #document{value = Loc}, [], NewSize, ChangedBlocks) ->
+invalidate_changes(FileCtx, Doc = #document{value = #file_location{size = OldSize} = Loc}, [], NewSize, ChangedBlocks) ->
     NewDoc = Doc#document{value = Loc#file_location{size = NewSize}},
     {ok, _} = fslogic_location_cache:save_location(NewDoc),
+    dir_size_stats:report_reg_file_size_changed(file_ctx:get_referenced_guid_const(FileCtx), total, NewSize - OldSize),
     {NewDoc, file_ctx:reset(FileCtx), ChangedBlocks};
-invalidate_changes(FileCtx, Doc = #document{value = Loc}, [{rename, Rename}],
+invalidate_changes(FileCtx, Doc = #document{value = #file_location{size = OldSize} = Loc}, [{rename, Rename}],
     NewSize, ChangedBlocks) ->
     % if rename is present, it is always last element of changes list
     NewDoc = Doc#document{value = Loc#file_location{size = NewSize}},
@@ -45,9 +46,11 @@ invalidate_changes(FileCtx, Doc = #document{value = Loc}, [{rename, Rename}],
             {deleted, FileCtx2, ChangedBlocks};
         {skipped, FileCtx2} ->
             {ok, _} = fslogic_location_cache:save_location(NewDoc),
+            dir_size_stats:report_reg_file_size_changed(file_ctx:get_referenced_guid_const(FileCtx), total, NewSize - OldSize),
             {NewDoc, file_ctx:reset(FileCtx2), ChangedBlocks};
         {{renamed, RenamedDoc, _FileUuid, _TargetSpaceId}, FileCtx2} ->
             {ok, _} = fslogic_location_cache:save_location(RenamedDoc),
+            dir_size_stats:report_reg_file_size_changed(file_ctx:get_referenced_guid_const(FileCtx), total, NewSize - OldSize),
             {RenamedDoc, file_ctx:reset(FileCtx2), ChangedBlocks}
     end;
 invalidate_changes(FileCtx, Doc = #document{

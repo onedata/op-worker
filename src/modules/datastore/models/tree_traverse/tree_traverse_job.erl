@@ -40,6 +40,11 @@
 
 -define(MAIN_JOB_PREFIX, "main_job").
 
+% Time in seconds for main job document to expire after delete (one year).
+% After expiration of main job document, information about traverse cancellation
+% cannot be propagated to other providers.
+-define(MAIN_JOB_EXPIRY, 31536000).
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -62,7 +67,8 @@ save_master_job(Key, Job = #tree_traverse{
     track_subtree_status = TrackSubtreeStatus,
     batch_size = BatchSize,
     traverse_info = TraverseInfo,
-    follow_symlinks = FollowSymlinks,
+    resolved_root_uuids = ResolvedRootUuids,
+    symlink_resolution_policy = SymlinkResolutionPolicy,
     relative_path = RelativePath,
     encountered_files = EncounteredFilesMap
 }, Pool, TaskId, CallbackModule) ->
@@ -82,7 +88,8 @@ save_master_job(Key, Job = #tree_traverse{
         track_subtree_status = TrackSubtreeStatus,
         batch_size = BatchSize,
         traverse_info = term_to_binary(TraverseInfo),
-        follow_symlinks = FollowSymlinks,
+        symlink_resolution_policy = SymlinkResolutionPolicy,
+        resolved_root_uuids = ResolvedRootUuids,
         relative_path = RelativePath,
         encountered_files = EncounteredFilesMap
     },
@@ -97,7 +104,8 @@ delete_master_job(<<?MAIN_JOB_PREFIX, _/binary>> = Key, Job, Scope, CallbackModu
         true -> Ctx#{scope => Scope};
         false -> Ctx
     end,
-    datastore_model:delete(Ctx2, Key);
+    Ctx3 = datastore_model:set_expiry(Ctx2, ?MAIN_JOB_EXPIRY),
+    datastore_model:delete(Ctx3, Key);
 delete_master_job(Key, _Job, _, _CallbackModule) ->
     datastore_model:delete(?CTX, Key).
 
@@ -116,7 +124,8 @@ get_master_job(#document{value = #tree_traverse_job{
     track_subtree_status = TrackSubtreeStatus,
     batch_size = BatchSize,
     traverse_info = TraverseInfo,
-    follow_symlinks = FollowSymlinks,
+    symlink_resolution_policy = SymlinkResolutionPolicy,
+    resolved_root_uuids = ResolvedRootUuids,
     relative_path = RelativePath,
     encountered_files = EncounteredFilesMap
 }}) ->
@@ -137,7 +146,8 @@ get_master_job(#document{value = #tree_traverse_job{
                 track_subtree_status = TrackSubtreeStatus,
                 batch_size = BatchSize,
                 traverse_info = binary_to_term(TraverseInfo),
-                follow_symlinks = FollowSymlinks,
+                symlink_resolution_policy = SymlinkResolutionPolicy,
+                resolved_root_uuids = ResolvedRootUuids,
                 relative_path = RelativePath,
                 encountered_files = EncounteredFilesMap
             },
@@ -174,7 +184,7 @@ get_ctx() ->
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    4.
+    5.
 
 
 -spec get_record_struct(datastore_model:record_version()) ->
@@ -245,6 +255,26 @@ get_record_struct(4) ->
         {traverse_info, binary},
         % new fields - follow_symlinks, relative_path and encountered_files
         {follow_symlinks, boolean},
+        {relative_path, binary},
+        {encountered_files, #{string => boolean}}
+    ]};
+get_record_struct(5) ->
+    {record, [
+        {pool, string},
+        {callback_module, atom},
+        {task_id, string},
+        {doc_id, string},
+        {user_id, string},
+        {use_listing_token, boolean},
+        {last_name, string},
+        {last_tree, string},
+        {child_dirs_job_generation_policy, atom},
+        {children_master_jobs_mode, atom},
+        {track_subtree_status, boolean},
+        {batch_size, integer},
+        {traverse_info, binary},
+        {symlink_resolution_policy, atom}, % modified field
+        {resolved_root_uuids, [string]}, % new field
         {relative_path, binary},
         {encountered_files, #{string => boolean}}
     ]}.
@@ -353,6 +383,51 @@ upgrade_record(3, Record) ->
         false,
         <<>>,
         #{}
+    }};
+upgrade_record(4, Record) ->
+    {
+        ?MODULE,
+        Pool,
+        CallbackModule,
+        TaskId,
+        DocId,
+        UserId,
+        UseListingToken,
+        LastName,
+        LastTree,
+        ChildDirsJobGenerationPolicy,
+        ChildrenMasterJobsMode,
+        TrackSubtreeStatus,
+        BatchSize,
+        TraverseInfo,
+        FollowSymlinks,
+        RelativePath,
+        EncounteredFiles
+    } = Record,
+    
+    SymlinkResolutionPolicy = case FollowSymlinks of
+        true -> follow_external;
+        false -> preserve
+    end,
+    
+    {5, {?MODULE,
+        Pool,
+        CallbackModule,
+        TaskId,
+        DocId,
+        UserId,
+        UseListingToken,
+        LastName,
+        LastTree,
+        ChildDirsJobGenerationPolicy,
+        ChildrenMasterJobsMode,
+        TrackSubtreeStatus,
+        BatchSize,
+        TraverseInfo,
+        SymlinkResolutionPolicy, % modified field
+        [], % new field resolved_root_uuids
+        RelativePath,
+        EncounteredFiles
     }}.
 
 %%%===================================================================
