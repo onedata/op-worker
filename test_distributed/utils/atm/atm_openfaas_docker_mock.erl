@@ -6,10 +6,10 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Test implementation of docker images used in automation CT tests.
+%%% This module contains mock implementations of OpenFaaS lambda docker functions.
 %%% @end
 %%%-------------------------------------------------------------------
--module(atm_test_docker_registry).
+-module(atm_openfaas_docker_mock).
 -author("Bartosz Walkowicz").
 
 %% API

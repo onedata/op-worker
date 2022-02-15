@@ -17,6 +17,12 @@
 
 -include("modules/dataset/dataset.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include_lib("onenv_ct/include/test_rpc.hrl").
+
+
+-define(rpc(__PROVIDER_SELECTOR, __EXPRESSION), ?opw_test_rpc(
+    __PROVIDER_SELECTOR, __EXPRESSION
+)).
 
 
 -record(archive_spec, {

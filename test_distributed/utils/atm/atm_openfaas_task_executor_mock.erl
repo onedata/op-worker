@@ -6,19 +6,28 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Mock for atm_openfaas_task_executor used in CT tests.
+%%% This module implements 'atm_openfaas_task_executor' mock for use in CT tests.
+%%%
+%%% NOTE: to save and later use additional contextual data available only at
+%%% executor creation the original executor model/record is also substituted.
+%%% This in turn causes following:
+%%% 1. mocked record must have the same name as original one as polymorphism
+%%%    implemented in atm is based on record name.
+%%% 2. not only required subset but all 'atm_openfaas_task_executor' functions
+%%%    must be mocked to be able to operate on substituted record.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_openfaas_task_executor_mock).
 -author("Bartosz Walkowicz").
 
 -include("modules/automation/atm_execution.hrl").
--include_lib("ctool/include/errors.hrl").
+-include("onenv_test_utils.hrl").
 -include_lib("ctool/include/automation/automation.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% API
 -export([init/2, teardown/1]).
--export([set_exp_lane_initiation_result/4]).
+-export([mock_lane_initiation_result/4]).
 
 
 -record(atm_openfaas_task_executor, {
@@ -28,13 +37,11 @@
 }).
 -type record() :: #atm_openfaas_task_executor{}.
 
--export_type([record/0]).
-
 
 -define(MOCKED_MODULE, atm_openfaas_task_executor).
 
--define(EXP_LANE_INITIATION_RESULT_KEY(__ATM_WORKFLOW_EXECUTION_ID, __ATM_LANE_INDEX),
-    {exp_lane_initiation_result_key, __ATM_WORKFLOW_EXECUTION_ID, __ATM_LANE_INDEX}
+-define(MOCKED_LANE_INITIATION_RESULT_KEY(__ATM_WORKFLOW_EXECUTION_ID, __ATM_LANE_INDEX),
+    {mocked_lane_initiation_result_key, __ATM_WORKFLOW_EXECUTION_ID, __ATM_LANE_INDEX}
 ).
 
 
@@ -48,7 +55,7 @@
     module()
 ) ->
     ok.
-init(ProviderSelectors, TestDockerRegistryModule) ->
+init(ProviderSelectors, ModuleWithOpenfaasDockerMock) ->
     Workers = get_nodes(utils:ensure_list(ProviderSelectors)),
 
     test_utils:mock_new(Workers, ?MOCKED_MODULE, [passthrough, no_history]),
@@ -60,7 +67,7 @@ init(ProviderSelectors, TestDockerRegistryModule) ->
     mock_teardown(Workers),
     mock_delete(Workers),
     mock_in_readonly_mode(Workers),
-    mock_run(Workers, TestDockerRegistryModule),
+    mock_run(Workers, ModuleWithOpenfaasDockerMock),
 
     mock_version(Workers),
     mock_db_encode(Workers),
@@ -74,18 +81,18 @@ teardown(ProviderSelectors) ->
     test_utils:mock_unload(Workers, ?MOCKED_MODULE).
 
 
--spec set_exp_lane_initiation_result(
+-spec mock_lane_initiation_result(
     oct_background:entity_selector(),
     atm_workflow_execution:id(),
     atm_lane_execution:index(),
     success | failure
 ) ->
     ok.
-set_exp_lane_initiation_result(ProviderSelector, AtmWorkflowExecutionId, AtmLaneIndex, ExpResult) ->
-    opw_test_rpc:call(ProviderSelector, node_cache, put, [
-        ?EXP_LANE_INITIATION_RESULT_KEY(AtmWorkflowExecutionId, AtmLaneIndex),
-        ExpResult
-    ]).
+mock_lane_initiation_result(ProviderSelector, AtmWorkflowExecutionId, AtmLaneIndex, MockedResult) ->
+    ?rpc(ProviderSelector, node_cache:put(
+        ?MOCKED_LANE_INITIATION_RESULT_KEY(AtmWorkflowExecutionId, AtmLaneIndex),
+        MockedResult
+    )).
 
 
 %%%===================================================================
@@ -135,7 +142,7 @@ mock_initiate(Workers) ->
         AtmLaneIndex = AtmTaskExecutor#atm_openfaas_task_executor.lane_index,
 
         case node_cache:get(
-            ?EXP_LANE_INITIATION_RESULT_KEY(AtmWorkflowExecutionId, AtmLaneIndex),
+            ?MOCKED_LANE_INITIATION_RESULT_KEY(AtmWorkflowExecutionId, AtmLaneIndex),
             success
         ) of
             success ->
@@ -176,13 +183,13 @@ mock_in_readonly_mode(Workers) ->
 
 %% @private
 -spec mock_run([node()], module()) -> ok.
-mock_run(Workers, TestDockerRegistryModule) ->
+mock_run(Workers, ModuleWithOpenfaasDockerMock) ->
     MockFun = fun(AtmJobCtx, Input, #atm_openfaas_task_executor{
         operation_spec = #atm_openfaas_operation_spec{docker_image = DockerImage}
     }) ->
         spawn(fun() ->
             Result = try
-                TestDockerRegistryModule:exec(DockerImage, Input)
+                ModuleWithOpenfaasDockerMock:exec(DockerImage, Input)
             catch Type:Reason:Stacktrace ->
                 errors:to_json(?atm_examine_error(Type, Reason, Stacktrace))
             end,

@@ -175,7 +175,7 @@ init_per_suite(Config) ->
         ?MODULE,
         atm_workflow_execution_test_runner,
         atm_openfaas_task_executor_mock,
-        atm_test_docker_registry
+        atm_openfaas_docker_mock
     ],
     oct_background:init_per_suite([{?LOAD_MODULES, ModulesToLoad} | Config], #onenv_test_config{
         onenv_scenario = "1op",
@@ -202,7 +202,7 @@ end_per_suite(_Config) ->
 
 
 init_per_testcase(prepare_first_lane_run_failure_test, Config) ->
-    atm_openfaas_task_executor_mock:init(krakow, atm_test_docker_registry),
+    atm_openfaas_task_executor_mock:init(krakow, atm_openfaas_docker_mock),
     atm_workflow_execution_test_runner:init(krakow),
     Config;
 
