@@ -93,7 +93,7 @@ get_stats(Guid, StatNames) ->
 get_stats_and_time_series_collections(Guid) ->
     case dir_stats_collector_config:is_enabled_for_space(file_id:guid_to_space_id(Guid)) of
         true ->
-            dir_stats_collector:flush_stats(Guid),
+            ok = dir_stats_collector:flush_stats(Guid, ?MODULE),
             Uuid = file_id:guid_to_uuid(Guid),
             case datastore_time_series_collection:list_windows(?CTX, Uuid, #{}) of
                 {ok, WindowsMap} -> {ok, all_metrics_to_stats_and_time_series_collections(WindowsMap)};

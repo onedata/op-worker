@@ -45,7 +45,7 @@
 
 %% API
 -export([get_stats/3, update_stats_of_dir/3, update_stats_of_parent/3, update_stats_of_parent/4,
-    update_stats_of_nearest_dir/3, flush_stats/1, delete_stats/2]).
+    update_stats_of_nearest_dir/3, flush_stats/2, delete_stats/2]).
 
 
 %% pes_plugin_behaviour callbacks
@@ -90,6 +90,16 @@
     collection_update :: dir_stats_collection:collection()
 }).
 
+-record(dsc_flush_request, {
+    guid :: file_id:file_guid(),
+    collection_type :: dir_stats_collection:type()
+}).
+
+-record(dsc_delete_request, {
+    guid :: file_id:file_guid(),
+    collection_type :: dir_stats_collection:type()
+}).
+
 
 -type state() :: #state{}.
 
@@ -102,7 +112,6 @@
                                                     % are removed from the cache
 -define(SUPERVISOR_NAME, dir_stats_collector_worker_sup).
 
--define(FORCED_FLUSH, forced_flush).
 -define(SCHEDULED_FLUSH, scheduled_flush).
 
 
@@ -196,25 +205,38 @@ update_stats_of_nearest_dir(Guid, CollectionType, CollectionUpdate) ->
     end.
 
 
--spec flush_stats(file_id:file_guid()) -> ok.
-flush_stats(Guid) ->
+-spec flush_stats(file_id:file_guid(), dir_stats_collection:type()) -> ok | ?ERROR_INTERNAL_SERVER_ERROR .
+flush_stats(Guid, CollectionType) ->
     case dir_stats_collector_config:is_enabled_for_space(file_id:guid_to_space_id(Guid)) of
         true ->
-            call_designated_node(Guid, submit_and_await,
-                [?MODULE, Guid, ?FORCED_FLUSH, #{ensure_executor_alive => false}]);
+            Request = #dsc_flush_request{guid = Guid, collection_type = CollectionType},
+            case call_designated_node(
+                Guid, submit_and_await, [?MODULE, Guid, Request, #{ensure_executor_alive => false}]
+            ) of
+                ignored -> ok;
+                Other -> Other
+            end;
         false ->
             ok
     end.
 
 
--spec delete_stats(file_id:file_guid(), dir_stats_collection:type()) -> ok.
+-spec delete_stats(file_id:file_guid(), dir_stats_collection:type()) -> ok | ?ERROR_INTERNAL_SERVER_ERROR.
 delete_stats(Guid, CollectionType) ->
-    flush_stats(Guid), % Flush data cached by executor as flush of this data after collection delete would
-                       % result in recreation of collection
-
-    % TODO VFS-8837 - delete collection only if collecting is enabled for space or was enabled in past
     % TODO VFS-8837 - delete only for directories
-    CollectionType:delete(Guid).
+    % TODO VFS-8837 - delete collection when collecting was enabled in past
+    case dir_stats_collector_config:is_enabled_for_space(file_id:guid_to_space_id(Guid)) of
+        true ->
+            Request = #dsc_delete_request{guid = Guid, collection_type = CollectionType},
+            case call_designated_node(
+                Guid, submit_and_await, [?MODULE, Guid, Request, #{ensure_executor_alive => false}]
+            ) of
+                ignored -> CollectionType:delete(Guid);
+                Other -> Other
+            end;
+        false ->
+            ok
+    end.
 
 
 %%%===================================================================
@@ -278,8 +300,8 @@ forced_terminate(Reason, State) ->
 %%% Callbacks used by executor - handling requests
 %%%===================================================================
 
--spec handle_call(#dsc_get_request{} | ?FORCED_FLUSH, state()) ->
-    {ok | {ok, dir_stats_collection:collection()}, state()}.
+-spec handle_call(#dsc_get_request{} | #dsc_flush_request{} | #dsc_delete_request{}, state()) ->
+    {ok | {ok, dir_stats_collection:collection()} | ?ERROR_INTERNAL_SERVER_ERROR, state()}.
 handle_call(#dsc_get_request{
     guid = Guid,
     collection_type = CollectionType,
@@ -288,8 +310,23 @@ handle_call(#dsc_get_request{
     {#cached_dir_stats{current_stats = CurrentStats}, UpdatedState} = reset_last_used_timer(State, Guid, CollectionType),
     {{ok, dir_stats_collection:with(StatNames, CurrentStats)}, UpdatedState};
 
-handle_call(?FORCED_FLUSH, State) ->
-    {ok, flush_internal(State)};
+handle_call(#dsc_flush_request{guid = Guid, collection_type = CollectionType}, State) ->
+    CachedDirStatsKey = {Guid, CollectionType},
+    case flush_keys([CachedDirStatsKey], false, State) of
+        {true, UpdatedState} -> {ok, UpdatedState};
+        {false, UpdatedState} -> {?ERROR_INTERNAL_SERVER_ERROR, UpdatedState}
+    end;
+
+handle_call(#dsc_delete_request{guid = Guid, collection_type = CollectionType}, State) ->
+    % Flush data cached by executor as flush of this data after collection delete would result in recreation of collection
+    CachedDirStatsKey = {Guid, CollectionType},
+    case flush_keys([CachedDirStatsKey], true, State) of
+        {true, UpdatedState} ->
+            CollectionType:delete(Guid),
+            {ok, UpdatedState};
+        {false, UpdatedState} ->
+            {?ERROR_INTERNAL_SERVER_ERROR, UpdatedState}
+    end;
 
 handle_call(Request, State) ->
     ?log_bad_request(Request),
@@ -332,32 +369,48 @@ flush_internal(#state{
     flush_timer_ref = undefined,
     dir_stats_cache = DirStatsCache
 } = State) ->
-    {NewDirStatsCache, HaveAllSucceeded} = maps:fold(fun(
-        CachedDirStatsKey, CachedDirStats, {DirStatsAcc, HasSucceededAcc} = Acc
-    ) ->
-        case has_unflushed_changes(CachedDirStats) of
-            true ->
-                UpdatedCachedDirStats = flush_cached_dir_stats(CachedDirStatsKey, CachedDirStats),
-                {DirStatsAcc#{CachedDirStatsKey => UpdatedCachedDirStats},
-                    (not has_unflushed_changes(UpdatedCachedDirStats)) and HasSucceededAcc};
-            false ->
-                case should_forget_cached_dir_stats(CachedDirStats) of
-                    true -> Acc;
-                    false -> {DirStatsAcc#{CachedDirStatsKey => CachedDirStats}, HasSucceededAcc}
-                end
-        end
-    end, {#{}, true}, DirStatsCache),
+    {HaveAllSucceeded, UpdatedState} = flush_keys(maps:keys(DirStatsCache), false, State),
 
-    State#state{
-        dir_stats_cache = NewDirStatsCache,
-        has_unflushed_changes = not HaveAllSucceeded
-    };
+    UpdatedState#state{has_unflushed_changes = not HaveAllSucceeded};
 
 flush_internal(#state{
     flush_timer_ref = Ref
 } = State) ->
     erlang:cancel_timer(Ref),
     flush_internal(State#state{flush_timer_ref = undefined}).
+
+
+%% @private
+-spec flush_keys([cached_dir_stats_key()], ForgetIfSuccessfullyFlushed :: boolean(), state()) ->
+    {HaveAllSucceeded :: boolean(), state()}.
+flush_keys(CachedDirStatsKeysToFlush, ForgetIfSuccessfullyFlushed, #state{dir_stats_cache = DirStatsCache} = State) ->
+    {NewDirStatsCache, HaveAllSucceeded} = maps:fold(
+        fun(
+            CachedDirStatsKey, CachedDirStats, {DirStatsAcc, HasSucceededAcc} = Acc
+        ) ->
+            case has_unflushed_changes(CachedDirStats) of
+                true ->
+                    UpdatedCachedDirStats = flush_cached_dir_stats(CachedDirStatsKey, CachedDirStats),
+                    KeySuccessfullyFlushed = not has_unflushed_changes(UpdatedCachedDirStats),
+                    case KeySuccessfullyFlushed and ForgetIfSuccessfullyFlushed of
+                        true ->
+                            Acc;
+                        false ->
+                            {DirStatsAcc#{CachedDirStatsKey => UpdatedCachedDirStats},
+                                KeySuccessfullyFlushed and HasSucceededAcc}
+                    end;
+                false ->
+                    case ForgetIfSuccessfullyFlushed orelse should_forget_cached_dir_stats(CachedDirStats) of
+                        true -> Acc;
+                        false -> {DirStatsAcc#{CachedDirStatsKey => CachedDirStats}, HasSucceededAcc}
+                    end
+            end
+        end,
+        {maps:without(CachedDirStatsKeysToFlush, DirStatsCache), true},
+        maps:with(CachedDirStatsKeysToFlush, DirStatsCache)
+    ),
+
+    {HaveAllSucceeded, State#state{dir_stats_cache = NewDirStatsCache}}.
 
 
 %% @private
@@ -501,17 +554,13 @@ add_hook_for_missing_doc(Guid, CollectionType, CollectionUpdate) ->
 
 %% @private
 -spec call_designated_node(file_id:file_guid(), submit_and_await | acknowledged_cast, list()) ->
-    ok | {ok, dir_stats_collection:collection()} | ?ERROR_INTERNAL_SERVER_ERROR.
+    ok | {ok, dir_stats_collection:collection()} | ignored | ?ERROR_INTERNAL_SERVER_ERROR.
 call_designated_node(Guid, Function, Args) ->
     Node = consistent_hashing:get_assigned_node(Guid),
     case erpc:call(Node, pes, Function, Args) of
-        ok ->
-            ok;
-        {ok, _} =
-            OkAns -> OkAns;
-        ignored ->
-            ok;
-        Error ->
+        {error, _} = Error ->
             ?error("Dir stats collector PES error: ~p", [Error]),
-            ?ERROR_INTERNAL_SERVER_ERROR
+            ?ERROR_INTERNAL_SERVER_ERROR;
+        Other ->
+            Other
     end.

@@ -843,13 +843,13 @@ create_subfiles_import_many_test(Config) ->
 
     ?assertMonitoring(W1, #{
         <<"scans">> => 1,
-        <<"created">> => 400,
+        <<"created">> => 2 * DirsNumber,
         <<"modified">> => 1,
         <<"deleted">> => 0,
         <<"failed">> => 0,
         <<"unmodified">> => 0,
-        <<"createdHourHist">> => 400,
-        <<"createdDayHist">> => 400,
+        <<"createdHourHist">> => 2 * DirsNumber,
+        <<"createdDayHist">> => 2 * DirsNumber,
         <<"modifiedMinHist">> => 1,
         <<"modifiedHourHist">> => 1,
         <<"modifiedDayHist">> => 1,
@@ -859,7 +859,10 @@ create_subfiles_import_many_test(Config) ->
         <<"queueLengthMinHist">> => 0,
         <<"queueLengthHourHist">> => 0,
         <<"queueLengthDayHist">> => 0
-    }, ?SPACE_ID).
+    }, ?SPACE_ID),
+
+    {ok, #file_attr{guid = SpaceGuid}} = ?assertMatch({ok, _}, lfm_proxy:stat(W1, SessId, {path, ?SPACE_PATH})),
+    dir_stats_collector_test_base:verify_dir_on_provider_creating_files(Config, op_worker_nodes, SpaceGuid).
 
 create_subfiles_import_many2_test(Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
@@ -895,7 +898,10 @@ create_subfiles_import_many2_test(Config) ->
         <<"queueLengthMinHist">> => 0,
         <<"queueLengthHourHist">> => 0,
         <<"queueLengthDayHist">> => 0
-    }, ?SPACE_ID).
+    }, ?SPACE_ID),
+
+    {ok, #file_attr{guid = SpaceGuid}} = ?assertMatch({ok, _}, lfm_proxy:stat(W1, SessId, {path, ?SPACE_PATH})),
+    dir_stats_collector_test_base:verify_dir_on_provider_creating_files(Config, op_worker_nodes, SpaceGuid).
 
 create_remote_file_import_conflict_test(Config) ->
     [W1, W2 | _] = ?config(op_worker_nodes, Config),
@@ -3798,6 +3804,9 @@ delete_many_subfiles_test(Config) ->
         <<"queueLengthDayHist">> => 0
     }, ?SPACE_ID),
 
+    {ok, #file_attr{guid = SpaceGuid}} = ?assertMatch({ok, _}, lfm_proxy:stat(W1, SessId, {path, ?SPACE_PATH})),
+    dir_stats_collector_test_base:verify_dir_on_provider_creating_files(Config, op_worker_nodes, SpaceGuid),
+
     ok = sd_test_utils:recursive_rm(W1, SDHandle),
     enable_continuous_scans(Config, ?SPACE_ID),
     assertScanFinished(W1, ?SPACE_ID, 2, Timeout),
@@ -3819,7 +3828,9 @@ delete_many_subfiles_test(Config) ->
         <<"queueLengthMinHist">> => 0,
         <<"queueLengthHourHist">> => 0,
         <<"queueLengthDayHist">> => 0
-    }, ?SPACE_ID).
+    }, ?SPACE_ID),
+
+    dir_stats_collector_test_base:verify_dir_on_provider_creating_files(Config, op_worker_nodes, SpaceGuid).
 
 create_delete_race_test(Config, StorageType) ->
     % this tests checks whether storage import works properly in case of create-delete race
@@ -4257,7 +4268,10 @@ append_file_update_test(Config) ->
         <<"queueLengthMinHist">> => 0,
         <<"queueLengthHourHist">> => 0,
         <<"queueLengthDayHist">> => 0
-    }, ?SPACE_ID).
+    }, ?SPACE_ID),
+
+    {ok, #file_attr{guid = SpaceGuid}} = ?assertMatch({ok, _}, lfm_proxy:stat(W1, SessId, {path, ?SPACE_PATH})),
+    dir_stats_collector_test_base:verify_dir_on_provider_creating_files(Config, op_worker_nodes, SpaceGuid).
 
 append_file_not_changing_mtime_update_test(Config) ->
     [W1, W2 | _] = ?config(op_worker_nodes, Config),
@@ -6990,7 +7004,7 @@ init_per_testcase(_Case, Config) ->
     Config2 = add_synced_storages(ConfigWithProxy),
     Config3 = add_rdwr_storages(Config2),
     create_init_file(Config3),
-    Config3.
+    dir_stats_collector_test_base:init(Config3).
 
 end_per_testcase(Case, Config)
     when Case =:= chmod_file_update2_test
@@ -7067,6 +7081,10 @@ end_per_testcase(Case, Config)
 
 end_per_testcase(_Case, Config) ->
     Workers = [W1 | _] = ?config(op_worker_nodes, Config),
+    SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
+    {ok, #file_attr{guid = SpaceGuid}} = ?assertMatch({ok, _}, lfm_proxy:stat(W1, SessId, {path, ?SPACE_PATH})),
+    dir_stats_collector_test_base:delete_stats(Config, op_worker_nodes, SpaceGuid),
+    dir_stats_collector_test_base:teardown(Config),
     lists:foreach(fun(W) -> lfm_proxy:close_all(W) end, Workers),
     clean_luma_db(W1),
     disable_storage_sync(Config),
