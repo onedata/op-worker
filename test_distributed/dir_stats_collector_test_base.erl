@@ -172,19 +172,19 @@ verify_dir_on_provider_creating_files(Config, NodesSelector, Guid) ->
                 ?REG_FILE_AND_LINK_COUNT => 1,
                 ?TOTAL_SIZE => ChildSize,
                 ?TOTAL_SIZE_ON_STORAGE(Config, NodesSelector) => ChildSize,
-                time => max(ChildMTime, ChildCTime)
+                update_time => max(ChildMTime, ChildCTime)
             })
     end, StatsForEmptyDir, Children),
 
-    check_dir_stats(Config, NodesSelector, Guid, maps:remove(time, Expectations)),
+    check_dir_stats(Config, NodesSelector, Guid, maps:remove(update_time, Expectations)),
 
     {ok, #file_attr{mtime = MTime, ctime = CTime}} = ?assertMatch({ok, _},
         lfm_proxy:stat(Worker, SessId, ?FILE_REF(Guid))),
-    {ok, CollectorTime} = ?assertMatch({ok, _}, rpc:call(Worker, dir_update_time_stats, get_update_time, [Guid])),
+    CollectorTime = get_dir_update_time_stat(Worker, Guid),
     ?assert(CollectorTime >= max(MTime, CTime)),
     % Time for directory should not be earlier than time for any child
-    ?assert(CollectorTime >= maps:get(time, Expectations, 0)),
-    update_expectations_map(Expectations, #{time => CollectorTime}).
+    ?assert(CollectorTime >= maps:get(update_time, Expectations, 0)),
+    update_expectations_map(Expectations, #{update_time => CollectorTime}).
 
 
 delete_stats(Config, NodesSelector, Guid) ->
@@ -384,8 +384,7 @@ resolve_update_times_in_metadata_and_stats(Config, NodesSelector, DirConstructor
     DirUpdateTime = case FileConstructor of
         [] ->
             [Worker | _] = ?config(NodesSelector, Config),
-            {ok, Time} = ?assertMatch({ok, _}, rpc:call(Worker, dir_update_time_stats, get_update_time, [Guid])),
-            Time;
+            get_dir_update_time_stat(Worker, Guid);
         _ ->
             not_a_dir
     end,
@@ -413,6 +412,11 @@ build_path(PathBeginning, Constructor, NamePrefix) ->
 
 update_expectations_map(Map, DiffMap) ->
     maps:fold(fun
-        (time, NewTime, Acc) -> maps:update_with(time, fun(Value) -> max(Value, NewTime) end, 0, Acc);
+        (update_time, NewTime, Acc) -> maps:update_with(update_time, fun(Value) -> max(Value, NewTime) end, 0, Acc);
         (Key, Diff, Acc) -> maps:update_with(Key, fun(Value) -> Value + Diff end, Acc)
     end, Map, DiffMap).
+
+
+get_dir_update_time_stat(Worker, Guid) ->
+    {ok, CollectorTime} = ?assertMatch({ok, _}, rpc:call(Worker, dir_update_time_stats, get_update_time, [Guid])),
+    CollectorTime.

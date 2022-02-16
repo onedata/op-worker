@@ -861,8 +861,7 @@ create_subfiles_import_many_test(Config) ->
         <<"queueLengthDayHist">> => 0
     }, ?SPACE_ID),
 
-    {ok, #file_attr{guid = SpaceGuid}} = ?assertMatch({ok, _}, lfm_proxy:stat(W1, SessId, {path, ?SPACE_PATH})),
-    dir_stats_collector_test_base:verify_dir_on_provider_creating_files(Config, op_worker_nodes, SpaceGuid).
+    dir_stats_collector_test_base:verify_dir_on_provider_creating_files(Config, op_worker_nodes, get_space_guid(Config)).
 
 create_subfiles_import_many2_test(Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
@@ -900,8 +899,7 @@ create_subfiles_import_many2_test(Config) ->
         <<"queueLengthDayHist">> => 0
     }, ?SPACE_ID),
 
-    {ok, #file_attr{guid = SpaceGuid}} = ?assertMatch({ok, _}, lfm_proxy:stat(W1, SessId, {path, ?SPACE_PATH})),
-    dir_stats_collector_test_base:verify_dir_on_provider_creating_files(Config, op_worker_nodes, SpaceGuid).
+    dir_stats_collector_test_base:verify_dir_on_provider_creating_files(Config, op_worker_nodes, get_space_guid(Config)).
 
 create_remote_file_import_conflict_test(Config) ->
     [W1, W2 | _] = ?config(op_worker_nodes, Config),
@@ -3804,7 +3802,7 @@ delete_many_subfiles_test(Config) ->
         <<"queueLengthDayHist">> => 0
     }, ?SPACE_ID),
 
-    {ok, #file_attr{guid = SpaceGuid}} = ?assertMatch({ok, _}, lfm_proxy:stat(W1, SessId, {path, ?SPACE_PATH})),
+    SpaceGuid = get_space_guid(Config),
     dir_stats_collector_test_base:verify_dir_on_provider_creating_files(Config, op_worker_nodes, SpaceGuid),
 
     ok = sd_test_utils:recursive_rm(W1, SDHandle),
@@ -4270,8 +4268,7 @@ append_file_update_test(Config) ->
         <<"queueLengthDayHist">> => 0
     }, ?SPACE_ID),
 
-    {ok, #file_attr{guid = SpaceGuid}} = ?assertMatch({ok, _}, lfm_proxy:stat(W1, SessId, {path, ?SPACE_PATH})),
-    dir_stats_collector_test_base:verify_dir_on_provider_creating_files(Config, op_worker_nodes, SpaceGuid).
+    dir_stats_collector_test_base:verify_dir_on_provider_creating_files(Config, op_worker_nodes, get_space_guid(Config)).
 
 append_file_not_changing_mtime_update_test(Config) ->
     [W1, W2 | _] = ?config(op_worker_nodes, Config),
@@ -6766,6 +6763,12 @@ close_if_applicable(_Node, _Handle, ?DELETE_OPENED_MODE) ->
 close_if_applicable(Node, Handle, _) ->
     ok = lfm_proxy:close(Node, Handle).
 
+get_space_guid(Config) ->
+    [W1 | _] = ?config(op_worker_nodes, Config),
+    SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
+    {ok, #file_attr{guid = SpaceGuid}} = ?assertMatch({ok, _}, lfm_proxy:stat(W1, SessId, {path, ?SPACE_PATH})),
+    SpaceGuid.
+
 %===================================================================
 % SetUp and TearDown functions
 %===================================================================
@@ -6996,6 +6999,14 @@ init_per_testcase(changing_max_depth_test, Config) ->
     ],
     init_per_testcase(default, Config2);
 
+init_per_testcase(Case, Config)
+    when Case =:= create_subfiles_import_many_test
+    orelse Case =:= create_subfiles_import_many2_test
+    orelse Case =:= delete_many_subfiles_test
+    orelse Case =:= append_file_update_test ->
+
+    init_per_testcase(default, dir_stats_collector_test_base:init(Config));
+
 init_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     ct:timetrap({minutes, 20}),
@@ -7004,7 +7015,7 @@ init_per_testcase(_Case, Config) ->
     Config2 = add_synced_storages(ConfigWithProxy),
     Config3 = add_rdwr_storages(Config2),
     create_init_file(Config3),
-    dir_stats_collector_test_base:init(Config3).
+    Config3.
 
 end_per_testcase(Case, Config)
     when Case =:= chmod_file_update2_test
@@ -7079,12 +7090,18 @@ end_per_testcase(Case, Config)
     time_test_utils:unfreeze_time(Config),
     end_per_testcase(default, Config);
 
+end_per_testcase(Case, Config)
+    when Case =:= create_subfiles_import_many_test
+    orelse Case =:= create_subfiles_import_many2_test
+    orelse Case =:= delete_many_subfiles_test
+    orelse Case =:= append_file_update_test ->
+
+    dir_stats_collector_test_base:delete_stats(Config, op_worker_nodes, get_space_guid(Config)),
+    dir_stats_collector_test_base:teardown(Config),
+    end_per_testcase(default, Config);
+
 end_per_testcase(_Case, Config) ->
     Workers = [W1 | _] = ?config(op_worker_nodes, Config),
-    SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
-    {ok, #file_attr{guid = SpaceGuid}} = ?assertMatch({ok, _}, lfm_proxy:stat(W1, SessId, {path, ?SPACE_PATH})),
-    dir_stats_collector_test_base:delete_stats(Config, op_worker_nodes, SpaceGuid),
-    dir_stats_collector_test_base:teardown(Config),
     lists:foreach(fun(W) -> lfm_proxy:close_all(W) end, Workers),
     clean_luma_db(W1),
     disable_storage_sync(Config),

@@ -311,16 +311,14 @@ handle_call(#dsc_get_request{
     {{ok, dir_stats_collection:with(StatNames, CurrentStats)}, UpdatedState};
 
 handle_call(#dsc_flush_request{guid = Guid, collection_type = CollectionType}, State) ->
-    CachedDirStatsKey = {Guid, CollectionType},
-    case flush_keys([CachedDirStatsKey], false, State) of
+    case flush_keys([gen_cached_dir_stats_key(Guid, CollectionType)], forget_inactive, State) of
         {true, UpdatedState} -> {ok, UpdatedState};
         {false, UpdatedState} -> {?ERROR_INTERNAL_SERVER_ERROR, UpdatedState}
     end;
 
 handle_call(#dsc_delete_request{guid = Guid, collection_type = CollectionType}, State) ->
     % Flush data cached by executor as flush of this data after collection delete would result in recreation of collection
-    CachedDirStatsKey = {Guid, CollectionType},
-    case flush_keys([CachedDirStatsKey], true, State) of
+    case flush_keys([gen_cached_dir_stats_key(Guid, CollectionType)], forget_flushed, State) of
         {true, UpdatedState} ->
             CollectionType:delete(Guid),
             {ok, UpdatedState};
@@ -369,7 +367,7 @@ flush_internal(#state{
     flush_timer_ref = undefined,
     dir_stats_cache = DirStatsCache
 } = State) ->
-    {HaveAllSucceeded, UpdatedState} = flush_keys(maps:keys(DirStatsCache), false, State),
+    {HaveAllSucceeded, UpdatedState} = flush_keys(maps:keys(DirStatsCache), forget_inactive, State),
 
     UpdatedState#state{has_unflushed_changes = not HaveAllSucceeded};
 
@@ -381,9 +379,9 @@ flush_internal(#state{
 
 
 %% @private
--spec flush_keys([cached_dir_stats_key()], ForgetIfSuccessfullyFlushed :: boolean(), state()) ->
+-spec flush_keys([cached_dir_stats_key()], CacheCleaningPolicy :: forget_flushed | forget_inactive, state()) ->
     {HaveAllSucceeded :: boolean(), state()}.
-flush_keys(CachedDirStatsKeysToFlush, ForgetIfSuccessfullyFlushed, #state{dir_stats_cache = DirStatsCache} = State) ->
+flush_keys(CachedDirStatsKeysToFlush, CacheCleaningPolicy, #state{dir_stats_cache = DirStatsCache} = State) ->
     {NewDirStatsCache, HaveAllSucceeded} = maps:fold(
         fun(
             CachedDirStatsKey, CachedDirStats, {DirStatsAcc, HasSucceededAcc} = Acc
@@ -392,7 +390,7 @@ flush_keys(CachedDirStatsKeysToFlush, ForgetIfSuccessfullyFlushed, #state{dir_st
                 true ->
                     UpdatedCachedDirStats = flush_cached_dir_stats(CachedDirStatsKey, CachedDirStats),
                     KeySuccessfullyFlushed = not has_unflushed_changes(UpdatedCachedDirStats),
-                    case KeySuccessfullyFlushed and ForgetIfSuccessfullyFlushed of
+                    case KeySuccessfullyFlushed and (CacheCleaningPolicy =:= forget_flushed) of
                         true ->
                             Acc;
                         false ->
@@ -400,7 +398,7 @@ flush_keys(CachedDirStatsKeysToFlush, ForgetIfSuccessfullyFlushed, #state{dir_st
                                 KeySuccessfullyFlushed and HasSucceededAcc}
                     end;
                 false ->
-                    case ForgetIfSuccessfullyFlushed orelse should_forget_cached_dir_stats(CachedDirStats) of
+                    case (CacheCleaningPolicy =:= forget_flushed) orelse is_inactive(CachedDirStats) of
                         true -> Acc;
                         false -> {DirStatsAcc#{CachedDirStatsKey => CachedDirStats}, HasSucceededAcc}
                     end
@@ -435,8 +433,8 @@ flush_cached_dir_stats({Guid, CollectionType} = _CachedDirStatsKey,
 
 
 %% @private
--spec should_forget_cached_dir_stats(cached_dir_stats()) -> boolean().
-should_forget_cached_dir_stats(#cached_dir_stats{last_used = LastUsed}) ->
+-spec is_inactive(cached_dir_stats()) -> boolean().
+is_inactive(#cached_dir_stats{last_used = LastUsed}) ->
     stopwatch:read_millis(LastUsed) >= ?CACHED_DIR_STATS_INACTIVITY_PERIOD.
 
 
@@ -461,7 +459,7 @@ reset_last_used_timer(State, Guid, CollectionType) ->
     fun((cached_dir_stats()) -> cached_dir_stats())) ->
     {UpdatedCachedDirStats :: cached_dir_stats(), state()} | no_return().
 update_in_cache(#state{dir_stats_cache = DirStatsCache} = State, Guid, CollectionType, Diff) ->
-    CachedDirStatsKey = {Guid, CollectionType},
+    CachedDirStatsKey = gen_cached_dir_stats_key(Guid, CollectionType),
     CachedDirStats = case maps:find(CachedDirStatsKey, DirStatsCache) of
         {ok, DirStatsFromCache} ->
             DirStatsFromCache;
@@ -564,3 +562,9 @@ call_designated_node(Guid, Function, Args) ->
         Other ->
             Other
     end.
+
+
+%% @private
+-spec gen_cached_dir_stats_key(file_id:file_guid(), dir_stats_collection:type()) -> cached_dir_stats_key().
+gen_cached_dir_stats_key(Guid, CollectionType) ->
+    {Guid, CollectionType}.
