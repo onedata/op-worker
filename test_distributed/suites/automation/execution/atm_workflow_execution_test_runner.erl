@@ -100,7 +100,7 @@ run(TestSpec = #atm_workflow_execution_test_spec{
     provider = ProviderSelector,
     user = UserSelector,
     space = SpaceSelector,
-    workflow_schema_alias = AtmWorkflowSchemaAlias,
+    workflow_schema_id = AtmWorkflowSchemaId,
     workflow_schema_revision_num = AtmWorkflowSchemaRevisionNum,
     store_initial_values = StoreInitialValues,
     callback_url = CallbackUrl,
@@ -109,19 +109,15 @@ run(TestSpec = #atm_workflow_execution_test_spec{
     SessionId = oct_background:get_user_session_id(UserSelector, ProviderSelector),
     SpaceId = oct_background:get_space_id(SpaceSelector),
 
-    AtmWorkflowSchemaId = atm_test_inventory:get_workflow_schema_id(AtmWorkflowSchemaAlias),
-
     {ok, {AtmWorkflowExecutionId, _}} = ?assertMatch({ok, _}, opt_atm:schedule_workflow_execution(
         ProviderSelector, SessionId, SpaceId, AtmWorkflowSchemaId, AtmWorkflowSchemaRevisionNum,
         StoreInitialValues#{test_process => self()}, CallbackUrl
     )),
 
-    {ok, AtmLaneSchemasJson} = json_utils:query(
-        atm_test_inventory:get_workflow_schema_json(AtmWorkflowSchemaAlias),
-        ?JSON_PATH(<<"revisionRegistry.1.lanes">>)
+    AtmLaneSchemas = atm_workflow_schema_test_utils:query(
+        atm_test_inventory:get_workflow_schema(AtmWorkflowSchemaId),
+        [revision_registry, registry, 1, lanes]
     ),
-    AtmLaneSchemas = jsonable_record:list_from_json(AtmLaneSchemasJson, atm_lane_schema),
-
     AtmWorkflowExecutionTestView = atm_workflow_execution_test_view:build(
         SpaceId, global_clock:timestamp_seconds(), AtmLaneSchemas
     ),

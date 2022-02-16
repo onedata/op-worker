@@ -18,6 +18,7 @@
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
+-include_lib("ctool/include/privileges.hrl").
 
 %% exported for CT
 -export([
@@ -38,7 +39,6 @@ all() -> [
 ].
 
 
--define(EMPTY_LANE_ATM_WORKFLOW_ALIAS, <<"empty_lane_workflow">>).
 -define(EMPTY_LANE_ATM_WORKFLOW_SCHEMA_DRAFT, #atm_workflow_schema_dump_draft{
     name = <<"empty_lane">>,
     revision_num = 1,
@@ -63,7 +63,6 @@ all() -> [
     }
 }).
 
--define(ECHO_ATM_WORKFLOW_ALIAS, <<"echo_workflow">>).
 -define(ECHO_ATM_WORKFLOW_SCHEMA_DRAFT, #atm_workflow_schema_dump_draft{
     name = <<"echo">>,
     revision_num = 1,
@@ -121,24 +120,30 @@ atm_workflow_with_empty_lane_scheduling_should_fail_test(_Config) ->
     SessionId = oct_background:get_user_session_id(user2, krakow),
     SpaceId = oct_background:get_space_id(space_krk),
 
-    AtmWorkflowSchemaId = atm_test_inventory:get_workflow_schema_id(?EMPTY_LANE_ATM_WORKFLOW_ALIAS),
-    {ok, EmptyAtmLaneSchemaId} = json_utils:query(
-        atm_test_inventory:get_workflow_schema_json(?EMPTY_LANE_ATM_WORKFLOW_ALIAS),
-        ?JSON_PATH(<<"revisionRegistry.1.lanes.[0].id">>)
+    AtmWorkflowSchemaId = atm_test_inventory:add_workflow_schema(
+        ?EMPTY_LANE_ATM_WORKFLOW_SCHEMA_DRAFT
+    ),
+    EmptyAtmLaneSchemaId = atm_workflow_schema_test_utils:query(
+        atm_test_inventory:get_workflow_schema(AtmWorkflowSchemaId),
+        [revision_registry, registry, 1, lanes, 1, id]
     ),
 
-    ?assertMatch(
+    ?assertEqual(
         ?ERROR_ATM_LANE_EMPTY(EmptyAtmLaneSchemaId),
-        opt_atm:schedule_workflow_execution(krakow, SessionId, SpaceId, AtmWorkflowSchemaId, 1)
+        opt_atm:schedule_workflow_execution(krakow, SessionId, SpaceId, AtmWorkflowSchemaId, 1),
+        30  % TODO is it necessary? maybe some force fetch? returns {error, forbidden}
     ).
 
 
 prepare_first_lane_run_failure_test(_Config) ->
+    AtmWorkflowSchemaId = atm_test_inventory:add_workflow_schema(
+        ?ECHO_ATM_WORKFLOW_SCHEMA_DRAFT
+    ),
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
         provider = krakow,
         user = user2,
         space = space_krk,
-        workflow_schema_alias = ?ECHO_ATM_WORKFLOW_ALIAS,
+        workflow_schema_id = AtmWorkflowSchemaId,
         workflow_schema_revision_num = 1,
         incarnations = [#atm_workflow_execution_incarnation_test_spec{
             lane_runs = [#atm_lane_run_execution_test_spec{
@@ -175,23 +180,20 @@ init_per_suite(Config) ->
         ?MODULE,
         atm_workflow_execution_test_runner,
         atm_openfaas_task_executor_mock,
-        atm_openfaas_docker_mock
+        atm_openfaas_docker_mock,
+        atm_test_inventory
     ],
     oct_background:init_per_suite([{?LOAD_MODULES, ModulesToLoad} | Config], #onenv_test_config{
         onenv_scenario = "1op",
         envs = [{op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}],
         posthook = fun(NewConfig) ->
-            atm_test_inventory:ensure_exists(),
-            atm_test_inventory:add_user(user1),
-            atm_test_inventory:add_user(user2),
-
-            lists:foreach(fun({AtmWorkflowAlias, AtmWorkflowSchemaDraft}) ->
-                atm_test_inventory:add_workflow_schema(AtmWorkflowAlias, AtmWorkflowSchemaDraft)
-            end, [
-                {?EMPTY_LANE_ATM_WORKFLOW_ALIAS, ?EMPTY_LANE_ATM_WORKFLOW_SCHEMA_DRAFT},
-                {?ECHO_ATM_WORKFLOW_ALIAS, ?ECHO_ATM_WORKFLOW_SCHEMA_DRAFT}
-            ]),
-
+            atm_test_inventory:init_per_suite(krakow, user1),
+            atm_test_inventory:add_member(user2),
+            ozt_spaces:set_privileges(
+                oct_background:get_space_id(space_krk),
+                oct_background:get_user_id(user2),
+                [?SPACE_VIEW_ATM_WORKFLOW_EXECUTIONS, ?SPACE_SCHEDULE_ATM_WORKFLOW_EXECUTIONS | privileges:space_member()]
+            ),
             NewConfig
         end
     }).

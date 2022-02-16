@@ -6,37 +6,38 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Helper functions for management of automation inventory used in CT tests.
+%%% This module handles management of singleton automation inventory created
+%%% for use in CT tests.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_test_inventory).
 -author("Bartosz Walkowicz").
 
 -include("atm_test_schema.hrl").
--include("graph_sync/provider_graph_sync.hrl").
--include("modules/datastore/datastore_models.hrl").
+-include("onenv_test_utils.hrl").
+-include_lib("ctool/include/test/assertions.hrl").
 
 -export([
-    ensure_exists/0,
+    init_per_suite/2,
+
     get_id/0,
 
-    add_user/1,
-    add_workflow_schema/2,
-    get_workflow_schema_id/1,
-    get_workflow_schema_json/1
+    add_member/1,
+    add_workflow_schema/1,
+    get_workflow_schema/1
 ]).
 
--type atm_workflow_schema_alias() :: binary().
 -type atm_workflow_schema_dump() :: #atm_workflow_schema_dump{}.
 
--export_type([
-    atm_workflow_schema_alias/0,
-    atm_workflow_schema_dump/0
-]).
+-export_type([atm_workflow_schema_dump/0]).
 
 
+-define(PROVIDER_SELECTOR_KEY, provider_selector).
 -define(ATM_INVENTORY_ID_KEY, atm_test_inventory_id).
--define(ATM_WORKFLOW_SCHEMA_ID_KEY(__ALIAS), {atm_workflow_schema_id, __ALIAS}).
+-define(ATM_INVENTORY_ADMIN_KEY, atm_test_inventory_admin).
+
+% TODO is it necessary? maybe some force fetch?
+-define(ATTEMPTS, 30).
 
 
 %%%===================================================================
@@ -44,14 +45,26 @@
 %%%===================================================================
 
 
--spec ensure_exists() -> ok.
-ensure_exists() ->
+-spec init_per_suite(
+    oct_background:entity_selector(),
+    oct_background:entity_selector()
+) ->
+    ok.
+init_per_suite(ProviderSelector, AdminUserSelector) ->
     case node_cache:get(?ATM_INVENTORY_ID_KEY, undefined) of
         undefined ->
-            AtmInventoryId = ozt_atm:create_inventory(str_utils:rand_hex(10)),
-            node_cache:put(?ATM_INVENTORY_ID_KEY, AtmInventoryId);
+            node_cache:put(?PROVIDER_SELECTOR_KEY, ProviderSelector),
+
+            AtmInventoryId = ozt_atm:create_inventory(<<"ONEPROVIDER CT TESTS">>),
+            node_cache:put(?ATM_INVENTORY_ID_KEY, AtmInventoryId),
+
+            UserId = oct_background:get_user_id(AdminUserSelector),
+            ozt_atm:add_user_to_inventory(UserId, AtmInventoryId, privileges:atm_inventory_admin()),
+            node_cache:put(?ATM_INVENTORY_ADMIN_KEY, UserId);
+
         _AtmInventoryId ->
-            ok
+            ct:pal("Attempt to init already initiated test inventory!!!"),
+            error(not_gonna_happen)
     end.
 
 
@@ -60,45 +73,36 @@ get_id() ->
     node_cache:get(?ATM_INVENTORY_ID_KEY).
 
 
--spec add_user(oct_background:entity_selector()) -> ok.
-add_user(UserPlaceholder) ->
+-spec add_member(oct_background:entity_selector()) -> ok.
+add_member(UserPlaceholder) ->
     UserId = oct_background:get_user_id(UserPlaceholder),
     ozt_atm:add_user_to_inventory(UserId, get_id()).
 
 
 -spec add_workflow_schema(
-    atm_workflow_schema_alias(),
     atm_workflow_schema_dump() | atm_test_schema_factory:atm_workflow_schema_dump_draft()
 ) ->
-    ok.
-add_workflow_schema(AtmWorkflowSchemaAlias, #atm_workflow_schema_dump{} = AtmWorkflowSchemaDump) ->
+    od_atm_workflow_schema:id().
+add_workflow_schema(#atm_workflow_schema_dump{} = AtmWorkflowSchemaDump) ->
     AtmWorkflowSchemaDumpJson = atm_workflow_schema_dump_to_json(AtmWorkflowSchemaDump),
-    AtmWorkflowSchemaId = ozt_atm:create_workflow_schema(AtmWorkflowSchemaDumpJson#{
-        <<"atmInventoryId">> => get_id()
-    }),
-    node_cache:put(?ATM_WORKFLOW_SCHEMA_ID_KEY(AtmWorkflowSchemaAlias), AtmWorkflowSchemaId);
+    ozt_atm:create_workflow_schema(AtmWorkflowSchemaDumpJson#{<<"atmInventoryId">> => get_id()});
 
-add_workflow_schema(AtmWorkflowSchemaAlias, AtmWorkflowSchemaDumpDraft) ->
-    add_workflow_schema(
-        AtmWorkflowSchemaAlias,
-        atm_test_schema_factory:create_from_draft(AtmWorkflowSchemaDumpDraft)
-    ).
+add_workflow_schema(AtmWorkflowSchemaDumpDraft) ->
+    add_workflow_schema(atm_test_schema_factory:create_from_draft(AtmWorkflowSchemaDumpDraft)).
 
 
--spec get_workflow_schema_id(atm_workflow_schema_alias()) -> od_atm_workflow_schema:id().
-get_workflow_schema_id(AtmWorkflowSchemaAlias) ->
-    node_cache:get(?ATM_WORKFLOW_SCHEMA_ID_KEY(AtmWorkflowSchemaAlias)).
+-spec get_workflow_schema(od_atm_workflow_schema:id()) -> od_atm_workflow_schema:record().
+get_workflow_schema(AtmWorkflowSchemaId) ->
+    AdminUserId = node_cache:get(?ATM_INVENTORY_ADMIN_KEY),
+    ProviderSelector = node_cache:get(?PROVIDER_SELECTOR_KEY),
+    AdminUserSessionId = oct_background:get_user_session_id(AdminUserId, ProviderSelector),
 
-
--spec get_workflow_schema_json(atm_workflow_schema_alias()) -> json_utils:json_map().
-get_workflow_schema_json(AtmWorkflowSchemaAlias) ->
-    AtmWorkflowSchemaId = get_workflow_schema_id(AtmWorkflowSchemaAlias),
-
-    ozw_test_rpc:call(provider_gs_translator, translate_resource, [
-        ?GS_PROTOCOL_VERSION,
-        #gri{type = od_atm_workflow_schema, aspect = instance, scope = private},
-        ozt_atm:get_workflow_schema(AtmWorkflowSchemaId)
-    ]).
+    {ok, #document{value = AtmWorkflowSchema}} = ?assertMatch(
+        {ok, _},
+        ?rpc(ProviderSelector, atm_workflow_schema_logic:get(AdminUserSessionId, AtmWorkflowSchemaId)),
+        ?ATTEMPTS
+    ),
+    AtmWorkflowSchema.
 
 
 %%%===================================================================

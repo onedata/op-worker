@@ -60,7 +60,7 @@
     user :: oct_background:entity_selector(),
     space :: oct_background:entity_selector(),
 
-    workflow_schema_alias :: atm_test_inventory:atm_workflow_schema_alias(),
+    workflow_schema_id :: automation:id(),
     workflow_schema_revision_num :: atm_workflow_schema_revision:revision_number(),
 
     store_initial_values = #{} :: atm_workflow_execution_api:store_initial_values(),
