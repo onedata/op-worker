@@ -64,17 +64,19 @@ get_user1_first_storage_id(Config, NodesSelector) ->
 create_files_tree(Worker, SessId, Structure, RootGuid) ->
     create_files_tree(Worker, SessId, Structure, RootGuid, <<"dir">>, <<"file">>, [], []).
 
-write_file(Worker, SessId, FileGuid, BytesCount) ->
-    write_file(Worker, SessId, FileGuid, 0, BytesCount).
+write_file(Worker, SessId, FileGuid, ByteCount) ->
+    write_file(Worker, SessId, FileGuid, 0, ByteCount).
 
-write_file(Worker, SessId, FileGuid, Offset, BytesCount) ->
+write_file(Worker, SessId, FileGuid, Offset, ByteCount) when is_integer(ByteCount) ->
+    write_file(Worker, SessId, FileGuid, Offset, crypto:strong_rand_bytes(ByteCount));
+write_file(Worker, SessId, FileGuid, Offset, Data) when is_binary(Data) ->
     {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(Worker, SessId, ?FILE_REF(FileGuid), write)),
-    ?assertMatch({ok, _}, lfm_proxy:write(Worker, Handle, Offset, crypto:strong_rand_bytes(BytesCount))),
+    ?assertMatch({ok, _}, lfm_proxy:write(Worker, Handle, Offset, Data)),
     ?assertEqual(ok, lfm_proxy:close(Worker, Handle)).
 
-read_file(Worker, SessId, FileGuid, BytesCount) ->
+read_file(Worker, SessId, FileGuid, ByteCount) ->
     {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(Worker, SessId, ?FILE_REF(FileGuid), read)),
-    {ok, Bytes} = ?assertMatch({ok, _}, lfm_proxy:read(Worker, Handle, 0, BytesCount)),
+    {ok, Bytes} = ?assertMatch({ok, _}, lfm_proxy:read(Worker, Handle, 0, ByteCount)),
     ?assertEqual(ok, lfm_proxy:close(Worker, Handle)),
     Bytes.
 

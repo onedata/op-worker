@@ -35,7 +35,9 @@
     get_qos_summary_test/1,
     get_available_qos_parameters_test/1,
     evaluate_qos_expression_test/1,
-    get_qos_entry_audit_log/1
+    get_qos_entry_audit_log/1,
+    get_qos_time_series_collections/1,
+    get_qos_time_series_collection/1
 ]).
 
 
@@ -46,7 +48,9 @@ all() -> [
     get_qos_summary_test,
     get_available_qos_parameters_test,
     evaluate_qos_expression_test,
-    get_qos_entry_audit_log
+    get_qos_entry_audit_log,
+    get_qos_time_series_collections,
+    get_qos_time_series_collection
 ].
 
 -define(ATTEMPTS, 20).
@@ -303,6 +307,7 @@ evaluate_qos_expression_test(Config) ->
     ])),
     ok.
 
+
 get_qos_entry_audit_log(Config) ->
     [P2, P1] = ?config(op_worker_nodes, Config),
     SessIdP1 = ?USER_IN_BOTH_SPACES_SESS_ID(P1, Config),
@@ -345,8 +350,100 @@ get_qos_entry_audit_log(Config) ->
                 ]
             }
         }
-    ])),
-    ok.
+    ])).
+
+
+get_qos_time_series_collections(Config) ->
+    [FileCreatingProvider, TransferringProvider] = ?config(op_worker_nodes, Config),
+    QosEntryId = setup_preexisting_qos_causing_file_transfer(Config, FileCreatingProvider, TransferringProvider, 100),
+
+    MemRef = api_test_memory:init(),
+
+    ?assert(api_test_runner:run_tests(Config, [
+        #suite_spec{
+            target_nodes = [FileCreatingProvider, TransferringProvider],
+            client_spec = ?CLIENT_SPEC_FOR_SPACE_2_SCENARIOS(Config),
+            setup_fun = fun() ->
+                api_test_memory:set(MemRef, qos_entry_id, QosEntryId),
+                api_test_memory:set(MemRef, space_id, ?SPACE_2),
+                api_test_memory:set(MemRef, file_creating_provider, FileCreatingProvider),
+                api_test_memory:set(MemRef, transferring_provider, TransferringProvider)
+            end,
+            scenario_templates = [
+                #scenario_template{
+                    name = <<"Get time series collections using gs api">>,
+                    type = gs,
+                    prepare_args_fun = prepare_args_fun_gs(MemRef, qos_time_series_collections),
+                    validate_result_fun = validate_result_fun_gs(MemRef, qos_time_series_collections)
+                }
+            ],
+            data_spec = #data_spec{
+                bad_values = [{bad_id, <<"NonExistingRequirement">>, ?ERROR_FORBIDDEN}]
+            }
+        }
+    ])).
+
+
+get_qos_time_series_collection(Config) ->
+    get_qos_time_series_collection_test_base(Config, ?BYTES_STATS),
+    get_qos_time_series_collection_test_base(Config, ?FILES_STATS).
+
+get_qos_time_series_collection_test_base(Config, CollectionType) ->
+    [FileCreatingProvider, TransferringProvider] = TargetNodes = ?config(op_worker_nodes, Config),
+    FileSize = rand:uniform(1000),
+    QosEntryId = setup_preexisting_qos_causing_file_transfer(Config, FileCreatingProvider, TransferringProvider, FileSize),
+
+    TimestampFarInThePast = 123456789,
+
+    MemRef = api_test_memory:init(),
+
+    lists:foreach(fun(TargetNode) ->
+        ?assert(api_test_runner:run_tests(Config, [
+            #suite_spec{
+                target_nodes = [TargetNode],
+                client_spec = ?CLIENT_SPEC_FOR_SPACE_2_SCENARIOS(Config),
+                setup_fun = fun() ->
+                    api_test_memory:set(MemRef, qos_entry_id, QosEntryId),
+                    api_test_memory:set(MemRef, file_size, FileSize),
+                    api_test_memory:set(MemRef, timestamp_far_in_the_past, 123456789),
+                    api_test_memory:set(MemRef, file_creating_provider, FileCreatingProvider)
+                end,
+                scenario_templates = [
+                    #scenario_template{
+                        name = <<"Get time series collection of type '", CollectionType/binary, "' using gs api">>,
+                        type = gs,
+                        prepare_args_fun = prepare_args_fun_gs(MemRef, {qos_time_series_collection, CollectionType}),
+                        validate_result_fun = validate_result_fun_gs(MemRef, {qos_time_series_collection, CollectionType})
+                    }
+                ],
+                data_spec = #data_spec{
+                    required = [<<"metrics">>],
+                    optional = [<<"startTimestamp">>, <<"limit">>],
+                    correct_values = #{
+                        <<"metrics">> => [fun() ->
+                            {ok, AvailableTimeSeriesIds} = rpc:call(
+                                TargetNode, qos_transfer_stats, list_time_series_ids, [QosEntryId, CollectionType]
+                            ),
+                            maps_utils:generate_from_list(fun(TimeSeriesId) ->
+                                {TimeSeriesId, [?MINUTE_METRIC_ID, ?HOUR_METRIC_ID, ?DAY_METRIC_ID, ?MONTH_METRIC_ID]}
+                            end, AvailableTimeSeriesIds)
+                        end],
+                        <<"startTimestamp">> => [global_clock:timestamp_seconds(), TimestampFarInThePast],
+                        <<"limit">> => [1, 500]
+                    },
+                    bad_values = [
+                        {bad_id, <<"NonExistingRequirement">>, ?ERROR_FORBIDDEN},
+                        {<<"metrics">>, [<<"a">>, <<"b">>], ?ERROR_BAD_VALUE_JSON(<<"metrics">>)},
+                        {<<"metrics">>, #{<<"a">> => [<<"a">>, 15]}, ?ERROR_BAD_DATA(<<"metrics">>)},
+                        {<<"startTimestamp">>, <<"aaa">>, ?ERROR_BAD_VALUE_INTEGER(<<"startTimestamp">>)},
+                        {<<"startTimestamp">>, -8, ?ERROR_BAD_VALUE_TOO_LOW(<<"startTimestamp">>, 0)},
+                        {<<"limit">>, <<"aaa">>, ?ERROR_BAD_VALUE_INTEGER(<<"limit">>)},
+                        {<<"limit">>, 99999, ?ERROR_BAD_VALUE_NOT_IN_RANGE(<<"limit">>, 1, 1000)}
+                    ]
+                }
+            }
+        ]))
+    end, TargetNodes).
 
 
 %%%===================================================================
@@ -454,6 +551,7 @@ prepare_args_fun_gs(MemRef, qos_summary) ->
             gri = #gri{type = op_file, id = Id, aspect = qos_summary, scope = private}
         }
     end;
+
 prepare_args_fun_gs(_MemRef, available_qos_parameters) ->
     fun(_) ->
         #gs_args{
@@ -461,12 +559,34 @@ prepare_args_fun_gs(_MemRef, available_qos_parameters) ->
             gri = #gri{type = op_space, id = ?SPACE_2, aspect = available_qos_parameters, scope = private}
         }
     end;
+
 prepare_args_fun_gs(_MemRef, evaluate_qos_expression) ->
     fun(#api_test_ctx{data = Data}) ->
         #gs_args{
             operation = create,
             gri = #gri{type = op_space, id = ?SPACE_2, aspect = evaluate_qos_expression, scope = private},
             data = Data
+        }
+    end;
+
+prepare_args_fun_gs(MemRef, qos_time_series_collections) ->
+    fun(#api_test_ctx{data = Data}) ->
+        QosEntryId = api_test_memory:get(MemRef, qos_entry_id),
+        {Id, _} = api_test_utils:maybe_substitute_bad_id(QosEntryId, Data),
+        #gs_args{
+            operation = get,
+            gri = #gri{type = op_qos, id = Id, aspect = time_series_collections, scope = private}
+        }
+    end;
+
+prepare_args_fun_gs(MemRef, {qos_time_series_collection, Type}) ->
+    fun(#api_test_ctx{data = Data}) ->
+        QosEntryId = api_test_memory:get(MemRef, qos_entry_id),
+        {Id, UpdatedData} = api_test_utils:maybe_substitute_bad_id(QosEntryId, Data),
+        #gs_args{
+            operation = get,
+            gri = #gri{type = op_qos, id = Id, aspect = {time_series_collection, Type}, scope = private},
+            data = UpdatedData
         }
     end;
 
@@ -633,8 +753,72 @@ validate_result_fun_gs(MemRef, evaluate_qos_expression) ->
         Expression = qos_expression:parse(maps:get(<<"expression">>, Data)),
         check_evaluate_expression_result_storages(Node, SpaceId, Expression, maps:get(<<"matchingStorages">>, Result)),
         ?assertEqual(maps:get(<<"expressionRpn">>, Result), qos_expression:to_rpn(Expression))
-    end.
+    end;
 
+validate_result_fun_gs(MemRef, qos_time_series_collections) ->
+    fun(#api_test_ctx{node = TargetNode}, {ok, Result}) ->
+        TargetProviderId = ?GET_DOMAIN_BIN(TargetNode),
+        SpaceId = api_test_memory:get(MemRef, space_id),
+        FileCreatingProviderId = ?GET_DOMAIN_BIN(api_test_memory:get(MemRef, file_creating_provider)),
+        TransferringProviderId = ?GET_DOMAIN_BIN(api_test_memory:get(MemRef, transferring_provider)),
+
+        ExpectedResult = case TargetProviderId of
+            FileCreatingProviderId ->
+                #{
+                    ?BYTES_STATS => [?TOTAL_TIME_SERIES_ID],
+                    ?FILES_STATS => [?TOTAL_TIME_SERIES_ID]
+                };
+            TransferringProviderId ->
+                #{
+                    ?BYTES_STATS => [?TOTAL_TIME_SERIES_ID | get_supporting_storages(TargetNode, SpaceId, FileCreatingProviderId)],
+                    ?FILES_STATS => [?TOTAL_TIME_SERIES_ID | get_supporting_storages(TargetNode, SpaceId, TransferringProviderId)]
+                }
+        end,
+
+        ?assertEqual(lists:sort(maps:keys(ExpectedResult)), lists:sort(maps:keys(Result))),
+        maps:foreach(fun(StatsType, TimeSeriesIds) ->
+            ?assertEqual(lists:sort(TimeSeriesIds), lists:sort(maps:get(StatsType, Result)))
+        end, ExpectedResult)
+    end;
+
+validate_result_fun_gs(MemRef, {qos_time_series_collection, CollectionType}) ->
+    fun(#api_test_ctx{node = TargetNode, data = Data}, {ok, Result}) ->
+        TargetProviderId = ?GET_DOMAIN_BIN(TargetNode),
+        FileSize = api_test_memory:get(MemRef, file_size),
+        TimestampFarInThePast = api_test_memory:get(MemRef, timestamp_far_in_the_past),
+        FileCreatingProviderId = ?GET_DOMAIN_BIN(api_test_memory:get(MemRef, file_creating_provider)),
+
+        RequestedMetrics = maps:get(<<"metrics">>, Data),
+        StartTimestamp = maps:get(<<"startTimestamp">>, Data, undefined),
+
+        ExpectingEmptyWindows = if
+            StartTimestamp == TimestampFarInThePast ->
+                true;
+            TargetProviderId == FileCreatingProviderId ->
+                true;
+            true ->
+                false
+        end,
+
+        #{<<"windows">> := WindowsPerMetricPerTimeSeries} = ?assertMatch(#{<<"windows">> := _}, Result),
+        ?assertEqual(lists:sort(maps:keys(RequestedMetrics)), lists:sort(maps:keys(WindowsPerMetricPerTimeSeries))),
+        maps:foreach(fun(_TimeSeriesId, WindowsPerMetric) ->
+            ?assertEqual(
+                lists:sort([?MINUTE_METRIC_ID, ?HOUR_METRIC_ID, ?DAY_METRIC_ID, ?MONTH_METRIC_ID]),
+                lists:sort(maps:keys(WindowsPerMetric))
+            ),
+            maps:foreach(fun(_MetricId, WindowsInCurrentMetric) ->
+                case {ExpectingEmptyWindows, CollectionType} of
+                    {true, _} ->
+                        ?assertEqual([], WindowsInCurrentMetric);
+                    {false, ?BYTES_STATS} ->
+                        ?assertMatch([#{<<"value">> := FileSize}], WindowsInCurrentMetric);
+                    {false, ?FILES_STATS} ->
+                        ?assertMatch([#{<<"value">> := 1}], WindowsInCurrentMetric)
+                end
+            end, WindowsPerMetric)
+        end, WindowsPerMetricPerTimeSeries)
+    end.
 
 %%%===================================================================
 %%% Verify env functions
@@ -702,6 +886,28 @@ check_evaluate_expression_result_storages(Node, SpaceId, Expression, Result) ->
         ?assertEqual(ProviderId, rpc:call(Node, storage, fetch_provider_id_of_remote_storage, [Id, SpaceId])),
         ?assertEqual(Name, rpc:call(Node, storage, fetch_name_of_remote_storage, [Id, SpaceId]))
     end, Result).
+
+
+setup_preexisting_qos_causing_file_transfer(Config, FileCreatingProvider, TransferringProvider, FileSize) ->
+    SessIdP1 = ?USER_IN_BOTH_SPACES_SESS_ID(FileCreatingProvider, Config),
+    SessIdP2 = ?USER_IN_BOTH_SPACES_SESS_ID(TransferringProvider, Config),
+    FilePath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME()]),
+    {ok, Guid} = api_test_utils:create_file(<<"file">>, FileCreatingProvider, SessIdP1, FilePath),
+    FileContent = crypto:strong_rand_bytes(FileSize),
+    api_test_utils:write_file(FileCreatingProvider, SessIdP1, Guid, 0, FileContent),
+    TransferringProviderId = ?GET_DOMAIN_BIN(TransferringProvider),
+    {ok, QosEntryId} = opt_qos:add_qos_entry(
+        FileCreatingProvider, SessIdP1, ?FILE_REF(Guid), <<"providerId=", TransferringProviderId/binary>>, 1
+    ),
+    % wait for qos entries to be dbsynced to other provider and file content to be transferred
+    ?assertMatch({ok, _}, opt_qos:get_qos_entry(TransferringProvider, SessIdP2, QosEntryId), ?ATTEMPTS),
+    ?assertEqual({ok, ?FULFILLED_QOS_STATUS}, opt_qos:check_qos_status(FileCreatingProvider, SessIdP1, QosEntryId), ?ATTEMPTS),
+    QosEntryId.
+
+
+get_supporting_storages(Node, SpaceId, ProviderId) ->
+    {ok, ProviderSupports} = rpc:call(Node, space_logic, get_storages_by_provider, [SpaceId, ProviderId]),
+    maps:keys(ProviderSupports).
 
 %%%===================================================================
 %%% SetUp and TearDown functions

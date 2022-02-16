@@ -497,27 +497,23 @@ qos_transfer_stats_test(_Config) ->
     ?assertMatch({ok, _}, opt_qos:get_qos_entry(P2Node, ?SESS_ID(Provider2), QosEntryId), ?ATTEMPTS),
     ?assertEqual({ok, ?FULFILLED_QOS_STATUS}, opt_qos:check_qos_status(P1Node, ?SESS_ID(Provider1), QosEntryId), ?ATTEMPTS),
     
-    check_transfer_stats(Provider1, QosEntryId, bytes, [<<"total">>], empty),
-    check_transfer_stats(Provider2, QosEntryId, bytes, [<<"total">>, opt_spaces:get_storage_id(Provider1, SpaceId)], {1, byte_size(?TEST_DATA)}),
-    check_transfer_stats(Provider1, QosEntryId, files, [<<"total">>], empty),
-    check_transfer_stats(Provider2, QosEntryId, files, [<<"total">>, opt_spaces:get_storage_id(Provider2, SpaceId)], {1, 1}),
+    check_transfer_stats(Provider1, QosEntryId, ?BYTES_STATS, [<<"total">>], empty),
+    check_transfer_stats(Provider2, QosEntryId, ?BYTES_STATS, [<<"total">>, opt_spaces:get_storage_id(Provider1, SpaceId)], {1, byte_size(?TEST_DATA)}),
+    check_transfer_stats(Provider1, QosEntryId, ?FILES_STATS, [<<"total">>], empty),
+    check_transfer_stats(Provider2, QosEntryId, ?FILES_STATS, [<<"total">>, opt_spaces:get_storage_id(Provider2, SpaceId)], {1, 1}),
     
-    {ok, HW3} = lfm_proxy:open(P3Node, ?SESS_ID(Provider3), #file_ref{guid = Guid}, write),
     NewData = crypto:strong_rand_bytes(8),
-    {ok, _} = lfm_proxy:write(P3Node, HW3, 0, NewData),
-    ok = lfm_proxy:close(P3Node, HW3),
-    
-    {ok, HW2} = lfm_proxy:open(P2Node, ?SESS_ID(Provider2), #file_ref{guid = Guid}, read),
-    ?assertEqual({ok, NewData}, lfm_proxy:read(P2Node, HW2, 0, byte_size(NewData)), ?ATTEMPTS),
-    ok = lfm_proxy:close(P2Node, HW2),
+    lfm_test_utils:write_file(P3Node, ?SESS_ID(Provider3), Guid, 0, NewData),
+
+    ?assertEqual(NewData, lfm_test_utils:read_file(P2Node, ?SESS_ID(Provider2), Guid, byte_size(NewData)), ?ATTEMPTS),
     ?assertEqual({ok, ?FULFILLED_QOS_STATUS}, opt_qos:check_qos_status(P2Node, ?SESS_ID(Provider2), QosEntryId), ?ATTEMPTS),
     
-    check_transfer_stats(Provider1, QosEntryId, bytes, [<<"total">>], empty),
-    check_transfer_stats(Provider2, QosEntryId, bytes, [opt_spaces:get_storage_id(Provider1, SpaceId)], {1, byte_size(?TEST_DATA)}),
-    check_transfer_stats(Provider2, QosEntryId, bytes, [opt_spaces:get_storage_id(Provider3, SpaceId)], {1, byte_size(NewData)}),
-    check_transfer_stats(Provider2, QosEntryId, bytes, [<<"total">>], {2, byte_size(NewData) + byte_size(?TEST_DATA)}),
-    check_transfer_stats(Provider1, QosEntryId, files, [<<"total">>], empty),
-    check_transfer_stats(Provider2, QosEntryId, files, [<<"total">>, opt_spaces:get_storage_id(Provider2, SpaceId)], {2, 2}).
+    check_transfer_stats(Provider1, QosEntryId, ?BYTES_STATS, [<<"total">>], empty),
+    check_transfer_stats(Provider2, QosEntryId, ?BYTES_STATS, [opt_spaces:get_storage_id(Provider1, SpaceId)], {1, byte_size(?TEST_DATA)}),
+    check_transfer_stats(Provider2, QosEntryId, ?BYTES_STATS, [opt_spaces:get_storage_id(Provider3, SpaceId)], {1, byte_size(NewData)}),
+    check_transfer_stats(Provider2, QosEntryId, ?BYTES_STATS, [<<"total">>], {2, byte_size(NewData) + byte_size(?TEST_DATA)}),
+    check_transfer_stats(Provider1, QosEntryId, ?FILES_STATS, [<<"total">>], empty),
+    check_transfer_stats(Provider2, QosEntryId, ?FILES_STATS, [<<"total">>, opt_spaces:get_storage_id(Provider2, SpaceId)], {2, 2}).
 
 %%%===================================================================
 %%% SetUp and TearDown functions

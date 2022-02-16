@@ -638,14 +638,13 @@ bad_data_sets(#data_spec{
     end, BadValues).
 
 
-% Converts correct value spec into a value
+% Converts correct value spec into a list of correct values for given key
 get_correct_value(Key, #data_spec{correct_values = CorrectValues}) ->
-    case maps:get(Key, CorrectValues) of
-        Fun when is_function(Fun, 0) ->
-            Fun();
-        Value ->
-            Value
-    end.
+    CorrectValuesForKey = maps:get(Key, CorrectValues),
+    lists:map(fun
+        (Fun) when is_function(Fun, 0) -> Fun();
+        (Value) -> Value
+    end, CorrectValuesForKey).
 
 
 %%%===================================================================

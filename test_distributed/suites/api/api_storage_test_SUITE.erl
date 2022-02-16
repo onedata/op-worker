@@ -51,11 +51,11 @@ get_shared_storage_test(_Config) ->
     SpaceId = oct_background:get_space_id(space_krk_par),
     lists:foreach(fun(ProviderSelector) ->
         ProviderId = oct_background:get_provider_id(ProviderSelector),
-        {ok, SupportingStorages} = ?opw_test_rpc(
-            ProviderSelector, space_logic:get_storages_by_provider(SpaceId, ProviderId)
+        {ok, SupportingStorages} = opw_test_rpc:call(
+            ProviderSelector, space_logic, get_storages_by_provider, [SpaceId, ProviderId]
         ),
         lists:foreach(fun(StorageId) ->
-            StorageName = ?opw_test_rpc(ProviderSelector, storage:fetch_name_of_local_storage(StorageId)),
+            StorageName = opw_test_rpc:call(ProviderSelector, storage, fetch_name_of_local_storage, [StorageId]),
             get_shared_storage_test_base(AllProviders, SpaceId, StorageId, StorageName, ProviderId)
         end, maps:keys(SupportingStorages))
     end, AllProviders).
@@ -75,10 +75,11 @@ get_shared_storage_test_base(TargetProviders, SpaceId, StorageId, StorageName, P
                 #scenario_template{
                     name = <<"Get shared storage using gs api">>,
                     type = gs,
-                    prepare_args_fun = fun(_) ->
+                    prepare_args_fun = fun(#api_test_ctx{data = Data0}) ->
+                        {TestedId, _} = api_test_utils:maybe_substitute_bad_id(StorageId, Data0),
                         #gs_args{
                             operation = get,
-                            gri = #gri{type = op_storage, id = StorageId, aspect = instance, scope = shared},
+                            gri = #gri{type = op_storage, id = TestedId, aspect = instance, scope = shared},
                             auth_hint = ?THROUGH_SPACE(SpaceId)
                         }
                     end,
@@ -101,7 +102,10 @@ get_shared_storage_test_base(TargetProviders, SpaceId, StorageId, StorageName, P
                         }, Result)
                     end
                 }
-            ]
+            ],
+            data_spec = #data_spec{
+                bad_values = [{bad_id, <<"NonExistentStorage">>, ?ERROR_NOT_FOUND}]
+            }
         }
     ])).
 
