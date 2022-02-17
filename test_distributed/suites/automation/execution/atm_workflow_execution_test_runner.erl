@@ -126,7 +126,7 @@ run(TestSpec = #atm_workflow_execution_test_spec{
     AtmWorkflowExecutionTestView = atm_workflow_execution_test_view:build(
         SpaceId, global_clock:timestamp_seconds(), AtmLaneSchemas
     ),
-    atm_workflow_execution_test_view:assert_match_with_backend(
+    true = atm_workflow_execution_test_view:assert_match_with_backend(
         ProviderSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionTestView
     ),
 
@@ -300,9 +300,12 @@ assert_actual_workflow_execution_test_view(NewAtmWorkflowExecutionTestView, Stat
     },
     workflow_execution_id = AtmWorkflowExecutionId
 }) ->
-    atm_workflow_execution_test_view:assert_match_with_backend(
+    case atm_workflow_execution_test_view:assert_match_with_backend(
         ProviderSelector, AtmWorkflowExecutionId, NewAtmWorkflowExecutionTestView
-    ),
+    ) of
+        true -> ok;
+        false -> ?assertEqual(success, failure)
+    end,
     State#state{workflow_execution_test_view = NewAtmWorkflowExecutionTestView}.
 
 

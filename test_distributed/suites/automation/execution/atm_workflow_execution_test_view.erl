@@ -7,7 +7,15 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% Helper module allowing definition and modification of atm workflow execution
-%%% test view which is json map of fields expected to be stored in op.
+%%% test view which consists of:
+%%% - expected state of atm_workflow_execution model
+%%% - expected state of each atm_task_execution model (to be implemented)
+%%% - expected state of each atm_store model (to be implemented)
+%%%
+%%% NOTE: test view is created and stored as json object similar to responses
+%%% send to clients via API endpoints. Model records definitions from op are
+%%% not reused as they contain many irrelevant (to clients) fields considered
+%%% as implementation details and omitted from said responses.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_workflow_execution_test_view).
@@ -29,6 +37,10 @@
     assert_match_with_backend/3
 ]).
 
+% json object similar in structure to translations returned via API endpoints
+% (has the same keys but as for values instead of concrete values it may contain
+% validator functions - e.g. timestamp fields should check approx time rather
+% than concrete value)
 -type view() :: json_utils:json_term().
 
 -export_type([view/0]).
@@ -62,9 +74,7 @@ build(SpaceId, ApproxScheduleTime, AtmLaneSchemas) ->
 
         <<"status">> => atom_to_binary(?SCHEDULED_STATUS, utf8),
 
-        <<"scheduleTime">> => fun(ScheduleTime) ->
-            ScheduleTime - 10 < ApproxScheduleTime andalso ApproxScheduleTime < ScheduleTime + 10
-        end,
+        <<"scheduleTime">> => build_timestamp_field_validator(ApproxScheduleTime),
         <<"startTime">> => 0,
         <<"finishTime">> => 0
     }.
@@ -82,13 +92,9 @@ report_lane_run_begin_preparing(AtmLaneRunSelector, TestView0) ->
     ),
     case maps:get(<<"status">>, TestView1) of
         <<"scheduled">> ->
-            ApproxStartTime = global_clock:timestamp_seconds(),
-
             TestView1#{
                 <<"status">> => <<"active">>,
-                <<"startTime">> => fun(ScheduleTime) ->
-                    ScheduleTime - 10 < ApproxStartTime andalso ApproxStartTime < ScheduleTime + 10
-                end
+                <<"startTime">> => build_timestamp_field_validator(global_clock:timestamp_seconds())
             };
         _ ->
             TestView1
@@ -115,13 +121,9 @@ report_workflow_execution_aborting(TestView) ->
 
 -spec report_workflow_execution_failed(view()) -> view().
 report_workflow_execution_failed(TestView) ->
-    ApproxFinishTime = global_clock:timestamp_seconds(),
-
     TestView#{
         <<"status">> => <<"failed">>,
-        <<"finishTime">> => fun(ScheduleTime) ->
-            ScheduleTime - 10 < ApproxFinishTime andalso ApproxFinishTime < ScheduleTime + 10
-        end
+        <<"finishTime">> => build_timestamp_field_validator(global_clock:timestamp_seconds())
     }.
 
 
@@ -130,7 +132,7 @@ report_workflow_execution_failed(TestView) ->
     atm_workflow_execution:id(),
     view()
 ) ->
-    ok | no_return().
+    boolean().
 assert_match_with_backend(ProviderSelector, AtmWorkflowExecutionId, TestView) ->
     {ok, #document{value = AtmWorkflowExecution}} = opw_test_rpc:call(
         ProviderSelector, atm_workflow_execution, get, [AtmWorkflowExecutionId]
@@ -139,10 +141,12 @@ assert_match_with_backend(ProviderSelector, AtmWorkflowExecutionId, TestView) ->
 
     case catch assert_matching_jsons(<<"atmWorkflowExecution">>, TestView, AtmWorkflowExecutionJson) of
         ok ->
-            ok;
+            true;
         badmatch ->
-            %% Bad match reason was already printed so it is enough to just end test
-            ?assertMatch(success, failure)
+            ct:pal("Error: mismatch between test view: ~n~p~n~nand models stored in op: ~n~p", [
+                TestView, AtmWorkflowExecutionJson
+            ]),
+            false
     end.
 
 
@@ -209,6 +213,13 @@ assert_matching_jsons(Path, Expected, Value) ->
             ]),
             throw(badmatch)
     end.
+
+
+%% @private
+-spec build_timestamp_field_validator(non_neg_integer()) ->
+    fun((non_neg_integer()) -> boolean()).
+build_timestamp_field_validator(ApproxTime) ->
+    fun(RecordedTime) -> abs(RecordedTime - ApproxTime) < 10 end.
 
 
 %% @private
