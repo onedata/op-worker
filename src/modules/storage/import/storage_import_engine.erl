@@ -109,7 +109,7 @@ sync_file(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
             end,
 
             case map_to_existing_file_uuid(ParentUuid, FileName, FileBaseName, FileUuid) of
-                {error, not_found} ->
+                {error, Reason} ->
                     % Link from Parent to FileBaseName is missing.
                     % We must check deletion marker to ensure that file may be synced.
                     % Deletion markers are removed if and only if file was successfully deleted from storage.
@@ -131,11 +131,17 @@ sync_file(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
                                         {error, not_found} ->
                                             maybe_import_file(StorageFileCtx, Info);
                                         {ok, SSIDoc} ->
-                                            case storage_sync_info:get_guid(SSIDoc) of
-                                                undefined ->
+                                            case {storage_sync_info:get_guid(SSIDoc), Reason} of
+                                                {undefined, _} ->
                                                     maybe_import_file(StorageFileCtx, Info);
-                                                _Guid ->
-                                                    {?FILE_UNMODIFIED, undefined, StorageFileCtx}
+                                                {_Guid, not_found} ->
+                                                    {?FILE_UNMODIFIED, undefined, StorageFileCtx};
+                                                {Guid, {conflicting_uuids, ConflictingUuids}} ->
+                                                    % Check if storage_sync_info points to other conflicting file
+                                                    case lists:member(file_id:guid_to_uuid(Guid), ConflictingUuids) of
+                                                        true -> maybe_import_file(StorageFileCtx, Info);
+                                                        false -> {?FILE_UNMODIFIED, undefined, StorageFileCtx}
+                                                    end
                                             end
                                     end
                             end;
@@ -180,11 +186,9 @@ sync_file(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
 
 
 -spec map_to_existing_file_uuid(file_meta:uuid(), file_meta:name(), file_meta:name(), file_meta:uuid() | undefined) ->
-    {ok, file_meta:uuid()} | {error, not_found}.
+    {ok, file_meta:uuid()} | {error, not_found | {conflicting_uuids, [file_meta:uuid()]}}.
 map_to_existing_file_uuid(ParentUuid, FileName, FileBaseName, undefined) ->
     case file_meta:get_matching_child_uuids_with_tree_ids(ParentUuid, all, FileBaseName) of
-        {ok, [{ResolvedUuid, _}]} ->
-            {ok, ResolvedUuid};
         {ok, UuidsWithTreeIds} ->
             Filtered = lists:filter(fun({FileUuid, _}) ->
                 case file_location:get_local(FileUuid) of
@@ -199,7 +203,7 @@ map_to_existing_file_uuid(ParentUuid, FileName, FileBaseName, undefined) ->
             end, UuidsWithTreeIds),
             case Filtered of
                 [{FileUuid, _}] -> {ok, FileUuid};
-                _ -> {error, not_found}
+                _ -> {error, {conflicting_uuids, lists:map(fun({FileUuid, _}) -> FileUuid end, UuidsWithTreeIds)}}
             end;
         {error, not_found} ->
             {error, not_found}
@@ -209,7 +213,7 @@ map_to_existing_file_uuid(ParentUuid, _FileName, FileBaseName, ExpectedFileUuid)
         {ok, UuidsWithTreeIds} ->
             case lists:any(fun({FileUuid, _}) -> FileUuid =:= ExpectedFileUuid end, UuidsWithTreeIds) of
                 true -> {ok, ExpectedFileUuid};
-                false -> {error, not_found}
+                false -> {error, {conflicting_uuids, lists:map(fun({FileUuid, _}) -> FileUuid end, UuidsWithTreeIds)}}
             end;
         {error, not_found} ->
             {error, not_found}
