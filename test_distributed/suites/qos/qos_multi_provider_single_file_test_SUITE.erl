@@ -503,7 +503,7 @@ qos_transfer_stats_test(_Config) ->
     check_transfer_stats(Provider2, QosEntryId, ?FILES_STATS, [<<"total">>, opt_spaces:get_storage_id(Provider2, SpaceId)], {1, 1}),
     
     NewData = crypto:strong_rand_bytes(8),
-    lfm_test_utils:write_file(P3Node, ?SESS_ID(Provider3), Guid, 0, NewData),
+    lfm_test_utils:write_file(P3Node, ?SESS_ID(Provider3), Guid, NewData),
 
     ?assertEqual(NewData, lfm_test_utils:read_file(P2Node, ?SESS_ID(Provider2), Guid, byte_size(NewData)), ?ATTEMPTS),
     ?assertEqual({ok, ?FULFILLED_QOS_STATUS}, opt_qos:check_qos_status(P2Node, ?SESS_ID(Provider2), QosEntryId), ?ATTEMPTS),

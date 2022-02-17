@@ -145,7 +145,7 @@ get_shared_file_attrs_test(_Config) ->
 
     FileType = api_test_utils:randomly_choose_file_type_for_test(),
     FilePath = filename:join(["/", ?SPACE_KRK_PAR, ?RANDOM_FILE_NAME()]),
-    {ok, FileGuid} = api_test_utils:create_file(FileType, P1Node, UserSessIdP1, FilePath, 8#707),
+    {ok, FileGuid} = lfm_test_utils:create_file(FileType, P1Node, UserSessIdP1, FilePath, 8#707),
 
     ShareId1 = api_test_utils:share_file_and_sync_file_attrs(P1Node, SpaceOwnerSessId, Providers, FileGuid),
     ShareId2 = api_test_utils:share_file_and_sync_file_attrs(P1Node, SpaceOwnerSessId, Providers, FileGuid),
@@ -242,8 +242,8 @@ test_for_hardlink_between_files_test(_Config) ->
         filename:join(["/", ?SPACE_KRK_PAR, ?RANDOM_FILE_NAME()])
     end,
     UserSessIdP1 = oct_background:get_user_session_id(user3, krakow),
-    {ok, TargetGuid} = api_test_utils:create_file(<<"file">>, ProviderNode, UserSessIdP1, GenPathFun()),
-    {ok, NotAffiliatedGuid} = api_test_utils:create_file(<<"file">>, ProviderNode, UserSessIdP1, GenPathFun()),
+    {ok, TargetGuid} = lfm_test_utils:create_file(<<"file">>, ProviderNode, UserSessIdP1, GenPathFun()),
+    {ok, NotAffiliatedGuid} = lfm_test_utils:create_file(<<"file">>, ProviderNode, UserSessIdP1, GenPathFun()),
     {ok, #file_attr{guid = LinkGuid1}} = lfm_proxy:make_link(ProviderNode, UserSessIdP1, GenPathFun(), TargetGuid),
     {ok, #file_attr{guid = LinkGuid2}} = lfm_proxy:make_link(ProviderNode, UserSessIdP1, GenPathFun(), TargetGuid),
     
@@ -819,12 +819,12 @@ get_file_distribution_test(Config) ->
 
     FileType = <<"file">>,
     FilePath = filename:join(["/", ?SPACE_KRK_PAR, ?RANDOM_FILE_NAME()]),
-    {ok, FileGuid} = api_test_utils:create_file(FileType, P1Node, UserSessIdP1, FilePath, 8#707),
+    {ok, FileGuid} = lfm_test_utils:create_file(FileType, P1Node, UserSessIdP1, FilePath, 8#707),
     {ok, ShareId} = opt_shares:create(P1Node, SpaceOwnerSessIdP1, ?FILE_REF(FileGuid), <<"share">>),
 
     file_test_utils:await_sync(P2Node, FileGuid),
 
-    api_test_utils:fill_file_with_dummy_data(P1Node, UserSessIdP1, FileGuid, 0, 20),
+    lfm_test_utils:write_file(P1Node, UserSessIdP1, FileGuid, 0, {rand_content, 20}),
     ExpDist1 = [#{
         <<"providerId">> => P1Id,
         <<"blocks">> => [[0, 20]],
@@ -835,7 +835,7 @@ get_file_distribution_test(Config) ->
 
     % Write another block to file on P2 and check returned distribution
 
-    api_test_utils:fill_file_with_dummy_data(P2Node, UserSessIdP2, FileGuid, 30, 20),
+    lfm_test_utils:write_file(P2Node, UserSessIdP2, FileGuid, 30, {rand_content, 20}),
     ExpDist2 = [
         #{
             <<"providerId">> => P1Id,
@@ -862,7 +862,7 @@ get_dir_distribution_test(Config) ->
 
     FileType = <<"dir">>,
     DirPath = filename:join(["/", ?SPACE_KRK_PAR, ?RANDOM_FILE_NAME()]),
-    {ok, DirGuid} = api_test_utils:create_file(FileType, P1Node, UserSessIdP1, DirPath, 8#707),
+    {ok, DirGuid} = lfm_test_utils:create_file(FileType, P1Node, UserSessIdP1, DirPath, 8#707),
     {ok, ShareId} = opt_shares:create(P1Node, SpaceOwnerSessIdP1, ?FILE_REF(DirGuid), <<"share">>),
     file_test_utils:await_sync(P2Node, DirGuid),
 
@@ -872,12 +872,12 @@ get_dir_distribution_test(Config) ->
 
     % Create file in dir and assert that dir distribution hasn't changed
 
-    {ok, FileGuid} = api_test_utils:create_file(
+    {ok, FileGuid} = lfm_test_utils:create_file(
         <<"file">>, P2Node, UserSessIdP2,
         filename:join([DirPath, ?RANDOM_FILE_NAME()]),
         8#707
     ),
-    api_test_utils:fill_file_with_dummy_data(P2Node, UserSessIdP2, FileGuid, 30, 20),
+    lfm_test_utils:write_file(P2Node, UserSessIdP2, FileGuid, 30, {rand_content, 20}),
 
     wait_for_file_location_sync(P1Node, UserSessIdP1, DirGuid, ExpDist),
     get_distribution_test_base(FileType, DirGuid, ShareId, ExpDist, Config).

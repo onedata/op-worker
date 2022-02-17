@@ -2342,13 +2342,7 @@ for(N, F) ->
 %% @private
 -spec fill_file_with_dummy_data(node(), session:id(), file_id:file_guid()) -> ok.
 fill_file_with_dummy_data(Node, SessId, Guid) ->
-    {ok, FileHandle} = ?assertMatch(
-        {ok, _},
-        lfm_proxy:open(Node, SessId, ?FILE_REF(Guid), write)
-    ),
-    ?assertMatch({ok, 4}, lfm_proxy:write(Node, FileHandle, 0, <<"DATA">>)),
-    ?assertMatch(ok, lfm_proxy:fsync(Node, FileHandle)),
-    ?assertMatch(ok, lfm_proxy:close(Node, FileHandle)).
+    lfm_test_utils:write_file(Node, SessId, Guid, <<"DATA">>).
 
 
 %% @private

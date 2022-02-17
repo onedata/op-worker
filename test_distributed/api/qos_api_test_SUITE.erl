@@ -65,7 +65,7 @@ create_qos_test(Config) ->
     SessIdP2 = ?USER_IN_BOTH_SPACES_SESS_ID(P2, Config),
     FileType = api_test_utils:randomly_choose_file_type_for_test(),
 
-    {ok, FileToShareGuid} = api_test_utils:create_file(
+    {ok, FileToShareGuid} = lfm_test_utils:create_file(
         FileType, P1, SessIdP1, filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME()])),
     ?assertMatch({ok, _}, lfm_proxy:stat(P2, SessIdP2, ?FILE_REF(FileToShareGuid)), ?ATTEMPTS),
     {ok, ShareId} = opt_shares:create(P1, SessIdP1, ?FILE_REF(FileToShareGuid), <<"share">>),
@@ -74,7 +74,7 @@ create_qos_test(Config) ->
 
     SetupFun = fun() ->
         FilePath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME()]),
-        {ok, Guid} = api_test_utils:create_file(FileType, P1, SessIdP1, FilePath),
+        {ok, Guid} = lfm_test_utils:create_file(FileType, P1, SessIdP1, FilePath),
         ?assertMatch({ok, _}, lfm_proxy:stat(P2, SessIdP2, ?FILE_REF(Guid)), ?ATTEMPTS),
         api_test_memory:set(MemRef, guid, Guid)
     end,
@@ -133,7 +133,7 @@ get_qos_test(Config) ->
     SessIdP1 = ?USER_IN_BOTH_SPACES_SESS_ID(P1, Config),
     FileType = api_test_utils:randomly_choose_file_type_for_test(),
     FilePath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME()]),
-    {ok, Guid} = api_test_utils:create_file(FileType, P1, SessIdP1, FilePath),
+    {ok, Guid} = lfm_test_utils:create_file(FileType, P1, SessIdP1, FilePath),
 
     MemRef = api_test_memory:init(),
 
@@ -169,7 +169,7 @@ delete_qos_test(Config) ->
     SessIdP1 = ?USER_IN_BOTH_SPACES_SESS_ID(P1, Config),
     FileType = api_test_utils:randomly_choose_file_type_for_test(),
     FilePath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME()]),
-    {ok, Guid} = api_test_utils:create_file(FileType, P1, SessIdP1, FilePath),
+    {ok, Guid} = lfm_test_utils:create_file(FileType, P1, SessIdP1, FilePath),
 
     MemRef = api_test_memory:init(),
 
@@ -207,8 +207,8 @@ get_qos_summary_test(Config) ->
     SessIdP2 = ?USER_IN_BOTH_SPACES_SESS_ID(P2, Config),
     FileType = api_test_utils:randomly_choose_file_type_for_test(),
     FilePath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME()]),
-    {ok, DirGuid} = api_test_utils:create_file(<<"dir">>, P1, SessIdP1, FilePath),
-    {ok, Guid} = api_test_utils:create_file(FileType, P1, SessIdP1, filename:join(FilePath, ?RANDOM_FILE_NAME())),
+    {ok, DirGuid} = lfm_test_utils:create_file(<<"dir">>, P1, SessIdP1, FilePath),
+    {ok, Guid} = lfm_test_utils:create_file(FileType, P1, SessIdP1, filename:join(FilePath, ?RANDOM_FILE_NAME())),
     {ok, QosEntryIdInherited} = opt_qos:add_qos_entry(P1, SessIdP1, ?FILE_REF(DirGuid), <<"key=value">>, 8),
     {ok, QosEntryIdDirect} = opt_qos:add_qos_entry(P1, SessIdP1, ?FILE_REF(Guid), <<"key=value">>, 3),
     % wait for qos entries to be dbsynced to other provider
@@ -313,7 +313,7 @@ get_qos_entry_audit_log(Config) ->
     SessIdP1 = ?USER_IN_BOTH_SPACES_SESS_ID(P1, Config),
     SessIdP2 = ?USER_IN_BOTH_SPACES_SESS_ID(P2, Config),
     FilePath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME()]),
-    {ok, Guid} = api_test_utils:create_file(<<"file">>, P1, SessIdP1, FilePath),
+    {ok, Guid} = lfm_test_utils:create_file(<<"file">>, P1, SessIdP1, FilePath),
     ProviderId1 = ?GET_DOMAIN_BIN(P1),
     {ok, QosEntryId} = opt_qos:add_qos_entry(P1, SessIdP1, ?FILE_REF(Guid), <<"providerId=", ProviderId1/binary>>, 1),
     % wait for qos entries to be dbsynced to other provider
@@ -355,7 +355,9 @@ get_qos_entry_audit_log(Config) ->
 
 get_qos_time_series_collections(Config) ->
     [FileCreatingProvider, TransferringProvider] = ?config(op_worker_nodes, Config),
-    QosEntryId = setup_preexisting_qos_causing_file_transfer(Config, FileCreatingProvider, TransferringProvider, 100),
+    QosEntryId = setup_preexisting_fulfilled_qos_causing_file_transfer(
+        Config, ?SPACE_2, FileCreatingProvider, TransferringProvider, 100
+    ),
 
     MemRef = api_test_memory:init(),
 
@@ -391,7 +393,9 @@ get_qos_time_series_collection(Config) ->
 get_qos_time_series_collection_test_base(Config, CollectionType) ->
     [FileCreatingProvider, TransferringProvider] = TargetNodes = ?config(op_worker_nodes, Config),
     FileSize = rand:uniform(1000),
-    QosEntryId = setup_preexisting_qos_causing_file_transfer(Config, FileCreatingProvider, TransferringProvider, FileSize),
+    QosEntryId = setup_preexisting_fulfilled_qos_causing_file_transfer(
+        Config, ?SPACE_2, FileCreatingProvider, TransferringProvider, FileSize
+    ),
 
     TimestampFarInThePast = 123456789,
 
@@ -405,7 +409,7 @@ get_qos_time_series_collection_test_base(Config, CollectionType) ->
                 setup_fun = fun() ->
                     api_test_memory:set(MemRef, qos_entry_id, QosEntryId),
                     api_test_memory:set(MemRef, file_size, FileSize),
-                    api_test_memory:set(MemRef, timestamp_far_in_the_past, 123456789),
+                    api_test_memory:set(MemRef, timestamp_far_in_the_past, TimestampFarInThePast),
                     api_test_memory:set(MemRef, file_creating_provider, FileCreatingProvider)
                 end,
                 scenario_templates = [
@@ -421,7 +425,7 @@ get_qos_time_series_collection_test_base(Config, CollectionType) ->
                     optional = [<<"startTimestamp">>, <<"limit">>],
                     correct_values = #{
                         <<"metrics">> => [fun() ->
-                            {ok, AvailableTimeSeriesIds} = rpc:call(
+                            {ok, AvailableTimeSeriesIds} = opw_test_rpc:call(
                                 TargetNode, qos_transfer_stats, list_time_series_ids, [QosEntryId, CollectionType]
                             ),
                             maps_utils:generate_from_list(fun(TimeSeriesId) ->
@@ -764,6 +768,8 @@ validate_result_fun_gs(MemRef, qos_time_series_collections) ->
 
         ExpectedResult = case TargetProviderId of
             FileCreatingProviderId ->
+                % "total" time series is created by default by all supporting providers for each QoS entry,
+                % even if no data transfer is recorded
                 #{
                     ?BYTES_STATS => [?TOTAL_TIME_SERIES_ID],
                     ?FILES_STATS => [?TOTAL_TIME_SERIES_ID]
@@ -795,6 +801,9 @@ validate_result_fun_gs(MemRef, {qos_time_series_collection, CollectionType}) ->
             StartTimestamp == TimestampFarInThePast ->
                 true;
             TargetProviderId == FileCreatingProviderId ->
+                % providers store only their own statistics concerning the incoming transfers
+                % (statistics are not synchronized), hence providers that not replicate any blocks
+                % concerning a QoS entry have empty statistics
                 true;
             true ->
                 false
@@ -879,22 +888,21 @@ maybe_inject_object_id(Data, Guid) ->
 
 
 check_evaluate_expression_result_storages(Node, SpaceId, Expression, Result) ->
-    ExpectedStorages = rpc:call(Node, qos_expression, get_matching_storages_in_space, [SpaceId, Expression]),
+    ExpectedStorages = opw_test_rpc:call(Node, qos_expression, get_matching_storages_in_space, [SpaceId, Expression]),
     lists:foreach(fun(StorageDetails) ->
         #{<<"id">> := Id, <<"name">> := Name, <<"providerId">> := ProviderId} = StorageDetails,
         ?assert(lists:member(Id, ExpectedStorages)),
-        ?assertEqual(ProviderId, rpc:call(Node, storage, fetch_provider_id_of_remote_storage, [Id, SpaceId])),
-        ?assertEqual(Name, rpc:call(Node, storage, fetch_name_of_remote_storage, [Id, SpaceId]))
+        ?assertEqual(ProviderId, opw_test_rpc:call(Node, storage, fetch_provider_id_of_remote_storage, [Id, SpaceId])),
+        ?assertEqual(Name, opw_test_rpc:call(Node, storage, fetch_name_of_remote_storage, [Id, SpaceId]))
     end, Result).
 
 
-setup_preexisting_qos_causing_file_transfer(Config, FileCreatingProvider, TransferringProvider, FileSize) ->
+setup_preexisting_fulfilled_qos_causing_file_transfer(Config, SpaceId, FileCreatingProvider, TransferringProvider, FileSize) ->
     SessIdP1 = ?USER_IN_BOTH_SPACES_SESS_ID(FileCreatingProvider, Config),
     SessIdP2 = ?USER_IN_BOTH_SPACES_SESS_ID(TransferringProvider, Config),
-    FilePath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME()]),
-    {ok, Guid} = api_test_utils:create_file(<<"file">>, FileCreatingProvider, SessIdP1, FilePath),
-    FileContent = crypto:strong_rand_bytes(FileSize),
-    api_test_utils:write_file(FileCreatingProvider, SessIdP1, Guid, 0, FileContent),
+    FilePath = filename:join(["/", SpaceId, ?RANDOM_FILE_NAME()]),
+    {ok, Guid} = lfm_test_utils:create_file(<<"file">>, FileCreatingProvider, SessIdP1, FilePath),
+    lfm_test_utils:write_file(FileCreatingProvider, SessIdP1, Guid, {rand_content, FileSize}),
     TransferringProviderId = ?GET_DOMAIN_BIN(TransferringProvider),
     {ok, QosEntryId} = opt_qos:add_qos_entry(
         FileCreatingProvider, SessIdP1, ?FILE_REF(Guid), <<"providerId=", TransferringProviderId/binary>>, 1
@@ -906,7 +914,7 @@ setup_preexisting_qos_causing_file_transfer(Config, FileCreatingProvider, Transf
 
 
 get_supporting_storages(Node, SpaceId, ProviderId) ->
-    {ok, ProviderSupports} = rpc:call(Node, space_logic, get_storages_by_provider, [SpaceId, ProviderId]),
+    {ok, ProviderSupports} = opw_test_rpc:call(Node, space_logic, get_storages_by_provider, [SpaceId, ProviderId]),
     maps:keys(ProviderSupports).
 
 %%%===================================================================

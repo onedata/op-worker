@@ -44,9 +44,9 @@
 
 
 create_file(Node, SessId, DirPath) ->
-    FilePath = filename:join([DirPath, ?RANDOM_FILE_NAME()]),
-    {ok, FileGuid} = api_test_utils:create_file(<<"file">>, Node, SessId, FilePath, 8#777),
-    api_test_utils:fill_file_with_dummy_data(Node, SessId, FileGuid, ?BYTES_NUM),
+    FilePath = filename:join([DirPath, ?RANDOM_FILE_NAME()]), %@fixme create
+    {ok, FileGuid} = lfm_test_utils:create_file(<<"file">>, Node, SessId, FilePath, 8#777),
+    lfm_test_utils:write_file(Node, SessId, FileGuid, {rand_content, ?BYTES_NUM}),
     FileGuid.
 
 
@@ -90,14 +90,14 @@ build_create_file_transfer_setup_fun(TransferType, MemRef, SrcNode, DstNode, Use
 
         RootFileType = api_test_utils:randomly_choose_file_type_for_test(false),
         RootFilePath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME()]),
-        {ok, RootFileGuid} = api_test_utils:create_file(
+        {ok, RootFileGuid} = lfm_test_utils:create_file(
             RootFileType, SrcNode, SessId1, RootFilePath, 8#777
         ),
         {ok, RootFileObjectId} = file_id:guid_to_objectid(RootFileGuid),
 
         FilesToTransfer = case RootFileType of
             <<"file">> ->
-                api_test_utils:fill_file_with_dummy_data(SrcNode, SessId1, RootFileGuid, ?BYTES_NUM),
+                lfm_test_utils:write_file(SrcNode, SessId1, RootFileGuid, {rand_content, ?BYTES_NUM}),
                 [RootFileGuid];
             <<"dir">> ->
                 lists:map(fun(_) ->
@@ -271,10 +271,10 @@ sync_files_between_nodes(eviction, SrcNode, DstNode, Files) ->
     lists:foreach(fun(Guid) ->
         % Read file on DstNode to force rtransfer
         file_test_utils:await_sync(DstNode, Guid),
-        ExpContent = api_test_utils:read_file(SrcNode, ?ROOT_SESS_ID, Guid, ?BYTES_NUM),
+        ExpContent = lfm_test_utils:read_file(SrcNode, ?ROOT_SESS_ID, Guid, ?BYTES_NUM),
         ?assertMatch(
             ExpContent,
-            api_test_utils:read_file(DstNode, ?ROOT_SESS_ID, Guid, ?BYTES_NUM),
+            lfm_test_utils:read_file(DstNode, ?ROOT_SESS_ID, Guid, ?BYTES_NUM),
             ?ATTEMPTS
         )
     end, Files),

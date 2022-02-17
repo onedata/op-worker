@@ -34,12 +34,6 @@
 
     randomly_choose_file_type_for_test/0,
     randomly_choose_file_type_for_test/1,
-    create_file/4, create_file/5,
-
-    fill_file_with_dummy_data/4,
-    fill_file_with_dummy_data/5,
-    write_file/5,
-    read_file/4,
 
     share_file_and_sync_file_attrs/4,
 
@@ -100,7 +94,7 @@ create_shared_file_in_space_krk() ->
 
     FileType = randomly_choose_file_type_for_test(),
     FilePath = filename:join(["/", ?SPACE_KRK, ?RANDOM_FILE_NAME()]),
-    {ok, FileGuid} = create_file(FileType, P1Node, UserSessId, FilePath),
+    {ok, FileGuid} = lfm_test_utils:create_file(FileType, P1Node, UserSessId, FilePath),
     {ok, ShareId} = opt_shares:create(P1Node, SpaceOwnerSessId, ?FILE_REF(FileGuid), <<"share">>),
 
     {FileType, FilePath, FileGuid, ShareId}.
@@ -132,7 +126,7 @@ create_and_sync_shared_file_in_space_krk_par(FileType, FileName, Mode) ->
     UserSessIdP1 = kv_utils:get([users, user3, sessions, krakow], node_cache:get(oct_mapping)),
 
     FilePath = filename:join(["/", ?SPACE_KRK_PAR, FileName]),
-    {ok, FileGuid} = create_file(FileType, P1Node, UserSessIdP1, FilePath, Mode),
+    {ok, FileGuid} = lfm_test_utils:create_file(FileType, P1Node, UserSessIdP1, FilePath, Mode),
     {ok, ShareId} = opt_shares:create(P1Node, SpaceOwnerSessIdP1, ?FILE_REF(FileGuid), <<"share">>),
 
     file_test_utils:await_sync(P2Node, FileGuid),
@@ -169,7 +163,7 @@ create_file_in_space_krk_par_with_additional_metadata(ParentPath, HasParentQos, 
     FilePath = filename:join([ParentPath, FileName]),
 
     FileMode = lists_utils:random_element([8#707, 8#705, 8#700]),
-    {ok, FileGuid} = create_file(
+    {ok, FileGuid} = lfm_test_utils:create_file(
         FileType, P1Node, UserSessIdP1, FilePath, FileMode
     ),
     FileShares = case randomly_create_share(P1Node, SpaceOwnerSessIdP1, FileGuid) of
@@ -179,7 +173,7 @@ create_file_in_space_krk_par_with_additional_metadata(ParentPath, HasParentQos, 
     Size = case FileType of
         <<"file">> ->
             RandSize = rand:uniform(20),
-            fill_file_with_dummy_data(P1Node, SpaceOwnerSessIdP1, FileGuid, RandSize),
+            lfm_test_utils:write_file(P1Node, SpaceOwnerSessIdP1, FileGuid, {rand_content, RandSize}),
             RandSize;
         _ ->
             0
@@ -225,52 +219,6 @@ randomly_choose_file_type_for_test(LogSelectedFileType) ->
     FileType = ?RANDOM_FILE_TYPE(),
     LogSelectedFileType andalso ct:pal("Chosen file type for test: ~s", [FileType]),
     FileType.
-
-
--spec create_file(file_type(), node(), session:id(), file_meta:path()) ->
-    {ok, file_id:file_guid()} | {error, term()}.
-create_file(FileType, Node, SessId, Path) ->
-    create_file(FileType, Node, SessId, Path, 8#777).
-
-
--spec create_file(file_type(), node(), session:id(), file_meta:path(), file_meta:mode()) ->
-    {ok, file_id:file_guid()} | {error, term()}.
-create_file(<<"file">>, Node, SessId, Path, Mode) ->
-    lfm_proxy:create(Node, SessId, Path, Mode);
-create_file(<<"dir">>, Node, SessId, Path, Mode) ->
-    lfm_proxy:mkdir(Node, SessId, Path, Mode).
-
-
--spec fill_file_with_dummy_data(node(), session:id(), file_id:file_guid(), Size :: non_neg_integer()) ->
-    WrittenContent :: binary().
-fill_file_with_dummy_data(Node, SessId, FileGuid, Size) ->
-    fill_file_with_dummy_data(Node, SessId, FileGuid, 0, Size).
-
-
--spec fill_file_with_dummy_data(node(), session:id(), file_id:file_guid(),
-    Offset :: non_neg_integer(), Size :: non_neg_integer()) -> WrittenContent :: binary().
-fill_file_with_dummy_data(Node, SessId, FileGuid, Offset, Size) ->
-    Content = crypto:strong_rand_bytes(Size),
-    write_file(Node, SessId, FileGuid, Offset, Content),
-    Content.
-
-
--spec write_file(node(), session:id(), file_id:file_guid(), Offset :: non_neg_integer(),
-    Size :: non_neg_integer()) -> ok.
-write_file(Node, SessId, FileGuid, Offset, Content) ->
-    {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(Node, SessId, ?FILE_REF(FileGuid), write)),
-    ?assertMatch({ok, _}, lfm_proxy:write(Node, Handle, Offset, Content)),
-    ?assertMatch(ok, lfm_proxy:fsync(Node, Handle)),
-    ?assertMatch(ok, lfm_proxy:close(Node, Handle)).
-
-
--spec read_file(node(), session:id(), file_id:file_guid(), Size :: non_neg_integer()) ->
-    Content :: binary().
-read_file(Node, SessId, FileGuid, Size) ->
-    {ok, ReadHandle} = lfm_proxy:open(Node, SessId, ?FILE_REF(FileGuid), read),
-    {ok, Content} = lfm_proxy:read(Node, ReadHandle, 0, Size),
-    ok = lfm_proxy:close(Node, ReadHandle),
-    Content.
 
 
 -spec share_file_and_sync_file_attrs(node(), session:id(), [node()], file_id:file_guid()) ->

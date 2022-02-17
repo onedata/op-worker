@@ -270,7 +270,7 @@ get_luma_config(StorageData) ->
     storage_config:get_luma_config(StorageData).
 
 
--spec fetch_shared_data(id(), od_space:id()) -> middleware:data().
+-spec fetch_shared_data(id(), od_space:id()) -> od_storage:doc().
 fetch_shared_data(StorageId, SpaceId) when is_binary(StorageId) ->
     {ok, Data} = ?throw_on_error(storage_logic:get_shared_data(StorageId, SpaceId)),
     Data.
