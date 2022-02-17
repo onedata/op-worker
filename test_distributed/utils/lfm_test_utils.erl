@@ -27,6 +27,7 @@
 
 % TODO VFS-7215 - merge this module with file_ops_test_utils
 
+-type file_type() :: binary(). % <<"file">> | <<"dir">>
 
 %%%===================================================================
 %%% API operating on Config map
