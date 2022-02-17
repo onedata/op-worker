@@ -60,47 +60,47 @@ all() -> [
 create_test(_Config) ->
     atm_infinite_log_based_stores_test_base:create_test_base(#{
         store_configs => example_configs(),
-        get_item_initializer_data_spec_fun => fun get_item_initializer_data_spec/1,
-        prepare_item_initializer_fun => fun prepare_item_initializer/1
+        get_input_item_generator_seed_data_spec => fun get_input_item_generator_seed_data_spec/1,
+        input_item_formatter => fun input_item_formatter/1
     }).
 
 
 apply_operation_test(_Config) ->
     atm_infinite_log_based_stores_test_base:apply_operation_test_base(#{
         store_configs => example_configs(),
-        get_item_initializer_data_spec_fun => fun get_item_initializer_data_spec/1,
-        prepare_item_initializer_fun => fun prepare_item_initializer/1,
-        prepare_item_fun => fun prepare_item/3
+        get_input_item_generator_seed_data_spec => fun get_input_item_generator_seed_data_spec/1,
+        input_item_formatter => fun input_item_formatter/1,
+        input_item_to_exp_store_item => fun input_item_to_exp_store_item/3
     }).
 
 
 iterator_test(_Config) ->
     atm_infinite_log_based_stores_test_base:iterator_test_base(#{
         store_configs => example_configs(),
-        get_item_initializer_data_spec_fun => fun get_item_initializer_data_spec/1,
-        prepare_item_initializer_fun => fun prepare_item_initializer/1,
-        prepare_item_fun => fun prepare_item/3,
-        randomly_remove_item_fun => fun randomly_remove_item/3
+        get_input_item_generator_seed_data_spec => fun get_input_item_generator_seed_data_spec/1,
+        input_item_formatter => fun input_item_formatter/1,
+        input_item_to_exp_store_item => fun input_item_to_exp_store_item/3,
+        randomly_remove_entity_referenced_by_item => fun randomly_remove_entity_referenced_by_item/3
     }).
 
 
 browse_by_index_test(_Config) ->
     atm_infinite_log_based_stores_test_base:browse_content_test_base(index, #{
         store_configs => example_configs(),
-        get_item_initializer_data_spec_fun => fun get_item_initializer_data_spec/1,
-        prepare_item_initializer_fun => fun prepare_item_initializer/1,
-        prepare_item_fun => fun prepare_item/3,
-        randomly_remove_item_fun => fun randomly_remove_item/3
+        get_input_item_generator_seed_data_spec => fun get_input_item_generator_seed_data_spec/1,
+        input_item_formatter => fun input_item_formatter/1,
+        input_item_to_exp_store_item => fun input_item_to_exp_store_item/3,
+        randomly_remove_entity_referenced_by_item => fun randomly_remove_entity_referenced_by_item/3
     }).
 
 
 browse_by_offset_test(_Config) ->
     atm_infinite_log_based_stores_test_base:browse_content_test_base(offset, #{
         store_configs => example_configs(),
-        get_item_initializer_data_spec_fun => fun get_item_initializer_data_spec/1,
-        prepare_item_initializer_fun => fun prepare_item_initializer/1,
-        prepare_item_fun => fun prepare_item/3,
-        randomly_remove_item_fun => fun randomly_remove_item/3
+        get_input_item_generator_seed_data_spec => fun get_input_item_generator_seed_data_spec/1,
+        input_item_formatter => fun input_item_formatter/1,
+        input_item_to_exp_store_item => fun input_item_to_exp_store_item/3,
+        randomly_remove_entity_referenced_by_item => fun randomly_remove_entity_referenced_by_item/3
     }).
 
 
@@ -127,39 +127,39 @@ example_configs() ->
 
 
 %% @private
--spec get_item_initializer_data_spec(atm_list_store_config:record()) ->
+-spec get_input_item_generator_seed_data_spec(atm_list_store_config:record()) ->
     atm_data_spec:record().
-get_item_initializer_data_spec(#atm_list_store_config{item_data_spec = ItemDataSpec}) ->
+get_input_item_generator_seed_data_spec(#atm_list_store_config{item_data_spec = ItemDataSpec}) ->
     ItemDataSpec.
 
 
 %% @private
--spec prepare_item_initializer(automation:item()) -> automation:item().
-prepare_item_initializer(Item) -> Item.
+-spec input_item_formatter(automation:item()) -> automation:item().
+input_item_formatter(Item) -> Item.
 
 
 %% @private
--spec prepare_item(
+-spec input_item_to_exp_store_item(
     atm_workflow_execution_auth:record(),
     atm_value:expanded(),
     atm_store:id()
 ) ->
     atm_value:expanded().
-prepare_item(AtmWorkflowExecutionAuth, ItemInitializer, ItemDataSpec) ->
-    atm_store_test_utils:ensure_fully_expanded_data(
+input_item_to_exp_store_item(AtmWorkflowExecutionAuth, ItemInitializer, ItemDataSpec) ->
+    atm_store_test_utils:compress_and_expand_data(
         ?PROVIDER_SELECTOR, AtmWorkflowExecutionAuth, ItemInitializer, ItemDataSpec
     ).
 
 
 %% @private
--spec randomly_remove_item(
+-spec randomly_remove_entity_referenced_by_item(
     atm_workflow_execution_auth:record(),
     atm_value:expanded(),
     atm_data_spec:record()
 ) ->
     false | {true, errors:error()}.
-randomly_remove_item(AtmWorkflowExecutionAuth, Item, ItemDataSpec) ->
-    atm_store_test_utils:randomly_remove_item(
+randomly_remove_entity_referenced_by_item(AtmWorkflowExecutionAuth, Item, ItemDataSpec) ->
+    atm_store_test_utils:randomly_remove_entity_referenced_by_item(
         ?PROVIDER_SELECTOR, AtmWorkflowExecutionAuth, Item, ItemDataSpec
     ).
 

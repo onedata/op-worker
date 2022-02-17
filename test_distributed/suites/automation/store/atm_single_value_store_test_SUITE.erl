@@ -111,10 +111,10 @@ apply_operation_test(_Config) ->
         end,
         FullyExpandedInitialItem = case InitialItem of
             undefined -> undefined;
-            _ -> ensure_fully_expanded_data(AtmWorkflowExecutionAuth, InitialItem, ItemDataSpec)
+            _ -> compress_and_expand_data(AtmWorkflowExecutionAuth, InitialItem, ItemDataSpec)
         end,
         NewItem = gen_valid_data(AtmWorkflowExecutionAuth, ItemDataSpec),
-        FullyExpandedNewItem = ensure_fully_expanded_data(AtmWorkflowExecutionAuth, NewItem, ItemDataSpec),
+        FullyExpandedNewItem = compress_and_expand_data(AtmWorkflowExecutionAuth, NewItem, ItemDataSpec),
 
         AtmStoreSchema = atm_store_test_utils:build_store_schema(Config),
         {ok, AtmStoreId} = ?extract_key(?rpc(atm_store_api:create(
@@ -183,7 +183,7 @@ iterator_test(_Config) ->
         ?assertEqual(stop, ?rpc(iterator:get_next(AtmWorkflowExecutionEnv, AtmStoreIterator0))),
 
         Item = gen_valid_data(AtmWorkflowExecutionAuth, ItemDataSpec),
-        FullyExpandedItem = ensure_fully_expanded_data(AtmWorkflowExecutionAuth, Item, ItemDataSpec),
+        FullyExpandedItem = compress_and_expand_data(AtmWorkflowExecutionAuth, Item, ItemDataSpec),
         set_item(AtmWorkflowExecutionAuth, Item, AtmStoreId),
 
         AtmStoreIterator1 = ?rpc(atm_store_api:acquire_iterator(AtmStoreId, AtmStoreIteratorSpec)),
@@ -217,7 +217,7 @@ browse_test(_Config) ->
 
         Item = gen_valid_data(AtmWorkflowExecutionAuth, ItemDataSpec),
         set_item(AtmWorkflowExecutionAuth, Item, AtmStoreId),
-        ExpandedItem = ensure_fully_expanded_data(AtmWorkflowExecutionAuth, Item, ItemDataSpec),
+        ExpandedItem = compress_and_expand_data(AtmWorkflowExecutionAuth, Item, ItemDataSpec),
 
         ?assertEqual(
             {[{<<>>, {ok, ExpandedItem}}], true},
@@ -257,14 +257,14 @@ example_configs() ->
 
 
 %% @private
--spec ensure_fully_expanded_data(
+-spec compress_and_expand_data(
     atm_workflow_execution_auth:record(),
     atm_value:expanded(),
     atm_store:id()
 ) ->
     atm_value:expanded().
-ensure_fully_expanded_data(AtmWorkflowExecutionAuth, Item, ItemDataSpec) ->
-    atm_store_test_utils:ensure_fully_expanded_data(
+compress_and_expand_data(AtmWorkflowExecutionAuth, Item, ItemDataSpec) ->
+    atm_store_test_utils:compress_and_expand_data(
         ?PROVIDER_SELECTOR, AtmWorkflowExecutionAuth, Item, ItemDataSpec
     ).
 

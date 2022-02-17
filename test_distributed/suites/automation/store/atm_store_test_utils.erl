@@ -29,14 +29,11 @@
     build_workflow_execution_env/3,
     gen_valid_data/3,
     gen_invalid_data/3,
-    ensure_fully_expanded_data/4,
-    randomly_remove_item/4,
+    compress_and_expand_data/4,
+    randomly_remove_entity_referenced_by_item/4,
     split_into_chunks/3
 ]).
 
-
--define(RAND_STR(Bytes), str_utils:rand_hex(Bytes)).
--define(RAND_INT(From, To), From + rand:uniform(To - From + 1) - 1).
 
 -define(rpc(ProviderSelector, Expr), ?opw_test_rpc(ProviderSelector, Expr)).
 
@@ -57,7 +54,7 @@
 create_workflow_execution_auth(ProviderSelector, UserSelector, SpaceSelector) ->
     Node = oct_background:get_random_provider_node(ProviderSelector),
 
-    AtmWorkflowExecutionId = str_utils:rand_hex(32),
+    AtmWorkflowExecutionId = ?RAND_STR(32),
 
     SessionId = oct_background:get_user_session_id(UserSelector, ProviderSelector),
     UserCtx = rpc:call(Node, user_ctx, new, [SessionId]),
@@ -254,14 +251,15 @@ gen_invalid_data(ProviderSelector, AtmWorkflowExecutionAuth, #atm_data_spec{
     }).
 
 
--spec ensure_fully_expanded_data(
+-spec compress_and_expand_data(
     oct_background:node_selector(),
     atm_workflow_execution_auth:record(),
     atm_value:expanded(),
     atm_store:id()
 ) ->
     atm_value:expanded().
-ensure_fully_expanded_data(ProviderSelector, AtmWorkflowExecutionAuth, Data, AtmDataSpec) ->
+compress_and_expand_data(ProviderSelector, AtmWorkflowExecutionAuth, Data, AtmDataSpec) ->
+    %% short comment about how item dropping to store and fetched will have different value TODO
     {ok, ExpandedData} = ?rpc(ProviderSelector, atm_value:expand(
         AtmWorkflowExecutionAuth,
         atm_value:compress(Data, AtmDataSpec),
@@ -270,14 +268,14 @@ ensure_fully_expanded_data(ProviderSelector, AtmWorkflowExecutionAuth, Data, Atm
     ExpandedData.
 
 
--spec randomly_remove_item(
+-spec randomly_remove_entity_referenced_by_item(
     oct_background:node_selector(),
     atm_workflow_execution_auth:record(),
     atm_value:expanded(),
     atm_data_spec:record()
 ) ->
     false | {true, errors:error()}.
-randomly_remove_item(ProviderSelector, AtmWorkflowExecutionAuth, Item, #atm_data_spec{
+randomly_remove_entity_referenced_by_item(ProviderSelector, AtmWorkflowExecutionAuth, Item, #atm_data_spec{
     type = atm_file_type
 }) ->
     case rand:uniform(5) of
@@ -294,7 +292,7 @@ randomly_remove_item(ProviderSelector, AtmWorkflowExecutionAuth, Item, #atm_data
             false
     end;
 
-randomly_remove_item(ProviderSelector, AtmWorkflowExecutionAuth, Item, #atm_data_spec{
+randomly_remove_entity_referenced_by_item(ProviderSelector, AtmWorkflowExecutionAuth, Item, #atm_data_spec{
     type = atm_dataset_type
 }) ->
     case rand:uniform(5) of
@@ -306,7 +304,7 @@ randomly_remove_item(ProviderSelector, AtmWorkflowExecutionAuth, Item, #atm_data
             false
     end;
 
-randomly_remove_item(_ProviderSelector, _AtmWorkflowExecutionAuth, _Item, _AtmDataSpec) ->
+randomly_remove_entity_referenced_by_item(_ProviderSelector, _AtmWorkflowExecutionAuth, _Item, _AtmDataSpec) ->
     false.
 
 

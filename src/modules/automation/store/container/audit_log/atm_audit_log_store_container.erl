@@ -278,7 +278,7 @@ prepare_audit_log_object(LogContent) ->
 %% @private
 -spec normalize_severity(any()) -> binary().
 normalize_severity(ProvidedSeverity) ->
-    case lists:member(ProvidedSeverity, ?LOGGER_SEVERITIES) of
+    case lists:member(ProvidedSeverity, ?LOGGER_SEVERITY_LEVELS) of
         true -> ProvidedSeverity;
         false -> ?LOGGER_INFO
     end.

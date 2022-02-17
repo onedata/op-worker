@@ -68,47 +68,47 @@ all() -> [
 create_test(_Config) ->
     atm_infinite_log_based_stores_test_base:create_test_base(#{
         store_configs => example_configs(),
-        get_item_initializer_data_spec_fun => fun get_log_content_data_spec/1,
-        prepare_item_initializer_fun => fun prepare_item_initializer/1
+        get_input_item_generator_seed_data_spec => fun get_input_item_generator_seed_data_spec/1,
+        input_item_formatter => fun input_item_formatter/1
     }).
 
 
 apply_operation_test(_Config) ->
     atm_infinite_log_based_stores_test_base:apply_operation_test_base(#{
         store_configs => example_configs(),
-        get_item_initializer_data_spec_fun => fun get_log_content_data_spec/1,
-        prepare_item_initializer_fun => fun prepare_item_initializer/1,
-        prepare_item_fun => fun prepare_item/3
+        get_input_item_generator_seed_data_spec => fun get_input_item_generator_seed_data_spec/1,
+        input_item_formatter => fun input_item_formatter/1,
+        input_item_to_exp_store_item => fun input_item_to_exp_store_item/3
     }).
 
 
 iterator_test(_Config) ->
     atm_infinite_log_based_stores_test_base:iterator_test_base(#{
         store_configs => example_configs(),
-        get_item_initializer_data_spec_fun => fun get_log_content_data_spec/1,
-        prepare_item_initializer_fun => fun prepare_item_initializer/1,
-        prepare_item_fun => fun prepare_item/3,
-        randomly_remove_item_fun => fun randomly_remove_item/3
+        get_input_item_generator_seed_data_spec => fun get_input_item_generator_seed_data_spec/1,
+        input_item_formatter => fun input_item_formatter/1,
+        input_item_to_exp_store_item => fun input_item_to_exp_store_item/3,
+        randomly_remove_entity_referenced_by_item => fun randomly_remove_entity_referenced_by_item/3
     }).
 
 
 browse_by_index_test(_Config) ->
     atm_infinite_log_based_stores_test_base:browse_content_test_base(index, #{
         store_configs => example_configs(),
-        get_item_initializer_data_spec_fun => fun get_log_content_data_spec/1,
-        prepare_item_initializer_fun => fun prepare_item_initializer/1,
-        prepare_item_fun => fun prepare_item/3,
-        randomly_remove_item_fun => fun randomly_remove_item/3
+        get_input_item_generator_seed_data_spec => fun get_input_item_generator_seed_data_spec/1,
+        input_item_formatter => fun input_item_formatter/1,
+        input_item_to_exp_store_item => fun input_item_to_exp_store_item/3,
+        randomly_remove_entity_referenced_by_item => fun randomly_remove_entity_referenced_by_item/3
     }).
 
 
 browse_by_offset_test(_Config) ->
     atm_infinite_log_based_stores_test_base:browse_content_test_base(offset, #{
         store_configs => example_configs(),
-        get_item_initializer_data_spec_fun => fun get_log_content_data_spec/1,
-        prepare_item_initializer_fun => fun prepare_item_initializer/1,
-        prepare_item_fun => fun prepare_item/3,
-        randomly_remove_item_fun => fun randomly_remove_item/3
+        get_input_item_generator_seed_data_spec => fun get_input_item_generator_seed_data_spec/1,
+        input_item_formatter => fun input_item_formatter/1,
+        input_item_to_exp_store_item => fun input_item_to_exp_store_item/3,
+        randomly_remove_entity_referenced_by_item => fun randomly_remove_entity_referenced_by_item/3
     }).
 
 
@@ -191,16 +191,18 @@ example_configs() ->
 
 
 %% @private
--spec get_log_content_data_spec(atm_list_store_config:record()) ->
+-spec get_input_item_generator_seed_data_spec(atm_list_store_config:record()) ->
     atm_data_spec:record().
-get_log_content_data_spec(#atm_audit_log_store_config{log_content_data_spec = ItemDataSpec}) ->
-    ItemDataSpec.
+get_input_item_generator_seed_data_spec(#atm_audit_log_store_config{
+    log_content_data_spec = LogContentDataSpec
+}) ->
+    LogContentDataSpec.
 
 
 %% @private
--spec prepare_item_initializer(atm_value:expanded()) -> atm_value:expanded().
-prepare_item_initializer(LogContent) ->
-    Severity = lists_utils:random_element([str_utils:rand_hex(16) | ?LOGGER_SEVERITIES]),
+-spec input_item_formatter(atm_value:expanded()) -> atm_value:expanded().
+input_item_formatter(LogContent) ->
+    Severity = lists_utils:random_element([str_utils:rand_hex(16) | ?LOGGER_SEVERITY_LEVELS]),
 
     case rand:uniform(5) of
         1 when is_map(LogContent) -> LogContent#{<<"severity">> => Severity};
@@ -211,28 +213,28 @@ prepare_item_initializer(LogContent) ->
 
 
 %% @private
--spec prepare_item(
+-spec input_item_to_exp_store_item(
     atm_workflow_execution_auth:record(),
     atm_value:expanded(),
     atm_store:id()
 ) ->
     atm_value:expanded().
-prepare_item(AtmWorkflowExecutionAuth, ItemInitializer, ItemDataSpec) ->
-    LogContent = case ItemInitializer of
+input_item_to_exp_store_item(AtmWorkflowExecutionAuth, InputItem, ItemDataSpec) ->
+    LogContent = case InputItem of
         #{<<"content">> := LC} -> LC;
         #{<<"severity">> := _} = Object -> maps:without([<<"severity">>], Object);
-        _ -> ItemInitializer
+        _ -> InputItem
     end,
-    Severity = case is_map(ItemInitializer) of
-        true -> maps:get(<<"severity">>, ItemInitializer, ?LOGGER_INFO);
+    Severity = case is_map(InputItem) of
+        true -> maps:get(<<"severity">>, InputItem, ?LOGGER_INFO);
         false -> ?LOGGER_INFO
     end,
 
     #{
-        <<"content">> => atm_store_test_utils:ensure_fully_expanded_data(
+        <<"content">> => atm_store_test_utils:compress_and_expand_data(
             ?PROVIDER_SELECTOR, AtmWorkflowExecutionAuth, LogContent, ItemDataSpec
         ),
-        <<"severity">> => case lists:member(Severity, ?LOGGER_SEVERITIES) of
+        <<"severity">> => case lists:member(Severity, ?LOGGER_SEVERITY_LEVELS) of
             true -> Severity;
             false -> ?LOGGER_INFO
         end,
@@ -241,14 +243,18 @@ prepare_item(AtmWorkflowExecutionAuth, ItemInitializer, ItemDataSpec) ->
 
 
 %% @private
--spec randomly_remove_item(
+-spec randomly_remove_entity_referenced_by_item(
     atm_workflow_execution_auth:record(),
     atm_value:expanded(),
     atm_data_spec:record()
 ) ->
     false | {true, errors:error()}.
-randomly_remove_item(AtmWorkflowExecutionAuth, #{<<"content">> := LogContent}, LogContentDataSpec) ->
-    atm_store_test_utils:randomly_remove_item(
+randomly_remove_entity_referenced_by_item(
+    AtmWorkflowExecutionAuth,
+    #{<<"content">> := LogContent},
+    LogContentDataSpec
+) ->
+    atm_store_test_utils:randomly_remove_entity_referenced_by_item(
         ?PROVIDER_SELECTOR, AtmWorkflowExecutionAuth, LogContent, LogContentDataSpec
     ).
 

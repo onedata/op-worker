@@ -159,6 +159,15 @@
 
 -define(CURRENT_LANE_RUN_EXCEPTION_STORE_SCHEMA_ID, <<"CURRENT_LANE_RUN_EXCEPTION_STORE">>).
 
+-define(ATM_LANE_RUN_EXCEPTION_STORE_SCHEMA(__ITEM_DATA_SPEC), #atm_store_schema{
+    id = ?CURRENT_LANE_RUN_EXCEPTION_STORE_SCHEMA_ID,
+    name = ?CURRENT_LANE_RUN_EXCEPTION_STORE_SCHEMA_ID,
+    description = <<>>,
+    type = list,
+    config = #atm_list_store_config{item_data_spec = __ITEM_DATA_SPEC},
+    requires_initial_content = false
+}).
+
 
 %% Atm status and phase related macros
 
@@ -190,7 +199,7 @@
 -define(LOGGER_CRITICAL, <<"critical">>).
 -define(LOGGER_EMERGENCY, <<"emergency">>).
 
--define(LOGGER_SEVERITIES, [
+-define(LOGGER_SEVERITY_LEVELS, [
     ?LOGGER_DEBUG, ?LOGGER_INFO, ?LOGGER_NOTICE,
     ?LOGGER_WARNING, ?LOGGER_ALERT,
     ?LOGGER_ERROR, ?LOGGER_CRITICAL, ?LOGGER_EMERGENCY
