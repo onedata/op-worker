@@ -191,6 +191,9 @@ map_to_existing_file_uuid(ParentUuid, FileName, FileBaseName, undefined) ->
     case file_meta:get_matching_child_uuids_with_tree_ids(ParentUuid, all, FileBaseName) of
         {ok, UuidsWithTreeIds} ->
             Filtered = lists:filter(fun({FileUuid, _}) ->
+                % NOTE: both file_location and dir_location have to be analyzed regardless of file's type on storage
+                % as its type may have been changed between scans (file may have been deleted and replaced with dir
+                % or vice versa)
                 case file_location:get_local(FileUuid) of
                     {ok, #document{value = #file_location{
                         storage_file_created = true,
@@ -198,7 +201,15 @@ map_to_existing_file_uuid(ParentUuid, FileName, FileBaseName, undefined) ->
                     }}} ->
                         binary:longest_common_suffix([FileId, FileName]) =:= size(FileName);
                     (_) ->
-                        false
+                        case dir_location:get(FileUuid) of
+                            {ok, #document{value = #dir_location{
+                                storage_file_created = true,
+                                storage_file_id = FileId
+                            }}} ->
+                                binary:longest_common_suffix([FileId, FileName]) =:= size(FileName);
+                            (_) ->
+                                false
+                        end
                 end
             end, UuidsWithTreeIds),
             case Filtered of
@@ -360,8 +371,8 @@ get_child_safe(FileCtx, ChildName) ->
 -spec check_location_and_maybe_sync(storage_file_ctx:ctx(), file_ctx:ctx(), info()) ->
     {result(), file_ctx:ctx() | undefined, storage_file_ctx:ctx()} | {error, term()}.
 check_location_and_maybe_sync(StorageFileCtx, FileCtx, Info) ->
-    {#statbuf{st_mode = StMode}, StorageFileCtx2} = storage_file_ctx:stat(StorageFileCtx),
-    case file_meta:type(StMode) of
+    {StorageFileType, StorageFileCtx2} = get_file_type(StorageFileCtx),
+    case StorageFileType of
         ?DIRECTORY_TYPE ->
             check_dir_location_and_maybe_sync(StorageFileCtx2, FileCtx, Info);
         ?REGULAR_FILE_TYPE ->
@@ -509,8 +520,7 @@ check_file_meta_and_maybe_sync(StorageFileCtx, FileCtx, Info, StorageFileCreated
 -spec check_file_type_and_maybe_sync(storage_file_ctx:ctx(), #file_attr{}, file_ctx:ctx(), info(),
     boolean()) -> {result(), file_ctx:ctx() | undefined, storage_file_ctx:ctx()} | {error, term()}.
 check_file_type_and_maybe_sync(StorageFileCtx, FileAttr = #file_attr{type = FileMetaType}, FileCtx, Info, StorageFileCreated) ->
-    {#statbuf{st_mode = StMode}, StorageFileCtx2} = storage_file_ctx:stat(StorageFileCtx),
-    StorageFileType = file_meta:type(StMode),
+    {StorageFileType, StorageFileCtx2} = get_file_type(StorageFileCtx),
     case {StorageFileType, FileMetaType, StorageFileCreated} of
         {Type, Type, true} ->
             maybe_update_file(StorageFileCtx2, FileAttr, FileCtx, Info);
@@ -1327,3 +1337,10 @@ is_suffixed(FileName) ->
         _ ->
             false
     end.
+
+%% @private
+-spec get_file_type(storage_file_ctx:ctx()) -> {file_meta:type(), storage_file_ctx:ctx()}.
+get_file_type(StorageFileCtx) ->
+    {#statbuf{st_mode = StMode}, StorageFileCtx2} = storage_file_ctx:stat(StorageFileCtx),
+    StorageFileType = file_meta:type(StMode),
+    {StorageFileType, StorageFileCtx2}.
