@@ -92,12 +92,8 @@
 
 -record(dsc_flush_request, {
     guid :: file_id:file_guid(),
-    collection_type :: dir_stats_collection:type()
-}).
-
--record(dsc_delete_request, {
-    guid :: file_id:file_guid(),
-    collection_type :: dir_stats_collection:type()
+    collection_type :: dir_stats_collection:type(),
+    pruning_strategy :: pruning_strategy()
 }).
 
 
@@ -105,6 +101,8 @@
 
 -type cached_dir_stats_key() :: {file_id:file_guid(), dir_stats_collection:type()}.
 -type cached_dir_stats() :: #cached_dir_stats{}.
+
+-type pruning_strategy() :: prune_flushed | prune_inactive.
 
 
 -define(FLUSH_INTERVAL_MILLIS, 5000).
@@ -208,16 +206,8 @@ update_stats_of_nearest_dir(Guid, CollectionType, CollectionUpdate) ->
 -spec flush_stats(file_id:file_guid(), dir_stats_collection:type()) -> ok | ?ERROR_INTERNAL_SERVER_ERROR .
 flush_stats(Guid, CollectionType) ->
     case dir_stats_collector_config:is_enabled_for_space(file_id:guid_to_space_id(Guid)) of
-        true ->
-            Request = #dsc_flush_request{guid = Guid, collection_type = CollectionType},
-            case call_designated_node(
-                Guid, submit_and_await, [?MODULE, Guid, Request, #{ensure_executor_alive => false}]
-            ) of
-                ignored -> ok;
-                Other -> Other
-            end;
-        false ->
-            ok
+        true -> request_flush(Guid, CollectionType, prune_inactive);
+        false -> ok
     end.
 
 
@@ -227,12 +217,9 @@ delete_stats(Guid, CollectionType) ->
     % TODO VFS-8837 - delete collection when collecting was enabled in past
     case dir_stats_collector_config:is_enabled_for_space(file_id:guid_to_space_id(Guid)) of
         true ->
-            Request = #dsc_delete_request{guid = Guid, collection_type = CollectionType},
-            case call_designated_node(
-                Guid, submit_and_await, [?MODULE, Guid, Request, #{ensure_executor_alive => false}]
-            ) of
-                ignored -> CollectionType:delete(Guid);
-                Other -> Other
+            case request_flush(Guid, CollectionType, prune_flushed) of
+                ok -> CollectionType:delete(Guid);
+                ?ERROR_INTERNAL_SERVER_ERROR -> ?ERROR_INTERNAL_SERVER_ERROR
             end;
         false ->
             ok
@@ -300,7 +287,7 @@ forced_terminate(Reason, State) ->
 %%% Callbacks used by executor - handling requests
 %%%===================================================================
 
--spec handle_call(#dsc_get_request{} | #dsc_flush_request{} | #dsc_delete_request{}, state()) ->
+-spec handle_call(#dsc_get_request{} | #dsc_flush_request{}, state()) ->
     {ok | {ok, dir_stats_collection:collection()} | ?ERROR_INTERNAL_SERVER_ERROR, state()}.
 handle_call(#dsc_get_request{
     guid = Guid,
@@ -310,20 +297,10 @@ handle_call(#dsc_get_request{
     {#cached_dir_stats{current_stats = CurrentStats}, UpdatedState} = reset_last_used_timer(State, Guid, CollectionType),
     {{ok, dir_stats_collection:with(StatNames, CurrentStats)}, UpdatedState};
 
-handle_call(#dsc_flush_request{guid = Guid, collection_type = CollectionType}, State) ->
-    case flush_keys([gen_cached_dir_stats_key(Guid, CollectionType)], forget_inactive, State) of
+handle_call(#dsc_flush_request{guid = Guid, collection_type = CollectionType, pruning_strategy = PruningStrategy}, State) ->
+    case flush_and_prune_keys([gen_cached_dir_stats_key(Guid, CollectionType)], PruningStrategy, State) of
         {true, UpdatedState} -> {ok, UpdatedState};
         {false, UpdatedState} -> {?ERROR_INTERNAL_SERVER_ERROR, UpdatedState}
-    end;
-
-handle_call(#dsc_delete_request{guid = Guid, collection_type = CollectionType}, State) ->
-    % Flush data cached by executor as flush of this data after collection delete would result in recreation of collection
-    case flush_keys([gen_cached_dir_stats_key(Guid, CollectionType)], forget_flushed, State) of
-        {true, UpdatedState} ->
-            CollectionType:delete(Guid),
-            {ok, UpdatedState};
-        {false, UpdatedState} ->
-            {?ERROR_INTERNAL_SERVER_ERROR, UpdatedState}
     end;
 
 handle_call(Request, State) ->
@@ -362,12 +339,29 @@ handle_cast(Info, State) ->
 %%%===================================================================
 
 %% @private
+-spec request_flush(file_id:file_guid(), dir_stats_collection:type(), PruningStrategy :: pruning_strategy()) ->
+    ok | ?ERROR_INTERNAL_SERVER_ERROR .
+request_flush(Guid, CollectionType, PruningStrategy) ->
+    Request = #dsc_flush_request{
+        guid = Guid,
+        collection_type = CollectionType,
+        pruning_strategy = PruningStrategy
+    },
+    case call_designated_node(
+        Guid, submit_and_await, [?MODULE, Guid, Request, #{ensure_executor_alive => false}]
+    ) of
+        ignored -> ok;
+        Other -> Other
+    end.
+
+
+%% @private
 -spec flush_internal(state()) -> state().
 flush_internal(#state{
     flush_timer_ref = undefined,
     dir_stats_cache = DirStatsCache
 } = State) ->
-    {HaveAllSucceeded, UpdatedState} = flush_keys(maps:keys(DirStatsCache), forget_inactive, State),
+    {HaveAllSucceeded, UpdatedState} = flush_and_prune_keys(maps:keys(DirStatsCache), prune_inactive, State),
 
     UpdatedState#state{has_unflushed_changes = not HaveAllSucceeded};
 
@@ -379,9 +373,9 @@ flush_internal(#state{
 
 
 %% @private
--spec flush_keys([cached_dir_stats_key()], CacheCleaningPolicy :: forget_flushed | forget_inactive, state()) ->
+-spec flush_and_prune_keys([cached_dir_stats_key()], PruningStrategy :: pruning_strategy(), state()) ->
     {HaveAllSucceeded :: boolean(), state()}.
-flush_keys(CachedDirStatsKeysToFlush, CacheCleaningPolicy, #state{dir_stats_cache = DirStatsCache} = State) ->
+flush_and_prune_keys(CachedDirStatsKeysToFlush, PruningStrategy, #state{dir_stats_cache = DirStatsCache} = State) ->
     {NewDirStatsCache, HaveAllSucceeded} = maps:fold(
         fun(
             CachedDirStatsKey, CachedDirStats, {DirStatsAcc, HasSucceededAcc} = Acc
@@ -390,7 +384,7 @@ flush_keys(CachedDirStatsKeysToFlush, CacheCleaningPolicy, #state{dir_stats_cach
                 true ->
                     UpdatedCachedDirStats = flush_cached_dir_stats(CachedDirStatsKey, CachedDirStats),
                     KeySuccessfullyFlushed = not has_unflushed_changes(UpdatedCachedDirStats),
-                    case KeySuccessfullyFlushed and (CacheCleaningPolicy =:= forget_flushed) of
+                    case KeySuccessfullyFlushed and (PruningStrategy =:= prune_flushed) of
                         true ->
                             Acc;
                         false ->
@@ -398,7 +392,7 @@ flush_keys(CachedDirStatsKeysToFlush, CacheCleaningPolicy, #state{dir_stats_cach
                                 KeySuccessfullyFlushed and HasSucceededAcc}
                     end;
                 false ->
-                    case (CacheCleaningPolicy =:= forget_flushed) orelse is_inactive(CachedDirStats) of
+                    case (PruningStrategy =:= prune_flushed) orelse is_inactive(CachedDirStats) of
                         true -> Acc;
                         false -> {DirStatsAcc#{CachedDirStatsKey => CachedDirStats}, HasSucceededAcc}
                     end
