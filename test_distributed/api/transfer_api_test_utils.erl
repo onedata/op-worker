@@ -44,7 +44,7 @@
 
 
 create_file(Node, SessId, DirPath) ->
-    FilePath = filename:join([DirPath, ?RANDOM_FILE_NAME()]), %@fixme create
+    FilePath = filename:join([DirPath, ?RANDOM_FILE_NAME()]),
     {ok, FileGuid} = lfm_test_utils:create_file(<<"file">>, Node, SessId, FilePath, 8#777),
     lfm_test_utils:write_file(Node, SessId, FileGuid, {rand_content, ?BYTES_NUM}),
     FileGuid.
