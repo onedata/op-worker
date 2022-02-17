@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Helper module allowing definition and modification of atm workflow  execution
+%%% Helper module allowing definition and modification of atm workflow execution
 %%% test view which is json map of fields expected to be stored in op.
 %%% @end
 %%%-------------------------------------------------------------------

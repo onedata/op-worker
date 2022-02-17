@@ -66,7 +66,7 @@ init(ProviderSelectors, ModuleWithOpenfaasDockerMock) ->
     mock_initiate(Workers),
     mock_teardown(Workers),
     mock_delete(Workers),
-    mock_in_readonly_mode(Workers),
+    mock_is_in_readonly_mode(Workers),
     mock_run(Workers, ModuleWithOpenfaasDockerMock),
 
     mock_version(Workers),
@@ -169,8 +169,8 @@ mock_delete(Workers) ->
 
 
 %% @private
--spec mock_in_readonly_mode([node()]) -> ok.
-mock_in_readonly_mode(Workers) ->
+-spec mock_is_in_readonly_mode([node()]) -> ok.
+mock_is_in_readonly_mode(Workers) ->
     MockFun = fun(#atm_openfaas_task_executor{
         operation_spec = #atm_openfaas_operation_spec{
             docker_execution_options = #atm_docker_execution_options{readonly = Readonly}
@@ -178,7 +178,7 @@ mock_in_readonly_mode(Workers) ->
     }) ->
         Readonly
     end,
-    test_utils:mock_expect(Workers, ?MOCKED_MODULE, in_readonly_mode, MockFun).
+    test_utils:mock_expect(Workers, ?MOCKED_MODULE, is_in_readonly_mode, MockFun).
 
 
 %% @private

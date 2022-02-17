@@ -15,7 +15,6 @@
 -include("atm_workflow_exeuction_test_runner.hrl").
 -include("atm_test_schema.hrl").
 -include_lib("ctool/include/errors.hrl").
--include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
 -include_lib("ctool/include/privileges.hrl").
@@ -192,7 +191,11 @@ init_per_suite(Config) ->
             ozt_spaces:set_privileges(
                 oct_background:get_space_id(space_krk),
                 oct_background:get_user_id(user2),
-                [?SPACE_VIEW_ATM_WORKFLOW_EXECUTIONS, ?SPACE_SCHEDULE_ATM_WORKFLOW_EXECUTIONS | privileges:space_member()]
+                [
+                    ?SPACE_VIEW_ATM_WORKFLOW_EXECUTIONS,
+                    ?SPACE_SCHEDULE_ATM_WORKFLOW_EXECUTIONS
+                    | privileges:space_member()
+                ]
             ),
             NewConfig
         end

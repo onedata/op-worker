@@ -107,7 +107,7 @@ run(TestSpec = #atm_workflow_execution_test_spec{
     space = SpaceSelector,
     workflow_schema_id = AtmWorkflowSchemaId,
     workflow_schema_revision_num = AtmWorkflowSchemaRevisionNum,
-    store_initial_values = StoreInitialValues,
+    store_initial_content = StoreInitialContent,
     callback_url = CallbackUrl,
     incarnations = Incarnations
 }) ->
@@ -116,7 +116,7 @@ run(TestSpec = #atm_workflow_execution_test_spec{
 
     {ok, {AtmWorkflowExecutionId, _}} = ?assertMatch({ok, _}, opt_atm:schedule_workflow_execution(
         ProviderSelector, SessionId, SpaceId, AtmWorkflowSchemaId, AtmWorkflowSchemaRevisionNum,
-        StoreInitialValues#{test_process => self()}, CallbackUrl
+        StoreInitialContent#{test_process => self()}, CallbackUrl
     )),
 
     AtmLaneSchemas = atm_workflow_schema_test_utils:query(
@@ -225,6 +225,8 @@ get_current_lane_run_test_spec(#state{ongoing_incarnations = [
 get_lane_run_test_spec(TargetAtmLaneIndex, #state{ongoing_incarnations = [
     #atm_workflow_execution_incarnation_test_spec{lane_runs = LaneRunTestSpecs} | _
 ]}) ->
+    % run must be searched because run num is global and as such lanes will not
+    % have all runs (there will be gaps)
     hd(lists:dropwhile(fun(#atm_lane_run_execution_test_spec{selector = {AtmLaneIndex, _}}) ->
         AtmLaneIndex < TargetAtmLaneIndex
     end, LaneRunTestSpecs)).

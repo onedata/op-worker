@@ -141,7 +141,7 @@ process_items_batch(
 
     AtmJobCtx = atm_job_ctx:build(
         AtmWorkflowExecutionCtx,
-        atm_task_executor:in_readonly_mode(AtmTaskExecutor),
+        atm_task_executor:is_in_readonly_mode(AtmTaskExecutor),
         ReportResultUrl
     ),
 

@@ -65,7 +65,7 @@
     workflow_schema_id :: automation:id(),
     workflow_schema_revision_num :: atm_workflow_schema_revision:revision_number(),
 
-    store_initial_values = #{} :: atm_workflow_execution_api:store_initial_values(),
+    store_initial_content = #{} :: atm_workflow_execution_api:store_initial_values(),
     callback_url = undefined :: undefined | http_client:url(),
 
     incarnations :: [atm_workflow_execution_test_runner:incarnation_test_spec()]
