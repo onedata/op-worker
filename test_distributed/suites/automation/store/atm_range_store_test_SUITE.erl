@@ -145,7 +145,7 @@ apply_operation_test(_Config) ->
         AtmWorkflowExecutionAuth, InitialContent, AtmStoreSchema
     ))),
 
-    % Assert none operation is supported
+    % Assert no operation is supported
     NewContent = #{<<"end">> => 100},
     lists:foreach(fun(Operation) ->
         ?assertEqual(?ERROR_NOT_SUPPORTED, ?rpc(catch atm_store_api:apply_operation(

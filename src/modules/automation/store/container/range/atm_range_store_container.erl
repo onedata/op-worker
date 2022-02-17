@@ -102,8 +102,8 @@ browse_content(_AtmWorkflowExecutionAuth, _BrowseOpts, #atm_range_store_containe
     end_num = EndNum,
     step = Step
 }) ->
-    Item = #{<<"start">> => StartNum, <<"end">> => EndNum, <<"step">> => Step},
-    {[{<<>>, {ok, Item}}], true}.
+    Content = #{<<"start">> => StartNum, <<"end">> => EndNum, <<"step">> => Step},
+    {[{<<>>, {ok, Content}}], true}.
 
 
 -spec acquire_iterator(record()) -> atm_range_store_container_iterator:record().
