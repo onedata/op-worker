@@ -6858,7 +6858,6 @@ init_per_testcase(Case, Config)
     orelse Case =:= symlink_is_ignored_by_initial_scan
     orelse Case =:= symlink_is_ignored_by_continuous_scan
     orelse Case =:= delete_file_in_dir_update_test
-    orelse Case =:= delete_many_subfiles_test
     orelse Case =:= move_file_update_test
     orelse Case =:= create_subfiles_and_delete_before_import_is_finished_test ->
 
@@ -7002,10 +7001,17 @@ init_per_testcase(changing_max_depth_test, Config) ->
 init_per_testcase(Case, Config)
     when Case =:= create_subfiles_import_many_test
     orelse Case =:= create_subfiles_import_many2_test
-    orelse Case =:= delete_many_subfiles_test
     orelse Case =:= append_file_update_test ->
 
     init_per_testcase(default, dir_stats_collector_test_base:init(Config));
+
+init_per_testcase(delete_many_subfiles_test, Config) ->
+    Config2 = [
+        {update_config, #{
+            detect_deletions => true,
+            detect_modifications => false}} | Config
+    ],
+    init_per_testcase(default, dir_stats_collector_test_base:init(Config2));
 
 init_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
