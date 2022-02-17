@@ -17,7 +17,7 @@
 -include_lib("ctool/include/automation/automation.hrl").
 
 
--record(atm_hook_call_ctx, {
+-record(atm_mock_call_ctx, {
     workflow_execution_id :: atm_workflow_execution:id(),
     workflow_execution_test_view :: atm_workflow_execution_test_view:view(),
     current_lane_index :: atm_lane_execution:index(),
@@ -25,34 +25,36 @@
     call_args :: [term()]
 }).
 
+-record(atm_step_mock_spec, {
+    before_step_hook = undefined :: undefined | atm_workflow_execution_test_runner:hook(),
+    before_step_test_view_diff = default :: default | atm_workflow_execution_test_runner:test_view_diff(),
+
+    % if set to {true, _} original step will not be executed
+    mock_result = false :: false | {true, Result :: term()},
+
+    % below checks will not be executed in case of mock_result = {true, _}
+    % (step has not been executed and as such no change compared to before_step_* should occur)
+    after_step_hook = undefined :: undefined | atm_workflow_execution_test_runner:hook(),
+    after_step_test_view_diff = default :: default | atm_workflow_execution_test_runner:test_view_diff()
+}).
+
 -record(atm_lane_run_execution_test_spec, {
     selector :: atm_lane_execution:lane_run_selector(),
 
-    pre_prepare_lane_hook = default :: default | atm_workflow_execution_test_runner:hook(),
-    pre_create_run_hook = default :: default | atm_workflow_execution_test_runner:hook(),
-    post_create_run_hook = default :: default | atm_workflow_execution_test_runner:hook(),
-    post_prepare_lane_hook = default :: default | atm_workflow_execution_test_runner:hook(),
+    prepare_lane = #atm_step_mock_spec{} :: atm_workflow_execution_test_runner:step_mock_spec(),
+    create_run = #atm_step_mock_spec{} :: atm_workflow_execution_test_runner:step_mock_spec(),
 
-    pre_process_item_hook = default :: default | atm_workflow_execution_test_runner:hook(),
-    post_process_item_hook = default :: default | atm_workflow_execution_test_runner:hook(),
+    process_item = #atm_step_mock_spec{} :: atm_workflow_execution_test_runner:step_mock_spec(),
+    process_result = #atm_step_mock_spec{} :: atm_workflow_execution_test_runner:step_mock_spec(),
+    report_item_error = #atm_step_mock_spec{} :: atm_workflow_execution_test_runner:step_mock_spec(),
 
-    pre_process_result_hook = default :: default | atm_workflow_execution_test_runner:hook(),
-    post_process_result_hook = default :: default | atm_workflow_execution_test_runner:hook(),
-
-    pre_report_item_error_hook = default :: default | atm_workflow_execution_test_runner:hook(),
-    post_report_item_error_hook = default :: default | atm_workflow_execution_test_runner:hook(),
-
-    pre_handle_task_execution_ended_hook = default :: default | atm_workflow_execution_test_runner:hook(),
-    post_handle_task_execution_ended_hook = default :: default | atm_workflow_execution_test_runner:hook(),
-
-    pre_handle_lane_execution_ended_hook = default :: default | atm_workflow_execution_test_runner:hook(),
-    post_handle_lane_execution_ended_hook = default :: default | atm_workflow_execution_test_runner:hook()
+    handle_task_execution_ended = #atm_step_mock_spec{} :: atm_workflow_execution_test_runner:step_mock_spec(),
+    handle_lane_execution_ended = #atm_step_mock_spec{} :: atm_workflow_execution_test_runner:step_mock_spec()
 }).
 
 -record(atm_workflow_execution_incarnation_test_spec, {
     lane_runs :: [atm_workflow_execution_test_runner:lane_run_test_spec()],
-    pre_handle_workflow_execution_ended_hook = default :: default | atm_workflow_execution_test_runner:hook(),
-    post_handle_workflow_execution_ended_hook = default :: default | atm_workflow_execution_test_runner:hook()
+    handle_workflow_execution_ended = #atm_step_mock_spec{} :: atm_workflow_execution_test_runner:step_mock_spec()
 }).
 
 -record(atm_workflow_execution_test_spec, {
