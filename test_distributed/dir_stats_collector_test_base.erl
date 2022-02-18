@@ -322,7 +322,7 @@ write_to_file(Config, NodesSelector, DirConstructor, FileConstructor, BytesCount
     [Worker | _] = ?config(NodesSelector, Config),
     SessId = lfm_test_utils:get_user1_session_id(Config, Worker),
     Guid = resolve_guid(Config, NodesSelector, DirConstructor, FileConstructor),
-    lfm_test_utils:write_file(Worker, SessId, Guid, BytesCount).
+    lfm_test_utils:write_file(Worker, SessId, Guid, {rand_content, BytesCount}).
 
 
 resolve_guid(Config, NodesSelector, DirConstructor, FileConstructor) ->

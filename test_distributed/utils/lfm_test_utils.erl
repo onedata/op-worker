@@ -21,11 +21,13 @@
 %% API
 -export([get_user1_session_id/2, get_user1_first_space_id/1, get_user1_first_space_guid/1, get_user1_first_space_name/1,
     get_user1_first_storage_id/2]).
+-export([create_file/4, create_file/5, write_file/4, write_file/5, read_file/4]).
+-export([create_files_tree/4]).
 -export([clean_space/3, clean_space/4, assert_space_and_trash_are_empty/3, assert_space_dir_empty/3]).
--export([create_files_tree/4, write_file/4, write_file/5, read_file/4]).
 
 % TODO VFS-7215 - merge this module with file_ops_test_utils
 
+-type file_type() :: binary(). % <<"file">> | <<"dir">>
 
 %%%===================================================================
 %%% API operating on Config map
@@ -61,22 +63,46 @@ get_user1_first_storage_id(Config, NodesSelector) ->
 %%% API functions
 %%%===================================================================
 
-create_files_tree(Worker, SessId, Structure, RootGuid) ->
-    create_files_tree(Worker, SessId, Structure, RootGuid, <<"dir">>, <<"file">>, [], []).
+-spec create_file(file_type(), node(), session:id(), file_meta:path()) ->
+    {ok, file_id:file_guid()} | {error, term()}.
+create_file(FileType, Node, SessId, Path) ->
+    create_file(FileType, Node, SessId, Path, 8#777).
 
-write_file(Worker, SessId, FileGuid, BytesCount) ->
-    write_file(Worker, SessId, FileGuid, 0, BytesCount).
 
-write_file(Worker, SessId, FileGuid, Offset, BytesCount) ->
+-spec create_file(file_type(), node(), session:id(), file_meta:path(), file_meta:mode()) ->
+    {ok, file_id:file_guid()} | {error, term()}.
+create_file(<<"file">>, Node, SessId, Path, Mode) ->
+    lfm_proxy:create(Node, SessId, Path, Mode);
+create_file(<<"dir">>, Node, SessId, Path, Mode) ->
+    lfm_proxy:mkdir(Node, SessId, Path, Mode).
+
+
+-spec write_file(node(), session:id(), file_id:file_guid(), binary() | {rand_content, non_neg_integer()}) ->
+    ok.
+write_file(Worker, SessId, FileGuid, ContentSpec) ->
+    write_file(Worker, SessId, FileGuid, 0, ContentSpec).
+
+-spec write_file(node(), session:id(), file_id:file_guid(), non_neg_integer(), binary() | {rand_content, non_neg_integer()}) ->
+    ok.
+write_file(Worker, SessId, FileGuid, Offset, {rand_content, Size}) ->
+    write_file(Worker, SessId, FileGuid, Offset, crypto:strong_rand_bytes(Size));
+write_file(Worker, SessId, FileGuid, Offset, Data) when is_binary(Data) ->
     {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(Worker, SessId, ?FILE_REF(FileGuid), write)),
-    ?assertMatch({ok, _}, lfm_proxy:write(Worker, Handle, Offset, crypto:strong_rand_bytes(BytesCount))),
+    ?assertMatch({ok, _}, lfm_proxy:write(Worker, Handle, Offset, Data)),
     ?assertEqual(ok, lfm_proxy:close(Worker, Handle)).
 
-read_file(Worker, SessId, FileGuid, BytesCount) ->
+
+-spec read_file(node(), session:id(), file_id:file_guid(), Size :: non_neg_integer()) ->
+    binary().
+read_file(Worker, SessId, FileGuid, Size) ->
     {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(Worker, SessId, ?FILE_REF(FileGuid), read)),
-    {ok, Bytes} = ?assertMatch({ok, _}, lfm_proxy:read(Worker, Handle, 0, BytesCount)),
+    {ok, Bytes} = ?assertMatch({ok, _}, lfm_proxy:read(Worker, Handle, 0, Size)),
     ?assertEqual(ok, lfm_proxy:close(Worker, Handle)),
     Bytes.
+
+
+create_files_tree(Worker, SessId, Structure, RootGuid) ->
+    create_files_tree(Worker, SessId, Structure, RootGuid, <<"dir">>, <<"file">>, [], []).
 
 
 clean_space(Workers, SpaceId, Attempts) ->

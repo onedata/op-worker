@@ -194,6 +194,7 @@ is_type_supported(#gri{type = op_provider}) -> true;
 is_type_supported(#gri{type = op_qos}) -> true;
 is_type_supported(#gri{type = op_share}) -> true;
 is_type_supported(#gri{type = op_space}) -> true;
+is_type_supported(#gri{type = op_storage}) -> true;
 is_type_supported(#gri{type = op_transfer}) -> true;
 is_type_supported(#gri{type = op_user}) -> true;
 is_type_supported(#gri{type = _}) -> false.
