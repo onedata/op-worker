@@ -123,15 +123,22 @@ multiprovider_test(Config) ->
 %%%===================================================================
 
 init(Config) ->
+    [Worker | _] = Workers = ?config(op_worker_nodes, Config),
+    {ok, EnableDirStatsCollectorForNewSpaces} =
+        test_utils:get_env(Worker, op_worker, enable_dir_stats_collector_for_new_spaces),
+    test_utils:set_env(Workers, op_worker, enable_dir_stats_collector_for_new_spaces, true),
+
     SpaceId = lfm_test_utils:get_user1_first_space_id(Config),
     lists:foreach(fun(W) ->
         rpc:call(W, dir_stats_collector_config, init_for_space, [SpaceId])
     end, initializer:get_different_domain_workers(Config)),
 
-    [Worker | _] = Workers = ?config(op_worker_nodes, Config),
+
     {ok, MinimalSyncRequest} = test_utils:get_env(Worker, op_worker, minimal_sync_request),
     test_utils:set_env(Workers, op_worker, minimal_sync_request, 1),
-    [{default_minimal_sync_request, MinimalSyncRequest} | Config].
+
+    [{default_enable_dir_stats_collector_for_new_spaces, EnableDirStatsCollectorForNewSpaces},
+        {default_minimal_sync_request, MinimalSyncRequest} | Config].
 
 
 teardown(Config) ->
@@ -141,6 +148,10 @@ teardown(Config) ->
     end, initializer:get_different_domain_workers(Config)),
 
     Workers = ?config(op_worker_nodes, Config),
+    EnableDirStatsCollectorForNewSpaces = ?config(default_enable_dir_stats_collector_for_new_spaces, Config),
+    test_utils:set_env(
+        Workers, op_worker, enable_dir_stats_collector_for_new_spaces, EnableDirStatsCollectorForNewSpaces),
+
     MinimalSyncRequest = ?config(default_minimal_sync_request, Config),
     test_utils:set_env(Workers, op_worker, minimal_sync_request, MinimalSyncRequest).
 
