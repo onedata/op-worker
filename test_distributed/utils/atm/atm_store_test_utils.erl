@@ -259,7 +259,10 @@ gen_invalid_data(ProviderSelector, AtmWorkflowExecutionAuth, #atm_data_spec{
 ) ->
     atm_value:expanded().
 compress_and_expand_data(ProviderSelector, AtmWorkflowExecutionAuth, Data, AtmDataSpec) ->
-    %% short comment about how item dropping to store and fetched will have different value TODO
+    %% Some data types supported in atm are just references to entities in op.
+    %% When retrieving items of such types from stores value returned may differ
+    %% from the one given during adding to store (actual data about such entity
+    %% is fetched using reference and returned)
     {ok, ExpandedData} = ?rpc(ProviderSelector, atm_value:expand(
         AtmWorkflowExecutionAuth,
         atm_value:compress(Data, AtmDataSpec),
