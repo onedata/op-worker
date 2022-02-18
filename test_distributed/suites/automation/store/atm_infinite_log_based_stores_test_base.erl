@@ -40,7 +40,7 @@
 % into one of the possible forms accepted as input by given store
 -type input_item_formatter() :: fun((atm_value:expanded()) -> atm_value:expanded()).
 
-% Prepares expected item (as stored and returned when browsing) from responding input item
+% Prepares expected item (as stored and returned when browsing) from corresponding input item
 -type input_item_to_exp_store_item() :: fun((
     atm_workflow_execution_auth:record(),
     atm_value:expanded(),

@@ -756,13 +756,14 @@ qos_autocleaning_protection_test_base(_Config, TestSpec) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    oct_background:init_per_suite(Config, #onenv_test_config{
+    oct_background:init_per_suite([{?LOAD_MODULES, [dir_stats_test_utils]} | Config], #onenv_test_config{
         onenv_scenario = "3op",
         envs = [{op_worker, op_worker, [
             {fuse_session_grace_period_seconds, 24 * 60 * 60},
             {provider_token_ttl_sec, 24 * 60 * 60},
             {qos_retry_failed_files_interval_seconds, 5}
-        ]}]
+        ]}],
+        posthook = fun dir_stats_test_utils:disable_stats_counting_ct_posthook/1
     }).
 
 init_per_testcase(_Case, Config) ->
@@ -771,14 +772,12 @@ init_per_testcase(_Case, Config) ->
     Config.
 
 end_per_testcase(_Case, Config) ->
-    Nodes = oct_background:get_all_providers_nodes(),
-    transfers_test_utils:unmock_replication_worker(Nodes),
-    transfers_test_utils:unmock_replica_synchronizer_failure(Nodes),
     transfers_test_utils:remove_transfers(Config),
     transfers_test_utils:ensure_transfers_removed(Config).
 
-end_per_suite(_Config) ->
-    oct_background:end_per_suite().
+end_per_suite(Config) ->
+    oct_background:end_per_suite(),
+    dir_stats_test_utils:enable_stats_counting(Config).
 
 
 %%%===================================================================

@@ -26,6 +26,7 @@
 -export([replicate_block/3]).
 
 -export([
+    dir_stats_collector_test/1,
     create_on_different_providers_test/1,
     file_consistency_test/1,
     file_consistency_test_base/1,
@@ -57,6 +58,7 @@
 ]).
 
 -define(TEST_CASES, [
+    dir_stats_collector_test,
     create_on_different_providers_test,
     file_consistency_test,
     concurrent_create_test,
@@ -1006,7 +1008,7 @@ user_opens_file_test_base(Config0, IsRegisteredUser, UseShareGuid, TestCase) ->
     FilePath = filepath_utils:join([DirPath, <<"file">>]),
     {ok, _} = ?assertMatch({ok, _} , lfm_proxy:mkdir(Worker1, SessionId(Worker1), DirPath)),
     {ok, FileGuid} = ?assertMatch({ok, _} , lfm_proxy:create(Worker1, SessionId(Worker1), FilePath)),
-    {ok, ShareId} = lfm_proxy:create_share(Worker1, SessionId(Worker1), ?FILE_REF(FileGuid), <<"share">>),
+    {ok, ShareId} = opt_shares:create(Worker1, SessionId(Worker1), ?FILE_REF(FileGuid), <<"share">>),
     ShareFileGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
 
     % verify share on 2nd provider
@@ -1114,6 +1116,12 @@ recreate_file_on_storage(Config0) ->
     multi_provider_file_ops_test_base:await_replication_end(Worker1 ,TransferID, 60).
 
 
+dir_stats_collector_test(Config0) ->
+    UserId = <<"user1">>,
+    Config = multi_provider_file_ops_test_base:extend_config(Config0, UserId, {4,0,0,2}, 60),
+    dir_stats_collector_test_base:multiprovider_test(Config).
+
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -1214,6 +1222,7 @@ meck_get_num_calls(Nodes, Module, Fun, Args) ->
         rpc:call(Node, meck, num_calls, [Module, Fun, Args], timer:seconds(60))
     end, Nodes).
 
+
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
@@ -1270,6 +1279,8 @@ init_per_testcase(truncate_on_storage_does_not_block_synchronizer = Case, Config
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, storage_driver),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
+init_per_testcase(dir_stats_collector_test = Case, Config) ->
+    dir_stats_collector_test_base:init(init_per_testcase(?DEFAULT_CASE(Case), Config));
 init_per_testcase(_Case, Config) ->
     ct:timetrap({minutes, 60}),
     lfm_proxy:init(Config).
@@ -1304,6 +1315,9 @@ end_per_testcase(Case, Config) when
 end_per_testcase(truncate_on_storage_does_not_block_synchronizer = Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Workers, storage_driver),
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
+end_per_testcase(dir_stats_collector_test = Case, Config) ->
+    dir_stats_collector_test_base:teardown(Config),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 end_per_testcase(_Case, Config) ->
     lfm_proxy:teardown(Config).

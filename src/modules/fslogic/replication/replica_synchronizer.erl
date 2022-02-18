@@ -59,7 +59,6 @@
 -define(FLUSH_STATS, flush_stats).
 -define(FLUSH_BLOCKS, flush_blocks).
 -define(FLUSH_EVENTS, flush_events).
--define(FLUSH_LOCATION, flush_location).
 
 -type fetch_ref() :: reference().
 -type block() :: fslogic_blocks:block().
@@ -566,12 +565,12 @@ handle_call({synchronize, FileCtx, Block, Prefetch, TransferId, Session, Priorit
                     dest_file_id = DestFileId,
                     file_guid = FileGuid,
                     space_id = SpaceId,
-                    transfer_id_to_stats_callback_module = 
+                    transfer_id_to_stats_callback_module =
                         TidToStatsCallback#{TransferId => StatsCallbackModule}
                 };
             _ ->
                 State0#state{
-                    transfer_id_to_stats_callback_module = 
+                    transfer_id_to_stats_callback_module =
                         TidToStatsCallback#{TransferId => StatsCallbackModule}
                 }
         end,
@@ -1554,7 +1553,7 @@ flush_blocks_list(AllBlocks, ExcludeSessions, Flush) ->
 flush_stats(#state{cached_stats = Stats} = State, _) when map_size(Stats) == 0 ->
     State;
 flush_stats(#state{
-    space_id = SpaceId, 
+    space_id = SpaceId,
     transfer_id_to_stats_callback_module = TidToStatsCallback
 } = State, CancelTimer) ->
     lists:foreach(fun({TransferId, BytesPerProvider}) ->
@@ -1564,7 +1563,7 @@ flush_stats(#state{
                 ok -> ok;
                 {error, Error} ->
                     ?error(
-                        "Failed to update transfer statistics using callback module ~p 
+                        "Failed to update transfer statistics using callback module ~p
                         for ~p transfer due to ~p", [StatsCallbackModule, TransferId, Error]
                     )
             end
@@ -1742,7 +1741,7 @@ delete_whole_file_replica_internal(AllowedVV, RequestedBy, #state{file_ctx = Fil
                 % Emmit events only when list of blocks is not empty
                 % (nothing changes from clients perspective if blocks list is empty)
                 EmitEvents = fslogic_location_cache:get_blocks(LocationDoc) =/= [],
-                fslogic_location_cache:clear_blocks(FileCtx, LocalFileLocId),
+                fslogic_location_cache:clear_blocks(FileCtx, LocationDoc),
                 spawn_block_clearing(FileCtx, EmitEvents, RequestedBy);
             _ ->
                 {error, file_modified_locally}

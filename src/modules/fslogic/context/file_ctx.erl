@@ -74,7 +74,7 @@
 -export([is_file_ctx_const/1, is_space_dir_const/1, is_trash_dir_const/1, is_trash_dir_const/2,
     is_share_root_dir_const/1, is_symlink_const/1, is_special_const/1,
     is_user_root_dir_const/2, is_root_dir_const/1, file_exists_const/1, file_exists_or_is_deleted/1,
-    is_in_user_space_const/2, assert_not_special_const/1, assert_is_dir/1, assert_not_dir/1,
+    is_in_user_space_const/2, assert_not_special_const/1, assert_is_dir/1, assert_not_dir/1, get_type/1,
     assert_not_trash_dir_const/1, assert_not_trash_dir_const/2]).
 -export([equals/2]).
 -export([assert_not_readonly_target_storage_const/2]).
@@ -1221,6 +1221,17 @@ assert_not_dir(FileCtx) ->
         {true, _} -> throw(?EISDIR);
         {false, FileCtx2} -> FileCtx2
     end.
+
+
+-spec get_type(ctx()) -> {file_meta:type(), ctx()}.
+get_type(FileCtx = #file_ctx{is_dir = true}) ->
+    {?DIRECTORY_TYPE, FileCtx};
+get_type(FileCtx) ->
+    {#document{value = #file_meta{type = Type}}, FileCtx2} =
+        get_file_doc_including_deleted(FileCtx),
+    IsDir = Type =:= ?DIRECTORY_TYPE,
+    {Type, FileCtx2#file_ctx{is_dir = IsDir}}.
+
 
 -spec is_readonly_storage(ctx()) -> {boolean(), ctx()}.
 is_readonly_storage(FileCtx) ->

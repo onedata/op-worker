@@ -15,6 +15,7 @@
 -include("proto/oneclient/client_messages.hrl").
 -include("proto/oneclient/server_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% API
 -export([send/2, send/3, send/4, send_via_any/3]).
@@ -127,6 +128,13 @@ send_msg_excluding_connections(SessionId, Msg, ExcludedCons) ->
 log_sending_msg_error(SessionId, _Msg, {error, no_connections}) ->
     ?debug("Failed to send msg to ~p due to lack of available "
            "connections", [SessionId]);
+
+log_sending_msg_error(SessionId, _Msg, ?ERROR_NOT_FOUND) ->
+    % there is no registry of tasks for session and therefore they are not
+    % interrupted even if session dies. As such it is possible for them to try
+    % send response long after session died
+    ?debug("Failed to send msg to session ~p as it no longer exist", [SessionId]);
+
 log_sending_msg_error(SessionId, Msg, Error) ->
     ?error("Failed to send msg ~s to peer ~p due to: ~p", [
         clproto_utils:msg_to_string(Msg), SessionId, Error

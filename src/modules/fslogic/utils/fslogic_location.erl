@@ -53,6 +53,7 @@ create_doc(FileCtx, StorageFileCreated, GeneratedKey) ->
     }, GeneratedKey) of
         {ok, _LocId} ->
             FileCtx5 = file_ctx:set_file_location(FileCtx4, LocId),
+            dir_size_stats:report_reg_file_size_changed(file_ctx:get_referenced_guid_const(FileCtx), total, Size),
             {{ok, Location}, FileCtx5};
         {error, already_exists} = Error ->
             {Error, FileCtx4}
@@ -110,6 +111,7 @@ create_imported_file_doc(SpaceId, StorageId, FileUuid, StorageFileId, Size, Owne
     },
     LocationDoc2 = fslogic_location_cache:set_blocks(LocationDoc, create_file_blocks(Size)),
     {ok, _LocId} = file_location:save_and_bump_version(LocationDoc2, OwnerId),
+    dir_size_stats:report_reg_file_size_changed(file_id:pack_guid(FileUuid, SpaceId), total, Size),
     ok.
 
 
