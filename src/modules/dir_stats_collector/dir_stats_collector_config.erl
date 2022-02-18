@@ -33,6 +33,7 @@
     model => ?MODULE
 }).
 
+-define(IS_ENABLED_FOR_NEW_SPACE, op_worker:get_env(dir_stats_collector_enabled_for_new_spaces, false)).
 
 %%%===================================================================
 %%% API
@@ -40,7 +41,7 @@
 
 -spec init_for_space(od_space:id()) -> ok.
 init_for_space(SpaceId) ->
-    NewRecord = #dir_stats_collector_config{},
+    NewRecord = #dir_stats_collector_config{enabled = ?IS_ENABLED_FOR_NEW_SPACE},
     {ok, _} = datastore_model:create(?CTX, #document{
         key = SpaceId,
         value = NewRecord
