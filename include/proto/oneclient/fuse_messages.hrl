@@ -66,7 +66,7 @@
     index_startid = undefined :: undefined | binary()
 }).
 
--record(get_file_recursive_children, {
+-record(get_recursive_file_list, {
     start_after :: file_meta:path(),
     size :: file_meta:size()
 }).
@@ -195,7 +195,7 @@
 -type file_request_type() ::
     #get_file_attr{} | #get_file_references{} |
     #get_file_children{} | #get_file_children_attrs{} |
-    #get_file_details{} | #get_file_children_details{} | #get_file_recursive_children{} |
+    #get_file_details{} | #get_file_children_details{} | #get_recursive_file_list{} |
     #create_dir{} | #delete_file{} | #move_to_trash{} |
     #update_times{} | #change_mode{} |
     #rename{} | #create_file{} | #make_file{} |
@@ -281,8 +281,8 @@
     is_last :: boolean()
 }).
 
--record(file_children_recursive_attrs, {
-    result :: [{file_meta:path(), #file_attr{}}],
+-record(recursive_file_list, {
+    files :: [{file_meta:path(), #file_attr{}}],
     is_last :: boolean()
 }).
 
@@ -367,7 +367,7 @@
     #file_attr{} | #file_references{} | #file_children{} | #file_location{} | #helper_params{} |
     #storage_test_file{} | #dir{} | #sync_response{} | #file_created{} |
     #file_opened{} | #file_renamed{} | #guid{} | #xattr_list{} | #xattr{} |
-    #file_children_attrs{} | #file_children_recursive_attrs{} | #file_location_changed{} | 
+    #file_children_attrs{} | #recursive_file_list{} | #file_location_changed{} | 
     #file_opened_extended{} | #file_details{} | #file_children_details{} | #fs_stats{} | #symlink{} |
     undefined.
 

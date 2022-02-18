@@ -46,7 +46,7 @@
     remove_file_on_remote_provider_ceph/1,
     evict_on_ceph/1,
     read_dir_collisions_test/1,
-    list_recursive/1,
+    get_recursive_file_list/1,
     check_fs_stats_on_different_providers/1,
     remote_driver_internal_call_test/1,
     list_children_recreated_remotely/1,
@@ -76,6 +76,7 @@
     remove_file_on_remote_provider_ceph,
     evict_on_ceph,
     read_dir_collisions_test,
+    get_recursive_file_list,
     check_fs_stats_on_different_providers,
     remote_driver_internal_call_test,
     list_children_recreated_remotely,
@@ -848,7 +849,7 @@ read_dir_collisions_test(Config0) ->
     ]).
 
 
-list_recursive(Config0) ->
+get_recursive_file_list(Config0) ->
     Config = multi_provider_file_ops_test_base:extend_config(Config0, <<"user2">>, {0, 0, 0, 0}, 0),
     User = <<"user2">>,
     SessionId = fun(Node) -> ?config({session_id, {User, ?GET_DOMAIN(Node)}}, Config) end,
@@ -877,9 +878,8 @@ list_recursive(Config0) ->
         {Worker2, DirGuidW1} => <<Dirname/binary, "@", Domain1/binary>>,
         {Worker2, DirGuidW2} => Dirname
     },
-        
-    Files = lists:sort(lists:map(fun(_) ->
-        generator:gen_name() end, lists:seq(1, 8))),
+    
+    Files = lists:sort(lists_utils:generate(fun generator:gen_name/0, 8)),
     {AllExpectedFilesW1, AllExpectedFilesW2} = lists:foldl(fun(DG, Acc) ->
         lists:foldl(fun(Filename, {FilesTmpW1, FilesTmpW2}) ->
             {ok, GW1} = ?assertMatch({ok, _}, lfm_proxy:create(Worker1, SessionId(Worker1), DG, Filename, ?DEFAULT_FILE_MODE)),
@@ -909,12 +909,12 @@ list_recursive(Config0) ->
     end,
     lists:foreach(fun({Worker, AllExpectedFiles}) ->
         ?assertMatch({ok, AllExpectedFiles, _}, 
-            ResultMapper(lfm_proxy:list_recursive(Worker, SessionId(Worker), ?FILE_REF(MainDirGuid), <<>>, length(AllExpectedFiles)))),
+            ResultMapper(lfm_proxy:get_files_recursively(Worker, SessionId(Worker), ?FILE_REF(MainDirGuid), <<>>, length(AllExpectedFiles)))),
         lists:foreach(fun(Num) ->
             {_, StartAfter} = lists:nth(Num, AllExpectedFiles),
             ExpectedTail = lists:nthtail(Num, AllExpectedFiles),
             ?assertMatch({ok, ExpectedTail, _}, 
-                ResultMapper(lfm_proxy:list_recursive(Worker, SessionId(Worker), ?FILE_REF(MainDirGuid), StartAfter, length(AllExpectedFiles))))
+                ResultMapper(lfm_proxy:get_files_recursively(Worker, SessionId(Worker), ?FILE_REF(MainDirGuid), StartAfter, length(AllExpectedFiles))))
         end, lists:seq(1, length(AllExpectedFiles))),
         
         lists:foreach(fun(Num) ->
@@ -924,7 +924,7 @@ list_recursive(Config0) ->
                 [] -> []
             end,
             ?assertMatch({ok, ExpectedRes, _}, 
-                ResultMapper(lfm_proxy:list_recursive(Worker, SessionId(Worker), ?FILE_REF(MainDirGuid), StartAfter, 1)))
+                ResultMapper(lfm_proxy:get_files_recursively(Worker, SessionId(Worker), ?FILE_REF(MainDirGuid), StartAfter, 1)))
         end, lists:seq(1, length(AllExpectedFiles)))
     end, [{Worker1, AllExpectedFilesW1}, {Worker2, AllExpectedFilesW2}]).
 

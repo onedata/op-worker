@@ -464,7 +464,7 @@ resolve_get_operation_handler(children, private) -> ?MODULE;             % REST/
 resolve_get_operation_handler(children, public) -> ?MODULE;              % REST/gs
 resolve_get_operation_handler(children_details, private) -> ?MODULE;     % gs only
 resolve_get_operation_handler(children_details, public) -> ?MODULE;      % gs only
-resolve_get_operation_handler(list_recursive, private) -> ?MODULE;       % REST only
+resolve_get_operation_handler(files, private) -> ?MODULE;       % REST only
 resolve_get_operation_handler(attrs, private) -> ?MODULE;                % REST/gs
 resolve_get_operation_handler(attrs, public) -> ?MODULE;                 % REST/gs
 resolve_get_operation_handler(xattrs, private) -> ?MODULE;               % REST/gs
@@ -504,7 +504,7 @@ data_spec_get(#gri{aspect = As}) when
 -> #{
     required => #{id => {binary, guid}},
     optional => #{
-        <<"limit">> => {integer, {between, 1, 1000}},
+        <<"limit">> => {integer, {between, 1, ?DEFAULT_LIST_ENTRIES}},
         <<"index">> => {binary, fun
             (null) ->
                 {true, undefined};
@@ -521,11 +521,12 @@ data_spec_get(#gri{aspect = As}) when
     }
 };
 
-data_spec_get(#gri{aspect = list_recursive}) -> #{
+data_spec_get(#gri{aspect = files}) -> #{
     required => #{id => {binary, guid}},
     optional => #{
-        <<"limit">> => {integer, {between, 1, 1000}},
-        <<"token">> => {binary, any}
+        <<"limit">> => {integer, {between, 1, ?DEFAULT_LIST_ENTRIES}},
+        <<"token">> => {binary, any},
+        <<"start_after">> => {binary, any}
     }
 };
 
@@ -624,7 +625,7 @@ authorize_get(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= instance;
     As =:= children;
     As =:= children_details;
-    As =:= list_recursive;
+    As =:= files;
     As =:= attrs;
     As =:= xattrs;
     As =:= json_metadata;
@@ -672,7 +673,7 @@ validate_get(#op_req{gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= instance;
     As =:= children;
     As =:= children_details;
-    As =:= list_recursive;
+    As =:= files;
     As =:= attrs;
     As =:= xattrs;
     As =:= json_metadata;
@@ -734,13 +735,16 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = childre
     )),
     {ok, value, {ChildrenDetails, IsLast}};
 
-get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = list_recursive}}, _) ->
+get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = files}}, _) ->
     SessionId = Auth#auth.session_id,
     
-    {ok, Result, IsLast} = ?lfm_check(lfm:list_recursive(SessionId, ?FILE_REF(FileGuid), 
-        maps:get(<<"token">>, Data, <<>>), maps:get(<<"limit">>, Data, ?DEFAULT_LIST_ENTRIES))),
+    %% @TODO VFS-8980 - return descriptive error when both token and start_after are provided
+    StartAfter = maps:get(<<"token">>, Data, maps:get(<<"start_after">>, Data, <<>>)),
+    {ok, Result, IsLast} = ?lfm_check(lfm:get_files_recursively(SessionId, ?FILE_REF(FileGuid), 
+        StartAfter, maps:get(<<"limit">>, Data, ?DEFAULT_LIST_ENTRIES))),
     NextPageToken = case IsLast of
-        true -> null;
+        true -> 
+            null;
         false ->
             {T, _} = lists:last(Result),
             T

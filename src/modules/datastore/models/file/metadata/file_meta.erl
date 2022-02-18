@@ -388,7 +388,7 @@ get_child(ParentUuid, Name) ->
     end.
 
 
--spec trim_filename_tree_id(name(), {all, uuid()} | [file_meta_forest:tree_id()]) -> name().
+-spec trim_filename_tree_id(name(), {all, uuid()} | file_meta_forest:tree_id()) -> name().
 trim_filename_tree_id(Name, {all, ParentUuid}) ->
     TreeIds = case file_meta_forest:get_trees(ParentUuid) of
         {ok, T} -> T;

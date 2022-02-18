@@ -40,7 +40,6 @@
 -type link_target() :: file_meta:uuid().
 -type link_revision() :: datastore_links:link_rev().
 -type scope () :: od_space:id().
--type tree_id() :: od_provider:id().
 -type internal_link() :: datastore_links:link().
 % list of links with the same name
 -type group() :: [internal_link()].
@@ -55,6 +54,7 @@
 -type last_name() :: link_name().
 -type last_tree() :: tree_id().
 -type link() :: {link_name(), link_target()}.
+-type tree_id() :: od_provider:id().
 -type tree_ids() :: datastore_model:tree_ids().
 
 %% @formatter:off
@@ -82,7 +82,7 @@
 %% @formatter:on
 
 -export_type([link/0, offset/0, size/0, token/0, last_name/0, last_tree/0,
-    list_opts/0, list_extended_info/0, tree_ids/0
+    list_opts/0, list_extended_info/0, tree_id/0, tree_ids/0
 ]).
 
 -define(CTX, (file_meta:get_ctx())).

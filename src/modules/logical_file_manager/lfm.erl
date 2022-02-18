@@ -77,7 +77,7 @@
     get_child_attr/3,
     get_children_attrs/3,
     get_children_details/3,
-    list_recursive/4,
+    get_files_recursively/4,
     get_children_count/2
 ]).
 %% Permissions related operations
@@ -532,10 +532,10 @@ get_children_details(SessId, FileKey, ListOpts) ->
 %% that is in a subtree of given file.
 %% @end
 %%--------------------------------------------------------------------
--spec list_recursive(session:id(), file_key(), file_meta:path(), non_neg_integer()) ->
+-spec get_files_recursively(session:id(), file_key(), file_meta:path(), non_neg_integer()) ->
     {ok, [{file_meta:path(), lfm_attrs:file_attributes()}], boolean()} | error_reply().
-list_recursive(SessId, FileKey, StartAfter, Limit) ->
-    ?run(lfm_dirs:list_recursive(SessId, FileKey, StartAfter, Limit)).
+get_files_recursively(SessId, FileKey, StartAfter, Limit) ->
+    ?run(lfm_dirs:get_files_recursively(SessId, FileKey, StartAfter, Limit)).
 
 
 -spec get_children_count(session:id(), file_key()) ->

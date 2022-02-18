@@ -25,9 +25,10 @@
     get_children/3,
     get_children_attrs/5,
     get_children_details/3,
-    list_recursive/4
+    get_recursive_file_list/4
 ]).
 
+%% @TODO VFS-9051 - Refactor recursive file listing
 
 -record(list_recursive_state, {
     % Split relative path between start after and start file path.
@@ -36,9 +37,9 @@
     filters :: [file_meta:name()],
     limit :: non_neg_integer(),
     current_path_tokens :: [file_meta:name()],
-    last_filter :: file_meta:name(),
+    previous_filter :: undefined | file_meta:name(),
     parent_uuid :: file_meta:uuid(),
-    canonical_children_white_list :: undefined | [file_meta:path()]
+    canonical_children_whitelist :: undefined | [file_meta:path()]
 }).
 
 -type list_recursive_state() :: #list_recursive_state{}.
@@ -182,9 +183,9 @@ get_children_details(UserCtx, FileCtx0, ListOpts) ->
 %% @equiv list_recusrive_insecure/5 with permission checks
 %% @end
 %%--------------------------------------------------------------------
--spec list_recursive(user_ctx:ctx(), file_ctx:ctx(), file_meta:path(), non_neg_integer()) ->
+-spec get_recursive_file_list(user_ctx:ctx(), file_ctx:ctx(), file_meta:path(), non_neg_integer()) ->
     fslogic_worker:fuse_response().
-list_recursive(UserCtx, FileCtx0, StartAfter, Limit) ->
+get_recursive_file_list(UserCtx, FileCtx0, StartAfter, Limit) ->
     {IsDir, FileCtx1} = file_ctx:is_dir(FileCtx0),
     AccessRequirements = case IsDir of
         true -> [?TRAVERSE_ANCESTORS, ?OPERATIONS(?traverse_container_mask, ?list_container_mask)];
@@ -344,21 +345,21 @@ list_recursive_insecure(UserCtx, FileCtx0, StartAfter, Limit, CanonicalChildrenW
                 filters = Filters,
                 limit = Limit,
                 current_path_tokens = [SpaceId | StartPathTokens],
-                last_filter = filename:basename(StartPath),
+                previous_filter = filename:basename(StartPath),
                 parent_uuid = file_ctx:get_logical_uuid_const(FileCtx1),
-                canonical_children_white_list = CanonicalChildrenWhiteList
+                canonical_children_whitelist = CanonicalChildrenWhiteList
             }),
             
             #fuse_response{status = #status{code = ?OK},
-                fuse_response = #file_children_recursive_attrs{
-                    result = Res,
+                fuse_response = #recursive_file_list{
+                    files = Res,
                     is_last = IsLast
                 }
             };
         halt ->
             #fuse_response{status = #status{code = ?OK},
-                fuse_response = #file_children_recursive_attrs{
-                    result = [],
+                fuse_response = #recursive_file_list{
+                    files = [],
                     is_last = true
                 }
             }
@@ -455,16 +456,16 @@ list_recursive_next_file(UserCtx, FileCtx, State) ->
     list_recursive_children_next_batch(UserCtx, FileCtx, ListOpts, UpdatedState, []).
 
 
--spec list_recursive_children_next_batch(user_ctx:ctx(), file_ctx:ctx(), file_meta:list_opts(), 
+-spec list_recursive_children_next_batch(user_ctx:ctx(), file_ctx:ctx(), map(), 
     list_recursive_state(), [{file_meta:path(), lfm_attrs:file_attributes()}]) ->
     {[{file_meta:path(), lfm_attrs:file_attributes()}], boolean()}.
 list_recursive_children_next_batch(UserCtx, FileCtx, ListOpts, State, Acc) ->
     #list_recursive_state{
         limit = Limit, 
-        canonical_children_white_list = CanonicalChildrenWhiteList
+        canonical_children_whitelist = CanonicalChildrenWhitelist
     } = State,
     {Children, #{is_last := IsLast} = ExtendedInfo, _FileCtx1} =
-    list_children(UserCtx, FileCtx, ListOpts#{size => ?LIST_RECURSIVE_BATCH_SIZE}, CanonicalChildrenWhiteList),
+        list_children(UserCtx, FileCtx, ListOpts#{size => ?LIST_RECURSIVE_BATCH_SIZE}, CanonicalChildrenWhitelist),
     {Res, FinalProcessedFiles} = lists_utils:foldl_while(fun(ChildCtx, {TmpBatch, ProcessedFiles}) ->
         {ChildBatch, IsChildProcessed} = map_list_recursive_child(
             UserCtx, ChildCtx, file_ctx:get_logical_guid_const(FileCtx), State#list_recursive_state{
@@ -498,7 +499,7 @@ list_recursive_children_next_batch(UserCtx, FileCtx, ListOpts, State, Acc) ->
 map_list_recursive_child(UserCtx, ChildCtx, ListedFileGuid, State) ->
     #list_recursive_state{
         current_path_tokens = CurrentPathTokens,
-        last_filter = LastFilter
+        previous_filter = LastFilter
     } = State,
     #fuse_response{
         status = #status{code = ?OK},
@@ -528,14 +529,14 @@ map_list_recursive_child(UserCtx, ChildCtx, ListedFileGuid, State) ->
 
 
 -spec build_starting_list_opts(list_recursive_state()) -> 
-    {file_meta:list_opts(), list_recursive_state()}.
-build_starting_list_opts(#list_recursive_state{last_filter = undefined} = State) ->
+    {map(), list_recursive_state()}.
+build_starting_list_opts(#list_recursive_state{previous_filter = undefined} = State) ->
     {#{last_name => <<>>}, State#list_recursive_state{filters = []}};
 build_starting_list_opts(#list_recursive_state{filters = []} = State) ->
-    {#{last_name => <<>>}, State#list_recursive_state{last_filter = undefined}};
+    {#{last_name => <<>>}, State#list_recursive_state{previous_filter = undefined}};
 build_starting_list_opts(#list_recursive_state{
     filters = [Filter | NextFilters],
-    last_filter = PrevFilter,
+    previous_filter = PrevFilter,
     current_path_tokens = CurrentPathTokens,
     parent_uuid = ParentUuid
 } = State) ->
@@ -553,11 +554,11 @@ build_starting_list_opts(#list_recursive_state{
                         last_name => file_meta:trim_filename_tree_id(Filter, {all, ParentUuid})
                     }
             end,
-            {Opts, State#list_recursive_state{filters = NextFilters, last_filter = Filter}};
+            {Opts, State#list_recursive_state{filters = NextFilters, previous_filter = Filter}};
         _ ->
             % we are no longer in a subtree that is filtered, so all filters ca be dropped
             {
                 #{last_name => <<>>}, 
-                State#list_recursive_state{filters = [], last_filter = undefined}
+                State#list_recursive_state{filters = [], previous_filter = undefined}
             }
     end.

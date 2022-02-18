@@ -23,7 +23,7 @@
     get_child_attr/3,
     get_children_details/3,
     get_children_count/2,
-    list_recursive/4
+    get_files_recursively/4
 ]).
 
 
@@ -170,16 +170,16 @@ get_children_count(SessId, FileKey) ->
     end.
 
 
-list_recursive(SessId, FileKey, StartAfter, Limit) ->
+get_files_recursively(SessId, FileKey, StartAfter, Limit) ->
     FileGuid = lfm_file_key:resolve_file_key(SessId, FileKey, resolve_symlink),
     
     remote_utils:call_fslogic(SessId, file_request, FileGuid,
-        #get_file_recursive_children{
+        #get_recursive_file_list{
             start_after = StartAfter,
             size = Limit
         },
-        fun(#file_children_recursive_attrs{
-            result = Result,
+        fun(#recursive_file_list{
+            files = Result,
             is_last = IsLast
         }) ->
             {ok, Result, IsLast}

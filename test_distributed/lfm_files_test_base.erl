@@ -92,7 +92,7 @@
     get_children_details_should_work_with_non_zero_offset/1,
     get_children_details_should_work_with_size_greater_than_dir_size/1,
     get_children_details_should_work_with_startid/1,
-    list_recursive/1,
+    get_recursive_file_list/1,
     lfm_recreate_handle/3,
     lfm_open_failure/1,
     lfm_create_and_open_failure/1,
@@ -516,7 +516,7 @@ get_children_details_should_work_with_startid(Config) ->
 
 
 % NOTE: this test must be run first as it requires empty space
-list_recursive(Config) ->
+get_recursive_file_list(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     
     {SessId1, _UserId1} =
@@ -526,20 +526,18 @@ list_recursive(Config) ->
     MainDirPath = <<"/space_name1/", MainDir/binary, "/">>,
     {ok, MainDirGuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker, SessId1, MainDirPath)),
     
-    Dirs = lists:sort(lists:map(fun(_) ->
-        generator:gen_name() end, lists:seq(1, 4))),
-    Files = lists:sort(lists:map(fun(_) ->
-        generator:gen_name() end, lists:seq(1, 8))),
+    Dirs = lists:sort(lists_utils:generate(fun generator:gen_name/0, 4)),
+    Files = lists:sort(lists_utils:generate(fun generator:gen_name/0, 8)),
     AllExpectedFiles = lists:foldl(fun(D, FilesTmp) ->
-        ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker, SessId1, <<MainDirPath/binary, D/binary>>)),
-        ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker, SessId1, <<MainDirPath/binary, D/binary, "/empty_dir">>)),
+        ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker, SessId1, filename:join([MainDirPath, D]))),
+        ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker, SessId1, filename:join([MainDirPath, D, <<"empty_dir">>]))),
         FilesTmp ++ lists:map(fun(F) ->
-            {ok, G} = ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId1, <<MainDirPath/binary, D/binary, "/", F/binary>>)),
+            {ok, G} = ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId1, filename:join([MainDirPath, D, F]))),
             {G, filename:join([MainDir, D, F])}
         end, Files)
     end, [], Dirs),
     
-    SpaceDirGuid = erpc:call(Worker, fslogic_uuid, spaceid_to_space_dir_guid, [file_id:guid_to_space_id(MainDirGuid)]),
+    SpaceDirGuid = fslogic_uuid:spaceid_to_space_dir_guid(file_id:guid_to_space_id(MainDirGuid)),
     ResultMapper = fun
         ({ok, Res, IsLast}) ->
             {ok, lists:map(fun({Path, #file_attr{guid = Guid}}) -> {Guid, Path} end, Res), IsLast};
@@ -548,12 +546,12 @@ list_recursive(Config) ->
     end,
     lists:foreach(fun(DirToListGuid) ->
         ?assertMatch({ok, AllExpectedFiles, _}, 
-            ResultMapper(lfm_proxy:list_recursive(Worker, SessId1, ?FILE_REF(DirToListGuid), <<>>, length(AllExpectedFiles)))),
+            ResultMapper(lfm_proxy:get_files_recursively(Worker, SessId1, ?FILE_REF(DirToListGuid), <<>>, length(AllExpectedFiles)))),
         lists:foreach(fun(Num) ->
             {_, StartAfter} = lists:nth(Num, AllExpectedFiles),
             ExpectedTail = lists:nthtail(Num, AllExpectedFiles),
             ?assertMatch({ok, ExpectedTail, _}, 
-                ResultMapper(lfm_proxy:list_recursive(Worker, SessId1, ?FILE_REF(DirToListGuid), StartAfter, length(AllExpectedFiles))))
+                ResultMapper(lfm_proxy:get_files_recursively(Worker, SessId1, ?FILE_REF(DirToListGuid), StartAfter, length(AllExpectedFiles))))
         end, lists:seq(1, length(AllExpectedFiles))),
         
         lists:foreach(fun(Num) ->
@@ -563,19 +561,19 @@ list_recursive(Config) ->
                 [] -> []
             end,
             ?assertMatch({ok, ExpectedRes, _}, 
-                ResultMapper(lfm_proxy:list_recursive(Worker, SessId1, ?FILE_REF(DirToListGuid), StartAfter, 1)))
+                ResultMapper(lfm_proxy:get_files_recursively(Worker, SessId1, ?FILE_REF(DirToListGuid), StartAfter, 1)))
         end, lists:seq(1, length(AllExpectedFiles)))
     end, [MainDirGuid, SpaceDirGuid]),
     
     % check that listing regular file returns this file
     {Num, {Guid, Path}} = lists_utils:random_element(lists:zip(lists:seq(1, length(AllExpectedFiles)), AllExpectedFiles)),
-    ?assertMatch({ok, [{Guid, Path}], true}, ResultMapper(lfm_proxy:list_recursive(Worker, SessId1, ?FILE_REF(Guid), <<>>, 1))),
+    ?assertMatch({ok, [{Guid, Path}], true}, ResultMapper(lfm_proxy:get_files_recursively(Worker, SessId1, ?FILE_REF(Guid), <<>>, 1))),
     
     % check listing after removing file that StartAfter points to 
     ok = lfm_proxy:unlink(Worker, SessId1, ?FILE_REF(Guid)),
     ExpectedTail = lists:nthtail(Num, AllExpectedFiles),
     ?assertMatch({ok, ExpectedTail, _}, 
-        ResultMapper(lfm_proxy:list_recursive(Worker, SessId1, ?FILE_REF(MainDirGuid), Path, length(AllExpectedFiles)))).
+        ResultMapper(lfm_proxy:get_files_recursively(Worker, SessId1, ?FILE_REF(MainDirGuid), Path, length(AllExpectedFiles)))).
     
 
 echo_loop(Config) ->

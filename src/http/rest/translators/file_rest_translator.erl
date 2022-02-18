@@ -88,9 +88,9 @@ get_response(#gri{aspect = children}, {Children, IsLast}) ->
         <<"isLast">> => IsLast
     });
 
-get_response(#gri{aspect = list_recursive}, {Result, NextPageToken, IsLast}) ->
+get_response(#gri{aspect = list_recursive}, {Files, NextPageToken, IsLast}) ->
     ?OK_REPLY(#{
-        <<"result">> => Result,
+        <<"files">> => Files,
         <<"nextPageToken">> => NextPageToken,
         <<"isLast">> => IsLast
     });
