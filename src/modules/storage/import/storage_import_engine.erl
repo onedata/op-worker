@@ -109,7 +109,7 @@ sync_file(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
             end,
 
             case map_to_existing_file_uuid(ParentUuid, FileName, FileBaseName, FileUuid) of
-                {error, not_found} ->
+                {error, Reason} ->
                     % Link from Parent to FileBaseName is missing.
                     % We must check deletion marker to ensure that file may be synced.
                     % Deletion markers are removed if and only if file was successfully deleted from storage.
@@ -131,11 +131,17 @@ sync_file(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
                                         {error, not_found} ->
                                             maybe_import_file(StorageFileCtx, Info);
                                         {ok, SSIDoc} ->
-                                            case storage_sync_info:get_guid(SSIDoc) of
-                                                undefined ->
+                                            case {storage_sync_info:get_guid(SSIDoc), Reason} of
+                                                {undefined, _} ->
                                                     maybe_import_file(StorageFileCtx, Info);
-                                                _Guid ->
-                                                    {?FILE_UNMODIFIED, undefined, StorageFileCtx}
+                                                {_Guid, not_found} ->
+                                                    {?FILE_UNMODIFIED, undefined, StorageFileCtx};
+                                                {Guid, {conflicting_uuids, ConflictingUuids}} ->
+                                                    % Check if storage_sync_info points to other conflicting file
+                                                    case lists:member(file_id:guid_to_uuid(Guid), ConflictingUuids) of
+                                                        true -> maybe_import_file(StorageFileCtx, Info);
+                                                        false -> {?FILE_UNMODIFIED, undefined, StorageFileCtx}
+                                                    end
                                             end
                                     end
                             end;
@@ -180,13 +186,14 @@ sync_file(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
 
 
 -spec map_to_existing_file_uuid(file_meta:uuid(), file_meta:name(), file_meta:name(), file_meta:uuid() | undefined) ->
-    {ok, file_meta:uuid()} | {error, not_found}.
+    {ok, file_meta:uuid()} | {error, not_found | {conflicting_uuids, [file_meta:uuid()]}}.
 map_to_existing_file_uuid(ParentUuid, FileName, FileBaseName, undefined) ->
     case file_meta:get_matching_child_uuids_with_tree_ids(ParentUuid, all, FileBaseName) of
-        {ok, [{ResolvedUuid, _}]} ->
-            {ok, ResolvedUuid};
         {ok, UuidsWithTreeIds} ->
             Filtered = lists:filter(fun({FileUuid, _}) ->
+                % NOTE: both file_location and dir_location have to be analyzed regardless of file's type on storage
+                % as its type may have been changed between scans (file may have been deleted and replaced with dir
+                % or vice versa)
                 case file_location:get_local(FileUuid) of
                     {ok, #document{value = #file_location{
                         storage_file_created = true,
@@ -194,12 +201,20 @@ map_to_existing_file_uuid(ParentUuid, FileName, FileBaseName, undefined) ->
                     }}} ->
                         binary:longest_common_suffix([FileId, FileName]) =:= size(FileName);
                     (_) ->
-                        false
+                        case dir_location:get(FileUuid) of
+                            {ok, #document{value = #dir_location{
+                                storage_file_created = true,
+                                storage_file_id = FileId
+                            }}} ->
+                                binary:longest_common_suffix([FileId, FileName]) =:= size(FileName);
+                            (_) ->
+                                false
+                        end
                 end
             end, UuidsWithTreeIds),
             case Filtered of
                 [{FileUuid, _}] -> {ok, FileUuid};
-                _ -> {error, not_found}
+                _ -> {error, {conflicting_uuids, lists:map(fun({FileUuid, _}) -> FileUuid end, UuidsWithTreeIds)}}
             end;
         {error, not_found} ->
             {error, not_found}
@@ -209,7 +224,7 @@ map_to_existing_file_uuid(ParentUuid, _FileName, FileBaseName, ExpectedFileUuid)
         {ok, UuidsWithTreeIds} ->
             case lists:any(fun({FileUuid, _}) -> FileUuid =:= ExpectedFileUuid end, UuidsWithTreeIds) of
                 true -> {ok, ExpectedFileUuid};
-                false -> {error, not_found}
+                false -> {error, {conflicting_uuids, lists:map(fun({FileUuid, _}) -> FileUuid end, UuidsWithTreeIds)}}
             end;
         {error, not_found} ->
             {error, not_found}
@@ -356,8 +371,8 @@ get_child_safe(FileCtx, ChildName) ->
 -spec check_location_and_maybe_sync(storage_file_ctx:ctx(), file_ctx:ctx(), info()) ->
     {result(), file_ctx:ctx() | undefined, storage_file_ctx:ctx()} | {error, term()}.
 check_location_and_maybe_sync(StorageFileCtx, FileCtx, Info) ->
-    {#statbuf{st_mode = StMode}, StorageFileCtx2} = storage_file_ctx:stat(StorageFileCtx),
-    case file_meta:type(StMode) of
+    {StorageFileType, StorageFileCtx2} = get_file_type(StorageFileCtx),
+    case StorageFileType of
         ?DIRECTORY_TYPE ->
             check_dir_location_and_maybe_sync(StorageFileCtx2, FileCtx, Info);
         ?REGULAR_FILE_TYPE ->
@@ -505,8 +520,7 @@ check_file_meta_and_maybe_sync(StorageFileCtx, FileCtx, Info, StorageFileCreated
 -spec check_file_type_and_maybe_sync(storage_file_ctx:ctx(), #file_attr{}, file_ctx:ctx(), info(),
     boolean()) -> {result(), file_ctx:ctx() | undefined, storage_file_ctx:ctx()} | {error, term()}.
 check_file_type_and_maybe_sync(StorageFileCtx, FileAttr = #file_attr{type = FileMetaType}, FileCtx, Info, StorageFileCreated) ->
-    {#statbuf{st_mode = StMode}, StorageFileCtx2} = storage_file_ctx:stat(StorageFileCtx),
-    StorageFileType = file_meta:type(StMode),
+    {StorageFileType, StorageFileCtx2} = get_file_type(StorageFileCtx),
     case {StorageFileType, FileMetaType, StorageFileCreated} of
         {Type, Type, true} ->
             maybe_update_file(StorageFileCtx2, FileAttr, FileCtx, Info);
@@ -656,8 +670,13 @@ import_file_unsafe(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
     {#statbuf{st_mode = Mode} = StatBuf, StorageFileCtx4} = storage_file_ctx:stat(StorageFileCtx3),
     {ok, FileCtx} = create_file_meta_and_handle_conflicts(FileUuid, FileName, Mode, OwnerId,
         ParentUuid, SpaceId, Info),
+    % Size could not be updated in statistic as file_meta was created after file_location.
+    % As a result file_meta_posthooks have been created during file_location creation - execute them now.
+    file_meta_posthooks:execute_hooks(FileUuid),
     {ok, StorageFileCtx5} = create_times_from_stat_timestamps(FileUuid, StorageFileCtx4),
-    dir_update_time_stats:report_update_of_dir(file_ctx:get_logical_guid_const(ParentCtx), StatBuf),
+    ParentGuid = file_ctx:get_logical_guid_const(ParentCtx),
+    dir_size_stats:report_file_created(file_meta:type(Mode), ParentGuid),
+    dir_update_time_stats:report_update_of_dir(ParentGuid, StatBuf),
     {ok, StorageFileCtx6} = maybe_import_nfs4_acl(FileCtx, StorageFileCtx5, Info),
     {CanonicalPath, FileCtx2} = file_ctx:get_canonical_path(FileCtx),
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
@@ -678,8 +697,9 @@ create_missing_parent_unsafe(StorageFileCtx, #{parent_ctx := ParentCtx}) ->
     ParentName = storage_file_ctx:get_file_name_const(StorageFileCtx),
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
     {ok, FileCtx} = file_registration:create_missing_directory(ParentCtx, ParentName, ?SPACE_OWNER_ID(SpaceId)),
-    FileUuid = datastore_key:new(),
+    FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
     set_times_for_dir_using_current_time(FileUuid, SpaceId),
+    dir_size_stats:report_file_created(?DIRECTORY_TYPE, file_ctx:get_logical_guid_const(FileCtx)),
     {CanonicalPath, FileCtx2} = file_ctx:get_canonical_path(FileCtx),
     StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
     storage_import_logger:log_creation(StorageFileId, CanonicalPath, FileUuid, SpaceId),
@@ -1317,3 +1337,10 @@ is_suffixed(FileName) ->
         _ ->
             false
     end.
+
+%% @private
+-spec get_file_type(storage_file_ctx:ctx()) -> {file_meta:type(), storage_file_ctx:ctx()}.
+get_file_type(StorageFileCtx) ->
+    {#statbuf{st_mode = StMode}, StorageFileCtx2} = storage_file_ctx:stat(StorageFileCtx),
+    StorageFileType = file_meta:type(StMode),
+    {StorageFileType, StorageFileCtx2}.
