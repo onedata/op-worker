@@ -277,7 +277,7 @@ list_children(Worker, ParentPath, Offset, Size, Token, LastName, LastTree) ->
     }]).
 
 list_children_using_token(Worker, ParentPath, Size) ->
-    rpc:call(Worker, file_meta, list_children, [{path, ParentPath}, #{token => ?INITIAL_LS_TOKEN, size => Size}]).
+    rpc:call(Worker, file_meta, list_children, [{path, ParentPath}, #{token => ?INITIAL_DATASTORE_LS_TOKEN, size => Size}]).
 
 list_children_using_token(Worker, ParentPath, Size, Token) ->
     rpc:call(Worker, file_meta, list_children, [{path, ParentPath}, #{token => Token, size => Size}]).

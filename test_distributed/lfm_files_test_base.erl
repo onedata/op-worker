@@ -12,6 +12,7 @@
 -module(lfm_files_test_base).
 -author("Rafal Slota").
 
+-include("global_definitions.hrl").
 -include("lfm_files_test_base.hrl").
 -include("modules/fslogic/acl.hrl").
 -include("modules/fslogic/file_attr.hrl").
@@ -81,10 +82,7 @@
     readdir_plus_should_work_with_zero_offset/1,
     readdir_plus_should_work_with_non_zero_offset/1,
     readdir_plus_should_work_with_size_greater_than_dir_size/1,
-    readdir_plus_should_work_with_token/1,
-    readdir_plus_should_work_with_token2/1,
-    readdir_should_work_with_token/1,
-    readdir_should_work_with_token2/1,
+    readdir_should_work_with_token/4,
     readdir_should_work_with_startid/1,
     get_children_details_should_return_empty_result_for_empty_dir/1,
     get_children_details_should_return_empty_result_zero_size/1,
@@ -422,33 +420,27 @@ readdir_plus_should_work_with_size_greater_than_dir_size(Config) ->
     {MainDirPath, Files} = generate_dir(Config, 5),
     verify_attrs(Config, MainDirPath, Files, 10, 5).
 
-readdir_plus_should_work_with_token(Config) ->
-    {MainDirPath, Files} = generate_dir(Config, 10),
-    Token = verify_attrs_with_token(Config, MainDirPath, Files, 3, 3, 0, false, <<"">>),
-    Token2 = verify_attrs_with_token(Config, MainDirPath, Files, 3, 3, 3, false, Token),
-    Token3 = verify_attrs_with_token(Config, MainDirPath, Files, 3, 3, 6, false, Token2),
-    verify_attrs_with_token(Config, MainDirPath, Files, 1, 3, 9, true, Token3).
-
-readdir_plus_should_work_with_token2(Config) ->
-    {MainDirPath, Files} = generate_dir(Config, 12),
-    Token = verify_attrs_with_token(Config, MainDirPath, Files, 3, 3, 0, false, <<"">>),
-    Token2 = verify_attrs_with_token(Config, MainDirPath, Files, 3, 3, 3, false, Token),
-    Token3 = verify_attrs_with_token(Config, MainDirPath, Files, 3, 3, 6, false, Token2),
-    verify_attrs_with_token(Config, MainDirPath, Files, 3, 3, 9, true, Token3).
-
-readdir_should_work_with_token(Config) ->
-    {MainDirPath, Files} = generate_dir(Config, 10),
-    Token = verify_with_token(Config, MainDirPath, Files, 3, 3, 0, false, <<"">>),
-    Token2 = verify_with_token(Config, MainDirPath, Files, 3, 3, 3, false, Token),
-    Token3 = verify_with_token(Config, MainDirPath, Files, 3, 3, 6, false, Token2),
-    verify_with_token(Config, MainDirPath, Files, 1, 3, 9, true, Token3).
-
-readdir_should_work_with_token2(Config) ->
-    {MainDirPath, Files} = generate_dir(Config, 12),
-    Token = verify_with_token(Config, MainDirPath, Files, 3, 3, 0, false, <<"">>),
-    Token2 = verify_with_token(Config, MainDirPath, Files, 3, 3, 3, false, Token),
-    Token3 = verify_with_token(Config, MainDirPath, Files, 3, 3, 6, false, Token2),
-    verify_with_token(Config, MainDirPath, Files, 3, 3, 9, true, Token3).
+readdir_should_work_with_token(Config, DirSize, Type, InitialToken) ->
+    [Worker | _] = Workers = ?config(op_worker_nodes, Config),
+    clock_freezer_mock:setup_for_ct(Workers, [datastore_cache_writer]),
+    {MainDirPath, Files} = generate_dir(Config, DirSize),
+    VerifyFun = case Type of
+        readdir_plus -> fun verify_attrs_with_token/8;
+        readdir -> fun verify_with_token/8
+    end,
+    Token = VerifyFun(Config, MainDirPath, Files, max(0, min(DirSize - 0, 3)), 3, 0, false, InitialToken),
+    Token2 = VerifyFun(Config, MainDirPath, Files, max(0, min(DirSize - 3, 3)), 3, 3, false, Token),
+    case InitialToken of
+        ?INITIAL_API_LS_TOKEN ->
+            {ok, TimeToWaitMillis} = erpc:call(Worker, application, get_env, [?CLUSTER_WORKER_APP_NAME, fold_cache_timeout]),
+            clock_freezer_mock:simulate_millis_passing(TimeToWaitMillis + 1),
+            timer:sleep(timer:seconds(5)); % wait for flush of expired tokens
+        _ ->
+            % only API listing token supports continued listing after datastore token expiration
+            ok
+    end,
+    Token3 = VerifyFun(Config, MainDirPath, Files, max(0, min(DirSize - 6, 3)), 3, 6, false, Token2),
+    VerifyFun(Config, MainDirPath, Files, max(0, min(DirSize - 9, 3)), 3, 9, true, Token3).
 
 readdir_should_work_with_startid(Config) ->
     {MainDirPath, Files} = generate_dir(Config, 10),
@@ -2584,5 +2576,6 @@ end_per_testcase(_Case, Config) ->
     lfm_test_utils:clean_space(Workers, ?SPACE_ID3, 30),
     lfm_test_utils:clean_space(Workers, ?SPACE_ID4, 30),
     lfm_proxy:teardown(Config),
+    clock_freezer_mock:teardown_for_ct(Workers),
     initializer:clean_test_users_and_spaces_no_validate(Config),
     test_utils:mock_validate_and_unload(Workers, [communicator]).

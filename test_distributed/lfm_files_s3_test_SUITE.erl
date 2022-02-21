@@ -22,6 +22,7 @@
     init_per_testcase/2, end_per_testcase/2
 ]).
 
+
 %% tests
 -export([
     fslogic_new_file_test/1,
@@ -74,9 +75,13 @@
     readdir_plus_should_work_with_non_zero_offset/1,
     readdir_plus_should_work_with_size_greater_than_dir_size/1,
     readdir_plus_should_work_with_token/1,
-    readdir_plus_should_work_with_token2/1,
+    readdir_plus_should_work_with_token_not_full_batch/1,
     readdir_should_work_with_token/1,
-    readdir_should_work_with_token2/1,
+    readdir_should_work_with_token_not_full_batch/1,
+    readdir_plus_should_work_with_api_token/1,
+    readdir_plus_should_work_with_api_token_not_full_batch/1,
+    readdir_should_work_with_api_token/1,
+    readdir_should_work_with_api_token_not_full_batch/1,
     readdir_should_work_with_startid/1,
     get_children_details_should_return_empty_result_for_empty_dir/1,
     get_children_details_should_return_empty_result_zero_size/1,
@@ -153,9 +158,13 @@
     readdir_plus_should_work_with_non_zero_offset,
     readdir_plus_should_work_with_size_greater_than_dir_size,
     readdir_plus_should_work_with_token,
-    readdir_plus_should_work_with_token2,
+    readdir_plus_should_work_with_token_not_full_batch,
+    readdir_plus_should_work_with_api_token_not_full_batch,
+    readdir_plus_should_work_with_api_token,
     readdir_should_work_with_token,
-    readdir_should_work_with_token2,
+    readdir_should_work_with_token_not_full_batch,
+    readdir_should_work_with_api_token,
+    readdir_should_work_with_api_token_not_full_batch,
     readdir_should_work_with_startid,
     get_children_details_should_return_empty_result_for_empty_dir,
     get_children_details_should_return_empty_result_zero_size,
@@ -240,17 +249,37 @@ readdir_plus_should_work_with_non_zero_offset(Config) ->
 readdir_plus_should_work_with_size_greater_than_dir_size(Config) ->
     lfm_files_test_base:readdir_plus_should_work_with_size_greater_than_dir_size(Config).
 
-readdir_plus_should_work_with_token(Config) ->
-    lfm_files_test_base:readdir_plus_should_work_with_token(Config).
 
-readdir_plus_should_work_with_token2(Config) ->
-    lfm_files_test_base:readdir_plus_should_work_with_token2(Config).
+readdir_plus_should_work_with_token(Config) ->
+    lfm_files_test_base:readdir_should_work_with_token(Config, 12, readdir_plus, ?INITIAL_DATASTORE_LS_TOKEN).
+
+
+readdir_plus_should_work_with_token_not_full_batch(Config) ->
+    lfm_files_test_base:readdir_should_work_with_token(Config, 10, readdir_plus, ?INITIAL_DATASTORE_LS_TOKEN).
+
+
+readdir_plus_should_work_with_api_token(Config) ->
+    lfm_files_test_base:readdir_should_work_with_token(Config, 12, readdir_plus, ?INITIAL_API_LS_TOKEN).
+
+
+readdir_plus_should_work_with_api_token_not_full_batch(Config) ->
+    lfm_files_test_base:readdir_should_work_with_token(Config, 10, readdir_plus, ?INITIAL_API_LS_TOKEN).
+
 
 readdir_should_work_with_token(Config) ->
-    lfm_files_test_base:readdir_should_work_with_token(Config).
+    lfm_files_test_base:readdir_should_work_with_token(Config, 12, readdir, ?INITIAL_DATASTORE_LS_TOKEN).
 
-readdir_should_work_with_token2(Config) ->
-    lfm_files_test_base:readdir_should_work_with_token2(Config).
+
+readdir_should_work_with_token_not_full_batch(Config) ->
+    lfm_files_test_base:readdir_should_work_with_token(Config, 10, readdir, ?INITIAL_DATASTORE_LS_TOKEN).
+
+
+readdir_should_work_with_api_token(Config) ->
+    lfm_files_test_base:readdir_should_work_with_token(Config, 12, readdir, ?INITIAL_API_LS_TOKEN).
+
+
+readdir_should_work_with_api_token_not_full_batch(Config) ->
+    lfm_files_test_base:readdir_should_work_with_token(Config, 10, readdir, ?INITIAL_API_LS_TOKEN).
 
 readdir_should_work_with_startid(Config) ->
     lfm_files_test_base:readdir_should_work_with_startid(Config).

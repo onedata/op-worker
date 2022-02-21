@@ -6,7 +6,19 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% This module is responsible for handing requests operating on directories.
+%%% This module operates on two types of tokens used for continuous listing of directory content: 
+%%%     * api_list_token - used by higher-level modules and passed to the external clients as an 
+%%%                        opaque string so that they can resume listing just after previously 
+%%%                        listed batch (results paging). It encodes a datastore_token and additional
+%%%                        information about last position in the file tree, in case the datastore
+%%%                        token expires. Hence, this token does not expire and always guarantees
+%%%                        correct listing resumption.
+%%%                    
+%%%     * datastore_list_token - token used internally by datastore, has limited TTL. After its expiration, 
+%%%                              information about last position in the file tree can be used to determine
+%%%                              the starting point for listing. This token offers the best performance 
+%%%                              when resuming listing from a certain point.
+%%% @TODO VFS-8980 currently it is possible to pass datastore_token from outside
 %%% @end
 %%%--------------------------------------------------------------------
 -module(dir_req).
@@ -17,6 +29,21 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_links.hrl").
+
+
+-type api_list_token() :: binary().
+-type list_token() :: file_meta:list_token() | api_list_token().
+-type token_type() :: api_list_token | datastore_list_token.
+
+%% @TODO VFS-8980 Create opaque structure for list opts
+% When api_list_token is provided, other starting point options (offset, last_tree, last_name) are ignored
+-type list_opts() :: #{
+    token := api_list_token(),
+    size := file_meta:list_size()
+} | file_meta:list_opts().
+
+
+-export_type([list_token/0, list_opts/0]).
 
 %% API
 -export([
@@ -48,6 +75,7 @@
     ?APP_NAME, max_read_dir_plus_procs, 20
 )).
 -define(LIST_RECURSIVE_BATCH_SIZE, 1000).
+-define(api_list_token_PREFIX, "api_list_token").
 
 %%%===================================================================
 %%% API
@@ -72,7 +100,7 @@ mkdir(UserCtx, ParentFileCtx0, Name, Mode) ->
 
 
 
--spec get_children(user_ctx:ctx(), file_ctx:ctx(), file_meta:list_opts()) ->
+-spec get_children(user_ctx:ctx(), file_ctx:ctx(), list_opts()) ->
     fslogic_worker:fuse_response().
 get_children(UserCtx, FileCtx0, ListOpts) ->
     ParentGuid = file_ctx:get_logical_guid_const(FileCtx0),
@@ -122,7 +150,7 @@ get_children(UserCtx, FileCtx0, ListOpts) ->
 %% TODO VFS-7149 untangle permissions_check and fslogic_worker
 %% @end
 %%--------------------------------------------------------------------
--spec get_children_ctxs(user_ctx:ctx(), file_ctx:ctx(), file_meta:list_opts()
+-spec get_children_ctxs(user_ctx:ctx(), file_ctx:ctx(), list_opts()
 ) ->
     {
         ChildrenCtxs :: [file_ctx:ctx()],
@@ -145,7 +173,7 @@ get_children_ctxs(UserCtx, FileCtx0, ListOpts) ->
 %% @equiv get_children_attrs_insecure/7 with permission checks
 %% @end
 %%--------------------------------------------------------------------
--spec get_children_attrs(user_ctx:ctx(), file_ctx:ctx(), file_meta:list_opts(), boolean(), boolean()) ->
+-spec get_children_attrs(user_ctx:ctx(), file_ctx:ctx(), list_opts(), boolean(), boolean()) ->
     fslogic_worker:fuse_response().
 get_children_attrs(UserCtx, FileCtx0, ListOpts, IncludeReplicationStatus, IncludeLinkCount) ->
     {IsDir, FileCtx1} = file_ctx:is_dir(FileCtx0),
@@ -165,7 +193,7 @@ get_children_attrs(UserCtx, FileCtx0, ListOpts, IncludeReplicationStatus, Includ
 %% @equiv get_children_details_insecure/6 with permission checks
 %% @end
 %%--------------------------------------------------------------------
--spec get_children_details(user_ctx:ctx(), file_ctx:ctx(), file_meta:list_opts()) ->
+-spec get_children_details(user_ctx:ctx(), file_ctx:ctx(), list_opts()) ->
     fslogic_worker:fuse_response().
 get_children_details(UserCtx, FileCtx0, ListOpts) ->
     {IsDir, FileCtx1} = file_ctx:is_dir(FileCtx0),
@@ -259,14 +287,15 @@ mkdir_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
 %% and allowed by CanonicalChildrenWhiteList.
 %% @end
 %%--------------------------------------------------------------------
--spec get_children_attrs_insecure(user_ctx:ctx(), file_ctx:ctx(), file_meta:list_opts(),
+-spec get_children_attrs_insecure(user_ctx:ctx(), file_ctx:ctx(), list_opts(),
     boolean(), boolean(), undefined | [file_meta:name()]
 ) ->
     fslogic_worker:fuse_response().
 get_children_attrs_insecure(
     UserCtx, FileCtx0, ListOpts, IncludeReplicationStatus, IncludeLinkCount, CanonicalChildrenWhiteList
 ) ->
-    {Children, ExtendedInfo, FileCtx1} = list_children(UserCtx, FileCtx0, ListOpts, CanonicalChildrenWhiteList),
+    {Children, ExtendedInfo, FileCtx1} = list_children(
+        UserCtx, FileCtx0, ListOpts, CanonicalChildrenWhiteList),
     ChildrenAttrs = map_children(
         UserCtx,
         fun attr_req:get_file_attr_insecure/3,
@@ -297,7 +326,7 @@ get_children_attrs_insecure(
 -spec get_children_details_insecure(
     user_ctx:ctx(),
     file_ctx:ctx(),
-    file_meta:list_opts(),
+    list_opts(),
     undefined | [file_meta:name()]
 ) ->
     fslogic_worker:fuse_response().
@@ -367,7 +396,7 @@ list_recursive_insecure(UserCtx, FileCtx0, StartAfter, Limit, CanonicalChildrenW
 
 
 %% @private
--spec list_children(user_ctx:ctx(), file_ctx:ctx(), file_meta:list_opts(),
+-spec list_children(user_ctx:ctx(), file_ctx:ctx(), list_opts(),
     CanonicalChildrenWhiteList :: undefined | [file_meta:name()]
 ) ->
     {
@@ -376,7 +405,19 @@ list_recursive_insecure(UserCtx, FileCtx0, StartAfter, Limit, CanonicalChildrenW
         NewFileCtx :: file_ctx:ctx()
     }.
 list_children(UserCtx, FileCtx0, ListOpts, CanonicalChildrenWhiteList) ->
-    files_tree:get_children(FileCtx0, UserCtx, ListOpts, CanonicalChildrenWhiteList).
+    {TokenType, FinalListOpts} = resolve_list_opts(ListOpts),
+    {Children, ExtendedInfo, NewFileCtx} = files_tree:get_children(
+        FileCtx0, UserCtx, FinalListOpts, CanonicalChildrenWhiteList),
+    FinalExtendedInfo = case TokenType of
+        api_list_token -> 
+            #{
+                is_last => maps:get(is_last, ExtendedInfo),
+                token => pack_api_list_token(ExtendedInfo)
+            };
+        _ ->
+            ExtendedInfo
+    end,
+    {Children, FinalExtendedInfo, NewFileCtx}.
 
 
 %%--------------------------------------------------------------------
@@ -562,3 +603,48 @@ build_starting_list_opts(#list_recursive_state{
                 State#list_recursive_state{filters = [], previous_filter = undefined}
             }
     end.
+
+
+%% @private
+-spec resolve_list_opts(list_opts()) -> {token_type() | none, file_meta:list_opts()}.
+resolve_list_opts(#{token := undefined} = ListOpts) ->
+    {none, ListOpts};
+resolve_list_opts(#{token := ?INITIAL_API_LS_TOKEN} = ListOpts) ->
+    {api_list_token, #{
+        token => ?INITIAL_DATASTORE_LS_TOKEN,
+        last_tree => <<>>,
+        last_name => <<>>,
+        size => maps:get(size, ListOpts)
+    }};
+resolve_list_opts(#{token := Token} = ListOpts) ->
+    try
+        {api_list_token, maps:merge(unpack_api_list_token(Token), #{
+            size => maps:get(size, ListOpts)
+        })}
+    catch _:_ ->
+        {datastore_list_token, ListOpts}
+    end;
+resolve_list_opts(ListOpts) ->
+    {none, ListOpts}.
+
+
+%% @private
+-spec pack_api_list_token(file_meta:list_extended_info()) -> binary().
+pack_api_list_token(#{token := DatastoreToken, last_tree := LastTree, last_name := LastName}) ->
+    mochiweb_base64url:encode(str_utils:join_binary(
+        [<<?api_list_token_PREFIX>>, DatastoreToken, LastTree, LastName], <<"#">>));
+pack_api_list_token(_) ->
+    undefined.
+
+
+%% @private
+-spec unpack_api_list_token(api_list_token()) -> map().
+unpack_api_list_token(Token) ->
+    <<?api_list_token_PREFIX, _/binary>> = DecodedToken = mochiweb_base64url:decode(Token),
+    [_Header, DecodedDatastoreToken, LastTree | LastNameTokens] =
+        binary:split(DecodedToken, <<"#">>, [global]),
+    #{
+        token => DecodedDatastoreToken,
+        last_tree => LastTree,
+        last_name => str_utils:join_binary(LastNameTokens, <<"#">>)
+    }.

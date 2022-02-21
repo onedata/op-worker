@@ -551,7 +551,7 @@ rename_meta_and_storage_file(UserCtx, SourceFileCtx0, TargetParentCtx0, TargetNa
 -spec rename_child_locations(user_ctx:ctx(), ParentFileCtx :: file_ctx:ctx(),
     ParentStorageFileId :: helpers:file_id()) -> [#file_renamed_entry{}].
 rename_child_locations(UserCtx, ParentFileCtx, ParentStorageFileId) ->
-    ListOpts = #{token => ?INITIAL_LS_TOKEN, size => ?DEFAULT_LS_BATCH_SIZE},
+    ListOpts = #{token => ?INITIAL_DATASTORE_LS_TOKEN, size => ?DEFAULT_LS_BATCH_SIZE},
     rename_child_locations(UserCtx, ParentFileCtx, ParentStorageFileId, ListOpts, []).
 
 

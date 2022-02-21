@@ -42,6 +42,8 @@
 -define(DEFAULT_LIST_OFFSET, 0).
 -define(DEFAULT_LIST_ENTRIES, 1000).
 
+-define(DEFAULT_BASIC_ATTRIBUTES, [<<"file_id">>, <<"name">>]).
+
 
 %%%===================================================================
 %%% API
@@ -71,7 +73,7 @@ file_attrs_to_json(#file_attr{
     #{
         <<"file_id">> => ObjectId,
         <<"name">> => Name,
-        <<"mode">> => <<"0", (integer_to_binary(Mode, 8))/binary>>,
+        <<"mode">> => list_to_binary(string:right(integer_to_list(Mode, 8), 3, $0)),
         <<"parent_id">> => case ParentGuid of
             undefined ->
                 null;
@@ -85,7 +87,10 @@ file_attrs_to_json(#file_attr{
         <<"mtime">> => Mtime,
         <<"ctime">> => Ctime,
         <<"type">> => str_utils:to_binary(Type),
-        <<"size">> => utils:null_to_undefined(Size),
+        <<"size">> => case Type of
+            ?DIRECTORY_TYPE -> null;
+            _ -> utils:undefined_to_null(Size)
+        end,
         <<"shares">> => Shares,
         <<"provider_id">> => ProviderId,
         <<"owner_id">> => OwnerId,
@@ -460,8 +465,8 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = register_file}}) ->
     module() | no_return().
 resolve_get_operation_handler(instance, private) -> ?MODULE;             % gs only
 resolve_get_operation_handler(instance, public) -> ?MODULE;              % gs only
-resolve_get_operation_handler(children, private) -> ?MODULE;             % REST/gs
-resolve_get_operation_handler(children, public) -> ?MODULE;              % REST/gs
+resolve_get_operation_handler(children, private) -> ?MODULE;             % REST only
+resolve_get_operation_handler(children, public) -> ?MODULE;              % REST only
 resolve_get_operation_handler(children_details, private) -> ?MODULE;     % gs only
 resolve_get_operation_handler(children_details, public) -> ?MODULE;      % gs only
 resolve_get_operation_handler(files, private) -> ?MODULE;       % REST only
@@ -499,7 +504,6 @@ data_spec_get(#gri{aspect = instance}) -> #{
 };
 
 data_spec_get(#gri{aspect = As}) when
-    As =:= children;
     As =:= children_details
 -> #{
     required => #{id => {binary, guid}},
@@ -521,6 +525,29 @@ data_spec_get(#gri{aspect = As}) when
     }
 };
 
+data_spec_get(#gri{aspect = children, scope = Sc}) -> #{
+    required => #{id => {binary, guid}},
+    optional => #{
+        <<"limit">> => {integer, {between, 1, 1000}},
+        <<"token">> => {binary, fun
+            (null) ->
+                {true, undefined};
+            (undefined) ->
+                true;
+            (<<>>) ->
+                throw(?ERROR_BAD_VALUE_EMPTY(<<"token">>));
+            (IndexBin) when is_binary(IndexBin) ->
+                true;
+            (_) ->
+                false
+        end},
+        <<"attribute">> => {any, case Sc of
+            public -> ?PUBLIC_BASIC_ATTRIBUTES;
+            private -> ?PRIVATE_BASIC_ATTRIBUTES
+        end}
+    }
+};
+
 data_spec_get(#gri{aspect = files}) -> #{
     required => #{id => {binary, guid}},
     optional => #{
@@ -532,11 +559,11 @@ data_spec_get(#gri{aspect = files}) -> #{
 
 data_spec_get(#gri{aspect = attrs, scope = private}) -> #{
     required => #{id => {binary, guid}},
-    optional => #{<<"attribute">> => {binary, ?PRIVATE_BASIC_ATTRIBUTES}}
+    optional => #{<<"attribute">> => {any, ?PRIVATE_BASIC_ATTRIBUTES}}
 };
 data_spec_get(#gri{aspect = attrs, scope = public}) -> #{
     required => #{id => {binary, guid}},
-    optional => #{<<"attribute">> => {binary, ?PUBLIC_BASIC_ATTRIBUTES}}
+    optional => #{<<"attribute">> => {any, ?PUBLIC_BASIC_ATTRIBUTES}}
 };
 
 data_spec_get(#gri{aspect = xattrs}) -> #{
@@ -714,14 +741,39 @@ get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = instance}}, _) ->
 
 get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = children}}, _) ->
     SessionId = Auth#auth.session_id,
-
-    {ok, Children, #{is_last := IsLast}} = ?lfm_check(lfm:get_children(
-        SessionId, ?FILE_REF(FileGuid), #{
-            offset => maps:get(<<"offset">>, Data, ?DEFAULT_LIST_OFFSET),
-            size => maps:get(<<"limit">>, Data, ?DEFAULT_LIST_ENTRIES),
-            last_name => maps:get(<<"index">>, Data, undefined)
-    })),
-    {ok, value, {Children, IsLast}};
+    RequestedAttributes = utils:ensure_list(maps:get(<<"attribute">>, Data, ?DEFAULT_BASIC_ATTRIBUTES)),
+    
+    ListingOpts = #{
+        size => maps:get(<<"limit">>, Data, ?DEFAULT_LIST_ENTRIES),
+        token => maps:get(<<"token">>, Data, ?INITIAL_API_LS_TOKEN)
+    },
+    
+    ToJsonWithRequestedAttributes = fun(ItemToJson) -> 
+        fun(Res) ->
+            maps:with(RequestedAttributes, ItemToJson(Res))
+        end
+    end,
+    
+    {ResultJson, Info} = case lists:sort(lists_utils:union(RequestedAttributes, ?DEFAULT_BASIC_ATTRIBUTES)) of
+        ?DEFAULT_BASIC_ATTRIBUTES ->
+            {ok, Children, ReturnedInfo} = ?lfm_check(lfm:get_children(
+                SessionId, ?FILE_REF(FileGuid), ListingOpts)),
+            ItemToJson = fun
+                ({Guid, Name}) ->
+                    {ok, ObjectId} = file_id:guid_to_objectid(Guid),
+                    #{<<"file_id">> => ObjectId, <<"name">> => Name}
+                end,
+            {lists:map(ToJsonWithRequestedAttributes(ItemToJson), Children), ReturnedInfo};
+        _ ->
+            IncludeHardlinksCount = lists:member(<<"hardlinks_count">>, RequestedAttributes),
+            {ok, Children, ReturnedInfo} = ?lfm_check(lfm:get_children_attrs(
+                SessionId, ?FILE_REF(FileGuid), ListingOpts, false, IncludeHardlinksCount)),
+            {lists:map(ToJsonWithRequestedAttributes(fun file_attrs_to_json/1), Children), ReturnedInfo}
+    end,
+    
+    #{is_last := IsLast} = Info,
+    %% @TODO VFS-8980 Do not use default after list options are refined and token is always returned
+    {ok, value, {ResultJson, IsLast, maps:get(token, Info, undefined)}};
 
 get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = children_details}}, _) ->
     SessionId = Auth#auth.session_id,

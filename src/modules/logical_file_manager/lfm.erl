@@ -76,6 +76,7 @@
     get_children/3,
     get_child_attr/3,
     get_children_attrs/3,
+    get_children_attrs/5,
     get_children_details/3,
     get_files_recursively/4,
     get_children_count/2
@@ -482,7 +483,7 @@ mkdir(SessId, ParentGuid, Name, Mode) ->
     ?run(lfm_dirs:mkdir(SessId, ParentGuid, Name, Mode)).
 
 
--spec get_children(session:id(), file_key(), file_meta:list_opts()) ->
+-spec get_children(session:id(), file_key(), dir_req:list_opts()) ->
     {ok, [{fslogic_worker:file_guid(), file_meta:name()}], file_meta:list_extended_info()} | error_reply().
 get_children(SessId, FileKey, ListOpts) ->
     ?run(lfm_dirs:get_children(SessId, FileKey, ListOpts)).
@@ -504,10 +505,16 @@ get_child_attr(SessId, ParentGuid, ChildName)  ->
 %% Gets file basic attributes (see file_attr.hrl) for each directory children.
 %% @end
 %%--------------------------------------------------------------------
--spec get_children_attrs(session:id(), file_key(), file_meta:list_opts()) ->
+-spec get_children_attrs(session:id(), file_key(), dir_req:list_opts()) ->
     {ok, [#file_attr{}], file_meta:list_extended_info()} | error_reply().
 get_children_attrs(SessId, FileKey, ListOpts) ->
-    ?run(lfm_dirs:get_children_attrs(SessId, FileKey, ListOpts)).
+    get_children_attrs(SessId, FileKey, ListOpts, false, false).
+
+
+-spec get_children_attrs(session:id(), file_key(), dir_req:list_opts(), boolean(), boolean()) ->
+    {ok, [#file_attr{}], file_meta:list_extended_info()} | error_reply().
+get_children_attrs(SessId, FileKey, ListOpts, IncludeReplicationStatus, IncludeHardlinkCount) ->
+    ?run(lfm_dirs:get_children_attrs(SessId, FileKey, ListOpts, IncludeReplicationStatus, IncludeHardlinkCount)).
 
 
 %%--------------------------------------------------------------------
@@ -515,7 +522,7 @@ get_children_attrs(SessId, FileKey, ListOpts) ->
 %% Gets file details (see file_details.hrl) for each directory children.
 %% @end
 %%--------------------------------------------------------------------
--spec get_children_details(session:id(), file_key(), file_meta:list_opts()) ->
+-spec get_children_details(session:id(), file_key(), dir_req:list_opts()) ->
     {ok, [lfm_attrs:file_details()], file_meta:list_extended_info()} | error_reply().
 get_children_details(SessId, FileKey, ListOpts) ->
     ?run(lfm_dirs:get_children_details(SessId, FileKey, ListOpts)).
