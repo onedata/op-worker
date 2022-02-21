@@ -88,6 +88,13 @@ get_response(#gri{aspect = children}, {Children, IsLast}) ->
         <<"isLast">> => IsLast
     });
 
+get_response(#gri{aspect = list_recursive}, {Files, NextPageToken, IsLast}) ->
+    ?OK_REPLY(#{
+        <<"files">> => Files,
+        <<"nextPageToken">> => NextPageToken,
+        <<"isLast">> => IsLast
+    });
+
 get_response(#gri{aspect = hardlinks}, Hardlinks) ->
     ?OK_REPLY(lists:map(fun(FileGuid) ->
         {ok, ObjectId} = file_id:guid_to_objectid(FileGuid),

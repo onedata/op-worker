@@ -30,7 +30,8 @@
 -export([get_protection_flags/1]).
 -export([get_parent/1, get_parent_uuid/1, get_provider_id/1]).
 -export([
-    get_uuid/1, get_child/2, get_child_uuid_and_tree_id/2, get_matching_child_uuids_with_tree_ids/3,
+    get_uuid/1, get_child/2, trim_filename_tree_id/2,
+    get_child_uuid_and_tree_id/2, get_matching_child_uuids_with_tree_ids/3,
     list_children/2, list_children_whitelisted/3
 ]).
 -export([get_name/1, set_name/2]).
@@ -43,6 +44,7 @@
     get_locations_by_uuid/1, rename/4, get_owner/1, get_type/1, get_effective_type/1,
     get_mode/1]).
 -export([check_name_and_get_conflicting_files/1, check_name_and_get_conflicting_files/4, has_suffix/1, is_deleted/1]).
+
 
 %% datastore_model callbacks
 -export([get_ctx/0]).
@@ -383,6 +385,26 @@ get_child(ParentUuid, Name) ->
             file_meta:get({uuid, ChildUuid});
         Error ->
             Error
+    end.
+
+
+-spec trim_filename_tree_id(name(), {all, uuid()} | file_meta_forest:tree_id()) -> name().
+trim_filename_tree_id(Name, {all, ParentUuid}) ->
+    TreeIds = case file_meta_forest:get_trees(ParentUuid) of
+        {ok, T} -> T;
+        ?ERROR_NOT_FOUND -> []
+    end,
+    lists_utils:foldl_while(fun(TreeId, Name) ->
+        case trim_filename_tree_id(Name, TreeId) of
+            Name -> {cont, Name};
+            TrimmedName -> {halt, TrimmedName}
+        end
+    end, Name, TreeIds);
+trim_filename_tree_id(Name, TreeId) ->
+    Tokens = binary:split(Name, ?CONFLICTING_LOGICAL_FILE_SUFFIX_SEPARATOR, [global]),
+    case lists:reverse(Tokens) of
+        [TreeId | NameTokens] -> str_utils:join_binary(NameTokens, ?CONFLICTING_LOGICAL_FILE_SUFFIX_SEPARATOR);
+        _ -> Name
     end.
 
 
