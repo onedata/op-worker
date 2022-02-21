@@ -58,6 +58,10 @@
     #get_effective_file_qos{} |
     #check_qos_status{}.
 
+-type share_operation() ::
+    #create_share{} |
+    #remove_share{}.
+
 -type transfer_operation() ::
     #schedule_file_transfer{} |
     #schedule_view_transfer{}.
@@ -67,6 +71,7 @@
     atm_operation() |
     dataset_operation() |
     qos_operation() |
+    share_operation() |
     transfer_operation().
 
 -export_type([

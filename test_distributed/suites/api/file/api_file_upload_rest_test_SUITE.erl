@@ -581,9 +581,9 @@ build_update_file_content_setup_fun(MemRef, Content) ->
 
     fun() ->
         FilePath = filename:join(["/", ?SPACE_KRK_PAR, ?RANDOM_FILE_NAME()]),
-        {ok, FileGuid} = api_test_utils:create_file(<<"file">>, P1Node, UserSessIdP1, FilePath, 8#704),
+        {ok, FileGuid} = lfm_test_utils:create_file(<<"file">>, P1Node, UserSessIdP1, FilePath, 8#704),
 
-        api_test_utils:write_file(P1Node, UserSessIdP1, FileGuid, 0, Content),
+        lfm_test_utils:write_file(P1Node, UserSessIdP1, FileGuid, Content),
         file_test_utils:await_size(P2Node, FileGuid, FileSize),
         file_test_utils:await_distribution(Providers, FileGuid, [{P1Node, FileSize}]),
 

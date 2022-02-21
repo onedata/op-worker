@@ -46,15 +46,9 @@ get_view_id(ViewName, SpaceId) ->
     Ctx = ?CTX#{scope => SpaceId},
     LinkRoot = link_root(SpaceId),
     case lists:reverse(Tokens) of
-        [ViewName] ->
-            case get_view_id(ViewName, oneprovider:get_id(), SpaceId) of
-                {ok, ViewId} -> {ok, ViewId};
-                {error, not_found} -> get_view_id(ViewName, all, SpaceId);
-                {error, Reason} -> {error, Reason}
-            end;
-        [TreeIdPrefix | Tokens2] ->
-            ViewName2 = list_to_binary(lists:reverse(Tokens2)),
+        [TreeIdPrefix | Tokens2] when TreeIdPrefix =/= <<>>, Tokens2 =/= [], Tokens2 =/= [<<>>] ->
             PrefixSize = erlang:size(TreeIdPrefix),
+            ViewName2 = binary:part(ViewName, 0, size(ViewName) - PrefixSize - size(?VIEW_ID_TREE_ID_SEPARATOR)),
             {ok, TreeIds} = datastore_model:get_links_trees(Ctx, LinkRoot),
             TreeIds2 = lists:filter(fun(TreeId) ->
                 case TreeId of
@@ -72,6 +66,12 @@ get_view_id(ViewName, SpaceId) ->
                     end;
                 [] ->
                     get_view_id(ViewName, all, SpaceId)
+            end;
+        _ ->
+            case get_view_id(ViewName, oneprovider:get_id(), SpaceId) of
+                {ok, ViewId} -> {ok, ViewId};
+                {error, not_found} -> get_view_id(ViewName, all, SpaceId);
+                {error, Reason} -> {error, Reason}
             end
     end.
 

@@ -29,6 +29,7 @@
 -export([data_spec/1, fetch_entity/1, authorize/2, validate/2]).
 -export([create/1, get/2, update/1, delete/1]).
 
+-define(MAX_LIST_LIMIT, 1000).
 
 %%%===================================================================
 %%% middleware_router callbacks
@@ -46,6 +47,9 @@ resolve_handler(create, instance, private) -> ?MODULE;
 
 resolve_handler(get, instance, private) -> ?MODULE;
 resolve_handler(get, audit_log, private) -> ?MODULE;
+resolve_handler(get, time_series_collections, private) -> ?MODULE;
+resolve_handler(get, {time_series_collection, ?BYTES_STATS}, private) -> ?MODULE;
+resolve_handler(get, {time_series_collection, ?FILES_STATS}, private) -> ?MODULE;
 
 resolve_handler(delete, instance, private) -> ?MODULE;
 
@@ -79,7 +83,30 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = audit_log}}) -> #{
     optional => #{
         <<"offset">> => {integer, any},
         <<"timestamp">> => {integer, {not_lower_than, 0}},
-        <<"limit">> => {integer, {not_lower_than, 1}}
+        <<"limit">> => {integer, {between, 1, ?MAX_LIST_LIMIT}}
+    }
+};
+data_spec(#op_req{operation = get, gri = #gri{aspect = time_series_collections}}) ->
+    undefined;
+% @TODO VFS-8958 Adjust when time series store browsing API is defined
+data_spec(#op_req{operation = get, gri = #gri{aspect = {time_series_collection, _}}}) -> #{
+    required => #{
+        <<"metrics">> => {json, fun(RequestedMetrics) ->
+            try
+                maps:foreach(fun(TimeSeriesId, MetricIds) ->
+                    true = is_binary(TimeSeriesId) andalso
+                        is_list(MetricIds) andalso
+                        lists:all(fun is_binary/1, MetricIds)
+                end, RequestedMetrics),
+                true
+            catch _:_ ->
+                false
+            end
+        end}
+    },
+    optional => #{
+        <<"startTimestamp">> => {integer, {not_lower_than, 0}},
+        <<"limit">> => {integer, {between, 1, ?MAX_LIST_LIMIT}}
     }
 };
 
@@ -103,6 +130,10 @@ fetch_entity(#op_req{operation = get, auth = Auth, gri = #gri{
 }}) ->
     fetch_qos_entry(Auth, QosEntryId);
 fetch_entity(#op_req{operation = get, gri = #gri{aspect = audit_log}}) ->
+    {ok, {undefined, 1}};
+fetch_entity(#op_req{operation = get, gri = #gri{aspect = time_series_collections}}) ->
+    {ok, {undefined, 1}};
+fetch_entity(#op_req{operation = get, gri = #gri{aspect = {time_series_collection, _}}}) ->
     {ok, {undefined, 1}};
 
 fetch_entity(#op_req{operation = delete, auth = Auth, gri = #gri{
@@ -134,7 +165,9 @@ authorize(#op_req{operation = get, auth = ?USER(UserId), gri = #gri{
     aspect = Aspect
 }}, _QosEntry) when
     Aspect =:= instance;
-    Aspect =:= audit_log
+    Aspect =:= audit_log;
+    Aspect =:= time_series_collections;
+    element(1, Aspect) =:= time_series_collection
 ->
     {ok, SpaceId} = ?lfm_check(qos_entry:get_space_id(QosEntryId)),
     space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW_QOS);
@@ -161,7 +194,9 @@ validate(#op_req{operation = create, gri = #gri{aspect = instance}, data = #{
 
 validate(#op_req{operation = get, gri = #gri{id = QosEntryId, aspect = Aspect}}, _QosEntry) when
     Aspect =:= instance;
-    Aspect =:= audit_log
+    Aspect =:= audit_log;
+    Aspect =:= time_series_collections;
+    element(1, Aspect) =:= time_series_collection
 ->
     {ok, SpaceId} = ?lfm_check(qos_entry:get_space_id(QosEntryId)),
     middleware_utils:assert_space_supported_locally(SpaceId);
@@ -218,7 +253,51 @@ get(#op_req{gri = #gri{id = QosEntryId, aspect = audit_log}, data = Data}, _QosE
         offset => maps:get(<<"offset">>, Data, 0),
         start_from => StartFrom
     },
-    qos_entry_audit_log:browse_content(QosEntryId, Opts).
+    {ok, BrowseResult} = qos_entry_audit_log:browse_content(QosEntryId, Opts),
+    {ok, value, BrowseResult};
+
+get(#op_req{gri = #gri{id = QosEntryId, aspect = time_series_collections}}, _QosEntry) ->
+    {ok, FilesTSIds} = qos_transfer_stats:list_time_series_ids(QosEntryId, ?FILES_STATS),
+    {ok, BytesTSIds} = qos_transfer_stats:list_time_series_ids(QosEntryId, ?BYTES_STATS),
+    {ok, value, #{
+        ?FILES_STATS => FilesTSIds,
+        ?BYTES_STATS => BytesTSIds
+    }};
+
+get(#op_req{gri = #gri{id = QosEntryId, aspect = {time_series_collection, Type}}, data = Data}, _QosEntry) ->
+    RequestedMetrics = maps:get(<<"metrics">>, Data),
+    RequestRange = maps:fold(fun(TimeSeriesId, MetricIds, Acc) ->
+        Acc ++ [{TimeSeriesId, MId} || MId <- MetricIds]
+    end, [], RequestedMetrics),
+    PossiblyUndefOpts = #{
+        start => maps:get(<<"startTimestamp">>, Data, undefined),
+        limit => maps:get(<<"limit">>, Data, undefined)
+    },
+    Opts = maps_utils:remove_undefined(PossiblyUndefOpts),
+    case qos_transfer_stats:list_windows(QosEntryId, Type, RequestRange, Opts) of
+        {error, not_found} ->
+            ?ERROR_NOT_FOUND;
+        {error, time_series_not_found} ->
+            ?ERROR_NOT_FOUND;
+        {error, metric_not_found} ->
+            ?ERROR_NOT_FOUND;
+        {ok, WindowsPerFullMetricId} ->
+            {ok, value, #{
+                <<"windows">> => maps:fold(fun({TimeSeriesId, MetricId}, Windows, Acc) ->
+                    MetricsForCurrentTimeSeries = maps:get(TimeSeriesId, Acc, #{}),
+                    Acc#{
+                        TimeSeriesId => MetricsForCurrentTimeSeries#{
+                            MetricId => lists:map(fun({Timestamp, {_ValuesCount, ValuesSum}}) ->
+                                #{
+                                    <<"timestamp">> => Timestamp,
+                                    <<"value">> => ValuesSum
+                                }
+                            end, Windows)
+                        }
+                    }
+                end, #{}, WindowsPerFullMetricId)
+            }}
+    end.
 
 
 %%--------------------------------------------------------------------

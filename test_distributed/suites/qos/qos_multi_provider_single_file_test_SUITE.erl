@@ -497,63 +497,62 @@ qos_transfer_stats_test(_Config) ->
     ?assertMatch({ok, _}, opt_qos:get_qos_entry(P2Node, ?SESS_ID(Provider2), QosEntryId), ?ATTEMPTS),
     ?assertEqual({ok, ?FULFILLED_QOS_STATUS}, opt_qos:check_qos_status(P1Node, ?SESS_ID(Provider1), QosEntryId), ?ATTEMPTS),
     
-    check_transfer_stats(Provider1, QosEntryId, bytes, [<<"total">>], empty),
-    check_transfer_stats(Provider2, QosEntryId, bytes, [<<"total">>, opt_spaces:get_storage_id(Provider1, SpaceId)], {1, byte_size(?TEST_DATA)}),
-    check_transfer_stats(Provider1, QosEntryId, files, [<<"total">>], empty),
-    check_transfer_stats(Provider2, QosEntryId, files, [<<"total">>, opt_spaces:get_storage_id(Provider2, SpaceId)], {1, 1}),
+    check_transfer_stats(Provider1, QosEntryId, ?BYTES_STATS, [<<"total">>], empty),
+    check_transfer_stats(Provider2, QosEntryId, ?BYTES_STATS, [<<"total">>, opt_spaces:get_storage_id(Provider1, SpaceId)], {1, byte_size(?TEST_DATA)}),
+    check_transfer_stats(Provider1, QosEntryId, ?FILES_STATS, [<<"total">>], empty),
+    check_transfer_stats(Provider2, QosEntryId, ?FILES_STATS, [<<"total">>, opt_spaces:get_storage_id(Provider2, SpaceId)], {1, 1}),
     
-    {ok, HW3} = lfm_proxy:open(P3Node, ?SESS_ID(Provider3), #file_ref{guid = Guid}, write),
     NewData = crypto:strong_rand_bytes(8),
-    {ok, _} = lfm_proxy:write(P3Node, HW3, 0, NewData),
-    ok = lfm_proxy:close(P3Node, HW3),
-    
-    {ok, HW2} = lfm_proxy:open(P2Node, ?SESS_ID(Provider2), #file_ref{guid = Guid}, read),
-    ?assertEqual({ok, NewData}, lfm_proxy:read(P2Node, HW2, 0, byte_size(NewData)), ?ATTEMPTS),
-    ok = lfm_proxy:close(P2Node, HW2),
+    lfm_test_utils:write_file(P3Node, ?SESS_ID(Provider3), Guid, NewData),
+
+    ?assertEqual(NewData, lfm_test_utils:read_file(P2Node, ?SESS_ID(Provider2), Guid, byte_size(NewData)), ?ATTEMPTS),
     ?assertEqual({ok, ?FULFILLED_QOS_STATUS}, opt_qos:check_qos_status(P2Node, ?SESS_ID(Provider2), QosEntryId), ?ATTEMPTS),
     
-    check_transfer_stats(Provider1, QosEntryId, bytes, [<<"total">>], empty),
-    check_transfer_stats(Provider2, QosEntryId, bytes, [opt_spaces:get_storage_id(Provider1, SpaceId)], {1, byte_size(?TEST_DATA)}),
-    check_transfer_stats(Provider2, QosEntryId, bytes, [opt_spaces:get_storage_id(Provider3, SpaceId)], {1, byte_size(NewData)}),
-    check_transfer_stats(Provider2, QosEntryId, bytes, [<<"total">>], {2, byte_size(NewData) + byte_size(?TEST_DATA)}),
-    check_transfer_stats(Provider1, QosEntryId, files, [<<"total">>], empty),
-    check_transfer_stats(Provider2, QosEntryId, files, [<<"total">>, opt_spaces:get_storage_id(Provider2, SpaceId)], {2, 2}).
+    check_transfer_stats(Provider1, QosEntryId, ?BYTES_STATS, [<<"total">>], empty),
+    check_transfer_stats(Provider2, QosEntryId, ?BYTES_STATS, [opt_spaces:get_storage_id(Provider1, SpaceId)], {1, byte_size(?TEST_DATA)}),
+    check_transfer_stats(Provider2, QosEntryId, ?BYTES_STATS, [opt_spaces:get_storage_id(Provider3, SpaceId)], {1, byte_size(NewData)}),
+    check_transfer_stats(Provider2, QosEntryId, ?BYTES_STATS, [<<"total">>], {2, byte_size(NewData) + byte_size(?TEST_DATA)}),
+    check_transfer_stats(Provider1, QosEntryId, ?FILES_STATS, [<<"total">>], empty),
+    check_transfer_stats(Provider2, QosEntryId, ?FILES_STATS, [<<"total">>, opt_spaces:get_storage_id(Provider2, SpaceId)], {2, 2}).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
 
 init_per_suite(Config) ->
-    oct_background:init_per_suite([{?LOAD_MODULES, [?MODULE, qos_tests_utils]} | Config], #onenv_test_config{
-        onenv_scenario = "3op",
-        envs = [{op_worker, op_worker, [
-            {fuse_session_grace_period_seconds, 24 * 60 * 60},
-            {provider_token_ttl_sec, 24 * 60 * 60}
-        ]}],
-        posthook = fun(NewConfig) ->
-            [Provider1, Provider2, Provider3 | _] = oct_background:get_provider_ids(),
-            SpaceId = oct_background:get_space_id(?SPACE1_PLACEHOLDER),
-            qos_tests_utils:set_qos_parameters(Provider1, opt_spaces:get_storage_id(Provider1, SpaceId), #{
-                <<"type">> => <<"disk">>,
-                <<"tier">> => <<"t3">>,
-                <<"param1">> => <<"val1">>
-            }),
-            qos_tests_utils:set_qos_parameters(Provider2, opt_spaces:get_storage_id(Provider2, SpaceId), #{
-                <<"type">> => <<"tape">>,
-                <<"tier">> => <<"t2">>
-            }),
-            qos_tests_utils:set_qos_parameters(Provider3, opt_spaces:get_storage_id(Provider3, SpaceId), #{
-                <<"type">> => <<"disk">>,
-                <<"tier">> => <<"t2">>,
-                <<"param1">> => <<"val1">>
-            }),
-            NewConfig
-        end
-    }).
+    oct_background:init_per_suite([{?LOAD_MODULES, [?MODULE, qos_tests_utils, dir_stats_test_utils]} | Config],
+        #onenv_test_config{
+            onenv_scenario = "3op",
+            envs = [{op_worker, op_worker, [
+                {fuse_session_grace_period_seconds, 24 * 60 * 60},
+                {provider_token_ttl_sec, 24 * 60 * 60}
+            ]}],
+            posthook = fun(NewConfig) ->
+                dir_stats_test_utils:disable_stats_counting(NewConfig),
+                [Provider1, Provider2, Provider3 | _] = oct_background:get_provider_ids(),
+                SpaceId = oct_background:get_space_id(?SPACE1_PLACEHOLDER),
+                qos_tests_utils:set_qos_parameters(Provider1, opt_spaces:get_storage_id(Provider1, SpaceId), #{
+                    <<"type">> => <<"disk">>,
+                    <<"tier">> => <<"t3">>,
+                    <<"param1">> => <<"val1">>
+                }),
+                qos_tests_utils:set_qos_parameters(Provider2, opt_spaces:get_storage_id(Provider2, SpaceId), #{
+                    <<"type">> => <<"tape">>,
+                    <<"tier">> => <<"t2">>
+                }),
+                qos_tests_utils:set_qos_parameters(Provider3, opt_spaces:get_storage_id(Provider3, SpaceId), #{
+                    <<"type">> => <<"disk">>,
+                    <<"tier">> => <<"t2">>,
+                    <<"param1">> => <<"val1">>
+                }),
+                NewConfig
+            end
+        }).
 
 
-end_per_suite(_Config) ->
-    oct_background:end_per_suite().
+end_per_suite(Config) ->
+    oct_background:end_per_suite(),
+    dir_stats_test_utils:enable_stats_counting(Config).
 
 
 init_per_testcase(qos_transfer_stats_test, Config) ->
@@ -568,9 +567,7 @@ end_per_testcase(qos_transfer_stats_test, Config) ->
     time_test_utils:unfreeze_time(Config),
     end_per_testcase(default, Config);
 end_per_testcase(_, Config) ->
-    Nodes = ?config(op_worker_nodes, Config),
     qos_tests_utils:finish_all_transfers(),
-    test_utils:mock_unload(Nodes),
     lfm_proxy:teardown(Config).
 
 
@@ -655,7 +652,7 @@ read_file(Node, FilePath) ->
 
 
 check_transfer_stats(Provider, QosEntryId, Type, ExpectedSeries, ExpectedValue) ->
-    {ok, Stats} = opw_test_rpc:call(Provider, qos_transfer_stats, get, [QosEntryId, Type]),
+    {ok, Stats} = opw_test_rpc:call(Provider, qos_transfer_stats, list_windows, [QosEntryId, Type]),
     lists:foreach(fun(Series) ->
         lists:foreach(fun(Metric) ->
             ?assert(maps:is_key({Series, Metric}, Stats)),

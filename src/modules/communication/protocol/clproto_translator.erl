@@ -15,6 +15,7 @@
 
 -include("global_definitions.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
+-include("proto/oneclient/client_messages.hrl").
 -include("proto/oneclient/common_messages.hrl").
 -include("proto/oneclient/stream_messages.hrl").
 -include("proto/common/handshake_messages.hrl").
@@ -880,75 +881,6 @@ translate_from_protobuf(#'FSync'{
     };
 translate_from_protobuf(#'GetFileDistribution'{}) ->
     #get_file_distribution{};
-translate_from_protobuf(#'ScheduleFileReplication'{
-    target_provider_id = ProviderId,
-    block = Block,
-    callback = Callback,
-    index_name = ViewName,
-    query_params = QueryParams
-}) ->
-    #schedule_file_replication{
-        target_provider_id = ProviderId,
-        block = translate_from_protobuf(Block),
-        callback = Callback,
-        view_name = ViewName,
-        query_view_params = translate_from_protobuf(QueryParams)
-    };
-translate_from_protobuf(#'QueryParams'{
-    descending = Descending,
-    endkey = EndKey,
-    endkey_docid = EndKeyDocId,
-    full_set = FullSet,
-    group = Group,
-    group_level = GroupLevel,
-    inclusive_end = InclusiveEnd,
-    key = Key,
-    limit = Limit,
-    on_error = OnError,
-    reduce = Reduce,
-    spatial = Spatial,
-    skip = Skip,
-    stale = Stale,
-    startkey = StartKey,
-    startkey_docid = StartKeyDocId,
-    bbox = BBox,
-    start_range = StartRange,
-    end_range = EndRange
-}) ->
-    #query_view_params{params = [
-        {descending, Descending},
-        {endkey, EndKey},
-        {endkey_docid, EndKeyDocId},
-        {full_set, FullSet},
-        {group, Group},
-        {group_level, GroupLevel},
-        {inclusive_end, InclusiveEnd},
-        {key, Key},
-        {limit, Limit},
-        {on_error, OnError},
-        {reduce, Reduce},
-        {spatial, Spatial},
-        {skip, Skip},
-        {stale, Stale},
-        {startkey, StartKey},
-        {startkey_docid, StartKeyDocId},
-        {bbox, BBox},
-        {start_range, StartRange},
-        {end_range, EndRange}
-
-    ]};
-translate_from_protobuf(#'ScheduleReplicaInvalidation'{
-    source_provider_id = SourceProviderId,
-    target_provider_id = TargetProviderId,
-    index_name = ViewName,
-    query_params = QueryParams
-}) ->
-    #schedule_replica_invalidation{
-        source_provider_id = SourceProviderId,
-        target_provider_id = TargetProviderId,
-        view_name = ViewName,
-        query_view_params = translate_from_protobuf(QueryParams)
-    };
 translate_from_protobuf(#'ReadMetadata'{
     type = Type,
     query = Query,
@@ -1036,8 +968,6 @@ translate_from_protobuf(#'Metadata'{
     };
 translate_from_protobuf(#'CheckPerms'{flag = Flag}) ->
     #check_perms{flag = open_flag_translate_from_protobuf(Flag)};
-translate_from_protobuf(#'ScheduledTransfer'{transfer_id = TransferId}) ->
-    #scheduled_transfer{transfer_id = TransferId};
 
 
 %% DBSYNC
@@ -1179,6 +1109,11 @@ translate_from_protobuf(#'RTransferNodesIPs'{nodes = Nodes}) ->
     #rtransfer_nodes_ips{
         nodes = [translate_from_protobuf(N) || N <- Nodes]
     };
+
+
+%% SESSION
+translate_from_protobuf(#'CloseSession'{}) ->
+    #close_session{};
 
 
 translate_from_protobuf(undefined) ->
@@ -1976,54 +1911,6 @@ translate_to_protobuf(#fsync{
     }};
 translate_to_protobuf(#get_file_distribution{}) ->
     {get_file_distribution, #'GetFileDistribution'{}};
-translate_to_protobuf(#schedule_file_replication{
-    target_provider_id = ProviderId,
-    block = Block,
-    callback = Callback,
-    view_name = ViewName,
-    query_view_params = QueryViewParams
-}) ->
-    {replicate_file, #'ScheduleFileReplication'{
-        target_provider_id = ProviderId,
-        block = translate_to_protobuf(Block),
-        callback = Callback,
-        index_name = ViewName,
-        query_params = translate_to_protobuf(QueryViewParams)
-    }};
-translate_to_protobuf(#schedule_replica_invalidation{
-    source_provider_id = ProviderId,
-    target_provider_id = MigrationProviderId,
-    view_name = ViewName,
-    query_view_params = QueryViewParams
-}) ->
-    {invalidate_file_replica, #'ScheduleReplicaInvalidation'{
-        source_provider_id = ProviderId,
-        target_provider_id = MigrationProviderId,
-        index_name = ViewName,
-        query_params = translate_to_protobuf(QueryViewParams)
-    }};
-translate_to_protobuf(#query_view_params{params = Params}) ->
-    {query_view_params, #'QueryParams'{
-        descending = proplists:get_value(descending, Params, undefined),
-        endkey = proplists:get_value(endkey, Params, undefined),
-        endkey_docid = proplists:get_value(endkey_docid, Params, undefined),
-        full_set = proplists:get_value(full_set, Params, undefined),
-        group = proplists:get_value(group, Params, undefined),
-        group_level = proplists:get_value(group_level, Params, undefined),
-        inclusive_end = proplists:get_value(inclusive_end, Params, undefined),
-        key = proplists:get_value(key, Params, undefined),
-        limit = proplists:get_value(limit, Params, undefined),
-        on_error = proplists:get_value(on_error, Params, undefined),
-        reduce = proplists:get_value(reduce, Params, undefined),
-        spatial = proplists:get_value(spatial, Params, undefined),
-        skip = proplists:get_value(skip, Params, undefined),
-        stale = proplists:get_value(stale, Params, undefined),
-        startkey = proplists:get_value(startkey, Params, undefined),
-        startkey_docid = proplists:get_value(startkey_docid, Params, undefined),
-        bbox = proplists:get_value(bbox, Params, undefined),
-        start_range = proplists:get_value(start_range, Params, undefined),
-        end_range = proplists:get_value(end_range, Params, undefined)
-    }};
 translate_to_protobuf(#get_metadata{
     type = Type,
     query = Query,
@@ -2113,12 +2000,6 @@ translate_to_protobuf(#metadata{
 translate_to_protobuf(#check_perms{flag = Flag}) ->
     {check_perms, #'CheckPerms'{
         flag = open_flag_translate_to_protobuf(Flag)
-    }};
-translate_to_protobuf(#scheduled_transfer{
-    transfer_id = TransferId
-}) ->
-    {scheduled_transfer, #'ScheduledTransfer'{
-        transfer_id = TransferId
     }};
 
 
@@ -2253,6 +2134,11 @@ translate_to_protobuf(#rtransfer_nodes_ips{nodes = Nodes}) ->
     {rtransfer_nodes_ips, #'RTransferNodesIPs'{
         nodes = [translate_to_protobuf(N) || N <- Nodes]
     }};
+
+
+%% SESSION
+translate_to_protobuf(#close_session{}) ->
+    {close_session, #'CloseSession'{}};
 
 
 translate_to_protobuf(undefined) ->

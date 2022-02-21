@@ -35,7 +35,8 @@ on_file_location_change(FileCtx, ChangedLocationDoc = #document{
     key = LocId,
     value = #file_location{
         provider_id = ProviderId,
-        file_id = FileId
+        file_id = FileId,
+        space_id = SpaceId
     }}
 ) ->
     replica_synchronizer:apply(FileCtx, fun() ->
@@ -47,24 +48,33 @@ on_file_location_change(FileCtx, ChangedLocationDoc = #document{
                 FileCtx3 = file_ctx:set_is_dir(FileCtx2, false),
                 case file_ctx:get_local_file_location_doc(FileCtx3) of
                     {undefined, FileCtx4} ->
-                        % TODO VFS-8962 - fix getting file distribution in tests to allow dir total size counting
-%%                        try
-%%                            case fslogic_location:create_doc(FileCtx4, false, false) of
-%%                                {{ok, _}, FileCtx5} ->
-%%                                    on_file_location_change(FileCtx5, ChangedLocationDoc);
-%%                                {{error, already_exists}, FileCtx5} ->
-%%                                    on_file_location_change(FileCtx5, ChangedLocationDoc)
-%%                            end
-%%                        catch
-%%                            Error:Reason  ->
-%%                                % create_doc crashes if file_meta is missing
-%%                                % TODO VFS-8952 - add posthook on ancestor if it is missing
-%%                                ?debug("~p failure: ~p~p", [?FUNCTION_NAME, Error, Reason]),
-%%                                file_meta_posthooks:add_hook(file_ctx:get_logical_uuid_const(FileCtx4), LocId,
-%%                                    ?MODULE, ?FUNCTION_NAME, [file_ctx:reset(FileCtx), ChangedLocationDoc])
-%%                        end;
-                        ok = fslogic_event_emitter:emit_file_attr_changed_with_replication_status(FileCtx4, true, []),
-                        ok = qos_hooks:reconcile_qos(FileCtx4);
+                        % If stats are enabled, force creation of local file_location doc
+                        % and call the procedure again so that it triggers update_local_location_replica
+                        % that internally emits events and reconciles QoS. Otherwise, do not create the
+                        % location but still emit events and reconcile QoS.
+                        % TODO VFS-8962 - fix getting file distribution in tests not to differentiate
+                        % spaces with enabled and disabled stats
+                        case dir_stats_collector_config:is_enabled_for_space(SpaceId) of
+                            true ->
+                                try
+                                    case fslogic_location:create_doc(FileCtx4, false, false) of
+                                        {{ok, _}, FileCtx5} ->
+                                            on_file_location_change(FileCtx5, ChangedLocationDoc);
+                                        {{error, already_exists}, FileCtx5} ->
+                                            on_file_location_change(FileCtx5, ChangedLocationDoc)
+                                    end
+                                catch
+                                    Error:Reason  ->
+                                        % create_doc crashes if file_meta is missing
+                                        % TODO VFS-8952 - add posthook on ancestor if it is missing
+                                        ?debug("~p failure: ~p~p", [?FUNCTION_NAME, Error, Reason]),
+                                        file_meta_posthooks:add_hook(file_ctx:get_logical_uuid_const(FileCtx4), LocId,
+                                            ?MODULE, ?FUNCTION_NAME, [file_ctx:reset(FileCtx), ChangedLocationDoc])
+                                end;
+                            false ->
+                                ok = fslogic_event_emitter:emit_file_attr_changed_with_replication_status(FileCtx4, true, []),
+                                ok = qos_hooks:reconcile_qos(FileCtx4)
+                        end;
                     {LocalLocation, FileCtx4} ->
                         update_local_location_replica(FileCtx4, LocalLocation, ChangedLocationDoc)
                 end;

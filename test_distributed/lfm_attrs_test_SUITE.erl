@@ -875,7 +875,7 @@ do_not_overwrite_space_dir_attrs_on_make_space_exist_test(Config) ->
     [{SpaceId, _SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
 
-    {ok, ShareId} = lfm_proxy:create_share(Worker, SessId, ?FILE_REF(SpaceGuid), <<"szer">>),
+    {ok, ShareId} = opt_shares:create(Worker, SessId, ?FILE_REF(SpaceGuid), <<"szer">>),
     {ok, SpaceAttrs} = ?assertMatch(
         {ok, #file_attr{shares = [ShareId]}},
         lfm_proxy:stat(Worker, SessId, ?FILE_REF(SpaceGuid))

@@ -101,8 +101,10 @@ sanitize_params(#op_req{
     operation = create,
     data = RawParams,
     gri = #gri{aspect = Aspect}
-} = OpReq, Req) when Aspect == child orelse Aspect == file_at_path
-    ->
+} = OpReq, Req) when
+    Aspect == child;
+    Aspect == file_at_path
+->
     {AllRawParams, OptionalParamsDependingOnAspect, RequiredParamsDependingOnAspect} = case Aspect of
         child ->
             {RawParams, #{}, #{<<"name">> => {binary, non_empty}}};
@@ -348,7 +350,7 @@ resolve_target_file(#op_req{
         _ ->
             lfm:resolve_guid_by_relative_path(SessionId, BaseDirGuid, FilePath)
     end,
-    
+
     case Result of
         {ok, ResolvedGuid} -> ResolvedGuid;
         {error, Errno} -> throw(?ERROR_POSIX(Errno))

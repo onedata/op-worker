@@ -1515,7 +1515,7 @@ make_symlink_target(SpaceId, ParentPath, Name) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    oct_background:init_per_suite(Config, #onenv_test_config{
+    oct_background:init_per_suite([{?LOAD_MODULES, [dir_stats_test_utils]} | Config], #onenv_test_config{
         onenv_scenario = "api_tests",
         envs = [
             {op_worker, op_worker, [
@@ -1536,6 +1536,7 @@ init_per_suite(Config) ->
             ]}
         ],
         posthook = fun(NewConfig) ->
+            dir_stats_test_utils:disable_stats_counting(NewConfig),
             User3Id = oct_background:get_user_id(user3),
             lists:foreach(fun(SpaceId) ->
                 ozw_test_rpc:space_set_user_privileges(SpaceId, User3Id, [
@@ -1577,10 +1578,11 @@ init_per_suite(Config) ->
     }).
 
 
-end_per_suite(_Config) ->
+end_per_suite(Config) ->
     Nodes = oct_background:get_all_providers_nodes(),
     test_utils:mock_unload(Nodes),
-    oct_background:end_per_suite().
+    oct_background:end_per_suite(),
+    dir_stats_test_utils:enable_stats_counting(Config).
 
 
 init_per_group(_Group, Config) ->

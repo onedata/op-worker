@@ -165,6 +165,7 @@ handle_release_of_deleted_file(FileCtx, RemovalStatus) ->
 
 -spec handle_file_deleted_on_imported_storage(file_ctx:ctx()) -> ok.
 handle_file_deleted_on_imported_storage(FileCtx) ->
+    report_file_deleted(FileCtx),
     UserCtx = user_ctx:new(?ROOT_SESS_ID),
     ok = remove_file(FileCtx, UserCtx, false, ?SPEC(?SINGLE_STEP_DEL, ?ALL_DOCS)),
     fslogic_event_emitter:emit_file_removed(FileCtx, []),

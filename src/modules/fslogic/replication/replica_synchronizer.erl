@@ -632,13 +632,13 @@ handle_call(?FLUSH_EVENTS, _From, State) ->
 
 handle_call({delete_whole_file_replica, AllowedVV}, From, State) ->
     case delete_whole_file_replica_internal(AllowedVV, From, State) of
-        {helper_process_spawned, _Pid} -> {noreply, State, ?DIE_AFTER};
+        {helper_process_spawned, _Pid} -> {noreply, set_caching_timers(State), ?DIE_AFTER};
         {error, _} = Error -> {reply, Error, State, ?DIE_AFTER}
     end;
 
 handle_call({apply, Fun}, _From, State) ->
     Ans = Fun(),
-    {reply, Ans, State, ?DIE_AFTER};
+    {reply, Ans, set_caching_timers(State), ?DIE_AFTER};
 
 handle_call({cancel_transfers_of_session, SessionId}, _From, State) ->
     NewState = cancel_session(SessionId, State),

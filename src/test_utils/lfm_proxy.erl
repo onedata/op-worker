@@ -51,6 +51,7 @@
     get_children_attrs/4,
     get_child_attr/4,
     get_children_details/4,
+    get_files_recursively/5,
 
     get_xattr/4, get_xattr/5,
     set_xattr/4, set_xattr/6,
@@ -65,8 +66,6 @@
 
     has_custom_metadata/3,
     get_metadata/6, set_metadata/6, remove_metadata/4,
-
-    create_share/4, create_share/5, remove_share/3,
 
     get_file_distribution/3
 ]).
@@ -553,7 +552,7 @@ get_children(Worker, SessId, FileKey, Offset, Limit) ->
 
 
 -spec get_children_attrs(node(), session:id(), lfm:file_key() | file_meta:uuid_or_path(),
-    dir_req:list_opts()) -> {ok, [#file_attr{}]} | lfm:error_reply().
+    dir_req:list_opts()) -> {ok, [#file_attr{}], file_meta:list_extended_info()} | lfm:error_reply().
 get_children_attrs(Worker, SessId, FileKey, ListOpts) ->
     ?EXEC(Worker, lfm:get_children_attrs(SessId, uuid_to_file_ref(Worker, FileKey), ListOpts)).
 
@@ -568,6 +567,12 @@ get_child_attr(Worker, SessId, ParentGuid, ChildName) ->
     file_meta:list_opts()) -> {ok, [lfm_attrs:file_details()], file_meta:list_extended_info()} | lfm:error_reply().
 get_children_details(Worker, SessId, FileKey, ListOpts) ->
     ?EXEC(Worker, lfm:get_children_details(SessId, uuid_to_file_ref(Worker, FileKey), ListOpts)).
+
+
+-spec get_files_recursively(node(), session:id(), lfm:file_key(), file_meta:path(), non_neg_integer()) ->
+    {ok, [{file_meta:path(), lfm_attrs:file_attributes()}], boolean()} | lfm:error_reply().
+get_files_recursively(Worker, SessId, FileKey, StartAfter, Limit) ->
+    ?EXEC(Worker, lfm:get_files_recursively(SessId, uuid_to_file_ref(Worker, FileKey), StartAfter, Limit)).
 
 
 %%%===================================================================
@@ -708,30 +713,6 @@ set_metadata(Worker, SessId, FileKey, Type, Value, Query) ->
     custom_metadata:type()) -> ok.
 remove_metadata(Worker, SessId, FileKey, Type) ->
     ?EXEC(Worker, lfm:remove_metadata(SessId, FileKey, Type)).
-
-
-%%%===================================================================
-%%% Shares related operations
-%%%===================================================================
-
-
--spec create_share(node(), session:id(), lfm:file_key(), od_share:name()) ->
-    {ok, od_share:id()} | {error, term()}.
-create_share(Worker, SessId, FileKey, Name) ->
-    RandomDescription = str_utils:rand_hex(100),
-    create_share(Worker, SessId, FileKey, Name, RandomDescription).
-
-
--spec create_share(node(), session:id(), lfm:file_key(), od_share:name(), od_share:description()) ->
-    {ok, od_share:id()} | {error, term()}.
-create_share(Worker, SessId, FileKey, Name, Description) ->
-    ?EXEC(Worker, lfm:create_share(SessId, FileKey, Name, Description)).
-
-
--spec remove_share(node(), session:id(), od_share:id()) ->
-    ok | {error, term()}.
-remove_share(Worker, SessId, FileKey) ->
-    ?EXEC(Worker, lfm:remove_share(SessId, FileKey)).
 
 
 %%%===================================================================

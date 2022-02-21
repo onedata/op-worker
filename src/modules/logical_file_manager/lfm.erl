@@ -78,6 +78,7 @@
     get_children_attrs/3,
     get_children_attrs/5,
     get_children_details/3,
+    get_files_recursively/4,
     get_children_count/2
 ]).
 %% Permissions related operations
@@ -109,11 +110,6 @@
     set_cdmi_completion_status/3,
     get_mimetype/2,
     set_mimetype/3
-]).
-%% Share related operations
--export([
-    create_share/4,
-    remove_share/2
 ]).
 
 %% Utility functions
@@ -532,6 +528,18 @@ get_children_details(SessId, FileKey, ListOpts) ->
     ?run(lfm_dirs:get_children_details(SessId, FileKey, ListOpts)).
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Gets file basic attributes (see file_attr.hrl) for each regular file 
+%% that is in a subtree of given file.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_files_recursively(session:id(), file_key(), file_meta:path(), non_neg_integer()) ->
+    {ok, [{file_meta:path(), lfm_attrs:file_attributes()}], boolean()} | error_reply().
+get_files_recursively(SessId, FileKey, StartAfter, Limit) ->
+    ?run(lfm_dirs:get_files_recursively(SessId, FileKey, StartAfter, Limit)).
+
+
 -spec get_children_count(session:id(), file_key()) ->
     {ok, integer()} | error_reply().
 get_children_count(SessId, FileKey) ->
@@ -694,22 +702,6 @@ get_mimetype(SessId, FileKey) ->
     ok | error_reply().
 set_mimetype(SessId, FileKey, Mimetype) ->
     ?run(lfm_attrs:set_mimetype(SessId, FileKey, Mimetype)).
-
-
-%%%===================================================================
-%%% Shares related operations
-%%%===================================================================
-
-
--spec create_share(session:id(), file_key(), od_share:name(), od_share:description()) ->
-    {ok, od_share:id()} | error_reply().
-create_share(SessId, FileKey, Name, Description) ->
-    ?run(lfm_shares:create_share(SessId, FileKey, Name, Description)).
-
-
--spec remove_share(session:id(), od_share:id()) -> ok | error_reply().
-remove_share(SessId, ShareID) ->
-    ?run(lfm_shares:remove_share(SessId, ShareID)).
 
 
 %%%===================================================================
