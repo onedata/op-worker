@@ -202,8 +202,8 @@ get_effective_membership_and_protection_flags(FileCtx) ->
 
 -spec get_effective_summary(file_ctx:ctx()) -> {ok, file_eff_summary()}.
 get_effective_summary(FileCtx) ->
-    %% @TODO VFS-8972 - do not filter out datasets established on archives after it is possible 
-    %% to add data protection flags to files that are not datasets
+    %% @TODO VFS-8972 - remove filtration of datasets established on archives after 
+    %% dummy dataset is no longer needed to add data protection flags to archive
     {CanonicalPath, FileCtx2} = file_ctx:get_canonical_path(FileCtx),
     case archivisation_tree:is_in_archive(CanonicalPath) of
         true ->
