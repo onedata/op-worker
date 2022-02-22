@@ -59,8 +59,8 @@ get_frozen_time_hours() ->
 
 
 -spec simulate_millis_passing(time:millis()) -> time:millis().
-simulate_millis_passing(Seconds) ->
-    clock_freezer_mock:simulate_millis_passing(Seconds).
+simulate_millis_passing(Millis) ->
+    clock_freezer_mock:simulate_millis_passing(Millis).
 
 
 -spec simulate_seconds_passing(time:seconds()) -> time:seconds().

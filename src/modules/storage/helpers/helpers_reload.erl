@@ -76,7 +76,7 @@ local_refresh_helpers(StorageId) ->
             end, HandlesSpaces)
         end, Sessions)
     catch Type:Error ->
-        StorageName = storage:fetch_name(StorageId),
+        StorageName = storage:fetch_name_of_local_storage(StorageId),
         ?error("Error updating active helper for storage ~tp with new args: ~p:~tp",
             [StorageName, Type, Error])
     end.

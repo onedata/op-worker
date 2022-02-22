@@ -30,6 +30,8 @@
     message_body :: tuple()
 }).
 
+-record(close_session, {}).
+
 -define(CLIENT_KEEPALIVE_MSG, <<"KA">>).
 
 -endif.

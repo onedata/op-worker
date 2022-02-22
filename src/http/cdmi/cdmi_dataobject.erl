@@ -207,10 +207,10 @@ put_cdmi(Req, #cdmi_req{
             {ok, created, NewGuid};
         {#file_attr{guid = NewGuid}, undefined, undefined} ->
             {ok, none, NewGuid};
-        {undefined, CopyURI, undefined} ->
+        {_, CopyURI, undefined} ->
             {ok, NewGuid} = cdmi_lfm:cp(SessionId, CopyURI, Path),
             {ok, copied, NewGuid};
-        {undefined, undefined, MoveURI} ->
+        {_, undefined, MoveURI} ->
             {ok, NewGuid} = cdmi_lfm:mv(SessionId, MoveURI, Path),
             {ok, moved, NewGuid}
     end,

@@ -175,7 +175,7 @@ run(Pool, FileCtx, UserId, Opts) ->
     TraverseInfo = maps:get(traverse_info, Opts, #{}),
     TraverseInfo2 = TraverseInfo#{pool => Pool},
     Token = case maps:get(use_listing_token, Opts, true) of
-        true -> ?INITIAL_LS_TOKEN;
+        true -> ?INITIAL_DATASTORE_LS_TOKEN;
         false -> undefined
     end,
     SymlinksResolutionPolicy = maps:get(symlink_resolution_policy, Opts, preserve),
@@ -547,7 +547,7 @@ maybe_report_children_jobs_to_process(_, _, _, _) ->
 -spec reset_list_options(master_job()) -> master_job().
 reset_list_options(Job) ->
     Job#tree_traverse{
-        token = ?INITIAL_LS_TOKEN,
+        token = ?INITIAL_DATASTORE_LS_TOKEN,
         last_name = <<>>,
         last_tree = <<>>
     }.

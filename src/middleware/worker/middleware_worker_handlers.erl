@@ -149,6 +149,13 @@ execute(UserCtx, FileCtx, #remove_qos_entry{id = QosEntryId}) ->
 execute(UserCtx, FileCtx, #check_qos_status{qos_id = QosEntryId}) ->
     qos_req:check_status(UserCtx, FileCtx, QosEntryId);
 
+%% Shares
+
+execute(UserCtx, FileCtx, #create_share{name = Name, description = Description}) ->
+    share_req:create_share(UserCtx, FileCtx, Name, Description);
+
+execute(UserCtx, FileCtx, #remove_share{share_id = ShareId}) ->
+    share_req:remove_share(UserCtx, FileCtx, ShareId);
 
 %% Transfers
 

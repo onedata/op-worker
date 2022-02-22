@@ -190,14 +190,6 @@ update(Key, Diff) ->
 -spec delete(id()) -> ok | {error, term()}.
 delete(Key) ->
    % TODO VFS-4739 - delete links
-    case datastore_model:get(?CTX, Key) of
-        {ok, #document{value = #file_location{
-            size = Size
-        } = Record}} ->
-            report_size_changed(total, Record, -Size);
-        _ ->
-            ok
-    end,
    datastore_model:delete(?CTX, Key).
 
 

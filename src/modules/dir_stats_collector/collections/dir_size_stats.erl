@@ -31,7 +31,7 @@
 
 -include("modules/dir_stats_collector/dir_size_stats.hrl").
 -include("modules/datastore/datastore_models.hrl").
--include_lib("cluster_worker/include/modules/datastore/ts_metric_config.hrl").
+-include_lib("ctool/include/time_series/common.hrl").
 -include_lib("ctool/include/errors.hrl").
 
 
@@ -93,7 +93,7 @@ get_stats(Guid, StatNames) ->
 get_stats_and_time_series_collections(Guid) ->
     case dir_stats_collector_config:is_enabled_for_space(file_id:guid_to_space_id(Guid)) of
         true ->
-            dir_stats_collector:flush_stats(Guid),
+            ok = dir_stats_collector:flush_stats(Guid, ?MODULE),
             Uuid = file_id:guid_to_uuid(Guid),
             case datastore_time_series_collection:list_windows(?CTX, Uuid, #{}) of
                 {ok, WindowsMap} -> {ok, all_metrics_to_stats_and_time_series_collections(WindowsMap)};
@@ -107,10 +107,8 @@ get_stats_and_time_series_collections(Guid) ->
 -spec report_reg_file_size_changed(file_id:file_guid(), total | {on_storage, storage:id()}, integer()) -> ok.
 report_reg_file_size_changed(_Guid, _Scope, 0) ->
     ok;
-report_reg_file_size_changed(_Guid, total, _SizeDiff) ->
-    % TODO VFS-8962 - fix getting file distribution in tests to allow dir total size counting
-%%    ok = dir_stats_collector:update_stats_of_parent(Guid, ?MODULE, #{?TOTAL_SIZE => SizeDiff}).
-    ok;
+report_reg_file_size_changed(Guid, total, SizeDiff) ->
+    ok = dir_stats_collector:update_stats_of_parent(Guid, ?MODULE, #{?TOTAL_SIZE => SizeDiff});
 report_reg_file_size_changed(Guid, {on_storage, StorageId}, SizeDiff) ->
     ok = dir_stats_collector:update_stats_of_parent(Guid, ?MODULE, #{?SIZE_ON_STORAGE(StorageId) => SizeDiff}).
 
@@ -217,9 +215,7 @@ update_stats(Guid, CollectionUpdate) ->
 -spec stat_names(file_id:file_guid()) -> [dir_stats_collection:stat_name()].
 stat_names(Guid) ->
     {ok, StorageId} = space_logic:get_local_supporting_storage(file_id:guid_to_space_id(Guid)),
-    [?REG_FILE_AND_LINK_COUNT, ?DIR_COUNT, ?SIZE_ON_STORAGE(StorageId)].
-    % TODO VFS-8962 - fix getting file distribution in tests to allow dir total size counting
-%%    [?REG_FILE_AND_LINK_COUNT, ?DIR_COUNT, ?TOTAL_SIZE, ?SIZE_ON_STORAGE(StorageId)].
+    [?REG_FILE_AND_LINK_COUNT, ?DIR_COUNT, ?TOTAL_SIZE, ?SIZE_ON_STORAGE(StorageId)].
 
 
 %% @private
@@ -237,22 +233,22 @@ metrics_extended_with_current_value() ->
 metrics() ->
     #{
         ?MINUTE_METRIC => #metric_config{
-            resolution = timer:minutes(1),
+            resolution = ?MINUTE_RESOLUTION,
             retention = 120,
             aggregator = sum
         },
         ?HOUR_METRIC => #metric_config{
-            resolution = timer:hours(1),
+            resolution = ?HOUR_RESOLUTION,
             retention = 48,
             aggregator = sum
         },
         ?DAY_METRIC => #metric_config{
-            resolution = timer:hours(24),
+            resolution = ?DAY_RESOLUTION,
             retention = 60,
             aggregator = sum
         },
         ?MONTH_METRIC => #metric_config{
-            resolution = timer:hours(24 * 30),
+            resolution = ?MONTH_RESOLUTION,
             retention = 12,
             aggregator = sum
         }

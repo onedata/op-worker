@@ -375,7 +375,7 @@ transfer_fs_subtree(State = #state{mod = Mod}, FileCtx, Params) ->
                     case file_ctx:is_dir(FileCtx) of
                         {true, FileCtx2} ->
                             ListOpts = #{
-                                token => ?INITIAL_LS_TOKEN,
+                                token => ?INITIAL_DATASTORE_LS_TOKEN,
                                 size => ?DEFAULT_LS_BATCH_SIZE
                             },
                             transfer_dir(State, FileCtx2, ListOpts, Params);

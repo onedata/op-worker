@@ -36,6 +36,10 @@
 -record(remove_acl, {
 }).
 
+-record(check_perms, {
+    flag :: fslogic_worker:open_flag()
+}).
+
 -record(get_transfer_encoding, {
 }).
 
@@ -63,31 +67,6 @@
 -record(get_file_distribution, {
 }).
 
-%% TODO VFS-6365 remove deprecated replicas endpoints
--record(schedule_file_replication, {
-    % meaning of fields in this record is explained in datastore_models.hrl
-    % in definition of transfer record
-    target_provider_id :: oneprovider:id(),
-    block :: undefined | #file_block{},
-    callback :: transfer:callback(),
-    view_name :: transfer:view_name(),
-    query_view_params :: transfer:query_view_params()
-}).
-
-%% TODO VFS-6365 remove deprecated replicas endpoints
--record(schedule_replica_invalidation, {
-    % meaning of fields in this record is explained in datastore_models.hrl
-    % in definition of transfer record
-    source_provider_id :: oneprovider:id(),
-    target_provider_id :: undefined | oneprovider:id(),
-    view_name :: transfer:view_name(),
-    query_view_params :: transfer:query_view_params()
-}).
-
--record(query_view_params, {
-    params :: proplists:proplist()
-}).
-
 -record(get_metadata, {
     type :: custom_metadata:type(),
     query = [] :: custom_metadata:query(),
@@ -103,28 +82,14 @@
     type :: custom_metadata:type()
 }).
 
--record(check_perms, {
-    flag :: fslogic_worker:open_flag()
-}).
-
--record(create_share, {
-    name :: od_share:name(),
-    description :: od_share:description()
-}).
-
--record(remove_share, {
-    share_id :: od_share:id()
-}).
-
 -type provider_request_type() ::
-    #get_parent{} | #get_acl{} | #set_acl{} | #remove_acl{} |
+    #get_parent{} |
+    #get_acl{} | #set_acl{} | #remove_acl{} | #check_perms{} |
     #get_transfer_encoding{} | #set_transfer_encoding{} |
     #get_cdmi_completion_status{} | #set_cdmi_completion_status{} |
     #get_mimetype{} | #set_mimetype{} | #get_file_path{} |
-    #get_file_distribution{} |
-    #schedule_file_replication{} | #schedule_replica_invalidation{} |
-    #get_metadata{} | #remove_metadata{} | #set_metadata{} | #check_perms{} |
-    #create_share{} | #remove_share{}.
+    #get_metadata{} | #remove_metadata{} | #set_metadata{} |
+    #get_file_distribution{}.
 
 -record(transfer_encoding, {
     value :: binary()
@@ -154,14 +119,6 @@
 -record(metadata, {
     type :: custom_metadata:type(),
     value :: term()
-}).
-
--record(share, {
-    share_id :: od_share:id()
-}).
-
--record(scheduled_transfer, {
-    transfer_id :: transfer:id()
 }).
 
 -record(dataset_info, {
@@ -204,7 +161,7 @@
 
 -type provider_response_type() ::
     #transfer_encoding{} | #cdmi_completion_status{} | #mimetype{} | #acl{} |
-    #dir{} | #file_path{} | #file_distribution{} | #metadata{} | #share{} | #scheduled_transfer{} |
+    #dir{} | #file_path{} | #file_distribution{} | #metadata{} |
     #dataset_info{} | #file_eff_dataset_summary{} | #archive_info{} |
     undefined.
 

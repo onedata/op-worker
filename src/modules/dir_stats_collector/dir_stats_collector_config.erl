@@ -17,7 +17,6 @@
 
 
 -include("modules/datastore/datastore_models.hrl").
--include("modules/datastore/datastore_runner.hrl").
 
 
 %% API
@@ -34,6 +33,7 @@
     model => ?MODULE
 }).
 
+-define(ENABLE_FOR_NEW_SPACES, op_worker:get_env(enable_dir_stats_collector_for_new_spaces, false)).
 
 %%%===================================================================
 %%% API
@@ -41,11 +41,11 @@
 
 -spec init_for_space(od_space:id()) -> ok.
 init_for_space(SpaceId) ->
-    NewRecord = #dir_stats_collector_config{},
-    ok = ?extract_ok(datastore_model:create(?CTX, #document{
+    NewRecord = #dir_stats_collector_config{enabled = ?ENABLE_FOR_NEW_SPACES},
+    {ok, _} = datastore_model:create(?CTX, #document{
         key = SpaceId,
         value = NewRecord
-    })),
+    }),
     node_cache:put({dir_stats_collector_enabled, SpaceId}, NewRecord#dir_stats_collector_config.enabled).
 
 

@@ -113,7 +113,7 @@ create_file_transfer(Config, Type) ->
     % Shared file will be used to assert that shared file transfer will be forbidden
     % (it will be added to '#data_spec.bad_values')
     FileGuid = transfer_api_test_utils:create_file(P1, SessIdP1, filename:join(["/", ?SPACE_2])),
-    {ok, ShareId} = lfm_proxy:create_share(P1, SessIdP1, ?FILE_REF(FileGuid), <<"share">>),
+    {ok, ShareId} = opt_shares:create(P1, SessIdP1, ?FILE_REF(FileGuid), <<"share">>),
     file_test_utils:await_sync(P2, FileGuid),
 
     RequiredPrivs = create_file_transfer_required_privs(Type),
@@ -148,7 +148,7 @@ create_file_transfer(Config, Type) ->
                     validate_result_fun = build_create_transfer_validate_gs_call_result_fun(MemRef)
                 }
             ],
-            data_spec = api_test_utils:replace_enoent_with_not_found_error_in_bad_data_values(
+            data_spec = api_test_utils:replace_enoent_with_error_not_found_in_error_expectations(
                 api_test_utils:add_cdmi_id_errors_for_operations_not_available_in_share_mode(
                     FileGuid, ?SPACE_2, ShareId,
                     build_op_transfer_spec(Type, <<"file">>, P1, P2)

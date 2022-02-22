@@ -111,7 +111,7 @@ get_rdf_metadata_test_base(SetRdfPolicy, TestMode, _Config) ->
 
     FileType = api_test_utils:randomly_choose_file_type_for_test(),
     FilePath = filename:join(["/", ?SPACE_KRK_PAR, ?RANDOM_FILE_NAME()]),
-    {ok, FileGuid} = api_test_utils:create_file(FileType, P1Node, UserSessIdP1, FilePath, 8#707),
+    {ok, FileGuid} = lfm_test_utils:create_file(FileType, P1Node, UserSessIdP1, FilePath, 8#707),
     SpaceId = oct_background:get_space_id(space_krk_par),
 
     GetExpCallResultFun = case SetRdfPolicy of
@@ -304,7 +304,7 @@ create_get_json_metadata_tests_env(FileType, SetJsonPolicy, TestMode) ->
     end,
 
     FileLayer5Path = filename:join([DirLayer4Path, ?RANDOM_FILE_NAME()]),
-    {ok, FileLayer5Guid} = api_test_utils:create_file(FileType, P1Node, UserSessIdP1, FileLayer5Path),
+    {ok, FileLayer5Guid} = lfm_test_utils:create_file(FileType, P1Node, UserSessIdP1, FileLayer5Path),
     case SetJsonPolicy of
         set_direct_json ->
             api_test_utils:set_and_sync_metadata(Nodes, FileLayer5Guid, MetadataType, ?JSON_METADATA_5);
@@ -546,7 +546,7 @@ create_get_xattrs_tests_env(FileType, SetXattrsPolicy, TestMode) ->
     end,
 
     FileLayer3Path = filename:join([DirLayer2Path, ?RANDOM_FILE_NAME()]),
-    {ok, FileLayer3Guid} = api_test_utils:create_file(
+    {ok, FileLayer3Guid} = lfm_test_utils:create_file(
         FileType, P1Node, UserSessIdP1, FileLayer3Path
     ),
     case SetXattrsPolicy of

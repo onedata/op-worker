@@ -12,6 +12,7 @@
 -module(lfm_files_test_base).
 -author("Rafal Slota").
 
+-include("global_definitions.hrl").
 -include("lfm_files_test_base.hrl").
 -include("modules/fslogic/acl.hrl").
 -include("modules/fslogic/file_attr.hrl").
@@ -81,10 +82,7 @@
     readdir_plus_should_work_with_zero_offset/1,
     readdir_plus_should_work_with_non_zero_offset/1,
     readdir_plus_should_work_with_size_greater_than_dir_size/1,
-    readdir_plus_should_work_with_token/1,
-    readdir_plus_should_work_with_token2/1,
-    readdir_should_work_with_token/1,
-    readdir_should_work_with_token2/1,
+    readdir_should_work_with_token/4,
     readdir_should_work_with_startid/1,
     get_children_details_should_return_empty_result_for_empty_dir/1,
     get_children_details_should_return_empty_result_zero_size/1,
@@ -92,6 +90,7 @@
     get_children_details_should_work_with_non_zero_offset/1,
     get_children_details_should_work_with_size_greater_than_dir_size/1,
     get_children_details_should_work_with_startid/1,
+    get_recursive_file_list/1,
     lfm_recreate_handle/3,
     lfm_open_failure/1,
     lfm_create_and_open_failure/1,
@@ -421,33 +420,27 @@ readdir_plus_should_work_with_size_greater_than_dir_size(Config) ->
     {MainDirPath, Files} = generate_dir(Config, 5),
     verify_attrs(Config, MainDirPath, Files, 10, 5).
 
-readdir_plus_should_work_with_token(Config) ->
-    {MainDirPath, Files} = generate_dir(Config, 10),
-    Token = verify_attrs_with_token(Config, MainDirPath, Files, 3, 3, 0, false, <<"">>),
-    Token2 = verify_attrs_with_token(Config, MainDirPath, Files, 3, 3, 3, false, Token),
-    Token3 = verify_attrs_with_token(Config, MainDirPath, Files, 3, 3, 6, false, Token2),
-    verify_attrs_with_token(Config, MainDirPath, Files, 1, 3, 9, true, Token3).
-
-readdir_plus_should_work_with_token2(Config) ->
-    {MainDirPath, Files} = generate_dir(Config, 12),
-    Token = verify_attrs_with_token(Config, MainDirPath, Files, 3, 3, 0, false, <<"">>),
-    Token2 = verify_attrs_with_token(Config, MainDirPath, Files, 3, 3, 3, false, Token),
-    Token3 = verify_attrs_with_token(Config, MainDirPath, Files, 3, 3, 6, false, Token2),
-    verify_attrs_with_token(Config, MainDirPath, Files, 3, 3, 9, true, Token3).
-
-readdir_should_work_with_token(Config) ->
-    {MainDirPath, Files} = generate_dir(Config, 10),
-    Token = verify_with_token(Config, MainDirPath, Files, 3, 3, 0, false, <<"">>),
-    Token2 = verify_with_token(Config, MainDirPath, Files, 3, 3, 3, false, Token),
-    Token3 = verify_with_token(Config, MainDirPath, Files, 3, 3, 6, false, Token2),
-    verify_with_token(Config, MainDirPath, Files, 1, 3, 9, true, Token3).
-
-readdir_should_work_with_token2(Config) ->
-    {MainDirPath, Files} = generate_dir(Config, 12),
-    Token = verify_with_token(Config, MainDirPath, Files, 3, 3, 0, false, <<"">>),
-    Token2 = verify_with_token(Config, MainDirPath, Files, 3, 3, 3, false, Token),
-    Token3 = verify_with_token(Config, MainDirPath, Files, 3, 3, 6, false, Token2),
-    verify_with_token(Config, MainDirPath, Files, 3, 3, 9, true, Token3).
+readdir_should_work_with_token(Config, DirSize, Type, InitialToken) ->
+    [Worker | _] = Workers = ?config(op_worker_nodes, Config),
+    clock_freezer_mock:setup_for_ct(Workers, [datastore_cache_writer]),
+    {MainDirPath, Files} = generate_dir(Config, DirSize),
+    VerifyFun = case Type of
+        readdir_plus -> fun verify_attrs_with_token/8;
+        readdir -> fun verify_with_token/8
+    end,
+    Token = VerifyFun(Config, MainDirPath, Files, max(0, min(DirSize - 0, 3)), 3, 0, false, InitialToken),
+    Token2 = VerifyFun(Config, MainDirPath, Files, max(0, min(DirSize - 3, 3)), 3, 3, false, Token),
+    case InitialToken of
+        ?INITIAL_API_LS_TOKEN ->
+            {ok, TimeToWaitMillis} = erpc:call(Worker, application, get_env, [?CLUSTER_WORKER_APP_NAME, fold_cache_timeout]),
+            clock_freezer_mock:simulate_millis_passing(TimeToWaitMillis + 1),
+            timer:sleep(timer:seconds(5)); % wait for flush of expired tokens
+        _ ->
+            % only API listing token supports continued listing after datastore token expiration
+            ok
+    end,
+    Token3 = VerifyFun(Config, MainDirPath, Files, max(0, min(DirSize - 6, 3)), 3, 6, false, Token2),
+    VerifyFun(Config, MainDirPath, Files, max(0, min(DirSize - 9, 3)), 3, 9, true, Token3).
 
 readdir_should_work_with_startid(Config) ->
     {MainDirPath, Files} = generate_dir(Config, 10),
@@ -512,6 +505,68 @@ get_children_details_should_work_with_startid(Config) ->
     % test ls with startid and negative offset
     StartId7 = verify_details(Config, MainDirPath, Files, 3, 4, -2, 4, StartId5),
     verify_details(Config, MainDirPath, Files, 0, 6, -10, 6, StartId7).
+
+
+% NOTE: this test must be run first as it requires empty space
+get_recursive_file_list(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    
+    {SessId1, _UserId1} =
+        {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+    
+    MainDir = generator:gen_name(),
+    MainDirPath = <<"/space_name1/", MainDir/binary, "/">>,
+    {ok, MainDirGuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker, SessId1, MainDirPath)),
+    
+    Dirs = lists:sort(lists_utils:generate(fun generator:gen_name/0, 4)),
+    Files = lists:sort(lists_utils:generate(fun generator:gen_name/0, 8)),
+    AllExpectedFiles = lists:foldl(fun(D, FilesTmp) ->
+        ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker, SessId1, filename:join([MainDirPath, D]))),
+        ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker, SessId1, filename:join([MainDirPath, D, <<"empty_dir">>]))),
+        FilesTmp ++ lists:map(fun(F) ->
+            {ok, G} = ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId1, filename:join([MainDirPath, D, F]))),
+            {G, filename:join([MainDir, D, F])}
+        end, Files)
+    end, [], Dirs),
+    
+    SpaceDirGuid = fslogic_uuid:spaceid_to_space_dir_guid(file_id:guid_to_space_id(MainDirGuid)),
+    ResultMapper = fun
+        ({ok, Res, IsLast}) ->
+            {ok, lists:map(fun({Path, #file_attr{guid = Guid}}) -> {Guid, Path} end, Res), IsLast};
+        (Other) ->
+            Other
+    end,
+    lists:foreach(fun(DirToListGuid) ->
+        ?assertMatch({ok, AllExpectedFiles, _}, 
+            ResultMapper(lfm_proxy:get_files_recursively(Worker, SessId1, ?FILE_REF(DirToListGuid), <<>>, length(AllExpectedFiles)))),
+        lists:foreach(fun(Num) ->
+            {_, StartAfter} = lists:nth(Num, AllExpectedFiles),
+            ExpectedTail = lists:nthtail(Num, AllExpectedFiles),
+            ?assertMatch({ok, ExpectedTail, _}, 
+                ResultMapper(lfm_proxy:get_files_recursively(Worker, SessId1, ?FILE_REF(DirToListGuid), StartAfter, length(AllExpectedFiles))))
+        end, lists:seq(1, length(AllExpectedFiles))),
+        
+        lists:foreach(fun(Num) ->
+            {_, StartAfter} = lists:nth(Num, AllExpectedFiles),
+            ExpectedRes = case lists:nthtail(Num, AllExpectedFiles) of
+                [File | _] -> [File];
+                [] -> []
+            end,
+            ?assertMatch({ok, ExpectedRes, _}, 
+                ResultMapper(lfm_proxy:get_files_recursively(Worker, SessId1, ?FILE_REF(DirToListGuid), StartAfter, 1)))
+        end, lists:seq(1, length(AllExpectedFiles)))
+    end, [MainDirGuid, SpaceDirGuid]),
+    
+    % check that listing regular file returns this file
+    {Num, {Guid, Path}} = lists_utils:random_element(lists:zip(lists:seq(1, length(AllExpectedFiles)), AllExpectedFiles)),
+    ?assertMatch({ok, [{Guid, Path}], true}, ResultMapper(lfm_proxy:get_files_recursively(Worker, SessId1, ?FILE_REF(Guid), <<>>, 1))),
+    
+    % check listing after removing file that StartAfter points to 
+    ok = lfm_proxy:unlink(Worker, SessId1, ?FILE_REF(Guid)),
+    ExpectedTail = lists:nthtail(Num, AllExpectedFiles),
+    ?assertMatch({ok, ExpectedTail, _}, 
+        ResultMapper(lfm_proxy:get_files_recursively(Worker, SessId1, ?FILE_REF(MainDirGuid), Path, length(AllExpectedFiles)))).
+    
 
 echo_loop(Config) ->
     ?PERFORMANCE(Config, [
@@ -1635,7 +1690,7 @@ create_share_dir(Config) ->
     initializer:testmaster_mock_space_user_privileges(
         Workers, SpaceId, UserId, privileges:space_admin() -- [?SPACE_MANAGE_SHARES]
     ),
-    ?assertMatch({error, ?EPERM}, lfm_proxy:create_share(W, SessId, ?FILE_REF(Guid), <<"share_name">>)),
+    ?assertMatch(?ERROR_POSIX(?EPERM), opt_shares:create(W, SessId, ?FILE_REF(Guid), <<"share_name">>)),
 
     initializer:testmaster_mock_space_user_privileges(
         Workers, SpaceId, UserId, privileges:space_admin()
@@ -1643,23 +1698,23 @@ create_share_dir(Config) ->
 
     % User root dir can not be shared
     ?assertMatch(
-        {error, ?EPERM},
-        lfm_proxy:create_share(W, SessId, ?FILE_REF(fslogic_uuid:user_root_dir_guid(UserId)), <<"share_name">>)
+        ?ERROR_POSIX(?EPERM),
+        opt_shares:create(W, SessId, ?FILE_REF(fslogic_uuid:user_root_dir_guid(UserId)), <<"share_name">>)
     ),
     % But space dir can
     ?assertMatch(
         {ok, <<_/binary>>},
-        lfm_proxy:create_share(W, SessId, ?FILE_REF(fslogic_uuid:spaceid_to_space_dir_guid(SpaceId)), <<"share_name">>)
+        opt_shares:create(W, SessId, ?FILE_REF(fslogic_uuid:spaceid_to_space_dir_guid(SpaceId)), <<"share_name">>)
     ),
     % As well as normal directory
     {ok, ShareId1} = ?assertMatch(
         {ok, <<_/binary>>},
-        lfm_proxy:create_share(W, SessId, ?FILE_REF(Guid), <<"share_name">>)
+        opt_shares:create(W, SessId, ?FILE_REF(Guid), <<"share_name">>)
     ),
     % Multiple times at that
     {ok, ShareId2} = ?assertMatch(
         {ok, <<_/binary>>},
-        lfm_proxy:create_share(W, SessId, ?FILE_REF(Guid), <<"share_name">>)
+        opt_shares:create(W, SessId, ?FILE_REF(Guid), <<"share_name">>)
     ),
     ?assertNotEqual(ShareId1, ShareId2).
 
@@ -1675,19 +1730,19 @@ create_share_file(Config) ->
     initializer:testmaster_mock_space_user_privileges(
         Workers, SpaceId, UserId, privileges:space_admin() -- [?SPACE_MANAGE_SHARES]
     ),
-    ?assertMatch({error, ?EPERM}, lfm_proxy:create_share(W, SessId, ?FILE_REF(Guid), <<"share_name">>)),
+    ?assertMatch(?ERROR_POSIX(?EPERM), opt_shares:create(W, SessId, ?FILE_REF(Guid), <<"share_name">>)),
 
     initializer:testmaster_mock_space_user_privileges(
         Workers, SpaceId, UserId, privileges:space_admin()
     ),
     {ok, ShareId1} = ?assertMatch(
         {ok, <<_/binary>>},
-        lfm_proxy:create_share(W, SessId, ?FILE_REF(Guid), <<"share_name">>)
+        opt_shares:create(W, SessId, ?FILE_REF(Guid), <<"share_name">>)
     ),
     % File can be shared multiple times
     {ok, ShareId2} = ?assertMatch(
         {ok, <<_/binary>>},
-        lfm_proxy:create_share(W, SessId, ?FILE_REF(Guid), <<"share_name">>)
+        opt_shares:create(W, SessId, ?FILE_REF(Guid), <<"share_name">>)
     ),
     ?assertNotEqual(ShareId1, ShareId2).
 
@@ -1698,22 +1753,22 @@ remove_share(Config) ->
     DirPath = <<"/space_name1/share_dir">>,
     {ok, Guid} = lfm_proxy:mkdir(W, SessId, DirPath, 8#704),
     SpaceId = file_id:guid_to_space_id(Guid),
-    {ok, ShareId1} = lfm_proxy:create_share(W, SessId, ?FILE_REF(Guid), <<"share_name">>),
+    {ok, ShareId1} = opt_shares:create(W, SessId, ?FILE_REF(Guid), <<"share_name">>),
 
     % Make sure SPACE_MANAGE_SHARES priv is accounted
     initializer:testmaster_mock_space_user_privileges(
         Workers, SpaceId, UserId, privileges:space_admin() -- [?SPACE_MANAGE_SHARES]
     ),
-    ?assertMatch({error, ?EPERM}, lfm_proxy:remove_share(W, SessId, ShareId1)),
+    ?assertMatch(?ERROR_POSIX(?EPERM), opt_shares:remove(W, SessId, ShareId1)),
 
     initializer:testmaster_mock_space_user_privileges(
         Workers, SpaceId, UserId, privileges:space_admin()
     ),
 
     % Remove share by share Id
-    ?assertMatch(ok, lfm_proxy:remove_share(W, SessId, ShareId1)),
+    ?assertMatch(ok, opt_shares:remove(W, SessId, ShareId1)),
     % ShareId no longer exists -> {error, not_found}
-    ?assertMatch({error, not_found}, lfm_proxy:remove_share(W, SessId, ShareId1)).
+    ?assertMatch(?ERROR_NOT_FOUND, opt_shares:remove(W, SessId, ShareId1)).
 
 share_getattr(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
@@ -1724,8 +1779,8 @@ share_getattr(Config) ->
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
     DirPath = <<SpaceName/binary, "/share_dir2">>,
     {ok, DirGuid} = lfm_proxy:mkdir(W, OwnerSessId, DirPath, 8#704),
-    {ok, ShareId1} = lfm_proxy:create_share(W, OwnerSessId, ?FILE_REF(DirGuid), <<"share_name">>),
-    {ok, ShareId2} = lfm_proxy:create_share(W, OwnerSessId, ?FILE_REF(DirGuid), <<"share_name">>),
+    {ok, ShareId1} = opt_shares:create(W, OwnerSessId, ?FILE_REF(DirGuid), <<"share_name">>),
+    {ok, ShareId2} = opt_shares:create(W, OwnerSessId, ?FILE_REF(DirGuid), <<"share_name">>),
     ?assertNotEqual(ShareId1, ShareId2),
 
     ShareGuid = file_id:guid_to_share_guid(DirGuid, ShareId1),
@@ -1774,7 +1829,7 @@ share_get_parent(Config) ->
     {ok, DirGuid} = lfm_proxy:mkdir(W, SessId, DirPath, 8#707),
     {ok, FileGuid} = lfm_proxy:create(W, SessId, <<DirPath/binary, "/file">>, 8#700),
 
-    {ok, ShareId} = lfm_proxy:create_share(W, SessId, ?FILE_REF(DirGuid), <<"share_name">>),
+    {ok, ShareId} = opt_shares:create(W, SessId, ?FILE_REF(DirGuid), <<"share_name">>),
     ShareDirGuid = file_id:guid_to_share_guid(DirGuid, ShareId),
     ShareFileGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
 
@@ -1794,7 +1849,7 @@ share_list(Config) ->
     SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
     DirPath = <<"/space_name1/share_dir3">>,
     {ok, DirGuid} = lfm_proxy:mkdir(W, SessId, DirPath, 8#707),
-    {ok, ShareId} = lfm_proxy:create_share(W, SessId, ?FILE_REF(DirGuid), <<"share_name">>),
+    {ok, ShareId} = opt_shares:create(W, SessId, ?FILE_REF(DirGuid), <<"share_name">>),
     ShareDirGuid = file_id:guid_to_share_guid(DirGuid, ShareId),
 
     {ok, Guid1} = lfm_proxy:mkdir(W, SessId, <<"/space_name1/share_dir3/1">>, 8#700),
@@ -1817,7 +1872,7 @@ share_read(Config) ->
     {ok, Handle} = lfm_proxy:open(W, SessId, ?FILE_REF(FileGuid), write),
     {ok, 4} = lfm_proxy:write(W, Handle, 0, <<"data">>),
     ok = lfm_proxy:close(W, Handle),
-    {ok, ShareId} = lfm_proxy:create_share(W, SessId, ?FILE_REF(DirGuid), <<"share_name">>),
+    {ok, ShareId} = opt_shares:create(W, SessId, ?FILE_REF(DirGuid), <<"share_name">>),
     ShareGuid = file_id:guid_to_share_guid(DirGuid, ShareId),
 
     {ok, [{ShareChildGuid, <<"share_file">>}]} = lfm_proxy:get_children(W, ?GUEST_SESS_ID, ?FILE_REF(ShareGuid), 0, 10),
@@ -1833,7 +1888,7 @@ share_child_getattr(Config) ->
     DirPath = <<"/space_name1/share_dir5">>,
     {ok, Guid} = lfm_proxy:mkdir(W, SessId, DirPath, 8#707),
     {ok, _} = lfm_proxy:create(W, SessId, <<"/space_name1/share_dir5/file">>, 8#700),
-    {ok, ShareId} = lfm_proxy:create_share(W, SessId, ?FILE_REF(Guid), <<"share_name">>),
+    {ok, ShareId} = opt_shares:create(W, SessId, ?FILE_REF(Guid), <<"share_name">>),
     ShareDirGuid = file_id:guid_to_share_guid(Guid, ShareId),
 
     {ok, [{ShareChildGuid, _}]} = lfm_proxy:get_children(W, ?GUEST_SESS_ID, ?FILE_REF(ShareDirGuid), 0, 1),
@@ -1855,7 +1910,7 @@ share_child_list(Config) ->
     SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
     DirPath = <<"/space_name1/share_dir6">>,
     {ok, DirGuid} = lfm_proxy:mkdir(W, SessId, DirPath, 8#707),
-    {ok, ShareId} = lfm_proxy:create_share(W, SessId, ?FILE_REF(DirGuid), <<"share_name">>),
+    {ok, ShareId} = opt_shares:create(W, SessId, ?FILE_REF(DirGuid), <<"share_name">>),
     ShareDirGuid = file_id:guid_to_share_guid(DirGuid, ShareId),
 
     {ok, Guid1} = lfm_proxy:mkdir(W, SessId, <<"/space_name1/share_dir6/1">>, 8#707),
@@ -1879,7 +1934,7 @@ share_child_read(Config) ->
     SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
     DirPath = <<"/space_name1/share_dir7">>,
     {ok, Guid} = lfm_proxy:mkdir(W, SessId, DirPath, 8#707),
-    {ok, ShareId} = lfm_proxy:create_share(W, SessId, ?FILE_REF(Guid), <<"share_name">>),
+    {ok, ShareId} = opt_shares:create(W, SessId, ?FILE_REF(Guid), <<"share_name">>),
     ShareGuid = file_id:guid_to_share_guid(Guid, ShareId),
 
     Path = <<"/space_name1/share_dir7/file">>,
@@ -2521,5 +2576,6 @@ end_per_testcase(_Case, Config) ->
     lfm_test_utils:clean_space(Workers, ?SPACE_ID3, 30),
     lfm_test_utils:clean_space(Workers, ?SPACE_ID4, 30),
     lfm_proxy:teardown(Config),
+    clock_freezer_mock:teardown_for_ct(Workers),
     initializer:clean_test_users_and_spaces_no_validate(Config),
     test_utils:mock_validate_and_unload(Workers, [communicator]).

@@ -22,6 +22,7 @@
 
 -export([single_provider_test/1, multiprovider_test/1]).
 -export([init/1, teardown/1]).
+-export([verify_dir_on_provider_creating_files/3, delete_stats/3]).
 
 
 % For multiprovider test, one provider creates files and fills them with data,
@@ -123,15 +124,22 @@ multiprovider_test(Config) ->
 %%%===================================================================
 
 init(Config) ->
+    [Worker | _] = Workers = ?config(op_worker_nodes, Config),
+    {ok, EnableDirStatsCollectorForNewSpaces} =
+        test_utils:get_env(Worker, op_worker, enable_dir_stats_collector_for_new_spaces),
+    test_utils:set_env(Workers, op_worker, enable_dir_stats_collector_for_new_spaces, true),
+
     SpaceId = lfm_test_utils:get_user1_first_space_id(Config),
     lists:foreach(fun(W) ->
         rpc:call(W, dir_stats_collector_config, init_for_space, [SpaceId])
     end, initializer:get_different_domain_workers(Config)),
 
-    [Worker | _] = Workers = ?config(op_worker_nodes, Config),
+
     {ok, MinimalSyncRequest} = test_utils:get_env(Worker, op_worker, minimal_sync_request),
     test_utils:set_env(Workers, op_worker, minimal_sync_request, 1),
-    [{default_minimal_sync_request, MinimalSyncRequest} | Config].
+
+    [{default_enable_dir_stats_collector_for_new_spaces, EnableDirStatsCollectorForNewSpaces},
+        {default_minimal_sync_request, MinimalSyncRequest} | Config].
 
 
 teardown(Config) ->
@@ -141,9 +149,59 @@ teardown(Config) ->
     end, initializer:get_different_domain_workers(Config)),
 
     Workers = ?config(op_worker_nodes, Config),
+    EnableDirStatsCollectorForNewSpaces = ?config(default_enable_dir_stats_collector_for_new_spaces, Config),
+    test_utils:set_env(
+        Workers, op_worker, enable_dir_stats_collector_for_new_spaces, EnableDirStatsCollectorForNewSpaces),
+
     MinimalSyncRequest = ?config(default_minimal_sync_request, Config),
     test_utils:set_env(Workers, op_worker, minimal_sync_request, MinimalSyncRequest).
 
+
+%%%===================================================================
+%%% Helper functions to be used in various suites to verify statistics
+%%%===================================================================
+
+verify_dir_on_provider_creating_files(Config, NodesSelector, Guid) ->
+    [Worker | _] = ?config(NodesSelector, Config),
+    SessId = lfm_test_utils:get_user1_session_id(Config, Worker),
+
+    {ok, Children, _} = ?assertMatch({ok, _, _},
+        lfm_proxy:get_children_attrs(Worker, SessId, ?FILE_REF(Guid), #{offset => 0, size => 100000})),
+
+    StatsForEmptyDir = #{
+        ?REG_FILE_AND_LINK_COUNT => 0,
+        ?DIR_COUNT => 0,
+        ?TOTAL_SIZE => 0,
+        ?TOTAL_SIZE_ON_STORAGE(Config, NodesSelector) => 0
+    },
+    Expectations = lists:foldl(fun
+        (#file_attr{type = ?DIRECTORY_TYPE, guid = ChildGuid}, Acc) ->
+            Acc2 = update_expectations_map(Acc, #{?DIR_COUNT => 1}),
+            update_expectations_map(Acc2, verify_dir_on_provider_creating_files(Config, NodesSelector, ChildGuid));
+        (#file_attr{size = ChildSize, mtime = ChildMTime, ctime = ChildCTime}, Acc) ->
+            update_expectations_map(Acc, #{
+                ?REG_FILE_AND_LINK_COUNT => 1,
+                ?TOTAL_SIZE => ChildSize,
+                ?TOTAL_SIZE_ON_STORAGE(Config, NodesSelector) => ChildSize,
+                update_time => max(ChildMTime, ChildCTime)
+            })
+    end, StatsForEmptyDir, Children),
+
+    check_dir_stats(Config, NodesSelector, Guid, maps:remove(update_time, Expectations)),
+
+    {ok, #file_attr{mtime = MTime, ctime = CTime}} = ?assertMatch({ok, _},
+        lfm_proxy:stat(Worker, SessId, ?FILE_REF(Guid))),
+    CollectorTime = get_dir_update_time_stat(Worker, Guid),
+    ?assert(CollectorTime >= max(MTime, CTime)),
+    % Time for directory should not be earlier than time for any child
+    ?assert(CollectorTime >= maps:get(update_time, Expectations, 0)),
+    update_expectations_map(Expectations, #{update_time => CollectorTime}).
+
+
+delete_stats(Config, NodesSelector, Guid) ->
+    [Worker | _] = ?config(NodesSelector, Config),
+    ?assertEqual(ok, rpc:call(Worker, dir_size_stats, delete_stats, [Guid])),
+    ?assertEqual(ok, rpc:call(Worker, dir_update_time_stats, delete_stats, [Guid])).
 
 %%%===================================================================
 %%% Internal functions
@@ -294,28 +352,17 @@ check_space_dir_values_map_and_time_series_collection(Config, NodesSelector, Spa
     {ok, {CurrentValues, WindowsMap}} = ?assertMatch({ok, {_, _}},
         rpc:call(Worker, dir_size_stats, get_stats_and_time_series_collections, [SpaceGuid])),
 
-    FilteredExpectedMap =  maps:remove(?TOTAL_SIZE, ExpectedMap),
-    ?assertEqual(FilteredExpectedMap, CurrentValues),
+    ?assertEqual(ExpectedMap, CurrentValues),
 
     case IsCollectionEmpty of
-        true -> ?assertEqual(lists:duplicate(12, []), maps:values(WindowsMap));
-        false -> ?assertEqual(12, maps:size(WindowsMap))
+        true -> ?assertEqual(lists:duplicate(16, []), maps:values(WindowsMap));
+        false -> ?assertEqual(16, maps:size(WindowsMap))
     end.
-    % TODO VFS-8962 - fix getting file distribution in tests to allow dir total size counting
-%%    ?assertEqual(ExpectedMap, CurrentValues),
-%%
-%%    case IsCollectionEmpty of
-%%        true -> ?assertEqual(lists:duplicate(16, []), maps:values(WindowsMap));
-%%        false -> ?assertEqual(16, maps:size(WindowsMap))
-%%    end.
 
 
 check_dir_stats(Config, NodesSelector, Guid, ExpectedMap) when is_binary(Guid) ->
     [Worker | _] = ?config(NodesSelector, Config),
-    FilteredExpectedMap =  maps:remove(?TOTAL_SIZE, ExpectedMap),
-    ?assertEqual({ok, FilteredExpectedMap}, rpc:call(Worker, dir_size_stats, get_stats, [Guid]), ?ATTEMPTS);
-    % TODO VFS-8962 - fix getting file distribution in tests to allow dir total size counting
-%%    ?assertEqual({ok, ExpectedMap}, rpc:call(Worker, dir_size_stats, get_stats, [Guid]), ?ATTEMPTS);
+    ?assertEqual({ok, ExpectedMap}, rpc:call(Worker, dir_size_stats, get_stats, [Guid]), ?ATTEMPTS);
 
 check_dir_stats(Config, NodesSelector, DirConstructor, ExpectedMap) ->
     Guid = resolve_guid(Config, NodesSelector, DirConstructor, []),
@@ -333,7 +380,7 @@ write_to_file(Config, NodesSelector, DirConstructor, FileConstructor, BytesCount
     [Worker | _] = ?config(NodesSelector, Config),
     SessId = lfm_test_utils:get_user1_session_id(Config, Worker),
     Guid = resolve_guid(Config, NodesSelector, DirConstructor, FileConstructor),
-    lfm_test_utils:write_file(Worker, SessId, Guid, BytesCount).
+    lfm_test_utils:write_file(Worker, SessId, Guid, {rand_content, BytesCount}).
 
 
 resolve_guid(Config, NodesSelector, DirConstructor, FileConstructor) ->
@@ -348,8 +395,7 @@ resolve_update_times_in_metadata_and_stats(Config, NodesSelector, DirConstructor
     DirUpdateTime = case FileConstructor of
         [] ->
             [Worker | _] = ?config(NodesSelector, Config),
-            {ok, Time} = ?assertMatch({ok, _}, rpc:call(Worker, dir_update_time_stats, get_update_time, [Guid])),
-            Time;
+            get_dir_update_time_stat(Worker, Guid);
         _ ->
             not_a_dir
     end,
@@ -373,3 +419,15 @@ build_path(PathBeginning, Constructor, NamePrefix) ->
         ChildName = str_utils:format_bin("~s_~p", [NamePrefix, DirNum]),
         filename:join([Acc, ChildName])
     end, PathBeginning, Constructor).
+
+
+update_expectations_map(Map, DiffMap) ->
+    maps:fold(fun
+        (update_time, NewTime, Acc) -> maps:update_with(update_time, fun(Value) -> max(Value, NewTime) end, 0, Acc);
+        (Key, Diff, Acc) -> maps:update_with(Key, fun(Value) -> Value + Diff end, Acc)
+    end, Map, DiffMap).
+
+
+get_dir_update_time_stat(Worker, Guid) ->
+    {ok, CollectorTime} = ?assertMatch({ok, _}, rpc:call(Worker, dir_update_time_stats, get_update_time, [Guid])),
+    CollectorTime.

@@ -259,7 +259,7 @@ get_storages_by_provider(SpaceId, ProviderId) when is_binary(SpaceId)->
         {ok, #document{value = #od_space{storages_by_provider = StoragesByProvider} }} ->
             case maps:get(ProviderId, StoragesByProvider, undefined) of
                 undefined -> ?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceId, ProviderId);
-                ProviderStoragesMap -> {ok, ProviderStoragesMap}
+                StoragesToAccessType -> {ok, StoragesToAccessType}
             end;
         {error, _} = Error ->
             Error

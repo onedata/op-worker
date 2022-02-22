@@ -40,6 +40,11 @@
 
 -define(MAIN_JOB_PREFIX, "main_job").
 
+% Time in seconds for main job document to expire after delete (one year).
+% After expiration of main job document, information about traverse cancellation
+% cannot be propagated to other providers.
+-define(MAIN_JOB_EXPIRY, 31536000).
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -99,7 +104,8 @@ delete_master_job(<<?MAIN_JOB_PREFIX, _/binary>> = Key, Job, Scope, CallbackModu
         true -> Ctx#{scope => Scope};
         false -> Ctx
     end,
-    datastore_model:delete(Ctx2, Key);
+    Ctx3 = datastore_model:set_expiry(Ctx2, ?MAIN_JOB_EXPIRY),
+    datastore_model:delete(Ctx3, Key);
 delete_master_job(Key, _Job, _, _CallbackModule) ->
     datastore_model:delete(?CTX, Key).
 
@@ -130,7 +136,7 @@ get_master_job(#document{value = #tree_traverse_job{
                 file_ctx = FileCtx,
                 user_id = UserId,
                 token = case UseListingToken of
-                    true -> ?INITIAL_LS_TOKEN;
+                    true -> ?INITIAL_DATASTORE_LS_TOKEN;
                     false -> undefined
                 end,
                 last_name = LastName,

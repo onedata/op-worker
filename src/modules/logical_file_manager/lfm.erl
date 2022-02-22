@@ -76,7 +76,9 @@
     get_children/3,
     get_child_attr/3,
     get_children_attrs/3,
+    get_children_attrs/5,
     get_children_details/3,
+    get_files_recursively/4,
     get_children_count/2
 ]).
 %% Permissions related operations
@@ -108,11 +110,6 @@
     set_cdmi_completion_status/3,
     get_mimetype/2,
     set_mimetype/3
-]).
-%% Share related operations
--export([
-    create_share/4,
-    remove_share/2
 ]).
 
 %% Utility functions
@@ -486,7 +483,7 @@ mkdir(SessId, ParentGuid, Name, Mode) ->
     ?run(lfm_dirs:mkdir(SessId, ParentGuid, Name, Mode)).
 
 
--spec get_children(session:id(), file_key(), file_meta:list_opts()) ->
+-spec get_children(session:id(), file_key(), dir_req:list_opts()) ->
     {ok, [{fslogic_worker:file_guid(), file_meta:name()}], file_meta:list_extended_info()} | error_reply().
 get_children(SessId, FileKey, ListOpts) ->
     ?run(lfm_dirs:get_children(SessId, FileKey, ListOpts)).
@@ -508,10 +505,16 @@ get_child_attr(SessId, ParentGuid, ChildName)  ->
 %% Gets file basic attributes (see file_attr.hrl) for each directory children.
 %% @end
 %%--------------------------------------------------------------------
--spec get_children_attrs(session:id(), file_key(), file_meta:list_opts()) ->
+-spec get_children_attrs(session:id(), file_key(), dir_req:list_opts()) ->
     {ok, [#file_attr{}], file_meta:list_extended_info()} | error_reply().
 get_children_attrs(SessId, FileKey, ListOpts) ->
-    ?run(lfm_dirs:get_children_attrs(SessId, FileKey, ListOpts)).
+    get_children_attrs(SessId, FileKey, ListOpts, false, false).
+
+
+-spec get_children_attrs(session:id(), file_key(), dir_req:list_opts(), boolean(), boolean()) ->
+    {ok, [#file_attr{}], file_meta:list_extended_info()} | error_reply().
+get_children_attrs(SessId, FileKey, ListOpts, IncludeReplicationStatus, IncludeHardlinkCount) ->
+    ?run(lfm_dirs:get_children_attrs(SessId, FileKey, ListOpts, IncludeReplicationStatus, IncludeHardlinkCount)).
 
 
 %%--------------------------------------------------------------------
@@ -519,10 +522,22 @@ get_children_attrs(SessId, FileKey, ListOpts) ->
 %% Gets file details (see file_details.hrl) for each directory children.
 %% @end
 %%--------------------------------------------------------------------
--spec get_children_details(session:id(), file_key(), file_meta:list_opts()) ->
+-spec get_children_details(session:id(), file_key(), dir_req:list_opts()) ->
     {ok, [lfm_attrs:file_details()], file_meta:list_extended_info()} | error_reply().
 get_children_details(SessId, FileKey, ListOpts) ->
     ?run(lfm_dirs:get_children_details(SessId, FileKey, ListOpts)).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Gets file basic attributes (see file_attr.hrl) for each regular file 
+%% that is in a subtree of given file.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_files_recursively(session:id(), file_key(), file_meta:path(), non_neg_integer()) ->
+    {ok, [{file_meta:path(), lfm_attrs:file_attributes()}], boolean()} | error_reply().
+get_files_recursively(SessId, FileKey, StartAfter, Limit) ->
+    ?run(lfm_dirs:get_files_recursively(SessId, FileKey, StartAfter, Limit)).
 
 
 -spec get_children_count(session:id(), file_key()) ->
@@ -687,22 +702,6 @@ get_mimetype(SessId, FileKey) ->
     ok | error_reply().
 set_mimetype(SessId, FileKey, Mimetype) ->
     ?run(lfm_attrs:set_mimetype(SessId, FileKey, Mimetype)).
-
-
-%%%===================================================================
-%%% Shares related operations
-%%%===================================================================
-
-
--spec create_share(session:id(), file_key(), od_share:name(), od_share:description()) ->
-    {ok, od_share:id()} | error_reply().
-create_share(SessId, FileKey, Name, Description) ->
-    ?run(lfm_shares:create_share(SessId, FileKey, Name, Description)).
-
-
--spec remove_share(session:id(), od_share:id()) -> ok | error_reply().
-remove_share(SessId, ShareID) ->
-    ?run(lfm_shares:remove_share(SessId, ShareID)).
 
 
 %%%===================================================================

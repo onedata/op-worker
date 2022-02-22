@@ -19,6 +19,7 @@
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
+-include_lib("ctool/include/test/test_utils.hrl").
 
 
 %% exported for CT
@@ -937,10 +938,12 @@ list_children_with_prefix_names_using_start_index(_Config) ->
 %===================================================================
 
 init_per_suite(Config) ->
-    oct_background:init_per_suite(Config, #onenv_test_config{onenv_scenario = "2op"}).
+    oct_background:init_per_suite([{?LOAD_MODULES, [dir_stats_test_utils]} | Config],
+        #onenv_test_config{onenv_scenario = "2op", posthook = fun dir_stats_test_utils:disable_stats_counting_ct_posthook/1}).
 
-end_per_suite(_Config) ->
-    oct_background:end_per_suite().
+end_per_suite(Config) ->
+    oct_background:end_per_suite(),
+    dir_stats_test_utils:enable_stats_counting(Config).
 
 init_per_testcase(Case, Config)
     when Case =:= move_dataset_with_1_children

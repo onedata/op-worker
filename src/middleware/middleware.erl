@@ -205,6 +205,7 @@ get_router(op_provider) -> provider_middleware_plugin;
 get_router(op_qos) -> qos_middleware_plugin;
 get_router(op_share) -> share_middleware_plugin;
 get_router(op_space) -> space_middleware_router;
+get_router(op_storage) -> storage_middleware_plugin;
 get_router(op_transfer) -> transfer_middleware_plugin;
 get_router(op_user) -> user_middleware_plugin;
 get_router(_) -> throw(?ERROR_NOT_SUPPORTED).

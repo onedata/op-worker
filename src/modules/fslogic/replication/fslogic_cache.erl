@@ -355,18 +355,28 @@ cache_doc(#document{key = Key} = LocationDoc) ->
 %%-------------------------------------------------------------------
 -spec delete_doc(file_location:id()) -> ok | {error, term()}.
 delete_doc(Key) ->
-    Ans = file_location:delete(Key),
-
-    case get_doc(Key) of
-        #document{value = #file_location{uuid = FileUuid, space_id = SpaceId, storage_id = StorageId}} ->
-            Size = get_local_size(Key),
-            cache_size_change(Key, SpaceId, StorageId, -Size),
-            apply_size_change(Key, FileUuid);
-        _ ->
-            ok
+    GetDocAns = case get_doc(Key) of
+        #document{} = Doc -> {ok, Doc};
+        _ -> file_location:get(Key)
     end,
-    
-    delete_local_blocks(Key),
+    case GetDocAns of
+        {ok, #document{value = #file_location{
+            uuid = FileUuid,
+            space_id = SpaceId,
+            storage_id = StorageId,
+            size = LocationSize
+        }}} ->
+            dir_size_stats:report_reg_file_size_changed(file_id:pack_guid(FileUuid, SpaceId), total, -LocationSize),
+            StorageSize = get_local_size(Key),
+            cache_size_change(Key, SpaceId, StorageId, -StorageSize),
+            apply_size_change(Key, FileUuid);
+        {error, not_found} ->
+            ok;
+        Error ->
+            ?error("~p:~p error ~p for key ~p", [?MODULE, ?FUNCTION_NAME, Error, Key])
+    end,
+
+    Ans = file_location:delete(Key),
 
     delete_local_blocks(Key),
 

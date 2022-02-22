@@ -88,8 +88,10 @@
 -define(TRASH_DIR_UUID_PREFIX, "trash_").
 -define(TRASH_DIR_UUID(SpaceId), <<?TRASH_DIR_UUID_PREFIX, SpaceId/binary>>).
 
-% Token that should be passed as initial token to start listing using tokens.
--define(INITIAL_LS_TOKEN, <<>>).
+% Tokens that should be passed as initial token to start listing using tokens.
+% (for tokens description see module `dir_req`)
+-define(INITIAL_DATASTORE_LS_TOKEN, <<>>).
+-define(INITIAL_API_LS_TOKEN, <<"initial_api_ls_token">>).
 
 -define(STICKY_BIT, 2#1000000000).
 

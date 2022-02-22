@@ -163,8 +163,8 @@ mkdir(Handle, FileId, Mode) ->
 %% Calls {@link helpers_nif:unlink/3} function.
 %% @end
 %%--------------------------------------------------------------------
--spec unlink(helper_handle(), file_id(), CurrentSize :: non_neg_integer())
-    -> ok | {error, Reason :: term()}.
+-spec unlink(helper_handle(), file_id(), CurrentSize :: non_neg_integer()) ->
+    ok | {error, Reason :: term()}.
 unlink(Handle, FileId, CurrentSize) ->
     ?MODULE:apply_helper_nif(Handle, unlink, [FileId, CurrentSize]).
 
@@ -173,8 +173,8 @@ unlink(Handle, FileId, CurrentSize) ->
 %% Calls {@link helpers_nif:flushbuffer/3} function.
 %% @end
 %%--------------------------------------------------------------------
--spec flushbuffer(helper_handle(), file_id(), CurrentSize :: non_neg_integer())
-    -> ok | {error, Reason :: term()}.
+-spec flushbuffer(helper_handle(), file_id(), CurrentSize :: non_neg_integer()) ->
+    ok | {error, Reason :: term()}.
 flushbuffer(Handle, FileId, CurrentSize) ->
     ?MODULE:apply_helper_nif(Handle, flushbuffer, [FileId, CurrentSize]).
 
@@ -183,8 +183,8 @@ flushbuffer(Handle, FileId, CurrentSize) ->
 %% Calls {@link helpers_nif:blocksize_for_path/2} function.
 %% @end
 %%--------------------------------------------------------------------
--spec blocksize_for_path(helper_handle(), file_id())
-    -> {ok, non_neg_integer()} | {error, Reason :: term()}.
+-spec blocksize_for_path(helper_handle(), file_id()) ->
+    {ok, non_neg_integer()} | {error, Reason :: term()}.
 blocksize_for_path(Handle, FileId) ->
     ?MODULE:apply_helper_nif(Handle, blocksize_for_path, [FileId]).
 

@@ -39,10 +39,9 @@
 
 
 %%%===================================================================
-%%% Available operations in middleware_worker
+%%% Archives related operations available in middleware_worker
 %%%===================================================================
 
-%% archives related
 
 -record(list_archives, {
     dataset_id :: dataset:id(),
@@ -87,7 +86,11 @@
     id :: archive_recall:id()
 }).
 
-%% automation related
+
+%%%===================================================================
+%%% Automation related operations available in middleware_worker
+%%%===================================================================
+
 
 -record(schedule_atm_workflow_execution, {
     atm_workflow_schema_id :: od_atm_workflow_schema:id(),
@@ -106,7 +109,11 @@
     atm_lane_run_selector :: atm_lane_execution:lane_run_selector()
 }).
 
-%% datasets related
+
+%%%===================================================================
+%%% Datasets related operations available in middleware_worker
+%%%===================================================================
+
 
 -record(list_top_datasets, {
     state :: dataset:state(),
@@ -141,7 +148,11 @@
 
 -record(get_file_eff_dataset_summary, {}).
 
-% QoS related
+
+%%%===================================================================
+%%% QoS related operations available in middleware_worker
+%%%===================================================================
+
 
 -record(add_qos_entry, {
     expression :: qos_expression:expression(),
@@ -163,7 +174,26 @@
     qos_id :: qos_entry:id()
 }).
 
-% transfers related
+
+%%%===================================================================
+%%% Shares related operations available in middleware_worker
+%%%===================================================================
+
+
+-record(create_share, {
+    name :: od_share:name(),
+    description :: od_share:description()
+}).
+
+-record(remove_share, {
+    share_id :: od_share:id()
+}).
+
+
+%%%===================================================================
+%%% Transfers related operations available in middleware_worker
+%%%===================================================================
+
 
 -record(schedule_file_transfer, {
     % meaning of fields in this record is explained in datastore_models.hrl

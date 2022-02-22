@@ -102,18 +102,21 @@ qos_status_after_failed_transfers_deleted_entry(_Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    oct_background:init_per_suite([{?LOAD_MODULES, [?MODULE, qos_tests_utils]} | Config], #onenv_test_config{
-        onenv_scenario = "2op",
-        envs = [{op_worker, op_worker, [
-            {fuse_session_grace_period_seconds, 24 * 60 * 60},
-            {provider_token_ttl_sec, 24 * 60 * 60},
-            {qos_retry_failed_files_interval_seconds, 5}
-        ]}]
-    }).
+    oct_background:init_per_suite([{?LOAD_MODULES, [?MODULE, qos_tests_utils, dir_stats_test_utils]} | Config],
+        #onenv_test_config{
+            onenv_scenario = "2op",
+            envs = [{op_worker, op_worker, [
+                {fuse_session_grace_period_seconds, 24 * 60 * 60},
+                {provider_token_ttl_sec, 24 * 60 * 60},
+                {qos_retry_failed_files_interval_seconds, 5}
+            ]}],
+            posthook = fun dir_stats_test_utils:disable_stats_counting_ct_posthook/1
+        }).
 
 
-end_per_suite(_Config) ->
-    oct_background:end_per_suite().
+end_per_suite(Config) ->
+    oct_background:end_per_suite(),
+    dir_stats_test_utils:enable_stats_counting(Config).
 
 
 init_per_testcase(_, Config) ->
@@ -125,7 +128,7 @@ init_per_testcase(_, Config) ->
 end_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     qos_tests_utils:finish_all_transfers(),
-    test_utils:mock_unload(Workers),
+    test_utils:mock_unload(Workers, replica_synchronizer),
     lfm_proxy:teardown(Config).
 
 

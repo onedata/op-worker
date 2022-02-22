@@ -1261,10 +1261,11 @@ get_root_dir_guid(ArchiveId) ->
 
 
 init_per_suite(Config) ->
-    oct_background:init_per_suite(Config, #onenv_test_config{
+    oct_background:init_per_suite([{?LOAD_MODULES, [dir_stats_test_utils]} | Config], #onenv_test_config{
         onenv_scenario = "api_tests",
         envs = [{op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}],
         posthook = fun(NewConfig) ->
+            dir_stats_test_utils:disable_stats_counting(NewConfig),
             SpaceId = oct_background:get_space_id(?SPACE),
             ozw_test_rpc:space_set_user_privileges(SpaceId, ?OCT_USER_ID(user3), [
                 ?SPACE_MANAGE_DATASETS, ?SPACE_VIEW_ARCHIVES, ?SPACE_CREATE_ARCHIVES,
@@ -1278,9 +1279,10 @@ init_per_suite(Config) ->
         end
     }).
 
-end_per_suite(_Config) ->
+end_per_suite(Config) ->
     stop_http_server(),
-    oct_background:end_per_suite().
+    oct_background:end_per_suite(),
+    dir_stats_test_utils:enable_stats_counting(Config).
 
 
 init_per_group(_Group, Config) ->

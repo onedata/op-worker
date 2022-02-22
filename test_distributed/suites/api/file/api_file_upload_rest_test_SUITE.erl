@@ -30,6 +30,7 @@
     update_file_content_test/1
 ]).
 
+%% @TODO VFS-8976 - test with update_existing=true option
 all() -> [
     create_file_test,
     create_file_at_path_test,
@@ -100,7 +101,7 @@ create_file_test(_Config) ->
             data_spec = api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
                 DirGuid, DirShareId, #data_spec{
                     required = [<<"name">>],
-                    optional = [<<"type">>, <<"mode">>, <<"offset">>, body],
+                    optional = [<<"type">>, <<"mode">>, <<"offset">>, body, <<"update_existing">>],
                     correct_values = #{
                         <<"name">> => [name_placeholder],
                         <<"type">> => [<<"REG">>, <<"DIR">>],
@@ -110,7 +111,8 @@ create_file_test(_Config) ->
                             ?WRITE_SIZE_BYTES,
                             ?WRITE_SIZE_BYTES * 1000000000 % > SUPPORT_SIZE
                         ],
-                        body => [Content]
+                        body => [Content],
+                        <<"update_existing">> => [false]
                     },
                     bad_values = [
                         {bad_id, FileObjectId, {rest, {error_fun, fun(#api_test_ctx{
@@ -142,7 +144,8 @@ create_file_test(_Config) ->
                         {<<"mode">>, <<"77777">>, ?ERROR_BAD_VALUE_NOT_IN_RANGE(<<"mode">>, 0, 8#1777)},
 
                         {<<"offset">>, <<"unicorns">>, ?ERROR_BAD_VALUE_INTEGER(<<"offset">>)},
-                        {<<"offset">>, <<"-123">>, ?ERROR_BAD_VALUE_TOO_LOW(<<"offset">>, 0)}
+                        {<<"offset">>, <<"-123">>, ?ERROR_BAD_VALUE_TOO_LOW(<<"offset">>, 0)},
+                        {<<"update_existing">>, <<"asd">>, ?ERROR_BAD_VALUE_BOOLEAN(<<"update_existing">>)}
                     ]
                 }
             )
@@ -333,7 +336,7 @@ create_file_at_path_test(_Config) ->
             data_spec = api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
                 DirGuid, DirShareId, #data_spec{
                     required = [<<"path">>],
-                    optional = [<<"type">>, <<"mode">>, <<"offset">>, body],
+                    optional = [<<"type">>, <<"mode">>, <<"offset">>, body, <<"update_existing">>],
                     correct_values = #{
                         <<"path">> => [
                             filename_only_without_create_parents_flag_placeholder,
@@ -349,7 +352,8 @@ create_file_at_path_test(_Config) ->
                             ?WRITE_SIZE_BYTES,
                             ?WRITE_SIZE_BYTES * 1000000000 % > SUPPORT_SIZE
                         ],
-                        body => [Content]
+                        body => [Content],
+                        <<"update_existing">> => [false]
                     },
 
                     bad_values = [
@@ -369,7 +373,8 @@ create_file_at_path_test(_Config) ->
                         {<<"mode">>, <<"77777">>, ?ERROR_BAD_VALUE_NOT_IN_RANGE(<<"mode">>, 0, 8#1777)},
 
                         {<<"offset">>, <<"unicorns">>, ?ERROR_BAD_VALUE_INTEGER(<<"offset">>)},
-                        {<<"offset">>, <<"-123">>, ?ERROR_BAD_VALUE_TOO_LOW(<<"offset">>, 0)}
+                        {<<"offset">>, <<"-123">>, ?ERROR_BAD_VALUE_TOO_LOW(<<"offset">>, 0)},
+                        {<<"update_existing">>, <<"asd">>, ?ERROR_BAD_VALUE_BOOLEAN(<<"update_existing">>)}
                     ]
                 }
             )
@@ -576,9 +581,9 @@ build_update_file_content_setup_fun(MemRef, Content) ->
 
     fun() ->
         FilePath = filename:join(["/", ?SPACE_KRK_PAR, ?RANDOM_FILE_NAME()]),
-        {ok, FileGuid} = api_test_utils:create_file(<<"file">>, P1Node, UserSessIdP1, FilePath, 8#704),
+        {ok, FileGuid} = lfm_test_utils:create_file(<<"file">>, P1Node, UserSessIdP1, FilePath, 8#704),
 
-        api_test_utils:write_file(P1Node, UserSessIdP1, FileGuid, 0, Content),
+        lfm_test_utils:write_file(P1Node, UserSessIdP1, FileGuid, Content),
         file_test_utils:await_size(P2Node, FileGuid, FileSize),
         file_test_utils:await_distribution(Providers, FileGuid, [{P1Node, FileSize}]),
 

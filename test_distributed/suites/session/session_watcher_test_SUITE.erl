@@ -7,6 +7,7 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This file contains incoming_session_watcher tests.
+%%% NOTE: fuse connection for each session is made in init_per_testcase
 %%% @end
 %%%-------------------------------------------------------------------
 -module(session_watcher_test_SUITE).
@@ -28,6 +29,7 @@
     incoming_session_watcher_should_not_remove_session_with_connections/1,
     incoming_session_watcher_should_remove_session_without_connections/1,
     incoming_session_watcher_should_remove_inactive_session/1,
+    incoming_session_watcher_should_remove_session_when_requested/1,
     incoming_session_watcher_should_remove_session_on_error/1,
     incoming_session_watcher_should_retry_session_removal/1,
     incoming_session_watcher_should_work_properly_with_forward_time_warps/1,
@@ -42,6 +44,7 @@ all() -> [
     incoming_session_watcher_should_not_remove_session_with_connections,
     incoming_session_watcher_should_remove_session_without_connections,
     incoming_session_watcher_should_remove_inactive_session,
+    incoming_session_watcher_should_remove_session_when_requested,
     incoming_session_watcher_should_remove_session_on_error,
     incoming_session_watcher_should_retry_session_removal,
     incoming_session_watcher_should_work_properly_with_forward_time_warps,
@@ -86,6 +89,13 @@ incoming_session_watcher_should_remove_inactive_session(Config) ->
     SessId = ?config(session_id, Config),
 
     set_session_status(Config, inactive),
+    ?assertReceivedMatch({termination_request, SessId}, ?TIMEOUT).
+
+
+incoming_session_watcher_should_remove_session_when_requested(Config) ->
+    SessId = ?config(session_id, Config),
+
+    report_session_close(Config),
     ?assertReceivedMatch({termination_request, SessId}, ?TIMEOUT).
 
 
@@ -330,6 +340,15 @@ set_session_status(Config, Status) ->
     ?call(Worker, update, [SessId, fun(Sess = #session{}) ->
         {ok, Sess#session{status = Status}}
     end]),
+    ok.
+
+
+%% @private
+-spec report_session_close(test_config:config()) -> ok.
+report_session_close(Config) ->
+    SessId = ?config(session_id, Config),
+    [Worker] = ?config(op_worker_nodes, Config),
+    ?call(Worker, incoming_session_watcher, report_session_close, [SessId]),
     ok.
 
 
