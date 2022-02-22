@@ -779,11 +779,11 @@ make_rest_request(Node, URL, Method, Headers, ReqBody, SpaceId, RequiredPrivs) -
     UserId = oct_background:get_user_id(?USER_PLACEHOLDER),
     UserPrivileges = opt_spaces:get_privileges(Node, SpaceId, UserId),
     try
-        ozt_spaces:set_privileges(SpaceId, UserId, AllSpacePrivs -- RequiredPrivs),
+        ozt_spaces:set_privileges(SpaceId, ?USER_PLACEHOLDER, AllSpacePrivs -- RequiredPrivs),
         {ok, Code, _, Resp} = rest_test_utils:request(Node, URL, Method, Headers, EncodedReqBody),
         ?assertMatch(ErrorForbidden, {Code, json_utils:decode(Resp)}),
 
-        ozt_spaces:set_privileges(SpaceId, oct_background:get_user_id(?USER_PLACEHOLDER), AllSpacePrivs),
+        ozt_spaces:set_privileges(SpaceId, ?USER_PLACEHOLDER, AllSpacePrivs),
         case rest_test_utils:request(Node, URL, Method, Headers, EncodedReqBody) of
             {ok, 200, _, RespBody} ->
                 {ok, RespBody};
@@ -793,5 +793,5 @@ make_rest_request(Node, URL, Method, Headers, ReqBody, SpaceId, RequiredPrivs) -
                 {error, {Code1, RespBody}}
         end
     after
-        ozt_spaces:set_privileges(SpaceId, oct_background:get_user_id(?USER_PLACEHOLDER), UserPrivileges)
+        ozt_spaces:set_privileges(SpaceId, ?USER_PLACEHOLDER, UserPrivileges)
     end.

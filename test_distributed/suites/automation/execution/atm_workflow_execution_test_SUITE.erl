@@ -190,15 +190,11 @@ init_per_suite(Config) ->
         posthook = fun(NewConfig) ->
             atm_test_inventory:init_per_suite(krakow, user1),
             atm_test_inventory:add_member(user2),
-            ozt_spaces:set_privileges(
-                oct_background:get_space_id(space_krk),
-                oct_background:get_user_id(user2),
-                [
-                    ?SPACE_VIEW_ATM_WORKFLOW_EXECUTIONS,
-                    ?SPACE_SCHEDULE_ATM_WORKFLOW_EXECUTIONS
-                    | privileges:space_member()
-                ]
-            ),
+            ozt_spaces:set_privileges(space_krk, user2, [
+                ?SPACE_VIEW_ATM_WORKFLOW_EXECUTIONS,
+                ?SPACE_SCHEDULE_ATM_WORKFLOW_EXECUTIONS
+                | privileges:space_member()
+            ]),
             NewConfig
         end
     }).
