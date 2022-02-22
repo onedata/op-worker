@@ -14,6 +14,7 @@
 
 -include("atm_workflow_exeuction_test_runner.hrl").
 -include("atm_test_schema.hrl").
+-include("onenv_test_utils.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
@@ -129,7 +130,9 @@ atm_workflow_with_empty_lane_scheduling_should_fail_test(_Config) ->
 
     ?assertEqual(
         ?ERROR_ATM_LANE_EMPTY(EmptyAtmLaneSchemaId),
-        opt_atm:schedule_workflow_execution(krakow, SessionId, SpaceId, AtmWorkflowSchemaId, 1),
+        ?rpc(krakow, catch mi_atm:schedule_workflow_execution(
+            SessionId, SpaceId, AtmWorkflowSchemaId, 1, #{}, undefined
+        )),
         30  % TODO is it necessary? maybe some force fetch? returns {error, forbidden}
     ).
 

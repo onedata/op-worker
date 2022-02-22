@@ -25,6 +25,7 @@
 
 -include("atm_workflow_exeuction_test_runner.hrl").
 -include("modules/automation/atm_execution.hrl").
+-include("onenv_test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 
 %% API
@@ -114,9 +115,10 @@ run(TestSpec = #atm_workflow_execution_test_spec{
     SessionId = oct_background:get_user_session_id(UserSelector, ProviderSelector),
     SpaceId = oct_background:get_space_id(SpaceSelector),
 
-    {ok, {AtmWorkflowExecutionId, _}} = ?assertMatch({ok, _}, opt_atm:schedule_workflow_execution(
-        ProviderSelector, SessionId, SpaceId, AtmWorkflowSchemaId, AtmWorkflowSchemaRevisionNum,
-        StoreInitialContent#{test_process => self()}, CallbackUrl
+    TestProcPid = self(),
+    {AtmWorkflowExecutionId, _} = ?rpc(ProviderSelector, mi_atm:schedule_workflow_execution(
+        SessionId, SpaceId, AtmWorkflowSchemaId, AtmWorkflowSchemaRevisionNum,
+        StoreInitialContent#{test_process => TestProcPid}, CallbackUrl
     )),
 
     AtmLaneSchemas = atm_workflow_schema_test_utils:query(
