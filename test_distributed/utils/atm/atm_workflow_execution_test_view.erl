@@ -21,7 +21,6 @@
 -module(atm_workflow_execution_test_view).
 -author("Bartosz Walkowicz").
 
--include("atm_workflow_exeuction_test_runner.hrl").
 -include("modules/automation/atm_execution.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 
@@ -44,6 +43,10 @@
 -type view() :: json_utils:json_term().
 
 -export_type([view/0]).
+
+
+-define(JSON_PATH(__QUERY_BIN), binary:split(__QUERY_BIN, <<".">>, [global])).
+-define(NOW(), global_clock:timestamp_seconds()).
 
 
 %%%===================================================================
@@ -94,7 +97,7 @@ report_lane_run_begin_preparing(AtmLaneRunSelector, TestView0) ->
         <<"scheduled">> ->
             TestView1#{
                 <<"status">> => <<"active">>,
-                <<"startTime">> => build_timestamp_field_validator(global_clock:timestamp_seconds())
+                <<"startTime">> => build_timestamp_field_validator(?NOW())
             };
         _ ->
             TestView1
@@ -123,7 +126,7 @@ report_workflow_execution_aborting(TestView) ->
 report_workflow_execution_failed(TestView) ->
     TestView#{
         <<"status">> => <<"failed">>,
-        <<"finishTime">> => build_timestamp_field_validator(global_clock:timestamp_seconds())
+        <<"finishTime">> => build_timestamp_field_validator(?NOW())
     }.
 
 

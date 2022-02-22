@@ -72,7 +72,4 @@
 }).
 
 
--define(JSON_PATH(__QUERY_BIN), binary:split(__QUERY_BIN, <<".">>, [global])).
-
-
 -endif.
