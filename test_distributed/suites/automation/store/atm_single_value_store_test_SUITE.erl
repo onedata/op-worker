@@ -333,7 +333,7 @@ end_per_group(_Group, Config) ->
 
 
 init_per_testcase(_Case, Config) ->
-    ct:timetrap({minutes, 3}),
+    ct:timetrap({minutes, 5}),
     Config.
 
 

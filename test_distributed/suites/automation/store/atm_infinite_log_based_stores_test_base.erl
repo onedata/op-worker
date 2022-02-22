@@ -148,15 +148,13 @@ create_test_base(#{
             ?rpc(catch CreateStoreFun(<<"NaN">>))
         ),
 
-        % Assert creating store with array initial content containing some invalid items
-        % fails
+        % Assert creating store with array initial content containing some invalid items fails
         ?assertEqual(
             ?ERROR_ATM_DATA_TYPE_UNVERIFIED(InvalidInputItemDataSeed, InputItemGeneratorSeedDataType),
             ?rpc(catch CreateStoreFun([ValidInputItem, InvalidInputItem]))
         ),
 
-        % Assert creating store with array initial content containing only valid items
-        % succeed
+        % Assert creating store with array initial content containing only valid items succeed
         ValidInputContent = [ValidInputItem, ValidInputItem],
         ?assertMatch(
             {ok, #document{value = #atm_store{initial_content = ValidInputContent, frozen = false}}},
@@ -230,7 +228,7 @@ apply_operation_test_base(#{
                 ?ERROR_ATM_DATA_TYPE_UNVERIFIED(InvalidInputItemDataSeed, InputItemGeneratorSeedDataType)},
             {extend, [NewInputItem1, InvalidInputItem],
                 ?ERROR_ATM_DATA_TYPE_UNVERIFIED(InvalidInputItemDataSeed, InputItemGeneratorSeedDataType)}
-            %% TODO VFS-8686 refactor atm data types errors to properly handle list types
+            %% TODO VFS-8686 refactor atm data types errors to properly handle array types
 %%            {extend, NewInputItem1,
 %%                ?ERROR_ATM_DATA_TYPE_UNVERIFIED(NewInputItem1, atm_array_type)}
         ]),

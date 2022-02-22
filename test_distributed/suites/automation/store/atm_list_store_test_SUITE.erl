@@ -190,7 +190,7 @@ end_per_group(infinite_log_based_stores_common_tests, Config) ->
 
 
 init_per_testcase(_Case, Config) ->
-    ct:timetrap({minutes, 3}),
+    ct:timetrap({minutes, 5}),
     Config.
 
 
