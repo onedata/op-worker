@@ -36,9 +36,6 @@
 -define(ATM_INVENTORY_ID_KEY, atm_test_inventory_id).
 -define(ATM_INVENTORY_ADMIN_KEY, atm_test_inventory_admin).
 
-% TODO is it necessary? maybe some force fetch?
--define(ATTEMPTS, 30).
-
 
 %%%===================================================================
 %%% API
@@ -59,7 +56,7 @@ init_per_suite(ProviderSelector, AdminUserSelector) ->
             node_cache:put(?ATM_INVENTORY_ID_KEY, AtmInventoryId),
 
             UserId = oct_background:get_user_id(AdminUserSelector),
-            ozt_atm:add_user_to_inventory(UserId, AtmInventoryId, privileges:atm_inventory_admin()),
+            add_user(UserId, privileges:atm_inventory_admin()),
             node_cache:put(?ATM_INVENTORY_ADMIN_KEY, UserId);
 
         _AtmInventoryId ->
@@ -76,7 +73,7 @@ get_id() ->
 -spec add_member(oct_background:entity_selector()) -> ok.
 add_member(UserPlaceholder) ->
     UserId = oct_background:get_user_id(UserPlaceholder),
-    ozt_atm:add_user_to_inventory(UserId, get_id()).
+    add_user(UserId, privileges:atm_inventory_member()).
 
 
 -spec add_workflow_schema(
@@ -85,7 +82,17 @@ add_member(UserPlaceholder) ->
     od_atm_workflow_schema:id().
 add_workflow_schema(#atm_workflow_schema_dump{} = AtmWorkflowSchemaDump) ->
     AtmWorkflowSchemaDumpJson = atm_workflow_schema_dump_to_json(AtmWorkflowSchemaDump),
-    ozt_atm:create_workflow_schema(AtmWorkflowSchemaDumpJson#{<<"atmInventoryId">> => get_id()});
+    TestAtmInventoryId = get_id(),
+    AtmWorkflowSchemaId = ozt_atm:create_workflow_schema(AtmWorkflowSchemaDumpJson#{
+        <<"atmInventoryId">> => TestAtmInventoryId
+    }),
+
+    % Invalidate cached od_atm_inventory entry to force op to fetch it on access
+    % rather than use stale data
+    ProviderSelector = node_cache:get(?PROVIDER_SELECTOR_KEY),
+    ok = ?rpc(ProviderSelector, od_atm_inventory:invalidate_cache(TestAtmInventoryId)),
+
+    AtmWorkflowSchemaId;
 
 add_workflow_schema(AtmWorkflowSchemaDumpDraft) ->
     add_workflow_schema(atm_test_schema_factory:create_from_draft(AtmWorkflowSchemaDumpDraft)).
@@ -99,8 +106,7 @@ get_workflow_schema(AtmWorkflowSchemaId) ->
 
     {ok, #document{value = AtmWorkflowSchema}} = ?assertMatch(
         {ok, _},
-        ?rpc(ProviderSelector, atm_workflow_schema_logic:get(AdminUserSessionId, AtmWorkflowSchemaId)),
-        ?ATTEMPTS
+        ?rpc(ProviderSelector, atm_workflow_schema_logic:get(AdminUserSessionId, AtmWorkflowSchemaId))
     ),
     AtmWorkflowSchema.
 
@@ -108,6 +114,18 @@ get_workflow_schema(AtmWorkflowSchemaId) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+%% @private
+-spec add_user(od_user:id(), [privileges:atm_inventory_privilege()]) -> ok.
+add_user(UserId, AtmInventoryPrivs) ->
+    AtmInventoryId = get_id(),
+    ozt_atm:add_user_to_inventory(UserId, AtmInventoryId, AtmInventoryPrivs),
+
+    % Invalidate cached user entry to force op to fetch it on access rather
+    % than use stale data
+    ProviderSelector = node_cache:get(?PROVIDER_SELECTOR_KEY),
+    ok = ?rpc(ProviderSelector, od_user:invalidate_cache(UserId)).
 
 
 %% @private

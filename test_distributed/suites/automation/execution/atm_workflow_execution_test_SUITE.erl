@@ -132,8 +132,7 @@ atm_workflow_with_empty_lane_scheduling_should_fail_test(_Config) ->
         ?ERROR_ATM_LANE_EMPTY(EmptyAtmLaneSchemaId),
         ?rpc(krakow, catch mi_atm:schedule_workflow_execution(
             SessionId, SpaceId, AtmWorkflowSchemaId, 1, #{}, undefined
-        )),
-        30  % TODO is it necessary? maybe some force fetch? returns {error, forbidden}
+        ))
     ).
 
 

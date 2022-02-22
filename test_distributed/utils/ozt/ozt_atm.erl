@@ -18,10 +18,8 @@
 
 -export([
     create_inventory/1,
-    add_user_to_inventory/2, add_user_to_inventory/3,
-
-    create_workflow_schema/1,
-    get_workflow_schema/1
+    add_user_to_inventory/3,
+    create_workflow_schema/1
 ]).
 
 
@@ -36,11 +34,6 @@ create_inventory(Name) ->
         ?ROOT, #{<<"name">> => Name}
     ])),
     AtmInventoryId.
-
-
--spec add_user_to_inventory(od_user:id(), od_atm_inventory:id()) -> ok.
-add_user_to_inventory(UserId, AtmInventoryId) ->
-    add_user_to_inventory(UserId, AtmInventoryId, privileges:atm_inventory_member()).
 
 
 -spec add_user_to_inventory(
@@ -62,11 +55,3 @@ create_workflow_schema(Data) ->
         ?ROOT, Data
     ])),
     AtmWorkflowSchemaId.
-
-
--spec get_workflow_schema(od_atm_workflow_schema:id()) -> od_atm_workflow_schema:record().
-get_workflow_schema(AtmWorkflowSchemaId) ->
-    {ok, AtmWorkflowSchema} = ?assertMatch({ok, _}, ozw_test_rpc:call(atm_workflow_schema_logic, get, [
-        ?ROOT, AtmWorkflowSchemaId
-    ])),
-    AtmWorkflowSchema.
