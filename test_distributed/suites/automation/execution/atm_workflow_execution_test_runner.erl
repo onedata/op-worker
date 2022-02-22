@@ -121,7 +121,7 @@ run(TestSpec = #atm_workflow_execution_test_spec{
         StoreInitialContent#{test_process => TestProcPid}, CallbackUrl
     )),
 
-    AtmLaneSchemas = atm_workflow_schema_test_utils:query(
+    AtmLaneSchemas = atm_workflow_schema_query:run(
         atm_test_inventory:get_workflow_schema(AtmWorkflowSchemaId),
         [revision_registry, registry, 1, lanes]
     ),

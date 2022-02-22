@@ -6,16 +6,16 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Automation workflow schema utility functions used in CT tests.
+%%% Utilities for accessing any nested field of automation workflow schema.
 %%% @end
 %%%-------------------------------------------------------------------
--module(atm_workflow_schema_test_utils).
+-module(atm_workflow_schema_query).
 -author("Bartosz Walkowicz").
 
 -include("atm_test_schema.hrl").
 -include("onenv_test_utils.hrl").
 
--export([query/2]).
+-export([run/2]).
 
 
 %%%===================================================================
@@ -23,28 +23,29 @@
 %%%===================================================================
 
 
-query(Target, []) ->
+run(Target, []) ->
     Target;
 
-query(Map, [Key | Rest]) when
+run(Map, [Key | Rest]) when
     is_map(Map),
     is_map_key(Key, Map)
 ->
-    query(maps:get(Key, Map), Rest);
+    run(maps:get(Key, Map), Rest);
 
-query(List, [Index | Rest]) when
+run(List, [Index | Rest]) when
     is_list(List),
     is_integer(Index),
     Index >= 1,
     Index =< length(List)
 ->
-    query(lists:nth(Index, List), Rest);
+    run(lists:nth(Index, List), Rest);
 
-query(Record, [FieldName | Rest]) when
+run(Record, [FieldName | Rest]) when
     is_tuple(Record),
+    is_atom(element(1, Record)),
     is_atom(FieldName)
 ->
-    query(
+    run(
         element(1 + lists_utils:index_of(FieldName, get_fields(Record)), Record),
         Rest
     ).

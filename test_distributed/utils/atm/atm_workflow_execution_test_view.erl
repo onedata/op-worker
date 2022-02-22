@@ -28,7 +28,7 @@
 -export([
     build/3,
 
-    report_lane_run_begin_preparing/2,
+    report_lane_run_started_preparing/2,
     report_lane_run_failed/2,
     report_workflow_execution_aborting/1,
     report_workflow_execution_failed/1,
@@ -83,9 +83,9 @@ build(SpaceId, ApproxScheduleTime, AtmLaneSchemas) ->
     }.
 
 
--spec report_lane_run_begin_preparing(atm_lane_execution:lane_run_selector(), view()) ->
+-spec report_lane_run_started_preparing(atm_lane_execution:lane_run_selector(), view()) ->
     view().
-report_lane_run_begin_preparing(AtmLaneRunSelector, TestView0) ->
+report_lane_run_started_preparing(AtmLaneRunSelector, TestView0) ->
     {AtmLaneRunPath, AtmLaneRun} = locate_lane_run(AtmLaneRunSelector, TestView0),
 
     {ok, TestView1} = json_utils:insert(

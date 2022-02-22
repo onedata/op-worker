@@ -123,7 +123,7 @@ atm_workflow_with_empty_lane_scheduling_should_fail_test(_Config) ->
     AtmWorkflowSchemaId = atm_test_inventory:add_workflow_schema(
         ?EMPTY_LANE_ATM_WORKFLOW_SCHEMA_DRAFT
     ),
-    EmptyAtmLaneSchemaId = atm_workflow_schema_test_utils:query(
+    EmptyAtmLaneSchemaId = atm_workflow_schema_query:run(
         atm_test_inventory:get_workflow_schema(AtmWorkflowSchemaId),
         [revision_registry, registry, 1, lanes, 1, id]
     ),
@@ -152,7 +152,7 @@ prepare_first_lane_run_failure_test(_Config) ->
                 selector = {1, 1},
                 create_run = #atm_step_mock_spec{
                     before_step_test_view_diff = fun(#atm_mock_call_ctx{workflow_execution_test_view = TestView0}) ->
-                        {true, atm_workflow_execution_test_view:report_lane_run_begin_preparing({1, 1}, TestView0)}
+                        {true, atm_workflow_execution_test_view:report_lane_run_started_preparing({1, 1}, TestView0)}
                     end,
                     mock_result = {true, ?ERROR_INTERNAL_SERVER_ERROR}
                 },
