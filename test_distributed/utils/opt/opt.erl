@@ -16,12 +16,16 @@
 
 -type entity() :: od_space.
 
--export([force_fetch_entity/2]).
+-export([
+    force_fetch_entity/2,
+    invalidate_cache/2
+]).
 
 
 %%%===================================================================
 %%% API
 %%%===================================================================
+
 
 -spec force_fetch_entity(entity(), binary()) -> ok.
 force_fetch_entity(Entity, Id) ->
@@ -31,5 +35,18 @@ force_fetch_entity(Entity, Id) ->
     end, Providers).
 
 
+-spec invalidate_cache(gs_protocol:entity_type(), binary()) -> ok.
+invalidate_cache(Entity, Id) ->
+    lists:foreach(fun(ProviderId) ->
+        ?assertEqual(ok, opw_test_rpc:call(ProviderId, Entity, invalidate_cache, [Id]))
+    end, oct_background:get_provider_ids()).
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+
+%% @private
 -spec entity_to_logic_module(entity()) -> module().
 entity_to_logic_module(od_space) -> space_logic.

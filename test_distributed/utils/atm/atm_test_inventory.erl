@@ -89,8 +89,7 @@ add_workflow_schema(#atm_workflow_schema_dump{} = AtmWorkflowSchemaDump) ->
 
     % Invalidate cached od_atm_inventory entry to force op to fetch it on access
     % rather than use stale data
-    ProviderSelector = node_cache:get(?PROVIDER_SELECTOR_KEY),
-    ok = ?rpc(ProviderSelector, od_atm_inventory:invalidate_cache(TestAtmInventoryId)),
+    opt:invalidate_cache(od_atm_inventory, TestAtmInventoryId),
 
     AtmWorkflowSchemaId;
 
@@ -124,8 +123,7 @@ add_user(UserId, AtmInventoryPrivs) ->
 
     % Invalidate cached user entry to force op to fetch it on access rather
     % than use stale data
-    ProviderSelector = node_cache:get(?PROVIDER_SELECTOR_KEY),
-    ok = ?rpc(ProviderSelector, od_user:invalidate_cache(UserId)).
+    opt:invalidate_cache(od_user, UserId).
 
 
 %% @private
