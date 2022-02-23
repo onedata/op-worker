@@ -216,7 +216,7 @@ do_master_job(MasterJob = #storage_traverse_master{
 update_job_progress(Id, Job, Pool, TaskId, Status)
     when Status =:= waiting
     orelse Status =:= on_pool
-    ->
+->
     storage_traverse_job:save_master_job(Id, Job, Pool, TaskId);
 update_job_progress(Id, _Job, _Pool, _TaskId, _Status) ->
     ok = storage_traverse_job:delete_master_job(Id),

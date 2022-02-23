@@ -76,15 +76,17 @@ get_response(#gri{aspect = dataset_summary}, #file_eff_dataset_summary{
         <<"effectiveProtectionFlags">> => file_meta:protection_flags_to_json(EffProtectionFlags)
     });
 
-get_response(#gri{aspect = children}, {Children, IsLast}) ->
+get_response(#gri{aspect = children}, {Children, IsLast, ReturnedToken}) ->
     ?OK_REPLY(#{
-        <<"children">> => lists:map(fun({Guid, Name}) ->
-            {ok, ObjectId} = file_id:guid_to_objectid(Guid),
-            #{
-                <<"id">> => ObjectId,
-                <<"name">> => Name
-            }
-        end, Children),
+        <<"children">> => Children,
+        <<"nextPageToken">> => utils:undefined_to_null(ReturnedToken),
+        <<"isLast">> => IsLast
+    });
+
+get_response(#gri{aspect = files}, {Files, NextPageToken, IsLast}) ->
+    ?OK_REPLY(#{
+        <<"files">> => Files,
+        <<"nextPageToken">> => NextPageToken,
         <<"isLast">> => IsLast
     });
 

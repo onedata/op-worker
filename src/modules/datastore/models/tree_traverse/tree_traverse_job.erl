@@ -136,7 +136,7 @@ get_master_job(#document{value = #tree_traverse_job{
                 file_ctx = FileCtx,
                 user_id = UserId,
                 token = case UseListingToken of
-                    true -> ?INITIAL_LS_TOKEN;
+                    true -> ?INITIAL_DATASTORE_LS_TOKEN;
                     false -> undefined
                 end,
                 last_name = LastName,

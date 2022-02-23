@@ -444,8 +444,8 @@ create(#sd_handle{file = FileId} = SDHandle, Mode) ->
 %% current size of the file known by the op-worker.
 %% @end
 %%--------------------------------------------------------------------
--spec truncate(handle(), Size :: integer(), CurrentSize :: non_neg_integer())
-    -> ok | error_reply().
+-spec truncate(handle(), Size :: integer(), CurrentSize :: non_neg_integer()) ->
+    ok | error_reply().
 truncate(#sd_handle{open_flag = undefined}, _, _) ->
     throw(?EPERM);
 truncate(#sd_handle{open_flag = read}, _, _) -> throw(?EPERM);

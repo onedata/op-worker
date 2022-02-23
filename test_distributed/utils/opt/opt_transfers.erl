@@ -21,7 +21,7 @@
 ]).
 
 -define(CALL(NodeSelector, Args),
-    try opw_test_rpc:call(NodeSelector, mi_transfers, ?FUNCTION_NAME, Args) of
+    try opw_test_rpc:insecure_call(NodeSelector, mi_transfers, ?FUNCTION_NAME, Args) of
         ok -> ok;
         __RESULT -> {ok, __RESULT}
     catch throw:__ERROR ->

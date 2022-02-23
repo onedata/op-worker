@@ -55,7 +55,7 @@ groups() -> [
 
         get_file_distribution_test,
         get_dir_distribution_test,
-        
+
         test_for_hardlink_between_files_test
     ]}
 ].
@@ -81,7 +81,7 @@ get_file_attrs_test(Config) ->
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
 
     {ok, FileAttrs} = file_test_utils:get_attrs(P2Node, FileGuid),
-    JsonAttrs = attrs_to_json(undefined, FileAttrs),
+    JsonAttrs = api_test_utils:file_attrs_to_json(undefined, FileAttrs),
 
     ?assert(onenv_api_test_runner:run_tests([
         #suite_spec{
@@ -145,7 +145,7 @@ get_shared_file_attrs_test(_Config) ->
 
     FileType = api_test_utils:randomly_choose_file_type_for_test(),
     FilePath = filename:join(["/", ?SPACE_KRK_PAR, ?RANDOM_FILE_NAME()]),
-    {ok, FileGuid} = api_test_utils:create_file(FileType, P1Node, UserSessIdP1, FilePath, 8#707),
+    {ok, FileGuid} = lfm_test_utils:create_file(FileType, P1Node, UserSessIdP1, FilePath, 8#707),
 
     ShareId1 = api_test_utils:share_file_and_sync_file_attrs(P1Node, SpaceOwnerSessId, Providers, FileGuid),
     ShareId2 = api_test_utils:share_file_and_sync_file_attrs(P1Node, SpaceOwnerSessId, Providers, FileGuid),
@@ -158,7 +158,7 @@ get_shared_file_attrs_test(_Config) ->
         file_test_utils:get_attrs(P2Node, FileGuid),
         ?ATTEMPTS
     ),
-    JsonAttrs = attrs_to_json(ShareId1, FileAttrs),
+    JsonAttrs = api_test_utils:file_attrs_to_json(ShareId1, FileAttrs),
 
     ?assert(onenv_api_test_runner:run_tests([
         #suite_spec{
@@ -242,8 +242,8 @@ test_for_hardlink_between_files_test(_Config) ->
         filename:join(["/", ?SPACE_KRK_PAR, ?RANDOM_FILE_NAME()])
     end,
     UserSessIdP1 = oct_background:get_user_session_id(user3, krakow),
-    {ok, TargetGuid} = api_test_utils:create_file(<<"file">>, ProviderNode, UserSessIdP1, GenPathFun()),
-    {ok, NotAffiliatedGuid} = api_test_utils:create_file(<<"file">>, ProviderNode, UserSessIdP1, GenPathFun()),
+    {ok, TargetGuid} = lfm_test_utils:create_file(<<"file">>, ProviderNode, UserSessIdP1, GenPathFun()),
+    {ok, NotAffiliatedGuid} = lfm_test_utils:create_file(<<"file">>, ProviderNode, UserSessIdP1, GenPathFun()),
     {ok, #file_attr{guid = LinkGuid1}} = lfm_proxy:make_link(ProviderNode, UserSessIdP1, GenPathFun(), TargetGuid),
     {ok, #file_attr{guid = LinkGuid2}} = lfm_proxy:make_link(ProviderNode, UserSessIdP1, GenPathFun(), TargetGuid),
     
@@ -310,70 +310,6 @@ test_for_hardlink_between_files_test(_Config) ->
 
 
 %% @private
--spec attrs_to_json(od_share:id(), #file_attr{}) -> map().
-attrs_to_json(ShareId, #file_attr{
-    guid = Guid,
-    parent_guid = ParentGuid,
-    name = Name,
-    mode = Mode,
-    uid = Uid,
-    gid = Gid,
-    atime = ATime,
-    mtime = MTime,
-    ctime = CTime,
-    type = Type,
-    size = Size,
-    shares = Shares,
-    provider_id = ProviderId,
-    owner_id = OwnerId,
-    nlink = LinksCount
-}) ->
-    PublicAttrs = #{
-        <<"name">> => Name,
-        <<"atime">> => ATime,
-        <<"mtime">> => MTime,
-        <<"ctime">> => CTime,
-        <<"type">> => str_utils:to_binary(Type),
-        <<"size">> => Size
-    },
-
-    case ShareId of
-        undefined ->
-            {ok, ObjectId} = file_id:guid_to_objectid(Guid),
-            {ok, ParentObjectId} = file_id:guid_to_objectid(ParentGuid),
-
-            PublicAttrs#{
-                <<"file_id">> => ObjectId,
-                <<"parent_id">> => ParentObjectId,
-                <<"mode">> => <<"0", (integer_to_binary(Mode, 8))/binary>>,
-                <<"storage_user_id">> => Uid,
-                <<"storage_group_id">> => Gid,
-                <<"shares">> => Shares,
-                <<"provider_id">> => ProviderId,
-                <<"owner_id">> => OwnerId,
-                <<"hardlinks_count">> => utils:undefined_to_null(LinksCount)
-            };
-        _ ->
-            ShareGuid = file_id:guid_to_share_guid(Guid, ShareId),
-            {ok, ShareObjectId} = file_id:guid_to_objectid(ShareGuid),
-
-            PublicAttrs#{
-                <<"file_id">> => ShareObjectId,
-                <<"parent_id">> => null,
-                <<"mode">> => <<"0", (integer_to_binary(2#111 band Mode, 8))/binary>>,
-                <<"storage_user_id">> => ?SHARE_UID,
-                <<"storage_group_id">> => ?SHARE_GID,
-                <<"shares">> => case lists:member(ShareId, Shares) of
-                    true -> [ShareId];
-                    false -> []
-                end,
-                <<"provider_id">> => <<"unknown">>,
-                <<"owner_id">> => <<"unknown">>
-            }
-    end.
-
-
-%% @private
 -spec get_attrs_data_spec(TestMode :: normal_mode | share_mode) -> onenv_api_test_runner:data_spec().
 get_attrs_data_spec(normal_mode) ->
     #data_spec{
@@ -381,7 +317,7 @@ get_attrs_data_spec(normal_mode) ->
         correct_values = #{<<"attribute">> => ?PRIVATE_BASIC_ATTRIBUTES},
         bad_values = [
             {<<"attribute">>, true, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attribute">>, ?PRIVATE_BASIC_ATTRIBUTES)},
-            {<<"attribute">>, 10, {gs, ?ERROR_BAD_VALUE_BINARY(<<"attribute">>)}},
+            {<<"attribute">>, 10, {gs, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attribute">>, ?PRIVATE_BASIC_ATTRIBUTES)}},
             {<<"attribute">>, <<"NaN">>, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attribute">>, ?PRIVATE_BASIC_ATTRIBUTES)}
         ]
     };
@@ -391,7 +327,7 @@ get_attrs_data_spec(share_mode) ->
         correct_values = #{<<"attribute">> => ?PUBLIC_BASIC_ATTRIBUTES},
         bad_values = [
             {<<"attribute">>, true, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attribute">>, ?PUBLIC_BASIC_ATTRIBUTES)},
-            {<<"attribute">>, 10, {gs, ?ERROR_BAD_VALUE_BINARY(<<"attribute">>)}},
+            {<<"attribute">>, 10, {gs, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attribute">>, ?PUBLIC_BASIC_ATTRIBUTES)}},
             {<<"attribute">>, <<"NaN">>, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attribute">>, ?PUBLIC_BASIC_ATTRIBUTES)},
             {<<"attribute">>, <<"owner_id">>, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attribute">>, ?PUBLIC_BASIC_ATTRIBUTES)}
         ]
@@ -819,12 +755,12 @@ get_file_distribution_test(Config) ->
 
     FileType = <<"file">>,
     FilePath = filename:join(["/", ?SPACE_KRK_PAR, ?RANDOM_FILE_NAME()]),
-    {ok, FileGuid} = api_test_utils:create_file(FileType, P1Node, UserSessIdP1, FilePath, 8#707),
+    {ok, FileGuid} = lfm_test_utils:create_file(FileType, P1Node, UserSessIdP1, FilePath, 8#707),
     {ok, ShareId} = opt_shares:create(P1Node, SpaceOwnerSessIdP1, ?FILE_REF(FileGuid), <<"share">>),
 
     file_test_utils:await_sync(P2Node, FileGuid),
 
-    api_test_utils:fill_file_with_dummy_data(P1Node, UserSessIdP1, FileGuid, 0, 20),
+    lfm_test_utils:write_file(P1Node, UserSessIdP1, FileGuid, 0, {rand_content, 20}),
     ExpDist1 = [#{
         <<"providerId">> => P1Id,
         <<"blocks">> => [[0, 20]],
@@ -835,7 +771,7 @@ get_file_distribution_test(Config) ->
 
     % Write another block to file on P2 and check returned distribution
 
-    api_test_utils:fill_file_with_dummy_data(P2Node, UserSessIdP2, FileGuid, 30, 20),
+    lfm_test_utils:write_file(P2Node, UserSessIdP2, FileGuid, 30, {rand_content, 20}),
     ExpDist2 = [
         #{
             <<"providerId">> => P1Id,
@@ -862,7 +798,7 @@ get_dir_distribution_test(Config) ->
 
     FileType = <<"dir">>,
     DirPath = filename:join(["/", ?SPACE_KRK_PAR, ?RANDOM_FILE_NAME()]),
-    {ok, DirGuid} = api_test_utils:create_file(FileType, P1Node, UserSessIdP1, DirPath, 8#707),
+    {ok, DirGuid} = lfm_test_utils:create_file(FileType, P1Node, UserSessIdP1, DirPath, 8#707),
     {ok, ShareId} = opt_shares:create(P1Node, SpaceOwnerSessIdP1, ?FILE_REF(DirGuid), <<"share">>),
     file_test_utils:await_sync(P2Node, DirGuid),
 
@@ -872,12 +808,12 @@ get_dir_distribution_test(Config) ->
 
     % Create file in dir and assert that dir distribution hasn't changed
 
-    {ok, FileGuid} = api_test_utils:create_file(
+    {ok, FileGuid} = lfm_test_utils:create_file(
         <<"file">>, P2Node, UserSessIdP2,
         filename:join([DirPath, ?RANDOM_FILE_NAME()]),
         8#707
     ),
-    api_test_utils:fill_file_with_dummy_data(P2Node, UserSessIdP2, FileGuid, 30, 20),
+    lfm_test_utils:write_file(P2Node, UserSessIdP2, FileGuid, 30, {rand_content, 20}),
 
     wait_for_file_location_sync(P1Node, UserSessIdP1, DirGuid, ExpDist),
     get_distribution_test_base(FileType, DirGuid, ShareId, ExpDist, Config).

@@ -73,12 +73,6 @@
 
 
 -spec translate_value(gri:gri(), Value :: term()) -> gs_protocol:data().
-translate_value(#gri{aspect = children}, {Children, IsLast}) ->
-    #{
-        <<"children">> => lists:map(fun({Guid, _Name}) -> Guid end, Children),
-        <<"isLast">> => IsLast
-    };
-
 translate_value(#gri{aspect = children_details, scope = Scope}, {ChildrenDetails, IsLast}) ->
     #{
         <<"children">> => lists:map(fun(ChildDetails) ->
@@ -190,10 +184,26 @@ translate_dataset_summary(#file_eff_dataset_summary{
     }.
 
 
--spec translate_distribution(file_id:file_guid(), Distribution :: [file_distribution()]) ->
+-spec translate_distribution(file_id:file_guid(), [file_distribution()]) ->
     distribution_per_provider().
-translate_distribution(FileGuid, Distribution) ->
+translate_distribution(FileGuid, PossiblyIncompleteDistribution) ->
     {ok, #file_attr{size = FileSize}} = lfm:stat(?ROOT_SESS_ID, ?FILE_REF(FileGuid)),
+
+    %% @TODO VFS-8935 ultimately, location for each file should be created in each provider
+    %% and the list of providers in the distribution should always be complete -
+    %% for now, add placeholders with zero blocks for missing providers
+    SpaceId = file_id:guid_to_space_id(FileGuid),
+    {ok, AllProviders} = space_logic:get_provider_ids(SpaceId),
+    IncludedProviders = [P || #{<<"providerId">> := P} <- PossiblyIncompleteDistribution],
+    MissingProviders = lists_utils:subtract(AllProviders, IncludedProviders),
+    ComplementedDistribution = lists:foldl(fun(ProviderId, Acc) ->
+        NoBlocksEntryForProvider = #{
+            <<"providerId">> => ProviderId,
+            <<"blocks">> => [],
+            <<"totalBlocksSize">> => 0
+        },
+        [NoBlocksEntryForProvider | Acc]
+    end, PossiblyIncompleteDistribution, MissingProviders),
 
     DistributionMap = lists:foldl(fun(#{
         <<"providerId">> := ProviderId,
@@ -211,7 +221,7 @@ translate_distribution(FileGuid, Distribution) ->
                 _ -> TotalBlocksSize * 100.0 / FileSize
             end
         }}
-    end, #{}, Distribution),
+    end, #{}, ComplementedDistribution),
 
     #{<<"distributionPerProvider">> => DistributionMap}.
 

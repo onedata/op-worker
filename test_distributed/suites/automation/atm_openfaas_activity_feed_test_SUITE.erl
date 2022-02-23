@@ -194,7 +194,13 @@ verify_recorded_activity(RegistryId, SubmittedReports) ->
         case maps:find(PodId, Acc) of
             {ok, {_, _, ObservedAt}} when Timestamp < ObservedAt ->
                 Acc;
-            _ ->
+            {ok, {PreviousPodStatus, _, ObservedAt}} ->
+                NewLastStatusChangeTimestamp = case PodStatus of
+                    PreviousPodStatus -> ObservedAt;
+                    _ -> Timestamp
+                end,
+                Acc#{PodId => {PodStatus, ContainersReadiness, NewLastStatusChangeTimestamp}};
+            error ->
                 Acc#{PodId => {PodStatus, ContainersReadiness, Timestamp}}
         end
     end, #{}, SubmittedReports),

@@ -673,7 +673,7 @@ build_delete_instance_setup_fun(MemRef, TopDirPath, FileType) ->
     fun() ->
         RootFileName = ?RANDOM_FILE_NAME(),
         Path = filename:join([TopDirPath, RootFileName]),
-        {ok, RootFileGuid} = api_test_utils:create_file(FileType, P1Node, UserSessIdP1, Path, 8#704),
+        {ok, RootFileGuid} = lfm_test_utils:create_file(FileType, P1Node, UserSessIdP1, Path, 8#704),
         RootFileShares = case api_test_utils:randomly_create_share(P1Node, SpaceOwnerSessIdP1, RootFileGuid) of
             undefined -> [];
             ShareId -> [ShareId]

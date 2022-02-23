@@ -34,12 +34,6 @@
 
     randomly_choose_file_type_for_test/0,
     randomly_choose_file_type_for_test/1,
-    create_file/4, create_file/5,
-
-    fill_file_with_dummy_data/4,
-    fill_file_with_dummy_data/5,
-    write_file/5,
-    read_file/4,
 
     share_file_and_sync_file_attrs/4,
 
@@ -55,7 +49,8 @@
     randomly_create_share/3,
 
     guids_to_object_ids/1,
-    file_details_to_gs_json/2
+    file_details_to_gs_json/2,
+    file_attrs_to_json/2
 ]).
 -export([
     add_file_id_errors_for_operations_available_in_share_mode/3,
@@ -100,7 +95,7 @@ create_shared_file_in_space_krk() ->
 
     FileType = randomly_choose_file_type_for_test(),
     FilePath = filename:join(["/", ?SPACE_KRK, ?RANDOM_FILE_NAME()]),
-    {ok, FileGuid} = create_file(FileType, P1Node, UserSessId, FilePath),
+    {ok, FileGuid} = lfm_test_utils:create_file(FileType, P1Node, UserSessId, FilePath),
     {ok, ShareId} = opt_shares:create(P1Node, SpaceOwnerSessId, ?FILE_REF(FileGuid), <<"share">>),
 
     {FileType, FilePath, FileGuid, ShareId}.
@@ -132,7 +127,7 @@ create_and_sync_shared_file_in_space_krk_par(FileType, FileName, Mode) ->
     UserSessIdP1 = kv_utils:get([users, user3, sessions, krakow], node_cache:get(oct_mapping)),
 
     FilePath = filename:join(["/", ?SPACE_KRK_PAR, FileName]),
-    {ok, FileGuid} = create_file(FileType, P1Node, UserSessIdP1, FilePath, Mode),
+    {ok, FileGuid} = lfm_test_utils:create_file(FileType, P1Node, UserSessIdP1, FilePath, Mode),
     {ok, ShareId} = opt_shares:create(P1Node, SpaceOwnerSessIdP1, ?FILE_REF(FileGuid), <<"share">>),
 
     file_test_utils:await_sync(P2Node, FileGuid),
@@ -169,7 +164,7 @@ create_file_in_space_krk_par_with_additional_metadata(ParentPath, HasParentQos, 
     FilePath = filename:join([ParentPath, FileName]),
 
     FileMode = lists_utils:random_element([8#707, 8#705, 8#700]),
-    {ok, FileGuid} = create_file(
+    {ok, FileGuid} = lfm_test_utils:create_file(
         FileType, P1Node, UserSessIdP1, FilePath, FileMode
     ),
     FileShares = case randomly_create_share(P1Node, SpaceOwnerSessIdP1, FileGuid) of
@@ -179,7 +174,7 @@ create_file_in_space_krk_par_with_additional_metadata(ParentPath, HasParentQos, 
     Size = case FileType of
         <<"file">> ->
             RandSize = rand:uniform(20),
-            fill_file_with_dummy_data(P1Node, SpaceOwnerSessIdP1, FileGuid, RandSize),
+            lfm_test_utils:write_file(P1Node, SpaceOwnerSessIdP1, FileGuid, {rand_content, RandSize}),
             RandSize;
         _ ->
             0
@@ -225,52 +220,6 @@ randomly_choose_file_type_for_test(LogSelectedFileType) ->
     FileType = ?RANDOM_FILE_TYPE(),
     LogSelectedFileType andalso ct:pal("Chosen file type for test: ~s", [FileType]),
     FileType.
-
-
--spec create_file(file_type(), node(), session:id(), file_meta:path()) ->
-    {ok, file_id:file_guid()} | {error, term()}.
-create_file(FileType, Node, SessId, Path) ->
-    create_file(FileType, Node, SessId, Path, 8#777).
-
-
--spec create_file(file_type(), node(), session:id(), file_meta:path(), file_meta:mode()) ->
-    {ok, file_id:file_guid()} | {error, term()}.
-create_file(<<"file">>, Node, SessId, Path, Mode) ->
-    lfm_proxy:create(Node, SessId, Path, Mode);
-create_file(<<"dir">>, Node, SessId, Path, Mode) ->
-    lfm_proxy:mkdir(Node, SessId, Path, Mode).
-
-
--spec fill_file_with_dummy_data(node(), session:id(), file_id:file_guid(), Size :: non_neg_integer()) ->
-    WrittenContent :: binary().
-fill_file_with_dummy_data(Node, SessId, FileGuid, Size) ->
-    fill_file_with_dummy_data(Node, SessId, FileGuid, 0, Size).
-
-
--spec fill_file_with_dummy_data(node(), session:id(), file_id:file_guid(),
-    Offset :: non_neg_integer(), Size :: non_neg_integer()) -> WrittenContent :: binary().
-fill_file_with_dummy_data(Node, SessId, FileGuid, Offset, Size) ->
-    Content = crypto:strong_rand_bytes(Size),
-    write_file(Node, SessId, FileGuid, Offset, Content),
-    Content.
-
-
--spec write_file(node(), session:id(), file_id:file_guid(), Offset :: non_neg_integer(),
-    Size :: non_neg_integer()) -> ok.
-write_file(Node, SessId, FileGuid, Offset, Content) ->
-    {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(Node, SessId, ?FILE_REF(FileGuid), write)),
-    ?assertMatch({ok, _}, lfm_proxy:write(Node, Handle, Offset, Content)),
-    ?assertMatch(ok, lfm_proxy:fsync(Node, Handle)),
-    ?assertMatch(ok, lfm_proxy:close(Node, Handle)).
-
-
--spec read_file(node(), session:id(), file_id:file_guid(), Size :: non_neg_integer()) ->
-    Content :: binary().
-read_file(Node, SessId, FileGuid, Size) ->
-    {ok, ReadHandle} = lfm_proxy:open(Node, SessId, ?FILE_REF(FileGuid), read),
-    {ok, Content} = lfm_proxy:read(Node, ReadHandle, 0, Size),
-    ok = lfm_proxy:close(Node, ReadHandle),
-    Content.
 
 
 -spec share_file_and_sync_file_attrs(node(), session:id(), [node()], file_id:file_guid()) ->
@@ -478,8 +427,8 @@ file_details_to_gs_json(undefined, #file_details{
         <<"activePermissionsType">> => atom_to_binary(ActivePermissionsType, utf8),
         <<"providerId">> => ProviderId,
         <<"ownerId">> => OwnerId,
-        <<"effQosMembership">> => atom_to_binary(EffQosMembership, utf8),
-        <<"effDatasetMembership">> => atom_to_binary(EffDatasetMembership, utf8),
+        <<"effQosMembership">> => translate_membership(EffQosMembership),
+        <<"effDatasetMembership">> => translate_membership(EffDatasetMembership),
         <<"hardlinksCount">> => utils:undefined_to_null(LinksCount),
         <<"recallRootId">> => utils:undefined_to_null(RecallRootId)
     };
@@ -524,6 +473,91 @@ file_details_to_gs_json(ShareId, #file_details{
         <<"activePermissionsType">> => atom_to_binary(ActivePermissionsType, utf8)
     }.
 
+
+-spec file_attrs_to_json(undefined | od_share:id(), #file_attr{}) -> map().
+file_attrs_to_json(undefined, #file_attr{
+    guid = Guid,
+    name = Name,
+    mode = Mode,
+    parent_guid = ParentGuid,
+    uid = Uid,
+    gid = Gid,
+    atime = Atime,
+    mtime = Mtime,
+    ctime = Ctime,
+    type = Type,
+    size = Size,
+    shares = Shares,
+    provider_id = ProviderId,
+    owner_id = OwnerId,
+    nlink = HardlinksCount
+}) ->
+    {ok, ObjectId} = file_id:guid_to_objectid(Guid),
+    
+    #{
+        <<"file_id">> => ObjectId,
+        <<"name">> => Name,
+        <<"mode">> => list_to_binary(string:right(integer_to_list(Mode, 8), 3, $0)),
+        <<"parent_id">> => case ParentGuid of
+            undefined ->
+                null;
+            _ ->
+                {ok, ParentObjectId} = file_id:guid_to_objectid(ParentGuid),
+                ParentObjectId
+        end,
+        <<"storage_user_id">> => Uid,
+        <<"storage_group_id">> => Gid,
+        <<"atime">> => Atime,
+        <<"mtime">> => Mtime,
+        <<"ctime">> => Ctime,
+        <<"type">> => str_utils:to_binary(Type),
+        <<"size">> => case Type of
+            ?DIRECTORY_TYPE -> null;
+            _ -> utils:undefined_to_null(Size)
+        end,
+        <<"shares">> => Shares,
+        <<"provider_id">> => ProviderId,
+        <<"owner_id">> => OwnerId,
+        <<"hardlinks_count">> => utils:undefined_to_null(HardlinksCount)
+    };
+file_attrs_to_json(ShareId, #file_attr{
+    guid = FileGuid,
+    parent_guid = ParentGuid,
+    name = Name,
+    type = Type,
+    mode = Mode,
+    size = Size,
+    mtime = Mtime,
+    atime = Atime,
+    ctime = Ctime,
+    shares = Shares
+}) ->
+    {ok, ObjectId} = file_id:guid_to_objectid(file_id:guid_to_share_guid(FileGuid, ShareId)),
+    IsShareRoot = lists:member(ShareId, Shares),
+    
+    #{
+        <<"file_id">> => ObjectId,
+        <<"name">> => Name,
+        <<"mode">> => list_to_binary(string:right(integer_to_list(Mode band 2#111, 8), 3, $0)),
+        <<"parent_id">> => case IsShareRoot of
+            true -> null;
+            false ->
+                {ok, ParentObjectId} = file_id:guid_to_objectid(file_id:guid_to_share_guid(ParentGuid, ShareId)),
+                ParentObjectId
+        end,
+        <<"atime">> => Atime,
+        <<"mtime">> => Mtime,
+        <<"ctime">> => Ctime,
+        <<"type">> => str_utils:to_binary(Type),
+        <<"size">> => case Type of
+            ?DIRECTORY_TYPE -> null;
+            _ -> utils:undefined_to_null(Size)
+        end,
+        <<"shares">> => case IsShareRoot of
+            true -> [ShareId];
+            false -> []
+        end
+    }.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -787,3 +821,10 @@ add_share_file_id_errors_for_operations_not_available_in_share_mode(FileGuid, Sh
 
         | Errors
     ].
+
+
+%% @private
+translate_membership(?NONE_MEMBERSHIP) -> <<"none">>;
+translate_membership(?DIRECT_MEMBERSHIP) -> <<"direct">>;
+translate_membership(?ANCESTOR_MEMBERSHIP) -> <<"ancestor">>;
+translate_membership(?DIRECT_AND_ANCESTOR_MEMBERSHIP) -> <<"directAndAncestor">>.

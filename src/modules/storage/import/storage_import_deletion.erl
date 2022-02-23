@@ -44,7 +44,7 @@ get_master_job(Job = #storage_traverse_master{info = Info}) ->
             deletion_job => true,
             sync_links_token => #link_token{},
             sync_links_children => [],
-            file_meta_token => ?INITIAL_LS_TOKEN,
+            file_meta_token => ?INITIAL_DATASTORE_LS_TOKEN,
             file_meta_children => []
         }
     }.
@@ -89,7 +89,7 @@ do_master_job(Job = #storage_traverse_master{
     StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
 
     % reset any_protected_child_changed in case of first batch job
-    case FMToken =:= ?INITIAL_LS_TOKEN andalso SLToken =:= #link_token{} of
+    case FMToken =:= ?INITIAL_DATASTORE_LS_TOKEN andalso SLToken =:= #link_token{} of
         true -> storage_sync_info:set_any_protected_child_changed(StorageFileId, SpaceId, false);
         false -> ok
     end,
@@ -427,7 +427,7 @@ delete_regular_file_and_update_counters(FileCtx, SpaceId) ->
 delete_dir_recursive(FileCtx, SpaceId, StorageId) ->
     RootUserCtx = user_ctx:new(?ROOT_SESS_ID),
     BatchSize = op_worker:get_env(ls_batch_size),
-    ListOpts = #{token => ?INITIAL_LS_TOKEN, size => BatchSize},
+    ListOpts = #{token => ?INITIAL_DATASTORE_LS_TOKEN, size => BatchSize},
     {ok, FileCtx2} = delete_children(FileCtx, RootUserCtx, ListOpts, SpaceId, StorageId),
     delete_file(FileCtx2).
 

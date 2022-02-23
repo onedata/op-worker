@@ -19,10 +19,11 @@
 -export([
     mkdir/3, mkdir/4,
     get_children/3,
-    get_children_attrs/3,
+    get_children_attrs/5,
     get_child_attr/3,
     get_children_details/3,
-    get_children_count/2
+    get_children_count/2,
+    get_files_recursively/4
 ]).
 
 
@@ -69,7 +70,7 @@ mkdir(SessId, ParentGuid0, Name, Mode) ->
 %% entry and up to Limit of entries.
 %% @end
 %%--------------------------------------------------------------------
--spec get_children(session:id(), lfm:file_key(), file_meta:list_opts()) ->
+-spec get_children(session:id(), lfm:file_key(), dir_req:list_opts()) ->
     {ok, [{fslogic_worker:file_guid(), file_meta:name()}], file_meta:list_extended_info()} | lfm:error_reply().
 get_children(SessId, FileKey, ListOpts) ->
     FileGuid = lfm_file_key:resolve_file_key(SessId, FileKey, resolve_symlink),
@@ -98,16 +99,18 @@ get_children(SessId, FileKey, ListOpts) ->
 %% starting with Offset-th entry and up to Limit of entries.
 %% @end
 %%--------------------------------------------------------------------
--spec get_children_attrs(session:id(), lfm:file_key(), file_meta:list_opts()) ->
+-spec get_children_attrs(session:id(), lfm:file_key(), dir_req:list_opts(), boolean(), boolean()) ->
     {ok, [#file_attr{}], file_meta:list_extended_info()} | lfm:error_reply().
-get_children_attrs(SessId, FileKey, ListOpts) ->
+get_children_attrs(SessId, FileKey, ListOpts, IncludeReplicationStatus, IncludeHardlinkCount) ->
     FileGuid = lfm_file_key:resolve_file_key(SessId, FileKey, resolve_symlink),
 
     remote_utils:call_fslogic(SessId, file_request, FileGuid,
         #get_file_children_attrs{
             offset = maps:get(offset, ListOpts, undefined),
             size = maps:get(size, ListOpts, undefined),
-            index_token = maps:get(token, ListOpts, undefined)
+            index_token = maps:get(token, ListOpts, undefined),
+            include_replication_status = IncludeReplicationStatus,
+            include_link_count = IncludeHardlinkCount
         },
         fun(#file_children_attrs{
             child_attrs = Attrs,
@@ -139,7 +142,7 @@ get_child_attr(SessId, ParentGuid0, ChildName)  ->
 %% of entries.
 %% @end
 %%--------------------------------------------------------------------
--spec get_children_details(session:id(), lfm:file_key(), file_meta:list_opts()) ->
+-spec get_children_details(session:id(), lfm:file_key(), dir_req:list_opts()) ->
     {ok, [lfm_attrs:file_details()], file_meta:list_extended_info()} | lfm:error_reply().
 get_children_details(SessId, FileKey, ListOpts) ->
     FileGuid = lfm_file_key:resolve_file_key(SessId, FileKey, resolve_symlink),
@@ -169,6 +172,22 @@ get_children_count(SessId, FileKey) ->
     end.
 
 
+get_files_recursively(SessId, FileKey, StartAfter, Limit) ->
+    FileGuid = lfm_file_key:resolve_file_key(SessId, FileKey, resolve_symlink),
+    
+    remote_utils:call_fslogic(SessId, file_request, FileGuid,
+        #get_recursive_file_list{
+            start_after = StartAfter,
+            size = Limit
+        },
+        fun(#recursive_file_list{
+            files = Result,
+            is_last = IsLast
+        }) ->
+            {ok, Result, IsLast}
+        end).
+
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -179,7 +198,7 @@ get_children_count(SessId, FileKey) ->
     {ok, non_neg_integer()} | lfm:error_reply().
 count_children(SessId, FileGuid) ->
     BatchSize = op_worker:get_env(ls_batch_size),
-    count_children(SessId, FileGuid, #{token => ?INITIAL_LS_TOKEN, size => BatchSize}, 0).
+    count_children(SessId, FileGuid, #{token => ?INITIAL_DATASTORE_LS_TOKEN, size => BatchSize}, 0).
 
 
 %% @private
