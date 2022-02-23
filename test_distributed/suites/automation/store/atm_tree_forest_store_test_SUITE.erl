@@ -79,7 +79,6 @@ all() -> [
 
 -define(PROVIDER_SELECTOR, krakow).
 -define(rpc(Expr), ?rpc(?PROVIDER_SELECTOR, Expr)).
--define(rpc(ProviderSelector, Expr), ?opw_test_rpc(ProviderSelector, Expr)).
 
 -define(ATTEMPTS, 30).
 

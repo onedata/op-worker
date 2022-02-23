@@ -97,6 +97,7 @@
 -record(atm_task_schema_draft, {
     id = ?ATM_AUTOGENERATE :: ?ATM_AUTOGENERATE | automation:id(),
     name = ?ATM_AUTOGENERATE :: ?ATM_AUTOGENERATE | automation:name(),
+    % TODO VFS-9060 allow to specify lambda draft instead of {id, revision_num}
     lambda_id :: automation:id(),
     lambda_revision_number :: atm_lambda_revision:revision_number(),
 

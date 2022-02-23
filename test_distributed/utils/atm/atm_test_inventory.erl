@@ -24,7 +24,8 @@
 
     add_member/1,
     add_workflow_schema/1,
-    get_workflow_schema/1
+    get_workflow_schema/1,
+    get_workflow_schema_revision/2
 ]).
 
 -type atm_workflow_schema_dump() :: #atm_workflow_schema_dump{}.
@@ -108,6 +109,18 @@ get_workflow_schema(AtmWorkflowSchemaId) ->
         ?rpc(ProviderSelector, atm_workflow_schema_logic:get(AdminUserSessionId, AtmWorkflowSchemaId))
     ),
     AtmWorkflowSchema.
+
+
+-spec get_workflow_schema_revision(
+    atm_workflow_schema_revision:revision_number(),
+    od_atm_workflow_schema:id()
+) ->
+    atm_workflow_schema_revision:record().
+get_workflow_schema_revision(RevisionNum, AtmWorkflowSchemaId) ->
+    #od_atm_workflow_schema{revision_registry = RevisionRegistry} = get_workflow_schema(
+        AtmWorkflowSchemaId
+    ),
+    atm_workflow_schema_revision_registry:get_revision(RevisionNum, RevisionRegistry).
 
 
 %%%===================================================================

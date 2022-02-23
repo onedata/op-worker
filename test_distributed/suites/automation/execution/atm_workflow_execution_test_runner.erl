@@ -78,6 +78,9 @@
 ).
 
 
+-define(NOW(), global_clock:timestamp_seconds()).
+
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -108,7 +111,7 @@ run(TestSpec = #atm_workflow_execution_test_spec{
     provider = ProviderSelector,
     user = UserSelector,
     space = SpaceSelector,
-    workflow_schema_id = AtmWorkflowSchemaId,
+    workflow_schema_dump_or_draft = AtmWorkflowSchemaDumpOrDraft,
     workflow_schema_revision_num = AtmWorkflowSchemaRevisionNum,
     store_initial_content = StoreInitialContent,
     callback_url = CallbackUrl,
@@ -117,18 +120,19 @@ run(TestSpec = #atm_workflow_execution_test_spec{
     SessionId = oct_background:get_user_session_id(UserSelector, ProviderSelector),
     SpaceId = oct_background:get_space_id(SpaceSelector),
 
+    AtmWorkflowSchemaId = atm_test_inventory:add_workflow_schema(AtmWorkflowSchemaDumpOrDraft),
+    AtmWorkflowSchemaRevision = atm_test_inventory:get_workflow_schema_revision(
+        AtmWorkflowSchemaRevisionNum, AtmWorkflowSchemaId
+    ),
+
     TestProcPid = self(),
     {AtmWorkflowExecutionId, _} = ?rpc(ProviderSelector, mi_atm:schedule_workflow_execution(
         SessionId, SpaceId, AtmWorkflowSchemaId, AtmWorkflowSchemaRevisionNum,
         StoreInitialContent#{test_process => TestProcPid}, CallbackUrl
     )),
 
-    AtmLaneSchemas = atm_workflow_schema_query:run(
-        atm_test_inventory:get_workflow_schema(AtmWorkflowSchemaId),
-        [revision_registry, registry, 1, lanes]
-    ),
     ExpState = atm_workflow_execution_exp_state_builder:init(
-        SpaceId, global_clock:timestamp_seconds(), AtmLaneSchemas
+        SpaceId, ?NOW(), AtmWorkflowSchemaRevision#atm_workflow_schema_revision.lanes
     ),
     true = atm_workflow_execution_exp_state_builder:assert_matches_with_backend(
         ProviderSelector, AtmWorkflowExecutionId, ExpState

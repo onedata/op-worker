@@ -62,7 +62,9 @@
     user :: oct_background:entity_selector(),
     space :: oct_background:entity_selector(),
 
-    workflow_schema_id :: automation:id(),
+    workflow_schema_dump_or_draft ::
+        atm_test_inventory:atm_workflow_schema_dump() |
+        atm_test_schema_factory:atm_workflow_schema_dump_draft(),
     workflow_schema_revision_num :: atm_workflow_schema_revision:revision_number(),
 
     store_initial_content = #{} :: atm_workflow_execution_api:store_initial_values(),

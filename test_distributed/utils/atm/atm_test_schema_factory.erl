@@ -20,6 +20,7 @@
 -author("Bartosz Walkowicz").
 
 -include("atm_test_schema.hrl").
+-include_lib("ctool/include/test/test_utils.hrl").
 
 -export([create_from_draft/1]).
 
@@ -53,9 +54,6 @@
 
     atm_workflow_schema_dump_draft/0
 ]).
-
-
--define(RAND_INT(From, To), From + rand:uniform(To - From + 1) - 1).
 
 
 %%%===================================================================

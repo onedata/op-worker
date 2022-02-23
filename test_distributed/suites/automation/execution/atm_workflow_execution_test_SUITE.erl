@@ -65,6 +65,21 @@ all() -> [
     }
 }).
 
+-define(ECHO_LAMBDA_DRAFT, #atm_lambda_revision_draft{
+    operation_spec = #atm_openfaas_operation_spec_draft{
+        docker_image = <<"test/echo">>
+    },
+    argument_specs = [#atm_lambda_argument_spec{
+        name = <<"val">>,
+        data_spec = #atm_data_spec{type = atm_integer_type},
+        is_optional = false
+    }],
+    result_specs = [#atm_lambda_result_spec{
+        name = <<"val">>,
+        data_spec = #atm_data_spec{type = atm_integer_type}
+    }]
+}).
+
 -define(ECHO_ATM_WORKFLOW_SCHEMA_DRAFT, #atm_workflow_schema_dump_draft{
     name = <<"echo">>,
     revision_num = 1,
@@ -98,20 +113,7 @@ all() -> [
             }
         }]
     },
-    supplementary_lambdas = #{<<"echo">> => #{1 => #atm_lambda_revision_draft{
-        operation_spec = #atm_openfaas_operation_spec_draft{
-            docker_image = <<"test/echo">>
-        },
-        argument_specs = [#atm_lambda_argument_spec{
-            name = <<"val">>,
-            data_spec = #atm_data_spec{type = atm_integer_type},
-            is_optional = false
-        }],
-        result_specs = [#atm_lambda_result_spec{
-            name = <<"val">>,
-            data_spec = #atm_data_spec{type = atm_integer_type}
-        }]
-    }}}
+    supplementary_lambdas = #{<<"echo">> => #{1 => ?ECHO_LAMBDA_DRAFT}}
 }).
 
 
@@ -127,10 +129,8 @@ atm_workflow_with_empty_lane_scheduling_should_fail_test(_Config) ->
     AtmWorkflowSchemaId = atm_test_inventory:add_workflow_schema(
         ?EMPTY_LANE_ATM_WORKFLOW_SCHEMA_DRAFT
     ),
-    EmptyAtmLaneSchemaId = atm_workflow_schema_query:run(
-        atm_test_inventory:get_workflow_schema(AtmWorkflowSchemaId),
-        [revision_registry, registry, 1, lanes, 1, id]
-    ),
+    AtmWorkflowSchemaRevision = atm_test_inventory:get_workflow_schema_revision(1, AtmWorkflowSchemaId),
+    EmptyAtmLaneSchemaId = atm_workflow_schema_query:run(AtmWorkflowSchemaRevision, [lanes, 1, id]),
 
     ?assertEqual(
         ?ERROR_ATM_LANE_EMPTY(EmptyAtmLaneSchemaId),
@@ -141,14 +141,11 @@ atm_workflow_with_empty_lane_scheduling_should_fail_test(_Config) ->
 
 
 prepare_first_lane_run_failure_test(_Config) ->
-    AtmWorkflowSchemaId = atm_test_inventory:add_workflow_schema(
-        ?ECHO_ATM_WORKFLOW_SCHEMA_DRAFT
-    ),
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
         provider = krakow,
         user = user2,
         space = space_krk,
-        workflow_schema_id = AtmWorkflowSchemaId,
+        workflow_schema_dump_or_draft = ?ECHO_ATM_WORKFLOW_SCHEMA_DRAFT,
         workflow_schema_revision_num = 1,
         incarnations = [#atm_workflow_execution_incarnation_test_spec{
             lane_runs = [#atm_lane_run_execution_test_spec{
