@@ -150,21 +150,23 @@ prepare_first_lane_run_failure_test(_Config) ->
             lane_runs = [#atm_lane_run_execution_test_spec{
                 selector = {1, 1},
                 create_run = #atm_step_mock_spec{
-                    before_step_test_view_diff = fun(#atm_mock_call_ctx{workflow_execution_test_view = TestView0}) ->
-                        {true, atm_workflow_execution_test_view:report_lane_run_started_preparing({1, 1}, TestView0)}
+                    before_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
+                        {true, atm_workflow_execution_exp_state_builder:report_lane_run_started_preparing(
+                            {1, 1}, ExpState0
+                        )}
                     end,
                     mock_result = {true, ?ERROR_INTERNAL_SERVER_ERROR}
                 },
                 prepare_lane = #atm_step_mock_spec{
-                    after_step_test_view_diff = fun(#atm_mock_call_ctx{workflow_execution_test_view = TestView0}) ->
-                        TestView1 = atm_workflow_execution_test_view:report_lane_run_failed({1, 1}, TestView0),
-                        {true, atm_workflow_execution_test_view:report_workflow_execution_aborting(TestView1)}
+                    after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
+                        ExpState1 = atm_workflow_execution_exp_state_builder:report_lane_run_failed({1, 1}, ExpState0),
+                        {true, atm_workflow_execution_exp_state_builder:report_workflow_execution_aborting(ExpState1)}
                     end
                 }
             }],
             handle_workflow_execution_ended = #atm_step_mock_spec{
-                after_step_test_view_diff = fun(#atm_mock_call_ctx{workflow_execution_test_view = TestView0}) ->
-                    {true, atm_workflow_execution_test_view:report_workflow_execution_failed(TestView0)}
+                after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
+                    {true, atm_workflow_execution_exp_state_builder:report_workflow_execution_failed(ExpState0)}
                 end
             }
         }]

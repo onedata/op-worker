@@ -7,18 +7,18 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% Helper module allowing definition and modification of atm workflow execution
-%%% test view which consists of:
+%%% exp state which consists of:
 %%% - expected state of atm_workflow_execution model
 %%% - expected state of each atm_task_execution model (to be implemented)
 %%% - expected state of each atm_store model (to be implemented)
 %%%
-%%% NOTE: test view is created and stored as json object similar to responses
+%%% NOTE: exp state is created and stored as json object similar to responses
 %%% send to clients via API endpoints. Model records definitions from op are
 %%% not reused as they contain many irrelevant (to clients) fields considered
 %%% as implementation details and omitted from said responses.
 %%% @end
 %%%-------------------------------------------------------------------
--module(atm_workflow_execution_test_view).
+-module(atm_workflow_execution_exp_state_builder).
 -author("Bartosz Walkowicz").
 
 -include("modules/automation/atm_execution.hrl").
@@ -26,23 +26,23 @@
 
 %% API
 -export([
-    build/3,
+    init/3,
 
     report_lane_run_started_preparing/2,
     report_lane_run_failed/2,
     report_workflow_execution_aborting/1,
     report_workflow_execution_failed/1,
 
-    assert_match_with_backend/3
+    assert_matches_with_backend/3
 ]).
 
 % json object similar in structure to translations returned via API endpoints
 % (has the same keys but as for values instead of concrete values it may contain
 % validator functions - e.g. timestamp fields should check approx time rather
 % than concrete value)
--type view() :: json_utils:json_term().
+-type exp_state() :: json_utils:json_term().
 
--export_type([view/0]).
+-export_type([exp_state/0]).
 
 
 -define(JSON_PATH(__QUERY_BIN), binary:split(__QUERY_BIN, <<".">>, [global])).
@@ -54,9 +54,9 @@
 %%%===================================================================
 
 
--spec build(od_space:id(), time:seconds(), [atm_lane_schema:record()]) ->
-    view().
-build(SpaceId, ApproxScheduleTime, AtmLaneSchemas) ->
+-spec init(od_space:id(), time:seconds(), [atm_lane_schema:record()]) ->
+    exp_state().
+init(SpaceId, ApproxScheduleTime, AtmLaneSchemas) ->
     FirstAtmLaneSchema = hd(AtmLaneSchemas),
 
     FirstLane = #{
@@ -83,71 +83,73 @@ build(SpaceId, ApproxScheduleTime, AtmLaneSchemas) ->
     }.
 
 
--spec report_lane_run_started_preparing(atm_lane_execution:lane_run_selector(), view()) ->
-    view().
-report_lane_run_started_preparing(AtmLaneRunSelector, TestView0) ->
-    {AtmLaneRunPath, AtmLaneRun} = locate_lane_run(AtmLaneRunSelector, TestView0),
+-spec report_lane_run_started_preparing(atm_lane_execution:lane_run_selector(), exp_state()) ->
+    exp_state().
+report_lane_run_started_preparing(AtmLaneRunSelector, ExpState0) ->
+    {AtmLaneRunPath, AtmLaneRun} = locate_lane_run(AtmLaneRunSelector, ExpState0),
 
-    {ok, TestView1} = json_utils:insert(
-        TestView0,
+    {ok, ExpState1} = json_utils:insert(
+        ExpState0,
         AtmLaneRun#{<<"status">> => <<"preparing">>},
         AtmLaneRunPath
     ),
-    case maps:get(<<"status">>, TestView1) of
+    case maps:get(<<"status">>, ExpState1) of
         <<"scheduled">> ->
-            TestView1#{
+            ExpState1#{
                 <<"status">> => <<"active">>,
                 <<"startTime">> => build_timestamp_field_validator(?NOW())
             };
         _ ->
-            TestView1
+            ExpState1
     end.
 
 
--spec report_lane_run_failed(atm_lane_execution:lane_run_selector(), view()) ->
-    view().
-report_lane_run_failed(AtmLaneRunSelector, TestView0) ->
-    {AtmLaneRunPath, AtmLaneRun} = locate_lane_run(AtmLaneRunSelector, TestView0),
+-spec report_lane_run_failed(atm_lane_execution:lane_run_selector(), exp_state()) ->
+    exp_state().
+report_lane_run_failed(AtmLaneRunSelector, ExpState0) ->
+    {AtmLaneRunPath, AtmLaneRun} = locate_lane_run(AtmLaneRunSelector, ExpState0),
 
-    {ok, TestView1} = json_utils:insert(
-        TestView0,
+    {ok, ExpState1} = json_utils:insert(
+        ExpState0,
         AtmLaneRun#{<<"status">> => <<"failed">>, <<"isRerunable">> => true},
         AtmLaneRunPath
     ),
-    TestView1.
+    ExpState1.
 
 
--spec report_workflow_execution_aborting(view()) -> view().
-report_workflow_execution_aborting(TestView) ->
-    TestView#{<<"status">> => <<"aborting">>}.
+-spec report_workflow_execution_aborting(exp_state()) -> exp_state().
+report_workflow_execution_aborting(ExpState) ->
+    ExpState#{<<"status">> => <<"aborting">>}.
 
 
--spec report_workflow_execution_failed(view()) -> view().
-report_workflow_execution_failed(TestView) ->
-    TestView#{
+-spec report_workflow_execution_failed(exp_state()) -> exp_state().
+report_workflow_execution_failed(ExpState) ->
+    ExpState#{
         <<"status">> => <<"failed">>,
         <<"finishTime">> => build_timestamp_field_validator(?NOW())
     }.
 
 
--spec assert_match_with_backend(
+-spec assert_matches_with_backend(
     oct_background:entity_selector(),
     atm_workflow_execution:id(),
-    view()
+    exp_state()
 ) ->
     boolean().
-assert_match_with_backend(ProviderSelector, AtmWorkflowExecutionId, TestView) ->
+assert_matches_with_backend(ProviderSelector, AtmWorkflowExecutionId, ExpState) ->
     {ok, #document{value = AtmWorkflowExecution}} = opw_test_rpc:call(
         ProviderSelector, atm_workflow_execution, get, [AtmWorkflowExecutionId]
     ),
     AtmWorkflowExecutionJson = atm_workflow_execution_to_json(AtmWorkflowExecution),
 
-    case catch assert_matching_jsons(<<"atmWorkflowExecution">>, TestView, AtmWorkflowExecutionJson) of
+    case catch assert_matching_jsons(
+        <<"atmWorkflowExecution">>, ExpState, AtmWorkflowExecutionJson
+    ) of
         ok ->
             true;
         badmatch ->
-            ct:pal("Error: mismatch between test view: ~n~p~n~nand models stored in op: ~n~p", [
-                TestView, AtmWorkflowExecutionJson
+            ct:pal("Error: mismatch between exp state: ~n~p~n~nand models stored in op: ~n~p", [
+                ExpState, AtmWorkflowExecutionJson
             ]),
             false
     end.
@@ -242,12 +244,12 @@ build_initial_regular_lane_run(RunNum) ->
 
 
 %% @private
--spec locate_lane_run(atm_lane_execution:lane_run_selector(), view()) ->
+-spec locate_lane_run(atm_lane_execution:lane_run_selector(), exp_state()) ->
     {json_utils:query(), json_utils:json_map()}.
-locate_lane_run({AtmLaneIndex, AtmRunNum}, TestView) ->
+locate_lane_run({AtmLaneIndex, AtmRunNum}, ExpState) ->
     AtmLaneRuns = maps:get(
         <<"runs">>,
-        lists:nth(AtmLaneIndex, maps:get(<<"lanes">>, TestView))
+        lists:nth(AtmLaneIndex, maps:get(<<"lanes">>, ExpState))
     ),
     {AtmRunIndex, AtmLaneRun} = hd(lists:dropwhile(
         fun({_, #{<<"runNumber">> := RunNum}}) -> RunNum /= AtmRunNum end,

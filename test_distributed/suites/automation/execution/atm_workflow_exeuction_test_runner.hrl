@@ -19,7 +19,7 @@
 
 -record(atm_mock_call_ctx, {
     workflow_execution_id :: atm_workflow_execution:id(),
-    workflow_execution_test_view :: atm_workflow_execution_test_view:view(),
+    workflow_execution_exp_state :: atm_workflow_execution_exp_state_builder:exp_state(),
     current_lane_index :: atm_lane_execution:index(),
     current_run_num :: atm_lane_execution:run_num(),
     call_args :: [term()]
@@ -27,7 +27,7 @@
 
 -record(atm_step_mock_spec, {
     before_step_hook = undefined :: undefined | atm_workflow_execution_test_runner:hook(),
-    before_step_test_view_diff = default :: default | atm_workflow_execution_test_runner:test_view_diff(),
+    before_step_exp_state_diff = default :: default | atm_workflow_execution_test_runner:exp_state_diff(),
 
     % if set to {true, _} original step will not be executed
     mock_result = false :: false | {true, Result :: term()},
@@ -35,7 +35,7 @@
     % below checks will not be executed in case of mock_result = {true, _}
     % (step has not been executed and as such no change compared to before_step_* should occur)
     after_step_hook = undefined :: undefined | atm_workflow_execution_test_runner:hook(),
-    after_step_test_view_diff = default :: default | atm_workflow_execution_test_runner:test_view_diff()
+    after_step_exp_state_diff = default :: default | atm_workflow_execution_test_runner:exp_state_diff()
 }).
 
 -record(atm_lane_run_execution_test_spec, {

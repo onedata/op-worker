@@ -14,10 +14,10 @@
 %%% 3. before/after each step transition:
 %%%    a) hook (procedure defined by tester which can be used to e.g. change
 %%%       mocks behaviour, simulate sth, etc.) is called if defined.
-%%%    b) test view diff is applied and, in case of changes, new test view is
-%%%       checked with model stored in Op. Test fails if they differ.
+%%%    b) exp state diff is applied and, in case of changes, new workflow execution
+%%%       exp state is checked with data stored in op. Test fails if they differ.
 %%% 4. test successfully ends after all steps have executed and no mismatch
-%%%    between test view and model in Op was found.
+%%%    between workflow execution exp state and data stored in Op was found.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_workflow_execution_test_runner).
@@ -35,7 +35,9 @@
 
 -type mock_call_ctx() :: #atm_mock_call_ctx{}.
 -type hook() :: fun((mock_call_ctx()) -> ok).
--type test_view_diff() :: fun((mock_call_ctx()) -> false | {true, atm_workflow_execution_test_view:view()}).
+-type exp_state_diff() :: fun((mock_call_ctx()) ->
+    false | {true, atm_workflow_execution_exp_state_builder:exp_state()}
+).
 
 -type step_mock_spec() :: #atm_step_mock_spec{}.
 -type lane_run_test_spec() :: #atm_lane_run_execution_test_spec{}.
@@ -43,7 +45,7 @@
 -type test_spec() :: #atm_workflow_execution_test_spec{}.
 
 -export_type([
-    mock_call_ctx/0, hook/0, test_view_diff/0,
+    mock_call_ctx/0, hook/0, exp_state_diff/0,
     step_mock_spec/0, lane_run_test_spec/0, incarnation_test_spec/0, test_spec/0
 ]).
 
@@ -55,15 +57,15 @@
 -type mock_call_report() :: #mock_call_report{}.
 -type reply_to() :: {pid(), reference()}.
 
--record(state, {
+-record(test_ctx, {
     test_spec :: test_spec(),
     workflow_execution_id :: atm_workflow_execution:id(),
+    workflow_execution_exp_state :: atm_workflow_execution_exp_state_builder:exp_state(),
     current_lane_index :: atm_lane_execution:index(),
     current_run_num :: atm_lane_execution:run_num(),
-    workflow_execution_test_view :: atm_workflow_execution_test_view:view(),
     ongoing_incarnations :: [incarnation_test_spec()]
 }).
--type state() :: #state{}.
+-type test_ctx() :: #test_ctx{}.
 
 
 -define(TEST_HUNG_TIMEOUT, timer:seconds(30)).
@@ -125,19 +127,19 @@ run(TestSpec = #atm_workflow_execution_test_spec{
         atm_test_inventory:get_workflow_schema(AtmWorkflowSchemaId),
         [revision_registry, registry, 1, lanes]
     ),
-    AtmWorkflowExecutionTestView = atm_workflow_execution_test_view:build(
+    ExpState = atm_workflow_execution_exp_state_builder:init(
         SpaceId, global_clock:timestamp_seconds(), AtmLaneSchemas
     ),
-    true = atm_workflow_execution_test_view:assert_match_with_backend(
-        ProviderSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionTestView
+    true = atm_workflow_execution_exp_state_builder:assert_matches_with_backend(
+        ProviderSelector, AtmWorkflowExecutionId, ExpState
     ),
 
-    monitor_workflow_execution(#state{
+    monitor_workflow_execution(#test_ctx{
         test_spec = TestSpec,
         workflow_execution_id = AtmWorkflowExecutionId,
         current_lane_index = 1,
         current_run_num = 1,
-        workflow_execution_test_view = AtmWorkflowExecutionTestView,
+        workflow_execution_exp_state = ExpState,
         ongoing_incarnations = Incarnations
     }).
 
@@ -148,21 +150,23 @@ run(TestSpec = #atm_workflow_execution_test_spec{
 
 
 %% @private
--spec monitor_workflow_execution(state()) -> ok | no_return().
-monitor_workflow_execution(State) ->
+-spec monitor_workflow_execution(test_ctx()) -> ok | no_return().
+monitor_workflow_execution(TestCtx) ->
     receive {ReplyTo, StepMockCallReport = #mock_call_report{timing = Timing}} ->
-        StepMockSpec = get_step_mock_spec(StepMockCallReport, State),
-        StepMockCallCtx = build_mock_call_ctx(StepMockCallReport, State),
+        StepMockSpec = get_step_mock_spec(StepMockCallReport, TestCtx),
+        StepMockCallCtx = build_mock_call_ctx(StepMockCallReport, TestCtx),
 
         Hook = get_hook(StepMockCallReport, StepMockSpec),
         call_if_defined(Hook, StepMockCallCtx),
 
-        TestViewDiff = get_test_view_diff(StepMockCallReport, StepMockSpec),
-        NewState1 = case TestViewDiff(StepMockCallCtx) of
-            {true, NewTestViewDiff} ->
-                assert_actual_workflow_execution_test_view(NewTestViewDiff, State);
+        ExpStateDiff = get_exp_state_diff(StepMockCallReport, StepMockSpec),
+        NewTestCtx1 = case ExpStateDiff(StepMockCallCtx) of
+            {true, NewExpState} ->
+                NewTestCtx0 = TestCtx#test_ctx{workflow_execution_exp_state = NewExpState},
+                assert_exp_workflow_execution_state(NewTestCtx0),
+                NewTestCtx0;
             false ->
-                State
+                TestCtx
         end,
 
         reply_to_execution_process(ReplyTo, case {Timing, StepMockSpec#atm_step_mock_spec.mock_result} of
@@ -171,12 +175,12 @@ monitor_workflow_execution(State) ->
             {after_step, _} -> ok
         end),
 
-        NewState2 = shift_monitored_lane_run_if_current_one_ended(StepMockCallReport, NewState1),
-        case NewState2#state.ongoing_incarnations of
+        NewTestCtx2 = shift_monitored_lane_run_if_current_one_ended(StepMockCallReport, NewTestCtx1),
+        case NewTestCtx2#test_ctx.ongoing_incarnations of
             [] ->
                 ok;
             [_ | _] ->
-                monitor_workflow_execution(NewState2)
+                monitor_workflow_execution(NewTestCtx2)
         end
     after ?TEST_HUNG_TIMEOUT ->
         ct:pal("ERROR: Atm workflow execution hung"),
@@ -185,36 +189,36 @@ monitor_workflow_execution(State) ->
 
 
 %% @private
--spec get_step_mock_spec(mock_call_report(), state()) -> step_mock_spec().
-get_step_mock_spec(#mock_call_report{step = handle_workflow_execution_ended}, #state{
+-spec get_step_mock_spec(mock_call_report(), test_ctx()) -> step_mock_spec().
+get_step_mock_spec(#mock_call_report{step = handle_workflow_execution_ended}, #test_ctx{
     ongoing_incarnations = [#atm_workflow_execution_incarnation_test_spec{
         handle_workflow_execution_ended = Spec
     } | _
 ]}) ->
     Spec;
 
-get_step_mock_spec(#mock_call_report{step = prepare_lane, args = [_, _, {AtmLaneIndex, _}]}, State) ->
+get_step_mock_spec(#mock_call_report{step = prepare_lane, args = [_, _, {AtmLaneIndex, _}]}, NewTestCtx) ->
     #atm_lane_run_execution_test_spec{prepare_lane = Spec} = get_lane_run_test_spec(
-        AtmLaneIndex, State
+        AtmLaneIndex, NewTestCtx
     ),
     Spec;
 
-get_step_mock_spec(#mock_call_report{step = create_run, args = [{AtmLaneIndex, _}, _, _]}, State) ->
+get_step_mock_spec(#mock_call_report{step = create_run, args = [{AtmLaneIndex, _}, _, _]}, NewTestCtx) ->
     #atm_lane_run_execution_test_spec{create_run = Spec} = get_lane_run_test_spec(
-        AtmLaneIndex, State
+        AtmLaneIndex, NewTestCtx
     ),
     Spec;
 
-get_step_mock_spec(#mock_call_report{step = Step}, State) ->
+get_step_mock_spec(#mock_call_report{step = Step}, NewTestCtx) ->
     element(
         1 + lists_utils:index_of(Step, record_info(fields, atm_lane_run_execution_test_spec)),
-        get_current_lane_run_test_spec(State)
+        get_current_lane_run_test_spec(NewTestCtx)
     ).
 
 
 %% @private
--spec get_current_lane_run_test_spec(state()) -> lane_run_test_spec().
-get_current_lane_run_test_spec(#state{ongoing_incarnations = [
+-spec get_current_lane_run_test_spec(test_ctx()) -> lane_run_test_spec().
+get_current_lane_run_test_spec(#test_ctx{ongoing_incarnations = [
     #atm_workflow_execution_incarnation_test_spec{lane_runs = [
         OngoingLaneRun | _
     ]} | _
@@ -223,8 +227,8 @@ get_current_lane_run_test_spec(#state{ongoing_incarnations = [
 
 
 %% @private
--spec get_lane_run_test_spec(atm_lane_execution:index(), state()) -> lane_run_test_spec().
-get_lane_run_test_spec(TargetAtmLaneIndex, #state{ongoing_incarnations = [
+-spec get_lane_run_test_spec(atm_lane_execution:index(), test_ctx()) -> lane_run_test_spec().
+get_lane_run_test_spec(TargetAtmLaneIndex, #test_ctx{ongoing_incarnations = [
     #atm_workflow_execution_incarnation_test_spec{lane_runs = LaneRunTestSpecs} | _
 ]}) ->
     % run must be searched because run num is global and as such lanes will not
@@ -235,16 +239,16 @@ get_lane_run_test_spec(TargetAtmLaneIndex, #state{ongoing_incarnations = [
 
 
 %% @private
--spec build_mock_call_ctx(mock_call_report(), state()) -> mock_call_ctx().
-build_mock_call_ctx(#mock_call_report{args = CallArgs}, #state{
+-spec build_mock_call_ctx(mock_call_report(), test_ctx()) -> mock_call_ctx().
+build_mock_call_ctx(#mock_call_report{args = CallArgs}, #test_ctx{
     workflow_execution_id = AtmWorkflowExecutionId,
     current_lane_index = CurrentAtmLaneIndex,
     current_run_num = CurrentRunNum,
-    workflow_execution_test_view = AtmWorkflowExecutionTestView
+    workflow_execution_exp_state = ExpState
 }) ->
     #atm_mock_call_ctx{
         workflow_execution_id = AtmWorkflowExecutionId,
-        workflow_execution_test_view = AtmWorkflowExecutionTestView,
+        workflow_execution_exp_state = ExpState,
         current_lane_index = CurrentAtmLaneIndex,
         current_run_num = CurrentRunNum,
         call_args = CallArgs
@@ -267,62 +271,62 @@ call_if_defined(Fun, Input) -> Fun(Input).
 
 
 %% @private
--spec get_test_view_diff(mock_call_report(), step_mock_spec()) -> test_view_diff().
-get_test_view_diff(
+-spec get_exp_state_diff(mock_call_report(), step_mock_spec()) ->
+    exp_state_diff().
+get_exp_state_diff(
     #mock_call_report{timing = before_step},
-    #atm_step_mock_spec{before_step_test_view_diff = default}
+    #atm_step_mock_spec{before_step_exp_state_diff = default}
 ) ->
     fun(_) -> false end;
 
-get_test_view_diff(
+get_exp_state_diff(
     #mock_call_report{timing = before_step},
-    #atm_step_mock_spec{before_step_test_view_diff = Diff}
+    #atm_step_mock_spec{before_step_exp_state_diff = Diff}
 ) ->
     Diff;
 
-get_test_view_diff(
+get_exp_state_diff(
     #mock_call_report{timing = after_step},
-    #atm_step_mock_spec{after_step_test_view_diff = default}
+    #atm_step_mock_spec{after_step_exp_state_diff = default}
 ) ->
     fun(_) -> false end;
 
-get_test_view_diff(
+get_exp_state_diff(
     #mock_call_report{timing = after_step},
-    #atm_step_mock_spec{after_step_test_view_diff = Diff}
+    #atm_step_mock_spec{after_step_exp_state_diff = Diff}
 ) ->
     Diff.
 
 
 %% @private
--spec assert_actual_workflow_execution_test_view(atm_workflow_execution_test_view:view(), state()) ->
-    state().
-assert_actual_workflow_execution_test_view(NewAtmWorkflowExecutionTestView, State = #state{
+-spec assert_exp_workflow_execution_state(test_ctx()) -> test_ctx().
+assert_exp_workflow_execution_state(#test_ctx{
     test_spec = #atm_workflow_execution_test_spec{
         provider = ProviderSelector
     },
-    workflow_execution_id = AtmWorkflowExecutionId
+    workflow_execution_id = AtmWorkflowExecutionId,
+    workflow_execution_exp_state = ExpState
 }) ->
-    case atm_workflow_execution_test_view:assert_match_with_backend(
-        ProviderSelector, AtmWorkflowExecutionId, NewAtmWorkflowExecutionTestView
+    case atm_workflow_execution_exp_state_builder:assert_matches_with_backend(
+        ProviderSelector, AtmWorkflowExecutionId, ExpState
     ) of
         true -> ok;
         false -> ?assertEqual(success, failure)
-    end,
-    State#state{workflow_execution_test_view = NewAtmWorkflowExecutionTestView}.
+    end.
 
 
 %% @private
--spec shift_monitored_lane_run_if_current_one_ended(mock_call_report(), state()) ->
-    state().
+-spec shift_monitored_lane_run_if_current_one_ended(mock_call_report(), test_ctx()) ->
+    test_ctx().
 shift_monitored_lane_run_if_current_one_ended(
     #mock_call_report{timing = after_step, step = handle_workflow_execution_ended},
-    State = #state{ongoing_incarnations = [_]}  %% last incarnation ended
+    TestCtx = #test_ctx{ongoing_incarnations = [_]}  %% last incarnation ended
 ) ->
-    State#state{ongoing_incarnations = []};
+    TestCtx#test_ctx{ongoing_incarnations = []};
 
 shift_monitored_lane_run_if_current_one_ended(
     #mock_call_report{timing = after_step, step = handle_workflow_execution_ended},
-    State = #state{ongoing_incarnations = [_ | LeftoverIncarnations]}
+    TestCtx = #test_ctx{ongoing_incarnations = [_ | LeftoverIncarnations]}
 ) ->
     #atm_workflow_execution_incarnation_test_spec{
         lane_runs = [#atm_lane_run_execution_test_spec{
@@ -330,7 +334,7 @@ shift_monitored_lane_run_if_current_one_ended(
         } | _]
     } = hd(LeftoverIncarnations),
 
-    State#state{
+    TestCtx#test_ctx{
         current_lane_index = AtmLaneIndex,
         current_run_num = AtmRunNum,
         ongoing_incarnations = LeftoverIncarnations
@@ -338,14 +342,14 @@ shift_monitored_lane_run_if_current_one_ended(
 
 shift_monitored_lane_run_if_current_one_ended(
     #mock_call_report{timing = after_step, step = handle_lane_execution_ended},
-    State = #state{ongoing_incarnations = [OngoingIncarnation | LeftoverIncarnations]}
+    TestCtx = #test_ctx{ongoing_incarnations = [OngoingIncarnation | LeftoverIncarnations]}
 ) ->
     case OngoingIncarnation#atm_workflow_execution_incarnation_test_spec.lane_runs of
         [_] ->
             NewOngoingIncarnation = OngoingIncarnation#atm_workflow_execution_incarnation_test_spec{
                 lane_runs = []
             },
-            State#state{ongoing_incarnations = [NewOngoingIncarnation | LeftoverIncarnations]};
+            TestCtx#test_ctx{ongoing_incarnations = [NewOngoingIncarnation | LeftoverIncarnations]};
         [_ | LeftoverLaneRuns] ->
             #atm_lane_run_execution_test_spec{selector = {AtmLaneIndex, AtmRunNum}} = hd(
                 LeftoverLaneRuns
@@ -353,15 +357,15 @@ shift_monitored_lane_run_if_current_one_ended(
             NewOngoingIncarnation = OngoingIncarnation#atm_workflow_execution_incarnation_test_spec{
                 lane_runs = LeftoverLaneRuns
             },
-            State#state{
+            TestCtx#test_ctx{
                 current_lane_index = AtmLaneIndex,
                 current_run_num = AtmRunNum,
                 ongoing_incarnations = [NewOngoingIncarnation | LeftoverIncarnations]
             }
     end;
 
-shift_monitored_lane_run_if_current_one_ended(_, State) ->
-    State.
+shift_monitored_lane_run_if_current_one_ended(_, TestCtx) ->
+    TestCtx.
 
 
 %% @private
