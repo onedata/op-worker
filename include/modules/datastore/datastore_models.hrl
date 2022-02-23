@@ -1064,7 +1064,7 @@
 
 
 -record(dir_stats_collector_config, {
-    enabled = true :: boolean()
+    status :: dir_stats_collector_config:status()
 }).
 
 
