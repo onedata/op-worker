@@ -73,9 +73,9 @@
     name = ?ATM_AUTOGENERATE :: ?ATM_AUTOGENERATE | automation:name(),
     description = ?ATM_AUTOGENERATE :: ?ATM_AUTOGENERATE | automation:description(),
     type :: automation:store_type(),
-    data_spec :: atm_data_spec:record(),
-    requires_initial_value :: boolean(),
-    default_initial_value :: undefined | json_utils:json_term()
+    config :: atm_store_config:record(),
+    requires_initial_content :: boolean(),
+    default_initial_content :: undefined | json_utils:json_term()
 }).
 
 -record(atm_lane_schema_draft, {

@@ -163,18 +163,18 @@ create_from_draft(#atm_store_schema_draft{
     name = PlaceholderOrName,
     description = PlaceholderOrDescription,
     type = Type,
-    data_spec = AtmDataSpec,
-    requires_initial_value = RequiresInitialValue,
-    default_initial_value = DefaultInitialValue
+    config = AtmStoreConfig,
+    requires_initial_content = RequiresInitialContent,
+    default_initial_content = DefaultInitialContent
 }) ->
     #atm_store_schema{
         id = Id,
         name = ensure_name(PlaceholderOrName),
         description = ensure_description(PlaceholderOrDescription),
         type = Type,
-        data_spec = AtmDataSpec,
-        requires_initial_value = RequiresInitialValue,
-        default_initial_value = DefaultInitialValue
+        config = AtmStoreConfig,
+        requires_initial_content = RequiresInitialContent,
+        default_initial_content = DefaultInitialContent
     };
 
 create_from_draft(#atm_lane_schema_draft{

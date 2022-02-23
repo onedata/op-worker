@@ -47,9 +47,11 @@ all() -> [
             #atm_store_schema_draft{
                 id = <<"st1">>,
                 type = list,
-                data_spec = #atm_data_spec{type = atm_integer_type},
-                requires_initial_value = false,
-                default_initial_value = [1, 2, 3]
+                config = #atm_list_store_config{item_data_spec = #atm_data_spec{
+                    type = atm_integer_type
+                }},
+                requires_initial_content = false,
+                default_initial_content = [1, 2, 3]
             }
         ],
         lanes = [
@@ -70,9 +72,11 @@ all() -> [
         stores = [#atm_store_schema_draft{
             id = <<"st1">>,
             type = list,
-            data_spec = #atm_data_spec{type = atm_integer_type},
-            requires_initial_value = false,
-            default_initial_value = [1, 2, 3]
+            config = #atm_list_store_config{item_data_spec = #atm_data_spec{
+                type = atm_integer_type
+            }},
+            requires_initial_content = false,
+            default_initial_content = [1, 2, 3]
         }],
         lanes = [#atm_lane_schema_draft{
             parallel_boxes = [#atm_parallel_box_schema_draft{
