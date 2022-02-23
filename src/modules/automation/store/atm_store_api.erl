@@ -26,7 +26,7 @@
 
 -compile({no_auto_import, [get/1]}).
 
--type initial_value() :: atm_store_container:initial_value().
+-type initial_content() :: atm_store_container:initial_content().
 
 % Index of automation:item() stored in atm_store_container that uniquely identifies it.
 -type index() :: binary().
@@ -36,7 +36,7 @@
 -type browse_options() :: atm_store_container:browse_options().
 -type browse_result() :: {[{index(), {ok, automation:item()} | errors:error()}], IsLast :: boolean()}.
 
--export_type([initial_value/0]).
+-export_type([initial_content/0]).
 -export_type([index/0, offset/0, limit/0, browse_options/0, browse_result/0]).
 
 
@@ -47,33 +47,33 @@
 
 -spec create(
     atm_workflow_execution_auth:record(),
-    undefined | initial_value(),
+    undefined | initial_content(),
     atm_store_schema:record()
 ) ->
     {ok, atm_store:doc()} | no_return().
 create(_AtmWorkflowExecutionAuth, undefined, #atm_store_schema{
-    requires_initial_value = true,
-    default_initial_value = undefined
+    requires_initial_content = true,
+    default_initial_content = undefined
 }) ->
-    throw(?ERROR_ATM_STORE_MISSING_REQUIRED_INITIAL_VALUE);
+    throw(?ERROR_ATM_STORE_MISSING_REQUIRED_INITIAL_CONTENT);
 
-create(AtmWorkflowExecutionAuth, InitialValue, #atm_store_schema{
+create(AtmWorkflowExecutionAuth, InitialContent, #atm_store_schema{
     id = AtmStoreSchemaId,
-    default_initial_value = DefaultInitialValue,
+    default_initial_content = DefaultInitialContent,
     type = StoreType,
-    data_spec = AtmDataSpec
+    config = AtmStoreConfig
 }) ->
-    ActualInitialValue = utils:ensure_defined(InitialValue, DefaultInitialValue),
+    ActualInitialContent = utils:ensure_defined(InitialContent, DefaultInitialContent),
 
     {ok, _} = atm_store:create(#atm_store{
         workflow_execution_id = atm_workflow_execution_auth:get_workflow_execution_id(
             AtmWorkflowExecutionAuth
         ),
         schema_id = AtmStoreSchemaId,
-        initial_value = ActualInitialValue,
+        initial_content = ActualInitialContent,
         frozen = false,
         container = atm_store_container:create(
-            StoreType, AtmWorkflowExecutionAuth, AtmDataSpec, ActualInitialValue
+            StoreType, AtmWorkflowExecutionAuth, AtmStoreConfig, ActualInitialContent
         )
     }).
 
@@ -114,8 +114,8 @@ browse_content(AtmWorkflowExecutionAuth, BrowseOpts, AtmStoreId) ->
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Returns 'atm_store_iterator' allowing to iterate over all values produced by
-%% store. Those values are not only items directly kept in store but also objects
+%% Returns 'atm_store_iterator' allowing to iterate over all items produced by
+%% store. Those items are not only items directly kept in store but also objects
 %% associated/inferred from them (e.g. in case of file tree forest store entire
 %% files subtree for each file kept in store will be traversed and returned).
 %% @end
@@ -152,7 +152,7 @@ unfreeze(AtmStoreId) ->
 apply_operation(AtmWorkflowExecutionAuth, Operation, Item, Options, AtmStoreId) ->
     % NOTE: no need to use critical section here as containers either:
     %   * are based on structure that support transaction operation on their own 
-    %   * store only one value and it will be overwritten 
+    %   * store only one item and it will be overwritten
     %   * do not support any operation
     case get(AtmStoreId) of
         {ok, #atm_store{container = AtmStoreContainer, frozen = false}} ->

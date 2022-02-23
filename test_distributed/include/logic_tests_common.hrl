@@ -268,22 +268,22 @@ end).
             name = <<"store1Name">>,
             description = <<"store1Desc">>,
             type = list,
-            data_spec = #atm_data_spec{
+            config = #atm_list_store_config{item_data_spec = #atm_data_spec{
                 type = atm_file_type,
                 value_constraints = #{}
-            },
-            requires_initial_value = true
+            }},
+            requires_initial_content = true
         },
         #atm_store_schema{
             id = <<"store2Id">>,
             name = <<"store2Name">>,
             description = <<"store2Desc">>,
             type = single_value,
-            data_spec = #atm_data_spec{
+            config = #atm_single_value_store_config{item_data_spec = #atm_data_spec{
                 type = atm_integer_type,
                 value_constraints = #{}
-            },
-            requires_initial_value = false
+            }},
+            requires_initial_content = false
         }
     ],
     lanes = [

@@ -29,7 +29,7 @@
 }.
 
 -type listing_postprocessor() :: json_infinite_log_model:listing_postprocessor(
-    {atm_store_api:index(), {ok, automation:item()} | errors:error()}
+    {atm_store_api:index(), {ok, atm_value:expanded()} | errors:error()}
 ).
 %@formatter:on
 

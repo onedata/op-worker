@@ -146,7 +146,27 @@
 
 %% Atm system stores related macros
 
+-define(ATM_SYSTEM_AUDIT_LOG_SCHEMA(__ID), #atm_store_schema{
+    id = __ID,
+    name = __ID,
+    description = <<>>,
+    type = audit_log,
+    config = #atm_audit_log_store_config{
+        log_content_data_spec = #atm_data_spec{type = atm_object_type}
+    },
+    requires_initial_content = false
+}).
+
 -define(CURRENT_LANE_RUN_EXCEPTION_STORE_SCHEMA_ID, <<"CURRENT_LANE_RUN_EXCEPTION_STORE">>).
+
+-define(ATM_LANE_RUN_EXCEPTION_STORE_SCHEMA(__ITEM_DATA_SPEC), #atm_store_schema{
+    id = ?CURRENT_LANE_RUN_EXCEPTION_STORE_SCHEMA_ID,
+    name = ?CURRENT_LANE_RUN_EXCEPTION_STORE_SCHEMA_ID,
+    description = <<>>,
+    type = list,
+    config = #atm_list_store_config{item_data_spec = __ITEM_DATA_SPEC},
+    requires_initial_content = false
+}).
 
 
 %% Atm status and phase related macros
@@ -178,6 +198,12 @@
 -define(LOGGER_ERROR, <<"error">>).
 -define(LOGGER_CRITICAL, <<"critical">>).
 -define(LOGGER_EMERGENCY, <<"emergency">>).
+
+-define(LOGGER_SEVERITY_LEVELS, [
+    ?LOGGER_DEBUG, ?LOGGER_INFO, ?LOGGER_NOTICE,
+    ?LOGGER_WARNING, ?LOGGER_ALERT,
+    ?LOGGER_ERROR, ?LOGGER_CRITICAL, ?LOGGER_EMERGENCY
+]).
 
 
 -define(atm_examine_error(__TYPE, __REASON, __STACKTRACE),

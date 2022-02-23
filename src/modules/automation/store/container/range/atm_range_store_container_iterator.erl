@@ -16,13 +16,13 @@
 -behaviour(atm_store_container_iterator).
 -behaviour(persistent_record).
 
--include_lib("ctool/include/errors.hrl").
+-include_lib("ctool/include/automation/automation.hrl").
 
 %% API
 -export([build/3]).
 
 % atm_store_container_iterator callbacks
--export([get_next_batch/4, forget_before/1, mark_exhausted/1]).
+-export([get_next_batch/3, forget_before/1, mark_exhausted/1]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
@@ -37,6 +37,9 @@
 -type record() :: #atm_range_store_container_iterator{}.
 
 -export_type([record/0]).
+
+
+-define(ITEM_DATA_SPEC, #atm_data_spec{type = atm_integer_type}).
 
 
 %%%===================================================================
@@ -57,15 +60,17 @@ build(Start, End, Step) ->
 %%%===================================================================
 
 
--spec get_next_batch(atm_workflow_execution_auth:record(), atm_store_container_iterator:batch_size(),
-    record(), atm_data_spec:record()
+-spec get_next_batch(
+    atm_workflow_execution_auth:record(),
+    atm_store_container_iterator:batch_size(),
+    record()
 ) ->
     {ok, [integer()], record()} | stop.
-get_next_batch(AtmWorkflowExecutionAuth, BatchSize, #atm_range_store_container_iterator{
+get_next_batch(AtmWorkflowExecutionAuth, BatchSize, Record = #atm_range_store_container_iterator{
     current_num = CurrentNum,
     end_num = End,
     step = Step
-} = Record, AtmDataSpec) ->
+}) ->
     RequestedEndNum = CurrentNum + (BatchSize - 1) * Step,
     Threshold = case Step > 0 of
         true -> min(RequestedEndNum, End);
@@ -75,7 +80,9 @@ get_next_batch(AtmWorkflowExecutionAuth, BatchSize, #atm_range_store_container_i
         [] ->
             stop;
         CompressedItems ->
-            Batch = atm_value:filterexpand_list(AtmWorkflowExecutionAuth, CompressedItems, AtmDataSpec),
+            Batch = atm_value:filterexpand_list(
+                AtmWorkflowExecutionAuth, CompressedItems, ?ITEM_DATA_SPEC
+            ),
             {ok, Batch, Record#atm_range_store_container_iterator{current_num = Threshold + Step}}
     end.
 

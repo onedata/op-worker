@@ -188,14 +188,9 @@ create_audit_log(CreationCtx = #creation_ctx{
     AtmWorkflowExecutionAuth = atm_workflow_execution_ctx:get_auth(AtmWorkflowExecutionCtx),
 
     {ok, #document{key = AtmSystemAuditLogId}} = atm_store_api:create(
-        AtmWorkflowExecutionAuth, undefined, #atm_store_schema{
-            id = ?CURRENT_TASK_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID,
-            name = ?CURRENT_TASK_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID,
-            description = <<>>,
-            type = audit_log,
-            data_spec = #atm_data_spec{type = atm_object_type},
-            requires_initial_value = false
-        }
+        AtmWorkflowExecutionAuth,
+        undefined,
+        ?ATM_SYSTEM_AUDIT_LOG_SCHEMA(?CURRENT_TASK_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID)
     ),
 
     CreationCtx#creation_ctx{execution_components = ExecutionComponents#execution_components{

@@ -1076,7 +1076,7 @@
     workflow_execution_id :: atm_workflow_execution:id(),
 
     schema_id :: automation:id(),
-    initial_value :: undefined | json_utils:json_term(),
+    initial_content :: undefined | json_utils:json_term(),
 
     % Flag used to tell if content (items) update operation should be blocked
     % (e.g when store is used as the iteration source for currently executed lane).

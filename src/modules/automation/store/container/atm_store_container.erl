@@ -28,7 +28,8 @@
 %% API
 -export([
     create/4,
-    get_store_type/1, get_data_spec/1, browse_content/3, acquire_iterator/1,
+    get_store_type/1, get_config/1, get_iterated_item_data_spec/1,
+    browse_content/3, acquire_iterator/1,
     apply_operation/2,
     delete/1
 ]).
@@ -44,12 +45,12 @@
     atm_single_value_store_container |
     atm_tree_forest_store_container.
 
--type initial_value() ::
-    atm_audit_log_store_container:initial_value() |
-    atm_list_store_container:initial_value() |
-    atm_range_store_container:initial_value() |
-    atm_single_value_store_container:initial_value() |
-    atm_tree_forest_store_container:initial_value().
+-type initial_content() ::
+    atm_audit_log_store_container:initial_content() |
+    atm_list_store_container:initial_content() |
+    atm_range_store_container:initial_content() |
+    atm_single_value_store_container:initial_content() |
+    atm_tree_forest_store_container:initial_content().
 
 -type record() ::
     atm_audit_log_store_container:record() |
@@ -76,7 +77,7 @@
 
 -type operation() :: #atm_store_container_operation{}.
 
--export_type([type/0, initial_value/0, record/0]).
+-export_type([type/0, initial_content/0, record/0]).
 -export_type([operation_type/0, operation_options/0, browse_options/0, operation/0]).
 
 
@@ -85,10 +86,12 @@
 %%%===================================================================
 
 
--callback create(atm_workflow_execution_auth:record(), atm_data_spec:record(), initial_value()) ->
+-callback create(atm_workflow_execution_auth:record(), atm_store_config:record(), initial_content()) ->
     record() | no_return().
 
--callback get_data_spec(record()) -> atm_data_spec:record().
+-callback get_config(record()) -> atm_store_config:record().
+
+-callback get_iterated_item_data_spec(record()) -> atm_data_spec:record().
 
 -callback browse_content(atm_workflow_execution_auth:record(), atm_store_api:browse_options(), record()) ->
     atm_store_api:browse_result() | no_return().
@@ -108,13 +111,13 @@
 -spec create(
     automation:store_type(),
     atm_workflow_execution_auth:record(),
-    atm_data_spec:record(),
-    initial_value()
+    atm_store_config:record(),
+    initial_content()
 ) ->
     record().
-create(AtmStoreType, AtmWorkflowExecutionAuth, AtmDataSpec, InitArgs) ->
+create(AtmStoreType, AtmWorkflowExecutionAuth, AtmStoreConfig, InitialContent) ->
     RecordType = atm_store_type_to_atm_store_container_type(AtmStoreType),
-    RecordType:create(AtmWorkflowExecutionAuth, AtmDataSpec, InitArgs).
+    RecordType:create(AtmWorkflowExecutionAuth, AtmStoreConfig, InitialContent).
 
 
 -spec get_store_type(record()) -> automation:store_type().
@@ -123,10 +126,16 @@ get_store_type(AtmStoreContainer) ->
     atm_store_container_type_to_atm_store_type(RecordType).
 
 
--spec get_data_spec(record()) -> atm_data_spec:record().
-get_data_spec(AtmStoreContainer) ->
+-spec get_config(record()) -> atm_store_config:record().
+get_config(AtmStoreContainer) ->
     RecordType = utils:record_type(AtmStoreContainer),
-    RecordType:get_data_spec(AtmStoreContainer).
+    RecordType:get_config(AtmStoreContainer).
+
+
+-spec get_iterated_item_data_spec(record()) -> atm_data_spec:record().
+get_iterated_item_data_spec(AtmStoreContainer) ->
+    RecordType = utils:record_type(AtmStoreContainer),
+    RecordType:get_iterated_item_data_spec(AtmStoreContainer).
 
 
 -spec browse_content(atm_workflow_execution_auth:record(), atm_store_api:browse_options(), record()) ->
