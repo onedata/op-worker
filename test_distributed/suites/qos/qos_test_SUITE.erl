@@ -316,15 +316,15 @@ qos_audit_log_base_test(ExpectedStatus, Type) ->
 
 
 prepare_audit_log_test_env(single_file, Node, SessId, RootFilePath) ->
-    {ok, Guid} = api_test_utils:create_file(<<"file">>, Node, SessId, RootFilePath),
+    {ok, Guid} = lfm_test_utils:create_file(<<"file">>, Node, SessId, RootFilePath),
     {ok, ObjectId} = file_id:guid_to_objectid(Guid),
     {Guid, [ObjectId]};
 prepare_audit_log_test_env(effective, Node, SessId, RootFilePath) ->
-    {ok, DirGuid} = api_test_utils:create_file(<<"dir">>, Node, SessId, RootFilePath),
+    {ok, DirGuid} = lfm_test_utils:create_file(<<"dir">>, Node, SessId, RootFilePath),
     ChildrenNum = rand:uniform(50),
     ChildrenIds = lists_utils:pmap(fun(Num) ->
         FilePath = filename:join(RootFilePath, integer_to_binary(Num)),
-        {ok, Guid} = api_test_utils:create_file(<<"file">>, Node, SessId, FilePath),
+        {ok, Guid} = lfm_test_utils:create_file(<<"file">>, Node, SessId, FilePath),
         {ok, ObjectId} = file_id:guid_to_objectid(Guid),
         ObjectId
     end, lists:seq(1, ChildrenNum)),

@@ -73,12 +73,6 @@
 
 
 -spec translate_value(gri:gri(), Value :: term()) -> gs_protocol:data().
-translate_value(#gri{aspect = children}, {Children, IsLast}) ->
-    #{
-        <<"children">> => lists:map(fun({Guid, _Name}) -> Guid end, Children),
-        <<"isLast">> => IsLast
-    };
-
 translate_value(#gri{aspect = children_details, scope = Scope}, {ChildrenDetails, IsLast}) ->
     #{
         <<"children">> => lists:map(fun(ChildDetails) ->

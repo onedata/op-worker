@@ -239,7 +239,7 @@ do_master_job(Job = #tree_traverse{
     MasterJobArgs = #{task_id := TaskId}
 ) ->
     mark_building_if_first_job(Job),
-    IsFirstBatch = ListingToken =:= ?INITIAL_LS_TOKEN,
+    IsFirstBatch = ListingToken =:= ?INITIAL_DATASTORE_LS_TOKEN,
     {IsDir, FileCtx2} = file_ctx:is_dir(FileCtx),
 
     case IsDir of
@@ -538,7 +538,7 @@ is_first_job(Job = #tree_traverse{
 }) ->
     {IsDir, _} = file_ctx:is_dir(FileCtx),
     is_dataset_root(Job) andalso (
-        (IsDir andalso (ListingToken =:= ?INITIAL_LS_TOKEN))
+        (IsDir andalso (ListingToken =:= ?INITIAL_DATASTORE_LS_TOKEN))
             orelse not IsDir
     ).
 

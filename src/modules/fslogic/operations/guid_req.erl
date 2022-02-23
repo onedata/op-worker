@@ -64,10 +64,20 @@ ensure_dir(UserCtx, RootFileCtx, Path, Mode) ->
             {ChildCtx, _} = files_tree:get_child(ParentCtx, PathToken, UserCtx),
             ChildCtx
         catch throw:?ENOENT ->
-            #fuse_response{fuse_response = #dir{guid = CreatedDirGuid}} = dir_req:mkdir(
-                UserCtx, ParentCtx, PathToken, Mode
-            ),
-            file_ctx:new_by_guid(CreatedDirGuid)
+            try 
+                #fuse_response{fuse_response = #dir{guid = CreatedDirGuid}} = dir_req:mkdir(
+                    UserCtx, ParentCtx, PathToken, Mode
+                ),
+                file_ctx:new_by_guid(CreatedDirGuid)
+            catch Class:Reason ->
+                case datastore_runner:normalize_error(Reason) of
+                    already_exists ->
+                        {Ctx, _} = files_tree:get_child(ParentCtx, PathToken, UserCtx),
+                        Ctx;
+                    _ ->
+                        erlang:apply(erlang, Class, [Reason])
+                end
+            end
         end
     end, RootFileCtx, PathTokens),
     resolve_guid(UserCtx, LeafFileCtx).

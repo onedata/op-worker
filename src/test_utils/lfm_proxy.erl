@@ -51,6 +51,7 @@
     get_children_attrs/4,
     get_child_attr/4,
     get_children_details/4,
+    get_files_recursively/5,
 
     get_xattr/4, get_xattr/5,
     set_xattr/4, set_xattr/6,
@@ -551,7 +552,7 @@ get_children(Worker, SessId, FileKey, Offset, Limit) ->
 
 
 -spec get_children_attrs(node(), session:id(), lfm:file_key() | file_meta:uuid_or_path(),
-    file_meta:list_opts()) -> {ok, [#file_attr{}]} | lfm:error_reply().
+    dir_req:list_opts()) -> {ok, [#file_attr{}], file_meta:list_extended_info()} | lfm:error_reply().
 get_children_attrs(Worker, SessId, FileKey, ListOpts) ->
     ?EXEC(Worker, lfm:get_children_attrs(SessId, uuid_to_file_ref(Worker, FileKey), ListOpts)).
 
@@ -566,6 +567,12 @@ get_child_attr(Worker, SessId, ParentGuid, ChildName) ->
     file_meta:list_opts()) -> {ok, [lfm_attrs:file_details()], file_meta:list_extended_info()} | lfm:error_reply().
 get_children_details(Worker, SessId, FileKey, ListOpts) ->
     ?EXEC(Worker, lfm:get_children_details(SessId, uuid_to_file_ref(Worker, FileKey), ListOpts)).
+
+
+-spec get_files_recursively(node(), session:id(), lfm:file_key(), file_meta:path(), non_neg_integer()) ->
+    {ok, [{file_meta:path(), lfm_attrs:file_attributes()}], boolean()} | lfm:error_reply().
+get_files_recursively(Worker, SessId, FileKey, StartAfter, Limit) ->
+    ?EXEC(Worker, lfm:get_files_recursively(SessId, uuid_to_file_ref(Worker, FileKey), StartAfter, Limit)).
 
 
 %%%===================================================================

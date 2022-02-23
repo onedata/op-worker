@@ -31,7 +31,7 @@
 
 -include("modules/dir_stats_collector/dir_size_stats.hrl").
 -include("modules/datastore/datastore_models.hrl").
--include_lib("cluster_worker/include/modules/datastore/ts_metric_config.hrl").
+-include_lib("ctool/include/time_series/common.hrl").
 -include_lib("ctool/include/errors.hrl").
 
 
@@ -93,7 +93,7 @@ get_stats(Guid, StatNames) ->
 get_stats_and_time_series_collections(Guid) ->
     case dir_stats_collector_config:is_enabled_for_space(file_id:guid_to_space_id(Guid)) of
         true ->
-            dir_stats_collector:flush_stats(Guid),
+            ok = dir_stats_collector:flush_stats(Guid, ?MODULE),
             Uuid = file_id:guid_to_uuid(Guid),
             case datastore_time_series_collection:list_windows(?CTX, Uuid, #{}) of
                 {ok, WindowsMap} -> {ok, all_metrics_to_stats_and_time_series_collections(WindowsMap)};
@@ -233,22 +233,22 @@ metrics_extended_with_current_value() ->
 metrics() ->
     #{
         ?MINUTE_METRIC => #metric_config{
-            resolution = timer:minutes(1),
+            resolution = ?MINUTE_RESOLUTION,
             retention = 120,
             aggregator = sum
         },
         ?HOUR_METRIC => #metric_config{
-            resolution = timer:hours(1),
+            resolution = ?HOUR_RESOLUTION,
             retention = 48,
             aggregator = sum
         },
         ?DAY_METRIC => #metric_config{
-            resolution = timer:hours(24),
+            resolution = ?DAY_RESOLUTION,
             retention = 60,
             aggregator = sum
         },
         ?MONTH_METRIC => #metric_config{
-            resolution = timer:hours(24 * 30),
+            resolution = ?MONTH_RESOLUTION,
             retention = 12,
             aggregator = sum
         }

@@ -220,7 +220,7 @@ copy_file_content(SourceHandle, TargetHandle, Offset, BufferSize, Callback) ->
 -spec copy_children(session:id(), file_id:file_guid(), file_id:file_guid(), options()) ->
     {ok, [child_entry()]} | {error, term()}.
 copy_children(SessId, ParentGuid, TargetParentGuid, Options) ->
-    copy_children(SessId, ParentGuid, TargetParentGuid, ?INITIAL_LS_TOKEN, [], Options).
+    copy_children(SessId, ParentGuid, TargetParentGuid, ?INITIAL_DATASTORE_LS_TOKEN, [], Options).
 
 
 -spec copy_children(session:id(), file_id:file_guid(), file_id:file_guid(), file_meta:list_token(), 

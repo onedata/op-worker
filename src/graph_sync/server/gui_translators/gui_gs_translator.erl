@@ -55,12 +55,20 @@ handshake_attributes(_Client) ->
     BagitUploaderWorkflowSchemaId = maps:get(<<"bagitUploaderWorkflowSchemaId">>, OnezoneConfiguration, null),
 
     #{
+        <<"globalTimeSeconds">> => global_clock:timestamp_seconds(),
         <<"providerName">> => ProviderName,
         <<"serviceVersion">> => op_worker:get_release_version(),
         <<"onezoneUrl">> => oneprovider:get_oz_url(),
         <<"transfersHistoryLimitPerFile">> => transferred_file:get_history_limit(),
         <<"openfaasAvailable">> => atm_openfaas_task_executor:is_openfaas_available(),
         <<"bagitUploaderWorkflowSchemaId">> => utils:undefined_to_null(BagitUploaderWorkflowSchemaId),
+        <<"qosTransferStatsConfig">> => #{
+            <<"totalTimeSeriesId">> => ?TOTAL_TIME_SERIES_ID,
+            <<"minuteMetricId">> => ?MINUTE_METRIC_ID,
+            <<"hourMetricId">> => ?HOUR_METRIC_ID,
+            <<"dayMetricId">> => ?DAY_METRIC_ID,
+            <<"monthMetricId">> => ?MONTH_METRIC_ID
+        },
         <<"apiTemplates">> => XRootDApiTemplates#{
             <<"rest">> => #{
                 <<"listSharedDirectoryChildren">> => ?ZONE_SHARED_DATA_CURL_COMMAND_TEMPLATE("/children"),
@@ -95,6 +103,8 @@ translate_value(_, #gri{type = op_space} = GRI, Value) ->
     space_gui_gs_translator:translate_value(GRI, Value);
 translate_value(_, #gri{type = op_transfer} = GRI, Value) ->
     transfer_gui_gs_translator:translate_value(GRI, Value);
+translate_value(_, #gri{type = op_qos} = GRI, Value) ->
+    qos_gui_gs_translator:translate_value(GRI, Value);
 translate_value(_, #gri{type = op_atm_task_execution} = GRI, Value) ->
     atm_task_execution_gui_gs_translator:translate_value(GRI, Value);
 translate_value(ProtocolVersion, GRI, Data) ->
@@ -150,6 +160,8 @@ translate_resource(_, #gri{type = op_share} = GRI, Data) ->
     share_gui_gs_translator:translate_resource(GRI, Data);
 translate_resource(_, #gri{type = op_space} = GRI, Data) ->
     space_gui_gs_translator:translate_resource(GRI, Data);
+translate_resource(_, #gri{type = op_storage} = GRI, Value) ->
+    storage_gui_gs_translator:translate_resource(GRI, Value);
 translate_resource(_, #gri{type = op_transfer} = GRI, Data) ->
     transfer_gui_gs_translator:translate_resource(GRI, Data);
 translate_resource(_, #gri{type = op_user} = GRI, Data) ->

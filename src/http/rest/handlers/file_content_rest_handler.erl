@@ -24,6 +24,11 @@
 %% API
 -export([handle_request/2]).
 
+-type create_fun() :: fun((session:id(), file_id:file_guid() , file_meta:name(), file_meta:mode()) -> 
+    {ok, file_id:file_guid()} | {error, term()}).
+
+-type create_link_fun() :: fun((session:id(), lfm:file_ref(), file_meta:name(), 
+    file_id:file_guid() | file_meta:path()) -> {ok, file_id:file_guid()} | {error, term()}).
 
 % timeout after which cowboy returns the data read from socket, regardless of its size
 % the value was decided upon experimentally
@@ -31,6 +36,8 @@
 
 -define(DEFAULT_CREATE_PARENTS_FLAG, false).
 
+%% @TODO VFS-8986 - remove update_existing in create endpoint and allow for creation of non existing files in update endpoint
+%% @TODO VFS-8986 - make update endpoint to work by path
 
 %%%===================================================================
 %%% API
@@ -94,8 +101,10 @@ sanitize_params(#op_req{
     operation = create,
     data = RawParams,
     gri = #gri{aspect = Aspect}
-} = OpReq, Req) when Aspect == child orelse Aspect == file_at_path
-    ->
+} = OpReq, Req) when
+    Aspect == child;
+    Aspect == file_at_path
+->
     {AllRawParams, OptionalParamsDependingOnAspect, RequiredParamsDependingOnAspect} = case Aspect of
         child ->
             {RawParams, #{}, #{<<"name">> => {binary, non_empty}}};
@@ -141,7 +150,8 @@ sanitize_params(#op_req{
                 throw(?ERROR_BAD_VALUE_INTEGER(<<"mode">>))
             end
         end},
-        <<"offset">> => {integer, {not_lower_than, 0}}
+        <<"offset">> => {integer, {not_lower_than, 0}},
+        <<"update_existing">> => {boolean, any}
     },
     OpReq#op_req{data = middleware_sanitizer:sanitize_data(AllRawParams, #{
         required => AllRequiredParams,
@@ -176,7 +186,7 @@ ensure_has_access_to_file(#op_req{auth = ?GUEST}) ->
     throw(?ERROR_UNAUTHORIZED);
 ensure_has_access_to_file(#op_req{auth = Auth, gri = #gri{id = Guid}}) ->
     middleware_utils:has_access_to_file_space(Auth, Guid) orelse throw(?ERROR_FORBIDDEN).
-
+    
 
 %% @private
 -spec process_request(middleware:req(), cowboy_req:req()) ->
@@ -215,42 +225,37 @@ process_request(#op_req{
         file_at_path -> lists:last(maps:get(path, Params, <<"">>))
     end,
 
-    Mode = maps:get(<<"mode">>, Params, undefined),
+    UpdateExisting = maps:get(<<"update_existing">>, Params, false),
 
     {Guid, Req3} = case maps:get(<<"type">>, Params, ?REGULAR_FILE_TYPE) of
         ?DIRECTORY_TYPE ->
-            {ok, CreatedDirGuid} = ?lfm_check(lfm:mkdir(SessionId, ParentGuid, Name, Mode)),
-            {CreatedDirGuid, Req};
+            Mode = maps:get(<<"mode">>, Params, ?DEFAULT_DIR_PERMS),
+            {DirGuid, _NewFileCreated} = create(fun lfm:mkdir/4, SessionId, ParentGuid, Name, Mode, UpdateExisting),
+            {DirGuid, Req};
         ?REGULAR_FILE_TYPE ->
-            {ok, CreatedFileGuid} = ?lfm_check(lfm:create(SessionId, ParentGuid, Name, Mode)),
-            FileRef = ?FILE_REF(CreatedFileGuid),
-
+            Mode = maps:get(<<"mode">>, Params, ?DEFAULT_FILE_PERMS),
+            {FileGuid, NewFileCreated} = create(fun lfm:create/4, SessionId, ParentGuid, Name, Mode, UpdateExisting),
+        
             case {maps:get(<<"offset">>, Params, 0), cowboy_req:has_body(Req)} of
                 {0, false} ->
-                    {CreatedFileGuid, Req};
+                    {FileGuid, Req};
                 {Offset, _} ->
+                    FileRef = ?FILE_REF(FileGuid),
+                
                     try
                         Req2 = write_req_body_to_file(SessionId, FileRef, Offset, Req),
-                        {CreatedFileGuid, Req2}
+                        {FileGuid, Req2}
                     catch Type:Reason ->
-                        lfm:unlink(SessionId, FileRef, false),
+                        NewFileCreated andalso lfm:unlink(SessionId, FileRef, false),
                         erlang:Type(Reason)
                     end
             end;
         ?LINK_TYPE ->
             TargetFileGuid = maps:get(<<"target_file_id">>, Params),
-
-            {ok, #file_attr{guid = LinkGuid}} = ?lfm_check(lfm:make_link(
-                SessionId, ?FILE_REF(TargetFileGuid), ?FILE_REF(ParentGuid), Name
-            )),
-            {LinkGuid, Req};
+            {create_link(fun lfm:make_link/4, SessionId, ParentGuid, Name, TargetFileGuid, UpdateExisting), Req};
         ?SYMLINK_TYPE ->
             TargetFilePath = maps:get(<<"target_file_path">>, Params),
-
-            {ok, #file_attr{guid = SymlinkGuid}} = ?lfm_check(lfm:make_symlink(
-                SessionId, ?FILE_REF(ParentGuid), Name, TargetFilePath
-            )),
-            {SymlinkGuid, Req}
+            {create_link(fun lfm:make_symlink/4, SessionId, ParentGuid, Name, TargetFilePath, UpdateExisting), Req}
     end,
     {ok, ObjectId} = file_id:guid_to_objectid(Guid),
 
@@ -345,10 +350,82 @@ resolve_target_file(#op_req{
         _ ->
             lfm:resolve_guid_by_relative_path(SessionId, BaseDirGuid, FilePath)
     end,
-    
+
     case Result of
         {ok, ResolvedGuid} -> ResolvedGuid;
         {error, Errno} -> throw(?ERROR_POSIX(Errno))
     end;
 resolve_target_file(#op_req{gri = #gri{id = TargetFileGuid}}) ->
     TargetFileGuid.
+
+
+%% @private
+-spec create(create_fun(), session:id(), file_id:file_guid(), file_meta:name(), file_meta:mode(), 
+    UpdateExisting :: boolean()) -> {file_id:file_guid(), NewFileCreated :: boolean()} | no_return().
+create(CreateFun, SessionId, ParentGuid, Name, Mode, false) ->
+    {ok, Guid} = ?lfm_check(CreateFun(SessionId, ParentGuid, Name, Mode)),
+    {Guid, true};
+create(CreateFun, SessionId, ParentGuid, Name, Mode, true) ->
+    case CreateFun(SessionId, ParentGuid, Name, Mode) of
+        {ok, CreatedFileGuid} ->
+            {CreatedFileGuid, true};
+        {error, ?EEXIST} ->
+            {ResolvedGuid, NewFileCreated} = case resolve_guid(SessionId, ParentGuid, Name,
+                fun() -> create(CreateFun, SessionId, ParentGuid, Name, Mode, true) end
+            ) of
+                {G, NFC} ->
+                    {G, NFC};
+                G ->
+                    {G, false}
+            end,
+            ?lfm_check(lfm:set_perms(SessionId, ?FILE_REF(ResolvedGuid), Mode)),
+            {ResolvedGuid, NewFileCreated};
+        {error, Errno} ->
+            throw(?ERROR_POSIX(Errno))
+    end.
+
+
+%% @private
+-spec create_link(create_link_fun(), session:id(), file_id:file_guid(), file_meta:name(), file_meta:mode(),
+    UpdateExisting :: boolean()) -> file_id:file_guid() | no_return().
+create_link(CreateFun, SessionId, ParentGuid, Name, TargetFilePath, false) ->
+    {ok, #file_attr{guid = SymlinkGuid}} =
+        ?lfm_check(CreateFun(SessionId, ?FILE_REF(ParentGuid), Name, TargetFilePath)),
+    SymlinkGuid;
+create_link(CreateFun, SessionId, ParentGuid, Name, TargetFilePath, true) ->
+    case CreateFun(SessionId, ?FILE_REF(ParentGuid), Name, TargetFilePath) of
+        {ok, #file_attr{guid = LinkGuid}} ->
+            LinkGuid;
+        {error, ?EEXIST} ->
+            delete_file(SessionId, ParentGuid, Name),
+            create_link(CreateFun, SessionId, ParentGuid, Name, TargetFilePath, true);
+        {error, Errno} ->
+            throw(?ERROR_POSIX(Errno))
+    end.
+
+
+%% @private
+-spec delete_file(session:id(), file_id:file_guid(), file_meta:name()) -> ok | no_return().
+delete_file(SessionId, ParentGuid, Name) ->
+    case resolve_guid(SessionId, ParentGuid, Name, fun() -> ok end) of
+        ok -> ok;
+        ResolvedGuid ->
+            case lfm:unlink(SessionId, ?FILE_REF(ResolvedGuid), false) of
+                ok -> ok;
+                {error, ?ENOENT} -> ok;
+                ?ERROR_NOT_FOUND -> ok;
+                {error, Errno} -> throw(?ERROR_POSIX(Errno))
+            end
+    end.
+
+
+%% @private
+-spec resolve_guid(session:id(), file_id:file_guid(), file_meta:name(), fun(() -> Term)) -> 
+    file_id:file_guid() | Term.
+resolve_guid(SessionId, ParentGuid, Name, Fallback) ->
+    case lfm:resolve_guid_by_relative_path(SessionId, ParentGuid, Name) of
+        {ok, ResolvedGuid} -> ResolvedGuid;
+        {error, ?ENOENT} -> Fallback();
+        ?ERROR_NOT_FOUND -> Fallback();
+        {error, Errno} -> throw(?ERROR_POSIX(Errno))
+    end.
