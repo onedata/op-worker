@@ -53,12 +53,11 @@ init_per_suite(ProviderSelector, AdminUserSelector) ->
         undefined ->
             node_cache:put(?PROVIDER_SELECTOR_KEY, ProviderSelector),
 
-            AtmInventoryId = ozt_atm:create_inventory(<<"ONEPROVIDER CT TESTS">>),
-            node_cache:put(?ATM_INVENTORY_ID_KEY, AtmInventoryId),
-
             UserId = oct_background:get_user_id(AdminUserSelector),
-            add_user(UserId, privileges:atm_inventory_admin()),
-            node_cache:put(?ATM_INVENTORY_ADMIN_KEY, UserId);
+            node_cache:put(?ATM_INVENTORY_ADMIN_KEY, UserId),
+
+            AtmInventoryId = ozt_atm:create_inventory_for_user(UserId, <<"OP CT TESTS">>),
+            node_cache:put(?ATM_INVENTORY_ID_KEY, AtmInventoryId);
 
         _AtmInventoryId ->
             ct:pal("Attempt to init already initiated test inventory!!!"),
@@ -74,7 +73,8 @@ get_id() ->
 -spec add_member(oct_background:entity_selector()) -> ok.
 add_member(UserPlaceholder) ->
     UserId = oct_background:get_user_id(UserPlaceholder),
-    add_user(UserId, privileges:atm_inventory_member()).
+    ozt_atm:add_user_to_inventory(UserId, get_id(), privileges:atm_inventory_member()),
+    ok.
 
 
 -spec add_workflow_schema(
@@ -83,16 +83,7 @@ add_member(UserPlaceholder) ->
     od_atm_workflow_schema:id().
 add_workflow_schema(#atm_workflow_schema_dump{} = AtmWorkflowSchemaDump) ->
     AtmWorkflowSchemaDumpJson = atm_workflow_schema_dump_to_json(AtmWorkflowSchemaDump),
-    TestAtmInventoryId = get_id(),
-    AtmWorkflowSchemaId = ozt_atm:create_workflow_schema(AtmWorkflowSchemaDumpJson#{
-        <<"atmInventoryId">> => TestAtmInventoryId
-    }),
-
-    % Invalidate cached od_atm_inventory entry to force op to fetch it on access
-    % rather than use stale data
-    opt:invalidate_cache(od_atm_inventory, TestAtmInventoryId),
-
-    AtmWorkflowSchemaId;
+    ozt_atm:create_workflow_schema(AtmWorkflowSchemaDumpJson#{<<"atmInventoryId">> => get_id()});
 
 add_workflow_schema(AtmWorkflowSchemaDumpDraft) ->
     add_workflow_schema(atm_test_schema_factory:create_from_draft(AtmWorkflowSchemaDumpDraft)).
@@ -126,17 +117,6 @@ get_workflow_schema_revision(RevisionNum, AtmWorkflowSchemaId) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-
-%% @private
--spec add_user(od_user:id(), [privileges:atm_inventory_privilege()]) -> ok.
-add_user(UserId, AtmInventoryPrivs) ->
-    AtmInventoryId = get_id(),
-    ozt_atm:add_user_to_inventory(UserId, AtmInventoryId, AtmInventoryPrivs),
-
-    % Invalidate cached user entry to force op to fetch it on access rather
-    % than use stale data
-    opt:invalidate_cache(od_user, UserId).
 
 
 %% @private
