@@ -183,27 +183,23 @@ prepare_first_lane_run_failure_test(_Config) ->
 
 
 init_per_suite(Config) ->
-    ModulesToLoad = [
-        ?MODULE,
-        atm_workflow_execution_test_runner,
-        atm_openfaas_task_executor_mock,
-        atm_openfaas_docker_mock,
-        atm_test_inventory
-    ],
-    oct_background:init_per_suite([{?LOAD_MODULES, ModulesToLoad} | Config], #onenv_test_config{
-        onenv_scenario = "1op",
-        envs = [{op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}],
-        posthook = fun(NewConfig) ->
-            atm_test_inventory:init_per_suite(krakow, user1),
-            atm_test_inventory:add_member(user2),
-            ozt_spaces:set_privileges(space_krk, user2, [
-                ?SPACE_VIEW_ATM_WORKFLOW_EXECUTIONS,
-                ?SPACE_SCHEDULE_ATM_WORKFLOW_EXECUTIONS
-                | privileges:space_member()
-            ]),
-            NewConfig
-        end
-    }).
+    oct_background:init_per_suite(
+        [{?LOAD_MODULES, ?ATM_WORKFLOW_EXECUTION_TEST_UTILS} | Config],
+        #onenv_test_config{
+            onenv_scenario = "1op",
+            envs = [{op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}],
+            posthook = fun(NewConfig) ->
+                atm_test_inventory:init_per_suite(krakow, user1),
+                atm_test_inventory:add_member(user2),
+                ozt_spaces:set_privileges(space_krk, user2, [
+                    ?SPACE_VIEW_ATM_WORKFLOW_EXECUTIONS,
+                    ?SPACE_SCHEDULE_ATM_WORKFLOW_EXECUTIONS
+                    | privileges:space_member()
+                ]),
+                NewConfig
+            end
+        }
+    ).
 
 
 end_per_suite(_Config) ->

@@ -72,4 +72,12 @@
 }).
 
 
+-define(ATM_WORKFLOW_EXECUTION_TEST_UTILS, [
+    atm_openfaas_docker_mock,
+    atm_openfaas_task_executor_mock,
+    atm_test_inventory,
+    atm_workflow_execution_test_runner
+]).
+
+
 -endif.
