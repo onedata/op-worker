@@ -23,6 +23,9 @@
 -define(rpc(__PROVIDER_SELECTOR, __EXPRESSION), ?opw_test_rpc(
     __PROVIDER_SELECTOR, __EXPRESSION
 )).
+-define(erpc(__PROVIDER_SELECTOR, __EXPRESSION), ?opw_test_rpc_insecure(
+    __PROVIDER_SELECTOR, __EXPRESSION
+)).
 
 
 -record(archive_spec, {

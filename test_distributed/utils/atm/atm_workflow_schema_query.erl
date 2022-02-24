@@ -12,7 +12,7 @@
 -module(atm_workflow_schema_query).
 -author("Bartosz Walkowicz").
 
--include("atm_test_schema.hrl").
+-include("atm/atm_test_schema.hrl").
 -include("onenv_test_utils.hrl").
 
 -export([run/2]).

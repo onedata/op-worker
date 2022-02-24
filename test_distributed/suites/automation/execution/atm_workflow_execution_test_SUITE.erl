@@ -12,58 +12,42 @@
 -module(atm_workflow_execution_test_SUITE).
 -author("Bartosz Walkowicz").
 
--include("atm_workflow_exeuction_test_runner.hrl").
--include("atm_test_schema.hrl").
--include("onenv_test_utils.hrl").
--include_lib("ctool/include/errors.hrl").
--include_lib("ctool/include/test/test_utils.hrl").
--include_lib("onenv_ct/include/oct_background.hrl").
+-include("atm_workflow_exeuction_test.hrl").
 -include_lib("ctool/include/privileges.hrl").
 
 %% exported for CT
 -export([
-    all/0,
+    groups/0, all/0,
     init_per_suite/1, end_per_suite/1,
+    init_per_group/2, end_per_group/2,
     init_per_testcase/2, end_per_testcase/2
 ]).
 
 %% tests
 -export([
+    atm_workflow_with_no_lanes_scheduling_should_fail_test/1,
     atm_workflow_with_empty_lane_scheduling_should_fail_test/1,
+    atm_workflow_with_empty_parallel_box_scheduling_should_fail_test/1,
+
     prepare_first_lane_run_failure_test/1
 ]).
 
-all() -> [
-    atm_workflow_with_empty_lane_scheduling_should_fail_test,
-    prepare_first_lane_run_failure_test
+groups() -> [
+    {non_executable_workflow_schema_scheduling, [parallel], [
+        atm_workflow_with_no_lanes_scheduling_should_fail_test,
+        atm_workflow_with_empty_lane_scheduling_should_fail_test,
+        atm_workflow_with_empty_parallel_box_scheduling_should_fail_test
+    ]},
+    {execution_tests, [parallel], [
+        prepare_first_lane_run_failure_test
+    ]}
 ].
 
+all() -> [
+    {group, non_executable_workflow_schema_scheduling},
+    {group, execution_tests}
+].
 
--define(EMPTY_LANE_ATM_WORKFLOW_SCHEMA_DRAFT, #atm_workflow_schema_dump_draft{
-    name = <<"empty_lane">>,
-    revision_num = 1,
-    revision = #atm_workflow_schema_revision_draft{
-        stores = [
-            #atm_store_schema_draft{
-                id = <<"st1">>,
-                type = list,
-                config = #atm_list_store_config{item_data_spec = #atm_data_spec{
-                    type = atm_integer_type
-                }},
-                requires_initial_content = false,
-                default_initial_content = [1, 2, 3]
-            }
-        ],
-        lanes = [
-            #atm_lane_schema_draft{
-                parallel_boxes = [],
-                store_iterator_spec = #atm_store_iterator_spec_draft{
-                    store_schema_id = <<"st1">>
-                }
-            }
-        ]
-    }
-}).
 
 -define(ECHO_LAMBDA_DRAFT, #atm_lambda_revision_draft{
     operation_spec = #atm_openfaas_operation_spec_draft{
@@ -122,29 +106,23 @@ all() -> [
 %%%===================================================================
 
 
+atm_workflow_with_no_lanes_scheduling_should_fail_test(_Config) ->
+    atm_non_executable_workflow_schema_scheduling_test_base:atm_workflow_with_no_lanes_scheduling_should_fail_test().
+
+
 atm_workflow_with_empty_lane_scheduling_should_fail_test(_Config) ->
-    SessionId = oct_background:get_user_session_id(user2, krakow),
-    SpaceId = oct_background:get_space_id(space_krk),
+    atm_non_executable_workflow_schema_scheduling_test_base:atm_workflow_with_empty_lane_scheduling_should_fail_test().
 
-    AtmWorkflowSchemaId = atm_test_inventory:add_workflow_schema(
-        ?EMPTY_LANE_ATM_WORKFLOW_SCHEMA_DRAFT
-    ),
-    AtmWorkflowSchemaRevision = atm_test_inventory:get_workflow_schema_revision(1, AtmWorkflowSchemaId),
-    EmptyAtmLaneSchemaId = atm_workflow_schema_query:run(AtmWorkflowSchemaRevision, [lanes, 1, id]),
 
-    ?assertEqual(
-        ?ERROR_ATM_LANE_EMPTY(EmptyAtmLaneSchemaId),
-        ?rpc(krakow, catch mi_atm:schedule_workflow_execution(
-            SessionId, SpaceId, AtmWorkflowSchemaId, 1, #{}, undefined
-        ))
-    ).
+atm_workflow_with_empty_parallel_box_scheduling_should_fail_test(_Config) ->
+    atm_non_executable_workflow_schema_scheduling_test_base:atm_workflow_with_empty_parallel_box_scheduling_should_fail_test().
 
 
 prepare_first_lane_run_failure_test(_Config) ->
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
-        provider = krakow,
-        user = user2,
-        space = space_krk,
+        provider = ?PROVIDER_SELECTOR,
+        user = ?USER_SELECTOR,
+        space = ?SPACE_SELECTOR,
         workflow_schema_dump_or_draft = ?ECHO_ATM_WORKFLOW_SCHEMA_DRAFT,
         workflow_schema_revision_num = 1,
         incarnations = [#atm_workflow_execution_incarnation_test_spec{
@@ -180,15 +158,19 @@ prepare_first_lane_run_failure_test(_Config) ->
 
 
 init_per_suite(Config) ->
+    ModulesToLoad = [
+        atm_non_executable_workflow_schema_scheduling_test_base
+        | ?ATM_WORKFLOW_EXECUTION_TEST_UTILS
+    ],
     oct_background:init_per_suite(
-        [{?LOAD_MODULES, ?ATM_WORKFLOW_EXECUTION_TEST_UTILS} | Config],
+        [{?LOAD_MODULES, ModulesToLoad} | Config],
         #onenv_test_config{
             onenv_scenario = "1op",
             envs = [{op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}],
             posthook = fun(NewConfig) ->
-                atm_test_inventory:init_per_suite(krakow, user1),
-                atm_test_inventory:add_member(user2),
-                ozt_spaces:set_privileges(space_krk, user2, [
+                atm_test_inventory:init_per_suite(?PROVIDER_SELECTOR, user1),
+                atm_test_inventory:add_member(?USER_SELECTOR),
+                ozt_spaces:set_privileges(?SPACE_SELECTOR, ?USER_SELECTOR, [
                     ?SPACE_VIEW_ATM_WORKFLOW_EXECUTIONS,
                     ?SPACE_SCHEDULE_ATM_WORKFLOW_EXECUTIONS
                     | privileges:space_member()
@@ -203,18 +185,27 @@ end_per_suite(_Config) ->
     oct_background:end_per_suite().
 
 
-init_per_testcase(prepare_first_lane_run_failure_test, Config) ->
-    atm_openfaas_task_executor_mock:init(krakow, atm_openfaas_docker_mock),
-    atm_workflow_execution_test_runner:init(krakow),
+init_per_group(non_executable_workflow_schema_scheduling, Config) ->
     Config;
+
+init_per_group(execution_tests, Config) ->
+    atm_openfaas_task_executor_mock:init(?PROVIDER_SELECTOR, atm_openfaas_docker_mock),
+    atm_workflow_execution_test_runner:init(?PROVIDER_SELECTOR),
+    Config.
+
+
+end_per_group(non_executable_workflow_schema_scheduling, Config) ->
+    Config;
+
+end_per_group(execution_tests, Config) ->
+    atm_workflow_execution_test_runner:teardown(?PROVIDER_SELECTOR),
+    atm_openfaas_task_executor_mock:teardown(?PROVIDER_SELECTOR),
+    Config.
+
 
 init_per_testcase(_Case, Config) ->
     Config.
 
-
-end_per_testcase(prepare_first_lane_run_failure_test, _Config) ->
-    atm_workflow_execution_test_runner:teardown(krakow),
-    atm_openfaas_task_executor_mock:teardown(krakow);
 
 end_per_testcase(_Case, _Config) ->
     ok.

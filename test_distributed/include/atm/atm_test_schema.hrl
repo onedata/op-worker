@@ -5,7 +5,7 @@
 %%% cited in 'LICENSE.txt'.
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% This file contains definitions of automation schema related records
+%%% This file contains definitions of automation schema related record drafts
 %%% used in CT tests.
 %%% @end
 %%%-------------------------------------------------------------------

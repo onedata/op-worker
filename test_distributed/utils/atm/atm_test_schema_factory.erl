@@ -19,7 +19,7 @@
 -module(atm_test_schema_factory).
 -author("Bartosz Walkowicz").
 
--include("atm_test_schema.hrl").
+-include("atm/atm_test_schema.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 
 -export([create_from_draft/1]).
