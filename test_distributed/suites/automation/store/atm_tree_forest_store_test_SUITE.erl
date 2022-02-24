@@ -20,7 +20,6 @@
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
--include_lib("onenv_ct/include/test_rpc.hrl").
 
 
 %% exported for CT

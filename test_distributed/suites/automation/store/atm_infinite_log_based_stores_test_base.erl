@@ -14,9 +14,8 @@
 
 -include("modules/automation/atm_execution.hrl").
 -include("modules/datastore/datastore_runner.hrl").
-
+-include("onenv_test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
--include_lib("onenv_ct/include/test_rpc.hrl").
 
 
 %% API
@@ -69,7 +68,7 @@
 
 
 -define(PROVIDER_SELECTOR, krakow).
--define(rpc(Expr), ?opw_test_rpc(?PROVIDER_SELECTOR, Expr)).
+-define(rpc(Expr), ?rpc(?PROVIDER_SELECTOR, Expr)).
 
 
 %%%===================================================================
