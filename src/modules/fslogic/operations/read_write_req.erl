@@ -22,7 +22,6 @@
 %% API
 -export([read/5, write/4, get_proxyio_node/1]).
 
--type operation() :: read | write.
 
 %%%===================================================================
 %%% API functions
@@ -37,7 +36,7 @@
     Offset :: non_neg_integer(), Size :: pos_integer()) ->
     fslogic_worker:proxyio_response().
 read(UserCtx, FileCtx, HandleId, Offset, Size) ->
-    {ok, Handle} =  get_handle(UserCtx, FileCtx, HandleId, read),
+    {ok, Handle} =  get_handle(UserCtx, FileCtx, HandleId),
     {ok, Data} = storage_driver:read(Handle, Offset, Size),
     #proxyio_response{
         status = #status{code = ?OK},
@@ -54,7 +53,7 @@ read(UserCtx, FileCtx, HandleId, Offset, Size) ->
     ByteSequences :: [#byte_sequence{}]) -> fslogic_worker:proxyio_response().
 write(UserCtx, FileCtx, HandleId, ByteSequences) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
-    {ok, Handle0} = get_handle(UserCtx, FileCtx, HandleId, write),
+    {ok, Handle0} = get_handle(UserCtx, FileCtx, HandleId),
 
     {Written, _} = lists:foldl(fun
         (#byte_sequence{offset = Offset, data = <<>>}, {Acc, Handle}) ->
@@ -105,16 +104,15 @@ get_proxyio_node(Uuid) ->
 %% Returns handle by either retrieving it from session or opening file.
 %% @end
 %%--------------------------------------------------------------------
--spec get_handle(user_ctx:ctx(), file_ctx:ctx(),
-    HandleId :: storage_driver:handle_id(), operation()) ->
+-spec get_handle(user_ctx:ctx(), file_ctx:ctx(), storage_driver:handle_id()) ->
     {ok, storage_driver:handle()} | lfm:error_reply().
-get_handle(UserCtx, FileCtx, HandleId, Operation) ->
+get_handle(UserCtx, FileCtx, HandleId) ->
     SessId = user_ctx:get_session_id(UserCtx),
     case session_handles:get(SessId, HandleId) of
         {error, not_found} ->
             ?debug("Handle not found, session id: ~p, handle id: ~p",
                 [SessId, HandleId]),
-            create_handle(UserCtx, FileCtx, HandleId, Operation),
+            create_handle(UserCtx, FileCtx, HandleId),
             session_handles:get(SessId, HandleId);
         Other ->
             Other
@@ -127,10 +125,11 @@ get_handle(UserCtx, FileCtx, HandleId, Operation) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec create_handle(user_ctx:ctx(), file_ctx:ctx(),
-    HandleId :: storage_driver:handle_id(), operation()) -> ok.
-create_handle(UserCtx, FileCtx, HandleId, Operation) ->
+    HandleId :: storage_driver:handle_id()) -> ok.
+create_handle(UserCtx, FileCtx, HandleId) ->
+    Flag = session_handles:get_handle_flag(HandleId),
     try
-        create_handle_helper(UserCtx, FileCtx, HandleId, rdwr, open_file)
+        create_handle_helper(UserCtx, FileCtx, HandleId, Flag, open_file)
     catch _:Reason when
         Reason =:= ?EACCES;
         Reason =:= ?EPERM;
@@ -140,10 +139,9 @@ create_handle(UserCtx, FileCtx, HandleId, Operation) ->
             {ok, HandleId} ->
                 % opening file with handle received from creation procedure
                 % (should open even if the user does not have permissions)
-                create_handle_helper(UserCtx, FileCtx, HandleId, rdwr, open_file_insecure);
+                create_handle_helper(UserCtx, FileCtx, HandleId, Flag, open_file_insecure);
             _ ->
-                % try opening for limited usage (read or write only)
-                create_handle_helper(UserCtx, FileCtx, HandleId, Operation, open_file)
+                error(Reason)
         end
     end.
 

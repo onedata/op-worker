@@ -16,7 +16,8 @@
 -include_lib("cluster_worker/include/modules/datastore/datastore_links.hrl").
 
 %% API
--export([add/3, remove/2, get/2, remove_handles/1]).
+-export([add/3, remove/2, get/2, remove_handles/1,
+    gen_handle_id/1, get_handle_flag/1]).
 %% For RPC
 -export([remove_local_handles/1]).
 
@@ -80,6 +81,18 @@ get(SessId, HandleId) ->
         {error, Reason} ->
             {error, Reason}
     end.
+
+
+-spec gen_handle_id(fslogic_worker:open_flag()) -> storage_driver:handle_id().
+gen_handle_id(Flag) ->
+    <<(atom_to_binary(Flag, utf8))/binary, "_", (base64:encode(crypto:strong_rand_bytes(20)))/binary>>.
+
+
+-spec get_handle_flag(storage_driver:handle_id()) -> fslogic_worker:open_flag().
+get_handle_flag(HandleId) ->
+    [FlagBin | _] = binary:split(HandleId, <<"_">>),
+    binary_to_atom(FlagBin, utf8).
+
 
 %%--------------------------------------------------------------------
 %% @doc

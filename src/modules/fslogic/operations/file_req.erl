@@ -33,8 +33,6 @@
 -type new_file() :: boolean(). % opening new file requires changes in procedure (see file_handles:creation_handle/0).
 -export_type([handle_id/0]).
 
--define(NEW_HANDLE_ID, base64:encode(crypto:strong_rand_bytes(20))).
-
 
 %%%===================================================================
 %%% API
@@ -252,13 +250,13 @@ release(UserCtx, FileCtx, HandleId) ->
 -spec create_file_insecure(user_ctx:ctx(), ParentFileCtx :: file_ctx:ctx(), Name :: file_meta:name(),
     Mode :: file_meta:posix_permissions(), Flags :: fslogic_worker:open_flag()) ->
     fslogic_worker:fuse_response().
-create_file_insecure(UserCtx, ParentFileCtx, Name, Mode, _Flag) ->
+create_file_insecure(UserCtx, ParentFileCtx, Name, Mode, Flag) ->
     ParentFileCtx2 = file_ctx:assert_not_readonly_storage(ParentFileCtx),
     % call via module to mock in tests
     {FileCtx, ParentFileCtx3} = file_req:create_file_doc(UserCtx, ParentFileCtx2, Name, Mode),
     try
         % TODO VFS-5267 - default open mode will fail if read-only file is created
-        {HandleId, FileLocation, FileCtx2} = open_file_internal(UserCtx, FileCtx, rdwr, undefined, true, false),
+        {HandleId, FileLocation, FileCtx2} = open_file_internal(UserCtx, FileCtx, Flag, undefined, true, false),
         fslogic_times:update_mtime_ctime(ParentFileCtx3),
 
         #fuse_response{fuse_response = FileAttr} = attr_req:get_file_attr_insecure(UserCtx, FileCtx, #{
@@ -570,7 +568,7 @@ open_file_internal(UserCtx, FileCtx0, Flag, HandleId0, NewFile, CheckLocationExi
     FileCtx2 = verify_file_exists(FileCtx1, HandleId0),
     SpaceID = file_ctx:get_space_id_const(FileCtx2),
     SessId = user_ctx:get_session_id(UserCtx),
-    HandleId = check_and_register_open(FileCtx2, SessId, HandleId0, NewFile),
+    HandleId = check_and_register_open(FileCtx2, SessId, Flag, HandleId0, NewFile),
     try
         {FileLocation, FileCtx3} = create_location(FileCtx2, UserCtx, CheckLocationExists),
         IsDirectIO = user_ctx:is_direct_io(UserCtx, SpaceID) andalso HandleId0 =:= undefined,
@@ -666,16 +664,16 @@ verify_file_exists(FileCtx, _HandleId) ->
 %% Verifies handle id and registers it.
 %% @end
 %%--------------------------------------------------------------------
--spec check_and_register_open(file_ctx:ctx(), session:id(), handle_id(), new_file()) ->
+-spec check_and_register_open(file_ctx:ctx(), session:id(), fslogic_worker:open_flag(), handle_id(), new_file()) ->
     storage_driver:handle_id() | no_return().
-check_and_register_open(FileCtx, SessId, undefined, true) ->
-    HandleId = ?NEW_HANDLE_ID,
+check_and_register_open(FileCtx, SessId, Flag, undefined, true) ->
+    HandleId = session_handles:gen_handle_id(Flag),
     ok = file_handles:register_open(FileCtx, SessId, 1, HandleId),
     HandleId;
-check_and_register_open(FileCtx, SessId, undefined, false) ->
+check_and_register_open(FileCtx, SessId, Flag, undefined, false) ->
     ok = file_handles:register_open(FileCtx, SessId, 1, undefined),
-    ?NEW_HANDLE_ID;
-check_and_register_open(_FileCtx, _SessId, HandleId, _NewFile) ->
+    session_handles:gen_handle_id(Flag);
+check_and_register_open(_FileCtx, _SessId, _Flag, HandleId, _NewFile) ->
     HandleId.
 
 
