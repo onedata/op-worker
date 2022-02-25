@@ -19,6 +19,15 @@
 -include("modules/fslogic/fslogic_common.hrl").
 
 
+-define(rpc(__PROVIDER_SELECTOR, __EXPRESSION), opw_test_rpc:call(__PROVIDER_SELECTOR, fun() ->
+    __EXPRESSION
+end)).
+
+-define(erpc(__PROVIDER_SELECTOR, __EXPRESSION), opw_test_rpc:insecure_call(__PROVIDER_SELECTOR, fun() ->
+    __EXPRESSION
+end)).
+
+
 -record(archive_spec, {
     config :: undefined | archive:config(),
     description :: undefined | archive:description()

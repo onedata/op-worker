@@ -14,10 +14,9 @@
 
 -include("modules/automation/atm_execution.hrl").
 -include("modules/datastore/datastore_runner.hrl").
-
+-include("onenv_test_utils.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
--include_lib("onenv_ct/include/test_rpc.hrl").
 
 %% exported for CT
 -export([
@@ -50,7 +49,7 @@ all() -> [
 
 
 -define(PROVIDER_SELECTOR, krakow).
--define(rpc(Expr), ?opw_test_rpc(?PROVIDER_SELECTOR, Expr)).
+-define(rpc(Expr), ?rpc(?PROVIDER_SELECTOR, Expr)).
 
 
 %%%===================================================================
@@ -243,16 +242,19 @@ create_workflow_execution_auth() ->
 %% @private
 -spec example_configs() -> [atm_single_value_store_config:record()].
 example_configs() ->
-    lists:map(fun(ItemDataSpec) ->
-        #atm_single_value_store_config{item_data_spec = ItemDataSpec}
+    lists:map(fun(ItemDataType) ->
+        #atm_single_value_store_config{item_data_spec = atm_store_test_utils:example_data_spec(
+            ItemDataType
+        )}
     end, [
-%%        #atm_data_spec{type = atm_array_type},   %% TODO VFS-8686 enable after implementing compress/expand
-        #atm_data_spec{type = atm_dataset_type},
-        #atm_data_spec{type = atm_file_type},
-        #atm_data_spec{type = atm_integer_type},
-        #atm_data_spec{type = atm_object_type},
-        #atm_data_spec{type = atm_string_type}
-        #atm_data_spec{type = atm_time_series_measurements_type}
+        %% TODO VFS-8686 enable after implementing compress/expand for array
+%%        atm_array_type,
+        atm_dataset_type,
+        atm_file_type,
+        atm_integer_type,
+        atm_object_type,
+        atm_string_type,
+        atm_time_series_measurements_type
     ]).
 
 

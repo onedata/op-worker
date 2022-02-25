@@ -28,7 +28,7 @@
 -include_lib("ctool/include/automation/automation.hrl").
 
 %% API
--export([create/4, initiate/4, teardown/2, delete/1, get_type/1, in_readonly_mode/1, run/3]).
+-export([create/4, initiate/4, teardown/2, delete/1, get_type/1, is_in_readonly_mode/1, run/3]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
@@ -84,7 +84,7 @@
 
 -callback delete(record()) -> ok | no_return().
 
--callback in_readonly_mode(record()) -> boolean().
+-callback is_in_readonly_mode(record()) -> boolean().
 
 -callback run(atm_job_ctx:record(), input(), record()) ->
     ok | no_return().
@@ -139,10 +139,10 @@ get_type(AtmTaskExecutor) ->
     utils:record_type(AtmTaskExecutor).
 
 
--spec in_readonly_mode(record()) -> boolean().
-in_readonly_mode(AtmTaskExecutor) ->
+-spec is_in_readonly_mode(record()) -> boolean().
+is_in_readonly_mode(AtmTaskExecutor) ->
     Model = utils:record_type(AtmTaskExecutor),
-    Model:in_readonly_mode(AtmTaskExecutor).
+    Model:is_in_readonly_mode(AtmTaskExecutor).
 
 
 -spec run(atm_job_ctx:record(), input(), record()) ->

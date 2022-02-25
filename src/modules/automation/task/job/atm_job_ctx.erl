@@ -30,7 +30,7 @@
 
 -record(atm_job_ctx, {
     workflow_execution_ctx :: atm_workflow_execution_ctx:record(),
-    in_readonly_mode :: boolean(),
+    is_in_readonly_mode :: boolean(),
     report_result_url :: undefined | binary()
 }).
 -type record() :: #atm_job_ctx{}.
@@ -45,10 +45,10 @@
 
 -spec build(atm_workflow_execution_ctx:record(), boolean(), undefined | binary()) ->
     record().
-build(AtmWorkflowExecutionCtx, InReadonlyMode, ReportResultUrl) ->
+build(AtmWorkflowExecutionCtx, IsInReadonlyMode, ReportResultUrl) ->
     #atm_job_ctx{
         workflow_execution_ctx = AtmWorkflowExecutionCtx,
-        in_readonly_mode = InReadonlyMode,
+        is_in_readonly_mode = IsInReadonlyMode,
         report_result_url = ReportResultUrl
     }.
 
@@ -66,12 +66,12 @@ get_workflow_execution_auth(#atm_job_ctx{workflow_execution_ctx = AtmWorkflowExe
 -spec get_access_token(record()) -> auth_manager:access_token().
 get_access_token(#atm_job_ctx{
     workflow_execution_ctx = AtmWorkflowExecutionCtx,
-    in_readonly_mode = InReadonlyMode
+    is_in_readonly_mode = IsInReadonlyMode
 }) ->
     AtmWorkflowExecutionAuth = atm_workflow_execution_ctx:get_auth(AtmWorkflowExecutionCtx),
     AccessToken = atm_workflow_execution_auth:get_access_token(AtmWorkflowExecutionAuth),
 
-    case InReadonlyMode of
+    case IsInReadonlyMode of
         true -> tokens:confine(AccessToken, #cv_data_readonly{});
         false -> AccessToken
     end.
