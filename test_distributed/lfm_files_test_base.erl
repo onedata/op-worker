@@ -421,24 +421,24 @@ readdir_plus_should_work_with_size_greater_than_dir_size(Config) ->
     verify_attrs(Config, MainDirPath, Files, 10, 5).
 
 readdir_should_work_with_token(Config, DirSize, Type, InitialToken) ->
-    [Worker | _] = Workers = ?config(op_worker_nodes, Config),
-    clock_freezer_mock:setup_for_ct(Workers, [datastore_cache_writer]),
+    [Worker | _] = ?config(op_worker_nodes, Config),
     {MainDirPath, Files} = generate_dir(Config, DirSize),
     VerifyFun = case Type of
         readdir_plus -> fun verify_attrs_with_token/8;
         readdir -> fun verify_with_token/8
     end,
     Token = VerifyFun(Config, MainDirPath, Files, max(0, min(DirSize - 0, 3)), 3, 0, false, InitialToken),
-    Token2 = VerifyFun(Config, MainDirPath, Files, max(0, min(DirSize - 3, 3)), 3, 3, false, Token),
+    {ok, FoldCacheTimeout} = erpc:call(Worker, application, get_env, [?CLUSTER_WORKER_APP_NAME, fold_cache_timeout]),
     case InitialToken of
         ?INITIAL_API_LS_TOKEN ->
-            {ok, TimeToWaitMillis} = erpc:call(Worker, application, get_env, [?CLUSTER_WORKER_APP_NAME, fold_cache_timeout]),
-            clock_freezer_mock:simulate_millis_passing(TimeToWaitMillis + 1),
-            timer:sleep(timer:seconds(5)); % wait for flush of expired tokens
+            ok = erpc:call(Worker, application, set_env, [?CLUSTER_WORKER_APP_NAME, fold_cache_timeout, 0]);
         _ ->
             % only API listing token supports continued listing after datastore token expiration
             ok
     end,
+    Token2 = VerifyFun(Config, MainDirPath, Files, max(0, min(DirSize - 3, 3)), 3, 3, false, Token),
+    timer:sleep(timer:seconds(5)), % wait for flush of expired tokens
+    ok = erpc:call(Worker, application, set_env, [?CLUSTER_WORKER_APP_NAME, fold_cache_timeout, FoldCacheTimeout]),
     Token3 = VerifyFun(Config, MainDirPath, Files, max(0, min(DirSize - 6, 3)), 3, 6, false, Token2),
     VerifyFun(Config, MainDirPath, Files, max(0, min(DirSize - 9, 3)), 3, 9, true, Token3).
 
@@ -2576,6 +2576,5 @@ end_per_testcase(_Case, Config) ->
     lfm_test_utils:clean_space(Workers, ?SPACE_ID3, 30),
     lfm_test_utils:clean_space(Workers, ?SPACE_ID4, 30),
     lfm_proxy:teardown(Config),
-    clock_freezer_mock:teardown_for_ct(Workers),
     initializer:clean_test_users_and_spaces_no_validate(Config),
     test_utils:mock_validate_and_unload(Workers, [communicator]).
