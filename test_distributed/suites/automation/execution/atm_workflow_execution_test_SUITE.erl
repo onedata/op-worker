@@ -33,19 +33,19 @@
 ]).
 
 groups() -> [
-    {non_executable_workflow_schema_scheduling, [parallel], [
+    {workflow_execution_scheduling_tests, [parallel], [
         atm_workflow_with_no_lanes_scheduling_should_fail_test,
         atm_workflow_with_empty_lane_scheduling_should_fail_test,
         atm_workflow_with_empty_parallel_box_scheduling_should_fail_test
     ]},
-    {execution_tests, [parallel], [
+    {workflow_execution_progress_tests, [parallel], [
         create_first_lane_run_failure_test
     ]}
 ].
 
 all() -> [
-    {group, non_executable_workflow_schema_scheduling},
-    {group, execution_tests}
+    {group, workflow_execution_scheduling_tests},
+    {group, workflow_execution_progress_tests}
 ].
 
 
@@ -55,15 +55,15 @@ all() -> [
 
 
 atm_workflow_with_no_lanes_scheduling_should_fail_test(_Config) ->
-    atm_non_executable_workflow_schema_scheduling_test_base:atm_workflow_with_no_lanes_scheduling_should_fail_test().
+    atm_workflow_execution_scheduling_test_base:atm_workflow_with_no_lanes_scheduling_should_fail_test().
 
 
 atm_workflow_with_empty_lane_scheduling_should_fail_test(_Config) ->
-    atm_non_executable_workflow_schema_scheduling_test_base:atm_workflow_with_empty_lane_scheduling_should_fail_test().
+    atm_workflow_execution_scheduling_test_base:atm_workflow_with_empty_lane_scheduling_should_fail_test().
 
 
 atm_workflow_with_empty_parallel_box_scheduling_should_fail_test(_Config) ->
-    atm_non_executable_workflow_schema_scheduling_test_base:atm_workflow_with_empty_parallel_box_scheduling_should_fail_test().
+    atm_workflow_execution_scheduling_test_base:atm_workflow_with_empty_parallel_box_scheduling_should_fail_test().
 
 
 create_first_lane_run_failure_test(_Config) ->
@@ -77,7 +77,7 @@ create_first_lane_run_failure_test(_Config) ->
 
 init_per_suite(Config) ->
     ModulesToLoad = [
-        atm_non_executable_workflow_schema_scheduling_test_base
+        atm_workflow_execution_scheduling_test_base
         | ?ATM_WORKFLOW_EXECUTION_TEST_UTILS
     ],
     oct_background:init_per_suite(
@@ -103,19 +103,19 @@ end_per_suite(_Config) ->
     oct_background:end_per_suite().
 
 
-init_per_group(non_executable_workflow_schema_scheduling, Config) ->
+init_per_group(workflow_execution_scheduling_tests, Config) ->
     Config;
 
-init_per_group(execution_tests, Config) ->
+init_per_group(workflow_execution_progress_tests, Config) ->
     atm_openfaas_task_executor_mock:init(?PROVIDER_SELECTOR, atm_openfaas_docker_mock),
     atm_workflow_execution_test_runner:init(?PROVIDER_SELECTOR),
     Config.
 
 
-end_per_group(non_executable_workflow_schema_scheduling, Config) ->
+end_per_group(workflow_execution_scheduling_tests, Config) ->
     Config;
 
-end_per_group(execution_tests, Config) ->
+end_per_group(workflow_execution_progress_tests, Config) ->
     atm_workflow_execution_test_runner:teardown(?PROVIDER_SELECTOR),
     atm_openfaas_task_executor_mock:teardown(?PROVIDER_SELECTOR),
     Config.

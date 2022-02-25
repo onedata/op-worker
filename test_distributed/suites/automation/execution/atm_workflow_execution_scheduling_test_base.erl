@@ -9,7 +9,7 @@
 %%% Bases for tests of scheduling non executable automation workflow schemas.
 %%% @end
 %%%-------------------------------------------------------------------
--module(atm_non_executable_workflow_schema_scheduling_test_base).
+-module(atm_workflow_execution_scheduling_test_base).
 -author("Bartosz Walkowicz").
 
 -include("atm_workflow_exeuction_test.hrl").
@@ -125,10 +125,25 @@ atm_workflow_with_empty_parallel_box_scheduling_should_fail_test() ->
 ) ->
     {atm_workflow_execution:id(), atm_workflow_execution:record()} | no_return().
 try_to_schedule_workflow_execution(AtmWorkflowSchemaId, AtmWorkflowSchemaRevisionNum) ->
+    try_to_schedule_workflow_execution(AtmWorkflowSchemaId, AtmWorkflowSchemaRevisionNum, #{}).
+
+
+%% @private
+-spec try_to_schedule_workflow_execution(
+    od_atm_workflow_schema:id(),
+    atm_workflow_schema_revision:revision_number(),
+    atm_workflow_execution_api:store_initial_contents()
+) ->
+    {atm_workflow_execution:id(), atm_workflow_execution:record()} | no_return().
+try_to_schedule_workflow_execution(
+    AtmWorkflowSchemaId,
+    AtmWorkflowSchemaRevisionNum,
+    StoreInitialContents
+) ->
     SessionId = oct_background:get_user_session_id(?USER_SELECTOR, ?PROVIDER_SELECTOR),
     SpaceId = oct_background:get_space_id(?SPACE_SELECTOR),
 
     ?erpc(?PROVIDER_SELECTOR, mi_atm:schedule_workflow_execution(
         SessionId, SpaceId, AtmWorkflowSchemaId, AtmWorkflowSchemaRevisionNum,
-        #{}, undefined
+        StoreInitialContents, undefined
     )).
