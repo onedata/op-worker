@@ -13,26 +13,12 @@
 -author("Bartosz Walkowicz").
 
 -include("atm_workflow_exeuction_test.hrl").
+-include("atm/atm_test_schema_drafts.hrl").
 
 -export([
     create_first_lane_run_failure_test/0
 ]).
 
-
--define(ECHO_LAMBDA_DRAFT, #atm_lambda_revision_draft{
-    operation_spec = #atm_openfaas_operation_spec_draft{
-        docker_image = <<"test/echo">>
-    },
-    argument_specs = [#atm_lambda_argument_spec{
-        name = <<"val">>,
-        data_spec = #atm_data_spec{type = atm_integer_type},
-        is_optional = false
-    }],
-    result_specs = [#atm_lambda_result_spec{
-        name = <<"val">>,
-        data_spec = #atm_data_spec{type = atm_integer_type}
-    }]
-}).
 
 -define(ECHO_ATM_WORKFLOW_SCHEMA_DRAFT, #atm_workflow_schema_dump_draft{
     name = <<"echo">>,
@@ -42,25 +28,14 @@
             id = <<"st1">>,
             type = list,
             config = #atm_list_store_config{item_data_spec = #atm_data_spec{
-                type = atm_integer_type
+                type = atm_string_type
             }},
             requires_initial_content = false,
-            default_initial_content = [1, 2, 3]
+            default_initial_content = [<<"A">>, <<"B">>, <<"C">>]
         }],
         lanes = [#atm_lane_schema_draft{
             parallel_boxes = [#atm_parallel_box_schema_draft{
-                tasks = [#atm_task_schema_draft{
-                    lambda_id = <<"echo">>,
-                    lambda_revision_number = 1,
-                    argument_mappings = [#atm_task_schema_argument_mapper{
-                        argument_name = <<"val">>,
-                        value_builder = #atm_task_argument_value_builder{
-                            type = iterated_item,
-                            recipe = undefined
-                        }
-                    }],
-                    result_mappings = []
-                }]
+                tasks = [?ECHO_TASK_DRAFT(?CURRENT_TASK_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID, append)]
             }],
             store_iterator_spec = #atm_store_iterator_spec_draft{
                 store_schema_id = <<"st1">>

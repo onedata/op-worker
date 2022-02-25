@@ -28,6 +28,9 @@
     atm_workflow_with_no_lanes_scheduling_should_fail_test/1,
     atm_workflow_with_empty_lane_scheduling_should_fail_test/1,
     atm_workflow_with_empty_parallel_box_scheduling_should_fail_test/1,
+    atm_workflow_scheduling_with_openfaas_not_configured_should_fail_test/1,
+
+    atm_workflow_with_invalid_initial_store_content_scheduling_should_fail_test/1,
 
     create_first_lane_run_failure_test/1
 ]).
@@ -36,7 +39,11 @@ groups() -> [
     {non_executable_workflow_schema_scheduling, [parallel], [
         atm_workflow_with_no_lanes_scheduling_should_fail_test,
         atm_workflow_with_empty_lane_scheduling_should_fail_test,
-        atm_workflow_with_empty_parallel_box_scheduling_should_fail_test
+        atm_workflow_with_empty_parallel_box_scheduling_should_fail_test,
+        atm_workflow_scheduling_with_openfaas_not_configured_should_fail_test
+    ]},
+    {executable_workflow_schema_scheduling_with_invalid_args, [parallel], [
+        atm_workflow_with_invalid_initial_store_content_scheduling_should_fail_test
     ]},
     {execution_tests, [parallel], [
         create_first_lane_run_failure_test
@@ -45,6 +52,7 @@ groups() -> [
 
 all() -> [
     {group, non_executable_workflow_schema_scheduling},
+    {group, executable_workflow_schema_scheduling_with_invalid_args},
     {group, execution_tests}
 ].
 
@@ -55,15 +63,23 @@ all() -> [
 
 
 atm_workflow_with_no_lanes_scheduling_should_fail_test(_Config) ->
-    atm_non_executable_workflow_schema_scheduling_test_base:atm_workflow_with_no_lanes_scheduling_should_fail_test().
+    atm_workflow_execution_scheduling_test_base:atm_workflow_with_no_lanes_scheduling_should_fail_test().
 
 
 atm_workflow_with_empty_lane_scheduling_should_fail_test(_Config) ->
-    atm_non_executable_workflow_schema_scheduling_test_base:atm_workflow_with_empty_lane_scheduling_should_fail_test().
+    atm_workflow_execution_scheduling_test_base:atm_workflow_with_empty_lane_scheduling_should_fail_test().
 
 
 atm_workflow_with_empty_parallel_box_scheduling_should_fail_test(_Config) ->
-    atm_non_executable_workflow_schema_scheduling_test_base:atm_workflow_with_empty_parallel_box_scheduling_should_fail_test().
+    atm_workflow_execution_scheduling_test_base:atm_workflow_with_empty_parallel_box_scheduling_should_fail_test().
+
+
+atm_workflow_scheduling_with_openfaas_not_configured_should_fail_test(_Config) ->
+    atm_workflow_execution_scheduling_test_base:atm_workflow_scheduling_with_openfaas_not_configured_should_fail_test().
+
+
+atm_workflow_with_invalid_initial_store_content_scheduling_should_fail_test(_Config) ->
+    atm_workflow_execution_scheduling_test_base:atm_workflow_with_invalid_initial_store_content_scheduling_should_fail_test().
 
 
 create_first_lane_run_failure_test(_Config) ->
@@ -77,7 +93,7 @@ create_first_lane_run_failure_test(_Config) ->
 
 init_per_suite(Config) ->
     ModulesToLoad = [
-        atm_non_executable_workflow_schema_scheduling_test_base
+        atm_workflow_execution_scheduling_test_base
         | ?ATM_WORKFLOW_EXECUTION_TEST_UTILS
     ],
     oct_background:init_per_suite(
@@ -106,6 +122,10 @@ end_per_suite(_Config) ->
 init_per_group(non_executable_workflow_schema_scheduling, Config) ->
     Config;
 
+init_per_group(executable_workflow_schema_scheduling_with_invalid_args, Config) ->
+    atm_openfaas_task_executor_mock:init(?PROVIDER_SELECTOR, atm_openfaas_docker_mock),
+    Config;
+
 init_per_group(execution_tests, Config) ->
     atm_openfaas_task_executor_mock:init(?PROVIDER_SELECTOR, atm_openfaas_docker_mock),
     atm_workflow_execution_test_runner:init(?PROVIDER_SELECTOR),
@@ -113,6 +133,10 @@ init_per_group(execution_tests, Config) ->
 
 
 end_per_group(non_executable_workflow_schema_scheduling, Config) ->
+    Config;
+
+end_per_group(executable_workflow_schema_scheduling_with_invalid_args, Config) ->
+    atm_openfaas_task_executor_mock:teardown(?PROVIDER_SELECTOR),
     Config;
 
 end_per_group(execution_tests, Config) ->
