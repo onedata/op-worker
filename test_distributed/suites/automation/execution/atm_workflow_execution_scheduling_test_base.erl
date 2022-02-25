@@ -36,6 +36,25 @@
     default_initial_content = [1, 2, 3]
 }).
 
+-define(EXAMPLE_EXECUTABLE_ATM_WORKFLOW_SCHEMA_DRAFT, #atm_workflow_schema_dump_draft{
+    name = <<"example_executable_atm_workflow">>,
+    revision_num = 1,
+    revision = #atm_workflow_schema_revision_draft{
+        stores = [?EXAMPLE_INTEGER_LIST_STORE_SCHEMA_DRAFT],
+        lanes = [#atm_lane_schema_draft{
+            parallel_boxes = [#atm_parallel_box_schema_draft{
+                tasks = [
+                    ?ECHO_TASK_DRAFT(?CURRENT_TASK_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID, append)
+                ]
+            }],
+            store_iterator_spec = #atm_store_iterator_spec_draft{
+                store_schema_id = ?EXAMPLE_INTEGER_LIST_STORE_SCHEMA_ID
+            }
+        }]
+    },
+    supplementary_lambdas = #{<<"echo">> => #{1 => ?ECHO_LAMBDA_DRAFT}}
+}).
+
 
 %%%===================================================================
 %%% Tests
@@ -111,24 +130,9 @@ atm_workflow_with_empty_parallel_box_scheduling_should_fail_test() ->
 
 
 atm_workflow_scheduling_with_openfaas_not_configured_should_fail_test() ->
-    AtmWorkflowSchemaId = atm_test_inventory:add_workflow_schema(#atm_workflow_schema_dump_draft{
-        name = <<"atm_workflow_with_openfaas_not_configured">>,
-        revision_num = 1,
-        revision = #atm_workflow_schema_revision_draft{
-            stores = [?EXAMPLE_INTEGER_LIST_STORE_SCHEMA_DRAFT],
-            lanes = [#atm_lane_schema_draft{
-                parallel_boxes = [#atm_parallel_box_schema_draft{
-                    tasks = [
-                        ?ECHO_TASK_DRAFT(?CURRENT_TASK_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID, append)
-                    ]
-                }],
-                store_iterator_spec = #atm_store_iterator_spec_draft{
-                    store_schema_id = ?EXAMPLE_INTEGER_LIST_STORE_SCHEMA_ID
-                }
-            }]
-        },
-        supplementary_lambdas = #{<<"echo">> => #{1 => ?ECHO_LAMBDA_DRAFT}}
-    }),
+    AtmWorkflowSchemaId = atm_test_inventory:add_workflow_schema(
+        ?EXAMPLE_EXECUTABLE_ATM_WORKFLOW_SCHEMA_DRAFT
+    ),
 
     ?assertThrow(
         ?ERROR_ATM_OPENFAAS_NOT_CONFIGURED,
@@ -140,24 +144,9 @@ atm_workflow_scheduling_with_openfaas_not_configured_should_fail_test() ->
 % to assert overall behaviour (failure to schedule execution). More such combinations are
 % checked in respective store test suites.
 atm_workflow_with_invalid_initial_store_content_scheduling_should_fail_test() ->
-    AtmWorkflowSchemaId = atm_test_inventory:add_workflow_schema(#atm_workflow_schema_dump_draft{
-        name = <<"atm_workflow_with_invalid_initial_store_content">>,
-        revision_num = 1,
-        revision = #atm_workflow_schema_revision_draft{
-            stores = [?EXAMPLE_INTEGER_LIST_STORE_SCHEMA_DRAFT],
-            lanes = [#atm_lane_schema_draft{
-                parallel_boxes = [#atm_parallel_box_schema_draft{
-                    tasks = [
-                        ?ECHO_TASK_DRAFT(?CURRENT_TASK_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID, append)
-                    ]
-                }],
-                store_iterator_spec = #atm_store_iterator_spec_draft{
-                    store_schema_id = ?EXAMPLE_INTEGER_LIST_STORE_SCHEMA_ID
-                }
-            }]
-        },
-        supplementary_lambdas = #{<<"echo">> => #{1 => ?ECHO_LAMBDA_DRAFT}}
-    }),
+    AtmWorkflowSchemaId = atm_test_inventory:add_workflow_schema(
+        ?EXAMPLE_EXECUTABLE_ATM_WORKFLOW_SCHEMA_DRAFT
+    ),
     InvalidInitialItem = <<"STR">>,
 
     ExpError = ?ERROR_ATM_STORE_CREATION_FAILED(
