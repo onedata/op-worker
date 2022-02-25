@@ -175,17 +175,19 @@ browse_by_timestamp_test(_Config) ->
 %% @private
 -spec example_configs() -> [atm_single_value_store_config:record()].
 example_configs() ->
-    lists:map(fun(ItemDataSpec) ->
-        #atm_audit_log_store_config{log_content_data_spec = ItemDataSpec}
+    lists:map(fun(LogContentDataType) ->
+        #atm_audit_log_store_config{log_content_data_spec = atm_store_test_utils:example_data_spec(
+            LogContentDataType
+        )}
     end, [
         %% TODO VFS-8686 enable after implementing compress/expand for array
-%%        #atm_data_spec{type = atm_array_type},
-        #atm_data_spec{type = atm_dataset_type},
-        #atm_data_spec{type = atm_file_type},
-        #atm_data_spec{type = atm_integer_type},
-        #atm_data_spec{type = atm_object_type},
-        #atm_data_spec{type = atm_string_type}
-        #atm_data_spec{type = atm_time_series_measurements_type}
+%%        atm_array_type,
+        atm_dataset_type,
+        atm_file_type,
+        atm_integer_type,
+        atm_object_type,
+        atm_string_type,
+        atm_time_series_measurements_type
     ]).
 
 

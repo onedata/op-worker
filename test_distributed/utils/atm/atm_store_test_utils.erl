@@ -26,6 +26,7 @@
     build_store_schema/1, build_store_schema/2, build_store_schema/3,
     build_create_store_with_initial_content_fun/3,
     build_workflow_execution_env/3,
+    example_data_spec/1,
     gen_valid_data/3,
     gen_invalid_data/3,
     compress_and_expand_data/4,
@@ -133,6 +134,27 @@ build_workflow_execution_env(AtmWorkflowExecutionAuth, AtmStoreSchema, AtmStoreI
     ).
 
 
+%% TODO VFS-8686 add array data spec generation after implementing compress/expand for array
+-spec example_data_spec(atm_data_type:type()) -> atm_data_spec:record().
+example_data_spec(atm_time_series_measurements_type) ->
+    RandSpecs = atm_test_utils:example_time_series_measurements_specs(),
+
+    #atm_data_spec{
+        type = atm_time_series_measurements_type,
+        value_constraints = #{specs => lists_utils:random_sublist(RandSpecs, 1, all)}
+    };
+
+example_data_spec(AtmDataType) when
+    AtmDataType =:= atm_dataset_type;
+    AtmDataType =:= atm_file_type;
+    AtmDataType =:= atm_integer_type;
+    AtmDataType =:= atm_object_type;
+    AtmDataType =:= atm_onedatafs_credentials_type;
+    AtmDataType =:= atm_string_type
+->
+    #atm_data_spec{type = AtmDataType}.
+
+
 -spec gen_valid_data(
     oct_background:node_selector(),
     atm_workflow_execution_auth:record(),
@@ -205,15 +227,26 @@ gen_valid_data(_ProviderSelector, _AtmWorkflowExecutionAuth, #atm_data_spec{
     ?RAND_STR(32);
 
 gen_valid_data(_ProviderSelector, _AtmWorkflowExecutionAuth, #atm_data_spec{
-    type = atm_time_series_measurements_type
+    type = atm_time_series_measurements_type,
+    value_constraints = #{specs := Specs}
 }) ->
     lists:map(fun(_) ->
         #{
-            <<"tsName">> => ?RAND_STR(16),
+            <<"tsName">> => gen_ts_name(?RAND_ELEMENT(Specs)),
             <<"timestamp">> => ?RAND_INT(100000, 999999),
             <<"value">> => ?RAND_INT(1, 99)
         }
     end, lists:seq(1, ?RAND_INT(2, 5))).
+
+
+%% @private
+-spec gen_ts_name(atm_time_series_measurements_spec:record()) ->
+    atm_time_series_attribute:name().
+gen_ts_name(#atm_time_series_measurements_spec{name_selector = fixed, name = TsName}) ->
+    TsName;
+
+gen_ts_name(#atm_time_series_measurements_spec{name_selector = pattern, name = Pattern}) ->
+    binary:replace(Pattern, <<"*">>, <<"NIHAU">>).
 
 
 -spec gen_invalid_data(
@@ -226,7 +259,7 @@ gen_invalid_data(ProviderSelector, AtmWorkflowExecutionAuth, #atm_data_spec{
     type = atm_array_type,
     value_constraints = #{item_data_spec := #atm_data_spec{type = ItemDataType}}
 }) ->
-    InvalidItemDataSpec = lists_utils:random_element(all_basic_data_types() -- [ItemDataType]),
+    InvalidItemDataSpec = example_data_spec(?RAND_ELEMENT(all_basic_data_types() -- [ItemDataType])),
 
     lists:map(
         fun(_) -> gen_valid_data(ProviderSelector, AtmWorkflowExecutionAuth, InvalidItemDataSpec) end,
@@ -243,9 +276,8 @@ gen_invalid_data(ProviderSelector, AtmWorkflowExecutionAuth, #atm_data_spec{
 gen_invalid_data(ProviderSelector, AtmWorkflowExecutionAuth, #atm_data_spec{
     type = AtmDataType
 }) ->
-    gen_valid_data(ProviderSelector, AtmWorkflowExecutionAuth, #atm_data_spec{
-        type = lists_utils:random_element(all_basic_data_types() -- [AtmDataType])
-    }).
+    InvalidDataSpec = example_data_spec(?RAND_ELEMENT(all_basic_data_types() -- [AtmDataType])),
+    gen_valid_data(ProviderSelector, AtmWorkflowExecutionAuth, InvalidDataSpec).
 
 
 -spec compress_and_expand_data(

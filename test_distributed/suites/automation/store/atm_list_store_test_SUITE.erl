@@ -112,17 +112,19 @@ browse_by_offset_test(_Config) ->
 %% @private
 -spec example_configs() -> [atm_single_value_store_config:record()].
 example_configs() ->
-    lists:map(fun(ItemDataSpec) ->
-        #atm_list_store_config{item_data_spec = ItemDataSpec}
+    lists:map(fun(ItemDataType) ->
+        #atm_list_store_config{item_data_spec = atm_store_test_utils:example_data_spec(
+            ItemDataType
+        )}
     end, [
         %% TODO VFS-8686 enable after implementing compress/expand for array
-%%        #atm_data_spec{type = atm_array_type},
-        #atm_data_spec{type = atm_dataset_type},
-        #atm_data_spec{type = atm_file_type},
-        #atm_data_spec{type = atm_integer_type},
-        #atm_data_spec{type = atm_object_type},
-        #atm_data_spec{type = atm_string_type}
-        #atm_data_spec{type = atm_time_series_measurements_type}
+%%        atm_array_type,
+        atm_dataset_type,
+        atm_file_type,
+        atm_integer_type,
+        atm_object_type,
+        atm_string_type,
+        atm_time_series_measurements_type
     ]).
 
 
