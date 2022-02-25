@@ -16,10 +16,9 @@
 -include("modules/datastore/datastore_runner.hrl").
 -include("modules/fslogic/acl.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
-
+-include("onenv_test_utils.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
--include_lib("onenv_ct/include/test_rpc.hrl").
 
 %% API
 -export([create_workflow_execution_auth/3]).
@@ -34,8 +33,6 @@
     split_into_chunks/3
 ]).
 
-
--define(rpc(ProviderSelector, Expr), ?opw_test_rpc(ProviderSelector, Expr)).
 
 -define(ATTEMPTS, 60).
 
