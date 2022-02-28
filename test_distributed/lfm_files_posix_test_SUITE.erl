@@ -11,6 +11,7 @@
 -module(lfm_files_posix_test_SUITE).
 -author("Michal Cwiertnia").
 
+-include("global_definitions.hrl").
 -include("lfm_files_test_base.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
@@ -978,6 +979,18 @@ init_per_testcase(lfm_create_and_read_symlink = Case, Config) ->
 init_per_testcase(dir_stats_collector_test = Case, Config) ->
     dir_stats_collector_test_base:init(init_per_testcase(?DEFAULT_CASE(Case), Config));
 
+init_per_testcase(Case, Config) when
+    Case =:= readdir_plus_should_work_with_token;
+    Case =:= readdir_plus_should_work_with_token_not_full_batch;
+    Case =:= readdir_plus_should_work_with_api_token_not_full_batch;
+    Case =:= readdir_plus_should_work_with_api_token;
+    Case =:= readdir_should_work_with_token;
+    Case =:= readdir_should_work_with_token_not_full_batch;
+    Case =:= readdir_should_work_with_api_token;
+    Case =:= readdir_should_work_with_api_token_not_full_batch
+    ->
+    lfm_files_test_base:init_per_testcase(readdir_should_work_with_token, Config);
+
 init_per_testcase(Case, Config) ->
     lfm_files_test_base:init_per_testcase(Case, Config).
 
@@ -997,6 +1010,18 @@ end_per_testcase(lfm_create_and_read_symlink = Case, Config) ->
 end_per_testcase(dir_stats_collector_test = Case, Config) ->
     dir_stats_collector_test_base:teardown(Config),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
+
+end_per_testcase(Case, Config) when
+    Case =:= readdir_plus_should_work_with_token;
+    Case =:= readdir_plus_should_work_with_token_not_full_batch;
+    Case =:= readdir_plus_should_work_with_api_token_not_full_batch;
+    Case =:= readdir_plus_should_work_with_api_token;
+    Case =:= readdir_should_work_with_token;
+    Case =:= readdir_should_work_with_token_not_full_batch;
+    Case =:= readdir_should_work_with_api_token;
+    Case =:= readdir_should_work_with_api_token_not_full_batch
+    ->
+    lfm_files_test_base:end_per_testcase(readdir_should_work_with_token, Config);
 
 end_per_testcase(Case, Config) ->
     lfm_files_test_base:end_per_testcase(Case, Config).
