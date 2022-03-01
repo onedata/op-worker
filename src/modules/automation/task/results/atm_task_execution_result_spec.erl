@@ -28,7 +28,7 @@
 
 -record(dispatch_spec, {
     store_schema_id :: automation:id(),
-    function :: atm_task_schema_result_mapper:dispatch_function()
+    store_content_update_options :: atm_store_content_update_options:record()
 }).
 -type dispatch_spec() :: #dispatch_spec{}.
 
@@ -80,7 +80,7 @@ consume_result(AtmWorkflowExecutionCtx, #atm_task_execution_result_spec{
 
     lists:foreach(fun(#dispatch_spec{store_schema_id = AtmStoreSchemaId} = DispatchSpec) ->
         try
-            dispatch_result(AtmWorkflowExecutionCtx, Result, #{}, DispatchSpec)
+            dispatch_result(AtmWorkflowExecutionCtx, Result, DispatchSpec)
         catch Type:Reason:Stacktrace ->
             Error = ?atm_examine_error(Type, Reason, Stacktrace),
             throw(?ERROR_ATM_TASK_RESULT_DISPATCH_FAILED(AtmStoreSchemaId, Error))
@@ -108,7 +108,10 @@ db_encode(#atm_task_execution_result_spec{
     #{
         <<"name">> => Name,
         <<"dataSpec">> => NestedRecordEncoder(AtmDataSpec, atm_data_spec),
-        <<"dispatchSpecs">> => lists:map(fun dispatch_spec_to_json/1, DispatchSpecs)
+        <<"dispatchSpecs">> => [
+            db_encode_dispatch_spec(Spec, NestedRecordEncoder)
+            || Spec <- DispatchSpecs
+        ]
     }.
 
 
@@ -122,7 +125,10 @@ db_decode(#{
     #atm_task_execution_result_spec{
         name = Name,
         data_spec = NestedRecordDecoder(AtmDataSpecJson, atm_data_spec),
-        dispatch_specs = lists:map(fun dispatch_spec_from_json/1, DispatchSpecsJson)
+        dispatch_specs = [
+            db_decode_dispatch_spec(SpecJson, NestedRecordDecoder)
+            || SpecJson <- DispatchSpecsJson
+        ]
     }.
 
 
@@ -135,35 +141,41 @@ db_decode(#{
 -spec build_dispatch_spec(atm_task_schema_result_mapper:record()) -> dispatch_spec().
 build_dispatch_spec(#atm_task_schema_result_mapper{
     store_schema_id = AtmStoreSchemaId,
-    dispatch_function = DispatchFunction
+    store_content_update_options = AtmStoreContentUpdateOptions
 }) ->
     #dispatch_spec{
         store_schema_id = AtmStoreSchemaId,
-        function = DispatchFunction
+        store_content_update_options = AtmStoreContentUpdateOptions
     }.
 
 
 %% @private
--spec dispatch_spec_to_json(dispatch_spec()) -> json_utils:json_term().
-dispatch_spec_to_json(#dispatch_spec{
+-spec db_encode_dispatch_spec(dispatch_spec(), persistent_record:nested_record_encoder()) ->
+    json_utils:json_term().
+db_encode_dispatch_spec(#dispatch_spec{
     store_schema_id = AtmStoreSchemaId,
-    function = DispatchFunction
-}) ->
+    store_content_update_options = AtmStoreContentUpdateOptions
+}, NestedRecordEncoder) ->
     #{
         <<"storeSchemaId">> => AtmStoreSchemaId,
-        <<"function">> => atom_to_binary(DispatchFunction, utf8)
+        <<"storeContentUpdateOptions">> => NestedRecordEncoder(
+            AtmStoreContentUpdateOptions, atm_store_content_update_options
+        )
     }.
 
 
 %% @private
--spec dispatch_spec_from_json(json_utils:json_term()) -> dispatch_spec().
-dispatch_spec_from_json(#{
+-spec db_decode_dispatch_spec(json_utils:json_term(), persistent_record:nested_record_decoder()) ->
+    dispatch_spec().
+db_decode_dispatch_spec(#{
     <<"storeSchemaId">> := AtmStoreSchemaId,
-    <<"function">> := DispatchFunctionBin
-}) ->
+    <<"storeContentUpdateOptions">> := AtmStoreContentUpdateOptionsJson
+}, NestedRecordDecoder) ->
     #dispatch_spec{
         store_schema_id = AtmStoreSchemaId,
-        function = binary_to_atom(DispatchFunctionBin, utf8)
+        store_content_update_options = NestedRecordDecoder(
+            AtmStoreContentUpdateOptionsJson, atm_store_content_update_options
+        )
     }.
 
 
@@ -171,34 +183,29 @@ dispatch_spec_from_json(#{
 -spec dispatch_result(
     atm_workflow_execution_ctx:record(),
     json_utils:json_term(),
-    atm_store_container:operation_options(),
     dispatch_spec()
 ) ->
     ok | no_return().
-dispatch_result(AtmWorkflowExecutionCtx, Result, Options, #dispatch_spec{
+dispatch_result(AtmWorkflowExecutionCtx, Result, #dispatch_spec{
     store_schema_id = ?CURRENT_TASK_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID,
-    function = DispatchFun
+    store_content_update_options = UpdateOptions
 }) ->
-    atm_workflow_execution_logger:task_handle_logs(
-        DispatchFun, Result, Options, atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx)
-    );
+    Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
+    atm_workflow_execution_logger:task_handle_logs(UpdateOptions, Result, Logger);
 
-dispatch_result(AtmWorkflowExecutionCtx, Result, Options, #dispatch_spec{
+dispatch_result(AtmWorkflowExecutionCtx, Result, #dispatch_spec{
     store_schema_id = ?WORKFLOW_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID,
-    function = DispatchFun
+    store_content_update_options = UpdateOptions
 }) ->
-    atm_workflow_execution_logger:workflow_handle_logs(
-        DispatchFun, Result, Options, atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx)
-    );
+    Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
+    atm_workflow_execution_logger:workflow_handle_logs(UpdateOptions, Result, Logger);
 
-dispatch_result(AtmWorkflowExecutionCtx, Result, Options, #dispatch_spec{
+dispatch_result(AtmWorkflowExecutionCtx, Result, #dispatch_spec{
     store_schema_id = AtmStoreSchemaId,
-    function = DispatchFun
+    store_content_update_options = UpdateOptions
 }) ->
     AtmWorkflowExecutionAuth = atm_workflow_execution_ctx:get_auth(AtmWorkflowExecutionCtx),
     AtmStoreId = atm_workflow_execution_ctx:get_global_store_id(
         AtmStoreSchemaId, AtmWorkflowExecutionCtx
     ),
-    atm_store_api:apply_operation(
-        AtmWorkflowExecutionAuth, DispatchFun, Result, Options, AtmStoreId
-    ).
+    atm_store_api:update_content(AtmWorkflowExecutionAuth, Result, UpdateOptions, AtmStoreId).

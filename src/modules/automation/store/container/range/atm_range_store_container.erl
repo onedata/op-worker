@@ -21,9 +21,11 @@
 %% atm_store_container callbacks
 -export([
     create/3,
-    get_config/1, get_iterated_item_data_spec/1,
-    browse_content/3, acquire_iterator/1,
-    apply_operation/2,
+    get_config/1,
+    get_iterated_item_data_spec/1,
+    acquire_iterator/1,
+    browse_content/3,
+    update_content/2,
     delete/1
 ]).
 
@@ -41,8 +43,12 @@
 %%      <<"step">> => integer()    % default `1`
 %% }
 -type initial_content() :: #{binary() => integer()}.
--type operation_options() :: #{}.  %% for now no options are supported
+
 -type browse_options() :: #{}.  %% for now no options are supported
+
+-type update_content() :: #update_atm_store_container_content{
+    options :: atm_range_store_content_update_options:record()
+}.
 
 -record(atm_range_store_container, {
     config :: atm_range_store_config:record(),
@@ -52,7 +58,7 @@
 }).
 -type record() :: #atm_range_store_container{}.
 
--export_type([initial_content/0, operation_options/0, browse_options/0, record/0]).
+-export_type([initial_content/0, browse_options/0, update_content/0, record/0]).
 
 
 -define(ITEM_DATA_SPEC, #atm_data_spec{type = atm_integer_type}).
@@ -95,6 +101,15 @@ get_iterated_item_data_spec(_) ->
     ?ITEM_DATA_SPEC.
 
 
+-spec acquire_iterator(record()) -> atm_range_store_container_iterator:record().
+acquire_iterator(#atm_range_store_container{
+    start_num = StartNum,
+    end_num = EndNum,
+    step = Step
+}) ->
+    atm_range_store_container_iterator:build(StartNum, EndNum, Step).
+
+
 -spec browse_content(atm_workflow_execution_auth:record(), browse_options(), record()) ->
     atm_store_api:browse_result() | no_return().
 browse_content(_AtmWorkflowExecutionAuth, _BrowseOpts, #atm_range_store_container{
@@ -106,17 +121,8 @@ browse_content(_AtmWorkflowExecutionAuth, _BrowseOpts, #atm_range_store_containe
     {[{<<>>, {ok, Content}}], true}.
 
 
--spec acquire_iterator(record()) -> atm_range_store_container_iterator:record().
-acquire_iterator(#atm_range_store_container{
-    start_num = StartNum,
-    end_num = EndNum,
-    step = Step
-}) ->
-    atm_range_store_container_iterator:build(StartNum, EndNum, Step).
-
-
--spec apply_operation(record(), atm_store_container:operation()) -> no_return().
-apply_operation(_Record, _AtmStoreContainerOperation) ->
+-spec update_content(record(), update_content()) -> no_return().
+update_content(_Record, _UpdateAtmStoreContainerContent) ->
     throw(?ERROR_NOT_SUPPORTED).
 
 

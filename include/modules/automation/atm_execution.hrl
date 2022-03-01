@@ -34,11 +34,10 @@
     finish_time :: atm_workflow_execution:timestamp()
 }).
 
--record(atm_store_container_operation, {
-    type :: atm_store_container:operation_type(),
-    options :: atm_store_container:operation_options(),
-    argument :: automation:item(),
-    workflow_execution_auth :: atm_workflow_execution_auth:record()
+-record(update_atm_store_container_content, {
+    workflow_execution_auth :: atm_workflow_execution_auth:record(),
+    argument :: atm_value:expanded(),
+    options :: atm_store_content_update_options:record()
 }).
 
 -record(atm_lane_execution, {

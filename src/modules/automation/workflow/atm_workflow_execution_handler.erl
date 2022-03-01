@@ -238,16 +238,18 @@ process_result(
 ) ->
     ok.
 report_item_error(_AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, ItemsBatch) ->
-    AtmLaneRunExceptionStoreContainer = atm_workflow_execution_env:get_lane_run_exception_store_container(
-        AtmWorkflowExecutionEnv
+    AtmWorkflowExecutionAuth = atm_workflow_execution_env:acquire_auth(AtmWorkflowExecutionEnv),
+
+    % NOTE: atm_store_api is bypassed for performance reasons. It is possible as list store update
+    % does not modify store document itself but only referenced infinite log
+    atm_list_store_container:update_content(
+        atm_workflow_execution_env:get_lane_run_exception_store_container(AtmWorkflowExecutionEnv),
+        #update_atm_store_container_content{
+            workflow_execution_auth = AtmWorkflowExecutionAuth,
+            argument = ItemsBatch,
+            options = #atm_list_store_content_update_options{function = extend}
+        }
     ),
-    Operation = #atm_store_container_operation{
-        type = extend,
-        options = #{},
-        argument = ItemsBatch,
-        workflow_execution_auth = atm_workflow_execution_env:acquire_auth(AtmWorkflowExecutionEnv)
-    },
-    atm_list_store_container:apply_operation(AtmLaneRunExceptionStoreContainer, Operation),
 
     ok.
 
