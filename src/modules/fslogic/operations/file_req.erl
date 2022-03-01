@@ -667,12 +667,12 @@ verify_file_exists(FileCtx, _HandleId) ->
 -spec check_and_register_open(file_ctx:ctx(), session:id(), fslogic_worker:open_flag(), handle_id(), new_file()) ->
     storage_driver:handle_id() | no_return().
 check_and_register_open(FileCtx, SessId, Flag, undefined, true) ->
-    HandleId = session_handles:gen_handle_id(Flag),
+    HandleId = file_handles:gen_handle_id(Flag),
     ok = file_handles:register_open(FileCtx, SessId, 1, HandleId),
     HandleId;
 check_and_register_open(FileCtx, SessId, Flag, undefined, false) ->
     ok = file_handles:register_open(FileCtx, SessId, 1, undefined),
-    session_handles:gen_handle_id(Flag);
+    file_handles:gen_handle_id(Flag);
 check_and_register_open(_FileCtx, _SessId, _Flag, HandleId, _NewFile) ->
     HandleId.
 

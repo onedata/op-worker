@@ -127,7 +127,7 @@ get_handle(UserCtx, FileCtx, HandleId) ->
 -spec create_handle(user_ctx:ctx(), file_ctx:ctx(),
     HandleId :: storage_driver:handle_id()) -> ok.
 create_handle(UserCtx, FileCtx, HandleId) ->
-    Flag = session_handles:get_handle_flag(HandleId),
+    Flag = file_handles:get_open_flag(HandleId),
     try
         create_handle_helper(UserCtx, FileCtx, HandleId, Flag, open_file)
     catch _:Reason when
