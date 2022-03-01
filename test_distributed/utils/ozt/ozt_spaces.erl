@@ -23,6 +23,14 @@
 %%%===================================================================
 
 -spec set_privileges(od_space:id(), od_user:id(), privileges:privileges(privileges:space_privilege())) -> ok.
-set_privileges(SpaceId, UserId, SpacePrivs) ->
+% hack necessary as unfortunately there are some ct_run.py suites not run using onenv :(
+set_privileges(SpaceId, UserId, SpacePrivs) when is_binary(SpaceId), is_binary(UserId) ->
     ozw_test_rpc:space_set_user_privileges(SpaceId, UserId, SpacePrivs),
-    opt:force_fetch_entity(od_space, SpaceId).
+    opt:force_fetch_entity(od_space, SpaceId);
+
+set_privileges(SpaceSelector, UserSelector, SpacePrivs) ->
+    set_privileges(
+        oct_background:get_space_id(SpaceSelector),
+        oct_background:get_user_id(UserSelector),
+        SpacePrivs
+    ).

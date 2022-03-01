@@ -192,15 +192,13 @@ validate(#op_req{operation = get, gri = #gri{aspect = As}}, _) when
 %%--------------------------------------------------------------------
 -spec create(middleware:req()) -> middleware:create_result().
 create(#op_req{auth = ?USER(_UserId, SessionId), data = Data, gri = #gri{aspect = instance} = GRI}) ->
-    {AtmWorkflowExecutionId, AtmWorkflowExecution} = middleware_worker:check_exec(
+    {AtmWorkflowExecutionId, AtmWorkflowExecution} = mi_atm:schedule_workflow_execution(
         SessionId,
-        fslogic_uuid:spaceid_to_space_dir_guid(maps:get(<<"spaceId">>, Data)),
-        #schedule_atm_workflow_execution{
-            atm_workflow_schema_id = maps:get(<<"atmWorkflowSchemaId">>, Data),
-            atm_workflow_schema_revision_num = maps:get(<<"atmWorkflowSchemaRevisionNumber">>, Data),
-            store_initial_values = maps:get(<<"storeInitialValues">>, Data, #{}),
-            callback_url = maps:get(<<"callback">>, Data, undefined)
-        }
+        maps:get(<<"spaceId">>, Data),
+        maps:get(<<"atmWorkflowSchemaId">>, Data),
+        maps:get(<<"atmWorkflowSchemaRevisionNumber">>, Data),
+        maps:get(<<"storeInitialValues">>, Data, #{}),  %% TODO VFS-9018 rename to StoreInitialContents
+        maps:get(<<"callback">>, Data, undefined)
     ),
     {ok, resource, {GRI#gri{id = AtmWorkflowExecutionId}, AtmWorkflowExecution}};
 
@@ -208,14 +206,7 @@ create(#op_req{auth = ?USER(_UserId, SessionId), gri = #gri{
     id = AtmWorkflowExecutionId,
     aspect = cancel
 }}) ->
-    {ok, #atm_workflow_execution{space_id = SpaceId}} = atm_workflow_execution_api:get(
-        AtmWorkflowExecutionId
-    ),
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
-
-    middleware_worker:check_exec(SessionId, SpaceGuid, #cancel_atm_workflow_execution{
-        atm_workflow_execution_id = AtmWorkflowExecutionId
-    });
+    mi_atm:cancel_workflow_execution(SessionId, AtmWorkflowExecutionId);
 
 create(#op_req{auth = ?USER(_UserId, SessionId), data = Data, gri = #gri{
     id = AtmWorkflowExecutionId,
@@ -224,18 +215,15 @@ create(#op_req{auth = ?USER(_UserId, SessionId), data = Data, gri = #gri{
     Aspect =:= retry;
     Aspect =:= rerun
 ->
-    {ok, Record = #atm_workflow_execution{space_id = SpaceId}} = atm_workflow_execution_api:get(
-        AtmWorkflowExecutionId
-    ),
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    {ok, Record} = atm_workflow_execution_api:get(AtmWorkflowExecutionId),
 
     case infer_lane_selector(maps:get(<<"laneSchemaId">>, Data), Record) of
         {ok, AtmLaneSelector} ->
-            middleware_worker:check_exec(SessionId, SpaceGuid, #repeat_atm_workflow_execution{
-                type = Aspect,
-                atm_workflow_execution_id = AtmWorkflowExecutionId,
-                atm_lane_run_selector = {AtmLaneSelector, maps:get(<<"laneRunNumber">>, Data)}
-            });
+            AtmLaneRunSelector = {AtmLaneSelector, maps:get(<<"laneRunNumber">>, Data)},
+
+            mi_atm:repeat_workflow_execution(
+                SessionId, Aspect, AtmWorkflowExecutionId, AtmLaneRunSelector
+            );
         {error, _} = Error ->
             Error
     end.

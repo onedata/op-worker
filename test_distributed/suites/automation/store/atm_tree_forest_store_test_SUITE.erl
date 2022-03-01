@@ -20,7 +20,6 @@
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
--include_lib("onenv_ct/include/test_rpc.hrl").
 
 
 %% exported for CT
@@ -79,7 +78,6 @@ all() -> [
 
 -define(PROVIDER_SELECTOR, krakow).
 -define(rpc(Expr), ?rpc(?PROVIDER_SELECTOR, Expr)).
--define(rpc(ProviderSelector, Expr), ?opw_test_rpc(ProviderSelector, Expr)).
 
 -define(ATTEMPTS, 30).
 
