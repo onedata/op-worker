@@ -34,11 +34,10 @@
 -type offset() :: integer().
 -type limit() :: pos_integer().
 
--type browse_options() :: atm_store_container:browse_options().
 -type browse_result() :: {[{index(), {ok, automation:item()} | errors:error()}], IsLast :: boolean()}.
 
 -export_type([initial_content/0]).
--export_type([index/0, offset/0, limit/0, browse_options/0, browse_result/0]).
+-export_type([index/0, offset/0, limit/0, browse_result/0]).
 
 
 %%%===================================================================
@@ -126,12 +125,15 @@ unfreeze(AtmStoreId) ->
 %%-------------------------------------------------------------------
 -spec browse_content(
     atm_workflow_execution_auth:record(),
-    browse_options(),
+    atm_store_content_browse_options:record(),
     atm_store:id() | atm_store:record()
 ) ->
     browse_result() | no_return().
 browse_content(AtmWorkflowExecutionAuth, BrowseOpts, #atm_store{container = AtmStoreContainer}) ->
-    atm_store_container:browse_content(AtmWorkflowExecutionAuth, BrowseOpts, AtmStoreContainer);
+    atm_store_container:browse_content(AtmStoreContainer, #atm_store_content_browse_req{
+        workflow_execution_auth = AtmWorkflowExecutionAuth,
+        options = BrowseOpts
+    });
 
 browse_content(AtmWorkflowExecutionAuth, BrowseOpts, AtmStoreId) ->
     case get(AtmStoreId) of
@@ -157,7 +159,7 @@ update_content(AtmWorkflowExecutionAuth, Item, Options, AtmStoreId) ->
     case get(AtmStoreId) of
         {ok, #atm_store{container = AtmStoreContainer, frozen = false}} ->
             UpdatedAtmStoreContainer = atm_store_container:update_content(
-                AtmStoreContainer, #update_atm_store_container_content{
+                AtmStoreContainer, #atm_store_content_update_req{
                     workflow_execution_auth = AtmWorkflowExecutionAuth,
                     argument = Item,
                     options = Options

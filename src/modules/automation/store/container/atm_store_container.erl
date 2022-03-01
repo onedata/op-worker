@@ -30,7 +30,7 @@
     create/4,
     get_store_type/1, get_config/1, get_iterated_item_data_spec/1,
     acquire_iterator/1,
-    browse_content/3,
+    browse_content/2,
     update_content/2,
     delete/1
 ]).
@@ -60,22 +60,22 @@
     atm_single_value_store_container:record() |
     atm_tree_forest_store_container:record().
 
--type browse_options() ::
-    atm_audit_log_store_container:browse_options() |
-    atm_list_store_container:browse_options() |
-    atm_range_store_container:browse_options() |
-    atm_single_value_store_container:browse_options() |
-    atm_tree_forest_store_container:browse_options().
+-type content_browse_req() ::
+    atm_audit_log_store_container:content_browse_req() |
+    atm_list_store_container:content_browse_req() |
+    atm_range_store_container:content_browse_req() |
+    atm_single_value_store_container:content_browse_req() |
+    atm_tree_forest_store_container:content_browse_req().
 
--type update_content() ::
-    atm_audit_log_store_container:update_content() |
-    atm_list_store_container:update_content() |
-    atm_range_store_container:update_content() |
-    atm_single_value_store_container:update_content() |
-    atm_tree_forest_store_container:update_content().
+-type content_update_req() ::
+    atm_audit_log_store_container:content_update_req() |
+    atm_list_store_container:content_update_req() |
+    atm_range_store_container:content_update_req() |
+    atm_single_value_store_container:content_update_req() |
+    atm_tree_forest_store_container:content_update_req().
 
 -export_type([type/0, initial_content/0, record/0]).
--export_type([browse_options/0, update_content/0]).
+-export_type([content_browse_req/0, content_update_req/0]).
 
 
 %%%===================================================================
@@ -96,14 +96,10 @@
 
 -callback acquire_iterator(record()) -> atm_store_container_iterator:record().
 
--callback browse_content(
-    atm_workflow_execution_auth:record(),
-    browse_options(),
-    record()
-) ->
+-callback browse_content(record(), content_browse_req()) ->
     atm_store_api:browse_result() | no_return().  %% TODO browse result
 
--callback update_content(record(), update_content()) -> record() | no_return().
+-callback update_content(record(), content_update_req()) -> record() | no_return().
 
 -callback delete(record()) -> ok | no_return().
 
@@ -149,17 +145,17 @@ acquire_iterator(AtmStoreContainer) ->
     RecordType:acquire_iterator(AtmStoreContainer).
 
 
--spec browse_content(atm_workflow_execution_auth:record(), atm_store_api:browse_options(), record()) ->
+-spec browse_content(record(), content_browse_req()) ->
     atm_store_api:browse_result() | no_return().
-browse_content(AtmWorkflowExecutionAuth, BrowseOpts, AtmStoreContainer) ->
+browse_content(AtmStoreContainer, AtmStoreContentBrowseReq) ->
     RecordType = utils:record_type(AtmStoreContainer),
-    RecordType:browse_content(AtmWorkflowExecutionAuth, BrowseOpts, AtmStoreContainer).
+    RecordType:browse_content(AtmStoreContainer, AtmStoreContentBrowseReq).
 
 
--spec update_content(record(), update_content()) -> record() | no_return().
-update_content(AtmStoreContainer, UpdateAtmStoreContainerContent) ->
+-spec update_content(record(), content_update_req()) -> record() | no_return().
+update_content(AtmStoreContainer, AtmStoreContentUpdateReq) ->
     RecordType = utils:record_type(AtmStoreContainer),
-    RecordType:update_content(AtmStoreContainer, UpdateAtmStoreContainerContent).
+    RecordType:update_content(AtmStoreContainer, AtmStoreContentUpdateReq).
 
 
 -spec delete(record()) -> ok | no_return().

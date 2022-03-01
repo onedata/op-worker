@@ -15,19 +15,10 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([browse_content/4]).
+-export([assert_numerical_index/1]).
 -export([get_next_batch/4]).
 
--type store_type() :: list_store | audit_log_store.
-
 %@formatter:off
--type browse_options() :: #{
-    limit := atm_store_api:limit(),
-    start_index => atm_store_api:index(),
-    start_timestamp => time:millis(),  % allowed only for audit log store
-    offset => atm_store_api:offset()
-}.
-
 -type listing_postprocessor() :: json_infinite_log_model:listing_postprocessor(
     {atm_store_api:index(), {ok, atm_value:expanded()} | errors:error()}
 ).
@@ -39,21 +30,15 @@
 %%% API
 %%%===================================================================
 
--spec browse_content(
-    store_type(),
-    json_infinite_log_model:id(),
-    browse_options(),
-    listing_postprocessor()
-) ->
-    atm_store_api:browse_result() | no_return().
-browse_content(StoreType, BackendId, BrowseOpts, ListingPostprocessor) ->
-    SanitizedBrowseOpts = sanitize_browse_options(StoreType, BrowseOpts),
-    {ok, {ProgressMarker, EntrySeries}} = json_infinite_log_model:list_and_postprocess(BackendId, #{
-        start_from => infer_start_from(StoreType, SanitizedBrowseOpts),
-        offset => maps:get(offset, SanitizedBrowseOpts, 0),
-        limit => maps:get(limit, SanitizedBrowseOpts)
-    }, ListingPostprocessor),
-    {EntrySeries, ProgressMarker =:= done}.
+
+%% TODO spec
+assert_numerical_index(Index) ->
+    try
+        binary_to_integer(Index),
+        true
+    catch _:_ ->
+        throw(?ERROR_BAD_DATA(<<"index">>, <<"not numerical">>))
+    end.
 
 
 -spec get_next_batch(
@@ -79,44 +64,3 @@ get_next_batch(BatchSize, BackendId, LastListedIndex, ListingPostprocessor) ->
             end, EntrySeries),
             {ok, FilteredEntries, NewLastListedIndex}
     end.
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-%% @private
--spec sanitize_browse_options(store_type(), browse_options()) -> browse_options().
-sanitize_browse_options(StoreType, BrowseOpts) ->
-    TimestampOption = case StoreType of
-        audit_log_store ->
-            #{start_timestamp => {integer, {not_lower_than, 0}}};
-        list_store ->
-            #{}
-    end,
-    middleware_sanitizer:sanitize_data(BrowseOpts, #{
-        required => #{
-            limit => {integer, {not_lower_than, 1}}
-        },
-        at_least_one => TimestampOption#{
-            offset => {integer, any},
-            start_index => {binary, any}
-        }
-    }).
-
-
-%% @private
--spec infer_start_from(store_type(), atm_store_api:browse_options()) ->
-    undefined | {index, infinite_log:entry_index()} | {timestamp, infinite_log:timestamp()}.
-infer_start_from(_, #{start_index := <<>>}) ->
-    undefined;
-infer_start_from(_, #{start_index := StartIndexBin}) ->
-    try
-        binary_to_integer(StartIndexBin)
-    catch _:_ ->
-        throw(?ERROR_BAD_DATA(<<"index">>, <<"not numerical">>))
-    end,
-    {index, StartIndexBin};
-infer_start_from(audit_log_store, #{start_timestamp := StartTimestamp}) ->
-    {timestamp, StartTimestamp};
-infer_start_from(_, _) ->
-    undefined.

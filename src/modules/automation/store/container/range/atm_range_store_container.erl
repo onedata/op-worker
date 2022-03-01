@@ -22,10 +22,13 @@
 -export([
     create/3,
     get_config/1,
+
     get_iterated_item_data_spec/1,
     acquire_iterator/1,
-    browse_content/3,
+
+    browse_content/2,
     update_content/2,
+
     delete/1
 ]).
 
@@ -44,9 +47,10 @@
 %% }
 -type initial_content() :: #{binary() => integer()}.
 
--type browse_options() :: #{}.  %% for now no options are supported
-
--type update_content() :: #update_atm_store_container_content{
+-type content_browse_req() :: #atm_store_content_browse_req{
+    options :: atm_range_store_content_browse_options:record()
+}.
+-type content_update_req() :: #atm_store_content_update_req{
     options :: atm_range_store_content_update_options:record()
 }.
 
@@ -58,7 +62,10 @@
 }).
 -type record() :: #atm_range_store_container{}.
 
--export_type([initial_content/0, browse_options/0, update_content/0, record/0]).
+-export_type([
+    initial_content/0, content_browse_req/0, content_update_req/0,
+    record/0
+]).
 
 
 -define(ITEM_DATA_SPEC, #atm_data_spec{type = atm_integer_type}).
@@ -110,18 +117,17 @@ acquire_iterator(#atm_range_store_container{
     atm_range_store_container_iterator:build(StartNum, EndNum, Step).
 
 
--spec browse_content(atm_workflow_execution_auth:record(), browse_options(), record()) ->
+-spec browse_content(record(), content_browse_req()) ->
     atm_store_api:browse_result() | no_return().
-browse_content(_AtmWorkflowExecutionAuth, _BrowseOpts, #atm_range_store_container{
-    start_num = StartNum,
-    end_num = EndNum,
-    step = Step
-}) ->
+browse_content(
+    #atm_range_store_container{start_num = StartNum, end_num = EndNum, step = Step},
+    #atm_store_content_browse_req{options = #atm_range_store_content_browse_options{}}
+) ->
     Content = #{<<"start">> => StartNum, <<"end">> => EndNum, <<"step">> => Step},
     {[{<<>>, {ok, Content}}], true}.
 
 
--spec update_content(record(), update_content()) -> no_return().
+-spec update_content(record(), content_update_req()) -> no_return().
 update_content(_Record, _UpdateAtmStoreContainerContent) ->
     throw(?ERROR_NOT_SUPPORTED).
 

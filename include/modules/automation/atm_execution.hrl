@@ -34,12 +34,6 @@
     finish_time :: atm_workflow_execution:timestamp()
 }).
 
--record(update_atm_store_container_content, {
-    workflow_execution_auth :: atm_workflow_execution_auth:record(),
-    argument :: atm_value:expanded(),
-    options :: atm_store_content_update_options:record()
-}).
-
 -record(atm_lane_execution, {
     schema_id :: automation:id(),
     retries_left :: non_neg_integer(),
@@ -143,7 +137,7 @@
 }).
 
 
-%% Atm system stores related macros
+%% Atm stores related macros
 
 -define(ATM_SYSTEM_AUDIT_LOG_SCHEMA(__ID), #atm_store_schema{
     id = __ID,
@@ -165,6 +159,39 @@
     type = list,
     config = #atm_list_store_config{item_data_spec = __ITEM_DATA_SPEC},
     requires_initial_content = false
+}).
+
+-record(atm_store_content_browse_req, {
+    workflow_execution_auth :: atm_workflow_execution_auth:record(),
+    options :: atm_store_content_browse_options:record()
+}).
+
+-record(atm_audit_log_store_content_browse_options, {
+    start_from :: atm_audit_log_store_content_browse_options:start_from(),
+    offset :: atm_audit_log_store_content_browse_options:offset(),
+    limit :: atm_audit_log_store_content_browse_options:limit()
+}).
+
+-record(atm_list_store_content_browse_options, {
+    start_from :: atm_list_store_content_browse_options:start_from(),
+    offset :: atm_list_store_content_browse_options:offset(),
+    limit :: atm_list_store_content_browse_options:limit()
+}).
+
+-record(atm_range_store_content_browse_options, {}).
+
+-record(atm_single_value_store_content_browse_options, {}).
+
+-record(atm_tree_forest_store_content_browse_options, {
+    start_from :: atm_tree_forest_store_content_browse_options:start_from(),
+    offset :: atm_tree_forest_store_content_browse_options:offset(),
+    limit :: atm_tree_forest_store_content_browse_options:limit()
+}).
+
+-record(atm_store_content_update_req, {
+    workflow_execution_auth :: atm_workflow_execution_auth:record(),
+    argument :: atm_value:expanded(),
+    options :: atm_store_content_update_options:record()
 }).
 
 

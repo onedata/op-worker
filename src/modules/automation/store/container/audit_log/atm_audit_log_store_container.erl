@@ -30,10 +30,13 @@
 -export([
     create/3,
     get_config/1,
+
     get_iterated_item_data_spec/1,
     acquire_iterator/1,
-    browse_content/3,
+
+    browse_content/2,
     update_content/2,
+
     delete/1
 ]).
 
@@ -43,16 +46,10 @@
 
 -type initial_content() :: [atm_value:expanded()] | undefined.
 
-%@formatter:off
--type browse_options() :: #{
-    limit := atm_store_api:limit(),
-    start_index => atm_store_api:index(),
-    start_timestamp => time:millis(),
-    offset => atm_store_api:offset()
+-type content_browse_req() :: #atm_store_content_browse_req{
+    options :: atm_audit_log_store_content_browse_options:record()
 }.
-%@formatter:on
-
--type update_content() :: #update_atm_store_container_content{
+-type content_update_req() :: #atm_store_content_update_req{
     options :: atm_audit_log_store_content_update_options:record()
 }.
 
@@ -62,7 +59,10 @@
 }).
 -type record() :: #atm_audit_log_store_container{}.
 
--export_type([initial_content/0, browse_options/0, update_content/0, record/0]).
+-export_type([
+    initial_content/0, content_browse_req/0, content_update_req/0,
+    record/0
+]).
 
 
 %%%===================================================================
@@ -105,22 +105,30 @@ acquire_iterator(#atm_audit_log_store_container{
     atm_audit_log_store_container_iterator:build(LogContentDataSpec, BackendId).
 
 
--spec browse_content(atm_workflow_execution_auth:record(), browse_options(), record()) ->
+-spec browse_content(record(), content_browse_req()) ->
     atm_store_api:browse_result() | no_return().
-browse_content(AtmWorkflowExecutionAuth, BrowseOpts, #atm_audit_log_store_container{
-    config = #atm_audit_log_store_config{log_content_data_spec = LogContentDataSpec},
-    backend_id = BackendId
+browse_content(Record, #atm_store_content_browse_req{
+    workflow_execution_auth = AtmWorkflowExecutionAuth,
+    options = #atm_audit_log_store_content_browse_options{
+        start_from = StartFrom,
+        offset = Offset,
+        limit  = Limit
+    }
 }) ->
-    atm_infinite_log_based_stores_common:browse_content(
-        audit_log_store, BackendId, BrowseOpts,
-        atm_audit_log_store_container_iterator:gen_listing_postprocessor(
-            AtmWorkflowExecutionAuth, LogContentDataSpec
-        )
-    ).
+    ListingPostprocessor = atm_list_store_container_iterator:gen_listing_postprocessor(
+        AtmWorkflowExecutionAuth, get_log_content_data_spec(Record)
+    ),
+    {ok, {ProgressMarker, EntrySeries}} = json_infinite_log_model:list_and_postprocess(
+        Record#atm_audit_log_store_container.backend_id,
+        #{start_from => StartFrom, offset => Offset, limit => Limit},
+        ListingPostprocessor
+    ),
+
+    {EntrySeries, ProgressMarker =:= done}.
 
 
--spec update_content(record(), update_content()) -> record() | no_return().
-update_content(Record, #update_atm_store_container_content{
+-spec update_content(record(), content_update_req()) -> record() | no_return().
+update_content(Record, #atm_store_content_update_req{
     workflow_execution_auth = AtmWorkflowExecutionAuth,
     argument = ItemsArray,
     options = #atm_audit_log_store_content_update_options{function = extend}
@@ -130,7 +138,7 @@ update_content(Record, #update_atm_store_container_content{
     Logs = sanitize_items_array(AtmWorkflowExecutionAuth, LogContentDataSpec, ItemsArray),
     extend_with_sanitized_items_array(Logs, Record);
 
-update_content(Record, #update_atm_store_container_content{
+update_content(Record, #atm_store_content_update_req{
     workflow_execution_auth = AtmWorkflowExecutionAuth,
     argument = Item,
     options = #atm_audit_log_store_content_update_options{function = append}

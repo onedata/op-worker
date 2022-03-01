@@ -185,7 +185,7 @@ build_value(_Item, AtmJobCtx, #atm_task_argument_value_builder{
     end,
 
     AtmWorkflowExecutionAuth = atm_job_ctx:get_workflow_execution_auth(AtmJobCtx),
-    BrowseOpts = #{offset => 0, limit => 1},
+    BrowseOpts = #atm_single_value_store_content_browse_options{},
 
     case atm_store_api:browse_content(AtmWorkflowExecutionAuth, BrowseOpts, AtmStore) of
         {[], true} ->

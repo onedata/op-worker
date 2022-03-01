@@ -244,7 +244,7 @@ report_item_error(_AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, ItemsBatch) 
     % does not modify store document itself but only referenced infinite log
     atm_list_store_container:update_content(
         atm_workflow_execution_env:get_lane_run_exception_store_container(AtmWorkflowExecutionEnv),
-        #update_atm_store_container_content{
+        #atm_store_content_update_req{
             workflow_execution_auth = AtmWorkflowExecutionAuth,
             argument = ItemsBatch,
             options = #atm_list_store_content_update_options{function = extend}

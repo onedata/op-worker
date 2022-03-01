@@ -23,10 +23,13 @@
 -export([
     create/3,
     get_config/1,
+
     get_iterated_item_data_spec/1,
     acquire_iterator/1,
-    browse_content/3,
+
+    browse_content/2,
     update_content/2,
+
     delete/1
 ]).
 
@@ -35,9 +38,10 @@
 
 -type initial_content() :: [atm_value:expanded()] | undefined.
 
--type browse_options() :: atm_list_store_container:browse_options().
-
--type update_content() :: #update_atm_store_container_content{
+-type content_browse_req() :: #atm_store_content_browse_req{
+    options :: atm_tree_forest_store_content_browse_options:record()
+}.
+-type content_update_req() :: #atm_store_content_update_req{
     options :: atm_tree_forest_store_content_update_options:record()
 }.
 
@@ -47,7 +51,10 @@
 }).
 -type record() :: #atm_tree_forest_store_container{}.
 
--export_type([initial_content/0, browse_options/0, update_content/0, record/0]).
+-export_type([
+    initial_content/0, content_browse_req/0, content_update_req/0,
+    record/0
+]).
 
 
 %%%===================================================================
@@ -95,25 +102,38 @@ acquire_iterator(#atm_tree_forest_store_container{
     atm_tree_forest_store_container_iterator:build(ItemDataSpec, RootsIterator).
 
 
--spec browse_content(atm_workflow_execution_auth:record(), browse_options(), record()) ->
+-spec browse_content(record(), content_browse_req()) ->
     atm_store_api:browse_result() | no_return().
-browse_content(AtmWorkflowExecutionAuth, BrowseOpts, #atm_tree_forest_store_container{
-    roots_list = RootsList
+browse_content(Record, ContentBrowseReq = #atm_store_content_browse_req{
+    options = #atm_tree_forest_store_content_browse_options{
+        start_from = StartFrom,
+        offset = Offset,
+        limit  = Limit
+    }
 }) ->
-    atm_list_store_container:browse_content(AtmWorkflowExecutionAuth, BrowseOpts, RootsList).
+    atm_list_store_container:browse_content(
+        Record#atm_tree_forest_store_container.roots_list,
+        ContentBrowseReq#atm_store_content_browse_req{
+            options = #atm_list_store_content_browse_options{
+                start_from = StartFrom,
+                offset = Offset,
+                limit  = Limit
+            }
+        }
+    ).
 
 
--spec update_content(record(), update_content()) -> record() | no_return().
-update_content(Record, Operation = #update_atm_store_container_content{
+-spec update_content(record(), content_update_req()) -> record() | no_return().
+update_content(Record, UpdateReq = #atm_store_content_update_req{
     options = #atm_tree_forest_store_content_update_options{function = Function}
 }) ->
     RootsList = Record#atm_tree_forest_store_container.roots_list,
-    UpdateRootsListContent = Operation#update_atm_store_container_content{
+    RootsListContentUpdateReq = UpdateReq#atm_store_content_update_req{
         options = #atm_list_store_content_update_options{function = Function}
     },
     Record#atm_tree_forest_store_container{
         roots_list = atm_list_store_container:update_content(
-            RootsList, UpdateRootsListContent
+            RootsList, RootsListContentUpdateReq
         )
     }.
 

@@ -23,10 +23,13 @@
 -export([
     create/3,
     get_config/1,
+
     get_iterated_item_data_spec/1,
     acquire_iterator/1,
-    browse_content/3,
+
+    browse_content/2,
     update_content/2,
+
     delete/1
 ]).
 
@@ -36,14 +39,10 @@
 
 -type initial_content() :: [atm_value:expanded()] | undefined.
 
--type browse_options() :: #{
-    limit := atm_store_api:limit(),
-    start_index => atm_store_api:index(),
-    offset => atm_store_api:offset()
+-type content_browse_req() :: #atm_store_content_browse_req{
+    options :: atm_list_store_content_browse_options:record()
 }.
-%@formatter:on
-
--type update_content() :: #update_atm_store_container_content{
+-type content_update_req() :: #atm_store_content_update_req{
     options :: atm_list_store_content_update_options:record()
 }.
 
@@ -53,7 +52,10 @@
 }).
 -type record() :: #atm_list_store_container{}.
 
--export_type([initial_content/0, browse_options/0, update_content/0, record/0]).
+-export_type([
+    initial_content/0, content_browse_req/0, content_update_req/0,
+    record/0
+]).
 
 
 %%%===================================================================
@@ -71,8 +73,11 @@ create(_AtmWorkflowExecutionAuth, AtmStoreConfig, undefined) ->
     create_container(AtmStoreConfig);
 
 create(AtmWorkflowExecutionAuth, AtmAtmStoreConfig, InitialItemsArray) ->
-    ItemDataSpec = AtmAtmStoreConfig#atm_list_store_config.item_data_spec,
-    atm_value:validate(AtmWorkflowExecutionAuth, InitialItemsArray, ?ATM_ARRAY_DATA_SPEC(ItemDataSpec)),
+    atm_value:validate(
+        AtmWorkflowExecutionAuth,
+        InitialItemsArray,
+        ?ATM_ARRAY_DATA_SPEC(AtmAtmStoreConfig#atm_list_store_config.item_data_spec)
+    ),
     extend_insecure(InitialItemsArray, create_container(AtmAtmStoreConfig)).
 
 
@@ -94,31 +99,42 @@ acquire_iterator(#atm_list_store_container{
     atm_list_store_container_iterator:build(ItemDataSpec, BackendId).
 
 
--spec browse_content(atm_workflow_execution_auth:record(), browse_options(), record()) ->
+-spec browse_content(record(), content_browse_req()) ->
     atm_store_api:browse_result() | no_return().
-browse_content(AtmWorkflowExecutionAuth, BrowseOpts, #atm_list_store_container{
-    config = #atm_list_store_config{item_data_spec = ItemDataSpec},
-    backend_id = BackendId
+browse_content(Record, #atm_store_content_browse_req{
+    workflow_execution_auth = AtmWorkflowExecutionAuth,
+    options = #atm_list_store_content_browse_options{
+        start_from = StartFrom,
+        offset = Offset,
+        limit  = Limit
+    }
 }) ->
-    atm_infinite_log_based_stores_common:browse_content(
-        list_store, BackendId, BrowseOpts,
-        atm_list_store_container_iterator:gen_listing_postprocessor(
-            AtmWorkflowExecutionAuth, ItemDataSpec
-        )
-    ).
+    ListingPostprocessor = atm_list_store_container_iterator:gen_listing_postprocessor(
+        AtmWorkflowExecutionAuth, get_item_data_spec(Record)
+    ),
+    {ok, {ProgressMarker, EntrySeries}} = json_infinite_log_model:list_and_postprocess(
+        Record#atm_list_store_container.backend_id,
+        #{start_from => StartFrom, offset => Offset, limit => Limit},
+        ListingPostprocessor
+    ),
+
+    {EntrySeries, ProgressMarker =:= done}.
 
 
--spec update_content(record(), update_content()) -> record() | no_return().
-update_content(Record, #update_atm_store_container_content{
+-spec update_content(record(), content_update_req()) -> record() | no_return().
+update_content(Record, #atm_store_content_update_req{
     workflow_execution_auth = AtmWorkflowExecutionAuth,
     argument = ItemsArray,
     options = #atm_list_store_content_update_options{function = extend}
 }) ->
-    ItemDataSpec = get_item_data_spec(Record),
-    atm_value:validate(AtmWorkflowExecutionAuth, ItemsArray, ?ATM_ARRAY_DATA_SPEC(ItemDataSpec)),
+    atm_value:validate(
+        AtmWorkflowExecutionAuth,
+        ItemsArray,
+        ?ATM_ARRAY_DATA_SPEC(get_item_data_spec(Record))
+    ),
     extend_insecure(ItemsArray, Record);
 
-update_content(Record, #update_atm_store_container_content{
+update_content(Record, #atm_store_content_update_req{
     workflow_execution_auth = AtmWorkflowExecutionAuth,
     argument = Item,
     options = #atm_list_store_content_update_options{function = append}

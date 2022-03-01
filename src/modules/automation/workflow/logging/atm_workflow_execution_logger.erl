@@ -326,7 +326,7 @@ handle_logs(UpdateOptions, Logs, AtmWorkflowExecutionAuth, AtmAuditLogStoreConta
     % audit_log store update does not modify store document itself but only
     % referenced infinite log
     atm_audit_log_store_container:update_content(
-        AtmAuditLogStoreContainer, #update_atm_store_container_content{
+        AtmAuditLogStoreContainer, #atm_store_content_update_req{
             workflow_execution_auth = AtmWorkflowExecutionAuth,
             argument = Logs,
             options = UpdateOptions

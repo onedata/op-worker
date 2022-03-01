@@ -23,10 +23,13 @@
 -export([
     create/3,
     get_config/1,
+
     get_iterated_item_data_spec/1,
     acquire_iterator/1,
-    browse_content/3,
+
+    browse_content/2,
     update_content/2,
+
     delete/1
 ]).
 
@@ -36,9 +39,10 @@
 
 -type initial_content() :: undefined | atm_value:expanded().
 
--type browse_options() :: #{}.  %% for now no options are supported
-
--type update_content() :: #update_atm_store_container_content{
+-type content_browse_req() :: #atm_store_content_browse_req{
+    options :: atm_single_value_store_content_browse_options:record()
+}.
+-type content_update_req() :: #atm_store_content_update_req{
     options :: atm_single_value_store_content_update_options:record()
 }.
 
@@ -48,7 +52,10 @@
 }).
 -type record() :: #atm_single_value_store_container{}.
 
--export_type([initial_content/0, browse_options/0, update_content/0, record/0]).
+-export_type([
+    initial_content/0, content_browse_req/0, content_update_req/0,
+    record/0
+]).
 
 
 %%%===================================================================
@@ -63,9 +70,8 @@
 ) ->
     record() | no_return().
 create(_AtmWorkflowExecutionAuth, AtmStoreConfig, undefined) ->
-    #atm_single_value_store_container{
-        config = AtmStoreConfig
-    };
+    #atm_single_value_store_container{config = AtmStoreConfig};
+
 create(AtmWorkflowExecutionAuth, AtmStoreConfig, InitialContent) ->
     ItemDataSpec = AtmStoreConfig#atm_single_value_store_config.item_data_spec,
     atm_value:validate(AtmWorkflowExecutionAuth, InitialContent, ItemDataSpec),
@@ -96,17 +102,24 @@ acquire_iterator(#atm_single_value_store_container{
     atm_single_value_store_container_iterator:build(CompressedItem, ItemDataSpec).
 
 
--spec browse_content(atm_workflow_execution_auth:record(), browse_options(), record()) ->
+-spec browse_content(record(), content_browse_req()) ->
     atm_store_api:browse_result() | no_return().
-browse_content(_AtmWorkflowExecutionAuth, _BrowseOpts, #atm_single_value_store_container{
-    compressed_item = undefined
-}) ->
+browse_content(
+    #atm_single_value_store_container{compressed_item = undefined},
+    #atm_store_content_browse_req{options = #atm_single_value_store_content_browse_options{}}
+) ->
     {[], true};
 
-browse_content(AtmWorkflowExecutionAuth, _BrowseOpts, #atm_single_value_store_container{
-    config = #atm_single_value_store_config{item_data_spec = ItemDataSpec},
-    compressed_item = CompressedItem
-}) ->
+browse_content(
+    #atm_single_value_store_container{
+        config = #atm_single_value_store_config{item_data_spec = ItemDataSpec},
+        compressed_item = CompressedItem
+    },
+    #atm_store_content_browse_req{
+        workflow_execution_auth = AtmWorkflowExecutionAuth,
+        options = #atm_single_value_store_content_browse_options{}
+    }
+) ->
     case atm_value:expand(AtmWorkflowExecutionAuth, CompressedItem, ItemDataSpec) of
         {ok, _} = Result ->
             {[{<<>>, Result}], true};
@@ -115,8 +128,8 @@ browse_content(AtmWorkflowExecutionAuth, _BrowseOpts, #atm_single_value_store_co
     end.
 
 
--spec update_content(record(), update_content()) -> record() | no_return().
-update_content(Record, #update_atm_store_container_content{
+-spec update_content(record(), content_update_req()) -> record() | no_return().
+update_content(Record, #atm_store_content_update_req{
     workflow_execution_auth = AtmWorkflowExecutionAuth,
     argument = Item,
     options = #atm_single_value_store_content_update_options{}
