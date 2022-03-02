@@ -29,15 +29,12 @@
 
 -type initial_content() :: atm_store_container:initial_content().
 
+-export_type([initial_content/0]).
+
+%% TODO rm
 % Index of automation:item() stored in atm_store_container that uniquely identifies it.
 -type index() :: binary().
--type offset() :: integer().
--type limit() :: pos_integer().
-
--type browse_result() :: {[{index(), {ok, automation:item()} | errors:error()}], IsLast :: boolean()}.
-
--export_type([initial_content/0]).
--export_type([index/0, offset/0, limit/0, browse_result/0]).
+-export_type([index/0]).
 
 
 %%%===================================================================
@@ -128,7 +125,7 @@ unfreeze(AtmStoreId) ->
     atm_store_content_browse_options:record(),
     atm_store:id() | atm_store:record()
 ) ->
-    browse_result() | no_return().
+    atm_store_content_browse_result:record() | no_return().
 browse_content(AtmWorkflowExecutionAuth, BrowseOpts, #atm_store{container = AtmStoreContainer}) ->
     atm_store_container:browse_content(AtmStoreContainer, #atm_store_content_browse_req{
         workflow_execution_auth = AtmWorkflowExecutionAuth,

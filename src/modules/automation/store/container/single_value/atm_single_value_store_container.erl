@@ -103,12 +103,12 @@ acquire_iterator(#atm_single_value_store_container{
 
 
 -spec browse_content(record(), content_browse_req()) ->
-    atm_store_api:browse_result() | no_return().
+    atm_single_value_store_content_browse_result:record() | no_return().
 browse_content(
     #atm_single_value_store_container{compressed_item = undefined},
     #atm_store_content_browse_req{options = #atm_single_value_store_content_browse_options{}}
 ) ->
-    {[], true};
+    #atm_single_value_store_content_browse_result{item = undefined};
 
 browse_content(
     #atm_single_value_store_container{
@@ -120,12 +120,11 @@ browse_content(
         options = #atm_single_value_store_content_browse_options{}
     }
 ) ->
-    case atm_value:expand(AtmWorkflowExecutionAuth, CompressedItem, ItemDataSpec) of
-        {ok, _} = Result ->
-            {[{<<>>, Result}], true};
-        {error, _} ->
-            {[{<<>>, ?ERROR_FORBIDDEN}], true}
-    end.
+    Item = case atm_value:expand(AtmWorkflowExecutionAuth, CompressedItem, ItemDataSpec) of
+        {ok, _} = Result -> Result;
+        {error, _} -> ?ERROR_FORBIDDEN
+    end,
+    #atm_single_value_store_content_browse_result{item = Item}.
 
 
 -spec update_content(record(), content_update_req()) -> record() | no_return().

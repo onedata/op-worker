@@ -103,7 +103,7 @@ acquire_iterator(#atm_tree_forest_store_container{
 
 
 -spec browse_content(record(), content_browse_req()) ->
-    atm_store_api:browse_result() | no_return().
+    atm_tree_forest_store_content_browse_result:record() | no_return().
 browse_content(Record, ContentBrowseReq = #atm_store_content_browse_req{
     options = #atm_tree_forest_store_content_browse_options{
         start_from = StartFrom,
@@ -111,7 +111,7 @@ browse_content(Record, ContentBrowseReq = #atm_store_content_browse_req{
         limit  = Limit
     }
 }) ->
-    atm_list_store_container:browse_content(
+    Result = atm_list_store_container:browse_content(
         Record#atm_tree_forest_store_container.roots_list,
         ContentBrowseReq#atm_store_content_browse_req{
             options = #atm_list_store_content_browse_options{
@@ -120,7 +120,11 @@ browse_content(Record, ContentBrowseReq = #atm_store_content_browse_req{
                 limit  = Limit
             }
         }
-    ).
+    ),
+    #atm_tree_forest_store_content_browse_result{
+        tree_roots = Result#atm_list_store_content_browse_result.items,
+        is_last = Result#atm_list_store_content_browse_result.is_last
+    }.
 
 
 -spec update_content(record(), content_update_req()) -> record() | no_return().

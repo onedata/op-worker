@@ -97,7 +97,7 @@
 -callback acquire_iterator(record()) -> atm_store_container_iterator:record().
 
 -callback browse_content(record(), content_browse_req()) ->
-    atm_store_api:browse_result() | no_return().  %% TODO browse result
+    atm_store_content_browse_result:record() | no_return().
 
 -callback update_content(record(), content_update_req()) -> record() | no_return().
 
@@ -146,7 +146,7 @@ acquire_iterator(AtmStoreContainer) ->
 
 
 -spec browse_content(record(), content_browse_req()) ->
-    atm_store_api:browse_result() | no_return().
+    atm_store_content_browse_result:record() | no_return().
 browse_content(AtmStoreContainer, AtmStoreContentBrowseReq) ->
     RecordType = utils:record_type(AtmStoreContainer),
     RecordType:browse_content(AtmStoreContainer, AtmStoreContentBrowseReq).

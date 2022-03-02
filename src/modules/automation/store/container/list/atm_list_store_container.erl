@@ -100,7 +100,7 @@ acquire_iterator(#atm_list_store_container{
 
 
 -spec browse_content(record(), content_browse_req()) ->
-    atm_store_api:browse_result() | no_return().
+    atm_list_store_content_browse_result:record() | no_return().
 browse_content(Record, #atm_store_content_browse_req{
     workflow_execution_auth = AtmWorkflowExecutionAuth,
     options = #atm_list_store_content_browse_options{
@@ -117,8 +117,10 @@ browse_content(Record, #atm_store_content_browse_req{
         #{start_from => StartFrom, offset => Offset, limit => Limit},
         ListingPostprocessor
     ),
-
-    {EntrySeries, ProgressMarker =:= done}.
+    #atm_list_store_content_browse_result{
+        items = EntrySeries,
+        is_last = ProgressMarker =:= done
+    }.
 
 
 -spec update_content(record(), content_update_req()) -> record() | no_return().

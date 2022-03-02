@@ -118,13 +118,12 @@ acquire_iterator(#atm_range_store_container{
 
 
 -spec browse_content(record(), content_browse_req()) ->
-    atm_store_api:browse_result() | no_return().
+    atm_range_store_content_browse_result:record() | no_return().
 browse_content(
     #atm_range_store_container{start_num = StartNum, end_num = EndNum, step = Step},
     #atm_store_content_browse_req{options = #atm_range_store_content_browse_options{}}
 ) ->
-    Content = #{<<"start">> => StartNum, <<"end">> => EndNum, <<"step">> => Step},
-    {[{<<>>, {ok, Content}}], true}.
+    #atm_range_store_content_browse_result{range = {StartNum, EndNum, Step}}.
 
 
 -spec update_content(record(), content_update_req()) -> no_return().
