@@ -8,13 +8,14 @@
 %%% @doc
 %%% Module defining types describing elements of directory statistics
 %%% collection.
+%%% TODO - opisac ze tu jest lista wszystkich kolekcji i trzeba ja uzupelniac w celu optymalizacji inicjalizacji dla istniejacych space
 %%% @end
 %%%-------------------------------------------------------------------
 -module(dir_stats_collection).
 -author("Michal Wrzeszcz").
 
 
--export([consolidate/3, with/2]).
+-export([consolidate/3, with/2, list/0]).
 
 
 -type type() :: module().
@@ -27,6 +28,9 @@
 -type stats_selector() :: [stat_name()] | all.
 
 -export_type([type/0, stat_name/0, stat_value/0, collection/0, stats_selector/0]).
+
+
+-define(ALL_COLLECTIONS, [dir_size_stats, dir_update_time_stats]).
 
 
 %%%===================================================================
@@ -43,3 +47,7 @@ with(all, Collection) ->
     Collection;
 with(StatNames, Collection) ->
     maps:with(StatNames, Collection).
+
+
+list() ->
+    ?ALL_COLLECTIONS.

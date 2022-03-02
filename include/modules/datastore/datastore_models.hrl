@@ -1064,7 +1064,9 @@
 
 
 -record(dir_stats_collector_config, {
-    status :: dir_stats_collector_config:status()
+    status :: dir_stats_collector_config:status(),
+    traverse_num = 0 :: non_neg_integer(),
+    next_status_change_order :: dir_stats_collector_config:status_change_order() | undefined
 }).
 
 

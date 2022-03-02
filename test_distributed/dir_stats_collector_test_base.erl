@@ -131,7 +131,7 @@ init(Config) ->
 
     SpaceId = lfm_test_utils:get_user1_first_space_id(Config),
     lists:foreach(fun(W) ->
-        rpc:call(W, dir_stats_collector_config, init_for_space, [SpaceId])
+        rpc:call(W, dir_stats_collector_config, init_for_empty_space, [SpaceId])
     end, initializer:get_different_domain_workers(Config)),
 
 
