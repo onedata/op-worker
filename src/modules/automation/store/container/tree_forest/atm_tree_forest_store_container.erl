@@ -105,20 +105,12 @@ acquire_iterator(#atm_tree_forest_store_container{
 -spec browse_content(record(), content_browse_req()) ->
     atm_tree_forest_store_content_browse_result:record() | no_return().
 browse_content(Record, ContentBrowseReq = #atm_store_content_browse_req{
-    options = #atm_tree_forest_store_content_browse_options{
-        start_from = StartFrom,
-        offset = Offset,
-        limit  = Limit
-    }
+    options = #atm_tree_forest_store_content_browse_options{listing_opts = ListingOpts}
 }) ->
     Result = atm_list_store_container:browse_content(
         Record#atm_tree_forest_store_container.roots_list,
         ContentBrowseReq#atm_store_content_browse_req{
-            options = #atm_list_store_content_browse_options{
-                start_from = StartFrom,
-                offset = Offset,
-                limit  = Limit
-            }
+            options = #atm_list_store_content_browse_options{listing_opts = ListingOpts}
         }
     ),
     #atm_tree_forest_store_content_browse_result{

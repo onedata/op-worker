@@ -55,7 +55,7 @@
 
 -record(atm_audit_log_store_container, {
     config :: atm_audit_log_store_config:record(),
-    backend_id :: json_infinite_log_model:id()
+    backend_id :: atm_store_container_infinite_log_backend:id()
 }).
 -type record() :: #atm_audit_log_store_container{}.
 
@@ -109,22 +109,18 @@ acquire_iterator(#atm_audit_log_store_container{
     atm_audit_log_store_content_browse_result:record() | no_return().
 browse_content(Record, #atm_store_content_browse_req{
     workflow_execution_auth = AtmWorkflowExecutionAuth,
-    options = #atm_audit_log_store_content_browse_options{
-        start_from = StartFrom,
-        offset = Offset,
-        limit  = Limit
-    }
+    options = #atm_audit_log_store_content_browse_options{listing_opts = ListingOpts}
 }) ->
-    ListingPostprocessor = atm_list_store_container_iterator:gen_listing_postprocessor(
+    ListingPostprocessor = atm_audit_log_store_container_iterator:gen_listing_postprocessor(
         AtmWorkflowExecutionAuth, get_log_content_data_spec(Record)
     ),
-    {ok, {ProgressMarker, EntrySeries}} = json_infinite_log_model:list_and_postprocess(
+    {ok, {ProgressMarker, Entries}} = atm_store_container_infinite_log_backend:list_entries(
         Record#atm_audit_log_store_container.backend_id,
-        #{start_from => StartFrom, offset => Offset, limit => Limit},
+        ListingOpts,
         ListingPostprocessor
     ),
     #atm_audit_log_store_content_browse_result{
-        logs = EntrySeries,
+        logs = Entries,
         is_last = ProgressMarker =:= done
     }.
 
@@ -152,7 +148,7 @@ update_content(Record, #atm_store_content_update_req{
 
 -spec delete(record()) -> ok.
 delete(#atm_audit_log_store_container{backend_id = BackendId}) ->
-    json_infinite_log_model:destroy(BackendId).
+    atm_store_container_infinite_log_backend:delete(BackendId).
 
 
 %%%===================================================================
@@ -197,10 +193,9 @@ db_decode(
 %% @private
 -spec create_container(atm_audit_log_store_config:record()) -> record().
 create_container(AtmStoreConfig) ->
-    {ok, Id} = json_infinite_log_model:create(#{}),
     #atm_audit_log_store_container{
         config = AtmStoreConfig,
-        backend_id = Id
+        backend_id = atm_store_container_infinite_log_backend:create()
     }.
 
 
@@ -256,7 +251,7 @@ append_sanitized_item(Log, Record = #atm_audit_log_store_container{
     backend_id = BackendId
 }) ->
     {LogContent, LogWithoutContent} = maps:take(<<"content">>, Log),
-    ok = json_infinite_log_model:append(BackendId, LogWithoutContent#{
+    atm_store_container_infinite_log_backend:append(BackendId, LogWithoutContent#{
         <<"compressedContent">> => atm_value:compress(LogContent, LogContentDataSpec)
     }),
     Record.

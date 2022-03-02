@@ -36,19 +36,9 @@ to_json(#atm_tree_forest_store_content_browse_result{
     is_last = IsLast
 }) ->
     #{
-        <<"treeRoots">> => lists:map(fun
-            ({Index, {ok, Value}}) ->
-                #{
-                    <<"index">> => Index,
-                    <<"success">> => true,
-                    <<"value">> => Value
-                };
-            ({Index, {error, _} = Error}) ->
-                #{
-                    <<"index">> => Index,
-                    <<"success">> => false,
-                    <<"error">> => errors:to_json(Error)
-                }
-        end, TreeRoots),
+        <<"treeRoots">> => lists:map(
+            fun atm_store_container_infinite_log_backend:entry_to_json/1,
+            TreeRoots
+        ),
         <<"isLast">> => IsLast
     }.

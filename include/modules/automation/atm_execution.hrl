@@ -167,24 +167,20 @@
 }).
 
 -record(atm_audit_log_store_content_browse_options, {
-    start_from :: atm_audit_log_store_content_browse_options:start_from(),
-    offset :: atm_audit_log_store_content_browse_options:offset(),
-    limit :: atm_audit_log_store_content_browse_options:limit()
+    listing_opts :: atm_store_container_infinite_log_backend:extended_listing_opts()
 }).
 
 -record(atm_audit_log_store_content_browse_result, {
-    logs :: {atm_store_api:index(), {ok, atm_value:expanded()} | errors:error()},
+    logs :: [atm_store_container_infinite_log_backend:entry()],
     is_last :: boolean()
 }).
 
 -record(atm_list_store_content_browse_options, {
-    start_from :: atm_list_store_content_browse_options:start_from(),
-    offset :: atm_list_store_content_browse_options:offset(),
-    limit :: atm_list_store_content_browse_options:limit()
+    listing_opts :: atm_store_container_infinite_log_backend:basic_listing_opts()
 }).
 
 -record(atm_list_store_content_browse_result, {
-    items :: {atm_store_api:index(), {ok, atm_value:expanded()} | errors:error()},
+    items :: [atm_store_container_infinite_log_backend:entry()],
     is_last :: boolean()
 }).
 
@@ -201,13 +197,11 @@
 }).
 
 -record(atm_tree_forest_store_content_browse_options, {
-    start_from :: atm_tree_forest_store_content_browse_options:start_from(),
-    offset :: atm_tree_forest_store_content_browse_options:offset(),
-    limit :: atm_tree_forest_store_content_browse_options:limit()
+    listing_opts :: atm_store_container_infinite_log_backend:basic_listing_opts()
 }).
 
 -record(atm_tree_forest_store_content_browse_result, {
-    tree_roots :: {atm_store_api:index(), {ok, atm_value:expanded()} | errors:error()},
+    tree_roots :: [atm_store_container_infinite_log_backend:entry()],
     is_last :: boolean()
 }).
 

@@ -36,19 +36,9 @@ to_json(#atm_list_store_content_browse_result{
     is_last = IsLast
 }) ->
     #{
-        <<"items">> => lists:map(fun
-            ({Index, {ok, Value}}) ->
-                #{
-                    <<"index">> => Index,
-                    <<"success">> => true,
-                    <<"value">> => Value
-                };
-            ({Index, {error, _} = Error}) ->
-                #{
-                    <<"index">> => Index,
-                    <<"success">> => false,
-                    <<"error">> => errors:to_json(Error)
-                }
-        end, Items),
+        <<"items">> => lists:map(
+            fun atm_store_container_infinite_log_backend:entry_to_json/1,
+            Items
+        ),
         <<"isLast">> => IsLast
     }.

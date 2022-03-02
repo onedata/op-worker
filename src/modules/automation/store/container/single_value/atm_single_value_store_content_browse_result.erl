@@ -32,16 +32,16 @@
 
 -spec to_json(record()) -> json_utils:json_map().
 to_json(#atm_single_value_store_content_browse_result{item = undefined}) ->
-    #{<<"item">> => null};
+    #{<<"content">> => null};
 
 to_json(#atm_single_value_store_content_browse_result{item = {ok, Item}}) ->
-    #{<<"item">> => #{
+    #{<<"content">> => #{
         <<"success">> => true,
         <<"value">> => Item
     }};
 
 to_json(#atm_single_value_store_content_browse_result{item = Error = {error, _}}) ->
-    #{<<"item">> => #{
+    #{<<"content">> => #{
         <<"success">> => false,
         <<"value">> => errors:to_json(Error)
     }}.

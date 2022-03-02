@@ -31,11 +31,6 @@
 
 -export_type([initial_content/0]).
 
-%% TODO rm
-% Index of automation:item() stored in atm_store_container that uniquely identifies it.
--type index() :: binary().
--export_type([index/0]).
-
 
 %%%===================================================================
 %%% API
