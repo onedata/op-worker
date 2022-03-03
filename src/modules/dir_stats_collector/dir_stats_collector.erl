@@ -366,7 +366,7 @@ handle_call(#dsc_flush_request{guid = Guid, collection_type = CollectionType, pr
 handle_call(?INITIALIZE(Guid), State) ->
     UpdatedState = lists:foldl(fun(CollectionType, StateAcc) ->
         reset_last_used_timer(Guid, CollectionType, prepare_initialization_data, StateAcc)
-    end, State, dir_stats_collection:list()),
+    end, State, dir_stats_collection:list_types()),
 
     {ok, initialize_dir_stats(UpdatedState)};
 
@@ -434,8 +434,8 @@ handle_cast(Info, State) ->
     State.
 
 
-set_collecting_active(#cached_dir_stats{initialization_data = InitializationData} = CachedDirStats) ->
-    CurrentStats = dir_stats_initializer:get_stats(InitializationData),
+set_collecting_active(#cached_dir_stats{initialization_data = InitializationData} = CachedDirStats, CollectionType) ->
+    CurrentStats = dir_stats_initializer:get_stats(InitializationData, CollectionType),
     CachedDirStats#cached_dir_stats{
         current_stats = CurrentStats,
         stat_updates_acc_for_parent = CurrentStats,
@@ -567,7 +567,7 @@ flush_all(#state{
     {HasSucceeded :: boolean(), state()}.
 flush_cached_dir_stats(CachedDirStatsKey, _, State) when not is_map_key(CachedDirStatsKey, State#state.dir_stats_cache) ->
     {true, State};
-flush_cached_dir_stats(CachedDirStatsKey, PruningStrategy, State) ->
+flush_cached_dir_stats({_, CollectionType} = CachedDirStatsKey, PruningStrategy, State) ->
     #cached_dir_stats{initialization_data = InitializationData} = CachedDirStats =
         maps:get(CachedDirStatsKey, State#state.dir_stats_cache),
     case get_collection_status(CachedDirStats) of
@@ -591,7 +591,7 @@ flush_cached_dir_stats(CachedDirStatsKey, PruningStrategy, State) ->
             case dir_stats_initializer:are_stats_ready(InitializationData) of
                 true ->
                     UpdatedState = update_cached_dir_stats(
-                        CachedDirStatsKey, set_collecting_active(CachedDirStats), State),
+                        CachedDirStatsKey, set_collecting_active(CachedDirStats, CollectionType), State),
                     flush_cached_dir_stats(CachedDirStatsKey, PruningStrategy, UpdatedState);
                 false ->
                     {false, State}

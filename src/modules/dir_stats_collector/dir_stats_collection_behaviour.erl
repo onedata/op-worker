@@ -14,9 +14,6 @@
 -author("Michal Wrzeszcz").
 
 
--include_lib("ctool/include/errors.hrl").
-
-
 %%%===================================================================
 %%% Callbacks
 %%%===================================================================
@@ -57,7 +54,19 @@
 -callback delete(file_id:file_guid()) -> ok | no_return().
 
 
--callback init_dir(file_id:file_guid()) -> ok | no_return().
+%%--------------------------------------------------------------------
+%% @doc
+%% Init collection for directory not including statistics of children (for each child init_child will be called).
+%% @end
+%%--------------------------------------------------------------------
+-callback init_dir(file_id:file_guid()) -> dir_stats_collection:collection() | no_return().
 
 
--callback init_child(file_id:file_guid()) -> ok | no_return().
+%%--------------------------------------------------------------------
+%% @doc
+%% When collection is being initialized, init_child/1 callback is called for each child to get
+%% statistics connected with this child.
+%% NOTE: if child is directory, returned statistics should not include statistics of this directory children.
+%% @end
+%%--------------------------------------------------------------------
+-callback init_child(file_id:file_guid()) -> dir_stats_collection:collection() | no_return().

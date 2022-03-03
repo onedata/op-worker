@@ -1065,7 +1065,9 @@
 
 -record(dir_stats_collector_config, {
     status :: dir_stats_collector_config:status(),
-    traverse_num = 0 :: non_neg_integer(),
+    traverse_num = 0 :: non_neg_integer(), % number of last dir_stats_initialization_traverse
+    % order of next status check if it cannot be executed immediately
+    % (previous status check operation is still ongoing)
     next_status_change_order :: dir_stats_collector_config:status_change_order() | undefined
 }).
 

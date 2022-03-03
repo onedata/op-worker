@@ -8,14 +8,17 @@
 %%% @doc
 %%% Module defining types describing elements of directory statistics
 %%% collection.
-%%% TODO - opisac ze tu jest lista wszystkich kolekcji i trzeba ja uzupelniac w celu optymalizacji inicjalizacji dla istniejacych space
+%%% NOTE: This module provides information about all collection types.
+%%%       It is needed when enabling statistics counting for not empty
+%%%       spaces. When new type of collection is created, it has to be
+%%%       added to ALL_COLLECTION_TYPES macro.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(dir_stats_collection).
 -author("Michal Wrzeszcz").
 
 
--export([consolidate/3, with/2, list/0]).
+-export([consolidate/3, with/2, list_types/0]).
 
 
 -type type() :: module().
@@ -30,7 +33,7 @@
 -export_type([type/0, stat_name/0, stat_value/0, collection/0, stats_selector/0]).
 
 
--define(ALL_COLLECTIONS, [dir_size_stats, dir_update_time_stats]).
+-define(ALL_COLLECTION_TYPES, [dir_size_stats, dir_update_time_stats]).
 
 
 %%%===================================================================
@@ -49,5 +52,6 @@ with(StatNames, Collection) ->
     maps:with(StatNames, Collection).
 
 
-list() ->
-    ?ALL_COLLECTIONS.
+-spec list_types() -> [type()].
+list_types() ->
+    ?ALL_COLLECTION_TYPES.

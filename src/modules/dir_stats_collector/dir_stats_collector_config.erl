@@ -229,13 +229,15 @@ get_record_struct(1) ->
     ]};
 get_record_struct(2) ->
     {record, [
-        {status, atom}
+        {status, atom},
+        {traverse_num, integer},
+        {next_status_change_order, atom}
     ]}.
 
 
 -spec upgrade_record(datastore_model:record_version(), datastore_model:record()) ->
     {datastore_model:record_version(), datastore_model:record()}.
 upgrade_record(1, {?MODULE, true = _Enabled}) ->
-    {2, {?MODULE, enabled}};
+    {2, {?MODULE, enabled, 0, undefined}};
 upgrade_record(1, {?MODULE, false = _Enabled}) ->
-    {2, {?MODULE, disabled}}.
+    {2, {?MODULE, disabled, 0, undefined}}.

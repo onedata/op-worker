@@ -109,7 +109,7 @@ task_finished(TaskId, Pool) ->
     }} = traverse_task:get_additional_data(Pool, TaskId),
     space_unsupport:report_cleanup_traverse_finished(SpaceId, StorageId).
 
--spec get_job(traverse:job_id() | tree_traverse_job:doc()) ->
+-spec get_job(traverse:job_id())->
     {ok, tree_traverse:master_job(), traverse:pool(), task_id()}  | {error, term()}.
 get_job(DocOrID) ->
     tree_traverse:get_job(DocOrID).

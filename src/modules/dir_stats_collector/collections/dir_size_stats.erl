@@ -194,10 +194,12 @@ delete(Guid) ->
     end.
 
 
+-spec init_dir(file_id:file_guid()) -> dir_stats_collection:collection().
 init_dir(Guid) ->
     gen_empty_stats_collection(Guid).
 
 
+-spec init_child(file_id:file_guid()) -> dir_stats_collection:collection().
 init_child(Guid) ->
     EmptyCollection = gen_empty_stats_collection(Guid),
     case file_meta:get_including_deleted(file_id:guid_to_uuid(Guid)) of
@@ -206,7 +208,7 @@ init_child(Guid) ->
                 ?DIRECTORY_TYPE ->
                     EmptyCollection#{?DIR_COUNT => 1};
                 _ ->
-                    {FileSizes, _} = file_ctx:get_file_sizes_summary(file_ctx:new_by_guid(Guid)),
+                    {FileSizes, _} = file_ctx:get_file_size_summary(file_ctx:new_by_guid(Guid)),
                     lists:foldl(fun
                         ({total, Size}, Acc) -> Acc#{?TOTAL_SIZE => Size};
                         ({StorageId, Size}, Acc) -> Acc#{?SIZE_ON_STORAGE(StorageId) => Size}

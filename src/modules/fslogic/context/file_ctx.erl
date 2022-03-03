@@ -97,7 +97,7 @@
     get_or_create_local_file_location_doc/1, get_or_create_local_file_location_doc/2,
     get_or_create_local_regular_file_location_doc/3,
     get_file_location_ids/1, get_file_location_docs/1, get_file_location_docs/2,
-    get_active_perms_type/2, get_acl/1, get_mode/1, get_file_size/1, get_file_sizes_summary/1,
+    get_active_perms_type/2, get_acl/1, get_mode/1, get_file_size/1, get_file_size_summary/1,
     get_replication_status_and_size/1, get_file_size_from_remote_locations/1, get_owner/1,
     get_local_storage_file_size/1
 ]).
@@ -959,8 +959,8 @@ get_file_size(FileCtx) ->
             get_file_size_from_remote_locations(FileCtx2)
     end.
 
--spec get_file_sizes_summary(ctx() | file_meta:uuid()) -> {[{total | storage:id(), non_neg_integer()}], ctx()}.
-get_file_sizes_summary(FileCtx) ->
+-spec get_file_size_summary(ctx() | file_meta:uuid()) -> {[{total | storage:id(), non_neg_integer()}], ctx()}.
+get_file_size_summary(FileCtx) ->
     case get_local_file_location_doc(FileCtx, true) of
         {#document{value = #file_location{size = undefined, storage_id = StorageId}} = Doc, FileCtx2} ->
             {FL, _} = get_local_file_location_doc(FileCtx, true),

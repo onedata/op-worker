@@ -114,7 +114,7 @@ task_finished(TaskId, _Pool) ->
     tree_traverse_session:close_for_task(TaskId),
     ?debug("dir deletion job ~p finished", [TaskId]).
 
--spec get_job(traverse:job_id() | tree_traverse_job:doc()) ->
+-spec get_job(traverse:job_id())->
     {ok, tree_traverse:master_job(), tree_traverse:pool(), id()}  | {error, term()}.
 get_job(DocOrId) ->
     tree_traverse:get_job(DocOrId).
