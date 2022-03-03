@@ -29,17 +29,17 @@
 %% tests
 -export([
     create_test/1,
-    apply_operation_test/1,
+    update_content_test/1,
     iterator_test/1,
-    browse_test/1
+    browse_content_test/1
 ]).
 
 groups() -> [
     {all_tests, [parallel], [
         create_test,
-        apply_operation_test,
+        update_content_test,
         iterator_test,
-        browse_test
+        browse_content_test
     ]}
 ].
 
@@ -100,7 +100,7 @@ create_test(_Config) ->
     end, ExampleAtmStoreConfigs).
 
 
-apply_operation_test(_Config) ->
+update_content_test(_Config) ->
     AtmWorkflowExecutionAuth = create_workflow_execution_auth(),
 
     lists:foreach(fun(Config = #atm_single_value_store_config{item_data_spec = ItemDataSpec}) ->
@@ -119,21 +119,14 @@ apply_operation_test(_Config) ->
         {ok, AtmStoreId} = ?extract_key(?rpc(atm_store_api:create(
             AtmWorkflowExecutionAuth, InitialItem, AtmStoreSchema
         ))),
-
-        % Assert all operations but 'set' are unsupported
-        lists:foreach(fun(Operation) ->
-            ?assertEqual(?ERROR_NOT_SUPPORTED, ?rpc(catch atm_store_api:apply_operation(
-                AtmWorkflowExecutionAuth, Operation, NewItem, #{}, AtmStoreId
-            ))),
-            ?assertMatch(FullyExpandedInitialItem, get_content(AtmWorkflowExecutionAuth, AtmStoreId))
-        end, atm_task_schema_result_mapper:all_dispatch_functions() -- [set]),
+        UpdateOpts = #atm_single_value_store_content_update_options{},
 
         % Assert set with invalid item should fail
         InvalidItem = gen_invalid_data(AtmWorkflowExecutionAuth, ItemDataSpec),
         ?assertEqual(
             ?ERROR_ATM_DATA_TYPE_UNVERIFIED(InvalidItem, ItemDataSpec#atm_data_spec.type),
-            ?rpc(catch atm_store_api:apply_operation(
-                AtmWorkflowExecutionAuth, set, InvalidItem, #{}, AtmStoreId
+            ?rpc(catch atm_store_api:update_content(
+                AtmWorkflowExecutionAuth, InvalidItem, UpdateOpts, AtmStoreId
             ))
         ),
         ?assertMatch(FullyExpandedInitialItem, get_content(AtmWorkflowExecutionAuth, AtmStoreId)),
@@ -142,8 +135,8 @@ apply_operation_test(_Config) ->
         ?rpc(atm_store_api:freeze(AtmStoreId)),
         ?assertEqual(
             ?ERROR_ATM_STORE_FROZEN(AtmStoreSchema#atm_store_schema.id),
-            ?rpc(catch atm_store_api:apply_operation(
-                AtmWorkflowExecutionAuth, set, NewItem, #{}, AtmStoreId
+            ?rpc(catch atm_store_api:update_content(
+                AtmWorkflowExecutionAuth, NewItem, UpdateOpts, AtmStoreId
             ))
         ),
         ?assertMatch(FullyExpandedInitialItem, get_content(AtmWorkflowExecutionAuth, AtmStoreId)),
@@ -152,7 +145,7 @@ apply_operation_test(_Config) ->
         ?rpc(atm_store_api:unfreeze(AtmStoreId)),
         ?assertEqual(
             ok,
-            ?rpc(atm_store_api:apply_operation(AtmWorkflowExecutionAuth, set, NewItem, #{}, AtmStoreId))
+            ?rpc(atm_store_api:update_content(AtmWorkflowExecutionAuth, NewItem, UpdateOpts, AtmStoreId))
         ),
         ?assertMatch(FullyExpandedNewItem, get_content(AtmWorkflowExecutionAuth, AtmStoreId))
 
@@ -201,7 +194,7 @@ iterator_test(_Config) ->
     end, example_configs()).
 
 
-browse_test(_Config) ->
+browse_content_test(_Config) ->
     AtmWorkflowExecutionAuth = create_workflow_execution_auth(),
 
     lists:foreach(fun(Config = #atm_single_value_store_config{item_data_spec = ItemDataSpec}) ->
@@ -210,7 +203,7 @@ browse_test(_Config) ->
             AtmWorkflowExecutionAuth, undefined, AtmStoreSchema
         ))),
         ?assertEqual(
-            {[], true},
+            #atm_single_value_store_content_browse_result{item = undefined},
             ?rpc(atm_store_api:browse_content(AtmWorkflowExecutionAuth, #{}, AtmStoreId))
         ),
 
@@ -219,7 +212,7 @@ browse_test(_Config) ->
         ExpandedItem = compress_and_expand_data(AtmWorkflowExecutionAuth, Item, ItemDataSpec),
 
         ?assertEqual(
-            {[{<<>>, {ok, ExpandedItem}}], true},
+            #atm_single_value_store_content_browse_result{item = {ok, ExpandedItem}},
             ?rpc(atm_store_api:browse_content(AtmWorkflowExecutionAuth, #{}, AtmStoreId))
         )
 
@@ -293,17 +286,23 @@ gen_invalid_data(AtmWorkflowExecutionAuth, ItemDataSpec) ->
 -spec set_item(atm_workflow_execution_auth:record(), atm_value:expanded(), atm_store:id()) ->
     ok.
 set_item(AtmWorkflowExecutionAuth, Item, AtmStoreId) ->
-    ?rpc(atm_store_api:apply_operation(AtmWorkflowExecutionAuth, set, Item, #{}, AtmStoreId)).
+    ?rpc(atm_store_api:update_content(
+        AtmWorkflowExecutionAuth,
+        Item,
+        #atm_single_value_store_content_update_options{},
+        AtmStoreId
+    )).
 
 
 %% @private
 -spec get_content(atm_workflow_execution_auth:record(), atm_store:id()) ->
     undefined | atm_value:expanded().
 get_content(AtmWorkflowExecutionAuth, AtmStoreId) ->
-    case ?rpc(atm_store_api:browse_content(AtmWorkflowExecutionAuth, #{}, AtmStoreId)) of
-        {[], true} ->
+    BrowseOpts = #atm_single_value_store_content_browse_options{},
+    case ?rpc(atm_store_api:browse_content(AtmWorkflowExecutionAuth, BrowseOpts, AtmStoreId)) of
+        #atm_single_value_store_content_browse_result{item = undefined} ->
             undefined;
-        {[{_, {ok, Item}}], true} ->
+        #atm_single_value_store_content_browse_result{item = {ok, Item}} ->
             Item
     end.
 
