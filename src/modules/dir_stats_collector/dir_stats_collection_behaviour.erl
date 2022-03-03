@@ -14,6 +14,9 @@
 -author("Michal Wrzeszcz").
 
 
+-include_lib("ctool/include/errors.hrl").
+
+
 %%%===================================================================
 %%% Callbacks
 %%%===================================================================
@@ -52,3 +55,9 @@
 %% @end
 %%--------------------------------------------------------------------
 -callback delete(file_id:file_guid()) -> ok | no_return().
+
+
+-callback init_dir(file_id:file_guid()) -> ok | no_return().
+
+
+-callback init_child(file_id:file_guid()) -> ok | no_return().

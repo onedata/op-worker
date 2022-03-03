@@ -27,7 +27,7 @@
 -export([report_update_of_dir/2, report_update_of_nearest_dir/2, get_update_time/1, delete_stats/1]).
 
 %% dir_stats_collection_behaviour callbacks
--export([acquire/1, consolidate/3, save/2, delete/1]).
+-export([acquire/1, consolidate/3, save/2, delete/1, init_dir/1, init_child/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1]).
@@ -64,7 +64,7 @@ report_update_of_nearest_dir(Guid, Time) ->
 
 
 -spec get_update_time(file_id:file_guid()) ->
-    {ok, times:time()} | ?ERROR_INTERNAL_SERVER_ERROR | ?ERROR_DIR_STATS_DISABLED_FOR_SPACE.
+    {ok, times:time()} | ?ERROR_INTERNAL_SERVER_ERROR | ?ERROR_DIR_STATS_DISABLED_FOR_SPACE | ?ERROR_FORBIDDEN.
 get_update_time(Guid) ->
     case dir_stats_collector:get_stats(Guid, ?MODULE, all) of
         {ok, #{?STAT_NAME := Time}} -> {ok, Time};
@@ -111,6 +111,14 @@ delete(Guid) ->
     ok = datastore_model:delete(?CTX, file_id:guid_to_uuid(Guid)).
 
 
+init_dir(Guid) ->
+    init(Guid).
+
+
+init_child(Guid) ->
+    init(Guid).
+
+
 %%%===================================================================
 %%% datastore_model callbacks
 %%%===================================================================
@@ -146,3 +154,13 @@ infer_update_time(#statbuf{st_mtime = StMtime, st_ctime = StCtime}) ->
     max(StMtime, StCtime);
 infer_update_time(Timestamp) when is_integer(Timestamp) ->
     Timestamp.
+
+
+init(Guid) ->
+    Uuid = file_id:guid_to_uuid(Guid),
+    case times:get(Uuid) of
+        {ok, #document{value = Times}} ->
+            #{?STAT_NAME => infer_update_time(Times)};
+        {error, not_found} ->
+            #{?STAT_NAME => 0} % Race with file deletion - stats will be invalidated by next update
+    end.

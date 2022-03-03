@@ -43,7 +43,7 @@
     delete_stats/1]).
 
 %% dir_stats_collection_behaviour callbacks
--export([acquire/1, consolidate/3, save/2, delete/1]).
+-export([acquire/1, consolidate/3, save/2, delete/1, init_dir/1, init_child/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0]).
@@ -65,7 +65,8 @@
 %%%===================================================================
 
 -spec get_stats(file_id:file_guid()) ->
-    {ok, dir_stats_collection:collection()} | ?ERROR_INTERNAL_SERVER_ERROR | ?ERROR_DIR_STATS_DISABLED_FOR_SPACE.
+    {ok, dir_stats_collection:collection()} |
+    ?ERROR_INTERNAL_SERVER_ERROR | ?ERROR_DIR_STATS_DISABLED_FOR_SPACE | ?ERROR_FORBIDDEN.
 get_stats(Guid) ->
     get_stats(Guid, all).
 
@@ -76,7 +77,8 @@ get_stats(Guid) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_stats(file_id:file_guid(), dir_stats_collection:stats_selector()) ->
-    {ok, dir_stats_collection:collection()} | ?ERROR_INTERNAL_SERVER_ERROR | ?ERROR_DIR_STATS_DISABLED_FOR_SPACE.
+    {ok, dir_stats_collection:collection()} |
+    ?ERROR_INTERNAL_SERVER_ERROR | ?ERROR_DIR_STATS_DISABLED_FOR_SPACE | ?ERROR_FORBIDDEN.
 get_stats(Guid, StatNames) ->
     dir_stats_collector:get_stats(Guid, ?MODULE, StatNames).
 
@@ -157,7 +159,7 @@ acquire(Guid) ->
         ?CTX, file_id:guid_to_uuid(Guid), {all, ?CURRENT_METRIC}, #{limit => 1}
     ) of
         {ok, WindowsMap} -> current_metrics_to_stats_collection(WindowsMap);
-        {error, not_found} -> maps:from_list(lists:map(fun(StatName) -> {StatName, 0} end, stat_names(Guid)))
+        {error, not_found} -> gen_empty_stats_collection(Guid)
     end.
 
 
@@ -189,6 +191,29 @@ delete(Guid) ->
     case datastore_time_series_collection:delete(?CTX, file_id:guid_to_uuid(Guid)) of
         ok -> ok;
         {error, not_found} -> ok
+    end.
+
+
+init_dir(Guid) ->
+    gen_empty_stats_collection(Guid).
+
+
+init_child(Guid) ->
+    EmptyCollection = gen_empty_stats_collection(Guid),
+    case file_meta:get_including_deleted(file_id:guid_to_uuid(Guid)) of
+        {ok, Doc} ->
+            case file_meta:get_type(Doc) of
+                ?DIRECTORY_TYPE ->
+                    EmptyCollection#{?DIR_COUNT => 1};
+                _ ->
+                    {FileSizes, _} = file_ctx:get_file_sizes_summary(file_ctx:new_by_guid(Guid)),
+                    lists:foldl(fun
+                        ({total, Size}, Acc) -> Acc#{?TOTAL_SIZE => Size};
+                        ({StorageId, Size}, Acc) -> Acc#{?SIZE_ON_STORAGE(StorageId) => Size}
+                    end, EmptyCollection, FileSizes)
+            end;
+        ?ERROR_NOT_FOUND ->
+            EmptyCollection % Race with file deletion - stats will be invalidated by next update
     end.
 
 

@@ -140,7 +140,8 @@
 %%%===================================================================
 
 -spec get_stats(file_id:file_guid(), dir_stats_collection:type(), dir_stats_collection:stats_selector()) ->
-    {ok, dir_stats_collection:collection()} | ?ERROR_INTERNAL_SERVER_ERROR | ?ERROR_DIR_STATS_DISABLED_FOR_SPACE.
+    {ok, dir_stats_collection:collection()} |
+    ?ERROR_INTERNAL_SERVER_ERROR | ?ERROR_DIR_STATS_DISABLED_FOR_SPACE | ?ERROR_FORBIDDEN.
 get_stats(Guid, CollectionType, StatNames) ->
     case dir_stats_collector_config:is_enabled_for_space(file_id:guid_to_space_id(Guid)) of
         true ->
@@ -304,18 +305,6 @@ graceful_terminate(State) ->
         false -> {ok, UpdatedState};
         true -> {defer, UpdatedState}
     end.
-% TODO - wyrzucac ze stanu cache dla stopujacych space
-%%graceful_terminate(#state{space_id = SpaceId} = State) ->
-%%    case dir_stats_collector_config:get_status_for_space(SpaceId) of
-%%        stopping ->
-%%            {ok, State};
-%%        _ ->
-%%            UpdatedState = flush_all(State),
-%%            case UpdatedState#state.has_unflushed_changes of
-%%                false -> {ok, UpdatedState};
-%%                true -> {defer, UpdatedState}
-%%            end
-%%    end.
 
 
 -spec forced_terminate(pes:forced_termination_reason(), state()) -> ok.
@@ -341,15 +330,32 @@ forced_terminate(Reason, State) ->
 %%%===================================================================
 
 -spec handle_call(#dsc_get_request{} | #dsc_flush_request{}, state()) ->
-    {ok | {ok, dir_stats_collection:collection()} | ?ERROR_INTERNAL_SERVER_ERROR, state()}.
+    {ok | {ok, dir_stats_collection:collection()} | ?ERROR_INTERNAL_SERVER_ERROR | ?ERROR_FORBIDDEN, state()}.
 handle_call(#dsc_get_request{
     guid = Guid,
     collection_type = CollectionType,
     stat_names = StatNames
-}, State) ->
-    % TODO - obsluzyc tryb inicjalizacji (nie mozemy robic acqure)
-    {#cached_dir_stats{current_stats = CurrentStats}, UpdatedState} = reset_last_used_timer(Guid, CollectionType, State),
-    {{ok, dir_stats_collection:with(StatNames, CurrentStats)}, UpdatedState};
+} = Request, #state{space_collecting_statuses = SpaceCollectingStatuses} = State) ->
+    SpaceId = file_id:guid_to_space_id(Guid),
+    case maps:get(SpaceId, SpaceCollectingStatuses, undefined) of
+        undefined ->
+            % TODO - czy mozemy jakos optymalizowac to (pobieramy stan zanim wyslemy wiadomosc)
+            case dir_stats_collector_config:get_status_for_space(SpaceId) of
+                disabled ->
+                    {?ERROR_FORBIDDEN, State};
+                Status ->
+                    handle_call(Request, State#state{
+                        space_collecting_statuses = SpaceCollectingStatuses#{SpaceId => Status}
+                    })
+            end;
+        enabled ->
+            {#cached_dir_stats{current_stats = CurrentStats}, UpdatedState} =
+                reset_last_used_timer(Guid, CollectionType, acquire, State),
+            {{ok, dir_stats_collection:with(StatNames, CurrentStats)}, UpdatedState};
+        _ ->
+            {?ERROR_FORBIDDEN, State}
+    end;
+
 
 handle_call(#dsc_flush_request{guid = Guid, collection_type = CollectionType, pruning_strategy = PruningStrategy}, State) ->
     case flush_cached_dir_stats(gen_cached_dir_stats_key(Guid, CollectionType), PruningStrategy, State) of
@@ -358,17 +364,21 @@ handle_call(#dsc_flush_request{guid = Guid, collection_type = CollectionType, pr
     end;
 
 handle_call(?INITIALIZE(Guid), State) ->
-    % TODO - rozwiazac spagetii z tym ze dir_stats_initializer pracuje na calej liscie a tutaj przechowujemy to per modul
-    % TODO - wystapic API dla tej wiadomosci - moze w dir_stats_collection dac funkcje typu get_all_collection_types zeby dostac liste wszystkich kolekcji?
-    try
-        initialize_dir_stats(CachedDirStatsKey, StateAcc)
-    catch
-        Error:Reason:Stacktrace ->
-            ?error_stacktrace("Dir stats collector ~p error for collection key: ~p: ~p:~p",
-                [?SCHEDULED_STATS_INITIALIZATION, CachedDirStatsKey, Error, Reason], Stacktrace),
-            ensure_initialization_scheduled(StateAcc)
-    end,
-    {ok, State};
+    UpdatedState = lists:foldl(fun(CollectionType, StateAcc) ->
+        reset_last_used_timer(Guid, CollectionType, prepare_initialization_data, StateAcc)
+    end, State, dir_stats_collection:list()),
+
+    {ok, initialize_dir_stats(UpdatedState)};
+
+handle_call(?DISABLE(SpaceId), #state{dir_stats_cache = DirStatsCache} = State) ->
+    UpdatedState = lists:foldl(fun({Guid, _} = CachedDirStatsKey, StateAcc) ->
+        case file_id:guid_to_space_id(Guid) of
+            SpaceId -> prune_cached_dir_stats(CachedDirStatsKey, StateAcc);
+            _ -> StateAcc
+        end
+    end, State, maps:keys(DirStatsCache)),
+
+    {ok, UpdatedState};
 
 handle_call(Request, State) ->
     ?log_bad_request(Request),
@@ -405,7 +415,7 @@ handle_cast(#dsc_update_request{
 handle_cast(?SCHEDULED_FLUSH, #state{space_collecting_statuses = SpaceCollectingStatuses} = State) ->
     UpdatedState = flush_all(State#state{flush_timer_ref = undefined}),
 
-    % TODO - poprostu sprawdzamy space'y wszystkie bo wpisyy juz istniejace maja bazowac na swoich metadanych
+    % TODO - moze to przeniesc do procedury inicjalizacji? tylko trzeba pamietac ze musi ona wystepowac w kolko tak dlugo jak jakis space ma stan initializing
     maps:fold(fun
         (SpaceId, initializing, StateAcc) ->
             case dir_stats_collector_config:get_status_for_space(SpaceId) of
@@ -416,17 +426,8 @@ handle_cast(?SCHEDULED_FLUSH, #state{space_collecting_statuses = SpaceCollecting
             StateAcc
     end, UpdatedState, SpaceCollectingStatuses);
 
-handle_cast(?SCHEDULED_STATS_INITIALIZATION, #state{dir_stats_cache = DirStatsCache} = State) ->
-    lists:foldl(fun(CachedDirStatsKey, StateAcc) ->
-        try
-            initialize_dir_stats(CachedDirStatsKey, StateAcc)
-        catch
-            Error:Reason:Stacktrace ->
-                ?error_stacktrace("Dir stats collector ~p error for collection key: ~p: ~p:~p",
-                    [?SCHEDULED_STATS_INITIALIZATION, CachedDirStatsKey, Error, Reason], Stacktrace),
-                ensure_initialization_scheduled(StateAcc)
-        end
-    end, State, maps:keys(DirStatsCache));
+handle_cast(?SCHEDULED_STATS_INITIALIZATION, State) ->
+    initialize_dir_stats(State);
 
 handle_cast(Info, State) ->
     ?log_bad_request(Info),
@@ -467,13 +468,9 @@ handle_update_request_during_initialization(#dsc_update_request{
     collection_update = CollectionUpdate
 }, State) ->
     {_, UpdatedState} = update_in_cache(Guid, CollectionType, fun
-        (#cached_dir_stats{
-            collecting_status = active
-        } = CachedDirStats) ->
+        (#cached_dir_stats{collecting_status = active} = CachedDirStats) ->
             update_collection_in_cache(CollectionType, CollectionUpdate, CachedDirStats);
-        (#cached_dir_stats{
-            collecting_status = initializing, initialization_data = InitializationData
-        } = CachedDirStats) ->
+        (#cached_dir_stats{collecting_status = initializing, initialization_data = InitializationData} = CachedDirStats) ->
             CachedDirStats#cached_dir_stats{
                 current_stats = dir_stats_initializer:update_stats_from_descendants(
                     InitializationData, CollectionType, CollectionUpdate)
@@ -488,7 +485,6 @@ handle_update_request_during_initialization(#dsc_update_request{
     collection_type = CollectionType,
     collection_update = CollectionUpdate
 }, State) ->
-    % TODO - a co z procesem ktory sie zinicjalizowal i zakonczyl? trzeba gdzies to zapisywac
     {#cached_dir_stats{collecting_status = UpdatedStatus, initialization_data = UpdatedInitializationData}, UpdatedState} =
         update_in_cache(Guid, CollectionType, fun
             (#cached_dir_stats{collecting_status = active} = CachedDirStats) ->
@@ -604,19 +600,37 @@ flush_cached_dir_stats(CachedDirStatsKey, PruningStrategy, State) ->
 
 
 %% @private
--spec initialize_dir_stats(cached_dir_stats_key(), state()) -> state().
-initialize_dir_stats(CachedDirStatsKey, State) ->
-    #cached_dir_stats{initialization_data = InitializationData} = CachedDirStats =
-        maps:get(CachedDirStatsKey, State#state.dir_stats_cache),
-    case get_collection_status(CachedDirStats) of
-        initializing ->
-            UpdatedCachedDirStats = CachedDirStats#cached_dir_stats{
-                initialization_data = dir_stats_initializer:ensure_dir_initialized(InitializationData)
-            },
-            update_cached_dir_stats(CachedDirStatsKey, UpdatedCachedDirStats, State);
-        _ ->
-            State
-    end.
+-spec initialize_dir_stats(state()) -> state().
+initialize_dir_stats(#state{dir_stats_cache = DirStatsCache} = State) ->
+    InitializationDataMaps = maps:fold(fun
+        ({Guid, CollectionType} = _CachedDirStatsKey, #cached_dir_stats{
+            collecting_status = initializing,
+            initialization_data = InitializationData
+        }, Acc) ->
+            InitializationDataMap = maps:get(Guid, Acc, #{}),
+            Acc#{Guid => InitializationDataMap#{CollectionType => InitializationData}};
+        (_CachedDirStatsKey, _CachedDirStats, Acc) ->
+            Acc
+    end, #{}, DirStatsCache),
+
+    maps:foldl(fun(Guid, InitializationDataMap, StateAcc) ->
+        try
+            UpdatedInitializationDataMap = dir_stats_initializer:ensure_dir_initialized(Guid, InitializationDataMap),
+            maps:foldl(fun(CollectionModule, InitializationData, InternalStateAcc) ->
+                CachedDirStatsKey = gen_cached_dir_stats_key(Guid, CollectionModule),
+                CachedDirStats = maps:get(CachedDirStatsKey, State#state.dir_stats_cache),
+                UpdatedCachedDirStats = CachedDirStats#cached_dir_stats{
+                    initialization_data = InitializationData
+                },
+                update_cached_dir_stats(CachedDirStatsKey, UpdatedCachedDirStats, InternalStateAcc)
+            end, StateAcc, UpdatedInitializationDataMap)
+        catch
+            Error:Reason:Stacktrace ->
+                ?error_stacktrace("Dir stats collector ~p error for ~p: ~p:~p",
+                    [?FUNCTION_NAME, Guid, Error, Reason], Stacktrace),
+                ensure_initialization_scheduled(StateAcc)
+        end
+    end, State, InitializationDataMaps).
 
 
 %% @private
@@ -674,10 +688,10 @@ ensure_initialization_scheduled(State) ->
 
 
 %% @private
--spec reset_last_used_timer(file_id:file_guid(), dir_stats_collection:type(), state()) ->
-    {cached_dir_stats(), state()} | no_return().
-reset_last_used_timer(Guid, CollectionType, State) ->
-    update_in_cache(Guid, CollectionType, fun(CachedDirStats) -> CachedDirStats end, acquire, State).
+-spec reset_last_used_timer(file_id:file_guid(), dir_stats_collection:type(), acquire | prepare_initialization_data,
+    state()) -> {cached_dir_stats(), state()} | no_return(). % TODO - dac typ na missing record action
+reset_last_used_timer(Guid, CollectionType, MissingRecordAction, State) ->
+    update_in_cache(Guid, CollectionType, fun(CachedDirStats) -> CachedDirStats end, MissingRecordAction, State).
 
 
 %% @private

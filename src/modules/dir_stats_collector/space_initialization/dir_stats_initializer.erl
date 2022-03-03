@@ -21,19 +21,20 @@
 
 
 %% API
--export([new_initialization_data/0, ensure_dir_initialized/3, update_stats_from_descendants/3, 
-    are_stats_ready/1, is_race_reported/1, report_race/1, get_stats/1]).
+-export([new_initialization_data/0, are_stats_ready/1, is_race_reported/1, report_race/1, get_stats/1,
+    update_stats_from_descendants/3, ensure_dir_initialized/2]).
 
 
 -record(initialization_data, {
     status = race_possible :: initalized | race_possible,
     init_watch :: stopwatch:instance() | undefined,
-    dir_with_direct_children_stats :: collections_map() | undefined,
-    stats_from_descendants :: collections_map() | undefined
+    dir_with_direct_children_stats :: dir_stats_collection:collection() | undefined,
+    stats_from_descendants :: dir_stats_collection:collection() | undefined
 }).
 
 
 -type initialization_data() :: #initialization_data{}.
+-type initialization_data_map() :: #{dir_stats_collection:type() => initialization_data()}.
 -type collections_map() :: #{dir_stats_collection:type() => dir_stats_collection:collection()}.
 
 
@@ -48,32 +49,6 @@
 -spec new_initialization_data() -> initialization_data().
 new_initialization_data() ->
     #initialization_data{}.
-
-
--spec ensure_dir_initialized(initialization_data(), file_id:file_guid(), [dir_stats_collection:type()]) ->
-    initialization_data().
-ensure_dir_initialized(#initialization_data{status = initalized} = Data, _Guid, _CollectionTypes) ->
-    Data;
-ensure_dir_initialized(Data, Guid, CollectionTypes) ->
-    {FileUuid, SpaceId} = file_id:unpack_guid(Guid),
-    Stats = init_for_dir_children(
-        FileUuid, SpaceId, CollectionTypes, #{token => ?INITIAL_DATASTORE_LS_TOKEN, size => ?BATCH_SIZE}, #{}),
-    FinalStats = finish_dir_init(Guid, CollectionTypes, Stats),
-
-    Data#initialization_data{
-        status = initalized,
-        dir_with_direct_children_stats = FinalStats
-    }.
-
-
--spec update_stats_from_descendants(initialization_data(), dir_stats_collection:type(),
-    dir_stats_collection:collection()) -> initialization_data().
-update_stats_from_descendants(#initialization_data{
-    stats_from_descendants = CurrentStats
-} = Data, CollectionType, CollectionUpdate) ->
-    Data#initialization_data{
-        stats_from_descendants = dir_stats_collection:consolidate(CollectionType, CurrentStats, CollectionUpdate)
-    }.
 
 
 -spec are_stats_ready(initialization_data()) -> boolean().
@@ -107,12 +82,44 @@ get_stats(#initialization_data{
     end, DirWithDirectChildrenStats, StatsFromDescendants).
 
 
+-spec update_stats_from_descendants(initialization_data(), dir_stats_collection:type(),
+    dir_stats_collection:collection()) -> initialization_data().
+update_stats_from_descendants(#initialization_data{
+    stats_from_descendants = CurrentStats
+} = Data, CollectionType, CollectionUpdate) ->
+    Data#initialization_data{
+        stats_from_descendants = dir_stats_collection:consolidate(CollectionType, CurrentStats, CollectionUpdate)
+    }.
+
+
+-spec ensure_dir_initialized(file_id:file_guid(), initialization_data_map()) -> initialization_data_map().
+ensure_dir_initialized(Guid, DataMap) ->
+    ToInit = maps:filter(fun(_CollectionType, #initialization_data{status = Status}) ->
+        Status =:= race_possible
+    end, DataMap),
+
+    {FileUuid, SpaceId} = file_id:unpack_guid(Guid),
+    CollectionTypesToInit = maps:keys(ToInit),
+    StatsMap = init_for_dir_children(
+        FileUuid, SpaceId, CollectionTypesToInit, #{token => ?INITIAL_DATASTORE_LS_TOKEN, size => ?BATCH_SIZE}, #{}),
+    FinalStatsMap = finish_dir_init(Guid, CollectionTypesToInit, StatsMap),
+
+    maps:merge_with(fun(_CollectionType, Data, Stats) ->
+        Data#initialization_data{
+            status = initalized,
+            dir_with_direct_children_stats = Stats
+        }
+    end, DataMap, FinalStatsMap).
+
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
 -spec init_for_dir_children(file_meta:uuid(), file_id:space_id(), [dir_stats_collection:type()],
     file_meta:list_opts(), collections_map()) -> collections_map().
+init_for_dir_children(_FileUuid, _SpaceId, [], _ListOpts, Acc) ->
+    Acc;
 init_for_dir_children(FileUuid, SpaceId, CollectionTypes, ListOpts, Acc) ->
     case file_meta:list_children(FileUuid, ListOpts) of
         {ok, Links, #{is_last := true} = _ListExtendedInfo} ->
@@ -138,6 +145,7 @@ init_batch(SpaceId, Links, CollectionTypes, InitialAcc) ->
 init_batch_for_collection_type(SpaceId, Links, CollectionType, InitialStats) ->
     lists:foldl(fun
         ({_, ChildUuid}, undefined) ->
+            % TODO - obsluzyc race z kasowaniem
             CollectionType:init_child(file_id:pack_guid(ChildUuid, SpaceId));
         ({_, ChildUuid}, Stats) ->
             dir_stats_collection:consolidate(CollectionType, Stats,
@@ -147,6 +155,7 @@ init_batch_for_collection_type(SpaceId, Links, CollectionType, InitialStats) ->
 
 -spec finish_dir_init(file_id:guid(), [dir_stats_collection:type()], collections_map()) -> collections_map().
 finish_dir_init(Guid, CollectionTypes, ChildrenStats) ->
+    % TODO - obsluzyc race z kasowaniem (moze rzucic blad i zlapac go w collectorze?)
     StatsForGuid = lists:map(fun(CollectionType) -> CollectionType:init_dir(Guid) end, CollectionTypes),
 
     maps:merge_with(fun(CollectionType, Stats1, Stats2) ->
