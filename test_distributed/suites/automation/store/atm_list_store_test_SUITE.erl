@@ -31,8 +31,8 @@
     create_test/1,
     update_content_test/1,
     iterator_test/1,
-    browse_by_index_test/1,
-    browse_by_offset_test/1
+    browse_content_by_index_test/1,
+    browse_content_by_offset_test/1
 ]).
 
 groups() -> [
@@ -40,8 +40,8 @@ groups() -> [
         create_test,
         update_content_test,
         iterator_test,
-        browse_by_index_test,
-        browse_by_offset_test
+        browse_content_by_index_test,
+        browse_content_by_offset_test
     ]}
 ].
 
@@ -87,7 +87,7 @@ iterator_test(_Config) ->
     }).
 
 
-browse_by_index_test(_Config) ->
+browse_content_by_index_test(_Config) ->
     atm_infinite_log_based_stores_test_base:browse_content_test_base(index, #{
         store_configs => example_configs(),
         get_input_item_generator_seed_data_spec => fun get_input_item_generator_seed_data_spec/1,
@@ -99,7 +99,7 @@ browse_by_index_test(_Config) ->
     }).
 
 
-browse_by_offset_test(_Config) ->
+browse_content_by_offset_test(_Config) ->
     atm_infinite_log_based_stores_test_base:browse_content_test_base(offset, #{
         store_configs => example_configs(),
         get_input_item_generator_seed_data_spec => fun get_input_item_generator_seed_data_spec/1,
