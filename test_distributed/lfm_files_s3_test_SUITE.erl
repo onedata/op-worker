@@ -11,7 +11,6 @@
 -module(lfm_files_s3_test_SUITE).
 -author("Michal Cwiertnia").
 
--include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/performance.hrl").

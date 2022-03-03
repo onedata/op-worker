@@ -11,7 +11,6 @@
 -module(lfm_files_posix_test_SUITE).
 -author("Michal Cwiertnia").
 
--include("global_definitions.hrl").
 -include("lfm_files_test_base.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/logical_file_manager/lfm.hrl").

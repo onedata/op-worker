@@ -447,7 +447,10 @@ readdir_should_work_with_token(Config, DirSize, Type, InitialToken) ->
     end,
     Token2 = VerifyFun(Config, MainDirPath, Files, max(0, min(DirSize - 3, 3)), 3, 3, false, Token),
     timer:sleep(timer:seconds(5)), % wait for flush of expired tokens
+    
+    % restore default fold cache timeout so next token does not expire
     ok = erpc:call(Worker, application, set_env, [?CLUSTER_WORKER_APP_NAME, fold_cache_timeout, FoldCacheDefaultTimeout]),
+    
     Token3 = VerifyFun(Config, MainDirPath, Files, max(0, min(DirSize - 6, 3)), 3, 6, false, Token2),
     VerifyFun(Config, MainDirPath, Files, max(0, min(DirSize - 9, 3)), 3, 9, true, Token3).
 
