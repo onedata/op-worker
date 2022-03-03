@@ -30,18 +30,18 @@
 %%%===================================================================
 
 
--spec to_json(record()) -> json_utils:json_map().
+-spec to_json(record()) -> json_utils:json_term().
 to_json(#atm_single_value_store_content_browse_result{item = undefined}) ->
-    #{<<"content">> => null};
+    <<>>;
 
 to_json(#atm_single_value_store_content_browse_result{item = {ok, Item}}) ->
-    #{<<"content">> => #{
+    #{
         <<"success">> => true,
         <<"value">> => Item
-    }};
+    };
 
 to_json(#atm_single_value_store_content_browse_result{item = Error = {error, _}}) ->
-    #{<<"content">> => #{
+    #{
         <<"success">> => false,
         <<"value">> => errors:to_json(Error)
-    }}.
+    }.

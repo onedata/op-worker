@@ -12,6 +12,7 @@
 -module(atm_range_store_test_SUITE).
 -author("Bartosz Walkowicz").
 
+-include("modules/automation/atm_execution.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
 -include("onenv_test_utils.hrl").
@@ -31,7 +32,7 @@
 %% tests
 -export([
     create_test/1,
-    apply_operation_test/1,
+    update_content_test/1,
 
     iterate_in_chunks_5_with_start_10_end_50_step_2_test/1,
     iterate_in_chunks_10_with_start_1_end_2_step_10_test/1,
@@ -40,13 +41,13 @@
     iterate_in_chunks_3_with_start_10_end_10_step_2_test/1,
 
     reuse_iterator_test/1,
-    browse_test/1
+    browse_content_test/1
 ]).
 
 groups() -> [
     {all_tests, [parallel], [
         create_test,
-        apply_operation_test,
+        update_content_test,
 
         iterate_in_chunks_5_with_start_10_end_50_step_2_test,
         iterate_in_chunks_10_with_start_1_end_2_step_10_test,
@@ -55,7 +56,7 @@ groups() -> [
         iterate_in_chunks_3_with_start_10_end_10_step_2_test,
 
         reuse_iterator_test,
-        browse_test
+        browse_content_test
     ]}
 ].
 
@@ -135,7 +136,7 @@ create_test(_Config) ->
     ]).
 
 
-apply_operation_test(_Config) ->
+update_content_test(_Config) ->
     AtmWorkflowExecutionAuth = create_workflow_execution_auth(),
     AtmStoreSchema = atm_store_test_utils:build_store_schema(?ATM_STORE_CONFIG),
 
@@ -146,12 +147,11 @@ apply_operation_test(_Config) ->
 
     % Assert no operation is supported
     NewContent = #{<<"end">> => 100},
-    lists:foreach(fun(Operation) ->
-        ?assertEqual(?ERROR_NOT_SUPPORTED, ?rpc(catch atm_store_api:apply_operation(
-            AtmWorkflowExecutionAuth, Operation, NewContent, #{}, AtmStoreId
-        ))),
-        ?assertEqual(InitialContent, get_content(AtmWorkflowExecutionAuth, AtmStoreId))
-    end, atm_task_schema_result_mapper:all_dispatch_functions()).
+    UpdateOpts = #atm_range_store_content_update_options{},
+    ?assertEqual(?ERROR_NOT_SUPPORTED, ?rpc(catch atm_store_api:update_content(
+        AtmWorkflowExecutionAuth, NewContent, UpdateOpts, AtmStoreId
+    ))),
+    ?assertEqual(InitialContent, get_content(AtmWorkflowExecutionAuth, AtmStoreId)).
 
 
 iterate_in_chunks_5_with_start_10_end_50_step_2_test(_Config) ->
@@ -236,18 +236,20 @@ reuse_iterator_test(_Config) ->
     ?assertMatch({ok, [8], _}, ?rpc(iterator:get_next(AtmWorkflowExecutionEnv, Iterator9))).
 
 
-browse_test(_Config) ->
+browse_content_test(_Config) ->
     AtmWorkflowExecutionAuth = create_workflow_execution_auth(),
     AtmStoreSchema = atm_store_test_utils:build_store_schema(?ATM_STORE_CONFIG),
 
-    Content = #{<<"start">> => 2, <<"end">> => 16, <<"step">> => 3},
     {ok, AtmStoreId} = ?extract_key(?rpc(atm_store_api:create(
-        AtmWorkflowExecutionAuth, Content, AtmStoreSchema
+        AtmWorkflowExecutionAuth,
+        #{<<"start">> => 2, <<"end">> => 16, <<"step">> => 3},
+        AtmStoreSchema
     ))),
+    BrowseOpts = #atm_range_store_content_browse_options{},
 
     ?assertEqual(
-        {[{<<>>, {ok, Content}}], true},
-        ?rpc(atm_store_api:browse_content(AtmWorkflowExecutionAuth, #{}, AtmStoreId))
+        #atm_range_store_content_browse_result{range = {2, 16, 3}},
+        ?rpc(atm_store_api:browse_content(AtmWorkflowExecutionAuth, BrowseOpts, AtmStoreId))
     ).
 
 
@@ -281,12 +283,11 @@ build_workflow_execution_env(AtmWorkflowExecutionAuth, AtmStoreSchemaId, AtmStor
 -spec get_content(atm_workflow_execution_auth:record(), atm_store:id()) ->
     undefined | atm_value:expanded().
 get_content(AtmWorkflowExecutionAuth, AtmStoreId) ->
-    case ?rpc(atm_store_api:browse_content(AtmWorkflowExecutionAuth, #{}, AtmStoreId)) of
-        {[], true} ->
-            undefined;
-        {[{_, {ok, Item}}], true} ->
-            Item
-    end.
+    atm_range_store_content_browse_result:to_json(?rpc(atm_store_api:browse_content(
+        AtmWorkflowExecutionAuth,
+        #atm_range_store_content_browse_options{},
+        AtmStoreId
+    ))).
 
 
 %% @private
