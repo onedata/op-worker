@@ -242,10 +242,16 @@ gen_valid_data(_ProviderSelector, _AtmWorkflowExecutionAuth, #atm_data_spec{
 %% @private
 -spec gen_ts_name(atm_time_series_measurements_spec:record()) ->
     atm_time_series_attribute:name().
-gen_ts_name(#atm_time_series_measurements_spec{name_selector = fixed, name = TsName}) ->
+gen_ts_name(#atm_time_series_measurements_spec{
+    name_matcher_type = fixed,
+    name_matcher = TsName
+}) ->
     TsName;
 
-gen_ts_name(#atm_time_series_measurements_spec{name_selector = pattern, name = Pattern}) ->
+gen_ts_name(#atm_time_series_measurements_spec{
+    name_matcher_type = has_prefix,
+    name_matcher = Pattern
+}) ->
     binary:replace(Pattern, <<"*">>, <<"NIHAU">>).
 
 

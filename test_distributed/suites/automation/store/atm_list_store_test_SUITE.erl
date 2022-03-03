@@ -175,7 +175,7 @@ randomly_remove_entity_referenced_by_item(AtmWorkflowExecutionAuth, Item, ItemDa
 
 %% @private
 -spec build_content_update_options(atm_list_store_content_update_options:update_function()) ->
-    atm_store_content_update_options:record().
+    atm_list_store_content_update_options:record().
 build_content_update_options(UpdateFun) ->
     #atm_list_store_content_update_options{function = UpdateFun}.
 
@@ -196,7 +196,7 @@ get_content(AtmWorkflowExecutionAuth, AtmStoreId) ->
 
 %% @private
 -spec build_content_browse_options(json_utils:json_map()) ->
-    atm_store_content_browse_options:record().
+    atm_list_store_content_browse_options:record().
 build_content_browse_options(OptsJson) ->
     atm_list_store_content_browse_options:sanitize(OptsJson#{
         <<"type">> => <<"listStoreContentBrowseOptions">>
@@ -205,7 +205,7 @@ build_content_browse_options(OptsJson) ->
 
 %% @private
 -spec build_content_browse_result([atm_store_container_infinite_log_backend:entry], boolean()) ->
-    atm_store_content_browse_result:record().
+    atm_list_store_content_browse_result:record().
 build_content_browse_result(Entries, IsLast) ->
     #atm_list_store_content_browse_result{items = Entries, is_last = IsLast}.
 

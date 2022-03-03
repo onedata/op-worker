@@ -12,6 +12,7 @@
 -module(atm_tree_forest_store_test_SUITE).
 -author("Michal Stanisz").
 
+-include("modules/automation/atm_execution.hrl").
 -include("modules/datastore/datastore_runner.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("onenv_test_utils.hrl").
@@ -34,9 +35,9 @@
 -export([
     % infinite_log_based_stores_common_tests
     create_test/1,
-    apply_operation_test/1,
-    browse_by_index_test/1,
-    browse_by_offset_test/1,
+    update_content_test/1,
+    browse_content_by_index_test/1,
+    browse_content_by_offset_test/1,
 
     % tree_forest_store_specific_tests
     iterator_queue_test/1,
@@ -53,9 +54,9 @@
 groups() -> [
     {infinite_log_based_stores_common_tests, [parallel], [
         create_test,
-        apply_operation_test,
-        browse_by_index_test,
-        browse_by_offset_test
+        update_content_test,
+        browse_content_by_index_test,
+        browse_content_by_offset_test
     ]},
     {tree_forest_store_specific_tests, [parallel], [
         iterator_queue_test,
@@ -95,32 +96,38 @@ create_test(_Config) ->
     }).
 
 
-apply_operation_test(_Config) ->
-    atm_infinite_log_based_stores_test_base:apply_operation_test_base(#{
+update_content_test(_Config) ->
+    atm_infinite_log_based_stores_test_base:update_content_test_base(#{
         store_configs => example_configs(),
         get_input_item_generator_seed_data_spec => fun get_input_item_generator_seed_data_spec/1,
         input_item_formatter => fun input_item_formatter/1,
-        input_item_to_exp_store_item => fun input_item_to_exp_store_item/3
+        input_item_to_exp_store_item => fun input_item_to_exp_store_item/3,
+        build_content_update_options := fun build_content_update_options/1,
+        get_content_fun := fun get_content/2
     }).
 
 
-browse_by_index_test(_Config) ->
+browse_content_by_index_test(_Config) ->
     atm_infinite_log_based_stores_test_base:browse_content_test_base(index, #{
         store_configs => example_configs(),
         get_input_item_generator_seed_data_spec => fun get_input_item_generator_seed_data_spec/1,
         input_item_formatter => fun input_item_formatter/1,
         input_item_to_exp_store_item => fun input_item_to_exp_store_item/3,
-        randomly_remove_entity_referenced_by_item => fun randomly_remove_entity_referenced_by_item/3
+        randomly_remove_entity_referenced_by_item => fun randomly_remove_entity_referenced_by_item/3,
+        build_content_browse_options := fun build_content_browse_options/1,
+        build_content_browse_result := fun build_content_browse_result/2
     }).
 
 
-browse_by_offset_test(_Config) ->
+browse_content_by_offset_test(_Config) ->
     atm_infinite_log_based_stores_test_base:browse_content_test_base(offset, #{
         store_configs => example_configs(),
         get_input_item_generator_seed_data_spec => fun get_input_item_generator_seed_data_spec/1,
         input_item_formatter => fun input_item_formatter/1,
         input_item_to_exp_store_item => fun input_item_to_exp_store_item/3,
-        randomly_remove_entity_referenced_by_item => fun randomly_remove_entity_referenced_by_item/3
+        randomly_remove_entity_referenced_by_item => fun randomly_remove_entity_referenced_by_item/3,
+        build_content_browse_options := fun build_content_browse_options/1,
+        build_content_browse_result := fun build_content_browse_result/2
     }).
 
 
@@ -366,6 +373,44 @@ randomly_remove_entity_referenced_by_item(AtmWorkflowExecutionAuth, Item, ItemDa
     atm_store_test_utils:randomly_remove_entity_referenced_by_item(
         ?PROVIDER_SELECTOR, AtmWorkflowExecutionAuth, Item, ItemDataSpec
     ).
+
+
+
+%% @private
+-spec build_content_update_options(atm_list_store_content_update_options:update_function()) ->
+    atm_tree_forest_store_content_update_options:record().
+build_content_update_options(UpdateFun) ->
+    #atm_tree_forest_store_content_update_options{function = UpdateFun}.
+
+
+%% @private
+-spec get_content(atm_workflow_execution_auth:record(), atm_store:id()) ->
+    [atm_value:expanded()].
+get_content(AtmWorkflowExecutionAuth, AtmStoreId) ->
+    BrowseOpts = build_content_browse_options(#{<<"limit">> => 10000000000000000}),
+    #atm_tree_forest_store_content_browse_result{
+        tree_roots = TreeRoots,
+        is_last = true
+    } = ?rpc(?PROVIDER_SELECTOR, atm_store_api:browse_content(
+        AtmWorkflowExecutionAuth, BrowseOpts, AtmStoreId
+    )),
+    lists:map(fun({_, {ok, Item}}) -> Item end, TreeRoots).
+
+
+%% @private
+-spec build_content_browse_options(json_utils:json_map()) ->
+    atm_tree_forest_store_content_browse_options:record().
+build_content_browse_options(OptsJson) ->
+    atm_tree_forest_store_content_browse_options:sanitize(OptsJson#{
+        <<"type">> => <<"treeForestStoreContentBrowseOptions">>
+    }).
+
+
+%% @private
+-spec build_content_browse_result([atm_store_container_infinite_log_backend:entry], boolean()) ->
+    atm_tree_forest_store_content_browse_result:record().
+build_content_browse_result(Entries, IsLast) ->
+    #atm_list_store_content_browse_result{items = Entries, is_last = IsLast}.
 
 
 -spec iterate_test_base(pos_integer(), non_neg_integer(), atm_data_type:type()) -> ok.
