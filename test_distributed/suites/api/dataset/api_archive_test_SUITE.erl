@@ -1267,13 +1267,14 @@ init_per_suite(Config) ->
         posthook = fun(NewConfig) ->
             dir_stats_test_utils:disable_stats_counting(NewConfig),
             SpaceId = oct_background:get_space_id(?SPACE),
-            ozw_test_rpc:space_set_user_privileges(SpaceId, ?OCT_USER_ID(user3), [
+            ozt_spaces:set_privileges(SpaceId, ?OCT_USER_ID(user3), [
                 ?SPACE_MANAGE_DATASETS, ?SPACE_VIEW_ARCHIVES, ?SPACE_CREATE_ARCHIVES,
                 ?SPACE_REMOVE_ARCHIVES, ?SPACE_RECALL_ARCHIVES | privileges:space_member()
             ]),
-            ozw_test_rpc:space_set_user_privileges(
+            ozt_spaces:set_privileges(
                 SpaceId, ?OCT_USER_ID(user4), privileges:space_member() -- [?SPACE_VIEW]
             ),
+            
             start_http_server(),
             NewConfig
         end
