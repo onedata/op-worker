@@ -315,7 +315,8 @@ update_job_progress(Id, Job = #tree_traverse{file_ctx = FileCtx}, _, _, _, Callb
     {ok, Id}.
 
 
--spec get_job(traverse:job_id())-> {ok, master_job(), traverse:pool(), id()}  | {error, term()}.
+-spec get_job(traverse:job_id() | tree_traverse_job:doc())->
+    {ok, master_job(), traverse:pool(), id()}  | {error, term()}.
 get_job(DocOrId) ->
     tree_traverse_job:get_master_job(DocOrId).
 

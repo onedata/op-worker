@@ -37,7 +37,8 @@
 
 
 -define(CTX, #{
-    model => ?MODULE
+    model => ?MODULE,
+    memory_copies => all
 }).
 
 -define(ENABLE_FOR_NEW_SPACES, op_worker:get_env(enable_dir_stats_collector_for_new_spaces, false)).
@@ -48,37 +49,26 @@
 
 -spec init_for_empty_space(od_space:id()) -> ok.
 init_for_empty_space(SpaceId) ->
-    Status = case ?ENABLE_FOR_NEW_SPACES of
-        true -> enabled;
-        false -> disabled
-    end,
-    NewRecord = #dir_stats_collector_config{status = Status},
     {ok, _} = datastore_model:create(?CTX, #document{
         key = SpaceId,
-        value = NewRecord
+        value = #dir_stats_collector_config{status = is_enabled_to_status(?ENABLE_FOR_NEW_SPACES)}
     }),
-    node_cache:put({dir_stats_collector_status, SpaceId}, NewRecord#dir_stats_collector_config.status).
+    ok.
 
 
 -spec clean_for_space(od_space:id()) -> ok.
 clean_for_space(SpaceId) ->
-    datastore_model:delete(?CTX, SpaceId),
-    utils:rpc_multicall(consistent_hashing:get_all_nodes(), node_cache, clear, [{dir_stats_collector_status, SpaceId}]),
-    ok.
+    ok = datastore_model:delete(?CTX, SpaceId).
 
 
 -spec enable_for_space(od_space:id()) -> ok.
 enable_for_space(SpaceId) ->
-    NewRecordStatus = case ?ENABLE_FOR_NEW_SPACES of
-        true -> enabled;
-        false -> disabled
-    end,
-    NewRecord = #dir_stats_collector_config{status = NewRecordStatus},
+    NewRecord = #dir_stats_collector_config{status = initializing, traverse_num = 1},
 
     Diff = fun
         (#dir_stats_collector_config{status = disabled, traverse_num = Num} = Config) ->
             {ok, Config#dir_stats_collector_config{status = initializing, traverse_num = Num + 1}};
-        (#dir_stats_collector_config{status = stopping} = Config) ->
+        (#dir_stats_collector_config{status = stopping, next_status_change_order = undefined} = Config) ->
             {ok, Config#dir_stats_collector_config{next_status_change_order = enable}};
         (#dir_stats_collector_config{}) ->
             {error, no_action_needed}
@@ -86,10 +76,7 @@ enable_for_space(SpaceId) ->
 
     case datastore_model:update(?CTX, SpaceId, Diff, NewRecord) of
         {ok, #document{value = #dir_stats_collector_config{status = initializing, traverse_num = TraverseNum}}} ->
-            % TODO - wyczyscic cache na innyych node
-            node_cache:put({dir_stats_collector_status, SpaceId}, initializing),
-            dir_stats_initialization_traverse:start(SpaceId, TraverseNum),
-            ok;
+            dir_stats_initialization_traverse:run(SpaceId, TraverseNum);
         {ok, _} ->
             ok;
         {error, no_action_needed} ->
@@ -102,9 +89,7 @@ disable_for_space(SpaceId) ->
     Diff = fun
         (#dir_stats_collector_config{status = enabled} = Config) ->
             {ok, Config#dir_stats_collector_config{status = stopping}};
-        (#dir_stats_collector_config{status = initializing, next_status_change_order = disable}) ->
-            {error, no_action_needed};
-        (#dir_stats_collector_config{status = initializing} = Config) ->
+        (#dir_stats_collector_config{status = initializing, next_status_change_order = undefined} = Config) ->
             {ok, Config#dir_stats_collector_config{next_status_change_order = disable}};
         (#dir_stats_collector_config{}) ->
             {error, no_action_needed}
@@ -112,21 +97,16 @@ disable_for_space(SpaceId) ->
 
     case datastore_model:update(?CTX, SpaceId, Diff) of
         {ok, #document{value = #dir_stats_collector_config{status = stopping}}} ->
-            node_cache:put({dir_stats_collector_status, SpaceId}, stopping),
             dir_stats_collector:disable_stats_collecting(SpaceId);
         {ok, #document{value = #dir_stats_collector_config{status = initializing, traverse_num = TraverseNum}}} ->
-            dir_stats_initialization_traverse:cancel(SpaceId, TraverseNum),
-            ok;
-        {ok, _} ->
-            ok;
+            dir_stats_initialization_traverse:cancel(SpaceId, TraverseNum);
         {error, no_action_needed} ->
             ok;
         {error, not_found} ->
-            ok
+            ?warning("Disabling space ~p without collector config document", [SpaceId])
     end.
 
 
-% TODO - wywolywane z callbackow cancel i finich traversu
 -spec report_enabling_finished(od_space:id()) -> ok.
 report_enabling_finished(SpaceId) ->
     Diff = fun
@@ -140,24 +120,25 @@ report_enabling_finished(SpaceId) ->
 
     case datastore_model:update(?CTX, SpaceId, Diff) of
         {ok, #document{value = #dir_stats_collector_config{status = enabled}}} ->
-            node_cache:put({dir_stats_collector_status, SpaceId}, enabled),
             ok;
         {ok, #document{value = #dir_stats_collector_config{status = stopping}}} ->
-            node_cache:put({dir_stats_collector_status, SpaceId}, stopping),
-            % TODO - wyslac do wszystkich procesow info o stopie (zrobic to w funkcji pomocniczej wywolywanej tu i w disable_for_space)
-            ok;
+            dir_stats_collector:disable_stats_collecting(SpaceId);
         {error, {wrong_status, WrongStatus}} ->
             ?warning("Reporting space ~p enabling finished when space has status ~p", [SpaceId, WrongStatus]);
         {error, not_found} ->
-            ok
+            ?warning("Reporting space ~p enabling finished when space has no collector config document ~p", [SpaceId])
     end.
 
 
 -spec report_disabling_finished(od_space:id()) -> ok.
 report_disabling_finished(SpaceId) ->
     Diff = fun
-        (#dir_stats_collector_config{status = stopping, next_status_change_order = enable} = Config) ->
-            {ok, Config#dir_stats_collector_config{status = initializing, next_status_change_order = undefined}};
+        (#dir_stats_collector_config{status = stopping, next_status_change_order = enable, traverse_num = Num} = Config) ->
+            {ok, Config#dir_stats_collector_config{
+                status = initializing,
+                traverse_num = Num + 1,
+                next_status_change_order = undefined
+            }};
         (#dir_stats_collector_config{status = stopping} = Config) ->
             {ok, Config#dir_stats_collector_config{status = disabled}};
         (#dir_stats_collector_config{status = Status}) ->
@@ -166,47 +147,32 @@ report_disabling_finished(SpaceId) ->
 
     case datastore_model:update(?CTX, SpaceId, Diff) of
         {ok, #document{value = #dir_stats_collector_config{status = disabled}}} ->
-            node_cache:put({dir_stats_collector_status, SpaceId}, disabled),
             ok;
-        {ok, #document{value = #dir_stats_collector_config{status = initializing}}} ->
-            node_cache:put({dir_stats_collector_status, SpaceId}, initializing),
-            dir_stats_initialization_traverse:run(SpaceId),
-            ok;
+        {ok, #document{value = #dir_stats_collector_config{status = initializing, traverse_num = TraverseNum}}} ->
+            dir_stats_initialization_traverse:run(SpaceId, TraverseNum);
         {error, {wrong_status, WrongStatus}} ->
             ?warning("Reporting space ~p disabling finished when space has status ~p", [SpaceId, WrongStatus]);
         {error, not_found} ->
-            ok
+            ?warning("Reporting space ~p disabling finished when space has no collector config document ~p", [SpaceId])
     end.
 
 
 -spec is_enabled_for_space(od_space:id()) -> boolean().
 is_enabled_for_space(SpaceId) ->
     case get_status_for_space(SpaceId) of
-        disabled -> false;
-        _ -> true
+        enabled -> true;
+        initializing -> true;
+        _ -> false
     end.
 
 
 -spec get_status_for_space(od_space:id()) -> status().
 get_status_for_space(SpaceId) ->
-    % TODO VFS-8837 - consider usage of datastore memory_copies instead of node_cache
-    % (check performance when doc cannot be found)
-    % TODO - ogarnac race ze zmienianiem uprawnien
-%%    {ok, Ans} = node_cache:acquire({dir_stats_collector_status, SpaceId}, fun() ->
-%%        case datastore_model:get(?CTX, SpaceId) of
-%%            {ok, #document{value = #dir_stats_collector_config{status = Status}}} ->
-%%                {ok, Status, infinity};
-%%            {error, not_found} ->
-%%                {ok, disabled, infinity}
-%%        end
-%%    end),
-%%    Ans.
     case datastore_model:get(?CTX, SpaceId) of
-        {ok, #document{value = #dir_stats_collector_config{status = Status}}} ->
-            {ok, Status};
-        {error, not_found} ->
-            {ok, disabled}
+        {ok, #document{value = #dir_stats_collector_config{status = Status}}} -> Status;
+        {error, not_found} -> disabled
     end.
+
 
 %%%===================================================================
 %%% datastore_model callbacks
@@ -237,7 +203,16 @@ get_record_struct(2) ->
 
 -spec upgrade_record(datastore_model:record_version(), datastore_model:record()) ->
     {datastore_model:record_version(), datastore_model:record()}.
-upgrade_record(1, {?MODULE, true = _Enabled}) ->
-    {2, {?MODULE, enabled, 0, undefined}};
-upgrade_record(1, {?MODULE, false = _Enabled}) ->
-    {2, {?MODULE, disabled, 0, undefined}}.
+upgrade_record(1, {?MODULE, IsEnabled}) ->
+    {2, {?MODULE, is_enabled_to_status(IsEnabled), 0, undefined}}.
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+-spec is_enabled_to_status(boolean()) -> status().
+is_enabled_to_status(true = _IsEnabled) ->
+    enabled;
+is_enabled_to_status(false = _IsEnabled) ->
+    disabled.

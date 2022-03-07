@@ -111,12 +111,12 @@ delete(Guid) ->
     ok = datastore_model:delete(?CTX, file_id:guid_to_uuid(Guid)).
 
 
--callback init_dir(file_id:file_guid()) -> dir_stats_collection:collection() | no_return().
+-spec init_dir(file_id:file_guid()) -> dir_stats_collection:collection() | no_return().
 init_dir(Guid) ->
     init(Guid).
 
 
--callback init_child(file_id:file_guid()) -> dir_stats_collection:collection() | no_return().
+-spec init_child(file_id:file_guid()) -> dir_stats_collection:collection() | no_return().
 init_child(Guid) ->
     init(Guid).
 

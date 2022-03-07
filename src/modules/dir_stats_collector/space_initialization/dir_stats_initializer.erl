@@ -18,7 +18,7 @@
 %%%       initialization.
 %%% @end
 %%%-------------------------------------------------------------------
--module(dir_stats_initializer).
+-module(dir_stats_initializer). %  TODO - moze cos innego niz initializer (trzeba ogarnac terminologie initializacja/enabling)
 -author("Michal Wrzeszcz").
 
 
@@ -41,6 +41,7 @@
 -type initialization_data() :: #initialization_data{}.
 -type initialization_data_map() :: #{dir_stats_collection:type() => initialization_data()}.
 -type collections_map() :: #{dir_stats_collection:type() => dir_stats_collection:collection()}.
+-export_type([initialization_data/0]).
 
 
 -define(RACE_PREVENTING_TIME, 5000). % If update appears in less than ?RACE_PREVENTING_TIME from initialization
@@ -155,10 +156,12 @@ init_batch_for_collection_type(SpaceId, Links, CollectionType, InitialStats) ->
     end, InitialStats, Links).
 
 
--spec finish_dir_init(file_id:guid(), [dir_stats_collection:type()], collections_map()) -> collections_map().
+-spec finish_dir_init(file_id:file_guid(), [dir_stats_collection:type()], collections_map()) -> collections_map().
 finish_dir_init(Guid, CollectionTypes, ChildrenStats) ->
-    StatsForGuid = lists:map(fun(CollectionType) -> CollectionType:init_dir(Guid) end, CollectionTypes),
+    StatsForGuid = lists:map(fun(CollectionType) ->
+        {CollectionType, CollectionType:init_dir(Guid)}
+    end, CollectionTypes),
 
     maps:merge_with(fun(CollectionType, Stats1, Stats2) ->
         dir_stats_collection:consolidate(CollectionType, Stats1, Stats2)
-    end, StatsForGuid, ChildrenStats).
+    end, maps:from_list(StatsForGuid), ChildrenStats).
