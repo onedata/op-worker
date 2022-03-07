@@ -20,7 +20,8 @@
 -include_lib("ctool/include/errors.hrl").
 
 
--export([single_provider_test/1, multiprovider_test/1]).
+-export([single_provider_test/1, multiprovider_test/1,
+    enabling_for_empty_space_test/1, enabling_for_not_empty_space_test/1]).
 -export([init/1, teardown/1]).
 -export([verify_dir_on_provider_creating_files/3, delete_stats/3]).
 
@@ -48,16 +49,18 @@
 
 single_provider_test(Config) ->
     % TODO VFS-8835 - test rename
-    create_initial_file_tree(Config, op_worker_nodes),
+    enable(Config, new_space),
+    create_initial_file_tree(Config, op_worker_nodes, enabled),
     check_initial_dir_stats(Config, op_worker_nodes),
     check_update_times(Config, [op_worker_nodes]).
 
 
 multiprovider_test(Config) ->
+    enable(Config, new_space),
     SpaceId = lfm_test_utils:get_user1_first_space_id(Config),
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
 
-    create_initial_file_tree(Config, ?PROVIDER_CREATING_FILES_NODES_SELECTOR),
+    create_initial_file_tree(Config, ?PROVIDER_CREATING_FILES_NODES_SELECTOR, enabled),
 
     lists:foreach(fun(NodesSelector) ->
         check_initial_dir_stats(Config, NodesSelector)
@@ -119,6 +122,20 @@ multiprovider_test(Config) ->
     end, [?PROVIDER_DELETING_FILES_NODES_SELECTOR, ?PROVIDER_CREATING_FILES_NODES_SELECTOR]).
 
 
+enabling_for_empty_space_test(Config) ->
+    enable(Config, existing_space),
+    create_initial_file_tree(Config, op_worker_nodes, initializing),
+    check_initial_dir_stats(Config, op_worker_nodes),
+    check_update_times(Config, [op_worker_nodes]).
+
+
+enabling_for_not_empty_space_test(Config) ->
+    create_initial_file_tree(Config, op_worker_nodes, disabled),
+    enable(Config, existing_space),
+    check_initial_dir_stats(Config, op_worker_nodes),
+    check_update_times(Config, [op_worker_nodes]).
+
+
 %%%===================================================================
 %%% Init and teardown
 %%%===================================================================
@@ -128,12 +145,6 @@ init(Config) ->
     {ok, EnableDirStatsCollectorForNewSpaces} =
         test_utils:get_env(Worker, op_worker, enable_dir_stats_collector_for_new_spaces),
     test_utils:set_env(Workers, op_worker, enable_dir_stats_collector_for_new_spaces, true),
-
-    SpaceId = lfm_test_utils:get_user1_first_space_id(Config),
-    lists:foreach(fun(W) ->
-        rpc:call(W, dir_stats_collector_config, init_for_empty_space, [SpaceId])
-    end, initializer:get_different_domain_workers(Config)),
-
 
     {ok, MinimalSyncRequest} = test_utils:get_env(Worker, op_worker, minimal_sync_request),
     test_utils:set_env(Workers, op_worker, minimal_sync_request, 1),
@@ -207,17 +218,34 @@ delete_stats(Config, NodesSelector, Guid) ->
 %%% Internal functions
 %%%===================================================================
 
-create_initial_file_tree(Config, NodesSelector) ->
+enable(Config, new_space) ->
+    SpaceId = lfm_test_utils:get_user1_first_space_id(Config),
+    lists:foreach(fun(W) ->
+        rpc:call(W, dir_stats_collector_config, init_for_empty_space, [SpaceId])
+    end, initializer:get_different_domain_workers(Config));
+enable(Config, existing_space) ->
+    SpaceId = lfm_test_utils:get_user1_first_space_id(Config),
+    Workers = initializer:get_different_domain_workers(Config),
+    lists:foreach(fun(W) ->
+        rpc:call(W, dir_stats_collector_config, enable_for_space, [SpaceId])
+    end, Workers),
+
+    lists:foreach(fun(W) ->
+        ?assertEqual(enabled, rpc:call(W, dir_stats_collector_config, get_status_for_space, [SpaceId]), ?ATTEMPTS)
+    end, Workers).
+
+
+create_initial_file_tree(Config, NodesSelector, CollectingStatus) ->
     [Worker | _] = ?config(NodesSelector, Config),
     SessId = lfm_test_utils:get_user1_session_id(Config, Worker),
     SpaceGuid = lfm_test_utils:get_user1_first_space_guid(Config),
 
     check_space_dir_values_map_and_time_series_collection(Config, NodesSelector, SpaceGuid, #{
-        ?REG_FILE_AND_LINK_COUNT => 0, 
+        ?REG_FILE_AND_LINK_COUNT => 0,
         ?DIR_COUNT => 0,
         ?TOTAL_SIZE => 0,
         ?TOTAL_SIZE_ON_STORAGE(Config, NodesSelector) => 0
-    }, true),
+    }, true, CollectingStatus),
 
     % Init tree structure
     Structure = [{3, 3}, {3, 3}, {3, 3}, {3, 3}, {0, 3}],
@@ -303,7 +331,7 @@ check_initial_dir_stats(Config, NodesSelector) ->
         ?DIR_COUNT => 120,
         ?TOTAL_SIZE => 1334,
         ?TOTAL_SIZE_ON_STORAGE(Config, NodesSelector) => ?INITIAL_DIR_TOTAL_SIZE_ON_STORAGE(NodesSelector, 1334)
-    }, false).
+    }, false, enabled).
 
 
 check_update_times(Config, NodesSelectors) ->
@@ -347,16 +375,33 @@ check_update_times(Config, NodesSelectors, FileConstructorsToCheck) ->
     end.
 
 
-check_space_dir_values_map_and_time_series_collection(Config, NodesSelector, SpaceGuid, ExpectedMap, IsCollectionEmpty) ->
+check_space_dir_values_map_and_time_series_collection(
+    Config, NodesSelector, SpaceGuid, _ExpectedMap, _IsCollectionEmpty, disabled = _CollectingStatus
+) ->
+    [Worker | _] = ?config(NodesSelector, Config),
+    ?assertMatch({error, dir_stats_disabled_for_space},
+        rpc:call(Worker, dir_size_stats, get_stats_and_time_series_collections, [SpaceGuid]));
+check_space_dir_values_map_and_time_series_collection(
+    Config, NodesSelector, SpaceGuid, ExpectedMap, IsCollectionEmpty, CollectingStatus
+) ->
+    Attempts = case CollectingStatus of
+        enabled -> 1;
+        initializing -> ?ATTEMPTS
+    end,
     [Worker | _] = ?config(NodesSelector, Config),
     {ok, {CurrentValues, WindowsMap}} = ?assertMatch({ok, {_, _}},
-        rpc:call(Worker, dir_size_stats, get_stats_and_time_series_collections, [SpaceGuid])),
+        rpc:call(Worker, dir_size_stats, get_stats_and_time_series_collections, [SpaceGuid]), Attempts),
 
     ?assertEqual(ExpectedMap, CurrentValues),
 
-    case IsCollectionEmpty of
-        true -> ?assertEqual(lists:duplicate(16, []), maps:values(WindowsMap));
-        false -> ?assertEqual(16, maps:size(WindowsMap))
+    case {IsCollectionEmpty, CollectingStatus} of
+        {true, enabled} ->
+            ?assertEqual(lists:duplicate(16, []), maps:values(WindowsMap));
+        {true, initializing} ->
+            ?assertEqual(lists:duplicate(16, 0),
+                lists:map(fun([{_Timestamp, Value}]) -> Value end, maps:values(WindowsMap)));
+        {false, _} ->
+            ?assertEqual(16, maps:size(WindowsMap))
     end.
 
 

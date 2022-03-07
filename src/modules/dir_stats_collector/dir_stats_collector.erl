@@ -220,7 +220,8 @@ update_stats_of_nearest_dir(Guid, CollectionType, CollectionUpdate) ->
     end.
 
 
--spec flush_stats(file_id:file_guid(), dir_stats_collection:type()) -> ok | ?ERROR_INTERNAL_SERVER_ERROR.
+-spec flush_stats(file_id:file_guid(), dir_stats_collection:type()) ->
+    ok | ?ERROR_FORBIDDEN | ?ERROR_INTERNAL_SERVER_ERROR.
 flush_stats(Guid, CollectionType) ->
     case dir_stats_collector_config:is_enabled_for_space(file_id:guid_to_space_id(Guid)) of
         true -> request_flush(Guid, CollectionType, prune_inactive);
@@ -363,7 +364,8 @@ handle_call(#dsc_get_request{
 handle_call(#dsc_flush_request{guid = Guid, collection_type = CollectionType, pruning_strategy = PruningStrategy}, State) ->
     case flush_cached_dir_stats(gen_cached_dir_stats_key(Guid, CollectionType), PruningStrategy, State) of
         {true, UpdatedState} -> {ok, UpdatedState};
-        {false, UpdatedState} -> {?ERROR_INTERNAL_SERVER_ERROR, UpdatedState}
+        {false, UpdatedState} -> {?ERROR_INTERNAL_SERVER_ERROR, UpdatedState};
+        {initializing, UpdatedState} -> {?ERROR_FORBIDDEN, UpdatedState} % TODO - moze lepszy blad niz ?ERROR_FORBIDDEN
     end;
 
 handle_call(?INITIALIZE(Guid), State) ->
@@ -548,7 +550,7 @@ flush_all(#state{
     ensure_flush_scheduled(lists:foldl(fun(CachedDirStatsKey, StateAcc) ->
         {HasSucceeded, UpdatedStateAcc} = flush_cached_dir_stats(CachedDirStatsKey, prune_inactive, StateAcc),
         UpdatedStateAcc#state{
-            has_unflushed_changes = StateAcc#state.has_unflushed_changes orelse not HasSucceeded
+            has_unflushed_changes = StateAcc#state.has_unflushed_changes orelse HasSucceeded =/= true % TODO - ladny zwracany typ z flush_cached_dir_stats
         }
     end, State#state{has_unflushed_changes = false}, maps:keys(DirStatsCache)));
 
@@ -591,7 +593,7 @@ flush_cached_dir_stats({_, CollectionType} = CachedDirStatsKey, PruningStrategy,
                         CachedDirStatsKey, set_collecting_active(CachedDirStats, CollectionType), State),
                     flush_cached_dir_stats(CachedDirStatsKey, PruningStrategy, UpdatedState);
                 false ->
-                    {false, State}
+                    {initializing, State} % TODO - ladny zwracany typ
             end
     end.
 
@@ -820,7 +822,7 @@ call_designated_node(Guid, Function, Args) ->
     Node = consistent_hashing:get_assigned_node(Guid),
     case erpc:call(Node, pes, Function, Args) of
         {error, _} = Error ->
-            ?error("Dir stats collector PES fun ~p error: ~p for Guid", [Function, Error, Guid]),
+            ?error("Dir stats collector PES fun ~p error: ~p for guid ~p", [Function, Error, Guid]),
             ?ERROR_INTERNAL_SERVER_ERROR;
         Other ->
             Other

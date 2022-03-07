@@ -158,7 +158,7 @@ report_disabling_finished(SpaceId) ->
 
 
 -spec is_enabled_for_space(od_space:id()) -> boolean().
-is_enabled_for_space(SpaceId) ->
+is_enabled_for_space(SpaceId) -> % TODO - zmienic nazwe zeby nie sugerowala ze chodzi o stan enabled tylko o to, ze zbieramy statystyki
     case get_status_for_space(SpaceId) of
         enabled -> true;
         initializing -> true;

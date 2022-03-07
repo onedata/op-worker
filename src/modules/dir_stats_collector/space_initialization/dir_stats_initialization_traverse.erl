@@ -22,7 +22,7 @@
 
 
 %% API
--export([init_pool/0, run/2, cancel/2]).
+-export([init_pool/0, stop_pool/0, run/2, cancel/2]).
 %% Pool callbacks
 -export([do_master_job/2, do_slave_job/2, update_job_progress/5, get_job/1, task_finished/2, task_canceled/2]).
 
@@ -36,6 +36,11 @@
 -spec init_pool() -> ok | no_return().
 init_pool() ->
     tree_traverse:init(?MODULE, 10, 0, 5).
+
+
+-spec stop_pool() -> ok.
+stop_pool() ->
+    tree_traverse:stop(?MODULE).
 
 
 -spec run(file_id:space_id(), non_neg_integer()) -> ok.

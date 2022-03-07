@@ -32,7 +32,7 @@
 
 -record(initialization_data, {
     status = race_possible :: initalized | race_possible,
-    init_watch :: stopwatch:instance() | undefined, % watch used to handle initialization/update races
+    init_timer :: countdown_timer:instance() | undefined, % watch used to handle initialization/update races
     dir_and_direct_children_stats :: dir_stats_collection:collection() | undefined,
     stats_from_descendants :: dir_stats_collection:collection() | undefined
 }).
@@ -58,8 +58,8 @@ new_initialization_data() ->
 
 
 -spec are_stats_ready(initialization_data()) -> boolean().
-are_stats_ready(#initialization_data{status = initalized, init_watch = Watch}) ->
-    stopwatch:read_millis(Watch) >= ?RACE_PREVENTING_TIME;
+are_stats_ready(#initialization_data{status = initalized, init_timer = Timer}) when Timer =/= undefined ->
+    countdown_timer:is_expired(Timer);
 are_stats_ready(_) ->
     false.
 
@@ -73,12 +73,17 @@ is_race_reported(#initialization_data{status = Status}) ->
 report_race(Data) ->
     Data#initialization_data{
         status = race_possible,
-        init_watch = undefined,
+        init_timer = undefined,
         dir_and_direct_children_stats = undefined
     }.
 
 
 -spec get_stats(initialization_data(), dir_stats_collection:type()) -> dir_stats_collection:collection().
+get_stats(#initialization_data{
+    dir_and_direct_children_stats = DirWithDirectChildrenStats,
+    stats_from_descendants = undefined
+}, _CollectionType) ->
+    DirWithDirectChildrenStats;
 get_stats(#initialization_data{
     dir_and_direct_children_stats = DirWithDirectChildrenStats,
     stats_from_descendants = StatsFromDescendants
@@ -88,6 +93,12 @@ get_stats(#initialization_data{
 
 -spec update_stats_from_descendants(initialization_data(), dir_stats_collection:type(),
     dir_stats_collection:collection()) -> initialization_data().
+update_stats_from_descendants(#initialization_data{
+    stats_from_descendants = undefined
+} = Data, _CollectionType, CollectionUpdate) ->
+    Data#initialization_data{
+        stats_from_descendants = CollectionUpdate
+    };
 update_stats_from_descendants(#initialization_data{
     stats_from_descendants = CurrentStats
 } = Data, CollectionType, CollectionUpdate) ->
@@ -108,9 +119,11 @@ ensure_dir_initialized(Guid, DataMap) ->
         FileUuid, SpaceId, CollectionTypesToInit, #{token => ?INITIAL_DATASTORE_LS_TOKEN, size => ?BATCH_SIZE}, #{}),
     FinalStatsMap = finish_dir_init(Guid, CollectionTypesToInit, StatsMap),
 
+    InitTimer = countdown_timer:start_millis(?RACE_PREVENTING_TIME),
     maps:merge_with(fun(_CollectionType, Data, Stats) ->
         Data#initialization_data{
             status = initalized,
+            init_timer = InitTimer,
             dir_and_direct_children_stats = Stats
         }
     end, DataMap, FinalStatsMap).
@@ -137,6 +150,8 @@ init_for_dir_children(FileUuid, SpaceId, CollectionTypes, ListOpts, Acc) ->
 
 -spec init_batch(file_id:space_id(), [file_meta:link()], [dir_stats_collection:type()], collections_map()) ->
     collections_map().
+init_batch(_SpaceId, _Links, _CollectionTypes, InitialAcc) ->
+    InitialAcc;
 init_batch(SpaceId, Links, CollectionTypes, InitialAcc) ->
     lists:foldl(fun(CollectionType, Acc) ->
         CollectionStats = maps:get(CollectionType, Acc, undefined),

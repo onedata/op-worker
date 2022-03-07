@@ -91,15 +91,19 @@ get_stats(Guid, StatNames) ->
 %%--------------------------------------------------------------------
 -spec get_stats_and_time_series_collections(file_id:file_guid()) ->
     {ok, {dir_stats_collection:collection(), time_series_collection:windows_map()}} |
-    ?ERROR_INTERNAL_SERVER_ERROR | ?ERROR_DIR_STATS_DISABLED_FOR_SPACE.
+    ?ERROR_INTERNAL_SERVER_ERROR | ?ERROR_DIR_STATS_DISABLED_FOR_SPACE | ?ERROR_FORBIDDEN.
 get_stats_and_time_series_collections(Guid) ->
     case dir_stats_collector_config:is_enabled_for_space(file_id:guid_to_space_id(Guid)) of
         true ->
-            ok = dir_stats_collector:flush_stats(Guid, ?MODULE),
-            Uuid = file_id:guid_to_uuid(Guid),
-            case datastore_time_series_collection:list_windows(?CTX, Uuid, #{}) of
-                {ok, WindowsMap} -> {ok, all_metrics_to_stats_and_time_series_collections(WindowsMap)};
-                {error, not_found} -> {ok, {gen_empty_stats_collection(Guid), gen_empty_time_series_collection(Guid)}}
+            case dir_stats_collector:flush_stats(Guid, ?MODULE) of
+                ok ->
+                    Uuid = file_id:guid_to_uuid(Guid),
+                    case datastore_time_series_collection:list_windows(?CTX, Uuid, #{}) of
+                        {ok, WindowsMap} -> {ok, all_metrics_to_stats_and_time_series_collections(WindowsMap)};
+                        {error, not_found} -> {ok, {gen_empty_stats_collection(Guid), gen_empty_time_series_collection(Guid)}}
+                    end;
+                ?ERROR_FORBIDDEN ->
+                    ?ERROR_FORBIDDEN
             end;
         false ->
             ?ERROR_DIR_STATS_DISABLED_FOR_SPACE

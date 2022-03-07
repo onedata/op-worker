@@ -28,6 +28,8 @@
 %% tests
 -export([
     dir_stats_collector_test/1,
+    dir_stats_collector_test_enabling_for_empty_space_test/1,
+    dir_stats_collector_test_enabling_for_not_empty_space_test/1,
     fslogic_new_file_test/1,
     lfm_create_and_unlink_test/1,
     lfm_create_and_access_test/1,
@@ -122,6 +124,8 @@
 -define(TEST_CASES, [
     get_recursive_file_list, % this test must be run first as it requires empty space
     dir_stats_collector_test,
+    dir_stats_collector_test_enabling_for_empty_space_test,
+    dir_stats_collector_test_enabling_for_not_empty_space_test,
     fslogic_new_file_test,
     lfm_create_and_unlink_test,
     lfm_create_and_access_test,
@@ -949,8 +953,16 @@ lfm_close_deleted_open_files(Config) ->
     lfm_files_test_base:lfm_close_deleted_open_files(Config).
 
 
-dir_stats_collector_test(Config) ->
+dir_stats_collector_test(Config) -> % TODO - zmienic nazwe zeby pokazywala ze jest to dla nowego space (tutaj i w pliku _base)
     dir_stats_collector_test_base:single_provider_test(Config).
+
+
+dir_stats_collector_test_enabling_for_empty_space_test(Config) ->
+    dir_stats_collector_test_base:enabling_for_empty_space_test(Config).
+
+
+dir_stats_collector_test_enabling_for_not_empty_space_test(Config) ->
+    dir_stats_collector_test_base:enabling_for_not_empty_space_test(Config).
 
 
 %%%===================================================================
@@ -966,7 +978,7 @@ end_per_suite(Config) ->
 init_per_testcase(Case, Config) when
     Case =:= rename_removed_opened_file_races_test;
     Case =:= rename_removed_opened_file_races_test2
-    ->
+->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, storage_driver, [passthrough]),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
@@ -975,7 +987,11 @@ init_per_testcase(lfm_create_and_read_symlink = Case, Config) ->
     time_test_utils:freeze_time(Config),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 
-init_per_testcase(dir_stats_collector_test = Case, Config) ->
+init_per_testcase(Case, Config) when
+    Case =:= dir_stats_collector_test;
+    Case =:= dir_stats_collector_test_enabling_for_empty_space_test;
+    Case =:= dir_stats_collector_test_enabling_for_not_empty_space_test
+->
     dir_stats_collector_test_base:init(init_per_testcase(?DEFAULT_CASE(Case), Config));
 
 init_per_testcase(Case, Config) ->
@@ -985,7 +1001,7 @@ init_per_testcase(Case, Config) ->
 end_per_testcase(Case, Config) when
     Case =:= rename_removed_opened_file_races_test;
     Case =:= rename_removed_opened_file_races_test2
-    ->
+->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Workers, [storage_driver]),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
@@ -994,7 +1010,11 @@ end_per_testcase(lfm_create_and_read_symlink = Case, Config) ->
     time_test_utils:unfreeze_time(Config),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 
-end_per_testcase(dir_stats_collector_test = Case, Config) ->
+end_per_testcase(Case, Config) when
+    Case =:= dir_stats_collector_test;
+    Case =:= dir_stats_collector_test_enabling_for_empty_space_test;
+    Case =:= dir_stats_collector_test_enabling_for_not_empty_space_test
+->
     dir_stats_collector_test_base:teardown(Config),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 
