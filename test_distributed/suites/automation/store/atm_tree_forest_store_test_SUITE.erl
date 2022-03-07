@@ -102,8 +102,8 @@ update_content_test(_Config) ->
         get_input_item_generator_seed_data_spec => fun get_input_item_generator_seed_data_spec/1,
         input_item_formatter => fun input_item_formatter/1,
         input_item_to_exp_store_item => fun input_item_to_exp_store_item/3,
-        build_content_update_options := fun build_content_update_options/1,
-        get_content_fun := fun get_content/2
+        build_content_update_options => fun build_content_update_options/1,
+        get_content => fun get_content/2
     }).
 
 
@@ -114,8 +114,8 @@ browse_content_by_index_test(_Config) ->
         input_item_formatter => fun input_item_formatter/1,
         input_item_to_exp_store_item => fun input_item_to_exp_store_item/3,
         randomly_remove_entity_referenced_by_item => fun randomly_remove_entity_referenced_by_item/3,
-        build_content_browse_options := fun build_content_browse_options/1,
-        build_content_browse_result := fun build_content_browse_result/2
+        build_content_browse_options => fun build_content_browse_options/1,
+        build_content_browse_result => fun build_content_browse_result/2
     }).
 
 
@@ -126,8 +126,8 @@ browse_content_by_offset_test(_Config) ->
         input_item_formatter => fun input_item_formatter/1,
         input_item_to_exp_store_item => fun input_item_to_exp_store_item/3,
         randomly_remove_entity_referenced_by_item => fun randomly_remove_entity_referenced_by_item/3,
-        build_content_browse_options := fun build_content_browse_options/1,
-        build_content_browse_result := fun build_content_browse_result/2
+        build_content_browse_options => fun build_content_browse_options/1,
+        build_content_browse_result => fun build_content_browse_result/2
     }).
 
 
@@ -387,7 +387,7 @@ build_content_update_options(UpdateFun) ->
 -spec get_content(atm_workflow_execution_auth:record(), atm_store:id()) ->
     [atm_value:expanded()].
 get_content(AtmWorkflowExecutionAuth, AtmStoreId) ->
-    BrowseOpts = build_content_browse_options(#{<<"limit">> => 10000000000000000}),
+    BrowseOpts = build_content_browse_options(#{<<"limit">> => 1000}),
     #atm_tree_forest_store_content_browse_result{
         tree_roots = TreeRoots,
         is_last = true
@@ -407,10 +407,10 @@ build_content_browse_options(OptsJson) ->
 
 
 %% @private
--spec build_content_browse_result([atm_store_container_infinite_log_backend:entry], boolean()) ->
+-spec build_content_browse_result([atm_store_container_infinite_log_backend:entry()], boolean()) ->
     atm_tree_forest_store_content_browse_result:record().
 build_content_browse_result(Entries, IsLast) ->
-    #atm_list_store_content_browse_result{items = Entries, is_last = IsLast}.
+    #atm_tree_forest_store_content_browse_result{tree_roots = Entries, is_last = IsLast}.
 
 
 -spec iterate_test_base(pos_integer(), non_neg_integer(), atm_data_type:type()) -> ok.

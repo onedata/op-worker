@@ -202,9 +202,11 @@ browse_content_test(_Config) ->
         {ok, AtmStoreId} = ?extract_key(?rpc(atm_store_api:create(
             AtmWorkflowExecutionAuth, undefined, AtmStoreSchema
         ))),
+        BrowseOpts = #atm_single_value_store_content_browse_options{},
+
         ?assertEqual(
             #atm_single_value_store_content_browse_result{item = undefined},
-            ?rpc(atm_store_api:browse_content(AtmWorkflowExecutionAuth, #{}, AtmStoreId))
+            ?rpc(atm_store_api:browse_content(AtmWorkflowExecutionAuth, BrowseOpts, AtmStoreId))
         ),
 
         Item = gen_valid_data(AtmWorkflowExecutionAuth, ItemDataSpec),
@@ -213,7 +215,7 @@ browse_content_test(_Config) ->
 
         ?assertEqual(
             #atm_single_value_store_content_browse_result{item = {ok, ExpandedItem}},
-            ?rpc(atm_store_api:browse_content(AtmWorkflowExecutionAuth, #{}, AtmStoreId))
+            ?rpc(atm_store_api:browse_content(AtmWorkflowExecutionAuth, BrowseOpts, AtmStoreId))
         )
 
     end, example_configs()).

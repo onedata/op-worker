@@ -94,7 +94,7 @@ sanitize_listing_opts(Data, SupportedOptionsType) ->
     BasicOptions = #{
         <<"index">> => {binary, fun(IndexBin) ->
             try
-                binary_to_integer(IndexBin),
+                _ = binary_to_integer(IndexBin),
                 true
             catch _:_ ->
                 throw(?ERROR_BAD_DATA(<<"index">>, <<"not numerical">>))
@@ -107,7 +107,7 @@ sanitize_listing_opts(Data, SupportedOptionsType) ->
         extended -> BasicOptions#{<<"timestamp">> => {integer, {not_lower_than, 0}}};
         basic -> BasicOptions
     end,
-    SanitizedData = middleware_sanitizer:sanitize_data(Data, AllOptions),
+    SanitizedData = middleware_sanitizer:sanitize_data(Data, #{optional => AllOptions}),
 
     #{
         start_from => infer_start_from(SanitizedData),

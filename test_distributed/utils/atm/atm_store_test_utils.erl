@@ -243,7 +243,7 @@ gen_valid_data(_ProviderSelector, _AtmWorkflowExecutionAuth, #atm_data_spec{
 -spec gen_ts_name(atm_time_series_measurements_spec:record()) ->
     atm_time_series_attribute:name().
 gen_ts_name(#atm_time_series_measurements_spec{
-    name_matcher_type = fixed,
+    name_matcher_type = exact,
     name_matcher = TsName
 }) ->
     TsName;

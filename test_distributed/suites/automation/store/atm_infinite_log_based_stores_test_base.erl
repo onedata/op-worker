@@ -72,7 +72,7 @@
     atm_store_content_browse_options:record()
 ).
 
--type build_content_browse_result() :: fun(([atm_store_container_infinite_log_backend:entry], boolean()) ->
+-type build_content_browse_result() :: fun(([atm_store_container_infinite_log_backend:entry()], boolean()) ->
     atm_store_content_browse_result:record()
 ).
 
@@ -189,7 +189,7 @@ create_test_base(#{
     input_item_formatter := input_item_formatter(),
     input_item_to_exp_store_item := input_item_to_exp_store_item(),
     build_content_update_options := build_content_update_options(),
-    get_content_fun := get_content()
+    get_content := get_content()
 }) ->
     ok | no_return().
 update_content_test_base(#{
@@ -198,7 +198,7 @@ update_content_test_base(#{
     input_item_formatter := InputItemFormatterFun,
     input_item_to_exp_store_item := InputItemToExpStoreItemFun,
     build_content_update_options := BuildContentUpdateOptionsFun,
-    get_content_fun := GetContentFun
+    get_content := GetContentFun
 }) ->
     AtmWorkflowExecutionAuth = create_workflow_execution_auth(),
 
