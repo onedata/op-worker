@@ -26,6 +26,7 @@
 -export([
     groups/0, all/0,
     init_per_suite/1, end_per_suite/1,
+    init_per_group/2, end_per_group/2,
     init_per_testcase/2, end_per_testcase/2
 ]).
 
@@ -45,30 +46,32 @@
 ]).
 
 groups() -> [
-    {all_tests, [parallel], [
+    {singular_item_based_stores_common_tests, [parallel], [
         create_test,
         update_content_test,
-
+        browse_content_test
+    ]},
+    {range_store_specific_tests, [parallel], [
         iterate_in_chunks_5_with_start_10_end_50_step_2_test,
         iterate_in_chunks_10_with_start_1_end_2_step_10_test,
         iterate_in_chunks_10_with_start_minus_50_end_50_step_4_test,
         iterate_in_chunks_7_with_start_50_end_minus_50_step_minus_3_test,
         iterate_in_chunks_3_with_start_10_end_10_step_2_test,
-
-        reuse_iterator_test,
-        browse_content_test
+        reuse_iterator_test
     ]}
 ].
 
 all() -> [
-    {group, all_tests}
+    {group, singular_item_based_stores_common_tests},
+    {group, range_store_specific_tests}
 ].
 
 
--define(PROVIDER_SELECTOR, krakow).
 -define(ATM_STORE_CONFIG, #atm_range_store_config{}).
 
+-define(PROVIDER_SELECTOR, krakow).
 -define(rpc(Expr), ?rpc(?PROVIDER_SELECTOR, Expr)).
+-define(erpc(Expr), ?erpc(?PROVIDER_SELECTOR, Expr)).
 
 
 %%%===================================================================
@@ -77,81 +80,29 @@ all() -> [
 
 
 create_test(_Config) ->
-    AtmWorkflowExecutionAuth = create_workflow_execution_auth(),
-
-    % Assert it is not possible to create range store with no initial content
-    ?assertEqual(
-        ?ERROR_MISSING_REQUIRED_VALUE(<<"end">>),
-        ?rpc(catch atm_store_api:create(
-            AtmWorkflowExecutionAuth,
-            undefined,
-            atm_store_test_utils:build_store_schema(?ATM_STORE_CONFIG, false)
-        ))
-    ),
-
-    lists:foreach(fun({InvalidInitialContent, ExpError}) ->
-        AtmStoreSchema = atm_store_test_utils:build_store_schema(?ATM_STORE_CONFIG, true),
-        ?assertEqual(ExpError, ?rpc(catch atm_store_api:create(
-            AtmWorkflowExecutionAuth, InvalidInitialContent, AtmStoreSchema
-        )))
-    end, [
-        {undefined, ?ERROR_ATM_STORE_MISSING_REQUIRED_INITIAL_CONTENT},
-        {#{}, ?ERROR_MISSING_REQUIRED_VALUE(<<"end">>)},
-        {#{<<"end">> => <<"NaN">>},
-            ?ERROR_BAD_DATA(<<"end">>, ?ERROR_ATM_DATA_TYPE_UNVERIFIED(<<"NaN">>, atm_integer_type))
-        },
-        {#{<<"start">> => <<"NaN">>, <<"end">> => 10},
-            ?ERROR_BAD_DATA(<<"start">>, ?ERROR_ATM_DATA_TYPE_UNVERIFIED(<<"NaN">>, atm_integer_type))
-        },
-        {#{<<"start">> => 5, <<"end">> => 10, <<"step">> => <<"NaN">>},
-            ?ERROR_BAD_DATA(<<"step">>, ?ERROR_ATM_DATA_TYPE_UNVERIFIED(<<"NaN">>, atm_integer_type))
-        },
-        {#{<<"start">> => 5, <<"end">> => 10, <<"step">> => 0},
-            ?ERROR_BAD_DATA(<<"range">>, <<"invalid range specification">>)
-        },
-        {#{<<"start">> => 15, <<"end">> => 10, <<"step">> => 1},
-            ?ERROR_BAD_DATA(<<"range">>, <<"invalid range specification">>)
-        },
-        {#{<<"start">> => -15, <<"end">> => -10, <<"step">> => -1},
-            ?ERROR_BAD_DATA(<<"range">>, <<"invalid range specification">>)
-        },
-        {#{<<"start">> => 10, <<"end">> => 15, <<"step">> => -1},
-            ?ERROR_BAD_DATA(<<"range">>, <<"invalid range specification">>)
-        }
-    ]),
-
-    CreateStoreFun = atm_store_test_utils:build_create_store_with_initial_content_fun(
-        AtmWorkflowExecutionAuth, ?ATM_STORE_CONFIG, #{<<"end">> => 989}
-    ),
-    lists:foreach(fun(ValidInitialContent) ->
-        ?assertMatch(
-            {ok, #document{value = #atm_store{initial_content = ValidInitialContent, frozen = false}}},
-            ?rpc(CreateStoreFun(ValidInitialContent))
-        )
-    end, [
-        #{<<"end">> => 10},
-        #{<<"start">> => 1, <<"end">> => 10},
-        #{<<"start">> => 5, <<"end">> => 10, <<"step">> => 2},
-        #{<<"start">> => 15, <<"end">> => 10, <<"step">> => -1}
-    ]).
+    atm_singular_item_based_stores_test_base:create_test_base(
+        [?ATM_STORE_CONFIG],
+        fun get_item_data_spec/1
+    ).
 
 
 update_content_test(_Config) ->
-    AtmWorkflowExecutionAuth = create_workflow_execution_auth(),
-    AtmStoreSchema = atm_store_test_utils:build_store_schema(?ATM_STORE_CONFIG),
+    atm_singular_item_based_stores_test_base:update_content_test_base(
+        [?ATM_STORE_CONFIG],
+        fun get_item_data_spec/1,
+        #atm_range_store_content_update_options{},
+        fun get_content/2
+    ).
 
-    InitialContent = #{<<"start">> => 5, <<"end">> => 10, <<"step">> => 2},
-    {ok, AtmStoreId} = ?extract_key(?rpc(atm_store_api:create(
-        AtmWorkflowExecutionAuth, InitialContent, AtmStoreSchema
-    ))),
 
-    % Assert no operation is supported
-    NewContent = #{<<"end">> => 100},
-    UpdateOpts = #atm_range_store_content_update_options{},
-    ?assertEqual(?ERROR_NOT_SUPPORTED, ?rpc(catch atm_store_api:update_content(
-        AtmWorkflowExecutionAuth, NewContent, UpdateOpts, AtmStoreId
-    ))),
-    ?assertEqual(InitialContent, get_content(AtmWorkflowExecutionAuth, AtmStoreId)).
+browse_content_test(_Config) ->
+    atm_singular_item_based_stores_test_base:browse_content_test_base(
+        [?ATM_STORE_CONFIG],
+        fun get_item_data_spec/1,
+        #atm_range_store_content_browse_options{},
+        fun set_content/3,
+        fun(Content) -> #atm_range_store_content_browse_result{range = Content} end
+    ).
 
 
 iterate_in_chunks_5_with_start_10_end_50_step_2_test(_Config) ->
@@ -236,23 +187,6 @@ reuse_iterator_test(_Config) ->
     ?assertMatch({ok, [8], _}, ?rpc(iterator:get_next(AtmWorkflowExecutionEnv, Iterator9))).
 
 
-browse_content_test(_Config) ->
-    AtmWorkflowExecutionAuth = create_workflow_execution_auth(),
-    AtmStoreSchema = atm_store_test_utils:build_store_schema(?ATM_STORE_CONFIG),
-
-    {ok, AtmStoreId} = ?extract_key(?rpc(atm_store_api:create(
-        AtmWorkflowExecutionAuth,
-        #{<<"start">> => 2, <<"end">> => 16, <<"step">> => 3},
-        AtmStoreSchema
-    ))),
-    BrowseOpts = #atm_range_store_content_browse_options{},
-
-    ?assertEqual(
-        #atm_range_store_content_browse_result{range = {2, 16, 3}},
-        ?rpc(atm_store_api:browse_content(AtmWorkflowExecutionAuth, BrowseOpts, AtmStoreId))
-    ).
-
-
 %===================================================================
 % Helper functions
 %===================================================================
@@ -280,14 +214,36 @@ build_workflow_execution_env(AtmWorkflowExecutionAuth, AtmStoreSchemaId, AtmStor
 
 
 %% @private
+-spec get_item_data_spec(atm_range_store_config:record()) -> atm_data_spec:record().
+get_item_data_spec(#atm_range_store_config{}) -> #atm_data_spec{type = atm_range_type}.
+
+
+%% @private
+-spec set_content(atm_workflow_execution_auth:record(), atm_value:expanded(), atm_store:id()) ->
+    ok.
+set_content(AtmWorkflowExecutionAuth, Item, AtmStoreId) ->
+    ?rpc(atm_store_api:update_content(
+        AtmWorkflowExecutionAuth,
+        Item,
+        #atm_range_store_content_update_options{},
+        AtmStoreId
+    )).
+
+
+%% @private
 -spec get_content(atm_workflow_execution_auth:record(), atm_store:id()) ->
     undefined | atm_value:expanded().
 get_content(AtmWorkflowExecutionAuth, AtmStoreId) ->
-    atm_range_store_content_browse_result:to_json(?rpc(atm_store_api:browse_content(
-        AtmWorkflowExecutionAuth,
-        #atm_range_store_content_browse_options{},
-        AtmStoreId
-    ))).
+    try
+        #atm_range_store_content_browse_result{range = RangeJson} = ?erpc(atm_store_api:browse_content(
+            AtmWorkflowExecutionAuth,
+            #atm_range_store_content_browse_options{},
+            AtmStoreId
+        )),
+        RangeJson
+    catch throw:?ERROR_ATM_STORE_EMPTY(_) ->
+        undefined
+    end.
 
 
 %% @private
@@ -314,7 +270,7 @@ assert_all_items_listed(AtmWorkflowExecutionEnv, Iterator0, [ExpBatch | RestBatc
 
 
 init_per_suite(Config) ->
-    ModulesToLoad = [?MODULE, atm_store_test_utils],
+    ModulesToLoad = [?MODULE | atm_singular_item_based_stores_test_base:modules_to_load()],
     oct_background:init_per_suite([{?LOAD_MODULES, ModulesToLoad} | Config], #onenv_test_config{
         onenv_scenario = "1op",
         envs = [{op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}]
@@ -323,6 +279,18 @@ init_per_suite(Config) ->
 
 end_per_suite(_Config) ->
     oct_background:end_per_suite().
+
+
+init_per_group(singular_item_based_stores_common_tests, Config) ->
+    atm_singular_item_based_stores_test_base:init_per_group(Config);
+init_per_group(range_store_specific_tests, Config) ->
+    Config.
+
+
+end_per_group(singular_item_based_stores_common_tests, Config) ->
+    atm_singular_item_based_stores_test_base:end_per_group(Config);
+end_per_group(range_store_specific_tests, _Config) ->
+    ok.
 
 
 init_per_testcase(_Case, Config) ->
