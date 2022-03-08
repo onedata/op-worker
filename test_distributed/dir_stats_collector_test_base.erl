@@ -21,7 +21,8 @@
 
 
 -export([single_provider_test/1, multiprovider_test/1,
-    enabling_for_empty_space_test/1, enabling_for_not_empty_space_test/1, enabling_during_writing_test/1]).
+    enabling_for_empty_space_test/1, enabling_for_not_empty_space_test/1, enabling_during_writing_test/1,
+    race_with_file_adding_test/1]).
 -export([init/1, teardown/1]).
 -export([verify_dir_on_provider_creating_files/3, delete_stats/3]).
 
@@ -124,6 +125,7 @@ multiprovider_test(Config) ->
 
 enabling_for_empty_space_test(Config) ->
     enable(Config, existing_space),
+    verify_enabled(Config),
     create_initial_file_tree_and_fill_files(Config, op_worker_nodes, initializing),
     check_initial_dir_stats(Config, op_worker_nodes),
     check_update_times(Config, [op_worker_nodes]).
@@ -132,6 +134,7 @@ enabling_for_empty_space_test(Config) ->
 enabling_for_not_empty_space_test(Config) ->
     create_initial_file_tree_and_fill_files(Config, op_worker_nodes, disabled),
     enable(Config, existing_space),
+    verify_enabled(Config),
     check_initial_dir_stats(Config, op_worker_nodes),
     check_update_times(Config, [op_worker_nodes]).
 
@@ -142,6 +145,30 @@ enabling_during_writing_test(Config) ->
     fill_files(Config, op_worker_nodes),
     check_initial_dir_stats(Config, op_worker_nodes),
     check_update_times(Config, [op_worker_nodes]).
+
+
+race_with_file_adding_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    SessId = lfm_test_utils:get_user1_session_id(Config, Worker),
+    SpaceGuid = lfm_test_utils:get_user1_first_space_guid(Config),
+    RacedTestFileName = <<"test_file">>,
+
+    Structure = [{3, 3}, {3, 3}],
+    lfm_test_utils:create_files_tree(Worker, SessId, Structure, SpaceGuid),
+
+    enable(Config, existing_space),
+    lfm_test_utils:create_and_write_file(Worker, SessId, SpaceGuid, RacedTestFileName, 0, {rand_content, 10}),
+
+    check_dir_stats(Config, op_worker_nodes, SpaceGuid, #{
+        ?REG_FILE_AND_LINK_COUNT => 13,
+        ?DIR_COUNT => 12,
+        ?TOTAL_SIZE => 10,
+        ?TOTAL_SIZE_ON_STORAGE(Config, op_worker_nodes) => 10
+    }).
+
+
+race_with_file_writing_test(Config) ->
+    ok.
 
 
 %%%===================================================================
@@ -233,14 +260,16 @@ enable(Config, new_space) ->
     end, initializer:get_different_domain_workers(Config));
 enable(Config, existing_space) ->
     SpaceId = lfm_test_utils:get_user1_first_space_id(Config),
-    Workers = initializer:get_different_domain_workers(Config),
     lists:foreach(fun(W) ->
         rpc:call(W, dir_stats_collector_config, enable_for_space, [SpaceId])
-    end, Workers),
+    end, initializer:get_different_domain_workers(Config)).
 
+
+verify_enabled(Config) ->
+    SpaceId = lfm_test_utils:get_user1_first_space_id(Config),
     lists:foreach(fun(W) ->
         ?assertEqual(enabled, rpc:call(W, dir_stats_collector_config, get_status_for_space, [SpaceId]), ?ATTEMPTS)
-    end, Workers).
+    end, initializer:get_different_domain_workers(Config)).
 
 
 create_initial_file_tree_and_fill_files(Config, NodesSelector, CollectingStatus) ->

@@ -426,19 +426,25 @@ handle_cast(#dsc_update_request{
             handle_update_request_during_initialization(Request, State)
     end;
 
-handle_cast(?SCHEDULED_FLUSH, #state{space_collecting_statuses = SpaceCollectingStatuses} = State) ->
+handle_cast(?SCHEDULED_FLUSH, #state{
+    space_collecting_statuses = SpaceCollectingStatuses,
+    dir_stats_cache = DirStatsCache
+} = State) ->
     UpdatedState = flush_all(State#state{flush_timer_ref = undefined}),
 
     % TODO - moze to przeniesc do procedury inicjalizacji? tylko trzeba pamietac ze musi ona wystepowac w kolko tak dlugo jak jakis space ma stan initializing
     maps:fold(fun
         (SpaceId, initializing, StateAcc) ->
+            AllActive = maps:fold(fun(_, #cached_dir_stats{collecting_status = Status}, Acc) ->
+                Status =:= active andalso Acc
+            end, true, DirStatsCache),
+
             % TODO - co nam po tym stanie jak i tak musimy sprawdzac stan kazdego wpisu w cache
             % moze zmienic stan space dopiero jak wszystkie spisy przejda w stan initializing?
-%%            case dir_stats_collector_config:get_status_for_space(SpaceId) of
-%%                enabled -> StateAcc#state{space_collecting_statuses = SpaceCollectingStatuses#{SpaceId => enabled}};
-%%                _ -> StateAcc
-%%            end;
-            StateAcc;
+            case AllActive andalso dir_stats_collector_config:get_status_for_space(SpaceId) =:= enabled of
+                true -> StateAcc#state{space_collecting_statuses = SpaceCollectingStatuses#{SpaceId => enabled}};
+                false -> StateAcc
+            end;
         (_SpaceId, _SpaceCollectingStatus, StateAcc) ->
             StateAcc
 %%    end, UpdatedState, SpaceCollectingStatuses);
@@ -744,7 +750,9 @@ update_in_cache(Guid, CollectionType, Diff, MissingRecordAction, #state{dir_stat
 %% @private
 -spec prune_cached_dir_stats(cached_dir_stats_key(), state()) -> state().
 prune_cached_dir_stats(CachedDirStatsKey, #state{dir_stats_cache = DirStatsCache} = State) ->
-    State#state{dir_stats_cache = maps:remove(CachedDirStatsKey, DirStatsCache)}.
+    State.
+% TODO - jak robimy prune to potem nie wiemy, ze to bylo juz zainicjalizowane i inicjalizujemy od nowa
+%%    State#state{dir_stats_cache = maps:remove(CachedDirStatsKey, DirStatsCache)}.
 
 
 %% @private
