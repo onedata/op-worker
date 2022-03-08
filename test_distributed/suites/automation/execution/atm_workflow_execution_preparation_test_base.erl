@@ -35,7 +35,10 @@
         }],
         lanes = [#atm_lane_schema_draft{
             parallel_boxes = [#atm_parallel_box_schema_draft{
-                tasks = [?ECHO_TASK_DRAFT(?CURRENT_TASK_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID, append)]
+                tasks = [?ECHO_TASK_DRAFT(
+                    ?CURRENT_TASK_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID,
+                    #atm_audit_log_store_content_update_options{function = append}
+                )]
             }],
             store_iterator_spec = #atm_store_iterator_spec_draft{
                 store_schema_id = <<"st1">>
