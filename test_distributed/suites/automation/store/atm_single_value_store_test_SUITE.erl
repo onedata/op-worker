@@ -50,6 +50,7 @@ all() -> [
 
 -define(PROVIDER_SELECTOR, krakow).
 -define(rpc(Expr), ?rpc(?PROVIDER_SELECTOR, Expr)).
+-define(erpc(Expr), ?erpc(?PROVIDER_SELECTOR, Expr)).
 
 
 %%%===================================================================
@@ -204,10 +205,10 @@ browse_content_test(_Config) ->
         ))),
         BrowseOpts = #atm_single_value_store_content_browse_options{},
 
-        ?assertEqual(
-            #atm_single_value_store_content_browse_result{item = undefined},
-            ?rpc(atm_store_api:browse_content(AtmWorkflowExecutionAuth, BrowseOpts, AtmStoreId))
-        ),
+        ExpError = ?ERROR_ATM_STORE_EMPTY(AtmStoreSchema#atm_store_schema.id),
+        ?assertThrow(ExpError, ?erpc(atm_store_api:browse_content(
+            AtmWorkflowExecutionAuth, BrowseOpts, AtmStoreId
+        ))),
 
         Item = gen_valid_data(AtmWorkflowExecutionAuth, ItemDataSpec),
         set_item(AtmWorkflowExecutionAuth, Item, AtmStoreId),
@@ -248,6 +249,7 @@ example_configs() ->
         atm_file_type,
         atm_integer_type,
         atm_object_type,
+        atm_range_type,
         atm_string_type,
         atm_time_series_measurements_type
     ]).
@@ -301,11 +303,15 @@ set_item(AtmWorkflowExecutionAuth, Item, AtmStoreId) ->
     undefined | atm_value:expanded().
 get_content(AtmWorkflowExecutionAuth, AtmStoreId) ->
     BrowseOpts = #atm_single_value_store_content_browse_options{},
-    case ?rpc(atm_store_api:browse_content(AtmWorkflowExecutionAuth, BrowseOpts, AtmStoreId)) of
-        #atm_single_value_store_content_browse_result{item = undefined} ->
-            undefined;
-        #atm_single_value_store_content_browse_result{item = {ok, Item}} ->
-            Item
+    try
+        #atm_single_value_store_content_browse_result{
+            item = {ok, Item}
+        } = ?erpc(atm_store_api:browse_content(
+            AtmWorkflowExecutionAuth, BrowseOpts, AtmStoreId
+        )),
+        Item
+    catch throw:?ERROR_ATM_STORE_EMPTY(_) ->
+        undefined
     end.
 
 

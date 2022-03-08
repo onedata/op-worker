@@ -99,6 +99,7 @@ acquire_iterator(#atm_single_value_store_container{
     config = #atm_single_value_store_config{item_data_spec = ItemDataSpec},
     compressed_item = CompressedItem
 }) ->
+    %% TODO throw error if no content
     atm_single_value_store_container_iterator:build(CompressedItem, ItemDataSpec).
 
 
@@ -106,9 +107,12 @@ acquire_iterator(#atm_single_value_store_container{
     atm_single_value_store_content_browse_result:record() | no_return().
 browse_content(
     #atm_single_value_store_container{compressed_item = undefined},
-    #atm_store_content_browse_req{options = #atm_single_value_store_content_browse_options{}}
+    #atm_store_content_browse_req{
+        store_schema_id = AtmStoreSchemaId,
+        options = #atm_single_value_store_content_browse_options{}
+    }
 ) ->
-    #atm_single_value_store_content_browse_result{item = undefined};
+    throw(?ERROR_ATM_STORE_EMPTY(AtmStoreSchemaId));
 
 browse_content(
     #atm_single_value_store_container{

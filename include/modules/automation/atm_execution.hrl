@@ -162,6 +162,7 @@
 }).
 
 -record(atm_store_content_browse_req, {
+    store_schema_id :: automation:id(),
     workflow_execution_auth :: atm_workflow_execution_auth:record(),
     options :: atm_store_content_browse_options:record()
 }).
@@ -193,7 +194,7 @@
 -record(atm_single_value_store_content_browse_options, {}).
 
 -record(atm_single_value_store_content_browse_result, {
-    item :: undefined | {ok, atm_value:expanded()} | errors:error()
+    item :: {ok, atm_value:expanded()} | errors:error()
 }).
 
 -record(atm_tree_forest_store_content_browse_options, {

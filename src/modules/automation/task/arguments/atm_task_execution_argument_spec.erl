@@ -188,8 +188,6 @@ build_value(_Item, AtmJobCtx, #atm_task_argument_value_builder{
     BrowseOpts = #atm_single_value_store_content_browse_options{},
 
     case atm_store_api:browse_content(AtmWorkflowExecutionAuth, BrowseOpts, AtmStore) of
-        #atm_single_value_store_content_browse_result{item = undefined} ->
-            throw(?ERROR_ATM_STORE_EMPTY(AtmSingleValueStoreSchemaId));
         #atm_single_value_store_content_browse_result{item = Error = {error, _}} ->
             throw(Error);
         #atm_single_value_store_content_browse_result{item = {ok, Item}} ->

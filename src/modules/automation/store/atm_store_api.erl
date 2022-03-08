@@ -121,8 +121,12 @@ unfreeze(AtmStoreId) ->
     atm_store:id() | atm_store:record()
 ) ->
     atm_store_content_browse_result:record() | no_return().
-browse_content(AtmWorkflowExecutionAuth, BrowseOpts, #atm_store{container = AtmStoreContainer}) ->
+browse_content(AtmWorkflowExecutionAuth, BrowseOpts, #atm_store{
+    schema_id = AtmStoreSchemaId,
+    container = AtmStoreContainer
+}) ->
     atm_store_container:browse_content(AtmStoreContainer, #atm_store_content_browse_req{
+        store_schema_id = AtmStoreSchemaId,
         workflow_execution_auth = AtmWorkflowExecutionAuth,
         options = BrowseOpts
     });

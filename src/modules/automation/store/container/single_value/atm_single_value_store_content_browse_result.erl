@@ -31,9 +31,6 @@
 
 
 -spec to_json(record()) -> json_utils:json_term().
-to_json(#atm_single_value_store_content_browse_result{item = undefined}) ->
-    <<>>;
-
 to_json(#atm_single_value_store_content_browse_result{item = {ok, Item}}) ->
     #{
         <<"success">> => true,
