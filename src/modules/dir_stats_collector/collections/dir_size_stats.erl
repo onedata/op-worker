@@ -103,7 +103,9 @@ get_stats_and_time_series_collections(Guid) ->
                         {error, not_found} -> {ok, {gen_empty_stats_collection(Guid), gen_empty_time_series_collection(Guid)}}
                     end;
                 ?ERROR_FORBIDDEN ->
-                    ?ERROR_FORBIDDEN
+                    ?ERROR_FORBIDDEN;
+                ?ERROR_INTERNAL_SERVER_ERROR ->
+                    ?ERROR_INTERNAL_SERVER_ERROR
             end;
         false ->
             ?ERROR_DIR_STATS_DISABLED_FOR_SPACE
@@ -216,7 +218,7 @@ init_child(Guid) ->
                     lists:foldl(fun
                         ({total, Size}, Acc) -> Acc#{?TOTAL_SIZE => Size};
                         ({StorageId, Size}, Acc) -> Acc#{?SIZE_ON_STORAGE(StorageId) => Size}
-                    end, EmptyCollection, FileSizes)
+                    end, EmptyCollection#{?REG_FILE_AND_LINK_COUNT => 1}, FileSizes)
             end;
         ?ERROR_NOT_FOUND ->
             EmptyCollection % Race with file deletion - stats will be invalidated by next update

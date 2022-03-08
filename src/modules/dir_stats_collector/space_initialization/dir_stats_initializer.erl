@@ -150,7 +150,7 @@ init_for_dir_children(FileUuid, SpaceId, CollectionTypes, ListOpts, Acc) ->
 
 -spec init_batch(file_id:space_id(), [file_meta:link()], [dir_stats_collection:type()], collections_map()) ->
     collections_map().
-init_batch(_SpaceId, _Links, _CollectionTypes, InitialAcc) ->
+init_batch(_SpaceId, [], _CollectionTypes, InitialAcc) ->
     InitialAcc;
 init_batch(SpaceId, Links, CollectionTypes, InitialAcc) ->
     lists:foldl(fun(CollectionType, Acc) ->

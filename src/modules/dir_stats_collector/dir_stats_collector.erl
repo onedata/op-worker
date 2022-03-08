@@ -353,9 +353,13 @@ handle_call(#dsc_get_request{
                     })
             end;
         enabled ->
-            {#cached_dir_stats{current_stats = CurrentStats}, UpdatedState} =
+            {#cached_dir_stats{current_stats = CurrentStats, collecting_status = Status}, UpdatedState} =
                 reset_last_used_timer(Guid, CollectionType, acquire, State),
-            {{ok, dir_stats_collection:with(StatNames, CurrentStats)}, UpdatedState};
+
+            case Status of
+                active -> {{ok, dir_stats_collection:with(StatNames, CurrentStats)}, UpdatedState};
+                initializing -> {?ERROR_FORBIDDEN, UpdatedState}
+            end;
         _ ->
             {?ERROR_FORBIDDEN, State}
     end;
@@ -374,7 +378,7 @@ handle_call(?INITIALIZE(Guid), State) ->
         UpdatedStateAcc
     end, State, dir_stats_collection:list_types()),
 
-    {ok, initialize_dir_stats(UpdatedState)};
+    {ok, ensure_flush_scheduled(initialize_dir_stats(UpdatedState#state{has_unflushed_changes = true}))}; % TODO - czy zawsze musimy ustawic has_unflushed_changes?
 
 handle_call(?DISABLE(SpaceId), #state{dir_stats_cache = DirStatsCache} = State) ->
     UpdatedState = lists:foldl(fun({Guid, _} = CachedDirStatsKey, StateAcc) ->
@@ -409,11 +413,15 @@ handle_cast(#dsc_update_request{
                     })
             end;
         enabled ->
-            {_, UpdatedState} = update_in_cache(Guid, CollectionType, fun(CachedDirStats) ->
-                update_collection_in_cache(CollectionType, CollectionUpdate, CachedDirStats)
-            end, acquire, State),
+            {#cached_dir_stats{collecting_status = Status}, UpdatedState} =
+                update_in_cache(Guid, CollectionType, fun(CachedDirStats) ->
+                    update_collection_in_cache(CollectionType, CollectionUpdate, CachedDirStats)
+                end, acquire, State),
 
-            ensure_flush_scheduled(UpdatedState#state{has_unflushed_changes = true});
+            case Status of
+                active -> ensure_flush_scheduled(UpdatedState#state{has_unflushed_changes = true});
+                initializing -> handle_update_request_during_initialization(Request, UpdatedState)
+            end;
         initializing ->
             handle_update_request_during_initialization(Request, State)
     end;
@@ -424,16 +432,20 @@ handle_cast(?SCHEDULED_FLUSH, #state{space_collecting_statuses = SpaceCollecting
     % TODO - moze to przeniesc do procedury inicjalizacji? tylko trzeba pamietac ze musi ona wystepowac w kolko tak dlugo jak jakis space ma stan initializing
     maps:fold(fun
         (SpaceId, initializing, StateAcc) ->
-            case dir_stats_collector_config:get_status_for_space(SpaceId) of
-                enabled -> StateAcc#state{space_collecting_statuses = SpaceCollectingStatuses#{SpaceId => enabled}};
-                _ -> StateAcc
-            end;
+            % TODO - co nam po tym stanie jak i tak musimy sprawdzac stan kazdego wpisu w cache
+            % moze zmienic stan space dopiero jak wszystkie spisy przejda w stan initializing?
+%%            case dir_stats_collector_config:get_status_for_space(SpaceId) of
+%%                enabled -> StateAcc#state{space_collecting_statuses = SpaceCollectingStatuses#{SpaceId => enabled}};
+%%                _ -> StateAcc
+%%            end;
+            StateAcc;
         (_SpaceId, _SpaceCollectingStatus, StateAcc) ->
             StateAcc
-    end, UpdatedState, SpaceCollectingStatuses);
+%%    end, UpdatedState, SpaceCollectingStatuses);
+    end, ensure_flush_scheduled(UpdatedState), SpaceCollectingStatuses); % TODO - ensure_flush_scheduled jest zbedne, ale trzeba zapewnic sprawdzanie czy cache sa zainicjalizowane wiec musi byc warunkowe
 
 handle_cast(?SCHEDULED_STATS_INITIALIZATION, State) ->
-    initialize_dir_stats(State);
+    initialize_dir_stats(State); % TODO - czy potrzeba tutaj ensure_flush_scheduled
 
 handle_cast(Info, State) ->
     ?log_bad_request(Info),
@@ -513,6 +525,10 @@ handle_update_request_during_initialization(#dsc_update_request{
 %% @private
 -spec update_collection_in_cache(dir_stats_collection:type(), dir_stats_collection:collection(), cached_dir_stats()) ->
     cached_dir_stats().
+update_collection_in_cache(_CollectionType, _CollectionUpdate, #cached_dir_stats{
+    collecting_status = initializing
+} = CachedDirStats) ->
+    CachedDirStats; % TODO - to nie bedzie potrzebne jak ladnie ogarniemy handlowanie dsc_update_request
 update_collection_in_cache(CollectionType, CollectionUpdate, #cached_dir_stats{
     current_stats = CurrentStats, stat_updates_acc_for_parent = StatUpdatesAccForParent
 } = CachedDirStats) ->
@@ -526,7 +542,7 @@ update_collection_in_cache(CollectionType, CollectionUpdate, #cached_dir_stats{
 
 %% @private
 -spec request_flush(file_id:file_guid(), dir_stats_collection:type(), PruningStrategy :: pruning_strategy()) ->
-    ok | ?ERROR_INTERNAL_SERVER_ERROR.
+    ok | ?ERROR_FORBIDDEN | ?ERROR_INTERNAL_SERVER_ERROR.
 request_flush(Guid, CollectionType, PruningStrategy) ->
     Request = #dsc_flush_request{
         guid = Guid,
@@ -563,7 +579,7 @@ flush_all(#state{
 
 %% @private
 -spec flush_cached_dir_stats(cached_dir_stats_key(), pruning_strategy(), state()) ->
-    {HasSucceeded :: boolean(), state()}.
+    {HasSucceeded :: boolean() | initializing, state()}.
 flush_cached_dir_stats(CachedDirStatsKey, _, State) when not is_map_key(CachedDirStatsKey, State#state.dir_stats_cache) ->
     {true, State};
 flush_cached_dir_stats({_, CollectionType} = CachedDirStatsKey, PruningStrategy, State) ->
@@ -817,10 +833,11 @@ add_hook_for_missing_doc(Guid, CollectionType, CollectionUpdate) ->
 
 %% @private
 -spec call_designated_node(file_id:file_guid(), submit_and_await | acknowledged_cast, list()) ->
-    ok | {ok, dir_stats_collection:collection()} | ignored | ?ERROR_INTERNAL_SERVER_ERROR.
+    ok | {ok, dir_stats_collection:collection()} | ignored | ?ERROR_FORBIDDEN | ?ERROR_INTERNAL_SERVER_ERROR.
 call_designated_node(Guid, Function, Args) ->
     Node = consistent_hashing:get_assigned_node(Guid),
     case erpc:call(Node, pes, Function, Args) of
+        ?ERROR_FORBIDDEN -> ?ERROR_FORBIDDEN;
         {error, _} = Error ->
             ?error("Dir stats collector PES fun ~p error: ~p for guid ~p", [Function, Error, Guid]),
             ?ERROR_INTERNAL_SERVER_ERROR;

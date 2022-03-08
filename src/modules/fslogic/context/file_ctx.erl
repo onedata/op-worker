@@ -967,7 +967,7 @@ get_file_size_summary(FileCtx) ->
             TotalSize = fslogic_blocks:upper(fslogic_location_cache:get_blocks(FL)),
             {[{total, TotalSize}, {StorageId, file_location:count_bytes(Doc)}], FileCtx2};
         {#document{value = #file_location{size = TotalSize, storage_id = StorageId}} = Doc, FileCtx2} ->
-            {[{total, TotalSize}, {StorageId, file_location:count_bytes(Doc)}], file_location:count_bytes(Doc), FileCtx2};
+            {[{total, TotalSize}, {StorageId, file_location:count_bytes(Doc)}], FileCtx2};
         {undefined, FileCtx2} ->
             {TotalSize, FileCtx3} = get_file_size_from_remote_locations(FileCtx2),
             {[{total, TotalSize}], FileCtx3}
