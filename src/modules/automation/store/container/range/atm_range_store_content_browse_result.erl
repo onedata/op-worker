@@ -31,9 +31,5 @@
 
 
 -spec to_json(record()) -> json_utils:json_map().
-to_json(#atm_range_store_content_browse_result{range = {StartNum, EndNum, Step}}) ->
-    #{
-        <<"start">> => StartNum,
-        <<"end">> => EndNum,
-        <<"step">> => Step
-    }.
+to_json(#atm_range_store_content_browse_result{range = RangeJson}) ->
+    RangeJson.

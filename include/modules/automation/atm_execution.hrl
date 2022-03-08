@@ -188,7 +188,7 @@
 -record(atm_range_store_content_browse_options, {}).
 
 -record(atm_range_store_content_browse_result, {
-    range :: {integer(), integer(), integer()}
+    range :: atm_range_value:range_json()
 }).
 
 -record(atm_single_value_store_content_browse_options, {}).
