@@ -28,8 +28,9 @@
 %% tests
 -export([
     dir_stats_collector_test/1,
-    dir_stats_collector_test_enabling_for_empty_space_test/1,
-    dir_stats_collector_test_enabling_for_not_empty_space_test/1,
+    dir_stats_collector_enabling_for_empty_space_test/1,
+    dir_stats_collector_enabling_for_not_empty_space_test/1,
+    dir_stats_collector_enabling_during_writing_test/1,
     fslogic_new_file_test/1,
     lfm_create_and_unlink_test/1,
     lfm_create_and_access_test/1,
@@ -124,8 +125,9 @@
 -define(TEST_CASES, [
     get_recursive_file_list, % this test must be run first as it requires empty space
     dir_stats_collector_test,
-    dir_stats_collector_test_enabling_for_empty_space_test,
-    dir_stats_collector_test_enabling_for_not_empty_space_test,
+    dir_stats_collector_enabling_for_empty_space_test,
+    dir_stats_collector_enabling_for_not_empty_space_test,
+    dir_stats_collector_enabling_during_writing_test,
     fslogic_new_file_test,
     lfm_create_and_unlink_test,
     lfm_create_and_access_test,
@@ -957,12 +959,16 @@ dir_stats_collector_test(Config) -> % TODO - zmienic nazwe zeby pokazywala ze je
     dir_stats_collector_test_base:single_provider_test(Config).
 
 
-dir_stats_collector_test_enabling_for_empty_space_test(Config) ->
+dir_stats_collector_enabling_for_empty_space_test(Config) ->
     dir_stats_collector_test_base:enabling_for_empty_space_test(Config).
 
 
-dir_stats_collector_test_enabling_for_not_empty_space_test(Config) ->
+dir_stats_collector_enabling_for_not_empty_space_test(Config) ->
     dir_stats_collector_test_base:enabling_for_not_empty_space_test(Config).
+
+
+dir_stats_collector_enabling_during_writing_test(Config) ->
+    dir_stats_collector_test_base:enabling_during_writing_test(Config).
 
 
 %%%===================================================================
@@ -989,8 +995,9 @@ init_per_testcase(lfm_create_and_read_symlink = Case, Config) ->
 
 init_per_testcase(Case, Config) when
     Case =:= dir_stats_collector_test;
-    Case =:= dir_stats_collector_test_enabling_for_empty_space_test;
-    Case =:= dir_stats_collector_test_enabling_for_not_empty_space_test
+    Case =:= dir_stats_collector_enabling_for_empty_space_test;
+    Case =:= dir_stats_collector_enabling_for_not_empty_space_test;
+    Case =:= dir_stats_collector_enabling_during_writing_test
 ->
     dir_stats_collector_test_base:init(init_per_testcase(?DEFAULT_CASE(Case), Config));
 
@@ -1012,8 +1019,9 @@ end_per_testcase(lfm_create_and_read_symlink = Case, Config) ->
 
 end_per_testcase(Case, Config) when
     Case =:= dir_stats_collector_test;
-    Case =:= dir_stats_collector_test_enabling_for_empty_space_test;
-    Case =:= dir_stats_collector_test_enabling_for_not_empty_space_test
+    Case =:= dir_stats_collector_enabling_for_empty_space_test;
+    Case =:= dir_stats_collector_enabling_for_not_empty_space_test;
+    Case =:= dir_stats_collector_enabling_during_writing_test
 ->
     dir_stats_collector_test_base:teardown(Config),
     end_per_testcase(?DEFAULT_CASE(Case), Config);

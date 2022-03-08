@@ -21,7 +21,7 @@
 
 
 -export([single_provider_test/1, multiprovider_test/1,
-    enabling_for_empty_space_test/1, enabling_for_not_empty_space_test/1]).
+    enabling_for_empty_space_test/1, enabling_for_not_empty_space_test/1, enabling_during_writing_test/1]).
 -export([init/1, teardown/1]).
 -export([verify_dir_on_provider_creating_files/3, delete_stats/3]).
 
@@ -50,7 +50,7 @@
 single_provider_test(Config) ->
     % TODO VFS-8835 - test rename
     enable(Config, new_space),
-    create_initial_file_tree(Config, op_worker_nodes, enabled),
+    create_initial_file_tree_and_fill_files(Config, op_worker_nodes, enabled),
     check_initial_dir_stats(Config, op_worker_nodes),
     check_update_times(Config, [op_worker_nodes]).
 
@@ -60,7 +60,7 @@ multiprovider_test(Config) ->
     SpaceId = lfm_test_utils:get_user1_first_space_id(Config),
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
 
-    create_initial_file_tree(Config, ?PROVIDER_CREATING_FILES_NODES_SELECTOR, enabled),
+    create_initial_file_tree_and_fill_files(Config, ?PROVIDER_CREATING_FILES_NODES_SELECTOR, enabled),
 
     lists:foreach(fun(NodesSelector) ->
         check_initial_dir_stats(Config, NodesSelector)
@@ -124,14 +124,22 @@ multiprovider_test(Config) ->
 
 enabling_for_empty_space_test(Config) ->
     enable(Config, existing_space),
-    create_initial_file_tree(Config, op_worker_nodes, initializing),
+    create_initial_file_tree_and_fill_files(Config, op_worker_nodes, initializing),
     check_initial_dir_stats(Config, op_worker_nodes),
     check_update_times(Config, [op_worker_nodes]).
 
 
 enabling_for_not_empty_space_test(Config) ->
+    create_initial_file_tree_and_fill_files(Config, op_worker_nodes, disabled),
+    enable(Config, existing_space),
+    check_initial_dir_stats(Config, op_worker_nodes),
+    check_update_times(Config, [op_worker_nodes]).
+
+
+enabling_during_writing_test(Config) ->
     create_initial_file_tree(Config, op_worker_nodes, disabled),
     enable(Config, existing_space),
+    fill_files(Config, op_worker_nodes),
     check_initial_dir_stats(Config, op_worker_nodes),
     check_update_times(Config, [op_worker_nodes]).
 
@@ -235,6 +243,11 @@ enable(Config, existing_space) ->
     end, Workers).
 
 
+create_initial_file_tree_and_fill_files(Config, NodesSelector, CollectingStatus) ->
+    create_initial_file_tree(Config, NodesSelector, CollectingStatus),
+    fill_files(Config, NodesSelector).
+
+
 create_initial_file_tree(Config, NodesSelector, CollectingStatus) ->
     [Worker | _] = ?config(NodesSelector, Config),
     SessId = lfm_test_utils:get_user1_session_id(Config, Worker),
@@ -247,11 +260,11 @@ create_initial_file_tree(Config, NodesSelector, CollectingStatus) ->
         ?TOTAL_SIZE_ON_STORAGE(Config, NodesSelector) => 0
     }, true, CollectingStatus),
 
-    % Init tree structure
     Structure = [{3, 3}, {3, 3}, {3, 3}, {3, 3}, {0, 3}],
-    lfm_test_utils:create_files_tree(Worker, SessId, Structure, SpaceGuid),
+    lfm_test_utils:create_files_tree(Worker, SessId, Structure, SpaceGuid).
 
-    % Fill files with data
+
+fill_files(Config, NodesSelector) ->
     write_to_file(Config, NodesSelector, [1], [1], 10),
     write_to_file(Config, NodesSelector, [1, 1], [1], 20),
     write_to_file(Config, NodesSelector, [1, 1, 1], [1], 30),
