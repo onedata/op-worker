@@ -150,6 +150,7 @@ example_data_spec(AtmDataType) when
     AtmDataType =:= atm_integer_type;
     AtmDataType =:= atm_object_type;
     AtmDataType =:= atm_onedatafs_credentials_type;
+    AtmDataType =:= atm_range_type;
     AtmDataType =:= atm_string_type
 ->
     #atm_data_spec{type = AtmDataType}.
@@ -220,6 +221,26 @@ gen_valid_data(ProviderSelector, AtmWorkflowExecutionAuth, #atm_data_spec{
         <<"host">> => ?rpc(ProviderSelector, oneprovider:get_domain()),
         <<"accessToken">> => atm_workflow_execution_auth:get_access_token(AtmWorkflowExecutionAuth)
     };
+
+gen_valid_data(_ProviderSelector, _AtmWorkflowExecutionAuth, #atm_data_spec{
+    type = atm_range_type
+}) ->
+    case rand:uniform(3) of
+        1 ->
+            #{<<"end">> => ?RAND_INT(10, 200)};
+        2 ->
+            #{
+                <<"end">> => ?RAND_INT(10, 20),
+                <<"start">> => - (?RAND_INT(0, 10)),
+                <<"step">> => ?RAND_INT(1, 5)
+            };
+        3 ->
+            #{
+                <<"end">> => - (?RAND_INT(10, 20)),
+                <<"start">> => ?RAND_INT(0, 10),
+                <<"step">> => - (?RAND_INT(1, 5))
+            }
+    end;
 
 gen_valid_data(_ProviderSelector, _AtmWorkflowExecutionAuth, #atm_data_spec{
     type = atm_string_type
@@ -377,6 +398,7 @@ all_basic_data_types() -> [
     atm_integer_type,
     atm_object_type,
     atm_onedatafs_credentials_type,
+    atm_range_type,
     atm_string_type,
     atm_time_series_measurements_type
 ].

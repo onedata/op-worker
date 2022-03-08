@@ -199,6 +199,7 @@ example_configs() ->
         atm_file_type,
         atm_integer_type,
         atm_object_type,
+        atm_range_type,
         atm_string_type,
         atm_time_series_measurements_type
     ]).
