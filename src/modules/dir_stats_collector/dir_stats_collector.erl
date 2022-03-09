@@ -451,7 +451,7 @@ handle_cast(?SCHEDULED_FLUSH, #state{
     end, ensure_flush_scheduled(UpdatedState), SpaceCollectingStatuses); % TODO - ensure_flush_scheduled jest zbedne, ale trzeba zapewnic sprawdzanie czy cache sa zainicjalizowane wiec musi byc warunkowe
 
 handle_cast(?SCHEDULED_STATS_INITIALIZATION, State) ->
-    initialize_dir_stats(State); % TODO - czy potrzeba tutaj ensure_flush_scheduled
+    initialize_dir_stats(State#state{initialization_timer_ref = undefined}); % TODO - czy potrzeba tutaj ensure_flush_scheduled
 
 handle_cast(Info, State) ->
     ?log_bad_request(Info),
@@ -493,7 +493,7 @@ handle_update_request_during_initialization(#dsc_update_request{
             }
     end, prepare_initialization_data, State),
 
-    ensure_flush_scheduled(UpdatedState#state{has_unflushed_changes = true});
+    ensure_flush_scheduled(ensure_initialization_scheduled(UpdatedState#state{has_unflushed_changes = true})); % TODO - ensure_initialization_scheduled jest potrzebne tylko niie mamy statystyk w cache i je wlozymy po raz pierwszy, moze sprawdzac tak jak w nastepnym case
 
 handle_update_request_during_initialization(#dsc_update_request{
     update_type = external,

@@ -23,6 +23,7 @@
 -export([init_for_empty_space/1, clean_for_space/1,
     enable_for_space/1, disable_for_space/1, report_enabling_finished/1, report_disabling_finished/1,
     is_enabled_for_space/1, get_status_for_space/1]).
+% TODO - dodac timestamp wlaczania/wylaczania - pamietac liste ostatnich zmian czasu (ograniczona dlugosc do N najnowszych)
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_version/0, get_record_struct/1, upgrade_record/2]).
@@ -158,7 +159,7 @@ report_disabling_finished(SpaceId) ->
 
 
 -spec is_enabled_for_space(od_space:id()) -> boolean().
-is_enabled_for_space(SpaceId) -> % TODO - zmienic nazwe zeby nie sugerowala ze chodzi o stan enabled tylko o to, ze zbieramy statystyki
+is_enabled_for_space(SpaceId) -> % TODO - zmienic nazwe zeby nie sugerowala ze chodzi o stan enabled tylko o to, ze zbieramy statystyki (is_active?)
     case get_status_for_space(SpaceId) of
         enabled -> true;
         initializing -> true;

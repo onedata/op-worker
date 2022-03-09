@@ -22,10 +22,11 @@
 
 -export([single_provider_test/1, multiprovider_test/1,
     enabling_for_empty_space_test/1, enabling_for_not_empty_space_test/1, enabling_during_writing_test/1,
-    race_with_file_adding_test/1]).
+    race_with_file_adding_test/1, race_with_file_writing_test/1,
+    race_with_subtree_adding_test/1, race_with_subtree_filling_with_data_test/1]).
 -export([init/1, teardown/1]).
 -export([verify_dir_on_provider_creating_files/3, delete_stats/3]).
-
+% TODO - dodac testy szybbkiego wylaczania po wlaczeniu i wlaczania po wylaczeniu, dodac siute stress gdzie robimy to co w empty_files...SUITE tylko z wlaczonym zliczaniem i potem wylaczam i wlaczamy zliczanie i sprawdzamy czy sie zliczylo
 
 % For multiprovider test, one provider creates files and fills them with data,
 % second reads some data and deletes files
@@ -151,15 +152,10 @@ race_with_file_adding_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = lfm_test_utils:get_user1_session_id(Config, Worker),
     SpaceGuid = lfm_test_utils:get_user1_first_space_guid(Config),
-    RacedTestFileName = <<"test_file">>,
-
-    Structure = [{3, 3}, {3, 3}],
-    lfm_test_utils:create_files_tree(Worker, SessId, Structure, SpaceGuid),
-
-    enable(Config, existing_space),
-    lfm_test_utils:create_and_write_file(Worker, SessId, SpaceGuid, RacedTestFileName, 0, {rand_content, 10}),
-
-    check_dir_stats(Config, op_worker_nodes, SpaceGuid, #{
+    OnSpaceChildrenListed = fun() ->
+        lfm_test_utils:create_and_write_file(Worker, SessId, SpaceGuid, <<"test_raced_file">>, 0, {rand_content, 10})
+    end,
+    test_with_race_base(Config, SpaceGuid, OnSpaceChildrenListed, #{
         ?REG_FILE_AND_LINK_COUNT => 13,
         ?DIR_COUNT => 12,
         ?TOTAL_SIZE => 10,
@@ -168,7 +164,107 @@ race_with_file_adding_test(Config) ->
 
 
 race_with_file_writing_test(Config) ->
-    ok.
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    SessId = lfm_test_utils:get_user1_session_id(Config, Worker),
+    SpaceGuid = lfm_test_utils:get_user1_first_space_guid(Config),
+    OnSpaceChildrenListed = fun() ->
+        Guid = resolve_guid(Config, op_worker_nodes, [], [1]),
+        lfm_test_utils:write_file(Worker, SessId, Guid, {rand_content, 10})
+    end,
+    test_with_race_base(Config, SpaceGuid, OnSpaceChildrenListed, #{
+        ?REG_FILE_AND_LINK_COUNT => 12,
+        ?DIR_COUNT => 12,
+        ?TOTAL_SIZE => 10,
+        ?TOTAL_SIZE_ON_STORAGE(Config, op_worker_nodes) => 10
+    }).
+
+
+race_with_subtree_adding_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    SessId = lfm_test_utils:get_user1_session_id(Config, Worker),
+    OnSpaceChildrenListed = fun() ->
+        TestDirGuid = resolve_guid(Config, op_worker_nodes, [1], []),
+
+        Guids = lists:map(fun(Seq) ->
+            SeqBin = integer_to_binary(Seq),
+            {ok, CreatedDirGuid} = ?assertMatch({ok, _},
+                lfm_proxy:mkdir(Worker, SessId, TestDirGuid, <<"test_dir", SeqBin/binary>>, 8#777)),
+            CreatedDirGuid
+        end, lists:seq(1, 10)),
+
+        lists:foreach(fun(Guid) ->
+            timer:sleep(2000),
+            ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker, SessId, Guid, <<"test_dir">>, 8#777))
+        end, Guids)
+    end,
+    test_with_race_base(Config, [1], OnSpaceChildrenListed, #{
+        ?REG_FILE_AND_LINK_COUNT => 12,
+        ?DIR_COUNT => 32,
+        ?TOTAL_SIZE => 0,
+        ?TOTAL_SIZE_ON_STORAGE(Config, op_worker_nodes) => 0
+    }).
+
+
+race_with_subtree_filling_with_data_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    SessId = lfm_test_utils:get_user1_session_id(Config, Worker),
+    OnSpaceChildrenListed = fun() ->
+        TestDirGuid = resolve_guid(Config, op_worker_nodes, [1, 1], []),
+
+        lists:foreach(fun(Seq) ->
+            SeqBin = integer_to_binary(Seq),
+            timer:sleep(2000),
+            lfm_test_utils:create_and_write_file(
+                Worker, SessId, TestDirGuid, <<"test_file", SeqBin/binary>>, 0, {rand_content, 10})
+        end, lists:seq(1, 10))
+    end,
+    test_with_race_base(Config, [1], OnSpaceChildrenListed, #{
+        ?REG_FILE_AND_LINK_COUNT => 22,
+        ?DIR_COUNT => 12,
+        ?TOTAL_SIZE => 100,
+        ?TOTAL_SIZE_ON_STORAGE(Config, op_worker_nodes) => 100
+    }).
+
+
+test_with_race_base(Config, TestDirIdentifier, OnSpaceChildrenListed, ExpectedSpaceStats) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    SessId = lfm_test_utils:get_user1_session_id(Config, Worker),
+    SpaceGuid = lfm_test_utils:get_user1_first_space_guid(Config),
+
+    Structure = [{3, 3}, {3, 3}],
+    lfm_test_utils:create_files_tree(Worker, SessId, Structure, SpaceGuid),
+
+    TestGuid = case is_list(TestDirIdentifier) of
+        true -> resolve_guid(Config, op_worker_nodes, TestDirIdentifier, []);
+        _ -> TestDirIdentifier
+    end,
+    TestUuid = file_id:guid_to_uuid(TestGuid),
+
+    Master = self(),
+    Tag = make_ref(),
+    ok = test_utils:mock_new(Worker, file_meta, [passthrough]), % TODO - mockowanie i odmockowanie w init_per_testcase
+    ok = test_utils:mock_expect(Worker, file_meta, list_children, fun
+        (FileUuid, ListOpts) when FileUuid =:= TestUuid ->
+            Ans = meck:passthrough([FileUuid, ListOpts]),
+            Master ! {space_children_listed, Tag},
+            timer:sleep(1000),
+            Ans;
+        (FileUuid, ListOpts) ->
+            meck:passthrough([FileUuid, ListOpts])
+    end),
+    enable(Config, existing_space),
+
+    MessageReceived = receive
+        {space_children_listed, Tag} ->
+            OnSpaceChildrenListed(),
+            ok
+    after
+        10000 -> timeout
+    end,
+    ?assertEqual(ok, MessageReceived),
+
+    check_dir_stats(Config, op_worker_nodes, SpaceGuid, ExpectedSpaceStats),
+    verify_enabled(Config).
 
 
 %%%===================================================================
