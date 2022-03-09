@@ -67,8 +67,7 @@
 }).
 
 -record(get_recursive_file_list, {
-    start_after :: file_meta:path(),
-    size :: file_meta:size()
+    options :: recursive_file_listing:options()
 }).
 
 -record(create_dir, {
@@ -282,8 +281,9 @@
 }).
 
 -record(recursive_file_list, {
-    files :: [{file_meta:path(), #file_attr{}}],
-    is_last :: boolean()
+    files :: [{file_meta:path(), lfm_attrs:file_attributes()}],
+    inaccessible_paths :: [file_meta:path()],
+    continuation_token :: undefined | recursive_file_listing:token()
 }).
 
 -record(helper_arg, {

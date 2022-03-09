@@ -90,6 +90,9 @@
     get_children_details_should_work_with_size_greater_than_dir_size/1,
     get_children_details_should_work_with_startid/1,
     get_recursive_file_list/1,
+    get_recursive_file_list_prefix_test/1,
+    get_recursive_file_list_inaccessible_paths_test/1,
+    get_recursive_file_list/1,
     lfm_recreate_handle_test/1,
     lfm_write_after_create_no_perms_test/1,
     lfm_recreate_handle_after_delete_test/1,
@@ -172,6 +175,9 @@
     get_children_details_should_work_with_non_zero_offset,
     get_children_details_should_work_with_size_greater_than_dir_size,
     get_children_details_should_work_with_startid,
+    get_recursive_file_list,
+    get_recursive_file_list_prefix_test,
+    get_recursive_file_list_inaccessible_paths_test,
     lfm_recreate_handle_test,
     lfm_write_after_create_no_perms_test,
     lfm_recreate_handle_after_delete_test,
@@ -304,6 +310,12 @@ get_children_details_should_work_with_startid(Config) ->
 
 get_recursive_file_list(Config) ->
     lfm_files_test_base:get_recursive_file_list(Config).
+
+get_recursive_file_list_prefix_test(Config) ->
+    lfm_files_test_base:get_recursive_file_list_prefix_test_base(Config).
+
+get_recursive_file_list_inaccessible_paths_test(Config) ->
+    lfm_files_test_base:get_recursive_file_list_inaccessible_paths_test_base(Config).
 
 echo_loop_test(Config) ->
     lfm_files_test_base:echo_loop(Config).

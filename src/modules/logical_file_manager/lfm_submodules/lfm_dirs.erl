@@ -23,7 +23,7 @@
     get_child_attr/3,
     get_children_details/3,
     get_children_count/2,
-    get_files_recursively/4
+    get_files_recursively/5
 ]).
 
 
@@ -172,19 +172,27 @@ get_children_count(SessId, FileKey) ->
     end.
 
 
-get_files_recursively(SessId, FileKey, StartAfter, Limit) ->
+-spec get_files_recursively(
+    session:id(), 
+    lfm:file_key(), 
+    {start_after, file_meta:path()} | {token, recursive_file_listing:token()}, 
+    recursive_file_listing:limit(), 
+    recursive_file_listing:prefix()
+) ->
+    {ok, [recursive_file_listing:result_file_entry()], [file_meta:path()], recursive_file_listing:token()}.
+get_files_recursively(SessId, FileKey, StartAfterOrToken, Limit, Prefix) ->
     FileGuid = lfm_file_key:resolve_file_key(SessId, FileKey, resolve_symlink),
     
     remote_utils:call_fslogic(SessId, file_request, FileGuid,
         #get_recursive_file_list{
-            start_after = StartAfter,
-            size = Limit
+            options = recursive_file_listing:pack_options(StartAfterOrToken, Limit, Prefix)
         },
         fun(#recursive_file_list{
             files = Result,
-            is_last = IsLast
+            inaccessible_paths = InaccessiblePaths,
+            continuation_token = Token
         }) ->
-            {ok, Result, IsLast}
+            {ok, Result, InaccessiblePaths, Token}
         end).
 
 

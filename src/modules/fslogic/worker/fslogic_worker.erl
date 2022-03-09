@@ -607,11 +607,8 @@ handle_file_request(UserCtx, #get_file_children_details{
         last_name => StartId
     },
     dir_req:get_children_details(UserCtx, FileCtx, ListOpts);
-handle_file_request(UserCtx, #get_recursive_file_list{
-    start_after = StartAfter,
-    size = Size
-}, FileCtx) ->
-    dir_req:get_recursive_file_list(UserCtx, FileCtx, StartAfter, Size);
+handle_file_request(UserCtx, #get_recursive_file_list{options = Options}, FileCtx) ->
+    recursive_file_listing:list(UserCtx, FileCtx, Options);
 handle_file_request(UserCtx, #rename{
     target_parent_guid = TargetParentGuid,
     target_name = TargetName

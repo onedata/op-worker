@@ -43,6 +43,7 @@
 -define(DEFAULT_LIST_ENTRIES, 1000).
 
 -define(DEFAULT_BASIC_ATTRIBUTES, [<<"file_id">>, <<"name">>]).
+-define(DEFAULT_RECURSIVE_FILE_LIST_ATTRIBUTES, [<<"file_id">>, <<"path">>]).
 
 
 %%%===================================================================
@@ -548,12 +549,17 @@ data_spec_get(#gri{aspect = children, scope = Sc}) -> #{
     }
 };
 
-data_spec_get(#gri{aspect = files}) -> #{
+data_spec_get(#gri{aspect = files, scope = Sc}) -> #{
     required => #{id => {binary, guid}},
     optional => #{
         <<"limit">> => {integer, {between, 1, ?DEFAULT_LIST_ENTRIES}},
         <<"token">> => {binary, any},
-        <<"start_after">> => {binary, any}
+        <<"prefix">> => {binary, any},
+        <<"start_after">> => {binary, any},
+        <<"attribute">> => {any, case Sc of
+            public -> ?PUBLIC_BASIC_ATTRIBUTES ++ [<<"path">>];
+            private -> ?PRIVATE_BASIC_ATTRIBUTES ++ [<<"path">>]
+        end}
     }
 };
 
@@ -791,21 +797,19 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = files}}
     SessionId = Auth#auth.session_id,
     
     %% @TODO VFS-8980 - return descriptive error when both token and start_after are provided
-    StartAfter = maps:get(<<"token">>, Data, maps:get(<<"start_after">>, Data, <<>>)),
-    {ok, Result, IsLast} = ?lfm_check(lfm:get_files_recursively(SessionId, ?FILE_REF(FileGuid), 
-        StartAfter, maps:get(<<"limit">>, Data, ?DEFAULT_LIST_ENTRIES))),
-    NextPageToken = case IsLast of
-        true -> 
-            null;
-        false ->
-            {T, _} = lists:last(Result),
-            T
+    StartPoint = case maps:get(<<"token">>, Data, undefined) of
+        undefined -> {start_after, maps:get(<<"start_after">>, Data, <<>>)};
+        Token -> {token, Token}
     end,
+    Prefix = maps:get(<<"prefix">>, Data, <<>>),
+    RequestedAttributes = utils:ensure_list(maps:get(<<"attribute">>, Data, ?DEFAULT_RECURSIVE_FILE_LIST_ATTRIBUTES)),
+    {ok, Result, InaccessiblePaths, NextPageToken} = ?lfm_check(lfm:get_files_recursively(SessionId, ?FILE_REF(FileGuid), 
+        StartPoint, maps:get(<<"limit">>, Data, ?DEFAULT_LIST_ENTRIES), Prefix)),
     JsonResult = lists:map(fun({Path, Attrs}) ->
         JsonAttrs = file_attrs_to_json(Attrs),
-        JsonAttrs#{<<"path">> => Path}
+        maps:with(RequestedAttributes, JsonAttrs#{<<"path">> => Path})
     end, Result),
-    {ok, value, {JsonResult, NextPageToken, IsLast}};
+    {ok, value, {JsonResult, InaccessiblePaths, NextPageToken}};
 
 get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = attrs, scope = Sc}}, _) ->
     RequestedAttributes = case maps:get(<<"attribute">>, Data, undefined) of

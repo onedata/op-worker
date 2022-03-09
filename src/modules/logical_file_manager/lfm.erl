@@ -78,7 +78,7 @@
     get_children_attrs/3,
     get_children_attrs/5,
     get_children_details/3,
-    get_files_recursively/4,
+    get_files_recursively/5,
     get_children_count/2
 ]).
 %% Permissions related operations
@@ -530,14 +530,21 @@ get_children_details(SessId, FileKey, ListOpts) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Gets file basic attributes (see file_attr.hrl) for each regular file 
-%% that is in a subtree of given file.
+%% Listing recursively non-directory files (i.e regular, symlinks and hardlinks) in subtree of 
+%% given top directory. For each such file returns its file basic attributes (see file_attr.hrl) 
+%% along with relative path to the given top directory.
 %% @end
 %%--------------------------------------------------------------------
--spec get_files_recursively(session:id(), file_key(), file_meta:path(), non_neg_integer()) ->
-    {ok, [{file_meta:path(), lfm_attrs:file_attributes()}], boolean()} | error_reply().
-get_files_recursively(SessId, FileKey, StartAfter, Limit) ->
-    ?run(lfm_dirs:get_files_recursively(SessId, FileKey, StartAfter, Limit)).
+-spec get_files_recursively(
+    session:id(),
+    lfm:file_key(),
+    {start_after, file_meta:path()} | {token, recursive_file_listing:token()},
+    recursive_file_listing:limit(),
+    recursive_file_listing:prefix()
+) ->
+    {ok, [recursive_file_listing:result_file_entry()], [file_meta:path()], recursive_file_listing:token()} | error_reply().
+get_files_recursively(SessId, FileKey, StartAfterOrToken, Limit, Prefix) -> 
+    ?run(lfm_dirs:get_files_recursively(SessId, FileKey, StartAfterOrToken, Limit, Prefix)).
 
 
 -spec get_children_count(session:id(), file_key()) ->
