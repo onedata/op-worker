@@ -25,7 +25,7 @@
     get_storage_file_id/1, get_storage_id/1]).
 -export([mkdir/2, mkdir/3, mv/2, chmod/2, chown/3, link/2, readdir/3,
     get_child_handle/2, listobjects/4]).
--export([stat/1, read/3, write/3, create/2, open/2, release/1,
+-export([stat/1, read/3, write/3, create/2, create/3, open/2, release/1,
     truncate/3, unlink/2, fsync/2, rmdir/1, exists/1]).
 -export([setxattr/5, getxattr/2, removexattr/2, listxattr/1]).
 -export([open_at_creation/1]).
@@ -434,13 +434,23 @@ read(SDHandle, Offset, MaxSize) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Creates a new file on storage.
+%% Creates a new regural file on storage.
 %% @end
 %%--------------------------------------------------------------------
 -spec create(handle(), Mode :: non_neg_integer()) -> ok | error_reply().
-create(#sd_handle{file = FileId} = SDHandle, Mode) ->
+create(SDHandle, Mode) ->
+    create(SDHandle, Mode, reg).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates a new file on storage.
+%% @end
+%%--------------------------------------------------------------------
+-spec create(handle(), Mode :: non_neg_integer(), helpers:file_type_flag()) -> ok | error_reply().
+create(#sd_handle{file = FileId} = SDHandle, Mode, FileTypeFlag) ->
     run_with_helper_handle(retry_as_root_and_chown, SDHandle, fun(HelperHandle) ->
-        helpers:mknod(HelperHandle, FileId, Mode, reg)
+        helpers:mknod(HelperHandle, FileId, Mode, FileTypeFlag)
     end, ?READWRITE).
 
 

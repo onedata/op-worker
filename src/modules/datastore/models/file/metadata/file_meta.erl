@@ -749,12 +749,14 @@ new_doc(FileUuid, FileName, FileType, Mode, Owner, ParentUuid, SpaceId) ->
 %% Return type of file depending on its posix mode.
 %% @end
 %%--------------------------------------------------------------------
--spec type(Mode :: non_neg_integer()) -> type().
+-spec type(Mode :: non_neg_integer()) -> {ok, type()} | ?ERROR_NOT_SUPPORTED.
 type(Mode) ->
-    IsDir = (Mode band 8#100000) == 0,
-    case IsDir of
-        true -> ?DIRECTORY_TYPE;
-        false -> ?REGULAR_FILE_TYPE
+    IsRegFile = (Mode band 8#100000) =/= 0,
+    IsDir = (Mode band 8#40000) =/= 0,
+    case {IsRegFile, IsDir} of
+        {true, false} -> {ok, ?REGULAR_FILE_TYPE};
+        {false, true} -> {ok, ?DIRECTORY_TYPE};
+        {false, false} -> ?ERROR_NOT_SUPPORTED
     end.
 
 

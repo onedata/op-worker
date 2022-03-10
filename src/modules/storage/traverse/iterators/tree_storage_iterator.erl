@@ -82,4 +82,4 @@ get_children_and_next_batch_job(StorageTraverse = #storage_traverse_master{
     {boolean(), StorageFileCtx2 :: storage_file_ctx:ctx()}.
 should_generate_master_job(StorageFileCtx) ->
     {#statbuf{st_mode = Mode}, StorageFileCtx2} = storage_file_ctx:stat(StorageFileCtx),
-    {file_meta:type(Mode) =:= ?DIRECTORY_TYPE, StorageFileCtx2}.
+    {file_meta:type(Mode) =:= {ok, ?DIRECTORY_TYPE}, StorageFileCtx2}.

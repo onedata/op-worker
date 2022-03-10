@@ -21,7 +21,7 @@
 %% API
 -export([get_storage_record/2, new_handle/3, new_handle/4, new_child_handle/2,
     setup_test_files_structure/3, setup_test_files_structure/4, recursive_rm/3, get_storage_mountpoint_handle/3]).
--export([mkdir/3, create_file/3, write_file/4, read_file/4, unlink/3, chown/4,
+-export([mkdir/3, create_file/3, create_file/4, write_file/4, read_file/4, unlink/3, chown/4,
     chmod/3, stat/2, ls/4, rmdir/2, truncate/4, recursive_rm/2, open/3, listobjects/5, storage_ls/5]).
 
 -define(DEFAULT_TIMEOUT, timer:minutes(1)).
@@ -54,6 +54,9 @@ mkdir(Worker, SDHandle, Mode) ->
 
 create_file(Worker, SDHandle, Mode) ->
     ok = rpc:call(Worker, storage_driver, create, [SDHandle, Mode]).
+
+create_file(Worker, SDHandle, Mode, FileTypeFlag) ->
+    ok = rpc:call(Worker, storage_driver, create, [SDHandle, Mode, FileTypeFlag]).
 
 open(Worker, SDHandle, Flag) ->
     rpc:call(Worker, storage_driver, open_insecure, [SDHandle, Flag]).
@@ -158,14 +161,14 @@ recursive_rm(Worker, SDHandle) ->
 
 recursive_rm(Worker, SDHandle = #sd_handle{storage_id = StorageId}, DoNotDeleteRoot) ->
     case type(Worker, SDHandle) of
-        ?REGULAR_FILE_TYPE ->
+        {ok, ?REGULAR_FILE_TYPE} ->
             case size(Worker, SDHandle) of
                 {error, ?ENOENT} ->
                     ok;
                 Size ->
                     unlink(Worker, SDHandle, Size)
             end;
-        ?DIRECTORY_TYPE ->
+        {ok, ?DIRECTORY_TYPE} ->
             {ok, Storage} = rpc:call(Worker, storage, get, [StorageId]),
             Helper = storage:get_helper(Storage),
             HelperName = helper:get_name(Helper),

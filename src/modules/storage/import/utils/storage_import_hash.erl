@@ -95,10 +95,10 @@ count_file_attrs_hash(StorageFileCtx, SyncAcl) ->
     {Xattr, StorageFileCtx3} = maybe_get_nfs4_acl(StorageFileCtx2, SyncAcl),
 
     case file_meta:type(StMode) of
-        ?DIRECTORY_TYPE ->
+        {ok, ?DIRECTORY_TYPE} ->
             %% don't count hash for directory as it will be scanned anyway
             {<<"">>, StorageFileCtx3};
-        ?REGULAR_FILE_TYPE ->
+        _ ->
             FileId = storage_file_ctx:get_file_name_const(StorageFileCtx2),
             {hash([FileId, StMode, StSize, STMtime, STCtime, Xattr]), StorageFileCtx3}
     end.
