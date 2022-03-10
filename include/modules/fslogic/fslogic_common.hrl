@@ -84,7 +84,7 @@
 % Special values masking file real uid/gid in share mode as agreed with Oneclient
 % developers (they can `case` on such values to perform some special actions).
 -define(SHARE_UID, ?UID_MAX).
--define(SHARE_GID, ?SHARE_UID).
+-define(SHARE_GID, ?GID_MAX).
 
 % Trash associated macros
 -define(TRASH_DIR_NAME, <<".trash">>).
