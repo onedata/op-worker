@@ -18,6 +18,8 @@
 -include("modules/storage/helpers/helpers.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
 
+-define(MAX_UINT32, 4_294_967_295).
+
 -define(FSLOGIC_WORKER_SUP, fslogic_worker_sup).
 
 %% Hidden file prefix
@@ -76,12 +78,12 @@
 -define(FILE_NEVER_EXISTED, never_existed).
 
 % Maximal uid/gid value in common linux distributions
--define(UID_MAX, 4_294_967_295).
+-define(UID_MAX, ?MAX_UINT32-1).
 -define(GID_MAX, ?UID_MAX).
 
 % Special values masking file real uid/gid in share mode as agreed with Oneclient
 % developers (they can `case` on such values to perform some special actions).
--define(SHARE_UID, ?UID_MAX-1).
+-define(SHARE_UID, ?UID_MAX).
 -define(SHARE_GID, ?SHARE_UID).
 
 % Trash associated macros
