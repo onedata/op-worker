@@ -163,7 +163,7 @@ fslogic_file_attrs_with_too_big_uid_and_gid_encoding_test(Config) ->
 
     OriginalMsg = #server_message{message_body = #fuse_response{
         status = #status{code = ?OK},
-        fuse_response = FileAttr#file_attr{uid = ?UID_MAX + 1, gid = ?UID_MAX + 1}
+        fuse_response = FileAttr#file_attr{uid = ?UID_MAX + 10, gid = ?UID_MAX + 10}
     }},
 
     ExpModifiedMsg = #server_message{message_body = #fuse_response{
