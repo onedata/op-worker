@@ -52,26 +52,9 @@ sanitize(#{<<"mode">> := <<"layout">>}) ->
     };
 
 sanitize(Data = #{<<"mode">> := <<"slice">>}) ->
-    SanitizedData = middleware_sanitizer:sanitize_data(Data, #{
-        required => #{
-            <<"layout">> => {json, fun(RequestedLayout) ->
-                try
-                    maps:foreach(fun(TimeSeriesName, MetricNames) ->
-                        true = is_binary(TimeSeriesName) andalso
-                            is_list(MetricNames) andalso
-                            lists:all(fun is_binary/1, MetricNames)
-                    end, RequestedLayout),
-                    true
-                catch _:_ ->
-                    false
-                end
-            end}
-        },
-        optional => #{
-            <<"startTimestamp">> => {integer, {not_lower_than, 0}},
-            <<"windowLimit">> => {integer, {between, 1, ?MAX_WINDOW_LIMIT}}
-        }
-    }),
+    DataSpec = ts_browser_middleware:data_spec(Data),
+    SanitizedData = middleware_sanitizer:sanitize_data(Data, DataSpec),
+    
     #atm_time_series_store_content_browse_options{
         request = #atm_time_series_store_content_get_slice_req{
             layout = maps:get(<<"layout">>, SanitizedData),

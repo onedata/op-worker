@@ -95,7 +95,10 @@ translate_value(#gri{aspect = transfers}, TransfersForFile) ->
     TransfersForFile;
 
 translate_value(#gri{aspect = download_url}, URL) ->
-    #{<<"fileUrl">> => URL}.
+    #{<<"fileUrl">> => URL};
+
+translate_value(#gri{aspect = dir_size_stats}, Value) ->
+    Value.
 
 
 -spec translate_resource(gri:gri(), Data :: term()) ->
@@ -258,7 +261,7 @@ translate_file_details(#file_details{
 }, Scope) ->
     PosixPerms = list_to_binary(string:right(integer_to_list(Mode, 8), 3, $0)),
     {Type, Size} = case TypeAttr of
-        ?DIRECTORY_TYPE -> {<<"DIR">>, null};
+        ?DIRECTORY_TYPE -> {<<"DIR">>, utils:undefined_to_null(SizeAttr)};
         ?REGULAR_FILE_TYPE -> {<<"REG">>, SizeAttr};
         ?SYMLINK_TYPE -> {<<"SYMLNK">>, SizeAttr}
     end,

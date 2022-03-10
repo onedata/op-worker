@@ -133,8 +133,8 @@ resolve_handler(delete, Aspect, Scope) ->
 -spec data_spec(middleware:req()) -> undefined | middleware_sanitizer:data_spec().
 data_spec(#op_req{operation = create, data = Data, gri = GRI}) ->
     data_spec_create(GRI, Data);
-data_spec(#op_req{operation = get, gri = GRI}) ->
-    data_spec_get(GRI);
+data_spec(#op_req{operation = get, gri = GRI, data = Data}) ->
+    data_spec_get(GRI, Data);
 data_spec(#op_req{operation = update, gri = GRI}) ->
     data_spec_update(GRI);
 data_spec(#op_req{operation = delete, gri = GRI}) ->
@@ -505,16 +505,17 @@ resolve_get_operation_handler(symlink_target, public) -> ?MODULE;
 resolve_get_operation_handler(symlink_target, private) -> ?MODULE;
 resolve_get_operation_handler(archive_recall_details, private) -> ?MODULE;
 resolve_get_operation_handler(archive_recall_progress, private) -> ?MODULE;
+resolve_get_operation_handler(dir_size_stats, private) -> ?MODULE;
 resolve_get_operation_handler(_, _) -> throw(?ERROR_NOT_SUPPORTED).
 
 
 %% @private
--spec data_spec_get(gri:gri()) -> undefined | middleware_sanitizer:data_spec().
-data_spec_get(#gri{aspect = instance}) -> #{
+-spec data_spec_get(gri:gri(), middleware:data()) -> undefined | middleware_sanitizer:data_spec().
+data_spec_get(#gri{aspect = instance}, _) -> #{
     required => #{id => {binary, guid}}
 };
 
-data_spec_get(#gri{aspect = As}) when
+data_spec_get(#gri{aspect = As}, _) when
     As =:= children_details
 -> #{
     required => #{id => {binary, guid}},
@@ -536,7 +537,7 @@ data_spec_get(#gri{aspect = As}) when
     }
 };
 
-data_spec_get(#gri{aspect = children, scope = Sc}) -> #{
+data_spec_get(#gri{aspect = children, scope = Sc}, _) -> #{
     required => #{id => {binary, guid}},
     optional => #{
         <<"limit">> => {integer, {between, 1, 1000}},
@@ -559,7 +560,7 @@ data_spec_get(#gri{aspect = children, scope = Sc}) -> #{
     }
 };
 
-data_spec_get(#gri{aspect = files}) -> #{
+data_spec_get(#gri{aspect = files}, _) -> #{
     required => #{id => {binary, guid}},
     optional => #{
         <<"limit">> => {integer, {between, 1, ?DEFAULT_LIST_ENTRIES}},
@@ -568,16 +569,16 @@ data_spec_get(#gri{aspect = files}) -> #{
     }
 };
 
-data_spec_get(#gri{aspect = attrs, scope = private}) -> #{
+data_spec_get(#gri{aspect = attrs, scope = private}, _) -> #{
     required => #{id => {binary, guid}},
     optional => #{<<"attribute">> => {any, ?PRIVATE_BASIC_ATTRIBUTES}}
 };
-data_spec_get(#gri{aspect = attrs, scope = public}) -> #{
+data_spec_get(#gri{aspect = attrs, scope = public}, _) -> #{
     required => #{id => {binary, guid}},
     optional => #{<<"attribute">> => {any, ?PUBLIC_BASIC_ATTRIBUTES}}
 };
 
-data_spec_get(#gri{aspect = xattrs}) -> #{
+data_spec_get(#gri{aspect = xattrs}, _) -> #{
     required => #{id => {binary, guid}},
     optional => #{
         <<"attribute">> => {binary, non_empty},
@@ -587,7 +588,7 @@ data_spec_get(#gri{aspect = xattrs}) -> #{
     }
 };
 
-data_spec_get(#gri{aspect = json_metadata}) -> #{
+data_spec_get(#gri{aspect = json_metadata}, _) -> #{
     required => #{id => {binary, guid}},
     optional => #{
         <<"filter_type">> => {binary, [<<"keypath">>]},
@@ -597,12 +598,12 @@ data_spec_get(#gri{aspect = json_metadata}) -> #{
     }
 };
 
-data_spec_get(#gri{aspect = rdf_metadata}) -> #{
+data_spec_get(#gri{aspect = rdf_metadata}, _) -> #{
     required => #{id => {binary, guid}},
     optional => #{<<"resolve_symlink">> => {boolean, any}}
 };
 
-data_spec_get(#gri{aspect = As}) when
+data_spec_get(#gri{aspect = As}, _) when
     As =:= distribution;
     As =:= acl;
     As =:= shares;
@@ -613,35 +614,42 @@ data_spec_get(#gri{aspect = As}) when
 ->
     #{required => #{id => {binary, guid}}};
 
-data_spec_get(#gri{aspect = hardlinks}) ->
+data_spec_get(#gri{aspect = hardlinks}, _) ->
     #{
         required => #{id => {binary, guid}},
         optional => #{<<"limit">> => {integer, {not_lower_than, 1}}}
     };
 
-data_spec_get(#gri{aspect = {hardlinks, _}}) -> #{
+data_spec_get(#gri{aspect = {hardlinks, _}}, _) -> #{
     required => #{
         id => {binary, guid},
         {aspect, <<"guid">>} => {binary, guid}
     }
 };
 
-data_spec_get(#gri{aspect = transfers}) -> #{
+data_spec_get(#gri{aspect = transfers}, _) -> #{
     required => #{id => {binary, guid}},
     optional => #{<<"include_ended_ids">> => {boolean, any}}
 };
 
-data_spec_get(#gri{aspect = As}) when
+data_spec_get(#gri{aspect = As}, _) when
     As =:= qos_summary;
     As =:= dataset_summary
 -> #{
     required => #{id => {binary, guid}}
 };
 
-data_spec_get(#gri{aspect = download_url}) -> #{
+data_spec_get(#gri{aspect = download_url}, _) -> #{
     required => #{<<"file_ids">> => {list_of_binaries, guid}},
     optional => #{<<"follow_symlinks">> => {boolean, any}}
-}.
+};
+
+data_spec_get(#gri{aspect = dir_size_stats}, Data) ->
+    kv_utils:put(
+        [required, <<"mode">>], 
+        {binary, [<<"layout">>, <<"slice">>]}, 
+        ts_browser_middleware:data_spec(Data)
+    ).
 
 
 %% @private
@@ -676,7 +684,8 @@ authorize_get(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= symlink_value;
     As =:= symlink_target;
     As =:= archive_recall_details;
-    As =:= archive_recall_progress
+    As =:= archive_recall_progress;
+    As =:= dir_size_stats
 ->
     middleware_utils:has_access_to_file_space(Auth, Guid);
 
@@ -726,7 +735,8 @@ validate_get(#op_req{gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= symlink_value;
     As =:= symlink_target;
     As =:= archive_recall_details;
-    As =:= archive_recall_progress
+    As =:= archive_recall_progress;
+    As =:= dir_size_stats
 ->
     middleware_utils:assert_file_managed_locally(Guid);
 
@@ -973,7 +983,38 @@ get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = archive_recall_detai
 
 
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = archive_recall_progress}}, _) ->
-    {ok, mi_archives:get_recall_progress(Auth#auth.session_id, FileGuid)}.
+    {ok, mi_archives:get_recall_progress(Auth#auth.session_id, FileGuid)};
+
+
+get(#op_req{gri = #gri{id = Guid, aspect = dir_size_stats}, data = #{<<"mode">> := <<"layout">>}}, _) ->
+    Layout = case dir_size_stats:get_layout(Guid) of
+        {ok, L} -> L;
+        {error, not_found} -> throw(?ERROR_NOT_FOUND)
+    end,
+    {ok, value, Layout};
+
+get(#op_req{gri = #gri{id = Guid, aspect = dir_size_stats}, data = #{<<"mode">> := <<"slice">>} = Data}, _) ->
+    SliceLayout = maps:get(<<"layout">>, Data),
+    PossiblyUndefOpts = #{
+        start_timestamp => maps:get(<<"startTimestamp">>, Data, undefined),
+        window_limit => maps:get(<<"limit">>, Data, undefined)
+    },
+    Opts = maps_utils:remove_undefined(PossiblyUndefOpts),
+    case dir_size_stats:get_stats_and_time_series_collection(Guid, SliceLayout, Opts) of
+        {ok, Slice} ->
+            {ok, value, #{
+                <<"windows">> => tsc_structure:map(fun(_TimeSeriesName, _MetricName, Windows) ->
+                    lists:map(fun({Timestamp, ValuesSum}) ->
+                        #{
+                            <<"timestamp">> => Timestamp,
+                            <<"value">> => ValuesSum
+                        }
+                    end, Windows)
+                end, Slice)
+            }};
+        {error, _} = Error -> 
+            Error
+    end.
 
 
 %%%===================================================================

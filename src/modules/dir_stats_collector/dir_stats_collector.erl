@@ -175,10 +175,14 @@
 get_stats(Guid, CollectionType, StatNames) ->
     case dir_stats_collector_config:get_extended_collecting_status(file_id:guid_to_space_id(Guid)) of
         enabled ->
+            StatNames2 = case StatNames of
+                all -> all;
+                _ -> utils:ensure_list(StatNames)
+            end, 
             Request = #dsc_get_request{
                 guid = Guid,
                 collection_type = CollectionType,
-                stat_names = StatNames
+                stat_names = StatNames2
             },
             call_designated_node(Guid, submit_and_await, [?MODULE, Guid, Request]);
         {collections_initialization, _} ->

@@ -41,7 +41,11 @@
 
 
 %% API
--export([get_stats/1, get_stats/2, get_stats_and_time_series_collection/1,
+-export([
+    get_layout/1,
+    get_stats/1, get_stats/2, 
+    get_stats_and_time_series_collection/1,
+    get_stats_and_time_series_collection/3,
     report_reg_file_size_changed/3,
     report_file_created/2, report_file_deleted/2,
     report_file_moved/4,
@@ -77,6 +81,11 @@
 %%% API
 %%%===================================================================
 
+-spec get_layout(file_id:file_guid()) -> {ok, time_series_collection:layout()} | {error, term()}.
+get_layout(Guid) ->
+    datastore_time_series_collection:get_layout(?CTX, file_id:guid_to_uuid(Guid)).
+
+
 -spec get_stats(file_id:file_guid()) -> {ok, current_stats()} | dir_stats_collector:error().
 get_stats(Guid) ->
     get_stats(Guid, all).
@@ -103,17 +112,26 @@ get_stats(Guid, StatNames) ->
     {ok, {current_stats(), internal_stats()}} |
     dir_stats_collector:collecting_status_error() | ?ERROR_INTERNAL_SERVER_ERROR.
 get_stats_and_time_series_collection(Guid) ->
+    case get_stats_and_time_series_collection(Guid, ?COMPLETE_LAYOUT, #{}) of
+        {ok, Slice} ->
+            {ok, {internal_stats_to_current_stats(Slice), internal_stats_to_time_stats(Slice)}};
+        {error, not_found} ->
+            {ok, {gen_empty_current_stats(Guid), gen_empty_time_stats(Guid)}};
+        {error, _} = Error ->
+            Error
+    end.
+
+
+-spec get_stats_and_time_series_collection(file_id:file_guid(), time_series_collection:layout(), 
+    ts_windows:list_options()) -> {ok, {current_stats(), internal_stats()}} |
+    dir_stats_collector:collecting_status_error() | ?ERROR_INTERNAL_SERVER_ERROR.
+get_stats_and_time_series_collection(Guid, Layout, Opts) ->
     case dir_stats_collector_config:is_collecting_active(file_id:guid_to_space_id(Guid)) of
         true ->
             case dir_stats_collector:flush_stats(Guid, ?MODULE) of
                 ok ->
                     Uuid = file_id:guid_to_uuid(Guid),
-                    case datastore_time_series_collection:get_slice(?CTX, Uuid, ?COMPLETE_LAYOUT, #{}) of
-                        {ok, Slice} ->
-                            {ok, {internal_stats_to_current_stats(Slice), internal_stats_to_time_stats(Slice)}};
-                        {error, not_found} ->
-                            {ok, {gen_empty_current_stats(Guid), gen_empty_time_stats(Guid)}}
-                    end;
+                    datastore_time_series_collection:get_slice(?CTX, Uuid, Layout, Opts);
                 {error, _} = Error ->
                     Error
             end;

@@ -50,13 +50,13 @@
     % and conflicting files will be returned.
     name_conflicts_resolution_policy => name_conflicts_resolution_policy(),
 
-    % Tells whether replication status should be included in answer
+    % Tells whether replication status should be included in answer.
     include_replication_status => boolean(),
 
-    % Tells whether hardlink count should be included in answer
+    % Tells whether hardlink count should be included in answer.
     include_link_count => boolean(),
 
-    % Tells whether fields calculated using effective value should be included in answer
+    % Tells whether fields calculated using effective value should be included in answer.
     effective_values_references_limit => non_neg_integer() | infinity
 }.
 
@@ -457,6 +457,13 @@ resolve_file_attr(UserCtx, FileCtx, Opts) ->
             {?REGULAR_FILE_TYPE, true, _} ->
                 {RS, _, Ctx} = file_ctx:get_replication_status_and_size(FileCtx5),
                 {RS, undefined, Ctx};
+            {?DIRECTORY_TYPE, _, true} ->
+                case dir_size_stats:get_stats(file_ctx:get_logical_guid_const(FileCtx5), <<"total_size">>) of
+                    {ok, #{<<"total_size">> := S}} ->
+                        {undefined, S, FileCtx5};
+                    _ ->
+                        {undefined, undefined, FileCtx5}
+                end;
             {?SYMLINK_TYPE, _, true} ->
                 {ok, Symlink} = file_meta_symlinks:readlink(FileDoc),
                 {undefined, byte_size(Symlink), FileCtx5};
