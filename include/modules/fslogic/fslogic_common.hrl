@@ -76,7 +76,7 @@
 -define(FILE_NEVER_EXISTED, never_existed).
 
 % Maximal uid/gid value in common linux distributions
--define(UID_MAX, 2147483647).
+-define(UID_MAX, 4_294_967_295).
 -define(GID_MAX, ?UID_MAX).
 
 % Special values masking file real uid/gid in share mode as agreed with Oneclient
