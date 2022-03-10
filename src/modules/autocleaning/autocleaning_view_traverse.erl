@@ -9,6 +9,8 @@
 %%% This module implements view_traverse behaviour (see view_traverse.erl).
 %%% It is used by autocleaning_run_controller to traverse over file_popularity_view
 %%% in given space and schedule deletions of the least popular file replicas.
+%%% Note: hardlinks are ignored during the traverse because they share content with
+%%% original file. The content will be cleaned with original file cleaning.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(autocleaning_view_traverse).
@@ -39,11 +41,11 @@
 %% @formatter:on
 
 -define(AUTOCLEANING_MASTER_JOBS_NUM,
-    application:get_env(?APP_NAME, autocleaning_master_jobs_num, 10)).
+    op_worker:get_env(autocleaning_master_jobs_num, 10)).
 -define(AUTOCLEANING_SLAVE_JOBS_NUM,
-    application:get_env(?APP_NAME, autocleaning_slave_jobs_num, 50)).
+    op_worker:get_env(autocleaning_slave_jobs_num, 50)).
 -define(AUTOCLEANING_PARALLEL_ORDERS_LIMIT,
-    application:get_env(?APP_NAME, autocleaning_parallel_orders_limit, 10)).
+    op_worker:get_env(autocleaning_parallel_orders_limit, 10)).
 
 -define(TASK_ID_SEPARATOR, <<"$$">>).
 
@@ -102,19 +104,22 @@ process_row(Row, #{
     {ok, Guid} = file_id:objectid_to_guid(FileId),
     FileCtx = file_ctx:new_by_guid(Guid),
     BatchNo = autocleaning_run_controller:batch_no(RowNumber, BatchSize),
-    try {autocleaning_rules:are_all_rules_satisfied(FileCtx, AutocleaningRules), autocleaning_run:is_active(AutocleaningRunId)} of
-        {true, true} ->
+    % TODO VFS-7440 - Can we clean hardlink pointing on deleted file?
+    try not file_ctx:is_link_const(FileCtx) andalso
+        autocleaning_rules:are_all_rules_satisfied(FileCtx, AutocleaningRules) andalso
+        autocleaning_run:is_active(AutocleaningRunId) of
+        true ->
             maybe_schedule_replica_deletion_task(FileCtx, AutocleaningRunId, SpaceId, BatchNo);
         _ ->
             autocleaning_run_controller:notify_processed_file(SpaceId, AutocleaningRunId, BatchNo)
-        catch
-            Error:Reason ->
-                Uuid = file_ctx:get_uuid_const(FileCtx),
-                SpaceId = file_ctx:get_space_id_const(FileCtx),
-                autocleaning_run_controller:notify_processed_file(SpaceId, AutocleaningRunId, BatchNo),
-                ?error_stacktrace("Filtering preselected file with uuid ~p in space ~p failed due to ~p:~p",
-                    [Uuid, SpaceId, Error, Reason]),
-                ok
+    catch
+        Error:Reason:Stacktrace ->
+            Uuid = file_ctx:get_logical_uuid_const(FileCtx),
+            SpaceId = file_ctx:get_space_id_const(FileCtx),
+            autocleaning_run_controller:notify_processed_file(SpaceId, AutocleaningRunId, BatchNo),
+            ?error_stacktrace("Filtering preselected file with uuid ~p in space ~p failed due to ~p:~p",
+                [Uuid, SpaceId, Error, Reason], Stacktrace),
+            ok
     end.
 
 %%--------------------------------------------------------------------

@@ -13,6 +13,7 @@
 
 -include("lfm_files_test_base.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/performance.hrl").
 -include_lib("ctool/include/errors.hrl").
@@ -26,6 +27,7 @@
 
 %% tests
 -export([
+    dir_stats_collector_test/1,
     fslogic_new_file_test/1,
     lfm_create_and_unlink_test/1,
     lfm_create_and_access_test/1,
@@ -78,9 +80,13 @@
     readdir_plus_should_work_with_non_zero_offset/1,
     readdir_plus_should_work_with_size_greater_than_dir_size/1,
     readdir_plus_should_work_with_token/1,
-    readdir_plus_should_work_with_token2/1,
+    readdir_plus_should_work_with_token_not_full_batch/1,
     readdir_should_work_with_token/1,
-    readdir_should_work_with_token2/1,
+    readdir_should_work_with_token_not_full_batch/1,
+    readdir_plus_should_work_with_api_token/1,
+    readdir_plus_should_work_with_api_token_not_full_batch/1,
+    readdir_should_work_with_api_token/1,
+    readdir_should_work_with_api_token_not_full_batch/1,
     readdir_should_work_with_startid/1,
     get_children_details_should_return_empty_result_for_empty_dir/1,
     get_children_details_should_return_empty_result_zero_size/1,
@@ -88,6 +94,7 @@
     get_children_details_should_work_with_non_zero_offset/1,
     get_children_details_should_work_with_size_greater_than_dir_size/1,
     get_children_details_should_work_with_startid/1,
+    get_recursive_file_list/1,
     lfm_recreate_handle_test/1,
     lfm_write_after_create_no_perms_test/1,
     lfm_recreate_handle_after_delete_test/1,
@@ -105,11 +112,16 @@
     rename_removed_opened_file_races_test/1,
     rename_removed_opened_file_races_test2/1,
     lfm_monitored_open/1,
-    recreate_file_on_storage/1
+    lfm_create_and_read_symlink/1,
+    lfm_create_hardlink_to_symlink/1,
+    recreate_file_on_storage/1,
+    lfm_close_deleted_open_files/1
 ]).
 
 
 -define(TEST_CASES, [
+    get_recursive_file_list, % this test must be run first as it requires empty space
+    dir_stats_collector_test,
     fslogic_new_file_test,
     lfm_create_and_unlink_test,
     lfm_create_and_access_test,
@@ -162,9 +174,13 @@
     readdir_plus_should_work_with_non_zero_offset,
     readdir_plus_should_work_with_size_greater_than_dir_size,
     readdir_plus_should_work_with_token,
-    readdir_plus_should_work_with_token2,
+    readdir_plus_should_work_with_token_not_full_batch,
+    readdir_plus_should_work_with_api_token_not_full_batch,
+    readdir_plus_should_work_with_api_token,
     readdir_should_work_with_token,
-    readdir_should_work_with_token2,
+    readdir_should_work_with_token_not_full_batch,
+    readdir_should_work_with_api_token,
+    readdir_should_work_with_api_token_not_full_batch,
     readdir_should_work_with_startid,
     get_children_details_should_return_empty_result_for_empty_dir,
     get_children_details_should_return_empty_result_zero_size,
@@ -189,7 +205,10 @@
     rename_removed_opened_file_races_test,
     rename_removed_opened_file_races_test2,
     lfm_monitored_open,
-    recreate_file_on_storage
+    lfm_create_and_read_symlink,
+    lfm_create_hardlink_to_symlink,
+    recreate_file_on_storage,
+    lfm_close_deleted_open_files
 ]).
 
 
@@ -405,19 +424,35 @@ readdir_plus_should_work_with_size_greater_than_dir_size(Config) ->
 
 
 readdir_plus_should_work_with_token(Config) ->
-    lfm_files_test_base:readdir_plus_should_work_with_token(Config).
+    lfm_files_test_base:readdir_should_work_with_token(Config, 12, readdir_plus, ?INITIAL_DATASTORE_LS_TOKEN).
 
 
-readdir_plus_should_work_with_token2(Config) ->
-    lfm_files_test_base:readdir_plus_should_work_with_token2(Config).
+readdir_plus_should_work_with_token_not_full_batch(Config) ->
+    lfm_files_test_base:readdir_should_work_with_token(Config, 10, readdir_plus, ?INITIAL_DATASTORE_LS_TOKEN).
+
+
+readdir_plus_should_work_with_api_token(Config) ->
+    lfm_files_test_base:readdir_should_work_with_token(Config, 12, readdir_plus, ?INITIAL_API_LS_TOKEN).
+
+
+readdir_plus_should_work_with_api_token_not_full_batch(Config) ->
+    lfm_files_test_base:readdir_should_work_with_token(Config, 10, readdir_plus, ?INITIAL_API_LS_TOKEN).
 
 
 readdir_should_work_with_token(Config) ->
-    lfm_files_test_base:readdir_should_work_with_token(Config).
+    lfm_files_test_base:readdir_should_work_with_token(Config, 12, readdir, ?INITIAL_DATASTORE_LS_TOKEN).
 
 
-readdir_should_work_with_token2(Config) ->
-    lfm_files_test_base:readdir_should_work_with_token2(Config).
+readdir_should_work_with_token_not_full_batch(Config) ->
+    lfm_files_test_base:readdir_should_work_with_token(Config, 10, readdir, ?INITIAL_DATASTORE_LS_TOKEN).
+
+
+readdir_should_work_with_api_token(Config) ->
+    lfm_files_test_base:readdir_should_work_with_token(Config, 12, readdir, ?INITIAL_API_LS_TOKEN).
+
+
+readdir_should_work_with_api_token_not_full_batch(Config) ->
+    lfm_files_test_base:readdir_should_work_with_token(Config, 10, readdir, ?INITIAL_API_LS_TOKEN).
 
 
 readdir_should_work_with_startid(Config) ->
@@ -446,6 +481,10 @@ get_children_details_should_work_with_size_greater_than_dir_size(Config) ->
 
 get_children_details_should_work_with_startid(Config) ->
     lfm_files_test_base:get_children_details_should_work_with_startid(Config).
+
+
+get_recursive_file_list(Config) ->
+    lfm_files_test_base:get_recursive_file_list(Config).
 
 
 lfm_recreate_handle_test(Config) ->
@@ -522,7 +561,7 @@ rename_removed_opened_file_test(Config) ->
     ?assertEqual([FileNameString], ListAns -- InitialSpaceFiles),
 
     ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId(User), {path, FilePath})),
-    ?assertEqual({error, ?ENOENT}, lfm_proxy:stat(Worker, SessId(User), {guid, Guid1})),
+    ?assertEqual({error, ?ENOENT}, lfm_proxy:stat(Worker, SessId(User), ?FILE_REF(Guid1))),
     {ok, StorageDirList} = ?assertMatch({ok, _}, rpc:call(Worker, file, list_dir, [StorageDir])),
     ?assert(lists:member(?DELETED_OPENED_FILES_DIR_STRING, StorageDirList)),
     {ok, ListAns2} = ?assertMatch({ok, _},
@@ -533,8 +572,8 @@ rename_removed_opened_file_test(Config) ->
     ?assertEqual([Guid1String], ListAns3 -- InitialDeletedDir),
     RenamedStorageId = filename:join([?DELETED_OPENED_FILES_DIR, Guid1]),
     ?assertMatch({ok, #file_location{file_id = RenamedStorageId}},
-        lfm_proxy:get_file_location(Worker, SessId(User), {guid, Guid1})),
-    ?assertMatch({error, ?ENOENT}, lfm_proxy:get_file_location(Worker, SessId(User2), {guid, Guid1})),
+        lfm_proxy:get_file_location(Worker, SessId(User), ?FILE_REF(Guid1))),
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:get_file_location(Worker, SessId(User2), ?FILE_REF(Guid1))),
 
     lfm_proxy:close_all(Worker),
     {ok, ListAns4} = ?assertMatch({ok, _},
@@ -573,7 +612,7 @@ mkdir_removed_opened_file_test(Config) ->
     ?assertEqual([FileNameString], ListAns -- InitialSpaceFiles),
 
     ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId(User), {path, FilePath})),
-    ?assertEqual({error, ?ENOENT}, lfm_proxy:stat(Worker, SessId(User), {guid, Guid1})),
+    ?assertEqual({error, ?ENOENT}, lfm_proxy:stat(Worker, SessId(User), ?FILE_REF(Guid1))),
     {ok, StorageDirList} = ?assertMatch({ok, _}, rpc:call(Worker, file, list_dir, [StorageDir])),
     ?assert(lists:member(?DELETED_OPENED_FILES_DIR_STRING, StorageDirList)),
     {ok, ListAns2} = ?assertMatch({ok, _},
@@ -689,7 +728,7 @@ rename_removed_opened_file_races_test_base(Config, MockOpts) ->
         5000 -> timeout
     end),
 
-    ?assertEqual({error, ?ENOENT}, lfm_proxy:stat(Worker, SessId(User), {guid, Guid1})),
+    ?assertEqual({error, ?ENOENT}, lfm_proxy:stat(Worker, SessId(User), ?FILE_REF(Guid1))),
     {ok, StorageDirList} = ?assertMatch({ok, _}, rpc:call(Worker, file, list_dir, [StorageDir])),
     ?assert(lists:member(?DELETED_OPENED_FILES_DIR_STRING, StorageDirList)),
     {ok, ListAns2} = ?assertMatch({ok, _},
@@ -718,11 +757,11 @@ lfm_monitored_open(Config) ->
     Attempts = 10,
 
     OpenAndHungFun = fun() ->
-        Self !  lfm:open(SessId1, {guid, File1Guid}, read),
+        Self !  lfm:open(SessId1, ?FILE_REF(File1Guid), read),
         receive _ -> ok end
     end,
     MonitoredOpenAndHungFun = fun() ->
-        Self !  lfm:monitored_open(SessId1, {guid, File2Guid}, read),
+        Self !  lfm:monitored_open(SessId1, ?FILE_REF(File2Guid), read),
         receive _ -> ok end
     end,
     GetAllProcessHandles = fun(Pid) ->
@@ -781,7 +820,7 @@ lfm_monitored_open(Config) ->
         {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, FilePath)),
 
         spawn(W, fun() ->
-            Self !  lfm:monitored_open(SessId1, {guid, FileGuid}, read),
+            Self !  lfm:monitored_open(SessId1, ?FILE_REF(FileGuid), read),
             receive _ -> ok end
         end),
         filename:join([<<"/">>, ?SPACE_ID1, <<"file_", FileIdx/binary>>])
@@ -809,6 +848,78 @@ lfm_monitored_open(Config) ->
     ?assertEqual(ExpFileIds, lists:usort(GetAllDocsFun(undefined)), Attempts).
 
 
+lfm_create_and_read_symlink(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+
+    {SessId, _UserId} =
+        {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+
+    % Prepare test dir and link data
+    TestDir = <<"/space_name1/", (generator:gen_name())/binary>>,
+    {ok, DirGuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, TestDir)),
+    Path = <<TestDir/binary, "/", (generator:gen_name())/binary>>,
+    LinkTarget = <<"test_link">>,
+    LinkSize = byte_size(LinkTarget),
+
+    % Create symlink and check its times
+    {ok, LinkAttrs} = ?assertMatch(
+        {ok, #file_attr{type = ?SYMLINK_TYPE, size = LinkSize, fully_replicated = undefined, parent_guid = DirGuid}},
+        lfm_proxy:make_symlink(W, SessId, Path, LinkTarget)),
+    ?assert(LinkAttrs#file_attr.atime > 0),
+    ?assert(LinkAttrs#file_attr.mtime > 0),
+    ?assert(LinkAttrs#file_attr.ctime > 0),
+    ?assert(fslogic_uuid:is_symlink_uuid(file_id:guid_to_uuid(LinkAttrs#file_attr.guid))),
+
+    % Read link and check it
+    time_test_utils:simulate_seconds_passing(2), % ensure time change
+    ?assertEqual({ok, LinkTarget}, lfm_proxy:read_symlink(W, SessId, {path, Path})),
+    {ok, LinkAttrs2} = ?assertMatch(
+        {ok, #file_attr{type = ?SYMLINK_TYPE, size = LinkSize, fully_replicated = undefined, parent_guid = DirGuid}},
+        lfm_proxy:stat(W, SessId, {path, Path})),
+    ?assert(LinkAttrs2#file_attr.atime > LinkAttrs#file_attr.atime),
+    ?assertMatch({ok, [LinkAttrs2], _}, lfm_proxy:get_children_attrs(W, SessId, ?FILE_REF(DirGuid), #{offset => 0, size => 10})),
+
+    % Unlink and check if symlink is deleted
+    ?assertEqual(ok, lfm_proxy:unlink(W, SessId, {path, Path})),
+    ?assertEqual({error, enoent}, lfm_proxy:read_symlink(W, SessId, {path, Path})),
+    ?assertMatch({ok, [], _}, lfm_proxy:get_children_attrs(W, SessId, ?FILE_REF(DirGuid), #{offset => 0, size => 10})),
+
+    % Delete test dir
+    ?assertMatch(ok, lfm_proxy:unlink(W, SessId, ?FILE_REF(DirGuid))),
+    ok.
+
+
+lfm_create_hardlink_to_symlink(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+
+    {SessId, _UserId} =
+        {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+
+    % Prepare test dir and link data
+    TestDir = <<"/space_name1/", (generator:gen_name())/binary>>,
+    {ok, DirGuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, TestDir)),
+    SymlinkPath = <<TestDir/binary, "/", (generator:gen_name())/binary>>,
+    HardlinkPath = <<TestDir/binary, "/", (generator:gen_name())/binary>>,
+    LinkTarget = <<"test_link">>,
+
+    % Create symlink and hardlink to this symlink
+    {ok, #file_attr{guid = SymlinkGuid}} = ?assertMatch({ok, #file_attr{type = ?SYMLINK_TYPE}},
+        lfm_proxy:make_symlink(W, SessId, SymlinkPath, LinkTarget)),
+    {ok, #file_attr{guid = HardlinkGuid}} = ?assertMatch({ok, #file_attr{type = ?SYMLINK_TYPE}},
+        lfm_proxy:make_link(W, SessId, HardlinkPath, SymlinkGuid)),
+
+    % Verify links
+    ?assertNotEqual(SymlinkGuid, HardlinkGuid),
+    ?assertEqual({ok, LinkTarget}, lfm_proxy:read_symlink(W, SessId, {path, SymlinkPath})),
+    ?assertEqual({ok, LinkTarget}, lfm_proxy:read_symlink(W, SessId, {path, HardlinkPath})),
+
+    % Clean
+    ?assertEqual(ok, lfm_proxy:unlink(W, SessId, {path, SymlinkPath})),
+    ?assertEqual(ok, lfm_proxy:unlink(W, SessId, {path, HardlinkPath})),
+    ?assertMatch(ok, lfm_proxy:unlink(W, SessId, ?FILE_REF(DirGuid))),
+    ok.
+
+
 recreate_file_on_storage(Config) ->
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
     {SessId, _UserId} =
@@ -829,9 +940,17 @@ recreate_file_on_storage(Config) ->
     ?assertEqual(ok, test_utils:mock_unload(Workers, storage_driver)),
 
     % File should be created on disk and read should succeed
-    {ok, Handle2} = ?assertMatch({ok, _}, lfm_proxy:open(Worker, SessId, {guid, Guid}, read)),
+    {ok, Handle2} = ?assertMatch({ok, _}, lfm_proxy:open(Worker, SessId, ?FILE_REF(Guid), read)),
     ?assertEqual({ok, <<>>}, lfm_proxy:read(Worker, Handle2, 0, 10)),
     ?assertEqual(ok, lfm_proxy:close(Worker, Handle2)).
+
+
+lfm_close_deleted_open_files(Config) ->
+    lfm_files_test_base:lfm_close_deleted_open_files(Config).
+
+
+dir_stats_collector_test(Config) ->
+    dir_stats_collector_test_base:single_provider_test(Config).
 
 
 %%%===================================================================
@@ -852,6 +971,25 @@ init_per_testcase(Case, Config) when
     test_utils:mock_new(Workers, storage_driver, [passthrough]),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 
+init_per_testcase(lfm_create_and_read_symlink = Case, Config) ->
+    time_test_utils:freeze_time(Config),
+    init_per_testcase(?DEFAULT_CASE(Case), Config);
+
+init_per_testcase(dir_stats_collector_test = Case, Config) ->
+    dir_stats_collector_test_base:init(init_per_testcase(?DEFAULT_CASE(Case), Config));
+
+init_per_testcase(Case, Config) when
+    Case =:= readdir_plus_should_work_with_token;
+    Case =:= readdir_plus_should_work_with_token_not_full_batch;
+    Case =:= readdir_plus_should_work_with_api_token_not_full_batch;
+    Case =:= readdir_plus_should_work_with_api_token;
+    Case =:= readdir_should_work_with_token;
+    Case =:= readdir_should_work_with_token_not_full_batch;
+    Case =:= readdir_should_work_with_api_token;
+    Case =:= readdir_should_work_with_api_token_not_full_batch
+    ->
+    lfm_files_test_base:init_per_testcase(readdir_should_work_with_token, Config);
+
 init_per_testcase(Case, Config) ->
     lfm_files_test_base:init_per_testcase(Case, Config).
 
@@ -863,6 +1001,26 @@ end_per_testcase(Case, Config) when
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Workers, [storage_driver]),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
+
+end_per_testcase(lfm_create_and_read_symlink = Case, Config) ->
+    time_test_utils:unfreeze_time(Config),
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
+
+end_per_testcase(dir_stats_collector_test = Case, Config) ->
+    dir_stats_collector_test_base:teardown(Config),
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
+
+end_per_testcase(Case, Config) when
+    Case =:= readdir_plus_should_work_with_token;
+    Case =:= readdir_plus_should_work_with_token_not_full_batch;
+    Case =:= readdir_plus_should_work_with_api_token_not_full_batch;
+    Case =:= readdir_plus_should_work_with_api_token;
+    Case =:= readdir_should_work_with_token;
+    Case =:= readdir_should_work_with_token_not_full_batch;
+    Case =:= readdir_should_work_with_api_token;
+    Case =:= readdir_should_work_with_api_token_not_full_batch
+    ->
+    lfm_files_test_base:end_per_testcase(readdir_should_work_with_token, Config);
 
 end_per_testcase(Case, Config) ->
     lfm_files_test_base:end_per_testcase(Case, Config).

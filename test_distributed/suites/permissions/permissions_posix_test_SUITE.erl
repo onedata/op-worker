@@ -401,6 +401,7 @@ end_per_suite(Config) ->
 
 
 init_per_testcase(Case, Config) ->
+    ct:timetrap({minutes, 5}),
     permissions_test_base:init_per_testcase(Case, Config).
 
 

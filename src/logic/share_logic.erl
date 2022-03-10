@@ -22,6 +22,7 @@
 -include("modules/datastore/datastore_models.hrl").
 
 -export([get/2, get_public_data/2]).
+-export([force_fetch/1]).
 -export([create/7, update/3, delete/2]).
 
 %%%===================================================================
@@ -58,6 +59,11 @@ get_public_data(SessionId, ShareId) ->
     }).
 
 
+-spec force_fetch(od_share:id()) -> {ok, od_share:doc()} | errors:error().
+force_fetch(ShareId) ->
+    gs_client_worker:force_fetch_entity(#gri{type = od_share, id = ShareId, aspect = instance}).
+
+
 -spec create(gs_client_worker:client(), od_share:id(), od_share:name(),
     od_share:description(), od_space:id(), od_share:root_file_guid(), od_share:file_type()
 ) ->
@@ -77,7 +83,7 @@ create(SessionId, ShareId, Name, Description, SpaceId, ShareFileGuid, FileType) 
         subscribe = true
     })),
     ?ON_SUCCESS(Res, fun(_) ->
-        gs_client_worker:invalidate_cache(od_space, SpaceId)
+        space_logic:force_fetch(SpaceId)
     end).
 
 
@@ -90,7 +96,7 @@ update(SessionId, ShareId, Data) ->
         data = Data
     }),
     ?ON_SUCCESS(Res, fun(_) ->
-        gs_client_worker:invalidate_cache(od_share, ShareId)
+        share_logic:force_fetch(ShareId)
     end).
 
 

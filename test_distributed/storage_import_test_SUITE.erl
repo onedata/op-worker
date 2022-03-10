@@ -14,8 +14,6 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/test/performance.hrl").
 
-% TODO VFS-6161 divide to smaller test suites
-
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
     end_per_testcase/2]).
@@ -49,35 +47,6 @@
     remote_delete_file_reimport_race_test/1,
     remote_delete_file_reimport_race2_test/1,
     delete_opened_file_reimport_race_test/1,
-
-    % tests of update
-    update_syncs_files_after_import_failed_test/1,
-    update_syncs_files_after_previous_update_failed_test/1,
-    sync_should_not_reimport_deleted_but_still_opened_file/1,
-    sync_should_not_reimport_directory_that_was_not_successfully_deleted_from_storage/1,
-    sync_should_not_reimport_file_that_was_not_successfully_deleted_from_storage/1,
-    sync_should_not_import_recreated_file_with_suffix_on_storage/1,
-    sync_should_update_blocks_of_recreated_file_with_suffix_on_storage/1,
-    sync_should_not_import_replicated_file_with_suffix_on_storage/1,
-    sync_should_update_replicated_file_with_suffix_on_storage/1,
-    sync_should_not_process_file_if_hash_of_its_attrs_has_not_changed/1,
-    create_delete_import2_test/1,
-    create_subfiles_and_delete_before_import_is_finished_test/1,
-    create_file_in_dir_update_test/1,
-    changing_max_depth_test/1,
-    create_file_in_dir_exceed_batch_update_test/1,
-    force_start_test/1,
-    force_stop_test/1,
-
-    delete_empty_directory_update_test/1,
-    delete_non_empty_directory_update_test/1,
-    sync_works_properly_after_delete_test/1,
-    delete_and_update_files_simultaneously_update_test/1,
-    delete_file_update_test/1,
-    delete_file_in_dir_update_test/1,
-    delete_many_subfiles_test/1,
-    create_delete_race_test/1,
-    create_list_race_test/1,
 
     append_file_update_test/1,
     append_file_not_changing_mtime_update_test/1,
@@ -135,36 +104,6 @@
     remote_delete_file_reimport_race_test,
     remote_delete_file_reimport_race2_test,
     delete_opened_file_reimport_race_test,
-
-    % tests of update
-    update_syncs_files_after_import_failed_test,
-    update_syncs_files_after_previous_update_failed_test,
-    % todo VFS-5203 add more tests of sync handling suffixed files
-    sync_should_not_reimport_deleted_but_still_opened_file,
-    sync_should_not_reimport_directory_that_was_not_successfully_deleted_from_storage,
-    sync_should_not_reimport_file_that_was_not_successfully_deleted_from_storage,
-    sync_should_not_import_recreated_file_with_suffix_on_storage,
-    sync_should_update_blocks_of_recreated_file_with_suffix_on_storage,
-    sync_should_not_import_replicated_file_with_suffix_on_storage,
-    sync_should_update_replicated_file_with_suffix_on_storage,
-    sync_should_not_process_file_if_hash_of_its_attrs_has_not_changed,
-    create_delete_import2_test,
-    create_subfiles_and_delete_before_import_is_finished_test,
-    create_file_in_dir_update_test,
-    changing_max_depth_test,
-    create_file_in_dir_exceed_batch_update_test,
-    force_start_test,
-    force_stop_test,
-
-    delete_empty_directory_update_test,
-    delete_non_empty_directory_update_test,
-    sync_works_properly_after_delete_test,
-    delete_and_update_files_simultaneously_update_test,
-    delete_file_update_test,
-    delete_file_in_dir_update_test,
-    delete_many_subfiles_test,
-    create_delete_race_test,
-    create_list_race_test,
 
     append_file_update_test,
     append_file_not_changing_mtime_update_test,
@@ -254,9 +193,6 @@ create_remote_dir_import_race_test(Config) ->
 create_remote_file_import_race_test(Config) ->
     storage_import_test_base:create_remote_file_import_race_test(Config).
 
-force_stop_test(Config) ->
-    storage_import_test_base:force_stop_test(Config).
-
 import_nfs_acl_test(Config) ->
     storage_import_test_base:import_nfs_acl_test(Config).
 
@@ -280,81 +216,6 @@ remote_delete_file_reimport_race2_test(Config) ->
 
 delete_opened_file_reimport_race_test(Config) ->
     storage_import_test_base:delete_opened_file_reimport_race_test(Config, ?POSIX_HELPER_NAME).
-
-update_syncs_files_after_import_failed_test(Config) ->
-    storage_import_test_base:update_syncs_files_after_import_failed_test(Config).
-
-update_syncs_files_after_previous_update_failed_test(Config) ->
-    storage_import_test_base:update_syncs_files_after_previous_update_failed_test(Config).
-
-sync_should_not_reimport_deleted_but_still_opened_file(Config) ->
-    storage_import_test_base:sync_should_not_reimport_deleted_but_still_opened_file(Config, ?POSIX_HELPER_NAME).
-
-sync_should_not_reimport_directory_that_was_not_successfully_deleted_from_storage(Config) ->
-    storage_import_test_base:sync_should_not_reimport_directory_that_was_not_successfully_deleted_from_storage(Config).
-
-sync_should_not_reimport_file_that_was_not_successfully_deleted_from_storage(Config) ->
-    storage_import_test_base:sync_should_not_reimport_file_that_was_not_successfully_deleted_from_storage(Config, ?POSIX_HELPER_NAME).
-
-sync_should_not_import_recreated_file_with_suffix_on_storage(Config) ->
-    storage_import_test_base:sync_should_not_import_recreated_file_with_suffix_on_storage(Config, ?POSIX_HELPER_NAME).
-
-sync_should_update_blocks_of_recreated_file_with_suffix_on_storage(Config) ->
-    storage_import_test_base:sync_should_update_blocks_of_recreated_file_with_suffix_on_storage(Config, ?POSIX_HELPER_NAME).
-
-sync_should_not_import_replicated_file_with_suffix_on_storage(Config) ->
-    storage_import_test_base:sync_should_not_import_replicated_file_with_suffix_on_storage(Config, ?POSIX_HELPER_NAME).
-
-sync_should_update_replicated_file_with_suffix_on_storage(Config) ->
-    storage_import_test_base:sync_should_update_replicated_file_with_suffix_on_storage(Config, ?POSIX_HELPER_NAME).
-
-sync_should_not_process_file_if_hash_of_its_attrs_has_not_changed(Config) ->
-    storage_import_test_base:sync_should_not_process_file_if_hash_of_its_attrs_has_not_changed(Config).
-
-create_delete_import2_test(Config) ->
-    storage_import_test_base:create_delete_import2_test(Config).
-
-create_subfiles_and_delete_before_import_is_finished_test(Config) ->
-    storage_import_test_base:create_subfiles_and_delete_before_import_is_finished_test(Config).
-
-create_file_in_dir_update_test(Config) ->
-    storage_import_test_base:create_file_in_dir_update_test(Config).
-
-changing_max_depth_test(Config) ->
-    storage_import_test_base:changing_max_depth_test(Config).
-
-create_file_in_dir_exceed_batch_update_test(Config) ->
-    storage_import_test_base:create_file_in_dir_exceed_batch_update_test(Config).
-
-force_start_test(Config) ->
-    storage_import_test_base:force_start_test(Config).
-
-delete_empty_directory_update_test(Config) ->
-    storage_import_test_base:delete_empty_directory_update_test(Config).
-
-delete_non_empty_directory_update_test(Config) ->
-    storage_import_test_base:delete_non_empty_directory_update_test(Config).
-
-sync_works_properly_after_delete_test(Config) ->
-    storage_import_test_base:sync_works_properly_after_delete_test(Config).
-
-delete_and_update_files_simultaneously_update_test(Config) ->
-    storage_import_test_base:delete_and_update_files_simultaneously_update_test(Config).
-
-delete_file_update_test(Config) ->
-    storage_import_test_base:delete_file_update_test(Config).
-
-delete_file_in_dir_update_test(Config) ->
-    storage_import_test_base:delete_file_in_dir_update_test(Config).
-
-delete_many_subfiles_test(Config) ->
-    storage_import_test_base:delete_many_subfiles_test(Config).
-
-create_delete_race_test(Config) ->
-    storage_import_test_base:create_delete_race_test(Config, ?POSIX_HELPER_NAME).
-
-create_list_race_test(Config) ->
-    storage_import_test_base:create_list_race_test(Config).
 
 append_file_update_test(Config) ->
     storage_import_test_base:append_file_update_test(Config).

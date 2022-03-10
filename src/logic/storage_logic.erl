@@ -34,6 +34,7 @@
 
 -export([create_in_zone/4, create_in_zone/5, delete_in_zone/1]).
 -export([get/1, get_shared_data/2]).
+-export([force_fetch/1]).
 -export([support_space/3]).
 -export([update_space_support_size/3]).
 -export([revoke_space_support/2]).
@@ -86,7 +87,7 @@ create_in_zone(Name, ImportedStorage, Readonly, QosParameters, StorageId) ->
         }
     }),
     ?CREATE_RETURN_ID(?ON_SUCCESS(Result, fun(_) ->
-        gs_client_worker:invalidate_cache(od_provider, oneprovider:get_id())
+        provider_logic:force_fetch()
     end)).
 
 
@@ -97,7 +98,7 @@ delete_in_zone(StorageId) ->
         gri = #gri{type = od_storage, id = StorageId, aspect = instance}
     }),
     ?ON_SUCCESS(Result, fun(_) ->
-        gs_client_worker:invalidate_cache(od_provider, oneprovider:get_id()),
+        provider_logic:force_fetch(),
         % only storage not supporting any space can be deleted
         % so no need to invalidate any od_space cache
         gs_client_worker:invalidate_cache(od_storage, StorageId)
@@ -128,6 +129,11 @@ get_shared_data(StorageId, SpaceId) ->
     }).
 
 
+-spec force_fetch(storage:id()) -> {ok, od_storage:doc()} | errors:error().
+force_fetch(StorageId) ->
+    gs_client_worker:force_fetch_entity(#gri{type = od_storage, id = StorageId, aspect = instance}).
+
+
 -spec support_space(storage:id(), tokens:serialized(), od_space:support_size()) ->
     {ok, od_space:id()} | errors:error().
 support_space(StorageId, SpaceSupportToken, SupportSize) ->
@@ -139,9 +145,10 @@ support_space(StorageId, SpaceSupportToken, SupportSize) ->
     }),
 
     ?ON_SUCCESS(?CREATE_RETURN_ID(Result), fun({ok, SpaceId}) ->
-        gs_client_worker:invalidate_cache(od_provider, oneprovider:get_id()),
-        gs_client_worker:invalidate_cache(od_space, SpaceId),
-        gs_client_worker:invalidate_cache(od_storage, StorageId)
+        provider_logic:force_fetch(),
+        space_logic:force_fetch(SpaceId),
+        storage_logic:force_fetch(StorageId),
+        dir_stats_collector_config:init_for_space(SpaceId)
     end).
 
 
@@ -154,9 +161,9 @@ update_space_support_size(StorageId, SpaceId, NewSupportSize) ->
         gri = #gri{type = od_storage, id = StorageId, aspect = {space, SpaceId}}
     }),
     ?ON_SUCCESS(Result, fun(_) ->
-        gs_client_worker:invalidate_cache(od_space, SpaceId),
-        gs_client_worker:invalidate_cache(od_storage, StorageId),
-        gs_client_worker:invalidate_cache(od_provider, oneprovider:get_id())
+        space_logic:force_fetch(SpaceId),
+        storage_logic:force_fetch(StorageId),
+        provider_logic:force_fetch()
     end).
 
 
@@ -167,9 +174,9 @@ revoke_space_support(StorageId, SpaceId) ->
         gri = #gri{type = od_storage, id = StorageId, aspect = {space, SpaceId}}
     }),
     ?ON_SUCCESS(Result, fun(_) ->
-        gs_client_worker:invalidate_cache(od_space, SpaceId),
-        gs_client_worker:invalidate_cache(od_storage, StorageId),
-        gs_client_worker:invalidate_cache(od_provider, oneprovider:get_id())
+        space_logic:force_fetch(SpaceId),
+        storage_logic:force_fetch(StorageId),
+        provider_logic:force_fetch()
     end).
 
 
@@ -280,7 +287,7 @@ update_name(StorageId, NewName) ->
         data = #{<<"name">> => NewName}
     }),
     ?ON_SUCCESS(Result, fun(_) ->
-        gs_client_worker:invalidate_cache(od_storage, StorageId)
+        storage_logic:force_fetch(StorageId)
     end).
 
 
@@ -292,7 +299,7 @@ set_qos_parameters(StorageId, QosParameters) ->
         data = #{<<"qosParameters">> => QosParameters}
     }),
     ?ON_SUCCESS(Result, fun(_) ->
-        gs_client_worker:invalidate_cache(od_storage, StorageId)
+        storage_logic:force_fetch(StorageId)
     end).
 
 
@@ -304,7 +311,7 @@ set_imported(StorageId, Imported) ->
         data = #{<<"imported">> => Imported}
     }),
     ?ON_SUCCESS(Result, fun(_) ->
-        gs_client_worker:invalidate_cache(od_storage, StorageId)
+        storage_logic:force_fetch(StorageId)
     end).
 
 
@@ -318,7 +325,7 @@ update_readonly_and_imported(StorageId, Readonly, Imported) ->
         }
     }),
     ?ON_SUCCESS(Result, fun(_) ->
-        gs_client_worker:invalidate_cache(od_storage, StorageId)
+        storage_logic:force_fetch(StorageId)
     end).
 
 
@@ -339,5 +346,5 @@ upgrade_legacy_support(StorageId, SpaceId) ->
         gri = #gri{type = od_storage, id = StorageId, aspect = {upgrade_legacy_support, SpaceId}}
     }),
     ?ON_SUCCESS(Result, fun(_) ->
-        gs_client_worker:invalidate_cache(od_space, SpaceId)
+        space_logic:force_fetch(SpaceId)
     end).

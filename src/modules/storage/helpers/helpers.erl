@@ -27,7 +27,7 @@
     mknod/4, mkdir/3, unlink/3, rmdir/2, symlink/3, rename/3, link/3,
     chmod/3, chown/4, truncate/4, setxattr/6, getxattr/3, removexattr/3,
     listxattr/2, open/3, read/3, write/3, release/1, flush/1, fsync/2,
-    readdir/4, listobjects/5]).
+    flushbuffer/3, readdir/4, listobjects/5, blocksize_for_path/2]).
 -export([init_counters/0, init_report/0]).
 %% For tests
 -export([apply_helper_nif/3, receive_loop/2]).
@@ -160,13 +160,33 @@ mkdir(Handle, FileId, Mode) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Calls {@link helpers_nif:unlink/2} function.
+%% Calls {@link helpers_nif:unlink/3} function.
 %% @end
 %%--------------------------------------------------------------------
--spec unlink(helper_handle(), file_id(), CurrentSize :: non_neg_integer())
-    -> ok | {error, Reason :: term()}.
+-spec unlink(helper_handle(), file_id(), CurrentSize :: non_neg_integer()) ->
+    ok | {error, Reason :: term()}.
 unlink(Handle, FileId, CurrentSize) ->
     ?MODULE:apply_helper_nif(Handle, unlink, [FileId, CurrentSize]).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Calls {@link helpers_nif:flushbuffer/3} function.
+%% @end
+%%--------------------------------------------------------------------
+-spec flushbuffer(helper_handle(), file_id(), CurrentSize :: non_neg_integer()) ->
+    ok | {error, Reason :: term()}.
+flushbuffer(Handle, FileId, CurrentSize) ->
+    ?MODULE:apply_helper_nif(Handle, flushbuffer, [FileId, CurrentSize]).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Calls {@link helpers_nif:blocksize_for_path/2} function.
+%% @end
+%%--------------------------------------------------------------------
+-spec blocksize_for_path(helper_handle(), file_id()) ->
+    {ok, non_neg_integer()} | {error, Reason :: term()}.
+blocksize_for_path(Handle, FileId) ->
+    ?MODULE:apply_helper_nif(Handle, blocksize_for_path, [FileId]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -323,7 +343,11 @@ read(Handle, Offset, Size) ->
 -spec write(file_handle(), Offset :: non_neg_integer(), Data :: binary()) ->
     {ok, Size :: non_neg_integer()} | {error, Reason :: term()}.
 write(Handle, Offset, Data) ->
-    ?MODULE:apply_helper_nif(Handle, write, [Offset, Data]).
+    Res = ?MODULE:apply_helper_nif(Handle, write, [Offset, Data]),
+    % Make sure Data is not released until write is complete
+    % TODO VFS-7934 - check if next line is necessary
+    _ = byte_size(Data),
+    Res.
 
 %%--------------------------------------------------------------------
 %% @doc

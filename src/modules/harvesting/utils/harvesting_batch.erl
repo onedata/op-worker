@@ -20,6 +20,8 @@
 %%%      <<"fileId">> => file_id:objectid(),
 %%%      <<"spaceId">> => od_space:id(),
 %%%      <<"fileName">> => file_meta:name(),
+%%%      <<"fileType">> => str_utils:to_binary(file_meta:type()),
+%%%      <<"datasetId">> => dataset:id(), // optional, passed only if dataset is attached
 %%%      <<"operation">> => ?SUBMIT | ?DELETE,
 %%%      <<"seq">> => couchbase_changes:seq(),
 %%%      <<"payload">> => #{    % optional, makes sense only for ?SUBMIT operation
@@ -53,6 +55,9 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/fslogic/metadata.hrl").
+-include("modules/dataset/dataset.hrl").
+-include("proto/oneprovider/provider_messages.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% API
 -export([new_accumulator/0, size/1, is_empty/1, accumulate/2, prepare_to_send/1,
@@ -224,26 +229,32 @@ submission_batch_entry(FileId, Seq,
     FileMetaDoc = #document{value = #file_meta{}},
     #document{value = #custom_metadata{value = Metadata, space_id = SpaceId}}
 ) ->
-    #{
+    Entry = #{
         <<"fileId">> => FileId,
         <<"operation">> => ?SUBMIT,
         <<"seq">> => Seq,
         <<"spaceId">> => SpaceId,
         <<"fileName">> => get_file_name(FileMetaDoc),
+        <<"fileType">> => get_file_type(FileMetaDoc),
         <<"payload">> => Metadata
-    };
+    },
+    ExtendedEntry = maps:merge(Entry, prepare_archive_details(FileMetaDoc)),
+    maps_utils:put_if_defined(ExtendedEntry, <<"datasetId">>, file_meta_dataset:get_id_if_attached(FileMetaDoc));
 submission_batch_entry(FileId, Seq,
     FileMetaDoc = #document{value = #file_meta{}, scope = SpaceId},
     undefined
 ) ->
-    #{
+    Entry = #{
         <<"fileId">> => FileId,
         <<"operation">> => ?SUBMIT,
         <<"seq">> => Seq,
         <<"spaceId">> => SpaceId,
         <<"fileName">> => get_file_name(FileMetaDoc),
+        <<"fileType">> => get_file_type(FileMetaDoc),
         <<"payload">> => #{}
-    };
+    },
+    ExtendedEntry = maps:merge(Entry, prepare_archive_details(FileMetaDoc)),
+    maps_utils:put_if_defined(ExtendedEntry, <<"datasetId">>, file_meta_dataset:get_id_if_attached(FileMetaDoc));
 submission_batch_entry(FileId, Seq,
     undefined,
     #document{value = #custom_metadata{value = Metadata}, scope = SpaceId}
@@ -256,6 +267,34 @@ submission_batch_entry(FileId, Seq,
         <<"fileName">> => <<>>,
         <<"payload">> => Metadata
     }.
+
+
+-spec prepare_archive_details(file_meta:doc()) -> map().
+prepare_archive_details(#document{scope = SpaceId} = FileMetaDoc) ->
+    FileCtx = file_ctx:new_by_doc(FileMetaDoc, SpaceId),
+    try
+        {Path, _FileCtx2} = file_ctx:get_canonical_path(FileCtx),
+        case archivisation_tree:extract_archive_id(Path) of
+            {ok, ArchiveId} ->
+                case archive_api:get_archive_info(ArchiveId) of
+                    {ok, #archive_info{
+                        description = Description,
+                        creation_time = CreationTime
+                    }} ->
+                        #{
+                            <<"archiveId">> => ArchiveId,
+                            <<"archiveDescription">> => Description,
+                            <<"archiveCreationTime">> => CreationTime
+                        };
+                    ?ERROR_NOT_FOUND->
+                        #{}
+                end;
+            ?ERROR_NOT_FOUND ->
+                #{}
+        end
+    catch _:_ ->
+        #{}
+    end.
 
 
 -spec deletion_batch_entry(file_id(), couchbase_changes:seq()) -> any().
@@ -282,7 +321,7 @@ encode_payload(Payload) ->
         (<<"onedata_rdf">>, RDF, PayloadIn) ->
             PayloadIn#{<<"rdf">> => RDF};
         (Key, Value, PayloadIn) ->
-            case is_cdmi_xattr(Key) orelse is_faas_xattr(Key) of
+            case is_cdmi_xattr(Key) orelse is_faas_xattr(Key) orelse is_onedata_xattr(Key) of
                 true ->
                     PayloadIn;
                 false ->
@@ -305,6 +344,11 @@ is_faas_xattr(<<?FAAS_PREFIX_STR, _/binary>>) -> true;
 is_faas_xattr(_) -> false.
 
 
+-spec is_onedata_xattr(binary()) -> boolean().
+is_onedata_xattr(<<?ONEDATA_PREFIX_STR, _/binary>>) -> true;
+is_onedata_xattr(_) -> false.
+
+
 -spec get_seq(batch_entry()) -> seq().
 get_seq(#{<<"seq">> := Seq}) ->
     Seq.
@@ -320,5 +364,10 @@ compute_file_id(#document{key = FileUuid, scope = SpaceId}) ->
 get_file_name(#document{value = #file_meta{is_scope = true, name = SpaceId}}) ->
     {ok, SpaceName} = space_logic:get_name(?ROOT_SESS_ID, SpaceId),
     SpaceName;
-get_file_name(#document{value = #file_meta{name = FileName}}) ->
-    FileName.
+get_file_name(FileDoc) ->
+    file_meta:get_name(FileDoc).
+
+
+-spec get_file_type(file_meta:doc()) -> binary().
+get_file_type(FileMetaDoc) ->
+    str_utils:to_binary((file_meta:get_effective_type(FileMetaDoc))).

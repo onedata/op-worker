@@ -25,7 +25,8 @@
     ensure_exists_for_all_spaces/0,
     ensure_exists_on_all_nodes/1,
     ensure_exists/1, invalidate_on_all_nodes/1,
-    init_qos_cache_for_space/1, init_qos_cache_for_all_spaces/0
+    init_qos_cache_for_space/1, init_qos_cache_for_all_spaces/0,
+    is_cache_initialized/1
 ]).
 
 
@@ -76,7 +77,7 @@ ensure_exists_for_all_spaces() ->
 -spec ensure_exists_on_all_nodes(od_space:id()) -> ok.
 ensure_exists_on_all_nodes(SpaceId) ->
     Nodes = consistent_hashing:get_all_nodes(),
-    {Res, BadNodes} = rpc:multicall(Nodes, ?MODULE, ensure_exists, [SpaceId]),
+    {Res, BadNodes} = utils:rpc_multicall(Nodes, ?MODULE, ensure_exists, [SpaceId]),
 
     case BadNodes of
         [] ->
@@ -106,13 +107,11 @@ ensure_exists_on_all_nodes(SpaceId) ->
 %%--------------------------------------------------------------------
 -spec ensure_exists(od_space:id()) -> ok.
 ensure_exists(SpaceId) ->
-    CacheTableName = ?CACHE_TABLE_NAME(SpaceId),
-    CacheTableInfo = ets:info(CacheTableName),
-    case CacheTableInfo of
-        undefined ->
+    case is_cache_initialized(SpaceId) of
+        false ->
             % call to worker as process that will hold ets is needed
             qos_worker:init_qos_cache_for_space(SpaceId);
-        _ ->
+        true ->
             ok
     end.
 
@@ -147,8 +146,8 @@ init_qos_cache_for_space(SpaceId) ->
         Error = {error, _} ->
             ?error("Unable to initialize QoS bounded cache due to: ~p", [Error])
     catch
-        Error2:Reason ->
-            ?error_stacktrace("Unable to initialize qos bounded cache due to: ~p", [{Error2, Reason}])
+        Error2:Reason:Stacktrace ->
+            ?error_stacktrace("Unable to initialize qos bounded cache due to: ~p", [{Error2, Reason}], Stacktrace)
     end.
 
 
@@ -160,7 +159,7 @@ init_qos_cache_for_space(SpaceId) ->
 -spec invalidate_on_all_nodes(od_space:id()) -> ok.
 invalidate_on_all_nodes(SpaceId) ->
     Nodes = consistent_hashing:get_all_nodes(),
-    {Res, BadNodes} = rpc:multicall(Nodes, effective_value, invalidate, [?CACHE_TABLE_NAME(SpaceId)]),
+    {Res, BadNodes} = utils:rpc_multicall(Nodes, effective_value, invalidate, [?CACHE_TABLE_NAME(SpaceId)]),
 
     case BadNodes of
         [] ->
@@ -182,6 +181,11 @@ invalidate_on_all_nodes(SpaceId) ->
     end, Res).
 
 
+-spec is_cache_initialized(od_space:id()) -> boolean().
+is_cache_initialized(SpaceId) ->
+    bounded_cache:cache_exists(?CACHE_TABLE_NAME(SpaceId)).
+
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -199,15 +203,15 @@ get_space_list() ->
         Error = {error, _} ->
             ?error("Unable to initialize QoS bounded cache due to: ~p", [Error])
     catch
-        Error2:Reason ->
-            ?error_stacktrace("Unable to initialize qos bounded cache due to: ~p", [{Error2, Reason}])
+        Error2:Reason:Stacktrace ->
+            ?error_stacktrace("Unable to initialize qos bounded cache due to: ~p", [{Error2, Reason}], Stacktrace)
     end.
 
 
 %% @private
 -spec get_param(atom(), non_neg_integer()) -> non_neg_integer().
 get_param(ParamName, DefaultVal) ->
-    Value = application:get_env(?APP_NAME, ParamName, DefaultVal),
+    Value = op_worker:get_env(ParamName, DefaultVal),
     ensure_non_neg_integer(Value, ParamName, DefaultVal).
 
 

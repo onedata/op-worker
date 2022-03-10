@@ -15,6 +15,7 @@
 
 -include("global_definitions.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
+-include("proto/oneclient/client_messages.hrl").
 -include("proto/oneclient/common_messages.hrl").
 -include("proto/oneclient/stream_messages.hrl").
 -include("proto/common/handshake_messages.hrl").
@@ -33,6 +34,7 @@
 %% API
 -export([
     translate_handshake_error/1,
+    session_mode_translate_to_protobuf/1, session_mode_translate_from_protobuf/1,
     translate_from_protobuf/1, translate_to_protobuf/1
 ]).
 
@@ -67,6 +69,18 @@ translate_handshake_error(<<"no_discharge_macaroon_for_caveat">>) ->
     'NO_DISCHARGE_MACAROON_FOR_CAVEAT';
 translate_handshake_error(_) ->
     'INTERNAL_SERVER_ERROR'.
+
+
+-spec session_mode_translate_to_protobuf(undefined | session:mode()) ->
+    'NORMAL' | 'OPEN_HANDLE'.
+session_mode_translate_to_protobuf(open_handle) -> 'OPEN_HANDLE';
+session_mode_translate_to_protobuf(_) -> 'NORMAL'.
+
+
+-spec session_mode_translate_from_protobuf(undefined | 'NORMAL' | 'OPEN_HANDLE') ->
+    session:mode().
+session_mode_translate_from_protobuf('OPEN_HANDLE') -> open_handle;
+session_mode_translate_from_protobuf(_) -> normal.
 
 
 %%--------------------------------------------------------------------
@@ -276,13 +290,15 @@ translate_from_protobuf(#'ClientHandshakeRequest'{
     macaroon = Macaroon,
     session_id = Nonce,
     version = Version,
-    compatible_oneprovider_versions = CompOpVersions
+    compatible_oneprovider_versions = CompOpVersions,
+    session_mode = SessionMode
 }) ->
     #client_handshake_request{
         client_tokens = translate_from_protobuf(Macaroon),
         nonce = Nonce,
         version = Version,
-        compatible_oneprovider_versions = CompOpVersions
+        compatible_oneprovider_versions = CompOpVersions,
+        session_mode = session_mode_translate_from_protobuf(SessionMode)
     };
 translate_from_protobuf(#'ProviderHandshakeRequest'{
     provider_id = ProviderId,
@@ -412,15 +428,17 @@ translate_from_protobuf(#'FileRequest'{
         context_guid = ContextGuid,
         file_request = translate_from_protobuf(Record)
     };
-translate_from_protobuf(#'GetFileAttr'{include_replication_status = IRS}) ->
-    #get_file_attr{include_replication_status = IRS};
+translate_from_protobuf(#'GetFileAttr'{include_replication_status = IRS, include_link_count = ILC}) ->
+    #get_file_attr{include_replication_status = IRS, include_link_count = ILC};
 translate_from_protobuf(#'GetChildAttr'{
     name = Name,
-    include_replication_status = IRS
+    include_replication_status = IRS,
+    include_link_count = ILC
 }) ->
     #get_child_attr{
         name = Name,
-        include_replication_status = IRS
+        include_replication_status = IRS,
+        include_link_count = ILC
     };
 translate_from_protobuf(#'GetFileChildren'{
     offset = Offset,
@@ -438,13 +456,15 @@ translate_from_protobuf(#'GetFileChildrenAttrs'{
     offset = Offset,
     size = Size,
     index_token = Token,
-    include_replication_status = IRS
+    include_replication_status = IRS,
+    include_link_count = ILC
 }) ->
     #get_file_children_attrs{
         offset = Offset,
         size = Size,
         index_token = Token,
-        include_replication_status = IRS
+        include_replication_status = IRS,
+        include_link_count = ILC
     };
 translate_from_protobuf(#'CreateDir'{
     name = Name,
@@ -500,6 +520,22 @@ translate_from_protobuf(#'MakeFile'{
         name = Name,
         mode = Mode
     };
+translate_from_protobuf(#'MakeLink'{
+    target_parent_uuid = TargetParentGuid,
+    target_name = Name
+}) ->
+    #make_link{
+        target_parent_guid = TargetParentGuid,
+        target_name = Name
+    };
+translate_from_protobuf(#'MakeSymlink'{
+    target_name = TargetName,
+    link = Link
+}) ->
+    #make_symlink{
+        target_name = TargetName,
+        link = Link
+    };
 translate_from_protobuf(#'OpenFile'{flag = Flag}) ->
     #open_file{flag = open_flag_translate_from_protobuf(Flag)};
 translate_from_protobuf(#'OpenFileWithExtendedInfo'{flag = Flag}) ->
@@ -508,6 +544,8 @@ translate_from_protobuf(#'OpenFileWithExtendedInfo'{flag = Flag}) ->
     };
 translate_from_protobuf(#'GetFileLocation'{}) ->
     #get_file_location{};
+translate_from_protobuf(#'ReadSymlink'{}) ->
+    #read_symlink{};
 translate_from_protobuf(#'Release'{handle_id = HandleId}) ->
     #release{handle_id = HandleId};
 translate_from_protobuf(#'Truncate'{size = Size}) ->
@@ -588,7 +626,8 @@ translate_from_protobuf(#'FileAttr'{} = FileAttr) ->
         provider_id = FileAttr#'FileAttr'.provider_id,
         shares = FileAttr#'FileAttr'.shares,
         owner_id = FileAttr#'FileAttr'.owner_id,
-        fully_replicated = FileAttr#'FileAttr'.fully_replicated
+        fully_replicated = FileAttr#'FileAttr'.fully_replicated,
+        nlink = FileAttr#'FileAttr'.nlink
     };
 translate_from_protobuf(#'FileChildren'{
     child_links = FileEntries,
@@ -694,6 +733,12 @@ translate_from_protobuf(#'FileOpened'{
 }) ->
     #file_opened{
         handle_id = HandleId
+    };
+translate_from_protobuf(#'Symlink'{
+    link = Link
+}) ->
+    #symlink{
+        link = Link
     };
 translate_from_protobuf(#'FileOpenedExtended'{
     handle_id = HandleId,
@@ -836,75 +881,6 @@ translate_from_protobuf(#'FSync'{
     };
 translate_from_protobuf(#'GetFileDistribution'{}) ->
     #get_file_distribution{};
-translate_from_protobuf(#'ScheduleFileReplication'{
-    target_provider_id = ProviderId,
-    block = Block,
-    callback = Callback,
-    index_name = ViewName,
-    query_params = QueryParams
-}) ->
-    #schedule_file_replication{
-        target_provider_id = ProviderId,
-        block = translate_from_protobuf(Block),
-        callback = Callback,
-        view_name = ViewName,
-        query_view_params = translate_from_protobuf(QueryParams)
-    };
-translate_from_protobuf(#'QueryParams'{
-    descending = Descending,
-    endkey = EndKey,
-    endkey_docid = EndKeyDocId,
-    full_set = FullSet,
-    group = Group,
-    group_level = GroupLevel,
-    inclusive_end = InclusiveEnd,
-    key = Key,
-    limit = Limit,
-    on_error = OnError,
-    reduce = Reduce,
-    spatial = Spatial,
-    skip = Skip,
-    stale = Stale,
-    startkey = StartKey,
-    startkey_docid = StartKeyDocId,
-    bbox = BBox,
-    start_range = StartRange,
-    end_range = EndRange
-}) ->
-    #query_view_params{params = [
-        {descending, Descending},
-        {endkey, EndKey},
-        {endkey_docid, EndKeyDocId},
-        {full_set, FullSet},
-        {group, Group},
-        {group_level, GroupLevel},
-        {inclusive_end, InclusiveEnd},
-        {key, Key},
-        {limit, Limit},
-        {on_error, OnError},
-        {reduce, Reduce},
-        {spatial, Spatial},
-        {skip, Skip},
-        {stale, Stale},
-        {startkey, StartKey},
-        {startkey_docid, StartKeyDocId},
-        {bbox, BBox},
-        {start_range, StartRange},
-        {end_range, EndRange}
-
-    ]};
-translate_from_protobuf(#'ScheduleReplicaInvalidation'{
-    source_provider_id = SourceProviderId,
-    target_provider_id = TargetProviderId,
-    index_name = ViewName,
-    query_params = QueryParams
-}) ->
-    #schedule_replica_invalidation{
-        source_provider_id = SourceProviderId,
-        target_provider_id = TargetProviderId,
-        view_name = ViewName,
-        query_view_params = translate_from_protobuf(QueryParams)
-    };
 translate_from_protobuf(#'ReadMetadata'{
     type = Type,
     query = Query,
@@ -992,8 +968,6 @@ translate_from_protobuf(#'Metadata'{
     };
 translate_from_protobuf(#'CheckPerms'{flag = Flag}) ->
     #check_perms{flag = open_flag_translate_from_protobuf(Flag)};
-translate_from_protobuf(#'ScheduledTransfer'{transfer_id = TransferId}) ->
-    #scheduled_transfer{transfer_id = TransferId};
 
 
 %% DBSYNC
@@ -1135,6 +1109,11 @@ translate_from_protobuf(#'RTransferNodesIPs'{nodes = Nodes}) ->
     #rtransfer_nodes_ips{
         nodes = [translate_from_protobuf(N) || N <- Nodes]
     };
+
+
+%% SESSION
+translate_from_protobuf(#'CloseSession'{}) ->
+    #close_session{};
 
 
 translate_from_protobuf(undefined) ->
@@ -1491,13 +1470,15 @@ translate_to_protobuf(#get_file_children_attrs{
     offset = Offset,
     size = Size,
     index_token = Token,
-    include_replication_status = IRS
+    include_replication_status = IRS,
+    include_link_count = ILC
 }) ->
     {get_file_children_attrs, #'GetFileChildrenAttrs'{
         offset = Offset,
         size = Size,
         index_token = Token,
-        include_replication_status = IRS
+        include_replication_status = IRS,
+        include_link_count = ILC
     }};
 translate_to_protobuf(#create_dir{
     name = Name,
@@ -1549,6 +1530,22 @@ translate_to_protobuf(#make_file{
         name = Name,
         mode = Mode
     }};
+translate_to_protobuf(#make_link{
+    target_parent_guid = TargetParentGuid,
+    target_name = Name
+}) ->
+    {make_link, #'MakeLink'{
+        target_parent_uuid = TargetParentGuid,
+        target_name = Name
+    }};
+translate_to_protobuf(#make_symlink{
+    target_name = TargetName,
+    link = Link
+}) ->
+    {make_symlink, #'MakeSymlink'{
+        target_name = TargetName,
+        link = Link
+    }};
 translate_to_protobuf(#open_file{flag = Flag}) ->
     {open_file, #'OpenFile'{
         flag = open_flag_translate_to_protobuf(Flag)}
@@ -1559,6 +1556,8 @@ translate_to_protobuf(#open_file_with_extended_info{flag = Flag}) ->
     };
 translate_to_protobuf(#get_file_location{}) ->
     {get_file_location, #'GetFileLocation'{}};
+translate_to_protobuf(#read_symlink{}) ->
+    {read_symlink, #'ReadSymlink'{}};
 translate_to_protobuf(#release{handle_id = HandleId}) ->
     {release, #'Release'{handle_id = HandleId}};
 translate_to_protobuf(#truncate{size = Size}) ->
@@ -1628,7 +1627,8 @@ translate_to_protobuf(#file_attr{} = FileAttr) ->
         provider_id = FileAttr#file_attr.provider_id,
         shares = FileAttr#file_attr.shares,
         owner_id = FileAttr#file_attr.owner_id,
-        fully_replicated = FileAttr#file_attr.fully_replicated
+        fully_replicated = FileAttr#file_attr.fully_replicated,
+        nlink = FileAttr#file_attr.nlink
     }};
 translate_to_protobuf(#file_children{
     child_links = FileEntries,
@@ -1743,6 +1743,12 @@ translate_to_protobuf(#file_opened{
 }) ->
     {file_opened, #'FileOpened'{
         handle_id = HandleId
+    }};
+translate_to_protobuf(#symlink{
+    link = Link
+}) ->
+    {symlink, #'Symlink'{
+        link = Link
     }};
 translate_to_protobuf(#file_opened_extended{} = Record) ->
     {file_opened_extended, #'FileOpenedExtended'{
@@ -1905,54 +1911,6 @@ translate_to_protobuf(#fsync{
     }};
 translate_to_protobuf(#get_file_distribution{}) ->
     {get_file_distribution, #'GetFileDistribution'{}};
-translate_to_protobuf(#schedule_file_replication{
-    target_provider_id = ProviderId,
-    block = Block,
-    callback = Callback,
-    view_name = ViewName,
-    query_view_params = QueryViewParams
-}) ->
-    {replicate_file, #'ScheduleFileReplication'{
-        target_provider_id = ProviderId,
-        block = translate_to_protobuf(Block),
-        callback = Callback,
-        index_name = ViewName,
-        query_params = translate_to_protobuf(QueryViewParams)
-    }};
-translate_to_protobuf(#schedule_replica_invalidation{
-    source_provider_id = ProviderId,
-    target_provider_id = MigrationProviderId,
-    view_name = ViewName,
-    query_view_params = QueryViewParams
-}) ->
-    {invalidate_file_replica, #'ScheduleReplicaInvalidation'{
-        source_provider_id = ProviderId,
-        target_provider_id = MigrationProviderId,
-        index_name = ViewName,
-        query_params = translate_to_protobuf(QueryViewParams)
-    }};
-translate_to_protobuf(#query_view_params{params = Params}) ->
-    {query_view_params, #'QueryParams'{
-        descending = proplists:get_value(descending, Params, undefined),
-        endkey = proplists:get_value(endkey, Params, undefined),
-        endkey_docid = proplists:get_value(endkey_docid, Params, undefined),
-        full_set = proplists:get_value(full_set, Params, undefined),
-        group = proplists:get_value(group, Params, undefined),
-        group_level = proplists:get_value(group_level, Params, undefined),
-        inclusive_end = proplists:get_value(inclusive_end, Params, undefined),
-        key = proplists:get_value(key, Params, undefined),
-        limit = proplists:get_value(limit, Params, undefined),
-        on_error = proplists:get_value(on_error, Params, undefined),
-        reduce = proplists:get_value(reduce, Params, undefined),
-        spatial = proplists:get_value(spatial, Params, undefined),
-        skip = proplists:get_value(skip, Params, undefined),
-        stale = proplists:get_value(stale, Params, undefined),
-        startkey = proplists:get_value(startkey, Params, undefined),
-        startkey_docid = proplists:get_value(startkey_docid, Params, undefined),
-        bbox = proplists:get_value(bbox, Params, undefined),
-        start_range = proplists:get_value(start_range, Params, undefined),
-        end_range = proplists:get_value(end_range, Params, undefined)
-    }};
 translate_to_protobuf(#get_metadata{
     type = Type,
     query = Query,
@@ -2042,12 +2000,6 @@ translate_to_protobuf(#metadata{
 translate_to_protobuf(#check_perms{flag = Flag}) ->
     {check_perms, #'CheckPerms'{
         flag = open_flag_translate_to_protobuf(Flag)
-    }};
-translate_to_protobuf(#scheduled_transfer{
-    transfer_id = TransferId
-}) ->
-    {scheduled_transfer, #'ScheduledTransfer'{
-        transfer_id = TransferId
     }};
 
 
@@ -2182,6 +2134,11 @@ translate_to_protobuf(#rtransfer_nodes_ips{nodes = Nodes}) ->
     {rtransfer_nodes_ips, #'RTransferNodesIPs'{
         nodes = [translate_to_protobuf(N) || N <- Nodes]
     }};
+
+
+%% SESSION
+translate_to_protobuf(#close_session{}) ->
+    {close_session, #'CloseSession'{}};
 
 
 translate_to_protobuf(undefined) ->

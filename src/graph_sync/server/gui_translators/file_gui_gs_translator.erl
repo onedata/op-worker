@@ -17,6 +17,7 @@
 -include("middleware/middleware.hrl").
 -include("modules/fslogic/file_details.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
+-include("proto/oneprovider/provider_messages.hrl").
 -include_lib("ctool/include/errors.hrl").
 
 %% API
@@ -24,6 +25,7 @@
     translate_value/2,
     translate_resource/2,
 
+    translate_dataset_summary/1,
     translate_distribution/2
 ]).
 
@@ -71,12 +73,6 @@
 
 
 -spec translate_value(gri:gri(), Value :: term()) -> gs_protocol:data().
-translate_value(#gri{aspect = children}, {Children, IsLast}) ->
-    #{
-        <<"children">> => lists:map(fun({Guid, _Name}) -> Guid end, Children),
-        <<"isLast">> => IsLast
-    };
-
 translate_value(#gri{aspect = children_details, scope = Scope}, {ChildrenDetails, IsLast}) ->
     #{
         <<"children">> => lists:map(fun(ChildDetails) ->
@@ -119,6 +115,22 @@ translate_resource(#gri{aspect = acl, scope = private}, Acl) ->
         throw(?ERROR_POSIX(Errno))
     end;
 
+translate_resource(#gri{aspect = hardlinks, scope = private}, References) ->
+    #{
+        <<"hardlinks">> => lists:map(fun(FileGuid) ->
+            gri:serialize(#gri{
+                type = op_file, id = FileGuid,
+                aspect = instance, scope = private
+            })
+        end, References)
+    };
+
+translate_resource(#gri{aspect = {hardlinks, _}, scope = private}, Result) ->
+    Result;
+
+translate_resource(#gri{aspect = symlink_target, scope = Scope}, FileDetails) ->
+    translate_file_details(FileDetails, Scope);
+
 translate_resource(#gri{aspect = shares, scope = private}, ShareIds) ->
     #{
         <<"list">> => lists:map(fun(ShareId) ->
@@ -131,14 +143,67 @@ translate_resource(#gri{aspect = shares, scope = private}, ShareIds) ->
         end, ShareIds)
     };
 
-translate_resource(#gri{aspect = file_qos_summary, scope = private}, QosSummaryResponse) ->
-    maps:without([<<"status">>], QosSummaryResponse).
+translate_resource(#gri{aspect = qos_summary, scope = private}, QosSummaryResponse) ->
+    maps:without([<<"status">>], QosSummaryResponse);
+
+translate_resource(#gri{aspect = dataset_summary, scope = private}, DatasetSummary) ->
+    translate_dataset_summary(DatasetSummary);
+
+translate_resource(#gri{aspect = archive_recall_details, scope = private}, ArchiveRecallDetails) ->
+    translate_archive_recall_details(ArchiveRecallDetails);
+
+translate_resource(#gri{aspect = archive_recall_progress, scope = private}, ArchiveRecallProgress) ->
+    #{<<"lastError">> := LastError} = ArchiveRecallProgress,
+    ArchiveRecallProgress#{
+        <<"lastError">> => utils:undefined_to_null(LastError)
+    }.
 
 
--spec translate_distribution(file_id:file_guid(), Distribution :: [file_distribution()]) ->
+-spec translate_dataset_summary(dataset_api:file_eff_summary()) -> map().
+translate_dataset_summary(#file_eff_dataset_summary{
+    direct_dataset = DatasetId,
+    eff_ancestor_datasets = EffAncestorDatasets,
+    eff_protection_flags = EffProtectionFlags
+}) ->
+    #{
+        <<"directDataset">> => case DatasetId of
+            undefined ->
+                null;
+            _ ->
+                gri:serialize(#gri{
+                    type = op_dataset, id = DatasetId,
+                    aspect = instance, scope = private
+                })
+        end,
+        <<"effAncestorDatasets">> => lists:map(fun(AncestorId) ->
+            gri:serialize(#gri{
+                type = op_dataset, id = AncestorId, aspect = instance, scope = private
+            })
+        end, EffAncestorDatasets),
+        <<"effProtectionFlags">> => file_meta:protection_flags_to_json(EffProtectionFlags)
+    }.
+
+
+-spec translate_distribution(file_id:file_guid(), [file_distribution()]) ->
     distribution_per_provider().
-translate_distribution(FileGuid, Distribution) ->
-    {ok, #file_attr{size = FileSize}} = lfm:stat(?ROOT_SESS_ID, {guid, FileGuid}),
+translate_distribution(FileGuid, PossiblyIncompleteDistribution) ->
+    {ok, #file_attr{size = FileSize}} = lfm:stat(?ROOT_SESS_ID, ?FILE_REF(FileGuid)),
+
+    %% @TODO VFS-8935 ultimately, location for each file should be created in each provider
+    %% and the list of providers in the distribution should always be complete -
+    %% for now, add placeholders with zero blocks for missing providers
+    SpaceId = file_id:guid_to_space_id(FileGuid),
+    {ok, AllProviders} = space_logic:get_provider_ids(SpaceId),
+    IncludedProviders = [P || #{<<"providerId">> := P} <- PossiblyIncompleteDistribution],
+    MissingProviders = lists_utils:subtract(AllProviders, IncludedProviders),
+    ComplementedDistribution = lists:foldl(fun(ProviderId, Acc) ->
+        NoBlocksEntryForProvider = #{
+            <<"providerId">> => ProviderId,
+            <<"blocks">> => [],
+            <<"totalBlocksSize">> => 0
+        },
+        [NoBlocksEntryForProvider | Acc]
+    end, PossiblyIncompleteDistribution, MissingProviders),
 
     DistributionMap = lists:foldl(fun(#{
         <<"providerId">> := ProviderId,
@@ -156,7 +221,7 @@ translate_distribution(FileGuid, Distribution) ->
                 _ -> TotalBlocksSize * 100.0 / FileSize
             end
         }}
-    end, #{}, Distribution),
+    end, #{}, ComplementedDistribution),
 
     #{<<"distributionPerProvider">> => DistributionMap}.
 
@@ -170,10 +235,13 @@ translate_distribution(FileGuid, Distribution) ->
 -spec translate_file_details(#file_details{}, gri:scope()) -> map().
 translate_file_details(#file_details{
     has_metadata = HasMetadata,
-    has_direct_qos = HasDirectQos,
-    has_eff_qos = HasEffQos,
+    eff_qos_membership = EffQosMembership,
     active_permissions_type = ActivePermissionsType,
     index_startid = StartId,
+    eff_dataset_membership = EffDatasetMembership,
+    eff_protection_flags = EffFileProtectionFlags,
+    recall_root_id = RecallRootId,
+    symlink_value = SymlinkValue,
     file_attr = #file_attr{
         guid = FileGuid,
         name = FileName,
@@ -184,15 +252,15 @@ translate_file_details(#file_details{
         size = SizeAttr,
         shares = Shares,
         provider_id = ProviderId,
-        owner_id = OwnerId
+        owner_id = OwnerId,
+        nlink = NLink
     }
 }, Scope) ->
     PosixPerms = list_to_binary(string:right(integer_to_list(Mode, 8), 3, $0)),
     {Type, Size} = case TypeAttr of
-        ?DIRECTORY_TYPE ->
-            {<<"dir">>, null};
-        _ ->
-            {<<"file">>, SizeAttr}
+        ?DIRECTORY_TYPE -> {<<"DIR">>, null};
+        ?REGULAR_FILE_TYPE -> {<<"REG">>, SizeAttr};
+        ?SYMLINK_TYPE -> {<<"SYMLNK">>, SizeAttr}
     end,
     IsRootDir = case file_id:guid_to_share_id(FileGuid) of
         undefined -> fslogic_uuid:is_space_dir_guid(FileGuid);
@@ -202,7 +270,7 @@ translate_file_details(#file_details{
         true -> null;
         false -> ParentGuid
     end,
-    PublicFields = #{
+    BasicPublicFields = #{
         <<"hasMetadata">> => HasMetadata,
         <<"guid">> => FileGuid,
         <<"name">> => FileName,
@@ -215,17 +283,69 @@ translate_file_details(#file_details{
         <<"shares">> => Shares,
         <<"activePermissionsType">> => ActivePermissionsType
     },
-    case Scope of
-        public ->
-            PublicFields;
-        private ->
-            PublicFields#{
+    PublicFields = case TypeAttr of
+        ?SYMLINK_TYPE ->
+            BasicPublicFields#{<<"targetPath">> => SymlinkValue};
+        _ ->
+            BasicPublicFields
+    end,
+    PublicFields2 = case archivisation_tree:uuid_to_archive_id(file_id:guid_to_uuid(FileGuid)) of
+        undefined -> PublicFields;
+        ArchiveId -> PublicFields#{<<"archiveId">> => ArchiveId}
+    end,
+    case {Scope, EffQosMembership} of
+        {public, _} ->
+            PublicFields2;
+        {private, undefined} -> % all or none effective fields are undefined
+            PublicFields2#{
+                <<"hardlinksCount">> => utils:undefined_to_null(NLink),
+                <<"effProtectionFlags">> => [],
+                <<"providerId">> => ProviderId,
+                <<"ownerId">> => OwnerId
+            };
+        {private, _} ->
+            PublicFields2#{
+                <<"hardlinksCount">> => utils:undefined_to_null(NLink),
+                <<"effProtectionFlags">> => file_meta:protection_flags_to_json(
+                    EffFileProtectionFlags
+                ),
                 <<"providerId">> => ProviderId,
                 <<"ownerId">> => OwnerId,
-                <<"hasDirectQos">> => HasDirectQos,
-                <<"hasEffQos">> => HasEffQos
+                <<"effQosMembership">> => translate_membership(EffQosMembership),
+                <<"effDatasetMembership">> => translate_membership(EffDatasetMembership),
+                <<"recallRootId">> => utils:undefined_to_null(RecallRootId)
             }
     end.
+
+
+%% @private
+-spec translate_archive_recall_details(archive_recall:record()) -> map().
+translate_archive_recall_details(#archive_recall_details{
+    archive_id = ArchiveId,
+    dataset_id = DatasetId,
+    start_timestamp = StartTimestamp,
+    finish_timestamp = FinishTimestamp,
+    total_file_count = TargetFileCount,
+    total_byte_size = TargetByteSize
+}) ->
+    #{
+        <<"archive">> => gri:serialize(#gri{
+            type = op_archive, id = ArchiveId, aspect = instance, scope = private}),
+        <<"dataset">> => gri:serialize(#gri{
+            type = op_dataset, id = DatasetId, aspect = instance, scope = private}),
+        <<"startTime">> => utils:undefined_to_null(StartTimestamp),
+        <<"finishTime">> => utils:undefined_to_null(FinishTimestamp),
+        <<"totalFileCount">> => TargetFileCount,
+        <<"totalByteSize">> => TargetByteSize
+    }.
+
+
+%% @private
+-spec translate_membership(file_qos:membership() | dataset:membership()) -> binary().
+translate_membership(?NONE_MEMBERSHIP) -> <<"none">>;
+translate_membership(?DIRECT_MEMBERSHIP) -> <<"direct">>;
+translate_membership(?ANCESTOR_MEMBERSHIP) -> <<"ancestor">>;
+translate_membership(?DIRECT_AND_ANCESTOR_MEMBERSHIP) -> <<"directAndAncestor">>.
 
 
 %%--------------------------------------------------------------------

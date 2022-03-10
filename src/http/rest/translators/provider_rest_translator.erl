@@ -31,6 +31,7 @@
 -spec get_response(gri:gri(), Resource :: term()) -> #rest_resp{}.
 get_response(#gri{aspect = As}, Result) when
     As =:= configuration;
-    As =:= test_image
+    As =:= test_image;
+    As =:= health
 ->
     ?OK_REPLY(Result).

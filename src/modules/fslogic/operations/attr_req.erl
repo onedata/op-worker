@@ -12,7 +12,7 @@
 -module(attr_req).
 -author("Tomasz Lichon").
 
--include("modules/auth/acl.hrl").
+-include("modules/fslogic/data_access_control.hrl").
 -include("modules/fslogic/file_details.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/fslogic/metadata.hrl").
@@ -21,12 +21,14 @@
 
 %% API
 -export([
-    get_file_attr/3, get_file_attr_insecure/3,
+    get_file_attr/4, get_file_attr_insecure/3,
     get_file_attr_and_conflicts_insecure/3,
 
     get_file_details/2, get_file_details_insecure/3,
 
-    get_child_attr/4, chmod/3, update_times/5,
+    get_file_references/2,
+
+    get_child_attr/5, chmod/3, update_times/5,
     chmod_attrs_only_insecure/2,
 
     get_fs_stats/2
@@ -49,7 +51,13 @@
     name_conflicts_resolution_policy => name_conflicts_resolution_policy(),
 
     % Tells whether replication status should be included in answer
-    include_replication_status => boolean()
+    include_replication_status => boolean(),
+
+    % Tells whether hardlink count should be included in answer
+    include_link_count => boolean(),
+
+    % Tells whether fields calculated using effective value should be included in answer
+    effective_values_references_limit => non_neg_integer() | infinity
 }.
 
 -export_type([name_conflicts_resolution_policy/0, compute_file_attr_opts/0]).
@@ -66,6 +74,8 @@
 }.
 
 
+-define(DEFAULT_REFERENCES_LIMIT, 100).
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -75,17 +85,18 @@
 %% @equiv get_file_attr_insecure/3 with permission checks and default options
 %% @end
 %%--------------------------------------------------------------------
--spec get_file_attr(user_ctx:ctx(), file_ctx:ctx(), boolean()) ->
+-spec get_file_attr(user_ctx:ctx(), file_ctx:ctx(), boolean(), boolean()) ->
     fslogic_worker:fuse_response().
-get_file_attr(UserCtx, FileCtx0, IncludeReplicationStatus) ->
+get_file_attr(UserCtx, FileCtx0, IncludeReplicationStatus, IncludeLinkCount) ->
     FileCtx1 = fslogic_authz:ensure_authorized(
-        UserCtx, FileCtx0, [traverse_ancestors], allow_ancestors
+        UserCtx, FileCtx0, [?TRAVERSE_ANCESTORS], allow_ancestors
     ),
     get_file_attr_insecure(UserCtx, FileCtx1, #{
         allow_deleted_files => false,
         include_size => true,
         name_conflicts_resolution_policy => resolve_name_conflicts,
-        include_replication_status => IncludeReplicationStatus
+        include_replication_status => IncludeReplicationStatus,
+        include_link_count => IncludeLinkCount
     }).
 
 
@@ -132,12 +143,13 @@ get_file_attr_and_conflicts_insecure(UserCtx, FileCtx, Opts) ->
     fslogic_worker:fuse_response().
 get_file_details(UserCtx, FileCtx0) ->
     FileCtx1 = fslogic_authz:ensure_authorized(
-        UserCtx, FileCtx0, [traverse_ancestors], allow_ancestors
+        UserCtx, FileCtx0, [?TRAVERSE_ANCESTORS], allow_ancestors
     ),
     get_file_details_insecure(UserCtx, FileCtx1, #{
         allow_deleted_files => false,
         include_size => true,
-        name_conflicts_resolution_policy => resolve_name_conflicts
+        name_conflicts_resolution_policy => resolve_name_conflicts,
+        include_link_count => true
     }).
 
 
@@ -152,16 +164,60 @@ get_file_details_insecure(UserCtx, FileCtx, Opts) ->
     {FileAttr, FileDoc, _, FileCtx2} = resolve_file_attr(UserCtx, FileCtx, Opts),
     {ok, ActivePermissionsType} = file_meta:get_active_perms_type(FileDoc),
 
+    ReferencesLimit = maps:get(effective_values_references_limit, Opts, ?DEFAULT_REFERENCES_LIMIT),
+    ShouldCalculateEffectiveValues = case ReferencesLimit of
+        infinity -> true;
+        _ ->
+            case file_meta_hardlinks:count_references(FileDoc) of
+                {ok, LinksCount} -> LinksCount =< ReferencesLimit;
+                _ -> false
+            end
+    end,
+    {EffectiveValues, FileCtx3} = case ShouldCalculateEffectiveValues of
+        true ->
+            calculate_effective_values(FileCtx2);
+        false ->
+            {#{}, FileCtx2}
+    end,
+
     #fuse_response{
         status = #status{code = ?OK},
         fuse_response = #file_details{
             file_attr = FileAttr,
+            symlink_value = case fslogic_uuid:is_symlink_uuid(file_ctx:get_logical_uuid_const(FileCtx)) of
+                true ->
+                    {ok, SymlinkValue} = file_meta_symlinks:readlink(FileDoc),
+                    SymlinkValue;
+                false ->
+                    undefined
+            end,
             index_startid = file_meta:get_name(FileDoc),
             active_permissions_type = ActivePermissionsType,
-            has_metadata = has_metadata(FileCtx2),
-            has_direct_qos = file_qos:has_any_qos_entry(FileDoc, direct),
-            has_eff_qos = file_qos:has_any_qos_entry(FileDoc, effective)
+            has_metadata = has_metadata(FileCtx3),
+            eff_qos_membership = maps:get(effective_qos_membership, EffectiveValues, undefined),
+            eff_dataset_membership = maps:get(effective_dataset_membership, EffectiveValues, undefined),
+            eff_protection_flags = maps:get(effective_protection_flags, EffectiveValues, undefined),
+            recall_root_id = maps:get(effective_recall, EffectiveValues, undefined)
         }
+    }.
+
+
+-spec get_file_references(user_ctx:ctx(), file_ctx:ctx()) ->
+    fslogic_worker:fuse_response().
+get_file_references(UserCtx, FileCtx0) ->
+    FileCtx1 = fslogic_authz:ensure_authorized(
+        UserCtx, FileCtx0, [?TRAVERSE_ANCESTORS, ?OPERATIONS(?read_attributes_mask)]
+    ),
+    FileCtx2 = file_ctx:assert_not_dir(FileCtx1),
+
+    SpaceId = file_ctx:get_space_id_const(FileCtx2),
+    {ok, RefUuids} = file_ctx:list_references_const(FileCtx2),
+
+    #fuse_response{
+        status = #status{code = ?OK},
+        fuse_response = #file_references{references = lists:map(fun(RefUuid) ->
+            file_id:pack_guid(RefUuid, SpaceId)
+        end, RefUuids)}
     }.
 
 
@@ -170,10 +226,12 @@ get_file_details_insecure(UserCtx, FileCtx, Opts) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_child_attr(user_ctx:ctx(), ParentFile :: file_ctx:ctx(),
-    Name :: file_meta:name(), boolean()) -> fslogic_worker:fuse_response().
-get_child_attr(UserCtx, ParentFileCtx0, Name, IncludeReplicationStatus) ->
+    Name :: file_meta:name(), boolean(), boolean()) -> fslogic_worker:fuse_response().
+get_child_attr(UserCtx, ParentFileCtx0, Name, IncludeReplicationStatus, IncludeLinkCount) ->
     ParentFileCtx1 = ensure_access_to_child(UserCtx, ParentFileCtx0, Name),
-    get_child_attr_insecure(UserCtx, ParentFileCtx1, Name, IncludeReplicationStatus).
+    get_child_attr_insecure(
+        UserCtx, ParentFileCtx1, Name, IncludeReplicationStatus, IncludeLinkCount
+    ).
 
 
 %%--------------------------------------------------------------------
@@ -186,7 +244,7 @@ chmod(UserCtx, FileCtx0, Mode) ->
     file_ctx:assert_not_special_const(FileCtx0),
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
-        [traverse_ancestors, owner]
+        [?TRAVERSE_ANCESTORS, ?OWNERSHIP]
     ),
     chmod_insecure(UserCtx, FileCtx1, Mode).
 
@@ -202,7 +260,7 @@ chmod(UserCtx, FileCtx0, Mode) ->
 update_times(UserCtx, FileCtx0, ATime, MTime, CTime) ->
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
-        [traverse_ancestors, {owner, 'or', ?write_attributes}]
+        [?TRAVERSE_ANCESTORS, ?OR(?OWNERSHIP, ?OPERATIONS(?write_attributes_mask))]
     ),
     update_times_insecure(UserCtx, FileCtx1, ATime, MTime, CTime).
 
@@ -215,7 +273,7 @@ update_times(UserCtx, FileCtx0, ATime, MTime, CTime) ->
     fslogic_worker:fuse_response().
 get_fs_stats(UserCtx, FileCtx0) ->
     FileCtx1 = fslogic_authz:ensure_authorized(
-        UserCtx, FileCtx0, [traverse_ancestors]
+        UserCtx, FileCtx0, [?TRAVERSE_ANCESTORS]
     ),
     get_fs_stats_insecure(UserCtx, FileCtx1).
 
@@ -231,7 +289,7 @@ get_fs_stats(UserCtx, FileCtx0) ->
 ensure_access_to_child(UserCtx, ParentFileCtx0, ChildName) ->
     case fslogic_authz:ensure_authorized_readdir(
         UserCtx, ParentFileCtx0,
-        [traverse_ancestors, ?traverse_container]
+        [?TRAVERSE_ANCESTORS, ?OPERATIONS(?traverse_container_mask)]
     ) of
         {undefined, ParentFileCtx1} ->
             ParentFileCtx1;
@@ -260,10 +318,10 @@ ensure_access_to_child(UserCtx, ParentFileCtx0, ChildName) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_child_attr_insecure(user_ctx:ctx(), ParentFile :: file_ctx:ctx(),
-    Name :: file_meta:name(), boolean()) -> fslogic_worker:fuse_response().
-get_child_attr_insecure(UserCtx, ParentFileCtx, Name, IncludeReplicationStatus) ->
-    {ChildFileCtx, _NewParentFileCtx} = file_ctx:get_child(ParentFileCtx, Name, UserCtx),
-    Response = attr_req:get_file_attr(UserCtx, ChildFileCtx, IncludeReplicationStatus),
+    Name :: file_meta:name(), boolean(), boolean()) -> fslogic_worker:fuse_response().
+get_child_attr_insecure(UserCtx, ParentFileCtx, Name, IncludeReplicationStatus, IncludeLinkCount) ->
+    {ChildFileCtx, _NewParentFileCtx} = files_tree:get_child(ParentFileCtx, Name, UserCtx),
+    Response = attr_req:get_file_attr(UserCtx, ChildFileCtx, IncludeReplicationStatus, IncludeLinkCount),
     ensure_proper_file_name(Response, Name).
 
 
@@ -296,8 +354,8 @@ ensure_proper_file_name(FuseResponse = #fuse_response{
     fslogic_worker:fuse_response().
 chmod_insecure(UserCtx, FileCtx, Mode) ->
     sd_utils:chmod(UserCtx, FileCtx, Mode),
-    chmod_attrs_only_insecure(FileCtx, Mode),
-    fslogic_times:update_ctime(FileCtx),
+    FileCtx2 = chmod_attrs_only_insecure(FileCtx, Mode),
+    fslogic_times:update_ctime(FileCtx2),
 
     #fuse_response{status = #status{code = ?OK}}.
 
@@ -308,13 +366,17 @@ chmod_insecure(UserCtx, FileCtx, Mode) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec chmod_attrs_only_insecure(file_ctx:ctx(),
-    fslogic_worker:posix_permissions()) -> ok | {error, term()}.
+    fslogic_worker:posix_permissions()) -> file_ctx:ctx().
 chmod_attrs_only_insecure(FileCtx, Mode) ->
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
-    ok = file_meta:update_mode(FileUuid, Mode),
+    % TODO VFS-7524 - verify if file_meta doc updates invalidate cached docs in file_ctx everywhere
+    % TODO VFS-7525 - Protect races on events production after parallel file_meta updates
+    FileUuid = file_ctx:get_referenced_uuid_const(FileCtx),
+    {ok, NewDoc} = file_meta:update_mode(FileUuid, Mode),
     ok = permissions_cache:invalidate(),
-    fslogic_event_emitter:emit_sizeless_file_attrs_changed(FileCtx),
-    fslogic_event_emitter:emit_file_perm_changed(FileCtx).
+    FileCtx2 = file_ctx:set_file_doc(FileCtx, NewDoc),
+    fslogic_event_emitter:emit_sizeless_file_attrs_changed(FileCtx2),
+    fslogic_event_emitter:emit_file_perm_changed(FileCtx2),
+    FileCtx2.
 
 
 %%--------------------------------------------------------------------
@@ -332,7 +394,7 @@ update_times_insecure(UserCtx, FileCtx, ATime, MTime, CTime) ->
     % TODO VFS-7139: This is temporary solution to be removed after fixing oneclient
     SessId = user_ctx:get_session_id(UserCtx),
     catch lfm_event_controller:flush_event_queue(
-        SessId, oneprovider:get_id(), file_ctx:get_uuid_const(FileCtx)),
+        SessId, oneprovider:get_id(), file_ctx:get_logical_uuid_const(FileCtx)),
 
     TimesDiff1 = fun
         (Times = #times{}) when ATime == undefined -> Times;
@@ -369,7 +431,7 @@ update_times_insecure(UserCtx, FileCtx, ATime, MTime, CTime) ->
         file_ctx:ctx()
     }.
 resolve_file_attr(UserCtx, FileCtx, Opts) ->
-    FileGuid = file_ctx:get_guid_const(FileCtx),
+    FileGuid = file_ctx:get_logical_guid_const(FileCtx),
     {_FileUuid, _SpaceId, ShareId} = file_id:unpack_share_guid(FileGuid),
 
     {FileDoc, FileCtx2} = case maps:get(allow_deleted_files, Opts, false) of
@@ -378,22 +440,26 @@ resolve_file_attr(UserCtx, FileCtx, Opts) ->
         false ->
             file_ctx:get_file_doc(FileCtx)
     end,
-    Type = file_meta:get_type(FileDoc),
+    EffectiveType = file_meta:get_effective_type(FileDoc),
 
     {{ATime, CTime, MTime}, FileCtx3} = file_ctx:get_times(FileCtx2),
-    {ParentGuid, FileCtx4} = file_ctx:get_parent_guid(FileCtx3, UserCtx),
+    {ParentGuid, FileCtx4} = files_tree:get_parent_guid_if_not_root_dir(FileCtx3, UserCtx),
 
     {Mode, Uid, Gid, OwnerId, ProviderId, Shares, FileCtx5} = case ShareId of
         undefined -> get_private_attrs(UserCtx, FileCtx4, FileDoc);
         _ -> get_masked_private_attrs(ShareId, FileCtx4, FileDoc)
     end,
+
     {ReplicationStatus, Size, FileCtx6} =
-        case {Type, maps:get(include_replication_status, Opts, false), maps:get(include_size, Opts, true)} of
+        case {EffectiveType, maps:get(include_replication_status, Opts, false), maps:get(include_size, Opts, true)} of
             {?REGULAR_FILE_TYPE, true, true} ->
                 file_ctx:get_replication_status_and_size(FileCtx5);
             {?REGULAR_FILE_TYPE, true, _} ->
                 {RS, _, Ctx} = file_ctx:get_replication_status_and_size(FileCtx5),
                 {RS, undefined, Ctx};
+            {?SYMLINK_TYPE, _, true} ->
+                {ok, Symlink} = file_meta_symlinks:readlink(FileDoc),
+                {undefined, byte_size(Symlink), FileCtx5};
             {_, _, true} ->
                 {S, Ctx} = file_ctx:get_file_size(FileCtx5),
                 {undefined, S, Ctx};
@@ -405,6 +471,13 @@ resolve_file_attr(UserCtx, FileCtx, Opts) ->
         maps:get(name_conflicts_resolution_policy, Opts, resolve_name_conflicts)
     ),
 
+    {ok, LinksCount} = case {ShareId, maps:get(include_link_count, Opts, false)} of
+        {undefined, true} ->
+            file_ctx:count_references_const(FileCtx7);
+        _ ->
+            {ok, undefined}
+    end,
+
     FileAttr = #file_attr{
         guid = FileGuid,
         name = FileName,
@@ -415,12 +488,13 @@ resolve_file_attr(UserCtx, FileCtx, Opts) ->
         atime = ATime,
         mtime = MTime,
         ctime = CTime,
-        type = Type,
+        type = EffectiveType,
         size = Size,
         shares = Shares,
         provider_id = ProviderId,
         owner_id = OwnerId,
-        fully_replicated = ReplicationStatus
+        fully_replicated = ReplicationStatus,
+        nlink = LinksCount
     },
     {FileAttr, FileDoc, ConflictingFiles, FileCtx7}.
 
@@ -545,3 +619,22 @@ get_fs_stats_insecure(_UserCtx, FileCtx) ->
             }]
         }
     }.
+
+
+%% @private
+-spec calculate_effective_values(file_ctx:ctx()) -> {map(), file_ctx:ctx()}.
+calculate_effective_values(FileCtx) ->
+    {FileDoc, FileCtx2} = file_ctx:get_file_doc(FileCtx),
+    EffectiveQoSMembership = file_qos:qos_membership(FileDoc),
+    {ok, EffectiveDatasetMembership, EffectiveProtectionFlags, FileCtx3} =
+        dataset_api:get_effective_membership_and_protection_flags(FileCtx2),
+    EffectiveRecallRootGuid = case archive_recall:get_effective_recall(FileDoc) of
+        {ok, undefined} -> undefined;
+        {ok, Uuid} -> file_id:pack_guid(Uuid, file_ctx:get_space_id_const(FileCtx))
+    end,
+    {#{
+        effective_qos_membership => EffectiveQoSMembership,
+        effective_dataset_membership => EffectiveDatasetMembership,
+        effective_protection_flags => EffectiveProtectionFlags,
+        effective_recall => EffectiveRecallRootGuid
+    }, FileCtx3}.

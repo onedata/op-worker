@@ -62,28 +62,36 @@ save_master_job(Key, Job = #tree_traverse{
     token = Token,
     last_name = LastName,
     last_tree = LastTree,
-    execute_slave_on_dir = OnDir,
+    child_dirs_job_generation_policy = ChildDirsJobGenerationPolicy,
     children_master_jobs_mode = ChildrenMasterJobsMode,
     track_subtree_status = TrackSubtreeStatus,
     batch_size = BatchSize,
-    traverse_info = TraverseInfo
-}, Pool, TaskID, CallbackModule) ->
-    Uuid = file_ctx:get_uuid_const(FileCtx),
+    traverse_info = TraverseInfo,
+    resolved_root_uuids = ResolvedRootUuids,
+    symlink_resolution_policy = SymlinkResolutionPolicy,
+    relative_path = RelativePath,
+    encountered_files = EncounteredFilesMap
+}, Pool, TaskId, CallbackModule) ->
+    Uuid = file_ctx:get_logical_uuid_const(FileCtx),
     Scope = file_ctx:get_space_id_const(FileCtx),
     Record = #tree_traverse_job{
         pool = Pool,
         callback_module = CallbackModule,
-        task_id = TaskID,
+        task_id = TaskId,
         doc_id = Uuid,
         user_id = UserId,
         use_listing_token = Token =/= undefined,
         last_name = LastName,
         last_tree = LastTree,
-        execute_slave_on_dir = OnDir,
+        child_dirs_job_generation_policy = ChildDirsJobGenerationPolicy,
         children_master_jobs_mode = ChildrenMasterJobsMode,
         track_subtree_status = TrackSubtreeStatus,
         batch_size = BatchSize,
-        traverse_info = term_to_binary(TraverseInfo)
+        traverse_info = term_to_binary(TraverseInfo),
+        symlink_resolution_policy = SymlinkResolutionPolicy,
+        resolved_root_uuids = ResolvedRootUuids,
+        relative_path = RelativePath,
+        encountered_files = EncounteredFilesMap
     },
     Ctx = get_extended_ctx(Job, CallbackModule),
     save(Key, Scope, Record, Ctx).
@@ -104,36 +112,49 @@ delete_master_job(Key, _Job, _, _CallbackModule) ->
 -spec get_master_job(key() | doc()) ->
     {ok, tree_traverse:master_job(), traverse:pool(), traverse:id()}  | {error, term()}.
 get_master_job(#document{value = #tree_traverse_job{
-    pool = Pool, task_id = TaskID,
-    doc_id = DocID,
+    pool = Pool,
+    task_id = TaskId,
+    doc_id = DocId,
     user_id = UserId,
     use_listing_token = UseListingToken,
     last_name = LastName,
     last_tree = LastTree,
-    execute_slave_on_dir = OnDir,
+    child_dirs_job_generation_policy = ChildDirsJobGenerationPolicy,
     children_master_jobs_mode = ChildrenMasterJobsMode,
     track_subtree_status = TrackSubtreeStatus,
     batch_size = BatchSize,
-    traverse_info = TraverseInfo
+    traverse_info = TraverseInfo,
+    symlink_resolution_policy = SymlinkResolutionPolicy,
+    resolved_root_uuids = ResolvedRootUuids,
+    relative_path = RelativePath,
+    encountered_files = EncounteredFilesMap
 }}) ->
-    {ok, Doc = #document{scope = SpaceId}} = file_meta:get_including_deleted(DocID),
-    FileCtx = file_ctx:new_by_doc(Doc, SpaceId),
-    Job = #tree_traverse{
-        file_ctx = FileCtx,
-        user_id = UserId,
-        token = case UseListingToken of
-            true -> ?INITIAL_LS_TOKEN;
-            false -> undefined
-        end,
-        last_name = LastName,
-        last_tree = LastTree,
-        execute_slave_on_dir = OnDir,
-        children_master_jobs_mode = ChildrenMasterJobsMode,
-        track_subtree_status = TrackSubtreeStatus,
-        batch_size = BatchSize,
-        traverse_info = binary_to_term(TraverseInfo)
-    },
-    {ok, Job, Pool, TaskID};
+    case file_meta:get_including_deleted(DocId) of
+        {ok, Doc = #document{scope = SpaceId}} ->
+            FileCtx = file_ctx:new_by_doc(Doc, SpaceId),
+            Job = #tree_traverse{
+                file_ctx = FileCtx,
+                user_id = UserId,
+                token = case UseListingToken of
+                    true -> ?INITIAL_DATASTORE_LS_TOKEN;
+                    false -> undefined
+                end,
+                last_name = LastName,
+                last_tree = LastTree,
+                child_dirs_job_generation_policy = ChildDirsJobGenerationPolicy,
+                children_master_jobs_mode = ChildrenMasterJobsMode,
+                track_subtree_status = TrackSubtreeStatus,
+                batch_size = BatchSize,
+                traverse_info = binary_to_term(TraverseInfo),
+                symlink_resolution_policy = SymlinkResolutionPolicy,
+                resolved_root_uuids = ResolvedRootUuids,
+                relative_path = RelativePath,
+                encountered_files = EncounteredFilesMap
+            },
+            {ok, Job, Pool, TaskId};
+        {error, _} = Error ->
+            Error
+    end;
 get_master_job(Key) ->
     case datastore_model:get(?CTX#{include_deleted => true}, Key) of
         {ok, Doc} ->
@@ -163,7 +184,7 @@ get_ctx() ->
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    2.
+    5.
 
 
 -spec get_record_struct(datastore_model:record_version()) ->
@@ -199,6 +220,63 @@ get_record_struct(2) ->
         {track_subtree_status, boolean},
         {batch_size, integer},
         {traverse_info, binary}
+    ]};
+get_record_struct(3) ->
+    {record, [
+        {pool, string},
+        {callback_module, atom},
+        {task_id, string},
+        {doc_id, string},
+        {user_id, string},
+        {use_listing_token, boolean},
+        {last_name, string},
+        {last_tree, string},
+        % execute_slave_on_dir has been changed to child_dirs_job_generation_policy in this version
+        {child_dirs_job_generation_policy, atom},
+        {children_master_jobs_mode, atom},
+        {track_subtree_status, boolean},
+        {batch_size, integer},
+        {traverse_info, binary}
+    ]};
+get_record_struct(4) ->
+    {record, [
+        {pool, string},
+        {callback_module, atom},
+        {task_id, string},
+        {doc_id, string},
+        {user_id, string},
+        {use_listing_token, boolean},
+        {last_name, string},
+        {last_tree, string},
+        {child_dirs_job_generation_policy, atom},
+        {children_master_jobs_mode, atom},
+        {track_subtree_status, boolean},
+        {batch_size, integer},
+        {traverse_info, binary},
+        % new fields - follow_symlinks, relative_path and encountered_files
+        {follow_symlinks, boolean},
+        {relative_path, binary},
+        {encountered_files, #{string => boolean}}
+    ]};
+get_record_struct(5) ->
+    {record, [
+        {pool, string},
+        {callback_module, atom},
+        {task_id, string},
+        {doc_id, string},
+        {user_id, string},
+        {use_listing_token, boolean},
+        {last_name, string},
+        {last_tree, string},
+        {child_dirs_job_generation_policy, atom},
+        {children_master_jobs_mode, atom},
+        {track_subtree_status, boolean},
+        {batch_size, integer},
+        {traverse_info, binary},
+        {symlink_resolution_policy, atom}, % modified field
+        {resolved_root_uuids, [string]}, % new field
+        {relative_path, binary},
+        {encountered_files, #{string => boolean}}
     ]}.
 
 
@@ -230,6 +308,126 @@ upgrade_record(1, {?MODULE, Pool, CallbackModule, TaskId, DocId, LastName, LastT
         false,
         BatchSize,
         TraverseInfo
+    }};
+upgrade_record(2, Record) ->
+    {
+        ?MODULE,
+        Pool,
+        CallbackModule,
+        TaskId,
+        DocId,
+        UserId,
+        UseListingToken,
+        LastName,
+        LastTree,
+        ExecuteSlaveOnDir,
+        ChildrenMasterJobsMode,
+        TrackSubtreeStatus,
+        BatchSize,
+        TraverseInfo
+    } = Record,
+    
+    ChildDirsJobGenerationPolicy = case ExecuteSlaveOnDir of
+        false -> generate_master_jobs;
+        true -> generate_slave_and_master_jobs
+    end,
+    
+    {3, {?MODULE,
+        Pool,
+        CallbackModule,
+        TaskId,
+        DocId,
+        UserId,
+        UseListingToken,
+        LastName,
+        LastTree,
+        ChildDirsJobGenerationPolicy,
+        ChildrenMasterJobsMode,
+        TrackSubtreeStatus,
+        BatchSize,
+        TraverseInfo
+    }};
+upgrade_record(3, Record) ->
+    {
+        ?MODULE,
+        Pool,
+        CallbackModule,
+        TaskId,
+        DocId,
+        UserId,
+        UseListingToken,
+        LastName,
+        LastTree,
+        ChildDirsJobGenerationPolicy,
+        ChildrenMasterJobsMode,
+        TrackSubtreeStatus,
+        BatchSize,
+        TraverseInfo
+    } = Record,
+    
+    {4, {?MODULE,
+        Pool,
+        CallbackModule,
+        TaskId,
+        DocId,
+        UserId,
+        UseListingToken,
+        LastName,
+        LastTree,
+        ChildDirsJobGenerationPolicy,
+        ChildrenMasterJobsMode,
+        TrackSubtreeStatus,
+        BatchSize,
+        TraverseInfo,
+        % new fields follow_symlinks, relative path and encountered files
+        false,
+        <<>>,
+        #{}
+    }};
+upgrade_record(4, Record) ->
+    {
+        ?MODULE,
+        Pool,
+        CallbackModule,
+        TaskId,
+        DocId,
+        UserId,
+        UseListingToken,
+        LastName,
+        LastTree,
+        ChildDirsJobGenerationPolicy,
+        ChildrenMasterJobsMode,
+        TrackSubtreeStatus,
+        BatchSize,
+        TraverseInfo,
+        FollowSymlinks,
+        RelativePath,
+        EncounteredFiles
+    } = Record,
+    
+    SymlinkResolutionPolicy = case FollowSymlinks of
+        true -> follow_external;
+        false -> preserve
+    end,
+    
+    {5, {?MODULE,
+        Pool,
+        CallbackModule,
+        TaskId,
+        DocId,
+        UserId,
+        UseListingToken,
+        LastName,
+        LastTree,
+        ChildDirsJobGenerationPolicy,
+        ChildrenMasterJobsMode,
+        TrackSubtreeStatus,
+        BatchSize,
+        TraverseInfo,
+        SymlinkResolutionPolicy, % modified field
+        [], % new field resolved_root_uuids
+        RelativePath,
+        EncounteredFiles
     }}.
 
 %%%===================================================================

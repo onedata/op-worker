@@ -33,7 +33,7 @@
     is_posix_compatible/1, is_getting_size_supported/1, is_rename_supported/1,
     is_import_supported/1, is_auto_import_supported/1, is_file_registration_supported/1,
     is_nfs4_acl_supported/1, should_skip_storage_detection/1, supports_storage_access_type/2,
-    is_object/1
+    is_object/1, is_archive_storage/1
 ]).
 -export([get_args_with_user_ctx/2]).
 -export([translate_name/1, translate_arg_name/1]).
@@ -198,7 +198,7 @@ get_params(#helper{name = Name} = Helper, UserCtx) ->
 %%--------------------------------------------------------------------
 -spec get_proxy_params(timeout(), storage:id()) -> params().
 get_proxy_params(Timeout, StorageId) ->
-    {ok, Latency} = application:get_env(?APP_NAME, proxy_helper_latency_milliseconds),
+    Latency = op_worker:get_env(proxy_helper_latency_milliseconds),
     TimeoutValue = integer_to_binary(Timeout + Latency),
     #helper_params{
         helper_name = ?PROXY_HELPER_NAME,
@@ -237,6 +237,7 @@ should_skip_storage_detection(#helper{args = Args}) ->
 -spec is_posix_compatible(helpers:helper() | name()) -> boolean().
 is_posix_compatible(?POSIX_HELPER_NAME) -> true;
 is_posix_compatible(?GLUSTERFS_HELPER_NAME) -> true;
+is_posix_compatible(?NFS_HELPER_NAME) -> true;
 is_posix_compatible(?NULL_DEVICE_HELPER_NAME) -> true;
 is_posix_compatible(#helper{name = HelperName}) -> is_posix_compatible(HelperName);
 is_posix_compatible(_) -> false.
@@ -254,6 +255,7 @@ is_auto_import_supported(Helper = #helper{name = HelperName})
     orelse HelperName =:= ?NULL_DEVICE_HELPER_NAME
     orelse HelperName =:= ?WEBDAV_HELPER_NAME
     orelse HelperName =:= ?XROOTD_HELPER_NAME
+    orelse HelperName =:= ?NFS_HELPER_NAME
 ->
     is_canonical_helper(Helper);
 is_auto_import_supported(Helper = #helper{name = ?S3_HELPER_NAME}) ->
@@ -268,6 +270,7 @@ is_file_registration_supported(Helper = #helper{name = HelperName})
     orelse HelperName =:= ?NULL_DEVICE_HELPER_NAME
     orelse HelperName =:= ?WEBDAV_HELPER_NAME
     orelse HelperName =:= ?XROOTD_HELPER_NAME
+    orelse HelperName =:= ?NFS_HELPER_NAME
     orelse HelperName =:= ?HTTP_HELPER_NAME
 ->
     is_canonical_helper(Helper);
@@ -294,6 +297,7 @@ is_rename_supported(?GLUSTERFS_HELPER_NAME) -> true;
 is_rename_supported(?NULL_DEVICE_HELPER_NAME) -> true;
 is_rename_supported(?WEBDAV_HELPER_NAME) -> true;
 is_rename_supported(?XROOTD_HELPER_NAME) -> true;
+is_rename_supported(?NFS_HELPER_NAME) -> true;
 is_rename_supported(#helper{name = HelperName}) -> is_rename_supported(HelperName);
 is_rename_supported(_) -> false.
 
@@ -302,6 +306,12 @@ is_object(#helper{name = Name}) ->
     is_object(Name);
 is_object(HelperName) ->
     lists:member(HelperName, ?OBJECT_HELPERS).
+
+
+-spec is_archive_storage(helpers:helper()) -> boolean().
+is_archive_storage(#helper{args = Args}) ->
+    utils:to_boolean(maps:get(<<"archiveStorage">>, Args, false)).
+
 
 -spec is_getting_size_supported(helpers:helper()) -> boolean().
 is_getting_size_supported(Helper) ->
@@ -343,6 +353,7 @@ translate_name(<<"Swift">>) -> ?SWIFT_HELPER_NAME;
 translate_name(<<"GlusterFS">>) -> ?GLUSTERFS_HELPER_NAME;
 translate_name(<<"WebDAV">>) -> ?WEBDAV_HELPER_NAME;
 translate_name(<<"XRootD">>) -> ?XROOTD_HELPER_NAME;
+translate_name(<<"NFS">>) -> ?NFS_HELPER_NAME;
 translate_name(<<"HTTP">>) -> ?HTTP_HELPER_NAME;
 translate_name(<<"NullDevice">>) -> ?NULL_DEVICE_HELPER_NAME;
 translate_name(Name) -> Name.
@@ -372,6 +383,7 @@ translate_arg_name(<<"credentials_type">>) -> <<"credentialsType">>;
 translate_arg_name(<<"authorization_header">>) -> <<"authorizationHeader">>;
 translate_arg_name(<<"range_write_support">>) -> <<"rangeWriteSupport">>;
 translate_arg_name(<<"connection_pool_size">>) -> <<"connectionPoolSize">>;
+translate_arg_name(<<"max_requests_per_session">>) -> <<"maxRequestsPerSession">>;
 translate_arg_name(<<"maximum_upload_size">>) -> <<"maximumUploadSize">>;
 translate_arg_name(<<"latency_min">>) -> <<"latencyMin">>;
 translate_arg_name(<<"latency_max">>) -> <<"latencyMax">>;

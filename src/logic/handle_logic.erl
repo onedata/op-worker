@@ -99,11 +99,9 @@ create(SessionId, HandleServiceId, ResourceType, ResourceId, Metadata) ->
         subscribe = true
     })),
     ?ON_SUCCESS(Res, fun(_) ->
-        {ok, UserId} = session:get_user_id(SessionId),
-        gs_client_worker:invalidate_cache(od_user, UserId),
         case ResourceType of
             <<"Share">> ->
-                gs_client_worker:invalidate_cache(od_share, ResourceId);
+                share_logic:force_fetch(ResourceId);
             _ ->
                 ok
         end

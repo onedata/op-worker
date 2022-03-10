@@ -1,11 +1,12 @@
 %%%-------------------------------------------------------------------
 %%% @author Lukasz Opiola
-%%% @copyright (C) 2015 ACK CYFRONET AGH
+%%% @copyright (C) 2015-2021 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc This module offers a high level API for operating on logical filesystem.
+%%% @doc
+%%% This module offers a high level API for operating on logical filesystem.
 %%% When passing a file in arguments, one can use one of the following:
 %%% {guid, FileGuid} - preferred and fast. guids are returned from 'ls' function.
 %%% {path, BinaryFilePath} - slower than by guid (path has to be resolved).
@@ -16,104 +17,242 @@
 %%% @end
 %%%-------------------------------------------------------------------
 -module(lfm).
+-author("Lukasz Opiola").
 
--define(run(F),
+-include("modules/logical_file_manager/lfm.hrl").
+-include("modules/fslogic/file_details.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
+-include("modules/fslogic/file_attr.hrl").
+-include("proto/oneclient/fuse_messages.hrl").
+-include_lib("ctool/include/errors.hrl").
+-include_lib("ctool/include/logging.hrl").
+
+
+% General file related operations
+-export([
+    get_fs_stats/2,
+
+    stat/2, stat/3,
+    get_details/2,
+    get_file_references/2,
+
+    get_file_path/2,
+    get_file_guid/2,
+    resolve_guid_by_relative_path/3,
+    get_parent/2,
+    ensure_dir/4,
+
+    is_dir/2,
+
+    update_times/5,
+    mv/4,
+    cp/4,
+    rm_recursive/2, unlink/3
+]).
+%% Hardlink/symlink specific operations
+-export([
+    make_link/4,
+    make_symlink/4,
+    read_symlink/2,
+    resolve_symlink/2
+]).
+%% Regular file specific operations
+-export([
+    create/2, create/3, create/4,
+    create_and_open/4, create_and_open/5,
+    open/3, monitored_open/3,
+    fsync/1, fsync/3,
+    write/3, read/3,
+    check_size_and_read/3,
+    silent_read/3,
+    truncate/3,
+    release/1, monitored_release/1,
+    get_file_location/2,
+    get_file_distribution/2
+]).
+%% Directory specific operations
+-export([
+    mkdir/3, mkdir/4,
+    get_children/3,
+    get_child_attr/3,
+    get_children_attrs/3,
+    get_children_attrs/5,
+    get_children_details/3,
+    get_files_recursively/4,
+    get_children_count/2
+]).
+%% Permissions related operations
+-export([
+    set_perms/3,
+    check_perms/3,
+    set_acl/3,
+    get_acl/2,
+    remove_acl/2
+]).
+%% Custom metadata related operations
+-export([
+    has_custom_metadata/2,
+    set_metadata/5,
+    get_metadata/5,
+    remove_metadata/3,
+
+    list_xattr/4,
+    set_xattr/3,
+    set_xattr/5,
+    get_xattr/4,
+    remove_xattr/3
+]).
+%% CDMI related operations
+-export([
+    get_transfer_encoding/2,
+    set_transfer_encoding/3,
+    get_cdmi_completion_status/2,
+    set_cdmi_completion_status/3,
+    get_mimetype/2,
+    set_mimetype/3
+]).
+
+%% Utility functions
+-export([check_result/1]).
+
+
+-type file_ref() :: #file_ref{}.
+-type file_key() :: {path, file_meta:path()} | file_ref().
+
+-type handle() :: lfm_context:ctx().
+-type error_reply() :: {error, term()}.
+
+-export_type([handle/0, file_ref/0, file_key/0, error_reply/0]).
+
+
+-define(run(Expr),
     try
-        F()
+        Expr
     catch
         _:{badmatch, {error, not_found}} ->
             {error, ?ENOENT};
         _:{badmatch, Error} ->
             Error;
-        _:___Reason ->
-            ?error_stacktrace("logical_file_manager generic error: ~p", [___Reason]),
+        throw:Error ->
+            Error;
+        _:___Reason:Stacktrace ->
+            ?error_stacktrace("logical_file_manager generic error: ~p", [___Reason], Stacktrace),
             {error, ___Reason}
     end).
 
--include("modules/fslogic/file_details.hrl").
--include("modules/fslogic/fslogic_common.hrl").
--include_lib("ctool/include/errors.hrl").
--include_lib("ctool/include/posix/file_attr.hrl").
--include_lib("ctool/include/logging.hrl").
-
--type handle() :: lfm_context:ctx().
--type file_key() :: fslogic_worker:file_guid_or_path() | {handle, handle()}.
--type error_reply() :: {error, term()}.
-
--export_type([handle/0, file_key/0, error_reply/0]).
-
-%% Functions operating on directories
--export([
-    mkdir/2, mkdir/3, mkdir/4,
-    get_children/3,
-    get_children_attrs/3,
-    get_children_details/3,
-    get_child_attr/3, get_children_count/2, get_parent/2
-]).
-%% Functions operating on directories or files
--export([mv/3, mv/4, cp/3, cp/4, get_file_path/2, get_file_guid/2, rm_recursive/2, unlink/3, is_dir/2]).
--export([
-    schedule_file_transfer/5, schedule_view_transfer/7,
-    schedule_file_replication/4, schedule_replica_eviction/4,
-    schedule_replication_by_view/6, schedule_replica_eviction_by_view/6
-]).
-%% Functions operating on files
--export([create/2, create/3, create/4,
-    open/3, monitored_open/3,
-    get_file_location/2, fsync/1, fsync/3,
-    write/3, read/3, check_size_and_read/3,
-    silent_read/3, truncate/3,
-    release/1, monitored_release/1,
-    get_file_distribution/2,
-    create_and_open/3, create_and_open/4, create_and_open/5
-]).
-%% Functions concerning file permissions
--export([set_perms/3, check_perms/3, set_acl/3, get_acl/2, remove_acl/2]).
-%% Functions concerning file attributes
--export([
-    stat/2, get_fs_stats/2, get_details/2,
-    get_xattr/4, set_xattr/3, set_xattr/5, remove_xattr/3, list_xattr/4,
-    update_times/5
-]).
-%% Functions concerning cdmi attributes
--export([get_transfer_encoding/2, set_transfer_encoding/3, get_cdmi_completion_status/2,
-    set_cdmi_completion_status/3, get_mimetype/2, set_mimetype/3]).
-%% Functions concerning file shares
--export([create_share/4, remove_share/2]).
-%% Functions concerning metadata
--export([get_metadata/5, set_metadata/5, has_custom_metadata/2, remove_metadata/3]).
-%% Utility functions
--export([check_result/1]).
-%% Functions concerning qos
--export([add_qos_entry/4, add_qos_entry/5, get_qos_entry/2, remove_qos_entry/2,
-    get_effective_file_qos/2, check_qos_status/2, check_qos_status/3]).
-
 
 %%%===================================================================
-%%% API
+%%% General file related operations
 %%%===================================================================
+
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Creates a directory.
+%% Returns fs_stats() containing support e.g. size and occupied size.
 %% @end
 %%--------------------------------------------------------------------
--spec mkdir(session:id(), Path :: file_meta:path()) ->
-    {ok, DirGuid :: file_meta:uuid()} | error_reply().
-mkdir(SessId, Path) ->
-    ?run(fun() -> lfm_dirs:mkdir(SessId, Path) end).
+-spec get_fs_stats(session:id(), file_key()) ->
+    {ok, lfm_attrs:fs_stats()} | error_reply().
+get_fs_stats(SessId, FileKey) ->
+    ?run(lfm_attrs:get_fs_stats(SessId, FileKey)).
 
--spec mkdir(session:id(), Path :: file_meta:path(),
-    Mode :: file_meta:posix_permissions() | undefined) ->
-    {ok, DirGUID :: fslogic_worker:file_guid()} | error_reply().
-mkdir(SessId, Path, Mode) ->
-    ?run(fun() -> lfm_dirs:mkdir(SessId, Path, Mode) end).
 
--spec mkdir(session:id(), ParentGuid :: fslogic_worker:file_guid(),
-    Name :: file_meta:name(), Mode :: file_meta:posix_permissions() | undefined) ->
-    {ok, DirGuid :: fslogic_worker:file_guid()} | error_reply().
-mkdir(SessId, ParentGuid, Name, Mode) ->
-    ?run(fun() -> lfm_dirs:mkdir(SessId, ParentGuid, Name, Mode) end).
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns file attributes (see file_attr.hrl).
+%% @end
+%%--------------------------------------------------------------------
+-spec stat(session:id(), file_key()) ->
+    {ok, lfm_attrs:file_attributes()} | error_reply().
+stat(SessId, FileKey) ->
+    stat(SessId, FileKey, false).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns file attributes (see file_attr.hrl).
+%% @end
+%%--------------------------------------------------------------------
+-spec stat(session:id(), file_key(), boolean()) ->
+    {ok, lfm_attrs:file_attributes()} | error_reply().
+stat(SessId, FileKey, IncludeLinksCount) ->
+    ?run(lfm_attrs:stat(SessId, FileKey, IncludeLinksCount)).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns file details (see file_details.hrl).
+%% @end
+%%--------------------------------------------------------------------
+-spec get_details(session:id(), file_key()) ->
+    {ok, lfm_attrs:file_details()} | error_reply().
+get_details(SessId, FileKey) ->
+    ?run(lfm_attrs:get_details(SessId, FileKey)).
+
+
+-spec get_file_references(session:id(), file_key()) ->
+    {ok, [file_id:file_guid()]} | error_reply().
+get_file_references(SessId, FileKey) ->
+    ?run(lfm_attrs:get_references(SessId, FileKey)).
+
+
+-spec get_file_path(session:id(), fslogic_worker:file_guid()) ->
+    {ok, file_meta:path()} | error_reply().
+get_file_path(SessId, FileGuid) ->
+    ?run(lfm_files:get_file_path(SessId, FileGuid)).
+
+
+-spec get_file_guid(session:id(), file_meta:path()) ->
+    {ok, fslogic_worker:file_guid()}.
+get_file_guid(SessId, FilePath) ->
+    ?run(lfm_files:get_file_guid(SessId, FilePath)).
+
+
+-spec resolve_guid_by_relative_path(session:id(), fslogic_worker:file_guid(), file_meta:path()) ->
+    {ok, fslogic_worker:file_guid()} | error_reply().
+resolve_guid_by_relative_path(SessId, RelativeRootGuid, FilePath) ->
+    ?run(lfm_files:resolve_guid_by_relative_path(SessId, RelativeRootGuid, FilePath)).
+
+
+-spec get_parent(session:id(), file_key()) ->
+    {ok, fslogic_worker:file_guid()} | error_reply().
+get_parent(SessId, FileKey) ->
+    ?run(lfm_files:get_parent(SessId, FileKey)).
+
+-spec ensure_dir(session:id(), fslogic_worker:file_guid(), file_meta:path(), file_meta:mode()) ->
+    {ok, fslogic_worker:file_guid()} | error_reply().
+ensure_dir(SessId, RelativeRootGuid, FilePath, Mode) ->
+    ?run(lfm_files:ensure_dir(SessId, RelativeRootGuid, FilePath, Mode)).
+
+-spec is_dir(session:id(), file_key()) ->
+    ok | error_reply().
+is_dir(SessId, FileEntry) ->
+    ?run(lfm_files:is_dir(SessId, FileEntry)).
+
+
+-spec update_times(
+    session:id(),
+    file_key(),
+    ATime :: file_meta:time() | undefined,
+    MTime :: file_meta:time() | undefined,
+    CTime :: file_meta:time() | undefined
+) ->
+    ok | error_reply().
+update_times(SessId, FileKey, ATime, MTime, CTime) ->
+    ?run(lfm_attrs:update_times(SessId, FileKey, ATime, MTime, CTime)).
+
+
+-spec mv(session:id(), file_key(), file_key(), file_meta:name()) ->
+    {ok, fslogic_worker:file_guid()} | error_reply().
+mv(SessId, FileKey, TargetParentKey, TargetName) ->
+    ?run(lfm_files:mv(SessId, FileKey, TargetParentKey, TargetName)).
+
+
+-spec cp(session:id(), file_key(), file_key(), file_meta:name()) ->
+    {ok, fslogic_worker:file_guid()} | error_reply().
+cp(SessId, FileKey, TargetParentKey, TargetName) ->
+    ?run(lfm_files:cp(SessId, FileKey, TargetParentKey, TargetName)).
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -121,315 +260,103 @@ mkdir(SessId, ParentGuid, Name, Mode) ->
 %% the directory to trash.
 %% @end
 %%--------------------------------------------------------------------
--spec rm_recursive(session:id(), fslogic_worker:file_guid_or_path()) ->
+-spec rm_recursive(session:id(), file_key()) ->
     ok | error_reply().
 rm_recursive(SessId, FileKey) ->
-    ?run(fun() -> lfm_files:rm_recursive(SessId, FileKey) end).
+    ?run(lfm_files:rm_recursive(SessId, FileKey)).
 
 
--spec get_children(session:id(), fslogic_worker:file_guid_or_path(), file_meta:list_opts()) ->
-    {ok, [{fslogic_worker:file_guid(), file_meta:name()}], file_meta:list_extended_info()} | error_reply().
-get_children(SessId, FileKey, ListOpts) ->
-    ?run(fun() -> lfm_dirs:get_children(SessId, FileKey, ListOpts) end).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Gets file basic attributes (see file_attr.hrl) for each directory children
-%% starting with Offset-th entry and up to Limit of entries.
-%% @end
-%%--------------------------------------------------------------------
--spec get_children_attrs(session:id(), fslogic_worker:file_guid_or_path(), file_meta:list_opts()) ->
-    {ok, [#file_attr{}], file_meta:list_extended_info()} | error_reply().
-get_children_attrs(SessId, FileKey, ListOpts) ->
-    ?run(fun() -> lfm_dirs:get_children_attrs(SessId, FileKey, ListOpts) end).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Gets basic file attributes (see file_attr.hrl) of a child with given name.
-%% @end
-%%--------------------------------------------------------------------
--spec get_child_attr(session:id(), ParentGuid :: fslogic_worker:file_guid(),
-    ChildName :: file_meta:name()) ->
-    {ok, #file_attr{}} | error_reply().
-get_child_attr(SessId, ParentGuid, ChildName)  ->
-    ?run(fun() -> lfm_dirs:get_child_attr(SessId, ParentGuid, ChildName) end).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Gets file details (see file_details.hrl) for each directory children
-%% starting with Offset-th from specified StartId entry and up to Limit
-%% of entries.
-%% @end
-%%--------------------------------------------------------------------
--spec get_children_details(session:id(), fslogic_worker:file_guid_or_path(), file_meta:list_opts()) ->
-    {ok, [lfm_attrs:file_details()], file_meta:list_extended_info()} | error_reply().
-get_children_details(SessId, FileKey, ListOpts) ->
-    ?run(fun() -> lfm_dirs:get_children_details(SessId, FileKey, ListOpts) end).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns number of children of a directory.
-%% @end
-%%--------------------------------------------------------------------
--spec get_children_count(session:id(),
-    FileKey :: fslogic_worker:file_guid_or_path()) ->
-    {ok, integer()} | error_reply().
-get_children_count(SessId, FileKey) ->
-    ?run(fun() -> lfm_dirs:get_children_count(SessId, FileKey) end).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns uuid of parent for given file.
-%% @end
-%%--------------------------------------------------------------------
--spec get_parent(session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
-    {ok, fslogic_worker:file_guid()} | error_reply().
-get_parent(SessId, FileKey) ->
-    ?run(fun() -> lfm_files:get_parent(SessId, FileKey) end).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Moves a file or directory to a new location.
-%% @end
-%%--------------------------------------------------------------------
--spec mv(session:id(), fslogic_worker:file_guid_or_path(), file_meta:path()) ->
-    {ok, fslogic_worker:file_guid()} | error_reply().
-mv(SessId, FileEntry, TargetPath) ->
-    ?run(fun() -> lfm_files:mv(SessId, FileEntry, TargetPath) end).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Moves a file or directory to a new location.
-%% @end
-%%--------------------------------------------------------------------
--spec mv(session:id(), fslogic_worker:file_guid_or_path(), fslogic_worker:file_guid_or_path(),
-    file_meta:name()) -> {ok, fslogic_worker:file_guid()} | error_reply().
-mv(SessId, FileKey, TargetParentKey, TargetName) ->
-    ?run(fun() -> lfm_files:mv(SessId, FileKey, TargetParentKey, TargetName) end).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Copies a file or directory to given location.
-%% @end
-%%--------------------------------------------------------------------
--spec cp(session:id(), fslogic_worker:file_guid_or_path(), file_meta:path()) ->
-    {ok, fslogic_worker:file_guid()} | error_reply().
-cp(SessId, FileEntry, TargetPath) ->
-    ?run(fun() -> lfm_files:cp(SessId, FileEntry, TargetPath) end).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Copies a file or directory to given location.
-%% @end
-%%--------------------------------------------------------------------
--spec cp(session:id(), fslogic_worker:file_guid_or_path(), fslogic_worker:file_guid_or_path(),
-    file_meta:name()) -> {ok, fslogic_worker:file_guid()} | error_reply().
-cp(SessId, FileKey, TargetParentKey, TargetName) ->
-    ?run(fun() -> lfm_files:cp(SessId, FileKey, TargetParentKey, TargetName) end).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns full path of file
-%% @end
-%%--------------------------------------------------------------------
--spec get_file_path(session:id(), fslogic_worker:file_guid()) ->
-    {ok, file_meta:path()} | error_reply().
-get_file_path(SessId, FileGuid) ->
-    ?run(fun() -> lfm_files:get_file_path(SessId, FileGuid) end).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns guid of file
-%% @end
-%%--------------------------------------------------------------------
--spec get_file_guid(session:id(), fslogic_worker:file_guid_or_path()) ->
-    {ok, fslogic_worker:file_guid()}.
-get_file_guid(SessId, FilePath) ->
-    ?run(fun() -> lfm_files:get_file_guid(SessId, FilePath) end).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Removes a file or an empty directory.
-%% @end
-%%--------------------------------------------------------------------
--spec unlink(session:id(), fslogic_worker:file_guid_or_path(), boolean()) ->
+-spec unlink(session:id(), file_key(), boolean()) ->
     ok | error_reply().
 unlink(SessId, FileEntry, Silent) ->
-    ?run(fun() -> lfm_files:unlink(SessId, FileEntry, Silent) end).
+    ?run(lfm_files:unlink(SessId, FileEntry, Silent)).
 
 
--spec is_dir(session:id(), fslogic_worker:file_guid_or_path()) ->
-    ok | error_reply().
-is_dir(SessId, FileEntry) ->
-    ?run(fun() -> lfm_files:is_dir(SessId, FileEntry) end).
+%%%===================================================================
+%%% Hardlink/symlink specific operations
+%%%===================================================================
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Schedules file transfer and returns its ID.
-%% @end
-%%--------------------------------------------------------------------
--spec schedule_file_transfer(
-    session:id(),
-    file_id:file_guid(),
-    ReplicatingProviderId :: undefined | od_provider:id(),
-    EvictingProviderId :: undefined | od_provider:id(),
-    transfer:callback()
-) ->
-    {ok, transfer:id()} | lfm:error_reply().
-schedule_file_transfer(SessId, FileGuid, ReplicatingProviderId, EvictingProviderId, Callback) ->
-    ?run(fun() -> lfm_files:schedule_file_transfer(
-        SessId, FileGuid, ReplicatingProviderId, EvictingProviderId, Callback
-    ) end).
+-spec make_link(session:id(), file_key(), file_key(), file_meta:name()) ->
+    {ok, #file_attr{}} | error_reply().
+make_link(SessId, FileKey, TargetParentKey, Name) ->
+    ?run(lfm_files:make_link(SessId, FileKey, TargetParentKey, Name)).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Schedules transfer by view and returns its ID.
-%% @end
-%%--------------------------------------------------------------------
--spec schedule_view_transfer(
-    session:id(),
-    od_space:id(),
-    transfer:view_name(), transfer:query_view_params(),
-    ReplicatingProviderId :: undefined | od_provider:id(),
-    EvictingProviderId :: undefined | od_provider:id(),
-    transfer:callback()
-) ->
-    {ok, transfer:id()} | lfm:error_reply().
-schedule_view_transfer(
-    SessId, SpaceId, ViewName, QueryViewParams,
-    ReplicatingProviderId, EvictingProviderId, Callback
-) ->
-    ?run(fun() -> lfm_files:schedule_view_transfer(
-        SessId, SpaceId, ViewName, QueryViewParams,
-        ReplicatingProviderId, EvictingProviderId, Callback
-    ) end).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Schedules file replication to given provider.
-%% TODO VFS-6365 remove deprecated replicas endpoints
-%% @end
-%%--------------------------------------------------------------------
--spec schedule_file_replication(session:id(), fslogic_worker:file_guid_or_path(),
-    TargetProviderId :: oneprovider:id(), transfer:callback()) ->
-    {ok, transfer:id()} | error_reply().
-schedule_file_replication(SessId, FileKey, TargetProviderId, Callback) ->
-    ?run(fun() -> lfm_files:schedule_file_replication(
-        SessId, FileKey, TargetProviderId, Callback
-    ) end).
+-spec make_symlink(session:id(), file_key(), file_meta:name(), file_meta_symlinks:symlink()) ->
+    {ok, #file_attr{}} | lfm:error_reply().
+make_symlink(SessId, ParentKey, Name, SymlinkValue) ->
+    ?run(lfm_files:make_symlink(SessId, ParentKey, Name, SymlinkValue)).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Schedules file replication to given provider.
-%% TODO VFS-6365 remove deprecated replicas endpoints
-%% @end
-%%--------------------------------------------------------------------
--spec schedule_replication_by_view(session:id(), TargetProviderId :: oneprovider:id(),
-    transfer:callback(), od_space:id(), transfer:view_name(),
-    transfer:query_view_params()) -> {ok, transfer:id()} | error_reply().
-schedule_replication_by_view(SessId, TargetProviderId, Callback, SpaceId,
-    ViewName, QueryParams
-) ->
-    ?run(fun() -> lfm_files:schedule_replication_by_view(
-        SessId, TargetProviderId, Callback, SpaceId, ViewName, QueryParams
-    ) end).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Schedules file replica eviction on given provider, migrates unique data
-%% to provider given as MigrateProviderId.
-%% TODO VFS-6365 remove deprecated replicas endpoints
-%% @end
-%%--------------------------------------------------------------------
--spec schedule_replica_eviction(session:id(), fslogic_worker:file_guid_or_path(),
-    SourceProviderId :: oneprovider:id(), TargetProviderId :: undefined | oneprovider:id()) ->
-    {ok, transfer:id()} | error_reply().
-schedule_replica_eviction(SessId, FileKey, SourceProviderId, TargetProviderId) ->
-    ?run(fun() -> lfm_files:schedule_replica_eviction(
-        SessId, FileKey, SourceProviderId, TargetProviderId
-    ) end).
+-spec read_symlink(session:id(), file_key()) ->
+    {ok, file_meta_symlinks:symlink()} | lfm:error_reply().
+read_symlink(SessId, FileKey) ->
+    ?run(lfm_files:read_symlink(SessId, FileKey)).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Schedules file replica eviction on given provider, migrates unique data
-%% to provider given as MigrateProviderId.
-%% TODO VFS-6365 remove deprecated replicas endpoints
-%% @end
-%%--------------------------------------------------------------------
--spec schedule_replica_eviction_by_view(session:id(), oneprovider:id(),
-    undefined | oneprovider:id(), od_space:id(),
-    transfer:view_name(), transfer:query_view_params()) ->
-    {ok, transfer:id()} | error_reply().
-schedule_replica_eviction_by_view(SessId, EvictingProviderId, ReplicatingProviderId,
-    SpaceId, ViewName, QueryViewParams
-) ->
-    ?run(fun() -> lfm_files:schedule_replica_eviction_by_view(
-        SessId, EvictingProviderId, ReplicatingProviderId,
-        SpaceId, ViewName, QueryViewParams
-    ) end).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Creates a new file
-%% @end
-%%--------------------------------------------------------------------
--spec create(session:id(), Path :: file_meta:path()) ->
+-spec resolve_symlink(session:id(), file_key()) ->
+    {ok, file_id:file_guid()} | error_reply().
+resolve_symlink(SessId, FileKey) ->
+    ?run(lfm_attrs:resolve_symlink(SessId, FileKey)).
+
+
+%%%===================================================================
+%%% Regular file specific operations
+%%%===================================================================
+
+
+-spec create(session:id(), file_meta:path()) ->
     {ok, fslogic_worker:file_guid()} | error_reply().
 create(SessId, Path) ->
-    ?run(fun() -> lfm_files:create(SessId, Path) end).
+    ?run(lfm_files:create(SessId, Path)).
 
--spec create(session:id(), Path :: file_meta:path(),
-    Mode :: file_meta:posix_permissions()) ->
+
+-spec create(session:id(), file_meta:path(), file_meta:posix_permissions()) ->
     {ok, fslogic_worker:file_guid()} | error_reply().
 create(SessId, Path, Mode) ->
-    ?run(fun() -> lfm_files:create(SessId, Path, Mode) end).
+    ?run(lfm_files:create(SessId, Path, Mode)).
 
--spec create(session:id(), ParentGuid :: fslogic_worker:file_guid(),
-    Name :: file_meta:name(), Mode :: undefined | file_meta:posix_permissions()) ->
+
+-spec create(
+    session:id(),
+    fslogic_worker:file_guid(),
+    file_meta:name(),
+    undefined | file_meta:posix_permissions()
+) ->
     {ok, fslogic_worker:file_guid()} | error_reply().
 create(SessId, ParentGuid, Name, Mode) ->
-    ?run(fun() -> lfm_files:create(SessId, ParentGuid, Name, Mode) end).
+    ?run(lfm_files:create(SessId, ParentGuid, Name, Mode)).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Creates and opens a new file
-%% @end
-%%--------------------------------------------------------------------
--spec create_and_open(session:id(), Path :: file_meta:path(), fslogic_worker:open_flag()) ->
-    {ok, {fslogic_worker:file_guid(), handle()}}| error_reply().
-create_and_open(SessId, Path, OpenFlag) ->
-    ?run(fun() -> lfm_files:create_and_open(SessId, Path, OpenFlag) end).
 
--spec create_and_open(session:id(), Path :: file_meta:path(),
-    Mode :: undefined | file_meta:posix_permissions(), fslogic_worker:open_flag()) ->
-    {ok, {fslogic_worker:file_guid(), handle()}}
-    | error_reply().
+-spec create_and_open(
+    session:id(),
+    file_meta:path(),
+    undefined | file_meta:posix_permissions(),
+    fslogic_worker:open_flag()
+) ->
+    {ok, {fslogic_worker:file_guid(), handle()}} | error_reply().
 create_and_open(SessId, Path, Mode, OpenFlag) ->
-    ?run(fun() -> lfm_files:create_and_open(SessId, Path, Mode, OpenFlag) end).
+    ?run(lfm_files:create_and_open(SessId, Path, Mode, OpenFlag)).
 
--spec create_and_open(session:id(), ParentGuid :: fslogic_worker:file_guid(),
-    Name :: file_meta:name(), Mode :: undefined | file_meta:posix_permissions(),
-    fslogic_worker:open_flag()) ->
-    {ok, {fslogic_worker:file_guid(), handle()}}
-    | error_reply().
+
+-spec create_and_open(
+    session:id(),
+    fslogic_worker:file_guid(),
+    file_meta:name(),
+    undefined | file_meta:posix_permissions(),
+    fslogic_worker:open_flag()
+) ->
+    {ok, {fslogic_worker:file_guid(), handle()}} | error_reply().
 create_and_open(SessId, ParentGuid, Name, Mode, OpenFlag) ->
-    ?run(fun() -> lfm_files:create_and_open(SessId, ParentGuid, Name, Mode, OpenFlag) end).
+    ?run(lfm_files:create_and_open(SessId, ParentGuid, Name, Mode, OpenFlag)).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Opens a file in selected mode and returns a file handle used to read or write.
-%% @end
-%%--------------------------------------------------------------------
--spec open(session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
-    OpenType :: helpers:open_flag()) ->
+
+-spec open(session:id(), file_key(), helpers:open_flag()) ->
     {ok, handle()} | error_reply().
 open(SessId, FileKey, OpenType) ->
-    ?run(fun() -> lfm_files:open(SessId, FileKey, OpenType) end).
+    ?run(lfm_files:open(SessId, FileKey, OpenType)).
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -438,80 +365,45 @@ open(SessId, FileKey, OpenType) ->
 %% (e.g. client abruptly closes connection).
 %% @end
 %%--------------------------------------------------------------------
--spec monitored_open(session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
-    OpenType :: helpers:open_flag()) ->
+-spec monitored_open(session:id(), file_key(), helpers:open_flag()) ->
     {ok, handle()} | error_reply().
 monitored_open(SessId, FileKey, OpenType) ->
-    ?run(fun() ->
-        {ok, FileHandle} = lfm_files:open(SessId, FileKey, OpenType),
-        case process_handles:add(FileHandle) of
-            ok ->
-                {ok, FileHandle};
-            {error, _} = Error ->
-                ?error("Failed to perform 'monitored_open' due to ~p", [Error]),
-                monitored_release(FileHandle),
-                {error, ?EAGAIN}
-        end
-    end).
+    ?run(lfm_files:monitored_open(SessId, FileKey, OpenType)).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns location to file.
-%% @end
-%%--------------------------------------------------------------------
--spec get_file_location(session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
-    {ok, file_location:record()} | lfm:error_reply().
-get_file_location(SessId, FileKey) ->
-    ?run(fun() -> lfm_files:get_file_location(SessId, FileKey) end).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Gets necessary data from handle and executes fsync/3
-%% @end
-%%--------------------------------------------------------------------
--spec fsync(FileHandle :: handle()) -> ok | {error, Reason :: term()}.
+-spec fsync(handle()) -> ok | {error, Reason :: term()}.
 fsync(FileHandle) ->
-    ?run(fun() -> lfm_files:fsync(FileHandle) end).
+    ?run(lfm_files:fsync(FileHandle)).
+
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Flushes waiting events for session connected with handler.
 %% @end
 %%--------------------------------------------------------------------
--spec fsync(session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
-    oneprovider:id()) -> ok | {error, Reason :: term()}.
+-spec fsync(session:id(), file_key(), oneprovider:id()) ->
+    ok | {error, Reason :: term()}.
 fsync(SessId, FileKey, ProviderId) ->
-    ?run(fun() -> lfm_files:fsync(SessId, FileKey, ProviderId) end).
+    ?run(lfm_files:fsync(SessId, FileKey, ProviderId)).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Writes data to a file. Returns number of written bytes.
-%% @end
-%%--------------------------------------------------------------------
+
 -spec write(FileHandle :: handle(), Offset :: integer(), Buffer :: binary()) ->
     {ok, NewHandle :: handle(), integer()} | error_reply().
 write(FileHandle, Offset, Buffer) ->
-    ?run(fun() -> lfm_files:write(FileHandle, Offset, Buffer) end).
+    ?run(lfm_files:write(FileHandle, Offset, Buffer)).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Reads requested part of a file.
-%% @end
-%%--------------------------------------------------------------------
+
 -spec read(FileHandle :: handle(), Offset :: integer(), MaxSize :: integer()) ->
     {ok, NewHandle :: handle(), binary()} | error_reply().
 read(FileHandle, Offset, MaxSize) ->
-    ?run(fun() -> lfm_files:read(FileHandle, Offset, MaxSize) end).
+    ?run(lfm_files:read(FileHandle, Offset, MaxSize)).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Reads requested part of a file with size check.
-%% @end
-%%--------------------------------------------------------------------
+
 -spec check_size_and_read(FileHandle :: handle(), Offset :: integer(), MaxSize :: integer()) ->
     {ok, NewHandle :: handle(), binary()} | error_reply().
 check_size_and_read(FileHandle, Offset, MaxSize) ->
-    ?run(fun() -> lfm_files:check_size_and_read(FileHandle, Offset, MaxSize) end).
+    ?run(lfm_files:check_size_and_read(FileHandle, Offset, MaxSize)).
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -521,28 +413,19 @@ check_size_and_read(FileHandle, Offset, MaxSize) ->
 -spec silent_read(FileHandle :: handle(), Offset :: integer(), MaxSize :: integer()) ->
     {ok, NewHandle :: handle(), binary()} | error_reply().
 silent_read(FileHandle, Offset, MaxSize) ->
-    ?run(fun() ->
-        lfm_files:silent_read(FileHandle, Offset, MaxSize)
-    end).
+    ?run(lfm_files:silent_read(FileHandle, Offset, MaxSize)).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Truncates a file.
-%% @end
-%%--------------------------------------------------------------------
--spec truncate(session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
+
+-spec truncate(session:id(), file_key(),
     Size :: non_neg_integer()) -> ok | error_reply().
 truncate(SessId, FileKey, Size) ->
-    ?run(fun() -> lfm_files:truncate(SessId, FileKey, Size) end).
+    ?run(lfm_files:truncate(SessId, FileKey, Size)).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Releases previously opened  file.
-%% @end
-%%--------------------------------------------------------------------
+
 -spec release(handle()) -> ok | error_reply().
 release(FileHandle) ->
-    ?run(fun() -> lfm_files:release(FileHandle) end).
+    ?run(lfm_files:release(FileHandle)).
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -553,183 +436,237 @@ release(FileHandle) ->
 %%--------------------------------------------------------------------
 -spec monitored_release(handle()) -> ok | error_reply().
 monitored_release(FileHandle) ->
-    ?run(fun() ->
-        Result = lfm_files:release(FileHandle),
-        process_handles:remove(FileHandle),
-        Result
-    end).
+    ?run(lfm_files:monitored_release(FileHandle)).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns location to file.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_file_location(session:id(), file_key()) ->
+    {ok, file_location:record()} | lfm:error_reply().
+get_file_location(SessId, FileKey) ->
+    ?run(lfm_files:get_file_location(SessId, FileKey)).
+
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns block map for a file.
 %% @end
 %%--------------------------------------------------------------------
--spec get_file_distribution(session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
+-spec get_file_distribution(session:id(), file_key()) ->
     {ok, Blocks :: [[non_neg_integer()]]} | error_reply().
 get_file_distribution(SessId, FileKey) ->
-    ?run(fun() -> lfm_files:get_file_distribution(SessId, FileKey) end).
+    ?run(lfm_files:get_file_distribution(SessId, FileKey)).
+
+
+%%%===================================================================
+%%% Directory specific operations
+%%%===================================================================
+
+
+-spec mkdir(session:id(), file_meta:path(), file_meta:posix_permissions() | undefined) ->
+    {ok, DirGUID :: fslogic_worker:file_guid()} | error_reply().
+mkdir(SessId, Path, Mode) ->
+    ?run(lfm_dirs:mkdir(SessId, Path, Mode)).
+
+
+-spec mkdir(
+    session:id(),
+    fslogic_worker:file_guid(),
+    file_meta:name(),
+    file_meta:posix_permissions() | undefined
+) ->
+    {ok, DirGuid :: fslogic_worker:file_guid()} | error_reply().
+mkdir(SessId, ParentGuid, Name, Mode) ->
+    ?run(lfm_dirs:mkdir(SessId, ParentGuid, Name, Mode)).
+
+
+-spec get_children(session:id(), file_key(), dir_req:list_opts()) ->
+    {ok, [{fslogic_worker:file_guid(), file_meta:name()}], file_meta:list_extended_info()} | error_reply().
+get_children(SessId, FileKey, ListOpts) ->
+    ?run(lfm_dirs:get_children(SessId, FileKey, ListOpts)).
+
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Changes the permissions of a file.
+%% Gets basic file attributes (see file_attr.hrl) of a child with given name.
 %% @end
 %%--------------------------------------------------------------------
--spec set_perms(session:id(), FileKey :: file_key(),
-    NewPerms :: file_meta:posix_permissions()) ->
+-spec get_child_attr(session:id(), fslogic_worker:file_guid(), file_meta:name()) ->
+    {ok, #file_attr{}} | error_reply().
+get_child_attr(SessId, ParentGuid, ChildName)  ->
+    ?run(lfm_dirs:get_child_attr(SessId, ParentGuid, ChildName)).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Gets file basic attributes (see file_attr.hrl) for each directory children.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_children_attrs(session:id(), file_key(), dir_req:list_opts()) ->
+    {ok, [#file_attr{}], file_meta:list_extended_info()} | error_reply().
+get_children_attrs(SessId, FileKey, ListOpts) ->
+    get_children_attrs(SessId, FileKey, ListOpts, false, false).
+
+
+-spec get_children_attrs(session:id(), file_key(), dir_req:list_opts(), boolean(), boolean()) ->
+    {ok, [#file_attr{}], file_meta:list_extended_info()} | error_reply().
+get_children_attrs(SessId, FileKey, ListOpts, IncludeReplicationStatus, IncludeHardlinkCount) ->
+    ?run(lfm_dirs:get_children_attrs(SessId, FileKey, ListOpts, IncludeReplicationStatus, IncludeHardlinkCount)).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Gets file details (see file_details.hrl) for each directory children.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_children_details(session:id(), file_key(), dir_req:list_opts()) ->
+    {ok, [lfm_attrs:file_details()], file_meta:list_extended_info()} | error_reply().
+get_children_details(SessId, FileKey, ListOpts) ->
+    ?run(lfm_dirs:get_children_details(SessId, FileKey, ListOpts)).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Gets file basic attributes (see file_attr.hrl) for each regular file 
+%% that is in a subtree of given file.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_files_recursively(session:id(), file_key(), file_meta:path(), non_neg_integer()) ->
+    {ok, [{file_meta:path(), lfm_attrs:file_attributes()}], boolean()} | error_reply().
+get_files_recursively(SessId, FileKey, StartAfter, Limit) ->
+    ?run(lfm_dirs:get_files_recursively(SessId, FileKey, StartAfter, Limit)).
+
+
+-spec get_children_count(session:id(), file_key()) ->
+    {ok, integer()} | error_reply().
+get_children_count(SessId, FileKey) ->
+    ?run(lfm_dirs:get_children_count(SessId, FileKey)).
+
+
+%%%===================================================================
+%%% Permissions related operations
+%%%===================================================================
+
+
+-spec set_perms(session:id(), file_key(), file_meta:posix_permissions()) ->
     ok | error_reply().
 set_perms(SessId, FileKey, NewPerms) ->
-    ?run(fun() -> lfm_perms:set_perms(SessId, FileKey, NewPerms) end).
+    ?run(lfm_perms:set_perms(SessId, FileKey, NewPerms)).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Checks if current user has given permissions for given file.
-%% @end
-%%--------------------------------------------------------------------
+
 -spec check_perms(session:id(), file_key(), helpers:open_flag()) ->
     ok | error_reply().
 check_perms(SessId, FileKey, PermType) ->
-    ?run(fun() -> lfm_perms:check_perms(SessId, FileKey, PermType) end).
+    ?run(lfm_perms:check_perms(SessId, FileKey, PermType)).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns file's Access Control List.
-%% @end
-%%--------------------------------------------------------------------
--spec get_acl(session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
+
+-spec set_acl(session:id(), file_key(), acl:acl()) ->
+    ok | error_reply().
+set_acl(SessId, FileKey, EntityList) ->
+    ?run(lfm_perms:set_acl(SessId, FileKey, EntityList)).
+
+
+-spec get_acl(session:id(), file_key()) ->
     {ok, acl:acl()} | error_reply().
 get_acl(SessId, FileKey) ->
-    ?run(fun() -> lfm_perms:get_acl(SessId, FileKey) end).
+    ?run(lfm_perms:get_acl(SessId, FileKey)).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Updates file's Access Control List.
-%% @end
-%%--------------------------------------------------------------------
--spec set_acl(session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
-    acl:acl()) -> ok | error_reply().
-set_acl(SessId, FileKey, EntityList) ->
-    ?run(fun() -> lfm_perms:set_acl(SessId, FileKey, EntityList) end).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Removes file's Access Control List.
-%% @end
-%%--------------------------------------------------------------------
--spec remove_acl(session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
+-spec remove_acl(session:id(), FileKey :: file_key()) ->
     ok | error_reply().
 remove_acl(SessId, FileKey) ->
-    ?run(fun() -> lfm_perms:remove_acl(SessId, FileKey) end).
+    ?run(lfm_perms:remove_acl(SessId, FileKey)).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns file attributes (see file_attr.hrl).
-%% @end
-%%--------------------------------------------------------------------
--spec stat(session:id(), file_key()) ->
-    {ok, lfm_attrs:file_attributes()} | error_reply().
-stat(SessId, FileKey) ->
-    ?run(fun() -> lfm_attrs:stat(SessId, FileKey) end).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns fs_stats() containing support e.g. size and occupied size.
-%% @end
-%%--------------------------------------------------------------------
--spec get_fs_stats(session:id(), file_key()) ->
-    {ok, lfm_attrs:fs_stats()} | error_reply().
-get_fs_stats(SessId, FileKey) ->
-    ?run(fun() -> lfm_attrs:get_fs_stats(SessId, FileKey) end).
+%%%===================================================================
+%%% Custom metadata related operations
+%%%===================================================================
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns file details (see file_details.hrl).
-%% @end
-%%--------------------------------------------------------------------
--spec get_details(session:id(), file_key()) ->
-    {ok, lfm_attrs:file_details()} | error_reply().
-get_details(SessId, FileKey) ->
-    ?run(fun() -> lfm_attrs:get_details(SessId, FileKey) end).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Changes file timestamps.
-%% @end
-%%--------------------------------------------------------------------
--spec update_times(session:id(), file_key(), ATime :: file_meta:time() | undefined,
-    MTime :: file_meta:time() | undefined, CTime :: file_meta:time() | undefined) ->
+-spec has_custom_metadata(session:id(), file_key()) -> {ok, boolean()} | error_reply().
+has_custom_metadata(SessId, FileKey) ->
+    ?run(lfm_attrs:has_custom_metadata(SessId, FileKey)).
+
+
+-spec set_metadata(
+    session:id(),
+    file_key(),
+    custom_metadata:type(),
+    custom_metadata:value(),
+    custom_metadata:query()
+) ->
     ok | error_reply().
-update_times(SessId, FileKey, ATime, MTime, CTime) ->
-    ?run(fun() -> lfm_attrs:update_times(SessId, FileKey, ATime, MTime, CTime) end).
+set_metadata(SessId, FileKey, Type, Value, Query) ->
+    ?run(lfm_attrs:set_metadata(SessId, FileKey, Type, Value, Query)).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns file's extended attribute by key.
-%% @end
-%%--------------------------------------------------------------------
--spec get_xattr(session:id(), file_key(), custom_metadata:name(), boolean()) ->
-    {ok, #xattr{}} | error_reply().
-get_xattr(SessId, FileKey, XattrName, Inherited) ->
-    ?run(fun() -> lfm_attrs:get_xattr(SessId, FileKey, XattrName, Inherited) end).
 
-%%--------------------------------------------------------------------
-%% @equiv set_xattr(SessId, FileKey, Xattr, false, false).
-%% @end
-%%--------------------------------------------------------------------
+-spec get_metadata(
+    session:id(),
+    file_key(),
+    custom_metadata:type(),
+    custom_metadata:query(),
+    boolean()
+) ->
+    {ok, custom_metadata:value()} | error_reply().
+get_metadata(SessId, FileKey, Type, Query, Inherited) ->
+    ?run(lfm_attrs:get_metadata(SessId, FileKey, Type, Query, Inherited)).
+
+
+-spec remove_metadata(session:id(), file_key(), custom_metadata:type()) ->
+    ok | error_reply().
+remove_metadata(SessId, FileKey, Type) ->
+    ?run(lfm_attrs:remove_metadata(SessId, FileKey, Type)).
+
+
+-spec list_xattr(session:id(), file_key(), boolean(), boolean()) ->
+    {ok, [custom_metadata:name()]} | error_reply().
+list_xattr(SessId, FileKey, Inherited, ShowInternal) ->
+    ?run(lfm_attrs:list_xattr(SessId, FileKey, Inherited, ShowInternal)).
+
+
 -spec set_xattr(session:id(), file_key(), #xattr{}) ->
     ok | error_reply().
 set_xattr(SessId, FileKey, Xattr) ->
     set_xattr(SessId, FileKey, Xattr, false, false).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Updates file's extended attribute by key.
-%% @end
-%%--------------------------------------------------------------------
--spec set_xattr(session:id(), file_key(), #xattr{}, Create :: boolean(), Replace :: boolean()) ->
+
+-spec set_xattr(session:id(), file_key(), #xattr{}, boolean(), boolean()) ->
     ok | error_reply().
 set_xattr(SessId, FileKey, Xattr, Create, Replace) ->
-    ?run(fun() -> lfm_attrs:set_xattr(SessId, FileKey, Xattr, Create, Replace) end).
+    ?run(lfm_attrs:set_xattr(SessId, FileKey, Xattr, Create, Replace)).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Removes file's extended attribute by key.
-%% @end
-%%--------------------------------------------------------------------
+
+-spec get_xattr(session:id(), file_key(), custom_metadata:name(), boolean()) ->
+    {ok, #xattr{}} | error_reply().
+get_xattr(SessId, FileKey, XattrName, Inherited) ->
+    ?run(lfm_attrs:get_xattr(SessId, FileKey, XattrName, Inherited)).
+
+
 -spec remove_xattr(session:id(), file_key(), custom_metadata:name()) ->
     ok | error_reply().
 remove_xattr(SessId, FileKey, XattrName) ->
-    ?run(fun() -> lfm_attrs:remove_xattr(SessId, FileKey, XattrName) end).
+    ?run(lfm_attrs:remove_xattr(SessId, FileKey, XattrName)).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns complete list of extended attributes of a file.
-%% @end
-%%--------------------------------------------------------------------
--spec list_xattr(session:id(), file_key(), boolean(), boolean()) ->
-    {ok, [custom_metadata:name()]} | error_reply().
-list_xattr(SessId, FileKey, Inherited, ShowInternal) ->
-    ?run(fun() -> lfm_attrs:list_xattr(SessId, FileKey, Inherited, ShowInternal) end).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns encoding suitable for rest transfer.
-%% @end
-%%--------------------------------------------------------------------
+%%%===================================================================
+%%% CDMI related operations
+%%%===================================================================
+
+
 -spec get_transfer_encoding(session:id(), file_key()) ->
     {ok, custom_metadata:transfer_encoding()} | error_reply().
 get_transfer_encoding(SessId, FileKey) ->
-    ?run(fun() -> lfm_attrs:get_transfer_encoding(SessId, FileKey) end).
+    ?run(lfm_attrs:get_transfer_encoding(SessId, FileKey)).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Sets encoding suitable for rest transfer.
-%% @end
-%%--------------------------------------------------------------------
+
 -spec set_transfer_encoding(session:id(), file_key(), custom_metadata:transfer_encoding()) ->
     ok | error_reply().
 set_transfer_encoding(SessId, FileKey, Encoding) ->
-    ?run(fun() ->
-        lfm_attrs:set_transfer_encoding(SessId, FileKey, Encoding) end).
+    ?run(lfm_attrs:set_transfer_encoding(SessId, FileKey, Encoding)).
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -740,7 +677,8 @@ set_transfer_encoding(SessId, FileKey, Encoding) ->
 -spec get_cdmi_completion_status(session:id(), file_key()) ->
     {ok, custom_metadata:cdmi_completion_status()} | error_reply().
 get_cdmi_completion_status(SessId, FileKey) ->
-    ?run(fun() -> lfm_attrs:get_cdmi_completion_status(SessId, FileKey) end).
+    ?run(lfm_attrs:get_cdmi_completion_status(SessId, FileKey)).
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -751,88 +689,24 @@ get_cdmi_completion_status(SessId, FileKey) ->
 -spec set_cdmi_completion_status(session:id(), file_key(), custom_metadata:cdmi_completion_status()) ->
     ok | error_reply().
 set_cdmi_completion_status(SessId, FileKey, CompletionStatus) ->
-    ?run(fun() ->
-        lfm_attrs:set_cdmi_completion_status(SessId, FileKey, CompletionStatus) end).
+    ?run(lfm_attrs:set_cdmi_completion_status(SessId, FileKey, CompletionStatus)).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns mimetype of file.
-%% @end
-%%--------------------------------------------------------------------
+
 -spec get_mimetype(session:id(), file_key()) ->
     {ok, custom_metadata:mimetype()} | error_reply().
 get_mimetype(SessId, FileKey) ->
-    ?run(fun() -> lfm_attrs:get_mimetype(SessId, FileKey) end).
+    ?run(lfm_attrs:get_mimetype(SessId, FileKey)).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Sets mimetype of file.
-%% @end
-%%--------------------------------------------------------------------
+
 -spec set_mimetype(session:id(), file_key(), custom_metadata:mimetype()) ->
     ok | error_reply().
 set_mimetype(SessId, FileKey, Mimetype) ->
-    ?run(fun() -> lfm_attrs:set_mimetype(SessId, FileKey, Mimetype) end).
+    ?run(lfm_attrs:set_mimetype(SessId, FileKey, Mimetype)).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Creates a share for given file. File can be shared with anyone or
-%% only specified group of users.
-%% @end
-%%--------------------------------------------------------------------
--spec create_share(session:id(), fslogic_worker:file_guid_or_path(), od_share:name(), od_share:description()) ->
-    {ok, od_share:id()} | error_reply().
-create_share(SessId, FileKey, Name, Description) ->
-    ?run(fun() -> lfm_shares:create_share(SessId, FileKey, Name, Description) end).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Removes file share by ShareID.
-%% @end
-%%--------------------------------------------------------------------
--spec remove_share(session:id(), od_share:id()) -> ok | error_reply().
-remove_share(SessId, ShareID) ->
-    ?run(fun() -> lfm_shares:remove_share(SessId, ShareID) end).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Get metadata linked with file
-%% @end
-%%--------------------------------------------------------------------
--spec get_metadata(session:id(), file_key(), custom_metadata:type(),
-    custom_metadata:query(), boolean()) ->
-    {ok, custom_metadata:value()} | error_reply().
-get_metadata(SessId, FileKey, Type, Query, Inherited) ->
-    ?run(fun() -> lfm_attrs:get_metadata(SessId, FileKey, Type, Query, Inherited) end).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Set metadata linked with file
-%% @end
-%%--------------------------------------------------------------------
--spec set_metadata(session:id(), file_key(), custom_metadata:type(),
-    custom_metadata:value(), custom_metadata:query()) -> ok | error_reply().
-set_metadata(SessId, FileKey, Type, Value, Query) ->
-    ?run(fun() -> lfm_attrs:set_metadata(SessId, FileKey, Type, Value, Query) end).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Check if file has custom metadata defined
-%% @end
-%%--------------------------------------------------------------------
--spec has_custom_metadata(session:id(), file_key()) -> {ok, boolean()} | error_reply().
-has_custom_metadata(SessId, FileKey) ->
-    ?run(fun() -> lfm_attrs:has_custom_metadata(SessId, FileKey) end).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Remove metadata linked with file
-%% @end
-%%--------------------------------------------------------------------
--spec remove_metadata(session:id(), file_key(), custom_metadata:type()) ->
-    ok | error_reply().
-remove_metadata(SessId, FileKey, Type) ->
-    ?run(fun() -> lfm_attrs:remove_metadata(SessId, FileKey, Type) end).
+%%%===================================================================
+%%% Utility functions
+%%%===================================================================
 
 
 %%--------------------------------------------------------------------
@@ -849,67 +723,3 @@ check_result({ok, _, _} = Res) -> Res;
 check_result({ok, _, _, _} = Res) -> Res;
 check_result(?ERROR_NOT_FOUND) -> throw(?ERROR_NOT_FOUND);
 check_result({error, Errno}) -> throw(?ERROR_POSIX(Errno)).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Adds new qos_entry for file or directory.
-%% @end
-%%--------------------------------------------------------------------
--spec add_qos_entry(session:id(), file_key(), qos_expression:infix() | qos_expression:expression(),
-    qos_entry:replicas_num()) -> {ok, qos_entry:id()} | error_reply().
-add_qos_entry(SessId, FileKey, Expression, ReplicasNum) ->
-    add_qos_entry(SessId, FileKey, Expression, ReplicasNum, user_defined).
-
--spec add_qos_entry(session:id(), file_key(), qos_expression:infix() | qos_expression:expression(),
-    qos_entry:replicas_num(), qos_entry:type()) -> {ok, qos_entry:id()} | error_reply().
-add_qos_entry(SessId, FileKey, Expression, ReplicasNum, EntryType) ->
-    ?run(fun() -> lfm_qos:add_qos_entry(SessId, FileKey, Expression, ReplicasNum, EntryType) end).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Gets effective QoS for file or directory.
-%% @end
-%%--------------------------------------------------------------------
--spec get_effective_file_qos(session:id(), file_key()) ->
-    {ok, {#{qos_entry:id() => qos_status:summary()}, file_qos:assigned_entries()}} | error_reply().
-get_effective_file_qos(SessId, FileKey) ->
-    ?run(fun() -> lfm_qos:get_effective_file_qos(SessId, FileKey) end).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Get details of specified qos_entry.
-%% @end
-%%--------------------------------------------------------------------
--spec get_qos_entry(session:id(), qos_entry:id()) ->
-    {ok, qos_entry:record()} | error_reply().
-get_qos_entry(SessId, QosEntryId) ->
-    ?run(fun() -> lfm_qos:get_qos_entry(SessId, QosEntryId) end).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Remove qos_entry.
-%% @end
-%%--------------------------------------------------------------------
--spec remove_qos_entry(session:id(), qos_entry:id()) -> ok | error_reply().
-remove_qos_entry(SessId, QosEntryId) ->
-    ?run(fun() -> lfm_qos:remove_qos_entry(SessId, QosEntryId) end).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Check status of QoS requirements defined in qos_entry document.
-%% @end
-%%--------------------------------------------------------------------
--spec check_qos_status(session:id(), qos_entry:id()) -> {ok, qos_status:summary()} | error_reply().
-check_qos_status(SessId, QosEntryId) ->
-    ?run(fun() -> lfm_qos:check_qos_status(SessId, QosEntryId) end).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Check status of QoS requirements defined in qos_entry document/documents
-%% for given file.
-%% @end
-%%--------------------------------------------------------------------
--spec check_qos_status(session:id(), qos_entry:id(), file_key()) ->
-    {ok, qos_status:summary()} | error_reply().
-check_qos_status(SessId, QosEntryId, FileKey) ->
-    ?run(fun() -> lfm_qos:check_qos_status(SessId, QosEntryId, FileKey) end).

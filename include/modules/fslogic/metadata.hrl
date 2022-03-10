@@ -13,7 +13,7 @@
 -ifndef(METADATA_HRL).
 -define(METADATA_HRL, 1).
 
--include("modules/auth/acl.hrl").
+-include("modules/fslogic/acl.hrl").
 
 -define(ONEDATA_PREFIX, <<"onedata_">>).
 -define(ONEDATA_PREFIX_STR, "onedata_").
@@ -32,5 +32,10 @@
 -define(RDF_METADATA_KEY, <<?ONEDATA_PREFIX_STR, "rdf">>).
 
 -define(METADATA_INTERNAL_PREFIXES, [?ONEDATA_PREFIX, ?CDMI_PREFIX]).
+
+%% Keys of special archivisation attrs
+-define(ARCHIVISATION_CONTENT_CHECKSUM_KEY, <<?ONEDATA_PREFIX_STR, "archivisation.checksum.md5">>).
+-define(ARCHIVISATION_METADATA_CHECKSUM_KEY, <<?ONEDATA_PREFIX_STR, "archivisation.metadata.checksum.md5">>).
+-define(ARCHIVISATION_CHILDREN_COUNT_KEY, <<?ONEDATA_PREFIX_STR, "archivisation.children.count">>).
 
 -endif.

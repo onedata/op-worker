@@ -39,7 +39,7 @@ all() ->
 stress_test(Config) ->
     ?STRESS(Config,[
             {description, "Main stress test function. Links together all cases to be done multiple times as one continous test."},
-            {success_rate, 90}, % TODO - check error i proxy test
+            {success_rate, 100},
             {config, [{name, stress}, {description, "Basic config for stress test"}]}
         ]
     ).
@@ -114,7 +114,7 @@ init_per_suite(Config) ->
 
 init_per_testcase(stress_test, Config) ->
     ssl:start(),
-    hackney:start(),
+    application:ensure_all_started(hackney),
     initializer:disable_quota_limit(Config),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config, true),
     lfm_proxy:init(ConfigWithSessionInfo);
@@ -127,7 +127,7 @@ end_per_testcase(stress_test, Config) ->
     %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
     initializer:clean_test_users_and_spaces_no_validate(Config),
     initializer:unload_quota_mocks(Config),
-    hackney:stop(),
+    application:stop(hackney),
     ssl:stop();
 
 end_per_testcase(_Case, Config) ->

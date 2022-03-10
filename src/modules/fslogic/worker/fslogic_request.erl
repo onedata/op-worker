@@ -38,6 +38,10 @@ get_file_partial_ctx(UserCtx, #fuse_request{fuse_request = #resolve_guid{path = 
     file_partial_ctx:new_by_logical_path(UserCtx, Path);
 get_file_partial_ctx(UserCtx, #fuse_request{fuse_request = #resolve_guid_by_canonical_path{path = Path}}) ->
     file_partial_ctx:new_by_canonical_path(UserCtx, Path);
+get_file_partial_ctx(_UserCtx, #fuse_request{fuse_request = #resolve_guid_by_relative_path{root_file = RelRootGuid}}) ->
+    file_partial_ctx:new_by_guid(RelRootGuid);
+get_file_partial_ctx(_UserCtx, #fuse_request{fuse_request = #ensure_dir{root_file = RelRootGuid}}) ->
+    file_partial_ctx:new_by_guid(RelRootGuid);
 get_file_partial_ctx(_UserCtx, #fuse_request{fuse_request = #file_request{context_guid = FileGuid}}) ->
     file_partial_ctx:new_by_guid(FileGuid);
 get_file_partial_ctx(_UserCtx, #fuse_request{fuse_request = #get_fs_stats{file_id = FileGuid}}) ->
@@ -65,14 +69,18 @@ get_target_providers(UserCtx, File, #fuse_request{
     fuse_request = #resolve_guid{}
 }) ->
     get_target_providers_for_attr_req(UserCtx, File);
+get_target_providers(UserCtx, File, #fuse_request{
+    fuse_request = #resolve_guid_by_relative_path{}
+}) ->
+    get_target_providers_for_attr_req(UserCtx, File);
+get_target_providers(UserCtx, File, #fuse_request{
+    fuse_request = #ensure_dir{}
+}) ->
+    get_target_providers_for_attr_req(UserCtx, File);
 get_target_providers(UserCtx, File, #fuse_request{fuse_request = #file_request{
     file_request = #get_file_attr{}
 }}) ->
     get_target_providers_for_attr_req(UserCtx, File);
-get_target_providers(_UserCtx, _File, #provider_request{provider_request = #schedule_file_replication{}}) ->
-    [oneprovider:get_id()];
-get_target_providers(_UserCtx, _File, #provider_request{provider_request = #schedule_replica_invalidation{}}) ->
-    [oneprovider:get_id()];
 get_target_providers(UserCtx, File, _Req) ->
     get_target_providers_for_file(UserCtx, File).
 
@@ -89,7 +97,6 @@ get_target_providers(UserCtx, File, _Req) ->
 -spec get_target_providers_for_attr_req(user_ctx:ctx(), file_partial_ctx:ctx()) ->
     [oneprovider:id()].
 get_target_providers_for_attr_req(UserCtx, FileCtx) ->
-    %todo TL handle guids stored in file_force_proxy
     case file_partial_ctx:is_space_dir_const(FileCtx) of
         true ->
             [oneprovider:get_id()];

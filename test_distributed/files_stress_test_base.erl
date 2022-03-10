@@ -15,6 +15,7 @@
 
 -include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include_lib("cluster_worker/include/elements/worker_host/worker_protocol.hrl").
 -include_lib("cluster_worker/include/modules/datastore/ha_datastore.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -24,8 +25,7 @@
 
 %% export for ct
 -export([init_per_suite/1, init_per_testcase/2, end_per_testcase/2, end_per_suite/1]).
--export([many_files_creation_tree_test_base/2, many_files_creation_tree_test_base/3,
-    many_files_creation_tree_test_base/4, many_files_creation_tree_test_base/5, single_dir_creation_test_base/2]).
+-export([many_files_creation_tree_test_base/2, single_dir_creation_test_base/2]).
 -export([create_single_call/4, get_final_ans_tree/10, get_param_value/2]).
 
 -define(TIMEOUT, timer:minutes(30)).
@@ -141,22 +141,19 @@ single_dir_creation_test_base(Config, Clear) ->
             get_final_ans(0,0,0,0,0,0,0,0,1)
     end.
 
-many_files_creation_tree_test_base(Config, WriteToFile) ->
-    many_files_creation_tree_test_base(Config, WriteToFile, false).
-
-many_files_creation_tree_test_base(Config, WriteToFile, CacheGUIDS) ->
-    many_files_creation_tree_test_base(Config, WriteToFile, CacheGUIDS, false).
-
-many_files_creation_tree_test_base(Config, WriteToFile, CacheGUIDS, SetMetadata) ->
-    many_files_creation_tree_test_base(Config, WriteToFile, CacheGUIDS, SetMetadata, 1).
-
-many_files_creation_tree_test_base(Config, WriteToFile, CacheGUIDS, SetMetadata, HA_Nodes) ->
+many_files_creation_tree_test_base(Config, Options) ->
     % Get test and environment description
     SpawnBegLevel = ?config(spawn_beg_level, Config),
     SpawnEndLevel = ?config(spawn_end_level, Config),
     DirLevel = ?config(dir_level, Config),
     DirsPerParent = ?config(dirs_per_parent, Config),
     FilesPerDir = ?config(files_per_dir, Config),
+
+    WriteToFile = maps:get(write_to_file, Options, false),
+    CacheGUIDS = maps:get(cache_guids, Options, false),
+    SetMetadata = maps:get(set_metadata, Options, false),
+    HA_Nodes = maps:get(ha_nodes, Options, 1),
+    UseHardlinks = maps:get(use_hardlinks, Options, false),
 
     % Setup test
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
@@ -200,8 +197,32 @@ many_files_creation_tree_test_base(Config, WriteToFile, CacheGUIDS, SetMetadata,
             Acc
     end, {ok, 0}, BaseDirs),
 
-    case BaseCreationAns of
-        ok ->
+    {ReferencedFilesStatus, ReferencedFilesMap} = case {UseHardlinks, get(referenced_files)} of
+        {false, _} ->
+            {ok, undefined};
+        {true, undefined} ->
+            {FoldlStatus, FoldlMap} = FoldlAns = lists:foldl(fun
+                (N, {ok, Acc}) ->
+                    ReferencedFileName = filename:join(["/", SpaceName, "ref_file" ++ integer_to_list(N)]),
+                    case lfm_proxy:create(Worker, SessId, ReferencedFileName) of
+                        {ok, ReferencedFileGuid} -> {ok, Acc#{N => ReferencedFileGuid}};
+                        Other -> Other
+                    end;
+                (_, ErrorAcc) ->
+                    ErrorAcc
+            end, {ok, #{}}, lists:seq(1, FilesPerDir)),
+
+            case FoldlStatus of
+                ok -> put(referenced_files, FoldlMap);
+                _ -> ok
+            end,
+            FoldlAns;
+        {true, Map} ->
+            {ok, Map}
+    end,
+
+    case {BaseCreationAns, ReferencedFilesStatus} of
+        {ok, ok} ->
             Dirs = create_dirs_names(BaseDir, SpawnBegLevel, DirLevel, DirsPerParent),
 
             % Function that creates test directories and measures performance
@@ -246,43 +267,50 @@ many_files_creation_tree_test_base(Config, WriteToFile, CacheGUIDS, SetMetadata,
                     F = <<D/binary, "/", N2/binary>>,
                     {ToAddV, Ans} = measure_execution_time(fun() ->
                         try
-                            {ok, FileGUID} = case CacheGUIDS of
-                                false ->
-                                    lfm_proxy:create(W, S, F);
-                                _ ->
-                                    lfm_proxy:create(W, S, GUID, N2, ?DEFAULT_FILE_PERMS)
-                            end,
-                            % Fill file if needed (depends on test config)
-                            case WriteToFile of
+                            case UseHardlinks of
                                 true ->
-                                    {ok, Handle} = case CacheGUIDS of
-                                        false ->
-                                            lfm_proxy:open(W, S, {path, F}, rdwr);
-                                        _ ->
-                                            lfm_proxy:open(W, S, {guid, FileGUID}, rdwr)
-                                    end,
-                                    WriteBuf = generator:gen_name(),
-                                    WriteSize = size(WriteBuf),
-                                    {ok, WriteSize} = lfm_proxy:write(W, Handle, 0, WriteBuf),
-                                    ok = lfm_proxy:close(W, Handle),
-                                    ok;
-                                _ ->
-                                    ok
-                            end,
-
-                            % set xattr metadata if needed (depends on test config)
-                            case SetMetadata of
-                                true ->
-                                    Xattr = #xattr{name = F, value = F},
-                                    case CacheGUIDS of
-                                        false ->
-                                            lfm_proxy:set_xattr(W, S, {path, F}, Xattr);
-                                        _ ->
-                                            lfm_proxy:set_xattr(W, S, {guid, FileGUID}, Xattr)
-                                    end,
+                                    INodeGuid = maps:get(N, ReferencedFilesMap),
+                                    {ok, _} = lfm_proxy:make_link(W, S, ?FILE_REF(INodeGuid), ?FILE_REF(GUID), N2),
                                     file_ok;
-                                _ ->
-                                    file_ok
+                                false ->
+                                    {ok, FileGUID} = case CacheGUIDS of
+                                        false ->
+                                            lfm_proxy:create(W, S, F);
+                                        _ ->
+                                            lfm_proxy:create(W, S, GUID, N2, ?DEFAULT_FILE_PERMS)
+                                    end,
+                                    % Fill file if needed (depends on test config)
+                                    case WriteToFile of
+                                        true ->
+                                            {ok, Handle} = case CacheGUIDS of
+                                                false ->
+                                                    lfm_proxy:open(W, S, {path, F}, rdwr);
+                                                _ ->
+                                                    lfm_proxy:open(W, S, ?FILE_REF(FileGUID), rdwr)
+                                            end,
+                                            WriteBuf = generator:gen_name(),
+                                            WriteSize = size(WriteBuf),
+                                            {ok, WriteSize} = lfm_proxy:write(W, Handle, 0, WriteBuf),
+                                            ok = lfm_proxy:close(W, Handle),
+                                            ok;
+                                        _ ->
+                                            ok
+                                    end,
+
+                                    % set xattr metadata if needed (depends on test config)
+                                    case SetMetadata of
+                                        true ->
+                                            Xattr = #xattr{name = F, value = F},
+                                            case CacheGUIDS of
+                                                false ->
+                                                    lfm_proxy:set_xattr(W, S, {path, F}, Xattr);
+                                                _ ->
+                                                    lfm_proxy:set_xattr(W, S, ?FILE_REF(FileGUID), Xattr)
+                                            end,
+                                            file_ok;
+                                        _ ->
+                                            file_ok
+                                    end
                             end
                         catch
                             E1:E2 ->
@@ -297,10 +325,10 @@ many_files_creation_tree_test_base(Config, WriteToFile, CacheGUIDS, SetMetadata,
             % Spawn processes that execute both test functions
             spawn_workers(Dirs, Fun, Fun2, SpawnBegLevel, SpawnEndLevel),
             LastLevelDirs = math:pow(DirsPerParent, DirLevel - SpawnBegLevel + 1),
-            DirsToDo = DirsPerParent * (1 - LastLevelDirs) / (1 - DirsPerParent),
+            DirsToProcess = DirsPerParent * (1 - LastLevelDirs) / (1 - DirsPerParent),
             % Gather test results
             GatherAns = gather_answers([{file_ok, {0,0}}, {dir_ok, {0,0}},
-                {other, {0,0}}], round(DirsToDo + LastLevelDirs)),
+                {other, {0,0}}], round(DirsToProcess + LastLevelDirs)),
 
             % Calculate and log output
             NewLevels = lists:foldl(fun
@@ -362,7 +390,7 @@ many_files_creation_tree_test_base(Config, WriteToFile, CacheGUIDS, SetMetadata,
 
             end;
         _ ->
-            ct:print("Dirs not ready"),
+            ct:print("Dirs or referenced files not ready"),
             timer:sleep(timer:seconds(60)),
             ?assertEqual(ok, BaseCreationAns),
             get_final_ans_tree(Worker, 0, 0, 0, 0, 0, 0,0, 1, 0)
@@ -373,14 +401,14 @@ many_files_creation_tree_test_base(Config, WriteToFile, CacheGUIDS, SetMetadata,
 %%%===================================================================
 
 init_per_suite(Config) ->
-    [{?LOAD_MODULES, [initializer, ?MODULE]} | Config].
+    [{?LOAD_MODULES, [initializer, ?MODULE, stress_test_traverse_pool]} | Config].
 
 end_per_suite(_Config) ->
     ok.
 
 init_per_testcase(stress_test, Config) ->
     ssl:start(),
-    hackney:start(),
+    application:ensure_all_started(hackney),
     initializer:disable_quota_limit(Config),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config, true),
 
@@ -394,7 +422,7 @@ end_per_testcase(stress_test, Config) ->
     %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
     initializer:clean_test_users_and_spaces_no_validate(Config),
     initializer:unload_quota_mocks(Config),
-    hackney:stop(),
+    application:stop(hackney),
     ssl:stop();
 
 end_per_testcase(_Case, Config) ->

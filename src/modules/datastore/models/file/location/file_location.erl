@@ -6,6 +6,9 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc Model for holding files' location data.
+%%% Note: file_location should operate always on referenced uuids. Thus, it is only permitted
+%%% to generate document's id using local_id/1 and id/2 functions. Moreover, the document
+%%% should be modified only within replica_synchronizer process.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(file_location).
@@ -67,7 +70,8 @@ local_id(FileUuid) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec id(file_meta:uuid(), od_provider:id()) -> file_location:id().
-id(FileUuid, ProviderId) ->
+id(Uuid, ProviderId) ->
+    FileUuid = fslogic_uuid:ensure_referenced_uuid(Uuid),
     datastore_key:build_adjacent(ProviderId, FileUuid).
 
 
@@ -83,9 +87,10 @@ create(Doc = #document{value = #file_location{space_id = SpaceId}}, _) ->
 create_and_update_quota(Doc = #document{value = #file_location{
     uuid = FileUuid,
     space_id = SpaceId
-}}, GeneratedKey) ->
+} = Record}, GeneratedKey) ->
     NewSize = count_bytes(Doc),
     space_quota:apply_size_change_and_maybe_emit(SpaceId, NewSize),
+    report_size_changed(on_storage, Record, NewSize),
     case get_owner_id(FileUuid) of
         {ok, UserId} ->
             monitoring_event_emitter:emit_storage_used_updated(
@@ -103,7 +108,7 @@ create_and_update_quota(Doc = #document{value = #file_location{
     end.
 
 
--spec save_and_bump_version(doc(), od_user:id()) -> {ok, doc()} | {error, term()}.
+-spec save_and_bump_version(doc(), od_user:id()) -> {ok, file_location:id()} | {error, term()}.
 save_and_bump_version(FileLocationDoc, UserId) ->
     fslogic_location_cache:save_location(
         version_vector:bump_version(FileLocationDoc), UserId).
@@ -122,27 +127,31 @@ save_and_update_quota(Doc = #document{
     save_and_update_quota(Doc, UserId);
 save_and_update_quota(Doc = #document{
     key = Key,
-    value = #file_location{space_id = SpaceId}
+    value = #file_location{space_id = SpaceId} = Record
 }, UserId) ->
     NewSize = count_bytes(Doc),
     case datastore_model:get(?CTX, Key) of
         {ok, #document{value = #file_location{space_id = SpaceId}} = OldDoc} ->
             OldSize = count_bytes(OldDoc),
             space_quota:apply_size_change_and_maybe_emit(SpaceId, NewSize - OldSize),
+            report_size_changed(on_storage, Record, NewSize - OldSize),
             monitoring_event_emitter:emit_storage_used_updated(
                 SpaceId, UserId, NewSize - OldSize);
 
         {ok, #document{value = #file_location{space_id = OldSpaceId}} = OldDoc} ->
             OldSize = count_bytes(OldDoc),
-            space_quota:apply_size_change_and_maybe_emit(OldSpaceId, -1 * OldSize),
+            space_quota:apply_size_change_and_maybe_emit(OldSpaceId, -OldSize),
+            report_size_changed(on_storage, Record, -OldSize),
             monitoring_event_emitter:emit_storage_used_updated(
-                OldSpaceId, UserId, -1 * OldSize),
+                OldSpaceId, UserId, -OldSize),
 
             space_quota:apply_size_change_and_maybe_emit(SpaceId, NewSize),
+            report_size_changed(on_storage, Record, NewSize),
             monitoring_event_emitter:emit_storage_used_updated(
                 SpaceId, UserId, NewSize);
         _ ->
             space_quota:apply_size_change_and_maybe_emit(SpaceId, NewSize),
+            report_size_changed(on_storage, Record, NewSize),
             monitoring_event_emitter:emit_storage_used_updated(
                 SpaceId, UserId, NewSize)
     end,
@@ -189,17 +198,28 @@ delete_and_update_quota(Key) ->
     case datastore_model:get(?CTX, Key) of
         {ok, Doc = #document{value = #file_location{
             uuid = FileUuid,
-            space_id = SpaceId
-        }}} ->
-            Size = count_bytes(Doc),
-            space_quota:apply_size_change_and_maybe_emit(SpaceId, -1 * Size),
+            space_id = SpaceId,
+            size = FileSize
+        } = Record}} ->
+            StorageSize = count_bytes(Doc),
+            space_quota:apply_size_change_and_maybe_emit(SpaceId, -StorageSize),
+            report_size_changed(on_storage, Record, -StorageSize),
+            report_size_changed(total, Record, -FileSize),
             {ok, UserId} = get_owner_id(FileUuid),
             monitoring_event_emitter:emit_storage_used_updated(
-                SpaceId, UserId, -1 * Size);
+                SpaceId, UserId, -StorageSize);
         _ ->
             ok
     end,
     datastore_model:delete(?CTX, Key).
+
+
+%% @private
+-spec report_size_changed(ReportType :: on_storage | total, record(), integer()) -> ok.
+report_size_changed(on_storage, #file_location{uuid = FileUuid, space_id = SpaceId, storage_id = StorageId}, SizeChange) ->
+    dir_size_stats:report_reg_file_size_changed(file_id:pack_guid(FileUuid, SpaceId), {on_storage, StorageId}, SizeChange);
+report_size_changed(total, #file_location{uuid = FileUuid, space_id = SpaceId}, SizeChange) ->
+    dir_size_stats:report_reg_file_size_changed(file_id:pack_guid(FileUuid, SpaceId), total, SizeChange).
 
 
 -spec is_storage_file_created(doc() | record()) -> boolean().

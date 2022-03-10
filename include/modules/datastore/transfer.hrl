@@ -67,21 +67,15 @@
 
 -define(REPLICATION_WORKER, replication_worker).
 -define(REPLICATION_WORKERS_POOL, replication_workers_pool).
--define(REPLICATION_WORKERS_NUM, application:get_env(
-    ?APP_NAME, replication_workers_num, 50)
-).
+-define(REPLICATION_WORKERS_NUM, op_worker:get_env(replication_workers_num, 50)).
 
 -define(REPLICATION_CONTROLLER, replication_controller).
 -define(REPLICATION_CONTROLLERS_POOL, replication_controllers_pool).
--define(REPLICATION_CONTROLLERS_NUM, application:get_env(
-    ?APP_NAME, replication_controllers_num, 10)
-).
+-define(REPLICATION_CONTROLLERS_NUM, op_worker:get_env(replication_controllers_num, 10)).
 
 -define(REPLICA_EVICTION_WORKER, replica_eviction_worker).
 -define(REPLICA_EVICTION_WORKERS_POOL, replica_eviction_workers_pool).
--define(REPLICA_EVICTION_WORKERS_NUM, application:get_env(
-    ?APP_NAME, replica_eviction_workers_num, 10)
-).
+-define(REPLICA_EVICTION_WORKERS_NUM, op_worker:get_env(replica_eviction_workers_num, 10)).
 
 -define(TRANSFER_DATA_REQ(__FileCtx, __Params, __Retries, __NextRetryTimestamp), {
     transfer_data, __FileCtx, __Params, __Retries, __NextRetryTimestamp

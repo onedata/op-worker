@@ -387,10 +387,12 @@ call(SpaceId, Request) ->
                 aborted ->
                     ok
             end;
-        Error:Reason2 ->
-            ?error_stacktrace("
-                    Unexpected error in main_harvesting_stream:call: ~w.",
-                [{Error, Reason2}])
+        Error:Reason2:Stacktrace ->
+            ?error_stacktrace(
+                "Unexpected error in main_harvesting_stream:call: ~w.",
+                [{Error, Reason2}],
+                Stacktrace
+            )
     end.
 
 -spec schedule_start_aux_streams(harvesting_destination:destination(),

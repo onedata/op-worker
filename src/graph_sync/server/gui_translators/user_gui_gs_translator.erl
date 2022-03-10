@@ -33,12 +33,16 @@ translate_resource(GRI = #gri{aspect = instance, scope = private}, #od_user{
     #{
         <<"fullName">> => FullName,
         <<"username">> => utils:undefined_to_null(Username),
-        <<"spaceList">> => gri:serialize(GRI#gri{
+        <<"effSpaceList">> => gri:serialize(GRI#gri{
             aspect = eff_spaces,
             scope = private
         }),
-        <<"handleServiceList">> => gri:serialize(GRI#gri{
+        <<"effHandleServiceList">> => gri:serialize(GRI#gri{
             aspect = eff_handle_services,
+            scope = private
+        }),
+        <<"effAtmInventoryList">> => gri:serialize(GRI#gri{
+            aspect = eff_atm_inventories,
             scope = private
         })
     };
@@ -71,4 +75,15 @@ translate_resource(#gri{aspect = eff_handle_services, scope = private}, HService
                 scope = private
             })
         end, HServices)
+    };
+translate_resource(#gri{aspect = eff_atm_inventories, scope = private}, AtmInventories) ->
+    #{
+        <<"list">> => lists:map(fun(AtmInventoryId) ->
+            gri:serialize(#gri{
+                type = op_atm_inventory,
+                id = AtmInventoryId,
+                aspect = instance,
+                scope = private
+            })
+        end, AtmInventories)
     }.
