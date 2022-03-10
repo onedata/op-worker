@@ -18,6 +18,7 @@
 -include("modules/storage/helpers/helpers.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
 
+-define(MAX_SINT32, 2_147_483_647).
 -define(MAX_UINT32, 4_294_967_295).
 
 -define(FSLOGIC_WORKER_SUP, fslogic_worker_sup).
