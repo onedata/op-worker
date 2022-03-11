@@ -94,7 +94,7 @@ count_file_attrs_hash(StorageFileCtx, SyncAcl) ->
 
     {Xattr, StorageFileCtx3} = maybe_get_nfs4_acl(StorageFileCtx2, SyncAcl),
 
-    case storage_driver:type(StMode) of
+    case storage_driver:infer_type(StMode) of
         {ok, ?REGULAR_FILE_TYPE} ->
             FileId = storage_file_ctx:get_file_name_const(StorageFileCtx2),
             {hash([FileId, StMode, StSize, STMtime, STCtime, Xattr]), StorageFileCtx3};

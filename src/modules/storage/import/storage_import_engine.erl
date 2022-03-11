@@ -356,7 +356,7 @@ get_child_safe(FileCtx, ChildName) ->
     {result(), file_ctx:ctx() | undefined, storage_file_ctx:ctx()} | {error, term()}.
 check_location_and_maybe_sync(StorageFileCtx, FileCtx, Info) ->
     {#statbuf{st_mode = StMode}, StorageFileCtx2} = storage_file_ctx:stat(StorageFileCtx),
-    case storage_driver:type(StMode) of
+    case storage_driver:infer_type(StMode) of
         {ok, ?DIRECTORY_TYPE} ->
             check_dir_location_and_maybe_sync(StorageFileCtx2, FileCtx, Info);
         {ok, ?REGULAR_FILE_TYPE} ->
@@ -506,7 +506,7 @@ check_file_meta_and_maybe_sync(StorageFileCtx, FileCtx, Info, StorageFileCreated
     boolean()) -> {result(), file_ctx:ctx() | undefined, storage_file_ctx:ctx()} | {error, term()}.
 check_file_type_and_maybe_sync(StorageFileCtx, FileAttr = #file_attr{type = FileMetaType}, FileCtx, Info, StorageFileCreated) ->
     {#statbuf{st_mode = StMode}, StorageFileCtx2} = storage_file_ctx:stat(StorageFileCtx),
-    case storage_driver:type(StMode) of
+    case storage_driver:infer_type(StMode) of
         {ok, StorageFileType} ->
             case {StorageFileType, FileMetaType, StorageFileCreated} of
                 {Type, Type, true} ->
@@ -702,7 +702,7 @@ create_location(FileUuid, StorageFileCtx, OwnerId) ->
         st_mode = Mode,
         st_mtime = MTime
     }, StorageFileCtx2} = storage_file_ctx:stat(StorageFileCtx),
-    case storage_driver:type(Mode) of
+    case storage_driver:infer_type(Mode) of
         {ok, ?REGULAR_FILE_TYPE} ->
             Guid = file_id:pack_guid(FileUuid, SpaceId),
             StatTimestamp = storage_file_ctx:get_stat_timestamp_const(StorageFileCtx2),
@@ -780,7 +780,7 @@ get_attr_including_deleted(FileCtx) ->
 -spec create_file_meta_and_handle_conflicts(file_meta:uuid(), file_meta:name(), file_meta:mode(), od_user:id(),
     file_meta:uuid(), od_space:id(), storage_sync_traverse:info()) -> {ok, file_ctx:ctx()} | {error, term()}.
 create_file_meta_and_handle_conflicts(FileUuid, FileName, Mode, OwnerId, ParentUuid, SpaceId, Info) ->
-    {ok, FileType} = storage_driver:type(Mode),
+    {ok, FileType} = storage_driver:infer_type(Mode),
     IteratorType = maps:get(iterator_type, Info, undefined),
     FileDoc = prepare_file_meta_doc(FileUuid, FileName, Mode, OwnerId, ParentUuid, SpaceId),
     CreationResult = case file_meta:create({uuid, ParentUuid}, FileDoc) of
@@ -858,7 +858,7 @@ create_conflicting_file_meta(FileDoc, ParentUuid, ConflictNumber) ->
 -spec prepare_file_meta_doc(file_meta:uuid(), file_meta:name(), file_meta:mode(), od_user:id(),
     file_meta:uuid(), od_space:id()) -> file_meta:doc().
 prepare_file_meta_doc(FileUuid, FileName, Mode, OwnerId, ParentUuid, SpaceId) ->
-    {ok, Type} = storage_driver:type(Mode),
+    {ok, Type} = storage_driver:infer_type(Mode),
     file_meta:new_doc(FileUuid, FileName, Type, Mode band 8#1777, OwnerId, ParentUuid, SpaceId).
 
 -spec create_times_from_stat_timestamps(file_meta:uuid(), storage_file_ctx:ctx()) ->

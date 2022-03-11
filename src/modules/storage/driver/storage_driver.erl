@@ -29,7 +29,7 @@
     truncate/3, unlink/2, fsync/2, rmdir/1, exists/1]).
 -export([setxattr/5, getxattr/2, removexattr/2, listxattr/1]).
 -export([open_at_creation/1]).
--export([type/1]).
+-export([infer_type/1]).
 
 % Export for tests
 -export([open_insecure/2]).
@@ -569,8 +569,8 @@ fsync(SDHandle, DataOnly) ->
 %% (hardlinks and symlinks are metadata-only structures).
 %% @end
 %%--------------------------------------------------------------------
--spec type(Mode :: non_neg_integer()) -> {ok, type()} | ?ERROR_NOT_SUPPORTED.
-type(Mode) ->
+-spec infer_type(Mode :: non_neg_integer()) -> {ok, type()} | ?ERROR_NOT_SUPPORTED.
+infer_type(Mode) ->
     IsRegFile = (Mode band 8#100000) =/= 0,
     IsDir = (Mode band 8#40000) =/= 0,
     case {IsRegFile, IsDir} of
