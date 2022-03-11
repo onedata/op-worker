@@ -29,6 +29,7 @@
     truncate/3, unlink/2, fsync/2, rmdir/1, exists/1]).
 -export([setxattr/5, getxattr/2, removexattr/2, listxattr/1]).
 -export([open_at_creation/1]).
+-export([type/1]).
 
 % Export for tests
 -export([open_insecure/2]).
@@ -559,6 +560,24 @@ fsync(SDHandle, DataOnly) ->
     run_with_file_handle(SDHandle, fun(FileHandle) ->
         helpers:fsync(FileHandle, DataOnly)
     end).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Return type of file depending on its posix mode.
+%% NOTE: currently only regular files and directories are supported
+%% (hardlinks and symlinks are metadata-only structures).
+%% @end
+%%--------------------------------------------------------------------
+-spec type(Mode :: non_neg_integer()) -> {ok, type()} | ?ERROR_NOT_SUPPORTED.
+type(Mode) ->
+    IsRegFile = (Mode band 8#100000) =/= 0,
+    IsDir = (Mode band 8#40000) =/= 0,
+    case {IsRegFile, IsDir} of
+        {true, false} -> {ok, ?REGULAR_FILE_TYPE};
+        {false, true} -> {ok, ?DIRECTORY_TYPE};
+        {false, false} -> ?ERROR_NOT_SUPPORTED
+    end.
 
 
 %%%===================================================================

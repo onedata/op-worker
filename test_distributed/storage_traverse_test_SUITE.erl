@@ -422,7 +422,7 @@ do_slave_job(#storage_traverse_slave{
 }, _TaskId) ->
     StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
     {#statbuf{st_mode = Mode}, _} = storage_file_ctx:stat(StorageFileCtx),
-    case file_meta:type(Mode) of
+    case storage_driver:type(Mode) of
         {ok, ?REGULAR_FILE_TYPE} when FilesCounterRef =/= undefined ->
             countdown_server:decrease(Pid, FilesCounterRef, StorageFileId);
         {ok, ?DIRECTORY_TYPE} when DirsCounterRef =/= undefined ->
@@ -436,7 +436,7 @@ do_slave_job(#storage_traverse_slave{
 }, _TaskId) ->
     StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
     {#statbuf{st_mode = Mode}, _} = storage_file_ctx:stat(StorageFileCtx),
-    case file_meta:type(Mode) of
+    case storage_driver:type(Mode) of
         {ok, ?REGULAR_FILE_TYPE} when FilesCounterRef =/= undefined ->
             countdown_server:decrease(Pid, FilesCounterRef, StorageFileId);
         {ok, ?DIRECTORY_TYPE} when DirsCounterRef =/= undefined ->

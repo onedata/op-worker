@@ -143,7 +143,7 @@ truncate(Worker, SDHandle, NewSize, CurrentSize) ->
 type(Worker, SDHandle) ->
     case stat(Worker, SDHandle) of
         {ok, #statbuf{st_mode = Mode}} ->
-            file_meta:type(Mode);
+            storage_driver:type(Mode);
         Error ->
             Error
     end.
