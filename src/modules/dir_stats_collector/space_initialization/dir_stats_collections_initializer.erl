@@ -18,7 +18,7 @@
 %%%       initialization.
 %%% @end
 %%%-------------------------------------------------------------------
--module(dir_stats_initializer). %  TODO - moze cos innego niz initializer (trzeba ogarnac terminologie initializacja/enabling)
+-module(dir_stats_collections_initializer).
 -author("Michal Wrzeszcz").
 
 
@@ -32,7 +32,7 @@
 
 -record(initialization_data, {
     status = race_possible :: initalized | race_possible,
-    init_timer :: countdown_timer:instance() | undefined, % watch used to handle initialization/update races
+    race_preventing_timer :: countdown_timer:instance() | undefined, % timer used to handle initialization/update races
     dir_and_direct_children_stats :: dir_stats_collection:collection() | undefined,
     stats_from_descendants :: dir_stats_collection:collection() | undefined
 }).
@@ -58,7 +58,7 @@ new_initialization_data() ->
 
 
 -spec are_stats_ready(initialization_data()) -> boolean().
-are_stats_ready(#initialization_data{status = initalized, init_timer = Timer}) when Timer =/= undefined ->
+are_stats_ready(#initialization_data{status = initalized, race_preventing_timer = Timer}) when Timer =/= undefined ->
     countdown_timer:is_expired(Timer);
 are_stats_ready(_) ->
     false.
@@ -73,7 +73,7 @@ is_race_reported(#initialization_data{status = Status}) ->
 report_race(Data) ->
     Data#initialization_data{
         status = race_possible,
-        init_timer = undefined,
+        race_preventing_timer = undefined,
         dir_and_direct_children_stats = undefined
     }.
 
@@ -119,11 +119,11 @@ ensure_dir_initialized(Guid, DataMap) ->
         FileUuid, SpaceId, CollectionTypesToInit, #{token => ?INITIAL_DATASTORE_LS_TOKEN, size => ?BATCH_SIZE}, #{}),
     FinalStatsMap = finish_dir_init(Guid, CollectionTypesToInit, StatsMap),
 
-    InitTimer = countdown_timer:start_millis(?RACE_PREVENTING_TIME),
+    Timer = countdown_timer:start_millis(?RACE_PREVENTING_TIME),
     maps:merge_with(fun(_CollectionType, Data, Stats) ->
         Data#initialization_data{
             status = initalized,
-            init_timer = InitTimer,
+            race_preventing_timer = Timer,
             dir_and_direct_children_stats = Stats
         }
     end, DataMap, FinalStatsMap).

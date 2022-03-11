@@ -93,7 +93,7 @@ get_stats(Guid, StatNames) ->
     {ok, {dir_stats_collection:collection(), time_series_collection:windows_map()}} |
     ?ERROR_INTERNAL_SERVER_ERROR | ?ERROR_DIR_STATS_DISABLED_FOR_SPACE | ?ERROR_FORBIDDEN.
 get_stats_and_time_series_collections(Guid) ->
-    case dir_stats_collector_config:is_enabled_for_space(file_id:guid_to_space_id(Guid)) of
+    case dir_stats_collector_config:is_collecting_active(file_id:guid_to_space_id(Guid)) of
         true ->
             case dir_stats_collector:flush_stats(Guid, ?MODULE) of
                 ok ->
@@ -137,7 +137,7 @@ report_file_deleted(_, Guid) ->
 
 -spec report_file_moved(file_meta:type(), file_id:file_guid(), file_id:file_guid(), file_id:file_guid()) -> ok.
 report_file_moved(?DIRECTORY_TYPE, FileGuid, SourceParentGuid, TargetParentGuid) ->
-    case dir_stats_collector_config:is_enabled_for_space(file_id:guid_to_space_id(FileGuid)) of
+    case dir_stats_collector_config:is_collecting_active(file_id:guid_to_space_id(FileGuid)) of
         true ->
             {ok, Collection} = get_stats(FileGuid),
             update_stats(TargetParentGuid, Collection),

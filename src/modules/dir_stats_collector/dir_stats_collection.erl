@@ -8,8 +8,9 @@
 %%% @doc
 %%% Module defining types describing elements of directory statistics
 %%% collection.
+%%%
 %%% NOTE: This module provides information about all collection types.
-%%%       It is needed when enabling statistics counting for not empty
+%%%       It is needed for enabling statistics counting for not empty
 %%%       spaces. When new type of collection is created, it has to be
 %%%       added to ALL_COLLECTION_TYPES macro.
 %%% @end

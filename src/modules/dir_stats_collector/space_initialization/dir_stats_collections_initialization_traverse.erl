@@ -8,9 +8,14 @@
 %%% @doc
 %%% Tree traverse that initializes statistics for all directories in
 %%% space.
+%%%
+%%% NOTE: Collections initialization traverses are used by
+%%%       dir_stats_collector_config to change collecting statuses.
+%%%       They should not be used directly by any other module than
+%%%       dir_stats_collector_config.
 %%% @end
 %%%-------------------------------------------------------------------
--module(dir_stats_initialization_traverse).
+-module(dir_stats_collections_initialization_traverse).
 -author("Michal Wrzeszcz").
 
 
@@ -27,6 +32,7 @@
 -export([do_master_job/2, do_slave_job/2, update_job_progress/5, get_job/1, task_finished/2, task_canceled/2]).
 
 
+-define(POOL_WORKERS, op_worker:get_env(dir_stats_collections_initialization_traverse_pool_workers, 10)).
 -define(TASK_ID_SEPARATOR, "#").
 
 %%%===================================================================
@@ -35,7 +41,7 @@
 
 -spec init_pool() -> ok | no_return().
 init_pool() ->
-    tree_traverse:init(?MODULE, 10, 0, 5).
+    tree_traverse:init(?MODULE, ?POOL_WORKERS, 0, 5).
 
 
 -spec stop_pool() -> ok.
@@ -90,7 +96,7 @@ get_job(DocOrId) ->
 
 -spec task_finished(tree_traverse:id(), traverse:pool()) -> ok.
 task_finished(TaskId, _PoolName) ->
-    dir_stats_collector_config:report_enabling_finished(get_space_id(TaskId)).
+    dir_stats_collector_config:report_collecting_initialization_finished(get_space_id(TaskId)).
 
 
 -spec task_canceled(tree_traverse:id(), traverse:pool()) -> ok.

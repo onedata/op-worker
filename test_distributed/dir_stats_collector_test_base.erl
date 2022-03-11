@@ -287,7 +287,7 @@ init(Config) ->
 teardown(Config) ->
     SpaceId = lfm_test_utils:get_user1_first_space_id(Config),
     lists:foreach(fun(W) ->
-        rpc:call(W, dir_stats_collector_config, clean_for_space, [SpaceId])
+        rpc:call(W, dir_stats_collector_config, clean, [SpaceId])
     end, initializer:get_different_domain_workers(Config)),
 
     Workers = ?config(op_worker_nodes, Config),
