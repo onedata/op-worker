@@ -903,7 +903,7 @@ get_owner_id(StorageFileCtx) ->
     case storage:is_posix_compatible(StorageId) of
         true ->
             {StatBuf, StorageFileCtx2} = storage_file_ctx:stat(StorageFileCtx),
-            #statbuf{st_uid = Uid} = StatBuf,
+            Uid = min(StatBuf#statbuf.st_uid, ?UID_MAX),
             {ok, OwnerId} = luma:map_uid_to_onedata_user(Uid, SpaceId, StorageId),
             {OwnerId, StorageFileCtx2};
         false ->
