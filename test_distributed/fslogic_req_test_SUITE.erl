@@ -15,6 +15,7 @@
 
 -include("global_definitions.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
+-include("proto/oneclient/server_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/onedata.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -34,6 +35,7 @@
     fslogic_get_file_attr_test/1,
     fslogic_get_file_attr_with_replication_status_not_requested_test/1,
     fslogic_get_file_attr_with_replication_status_requested_test/1,
+    fslogic_file_attrs_with_too_big_uid_and_gid_encoding_test/1,
     fslogic_get_file_children_attrs_test/1,
     fslogic_get_file_children_attrs_with_replication_status_test/1,
     fslogic_get_child_attr_test/1,
@@ -52,6 +54,7 @@ all() ->
         fslogic_get_file_attr_test,
         fslogic_get_file_attr_with_replication_status_not_requested_test,
         fslogic_get_file_attr_with_replication_status_requested_test,
+        fslogic_file_attrs_with_too_big_uid_and_gid_encoding_test,
         fslogic_get_file_children_attrs_test,
         fslogic_get_file_children_attrs_with_replication_status_test,
         fslogic_get_child_attr_test,
@@ -148,6 +151,31 @@ fslogic_get_file_attr_test_base(Config, CheckReplicationStatus) ->
     )),
 
     ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId1, {path, FilePath})).
+
+fslogic_file_attrs_with_too_big_uid_and_gid_encoding_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),
+
+    {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(
+        Worker, SessId, filename:join([<<"/space_name1">>, generator:gen_name()]))
+    ),
+    {ok, FileAttr} = lfm_proxy:stat(Worker, SessId, {guid, FileGuid}),
+
+    OriginalMsg = #server_message{message_body = #fuse_response{
+        status = #status{code = ?OK},
+        fuse_response = FileAttr#file_attr{uid = ?UID_MAX + 10, gid = ?UID_MAX + 10}
+    }},
+
+    ExpModifiedMsg = #server_message{message_body = #fuse_response{
+        status = #status{code = ?OK},
+        fuse_response = FileAttr#file_attr{uid = ?UID_MAX, gid = ?UID_MAX}
+    }},
+    {ok, Data} = rpc:call(Worker, clproto_serializer, serialize_server_message, [ExpModifiedMsg, false]),
+
+    ?assertEqual(
+        {ok, Data},
+        rpc:call(Worker, clproto_serializer, serialize_server_message, [OriginalMsg, false])
+    ).
 
 fslogic_get_file_children_attrs_with_replication_status_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
