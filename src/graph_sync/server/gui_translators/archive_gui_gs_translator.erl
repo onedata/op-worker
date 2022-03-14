@@ -52,6 +52,7 @@ translate_archive_info(#archive_info{
     description = Description,
     index = Index,
     stats = Stats,
+    parent_archive = ParentArchive,
     base_archive_id = BaseArchive,
     related_aip = RelatedAip,
     related_dip = RelatedDip
@@ -81,6 +82,7 @@ translate_archive_info(#archive_info{
         <<"description">> => Description,
         <<"index">> => Index,
         <<"stats">> => archive_stats:to_json(Stats),
+        <<"parentArchive">> => prepare_archive_instance_gri(ParentArchive),
         <<"baseArchive">> => prepare_archive_instance_gri(BaseArchive),
         <<"relatedAip">> => prepare_archive_instance_gri(RelatedAip),
         <<"relatedDip">> => prepare_archive_instance_gri(RelatedDip)

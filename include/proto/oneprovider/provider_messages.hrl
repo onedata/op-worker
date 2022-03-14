@@ -154,7 +154,8 @@
     description :: archive:description(),
     index :: archive_api:index(),
     stats :: archive_stats:record(),
-    base_archive_id :: archive:id() | undefined,
+    parent_archive :: undefined | archive:id(),
+    base_archive_id :: undefined | archive:id(),
     related_aip :: undefined | archive:id(),
     related_dip :: undefined | archive:id()
 }).

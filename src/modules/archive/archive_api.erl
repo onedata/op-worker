@@ -163,6 +163,7 @@ get_archive_info(ArchiveDoc = #document{}, ArchiveIndex) ->
     {ok, PreservedCallback} = archive:get_preserved_callback(ArchiveDoc),
     {ok, PurgedCallback} = archive:get_purged_callback(ArchiveDoc),
     {ok, Description} = archive:get_description(ArchiveDoc),
+    {ok, ParentArchive} = archive:get_parent(ArchiveDoc),
     {ok, BaseArchiveId} = archive:get_base_archive_id(ArchiveDoc),
     {ok, RelatedAip} = archive:get_related_aip(ArchiveDoc),
     {ok, RelatedDip} = archive:get_related_dip(ArchiveDoc),
@@ -182,6 +183,7 @@ get_archive_info(ArchiveDoc = #document{}, ArchiveIndex) ->
             false -> ArchiveIndex
         end,
         stats = Stats,
+        parent_archive = ParentArchive,
         base_archive_id = BaseArchiveId,
         related_aip = RelatedAip,
         related_dip = RelatedDip
