@@ -63,11 +63,12 @@ cm_failure_test_base(Config) ->
 
     failure_test_utils:kill_nodes(Config, KilledCM),
     ct:pal("CM killed"),
-    ?assertEqual({badrpc, nodedown}, rpc:call(NodeToBeStopped, oneprovider, get_id, []), 10),
+    ?assertEqual({badrpc, nodedown}, rpc:call(NodeToBeStopped, oneprovider, get_id, []), 120),
+    ct:pal("Worker node down"),
     ok = oct_environment:start_node(Config, KilledCM),
     ct:pal("CM restarted"),
     failure_test_utils:restart_nodes(Config, NodeToBeStopped),
-    ct:pal("CM failure test finished").
+    ct:pal("Worker node restarted").
 
 
 worker_failure_test_base(Config, InitialData, StopAppBeforeKill) ->
