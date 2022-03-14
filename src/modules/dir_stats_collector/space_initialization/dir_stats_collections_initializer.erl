@@ -41,7 +41,7 @@
 -type initialization_data() :: #initialization_data{}.
 -type initialization_data_map() :: #{dir_stats_collection:type() => initialization_data()}.
 -type collections_map() :: #{dir_stats_collection:type() => dir_stats_collection:collection()}.
--export_type([initialization_data/0]).
+-export_type([initialization_data/0, initialization_data_map/0]).
 
 
 -define(RACE_PREVENTING_TIME, 5000). % If update appears in less than ?RACE_PREVENTING_TIME from initialization

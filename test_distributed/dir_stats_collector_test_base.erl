@@ -364,7 +364,7 @@ enable(Config, existing_space) ->
 verify_enabled(Config) ->
     SpaceId = lfm_test_utils:get_user1_first_space_id(Config),
     lists:foreach(fun(W) ->
-        ?assertEqual(enabled, rpc:call(W, dir_stats_collector_config, get_status_for_space, [SpaceId]), ?ATTEMPTS)
+        ?assertEqual(enabled, rpc:call(W, dir_stats_collector_config, get_collecting_status, [SpaceId]), ?ATTEMPTS)
     end, initializer:get_different_domain_workers(Config)).
 
 

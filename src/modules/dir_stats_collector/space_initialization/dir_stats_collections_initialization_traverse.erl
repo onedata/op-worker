@@ -69,7 +69,7 @@ cancel(SpaceId, TraverseNum) ->
 -spec do_master_job(tree_traverse:master_job(), traverse:master_job_extended_args()) ->
     {ok, traverse:master_job_map()}.
 do_master_job(#tree_traverse{file_ctx = FileCtx} = Job, MasterJobExtendedArgs) ->
-    ok = dir_stats_collector:enable_stats_collecting(file_ctx:get_logical_guid_const(FileCtx)),
+    ok = dir_stats_collector:initialize_collections(file_ctx:get_logical_guid_const(FileCtx)),
     NewJobsPreprocessor = fun(_SlaveJobs, MasterJobs, _ListExtendedInfo, _SubtreeProcessingStatus) ->
         {[], MasterJobs}
     end,
@@ -96,7 +96,7 @@ get_job(DocOrId) ->
 
 -spec task_finished(tree_traverse:id(), traverse:pool()) -> ok.
 task_finished(TaskId, _PoolName) ->
-    dir_stats_collector_config:report_collecting_initialization_finished(get_space_id(TaskId)).
+    dir_stats_collector_config:report_collections_initialization_finished(get_space_id(TaskId)).
 
 
 -spec task_canceled(tree_traverse:id(), traverse:pool()) -> ok.

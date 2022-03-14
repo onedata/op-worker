@@ -16,11 +16,11 @@
 %%% Collecting status can be changed using enable_for_space/1 and
 %%% disable_for_space/1 API functions. In such a case, status is not changed
 %%% directly to enabled/disabled but is changed via intermediate states
-%%% collecting_initialization/collectors_stopping. These intermediate
+%%% collections_initialization/collectors_stopping. These intermediate
 %%% states are used because changing of status requires travers via all
-%%% directories in space (collecting_initialization) or broadcasting
+%%% directories in space (collections_initialization) or broadcasting
 %%% messages to all collectors (collectors_stopping). Changes from
-%%% collecting_initialization to enabled status and collectors_stopping
+%%% collections_initialization to enabled status and collectors_stopping
 %%% to disabled status are triggered automatically when all work
 %%% is performed. Thus, collecting status changes can be depicted as
 %%% follows where transitions ◄────────► are triggered automatically
@@ -31,7 +31,7 @@
 %%%               │                              │
 %%%               │                              │
 %%%               ▼                              │
-%%%       collecting_initialization ────────► enabled
+%%%       collections_initialization ────────► enabled
 %%%
 %%% Additionally, config includes timestamps of collecting state changes
 %%% that allow verification when historic statistics were trustworthy.
@@ -53,19 +53,19 @@
 
 
 %% API - getters
--export([is_collecting_active/1, get_status_for_space/1,
+-export([is_collecting_active/1, get_collecting_status/1,
     get_enabling_time/1, get_collecting_status_change_timestamps/1]).
 %% API - init/cleanup
 -export([init_for_empty_space/1, clean/1]).
 %% API - collecting status changes
 -export([enable_for_space/1, disable_for_space/1,
-    report_collecting_initialization_finished/1, report_collectors_stopped/1]).
+    report_collections_initialization_finished/1, report_collectors_stopped/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_version/0, get_record_struct/1, upgrade_record/2]).
 
 
--type active_collecting_status() :: enabled | collecting_initialization. % update requests are generated for
+-type active_collecting_status() :: enabled | collections_initialization. % update requests are generated for
                                                                          % active statuses
 -type collecting_status() :: active_collecting_status() | disabled | collectors_stopping.
 -type collecting_status_change_order() :: enable | disable.
@@ -92,15 +92,15 @@
 
 -spec is_collecting_active(od_space:id()) -> boolean().
 is_collecting_active(SpaceId) ->
-    case get_status_for_space(SpaceId) of
+    case get_collecting_status(SpaceId) of
         enabled -> true;
-        collecting_initialization -> true;
+        collections_initialization -> true;
         _ -> false
     end.
 
 
--spec get_status_for_space(od_space:id()) -> collecting_status().
-get_status_for_space(SpaceId) ->
+-spec get_collecting_status(od_space:id()) -> collecting_status().
+get_collecting_status(SpaceId) ->
     case datastore_model:get(?CTX, SpaceId) of
         {ok, #document{value = #dir_stats_collector_config{collecting_status = Status}}} -> Status;
         {error, not_found} -> disabled
@@ -164,7 +164,7 @@ clean(SpaceId) ->
 -spec enable_for_space(od_space:id()) -> ok.
 enable_for_space(SpaceId) ->
     NewRecord = #dir_stats_collector_config{
-        collecting_status = collecting_initialization, 
+        collecting_status = collections_initialization,
         collections_initialization_traverse_num = 1
     },
 
@@ -174,7 +174,7 @@ enable_for_space(SpaceId) ->
             collections_initialization_traverse_num = Num
         } = Config) ->
             {ok, Config#dir_stats_collector_config{
-                collecting_status = collecting_initialization, 
+                collecting_status = collections_initialization,
                 collections_initialization_traverse_num = Num + 1
             }};
         (#dir_stats_collector_config{
@@ -188,7 +188,7 @@ enable_for_space(SpaceId) ->
 
     case update(SpaceId, Diff, NewRecord) of
         {ok, #document{value = #dir_stats_collector_config{
-            collecting_status = collecting_initialization, 
+            collecting_status = collections_initialization,
             collections_initialization_traverse_num = TraverseNum
         }}} ->
             dir_stats_collections_initialization_traverse:run(SpaceId, TraverseNum);
@@ -207,7 +207,7 @@ disable_for_space(SpaceId) ->
         } = Config) ->
             {ok, Config#dir_stats_collector_config{collecting_status = collectors_stopping}};
         (#dir_stats_collector_config{
-            collecting_status = collecting_initialization, 
+            collecting_status = collections_initialization,
             next_collecting_status_change_order = undefined
         } = Config) ->
             {ok, Config#dir_stats_collector_config{next_collecting_status_change_order = disable}};
@@ -219,9 +219,9 @@ disable_for_space(SpaceId) ->
         {ok, #document{value = #dir_stats_collector_config{
             collecting_status = collectors_stopping
         }}} ->
-            dir_stats_collector:disable_stats_collecting(SpaceId);
+            dir_stats_collector:stop_collecting(SpaceId);
         {ok, #document{value = #dir_stats_collector_config{
-            collecting_status = collecting_initialization, 
+            collecting_status = collections_initialization,
             collections_initialization_traverse_num = TraverseNum
         }}} ->
             dir_stats_collections_initialization_traverse:cancel(SpaceId, TraverseNum);
@@ -232,18 +232,18 @@ disable_for_space(SpaceId) ->
     end.
 
 
--spec report_collecting_initialization_finished(od_space:id()) -> ok.
-report_collecting_initialization_finished(SpaceId) ->
+-spec report_collections_initialization_finished(od_space:id()) -> ok.
+report_collections_initialization_finished(SpaceId) ->
     Diff = fun
         (#dir_stats_collector_config{
-            collecting_status = collecting_initialization, 
+            collecting_status = collections_initialization,
             next_collecting_status_change_order = disable
         } = Config) ->
             {ok, Config#dir_stats_collector_config{
                 collecting_status = collectors_stopping,
                 next_collecting_status_change_order = undefined
             }};
-        (#dir_stats_collector_config{collecting_status = collecting_initialization} = Config) ->
+        (#dir_stats_collector_config{collecting_status = collections_initialization} = Config) ->
             {ok, Config#dir_stats_collector_config{collecting_status = enabled}};
         (#dir_stats_collector_config{collecting_status = Status}) ->
             {error, {wrong_status, Status}}
@@ -253,7 +253,7 @@ report_collecting_initialization_finished(SpaceId) ->
         {ok, #document{value = #dir_stats_collector_config{collecting_status = enabled}}} ->
             ok;
         {ok, #document{value = #dir_stats_collector_config{collecting_status = collectors_stopping}}} ->
-            dir_stats_collector:disable_stats_collecting(SpaceId);
+            dir_stats_collector:stop_collecting(SpaceId);
         {error, {wrong_status, WrongStatus}} ->
             ?warning("Reporting space ~p enabling finished when space has status ~p", [SpaceId, WrongStatus]);
         {error, not_found} ->
@@ -270,7 +270,7 @@ report_collectors_stopped(SpaceId) ->
             collections_initialization_traverse_num = Num
         } = Config) ->
             {ok, Config#dir_stats_collector_config{
-                collecting_status = collecting_initialization,
+                collecting_status = collections_initialization,
                 collections_initialization_traverse_num = Num + 1,
                 next_collecting_status_change_order = undefined
             }};
@@ -284,7 +284,7 @@ report_collectors_stopped(SpaceId) ->
         {ok, #document{value = #dir_stats_collector_config{collecting_status = disabled}}} ->
             ok;
         {ok, #document{value = #dir_stats_collector_config{
-            collecting_status = collecting_initialization,
+            collecting_status = collections_initialization,
             collections_initialization_traverse_num = TraverseNum
         }}} ->
             dir_stats_collections_initialization_traverse:run(SpaceId, TraverseNum);
