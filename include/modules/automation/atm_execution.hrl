@@ -150,6 +150,15 @@
     requires_initial_content = false
 }).
 
+-define(ATM_TASK_TIME_SERIES_STORE_SCHEMA(__CONFIG), #atm_store_schema{
+    id = ?CURRENT_TASK_TIME_SERIES_STORE_SCHEMA_ID,
+    name = ?CURRENT_TASK_TIME_SERIES_STORE_SCHEMA_ID,
+    description = <<>>,
+    type = time_series,
+    config = __CONFIG,
+    requires_initial_content = false
+}).
+
 -define(CURRENT_LANE_RUN_EXCEPTION_STORE_SCHEMA_ID, <<"CURRENT_LANE_RUN_EXCEPTION_STORE">>).
 
 -define(ATM_LANE_RUN_EXCEPTION_STORE_SCHEMA(__ITEM_DATA_SPEC), #atm_store_schema{
