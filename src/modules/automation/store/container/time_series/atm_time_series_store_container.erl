@@ -7,7 +7,11 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module implements `atm_store_container` functionality for `time_series`
-%%% atm_store type. TODO WRITE ABOUT UNSUPPORTED ITERATION
+%%% atm_store type.
+%%%
+%%%                             !!! Caution !!!
+%%% This store does not support iteration and should never be referenced by
+%%% schema in such context.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_time_series_store_container).
@@ -36,6 +40,9 @@
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
 
+%% datastore model callbacks
+-export([get_ctx/0]).
+
 
 -type initial_content() :: undefined.
 
@@ -47,7 +54,8 @@
 }.
 
 -record(atm_time_series_store_container, {
-    config :: atm_time_series_store_config:record()
+    config :: atm_time_series_store_config:record(),
+    backend_id :: time_series_collection:collection_id()
 }).
 -type record() :: #atm_time_series_store_container{}.
 
@@ -55,6 +63,11 @@
     initial_content/0, content_browse_req/0, content_update_req/0,
     record/0
 ]).
+
+
+-define(CTX, #{
+    model => ?MODULE
+}).
 
 
 %%%===================================================================
@@ -69,7 +82,15 @@
 ) ->
     record() | no_return().
 create(_AtmWorkflowExecutionAuth, AtmStoreConfig, undefined) ->
-    #atm_time_series_store_container{config = AtmStoreConfig}.
+    BackendId = datastore_key:new(),
+    ok = datastore_time_series_collection:create(?CTX, BackendId, build_ts_collection_config(
+        AtmStoreConfig#atm_time_series_store_config.schemas
+    )),
+
+    #atm_time_series_store_container{
+        config = AtmStoreConfig,
+        backend_id = BackendId
+    }.
 
 
 -spec get_config(record()) -> atm_time_series_store_config:record().
@@ -106,8 +127,8 @@ update_content(Record, #atm_store_content_update_req{
 
 
 -spec delete(record()) -> ok.
-delete(_Record) ->
-    ok.
+delete(#atm_time_series_store_container{backend_id = BackendId}) ->
+    ok = datastore_time_series_collection:delete(?CTX, BackendId).
 
 
 %%%===================================================================
@@ -123,22 +144,53 @@ version() ->
 -spec db_encode(record(), persistent_record:nested_record_encoder()) ->
     json_utils:json_term().
 db_encode(#atm_time_series_store_container{
-    config = AtmStoreConfig
+    config = AtmStoreConfig,
+    backend_id = BackendId
 }, NestedRecordEncoder) ->
-    #{<<"config">> => NestedRecordEncoder(AtmStoreConfig, atm_time_series_store_config)}.
+    #{
+        <<"config">> => NestedRecordEncoder(AtmStoreConfig, atm_time_series_store_config),
+        <<"backendId">> => BackendId
+    }.
 
 
 -spec db_decode(json_utils:json_term(), persistent_record:nested_record_decoder()) ->
     record().
-db_decode(#{<<"config">> := AtmStoreConfigJson}, NestedRecordDecoder) ->
+db_decode(#{
+    <<"config">> := AtmStoreConfigJson,
+    <<"backendId">> := BackendId
+}, NestedRecordDecoder) ->
     #atm_time_series_store_container{
-        config = NestedRecordDecoder(AtmStoreConfigJson, atm_time_series_store_config)
+        config = NestedRecordDecoder(AtmStoreConfigJson, atm_time_series_store_config),
+        backend_id = BackendId
     }.
+
+
+%%%===================================================================
+%%% datastore_model callbacks
+%%%===================================================================
+
+-spec get_ctx() -> datastore:ctx().
+get_ctx() ->
+    ?CTX.
 
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+%% @private
+-spec build_ts_collection_config([atm_time_series_schema:record()]) ->
+    time_series_collection:collection_config().
+build_ts_collection_config(TSSchemas) ->
+    lists:foldl(fun
+        (TSSchema = #atm_time_series_schema{name_generator_type = exact}, Acc) ->
+            Acc#{TSSchema#atm_time_series_schema.name_generator => lists:foldl(fun(Metric, Acc) ->
+                Acc#{Metric#metric_config.label => Metric}
+            end, #{}, TSSchema#atm_time_series_schema.metrics)};
+        (_, Acc) ->
+            Acc
+    end, #{}, TSSchemas).
 
 
 %% TODO implement
