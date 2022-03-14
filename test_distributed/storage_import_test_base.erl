@@ -63,6 +63,7 @@
     create_directory_import_many_test/1,
     create_empty_file_import_test/1,
     create_file_import_test/1,
+    ignore_fifo_import_test/1,
     create_delete_import_test/1,
     create_file_import_check_user_id_test/1,
     create_file_import_check_user_id_error_test/1,
@@ -560,6 +561,44 @@ create_file_import_test(Config) ->
         lfm_proxy:open(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH1}, read), ?ATTEMPTS),
     ?assertMatch({ok, ?TEST_DATA},
         lfm_proxy:read(W2, Handle2, 0, byte_size(?TEST_DATA)), ?ATTEMPTS).
+
+
+ignore_fifo_import_test(Config) ->
+    [W1 | _] = ?config(op_worker_nodes, Config),
+    SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
+    RDWRStorage = get_rdwr_storage(Config, W1),
+    StorageTestFilePath = provider_storage_path(?SPACE_ID, ?TEST_FILE1),
+    %% Create file on storage
+    timer:sleep(timer:seconds(1)), %ensure that space_dir mtime will change
+    SDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestFilePath, RDWRStorage),
+    ok = sd_test_utils:create_file(W1, SDHandle, ?DEFAULT_FILE_PERMS, fifo),
+    enable_initial_scan(Config, ?SPACE_ID),
+    assertInitialScanFinished(W1, ?SPACE_ID),
+
+    ?assertMonitoring(W1, #{
+        <<"scans">> => 1,
+        <<"created">> => 0,
+        <<"modified">> => 1,
+        <<"deleted">> => 0,
+        <<"failed">> => 0,
+        <<"unmodified">> => 1,
+        <<"createdMinHist">> => 0,
+        <<"createdHourHist">> => 0,
+        <<"createdDayHist">> => 0,
+        <<"modifiedMinHist">> => 1,
+        <<"modifiedHourHist">> => 1,
+        <<"modifiedDayHist">> => 1,
+        <<"deletedMinHist">> => 0,
+        <<"deletedHourHist">> => 0,
+        <<"deletedDayHist">> => 0,
+        <<"queueLengthMinHist">> => 0,
+        <<"queueLengthHourHist">> => 0,
+        <<"queueLengthDayHist">> => 0
+    }, ?SPACE_ID),
+
+    %% Check if fifo file was not imported on W1
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS).
+
 
 create_delete_import_test(Config) ->
     [W1, W2 | _] = Workers = ?config(op_worker_nodes, Config),
@@ -6417,6 +6456,15 @@ init_per_testcase(_Case, Config) ->
     Config3 = add_rdwr_storages(Config2),
     create_init_file(Config3),
     Config3.
+
+end_per_testcase(ignore_fifo_import_test, Config) ->
+    [W1 | _] = ?config(op_worker_nodes, Config),
+    RDWRStorage = get_rdwr_storage(Config, W1),
+    StorageTestFilePath = provider_storage_path(?SPACE_ID, ?TEST_FILE1),
+    SDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestFilePath, RDWRStorage),
+    ok = sd_test_utils:unlink(W1, SDHandle, 0), % unlink file as fifo files are not supported and recursive_rm would
+                                                % fail (fail has been created artificially to confirm that it is ignored)
+    end_per_testcase(default, Config);
 
 end_per_testcase(Case, Config)
     when Case =:= chmod_file_update2_test

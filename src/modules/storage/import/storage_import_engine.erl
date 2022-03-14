@@ -356,11 +356,13 @@ get_child_safe(FileCtx, ChildName) ->
     {result(), file_ctx:ctx() | undefined, storage_file_ctx:ctx()} | {error, term()}.
 check_location_and_maybe_sync(StorageFileCtx, FileCtx, Info) ->
     {#statbuf{st_mode = StMode}, StorageFileCtx2} = storage_file_ctx:stat(StorageFileCtx),
-    case file_meta:type(StMode) of
-        ?DIRECTORY_TYPE ->
+    case storage_driver:infer_type(StMode) of
+        {ok, ?DIRECTORY_TYPE} ->
             check_dir_location_and_maybe_sync(StorageFileCtx2, FileCtx, Info);
-        ?REGULAR_FILE_TYPE ->
-            check_file_location_and_maybe_sync(StorageFileCtx2, FileCtx, Info)
+        {ok, ?REGULAR_FILE_TYPE} ->
+            check_file_location_and_maybe_sync(StorageFileCtx2, FileCtx, Info);
+        ?ERROR_NOT_SUPPORTED ->
+            {?FILE_UNMODIFIED, undefined, StorageFileCtx2}
     end.
 
 -spec check_dir_location_and_maybe_sync(storage_file_ctx:ctx(), file_ctx:ctx(), info()) ->
@@ -504,19 +506,23 @@ check_file_meta_and_maybe_sync(StorageFileCtx, FileCtx, Info, StorageFileCreated
     boolean()) -> {result(), file_ctx:ctx() | undefined, storage_file_ctx:ctx()} | {error, term()}.
 check_file_type_and_maybe_sync(StorageFileCtx, FileAttr = #file_attr{type = FileMetaType}, FileCtx, Info, StorageFileCreated) ->
     {#statbuf{st_mode = StMode}, StorageFileCtx2} = storage_file_ctx:stat(StorageFileCtx),
-    StorageFileType = file_meta:type(StMode),
-    case {StorageFileType, FileMetaType, StorageFileCreated} of
-        {Type, Type, true} ->
-            maybe_update_file(StorageFileCtx2, FileAttr, FileCtx, Info);
-        {_Type, _OtherType, true} ->
-            import_file_recreated_with_different_type(StorageFileCtx2, FileCtx, Info);
-        {?REGULAR_FILE_TYPE, ?REGULAR_FILE_TYPE, false} ->
-            maybe_import_file(StorageFileCtx2, Info);
-        {?DIRECTORY_TYPE, ?DIRECTORY_TYPE, false} ->
-            maybe_update_file(StorageFileCtx2, FileAttr, FileCtx, Info);
-        {?REGULAR_FILE_TYPE, ?DIRECTORY_TYPE, false} ->
-            maybe_import_file(StorageFileCtx2, Info);
-        {?DIRECTORY_TYPE, ?REGULAR_FILE_TYPE, false} ->
+    case storage_driver:infer_type(StMode) of
+        {ok, StorageFileType} ->
+            case {StorageFileType, FileMetaType, StorageFileCreated} of
+                {Type, Type, true} ->
+                    maybe_update_file(StorageFileCtx2, FileAttr, FileCtx, Info);
+                {_Type, _OtherType, true} ->
+                    import_file_recreated_with_different_type(StorageFileCtx2, FileCtx, Info);
+                {?REGULAR_FILE_TYPE, ?REGULAR_FILE_TYPE, false} ->
+                    maybe_import_file(StorageFileCtx2, Info);
+                {?DIRECTORY_TYPE, ?DIRECTORY_TYPE, false} ->
+                    maybe_update_file(StorageFileCtx2, FileAttr, FileCtx, Info);
+                {?REGULAR_FILE_TYPE, ?DIRECTORY_TYPE, false} ->
+                    maybe_import_file(StorageFileCtx2, Info);
+                {?DIRECTORY_TYPE, ?REGULAR_FILE_TYPE, false} ->
+                    {?FILE_UNMODIFIED, undefined, StorageFileCtx2}
+            end;
+        ?ERROR_NOT_SUPPORTED ->
             {?FILE_UNMODIFIED, undefined, StorageFileCtx2}
     end.
 
@@ -649,18 +655,22 @@ import_file_unsafe(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
     {OwnerId, StorageFileCtx2} = get_owner_id(StorageFileCtx),
     ParentUuid = file_ctx:get_uuid_const(ParentCtx),
     FileUuid = datastore_key:new(),
-    {ok, StorageFileCtx3} = create_location(FileUuid, StorageFileCtx2, OwnerId),
-    FileName = storage_file_ctx:get_file_name_const(StorageFileCtx3),
-    {#statbuf{st_mode = Mode}, StorageFileCtx4} = storage_file_ctx:stat(StorageFileCtx3),
-    {ok, FileCtx} = create_file_meta_and_handle_conflicts(FileUuid, FileName, Mode, OwnerId,
-        ParentUuid, SpaceId, Info),
-    {ok, StorageFileCtx5} = create_times_from_stat_timestamps(FileUuid, StorageFileCtx4),
-    {ok, StorageFileCtx6} = maybe_import_nfs4_acl(FileCtx, StorageFileCtx5, Info),
-    {CanonicalPath, FileCtx2} = file_ctx:get_canonical_path(FileCtx),
-    SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
-    StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
-    storage_import_logger:log_creation(StorageFileId, CanonicalPath, FileUuid, SpaceId),
-    {?FILE_CREATED, FileCtx2, StorageFileCtx6}.
+    case create_location(FileUuid, StorageFileCtx2, OwnerId) of
+        {ok, StorageFileCtx3} ->
+            FileName = storage_file_ctx:get_file_name_const(StorageFileCtx3),
+            {#statbuf{st_mode = Mode}, StorageFileCtx4} = storage_file_ctx:stat(StorageFileCtx3),
+            {ok, FileCtx} = create_file_meta_and_handle_conflicts(FileUuid, FileName, Mode, OwnerId,
+                ParentUuid, SpaceId, Info),
+            {ok, StorageFileCtx5} = create_times_from_stat_timestamps(FileUuid, StorageFileCtx4),
+            {ok, StorageFileCtx6} = maybe_import_nfs4_acl(FileCtx, StorageFileCtx5, Info),
+            {CanonicalPath, FileCtx2} = file_ctx:get_canonical_path(FileCtx),
+            SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
+            StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
+            storage_import_logger:log_creation(StorageFileId, CanonicalPath, FileUuid, SpaceId),
+            {?FILE_CREATED, FileCtx2, StorageFileCtx6};
+        {?ERROR_NOT_SUPPORTED, StorageFileCtx3} ->
+            {?FILE_UNMODIFIED, undefined, StorageFileCtx}
+    end.
 
 %%-------------------------------------------------------------------
 %% @private
@@ -683,7 +693,8 @@ create_missing_parent_unsafe(StorageFileCtx, #{parent_ctx := ParentCtx}) ->
     {?FILE_CREATED, FileCtx2}.
 
 
--spec create_location(file_meta:uuid(), storage_file_ctx:ctx(), od_user:id()) -> {ok, storage_file_ctx:ctx()}.
+-spec create_location(file_meta:uuid(), storage_file_ctx:ctx(), od_user:id()) ->
+    {ok | ?ERROR_NOT_SUPPORTED, storage_file_ctx:ctx()}.
 create_location(FileUuid, StorageFileCtx, OwnerId) ->
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
     StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
@@ -691,14 +702,17 @@ create_location(FileUuid, StorageFileCtx, OwnerId) ->
         st_mode = Mode,
         st_mtime = MTime
     }, StorageFileCtx2} = storage_file_ctx:stat(StorageFileCtx),
-    case file_meta:type(Mode) of
-        ?REGULAR_FILE_TYPE ->
+    case storage_driver:infer_type(Mode) of
+        {ok, ?REGULAR_FILE_TYPE} ->
             Guid = file_id:pack_guid(FileUuid, SpaceId),
             StatTimestamp = storage_file_ctx:get_stat_timestamp_const(StorageFileCtx2),
             storage_sync_info:update_mtime(StorageFileId, SpaceId, Guid, MTime, StatTimestamp),
             create_file_location(FileUuid, OwnerId, StorageFileCtx2);
-        _ ->
-            create_dir_location(FileUuid, StorageFileCtx2)
+        {ok, ?DIRECTORY_TYPE} ->
+            create_dir_location(FileUuid, StorageFileCtx2);
+        ?ERROR_NOT_SUPPORTED ->
+            {?ERROR_NOT_SUPPORTED, StorageFileCtx2}
+
     end.
 
 -spec create_dir_location(file_meta:uuid(), storage_file_ctx:ctx()) -> {ok, storage_file_ctx:ctx()}.
@@ -766,7 +780,7 @@ get_attr_including_deleted(FileCtx) ->
 -spec create_file_meta_and_handle_conflicts(file_meta:uuid(), file_meta:name(), file_meta:mode(), od_user:id(),
     file_meta:uuid(), od_space:id(), storage_sync_traverse:info()) -> {ok, file_ctx:ctx()} | {error, term()}.
 create_file_meta_and_handle_conflicts(FileUuid, FileName, Mode, OwnerId, ParentUuid, SpaceId, Info) ->
-    FileType = file_meta:type(Mode),
+    {ok, FileType} = storage_driver:infer_type(Mode),
     IteratorType = maps:get(iterator_type, Info, undefined),
     FileDoc = prepare_file_meta_doc(FileUuid, FileName, Mode, OwnerId, ParentUuid, SpaceId),
     CreationResult = case file_meta:create({uuid, ParentUuid}, FileDoc) of
@@ -844,7 +858,7 @@ create_conflicting_file_meta(FileDoc, ParentUuid, ConflictNumber) ->
 -spec prepare_file_meta_doc(file_meta:uuid(), file_meta:name(), file_meta:mode(), od_user:id(),
     file_meta:uuid(), od_space:id()) -> file_meta:doc().
 prepare_file_meta_doc(FileUuid, FileName, Mode, OwnerId, ParentUuid, SpaceId) ->
-    Type = file_meta:type(Mode),
+    {ok, Type} = storage_driver:infer_type(Mode),
     file_meta:new_doc(FileUuid, FileName, Type, Mode band 8#1777, OwnerId, ParentUuid, SpaceId).
 
 -spec create_times_from_stat_timestamps(file_meta:uuid(), storage_file_ctx:ctx()) ->
