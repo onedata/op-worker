@@ -30,7 +30,8 @@
     add_global_store_mapping/3,
     set_workflow_audit_log_store_container/2,
     set_lane_run_exception_store_container/2,
-    add_task_audit_log_store_container/3
+    add_task_audit_log_store_container/3,
+    add_task_time_series_store_id/3
 ]).
 -export([
     get_space_id/1,
@@ -41,6 +42,7 @@
     get_global_store_id/2,
 
     get_lane_run_exception_store_container/1,
+    get_task_time_series_store_id/2,
 
     acquire_auth/1,
     acquire_logger/3
@@ -55,7 +57,8 @@
     workflow_execution_incarnation :: atm_workflow_execution:incarnation(),
     workflow_audit_log_store_container :: undefined | atm_store_container:record(),
     lane_exception_store_container :: undefined | atm_store_container:record(),
-    task_audit_logs_registry :: #{atm_task_execution:id() => atm_store_container:record()}
+    task_audit_logs_registry :: #{atm_task_execution:id() => atm_store_container:record()},
+    task_time_series_registry :: #{atm_task_execution:id() => atm_store:id()}
 }).
 -type record() :: #atm_workflow_execution_env{}.
 
@@ -90,7 +93,8 @@ build(SpaceId, AtmWorkflowExecutionId, AtmWorkflowExecutionIncarnation, AtmGloba
         workflow_execution_incarnation = AtmWorkflowExecutionIncarnation,
         workflow_audit_log_store_container = undefined,
         lane_exception_store_container = undefined,
-        task_audit_logs_registry = #{}
+        task_audit_logs_registry = #{},
+        task_time_series_registry = #{}
     }.
 
 
@@ -132,6 +136,22 @@ add_task_audit_log_store_container(
 ) ->
     Record#atm_workflow_execution_env{task_audit_logs_registry = AtmTaskAuditLogsRegistry#{
         AtmTaskExecutionId => AtmTaskAuditLogStoreContainer
+    }}.
+
+
+-spec add_task_time_series_store_id(
+    atm_task_execution:id(),
+    undefined | atm_store_container:record(),
+    record()
+) ->
+    record().
+add_task_time_series_store_id(
+    AtmTaskExecutionId,
+    AtmTaskTSStoreId,
+    Record = #atm_workflow_execution_env{task_time_series_registry = AtmTaskTSRegistry}
+) ->
+    Record#atm_workflow_execution_env{task_time_series_registry = AtmTaskTSRegistry#{
+        AtmTaskExecutionId => AtmTaskTSStoreId
     }}.
 
 
@@ -178,6 +198,14 @@ get_lane_run_exception_store_container(#atm_workflow_execution_env{
     lane_exception_store_container = AtmLaneExceptionStoreContainer
 }) ->
     AtmLaneExceptionStoreContainer.
+
+
+-spec get_task_time_series_store_id(atm_task_execution:id(), record()) ->
+    undefined | atm_store:id().
+get_task_time_series_store_id(AtmTaskExecutionId, #atm_workflow_execution_env{
+    task_time_series_registry = AtmTaskTSRegistry
+}) ->
+    maps:get(AtmTaskExecutionId, AtmTaskTSRegistry).
 
 
 -spec acquire_auth(record()) -> atm_workflow_execution_auth:record() | no_return().

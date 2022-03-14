@@ -187,6 +187,14 @@ db_decode_dispatch_spec(#{
 ) ->
     ok | no_return().
 dispatch_result(AtmWorkflowExecutionCtx, Result, #dispatch_spec{
+    store_schema_id = ?CURRENT_TASK_TIME_SERIES_STORE_SCHEMA_ID,
+    store_content_update_options = UpdateOptions
+}) ->
+    AtmWorkflowExecutionAuth = atm_workflow_execution_ctx:get_auth(AtmWorkflowExecutionCtx),
+    AtmStoreId = atm_workflow_execution_ctx:get_task_time_series_store_id(AtmWorkflowExecutionCtx),
+    atm_store_api:update_content(AtmWorkflowExecutionAuth, Result, UpdateOptions, AtmStoreId);
+
+dispatch_result(AtmWorkflowExecutionCtx, Result, #dispatch_spec{
     store_schema_id = ?CURRENT_TASK_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID,
     store_content_update_options = UpdateOptions
 }) ->
