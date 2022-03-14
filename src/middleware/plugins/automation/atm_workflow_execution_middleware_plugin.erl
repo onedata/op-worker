@@ -75,7 +75,7 @@ data_spec(#op_req{operation = create, gri = #gri{aspect = instance}}) ->
             <<"atmWorkflowSchemaRevisionNumber">> => {integer, {not_lower_than, 1}}
         },
         optional => #{
-            <<"storeInitialValues">> => {json, any},
+            <<"storeInitialContents">> => {json, any},
             <<"callback">> => {binary, fun(Callback) -> url_utils:is_valid(Callback) end}
         }
     };
