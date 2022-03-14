@@ -470,6 +470,7 @@
     dataset_id :: dataset:id(),
     start_timestamp = undefined :: undefined | time:millis(),
     finish_timestamp = undefined :: undefined | time:millis(),
+    cancel_timestamp = undefined :: undefined | time:millis(),
     total_file_count :: non_neg_integer(),
     total_byte_size :: non_neg_integer()
 }).

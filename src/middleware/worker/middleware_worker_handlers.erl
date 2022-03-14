@@ -58,6 +58,9 @@ execute(UserCtx, SpaceDirCtx, #recall_archive{
 ) ->
     dataset_req:init_archive_recall(SpaceDirCtx, ArchiveId, ParentDirectoryGuid, TargetName, UserCtx);
 
+execute(UserCtx, FileCtx, #cancel_archive_recall{id = Id}) ->
+    dataset_req:cancel_archive_recall(FileCtx, Id, UserCtx);
+
 execute(UserCtx, FileCtx, #get_recall_details{id = Id}) ->
     dataset_req:get_archive_recall_details(FileCtx, Id, UserCtx);
 

@@ -78,7 +78,6 @@
     recall_bagit_archive_containing_nested_child_symlink_test/1,
     recall_plain_archive_containing_nested_child_symlink_dip_test/1,
     recall_bagit_archive_containing_nested_child_symlink_dip_test/1,
-    
     recall_custom_name_test/1,
     
     recall_details_test/1,
@@ -87,7 +86,9 @@
     recall_to_recalling_dir_by_symlink_test/1,
     recall_dir_error_test/1,
     recall_file_error_test/1,
-    recall_effective_cache_test/1
+    recall_effective_cache_test/1,
+    cancel_local_recall_test/1,
+    cancel_remote_recall_test/1
 ]).
 
 groups() -> [
@@ -148,7 +149,9 @@ groups() -> [
         recall_to_recalling_dir_by_symlink_test,
         recall_dir_error_test,
         recall_file_error_test,
-        recall_effective_cache_test
+        recall_effective_cache_test,
+        cancel_local_recall_test,
+        cancel_remote_recall_test
     ]}
 ].
 
@@ -394,6 +397,14 @@ recall_effective_cache_test(_Config) ->
     check_effective_cache_values(RecallRootFileGuid1),
     {ok, RecallRootFileGuid2} = ?assertMatch({ok, _}, opt_archives:recall(krakow, SessId, ArchiveId, RecallRootFileGuid1, default)),
     check_effective_cache_values(RecallRootFileGuid2).
+
+
+cancel_local_recall_test(_Config) ->
+    cancel_recall_test_base(krakow).
+
+
+cancel_remote_recall_test(_Config) ->
+    cancel_recall_test_base(paris).
 
 
 %===================================================================
@@ -670,6 +681,46 @@ recall_error_test_base(Spec, FunName) ->
     end, Errors).
 
 
+cancel_recall_test_base(CancellingProvider) ->
+    {ArchiveId, _TargetParentGuid, RecallRootFileGuid} = recall_test_setup(#dir_spec{
+        dataset = #dataset_spec{archives = [#archive_spec{config = #archive_config{layout = ?ARCHIVE_PLAIN_LAYOUT}}]},
+        children = [#file_spec{}, #file_spec{}, #file_spec{}]
+    }),
+    SessId = fun(P) -> oct_background:get_user_session_id(?USER1, P) end,
+    
+    StartTimestamp = time_test_utils:get_frozen_time_millis(),
+    time_test_utils:simulate_millis_passing(1),
+    CancelTimestamp = time_test_utils:get_frozen_time_millis(),
+    Providers = oct_background:get_space_supporting_providers(?SPACE),
+    
+    lists:foreach(fun(Provider) ->
+        ?assertMatch({ok, #archive_recall_details{
+            archive_id = ArchiveId,
+            start_timestamp = StartTimestamp
+        }}, opt_archives:get_recall_details(Provider, SessId(Provider), RecallRootFileGuid), ?ATTEMPTS)
+    end, Providers),
+    
+    ?assertEqual(ok, opt_archives:cancel_recall(CancellingProvider, SessId(CancellingProvider), RecallRootFileGuid)),
+    
+    lists:foreach(fun(Provider) ->
+        ?assertMatch({ok, #archive_recall_details{
+            cancel_timestamp = CancelTimestamp
+        }}, opt_archives:get_recall_details(Provider, SessId(Provider), RecallRootFileGuid), ?ATTEMPTS)
+    end, Providers),
+    
+    time_test_utils:simulate_millis_passing(1),
+    FinishTimestamp = time_test_utils:get_frozen_time_millis(),
+    
+    check_mocked_slave_jobs_cancelled(3),
+    
+    lists:foreach(fun(Provider) ->
+        ?assertMatch({ok, #archive_recall_details{
+            finish_timestamp = FinishTimestamp
+        }}, opt_archives:get_recall_details(Provider, SessId(Provider), RecallRootFileGuid), ?ATTEMPTS)
+    end, Providers),
+    ok.
+    
+
 %===================================================================
 % Helper functions
 %===================================================================
@@ -709,7 +760,7 @@ check_effective_cache_values(RecallRootFileGuid) ->
     end, oct_background:get_all_providers_nodes()).
 
 
-mock_recall_traverse() ->
+mock_recall_traverse_finished() ->
     Nodes = oct_background:get_all_providers_nodes(),
     test_utils:mock_new(Nodes, archive_recall_traverse),
     Self = self(),
@@ -721,7 +772,36 @@ mock_recall_traverse() ->
     end).
 
 
-%% below functions require calling mock_recall_traverse/0 function beforehand.
+mock_cancel_test_slave_job() ->
+    Nodes = oct_background:get_all_providers_nodes(),
+    test_utils:mock_new(Nodes, archive_recall_traverse),
+    Self = self(),
+    test_utils:mock_expect(Nodes, archive_recall_traverse, do_slave_job_unsafe, fun(_, TaskId) ->
+        Self ! {slave_job, self()},
+        receive check_cancel ->
+            Self ! {result, traverse:is_slave_job_cancelled(TaskId)}
+        end,
+        ok
+    end).
+
+
+check_mocked_slave_jobs_cancelled(0) ->
+    ok;
+check_mocked_slave_jobs_cancelled(SlaveJobsLeft) ->
+    receive {slave_job, Pid} ->
+        Pid ! check_cancel,
+        receive {result, Res} ->
+            ?assertEqual(true, Res)
+        after 1000 ->
+            throw(cancel_result_not_received)
+        end
+    after timer:seconds(?ATTEMPTS) ->
+        throw(slave_job_not_started)
+    end,
+    check_mocked_slave_jobs_cancelled(SlaveJobsLeft - 1).
+
+
+%% below functions require calling mock_recall_traverse_finished/0 function beforehand.
 wait_for_recall_traverse_finish() ->
     receive
         {recall_traverse_finished, P} -> P
@@ -767,7 +847,14 @@ init_per_testcase(Case, Config) when
     Case =:= recall_to_recalling_dir_by_symlink_test;
     Case =:= recall_effective_cache_test
 ->
-    mock_recall_traverse(),
+    mock_recall_traverse_finished(),
+    time_test_utils:freeze_time(Config),
+    Config;
+init_per_testcase(Case, Config) when
+    Case =:= cancel_local_recall_test;
+    Case =:= cancel_remote_recall_test
+    ->
+    mock_cancel_test_slave_job(),
     time_test_utils:freeze_time(Config),
     Config;
 init_per_testcase(_Case, Config) ->
@@ -778,7 +865,9 @@ end_per_testcase(Case, Config) when
     Case =:= recall_details_nested_test;
     Case =:= recall_to_recalling_dir_test;
     Case =:= recall_to_recalling_dir_by_symlink_test;
-    Case =:= recall_effective_cache_test
+    Case =:= recall_effective_cache_test;
+    Case =:= cancel_local_recall_test;
+    Case =:= cancel_remote_recall_test
 ->
     time_test_utils:unfreeze_time(Config),
     test_utils:mock_unload(oct_background:get_all_providers_nodes(), archive_recall_traverse),

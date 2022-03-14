@@ -20,7 +20,7 @@
 %% API
 -export([create/2, delete/1]).
 -export([get/1]).
--export([report_started/1, report_finished/1]).
+-export([report_started/1, report_finished/1, report_cancelled/1]).
 %% Datastore callbacks
 -export([get_ctx/0, get_record_version/0, get_record_struct/1, on_remote_doc_created/2]).
 
@@ -89,6 +89,13 @@ report_finished(Id) ->
     end)).
 
 
+-spec report_cancelled(id()) -> ok | {error, term()}.
+report_cancelled(Id) ->
+    ?extract_ok(datastore_model:update(?CTX, Id, fun(ArchiveRecall) ->
+        {ok, ArchiveRecall#archive_recall_details{cancel_timestamp = global_clock:timestamp_millis()}}
+    end)).
+
+
 %%%===================================================================
 %%% Datastore callbacks
 %%%===================================================================
@@ -110,6 +117,7 @@ get_record_struct(1) ->
         {dataset_id, string},
         {start_timestamp, integer},
         {finish_timestamp, integer},
+        {cancel_timestamp, integer},
         {total_files, integer},
         {total_bytes, integer}
     ]}.

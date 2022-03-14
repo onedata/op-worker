@@ -325,6 +325,7 @@ translate_archive_recall_details(#archive_recall_details{
     dataset_id = DatasetId,
     start_timestamp = StartTimestamp,
     finish_timestamp = FinishTimestamp,
+    cancel_timestamp = CancelTimestamp,
     total_file_count = TargetFileCount,
     total_byte_size = TargetByteSize
 }) ->
@@ -335,6 +336,7 @@ translate_archive_recall_details(#archive_recall_details{
             type = op_dataset, id = DatasetId, aspect = instance, scope = private}),
         <<"startTime">> => utils:undefined_to_null(StartTimestamp),
         <<"finishTime">> => utils:undefined_to_null(FinishTimestamp),
+        <<"cancelTime">> => utils:undefined_to_null(CancelTimestamp),
         <<"totalFileCount">> => TargetFileCount,
         <<"totalByteSize">> => TargetByteSize
     }.
