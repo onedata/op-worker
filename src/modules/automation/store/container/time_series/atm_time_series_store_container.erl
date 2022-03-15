@@ -252,6 +252,81 @@ build_ts_collection_config(TSSchemas) ->
     end, #{}, TSSchemas).
 
 
-%% TODO implement
-apply_measurements(Measurements, DispatchRules, Record) ->
+%% @private
+-spec apply_measurements(
+    [json_utils:json_map()],
+    [atm_time_series_dispatch_rule:record()],
+    record()
+) ->
+    record().
+apply_measurements(Measurements, DispatchRules, Record = #atm_time_series_store_container{
+    config = #atm_time_series_store_config{schemas = TSSchemas},
+    backend_id = BackendId
+}) ->
+    {Updates, Configs} = lists:foldl(fun(Measurement, Acc = {TSUpdates, TSConfigs}) ->
+        case infer_target_ts(Measurement, DispatchRules, TSSchemas) of
+            {true, TSName, TSMetrics} ->
+                Timestamp = maps:get(<<"timestamp">>, Measurement),
+                Value = maps:get(<<"value">>, Measurement),
+                TSUpdate = {Timestamp, {TSName, Value}},
+                {
+                    [TSUpdate | TSUpdates],
+                    TSConfigs#{TSName => lists:foldl(fun(TSMetric, Acc) ->
+                        Acc#{TSMetric#metric_config.label => TSMetric}
+                    end, #{}, TSMetrics)}
+                };
+            false ->
+                Acc
+        end
+    end, {[], #{}}, Measurements),
+
+    ensure_time_series_exist(Configs, Record),
+
+    lists:foreach(fun({Timestamp, UpdateRange}) ->
+        ok = datastore_time_series_collection:check_and_update(?CTX, BackendId, Timestamp, UpdateRange)
+    end, Updates),
+
     Record.
+
+
+%% @private
+-spec ensure_time_series_exist(time_series_collection:collection_config(), record()) -> ok.
+ensure_time_series_exist(TSConfigs, #atm_time_series_store_container{backend_id = BackendId}) ->
+    {ok, ExistingTimeSeries} = datastore_time_series_collection:list_time_series_ids(
+        ?CTX, BackendId
+    ),
+    MissingTimeSeries = lists_utils:subtract(maps:keys(TSConfigs), ExistingTimeSeries),
+    MissingConfigs = maps:with(MissingTimeSeries, TSConfigs),
+
+    case datastore_time_series_collection:add_metrics(?CTX, BackendId, MissingConfigs, #{}) of
+        ok -> ok;
+        {error, time_series_already_exists} -> ok;
+        {error, metric_already_exists} -> ok
+    end.
+
+
+%% @private
+-spec infer_target_ts(
+    json_utils:json_map(),
+    [atm_time_series_dispatch_rule:record()],
+    [atm_time_series_schema:record()]
+) ->
+    {true, atm_time_series_names:target_ts_name(), [metric_config:record()]} | false | no_return().
+infer_target_ts(#{<<"tsName">> := MeasurementTSName}, DispatchRules, TSSchemas) ->
+    case atm_time_series_names:find_matching_dispatch_rule(MeasurementTSName, DispatchRules) of
+        {ok, DispatchRule} ->
+            case atm_time_series_names:find_referenced_time_series_schema(DispatchRule, TSSchemas) of
+                {ok, TSSchema} ->
+                    TargetTSName = atm_time_series_names:resolve_target_ts_name(
+                        MeasurementTSName, TSSchema, DispatchRule
+                    ),
+                    {true, TargetTSName, TSSchema#atm_time_series_schema.metrics};
+                error ->
+                    throw(?ERROR_BAD_DATA(
+                        <<"dispatchRules">>,
+                        <<"Dispatch rules must point to defined time series schema">>
+                    ))
+            end;
+        error ->
+            false
+    end.
