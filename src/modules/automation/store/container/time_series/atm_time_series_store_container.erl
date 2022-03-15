@@ -90,7 +90,13 @@ create(_AtmWorkflowExecutionAuth, AtmStoreConfig, undefined) ->
     #atm_time_series_store_container{
         config = AtmStoreConfig,
         backend_id = BackendId
-    }.
+    };
+
+create(_AtmWorkflowExecutionAuth, _AtmStoreConfig, _InitialContent) ->
+    throw(?ERROR_BAD_DATA(
+        <<"initialContent">>,
+        <<"Time series store does not accept initial content">>
+    )).
 
 
 -spec get_config(record()) -> atm_time_series_store_config:record().
