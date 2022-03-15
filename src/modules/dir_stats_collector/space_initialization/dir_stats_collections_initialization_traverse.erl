@@ -31,6 +31,9 @@
 %% Pool callbacks
 -export([do_master_job/2, do_slave_job/2, update_job_progress/5, get_job/1, task_finished/2, task_canceled/2]).
 
+% Export for tests
+-export([gen_task_id/2]).
+
 
 -define(POOL_WORKERS, op_worker:get_env(dir_stats_collections_initialization_traverse_pool_workers, 10)).
 -define(TASK_ID_SEPARATOR, "#").
@@ -101,7 +104,7 @@ task_finished(TaskId, _PoolName) ->
 
 -spec task_canceled(tree_traverse:id(), traverse:pool()) -> ok.
 task_canceled(TaskId, PoolName) ->
-    % NOTE - task should be canceled using dir_stats_collector_config:disable_for_space/1 so information about
+    % NOTE - task should be canceled using dir_stats_collector_config:disable/1 so information about
     % cancellation is already present in config - notification about finish is enough to handle cancellation.
     task_finished(TaskId, PoolName).
 

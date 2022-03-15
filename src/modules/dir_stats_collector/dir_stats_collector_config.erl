@@ -13,8 +13,8 @@
 %%% at the moment of space support granting by provider. For other spaces
 %%% collecting status is disabled.
 %%%
-%%% Collecting status can be changed using enable_for_space/1 and
-%%% disable_for_space/1 API functions. In such a case, status is not changed
+%%% Collecting status can be changed using enable/1 and
+%%% disable/1 API functions. In such a case, status is not changed
 %%% directly to enabled/disabled but is changed via intermediate states
 %%% collections_initialization/collectors_stopping. These intermediate
 %%% states are used because changing of status requires travers via all
@@ -58,7 +58,7 @@
 %% API - init/cleanup
 -export([init_for_empty_space/1, clean/1]).
 %% API - collecting status changes
--export([enable_for_space/1, disable_for_space/1,
+-export([enable/1, disable/1,
     report_collections_initialization_finished/1, report_collectors_stopped/1]).
 
 %% datastore_model callbacks
@@ -176,8 +176,8 @@ clean(SpaceId) ->
 %%% API - collecting status changes
 %%%===================================================================
 
--spec enable_for_space(od_space:id()) -> ok.
-enable_for_space(SpaceId) ->
+-spec enable(od_space:id()) -> ok.
+enable(SpaceId) ->
     NewRecord = #dir_stats_collector_config{
         collecting_status = collections_initialization,
         collections_initialization_traverse_num = 1
@@ -214,8 +214,8 @@ enable_for_space(SpaceId) ->
     end.
 
 
--spec disable_for_space(od_space:id()) -> ok.
-disable_for_space(SpaceId) ->
+-spec disable(od_space:id()) -> ok.
+disable(SpaceId) ->
     Diff = fun
         (#dir_stats_collector_config{
             collecting_status = enabled

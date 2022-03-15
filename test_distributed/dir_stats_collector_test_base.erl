@@ -20,13 +20,14 @@
 -include_lib("ctool/include/errors.hrl").
 
 
--export([single_provider_test/1, multiprovider_test/1,
+-export([basic_test/1, multiprovider_test/1,
     enabling_for_empty_space_test/1, enabling_for_not_empty_space_test/1, enabling_during_writing_test/1,
     race_with_file_adding_test/1, race_with_file_writing_test/1,
     race_with_subtree_adding_test/1, race_with_subtree_filling_with_data_test/1]).
 -export([init/1, teardown/1]).
--export([verify_dir_on_provider_creating_files/3, delete_stats/3]).
-% TODO - dodac testy szybbkiego wylaczania po wlaczeniu i wlaczania po wylaczeniu, dodac siute stress gdzie robimy to co w empty_files...SUITE tylko z wlaczonym zliczaniem i potem wylaczam i wlaczamy zliczanie i sprawdzamy czy sie zliczylo
+-export([verify_dir_on_provider_creating_files/3, delete_stats/2]).
+% TODO VFS-9148, VFS-9149 - extend tests
+
 
 % For multiprovider test, one provider creates files and fills them with data,
 % second reads some data and deletes files
@@ -49,7 +50,7 @@
 %%% Test functions
 %%%===================================================================
 
-single_provider_test(Config) ->
+basic_test(Config) ->
     % TODO VFS-8835 - test rename
     enable(Config, new_space),
     create_initial_file_tree_and_fill_files(Config, op_worker_nodes, enabled),
@@ -242,7 +243,7 @@ test_with_race_base(Config, TestDirIdentifier, OnSpaceChildrenListed, ExpectedSp
 
     Master = self(),
     Tag = make_ref(),
-    ok = test_utils:mock_new(Worker, file_meta, [passthrough]), % TODO - mockowanie i odmockowanie w init_per_testcase
+    ok = test_utils:mock_new(Worker, file_meta, [passthrough]),
     ok = test_utils:mock_expect(Worker, file_meta, list_children, fun
         (FileUuid, ListOpts) when FileUuid =:= TestUuid ->
             Ans = meck:passthrough([FileUuid, ListOpts]),
@@ -286,17 +287,29 @@ init(Config) ->
 
 teardown(Config) ->
     SpaceId = lfm_test_utils:get_user1_first_space_id(Config),
+    SpaceGuid = lfm_test_utils:get_user1_first_space_guid(Config),
     lists:foreach(fun(W) ->
-        rpc:call(W, dir_stats_collector_config, clean, [SpaceId])
+        ?assertEqual(ok, rpc:call(W, dir_stats_collector_config, disable, [SpaceId])),
+        ?assertEqual(ok, rpc:call(W, dir_stats_collector_config, clean, [SpaceId])),
+        delete_stats(W, SpaceGuid),
+        % Clean traverse data (do not assert as not all tests use initialization traverses)
+        rpc:call(W, traverse_task, delete_ended, [
+            <<"dir_stats_collections_initialization_traverse">>,
+            dir_stats_collections_initialization_traverse:gen_task_id(SpaceId, 1)
+        ])
     end, initializer:get_different_domain_workers(Config)),
 
     Workers = ?config(op_worker_nodes, Config),
+    lfm_test_utils:clean_space(Workers, SpaceId, 30),
+
     EnableDirStatsCollectorForNewSpaces = ?config(default_enable_dir_stats_collector_for_new_spaces, Config),
     test_utils:set_env(
         Workers, op_worker, enable_dir_stats_collector_for_new_spaces, EnableDirStatsCollectorForNewSpaces),
 
     MinimalSyncRequest = ?config(default_minimal_sync_request, Config),
-    test_utils:set_env(Workers, op_worker, minimal_sync_request, MinimalSyncRequest).
+    test_utils:set_env(Workers, op_worker, minimal_sync_request, MinimalSyncRequest),
+
+    test_utils:mock_unload(Workers, file_meta).
 
 
 %%%===================================================================
@@ -340,8 +353,7 @@ verify_dir_on_provider_creating_files(Config, NodesSelector, Guid) ->
     update_expectations_map(Expectations, #{update_time => CollectorTime}).
 
 
-delete_stats(Config, NodesSelector, Guid) ->
-    [Worker | _] = ?config(NodesSelector, Config),
+delete_stats(Worker, Guid) ->
     ?assertEqual(ok, rpc:call(Worker, dir_size_stats, delete_stats, [Guid])),
     ?assertEqual(ok, rpc:call(Worker, dir_update_time_stats, delete_stats, [Guid])).
 
@@ -352,12 +364,12 @@ delete_stats(Config, NodesSelector, Guid) ->
 enable(Config, new_space) ->
     SpaceId = lfm_test_utils:get_user1_first_space_id(Config),
     lists:foreach(fun(W) ->
-        rpc:call(W, dir_stats_collector_config, init_for_empty_space, [SpaceId])
+        ?assertEqual(ok, rpc:call(W, dir_stats_collector_config, init_for_empty_space, [SpaceId]))
     end, initializer:get_different_domain_workers(Config));
 enable(Config, existing_space) ->
     SpaceId = lfm_test_utils:get_user1_first_space_id(Config),
     lists:foreach(fun(W) ->
-        rpc:call(W, dir_stats_collector_config, enable_for_space, [SpaceId])
+        ?assertEqual(ok, rpc:call(W, dir_stats_collector_config, enable, [SpaceId]))
     end, initializer:get_different_domain_workers(Config)).
 
 

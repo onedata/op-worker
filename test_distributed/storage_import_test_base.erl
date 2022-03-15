@@ -7102,7 +7102,8 @@ end_per_testcase(Case, Config)
     orelse Case =:= delete_many_subfiles_test
     orelse Case =:= append_file_update_test ->
 
-    dir_stats_collector_test_base:delete_stats(Config, op_worker_nodes, get_space_guid(Config)),
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    dir_stats_collector_test_base:delete_stats(Worker, get_space_guid(Config)),
     dir_stats_collector_test_base:teardown(Config),
     end_per_testcase(default, Config);
 
