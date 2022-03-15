@@ -115,9 +115,9 @@ ensure_dir_initialized(Guid, DataMap) ->
 
     {FileUuid, SpaceId} = file_id:unpack_guid(Guid),
     CollectionTypesToInit = maps:keys(ToInit),
-    StatsMap = init_for_dir_children(
+    NewStatsMap = init_for_dir_children(
         FileUuid, SpaceId, CollectionTypesToInit, #{token => ?INITIAL_DATASTORE_LS_TOKEN, size => ?BATCH_SIZE}, #{}),
-    FinalStatsMap = finish_dir_init(Guid, CollectionTypesToInit, StatsMap),
+    FinalNewStatsMap = finish_dir_init(Guid, CollectionTypesToInit, NewStatsMap),
 
     Timer = countdown_timer:start_millis(?RACE_PREVENTING_TIME),
     maps:merge_with(fun(_CollectionType, Data, Stats) ->
@@ -126,7 +126,7 @@ ensure_dir_initialized(Guid, DataMap) ->
             race_preventing_timer = Timer,
             dir_and_direct_children_stats = Stats
         }
-    end, DataMap, FinalStatsMap).
+    end, DataMap, FinalNewStatsMap).
 
 
 %%%===================================================================

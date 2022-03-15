@@ -43,7 +43,7 @@
     delete_stats/1]).
 
 %% dir_stats_collection_behaviour callbacks
--export([acquire/1, consolidate/3, save/2, delete/1, init_dir/1, init_child/1]).
+-export([acquire/1, consolidate/3, save/3, delete/1, init_dir/1, init_child/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0]).
@@ -57,8 +57,11 @@
 }).
 
 -define(NOW(), global_clock:timestamp_seconds()).
-% Metric storing current value of each statistic
+% Metric storing current value of statistic or traverse number (depending on time series)
 -define(CURRENT_METRIC, <<"current">>).
+% Metric storing last traverse num - historical values are not required
+% but usage of metric allows keeping everything in single structure
+-define(INITIALIZATION_TRAVERSE_NUM_TIME_SERIES, <<"traverse_num">>).
 
 %%%===================================================================
 %%% API
@@ -159,13 +162,15 @@ delete_stats(Guid) ->
 %%% dir_stats_collection_behaviour callbacks
 %%%===================================================================
 
--spec acquire(file_id:file_guid()) -> dir_stats_collection:collection().
+-spec acquire(file_id:file_guid()) -> {dir_stats_collection:collection(), non_neg_integer()}.
 acquire(Guid) ->
     case datastore_time_series_collection:list_windows(
         ?CTX, file_id:guid_to_uuid(Guid), {all, ?CURRENT_METRIC}, #{limit => 1}
     ) of
-        {ok, WindowsMap} -> current_metrics_to_stats_collection(WindowsMap);
-        {error, not_found} -> gen_empty_stats_collection(Guid)
+        {ok, WindowsMap} ->
+            {current_metrics_to_stats_collection(WindowsMap), get_initialization_traverse_num(WindowsMap)};
+        {error, not_found} ->
+            {gen_empty_stats_collection(Guid), 0}
     end.
 
 
@@ -175,20 +180,26 @@ consolidate(_, Value, Diff) ->
     Value + Diff.
 
 
--spec save(file_id:file_guid(), dir_stats_collection:collection()) -> ok.
-save(Guid, Collection) ->
+-spec save(file_id:file_guid(), dir_stats_collection:collection(), non_neg_integer() | undefined) -> ok.
+save(Guid, Collection, InitializationTraverseNum) ->
     Uuid = file_id:guid_to_uuid(Guid),
-    case datastore_time_series_collection:update(?CTX, Uuid, ?NOW(), maps:to_list(Collection)) of
+    UpdateSpec = case InitializationTraverseNum of
+        undefined ->
+            maps:to_list(Collection);
+        _ -> [{?INITIALIZATION_TRAVERSE_NUM_TIME_SERIES, InitializationTraverseNum} | maps:to_list(Collection)]
+    end,
+    case datastore_time_series_collection:update(?CTX, Uuid, ?NOW(), UpdateSpec) of
         ok ->
             ok;
         ?ERROR_NOT_FOUND ->
-            Config = maps:from_list(lists:map(fun(StatName) ->
+            BasicConfig = maps:from_list(lists:map(fun(StatName) ->
                 {StatName, metrics_extended_with_current_value()}
             end, stat_names(Guid))),
+            FinalConfig = maps:merge(BasicConfig, #{?INITIALIZATION_TRAVERSE_NUM_TIME_SERIES => current_metric()}),
             % NOTE: single pes process is dedicated for each guid so race resulting in
             % {error, collection_already_exists} is impossible - match create answer to ok
-            ok = datastore_time_series_collection:create(?CTX, Uuid, Config),
-            save(Guid, Collection)
+            ok = datastore_time_series_collection:create(?CTX, Uuid, FinalConfig),
+            save(Guid, Collection, InitializationTraverseNum)
     end.
 
 
@@ -254,11 +265,17 @@ stat_names(Guid) ->
 %% @private
 -spec metrics_extended_with_current_value() -> #{ts_metric:id() => ts_metric:config()}.
 metrics_extended_with_current_value() ->
-    maps:put(?CURRENT_METRIC, #metric_config{
+    maps:put(?CURRENT_METRIC, current_metric(), metrics()).
+
+
+%% @private
+-spec current_metric() -> ts_metric:config().
+current_metric() ->
+    #metric_config{
         resolution = 1,
         retention = 1,
         aggregator = last
-    }, metrics()).
+    }.
 
 
 %% @private
@@ -267,23 +284,23 @@ metrics() ->
     #{
         ?MINUTE_METRIC => #metric_config{
             resolution = ?MINUTE_RESOLUTION,
-            retention = 120,
-            aggregator = sum
+            retention = 720,
+            aggregator = last
         },
         ?HOUR_METRIC => #metric_config{
             resolution = ?HOUR_RESOLUTION,
-            retention = 48,
-            aggregator = sum
+            retention = 1440,
+            aggregator = last
         },
         ?DAY_METRIC => #metric_config{
             resolution = ?DAY_RESOLUTION,
-            retention = 60,
-            aggregator = sum
+            retention = 550,
+            aggregator = last
         },
         ?MONTH_METRIC => #metric_config{
             resolution = ?MONTH_RESOLUTION,
-            retention = 12,
-            aggregator = sum
+            retention = 360,
+            aggregator = last
         }
     }.
 
@@ -299,7 +316,7 @@ all_metrics_to_stats_and_time_series_collections(WindowsMap) ->
 
     {
         current_metrics_to_stats_collection(CurrentValues),
-        time_metrics_to_time_series_collection(maps:without(maps:keys(CurrentValues), WindowsMap))
+        maps:without(maps:keys(CurrentValues), WindowsMap)
     }.
 
 
@@ -309,15 +326,7 @@ current_metrics_to_stats_collection(WindowsMap) ->
     maps_utils:map_key_value(fun
         ({StatName, _}, [{_Timestamp, Value}]) -> {StatName, Value};
         ({StatName, _}, []) -> {StatName, 0}
-    end, WindowsMap).
-
-
-%% @private
--spec time_metrics_to_time_series_collection(time_series_collection:windows_map()) -> dir_stats_collection:collection().
-time_metrics_to_time_series_collection(WindowsMap) ->
-    maps:map(fun(_, Windows) ->
-        lists:map(fun({Timestamp, {Count, Sum}}) -> {Timestamp, round(Sum / Count)} end, Windows)
-    end, WindowsMap).
+    end, maps:without([{?INITIALIZATION_TRAVERSE_NUM_TIME_SERIES, ?CURRENT_METRIC}], WindowsMap)).
 
 
 %% @private
@@ -333,3 +342,11 @@ gen_empty_time_series_collection(Guid) ->
     maps:from_list(lists:flatmap(fun(StatName) ->
         lists:map(fun(MetricId) -> {{StatName, MetricId}, []} end, MetricIds)
     end, stat_names(Guid))).
+
+
+-spec get_initialization_traverse_num(time_series_collection:windows_map()) -> non_neg_integer().
+get_initialization_traverse_num(WindowsMap) ->
+    case maps:get({?INITIALIZATION_TRAVERSE_NUM_TIME_SERIES, ?CURRENT_METRIC}, WindowsMap) of
+        [] -> 0;
+        [{_Timestamp, Value}] -> Value
+    end.

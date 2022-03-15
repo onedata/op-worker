@@ -1059,7 +1059,8 @@
 }).
 
 -record(dir_update_time_stats, {
-    time = 0 :: times:time()
+    time = 0 :: times:time(),
+    collections_initialization_traverse_num = 0 :: non_neg_integer()
 }).
 
 

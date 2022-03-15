@@ -53,7 +53,7 @@
 
 
 %% API - getters
--export([is_collecting_active/1, get_collecting_status/1,
+-export([is_collecting_active/1, get_extended_collecting_status/1,
     get_enabling_time/1, get_collecting_status_change_timestamps/1]).
 %% API - init/cleanup
 -export([init_for_empty_space/1, clean/1]).
@@ -65,16 +65,24 @@
 -export([get_ctx/0, get_record_version/0, get_record_struct/1, upgrade_record/2]).
 
 
--type active_collecting_status() :: enabled | collections_initialization. % update requests are generated for
-                                                                         % active statuses
 -type collecting_status() :: active_collecting_status() | disabled | collectors_stopping.
+% update requests can be generated only for active statuses
+-type active_collecting_status() :: enabled | collections_initialization.
+% extended status includes information about initialization traverse - it is used
+% outside this module while internally status and travers number are stored separately
+-type extended_collecting_status() :: extended_active_collecting_status() | disabled | collectors_stopping.
+-type extended_active_collecting_status() :: enabled |
+    {collections_initialization, InitializationTraverseNum :: non_neg_integer()}.
+
 -type collecting_status_change_order() :: enable | disable.
 -type status_change_timestamp() :: {collecting_status(), time:seconds()}.
+
 -type record() :: #dir_stats_collector_config{}.
 -type diff_fun() :: datastore_doc:diff(record()).
 -type ctx() :: datastore:ctx().
 
--export_type([active_collecting_status/0, collecting_status/0,
+-export_type([collecting_status/0, active_collecting_status/0,
+    extended_collecting_status/0, extended_active_collecting_status/0,
     collecting_status_change_order/0, status_change_timestamp/0]).
 
 
@@ -92,18 +100,25 @@
 
 -spec is_collecting_active(od_space:id()) -> boolean().
 is_collecting_active(SpaceId) ->
-    case get_collecting_status(SpaceId) of
+    case get_extended_collecting_status(SpaceId) of
         enabled -> true;
-        collections_initialization -> true;
+        {collections_initialization, _} -> true;
         _ -> false
     end.
 
 
--spec get_collecting_status(od_space:id()) -> collecting_status().
-get_collecting_status(SpaceId) ->
+-spec get_extended_collecting_status(od_space:id()) -> extended_collecting_status().
+get_extended_collecting_status(SpaceId) ->
     case datastore_model:get(?CTX, SpaceId) of
-        {ok, #document{value = #dir_stats_collector_config{collecting_status = Status}}} -> Status;
-        {error, not_found} -> disabled
+        {ok, #document{value = #dir_stats_collector_config{
+            collecting_status = collections_initialization,
+            collections_initialization_traverse_num = TraverseNum
+        }}} ->
+            {collections_initialization, TraverseNum};
+        {ok, #document{value = #dir_stats_collector_config{collecting_status = Status}}} ->
+            Status;
+        {error, not_found} ->
+            disabled
     end.
 
 

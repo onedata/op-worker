@@ -23,7 +23,8 @@
 %% Gets collection from datastore.
 %% @end
 %%--------------------------------------------------------------------
--callback acquire(file_id:file_guid()) -> dir_stats_collection:collection() | no_return().
+-callback acquire(file_id:file_guid()) ->
+    {dir_stats_collection:collection(), InitializationTraverseNum :: non_neg_integer()} | no_return().
 
 
 %%--------------------------------------------------------------------
@@ -40,10 +41,14 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Saves collection to datastore.
+%% Saves collection to datastore. If collection if saved during collections initialization traverse, traverse number
+%% is the third argument, otherwise third argument is undefined.
+%% NOTE: latest initialization traverse number is persisted to allow collector determine if stored collection is
+%% outdated as a result of temporary disabling of statistics collecting.
 %% @end
 %%--------------------------------------------------------------------
--callback save(file_id:file_guid(), dir_stats_collection:collection()) -> ok | no_return().
+-callback save(file_id:file_guid(), dir_stats_collection:collection(),
+    InitializationTraverseNum :: non_neg_integer() | undefined) -> ok | no_return().
 
 
 %%--------------------------------------------------------------------

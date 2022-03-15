@@ -27,7 +27,7 @@
 -export([report_update_of_dir/2, report_update_of_nearest_dir/2, get_update_time/1, delete_stats/1]).
 
 %% dir_stats_collection_behaviour callbacks
--export([acquire/1, consolidate/3, save/2, delete/1, init_dir/1, init_child/1]).
+-export([acquire/1, consolidate/3, save/3, delete/1, init_dir/1, init_child/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1]).
@@ -81,13 +81,16 @@ delete_stats(Guid) ->
 %%% dir_stats_collection_behaviour callbacks
 %%%===================================================================
 
--spec acquire(file_id:file_guid()) -> dir_stats_collection:collection().
+-spec acquire(file_id:file_guid()) -> {dir_stats_collection:collection(), non_neg_integer()}.
 acquire(Guid) ->
     case datastore_model:get(?CTX, file_id:guid_to_uuid(Guid)) of
-        {ok, #document{value = #dir_update_time_stats{time = Time}}} ->
-            #{?STAT_NAME => Time};
+        {ok, #document{value = #dir_update_time_stats{
+            time = Time,
+            collections_initialization_traverse_num = InitializationTraverseNum
+        }}} ->
+            {#{?STAT_NAME => Time}, InitializationTraverseNum};
         {error, not_found} ->
-            #{?STAT_NAME => 0}
+            {#{?STAT_NAME => 0}, 0}
     end.
 
 
@@ -98,12 +101,24 @@ consolidate(_, OldValue, NewValue) ->
     max(OldValue, NewValue).
 
 
--spec save(file_id:file_guid(), dir_stats_collection:collection()) -> ok.
-save(Guid, #{?STAT_NAME := Time}) ->
-    ok = ?extract_ok(datastore_model:save(?CTX, #document{
-        key = file_id:guid_to_uuid(Guid),
-        value = #dir_update_time_stats{time = Time}
-    })).
+-spec save(file_id:file_guid(), dir_stats_collection:collection(), non_neg_integer() | undefined) -> ok.
+save(Guid, #{?STAT_NAME := Time}, InitializationTraverseNum) ->
+    Default = #dir_update_time_stats{
+        time = Time,
+        collections_initialization_traverse_num = utils:ensure_defined(InitializationTraverseNum, 0)
+    },
+
+    Diff = fun(#dir_update_time_stats{
+        collections_initialization_traverse_num = CurrentInitializationTraverseNum
+    } = Record) ->
+        NewInitializationTraverseNum = utils:ensure_defined(InitializationTraverseNum, CurrentInitializationTraverseNum),
+        {ok, Record#dir_update_time_stats{
+            time = Time,
+            collections_initialization_traverse_num = NewInitializationTraverseNum
+        }}
+    end,
+
+    ok = ?extract_ok(datastore_model:update(?CTX, file_id:guid_to_uuid(Guid), Diff, Default)).
 
 
 -spec delete(file_id:file_guid()) -> ok.
