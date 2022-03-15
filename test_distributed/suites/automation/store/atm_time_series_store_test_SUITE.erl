@@ -28,12 +28,16 @@
 
 %% tests
 -export([
-    create_test/1
+    create_test/1,
+    update_content_test/1,
+    not_supported_iteration_test/1
 ]).
 
 groups() -> [
     {all_tests, [parallel], [
-        create_test
+        create_test,
+        update_content_test,
+        not_supported_iteration_test
     ]}
 ].
 
@@ -93,6 +97,40 @@ all() -> [
     ?COUNT_TS_SCHEMA
 ]}).
 
+-define(DISPATCH_RULES, [
+    #atm_time_series_dispatch_rule{
+        measurement_ts_name_matcher_type = exact,
+        measurement_ts_name_matcher = <<"mp3">>,
+        target_ts_name_generator = <<"count_">>,
+        prefix_combiner = overwrite
+    },
+    #atm_time_series_dispatch_rule{
+        measurement_ts_name_matcher_type = has_prefix,
+        measurement_ts_name_matcher = <<"size">>,
+        target_ts_name_generator = ?MAX_FILE_SIZE_TS_NAME,
+        prefix_combiner = converge
+    },
+    #atm_time_series_dispatch_rule{
+        measurement_ts_name_matcher_type = has_prefix,
+        measurement_ts_name_matcher = <<"count_ct_">>,
+        target_ts_name_generator = <<"count_">>,
+        prefix_combiner = concatenate
+    },
+    #atm_time_series_dispatch_rule{
+        measurement_ts_name_matcher_type = has_prefix,
+        measurement_ts_name_matcher = <<"count_cn_">>,
+        target_ts_name_generator = <<"count_">>,
+        prefix_combiner = converge
+    },
+    #atm_time_series_dispatch_rule{
+        measurement_ts_name_matcher_type = has_prefix,
+        measurement_ts_name_matcher = <<"count_over_">>,
+        target_ts_name_generator = <<"count_">>,
+        prefix_combiner = overwrite
+    }
+]).
+
+-define(NOW(), global_clock:timestamp_seconds()).
 
 -define(PROVIDER_SELECTOR, krakow).
 -define(rpc(Expr), ?rpc(?PROVIDER_SELECTOR, Expr)).
@@ -127,6 +165,58 @@ create_test(_Config) ->
     ).
 
 
+update_content_test(_Config) ->
+    AtmWorkflowExecutionAuth = create_workflow_execution_auth(),
+    AtmStoreSchema = build_store_schema(?ATM_STORE_CONFIG),
+
+    AtmStoreId = create_store(AtmWorkflowExecutionAuth, AtmStoreSchema),
+    ExpLayout0 = #{?MAX_FILE_SIZE_TS_NAME => [?MAX_FILE_SIZE_TS_NAME]},
+    ?assertEqual(ExpLayout0, get_layout(AtmWorkflowExecutionAuth, AtmStoreId)),
+
+    ContentUpdateOpts = #atm_time_series_store_content_update_options{
+        dispatch_rules = ?DISPATCH_RULES
+    },
+
+    NewItem = [
+        #{<<"tsName">> => <<"mp3">>, <<"timestamp">> => ?NOW() + 10, <<"value">> => 10}
+    ],
+    ?assertEqual(ok, ?rpc(atm_store_api:update_content(
+        AtmWorkflowExecutionAuth, NewItem, ContentUpdateOpts, AtmStoreId
+    ))),
+    ExpLayout1 = ExpLayout0#{
+        <<"count_mp3">> => [?MINUTE_METRIC_NAME, ?HOUR_METRIC_NAME, ?DAY_METRIC_NAME]
+    },
+
+    ?assertMatch(
+        #{
+            ?MAX_FILE_SIZE_TS_NAME := #{?MAX_FILE_SIZE_TS_NAME := []},
+            <<"count_mp3">> := #{
+                ?MINUTE_METRIC_NAME := [#{<<"value">> := 10}],
+                ?HOUR_METRIC_NAME := [#{<<"value">> := 10}],
+                ?DAY_METRIC_NAME := [#{<<"value">> := 10}]
+            }
+        },
+        get_windows(AtmWorkflowExecutionAuth, AtmStoreId, ExpLayout1)
+    ).
+
+
+not_supported_iteration_test(_Config) ->
+    AtmWorkflowExecutionAuth = create_workflow_execution_auth(),
+
+    AtmStoreSchema = build_store_schema(?ATM_STORE_CONFIG),
+    AtmStoreId = create_store(AtmWorkflowExecutionAuth, AtmStoreSchema),
+
+    AtmStoreIteratorSpec = #atm_store_iterator_spec{
+        store_schema_id = AtmStoreSchema#atm_store_schema.id,
+        max_batch_size = rand:uniform(8)
+    },
+
+    ?assertError(
+        {exception, not_supported, _},
+        ?erpc(atm_store_api:acquire_iterator(AtmStoreId, AtmStoreIteratorSpec))
+    ).
+
+
 %===================================================================
 % Helper functions
 %===================================================================
@@ -146,6 +236,17 @@ build_store_schema(AtmStoreConfig) ->
     % time_series store does not allow initial content and as such 'requires_initial_content'
     % is always set as 'false' (it is enforced by oz)
     atm_store_test_utils:build_store_schema(AtmStoreConfig, false).
+
+
+%% @private
+-spec create_store(atm_workflow_execution_auth:record(), atm_store_schema:record()) ->
+    atm_store:id().
+create_store(AtmWorkflowExecutionAuth, AtmStoreSchema) ->
+    {ok, #document{key = AtmStoreId}} = ?assertMatch(
+        {ok, #document{value = #atm_store{initial_content = undefined, frozen = false}}},
+        ?rpc(atm_store_api:create(AtmWorkflowExecutionAuth, undefined, AtmStoreSchema))
+    ),
+    AtmStoreId.
 
 
 %% @private

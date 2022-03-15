@@ -153,8 +153,7 @@ update_content_test_base(AtmStoreConfigs, GetItemDataSpec, ContentUpdateOpts, Ge
         ?rpc(atm_store_api:unfreeze(AtmStoreId)),
         ?assertEqual(ok, ?rpc(atm_store_api:update_content(
             AtmWorkflowExecutionAuth, NewItem, ContentUpdateOpts, AtmStoreId
-        ))
-        ),
+        ))),
         ?assertMatch(FullyExpandedNewItem, GetContentFun(AtmWorkflowExecutionAuth, AtmStoreId))
 
     end, AtmStoreConfigs).
