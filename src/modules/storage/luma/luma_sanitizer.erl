@@ -15,6 +15,7 @@
 
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include("modules/storage/luma/luma.hrl").
 
 %% API
@@ -39,7 +40,7 @@ sanitize_storage_user(StorageUserMap, HelperName) when is_map(StorageUserMap) ->
     try
         {ok, middleware_sanitizer:sanitize_data(StorageUserMap, #{
             required => #{<<"storageCredentials">> => {json, storage_credentials_custom_constraint(HelperName)}},
-            optional => #{<<"displayUid">> => {integer, {not_lower_than, 0}}}
+            optional => #{<<"displayUid">> => {integer, {between, 0, ?UID_MAX}}}
         })}
     catch
         throw:Error:Stacktrace ->
@@ -53,8 +54,8 @@ sanitize_posix_credentials(PosixCredentials) ->
     try
         {ok, middleware_sanitizer:sanitize_data(PosixCredentials, #{
             optional => #{
-                <<"uid">> => {integer, {not_lower_than, 0}},
-                <<"gid">> => {integer, {not_lower_than, 0}}
+                <<"uid">> => {integer, {between, 0, ?UID_MAX}},
+                <<"gid">> => {integer, {between, 0, ?GID_MAX}}
             }
         })}
     catch
@@ -124,7 +125,7 @@ storage_credentials_custom_constraint(HelperName) ->
     luma:storage_credentials().
 sanitize_posix_storage_user_credentials(PosixCredentials) ->
     middleware_sanitizer:sanitize_data(PosixCredentials, #{
-        required => #{<<"uid">> => {integer, {not_lower_than, 0}}}
+        required => #{<<"uid">> => {integer, {between, 0, ?UID_MAX}}}
     }).
 
 
