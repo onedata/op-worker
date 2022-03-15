@@ -58,16 +58,17 @@ failure_test(Config) ->
 
 
 cm_failure_test_base(Config) ->
-    [KilledCM] = provider_onenv_test_utils:get_primary_cm_node(Config, krakow),
-    [NodeToBeStopped | _] = oct_background:get_provider_nodes(krakow),
+    KilledCM = provider_onenv_test_utils:get_primary_cm_node(Config, krakow),
+    [NodeExpectedToStopItself] = oct_background:get_provider_nodes(krakow),
 
     failure_test_utils:kill_nodes(Config, KilledCM),
     ct:pal("CM killed"),
-    ?assertEqual({badrpc, nodedown}, rpc:call(NodeToBeStopped, oneprovider, get_id, []), 120),
+    % Worker node should detect that CM is down and stop
+    ?assertEqual({badrpc, nodedown}, rpc:call(NodeExpectedToStopItself, oneprovider, get_id, []), 120),
     ct:pal("Worker node down"),
     ok = oct_environment:start_node(Config, KilledCM),
     ct:pal("CM restarted"),
-    failure_test_utils:restart_nodes(Config, NodeToBeStopped),
+    failure_test_utils:restart_nodes(Config, NodeExpectedToStopItself),
     ct:pal("Worker node restarted").
 
 

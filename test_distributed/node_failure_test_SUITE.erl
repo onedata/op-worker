@@ -172,8 +172,8 @@ end_per_suite(_Config) ->
 
 enable_ha(Config) ->
     Workers = oct_background:get_provider_nodes(krakow) ++ oct_background:get_provider_nodes(paris),
-    [CM_P1] = provider_onenv_test_utils:get_primary_cm_node(Config, krakow),
-    [CM_P2] = provider_onenv_test_utils:get_primary_cm_node(Config, paris),
+    CM_P1 = provider_onenv_test_utils:get_primary_cm_node(Config, krakow),
+    CM_P2 = provider_onenv_test_utils:get_primary_cm_node(Config, paris),
     ClusterManagerNodes = [CM_P1, CM_P2],
 
     lists:foreach(fun(Worker) ->
