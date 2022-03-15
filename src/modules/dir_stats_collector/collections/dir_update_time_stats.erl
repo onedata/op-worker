@@ -148,7 +148,8 @@ get_ctx() ->
 -spec get_record_struct(datastore_model:record_version()) -> datastore_model:record_struct().
 get_record_struct(1) ->
     {record, [
-        {time, integer}
+        {time, integer},
+        {collections_initialization_traverse_num, integer}
     ]}.
 
 

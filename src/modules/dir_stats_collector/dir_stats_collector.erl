@@ -165,8 +165,10 @@ get_stats(Guid, CollectionType, StatNames) ->
                 stat_names = StatNames
             },
             call_designated_node(Guid, submit_and_await, [?MODULE, Guid, Request]);
+        % TODO VFS-8837 - should we have 2 types of errors: ?ERROR_FORBIDDEN and ?ERROR_DIR_STATS_DISABLED_FOR_SPACE?
+        % Maybe return single error ?ERROR_DIR_STATS_COLLECTING_NOT_ACTIVE_FOR_SPACE?
         {collections_initialization, _} ->
-            ?ERROR_FORBIDDEN; % TODO - ?ERROR_FORBIDDEN zmienic na nowy blad ?ERROR_COLLECTIONS_INITIALIZATION_FOR_SPACE
+            ?ERROR_FORBIDDEN;
         _ ->
             ?ERROR_DIR_STATS_DISABLED_FOR_SPACE
     end.
@@ -237,11 +239,12 @@ update_stats_of_nearest_dir(Guid, CollectionType, CollectionUpdate) ->
 
 
 -spec flush_stats(file_id:file_guid(), dir_stats_collection:type()) ->
-    ok | ?ERROR_FORBIDDEN | ?ERROR_INTERNAL_SERVER_ERROR.
+    ok | ?ERROR_FORBIDDEN | ?ERROR_DIR_STATS_DISABLED_FOR_SPACE | ?ERROR_INTERNAL_SERVER_ERROR.
 flush_stats(Guid, CollectionType) ->
-    case dir_stats_collector_config:is_collecting_active(file_id:guid_to_space_id(Guid)) of
-        true -> request_flush(Guid, CollectionType, prune_inactive);
-        false -> ok
+    case dir_stats_collector_config:get_extended_collecting_status(file_id:guid_to_space_id(Guid)) of
+        enabled -> request_flush(Guid, CollectionType, prune_inactive);
+        {collections_initialization, _} -> ?ERROR_FORBIDDEN; % TODO - ?ERROR_FORBIDDEN zmienic na nowy blad ?ERROR_COLLECTIONS_INITIALIZATION_FOR_SPACE
+        _ -> ?ERROR_DIR_STATS_DISABLED_FOR_SPACE
     end.
 
 
@@ -249,14 +252,16 @@ flush_stats(Guid, CollectionType) ->
 delete_stats(Guid, CollectionType) ->
     % TODO VFS-8837 - delete only for directories
     % TODO VFS-8837 - delete collection when collecting was enabled in past
+    % TODO VFS-8837 - delete from collector memory for collections_initialization status
     case dir_stats_collector_config:is_collecting_active(file_id:guid_to_space_id(Guid)) of
         true ->
             case request_flush(Guid, CollectionType, prune_flushed) of
                 ok -> CollectionType:delete(Guid);
+                ?ERROR_FORBIDDEN -> CollectionType:delete(Guid);
                 ?ERROR_INTERNAL_SERVER_ERROR -> ?ERROR_INTERNAL_SERVER_ERROR
             end;
         false ->
-            ok
+            CollectionType:delete(Guid)
     end.
 
 
@@ -550,15 +555,16 @@ flush_cached_dir_stats({_, CollectionType} = CachedDirStatsKey, PruningStrategy,
         maps:get(CachedDirStatsKey, State#state.dir_stats_cache),
     case get_dir_status(CachedDirStats) of
         unflushed ->
-            UpdatedCachedDirStats = save_and_propagate_cached_dir_stats(CachedDirStatsKey, CachedDirStats),
+            {UpdatedCachedDirStats, UpdatedState} =
+                save_and_propagate_cached_dir_stats(CachedDirStatsKey, CachedDirStats, State),
             UpdatedStatus = get_dir_status(UpdatedCachedDirStats),
-            UpdatedState = case (UpdatedStatus =:= flushed) and (PruningStrategy =:= prune_flushed) of
+            FinalState = case (UpdatedStatus =:= flushed) and (PruningStrategy =:= prune_flushed) of
                 true ->
-                    prune_cached_dir_stats(CachedDirStatsKey, State);
+                    prune_cached_dir_stats(CachedDirStatsKey, UpdatedState);
                 false ->
-                    update_cached_dir_stats(CachedDirStatsKey, UpdatedCachedDirStats, State)
+                    update_cached_dir_stats(CachedDirStatsKey, UpdatedCachedDirStats, UpdatedState)
             end,
-            {UpdatedStatus, UpdatedState};
+            {UpdatedStatus, FinalState};
         flushed ->
             case (PruningStrategy =:= prune_flushed) orelse is_inactive(CachedDirStats) of
                 true ->
@@ -681,17 +687,25 @@ set_collecting_enabled(#cached_dir_stats{initialization_data = InitializationDat
 
 
 %% @private
--spec save_and_propagate_cached_dir_stats(cached_dir_stats_key(), cached_dir_stats()) -> UpdatedCachedDirStats :: cached_dir_stats().
+-spec save_and_propagate_cached_dir_stats(cached_dir_stats_key(), cached_dir_stats(), state()) ->
+    {UpdatedCachedDirStats :: cached_dir_stats(), state()}.
 save_and_propagate_cached_dir_stats({Guid, CollectionType} = _CachedDirStatsKey,
-    #cached_dir_stats{current_stats = CurrentStats} = CachedDirStats) ->
+    #cached_dir_stats{current_stats = CurrentStats} = CachedDirStats, State
+) ->
+    {CollectingStatus, State2} = acquire_space_collecting_status(file_id:guid_to_space_id(Guid), State),
     try
-        CollectionType:save(Guid, CurrentStats),
-        propagate_to_parent(Guid, CollectionType, CachedDirStats)
+        case CollectingStatus of
+            {collections_initialization, InitializationTraverseNum} ->
+                CollectionType:save(Guid, CurrentStats, InitializationTraverseNum);
+            _ ->
+                CollectionType:save(Guid, CurrentStats, undefined)
+        end,
+        {propagate_to_parent(Guid, CollectionType, CachedDirStats), State2}
     catch
         Error:Reason:Stacktrace ->
             ?error_stacktrace("Dir stats collector save and propagate error for collection type: ~p and guid ~p: ~p:~p",
                 [CollectionType, Guid, Error, Reason], Stacktrace),
-            CachedDirStats
+            {CachedDirStats, State2}
     end.
 
 

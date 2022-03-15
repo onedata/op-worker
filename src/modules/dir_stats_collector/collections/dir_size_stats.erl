@@ -105,10 +105,8 @@ get_stats_and_time_series_collections(Guid) ->
                         {ok, WindowsMap} -> {ok, all_metrics_to_stats_and_time_series_collections(WindowsMap)};
                         {error, not_found} -> {ok, {gen_empty_stats_collection(Guid), gen_empty_time_series_collection(Guid)}}
                     end;
-                ?ERROR_FORBIDDEN ->
-                    ?ERROR_FORBIDDEN;
-                ?ERROR_INTERNAL_SERVER_ERROR ->
-                    ?ERROR_INTERNAL_SERVER_ERROR
+                {error, _} = Error ->
+                    Error
             end;
         false ->
             ?ERROR_DIR_STATS_DISABLED_FOR_SPACE
@@ -195,7 +193,9 @@ save(Guid, Collection, InitializationTraverseNum) ->
             BasicConfig = maps:from_list(lists:map(fun(StatName) ->
                 {StatName, metrics_extended_with_current_value()}
             end, stat_names(Guid))),
-            FinalConfig = maps:merge(BasicConfig, #{?INITIALIZATION_TRAVERSE_NUM_TIME_SERIES => current_metric()}),
+            FinalConfig = maps:merge(BasicConfig, #{
+                ?INITIALIZATION_TRAVERSE_NUM_TIME_SERIES => #{?CURRENT_METRIC => current_metric()}
+            }),
             % NOTE: single pes process is dedicated for each guid so race resulting in
             % {error, collection_already_exists} is impossible - match create answer to ok
             ok = datastore_time_series_collection:create(?CTX, Uuid, FinalConfig),
