@@ -24,6 +24,7 @@
     atm_list_store_content_browse_result:record() |
     atm_range_store_content_browse_result:record() |
     atm_single_value_store_content_browse_result:record() |
+    atm_time_series_store_content_browse_result:record() |
     atm_tree_forest_store_content_browse_result:record().
 
 -export_type([record/0]).

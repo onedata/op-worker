@@ -25,6 +25,7 @@
     atm_list_store_content_browse_options |
     atm_range_store_content_browse_options |
     atm_single_value_store_content_browse_options |
+    atm_time_series_store_content_browse_options |
     atm_tree_forest_store_content_browse_options.
 
 -type record() ::
@@ -32,6 +33,7 @@
     atm_list_store_content_browse_options:record() |
     atm_range_store_content_browse_options:record() |
     atm_single_value_store_content_browse_options:record() |
+    atm_time_series_store_content_browse_options:record() |
     atm_tree_forest_store_content_browse_options:record().
 
 -export_type([type/0, record/0]).
@@ -67,6 +69,9 @@ sanitize(range, #{<<"type">> := <<"rangeStoreContentBrowseOptions">>} = Data) ->
 
 sanitize(single_value, #{<<"type">> := <<"singleValueStoreContentBrowseOptions">>} = Data) ->
     atm_single_value_store_content_browse_options:sanitize(Data);
+
+sanitize(time_series, #{<<"type">> := <<"timeSeriesStoreContentBrowseOptions">>} = Data) ->
+    atm_time_series_store_content_browse_options:sanitize(Data);
 
 sanitize(tree_forest, #{<<"type">> := <<"treeForestStoreContentBrowseOptions">>} = Data) ->
     atm_tree_forest_store_content_browse_options:sanitize(Data);

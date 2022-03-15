@@ -47,7 +47,7 @@
 -type initial_content() :: undefined.
 
 -type content_browse_req() :: #atm_store_content_browse_req{
-    options :: atm_single_value_store_content_browse_options:record()  %% TODO implement browse opts for ts
+    options :: atm_time_series_store_content_browse_options:record()
 }.
 -type content_update_req() :: #atm_store_content_update_req{
     options :: atm_time_series_store_content_update_options:record()
@@ -109,10 +109,63 @@ acquire_iterator(#atm_time_series_store_container{}) ->
 
 
 -spec browse_content(record(), content_browse_req()) ->
-    atm_single_value_store_content_browse_result:record() | no_return().
-browse_content(_, _) ->
-    %% TODO implement
-    error(not_implemented).
+    atm_time_series_store_content_browse_result:record() | no_return().
+browse_content(Record, #atm_store_content_browse_req{
+    options = #atm_time_series_store_content_browse_options{
+        request = #get_atm_time_series_store_content_layout{}
+    }
+}) ->
+    {ok, Layout} = datastore_time_series_collection:list_metrics_by_time_series(
+        ?CTX, Record#atm_time_series_store_container.backend_id
+    ),
+    #atm_time_series_store_content_browse_result{
+        result = #atm_time_series_store_content_layout{layout = Layout}
+    };
+
+browse_content(Record, #atm_store_content_browse_req{
+    options = #atm_time_series_store_content_browse_options{
+        request = #get_atm_time_series_store_content_slice{
+            layout = RequestedLayout,
+            start_timestamp = StartTimestamp,
+            windows_limit = WindowsLimit
+        }
+    }
+}) ->
+    RequestRange = maps:fold(fun(TimeSeriesId, MetricIds, OuterAcc) ->
+        lists:foldl(fun(MetricId, InnerAcc) ->
+            [{TimeSeriesId, MetricId} | InnerAcc]
+        end, OuterAcc, MetricIds)
+    end, [], RequestedLayout),
+
+    case datastore_time_series_collection:list_windows(
+        ?CTX,
+        Record#atm_time_series_store_container.backend_id,
+        RequestRange,
+        maps_utils:remove_undefined(#{start => StartTimestamp, limit => WindowsLimit})
+    ) of
+        {error, not_found} ->
+            throw(?ERROR_NOT_FOUND);
+        {error, time_series_not_found} ->
+            throw(?ERROR_NOT_FOUND);
+        {error, metric_not_found} ->
+            throw(?ERROR_NOT_FOUND);
+        {ok, WindowsPerFullMetricId} ->
+            Slice = maps:fold(fun({TimeSeriesId, MetricId}, Windows, Acc) ->
+                MetricsForCurrentTimeSeries = maps:get(TimeSeriesId, Acc, #{}),
+                Acc#{TimeSeriesId => MetricsForCurrentTimeSeries#{
+                    MetricId => lists:map(fun({Timestamp, {_ValuesCount, ValuesSum}}) ->
+                        #{
+                            <<"timestamp">> => Timestamp,
+                            <<"value">> => ValuesSum
+                        }
+                    end, Windows)
+                }}
+            end, #{}, WindowsPerFullMetricId),
+
+            #atm_time_series_store_content_browse_result{
+                result = #atm_time_series_store_content_slice{slice = Slice}
+            }
+    end.
 
 
 -spec update_content(record(), content_update_req()) -> record() | no_return().
