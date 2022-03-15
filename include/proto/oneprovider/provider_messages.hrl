@@ -154,10 +154,10 @@
     description :: archive:description(),
     index :: archive_api:index(),
     stats :: archive_stats:record(),
-    parent_archive :: undefined | archive:id(),
+    parent_archive_id :: undefined | archive:id(),
     base_archive_id :: undefined | archive:id(),
-    related_aip :: undefined | archive:id(),
-    related_dip :: undefined | archive:id()
+    related_aip_id :: undefined | archive:id(),
+    related_dip_id :: undefined | archive:id()
 }).
 
 -type provider_response_type() ::
