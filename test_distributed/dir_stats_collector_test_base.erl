@@ -23,10 +23,11 @@
 -export([basic_test/1, multiprovider_test/1,
     enabling_for_empty_space_test/1, enabling_for_not_empty_space_test/1, enabling_during_writing_test/1,
     race_with_file_adding_test/1, race_with_file_writing_test/1,
-    race_with_subtree_adding_test/1, race_with_subtree_filling_with_data_test/1]).
+    race_with_subtree_adding_test/1, race_with_subtree_filling_with_data_test/1,
+    multiple_status_change_test/1]).
 -export([init/1, teardown/1]).
 -export([verify_dir_on_provider_creating_files/3, delete_stats/2]).
-% TODO VFS-9148, VFS-9149 - extend tests
+% TODO VFS-9148 - extend tests
 
 
 % For multiprovider test, one provider creates files and fills them with data,
@@ -127,7 +128,7 @@ multiprovider_test(Config) ->
 
 enabling_for_empty_space_test(Config) ->
     enable(Config, existing_space),
-    verify_enabled(Config),
+    verify_collecting_status(Config, enabled),
     create_initial_file_tree_and_fill_files(Config, op_worker_nodes, initializing),
     check_initial_dir_stats(Config, op_worker_nodes),
     check_update_times(Config, [op_worker_nodes]).
@@ -136,7 +137,7 @@ enabling_for_empty_space_test(Config) ->
 enabling_for_not_empty_space_test(Config) ->
     create_initial_file_tree_and_fill_files(Config, op_worker_nodes, disabled),
     enable(Config, existing_space),
-    verify_enabled(Config),
+    verify_collecting_status(Config, enabled),
     check_initial_dir_stats(Config, op_worker_nodes),
     check_update_times(Config, [op_worker_nodes]).
 
@@ -265,7 +266,72 @@ test_with_race_base(Config, TestDirIdentifier, OnSpaceChildrenListed, ExpectedSp
     ?assertEqual(ok, MessageReceived),
 
     check_dir_stats(Config, op_worker_nodes, SpaceGuid, ExpectedSpaceStats),
-    verify_enabled(Config).
+    verify_collecting_status(Config, enabled).
+
+
+multiple_status_change_test(Config) ->
+    create_initial_file_tree_and_fill_files(Config, op_worker_nodes, disabled),
+
+    enable(Config, existing_space),
+    enable(Config, existing_space),
+    enable(Config, existing_space),
+    verify_collecting_status(Config, enabled),
+
+    disable(Config),
+    disable(Config),
+    disable(Config),
+    verify_collecting_status(Config, disabled),
+
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    SpaceId = lfm_test_utils:get_user1_first_space_id(Config),
+    StatusChangesWithTimestamps = rpc:call(
+        Worker, dir_stats_collector_config, get_collecting_status_change_timestamps, [SpaceId]),
+    StatusChanges = lists:map(
+        fun({StatusChangeDescription, _Timestamp}) -> StatusChangeDescription end, StatusChangesWithTimestamps),
+    ExpectedStatusChanges = [disabled, collectors_stopping, enabled],
+    ?assertEqual(ExpectedStatusChanges, StatusChanges),
+
+    enable(Config, existing_space),
+    disable(Config),
+    verify_collecting_status(Config, disabled),
+
+    enable(Config, existing_space),
+    disable(Config),
+    enable(Config, existing_space),
+    disable(Config),
+    enable(Config, existing_space),
+    enable(Config, existing_space),
+    verify_collecting_status(Config, enabled),
+
+    disable(Config),
+    enable(Config, existing_space),
+    verify_collecting_status(Config, enabled),
+
+    check_initial_dir_stats(Config, op_worker_nodes),
+    check_update_times(Config, [op_worker_nodes]),
+
+    {ok, EnablingTime} = ?assertMatch({ok, _}, rpc:call(Worker, dir_stats_collector_config, get_enabling_time, [SpaceId])),
+    [{_, EnablingTime2} | _] = rpc:call(
+        Worker, dir_stats_collector_config, get_collecting_status_change_timestamps, [SpaceId]),
+    ?assertEqual(EnablingTime, EnablingTime2),
+
+    disable(Config),
+    enable(Config, existing_space),
+    disable(Config),
+    disable(Config),
+    enable(Config, existing_space),
+    disable(Config),
+    verify_collecting_status(Config, disabled),
+
+    StatusChangesWithTimestamps2 = rpc:call(
+        Worker, dir_stats_collector_config, get_collecting_status_change_timestamps, [SpaceId]),
+    [{_, LastChangeTime} | _] = StatusChangesWithTimestamps2,
+    lists:foldl(fun({_, Timestamp}, TimestampToCompare) ->
+        ?assert(TimestampToCompare >= Timestamp),
+        Timestamp
+    end, LastChangeTime, StatusChangesWithTimestamps2),
+
+    ?assertEqual(?ERROR_FORBIDDEN, rpc:call(Worker, dir_stats_collector_config, get_enabling_time, [SpaceId])).
 
 
 %%%===================================================================
@@ -288,17 +354,20 @@ init(Config) ->
 teardown(Config) ->
     SpaceId = lfm_test_utils:get_user1_first_space_id(Config),
     SpaceGuid = lfm_test_utils:get_user1_first_space_guid(Config),
+
+    disable(Config),
+    verify_collecting_status(Config, disabled),
+
     lists:foreach(fun(W) ->
-        ?assertEqual(ok, rpc:call(W, dir_stats_collector_config, disable, [SpaceId])),
-        ?assertEqual(disabled,
-            rpc:call(W, dir_stats_collector_config, get_extended_collecting_status, [SpaceId]), ?ATTEMPTS),
         ?assertEqual(ok, rpc:call(W, dir_stats_collector_config, clean, [SpaceId])),
         delete_stats(W, SpaceGuid),
-        % Clean traverse data (do not assert as not all tests use initialization traverses)
-        rpc:call(W, traverse_task, delete_ended, [
-            <<"dir_stats_collections_initialization_traverse">>,
-            dir_stats_collections_initialization_traverse:gen_task_id(SpaceId, 1)
-        ])
+        lists:foreach(fun(TraverseNum) ->
+            % Clean traverse data (do not assert as not all tests use initialization traverses)
+            rpc:call(W, traverse_task, delete_ended, [
+                <<"dir_stats_collections_initialization_traverse">>,
+                dir_stats_collections_initialization_traverse:gen_task_id(SpaceId, TraverseNum)
+            ])
+        end, lists:seq(1, 10))
     end, initializer:get_different_domain_workers(Config)),
 
     Workers = ?config(op_worker_nodes, Config),
@@ -376,10 +445,17 @@ enable(Config, existing_space) ->
     end, initializer:get_different_domain_workers(Config)).
 
 
-verify_enabled(Config) ->
+disable(Config) ->
     SpaceId = lfm_test_utils:get_user1_first_space_id(Config),
     lists:foreach(fun(W) ->
-        ?assertEqual(enabled,
+        ?assertEqual(ok, rpc:call(W, dir_stats_collector_config, disable, [SpaceId]))
+    end, initializer:get_different_domain_workers(Config)).
+
+
+verify_collecting_status(Config, ExpectedStatus) ->
+    SpaceId = lfm_test_utils:get_user1_first_space_id(Config),
+    lists:foreach(fun(W) ->
+        ?assertEqual(ExpectedStatus,
             rpc:call(W, dir_stats_collector_config, get_extended_collecting_status, [SpaceId]), ?ATTEMPTS)
     end, initializer:get_different_domain_workers(Config)).
 

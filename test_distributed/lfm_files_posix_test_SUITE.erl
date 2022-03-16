@@ -35,6 +35,7 @@
     dir_stats_collector_race_with_file_writing_test/1,
     dir_stats_collector_race_with_subtree_adding_test/1,
     dir_stats_collector_race_with_subtree_filling_with_data_test/1,
+    dir_stats_collector_multiple_status_change_test/1,
     fslogic_new_file_test/1,
     lfm_create_and_unlink_test/1,
     lfm_create_and_access_test/1,
@@ -136,6 +137,7 @@
     dir_stats_collector_race_with_file_writing_test,
     dir_stats_collector_race_with_subtree_adding_test,
     dir_stats_collector_race_with_subtree_filling_with_data_test,
+    dir_stats_collector_multiple_status_change_test,
     fslogic_new_file_test,
     lfm_create_and_unlink_test,
     lfm_create_and_access_test,
@@ -995,6 +997,10 @@ dir_stats_collector_race_with_subtree_filling_with_data_test(Config) ->
     dir_stats_collector_test_base:race_with_subtree_filling_with_data_test(Config).
 
 
+dir_stats_collector_multiple_status_change_test(Config) ->
+    dir_stats_collector_test_base:multiple_status_change_test(Config).
+
+
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
@@ -1025,7 +1031,8 @@ init_per_testcase(Case, Config) when
     Case =:= dir_stats_collector_race_with_file_adding_test;
     Case =:= dir_stats_collector_race_with_file_writing_test;
     Case =:= dir_stats_collector_race_with_subtree_adding_test;
-    Case =:= dir_stats_collector_race_with_subtree_filling_with_data_test
+    Case =:= dir_stats_collector_race_with_subtree_filling_with_data_test;
+    Case =:= dir_stats_collector_multiple_status_change_test
 ->
     dir_stats_collector_test_base:init(init_per_testcase(?DEFAULT_CASE(Case), Config));
 
@@ -1053,7 +1060,8 @@ end_per_testcase(Case, Config) when
     Case =:= dir_stats_collector_race_with_file_adding_test;
     Case =:= dir_stats_collector_race_with_file_writing_test;
     Case =:= dir_stats_collector_race_with_subtree_adding_test;
-    Case =:= dir_stats_collector_race_with_subtree_filling_with_data_test
+    Case =:= dir_stats_collector_race_with_subtree_filling_with_data_test;
+    Case =:= dir_stats_collector_multiple_status_change_test
 ->
     dir_stats_collector_test_base:teardown(Config),
     end_per_testcase(?DEFAULT_CASE(Case), Config);

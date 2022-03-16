@@ -24,6 +24,7 @@
 
 -include("tree_traverse.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 
 %% API
@@ -62,7 +63,10 @@ run(SpaceId, TraverseNum) ->
 
 -spec cancel(file_id:space_id(), non_neg_integer()) -> ok.
 cancel(SpaceId, TraverseNum) ->
-    ok = tree_traverse:cancel(?MODULE, gen_task_id(SpaceId, TraverseNum)).
+    case tree_traverse:cancel(?MODULE, gen_task_id(SpaceId, TraverseNum)) of
+        ok -> ok;
+        ?ERROR_NOT_FOUND -> ok
+    end.
 
 
 %%%===================================================================

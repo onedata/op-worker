@@ -74,7 +74,7 @@
 -type extended_active_collecting_status() :: enabled |
     {collections_initialization, InitializationTraverseNum :: non_neg_integer()}.
 
--type collecting_status_change_order() :: enable | disable.
+-type collecting_status_change_order() :: enable | disable | canceled | undefined.
 -type status_change_timestamp() :: {collecting_status(), time:seconds()}.
 
 -type record() :: #dir_stats_collector_config{}.
@@ -126,13 +126,13 @@ get_extended_collecting_status(SpaceId) ->
 get_enabling_time(SpaceId) ->
     case datastore_model:get(?CTX, SpaceId) of
         {ok, #document{value = #dir_stats_collector_config{
-            collecting_status = enabled, 
+            collecting_status = enabled,
             collecting_status_change_timestamps = []}
         }} -> 
             {ok, 0};
         {ok, #document{value = #dir_stats_collector_config{
             collecting_status = enabled,
-            collecting_status_change_timestamps = [{enabled, Time}]}
+            collecting_status_change_timestamps = [{enabled, Time} | _]}
         }} ->
             {ok, Time};
         {ok, _} ->
@@ -194,9 +194,11 @@ enable(SpaceId) ->
             }};
         (#dir_stats_collector_config{
             collecting_status = collectors_stopping, 
-            next_collecting_status_change_order = undefined
-        } = Config) ->
+            next_collecting_status_change_order = ChangeOrder
+        } = Config) when ChangeOrder =:= undefined ; ChangeOrder =:= canceled ->
             {ok, Config#dir_stats_collector_config{next_collecting_status_change_order = enable}};
+        (#dir_stats_collector_config{next_collecting_status_change_order = disable} = Config) ->
+            {ok, Config#dir_stats_collector_config{next_collecting_status_change_order = canceled}};
         (#dir_stats_collector_config{}) ->
             {error, no_action_needed}
     end,
@@ -204,8 +206,9 @@ enable(SpaceId) ->
     case update(SpaceId, Diff, NewRecord) of
         {ok, #document{value = #dir_stats_collector_config{
             collecting_status = collections_initialization,
-            collections_initialization_traverse_num = TraverseNum
-        }}} ->
+            collections_initialization_traverse_num = TraverseNum,
+            next_collecting_status_change_order = ChangeOrder
+        }}} when ChangeOrder =/= canceled ->
             dir_stats_collections_initialization_traverse:run(SpaceId, TraverseNum);
         {ok, _} ->
             ok;
@@ -223,23 +226,28 @@ disable(SpaceId) ->
             {ok, Config#dir_stats_collector_config{collecting_status = collectors_stopping}};
         (#dir_stats_collector_config{
             collecting_status = collections_initialization,
-            next_collecting_status_change_order = undefined
-        } = Config) ->
+            next_collecting_status_change_order = ChangeOrder
+        } = Config) when ChangeOrder =:= undefined ; ChangeOrder =:= canceled ->
             {ok, Config#dir_stats_collector_config{next_collecting_status_change_order = disable}};
+        (#dir_stats_collector_config{next_collecting_status_change_order = enable} = Config) ->
+            {ok, Config#dir_stats_collector_config{next_collecting_status_change_order = canceled}};
         (#dir_stats_collector_config{}) ->
             {error, no_action_needed}
     end,
 
     case update(SpaceId, Diff) of
         {ok, #document{value = #dir_stats_collector_config{
-            collecting_status = collectors_stopping
-        }}} ->
+            collecting_status = collectors_stopping,
+            next_collecting_status_change_order = ChangeOrder
+        }}} when ChangeOrder =/= canceled ->
             dir_stats_collector:stop_collecting(SpaceId);
         {ok, #document{value = #dir_stats_collector_config{
             collecting_status = collections_initialization,
             collections_initialization_traverse_num = TraverseNum
         }}} ->
             dir_stats_collections_initialization_traverse:cancel(SpaceId, TraverseNum);
+        {ok, _} ->
+            ok;
         {error, no_action_needed} ->
             ok;
         ?ERROR_NOT_FOUND ->
@@ -259,7 +267,10 @@ report_collections_initialization_finished(SpaceId) ->
                 next_collecting_status_change_order = undefined
             }};
         (#dir_stats_collector_config{collecting_status = collections_initialization} = Config) ->
-            {ok, Config#dir_stats_collector_config{collecting_status = enabled}};
+            {ok, Config#dir_stats_collector_config{
+                collecting_status = enabled,
+                next_collecting_status_change_order = undefined
+            }};
         (#dir_stats_collector_config{collecting_status = Status}) ->
             {error, {wrong_status, Status}}
     end,
@@ -290,7 +301,10 @@ report_collectors_stopped(SpaceId) ->
                 next_collecting_status_change_order = undefined
             }};
         (#dir_stats_collector_config{collecting_status = collectors_stopping} = Config) ->
-            {ok, Config#dir_stats_collector_config{collecting_status = disabled}};
+            {ok, Config#dir_stats_collector_config{
+                collecting_status = disabled,
+                next_collecting_status_change_order = undefined
+            }};
         (#dir_stats_collector_config{collecting_status = Status}) ->
             {error, {wrong_status, Status}}
     end,
