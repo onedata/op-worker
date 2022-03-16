@@ -59,6 +59,8 @@
 }).
 -type record() :: #atm_time_series_store_container{}.
 
+-type ts_config() :: #{metric_config:label() => metric_config:record()}.
+
 -export_type([
     initial_content/0, content_browse_req/0, content_update_req/0,
     record/0
@@ -244,9 +246,9 @@ get_ctx() ->
 build_ts_collection_config(TSSchemas) ->
     lists:foldl(fun
         (TSSchema = #atm_time_series_schema{name_generator_type = exact}, Acc) ->
-            Acc#{TSSchema#atm_time_series_schema.name_generator => lists:foldl(fun(Metric, Acc) ->
-                Acc#{Metric#metric_config.label => Metric}
-            end, #{}, TSSchema#atm_time_series_schema.metrics)};
+            TSName = TSSchema#atm_time_series_schema.name_generator,
+            TSConfig = TSSchema#atm_time_series_schema.metrics,
+            Acc#{TSName => TSConfig};
         (_, Acc) ->
             Acc
     end, #{}, TSSchemas).
@@ -263,24 +265,18 @@ apply_measurements(Measurements, DispatchRules, Record = #atm_time_series_store_
     config = #atm_time_series_store_config{schemas = TSSchemas},
     backend_id = BackendId
 }) ->
-    {Updates, Configs} = lists:foldl(fun(Measurement, Acc = {TSUpdates, TSConfigs}) ->
-        case infer_target_ts(Measurement, DispatchRules, TSSchemas) of
-            {true, TSName, TSMetrics} ->
+    {Updates, TSCollectionConfigs} = lists:foldl(fun(Measurement, Acc = {TSUpdates, TSConfigs}) ->
+        case match_target_ts(Measurement, DispatchRules, TSSchemas) of
+            {true, TSName, TSConfig} ->
                 Timestamp = maps:get(<<"timestamp">>, Measurement),
                 Value = maps:get(<<"value">>, Measurement),
-                TSUpdate = {Timestamp, {TSName, Value}},
-                {
-                    [TSUpdate | TSUpdates],
-                    TSConfigs#{TSName => lists:foldl(fun(TSMetric, Acc) ->
-                        Acc#{TSMetric#metric_config.label => TSMetric}
-                    end, #{}, TSMetrics)}
-                };
+                {[{Timestamp, {TSName, Value}} | TSUpdates], TSConfigs#{TSName => TSConfig}};
             false ->
                 Acc
         end
     end, {[], #{}}, Measurements),
 
-    ensure_time_series_exist(Configs, Record),
+    ensure_time_series_exist(TSCollectionConfigs, Record),
 
     lists:foreach(fun({Timestamp, UpdateRange}) ->
         ok = datastore_time_series_collection:check_and_update(?CTX, BackendId, Timestamp, UpdateRange)
@@ -306,13 +302,13 @@ ensure_time_series_exist(TSConfigs, #atm_time_series_store_container{backend_id 
 
 
 %% @private
--spec infer_target_ts(
+-spec match_target_ts(
     json_utils:json_map(),
     [atm_time_series_dispatch_rule:record()],
     [atm_time_series_schema:record()]
 ) ->
-    {true, atm_time_series_names:target_ts_name(), [metric_config:record()]} | false | no_return().
-infer_target_ts(#{<<"tsName">> := MeasurementTSName}, DispatchRules, TSSchemas) ->
+    {true, atm_time_series_names:target_ts_name(), ts_config()} | false | no_return().
+match_target_ts(#{<<"tsName">> := MeasurementTSName}, DispatchRules, TSSchemas) ->
     case atm_time_series_names:find_matching_dispatch_rule(MeasurementTSName, DispatchRules) of
         {ok, DispatchRule} ->
             case atm_time_series_names:find_referenced_time_series_schema(DispatchRule, TSSchemas) of

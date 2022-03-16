@@ -98,7 +98,7 @@ get_iterated_item_data_spec(_) ->
 
 -spec acquire_iterator(record()) -> atm_range_store_container_iterator:record().
 acquire_iterator(#atm_range_store_container{range = undefined}) ->
-    %% TODO throw error if no content
+    %% TODO VFS-9150 throw error if no content
     atm_range_store_container_iterator:build(0, 0, 1);
 
 acquire_iterator(#atm_range_store_container{range = [Start, End, Step]}) ->
@@ -114,7 +114,7 @@ browse_content(
         options = #atm_range_store_content_browse_options{}
     }
 ) ->
-    throw(?ERROR_ATM_STORE_EMPTY(AtmStoreSchemaId));
+    throw(?ERROR_ATM_STORE_CONTENT_NOT_SET(AtmStoreSchemaId));
 
 browse_content(
     #atm_range_store_container{range = Range},

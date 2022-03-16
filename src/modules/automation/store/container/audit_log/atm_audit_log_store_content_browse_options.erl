@@ -35,6 +35,6 @@
 sanitize(#{<<"type">> := <<"auditLogStoreContentBrowseOptions">>} = Data) ->
     #atm_audit_log_store_content_browse_options{
         listing_opts = atm_store_container_infinite_log_backend:sanitize_listing_opts(
-            Data, extended
+            Data, timestamp_aware
         )
     }.

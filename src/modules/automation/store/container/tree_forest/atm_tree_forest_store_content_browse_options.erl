@@ -35,6 +35,6 @@
 sanitize(#{<<"type">> := <<"treeForestStoreContentBrowseOptions">>} = Data) ->
     #atm_tree_forest_store_content_browse_options{
         listing_opts = atm_store_container_infinite_log_backend:sanitize_listing_opts(
-            Data, extended
+            Data, timestamp_agnostic
         )
     }.

@@ -177,7 +177,7 @@
 }).
 
 -record(atm_audit_log_store_content_browse_options, {
-    listing_opts :: atm_store_container_infinite_log_backend:extended_listing_opts()
+    listing_opts :: atm_store_container_infinite_log_backend:timestamp_aware_listing_opts()
 }).
 
 -record(atm_audit_log_store_content_browse_result, {
@@ -186,7 +186,7 @@
 }).
 
 -record(atm_list_store_content_browse_options, {
-    listing_opts :: atm_store_container_infinite_log_backend:basic_listing_opts()
+    listing_opts :: atm_store_container_infinite_log_backend:timestamp_agnostic_listing_opts()
 }).
 
 -record(atm_list_store_content_browse_result, {
@@ -235,7 +235,7 @@
 }).
 
 -record(atm_tree_forest_store_content_browse_options, {
-    listing_opts :: atm_store_container_infinite_log_backend:basic_listing_opts()
+    listing_opts :: atm_store_container_infinite_log_backend:timestamp_agnostic_listing_opts()
 }).
 
 -record(atm_tree_forest_store_content_browse_result, {

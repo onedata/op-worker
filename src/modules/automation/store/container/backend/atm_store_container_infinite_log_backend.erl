@@ -39,29 +39,29 @@
 -define(DEFAULT_LISTING_LIMIT, 1000).
 
 -type index() :: json_infinite_log_model:entry_index().
--type timestamp() :: time:millis().
+-type timestamp_millis() :: time:millis().
 -type offset() :: integer().
 -type limit() :: 1..?MAX_LISTING_LIMIT.
 
--type basic_listing_opts() :: #{
+-type timestamp_agnostic_listing_opts() :: #{
     start_from => undefined | {index, index()},
     offset => offset(),
     limit => limit()
 }.
--type extended_listing_opts() :: #{
-    start_from => undefined | {index, index()} | {timestamp, timestamp()},
+-type timestamp_aware_listing_opts() :: #{
+    start_from => undefined | {index, index()} | {timestamp, timestamp_millis()},
     offset => offset(),
     limit => limit()
 }.
--type listing_opts() :: basic_listing_opts() | extended_listing_opts().
+-type listing_opts() :: timestamp_agnostic_listing_opts() | timestamp_aware_listing_opts().
 
 -type entry() :: {index(), {ok, atm_value:expanded()} | errors:error()}.
 -type listing_postprocessor() :: json_infinite_log_model:listing_postprocessor(entry()).
 
 -export_type([
     id/0,
-    index/0, timestamp/0, offset/0, limit/0,
-    basic_listing_opts/0, extended_listing_opts/0, listing_opts/0,
+    index/0, timestamp_millis/0, offset/0, limit/0,
+    timestamp_agnostic_listing_opts/0, timestamp_aware_listing_opts/0, listing_opts/0,
     entry/0, listing_postprocessor/0
 ]).
 
@@ -88,10 +88,10 @@ append(Id, CompressedItem) ->
 
 
 -spec sanitize_listing_opts
-    (json_utils:json_map(), basic) -> basic_listing_opts() | no_return();
-    (json_utils:json_map(), extended) -> extended_listing_opts() | no_return().
+    (json_utils:json_map(), timestamp_agnostic) -> timestamp_agnostic_listing_opts() | no_return();
+    (json_utils:json_map(), timestamp_aware) -> timestamp_aware_listing_opts() | no_return().
 sanitize_listing_opts(Data, SupportedOptionsType) ->
-    BasicOptions = #{
+    TimestampAgnosticOptions = #{
         <<"index">> => {binary, fun(IndexBin) ->
             try
                 _ = binary_to_integer(IndexBin),
@@ -104,8 +104,10 @@ sanitize_listing_opts(Data, SupportedOptionsType) ->
         <<"limit">> => {integer, {between, 1, ?MAX_LISTING_LIMIT}}
     },
     AllOptions = case SupportedOptionsType of
-        extended -> BasicOptions#{<<"timestamp">> => {integer, {not_lower_than, 0}}};
-        basic -> BasicOptions
+        timestamp_aware ->
+            TimestampAgnosticOptions#{<<"timestamp">> => {integer, {not_lower_than, 0}}};
+        timestamp_agnostic ->
+            TimestampAgnosticOptions
     end,
     SanitizedData = middleware_sanitizer:sanitize_data(Data, #{optional => AllOptions}),
 
@@ -180,7 +182,7 @@ iterator_get_next_batch(BatchSize, Id, LastListedIndex, ListingPostprocessor) ->
 
 %% @private
 -spec infer_start_from(json_utils:json_map()) ->
-    undefined | {index, index()} | {timestamp, timestamp()}.
+    undefined | {index, index()} | {timestamp, timestamp_millis()}.
 infer_start_from(#{<<"timestamp">> := Timestamp}) -> {timestamp, Timestamp};
 infer_start_from(#{<<"index">> := Index}) -> {index, Index};
 infer_start_from(_) -> undefined.

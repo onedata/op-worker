@@ -99,7 +99,7 @@ acquire_iterator(#atm_single_value_store_container{
     config = #atm_single_value_store_config{item_data_spec = ItemDataSpec},
     compressed_item = CompressedItem
 }) ->
-    %% TODO throw error if no content
+    %% TODO VFS-9150 throw error if no content
     atm_single_value_store_container_iterator:build(CompressedItem, ItemDataSpec).
 
 
@@ -112,7 +112,7 @@ browse_content(
         options = #atm_single_value_store_content_browse_options{}
     }
 ) ->
-    throw(?ERROR_ATM_STORE_EMPTY(AtmStoreSchemaId));
+    throw(?ERROR_ATM_STORE_CONTENT_NOT_SET(AtmStoreSchemaId));
 
 browse_content(
     #atm_single_value_store_container{
