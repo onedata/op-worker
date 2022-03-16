@@ -33,7 +33,7 @@
 %%%               ▼                              │
 %%%       collections_initialization ────────► enabled
 %%%
-%%% Additionally, config includes timestamps of collecting state changes
+%%% Additionally, config includes timestamps of collecting status changes
 %%% that allow verification when historic statistics were trustworthy.
 %%%
 %%% NOTE: Timestamps are generated at collecting status transition.
@@ -117,7 +117,7 @@ get_extended_collecting_status(SpaceId) ->
             {collections_initialization, TraverseNum};
         {ok, #document{value = #dir_stats_collector_config{collecting_status = Status}}} ->
             Status;
-        {error, not_found} ->
+        ?ERROR_NOT_FOUND ->
             disabled
     end.
 
@@ -137,7 +137,7 @@ get_enabling_time(SpaceId) ->
             {ok, Time};
         {ok, _} ->
             ?ERROR_FORBIDDEN;
-        {error, not_found} ->
+        ?ERROR_NOT_FOUND ->
             ?ERROR_FORBIDDEN
     end.
 
@@ -149,7 +149,7 @@ get_collecting_status_change_timestamps(SpaceId) ->
             collecting_status_change_timestamps = Timestamps
         }}} ->
             Timestamps;
-        {error, not_found} ->
+        ?ERROR_NOT_FOUND ->
             []
     end.
 
@@ -242,7 +242,7 @@ disable(SpaceId) ->
             dir_stats_collections_initialization_traverse:cancel(SpaceId, TraverseNum);
         {error, no_action_needed} ->
             ok;
-        {error, not_found} ->
+        ?ERROR_NOT_FOUND ->
             ?warning("Disabling space ~p without collector config document", [SpaceId])
     end.
 
@@ -271,8 +271,8 @@ report_collections_initialization_finished(SpaceId) ->
             dir_stats_collector:stop_collecting(SpaceId);
         {error, {wrong_status, WrongStatus}} ->
             ?warning("Reporting space ~p enabling finished when space has status ~p", [SpaceId, WrongStatus]);
-        {error, not_found} ->
-            ?warning("Reporting space ~p enabling finished when space has no collector config document ~p", [SpaceId])
+        ?ERROR_NOT_FOUND ->
+            ?warning("Reporting space ~p enabling finished when space has no collector config document", [SpaceId])
     end.
 
 
@@ -305,8 +305,8 @@ report_collectors_stopped(SpaceId) ->
             dir_stats_collections_initialization_traverse:run(SpaceId, TraverseNum);
         {error, {wrong_status, WrongStatus}} ->
             ?warning("Reporting space ~p disabling finished when space has status ~p", [SpaceId, WrongStatus]);
-        {error, not_found} ->
-            ?warning("Reporting space ~p disabling finished when space has no collector config document ~p", [SpaceId])
+        ?ERROR_NOT_FOUND ->
+            ?warning("Reporting space ~p disabling finished when space has no collector config document", [SpaceId])
     end.
 
 

@@ -89,7 +89,7 @@ acquire(Guid) ->
             collections_initialization_traverse_num = InitializationTraverseNum
         }}} ->
             {#{?STAT_NAME => Time}, InitializationTraverseNum};
-        {error, not_found} ->
+        ?ERROR_NOT_FOUND ->
             {#{?STAT_NAME => 0}, 0}
     end.
 
@@ -181,6 +181,6 @@ init(Guid) ->
     case times:get(Uuid) of
         {ok, #document{value = Times}} ->
             #{?STAT_NAME => infer_update_time(Times)};
-        {error, not_found} ->
+        ?ERROR_NOT_FOUND ->
             #{?STAT_NAME => 0} % Race with file deletion - stats will be invalidated by next update
     end.

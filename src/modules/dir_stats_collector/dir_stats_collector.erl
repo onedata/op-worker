@@ -80,14 +80,14 @@
     flush_timer_ref :: reference() | undefined,
     initialization_timer_ref :: reference() | undefined,
 
-    % Space status is initialized on first dsc_update_request for any dir in space
+    % Space status is initialized on first request for any dir in space
     space_collecting_statuses = #{} :: #{od_space:id() => dir_stats_collector_config:extended_active_collecting_status()}
 }).
 
 -record(cached_dir_stats, {
     % current statistics for the {guid, type} pair, i. e. previous stats acquired from db
     % with all the updates (that were reported during executor's lifecycle) applied
-    current_stats :: dir_stats_collection:collection() | undefined,
+    current_stats :: dir_stats_collection:collection() | undefined, % undefined during collections initialization
     % accumulates all the updates that were reported since the last propagation to parent
     stat_updates_acc_for_parent = #{} :: dir_stats_collection:collection(),
     last_used :: stopwatch:instance() | undefined,
@@ -243,7 +243,7 @@ update_stats_of_nearest_dir(Guid, CollectionType, CollectionUpdate) ->
 flush_stats(Guid, CollectionType) ->
     case dir_stats_collector_config:get_extended_collecting_status(file_id:guid_to_space_id(Guid)) of
         enabled -> request_flush(Guid, CollectionType, prune_inactive);
-        {collections_initialization, _} -> ?ERROR_FORBIDDEN; % TODO - ?ERROR_FORBIDDEN zmienic na nowy blad ?ERROR_COLLECTIONS_INITIALIZATION_FOR_SPACE
+        {collections_initialization, _} -> ?ERROR_FORBIDDEN;
         _ -> ?ERROR_DIR_STATS_DISABLED_FOR_SPACE
     end.
 
@@ -281,7 +281,7 @@ stop_collecting(SpaceId) ->
     spawn(fun() ->
         {Ans, BadNodes} = utils:rpc_multicall(consistent_hashing:get_all_nodes(),
             pes, multi_submit_and_await, [?MODULE, ?STOP_COLLECTING(SpaceId)]),
-        FilteredAns = lists:filter(fun(NodeAns) -> NodeAns =/= ok end, Ans),
+        FilteredAns = lists:filter(fun(NodeAns) -> NodeAns =/= ok end, lists:flatten(Ans)),
 
         case {FilteredAns, BadNodes} of
             {[], []} ->
@@ -380,7 +380,7 @@ handle_call(#dsc_flush_request{guid = Guid, collection_type = CollectionType, pr
     case flush_cached_dir_stats(gen_cached_dir_stats_key(Guid, CollectionType), PruningStrategy, State) of
         {flushed, UpdatedState} -> {ok, UpdatedState};
         {unflushed, UpdatedState} -> {?ERROR_INTERNAL_SERVER_ERROR, UpdatedState};
-        {collections_initialization, UpdatedState} -> {?ERROR_FORBIDDEN, UpdatedState} % TODO - moze lepszy blad niz ?ERROR_FORBIDDEN
+        {collections_initialization, UpdatedState} -> {?ERROR_FORBIDDEN, UpdatedState}
     end;
 
 handle_call(?INITIALIZE_COLLECTIONS(Guid), State) ->

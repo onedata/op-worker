@@ -290,6 +290,8 @@ teardown(Config) ->
     SpaceGuid = lfm_test_utils:get_user1_first_space_guid(Config),
     lists:foreach(fun(W) ->
         ?assertEqual(ok, rpc:call(W, dir_stats_collector_config, disable, [SpaceId])),
+        ?assertEqual(disabled,
+            rpc:call(W, dir_stats_collector_config, get_extended_collecting_status, [SpaceId]), ?ATTEMPTS),
         ?assertEqual(ok, rpc:call(W, dir_stats_collector_config, clean, [SpaceId])),
         delete_stats(W, SpaceGuid),
         % Clean traverse data (do not assert as not all tests use initialization traverses)
@@ -366,6 +368,7 @@ enable(Config, new_space) ->
     lists:foreach(fun(W) ->
         ?assertEqual(ok, rpc:call(W, dir_stats_collector_config, init_for_empty_space, [SpaceId]))
     end, initializer:get_different_domain_workers(Config));
+
 enable(Config, existing_space) ->
     SpaceId = lfm_test_utils:get_user1_first_space_id(Config),
     lists:foreach(fun(W) ->
@@ -532,6 +535,7 @@ check_space_dir_values_map_and_time_series_collection(
     [Worker | _] = ?config(NodesSelector, Config),
     ?assertMatch({error, dir_stats_disabled_for_space},
         rpc:call(Worker, dir_size_stats, get_stats_and_time_series_collections, [SpaceGuid]));
+
 check_space_dir_values_map_and_time_series_collection(
     Config, NodesSelector, SpaceGuid, ExpectedMap, IsCollectionEmpty, CollectingStatus
 ) ->

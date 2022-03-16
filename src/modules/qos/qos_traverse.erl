@@ -136,7 +136,7 @@ stop_pool() ->
 %%% Traverse callbacks
 %%%===================================================================
 
--spec get_job(traverse:job_id())->
+-spec get_job(traverse:job_id()) ->
     {ok, tree_traverse:master_job(), traverse:pool(), tree_traverse:id()}  | {error, term()}.
 get_job(DocOrID) ->
     tree_traverse:get_job(DocOrID).

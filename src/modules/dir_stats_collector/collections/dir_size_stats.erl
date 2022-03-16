@@ -59,8 +59,8 @@
 -define(NOW(), global_clock:timestamp_seconds()).
 % Metric storing current value of statistic or traverse number (depending on time series)
 -define(CURRENT_METRIC, <<"current">>).
-% Metric storing last traverse num - historical values are not required
-% but usage of metric allows keeping everything in single structure
+% Time series storing last traverse num - historical values are not required
+% but usage of time series allows keeping everything in single structure
 -define(INITIALIZATION_TRAVERSE_NUM_TIME_SERIES, <<"traverse_num">>).
 
 %%%===================================================================
@@ -102,8 +102,10 @@ get_stats_and_time_series_collections(Guid) ->
                 ok ->
                     Uuid = file_id:guid_to_uuid(Guid),
                     case datastore_time_series_collection:list_windows(?CTX, Uuid, #{}) of
-                        {ok, WindowsMap} -> {ok, all_metrics_to_stats_and_time_series_collections(WindowsMap)};
-                        {error, not_found} -> {ok, {gen_empty_stats_collection(Guid), gen_empty_time_series_collection(Guid)}}
+                        {ok, WindowsMap} ->
+                            {ok, all_metrics_to_stats_and_time_series_collections(WindowsMap)};
+                        ?ERROR_NOT_FOUND ->
+                            {ok, {gen_empty_stats_collection(Guid), gen_empty_time_series_collection(Guid)}}
                     end;
                 {error, _} = Error ->
                     Error
@@ -167,7 +169,7 @@ acquire(Guid) ->
     ) of
         {ok, WindowsMap} ->
             {current_metrics_to_stats_collection(WindowsMap), get_initialization_traverse_num(WindowsMap)};
-        {error, not_found} ->
+        ?ERROR_NOT_FOUND ->
             {gen_empty_stats_collection(Guid), 0}
     end.
 
@@ -182,10 +184,10 @@ consolidate(_, Value, Diff) ->
 save(Guid, Collection, InitializationTraverseNum) ->
     Uuid = file_id:guid_to_uuid(Guid),
     UpdateSpec = case InitializationTraverseNum of
-        undefined ->
-            maps:to_list(Collection);
+        undefined -> maps:to_list(Collection);
         _ -> [{?INITIALIZATION_TRAVERSE_NUM_TIME_SERIES, InitializationTraverseNum} | maps:to_list(Collection)]
     end,
+
     case datastore_time_series_collection:update(?CTX, Uuid, ?NOW(), UpdateSpec) of
         ok ->
             ok;
@@ -207,7 +209,7 @@ save(Guid, Collection, InitializationTraverseNum) ->
 delete(Guid) ->
     case datastore_time_series_collection:delete(?CTX, file_id:guid_to_uuid(Guid)) of
         ok -> ok;
-        {error, not_found} -> ok
+        ?ERROR_NOT_FOUND -> ok
     end.
 
 
