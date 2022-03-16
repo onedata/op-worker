@@ -21,8 +21,8 @@
 
 
 -export([basic_test/1, multiprovider_test/1,
-    enabling_for_empty_space_test/1, enabling_for_not_empty_space_test/1, enabling_during_writing_test/1,
-    race_with_file_adding_test/1, race_with_file_writing_test/1,
+    enabling_for_empty_space_test/1, enabling_for_not_empty_space_test/1, enabling_large_dirs_test/1,
+    enabling_during_writing_test/1, race_with_file_adding_test/1, race_with_file_writing_test/1,
     race_with_subtree_adding_test/1, race_with_subtree_filling_with_data_test/1,
     multiple_status_change_test/1]).
 -export([init/1, teardown/1]).
@@ -140,6 +140,24 @@ enabling_for_not_empty_space_test(Config) ->
     verify_collecting_status(Config, enabled),
     check_initial_dir_stats(Config, op_worker_nodes),
     check_update_times(Config, [op_worker_nodes]).
+
+
+enabling_large_dirs_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    SessId = lfm_test_utils:get_user1_session_id(Config, Worker),
+    SpaceGuid = lfm_test_utils:get_user1_first_space_guid(Config),
+    Structure = [{3, 313}, {3, 101}],
+    lfm_test_utils:create_files_tree(Worker, SessId, Structure, SpaceGuid),
+
+    enable(Config, existing_space),
+    verify_collecting_status(Config, enabled),
+
+    check_dir_stats(Config, op_worker_nodes, SpaceGuid, #{
+        ?REG_FILE_AND_LINK_COUNT => 616,
+        ?DIR_COUNT => 12,
+        ?TOTAL_SIZE => 0,
+        ?TOTAL_SIZE_ON_STORAGE(Config, op_worker_nodes) => 0
+    }).
 
 
 enabling_during_writing_test(Config) ->

@@ -30,6 +30,7 @@
     dir_stats_collector_test_basic_test/1,
     dir_stats_collector_enabling_for_empty_space_test/1,
     dir_stats_collector_enabling_for_not_empty_space_test/1,
+    dir_stats_collector_enabling_large_dirs_test/1,
     dir_stats_collector_enabling_during_writing_test/1,
     dir_stats_collector_race_with_file_adding_test/1,
     dir_stats_collector_race_with_file_writing_test/1,
@@ -132,6 +133,7 @@
     dir_stats_collector_test_basic_test,
     dir_stats_collector_enabling_for_empty_space_test,
     dir_stats_collector_enabling_for_not_empty_space_test,
+    dir_stats_collector_enabling_large_dirs_test,
     dir_stats_collector_enabling_during_writing_test,
     dir_stats_collector_race_with_file_adding_test,
     dir_stats_collector_race_with_file_writing_test,
@@ -977,6 +979,10 @@ dir_stats_collector_enabling_for_not_empty_space_test(Config) ->
     dir_stats_collector_test_base:enabling_for_not_empty_space_test(Config).
 
 
+dir_stats_collector_enabling_large_dirs_test(Config) ->
+    dir_stats_collector_test_base:enabling_large_dirs_test(Config).
+
+
 dir_stats_collector_enabling_during_writing_test(Config) ->
     dir_stats_collector_test_base:enabling_during_writing_test(Config).
 
@@ -1027,6 +1033,7 @@ init_per_testcase(Case, Config) when
     Case =:= dir_stats_collector_test_basic_test;
     Case =:= dir_stats_collector_enabling_for_empty_space_test;
     Case =:= dir_stats_collector_enabling_for_not_empty_space_test;
+    Case =:= dir_stats_collector_enabling_large_dirs_test;
     Case =:= dir_stats_collector_enabling_during_writing_test;
     Case =:= dir_stats_collector_race_with_file_adding_test;
     Case =:= dir_stats_collector_race_with_file_writing_test;
@@ -1056,6 +1063,7 @@ end_per_testcase(Case, Config) when
     Case =:= dir_stats_collector_test_basic_test;
     Case =:= dir_stats_collector_enabling_for_empty_space_test;
     Case =:= dir_stats_collector_enabling_for_not_empty_space_test;
+    Case =:= dir_stats_collector_enabling_large_dirs_test;
     Case =:= dir_stats_collector_enabling_during_writing_test;
     Case =:= dir_stats_collector_race_with_file_adding_test;
     Case =:= dir_stats_collector_race_with_file_writing_test;
