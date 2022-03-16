@@ -80,14 +80,14 @@ all() -> [
 
 
 create_test(_Config) ->
-    atm_singular_item_based_stores_test_base:create_test_base(
+    atm_singleton_content_based_stores_test_base:create_test_base(
         [?ATM_STORE_CONFIG],
         fun get_item_data_spec/1
     ).
 
 
 update_content_test(_Config) ->
-    atm_singular_item_based_stores_test_base:update_content_test_base(
+    atm_singleton_content_based_stores_test_base:update_content_test_base(
         [?ATM_STORE_CONFIG],
         fun get_item_data_spec/1,
         #atm_range_store_content_update_options{},
@@ -96,7 +96,7 @@ update_content_test(_Config) ->
 
 
 browse_content_test(_Config) ->
-    atm_singular_item_based_stores_test_base:browse_content_test_base(
+    atm_singleton_content_based_stores_test_base:browse_content_test_base(
         [?ATM_STORE_CONFIG],
         fun get_item_data_spec/1,
         #atm_range_store_content_browse_options{},
@@ -241,7 +241,7 @@ get_content(AtmWorkflowExecutionAuth, AtmStoreId) ->
             AtmStoreId
         )),
         RangeJson
-    catch throw:?ERROR_ATM_STORE_EMPTY(_) ->
+    catch throw:?ERROR_ATM_STORE_CONTENT_NOT_SET(_) ->
         undefined
     end.
 
@@ -270,7 +270,7 @@ assert_all_items_listed(AtmWorkflowExecutionEnv, Iterator0, [ExpBatch | RestBatc
 
 
 init_per_suite(Config) ->
-    ModulesToLoad = [?MODULE | atm_singular_item_based_stores_test_base:modules_to_load()],
+    ModulesToLoad = [?MODULE | atm_singleton_content_based_stores_test_base:modules_to_load()],
     oct_background:init_per_suite([{?LOAD_MODULES, ModulesToLoad} | Config], #onenv_test_config{
         onenv_scenario = "1op",
         envs = [{op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}]
@@ -282,13 +282,13 @@ end_per_suite(_Config) ->
 
 
 init_per_group(singular_item_based_stores_common_tests, Config) ->
-    atm_singular_item_based_stores_test_base:init_per_group(Config);
+    atm_singleton_content_based_stores_test_base:init_per_group(Config);
 init_per_group(range_store_specific_tests, Config) ->
     Config.
 
 
 end_per_group(singular_item_based_stores_common_tests, Config) ->
-    atm_singular_item_based_stores_test_base:end_per_group(Config);
+    atm_singleton_content_based_stores_test_base:end_per_group(Config);
 end_per_group(range_store_specific_tests, _Config) ->
     ok.
 

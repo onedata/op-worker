@@ -10,7 +10,7 @@
 %%% storing only single item.
 %%% @end
 %%%-------------------------------------------------------------------
--module(atm_singular_item_based_stores_test_base).
+-module(atm_singleton_content_based_stores_test_base).
 -author("Bartosz Walkowicz").
 
 -include("modules/automation/atm_execution.hrl").
@@ -177,7 +177,7 @@ browse_content_test_base(AtmStoreConfigs, GetItemDataSpec, ContentBrowseOpts, Se
             AtmWorkflowExecutionAuth, undefined, AtmStoreSchema
         ))),
 
-        ExpError = ?ERROR_ATM_STORE_EMPTY(AtmStoreSchema#atm_store_schema.id),
+        ExpError = ?ERROR_ATM_STORE_CONTENT_NOT_SET(AtmStoreSchema#atm_store_schema.id),
         ?assertThrow(ExpError, ?erpc(atm_store_api:browse_content(
             AtmWorkflowExecutionAuth, ContentBrowseOpts, AtmStoreId
         ))),
