@@ -49,16 +49,30 @@ all() -> [
 %%%===================================================================
 
 failure_test(Config) ->
-    % disable op_worker healthcheck in onepanel, so nodes are not started up automatically
-    oct_environment:disable_panel_healthcheck(Config),
-
-    InitialData = create_initial_data_structure(Config),
-    UpdatedConfig = test_base(Config, InitialData, true),
-    test_base(UpdatedConfig, InitialData, false),
+    UpdatedConfig = cm_failure_test_base(Config),
+    InitialData = create_initial_data_structure(UpdatedConfig),
+    UpdatedConfig2 = worker_failure_test_base(UpdatedConfig, InitialData, true),
+    worker_failure_test_base(UpdatedConfig2, InitialData, false),
 
     ok.
 
-test_base(Config, InitialData, StopAppBeforeKill) ->
+
+cm_failure_test_base(Config) ->
+    KilledCM = provider_onenv_test_utils:get_primary_cm_node(Config, krakow),
+    [NodeExpectedToStopItself] = oct_background:get_provider_nodes(krakow),
+
+    failure_test_utils:kill_nodes(Config, KilledCM),
+    ct:pal("CM killed"),
+    % Worker node should detect that CM is down and stop
+    ?assertEqual({badrpc, nodedown}, rpc:call(NodeExpectedToStopItself, oneprovider, get_id, []), 120),
+    ct:pal("Worker node down"),
+    ok = oct_environment:start_node(Config, KilledCM),
+    ct:pal("CM restarted"),
+    failure_test_utils:restart_nodes(Config, NodeExpectedToStopItself),
+    ct:pal("Worker node restarted").
+
+
+worker_failure_test_base(Config, InitialData, StopAppBeforeKill) ->
     FailingProvider = kv_utils:get(failing_provider, InitialData),
     [FailingNode | _] = oct_background:get_provider_nodes(FailingProvider),
 
@@ -192,6 +206,8 @@ init_per_suite(Config) ->
     }).
 
 init_per_testcase(_Case, Config) ->
+    % disable op_worker healthcheck in onepanel, so nodes are not started up automatically
+    oct_environment:disable_panel_healthcheck(Config),
     lfm_proxy:init(Config, false).
 
 

@@ -19,7 +19,8 @@
     initialize/1,
     setup_sessions/1,
     find_importing_provider/2,
-    create_oz_temp_access_token/2
+    create_oz_temp_access_token/2,
+    get_primary_cm_node/2
 ]).
 
 %%%===================================================================
@@ -82,6 +83,16 @@ create_oz_temp_access_token(OzwNode, UserId) ->
     {ok, SerializedAccessToken} = tokens:serialize(AccessToken),
 
     SerializedAccessToken.
+
+
+-spec get_primary_cm_node(test_config:config(), atom()) -> node() | undefined.
+get_primary_cm_node(Config, ProviderPlaceholder) ->
+    lists:foldl(fun(CMNode, CMAcc) ->
+        case string:str(atom_to_list(CMNode), atom_to_list(ProviderPlaceholder) ++ "-0") > 0 of
+            true -> CMNode;
+            false -> CMAcc
+        end
+    end, undefined, test_config:get_custom(Config, [cm_nodes])).
 
 
 %%%===================================================================
