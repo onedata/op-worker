@@ -63,8 +63,8 @@ report_update_of_nearest_dir(Guid, Time) ->
     ok = dir_stats_collector:update_stats_of_nearest_dir(Guid, ?MODULE, #{?STAT_NAME => infer_update_time(Time)}).
 
 
--spec get_update_time(file_id:file_guid()) ->
-    {ok, times:time()} | ?ERROR_INTERNAL_SERVER_ERROR | ?ERROR_DIR_STATS_DISABLED_FOR_SPACE | ?ERROR_FORBIDDEN.
+-spec get_update_time(file_id:file_guid()) -> {ok, times:time()} |
+    ?ERROR_INTERNAL_SERVER_ERROR | ?ERROR_DIR_STATS_DISABLED_FOR_SPACE | ?ERROR_FORBIDDEN | ?ERROR_NOT_FOUND.
 get_update_time(Guid) ->
     case dir_stats_collector:get_stats(Guid, ?MODULE, all) of
         {ok, #{?STAT_NAME := Time}} -> {ok, Time};

@@ -155,7 +155,7 @@
 
 -spec get_stats(file_id:file_guid(), dir_stats_collection:type(), dir_stats_collection:stats_selector()) ->
     {ok, dir_stats_collection:collection()} |
-    ?ERROR_INTERNAL_SERVER_ERROR | ?ERROR_DIR_STATS_DISABLED_FOR_SPACE | ?ERROR_FORBIDDEN.
+    ?ERROR_INTERNAL_SERVER_ERROR | ?ERROR_DIR_STATS_DISABLED_FOR_SPACE | ?ERROR_FORBIDDEN | ?ERROR_NOT_FOUND.
 get_stats(Guid, CollectionType, StatNames) ->
     case dir_stats_collector_config:get_extended_collecting_status(file_id:guid_to_space_id(Guid)) of
         enabled ->
@@ -359,7 +359,11 @@ forced_terminate(Reason, State) ->
 
 -spec handle_call(#dsc_get_request{} | #dsc_flush_request{} |
     ?INITIALIZE_COLLECTIONS(file_id:file_guid()) | ?STOP_COLLECTING(od_space:id()), state()) ->
-    {ok | {ok, dir_stats_collection:collection()} | ?ERROR_INTERNAL_SERVER_ERROR | ?ERROR_FORBIDDEN, state()}.
+    {
+        ok | {ok, dir_stats_collection:collection()} |
+            ?ERROR_INTERNAL_SERVER_ERROR | ?ERROR_FORBIDDEN | ?ERROR_NOT_FOUND,
+        state()
+    }.
 handle_call(#dsc_get_request{
     guid = Guid,
     collection_type = CollectionType,
@@ -368,7 +372,7 @@ handle_call(#dsc_get_request{
     case reset_last_used_timer(Guid, CollectionType, State) of
         {{ok, #cached_dir_stats{current_stats = CurrentStats, collecting_status = Status}}, UpdatedState} ->
             case Status of
-                enabled -> {{ok, dir_stats_collection:with(StatNames, CurrentStats)}, UpdatedState};
+                enabled -> {dir_stats_collection:with(StatNames, CurrentStats), UpdatedState};
                 collections_initialization -> {?ERROR_FORBIDDEN, State}
             end;
         {?ERROR_FORBIDDEN, _UpdatedState} = Error ->

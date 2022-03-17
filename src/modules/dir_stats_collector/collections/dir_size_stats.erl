@@ -69,7 +69,7 @@
 
 -spec get_stats(file_id:file_guid()) ->
     {ok, dir_stats_collection:collection()} |
-    ?ERROR_INTERNAL_SERVER_ERROR | ?ERROR_DIR_STATS_DISABLED_FOR_SPACE | ?ERROR_FORBIDDEN.
+    ?ERROR_INTERNAL_SERVER_ERROR | ?ERROR_DIR_STATS_DISABLED_FOR_SPACE | ?ERROR_FORBIDDEN | ?ERROR_NOT_FOUND.
 get_stats(Guid) ->
     get_stats(Guid, all).
 
@@ -81,7 +81,7 @@ get_stats(Guid) ->
 %%--------------------------------------------------------------------
 -spec get_stats(file_id:file_guid(), dir_stats_collection:stats_selector()) ->
     {ok, dir_stats_collection:collection()} |
-    ?ERROR_INTERNAL_SERVER_ERROR | ?ERROR_DIR_STATS_DISABLED_FOR_SPACE | ?ERROR_FORBIDDEN.
+    ?ERROR_INTERNAL_SERVER_ERROR | ?ERROR_DIR_STATS_DISABLED_FOR_SPACE | ?ERROR_FORBIDDEN | ?ERROR_NOT_FOUND.
 get_stats(Guid, StatNames) ->
     dir_stats_collector:get_stats(Guid, ?MODULE, StatNames).
 

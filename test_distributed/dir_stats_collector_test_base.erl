@@ -24,7 +24,7 @@
     enabling_for_empty_space_test/1, enabling_for_not_empty_space_test/1, enabling_large_dirs_test/1,
     enabling_during_writing_test/1, race_with_file_adding_test/1, race_with_file_writing_test/1,
     race_with_subtree_adding_test/1, race_with_subtree_filling_with_data_test/1,
-    multiple_status_change_test/1]).
+    multiple_status_change_test/1, adding_file_when_disabled_test/1]).
 -export([init/1, teardown/1]).
 -export([verify_dir_on_provider_creating_files/3, delete_stats/2]).
 % TODO VFS-9148 - extend tests
@@ -146,14 +146,14 @@ enabling_large_dirs_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = lfm_test_utils:get_user1_session_id(Config, Worker),
     SpaceGuid = lfm_test_utils:get_user1_first_space_guid(Config),
-    Structure = [{3, 313}, {3, 101}],
+    Structure = [{3, 2000}, {3, 300}],
     lfm_test_utils:create_files_tree(Worker, SessId, Structure, SpaceGuid),
 
     enable(Config, existing_space),
     verify_collecting_status(Config, enabled),
 
     check_dir_stats(Config, op_worker_nodes, SpaceGuid, #{
-        ?REG_FILE_AND_LINK_COUNT => 616,
+        ?REG_FILE_AND_LINK_COUNT => 2900,
         ?DIR_COUNT => 12,
         ?TOTAL_SIZE => 0,
         ?TOTAL_SIZE_ON_STORAGE(Config, op_worker_nodes) => 0
@@ -351,6 +351,29 @@ multiple_status_change_test(Config) ->
 
     ?assertEqual(?ERROR_FORBIDDEN, rpc:call(Worker, dir_stats_collector_config, get_enabling_time, [SpaceId])).
 
+
+adding_file_when_disabled_test(Config) ->
+    create_initial_file_tree_and_fill_files(Config, op_worker_nodes, disabled),
+    enable(Config, existing_space),
+    verify_collecting_status(Config, enabled),
+    check_initial_dir_stats(Config, op_worker_nodes),
+
+    disable(Config),
+    verify_collecting_status(Config, disabled),
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    SessId = lfm_test_utils:get_user1_session_id(Config, Worker),
+    SpaceGuid = lfm_test_utils:get_user1_first_space_guid(Config),
+    lfm_test_utils:create_and_write_file(Worker, SessId, SpaceGuid, <<"test_file">>, 0, {rand_content, 10}),
+
+    enable(Config, existing_space),
+    verify_collecting_status(Config, enabled),
+    check_dir_stats(Config, op_worker_nodes, SpaceGuid, #{
+        ?REG_FILE_AND_LINK_COUNT => 364,
+        ?DIR_COUNT => 120,
+        ?TOTAL_SIZE => 1344,
+        ?TOTAL_SIZE_ON_STORAGE(Config, op_worker_nodes) => 1344
+    }),
+    check_update_times(Config, [op_worker_nodes]).
 
 %%%===================================================================
 %%% Init and teardown
