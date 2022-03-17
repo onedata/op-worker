@@ -40,7 +40,7 @@
 -export([get_name/1, set_name/2]).
 -export([get_active_perms_type/1, update_mode/2, update_acl/2]).
 -export([get_scope_id/1, setup_onedata_user/2, get_including_deleted/1,
-    make_space_exist/1, new_doc/6, new_doc/7, type/1, get_ancestors/1,
+    make_space_exist/1, new_doc/6, new_doc/7, get_ancestors/1,
     get_locations_by_uuid/1, rename/4, get_owner/1, get_type/1,
     get_mode/1]).
 -export([check_name_and_get_conflicting_files/1, check_name_and_get_conflicting_files/4, has_suffix/1, is_deleted/1]).
@@ -742,20 +742,6 @@ new_doc(FileUuid, FileName, FileType, Mode, Owner, ParentUuid, SpaceId) ->
         },
         scope = SpaceId
     }.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Return type of file depending on its posix mode.
-%% @end
-%%--------------------------------------------------------------------
--spec type(Mode :: non_neg_integer()) -> type().
-type(Mode) ->
-    IsDir = (Mode band 8#100000) == 0,
-    case IsDir of
-        true -> ?DIRECTORY_TYPE;
-        false -> ?REGULAR_FILE_TYPE
-    end.
 
 
 %%--------------------------------------------------------------------
