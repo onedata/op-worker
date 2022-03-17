@@ -448,6 +448,8 @@ handle_cast(?SCHEDULED_FLUSH, State) ->
     flush_all(State);
 
 handle_cast(?SCHEDULED_COLLECTIONS_INITIALIZATION, State) ->
+    % NOTE: initialize_all_cached_collections can take long time for large directories
+    % TODO VFS-8837 - consider non-blocking initialization of statistics
     verify_space_collecting_statuses(
         initialize_all_cached_collections(State#state{initialization_timer_ref = undefined}));
 
