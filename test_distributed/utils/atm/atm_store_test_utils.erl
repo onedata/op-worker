@@ -387,6 +387,7 @@ infer_store_type(#atm_audit_log_store_config{}) -> audit_log;
 infer_store_type(#atm_list_store_config{}) -> list;
 infer_store_type(#atm_range_store_config{}) -> range;
 infer_store_type(#atm_single_value_store_config{}) -> single_value;
+infer_store_type(#atm_time_series_store_config{}) -> time_series;
 infer_store_type(#atm_tree_forest_store_config{}) -> tree_forest.
 
 

@@ -36,10 +36,10 @@
 -type summary_entries() :: [{atm_workflow_executions_forest:index(), atm_workflow_execution:summary()}].
 -type entries() :: basic_entries() | summary_entries().
 
--type store_initial_contents() :: #{AtmStoreSchemaId :: automation:id() => json_utils:json_term()}.
+-type store_initial_content_overlay() :: #{AtmStoreSchemaId :: automation:id() => json_utils:json_term()}.
 
 -export_type([listing_mode/0, basic_entries/0, summary_entries/0, entries/0]).
--export_type([store_initial_contents/0]).
+-export_type([store_initial_content_overlay/0]).
 
 
 %%%===================================================================
@@ -89,7 +89,7 @@ list(SpaceId, Phase, summary, ListingOpts) ->
     od_space:id(),
     od_atm_workflow_schema:id(),
     atm_workflow_schema_revision:revision_number(),
-    store_initial_contents(),
+    store_initial_content_overlay(),
     undefined | http_client:url()
 ) ->
     {atm_workflow_execution:id(), atm_workflow_execution:record()} | no_return().
@@ -98,7 +98,7 @@ schedule(
     SpaceId,
     AtmWorkflowSchemaId,
     AtmWorkflowSchemaRevisionNum,
-    StoreInitialContents,
+    AtmStoreInitialContentOverlay,
     CallbackUrl
 ) ->
     {AtmWorkflowExecutionDoc, AtmWorkflowExecutionEnv} = atm_workflow_execution_factory:create(
@@ -106,7 +106,7 @@ schedule(
         SpaceId,
         AtmWorkflowSchemaId,
         AtmWorkflowSchemaRevisionNum,
-        StoreInitialContents,
+        AtmStoreInitialContentOverlay,
         CallbackUrl
     ),
     atm_workflow_execution_handler:start(UserCtx, AtmWorkflowExecutionEnv, AtmWorkflowExecutionDoc),

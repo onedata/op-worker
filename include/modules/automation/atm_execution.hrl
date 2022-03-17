@@ -150,6 +150,15 @@
     requires_initial_content = false
 }).
 
+-define(ATM_TASK_TIME_SERIES_STORE_SCHEMA(__CONFIG), #atm_store_schema{
+    id = ?CURRENT_TASK_TIME_SERIES_STORE_SCHEMA_ID,
+    name = ?CURRENT_TASK_TIME_SERIES_STORE_SCHEMA_ID,
+    description = <<>>,
+    type = time_series,
+    config = __CONFIG,
+    requires_initial_content = false
+}).
+
 -define(CURRENT_LANE_RUN_EXCEPTION_STORE_SCHEMA_ID, <<"CURRENT_LANE_RUN_EXCEPTION_STORE">>).
 
 -define(ATM_LANE_RUN_EXCEPTION_STORE_SCHEMA(__ITEM_DATA_SPEC), #atm_store_schema{
@@ -168,7 +177,7 @@
 }).
 
 -record(atm_audit_log_store_content_browse_options, {
-    listing_opts :: atm_store_container_infinite_log_backend:extended_listing_opts()
+    listing_opts :: atm_store_container_infinite_log_backend:timestamp_aware_listing_opts()
 }).
 
 -record(atm_audit_log_store_content_browse_result, {
@@ -177,7 +186,7 @@
 }).
 
 -record(atm_list_store_content_browse_options, {
-    listing_opts :: atm_store_container_infinite_log_backend:basic_listing_opts()
+    listing_opts :: atm_store_container_infinite_log_backend:timestamp_agnostic_listing_opts()
 }).
 
 -record(atm_list_store_content_browse_result, {
@@ -197,8 +206,36 @@
     item :: {ok, atm_value:expanded()} | errors:error()
 }).
 
+-record(atm_time_series_store_content_browse_options, {
+    request ::
+        atm_time_series_store_content_browse_options:get_layout() |
+        atm_time_series_store_content_browse_options:get_slice()
+}).
+
+-record(atm_time_series_store_content_get_layout_req, {}).
+
+-record(atm_time_series_store_content_get_slice_req, {
+    layout :: time_series_collection:metrics_by_time_series(),
+    start_timestamp :: undefined | atm_time_series_store_content_browse_options:timestamp(),
+    windows_limit :: atm_time_series_store_content_browse_options:windows_limit()
+}).
+
+-record(atm_time_series_store_content_browse_result, {
+    result ::
+        atm_time_series_store_content_browse_result:layout() |
+        atm_time_series_store_content_browse_result:slice()
+}).
+
+-record(atm_time_series_store_content_layout, {
+    layout :: time_series_collection:metrics_by_time_series()
+}).
+
+-record(atm_time_series_store_content_slice, {
+    slice :: json_utils:json_map()
+}).
+
 -record(atm_tree_forest_store_content_browse_options, {
-    listing_opts :: atm_store_container_infinite_log_backend:basic_listing_opts()
+    listing_opts :: atm_store_container_infinite_log_backend:timestamp_agnostic_listing_opts()
 }).
 
 -record(atm_tree_forest_store_content_browse_result, {

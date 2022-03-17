@@ -44,6 +44,7 @@
     atm_list_store_container |
     atm_range_store_container |
     atm_single_value_store_container |
+    atm_time_series_store_container |
     atm_tree_forest_store_container.
 
 -type initial_content() ::
@@ -51,6 +52,7 @@
     atm_list_store_container:initial_content() |
     atm_range_store_container:initial_content() |
     atm_single_value_store_container:initial_content() |
+    atm_time_series_store_container:initial_content() |
     atm_tree_forest_store_container:initial_content().
 
 -type record() ::
@@ -58,6 +60,7 @@
     atm_list_store_container:record() |
     atm_range_store_container:record() |
     atm_single_value_store_container:record() |
+    atm_time_series_store_container:record() |
     atm_tree_forest_store_container:record().
 
 -type content_browse_req() ::
@@ -65,6 +68,7 @@
     atm_list_store_container:content_browse_req() |
     atm_range_store_container:content_browse_req() |
     atm_single_value_store_container:content_browse_req() |
+    atm_time_series_store_container:content_browse_req() |
     atm_tree_forest_store_container:content_browse_req().
 
 -type content_update_req() ::
@@ -72,6 +76,7 @@
     atm_list_store_container:content_update_req() |
     atm_range_store_container:content_update_req() |
     atm_single_value_store_container:content_update_req() |
+    atm_time_series_store_container:content_update_req() |
     atm_tree_forest_store_container:content_update_req().
 
 -export_type([type/0, initial_content/0, record/0]).
@@ -207,6 +212,7 @@ atm_store_type_to_atm_store_container_type(audit_log) -> atm_audit_log_store_con
 atm_store_type_to_atm_store_container_type(list) -> atm_list_store_container;
 atm_store_type_to_atm_store_container_type(range) -> atm_range_store_container;
 atm_store_type_to_atm_store_container_type(single_value) -> atm_single_value_store_container;
+atm_store_type_to_atm_store_container_type(time_series) -> atm_time_series_store_container;
 atm_store_type_to_atm_store_container_type(tree_forest) -> atm_tree_forest_store_container.
 
 
@@ -217,4 +223,5 @@ atm_store_container_type_to_atm_store_type(atm_audit_log_store_container) -> aud
 atm_store_container_type_to_atm_store_type(atm_list_store_container) -> list;
 atm_store_container_type_to_atm_store_type(atm_range_store_container) -> range;
 atm_store_container_type_to_atm_store_type(atm_single_value_store_container) -> single_value;
+atm_store_container_type_to_atm_store_type(atm_time_series_store_container) -> time_series;
 atm_store_container_type_to_atm_store_type(atm_tree_forest_store_container) -> tree_forest.

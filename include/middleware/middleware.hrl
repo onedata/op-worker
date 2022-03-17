@@ -95,7 +95,7 @@
 -record(schedule_atm_workflow_execution, {
     atm_workflow_schema_id :: od_atm_workflow_schema:id(),
     atm_workflow_schema_revision_num :: atm_workflow_schema_revision:revision_number(),
-    store_initial_contents :: atm_workflow_execution_api:store_initial_contents(),
+    store_initial_content_overlay :: atm_workflow_execution_api:store_initial_content_overlay(),
     callback_url :: undefined | http_client:url()
 }).
 
