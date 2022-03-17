@@ -26,8 +26,8 @@
 -type timestamp() :: time:millis().
 -type windows_limit() :: 1..?MAX_WINDOWS_LIMIT.
 
--type get_layout() :: #get_atm_time_series_store_content_layout{}.
--type get_slice() :: #get_atm_time_series_store_content_slice{}.
+-type get_layout() :: #atm_time_series_store_content_get_layout_req{}.
+-type get_slice() :: #atm_time_series_store_content_get_slice_req{}.
 
 -type record() :: #atm_time_series_store_content_browse_options{}.
 
@@ -43,12 +43,12 @@
 sanitize(Data) when not is_map_key(<<"mode">>, Data) ->
     % Default request
     #atm_time_series_store_content_browse_options{
-        request = #get_atm_time_series_store_content_layout{}
+        request = #atm_time_series_store_content_get_layout_req{}
     };
 
 sanitize(#{<<"mode">> := <<"layout">>}) ->
     #atm_time_series_store_content_browse_options{
-        request = #get_atm_time_series_store_content_layout{}
+        request = #atm_time_series_store_content_get_layout_req{}
     };
 
 sanitize(Data = #{<<"mode">> := <<"slice">>}) ->
@@ -73,7 +73,7 @@ sanitize(Data = #{<<"mode">> := <<"slice">>}) ->
         }
     }),
     #atm_time_series_store_content_browse_options{
-        request = #get_atm_time_series_store_content_slice{
+        request = #atm_time_series_store_content_get_slice_req{
             layout = maps:get(<<"layout">>, SanitizedData),
             start_timestamp = maps:get(<<"startTimestamp">>, SanitizedData, undefined),
             windows_limit = maps:get(<<"windowsLimit">>, SanitizedData, ?DEFAULT_WINDOWS_LIMIT)

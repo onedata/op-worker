@@ -212,9 +212,9 @@
         atm_time_series_store_content_browse_options:get_slice()
 }).
 
--record(get_atm_time_series_store_content_layout, {}).
+-record(atm_time_series_store_content_get_layout_req, {}).
 
--record(get_atm_time_series_store_content_slice, {
+-record(atm_time_series_store_content_get_slice_req, {
     layout :: time_series_collection:metrics_by_time_series(),
     start_timestamp :: undefined | atm_time_series_store_content_browse_options:timestamp(),
     windows_limit :: atm_time_series_store_content_browse_options:windows_limit()

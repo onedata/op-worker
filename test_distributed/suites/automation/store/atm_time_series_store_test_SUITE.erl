@@ -47,19 +47,20 @@ all() -> [
 
 
 -define(MAX_FILE_SIZE_TS_NAME, <<"max_file_size">>).
+-define(MAX_FILE_SIZE_METRIC_NAME, ?MAX_FILE_SIZE_TS_NAME).
 
 -define(MAX_FILE_SIZE_TS_SCHEMA, #atm_time_series_schema{
     name_generator_type = exact,
     name_generator = ?MAX_FILE_SIZE_TS_NAME,
     unit = bytes,
-    metrics = [
-        #metric_config{
+    metrics = #{
+        ?MAX_FILE_SIZE_TS_NAME => #metric_config{
             label = ?MAX_FILE_SIZE_TS_NAME,
             resolution = ?MONTH_RESOLUTION,
             retention = 1,
             aggregator = max
         }
-    ]
+    }
 }).
 
 -define(MINUTE_METRIC_NAME, <<"minute">>).
@@ -70,26 +71,26 @@ all() -> [
     name_generator_type = add_prefix,
     name_generator = <<"count_">>,
     unit = counts_per_sec,
-    metrics = [
-        #metric_config{
+    metrics = #{
+        ?MINUTE_METRIC_NAME => #metric_config{
             label = ?MINUTE_METRIC_NAME,
             resolution = ?MINUTE_RESOLUTION,
             retention = 120,
             aggregator = sum
         },
-        #metric_config{
+        ?HOUR_METRIC_NAME => #metric_config{
             label = ?HOUR_METRIC_NAME,
             resolution = ?HOUR_RESOLUTION,
             retention = 48,
             aggregator = sum
         },
-        #metric_config{
+        ?DAY_METRIC_NAME => #metric_config{
             label = ?DAY_METRIC_NAME,
             resolution = ?DAY_RESOLUTION,
             retention = 60,
             aggregator = sum
         }
-    ]
+    }
 }).
 
 -define(ATM_STORE_CONFIG, #atm_time_series_store_config{schemas = [
@@ -157,10 +158,10 @@ create_test(_Config) ->
     ),
 
     % Assert only ts for exact generators are initiated
-    ExpLayout = #{?MAX_FILE_SIZE_TS_NAME => [?MAX_FILE_SIZE_TS_NAME]},
+    ExpLayout = #{?MAX_FILE_SIZE_TS_NAME => [?MAX_FILE_SIZE_METRIC_NAME]},
     ?assertEqual(ExpLayout, get_layout(AtmWorkflowExecutionAuth, AtmStoreId)),
     ?assertEqual(
-        #{?MAX_FILE_SIZE_TS_NAME => #{?MAX_FILE_SIZE_TS_NAME => []}},
+        #{?MAX_FILE_SIZE_TS_NAME => #{?MAX_FILE_SIZE_METRIC_NAME => []}},
         get_windows(AtmWorkflowExecutionAuth, AtmStoreId, ExpLayout)
     ).
 
@@ -170,7 +171,7 @@ update_content_test(_Config) ->
     AtmStoreSchema = build_store_schema(?ATM_STORE_CONFIG),
 
     AtmStoreId = create_store(AtmWorkflowExecutionAuth, AtmStoreSchema),
-    ExpLayout0 = #{?MAX_FILE_SIZE_TS_NAME => [?MAX_FILE_SIZE_TS_NAME]},
+    ExpLayout0 = #{?MAX_FILE_SIZE_TS_NAME => [?MAX_FILE_SIZE_METRIC_NAME]},
     ?assertEqual(ExpLayout0, get_layout(AtmWorkflowExecutionAuth, AtmStoreId)),
 
     ContentUpdateOpts = #atm_time_series_store_content_update_options{
@@ -189,7 +190,7 @@ update_content_test(_Config) ->
 
     ?assertMatch(
         #{
-            ?MAX_FILE_SIZE_TS_NAME := #{?MAX_FILE_SIZE_TS_NAME := []},
+            ?MAX_FILE_SIZE_TS_NAME := #{?MAX_FILE_SIZE_METRIC_NAME := []},
             <<"count_mp3">> := #{
                 ?MINUTE_METRIC_NAME := [#{<<"value">> := 10}],
                 ?HOUR_METRIC_NAME := [#{<<"value">> := 10}],
@@ -254,7 +255,7 @@ create_store(AtmWorkflowExecutionAuth, AtmStoreSchema) ->
     time_series_collection:metrics_by_time_series().
 get_layout(AtmWorkflowExecutionAuth, AtmStoreId) ->
     BrowseOpts = #atm_time_series_store_content_browse_options{
-        request = #get_atm_time_series_store_content_layout{}
+        request = #atm_time_series_store_content_get_layout_req{}
     },
 
     #atm_time_series_store_content_browse_result{
@@ -277,7 +278,7 @@ get_layout(AtmWorkflowExecutionAuth, AtmStoreId) ->
     #{time_series_collection:time_series_id() => #{ts_metric:id() => [ts_windows:value()]}}.
 get_windows(AtmWorkflowExecutionAuth, AtmStoreId, Layout) ->
     BrowseOpts = #atm_time_series_store_content_browse_options{
-        request = #get_atm_time_series_store_content_slice{
+        request = #atm_time_series_store_content_get_slice_req{
             layout = Layout,
             start_timestamp = undefined,
             windows_limit = 10000000000
