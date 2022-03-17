@@ -31,8 +31,9 @@
 
 -record(atm_audit_log_store_container_iterator, {
     log_content_data_spec :: atm_data_spec:record(),
-    backend_id :: json_infinite_log_model:id(),
-    last_listed_index = json_infinite_log_model:default_start_index(exclusive) :: json_infinite_log_model:entry_index()
+    backend_id :: atm_store_container_infinite_log_backend:id(),
+    last_listed_index = atm_store_container_infinite_log_backend:iterator_start_index() ::
+        atm_store_container_infinite_log_backend:index()
 }).
 -type record() :: #atm_audit_log_store_container_iterator{}.
 
@@ -44,7 +45,8 @@
 %%%===================================================================
 
 
--spec build(atm_data_spec:record(), json_infinite_log_model:id()) -> record().
+-spec build(atm_data_spec:record(), atm_store_container_infinite_log_backend:id()) ->
+    record().
 build(LogContentDataSpec, BackendId) ->
     #atm_audit_log_store_container_iterator{
         log_content_data_spec = LogContentDataSpec,
@@ -53,7 +55,7 @@ build(LogContentDataSpec, BackendId) ->
 
 
 -spec gen_listing_postprocessor(atm_workflow_execution_auth:record(), atm_data_spec:record()) ->
-    atm_infinite_log_based_stores_common:listing_postprocessor().
+    atm_store_container_infinite_log_backend:listing_postprocessor().
 gen_listing_postprocessor(AtmWorkflowExecutionAuth, LogContentDataSpec) ->
     fun({Index, {Timestamp, CompressedLog}}) ->
         CompressedLogContent = maps:get(<<"compressedContent">>, CompressedLog),
@@ -86,7 +88,7 @@ get_next_batch(AtmWorkflowExecutionAuth, BatchSize, Record = #atm_audit_log_stor
     backend_id = BackendId,
     last_listed_index = LastListedIndex
 }) ->
-    Result = atm_infinite_log_based_stores_common:get_next_batch(
+    Result = atm_store_container_infinite_log_backend:iterator_get_next_batch(
         BatchSize, BackendId, LastListedIndex,
         gen_listing_postprocessor(AtmWorkflowExecutionAuth, LogContentDataSpec)
     ),

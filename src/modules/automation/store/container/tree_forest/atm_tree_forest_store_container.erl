@@ -16,24 +16,34 @@
 -behaviour(atm_store_container).
 -behaviour(persistent_record).
 
--include_lib("ctool/include/automation/automation.hrl").
+-include("modules/automation/atm_execution.hrl").
 -include_lib("ctool/include/errors.hrl").
 
 %% atm_store_container callbacks
 -export([
     create/3,
-    get_config/1, get_iterated_item_data_spec/1,
-    browse_content/3, acquire_iterator/1,
-    apply_operation/2,
+    get_config/1,
+
+    get_iterated_item_data_spec/1,
+    acquire_iterator/1,
+
+    browse_content/2,
+    update_content/2,
+
     delete/1
 ]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
 
--type operation_options() :: #{}.  %% for now no options are supported
--type browse_options() :: atm_list_store_container:browse_options().
 -type initial_content() :: [atm_value:expanded()] | undefined.
+
+-type content_browse_req() :: #atm_store_content_browse_req{
+    options :: atm_tree_forest_store_content_browse_options:record()
+}.
+-type content_update_req() :: #atm_store_content_update_req{
+    options :: atm_tree_forest_store_content_update_options:record()
+}.
 
 -record(atm_tree_forest_store_container, {
     config :: atm_tree_forest_store_config:record(),
@@ -41,7 +51,10 @@
 }).
 -type record() :: #atm_tree_forest_store_container{}.
 
--export_type([initial_content/0, operation_options/0, browse_options/0, record/0]).
+-export_type([
+    initial_content/0, content_browse_req/0, content_update_req/0,
+    record/0
+]).
 
 
 %%%===================================================================
@@ -80,14 +93,6 @@ get_iterated_item_data_spec(#atm_tree_forest_store_container{
     ItemDataSpec.
 
 
--spec browse_content(atm_workflow_execution_auth:record(), browse_options(), record()) ->
-    atm_store_api:browse_result() | no_return().
-browse_content(AtmWorkflowExecutionAuth, BrowseOpts, #atm_tree_forest_store_container{
-    roots_list = RootsList
-}) ->
-    atm_list_store_container:browse_content(AtmWorkflowExecutionAuth, BrowseOpts, RootsList).
-
-
 -spec acquire_iterator(record()) -> atm_tree_forest_store_container_iterator:record().
 acquire_iterator(#atm_tree_forest_store_container{
     config = #atm_tree_forest_store_config{item_data_spec = ItemDataSpec},
@@ -97,11 +102,35 @@ acquire_iterator(#atm_tree_forest_store_container{
     atm_tree_forest_store_container_iterator:build(ItemDataSpec, RootsIterator).
 
 
--spec apply_operation(record(), atm_store_container:operation()) ->
-    record() | no_return().
-apply_operation(#atm_tree_forest_store_container{roots_list = RootsList} = Record, Operation) ->
+-spec browse_content(record(), content_browse_req()) ->
+    atm_tree_forest_store_content_browse_result:record() | no_return().
+browse_content(Record, ContentBrowseReq = #atm_store_content_browse_req{
+    options = #atm_tree_forest_store_content_browse_options{listing_opts = ListingOpts}
+}) ->
+    Result = atm_list_store_container:browse_content(
+        Record#atm_tree_forest_store_container.roots_list,
+        ContentBrowseReq#atm_store_content_browse_req{
+            options = #atm_list_store_content_browse_options{listing_opts = ListingOpts}
+        }
+    ),
+    #atm_tree_forest_store_content_browse_result{
+        tree_roots = Result#atm_list_store_content_browse_result.items,
+        is_last = Result#atm_list_store_content_browse_result.is_last
+    }.
+
+
+-spec update_content(record(), content_update_req()) -> record() | no_return().
+update_content(Record, UpdateReq = #atm_store_content_update_req{
+    options = #atm_tree_forest_store_content_update_options{function = Function}
+}) ->
+    RootsList = Record#atm_tree_forest_store_container.roots_list,
+    RootsListContentUpdateReq = UpdateReq#atm_store_content_update_req{
+        options = #atm_list_store_content_update_options{function = Function}
+    },
     Record#atm_tree_forest_store_container{
-        roots_list = atm_list_store_container:apply_operation(RootsList, Operation)
+        roots_list = atm_list_store_container:update_content(
+            RootsList, RootsListContentUpdateReq
+        )
     }.
 
 
