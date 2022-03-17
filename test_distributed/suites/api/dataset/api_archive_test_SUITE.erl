@@ -1196,12 +1196,12 @@ verify_archive(
         GetArchiveInfoFun = fun() ->
             case opt_archives:get_info(Node, UserSessId, ArchiveId) of
                 {ok, ActualArchiveInfo} ->
-                    ?assertEqual(archive_config:should_include_dip(Config), ActualArchiveInfo#archive_info.related_dip =/= undefined),
+                    ?assertEqual(archive_config:should_include_dip(Config), ActualArchiveInfo#archive_info.related_dip_id =/= undefined),
                     ActualArchiveInfo#archive_info{
                         % baseArchiveId is the id of the last successfully preserved, so it depends on previous test cases.
                         base_archive_id = undefined,
                         % DIP is created alongside AIP archive, so value of `relatedDip` field is not know beforehand. 
-                        related_dip = undefined
+                        related_dip_id = undefined
                     };
                 {error, _} = Error  ->
                     Error

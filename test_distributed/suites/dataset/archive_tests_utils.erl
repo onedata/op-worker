@@ -61,8 +61,8 @@ assert_archive_is_preserved(_Node, _SessionId, undefined, _DatasetId, _DatasetRo
     ok;
 assert_archive_is_preserved(Node, SessionId, ArchiveId, DatasetId, DatasetRootFileGuid, FileCount, ExpSize, Attempts) ->
     {ok, #archive_info{
-        related_aip = RelatedAip,
-        related_dip = RelatedDip
+        related_aip_id = RelatedAip,
+        related_dip_id = RelatedDip
     }} = ?assertMatch({ok, #archive_info{
         state = ?ARCHIVE_PRESERVED,
         stats = #archive_stats{
