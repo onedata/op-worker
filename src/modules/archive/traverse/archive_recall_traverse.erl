@@ -191,8 +191,10 @@ do_slave_job(#tree_traverse_slave{
         archive_doc := ArchiveDoc
     }} = Job, TaskId
 ) ->
-    execute_unsafe_job(do_slave_job_unsafe, [Job, TaskId], 
-        FileCtx, TaskId, ArchiveDoc).
+    case execute_unsafe_job(do_slave_job_unsafe, [Job, TaskId], FileCtx, TaskId, ArchiveDoc) of
+        ok -> ok;
+        error -> ok % error should be logged and saved, continue recall
+    end.
 
 %%%===================================================================
 %%% Internal functions

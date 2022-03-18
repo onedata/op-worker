@@ -466,6 +466,7 @@
 
 
 -record(archive_recall_details, {
+    recalling_provider_id :: od_provider:id(),
     archive_id :: archive:id(),
     dataset_id :: dataset:id(),
     start_timestamp = undefined :: undefined | time:millis(),

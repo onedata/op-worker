@@ -113,7 +113,7 @@ invalidate_on_all_nodes(SpaceId) ->
 -spec get(od_space:id(), file_meta:uuid() | file_meta:doc()) ->
     {ok, undefined | {ongoing | finished, file_meta:uuid()}} 
     | {error, {file_meta_missing, file_meta:uuid()}} | {error, term()}.
-get(SpaceId, Doc = #document{value = #file_meta{}}) ->
+get(SpaceId, Doc = #document{key = FileUuid, value = #file_meta{}}) ->
     CacheName = ?CACHE_NAME(SpaceId),
     case effective_value:get_or_calculate(CacheName, Doc, fun find_closest_recall/1) of
         {ok, Res, _} ->
@@ -161,9 +161,9 @@ find_closest_recall([_, {ongoing, _} = ParentValue, CalculationInfo]) ->
 find_closest_recall([#document{} = FileMetaDoc, ParentValue, CalculationInfo]) ->
     #document{key = FileUuid} = FileMetaDoc,
     case archive_recall:get_details(FileUuid) of
-        {ok, #archive_recall_details{finish_timestamp = undefined}} -> 
+        {ok, #archive_recall_details{finish_timestamp = undefined}} ->
             {ok, {ongoing, FileUuid}, CalculationInfo};
-        {ok, #archive_recall_details{}} -> 
+        {ok, #archive_recall_details{}} ->
             {ok, {finished, FileUuid}, CalculationInfo};
         {error, not_found} -> 
             {ok, ParentValue, CalculationInfo};
